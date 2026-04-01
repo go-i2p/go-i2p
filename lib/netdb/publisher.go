@@ -12,6 +12,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // SessionProvider provides access to the transport layer for sending I2NP messages.
@@ -122,13 +123,13 @@ func NewPublisher(db NetworkDatabase, pool *tunnel.Pool, transport SessionProvid
 // Publishing runs in background goroutines until Stop is called.
 func (p *Publisher) Start() error {
 	if p.pool == nil {
-		return fmt.Errorf("tunnel pool required for publishing")
+		return oops.Errorf("tunnel pool required for publishing")
 	}
 	p.fieldMu.RLock()
 	transport := p.transport
 	p.fieldMu.RUnlock()
 	if transport == nil {
-		return fmt.Errorf("transport manager required for publishing")
+		return oops.Errorf("transport manager required for publishing")
 	}
 
 	log.WithFields(logger.Fields{
@@ -280,17 +281,17 @@ func (p *Publisher) publishLeaseSetEntry(lsEntry LeaseSetEntry) error {
 		lsBytes, err = lsEntry.Entry.MetaLeaseSet.Bytes()
 		storeType = i2np.DatabaseStoreTypeMetaLeaseSet
 	default:
-		return fmt.Errorf("LeaseSetEntry contains no valid LeaseSet data")
+		return oops.Errorf("LeaseSetEntry contains no valid LeaseSet data")
 	}
 
 	if err != nil {
-		return fmt.Errorf("failed to serialize LeaseSet: %w", err)
+		return oops.Errorf("failed to serialize LeaseSet: %w", err)
 	}
 
 	// Select closest floodfill routers
 	floodfills, err := p.selectFloodfillsForPublishing(lsEntry.Hash)
 	if err != nil {
-		return fmt.Errorf("failed to select floodfills: %w", err)
+		return oops.Errorf("failed to select floodfills: %w", err)
 	}
 
 	// Send DatabaseStore message to each selected floodfill with the correct store type
@@ -306,20 +307,20 @@ func (p *Publisher) PublishLeaseSet(hash common.Hash, ls lease_set.LeaseSet) err
 
 	// Validate LeaseSet before attempting serialization
 	if err := ls.Validate(); err != nil {
-		return fmt.Errorf("invalid LeaseSet: %w", err)
+		return oops.Errorf("invalid LeaseSet: %w", err)
 	}
 
 	// Select closest floodfill routers
 	floodfills, err := p.selectFloodfillsForPublishing(hash)
 	if err != nil {
-		return fmt.Errorf("failed to select floodfills: %w", err)
+		return oops.Errorf("failed to select floodfills: %w", err)
 	}
 
 	// Send DatabaseStore message to each selected floodfill
 	// Use DatabaseStoreTypeLeaseSet (1) since this is an original LeaseSet, not LeaseSet2
 	lsBytes, err := ls.Bytes()
 	if err != nil {
-		return fmt.Errorf("failed to serialize LeaseSet: %w", err)
+		return oops.Errorf("failed to serialize LeaseSet: %w", err)
 	}
 	return p.sendDatabaseStoreMessages(hash, lsBytes, i2np.DatabaseStoreTypeLeaseSet, floodfills)
 }
@@ -328,25 +329,25 @@ func (p *Publisher) PublishLeaseSet(hash common.Hash, ls lease_set.LeaseSet) err
 func (p *Publisher) PublishRouterInfo(ri router_info.RouterInfo) error {
 	hash, err := ri.IdentHash()
 	if err != nil {
-		return fmt.Errorf("failed to get router hash: %w", err)
+		return oops.Errorf("failed to get router hash: %w", err)
 	}
 	log.WithField("hash", fmt.Sprintf("%x", hash[:8])).Debug("Publishing RouterInfo")
 
 	// Select closest floodfill routers
 	floodfills, err := p.selectFloodfillsForPublishing(hash)
 	if err != nil {
-		return fmt.Errorf("failed to select floodfills: %w", err)
+		return oops.Errorf("failed to select floodfills: %w", err)
 	}
 
 	// Send DatabaseStore message to each selected floodfill.
 	// Per I2P spec, RouterInfo data in DatabaseStore must be gzip-compressed.
 	riBytes, err := ri.Bytes()
 	if err != nil {
-		return fmt.Errorf("failed to serialize RouterInfo: %w", err)
+		return oops.Errorf("failed to serialize RouterInfo: %w", err)
 	}
 	compressed, err := gzipCompress(riBytes)
 	if err != nil {
-		return fmt.Errorf("failed to gzip-compress RouterInfo: %w", err)
+		return oops.Errorf("failed to gzip-compress RouterInfo: %w", err)
 	}
 	return p.sendDatabaseStoreMessages(hash, compressed, i2np.DatabaseStoreTypeRouterInfo, floodfills)
 }
@@ -404,7 +405,7 @@ func (p *Publisher) sendDatabaseStoreMessages(hash common.Hash, data []byte, dat
 			"total":        len(floodfills),
 			"error_detail": errMsgs,
 		}).Warn("Some DatabaseStore messages failed to send")
-		return fmt.Errorf("failed to send to %d of %d floodfills: first error: %w", len(errors), len(floodfills), errors[0])
+		return oops.Errorf("failed to send to %d of %d floodfills: first error: %w", len(errors), len(floodfills), errors[0])
 	}
 
 	log.WithFields(logger.Fields{
@@ -428,7 +429,7 @@ func (p *Publisher) sendDatabaseStoreToFloodfill(hash common.Hash, data []byte, 
 	// Get floodfill hash for logging and validation
 	ffHash, err := floodfill.IdentHash()
 	if err != nil {
-		return fmt.Errorf("failed to get floodfill hash: %w", err)
+		return oops.Errorf("failed to get floodfill hash: %w", err)
 	}
 
 	log.WithFields(logger.Fields{
@@ -477,7 +478,7 @@ func (p *Publisher) selectAndValidateTunnel() (*tunnel.TunnelState, common.Hash,
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		selectedTunnel := p.pool.SelectTunnel()
 		if selectedTunnel == nil {
-			lastErr = fmt.Errorf("no active outbound tunnels available")
+			lastErr = oops.Errorf("no active outbound tunnels available")
 			if attempt < maxRetries-1 {
 				log.WithField("attempt", attempt+1).Debug("No outbound tunnels available, retrying after delay")
 				time.Sleep(retryDelay)
@@ -487,7 +488,7 @@ func (p *Publisher) selectAndValidateTunnel() (*tunnel.TunnelState, common.Hash,
 		}
 
 		if len(selectedTunnel.Hops) == 0 {
-			lastErr = fmt.Errorf("tunnel has no hops")
+			lastErr = oops.Errorf("tunnel has no hops")
 			if attempt < maxRetries-1 {
 				log.WithField("attempt", attempt+1).Debug("Selected tunnel has no hops, retrying")
 				time.Sleep(retryDelay)
@@ -514,7 +515,7 @@ func (p *Publisher) createTunnelGatewayMessage(hash common.Hash, data []byte, da
 	// Marshal DatabaseStore message for tunnel wrapping
 	dbStoreMsgBytes, err := dbStoreMsg.MarshalBinary()
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal DatabaseStore I2NP message: %w", err)
+		return nil, oops.Errorf("failed to marshal DatabaseStore I2NP message: %w", err)
 	}
 
 	// Create TunnelGateway message to inject DatabaseStore into outbound tunnel
@@ -535,7 +536,7 @@ func (p *Publisher) createDatabaseStoreMessage(hash common.Hash, data []byte, da
 
 	dbStoreData, err := dbStore.MarshalBinary()
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal DatabaseStore: %w", err)
+		return nil, oops.Errorf("failed to marshal DatabaseStore: %w", err)
 	}
 	dbStoreMsg.SetData(dbStoreData)
 
@@ -549,7 +550,7 @@ func (p *Publisher) sendMessageThroughGateway(gatewayHash common.Hash, msg i2np.
 	// Get gateway router's RouterInfo from NetDB
 	gatewayRouterInfo, err := p.getGatewayRouterInfo(gatewayHash)
 	if err != nil {
-		return fmt.Errorf("failed to get gateway RouterInfo: %w", err)
+		return oops.Errorf("failed to get gateway RouterInfo: %w", err)
 	}
 
 	// Get or create transport session to gateway router
@@ -557,16 +558,16 @@ func (p *Publisher) sendMessageThroughGateway(gatewayHash common.Hash, msg i2np.
 	transport := p.transport
 	p.fieldMu.RUnlock()
 	if transport == nil {
-		return fmt.Errorf("transport manager not available")
+		return oops.Errorf("transport manager not available")
 	}
 	session, err := transport.GetSession(*gatewayRouterInfo)
 	if err != nil {
-		return fmt.Errorf("failed to get transport session to gateway: %w", err)
+		return oops.Errorf("failed to get transport session to gateway: %w", err)
 	}
 
 	// Queue message for transmission
 	if err := session.QueueSendI2NP(msg); err != nil {
-		return fmt.Errorf("failed to queue message for transmission: %w", err)
+		return oops.Errorf("failed to queue message for transmission: %w", err)
 	}
 	return nil
 }
@@ -577,11 +578,11 @@ func (p *Publisher) getGatewayRouterInfo(gatewayHash common.Hash) (*router_info.
 	// Get RouterInfo from NetDB using the hash
 	riChan := p.db.GetRouterInfo(gatewayHash)
 	if riChan == nil {
-		return nil, fmt.Errorf("gateway %x not found in NetDB", gatewayHash[:8])
+		return nil, oops.Errorf("gateway %x not found in NetDB", gatewayHash[:8])
 	}
 	ri, ok := <-riChan
 	if !ok {
-		return nil, fmt.Errorf("failed to retrieve RouterInfo for gateway %x", gatewayHash[:8])
+		return nil, oops.Errorf("failed to retrieve RouterInfo for gateway %x", gatewayHash[:8])
 	}
 
 	// Check if RouterInfo has a valid identity by verifying we can get its hash.
@@ -590,7 +591,7 @@ func (p *Publisher) getGatewayRouterInfo(gatewayHash common.Hash) (*router_info.
 	// For transport purposes, we only need a valid identity to establish a session.
 	_, err := ri.IdentHash()
 	if err != nil {
-		return nil, fmt.Errorf("gateway %x not found in NetDB or has no valid identity: %w", gatewayHash[:8], err)
+		return nil, oops.Errorf("gateway %x not found in NetDB or has no valid identity: %w", gatewayHash[:8], err)
 	}
 
 	return &ri, nil

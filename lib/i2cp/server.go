@@ -14,6 +14,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/naming"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // errClientDisconnected is a sentinel error returned by handleDisconnect to
@@ -205,7 +206,7 @@ func (s *Server) Start() error {
 	s.mu.Lock()
 	if s.running {
 		s.mu.Unlock()
-		return fmt.Errorf("server already running")
+		return oops.Errorf("server already running")
 	}
 	s.running = true
 	s.mu.Unlock()
@@ -216,7 +217,7 @@ func (s *Server) Start() error {
 		s.mu.Lock()
 		s.running = false
 		s.mu.Unlock()
-		return fmt.Errorf("failed to listen on %s: %w", s.config.ListenAddr, err)
+		return oops.Errorf("failed to listen on %s: %w", s.config.ListenAddr, err)
 	}
 
 	s.listener = listener
@@ -314,7 +315,7 @@ func (s *Server) resolveDestinationKey(destHash common.Hash) ([32]byte, error) {
 
 	pubKey, err := s.destinationResolver.ResolveDestination(destHash)
 	if err != nil {
-		return [32]byte{}, fmt.Errorf("failed to resolve destination: %w", err)
+		return [32]byte{}, oops.Errorf("failed to resolve destination: %w", err)
 	}
 
 	log.WithField("destination", fmt.Sprintf("%x", destHash[:8])).
@@ -502,7 +503,7 @@ func (s *Server) prepareMessagePayload(
 			"payloadSize": len(incomingMsg.Payload),
 			"maxAllowed":  MaxPayloadSize - headerSize,
 		}).Error("incoming_message_payload_too_large")
-		return nil, fmt.Errorf("message payload too large: %d bytes (max %d bytes)",
+		return nil, oops.Errorf("message payload too large: %d bytes (max %d bytes)",
 			len(incomingMsg.Payload), MaxPayloadSize-headerSize)
 	}
 

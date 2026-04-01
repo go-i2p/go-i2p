@@ -3,7 +3,6 @@ package reseed
 import (
 	"crypto/x509"
 	"encoding/pem"
-	"fmt"
 	"io/fs"
 	"path/filepath"
 	"strings"
@@ -11,6 +10,7 @@ import (
 	"time"
 
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // CertificatePool holds trusted reseed signing certificates loaded from embedded files.
@@ -62,7 +62,7 @@ func GetDefaultCertificatePool() (*CertificatePool, error) {
 	}
 
 	if defaultCertProvider == nil {
-		return nil, fmt.Errorf("certificate provider not initialized - call SetCertificateProvider first")
+		return nil, oops.Errorf("certificate provider not initialized - call SetCertificateProvider first")
 	}
 
 	pool, err := NewCertificatePoolFromProvider(defaultCertProvider)
@@ -79,7 +79,7 @@ func GetDefaultCertificatePool() (*CertificatePool, error) {
 func NewCertificatePoolFromProvider(provider CertificateFSProvider) (*CertificatePool, error) {
 	certFS, err := provider()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get certificate filesystem: %w", err)
+		return nil, oops.Errorf("failed to get certificate filesystem: %w", err)
 	}
 	return NewCertificatePoolFromFS(certFS)
 }
@@ -93,7 +93,7 @@ func NewCertificatePoolFromFS(certFS fs.FS) (*CertificatePool, error) {
 
 	entries, err := fs.ReadDir(certFS, ".")
 	if err != nil {
-		return nil, fmt.Errorf("failed to read certificate directory: %w", err)
+		return nil, oops.Errorf("failed to read certificate directory: %w", err)
 	}
 
 	loadedCount := 0
@@ -110,7 +110,7 @@ func NewCertificatePoolFromFS(certFS fs.FS) (*CertificatePool, error) {
 	}
 
 	if loadedCount == 0 {
-		return nil, fmt.Errorf("no valid reseed certificates loaded")
+		return nil, oops.Errorf("no valid reseed certificates loaded")
 	}
 
 	log.WithFields(logger.Fields{
@@ -125,7 +125,7 @@ func NewCertificatePoolFromFS(certFS fs.FS) (*CertificatePool, error) {
 func (cp *CertificatePool) loadCertificateFromFS(certFS fs.FS, filename string) error {
 	data, err := fs.ReadFile(certFS, filename)
 	if err != nil {
-		return fmt.Errorf("failed to read certificate file %s: %w", filename, err)
+		return oops.Errorf("failed to read certificate file %s: %w", filename, err)
 	}
 
 	return cp.loadCertificateFromPEM(data, filename)
@@ -135,18 +135,18 @@ func (cp *CertificatePool) loadCertificateFromFS(certFS fs.FS, filename string) 
 func (cp *CertificatePool) loadCertificateFromPEM(pemData []byte, filename string) error {
 	block, _ := pem.Decode(pemData)
 	if block == nil {
-		return fmt.Errorf("failed to decode PEM data from %s", filename)
+		return oops.Errorf("failed to decode PEM data from %s", filename)
 	}
 
 	cert, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
-		return fmt.Errorf("failed to parse certificate from %s: %w", filename, err)
+		return oops.Errorf("failed to parse certificate from %s: %w", filename, err)
 	}
 
 	// Extract signer ID from certificate
 	signerID := extractSignerID(cert, filename)
 	if signerID == "" {
-		return fmt.Errorf("could not determine signer ID from certificate %s", filename)
+		return oops.Errorf("could not determine signer ID from certificate %s", filename)
 	}
 
 	cp.mu.Lock()
@@ -208,7 +208,7 @@ func (cp *CertificatePool) GetCertificate(signerID string) (*x509.Certificate, b
 func (cp *CertificatePool) GetPublicKey(signerID string) (interface{}, error) {
 	cert, ok := cp.GetCertificate(signerID)
 	if !ok {
-		return nil, fmt.Errorf("no certificate found for signer: %s", signerID)
+		return nil, oops.Errorf("no certificate found for signer: %s", signerID)
 	}
 
 	// Validate certificate is not expired
@@ -224,11 +224,11 @@ func (cp *CertificatePool) ValidateCertificate(cert *x509.Certificate, signerID 
 	now := time.Now()
 
 	if now.Before(cert.NotBefore) {
-		return fmt.Errorf("certificate for signer %s not yet valid (NotBefore: %v)", signerID, cert.NotBefore)
+		return oops.Errorf("certificate for signer %s not yet valid (NotBefore: %v)", signerID, cert.NotBefore)
 	}
 
 	if now.After(cert.NotAfter) {
-		return fmt.Errorf("certificate for signer %s expired (NotAfter: %v)", signerID, cert.NotAfter)
+		return oops.Errorf("certificate for signer %s expired (NotAfter: %v)", signerID, cert.NotAfter)
 	}
 
 	return nil

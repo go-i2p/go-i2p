@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-i2p/crypto/rand"
+	"github.com/samber/oops"
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
@@ -137,7 +138,7 @@ func NewExplorer(db NetworkDatabase, pool *tunnel.Pool, config ExplorerConfig) *
 // Exploration runs in a background goroutine until Stop is called.
 func (e *Explorer) Start() error {
 	if e.pool == nil {
-		return fmt.Errorf("tunnel pool required for exploration")
+		return oops.Errorf("tunnel pool required for exploration")
 	}
 
 	log.WithFields(logger.Fields{
@@ -306,7 +307,7 @@ func (e *Explorer) performExploratoryLookup(index int, lookupHash common.Hash) e
 
 	if resolver == nil {
 		log.Warn("Exploratory lookup skipped: no transport available, cannot reach network peers")
-		return fmt.Errorf("no transport available for exploratory lookup")
+		return oops.Errorf("no transport available for exploratory lookup")
 	}
 
 	// Perform lookup with timeout.
@@ -389,7 +390,7 @@ func (e *Explorer) calculateExplorationInterval() time.Duration {
 // Useful for testing or manual exploration triggers.
 func (e *Explorer) ExploreOnce() error {
 	if e.pool == nil {
-		return fmt.Errorf("tunnel pool required for exploration")
+		return oops.Errorf("tunnel pool required for exploration")
 	}
 
 	log.WithFields(logger.Fields{

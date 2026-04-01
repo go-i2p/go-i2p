@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 
 	"github.com/go-i2p/common/base64"
 	common "github.com/go-i2p/common/data"
@@ -72,7 +73,7 @@ func (db *StdNetDB) storeStandardLeaseSet(key common.Hash, data []byte) error {
 	// Verify cryptographic signature before accepting into cache
 	if err := ls.Verify(); err != nil {
 		log.WithError(err).WithField("hash", key).Warn("LeaseSet signature verification failed")
-		return fmt.Errorf("LeaseSet signature verification failed: %w", err)
+		return oops.Errorf("LeaseSet signature verification failed: %w", err)
 	}
 
 	if !db.addLeaseSetToCache(key, ls) {
@@ -104,7 +105,7 @@ func validateLeaseSetDataType(dataType byte) error {
 		return nil
 	default:
 		log.WithField("type", dataType).Warn("Invalid data type for LeaseSet")
-		return fmt.Errorf("invalid data type for LeaseSet: expected 1, 3, 5, or 7, got %d", dataType)
+		return oops.Errorf("invalid data type for LeaseSet: expected 1, 3, 5, or 7, got %d", dataType)
 	}
 }
 
@@ -113,7 +114,7 @@ func parseLeaseSetData(data []byte) (lease_set.LeaseSet, error) {
 	ls, err := lease_set.ReadLeaseSet(data)
 	if err != nil {
 		log.WithError(err).Error("Failed to parse LeaseSet from DatabaseStore data")
-		return lease_set.LeaseSet{}, fmt.Errorf("failed to parse LeaseSet: %w", err)
+		return lease_set.LeaseSet{}, oops.Errorf("failed to parse LeaseSet: %w", err)
 	}
 	return ls, nil
 }
@@ -127,7 +128,7 @@ func verifyHashMatch(key common.Hash, destBytes []byte, typeName string) error {
 			"expected_hash": expectedHash,
 			"provided_key":  key,
 		}).Error(typeName + " hash mismatch")
-		return fmt.Errorf("%s hash mismatch: expected %x, got %x", typeName, expectedHash, key)
+		return oops.Errorf("%s hash mismatch: expected %x, got %x", typeName, expectedHash, key)
 	}
 	return nil
 }
@@ -137,7 +138,7 @@ func verifyLeaseSetHash(key common.Hash, ls lease_set.LeaseSet) error {
 	dest := ls.Destination()
 	destBytes, err := dest.Bytes()
 	if err != nil {
-		return fmt.Errorf("failed to get destination bytes: %w", err)
+		return oops.Errorf("failed to get destination bytes: %w", err)
 	}
 	return verifyHashMatch(key, destBytes, "LeaseSet")
 }
@@ -182,13 +183,13 @@ func (db *StdNetDB) persistLeaseSetEntryToFile(key common.Hash, entry *Entry, ty
 	f, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		log.WithError(err).Warn(fmt.Sprintf("Failed to open file for saving %s (in-memory entry preserved)", typeName))
-		return fmt.Errorf("failed to open %s file: %w", typeName, err)
+		return oops.Errorf("failed to open %s file: %w", typeName, err)
 	}
 	defer f.Close()
 
 	if err := entry.Serialize(f); err != nil {
 		log.WithError(err).Warn(fmt.Sprintf("Failed to write %s to filesystem (in-memory entry preserved)", typeName))
-		return fmt.Errorf("failed to save %s to filesystem: %w", typeName, err)
+		return oops.Errorf("failed to save %s to filesystem: %w", typeName, err)
 	}
 
 	return nil
@@ -280,7 +281,7 @@ func (db *StdNetDB) loadLeaseSetFromFile(hash common.Hash) ([]byte, error) {
 
 	entry, err := db.loadLeaseSetEntryFromFile(fname)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load LeaseSet entry: %w", err)
+		return nil, oops.Errorf("failed to load LeaseSet entry: %w", err)
 	}
 
 	return db.serializeEntry(entry)
@@ -302,11 +303,11 @@ func (db *StdNetDB) serializeEntry(entry *Entry) ([]byte, error) {
 	for _, s := range serializers {
 		data, err := s.serialize()
 		if err != nil {
-			return nil, fmt.Errorf("failed to serialize %s from entry: %w", s.name, err)
+			return nil, oops.Errorf("failed to serialize %s from entry: %w", s.name, err)
 		}
 		return data, nil
 	}
-	return nil, fmt.Errorf("entry contains no valid data")
+	return nil, oops.Errorf("entry contains no valid data")
 }
 
 // collectSerializers returns the serializers for all non-nil entry types.
@@ -334,7 +335,7 @@ func (db *StdNetDB) collectSerializers(entry *Entry) []entrySerializer {
 func (db *StdNetDB) parseAndCacheLeaseSet(hash common.Hash, data []byte) (lease_set.LeaseSet, error) {
 	ls, err := lease_set.ReadLeaseSet(data)
 	if err != nil {
-		return lease_set.LeaseSet{}, fmt.Errorf("failed to parse LeaseSet: %w", err)
+		return lease_set.LeaseSet{}, oops.Errorf("failed to parse LeaseSet: %w", err)
 	}
 
 	// Always store/replace the cached entry so stale data is updated
@@ -367,7 +368,7 @@ func (db *StdNetDB) fetchLeaseSetBytes(
 			db.lsMutex.RUnlock()
 			if err != nil {
 				log.WithError(err).Error("Failed to serialize cached " + typeName)
-				return nil, fmt.Errorf("failed to serialize %s: %w", typeName, err)
+				return nil, oops.Errorf("failed to serialize %s: %w", typeName, err)
 			}
 			log.Debug(typeName + " found in memory cache")
 			return data, nil
@@ -379,13 +380,13 @@ func (db *StdNetDB) fetchLeaseSetBytes(
 	data, err := db.loadLeaseSetFromFile(hash)
 	if err != nil {
 		log.WithError(err).Debug(typeName + " not found in filesystem")
-		return nil, fmt.Errorf("%s not found: %w", typeName, err)
+		return nil, oops.Errorf("%s not found: %w", typeName, err)
 	}
 
 	// Parse and cache for future use
 	if err := parseAndCache(hash, data); err != nil {
 		log.WithError(err).Error("Failed to parse " + typeName + " from file")
-		return nil, fmt.Errorf("failed to parse %s: %w", typeName, err)
+		return nil, oops.Errorf("failed to parse %s: %w", typeName, err)
 	}
 
 	return data, nil
@@ -442,7 +443,7 @@ func (db *StdNetDB) storeLeaseSetVariant(
 
 	if err := ls.Verify(); err != nil {
 		log.WithError(err).WithField("hash", key).Warnf("%s signature verification failed", typeName)
-		return fmt.Errorf("%s signature verification failed: %w", typeName, err)
+		return oops.Errorf("%s signature verification failed: %w", typeName, err)
 	}
 
 	if !addToCache() {
@@ -487,7 +488,7 @@ func (db *StdNetDB) StoreLeaseSet2(key common.Hash, data []byte, dataType byte) 
 func validateLeaseSetVariantDataType(dataType, expected byte, typeName string) error {
 	if dataType != expected {
 		log.WithField("type", dataType).Warnf("Invalid data type for %s, expected %d", typeName, expected)
-		return fmt.Errorf("invalid data type for %s: expected %d, got %d", typeName, expected, dataType)
+		return oops.Errorf("invalid data type for %s: expected %d, got %d", typeName, expected, dataType)
 	}
 	return nil
 }
@@ -497,7 +498,7 @@ func parseLeaseSet2Data(data []byte) (lease_set2.LeaseSet2, error) {
 	ls2, _, err := lease_set2.ReadLeaseSet2(data)
 	if err != nil {
 		log.WithError(err).Error("Failed to parse LeaseSet2 from DatabaseStore data")
-		return lease_set2.LeaseSet2{}, fmt.Errorf("failed to parse LeaseSet2: %w", err)
+		return lease_set2.LeaseSet2{}, oops.Errorf("failed to parse LeaseSet2: %w", err)
 	}
 	return ls2, nil
 }
@@ -507,7 +508,7 @@ func verifyLeaseSet2Hash(key common.Hash, ls2 lease_set2.LeaseSet2) error {
 	dest := ls2.Destination()
 	destBytes, err := dest.Bytes()
 	if err != nil {
-		return fmt.Errorf("failed to get destination bytes: %w", err)
+		return oops.Errorf("failed to get destination bytes: %w", err)
 	}
 	return verifyHashMatch(key, destBytes, "LeaseSet2")
 }
@@ -626,7 +627,7 @@ func (db *StdNetDB) cacheLeaseSetEntryIfNewer(hash common.Hash, entry Entry, isN
 func (db *StdNetDB) parseAndCacheLeaseSet2(hash common.Hash, data []byte) (lease_set2.LeaseSet2, error) {
 	ls2, _, err := lease_set2.ReadLeaseSet2(data)
 	if err != nil {
-		return lease_set2.LeaseSet2{}, fmt.Errorf("failed to parse LeaseSet2: %w", err)
+		return lease_set2.LeaseSet2{}, oops.Errorf("failed to parse LeaseSet2: %w", err)
 	}
 
 	db.cacheLeaseSetEntryIfNewer(hash, Entry{LeaseSet2: &ls2}, func(existing Entry) bool {
@@ -683,7 +684,7 @@ func parseEncryptedLeaseSetData(data []byte) (encrypted_leaseset.EncryptedLeaseS
 	els, _, err := encrypted_leaseset.ReadEncryptedLeaseSet(data)
 	if err != nil {
 		log.WithError(err).Error("Failed to parse EncryptedLeaseSet from DatabaseStore data")
-		return encrypted_leaseset.EncryptedLeaseSet{}, fmt.Errorf("failed to parse EncryptedLeaseSet: %w", err)
+		return encrypted_leaseset.EncryptedLeaseSet{}, oops.Errorf("failed to parse EncryptedLeaseSet: %w", err)
 	}
 	return els, nil
 }
@@ -692,7 +693,7 @@ func parseEncryptedLeaseSetData(data []byte) (encrypted_leaseset.EncryptedLeaseS
 func verifyEncryptedLeaseSetHash(key common.Hash, els encrypted_leaseset.EncryptedLeaseSet) error {
 	destBytes := els.BlindedPublicKey()
 	if destBytes == nil {
-		return fmt.Errorf("failed to get blinded public key bytes")
+		return oops.Errorf("failed to get blinded public key bytes")
 	}
 	return verifyHashMatch(key, destBytes, "EncryptedLeaseSet")
 }
@@ -769,7 +770,7 @@ func (db *StdNetDB) GetEncryptedLeaseSet(hash common.Hash) (chnl chan encrypted_
 func (db *StdNetDB) parseAndCacheEncryptedLeaseSet(hash common.Hash, data []byte) (encrypted_leaseset.EncryptedLeaseSet, error) {
 	els, _, err := encrypted_leaseset.ReadEncryptedLeaseSet(data)
 	if err != nil {
-		return encrypted_leaseset.EncryptedLeaseSet{}, fmt.Errorf("failed to parse EncryptedLeaseSet: %w", err)
+		return encrypted_leaseset.EncryptedLeaseSet{}, oops.Errorf("failed to parse EncryptedLeaseSet: %w", err)
 	}
 
 	db.cacheLeaseSetEntryIfNewer(hash, Entry{EncryptedLeaseSet: &els}, func(existing Entry) bool {
@@ -826,7 +827,7 @@ func parseMetaLeaseSetData(data []byte) (meta_leaseset.MetaLeaseSet, error) {
 	mls, _, err := meta_leaseset.ReadMetaLeaseSet(data)
 	if err != nil {
 		log.WithError(err).Error("Failed to parse MetaLeaseSet from DatabaseStore data")
-		return meta_leaseset.MetaLeaseSet{}, fmt.Errorf("failed to parse MetaLeaseSet: %w", err)
+		return meta_leaseset.MetaLeaseSet{}, oops.Errorf("failed to parse MetaLeaseSet: %w", err)
 	}
 	return mls, nil
 }
@@ -836,7 +837,7 @@ func verifyMetaLeaseSetHash(key common.Hash, mls meta_leaseset.MetaLeaseSet) err
 	dest := mls.Destination()
 	destBytes, err := dest.Bytes()
 	if err != nil {
-		return fmt.Errorf("failed to get destination bytes: %w", err)
+		return oops.Errorf("failed to get destination bytes: %w", err)
 	}
 	return verifyHashMatch(key, destBytes, "MetaLeaseSet")
 }
@@ -913,7 +914,7 @@ func (db *StdNetDB) GetMetaLeaseSet(hash common.Hash) (chnl chan meta_leaseset.M
 func (db *StdNetDB) parseAndCacheMetaLeaseSet(hash common.Hash, data []byte) (meta_leaseset.MetaLeaseSet, error) {
 	mls, _, err := meta_leaseset.ReadMetaLeaseSet(data)
 	if err != nil {
-		return meta_leaseset.MetaLeaseSet{}, fmt.Errorf("failed to parse MetaLeaseSet: %w", err)
+		return meta_leaseset.MetaLeaseSet{}, oops.Errorf("failed to parse MetaLeaseSet: %w", err)
 	}
 
 	db.cacheLeaseSetEntryIfNewer(hash, Entry{MetaLeaseSet: &mls}, func(existing Entry) bool {

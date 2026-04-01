@@ -7,6 +7,7 @@ import (
 	"github.com/go-i2p/common/router_address"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // NetDBSelector is a minimal interface used by DefaultPeerSelector to
@@ -38,7 +39,7 @@ func NewDefaultPeerSelector(db NetDBSelector) (*DefaultPeerSelector, error) {
 			"at":     "NewDefaultPeerSelector",
 			"reason": "nil_db_selector",
 		}).Error("DB selector is nil")
-		return nil, fmt.Errorf("db selector cannot be nil")
+		return nil, oops.Errorf("db selector cannot be nil")
 	}
 	log.WithFields(logger.Fields{
 		"at":     "NewDefaultPeerSelector",
@@ -67,7 +68,7 @@ func (s *DefaultPeerSelector) SelectPeers(count int, exclude []common.Hash) ([]r
 			"reason": "db_selector_failed",
 			"error":  err.Error(),
 		}).Error("underlying selector failed")
-		return nil, fmt.Errorf("underlying selector error: %w", err)
+		return nil, oops.Errorf("underlying selector error: %w", err)
 	}
 
 	log.WithFields(logger.Fields{
@@ -88,7 +89,7 @@ func validatePeerCount(count int) error {
 			"count":  count,
 			"reason": "count must be positive",
 		}).Error("Invalid peer count")
-		return fmt.Errorf("count must be > 0")
+		return oops.Errorf("count must be > 0")
 	}
 	return nil
 }

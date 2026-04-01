@@ -14,6 +14,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // LookupTransport defines the interface for sending DatabaseLookup messages
@@ -224,7 +225,7 @@ func (kr *KademliaResolver) validateRemoteLookupCapability() error {
 			"at":     "validateRemoteLookupCapability",
 			"reason": "tunnel pool not configured",
 		}).Error("Cannot perform remote lookup")
-		return fmt.Errorf("tunnel pool required for remote lookups")
+		return oops.Errorf("tunnel pool required for remote lookups")
 	}
 	return nil
 }
@@ -255,7 +256,7 @@ func (kr *KademliaResolver) performRemoteLookup(ctx context.Context, h common.Ha
 		} else if err != nil {
 			errChan <- err
 		} else {
-			errChan <- fmt.Errorf("router info not found in kademlia lookup")
+			errChan <- oops.Errorf("router info not found in kademlia lookup")
 		}
 	}()
 }
@@ -276,7 +277,7 @@ func (kr *KademliaResolver) iterativeLookup(ctx context.Context, target common.H
 
 	closestPeers := kr.findClosestPeers(target)
 	if len(closestPeers) == 0 {
-		return nil, fmt.Errorf("insufficient peers available for lookup")
+		return nil, oops.Errorf("insufficient peers available for lookup")
 	}
 	for _, p := range closestPeers {
 		unqueried[p] = true
@@ -296,7 +297,7 @@ func (kr *KademliaResolver) iterativeLookup(ctx context.Context, target common.H
 		}
 	}
 
-	return nil, fmt.Errorf("router info not found after %d iterative hops", MaxIterativeLookupHops)
+	return nil, oops.Errorf("router info not found after %d iterative hops", MaxIterativeLookupHops)
 }
 
 // processLookupRound executes a single round of the iterative Kademlia lookup.
@@ -437,7 +438,7 @@ func (kr *KademliaResolver) collectLookupResult(resultChan chan *router_info.Rou
 			"at":      "collectLookupResult",
 			"timeout": timeout,
 		}).Error("Kademlia lookup timed out")
-		return nil, fmt.Errorf("lookup timed out after %s", timeout)
+		return nil, oops.Errorf("lookup timed out after %s", timeout)
 	}
 }
 
@@ -542,20 +543,20 @@ func (kr *KademliaResolver) queryPeer(ctx context.Context, peer, target common.H
 			"target": fmt.Sprintf("%x", target[:8]),
 			"reason": "no_transport",
 		}).Debug("Transport not configured, using local-only lookup")
-		return nil, fmt.Errorf("transport not configured for remote lookups")
+		return nil, oops.Errorf("transport not configured for remote lookups")
 	}
 
 	// Get the peer's RouterInfo from our database
 	peerRI := kr.getPeerRouterInfo(peer)
 	if peerRI == nil {
-		return nil, fmt.Errorf("peer %x not found in local database", peer[:8])
+		return nil, oops.Errorf("peer %x not found in local database", peer[:8])
 	}
 
 	// Determine which hash to use as "from" in the lookup
 	fromHash := ourHash
 	var emptyHash common.Hash
 	if fromHash == emptyHash {
-		return nil, fmt.Errorf("cannot query peer: our router hash is not set")
+		return nil, oops.Errorf("cannot query peer: our router hash is not set")
 	}
 
 	// Create the DatabaseLookup message for RouterInfo lookup
@@ -569,7 +570,7 @@ func (kr *KademliaResolver) queryPeer(ctx context.Context, peer, target common.H
 			"peer":   fmt.Sprintf("%x", peer[:8]),
 			"target": fmt.Sprintf("%x", target[:8]),
 		}).Debug("DatabaseLookup failed")
-		return nil, fmt.Errorf("lookup failed: %w", err)
+		return nil, oops.Errorf("lookup failed: %w", err)
 	}
 
 	// Process the response based on message type
@@ -613,7 +614,7 @@ func (kr *KademliaResolver) processLookupResponse(data []byte, msgType int, targ
 		return kr.processDatabaseSearchReplyResponse(data, targetHash)
 
 	default:
-		return nil, fmt.Errorf("unexpected response type: %d", msgType)
+		return nil, oops.Errorf("unexpected response type: %d", msgType)
 	}
 }
 
@@ -631,7 +632,7 @@ func (kr *KademliaResolver) processDatabaseStoreResponse(data []byte, targetHash
 
 	ri, _, err := router_info.ReadRouterInfo(decompressed)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse RouterInfo: %w", err)
+		return nil, oops.Errorf("failed to parse RouterInfo: %w", err)
 	}
 
 	kr.NetworkDatabase.StoreRouterInfo(ri)
@@ -649,7 +650,7 @@ func (kr *KademliaResolver) processDatabaseStoreResponse(data []byte, targetHash
 func parseDatabaseStore(data []byte, targetHash common.Hash) (*i2np.DatabaseStore, error) {
 	var dbStore i2np.DatabaseStore
 	if err := dbStore.UnmarshalBinary(data); err != nil {
-		return nil, fmt.Errorf("failed to parse DatabaseStore: %w", err)
+		return nil, oops.Errorf("failed to parse DatabaseStore: %w", err)
 	}
 
 	if dbStore.Key != targetHash {
@@ -658,11 +659,11 @@ func parseDatabaseStore(data []byte, targetHash common.Hash) (*i2np.DatabaseStor
 			"expected": fmt.Sprintf("%x", targetHash[:8]),
 			"got":      fmt.Sprintf("%x", dbStore.Key[:8]),
 		}).Warn("DatabaseStore key mismatch")
-		return nil, fmt.Errorf("key mismatch in response")
+		return nil, oops.Errorf("key mismatch in response")
 	}
 
 	if !dbStore.IsRouterInfo() {
-		return nil, fmt.Errorf("response is not a RouterInfo (type=%d)", dbStore.StoreType)
+		return nil, oops.Errorf("response is not a RouterInfo (type=%d)", dbStore.StoreType)
 	}
 
 	return &dbStore, nil
@@ -673,19 +674,19 @@ func parseDatabaseStore(data []byte, targetHash common.Hash) (*i2np.DatabaseStor
 // big-endian compressed length followed by the compressed data.
 func decompressRouterInfoPayload(storeData []byte) ([]byte, error) {
 	if len(storeData) < 2 {
-		return nil, fmt.Errorf("RouterInfo data too short")
+		return nil, oops.Errorf("RouterInfo data too short")
 	}
 
 	compressedLen := int(binary.BigEndian.Uint16(storeData[:2]))
 	if len(storeData) < 2+compressedLen {
-		return nil, fmt.Errorf("RouterInfo data truncated: need %d bytes, have %d", 2+compressedLen, len(storeData))
+		return nil, oops.Errorf("RouterInfo data truncated: need %d bytes, have %d", 2+compressedLen, len(storeData))
 	}
 
 	compressedData := storeData[2 : 2+compressedLen]
 
 	decompressed, err := gzipDecompress(compressedData)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decompress RouterInfo: %w", err)
+		return nil, oops.Errorf("failed to decompress RouterInfo: %w", err)
 	}
 
 	log.WithFields(logger.Fields{
@@ -713,7 +714,7 @@ func (e *SearchReplyError) Error() string {
 func (kr *KademliaResolver) processDatabaseSearchReplyResponse(data []byte, targetHash common.Hash) (*router_info.RouterInfo, error) {
 	searchReply, err := i2np.ReadDatabaseSearchReply(data)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse DatabaseSearchReply: %w", err)
+		return nil, oops.Errorf("failed to parse DatabaseSearchReply: %w", err)
 	}
 
 	if len(searchReply.PeerHashes) > 0 {

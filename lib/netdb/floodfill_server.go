@@ -13,6 +13,7 @@ import (
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // FloodfillServer implements floodfill router functionality, handling incoming
@@ -255,14 +256,14 @@ func (fs *FloodfillServer) HandleDatabaseLookup(lookup *i2np.DatabaseLookup) err
 
 	if !enabled {
 		log.Debug("Floodfill server not enabled, ignoring lookup")
-		return fmt.Errorf("floodfill server not enabled")
+		return oops.Errorf("floodfill server not enabled")
 	}
 
 	// Rate limit per source peer
 	if fs.lookupLimiter != nil && !fs.lookupLimiter.Allow(lookup.From) {
 		log.WithField("from", fmt.Sprintf("%x", lookup.From[:8])).
 			Warn("Rate limiting DatabaseLookup from peer")
-		return fmt.Errorf("rate limited")
+		return oops.Errorf("rate limited")
 	}
 
 	// Reject lookups with a zero-hash From field.
@@ -271,7 +272,7 @@ func (fs *FloodfillServer) HandleDatabaseLookup(lookup *i2np.DatabaseLookup) err
 	var zeroHash common.Hash
 	if lookup.From == zeroHash {
 		log.Warn("Rejecting DatabaseLookup with zero-hash From field")
-		return fmt.Errorf("invalid From field: zero hash")
+		return oops.Errorf("invalid From field: zero hash")
 	}
 
 	key := lookup.Key
@@ -326,7 +327,7 @@ func (fs *FloodfillServer) lookupData(key common.Hash, lookupType string) ([]byt
 		return fs.lookupLeaseSet(key)
 	case "exploration":
 		// Exploration lookups never return actual data; always return SearchReply
-		return nil, 0, fmt.Errorf("exploration lookup")
+		return nil, 0, oops.Errorf("exploration lookup")
 	default: // "any"
 		// Try RouterInfo first, then LeaseSet
 		data, dataType, err := fs.lookupRouterInfo(key)
@@ -344,7 +345,7 @@ func (fs *FloodfillServer) lookupRouterInfo(key common.Hash) ([]byte, byte, erro
 		return nil, 0, err
 	}
 	if len(data) == 0 {
-		return nil, 0, fmt.Errorf("RouterInfo not found for %x", key[:8])
+		return nil, 0, oops.Errorf("RouterInfo not found for %x", key[:8])
 	}
 
 	// Gzip-compress the RouterInfo data for DatabaseStore (per I2P spec)
@@ -385,7 +386,7 @@ func (fs *FloodfillServer) lookupLeaseSet(key common.Hash) ([]byte, byte, error)
 		return data, i2np.DatabaseStoreTypeLeaseSet, nil
 	}
 
-	return nil, 0, fmt.Errorf("LeaseSet not found for %x", key[:8])
+	return nil, 0, oops.Errorf("LeaseSet not found for %x", key[:8])
 }
 
 // sendDatabaseStore constructs and sends a DatabaseStore response to the requester.
@@ -397,7 +398,7 @@ func (fs *FloodfillServer) sendDatabaseStore(
 	transport FloodfillTransport,
 ) error {
 	if transport == nil {
-		return fmt.Errorf("no transport available to send DatabaseStore response")
+		return oops.Errorf("no transport available to send DatabaseStore response")
 	}
 
 	store := i2np.NewDatabaseStore(key, data, dataType)
@@ -420,7 +421,7 @@ func (fs *FloodfillServer) sendDatabaseSearchReply(
 	transport FloodfillTransport,
 ) error {
 	if transport == nil {
-		return fmt.Errorf("no transport available to send DatabaseSearchReply")
+		return oops.Errorf("no transport available to send DatabaseSearchReply")
 	}
 
 	// Select closest floodfill routers to suggest
@@ -532,17 +533,17 @@ func (fs *FloodfillServer) floodToSelectedPeers(floodfills []router_info.RouterI
 func (fs *FloodfillServer) GetFloodfillRouterInfo() (*router_info.RouterInfo, error) {
 	ch := fs.db.GetRouterInfo(fs.ourHash)
 	if ch == nil {
-		return nil, fmt.Errorf("our RouterInfo not found in NetDB")
+		return nil, oops.Errorf("our RouterInfo not found in NetDB")
 	}
 
 	select {
 	case ri, ok := <-ch:
 		if !ok {
-			return nil, fmt.Errorf("channel closed without RouterInfo")
+			return nil, oops.Errorf("channel closed without RouterInfo")
 		}
 		return &ri, nil
 	case <-time.After(1 * time.Second):
-		return nil, fmt.Errorf("timeout getting our RouterInfo")
+		return nil, oops.Errorf("timeout getting our RouterInfo")
 	}
 }
 
@@ -565,7 +566,7 @@ func gzipCompress(data []byte) ([]byte, error) {
 func gzipDecompress(data []byte) ([]byte, error) {
 	r, err := gzip.NewReader(bytes.NewReader(data))
 	if err != nil {
-		return nil, fmt.Errorf("gzip: failed to create reader: %w", err)
+		return nil, oops.Errorf("gzip: failed to create reader: %w", err)
 	}
 	defer r.Close()
 	var buf bytes.Buffer
@@ -574,10 +575,10 @@ func gzipDecompress(data []byte) ([]byte, error) {
 	const maxDecompressedSize = 64 * 1024
 	limited := io.LimitReader(r, maxDecompressedSize+1)
 	if _, err := buf.ReadFrom(limited); err != nil {
-		return nil, fmt.Errorf("gzip: decompression failed: %w", err)
+		return nil, oops.Errorf("gzip: decompression failed: %w", err)
 	}
 	if buf.Len() > maxDecompressedSize {
-		return nil, fmt.Errorf("gzip: decompressed data exceeds %d bytes, possible zip bomb", maxDecompressedSize)
+		return nil, oops.Errorf("gzip: decompressed data exceeds %d bytes, possible zip bomb", maxDecompressedSize)
 	}
 	return buf.Bytes(), nil
 }

@@ -8,6 +8,7 @@ import (
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/destination"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 func (s *Server) handleMessage(msg *Message, sessionPtr **Session) (*Message, error) {
@@ -73,7 +74,7 @@ func (s *Server) handleMessage(msg *Message, sessionPtr **Session) (*Message, er
 			"payloadSize": len(msg.Payload),
 			"payloadHex":  fmt.Sprintf("%x", msg.Payload[:min(32, len(msg.Payload))]),
 		}).Warn("unsupported_message_type")
-		return nil, fmt.Errorf("unsupported message type: %d", msg.Type)
+		return nil, oops.Errorf("unsupported message type: %d", msg.Type)
 	}
 }
 
@@ -82,14 +83,14 @@ func (s *Server) handleCreateSession(msg *Message, sessionPtr **Session) (*Messa
 	// Parse and validate session configuration
 	dest, config, err := parseSessionConfiguration(msg.Payload)
 	if err != nil {
-		return nil, fmt.Errorf("session configuration error: %w", err)
+		return nil, oops.Errorf("session configuration error: %w", err)
 	}
 
 	// Create session with parsed or default configuration
 	// If dest is nil, NewSession will generate a new destination
 	session, err := s.manager.CreateSession(dest, config)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create session: %w", err)
+		return nil, oops.Errorf("failed to create session: %w", err)
 	}
 
 	// Configure LeaseSet publisher if available
@@ -149,7 +150,7 @@ func parseSessionConfiguration(payload []byte) (*destination.Destination, *Sessi
 			"payload_size": len(payload),
 			"error":        err.Error(),
 		}).Warn("failed to parse create session payload")
-		return nil, nil, fmt.Errorf("failed to parse session configuration: %w", err)
+		return nil, nil, oops.Errorf("failed to parse session configuration: %w", err)
 	}
 
 	// Validate the parsed configuration
@@ -160,7 +161,7 @@ func parseSessionConfiguration(payload []byte) (*destination.Destination, *Sessi
 			"payload_size": len(payload),
 			"error":        err.Error(),
 		}).Warn("invalid session config")
-		return dest, nil, fmt.Errorf("invalid session configuration: %w", err)
+		return dest, nil, oops.Errorf("invalid session configuration: %w", err)
 	}
 
 	return dest, config, nil
@@ -207,13 +208,13 @@ func buildMessageStatusResponse(sessionID uint16, messageID uint32, statusCode u
 // handleDestroySession destroys a session
 func (s *Server) handleDestroySession(msg *Message, sessionPtr **Session) (*Message, error) {
 	if *sessionPtr == nil {
-		return nil, fmt.Errorf("session not active")
+		return nil, oops.Errorf("session not active")
 	}
 
 	sessionID := (*sessionPtr).ID()
 
 	if err := s.manager.DestroySession(sessionID); err != nil {
-		return nil, fmt.Errorf("failed to destroy session: %w", err)
+		return nil, oops.Errorf("failed to destroy session: %w", err)
 	}
 
 	*sessionPtr = nil
@@ -239,7 +240,7 @@ func (s *Server) handleDestroySession(msg *Message, sessionPtr **Session) (*Mess
 // stripSessionIDPrefix removes the 2-byte SessionID prefix from the payload.
 func stripSessionIDPrefix(payload []byte) ([]byte, error) {
 	if len(payload) < 2 {
-		return nil, fmt.Errorf("ReconfigureSession payload too short: %d bytes (need at least 2 for SessionID)", len(payload))
+		return nil, oops.Errorf("ReconfigureSession payload too short: %d bytes (need at least 2 for SessionID)", len(payload))
 	}
 	return payload[2:], nil
 }
@@ -249,11 +250,11 @@ func parseAndValidateReconfigPayload(payloadData []byte) (*SessionConfig, error)
 	newConfig, err := ParseReconfigureSessionPayload(payloadData)
 	if err != nil {
 		log.WithError(err).Error("failed to parse reconfigure session payload")
-		return nil, fmt.Errorf("failed to parse reconfigure payload: %w", err)
+		return nil, oops.Errorf("failed to parse reconfigure payload: %w", err)
 	}
 	if err := ValidateSessionConfig(newConfig); err != nil {
 		log.WithError(err).Warn("invalid session config in reconfigure request")
-		return nil, fmt.Errorf("invalid configuration: %w", err)
+		return nil, oops.Errorf("invalid configuration: %w", err)
 	}
 	return newConfig, nil
 }
@@ -272,7 +273,7 @@ func logReconfigSuccess(sessionID uint16, cfg *SessionConfig) {
 
 func (s *Server) handleReconfigureSession(msg *Message, sessionPtr **Session) (*Message, error) {
 	if *sessionPtr == nil {
-		return nil, fmt.Errorf("session not active")
+		return nil, oops.Errorf("session not active")
 	}
 
 	payloadData, err := stripSessionIDPrefix(msg.Payload)
@@ -286,7 +287,7 @@ func (s *Server) handleReconfigureSession(msg *Message, sessionPtr **Session) (*
 	}
 
 	if err := (*sessionPtr).Reconfigure(newConfig); err != nil {
-		return nil, fmt.Errorf("failed to reconfigure session: %w", err)
+		return nil, oops.Errorf("failed to reconfigure session: %w", err)
 	}
 
 	if err := s.rebuildSessionTunnelPools(*sessionPtr); err != nil {
@@ -307,7 +308,7 @@ func (s *Server) handleReconfigureSession(msg *Message, sessionPtr **Session) (*
 // publish the LeaseSet to the network database.
 func (s *Server) handleCreateLeaseSet(msg *Message, sessionPtr **Session) (*Message, error) {
 	if *sessionPtr == nil {
-		return nil, fmt.Errorf("no active session")
+		return nil, oops.Errorf("no active session")
 	}
 
 	session := *sessionPtr
@@ -327,7 +328,7 @@ func (s *Server) handleCreateLeaseSet(msg *Message, sessionPtr **Session) (*Mess
 			"sessionID": session.ID(),
 			"error":     err,
 		}).Error("failed_to_create_leaseset")
-		return nil, fmt.Errorf("failed to create LeaseSet: %w", err)
+		return nil, oops.Errorf("failed to create LeaseSet: %w", err)
 	}
 
 	log.WithFields(logger.Fields{
@@ -378,7 +379,7 @@ func (s *Server) handleCreateLeaseSet(msg *Message, sessionPtr **Session) (*Mess
 // LeaseSet2 structure. The router validates and publishes it to the network.
 func (s *Server) handleCreateLeaseSet2(msg *Message, sessionPtr **Session) (*Message, error) {
 	if *sessionPtr == nil {
-		return nil, fmt.Errorf("no active session")
+		return nil, oops.Errorf("no active session")
 	}
 
 	session := *sessionPtr
@@ -401,7 +402,7 @@ func (s *Server) handleCreateLeaseSet2(msg *Message, sessionPtr **Session) (*Mes
 
 	if err := session.ValidateLeaseSet2Data(leaseSetBytes); err != nil {
 		logLeaseSet2ValidationError(session.ID(), err)
-		return nil, fmt.Errorf("LeaseSet2 validation failed: %w", err)
+		return nil, oops.Errorf("LeaseSet2 validation failed: %w", err)
 	}
 
 	session.SetCurrentLeaseSet(leaseSetBytes)
@@ -428,7 +429,7 @@ func logLeaseSet2Request(sessionID uint16, payloadSize int) {
 // extractLeaseSet2Payload strips the 2-byte SessionID prefix from the payload.
 func extractLeaseSet2Payload(payload []byte) ([]byte, error) {
 	if len(payload) < 2 {
-		return nil, fmt.Errorf("CreateLeaseSet2 payload too short: %d bytes (need at least 2 for SessionID)", len(payload))
+		return nil, oops.Errorf("CreateLeaseSet2 payload too short: %d bytes (need at least 2 for SessionID)", len(payload))
 	}
 	return payload[2:], nil
 }
@@ -442,7 +443,7 @@ func validateLeaseSet2PayloadSize(sessionID uint16, leaseSetBytes []byte) error 
 			"sessionID":   sessionID,
 			"payloadSize": len(leaseSetBytes),
 		}).Warn("create_leaseset2_payload_too_short")
-		return fmt.Errorf("CreateLeaseSet2 payload too short: %d bytes (need at least 400)", len(leaseSetBytes))
+		return oops.Errorf("CreateLeaseSet2 payload too short: %d bytes (need at least 400)", len(leaseSetBytes))
 	}
 	return nil
 }
@@ -737,7 +738,7 @@ func buildHostReplyMessage(sessionID uint16, replyPayload *HostReplyPayload) (*M
 			"requestID": replyPayload.RequestID,
 			"error":     err.Error(),
 		}).Error("failed_to_marshal_host_reply")
-		return nil, fmt.Errorf("failed to marshal HostReply: %w", err)
+		return nil, oops.Errorf("failed to marshal HostReply: %w", err)
 	}
 
 	log.WithFields(logger.Fields{
@@ -765,7 +766,7 @@ func (s *Server) handleHostLookup(msg *Message) (*Message, error) {
 	lookupMsg, err := ParseHostLookupPayload(msg.Payload)
 	if err != nil {
 		logHostLookupParseError(msg.SessionID, len(msg.Payload), err)
-		return nil, fmt.Errorf("failed to parse HostLookup payload: %w", err)
+		return nil, oops.Errorf("failed to parse HostLookup payload: %w", err)
 	}
 
 	logHostLookupRequest(msg.SessionID, lookupMsg)
@@ -902,13 +903,13 @@ func (s *Server) extractDestinationFromLeaseSet(leaseSetBytes []byte) ([]byte, e
 	// Destination minimum size is 387 bytes (for standard ElGamal/DSA)
 	// But can be larger with key certificates
 	if len(leaseSetBytes) < 387 {
-		return nil, fmt.Errorf("leaseset too small: %d bytes", len(leaseSetBytes))
+		return nil, oops.Errorf("leaseset too small: %d bytes", len(leaseSetBytes))
 	}
 
 	// Parse the destination to determine its actual size
 	_, remainder, err := destination.ReadDestination(leaseSetBytes)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse destination: %w", err)
+		return nil, oops.Errorf("failed to parse destination: %w", err)
 	}
 
 	// Calculate how many bytes the destination occupies
@@ -931,7 +932,7 @@ func (s *Server) extractDestinationFromLeaseSet(leaseSetBytes []byte) ([]byte, e
 // The session's updateBlindedDestination() handles daily rotation automatically.
 func (s *Server) handleBlindingInfo(msg *Message, sessionPtr **Session) (*Message, error) {
 	if *sessionPtr == nil {
-		return nil, fmt.Errorf("session not active")
+		return nil, oops.Errorf("session not active")
 	}
 
 	session := *sessionPtr
@@ -960,7 +961,7 @@ func parseAndLogBlindingInfo(msg *Message, session *Session) (*BlindingInfoPaylo
 			"payloadSize": len(msg.Payload),
 			"error":       err.Error(),
 		}).Error("failed_to_parse_blinding_info")
-		return nil, fmt.Errorf("failed to parse BlindingInfo payload: %w", err)
+		return nil, oops.Errorf("failed to parse BlindingInfo payload: %w", err)
 	}
 
 	log.WithFields(logger.Fields{
@@ -1004,7 +1005,7 @@ func applyBlindedDestinationUpdate(session *Session, blindingInfo *BlindingInfoP
 			"sessionID": session.ID(),
 			"error":     err.Error(),
 		}).Error("failed_to_update_blinded_destination")
-		return fmt.Errorf("failed to update blinded destination: %w", err)
+		return oops.Errorf("failed to update blinded destination: %w", err)
 	}
 
 	log.WithFields(logger.Fields{
@@ -1052,7 +1053,7 @@ func (s *Server) handleSendMessage(msg *Message, sessionPtr **Session) (*Message
 // validateSessionForSending validates that a session exists for sending.
 func (s *Server) validateSessionForSending(sessionPtr **Session) (*Session, error) {
 	if *sessionPtr == nil {
-		return nil, fmt.Errorf("session not active")
+		return nil, oops.Errorf("session not active")
 	}
 	return *sessionPtr, nil
 }
@@ -1073,7 +1074,7 @@ func (s *Server) parseSendMessagePayload(msg *Message, session *Session) (*SendM
 	// ReadMessage extracts SessionID into msg.SessionID but does not remove it
 	// from msg.Payload. ParseSendMessagePayload expects: Destination(32) + Payload.
 	if len(msg.Payload) < 2 {
-		return nil, fmt.Errorf("SendMessage payload too short: %d bytes (need at least 2 for SessionID)", len(msg.Payload))
+		return nil, oops.Errorf("SendMessage payload too short: %d bytes (need at least 2 for SessionID)", len(msg.Payload))
 	}
 	payloadData := msg.Payload[2:]
 
@@ -1088,7 +1089,7 @@ func (s *Server) parseSendMessagePayload(msg *Message, session *Session) (*SendM
 			"error":          err,
 			"payloadExcerpt": fmt.Sprintf("%x", msg.Payload[:excerptLen]),
 		}).Error("failed_to_parse_send_message")
-		return nil, fmt.Errorf("failed to parse SendMessage payload: %w", err)
+		return nil, oops.Errorf("failed to parse SendMessage payload: %w", err)
 	}
 
 	// Validate payload size to prevent exceeding I2CP limits after garlic encryption
@@ -1108,7 +1109,7 @@ func (s *Server) parseSendMessagePayload(msg *Message, session *Session) (*SendM
 			"overhead":        512,
 			"destinationHash": fmt.Sprintf("%x", sendMsg.Destination[:8]),
 		}).Error("send_message_payload_too_large")
-		return nil, fmt.Errorf("message payload too large: %d bytes (max %d bytes to allow for encryption overhead)",
+		return nil, oops.Errorf("message payload too large: %d bytes (max %d bytes to allow for encryption overhead)",
 			len(sendMsg.Payload), maxSafePayloadSize)
 	}
 
@@ -1123,7 +1124,7 @@ func (s *Server) validateOutboundPool(session *Session) error {
 			"at":        "i2cp.Server.validateOutboundPool",
 			"sessionID": session.ID(),
 		}).Warn("no_outbound_tunnel_pool")
-		return fmt.Errorf("session %d has no outbound tunnel pool", session.ID())
+		return oops.Errorf("session %d has no outbound tunnel pool", session.ID())
 	}
 	return nil
 }
@@ -1208,7 +1209,7 @@ func (s *Server) parseSendMessageExpiresPayload(msg *Message, session *Session) 
 	// from msg.Payload. ParseSendMessageExpiresPayload expects:
 	// Destination(32) + PayloadLen(4) + Payload + Nonce(4) + Expiration(8).
 	if len(msg.Payload) < 2 {
-		return nil, fmt.Errorf("SendMessageExpires payload too short: %d bytes (need at least 2 for SessionID)", len(msg.Payload))
+		return nil, oops.Errorf("SendMessageExpires payload too short: %d bytes (need at least 2 for SessionID)", len(msg.Payload))
 	}
 	payloadData := msg.Payload[2:]
 
@@ -1222,7 +1223,7 @@ func (s *Server) parseSendMessageExpiresPayload(msg *Message, session *Session) 
 			"error":          err,
 			"payloadExcerpt": fmt.Sprintf("%x", msg.Payload[:excerptLen]),
 		}).Error("failed_to_parse_send_message_expires")
-		return nil, fmt.Errorf("failed to parse SendMessageExpires payload: %w", err)
+		return nil, oops.Errorf("failed to parse SendMessageExpires payload: %w", err)
 	}
 
 	// Validate payload size (same limits as SendMessage)
@@ -1236,7 +1237,7 @@ func (s *Server) parseSendMessageExpiresPayload(msg *Message, session *Session) 
 			"maxPayloadSize":  MaxPayloadSize,
 			"destinationHash": fmt.Sprintf("%x", sendMsg.Destination[:8]),
 		}).Error("send_message_expires_payload_too_large")
-		return nil, fmt.Errorf("message payload too large: %d bytes (max %d bytes to allow for encryption overhead)",
+		return nil, oops.Errorf("message payload too large: %d bytes (max %d bytes to allow for encryption overhead)",
 			len(sendMsg.Payload), maxSafePayloadSize)
 	}
 

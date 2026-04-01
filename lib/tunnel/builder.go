@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/go-i2p/crypto/rand"
+	"github.com/samber/oops"
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
@@ -36,7 +37,7 @@ func NewTunnelBuilder(selector PeerSelector) (*TunnelBuilder, error) {
 			"phase":  "tunnel_build",
 			"reason": "peer selector is nil",
 		}).Error("peer selector is nil")
-		return nil, fmt.Errorf("peer selector cannot be nil")
+		return nil, oops.Errorf("peer selector cannot be nil")
 	}
 	log.WithFields(logger.Fields{
 		"at":     "(TunnelBuilder) NewTunnelBuilder",
@@ -191,7 +192,7 @@ func (tb *TunnelBuilder) CreateBuildRequest(req BuildTunnelRequest) (*TunnelBuil
 	hopTunnelIDs, err := generateHopTunnelIDs(req.HopCount)
 	if err != nil {
 		logTunnelIDError(err)
-		return nil, fmt.Errorf("failed to generate hop tunnel IDs: %w", err)
+		return nil, oops.Errorf("failed to generate hop tunnel IDs: %w", err)
 	}
 	// The primary tunnel ID is the first hop's receive tunnel ID
 	logTunnelIDGenerated(hopTunnelIDs[0])
@@ -281,7 +282,7 @@ func (tb *TunnelBuilder) validateHopCount(hopCount int) error {
 			"hop_count": hopCount,
 			"reason":    "hop count out of range (1-8)",
 		}).Error("Invalid hop count")
-		return fmt.Errorf("hop count must be between 1 and 8, got %d", hopCount)
+		return oops.Errorf("hop count must be between 1 and 8, got %d", hopCount)
 	}
 	return nil
 }
@@ -307,7 +308,7 @@ func (tb *TunnelBuilder) selectTunnelPeers(req BuildTunnelRequest) ([]router_inf
 			"hop_count":     req.HopCount,
 			"exclude_count": len(req.ExcludePeers),
 		}).Error("peer selection failed")
-		return nil, fmt.Errorf("failed to select peers: %w", err)
+		return nil, oops.Errorf("failed to select peers: %w", err)
 	}
 
 	if len(peers) < req.HopCount {
@@ -321,7 +322,7 @@ func (tb *TunnelBuilder) selectTunnelPeers(req BuildTunnelRequest) ([]router_inf
 			"impact":     "tunnel build will fail",
 			"suggestion": "ensure sufficient peers in netDb or complete bootstrap",
 		}).Warn("not enough peers available for tunnel building")
-		return nil, fmt.Errorf("insufficient peers: need %d, got %d", req.HopCount, len(peers))
+		return nil, oops.Errorf("insufficient peers: need %d, got %d", req.HopCount, len(peers))
 	}
 
 	log.WithFields(logger.Fields{
@@ -343,13 +344,13 @@ func generateHopTunnelIDs(hopCount int) ([]TunnelID, error) {
 	for i := 0; i < hopCount; i++ {
 		id, err := generateTunnelID()
 		if err != nil {
-			return nil, fmt.Errorf("failed to generate tunnel ID for hop %d: %w", i, err)
+			return nil, oops.Errorf("failed to generate tunnel ID for hop %d: %w", i, err)
 		}
 		// Ensure uniqueness across hops (collision is astronomically unlikely but we check anyway)
 		for seen[id] {
 			id, err = generateTunnelID()
 			if err != nil {
-				return nil, fmt.Errorf("failed to regenerate tunnel ID for hop %d: %w", i, err)
+				return nil, oops.Errorf("failed to regenerate tunnel ID for hop %d: %w", i, err)
 			}
 		}
 		seen[id] = true
@@ -380,7 +381,7 @@ func (tb *TunnelBuilder) createAllHopRecords(
 				"hop_index": i,
 				"hop_count": req.HopCount,
 			}).Error("failed to create hop record")
-			return nil, nil, nil, fmt.Errorf("failed to create record for hop %d: %w", i, err)
+			return nil, nil, nil, oops.Errorf("failed to create record for hop %d: %w", i, err)
 		}
 
 		tb.logHopRecordCreation(i, req, hopTunnelIDs[i], peers[i])
@@ -453,7 +454,7 @@ func (tb *TunnelBuilder) createHopRecord(
 		hopIndex, req, hopTunnelIDs, peers,
 	)
 	if err != nil {
-		return BuildRequestRecord{}, session_key.SessionKey{}, [16]byte{}, fmt.Errorf("failed to determine routing params: %w", err)
+		return BuildRequestRecord{}, session_key.SessionKey{}, [16]byte{}, oops.Errorf("failed to determine routing params: %w", err)
 	}
 
 	padding, err := generateRecordPadding()
@@ -463,7 +464,7 @@ func (tb *TunnelBuilder) createHopRecord(
 
 	sendMessageID, err := generateMessageID()
 	if err != nil {
-		return BuildRequestRecord{}, session_key.SessionKey{}, [16]byte{}, fmt.Errorf("failed to generate message ID: %w", err)
+		return BuildRequestRecord{}, session_key.SessionKey{}, [16]byte{}, oops.Errorf("failed to generate message ID: %w", err)
 	}
 
 	flag := determineBuildRecordFlag(hopIndex, req.HopCount, req.IsInbound)
@@ -480,24 +481,24 @@ func (tb *TunnelBuilder) createHopRecord(
 func generateHopCryptoKeys() (layerKey, ivKey, replyKey session_key.SessionKey, replyIV [16]byte, err error) {
 	layerKey, err = generateSessionKey()
 	if err != nil {
-		err = fmt.Errorf("failed to generate layer key: %w", err)
+		err = oops.Errorf("failed to generate layer key: %w", err)
 		return layerKey, ivKey, replyKey, replyIV, err
 	}
 
 	ivKey, err = generateSessionKey()
 	if err != nil {
-		err = fmt.Errorf("failed to generate IV key: %w", err)
+		err = oops.Errorf("failed to generate IV key: %w", err)
 		return layerKey, ivKey, replyKey, replyIV, err
 	}
 
 	replyKey, err = generateSessionKey()
 	if err != nil {
-		err = fmt.Errorf("failed to generate reply key: %w", err)
+		err = oops.Errorf("failed to generate reply key: %w", err)
 		return layerKey, ivKey, replyKey, replyIV, err
 	}
 
 	if _, err = rand.Read(replyIV[:]); err != nil {
-		err = fmt.Errorf("failed to generate reply IV: %w", err)
+		err = oops.Errorf("failed to generate reply IV: %w", err)
 		return layerKey, ivKey, replyKey, replyIV, err
 	}
 
@@ -508,7 +509,7 @@ func generateHopCryptoKeys() (layerKey, ivKey, replyKey session_key.SessionKey, 
 func generateRecordPadding() ([29]byte, error) {
 	var padding [29]byte
 	if _, err := rand.Read(padding[:]); err != nil {
-		return [29]byte{}, fmt.Errorf("failed to generate padding: %w", err)
+		return [29]byte{}, oops.Errorf("failed to generate padding: %w", err)
 	}
 	return padding, nil
 }
@@ -589,7 +590,7 @@ func (tb *TunnelBuilder) determineRoutingParams(
 ) (receiveTunnel, nextTunnel TunnelID, ourIdent, nextIdent common.Hash, err error) {
 	ourIdent, err = peers[hopIndex].IdentHash()
 	if err != nil {
-		return 0, 0, common.Hash{}, common.Hash{}, fmt.Errorf("failed to get hop %d identity: %w", hopIndex, err)
+		return 0, 0, common.Hash{}, common.Hash{}, oops.Errorf("failed to get hop %d identity: %w", hopIndex, err)
 	}
 
 	if req.IsInbound {
@@ -628,7 +629,7 @@ func (tb *TunnelBuilder) determineInboundRouting(
 		nextTunnel = hopTunnelIDs[hopIndex+1]
 		nextIdent, err = peers[hopIndex+1].IdentHash()
 		if err != nil {
-			return 0, 0, common.Hash{}, fmt.Errorf("failed to get next hop identity at index %d: %w", hopIndex+1, err)
+			return 0, 0, common.Hash{}, oops.Errorf("failed to get next hop identity at index %d: %w", hopIndex+1, err)
 		}
 	}
 
@@ -655,7 +656,7 @@ func (tb *TunnelBuilder) determineOutboundRouting(
 		nextTunnel = hopTunnelIDs[hopIndex+1]
 		nextIdent, err = peers[hopIndex+1].IdentHash()
 		if err != nil {
-			return 0, 0, common.Hash{}, fmt.Errorf("failed to get next hop identity at index %d: %w", hopIndex+1, err)
+			return 0, 0, common.Hash{}, oops.Errorf("failed to get next hop identity at index %d: %w", hopIndex+1, err)
 		}
 	}
 
@@ -670,7 +671,7 @@ func generateTunnelID() (TunnelID, error) {
 	for i := 0; i < maxAttempts; i++ {
 		var buf [4]byte
 		if _, err := rand.Read(buf[:]); err != nil {
-			return 0, fmt.Errorf("failed to read random data: %w", err)
+			return 0, oops.Errorf("failed to read random data: %w", err)
 		}
 
 		id := TunnelID(uint32(buf[0])<<24 | uint32(buf[1])<<16 | uint32(buf[2])<<8 | uint32(buf[3]))
@@ -678,7 +679,7 @@ func generateTunnelID() (TunnelID, error) {
 			return id, nil
 		}
 	}
-	return 0, fmt.Errorf("failed to generate non-zero tunnel ID after %d attempts", maxAttempts)
+	return 0, oops.Errorf("failed to generate non-zero tunnel ID after %d attempts", maxAttempts)
 }
 
 // generateSessionKey creates a cryptographically random 32-byte session key.
@@ -686,7 +687,7 @@ func generateTunnelID() (TunnelID, error) {
 func generateSessionKey() (session_key.SessionKey, error) {
 	var key session_key.SessionKey
 	if _, err := rand.Read(key[:]); err != nil {
-		return session_key.SessionKey{}, fmt.Errorf("failed to read random data: %w", err)
+		return session_key.SessionKey{}, oops.Errorf("failed to read random data: %w", err)
 	}
 	return key, nil
 }
@@ -698,7 +699,7 @@ func generateSessionKey() (session_key.SessionKey, error) {
 func generateMessageID() (int, error) {
 	var buf [4]byte
 	if _, err := rand.Read(buf[:]); err != nil {
-		return 0, fmt.Errorf("tunnel: crypto/rand failed: %w", err)
+		return 0, oops.Errorf("tunnel: crypto/rand failed: %w", err)
 	}
 	// Mask to 31 bits to guarantee positive int on 32-bit platforms.
 	return int((uint32(buf[0])<<24 | uint32(buf[1])<<16 | uint32(buf[2])<<8 | uint32(buf[3])) & 0x7FFFFFFF), nil

@@ -1,10 +1,9 @@
 package tunnel
 
 import (
-	"fmt"
-
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
+	"github.com/samber/oops"
 )
 
 // PeerEvaluator evaluates whether a peer should be selected.
@@ -27,7 +26,7 @@ func retryingSelect(
 	evaluator PeerEvaluator,
 ) ([]router_info.RouterInfo, int, error) {
 	if count <= 0 {
-		return nil, 0, fmt.Errorf("count must be > 0")
+		return nil, 0, oops.Errorf("count must be > 0")
 	}
 
 	allExcluded := buildExclusionSet(exclude)
@@ -82,7 +81,7 @@ func fetchPeerCandidates(
 
 	candidates, err := cfg.underlying.SelectPeers(requestCount, excludeList)
 	if err != nil {
-		return nil, fmt.Errorf("underlying selector error: %w", err)
+		return nil, oops.Errorf("underlying selector error: %w", err)
 	}
 	return candidates, nil
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/go-i2p/common/lease_set2"
 	"github.com/go-i2p/common/meta_leaseset"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // DestinationResolver resolves I2P destinations to their encryption public keys.
@@ -86,7 +87,7 @@ func (dr *DestinationResolver) ResolveDestination(destHash common.Hash) ([32]byt
 			"destination_hash": fmt.Sprintf("%x", destHash[:8]),
 			"reason":           "not found in netdb",
 		}).Error("Destination lookup failed")
-		return [32]byte{}, fmt.Errorf("destination %x not found in netdb", destHash[:8])
+		return [32]byte{}, oops.Errorf("destination %x not found in netdb", destHash[:8])
 	}
 
 	// Read from channel
@@ -97,7 +98,7 @@ func (dr *DestinationResolver) ResolveDestination(destHash common.Hash) ([32]byt
 			"destination_hash": fmt.Sprintf("%x", destHash[:8]),
 			"reason":           "channel closed",
 		}).Error("Failed to retrieve LeaseSet")
-		return [32]byte{}, fmt.Errorf("failed to retrieve LeaseSet for destination %x", destHash[:8])
+		return [32]byte{}, oops.Errorf("failed to retrieve LeaseSet for destination %x", destHash[:8])
 	}
 
 	// Extract key from legacy LeaseSet format
@@ -162,7 +163,7 @@ func (dr *DestinationResolver) parseLeaseSet2(lsBytes []byte) (lease_set2.LeaseS
 			"at":     "parseLeaseSet2",
 			"reason": "invalid LeaseSet2 data",
 		}).WithError(err).Debug("LeaseSet2 parse failed")
-		return lease_set2.LeaseSet2{}, fmt.Errorf("failed to parse LeaseSet2: %w", err)
+		return lease_set2.LeaseSet2{}, oops.Errorf("failed to parse LeaseSet2: %w", err)
 	}
 
 	return ls2, nil
@@ -175,7 +176,7 @@ func (dr *DestinationResolver) parseLeaseSet2(lsBytes []byte) (lease_set2.LeaseS
 // ReadLeaseSet2 for full format validation.
 func (dr *DestinationResolver) validateLeaseSet2Format(lsBytes []byte) error {
 	if len(lsBytes) == 0 {
-		return fmt.Errorf("empty lease set data")
+		return oops.Errorf("empty lease set data")
 	}
 	return nil
 }
@@ -196,7 +197,7 @@ func (dr *DestinationResolver) findX25519KeyInLeaseSet2(ls2 lease_set2.LeaseSet2
 		"destination_hash": fmt.Sprintf("%x", destHash[:8]),
 		"reason":           "no X25519 encryption key found",
 	}).Error("Encryption key not found in LeaseSet2")
-	return [32]byte{}, fmt.Errorf("x25519 encryption key not found in lease set")
+	return [32]byte{}, oops.Errorf("x25519 encryption key not found in lease set")
 }
 
 // extractValidX25519Key validates and extracts a 32-byte X25519 key from encryption key data.
@@ -208,7 +209,7 @@ func (dr *DestinationResolver) extractValidX25519Key(encKey lease_set2.Encryptio
 			"actual":   len(encKey.KeyData),
 			"reason":   "invalid key length",
 		}).Error("X25519 key validation failed")
-		return [32]byte{}, fmt.Errorf("invalid X25519 key length: %d", len(encKey.KeyData))
+		return [32]byte{}, oops.Errorf("invalid X25519 key length: %d", len(encKey.KeyData))
 	}
 
 	var pubKey [32]byte
@@ -234,7 +235,7 @@ func (dr *DestinationResolver) extractKeyFromLegacyLeaseSet(ls lease_set.LeaseSe
 	}
 
 	// Legacy ElGamal key — intentionally unsupported; this router only supports ECIES-X25519-AEAD
-	return [32]byte{}, fmt.Errorf("destination uses ElGamal encryption which is intentionally unsupported; this router only supports ECIES-X25519-AEAD destinations (see GAPS.md)")
+	return [32]byte{}, oops.Errorf("destination uses ElGamal encryption which is intentionally unsupported; this router only supports ECIES-X25519-AEAD destinations (see GAPS.md)")
 }
 
 // extractX25519KeyFromCertificate extracts an X25519 key from a destination's key certificate.
@@ -242,7 +243,7 @@ func (dr *DestinationResolver) extractKeyFromLegacyLeaseSet(ls lease_set.LeaseSe
 func (dr *DestinationResolver) extractX25519KeyFromCertificate(dest destination.Destination) ([32]byte, error) {
 	cryptoType := dest.KeyCertificate.PublicKeyType()
 	if cryptoType != key_certificate.KEYCERT_CRYPTO_X25519 {
-		return [32]byte{}, fmt.Errorf("destination uses crypto type %d, not X25519", cryptoType)
+		return [32]byte{}, oops.Errorf("destination uses crypto type %d, not X25519", cryptoType)
 	}
 
 	return dr.extractX25519KeyBytes(dest)
@@ -252,7 +253,7 @@ func (dr *DestinationResolver) extractX25519KeyFromCertificate(dest destination.
 func (dr *DestinationResolver) extractX25519KeyBytes(dest destination.Destination) ([32]byte, error) {
 	pubKeyBytes := dest.ReceivingPublic.Bytes()
 	if len(pubKeyBytes) != 32 {
-		return [32]byte{}, fmt.Errorf("invalid X25519 key length in destination: %d", len(pubKeyBytes))
+		return [32]byte{}, oops.Errorf("invalid X25519 key length in destination: %d", len(pubKeyBytes))
 	}
 
 	var key [32]byte
@@ -307,7 +308,7 @@ func (dr *DestinationResolver) ResolveEncryptedDestination(dest destination.Dest
 
 	destHash, err := dest.Hash()
 	if err != nil {
-		return [32]byte{}, fmt.Errorf("failed to hash destination: %w", err)
+		return [32]byte{}, oops.Errorf("failed to hash destination: %w", err)
 	}
 	return dr.findX25519KeyInLeaseSet2(*innerLS2, destHash)
 }
@@ -316,12 +317,12 @@ func (dr *DestinationResolver) ResolveEncryptedDestination(dest destination.Dest
 func (dr *DestinationResolver) deriveBlindedLookupHash(dest destination.Destination, secret []byte) (common.Hash, error) {
 	blindedDest, err := encrypted_leaseset.CreateBlindedDestination(dest, secret, time.Now())
 	if err != nil {
-		return common.Hash{}, fmt.Errorf("failed to derive blinded destination: %w", err)
+		return common.Hash{}, oops.Errorf("failed to derive blinded destination: %w", err)
 	}
 
 	blindedSigningKey, err := blindedDest.SigningPublicKey()
 	if err != nil {
-		return common.Hash{}, fmt.Errorf("failed to get blinded signing key: %w", err)
+		return common.Hash{}, oops.Errorf("failed to get blinded signing key: %w", err)
 	}
 	lookupHash := common.HashData(blindedSigningKey.Bytes())
 
@@ -337,12 +338,12 @@ func (dr *DestinationResolver) deriveBlindedLookupHash(dest destination.Destinat
 func (dr *DestinationResolver) fetchEncryptedLeaseSet(lookupHash common.Hash) (*encrypted_leaseset.EncryptedLeaseSet, error) {
 	elsBytes, err := dr.netdb.GetEncryptedLeaseSetBytes(lookupHash)
 	if err != nil {
-		return nil, fmt.Errorf("EncryptedLeaseSet not found for blinded hash %x: %w", lookupHash[:8], err)
+		return nil, oops.Errorf("EncryptedLeaseSet not found for blinded hash %x: %w", lookupHash[:8], err)
 	}
 
 	els, _, err := encrypted_leaseset.ReadEncryptedLeaseSet(elsBytes)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse EncryptedLeaseSet: %w", err)
+		return nil, oops.Errorf("failed to parse EncryptedLeaseSet: %w", err)
 	}
 	return &els, nil
 }
@@ -351,7 +352,7 @@ func (dr *DestinationResolver) fetchEncryptedLeaseSet(lookupHash common.Hash) (*
 func (dr *DestinationResolver) decryptEncryptedLeaseSet(dest destination.Destination, els *encrypted_leaseset.EncryptedLeaseSet) (*lease_set2.LeaseSet2, error) {
 	origSigningKey, err := dest.SigningPublicKey()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get original signing key: %w", err)
+		return nil, oops.Errorf("failed to get original signing key: %w", err)
 	}
 	subcredential := encrypted_leaseset.DeriveSubcredential(
 		origSigningKey.Bytes(),
@@ -360,7 +361,7 @@ func (dr *DestinationResolver) decryptEncryptedLeaseSet(dest destination.Destina
 
 	innerLS2, err := els.DecryptInnerData(subcredential)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decrypt EncryptedLeaseSet inner data: %w", err)
+		return nil, oops.Errorf("failed to decrypt EncryptedLeaseSet inner data: %w", err)
 	}
 	return innerLS2, nil
 }
@@ -389,7 +390,7 @@ func (dr *DestinationResolver) ResolveMetaDestination(destHash common.Hash) ([32
 // resolveMetaDestinationWithDepth is the depth-limited implementation of ResolveMetaDestination.
 func (dr *DestinationResolver) resolveMetaDestinationWithDepth(destHash common.Hash, depth int) ([32]byte, error) {
 	if depth >= maxMetaRecursionDepth {
-		return [32]byte{}, fmt.Errorf("MetaLeaseSet recursion depth exceeded (%d)", maxMetaRecursionDepth)
+		return [32]byte{}, oops.Errorf("MetaLeaseSet recursion depth exceeded (%d)", maxMetaRecursionDepth)
 	}
 
 	log.WithFields(logger.Fields{
@@ -406,7 +407,7 @@ func (dr *DestinationResolver) resolveMetaDestinationWithDepth(destHash common.H
 
 	validEntries := filterValidMetaEntries(mls.SortEntriesByCost())
 	if len(validEntries) == 0 {
-		return [32]byte{}, fmt.Errorf("all MetaLeaseSet entries are expired")
+		return [32]byte{}, oops.Errorf("all MetaLeaseSet entries are expired")
 	}
 
 	log.WithFields(logger.Fields{
@@ -421,11 +422,11 @@ func (dr *DestinationResolver) resolveMetaDestinationWithDepth(destHash common.H
 func (dr *DestinationResolver) fetchMetaLeaseSet(destHash common.Hash) (meta_leaseset.MetaLeaseSet, error) {
 	mlsBytes, err := dr.netdb.GetMetaLeaseSetBytes(destHash)
 	if err != nil {
-		return meta_leaseset.MetaLeaseSet{}, fmt.Errorf("MetaLeaseSet not found for hash %x: %w", destHash[:8], err)
+		return meta_leaseset.MetaLeaseSet{}, oops.Errorf("MetaLeaseSet not found for hash %x: %w", destHash[:8], err)
 	}
 	mls, _, err := meta_leaseset.ReadMetaLeaseSet(mlsBytes)
 	if err != nil {
-		return meta_leaseset.MetaLeaseSet{}, fmt.Errorf("failed to parse MetaLeaseSet: %w", err)
+		return meta_leaseset.MetaLeaseSet{}, oops.Errorf("failed to parse MetaLeaseSet: %w", err)
 	}
 	return mls, nil
 }
@@ -457,7 +458,7 @@ func (dr *DestinationResolver) resolveFirstValidEntry(entries []meta_leaseset.Me
 			"error":      err.Error(),
 		}).Debug("MetaLeaseSet entry resolution failed, trying next")
 	}
-	return [32]byte{}, fmt.Errorf("no resolvable component LeaseSet found in MetaLeaseSet")
+	return [32]byte{}, oops.Errorf("no resolvable component LeaseSet found in MetaLeaseSet")
 }
 
 // resolveMetaEntryWithDepth attempts to resolve a single MetaLeaseSet entry by its hash

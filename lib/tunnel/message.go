@@ -2,9 +2,9 @@ package tunnel
 
 import (
 	"encoding/binary"
-	"fmt"
 
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 
 	"github.com/go-i2p/crypto/tunnel"
 )
@@ -129,7 +129,7 @@ type DeliveryInstructionsWithFragment struct {
 
 func (tm EncryptedTunnelMessage) ID() (tid TunnelID, err error) {
 	if len(tm) < 4 {
-		return 0, fmt.Errorf("encrypted tunnel message too short for tunnel ID: %d bytes", len(tm))
+		return 0, oops.Errorf("encrypted tunnel message too short for tunnel ID: %d bytes", len(tm))
 	}
 	tid = TunnelID(binary.BigEndian.Uint32(tm[:4]))
 	return tid, nil
@@ -137,7 +137,7 @@ func (tm EncryptedTunnelMessage) ID() (tid TunnelID, err error) {
 
 func (tm EncryptedTunnelMessage) IV() (tunnel.TunnelIV, error) {
 	if len(tm) < 20 {
-		return nil, fmt.Errorf("encrypted tunnel message too short for IV: %d bytes", len(tm))
+		return nil, oops.Errorf("encrypted tunnel message too short for IV: %d bytes", len(tm))
 	}
 	return tm[4:20], nil
 }
@@ -148,7 +148,7 @@ func (tm EncryptedTunnelMessage) IV() (tunnel.TunnelIV, error) {
 // the decrypted format.
 func (tm EncryptedTunnelMessage) Data() ([]byte, error) {
 	if len(tm) < 20 {
-		return nil, fmt.Errorf("encrypted tunnel message too short for data: %d bytes", len(tm))
+		return nil, oops.Errorf("encrypted tunnel message too short for data: %d bytes", len(tm))
 	}
 	return tm[20:], nil
 }
@@ -221,7 +221,7 @@ func (decrypted_tunnel_message DecryptedTunnelMessage) DeliveryInstructionsWithF
 				"fragment_size": fragment_size,
 				"remainder_len": len(remainder),
 			}).Error("fragment size exceeds remaining data")
-			parseErr = fmt.Errorf("fragment size %d exceeds remaining data %d", fragment_size, len(remainder))
+			parseErr = oops.Errorf("fragment size %d exceeds remaining data %d", fragment_size, len(remainder))
 			break
 		}
 

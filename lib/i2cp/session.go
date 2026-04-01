@@ -2,13 +2,13 @@ package i2cp
 
 import (
 	"crypto/ed25519"
-	"fmt"
 	"sync"
 	"time"
 
 	ed25519i2p "github.com/go-i2p/crypto/ed25519"
 	"github.com/go-i2p/crypto/rand"
 	"github.com/go-i2p/crypto/types"
+	"github.com/samber/oops"
 
 	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/destination"
@@ -326,7 +326,7 @@ func prepareDestinationAndKeys(dest *destination.Destination, sigPriv types.Sign
 
 		keyStore, err := keys.NewDestinationKeyStoreFromKeys(sigPriv, encPriv, identityPadding...)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to create keystore from client keys: %w", err)
+			return nil, nil, oops.Errorf("failed to create keystore from client keys: %w", err)
 		}
 		return keyStore, keyStore.Destination(), nil
 	}
@@ -345,7 +345,7 @@ func prepareDestinationAndKeys(dest *destination.Destination, sigPriv types.Sign
 	// Case 3: No destination and no keys — generate everything fresh
 	keyStore, err := keys.NewDestinationKeyStore()
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to generate keys: %w", err)
+		return nil, nil, oops.Errorf("failed to generate keys: %w", err)
 	}
 
 	return keyStore, keyStore.Destination(), nil
@@ -556,7 +556,7 @@ func (s *Session) checkSessionActive() error {
 	s.mu.RUnlock()
 
 	if !active {
-		return fmt.Errorf("session %d not active", s.id)
+		return oops.Errorf("session %d not active", s.id)
 	}
 	return nil
 }
@@ -570,7 +570,7 @@ func (s *Session) checkRateLimit() error {
 			"session_id":      s.id,
 			"rate_limit_msgs": s.config.MessageRateLimit,
 		}).Warn("message rate limit exceeded")
-		return fmt.Errorf("message rate limit exceeded for session %d", s.id)
+		return oops.Errorf("message rate limit exceeded for session %d", s.id)
 	}
 	return nil
 }
@@ -620,7 +620,7 @@ func (s *Session) handleQueueFull() error {
 		"session_id": s.id,
 		"queue_cap":  cap(s.incomingMessages),
 	}).Error("Incoming message queue full")
-	return fmt.Errorf("incoming message queue full for session %d", s.id)
+	return oops.Errorf("incoming message queue full for session %d", s.id)
 }
 
 // QueueIncomingMessageWithID queues a message for delivery to the client with a message ID.
@@ -675,7 +675,7 @@ func (s *Session) Reconfigure(newConfig *SessionConfig) error {
 // validateSessionActive checks if the session is active before reconfiguration.
 func validateSessionActive(active bool, sessionID uint16) error {
 	if !active {
-		return fmt.Errorf("cannot reconfigure inactive session %d", sessionID)
+		return oops.Errorf("cannot reconfigure inactive session %d", sessionID)
 	}
 	return nil
 }
@@ -815,19 +815,19 @@ func (s *Session) CreateLeaseSet() ([]byte, error) {
 // Returns an error if the session is inactive or missing required components.
 func (s *Session) validateSessionState() error {
 	if !s.active {
-		return fmt.Errorf("session %d not active", s.id)
+		return oops.Errorf("session %d not active", s.id)
 	}
 
 	if s.inboundPool == nil {
-		return fmt.Errorf("session %d has no inbound tunnel pool", s.id)
+		return oops.Errorf("session %d has no inbound tunnel pool", s.id)
 	}
 
 	if s.destination == nil {
-		return fmt.Errorf("session %d has no destination", s.id)
+		return oops.Errorf("session %d has no destination", s.id)
 	}
 
 	if s.keys == nil {
-		return fmt.Errorf("session %d has no private keys", s.id)
+		return oops.Errorf("session %d has no private keys", s.id)
 	}
 
 	return nil
@@ -838,7 +838,7 @@ func (s *Session) validateSessionState() error {
 func (s *Session) collectActiveTunnels() ([]*tunnel.TunnelState, error) {
 	tunnels := s.inboundPool.GetActiveTunnels()
 	if len(tunnels) == 0 {
-		return nil, fmt.Errorf("session %d has no active inbound tunnels", s.id)
+		return nil, oops.Errorf("session %d has no active inbound tunnels", s.id)
 	}
 	return tunnels, nil
 }
@@ -887,7 +887,7 @@ func (s *Session) buildLeasesFromTunnels(tunnels []*tunnel.TunnelState) ([]lease
 	}).Debug("built_leases_from_tunnels")
 
 	if len(leases) == 0 {
-		return nil, fmt.Errorf("session %d has no valid leases to publish", s.id)
+		return nil, oops.Errorf("session %d has no valid leases to publish", s.id)
 	}
 
 	return leases, nil
@@ -915,7 +915,7 @@ func (s *Session) createLeaseFromTunnel(tun *tunnel.TunnelState) (*lease.Lease2,
 
 	timeUntilExpiration := time.Until(expiration)
 	if timeUntilExpiration < minValidity {
-		return nil, fmt.Errorf("lease would expire too soon (%v remaining, min %v required)",
+		return nil, oops.Errorf("lease would expire too soon (%v remaining, min %v required)",
 			timeUntilExpiration.Round(time.Second), minValidity)
 	}
 
@@ -927,7 +927,7 @@ func (s *Session) createLeaseFromTunnel(tun *tunnel.TunnelState) (*lease.Lease2,
 func (s *Session) prepareEncryptionKey() (lease_set2.EncryptionKey, error) {
 	encryptionPublicKey, err := s.keys.EncryptionPublicKey()
 	if err != nil {
-		return lease_set2.EncryptionKey{}, fmt.Errorf("failed to get encryption public key: %w", err)
+		return lease_set2.EncryptionKey{}, oops.Errorf("failed to get encryption public key: %w", err)
 	}
 
 	return lease_set2.EncryptionKey{
@@ -951,7 +951,7 @@ func (s *Session) stdlibSigningKey() (ed25519.PrivateKey, error) {
 	if kb, ok := key.(interface{ Bytes() []byte }); ok {
 		return ed25519.PrivateKey(kb.Bytes()), nil
 	}
-	return nil, fmt.Errorf("cannot convert signing key of type %T to ed25519.PrivateKey", key)
+	return nil, oops.Errorf("cannot convert signing key of type %T to ed25519.PrivateKey", key)
 }
 
 // assembleLeaseSet constructs and serializes the final LeaseSet2 structure.
@@ -960,7 +960,7 @@ func (s *Session) assembleLeaseSet(leases []lease.Lease2, encKey lease_set2.Encr
 	dest := *s.destination
 	signingPrivateKey, err := s.stdlibSigningKey()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get signing key: %w", err)
+		return nil, oops.Errorf("failed to get signing key: %w", err)
 	}
 
 	published := uint32(time.Now().Unix())
@@ -978,12 +978,12 @@ func (s *Session) assembleLeaseSet(leases []lease.Lease2, encKey lease_set2.Encr
 		signingPrivateKey,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create LeaseSet2: %w", err)
+		return nil, oops.Errorf("failed to create LeaseSet2: %w", err)
 	}
 
 	leaseSetBytes, err := ls2.Bytes()
 	if err != nil {
-		return nil, fmt.Errorf("failed to serialize LeaseSet2: %w", err)
+		return nil, oops.Errorf("failed to serialize LeaseSet2: %w", err)
 	}
 
 	return leaseSetBytes, nil
@@ -1080,7 +1080,7 @@ func (s *Session) finalizeEncryptedLeaseSet(cookie [32]byte, encryptedData []byt
 
 	elsBytes, err := els.Bytes()
 	if err != nil {
-		return nil, fmt.Errorf("failed to serialize EncryptedLeaseSet: %w", err)
+		return nil, oops.Errorf("failed to serialize EncryptedLeaseSet: %w", err)
 	}
 
 	return elsBytes, nil
@@ -1091,7 +1091,7 @@ func (s *Session) finalizeEncryptedLeaseSet(cookie [32]byte, encryptedData []byt
 func (s *Session) validateEncryptedLeaseSetSupport() error {
 	sigType := s.destination.KeyCertificate.SigningPublicKeyType()
 	if sigType != key_certificate.KEYCERT_SIGN_ED25519 {
-		return fmt.Errorf("EncryptedLeaseSet requires Ed25519 signature type (type 7), got type %d", sigType)
+		return oops.Errorf("EncryptedLeaseSet requires Ed25519 signature type (type 7), got type %d", sigType)
 	}
 	return nil
 }
@@ -1117,7 +1117,7 @@ func (s *Session) updateBlindedDestination() error {
 			today,
 		)
 		if err != nil {
-			return fmt.Errorf("failed to create blinded destination: %w", err)
+			return oops.Errorf("failed to create blinded destination: %w", err)
 		}
 
 		s.blindedDestination = &blindedDest
@@ -1149,7 +1149,7 @@ func (s *Session) ensureBlindingSecret() error {
 	// Generate random 32-byte secret
 	secret := make([]byte, 32)
 	if _, err := rand.Read(secret); err != nil {
-		return fmt.Errorf("failed to generate random blinding secret: %w", err)
+		return oops.Errorf("failed to generate random blinding secret: %w", err)
 	}
 
 	s.blindingSecret = secret
@@ -1173,7 +1173,7 @@ func (s *Session) createInnerLeaseSet2(leases []lease.Lease2) (*lease_set2.Lease
 	// for compatibility with common's ExtractEd25519PrivateKey type switch.
 	signingPrivateKey, err := s.stdlibSigningKey()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get signing key: %w", err)
+		return nil, oops.Errorf("failed to get signing key: %w", err)
 	}
 
 	// Calculate published time and expiration
@@ -1192,7 +1192,7 @@ func (s *Session) createInnerLeaseSet2(leases []lease.Lease2) (*lease_set2.Lease
 		signingPrivateKey,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create inner LeaseSet2: %w", err)
+		return nil, oops.Errorf("failed to create inner LeaseSet2: %w", err)
 	}
 
 	return &ls2, nil
@@ -1202,7 +1202,7 @@ func (s *Session) createInnerLeaseSet2(leases []lease.Lease2) (*lease_set2.Lease
 func (s *Session) generateEncryptionCookie() ([32]byte, error) {
 	var cookie [32]byte
 	if _, err := rand.Read(cookie[:]); err != nil {
-		return [32]byte{}, fmt.Errorf("failed to generate encryption cookie: %w", err)
+		return [32]byte{}, oops.Errorf("failed to generate encryption cookie: %w", err)
 	}
 	return cookie, nil
 }
@@ -1212,13 +1212,13 @@ func (s *Session) encryptInnerLeaseSet(ls2 *lease_set2.LeaseSet2, cookie [32]byt
 	// Get the unblinded destination's signing public key
 	destSigningPubKey, err := s.destination.SigningPublicKey()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get destination signing public key: %w", err)
+		return nil, oops.Errorf("failed to get destination signing public key: %w", err)
 	}
 
 	// Get the blinded destination's signing public key
 	blindedSigningPubKey, err := s.blindedDestination.SigningPublicKey()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get blinded signing public key: %w", err)
+		return nil, oops.Errorf("failed to get blinded signing public key: %w", err)
 	}
 
 	// Derive subcredential per I2P spec:
@@ -1235,7 +1235,7 @@ func (s *Session) encryptInnerLeaseSet(ls2 *lease_set2.LeaseSet2, cookie [32]byt
 	// Encrypt inner LeaseSet2
 	encryptedData, err := encrypted_leaseset.EncryptInnerLeaseSet2(ls2, subcredential, published)
 	if err != nil {
-		return nil, fmt.Errorf("failed to encrypt inner LeaseSet2: %w", err)
+		return nil, oops.Errorf("failed to encrypt inner LeaseSet2: %w", err)
 	}
 
 	return encryptedData, nil
@@ -1252,7 +1252,7 @@ func (s *Session) assembleEncryptedLeaseSet(cookie [32]byte, encryptedInnerData 
 	// The encrypted_leaseset library's NewEncryptedLeaseSet expects the blinded private key
 	signingPrivateKey, err := s.stdlibSigningKey()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get signing key: %w", err)
+		return nil, oops.Errorf("failed to get signing key: %w", err)
 	}
 
 	// Create EncryptedLeaseSet
@@ -1263,7 +1263,7 @@ func (s *Session) assembleEncryptedLeaseSet(cookie [32]byte, encryptedInnerData 
 	// Extract blinded public key bytes from the blinded destination
 	blindedPubKey, err := s.blindedDestination.PublicKey()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get blinded public key: %w", err)
+		return nil, oops.Errorf("failed to get blinded public key: %w", err)
 	}
 	blindedPubKeyBytes := blindedPubKey.Bytes()
 
@@ -1281,7 +1281,7 @@ func (s *Session) assembleEncryptedLeaseSet(cookie [32]byte, encryptedInnerData 
 		signingPrivateKey,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create EncryptedLeaseSet: %w", err)
+		return nil, oops.Errorf("failed to create EncryptedLeaseSet: %w", err)
 	}
 
 	log.WithFields(logger.Fields{

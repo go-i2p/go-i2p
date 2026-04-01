@@ -1,11 +1,10 @@
 package tunnel
 
 import (
-	"fmt"
-
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // FilteringPeerSelector wraps an underlying selector and applies filters.
@@ -48,7 +47,7 @@ func NewFilteringPeerSelector(
 	opts ...FilteringPeerSelectorOption,
 ) (*FilteringPeerSelector, error) {
 	if underlying == nil {
-		return nil, fmt.Errorf("underlying selector cannot be nil")
+		return nil, oops.Errorf("underlying selector cannot be nil")
 	}
 
 	s := &FilteringPeerSelector{

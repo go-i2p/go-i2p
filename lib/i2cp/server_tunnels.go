@@ -2,12 +2,12 @@ package i2cp
 
 import (
 	"encoding/binary"
-	"fmt"
 	"net"
 	"time"
 
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // backupQuantityOrDefault returns the backup quantity, defaulting to 2 if not explicitly set.
@@ -59,7 +59,7 @@ func (s *Server) getTunnelInfrastructure() (tunnel.BuilderInterface, tunnel.Peer
 	s.mu.RUnlock()
 
 	if builder == nil || selector == nil {
-		return nil, nil, fmt.Errorf("tunnel infrastructure not configured (builder=%v, selector=%v)",
+		return nil, nil, oops.Errorf("tunnel infrastructure not configured (builder=%v, selector=%v)",
 			builder != nil, selector != nil)
 	}
 	return builder, selector, nil
@@ -75,7 +75,7 @@ func (s *Server) createInboundPool(session *Session, config *SessionConfig, buil
 	session.SetInboundPool(pool)
 
 	if err := pool.StartMaintenance(); err != nil {
-		return nil, fmt.Errorf("failed to start inbound tunnel pool maintenance: %w", err)
+		return nil, oops.Errorf("failed to start inbound tunnel pool maintenance: %w", err)
 	}
 	return pool, nil
 }
@@ -91,7 +91,7 @@ func (s *Server) createOutboundPool(session *Session, config *SessionConfig, bui
 
 	if err := pool.StartMaintenance(); err != nil {
 		inboundPool.Stop()
-		return fmt.Errorf("failed to start outbound tunnel pool maintenance: %w", err)
+		return oops.Errorf("failed to start outbound tunnel pool maintenance: %w", err)
 	}
 	return nil
 }
@@ -349,7 +349,7 @@ func filterValidTunnels(tunnels []*tunnel.TunnelState) ([]*tunnel.TunnelState, e
 		}
 	}
 	if len(validTunnels) == 0 {
-		return nil, fmt.Errorf("no valid tunnels provided")
+		return nil, oops.Errorf("no valid tunnels provided")
 	}
 	if len(validTunnels) > 16 {
 		validTunnels = validTunnels[:16]

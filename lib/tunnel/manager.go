@@ -12,6 +12,7 @@ import (
 	"github.com/go-i2p/crypto/tunnel"
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // Build reply codes per I2P specification (TUNNEL-CREATION)
@@ -137,7 +138,7 @@ func (m *Manager) AddParticipant(p *Participant) error {
 			"phase":  "tunnel_build",
 			"reason": "nil_participant_rejected",
 		}).Error("cannot add nil participant")
-		return fmt.Errorf("cannot add nil participant")
+		return oops.Errorf("cannot add nil participant")
 	}
 
 	m.mu.Lock()
@@ -151,7 +152,7 @@ func (m *Manager) AddParticipant(p *Participant) error {
 			"reason":    "duplicate_tunnel_id",
 			"tunnel_id": tunnelID,
 		}).Warn("participant already exists, rejecting duplicate")
-		return fmt.Errorf("participant with tunnel ID %d already exists", tunnelID)
+		return oops.Errorf("participant with tunnel ID %d already exists", tunnelID)
 	}
 
 	m.participants[tunnelID] = p
@@ -428,7 +429,7 @@ func (m *Manager) RegisterParticipant(tunnelID TunnelID, sourceHash common.Hash,
 	// Calculate lifetime from expiry
 	lifetime := time.Until(expiry)
 	if lifetime <= 0 {
-		return fmt.Errorf("tunnel expiry is in the past")
+		return oops.Errorf("tunnel expiry is in the past")
 	}
 
 	// Create the tunnel decryption using the layer and IV keys from the build request
@@ -439,7 +440,7 @@ func (m *Manager) RegisterParticipant(tunnelID TunnelID, sourceHash common.Hash,
 
 	decryption, err := tunnel.NewAESEncryptor(tunnelLayerKey, tunnelIVKey)
 	if err != nil {
-		return fmt.Errorf("failed to create tunnel decryption: %w", err)
+		return oops.Errorf("failed to create tunnel decryption: %w", err)
 	}
 
 	// Create the participant with proper decryption
@@ -455,7 +456,7 @@ func (m *Manager) RegisterParticipant(tunnelID TunnelID, sourceHash common.Hash,
 	// Add to tracking
 	err = m.AddParticipant(participant)
 	if err != nil {
-		return fmt.Errorf("failed to add participant: %w", err)
+		return oops.Errorf("failed to add participant: %w", err)
 	}
 
 	log.WithFields(logger.Fields{

@@ -2,11 +2,11 @@ package tunnel
 
 import (
 	"encoding/binary"
-	"fmt"
 	"sync"
 	"time"
 
 	"github.com/go-i2p/crypto/rand"
+	"github.com/samber/oops"
 )
 
 // TunnelMessageSender defines the interface for sending test messages through tunnels.
@@ -127,14 +127,14 @@ func (tt *TunnelTester) TestTunnel(tunnelID TunnelID) TunnelTestResult {
 
 	if !exists {
 		result.Success = false
-		result.Error = fmt.Errorf("tunnel %d not found", tunnelID)
+		result.Error = oops.Errorf("tunnel %d not found", tunnelID)
 		return result
 	}
 
 	// Check if tunnel is in ready state
 	if tunnel.State != TunnelReady {
 		result.Success = false
-		result.Error = fmt.Errorf("tunnel %d not ready (state: %v)", tunnelID, tunnel.State)
+		result.Error = oops.Errorf("tunnel %d not ready (state: %v)", tunnelID, tunnel.State)
 		return result
 	}
 
@@ -191,7 +191,7 @@ func (tt *TunnelTester) performEchoTest(tunnel *TunnelState) error {
 func (tt *TunnelTester) generateTestMessageID() (uint32, error) {
 	var buf [4]byte
 	if _, err := rand.Read(buf[:]); err != nil {
-		return 0, fmt.Errorf("failed to generate random message ID: %w", err)
+		return 0, oops.Errorf("failed to generate random message ID: %w", err)
 	}
 	return binary.BigEndian.Uint32(buf[:]), nil
 }
@@ -232,7 +232,7 @@ func (tt *TunnelTester) performRealEchoTest(tunnel *TunnelState, timeout time.Du
 			"message_id": messageID,
 			"error":      err,
 		}).Warn("Failed to send test message")
-		return fmt.Errorf("failed to send test message: %w", err)
+		return oops.Errorf("failed to send test message: %w", err)
 	}
 
 	log.WithFields(map[string]interface{}{
@@ -252,7 +252,7 @@ func (tt *TunnelTester) performRealEchoTest(tunnel *TunnelState, timeout time.Du
 			"message_id": messageID,
 			"timeout":    timeout,
 		}).Warn("Tunnel test timeout")
-		return fmt.Errorf("tunnel test timeout after %v", timeout)
+		return oops.Errorf("tunnel test timeout after %v", timeout)
 	}
 }
 
@@ -299,7 +299,7 @@ func (tt *TunnelTester) performAgeBasedTest(tunnel *TunnelState, timeout time.Du
 
 		// Tunnels near expiration (within 1 minute of 10-minute lifetime) are less reliable
 		if age > 9*time.Minute {
-			testChan <- fmt.Errorf("tunnel near expiration (age: %v)", age)
+			testChan <- oops.Errorf("tunnel near expiration (age: %v)", age)
 		} else {
 			// Minimal delay to simulate test overhead
 			time.Sleep(10 * time.Millisecond)
@@ -311,7 +311,7 @@ func (tt *TunnelTester) performAgeBasedTest(tunnel *TunnelState, timeout time.Du
 	case err := <-testChan:
 		return err
 	case <-time.After(timeout):
-		return fmt.Errorf("tunnel test timeout after %v", timeout)
+		return oops.Errorf("tunnel test timeout after %v", timeout)
 	}
 }
 

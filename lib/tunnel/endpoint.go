@@ -1,12 +1,11 @@
 package tunnel
 
 import (
-	"errors"
-	"fmt"
 	"sync"
 	"time"
 
 	"github.com/go-i2p/crypto/types"
+	"github.com/samber/oops"
 
 	"github.com/go-i2p/crypto/tunnel"
 	"github.com/go-i2p/logger"
@@ -83,17 +82,17 @@ type fragmentAssembler struct {
 
 var (
 	// ErrNilDecryption is returned when decryption is nil
-	ErrNilDecryption = errors.New("decryption tunnel cannot be nil")
+	ErrNilDecryption = oops.Errorf("decryption tunnel cannot be nil")
 	// ErrNilHandler is returned when message handler is nil
-	ErrNilHandler = errors.New("message handler cannot be nil")
+	ErrNilHandler = oops.Errorf("message handler cannot be nil")
 	// ErrInvalidTunnelData is returned when tunnel data is malformed
-	ErrInvalidTunnelData = errors.New("invalid tunnel data")
+	ErrInvalidTunnelData = oops.Errorf("invalid tunnel data")
 	// ErrChecksumMismatch is returned when checksum validation fails
-	ErrChecksumMismatch = errors.New("tunnel message checksum mismatch")
+	ErrChecksumMismatch = oops.Errorf("tunnel message checksum mismatch")
 	// ErrTooManyFragments is returned when fragment number exceeds maximum
-	ErrTooManyFragments = errors.New("too many fragments: maximum 63")
+	ErrTooManyFragments = oops.Errorf("too many fragments: maximum 63")
 	// ErrDuplicateFragment is returned when a fragment is received twice
-	ErrDuplicateFragment = errors.New("duplicate fragment received")
+	ErrDuplicateFragment = oops.Errorf("duplicate fragment received")
 )
 
 // NewEndpoint creates a new tunnel endpoint.
@@ -256,7 +255,7 @@ func findZeroSeparator(decrypted []byte) (int, error) {
 			return i + 1, nil
 		}
 	}
-	return 0, fmt.Errorf("no zero byte separator found in tunnel message")
+	return 0, oops.Errorf("no zero byte separator found in tunnel message")
 }
 
 // processDeliveryInstructions parses delivery instructions and extracts messages.
@@ -422,7 +421,7 @@ func (e *Endpoint) deliverWithInstructions(deliveryType byte, di *DeliveryInstru
 		return e.deliverViaForwarder(DTRouter, 0, di.hash, msgBytes)
 	default:
 		log.WithField("delivery_type", deliveryType).Warn("Unknown delivery type, dropping fragment")
-		return fmt.Errorf("unknown delivery type 0x%02x", deliveryType)
+		return oops.Errorf("unknown delivery type 0x%02x", deliveryType)
 	}
 }
 
@@ -640,7 +639,7 @@ func (e *Endpoint) storeFragmentData(msgID uint32, fragmentNum int, fragmentData
 			"message_id":   msgID,
 			"fragment_num": fragmentNum,
 		}).Error("Fragment number out of range (must be 0-63)")
-		return fmt.Errorf("fragment number %d out of range (must be 0-63)", fragmentNum)
+		return oops.Errorf("fragment number %d out of range (must be 0-63)", fragmentNum)
 	}
 
 	mask := uint64(1) << fragmentNum
@@ -701,7 +700,7 @@ func (e *Endpoint) reassembleFragments(msgID uint32, assembler *fragmentAssemble
 				"message_id":   msgID,
 				"fragment_num": i,
 			}).Error("Missing fragment during reassembly")
-			return &reassembledResult{err: errors.New("missing fragment")}
+			return &reassembledResult{err: oops.Errorf("missing fragment")}
 		}
 		totalSize += len(frag)
 	}

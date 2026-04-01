@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // Message type constants as defined in I2CP v0.9.67
@@ -189,7 +190,7 @@ func (m *Message) MarshalBinary() ([]byte, error) {
 	// Validate payload size per I2CP specification
 	payloadLen := len(m.Payload)
 	if payloadLen > MaxPayloadSize {
-		return nil, fmt.Errorf("i2cp message payload too large: %d bytes (max %d bytes per I2CP spec)", payloadLen, MaxPayloadSize)
+		return nil, oops.Errorf("i2cp message payload too large: %d bytes (max %d bytes per I2CP spec)", payloadLen, MaxPayloadSize)
 	}
 
 	// Per I2CP spec: wire format is length(4) + type(1) + payload
@@ -216,7 +217,7 @@ func (m *Message) MarshalBinary() ([]byte, error) {
 // Per I2CP spec: wire format is length(4) + type(1) + payload
 func (m *Message) UnmarshalBinary(data []byte) error {
 	if len(data) < 5 {
-		return fmt.Errorf("i2cp message too short: need at least 5 bytes for header, got %d", len(data))
+		return oops.Errorf("i2cp message too short: need at least 5 bytes for header, got %d", len(data))
 	}
 
 	// Parse payload length (4 bytes, big endian)
@@ -231,7 +232,7 @@ func (m *Message) UnmarshalBinary(data []byte) error {
 	// Validate total length
 	expectedTotal := 5 + payloadLen
 	if uint32(len(data)) < expectedTotal {
-		return fmt.Errorf("i2cp message truncated: expected %d bytes, got %d", expectedTotal, len(data))
+		return oops.Errorf("i2cp message truncated: expected %d bytes, got %d", expectedTotal, len(data))
 	}
 
 	// Extract payload
@@ -390,7 +391,7 @@ func setReaderDeadline(r io.Reader) {
 func readMessageHeader(r io.Reader) ([]byte, error) {
 	header := make([]byte, 5)
 	if _, err := io.ReadFull(r, header); err != nil {
-		return nil, fmt.Errorf("failed to read I2CP header: %w", err)
+		return nil, oops.Errorf("failed to read I2CP header: %w", err)
 	}
 	return header, nil
 }
@@ -430,7 +431,7 @@ func parseMessageHeader(header []byte) (msgType uint8, sessionID uint16, payload
 // validatePayloadSize checks if the payload length exceeds the maximum allowed size per I2CP specification.
 func validatePayloadSize(payloadLen uint32) error {
 	if payloadLen > MaxPayloadSize {
-		return fmt.Errorf("i2cp message payload too large: %d bytes (max %d bytes per I2CP spec)", payloadLen, MaxPayloadSize)
+		return oops.Errorf("i2cp message payload too large: %d bytes (max %d bytes per I2CP spec)", payloadLen, MaxPayloadSize)
 	}
 	return nil
 }
@@ -459,14 +460,14 @@ func readMessagePayload(r io.Reader, payloadLen uint32) ([]byte, error) {
 	// Validate payload size before allocation (defense-in-depth)
 	// Even though caller should validate, we check here to prevent misuse
 	if payloadLen > MaxPayloadSize {
-		return nil, fmt.Errorf("payload size %d exceeds maximum %d", payloadLen, MaxPayloadSize)
+		return nil, oops.Errorf("payload size %d exceeds maximum %d", payloadLen, MaxPayloadSize)
 	}
 
 	// Safe to allocate after validation
 	payload := make([]byte, payloadLen)
 	if payloadLen > 0 {
 		if _, err := io.ReadFull(r, payload); err != nil {
-			return nil, fmt.Errorf("failed to read I2CP payload: %w", err)
+			return nil, oops.Errorf("failed to read I2CP payload: %w", err)
 		}
 	}
 	return payload, nil
@@ -493,7 +494,7 @@ func WriteMessage(w io.Writer, msg *Message) error {
 			"at":    "i2cp.WriteMessage",
 			"error": err.Error(),
 		}).Error("failed_to_marshal_message")
-		return fmt.Errorf("failed to marshal I2CP message: %w", err)
+		return oops.Errorf("failed to marshal I2CP message: %w", err)
 	}
 
 	if _, err := w.Write(data); err != nil {
@@ -503,7 +504,7 @@ func WriteMessage(w io.Writer, msg *Message) error {
 			"msgType":    MessageTypeName(msg.Type),
 			"error":      err.Error(),
 		}).Error("failed_to_write_message_data")
-		return fmt.Errorf("failed to write I2CP message: %w", err)
+		return oops.Errorf("failed to write I2CP message: %w", err)
 	}
 
 	log.WithFields(logger.Fields{

@@ -2,7 +2,6 @@
 package tunnel
 
 import (
-	"fmt"
 	"sync"
 	"time"
 
@@ -10,6 +9,7 @@ import (
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // CongestionAwarePeerSelector adjusts peer selection based on congestion flags.
@@ -93,10 +93,10 @@ func NewCongestionAwarePeerSelector(
 	opts ...CongestionAwareSelectorOption,
 ) (*DefaultCongestionAwarePeerSelector, error) {
 	if underlying == nil {
-		return nil, fmt.Errorf("underlying peer selector cannot be nil")
+		return nil, oops.Errorf("underlying peer selector cannot be nil")
 	}
 	if congestionInfo == nil {
-		return nil, fmt.Errorf("congestion info provider cannot be nil")
+		return nil, oops.Errorf("congestion info provider cannot be nil")
 	}
 
 	s := &DefaultCongestionAwarePeerSelector{
@@ -131,7 +131,7 @@ func (s *DefaultCongestionAwarePeerSelector) SelectPeersWithCongestionAwareness(
 	exclude []common.Hash,
 ) ([]router_info.RouterInfo, error) {
 	if count <= 0 {
-		return nil, fmt.Errorf("count must be > 0")
+		return nil, oops.Errorf("count must be > 0")
 	}
 
 	s.metricsMu.Lock()
@@ -174,7 +174,7 @@ func (s *DefaultCongestionAwarePeerSelector) selectWithRetries(
 			s.metricsMu.Lock()
 			s.selectionMetrics.SelectionFailures++
 			s.metricsMu.Unlock()
-			return nil, retries, fmt.Errorf("underlying selector error: %w", err)
+			return nil, retries, oops.Errorf("underlying selector error: %w", err)
 		}
 		if len(candidates) == 0 {
 			break
@@ -461,10 +461,10 @@ func NewCongestionAwareStack(
 	congestionInfo CongestionInfoProvider,
 ) (PeerSelector, error) {
 	if db == nil {
-		return nil, fmt.Errorf("db selector cannot be nil")
+		return nil, oops.Errorf("db selector cannot be nil")
 	}
 	if congestionInfo == nil {
-		return nil, fmt.Errorf("congestion info provider cannot be nil")
+		return nil, oops.Errorf("congestion info provider cannot be nil")
 	}
 
 	return FromNetDB(db).
@@ -480,10 +480,10 @@ func NewCongestionAwareScoringStack(
 	cfg config.CongestionDefaults,
 ) (PeerSelector, error) {
 	if db == nil {
-		return nil, fmt.Errorf("db selector cannot be nil")
+		return nil, oops.Errorf("db selector cannot be nil")
 	}
 	if congestionInfo == nil {
-		return nil, fmt.Errorf("congestion info provider cannot be nil")
+		return nil, oops.Errorf("congestion info provider cannot be nil")
 	}
 
 	return FromNetDB(db).

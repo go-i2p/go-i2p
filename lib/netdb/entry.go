@@ -2,7 +2,6 @@ package netdb
 
 import (
 	"encoding/binary"
-	"fmt"
 	"io"
 
 	"github.com/go-i2p/common/encrypted_leaseset"
@@ -10,6 +9,7 @@ import (
 	"github.com/go-i2p/common/lease_set2"
 	"github.com/go-i2p/common/meta_leaseset"
 	"github.com/go-i2p/common/router_info"
+	"github.com/samber/oops"
 )
 
 // File format type codes for local skiplist storage (Entry.WriteTo / Entry.ReadFrom).
@@ -75,7 +75,7 @@ func (e *Entry) Serialize(w io.Writer) error {
 	}
 
 	log.WithField("at", "Entry.Serialize").Error("Entry contains no valid data")
-	return fmt.Errorf("entry contains no valid data (RouterInfo, LeaseSet, LeaseSet2, EncryptedLeaseSet, or MetaLeaseSet)")
+	return oops.Errorf("entry contains no valid data (RouterInfo, LeaseSet, LeaseSet2, EncryptedLeaseSet, or MetaLeaseSet)")
 }
 
 // writeRouterInfo writes a RouterInfo entry to the writer.
@@ -132,11 +132,11 @@ func (e *Entry) writeMetaLeaseSet(w io.Writer) error {
 func (e *Entry) serializeRouterInfo() ([]byte, error) {
 	data, err := e.RouterInfo.Bytes()
 	if err != nil {
-		return nil, fmt.Errorf("failed to serialize RouterInfo: %w", err)
+		return nil, oops.Errorf("failed to serialize RouterInfo: %w", err)
 	}
 
 	if len(data) == 0 {
-		return nil, fmt.Errorf("router info data empty")
+		return nil, oops.Errorf("router info data empty")
 	}
 
 	return data, nil
@@ -146,7 +146,7 @@ func (e *Entry) serializeRouterInfo() ([]byte, error) {
 func (e *Entry) serializeLeaseSet() ([]byte, error) {
 	data, err := e.LeaseSet.Bytes()
 	if err != nil {
-		return nil, fmt.Errorf("failed to serialize LeaseSet: %w", err)
+		return nil, oops.Errorf("failed to serialize LeaseSet: %w", err)
 	}
 
 	return data, nil
@@ -156,7 +156,7 @@ func (e *Entry) serializeLeaseSet() ([]byte, error) {
 func (e *Entry) serializeLeaseSet2() ([]byte, error) {
 	data, err := e.LeaseSet2.Bytes()
 	if err != nil {
-		return nil, fmt.Errorf("failed to serialize LeaseSet2: %w", err)
+		return nil, oops.Errorf("failed to serialize LeaseSet2: %w", err)
 	}
 
 	return data, nil
@@ -166,7 +166,7 @@ func (e *Entry) serializeLeaseSet2() ([]byte, error) {
 func (e *Entry) serializeEncryptedLeaseSet() ([]byte, error) {
 	data, err := e.EncryptedLeaseSet.Bytes()
 	if err != nil {
-		return nil, fmt.Errorf("failed to serialize EncryptedLeaseSet: %w", err)
+		return nil, oops.Errorf("failed to serialize EncryptedLeaseSet: %w", err)
 	}
 
 	return data, nil
@@ -176,7 +176,7 @@ func (e *Entry) serializeEncryptedLeaseSet() ([]byte, error) {
 func (e *Entry) serializeMetaLeaseSet() ([]byte, error) {
 	data, err := e.MetaLeaseSet.Bytes()
 	if err != nil {
-		return nil, fmt.Errorf("failed to serialize MetaLeaseSet: %w", err)
+		return nil, oops.Errorf("failed to serialize MetaLeaseSet: %w", err)
 	}
 
 	return data, nil
@@ -198,7 +198,7 @@ func (e *Entry) writeEntryData(w io.Writer, entryType byte, data []byte) error {
 // writeEntryType writes the entry type indicator.
 func (e *Entry) writeEntryType(w io.Writer, entryType byte) error {
 	if _, err := w.Write([]byte{entryType}); err != nil {
-		return fmt.Errorf("failed to write entry type: %w", err)
+		return oops.Errorf("failed to write entry type: %w", err)
 	}
 	return nil
 }
@@ -208,12 +208,12 @@ func (e *Entry) writeEntryType(w io.Writer, entryType byte) error {
 // by uint16 (65535 bytes).
 func (e *Entry) writeDataLength(w io.Writer, length int) error {
 	if length > 65535 {
-		return fmt.Errorf("entry data too large for uint16 length field: %d bytes (max 65535)", length)
+		return oops.Errorf("entry data too large for uint16 length field: %d bytes (max 65535)", length)
 	}
 	lenBytes := make([]byte, 2)
 	binary.BigEndian.PutUint16(lenBytes, uint16(length))
 	if _, err := w.Write(lenBytes); err != nil {
-		return fmt.Errorf("failed to write length: %w", err)
+		return oops.Errorf("failed to write length: %w", err)
 	}
 	return nil
 }
@@ -221,7 +221,7 @@ func (e *Entry) writeDataLength(w io.Writer, length int) error {
 // writeData writes the actual entry data.
 func (e *Entry) writeData(w io.Writer, data []byte) error {
 	if _, err := w.Write(data); err != nil {
-		return fmt.Errorf("failed to write data: %w", err)
+		return oops.Errorf("failed to write data: %w", err)
 	}
 	return nil
 }
@@ -244,7 +244,7 @@ func (e *Entry) Deserialize(r io.Reader) (err error) {
 func (e *Entry) readEntryType(r io.Reader) (byte, error) {
 	typeBytes := make([]byte, 1)
 	if _, err := io.ReadFull(r, typeBytes); err != nil {
-		return 0, fmt.Errorf("failed to read entry type: %w", err)
+		return 0, oops.Errorf("failed to read entry type: %w", err)
 	}
 	return typeBytes[0], nil
 }
@@ -258,7 +258,7 @@ func (e *Entry) readEntryData(r io.Reader) ([]byte, error) {
 
 	data := make([]byte, dataLen)
 	if _, err = io.ReadFull(r, data); err != nil {
-		return nil, fmt.Errorf("failed to read entry data: %w", err)
+		return nil, oops.Errorf("failed to read entry data: %w", err)
 	}
 
 	return data, nil
@@ -268,7 +268,7 @@ func (e *Entry) readEntryData(r io.Reader) ([]byte, error) {
 func (e *Entry) readDataLength(r io.Reader) (uint16, error) {
 	lenBytes := make([]byte, 2)
 	if _, err := io.ReadFull(r, lenBytes); err != nil {
-		return 0, fmt.Errorf("failed to read length: %w", err)
+		return 0, oops.Errorf("failed to read length: %w", err)
 	}
 	return binary.BigEndian.Uint16(lenBytes), nil
 }
@@ -287,7 +287,7 @@ func (e *Entry) processEntryData(entryType byte, data []byte) error {
 	case FileTypeMetaLeaseSet:
 		return e.processMetaLeaseSetData(data)
 	default:
-		return fmt.Errorf("unknown entry type: %d", entryType)
+		return oops.Errorf("unknown entry type: %d", entryType)
 	}
 }
 
@@ -304,7 +304,7 @@ func (e *Entry) clearFields() {
 func (e *Entry) processRouterInfoData(data []byte) error {
 	ri, _, err := router_info.ReadRouterInfo(data)
 	if err != nil {
-		return fmt.Errorf("failed to parse RouterInfo: %w", err)
+		return oops.Errorf("failed to parse RouterInfo: %w", err)
 	}
 	e.clearFields()
 	e.RouterInfo = &ri
@@ -315,7 +315,7 @@ func (e *Entry) processRouterInfoData(data []byte) error {
 func (e *Entry) processLeaseSetData(data []byte) error {
 	ls, err := lease_set.ReadLeaseSet(data)
 	if err != nil {
-		return fmt.Errorf("failed to parse LeaseSet: %w", err)
+		return oops.Errorf("failed to parse LeaseSet: %w", err)
 	}
 	e.clearFields()
 	e.LeaseSet = &ls
@@ -326,7 +326,7 @@ func (e *Entry) processLeaseSetData(data []byte) error {
 func (e *Entry) processLeaseSet2Data(data []byte) error {
 	ls2, _, err := lease_set2.ReadLeaseSet2(data)
 	if err != nil {
-		return fmt.Errorf("failed to parse LeaseSet2: %w", err)
+		return oops.Errorf("failed to parse LeaseSet2: %w", err)
 	}
 	e.clearFields()
 	e.LeaseSet2 = &ls2
@@ -337,7 +337,7 @@ func (e *Entry) processLeaseSet2Data(data []byte) error {
 func (e *Entry) processEncryptedLeaseSetData(data []byte) error {
 	els, _, err := encrypted_leaseset.ReadEncryptedLeaseSet(data)
 	if err != nil {
-		return fmt.Errorf("failed to parse EncryptedLeaseSet: %w", err)
+		return oops.Errorf("failed to parse EncryptedLeaseSet: %w", err)
 	}
 	e.clearFields()
 	e.EncryptedLeaseSet = &els
@@ -348,7 +348,7 @@ func (e *Entry) processEncryptedLeaseSetData(data []byte) error {
 func (e *Entry) processMetaLeaseSetData(data []byte) error {
 	mls, _, err := meta_leaseset.ReadMetaLeaseSet(data)
 	if err != nil {
-		return fmt.Errorf("failed to parse MetaLeaseSet: %w", err)
+		return oops.Errorf("failed to parse MetaLeaseSet: %w", err)
 	}
 	e.clearFields()
 	e.MetaLeaseSet = &mls

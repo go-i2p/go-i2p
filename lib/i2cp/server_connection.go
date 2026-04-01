@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // recoverFromAcceptPanic recovers from any panic in the accept loop to prevent server crash.
@@ -408,7 +409,7 @@ func (s *Server) readClientMessage(conn net.Conn) (*Message, error) {
 			"messageCount": state.messageCount,
 			"bytesRead":    state.bytesRead,
 		}).Warn("connection_rate_limit_exceeded")
-		return nil, fmt.Errorf("connection rate limit exceeded")
+		return nil, oops.Errorf("connection rate limit exceeded")
 	}
 
 	msg, err := ReadMessage(conn)

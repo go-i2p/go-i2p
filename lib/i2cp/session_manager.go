@@ -1,12 +1,12 @@
 package i2cp
 
 import (
-	"fmt"
 	"sync"
 
 	"github.com/go-i2p/common/destination"
 	"github.com/go-i2p/crypto/rand"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // SessionManager manages all active I2CP sessions
@@ -81,7 +81,7 @@ func (sm *SessionManager) DestroySession(sessionID uint16) error {
 			"at":        "i2cp.SessionManager.DestroySession",
 			"sessionID": sessionID,
 		}).Warn("session_not_found")
-		return fmt.Errorf("session %d not found", sessionID)
+		return oops.Errorf("session %d not found", sessionID)
 	}
 
 	delete(sm.sessions, sessionID)
@@ -163,7 +163,7 @@ func (sm *SessionManager) allocateSequentialScan(activeCount int) (uint16, error
 			return id, nil
 		}
 	}
-	return 0, fmt.Errorf("session ID space exhausted (%d active sessions)", activeCount)
+	return 0, oops.Errorf("session ID space exhausted (%d active sessions)", activeCount)
 }
 
 // allocateRandomProbe picks a free session ID by generating random candidates.
@@ -193,14 +193,14 @@ func (sm *SessionManager) allocateRandomProbe(activeCount int) (uint16, error) {
 		"activeSessions": activeCount,
 		"maxAttempts":    maxAttempts,
 	}).Error("failed to allocate session ID after maximum attempts")
-	return 0, fmt.Errorf("failed to allocate session ID after %d attempts (%d active sessions)", maxAttempts, activeCount)
+	return 0, oops.Errorf("failed to allocate session ID after %d attempts (%d active sessions)", maxAttempts, activeCount)
 }
 
 // generateSecureSessionID generates a cryptographically random 16-bit session ID
 func generateSecureSessionID() (uint16, error) {
 	var buf [2]byte
 	if _, err := rand.Read(buf[:]); err != nil {
-		return 0, fmt.Errorf("failed to read random bytes: %w", err)
+		return 0, oops.Errorf("failed to read random bytes: %w", err)
 	}
 
 	// Convert bytes to uint16 (big-endian)

@@ -1,13 +1,13 @@
 package netdb
 
 import (
-	"fmt"
 	"sync"
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/crypto/rand"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 const (
@@ -115,7 +115,7 @@ func (s *AdaptiveStrategy) GenerateExplorationKeys(count int) ([]common.Hash, er
 		}
 
 		if err != nil {
-			return nil, fmt.Errorf("failed to generate exploration key: %w", err)
+			return nil, oops.Errorf("failed to generate exploration key: %w", err)
 		}
 
 		keys[i] = key
@@ -287,7 +287,7 @@ func (s *AdaptiveStrategy) calculateBucket(routerHash common.Hash) int {
 // The bucket is determined by the position of the most significant differing bit.
 func (s *AdaptiveStrategy) generateKeyInBucket(bucketIdx int) (common.Hash, error) {
 	if bucketIdx < 0 || bucketIdx >= NumKademliaBuckets {
-		return common.Hash{}, fmt.Errorf("invalid bucket index: %d", bucketIdx)
+		return common.Hash{}, oops.Errorf("invalid bucket index: %d", bucketIdx)
 	}
 
 	// Start with our hash and flip the target bit
@@ -333,7 +333,7 @@ func (s *AdaptiveStrategy) randomizeLowerBits(key *common.Hash, bucketIdx int) e
 		var b [1]byte
 		_, err := rand.Read(b[:])
 		if err != nil {
-			return fmt.Errorf("failed to generate random byte: %w", err)
+			return oops.Errorf("failed to generate random byte: %w", err)
 		}
 		key[i] = b[0]
 	}
@@ -353,7 +353,7 @@ func generateRandomHash() (common.Hash, error) {
 	var hash common.Hash
 	_, err := rand.Read(hash[:])
 	if err != nil {
-		return common.Hash{}, fmt.Errorf("failed to generate random hash: %w", err)
+		return common.Hash{}, oops.Errorf("failed to generate random hash: %w", err)
 	}
 	return hash, nil
 }

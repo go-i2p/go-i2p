@@ -1,10 +1,9 @@
 package netdb
 
 import (
-	"fmt"
-
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // verifyRouterInfoSignature verifies the cryptographic signature of a RouterInfo.
@@ -27,7 +26,7 @@ func verifyRouterInfoSignature(ri router_info.RouterInfo) error {
 			"sig_len":  len(sigBytes),
 			"data_len": len(dataToVerify),
 		}).Warn("RouterInfo signature verification failed")
-		return fmt.Errorf("RouterInfo signature verification failed: %w", err)
+		return oops.Errorf("RouterInfo signature verification failed: %w", err)
 	}
 
 	return nil
@@ -38,17 +37,17 @@ func verifyRouterInfoSignature(ri router_info.RouterInfo) error {
 func createRouterInfoVerifier(ri router_info.RouterInfo) (interface{ Verify([]byte, []byte) error }, error) {
 	identity := ri.RouterIdentity()
 	if identity == nil {
-		return nil, fmt.Errorf("RouterInfo has nil RouterIdentity, cannot verify signature")
+		return nil, oops.Errorf("RouterInfo has nil RouterIdentity, cannot verify signature")
 	}
 
 	signingPubKey, err := identity.SigningPublicKey()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get signing public key from RouterInfo: %w", err)
+		return nil, oops.Errorf("failed to get signing public key from RouterInfo: %w", err)
 	}
 
 	verifier, err := signingPubKey.NewVerifier()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create signature verifier: %w", err)
+		return nil, oops.Errorf("failed to create signature verifier: %w", err)
 	}
 
 	return verifier, nil
@@ -60,18 +59,18 @@ func createRouterInfoVerifier(ri router_info.RouterInfo) (interface{ Verify([]by
 func extractSignatureComponents(ri router_info.RouterInfo) (dataToVerify, sigBytes []byte, err error) {
 	fullBytes, err := ri.Bytes()
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to serialize RouterInfo for verification: %w", err)
+		return nil, nil, oops.Errorf("failed to serialize RouterInfo for verification: %w", err)
 	}
 
 	sig := ri.Signature()
 	sigBytes = sig.Bytes()
 
 	if len(sigBytes) == 0 {
-		return nil, nil, fmt.Errorf("RouterInfo has empty signature")
+		return nil, nil, oops.Errorf("RouterInfo has empty signature")
 	}
 
 	if len(sigBytes) >= len(fullBytes) {
-		return nil, nil, fmt.Errorf("RouterInfo signature length (%d) >= total length (%d)", len(sigBytes), len(fullBytes))
+		return nil, nil, oops.Errorf("RouterInfo signature length (%d) >= total length (%d)", len(sigBytes), len(fullBytes))
 	}
 
 	dataToVerify = fullBytes[:len(fullBytes)-len(sigBytes)]

@@ -1,6 +1,6 @@
 package tunnel
 
-import "fmt"
+import "github.com/samber/oops"
 
 // PeerSelectorStack provides a fluent builder for composing peer selectors.
 type PeerSelectorStack struct {
@@ -11,7 +11,7 @@ type PeerSelectorStack struct {
 // NewPeerSelectorStack starts building a selector stack from a base selector.
 func NewPeerSelectorStack(base PeerSelector) *PeerSelectorStack {
 	if base == nil {
-		return &PeerSelectorStack{err: fmt.Errorf("base selector cannot be nil")}
+		return &PeerSelectorStack{err: oops.Errorf("base selector cannot be nil")}
 	}
 	return &PeerSelectorStack{selector: base}
 }

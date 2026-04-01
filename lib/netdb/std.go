@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 
 	"github.com/go-i2p/common/base64"
 	common "github.com/go-i2p/common/data"
@@ -134,13 +135,13 @@ func (db *StdNetDB) loadRouterInfoFromFile(hash common.Hash) ([]byte, error) {
 
 	f, err := os.Open(fname)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open RouterInfo file: %w", err)
+		return nil, oops.Errorf("failed to open RouterInfo file: %w", err)
 	}
 	defer f.Close()
 
 	entry := &Entry{}
 	if err := entry.Deserialize(f); err != nil {
-		return nil, fmt.Errorf("failed to read RouterInfo entry: %w", err)
+		return nil, oops.Errorf("failed to read RouterInfo entry: %w", err)
 	}
 
 	return db.serializeEntry(entry)
@@ -152,7 +153,7 @@ func (db *StdNetDB) loadRouterInfoFromFile(hash common.Hash) ([]byte, error) {
 func (db *StdNetDB) parseAndCacheRouterInfo(hash common.Hash, data []byte) (router_info.RouterInfo, error) {
 	ri, _, err := router_info.ReadRouterInfo(data)
 	if err != nil {
-		return router_info.RouterInfo{}, fmt.Errorf("failed to parse RouterInfo: %w", err)
+		return router_info.RouterInfo{}, oops.Errorf("failed to parse RouterInfo: %w", err)
 	}
 
 	// Add to cache, or replace if newer
@@ -331,12 +332,12 @@ func (db *StdNetDB) Exists() bool {
 
 func (db *StdNetDB) SaveEntry(e *Entry) (err error) {
 	if e.RouterInfo == nil {
-		return fmt.Errorf("cannot save entry: RouterInfo is nil (only RouterInfo entries can be persisted to the NetDB skiplist)")
+		return oops.Errorf("cannot save entry: RouterInfo is nil (only RouterInfo entries can be persisted to the NetDB skiplist)")
 	}
 	var f io.WriteCloser
 	h, err := e.RouterInfo.IdentHash()
 	if err != nil {
-		return fmt.Errorf("failed to get router hash for saving: %w", err)
+		return oops.Errorf("failed to get router hash for saving: %w", err)
 	}
 	log.WithField("hash", h).Debug("Saving NetDB entry")
 	// if err == nil {
@@ -469,7 +470,7 @@ func (db *StdNetDB) retrievePeersFromBootstrap(b bootstrap.Bootstrap) ([]router_
 	peersChan, err := b.GetPeers(ctx, 0) // Get as many peers as possible
 	if err != nil {
 		log.WithError(err).Error("Failed to get peers from bootstrap provider")
-		return nil, fmt.Errorf("bootstrap failed: %w", err)
+		return nil, oops.Errorf("bootstrap failed: %w", err)
 	}
 
 	return peersChan, nil
@@ -529,21 +530,21 @@ func (db *StdNetDB) validatePublishedTimestamp(ri router_info.RouterInfo, hash c
 	published := ri.Published()
 	if published == nil || published.Time().IsZero() {
 		log.WithField("hash", hash).Warn("Rejecting RouterInfo from reseed: missing published date")
-		return fmt.Errorf("missing published date")
+		return oops.Errorf("missing published date")
 	}
 	if now.Sub(published.Time()) > RouterInfoMaxAge {
 		log.WithFields(logger.Fields{
 			"hash": hash,
 			"age":  now.Sub(published.Time()).Round(time.Second),
 		}).Warn("Rejecting RouterInfo from reseed: stale published date")
-		return fmt.Errorf("stale published date")
+		return oops.Errorf("stale published date")
 	}
 	if published.Time().After(now.Add(1 * time.Hour)) {
 		log.WithFields(logger.Fields{
 			"hash":      hash,
 			"published": published.Time(),
 		}).Warn("Rejecting RouterInfo from reseed: future-dated published time")
-		return fmt.Errorf("future-dated published time")
+		return oops.Errorf("future-dated published time")
 	}
 	return nil
 }
@@ -580,7 +581,7 @@ func (db *StdNetDB) updateCacheAfterReseed() error {
 func validateRouterInfoDataType(dataType byte) error {
 	if dataType != 0 {
 		log.WithField("type", dataType).Warn("Invalid data type for RouterInfo, expected 0")
-		return fmt.Errorf("invalid data type for RouterInfo: expected 0, got %d", dataType)
+		return oops.Errorf("invalid data type for RouterInfo: expected 0, got %d", dataType)
 	}
 	return nil
 }
@@ -590,7 +591,7 @@ func parseRouterInfoData(data []byte) (router_info.RouterInfo, error) {
 	ri, _, err := router_info.ReadRouterInfo(data)
 	if err != nil {
 		log.WithError(err).Error("Failed to parse RouterInfo from DatabaseStore data")
-		return router_info.RouterInfo{}, fmt.Errorf("failed to parse RouterInfo: %w", err)
+		return router_info.RouterInfo{}, oops.Errorf("failed to parse RouterInfo: %w", err)
 	}
 	return ri, nil
 }
@@ -599,14 +600,14 @@ func parseRouterInfoData(data []byte) (router_info.RouterInfo, error) {
 func verifyRouterInfoHash(key common.Hash, ri router_info.RouterInfo) error {
 	expectedHash, err := ri.IdentHash()
 	if err != nil {
-		return fmt.Errorf("failed to get router hash for verification: %w", err)
+		return oops.Errorf("failed to get router hash for verification: %w", err)
 	}
 	if key != expectedHash {
 		log.WithFields(logger.Fields{
 			"expected_hash": expectedHash,
 			"provided_key":  key,
 		}).Error("RouterInfo hash mismatch")
-		return fmt.Errorf("RouterInfo hash mismatch: expected %x, got %x", expectedHash, key)
+		return oops.Errorf("RouterInfo hash mismatch: expected %x, got %x", expectedHash, key)
 	}
 	return nil
 }
@@ -650,7 +651,7 @@ func (db *StdNetDB) persistRouterInfoToFilesystem(key common.Hash, ri router_inf
 		db.riMutex.Lock()
 		delete(db.RouterInfos, key)
 		db.riMutex.Unlock()
-		return fmt.Errorf("failed to save RouterInfo to filesystem: %w", err)
+		return oops.Errorf("failed to save RouterInfo to filesystem: %w", err)
 	}
 	return nil
 }
@@ -675,7 +676,7 @@ func (db *StdNetDB) Store(key common.Hash, data []byte, dataType byte) error {
 	case 7:
 		return db.StoreMetaLeaseSet(key, data, dataType)
 	default:
-		return fmt.Errorf("unknown database store type: %d", dataType)
+		return oops.Errorf("unknown database store type: %d", dataType)
 	}
 }
 
@@ -906,18 +907,18 @@ func (db *StdNetDB) loadAndParseRouterInfo(filePath string) (*router_info.Router
 
 	entry := &Entry{}
 	if err := entry.Deserialize(f); err != nil {
-		return nil, fmt.Errorf("failed to read RouterInfo entry: %w", err)
+		return nil, oops.Errorf("failed to read RouterInfo entry: %w", err)
 	}
 
 	if entry.RouterInfo == nil {
-		return nil, fmt.Errorf("file does not contain a RouterInfo entry")
+		return nil, oops.Errorf("file does not contain a RouterInfo entry")
 	}
 
 	// Verify cryptographic signature to prevent loading tampered RouterInfos.
 	// Network-received and reseeded RouterInfos are already verified; disk-loaded
 	// ones must be verified too in case the netdb directory was tampered with.
 	if err := verifyRouterInfoSignature(*entry.RouterInfo); err != nil {
-		return nil, fmt.Errorf("RouterInfo signature verification failed: %w", err)
+		return nil, oops.Errorf("RouterInfo signature verification failed: %w", err)
 	}
 
 	return entry.RouterInfo, nil
@@ -1046,13 +1047,13 @@ func (db *StdNetDB) extractHashFromLeaseSetFilename(filename string) (common.Has
 func (db *StdNetDB) loadLeaseSetEntryFromFile(filePath string) (*Entry, error) {
 	f, err := os.Open(filePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open LeaseSet file: %w", err)
+		return nil, oops.Errorf("failed to open LeaseSet file: %w", err)
 	}
 	defer f.Close()
 
 	entry := &Entry{}
 	if err := entry.Deserialize(f); err != nil {
-		return nil, fmt.Errorf("failed to read LeaseSet entry: %w", err)
+		return nil, oops.Errorf("failed to read LeaseSet entry: %w", err)
 	}
 
 	return entry, nil
@@ -1161,7 +1162,7 @@ func (db *StdNetDB) GetRouterInfoBytes(hash common.Hash) ([]byte, error) {
 		data, err := ri.RouterInfo.Bytes()
 		if err != nil {
 			log.WithError(err).Error("Failed to serialize cached RouterInfo")
-			return nil, fmt.Errorf("failed to serialize RouterInfo: %w", err)
+			return nil, oops.Errorf("failed to serialize RouterInfo: %w", err)
 		}
 		return data, nil
 	}
@@ -1171,14 +1172,14 @@ func (db *StdNetDB) GetRouterInfoBytes(hash common.Hash) ([]byte, error) {
 	data, err := db.loadRouterInfoFromFile(hash)
 	if err != nil {
 		log.WithError(err).Debug("RouterInfo not found in filesystem")
-		return nil, fmt.Errorf("RouterInfo not found: %w", err)
+		return nil, oops.Errorf("RouterInfo not found: %w", err)
 	}
 
 	// Parse and cache for future use
 	_, err = db.parseAndCacheRouterInfo(hash, data)
 	if err != nil {
 		log.WithError(err).Error("Failed to parse RouterInfo from file")
-		return nil, fmt.Errorf("failed to parse RouterInfo: %w", err)
+		return nil, oops.Errorf("failed to parse RouterInfo: %w", err)
 	}
 
 	return data, nil

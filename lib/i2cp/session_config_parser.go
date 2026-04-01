@@ -8,6 +8,7 @@ import (
 	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/destination"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // SessionConfigParser parses I2CP CreateSession and ReconfigureSession message payloads.
@@ -51,7 +52,7 @@ func ParseCreateSessionPayload(payload []byte) (*destination.Destination, *Sessi
 			"payloadSize": len(payload),
 			"required":    2,
 		}).Error("create_session_payload_too_short")
-		return nil, nil, fmt.Errorf("create session payload too short: %d bytes", len(payload))
+		return nil, nil, oops.Errorf("create session payload too short: %d bytes", len(payload))
 	}
 
 	// Parse destination (reads variable-length structure)
@@ -68,7 +69,7 @@ func ParseCreateSessionPayload(payload []byte) (*destination.Destination, *Sessi
 			"payloadSize":    len(payload),
 			"payloadExcerpt": fmt.Sprintf("%x", payload[:excerptLen]),
 		}).Error("failed_to_parse_destination")
-		return nil, nil, fmt.Errorf("failed to parse destination: %w", err)
+		return nil, nil, oops.Errorf("failed to parse destination: %w", err)
 	}
 
 	// Parse options mapping from remaining bytes
@@ -85,7 +86,7 @@ func ParseCreateSessionPayload(payload []byte) (*destination.Destination, *Sessi
 			"error":          err.Error(),
 			"remainingBytes": len(remainingBytes),
 		}).Error("failed_to_parse_session_options")
-		return nil, nil, fmt.Errorf("failed to parse session options: %w", err)
+		return nil, nil, oops.Errorf("failed to parse session options: %w", err)
 	}
 
 	log.WithFields(logger.Fields{
@@ -110,13 +111,13 @@ func ParseCreateSessionPayload(payload []byte) (*destination.Destination, *Sessi
 // payload but is extracted into msg.SessionID by ReadMessage.
 func ParseReconfigureSessionPayload(payload []byte) (*SessionConfig, error) {
 	if len(payload) < 2 {
-		return nil, fmt.Errorf("reconfigure session payload too short: %d bytes", len(payload))
+		return nil, oops.Errorf("reconfigure session payload too short: %d bytes", len(payload))
 	}
 
 	// Parse options mapping
 	config, err := parseSessionOptions(payload)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse session options: %w", err)
+		return nil, oops.Errorf("failed to parse session options: %w", err)
 	}
 
 	log.WithFields(logger.Fields{
@@ -140,7 +141,7 @@ func parseDestination(payload []byte) (*destination.Destination, []byte, error) 
 			"payloadSize": len(payload),
 			"error":       err.Error(),
 		}).Error("failed_to_read_destination")
-		return nil, nil, fmt.Errorf("failed to read destination: %w", err)
+		return nil, nil, oops.Errorf("failed to read destination: %w", err)
 	}
 
 	log.WithFields(logger.Fields{
@@ -176,7 +177,7 @@ func parseSessionOptions(optionsBytes []byte) (*SessionConfig, error) {
 			"at":     "i2cp.parseSessionOptions",
 			"errors": fmt.Sprintf("%v", errs),
 		}).Warn("failed_to_parse_options_mapping")
-		return nil, fmt.Errorf("failed to parse session options mapping: %v", errs)
+		return nil, oops.Errorf("failed to parse session options mapping: %v", errs)
 	}
 
 	// Convert mapping to Go map for easier access
@@ -479,7 +480,7 @@ func ValidateSessionConfig(config *SessionConfig) error {
 		log.WithFields(logger.Fields{
 			"at": "i2cp.ValidateSessionConfig",
 		}).Error("session_config_is_nil")
-		return fmt.Errorf("session config is nil")
+		return oops.Errorf("session config is nil")
 	}
 
 	if err := validateTunnelLengths(config); err != nil {
@@ -536,7 +537,7 @@ func validateTunnelLengths(config *SessionConfig) error {
 			"min":    0,
 			"max":    7,
 		}).Error("invalid_inbound_tunnel_length")
-		return fmt.Errorf("invalid inbound tunnel length: %d (must be 0-7)", config.InboundTunnelLength)
+		return oops.Errorf("invalid inbound tunnel length: %d (must be 0-7)", config.InboundTunnelLength)
 	}
 	if config.OutboundTunnelLength < 0 || config.OutboundTunnelLength > 7 {
 		log.WithFields(logger.Fields{
@@ -545,7 +546,7 @@ func validateTunnelLengths(config *SessionConfig) error {
 			"min":    0,
 			"max":    7,
 		}).Error("invalid_outbound_tunnel_length")
-		return fmt.Errorf("invalid outbound tunnel length: %d (must be 0-7)", config.OutboundTunnelLength)
+		return oops.Errorf("invalid outbound tunnel length: %d (must be 0-7)", config.OutboundTunnelLength)
 	}
 	return nil
 }
@@ -560,7 +561,7 @@ func validateTunnelCounts(config *SessionConfig) error {
 			"min":   1,
 			"max":   16,
 		}).Error("invalid_inbound_tunnel_count")
-		return fmt.Errorf("invalid inbound tunnel count: %d (must be 1-16)", config.InboundTunnelCount)
+		return oops.Errorf("invalid inbound tunnel count: %d (must be 1-16)", config.InboundTunnelCount)
 	}
 	if config.OutboundTunnelCount < 1 || config.OutboundTunnelCount > 16 {
 		log.WithFields(logger.Fields{
@@ -569,7 +570,7 @@ func validateTunnelCounts(config *SessionConfig) error {
 			"min":   1,
 			"max":   16,
 		}).Error("invalid_outbound_tunnel_count")
-		return fmt.Errorf("invalid outbound tunnel count: %d (must be 1-16)", config.OutboundTunnelCount)
+		return oops.Errorf("invalid outbound tunnel count: %d (must be 1-16)", config.OutboundTunnelCount)
 	}
 	return nil
 }
@@ -584,7 +585,7 @@ func validateTunnelLifetime(config *SessionConfig) error {
 			"min":      1 * time.Minute,
 			"max":      60 * time.Minute,
 		}).Error("invalid_tunnel_lifetime")
-		return fmt.Errorf("invalid tunnel lifetime: %v (must be 1m-60m)", config.TunnelLifetime)
+		return oops.Errorf("invalid tunnel lifetime: %v (must be 1m-60m)", config.TunnelLifetime)
 	}
 	return nil
 }
@@ -598,7 +599,7 @@ func validateMessageQueueSize(config *SessionConfig) error {
 			"queueSize": config.MessageQueueSize,
 			"min":       1,
 		}).Error("invalid_message_queue_size")
-		return fmt.Errorf("invalid message queue size: %d (must be >= 1)", config.MessageQueueSize)
+		return oops.Errorf("invalid message queue size: %d (must be >= 1)", config.MessageQueueSize)
 	}
 	return nil
 }

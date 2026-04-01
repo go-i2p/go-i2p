@@ -10,6 +10,7 @@ import (
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // TunnelState represents the current state of a tunnel during building
@@ -286,7 +287,7 @@ func (p *Pool) StartMaintenance() error {
 			"phase":  "tunnel_build",
 			"reason": "tunnel builder not configured",
 		}).Error("tunnel builder not set")
-		return fmt.Errorf("tunnel builder not set")
+		return oops.Errorf("tunnel builder not set")
 	}
 
 	p.maintWg.Add(1)
@@ -682,7 +683,7 @@ func (p *Pool) executeBuildWithRetry(req *BuildTunnelRequest) (TunnelID, error) 
 
 		builder := p.getTunnelBuilder()
 		if builder == nil {
-			return 0, fmt.Errorf("tunnel builder not set")
+			return 0, oops.Errorf("tunnel builder not set")
 		}
 		result, err := builder.BuildTunnel(*req)
 		if err != nil {
@@ -698,18 +699,18 @@ func (p *Pool) executeBuildWithRetry(req *BuildTunnelRequest) (TunnelID, error) 
 		}
 
 		if retry == maxRetries-1 {
-			return 0, fmt.Errorf("tunnel ID collision after %d retries", maxRetries)
+			return 0, oops.Errorf("tunnel ID collision after %d retries", maxRetries)
 		}
 	}
 
-	return 0, fmt.Errorf("tunnel build failed after %d retries", maxRetries)
+	return 0, oops.Errorf("tunnel build failed after %d retries", maxRetries)
 }
 
 // checkRetryContext verifies the pool context is still active before a retry attempt.
 func (p *Pool) checkRetryContext() error {
 	select {
 	case <-p.ctx.Done():
-		return fmt.Errorf("tunnel build cancelled: context done")
+		return oops.Errorf("tunnel build cancelled: context done")
 	default:
 		return nil
 	}
@@ -881,7 +882,7 @@ func (p *Pool) RetryTunnelBuild(tunnelID TunnelID, isInbound bool, hopCount int)
 
 	builder := p.getTunnelBuilder()
 	if builder == nil {
-		return fmt.Errorf("tunnel builder not set; cannot retry tunnel build for tunnel %d", tunnelID)
+		return oops.Errorf("tunnel builder not set; cannot retry tunnel build for tunnel %d", tunnelID)
 	}
 
 	// FIX: Exclude failed peers from retry attempts

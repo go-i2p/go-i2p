@@ -1,8 +1,11 @@
 package ntcp2
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -50,6 +53,10 @@ type NTCP2Session struct {
 	callbackMu      sync.Mutex // protects cleanupCallback field
 	cleanupCallback func()
 	cleanupOnce     sync.Once
+
+	// RouterInfo callback (called when a RouterInfo block is received from peer)
+	routerInfoMu       sync.Mutex
+	routerInfoCallback func([]byte)
 
 	// Logging
 	logger *logger.Entry
@@ -478,12 +485,70 @@ func (s *NTCP2Session) handleNonI2NPBlock(block Block) {
 	case BlockTypePadding:
 		// Padding is ignored per spec
 	case BlockTypeRouterInfo:
-		s.logger.Debug("Received RouterInfo block from peer")
+		s.handleRouterInfoBlock(block.Data)
 	case BlockTypeTermination:
-		s.logger.Debug("Received Termination block from peer")
+		reason := byte(0)
+		if len(block.Data) >= terminationBlockPayloadSize {
+			reason = block.Data[terminationBlockPayloadSize-1]
+		}
+		s.logger.WithFields(map[string]interface{}{
+			"at":     "(NTCP2Session) handleNonI2NPBlock",
+			"reason": TerminationReasonString(reason),
+		}).Info("Received Termination block from peer, closing session")
+		// Close in a goroutine to avoid deadlock: Close() calls wg.Wait(),
+		// and this callback runs inside the receive worker goroutine.
+		go s.Close()
 	default:
 		s.logger.WithField("block_type", block.Type).Debug("Received unknown block type")
 	}
+}
+
+// SetRouterInfoCallback sets a callback for RouterInfo blocks received from the peer.
+// The callback receives the raw (decompressed) RouterInfo bytes.
+func (s *NTCP2Session) SetRouterInfoCallback(cb func([]byte)) {
+	s.routerInfoMu.Lock()
+	s.routerInfoCallback = cb
+	s.routerInfoMu.Unlock()
+}
+
+// handleRouterInfoBlock parses a RouterInfo block, decompresses if needed,
+// and passes the raw RouterInfo bytes to the registered callback.
+func (s *NTCP2Session) handleRouterInfoBlock(data []byte) {
+	if len(data) < 2 {
+		s.logger.Warn("RouterInfo block too short")
+		return
+	}
+	flag := data[0]
+	riData := data[1:]
+
+	if flag&0x01 != 0 {
+		decompressed, err := decompressGzip(riData)
+		if err != nil {
+			s.logger.WithError(err).Warn("Failed to decompress RouterInfo block")
+			return
+		}
+		riData = decompressed
+	}
+
+	s.routerInfoMu.Lock()
+	cb := s.routerInfoCallback
+	s.routerInfoMu.Unlock()
+
+	if cb != nil {
+		cb(riData)
+	} else {
+		s.logger.Debug("Received RouterInfo block but no callback registered")
+	}
+}
+
+// decompressGzip decompresses gzip-compressed data.
+func decompressGzip(data []byte) ([]byte, error) {
+	r, err := gzip.NewReader(bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("gzip reader: %w", err)
+	}
+	defer r.Close()
+	return io.ReadAll(r)
 }
 
 // shouldStopReceiving checks if the session context is done and receiving should stop.

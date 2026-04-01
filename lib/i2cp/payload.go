@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // SendMessagePayload represents the payload structure of a SendMessage (type 7) message.
@@ -49,7 +50,7 @@ func ParseSendMessagePayload(rawData []byte) (*SendMessagePayload, error) {
 			"dataSize": len(rawData),
 			"required": 32,
 		}).Error("send_message_payload_too_short")
-		return nil, fmt.Errorf("send message payload too short: need at least 32 bytes for destination, got %d", len(rawData))
+		return nil, oops.Errorf("send message payload too short: need at least 32 bytes for destination, got %d", len(rawData))
 	}
 	smp.Destination = hash
 
@@ -133,7 +134,7 @@ func ParseMessagePayloadPayload(data []byte) (*MessagePayloadPayload, error) {
 			"dataSize": len(data),
 			"required": 6,
 		}).Error("message_payload_too_short")
-		return nil, fmt.Errorf("message payload too short: need at least 6 bytes (SessionID + MessageID), got %d", len(data))
+		return nil, oops.Errorf("message payload too short: need at least 6 bytes (SessionID + MessageID), got %d", len(data))
 	}
 
 	mpp := &MessagePayloadPayload{}
@@ -237,7 +238,7 @@ func ParseSendMessageExpiresPayload(rawData []byte) (*SendMessageExpiresPayload,
 			"dataSize": len(rawData),
 			"required": minSize,
 		}).Error("send_message_expires_payload_too_short")
-		return nil, fmt.Errorf("send message expires payload too short: need at least %d bytes, got %d", minSize, len(rawData))
+		return nil, oops.Errorf("send message expires payload too short: need at least %d bytes, got %d", minSize, len(rawData))
 	}
 
 	smp := &SendMessageExpiresPayload{}
@@ -245,7 +246,7 @@ func ParseSendMessageExpiresPayload(rawData []byte) (*SendMessageExpiresPayload,
 	// Parse destination hash (first 32 bytes)
 	hash, remainder, err := data.ReadHash(rawData)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read destination hash: %w", err)
+		return nil, oops.Errorf("failed to read destination hash: %w", err)
 	}
 	smp.Destination = hash
 
@@ -366,7 +367,7 @@ func ParseDisconnectPayload(data []byte) (*DisconnectPayload, error) {
 			"dataSize": len(data),
 			"required": 2,
 		}).Error("disconnect_payload_too_short")
-		return nil, fmt.Errorf("disconnect payload too short: need at least 2 bytes for length, got %d", len(data))
+		return nil, oops.Errorf("disconnect payload too short: need at least 2 bytes for length, got %d", len(data))
 	}
 
 	dp := &DisconnectPayload{}
@@ -382,7 +383,7 @@ func ParseDisconnectPayload(data []byte) (*DisconnectPayload, error) {
 			"reasonLen":   reasonLen,
 			"requiredLen": 2 + int(reasonLen),
 		}).Error("disconnect_payload_incomplete")
-		return nil, fmt.Errorf("disconnect payload incomplete: need %d bytes for reason, got %d", 2+int(reasonLen), len(data))
+		return nil, oops.Errorf("disconnect payload incomplete: need %d bytes for reason, got %d", 2+int(reasonLen), len(data))
 	}
 
 	// Parse reason string (UTF-8)
@@ -407,7 +408,7 @@ func (dp *DisconnectPayload) MarshalBinary() ([]byte, error) {
 	// Calculate total size: 2 (length) + len(reason)
 	reasonBytes := []byte(dp.Reason)
 	if len(reasonBytes) > math.MaxUint16 {
-		return nil, fmt.Errorf("disconnect reason too long: %d bytes (max %d)", len(reasonBytes), math.MaxUint16)
+		return nil, oops.Errorf("disconnect reason too long: %d bytes (max %d)", len(reasonBytes), math.MaxUint16)
 	}
 	totalSize := 2 + len(reasonBytes)
 	result := make([]byte, totalSize)
@@ -473,7 +474,7 @@ func ParseHostLookupPayload(data []byte) (*HostLookupPayload, error) {
 			"dataSize": len(data),
 			"required": 8,
 		}).Error("host_lookup_payload_too_short")
-		return nil, fmt.Errorf("host lookup payload too short: need at least 8 bytes, got %d", len(data))
+		return nil, oops.Errorf("host lookup payload too short: need at least 8 bytes, got %d", len(data))
 	}
 
 	hlp := &HostLookupPayload{}
@@ -495,7 +496,7 @@ func ParseHostLookupPayload(data []byte) (*HostLookupPayload, error) {
 			"queryLen":    queryLen,
 			"requiredLen": 8 + int(queryLen),
 		}).Error("host_lookup_payload_incomplete")
-		return nil, fmt.Errorf("host lookup payload incomplete: need %d bytes for query, got %d", 8+int(queryLen), len(data))
+		return nil, oops.Errorf("host lookup payload incomplete: need %d bytes for query, got %d", 8+int(queryLen), len(data))
 	}
 
 	// Parse query string
@@ -521,7 +522,7 @@ func ParseHostLookupPayload(data []byte) (*HostLookupPayload, error) {
 func (hlp *HostLookupPayload) MarshalBinary() ([]byte, error) {
 	queryBytes := []byte(hlp.Query)
 	if len(queryBytes) > math.MaxUint16 {
-		return nil, fmt.Errorf("host lookup query too long: %d bytes (max %d)", len(queryBytes), math.MaxUint16)
+		return nil, oops.Errorf("host lookup query too long: %d bytes (max %d)", len(queryBytes), math.MaxUint16)
 	}
 	totalSize := 4 + 2 + 2 + len(queryBytes) // requestID + type + length + query
 	result := make([]byte, totalSize)
@@ -598,7 +599,7 @@ func ParseHostReplyPayload(data []byte) (*HostReplyPayload, error) {
 			"dataSize": len(data),
 			"required": 5,
 		}).Error("host_reply_payload_too_short")
-		return nil, fmt.Errorf("host reply payload too short: need at least 5 bytes, got %d", len(data))
+		return nil, oops.Errorf("host reply payload too short: need at least 5 bytes, got %d", len(data))
 	}
 
 	hrp := &HostReplyPayload{}
@@ -678,7 +679,7 @@ func ParseBlindingInfoPayload(data []byte) (*BlindingInfoPayload, error) {
 			"at":       "i2cp.ParseBlindingInfoPayload",
 			"dataSize": len(data),
 		}).Error("payload_too_short")
-		return nil, fmt.Errorf("BlindingInfo payload too short: need at least 1 byte, got %d", len(data))
+		return nil, oops.Errorf("BlindingInfo payload too short: need at least 1 byte, got %d", len(data))
 	}
 
 	bip := &BlindingInfoPayload{}
@@ -691,7 +692,7 @@ func ParseBlindingInfoPayload(data []byte) (*BlindingInfoPayload, error) {
 				"at":       "i2cp.ParseBlindingInfoPayload",
 				"dataSize": len(data),
 			}).Error("invalid_secret_length")
-			return nil, fmt.Errorf("BlindingInfo secret must be 32 bytes, got %d", len(data)-1)
+			return nil, oops.Errorf("BlindingInfo secret must be 32 bytes, got %d", len(data)-1)
 		}
 		bip.Secret = make([]byte, 32)
 		copy(bip.Secret, data[1:33])
@@ -721,7 +722,7 @@ func (bip *BlindingInfoPayload) MarshalBinary() ([]byte, error) {
 	// Secret (if provided and enabled)
 	if bip.Enabled && len(bip.Secret) > 0 {
 		if len(bip.Secret) != 32 {
-			return nil, fmt.Errorf("BlindingInfo secret must be 32 bytes, got %d", len(bip.Secret))
+			return nil, oops.Errorf("BlindingInfo secret must be 32 bytes, got %d", len(bip.Secret))
 		}
 		result = append(result, bip.Secret...)
 	}

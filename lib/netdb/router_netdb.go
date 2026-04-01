@@ -8,6 +8,7 @@ import (
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/bootstrap"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // RouterNetDB provides a router-focused interface to the network database.
@@ -78,7 +79,7 @@ func (r *RouterNetDB) Store(key common.Hash, data []byte, dataType byte) error {
 		log.WithField("hash", key).Debug("RouterNetDB: Storing MetaLeaseSet")
 		return r.db.StoreMetaLeaseSet(key, data, dataType)
 	default:
-		return fmt.Errorf("unknown database store type: %d", dataType)
+		return oops.Errorf("unknown database store type: %d", dataType)
 	}
 }
 

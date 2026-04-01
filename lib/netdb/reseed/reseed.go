@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -107,7 +106,7 @@ func (r Reseed) readSU3FileFromDisk(filePath string) ([]byte, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		log.WithError(err).WithField("file_path", filePath).Error("Failed to read SU3 file")
-		return nil, fmt.Errorf("failed to read SU3 file: %w", err)
+		return nil, oops.Errorf("failed to read SU3 file: %w", err)
 	}
 
 	log.WithFields(logger.Fields{
@@ -158,7 +157,7 @@ func (r Reseed) ProcessLocalZipFileWithLimit(filePath string, limit int) ([]rout
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		log.WithError(err).WithField("file_path", filePath).Error("Failed to read zip file")
-		return nil, fmt.Errorf("failed to read zip file: %w", err)
+		return nil, oops.Errorf("failed to read zip file: %w", err)
 	}
 
 	log.WithFields(logger.Fields{
@@ -202,7 +201,7 @@ func (r Reseed) performReseedRequest(uri string) (*http.Response, error) {
 			"uri":    uri,
 			"scheme": URL.Scheme,
 		}).Error("Refusing reseed over insecure scheme — only HTTPS is allowed")
-		return nil, fmt.Errorf("reseed requires HTTPS, got scheme %q for %s", URL.Scheme, uri)
+		return nil, oops.Errorf("reseed requires HTTPS, got scheme %q for %s", URL.Scheme, uri)
 	}
 
 	// Append standard reseed path if not already present
@@ -344,7 +343,7 @@ func validateReseedResponse(response *http.Response, uri string) error {
 	if response.StatusCode != 200 {
 		response.Body.Close()
 		log.WithField("status_code", response.StatusCode).Error("Reseed server returned error status")
-		return fmt.Errorf("reseed server returned status %d", response.StatusCode)
+		return oops.Errorf("reseed server returned status %d", response.StatusCode)
 	}
 
 	// Validate content length if provided
@@ -353,7 +352,7 @@ func validateReseedResponse(response *http.Response, uri string) error {
 		if response.ContentLength < 100 {
 			response.Body.Close()
 			log.WithField("content_length", response.ContentLength).Error("Response too small to be valid SU3 file")
-			return fmt.Errorf("response too small to be valid SU3 file: %d bytes", response.ContentLength)
+			return oops.Errorf("response too small to be valid SU3 file: %d bytes", response.ContentLength)
 		}
 	} else {
 		log.Warn("Response content length not provided by server")
@@ -519,7 +518,7 @@ func (r Reseed) writeZipFile(content []byte) (string, error) {
 	tempFile, err := os.CreateTemp("", "reseed-*.zip")
 	if err != nil {
 		log.WithError(err).Error("Failed to create temporary file for reseed zip")
-		return "", fmt.Errorf("failed to create temp file: %w", err)
+		return "", oops.Errorf("failed to create temp file: %w", err)
 	}
 	zipPath := tempFile.Name()
 
@@ -527,7 +526,7 @@ func (r Reseed) writeZipFile(content []byte) (string, error) {
 	if err := tempFile.Chmod(0o600); err != nil {
 		tempFile.Close()
 		os.Remove(zipPath)
-		return "", fmt.Errorf("failed to set temp file permissions: %w", err)
+		return "", oops.Errorf("failed to set temp file permissions: %w", err)
 	}
 
 	log.WithFields(logger.Fields{
@@ -585,7 +584,7 @@ func (r Reseed) createExtractionDir() (string, error) {
 	tempDir, err := os.MkdirTemp("", "reseed-extract-*")
 	if err != nil {
 		log.WithError(err).Error("Failed to create temporary directory for reseed extraction")
-		return "", fmt.Errorf("failed to create temp directory: %w", err)
+		return "", oops.Errorf("failed to create temp directory: %w", err)
 	}
 	return tempDir, nil
 }
@@ -621,7 +620,7 @@ func (r Reseed) validateDecompressedSize(tempDir string, files []string) error {
 		}
 		totalSize += info.Size()
 		if totalSize > maxDecompressedSize {
-			return fmt.Errorf("decompressed reseed data exceeds %d MB size limit (possible zip bomb)", maxDecompressedSize/(1024*1024))
+			return oops.Errorf("decompressed reseed data exceeds %d MB size limit (possible zip bomb)", maxDecompressedSize/(1024*1024))
 		}
 	}
 	return nil
@@ -650,7 +649,7 @@ func (r Reseed) parseRouterInfoFilesWithLimit(files []string, limit int) ([]rout
 	// If we had files to parse but produced zero RouterInfos, report an error
 	// so callers can distinguish total parse failure from an empty file list.
 	if len(files) > 0 && len(routerInfos) == 0 {
-		return routerInfos, fmt.Errorf("failed to parse any RouterInfo from %d files (%d parse errors, %d read errors, %d skipped)",
+		return routerInfos, oops.Errorf("failed to parse any RouterInfo from %d files (%d parse errors, %d read errors, %d skipped)",
 			len(files), stats.parseErrors, stats.readErrors, stats.skippedFiles)
 	}
 

@@ -8,6 +8,7 @@ import (
 	"github.com/go-i2p/common/destination"
 	"github.com/go-i2p/common/lease_set2"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // StartLeaseSetMaintenance begins automatic LeaseSet maintenance.
@@ -26,11 +27,11 @@ func (s *Session) StartLeaseSetMaintenance() error {
 	defer s.mu.Unlock()
 
 	if !s.active {
-		return fmt.Errorf("session %d is not active", s.id)
+		return oops.Errorf("session %d is not active", s.id)
 	}
 
 	if s.inboundPool == nil {
-		return fmt.Errorf("session %d has no inbound tunnel pool", s.id)
+		return oops.Errorf("session %d has no inbound tunnel pool", s.id)
 	}
 
 	// Calculate maintenance interval: check every 1/4 of tunnel lifetime
@@ -203,12 +204,12 @@ func (s *Session) regenerateAndPublishLeaseSet() error {
 	if useEncrypted {
 		leaseSetBytes, err = s.CreateEncryptedLeaseSet()
 		if err != nil {
-			return fmt.Errorf("failed to create EncryptedLeaseSet: %w", err)
+			return oops.Errorf("failed to create EncryptedLeaseSet: %w", err)
 		}
 	} else {
 		leaseSetBytes, err = s.CreateLeaseSet()
 		if err != nil {
-			return fmt.Errorf("failed to create LeaseSet: %w", err)
+			return oops.Errorf("failed to create LeaseSet: %w", err)
 		}
 	}
 
@@ -274,7 +275,7 @@ func (s *Session) calculatePublicationHash(useEncrypted bool, blindedDest *desti
 		// For EncryptedLeaseSet, use blinded destination hash
 		destBytes, err := blindedDest.Bytes()
 		if err != nil {
-			return data.Hash{}, fmt.Errorf("failed to get blinded destination bytes: %w", err)
+			return data.Hash{}, oops.Errorf("failed to get blinded destination bytes: %w", err)
 		}
 		return data.HashData(destBytes), nil
 	}
@@ -282,7 +283,7 @@ func (s *Session) calculatePublicationHash(useEncrypted bool, blindedDest *desti
 	// For normal LeaseSet2, use original destination hash
 	destBytes, err := s.destination.Bytes()
 	if err != nil {
-		return data.Hash{}, fmt.Errorf("failed to get destination bytes: %w", err)
+		return data.Hash{}, oops.Errorf("failed to get destination bytes: %w", err)
 	}
 	return data.HashData(destBytes), nil
 }
@@ -290,7 +291,7 @@ func (s *Session) calculatePublicationHash(useEncrypted bool, blindedDest *desti
 // publishToPublisher executes the publication and logs the result.
 func (s *Session) publishToPublisher(publisher LeaseSetPublisher, destHash data.Hash, leaseSetBytes []byte, useEncrypted bool) error {
 	if err := publisher.PublishLeaseSet(destHash, leaseSetBytes); err != nil {
-		return fmt.Errorf("publisher failed: %w", err)
+		return oops.Errorf("publisher failed: %w", err)
 	}
 
 	log.WithFields(logger.Fields{
@@ -341,7 +342,7 @@ func (s *Session) ValidateLeaseSet2Data(leaseSetBytes []byte) error {
 	// Parse the LeaseSet2 to verify structural validity
 	ls2, _, err := lease_set2.ReadLeaseSet2(leaseSetBytes)
 	if err != nil {
-		return fmt.Errorf("invalid LeaseSet2 structure: %w", err)
+		return oops.Errorf("invalid LeaseSet2 structure: %w", err)
 	}
 
 	// Verify the LeaseSet2's destination matches this session's destination
@@ -350,16 +351,16 @@ func (s *Session) ValidateLeaseSet2Data(leaseSetBytes []byte) error {
 	s.mu.RUnlock()
 
 	if sessionDest == nil {
-		return fmt.Errorf("session has no destination configured")
+		return oops.Errorf("session has no destination configured")
 	}
 
 	if err := matchDestinations(sessionDest, ls2.Destination()); err != nil {
-		return fmt.Errorf("destination mismatch: %w", err)
+		return oops.Errorf("destination mismatch: %w", err)
 	}
 
 	// Verify the LeaseSet2 is not already expired
 	if ls2.IsExpired() {
-		return fmt.Errorf("LeaseSet2 is already expired (published: %v, expires offset: %d)",
+		return oops.Errorf("LeaseSet2 is already expired (published: %v, expires offset: %d)",
 			ls2.PublishedTime(), ls2.Expires())
 	}
 
@@ -373,19 +374,19 @@ func (s *Session) ValidateLeaseSet2Data(leaseSetBytes []byte) error {
 func matchDestinations(sessionDest *destination.Destination, lsDest destination.Destination) error {
 	sessionSPK, err := sessionDest.SigningPublicKey()
 	if err != nil {
-		return fmt.Errorf("failed to get session signing public key: %w", err)
+		return oops.Errorf("failed to get session signing public key: %w", err)
 	}
 
 	lsSPK, err := lsDest.SigningPublicKey()
 	if err != nil {
-		return fmt.Errorf("failed to get LeaseSet2 signing public key: %w", err)
+		return oops.Errorf("failed to get LeaseSet2 signing public key: %w", err)
 	}
 
 	sessionSPKBytes := sessionSPK.Bytes()
 	lsSPKBytes := lsSPK.Bytes()
 
 	if len(sessionSPKBytes) != len(lsSPKBytes) {
-		return fmt.Errorf("signing key length mismatch: session=%d, leaseset=%d",
+		return oops.Errorf("signing key length mismatch: session=%d, leaseset=%d",
 			len(sessionSPKBytes), len(lsSPKBytes))
 	}
 
@@ -393,7 +394,7 @@ func matchDestinations(sessionDest *destination.Destination, lsDest destination.
 	lsHash := data.HashData(lsSPKBytes)
 
 	if sessionHash != lsHash {
-		return fmt.Errorf("LeaseSet2 destination hash %x does not match session destination hash %x",
+		return oops.Errorf("LeaseSet2 destination hash %x does not match session destination hash %x",
 			lsHash[:8], sessionHash[:8])
 	}
 

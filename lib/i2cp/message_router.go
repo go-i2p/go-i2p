@@ -8,6 +8,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // GarlicMessageEncryptor provides garlic message encryption for the message router.
@@ -161,7 +162,7 @@ func checkMessageExpiration(session *Session, messageID uint32, expirationMs uin
 	}).Warn("message_expired")
 
 	notifyStatusCallback(statusCallback, messageID, MessageStatusFailure, payload)
-	return fmt.Errorf("message expired: current=%d, expiration=%d", currentMs, expirationMs)
+	return oops.Errorf("message expired: current=%d, expiration=%d", currentMs, expirationMs)
 }
 
 // notifyStatusCallback invokes the status callback if provided.
@@ -180,7 +181,7 @@ func (mr *MessageRouter) validateAndSelectTunnel(session *Session, destinationHa
 			"sessionID":   session.ID(),
 			"destination": fmt.Sprintf("%x", destinationHash[:8]),
 		}).Error("no_outbound_pool")
-		return nil, fmt.Errorf("outbound tunnel pool required for session %d", session.ID())
+		return nil, oops.Errorf("outbound tunnel pool required for session %d", session.ID())
 	}
 
 	selectedTunnel := outboundPool.SelectTunnel()
@@ -190,7 +191,7 @@ func (mr *MessageRouter) validateAndSelectTunnel(session *Session, destinationHa
 			"sessionID":   session.ID(),
 			"destination": fmt.Sprintf("%x", destinationHash[:8]),
 		}).Error("no_active_tunnels")
-		return nil, fmt.Errorf("insufficient active outbound tunnels for session %d", session.ID())
+		return nil, oops.Errorf("insufficient active outbound tunnels for session %d", session.ID())
 	}
 
 	if len(selectedTunnel.Hops) == 0 {
@@ -206,7 +207,7 @@ func (mr *MessageRouter) validateAndSelectTunnel(session *Session, destinationHa
 		// 2. The destination hash is not a router hash, so transport-level delivery
 		//    would fail anyway since transportSend expects routable router hashes.
 		// This is consistent with lib/netdb/publisher.go which also rejects zero-hop tunnels.
-		return nil, fmt.Errorf("zero-hop tunnels are not supported for I2CP client traffic (session %d): anonymity requires at least one hop", session.ID())
+		return nil, oops.Errorf("zero-hop tunnels are not supported for I2CP client traffic (session %d): anonymity requires at least one hop", session.ID())
 	}
 
 	log.WithFields(logger.Fields{
@@ -229,7 +230,7 @@ func (mr *MessageRouter) buildEncryptedGarlicMessage(
 	payload []byte,
 ) (i2np.I2NPMessage, error) {
 	if mr.garlicSessions == nil {
-		return nil, fmt.Errorf("garlic session manager not initialized for session %d", session.ID())
+		return nil, oops.Errorf("garlic session manager not initialized for session %d", session.ID())
 	}
 
 	log.WithFields(logger.Fields{
@@ -277,7 +278,7 @@ func (mr *MessageRouter) buildPlaintextGarlicMessage(
 			"error":       err,
 			"destination": fmt.Sprintf("%x", destinationHash[:8]),
 		}).Error("failed_to_create_garlic_builder")
-		return nil, fmt.Errorf("failed to create garlic builder: %w", err)
+		return nil, oops.Errorf("failed to create garlic builder: %w", err)
 	}
 
 	if err := garlicBuilder.AddLocalDeliveryClove(dataMsg, 1); err != nil {
@@ -287,7 +288,7 @@ func (mr *MessageRouter) buildPlaintextGarlicMessage(
 			"error":       err,
 			"destination": fmt.Sprintf("%x", destinationHash[:8]),
 		}).Error("failed_to_add_garlic_clove")
-		return nil, fmt.Errorf("failed to add garlic clove: %w", err)
+		return nil, oops.Errorf("failed to add garlic clove: %w", err)
 	}
 
 	plaintextGarlic, err := garlicBuilder.BuildAndSerialize()
@@ -298,7 +299,7 @@ func (mr *MessageRouter) buildPlaintextGarlicMessage(
 			"error":       err,
 			"destination": fmt.Sprintf("%x", destinationHash[:8]),
 		}).Error("failed_to_build_garlic")
-		return nil, fmt.Errorf("failed to build garlic message: %w", err)
+		return nil, oops.Errorf("failed to build garlic message: %w", err)
 	}
 
 	return plaintextGarlic, nil
@@ -323,7 +324,7 @@ func (mr *MessageRouter) encryptGarlicMessage(
 			"error":       err,
 			"destination": fmt.Sprintf("%x", destinationHash[:8]),
 		}).Error("failed_to_encrypt_garlic")
-		return nil, fmt.Errorf("failed to encrypt garlic message: %w", err)
+		return nil, oops.Errorf("failed to encrypt garlic message: %w", err)
 	}
 	return encryptedGarlic, nil
 }
@@ -342,7 +343,7 @@ func (mr *MessageRouter) wrapInGarlicMessage(
 			"error":       err,
 			"destination": fmt.Sprintf("%x", destinationHash[:8]),
 		}).Error("failed_to_wrap_garlic")
-		return nil, fmt.Errorf("failed to wrap garlic message: %w", err)
+		return nil, oops.Errorf("failed to wrap garlic message: %w", err)
 	}
 	return garlicMsg, nil
 }
@@ -357,7 +358,7 @@ func (mr *MessageRouter) sendThroughGateway(
 	garlicMsg i2np.I2NPMessage,
 ) error {
 	if mr.transportSend == nil {
-		return fmt.Errorf("transport send function not initialized for session %d", session.ID())
+		return oops.Errorf("transport send function not initialized for session %d", session.ID())
 	}
 
 	// Always send to the first hop (gateway) of the tunnel.
@@ -373,7 +374,7 @@ func (mr *MessageRouter) sendThroughGateway(
 			"destination": fmt.Sprintf("%x", destinationHash[:8]),
 			"error":       err,
 		}).Error("failed_to_send_to_gateway")
-		return fmt.Errorf("failed to send message to gateway: %w", err)
+		return oops.Errorf("failed to send message to gateway: %w", err)
 	}
 	return nil
 }
@@ -411,7 +412,7 @@ func (mr *MessageRouter) SendThroughTunnel(tunnel *tunnel.TunnelState, msg i2np.
 			"at":       "i2cp.MessageRouter.SendThroughTunnel",
 			"tunnelID": tunnel.ID,
 		}).Error("tunnel_has_no_hops")
-		return fmt.Errorf("tunnel hops required for tunnel %d", tunnel.ID)
+		return oops.Errorf("tunnel hops required for tunnel %d", tunnel.ID)
 	}
 
 	gatewayHash := tunnel.Hops[0]

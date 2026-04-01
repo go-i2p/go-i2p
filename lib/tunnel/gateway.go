@@ -2,12 +2,11 @@ package tunnel
 
 import (
 	"encoding/binary"
-	"errors"
-	"fmt"
 	"sync"
 	"sync/atomic"
 
 	"github.com/go-i2p/crypto/types"
+	"github.com/samber/oops"
 
 	"github.com/go-i2p/crypto/rand"
 	"github.com/go-i2p/crypto/tunnel"
@@ -35,11 +34,11 @@ type Gateway struct {
 
 var (
 	// ErrNilEncryption is returned when encryption is nil
-	ErrNilEncryption = errors.New("encryption tunnel cannot be nil")
+	ErrNilEncryption = oops.Errorf("encryption tunnel cannot be nil")
 	// ErrMessageTooLarge is returned when a message exceeds maximum size
-	ErrMessageTooLarge = errors.New("message too large for tunnel")
+	ErrMessageTooLarge = oops.Errorf("message too large for tunnel")
 	// ErrInvalidMessage is returned when message data is invalid
-	ErrInvalidMessage = errors.New("invalid I2NP message data")
+	ErrInvalidMessage = oops.Errorf("invalid I2NP message data")
 )
 
 const (
@@ -381,7 +380,7 @@ func (g *Gateway) createDeliveryInstructionsForConfig(dc DeliveryConfig, msgByte
 
 	data, err := di.Bytes()
 	if err != nil {
-		return nil, fmt.Errorf("failed to serialize delivery instructions: %w", err)
+		return nil, oops.Errorf("failed to serialize delivery instructions: %w", err)
 	}
 	return data, nil
 }
@@ -398,7 +397,7 @@ func (g *Gateway) createFollowOnInstructions(msgID uint32, fragNum int, isLast b
 
 	data, err := di.Bytes()
 	if err != nil {
-		return nil, fmt.Errorf("failed to serialize follow-on fragment instructions: %w", err)
+		return nil, oops.Errorf("failed to serialize follow-on fragment instructions: %w", err)
 	}
 	return data, nil
 }

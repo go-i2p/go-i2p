@@ -1,10 +1,9 @@
 package tunnel
 
 import (
-	"fmt"
-
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
+	"github.com/samber/oops"
 )
 
 // NetDBSelectorAdapter wraps a NetDBSelector to implement PeerSelector.
@@ -16,7 +15,7 @@ type NetDBSelectorAdapter struct {
 // NewNetDBSelectorAdapter creates an adapter from NetDBSelector to PeerSelector.
 func NewNetDBSelectorAdapter(db NetDBSelector) (*NetDBSelectorAdapter, error) {
 	if db == nil {
-		return nil, fmt.Errorf("db selector cannot be nil")
+		return nil, oops.Errorf("db selector cannot be nil")
 	}
 	return &NetDBSelectorAdapter{db: db}, nil
 }

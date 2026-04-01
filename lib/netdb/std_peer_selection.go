@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/go-i2p/crypto/rand"
+	"github.com/samber/oops"
 
 	"github.com/go-i2p/logger"
 
@@ -265,7 +266,7 @@ func (db *StdNetDB) SelectPeers(count int, exclude []common.Hash) ([]router_info
 
 	allRouterInfos := db.GetAllRouterInfos()
 	if len(allRouterInfos) == 0 {
-		return nil, fmt.Errorf("insufficient router infos available for peer selection")
+		return nil, oops.Errorf("insufficient router infos available for peer selection")
 	}
 
 	excludeMap := db.buildExcludeMap(exclude)
@@ -285,7 +286,7 @@ func (db *StdNetDB) SelectPeers(count int, exclude []common.Hash) ([]router_info
 			"recommendation":  "implement NTCP2 introducer support or add SSU2 transport",
 			"impact":          "tunnel building will fail until directly-contactable peers are available",
 		}).Error("No directly-contactable peers available after filtering")
-		return nil, fmt.Errorf("insufficient suitable peers after filtering: need %d directly-contactable peers, but 0 available from %d total peers (%d excluded)", count, len(allRouterInfos), len(exclude))
+		return nil, oops.Errorf("insufficient suitable peers after filtering: need %d directly-contactable peers, but 0 available from %d total peers (%d excluded)", count, len(allRouterInfos), len(exclude))
 	}
 
 	// If we have fewer available peers than requested, return all
@@ -331,13 +332,13 @@ func (db *StdNetDB) SelectFloodfillRouters(targetHash common.Hash, count int) ([
 	// Get all router infos
 	allRouterInfos := db.GetAllRouterInfos()
 	if len(allRouterInfos) == 0 {
-		return nil, fmt.Errorf("no router infos available in NetDB")
+		return nil, oops.Errorf("no router infos available in NetDB")
 	}
 
 	// Filter for floodfill routers
 	floodfills := db.filterFloodfillRouters(allRouterInfos)
 	if len(floodfills) == 0 {
-		return nil, fmt.Errorf("no floodfill routers available in NetDB")
+		return nil, oops.Errorf("no floodfill routers available in NetDB")
 	}
 
 	log.WithFields(logger.Fields{

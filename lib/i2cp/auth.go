@@ -3,11 +3,11 @@ package i2cp
 import (
 	"crypto/subtle"
 	"encoding/binary"
-	"fmt"
 	"net"
 	"strings"
 
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // Authenticator validates I2CP client credentials.
@@ -30,7 +30,7 @@ type PasswordAuthenticator struct {
 // Returns an error if username or password is empty.
 func NewPasswordAuthenticator(username, password string) (*PasswordAuthenticator, error) {
 	if username == "" || password == "" {
-		return nil, fmt.Errorf("i2cp: NewPasswordAuthenticator requires non-empty username and password")
+		return nil, oops.Errorf("i2cp: NewPasswordAuthenticator requires non-empty username and password")
 	}
 	return &PasswordAuthenticator{
 		username: username,
