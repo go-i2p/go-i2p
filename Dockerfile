@@ -12,6 +12,9 @@ RUN CGO_ENABLED=0 go build --tags netgo,osusergo -o /go-i2p
 FROM alpine:3.21
 
 RUN adduser -D -h /home/i2p i2p
+RUN mkdir -p /home/i2p/.go-i2p/
+RUN chown -R i2p:i2p /home/i2p
+RUN chmod -R 700 /home/i2p
 
 COPY --from=builder /go-i2p /usr/local/bin/go-i2p
 
