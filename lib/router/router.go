@@ -261,13 +261,24 @@ func constructRouterInfo(r *Router) (*router_info.RouterInfo, error) {
 	return ri, nil
 }
 
+// resolveTransportPort returns a listen address string from transport config.
+// Returns ":0" if the configured port is 0 (OS assigns a random port).
+func resolveTransportPort(cfg *config.TransportDefaults, port int) string {
+	p := 0
+	if cfg != nil && port > 0 {
+		p = port
+	}
+	return fmt.Sprintf(":%d", p)
+}
+
 // buildNTCP2Transport creates the NTCP2 transport, publishes its address to ri, and returns it.
 func buildNTCP2Transport(r *Router, ri *router_info.RouterInfo) (*ntcp.NTCP2Transport, error) {
-	port := 0 // default: automatic assignment
-	if r.cfg.Transport != nil && r.cfg.Transport.NTCP2Port > 0 {
-		port = r.cfg.Transport.NTCP2Port
-	}
-	addr := fmt.Sprintf(":%d", port)
+	addr := resolveTransportPort(r.cfg.Transport, func() int {
+		if r.cfg.Transport != nil {
+			return r.cfg.Transport.NTCP2Port
+		}
+		return 0
+	}())
 	ntcp2Config, err := ntcp.NewConfig(addr)
 	if err != nil {
 		log.WithError(err).Error("Failed to create NTCP2 config")
@@ -294,11 +305,12 @@ func buildNTCP2Transport(r *Router, ri *router_info.RouterInfo) (*ntcp.NTCP2Tran
 
 // buildSSU2Transport creates the SSU2 transport, publishes its address to ri, and returns it.
 func buildSSU2Transport(r *Router, ri *router_info.RouterInfo) (*ssu2.SSU2Transport, error) {
-	port := 0 // default: automatic assignment
-	if r.cfg.Transport != nil && r.cfg.Transport.SSU2Port > 0 {
-		port = r.cfg.Transport.SSU2Port
-	}
-	addr := fmt.Sprintf(":%d", port)
+	addr := resolveTransportPort(r.cfg.Transport, func() int {
+		if r.cfg.Transport != nil {
+			return r.cfg.Transport.SSU2Port
+		}
+		return 0
+	}())
 
 	ssu2Config, err := ssu2.NewConfig(addr)
 	if err != nil {

@@ -577,46 +577,35 @@ func validateNetDBMaxLeaseSets(maxLeaseSets int) error {
 	return newValidationError("NetDB.MaxLeaseSets must be at least 1")
 }
 
+// runValidation runs a sequence of validator functions with logging bookends.
+func runValidation(name, startMsg, successMsg string, validators ...func() error) error {
+	logValidationStart(name, startMsg)
+	for _, v := range validators {
+		if err := v(); err != nil {
+			return err
+		}
+	}
+	logValidationSuccess(name, successMsg)
+	return nil
+}
+
 // validateNetDB validates network database configuration settings.
 func validateNetDB(netdb NetDBDefaults) error {
-	logValidationStart("validateNetDBConfig", "validating_netdb_settings")
-
-	if err := validateNetDBPath(netdb.Path); err != nil {
-		return err
-	}
-	if err := validateNetDBMaxRouterInfos(netdb.MaxRouterInfos); err != nil {
-		return err
-	}
-	if err := validateNetDBMaxLeaseSets(netdb.MaxLeaseSets); err != nil {
-		return err
-	}
-
-	logValidationSuccess("validateNetDBConfig", "NetDB configuration validated successfully")
-	return nil
+	return runValidation("validateNetDBConfig", "validating_netdb_settings", "NetDB configuration validated successfully",
+		func() error { return validateNetDBPath(netdb.Path) },
+		func() error { return validateNetDBMaxRouterInfos(netdb.MaxRouterInfos) },
+		func() error { return validateNetDBMaxLeaseSets(netdb.MaxLeaseSets) },
+	)
 }
 
 // validateBootstrap validates bootstrap configuration settings.
 func validateBootstrap(bootstrap BootstrapDefaults) error {
-	logValidationStart("validateBootstrapConfig", "validating_bootstrap_settings")
-
-	if err := validateLowPeerThreshold(bootstrap.LowPeerThreshold); err != nil {
-		return err
-	}
-
-	if err := validateMinimumReseedPeers(bootstrap.MinimumReseedPeers); err != nil {
-		return err
-	}
-
-	if err := validateBootstrapType(bootstrap.BootstrapType); err != nil {
-		return err
-	}
-
-	if err := validateReseedStrategyIfSet(bootstrap.ReseedStrategy); err != nil {
-		return err
-	}
-
-	logValidationSuccess("validateBootstrapConfig", "bootstrap configuration validated successfully")
-	return nil
+	return runValidation("validateBootstrapConfig", "validating_bootstrap_settings", "bootstrap configuration validated successfully",
+		func() error { return validateLowPeerThreshold(bootstrap.LowPeerThreshold) },
+		func() error { return validateMinimumReseedPeers(bootstrap.MinimumReseedPeers) },
+		func() error { return validateBootstrapType(bootstrap.BootstrapType) },
+		func() error { return validateReseedStrategyIfSet(bootstrap.ReseedStrategy) },
+	)
 }
 
 // logValidationStart logs the start of a validation phase.
@@ -738,20 +727,11 @@ func validateI2CPNetworkType(network string) error {
 
 // validateI2CP validates I2CP server configuration settings.
 func validateI2CP(i2cp I2CPDefaults) error {
-	logValidationStart("validateI2CPConfig", "validating_i2cp_settings")
-
-	if err := validateI2CPMaxSessions(i2cp.MaxSessions); err != nil {
-		return err
-	}
-	if err := validateI2CPMessageQueueSize(i2cp.MessageQueueSize); err != nil {
-		return err
-	}
-	if err := validateI2CPNetworkType(i2cp.Network); err != nil {
-		return err
-	}
-
-	logValidationSuccess("validateI2CPConfig", "I2CP configuration validated successfully")
-	return nil
+	return runValidation("validateI2CPConfig", "validating_i2cp_settings", "I2CP configuration validated successfully",
+		func() error { return validateI2CPMaxSessions(i2cp.MaxSessions) },
+		func() error { return validateI2CPMessageQueueSize(i2cp.MessageQueueSize) },
+		func() error { return validateI2CPNetworkType(i2cp.Network) },
+	)
 }
 
 // validateI2PControl validates I2PControl RPC server configuration settings.
