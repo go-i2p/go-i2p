@@ -15,8 +15,8 @@ github.com/frankban/quicktest v1.14.6 h1:7Xjx+VpznH+oBnejlPUj8oUpdxnVs4f8XU8WnHk
 github.com/frankban/quicktest v1.14.6/go.mod h1:4ptaffx2x8+WTWXmUCuVU6aPUX1/Mz7zb5vbUoiM6w0=
 github.com/fsnotify/fsnotify v1.9.0 h1:2Ml+OJNzbYCTzsxtv8vKSFD9PbJjmhYF14k/jKC7S9k=
 github.com/fsnotify/fsnotify v1.9.0/go.mod h1:8jBTzvmWwFyi3Pb8djgCCO5IBqzKJ/Jwo8TRcHyHii0=
-github.com/go-i2p/common v0.1.4-0.20260317205637-c40aee7ed134 h1:srS/Onq87KzT5pWveTccplz7zUM59LZT92EPy6CIVP0=
-github.com/go-i2p/common v0.1.4-0.20260317205637-c40aee7ed134/go.mod h1:+2GepiYYxk+LkWDivDMZqhlputZ0cHOoQAWpC7XRQ34=
+github.com/go-i2p/common v0.1.4-0.20260402231221-af2f599a75cd h1:5Z06cPUwEig1FCFfnT/7sRqj0D6SUXxGN8BxvJD12O0=
+github.com/go-i2p/common v0.1.4-0.20260402231221-af2f599a75cd/go.mod h1:VneWSJDuz95+BOpLa8ySAnIMF/Vuhap7ad62H5z+eKY=
 github.com/go-i2p/crypto v0.1.4-0.20260327201310-96101c044a62 h1:d6kQAwBKkYe8dCHsbXJn3n6lGjqS8ermfeEj1ZsyRiQ=
 github.com/go-i2p/crypto v0.1.4-0.20260327201310-96101c044a62/go.mod h1:dPXGp189PUFOQDMJD9vGo+yfx4W42+Tu4ecrKns+yi0=
 github.com/go-i2p/elgamal v0.0.2 h1:3x2MwXWH5KjFZ06YThjLjB2/7eM3f6BsmhudKXn+dnk=

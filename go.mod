@@ -5,7 +5,7 @@ go 1.25.0
 require (
 	github.com/beevik/ntp v1.5.0
 	github.com/eyedeekay/go-unzip v0.0.0-20240201194209-560d8225b50e
-	github.com/go-i2p/common v0.1.4-0.20260317205637-c40aee7ed134
+	github.com/go-i2p/common v0.1.4-0.20260402231221-af2f599a75cd
 	github.com/go-i2p/crypto v0.1.4-0.20260327201310-96101c044a62
 	github.com/go-i2p/go-nat-listener v0.0.0-20260402214544-c8773aeea918
 	github.com/go-i2p/go-noise v0.1.4-0.20260402003936-5386860e3a96
