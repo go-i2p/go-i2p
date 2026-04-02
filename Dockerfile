@@ -19,6 +19,7 @@ USER i2p
 WORKDIR /home/i2p
 
 # I2CP and I2PControl
-EXPOSE 7654 7650
-
+#EXPOSE 7654 7650
+# Set DEBUG_I2P=debug to enable debug logging
+ENV DEBUG_I2P=debug
 ENTRYPOINT ["go-i2p"]

@@ -2,7 +2,7 @@ services:
   go-i2p:
     build: .
     ports:
-      - "127.0.0.1:7654:7654"  # I2CP
+      - "127.0.0.1:7653:7654"  # I2CP
       - "127.0.0.1:7650:7650"  # I2PControl
     volumes:
       - i2p-data:/home/i2p/.go-i2p
