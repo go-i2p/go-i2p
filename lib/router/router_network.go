@@ -216,25 +216,33 @@ func (r *Router) runMainLoop() {
 func (r *Router) mainloop() {
 	// Initialize active sessions map for tracking NTCP2 connections
 	r.activeSessions = make(map[common.Hash]*ntcp.NTCP2Session)
-	log.WithFields(logger.Fields{"at": "mainloop"}).Debug("Initialized active sessions map")
+	log.WithField("at", "mainloop").Debug("initialized active sessions map")
 
+	log.WithField("at", "mainloop").Debug("step 1: initializing core components (NetDB, I2CP, I2PControl)")
 	if err := r.initializeCoreComponents(); err != nil {
 		r.startupErr <- err
 		r.Stop()
 		return
 	}
-
+	log.WithField("at", "mainloop").Debug("step 2: wiring inbound handler")
 	r.wireInboundHandler()
+	log.WithField("at", "mainloop").Debug("step 3: initializing message router (includes ConstructRouterInfo for identity hash)")
 	r.initializeMessageRouter()
+	log.WithField("at", "mainloop").Debug("step 4: starting publisher")
 	r.startPublisher()
+	log.WithField("at", "mainloop").Debug("step 5: starting explorer")
 	r.startExplorer()
+	log.WithField("at", "mainloop").Debug("step 6: starting floodfill server")
 	r.startFloodfillServer()
+	log.WithField("at", "mainloop").Debug("step 7: starting SSU2 NAT detection")
 	r.startSSU2NATDetection()
 
 	// Signal Start() that all startup-critical initialization succeeded
+	log.WithField("at", "mainloop").Debug("signaling startup success")
 	r.startupErr <- nil
 
 	// Start session monitors for inbound message processing
+	log.WithField("at", "mainloop").Debug("starting session monitors")
 	r.startSessionMonitors()
 
 	r.runMainLoop()

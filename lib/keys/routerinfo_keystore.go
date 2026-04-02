@@ -448,16 +448,19 @@ type RouterInfoOptions struct {
 func (ks *RouterInfoKeystore) ConstructRouterInfo(addresses []*router_address.RouterAddress, opts ...RouterInfoOptions) (*router_info.RouterInfo, error) {
 	ks.logConstructionStart(len(addresses))
 
+	log.WithField("at", "ConstructRouterInfo").Debug("step 1/5: validating and getting keys")
 	publicKey, privateKey, err := ks.validateAndGetKeys()
 	if err != nil {
 		return nil, ks.logAndWrapError(err, "Failed to validate and get keys")
 	}
 
+	log.WithField("at", "ConstructRouterInfo").Debug("step 2/5: creating Ed25519 certificate")
 	cert, err := ks.createEd25519Certificate()
 	if err != nil {
 		return nil, ks.logAndWrapError(err, "Failed to create certificate")
 	}
 
+	log.WithField("at", "ConstructRouterInfo").Debug("step 3/5: building router identity")
 	routerIdentity, err := ks.buildRouterIdentity(publicKey, cert)
 	if err != nil {
 		return nil, ks.logAndWrapError(err, "Failed to build router identity")
@@ -465,12 +468,13 @@ func (ks *RouterInfoKeystore) ConstructRouterInfo(addresses []*router_address.Ro
 
 	options := ks.mergeOptions(opts)
 
+	log.WithField("at", "ConstructRouterInfo").Debug("step 4/5: assembling router info (includes signing)")
 	ri, err := ks.assembleRouterInfo(routerIdentity, addresses, privateKey, options)
 	if err != nil {
 		return nil, ks.logAndWrapError(err, "Failed to assemble RouterInfo")
 	}
 
-	log.WithField("at", "ConstructRouterInfo").Debug("Successfully constructed RouterInfo")
+	log.WithField("at", "ConstructRouterInfo").Debug("step 5/5: construction complete")
 	return ri, nil
 }
 
@@ -668,6 +672,7 @@ func (ks *RouterInfoKeystore) assembleRouterInfo(routerIdentity *router_identity
 		"congestion_flag": opts.CongestionFlag,
 	}).Debug("Creating RouterInfo with options")
 
+	log.WithField("at", "assembleRouterInfo").Debug("entering router_info.NewRouterInfo — if no further log appears, stall is inside dependency")
 	ri, err := router_info.NewRouterInfo(
 		routerIdentity,
 		publishedTime,
@@ -680,7 +685,7 @@ func (ks *RouterInfoKeystore) assembleRouterInfo(routerIdentity *router_identity
 		log.WithError(err).WithField("at", "assembleRouterInfo").Error("Failed to create RouterInfo")
 		return nil, oops.Errorf("failed to create router info: %w", err)
 	}
-	log.WithField("at", "assembleRouterInfo").Debug("Successfully assembled RouterInfo")
+	log.WithField("at", "assembleRouterInfo").Debug("router_info.NewRouterInfo returned successfully")
 	return ri, nil
 }
 

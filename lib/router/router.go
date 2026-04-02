@@ -115,34 +115,38 @@ type Router struct {
 
 // CreateRouter creates a router with the provided configuration
 func CreateRouter(cfg *config.RouterConfig) (*Router, error) {
-	logStartup("creating router instance", cfg.BaseDir, cfg.WorkingDir)
+	log.WithField("at", "CreateRouter").Debug("step 1/6: creating router from config")
 
 	r, err := FromConfig(cfg)
 	if err != nil {
 		logError("failed to create router from configuration", err)
 		return nil, err
 	}
-	logStartup("router instance created successfully", "", "")
+	log.WithField("at", "CreateRouter").Debug("step 2/6: initializing keystore")
 
 	if err := initializeRouterKeystore(r, cfg); err != nil {
 		return nil, err
 	}
 
+	log.WithField("at", "CreateRouter").Debug("step 3/6: validating router keys")
 	if err := validateRouterKeys(r); err != nil {
 		return nil, err
 	}
 
+	log.WithField("at", "CreateRouter").Debug("step 4/6: constructing RouterInfo (includes signing)")
 	ri, err := constructRouterInfo(r)
 	if err != nil {
 		return nil, err
 	}
 
+	log.WithField("at", "CreateRouter").Debug("step 5/6: initializing transports")
 	transports, err := initializeTransports(r, ri, cfg)
 	if err != nil {
 		return nil, err
 	}
 
 	r.TransportMuxer = transport.Mux(transports...)
+	log.WithField("at", "CreateRouter").Debug("step 6/6: router created successfully")
 	return r, nil
 }
 
@@ -173,14 +177,17 @@ func logError(reason string, err error) {
 
 // initializeTransports creates and returns all configured transports.
 func initializeTransports(r *Router, ri *router_info.RouterInfo, cfg *config.RouterConfig) ([]transport.Transport, error) {
+	log.WithField("at", "initializeTransports").Debug("building NTCP2 transport")
 	ntcp2Transport, err := buildNTCP2Transport(r, ri)
 	if err != nil {
 		return nil, err
 	}
+	log.WithField("at", "initializeTransports").Debug("NTCP2 transport built successfully")
 
 	transports := []transport.Transport{ntcp2Transport}
 
 	if cfg.Transport != nil && cfg.Transport.SSU2Enabled {
+		log.WithField("at", "initializeTransports").Debug("building SSU2 transport")
 		if ssu2Transport, err := buildSSU2Transport(r, ri); err != nil {
 			log.WithError(err).Warn("SSU2 transport setup failed; continuing without SSU2")
 		} else {
@@ -188,6 +195,7 @@ func initializeTransports(r *Router, ri *router_info.RouterInfo, cfg *config.Rou
 		}
 	}
 
+	log.WithFields(logger.Fields{"at": "initializeTransports", "count": len(transports)}).Debug("all transports initialized")
 	return transports, nil
 }
 
@@ -250,14 +258,14 @@ func validateRouterKeys(r *Router) error {
 
 // constructRouterInfo builds the router info from the keystore
 func constructRouterInfo(r *Router) (*router_info.RouterInfo, error) {
+	log.WithField("at", "constructRouterInfo").Debug("calling ConstructRouterInfo")
 	ri, err := r.RouterInfoKeystore.ConstructRouterInfo(nil)
 	if err != nil {
 		log.WithError(err).Error("Failed to construct RouterInfo")
 		return nil, err
 	}
 
-	log.WithFields(logger.Fields{"at": "constructRouterInfo"}).Debug("RouterInfo constructed successfully")
-	log.WithFields(logger.Fields{"at": "constructRouterInfo"}).Debug("RouterInfo:", ri)
+	log.WithField("at", "constructRouterInfo").Debug("RouterInfo constructed successfully")
 	return ri, nil
 }
 
@@ -273,12 +281,14 @@ func resolveTransportPort(cfg *config.TransportDefaults, port int) string {
 
 // buildNTCP2Transport creates the NTCP2 transport, publishes its address to ri, and returns it.
 func buildNTCP2Transport(r *Router, ri *router_info.RouterInfo) (*ntcp.NTCP2Transport, error) {
+	log.WithField("at", "buildNTCP2Transport").Debug("resolving transport port")
 	addr := resolveTransportPort(r.cfg.Transport, func() int {
 		if r.cfg.Transport != nil {
 			return r.cfg.Transport.NTCP2Port
 		}
 		return 0
 	}())
+	log.WithFields(logger.Fields{"at": "buildNTCP2Transport", "addr": addr}).Debug("creating NTCP2 config")
 	ntcp2Config, err := ntcp.NewConfig(addr)
 	if err != nil {
 		log.WithError(err).Error("Failed to create NTCP2 config")
@@ -286,6 +296,7 @@ func buildNTCP2Transport(r *Router, ri *router_info.RouterInfo) (*ntcp.NTCP2Tran
 	}
 	ntcp2Config.WorkingDir = r.cfg.WorkingDir
 
+	log.WithField("at", "buildNTCP2Transport").Debug("creating NTCP2 transport instance")
 	ntcp2Transport, err := ntcp.NewNTCP2Transport(*ri, ntcp2Config, r.RouterInfoKeystore)
 	if err != nil {
 		log.WithError(err).Error("Failed to create NTCP2 transport")

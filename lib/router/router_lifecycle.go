@@ -618,10 +618,15 @@ func (r *Router) Start() error {
 	}
 
 	r.markRunning()
+	log.WithField("at", "Start").Debug("step 2/6: initializing lifecycle context")
 	r.initializeLifecycleContext()
+	log.WithField("at", "Start").Debug("step 3/6: initializing bandwidth tracker")
 	r.initializeBandwidthTracker()
+	log.WithField("at", "Start").Debug("step 4/6: initializing congestion monitoring")
 	r.initializeCongestionMonitoring()
+	log.WithField("at", "Start").Debug("step 5/6: initializing router info provider")
 	r.initializeRouterInfoProvider()
+	log.WithField("at", "Start").Debug("step 6/6: launching mainloop")
 	r.launchMainloop()
 
 	// Release runMux BEFORE blocking on startupErr to prevent deadlocking
@@ -903,16 +908,18 @@ func (r *Router) wireGarlicSessionManager() {
 // getOurRouterHash returns our router's identity hash.
 // Returns an error if the hash cannot be computed.
 func (r *Router) getOurRouterHash() (common.Hash, error) {
-	// Try to construct a RouterInfo to get our hash
+	log.WithField("at", "getOurRouterHash").Debug("constructing RouterInfo to derive identity hash")
 	ri, err := r.RouterInfoKeystore.ConstructRouterInfo(nil)
 	if err != nil {
 		return common.Hash{}, fmt.Errorf("failed to construct RouterInfo: %w", err)
 	}
+	log.WithField("at", "getOurRouterHash").Debug("RouterInfo constructed, computing IdentHash")
 
 	hash, err := ri.IdentHash()
 	if err != nil {
 		return common.Hash{}, fmt.Errorf("failed to get IdentHash: %w", err)
 	}
 
+	log.WithField("at", "getOurRouterHash").Debug("identity hash computed successfully")
 	return hash, nil
 }

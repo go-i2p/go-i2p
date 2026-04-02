@@ -430,22 +430,22 @@ func createAndConfigureRouter() error {
 
 	routerCfg := config.GetRouterConfig()
 
+	log.WithField("at", "createAndConfigureRouter").Debug("calling NewStandardEmbeddedRouter")
 	var err error
 	embeddedRouter, err = embedded.NewStandardEmbeddedRouter(routerCfg)
 	if err != nil {
 		return fmt.Errorf("failed to create embedded router: %w", err)
 	}
+	log.WithField("at", "createAndConfigureRouter").Debug("NewStandardEmbeddedRouter returned")
 
-	log.WithFields(logger.Fields{
-		"at":     "runRouter",
-		"phase":  "startup",
-		"step":   4,
-		"reason": "embedded router created successfully",
-	}).Info("embedded router instance created")
-
+	// Note: NewStandardEmbeddedRouter already calls Configure() internally.
+	// The second Configure() call below is a documented no-op for the
+	// constructor + Configure pattern.
+	log.WithField("at", "createAndConfigureRouter").Debug("calling Configure (expected no-op)")
 	if err := embeddedRouter.Configure(routerCfg); err != nil {
 		return fmt.Errorf("failed to configure router: %w", err)
 	}
+	log.WithField("at", "createAndConfigureRouter").Debug("router creation and configuration complete")
 	return nil
 }
 
