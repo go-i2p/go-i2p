@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/go-i2p/common/router_info"
@@ -126,7 +127,7 @@ func (rb *ReseedBootstrap) singleServerReseed(ctx context.Context, n int) ([]rou
 		}
 	}
 
-	if err := rb.validateResults(state.allRouterInfos, state.lastErr, state.attemptedServers, state.successfulServers); err != nil {
+	if err := rb.validateResults(state.allRouterInfos, state.serverErrors, state.attemptedServers, state.successfulServers); err != nil {
 		return nil, err
 	}
 
@@ -137,6 +138,7 @@ func (rb *ReseedBootstrap) singleServerReseed(ctx context.Context, n int) ([]rou
 type reseedState struct {
 	allRouterInfos    []router_info.RouterInfo
 	lastErr           error
+	serverErrors      []string
 	attemptedServers  int
 	successfulServers int
 }
@@ -151,6 +153,7 @@ func (rb *ReseedBootstrap) processReseedServer(ctx context.Context, server *conf
 	serverRIs, err := rb.attemptReseedFromServer(server, state.attemptedServers)
 	if err != nil {
 		state.lastErr = err
+		state.serverErrors = append(state.serverErrors, err.Error())
 		return nil
 	}
 
@@ -349,11 +352,13 @@ func (rb *ReseedBootstrap) hasEnoughPeers(requested, obtained int) bool {
 }
 
 // validateResults checks if we obtained any router infos and returns an error if not.
-func (rb *ReseedBootstrap) validateResults(allRouterInfos []router_info.RouterInfo, lastErr error, attemptedServers, successfulServers int) error {
+func (rb *ReseedBootstrap) validateResults(allRouterInfos []router_info.RouterInfo, serverErrors []string, attemptedServers, successfulServers int) error {
 	if len(allRouterInfos) == 0 {
 		detail := "no peers obtained"
-		if lastErr != nil {
-			detail = lastErr.Error()
+		if len(serverErrors) > 0 {
+			// Deduplicate error messages for cleaner reporting
+			unique := deduplicateErrors(serverErrors)
+			detail = strings.Join(unique, "; ")
 		}
 		log.WithFields(logger.Fields{
 			"at":                 "(ReseedBootstrap) validateResults",
@@ -363,12 +368,25 @@ func (rb *ReseedBootstrap) validateResults(allRouterInfos []router_info.RouterIn
 			"successful_servers": successfulServers,
 			"failed_servers":     attemptedServers - successfulServers,
 			"router_count":       0,
-			"last_error":         detail,
+			"errors":             detail,
 			"recommendation":     "check network connectivity, firewall, DNS resolution, and RouterInfo validation rules",
 		}).Error("reseed completed with zero peers")
 		return oops.Errorf("reseed yielded zero peers (attempted %d servers): %s", attemptedServers, detail)
 	}
 	return nil
+}
+
+// deduplicateErrors returns unique error messages preserving order.
+func deduplicateErrors(errors []string) []string {
+	seen := make(map[string]bool)
+	var unique []string
+	for _, e := range errors {
+		if !seen[e] {
+			seen[e] = true
+			unique = append(unique, e)
+		}
+	}
+	return unique
 }
 
 // logReseedComplete logs the completion of bootstrap peer acquisition.

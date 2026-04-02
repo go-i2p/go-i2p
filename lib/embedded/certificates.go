@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/go-i2p/go-i2p/lib/netdb/reseed"
 )
 
 // CertificatesFS embeds all certificates at compile time.
@@ -14,6 +16,19 @@ import (
 //
 //go:embed all:certificates
 var CertificatesFS embed.FS
+
+func init() {
+	// Automatically register certificate providers with the reseed package.
+	// This ensures downstream users (e.g., go-sam-bridge) who import the embedded
+	// package get proper TLS certificate verification without needing to manually
+	// call SetCertificateProvider/SetSSLCertificateProvider.
+	reseed.SetCertificateProvider(func() (fs.FS, error) {
+		return GetReseedCertificates()
+	})
+	reseed.SetSSLCertificateProvider(func() (fs.FS, error) {
+		return GetSSLCertificates()
+	})
+}
 
 // GetReseedCertificates returns the embedded reseed certificates as a filesystem.
 // The returned fs.FS is rooted at the certificates/reseed directory.

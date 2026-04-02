@@ -39,6 +39,9 @@ func init() {
 	reseed.SetCertificateProvider(func() (fs.FS, error) {
 		return embedded.GetReseedCertificates()
 	})
+	reseed.SetSSLCertificateProvider(func() (fs.FS, error) {
+		return embedded.GetSSLCertificates()
+	})
 
 	cobra.OnInitialize(config.InitConfigOrExit)
 	registerGlobalFlags()

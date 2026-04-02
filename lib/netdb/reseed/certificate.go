@@ -32,6 +32,11 @@ type CertificateFSProvider func() (fs.FS, error)
 // This is set by the embedded package when it initializes.
 var defaultCertProvider CertificateFSProvider
 
+// defaultSSLCertProvider is set during initialization to provide the SSL certificate filesystem.
+// SSL certificates (e.g., ISRG Root X1 for Let's Encrypt) are used for TLS verification
+// when connecting to reseed servers.
+var defaultSSLCertProvider CertificateFSProvider
+
 // defaultPool is the lazily-initialized global certificate pool.
 // Uses a mutex with an initialized flag instead of sync.Once so that
 // transient initialization failures can be retried on subsequent calls.
@@ -46,6 +51,60 @@ var (
 // Typically called by the embedded package during initialization.
 func SetCertificateProvider(provider CertificateFSProvider) {
 	defaultCertProvider = provider
+}
+
+// SetSSLCertificateProvider sets the function that provides the SSL certificate filesystem.
+// SSL certificates are used for TLS verification when connecting to reseed servers.
+// This must be called before buildReseedCertPool is used for the first time.
+func SetSSLCertificateProvider(provider CertificateFSProvider) {
+	defaultSSLCertProvider = provider
+}
+
+// GetSSLCertificates returns parsed x509 certificates from the SSL certificate provider.
+// Returns nil if no SSL certificate provider has been set.
+func GetSSLCertificates() ([]*x509.Certificate, error) {
+	if defaultSSLCertProvider == nil {
+		return nil, nil
+	}
+
+	sslFS, err := defaultSSLCertProvider()
+	if err != nil {
+		return nil, oops.Errorf("failed to get SSL certificate filesystem: %w", err)
+	}
+
+	entries, err := fs.ReadDir(sslFS, ".")
+	if err != nil {
+		return nil, oops.Errorf("failed to read SSL certificate directory: %w", err)
+	}
+
+	var certs []*x509.Certificate
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".crt") {
+			continue
+		}
+
+		data, err := fs.ReadFile(sslFS, entry.Name())
+		if err != nil {
+			log.WithError(err).WithField("filename", entry.Name()).Warn("Failed to read SSL certificate, skipping")
+			continue
+		}
+
+		block, _ := pem.Decode(data)
+		if block == nil {
+			log.WithField("filename", entry.Name()).Warn("Failed to decode SSL certificate PEM, skipping")
+			continue
+		}
+
+		cert, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			log.WithError(err).WithField("filename", entry.Name()).Warn("Failed to parse SSL certificate, skipping")
+			continue
+		}
+
+		certs = append(certs, cert)
+	}
+
+	return certs, nil
 }
 
 // GetDefaultCertificatePool returns the default certificate pool loaded from embedded certificates.
