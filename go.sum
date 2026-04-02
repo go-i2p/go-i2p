@@ -21,8 +21,8 @@ github.com/go-i2p/crypto v0.1.4-0.20260327201310-96101c044a62 h1:d6kQAwBKkYe8dCH
 github.com/go-i2p/crypto v0.1.4-0.20260327201310-96101c044a62/go.mod h1:dPXGp189PUFOQDMJD9vGo+yfx4W42+Tu4ecrKns+yi0=
 github.com/go-i2p/elgamal v0.0.2 h1:3x2MwXWH5KjFZ06YThjLjB2/7eM3f6BsmhudKXn+dnk=
 github.com/go-i2p/elgamal v0.0.2/go.mod h1:5L85gta1c07w3f4ZCy4z//Caq1zaiHbEB8jocfQKWxM=
-github.com/go-i2p/go-nat-listener v0.0.0-20260128190435-6fcfda9acc7a h1:rqEgzM+caWS2K38eM9g2dsj2rI++ItxzPJEPX8o6PoI=
-github.com/go-i2p/go-nat-listener v0.0.0-20260128190435-6fcfda9acc7a/go.mod h1:dZzic+R5kncgEzM5OzZufBhsA3bEwRADscN4W2WZQgE=
+github.com/go-i2p/go-nat-listener v0.0.0-20260402214544-c8773aeea918 h1:UFg1wIQtdbeSbbY0w6Kr1UWVo+OU8go7fu6yX8OoUTw=
+github.com/go-i2p/go-nat-listener v0.0.0-20260402214544-c8773aeea918/go.mod h1:HYnoqKCbnOBw6WpJ4+GJZVwVgH+4lgTl9zCOzgHRupM=
 github.com/go-i2p/go-noise v0.1.4-0.20260402003936-5386860e3a96 h1:7KrMcUpL7g1zgpmz9hj88dfFBUTOV1+SX5uWByHaios=
 github.com/go-i2p/go-noise v0.1.4-0.20260402003936-5386860e3a96/go.mod h1:CLk+IyYcbzv5O6PNw0bE1v/1Q7BVgd51XOCPr7Lfu8I=
 github.com/go-i2p/logger v0.1.5 h1:bqX0R59jRNhCTuOVm97gtvo6tH2+nU1NJ53WzAi3I4I=
