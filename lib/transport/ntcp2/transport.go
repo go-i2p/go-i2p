@@ -196,8 +196,11 @@ func setupNetworkListener(transport *NTCP2Transport, config *Config, ntcp2Config
 	if err != nil {
 		return fmt.Errorf("failed to convert port to integer: %w", err)
 	}
-	tcpListener, err := nattraversal.ListenWithFallback(iport)
-	// tcpListener, err := net.Listen("tcp", config.ListenerAddress)
+	// Use a timeout context for NAT traversal to prevent indefinite blocking
+	// in environments without UPnP/NAT-PMP gateways (e.g. Docker containers).
+	natCtx, natCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer natCancel()
+	tcpListener, err := nattraversal.ListenWithFallbackContext(natCtx, iport)
 	if err != nil {
 		return fmt.Errorf("failed to create TCP listener: %w", err)
 	}
