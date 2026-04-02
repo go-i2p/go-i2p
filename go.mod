@@ -8,7 +8,7 @@ require (
 	github.com/go-i2p/common v0.1.4-0.20260317205637-c40aee7ed134
 	github.com/go-i2p/crypto v0.1.4-0.20260327201310-96101c044a62
 	github.com/go-i2p/go-nat-listener v0.0.0-20260128190435-6fcfda9acc7a
-	github.com/go-i2p/go-noise v0.1.4-0.20260401195852-07c5429be191
+	github.com/go-i2p/go-noise v0.1.4-0.20260402003936-5386860e3a96
 	github.com/go-i2p/logger v0.1.5
 	github.com/go-i2p/su3 v0.0.1
 	github.com/samber/oops v1.21.0
@@ -66,7 +66,7 @@ require (
 // Group 2: noise, go-noise
 //replace github.com/go-i2p/noise => ../noise
 
-replace github.com/go-i2p/go-noise => ../go-noise
+//replace github.com/go-i2p/go-noise => ../go-noise
 
 // Group 3: logger, su3
 //replace github.com/go-i2p/logger => ../logger
