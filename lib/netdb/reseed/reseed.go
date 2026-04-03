@@ -733,6 +733,12 @@ func (r Reseed) tryParseRouterInfoFile(filePath string, stats *parseStats) (rout
 		return router_info.RouterInfo{}, false
 	}
 
+	if len(riB) == 0 {
+		stats.skippedFiles++
+		log.WithField("file", filePath).Debug("Skipping empty router info file")
+		return router_info.RouterInfo{}, false
+	}
+
 	ri, _, err := router_info.ReadRouterInfo(riB)
 	if err != nil {
 		stats.parseErrors++

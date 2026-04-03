@@ -349,6 +349,9 @@ func readRouterInfoBytes(filePath string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file: %w", err)
 	}
+	if len(data) == 0 {
+		return nil, fmt.Errorf("router info file is empty")
+	}
 	return data, nil
 }
 

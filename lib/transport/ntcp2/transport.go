@@ -187,15 +187,39 @@ func buildTransportInstance(config *Config, identity router_info.RouterInfo, key
 
 // setupNetworkListener creates and attaches the TCP and NTCP2 listeners to the transport.
 func setupNetworkListener(transport *NTCP2Transport, config *Config, ntcp2Config *ntcp2.NTCP2Config) error {
-	// NAT traversal prototype (disabled — requires go-nat-listener dependency and NAT testing):
-	_, port, err := net.SplitHostPort(config.ListenerAddress)
+	_, portStr, err := net.SplitHostPort(config.ListenerAddress)
 	if err != nil {
 		return fmt.Errorf("failed to parse listener address: %w", err)
 	}
-	iport, err := strconv.Atoi(port)
+	iport, err := strconv.Atoi(portStr)
 	if err != nil {
 		return fmt.Errorf("failed to convert port to integer: %w", err)
 	}
+
+	// When the configured port is 0, the OS will assign a random port at bind
+	// time. UPnP and NAT-PMP both reject port 0 as invalid, so we must discover
+	// the actual port before attempting NAT traversal. We do this by creating a
+	// short-lived listener, reading the assigned port, closing it, then passing
+	// the real port to nattraversal (which re-binds it).
+	if iport == 0 {
+		tmp, tmpErr := net.Listen("tcp", config.ListenerAddress)
+		if tmpErr != nil {
+			return fmt.Errorf("failed to create temporary listener to discover port: %w", tmpErr)
+		}
+		actualAddr := tmp.Addr().String()
+		tmp.Close() // Release the port; nattraversal will re-bind it below.
+
+		_, assignedPort, splitErr := net.SplitHostPort(actualAddr)
+		if splitErr != nil {
+			return fmt.Errorf("failed to parse assigned listener address %q: %w", actualAddr, splitErr)
+		}
+		iport, err = strconv.Atoi(assignedPort)
+		if err != nil {
+			return fmt.Errorf("failed to parse assigned port number %q: %w", assignedPort, err)
+		}
+		config.ListenerAddress = actualAddr
+	}
+
 	// Use a timeout context for NAT traversal to prevent indefinite blocking
 	// in environments without UPnP/NAT-PMP gateways (e.g. Docker containers).
 	natCtx, natCancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -203,6 +227,12 @@ func setupNetworkListener(transport *NTCP2Transport, config *Config, ntcp2Config
 	tcpListener, err := nattraversal.ListenWithFallbackContext(natCtx, iport)
 	if err != nil {
 		return fmt.Errorf("failed to create TCP listener: %w", err)
+	}
+
+	// Keep config in sync with the actual bound address so that
+	// createNewListenerWithConfig (used by SetIdentity) rebinds to the same port.
+	if boundAddr := tcpListener.Addr().String(); boundAddr != config.ListenerAddress {
+		config.ListenerAddress = boundAddr
 	}
 
 	listener, err := ntcp2.NewNTCP2Listener(tcpListener, ntcp2Config)
