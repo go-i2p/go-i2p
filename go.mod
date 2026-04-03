@@ -10,7 +10,7 @@ require (
 	github.com/go-i2p/go-nat-listener v0.0.0-20260402214544-c8773aeea918
 	github.com/go-i2p/go-noise v0.1.4-0.20260402003936-5386860e3a96
 	github.com/go-i2p/logger v0.1.5
-	github.com/go-i2p/su3 v0.0.1
+	github.com/go-i2p/su3 v0.0.2-0.20260403222358-bf7ef28aa90e
 	github.com/samber/oops v1.21.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
