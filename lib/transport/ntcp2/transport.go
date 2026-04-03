@@ -196,43 +196,33 @@ func setupNetworkListener(transport *NTCP2Transport, config *Config, ntcp2Config
 		return fmt.Errorf("failed to convert port to integer: %w", err)
 	}
 
-	// When the configured port is 0, the OS will assign a random port at bind
-	// time. UPnP and NAT-PMP both reject port 0 as invalid, so we must discover
-	// the actual port before attempting NAT traversal. We do this by creating a
-	// short-lived listener, reading the assigned port, closing it, then passing
-	// the real port to nattraversal (which re-binds it).
+	var tcpListener net.Listener
+
 	if iport == 0 {
-		tmp, tmpErr := net.Listen("tcp", config.ListenerAddress)
-		if tmpErr != nil {
-			return fmt.Errorf("failed to create temporary listener to discover port: %w", tmpErr)
-		}
-		actualAddr := tmp.Addr().String()
-		tmp.Close() // Release the port; nattraversal will re-bind it below.
-
-		_, assignedPort, splitErr := net.SplitHostPort(actualAddr)
-		if splitErr != nil {
-			return fmt.Errorf("failed to parse assigned listener address %q: %w", actualAddr, splitErr)
-		}
-		iport, err = strconv.Atoi(assignedPort)
+		// Port 0 means "let the OS choose". NAT traversal (UPnP/NAT-PMP) requires
+		// a specific port to map, so attempting it with port 0 always fails. Create
+		// the listener directly so the OS assigns a real port, then skip NAT mapping.
+		tcpListener, err = net.Listen("tcp", config.ListenerAddress)
 		if err != nil {
-			return fmt.Errorf("failed to parse assigned port number %q: %w", assignedPort, err)
+			return fmt.Errorf("failed to create TCP listener: %w", err)
 		}
-		config.ListenerAddress = actualAddr
-	}
-
-	// Use a timeout context for NAT traversal to prevent indefinite blocking
-	// in environments without UPnP/NAT-PMP gateways (e.g. Docker containers).
-	natCtx, natCancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer natCancel()
-	tcpListener, err := nattraversal.ListenWithFallbackContext(natCtx, iport)
-	if err != nil {
-		return fmt.Errorf("failed to create TCP listener: %w", err)
-	}
-
-	// Keep config in sync with the actual bound address so that
-	// createNewListenerWithConfig (used by SetIdentity) rebinds to the same port.
-	if boundAddr := tcpListener.Addr().String(); boundAddr != config.ListenerAddress {
-		config.ListenerAddress = boundAddr
+		config.ListenerAddress = tcpListener.Addr().String()
+		log.WithField("address", config.ListenerAddress).Info("TCP listener started (no NAT traversal for OS-assigned port)")
+	} else {
+		// A specific port was requested — attempt NAT traversal with fallback.
+		// Use a timeout context to prevent indefinite blocking in environments
+		// without UPnP/NAT-PMP gateways (e.g. Docker containers).
+		natCtx, natCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer natCancel()
+		tcpListener, err = nattraversal.ListenWithFallbackContext(natCtx, iport)
+		if err != nil {
+			return fmt.Errorf("failed to create TCP listener: %w", err)
+		}
+		// Keep config in sync with the actual bound address so that
+		// createNewListenerWithConfig (used by SetIdentity) rebinds to the same port.
+		if boundAddr := tcpListener.Addr().String(); boundAddr != config.ListenerAddress {
+			config.ListenerAddress = boundAddr
+		}
 	}
 
 	listener, err := ntcp2.NewNTCP2Listener(tcpListener, ntcp2Config)
