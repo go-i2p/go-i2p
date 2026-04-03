@@ -26,12 +26,12 @@ LLMs have been used for:
 
 Code review type usage produced freestanding bug reports in markdown documents, which were then reviewed and resolved by a human.
 
-Allowing the LLM to generate tests has led to significant test accumulation. While this has been a small problem as new features have broken old negative tests which relied on `unimplemented` error messages, ultimately these negative tests were turned into unit tests and this is no longer a problem.
+Allowing the LLM to generate tests led to significant test accumulation. While at first this was not a problem, it became clear that letting the LLM generate tests was resulting in maintainability issues in the test code. These have been largely resolved but in the future we should make sure to use shared helpers set up in the test packages.
 
 LLM's have *not* been used for:
 -------------------------------
 
- - Non-test code.
+ - End-to-End development (vibe) code. It's OK to press tab, it's not OK to not look.
  - Handling any long-term secret material(there is none)
  - No code or documentation of any kind(test or library) has been checked in without a human reviewer
 
@@ -41,5 +41,7 @@ LLMs that have been used are:
  - claude-3.5-sonnet
  - claude-4.0-sonnet
  - claude-4.5-sonnet
+ - claude-4.6-sonnet
+ - claude-4.6-opus
 
 All LLM assistance has been provided by Github Copilot.
