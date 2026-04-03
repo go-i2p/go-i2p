@@ -13,7 +13,7 @@
         <a href="../index.html">go-i2p/go-i2p</a>
       </h2>
       <div class="repo-meta">
-        📝 1608 commits
+        📝 1612 commits
          • 📜 MIT License
       </div>
     </div>
@@ -81,12 +81,12 @@ You need to treat it like the dumb co-worker who proposed to port your whole cod
 
 <p>Code review type usage produced freestanding bug reports in markdown documents, which were then reviewed and resolved by a human.</p>
 
-<p>Allowing the LLM to generate tests has led to significant test accumulation. While this has been a small problem as new features have broken old negative tests which relied on <code>unimplemented</code> error messages, ultimately these negative tests were turned into unit tests and this is no longer a problem.</p>
+<p>Allowing the LLM to generate tests led to significant test accumulation. While at first this was not a problem, it became clear that letting the LLM generate tests was resulting in maintainability issues in the test code. These have been largely resolved but in the future we should make sure to use shared helpers set up in the test packages.</p>
 
 <h2 id="llm-s-have-not-been-used-for">LLM&rsquo;s have <em>not</em> been used for:</h2>
 
 <ul>
-<li>Non-test code.</li>
+<li>End-to-End development (vibe) code. It&rsquo;s OK to press tab, it&rsquo;s not OK to not look.</li>
 <li>Handling any long-term secret material(there is none)</li>
 <li>No code or documentation of any kind(test or library) has been checked in without a human reviewer</li>
 </ul>
@@ -97,6 +97,8 @@ You need to treat it like the dumb co-worker who proposed to port your whole cod
 <li>claude-3.5-sonnet</li>
 <li>claude-4.0-sonnet</li>
 <li>claude-4.5-sonnet</li>
+<li>claude-4.6-sonnet</li>
+<li>claude-4.6-opus</li>
 </ul>
 
 <p>All LLM assistance has been provided by Github Copilot.</p>
@@ -105,7 +107,7 @@ You need to treat it like the dumb co-worker who proposed to port your whole cod
     </main>
     
     <footer class="page-footer">
-      <p>Generated on 2026-04-03 23:36:58 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
+      <p>Generated on 2026-04-03 23:41:42 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
     </footer>
   </div>
 </body>
