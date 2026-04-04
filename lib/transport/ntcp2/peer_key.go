@@ -88,18 +88,21 @@ func ExtractPeerIV(routerInfo router_info.RouterInfo) ([]byte, error) {
 // Spec reference: https://geti2p.net/spec/ntcp2 — Noise XK pattern requires
 // the initiator to pre-know the responder's static public key.
 func ConfigureDialConfig(config *ntcp2.NTCP2Config, peerInfo router_info.RouterInfo) error {
-	// Extract and set the peer's static key
+	// Extract and set the peer's static key as the *remote* static key.
+	// The Noise XK pre-message is "← s": the initiator must know the
+	// responder's static public key before the handshake begins.
+	// WithStaticKey sets the local key; WithRemoteStaticKey sets the peer's key.
 	staticKey, err := ExtractPeerStaticKey(peerInfo)
 	if err != nil {
 		return fmt.Errorf("failed to extract peer static key for XK handshake: %w", err)
 	}
 
-	config = config.WithStaticKey(staticKey)
+	config.WithRemoteStaticKey(staticKey)
 
 	log.WithFields(map[string]interface{}{
 		"static_key_len": len(staticKey),
 		"static_key_b64": base64.StdEncoding.EncodeToString(staticKey[:8]),
-	}).Debug("Configured peer static key for XK handshake")
+	}).Debug("Configured peer remote static key for XK handshake")
 
 	// Extract and set the peer's obfuscation IV
 	iv, err := ExtractPeerIV(peerInfo)
