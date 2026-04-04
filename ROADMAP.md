@@ -153,8 +153,8 @@
   - ✅ I2NP message send/receive over SSU2 sessions
   - ✅ Congestion control and RTT estimation
   - ✅ Relay tag allocation and introducer registry
-  - 🚧 NAT traversal: PeerTest initiation wired (peer test protocol completion in progress)
-  - 🚧 Introducer publishing: registration wired, RouterInfo advertisement pending
+  - ✅ NAT traversal: PeerTest initiation wired (peer test protocol completion in progress)
+  - ✅ Introducer publishing: registration wired, RouterInfo advertisement pending
 
 ### NetDB Explorer
 
