@@ -11,14 +11,9 @@ A pure Go implementation of the I2P router.
 - **Tunnel System**: Automatic tunnel building, pool management, and cryptographic processing
 - **Transport Layer**: Full NTCP2 implementation with session management
 
-The core router functionality is now operational. We have tested functionality using i2psnark-standalone against our I2CP API server. Basic compatibility is available. We are now focused application layer protocols. We have a mostly-complete I2CP client, a prototype of a Streaming library, and a pretty boring Datagrams library, all of which are requirements for SAMv3.3(which we also have), which is what all our applications use. Refining these components and making them production-ready is the immediate goal. After the turn of the year, we will return our focus to transports by implementing SSU2.
+The core router functionality is now operational. We have tested functionality using i2psnark-standalone against our I2CP API server. Basic compatibility is available. We are now focused application layer protocols. We have a mostly-complete I2CP client, a prototype of a Streaming library, and a pretty boring Datagrams library, all of which are requirements for SAMv3.3(which we also have), which is what all our applications use. Refining these components and making them production-ready is the immediate goal.
 
-The current release(0.1.4 and earlier) have literally hundreds of bugs pending resolution in 0.1.5. Probably hold off until I release it in a few days.
-
-**`go-i2p`'s network presence is HIGHLY DISTINCTIVE at this time.** This is because:
-
- - SSU2 is available but disabled by default. Peer Tests and Introducers are still in progress.
- - We do not implement Elgamal or AES+SessionTag or DSA. This will not change.
+**`go-i2p` is still in very early development.** It has bugs. It is probably very distinct on the network. You probably should use a more established router for now. Developers: The API is still unstable. Users: It's probably not safe yet, nor does it do the things you want yet. However, we have reached significant milestones in interacting with the network and are beginning to use it more regularly in a handful of non-anonymous services.
 
 ### Implemented Features
 
