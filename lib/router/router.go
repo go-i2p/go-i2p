@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 
 	"github.com/go-i2p/common/base32"
@@ -555,7 +556,7 @@ func (r *Router) Reseed() error {
 func hasNTCP2Address(routerInfo router_info.RouterInfo) bool {
 	for _, addr := range routerInfo.RouterAddresses() {
 		style := addr.TransportStyle()
-		if styleStr, err := style.Data(); err == nil && styleStr == "ntcp2" {
+		if styleStr, err := style.Data(); err == nil && strings.EqualFold(styleStr, "NTCP2") {
 			return true
 		}
 	}

@@ -829,25 +829,34 @@ func getSyscallError(err error) string {
 }
 
 func (t *NTCP2Transport) createNTCP2Config(routerInfo router_info.RouterInfo) (*ntcp2.NTCP2Config, error) {
-	// Acquire read lock on identity to prevent data race with SetIdentity
-	t.identityMu.RLock()
-	identHash, err := t.identity.IdentHash()
-	t.identityMu.RUnlock()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get our identity hash: %w", err)
-	}
-	config, err := ntcp2.NewNTCP2Config(identHash, true)
-	if err != nil {
-		return nil, WrapNTCP2Error(err, "creating NTCP2 config")
-	}
-
+	// Per the NTCP2 spec (RH_B), the AES-CBC-256 key used to obfuscate the
+	// initiator's ephemeral public key in message 1 is Bob's (the responder's)
+	// router hash.  NewNTCP2Config's first argument is always BobRouterHash —
+	// for an initiator that means the *remote* peer's hash, not our own.
 	remoteHash, err := routerInfo.IdentHash()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get remote router hash: %w", err)
 	}
+
+	// Read our own static key under the identity lock.
+	// config.NTCP2Config is also guarded by identityMu per its field comment.
+	t.identityMu.RLock()
+	ourStaticKey := t.config.NTCP2Config.StaticKey
+	t.identityMu.RUnlock()
+
+	config, err := ntcp2.NewNTCP2Config(remoteHash, true)
+	if err != nil {
+		return nil, WrapNTCP2Error(err, "creating NTCP2 config")
+	}
+
+	// Supply our static private key so the remote can authenticate us during
+	// the Noise XK handshake (message 2: → s, se).
+	config.WithStaticKey(ourStaticKey)
+
+	// RemoteRouterHash is required by go-noise validation for initiators.
 	config = config.WithRemoteRouterHash(remoteHash)
 
-	// Extract and set the peer's static key and IV from their RouterInfo.
+	// Extract and set the peer's static public key and IV from their RouterInfo.
 	// Required by the Noise XK pattern: the initiator must know the
 	// responder's static key before the handshake begins.
 	if err := ConfigureDialConfig(config, routerInfo); err != nil {
