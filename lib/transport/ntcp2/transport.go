@@ -859,9 +859,12 @@ func (t *NTCP2Transport) createNTCP2Config(routerInfo router_info.RouterInfo) (*
 	// Extract and set the peer's static public key and IV from their RouterInfo.
 	// Required by the Noise XK pattern: the initiator must know the
 	// responder's static key before the handshake begins.
+	// This is fatal: without the remote static key the XK message 1 will be
+	// encrypted to the wrong key and the responder will close the connection
+	// (producing a confusing EOF rather than a clear error).
 	if err := ConfigureDialConfig(config, routerInfo); err != nil {
-		t.logger.WithError(err).Debug("Could not configure peer static key (XK handshake may fail)")
-		// Non-fatal: proceed and let the handshake fail with a clear error
+		t.logger.WithError(err).Error("Cannot extract peer static key for NTCP2 XK handshake - peer RouterInfo is missing required 's=' option")
+		return nil, WrapNTCP2Error(err, "extracting peer NTCP2 static key")
 	}
 
 	return config, nil

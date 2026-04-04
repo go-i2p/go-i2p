@@ -265,12 +265,13 @@ func (tmux *TransportMuxer) tryGetSessionFromTransport(t Transport, routerInfo r
 			"at":              "(TransportMuxer) GetSession",
 			"phase":           "session_establishment",
 			"reason":          "session_creation_failed",
+			"transport_name":  t.Name(),
 			"transport_index": index,
 			"peer_hash":       fmt.Sprintf("%x", peerHash[:]),
 			"error":           err.Error(),
-			"impact":          "cannot communicate with this peer",
+			"impact":          "cannot communicate with this peer via this transport",
 			"addresses":       len(routerInfo.RouterAddresses()),
-		}).Warn("failed to get session from compatible transport, trying next")
+		}).Error("transport session failed, trying next transport")
 		return nil, err
 	}
 
@@ -282,9 +283,8 @@ func (tmux *TransportMuxer) tryGetSessionFromTransport(t Transport, routerInfo r
 	return s, nil
 }
 
-// logNoTransportError logs detailed diagnostics when no compatible transport is found.
-func (tmux *TransportMuxer) logNoTransportError(routerInfo router_info.RouterInfo) {
-	peerHash, _ := routerInfo.IdentHash()
+// collectAddressTypes returns the transport style strings from all RouterAddresses.
+func collectAddressTypes(routerInfo router_info.RouterInfo) []string {
 	addressTypes := make([]string, 0, len(routerInfo.RouterAddresses()))
 	for _, addr := range routerInfo.RouterAddresses() {
 		style := addr.TransportStyle()
@@ -292,6 +292,14 @@ func (tmux *TransportMuxer) logNoTransportError(routerInfo router_info.RouterInf
 			addressTypes = append(addressTypes, string(styleBytes))
 		}
 	}
+	return addressTypes
+}
+
+// logNoTransportError logs diagnostics when none of our registered transports
+// know how to reach the peer's advertised address types at all.
+func (tmux *TransportMuxer) logNoTransportError(routerInfo router_info.RouterInfo) {
+	peerHash, _ := routerInfo.IdentHash()
+	addressTypes := collectAddressTypes(routerInfo)
 
 	log.WithFields(logger.Fields{
 		"at":             "(TransportMuxer) GetSession",
@@ -302,9 +310,27 @@ func (tmux *TransportMuxer) logNoTransportError(routerInfo router_info.RouterInf
 		"addresses":      len(routerInfo.RouterAddresses()),
 		"address_types":  addressTypes,
 		"impact":         "peer completely unreachable",
-		"diagnosis":      "peer may only support introducer-based connections or SSU2",
-		"recommendation": "implement introducer support or SSU2 transport",
-	}).Error("failed to get session - no compatible transports found")
+		"diagnosis":      "none of our registered transports support this peer's address types",
+	}).Error("failed to get session - no compatible transport for peer's address types")
+}
+
+// logAllTransportsFailed logs diagnostics when compatible transports were found
+// but every attempt to establish a session failed.
+func (tmux *TransportMuxer) logAllTransportsFailed(routerInfo router_info.RouterInfo) {
+	peerHash, _ := routerInfo.IdentHash()
+	addressTypes := collectAddressTypes(routerInfo)
+
+	log.WithFields(logger.Fields{
+		"at":             "(TransportMuxer) GetSession",
+		"phase":          "session_establishment",
+		"reason":         "all_transports_failed",
+		"peer_hash":      fmt.Sprintf("%x", peerHash[:]),
+		"num_transports": len(tmux.trans),
+		"addresses":      len(routerInfo.RouterAddresses()),
+		"address_types":  addressTypes,
+		"impact":         "peer unreachable via all compatible transports",
+		"diagnosis":      "all compatible transport handshakes or dials failed; check individual transport warnings above",
+	}).Error("failed to get session - all compatible transports failed")
 }
 
 // get a transport session given a router info
@@ -335,8 +361,10 @@ func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s Tra
 		}
 	}()
 
+	compatibleFound := false
 	for i, t := range tmux.trans {
 		if t.Compatible(routerInfo) {
+			compatibleFound = true
 			s, err = tmux.tryGetSessionFromTransport(t, routerInfo, i)
 			if err != nil {
 				continue
@@ -348,7 +376,11 @@ func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s Tra
 	}
 
 	// No session established — slot will be released by defer
-	tmux.logNoTransportError(routerInfo)
+	if compatibleFound {
+		tmux.logAllTransportsFailed(routerInfo)
+	} else {
+		tmux.logNoTransportError(routerInfo)
+	}
 	err = ErrNoTransportAvailable
 	return s, err
 }
