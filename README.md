@@ -90,8 +90,8 @@ The current release(0.1.4 and earlier) have literally hundreds of bugs pending r
   - SSU2
     - [X] Session handshake
     - [X] Connection management
-    - [~] Peer Tests
-    - [~] Introducers
+    - [X] Peer Tests
+    - [X] Introducers
   - [Noise Subsystem (see also https://github.com/go-i2p/go-noise)](https://github.com/go-i2p/go-noise)
     - [X] Noise Socket Framework
     - [X] NTCP2 Socket Framework
@@ -152,30 +152,6 @@ export WARNFAIL_I2P=true
 ```
 
 If `WARNFAIL_I2P` is set and `DEBUG_I2P` is unset, `DEBUG_I2P` will be set to `debug`.
-
-## SSU2 Transport
-
-SSU2 is the UDP-based transport protocol for I2P. It is available but **disabled by default** because Peer Tests and Introducers are still in progress.
-
-### Configuration
-
-Enable SSU2 via command-line flags:
-
-```shell
-# Enable SSU2 transport
-go-i2p --transport.ssu2-enabled=true
-
-# Set a specific listen port (default: 0 = random)
-go-i2p --transport.ssu2-enabled=true --transport.ssu2-port=9002
-```
-
-Or via `config.yaml`:
-
-```yaml
-transport:
-  ssu2_enabled: true
-  ssu2_port: 0  # 0 = random port assigned by OS
-```
 
 ## I2CP Server
 

@@ -5,7 +5,7 @@
 // The transport layer handles encrypted, authenticated connections between I2P routers.
 // Supported transports:
 //   - NTCP2: TCP-based transport with Noise protocol encryption
-//   - SSU2: UDP-based transport (planned)
+//   - SSU2: UDP-based transport with NAT traversal and introducer support
 //
 // # TransportMuxer
 //

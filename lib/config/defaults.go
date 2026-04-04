@@ -295,7 +295,7 @@ type TransportDefaults struct {
 	NTCP2MaxConnections int
 
 	// SSU2Enabled determines if SSU2 transport is active
-	// Default: false (not yet implemented)
+	// Default: true
 	SSU2Enabled bool
 
 	// SSU2Port is the listen port for SSU2
@@ -455,8 +455,8 @@ func buildTransportDefaults() TransportDefaults {
 		NTCP2Enabled:        true,
 		NTCP2Port:           0, // Random port
 		NTCP2MaxConnections: 200,
-		SSU2Enabled:         false,
-		SSU2Port:            0,
+		SSU2Enabled:         true,
+		SSU2Port:            0, // Random port
 		ConnectionTimeout:   30 * time.Second,
 		IdleTimeout:         5 * time.Minute,
 		MaxMessageSize:      32768, // 32 KiB

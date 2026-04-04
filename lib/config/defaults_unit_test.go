@@ -64,7 +64,7 @@ func TestDefaults(t *testing.T) {
 
 	// Transport defaults
 	assert.True(t, cfg.Transport.NTCP2Enabled, "Transport.NTCP2Enabled should be true by default")
-	assert.False(t, cfg.Transport.SSU2Enabled, "Transport.SSU2Enabled should be false by default")
+	assert.True(t, cfg.Transport.SSU2Enabled, "Transport.SSU2Enabled should be true by default")
 	assert.Equal(t, 200, cfg.Transport.NTCP2MaxConnections, "Transport.NTCP2MaxConnections")
 	assert.Equal(t, 32768, cfg.Transport.MaxMessageSize, "Transport.MaxMessageSize")
 
