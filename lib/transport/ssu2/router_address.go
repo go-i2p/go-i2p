@@ -3,10 +3,12 @@ package ssu2
 import (
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 	"time"
 
 	i2pbase64 "github.com/go-i2p/common/base64"
+	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_address"
 	"github.com/go-i2p/common/router_info"
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
@@ -196,4 +198,84 @@ func addSingleIntroducerOptions(options map[string]string, intro *ssu2noise.Regi
 // encodeBase64 returns the I2P base64 encoding of data.
 func encodeBase64(data []byte) string {
 	return i2pbase64.EncodeToString(data)
+}
+
+// IntroducerAddr holds the parsed fields of a single SSU2 introducer entry
+// from a RouterAddress's options (ih0/itag0/iexp0 through ih2/itag2/iexp2).
+type IntroducerAddr struct {
+	// RouterHash is Bob's 32-byte router identity hash (from the ih<N> option).
+	RouterHash data.Hash
+
+	// RelayTag is the relay tag assigned by Bob to Charlie (from the itag<N> option).
+	RelayTag uint32
+
+	// Expiry is the Unix timestamp (seconds) after which the introduction expires.
+	Expiry int64
+}
+
+// ExtractIntroducers parses the introducer entries (indices 0-2) from a single
+// SSU2 RouterAddress, returning all valid entries.  Invalid or missing entries
+// (e.g. empty hash, zero relay tag, already-expired) are silently skipped.
+func ExtractIntroducers(addr *router_address.RouterAddress) []IntroducerAddr {
+	if addr == nil {
+		return nil
+	}
+	now := time.Now().Unix()
+	var result []IntroducerAddr
+	for i := router_address.MIN_INTRODUCER_NUMBER; i <= router_address.MAX_INTRODUCER_NUMBER; i++ {
+		hashStr, err := addr.IntroducerHashString(i).Data()
+		if err != nil || hashStr == "" {
+			continue
+		}
+		hashBytes, err := i2pbase64.DecodeString(hashStr)
+		if err != nil || len(hashBytes) != 32 {
+			continue
+		}
+		tagStr, err := addr.IntroducerTagString(i).Data()
+		if err != nil || tagStr == "" {
+			continue
+		}
+		tag64, err := strconv.ParseUint(tagStr, 10, 32)
+		if err != nil || tag64 == 0 {
+			continue
+		}
+
+		var expiry int64
+		if expStr, err2 := addr.IntroducerExpirationString(i).Data(); err2 == nil && expStr != "" {
+			if exp, err3 := strconv.ParseInt(expStr, 10, 64); err3 == nil {
+				expiry = exp
+			}
+		}
+		if expiry > 0 && expiry < now {
+			continue // already expired
+		}
+
+		var routerHash data.Hash
+		copy(routerHash[:], hashBytes)
+		result = append(result, IntroducerAddr{
+			RouterHash: routerHash,
+			RelayTag:   uint32(tag64),
+			Expiry:     expiry,
+		})
+	}
+	return result
+}
+
+// HasIntroducerOnlySSU2Address returns true if the RouterInfo has at least one
+// SSU2 address containing a valid introducer entry (ih0/itag0 present) but no
+// directly dialable address.  Used by Compatible() and GetSession() to decide
+// whether the introducer path should be attempted.
+func HasIntroducerOnlySSU2Address(ri *router_info.RouterInfo) bool {
+	if ri == nil {
+		return false
+	}
+	for _, addr := range ri.RouterAddresses() {
+		if !isSSU2Transport(addr) {
+			continue
+		}
+		if len(ExtractIntroducers(addr)) > 0 {
+			return true
+		}
+	}
+	return false
 }

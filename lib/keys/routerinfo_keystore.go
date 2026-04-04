@@ -263,6 +263,11 @@ func (ks *RouterInfoKeystore) GetKeys() (types.PublicKey, types.PrivateKey, erro
 	return public, ks.privateKey, nil
 }
 
+// GetSigningPrivateKey returns the Ed25519 signing private key.
+func (ks *RouterInfoKeystore) GetSigningPrivateKey() types.PrivateKey {
+	return ks.privateKey
+}
+
 // GetEncryptionPrivateKey returns the X25519 encryption private key used for NTCP2.
 // This key is used as the static key for NTCP2 transport sessions, ensuring
 // consistent peer identification across router restarts.

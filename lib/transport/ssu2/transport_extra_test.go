@@ -42,6 +42,7 @@ type mockKeystore struct {
 }
 
 func (m *mockKeystore) GetEncryptionPrivateKey() types.PrivateEncryptionKey { return m.privKey }
+func (m *mockKeystore) GetSigningPrivateKey() types.PrivateKey              { return nil }
 
 // ---------------------------------------------------------------------------
 // Compatible

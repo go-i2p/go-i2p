@@ -336,6 +336,19 @@ func buildSSU2Transport(r *Router, ri *router_info.RouterInfo) (*ssu2.SSU2Transp
 		log.WithError(err).Error("Failed to create SSU2 transport")
 		return nil, err
 	}
+
+	// Wire router lookup so SSU2 can connect via introducers.
+	ssu2Config.RouterLookupFunc = func(hash common.Hash) (router_info.RouterInfo, error) {
+		ch := r.StdNetDB.GetRouterInfo(hash)
+		select {
+		case ri, ok := <-ch:
+			if !ok {
+				return router_info.RouterInfo{}, fmt.Errorf("router %x not found in netdb", hash[:4])
+			}
+			return ri, nil
+		}
+	}
+
 	log.WithFields(logger.Fields{"at": "buildSSU2Transport"}).Debug("SSU2 transport created successfully")
 
 	ssu2addr := ssu2Transport.Addr()

@@ -3,6 +3,8 @@ package ssu2
 import (
 	"time"
 
+	"github.com/go-i2p/common/data"
+	"github.com/go-i2p/common/router_info"
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
 	"github.com/go-i2p/logger"
 )
@@ -26,6 +28,12 @@ type Config struct {
 	MaxSessions        int           // Maximum concurrent sessions (0 = DefaultMaxSessions)
 	KeepaliveInterval  time.Duration // How often keepalive packets are sent (0 = DefaultKeepaliveInterval)
 	MaxRetransmissions int           // I2NP retransmission attempts before teardown (0 = DefaultMaxRetransmissions)
+
+	// RouterLookupFunc looks up a RouterInfo by identity hash.
+	// Required for SSU2 via introducers: Alice looks up Bob (the introducer)
+	// to get a direct dialable address before sending the RelayRequest.
+	RouterLookupFunc func(hash data.Hash) (router_info.RouterInfo, error)
+
 	*ssu2noise.SSU2Config
 }
 

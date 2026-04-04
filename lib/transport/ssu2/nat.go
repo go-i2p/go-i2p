@@ -261,8 +261,8 @@ func buildRelayIntro(req *ssu2noise.RelayRequestBlock) *ssu2noise.RelayIntroBloc
 }
 
 // handleRelayResponseBlock processes a RelayResponse (we are Alice).
-// It decodes the response and completes the pending hole-punch session
-// when the relay was successful.
+// If a dialViaIntroducer goroutine is waiting for this nonce it is notified;
+// otherwise the response is logged and discarded.
 func (t *SSU2Transport) handleRelayResponseBlock(block *ssu2noise.SSU2Block) error {
 	if t.relayManager == nil || block == nil {
 		return nil
@@ -272,11 +272,21 @@ func (t *SSU2Transport) handleRelayResponseBlock(block *ssu2noise.SSU2Block) err
 		t.logger.WithField("error", err).Warn("failed to decode RelayResponse")
 		return nil
 	}
-	if resp.Code != 0 {
-		t.logger.WithField("status", resp.Code).Debug("relay response indicates failure")
-		return nil
+
+	t.logger.WithFields(map[string]interface{}{
+		"nonce": resp.Nonce,
+		"code":  resp.Code,
+	}).Debug("relay response received")
+
+	// Deliver to any waiting dialViaIntroducer call.
+	if ch, ok := t.pendingRelayResponses.Load(resp.Nonce); ok {
+		responseCh := ch.(chan *ssu2noise.RelayResponseBlock)
+		select {
+		case responseCh <- resp:
+		default:
+			// channel already has a value (duplicate delivery); ignore
+		}
 	}
-	t.logger.WithField("nonce", resp.Nonce).Debug("relay response success")
 	return nil
 }
 

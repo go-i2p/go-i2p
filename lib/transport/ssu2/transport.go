@@ -34,6 +34,10 @@ type SSU2Transport struct {
 	introducerRegistry *ssu2noise.IntroducerRegistry
 	holePunchCoord     *ssu2noise.HolePunchCoordinator
 
+	// pendingRelayResponses holds channels waiting for a RelayResponse keyed by nonce.
+	// Used by dialViaIntroducer to synchronise with the protocol callback.
+	pendingRelayResponses sync.Map // map[uint32]chan *ssu2noise.RelayResponseBlock
+
 	// NAT state cache with TTL.
 	natStateCache *natState
 
@@ -48,9 +52,10 @@ type SSU2Transport struct {
 	logger *logger.Entry
 }
 
-// KeystoreProvider provides access to the router's encryption private key.
+// KeystoreProvider provides access to the router's cryptographic keys.
 type KeystoreProvider interface {
 	GetEncryptionPrivateKey() types.PrivateEncryptionKey
+	GetSigningPrivateKey() types.PrivateKey
 }
 
 // NewSSU2Transport creates a new SSU2 transport instance.
@@ -273,6 +278,8 @@ func (t *SSU2Transport) SetIdentity(ident router_info.RouterInfo) error {
 }
 
 // GetSession obtains a transport session with a router given its RouterInfo.
+// It tries direct dial first; if the peer only advertises introducer addresses
+// and a RouterLookupFunc is configured, it falls back to the relay path.
 func (t *SSU2Transport) GetSession(routerInfo router_info.RouterInfo) (transport.TransportSession, error) {
 	routerHash, err := routerInfo.IdentHash()
 	if err != nil {
@@ -283,7 +290,15 @@ func (t *SSU2Transport) GetSession(routerInfo router_info.RouterInfo) (transport
 		return session, nil
 	}
 
-	return t.createOutboundSession(routerInfo, routerHash)
+	if HasDialableSSU2Address(&routerInfo) {
+		return t.createOutboundSession(routerInfo, routerHash)
+	}
+
+	if t.config.RouterLookupFunc != nil && HasIntroducerOnlySSU2Address(&routerInfo) {
+		return t.dialViaIntroducer(routerInfo, routerHash)
+	}
+
+	return nil, fmt.Errorf("no reachable SSU2 address for router %x", routerHash[:4])
 }
 
 func (t *SSU2Transport) findExistingSession(routerHash data.Hash) (transport.TransportSession, bool) {
@@ -443,9 +458,17 @@ func (t *SSU2Transport) registerOrReuseSession(conn *ssu2noise.SSU2Conn, routerH
 	return session, true, nil // New session, slot is used
 }
 
-// Compatible returns true if the RouterInfo has an SSU2 transport address.
+// Compatible returns true if we can reach this router over SSU2 — either by
+// dialling it directly or by going through one of its introducers (when a
+// RouterLookupFunc is configured).
 func (t *SSU2Transport) Compatible(routerInfo router_info.RouterInfo) bool {
-	return HasDialableSSU2Address(&routerInfo)
+	if HasDialableSSU2Address(&routerInfo) {
+		return true
+	}
+	if t.config.RouterLookupFunc != nil && HasIntroducerOnlySSU2Address(&routerInfo) {
+		return true
+	}
+	return false
 }
 
 // Close closes the transport cleanly.
