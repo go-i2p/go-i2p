@@ -199,6 +199,25 @@ func HasDirectNTCP2Connectivity(ri router_info.RouterInfo) bool {
 	return false
 }
 
+// HasSSU2IntroducerConnectivity checks if a RouterInfo has at least one SSU2 address
+// reachable via introducers (ih0 key set, even without a direct host/port).
+// This identifies firewalled/NAT'd routers that can be reached via the SSU2
+// relay/introducer protocol.
+func HasSSU2IntroducerConnectivity(ri router_info.RouterInfo) bool {
+	for _, addr := range ri.RouterAddresses() {
+		if !extractSSU2Transport(addr) {
+			continue
+		}
+		// An introducer-based SSU2 address has the introducer hash key (ih0)
+		// but may lack a direct host/port
+		ihStr, err := addr.IntroducerHashString(0).Data()
+		if err == nil && ihStr != "" {
+			return true
+		}
+	}
+	return false
+}
+
 // HasDirectConnectivity checks if a RouterInfo has at least one address (NTCP2 or SSU2)
 // with direct connectivity (host and port present, not introducer-only).
 // This is a broader check than HasDirectNTCP2Connectivity that also accepts

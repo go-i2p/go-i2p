@@ -3,7 +3,6 @@ package netdb
 import (
 	"fmt"
 	"sort"
-	"strings"
 
 	"github.com/go-i2p/crypto/rand"
 	"github.com/samber/oops"
@@ -11,7 +10,6 @@ import (
 	"github.com/go-i2p/logger"
 
 	common "github.com/go-i2p/common/data"
-	"github.com/go-i2p/common/router_address"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/bootstrap"
 )
@@ -42,92 +40,21 @@ func (db *StdNetDB) buildExcludeMap(exclude []common.Hash) map[common.Hash]bool 
 	return excludeMap
 }
 
-// hasValidNTCP2Address checks if router has at least one valid NTCP2 address.
-// The NTCP2 transport will try all NTCP2 addresses in sequence when connecting,
-// and will use the first one that works. Therefore, we only need to ensure at least
-// one valid NTCP2 address exists - invalid addresses will simply be skipped during connection.
-// This filters out routers that:
-// - Have NO NTCP2 addresses at all
-// - Have only NTCP2 addresses missing 'host' or 'port' keys
-// - Have only NTCP2 addresses with invalid/unresolvable hostnames or IPs
-// Note: Many I2P routers are firewalled and only reachable via SSU introducers,
-// so it's normal for a significant portion of routers to be filtered out.
-func hasValidNTCP2Address(ri *router_info.RouterInfo) bool {
+// hasReachableAddress checks if a router is reachable via any supported transport:
+// - Direct NTCP2 or SSU2 (host+port present)
+// - SSU2 via introducers (ih0 key set)
+// Returns (direct bool, viaIntroducer bool). Both false means no reachable address.
+func hasReachableAddress(ri *router_info.RouterInfo) (direct bool, viaIntroducer bool) {
 	if ri == nil {
-		log.WithFields(logger.Fields{"at": "hasValidNTCP2Address"}).Debug("hasValidNTCP2Address: RouterInfo is nil")
-		return false
+		return false, false
 	}
-
-	addresses := ri.RouterAddresses()
-	log.WithField("address_count", len(addresses)).Debug("hasValidNTCP2Address: checking addresses")
-
-	hasValidNTCP2 := false
-
-	for i, addr := range addresses {
-		if isNTCP2Address(addr, i) {
-			if validateAndLogNTCP2Address(addr, i) {
-				hasValidNTCP2 = true
-			}
-		}
+	if bootstrap.HasDirectConnectivity(*ri) {
+		return true, false
 	}
-
-	if !hasValidNTCP2 {
-		log.WithFields(logger.Fields{"at": "hasValidNTCP2Address"}).Debug("hasValidNTCP2Address: NO valid NTCP2 addresses found")
-		return false
+	if bootstrap.HasSSU2IntroducerConnectivity(*ri) {
+		return false, true
 	}
-
-	log.WithFields(logger.Fields{"at": "hasValidNTCP2Address"}).Debug("hasValidNTCP2Address: At least one valid NTCP2 address found")
-	return true
-}
-
-// isNTCP2Address checks if the given address uses NTCP2 transport style.
-// It returns true if the address is NTCP2, false otherwise or on error.
-func isNTCP2Address(addr *router_address.RouterAddress, index int) bool {
-	style := addr.TransportStyle()
-	styleStr, err := style.Data()
-	if err != nil {
-		log.WithField("index", index).WithError(err).Debug("isNTCP2Address: failed to get transport style")
-		return false
-	}
-
-	log.WithFields(logger.Fields{
-		"index": index,
-		"style": styleStr,
-	}).Debug("isNTCP2Address: checking address style")
-
-	return strings.EqualFold(styleStr, "ntcp2")
-}
-
-// validateAndLogNTCP2Address validates an NTCP2 address and logs the result.
-// It returns true if the address is valid for direct connectivity, false otherwise.
-func validateAndLogNTCP2Address(addr *router_address.RouterAddress, index int) bool {
-	log.WithField("index", index).Debug("validateAndLogNTCP2Address: found NTCP2 address, validating...")
-
-	err := bootstrap.ValidateNTCP2Address(addr)
-	if err == nil {
-		log.WithField("index", index).Debug("validateAndLogNTCP2Address: NTCP2 address is VALID (direct connectivity)")
-		return true
-	}
-
-	logNTCP2ValidationFailure(err, index)
-	return false
-}
-
-// logNTCP2ValidationFailure logs the appropriate message for NTCP2 validation failures.
-// It distinguishes between introducer-based addresses (NAT/firewall) and truly invalid addresses.
-func logNTCP2ValidationFailure(err error, index int) {
-	isIntroducerBased := strings.Contains(err.Error(), "introducer")
-	if isIntroducerBased {
-		log.WithFields(logger.Fields{
-			"index":  index,
-			"reason": "introducer-based address (NAT/firewall)",
-		}).Debug("logNTCP2ValidationFailure: skipping introducer-only address")
-	} else {
-		log.WithFields(logger.Fields{
-			"index": index,
-			"error": err.Error(),
-		}).Debug("logNTCP2ValidationFailure: NTCP2 address validation FAILED")
-	}
+	return false, false
 }
 
 // filterAvailablePeers filters router infos excluding specified hashes and checking reachability.
@@ -161,12 +88,16 @@ func (db *StdNetDB) sortPeersByReliability(peers []router_info.RouterInfo) {
 type peerFilterStats struct {
 	skippedExcluded     int
 	skippedNoAddresses  int
-	skippedNoValidNTCP2 int
+	skippedNotReachable int // no NTCP2/SSU2 direct address and no SSU2 introducer
 	skippedHashError    int
 	skippedStale        int
+	directCount         int // accepted with direct NTCP2 or SSU2 connectivity
+	viaIntroducer       int // accepted via SSU2 introducers
 }
 
 // collectAvailablePeers iterates through router infos and filters out invalid or excluded peers.
+// Accepted peers are those reachable directly (NTCP2 or SSU2 with host+port) or
+// via SSU2 introducers.
 func (db *StdNetDB) collectAvailablePeers(allRouterInfos []router_info.RouterInfo, excludeMap map[common.Hash]bool, stats *peerFilterStats) []router_info.RouterInfo {
 	var available []router_info.RouterInfo
 
@@ -174,10 +105,16 @@ func (db *StdNetDB) collectAvailablePeers(allRouterInfos []router_info.RouterInf
 		if shouldSkipPeer(ri, excludeMap, db.PeerTracker, stats) {
 			continue
 		}
-		if hasValidNTCP2Address(&ri) {
+		direct, viaIntro := hasReachableAddress(&ri)
+		switch {
+		case direct:
+			stats.directCount++
 			available = append(available, ri)
-		} else {
-			stats.skippedNoValidNTCP2++
+		case viaIntro:
+			stats.viaIntroducer++
+			available = append(available, ri)
+		default:
+			stats.skippedNotReachable++
 		}
 	}
 
@@ -214,18 +151,18 @@ func shouldSkipPeer(ri router_info.RouterInfo, excludeMap map[common.Hash]bool, 
 // logPeerFilteringResults logs detailed peer filtering statistics.
 func logPeerFilteringResults(allRouterInfos, available []router_info.RouterInfo, stats *peerFilterStats) {
 	log.WithFields(logger.Fields{
-		"at":                     "filterAvailablePeers",
-		"phase":                  "peer_filtering",
-		"total":                  len(allRouterInfos),
-		"available":              len(available),
-		"skipped_excluded":       stats.skippedExcluded,
-		"skipped_no_addresses":   stats.skippedNoAddresses,
-		"skipped_no_valid_ntcp2": stats.skippedNoValidNTCP2,
-		"skipped_stale":          stats.skippedStale,
-		"skipped_hash_error":     stats.skippedHashError,
-		"directly_contactable":   len(available),
-		"introducer_only":        stats.skippedNoValidNTCP2,
-		"usability_ratio":        fmt.Sprintf("%.1f%%", float64(len(available))*100.0/float64(len(allRouterInfos))),
+		"at":                    "filterAvailablePeers",
+		"phase":                 "peer_filtering",
+		"total":                 len(allRouterInfos),
+		"available":             len(available),
+		"direct":                stats.directCount,
+		"via_introducer":        stats.viaIntroducer,
+		"skipped_excluded":      stats.skippedExcluded,
+		"skipped_no_addresses":  stats.skippedNoAddresses,
+		"skipped_not_reachable": stats.skippedNotReachable,
+		"skipped_stale":         stats.skippedStale,
+		"skipped_hash_error":    stats.skippedHashError,
+		"usability_ratio":       fmt.Sprintf("%.1f%%", float64(len(available))*100.0/float64(len(allRouterInfos))),
 	}).Info("Peer filtering complete")
 }
 
@@ -282,11 +219,10 @@ func (db *StdNetDB) SelectPeers(count int, exclude []common.Hash) ([]router_info
 			"excluded_peers":  len(exclude),
 			"filtered_peers":  len(available),
 			"requested_count": count,
-			"diagnosis":       "all peers require introducers or lack valid NTCP2 addresses",
-			"recommendation":  "implement NTCP2 introducer support or add SSU2 transport",
-			"impact":          "tunnel building will fail until directly-contactable peers are available",
-		}).Error("No directly-contactable peers available after filtering")
-		return nil, oops.Errorf("insufficient suitable peers after filtering: need %d directly-contactable peers, but 0 available from %d total peers (%d excluded)", count, len(allRouterInfos), len(exclude))
+			"diagnosis":       "no reachable peers: all lack direct NTCP2/SSU2 addresses and SSU2 introducer addresses",
+			"impact":          "tunnel building will fail until reachable peers are available",
+		}).Error("No reachable peers available after filtering")
+		return nil, oops.Errorf("insufficient suitable peers after filtering: need %d reachable peers, but 0 available from %d total peers (%d excluded)", count, len(allRouterInfos), len(exclude))
 	}
 
 	// If we have fewer available peers than requested, return all
