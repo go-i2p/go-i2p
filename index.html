@@ -13,7 +13,7 @@
         <a href="index.html">go-i2p/go-i2p</a>
       </h2>
       <div class="repo-meta">
-        📝 1612 commits
+        📝 1613 commits
          • 📜 MIT License
       </div>
     </div>
@@ -54,7 +54,7 @@
       <div class="repo-stats">
         
         <div class="repo-stat">
-          <span>📝</span> <span>1612 commits</span>
+          <span>📝</span> <span>1613 commits</span>
         </div>
         
         
@@ -200,8 +200,8 @@
 <ul>
 <li>[X] Session handshake</li>
 <li>[X] Connection management</li>
-<li>[~] Peer Tests</li>
-<li>[~] Introducers</li>
+<li>[X] Peer Tests</li>
+<li>[X] Introducers</li>
 </ul></li>
 <li><a href="https://github.com/go-i2p/go-noise" target="_blank">Noise Subsystem (see also https://github.com/go-i2p/go-noise)</a>
 
@@ -285,33 +285,11 @@ It is unsafe for production use, and intended only for debugging and testing pur
 
 <p>If <code>WARNFAIL_I2P</code> is set and <code>DEBUG_I2P</code> is unset, <code>DEBUG_I2P</code> will be set to <code>debug</code>.</p>
 
-<h2 id="ssu2-transport">SSU2 Transport</h2>
-
-<p>SSU2 is the UDP-based transport protocol for I2P. It is available but <strong>disabled by default</strong> because Peer Tests and Introducers are still in progress.</p>
-
-<h3 id="configuration">Configuration</h3>
-
-<p>Enable SSU2 via command-line flags:</p>
-
-<pre><code class="language-shell"># Enable SSU2 transport
-go-i2p --transport.ssu2-enabled=true
-
-# Set a specific listen port (default: 0 = random)
-go-i2p --transport.ssu2-enabled=true --transport.ssu2-port=9002
-</code></pre>
-
-<p>Or via <code>config.yaml</code>:</p>
-
-<pre><code class="language-yaml">transport:
-  ssu2_enabled: true
-  ssu2_port: 0  # 0 = random port assigned by OS
-</code></pre>
-
 <h2 id="i2cp-server">I2CP Server</h2>
 
 <p>The I2CP (I2P Client Protocol) server allows client applications to communicate with the I2P router. It is enabled by default and listens on <code>localhost:7654</code>.</p>
 
-<h3 id="configuration-1">Configuration</h3>
+<h3 id="configuration">Configuration</h3>
 
 <p>You can configure the I2CP server using command-line flags:</p>
 
@@ -366,7 +344,7 @@ go-i2p --i2cp.network=unix --i2cp.address=/tmp/i2cp.sock
                 eyedeekay
               </div>
               <div class="contributor-commits">
-                1255 commits
+                1256 commits
               </div>
             </div>
           </div>
@@ -438,7 +416,7 @@ go-i2p --i2cp.network=unix --i2cp.address=/tmp/i2cp.sock
     </main>
     
     <footer class="page-footer">
-      <p>Generated on 2026-04-03 23:41:42 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
+      <p>Generated on 2026-04-04 00:07:45 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
     </footer>
   </div>
 </body>
