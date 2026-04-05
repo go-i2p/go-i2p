@@ -47,6 +47,7 @@ func NewBandwidthTracker() *BandwidthTracker {
 // Start begins the bandwidth tracking goroutine.
 // The getBandwidth function should return current cumulative bytes sent/received.
 func (bt *BandwidthTracker) Start(getBandwidth func() (sent, received uint64)) {
+	log.WithField("sample_interval", bt.sampleInterval).Debug("starting bandwidth tracker")
 	bt.wg.Add(1)
 	go bt.samplingLoop(getBandwidth)
 }
@@ -54,6 +55,7 @@ func (bt *BandwidthTracker) Start(getBandwidth func() (sent, received uint64)) {
 // Stop stops the bandwidth tracking goroutine.
 // It is safe to call Stop multiple times; only the first call closes the channel.
 func (bt *BandwidthTracker) Stop() {
+	log.Debug("stopping bandwidth tracker")
 	bt.stopOnce.Do(func() {
 		close(bt.stopChan)
 	})

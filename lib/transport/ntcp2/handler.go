@@ -55,6 +55,7 @@ type DefaultHandler struct {
 // Call Close() on the handler when it is no longer needed to stop the
 // background cache cleanup goroutine.
 func NewDefaultHandler() *DefaultHandler {
+	log.Debug("creating NTCP2 default handler")
 	return &DefaultHandler{
 		replayCache: gonoise.NewReplayCache(),
 	}
@@ -64,32 +65,49 @@ func NewDefaultHandler() *DefaultHandler {
 // raw TCP connection. This makes handshake failures indistinguishable from a
 // random TCP service to an active prober.
 func (h *DefaultHandler) OnHandshakeError(rawConn net.Conn, err error) {
+	log.WithError(err).Debug("NTCP2 handshake error, applying probing resistance")
 	applyProbingResistance(rawConn)
 }
 
 // CheckReplay checks whether an ephemeral key has been seen before using the
 // shared replay cache. Returns true if the key is a duplicate (replay attack).
 func (h *DefaultHandler) CheckReplay(ephemeralKey [32]byte) bool {
-	return h.replayCache.CheckAndAdd(ephemeralKey)
+	if h.replayCache.CheckAndAdd(ephemeralKey) {
+		log.Warn("NTCP2 replay attack detected: duplicate ephemeral key")
+		return true
+	}
+	return false
 }
 
 // ValidateTimestamp checks whether a peer's timestamp is within ±60 seconds
 // of the local clock. Returns a *ClockSkewError if the skew is excessive.
 func (h *DefaultHandler) ValidateTimestamp(peerTime uint32) error {
-	return ValidateTimestamp(peerTime)
+	if err := ValidateTimestamp(peerTime); err != nil {
+		log.WithFields(map[string]interface{}{
+			"peer_time": peerTime,
+			"error":     err.Error(),
+		}).Warn("NTCP2 peer clock skew exceeds tolerance")
+		return err
+	}
+	return nil
 }
 
 // SendTermination constructs and sends an encrypted termination block through
 // the NTCP2 connection's Noise cipher. The block is written via conn.Write,
 // which applies AEAD encryption and SipHash length obfuscation.
 func (h *DefaultHandler) SendTermination(conn *gonoise.NTCP2Conn, reason byte) error {
+	log.WithField("reason", reason).Debug("sending NTCP2 termination block")
 	block := BuildTerminationBlock(reason)
 	_, err := conn.Write(block)
+	if err != nil {
+		log.WithError(err).WithField("reason", reason).Warn("failed to send NTCP2 termination block")
+	}
 	return err
 }
 
 // Close releases resources held by the handler (stops replay cache cleanup).
 func (h *DefaultHandler) Close() {
+	log.Debug("closing NTCP2 handler")
 	if h.replayCache != nil {
 		h.replayCache.Close()
 	}

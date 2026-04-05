@@ -121,6 +121,7 @@ func (e *RPCError) Error() string {
 func ParseRequest(data []byte) (*Request, error) {
 	// Check for empty input
 	if len(data) == 0 {
+		log.Warn("received empty JSON-RPC request")
 		return nil, &RPCError{
 			Code:    ErrCodeParseError,
 			Message: "empty request",
@@ -130,6 +131,7 @@ func ParseRequest(data []byte) (*Request, error) {
 	// Parse JSON into Request struct
 	var req Request
 	if err := json.Unmarshal(data, &req); err != nil {
+		log.WithError(err).Warn("failed to parse JSON-RPC request")
 		return nil, &RPCError{
 			Code:    ErrCodeParseError,
 			Message: "invalid JSON",
@@ -139,6 +141,7 @@ func ParseRequest(data []byte) (*Request, error) {
 
 	// Validate JSON-RPC version
 	if req.JSONRPC != "2.0" {
+		log.WithField("version", req.JSONRPC).Warn("invalid JSON-RPC version in request")
 		return nil, &RPCError{
 			Code:    ErrCodeInvalidRequest,
 			Message: "invalid JSON-RPC version",

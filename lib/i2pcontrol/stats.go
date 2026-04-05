@@ -236,6 +236,7 @@ type RouterAccess interface {
 // Returns:
 //   - RouterStatsProvider: The statistics provider
 func NewRouterStatsProvider(router RouterAccess, version string) RouterStatsProvider {
+	log.WithField("version", version).Debug("creating router stats provider")
 	return &routerStatsProvider{
 		router:    router,
 		startTime: time.Now(),
@@ -249,6 +250,11 @@ func NewRouterStatsProvider(router RouterAccess, version string) RouterStatsProv
 func (rsp *routerStatsProvider) GetBandwidthStats() BandwidthStats {
 	// Get 15-second inbound and outbound rates (more stable than 1s)
 	inbound, outbound := rsp.router.GetBandwidthRates()
+
+	log.WithFields(map[string]interface{}{
+		"inbound_bps":  inbound,
+		"outbound_bps": outbound,
+	}).Debug("collected bandwidth stats")
 
 	return BandwidthStats{
 		InboundRate:  float64(inbound),  // 15-second average in bytes/sec
@@ -331,6 +337,7 @@ func (rsp *routerStatsProvider) collectTunnelStats(stats *RouterInfoStats) {
 // Collects statistics from separate inbound and outbound tunnel manager pools.
 func (rsp *routerStatsProvider) GetTunnelStats() TunnelStats {
 	stats := TunnelStats{}
+	log.Debug("collecting tunnel stats")
 
 	// Collect from tunnel manager if available
 	tm := rsp.router.GetTunnelManager()
@@ -365,6 +372,11 @@ func (rsp *routerStatsProvider) GetNetDBStats() NetDBStats {
 		stats.RouterInfos = netdb.GetRouterInfoCount()
 		stats.LeaseSets = netdb.GetLeaseSetCount()
 		stats.Floodfill = netdb.IsFloodfill()
+		log.WithFields(map[string]interface{}{
+			"router_infos": stats.RouterInfos,
+			"lease_sets":   stats.LeaseSets,
+			"floodfill":    stats.Floodfill,
+		}).Debug("collected NetDB stats")
 	}
 
 	return stats
