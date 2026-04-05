@@ -62,6 +62,11 @@ func ParseBlocks(payload []byte) ([]Block, error) {
 	for offset < len(payload) {
 		// Need at least 3 bytes for the block header
 		if offset+blockHeaderSize > len(payload) {
+			log.WithFields(map[string]interface{}{
+				"offset":    offset,
+				"remaining": len(payload) - offset,
+				"need":      blockHeaderSize,
+			}).Error("truncated NTCP2 block header")
 			return blocks, fmt.Errorf("truncated block header at offset %d (have %d bytes, need %d)",
 				offset, len(payload)-offset, blockHeaderSize)
 		}
@@ -71,6 +76,11 @@ func ParseBlocks(payload []byte) ([]Block, error) {
 		offset += blockHeaderSize
 
 		if offset+blockSize > len(payload) {
+			log.WithFields(map[string]interface{}{
+				"block_type":    blockType,
+				"declared_size": blockSize,
+				"available":     len(payload) - offset,
+			}).Error("truncated NTCP2 block data")
 			return blocks, fmt.Errorf("truncated block data at offset %d: type=%d, declared size=%d, available=%d",
 				offset-blockHeaderSize, blockType, blockSize, len(payload)-offset)
 		}

@@ -48,6 +48,7 @@ const replayCleanupInterval = 5 * time.Minute
 // A background goroutine evicts replay cache entries older than 120 seconds every
 // 5 minutes. Call Close() to stop it.
 func NewDefaultHandler() *DefaultHandler {
+	log.Debug("creating SSU2 default handler")
 	h := &DefaultHandler{
 		seen:    make(map[[32]byte]time.Time),
 		maxSkew: 60 * time.Second,
@@ -90,6 +91,7 @@ func (h *DefaultHandler) CheckReplay(ephemeralKey [32]byte) bool {
 	defer h.mu.Unlock()
 
 	if _, exists := h.seen[ephemeralKey]; exists {
+		log.Warn("SSU2 replay attack detected: duplicate ephemeral key")
 		return true
 	}
 
@@ -108,6 +110,12 @@ func (h *DefaultHandler) ValidateTimestamp(peerTime uint32) error {
 		diff = peerTime - now
 	}
 	if diff > uint32(math.Round(h.maxSkew.Seconds())) {
+		log.WithFields(map[string]interface{}{
+			"peer_time":    peerTime,
+			"local_time":   now,
+			"diff_seconds": diff,
+			"max_skew":     h.maxSkew.Seconds(),
+		}).Warn("SSU2 peer clock skew exceeds tolerance")
 		return WrapSSU2Error(
 			ErrHandshakeFailed,
 			"clock skew too large",
@@ -118,8 +126,12 @@ func (h *DefaultHandler) ValidateTimestamp(peerTime uint32) error {
 
 // SendTermination sends a termination block through the SSU2 connection.
 func (h *DefaultHandler) SendTermination(conn *ssu2noise.SSU2Conn, reason byte) error {
+	log.WithField("reason", reason).Debug("sending SSU2 termination block")
 	block := buildTerminationBlock(reason)
 	_, err := conn.Write(block)
+	if err != nil {
+		log.WithError(err).WithField("reason", reason).Warn("failed to send SSU2 termination block")
+	}
 	return err
 }
 
@@ -140,6 +152,7 @@ func buildTerminationBlock(reason byte) []byte {
 
 // Close stops the background cleanup goroutine and resets the replay cache.
 func (h *DefaultHandler) Close() {
+	log.Debug("closing SSU2 handler replay cache")
 	select {
 	case <-h.done:
 		// already closed

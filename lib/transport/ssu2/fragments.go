@@ -34,6 +34,7 @@ const (
 func FragmentI2NPMessage(msg i2np.I2NPMessage, maxPayload int) ([]*ssu2noise.SSU2Block, error) {
 	data, err := msg.MarshalBinary()
 	if err != nil {
+		log.WithError(err).Error("failed to marshal I2NP message for fragmentation")
 		return nil, fmt.Errorf("failed to marshal I2NP message: %w", err)
 	}
 
@@ -44,6 +45,10 @@ func FragmentI2NPMessage(msg i2np.I2NPMessage, maxPayload int) ([]*ssu2noise.SSU
 		}, nil
 	}
 
+	log.WithFields(map[string]interface{}{
+		"message_size": len(data),
+		"max_payload":  maxPayload,
+	}).Debug("fragmenting I2NP message for SSU2")
 	return fragmentData(data, uint32(msg.MessageID()), maxPayload)
 }
 
@@ -73,6 +78,10 @@ func fragmentData(data []byte, messageID uint32, maxPayload int) ([]*ssu2noise.S
 func createFirstFragment(data []byte, messageID, totalSize uint32, maxPayload int) (*ssu2noise.SSU2Block, int, error) {
 	firstDataSize := maxPayload - firstFragmentOverhead
 	if firstDataSize <= 0 {
+		log.WithFields(map[string]interface{}{
+			"max_payload": maxPayload,
+			"overhead":    firstFragmentOverhead,
+		}).Error("max payload too small for SSU2 first fragment")
 		return nil, 0, fmt.Errorf("max payload %d too small for first fragment", maxPayload)
 	}
 	if firstDataSize > len(data) {
@@ -92,6 +101,10 @@ func createFollowOnFragments(data []byte, messageID uint32, maxPayload int) ([]*
 	for offset < len(data) {
 		followDataSize := maxPayload - followOnFragmentOverhead
 		if followDataSize <= 0 {
+			log.WithFields(map[string]interface{}{
+				"max_payload": maxPayload,
+				"overhead":    followOnFragmentOverhead,
+			}).Error("max payload too small for SSU2 follow-on fragment")
 			return nil, fmt.Errorf("max payload %d too small for follow-on fragment", maxPayload)
 		}
 		end := offset + followDataSize
@@ -106,6 +119,10 @@ func createFollowOnFragments(data []byte, messageID uint32, maxPayload int) ([]*
 		offset = end
 		fragmentNum++
 		if fragmentNum > 127 {
+			log.WithFields(map[string]interface{}{
+				"message_id":   messageID,
+				"fragment_num": fragmentNum,
+			}).Error("I2NP message too large: exceeds max SSU2 follow-on fragments")
 			return nil, fmt.Errorf("message too large: exceeds 127 follow-on fragments")
 		}
 	}

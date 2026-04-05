@@ -10,8 +10,6 @@ import (
 	"github.com/go-i2p/logger"
 )
 
-var log = logger.GetGoI2PLogger()
-
 // EmbeddedRouter defines the interface for an embeddable I2P router instance.
 // This interface allows programmatic control of router lifecycle for applications
 // that need to embed an I2P router rather than run it as a standalone process.
