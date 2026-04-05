@@ -328,6 +328,19 @@ func buildNTCP2Transport(r *Router, ri *router_info.RouterInfo) (*ntcp.NTCP2Tran
 		log.WithError(err).Error("Failed to re-sign RouterInfo after adding NTCP2 address")
 		return nil, err
 	}
+	// Diagnostic: confirm re-signed RI passes local verification
+	if sigValid, sigErr := ri.VerifySignature(); !sigValid || sigErr != nil {
+		log.WithFields(logger.Fields{
+			"sig_valid": sigValid,
+			"sig_err":   fmt.Sprintf("%v", sigErr),
+		}).Error("Re-signed RouterInfo FAILED local verification — i2pd will reject it with reason_code=15")
+	} else {
+		riBytes, _ := ri.Bytes()
+		log.WithFields(logger.Fields{
+			"addr_count": ri.RouterAddressCount(),
+			"ri_len":     len(riBytes),
+		}).Info("Re-signed RouterInfo passes local verification")
+	}
 	ntcp2Transport.UpdateLocalRouterInfo(*ri)
 	log.WithField("at", "buildNTCP2Transport").Debug("RouterInfo re-signed with NTCP2 address and pushed to transport")
 

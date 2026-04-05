@@ -8,10 +8,14 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/go-i2p/common/key_certificate"
+	"github.com/go-i2p/common/router_address"
 	"github.com/go-i2p/common/router_info"
+	"github.com/go-i2p/common/signature"
 	"github.com/go-i2p/crypto/ed25519"
+	"github.com/go-i2p/crypto/types"
 )
 
 // =============================================================================
@@ -605,6 +609,90 @@ func TestConstructRouterInfoSignatureRoundTrip(t *testing.T) {
 			}
 		}
 	}
+}
+
+// TestAddressAddAndReSignRoundTrip exercises the exact fix for reason_code=15:
+// ConstructRouterInfo(nil) → AddAddress → ReSign → Bytes → ReadRouterInfo → VerifySignature.
+// If this test fails the signature produced by ReSign is invalid.
+func TestAddressAddAndReSignRoundTrip(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	ks, err := NewRouterInfoKeystore(tmpDir, "localRouter")
+	if err != nil {
+		t.Fatalf("NewRouterInfoKeystore: %v", err)
+	}
+
+	// Step 1: construct RI with no addresses (mirrors constructRouterInfo)
+	ri, err := ks.ConstructRouterInfo(nil)
+	if err != nil {
+		t.Fatalf("ConstructRouterInfo: %v", err)
+	}
+	t.Logf("step1: address_count=%d", ri.RouterAddressCount())
+
+	// Step 2: create and add a minimal NTCP2-style RouterAddress (cost=10, style="ntcp2")
+	addr, err := router_address.NewRouterAddress(10, time.Time{}, "ntcp2", map[string]string{
+		"host": "1.2.3.4",
+		"port": "4567",
+		"s":    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", // 32 zero bytes base64
+		"i":    "AAAAAAAAAAAAAAAAAAAAAA==",                     // 16 zero bytes base64
+		"v":    "2",
+	})
+	if err != nil {
+		t.Fatalf("NewRouterAddress: %v", err)
+	}
+	if err := ri.AddAddress(addr); err != nil {
+		t.Fatalf("AddAddress: %v", err)
+	}
+	t.Logf("step2: address_count=%d, sig_bytes=%d", ri.RouterAddressCount(), len(ri.Signature().Bytes()))
+
+	// Step 3: ReSign with the keystore's signing key (mirrors buildNTCP2Transport)
+	privKey := ks.GetSigningPrivateKey()
+	signingKey, ok := privKey.(types.SigningPrivateKey)
+	if !ok {
+		t.Fatalf("GetSigningPrivateKey() does not implement types.SigningPrivateKey (got %T)", privKey)
+	}
+	pubTime := time.Now().Round(time.Second)
+	if err := ri.ReSign(pubTime, signingKey, signature.SIGNATURE_TYPE_EDDSA_SHA512_ED25519); err != nil {
+		t.Fatalf("ReSign: %v", err)
+	}
+	t.Logf("step3: address_count=%d, sig_len=%d", ri.RouterAddressCount(), ri.Signature().Len())
+
+	// Step 4: verify signature immediately after ReSign
+	valid, err := ri.VerifySignature()
+	if err != nil {
+		t.Fatalf("VerifySignature after ReSign: %v", err)
+	}
+	if !valid {
+		t.Fatal("FAIL: signature invalid immediately after ReSign — signing bug")
+	}
+
+	// Step 5: serialize to bytes
+	riBytes, err := ri.Bytes()
+	if err != nil {
+		t.Fatalf("ri.Bytes(): %v", err)
+	}
+	t.Logf("step5: serialized %d bytes", len(riBytes))
+
+	// Step 6: parse (what i2pd does on receiving msg3)
+	parsed, remainder, err := router_info.ReadRouterInfo(riBytes)
+	if err != nil {
+		t.Fatalf("ReadRouterInfo: %v", err)
+	}
+	if len(remainder) != 0 {
+		t.Errorf("ReadRouterInfo left %d extra bytes", len(remainder))
+	}
+	t.Logf("step6: parsed address_count=%d", parsed.RouterAddressCount())
+
+	// Step 7: verify signature on parsed RI (same check i2pd does)
+	valid2, err := parsed.VerifySignature()
+	if err != nil {
+		t.Fatalf("VerifySignature on parsed RI: %v", err)
+	}
+	if !valid2 {
+		t.Fatal("FAIL: signature invalid on parsed RouterInfo — serialization/signing mismatch")
+	}
+
+	t.Log("PASS: AddAddress + ReSign + Bytes + ReadRouterInfo + VerifySignature all succeed")
 }
 
 func TestRouterInfoKeystorePaddingGeneration(t *testing.T) {

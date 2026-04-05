@@ -882,7 +882,19 @@ func (t *NTCP2Transport) createNTCP2Config(routerInfo router_info.RouterInfo) (*
 	localRI := t.identity
 	t.identityMu.RUnlock()
 	if riBytes, riErr := localRI.Bytes(); riErr == nil {
+		addrCount := localRI.RouterAddressCount()
+		sigValid, sigErr := localRI.VerifySignature()
+		t.logger.WithFields(map[string]interface{}{
+			"ri_bytes_len":    len(riBytes),
+			"ri_addr_count":   addrCount,
+			"sig_valid":       sigValid,
+			"sig_verify_err":  fmt.Sprintf("%v", sigErr),
+			"ri_bytes_prefix": fmt.Sprintf("%x", riBytes[:min(16, len(riBytes))]),
+			"ri_bytes_suffix": fmt.Sprintf("%x", riBytes[max(0, len(riBytes)-16):]),
+		}).Info("LocalRouterInfo for msg3 outbound")
 		config = config.WithLocalRouterInfo(riBytes)
+	} else {
+		t.logger.WithError(riErr).Error("Failed to serialize LocalRouterInfo for msg3 — NTCP2 will send empty RI")
 	}
 
 	return config, nil
