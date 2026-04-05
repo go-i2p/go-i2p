@@ -492,9 +492,10 @@ func (s *NTCP2Session) handleNonI2NPBlock(block Block) {
 			reason = block.Data[terminationBlockPayloadSize-1]
 		}
 		s.logger.WithFields(map[string]interface{}{
-			"at":     "(NTCP2Session) handleNonI2NPBlock",
-			"reason": TerminationReasonString(reason),
-		}).Info("Received Termination block from peer, closing session")
+			"at":          "(NTCP2Session) handleNonI2NPBlock",
+			"reason_code": reason,
+			"reason":      TerminationReasonString(reason),
+		}).Warn("Received Termination block from peer, closing session")
 		// Close in a goroutine to avoid deadlock: Close() calls wg.Wait(),
 		// and this callback runs inside the receive worker goroutine.
 		go s.Close()
