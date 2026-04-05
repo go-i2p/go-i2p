@@ -716,10 +716,10 @@ func (t *NTCP2Transport) performNTCP2Handshake(ntcp2Addr net.Addr, tcpAddrString
 		return nil, WrapNTCP2Error(err, "dialing NTCP2 connection")
 	}
 
-	// Phase 2: Perform the Noise XK handshake manually
+	// Phase 2: Perform the NTCP2 wire-format handshake (no framing, 16-byte options block).
 	handshakeStart := time.Now()
 	ctx := t.ctx
-	if err := conn.UnderlyingConn().Handshake(ctx); err != nil {
+	if err := conn.Handshake(ctx); err != nil {
 		handshakeDuration := time.Since(handshakeStart)
 		t.logHandshakeFailure(tcpAddrString, peerHashBytes, err, handshakeDuration)
 
@@ -865,6 +865,14 @@ func (t *NTCP2Transport) createNTCP2Config(routerInfo router_info.RouterInfo) (*
 	if err := ConfigureDialConfig(config, routerInfo); err != nil {
 		t.logger.WithError(err).Error("Cannot extract peer static key for NTCP2 XK handshake - peer RouterInfo is missing required 's=' option")
 		return nil, WrapNTCP2Error(err, "extracting peer NTCP2 static key")
+	}
+
+	// Supply our local RouterInfo bytes for message 3 part 2 payload.
+	t.identityMu.RLock()
+	localRI := t.identity
+	t.identityMu.RUnlock()
+	if riBytes, riErr := localRI.Bytes(); riErr == nil {
+		config = config.WithLocalRouterInfo(riBytes)
 	}
 
 	return config, nil
