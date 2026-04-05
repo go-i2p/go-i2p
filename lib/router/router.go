@@ -7,11 +7,13 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/go-i2p/common/base32"
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_address"
 	"github.com/go-i2p/common/router_info"
+	"github.com/go-i2p/common/signature"
 	"github.com/go-i2p/crypto/types"
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/i2cp"
@@ -311,6 +313,23 @@ func buildNTCP2Transport(r *Router, ri *router_info.RouterInfo) (*ntcp.NTCP2Tran
 	}); err != nil {
 		return nil, err
 	}
+
+	// Re-sign the RouterInfo now that the NTCP2 address has been added.
+	// ConstructRouterInfo(nil) signed with no addresses; AddAddress invalidated
+	// that signature. Without re-signing, i2pd rejects our RI in message 3
+	// with reason_code=15 (Alice RouterInfo signature verification failure).
+	privKey := r.RouterInfoKeystore.GetSigningPrivateKey()
+	signingKey, ok := privKey.(types.SigningPrivateKey)
+	if !ok {
+		return nil, fmt.Errorf("router signing key does not implement SigningPrivateKey (got %T)", privKey)
+	}
+	pubTime := r.RouterInfoKeystore.GetCurrentTime().Round(time.Second)
+	if err := ri.ReSign(pubTime, signingKey, signature.SIGNATURE_TYPE_EDDSA_SHA512_ED25519); err != nil {
+		log.WithError(err).Error("Failed to re-sign RouterInfo after adding NTCP2 address")
+		return nil, err
+	}
+	ntcp2Transport.UpdateLocalRouterInfo(*ri)
+	log.WithField("at", "buildNTCP2Transport").Debug("RouterInfo re-signed with NTCP2 address and pushed to transport")
 
 	return ntcp2Transport, nil
 }

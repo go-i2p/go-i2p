@@ -397,6 +397,16 @@ func (t *NTCP2Transport) Addr() net.Addr {
 	return l.Addr()
 }
 
+// UpdateLocalRouterInfo replaces the stored local RouterInfo with a re-signed
+// version that includes the transport's address. Safe to call during transport
+// initialization (before the router starts accepting connections). Unlike
+// SetIdentity, this does NOT recreate the listener.
+func (t *NTCP2Transport) UpdateLocalRouterInfo(ri router_info.RouterInfo) {
+	t.identityMu.Lock()
+	t.identity = ri
+	t.identityMu.Unlock()
+}
+
 // SetIdentity sets the router identity for this transport.
 // Protected by identityMu to prevent races with GetSession/Accept/Compatible.
 func (t *NTCP2Transport) SetIdentity(ident router_info.RouterInfo) error {

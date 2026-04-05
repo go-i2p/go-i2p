@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/go-i2p/common/key_certificate"
+	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/crypto/ed25519"
 )
 
@@ -531,6 +532,81 @@ func TestRouterInfoKeystore_Close_ZeroesKeyMaterial(t *testing.T) {
 
 // TestRouterInfoKeystorePaddingGeneration verifies that generateIdentityPaddingFromSizes
 // produces padding of the correct size and caches it for identity stability.
+// TestConstructRouterInfoSignatureRoundTrip verifies that a RouterInfo constructed
+// exactly as the router does (ConstructRouterInfo(nil), X25519+Ed25519 keys)
+// has a valid signature that survives serialization and re-parsing.
+// This tests the exact code path that feeds into NTCP2 message 3.
+func TestConstructRouterInfoSignatureRoundTrip(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Step 1 — create keystore (mirrors initializeRouterKeystore)
+	ks, err := NewRouterInfoKeystore(tmpDir, "localRouter")
+	if err != nil {
+		t.Fatalf("NewRouterInfoKeystore failed: %v", err)
+	}
+
+	// Step 2 — construct RouterInfo with nil addresses (mirrors constructRouterInfo)
+	ri, err := ks.ConstructRouterInfo(nil)
+	if err != nil {
+		t.Fatalf("ConstructRouterInfo(nil) failed: %v", err)
+	}
+	if ri == nil {
+		t.Fatal("ConstructRouterInfo returned nil RouterInfo")
+	}
+
+	t.Logf("address_count=%d", ri.RouterAddressCount())
+
+	// Step 3 — verify the signature on the freshly-constructed RouterInfo
+	valid, err := ri.VerifySignature()
+	if err != nil {
+		t.Fatalf("VerifySignature on fresh RouterInfo: %v", err)
+	}
+	if !valid {
+		t.Fatal("Fresh RouterInfo signature is INVALID — signing bug")
+	}
+
+	// Step 4 — serialize to bytes (what createNTCP2Config calls)
+	riBytes, err := ri.Bytes()
+	if err != nil {
+		t.Fatalf("RouterInfo.Bytes() failed: %v", err)
+	}
+	t.Logf("RouterInfo bytes length: %d", len(riBytes))
+
+	// Step 5 — re-parse (simulates what i2pd does on receiving our RI)
+	parsed, remainder, err := router_info.ReadRouterInfo(riBytes)
+	if err != nil {
+		t.Fatalf("ReadRouterInfo failed: %v", err)
+	}
+	if len(remainder) != 0 {
+		t.Errorf("ReadRouterInfo left %d bytes of remainder", len(remainder))
+	}
+
+	// Step 6 — verify signature on parsed RouterInfo (same check i2pd does)
+	valid2, err := parsed.VerifySignature()
+	if err != nil {
+		t.Fatalf("VerifySignature on parsed RouterInfo: %v", err)
+	}
+	if !valid2 {
+		t.Fatal("Parsed RouterInfo signature is INVALID — serialization round-trip bug")
+	}
+
+	// Step 7 — Round-trip byte fidelity
+	reparsedBytes, err := parsed.Bytes()
+	if err != nil {
+		t.Fatalf("parsed.Bytes() failed: %v", err)
+	}
+	if !bytes.Equal(riBytes, reparsedBytes) {
+		t.Error("Bytes differ after round-trip — serialization is not deterministic")
+		// Log first difference for debugging
+		for i := range riBytes {
+			if i >= len(reparsedBytes) || riBytes[i] != reparsedBytes[i] {
+				t.Logf("First divergence at byte %d: original=0x%02x reparsed=0x%02x", i, riBytes[i], reparsedBytes[i])
+				break
+			}
+		}
+	}
+}
+
 func TestRouterInfoKeystorePaddingGeneration(t *testing.T) {
 	tmpDir := t.TempDir()
 	ks := &RouterInfoKeystore{dir: tmpDir, name: "test"}
