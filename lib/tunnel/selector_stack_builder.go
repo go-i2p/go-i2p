@@ -11,8 +11,10 @@ type PeerSelectorStack struct {
 // NewPeerSelectorStack starts building a selector stack from a base selector.
 func NewPeerSelectorStack(base PeerSelector) *PeerSelectorStack {
 	if base == nil {
+		log.Error("NewPeerSelectorStack: base selector cannot be nil")
 		return &PeerSelectorStack{err: oops.Errorf("base selector cannot be nil")}
 	}
+	log.Debug("creating peer selector stack")
 	return &PeerSelectorStack{selector: base}
 }
 
@@ -20,8 +22,10 @@ func NewPeerSelectorStack(base PeerSelector) *PeerSelectorStack {
 func FromNetDB(db NetDBSelector) *PeerSelectorStack {
 	adapter, err := NewNetDBSelectorAdapter(db)
 	if err != nil {
+		log.WithError(err).Error("FromNetDB: failed to create netdb selector adapter")
 		return &PeerSelectorStack{err: err}
 	}
+	log.Debug("created peer selector stack from netdb")
 	return &PeerSelectorStack{selector: adapter}
 }
 
@@ -36,6 +40,7 @@ func (s *PeerSelectorStack) WithFilter(filters ...PeerFilter) *PeerSelectorStack
 		WithFilters(filters...),
 	)
 	if err != nil {
+		log.WithError(err).Error("WithFilter: failed to create filtering peer selector")
 		s.err = err
 		return s
 	}
@@ -55,6 +60,7 @@ func (s *PeerSelectorStack) WithScoring(scorers ...PeerScorer) *PeerSelectorStac
 		WithScorers(scorers...),
 	)
 	if err != nil {
+		log.WithError(err).Error("WithScoring: failed to create scoring peer selector")
 		s.err = err
 		return s
 	}
@@ -86,8 +92,10 @@ func (s *PeerSelectorStack) WithThreshold(threshold float64, scorers ...PeerScor
 // Build returns the final composed selector, or an error if any step failed.
 func (s *PeerSelectorStack) Build() (PeerSelector, error) {
 	if s.err != nil {
+		log.WithError(s.err).Error("Build: peer selector stack has accumulated error")
 		return nil, s.err
 	}
+	log.Debug("peer selector stack built successfully")
 	return s.selector, nil
 }
 

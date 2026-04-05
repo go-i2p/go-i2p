@@ -57,6 +57,7 @@ func GetCertificateByPath(certPath string) ([]byte, error) {
 	// explicitly so callers get a clear error rather than a generic one.
 	cleaned := filepath.ToSlash(filepath.Clean(certPath))
 	if strings.HasPrefix(cleaned, "/") || strings.HasPrefix(cleaned, "..") || strings.Contains(cleaned, "/../") {
+		log.WithField("cert_path", certPath).Warn("rejected certificate path: contains path traversal")
 		return nil, fmt.Errorf("invalid certificate path: %q contains path traversal", certPath)
 	}
 	return CertificatesFS.ReadFile("certificates/" + cleaned)
@@ -68,6 +69,7 @@ func GetCertificateByPath(certPath string) ([]byte, error) {
 func GetReseedCertificateByName(certFileName string) ([]byte, error) {
 	// Defense-in-depth: reject any path separators in the filename
 	if strings.ContainsAny(certFileName, "/\\") || strings.Contains(certFileName, "..") {
+		log.WithField("cert_file_name", certFileName).Warn("rejected certificate filename: contains path separators or traversal")
 		return nil, fmt.Errorf("invalid certificate filename: %q must not contain path separators", certFileName)
 	}
 	return CertificatesFS.ReadFile("certificates/reseed/" + certFileName)

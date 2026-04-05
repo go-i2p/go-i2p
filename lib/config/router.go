@@ -253,6 +253,7 @@ func copyBootstrapConfig(src *BootstrapConfig) *BootstrapConfig {
 func SetRouterConfig(cfg *RouterConfig) {
 	routerConfigMutex.Lock()
 	defer routerConfigMutex.Unlock()
+	log.Debug("replacing global router configuration")
 	routerConfigProperties = cfg
 }
 

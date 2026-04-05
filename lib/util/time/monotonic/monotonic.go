@@ -33,6 +33,7 @@ func (c *Clock) Now() time.Time {
 // SetOffset updates the NTP time offset. This is called when the SNTP
 // subsystem determines a new clock correction.
 func (c *Clock) SetOffset(offset time.Duration) {
+	log.WithField("offset", offset).Debug("updating monotonic clock NTP offset")
 	c.mu.Lock()
 	c.offset = offset
 	c.mu.Unlock()

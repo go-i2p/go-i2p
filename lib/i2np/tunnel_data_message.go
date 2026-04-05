@@ -43,12 +43,17 @@ func NewTunnelCarrier(tunnelID tunnel.TunnelID, data [1024]byte) TunnelCarrier {
 func (t *TunnelDataMessage) UnmarshalBinary(data []byte) error {
 	// First unmarshal the base message
 	if err := t.BaseI2NPMessage.UnmarshalBinary(data); err != nil {
+		log.WithError(err).Error("failed to unmarshal base I2NP message for TunnelData")
 		return err
 	}
 
 	// Extract the data payload and parse it
 	messageData := t.BaseI2NPMessage.GetData()
 	if len(messageData) != 1028 {
+		log.WithFields(map[string]interface{}{
+			"expected": 1028,
+			"got":      len(messageData),
+		}).Error("tunnel data message payload wrong size")
 		return oops.Errorf("tunnel data message payload wrong size: expected 1028 bytes, got %d", len(messageData))
 	}
 

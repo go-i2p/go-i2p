@@ -26,6 +26,7 @@ func retryingSelect(
 	evaluator PeerEvaluator,
 ) ([]router_info.RouterInfo, int, error) {
 	if count <= 0 {
+		log.WithField("count", count).Error("retryingSelect: count must be > 0")
 		return nil, 0, oops.Errorf("count must be > 0")
 	}
 
@@ -81,6 +82,10 @@ func fetchPeerCandidates(
 
 	candidates, err := cfg.underlying.SelectPeers(requestCount, excludeList)
 	if err != nil {
+		log.WithFields(map[string]interface{}{
+			"selector": cfg.name,
+			"needed":   needed,
+		}).WithError(err).Error("underlying selector error fetching peer candidates")
 		return nil, oops.Errorf("underlying selector error: %w", err)
 	}
 	return candidates, nil

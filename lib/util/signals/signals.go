@@ -113,6 +113,7 @@ func handleInterrupted() {
 // Safe to call multiple times; only the first call takes effect.
 func StopHandle() {
 	stopOnce.Do(func() {
+		log.Debug("stopping signal handle: closing signal channel")
 		signal.Stop(sigChan)
 		close(sigChan)
 	})

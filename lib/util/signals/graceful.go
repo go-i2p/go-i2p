@@ -46,6 +46,7 @@ func RegisterPreShutdownHandler(f Handler) HandlerID {
 	nextID++
 	mu.Unlock()
 	preShutdownHandlers = append(preShutdownHandlers, registeredHandler{id: id, fn: f})
+	log.WithField("handler_id", id).Debug("registered pre-shutdown handler")
 	return id
 }
 
@@ -121,6 +122,7 @@ func runHandlerWithTimeout(h Handler, timeout time.Duration) bool {
 	case <-done:
 		return true
 	case <-time.After(timeout):
+		log.WithField("timeout", timeout).Warn("pre-shutdown handler timed out")
 		fmt.Fprintf(os.Stderr, "signals: pre-shutdown handler timed out after %s\n", timeout)
 		return false
 	}
