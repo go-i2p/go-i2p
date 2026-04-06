@@ -2,11 +2,11 @@ package ntcp2
 
 import (
 	"context"
-	"encoding/base64"
 	"net"
 	"testing"
 	"time"
 
+	i2pbase64 "github.com/go-i2p/common/base64"
 	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_address"
 	"github.com/go-i2p/go-noise/ntcp2"
@@ -87,8 +87,8 @@ func assertValidNTCP2RouterAddress(t *testing.T, routerAddr *router_address.Rout
 	require.NoError(t, err)
 	assert.NotEmpty(t, staticKeyData)
 
-	_, err = base64.StdEncoding.DecodeString(staticKeyData)
-	assert.NoError(t, err, "static key should be valid base64")
+	_, err = i2pbase64.I2PEncoding.DecodeString(staticKeyData)
+	assert.NoError(t, err, "static key should be valid I2P base64")
 }
 
 // TestConvertToRouterAddress_Success tests successful conversion of NTCP2 transport to RouterAddress
@@ -132,7 +132,7 @@ func TestConvertToRouterAddress_WithObfuscationIV(t *testing.T) {
 	assert.NotEmpty(t, ivData)
 
 	// Verify IV can be decoded and matches
-	decodedIV, err := base64.StdEncoding.DecodeString(ivData)
+	decodedIV, err := i2pbase64.I2PEncoding.DecodeString(ivData)
 	require.NoError(t, err)
 	assert.Equal(t, iv, decodedIV)
 }
