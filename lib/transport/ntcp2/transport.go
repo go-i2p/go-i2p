@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"strconv"
 	"strings"
@@ -40,6 +41,10 @@ type NTCP2Transport struct {
 	// peerConnNotifier receives connection outcome feedback (optional).
 	// Set via SetPeerConnNotifier after construction.
 	peerConnNotifier transport.PeerConnNotifier
+
+	// routerInfoRefresher requests stale RI eviction on handshake EOF (optional).
+	// Set via SetRouterInfoRefresher after construction.
+	routerInfoRefresher transport.RouterInfoRefresher
 
 	// Session management
 	sessions     sync.Map // map[string]*NTCP2Session (keyed by router hash)
@@ -420,6 +425,12 @@ func (t *NTCP2Transport) SetPeerConnNotifier(n transport.PeerConnNotifier) {
 	t.peerConnNotifier = n
 }
 
+// SetRouterInfoRefresher wires a RouterInfo cache-eviction notifier so that
+// stale entries are removed from NetDB after a handshake EOF failure.
+func (t *NTCP2Transport) SetRouterInfoRefresher(r transport.RouterInfoRefresher) {
+	t.routerInfoRefresher = r
+}
+
 // SetIdentity sets the router identity for this transport.
 // Protected by identityMu to prevent races with GetSession/Accept/Compatible.
 func (t *NTCP2Transport) SetIdentity(ident router_info.RouterInfo) error {
@@ -648,6 +659,13 @@ func (t *NTCP2Transport) createOutboundSession(routerInfo router_info.RouterInfo
 		t.logger.WithError(err).WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Debug("Failed to dial NTCP2 connection")
 		if n := t.peerConnNotifier; n != nil {
 			n.RecordFailure(routerHash, err.Error())
+		}
+		// On EOF the peer likely rotated its static key; evict the cached RI
+		// so the next selection fetches a fresh copy (AUDIT P3/RC-2).
+		if errors.Is(err, io.EOF) {
+			if r := t.routerInfoRefresher; r != nil {
+				go r.RequestRouterInfoRefresh(routerHash)
+			}
 		}
 		return nil, err
 	}

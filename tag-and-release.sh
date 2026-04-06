@@ -32,6 +32,12 @@ github_release() {
 comment_out_replaces() {
   echo "Commenting out replace directives in go.mod and running go mod tidy" 1>&2
   sed -i.bak '/^replace /s/^/\/\//g' go.mod
+  git add -v .
+  if [ $CHECKIN_DRY_RUN = true ]; then
+    echo "Dry run: skipping git commit for commented out replace directives"
+  else
+    git commit -am "Comment out replace directives"
+  fi
   #go mod tidy
   rm go.mod.bak
 }

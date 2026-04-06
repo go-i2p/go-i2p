@@ -310,6 +310,11 @@ func buildNTCP2Transport(r *Router, ri *router_info.RouterInfo) (*ntcp.NTCP2Tran
 	if r.StdNetDB != nil && r.StdNetDB.PeerTracker != nil {
 		ntcp2Transport.SetPeerConnNotifier(r.StdNetDB.PeerTracker)
 	}
+	// Wire RouterInfo refresh so stale entries are evicted on handshake EOF
+	// (AUDIT P3 / RC-2).
+	if r.StdNetDB != nil {
+		ntcp2Transport.SetRouterInfoRefresher(r.StdNetDB)
+	}
 	log.WithFields(logger.Fields{"at": "buildNTCP2Transport"}).Debug("NTCP2 transport created successfully")
 
 	ntcpaddr := ntcp2Transport.Addr()

@@ -1318,3 +1318,43 @@ func (db *StdNetDB) GetHighCapacityPeerCount() int {
 
 	return count
 }
+
+// riRefreshCooldownDuration is the minimum time between RouterInfo cache
+// evictions for the same peer (prevents thundering-herd re-fetches).
+const riRefreshCooldownDuration = 5 * time.Minute
+
+// RequestRouterInfoRefresh evicts a peer's RouterInfo from the in-memory cache
+// so that subsequent peer selection will not reuse the stale entry. The method
+// enforces a per-peer cooldown of riRefreshCooldownDuration to prevent
+// repeated evictions (e.g. when a key-rotated peer causes many handshake
+// failures in quick succession).
+//
+// After eviction the entry will be re-populated on the next reseed or
+// bootstrap cycle.
+func (db *StdNetDB) RequestRouterInfoRefresh(hash common.Hash) {
+	now := time.Now()
+	// Enforce cool-down: if a refresh was already requested recently, skip.
+	if prev, loaded := db.riRefreshCooldown.Load(hash); loaded {
+		if prevTime, ok := prev.(time.Time); ok && now.Sub(prevTime) < riRefreshCooldownDuration {
+			log.WithFields(logger.Fields{
+				"peer_hash": fmt.Sprintf("%x", hash[:8]),
+				"next_in":   riRefreshCooldownDuration - now.Sub(prevTime),
+			}).Debug("RouterInfo refresh skipped: cooldown in effect")
+			return
+		}
+	}
+	db.riRefreshCooldown.Store(hash, now)
+
+	db.riMutex.Lock()
+	_, existed := db.RouterInfos[hash]
+	delete(db.RouterInfos, hash)
+	db.riMutex.Unlock()
+
+	if existed {
+		log.WithFields(logger.Fields{
+			"at":        "StdNetDB.RequestRouterInfoRefresh",
+			"peer_hash": fmt.Sprintf("%x", hash[:8]),
+			"reason":    "stale RouterInfo evicted after handshake EOF",
+		}).Info("Evicted stale RouterInfo from cache; will be refreshed on next reseed")
+	}
+}
