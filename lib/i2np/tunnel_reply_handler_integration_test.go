@@ -155,8 +155,10 @@ func TestReplyProcessor_Retry(t *testing.T) {
 	// Process reply (should trigger retry)
 	err := rp.ProcessBuildReply(reply, tunnelID)
 
-	assert.Error(t, err, "Should fail for rejected tunnel build")
-	assert.Contains(t, err.Error(), "retry scheduled")
+	// Retry was successfully scheduled — no error should be returned.
+	// Previously a spurious error ("tunnel build failed, retry scheduled") was
+	// returned on the success path; that false-positive has been corrected.
+	assert.NoError(t, err, "Should not error when retry was successfully scheduled")
 
 	// Wait for retry callback
 	time.Sleep(50 * time.Millisecond)

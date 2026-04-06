@@ -808,6 +808,15 @@ func (r *Router) initializeMessageRouter() {
 		log.WithFields(logger.Fields{"at": "initializeMessageRouter"}).Debug("MessageProcessor identity, decryptor, and private key wired for build record decryption")
 	}
 
+	// Wire tunnel manager into I2CP server now that it is available.
+	// configureI2CPServerInfrastructure() was called before initializeTunnelManager()
+	// during startup, so SetTunnelBuilder was skipped due to a nil tunnelManager.
+	// We complete that wiring here.
+	if r.i2cpServer != nil && r.tunnelManager != nil {
+		r.i2cpServer.SetTunnelBuilder(r.tunnelManager)
+		log.WithFields(logger.Fields{"at": "initializeMessageRouter"}).Debug("I2CP server: tunnel builder wired after tunnel manager initialization")
+	}
+
 	log.WithFields(logger.Fields{"at": "initializeMessageRouter"}).Debug("Message router initialized with NetDB, peer selection, session provider, tunnel data handler, garlic sessions, and garlic forwarding")
 }
 

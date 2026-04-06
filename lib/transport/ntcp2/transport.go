@@ -768,7 +768,7 @@ func (t *NTCP2Transport) logHandshakeFailure(tcpAddrString string, peerHashBytes
 		impact = "network unreachable - check firewall/routing"
 	}
 
-	t.logger.WithFields(map[string]interface{}{
+	fields := map[string]interface{}{
 		"remote_addr":    tcpAddrString,
 		"peer_hash":      fmt.Sprintf("%x", peerHashBytes[:8]),
 		"peer_hash_full": fmt.Sprintf("%x", peerHashBytes),
@@ -779,7 +779,17 @@ func (t *NTCP2Transport) logHandshakeFailure(tcpAddrString string, peerHashBytes
 		"is_ipv6":        isIPv6,
 		"phase":          phase,
 		"impact":         impact,
-	}).Error("Failed to dial NTCP2 connection")
+	}
+
+	// IPv6 peers on an IPv4-only host will always fail with ENETUNREACH.
+	// This is a known, persistent, expected condition — log at Debug to
+	// avoid inflating the error rate with non-actionable noise.
+	if isIPv6 && errorType == "network_unreachable" {
+		t.logger.WithFields(fields).Debug("Skipping IPv6 peer — no IPv6 connectivity on this host")
+		return
+	}
+
+	t.logger.WithFields(fields).Error("Failed to dial NTCP2 connection")
 
 	if isTCPFailure {
 		t.logger.Errorf("TCP connection FAILED to %s after %dms: %v (type: %s)",
@@ -894,7 +904,7 @@ func (t *NTCP2Transport) createNTCP2Config(routerInfo router_info.RouterInfo) (*
 		}).Info("LocalRouterInfo for msg3 outbound")
 		config = config.WithLocalRouterInfo(riBytes)
 	} else {
-		t.logger.WithError(riErr).Error("Failed to serialize LocalRouterInfo for msg3 — NTCP2 will send empty RI")
+		return nil, fmt.Errorf("cannot serialize local RouterInfo for NTCP2 msg3: %w", riErr)
 	}
 
 	return config, nil

@@ -408,7 +408,7 @@ func (rp *ReplyProcessor) retryBuild(tunnelID tunnel.TunnelID, pending *PendingB
 	rp.pendingTimers = append(rp.pendingTimers, timer)
 	rp.mutex.Unlock()
 
-	return fmt.Errorf("tunnel build failed, retry scheduled")
+	return nil
 }
 
 // handleBuildTimeout handles tunnel build timeout events.
