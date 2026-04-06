@@ -33,7 +33,7 @@ comment_out_replaces() {
   echo "Commenting out replace directives in go.mod and running go mod tidy" 1>&2
   sed -i.bak '/^replace /s/^/\/\//g' go.mod
   git add -v .
-  if [ $CHECKIN_DRY_RUN = true ]; then
+  if [ "$CHECKIN_DRY_RUN" = true ]; then
     echo "Dry run: skipping git commit for commented out replace directives"
   else
     git commit -am "Comment out replace directives"
@@ -62,6 +62,8 @@ collecthash() {
 
 LOGGER_TAG_HASH=$(collecthash logger) # 0
 echo "logger tag hash: $LOGGER_TAG_HASH" 1>&2
+SU3_TAG_HASH=$(collecthash su3) # 0
+echo "su3 tag hash: $SU3_TAG_HASH" 1>&2
 CRYPTO_TAG_HASH=$(collecthash crypto) # 1
 echo "crypto tag hash: $CRYPTO_TAG_HASH" 1>&2
 COMMON_TAG_HASH=$(collecthash common) # 2
@@ -90,6 +92,8 @@ update_our_packages() {
   #go get -u ./...
   echo go get "github.com/go-i2p/logger@$LOGGER_TAG_HASH" 1>&2
   go get "github.com/go-i2p/logger@$LOGGER_TAG_HASH" >/dev/null 2>/dev/null || true
+  echo go get "github.com/go-i2p/su3@$SU3_TAG_HASH" 1>&2
+  go get "github.com/go-i2p/su3@$SU3_TAG_HASH" >/dev/null 2>/dev/null || true
   echo go get "github.com/go-i2p/crypto@$CRYPTO_TAG_HASH" 1>&2
   go get "github.com/go-i2p/crypto@$CRYPTO_TAG_HASH" >/dev/null 2>/dev/null || true
   echo go get "github.com/go-i2p/common@$COMMON_TAG_HASH" 1>&2
@@ -129,11 +133,12 @@ tagandrelease() {
   update_our_packages
   if [ $DRY_RUN = true ]; then
     echo "Dry run: skipping git tag and release for $1"
-    if [ $CHECKIN_DRY_RUN = true ]; then
+    if [ "$CHECKIN_DRY_RUN" = true ]; then
       echo "Dry run: skipping git add and commit for $1"
     else
       git add -v .
       git commit -am "library sync for v$VERSION" 1>&2
+      push
     fi
     return
   fi
