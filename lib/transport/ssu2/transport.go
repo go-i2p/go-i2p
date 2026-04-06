@@ -6,6 +6,7 @@ import (
 	"net"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
@@ -44,6 +45,10 @@ type SSU2Transport struct {
 	// Key management.
 	persistentConfig   *PersistentConfig
 	keyRotationManager *ssu2noise.KeyRotationManager
+
+	// peerConnNotifier receives connection outcome feedback (optional).
+	// Set via SetPeerConnNotifier after construction.
+	peerConnNotifier transport.PeerConnNotifier
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -251,6 +256,12 @@ func (t *SSU2Transport) Addr() net.Addr {
 	return l.Addr()
 }
 
+// SetPeerConnNotifier wires a connection-outcome notifier into the transport.
+// Call this after construction to enable PeerTracker feedback.
+func (t *SSU2Transport) SetPeerConnNotifier(n transport.PeerConnNotifier) {
+	t.peerConnNotifier = n
+}
+
 // SetIdentity sets the router identity for this transport.
 func (t *SSU2Transport) SetIdentity(ident router_info.RouterInfo) error {
 	identHash, err := ident.IdentHash()
@@ -362,8 +373,15 @@ func (t *SSU2Transport) createOutboundSession(routerInfo router_info.RouterInfo,
 		return nil, err
 	}
 
+	if n := t.peerConnNotifier; n != nil {
+		n.RecordAttempt(routerHash)
+	}
+	dialStart := time.Now()
 	conn, err := ssu2noise.DialSSU2WithHandshakeContext(t.ctx, nil, remoteUDPAddr, dialConfig)
 	if err != nil {
+		if n := t.peerConnNotifier; n != nil {
+			n.RecordFailure(routerHash, err.Error())
+		}
 		return nil, WrapSSU2Error(err, "dialing SSU2 connection")
 	}
 
@@ -372,6 +390,9 @@ func (t *SSU2Transport) createOutboundSession(routerInfo router_info.RouterInfo,
 		return nil, err
 	}
 
+	if n := t.peerConnNotifier; n != nil {
+		n.RecordSuccess(routerHash, time.Since(dialStart).Milliseconds())
+	}
 	slotUsed = newSlotUsed
 	return session, nil
 }

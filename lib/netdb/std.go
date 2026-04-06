@@ -40,6 +40,10 @@ type StdNetDB struct {
 
 	PeerTracker *PeerTracker // tracks connection success/failure for peers
 
+	// riRefreshCooldown stores the time of the last RequestRouterInfoRefresh
+	// call per peer hash to prevent thundering-herd re-fetches.
+	riRefreshCooldown sync.Map // map[common.Hash]time.Time
+
 	// Cleanup goroutine management
 	ctx       context.Context
 	cancel    context.CancelFunc

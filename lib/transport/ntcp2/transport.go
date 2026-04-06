@@ -37,6 +37,10 @@ type NTCP2Transport struct {
 	// timestamp validation, encrypted termination).
 	handler *DefaultHandler
 
+	// peerConnNotifier receives connection outcome feedback (optional).
+	// Set via SetPeerConnNotifier after construction.
+	peerConnNotifier transport.PeerConnNotifier
+
 	// Session management
 	sessions     sync.Map // map[string]*NTCP2Session (keyed by router hash)
 	sessionCount int32    // atomic O(1) session counter
@@ -407,6 +411,15 @@ func (t *NTCP2Transport) UpdateLocalRouterInfo(ri router_info.RouterInfo) {
 	t.identityMu.Unlock()
 }
 
+// SetPeerConnNotifier wires a connection-outcome notifier into the transport.
+// Call this after construction to enable PeerTracker feedback. Safe to call
+// concurrently; the field is only read under t.identityMu or from the
+// goroutine that dials (no hot-path lock needed because the pointer is set
+// once before any sessions are created).
+func (t *NTCP2Transport) SetPeerConnNotifier(n transport.PeerConnNotifier) {
+	t.peerConnNotifier = n
+}
+
 // SetIdentity sets the router identity for this transport.
 // Protected by identityMu to prevent races with GetSession/Accept/Compatible.
 func (t *NTCP2Transport) SetIdentity(ident router_info.RouterInfo) error {
@@ -625,16 +638,26 @@ func (t *NTCP2Transport) createOutboundSession(routerInfo router_info.RouterInfo
 
 	t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Info("Creating new outbound NTCP2 session")
 
+	if n := t.peerConnNotifier; n != nil {
+		n.RecordAttempt(routerHash)
+	}
+	dialStart := time.Now()
 	conn, err := t.dialNTCP2Connection(routerInfo)
 	if err != nil {
 		t.unreserveSessionSlot() // Release the reserved slot on dial failure
 		t.logger.WithError(err).WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Debug("Failed to dial NTCP2 connection")
+		if n := t.peerConnNotifier; n != nil {
+			n.RecordFailure(routerHash, err.Error())
+		}
 		return nil, err
 	}
 
 	session := t.setupSession(conn, routerHash)
 	if session == nil {
 		return nil, fmt.Errorf("failed to set up session for %x: corrupt session map entry, connection closed", routerHashBytes[:8])
+	}
+	if n := t.peerConnNotifier; n != nil {
+		n.RecordSuccess(routerHash, time.Since(dialStart).Milliseconds())
 	}
 	t.logger.WithFields(map[string]interface{}{
 		"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),

@@ -123,6 +123,12 @@ tagandrelease() {
   update_our_packages
   if [ $DRY_RUN = true ]; then
     echo "Dry run: skipping git tag and release for $1"
+    if [ $CHECKIN_DRY_RUN = true ]; then
+      echo "Dry run: skipping git add and commit for $1"
+    else
+      git add -v .
+      git commit -am "library sync for v$VERSION" 1>&2
+    fi
     return
   fi
   # if release nodes is less than 6 lines long, delete it and create a placeholder

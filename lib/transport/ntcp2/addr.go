@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"sync"
 
 	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_address"
@@ -11,6 +12,56 @@ import (
 	"github.com/go-i2p/go-noise/ntcp2"
 	"github.com/go-i2p/logger"
 )
+
+// ipv6Once ensures the IPv6 connectivity probe runs exactly once per process.
+var (
+	ipv6Once       sync.Once
+	hasIPv6Support bool
+)
+
+// probeIPv6 returns true if the host has at least one non-loopback, globally
+// unicast IPv6 interface. The result is cached after the first call.
+func probeIPv6() bool {
+	ipv6Once.Do(func() {
+		ifaces, err := net.Interfaces()
+		if err != nil {
+			return
+		}
+		for _, iface := range ifaces {
+			if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+				continue
+			}
+			addrs, err := iface.Addrs()
+			if err != nil {
+				continue
+			}
+			for _, a := range addrs {
+				var ip net.IP
+				switch v := a.(type) {
+				case *net.IPNet:
+					ip = v.IP
+				case *net.IPAddr:
+					ip = v.IP
+				}
+				if ip != nil && ip.To4() == nil && ip.IsGlobalUnicast() {
+					hasIPv6Support = true
+					return
+				}
+			}
+		}
+	})
+	return hasIPv6Support
+}
+
+// isIPv4RouterAddress returns true if a RouterAddress host is a plain IPv4 address.
+func isIPv4RouterAddress(addr *router_address.RouterAddress) bool {
+	host, err := addr.Host()
+	if err != nil {
+		return false
+	}
+	ip := net.ParseIP(host.String())
+	return ip != nil && ip.To4() != nil
+}
 
 // ExtractNTCP2Addr extracts the NTCP2 network address from a RouterInfo structure.
 // It validates NTCP2 support and returns a properly wrapped NTCP2 address with router hash metadata.
@@ -56,6 +107,9 @@ func findValidNTCP2Address(routerInfo router_info.RouterInfo, hashBytes []byte) 
 		"address_count": len(addresses),
 	}).Debug("Searching for valid NTCP2 address")
 
+	// Two-pass: prefer IPv4 NTCP2 addresses; fall back to IPv6 only when
+	// IPv6 connectivity is available (AUDIT P4 + P1/RC-3).
+	var ipv6Fallback net.Addr
 	for i, addr := range addresses {
 		style := addr.TransportStyle()
 		styleStr, _ := style.Data()
@@ -76,8 +130,20 @@ func findValidNTCP2Address(routerInfo router_info.RouterInfo, hashBytes []byte) 
 			continue
 		}
 
-		logSuccessfulExtraction(ntcp2Addr, hashBytes)
-		return ntcp2Addr, nil
+		if isIPv4RouterAddress(addr) {
+			// IPv4 – return immediately (preferred path).
+			logSuccessfulExtraction(ntcp2Addr, hashBytes)
+			return ntcp2Addr, nil
+		}
+		// IPv6 – keep as fallback, continue looking for IPv4.
+		if ipv6Fallback == nil {
+			ipv6Fallback = ntcp2Addr
+		}
+	}
+
+	if ipv6Fallback != nil {
+		logSuccessfulExtraction(ipv6Fallback, hashBytes)
+		return ipv6Fallback, nil
 	}
 
 	// Enhanced logging when no valid NTCP2 addresses found - helps diagnose Issue #1 scope
@@ -93,6 +159,8 @@ func findValidNTCP2Address(routerInfo router_info.RouterInfo, hashBytes []byte) 
 }
 
 // processNTCP2Address resolves TCP address and wraps it with router hash.
+// Returns an error for IPv6 addresses when the local host has no IPv6
+// connectivity (AUDIT P1/RC-3), causing callers to skip to the next address.
 func processNTCP2Address(addr *router_address.RouterAddress, routerInfo router_info.RouterInfo) (net.Addr, error) {
 	log.WithFields(logger.Fields{"at": "processNTCP2Address"}).Debug("Found NTCP2 transport address, resolving TCP address")
 	tcpAddr, err := resolveTCPAddress(addr)
@@ -109,6 +177,17 @@ func processNTCP2Address(addr *router_address.RouterAddress, routerInfo router_i
 			"address_count": len(routerInfo.RouterAddresses()),
 		}).Warn("Failed to resolve TCP address from NTCP2 router address")
 		return nil, fmt.Errorf("failed to resolve TCP address: %w", err)
+	}
+
+	// Skip IPv6 peer addresses when the local host has no IPv6 connectivity.
+	if concrete, ok := tcpAddr.(*net.TCPAddr); ok {
+		if concrete.IP.To4() == nil && !probeIPv6() {
+			log.WithFields(map[string]interface{}{
+				"at":      "processNTCP2Address",
+				"address": tcpAddr.String(),
+			}).Debug("Skipping IPv6 NTCP2 address: no local IPv6 connectivity")
+			return nil, fmt.Errorf("skip IPv6 address %s: no local IPv6 connectivity", tcpAddr)
+		}
 	}
 
 	hashVal, err := routerInfo.IdentHash()

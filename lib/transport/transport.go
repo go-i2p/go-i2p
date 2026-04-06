@@ -3,10 +3,34 @@ package transport
 import (
 	"net"
 
+	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
 
 	"github.com/go-i2p/go-i2p/lib/i2np"
 )
+
+// PeerConnNotifier receives transport-layer connection feedback so that
+// higher-level routing components (e.g. PeerTracker) can update peer
+// reputation without coupling the transport packages to netdb.
+type PeerConnNotifier interface {
+	// RecordAttempt is called just before a dial attempt begins.
+	RecordAttempt(hash common.Hash)
+	// RecordSuccess is called when a handshake completes successfully.
+	// responseTimeMs is the round-trip to fully-established session in ms.
+	RecordSuccess(hash common.Hash, responseTimeMs int64)
+	// RecordFailure is called when a dial or handshake fails.
+	RecordFailure(hash common.Hash, reason string)
+}
+
+// RouterInfoRefresher allows transport layers to request a stale RouterInfo
+// be evicted from the local NetDB cache. Implementations should enforce a
+// per-peer cooldown to prevent thundering-herd on popular peers.
+type RouterInfoRefresher interface {
+	// RequestRouterInfoRefresh marks a peer's RouterInfo as stale and removes
+	// it from the in-memory cache. The implementation must honour a per-peer
+	// cooldown (e.g. one eviction per 5 minutes).
+	RequestRouterInfoRefresh(hash common.Hash)
+}
 
 // a session between 2 routers for tranmitting i2np messages securly
 type TransportSession interface {

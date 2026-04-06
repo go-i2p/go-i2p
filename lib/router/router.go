@@ -305,6 +305,11 @@ func buildNTCP2Transport(r *Router, ri *router_info.RouterInfo) (*ntcp.NTCP2Tran
 		log.WithError(err).Error("Failed to create NTCP2 transport")
 		return nil, err
 	}
+	// Wire PeerTracker feedback so transport-layer failures are visible to
+	// peer selection (AUDIT P0 / RC-1).
+	if r.StdNetDB != nil && r.StdNetDB.PeerTracker != nil {
+		ntcp2Transport.SetPeerConnNotifier(r.StdNetDB.PeerTracker)
+	}
 	log.WithFields(logger.Fields{"at": "buildNTCP2Transport"}).Debug("NTCP2 transport created successfully")
 
 	ntcpaddr := ntcp2Transport.Addr()
@@ -367,6 +372,10 @@ func buildSSU2Transport(r *Router, ri *router_info.RouterInfo) (*ssu2.SSU2Transp
 	if err != nil {
 		log.WithError(err).Error("Failed to create SSU2 transport")
 		return nil, err
+	}
+	// Wire PeerTracker feedback (AUDIT P0 / RC-1).
+	if r.StdNetDB != nil && r.StdNetDB.PeerTracker != nil {
+		ssu2Transport.SetPeerConnNotifier(r.StdNetDB.PeerTracker)
 	}
 
 	// Wire router lookup so SSU2 can connect via introducers.
