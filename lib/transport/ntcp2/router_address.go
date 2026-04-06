@@ -1,10 +1,11 @@
 package ntcp2
 
 import (
-	"encoding/base64"
 	"fmt"
 	"net"
 	"time"
+
+	i2pbase64 "github.com/go-i2p/common/base64"
 
 	"github.com/go-i2p/common/router_address"
 	i2pcurve25519 "github.com/go-i2p/crypto/curve25519"
@@ -225,7 +226,7 @@ func validateAndExtractStaticKey(transport *NTCP2Transport) (string, error) {
 	}
 	publicKey := pubKey.Bytes()
 
-	staticKeyB64 := base64.StdEncoding.EncodeToString(publicKey)
+	staticKeyB64 := i2pbase64.I2PEncoding.EncodeToString(publicKey)
 	return staticKeyB64, nil
 }
 
@@ -233,8 +234,8 @@ func validateAndExtractStaticKey(transport *NTCP2Transport) (string, error) {
 // NTCP2 parameters including host, port, static key, and IV.
 //
 // Per I2P specification (https://geti2p.net/spec/ntcp2#published-addresses):
-// - Static key 's': 32 bytes binary (little-endian X25519), 44 bytes Base64-encoded
-// - IV 'i': 16 bytes binary (big-endian), 24 bytes Base64-encoded
+// - Static key 's': 32 bytes binary (X25519 public key), 44 bytes I2P base64-encoded
+// - IV 'i': 16 bytes binary (big-endian), 24 bytes I2P base64-encoded
 //
 // Returns the options map and an error if validation fails.
 func buildRouterAddressOptions(host, port, staticKey string, ntcp2Config *ntcp2noise.NTCP2Config) (map[string]string, error) {
@@ -243,9 +244,9 @@ func buildRouterAddressOptions(host, port, staticKey string, ntcp2Config *ntcp2n
 		return nil, fmt.Errorf("invalid IV length: expected 16 bytes, got %d", len(ntcp2Config.ObfuscationIV))
 	}
 
-	// Encode IV to Base64 (big-endian per spec)
+	// Encode IV to I2P base64 (same alphabet as other I2P addresses: - and ~ instead of + and /)
 	// Note: The ObfuscationIV is already in the correct byte order from go-noise library
-	ivB64 := base64.StdEncoding.EncodeToString(ntcp2Config.ObfuscationIV)
+	ivB64 := i2pbase64.I2PEncoding.EncodeToString(ntcp2Config.ObfuscationIV)
 
 	options := map[string]string{
 		"host": host,
