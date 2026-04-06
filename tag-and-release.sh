@@ -188,14 +188,15 @@ tagandrelease() {
 echo "Tagging and releasing version v$VERSION" 1>&2
 
 LOGGER_TAG_HASH=$(tagandrelease logger) # 0
-CRYPTO_TAG_HASH=$(tagandrelease crypto) # 1
-COMMON_TAG_HASH=$(tagandrelease common) # 2
-NOISE_TAG_HASH=$(tagandrelease noise) # 3
-GO_NOISE_TAG_HASH=$(tagandrelease go-noise) # 4
-GO_I2P_TAG_HASH=$(tagandrelease go-i2p) # 5
-GO_I2CP_TAG_HASH=$(tagandrelease go-i2cp) # 6
-GO_DATAGRAMS_TAG_HASH=$(tagandrelease go-datagrams) # 7
-GO_STREAMING_TAG_HASH=$(tagandrelease go-streaming) # 8
-GO_SAM_BRIDGE_TAG_HASH=$(tagandrelease go-sam-bridge) # 9
+SU3_TAG_HASH=$(tagandrelease su3) # 1
+CRYPTO_TAG_HASH=$(tagandrelease crypto) # 3
+COMMON_TAG_HASH=$(tagandrelease common) # 4
+NOISE_TAG_HASH=$(tagandrelease noise) # 5
+GO_NOISE_TAG_HASH=$(tagandrelease go-noise) # 6
+GO_I2P_TAG_HASH=$(tagandrelease go-i2p) # 7
+GO_I2CP_TAG_HASH=$(tagandrelease go-i2cp) # 8
+GO_DATAGRAMS_TAG_HASH=$(tagandrelease go-datagrams) # 9
+GO_STREAMING_TAG_HASH=$(tagandrelease go-streaming) # 10
+GO_SAM_BRIDGE_TAG_HASH=$(tagandrelease go-sam-bridge) # 11
 
 echo "Successfully tagged and released version v$VERSION" 1>&2

@@ -21,6 +21,10 @@ github.com/go-i2p/crypto v0.1.4-0.20260327201310-96101c044a62 h1:d6kQAwBKkYe8dCH
 github.com/go-i2p/crypto v0.1.4-0.20260327201310-96101c044a62/go.mod h1:dPXGp189PUFOQDMJD9vGo+yfx4W42+Tu4ecrKns+yi0=
 github.com/go-i2p/elgamal v0.0.2 h1:3x2MwXWH5KjFZ06YThjLjB2/7eM3f6BsmhudKXn+dnk=
 github.com/go-i2p/elgamal v0.0.2/go.mod h1:5L85gta1c07w3f4ZCy4z//Caq1zaiHbEB8jocfQKWxM=
+github.com/go-i2p/go-datagrams v0.1.4-0.20260129000405-f6a1f1328725 h1:jEi0NGUJ5PI17weK5NtTvl93nWoiDrReLXlaNFXDsoE=
+github.com/go-i2p/go-datagrams v0.1.4-0.20260129000405-f6a1f1328725/go.mod h1:riRmKt9aUstbieIwtF7lUMxgrZhOFYHer7iJPvd0qV8=
+github.com/go-i2p/go-i2cp v0.1.4-0.20260309213829-4a5c1a1e25e7 h1:Jw9494O3j4HJC/rD8bVzpxXjmT8V7SKnt5tPTdtoAOA=
+github.com/go-i2p/go-i2cp v0.1.4-0.20260309213829-4a5c1a1e25e7/go.mod h1:RHgSYKcRso7S1MToniblx/fRs0MWK+mY3pSole6N0fY=
 github.com/go-i2p/go-nat-listener v0.0.0-20260402214544-c8773aeea918 h1:UFg1wIQtdbeSbbY0w6Kr1UWVo+OU8go7fu6yX8OoUTw=
 github.com/go-i2p/go-nat-listener v0.0.0-20260402214544-c8773aeea918/go.mod h1:HYnoqKCbnOBw6WpJ4+GJZVwVgH+4lgTl9zCOzgHRupM=
 github.com/go-i2p/go-noise v0.1.4-0.20260402003936-5386860e3a96 h1:7KrMcUpL7g1zgpmz9hj88dfFBUTOV1+SX5uWByHaios=
