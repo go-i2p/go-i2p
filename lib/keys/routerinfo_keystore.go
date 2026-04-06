@@ -446,6 +446,9 @@ type RouterInfoOptions struct {
 	// NetId is the network identifier. Defaults to "2" (production I2P network).
 	// Set to "3" for testnet or other values for experimental networks.
 	NetId string
+	// Version is the router.version string advertised in RouterInfo options.
+	// Defaults to "0.9.63". Must be >= "0.9.58" to pass i2pd's NETDB_MIN_ALLOWED_VERSION check.
+	Version string
 }
 
 // ConstructRouterInfo creates a complete RouterInfo structure with signing keys and certificate.
@@ -512,6 +515,9 @@ func (ks *RouterInfoKeystore) mergeOptions(opts []RouterInfoOptions) RouterInfoO
 		}
 		if opt.NetId != "" {
 			options.NetId = opt.NetId
+		}
+		if opt.Version != "" {
+			options.Version = opt.Version
 		}
 	}
 	return options
@@ -664,9 +670,19 @@ func (ks *RouterInfoKeystore) assembleRouterInfo(routerIdentity *router_identity
 		netId = "2" // Default: production I2P network
 	}
 
+	// router.version is required by i2pd (and Java I2P): if absent, i2pd sets
+	// m_Version=0 which triggers SetUnreachable(true) → reason_code=15 in NTCP2
+	// ProcessSessionConfirmed.  Minimum accepted by i2pd is NETDB_MIN_ALLOWED_VERSION
+	// = 0.9.58; use 0.9.63 which also clears NETDB_MIN_PEER_TEST_VERSION (0.9.62).
+	routerVersion := opts.Version
+	if routerVersion == "" {
+		routerVersion = "0.9.67"
+	}
+
 	options := map[string]string{
-		"caps":  caps,
-		"netId": netId,
+		"caps":           caps,
+		"netId":          netId,
+		"router.version": routerVersion,
 	}
 
 	log.WithFields(map[string]interface{}{
@@ -674,6 +690,7 @@ func (ks *RouterInfoKeystore) assembleRouterInfo(routerIdentity *router_identity
 		"timestamp":       publishedTime.Unix(),
 		"caps":            options["caps"],
 		"netId":           options["netId"],
+		"router.version":  options["router.version"],
 		"congestion_flag": opts.CongestionFlag,
 	}).Debug("Creating RouterInfo with options")
 
