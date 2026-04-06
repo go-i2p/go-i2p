@@ -152,6 +152,14 @@ func (mr *I2NPMessageDispatcher) RouteTunnelMessage(msg interface{}) error {
 	return fmt.Errorf("message does not implement tunnel interfaces")
 }
 
+// SetTunnelManager replaces the internal TunnelManager with an external one.
+// This must be called from the router after r.tunnelManager is created so that
+// both the dispatcher and the router share the same pendingBuilds map, enabling
+// build-reply correlation (A3 fix).
+func (mr *I2NPMessageDispatcher) SetTunnelManager(tm *TunnelManager) {
+	mr.tunnelMgr = tm
+}
+
 // GetProcessor returns the underlying MessageProcessor for direct access.
 // This is used by the router to set up garlic clove forwarding.
 func (mr *I2NPMessageDispatcher) GetProcessor() *MessageProcessor {

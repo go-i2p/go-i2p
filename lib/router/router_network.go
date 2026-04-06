@@ -479,8 +479,9 @@ func (r *Router) dispatchByMessageType(msg i2np.I2NPMessage, mr *i2np.I2NPMessag
 		i2np.I2NPMessageTypeTunnelGateway:
 		return mr.RouteMessage(msg)
 	case i2np.I2NPMessageTypeTunnelBuild, i2np.I2NPMessageTypeTunnelBuildReply,
-		i2np.I2NPMessageTypeVariableTunnelBuild, i2np.I2NPMessageTypeVariableTunnelBuildReply:
-		return mr.RouteTunnelMessage(msg)
+		i2np.I2NPMessageTypeVariableTunnelBuild, i2np.I2NPMessageTypeVariableTunnelBuildReply,
+		i2np.I2NPMessageTypeShortTunnelBuild, i2np.I2NPMessageTypeShortTunnelBuildReply:
+		return mr.GetProcessor().ProcessMessage(msg)
 	default:
 		return fmt.Errorf("unsupported message type: %d", msg.Type())
 	}
@@ -627,7 +628,7 @@ func (r *Router) configureI2CPServerInfrastructure(server *i2cp.Server) {
 		server.SetTunnelBuilder(r.tunnelManager)
 		log.WithFields(logger.Fields{"at": "configureI2CPServerInfrastructure"}).Debug("I2CP server: tunnel builder configured")
 	} else {
-		log.WithFields(logger.Fields{"at": "configureI2CPServerInfrastructure"}).Warn("I2CP server: tunnel manager not available for session pools")
+		log.WithFields(logger.Fields{"at": "configureI2CPServerInfrastructure"}).Debug("I2CP server: tunnel manager not available for session pools")
 	}
 
 	peerSelector, err := tunnel.NewDefaultPeerSelector(r.StdNetDB)

@@ -765,6 +765,16 @@ func (r *Router) initializeMessageRouter() {
 	// Must be done before garlic router so it can access the tunnel pool
 	r.initializeTunnelManager()
 
+	// A3: Unify the dispatcher's tunnelMgr with r.tunnelManager so that
+	// RouteTunnelMessage and the processor share the same pendingBuilds map.
+	r.messageRouter.SetTunnelManager(r.tunnelManager)
+	log.WithFields(logger.Fields{"at": "initializeMessageRouter"}).Debug("Dispatcher tunnel manager unified with router tunnel manager")
+
+	// A4: Wire r.tunnelManager as the buildReplyProcessor on the message
+	// processor so that parsed build replies are correlated with pending builds.
+	r.messageRouter.GetProcessor().SetBuildReplyProcessor(r.tunnelManager)
+	log.WithFields(logger.Fields{"at": "initializeMessageRouter"}).Debug("Build reply processor wired to tunnel manager")
+
 	// Initialize participant manager for tracking transit tunnels
 	r.participantManager = tunnel.NewManager()
 	log.WithFields(logger.Fields{"at": "initializeMessageRouter"}).Debug("Participant manager initialized for transit tunnel tracking")

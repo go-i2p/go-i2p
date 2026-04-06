@@ -773,6 +773,13 @@ func (tm *TunnelManager) logBuildRequestsCompleted(tunnelID tunnel.TunnelID) {
 	log.WithField("tunnel_id", tunnelID).Debug("Tunnel build requests sent")
 }
 
+// ProcessTunnelBuildReply satisfies the TunnelBuildReplyProcessor interface used by
+// MessageProcessor. It delegates to ProcessTunnelReply so that the single pendingBuilds
+// map is consulted for reply correlation (A4 fix).
+func (tm *TunnelManager) ProcessTunnelBuildReply(handler TunnelReplyHandler, messageID int) error {
+	return tm.ProcessTunnelReply(handler, messageID)
+}
+
 // ProcessTunnelReply processes tunnel build replies using TunnelReplyHandler interface.
 // This method integrates with the tunnel pool to update tunnel states and handle build completions.
 // Uses message ID to correlate the reply with the original build request.
