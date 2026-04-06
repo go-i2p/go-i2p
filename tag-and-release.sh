@@ -36,15 +36,15 @@ comment_out_replaces() {
   if [ "$CHECKIN_DRY_RUN" = true ]; then
     echo "Dry run: skipping git commit for commented out replace directives"
   else
-    git commit -am "Comment out replace directives"
+    /usr/bin/git commit -am "Comment out replace directives"
   fi
   #go mod tidy
   rm go.mod.bak
 }
 
 push() {
-  git push origin main || git push origin trunk || git push origin master
-  git push --tags
+  /usr/bin/git push origin main || /usr/bin/git push origin trunk || /usr/bin/git push origin master
+  /usr/bin/git push --tags
 }
 
 # descend into the go-i2p namespace and collect checkin hashes
@@ -115,11 +115,11 @@ update_our_packages() {
   go mod tidy -v 1>&2
   go build -v ./... 1>&2
   echo "Updated our packages to v$VERSION" 1>&2
-  git commit -am "Update dependencies to v$VERSION"
+  /usr/bin/git commit -am "Update dependencies to v$VERSION"
 }
 
 cleanup() {
-  git push origin --delete "v$VERSION" 2> /dev/null || true
+  /usr/bin/git push origin --delete "v$VERSION" 2> /dev/null || true
 }
 
 tagandrelease() {
@@ -136,8 +136,8 @@ tagandrelease() {
     if [ "$CHECKIN_DRY_RUN" = true ]; then
       echo "Dry run: skipping git add and commit for $1"
     else
-      git add -v .
-      git commit -am "library sync for v$VERSION" 1>&2
+      /usr/bin/git add -v .
+      /usr/bin/git commit -am "library sync for v$VERSION" 1>&2
       push
     fi
     return

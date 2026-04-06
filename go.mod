@@ -10,7 +10,7 @@ require (
 	github.com/go-i2p/go-nat-listener v0.0.0-20260402214544-c8773aeea918
 	github.com/go-i2p/go-noise v0.1.4-0.20260402003936-5386860e3a96
 	github.com/go-i2p/logger v0.1.5
-	github.com/go-i2p/su3 v0.0.2-0.20260403222358-bf7ef28aa90e
+	github.com/go-i2p/su3 v0.0.2-0.20260406203134-0ec837609b00
 	github.com/samber/oops v1.21.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
@@ -26,8 +26,6 @@ require (
 	github.com/dchest/siphash v1.2.3 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/go-i2p/elgamal v0.0.2 // indirect
-	github.com/go-i2p/go-datagrams v0.1.4-0.20260129000405-f6a1f1328725 // indirect
-	github.com/go-i2p/go-i2cp v0.1.4-0.20260309213829-4a5c1a1e25e7 // indirect
 	github.com/go-i2p/noise v1.1.1-0.20260327201800-8e41bb3d9f1e // indirect
 	github.com/go-i2p/red25519 v0.0.0-20260302212615-1093a31f680d // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
