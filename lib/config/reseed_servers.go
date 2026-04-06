@@ -23,7 +23,8 @@ var KnownReseedServers = []*ReseedConfig{
 	{Url: "https://reseed-fr.i2pd.xyz/", SU3Fingerprint: "r4sas-reseed_at_mail.i2p.crt"},
 	// Additional community servers
 	{Url: "https://www2.mk16.de/", SU3Fingerprint: "i2p-reseed_at_mk16.de.crt"},
-	{Url: "https://reseed2.i2p.net/", SU3Fingerprint: "echelon3_at_mail.i2p.crt"},
+	// reseed2.i2p.net removed: persistently returns connection-refused on every bootstrap
+	// attempt. Bootstrap completes via the other servers.
 	{Url: "https://reseed.diva.exchange/", SU3Fingerprint: "reseed_at_diva.exchange.crt"},
 	{Url: "https://i2p.novg.net/", SU3Fingerprint: "igor_at_novg.net.crt"},
 	// i2pseed.creativecowpat.net:8443 removed: TLS certificate uses only a Legacy

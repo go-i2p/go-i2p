@@ -141,22 +141,11 @@ func isNTCP2Transport(addr *router_address.RouterAddress) bool {
 // resolveTCPAddress extracts host and port from a router address and resolves them to a TCP address.
 // It returns an error if host or port extraction fails, or if TCP address resolution fails.
 func resolveTCPAddress(addr *router_address.RouterAddress) (net.Addr, error) {
-	// CRITICAL FIX #2: Suppress error-level logging from common package Host() method
-	// The common package logs at ERROR level when host key is missing, but this is
-	// normal for introducer-based NTCP2 addresses. We call it silently and handle gracefully.
 	log.WithFields(logger.Fields{"at": "resolveTCPAddress"}).Debug("Getting host from RouterAddress")
-	host, err := extractHostQuietly(addr)
+	host, err := addr.Host()
 	if err != nil {
-		// Missing host key is normal for introducer-based addresses (NAT/firewall traversal)
-		// These addresses require introduction from a third-party router
-		// Log at debug level to reduce noise - this is expected behavior
-		log.WithFields(map[string]interface{}{
-			"at":        "resolveTCPAddress",
-			"phase":     "address_parsing",
-			"operation": "extract_host",
-			"error":     err.Error(),
-			"context":   "normal for introducer-based addresses",
-		}).Debug("Cannot extract host from RouterAddress (introducer-only address)")
+		// Missing host key is normal for introducer-based addresses (NAT traversal).
+		log.WithFields(logger.Fields{"at": "resolveTCPAddress"}).Debug("Cannot extract host from RouterAddress (introducer-only address)")
 		return nil, fmt.Errorf("failed to extract host (introducer-based address): %w", err)
 	}
 
@@ -188,28 +177,9 @@ func resolveTCPAddress(addr *router_address.RouterAddress) (net.Addr, error) {
 	return tcpAddr, nil
 }
 
-// extractHostQuietly wraps addr.Host() to suppress ERROR-level logging from common package.
-// The common package's Host() method logs at ERROR level when the host key is missing,
-// but for NTCP2, missing host keys are normal for introducer-based addresses.
-// This function provides the same functionality without the noisy error logs.
-func extractHostQuietly(addr *router_address.RouterAddress) (net.Addr, error) {
-	// Try to get host using the standard method
-	// Note: The common package will log errors internally, but we document
-	// that this is expected behavior for introducer addresses
-	host, err := addr.Host()
-	if err != nil {
-		// Suppress by returning immediately - the common package already logged
-		// We add our own DEBUG-level log in the caller (resolveTCPAddress)
-		return nil, err
-	}
-	return host, nil
-}
-
 // HasDirectConnectivity checks if a RouterAddress has direct NTCP2 connectivity.
 // Returns true if the address has both host and port keys (directly dialable).
 // Returns false if the address is introducer-only (requires NAT traversal).
-// Returns false for nil addresses.
-// CRITICAL FIX #1: Pre-filtering utility for peer selection.
 func HasDirectConnectivity(addr *router_address.RouterAddress) bool {
 	if addr == nil {
 		return false
@@ -223,7 +193,7 @@ func HasDirectConnectivity(addr *router_address.RouterAddress) bool {
 	}
 
 	// Try to extract host (will fail for introducer-only addresses)
-	host, err := extractHostQuietly(addr)
+	host, err := addr.Host()
 	if err != nil || host == nil {
 		return false
 	}
@@ -238,7 +208,7 @@ func HasDirectConnectivity(addr *router_address.RouterAddress) bool {
 }
 
 // HasDialableNTCP2Address checks if a RouterInfo has at least one directly
-// dialable NTCP2 address (i.e., an NTCP2 address with a valid host and port).
+// dialable NTCP2 address (i.e., an NTCP2 address with both host and port).
 // Introducer-only addresses are not dialable and will return false.
 func HasDialableNTCP2Address(routerInfo *router_info.RouterInfo) bool {
 	if routerInfo == nil {
@@ -284,8 +254,7 @@ func WrapNTCP2Addr(addr net.Addr, routerHash data.Hash) (*ntcp2.NTCP2Addr, error
 }
 
 // SupportsDirectNTCP2 checks if a RouterInfo has at least one directly dialable NTCP2 address.
-// This is a convenience function for peer selection - filters out introducer-only routers.
-// CRITICAL FIX #1: Exported function for use in peer selection/filtering.
+// Convenience function for peer selection; filters out introducer-only routers.
 func SupportsDirectNTCP2(routerInfo *router_info.RouterInfo) bool {
 	if routerInfo == nil {
 		return false
