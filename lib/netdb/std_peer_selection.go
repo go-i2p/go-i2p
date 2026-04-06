@@ -44,7 +44,7 @@ func (db *StdNetDB) buildExcludeMap(exclude []common.Hash) map[common.Hash]bool 
 // - Direct NTCP2 or SSU2 (host+port present)
 // - SSU2 via introducers (ih0 key set)
 // Returns (direct bool, viaIntroducer bool). Both false means no reachable address.
-func hasReachableAddress(ri *router_info.RouterInfo) (direct bool, viaIntroducer bool) {
+func hasReachableAddress(ri *router_info.RouterInfo) (direct, viaIntroducer bool) {
 	if ri == nil {
 		return false, false
 	}
