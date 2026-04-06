@@ -195,6 +195,10 @@ func initializeTransports(r *Router, ri *router_info.RouterInfo, cfg *config.Rou
 			log.WithError(err).Warn("SSU2 transport setup failed; continuing without SSU2")
 		} else {
 			transports = append(transports, ssu2Transport)
+			// Propagate the final dual-transport RI to NTCP2 so msg3 sends
+			// ri_addr_count=2 instead of the stale 1-address RI stored during
+			// buildNTCP2Transport. (AUDIT FIX-1 / RC-B)
+			ntcp2Transport.UpdateLocalRouterInfo(*ri)
 		}
 	}
 
@@ -408,6 +412,32 @@ func buildSSU2Transport(r *Router, ri *router_info.RouterInfo) (*ssu2.SSU2Transp
 		return ssu2.ConvertToRouterAddress(ssu2Transport)
 	}); err != nil {
 		return nil, err
+	}
+
+	// Re-sign the RouterInfo now that the SSU2 address has been added so that
+	// the signature covers both transport addresses. Without this, remote peers
+	// that receive the RI in NTCP2 msg3 will reject it with a signature error.
+	privKey := r.RouterInfoKeystore.GetSigningPrivateKey()
+	signingKey, ok := privKey.(types.SigningPrivateKey)
+	if !ok {
+		return nil, fmt.Errorf("router signing key does not implement SigningPrivateKey (got %T)", privKey)
+	}
+	pubTime := r.RouterInfoKeystore.GetCurrentTime().Round(time.Second)
+	if err := ri.ReSign(pubTime, signingKey, signature.SIGNATURE_TYPE_EDDSA_SHA512_ED25519); err != nil {
+		log.WithError(err).Error("Failed to re-sign RouterInfo after adding SSU2 address")
+		return nil, err
+	}
+	if sigValid, sigErr := ri.VerifySignature(); !sigValid || sigErr != nil {
+		log.WithFields(logger.Fields{
+			"sig_valid": sigValid,
+			"sig_err":   fmt.Sprintf("%v", sigErr),
+		}).Warn("Re-signed RouterInfo (SSU2) FAILED local verification")
+	} else {
+		riBytes, _ := ri.Bytes()
+		log.WithFields(logger.Fields{
+			"addr_count": ri.RouterAddressCount(),
+			"ri_len":     len(riBytes),
+		}).Info("Re-signed RouterInfo (dual-transport) passes local verification")
 	}
 
 	return ssu2Transport, nil
