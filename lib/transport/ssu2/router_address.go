@@ -5,6 +5,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	i2pbase64 "github.com/go-i2p/common/base64"
@@ -70,11 +71,54 @@ func HasDialableSSU2Address(routerInfo *router_info.RouterInfo) bool {
 	return false
 }
 
+// ssu2IPv6Once / ssu2HasIPv6Support cache the one-time IPv6 connectivity probe
+// result for the ssu2 package (mirrors ntcp2.probeIPv6, AUDIT FIX-2 / RC-C).
+var (
+	ssu2IPv6Once       sync.Once
+	ssu2HasIPv6Support bool
+)
+
+// probeIPv6 returns true if the host has at least one non-loopback, globally
+// unicast IPv6 interface. The result is cached after the first call.
+func probeIPv6() bool {
+	ssu2IPv6Once.Do(func() {
+		ifaces, err := net.Interfaces()
+		if err != nil {
+			return
+		}
+		for _, iface := range ifaces {
+			if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+				continue
+			}
+			addrs, err := iface.Addrs()
+			if err != nil {
+				continue
+			}
+			for _, a := range addrs {
+				var ip net.IP
+				switch v := a.(type) {
+				case *net.IPNet:
+					ip = v.IP
+				case *net.IPAddr:
+					ip = v.IP
+				}
+				if ip != nil && ip.To4() == nil && ip.IsGlobalUnicast() {
+					ssu2HasIPv6Support = true
+					return
+				}
+			}
+		}
+	})
+	return ssu2HasIPv6Support
+}
+
 // ExtractSSU2Addr extracts the SSU2 network address from a RouterInfo structure.
-// It returns a *net.UDPAddr for the first valid SSU2 transport address found.
+// It returns a *net.UDPAddr for the best SSU2 transport address found, using a
+// two-pass strategy: IPv4 addresses are preferred; IPv6 is only returned when
+// the host has confirmed global-unicast IPv6 connectivity (AUDIT FIX-2 / RC-C).
 func ExtractSSU2Addr(routerInfo router_info.RouterInfo) (*net.UDPAddr, error) {
-	addresses := routerInfo.RouterAddresses()
-	for _, addr := range addresses {
+	var ipv6Fallback *net.UDPAddr
+	for _, addr := range routerInfo.RouterAddresses() {
 		if !isSSU2Transport(addr) {
 			continue
 		}
@@ -83,7 +127,17 @@ func ExtractSSU2Addr(routerInfo router_info.RouterInfo) (*net.UDPAddr, error) {
 			log.WithField("error", err.Error()).Debug("Failed to resolve SSU2 address, trying next")
 			continue
 		}
-		return udpAddr, nil
+		if udpAddr.IP.To4() != nil {
+			// IPv4 address — return immediately (preferred path).
+			return udpAddr, nil
+		}
+		// IPv6 — only keep if the local host has IPv6 connectivity.
+		if ipv6Fallback == nil && probeIPv6() {
+			ipv6Fallback = udpAddr
+		}
+	}
+	if ipv6Fallback != nil {
+		return ipv6Fallback, nil
 	}
 	return nil, ErrInvalidRouterInfo
 }
