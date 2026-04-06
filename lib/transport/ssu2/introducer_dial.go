@@ -249,5 +249,17 @@ func (t *SSU2Transport) buildCharlieDialConfig(charlieRI router_info.RouterInfo,
 	}
 	dialConfig = dialConfig.WithRemoteStaticKey(remoteStaticKey)
 
+	// Set our local intro key for header protection.
+	if ik := t.GetIntroKey(); len(ik) == 32 {
+		dialConfig.IntroKey = ik
+	}
+
+	// Set Charlie's intro key for ChaCha header obfuscation.
+	charlieIK, err := ExtractSSU2IntroKey(charlieRI)
+	if err != nil {
+		return nil, fmt.Errorf("no SSU2 intro key in Charlie's RI: %w", err)
+	}
+	dialConfig.RemoteIntroKey = charlieIK
+
 	return dialConfig, nil
 }

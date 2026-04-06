@@ -416,6 +416,21 @@ func (t *SSU2Transport) prepareDialConfig(routerInfo router_info.RouterInfo) (*s
 	}
 	dialConfig = dialConfig.WithRemoteStaticKey(remoteStaticKey)
 
+	// Set our local intro key so that header protection is enabled for the
+	// outbound session (initHeaderProtection requires IntroKey to be set).
+	if ik := t.GetIntroKey(); len(ik) == 32 {
+		dialConfig.IntroKey = ik
+	}
+
+	// Set the remote router's intro key so that the first-packet ChaCha
+	// obfuscation uses Bob's published intro key rather than the fallback
+	// router hash, which would cause Bob to discard our SessionRequest.
+	remoteIK, err := ExtractSSU2IntroKey(routerInfo)
+	if err != nil {
+		return nil, nil, WrapSSU2Error(err, "extracting remote SSU2 intro key")
+	}
+	dialConfig.RemoteIntroKey = remoteIK
+
 	return dialConfig, remoteUDPAddr, nil
 }
 

@@ -88,6 +88,35 @@ func ExtractSSU2Addr(routerInfo router_info.RouterInfo) (*net.UDPAddr, error) {
 	return nil, ErrInvalidRouterInfo
 }
 
+// ExtractSSU2IntroKey extracts the 32-byte introduction key from the "i" option
+// of the first SSU2 RouterAddress found in ri.  The option value is
+// I2P-base64-encoded (same alphabet as static keys).
+// Returns an error if no SSU2 address carries a valid 32-byte intro key.
+func ExtractSSU2IntroKey(ri router_info.RouterInfo) ([]byte, error) {
+	for _, addr := range ri.RouterAddresses() {
+		if !isSSU2Transport(addr) {
+			continue
+		}
+		ivStr := addr.InitializationVectorString()
+		if ivStr == nil {
+			continue
+		}
+		encoded, err := ivStr.Data()
+		if err != nil {
+			continue
+		}
+		raw, err := i2pbase64.DecodeString(encoded)
+		if err != nil {
+			continue
+		}
+		if len(raw) != 32 {
+			continue
+		}
+		return raw, nil
+	}
+	return nil, fmt.Errorf("no SSU2 address with a 32-byte intro key found in RouterInfo")
+}
+
 // resolveUDPAddress extracts host and port from a RouterAddress and resolves to a UDP address.
 func resolveUDPAddress(addr *router_address.RouterAddress) (*net.UDPAddr, error) {
 	host, err := addr.Host()
@@ -132,6 +161,7 @@ func ConvertToRouterAddress(transport *SSU2Transport) (*router_address.RouterAdd
 
 	options := buildBaseSSU2Options(host, portStr)
 	addStaticKeyOption(options, transport)
+	addIntroKeyOption(options, transport)
 	addIntroducerOptions(options, transport.GetIntroducers())
 
 	ra, err := router_address.NewRouterAddress(0, time.Time{}, "SSU2", options)
@@ -160,6 +190,15 @@ func buildBaseSSU2Options(host, port string) map[string]string {
 		router_address.HOST_OPTION_KEY:             host,
 		router_address.PORT_OPTION_KEY:             port,
 		router_address.PROTOCOL_VERSION_OPTION_KEY: "2",
+	}
+}
+
+// addIntroKeyOption adds the "i" (introduction key) option to the RouterAddress options.
+// The intro key is required by remote routers to obfuscate SSU2 packet headers.
+func addIntroKeyOption(options map[string]string, transport *SSU2Transport) {
+	ik := transport.GetIntroKey()
+	if len(ik) == 32 {
+		options[router_address.INITIALIZATION_VECTOR_OPTION_KEY] = encodeBase64(ik)
 	}
 }
 

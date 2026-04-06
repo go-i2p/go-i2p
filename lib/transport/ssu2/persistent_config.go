@@ -157,6 +157,12 @@ func initKeyManagement(t *SSU2Transport, ssu2Config *ssu2noise.SSU2Config) error
 
 	krm.Start()
 	t.keyRotationManager = krm
+
+	// Wire the intro key into the SSU2Config so that header protection is
+	// initialised for inbound connections (initHeaderProtection requires a
+	// non-nil IntroKey of length HeaderKeySize == 32).
+	ssu2Config.IntroKey = introKey
+
 	return nil
 }
 
