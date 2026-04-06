@@ -25,6 +25,8 @@ github.com/go-i2p/go-nat-listener v0.0.0-20260402214544-c8773aeea918 h1:UFg1wIQt
 github.com/go-i2p/go-nat-listener v0.0.0-20260402214544-c8773aeea918/go.mod h1:HYnoqKCbnOBw6WpJ4+GJZVwVgH+4lgTl9zCOzgHRupM=
 github.com/go-i2p/go-noise v0.1.4-0.20260402003936-5386860e3a96 h1:7KrMcUpL7g1zgpmz9hj88dfFBUTOV1+SX5uWByHaios=
 github.com/go-i2p/go-noise v0.1.4-0.20260402003936-5386860e3a96/go.mod h1:CLk+IyYcbzv5O6PNw0bE1v/1Q7BVgd51XOCPr7Lfu8I=
+github.com/go-i2p/go-noise v0.1.4-0.20260406215923-93b02ff49d4f h1:CJK8cTEZMcnlSuaie9UxqF7B4YwqBIDw4uFjC5kfEE8=
+github.com/go-i2p/go-noise v0.1.4-0.20260406215923-93b02ff49d4f/go.mod h1:exXr2wz92PWoynJUU5tgoAjvAfxv7fs6B/McUOgAnu0=
 github.com/go-i2p/logger v0.1.5 h1:bqX0R59jRNhCTuOVm97gtvo6tH2+nU1NJ53WzAi3I4I=
 github.com/go-i2p/logger v0.1.5/go.mod h1:fEh2nRZ6HwLJNaWJuE25mCzDa6VpCI4O37u5OfGNvus=
 github.com/go-i2p/noise v1.1.1-0.20260327201800-8e41bb3d9f1e h1:RUdNl2UXCZAGYaEHlthIpyvnjgq4kTI5adRxGpXV7FM=
@@ -82,8 +84,12 @@ github.com/subosito/gotenv v1.6.0 h1:9NlTDc1FTs4qu0DDq7AEtTPNw6SVm7uBMsUCUjABIf8
 github.com/subosito/gotenv v1.6.0/go.mod h1:Dk4QP5c2W3ibzajGcXpNraDfq2IrhjMIvMSWPKKo0FU=
 go.opentelemetry.io/otel v1.42.0 h1:lSQGzTgVR3+sgJDAU/7/ZMjN9Z+vUip7leaqBKy4sho=
 go.opentelemetry.io/otel v1.42.0/go.mod h1:lJNsdRMxCUIWuMlVJWzecSMuNjE7dOYyWlqOXWkdqCc=
+go.opentelemetry.io/otel v1.43.0 h1:mYIM03dnh5zfN7HautFE4ieIig9amkNANT+xcVxAj9I=
+go.opentelemetry.io/otel v1.43.0/go.mod h1:JuG+u74mvjvcm8vj8pI5XiHy1zDeoCS2LB1spIq7Ay0=
 go.opentelemetry.io/otel/trace v1.42.0 h1:OUCgIPt+mzOnaUTpOQcBiM/PLQ/Op7oq6g4LenLmOYY=
 go.opentelemetry.io/otel/trace v1.42.0/go.mod h1:f3K9S+IFqnumBkKhRJMeaZeNk9epyhnCmQh/EysQCdc=
+go.opentelemetry.io/otel/trace v1.43.0 h1:BkNrHpup+4k4w+ZZ86CZoHHEkohws8AY+WTX09nk+3A=
+go.opentelemetry.io/otel/trace v1.43.0/go.mod h1:/QJhyVBUUswCphDVxq+8mld+AvhXZLhe+8WVFxiFff0=
 go.step.sm/crypto v0.76.0 h1:K23BSaeoiY7Y5dvvijTeYC9EduDBetNwQYMBwMhi1aA=
 go.step.sm/crypto v0.76.0/go.mod h1:PXYJdKkK8s+GHLwLguFaLxHNAFsFL3tL1vSBrYfey5k=
 go.yaml.in/yaml/v3 v3.0.4 h1:tfq32ie2Jv2UxXFdLJdh3jXuOzWiL1fo0bu/FbuKpbc=
