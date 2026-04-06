@@ -311,7 +311,21 @@ func (t *NTCP2Transport) performInboundHandshake(conn net.Conn) error {
 	// remote NTCP2Addr so that extractPeerHash returns the real router hash
 	// instead of the fallback address-derived hash.
 	ntcp2Conn.PropagatePeerStaticKey()
-	t.logger.Debug("Inbound Noise XK handshake completed successfully")
+
+	// Log what the remote peer sent as their RouterInfo (Alice's msg3 payload).
+	// This allows post-hoc diagnosis of E2-pattern EOFs: if Alice closes immediately
+	// after msg3, logging here confirms the handshake itself succeeded and the issue
+	// is in the data phase (peer policy / caps mismatch / no-data timeout).
+	t.identityMu.RLock()
+	localRI := t.identity
+	t.identityMu.RUnlock()
+	localCaps := localRI.RouterCapabilities()
+	localAddrCount := localRI.RouterAddressCount()
+	t.logger.WithFields(map[string]interface{}{
+		"remote_addr":      conn.RemoteAddr().String(),
+		"local_caps":       localCaps,
+		"local_addr_count": localAddrCount,
+	}).Info("Inbound Noise XK handshake completed successfully (responder role)")
 	return nil
 }
 

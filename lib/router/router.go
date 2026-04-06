@@ -259,16 +259,22 @@ func validateRouterKeys(r *Router) error {
 	return nil
 }
 
-// constructRouterInfo builds the router info from the keystore
+// constructRouterInfo builds the router info from the keystore.
+// Reachable:true is set because we always start a transport listener
+// immediately after; the caps string must say "R" not "U" or remote peers
+// will reject our published RI and our message-3 RouterInfo payload.
 func constructRouterInfo(r *Router) (*router_info.RouterInfo, error) {
 	log.WithField("at", "constructRouterInfo").Debug("calling ConstructRouterInfo")
-	ri, err := r.RouterInfoKeystore.ConstructRouterInfo(nil)
+	ri, err := r.RouterInfoKeystore.ConstructRouterInfo(nil, keys.RouterInfoOptions{Reachable: true})
 	if err != nil {
 		log.WithError(err).Error("Failed to construct RouterInfo")
 		return nil, err
 	}
 
-	log.WithField("at", "constructRouterInfo").Debug("RouterInfo constructed successfully")
+	log.WithFields(logger.Fields{
+		"at":   "constructRouterInfo",
+		"caps": ri.RouterCapabilities(),
+	}).Debug("RouterInfo constructed successfully")
 	return ri, nil
 }
 
