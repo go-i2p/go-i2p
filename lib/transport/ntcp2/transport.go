@@ -764,21 +764,38 @@ func (t *NTCP2Transport) logTCPConnectionAttempt(tcpAddrString string, peerHashB
 }
 
 // performNTCP2Handshake performs the NTCP2 handshake after successful TCP connection.
-// The handshake is split into two phases: DialNTCP2 (TCP dial + Noise wrapping, no
-// handshake) followed by a manual Handshake() call. This allows us to apply probing
-// resistance (random delay + junk read) on handshake failure, so that both sides are
+// The handshake is split into two phases: TCP dial + Noise wrapping (no handshake),
+// followed by a manual Handshake() call. This allows us to apply probing resistance
+// (random delay + junk read) on handshake failure, so that both sides are
 // indistinguishable from a random TCP service to an active prober.
+//
+// The TCP dial uses an explicit 30 s context deadline (AUDIT FIX-3 / RC-D) to avoid
+// the ~135 s kernel TCP connect timeout that occurs when hosts silently drop SYN
+// packets. WrapNTCP2Conn is used instead of DialNTCP2 so we can control the dial.
 //
 // Spec reference: https://geti2p.net/spec/ntcp2#probing-resistance
 func (t *NTCP2Transport) performNTCP2Handshake(ntcp2Addr net.Addr, tcpAddrString string, peerHashBytes []byte, config *ntcp2.NTCP2Config, tcpDialStart time.Time) (*ntcp2.NTCP2Conn, error) {
 	t.logger.WithField("remote_addr", ntcp2Addr.String()).Info("Dialing NTCP2 connection")
 
-	// Phase 1: Establish TCP connection and wrap in NTCP2Conn (no handshake)
-	conn, err := ntcp2.DialNTCP2("tcp", tcpAddrString, config)
+	// Phase 1a: TCP dial with a 30 s deadline so we don't wait ~135 s for
+	// the kernel connect timeout on silently-dropping hosts (AUDIT FIX-3 / RC-D).
+	dialCtx, dialCancel := context.WithTimeout(t.ctx, 30*time.Second)
+	defer dialCancel()
+	tcpDialer := &net.Dialer{}
+	tcpConn, err := tcpDialer.DialContext(dialCtx, "tcp", tcpAddrString)
 	if err != nil {
 		handshakeDuration := time.Since(tcpDialStart)
 		t.logHandshakeFailure(tcpAddrString, peerHashBytes, err, handshakeDuration)
-		return nil, WrapNTCP2Error(err, "dialing NTCP2 connection")
+		return nil, WrapNTCP2Error(err, "dialing NTCP2 connection (TCP)")
+	}
+
+	// Phase 1b: Wrap the established TCP connection in NTCP2Conn (no handshake yet).
+	conn, err := ntcp2.WrapNTCP2Conn(tcpConn, config)
+	if err != nil {
+		tcpConn.Close()
+		handshakeDuration := time.Since(tcpDialStart)
+		t.logHandshakeFailure(tcpAddrString, peerHashBytes, err, handshakeDuration)
+		return nil, WrapNTCP2Error(err, "wrapping NTCP2 connection")
 	}
 
 	// Phase 2: Perform the NTCP2 wire-format handshake (no framing, 16-byte options block).
