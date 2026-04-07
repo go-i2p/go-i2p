@@ -209,14 +209,14 @@ func TestWrappedErrorMessagesNoInfoLeak(t *testing.T) {
 
 // TestTimeoutConfiguration verifies that timeouts are properly configured.
 func TestTimeoutConfiguration(t *testing.T) {
-	// Verify default timeout is reasonable (30s for TCP dial)
-	const expectedDialTimeout = 30 * time.Second
+	// Verify default timeout is reasonable (P0.2: reduced from 30s to 10s)
+	const expectedDialTimeout = 10 * time.Second
 
-	// This is the timeout used in dialNTCP2Connection
+	// This is the timeout used in performNTCP2Handshake
 	// We can't easily test the actual dial without network access,
 	// but we verify the constant is reasonable
-	assert.GreaterOrEqual(t, expectedDialTimeout, 10*time.Second, "dial timeout should be at least 10s")
-	assert.LessOrEqual(t, expectedDialTimeout, 60*time.Second, "dial timeout should be at most 60s")
+	assert.GreaterOrEqual(t, expectedDialTimeout, 5*time.Second, "dial timeout should be at least 5s")
+	assert.LessOrEqual(t, expectedDialTimeout, 30*time.Second, "dial timeout should be at most 30s")
 }
 
 // TestConcurrentSessionAccess verifies thread-safe session operations.

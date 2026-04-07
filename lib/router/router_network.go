@@ -827,6 +827,9 @@ func (r *Router) registerNewSession(hash common.Hash, transportSession i2np.I2NP
 }
 
 // logSessionEstablishmentFailure logs detailed context about session establishment failures.
+// Downgraded from Error to Warn because the error is already returned to
+// the caller; logging it again at Error inflated the apparent error count (E4/E5
+// in the AUDIT report were the same event logged twice).
 func (r *Router) logSessionEstablishmentFailure(hash common.Hash, routerInfo *router_info.RouterInfo, err error) {
 	log.WithFields(logger.Fields{
 		"at":            "Router.GetSessionByHash",
@@ -836,7 +839,7 @@ func (r *Router) logSessionEstablishmentFailure(hash common.Hash, routerInfo *ro
 		"error":         err.Error(),
 		"address_count": len(routerInfo.RouterAddresses()),
 		"has_ntcp2":     hasNTCP2Address(*routerInfo),
-	}).Error("failed to get session")
+	}).Warn("failed to get session")
 }
 
 // logRouterInfoTimeout logs timeout events when waiting for RouterInfo from NetDB.
