@@ -2,6 +2,7 @@ package ssu2
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"sync"
@@ -370,6 +371,19 @@ func (t *SSU2Transport) createOutboundSession(routerInfo router_info.RouterInfo,
 
 	dialConfig, remoteUDPAddr, err := t.prepareDialConfig(routerInfo)
 	if err != nil {
+		// P0.1: Track address-extraction failures so bad peers are penalised
+		// even when no network dial is attempted.  ErrInvalidRouterInfo means
+		// the peer is structurally unreachable (e.g. IPv6-only, no local IPv6);
+		// immediately advance the consecutive-fail counter to the staleness
+		// threshold so the peer is excluded from the next hop-selection pass.
+		if n := t.peerConnNotifier; n != nil {
+			n.RecordAttempt(routerHash)
+			if errors.Is(err, ErrInvalidRouterInfo) {
+				n.RecordPermanentFailure(routerHash, "no_reachable_ssu2_address")
+			} else {
+				n.RecordFailure(routerHash, err.Error())
+			}
+		}
 		return nil, err
 	}
 
@@ -382,6 +396,13 @@ func (t *SSU2Transport) createOutboundSession(routerInfo router_info.RouterInfo,
 		if n := t.peerConnNotifier; n != nil {
 			n.RecordFailure(routerHash, err.Error())
 		}
+		// P1.2: Log the peer hash at the SSU2 transport level so repeated
+		// timeouts to the same peer are easily grep-able (the muxer also logs,
+		// but this gives a transport-level view for Token-staleness analysis).
+		t.logger.WithFields(map[string]interface{}{
+			"router_hash": fmt.Sprintf("%x", routerHash[:8]),
+			"error":       err.Error(),
+		}).Warn("SSU2 outbound dial failed")
 		return nil, WrapSSU2Error(err, "dialing SSU2 connection")
 	}
 

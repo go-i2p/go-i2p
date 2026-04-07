@@ -130,6 +130,38 @@ func (pt *PeerTracker) RecordFailure(hash common.Hash, reason string) {
 	}).Debug("Recorded connection failure")
 }
 
+// RecordPermanentFailure records a structurally permanent connection failure
+// (e.g. IPv6-only peer with no local IPv6, malformed RouterInfo with no valid
+// address).  Unlike RecordFailure, which increments the consecutive-failure
+// counter by one, this method immediately advances it to the staleness
+// threshold so that IsLikelyStale() returns true on the very next call,
+// preventing repeated wasted dial attempts to permanently unreachable peers.
+func (pt *PeerTracker) RecordPermanentFailure(hash common.Hash, reason string) {
+	pt.mu.Lock()
+	defer pt.mu.Unlock()
+
+	stats, exists := pt.stats[hash]
+	if !exists {
+		stats = &PeerStats{
+			Hash: hash,
+		}
+		pt.stats[hash] = stats
+	}
+
+	stats.FailureCount++
+	stats.LastFailure = time.Now()
+	if stats.ConsecutiveFails < consecutiveFailThreshold {
+		stats.ConsecutiveFails = consecutiveFailThreshold
+	}
+
+	log.WithFields(logger.Fields{
+		"peer_hash":         shortHash(hash.String(), 16),
+		"failure_count":     stats.FailureCount,
+		"consecutive_fails": stats.ConsecutiveFails,
+		"reason":            reason,
+	}).Debug("Recorded permanent connection failure — peer immediately marked stale")
+}
+
 // GetStats retrieves statistics for a peer.
 func (pt *PeerTracker) GetStats(hash common.Hash) *PeerStats {
 	pt.mu.RLock()

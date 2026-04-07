@@ -672,7 +672,15 @@ func (t *NTCP2Transport) createOutboundSession(routerInfo router_info.RouterInfo
 		t.unreserveSessionSlot() // Release the reserved slot on dial failure
 		t.logger.WithError(err).WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Debug("Failed to dial NTCP2 connection")
 		if n := t.peerConnNotifier; n != nil {
-			n.RecordFailure(routerHash, err.Error())
+			// P0.1: ErrInvalidRouterInfo means the peer has no address we can
+			// reach (e.g. IPv6-only, locally-unreachable).  Treat it as a
+			// permanent failure so IsLikelyStale() is true immediately and
+			// the peer is excluded from the next hop-selection pass.
+			if errors.Is(err, ErrInvalidRouterInfo) {
+				n.RecordPermanentFailure(routerHash, "no_reachable_ntcp2_address")
+			} else {
+				n.RecordFailure(routerHash, err.Error())
+			}
 		}
 		// On EOF the peer likely rotated its static key; evict the cached RI
 		// so the next selection fetches a fresh copy (AUDIT P3/RC-2).
@@ -769,17 +777,17 @@ func (t *NTCP2Transport) logTCPConnectionAttempt(tcpAddrString string, peerHashB
 // (random delay + junk read) on handshake failure, so that both sides are
 // indistinguishable from a random TCP service to an active prober.
 //
-// The TCP dial uses an explicit 30 s context deadline (AUDIT FIX-3 / RC-D) to avoid
-// the ~135 s kernel TCP connect timeout that occurs when hosts silently drop SYN
-// packets. WrapNTCP2Conn is used instead of DialNTCP2 so we can control the dial.
+// The TCP dial uses a 10 s context deadline (reduced from 30 s; P0.2) which is
+// sufficient for reachable peers and avoids holding goroutines for 30 s against
+// hosts that silently drop SYN packets.
 //
 // Spec reference: https://geti2p.net/spec/ntcp2#probing-resistance
 func (t *NTCP2Transport) performNTCP2Handshake(ntcp2Addr net.Addr, tcpAddrString string, peerHashBytes []byte, config *ntcp2.NTCP2Config, tcpDialStart time.Time) (*ntcp2.NTCP2Conn, error) {
 	t.logger.WithField("remote_addr", ntcp2Addr.String()).Info("Dialing NTCP2 connection")
 
-	// Phase 1a: TCP dial with a 30 s deadline so we don't wait ~135 s for
-	// the kernel connect timeout on silently-dropping hosts (AUDIT FIX-3 / RC-D).
-	dialCtx, dialCancel := context.WithTimeout(t.ctx, 30*time.Second)
+	// Phase 1a: TCP dial with a 10 s deadline (P0.2: reduced from 30 s to avoid
+	// blocking goroutines for 30 s against hosts that silently drop SYN packets).
+	dialCtx, dialCancel := context.WithTimeout(t.ctx, 10*time.Second)
 	defer dialCancel()
 	tcpDialer := &net.Dialer{}
 	tcpConn, err := tcpDialer.DialContext(dialCtx, "tcp", tcpAddrString)

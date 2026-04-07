@@ -364,6 +364,13 @@ func buildNTCP2Transport(r *Router, ri *router_info.RouterInfo) (*ntcp.NTCP2Tran
 	ntcp2Transport.UpdateLocalRouterInfo(*ri)
 	log.WithField("at", "buildNTCP2Transport").Debug("RouterInfo re-signed with NTCP2 address and pushed to transport")
 
+	// P1.1: Verify that the static key we use in Noise handshakes matches the
+	// public key we published in the RouterInfo "s=" option.  A mismatch causes
+	// 100% outbound NTCP2 handshake failures and makes us unreachable to peers.
+	if err := ntcp.VerifyStaticKeyConsistency(ntcp2Transport, *ri); err != nil {
+		return nil, fmt.Errorf("NTCP2 static key consistency check failed: %w", err)
+	}
+
 	return ntcp2Transport, nil
 }
 

@@ -1,12 +1,14 @@
 package ntcp2
 
 import (
+	"bytes"
 	"encoding/base64"
 	"fmt"
 	"strings"
 
 	"github.com/go-i2p/common/router_address"
 	"github.com/go-i2p/common/router_info"
+	i2pcurve25519 "github.com/go-i2p/crypto/curve25519"
 	"github.com/go-i2p/go-noise/ntcp2"
 )
 
@@ -115,5 +117,55 @@ func ConfigureDialConfig(config *ntcp2.NTCP2Config, peerInfo router_info.RouterI
 		log.WithField("iv_len", len(iv)).Debug("Configured peer IV for AES obfuscation")
 	}
 
+	return nil
+}
+
+// VerifyStaticKeyConsistency checks that the Noise static private key stored in the
+// transport config produces the same public key that was published in the NTCP2
+// RouterInfo "s=" option.
+//
+// A mismatch means every remote peer will reject our Noise message 1 immediately
+// after verifying our static key, causing 100% outbound NTCP2 handshake failures
+// and making us unreachable to all NTCP2 peers.
+//
+// Should be called once at startup after the RouterInfo has been built and signed.
+// Returns a descriptive error (with both keys base64-encoded) if a mismatch is found.
+func VerifyStaticKeyConsistency(transport *NTCP2Transport, identity router_info.RouterInfo) error {
+	if transport.config == nil || transport.config.NTCP2Config == nil {
+		return fmt.Errorf("transport config is not initialized")
+	}
+	privKeyBytes := transport.config.NTCP2Config.StaticKey
+	if len(privKeyBytes) != 32 {
+		return fmt.Errorf("static key is not 32 bytes: got %d", len(privKeyBytes))
+	}
+
+	// Derive the public key from the live Noise static private key.
+	privKey, err := i2pcurve25519.NewCurve25519PrivateKey(privKeyBytes)
+	if err != nil {
+		return fmt.Errorf("failed to create Curve25519 private key from static key: %w", err)
+	}
+	pubKey, err := privKey.Public()
+	if err != nil {
+		return fmt.Errorf("failed to derive public key from static private key: %w", err)
+	}
+	livePublicKey := pubKey.Bytes()
+
+	// Extract the public key published in the RouterInfo NTCP2 "s=" option.
+	publishedPublicKey, err := ExtractPeerStaticKey(identity)
+	if err != nil {
+		return fmt.Errorf("failed to extract static key from local RouterInfo: %w", err)
+	}
+
+	if !bytes.Equal(livePublicKey, publishedPublicKey) {
+		return fmt.Errorf(
+			"NTCP2 static key mismatch: live Noise public key %s does not match published RouterInfo key %s — "+
+				"every peer will reject our handshake; check that the encryption key in RouterInfoKeystore matches "+
+				"the key used when the RouterInfo was built",
+			base64.StdEncoding.EncodeToString(livePublicKey),
+			base64.StdEncoding.EncodeToString(publishedPublicKey),
+		)
+	}
+
+	log.WithField("at", "VerifyStaticKeyConsistency").Debug("NTCP2 static key consistency verified: live key matches published RouterInfo")
 	return nil
 }

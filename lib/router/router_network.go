@@ -837,7 +837,6 @@ func (r *Router) logSessionEstablishmentFailure(hash common.Hash, routerInfo *ro
 		"address_count": len(routerInfo.RouterAddresses()),
 		"has_ntcp2":     hasNTCP2Address(*routerInfo),
 	}).Error("failed to get session")
-	log.WithError(err).WithField("peer_hash", fmt.Sprintf("%x", hash[:8])).Error("Failed to establish outbound session")
 }
 
 // logRouterInfoTimeout logs timeout events when waiting for RouterInfo from NetDB.

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -588,8 +589,14 @@ func (s *NTCP2Session) readNextMessage(unframer *I2NPUnframer) (i2np.I2NPMessage
 }
 
 // handleReceiveError handles errors that occur during message receiving.
+// P2.2: EOF is a normal peer-closed-connection event; log it at Warn level
+// rather than Error to avoid flooding logs during ordinary churn.
 func (s *NTCP2Session) handleReceiveError(err error) {
-	s.logger.WithError(err).Error("Failed to read message from connection")
+	if errors.Is(err, io.EOF) {
+		s.logger.WithError(err).Warn("Connection closed by remote peer (EOF)")
+	} else {
+		s.logger.WithError(err).Error("Failed to read message from connection")
+	}
 	s.setError(WrapNTCP2Error(err, "reading message"))
 }
 

@@ -316,6 +316,13 @@ func ExtractIntroducers(addr *router_address.RouterAddress) []IntroducerAddr {
 	now := time.Now().Unix()
 	var result []IntroducerAddr
 	for i := router_address.MIN_INTRODUCER_NUMBER; i <= router_address.MAX_INTRODUCER_NUMBER; i++ {
+		// P2.1: Guard against the false-positive ERROR that I2PString.Length()
+		// emits when an option key is absent.  CheckOption is a pure map
+		// lookup and never logs; only call IntroducerHashString when the
+		// option actually exists.
+		if !addr.CheckOption(router_address.INTRODUCER_HASH_PREFIX + strconv.Itoa(i)) {
+			continue
+		}
 		hashStr, err := addr.IntroducerHashString(i).Data()
 		if err != nil || hashStr == "" {
 			continue

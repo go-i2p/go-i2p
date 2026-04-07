@@ -20,6 +20,13 @@ type PeerConnNotifier interface {
 	RecordSuccess(hash common.Hash, responseTimeMs int64)
 	// RecordFailure is called when a dial or handshake fails.
 	RecordFailure(hash common.Hash, reason string)
+	// RecordPermanentFailure is called when a peer is structurally unreachable
+	// (e.g. IPv6-only peer with no local IPv6 connectivity, or a malformed
+	// RouterInfo with no valid address).  It immediately advances the peer's
+	// consecutive-failure counter to the staleness threshold so that
+	// IsLikelyStale() returns true on the very next hop-selection pass,
+	// preventing repeated wasted dial attempts.
+	RecordPermanentFailure(hash common.Hash, reason string)
 }
 
 // RouterInfoRefresher allows transport layers to request a stale RouterInfo
