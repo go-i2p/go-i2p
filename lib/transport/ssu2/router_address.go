@@ -13,6 +13,7 @@ import (
 	"github.com/go-i2p/common/router_address"
 	"github.com/go-i2p/common/router_info"
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
+	"golang.org/x/crypto/curve25519"
 )
 
 // SupportsSSU2 checks if a RouterInfo has an SSU2 transport address.
@@ -257,9 +258,16 @@ func addIntroKeyOption(options map[string]string, transport *SSU2Transport) {
 }
 
 // addStaticKeyOption adds the static key option if configured.
+// The SSU2Config.StaticKey contains the X25519 PRIVATE key. The SSU2 spec
+// requires publishing the corresponding PUBLIC key as the 's=' parameter.
+// This mirrors the NTCP2 pattern in ntcp2/router_address.go.
 func addStaticKeyOption(options map[string]string, transport *SSU2Transport) {
 	if transport.config != nil && transport.config.SSU2Config != nil && len(transport.config.SSU2Config.StaticKey) == 32 {
-		options[router_address.STATIC_KEY_OPTION_KEY] = encodeBase64(transport.config.SSU2Config.StaticKey)
+		pub, err := curve25519.X25519(transport.config.SSU2Config.StaticKey, curve25519.Basepoint)
+		if err != nil {
+			return
+		}
+		options[router_address.STATIC_KEY_OPTION_KEY] = encodeBase64(pub)
 	}
 }
 
