@@ -65,14 +65,14 @@ func createTestTransport(t *testing.T, listenAddr string) *NTCP2Transport {
 }
 
 // assertValidNTCP2RouterAddress verifies the common fields of a converted RouterAddress:
-// transport style is "ntcp2", host/port are set, and static key is valid base64.
+// transport style is "NTCP2", host/port are set, and static key is valid base64.
 func assertValidNTCP2RouterAddress(t *testing.T, routerAddr *router_address.RouterAddress) {
 	t.Helper()
 
 	style := routerAddr.TransportStyle()
 	styleData, err := style.Data()
 	require.NoError(t, err)
-	assert.Equal(t, "ntcp2", styleData)
+	assert.Equal(t, router_address.NTCP2_TRANSPORT_STYLE, styleData)
 
 	host, err := routerAddr.Host()
 	require.NoError(t, err)

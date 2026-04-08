@@ -97,7 +97,7 @@ func logConversionSuccess(host, port string) {
 // - Static public key from the NTCP2 configuration
 // - Initialization vector (IV) for AES obfuscation
 //
-// Returns a RouterAddress with transport style "ntcp2" and all required options,
+// Returns a RouterAddress with transport style "NTCP2" and all required options,
 // or an error if address extraction or conversion fails.
 func ConvertToRouterAddress(transport *NTCP2Transport) (*router_address.RouterAddress, error) {
 	logConversionStart()
@@ -125,8 +125,7 @@ func ConvertToRouterAddress(transport *NTCP2Transport) (*router_address.RouterAd
 		return nil, err
 	}
 
-	expiration := time.Now().Add(2 * time.Hour)
-	routerAddress, err := router_address.NewRouterAddress(10, expiration, "ntcp2", options)
+	routerAddress, err := router_address.NewRouterAddress(10, time.Time{}, router_address.NTCP2_TRANSPORT_STYLE, options)
 	if err != nil {
 		logRouterAddressCreationError(err)
 		return nil, fmt.Errorf("failed to create RouterAddress: %w", err)
