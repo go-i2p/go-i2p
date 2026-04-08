@@ -690,7 +690,14 @@ func (s *NTCP2Session) DroppedMessages() uint64 {
 func (s *NTCP2Session) setError(err error) {
 	s.errorOnce.Do(func() {
 		s.lastError = err
-		s.logger.WithError(err).Error("Session error")
+		// EOF indicates the remote peer closed the connection — this is normal
+		// peer churn, not an error condition. Log at Warn to avoid flooding
+		// the error log with non-actionable entries.
+		if errors.Is(err, io.EOF) {
+			s.logger.WithError(err).Warn("Session closed by remote peer")
+		} else {
+			s.logger.WithError(err).Error("Session error")
+		}
 		s.cancel()
 	})
 }

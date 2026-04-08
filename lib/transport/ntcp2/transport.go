@@ -869,11 +869,18 @@ func (t *NTCP2Transport) logHandshakeFailure(tcpAddrString string, peerHashBytes
 		return
 	}
 
-	t.logger.WithFields(fields).Error("Failed to dial NTCP2 connection")
+	// Handshake rejections (EOF / connection reset during noise handshake) are
+	// expected when a new router joins the network — remote peers may not
+	// recognise our identity and close immediately. Log at Warn, not Error.
+	isExpectedRejection := errorType == "handshake_rejected_eof" || errorType == "connection_reset"
+	if isExpectedRejection {
+		t.logger.WithFields(fields).Warn("NTCP2 handshake rejected by peer")
+	} else {
+		t.logger.WithFields(fields).Error("Failed to dial NTCP2 connection")
+	}
 
 	if isTCPFailure {
-		t.logger.Errorf("TCP connection FAILED to %s after %dms: %v (type: %s)",
-			tcpAddrString, handshakeDuration.Milliseconds(), err, errorType)
+		t.logger.WithFields(fields).Debug("TCP connection failed (details in structured fields above)")
 	}
 }
 
@@ -898,6 +905,10 @@ func classifyDialError(err error) string {
 		// "no route to host"). Must come after the more specific "network is
 		// unreachable" check above.
 		return "host_unreachable"
+	case strings.Contains(errStr, "EOF"):
+		return "handshake_rejected_eof"
+	case strings.Contains(errStr, "connection reset"):
+		return "connection_reset"
 	case strings.Contains(errStr, "handshake"):
 		return "handshake_failed"
 	case strings.Contains(errStr, "context canceled"):
