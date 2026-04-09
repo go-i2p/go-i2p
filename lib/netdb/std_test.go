@@ -70,8 +70,8 @@ func TestStdNetDB_StoreRouterInfo_ParseError(t *testing.T) {
 	if err == nil {
 		t.Error("Expected error for invalid RouterInfo data, got nil")
 	}
-	if err != nil && !containsString(err.Error(), "failed to parse RouterInfo") {
-		t.Errorf("Expected error about parsing RouterInfo, got: %v", err)
+	if err != nil && !containsString(err.Error(), "failed to decompress RouterInfo") && !containsString(err.Error(), "failed to parse RouterInfo") {
+		t.Errorf("Expected error about decompressing or parsing RouterInfo, got: %v", err)
 	}
 }
 
@@ -90,8 +90,8 @@ func TestStdNetDB_StoreRouterInfo_EmptyData(t *testing.T) {
 	if err == nil {
 		t.Error("Expected error for empty data, got nil")
 	}
-	if err != nil && !containsString(err.Error(), "failed to parse RouterInfo") {
-		t.Errorf("Expected error about parsing RouterInfo, got: %v", err)
+	if err != nil && !containsString(err.Error(), "failed to decompress RouterInfo") && !containsString(err.Error(), "failed to parse RouterInfo") {
+		t.Errorf("Expected error about decompressing or parsing RouterInfo, got: %v", err)
 	}
 }
 

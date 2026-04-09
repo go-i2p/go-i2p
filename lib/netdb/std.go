@@ -694,7 +694,15 @@ func (db *StdNetDB) StoreRouterInfoFromMessage(key common.Hash, data []byte, dat
 		return err
 	}
 
-	ri, err := parseRouterInfoData(data)
+	// DatabaseStore RouterInfo payload is: [2-byte compressed length][gzip data]
+	// Must decompress before parsing per I2P spec.
+	decompressed, err := decompressRouterInfoPayload(data)
+	if err != nil {
+		log.WithError(err).Error("Failed to decompress RouterInfo from DatabaseStore")
+		return oops.Errorf("failed to decompress RouterInfo: %w", err)
+	}
+
+	ri, err := parseRouterInfoData(decompressed)
 	if err != nil {
 		return err
 	}
