@@ -18,6 +18,10 @@ import (
 // across all muxed transports. This prevents resource exhaustion under heavy load.
 const DefaultMaxConnections = 1024
 
+// peerCooldown is how long to suppress connection attempts to a peer after all
+// transports failed. This avoids flooding the network with doomed dials.
+const peerCooldown = 60 * time.Second
+
 // Compile-time check that TransportMuxer implements Transport interface
 var _ Transport = (*TransportMuxer)(nil)
 
@@ -33,6 +37,12 @@ type TransportMuxer struct {
 
 	// activeSessionCount tracks the number of currently active sessions
 	activeSessionCount int32 // atomic
+
+	// failedPeers records the last failure time for peers whose transports all
+	// failed. GetSession skips peers still inside the cooldown window to avoid
+	// repeatedly dialling unreachable routers (RCA-3 / AUDIT.md).
+	failedPeers    map[[32]byte]time.Time
+	peerCooldownMu sync.Mutex
 
 	// acceptChan is a persistent channel fed by long-lived accept goroutines.
 	// Lazily initialised by ensureAcceptLoop. Connections arriving here are
@@ -59,7 +69,8 @@ func Mux(t ...Transport) (tmux *TransportMuxer) {
 		"transport_count": len(t),
 	}).Debug("creating new TransportMuxer")
 	tmux = &TransportMuxer{
-		acceptDone: make(chan struct{}),
+		acceptDone:  make(chan struct{}),
+		failedPeers: make(map[[32]byte]time.Time),
 	}
 	tmux.trans = append(tmux.trans, t...)
 	log.WithFields(logger.Fields{
@@ -271,7 +282,7 @@ func (tmux *TransportMuxer) tryGetSessionFromTransport(t Transport, routerInfo r
 			"error":           err.Error(),
 			"impact":          "cannot communicate with this peer via this transport",
 			"addresses":       len(routerInfo.RouterAddresses()),
-		}).Error("transport session failed, trying next transport")
+		}).Warn("transport session failed, trying next transport")
 		return nil, err
 	}
 
@@ -320,6 +331,8 @@ func (tmux *TransportMuxer) logAllTransportsFailed(routerInfo router_info.Router
 	peerHash, _ := routerInfo.IdentHash()
 	addressTypes := collectAddressTypes(routerInfo)
 
+	tmux.recordPeerFailure(peerHash)
+
 	log.WithFields(logger.Fields{
 		"at":             "(TransportMuxer) GetSession",
 		"phase":          "session_establishment",
@@ -328,9 +341,34 @@ func (tmux *TransportMuxer) logAllTransportsFailed(routerInfo router_info.Router
 		"num_transports": len(tmux.trans),
 		"addresses":      len(routerInfo.RouterAddresses()),
 		"address_types":  addressTypes,
+		"cooldown":       peerCooldown.String(),
 		"impact":         "peer unreachable via all compatible transports",
 		"diagnosis":      "all compatible transport handshakes or dials failed; check individual transport warnings above",
-	}).Error("failed to get session - all compatible transports failed")
+	}).Warn("failed to get session - all compatible transports failed")
+}
+
+// isPeerCoolingDown returns true if we recently failed to reach this peer and
+// should skip retrying until the cooldown expires.
+func (tmux *TransportMuxer) isPeerCoolingDown(peerHash [32]byte) bool {
+	tmux.peerCooldownMu.Lock()
+	defer tmux.peerCooldownMu.Unlock()
+
+	if failTime, ok := tmux.failedPeers[peerHash]; ok {
+		if time.Since(failTime) < peerCooldown {
+			return true
+		}
+		delete(tmux.failedPeers, peerHash)
+	}
+	return false
+}
+
+// recordPeerFailure marks a peer as recently failed so future GetSession calls
+// are suppressed for the cooldown window.
+func (tmux *TransportMuxer) recordPeerFailure(peerHash [32]byte) {
+	tmux.peerCooldownMu.Lock()
+	defer tmux.peerCooldownMu.Unlock()
+
+	tmux.failedPeers[peerHash] = time.Now()
 }
 
 // get a transport session given a router info
@@ -339,6 +377,18 @@ func (tmux *TransportMuxer) logAllTransportsFailed(routerInfo router_info.Router
 // return nil and ErrConnectionPoolFull if the connection limit has been reached
 func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s TransportSession, err error) {
 	peerHash, _ := routerInfo.IdentHash()
+
+	// Skip peers that recently failed all transports (cooldown window).
+	if tmux.isPeerCoolingDown(peerHash) {
+		log.WithFields(logger.Fields{
+			"at":        "(TransportMuxer) GetSession",
+			"reason":    "peer_cooldown",
+			"peer_hash": fmt.Sprintf("%x...", peerHash[:8]),
+			"cooldown":  peerCooldown.String(),
+		}).Debug("skipping peer still in cooldown")
+		return nil, ErrNoTransportAvailable
+	}
+
 	log.WithFields(logger.Fields{
 		"at":             "(TransportMuxer) GetSession",
 		"reason":         "attempting_peer_connection",

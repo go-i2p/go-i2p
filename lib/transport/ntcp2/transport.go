@@ -876,7 +876,7 @@ func (t *NTCP2Transport) logHandshakeFailure(tcpAddrString string, peerHashBytes
 	if isExpectedRejection {
 		t.logger.WithFields(fields).Warn("NTCP2 handshake rejected by peer")
 	} else {
-		t.logger.WithFields(fields).Error("Failed to dial NTCP2 connection")
+		t.logger.WithFields(fields).Warn("Failed to dial NTCP2 connection")
 	}
 
 	if isTCPFailure {

@@ -390,11 +390,17 @@ func (r *Router) createSessionFromConn(conn net.Conn) (*ntcp.NTCP2Session, commo
 	return session, peerHash, nil
 }
 
+// i2npReader is a transport session that supports reading inbound I2NP messages.
+// Both NTCP2Session and SSU2Session implement this interface.
+type i2npReader interface {
+	ReadNextI2NP() (i2np.I2NPMessage, error)
+}
+
 // processSessionMessages reads and processes I2NP messages from a single session.
 // This method runs in a dedicated goroutine for each active session,
 // continuously reading messages until the session closes or the router stops.
 // Message processing errors are logged but don't terminate the session.
-func (r *Router) processSessionMessages(session *ntcp.NTCP2Session, peerHash common.Hash) {
+func (r *Router) processSessionMessages(session i2npReader, peerHash common.Hash) {
 	defer log.WithField("peer_hash", fmt.Sprintf("%x", peerHash[:8])).Debug("Session message processor stopped")
 
 	for r.shouldContinueMonitoring() {
@@ -408,7 +414,7 @@ func (r *Router) processSessionMessages(session *ntcp.NTCP2Session, peerHash com
 
 // readNextMessage reads the next I2NP message from the session.
 // Returns nil if an error occurs or the session is closed.
-func (r *Router) readNextMessage(session *ntcp.NTCP2Session, peerHash common.Hash) i2np.I2NPMessage {
+func (r *Router) readNextMessage(session i2npReader, peerHash common.Hash) i2np.I2NPMessage {
 	msg, err := session.ReadNextI2NP()
 	if err != nil {
 		r.logReadError(err, peerHash)
@@ -818,11 +824,32 @@ func (r *Router) validateTransportMuxer(hash common.Hash) error {
 	return nil
 }
 
-// registerNewSession stores a newly established session if it's an NTCP2 session.
+// registerNewSession stores a newly established session and starts a reader
+// goroutine so that inbound I2NP messages on outbound sessions are processed.
+// Without the reader goroutine, messages (e.g. tunnel build replies) pile up in
+// the session's recvChan and are never consumed, which was the root cause of
+// zero operational tunnels (RCA-1 / AUDIT.md).
 func (r *Router) registerNewSession(hash common.Hash, transportSession i2np.I2NPTransportSession) {
-	if ntcp2Session, ok := transportSession.(*ntcp.NTCP2Session); ok {
-		r.addSession(hash, ntcp2Session)
-		log.WithField("peer_hash", fmt.Sprintf("%x", hash[:8])).Info("Established and registered new outbound session")
+	switch s := transportSession.(type) {
+	case *ntcp.NTCP2Session:
+		r.addSession(hash, s)
+		r.wg.Add(1)
+		go func() {
+			defer r.wg.Done()
+			r.processSessionMessages(s, hash)
+		}()
+		log.WithField("peer_hash", fmt.Sprintf("%x", hash[:8])).Info("Established and registered new outbound NTCP2 session")
+	case *ssu2.SSU2Session:
+		// SSU2 sessions are not stored in activeSessions (NTCP2-typed map)
+		// but still need a reader goroutine for inbound I2NP messages.
+		r.wg.Add(1)
+		go func() {
+			defer r.wg.Done()
+			r.processSessionMessages(s, hash)
+		}()
+		log.WithField("peer_hash", fmt.Sprintf("%x", hash[:8])).Info("Established and registered new outbound SSU2 session")
+	default:
+		log.WithField("peer_hash", fmt.Sprintf("%x", hash[:8])).Warn("Unknown transport session type, cannot start reader goroutine")
 	}
 }
 
