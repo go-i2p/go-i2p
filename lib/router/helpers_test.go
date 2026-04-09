@@ -9,7 +9,7 @@ import (
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/i2cp"
-	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
+	"github.com/go-i2p/go-i2p/lib/transport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -244,7 +244,7 @@ func setupInboundHandlerWithSession(t *testing.T) (*InboundMessageHandler, uint1
 // --- Session helpers ---
 
 // addAndAssertSession adds a session to the router and verifies retrieval.
-func addAndAssertSession(t *testing.T, router *Router, hash common.Hash, session *ntcp.NTCP2Session) {
+func addAndAssertSession(t *testing.T, router *Router, hash common.Hash, session transport.TransportSession) {
 	t.Helper()
 	router.addSession(hash, session)
 	retrieved, err := router.getSessionByHash(hash)

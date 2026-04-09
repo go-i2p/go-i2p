@@ -8,6 +8,7 @@ import (
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/netdb"
+	"github.com/go-i2p/go-i2p/lib/transport"
 	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -17,7 +18,7 @@ import (
 func TestRouterSessionTracking(t *testing.T) {
 	// Create a router with minimal setup for session testing
 	router := &Router{
-		activeSessions: make(map[common.Hash]*ntcp.NTCP2Session),
+		activeSessions: make(map[common.Hash]transport.TransportSession),
 	}
 
 	// Create mock peer hashes
@@ -59,7 +60,7 @@ func TestRouterSessionTracking(t *testing.T) {
 // TestGetSessionByHash tests session retrieval scenarios
 func TestGetSessionByHash(t *testing.T) {
 	router := &Router{
-		activeSessions: make(map[common.Hash]*ntcp.NTCP2Session),
+		activeSessions: make(map[common.Hash]transport.TransportSession),
 	}
 
 	// Test retrieving non-existent session
@@ -82,7 +83,7 @@ func TestGetSessionByHash(t *testing.T) {
 // TestSessionThreadSafety tests concurrent session operations
 func TestSessionThreadSafety(t *testing.T) {
 	router := &Router{
-		activeSessions: make(map[common.Hash]*ntcp.NTCP2Session),
+		activeSessions: make(map[common.Hash]transport.TransportSession),
 	}
 
 	const numGoroutines = 10
@@ -143,7 +144,7 @@ func TestSessionThreadSafety(t *testing.T) {
 // TestRouterImplementsSessionProvider verifies Router implements SessionProvider interface
 func TestRouterImplementsSessionProvider(t *testing.T) {
 	router := &Router{
-		activeSessions: make(map[common.Hash]*ntcp.NTCP2Session),
+		activeSessions: make(map[common.Hash]transport.TransportSession),
 		running:        true, // Mark as running to allow session operations
 	}
 
@@ -172,7 +173,7 @@ func TestGetSessionByHashWithNonExistentPeer(t *testing.T) {
 	tempDir := t.TempDir()
 
 	router := &Router{
-		activeSessions: make(map[common.Hash]*ntcp.NTCP2Session),
+		activeSessions: make(map[common.Hash]transport.TransportSession),
 		StdNetDB:       netdb.NewStdNetDB(tempDir),
 		running:        true, // Mark as running to allow session operations
 	}
@@ -194,7 +195,7 @@ func TestGetSessionByHashWithNonExistentPeer(t *testing.T) {
 // TestSessionReplacement tests that adding a session with the same hash replaces the old one
 func TestSessionReplacement(t *testing.T) {
 	router := &Router{
-		activeSessions: make(map[common.Hash]*ntcp.NTCP2Session),
+		activeSessions: make(map[common.Hash]transport.TransportSession),
 	}
 
 	peerHash := common.Hash{}
@@ -232,7 +233,7 @@ func TestSessionReplacement(t *testing.T) {
 // TestMultipleSessionRemoval tests that removing a session multiple times is safe
 func TestMultipleSessionRemoval(t *testing.T) {
 	router := &Router{
-		activeSessions: make(map[common.Hash]*ntcp.NTCP2Session),
+		activeSessions: make(map[common.Hash]transport.TransportSession),
 	}
 
 	peerHash := common.Hash{}
@@ -269,7 +270,7 @@ func TestSessionMapInitialization(t *testing.T) {
 	assert.Nil(t, router.activeSessions, "activeSessions can be nil initially")
 
 	// Initialize the map properly
-	router.activeSessions = make(map[common.Hash]*ntcp.NTCP2Session)
+	router.activeSessions = make(map[common.Hash]transport.TransportSession)
 	assert.NotNil(t, router.activeSessions, "activeSessions should be initialized")
 
 	// Now operations should work
@@ -286,7 +287,7 @@ func TestSessionMapInitialization(t *testing.T) {
 // BenchmarkAddSession benchmarks session addition performance
 func BenchmarkAddSession(b *testing.B) {
 	router := &Router{
-		activeSessions: make(map[common.Hash]*ntcp.NTCP2Session),
+		activeSessions: make(map[common.Hash]transport.TransportSession),
 	}
 
 	// Use nil sessions for benchmarking - we're testing map operations, not session functionality
@@ -309,7 +310,7 @@ func BenchmarkAddSession(b *testing.B) {
 // BenchmarkGetSession benchmarks session retrieval performance
 func BenchmarkGetSession(b *testing.B) {
 	router := &Router{
-		activeSessions: make(map[common.Hash]*ntcp.NTCP2Session),
+		activeSessions: make(map[common.Hash]transport.TransportSession),
 	}
 
 	// Add 1000 nil sessions for benchmarking map retrieval
@@ -331,7 +332,7 @@ func BenchmarkGetSession(b *testing.B) {
 // BenchmarkRemoveSession benchmarks session removal performance
 func BenchmarkRemoveSession(b *testing.B) {
 	router := &Router{
-		activeSessions: make(map[common.Hash]*ntcp.NTCP2Session),
+		activeSessions: make(map[common.Hash]transport.TransportSession),
 	}
 
 	hashes := make([]common.Hash, b.N)

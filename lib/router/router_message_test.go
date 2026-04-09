@@ -10,7 +10,7 @@ import (
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/i2np"
-	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
+	"github.com/go-i2p/go-i2p/lib/transport"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -139,7 +139,7 @@ func TestRouteMessageSwitchStatement(t *testing.T) {
 // has invalid address type.
 func TestCreateSessionFromConnInvalidAddr(t *testing.T) {
 	router := &Router{
-		activeSessions: make(map[common.Hash]*ntcp.NTCP2Session),
+		activeSessions: make(map[common.Hash]transport.TransportSession),
 	}
 
 	// Create a mock connection with wrong address type

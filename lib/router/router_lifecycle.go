@@ -6,6 +6,7 @@ import (
 	"time"
 
 	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/go-i2p/lib/transport"
 	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
 
 	"github.com/go-i2p/logger"
@@ -517,7 +518,7 @@ func (r *Router) clearActiveSessions() {
 	sessions := r.activeSessions
 	// Replace with empty map instead of nil to prevent panics from
 	// async session cleanup callbacks that may call delete() after shutdown.
-	r.activeSessions = make(map[common.Hash]*ntcp.NTCP2Session)
+	r.activeSessions = make(map[common.Hash]transport.TransportSession)
 	r.sessionMutex.Unlock()
 
 	sessionCount := len(sessions)
@@ -528,7 +529,7 @@ func (r *Router) clearActiveSessions() {
 				"phase":     "finalization",
 				"peer_hash": fmt.Sprintf("%x", hash[:8]),
 				"error":     err.Error(),
-			}).Warn("failed to close NTCP2 session during shutdown")
+			}).Warn("failed to close transport session during shutdown")
 		}
 	}
 

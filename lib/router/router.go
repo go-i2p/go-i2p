@@ -53,8 +53,8 @@ type Router struct {
 	// cancel cancels the router's context, triggering graceful shutdown
 	cancel context.CancelFunc
 
-	// Session tracking for NTCP2 message routing
-	activeSessions map[common.Hash]*ntcp.NTCP2Session
+	// Session tracking for transport message routing (NTCP2 and SSU2)
+	activeSessions map[common.Hash]transport.TransportSession
 	// sessionMutex protects concurrent access to activeSessions map
 	sessionMutex sync.RWMutex
 

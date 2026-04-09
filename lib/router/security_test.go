@@ -16,6 +16,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/netdb"
+	"github.com/go-i2p/go-i2p/lib/transport"
 	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/stretchr/testify/assert"
@@ -673,7 +674,7 @@ func TestErrorRecovery_StopWithoutStart(t *testing.T) {
 // TestSessionManagement_ThreadSafety verifies concurrent session access
 func TestSessionManagement_ThreadSafety(t *testing.T) {
 	router := &Router{
-		activeSessions: make(map[common.Hash]*ntcp.NTCP2Session),
+		activeSessions: make(map[common.Hash]transport.TransportSession),
 	}
 
 	var wg sync.WaitGroup
@@ -713,7 +714,7 @@ func TestSessionManagement_ThreadSafety(t *testing.T) {
 // TestSessionManagement_SessionReplacement verifies session replacement behavior
 func TestSessionManagement_SessionReplacement(t *testing.T) {
 	router := &Router{
-		activeSessions: make(map[common.Hash]*ntcp.NTCP2Session),
+		activeSessions: make(map[common.Hash]transport.TransportSession),
 	}
 
 	var hash common.Hash

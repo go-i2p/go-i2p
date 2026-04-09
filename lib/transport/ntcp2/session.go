@@ -589,15 +589,35 @@ func (s *NTCP2Session) readNextMessage(unframer *I2NPUnframer) (i2np.I2NPMessage
 }
 
 // handleReceiveError handles errors that occur during message receiving.
-// P2.2: EOF is a normal peer-closed-connection event; log it at Warn level
-// rather than Error to avoid flooding logs during ordinary churn.
+// P2.2: EOF, timeouts, and connection resets are normal peer-churn events;
+// log at Warn instead of Error to avoid flooding logs.
 func (s *NTCP2Session) handleReceiveError(err error) {
-	if errors.Is(err, io.EOF) {
+	switch {
+	case errors.Is(err, io.EOF):
 		s.logger.WithError(err).Warn("Connection closed by remote peer (EOF)")
-	} else {
+	case errors.Is(err, net.ErrClosed):
+		s.logger.WithError(err).Warn("Read on closed connection")
+	case isTimeoutOrReset(err):
+		s.logger.WithError(err).Warn("Connection lost (timeout or reset)")
+	default:
 		s.logger.WithError(err).Error("Failed to read message from connection")
 	}
 	s.setError(WrapNTCP2Error(err, "reading message"))
+}
+
+// isTimeoutOrReset returns true for network errors that indicate normal
+// connection churn: read timeouts and connection resets by peer.
+func isTimeoutOrReset(err error) bool {
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
+	}
+	var opErr *net.OpError
+	if errors.As(err, &opErr) {
+		return opErr.Err.Error() == "connection reset by peer" ||
+			opErr.Err.Error() == "read: connection reset by peer"
+	}
+	return false
 }
 
 // queueReceivedMessage attempts to queue a received message to the receive channel.

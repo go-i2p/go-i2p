@@ -749,6 +749,13 @@ type trackedSession struct {
 	released int32 // atomic; 1 = already released
 }
 
+// Unwrap returns the underlying TransportSession without the tracking wrapper.
+// This allows callers (e.g. registerNewSession) to type-assert the concrete
+// session type (NTCP2Session, SSU2Session) for protocol-specific handling.
+func (ts *trackedSession) Unwrap() TransportSession {
+	return ts.TransportSession
+}
+
 // Close closes the underlying session and decrements the active session
 // counter exactly once, even if Close is called multiple times.
 func (ts *trackedSession) Close() error {

@@ -15,6 +15,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/naming"
 	"github.com/go-i2p/go-i2p/lib/netdb"
+	"github.com/go-i2p/go-i2p/lib/transport"
 	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
 	ssu2 "github.com/go-i2p/go-i2p/lib/transport/ssu2"
 	ntcp2 "github.com/go-i2p/go-noise/ntcp2"
@@ -215,7 +216,7 @@ func (r *Router) runMainLoop() {
 // run i2p router mainloop
 func (r *Router) mainloop() {
 	// Initialize active sessions map for tracking NTCP2 connections
-	r.activeSessions = make(map[common.Hash]*ntcp.NTCP2Session)
+	r.activeSessions = make(map[common.Hash]transport.TransportSession)
 	log.WithField("at", "mainloop").Debug("initialized active sessions map")
 
 	log.WithField("at", "mainloop").Debug("step 1: initializing core components (NetDB, I2CP, I2PControl)")
@@ -558,7 +559,7 @@ func (r *Router) parseDatabaseLookupMessage(msg i2np.I2NPMessage) (*i2np.Databas
 // This method is called when a new NTCP2 connection is established,
 // allowing the router to track active sessions for message routing.
 // Thread-safe for concurrent access. No-ops if the session map is nil (after shutdown).
-func (r *Router) addSession(peerHash common.Hash, session *ntcp.NTCP2Session) {
+func (r *Router) addSession(peerHash common.Hash, session transport.TransportSession) {
 	r.sessionMutex.Lock()
 	defer r.sessionMutex.Unlock()
 
@@ -707,7 +708,7 @@ func (r *Router) removeSession(peerHash common.Hash) {
 // getSessionByHash retrieves a session for a specific peer.
 // Returns an error if no active session exists for the given peer hash.
 // Thread-safe for concurrent read access using RWMutex.
-func (r *Router) getSessionByHash(peerHash common.Hash) (*ntcp.NTCP2Session, error) {
+func (r *Router) getSessionByHash(peerHash common.Hash) (transport.TransportSession, error) {
 	r.sessionMutex.RLock()
 	defer r.sessionMutex.RUnlock()
 
@@ -830,6 +831,20 @@ func (r *Router) validateTransportMuxer(hash common.Hash) error {
 // the session's recvChan and are never consumed, which was the root cause of
 // zero operational tunnels (RCA-1 / AUDIT.md).
 func (r *Router) registerNewSession(hash common.Hash, transportSession i2np.I2NPTransportSession) {
+	// Unwrap the trackedSession wrapper from TransportMuxer so the type switch
+	// can match the concrete session type (NTCP2Session, SSU2Session).
+	// Without this, the *trackedSession wrapper causes every case to miss,
+	// falling through to the default branch and preventing reader goroutines
+	// from starting on outbound sessions (see AUDIT-2026-04-09.md RCA-1).
+	type unwrapper interface {
+		Unwrap() transport.TransportSession
+	}
+	if uw, ok := transportSession.(unwrapper); ok {
+		if inner, ok := uw.Unwrap().(i2np.I2NPTransportSession); ok {
+			transportSession = inner
+		}
+	}
+
 	switch s := transportSession.(type) {
 	case *ntcp.NTCP2Session:
 		r.addSession(hash, s)
@@ -840,8 +855,7 @@ func (r *Router) registerNewSession(hash common.Hash, transportSession i2np.I2NP
 		}()
 		log.WithField("peer_hash", fmt.Sprintf("%x", hash[:8])).Info("Established and registered new outbound NTCP2 session")
 	case *ssu2.SSU2Session:
-		// SSU2 sessions are not stored in activeSessions (NTCP2-typed map)
-		// but still need a reader goroutine for inbound I2NP messages.
+		r.addSession(hash, s)
 		r.wg.Add(1)
 		go func() {
 			defer r.wg.Done()

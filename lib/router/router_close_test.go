@@ -7,7 +7,7 @@ import (
 	"time"
 
 	common "github.com/go-i2p/common/data"
-	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
+	"github.com/go-i2p/go-i2p/lib/transport"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -86,7 +86,7 @@ func TestRouterCloseClearsActiveSessions(t *testing.T) {
 	// Manually add a mock session to the active sessions map
 	router.sessionMutex.Lock()
 	if router.activeSessions == nil {
-		router.activeSessions = make(map[common.Hash]*ntcp.NTCP2Session)
+		router.activeSessions = make(map[common.Hash]transport.TransportSession)
 	}
 	testHash := common.Hash{}
 	copy(testHash[:], []byte("test-session-hash-for-testing!!!"))

@@ -9,6 +9,7 @@ import (
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/netdb"
+	"github.com/go-i2p/go-i2p/lib/transport"
 	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,7 +19,7 @@ import (
 func TestRouterSessionProviderInterface(t *testing.T) {
 	// Create a minimal router instance for interface verification
 	router := &Router{
-		activeSessions: make(map[common.Hash]*ntcp.NTCP2Session),
+		activeSessions: make(map[common.Hash]transport.TransportSession),
 	}
 
 	// Verify Router implements i2np.SessionProvider interface
@@ -32,7 +33,7 @@ func TestRouterSessionProviderInterface(t *testing.T) {
 func TestMessageRouterSessionProvider(t *testing.T) {
 	// Create a router with active sessions
 	router := &Router{
-		activeSessions: make(map[common.Hash]*ntcp.NTCP2Session),
+		activeSessions: make(map[common.Hash]transport.TransportSession),
 		running:        true,
 	}
 
@@ -71,7 +72,7 @@ func TestSessionProviderWithNonExistentPeer(t *testing.T) {
 
 	// Create a router with proper NetDB initialization
 	router := &Router{
-		activeSessions: make(map[common.Hash]*ntcp.NTCP2Session),
+		activeSessions: make(map[common.Hash]transport.TransportSession),
 		StdNetDB:       netdb.NewStdNetDB(tempDir),
 		running:        true,
 	}
@@ -100,7 +101,7 @@ func TestInitializeMessageRouterWithSessionProvider(t *testing.T) {
 	// We'll create a minimal router setup to test the initialization flow
 
 	router := &Router{
-		activeSessions: make(map[common.Hash]*ntcp.NTCP2Session),
+		activeSessions: make(map[common.Hash]transport.TransportSession),
 		running:        true,
 	}
 
@@ -132,7 +133,7 @@ func TestInitializeMessageRouterWithSessionProvider(t *testing.T) {
 // TestSessionProviderThreadSafety verifies concurrent access to SessionProvider
 func TestSessionProviderThreadSafety(t *testing.T) {
 	router := &Router{
-		activeSessions: make(map[common.Hash]*ntcp.NTCP2Session),
+		activeSessions: make(map[common.Hash]transport.TransportSession),
 		running:        true,
 	}
 
