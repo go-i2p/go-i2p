@@ -697,15 +697,9 @@ func (p *Pool) executeBuildWithRetry(req *BuildTunnelRequest) (TunnelID, error) 
 			continue
 		}
 
-		lastBuildPeers = p.extractPeerHashes(result)
-
-		if !p.checkTunnelCollision(result.TunnelID, retry, maxRetries) {
-			return result.TunnelID, nil
-		}
-
-		if retry == maxRetries-1 {
-			return 0, oops.Errorf("tunnel ID collision after %d retries", maxRetries)
-		}
+		// BuildTunnelFromRequest already adds the tunnel to the pool,
+		// so return immediately on success.
+		return result.TunnelID, nil
 	}
 
 	return 0, oops.Errorf("tunnel build failed after %d retries", maxRetries)

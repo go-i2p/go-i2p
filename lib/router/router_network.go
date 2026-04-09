@@ -519,15 +519,15 @@ func (r *Router) routeDatabaseLookup(msg i2np.I2NPMessage, mr *i2np.I2NPMessageD
 // This converts the raw I2NP message into a structured DatabaseStore that implements
 // the DatabaseWriter interface for NetDB storage.
 func (r *Router) parseDatabaseStoreMessage(msg i2np.I2NPMessage) (*i2np.DatabaseStore, error) {
-	// Extract payload from BaseI2NPMessage
-	payload, ok := msg.(i2np.PayloadCarrier)
+	// Extract raw message data from BaseI2NPMessage
+	dataCarrier, ok := msg.(i2np.DataCarrier)
 	if !ok {
-		return nil, fmt.Errorf("message does not implement PayloadCarrier interface")
+		return nil, fmt.Errorf("message does not implement DataCarrier interface")
 	}
 
 	// Create DatabaseStore and unmarshal the payload
 	dbStore := &i2np.DatabaseStore{}
-	if err := dbStore.UnmarshalBinary(payload.GetPayload()); err != nil {
+	if err := dbStore.UnmarshalBinary(dataCarrier.GetData()); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal DatabaseStore: %w", err)
 	}
 
@@ -542,11 +542,11 @@ func (r *Router) parseDatabaseStoreMessage(msg i2np.I2NPMessage) (*i2np.Database
 
 // parseDatabaseLookupMessage extracts and parses a DatabaseLookup from a BaseI2NPMessage.
 func (r *Router) parseDatabaseLookupMessage(msg i2np.I2NPMessage) (*i2np.DatabaseLookup, error) {
-	payload, ok := msg.(i2np.PayloadCarrier)
+	dataCarrier, ok := msg.(i2np.DataCarrier)
 	if !ok {
-		return nil, fmt.Errorf("message does not implement PayloadCarrier interface")
+		return nil, fmt.Errorf("message does not implement DataCarrier interface")
 	}
-	dl, err := i2np.ReadDatabaseLookup(payload.GetPayload())
+	dl, err := i2np.ReadDatabaseLookup(dataCarrier.GetData())
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse DatabaseLookup: %w", err)
 	}
