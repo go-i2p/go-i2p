@@ -452,7 +452,8 @@ func (s *NTCP2Session) processNextInboundMessageFromBlocks(unframer *BlockUnfram
 // handleReadResult evaluates a read error and returns true if the loop should continue
 // (e.g. on a read-deadline timeout) or false if the error is fatal.
 func (s *NTCP2Session) handleReadResult(err error) bool {
-	if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
 		s.logger.Debug("Read deadline expired, checking session state")
 		return true
 	}
@@ -713,9 +714,12 @@ func (s *NTCP2Session) setError(err error) {
 		// EOF indicates the remote peer closed the connection — this is normal
 		// peer churn, not an error condition. Log at Warn to avoid flooding
 		// the error log with non-actionable entries.
-		if errors.Is(err, io.EOF) {
+		switch {
+		case errors.Is(err, io.EOF):
 			s.logger.WithError(err).Warn("Session closed by remote peer")
-		} else {
+		case isTimeoutOrReset(err):
+			s.logger.WithError(err).Warn("Session closed due to timeout or reset")
+		default:
 			s.logger.WithError(err).Error("Session error")
 		}
 		s.cancel()
