@@ -299,6 +299,32 @@ func (t *SSU2Transport) SetPeerConnNotifier(n transport.PeerConnNotifier) {
 	t.peerConnNotifier = n
 }
 
+// recordPeerAttempt notifies the PeerTracker of a dial attempt if wired.
+func (t *SSU2Transport) recordPeerAttempt(hash data.Hash) {
+	if n := t.peerConnNotifier; n != nil {
+		n.RecordAttempt(hash)
+	}
+}
+
+// recordPeerFailure notifies the PeerTracker of a dial failure. If the error
+// is ErrInvalidRouterInfo, the peer is marked as permanently unreachable.
+func (t *SSU2Transport) recordPeerFailure(hash data.Hash, err error) {
+	if n := t.peerConnNotifier; n != nil {
+		if errors.Is(err, ErrInvalidRouterInfo) {
+			n.RecordPermanentFailure(hash, "no_reachable_ssu2_address")
+		} else {
+			n.RecordFailure(hash, err.Error())
+		}
+	}
+}
+
+// recordPeerSuccess notifies the PeerTracker of a successful connection.
+func (t *SSU2Transport) recordPeerSuccess(hash data.Hash, latencyMs int64) {
+	if n := t.peerConnNotifier; n != nil {
+		n.RecordSuccess(hash, latencyMs)
+	}
+}
+
 // SetIdentity sets the router identity for this transport.
 func (t *SSU2Transport) SetIdentity(ident router_info.RouterInfo) error {
 	identHash, err := ident.IdentHash()
@@ -407,34 +433,16 @@ func (t *SSU2Transport) createOutboundSession(routerInfo router_info.RouterInfo,
 
 	dialConfig, remoteUDPAddr, err := t.prepareDialConfig(routerInfo)
 	if err != nil {
-		// P0.1: Track address-extraction failures so bad peers are penalised
-		// even when no network dial is attempted.  ErrInvalidRouterInfo means
-		// the peer is structurally unreachable (e.g. IPv6-only, no local IPv6);
-		// immediately advance the consecutive-fail counter to the staleness
-		// threshold so the peer is excluded from the next hop-selection pass.
-		if n := t.peerConnNotifier; n != nil {
-			n.RecordAttempt(routerHash)
-			if errors.Is(err, ErrInvalidRouterInfo) {
-				n.RecordPermanentFailure(routerHash, "no_reachable_ssu2_address")
-			} else {
-				n.RecordFailure(routerHash, err.Error())
-			}
-		}
+		t.recordPeerAttempt(routerHash)
+		t.recordPeerFailure(routerHash, err)
 		return nil, err
 	}
 
-	if n := t.peerConnNotifier; n != nil {
-		n.RecordAttempt(routerHash)
-	}
+	t.recordPeerAttempt(routerHash)
 	dialStart := time.Now()
 	conn, err := ssu2noise.DialSSU2WithHandshakeContext(t.ctx, nil, remoteUDPAddr, dialConfig)
 	if err != nil {
-		if n := t.peerConnNotifier; n != nil {
-			n.RecordFailure(routerHash, err.Error())
-		}
-		// P1.2: Log the peer hash at the SSU2 transport level so repeated
-		// timeouts to the same peer are easily grep-able (the muxer also logs,
-		// but this gives a transport-level view for Token-staleness analysis).
+		t.recordPeerFailure(routerHash, err)
 		t.logger.WithFields(map[string]interface{}{
 			"router_hash": fmt.Sprintf("%x", routerHash[:8]),
 			"error":       err.Error(),
@@ -447,9 +455,7 @@ func (t *SSU2Transport) createOutboundSession(routerInfo router_info.RouterInfo,
 		return nil, err
 	}
 
-	if n := t.peerConnNotifier; n != nil {
-		n.RecordSuccess(routerHash, time.Since(dialStart).Milliseconds())
-	}
+	t.recordPeerSuccess(routerHash, time.Since(dialStart).Milliseconds())
 	slotUsed = newSlotUsed
 	return session, nil
 }

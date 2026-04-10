@@ -292,6 +292,38 @@ func resolveTransportPort(cfg *config.TransportDefaults, port int) string {
 	return fmt.Sprintf(":%d", p)
 }
 
+// reSignAndVerifyRouterInfo re-signs the RouterInfo after a transport address
+// has been added and verifies the new signature locally. It returns an error
+// if the signing key has the wrong type, the re-signing operation fails, or
+// the resulting signature does not verify.
+func reSignAndVerifyRouterInfo(ri *router_info.RouterInfo, ks *keys.RouterInfoKeystore) error {
+	privKey := ks.GetSigningPrivateKey()
+	signingKey, ok := privKey.(types.SigningPrivateKey)
+	if !ok {
+		return fmt.Errorf("router signing key does not implement SigningPrivateKey (got %T)", privKey)
+	}
+	pubTime := ks.GetCurrentTime().Round(time.Second)
+	if err := ri.ReSign(pubTime, signingKey, signature.SIGNATURE_TYPE_EDDSA_SHA512_ED25519); err != nil {
+		return fmt.Errorf("failed to re-sign RouterInfo: %w", err)
+	}
+	if sigValid, sigErr := ri.VerifySignature(); !sigValid || sigErr != nil {
+		riBytes, _ := ri.Bytes()
+		log.WithFields(logger.Fields{
+			"sig_valid":  sigValid,
+			"sig_err":    fmt.Sprintf("%v", sigErr),
+			"addr_count": ri.RouterAddressCount(),
+			"ri_len":     len(riBytes),
+		}).Error("Re-signed RouterInfo FAILED local verification")
+		return fmt.Errorf("re-signed RouterInfo failed verification: valid=%v err=%v", sigValid, sigErr)
+	}
+	riBytes, _ := ri.Bytes()
+	log.WithFields(logger.Fields{
+		"addr_count": ri.RouterAddressCount(),
+		"ri_len":     len(riBytes),
+	}).Info("Re-signed RouterInfo passes local verification")
+	return nil
+}
+
 // buildNTCP2Transport creates the NTCP2 transport, publishes its address to ri, and returns it.
 func buildNTCP2Transport(r *Router, ri *router_info.RouterInfo) (*ntcp.NTCP2Transport, error) {
 	log.WithField("at", "buildNTCP2Transport").Debug("resolving transport port")
@@ -338,28 +370,9 @@ func buildNTCP2Transport(r *Router, ri *router_info.RouterInfo) (*ntcp.NTCP2Tran
 	// ConstructRouterInfo(nil) signed with no addresses; AddAddress invalidated
 	// that signature. Without re-signing, i2pd rejects our RI in message 3
 	// with reason_code=15 (Alice RouterInfo signature verification failure).
-	privKey := r.RouterInfoKeystore.GetSigningPrivateKey()
-	signingKey, ok := privKey.(types.SigningPrivateKey)
-	if !ok {
-		return nil, fmt.Errorf("router signing key does not implement SigningPrivateKey (got %T)", privKey)
-	}
-	pubTime := r.RouterInfoKeystore.GetCurrentTime().Round(time.Second)
-	if err := ri.ReSign(pubTime, signingKey, signature.SIGNATURE_TYPE_EDDSA_SHA512_ED25519); err != nil {
+	if err := reSignAndVerifyRouterInfo(ri, r.RouterInfoKeystore); err != nil {
 		log.WithError(err).Error("Failed to re-sign RouterInfo after adding NTCP2 address")
 		return nil, err
-	}
-	// Diagnostic: confirm re-signed RI passes local verification
-	if sigValid, sigErr := ri.VerifySignature(); !sigValid || sigErr != nil {
-		log.WithFields(logger.Fields{
-			"sig_valid": sigValid,
-			"sig_err":   fmt.Sprintf("%v", sigErr),
-		}).Error("Re-signed RouterInfo FAILED local verification — i2pd will reject it with reason_code=15")
-	} else {
-		riBytes, _ := ri.Bytes()
-		log.WithFields(logger.Fields{
-			"addr_count": ri.RouterAddressCount(),
-			"ri_len":     len(riBytes),
-		}).Info("Re-signed RouterInfo passes local verification")
 	}
 	ntcp2Transport.UpdateLocalRouterInfo(*ri)
 	log.WithField("at", "buildNTCP2Transport").Debug("RouterInfo re-signed with NTCP2 address and pushed to transport")
@@ -403,13 +416,11 @@ func buildSSU2Transport(r *Router, ri *router_info.RouterInfo) (*ssu2.SSU2Transp
 	// Wire router lookup so SSU2 can connect via introducers.
 	ssu2Config.RouterLookupFunc = func(hash common.Hash) (router_info.RouterInfo, error) {
 		ch := r.StdNetDB.GetRouterInfo(hash)
-		select {
-		case ri, ok := <-ch:
-			if !ok {
-				return router_info.RouterInfo{}, fmt.Errorf("router %x not found in netdb", hash[:4])
-			}
-			return ri, nil
+		ri, ok := <-ch
+		if !ok {
+			return router_info.RouterInfo{}, fmt.Errorf("router %x not found in netdb", hash[:4])
 		}
+		return ri, nil
 	}
 
 	log.WithFields(logger.Fields{"at": "buildSSU2Transport"}).Debug("SSU2 transport created successfully")
@@ -424,27 +435,9 @@ func buildSSU2Transport(r *Router, ri *router_info.RouterInfo) (*ssu2.SSU2Transp
 	// Re-sign the RouterInfo now that the SSU2 address has been added so that
 	// the signature covers both transport addresses. Without this, remote peers
 	// that receive the RI in NTCP2 msg3 will reject it with a signature error.
-	privKey := r.RouterInfoKeystore.GetSigningPrivateKey()
-	signingKey, ok := privKey.(types.SigningPrivateKey)
-	if !ok {
-		return nil, fmt.Errorf("router signing key does not implement SigningPrivateKey (got %T)", privKey)
-	}
-	pubTime := r.RouterInfoKeystore.GetCurrentTime().Round(time.Second)
-	if err := ri.ReSign(pubTime, signingKey, signature.SIGNATURE_TYPE_EDDSA_SHA512_ED25519); err != nil {
+	if err := reSignAndVerifyRouterInfo(ri, r.RouterInfoKeystore); err != nil {
 		log.WithError(err).Error("Failed to re-sign RouterInfo after adding SSU2 address")
 		return nil, err
-	}
-	if sigValid, sigErr := ri.VerifySignature(); !sigValid || sigErr != nil {
-		log.WithFields(logger.Fields{
-			"sig_valid": sigValid,
-			"sig_err":   fmt.Sprintf("%v", sigErr),
-		}).Warn("Re-signed RouterInfo (SSU2) FAILED local verification")
-	} else {
-		riBytes, _ := ri.Bytes()
-		log.WithFields(logger.Fields{
-			"addr_count": ri.RouterAddressCount(),
-			"ri_len":     len(riBytes),
-		}).Info("Re-signed RouterInfo (dual-transport) passes local verification")
 	}
 
 	return ssu2Transport, nil

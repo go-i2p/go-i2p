@@ -39,17 +39,16 @@ func NewServer(cfg *config.I2PControlConfig, stats RouterStatsProvider) (*Server
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	registry := registerRPCHandlers(stats, authManager, cfg)
 
 	server := &Server{
 		config:      cfg,
 		authManager: authManager,
-		registry:    registry,
 		stats:       stats,
 		ctx:         ctx,
 		cancel:      cancel,
 	}
 
+	server.registry = registerRPCHandlers(ctx, &server.wg, stats, authManager, cfg)
 	server.httpServer = createHTTPServer(cfg, server)
 	return server, nil
 }
@@ -81,7 +80,7 @@ func initializeAuthManager(password string) (*AuthManager, error) {
 
 // registerRPCHandlers creates a method registry and registers all RPC handlers.
 // Returns the configured registry with Echo, GetRate, RouterInfo, Authenticate, RouterManager, NetworkSetting, and I2PControl handlers.
-func registerRPCHandlers(stats RouterStatsProvider, authManager *AuthManager, cfg *config.I2PControlConfig) *MethodRegistry {
+func registerRPCHandlers(ctx context.Context, wg *sync.WaitGroup, stats RouterStatsProvider, authManager *AuthManager, cfg *config.I2PControlConfig) *MethodRegistry {
 	registry := NewMethodRegistry()
 
 	registry.Register("Echo", NewEchoHandler())
@@ -113,7 +112,7 @@ func registerRPCHandlers(stats RouterStatsProvider, authManager *AuthManager, cf
 		}, nil
 	}))
 
-	registry.Register("RouterManager", NewRouterManagerHandler(stats.GetRouterControl()))
+	registry.Register("RouterManager", NewRouterManagerHandler(ctx, wg, stats.GetRouterControl()))
 	registry.Register("NetworkSetting", NewNetworkSettingHandler(stats))
 	registry.Register("I2PControl", NewI2PControlHandler(authManager, cfg))
 

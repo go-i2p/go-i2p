@@ -334,49 +334,54 @@ func ExtractIntroducers(addr *router_address.RouterAddress) []IntroducerAddr {
 	now := time.Now().Unix()
 	var result []IntroducerAddr
 	for i := router_address.MIN_INTRODUCER_NUMBER; i <= router_address.MAX_INTRODUCER_NUMBER; i++ {
-		// P2.1: Guard against the false-positive ERROR that I2PString.Length()
-		// emits when an option key is absent.  CheckOption is a pure map
-		// lookup and never logs; only call IntroducerHashString when the
-		// option actually exists.
-		if !addr.CheckOption(router_address.INTRODUCER_HASH_PREFIX + strconv.Itoa(i)) {
-			continue
+		if intro, ok := extractIntroducerAtSlot(addr, i, now); ok {
+			result = append(result, intro)
 		}
-		hashStr, err := addr.IntroducerHashString(i).Data()
-		if err != nil || hashStr == "" {
-			continue
-		}
-		hashBytes, err := i2pbase64.DecodeString(hashStr)
-		if err != nil || len(hashBytes) != 32 {
-			continue
-		}
-		tagStr, err := addr.IntroducerTagString(i).Data()
-		if err != nil || tagStr == "" {
-			continue
-		}
-		tag64, err := strconv.ParseUint(tagStr, 10, 32)
-		if err != nil || tag64 == 0 {
-			continue
-		}
-
-		var expiry int64
-		if expStr, err2 := addr.IntroducerExpirationString(i).Data(); err2 == nil && expStr != "" {
-			if exp, err3 := strconv.ParseInt(expStr, 10, 64); err3 == nil {
-				expiry = exp
-			}
-		}
-		if expiry > 0 && expiry < now {
-			continue // already expired
-		}
-
-		var routerHash data.Hash
-		copy(routerHash[:], hashBytes)
-		result = append(result, IntroducerAddr{
-			RouterHash: routerHash,
-			RelayTag:   uint32(tag64),
-			Expiry:     expiry,
-		})
 	}
 	return result
+}
+
+// extractIntroducerAtSlot attempts to parse a single introducer entry at the
+// given slot index. Returns the parsed introducer and true if valid, or a zero
+// value and false if the entry is missing, malformed, or expired.
+func extractIntroducerAtSlot(addr *router_address.RouterAddress, slot int, now int64) (IntroducerAddr, bool) {
+	if !addr.CheckOption(router_address.INTRODUCER_HASH_PREFIX + strconv.Itoa(slot)) {
+		return IntroducerAddr{}, false
+	}
+	hashStr, err := addr.IntroducerHashString(slot).Data()
+	if err != nil || hashStr == "" {
+		return IntroducerAddr{}, false
+	}
+	hashBytes, err := i2pbase64.DecodeString(hashStr)
+	if err != nil || len(hashBytes) != 32 {
+		return IntroducerAddr{}, false
+	}
+	tagStr, err := addr.IntroducerTagString(slot).Data()
+	if err != nil || tagStr == "" {
+		return IntroducerAddr{}, false
+	}
+	tag64, err := strconv.ParseUint(tagStr, 10, 32)
+	if err != nil || tag64 == 0 {
+		return IntroducerAddr{}, false
+	}
+
+	var expiry int64
+	if expStr, err2 := addr.IntroducerExpirationString(slot).Data(); err2 == nil && expStr != "" {
+		if exp, err3 := strconv.ParseInt(expStr, 10, 64); err3 == nil {
+			expiry = exp
+		}
+	}
+	if expiry > 0 && expiry < now {
+		return IntroducerAddr{}, false
+	}
+
+	var routerHash data.Hash
+	copy(routerHash[:], hashBytes)
+	return IntroducerAddr{
+		RouterHash: routerHash,
+		RelayTag:   uint32(tag64),
+		Expiry:     expiry,
+	}, true
 }
 
 // HasIntroducerOnlySSU2Address returns true if the RouterInfo has at least one

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
+	"time"
 
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/logger"
@@ -258,19 +260,27 @@ type RouterManagerHandler struct {
 		// Reseed triggers a manual NetDB reseed operation
 		Reseed() error
 	}
+	// ctx is the server context used to signal cancellation to handler goroutines.
+	ctx context.Context
+	// wg tracks handler goroutines so the server can wait for them on shutdown.
+	wg *sync.WaitGroup
 }
 
 // NewRouterManagerHandler creates a new RouterManager handler.
 //
 // Parameters:
+//   - ctx: server context for cancellation propagation to handler goroutines
+//   - wg: WaitGroup to track handler goroutines for clean shutdown
 //   - control: Router control interface (typically the Router itself)
-func NewRouterManagerHandler(control interface {
+func NewRouterManagerHandler(ctx context.Context, wg *sync.WaitGroup, control interface {
 	Stop()
 	Reseed() error
 },
 ) *RouterManagerHandler {
 	return &RouterManagerHandler{
 		RouterControl: control,
+		ctx:           ctx,
+		wg:            wg,
 	}
 }
 
@@ -304,7 +314,9 @@ func (h *RouterManagerHandler) handleShutdown(req, result map[string]interface{}
 			result["Shutdown"] = "error: router control not available"
 			return
 		}
+		h.wg.Add(1)
 		go func() {
+			defer h.wg.Done()
 			log.WithFields(logger.Fields{"at": "handleShutdown"}).Info("Shutdown requested via I2PControl")
 			h.RouterControl.Stop()
 			log.WithFields(logger.Fields{"at": "handleShutdown"}).Info("Router shutdown completed via I2PControl")
@@ -322,7 +334,9 @@ func (h *RouterManagerHandler) handleRestart(req, result map[string]interface{})
 			result["Restart"] = "error: router control not available"
 			return
 		}
+		h.wg.Add(1)
 		go func() {
+			defer h.wg.Done()
 			log.WithFields(logger.Fields{"at": "handleRestart"}).Info("Restart requested via I2PControl (performing shutdown for supervisor restart)")
 			h.RouterControl.Stop()
 			log.WithFields(logger.Fields{"at": "handleRestart"}).Info("Router restart/stop completed via I2PControl")
@@ -330,6 +344,10 @@ func (h *RouterManagerHandler) handleRestart(req, result map[string]interface{})
 		result["Restart"] = "initiated (shutdown only — external supervisor must restart the process)"
 	}
 }
+
+// reseedTimeout is the maximum duration allowed for a Reseed operation
+// triggered via I2PControl before the goroutine is cancelled.
+const reseedTimeout = 120 * time.Second
 
 // handleReseed triggers a manual NetDB reseed operation if requested.
 func (h *RouterManagerHandler) handleReseed(req, result map[string]interface{}) {
@@ -339,10 +357,21 @@ func (h *RouterManagerHandler) handleReseed(req, result map[string]interface{}) 
 			result["Reseed"] = "error: router control not available"
 			return
 		}
+		h.wg.Add(1)
 		go func() {
+			defer h.wg.Done()
+			reseedCtx, cancel := context.WithTimeout(h.ctx, reseedTimeout)
+			defer cancel()
 			log.WithFields(logger.Fields{"at": "handleReseed"}).Info("Reseed requested via I2PControl")
-			if err := h.RouterControl.Reseed(); err != nil {
-				log.WithError(err).Error("Reseed via I2PControl failed")
+			done := make(chan error, 1)
+			go func() { done <- h.RouterControl.Reseed() }()
+			select {
+			case err := <-done:
+				if err != nil {
+					log.WithError(err).Error("Reseed via I2PControl failed")
+				}
+			case <-reseedCtx.Done():
+				log.WithFields(logger.Fields{"at": "handleReseed"}).Warn("Reseed via I2PControl timed out or cancelled")
 			}
 		}()
 		result["Reseed"] = nil

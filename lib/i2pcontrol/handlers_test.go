@@ -3,6 +3,7 @@ package i2pcontrol
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"testing"
 
 	"github.com/go-i2p/go-i2p/lib/config"
@@ -239,7 +240,7 @@ func TestRouterManagerHandler_Operations(t *testing.T) {
 	for _, op := range operations {
 		t.Run(op.name, func(t *testing.T) {
 			mockControl := &mockRouterControl{}
-			handler := NewRouterManagerHandler(mockControl)
+			handler := NewRouterManagerHandler(context.Background(), &sync.WaitGroup{}, mockControl)
 			resultMap := invokeHandler(t, handler, `{"`+op.operation+`": null}`)
 
 			assert.Contains(t, resultMap, op.operation)
@@ -248,12 +249,12 @@ func TestRouterManagerHandler_Operations(t *testing.T) {
 }
 
 func TestRouterManagerHandler_NoOperations(t *testing.T) {
-	assertHandlerError(t, NewRouterManagerHandler(&mockRouterControl{}), `{}`, ErrCodeInvalidParams)
+	assertHandlerError(t, NewRouterManagerHandler(context.Background(), &sync.WaitGroup{}, &mockRouterControl{}), `{}`, ErrCodeInvalidParams)
 }
 
 func TestRouterManagerHandler_InvalidJSON(t *testing.T) {
 	mockControl := &mockRouterControl{}
-	handler := NewRouterManagerHandler(mockControl)
+	handler := NewRouterManagerHandler(context.Background(), &sync.WaitGroup{}, mockControl)
 
 	_, err := handler.Handle(context.Background(), json.RawMessage(`{invalid}`))
 	if err == nil {

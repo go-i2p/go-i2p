@@ -48,11 +48,9 @@ func NewPeerTracker() *PeerTracker {
 	}
 }
 
-// RecordAttempt records a connection attempt to a peer.
-func (pt *PeerTracker) RecordAttempt(hash common.Hash) {
-	pt.mu.Lock()
-	defer pt.mu.Unlock()
-
+// getOrCreateStats returns the PeerStats for the given hash, creating a new
+// entry if one does not exist. The caller must hold pt.mu.
+func (pt *PeerTracker) getOrCreateStats(hash common.Hash) *PeerStats {
 	stats, exists := pt.stats[hash]
 	if !exists {
 		stats = &PeerStats{
@@ -60,6 +58,15 @@ func (pt *PeerTracker) RecordAttempt(hash common.Hash) {
 		}
 		pt.stats[hash] = stats
 	}
+	return stats
+}
+
+// RecordAttempt records a connection attempt to a peer.
+func (pt *PeerTracker) RecordAttempt(hash common.Hash) {
+	pt.mu.Lock()
+	defer pt.mu.Unlock()
+
+	stats := pt.getOrCreateStats(hash)
 
 	stats.LastAttempt = time.Now()
 	stats.TotalAttempts++
@@ -75,13 +82,7 @@ func (pt *PeerTracker) RecordSuccess(hash common.Hash, responseTimeMs int64) {
 	pt.mu.Lock()
 	defer pt.mu.Unlock()
 
-	stats, exists := pt.stats[hash]
-	if !exists {
-		stats = &PeerStats{
-			Hash: hash,
-		}
-		pt.stats[hash] = stats
-	}
+	stats := pt.getOrCreateStats(hash)
 
 	stats.SuccessCount++
 	stats.LastSuccess = time.Now()
@@ -110,13 +111,7 @@ func (pt *PeerTracker) RecordFailure(hash common.Hash, reason string) {
 	pt.mu.Lock()
 	defer pt.mu.Unlock()
 
-	stats, exists := pt.stats[hash]
-	if !exists {
-		stats = &PeerStats{
-			Hash: hash,
-		}
-		pt.stats[hash] = stats
-	}
+	stats := pt.getOrCreateStats(hash)
 
 	stats.FailureCount++
 	stats.LastFailure = time.Now()
@@ -140,13 +135,7 @@ func (pt *PeerTracker) RecordPermanentFailure(hash common.Hash, reason string) {
 	pt.mu.Lock()
 	defer pt.mu.Unlock()
 
-	stats, exists := pt.stats[hash]
-	if !exists {
-		stats = &PeerStats{
-			Hash: hash,
-		}
-		pt.stats[hash] = stats
-	}
+	stats := pt.getOrCreateStats(hash)
 
 	stats.FailureCount++
 	stats.LastFailure = time.Now()
