@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/crypto/types"
 	"github.com/go-i2p/go-i2p/lib/transport"
+	nattraversal "github.com/go-i2p/go-nat-listener"
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
 	"github.com/go-i2p/logger"
 )
@@ -154,14 +156,48 @@ func initializeCryptoKeys(cfg *ssu2noise.SSU2Config, keystore KeystoreProvider) 
 }
 
 // setupUDPListener creates the UDP listener and wraps it with SSU2.
+// When a specific port is requested (non-zero), NAT traversal (UPnP/NAT-PMP) is
+// attempted so the router publishes its external IP:port in the RouterInfo.
+// Port 0 (OS-assigned) skips NAT traversal because there is no stable port to map.
 func setupUDPListener(t *SSU2Transport, config *Config, ssu2Config *ssu2noise.SSU2Config) error {
-	udpAddr, err := net.ResolveUDPAddr("udp", config.ListenerAddress)
+	_, portStr, err := net.SplitHostPort(config.ListenerAddress)
 	if err != nil {
-		return fmt.Errorf("failed to resolve UDP address: %w", err)
+		return fmt.Errorf("failed to parse listener address: %w", err)
 	}
-	udpConn, err := net.ListenUDP("udp", udpAddr)
+	iport, err := strconv.Atoi(portStr)
 	if err != nil {
-		return fmt.Errorf("failed to create UDP listener: %w", err)
+		return fmt.Errorf("failed to convert port to integer: %w", err)
+	}
+
+	var udpConn net.PacketConn
+
+	if iport == 0 {
+		// Port 0 means "let the OS choose". NAT traversal requires a specific
+		// port to map, so skip it and create the connection directly.
+		udpAddr, resolveErr := net.ResolveUDPAddr("udp", config.ListenerAddress)
+		if resolveErr != nil {
+			return fmt.Errorf("failed to resolve UDP address: %w", resolveErr)
+		}
+		rawConn, listenErr := net.ListenUDP("udp", udpAddr)
+		if listenErr != nil {
+			return fmt.Errorf("failed to create UDP listener: %w", listenErr)
+		}
+		config.ListenerAddress = rawConn.LocalAddr().String()
+		log.WithField("address", config.ListenerAddress).Info("UDP listener started (no NAT traversal for OS-assigned port)")
+		udpConn = rawConn
+	} else {
+		// A specific port was requested — attempt NAT traversal with fallback.
+		natCtx, natCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer natCancel()
+		natPL, natErr := nattraversal.ListenPacketWithFallbackContext(natCtx, iport)
+		if natErr != nil {
+			return fmt.Errorf("failed to create UDP listener: %w", natErr)
+		}
+		// Keep config in sync with the actual bound address.
+		if boundAddr := natPL.Addr().String(); boundAddr != config.ListenerAddress {
+			config.ListenerAddress = boundAddr
+		}
+		udpConn = natPL.PacketConn()
 	}
 
 	listener, err := ssu2noise.NewSSU2Listener(udpConn, ssu2Config)

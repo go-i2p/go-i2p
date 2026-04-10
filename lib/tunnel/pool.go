@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -902,7 +903,7 @@ func (p *Pool) RetryTunnelBuild(tunnelID TunnelID, isInbound bool, hopCount int)
 	if err != nil {
 		// Mark peers from the failed attempt to avoid retrying them
 		p.extractAndMarkFailedPeers(result)
-		log.WithError(err).WithFields(logger.Fields{
+		fields := logger.Fields{
 			"at":          "Pool.RetryTunnelBuild",
 			"phase":       "tunnel_build",
 			"operation":   "retry_failed",
@@ -910,7 +911,14 @@ func (p *Pool) RetryTunnelBuild(tunnelID TunnelID, isInbound bool, hopCount int)
 			"is_inbound":  isInbound,
 			"hop_count":   hopCount,
 			"reason":      "tunnel builder returned error",
-		}).Error("failed to retry tunnel build after timeout")
+		}
+		// Downgrade to Warn when the root cause is transport unavailability —
+		// the transport layer already logs the actual failure at the appropriate level.
+		if strings.Contains(err.Error(), "no transports available") {
+			log.WithError(err).WithFields(fields).Warn("tunnel build retry failed (no transports available)")
+		} else {
+			log.WithError(err).WithFields(fields).Error("failed to retry tunnel build after timeout")
+		}
 		return err
 	}
 

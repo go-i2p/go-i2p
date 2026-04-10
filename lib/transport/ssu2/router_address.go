@@ -12,6 +12,7 @@ import (
 	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_address"
 	"github.com/go-i2p/common/router_info"
+	nattraversal "github.com/go-i2p/go-nat-listener"
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
 	"golang.org/x/crypto/curve25519"
 )
@@ -227,10 +228,19 @@ func ConvertToRouterAddress(transport *SSU2Transport) (*router_address.RouterAdd
 }
 
 // extractHostPort unwraps SSU2Addr and extracts host and port from the listener address.
+// Handles NATAddr (from go-nat-listener) to use the external address when available.
 func extractHostPort(addr net.Addr) (string, string, error) {
 	effectiveAddr := addr
 	if ssu2Addr, ok := addr.(*ssu2noise.SSU2Addr); ok {
 		effectiveAddr = ssu2Addr.UnderlyingAddr()
+	}
+	// If the underlying address is a NATAddr, use its external address explicitly.
+	if natAddr, ok := effectiveAddr.(*nattraversal.NATAddr); ok {
+		host, portStr, err := net.SplitHostPort(natAddr.ExternalAddr())
+		if err != nil {
+			return "", "", fmt.Errorf("failed to parse NATAddr external address %q: %w", natAddr.ExternalAddr(), err)
+		}
+		return host, portStr, nil
 	}
 	host, portStr, err := net.SplitHostPort(effectiveAddr.String())
 	if err != nil {
