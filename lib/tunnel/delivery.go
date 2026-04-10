@@ -146,6 +146,7 @@ const (
 	SizeFieldSize          = 2
 )
 
+// DelayFactor represents a delay factor byte for tunnel message delivery instructions.
 type DelayFactor byte
 
 // DeliveryInstructions represents I2P tunnel message delivery instructions
@@ -549,6 +550,7 @@ func (delivery_instructions *DeliveryInstructions) HasTunnelID() (bool, error) {
 	return hasTunnelID, nil
 }
 
+// HasHash returns true if the DeliveryInstructions contain a hash field, which is present for DTTunnel and DTRouter delivery types.
 func (delivery_instructions *DeliveryInstructions) HasHash() (bool, error) {
 	log.WithFields(logger.Fields{"at": "HasHash"}).Debug("Checking if DeliveryInstructions has Hash")
 	if delivery_instructions == nil {
@@ -606,6 +608,7 @@ func (delivery_instructions *DeliveryInstructions) Hash() (hash common.Hash, err
 	return delivery_instructions.hash, nil
 }
 
+// Delay returns the delay factor for these DeliveryInstructions, or an error if the instructions are not a FirstFragment or have no delay set.
 func (delivery_instructions *DeliveryInstructions) Delay() (delay_factor DelayFactor, err error) {
 	log.WithFields(logger.Fields{"at": "Delay"}).Debug("Getting Delay")
 	if delivery_instructions == nil {

@@ -118,15 +118,19 @@ Message Fragment ::
 total size: 1028 Bytes
 */
 
+// TunnelID represents a 4-byte tunnel identifier used to route messages through I2P tunnels.
 type TunnelID uint32
 
+// EncryptedTunnelMessage represents an encrypted I2P tunnel message consisting of a TunnelID, IV, and encrypted data.
 type EncryptedTunnelMessage tunnel.TunnelData
 
+// DeliveryInstructionsWithFragment pairs a set of DeliveryInstructions with the corresponding message fragment payload.
 type DeliveryInstructionsWithFragment struct {
 	DeliveryInstructions *DeliveryInstructions
 	MessageFragment      []byte
 }
 
+// ID returns the TunnelID from the first 4 bytes of the encrypted tunnel message.
 func (tm EncryptedTunnelMessage) ID() (tid TunnelID, err error) {
 	if len(tm) < 4 {
 		return 0, oops.Errorf("encrypted tunnel message too short for tunnel ID: %d bytes", len(tm))
@@ -135,6 +139,7 @@ func (tm EncryptedTunnelMessage) ID() (tid TunnelID, err error) {
 	return tid, nil
 }
 
+// IV returns the 16-byte initialization vector from the encrypted tunnel message.
 func (tm EncryptedTunnelMessage) IV() (tunnel.TunnelIV, error) {
 	if len(tm) < 20 {
 		return nil, oops.Errorf("encrypted tunnel message too short for IV: %d bytes", len(tm))
@@ -153,18 +158,22 @@ func (tm EncryptedTunnelMessage) Data() ([]byte, error) {
 	return tm[20:], nil
 }
 
+// DecryptedTunnelMessage represents a decrypted 1028-byte I2P tunnel message containing a TunnelID, IV, checksum, and delivery instructions.
 type DecryptedTunnelMessage [1028]byte
 
+// ID returns the TunnelID from the first 4 bytes of the decrypted tunnel message.
 func (decrypted_tunnel_message DecryptedTunnelMessage) ID() TunnelID {
 	return TunnelID(binary.BigEndian.Uint32(
 		decrypted_tunnel_message[:4],
 	))
 }
 
+// IV returns the 16-byte initialization vector from the decrypted tunnel message.
 func (decrypted_tunnel_message DecryptedTunnelMessage) IV() tunnel.TunnelIV {
 	return decrypted_tunnel_message[4 : 4+16]
 }
 
+// Checksum returns the 4-byte checksum from the decrypted tunnel message, located after the TunnelID and IV fields.
 func (decrypted_tunnel_message DecryptedTunnelMessage) Checksum() []byte {
 	return decrypted_tunnel_message[4+16 : 4+4+16]
 }

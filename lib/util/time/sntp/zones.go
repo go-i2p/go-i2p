@@ -11,11 +11,13 @@ import (
 //go:embed continents.txt
 var continentsFS embed.FS
 
+// Zones maps country and continent codes to their corresponding NTP pool zone names.
 type Zones struct {
 	countryToZone   map[string]string
 	continentToZone map[string]string
 }
 
+// NewZones creates a new Zones instance populated with continent-to-zone and country-to-zone mappings.
 func NewZones() *Zones {
 	z := &Zones{
 		countryToZone:   make(map[string]string),
@@ -25,6 +27,7 @@ func NewZones() *Zones {
 	return z
 }
 
+// GetZone returns the NTP pool zone name for the given country code, or an empty string if not found.
 func (z *Zones) GetZone(countryCode string) string {
 	countryCode = strings.ToLower(countryCode)
 	if zone, ok := z.countryToZone[countryCode]; ok {

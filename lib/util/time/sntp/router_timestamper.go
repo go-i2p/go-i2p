@@ -14,12 +14,15 @@ import (
 	"github.com/beevik/ntp"
 )
 
+// NTPClient is the interface for querying NTP servers for time synchronization.
 type NTPClient interface {
 	QueryWithOptions(host string, options ntp.QueryOptions) (*ntp.Response, error)
 }
 
+// DefaultNTPClient is the default NTPClient implementation that delegates to the beevik/ntp library.
 type DefaultNTPClient struct{}
 
+// QueryWithOptions queries the specified NTP host with the given options and returns the response.
 func (c *DefaultNTPClient) QueryWithOptions(host string, options ntp.QueryOptions) (*ntp.Response, error) {
 	return ntp.QueryWithOptions(host, options)
 }
@@ -31,6 +34,8 @@ type ntpSample struct {
 	stratum uint8
 }
 
+// RouterTimestamper periodically queries NTP servers to determine the clock offset
+// between the local system time and network time, notifying registered listeners of updates.
 type RouterTimestamper struct {
 	servers           []string
 	priorityServers   [][]string
@@ -67,6 +72,7 @@ const (
 	maxVariance           = 10 * time.Second // Max inter-sample variance for NTP consistency checks
 )
 
+// NewRouterTimestamper creates a new RouterTimestamper using the provided NTPClient for time queries.
 func NewRouterTimestamper(client NTPClient) *RouterTimestamper {
 	rt := &RouterTimestamper{
 		listeners:         []UpdateListener{},
@@ -82,6 +88,7 @@ func NewRouterTimestamper(client NTPClient) *RouterTimestamper {
 	return rt
 }
 
+// Start begins the periodic NTP querying process in a background goroutine.
 func (rt *RouterTimestamper) Start() {
 	rt.mutex.Lock()
 	defer rt.mutex.Unlock()
@@ -93,6 +100,7 @@ func (rt *RouterTimestamper) Start() {
 	go rt.run()
 }
 
+// Stop signals the background NTP query goroutine to stop and waits for it to finish.
 func (rt *RouterTimestamper) Stop() {
 	rt.mutex.Lock()
 	if !rt.isRunning {
@@ -107,12 +115,14 @@ func (rt *RouterTimestamper) Stop() {
 	rt.waitGroup.Wait()
 }
 
+// AddListener registers an UpdateListener to be notified of time offset changes.
 func (rt *RouterTimestamper) AddListener(listener UpdateListener) {
 	rt.mutex.Lock()
 	defer rt.mutex.Unlock()
 	rt.listeners = append(rt.listeners, listener)
 }
 
+// RemoveListener unregisters a previously added UpdateListener so it no longer receives updates.
 func (rt *RouterTimestamper) RemoveListener(listener UpdateListener) {
 	rt.mutex.Lock()
 	defer rt.mutex.Unlock()
@@ -135,6 +145,7 @@ func listenersMatch(a, b UpdateListener) bool {
 	return a == b
 }
 
+// WaitForInitialization blocks until the first successful NTP query completes or a timeout is reached.
 func (rt *RouterTimestamper) WaitForInitialization() {
 	select {
 	case <-rt.initChan:
@@ -144,6 +155,7 @@ func (rt *RouterTimestamper) WaitForInitialization() {
 	}
 }
 
+// TimestampNow triggers an immediate NTP query if the timestamper is initialized and running.
 func (rt *RouterTimestamper) TimestampNow() {
 	rt.mutex.Lock()
 	canRun := rt.initialized && rt.isRunning && !rt.disabled

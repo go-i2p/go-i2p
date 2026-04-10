@@ -404,10 +404,17 @@ func (m *CongestionMonitor) ClearForceFlag() {
 // noopMetricsCollector is a no-op implementation for when no collector is provided.
 type noopMetricsCollector struct{}
 
+// GetParticipatingTunnelRatio returns 0, indicating no participating tunnels.
 func (n *noopMetricsCollector) GetParticipatingTunnelRatio() float64 { return 0 }
-func (n *noopMetricsCollector) GetBandwidthUtilization() float64     { return 0 }
-func (n *noopMetricsCollector) GetConnectionUtilization() float64    { return 0 }
-func (n *noopMetricsCollector) IsAcceptingTunnels() bool             { return true }
+
+// GetBandwidthUtilization returns 0, indicating no bandwidth usage.
+func (n *noopMetricsCollector) GetBandwidthUtilization() float64 { return 0 }
+
+// GetConnectionUtilization returns 0, indicating no connection usage.
+func (n *noopMetricsCollector) GetConnectionUtilization() float64 { return 0 }
+
+// IsAcceptingTunnels returns true, indicating the no-op collector always accepts tunnels.
+func (n *noopMetricsCollector) IsAcceptingTunnels() bool { return true }
 
 // Ensure interfaces are implemented
 var (

@@ -390,8 +390,10 @@ func NewCongestionFilter(congestionInfo CongestionInfoProvider) *CongestionFilte
 	return &CongestionFilter{congestionInfo: congestionInfo}
 }
 
+// Name returns the name of the CongestionFilter.
 func (f *CongestionFilter) Name() string { return "CongestionFilter" }
 
+// Accept returns true if the given peer should be considered for tunnel participation, rejecting peers with a G congestion flag.
 func (f *CongestionFilter) Accept(ri router_info.RouterInfo) bool {
 	hash, err := ri.IdentHash()
 	if err != nil {
@@ -418,8 +420,10 @@ func NewCongestionScorer(congestionInfo CongestionInfoProvider, cfg config.Conge
 	}
 }
 
+// Name returns the name of the CongestionScorer.
 func (s *CongestionScorer) Name() string { return "CongestionScorer" }
 
+// Score returns a score between 0.0 and 1.0 for the given peer based on its congestion flag, with lower scores indicating higher congestion.
 func (s *CongestionScorer) Score(ri router_info.RouterInfo) float64 {
 	hash, err := ri.IdentHash()
 	if err != nil {

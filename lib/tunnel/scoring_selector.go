@@ -127,6 +127,7 @@ func (s *ScoringPeerSelector) SelectPeers(count int, exclude []common.Hash) ([]r
 // zero-scoring scorer from permanently eliminating a peer regardless of other scores.
 const minScorerOutput = 0.01
 
+// ComputeScore computes the multiplicative combined score for a peer from all registered scorers.
 func (s *ScoringPeerSelector) ComputeScore(ri router_info.RouterInfo) float64 {
 	if len(s.scorers) == 0 {
 		return 1.0

@@ -27,6 +27,8 @@ import (
 	"github.com/samber/oops"
 )
 
+// Router is the core I2P router implementation that manages transports, the network database,
+// tunnel pools, and message routing for participating in the I2P network.
 type Router struct {
 	// keystore for router info
 	*keys.RouterInfoKeystore
@@ -611,6 +613,7 @@ func (r *Router) GetCongestionMonitor() CongestionStateProvider {
 	return r.congestionMonitor
 }
 
+// GetNetDB returns the router's underlying network database instance.
 func (r *Router) GetNetDB() *netdb.StdNetDB {
 	return r.StdNetDB
 }

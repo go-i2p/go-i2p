@@ -20,10 +20,12 @@ type publisherNetDBAdapter struct {
 	db *netdb.StdNetDB
 }
 
+// GetRouterInfo returns a channel that yields the RouterInfo associated with the given hash from the underlying NetDB.
 func (a *publisherNetDBAdapter) GetRouterInfo(hash common.Hash) chan router_info.RouterInfo {
 	return a.db.GetRouterInfo(hash)
 }
 
+// GetAllRouterInfos returns all RouterInfo entries currently stored in the underlying NetDB.
 func (a *publisherNetDBAdapter) GetAllRouterInfos() []router_info.RouterInfo {
 	return a.db.GetAllRouterInfos()
 }
@@ -55,30 +57,37 @@ func (a *publisherNetDBAdapter) StoreRouterInfo(ri router_info.RouterInfo) {
 	}
 }
 
+// Reseed delegates to the underlying NetDB to reseed from the given bootstrap source until at least minRouters are known.
 func (a *publisherNetDBAdapter) Reseed(b bootstrap.Bootstrap, minRouters int) error {
 	return a.db.Reseed(b, minRouters)
 }
 
+// Size returns the number of RouterInfo entries stored in the underlying NetDB.
 func (a *publisherNetDBAdapter) Size() int {
 	return a.db.Size()
 }
 
+// RecalculateSize recalculates the cached size of the underlying NetDB by scanning stored entries.
 func (a *publisherNetDBAdapter) RecalculateSize() error {
 	return a.db.RecalculateSize()
 }
 
+// Ensure verifies that the underlying NetDB storage directory exists and is properly initialized.
 func (a *publisherNetDBAdapter) Ensure() error {
 	return a.db.Ensure()
 }
 
+// SelectFloodfillRouters returns up to count floodfill routers closest to the given target hash from the underlying NetDB.
 func (a *publisherNetDBAdapter) SelectFloodfillRouters(targetHash common.Hash, count int) ([]router_info.RouterInfo, error) {
 	return a.db.SelectFloodfillRouters(targetHash, count)
 }
 
+// GetLeaseSetCount returns the number of LeaseSets stored in the underlying NetDB.
 func (a *publisherNetDBAdapter) GetLeaseSetCount() int {
 	return a.db.GetLeaseSetCount()
 }
 
+// GetAllLeaseSets returns all LeaseSet entries currently stored in the underlying NetDB.
 func (a *publisherNetDBAdapter) GetAllLeaseSets() []netdb.LeaseSetEntry {
 	return a.db.GetAllLeaseSets()
 }
@@ -94,6 +103,7 @@ type publisherTransportAdapter struct {
 	muxer *transport.TransportMuxer
 }
 
+// GetSession returns an I2NP-capable session for the given router by delegating to the underlying transport muxer.
 func (a *publisherTransportAdapter) GetSession(routerInfo router_info.RouterInfo) (netdb.I2NPSender, error) {
 	session, err := a.muxer.GetSession(routerInfo)
 	if err != nil {
