@@ -14,6 +14,7 @@ import (
 	"github.com/go-i2p/common/router_info"
 	nattraversal "github.com/go-i2p/go-nat-listener"
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
+	"github.com/samber/oops"
 	"golang.org/x/crypto/curve25519"
 )
 
@@ -170,19 +171,19 @@ func ExtractSSU2IntroKey(ri router_info.RouterInfo) ([]byte, error) {
 		}
 		return raw, nil
 	}
-	return nil, fmt.Errorf("no SSU2 address with a 32-byte intro key found in RouterInfo")
+	return nil, oops.Errorf("no SSU2 address with a 32-byte intro key found in RouterInfo")
 }
 
 // resolveUDPAddress extracts host and port from a RouterAddress and resolves to a UDP address.
 func resolveUDPAddress(addr *router_address.RouterAddress) (*net.UDPAddr, error) {
 	host, err := addr.Host()
 	if err != nil {
-		return nil, fmt.Errorf("failed to extract host: %w", err)
+		return nil, oops.Wrapf(err, "failed to extract host")
 	}
 
 	port, err := addr.Port()
 	if err != nil {
-		return nil, fmt.Errorf("failed to extract port: %w", err)
+		return nil, oops.Wrapf(err, "failed to extract port")
 	}
 
 	hostStr := host.String()
@@ -193,7 +194,7 @@ func resolveUDPAddress(addr *router_address.RouterAddress) (*net.UDPAddr, error)
 
 	udpAddr, err := net.ResolveUDPAddr("udp", net.JoinHostPort(hostStr, port))
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve UDP address: %w", err)
+		return nil, oops.Wrapf(err, "failed to resolve UDP address")
 	}
 	return udpAddr, nil
 }
@@ -202,12 +203,12 @@ func resolveUDPAddress(addr *router_address.RouterAddress) (*net.UDPAddr, error)
 // suitable for publishing in RouterInfo.
 func ConvertToRouterAddress(transport *SSU2Transport) (*router_address.RouterAddress, error) {
 	if transport == nil {
-		return nil, fmt.Errorf("transport cannot be nil")
+		return nil, oops.Errorf("transport cannot be nil")
 	}
 
 	addr := transport.Addr()
 	if addr == nil {
-		return nil, fmt.Errorf("transport has no listener address")
+		return nil, oops.Errorf("transport has no listener address")
 	}
 
 	host, portStr, err := extractHostPort(addr)
@@ -222,7 +223,7 @@ func ConvertToRouterAddress(transport *SSU2Transport) (*router_address.RouterAdd
 
 	ra, err := router_address.NewRouterAddress(0, time.Time{}, "SSU2", options)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create RouterAddress: %w", err)
+		return nil, oops.Wrapf(err, "failed to create RouterAddress")
 	}
 	return ra, nil
 }
@@ -238,13 +239,13 @@ func extractHostPort(addr net.Addr) (string, string, error) {
 	if natAddr, ok := effectiveAddr.(*nattraversal.NATAddr); ok {
 		host, portStr, err := net.SplitHostPort(natAddr.ExternalAddr())
 		if err != nil {
-			return "", "", fmt.Errorf("failed to parse NATAddr external address %q: %w", natAddr.ExternalAddr(), err)
+			return "", "", oops.Wrapf(err, "failed to parse NATAddr external address %q", natAddr.ExternalAddr())
 		}
 		return host, portStr, nil
 	}
 	host, portStr, err := net.SplitHostPort(effectiveAddr.String())
 	if err != nil {
-		return "", "", fmt.Errorf("failed to parse listener address: %w", err)
+		return "", "", oops.Wrapf(err, "failed to parse listener address")
 	}
 	return host, portStr, nil
 }

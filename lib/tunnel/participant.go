@@ -2,12 +2,12 @@ package tunnel
 
 import (
 	"encoding/binary"
-	"errors"
 	"sync"
 	"time"
 
 	"github.com/go-i2p/crypto/tunnel"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // Participant represents an intermediate hop in an I2P tunnel.
@@ -53,10 +53,10 @@ type Participant struct {
 
 var (
 	// ErrNilDecryption is returned when decryption is nil
-	ErrNilParticipantDecryption = errors.New("participant decryption cannot be nil")
+	ErrNilParticipantDecryption = oops.Errorf("participant decryption cannot be nil")
 
 	// ErrInvalidParticipantData is returned when tunnel data is malformed
-	ErrInvalidParticipantData = errors.New("invalid participant tunnel data")
+	ErrInvalidParticipantData = oops.Errorf("invalid participant tunnel data")
 )
 
 // DefaultIdleTimeout is the default duration after which an idle tunnel is dropped.

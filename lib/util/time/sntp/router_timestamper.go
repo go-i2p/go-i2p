@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-i2p/crypto/rand"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 
 	"github.com/beevik/ntp"
 )
@@ -348,7 +349,7 @@ func (rt *RouterTimestamper) queryWithRetry(servers []string, timeout time.Durat
 // and returns the clock offset and stratum directly from the NTP response.
 func (rt *RouterTimestamper) querySingleServer(server string, timeout time.Duration) (ntpSample, error) {
 	if server == "" {
-		return ntpSample{}, fmt.Errorf("no NTP server specified")
+		return ntpSample{}, oops.Errorf("no NTP server specified")
 	}
 	options := ntp.QueryOptions{
 		Timeout: timeout,
@@ -362,7 +363,7 @@ func (rt *RouterTimestamper) querySingleServer(server string, timeout time.Durat
 
 	if !rt.validateResponse(response) {
 		log.WithField("server", server).Debug("NTP response failed validation")
-		return ntpSample{}, fmt.Errorf("NTP response validation failed for server %s", server)
+		return ntpSample{}, oops.Errorf("NTP response validation failed for server %s", server)
 	}
 
 	// Use response.ClockOffset directly as the delta — this is already the

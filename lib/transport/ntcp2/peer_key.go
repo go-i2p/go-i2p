@@ -3,13 +3,13 @@ package ntcp2
 import (
 	"bytes"
 	"encoding/base64"
-	"fmt"
 	"strings"
 
 	"github.com/go-i2p/common/router_address"
 	"github.com/go-i2p/common/router_info"
 	i2pcurve25519 "github.com/go-i2p/crypto/curve25519"
 	"github.com/go-i2p/go-noise/ntcp2"
+	"github.com/samber/oops"
 )
 
 // ExtractPeerStaticKey extracts the NTCP2 static public key ("s=" option)
@@ -43,7 +43,7 @@ func ExtractPeerStaticKey(routerInfo router_info.RouterInfo) ([]byte, error) {
 		return staticKey, nil
 	}
 
-	return nil, fmt.Errorf("no valid NTCP2 static key found in RouterInfo")
+	return nil, oops.Errorf("no valid NTCP2 static key found in RouterInfo")
 }
 
 // extractStaticKeyFromAddress attempts to extract the static key from a single
@@ -51,7 +51,7 @@ func ExtractPeerStaticKey(routerInfo router_info.RouterInfo) ([]byte, error) {
 func extractStaticKeyFromAddress(addr *router_address.RouterAddress) ([]byte, error) {
 	staticKey, err := addr.StaticKey()
 	if err != nil {
-		return nil, fmt.Errorf("failed to extract static key: %w", err)
+		return nil, oops.Wrapf(err, "failed to extract static key")
 	}
 	return staticKey[:], nil
 }
@@ -80,7 +80,7 @@ func ExtractPeerIV(routerInfo router_info.RouterInfo) ([]byte, error) {
 		return iv[:], nil
 	}
 
-	return nil, fmt.Errorf("no valid NTCP2 IV found in RouterInfo")
+	return nil, oops.Errorf("no valid NTCP2 IV found in RouterInfo")
 }
 
 // ConfigureDialConfig sets the peer's static key and obfuscation IV on an
@@ -96,7 +96,7 @@ func ConfigureDialConfig(config *ntcp2.NTCP2Config, peerInfo router_info.RouterI
 	// WithStaticKey sets the local key; WithRemoteStaticKey sets the peer's key.
 	staticKey, err := ExtractPeerStaticKey(peerInfo)
 	if err != nil {
-		return fmt.Errorf("failed to extract peer static key for XK handshake: %w", err)
+		return oops.Wrapf(err, "failed to extract peer static key for XK handshake")
 	}
 
 	config.WithRemoteStaticKey(staticKey)
@@ -132,32 +132,32 @@ func ConfigureDialConfig(config *ntcp2.NTCP2Config, peerInfo router_info.RouterI
 // Returns a descriptive error (with both keys base64-encoded) if a mismatch is found.
 func VerifyStaticKeyConsistency(transport *NTCP2Transport, identity router_info.RouterInfo) error {
 	if transport.config == nil || transport.config.NTCP2Config == nil {
-		return fmt.Errorf("transport config is not initialized")
+		return oops.Errorf("transport config is not initialized")
 	}
 	privKeyBytes := transport.config.NTCP2Config.StaticKey
 	if len(privKeyBytes) != 32 {
-		return fmt.Errorf("static key is not 32 bytes: got %d", len(privKeyBytes))
+		return oops.Errorf("static key is not 32 bytes: got %d", len(privKeyBytes))
 	}
 
 	// Derive the public key from the live Noise static private key.
 	privKey, err := i2pcurve25519.NewCurve25519PrivateKey(privKeyBytes)
 	if err != nil {
-		return fmt.Errorf("failed to create Curve25519 private key from static key: %w", err)
+		return oops.Wrapf(err, "failed to create Curve25519 private key from static key")
 	}
 	pubKey, err := privKey.Public()
 	if err != nil {
-		return fmt.Errorf("failed to derive public key from static private key: %w", err)
+		return oops.Wrapf(err, "failed to derive public key from static private key")
 	}
 	livePublicKey := pubKey.Bytes()
 
 	// Extract the public key published in the RouterInfo NTCP2 "s=" option.
 	publishedPublicKey, err := ExtractPeerStaticKey(identity)
 	if err != nil {
-		return fmt.Errorf("failed to extract static key from local RouterInfo: %w", err)
+		return oops.Wrapf(err, "failed to extract static key from local RouterInfo")
 	}
 
 	if !bytes.Equal(livePublicKey, publishedPublicKey) {
-		return fmt.Errorf(
+		return oops.Errorf(
 			"NTCP2 static key mismatch: live Noise public key %s does not match published RouterInfo key %s — "+
 				"every peer will reject our handshake; check that the encryption key in RouterInfoKeystore matches "+
 				"the key used when the RouterInfo was built",

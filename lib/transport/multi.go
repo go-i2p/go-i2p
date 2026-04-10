@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // DefaultMaxConnections is the default maximum number of concurrent connections
@@ -494,7 +495,7 @@ func (tmux *TransportMuxer) waitForAcceptedConnection() (net.Conn, error) {
 		return tmux.handleAcceptChannelResult(res, ok)
 	case <-tmux.acceptDone:
 		atomic.AddInt32(&tmux.activeSessionCount, -1)
-		return nil, errors.New("transport muxer closed")
+		return nil, oops.Errorf("transport muxer closed")
 	}
 }
 
@@ -502,7 +503,7 @@ func (tmux *TransportMuxer) waitForAcceptedConnection() (net.Conn, error) {
 func (tmux *TransportMuxer) handleAcceptChannelResult(res acceptResult, ok bool) (net.Conn, error) {
 	if !ok {
 		atomic.AddInt32(&tmux.activeSessionCount, -1)
-		return nil, errors.New("transport muxer closed")
+		return nil, oops.Errorf("transport muxer closed")
 	}
 	if res.err != nil {
 		atomic.AddInt32(&tmux.activeSessionCount, -1)
@@ -572,7 +573,7 @@ func (tmux *TransportMuxer) waitForConnection(timeout time.Duration) (net.Conn, 
 		return nil, context.DeadlineExceeded
 	case <-tmux.acceptDone:
 		atomic.AddInt32(&tmux.activeSessionCount, -1)
-		return nil, errors.New("transport muxer closed")
+		return nil, oops.Errorf("transport muxer closed")
 	}
 }
 
@@ -581,7 +582,7 @@ func (tmux *TransportMuxer) waitForConnection(timeout time.Duration) (net.Conn, 
 func (tmux *TransportMuxer) handleAcceptResult(res acceptResult, ok bool) (net.Conn, error) {
 	if !ok {
 		atomic.AddInt32(&tmux.activeSessionCount, -1)
-		return nil, errors.New("transport muxer closed")
+		return nil, oops.Errorf("transport muxer closed")
 	}
 	if res.err != nil {
 		atomic.AddInt32(&tmux.activeSessionCount, -1)

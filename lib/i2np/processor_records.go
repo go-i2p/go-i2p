@@ -7,6 +7,7 @@ import (
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/crypto/rand"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // processShortTunnelBuildMessage processes Short Tunnel Build Messages (STBM).
@@ -49,7 +50,7 @@ func (p *MessageProcessor) processFixedTunnelBuildRequest(msg I2NPMessage) error
 
 	records, err := p.parseFixedTunnelBuildRecords(data)
 	if err != nil {
-		return fmt.Errorf("failed to parse fixed tunnel build records: %w", err)
+		return oops.Wrapf(err, "failed to parse fixed tunnel build records")
 	}
 
 	p.logParsedBuildRequest(msg.MessageID(), len(records), false)
@@ -64,7 +65,7 @@ func (p *MessageProcessor) parseFixedTunnelBuildRecords(data []byte) ([]BuildReq
 	const expectedSize = fixedRecordCount * recordSize // 4224 bytes
 
 	if len(data) < expectedSize {
-		return nil, fmt.Errorf("insufficient data for TunnelBuild: have %d, need %d", len(data), expectedSize)
+		return nil, oops.Errorf("insufficient data for TunnelBuild: have %d, need %d", len(data), expectedSize)
 	}
 
 	records := make([]BuildRequestRecord, 0, fixedRecordCount)
@@ -107,7 +108,7 @@ func (p *MessageProcessor) processFixedBuildReply(msg I2NPMessage) error {
 	const expectedSize = fixedRecordCount * recordSize
 
 	if len(data) < expectedSize {
-		return fmt.Errorf("insufficient data for TunnelBuildReply: have %d, need %d", len(data), expectedSize)
+		return oops.Errorf("insufficient data for TunnelBuildReply: have %d, need %d", len(data), expectedSize)
 	}
 
 	records, rawRecords, err := parseFixedBuildRecords(data, fixedRecordCount, recordSize)
@@ -133,11 +134,11 @@ func (p *MessageProcessor) processFixedBuildReply(msg I2NPMessage) error {
 func extractBuildReplyData(msg I2NPMessage) ([]byte, error) {
 	carrier, ok := msg.(DataCarrier)
 	if !ok {
-		return nil, fmt.Errorf("tunnel build reply does not implement DataCarrier")
+		return nil, oops.Errorf("tunnel build reply does not implement DataCarrier")
 	}
 	data := carrier.GetData()
 	if len(data) == 0 {
-		return nil, fmt.Errorf("tunnel build reply contains no data")
+		return nil, oops.Errorf("tunnel build reply contains no data")
 	}
 	return data, nil
 }
@@ -156,7 +157,7 @@ func parseFixedBuildRecords(data []byte, count, recordSize int) ([8]BuildRespons
 
 		record, err := ReadBuildResponseRecord(recordData)
 		if err != nil {
-			return records, nil, fmt.Errorf("failed to parse response record %d: %w", i, err)
+			return records, nil, oops.Wrapf(err, "failed to parse response record %d", i)
 		}
 		records[i] = record
 		offset += recordSize
@@ -192,17 +193,17 @@ func (p *MessageProcessor) processBuildReplyCommon(msg I2NPMessage, isShortBuild
 
 	carrier, ok := msg.(DataCarrier)
 	if !ok {
-		return fmt.Errorf("tunnel build reply does not implement DataCarrier")
+		return oops.Errorf("tunnel build reply does not implement DataCarrier")
 	}
 
 	data := carrier.GetData()
 	if len(data) == 0 {
-		return fmt.Errorf("tunnel build reply contains no data")
+		return oops.Errorf("tunnel build reply contains no data")
 	}
 
 	records, rawRecords, err := p.parseBuildResponseRecords(data, isShortBuild)
 	if err != nil {
-		return fmt.Errorf("failed to parse build reply records: %w", err)
+		return oops.Wrapf(err, "failed to parse build reply records")
 	}
 
 	// Wrap parsed records in a TunnelReplyHandler
@@ -237,18 +238,18 @@ func (p *MessageProcessor) processBuildReplyCommon(msg I2NPMessage, isShortBuild
 // since re-serializing parsed records corrupts the original ciphertext needed for decryption.
 func (p *MessageProcessor) parseBuildResponseRecords(data []byte, isShortBuild bool) ([]BuildResponseRecord, [][]byte, error) {
 	if len(data) < 1 {
-		return nil, nil, fmt.Errorf("insufficient data for record count")
+		return nil, nil, oops.Errorf("insufficient data for record count")
 	}
 
 	recordCount := int(data[0])
 	if recordCount < 1 || recordCount > 8 {
-		return nil, nil, fmt.Errorf("invalid record count: %d (must be 1-8)", recordCount)
+		return nil, nil, oops.Errorf("invalid record count: %d (must be 1-8)", recordCount)
 	}
 
 	recordSize := p.getRecordSize(isShortBuild)
 	expectedLen := 1 + recordCount*recordSize
 	if len(data) < expectedLen {
-		return nil, nil, fmt.Errorf("insufficient data for %d records: have %d, need %d", recordCount, len(data), expectedLen)
+		return nil, nil, oops.Errorf("insufficient data for %d records: have %d, need %d", recordCount, len(data), expectedLen)
 	}
 
 	records := make([]BuildResponseRecord, recordCount)
@@ -263,7 +264,7 @@ func (p *MessageProcessor) parseBuildResponseRecords(data []byte, isShortBuild b
 
 		record, err := ReadBuildResponseRecord(recordData)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to parse response record %d: %w", i, err)
+			return nil, nil, oops.Wrapf(err, "failed to parse response record %d", i)
 		}
 		records[i] = record
 		offset += recordSize
@@ -290,7 +291,7 @@ func (p *MessageProcessor) processTunnelBuildRequest(msg I2NPMessage, isShortBui
 
 	records, err := p.parseTunnelBuildRecords(data, isShortBuild)
 	if err != nil {
-		return fmt.Errorf("failed to parse tunnel build records: %w", err)
+		return oops.Wrapf(err, "failed to parse tunnel build records")
 	}
 
 	p.logParsedBuildRequest(msg.MessageID(), len(records), isShortBuild)
@@ -305,7 +306,7 @@ func (p *MessageProcessor) validateParticipantManager(isShortBuild bool, msgType
 			"message_type":   msgType,
 			"is_short_build": isShortBuild,
 		}).Warn("participant manager not configured - rejecting tunnel build request")
-		return fmt.Errorf("participant manager not configured - cannot process tunnel build requests")
+		return oops.Errorf("participant manager not configured - cannot process tunnel build requests")
 	}
 	return nil
 }
@@ -314,12 +315,12 @@ func (p *MessageProcessor) validateParticipantManager(isShortBuild bool, msgType
 func (p *MessageProcessor) extractBuildMessageData(msg I2NPMessage) ([]byte, error) {
 	carrier, ok := msg.(DataCarrier)
 	if !ok {
-		return nil, fmt.Errorf("tunnel build message does not implement DataCarrier")
+		return nil, oops.Errorf("tunnel build message does not implement DataCarrier")
 	}
 
 	data := carrier.GetData()
 	if len(data) == 0 {
-		return nil, fmt.Errorf("tunnel build message contains no data")
+		return nil, oops.Errorf("tunnel build message contains no data")
 	}
 
 	return data, nil
@@ -350,7 +351,7 @@ func (p *MessageProcessor) processAllBuildRecords(messageID int, records []Build
 			"at":         "processAllBuildRecords",
 			"message_id": messageID,
 		}).Warn("Router hash not set (zero) — skipping all build records. Call SetOurRouterHash first.")
-		return fmt.Errorf("router hash not set: call SetOurRouterHash before processing tunnel build messages")
+		return oops.Errorf("router hash not set: call SetOurRouterHash before processing tunnel build messages")
 	}
 
 	for i, record := range records {
@@ -405,7 +406,7 @@ func (p *MessageProcessor) generateAndSendBuildReply(messageID, index int, recor
 	// Step 1: Generate random data for the response record
 	var randomData [495]byte
 	if _, err := rand.Read(randomData[:]); err != nil {
-		return fmt.Errorf("failed to generate random data for reply: %w", err)
+		return oops.Wrapf(err, "failed to generate random data for reply")
 	}
 
 	// Step 2: Create the BuildResponseRecord with proper hash
@@ -418,7 +419,7 @@ func (p *MessageProcessor) generateAndSendBuildReply(messageID, index int, recor
 			"message_id":   messageID,
 			"record_index": index,
 		}).Warn("build record crypto not initialized - cannot encrypt reply")
-		return fmt.Errorf("build record crypto not initialized")
+		return oops.Errorf("build record crypto not initialized")
 	}
 
 	encryptedReply, err := p.buildRecordCrypto.EncryptReplyRecord(
@@ -427,12 +428,12 @@ func (p *MessageProcessor) generateAndSendBuildReply(messageID, index int, recor
 		record.ReplyIV,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to encrypt build response record: %w", err)
+		return oops.Wrapf(err, "failed to encrypt build response record")
 	}
 
 	// Step 4: Forward the encrypted reply to the next hop
 	if err := p.forwardBuildReply(messageID, record, encryptedReply, isShortBuild); err != nil {
-		return fmt.Errorf("failed to forward build reply: %w", err)
+		return oops.Wrapf(err, "failed to forward build reply")
 	}
 
 	log.WithFields(logger.Fields{
@@ -502,7 +503,7 @@ func (p *MessageProcessor) handleAcceptedBuildRecord(messageID, index int, recor
 			"at":             "processTunnelBuildRequest",
 			"receive_tunnel": record.ReceiveTunnel,
 		}).Error("failed to register participant after acceptance")
-		return fmt.Errorf("RegisterParticipant failed for tunnel %d: %w", record.ReceiveTunnel, err)
+		return oops.Wrapf(err, "RegisterParticipant failed for tunnel %d", record.ReceiveTunnel)
 	}
 	return nil
 }
@@ -534,12 +535,12 @@ func (p *MessageProcessor) parseTunnelBuildRecords(data []byte, isShortBuild boo
 // validateAndGetRecordCount validates the data and extracts the record count.
 func (p *MessageProcessor) validateAndGetRecordCount(data []byte) (int, error) {
 	if len(data) < 1 {
-		return 0, fmt.Errorf("insufficient data for record count")
+		return 0, oops.Errorf("insufficient data for record count")
 	}
 
 	recordCount := int(data[0])
 	if recordCount < 1 || recordCount > 8 {
-		return 0, fmt.Errorf("invalid record count: %d (must be 1-8)", recordCount)
+		return 0, oops.Errorf("invalid record count: %d (must be 1-8)", recordCount)
 	}
 
 	return recordCount, nil
@@ -561,7 +562,7 @@ func (p *MessageProcessor) parseRecordsFromData(data []byte, recordCount, record
 
 	for i := 0; i < recordCount; i++ {
 		if len(data)-offset < recordSize {
-			return nil, fmt.Errorf("insufficient data for record %d: have %d, need %d", i, len(data)-offset, recordSize)
+			return nil, oops.Errorf("insufficient data for record %d: have %d, need %d", i, len(data)-offset, recordSize)
 		}
 
 		recordData := data[offset : offset+recordSize]

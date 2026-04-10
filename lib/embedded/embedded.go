@@ -8,6 +8,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/router"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // EmbeddedRouter defines the interface for an embeddable I2P router instance.
@@ -78,7 +79,7 @@ type StandardEmbeddedRouter struct {
 // Returns error if the configuration is nil or invalid, or if router creation fails.
 func NewStandardEmbeddedRouter(cfg *config.RouterConfig) (*StandardEmbeddedRouter, error) {
 	if cfg == nil {
-		return nil, fmt.Errorf("configuration cannot be nil")
+		return nil, oops.Errorf("configuration cannot be nil")
 	}
 
 	log.WithFields(logger.Fields{
@@ -96,7 +97,7 @@ func NewStandardEmbeddedRouter(cfg *config.RouterConfig) (*StandardEmbeddedRoute
 	// Auto-configure the router so callers don't need a separate Configure() call.
 	// Configure() creates the underlying router instance using the provided config.
 	if err := e.Configure(cfg); err != nil {
-		return nil, fmt.Errorf("auto-configure failed: %w", err)
+		return nil, oops.Wrapf(err, "auto-configure failed")
 	}
 
 	return e, nil
@@ -123,11 +124,11 @@ func (e *StandardEmbeddedRouter) Configure(cfg *config.RouterConfig) error {
 	}
 
 	if e.running {
-		return fmt.Errorf("cannot reconfigure running router")
+		return oops.Errorf("cannot reconfigure running router")
 	}
 
 	if cfg == nil {
-		return fmt.Errorf("configuration cannot be nil")
+		return oops.Errorf("configuration cannot be nil")
 	}
 
 	log.WithFields(logger.Fields{
@@ -147,7 +148,7 @@ func (e *StandardEmbeddedRouter) Configure(cfg *config.RouterConfig) error {
 			"reason":     "router creation failed",
 			"error_type": fmt.Sprintf("%T", err),
 		}).Error("failed to create router instance")
-		return fmt.Errorf("failed to create router: %w", err)
+		return oops.Wrapf(err, "failed to create router")
 	}
 
 	e.router = routerInstance
@@ -170,15 +171,15 @@ func (e *StandardEmbeddedRouter) Start() error {
 	defer e.mu.Unlock()
 
 	if !e.configured {
-		return fmt.Errorf("router must be configured before starting")
+		return oops.Errorf("router must be configured before starting")
 	}
 
 	if e.running {
-		return fmt.Errorf("router is already running")
+		return oops.Errorf("router is already running")
 	}
 
 	if e.router == nil {
-		return fmt.Errorf("router instance is nil - configuration may have failed")
+		return oops.Errorf("router instance is nil - configuration may have failed")
 	}
 
 	log.WithFields(logger.Fields{
@@ -189,7 +190,7 @@ func (e *StandardEmbeddedRouter) Start() error {
 
 	// Start the router subsystems
 	if err := e.router.Start(); err != nil {
-		return fmt.Errorf("router startup failed: %w", err)
+		return oops.Wrapf(err, "router startup failed")
 	}
 	e.running = true
 	e.done = make(chan struct{})
@@ -222,7 +223,7 @@ func (e *StandardEmbeddedRouter) Stop() error {
 
 	if e.router == nil {
 		e.mu.Unlock()
-		return fmt.Errorf("router instance is nil")
+		return oops.Errorf("router instance is nil")
 	}
 
 	log.WithFields(logger.Fields{
@@ -408,7 +409,7 @@ func (e *StandardEmbeddedRouter) Close() error {
 	defer e.mu.Unlock()
 
 	if e.running {
-		return fmt.Errorf("cannot close running router - call Stop() first")
+		return oops.Errorf("cannot close running router - call Stop() first")
 	}
 
 	if e.router == nil {
@@ -433,7 +434,7 @@ func (e *StandardEmbeddedRouter) Close() error {
 			"phase":  "cleanup",
 			"reason": "error during router close",
 		}).Error("failed to close router cleanly")
-		return fmt.Errorf("failed to close router: %w", err)
+		return oops.Wrapf(err, "failed to close router")
 	}
 
 	e.router = nil

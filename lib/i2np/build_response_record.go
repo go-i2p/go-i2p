@@ -1,11 +1,10 @@
 package i2np
 
 import (
-	"fmt"
-
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/crypto/types"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 /*
@@ -160,7 +159,7 @@ func validateBuildResponseRecord(record BuildResponseRecord) error {
 	}
 
 	if allZeros {
-		return fmt.Errorf("response record has empty hash")
+		return oops.Errorf("response record has empty hash")
 	}
 
 	// Verify SHA-256 hash: hash should be SHA256(random_data + reply_byte)
@@ -174,7 +173,7 @@ func validateBuildResponseRecord(record BuildResponseRecord) error {
 			"expected": record.Hash,
 			"computed": computedHash,
 		}).Warn("Response record hash mismatch")
-		return fmt.Errorf("response record hash verification failed")
+		return oops.Errorf("response record hash verification failed")
 	}
 
 	log.WithFields(logger.Fields{"at": "validateBuildResponseRecord"}).Debug("Response record validation passed")

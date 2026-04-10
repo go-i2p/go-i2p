@@ -1,8 +1,9 @@
 package skew
 
 import (
-	"fmt"
 	"time"
+
+	"github.com/samber/oops"
 )
 
 // MaxClockSkew is the maximum acceptable difference between a RouterInfo's
@@ -24,7 +25,7 @@ var nowFunc = time.Now
 // published timestamp >60 minutes in the future or past."
 func ValidateTimestamp(published time.Time) error {
 	if published.IsZero() {
-		return fmt.Errorf("clock skew: published timestamp is zero")
+		return oops.Errorf("clock skew: published timestamp is zero")
 	}
 
 	now := nowFunc()
@@ -37,7 +38,7 @@ func ValidateTimestamp(published time.Time) error {
 			"skew":      skew.String(),
 			"max":       MaxClockSkew.String(),
 		}).Warn("Rejecting RouterInfo: published timestamp too far in the past")
-		return fmt.Errorf("clock skew: timestamp is %s in the past (max %s)", skew, MaxClockSkew)
+		return oops.Errorf("clock skew: timestamp is %s in the past (max %s)", skew, MaxClockSkew)
 	}
 
 	if skew < -MaxClockSkew {
@@ -47,7 +48,7 @@ func ValidateTimestamp(published time.Time) error {
 			"skew":      (-skew).String(),
 			"max":       MaxClockSkew.String(),
 		}).Warn("Rejecting RouterInfo: published timestamp too far in the future")
-		return fmt.Errorf("clock skew: timestamp is %s in the future (max %s)", -skew, MaxClockSkew)
+		return oops.Errorf("clock skew: timestamp is %s in the future (max %s)", -skew, MaxClockSkew)
 	}
 
 	return nil
@@ -68,20 +69,20 @@ func IsTimestampValid(published time.Time) bool {
 // with an error.
 func ValidateTimestampWithSkew(published time.Time, maxSkew time.Duration) error {
 	if maxSkew <= 0 {
-		return fmt.Errorf("clock skew: maxSkew must be positive, got %s", maxSkew)
+		return oops.Errorf("clock skew: maxSkew must be positive, got %s", maxSkew)
 	}
 	if published.IsZero() {
-		return fmt.Errorf("clock skew: published timestamp is zero")
+		return oops.Errorf("clock skew: published timestamp is zero")
 	}
 
 	now := nowFunc()
 	skew := now.Sub(published)
 
 	if skew > maxSkew {
-		return fmt.Errorf("clock skew: timestamp is %s in the past (max %s)", skew, maxSkew)
+		return oops.Errorf("clock skew: timestamp is %s in the past (max %s)", skew, maxSkew)
 	}
 	if skew < -maxSkew {
-		return fmt.Errorf("clock skew: timestamp is %s in the future (max %s)", -skew, maxSkew)
+		return oops.Errorf("clock skew: timestamp is %s in the future (max %s)", -skew, maxSkew)
 	}
 
 	return nil

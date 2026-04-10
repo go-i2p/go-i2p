@@ -1,7 +1,6 @@
 package router
 
 import (
-	"fmt"
 	"sync"
 	"sync/atomic"
 
@@ -12,6 +11,7 @@ import (
 	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
 	"github.com/go-i2p/go-i2p/lib/transport/ssu2"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // routerInfoProvider implements netdb.RouterInfoProvider for the Router.
@@ -46,7 +46,7 @@ func (p *routerInfoProvider) GetRouterInfo() (*router_info.RouterInfo, error) {
 	p.router.keystoreMux.RUnlock()
 
 	if ks == nil {
-		return nil, fmt.Errorf("router keystore not available (router may be shutting down)")
+		return nil, oops.Errorf("router keystore not available (router may be shutting down)")
 	}
 
 	// Build options with congestion flag if available

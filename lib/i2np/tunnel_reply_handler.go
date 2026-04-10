@@ -1,7 +1,6 @@
 package i2np
 
 import (
-	"fmt"
 	"sync"
 	"time"
 
@@ -10,6 +9,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/go-i2p/go-noise/ratchet"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // ReplyProcessorConfig configures tunnel reply processing behavior.
@@ -112,7 +112,7 @@ func (rp *ReplyProcessor) RegisterPendingBuild(
 	hopCount int,
 ) error {
 	if len(replyKeys) != hopCount || len(replyIVs) != hopCount {
-		return fmt.Errorf("reply key/IV count mismatch: got %d keys, %d IVs, expected %d",
+		return oops.Errorf("reply key/IV count mismatch: got %d keys, %d IVs, expected %d",
 			len(replyKeys), len(replyIVs), hopCount)
 	}
 
@@ -182,7 +182,7 @@ func (rp *ReplyProcessor) retrieveAndRemovePendingBuild(tunnelID tunnel.TunnelID
 	pending, exists := rp.pendingBuilds[tunnelID]
 	if !exists {
 		log.WithField("tunnel_id", tunnelID).Warn("Received reply for unknown tunnel build")
-		return nil, fmt.Errorf("no pending build for tunnel %d", tunnelID)
+		return nil, oops.Errorf("no pending build for tunnel %d", tunnelID)
 	}
 
 	if pending.TimeoutTimer != nil {
@@ -237,12 +237,12 @@ func (rp *ReplyProcessor) decryptReplyRecords(handler TunnelReplyHandler, pendin
 	rawRecords := handler.GetRawReplyRecords()
 
 	if len(records) != len(pending.ReplyKeys) {
-		return fmt.Errorf("record count mismatch: got %d records, expected %d",
+		return oops.Errorf("record count mismatch: got %d records, expected %d",
 			len(records), len(pending.ReplyKeys))
 	}
 
 	if len(rawRecords) != len(records) {
-		return fmt.Errorf("raw record count mismatch: got %d raw records, expected %d",
+		return oops.Errorf("raw record count mismatch: got %d raw records, expected %d",
 			len(rawRecords), len(records))
 	}
 
@@ -250,13 +250,13 @@ func (rp *ReplyProcessor) decryptReplyRecords(handler TunnelReplyHandler, pendin
 		// Decrypt this hop's reply record using the raw encrypted bytes
 		decrypted, err := rp.decryptRecord(rawRecords[i], pending.ReplyKeys[i], pending.ReplyIVs[i])
 		if err != nil {
-			return fmt.Errorf("failed to decrypt record %d: %w", i, err)
+			return oops.Wrapf(err, "failed to decrypt record %d", i)
 		}
 
 		// Parse decrypted data into BuildResponseRecord
 		decryptedRecord, err := ReadBuildResponseRecord(decrypted)
 		if err != nil {
-			return fmt.Errorf("failed to parse decrypted record %d: %w", i, err)
+			return oops.Wrapf(err, "failed to parse decrypted record %d", i)
 		}
 
 		// Update the record in-place (this modifies the handler's records)
@@ -288,7 +288,7 @@ func (rp *ReplyProcessor) decryptRecord(
 		// Modern path: ChaCha20-Poly1305 AEAD with 16-byte auth tag
 		decryptedRecord, err := crypto.DecryptReplyRecord(encrypted, replyKey, replyIV)
 		if err != nil {
-			return nil, fmt.Errorf("ChaCha20-Poly1305 decryption failed: %w", err)
+			return nil, oops.Wrapf(err, "ChaCha20-Poly1305 decryption failed")
 		}
 
 		cleartext := ratchet.SerializeResponseRecord(decryptedRecord.Hash, decryptedRecord.RandomData, decryptedRecord.Reply)
@@ -310,7 +310,7 @@ func (rp *ReplyProcessor) decryptRecord(
 		}
 		cleartext, err := decrypter.DecryptNoPadding(encrypted)
 		if err != nil {
-			return nil, fmt.Errorf("AES-256-CBC decryption failed: %w", err)
+			return nil, oops.Wrapf(err, "AES-256-CBC decryption failed")
 		}
 
 		log.WithFields(logger.Fields{
@@ -321,7 +321,7 @@ func (rp *ReplyProcessor) decryptRecord(
 		return cleartext, nil
 	}
 
-	return nil, fmt.Errorf("unexpected encrypted record size: %d (expected 528 or 544)", len(encrypted))
+	return nil, oops.Errorf("unexpected encrypted record size: %d (expected 528 or 544)", len(encrypted))
 }
 
 // handleBuildSuccess handles successful tunnel build completion.
@@ -365,14 +365,14 @@ func (rp *ReplyProcessor) handleBuildFailure(
 		"retry_count": pending.Retries,
 	}).Error("Tunnel build failed permanently after all retries")
 
-	return fmt.Errorf("tunnel build failed after %d retries: %w", pending.Retries, buildErr)
+	return oops.Wrapf(buildErr, "tunnel build failed after %d retries", pending.Retries)
 }
 
 // retryBuild attempts to retry a failed tunnel build with exponential backoff.
 func (rp *ReplyProcessor) retryBuild(tunnelID tunnel.TunnelID, pending *PendingBuildRequest) error {
 	if rp.retryCallback == nil {
 		log.WithFields(logger.Fields{"at": "retryBuild"}).Warn("No retry callback configured, cannot retry tunnel build")
-		return fmt.Errorf("retry not available")
+		return oops.Errorf("retry not available")
 	}
 
 	// Calculate backoff delay with exponential increase

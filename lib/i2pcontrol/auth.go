@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-i2p/crypto/hmac"
 	"github.com/go-i2p/crypto/rand"
+	"github.com/samber/oops"
 )
 
 // AuthManager handles token-based authentication for I2PControl RPC.
@@ -61,7 +62,7 @@ func NewAuthManager(password string) (*AuthManager, error) {
 	// This ensures tokens are unique per server instance
 	secret := make([]byte, 32)
 	if _, err := rand.Read(secret); err != nil {
-		return nil, fmt.Errorf("failed to generate HMAC secret: %w", err)
+		return nil, oops.Wrapf(err, "failed to generate HMAC secret")
 	}
 
 	return &AuthManager{
@@ -99,7 +100,7 @@ func (am *AuthManager) Authenticate(password string, expiration time.Duration) (
 			"at":        "AuthManager.Authenticate",
 			"remaining": remaining.String(),
 		}).Warn("authentication rate limited")
-		return "", fmt.Errorf("too many failed attempts, locked out for %s", remaining)
+		return "", oops.Errorf("too many failed attempts, locked out for %s", remaining)
 	}
 
 	// Read password with lock to prevent race with ChangePassword.
@@ -123,7 +124,7 @@ func (am *AuthManager) Authenticate(password string, expiration time.Duration) (
 			}).Warn("authentication lockout triggered")
 		}
 		am.rateLimitMu.Unlock()
-		return "", fmt.Errorf("invalid password")
+		return "", oops.Errorf("invalid password")
 	}
 
 	// Successful authentication — reset failure counter (rateLimitMu already held)

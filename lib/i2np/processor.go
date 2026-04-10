@@ -1,7 +1,6 @@
 package i2np
 
 import (
-	"fmt"
 	"sync"
 	"time"
 
@@ -9,6 +8,7 @@ import (
 	"github.com/go-i2p/common/session_key"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // GarlicCloveForwarder defines the interface for forwarding garlic cloves
@@ -458,7 +458,7 @@ func (p *MessageProcessor) processMessageDispatch(msg I2NPMessage) error {
 			"message_type": msg.Type(),
 			"reason":       "unknown message type",
 		}).Error("Cannot process message")
-		return fmt.Errorf("unknown message type: %d", msg.Type())
+		return oops.Errorf("unknown message type: %d", msg.Type())
 	}
 }
 

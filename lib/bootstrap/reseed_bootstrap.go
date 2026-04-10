@@ -65,7 +65,7 @@ func NewReseedBootstrap(config *config.BootstrapConfig) *ReseedBootstrap {
 // or when MinReseedServers == 1.
 func (rb *ReseedBootstrap) GetPeers(ctx context.Context, n int) ([]router_info.RouterInfo, error) {
 	if rb.config == nil {
-		return nil, fmt.Errorf("reseed bootstrap not configured")
+		return nil, oops.Errorf("reseed bootstrap not configured")
 	}
 	rb.logReseedStart(n)
 

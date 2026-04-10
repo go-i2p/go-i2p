@@ -17,6 +17,7 @@ import (
 	nattraversal "github.com/go-i2p/go-nat-listener"
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // SSU2Transport implements transport.Transport for SSU2 connections.
@@ -74,7 +75,7 @@ func NewSSU2Transport(identity router_info.RouterInfo, config *Config, keystore 
 	identHash, err := identity.IdentHash()
 	if err != nil {
 		cancel()
-		return nil, fmt.Errorf("failed to get router identity hash: %w", err)
+		return nil, oops.Wrapf(err, "failed to get router identity hash")
 	}
 	identHashBytes := identHash.Bytes()
 	l.WithFields(map[string]interface{}{
@@ -126,7 +127,7 @@ func NewSSU2Transport(identity router_info.RouterInfo, config *Config, keystore 
 func createSSU2Config(identity router_info.RouterInfo) (*ssu2noise.SSU2Config, error) {
 	identHash, err := identity.IdentHash()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get router identity hash: %w", err)
+		return nil, oops.Wrapf(err, "failed to get router identity hash")
 	}
 	cfg, err := ssu2noise.NewSSU2Config(identHash, false)
 	if err != nil {
@@ -143,12 +144,12 @@ func initializeCryptoKeys(cfg *ssu2noise.SSU2Config, keystore KeystoreProvider) 
 	}
 	encryptionPrivKey := keystore.GetEncryptionPrivateKey()
 	if encryptionPrivKey == nil {
-		return WrapSSU2Error(fmt.Errorf("encryption private key is nil"), "retrieving encryption key")
+		return WrapSSU2Error(oops.Errorf("encryption private key is nil"), "retrieving encryption key")
 	}
 	cfg.StaticKey = encryptionPrivKey.Bytes()
 	if len(cfg.StaticKey) != 32 {
 		return WrapSSU2Error(
-			fmt.Errorf("invalid static key size: expected 32 bytes, got %d", len(cfg.StaticKey)),
+			oops.Errorf("invalid static key size: expected 32 bytes, got %d", len(cfg.StaticKey)),
 			"loading static key",
 		)
 	}
@@ -162,11 +163,11 @@ func initializeCryptoKeys(cfg *ssu2noise.SSU2Config, keystore KeystoreProvider) 
 func setupUDPListener(t *SSU2Transport, config *Config, ssu2Config *ssu2noise.SSU2Config) error {
 	_, portStr, err := net.SplitHostPort(config.ListenerAddress)
 	if err != nil {
-		return fmt.Errorf("failed to parse listener address: %w", err)
+		return oops.Wrapf(err, "failed to parse listener address")
 	}
 	iport, err := strconv.Atoi(portStr)
 	if err != nil {
-		return fmt.Errorf("failed to convert port to integer: %w", err)
+		return oops.Wrapf(err, "failed to convert port to integer")
 	}
 
 	var udpConn net.PacketConn
@@ -176,11 +177,11 @@ func setupUDPListener(t *SSU2Transport, config *Config, ssu2Config *ssu2noise.SS
 		// port to map, so skip it and create the connection directly.
 		udpAddr, resolveErr := net.ResolveUDPAddr("udp", config.ListenerAddress)
 		if resolveErr != nil {
-			return fmt.Errorf("failed to resolve UDP address: %w", resolveErr)
+			return oops.Wrapf(resolveErr, "failed to resolve UDP address")
 		}
 		rawConn, listenErr := net.ListenUDP("udp", udpAddr)
 		if listenErr != nil {
-			return fmt.Errorf("failed to create UDP listener: %w", listenErr)
+			return oops.Wrapf(listenErr, "failed to create UDP listener")
 		}
 		config.ListenerAddress = rawConn.LocalAddr().String()
 		log.WithField("address", config.ListenerAddress).Info("UDP listener started (no NAT traversal for OS-assigned port)")
@@ -191,7 +192,7 @@ func setupUDPListener(t *SSU2Transport, config *Config, ssu2Config *ssu2noise.SS
 		defer natCancel()
 		natPL, natErr := nattraversal.ListenPacketWithFallbackContext(natCtx, iport)
 		if natErr != nil {
-			return fmt.Errorf("failed to create UDP listener: %w", natErr)
+			return oops.Wrapf(natErr, "failed to create UDP listener")
 		}
 		// Keep config in sync with the actual bound address.
 		if boundAddr := natPL.Addr().String(); boundAddr != config.ListenerAddress {
@@ -329,7 +330,7 @@ func (t *SSU2Transport) recordPeerSuccess(hash data.Hash, latencyMs int64) {
 func (t *SSU2Transport) SetIdentity(ident router_info.RouterInfo) error {
 	identHash, err := ident.IdentHash()
 	if err != nil {
-		return fmt.Errorf("failed to get router identity hash: %w", err)
+		return oops.Wrapf(err, "failed to get router identity hash")
 	}
 	identHashBytes := identHash.Bytes()
 	t.logger.WithField("router_hash", fmt.Sprintf("%x", identHashBytes[:8])).Info("Updating SSU2 transport identity")
@@ -340,7 +341,7 @@ func (t *SSU2Transport) SetIdentity(ident router_info.RouterInfo) error {
 	}
 
 	if err := initializeCryptoKeys(ssu2Config, t.keystore); err != nil {
-		return fmt.Errorf("failed to reinitialize crypto keys: %w", err)
+		return oops.Wrapf(err, "failed to reinitialize crypto keys")
 	}
 
 	t.identityMu.Lock()
@@ -357,7 +358,7 @@ func (t *SSU2Transport) SetIdentity(ident router_info.RouterInfo) error {
 func (t *SSU2Transport) GetSession(routerInfo router_info.RouterInfo) (transport.TransportSession, error) {
 	routerHash, err := routerInfo.IdentHash()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get router hash: %w", err)
+		return nil, oops.Wrapf(err, "failed to get router hash")
 	}
 
 	if session, found := t.findExistingSession(routerHash); found {
@@ -372,7 +373,7 @@ func (t *SSU2Transport) GetSession(routerInfo router_info.RouterInfo) (transport
 		return t.dialViaIntroducer(routerInfo, routerHash)
 	}
 
-	return nil, fmt.Errorf("no reachable SSU2 address for router %x", routerHash[:4])
+	return nil, oops.Errorf("no reachable SSU2 address for router %x", routerHash[:4])
 }
 
 func (t *SSU2Transport) findExistingSession(routerHash data.Hash) (transport.TransportSession, bool) {
@@ -476,7 +477,7 @@ func (t *SSU2Transport) prepareDialConfig(routerInfo router_info.RouterInfo) (*s
 	identHash, err := t.identity.IdentHash()
 	t.identityMu.RUnlock()
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get our identity hash: %w", err)
+		return nil, nil, oops.Wrapf(err, "failed to get our identity hash")
 	}
 
 	dialConfig, err := ssu2noise.NewSSU2Config(identHash, true)
@@ -490,7 +491,7 @@ func (t *SSU2Transport) prepareDialConfig(routerInfo router_info.RouterInfo) (*s
 
 	remoteHash, err := routerInfo.IdentHash()
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get remote router hash: %w", err)
+		return nil, nil, oops.Wrapf(err, "failed to get remote router hash")
 	}
 	dialConfig = dialConfig.WithRemoteRouterHash(remoteHash)
 
@@ -531,7 +532,7 @@ func extractRemoteStaticKey(routerInfo router_info.RouterInfo) ([]byte, error) {
 		}
 		return sk[:], nil
 	}
-	return nil, fmt.Errorf("no SSU2 address with static key found in RouterInfo")
+	return nil, oops.Errorf("no SSU2 address with static key found in RouterInfo")
 }
 
 // registerOrReuseSession creates a new session or returns an existing one for the router hash.
@@ -547,7 +548,7 @@ func (t *SSU2Transport) registerOrReuseSession(conn *ssu2noise.SSU2Conn, routerH
 		if existingSession, ok := existing.(*SSU2Session); ok {
 			return existingSession, false, nil // Reusing existing, slot not used
 		}
-		return nil, false, fmt.Errorf("unexpected session map entry type")
+		return nil, false, oops.Errorf("unexpected session map entry type")
 	}
 
 	session.StartWorkers()

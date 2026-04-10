@@ -7,6 +7,7 @@ import (
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // CompositeBootstrap implements the Bootstrap interface by trying multiple
@@ -98,7 +99,7 @@ func (cb *CompositeBootstrap) GetPeers(ctx context.Context, n int) ([]router_inf
 // getPeersFileOnly uses only the file bootstrap method.
 func (cb *CompositeBootstrap) getPeersFileOnly(ctx context.Context, n int) ([]router_info.RouterInfo, error) {
 	if cb.fileBootstrap == nil {
-		return nil, fmt.Errorf("bootstrap type is 'file' but no reseed file path is configured")
+		return nil, oops.Errorf("bootstrap type is 'file' but no reseed file path is configured")
 	}
 	return tryFileBootstrap(cb.fileBootstrap, ctx, n)
 }
@@ -171,9 +172,9 @@ func tryFileBootstrap(fb *FileBootstrap, ctx context.Context, n int) ([]router_i
 	logFileBootstrapFailure(err)
 	// Preserve actual error details for debugging
 	if err != nil {
-		return nil, fmt.Errorf("file bootstrap failed: %w", err)
+		return nil, oops.Wrapf(err, "file bootstrap failed")
 	}
-	return nil, fmt.Errorf("file bootstrap returned no peers")
+	return nil, oops.Errorf("file bootstrap returned no peers")
 }
 
 // tryReseedBootstrap attempts to obtain peers from remote reseed servers.
@@ -202,9 +203,9 @@ func tryReseedBootstrap(rb *ReseedBootstrap, ctx context.Context, n int) ([]rout
 	logReseedFailure(err)
 	// Preserve actual error details for debugging
 	if err != nil {
-		return nil, fmt.Errorf("reseed bootstrap failed: %w", err)
+		return nil, oops.Wrapf(err, "reseed bootstrap failed")
 	}
-	return nil, fmt.Errorf("reseed bootstrap returned no peers")
+	return nil, oops.Errorf("reseed bootstrap returned no peers")
 }
 
 // tryLocalNetDbBootstrap attempts to obtain peers from local netDb directories.
@@ -225,11 +226,11 @@ func tryLocalNetDbBootstrap(lb *LocalNetDbBootstrap, ctx context.Context, n int)
 			"reason": "local netdb bootstrap failed",
 		}).Error("local netDb bootstrap failed")
 		// Preserve error details with consistent wrapping
-		return nil, fmt.Errorf("local netDb bootstrap failed: %w", err)
+		return nil, oops.Wrapf(err, "local netDb bootstrap failed")
 	}
 
 	if len(peers) == 0 {
-		return nil, fmt.Errorf("local netDb bootstrap returned no peers")
+		return nil, oops.Errorf("local netDb bootstrap returned no peers")
 	}
 
 	log.WithFields(logger.Fields{
@@ -337,5 +338,5 @@ func buildAggregatedError(fileErr, reseedErr, netDbErr error) error {
 		errMsg += fmt.Sprintf(" netDb=%v", netDbErr)
 	}
 
-	return fmt.Errorf("%s", errMsg)
+	return oops.Errorf("%s", errMsg)
 }

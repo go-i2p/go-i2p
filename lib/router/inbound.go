@@ -2,7 +2,6 @@ package router
 
 import (
 	"encoding/binary"
-	"fmt"
 	"sync"
 
 	cryptotunnel "github.com/go-i2p/crypto/tunnel"
@@ -10,6 +9,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // InboundMessageHandler processes inbound tunnel messages and delivers them to I2CP sessions.
@@ -70,7 +70,7 @@ func (h *InboundMessageHandler) RegisterTunnel(tunnelID tunnel.TunnelID, session
 			"session_id": sessionID,
 			"reason":     "tunnel already registered",
 		}).Error("Failed to register tunnel")
-		return fmt.Errorf("tunnel %d already registered", tunnelID)
+		return oops.Errorf("tunnel %d already registered", tunnelID)
 	}
 
 	h.tunnelSessions[tunnelID] = &inboundTunnelEntry{
@@ -112,7 +112,7 @@ func (h *InboundMessageHandler) CreateEndpointForSession(tunnelID tunnel.TunnelI
 			"session_id": sessionID,
 			"reason":     "endpoint creation failed",
 		}).WithError(err).Error("Failed to create endpoint")
-		return nil, fmt.Errorf("failed to create endpoint: %w", err)
+		return nil, oops.Wrapf(err, "failed to create endpoint")
 	}
 
 	// Register the tunnel
@@ -195,7 +195,7 @@ func extractTunnelPayload(msg i2np.I2NPMessage) ([]byte, tunnel.TunnelID, error)
 			"message_type": msg.Type(),
 			"reason":       "message does not implement TunnelCarrier",
 		}).Error("Invalid message type")
-		return nil, 0, fmt.Errorf("message does not implement TunnelCarrier interface")
+		return nil, 0, oops.Errorf("message does not implement TunnelCarrier interface")
 	}
 
 	data := tunnelCarrier.GetTunnelData()
@@ -206,7 +206,7 @@ func extractTunnelPayload(msg i2np.I2NPMessage) ([]byte, tunnel.TunnelID, error)
 			"actual":   len(data),
 			"reason":   "wrong tunnel data size",
 		}).Error("Invalid tunnel data")
-		return nil, 0, fmt.Errorf("tunnel data wrong size: expected 1024 bytes, got %d", len(data))
+		return nil, 0, oops.Errorf("tunnel data wrong size: expected 1024 bytes, got %d", len(data))
 	}
 
 	return data, tunnelCarrier.GetTunnelID(), nil
@@ -244,7 +244,7 @@ func (h *InboundMessageHandler) decryptAndDeliver(tunnelID tunnel.TunnelID, data
 			"session_id": entry.sessionID,
 			"error":      err,
 		}).Error("Failed to decrypt tunnel message")
-		return fmt.Errorf("failed to decrypt tunnel message: %w", err)
+		return oops.Wrapf(err, "failed to decrypt tunnel message")
 	}
 
 	log.WithFields(logger.Fields{
@@ -274,7 +274,7 @@ func (h *InboundMessageHandler) createMessageHandler(sessionID uint16) tunnel.Me
 				"session_id": sessionID,
 				"reason":     "session not found",
 			}).Error("Failed to lookup session")
-			return fmt.Errorf("session %d not found", sessionID)
+			return oops.Errorf("session %d not found", sessionID)
 		}
 
 		// Queue the message for delivery to the client
@@ -283,7 +283,7 @@ func (h *InboundMessageHandler) createMessageHandler(sessionID uint16) tunnel.Me
 				"session_id": sessionID,
 				"error":      err,
 			}).Error("Failed to queue incoming message")
-			return fmt.Errorf("failed to queue message: %w", err)
+			return oops.Wrapf(err, "failed to queue message")
 		}
 
 		log.WithFields(logger.Fields{

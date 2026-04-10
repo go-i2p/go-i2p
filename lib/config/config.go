@@ -1,12 +1,12 @@
 package config
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/go-i2p/go-i2p/lib/util"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 	"github.com/spf13/viper"
 )
 
@@ -33,7 +33,7 @@ func InitConfig() error {
 
 	// handle config file creating it if needed
 	if err := handleConfigFile(); err != nil {
-		return fmt.Errorf("fatal configuration error: %w", err)
+		return oops.Wrapf(err, "fatal configuration error")
 	}
 
 	// Update RouterConfigProperties
@@ -43,7 +43,7 @@ func InitConfig() error {
 	// not just the hardcoded defaults. This catches invalid user-provided values
 	// at startup rather than allowing them to cause runtime failures.
 	if err := Validate(CurrentConfig()); err != nil {
-		return fmt.Errorf("configuration validation failed: %w", err)
+		return oops.Wrapf(err, "configuration validation failed")
 	}
 
 	// Security warning: Check for default password
@@ -537,12 +537,12 @@ func createDefaultConfig(defaultConfigDir string) error {
 	defaultConfigFile := filepath.Join(defaultConfigDir, "config.yaml")
 	// Ensure directory exists with secure permissions (config may contain passwords)
 	if err := CreateSecureDirectory(defaultConfigDir); err != nil {
-		return fmt.Errorf("could not create config directory: %w", err)
+		return oops.Wrapf(err, "could not create config directory")
 	}
 
 	// Write current config file
 	if err := viper.SafeWriteConfig(); err != nil {
-		return fmt.Errorf("could not write default config file: %w", err)
+		return oops.Wrapf(err, "could not write default config file")
 	}
 
 	// Secure the config file (may contain sensitive data like I2PControl password)
@@ -569,14 +569,14 @@ func handleConfigFile() error {
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 			if CfgFile != "" {
-				return fmt.Errorf("config file %s is not found: %w", CfgFile, err)
+				return oops.Wrapf(err, "config file %s is not found", CfgFile)
 			} else {
 				if err := createDefaultConfig(BuildI2PDirPath()); err != nil {
 					return err
 				}
 			}
 		} else {
-			return fmt.Errorf("error reading config file: %w", err)
+			return oops.Wrapf(err, "error reading config file")
 		}
 	} else {
 		log.WithFields(logger.Fields{

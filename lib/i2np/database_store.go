@@ -5,6 +5,7 @@ import (
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // DatabaseStore type constants (bits 3-0 of type field)
@@ -272,7 +273,7 @@ func (d *DatabaseStore) MarshalBinary() ([]byte, error) {
 // UnmarshalBinary deserializes the DatabaseStore message from I2NP message data
 func (d *DatabaseStore) UnmarshalBinary(data []byte) error {
 	if len(data) < 37 { // Minimum: key(32) + type(1) + replyToken(4)
-		return fmt.Errorf("DatabaseStore message too short: %d bytes", len(data))
+		return oops.Errorf("DatabaseStore message too short: %d bytes", len(data))
 	}
 
 	remainder := data
@@ -280,7 +281,7 @@ func (d *DatabaseStore) UnmarshalBinary(data []byte) error {
 	// Key (32 bytes)
 	key, remainder, err := common.ReadHash(remainder)
 	if err != nil {
-		return fmt.Errorf("DatabaseStore: failed to read key hash: %w", err)
+		return oops.Wrapf(err, "DatabaseStore: failed to read key hash")
 	}
 	d.Key = key
 
@@ -296,7 +297,7 @@ func (d *DatabaseStore) UnmarshalBinary(data []byte) error {
 	hasReply := d.ReplyToken != [4]byte{0, 0, 0, 0}
 	if hasReply {
 		if len(remainder) < 36 { // Need replyTunnelID(4) + replyGateway(32)
-			return fmt.Errorf("DatabaseStore with reply token truncated")
+			return oops.Errorf("DatabaseStore with reply token truncated")
 		}
 		// Reply Tunnel ID (4 bytes)
 		copy(d.ReplyTunnelID[:], remainder[:4])
@@ -305,7 +306,7 @@ func (d *DatabaseStore) UnmarshalBinary(data []byte) error {
 		// Reply Gateway (32 bytes)
 		gateway, rem, err := common.ReadHash(remainder)
 		if err != nil {
-			return fmt.Errorf("DatabaseStore: failed to read reply gateway hash: %w", err)
+			return oops.Wrapf(err, "DatabaseStore: failed to read reply gateway hash")
 		}
 		d.ReplyGateway = gateway
 		remainder = rem
@@ -345,19 +346,19 @@ func validateDatabaseStoreSize(dataType byte, size int) error {
 	switch leaseSetType {
 	case DatabaseStoreTypeRouterInfo:
 		if size > MaxRouterInfoSize {
-			return fmt.Errorf("RouterInfo size %d exceeds maximum %d", size, MaxRouterInfoSize)
+			return oops.Errorf("RouterInfo size %d exceeds maximum %d", size, MaxRouterInfoSize)
 		}
 	case DatabaseStoreTypeLeaseSet,
 		DatabaseStoreTypeLeaseSet2,
 		DatabaseStoreTypeEncryptedLeaseSet,
 		DatabaseStoreTypeMetaLeaseSet:
 		if size > MaxLeaseSetSize {
-			return fmt.Errorf("LeaseSet size %d exceeds maximum %d", size, MaxLeaseSetSize)
+			return oops.Errorf("LeaseSet size %d exceeds maximum %d", size, MaxLeaseSetSize)
 		}
 	default:
 		// Unknown type - use LeaseSet limit as conservative default
 		if size > MaxLeaseSetSize {
-			return fmt.Errorf("unknown DatabaseStore type %d: size %d exceeds maximum %d",
+			return oops.Errorf("unknown DatabaseStore type %d: size %d exceeds maximum %d",
 				dataType, size, MaxLeaseSetSize)
 		}
 	}

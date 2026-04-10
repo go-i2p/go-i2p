@@ -1,8 +1,6 @@
 package i2np
 
-import (
-	"errors"
-)
+import "github.com/samber/oops"
 
 // I2NP Message Type Constants
 // Moved from: header.go
@@ -27,13 +25,13 @@ const (
 // These use errors.New (not oops.Errorf) so callers can match them with errors.Is().
 // Moved from: header.go, build_request_record.go, build_response_record.go, database_lookup.go
 var (
-	ErrI2NPNotEnoughData                = errors.New("not enough i2np header data")
-	ErrBuildRequestRecordNotEnoughData  = errors.New("not enough i2np build request record data")
-	ErrBuildResponseRecordNotEnoughData = errors.New("not enough i2np build response record data")
-	ErrDatabaseLookupNotEnoughData      = errors.New("not enough i2np database lookup data")
-	ErrDatabaseSearchReplyNotEnoughData = errors.New("not enough i2np database search reply data")
-	ErrDatabaseLookupInvalidSize        = errors.New("database lookup excluded peers size exceeds protocol limit")
-	ErrI2NPMessageExpired               = errors.New("i2np message has expired")
+	ErrI2NPNotEnoughData                = oops.Errorf("not enough i2np header data")
+	ErrBuildRequestRecordNotEnoughData  = oops.Errorf("not enough i2np build request record data")
+	ErrBuildResponseRecordNotEnoughData = oops.Errorf("not enough i2np build response record data")
+	ErrDatabaseLookupNotEnoughData      = oops.Errorf("not enough i2np database lookup data")
+	ErrDatabaseSearchReplyNotEnoughData = oops.Errorf("not enough i2np database search reply data")
+	ErrDatabaseLookupInvalidSize        = oops.Errorf("database lookup excluded peers size exceeds protocol limit")
+	ErrI2NPMessageExpired               = oops.Errorf("i2np message has expired")
 )
 
 // Build record size constants per the I2P specification.

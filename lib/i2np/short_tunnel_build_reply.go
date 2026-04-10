@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/go-i2p/crypto/types"
+	"github.com/samber/oops"
 
 	"github.com/go-i2p/logger"
 )
@@ -72,12 +73,12 @@ func (s *ShortTunnelBuildReply) logReplyStart(recordCount int) {
 // Returns an error if count mismatch or no records present.
 func (s *ShortTunnelBuildReply) validateRecordCount(recordCount int) error {
 	if s.Count != recordCount {
-		return fmt.Errorf("count mismatch: Count field is %d but have %d records", s.Count, recordCount)
+		return oops.Errorf("count mismatch: Count field is %d but have %d records", s.Count, recordCount)
 	}
 
 	if recordCount == 0 {
 		log.WithFields(logger.Fields{"at": "validateRecordCount"}).Warn("ShortTunnelBuildReply has no response records")
-		return fmt.Errorf("tunnel build failed: no response records")
+		return oops.Errorf("tunnel build failed: no response records")
 	}
 
 	return nil
@@ -155,7 +156,7 @@ func (s *ShortTunnelBuildReply) verifyRecordIntegrity(hopIndex int, record Build
 			"provided_hash": fmt.Sprintf("%x", record.Hash[:8]),
 			"computed_hash": fmt.Sprintf("%x", computedHash[:8]),
 		}).Warn("Record hash mismatch - integrity check failed")
-		return fmt.Errorf("record %d hash mismatch: provided %x, computed %x", hopIndex, record.Hash[:8], computedHash[:8])
+		return oops.Errorf("record %d hash mismatch: provided %x, computed %x", hopIndex, record.Hash[:8], computedHash[:8])
 	}
 
 	return nil
@@ -190,10 +191,10 @@ func (s *ShortTunnelBuildReply) determineBuildResult(successCount, recordCount i
 	}).Warn("Short tunnel build failed - one or more hops rejected")
 
 	if firstError != nil {
-		return fmt.Errorf("short tunnel build failed: %d of %d hops rejected, first error: %w", failedHops, recordCount, firstError)
+		return oops.Wrapf(firstError, "short tunnel build failed: %d of %d hops rejected, first error", failedHops, recordCount)
 	}
 
-	return fmt.Errorf("short tunnel build failed: %d of %d hops rejected", failedHops, recordCount)
+	return oops.Errorf("short tunnel build failed: %d of %d hops rejected", failedHops, recordCount)
 }
 
 // NewShortTunnelBuildReply creates a new ShortTunnelBuildReply

@@ -2,7 +2,6 @@ package keys
 
 import (
 	"encoding/hex"
-	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -164,7 +163,7 @@ func loadOrGenerateEncryptionKey(dir, name string) (types.ReceivingPublicKey, ty
 	// but is inaccessible — generating a new one would silently
 	// change the router's NTCP2 static key and identity.
 	if !os.IsNotExist(err) {
-		return nil, nil, fmt.Errorf("failed to read encryption key file %s (refusing to regenerate): %w", fullPath, err)
+		return nil, nil, oops.Wrapf(err, "failed to read encryption key file %s (refusing to regenerate)", fullPath)
 	}
 
 	return generateAndPersistEncryptionKey(fullPath)
@@ -246,7 +245,7 @@ func loadExistingKey(keyData []byte) (types.PrivateKey, error) {
 	// Reject anything else to prevent malformed keys from causing
 	// panics or incorrect signatures downstream.
 	if len(keyData) != 32 && len(keyData) != 64 {
-		return nil, fmt.Errorf("invalid Ed25519 key length: got %d bytes, want 32 or 64", len(keyData))
+		return nil, oops.Errorf("invalid Ed25519 key length: got %d bytes, want 32 or 64", len(keyData))
 	}
 	key := ed25519.Ed25519PrivateKey(keyData)
 	return &key, nil

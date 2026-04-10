@@ -11,6 +11,7 @@ import (
 	"github.com/go-i2p/crypto/curve25519"
 	"github.com/go-i2p/crypto/ed25519"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // Persisted key file format v2 (all fields are fixed-size):
@@ -49,18 +50,18 @@ func (dks *DestinationKeyStore) StoreKeys(dir, name string) error {
 	}).Debug("Storing destination keys to disk")
 
 	if err := ensureDirectoryExists(dir); err != nil {
-		return fmt.Errorf("failed to create key directory: %w", err)
+		return oops.Wrapf(err, "failed to create key directory")
 	}
 
 	data, err := dks.marshal()
 	if err != nil {
-		return fmt.Errorf("failed to marshal destination keys: %w", err)
+		return oops.Wrapf(err, "failed to marshal destination keys")
 	}
 
 	filename := filepath.Join(dir, name+".dest.key")
 	if err := os.WriteFile(filename, data, 0o600); err != nil {
 		log.WithError(err).Error("Failed to write destination key file")
-		return fmt.Errorf("failed to write destination key file: %w", err)
+		return oops.Wrapf(err, "failed to write destination key file")
 	}
 
 	log.WithFields(map[string]interface{}{
@@ -83,14 +84,14 @@ func LoadDestinationKeyStore(dir, name string) (*DestinationKeyStore, error) {
 	data, err := os.ReadFile(filename)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("destination key file not found: %s", filename)
+			return nil, oops.Errorf("destination key file not found: %s", filename)
 		}
-		return nil, fmt.Errorf("failed to read destination key file: %w", err)
+		return nil, oops.Wrapf(err, "failed to read destination key file")
 	}
 
 	dks, err := unmarshalDestinationKeyStore(data)
 	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal destination keys: %w", err)
+		return nil, oops.Wrapf(err, "failed to unmarshal destination keys")
 	}
 
 	log.WithField("at", "LoadDestinationKeyStore").Debug("Successfully loaded destination keys")
@@ -123,21 +124,21 @@ func LoadOrCreateDestinationKeyStore(dir, name string) (*DestinationKeyStore, er
 		// File exists but couldn't be loaded (corrupt/unreadable), or stat itself
 		// failed (permission denied). Do NOT silently replace the identity.
 		if statErr == nil {
-			return nil, fmt.Errorf("destination key file exists but could not be loaded (refusing to overwrite — would cause identity loss): %w", err)
+			return nil, oops.Wrapf(err, "destination key file exists but could not be loaded (refusing to overwrite — would cause identity loss)")
 		}
 		// statErr is non-nil but also not "not exist" — e.g. permission denied
-		return nil, fmt.Errorf("cannot verify destination key file status: %w", statErr)
+		return nil, oops.Wrapf(statErr, "cannot verify destination key file status")
 	}
 
 	// File truly does not exist — safe to create fresh keys
 	log.WithField("reason", err.Error()).Debug("Creating new destination key store")
 	dks, err = NewDestinationKeyStore()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create destination key store: %w", err)
+		return nil, oops.Wrapf(err, "failed to create destination key store")
 	}
 
 	if err := dks.StoreKeys(dir, name); err != nil {
-		return nil, fmt.Errorf("failed to persist new destination key store: %w", err)
+		return nil, oops.Wrapf(err, "failed to persist new destination key store")
 	}
 
 	return dks, nil
@@ -150,7 +151,7 @@ func (dks *DestinationKeyStore) marshal() ([]byte, error) {
 	// Get raw bytes from the signing private key via type assertion
 	sigPrivConcrete, ok := dks.signingPrivKey.(interface{ Bytes() []byte })
 	if !ok {
-		return nil, fmt.Errorf("signing private key does not support Bytes()")
+		return nil, oops.Errorf("signing private key does not support Bytes()")
 	}
 	sigPrivBytes := sigPrivConcrete.Bytes()
 
@@ -239,7 +240,7 @@ func unmarshalDestinationKeyStore(data []byte) (*DestinationKeyStore, error) {
 // and the offset past the header.
 func detectFormatVersion(data []byte) (version, offset int, err error) {
 	if len(data) < 4 {
-		return 0, 0, fmt.Errorf("data too short for magic header")
+		return 0, 0, oops.Errorf("data too short for magic header")
 	}
 	if matchesMagic(data, destinationKeyStoreMagicV2) {
 		return 2, len(destinationKeyStoreMagicV2), nil
@@ -247,7 +248,7 @@ func detectFormatVersion(data []byte) (version, offset int, err error) {
 	if matchesMagic(data, destinationKeyStoreMagicV1) {
 		return 1, len(destinationKeyStoreMagicV1), nil
 	}
-	return 0, 0, fmt.Errorf("invalid magic header: not a destination key file")
+	return 0, 0, oops.Errorf("invalid magic header: not a destination key file")
 }
 
 // matchesMagic checks if data starts with the given magic bytes.
@@ -295,11 +296,11 @@ func readPrivateKeyFieldsWithOffset(data []byte, offset int) (sigPrivBytes []byt
 func reconstructPrivateKeys(sigPrivBytes, encPrivBytes []byte) (ed25519.Ed25519PrivateKey, *curve25519.Curve25519PrivateKey, error) {
 	sigPrivKey, err := ed25519.NewEd25519PrivateKey(sigPrivBytes)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to reconstruct signing private key: %w", err)
+		return nil, nil, oops.Wrapf(err, "failed to reconstruct signing private key")
 	}
 	encPrivKey, err := curve25519.NewCurve25519PrivateKey(encPrivBytes)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to reconstruct encryption private key: %w", err)
+		return nil, nil, oops.Wrapf(err, "failed to reconstruct encryption private key")
 	}
 	return sigPrivKey, encPrivKey, nil
 }
@@ -327,17 +328,17 @@ const maxPrivateKeyFieldLength = 1024
 // readLengthPrefixedField reads a 4-byte big-endian length followed by that many bytes.
 func readLengthPrefixedField(data []byte, offset int, fieldName string) ([]byte, int, error) {
 	if offset+4 > len(data) {
-		return nil, 0, fmt.Errorf("data too short for %s length", fieldName)
+		return nil, 0, oops.Errorf("data too short for %s length", fieldName)
 	}
 	length := int(binary.BigEndian.Uint32(data[offset : offset+4]))
 	offset += 4
 
 	if length > maxPrivateKeyFieldLength {
-		return nil, 0, fmt.Errorf("%s length %d exceeds maximum allowed %d", fieldName, length, maxPrivateKeyFieldLength)
+		return nil, 0, oops.Errorf("%s length %d exceeds maximum allowed %d", fieldName, length, maxPrivateKeyFieldLength)
 	}
 
 	if offset+length > len(data) {
-		return nil, 0, fmt.Errorf("data too short for %s data (need %d, have %d)", fieldName, length, len(data)-offset)
+		return nil, 0, oops.Errorf("data too short for %s data (need %d, have %d)", fieldName, length, len(data)-offset)
 	}
 	field := make([]byte, length)
 	copy(field, data[offset:offset+length])
@@ -352,14 +353,14 @@ func readLengthPrefixedField(data []byte, offset int, fieldName string) ([]byte,
 func (dks *DestinationKeyStore) archiveCurrentKeys(dir, name string) error {
 	data, err := dks.marshal()
 	if err != nil {
-		return fmt.Errorf("failed to marshal keys for archive: %w", err)
+		return oops.Wrapf(err, "failed to marshal keys for archive")
 	}
 
 	timestamp := time.Now().UTC().Format("20060102-150405")
 	archiveFilename := filepath.Join(dir, fmt.Sprintf("%s.dest.key.%s.archive", name, timestamp))
 
 	if err := os.WriteFile(archiveFilename, data, 0o600); err != nil {
-		return fmt.Errorf("failed to write archive file: %w", err)
+		return oops.Wrapf(err, "failed to write archive file")
 	}
 
 	log.WithFields(map[string]interface{}{
@@ -390,18 +391,18 @@ func (dks *DestinationKeyStore) RotateDestinationKeys(dir, name string) (*Destin
 
 	// Archive the current keys before rotation
 	if err := dks.archiveCurrentKeys(dir, name); err != nil {
-		return nil, fmt.Errorf("failed to archive current keys: %w", err)
+		return nil, oops.Wrapf(err, "failed to archive current keys")
 	}
 
 	// Generate new keys
 	newDKS, err := NewDestinationKeyStore()
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate new destination keys: %w", err)
+		return nil, oops.Wrapf(err, "failed to generate new destination keys")
 	}
 
 	// Persist the new keys (overwrites the current key file)
 	if err := newDKS.StoreKeys(dir, name); err != nil {
-		return nil, fmt.Errorf("failed to store new destination keys: %w", err)
+		return nil, oops.Wrapf(err, "failed to store new destination keys")
 	}
 
 	log.WithFields(map[string]interface{}{

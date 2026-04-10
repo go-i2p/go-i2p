@@ -1,7 +1,6 @@
 package bootstrap
 
 import (
-	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -11,6 +10,7 @@ import (
 	"github.com/go-i2p/common/router_identity"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // ValidationStats tracks statistics about RouterInfo validation during bootstrap
@@ -255,7 +255,7 @@ func ValidateRouterInfo(ri router_info.RouterInfo) error {
 	// Check if RouterInfo has any addresses
 	addresses := ri.RouterAddresses()
 	if len(addresses) == 0 {
-		return errors.New("no router addresses")
+		return oops.Errorf("no router addresses")
 	}
 
 	// Check if at least one valid address exists
@@ -273,9 +273,9 @@ func ValidateRouterInfo(ri router_info.RouterInfo) error {
 
 	if !hasValidAddress {
 		if lastErr != nil {
-			return fmt.Errorf("no valid router addresses found (last error: %v)", lastErr)
+			return oops.Errorf("no valid router addresses found (last error: %v)", lastErr)
 		}
-		return errors.New("no valid router addresses found")
+		return oops.Errorf("no valid router addresses found")
 	}
 
 	return nil
@@ -288,12 +288,12 @@ func ValidateRouterAddress(addr *router_address.RouterAddress) error {
 	style := addr.TransportStyle()
 	styleBytes, err := style.Data()
 	if err != nil {
-		return fmt.Errorf("invalid transport style: %w", err)
+		return oops.Wrapf(err, "invalid transport style")
 	}
 	styleStr := string(styleBytes)
 
 	if styleStr == "" {
-		return errors.New("empty transport style")
+		return oops.Errorf("empty transport style")
 	}
 
 	// For NTCP2, validate required keys
@@ -354,7 +354,7 @@ func validateHostData(addr *router_address.RouterAddress) (string, error) {
 			"note":      "requires introducer support (not yet implemented)",
 			"impact":    "none - will be skipped during peer selection",
 		}).Debug("NTCP2 address is introducer-only (no direct connectivity)")
-		return "", fmt.Errorf("NTCP2 address cannot retrieve host (introducer-based): %w", err)
+		return "", oops.Wrapf(err, "NTCP2 address cannot retrieve host (introducer-based)")
 	}
 
 	if host == nil {
@@ -365,7 +365,7 @@ func validateHostData(addr *router_address.RouterAddress) (string, error) {
 			"reason":    "host key value is nil",
 			"impact":    "peer cannot be contacted via NTCP2",
 		}).Warn("NTCP2 host is nil")
-		return "", errors.New("NTCP2 host is nil")
+		return "", oops.Errorf("NTCP2 host is nil")
 	}
 
 	hostData := host.String()
@@ -377,7 +377,7 @@ func validateHostData(addr *router_address.RouterAddress) (string, error) {
 			"reason":    "host key value is empty string",
 			"impact":    "peer cannot be contacted via NTCP2",
 		}).Warn("NTCP2 host is empty")
-		return "", errors.New("NTCP2 host is empty")
+		return "", oops.Errorf("NTCP2 host is empty")
 	}
 
 	return hostData, nil
@@ -397,7 +397,7 @@ func validatePortData(addr *router_address.RouterAddress, hostData string) (stri
 			"host":      hostData,
 			"impact":    "peer cannot be contacted via NTCP2",
 		}).Warn("RouterAddress missing required port key")
-		return "", fmt.Errorf("NTCP2 address cannot retrieve port: %w", err)
+		return "", oops.Wrapf(err, "NTCP2 address cannot retrieve port")
 	}
 
 	if port == "" {
@@ -409,7 +409,7 @@ func validatePortData(addr *router_address.RouterAddress, hostData string) (stri
 			"host":      hostData,
 			"impact":    "peer cannot be contacted via NTCP2",
 		}).Warn("NTCP2 port is empty")
-		return "", errors.New("NTCP2 port is empty")
+		return "", oops.Errorf("NTCP2 port is empty")
 	}
 
 	return port, nil
@@ -422,7 +422,7 @@ func validatePortData(addr *router_address.RouterAddress, hostData string) (stri
 func validateTCPResolution(hostData, port string) error {
 	// Validate host is non-empty
 	if hostData == "" {
-		return fmt.Errorf("NTCP2 address has empty host")
+		return oops.Errorf("NTCP2 address has empty host")
 	}
 
 	// Validate port is a valid number in range (already parsed by caller, but
@@ -442,7 +442,7 @@ func validateTCPResolution(hostData, port string) error {
 			"error":     err.Error(),
 			"impact":    "peer address is syntactically invalid",
 		}).Warn("Invalid NTCP2 address discovered")
-		return fmt.Errorf("NTCP2 address is malformed %s: %w", hostPort, err)
+		return oops.Wrapf(err, "NTCP2 address is malformed %s", hostPort)
 	}
 	return nil
 }
@@ -464,26 +464,26 @@ func validateTransportHostPort(addr *router_address.RouterAddress, protocolName 
 	// Use the same API as runtime transport - addr.Host() is the single source of truth
 	host, err := addr.Host()
 	if err != nil {
-		return fmt.Errorf("%s address cannot retrieve host: %w", protocolName, err)
+		return oops.Wrapf(err, "%s address cannot retrieve host", protocolName)
 	}
 
 	if host == nil {
-		return fmt.Errorf("%s host is nil", protocolName)
+		return oops.Errorf("%s host is nil", protocolName)
 	}
 
 	hostData := host.String()
 	if hostData == "" {
-		return fmt.Errorf("%s host is empty", protocolName)
+		return oops.Errorf("%s host is empty", protocolName)
 	}
 
 	// Use the same API as runtime transport - addr.Port() is the single source of truth
 	port, err := addr.Port()
 	if err != nil {
-		return fmt.Errorf("%s address cannot retrieve port: %w", protocolName, err)
+		return oops.Wrapf(err, "%s address cannot retrieve port", protocolName)
 	}
 
 	if port == "" {
-		return fmt.Errorf("%s port is empty", protocolName)
+		return oops.Errorf("%s port is empty", protocolName)
 	}
 
 	return nil
@@ -528,12 +528,12 @@ func GetRouterHashString(ri router_info.RouterInfo) string {
 func VerifyRouterInfoSignature(ri router_info.RouterInfo) error {
 	fullBytes, err := ri.Bytes()
 	if err != nil {
-		return fmt.Errorf("failed to serialize RouterInfo: %w", err)
+		return oops.Wrapf(err, "failed to serialize RouterInfo")
 	}
 
 	identity := ri.RouterIdentity()
 	if identity == nil {
-		return errors.New("RouterInfo has nil RouterIdentity")
+		return oops.Errorf("RouterInfo has nil RouterIdentity")
 	}
 
 	if err := validateSignaturePresent(ri); err != nil {
@@ -553,7 +553,7 @@ func validateSignaturePresent(ri router_info.RouterInfo) error {
 	sig := ri.Signature()
 	sigBytes := sig.Bytes()
 	if len(sigBytes) == 0 {
-		return errors.New("RouterInfo has empty signature")
+		return oops.Errorf("RouterInfo has empty signature")
 	}
 	return nil
 }
@@ -564,7 +564,7 @@ func resolveExpectedSigSize(identity *router_identity.RouterIdentity) (int, erro
 	sigType := identity.KeyCertificate.SigningPublicKeyType()
 	expectedSigSize, err := key_certificate.GetSignatureSize(sigType)
 	if err != nil {
-		return 0, fmt.Errorf("unknown signature type %d: %w", sigType, err)
+		return 0, oops.Wrapf(err, "unknown signature type %d", sigType)
 	}
 	return expectedSigSize, nil
 }
@@ -573,13 +573,13 @@ func resolveExpectedSigSize(identity *router_identity.RouterIdentity) (int, erro
 // then verifies the signature cryptographically.
 func verifySignatureBytes(fullBytes []byte, expectedSigSize int, identity *router_identity.RouterIdentity) error {
 	if len(fullBytes) <= expectedSigSize {
-		return fmt.Errorf("RouterInfo too short (%d bytes) for signature size %d",
+		return oops.Errorf("RouterInfo too short (%d bytes) for signature size %d",
 			len(fullBytes), expectedSigSize)
 	}
 
 	signingPubKey, err := identity.SigningPublicKey()
 	if err != nil {
-		return fmt.Errorf("failed to get signing public key: %w", err)
+		return oops.Wrapf(err, "failed to get signing public key")
 	}
 
 	dataBytes := fullBytes[:len(fullBytes)-expectedSigSize]
@@ -587,11 +587,11 @@ func verifySignatureBytes(fullBytes []byte, expectedSigSize int, identity *route
 
 	verifier, err := signingPubKey.NewVerifier()
 	if err != nil {
-		return fmt.Errorf("failed to create signature verifier: %w", err)
+		return oops.Wrapf(err, "failed to create signature verifier")
 	}
 
 	if err := verifier.Verify(dataBytes, sigFromBytes); err != nil {
-		return fmt.Errorf("RouterInfo signature verification failed: %w", err)
+		return oops.Wrapf(err, "RouterInfo signature verification failed")
 	}
 
 	return nil

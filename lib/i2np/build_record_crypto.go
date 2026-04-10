@@ -1,8 +1,6 @@
 package i2np
 
 import (
-	"fmt"
-
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/common/session_key"
@@ -67,12 +65,12 @@ func (c *BuildRecordCrypto) DecryptReplyRecord(
 	// Parse the decrypted record
 	record, err := ReadBuildResponseRecord(cleartext)
 	if err != nil {
-		return BuildResponseRecord{}, fmt.Errorf("failed to parse decrypted record: %w", err)
+		return BuildResponseRecord{}, oops.Wrapf(err, "failed to parse decrypted record")
 	}
 
 	// Verify the hash
 	if err := ratchet.VerifyResponseRecordHash(record.Hash, record.RandomData, record.Reply); err != nil {
-		return BuildResponseRecord{}, fmt.Errorf("hash verification failed: %w", err)
+		return BuildResponseRecord{}, oops.Wrapf(err, "hash verification failed")
 	}
 
 	log.WithFields(logger.Fields{"at": "DecryptReplyRecord"}).Debug("Decrypted and verified build response record")
@@ -230,14 +228,14 @@ func extractEncryptionPublicKey(routerInfo router_info.RouterInfo) ([]byte, erro
 func calculateIdentityHash(routerInfo router_info.RouterInfo) ([32]byte, error) {
 	identity := routerInfo.RouterIdentity()
 	if identity == nil {
-		return [32]byte{}, fmt.Errorf("RouterInfo has nil RouterIdentity")
+		return [32]byte{}, oops.Errorf("RouterInfo has nil RouterIdentity")
 	}
 	if identity.KeysAndCert == nil {
-		return [32]byte{}, fmt.Errorf("RouterIdentity has nil KeysAndCert")
+		return [32]byte{}, oops.Errorf("RouterIdentity has nil KeysAndCert")
 	}
 	identityBytes, err := identity.KeysAndCert.Bytes()
 	if err != nil {
-		return [32]byte{}, fmt.Errorf("failed to serialize RouterIdentity: %w", err)
+		return [32]byte{}, oops.Wrapf(err, "failed to serialize RouterIdentity")
 	}
 	return types.SHA256(identityBytes), nil
 }

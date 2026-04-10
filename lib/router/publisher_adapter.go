@@ -2,7 +2,6 @@ package router
 
 import (
 	"context"
-	"fmt"
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
@@ -11,6 +10,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/netdb"
 	"github.com/go-i2p/go-i2p/lib/transport"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // publisherNetDBAdapter wraps StdNetDB to satisfy the netdb.NetworkDatabase interface.
@@ -117,7 +117,7 @@ type floodfillTransportAdapter struct {
 // obtains (or creates) a transport session to that router, and queues msg.
 func (a *floodfillTransportAdapter) SendI2NPMessage(ctx context.Context, routerHash common.Hash, msg i2np.I2NPMessage) error {
 	if a.muxer == nil || a.db == nil {
-		return fmt.Errorf("floodfill transport not ready")
+		return oops.Errorf("floodfill transport not ready")
 	}
 
 	// Resolve RouterInfo from local NetDB (channel-based API)
@@ -131,7 +131,7 @@ func (a *floodfillTransportAdapter) SendI2NPMessage(ctx context.Context, routerH
 
 	session, err := a.muxer.GetSession(ri)
 	if err != nil {
-		return fmt.Errorf("floodfill: get session for %x: %w", routerHash[:8], err)
+		return oops.Wrapf(err, "floodfill: get session for %x", routerHash[:8])
 	}
 	return session.QueueSendI2NP(msg)
 }

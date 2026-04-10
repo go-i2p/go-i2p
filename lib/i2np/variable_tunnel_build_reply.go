@@ -1,9 +1,8 @@
 package i2np
 
 import (
-	"fmt"
-
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 /*
@@ -53,12 +52,12 @@ func (v *VariableTunnelBuildReply) logReplyStart(recordCount int) {
 // Returns an error if count mismatch or no records present.
 func (v *VariableTunnelBuildReply) validateRecordCount(recordCount int) error {
 	if v.Count != recordCount {
-		return fmt.Errorf("count mismatch: Count field is %d but have %d records", v.Count, recordCount)
+		return oops.Errorf("count mismatch: Count field is %d but have %d records", v.Count, recordCount)
 	}
 
 	if recordCount == 0 {
 		log.WithFields(logger.Fields{"at": "validateRecordCount"}).Warn("VariableTunnelBuildReply has no response records")
-		return fmt.Errorf("tunnel build failed: no response records")
+		return oops.Errorf("tunnel build failed: no response records")
 	}
 
 	return nil
@@ -110,10 +109,10 @@ func (v *VariableTunnelBuildReply) determineBuildResult(successCount, recordCoun
 	}
 
 	if firstError != nil {
-		return fmt.Errorf("variable tunnel build failed: %w", firstError)
+		return oops.Wrapf(firstError, "variable tunnel build failed")
 	}
 
-	return fmt.Errorf("variable tunnel build failed: only %d of %d hops accepted", successCount, recordCount)
+	return oops.Errorf("variable tunnel build failed: only %d of %d hops accepted", successCount, recordCount)
 }
 
 // processHopResponse processes a single hop's response record for variable tunnels.
@@ -126,7 +125,7 @@ func (v *VariableTunnelBuildReply) processHopResponse(hopIndex int, record Build
 
 	// Validate response record (basic integrity check)
 	if err := v.validateResponseRecord(record); err != nil {
-		return false, fmt.Errorf("hop %d: invalid response record: %w", hopIndex, err)
+		return false, oops.Wrapf(err, "hop %d: invalid response record", hopIndex)
 	}
 
 	// Process reply code (same logic as TunnelBuildReply)
@@ -137,30 +136,30 @@ func (v *VariableTunnelBuildReply) processHopResponse(hopIndex int, record Build
 
 	case TunnelBuildReplyReject:
 		log.WithField("hop_index", hopIndex).Warn("Variable tunnel hop rejected build request")
-		return false, fmt.Errorf("hop %d: rejected request", hopIndex)
+		return false, oops.Errorf("hop %d: rejected request", hopIndex)
 
 	case TunnelBuildReplyOverload:
 		log.WithField("hop_index", hopIndex).Warn("Variable tunnel hop is overloaded")
-		return false, fmt.Errorf("hop %d: router overloaded", hopIndex)
+		return false, oops.Errorf("hop %d: router overloaded", hopIndex)
 
 	case TunnelBuildReplyBandwidth:
 		log.WithField("hop_index", hopIndex).Warn("Variable tunnel hop has insufficient bandwidth")
-		return false, fmt.Errorf("hop %d: insufficient bandwidth", hopIndex)
+		return false, oops.Errorf("hop %d: insufficient bandwidth", hopIndex)
 
 	case TunnelBuildReplyInvalid:
 		log.WithField("hop_index", hopIndex).Warn("Variable tunnel hop received invalid request data")
-		return false, fmt.Errorf("hop %d: invalid request data", hopIndex)
+		return false, oops.Errorf("hop %d: invalid request data", hopIndex)
 
 	case TunnelBuildReplyExpired:
 		log.WithField("hop_index", hopIndex).Warn("Variable tunnel hop request has expired")
-		return false, fmt.Errorf("hop %d: request expired", hopIndex)
+		return false, oops.Errorf("hop %d: request expired", hopIndex)
 
 	default:
 		log.WithFields(logger.Fields{
 			"hop_index":  hopIndex,
 			"reply_code": record.Reply,
 		}).Warn("Variable tunnel hop returned unknown reply code")
-		return false, fmt.Errorf("hop %d: unknown reply code %d", hopIndex, record.Reply)
+		return false, oops.Errorf("hop %d: unknown reply code %d", hopIndex, record.Reply)
 	}
 }
 

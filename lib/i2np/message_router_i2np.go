@@ -7,6 +7,7 @@ import (
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // I2NPMessageDispatcherConfig represents configuration for message routing
@@ -114,7 +115,7 @@ func (mr *I2NPMessageDispatcher) RouteMessage(msg I2NPMessage) error {
 
 	// Check for expiration
 	if time.Now().After(msg.Expiration()) {
-		return fmt.Errorf("message %d has expired", msg.MessageID())
+		return oops.Errorf("message %d has expired", msg.MessageID())
 	}
 
 	// Process using the appropriate interface
@@ -131,7 +132,7 @@ func (mr *I2NPMessageDispatcher) RouteDatabaseMessage(msg interface{}) error {
 		return mr.dbManager.StoreData(writer)
 	}
 
-	return fmt.Errorf("message does not implement database interfaces")
+	return oops.Errorf("message does not implement database interfaces")
 }
 
 // RouteTunnelMessage routes tunnel-related messages
@@ -149,7 +150,7 @@ func (mr *I2NPMessageDispatcher) RouteTunnelMessage(msg interface{}) error {
 		return mr.tunnelMgr.ProcessTunnelReply(handler, messageID)
 	}
 
-	return fmt.Errorf("message does not implement tunnel interfaces")
+	return oops.Errorf("message does not implement tunnel interfaces")
 }
 
 // SetTunnelManager replaces the internal TunnelManager with an external one.

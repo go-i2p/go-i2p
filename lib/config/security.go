@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // SecureFilePermissions for files containing sensitive data (e.g., passwords, keys)
@@ -55,12 +56,12 @@ func SanitizePath(basePath, userPath string) (string, error) {
 // validateAndCleanBasePath validates and returns the absolute clean base path.
 func validateAndCleanBasePath(basePath string) (string, error) {
 	if basePath == "" {
-		return "", fmt.Errorf("base path cannot be empty")
+		return "", oops.Errorf("base path cannot be empty")
 	}
 
 	cleanBase, err := filepath.Abs(filepath.Clean(basePath))
 	if err != nil {
-		return "", fmt.Errorf("invalid base path: %w", err)
+		return "", oops.Wrapf(err, "invalid base path")
 	}
 	return cleanBase, nil
 }
@@ -79,7 +80,7 @@ func resolveUserPath(cleanBase, userPath string) (string, error) {
 
 	absResolved, err := filepath.Abs(resolvedPath)
 	if err != nil {
-		return "", fmt.Errorf("invalid path: %w", err)
+		return "", oops.Wrapf(err, "invalid path")
 	}
 
 	// Resolve symlinks to detect symlink-based traversal.
@@ -114,7 +115,7 @@ func validatePathWithinBase(cleanBase, absResolved, userPath, basePath string) e
 			"base_path":     cleanBase,
 			"resolved_path": absResolved,
 		}).Warn("potential path traversal blocked")
-		return fmt.Errorf("path %q escapes base directory %q", userPath, basePath)
+		return oops.Errorf("path %q escapes base directory %q", userPath, basePath)
 	}
 	return nil
 }
@@ -134,7 +135,7 @@ func CreateSecureDirectory(path string) error {
 
 	// Create directory with secure permissions
 	if err := os.MkdirAll(cleanPath, SecureDirPermissions); err != nil {
-		return fmt.Errorf("failed to create secure directory %q: %w", cleanPath, err)
+		return oops.Wrapf(err, "failed to create secure directory %q", cleanPath)
 	}
 
 	// Verify and fix permissions (MkdirAll may inherit from parent)
@@ -163,7 +164,7 @@ func CreateStandardDirectory(path string) error {
 	cleanPath := filepath.Clean(path)
 
 	if err := os.MkdirAll(cleanPath, StandardDirPermissions); err != nil {
-		return fmt.Errorf("failed to create directory %q: %w", cleanPath, err)
+		return oops.Wrapf(err, "failed to create directory %q", cleanPath)
 	}
 
 	return nil
@@ -176,7 +177,7 @@ func WriteSecureFile(path string, data []byte) error {
 
 	// Write with secure permissions
 	if err := os.WriteFile(cleanPath, data, SecureFilePermissions); err != nil {
-		return fmt.Errorf("failed to write secure file %q: %w", cleanPath, err)
+		return oops.Wrapf(err, "failed to write secure file %q", cleanPath)
 	}
 
 	// Verify permissions are set correctly
@@ -251,19 +252,19 @@ func determineTargetMode(info os.FileInfo, path string, expectDir bool) (os.File
 		if expectDir {
 			return SecureDirPermissions, nil
 		}
-		return 0, fmt.Errorf("expected file but found directory: %s", path)
+		return 0, oops.Errorf("expected file but found directory: %s", path)
 	}
 
 	if !expectDir {
 		return SecureFilePermissions, nil
 	}
-	return 0, fmt.Errorf("expected directory but found file: %s", path)
+	return 0, oops.Errorf("expected directory but found file: %s", path)
 }
 
 // applySecurePermissions applies the target permissions and logs the change.
 func applySecurePermissions(path string, targetMode os.FileMode) error {
 	if err := os.Chmod(path, targetMode); err != nil {
-		return fmt.Errorf("failed to secure path %q: %w", path, err)
+		return oops.Wrapf(err, "failed to secure path %q", path)
 	}
 
 	log.WithFields(logger.Fields{

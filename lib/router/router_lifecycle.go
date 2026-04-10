@@ -8,6 +8,7 @@ import (
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/transport"
 	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
+	"github.com/samber/oops"
 
 	"github.com/go-i2p/logger"
 
@@ -332,17 +333,17 @@ func (r *Router) startPublisher() {
 // the missing prerequisite.
 func (r *Router) resolvePublisherDependencies() (*tunnel.Pool, error) {
 	if r.StdNetDB == nil {
-		return nil, fmt.Errorf("Cannot start publisher: NetDB not initialized")
+		return nil, oops.Errorf("Cannot start publisher: NetDB not initialized")
 	}
 	if r.TransportMuxer == nil {
-		return nil, fmt.Errorf("Cannot start publisher: TransportMuxer not initialized")
+		return nil, oops.Errorf("Cannot start publisher: TransportMuxer not initialized")
 	}
 	var tunnelPool *tunnel.Pool
 	if r.tunnelManager != nil {
 		tunnelPool = r.tunnelManager.GetPool()
 	}
 	if tunnelPool == nil {
-		return nil, fmt.Errorf("Cannot start publisher: tunnel pool not available")
+		return nil, oops.Errorf("Cannot start publisher: tunnel pool not available")
 	}
 	return tunnelPool, nil
 }
@@ -642,10 +643,10 @@ func (r *Router) Start() error {
 // Must be called while runMux is held.
 func (r *Router) validateSubsystems() error {
 	if r.RouterInfoKeystore == nil {
-		return fmt.Errorf("router not fully initialized: keystore is nil (use CreateRouter, not FromConfig directly)")
+		return oops.Errorf("router not fully initialized: keystore is nil (use CreateRouter, not FromConfig directly)")
 	}
 	if r.TransportMuxer == nil {
-		return fmt.Errorf("router not fully initialized: transport muxer is nil (use CreateRouter, not FromConfig directly)")
+		return oops.Errorf("router not fully initialized: transport muxer is nil (use CreateRouter, not FromConfig directly)")
 	}
 	return nil
 }
@@ -931,13 +932,13 @@ func (r *Router) getOurRouterHash() (common.Hash, error) {
 	log.WithField("at", "getOurRouterHash").Debug("constructing RouterInfo to derive identity hash")
 	ri, err := r.RouterInfoKeystore.ConstructRouterInfo(nil)
 	if err != nil {
-		return common.Hash{}, fmt.Errorf("failed to construct RouterInfo: %w", err)
+		return common.Hash{}, oops.Wrapf(err, "failed to construct RouterInfo")
 	}
 	log.WithField("at", "getOurRouterHash").Debug("RouterInfo constructed, computing IdentHash")
 
 	hash, err := ri.IdentHash()
 	if err != nil {
-		return common.Hash{}, fmt.Errorf("failed to get IdentHash: %w", err)
+		return common.Hash{}, oops.Wrapf(err, "failed to get IdentHash")
 	}
 
 	log.WithField("at", "getOurRouterHash").Debug("identity hash computed successfully")

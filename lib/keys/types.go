@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-i2p/crypto/types"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // KeyStore is an interface for storing and retrieving keys
@@ -90,7 +91,7 @@ func (ks *KeyStoreImpl) computeKeyID() string {
 func (ks *KeyStoreImpl) GetKeys() (types.PublicKey, types.PrivateKey, error) {
 	log.WithField("at", "GetKeys").Debug("Retrieving key pair")
 	if ks.privateKey == nil {
-		return nil, nil, fmt.Errorf("private key not initialized")
+		return nil, nil, oops.Errorf("private key not initialized")
 	}
 	public, err := ks.privateKey.Public()
 	if err != nil {

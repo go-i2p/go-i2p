@@ -3,7 +3,6 @@ package ssu2
 import (
 	"context"
 	"encoding/binary"
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -11,6 +10,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // retransmitTickInterval is how often the send worker checks for expired
@@ -131,7 +131,7 @@ func (s *SSU2Session) buildMergedCallbacks(extra *BlockCallbackConfig) ssu2noise
 			if delta > 60 {
 				s.logger.WithField("skew_seconds", delta).Warn("SSU2 clock skew out of tolerance, closing session")
 				s.cancel()
-				return fmt.Errorf("clock skew %ds exceeds 60s tolerance", delta)
+				return oops.Errorf("clock skew %ds exceeds 60s tolerance", delta)
 			}
 			return nil
 		},
@@ -195,10 +195,10 @@ func (s *SSU2Session) QueueSendI2NP(msg i2np.I2NPMessage) error {
 		return nil
 	case <-s.ctx.Done():
 		atomic.AddInt32(&s.sendQueueSize, -1)
-		return fmt.Errorf("session closed, message dropped (type=%d)", msg.Type())
+		return oops.Errorf("session closed, message dropped (type=%d)", msg.Type())
 	case <-time.After(500 * time.Millisecond):
 		atomic.AddInt32(&s.sendQueueSize, -1)
-		return fmt.Errorf("send queue full, message dropped (type=%d)", msg.Type())
+		return oops.Errorf("send queue full, message dropped (type=%d)", msg.Type())
 	}
 }
 
@@ -220,16 +220,22 @@ func (s *SSU2Session) ReadNextI2NP() (i2np.I2NPMessage, error) {
 // sendQueueDrainTimeout is the maximum time to wait for queued messages.
 const sendQueueDrainTimeout = 2 * time.Second
 
-// Close closes the session cleanly.
+// Close closes the session cleanly with a normal-close termination reason.
 func (s *SSU2Session) Close() error {
+	return s.CloseWithReason(ssu2noise.TerminationNormalClose)
+}
+
+// CloseWithReason closes the session with the specified termination reason code.
+// A termination block is sent to the remote peer before closing the connection.
+func (s *SSU2Session) CloseWithReason(reason ssu2noise.TerminationReason) error {
 	var err error
 	s.closeOnce.Do(func() {
-		s.logger.Info("Closing SSU2 session")
+		s.logger.WithField("reason", reason.String()).Info("Closing SSU2 session")
 		s.drainSendQueue()
-		s.cancel()
 		if s.conn != nil {
-			err = s.conn.Close()
+			err = s.conn.CloseWithReason(reason, nil)
 		}
+		s.cancel()
 		s.wg.Wait()
 		s.callCleanupCallback()
 		s.logger.Info("SSU2 session closed")
@@ -371,7 +377,7 @@ func marshalI2NPShort(msg i2np.I2NPMessage) ([]byte, error) {
 			return nil, err
 		}
 		if len(full) < 16 {
-			return nil, fmt.Errorf("NTCP data too short: %d bytes", len(full))
+			return nil, oops.Errorf("NTCP data too short: %d bytes", len(full))
 		}
 		body = full[16:]
 	}
@@ -401,7 +407,7 @@ func fragmentSSU2Short(data []byte, maxPayload int) ([]*ssu2noise.SSU2Block, err
 	}
 
 	if len(data) < i2np.ShortI2NPHeaderSize {
-		return nil, fmt.Errorf("SSU2 short data too short: %d bytes", len(data))
+		return nil, oops.Errorf("SSU2 short data too short: %d bytes", len(data))
 	}
 
 	// Extract header fields from SSU2 short format
@@ -432,7 +438,7 @@ func buildShortFirstFragment(i2npType byte, messageID, shortExpiry uint32, body 
 	const firstFragHeaderSize = 9 // type(1) + msgID(4) + shortExpiry(4)
 	maxFirstBody := maxPayload - tlvOverhead - firstFragHeaderSize
 	if maxFirstBody <= 0 {
-		return nil, 0, fmt.Errorf("max payload %d too small for first fragment", maxPayload)
+		return nil, 0, oops.Errorf("max payload %d too small for first fragment", maxPayload)
 	}
 
 	firstBodySize := maxFirstBody
@@ -454,7 +460,7 @@ func buildShortFollowOnFragments(messageID uint32, body []byte, offset, maxPaylo
 	const followOnHeaderSize = 5 // fragInfo(1) + msgID(4)
 	maxFollowBody := maxPayload - tlvOverhead - followOnHeaderSize
 	if maxFollowBody <= 0 {
-		return nil, fmt.Errorf("max payload %d too small for follow-on fragment", maxPayload)
+		return nil, oops.Errorf("max payload %d too small for follow-on fragment", maxPayload)
 	}
 
 	var blocks []*ssu2noise.SSU2Block
@@ -479,7 +485,7 @@ func buildShortFollowOnFragments(messageID uint32, body []byte, offset, maxPaylo
 		offset = end
 		fragNum++
 		if fragNum > 127 {
-			return nil, fmt.Errorf("message too large: exceeds 127 follow-on fragments")
+			return nil, oops.Errorf("message too large: exceeds 127 follow-on fragments")
 		}
 	}
 
@@ -561,34 +567,52 @@ func (s *SSU2Session) removePending(seq uint64) {
 	s.pendingMsgsMu.Unlock()
 }
 
+// retransmitCandidate holds a pending message that needs retransmission,
+// collected under lock and processed after the lock is released.
+type retransmitCandidate struct {
+	seq     uint64
+	pending *pendingI2NP
+}
+
 // handleRetransmissions checks all pending I2NP messages and retransmits any
 // that have exceeded their RTO deadline.  Returns true if the session should
 // be closed (max retransmissions exceeded for at least one message).
 func (s *SSU2Session) handleRetransmissions() (shouldClose bool) {
 	now := time.Now()
-	var toDelete []uint64
+	var candidates []retransmitCandidate
 	var hadLoss bool
 
+	// Collect candidates under lock without performing I/O.
 	s.pendingMsgsMu.Lock()
 	for seq, p := range s.pendingMsgs {
 		if now.Before(p.deadline) {
 			continue
 		}
-		// Any deadline expiry indicates packet loss — signal regardless of
-		// whether the retransmission itself succeeded or failed.
 		hadLoss = true
-		action := s.processRetransmission(p, now)
+		candidates = append(candidates, retransmitCandidate{seq: seq, pending: p})
+	}
+	s.pendingMsgsMu.Unlock()
+
+	// Process retransmissions without holding the lock.
+	var toDelete []uint64
+	for _, c := range candidates {
+		action := s.processRetransmission(c.pending, now)
 		if action == retransmitDelete || action == retransmitMaxExceeded {
-			toDelete = append(toDelete, seq)
+			toDelete = append(toDelete, c.seq)
 			if action == retransmitMaxExceeded {
 				shouldClose = true
 			}
 		}
 	}
-	for _, seq := range toDelete {
-		delete(s.pendingMsgs, seq)
+
+	// Re-acquire lock to clean up completed entries.
+	if len(toDelete) > 0 {
+		s.pendingMsgsMu.Lock()
+		for _, seq := range toDelete {
+			delete(s.pendingMsgs, seq)
+		}
+		s.pendingMsgsMu.Unlock()
 	}
-	s.pendingMsgsMu.Unlock()
 
 	if hadLoss {
 		s.congestionCtrl.OnRetransmissionTimeout()
@@ -606,7 +630,7 @@ const (
 )
 
 // processRetransmission handles a single pending message that has exceeded its deadline.
-// Must be called while holding pendingMsgsMu.
+// Called without holding pendingMsgsMu to avoid blocking other goroutines during network I/O.
 func (s *SSU2Session) processRetransmission(p *pendingI2NP, now time.Time) retransmitAction {
 	if p.attempts >= s.maxRetransmit {
 		return retransmitMaxExceeded

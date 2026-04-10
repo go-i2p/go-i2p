@@ -16,6 +16,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/transport"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 const (
@@ -240,7 +241,7 @@ func (gr *GarlicMessageRouter) validateAndExtractLeases(destHash common.Hash, le
 			"dest_hash": fmt.Sprintf("%x", destHash[:8]),
 			"reason":    "invalid LeaseSet",
 		}).Error("LeaseSet validation failed")
-		return nil, fmt.Errorf("destination %x has invalid LeaseSet", destHash[:8])
+		return nil, oops.Errorf("destination %x has invalid LeaseSet", destHash[:8])
 	}
 
 	leases := leaseSet.Leases()
@@ -251,7 +252,7 @@ func (gr *GarlicMessageRouter) validateAndExtractLeases(destHash common.Hash, le
 			"dest_hash": fmt.Sprintf("%x", destHash[:8]),
 			"reason":    "no valid leases",
 		}).Error("LeaseSet has no valid leases")
-		return nil, fmt.Errorf("destination %x has no valid leases", destHash[:8])
+		return nil, oops.Errorf("destination %x has no valid leases", destHash[:8])
 	}
 
 	return leases, nil
@@ -267,7 +268,7 @@ func (gr *GarlicMessageRouter) routeMessageThroughLease(destHash common.Hash, le
 			"dest_hash": fmt.Sprintf("%x", destHash[:8]),
 			"reason":    "no valid lease available",
 		}).Error("Failed to select lease")
-		return fmt.Errorf("no valid lease available for destination %x", destHash[:8])
+		return oops.Errorf("no valid lease available for destination %x", destHash[:8])
 	}
 
 	gatewayHash := selectedLease.TunnelGateway()
@@ -384,7 +385,7 @@ func (gr *GarlicMessageRouter) handleReflexiveDelivery(routerHash common.Hash, m
 			"at":     "handleReflexiveDelivery",
 			"reason": "processor not configured",
 		}).Error("Reflexive delivery failed")
-		return fmt.Errorf("reflexive delivery failed: processor not configured")
+		return oops.Errorf("reflexive delivery failed: processor not configured")
 	}
 
 	return gr.processor.ProcessMessage(msg)
@@ -424,7 +425,7 @@ func (gr *GarlicMessageRouter) checkNetDBForRouter(routerHash common.Hash) (chan
 			"router_hash": fmt.Sprintf("%x", routerHash[:8]),
 			"reason":      "not found in NetDB",
 		}).Error("RouterInfo lookup failed")
-		return nil, fmt.Errorf("router %x not found in NetDB", routerHash[:8])
+		return nil, oops.Errorf("router %x not found in NetDB", routerHash[:8])
 	}
 	return routerInfoChan, nil
 }
@@ -456,7 +457,7 @@ func (gr *GarlicMessageRouter) handleRouterInfoChannelClosed(routerHash common.H
 		"router_hash": fmt.Sprintf("%x", routerHash[:8]),
 		"reason":      "channel closed",
 	}).Error("RouterInfo channel closed")
-	return router_info.RouterInfo{}, fmt.Errorf("router %x RouterInfo channel closed", routerHash[:8])
+	return router_info.RouterInfo{}, oops.Errorf("router %x RouterInfo channel closed", routerHash[:8])
 }
 
 // drainRouterInfoChannel consumes from a RouterInfo channel in the background to prevent
@@ -477,7 +478,7 @@ func (gr *GarlicMessageRouter) handleRouterInfoTimeout(routerHash common.Hash) (
 		"router_hash": fmt.Sprintf("%x", routerHash[:8]),
 		"reason":      "timeout",
 	}).Error("RouterInfo lookup timed out")
-	return router_info.RouterInfo{}, fmt.Errorf("timeout waiting for router %x RouterInfo", routerHash[:8])
+	return router_info.RouterInfo{}, oops.Errorf("timeout waiting for router %x RouterInfo", routerHash[:8])
 }
 
 // validateRouterInfo checks if the retrieved RouterInfo is valid.
@@ -489,7 +490,7 @@ func (gr *GarlicMessageRouter) validateRouterInfo(routerInfo router_info.RouterI
 			"router_hash": fmt.Sprintf("%x", routerHash[:8]),
 			"reason":      "invalid RouterInfo",
 		}).Error("RouterInfo validation failed")
-		return fmt.Errorf("router %x has invalid RouterInfo", routerHash[:8])
+		return oops.Errorf("router %x has invalid RouterInfo", routerHash[:8])
 	}
 	return nil
 }
@@ -503,7 +504,7 @@ func (gr *GarlicMessageRouter) sendMessageToRouter(routerHash common.Hash, route
 			"at":          "sendMessageToRouter",
 			"router_hash": fmt.Sprintf("%x", routerHash[:8]),
 		}).WithError(err).Error("Failed to get transport session")
-		return fmt.Errorf("failed to get session for router %x: %w", routerHash[:8], err)
+		return oops.Wrapf(err, "failed to get session for router %x", routerHash[:8])
 	}
 
 	session.QueueSendI2NP(msg)
@@ -563,7 +564,7 @@ func (gr *GarlicMessageRouter) processReflexiveTunnelDelivery(tunnelID tunnel.Tu
 			"at":        "processReflexiveTunnelDelivery",
 			"tunnel_id": tunnelID,
 		}).WithError(err).Error("Failed to marshal message for tunnel injection")
-		return fmt.Errorf("failed to marshal message for local tunnel injection: %w", err)
+		return oops.Wrapf(err, "failed to marshal message for local tunnel injection")
 	}
 
 	tunnelGatewayMsg := i2np.NewTunnelGatewayMessage(tunnelID, msgBytes)
@@ -576,7 +577,7 @@ func (gr *GarlicMessageRouter) processReflexiveTunnelDelivery(tunnelID tunnel.Tu
 			"tunnel_id": tunnelID,
 			"reason":    "processor not set",
 		}).Error("Message processor not configured")
-		return fmt.Errorf("message processor not set for local tunnel injection")
+		return oops.Errorf("message processor not set for local tunnel injection")
 	}
 
 	if err := gr.processor.ProcessMessage(tunnelGatewayMsg); err != nil {
@@ -584,7 +585,7 @@ func (gr *GarlicMessageRouter) processReflexiveTunnelDelivery(tunnelID tunnel.Tu
 			"at":        "processReflexiveTunnelDelivery",
 			"tunnel_id": tunnelID,
 		}).WithError(err).Error("Failed to process local tunnel injection")
-		return fmt.Errorf("failed to process local tunnel injection: %w", err)
+		return oops.Wrapf(err, "failed to process local tunnel injection")
 	}
 
 	log.WithFields(logger.Fields{
@@ -604,7 +605,7 @@ func (gr *GarlicMessageRouter) forwardToTunnelGateway(gatewayHash common.Hash, t
 			"gateway_hash": fmt.Sprintf("%x", gatewayHash[:8]),
 			"tunnel_id":    tunnelID,
 		}).WithError(err).Error("Failed to marshal message for tunnel")
-		return fmt.Errorf("failed to marshal wrapped message for tunnel: %w", err)
+		return oops.Wrapf(err, "failed to marshal wrapped message for tunnel")
 	}
 
 	// Create TunnelGateway message (wraps the original message for tunnel transmission)
@@ -768,7 +769,7 @@ func (gr *GarlicMessageRouter) extractValidLease(destHash common.Hash, leaseSet 
 	if len(leases) == 0 {
 		log.WithField("dest_hash", fmt.Sprintf("%x", destHash[:8])).
 			Warn("LeaseSet has no valid leases")
-		return common.Hash{}, 0, fmt.Errorf("no valid leases")
+		return common.Hash{}, 0, oops.Errorf("no valid leases")
 	}
 
 	// Select best lease
@@ -776,7 +777,7 @@ func (gr *GarlicMessageRouter) extractValidLease(destHash common.Hash, leaseSet 
 	if selectedLease == nil {
 		log.WithField("dest_hash", fmt.Sprintf("%x", destHash[:8])).
 			Warn("No valid lease available")
-		return common.Hash{}, 0, fmt.Errorf("no valid lease available")
+		return common.Hash{}, 0, oops.Errorf("no valid lease available")
 	}
 
 	// Extract gateway and tunnel ID
@@ -822,7 +823,7 @@ func (gr *GarlicMessageRouter) queuePendingMessage(destHash common.Hash, msg i2n
 			"total_pending": totalPending,
 			"max_global":    maxGlobalPendingMessages,
 		}).Error("Global pending message limit reached")
-		return fmt.Errorf("global pending message limit reached (%d)", totalPending)
+		return oops.Errorf("global pending message limit reached (%d)", totalPending)
 	}
 
 	// Check per-destination pending message limit
@@ -833,7 +834,7 @@ func (gr *GarlicMessageRouter) queuePendingMessage(destHash common.Hash, msg i2n
 			"pending_count": len(existing),
 			"max_pending":   maxPendingMessages,
 		}).Error("Too many pending messages for destination")
-		return fmt.Errorf("too many pending messages for destination %x", destHash[:8])
+		return oops.Errorf("too many pending messages for destination %x", destHash[:8])
 	}
 
 	// Add message to queue

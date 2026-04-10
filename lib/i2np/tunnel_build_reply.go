@@ -1,9 +1,8 @@
 package i2np
 
 import (
-	"fmt"
-
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 /*
@@ -103,10 +102,10 @@ func (t *TunnelBuildReply) determineTunnelBuildResult(successCount int, firstErr
 	}
 
 	if firstError != nil {
-		return fmt.Errorf("tunnel build failed: %w", firstError)
+		return oops.Wrapf(firstError, "tunnel build failed")
 	}
 
-	return fmt.Errorf("tunnel build failed: only %d of %d hops accepted", successCount, len(t.Records))
+	return oops.Errorf("tunnel build failed: only %d of %d hops accepted", successCount, len(t.Records))
 }
 
 // processHopResponse processes a single hop's response record.
@@ -119,7 +118,7 @@ func (t *TunnelBuildReply) processHopResponse(hopIndex int, record BuildResponse
 
 	// Validate response record (basic integrity check)
 	if err := t.validateResponseRecord(record); err != nil {
-		return false, fmt.Errorf("hop %d: invalid response record: %w", hopIndex, err)
+		return false, oops.Wrapf(err, "hop %d: invalid response record", hopIndex)
 	}
 
 	// Process reply code
@@ -130,30 +129,30 @@ func (t *TunnelBuildReply) processHopResponse(hopIndex int, record BuildResponse
 
 	case TunnelBuildReplyReject:
 		log.WithField("hop_index", hopIndex).Warn("Hop rejected tunnel build request")
-		return false, fmt.Errorf("hop %d: rejected request", hopIndex)
+		return false, oops.Errorf("hop %d: rejected request", hopIndex)
 
 	case TunnelBuildReplyOverload:
 		log.WithField("hop_index", hopIndex).Warn("Hop is overloaded")
-		return false, fmt.Errorf("hop %d: router overloaded", hopIndex)
+		return false, oops.Errorf("hop %d: router overloaded", hopIndex)
 
 	case TunnelBuildReplyBandwidth:
 		log.WithField("hop_index", hopIndex).Warn("Hop has insufficient bandwidth")
-		return false, fmt.Errorf("hop %d: insufficient bandwidth", hopIndex)
+		return false, oops.Errorf("hop %d: insufficient bandwidth", hopIndex)
 
 	case TunnelBuildReplyInvalid:
 		log.WithField("hop_index", hopIndex).Warn("Hop received invalid request data")
-		return false, fmt.Errorf("hop %d: invalid request data", hopIndex)
+		return false, oops.Errorf("hop %d: invalid request data", hopIndex)
 
 	case TunnelBuildReplyExpired:
 		log.WithField("hop_index", hopIndex).Warn("Hop request has expired")
-		return false, fmt.Errorf("hop %d: request expired", hopIndex)
+		return false, oops.Errorf("hop %d: request expired", hopIndex)
 
 	default:
 		log.WithFields(logger.Fields{
 			"hop_index":  hopIndex,
 			"reply_code": record.Reply,
 		}).Warn("Hop returned unknown reply code")
-		return false, fmt.Errorf("hop %d: unknown reply code %d", hopIndex, record.Reply)
+		return false, oops.Errorf("hop %d: unknown reply code %d", hopIndex, record.Reply)
 	}
 }
 

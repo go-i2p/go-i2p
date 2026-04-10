@@ -2,13 +2,13 @@ package embedded
 
 import (
 	"embed"
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/go-i2p/go-i2p/lib/netdb/reseed"
+	"github.com/samber/oops"
 )
 
 // CertificatesFS embeds all certificates at compile time.
@@ -58,7 +58,7 @@ func GetCertificateByPath(certPath string) ([]byte, error) {
 	cleaned := filepath.ToSlash(filepath.Clean(certPath))
 	if strings.HasPrefix(cleaned, "/") || strings.HasPrefix(cleaned, "..") || strings.Contains(cleaned, "/../") {
 		log.WithField("cert_path", certPath).Warn("rejected certificate path: contains path traversal")
-		return nil, fmt.Errorf("invalid certificate path: %q contains path traversal", certPath)
+		return nil, oops.Errorf("invalid certificate path: %q contains path traversal", certPath)
 	}
 	return CertificatesFS.ReadFile("certificates/" + cleaned)
 }
@@ -70,7 +70,7 @@ func GetReseedCertificateByName(certFileName string) ([]byte, error) {
 	// Defense-in-depth: reject any path separators in the filename
 	if strings.ContainsAny(certFileName, "/\\") || strings.Contains(certFileName, "..") {
 		log.WithField("cert_file_name", certFileName).Warn("rejected certificate filename: contains path separators or traversal")
-		return nil, fmt.Errorf("invalid certificate filename: %q must not contain path separators", certFileName)
+		return nil, oops.Errorf("invalid certificate filename: %q must not contain path separators", certFileName)
 	}
 	return CertificatesFS.ReadFile("certificates/reseed/" + certFileName)
 }

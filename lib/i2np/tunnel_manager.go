@@ -12,6 +12,7 @@ import (
 	"github.com/go-i2p/crypto/rand"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // buildRequest tracks a pending tunnel build request for correlation with replies.
@@ -154,7 +155,7 @@ func (tm *TunnelManager) getPoolForTunnel(isInbound bool) *tunnel.Pool {
 func (tm *TunnelManager) retryTunnelBuild(tunnelID tunnel.TunnelID, isInbound bool, hopCount int) error {
 	pool := tm.getPoolForTunnel(isInbound)
 	if pool == nil {
-		return fmt.Errorf("pool not initialized for isInbound=%v", isInbound)
+		return oops.Errorf("pool not initialized for isInbound=%v", isInbound)
 	}
 	return pool.RetryTunnelBuild(tunnelID, isInbound, hopCount)
 }
@@ -211,7 +212,7 @@ func (tm *TunnelManager) BuildTunnelFromRequest(req tunnel.BuildTunnelRequest) (
 		len(result.Hops),
 	); regErr != nil {
 		tm.cleanupFailedBuild(result.TunnelID, messageID, req.IsInbound)
-		return 0, peerHashes, fmt.Errorf("failed to register pending build: %w", regErr)
+		return 0, peerHashes, oops.Wrapf(regErr, "failed to register pending build")
 	}
 
 	// Schedule immediate cleanup on timeout (90 seconds per I2P spec)
@@ -223,7 +224,7 @@ func (tm *TunnelManager) BuildTunnelFromRequest(req tunnel.BuildTunnelRequest) (
 	err = tm.sendBuildMessage(result, messageID)
 	if err != nil {
 		tm.cleanupFailedBuild(result.TunnelID, messageID, req.IsInbound)
-		return 0, peerHashes, fmt.Errorf("failed to send build request: %w", err)
+		return 0, peerHashes, oops.Wrapf(err, "failed to send build request")
 	}
 
 	tm.logBuildRequestSent(result, messageID)
@@ -233,22 +234,22 @@ func (tm *TunnelManager) BuildTunnelFromRequest(req tunnel.BuildTunnelRequest) (
 // createBuildRequestAndID validates prerequisites and creates the build request with message ID
 func (tm *TunnelManager) createBuildRequestAndID(req tunnel.BuildTunnelRequest) (*tunnel.TunnelBuildResult, int, error) {
 	if tm.peerSelector == nil {
-		return nil, 0, fmt.Errorf("no peer selector configured")
+		return nil, 0, oops.Errorf("no peer selector configured")
 	}
 
 	builder, err := tunnel.NewTunnelBuilder(tm.peerSelector)
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to create tunnel builder: %w", err)
+		return nil, 0, oops.Wrapf(err, "failed to create tunnel builder")
 	}
 
 	result, err := builder.CreateBuildRequest(req)
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to create build request: %w", err)
+		return nil, 0, oops.Wrapf(err, "failed to create build request")
 	}
 
 	messageID, err := tm.generateMessageID()
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to generate message ID: %w", err)
+		return nil, 0, oops.Wrapf(err, "failed to generate message ID")
 	}
 	return result, messageID, nil
 }
@@ -340,7 +341,7 @@ func (tm *TunnelManager) logBuildRequestSent(result *tunnel.TunnelBuildResult, m
 // sendBuildMessage sends a tunnel build message (STBM or VTB) based on the result.
 func (tm *TunnelManager) sendBuildMessage(result *tunnel.TunnelBuildResult, messageID int) error {
 	if tm.sessionProvider == nil {
-		return fmt.Errorf("no session provider available")
+		return oops.Errorf("no session provider available")
 	}
 
 	firstHop, err := validateTunnelBuild(result)
@@ -355,7 +356,7 @@ func (tm *TunnelManager) sendBuildMessage(result *tunnel.TunnelBuildResult, mess
 
 	buildMsg, err := tm.selectBuildMessage(result, messageID)
 	if err != nil {
-		return fmt.Errorf("failed to create build message: %w", err)
+		return oops.Wrapf(err, "failed to create build message")
 	}
 	tm.queueBuildMessageToGateway(session, buildMsg, messageID, peerHash, result.UseShortBuild)
 
@@ -365,7 +366,7 @@ func (tm *TunnelManager) sendBuildMessage(result *tunnel.TunnelBuildResult, mess
 // validateTunnelBuild validates the tunnel build result has required hops.
 func validateTunnelBuild(result *tunnel.TunnelBuildResult) (router_info.RouterInfo, error) {
 	if len(result.Hops) == 0 {
-		return router_info.RouterInfo{}, fmt.Errorf("no hops in tunnel build result")
+		return router_info.RouterInfo{}, oops.Errorf("no hops in tunnel build result")
 	}
 	return result.Hops[0], nil
 }
@@ -374,12 +375,12 @@ func validateTunnelBuild(result *tunnel.TunnelBuildResult) (router_info.RouterIn
 func (tm *TunnelManager) getGatewaySession(firstHop router_info.RouterInfo) (I2NPTransportSession, [32]byte, error) {
 	peerHash, err := firstHop.IdentHash()
 	if err != nil {
-		return nil, [32]byte{}, fmt.Errorf("failed to get first hop identity: %w", err)
+		return nil, [32]byte{}, oops.Wrapf(err, "failed to get first hop identity")
 	}
 
 	session, err := tm.sessionProvider.GetSessionByHash(peerHash)
 	if err != nil {
-		return nil, [32]byte{}, fmt.Errorf("failed to get session for gateway %x: %w", peerHash[:8], err)
+		return nil, [32]byte{}, oops.Wrapf(err, "failed to get session for gateway %x", peerHash[:8])
 	}
 
 	return session, peerHash, nil
@@ -424,11 +425,11 @@ func (tm *TunnelManager) createShortTunnelBuildMessage(result *tunnel.TunnelBuil
 	encryptedRecords := make([][528]byte, len(i2npRecords))
 	for i, record := range i2npRecords {
 		if i >= len(result.Hops) {
-			return nil, fmt.Errorf("record %d has no corresponding hop RouterInfo", i)
+			return nil, oops.Errorf("record %d has no corresponding hop RouterInfo", i)
 		}
 		encrypted, err := EncryptBuildRequestRecord(record, result.Hops[i])
 		if err != nil {
-			return nil, fmt.Errorf("failed to encrypt build record %d: %w", i, err)
+			return nil, oops.Wrapf(err, "failed to encrypt build record %d", i)
 		}
 		encryptedRecords[i] = encrypted
 	}
@@ -537,11 +538,11 @@ func encryptBuildRecords(result *tunnel.TunnelBuildResult) ([8][528]byte, error)
 		i2npRecord := convertTunnelBuildRecord(result.Records[i])
 
 		if i >= len(result.Hops) {
-			return encryptedData, fmt.Errorf("record %d has no corresponding hop RouterInfo", i)
+			return encryptedData, oops.Errorf("record %d has no corresponding hop RouterInfo", i)
 		}
 		encrypted, err := EncryptBuildRequestRecord(i2npRecord, result.Hops[i])
 		if err != nil {
-			return encryptedData, fmt.Errorf("failed to encrypt build record %d: %w", i, err)
+			return encryptedData, oops.Wrapf(err, "failed to encrypt build record %d", i)
 		}
 		encryptedData[i] = encrypted
 	}
@@ -561,7 +562,7 @@ func serializeBuildRecords(encryptedData [8][528]byte, recordCount int) ([]byte,
 		} else {
 			// Fill unused slot with random padding
 			if _, err := rand.Read(data[i*528 : (i+1)*528]); err != nil {
-				return nil, fmt.Errorf("failed to generate random padding for unused slot %d: %w", i, err)
+				return nil, oops.Wrapf(err, "failed to generate random padding for unused slot %d", i)
 			}
 		}
 	}
@@ -585,7 +586,7 @@ func serializeVariableBuildRecords(encryptedData [8][528]byte, recordCount int) 
 func (tm *TunnelManager) generateMessageID() (int, error) {
 	var buf [4]byte
 	if _, err := rand.Read(buf[:]); err != nil {
-		return 0, fmt.Errorf("failed to generate random message ID: %w", err)
+		return 0, oops.Wrapf(err, "failed to generate random message ID")
 	}
 	// Use only 31 bits to ensure positive int on all platforms
 	return int(binary.BigEndian.Uint32(buf[:]) & 0x7FFFFFFF), nil
@@ -608,7 +609,7 @@ func (tm *TunnelManager) BuildTunnelWithBuilder(builder TunnelBuilder) error {
 
 	tunnelID, err := tm.generateTunnelID()
 	if err != nil {
-		return fmt.Errorf("failed to generate tunnel ID: %w", err)
+		return oops.Wrapf(err, "failed to generate tunnel ID")
 	}
 	tunnelState := tm.createTunnelState(tunnelID, count, peers)
 	// BuildTunnelWithBuilder is legacy interface, defaults to outbound tunnels
@@ -620,11 +621,11 @@ func (tm *TunnelManager) BuildTunnelWithBuilder(builder TunnelBuilder) error {
 // validateTunnelBuilder checks if the tunnel manager and builder are properly configured.
 func (tm *TunnelManager) validateTunnelBuilder(builder TunnelBuilder) error {
 	if tm.peerSelector == nil {
-		return fmt.Errorf("no peer selector configured")
+		return oops.Errorf("no peer selector configured")
 	}
 
 	if builder.GetRecordCount() == 0 {
-		return fmt.Errorf("no build records provided")
+		return oops.Errorf("no build records provided")
 	}
 
 	return nil
@@ -634,11 +635,11 @@ func (tm *TunnelManager) validateTunnelBuilder(builder TunnelBuilder) error {
 func (tm *TunnelManager) selectTunnelPeers(count int) ([]router_info.RouterInfo, error) {
 	peers, err := tm.peerSelector.SelectPeers(count, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to select peers for tunnel: %w", err)
+		return nil, oops.Wrapf(err, "failed to select peers for tunnel")
 	}
 
 	if len(peers) < count {
-		return nil, fmt.Errorf("insufficient peers available: need %d, got %d", count, len(peers))
+		return nil, oops.Errorf("insufficient peers available: need %d, got %d", count, len(peers))
 	}
 
 	return peers, nil
@@ -675,7 +676,7 @@ func populateTunnelHops(tunnelState *tunnel.TunnelState, peers []router_info.Rou
 func (tm *TunnelManager) generateTunnelID() (tunnel.TunnelID, error) {
 	var buf [4]byte
 	if _, err := rand.Read(buf[:]); err != nil {
-		return 0, fmt.Errorf("failed to generate random tunnel ID: %w", err)
+		return 0, oops.Wrapf(err, "failed to generate random tunnel ID")
 	}
 	return tunnel.TunnelID(binary.BigEndian.Uint32(buf[:])), nil
 }
@@ -687,10 +688,10 @@ func (tm *TunnelManager) generateTunnelID() (tunnel.TunnelID, error) {
 // to the next. Sending directly to each hop would break tunnel anonymity.
 func (tm *TunnelManager) sendTunnelBuildRequests(records []BuildRequestRecord, peers []router_info.RouterInfo, tunnelID tunnel.TunnelID) error {
 	if tm.sessionProvider == nil {
-		return fmt.Errorf("no session provider available for sending tunnel build requests")
+		return oops.Errorf("no session provider available for sending tunnel build requests")
 	}
 	if len(peers) == 0 {
-		return fmt.Errorf("no peers provided for tunnel build")
+		return oops.Errorf("no peers provided for tunnel build")
 	}
 
 	tm.logSendingBuildRequests(tunnelID, len(peers))
@@ -699,17 +700,17 @@ func (tm *TunnelManager) sendTunnelBuildRequests(records []BuildRequestRecord, p
 	// assemble all records into a single 8-slot TunnelBuild message.
 	msg, err := tm.createCombinedBuildMessage(records, peers, tunnelID)
 	if err != nil {
-		return fmt.Errorf("failed to create combined tunnel build message: %w", err)
+		return oops.Wrapf(err, "failed to create combined tunnel build message")
 	}
 
 	// Send only to the first hop (gateway) — it will forward onion-style.
 	firstPeerHash, err := peers[0].IdentHash()
 	if err != nil {
-		return fmt.Errorf("failed to get first hop hash: %w", err)
+		return oops.Wrapf(err, "failed to get first hop hash")
 	}
 	session, err := tm.getSessionForPeer(firstPeerHash)
 	if err != nil {
-		return fmt.Errorf("failed to get session for gateway: %w", err)
+		return oops.Wrapf(err, "failed to get session for gateway")
 	}
 	session.QueueSendI2NP(msg)
 
@@ -729,12 +730,12 @@ func (tm *TunnelManager) createCombinedBuildMessage(records []BuildRequestRecord
 		if i < len(records) && i < len(peers) {
 			encrypted, err := EncryptBuildRequestRecord(records[i], peers[i])
 			if err != nil {
-				return nil, fmt.Errorf("failed to encrypt record for hop %d: %w", i, err)
+				return nil, oops.Wrapf(err, "failed to encrypt record for hop %d", i)
 			}
 			copy(data[slotStart:slotEnd], encrypted[:])
 		} else {
 			if _, err := rand.Read(data[slotStart:slotEnd]); err != nil {
-				return nil, fmt.Errorf("failed to generate random padding for slot %d: %w", i, err)
+				return nil, oops.Wrapf(err, "failed to generate random padding for slot %d", i)
 			}
 		}
 	}

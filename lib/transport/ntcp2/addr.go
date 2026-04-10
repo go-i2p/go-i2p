@@ -11,6 +11,7 @@ import (
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-noise/ntcp2"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // ipv6Once ensures the IPv6 connectivity probe runs exactly once per process.
@@ -82,7 +83,7 @@ func ExtractNTCP2Addr(routerInfo router_info.RouterInfo) (net.Addr, error) {
 func getRouterHashBytes(routerInfo router_info.RouterInfo) ([]byte, error) {
 	routerHash, err := routerInfo.IdentHash()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get router hash: %w", err)
+		return nil, oops.Wrapf(err, "failed to get router hash")
 	}
 	hashBytes := routerHash.Bytes()
 	return hashBytes[:], nil
@@ -176,7 +177,7 @@ func processNTCP2Address(addr *router_address.RouterAddress, routerInfo router_i
 			"router_hash":   fmt.Sprintf("%x", hashBytes[:8]),
 			"address_count": len(routerInfo.RouterAddresses()),
 		}).Warn("Failed to resolve TCP address from NTCP2 router address")
-		return nil, fmt.Errorf("failed to resolve TCP address: %w", err)
+		return nil, oops.Wrapf(err, "failed to resolve TCP address")
 	}
 
 	// Skip IPv6 peer addresses when the local host has no IPv6 connectivity.
@@ -186,13 +187,13 @@ func processNTCP2Address(addr *router_address.RouterAddress, routerInfo router_i
 				"at":      "processNTCP2Address",
 				"address": tcpAddr.String(),
 			}).Debug("Skipping IPv6 NTCP2 address: no local IPv6 connectivity")
-			return nil, fmt.Errorf("skip IPv6 address %s: no local IPv6 connectivity", tcpAddr)
+			return nil, oops.Errorf("skip IPv6 address %s: no local IPv6 connectivity", tcpAddr)
 		}
 	}
 
 	hashVal, err := routerInfo.IdentHash()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get router hash for wrapping: %w", err)
+		return nil, oops.Wrapf(err, "failed to get router hash for wrapping")
 	}
 
 	return WrapNTCP2Addr(tcpAddr, hashVal)
@@ -225,7 +226,7 @@ func resolveTCPAddress(addr *router_address.RouterAddress) (net.Addr, error) {
 	if err != nil {
 		// Missing host key is normal for introducer-based addresses (NAT traversal).
 		log.WithFields(logger.Fields{"at": "resolveTCPAddress"}).Debug("Cannot extract host from RouterAddress (introducer-only address)")
-		return nil, fmt.Errorf("failed to extract host (introducer-based address): %w", err)
+		return nil, oops.Wrapf(err, "failed to extract host (introducer-based address)")
 	}
 
 	port, err := addr.Port()
@@ -240,7 +241,7 @@ func resolveTCPAddress(addr *router_address.RouterAddress) (net.Addr, error) {
 			"host":      host.String(),
 			"cost":      addr.Cost(),
 		}).Warn("Failed to extract port from RouterAddress")
-		return nil, fmt.Errorf("failed to extract port: %w", err)
+		return nil, oops.Wrapf(err, "failed to extract port")
 	}
 
 	hostPort := net.JoinHostPort(host.String(), port)
@@ -250,7 +251,7 @@ func resolveTCPAddress(addr *router_address.RouterAddress) (net.Addr, error) {
 			"host": host.String(),
 			"port": port,
 		}).WithError(err).Debug("Failed to resolve TCP address")
-		return nil, fmt.Errorf("failed to resolve TCP address %s: %w", hostPort, err)
+		return nil, oops.Wrapf(err, "failed to resolve TCP address %s", hostPort)
 	}
 
 	return tcpAddr, nil

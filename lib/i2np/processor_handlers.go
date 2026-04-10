@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 )
@@ -14,7 +15,7 @@ import (
 func (p *MessageProcessor) processDataMessage(msg I2NPMessage) error {
 	payloadCarrier, ok := msg.(PayloadCarrier)
 	if !ok {
-		return fmt.Errorf("message does not implement PayloadCarrier interface")
+		return oops.Errorf("message does not implement PayloadCarrier interface")
 	}
 
 	payload := payloadCarrier.GetPayload()
@@ -40,7 +41,7 @@ func (p *MessageProcessor) processDatabaseStoreMessage(msg I2NPMessage) error {
 			"at":     "processDatabaseStoreMessage",
 			"reason": "no_database_manager",
 		}).Warn("DatabaseStore received but no database manager configured")
-		return fmt.Errorf("database manager not configured")
+		return oops.Errorf("database manager not configured")
 	}
 
 	// Type assert to *DatabaseStore
@@ -50,7 +51,7 @@ func (p *MessageProcessor) processDatabaseStoreMessage(msg I2NPMessage) error {
 			"at":     "processDatabaseStoreMessage",
 			"reason": "type_assertion_failed",
 		}).Error("Message is not a DatabaseStore")
-		return fmt.Errorf("message is not a DatabaseStore")
+		return oops.Errorf("message is not a DatabaseStore")
 	}
 
 	key := dbStore.GetStoreKey()
@@ -71,7 +72,7 @@ func (p *MessageProcessor) processDatabaseStoreMessage(msg I2NPMessage) error {
 			"reason": "store_failed",
 			"key":    fmt.Sprintf("%x", key[:8]),
 		}).WithError(err).Error("Failed to store data in NetDB")
-		return fmt.Errorf("failed to store in NetDB: %w", err)
+		return oops.Wrapf(err, "failed to store in NetDB")
 	}
 
 	log.WithFields(logger.Fields{
@@ -116,7 +117,7 @@ func (p *MessageProcessor) processDatabaseSearchReplyMessage(msg I2NPMessage) er
 			"at":     "processDatabaseSearchReplyMessage",
 			"reason": "type_assertion_failed",
 		}).Error("Message is not a DatabaseSearchReply")
-		return fmt.Errorf("message is not a DatabaseSearchReply")
+		return oops.Errorf("message is not a DatabaseSearchReply")
 	}
 
 	log.WithFields(logger.Fields{
@@ -160,7 +161,7 @@ func (p *MessageProcessor) processTunnelGatewayMessage(msg I2NPMessage) error {
 			"at":     "processTunnelGatewayMessage",
 			"reason": "type_assertion_failed",
 		}).Error("Message is not a TunnelGateway")
-		return fmt.Errorf("message is not a TunnelGateway")
+		return oops.Errorf("message is not a TunnelGateway")
 	}
 
 	log.WithFields(logger.Fields{
@@ -175,7 +176,7 @@ func (p *MessageProcessor) processTunnelGatewayMessage(msg I2NPMessage) error {
 			"tunnel_id": tgMsg.TunnelID,
 			"reason":    "empty_payload",
 		}).Warn("TunnelGateway message has empty payload")
-		return fmt.Errorf("TunnelGateway message has empty payload")
+		return oops.Errorf("TunnelGateway message has empty payload")
 	}
 
 	// Delegate to the tunnel gateway handler if one is configured.
@@ -188,7 +189,7 @@ func (p *MessageProcessor) processTunnelGatewayMessage(msg I2NPMessage) error {
 				"tunnel_id": tgMsg.TunnelID,
 				"error":     err,
 			}).Error("Failed to handle TunnelGateway message")
-			return fmt.Errorf("tunnel gateway handling failed: %w", err)
+			return oops.Wrapf(err, "tunnel gateway handling failed")
 		}
 		return nil
 	}
@@ -198,7 +199,7 @@ func (p *MessageProcessor) processTunnelGatewayMessage(msg I2NPMessage) error {
 		"tunnel_id": tgMsg.TunnelID,
 		"reason":    "no tunnel gateway handler configured",
 	}).Warn("TunnelGateway message received but no handler configured")
-	return fmt.Errorf("no tunnel gateway handler configured")
+	return oops.Errorf("no tunnel gateway handler configured")
 }
 
 // processDeliveryStatusMessage processes delivery status messages using StatusReporter interface.
@@ -207,7 +208,7 @@ func (p *MessageProcessor) processTunnelGatewayMessage(msg I2NPMessage) error {
 func (p *MessageProcessor) processDeliveryStatusMessage(msg I2NPMessage) error {
 	statusReporter, ok := msg.(StatusReporter)
 	if !ok {
-		return fmt.Errorf("message does not implement StatusReporter interface")
+		return oops.Errorf("message does not implement StatusReporter interface")
 	}
 
 	msgID := statusReporter.GetStatusMessageID()
@@ -232,7 +233,7 @@ func (p *MessageProcessor) processDeliveryStatusMessage(msg I2NPMessage) error {
 // processDatabaseLookupMessage processes database lookup messages using DatabaseReader interface
 func (p *MessageProcessor) processDatabaseLookupMessage(msg I2NPMessage) error {
 	if p.dbManager == nil {
-		return fmt.Errorf("database manager not configured")
+		return oops.Errorf("database manager not configured")
 	}
 
 	if reader, ok := msg.(DatabaseReader); ok {
@@ -244,7 +245,7 @@ func (p *MessageProcessor) processDatabaseLookupMessage(msg I2NPMessage) error {
 		}).Debug("Processing database lookup")
 		return p.dbManager.PerformLookup(reader)
 	}
-	return fmt.Errorf("message does not implement DatabaseReader interface")
+	return oops.Errorf("message does not implement DatabaseReader interface")
 }
 
 // processGarlicMessage processes encrypted garlic messages by decrypting them
@@ -287,7 +288,7 @@ func (p *MessageProcessor) processGarlicMessage(msg I2NPMessage) error {
 // validateGarlicSession verifies that the garlic session manager is configured.
 func (p *MessageProcessor) validateGarlicSession() error {
 	if p.garlicSessions == nil {
-		return fmt.Errorf("garlic session manager not configured - cannot decrypt garlic messages")
+		return oops.Errorf("garlic session manager not configured - cannot decrypt garlic messages")
 	}
 	return nil
 }
@@ -296,12 +297,12 @@ func (p *MessageProcessor) validateGarlicSession() error {
 func (p *MessageProcessor) extractGarlicData(msg I2NPMessage) ([]byte, error) {
 	carrier, ok := msg.(DataCarrier)
 	if !ok {
-		return nil, fmt.Errorf("garlic message does not implement DataCarrier")
+		return nil, oops.Errorf("garlic message does not implement DataCarrier")
 	}
 
 	encryptedData := carrier.GetData()
 	if len(encryptedData) == 0 {
-		return nil, fmt.Errorf("garlic message contains no data")
+		return nil, oops.Errorf("garlic message contains no data")
 	}
 
 	return encryptedData, nil
@@ -316,7 +317,7 @@ func (p *MessageProcessor) decryptGarlicData(msgID int, encryptedData []byte) ([
 
 	decryptedData, sessionTag, _, err := p.garlicSessions.DecryptGarlicMessage(encryptedData)
 	if err != nil {
-		return nil, [8]byte{}, fmt.Errorf("failed to decrypt garlic message: %w", err)
+		return nil, [8]byte{}, oops.Wrapf(err, "failed to decrypt garlic message")
 	}
 
 	log.WithFields(logger.Fields{
@@ -334,7 +335,7 @@ func (p *MessageProcessor) decryptGarlicData(msgID int, encryptedData []byte) ([
 func (p *MessageProcessor) parseAndLogGarlic(msgID int, decryptedData []byte, sessionTag [8]byte) (*Garlic, error) {
 	garlic, err := DeserializeGarlic(decryptedData, 0)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse decrypted garlic structure: %w", err)
+		return nil, oops.Wrapf(err, "failed to parse decrypted garlic structure")
 	}
 
 	log.WithFields(logger.Fields{
@@ -507,7 +508,7 @@ func (p *MessageProcessor) handleTunnelDelivery(index int, clove GarlicClove) {
 // and delivery to the owning I2CP session. Otherwise the message is validated and logged.
 func (p *MessageProcessor) processTunnelDataMessage(msg I2NPMessage) error {
 	if _, ok := msg.(TunnelCarrier); !ok {
-		return fmt.Errorf("message does not implement TunnelCarrier interface")
+		return oops.Errorf("message does not implement TunnelCarrier interface")
 	}
 
 	// Delegate to handler if available

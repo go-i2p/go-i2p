@@ -15,6 +15,7 @@ import (
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/lease_set"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // LeaseSetLookup is the interface required to look up LeaseSets in the NetDB.
@@ -45,7 +46,7 @@ type HostsTxtResolver struct {
 func NewHostsTxtResolver() (*HostsTxtResolver, error) {
 	data, err := defaultHostsFS.ReadFile("hosts.txt")
 	if err != nil {
-		return nil, fmt.Errorf("failed to read embedded hosts.txt: %w", err)
+		return nil, oops.Wrapf(err, "failed to read embedded hosts.txt")
 	}
 	return newResolverFromData(data)
 }
@@ -75,7 +76,7 @@ func newResolverFromData(data []byte) (*HostsTxtResolver, error) {
 	}
 
 	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("failed to scan hosts.txt: %w", err)
+		return nil, oops.Wrapf(err, "failed to scan hosts.txt")
 	}
 
 	log.WithFields(logger.Fields{
@@ -90,22 +91,22 @@ func newResolverFromData(data []byte) (*HostsTxtResolver, error) {
 func parseHostsLine(line string) (string, []byte, error) {
 	idx := strings.IndexByte(line, '=')
 	if idx < 1 {
-		return "", nil, fmt.Errorf("missing '=' separator")
+		return "", nil, oops.Errorf("missing '=' separator")
 	}
 
 	hostname := strings.TrimSpace(line[:idx])
 	b64dest := strings.TrimSpace(line[idx+1:])
 
 	if hostname == "" {
-		return "", nil, fmt.Errorf("empty hostname")
+		return "", nil, oops.Errorf("empty hostname")
 	}
 	if b64dest == "" {
-		return "", nil, fmt.Errorf("empty destination for %s", hostname)
+		return "", nil, oops.Errorf("empty destination for %s", hostname)
 	}
 
 	destBytes, err := base64.I2PEncoding.DecodeString(b64dest)
 	if err != nil {
-		return "", nil, fmt.Errorf("invalid base64 destination for %s: %w", hostname, err)
+		return "", nil, oops.Wrapf(err, "invalid base64 destination for %s", hostname)
 	}
 
 	return hostname, destBytes, nil
@@ -120,7 +121,7 @@ func (r *HostsTxtResolver) ResolveHostname(hostname string) ([]byte, error) {
 
 	dest, ok := r.hosts[hostname]
 	if !ok {
-		return nil, fmt.Errorf("hostname not found: %s", hostname)
+		return nil, oops.Errorf("hostname not found: %s", hostname)
 	}
 
 	// Return a copy to prevent callers from mutating the internal map
@@ -152,7 +153,7 @@ func (r *HostsTxtResolver) SetNetDB(netdb LeaseSetLookup) {
 func (r *HostsTxtResolver) AddHostsFile(path string) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return fmt.Errorf("failed to read hosts file %s: %w", path, err)
+		return oops.Wrapf(err, "failed to read hosts file %s", path)
 	}
 
 	return r.addHostsData(data, path)
@@ -185,7 +186,7 @@ func (r *HostsTxtResolver) addHostsData(data []byte, source string) error {
 	}
 
 	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("failed to scan hosts data from %s: %w", source, err)
+		return oops.Wrapf(err, "failed to scan hosts data from %s", source)
 	}
 
 	log.WithFields(logger.Fields{
@@ -211,7 +212,7 @@ func (r *HostsTxtResolver) LoadAddressBooksFromDir(dir string) error {
 			}).Debug("address_book_directory_not_found")
 			return nil // Not an error if directory doesn't exist
 		}
-		return fmt.Errorf("failed to read address book directory %s: %w", dir, err)
+		return oops.Wrapf(err, "failed to read address book directory %s", dir)
 	}
 
 	for _, entry := range entries {
@@ -260,16 +261,16 @@ func decodeB32Address(address string) ([]byte, error) {
 
 	// B32 addresses are 52 characters (256 bits in base32)
 	if len(address) != 52 {
-		return nil, fmt.Errorf("invalid b32 address length: %d (expected 52)", len(address))
+		return nil, oops.Errorf("invalid b32 address length: %d (expected 52)", len(address))
 	}
 
 	hashBytes, err := b32Encoding.DecodeString(address)
 	if err != nil {
-		return nil, fmt.Errorf("invalid b32 encoding: %w", err)
+		return nil, oops.Wrapf(err, "invalid b32 encoding")
 	}
 
 	if len(hashBytes) != 32 {
-		return nil, fmt.Errorf("decoded b32 hash is %d bytes (expected 32)", len(hashBytes))
+		return nil, oops.Errorf("decoded b32 hash is %d bytes (expected 32)", len(hashBytes))
 	}
 
 	return hashBytes, nil
@@ -339,23 +340,23 @@ func (r *HostsTxtResolver) lookupDestinationFromNetDB(hashBytes []byte, netdb Le
 
 	lsChan := netdb.GetLeaseSet(hash)
 	if lsChan == nil {
-		return nil, fmt.Errorf("b32 address %x not found in NetDB", hashBytes[:8])
+		return nil, oops.Errorf("b32 address %x not found in NetDB", hashBytes[:8])
 	}
 
 	ls, ok := <-lsChan
 	if !ok {
-		return nil, fmt.Errorf("b32 address %x not found in NetDB", hashBytes[:8])
+		return nil, oops.Errorf("b32 address %x not found in NetDB", hashBytes[:8])
 	}
 
 	// Extract the destination from the LeaseSet
 	dest := ls.Destination()
 	if !dest.IsValid() {
-		return nil, fmt.Errorf("LeaseSet for %x has invalid destination", hashBytes[:8])
+		return nil, oops.Errorf("LeaseSet for %x has invalid destination", hashBytes[:8])
 	}
 
 	destBytes, err := dest.Bytes()
 	if err != nil {
-		return nil, fmt.Errorf("failed to serialize destination for %x: %w", hashBytes[:8], err)
+		return nil, oops.Wrapf(err, "failed to serialize destination for %x", hashBytes[:8])
 	}
 
 	log.WithFields(logger.Fields{

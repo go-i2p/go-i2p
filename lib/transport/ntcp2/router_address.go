@@ -6,6 +6,7 @@ import (
 	"time"
 
 	i2pbase64 "github.com/go-i2p/common/base64"
+	"github.com/samber/oops"
 
 	"github.com/go-i2p/common/router_address"
 	i2pcurve25519 "github.com/go-i2p/crypto/curve25519"
@@ -104,7 +105,7 @@ func ConvertToRouterAddress(transport *NTCP2Transport) (*router_address.RouterAd
 
 	if transport == nil {
 		logNilTransportError()
-		return nil, fmt.Errorf("transport cannot be nil")
+		return nil, oops.Errorf("transport cannot be nil")
 	}
 
 	host, port, err := extractTransportAddress(transport)
@@ -128,7 +129,7 @@ func ConvertToRouterAddress(transport *NTCP2Transport) (*router_address.RouterAd
 	routerAddress, err := router_address.NewRouterAddress(10, time.Time{}, router_address.NTCP2_TRANSPORT_STYLE, options)
 	if err != nil {
 		logRouterAddressCreationError(err)
-		return nil, fmt.Errorf("failed to create RouterAddress: %w", err)
+		return nil, oops.Wrapf(err, "failed to create RouterAddress")
 	}
 
 	logConversionSuccess(host, port)
@@ -141,7 +142,7 @@ func extractTransportAddress(transport *NTCP2Transport) (string, string, error) 
 	addr := transport.Addr()
 	if addr == nil {
 		log.WithFields(logger.Fields{"at": "extractTransportAddress"}).Error("Transport has no listening address")
-		return "", "", fmt.Errorf("transport has no listening address")
+		return "", "", oops.Errorf("transport has no listening address")
 	}
 
 	// Handle *ntcp2.NTCP2Addr (wrapped), *net.TCPAddr (direct), and *nattraversal.NATAddr
@@ -154,7 +155,7 @@ func extractTransportAddress(transport *NTCP2Transport) (string, string, error) 
 		host, port, err = extractHostPort(underlying)
 		if err != nil {
 			log.Errorf("NTCP2Addr underlying address extraction failed: %v", err)
-			return "", "", fmt.Errorf("NTCP2Addr underlying address extraction failed: %w", err)
+			return "", "", oops.Wrapf(err, "NTCP2Addr underlying address extraction failed")
 		}
 	case *net.TCPAddr:
 		host = typedAddr.IP.String()
@@ -163,11 +164,11 @@ func extractTransportAddress(transport *NTCP2Transport) (string, string, error) 
 		var err error
 		host, port, err = net.SplitHostPort(typedAddr.ExternalAddr())
 		if err != nil {
-			return "", "", fmt.Errorf("failed to parse NATAddr external address %q: %w", typedAddr.ExternalAddr(), err)
+			return "", "", oops.Wrapf(err, "failed to parse NATAddr external address %q", typedAddr.ExternalAddr())
 		}
 	default:
 		log.Errorf("Expected *net.TCPAddr, *ntcp2.NTCP2Addr, or *nattraversal.NATAddr, got %T", addr)
-		return "", "", fmt.Errorf("unsupported address type %T", addr)
+		return "", "", oops.Errorf("unsupported address type %T", addr)
 	}
 
 	return host, port, nil
@@ -181,11 +182,11 @@ func extractHostPort(addr net.Addr) (string, string, error) {
 	case *nattraversal.NATAddr:
 		host, port, err := net.SplitHostPort(a.ExternalAddr())
 		if err != nil {
-			return "", "", fmt.Errorf("failed to parse NATAddr external address %q: %w", a.ExternalAddr(), err)
+			return "", "", oops.Wrapf(err, "failed to parse NATAddr external address %q", a.ExternalAddr())
 		}
 		return host, port, nil
 	default:
-		return "", "", fmt.Errorf("unsupported underlying address type %T", addr)
+		return "", "", oops.Errorf("unsupported underlying address type %T", addr)
 	}
 }
 
@@ -201,14 +202,14 @@ func extractHostPort(addr net.Addr) (string, string, error) {
 func validateAndExtractStaticKey(transport *NTCP2Transport) (string, error) {
 	if transport.config == nil || transport.config.NTCP2Config == nil {
 		log.WithFields(logger.Fields{"at": "validateAndExtractStaticKey"}).Error("Transport NTCP2 configuration is not initialized")
-		return "", fmt.Errorf("transport NTCP2 configuration is not initialized")
+		return "", oops.Errorf("transport NTCP2 configuration is not initialized")
 	}
 
 	ntcp2Config := transport.config.NTCP2Config
 
 	if len(ntcp2Config.StaticKey) != 32 {
 		log.WithField("length", len(ntcp2Config.StaticKey)).Error("Invalid static key length")
-		return "", fmt.Errorf("invalid static key length: expected 32 bytes, got %d", len(ntcp2Config.StaticKey))
+		return "", oops.Errorf("invalid static key length: expected 32 bytes, got %d", len(ntcp2Config.StaticKey))
 	}
 
 	// Derive the X25519 public key from the private key.
@@ -216,12 +217,12 @@ func validateAndExtractStaticKey(transport *NTCP2Transport) (string, error) {
 	privKey, err := i2pcurve25519.NewCurve25519PrivateKey(ntcp2Config.StaticKey)
 	if err != nil {
 		log.WithError(err).Error("Failed to create Curve25519 private key")
-		return "", fmt.Errorf("failed to create private key: %w", err)
+		return "", oops.Wrapf(err, "failed to create private key")
 	}
 	pubKey, err := privKey.Public()
 	if err != nil {
 		log.WithError(err).Error("Failed to derive public key from static private key")
-		return "", fmt.Errorf("failed to derive public key: %w", err)
+		return "", oops.Wrapf(err, "failed to derive public key")
 	}
 	publicKey := pubKey.Bytes()
 
@@ -240,7 +241,7 @@ func validateAndExtractStaticKey(transport *NTCP2Transport) (string, error) {
 func buildRouterAddressOptions(host, port, staticKey string, ntcp2Config *ntcp2noise.NTCP2Config) (map[string]string, error) {
 	// Validate IV length (required per spec: 16 bytes binary -> 24 bytes Base64)
 	if len(ntcp2Config.ObfuscationIV) != 16 {
-		return nil, fmt.Errorf("invalid IV length: expected 16 bytes, got %d", len(ntcp2Config.ObfuscationIV))
+		return nil, oops.Errorf("invalid IV length: expected 16 bytes, got %d", len(ntcp2Config.ObfuscationIV))
 	}
 
 	// Encode IV to I2P base64 (same alphabet as other I2P addresses: - and ~ instead of + and /)

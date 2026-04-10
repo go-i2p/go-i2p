@@ -1,12 +1,12 @@
 package ntcp2
 
 import (
-	"fmt"
 	"io"
 	"net"
 
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // FrameI2NPMessageAsBlock frames an I2NP message using NTCP2 block format.
@@ -132,7 +132,7 @@ func (u *I2NPUnframer) ReadNextMessage() (i2np.I2NPMessage, error) {
 			"length":   length,
 			"max_size": maxI2NPMessageSize,
 		}).Error("Message length exceeds maximum allowed size")
-		return nil, fmt.Errorf("message length %d exceeds max %d", length, maxI2NPMessageSize)
+		return nil, oops.Errorf("message length %d exceeds max %d", length, maxI2NPMessageSize)
 	}
 
 	// Read the I2NP message data
@@ -214,7 +214,7 @@ func (u *BlockUnframer) ReadNextMessage() (i2np.I2NPMessage, error) {
 	blocks, err := ParseBlocks(payload)
 	if err != nil {
 		log.WithError(err).Error("Failed to parse NTCP2 blocks")
-		return nil, fmt.Errorf("failed to parse NTCP2 blocks: %w", err)
+		return nil, oops.Wrapf(err, "failed to parse NTCP2 blocks")
 	}
 
 	// Process blocks, extracting I2NP messages
@@ -295,7 +295,7 @@ func (u *BlockUnframer) readFrame() ([]byte, error) {
 // parseI2NPBlock parses an I2NP message from block data using short header format.
 func (u *BlockUnframer) parseI2NPBlock(data []byte) (i2np.I2NPMessage, error) {
 	if len(data) < i2np.ShortI2NPHeaderSize {
-		return nil, fmt.Errorf("I2NP block data too short: %d bytes", len(data))
+		return nil, oops.Errorf("I2NP block data too short: %d bytes", len(data))
 	}
 
 	msg := &i2np.BaseI2NPMessage{}

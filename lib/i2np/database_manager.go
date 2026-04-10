@@ -11,6 +11,7 @@ import (
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // DatabaseManager coordinates database-related message processing and response generation.
@@ -101,7 +102,7 @@ func (dm *DatabaseManager) PerformLookup(reader DatabaseReader) error {
 	from := reader.GetFrom()
 	if !dm.rateLimitLookup(from) {
 		log.WithField("from", fmt.Sprintf("%x", from[:8])).Warn("DatabaseLookup rate limited")
-		return fmt.Errorf("lookup rate limit exceeded")
+		return oops.Errorf("lookup rate limit exceeded")
 	}
 
 	dm.logLookupRequest(reader)
@@ -194,10 +195,10 @@ func (dm *DatabaseManager) performLookupWithSession(key, from common.Hash) error
 func (dm *DatabaseManager) retrieveRouterInfo(key common.Hash) ([]byte, error) {
 	data, err := dm.retriever.GetRouterInfoBytes(key)
 	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve RouterInfo: %w", err)
+		return nil, oops.Wrapf(err, "failed to retrieve RouterInfo")
 	}
 	if len(data) == 0 {
-		return nil, fmt.Errorf("RouterInfo not found for key %x", key[:8])
+		return nil, oops.Errorf("RouterInfo not found for key %x", key[:8])
 	}
 	return data, nil
 }
@@ -313,12 +314,12 @@ func (dm *DatabaseManager) logDatabaseSearchReply(key, to common.Hash, peerCount
 // sendResponse sends an I2NP message response using the session provider
 func (dm *DatabaseManager) sendResponse(response interface{}, to common.Hash) error {
 	if dm.sessionProvider == nil {
-		return fmt.Errorf("no session provider available for sending response")
+		return oops.Errorf("no session provider available for sending response")
 	}
 
 	session, err := dm.sessionProvider.GetSessionByHash(to)
 	if err != nil {
-		return fmt.Errorf("failed to get session for %x: %w", to[:8], err)
+		return oops.Wrapf(err, "failed to get session for %x", to[:8])
 	}
 
 	// Convert response to I2NPMessage interface
@@ -329,17 +330,17 @@ func (dm *DatabaseManager) sendResponse(response interface{}, to common.Hash) er
 	case *DatabaseSearchReply:
 		msg = dm.createDatabaseSearchReplyMessage(r)
 	default:
-		return fmt.Errorf("unsupported response type: %T", response)
+		return oops.Errorf("unsupported response type: %T", response)
 	}
 
 	// Check if message creation failed
 	if msg == nil {
-		return fmt.Errorf("failed to create response message for %x", to[:8])
+		return oops.Errorf("failed to create response message for %x", to[:8])
 	}
 
 	// Send the response
 	if err := session.QueueSendI2NP(msg); err != nil {
-		return fmt.Errorf("failed to queue response message for %x: %w", to[:8], err)
+		return oops.Wrapf(err, "failed to queue response message for %x", to[:8])
 	}
 	log.WithFields(logger.Fields{
 		"message_type": msg.Type(),
@@ -385,7 +386,7 @@ func (dm *DatabaseManager) createDatabaseSearchReplyMessage(reply *DatabaseSearc
 func validateGzipSize(data []byte, maxUncompressed, maxRatio int) (int, error) {
 	gr, err := gzip.NewReader(bytes.NewReader(data))
 	if err != nil {
-		return 0, fmt.Errorf("invalid gzip data: %w", err)
+		return 0, oops.Wrapf(err, "invalid gzip data")
 	}
 	defer gr.Close()
 
@@ -394,12 +395,12 @@ func validateGzipSize(data []byte, maxUncompressed, maxRatio int) (int, error) {
 	n, _ := io.Copy(io.Discard, lr)
 
 	if n > int64(maxUncompressed) {
-		return int(n), fmt.Errorf("uncompressed size exceeds limit (%d > %d)", n, maxUncompressed)
+		return int(n), oops.Errorf("uncompressed size exceeds limit (%d > %d)", n, maxUncompressed)
 	}
 
 	ratio := float64(n) / float64(len(data))
 	if ratio > float64(maxRatio) {
-		return int(n), fmt.Errorf("compression ratio too high (%.2f:1 > %d:1)", ratio, maxRatio)
+		return int(n), oops.Errorf("compression ratio too high (%.2f:1 > %d:1)", ratio, maxRatio)
 	}
 
 	return int(n), nil
@@ -426,7 +427,7 @@ func (dm *DatabaseManager) StoreData(writer DatabaseWriter) error {
 		return dm.netdb.Store(key, data, dataType)
 	}
 
-	return fmt.Errorf("no NetDB available for storage")
+	return oops.Errorf("no NetDB available for storage")
 }
 
 // validateStoreData validates data size and compression before storing.
@@ -444,7 +445,7 @@ func validateStoreData(data []byte, dataType byte) error {
 			"data_size": len(data),
 			"max_size":  MaxCompressedSize,
 		}).Warn("Rejecting oversized database store data")
-		return fmt.Errorf("database store data too large: %d bytes (max %d)", len(data), MaxCompressedSize)
+		return oops.Errorf("database store data too large: %d bytes (max %d)", len(data), MaxCompressedSize)
 	}
 
 	// For RouterInfo (type 0), validate compression if data appears compressed
@@ -470,7 +471,7 @@ func validateRouterInfoCompression(data []byte, maxUncompressed, maxRatio int) e
 			"uncompressed_size": uncompressedSize,
 			"error":             err,
 		}).Warn("Rejecting suspicious compressed RouterInfo")
-		return fmt.Errorf("invalid compressed RouterInfo: %w", err)
+		return oops.Wrapf(err, "invalid compressed RouterInfo")
 	}
 
 	log.WithFields(logger.Fields{

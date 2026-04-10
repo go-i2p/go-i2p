@@ -19,6 +19,7 @@ import (
 	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
 	ssu2 "github.com/go-i2p/go-i2p/lib/transport/ssu2"
 	ntcp2 "github.com/go-i2p/go-noise/ntcp2"
+	"github.com/samber/oops"
 
 	"github.com/go-i2p/logger"
 
@@ -29,7 +30,7 @@ import (
 // Returns an error if the router's StdNetDB is nil (e.g. during shutdown).
 func (r *Router) ensureNetDBReady() error {
 	if r.StdNetDB == nil {
-		return fmt.Errorf("StdNetDB is nil (router may be shutting down)")
+		return oops.Errorf("StdNetDB is nil (router may be shutting down)")
 	}
 	if err := r.StdNetDB.Ensure(); err != nil {
 		log.WithError(err).Error("Failed to ensure NetDB")
@@ -111,7 +112,7 @@ func (r *Router) createFileBootstrapper() (bootstrap.Bootstrap, error) {
 			"reason":         "bootstrap_type is file but path not configured",
 			"bootstrap_type": "file",
 		}).Error("bootstrap configuration error")
-		return nil, fmt.Errorf("bootstrap_type is 'file' but no reseed_file_path is configured")
+		return nil, oops.Errorf("bootstrap_type is 'file' but no reseed_file_path is configured")
 	}
 	log.WithFields(logger.Fields{
 		"at":        "(Router) createFileBootstrapper",
@@ -255,7 +256,7 @@ func (r *Router) mainloop() {
 func (r *Router) initializeCoreComponents() error {
 	if err := r.initializeNetDB(); err != nil {
 		log.WithError(err).Error("Failed to initialize NetDB")
-		return fmt.Errorf("NetDB initialization failed: %w", err)
+		return oops.Wrapf(err, "NetDB initialization failed")
 	}
 
 	if err := r.ensureNetDBReady(); err != nil {
@@ -263,17 +264,17 @@ func (r *Router) initializeCoreComponents() error {
 			"at":     "(Router) mainloop",
 			"reason": err.Error(),
 		}).Error("NetDB startup failed")
-		return fmt.Errorf("NetDB readiness check failed: %w", err)
+		return oops.Wrapf(err, "NetDB readiness check failed")
 	}
 
 	if r.cfg.I2CP != nil && r.cfg.I2CP.Enabled {
 		if err := r.startI2CPServer(); err != nil {
-			return fmt.Errorf("I2CP server startup failed: %w", err)
+			return oops.Wrapf(err, "I2CP server startup failed")
 		}
 	}
 
 	if err := r.startI2PControlServer(); err != nil {
-		return fmt.Errorf("I2PControl server startup failed: %w", err)
+		return oops.Wrapf(err, "I2PControl server startup failed")
 	}
 
 	return nil
@@ -370,7 +371,7 @@ func (r *Router) createSessionFromConn(conn net.Conn) (*ntcp.NTCP2Session, commo
 	// Type assert to NTCP2Addr to extract peer router hash
 	ntcpAddr, ok := conn.RemoteAddr().(*ntcp2.NTCP2Addr)
 	if !ok {
-		return nil, common.Hash{}, fmt.Errorf("invalid connection type: expected NTCP2Addr, got %T", conn.RemoteAddr())
+		return nil, common.Hash{}, oops.Errorf("invalid connection type: expected NTCP2Addr, got %T", conn.RemoteAddr())
 	}
 
 	// Extract router hash from NTCP2 address
@@ -459,7 +460,7 @@ func (r *Router) routeMessage(msg i2np.I2NPMessage, fromPeer common.Hash) error 
 
 	mr, fs := r.getRoutingComponents()
 	if mr == nil {
-		return fmt.Errorf("message router not available (router may be shutting down)")
+		return oops.Errorf("message router not available (router may be shutting down)")
 	}
 
 	return r.dispatchByMessageType(msg, mr, fs)
@@ -490,7 +491,7 @@ func (r *Router) dispatchByMessageType(msg i2np.I2NPMessage, mr *i2np.I2NPMessag
 		i2np.I2NPMessageTypeShortTunnelBuild, i2np.I2NPMessageTypeShortTunnelBuildReply:
 		return mr.GetProcessor().ProcessMessage(msg)
 	default:
-		return fmt.Errorf("unsupported message type: %d", msg.Type())
+		return oops.Errorf("unsupported message type: %d", msg.Type())
 	}
 }
 
@@ -498,7 +499,7 @@ func (r *Router) dispatchByMessageType(msg i2np.I2NPMessage, mr *i2np.I2NPMessag
 func (r *Router) routeDatabaseStore(msg i2np.I2NPMessage, mr *i2np.I2NPMessageDispatcher) error {
 	dbStore, err := r.parseDatabaseStoreMessage(msg)
 	if err != nil {
-		return fmt.Errorf("failed to parse DatabaseStore message: %w", err)
+		return oops.Wrapf(err, "failed to parse DatabaseStore message")
 	}
 	return mr.RouteDatabaseMessage(dbStore)
 }
@@ -522,13 +523,13 @@ func (r *Router) parseDatabaseStoreMessage(msg i2np.I2NPMessage) (*i2np.Database
 	// Extract raw message data from BaseI2NPMessage
 	dataCarrier, ok := msg.(i2np.DataCarrier)
 	if !ok {
-		return nil, fmt.Errorf("message does not implement DataCarrier interface")
+		return nil, oops.Errorf("message does not implement DataCarrier interface")
 	}
 
 	// Create DatabaseStore and unmarshal the payload
 	dbStore := &i2np.DatabaseStore{}
 	if err := dbStore.UnmarshalBinary(dataCarrier.GetData()); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal DatabaseStore: %w", err)
+		return nil, oops.Wrapf(err, "failed to unmarshal DatabaseStore")
 	}
 
 	log.WithFields(logger.Fields{
@@ -544,11 +545,11 @@ func (r *Router) parseDatabaseStoreMessage(msg i2np.I2NPMessage) (*i2np.Database
 func (r *Router) parseDatabaseLookupMessage(msg i2np.I2NPMessage) (*i2np.DatabaseLookup, error) {
 	dataCarrier, ok := msg.(i2np.DataCarrier)
 	if !ok {
-		return nil, fmt.Errorf("message does not implement DataCarrier interface")
+		return nil, oops.Errorf("message does not implement DataCarrier interface")
 	}
 	dl, err := i2np.ReadDatabaseLookup(dataCarrier.GetData())
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse DatabaseLookup: %w", err)
+		return nil, oops.Wrapf(err, "failed to parse DatabaseLookup")
 	}
 	return &dl, nil
 }
@@ -584,7 +585,7 @@ func (r *Router) startI2CPServer() error {
 	r.configureI2CPServerInfrastructure(server)
 
 	if err := server.Start(); err != nil {
-		return fmt.Errorf("failed to start I2CP server: %w", err)
+		return oops.Wrapf(err, "failed to start I2CP server")
 	}
 
 	r.i2cpServer = server
@@ -612,7 +613,7 @@ func (r *Router) createI2CPServer() (*i2cp.Server, error) {
 
 	server, err := i2cp.NewServer(serverConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create I2CP server: %w", err)
+		return nil, oops.Wrapf(err, "failed to create I2CP server")
 	}
 	return server, nil
 }
@@ -683,7 +684,7 @@ func (r *Router) wireI2CPMessageRouter(server *i2cp.Server) {
 	transportSend := func(peerHash common.Hash, msg i2np.I2NPMessage) error {
 		session, sErr := r.GetSessionByHash(peerHash)
 		if sErr != nil {
-			return fmt.Errorf("no session for peer %x: %w", peerHash[:8], sErr)
+			return oops.Wrapf(sErr, "no session for peer %x", peerHash[:8])
 		}
 		return session.QueueSendI2NP(msg)
 	}
@@ -715,7 +716,7 @@ func (r *Router) getSessionByHash(peerHash common.Hash) (transport.TransportSess
 	if session, ok := r.activeSessions[peerHash]; ok {
 		return session, nil
 	}
-	return nil, fmt.Errorf("no session found for peer %x", peerHash[:8])
+	return nil, oops.Errorf("no session found for peer %x", peerHash[:8])
 }
 
 // GetSessionByHash implements SessionProvider interface for DatabaseManager.
@@ -730,7 +731,7 @@ func (r *Router) GetSessionByHash(hash common.Hash) (i2np.I2NPTransportSession, 
 	r.runMux.RUnlock()
 
 	if !running {
-		return nil, errors.New("router is not running")
+		return nil, oops.Errorf("router is not running")
 	}
 
 	// First check for existing session
@@ -769,11 +770,11 @@ func (r *Router) retrieveRouterInfoWithTimeout(hash common.Hash) (*router_info.R
 // getRouterInfoChannel initiates a RouterInfo lookup and returns the result channel.
 func (r *Router) getRouterInfoChannel(hash common.Hash) (<-chan router_info.RouterInfo, error) {
 	if r.StdNetDB == nil {
-		return nil, errors.New("router NetDB not available")
+		return nil, oops.Errorf("router NetDB not available")
 	}
 	routerInfoChan := r.StdNetDB.GetRouterInfo(hash)
 	if routerInfoChan == nil {
-		return nil, fmt.Errorf("no RouterInfo found for peer %x", hash[:8])
+		return nil, oops.Errorf("no RouterInfo found for peer %x", hash[:8])
 	}
 	return routerInfoChan, nil
 }
@@ -786,12 +787,12 @@ func (r *Router) waitForRouterInfo(ch <-chan router_info.RouterInfo, hash common
 	select {
 	case routerInfo, ok := <-ch:
 		if !ok {
-			return nil, fmt.Errorf("failed to receive RouterInfo for peer %x", hash[:8])
+			return nil, oops.Errorf("failed to receive RouterInfo for peer %x", hash[:8])
 		}
 		return &routerInfo, nil
 	case <-timer.C:
 		r.logRouterInfoTimeout(hash)
-		return nil, fmt.Errorf("timeout waiting for RouterInfo for peer %x", hash[:8])
+		return nil, oops.Errorf("timeout waiting for RouterInfo for peer %x", hash[:8])
 	}
 }
 
@@ -804,7 +805,7 @@ func (r *Router) establishOutboundSession(hash common.Hash, routerInfo *router_i
 	transportSession, err := r.TransportMuxer.GetSession(*routerInfo)
 	if err != nil {
 		r.logSessionEstablishmentFailure(hash, routerInfo, err)
-		return nil, fmt.Errorf("failed to establish outbound session: %w", err)
+		return nil, oops.Wrapf(err, "failed to establish outbound session")
 	}
 
 	return transportSession, nil
@@ -820,7 +821,7 @@ func (r *Router) validateTransportMuxer(hash common.Hash) error {
 			"peer_hash": fmt.Sprintf("%x", hash[:8]),
 			"reason":    "transport_not_initialized",
 		}).Error("TransportMuxer not initialized")
-		return fmt.Errorf("transport not initialized for peer %x", hash[:8])
+		return oops.Errorf("transport not initialized for peer %x", hash[:8])
 	}
 	return nil
 }

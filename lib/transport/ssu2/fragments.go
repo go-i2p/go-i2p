@@ -2,10 +2,10 @@ package ssu2
 
 import (
 	"encoding/binary"
-	"fmt"
 
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
+	"github.com/samber/oops"
 )
 
 // maxSSU2PayloadIPv4 is the maximum plaintext payload per SSU2 packet for IPv4.
@@ -35,7 +35,7 @@ func FragmentI2NPMessage(msg i2np.I2NPMessage, maxPayload int) ([]*ssu2noise.SSU
 	data, err := msg.MarshalBinary()
 	if err != nil {
 		log.WithError(err).Error("failed to marshal I2NP message for fragmentation")
-		return nil, fmt.Errorf("failed to marshal I2NP message: %w", err)
+		return nil, oops.Wrapf(err, "failed to marshal I2NP message")
 	}
 
 	blockOverhead := 3 // TLV header for type 3 block
@@ -82,7 +82,7 @@ func createFirstFragment(data []byte, messageID, totalSize uint32, maxPayload in
 			"max_payload": maxPayload,
 			"overhead":    firstFragmentOverhead,
 		}).Error("max payload too small for SSU2 first fragment")
-		return nil, 0, fmt.Errorf("max payload %d too small for first fragment", maxPayload)
+		return nil, 0, oops.Errorf("max payload %d too small for first fragment", maxPayload)
 	}
 	if firstDataSize > len(data) {
 		firstDataSize = len(data)
@@ -105,7 +105,7 @@ func createFollowOnFragments(data []byte, messageID uint32, maxPayload int) ([]*
 				"max_payload": maxPayload,
 				"overhead":    followOnFragmentOverhead,
 			}).Error("max payload too small for SSU2 follow-on fragment")
-			return nil, fmt.Errorf("max payload %d too small for follow-on fragment", maxPayload)
+			return nil, oops.Errorf("max payload %d too small for follow-on fragment", maxPayload)
 		}
 		end := offset + followDataSize
 		if end > len(data) {
@@ -123,7 +123,7 @@ func createFollowOnFragments(data []byte, messageID uint32, maxPayload int) ([]*
 				"message_id":   messageID,
 				"fragment_num": fragmentNum,
 			}).Error("I2NP message too large: exceeds max SSU2 follow-on fragments")
-			return nil, fmt.Errorf("message too large: exceeds 127 follow-on fragments")
+			return nil, oops.Errorf("message too large: exceeds 127 follow-on fragments")
 		}
 	}
 

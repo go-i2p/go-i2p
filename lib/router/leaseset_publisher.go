@@ -9,6 +9,7 @@ import (
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // LeaseSetPublisher implements i2cp.LeaseSetPublisher interface.
@@ -49,7 +50,7 @@ func (p *LeaseSetPublisher) PublishLeaseSet(key common.Hash, leaseSetData []byte
 
 	// Store in local NetDB (dataType=1 indicates LeaseSet)
 	if err := p.storeInLocalNetDB(key, leaseSetData); err != nil {
-		return fmt.Errorf("failed to store LeaseSet in local NetDB: %w", err)
+		return oops.Wrapf(err, "failed to store LeaseSet in local NetDB")
 	}
 
 	// Distribute to network (non-blocking, tracked by WaitGroup for clean shutdown)
@@ -166,14 +167,14 @@ func (p *LeaseSetPublisher) sendToFloodfill(ffHash common.Hash, dbStore *i2np.Da
 	// Get active session to this floodfill router
 	session, err := p.router.GetSessionByHash(ffHash)
 	if err != nil {
-		return fmt.Errorf("no active session to floodfill router: %w", err)
+		return oops.Wrapf(err, "no active session to floodfill router")
 	}
 
 	// Wrap DatabaseStore in I2NPMessage interface
 	msg := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeDatabaseStore)
 	data, err := dbStore.MarshalBinary()
 	if err != nil {
-		return fmt.Errorf("failed to marshal DatabaseStore: %w", err)
+		return oops.Wrapf(err, "failed to marshal DatabaseStore")
 	}
 	msg.SetData(data)
 

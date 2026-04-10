@@ -19,6 +19,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/transport"
 	"github.com/go-i2p/go-noise/ntcp2"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 
 	nattraversal "github.com/go-i2p/go-nat-listener"
 )
@@ -74,7 +75,7 @@ func NewNTCP2Transport(identity router_info.RouterInfo, config *Config, keystore
 	identHash, err := identity.IdentHash()
 	if err != nil {
 		cancel()
-		return nil, fmt.Errorf("failed to get router identity hash: %w", err)
+		return nil, oops.Wrapf(err, "failed to get router identity hash")
 	}
 	identHashBytes := identHash.Bytes()
 	logger.WithFields(map[string]interface{}{
@@ -111,7 +112,7 @@ func NewNTCP2Transport(identity router_info.RouterInfo, config *Config, keystore
 func createNTCP2Config(identity router_info.RouterInfo, cancel context.CancelFunc) (*ntcp2.NTCP2Config, error) {
 	identHash, err := identity.IdentHash()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get router identity hash: %w", err)
+		return nil, oops.Wrapf(err, "failed to get router identity hash")
 	}
 	ntcp2Config, err := ntcp2.NewNTCP2Config(identHash, false)
 	if err != nil {
@@ -145,7 +146,7 @@ func loadStaticKeyFromRouter(ntcp2Config *ntcp2.NTCP2Config, identity router_inf
 		if cancel != nil {
 			cancel()
 		}
-		return WrapNTCP2Error(fmt.Errorf("encryption private key is nil"), "retrieving encryption key from keystore")
+		return WrapNTCP2Error(oops.Errorf("encryption private key is nil"), "retrieving encryption key from keystore")
 	}
 
 	// Use the encryption private key as the NTCP2 static key
@@ -154,7 +155,7 @@ func loadStaticKeyFromRouter(ntcp2Config *ntcp2.NTCP2Config, identity router_inf
 		if cancel != nil {
 			cancel()
 		}
-		return WrapNTCP2Error(fmt.Errorf("invalid static key size: expected 32 bytes, got %d", len(ntcp2Config.StaticKey)), "loading static key")
+		return WrapNTCP2Error(oops.Errorf("invalid static key size: expected 32 bytes, got %d", len(ntcp2Config.StaticKey)), "loading static key")
 	}
 	return nil
 }
@@ -198,11 +199,11 @@ func buildTransportInstance(config *Config, identity router_info.RouterInfo, key
 func setupNetworkListener(transport *NTCP2Transport, config *Config, ntcp2Config *ntcp2.NTCP2Config) error {
 	_, portStr, err := net.SplitHostPort(config.ListenerAddress)
 	if err != nil {
-		return fmt.Errorf("failed to parse listener address: %w", err)
+		return oops.Wrapf(err, "failed to parse listener address")
 	}
 	iport, err := strconv.Atoi(portStr)
 	if err != nil {
-		return fmt.Errorf("failed to convert port to integer: %w", err)
+		return oops.Wrapf(err, "failed to convert port to integer")
 	}
 
 	var tcpListener net.Listener
@@ -213,7 +214,7 @@ func setupNetworkListener(transport *NTCP2Transport, config *Config, ntcp2Config
 		// the listener directly so the OS assigns a real port, then skip NAT mapping.
 		tcpListener, err = net.Listen("tcp", config.ListenerAddress)
 		if err != nil {
-			return fmt.Errorf("failed to create TCP listener: %w", err)
+			return oops.Wrapf(err, "failed to create TCP listener")
 		}
 		config.ListenerAddress = tcpListener.Addr().String()
 		log.WithField("address", config.ListenerAddress).Info("TCP listener started (no NAT traversal for OS-assigned port)")
@@ -225,7 +226,7 @@ func setupNetworkListener(transport *NTCP2Transport, config *Config, ntcp2Config
 		defer natCancel()
 		tcpListener, err = nattraversal.ListenWithFallbackContext(natCtx, iport)
 		if err != nil {
-			return fmt.Errorf("failed to create TCP listener: %w", err)
+			return oops.Wrapf(err, "failed to create TCP listener")
 		}
 		// Keep config in sync with the actual bound address so that
 		// createNewListenerWithConfig (used by SetIdentity) rebinds to the same port.
@@ -458,7 +459,7 @@ func (t *NTCP2Transport) SetIdentity(ident router_info.RouterInfo) error {
 	}
 
 	if err := initializeCryptoKeys(ntcp2Config, ident, t.keystore, t.config.WorkingDir, nil); err != nil {
-		return fmt.Errorf("failed to reinitialize crypto keys after identity update: %w", err)
+		return oops.Wrapf(err, "failed to reinitialize crypto keys after identity update")
 	}
 
 	t.identityMu.Lock()
@@ -478,7 +479,7 @@ func (t *NTCP2Transport) SetIdentity(ident router_info.RouterInfo) error {
 func (t *NTCP2Transport) logIdentityUpdate(ident router_info.RouterInfo) error {
 	identHash, err := ident.IdentHash()
 	if err != nil {
-		return fmt.Errorf("failed to get router identity hash: %w", err)
+		return oops.Wrapf(err, "failed to get router identity hash")
 	}
 	identHashBytes := identHash.Bytes()
 	t.logger.WithField("router_hash", fmt.Sprintf("%x", identHashBytes[:8])).Info("Updating NTCP2 transport identity")
@@ -489,7 +490,7 @@ func (t *NTCP2Transport) logIdentityUpdate(ident router_info.RouterInfo) error {
 func (t *NTCP2Transport) createNTCP2ConfigFromIdentity(ident router_info.RouterInfo) (*ntcp2.NTCP2Config, error) {
 	identityHash, err := ident.IdentHash()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get router identity hash: %w", err)
+		return nil, oops.Wrapf(err, "failed to get router identity hash")
 	}
 	ntcp2Config, err := ntcp2.NewNTCP2Config(identityHash, false)
 	if err != nil {
@@ -557,7 +558,7 @@ func (t *NTCP2Transport) createNewListenerWithConfig(ntcp2Config *ntcp2.NTCP2Con
 func (t *NTCP2Transport) GetSession(routerInfo router_info.RouterInfo) (transport.TransportSession, error) {
 	routerHash, err := routerInfo.IdentHash()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get router hash: %w", err)
+		return nil, oops.Wrapf(err, "failed to get router hash")
 	}
 	routerHashBytes := routerHash.Bytes()
 	t.logger.WithFields(map[string]interface{}{
@@ -694,7 +695,7 @@ func (t *NTCP2Transport) createOutboundSession(routerInfo router_info.RouterInfo
 
 	session := t.setupSession(conn, routerHash)
 	if session == nil {
-		return nil, fmt.Errorf("failed to set up session for %x: corrupt session map entry, connection closed", routerHashBytes[:8])
+		return nil, oops.Errorf("failed to set up session for %x: corrupt session map entry, connection closed", routerHashBytes[:8])
 	}
 	if n := t.peerConnNotifier; n != nil {
 		n.RecordSuccess(routerHash, time.Since(dialStart).Milliseconds())
@@ -946,7 +947,7 @@ func (t *NTCP2Transport) createNTCP2Config(routerInfo router_info.RouterInfo) (*
 	// for an initiator that means the *remote* peer's hash, not our own.
 	remoteHash, err := routerInfo.IdentHash()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get remote router hash: %w", err)
+		return nil, oops.Wrapf(err, "failed to get remote router hash")
 	}
 
 	// Read our own static key under the identity lock.
@@ -995,7 +996,7 @@ func (t *NTCP2Transport) createNTCP2Config(routerInfo router_info.RouterInfo) (*
 		}).Info("LocalRouterInfo for msg3 outbound")
 		config = config.WithLocalRouterInfo(riBytes)
 	} else {
-		return nil, fmt.Errorf("cannot serialize local RouterInfo for NTCP2 msg3: %w", riErr)
+		return nil, oops.Wrapf(riErr, "cannot serialize local RouterInfo for NTCP2 msg3")
 	}
 
 	return config, nil

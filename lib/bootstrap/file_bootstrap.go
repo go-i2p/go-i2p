@@ -10,6 +10,7 @@ import (
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/netdb/reseed"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // FileBootstrap implements the Bootstrap interface using a local zip or su3 file
@@ -50,7 +51,7 @@ func (fb *FileBootstrap) GetPeers(ctx context.Context, n int) ([]router_info.Rou
 			"phase":  "bootstrap",
 			"reason": "context canceled before file bootstrap",
 		}).Warn("file bootstrap canceled by context before starting")
-		return nil, fmt.Errorf("file bootstrap canceled: %w", ctx.Err())
+		return nil, oops.Wrapf(ctx.Err(), "file bootstrap canceled")
 	}
 
 	// Validate file exists
@@ -65,7 +66,7 @@ func (fb *FileBootstrap) GetPeers(ctx context.Context, n int) ([]router_info.Rou
 	}
 
 	if len(routerInfos) == 0 {
-		return nil, fmt.Errorf("no RouterInfos found in reseed file")
+		return nil, oops.Errorf("no RouterInfos found in reseed file")
 	}
 
 	log.WithFields(logger.Fields{
@@ -104,7 +105,7 @@ func (fb *FileBootstrap) processReseedFile(ctx context.Context, limit int) ([]ro
 	case ".zip":
 		routerInfos, err = fb.processZipFile(ctx, limit)
 	default:
-		return nil, fmt.Errorf("unsupported file type: %s (expected .su3 or .zip)", ext)
+		return nil, oops.Errorf("unsupported file type: %s (expected .su3 or .zip)", ext)
 	}
 
 	if err != nil {
@@ -135,7 +136,7 @@ func checkFileAccessibility(filePath string) (os.FileInfo, error) {
 				"file_path":  filePath,
 				"suggestion": "verify file path or download reseed file",
 			}).Warn("reseed file does not exist")
-			return nil, fmt.Errorf("file bootstrap validation failed: file does not exist at path %s", filePath)
+			return nil, oops.Errorf("file bootstrap validation failed: file does not exist at path %s", filePath)
 		}
 		log.WithError(err).WithFields(logger.Fields{
 			"at":         "(FileBootstrap) validateFile",
@@ -144,7 +145,7 @@ func checkFileAccessibility(filePath string) (os.FileInfo, error) {
 			"file_path":  filePath,
 			"error_type": fmt.Sprintf("%T", err),
 		}).Warn("failed to stat reseed file")
-		return nil, fmt.Errorf("file bootstrap validation failed: cannot access file %s: %w", filePath, err)
+		return nil, oops.Wrapf(err, "file bootstrap validation failed: cannot access file %s", filePath)
 	}
 
 	if info.IsDir() {
@@ -155,7 +156,7 @@ func checkFileAccessibility(filePath string) (os.FileInfo, error) {
 			"file_path":  filePath,
 			"suggestion": "specify path to .su3 or .zip file, not directory",
 		}).Warn("reseed path is a directory, not a file")
-		return nil, fmt.Errorf("file bootstrap validation failed: path is a directory, not a file: %s", filePath)
+		return nil, oops.Errorf("file bootstrap validation failed: path is a directory, not a file: %s", filePath)
 	}
 
 	return info, nil
@@ -174,7 +175,7 @@ func validateFileSize(filePath string, info os.FileInfo) error {
 			"min_bytes":  100,
 			"suggestion": "verify file is complete and not corrupted",
 		}).Warn("reseed file is too small to be valid")
-		return fmt.Errorf("file bootstrap validation failed: file too small (%d bytes) at %s", info.Size(), filePath)
+		return oops.Errorf("file bootstrap validation failed: file too small (%d bytes) at %s", info.Size(), filePath)
 	}
 	return nil
 }
@@ -193,7 +194,7 @@ func (fb *FileBootstrap) validateFile() error {
 			"phase":  "bootstrap",
 			"reason": "empty file path provided",
 		}).Error("file bootstrap: empty file path provided")
-		return fmt.Errorf("file bootstrap validation failed: empty file path")
+		return oops.Errorf("file bootstrap validation failed: empty file path")
 	}
 
 	info, err := checkFileAccessibility(fb.filePath)
@@ -229,14 +230,14 @@ func (fb *FileBootstrap) processReseedFileByType(ctx context.Context, limit int,
 	}).Info("processing " + fileType + " reseed file")
 
 	if ctx.Err() != nil {
-		return nil, fmt.Errorf("file bootstrap canceled: %w", ctx.Err())
+		return nil, oops.Wrapf(ctx.Err(), "file bootstrap canceled")
 	}
 
 	requestLimit := calculateRequestLimit(limit)
 	routerInfos, err := process(fb.filePath, requestLimit)
 	if err != nil {
 		logReseedProcessingFailure("process"+fileType+"File", fileType, fb.filePath, err)
-		return nil, fmt.Errorf("%s file processing failed for %s (requested %d peers): %w", fileType, fb.filePath, limit, err)
+		return nil, oops.Wrapf(err, "%s file processing failed for %s (requested %d peers)", fileType, fb.filePath, limit)
 	}
 
 	return fb.finalizeRouterInfos(routerInfos, limit, fileType)
@@ -289,7 +290,7 @@ func (fb *FileBootstrap) finalizeRouterInfos(routerInfos []router_info.RouterInf
 			"reason":    "no valid RouterInfos extracted after validation",
 			"file_path": fb.filePath,
 		}).Error("no valid RouterInfos extracted from " + fileType + " file")
-		return nil, fmt.Errorf("%s file processing failed: no valid RouterInfos found in %s (file may be corrupted or contain invalid data)", fileType, fb.filePath)
+		return nil, oops.Errorf("%s file processing failed: no valid RouterInfos found in %s (file may be corrupted or contain invalid data)", fileType, fb.filePath)
 	}
 
 	if limit > 0 && len(validRouterInfos) > limit {

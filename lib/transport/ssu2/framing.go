@@ -2,11 +2,11 @@ package ssu2
 
 import (
 	"encoding/binary"
-	"fmt"
 	"time"
 
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
+	"github.com/samber/oops"
 )
 
 // FrameI2NPToBlock serializes an I2NP message into an SSU2 block type 3.
@@ -16,7 +16,7 @@ func FrameI2NPToBlock(msg i2np.I2NPMessage) (*ssu2noise.SSU2Block, error) {
 	data, err := msg.MarshalBinary()
 	if err != nil {
 		log.WithError(err).Error("failed to marshal I2NP message for SSU2 block")
-		return nil, fmt.Errorf("failed to marshal I2NP message: %w", err)
+		return nil, oops.Wrapf(err, "failed to marshal I2NP message")
 	}
 	return ssu2noise.NewSSU2Block(ssu2noise.BlockTypeI2NPMessage, data), nil
 }
@@ -29,17 +29,17 @@ func ParseI2NPFromBlock(block *ssu2noise.SSU2Block) (i2np.I2NPMessage, error) {
 			"expected_type": ssu2noise.BlockTypeI2NPMessage,
 			"got_type":      block.Type,
 		}).Error("unexpected SSU2 block type for I2NP message")
-		return nil, fmt.Errorf("expected block type %d (I2NP), got %d",
+		return nil, oops.Errorf("expected block type %d (I2NP), got %d",
 			ssu2noise.BlockTypeI2NPMessage, block.Type)
 	}
 	if len(block.Data) == 0 {
 		log.Error("empty I2NP block data in SSU2 block")
-		return nil, fmt.Errorf("empty I2NP block data")
+		return nil, oops.Errorf("empty I2NP block data")
 	}
 	msg := &i2np.BaseI2NPMessage{}
 	if err := msg.UnmarshalBinary(block.Data); err != nil {
 		log.WithError(err).Error("failed to unmarshal I2NP message from SSU2 block")
-		return nil, fmt.Errorf("failed to unmarshal I2NP message: %w", err)
+		return nil, oops.Wrapf(err, "failed to unmarshal I2NP message")
 	}
 	return msg, nil
 }
@@ -50,7 +50,7 @@ func FrameI2NPForSSU2(msg i2np.I2NPMessage) ([]byte, error) {
 	data, err := msg.MarshalBinary()
 	if err != nil {
 		log.WithError(err).Error("failed to marshal I2NP message for SSU2")
-		return nil, fmt.Errorf("failed to marshal I2NP message: %w", err)
+		return nil, oops.Wrapf(err, "failed to marshal I2NP message")
 	}
 	return data, nil
 }
@@ -60,12 +60,12 @@ func FrameI2NPForSSU2(msg i2np.I2NPMessage) ([]byte, error) {
 func ParseI2NPFromSSU2(data []byte) (i2np.I2NPMessage, error) {
 	if len(data) == 0 {
 		log.Error("empty data in ParseI2NPFromSSU2")
-		return nil, fmt.Errorf("empty I2NP data")
+		return nil, oops.Errorf("empty I2NP data")
 	}
 	msg := &i2np.BaseI2NPMessage{}
 	if err := msg.UnmarshalBinary(data); err != nil {
 		log.WithError(err).Error("failed to unmarshal I2NP message from SSU2")
-		return nil, fmt.Errorf("failed to unmarshal I2NP message: %w", err)
+		return nil, oops.Wrapf(err, "failed to unmarshal I2NP message")
 	}
 	return msg, nil
 }

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/config"
@@ -67,7 +68,7 @@ func (lb *LocalNetDbBootstrap) GetPeers(ctx context.Context, n int) ([]router_in
 	// Find the first available netDb directory
 	netDbPath, err := lb.findNetDbDirectory()
 	if err != nil {
-		return nil, fmt.Errorf("no local netDb found: %w", err)
+		return nil, oops.Wrapf(err, "no local netDb found")
 	}
 
 	log.WithFields(logger.Fields{
@@ -82,7 +83,7 @@ func (lb *LocalNetDbBootstrap) GetPeers(ctx context.Context, n int) ([]router_in
 	// Read RouterInfos from the directory
 	routerInfos, err := lb.readRouterInfosFromDirectory(ctx, netDbPath, n)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read RouterInfos from local netDb: %w", err)
+		return nil, oops.Wrapf(err, "failed to read RouterInfos from local netDb")
 	}
 
 	log.WithFields(logger.Fields{
@@ -141,7 +142,7 @@ func (lb *LocalNetDbBootstrap) findNetDbDirectory() (string, error) {
 		"impact":     "local netDb bootstrap will fail",
 		"suggestion": "install Java I2P or i2pd to populate local netDb",
 	}).Warn("no valid netdb directory found in search paths")
-	return "", fmt.Errorf("no valid netDb directory found in search paths: %v", lb.searchPaths)
+	return "", oops.Errorf("no valid netDb directory found in search paths: %v", lb.searchPaths)
 }
 
 // isValidNetDbDirectory checks if a path contains a valid netDb structure
@@ -203,7 +204,7 @@ func (lb *LocalNetDbBootstrap) readRouterInfosFromDirectory(ctx context.Context,
 	}
 
 	if len(routerInfos) == 0 {
-		return nil, fmt.Errorf("no valid RouterInfo files found in %s", path)
+		return nil, oops.Errorf("no valid RouterInfo files found in %s", path)
 	}
 
 	return routerInfos, nil
@@ -260,7 +261,7 @@ func validateRouterInfoForBootstrap(ri router_info.RouterInfo, filePath string) 
 			"reason": "no direct NTCP2 connectivity",
 			"file":   filePath,
 		}).Debug("skipping RouterInfo without direct NTCP2 connectivity")
-		return fmt.Errorf("no direct connectivity")
+		return oops.Errorf("no direct connectivity")
 	}
 
 	if err := ValidateRouterInfo(ri); err != nil {
@@ -325,7 +326,7 @@ func (lb *LocalNetDbBootstrap) readRouterInfoFromFile(filePath string) (router_i
 
 	ri, _, err := router_info.ReadRouterInfo(data)
 	if err != nil {
-		return router_info.RouterInfo{}, fmt.Errorf("failed to parse RouterInfo: %w", err)
+		return router_info.RouterInfo{}, oops.Wrapf(err, "failed to parse RouterInfo")
 	}
 
 	if err := validateRouterInfoFreshness(ri); err != nil {
@@ -340,17 +341,17 @@ func (lb *LocalNetDbBootstrap) readRouterInfoFromFile(filePath string) (router_i
 func readRouterInfoBytes(filePath string) ([]byte, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open file: %w", err)
+		return nil, oops.Wrapf(err, "failed to open file")
 	}
 	defer file.Close()
 
 	const maxRouterInfoSize = 64 * 1024
 	data, err := io.ReadAll(io.LimitReader(file, maxRouterInfoSize))
 	if err != nil {
-		return nil, fmt.Errorf("failed to read file: %w", err)
+		return nil, oops.Wrapf(err, "failed to read file")
 	}
 	if len(data) == 0 {
-		return nil, fmt.Errorf("router info file is empty")
+		return nil, oops.Errorf("router info file is empty")
 	}
 	return data, nil
 }
@@ -369,10 +370,10 @@ func validateRouterInfoFreshness(ri router_info.RouterInfo) error {
 	publishedTime := publishedDate.Time()
 	age := time.Since(publishedTime)
 	if age < -maxClockSkew {
-		return fmt.Errorf("RouterInfo has future timestamp (published %v in the future, max clock skew %v)", -age.Round(time.Second), maxClockSkew)
+		return oops.Errorf("RouterInfo has future timestamp (published %v in the future, max clock skew %v)", -age.Round(time.Second), maxClockSkew)
 	}
 	if age > routerInfoMaxAge {
-		return fmt.Errorf("RouterInfo expired (published %v ago, max age %v)", age.Round(time.Minute), routerInfoMaxAge)
+		return oops.Errorf("RouterInfo expired (published %v ago, max age %v)", age.Round(time.Minute), routerInfoMaxAge)
 	}
 	return nil
 }

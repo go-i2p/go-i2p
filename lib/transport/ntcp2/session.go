@@ -5,7 +5,6 @@ import (
 	"compress/gzip"
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"sync"
@@ -14,6 +13,7 @@ import (
 
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 type NTCP2Session struct {
@@ -133,14 +133,14 @@ func (s *NTCP2Session) QueueSendI2NP(msg i2np.I2NPMessage) error {
 	case <-s.ctx.Done():
 		atomic.AddInt32(&s.sendQueueSize, -1)
 		s.logger.WithField("message_type", msg.Type()).Warn("Cannot queue message - session is closed")
-		return fmt.Errorf("session closed, message dropped (type=%d)", msg.Type())
+		return oops.Errorf("session closed, message dropped (type=%d)", msg.Type())
 	case <-time.After(500 * time.Millisecond):
 		atomic.AddInt32(&s.sendQueueSize, -1)
 		s.logger.WithFields(map[string]interface{}{
 			"message_type":       msg.Type(),
 			"current_queue_size": atomic.LoadInt32(&s.sendQueueSize),
 		}).Warn("Send queue full after timeout, dropping message")
-		return fmt.Errorf("send queue full, message dropped (type=%d)", msg.Type())
+		return oops.Errorf("send queue full, message dropped (type=%d)", msg.Type())
 	}
 }
 
@@ -544,14 +544,18 @@ func (s *NTCP2Session) handleRouterInfoBlock(data []byte) {
 	}
 }
 
-// decompressGzip decompresses gzip-compressed data.
+// maxRouterInfoSize is the maximum allowed size for decompressed RouterInfo data.
+// Per I2P spec, RouterInfos are typically <4KB; 8KB provides a safe upper bound.
+const maxRouterInfoSize = 8192
+
+// decompressGzip decompresses gzip-compressed data with a size limit to prevent gzip bomb DoS.
 func decompressGzip(data []byte) ([]byte, error) {
 	r, err := gzip.NewReader(bytes.NewReader(data))
 	if err != nil {
-		return nil, fmt.Errorf("gzip reader: %w", err)
+		return nil, oops.Wrapf(err, "gzip reader")
 	}
 	defer r.Close()
-	return io.ReadAll(r)
+	return io.ReadAll(io.LimitReader(r, maxRouterInfoSize))
 }
 
 // shouldStopReceiving checks if the session context is done and receiving should stop.

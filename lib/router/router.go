@@ -2,7 +2,6 @@ package router
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -25,6 +24,7 @@ import (
 	ssu2 "github.com/go-i2p/go-i2p/lib/transport/ssu2"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 type Router struct {
@@ -300,11 +300,11 @@ func reSignAndVerifyRouterInfo(ri *router_info.RouterInfo, ks *keys.RouterInfoKe
 	privKey := ks.GetSigningPrivateKey()
 	signingKey, ok := privKey.(types.SigningPrivateKey)
 	if !ok {
-		return fmt.Errorf("router signing key does not implement SigningPrivateKey (got %T)", privKey)
+		return oops.Errorf("router signing key does not implement SigningPrivateKey (got %T)", privKey)
 	}
 	pubTime := ks.GetCurrentTime().Round(time.Second)
 	if err := ri.ReSign(pubTime, signingKey, signature.SIGNATURE_TYPE_EDDSA_SHA512_ED25519); err != nil {
-		return fmt.Errorf("failed to re-sign RouterInfo: %w", err)
+		return oops.Wrapf(err, "failed to re-sign RouterInfo")
 	}
 	if sigValid, sigErr := ri.VerifySignature(); !sigValid || sigErr != nil {
 		riBytes, _ := ri.Bytes()
@@ -314,7 +314,7 @@ func reSignAndVerifyRouterInfo(ri *router_info.RouterInfo, ks *keys.RouterInfoKe
 			"addr_count": ri.RouterAddressCount(),
 			"ri_len":     len(riBytes),
 		}).Error("Re-signed RouterInfo FAILED local verification")
-		return fmt.Errorf("re-signed RouterInfo failed verification: valid=%v err=%v", sigValid, sigErr)
+		return oops.Errorf("re-signed RouterInfo failed verification: valid=%v err=%v", sigValid, sigErr)
 	}
 	riBytes, _ := ri.Bytes()
 	log.WithFields(logger.Fields{
@@ -381,7 +381,7 @@ func buildNTCP2Transport(r *Router, ri *router_info.RouterInfo) (*ntcp.NTCP2Tran
 	// public key we published in the RouterInfo "s=" option.  A mismatch causes
 	// 100% outbound NTCP2 handshake failures and makes us unreachable to peers.
 	if err := ntcp.VerifyStaticKeyConsistency(ntcp2Transport, *ri); err != nil {
-		return nil, fmt.Errorf("NTCP2 static key consistency check failed: %w", err)
+		return nil, oops.Wrapf(err, "NTCP2 static key consistency check failed")
 	}
 
 	return ntcp2Transport, nil
@@ -418,7 +418,7 @@ func buildSSU2Transport(r *Router, ri *router_info.RouterInfo) (*ssu2.SSU2Transp
 		ch := r.StdNetDB.GetRouterInfo(hash)
 		ri, ok := <-ch
 		if !ok {
-			return router_info.RouterInfo{}, fmt.Errorf("router %x not found in netdb", hash[:4])
+			return router_info.RouterInfo{}, oops.Errorf("router %x not found in netdb", hash[:4])
 		}
 		return ri, nil
 	}
@@ -448,7 +448,7 @@ func buildSSU2Transport(r *Router, ri *router_info.RouterInfo) (*ssu2.SSU2Transp
 func validateAndAddTransportAddress(ri *router_info.RouterInfo, addr net.Addr, proto string, converter func() (*router_address.RouterAddress, error)) error {
 	if addr == nil {
 		log.WithFields(logger.Fields{"at": "validateAndAddTransportAddress"}).Error("Failed to get " + proto + " address")
-		return errors.New("failed to get " + proto + " address")
+		return oops.Errorf("failed to get %s address", proto)
 	}
 	log.WithFields(logger.Fields{"at": "validateAndAddTransportAddress"}).Debug(proto+" address:", addr)
 	return addTransportAddress(ri, addr, proto, converter)
@@ -460,7 +460,7 @@ func addTransportAddress(ri *router_info.RouterInfo, addr net.Addr, proto string
 	routerAddress, err := converter()
 	if err != nil {
 		log.WithError(err).Errorf("Failed to convert %s address to RouterAddress", proto)
-		return fmt.Errorf("failed to convert %s address: %w", proto, err)
+		return oops.Wrapf(err, "failed to convert %s address", proto)
 	}
 	ri.AddAddress(routerAddress)
 	log.WithFields(logger.Fields{
@@ -543,7 +543,7 @@ func (r *Router) GetTransportAddr() interface{} {
 // an error because required subsystems (keystore, transport) are nil.
 func FromConfig(c *config.RouterConfig) (r *Router, err error) {
 	if c == nil {
-		return nil, fmt.Errorf("router config cannot be nil")
+		return nil, oops.Errorf("router config cannot be nil")
 	}
 	log.WithFields(logger.Fields{
 		"at":          "(Router) FromConfig",

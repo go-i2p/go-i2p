@@ -2,8 +2,9 @@ package ntcp2
 
 import (
 	"encoding/binary"
-	"fmt"
 	"math"
+
+	"github.com/samber/oops"
 )
 
 // Options represents the NTCP2 options block parameters used for negotiating
@@ -66,7 +67,7 @@ func DefaultOptions() *Options {
 // the 3-byte block header) into an Options struct.
 func ParseOptions(data []byte) (*Options, error) {
 	if len(data) < optionsBlockMinSize {
-		return nil, fmt.Errorf("options block too short: %d bytes, need at least %d", len(data), optionsBlockMinSize)
+		return nil, oops.Errorf("options block too short: %d bytes, need at least %d", len(data), optionsBlockMinSize)
 	}
 
 	opts := &Options{

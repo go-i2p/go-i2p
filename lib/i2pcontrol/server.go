@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // Server provides an HTTP/HTTPS endpoint for I2PControl JSON-RPC requests.
@@ -57,13 +58,13 @@ func NewServer(cfg *config.I2PControlConfig, stats RouterStatsProvider) (*Server
 // Returns an error if config is nil, stats is nil, or password is empty.
 func validateServerConfig(cfg *config.I2PControlConfig, stats RouterStatsProvider) error {
 	if cfg == nil {
-		return fmt.Errorf("i2pcontrol: config cannot be nil")
+		return oops.Errorf("i2pcontrol: config cannot be nil")
 	}
 	if stats == nil {
-		return fmt.Errorf("i2pcontrol: stats provider cannot be nil")
+		return oops.Errorf("i2pcontrol: stats provider cannot be nil")
 	}
 	if cfg.Password == "" {
-		return fmt.Errorf("i2pcontrol: password cannot be empty")
+		return oops.Errorf("i2pcontrol: password cannot be empty")
 	}
 	return nil
 }
@@ -73,7 +74,7 @@ func validateServerConfig(cfg *config.I2PControlConfig, stats RouterStatsProvide
 func initializeAuthManager(password string) (*AuthManager, error) {
 	authManager, err := NewAuthManager(password)
 	if err != nil {
-		return nil, fmt.Errorf("i2pcontrol: failed to create auth manager: %w", err)
+		return nil, oops.Wrapf(err, "i2pcontrol: failed to create auth manager")
 	}
 	return authManager, nil
 }
@@ -180,7 +181,7 @@ func (s *Server) startHTTPSServer() error {
 			"certFile": s.config.CertFile,
 			"keyFile":  s.config.KeyFile,
 		}).Error("Failed to start HTTPS server")
-		return fmt.Errorf("missing certificate or key file")
+		return oops.Errorf("missing certificate or key file")
 	}
 
 	log.WithFields(logger.Fields{

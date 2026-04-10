@@ -3,12 +3,12 @@ package ssu2
 import (
 	"context"
 	"crypto/ed25519"
-	"fmt"
 	"net"
 	"strconv"
 	"time"
 
 	"github.com/go-i2p/crypto/rand"
+	"github.com/samber/oops"
 
 	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
@@ -38,12 +38,12 @@ const (
 //  6. Alice → Charlie: SessionRequest (direct UDP)
 func (t *SSU2Transport) dialViaIntroducer(charlieRI router_info.RouterInfo, charlieHash data.Hash) (transport.TransportSession, error) {
 	if t.config.RouterLookupFunc == nil {
-		return nil, fmt.Errorf("RouterLookupFunc not configured: cannot dial via introducer")
+		return nil, oops.Errorf("RouterLookupFunc not configured: cannot dial via introducer")
 	}
 
 	introducers := t.collectIntroducers(charlieRI)
 	if len(introducers) == 0 {
-		return nil, fmt.Errorf("no valid introducers found for router %x", charlieHash[:4])
+		return nil, oops.Errorf("no valid introducers found for router %x", charlieHash[:4])
 	}
 
 	for _, intro := range introducers {
@@ -54,7 +54,7 @@ func (t *SSU2Transport) dialViaIntroducer(charlieRI router_info.RouterInfo, char
 		}
 		return session, nil
 	}
-	return nil, fmt.Errorf("all %d introducer(s) failed for router %x", len(introducers), charlieHash[:4])
+	return nil, oops.Errorf("all %d introducer(s) failed for router %x", len(introducers), charlieHash[:4])
 }
 
 // collectIntroducers gathers all distinct IntroducerAddr entries from all SSU2
@@ -81,17 +81,17 @@ func (t *SSU2Transport) tryOneIntroducer(charlieRI router_info.RouterInfo, charl
 	// Step 1: look up Bob's RouterInfo so we can dial him directly.
 	bobRI, err := t.config.RouterLookupFunc(intro.RouterHash)
 	if err != nil {
-		return nil, fmt.Errorf("Bob (%x...) lookup failed: %w", intro.RouterHash[:4], err)
+		return nil, oops.Wrapf(err, "Bob (%x...) lookup failed", intro.RouterHash[:4])
 	}
 
 	// Step 2: get (or create) a session to Bob.
 	bobSession, err := t.GetSession(bobRI)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get session to Bob (%x...): %w", intro.RouterHash[:4], err)
+		return nil, oops.Wrapf(err, "failed to get session to Bob (%x...)", intro.RouterHash[:4])
 	}
 	bobSSU2Session, ok := bobSession.(*SSU2Session)
 	if !ok {
-		return nil, fmt.Errorf("unexpected Bob session type %T", bobSession)
+		return nil, oops.Errorf("unexpected Bob session type %T", bobSession)
 	}
 
 	// Step 3: register a pending-response channel keyed by nonce.
@@ -102,7 +102,7 @@ func (t *SSU2Transport) tryOneIntroducer(charlieRI router_info.RouterInfo, charl
 
 	// Step 4: send signed RelayRequest to Bob.
 	if err := t.sendRelayRequest(bobSSU2Session, intro, charlieHash, nonce); err != nil {
-		return nil, fmt.Errorf("failed to send RelayRequest to Bob: %w", err)
+		return nil, oops.Wrapf(err, "failed to send RelayRequest to Bob")
 	}
 
 	// Step 5: wait for Bob to forward Charlie's RelayResponse.
@@ -112,11 +112,11 @@ func (t *SSU2Transport) tryOneIntroducer(charlieRI router_info.RouterInfo, charl
 	select {
 	case resp, ok := <-responseCh:
 		if !ok || resp == nil {
-			return nil, fmt.Errorf("relay response channel closed unexpectedly")
+			return nil, oops.Errorf("relay response channel closed unexpectedly")
 		}
 		return t.dialCharlieDirectly(charlieRI, charlieHash, resp)
 	case <-ctx.Done():
-		return nil, fmt.Errorf("relay request timed out after %v", relayRequestTimeout)
+		return nil, oops.Errorf("relay request timed out after %v", relayRequestTimeout)
 	}
 }
 
@@ -124,14 +124,14 @@ func (t *SSU2Transport) tryOneIntroducer(charlieRI router_info.RouterInfo, charl
 func (t *SSU2Transport) sendRelayRequest(bobSession *SSU2Session, intro IntroducerAddr, charlieHash data.Hash, nonce uint32) error {
 	signingKey := t.keystore.GetSigningPrivateKey()
 	if signingKey == nil {
-		return fmt.Errorf("signing key unavailable")
+		return oops.Errorf("signing key unavailable")
 	}
 	// types.PrivateKey.Bytes() returns the raw 64-byte Ed25519 seed+public.
 	ed25519Key := ed25519.PrivateKey(signingKey.Bytes())
 
 	aliceIP, alicePort, err := t.localIPPort()
 	if err != nil {
-		return fmt.Errorf("could not determine local address: %w", err)
+		return oops.Wrapf(err, "could not determine local address")
 	}
 
 	timestamp := uint32(time.Now().Unix())
@@ -143,7 +143,7 @@ func (t *SSU2Transport) sendRelayRequest(bobSession *SSU2Session, intro Introduc
 		alicePort, aliceIP,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to sign RelayRequest: %w", err)
+		return oops.Wrapf(err, "failed to sign RelayRequest")
 	}
 
 	req := &ssu2noise.RelayRequestBlock{
@@ -157,7 +157,7 @@ func (t *SSU2Transport) sendRelayRequest(bobSession *SSU2Session, intro Introduc
 	}
 	block, err := ssu2noise.EncodeRelayRequest(req)
 	if err != nil {
-		return fmt.Errorf("failed to encode RelayRequest: %w", err)
+		return oops.Wrapf(err, "failed to encode RelayRequest")
 	}
 	return bobSession.WriteBlocks([]*ssu2noise.SSU2Block{block})
 }
@@ -171,15 +171,15 @@ func (t *SSU2Transport) localIPPort() (net.IP, uint16, error) {
 	}
 	host, portStr, err := net.SplitHostPort(s)
 	if err != nil {
-		return nil, 0, fmt.Errorf("malformed listener address %q: %w", s, err)
+		return nil, 0, oops.Wrapf(err, "malformed listener address %q", s)
 	}
 	ip := net.ParseIP(host)
 	if ip == nil {
-		return nil, 0, fmt.Errorf("could not parse IP %q", host)
+		return nil, 0, oops.Errorf("could not parse IP %q", host)
 	}
 	port, err := strconv.Atoi(portStr)
 	if err != nil {
-		return nil, 0, fmt.Errorf("could not parse port %q: %w", portStr, err)
+		return nil, 0, oops.Wrapf(err, "could not parse port %q", portStr)
 	}
 	return ip, uint16(port), nil
 }
@@ -187,7 +187,7 @@ func (t *SSU2Transport) localIPPort() (net.IP, uint16, error) {
 // dialCharlieDirectly dials Charlie's address obtained from the RelayResponse.
 func (t *SSU2Transport) dialCharlieDirectly(charlieRI router_info.RouterInfo, charlieHash data.Hash, resp *ssu2noise.RelayResponseBlock) (transport.TransportSession, error) {
 	if resp.Code != 0 {
-		return nil, fmt.Errorf("relay rejected by introducer: code=%d", resp.Code)
+		return nil, oops.Errorf("relay rejected by introducer: code=%d", resp.Code)
 	}
 
 	charlieAddr := &net.UDPAddr{
@@ -201,12 +201,12 @@ func (t *SSU2Transport) dialCharlieDirectly(charlieRI router_info.RouterInfo, ch
 
 	dialConfig, err := t.buildCharlieDialConfig(charlieRI, charlieHash)
 	if err != nil {
-		return nil, fmt.Errorf("failed to build dial config for Charlie: %w", err)
+		return nil, oops.Wrapf(err, "failed to build dial config for Charlie")
 	}
 
 	conn, err := ssu2noise.DialSSU2WithHandshakeContext(t.ctx, nil, charlieAddr, dialConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to dial Charlie at %v: %w", charlieAddr, err)
+		return nil, oops.Wrapf(err, "failed to dial Charlie at %v", charlieAddr)
 	}
 
 	if err := t.checkSessionLimit(); err != nil {
@@ -232,7 +232,7 @@ func (t *SSU2Transport) buildCharlieDialConfig(charlieRI router_info.RouterInfo,
 	ourHash, err := t.identity.IdentHash()
 	t.identityMu.RUnlock()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get our identity hash: %w", err)
+		return nil, oops.Wrapf(err, "failed to get our identity hash")
 	}
 
 	dialConfig, err := ssu2noise.NewSSU2Config(ourHash, true)
@@ -246,7 +246,7 @@ func (t *SSU2Transport) buildCharlieDialConfig(charlieRI router_info.RouterInfo,
 
 	remoteStaticKey, err := extractRemoteStaticKey(charlieRI)
 	if err != nil {
-		return nil, fmt.Errorf("no SSU2 static key in Charlie's RI: %w", err)
+		return nil, oops.Wrapf(err, "no SSU2 static key in Charlie's RI")
 	}
 	dialConfig = dialConfig.WithRemoteStaticKey(remoteStaticKey)
 
@@ -258,7 +258,7 @@ func (t *SSU2Transport) buildCharlieDialConfig(charlieRI router_info.RouterInfo,
 	// Set Charlie's intro key for ChaCha header obfuscation.
 	charlieIK, err := ExtractSSU2IntroKey(charlieRI)
 	if err != nil {
-		return nil, fmt.Errorf("no SSU2 intro key in Charlie's RI: %w", err)
+		return nil, oops.Wrapf(err, "no SSU2 intro key in Charlie's RI")
 	}
 	dialConfig.RemoteIntroKey = charlieIK
 

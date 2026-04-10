@@ -1,13 +1,13 @@
 package ssu2
 
 import (
-	"fmt"
 	"net"
 	"time"
 
 	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
+	"github.com/samber/oops"
 )
 
 // initNATManagers allocates and wires the PeerTestManager, RelayManager,
@@ -149,7 +149,7 @@ func (t *SSU2Transport) forwardPeerTestToCharlie(ptBlock *ssu2noise.PeerTestBloc
 	}
 	encoded, err := ssu2noise.EncodePeerTestBlock(relayBlock)
 	if err != nil {
-		return fmt.Errorf("PeerTest Bob: encode relay block: %w", err)
+		return oops.Wrapf(err, "PeerTest Bob: encode relay block")
 	}
 	return session.WriteBlocks([]*ssu2noise.SSU2Block{encoded})
 }
@@ -187,7 +187,7 @@ func (t *SSU2Transport) sendProbeToAlice(ptBlock *ssu2noise.PeerTestBlock, alice
 	}
 	encoded, err := ssu2noise.EncodePeerTestBlock(probeBlock)
 	if err != nil {
-		return fmt.Errorf("PeerTest Charlie: encode probe block: %w", err)
+		return oops.Wrapf(err, "PeerTest Charlie: encode probe block")
 	}
 	session := t.anyActiveSession()
 	if session == nil || session.conn == nil {
@@ -446,23 +446,23 @@ func (t *SSU2Transport) initiatePeerTest(candidates []router_info.RouterInfo) (*
 
 	bobAddr, err := ExtractSSU2Addr(bobRI)
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to get Bob address: %w", err)
+		return nil, 0, oops.Wrapf(err, "failed to get Bob address")
 	}
 
 	// Register the test nonce
 	nonce, err := t.InitiateNATDetection(bobAddr)
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to register peer test nonce: %w", err)
+		return nil, 0, oops.Wrapf(err, "failed to register peer test nonce")
 	}
 
 	// Establish a session with Bob
 	session, err := t.GetSession(bobRI)
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to get session to Bob: %w", err)
+		return nil, 0, oops.Wrapf(err, "failed to get session to Bob")
 	}
 	ssu2Session, ok := session.(*SSU2Session)
 	if !ok {
-		return nil, 0, fmt.Errorf("session is not *SSU2Session")
+		return nil, 0, oops.Errorf("session is not *SSU2Session")
 	}
 
 	return ssu2Session, nonce, nil
@@ -479,10 +479,10 @@ func (t *SSU2Transport) sendPeerTestRequest(session *SSU2Session, nonce uint32, 
 	}
 	encoded, err := ssu2noise.EncodePeerTestBlock(ptBlock)
 	if err != nil {
-		return fmt.Errorf("failed to encode PeerTest block: %w", err)
+		return oops.Wrapf(err, "failed to encode PeerTest block")
 	}
 	if err := session.WriteBlocks([]*ssu2noise.SSU2Block{encoded}); err != nil {
-		return fmt.Errorf("failed to send PeerTest request: %w", err)
+		return oops.Wrapf(err, "failed to send PeerTest request")
 	}
 	t.logger.Debug("NAT detection: sent PeerTest request to Bob, awaiting Charlie probe")
 	return nil

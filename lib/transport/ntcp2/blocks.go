@@ -4,6 +4,8 @@ import (
 	"encoding/binary"
 	"fmt"
 	"time"
+
+	"github.com/samber/oops"
 )
 
 // NTCP2 data-phase block types per the specification.
@@ -67,7 +69,7 @@ func ParseBlocks(payload []byte) ([]Block, error) {
 				"remaining": len(payload) - offset,
 				"need":      blockHeaderSize,
 			}).Error("truncated NTCP2 block header")
-			return blocks, fmt.Errorf("truncated block header at offset %d (have %d bytes, need %d)",
+			return blocks, oops.Errorf("truncated block header at offset %d (have %d bytes, need %d)",
 				offset, len(payload)-offset, blockHeaderSize)
 		}
 
@@ -81,7 +83,7 @@ func ParseBlocks(payload []byte) ([]Block, error) {
 				"declared_size": blockSize,
 				"available":     len(payload) - offset,
 			}).Error("truncated NTCP2 block data")
-			return blocks, fmt.Errorf("truncated block data at offset %d: type=%d, declared size=%d, available=%d",
+			return blocks, oops.Errorf("truncated block data at offset %d: type=%d, declared size=%d, available=%d",
 				offset-blockHeaderSize, blockType, blockSize, len(payload)-offset)
 		}
 
@@ -127,7 +129,7 @@ func NewDateTimeBlock() Block {
 // Returns an error if the data is not exactly 4 bytes.
 func ParseDateTimeBlock(data []byte) (time.Time, error) {
 	if len(data) != 4 {
-		return time.Time{}, fmt.Errorf("DateTime block data must be 4 bytes, got %d", len(data))
+		return time.Time{}, oops.Errorf("DateTime block data must be 4 bytes, got %d", len(data))
 	}
 	epoch := binary.BigEndian.Uint32(data)
 	return time.Unix(int64(epoch), 0), nil

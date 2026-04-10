@@ -1,9 +1,8 @@
 package keys
 
 import (
-	"fmt"
-
 	cryptorand "github.com/go-i2p/crypto/rand"
+	"github.com/samber/oops"
 
 	"github.com/go-i2p/common/destination"
 	"github.com/go-i2p/common/key_certificate"
@@ -78,7 +77,7 @@ func generateSigningKeyPair() (types.SigningPublicKey, types.SigningPrivateKey, 
 	signingPubKey, signingPrivKey, err := ed25519.GenerateEd25519KeyPair()
 	if err != nil {
 		log.WithError(err).Error("Ed25519 key generation failed")
-		return nil, nil, fmt.Errorf("failed to generate Ed25519 key pair: %w", err)
+		return nil, nil, oops.Wrapf(err, "failed to generate Ed25519 key pair")
 	}
 	return signingPubKey, signingPrivKey, nil
 }
@@ -88,7 +87,7 @@ func generateEncryptionKeyPair() (types.ReceivingPublicKey, types.PrivateEncrypt
 	encryptionPubKey, encryptionPrivKey, err := curve25519.GenerateKeyPair()
 	if err != nil {
 		log.WithError(err).Error("X25519 key generation failed")
-		return nil, nil, fmt.Errorf("failed to generate X25519 key: %w", err)
+		return nil, nil, oops.Wrapf(err, "failed to generate X25519 key")
 	}
 	return encryptionPubKey, encryptionPrivKey, nil
 }
@@ -97,7 +96,7 @@ func generateEncryptionKeyPair() (types.ReceivingPublicKey, types.PrivateEncrypt
 func createKeyCertificate() (*key_certificate.KeyCertificate, error) {
 	keyCert, err := key_certificate.NewEd25519X25519KeyCertificate()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create KeyCertificate: %w", err)
+		return nil, oops.Wrapf(err, "failed to create KeyCertificate")
 	}
 	return keyCert, nil
 }
@@ -112,12 +111,12 @@ func calculateKeyPadding() ([]byte, error) {
 		key_certificate.KEYCERT_CRYPTO_X25519,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get key sizes: %w", err)
+		return nil, oops.Wrapf(err, "failed to get key sizes")
 	}
 
 	paddingSize := keys_and_cert.KEYS_AND_CERT_DATA_SIZE - (sizes.CryptoPublicKeySize + sizes.SigningPublicKeySize)
 	if paddingSize < 0 {
-		return nil, fmt.Errorf("invalid key sizes: padding would be negative")
+		return nil, oops.Errorf("invalid key sizes: padding would be negative")
 	}
 
 	return generateTiledPadding(paddingSize)
@@ -133,7 +132,7 @@ func generateTiledPadding(size int) ([]byte, error) {
 	const tileSize = 32
 	tile := make([]byte, tileSize)
 	if _, err := cryptorand.Read(tile); err != nil {
-		return nil, fmt.Errorf("failed to generate random padding tile: %w", err)
+		return nil, oops.Wrapf(err, "failed to generate random padding tile")
 	}
 
 	padding := make([]byte, size)
@@ -152,7 +151,7 @@ func assembleKeysAndCert(keyCert *key_certificate.KeyCertificate, encryptionPubK
 		signingPubKey,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create KeysAndCert: %w", err)
+		return nil, oops.Wrapf(err, "failed to create KeysAndCert")
 	}
 	return keysAndCert, nil
 }
@@ -261,10 +260,10 @@ func NewDestinationKeyStoreFromKeys(signingPrivKey types.SigningPrivateKey, encr
 // validatePrivateKeys checks that both signing and encryption private keys are non-nil.
 func validatePrivateKeys(signingPrivKey types.SigningPrivateKey, encryptionPrivKey types.PrivateEncryptionKey) error {
 	if signingPrivKey == nil {
-		return fmt.Errorf("signing private key must not be nil")
+		return oops.Errorf("signing private key must not be nil")
 	}
 	if encryptionPrivKey == nil {
-		return fmt.Errorf("encryption private key must not be nil")
+		return oops.Errorf("encryption private key must not be nil")
 	}
 	return nil
 }
@@ -274,16 +273,16 @@ func validatePrivateKeys(signingPrivKey types.SigningPrivateKey, encryptionPrivK
 func derivePublicKeys(signingPrivKey types.SigningPrivateKey, encryptionPrivKey types.PrivateEncryptionKey) (types.SigningPublicKey, types.ReceivingPublicKey, error) {
 	sigPubKey, err := signingPrivKey.Public()
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to derive signing public key: %w", err)
+		return nil, nil, oops.Wrapf(err, "failed to derive signing public key")
 	}
 	encPubKey, err := encryptionPrivKey.Public()
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to derive encryption public key: %w", err)
+		return nil, nil, oops.Wrapf(err, "failed to derive encryption public key")
 	}
 
 	receivingPubKey, ok := encPubKey.(types.ReceivingPublicKey)
 	if !ok {
-		return nil, nil, fmt.Errorf("encryption public key does not implement ReceivingPublicKey")
+		return nil, nil, oops.Errorf("encryption public key does not implement ReceivingPublicKey")
 	}
 	return sigPubKey, receivingPubKey, nil
 }
@@ -293,17 +292,17 @@ func derivePublicKeys(signingPrivKey types.SigningPrivateKey, encryptionPrivKey 
 func buildDestinationFromPublicKeys(encryptionPubKey types.ReceivingPublicKey, signingPubKey types.SigningPublicKey) (*destination.Destination, error) {
 	keyCert, err := createKeyCertificate()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create key certificate: %w", err)
+		return nil, oops.Wrapf(err, "failed to create key certificate")
 	}
 
 	padding, err := calculateKeyPadding()
 	if err != nil {
-		return nil, fmt.Errorf("failed to calculate key padding: %w", err)
+		return nil, oops.Wrapf(err, "failed to calculate key padding")
 	}
 
 	keysAndCert, err := assembleKeysAndCert(keyCert, encryptionPubKey, padding, signingPubKey)
 	if err != nil {
-		return nil, fmt.Errorf("failed to assemble keys and cert: %w", err)
+		return nil, oops.Wrapf(err, "failed to assemble keys and cert")
 	}
 
 	return &destination.Destination{
@@ -317,12 +316,12 @@ func buildDestinationFromPublicKeys(encryptionPubKey types.ReceivingPublicKey, s
 func buildDestinationFromPublicKeysWithPadding(encryptionPubKey types.ReceivingPublicKey, signingPubKey types.SigningPublicKey, padding []byte) (*destination.Destination, error) {
 	keyCert, err := createKeyCertificate()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create key certificate: %w", err)
+		return nil, oops.Wrapf(err, "failed to create key certificate")
 	}
 
 	keysAndCert, err := assembleKeysAndCert(keyCert, encryptionPubKey, padding, signingPubKey)
 	if err != nil {
-		return nil, fmt.Errorf("failed to assemble keys and cert: %w", err)
+		return nil, oops.Wrapf(err, "failed to assemble keys and cert")
 	}
 
 	return &destination.Destination{
@@ -343,17 +342,17 @@ type rotatedKeySet struct {
 func generateRotatedKeys() (*rotatedKeySet, error) {
 	signingPubKey, signingPrivKey, err := generateSigningKeyPair()
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate new signing keys: %w", err)
+		return nil, oops.Wrapf(err, "failed to generate new signing keys")
 	}
 
 	encryptionPubKey, encryptionPrivKey, err := generateEncryptionKeyPair()
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate new encryption keys: %w", err)
+		return nil, oops.Wrapf(err, "failed to generate new encryption keys")
 	}
 
 	padding, err := calculateKeyPadding()
 	if err != nil {
-		return nil, fmt.Errorf("failed to calculate new padding: %w", err)
+		return nil, oops.Wrapf(err, "failed to calculate new padding")
 	}
 
 	return &rotatedKeySet{
@@ -369,7 +368,7 @@ func generateRotatedKeys() (*rotatedKeySet, error) {
 func (dks *DestinationKeyStore) applyRotatedKeys(ks *rotatedKeySet, dir, name string) error {
 	newDest, err := buildDestinationFromPublicKeysWithPadding(ks.encryptionPubKey, ks.signingPubKey, ks.padding)
 	if err != nil {
-		return fmt.Errorf("failed to build new destination: %w", err)
+		return oops.Wrapf(err, "failed to build new destination")
 	}
 
 	dks.Close()
@@ -379,7 +378,7 @@ func (dks *DestinationKeyStore) applyRotatedKeys(ks *rotatedKeySet, dir, name st
 	dks.padding = ks.padding
 
 	if err := dks.StoreKeys(dir, name); err != nil {
-		return fmt.Errorf("failed to store rotated keys: %w", err)
+		return oops.Wrapf(err, "failed to store rotated keys")
 	}
 	return nil
 }
@@ -407,7 +406,7 @@ func (dks *DestinationKeyStore) RotateKeys(dir, name string) (*destination.Desti
 
 	oldDest := dks.destination
 	if err := dks.archiveCurrentKeys(dir, name); err != nil {
-		return nil, fmt.Errorf("failed to archive current keys: %w", err)
+		return nil, oops.Wrapf(err, "failed to archive current keys")
 	}
 
 	keySet, err := generateRotatedKeys()
