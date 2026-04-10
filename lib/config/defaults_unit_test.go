@@ -47,7 +47,7 @@ func TestDefaults(t *testing.T) {
 	assert.Equal(t, 64, cfg.I2CP.MessageQueueSize, "I2CP.MessageQueueSize")
 
 	// I2PControl defaults
-	assert.False(t, cfg.I2PControl.Enabled, "I2PControl.Enabled should be false by default")
+	assert.True(t, cfg.I2PControl.Enabled, "I2PControl.Enabled should be true by default")
 	assert.Equal(t, "localhost:7650", cfg.I2PControl.Address, "I2PControl.Address")
 	assert.Equal(t, "itoopie", cfg.I2PControl.Password, "I2PControl.Password")
 	assert.False(t, cfg.I2PControl.UseHTTPS, "I2PControl.UseHTTPS should be false by default")
