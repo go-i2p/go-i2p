@@ -3,6 +3,7 @@ package router
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -365,7 +366,7 @@ func (gr *GarlicMessageRouter) ForwardToRouter(routerHash common.Hash, msg i2np.
 }
 
 // errNotReflexive indicates the delivery is not reflexive and should continue normal routing.
-var errNotReflexive = fmt.Errorf("not reflexive")
+var errNotReflexive = errors.New("not reflexive")
 
 // handleReflexiveDelivery checks if the message is being sent to ourselves and processes it locally.
 // Returns nil if the message was successfully processed reflexively.
