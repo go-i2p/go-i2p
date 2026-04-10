@@ -4,10 +4,11 @@ import (
 	"context"
 	"crypto/ed25519"
 	"fmt"
-	"math/rand"
 	"net"
 	"strconv"
 	"time"
+
+	"github.com/go-i2p/crypto/rand"
 
 	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
