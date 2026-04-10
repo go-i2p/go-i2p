@@ -206,6 +206,7 @@ func selectRequestedOrDefaultFields(req, availableFields map[string]interface{})
 	return result
 }
 
+// Handle processes an I2PControl RouterInfo RPC request, returning the requested or default router information fields.
 func (h *RouterInfoHandler) Handle(ctx context.Context, params json.RawMessage) (interface{}, error) {
 	var req map[string]interface{}
 	if err := json.Unmarshal(params, &req); err != nil {

@@ -24,6 +24,7 @@ import (
 	nattraversal "github.com/go-i2p/go-nat-listener"
 )
 
+// NTCP2Transport implements the I2P NTCP2 transport protocol, managing listener setup, session lifecycle, and peer connections.
 type NTCP2Transport struct {
 	// Network listener (uses net.Listener interface per guidelines)
 	listener net.Listener // Will be *ntcp2.NTCP2Listener internally
@@ -64,10 +65,12 @@ type NTCP2Transport struct {
 	logger *logger.Entry
 }
 
+// KeystoreProvider is the interface that supplies the X25519 encryption private key required for NTCP2 handshake negotiation.
 type KeystoreProvider interface {
 	GetEncryptionPrivateKey() types.PrivateEncryptionKey
 }
 
+// NewNTCP2Transport creates and initializes a new NTCP2Transport with the given router identity, configuration, and keystore provider.
 func NewNTCP2Transport(identity router_info.RouterInfo, config *Config, keystore KeystoreProvider) (*NTCP2Transport, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	logger := logger.WithField("component", "ntcp2")

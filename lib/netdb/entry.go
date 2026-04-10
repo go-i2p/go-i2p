@@ -226,6 +226,7 @@ func (e *Entry) writeData(w io.Writer, data []byte) error {
 	return nil
 }
 
+// Deserialize reads an Entry from the given reader, parsing the entry type indicator and data payload.
 func (e *Entry) Deserialize(r io.Reader) (err error) {
 	entryType, err := e.readEntryType(r)
 	if err != nil {

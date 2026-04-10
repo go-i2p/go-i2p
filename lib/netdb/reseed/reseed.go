@@ -29,10 +29,12 @@ const (
 	ReseedSU3Path = "i2pseeds.su3"
 )
 
+// Reseed provides methods for bootstrapping the NetDB by fetching RouterInfo bundles from reseed servers.
 type Reseed struct {
 	net.Dialer
 }
 
+// SingleReseed fetches and parses an SU3 reseed bundle from the given URI, returning the extracted RouterInfos.
 func (r Reseed) SingleReseed(uri string) ([]router_info.RouterInfo, error) {
 	log.WithField("uri", uri).Debug("Starting single reseed operation")
 

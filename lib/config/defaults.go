@@ -1210,6 +1210,7 @@ func newValidationError(message string) error {
 	return &validationError{message: message}
 }
 
+// Error returns the validation error message prefixed with a standard validation failure label.
 func (e *validationError) Error() string {
 	return "configuration validation failed: " + e.message
 }

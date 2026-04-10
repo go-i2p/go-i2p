@@ -50,6 +50,8 @@ type StdNetDB struct {
 	cleanupWg sync.WaitGroup
 }
 
+// NewStdNetDB creates and returns a new StdNetDB rooted at the given directory path,
+// initializing in-memory caches and starting the background expiration cleaner.
 func NewStdNetDB(db string) *StdNetDB {
 	log.WithFields(logger.Fields{
 		"at":      "(StdNetDB) NewStdNetDB",
@@ -74,6 +76,8 @@ func NewStdNetDB(db string) *StdNetDB {
 	return ndb
 }
 
+// GetRouterInfo returns a channel that yields the RouterInfo for the given hash,
+// checking the in-memory cache first and falling back to disk.
 func (db *StdNetDB) GetRouterInfo(hash common.Hash) (chnl chan router_info.RouterInfo) {
 	log.WithFields(logger.Fields{
 		"at":     "(StdNetDB) GetRouterInfo",
@@ -218,6 +222,8 @@ func (db *StdNetDB) Size() (routers int) {
 	return routers
 }
 
+// CheckFilePathValid reports whether the given file path is a valid NetDB entry path,
+// verifying it has the correct extension, resolves within the NetDB directory, and passes security checks.
 func (db *StdNetDB) CheckFilePathValid(fpath string) bool {
 	if !db.validateFileExtension(fpath) {
 		return false
@@ -334,6 +340,7 @@ func (db *StdNetDB) Exists() bool {
 	return err == nil
 }
 
+// SaveEntry persists a single RouterInfo Entry to disk in the NetDB skiplist directory.
 func (db *StdNetDB) SaveEntry(e *Entry) (err error) {
 	if e.RouterInfo == nil {
 		return oops.Errorf("cannot save entry: RouterInfo is nil (only RouterInfo entries can be persisted to the NetDB skiplist)")
@@ -366,6 +373,7 @@ func (db *StdNetDB) SaveEntry(e *Entry) (err error) {
 	return err
 }
 
+// Save persists all in-memory RouterInfo and LeaseSet entries to disk.
 func (db *StdNetDB) Save() error {
 	log.WithFields(logger.Fields{"at": "Save"}).Debug("Saving all NetDB entries")
 
@@ -1141,6 +1149,8 @@ func (db *StdNetDB) createSkiplistSubdirectories(prefix string, mode os.FileMode
 	return nil
 }
 
+// Create initializes the on-disk NetDB directory structure, creating the root directory
+// and all skiplist subdirectories for RouterInfo and LeaseSet storage.
 func (db *StdNetDB) Create() (err error) {
 	mode, err := db.createRootDirectory()
 	if err != nil {

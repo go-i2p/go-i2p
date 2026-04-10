@@ -10,8 +10,10 @@ import (
 	"github.com/spf13/viper"
 )
 
+// CfgFile holds the path to the user-specified configuration file, overriding the default location.
 var CfgFile string
 
+// GoI2PBaseDir is the name of the base directory under the user's home directory where go-i2p stores its data.
 const GoI2PBaseDir = ".go-i2p"
 
 // InitConfig initializes the configuration subsystem: loads or creates the
@@ -602,6 +604,7 @@ func handleConfigFile() error {
 	return nil
 }
 
+// BuildI2PDirPath returns the absolute path to the go-i2p data directory under the user's home directory.
 func BuildI2PDirPath() string {
 	return filepath.Join(util.UserHome(), GoI2PBaseDir)
 }

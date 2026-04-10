@@ -28,6 +28,7 @@ var (
 	log              = logger.GetGoI2PLogger()
 )
 
+// RootCmd is the top-level cobra command for the go-i2p router, handling CLI argument parsing and router startup.
 var RootCmd = &cobra.Command{
 	Use:   "go-i2p",
 	Short: "I2P Router implementation in Go",

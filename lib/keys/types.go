@@ -21,6 +21,7 @@ type KeyStore interface {
 	StoreKeys() error
 }
 
+// KeyStoreImpl is a filesystem-backed implementation of the KeyStore interface that manages a single private key and its derived public key.
 type KeyStoreImpl struct {
 	dir        string
 	name       string
@@ -31,6 +32,7 @@ type KeyStoreImpl struct {
 	cachedKeyIDOnce sync.Once
 }
 
+// NewKeyStoreImpl creates a new KeyStoreImpl that stores keys in the given directory with the specified name prefix.
 func NewKeyStoreImpl(dir, name string, privateKey types.PrivateKey) *KeyStoreImpl {
 	log.WithFields(logger.Fields{
 		"at":   "NewKeyStoreImpl",
@@ -44,6 +46,7 @@ func NewKeyStoreImpl(dir, name string, privateKey types.PrivateKey) *KeyStoreImp
 	}
 }
 
+// KeyID returns a stable, filesystem-safe identifier for this keystore, using the configured name or a hex-encoded prefix of the public key.
 func (ks *KeyStoreImpl) KeyID() string {
 	// Use sync.Once to ensure deterministic KeyID across multiple calls
 	ks.cachedKeyIDOnce.Do(func() {
@@ -88,6 +91,7 @@ func (ks *KeyStoreImpl) computeKeyID() string {
 	return ks.name
 }
 
+// GetKeys returns the public and private key pair managed by this KeyStoreImpl.
 func (ks *KeyStoreImpl) GetKeys() (types.PublicKey, types.PrivateKey, error) {
 	log.WithField("at", "GetKeys").Debug("Retrieving key pair")
 	if ks.privateKey == nil {
@@ -102,6 +106,7 @@ func (ks *KeyStoreImpl) GetKeys() (types.PublicKey, types.PrivateKey, error) {
 	return public, ks.privateKey, nil
 }
 
+// StoreKeys persists the private key to the filesystem in the configured directory with appropriate permissions.
 func (ks *KeyStoreImpl) StoreKeys() error {
 	log.WithFields(logger.Fields{
 		"at":  "StoreKeys",

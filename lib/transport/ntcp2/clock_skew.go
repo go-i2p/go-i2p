@@ -26,6 +26,7 @@ type ClockSkewError struct {
 	Skew time.Duration
 }
 
+// Error returns a human-readable description of the clock skew violation, including the peer and local timestamps, observed skew, and tolerance.
 func (e *ClockSkewError) Error() string {
 	return fmt.Sprintf("clock skew too large: peer=%d, local=%d, skew=%v (tolerance=%v)",
 		e.PeerTime, e.LocalTime, e.Skew, ClockSkewTolerance)

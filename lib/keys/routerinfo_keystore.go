@@ -251,6 +251,7 @@ func loadExistingKey(keyData []byte) (types.PrivateKey, error) {
 	return &key, nil
 }
 
+// GetKeys returns the public and private signing key pair held by this RouterInfoKeystore.
 func (ks *RouterInfoKeystore) GetKeys() (types.PublicKey, types.PrivateKey, error) {
 	log.WithField("at", "GetKeys").Debug("Retrieving keys")
 	public, err := ks.privateKey.Public()
@@ -275,6 +276,7 @@ func (ks *RouterInfoKeystore) GetEncryptionPrivateKey() types.PrivateEncryptionK
 	return ks.encryptionPrivKey
 }
 
+// StoreKeys persists the signing and encryption private keys to disk in the configured directory.
 func (ks *RouterInfoKeystore) StoreKeys() error {
 	log.WithField("at", "StoreKeys").Debug("Storing keys to disk")
 
@@ -347,6 +349,7 @@ func (ks *RouterInfoKeystore) storeEncryptionKey(keyName string) error {
 	return nil
 }
 
+// KeyID returns a stable, filesystem-safe identifier for this keystore, derived from the configured name or the public key.
 func (ks *RouterInfoKeystore) KeyID() string {
 	// If a name is explicitly set, always return it
 	if ks.name != "" {

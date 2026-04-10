@@ -111,6 +111,8 @@ type peerDistance struct {
 	distance []byte
 }
 
+// Lookup performs a Kademlia-based iterative lookup for the RouterInfo identified by the given hash,
+// trying the local NetDB first and querying progressively closer peers until the timeout expires.
 func (kr *KademliaResolver) Lookup(h common.Hash, timeout time.Duration) (*router_info.RouterInfo, error) {
 	log.WithFields(logger.Fields{
 		"at":      "(KademliaResolver) Lookup",
@@ -704,6 +706,7 @@ type SearchReplyError struct {
 	Suggestions []common.Hash
 }
 
+// Error returns a human-readable description of the SearchReplyError, including the number of suggested alternative peers.
 func (e *SearchReplyError) Error() string {
 	return fmt.Sprintf("peer did not have target, suggested %d alternatives", len(e.Suggestions))
 }

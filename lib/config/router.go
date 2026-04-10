@@ -147,6 +147,7 @@ func defaultCongestionConfigPtr() *CongestionDefaults {
 	return &cfg
 }
 
+// DefaultRouterConfig returns a deep copy of the default RouterConfig so callers cannot mutate the package-level default.
 func DefaultRouterConfig() *RouterConfig {
 	// Return a deep copy so callers cannot mutate the package-level default.
 	cfg := copyBaseFields(defaultRouterConfig)

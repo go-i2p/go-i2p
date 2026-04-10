@@ -10,6 +10,7 @@ const (
 	DefaultKeepAlive   = 30 * time.Second // 30 seconds keep-alive
 )
 
+// NewReseed creates a new Reseed instance with default dial timeout and keep-alive settings.
 func NewReseed() *Reseed {
 	return &Reseed{
 		Dialer: net.Dialer{

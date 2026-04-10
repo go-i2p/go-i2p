@@ -94,6 +94,7 @@ type I2NPUnframer struct {
 	totalBytesRead int // Track cumulative bytes read
 }
 
+// NewI2NPUnframer creates a new I2NPUnframer that reads length-prefixed I2NP messages from the given connection.
 func NewI2NPUnframer(conn net.Conn) *I2NPUnframer {
 	return &I2NPUnframer{
 		conn:           conn,
@@ -107,6 +108,7 @@ func (u *I2NPUnframer) BytesRead() int {
 	return u.bytesRead
 }
 
+// ReadNextMessage reads the next length-prefixed I2NP message from the underlying connection and returns the parsed message.
 func (u *I2NPUnframer) ReadNextMessage() (i2np.I2NPMessage, error) {
 	log.WithFields(logger.Fields{"at": "ReadNextMessage"}).Debug("Reading next framed message from connection")
 

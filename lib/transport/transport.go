@@ -55,6 +55,8 @@ type TransportSession interface {
 	// CreateHandshakeMessage() (i2np.I2NPMessage, error)
 }
 
+// Transport defines the interface for an I2P transport layer capable of accepting connections,
+// managing sessions, and binding to a router identity.
 type Transport interface {
 	// Accept accepts an incoming session.
 	Accept() (net.Conn, error)

@@ -16,6 +16,7 @@ import (
 	"github.com/samber/oops"
 )
 
+// NTCP2Session represents an active NTCP2 connection session with a remote peer, managing message queues, bandwidth tracking, and rekeying state.
 type NTCP2Session struct {
 	// Underlying connection (uses net.Conn interface per guidelines)
 	conn net.Conn // Will be *ntcp2.NTCP2Conn internally

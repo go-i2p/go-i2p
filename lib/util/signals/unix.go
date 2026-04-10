@@ -15,6 +15,7 @@ import (
 // that import this package without intending to handle signals.
 var signalOnce sync.Once
 
+// Handle registers OS signal handlers and blocks, dispatching signals to the appropriate shutdown or reload routines.
 func Handle() {
 	// Register signal handlers on first call (not at import time).
 	signalOnce.Do(func() {
