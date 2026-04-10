@@ -172,8 +172,8 @@ type I2CPDefaults struct {
 // I2PControlDefaults contains default values for I2PControl JSON-RPC server
 type I2PControlDefaults struct {
 	// Enabled determines if I2PControl server starts automatically
-	// Default: false (disabled for security — default password over HTTP allows
-	// any local process to control the router; must be explicitly enabled)
+	// Default: true (enabled to support the embedded TUI; config file creation
+	// generates a random password to replace the default)
 	Enabled bool
 
 	// Address is the listen address for I2PControl server
@@ -411,12 +411,13 @@ func buildI2CPDefaults() I2CPDefaults {
 }
 
 // buildI2PControlDefaults creates default I2PControl RPC server configuration values.
-// I2PControl is disabled by default for security — the default password "itoopie" over
-// plaintext HTTP allows any local process to control the router. Users must explicitly
-// enable I2PControl in their configuration.
+// I2PControl is enabled by default to support the embedded TUI. When a config file
+// is created, a random password replaces the fallback "itoopie". If no config file
+// exists and no password is provided via flags, the standard "itoopie" password is
+// used with a security warning.
 func buildI2PControlDefaults() I2PControlDefaults {
 	return I2PControlDefaults{
-		Enabled:         false,
+		Enabled:         true,
 		Address:         "localhost:7650",
 		Password:        "itoopie",
 		UseHTTPS:        false,

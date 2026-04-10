@@ -1,6 +1,8 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -191,6 +193,16 @@ func WriteSecureFile(path string, data []byte) error {
 	}
 
 	return nil
+}
+
+// GenerateRandomPassword generates a cryptographically random password
+// encoded as URL-safe base64 (24 random bytes → 32-character string).
+func GenerateRandomPassword() (string, error) {
+	b := make([]byte, 24)
+	if _, err := rand.Read(b); err != nil {
+		return "", oops.Wrapf(err, "failed to generate random password")
+	}
+	return base64.URLEncoding.EncodeToString(b), nil
 }
 
 // CheckDefaultPasswordWarning logs a warning if the I2PControl password

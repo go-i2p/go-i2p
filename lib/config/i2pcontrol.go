@@ -14,7 +14,7 @@ const DefaultI2PControlPort = 7650
 // supporting basic statistics queries without write operations to router configuration.
 type I2PControlConfig struct {
 	// Enabled determines if the I2PControl server should start
-	// Default: false (disabled for security — must be explicitly enabled)
+	// Default: true (enabled to support the embedded TUI)
 	Enabled bool
 
 	// Address is the listen address for the I2PControl server
@@ -52,15 +52,14 @@ type I2PControlConfig struct {
 
 // DefaultI2PControlConfig returns sensible defaults for I2PControl server.
 // Returns a fresh copy each time to prevent mutation of shared state.
-// These defaults prioritize security:
-// - Disabled by default (must be explicitly enabled)
+// I2PControl is enabled by default to support the embedded TUI.
 // - Localhost-only binding (not exposed to network)
 // - HTTP only (HTTPS requires explicit cert configuration)
 // - Standard I2PControl port (7650)
-// - Standard default password (should be changed before enabling)
+// - Standard default password (should be changed; config file creation generates a random one)
 func DefaultI2PControlConfig() I2PControlConfig {
 	return I2PControlConfig{
-		Enabled:         false,
+		Enabled:         true,
 		Address:         "localhost:7650",
 		Password:        "itoopie",
 		UseHTTPS:        false,

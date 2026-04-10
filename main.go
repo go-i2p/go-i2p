@@ -8,11 +8,14 @@ import (
 	"sync"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/embedded"
 	"github.com/go-i2p/go-i2p/lib/netdb/reseed"
+	tuipkg "github.com/go-i2p/go-i2p/lib/tui"
 	"github.com/go-i2p/go-i2p/lib/util"
 	"github.com/go-i2p/go-i2p/lib/util/signals"
+	"github.com/go-i2p/i2ptui"
 	"github.com/go-i2p/logger"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -49,6 +52,7 @@ func init() {
 	registerNetDbFlags()
 	registerBootstrapFlags()
 	registerI2CPFlags()
+	registerI2PControlFlags()
 	registerTransportFlags()
 	bindFlagsToViper()
 }
@@ -91,6 +95,17 @@ func registerI2CPFlags() {
 		"Maximum number of concurrent I2CP sessions")
 }
 
+// registerI2PControlFlags registers I2PControl RPC server configuration flags.
+func registerI2PControlFlags() {
+	defaultCfg := config.DefaultI2PControlConfig()
+	RootCmd.PersistentFlags().Bool("i2pcontrol.enabled", defaultCfg.Enabled,
+		"Enable I2PControl JSON-RPC server")
+	RootCmd.PersistentFlags().String("i2pcontrol.address", defaultCfg.Address,
+		"I2PControl server listen address (host:port)")
+	RootCmd.PersistentFlags().String("i2pcontrol.password", "",
+		"I2PControl API password (default: random from config file, or 'itoopie' if no config)")
+}
+
 // registerTransportFlags registers transport layer configuration flags.
 func registerTransportFlags() {
 	RootCmd.PersistentFlags().Bool("transport.ssu2-enabled", config.DefaultTransportConfig.SSU2Enabled,
@@ -105,6 +120,7 @@ func bindFlagsToViper() {
 	bindNetDbFlagsToViper()
 	bindBootstrapFlagsToViper()
 	bindI2CPFlagsToViper()
+	bindI2PControlFlagsToViper()
 	bindTransportFlagsToViper()
 }
 
@@ -204,6 +220,34 @@ func bindI2CPFlagsToViper() {
 	}
 }
 
+// bindI2PControlFlagsToViper binds I2PControl flags to viper configuration.
+func bindI2PControlFlagsToViper() {
+	if err := viper.BindPFlag("i2pcontrol.enabled", RootCmd.PersistentFlags().Lookup("i2pcontrol.enabled")); err != nil {
+		log.WithError(err).WithFields(logger.Fields{
+			"at":     "bindI2PControlFlagsToViper",
+			"phase":  "startup",
+			"reason": "failed to bind i2pcontrol.enabled flag",
+			"flag":   "i2pcontrol.enabled",
+		}).Fatal("failed to bind i2pcontrol.enabled flag")
+	}
+	if err := viper.BindPFlag("i2pcontrol.address", RootCmd.PersistentFlags().Lookup("i2pcontrol.address")); err != nil {
+		log.WithError(err).WithFields(logger.Fields{
+			"at":     "bindI2PControlFlagsToViper",
+			"phase":  "startup",
+			"reason": "failed to bind i2pcontrol.address flag",
+			"flag":   "i2pcontrol.address",
+		}).Fatal("failed to bind i2pcontrol.address flag")
+	}
+	if err := viper.BindPFlag("i2pcontrol.password", RootCmd.PersistentFlags().Lookup("i2pcontrol.password")); err != nil {
+		log.WithError(err).WithFields(logger.Fields{
+			"at":     "bindI2PControlFlagsToViper",
+			"phase":  "startup",
+			"reason": "failed to bind i2pcontrol.password flag",
+			"flag":   "i2pcontrol.password",
+		}).Fatal("failed to bind i2pcontrol.password flag")
+	}
+}
+
 // bindTransportFlagsToViper binds transport flags to viper configuration.
 func bindTransportFlagsToViper() {
 	if err := viper.BindPFlag("transport.ssu2_enabled", RootCmd.PersistentFlags().Lookup("transport.ssu2-enabled")); err != nil {
@@ -222,6 +266,48 @@ func bindTransportFlagsToViper() {
 			"flag":   "transport.ssu2-port",
 		}).Fatal("failed to bind transport.ssu2_port flag")
 	}
+}
+
+// tuiCmd launches the embedded bubbletea TUI for I2P router management
+// via the I2PControl JSON-RPC interface.
+var tuiCmd = &cobra.Command{
+	Use:   "tui",
+	Short: "Launch the I2P router TUI (terminal user interface)",
+	Long: `Launch an interactive terminal UI for monitoring and managing the I2P router.
+The TUI communicates via the I2PControl JSON-RPC interface. By default, all
+connection parameters are derived from the config file.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		address := viper.GetString("i2pcontrol.address")
+		password := viper.GetString("i2pcontrol.password")
+
+		host, port, err := net.SplitHostPort(address)
+		if err != nil {
+			log.WithError(err).WithFields(logger.Fields{
+				"at":      "tuiCmd",
+				"address": address,
+			}).Fatal("invalid i2pcontrol address format, expected host:port")
+		}
+
+		log.WithFields(logger.Fields{
+			"at":       "tuiCmd",
+			"host":     host,
+			"port":     port,
+			"password": password != "itoopie",
+		}).Info("launching TUI")
+
+		opts := []i2ptui.Option{
+			i2ptui.WithHost(host),
+			i2ptui.WithPort(port),
+			i2ptui.WithPassword(password),
+			i2ptui.WithPath("jsonrpc"),
+		}
+
+		m := tuipkg.New(password, address, opts...)
+		p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
+		if _, err := p.Run(); err != nil {
+			log.WithError(err).Fatal("TUI exited with error")
+		}
+	},
 }
 
 // configCmd shows current configuration
@@ -613,6 +699,7 @@ func launchRouterLifecycle() {
 
 func main() {
 	RootCmd.AddCommand(configCmd)
+	RootCmd.AddCommand(tuiCmd)
 	if err := RootCmd.Execute(); err != nil {
 		log.Error(err)
 		debugPrintConfig()

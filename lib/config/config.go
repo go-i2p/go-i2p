@@ -540,6 +540,19 @@ func createDefaultConfig(defaultConfigDir string) error {
 		return oops.Wrapf(err, "could not create config directory")
 	}
 
+	// Generate a random I2PControl password for the new config file
+	// so it is not left at the insecure default "itoopie".
+	randomPassword, err := GenerateRandomPassword()
+	if err != nil {
+		log.WithError(err).Warn("could not generate random I2PControl password, falling back to default")
+	} else {
+		viper.Set("i2pcontrol.password", randomPassword)
+		log.WithFields(logger.Fields{
+			"at":     "createDefaultConfig",
+			"reason": "random_password_generated",
+		}).Info("generated random I2PControl password for new config file")
+	}
+
 	// Write current config file
 	if err := viper.SafeWriteConfig(); err != nil {
 		return oops.Wrapf(err, "could not write default config file")
