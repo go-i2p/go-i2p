@@ -30,6 +30,7 @@ data ::
      actual payload of this message
 */
 
+// TunnelGateway represents an I2NP TunnelGateway message used to wrap and deliver data through a tunnel gateway.
 type TunnelGateway struct {
 	*BaseI2NPMessage
 	TunnelID tunnel.TunnelID

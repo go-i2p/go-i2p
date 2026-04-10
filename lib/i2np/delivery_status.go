@@ -23,6 +23,7 @@ time_stamp :: Date
              time the message was successfully created or delivered
 */
 
+// DeliveryStatus represents an I2NP DeliveryStatus message used to confirm the successful delivery or creation of a message.
 type DeliveryStatus struct {
 	MessageID int
 	Timestamp time.Time

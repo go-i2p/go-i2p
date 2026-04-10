@@ -18,6 +18,7 @@ data ::
      actual payload of this message
 */
 
+// Data represents an I2NP Data message used to encapsulate an arbitrary payload for delivery through a tunnel.
 type Data struct {
 	Length int
 	Data   []byte

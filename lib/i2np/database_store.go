@@ -120,6 +120,7 @@ data ::
      If type == 7, data is an uncompressed MetaLeaseSet, handled by lib/netdb.
 */
 
+// DatabaseStore represents an I2NP DatabaseStore message used to publish a RouterInfo or LeaseSet to the network database.
 type DatabaseStore struct {
 	*BaseI2NPMessage
 	Key           common.Hash

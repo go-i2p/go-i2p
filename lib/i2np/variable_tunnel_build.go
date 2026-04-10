@@ -22,6 +22,7 @@ record size: 528 bytes
 total size: 1+$num*528
 */
 
+// VariableTunnelBuild represents an I2NP VariableTunnelBuild message containing a variable number of build request records for tunnel construction.
 type VariableTunnelBuild struct {
 	Count               int
 	BuildRequestRecords []BuildRequestRecord

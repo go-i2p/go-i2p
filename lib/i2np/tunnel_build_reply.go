@@ -23,6 +23,7 @@ const (
 	TunnelBuildReplyExpired   = 0x05 // Request has expired
 )
 
+// TunnelBuildReply represents an I2NP TunnelBuildReply message containing exactly 8 build response records indicating the success or failure of a tunnel build request.
 type TunnelBuildReply struct {
 	Records       [8]BuildResponseRecord
 	RawRecordData [][]byte // Original encrypted bytes before parsing

@@ -27,6 +27,7 @@ record size: 218 bytes (ElGamal/AES) or variable (ECIES)
 total size: 1+$num*218 (for ElGamal/AES records)
 */
 
+// ShortTunnelBuildReply represents an I2NP ShortTunnelBuildReply message, the reply counterpart to ShortTunnelBuild containing compact build response records.
 type ShortTunnelBuildReply struct {
 	Count                int
 	BuildResponseRecords []BuildResponseRecord

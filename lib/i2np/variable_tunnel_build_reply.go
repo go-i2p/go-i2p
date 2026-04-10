@@ -17,6 +17,7 @@ Accurate for version 0.9.28
 Same format as VariableTunnelBuildMessage, with BuildResponseRecords.
 */
 
+// VariableTunnelBuildReply represents an I2NP VariableTunnelBuildReply message containing a variable number of build response records.
 type VariableTunnelBuildReply struct {
 	Count                int
 	BuildResponseRecords []BuildResponseRecord

@@ -67,6 +67,7 @@ from ::
      SHA256 of the RouterInfo of the router this reply was sent from
 */
 
+// DatabaseSearchReply represents an I2NP DatabaseSearchReply message returned in response to a failed DatabaseLookup, containing hashes of alternative peers to query.
 type DatabaseSearchReply struct {
 	*BaseI2NPMessage
 	Key        common.Hash

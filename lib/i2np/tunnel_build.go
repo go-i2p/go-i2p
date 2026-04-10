@@ -202,6 +202,7 @@ func parseBuildRequestRecords(recordData []byte) ([8]BuildRequestRecord, error) 
 	return records, nil
 }
 
+// UnmarshalBinary parses a TunnelBuildMessage from the provided byte slice, populating the base I2NP header and the fixed set of 8 build request records.
 func (msg *TunnelBuildMessage) UnmarshalBinary(data []byte) error {
 	log.WithFields(logger.Fields{
 		"at":        "UnmarshalBinary",

@@ -154,6 +154,7 @@ type (
 	BuildRequestRecordElGamal    [528]byte
 )
 
+// BuildRequestRecord represents a single record in a tunnel build request, containing the cryptographic keys and routing information needed to construct one hop in a tunnel.
 type BuildRequestRecord struct {
 	ReceiveTunnel tunnel.TunnelID
 	OurIdent      common.Hash
@@ -169,6 +170,7 @@ type BuildRequestRecord struct {
 	Padding       [29]byte
 }
 
+// ReadBuildRequestRecord parses a BuildRequestRecord from the provided byte slice.
 func ReadBuildRequestRecord(data []byte) (BuildRequestRecord, error) {
 	log.WithFields(logger.Fields{"at": "ReadBuildRequestRecord"}).Debug("Reading BuildRequestRecord")
 

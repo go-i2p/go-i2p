@@ -72,6 +72,7 @@ Total length: Typical length is:
        37 bytes for TUNNEL delivery
 */
 
+// GarlicCloveDeliveryInstructions represents the delivery instructions for a garlic clove, specifying how and where the enclosed I2NP message should be delivered.
 type GarlicCloveDeliveryInstructions struct {
 	Flag       byte
 	SessionKey session_key.SessionKey

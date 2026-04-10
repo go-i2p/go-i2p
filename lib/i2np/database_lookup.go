@@ -183,6 +183,7 @@ reply_tags ::
 
 */
 
+// DatabaseLookup represents an I2NP DatabaseLookup message used to query the network database for a RouterInfo or LeaseSet.
 type DatabaseLookup struct {
 	Key            common.Hash
 	From           common.Hash
@@ -196,6 +197,7 @@ type DatabaseLookup struct {
 	ECIESReplyTags []session_tag.ECIESSessionTag
 }
 
+// ReadDatabaseLookup parses a DatabaseLookup message from the provided byte slice.
 func ReadDatabaseLookup(data []byte) (DatabaseLookup, error) {
 	log.WithFields(logger.Fields{"at": "ReadDatabaseLookup"}).Debug("Reading DatabaseLookup")
 	databaseLookup := DatabaseLookup{}

@@ -132,6 +132,7 @@ func (g *GarlicElGamal) Bytes() ([]byte, error) {
 	return result, nil
 }
 
+// Garlic represents an I2NP Garlic message containing one or more encrypted garlic cloves for anonymous message delivery.
 type Garlic struct {
 	Count       int
 	Cloves      []GarlicClove

@@ -50,6 +50,7 @@ type (
 BuildResponseRecord struct contains a response to BuildRequestRecord
 concerning the creation of one hop in the tunnel
 */
+// BuildResponseRecord represents a single response record in a tunnel build reply, indicating whether a hop accepted or rejected the tunnel build request.
 type BuildResponseRecord struct {
 	Hash       common.Hash
 	RandomData [495]byte
@@ -75,6 +76,7 @@ func applyResponseParsers(data []byte, record *BuildResponseRecord, parsers []re
 	return nil
 }
 
+// ReadBuildResponseRecord parses a BuildResponseRecord from the provided byte slice.
 func ReadBuildResponseRecord(data []byte) (BuildResponseRecord, error) {
 	log.WithFields(logger.Fields{"at": "ReadBuildResponseRecord"}).Debug("Reading BuildResponseRecord")
 	record := BuildResponseRecord{}

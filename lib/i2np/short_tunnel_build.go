@@ -27,6 +27,7 @@ Note: ECIES-X25519 records are variable length and more compact.
 The modern I2P network uses ECIES primarily, with ElGamal/AES for backward compatibility.
 */
 
+// ShortTunnelBuild represents an I2NP ShortTunnelBuild message, a modern compact format for tunnel build requests introduced in I2P 0.9.51.
 type ShortTunnelBuild struct {
 	Count               int
 	BuildRequestRecords []BuildRequestRecord
