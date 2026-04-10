@@ -567,7 +567,7 @@ func (s *Session) checkRateLimit() error {
 		log.WithFields(logger.Fields{
 			"at":              "(Session) SendMessage",
 			"reason":          "rate_limit_exceeded",
-			"session_id":      s.id,
+			"sessionID":       s.id,
 			"rate_limit_msgs": s.config.MessageRateLimit,
 		}).Warn("message rate limit exceeded")
 		return oops.Errorf("message rate limit exceeded for session %d", s.id)
@@ -607,9 +607,10 @@ func (s *Session) checkQueueHighWaterMark() {
 	queueLen := len(s.incomingMessages)
 	if queueLen > s.queueHighWaterMark*8/10 {
 		log.WithFields(logger.Fields{
-			"session_id": s.id,
-			"queue_len":  queueLen,
-			"queue_cap":  cap(s.incomingMessages),
+			"at":        "i2cp.Session.checkQueueHighWaterMark",
+			"sessionID": s.id,
+			"queue_len": queueLen,
+			"queue_cap": cap(s.incomingMessages),
 		}).Warn("Incoming message queue filling up")
 	}
 }
@@ -617,8 +618,9 @@ func (s *Session) checkQueueHighWaterMark() {
 // handleQueueFull logs an error and returns an error when the incoming message queue is full.
 func (s *Session) handleQueueFull() error {
 	log.WithFields(logger.Fields{
-		"session_id": s.id,
-		"queue_cap":  cap(s.incomingMessages),
+		"at":        "i2cp.Session.handleQueueFull",
+		"sessionID": s.id,
+		"queue_cap": cap(s.incomingMessages),
 	}).Error("Incoming message queue full")
 	return oops.Errorf("incoming message queue full for session %d", s.id)
 }
@@ -1303,6 +1305,10 @@ func (s *Session) Stop() {
 			"sessionID": s.id,
 			"uptime":    time.Since(s.createdAt),
 		}).Info("stopping_session")
+
+		// Stop tunnel pools before closing the stop channel to ensure
+		// maintenance goroutines don't leak.
+		s.StopTunnelPools()
 
 		s.mu.Lock()
 		s.active = false

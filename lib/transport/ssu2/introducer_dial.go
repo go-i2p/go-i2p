@@ -197,7 +197,11 @@ func (t *SSU2Transport) dialCharlieDirectly(charlieRI router_info.RouterInfo, ch
 	t.logger.WithField("charlie_addr", charlieAddr).Debug("dialing Charlie directly after relay")
 
 	// Give Charlie's hole-punch packets time to arrive so NAT state is open.
-	time.Sleep(holePunchDelay)
+	select {
+	case <-time.After(holePunchDelay):
+	case <-t.ctx.Done():
+		return nil, oops.Wrapf(t.ctx.Err(), "context canceled during hole-punch delay")
+	}
 
 	dialConfig, err := t.buildCharlieDialConfig(charlieRI, charlieHash)
 	if err != nil {

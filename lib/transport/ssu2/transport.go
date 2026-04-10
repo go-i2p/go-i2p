@@ -51,8 +51,8 @@ type SSU2Transport struct {
 	keyRotationManager *ssu2noise.KeyRotationManager
 
 	// peerConnNotifier receives connection outcome feedback (optional).
-	// Set via SetPeerConnNotifier after construction.
-	peerConnNotifier transport.PeerConnNotifier
+	// Set via SetPeerConnNotifier after construction. Uses atomic.Value for safe concurrent access.
+	peerConnNotifier atomic.Value // stores transport.PeerConnNotifier
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -297,12 +297,20 @@ func (t *SSU2Transport) Addr() net.Addr {
 // SetPeerConnNotifier wires a connection-outcome notifier into the transport.
 // Call this after construction to enable PeerTracker feedback.
 func (t *SSU2Transport) SetPeerConnNotifier(n transport.PeerConnNotifier) {
-	t.peerConnNotifier = n
+	t.peerConnNotifier.Store(n)
+}
+
+// getPeerConnNotifier returns the current PeerConnNotifier, or nil if none is set.
+func (t *SSU2Transport) getPeerConnNotifier() transport.PeerConnNotifier {
+	if v := t.peerConnNotifier.Load(); v != nil {
+		return v.(transport.PeerConnNotifier)
+	}
+	return nil
 }
 
 // recordPeerAttempt notifies the PeerTracker of a dial attempt if wired.
 func (t *SSU2Transport) recordPeerAttempt(hash data.Hash) {
-	if n := t.peerConnNotifier; n != nil {
+	if n := t.getPeerConnNotifier(); n != nil {
 		n.RecordAttempt(hash)
 	}
 }
@@ -310,7 +318,7 @@ func (t *SSU2Transport) recordPeerAttempt(hash data.Hash) {
 // recordPeerFailure notifies the PeerTracker of a dial failure. If the error
 // is ErrInvalidRouterInfo, the peer is marked as permanently unreachable.
 func (t *SSU2Transport) recordPeerFailure(hash data.Hash, err error) {
-	if n := t.peerConnNotifier; n != nil {
+	if n := t.getPeerConnNotifier(); n != nil {
 		if errors.Is(err, ErrInvalidRouterInfo) {
 			n.RecordPermanentFailure(hash, "no_reachable_ssu2_address")
 		} else {
@@ -321,7 +329,7 @@ func (t *SSU2Transport) recordPeerFailure(hash data.Hash, err error) {
 
 // recordPeerSuccess notifies the PeerTracker of a successful connection.
 func (t *SSU2Transport) recordPeerSuccess(hash data.Hash, latencyMs int64) {
-	if n := t.peerConnNotifier; n != nil {
+	if n := t.getPeerConnNotifier(); n != nil {
 		n.RecordSuccess(hash, latencyMs)
 	}
 }

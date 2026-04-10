@@ -40,8 +40,8 @@ type NTCP2Transport struct {
 	handler *DefaultHandler
 
 	// peerConnNotifier receives connection outcome feedback (optional).
-	// Set via SetPeerConnNotifier after construction.
-	peerConnNotifier transport.PeerConnNotifier
+	// Set via SetPeerConnNotifier after construction. Uses atomic.Value for safe concurrent access.
+	peerConnNotifier atomic.Value // stores transport.PeerConnNotifier
 
 	// routerInfoRefresher requests stale RI eviction on handshake EOF (optional).
 	// Set via SetRouterInfoRefresher after construction.
@@ -437,7 +437,15 @@ func (t *NTCP2Transport) UpdateLocalRouterInfo(ri router_info.RouterInfo) {
 // goroutine that dials (no hot-path lock needed because the pointer is set
 // once before any sessions are created).
 func (t *NTCP2Transport) SetPeerConnNotifier(n transport.PeerConnNotifier) {
-	t.peerConnNotifier = n
+	t.peerConnNotifier.Store(n)
+}
+
+// getPeerConnNotifier returns the current PeerConnNotifier, or nil if none is set.
+func (t *NTCP2Transport) getPeerConnNotifier() transport.PeerConnNotifier {
+	if v := t.peerConnNotifier.Load(); v != nil {
+		return v.(transport.PeerConnNotifier)
+	}
+	return nil
 }
 
 // SetRouterInfoRefresher wires a RouterInfo cache-eviction notifier so that
@@ -664,7 +672,7 @@ func (t *NTCP2Transport) createOutboundSession(routerInfo router_info.RouterInfo
 
 	t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Info("Creating new outbound NTCP2 session")
 
-	if n := t.peerConnNotifier; n != nil {
+	if n := t.getPeerConnNotifier(); n != nil {
 		n.RecordAttempt(routerHash)
 	}
 	dialStart := time.Now()
@@ -672,7 +680,7 @@ func (t *NTCP2Transport) createOutboundSession(routerInfo router_info.RouterInfo
 	if err != nil {
 		t.unreserveSessionSlot() // Release the reserved slot on dial failure
 		t.logger.WithError(err).WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Debug("Failed to dial NTCP2 connection")
-		if n := t.peerConnNotifier; n != nil {
+		if n := t.getPeerConnNotifier(); n != nil {
 			// P0.1: ErrInvalidRouterInfo means the peer has no address we can
 			// reach (e.g. IPv6-only, locally-unreachable).  Treat it as a
 			// permanent failure so IsLikelyStale() is true immediately and
@@ -697,7 +705,7 @@ func (t *NTCP2Transport) createOutboundSession(routerInfo router_info.RouterInfo
 	if session == nil {
 		return nil, oops.Errorf("failed to set up session for %x: corrupt session map entry, connection closed", routerHashBytes[:8])
 	}
-	if n := t.peerConnNotifier; n != nil {
+	if n := t.getPeerConnNotifier(); n != nil {
 		n.RecordSuccess(routerHash, time.Since(dialStart).Milliseconds())
 	}
 	t.logger.WithFields(map[string]interface{}{
