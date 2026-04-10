@@ -26,14 +26,12 @@
 // # Usage Example
 //
 //	// Create DatabaseStore message
-//	ds, err := i2np.NewDatabaseStoreMessage(hash, data, i2np.ROUTER_INFO_TYPE)
-//	if err != nil {
-//	    log.Printf("Failed to create message: %v", err)
-//	}
+//	ds := i2np.NewDatabaseStore(hash, data, i2np.DatabaseStoreTypeRouterInfo)
 //
-//	// Send via transport
-//	if err := transport.SendMessage(peerHash, ds); err != nil {
-//	    log.Printf("Failed to send: %v", err)
+//	// Serialize for transmission
+//	payload, err := ds.MarshalBinary()
+//	if err != nil {
+//	    log.Printf("Failed to serialize message: %v", err)
 //	}
 //
 // # Database Operations

@@ -100,7 +100,7 @@ The core router functionality is now operational. We have tested functionality u
   - [X] Tunnel cryptography (layered encryption)
   - [X] Gateway and endpoint implementation
   - [X] Participant functionality
-- [Common Data Structures(see also: https://github.com/go-i2p/common](https://github.com/go-i2p/common)
+- [Common Data Structures (see also: https://github.com/go-i2p/common)](https://github.com/go-i2p/common)
     - [X] Keys and Cert
     - [X] Key Certificates
     - [X] Certificate

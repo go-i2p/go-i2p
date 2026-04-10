@@ -89,8 +89,8 @@ routerDB := NewRouterNetDB(db)
 **Changes**: Each session now creates its own ephemeral ClientNetDB:
 
 ```go
-func NewSession(id uint16, dest common.Destination, config *config.RouterConfig, _ string) (*Session, error) {
-    // Create ephemeral in-memory database (empty path)
+func NewSession(id uint16, dest *destination.Destination, config *SessionConfig, privKeys ...interface{}) (*Session, error) {
+    // Create ephemeral in-memory database
     db := NewStdNetDB("")
     
     return &Session{
@@ -102,7 +102,7 @@ func NewSession(id uint16, dest common.Destination, config *config.RouterConfig,
 }
 ```
 
-The `netDBPath` parameter is now ignored (for backward compatibility) since all client databases are ephemeral.
+All client databases are ephemeral in-memory instances.
 
 ## Database Message Routing
 
@@ -190,7 +190,7 @@ KEY ISOLATION RULES:
 Comprehensive test coverage in:
 - `lib/netdb/client_netdb_test.go` - ClientNetDB operations and isolation
 - `lib/netdb/router_netdb_test.go` - RouterNetDB operations including floodfill
-- `lib/i2cp/session_test.go` - Session isolation and ephemeral storage
+- `lib/i2cp/session_unit_test.go` - Session isolation and ephemeral storage
 
 All tests verify:
 - Correct operation of isolated databases
@@ -203,22 +203,16 @@ All tests verify:
 
 ### Breaking Changes
 
-1. **NewSession signature**: The `netDBPath` parameter is now ignored
+1. **NewSession signature**: Uses variadic private keys instead of a path parameter
    ```go
-   // Before: path was used
-   session, err := NewSession(id, dest, config, "/path/to/netdb")
-   
-   // After: path is ignored (pass empty string)
-   session, err := NewSession(id, dest, config, "")
+   // Current signature
+   session, err := NewSession(id, dest, config, privKeys...)
    ```
 
-2. **CreateSession signature**: Same as above
+2. **CreateSession signature**: Same variadic private keys pattern
    ```go
-   // Before
-   manager.CreateSession(dest, config, "/path/to/netdb")
-   
-   // After: path ignored
-   manager.CreateSession(dest, config, "")
+   // Current signature
+   manager.CreateSession(dest, config, privKeys...)
    ```
 
 ### Router Integration

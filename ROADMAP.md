@@ -80,7 +80,7 @@
   * ✅ Message format compliance with I2P specification
 
 ### I2CP Implementation
-- ✅ **I2CP Protocol Server**: Complete I2CP v2.10.0 server
+- ✅ **I2CP Protocol Server**: Complete I2CP v0.9.67 server
   * ✅ TCP server socket on localhost:7654
   * ✅ Protocol message handling (CreateSession, DestroySession, ReconfigureSession)
   * ✅ Session management and multi-client support
