@@ -55,6 +55,9 @@ func init() {
 	registerI2CPFlags()
 	registerI2PControlFlags()
 	registerTransportFlags()
+	registerTunnelFlags()
+	registerPerformanceFlags()
+	registerCongestionFlags()
 	bindFlagsToViper()
 }
 
@@ -65,23 +68,61 @@ func registerGlobalFlags() {
 
 // registerRouterFlags registers router-specific configuration flags.
 func registerRouterFlags() {
-	RootCmd.PersistentFlags().String("base-dir", config.DefaultRouterConfig().BaseDir, "Base directory for I2P router")
-	RootCmd.PersistentFlags().String("working-dir", config.DefaultRouterConfig().WorkingDir, "Working directory for I2P router")
+	routerCfg := config.DefaultRouterConfig()
+	defaults := config.Defaults()
+	RootCmd.PersistentFlags().String("base-dir", routerCfg.BaseDir, "Base directory for I2P router")
+	RootCmd.PersistentFlags().String("working-dir", routerCfg.WorkingDir, "Working directory for I2P router")
+	RootCmd.PersistentFlags().Uint64("router.max-bandwidth", routerCfg.MaxBandwidth,
+		"Maximum bandwidth in bytes/sec (0 = unlimited)")
+	RootCmd.PersistentFlags().Int("router.max-connections", routerCfg.MaxConnections,
+		"Maximum concurrent transport connections")
+	RootCmd.PersistentFlags().Bool("router.accept-tunnels", routerCfg.AcceptTunnels,
+		"Participate in transit tunnels for the network")
+	RootCmd.PersistentFlags().Duration("router.info-refresh-interval", defaults.Router.RouterInfoRefreshInterval,
+		"How often to refresh our RouterInfo")
+	RootCmd.PersistentFlags().Duration("router.message-expiration-time", defaults.Router.MessageExpirationTime,
+		"How long messages stay valid")
+	RootCmd.PersistentFlags().Int("router.max-concurrent-sessions", defaults.Router.MaxConcurrentSessions,
+		"Maximum active transport sessions")
 }
 
 // registerNetDbFlags registers NetDb configuration flags.
 func registerNetDbFlags() {
+	defaults := config.Defaults()
 	RootCmd.PersistentFlags().String("netdb.path", config.DefaultNetDbConfig.Path, "Path to the netDb")
+	RootCmd.PersistentFlags().Int("netdb.max-router-infos", defaults.NetDB.MaxRouterInfos,
+		"Maximum RouterInfos to store locally")
+	RootCmd.PersistentFlags().Int("netdb.max-lease-sets", defaults.NetDB.MaxLeaseSets,
+		"Maximum LeaseSets to cache")
+	RootCmd.PersistentFlags().Duration("netdb.expiration-check-interval", defaults.NetDB.ExpirationCheckInterval,
+		"How often to check for expired entries")
+	RootCmd.PersistentFlags().Duration("netdb.lease-set-refresh-threshold", defaults.NetDB.LeaseSetRefreshThreshold,
+		"How far before expiration to refresh a LeaseSet")
+	RootCmd.PersistentFlags().Duration("netdb.exploration-interval", defaults.NetDB.ExplorationInterval,
+		"How often to explore the network for new peers")
+	RootCmd.PersistentFlags().Bool("netdb.floodfill-enabled", defaults.NetDB.FloodfillEnabled,
+		"Operate as a floodfill router")
 }
 
 // registerBootstrapFlags registers bootstrap configuration flags.
 func registerBootstrapFlags() {
+	defaults := config.Defaults()
 	RootCmd.PersistentFlags().Int("bootstrap.low-peer-threshold", config.DefaultBootstrapConfig.LowPeerThreshold,
 		"Minimum number of peers before reseeding")
 	RootCmd.PersistentFlags().String("bootstrap.type", config.DefaultBootstrapConfig.BootstrapType,
 		"Bootstrap type: auto (tries all methods), file (local file only), reseed (remote only), local (netDb only)")
 	RootCmd.PersistentFlags().String("bootstrap.reseed-file", "",
 		"Path to local reseed file (zip or su3) - takes priority over remote reseed servers")
+	RootCmd.PersistentFlags().Duration("bootstrap.reseed-timeout", defaults.Bootstrap.ReseedTimeout,
+		"Maximum time to wait for reseed operations")
+	RootCmd.PersistentFlags().Int("bootstrap.minimum-reseed-peers", defaults.Bootstrap.MinimumReseedPeers,
+		"Minimum peers to obtain from reseed")
+	RootCmd.PersistentFlags().Duration("bootstrap.reseed-retry-interval", defaults.Bootstrap.ReseedRetryInterval,
+		"Time between reseed attempts")
+	RootCmd.PersistentFlags().Int("bootstrap.min-reseed-servers", config.DefaultBootstrapConfig.MinReseedServers,
+		"Minimum successful reseed servers required")
+	RootCmd.PersistentFlags().String("bootstrap.reseed-strategy", config.DefaultBootstrapConfig.ReseedStrategy,
+		"How to combine RouterInfos from multiple servers: union, intersection, or random")
 }
 
 // registerI2CPFlags registers I2CP server configuration flags.
@@ -94,6 +135,18 @@ func registerI2CPFlags() {
 		"I2CP network type (tcp or unix)")
 	RootCmd.PersistentFlags().Int("i2cp.max-sessions", config.DefaultI2CPConfig.MaxSessions,
 		"Maximum number of concurrent I2CP sessions")
+	RootCmd.PersistentFlags().String("i2cp.username", "",
+		"I2CP authentication username (empty = no auth)")
+	RootCmd.PersistentFlags().String("i2cp.password", "",
+		"I2CP authentication password (empty = no auth)")
+	RootCmd.PersistentFlags().Int("i2cp.message-queue-size", config.DefaultI2CPConfig.MessageQueueSize,
+		"Buffer size for outbound messages per session")
+	RootCmd.PersistentFlags().Duration("i2cp.session-timeout", config.DefaultI2CPConfig.SessionTimeout,
+		"Idle session timeout (0 = no timeout)")
+	RootCmd.PersistentFlags().Duration("i2cp.read-timeout", config.DefaultI2CPConfig.ReadTimeout,
+		"Maximum time to wait for client reads")
+	RootCmd.PersistentFlags().Duration("i2cp.write-timeout", config.DefaultI2CPConfig.WriteTimeout,
+		"Maximum time to wait for client writes")
 }
 
 // registerI2PControlFlags registers I2PControl RPC server configuration flags.
@@ -105,14 +158,125 @@ func registerI2PControlFlags() {
 		"I2PControl server listen address (host:port)")
 	RootCmd.PersistentFlags().String("i2pcontrol.password", "",
 		"I2PControl API password (default: random from config file, or 'itoopie' if no config)")
+	RootCmd.PersistentFlags().Bool("i2pcontrol.use-https", defaultCfg.UseHTTPS,
+		"Enable TLS/HTTPS for I2PControl server")
+	RootCmd.PersistentFlags().String("i2pcontrol.cert-file", defaultCfg.CertFile,
+		"Path to TLS certificate file (PEM format, required when HTTPS enabled)")
+	RootCmd.PersistentFlags().String("i2pcontrol.key-file", defaultCfg.KeyFile,
+		"Path to TLS private key file (PEM format, required when HTTPS enabled)")
+	RootCmd.PersistentFlags().Duration("i2pcontrol.token-expiration", defaultCfg.TokenExpiration,
+		"How long authentication tokens remain valid")
 }
 
 // registerTransportFlags registers transport layer configuration flags.
 func registerTransportFlags() {
+	RootCmd.PersistentFlags().Bool("transport.ntcp2-enabled", config.DefaultTransportConfig.NTCP2Enabled,
+		"Enable NTCP2 transport (TCP-based)")
+	RootCmd.PersistentFlags().Int("transport.ntcp2-port", config.DefaultTransportConfig.NTCP2Port,
+		"NTCP2 listen port (0 = random port assigned by OS)")
+	RootCmd.PersistentFlags().Int("transport.ntcp2-max-connections", config.DefaultTransportConfig.NTCP2MaxConnections,
+		"Maximum concurrent NTCP2 sessions")
 	RootCmd.PersistentFlags().Bool("transport.ssu2-enabled", config.DefaultTransportConfig.SSU2Enabled,
 		"Enable SSU2 transport (UDP-based, currently experimental)")
 	RootCmd.PersistentFlags().Int("transport.ssu2-port", config.DefaultTransportConfig.SSU2Port,
 		"SSU2 listen port (0 = random port assigned by OS)")
+	RootCmd.PersistentFlags().Duration("transport.connection-timeout", config.DefaultTransportConfig.ConnectionTimeout,
+		"Maximum time to establish a connection")
+	RootCmd.PersistentFlags().Duration("transport.idle-timeout", config.DefaultTransportConfig.IdleTimeout,
+		"When to close idle connections")
+	RootCmd.PersistentFlags().Int("transport.max-message-size", config.DefaultTransportConfig.MaxMessageSize,
+		"Maximum I2NP message size in bytes")
+}
+
+// registerTunnelFlags registers tunnel pool management configuration flags.
+func registerTunnelFlags() {
+	defaults := config.Defaults()
+	RootCmd.PersistentFlags().Int("tunnel.min-pool-size", defaults.Tunnel.MinPoolSize,
+		"Minimum tunnels to maintain per pool")
+	RootCmd.PersistentFlags().Int("tunnel.max-pool-size", defaults.Tunnel.MaxPoolSize,
+		"Maximum tunnels to maintain per pool")
+	RootCmd.PersistentFlags().Int("tunnel.length", defaults.Tunnel.TunnelLength,
+		"Hops per tunnel (I2P protocol standard: 3)")
+	RootCmd.PersistentFlags().Duration("tunnel.lifetime", defaults.Tunnel.TunnelLifetime,
+		"How long tunnels stay active")
+	RootCmd.PersistentFlags().Duration("tunnel.test-interval", defaults.Tunnel.TunnelTestInterval,
+		"How often to test tunnel health")
+	RootCmd.PersistentFlags().Duration("tunnel.test-timeout", defaults.Tunnel.TunnelTestTimeout,
+		"Maximum time to wait for tunnel test response")
+	RootCmd.PersistentFlags().Duration("tunnel.build-timeout", defaults.Tunnel.BuildTimeout,
+		"Maximum time to wait for tunnel build")
+	RootCmd.PersistentFlags().Int("tunnel.build-retries", defaults.Tunnel.BuildRetries,
+		"Maximum attempts to build a tunnel")
+	RootCmd.PersistentFlags().Duration("tunnel.replace-before-expiration", defaults.Tunnel.ReplaceBeforeExpiration,
+		"When to build replacement tunnel before expiration")
+	RootCmd.PersistentFlags().Duration("tunnel.maintenance-interval", defaults.Tunnel.MaintenanceInterval,
+		"How often to run pool maintenance")
+	RootCmd.PersistentFlags().Int("tunnel.max-participating-tunnels", defaults.Tunnel.MaxParticipatingTunnels,
+		"Hard limit on tunnels where we act as intermediate hop")
+	RootCmd.PersistentFlags().Bool("tunnel.participating-limits-enabled", defaults.Tunnel.ParticipatingLimitsEnabled,
+		"Enable global participating tunnel limits")
+	RootCmd.PersistentFlags().Bool("tunnel.per-source-rate-limit-enabled", defaults.Tunnel.PerSourceRateLimitEnabled,
+		"Enable per-source tunnel build request rate limiting")
+	RootCmd.PersistentFlags().Int("tunnel.max-build-requests-per-minute", defaults.Tunnel.MaxBuildRequestsPerMinute,
+		"Maximum tunnel build requests per source per minute")
+	RootCmd.PersistentFlags().Int("tunnel.build-request-burst-size", defaults.Tunnel.BuildRequestBurstSize,
+		"Burst allowance for tunnel build requests")
+	RootCmd.PersistentFlags().Duration("tunnel.source-ban-duration", defaults.Tunnel.SourceBanDuration,
+		"How long to ban sources that exceed rate limits")
+}
+
+// registerPerformanceFlags registers performance tuning configuration flags.
+func registerPerformanceFlags() {
+	defaults := config.Defaults()
+	RootCmd.PersistentFlags().Int("performance.message-queue-size", defaults.Performance.MessageQueueSize,
+		"Buffer size for router message processing")
+	RootCmd.PersistentFlags().Int("performance.worker-pool-size", defaults.Performance.WorkerPoolSize,
+		"Concurrent message processing workers")
+	RootCmd.PersistentFlags().Int("performance.garlic-encryption-cache-size", defaults.Performance.GarlicEncryptionCacheSize,
+		"Cache size for garlic encryption sessions")
+	RootCmd.PersistentFlags().Int("performance.fragment-cache-size", defaults.Performance.FragmentCacheSize,
+		"Cache size for message fragment reassembly")
+	RootCmd.PersistentFlags().Duration("performance.cleanup-interval", defaults.Performance.CleanupInterval,
+		"How often to run cleanup tasks")
+}
+
+// registerCongestionFlags registers congestion advertisement configuration flags (Proposal 162).
+func registerCongestionFlags() {
+	defaults := config.Defaults()
+	RootCmd.PersistentFlags().Float64("congestion.d-flag-threshold", defaults.Congestion.DFlagThreshold,
+		"Participating tunnel ratio to advertise D (medium congestion) flag")
+	RootCmd.PersistentFlags().Float64("congestion.e-flag-threshold", defaults.Congestion.EFlagThreshold,
+		"Participating tunnel ratio to advertise E (high congestion) flag")
+	RootCmd.PersistentFlags().Float64("congestion.g-flag-threshold", defaults.Congestion.GFlagThreshold,
+		"Participating tunnel ratio to advertise G (critical congestion) flag")
+	RootCmd.PersistentFlags().Float64("congestion.clear-d-flag-threshold", defaults.Congestion.ClearDFlagThreshold,
+		"Ratio to clear D flag and return to normal")
+	RootCmd.PersistentFlags().Float64("congestion.clear-e-flag-threshold", defaults.Congestion.ClearEFlagThreshold,
+		"Ratio to clear E flag (downgrade to D or clear)")
+	RootCmd.PersistentFlags().Float64("congestion.clear-g-flag-threshold", defaults.Congestion.ClearGFlagThreshold,
+		"Ratio to clear G flag (downgrade to E)")
+	RootCmd.PersistentFlags().Duration("congestion.averaging-window", defaults.Congestion.AveragingWindow,
+		"Duration to average congestion metrics over")
+	RootCmd.PersistentFlags().Duration("congestion.e-flag-age-threshold", defaults.Congestion.EFlagAgeThreshold,
+		"When E flag on stale RouterInfo is treated as D flag")
+	RootCmd.PersistentFlags().Float64("congestion.d-flag-capacity-multiplier", defaults.Congestion.DFlagCapacityMultiplier,
+		"Capacity multiplier for D-flagged peers in tunnel building")
+	RootCmd.PersistentFlags().Float64("congestion.e-flag-capacity-multiplier", defaults.Congestion.EFlagCapacityMultiplier,
+		"Capacity multiplier for E-flagged peers in tunnel building")
+	RootCmd.PersistentFlags().Float64("congestion.stale-e-flag-capacity-multiplier", defaults.Congestion.StaleEFlagCapacityMultiplier,
+		"Capacity multiplier for E-flagged peers with stale RouterInfo")
+}
+
+// mustBindPFlag binds a persistent flag to a viper configuration key, terminating on error.
+func mustBindPFlag(viperKey, flagName string) {
+	if err := viper.BindPFlag(viperKey, RootCmd.PersistentFlags().Lookup(flagName)); err != nil {
+		log.WithError(err).WithFields(logger.Fields{
+			"at":     "mustBindPFlag",
+			"phase":  "startup",
+			"reason": fmt.Sprintf("failed to bind %s configuration flag", viperKey),
+			"flag":   flagName,
+		}).Fatalf("failed to bind %s flag", viperKey)
+	}
 }
 
 // bindFlagsToViper binds all command-line flags to viper configuration keys.
@@ -123,6 +287,9 @@ func bindFlagsToViper() {
 	bindI2CPFlagsToViper()
 	bindI2PControlFlagsToViper()
 	bindTransportFlagsToViper()
+	bindTunnelFlagsToViper()
+	bindPerformanceFlagsToViper()
+	bindCongestionFlagsToViper()
 }
 
 // bindRouterFlagsToViper binds router flags to viper configuration.
@@ -143,6 +310,12 @@ func bindRouterFlagsToViper() {
 			"flag":   "working-dir",
 		}).Fatal("failed to bind working_dir flag")
 	}
+	mustBindPFlag("router.max_bandwidth", "router.max-bandwidth")
+	mustBindPFlag("router.max_connections", "router.max-connections")
+	mustBindPFlag("router.accept_tunnels", "router.accept-tunnels")
+	mustBindPFlag("router.info_refresh_interval", "router.info-refresh-interval")
+	mustBindPFlag("router.message_expiration_time", "router.message-expiration-time")
+	mustBindPFlag("router.max_concurrent_sessions", "router.max-concurrent-sessions")
 }
 
 // bindNetDbFlagsToViper binds NetDb flags to viper configuration.
@@ -155,6 +328,12 @@ func bindNetDbFlagsToViper() {
 			"flag":   "netdb.path",
 		}).Fatal("failed to bind netdb.path flag")
 	}
+	mustBindPFlag("netdb.max_router_infos", "netdb.max-router-infos")
+	mustBindPFlag("netdb.max_lease_sets", "netdb.max-lease-sets")
+	mustBindPFlag("netdb.expiration_check_interval", "netdb.expiration-check-interval")
+	mustBindPFlag("netdb.lease_set_refresh_threshold", "netdb.lease-set-refresh-threshold")
+	mustBindPFlag("netdb.exploration_interval", "netdb.exploration-interval")
+	mustBindPFlag("netdb.floodfill_enabled", "netdb.floodfill-enabled")
 }
 
 // bindBootstrapFlagsToViper binds bootstrap flags to viper configuration.
@@ -183,6 +362,11 @@ func bindBootstrapFlagsToViper() {
 			"flag":   "bootstrap.reseed-file",
 		}).Fatal("failed to bind bootstrap.reseed_file_path flag")
 	}
+	mustBindPFlag("bootstrap.reseed_timeout", "bootstrap.reseed-timeout")
+	mustBindPFlag("bootstrap.minimum_reseed_peers", "bootstrap.minimum-reseed-peers")
+	mustBindPFlag("bootstrap.reseed_retry_interval", "bootstrap.reseed-retry-interval")
+	mustBindPFlag("bootstrap.min_reseed_servers", "bootstrap.min-reseed-servers")
+	mustBindPFlag("bootstrap.reseed_strategy", "bootstrap.reseed-strategy")
 }
 
 // bindI2CPFlagsToViper binds I2CP flags to viper configuration.
@@ -219,6 +403,12 @@ func bindI2CPFlagsToViper() {
 			"flag":   "i2cp.max-sessions",
 		}).Fatal("failed to bind i2cp.max_sessions flag")
 	}
+	mustBindPFlag("i2cp.username", "i2cp.username")
+	mustBindPFlag("i2cp.password", "i2cp.password")
+	mustBindPFlag("i2cp.message_queue_size", "i2cp.message-queue-size")
+	mustBindPFlag("i2cp.session_timeout", "i2cp.session-timeout")
+	mustBindPFlag("i2cp.read_timeout", "i2cp.read-timeout")
+	mustBindPFlag("i2cp.write_timeout", "i2cp.write-timeout")
 }
 
 // bindI2PControlFlagsToViper binds I2PControl flags to viper configuration.
@@ -247,10 +437,17 @@ func bindI2PControlFlagsToViper() {
 			"flag":   "i2pcontrol.password",
 		}).Fatal("failed to bind i2pcontrol.password flag")
 	}
+	mustBindPFlag("i2pcontrol.use_https", "i2pcontrol.use-https")
+	mustBindPFlag("i2pcontrol.cert_file", "i2pcontrol.cert-file")
+	mustBindPFlag("i2pcontrol.key_file", "i2pcontrol.key-file")
+	mustBindPFlag("i2pcontrol.token_expiration", "i2pcontrol.token-expiration")
 }
 
 // bindTransportFlagsToViper binds transport flags to viper configuration.
 func bindTransportFlagsToViper() {
+	mustBindPFlag("transport.ntcp2_enabled", "transport.ntcp2-enabled")
+	mustBindPFlag("transport.ntcp2_port", "transport.ntcp2-port")
+	mustBindPFlag("transport.ntcp2_max_connections", "transport.ntcp2-max-connections")
 	if err := viper.BindPFlag("transport.ssu2_enabled", RootCmd.PersistentFlags().Lookup("transport.ssu2-enabled")); err != nil {
 		log.WithError(err).WithFields(logger.Fields{
 			"at":     "bindTransportFlagsToViper",
@@ -267,6 +464,53 @@ func bindTransportFlagsToViper() {
 			"flag":   "transport.ssu2-port",
 		}).Fatal("failed to bind transport.ssu2_port flag")
 	}
+	mustBindPFlag("transport.connection_timeout", "transport.connection-timeout")
+	mustBindPFlag("transport.idle_timeout", "transport.idle-timeout")
+	mustBindPFlag("transport.max_message_size", "transport.max-message-size")
+}
+
+// bindTunnelFlagsToViper binds tunnel flags to viper configuration.
+func bindTunnelFlagsToViper() {
+	mustBindPFlag("tunnel.min_pool_size", "tunnel.min-pool-size")
+	mustBindPFlag("tunnel.max_pool_size", "tunnel.max-pool-size")
+	mustBindPFlag("tunnel.length", "tunnel.length")
+	mustBindPFlag("tunnel.lifetime", "tunnel.lifetime")
+	mustBindPFlag("tunnel.test_interval", "tunnel.test-interval")
+	mustBindPFlag("tunnel.test_timeout", "tunnel.test-timeout")
+	mustBindPFlag("tunnel.build_timeout", "tunnel.build-timeout")
+	mustBindPFlag("tunnel.build_retries", "tunnel.build-retries")
+	mustBindPFlag("tunnel.replace_before_expiration", "tunnel.replace-before-expiration")
+	mustBindPFlag("tunnel.maintenance_interval", "tunnel.maintenance-interval")
+	mustBindPFlag("tunnel.max_participating_tunnels", "tunnel.max-participating-tunnels")
+	mustBindPFlag("tunnel.participating_limits_enabled", "tunnel.participating-limits-enabled")
+	mustBindPFlag("tunnel.per_source_rate_limit_enabled", "tunnel.per-source-rate-limit-enabled")
+	mustBindPFlag("tunnel.max_build_requests_per_minute", "tunnel.max-build-requests-per-minute")
+	mustBindPFlag("tunnel.build_request_burst_size", "tunnel.build-request-burst-size")
+	mustBindPFlag("tunnel.source_ban_duration", "tunnel.source-ban-duration")
+}
+
+// bindPerformanceFlagsToViper binds performance flags to viper configuration.
+func bindPerformanceFlagsToViper() {
+	mustBindPFlag("performance.message_queue_size", "performance.message-queue-size")
+	mustBindPFlag("performance.worker_pool_size", "performance.worker-pool-size")
+	mustBindPFlag("performance.garlic_encryption_cache_size", "performance.garlic-encryption-cache-size")
+	mustBindPFlag("performance.fragment_cache_size", "performance.fragment-cache-size")
+	mustBindPFlag("performance.cleanup_interval", "performance.cleanup-interval")
+}
+
+// bindCongestionFlagsToViper binds congestion flags to viper configuration.
+func bindCongestionFlagsToViper() {
+	mustBindPFlag("router.congestion.d_flag_threshold", "congestion.d-flag-threshold")
+	mustBindPFlag("router.congestion.e_flag_threshold", "congestion.e-flag-threshold")
+	mustBindPFlag("router.congestion.g_flag_threshold", "congestion.g-flag-threshold")
+	mustBindPFlag("router.congestion.clear_d_flag_threshold", "congestion.clear-d-flag-threshold")
+	mustBindPFlag("router.congestion.clear_e_flag_threshold", "congestion.clear-e-flag-threshold")
+	mustBindPFlag("router.congestion.clear_g_flag_threshold", "congestion.clear-g-flag-threshold")
+	mustBindPFlag("router.congestion.averaging_window", "congestion.averaging-window")
+	mustBindPFlag("router.congestion.e_flag_age_threshold", "congestion.e-flag-age-threshold")
+	mustBindPFlag("router.congestion.d_flag_capacity_multiplier", "congestion.d-flag-capacity-multiplier")
+	mustBindPFlag("router.congestion.e_flag_capacity_multiplier", "congestion.e-flag-capacity-multiplier")
+	mustBindPFlag("router.congestion.stale_e_flag_capacity_multiplier", "congestion.stale-e-flag-capacity-multiplier")
 }
 
 // tuiCmd launches the embedded bubbletea TUI for I2P router management

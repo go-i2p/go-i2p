@@ -101,6 +101,9 @@ func setRouterDefaults(defaults ConfigDefaults) {
 		{"router.info_refresh_interval", defaults.Router.RouterInfoRefreshInterval},
 		{"router.message_expiration_time", defaults.Router.MessageExpirationTime},
 		{"router.max_concurrent_sessions", defaults.Router.MaxConcurrentSessions},
+		{"router.max_bandwidth", uint64(1024 * 1024)},
+		{"router.max_connections", 200},
+		{"router.accept_tunnels", true},
 	})
 }
 
@@ -173,6 +176,12 @@ func setTunnelDefaults(defaults ConfigDefaults) {
 		{"tunnel.build_retries", defaults.Tunnel.BuildRetries},
 		{"tunnel.replace_before_expiration", defaults.Tunnel.ReplaceBeforeExpiration},
 		{"tunnel.maintenance_interval", defaults.Tunnel.MaintenanceInterval},
+		{"tunnel.max_participating_tunnels", defaults.Tunnel.MaxParticipatingTunnels},
+		{"tunnel.participating_limits_enabled", defaults.Tunnel.ParticipatingLimitsEnabled},
+		{"tunnel.per_source_rate_limit_enabled", defaults.Tunnel.PerSourceRateLimitEnabled},
+		{"tunnel.max_build_requests_per_minute", defaults.Tunnel.MaxBuildRequestsPerMinute},
+		{"tunnel.build_request_burst_size", defaults.Tunnel.BuildRequestBurstSize},
+		{"tunnel.source_ban_duration", defaults.Tunnel.SourceBanDuration},
 	})
 }
 
