@@ -759,77 +759,64 @@ func (r *Router) initializeMessageRouter() {
 	r.messageRouter = i2np.NewI2NPMessageDispatcher(messageConfig)
 	r.messageRouter.SetNetDB(r.StdNetDB)
 	r.messageRouter.SetPeerSelector(r.StdNetDB)
-
-	// Set router as SessionProvider to enable message response routing
 	r.messageRouter.SetSessionProvider(r)
 
-	// Initialize tunnel manager for building and managing tunnels
-	// Must be done before garlic router so it can access the tunnel pool
 	r.initializeTunnelManager()
-
-	// A3: Unify the dispatcher's tunnelMgr with r.tunnelManager so that
-	// RouteTunnelMessage and the processor share the same pendingBuilds map.
-	r.messageRouter.SetTunnelManager(r.tunnelManager)
-	log.WithFields(logger.Fields{"at": "initializeMessageRouter"}).Debug("Dispatcher tunnel manager unified with router tunnel manager")
-
-	// A4: Wire r.tunnelManager as the buildReplyProcessor on the message
-	// processor so that parsed build replies are correlated with pending builds.
-	r.messageRouter.GetProcessor().SetBuildReplyProcessor(r.tunnelManager)
-	log.WithFields(logger.Fields{"at": "initializeMessageRouter"}).Debug("Build reply processor wired to tunnel manager")
-
-	// Initialize participant manager for tracking transit tunnels
-	r.participantManager = tunnel.NewManager()
-	log.WithFields(logger.Fields{"at": "initializeMessageRouter"}).Debug("Participant manager initialized for transit tunnel tracking")
-
-	// Wire participant manager into the message processor so incoming tunnel
-	// build requests from other routers are evaluated instead of silently dropped.
-	r.messageRouter.GetProcessor().SetParticipantManager(r.participantManager)
-	log.WithFields(logger.Fields{"at": "initializeMessageRouter"}).Debug("Participant manager wired into message processor")
-
-	// Wire build reply forwarder so accepted tunnel build requests can send
-	// replies back to the requester via the transport layer.
-	r.messageRouter.GetProcessor().SetBuildReplyForwarder(&transportBuildReplyForwarder{sessionProvider: r})
-	log.WithFields(logger.Fields{"at": "initializeMessageRouter"}).Debug("Build reply forwarder wired into message processor")
-
-	// Initialize garlic message router for handling garlic clove forwarding
+	r.wireDispatcherTunnelManager()
+	r.wireParticipantManager()
 	r.initializeGarlicRouter()
-
-	// Create and wire garlic session manager for decrypting inbound garlic messages.
-	// Uses the router's X25519 encryption private key for ECIES decryption.
 	r.wireGarlicSessionManager()
+	r.wireTunnelDataHandler()
+	r.wireBuildRecordIdentity()
+	r.wireI2CPTunnelBuilder()
 
-	// Wire InboundMessageHandler as the TunnelData handler on the message processor.
-	// This enables inbound tunnel messages to be decrypted and delivered to I2CP sessions.
+	log.WithFields(logger.Fields{"at": "initializeMessageRouter"}).Debug("Message router initialized with NetDB, peer selection, session provider, tunnel data handler, garlic sessions, and garlic forwarding")
+}
+
+// wireDispatcherTunnelManager unifies the dispatcher's tunnel manager with the router's.
+func (r *Router) wireDispatcherTunnelManager() {
+	r.messageRouter.SetTunnelManager(r.tunnelManager)
+	r.messageRouter.GetProcessor().SetBuildReplyProcessor(r.tunnelManager)
+	log.WithFields(logger.Fields{"at": "initializeMessageRouter"}).Debug("Dispatcher tunnel manager unified with router tunnel manager")
+}
+
+// wireParticipantManager initializes and wires the participant manager for transit tunnels.
+func (r *Router) wireParticipantManager() {
+	r.participantManager = tunnel.NewManager()
+	r.messageRouter.GetProcessor().SetParticipantManager(r.participantManager)
+	r.messageRouter.GetProcessor().SetBuildReplyForwarder(&transportBuildReplyForwarder{sessionProvider: r})
+	log.WithFields(logger.Fields{"at": "initializeMessageRouter"}).Debug("Participant manager and build reply forwarder wired into message processor")
+}
+
+// wireTunnelDataHandler wires the inbound message handler as the TunnelData handler.
+func (r *Router) wireTunnelDataHandler() {
 	if r.inboundHandler != nil {
 		r.messageRouter.GetProcessor().SetTunnelDataHandler(r.inboundHandler)
 		log.WithFields(logger.Fields{"at": "initializeMessageRouter"}).Debug("InboundMessageHandler wired as TunnelData handler on message processor")
 	}
+}
 
-	// Wire our router identity, build-record decryptor, and X25519 private key so that
-	// the MessageProcessor can recognise and decrypt inbound tunnel build records.
-	// Without this, isRecordForUs always returns false and all decryption paths are dead.
+// wireBuildRecordIdentity wires router identity and crypto keys for build record decryption.
+func (r *Router) wireBuildRecordIdentity() {
 	routerHash, err := r.getOurRouterHash()
 	if err != nil {
 		log.WithError(err).Error("Failed to get router hash for build record identity — transit tunnel building will be degraded")
-	} else {
-		privKeyBytes := r.RouterInfoKeystore.GetEncryptionPrivateKey().Bytes()
-		buildCrypto := i2np.NewBuildRecordCrypto()
-		r.messageRouter.GetProcessor().SetOurRouterHash(routerHash)
-		r.messageRouter.GetProcessor().SetBuildRequestDecryptor(buildCrypto)
-		r.messageRouter.GetProcessor().SetOurPrivateKey(privKeyBytes)
-		log.WithFields(logger.Fields{"at": "initializeMessageRouter"}).Debug("MessageProcessor identity, decryptor, and private key wired for build record decryption")
+		return
 	}
+	privKeyBytes := r.RouterInfoKeystore.GetEncryptionPrivateKey().Bytes()
+	buildCrypto := i2np.NewBuildRecordCrypto()
+	r.messageRouter.GetProcessor().SetOurRouterHash(routerHash)
+	r.messageRouter.GetProcessor().SetBuildRequestDecryptor(buildCrypto)
+	r.messageRouter.GetProcessor().SetOurPrivateKey(privKeyBytes)
+	log.WithFields(logger.Fields{"at": "initializeMessageRouter"}).Debug("MessageProcessor identity, decryptor, and private key wired for build record decryption")
+}
 
-	// Wire tunnel manager into I2CP server now that it is available.
-	// configureI2CPServerInfrastructure() was called before initializeTunnelManager()
-	// during startup, so SetTunnelBuilder was skipped due to a nil tunnelManager.
-	// We complete that wiring here.
+// wireI2CPTunnelBuilder wires the tunnel manager into the I2CP server.
+func (r *Router) wireI2CPTunnelBuilder() {
 	if r.i2cpServer != nil && r.tunnelManager != nil {
 		r.i2cpServer.SetTunnelBuilder(r.tunnelManager)
 		log.WithFields(logger.Fields{"at": "initializeMessageRouter"}).Debug("I2CP server: tunnel builder wired after tunnel manager initialization")
 	}
-
-	log.WithFields(logger.Fields{"at": "initializeMessageRouter"}).Debug("Message router initialized with NetDB, peer selection, session provider, tunnel data handler, garlic sessions, and garlic forwarding")
 }
 
 // initializeTunnelManager creates and configures the tunnel manager for building and maintaining tunnels.

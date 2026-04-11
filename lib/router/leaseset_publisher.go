@@ -7,6 +7,7 @@ import (
 	"time"
 
 	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
@@ -108,7 +109,6 @@ func (p *LeaseSetPublisher) distributeToNetwork(key common.Hash, data []byte) {
 		"key": fmt.Sprintf("%x", key[:8]),
 	}).Debug("distributing_leaseset_to_network")
 
-	// Select closest floodfill routers (typically 3-5 routers for redundancy)
 	const floodfillCount = 3
 	floodfills, err := p.router.StdNetDB.SelectFloodfillRouters(key, floodfillCount)
 	if err != nil {
@@ -120,19 +120,26 @@ func (p *LeaseSetPublisher) distributeToNetwork(key common.Hash, data []byte) {
 		return
 	}
 
-	// Create DatabaseStore message for network distribution
-	// dataType=3 indicates LeaseSet2 (bits 3-0 = 0x03, as per I2NP spec)
 	const leaseSet2DataType = 3
 	dbStore := i2np.NewDatabaseStore(key, data, leaseSet2DataType)
+	p.sendToFloodfills(key, floodfills, dbStore)
 
-	// Send to each selected floodfill router
+	log.WithFields(logger.Fields{
+		"at":                "router.LeaseSetPublisher.distributeToNetwork",
+		"key":               fmt.Sprintf("%x", key[:8]),
+		"floodfills_sent":   len(floodfills),
+		"floodfills_target": floodfillCount,
+	}).Info("leaseset_distribution_completed")
+}
+
+// sendToFloodfills sends a DatabaseStore message to each floodfill router in the list.
+func (p *LeaseSetPublisher) sendToFloodfills(key common.Hash, floodfills []router_info.RouterInfo, dbStore *i2np.DatabaseStore) {
 	for _, ffRouter := range floodfills {
 		ffHash, err := ffRouter.IdentHash()
 		if err != nil {
 			log.WithFields(logger.Fields{
-				"at":    "router.LeaseSetPublisher.distributeToNetwork",
-				"key":   fmt.Sprintf("%x", key[:8]),
-				"error": err,
+				"at":  "router.LeaseSetPublisher.distributeToNetwork",
+				"key": fmt.Sprintf("%x", key[:8]),
 			}).Warn("failed_to_get_floodfill_hash")
 			continue
 		}
@@ -141,24 +148,15 @@ func (p *LeaseSetPublisher) distributeToNetwork(key common.Hash, data []byte) {
 				"at":        "router.LeaseSetPublisher.distributeToNetwork",
 				"key":       fmt.Sprintf("%x", key[:8]),
 				"floodfill": fmt.Sprintf("%x", ffHash[:8]),
-				"error":     err,
 			}).Warn("failed_to_send_to_floodfill")
 			continue
 		}
-
 		log.WithFields(logger.Fields{
 			"at":        "router.LeaseSetPublisher.distributeToNetwork",
 			"key":       fmt.Sprintf("%x", key[:8]),
 			"floodfill": fmt.Sprintf("%x", ffHash[:8]),
 		}).Debug("leaseset_sent_to_floodfill")
 	}
-
-	log.WithFields(logger.Fields{
-		"at":                "router.LeaseSetPublisher.distributeToNetwork",
-		"key":               fmt.Sprintf("%x", key[:8]),
-		"floodfills_sent":   len(floodfills),
-		"floodfills_target": floodfillCount,
-	}).Info("leaseset_distribution_completed")
 }
 
 // sendToFloodfill sends a DatabaseStore message to a specific floodfill router.

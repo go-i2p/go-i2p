@@ -170,37 +170,53 @@ func setupUDPListener(t *SSU2Transport, config *Config, ssu2Config *ssu2noise.SS
 		return oops.Wrapf(err, "failed to convert port to integer")
 	}
 
-	var udpConn net.PacketConn
-
-	if iport == 0 {
-		// Port 0 means "let the OS choose". NAT traversal requires a specific
-		// port to map, so skip it and create the connection directly.
-		udpAddr, resolveErr := net.ResolveUDPAddr("udp", config.ListenerAddress)
-		if resolveErr != nil {
-			return oops.Wrapf(resolveErr, "failed to resolve UDP address")
-		}
-		rawConn, listenErr := net.ListenUDP("udp", udpAddr)
-		if listenErr != nil {
-			return oops.Wrapf(listenErr, "failed to create UDP listener")
-		}
-		config.ListenerAddress = rawConn.LocalAddr().String()
-		log.WithField("address", config.ListenerAddress).Info("UDP listener started (no NAT traversal for OS-assigned port)")
-		udpConn = rawConn
-	} else {
-		// A specific port was requested — attempt NAT traversal with fallback.
-		natCtx, natCancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer natCancel()
-		natPL, natErr := nattraversal.ListenPacketWithFallbackContext(natCtx, iport)
-		if natErr != nil {
-			return oops.Wrapf(natErr, "failed to create UDP listener")
-		}
-		// Keep config in sync with the actual bound address.
-		if boundAddr := natPL.Addr().String(); boundAddr != config.ListenerAddress {
-			config.ListenerAddress = boundAddr
-		}
-		udpConn = natPL.PacketConn()
+	udpConn, err := createUDPConn(config, iport)
+	if err != nil {
+		return err
 	}
 
+	return startSSU2Listener(t, udpConn, ssu2Config)
+}
+
+// createUDPConn creates a UDP packet connection, using OS-assigned port or NAT traversal.
+func createUDPConn(config *Config, iport int) (net.PacketConn, error) {
+	if iport == 0 {
+		return listenWithOSPort(config)
+	}
+	return listenWithNATTraversal(config, iport)
+}
+
+// listenWithOSPort creates a UDP listener with an OS-assigned port.
+func listenWithOSPort(config *Config) (net.PacketConn, error) {
+	udpAddr, err := net.ResolveUDPAddr("udp", config.ListenerAddress)
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to resolve UDP address")
+	}
+	rawConn, err := net.ListenUDP("udp", udpAddr)
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to create UDP listener")
+	}
+	config.ListenerAddress = rawConn.LocalAddr().String()
+	log.WithField("address", config.ListenerAddress).Info("UDP listener started (no NAT traversal for OS-assigned port)")
+	return rawConn, nil
+}
+
+// listenWithNATTraversal creates a UDP listener with NAT port mapping.
+func listenWithNATTraversal(config *Config, iport int) (net.PacketConn, error) {
+	natCtx, natCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer natCancel()
+	natPL, err := nattraversal.ListenPacketWithFallbackContext(natCtx, iport)
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to create UDP listener")
+	}
+	if boundAddr := natPL.Addr().String(); boundAddr != config.ListenerAddress {
+		config.ListenerAddress = boundAddr
+	}
+	return natPL.PacketConn(), nil
+}
+
+// startSSU2Listener creates and starts the SSU2 protocol listener over a UDP connection.
+func startSSU2Listener(t *SSU2Transport, udpConn net.PacketConn, ssu2Config *ssu2noise.SSU2Config) error {
 	listener, err := ssu2noise.NewSSU2Listener(udpConn, ssu2Config)
 	if err != nil {
 		udpConn.Close()
@@ -471,60 +487,81 @@ func (t *SSU2Transport) createOutboundSession(routerInfo router_info.RouterInfo,
 
 // prepareDialConfig creates the dial configuration for an outbound SSU2 session.
 func (t *SSU2Transport) prepareDialConfig(routerInfo router_info.RouterInfo) (*ssu2noise.SSU2Config, *net.UDPAddr, error) {
+	remoteUDPAddr, err := resolveRemoteAddr(routerInfo)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	dialConfig, err := t.createBaseDialConfig()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if err := t.applyRemotePeerConfig(dialConfig, routerInfo); err != nil {
+		return nil, nil, err
+	}
+
+	return dialConfig, remoteUDPAddr, nil
+}
+
+// resolveRemoteAddr extracts and resolves the remote peer's SSU2 UDP address.
+func resolveRemoteAddr(routerInfo router_info.RouterInfo) (*net.UDPAddr, error) {
 	ssu2Addr, err := ExtractSSU2Addr(routerInfo)
 	if err != nil {
-		return nil, nil, WrapSSU2Error(err, "extracting SSU2 address")
+		return nil, WrapSSU2Error(err, "extracting SSU2 address")
 	}
-
 	remoteUDPAddr, err := net.ResolveUDPAddr("udp", ssu2Addr.String())
 	if err != nil {
-		return nil, nil, WrapSSU2Error(err, "resolving remote UDP address")
+		return nil, WrapSSU2Error(err, "resolving remote UDP address")
 	}
+	return remoteUDPAddr, nil
+}
 
+// createBaseDialConfig creates an SSU2 dial config with our identity and crypto keys.
+func (t *SSU2Transport) createBaseDialConfig() (*ssu2noise.SSU2Config, error) {
 	t.identityMu.RLock()
 	identHash, err := t.identity.IdentHash()
 	t.identityMu.RUnlock()
 	if err != nil {
-		return nil, nil, oops.Wrapf(err, "failed to get our identity hash")
+		return nil, oops.Wrapf(err, "failed to get our identity hash")
 	}
 
 	dialConfig, err := ssu2noise.NewSSU2Config(identHash, true)
 	if err != nil {
-		return nil, nil, WrapSSU2Error(err, "creating dial config")
+		return nil, WrapSSU2Error(err, "creating dial config")
 	}
 
 	if err := initializeCryptoKeys(dialConfig, t.keystore); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	remoteHash, err := routerInfo.IdentHash()
-	if err != nil {
-		return nil, nil, oops.Wrapf(err, "failed to get remote router hash")
-	}
-	dialConfig = dialConfig.WithRemoteRouterHash(remoteHash)
-
-	remoteStaticKey, err := extractRemoteStaticKey(routerInfo)
-	if err != nil {
-		return nil, nil, WrapSSU2Error(err, "extracting remote static key")
-	}
-	dialConfig = dialConfig.WithRemoteStaticKey(remoteStaticKey)
-
-	// Set our local intro key so that header protection is enabled for the
-	// outbound session (initHeaderProtection requires IntroKey to be set).
 	if ik := t.GetIntroKey(); len(ik) == 32 {
 		dialConfig.IntroKey = ik
 	}
+	return dialConfig, nil
+}
 
-	// Set the remote router's intro key so that the first-packet ChaCha
-	// obfuscation uses Bob's published intro key rather than the fallback
-	// router hash, which would cause Bob to discard our SessionRequest.
+// applyRemotePeerConfig sets the remote router hash, static key, and intro key on the dial config.
+func (t *SSU2Transport) applyRemotePeerConfig(dialConfig *ssu2noise.SSU2Config, routerInfo router_info.RouterInfo) error {
+	remoteHash, err := routerInfo.IdentHash()
+	if err != nil {
+		return oops.Wrapf(err, "failed to get remote router hash")
+	}
+	dialConfig.WithRemoteRouterHash(remoteHash)
+
+	remoteStaticKey, err := extractRemoteStaticKey(routerInfo)
+	if err != nil {
+		return WrapSSU2Error(err, "extracting remote static key")
+	}
+	dialConfig.WithRemoteStaticKey(remoteStaticKey)
+
 	remoteIK, err := ExtractSSU2IntroKey(routerInfo)
 	if err != nil {
-		return nil, nil, WrapSSU2Error(err, "extracting remote SSU2 intro key")
+		return WrapSSU2Error(err, "extracting remote SSU2 intro key")
 	}
 	dialConfig.RemoteIntroKey = remoteIK
 
-	return dialConfig, remoteUDPAddr, nil
+	return nil
 }
 
 // extractRemoteStaticKey extracts the X25519 static public key from a remote

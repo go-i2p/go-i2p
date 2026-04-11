@@ -681,29 +681,34 @@ func (t *NTCP2Transport) createOutboundSession(routerInfo router_info.RouterInfo
 	dialStart := time.Now()
 	conn, err := t.dialNTCP2Connection(routerInfo)
 	if err != nil {
-		t.unreserveSessionSlot() // Release the reserved slot on dial failure
-		t.logger.WithError(err).WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Debug("Failed to dial NTCP2 connection")
-		if n := t.getPeerConnNotifier(); n != nil {
-			// P0.1: ErrInvalidRouterInfo means the peer has no address we can
-			// reach (e.g. IPv6-only, locally-unreachable).  Treat it as a
-			// permanent failure so IsLikelyStale() is true immediately and
-			// the peer is excluded from the next hop-selection pass.
-			if errors.Is(err, ErrInvalidRouterInfo) {
-				n.RecordPermanentFailure(routerHash, "no_reachable_ntcp2_address")
-			} else {
-				n.RecordFailure(routerHash, err.Error())
-			}
-		}
-		// On EOF the peer likely rotated its static key; evict the cached RI
-		// so the next selection fetches a fresh copy (AUDIT P3/RC-2).
-		if errors.Is(err, io.EOF) {
-			if r := t.routerInfoRefresher; r != nil {
-				go r.RequestRouterInfoRefresh(routerHash)
-			}
-		}
+		t.handleDialFailure(routerHash, routerHashBytes, err)
 		return nil, err
 	}
 
+	return t.finalizeOutboundSession(conn, routerHash, routerHashBytes, dialStart)
+}
+
+// handleDialFailure releases the reserved session slot and records dial failure metrics.
+func (t *NTCP2Transport) handleDialFailure(routerHash data.Hash, routerHashBytes [32]byte, err error) {
+	t.unreserveSessionSlot()
+	t.logger.WithError(err).WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Debug("Failed to dial NTCP2 connection")
+	if n := t.getPeerConnNotifier(); n != nil {
+		if errors.Is(err, ErrInvalidRouterInfo) {
+			n.RecordPermanentFailure(routerHash, "no_reachable_ntcp2_address")
+		} else {
+			n.RecordFailure(routerHash, err.Error())
+		}
+	}
+	// On EOF the peer likely rotated its static key; evict the cached RI.
+	if errors.Is(err, io.EOF) {
+		if r := t.routerInfoRefresher; r != nil {
+			go r.RequestRouterInfoRefresh(routerHash)
+		}
+	}
+}
+
+// finalizeOutboundSession sets up the session object and records success metrics.
+func (t *NTCP2Transport) finalizeOutboundSession(conn *ntcp2.NTCP2Conn, routerHash data.Hash, routerHashBytes [32]byte, dialStart time.Time) (transport.TransportSession, error) {
 	session := t.setupSession(conn, routerHash)
 	if session == nil {
 		return nil, oops.Errorf("failed to set up session for %x: corrupt session map entry, connection closed", routerHashBytes[:8])
@@ -952,17 +957,11 @@ func getSyscallError(err error) string {
 }
 
 func (t *NTCP2Transport) createNTCP2Config(routerInfo router_info.RouterInfo) (*ntcp2.NTCP2Config, error) {
-	// Per the NTCP2 spec (RH_B), the AES-CBC-256 key used to obfuscate the
-	// initiator's ephemeral public key in message 1 is Bob's (the responder's)
-	// router hash.  NewNTCP2Config's first argument is always BobRouterHash —
-	// for an initiator that means the *remote* peer's hash, not our own.
 	remoteHash, err := routerInfo.IdentHash()
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to get remote router hash")
 	}
 
-	// Read our own static key under the identity lock.
-	// config.NTCP2Config is also guarded by identityMu per its field comment.
 	t.identityMu.RLock()
 	ourStaticKey := t.config.NTCP2Config.StaticKey
 	t.identityMu.RUnlock()
@@ -972,45 +971,42 @@ func (t *NTCP2Transport) createNTCP2Config(routerInfo router_info.RouterInfo) (*
 		return nil, WrapNTCP2Error(err, "creating NTCP2 config")
 	}
 
-	// Supply our static private key so the remote can authenticate us during
-	// the Noise XK handshake (message 2: → s, se).
 	config.WithStaticKey(ourStaticKey)
-
-	// RemoteRouterHash is required by go-noise validation for initiators.
 	config = config.WithRemoteRouterHash(remoteHash)
 
-	// Extract and set the peer's static public key and IV from their RouterInfo.
-	// Required by the Noise XK pattern: the initiator must know the
-	// responder's static key before the handshake begins.
-	// This is fatal: without the remote static key the XK message 1 will be
-	// encrypted to the wrong key and the responder will close the connection
-	// (producing a confusing EOF rather than a clear error).
 	if err := ConfigureDialConfig(config, routerInfo); err != nil {
 		t.logger.WithError(err).Error("Cannot extract peer static key for NTCP2 XK handshake - peer RouterInfo is missing required 's=' option")
 		return nil, WrapNTCP2Error(err, "extracting peer NTCP2 static key")
 	}
 
-	// Supply our local RouterInfo bytes for message 3 part 2 payload.
-	t.identityMu.RLock()
-	localRI := t.identity
-	t.identityMu.RUnlock()
-	if riBytes, riErr := localRI.Bytes(); riErr == nil {
-		addrCount := localRI.RouterAddressCount()
-		sigValid, sigErr := localRI.VerifySignature()
-		t.logger.WithFields(map[string]interface{}{
-			"ri_bytes_len":    len(riBytes),
-			"ri_addr_count":   addrCount,
-			"sig_valid":       sigValid,
-			"sig_verify_err":  fmt.Sprintf("%v", sigErr),
-			"ri_bytes_prefix": fmt.Sprintf("%x", riBytes[:min(16, len(riBytes))]),
-			"ri_bytes_suffix": fmt.Sprintf("%x", riBytes[max(0, len(riBytes)-16):]),
-		}).Info("LocalRouterInfo for msg3 outbound")
-		config = config.WithLocalRouterInfo(riBytes)
-	} else {
-		return nil, oops.Wrapf(riErr, "cannot serialize local RouterInfo for NTCP2 msg3")
+	if err := t.attachLocalRouterInfo(config); err != nil {
+		return nil, err
 	}
 
 	return config, nil
+}
+
+// attachLocalRouterInfo serializes our RouterInfo and attaches it to the config for msg3.
+func (t *NTCP2Transport) attachLocalRouterInfo(config *ntcp2.NTCP2Config) error {
+	t.identityMu.RLock()
+	localRI := t.identity
+	t.identityMu.RUnlock()
+	riBytes, err := localRI.Bytes()
+	if err != nil {
+		return oops.Wrapf(err, "cannot serialize local RouterInfo for NTCP2 msg3")
+	}
+	addrCount := localRI.RouterAddressCount()
+	sigValid, sigErr := localRI.VerifySignature()
+	t.logger.WithFields(map[string]interface{}{
+		"ri_bytes_len":    len(riBytes),
+		"ri_addr_count":   addrCount,
+		"sig_valid":       sigValid,
+		"sig_verify_err":  fmt.Sprintf("%v", sigErr),
+		"ri_bytes_prefix": fmt.Sprintf("%x", riBytes[:min(16, len(riBytes))]),
+		"ri_bytes_suffix": fmt.Sprintf("%x", riBytes[max(0, len(riBytes)-16):]),
+	}).Info("LocalRouterInfo for msg3 outbound")
+	config.WithLocalRouterInfo(riBytes)
+	return nil
 }
 
 func (t *NTCP2Transport) setupSession(conn *ntcp2.NTCP2Conn, routerHash data.Hash) *NTCP2Session {

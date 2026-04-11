@@ -343,71 +343,50 @@ func (p *Pool) maintainPool() {
 
 	// Hold mutex only for inspection and calculation
 	p.mutex.Lock()
-
-	// Clean up expired tunnels
 	p.cleanupExpiredTunnelsLocked()
-
-	// Count active and near-expiry tunnels
 	activeCount, nearExpiry := p.countTunnelsLocked()
-
-	// Determine how many new tunnels to build
 	needed = p.calculateNeededTunnels(activeCount, nearExpiry)
-
 	p.mutex.Unlock()
 
 	if needed > 0 {
-		// Clean up failed peers outside p.mutex to avoid lock-ordering issues
-		// with failedPeersMu (ABBA deadlock prevention)
-		p.CleanupFailedPeers()
-
-		log.WithFields(logger.Fields{
-			"at":          "Pool.maintainPool",
-			"phase":       "tunnel_build",
-			"step":        "determine_needs",
-			"operation":   "check_pool_health",
-			"reason":      "tunnel pool below threshold",
-			"needed":      needed,
-			"min_tunnels": p.config.MinTunnels,
-			"max_tunnels": p.config.MaxTunnels,
-			"is_inbound":  p.config.IsInbound,
-		}).Warn("tunnel pool below minimum, building replacement tunnels")
-
-		// Re-acquire mutex for backoff bookkeeping which accesses
-		// p.buildFailures and p.lastBuildTime
-		p.mutex.Lock()
-
-		// Re-check needed count since pool state may have changed
-		// while mutex was released (e.g., new tunnels became ready)
-		activeCount, nearExpiry = p.countTunnelsLocked()
-		needed = p.calculateNeededTunnels(activeCount, nearExpiry)
-
-		var shouldBuild bool
-		if needed > 0 {
-			// Perform backoff bookkeeping under the lock, but do NOT
-			// launch the async goroutine yet — releasing the write lock
-			// first prevents a deadlock where the child goroutine's
-			// RLock (in validateTunnelBuilder) blocks on the parent's
-			// still-held write lock.
-			shouldBuild = p.checkAndUpdateBackoff()
-		}
-
-		p.mutex.Unlock()
-
-		// Launch the async build AFTER releasing the write lock so the
-		// goroutine can safely acquire RLock in validateTunnelBuilder.
-		if shouldBuild {
-			p.launchAsyncBuild(needed)
-		}
-
-		// Log completion of build attempt
-		log.WithFields(logger.Fields{
-			"at":         "Pool.maintainPool",
-			"phase":      "tunnel_build",
-			"operation":  "build_complete",
-			"requested":  needed,
-			"is_inbound": p.config.IsInbound,
-		}).Debug("tunnel build attempt completed")
+		p.rebuildTunnels(needed)
 	}
+}
+
+// rebuildTunnels handles failed-peer cleanup, backoff, and async tunnel building.
+func (p *Pool) rebuildTunnels(needed int) {
+	p.CleanupFailedPeers()
+
+	log.WithFields(logger.Fields{
+		"at":          "Pool.maintainPool",
+		"phase":       "tunnel_build",
+		"needed":      needed,
+		"min_tunnels": p.config.MinTunnels,
+		"max_tunnels": p.config.MaxTunnels,
+		"is_inbound":  p.config.IsInbound,
+	}).Warn("tunnel pool below minimum, building replacement tunnels")
+
+	// Re-acquire mutex for backoff bookkeeping
+	p.mutex.Lock()
+	activeCount, nearExpiry := p.countTunnelsLocked()
+	needed = p.calculateNeededTunnels(activeCount, nearExpiry)
+	var shouldBuild bool
+	if needed > 0 {
+		shouldBuild = p.checkAndUpdateBackoff()
+	}
+	p.mutex.Unlock()
+
+	if shouldBuild {
+		p.launchAsyncBuild(needed)
+	}
+
+	log.WithFields(logger.Fields{
+		"at":         "Pool.maintainPool",
+		"phase":      "tunnel_build",
+		"operation":  "build_complete",
+		"requested":  needed,
+		"is_inbound": p.config.IsInbound,
+	}).Debug("tunnel build attempt completed")
 }
 
 // cleanupExpiredTunnelsLocked removes expired tunnels (must hold mutex)
@@ -874,12 +853,9 @@ type PoolStats struct {
 func (p *Pool) RetryTunnelBuild(tunnelID TunnelID, isInbound bool, hopCount int) error {
 	log.WithFields(logger.Fields{
 		"at":         "Pool.RetryTunnelBuild",
-		"phase":      "tunnel_build",
-		"operation":  "retry_timed_out_tunnel",
 		"tunnel_id":  tunnelID,
 		"is_inbound": isInbound,
 		"hop_count":  hopCount,
-		"reason":     "tunnel build timeout detected, attempting retry",
 	}).Info("retrying tunnel build after timeout")
 
 	builder := p.getTunnelBuilder()
@@ -887,53 +863,43 @@ func (p *Pool) RetryTunnelBuild(tunnelID TunnelID, isInbound bool, hopCount int)
 		return oops.Errorf("tunnel builder not set; cannot retry tunnel build for tunnel %d", tunnelID)
 	}
 
-	// FIX: Exclude failed peers from retry attempts
-	excludePeers := p.GetFailedPeers()
-
-	// Create build request with the same parameters
 	req := BuildTunnelRequest{
 		IsInbound:                 isInbound,
 		HopCount:                  hopCount,
-		ExcludePeers:              excludePeers, // FIX: Exclude recently failed peers from retry
-		RequireDirectConnectivity: true,         // FIX: Only select directly-contactable peers
+		ExcludePeers:              p.GetFailedPeers(),
+		RequireDirectConnectivity: true,
 	}
 
-	// Attempt to build the tunnel
 	result, err := builder.BuildTunnel(req)
 	if err != nil {
-		// Mark peers from the failed attempt to avoid retrying them
 		p.extractAndMarkFailedPeers(result)
-		fields := logger.Fields{
-			"at":          "Pool.RetryTunnelBuild",
-			"phase":       "tunnel_build",
-			"operation":   "retry_failed",
-			"original_id": tunnelID,
-			"is_inbound":  isInbound,
-			"hop_count":   hopCount,
-			"reason":      "tunnel builder returned error",
-		}
-		// Downgrade to Warn when the root cause is transport unavailability —
-		// the transport layer already logs the actual failure at the appropriate level.
-		if strings.Contains(err.Error(), "no transports available") {
-			log.WithError(err).WithFields(fields).Warn("tunnel build retry failed (no transports available)")
-		} else {
-			log.WithError(err).WithFields(fields).Error("failed to retry tunnel build after timeout")
-		}
+		p.logRetryFailure(tunnelID, isInbound, hopCount, err)
 		return err
 	}
 
 	log.WithFields(logger.Fields{
 		"at":          "Pool.RetryTunnelBuild",
-		"phase":       "tunnel_build",
-		"operation":   "retry_success",
 		"original_id": tunnelID,
 		"new_id":      result.TunnelID,
 		"is_inbound":  isInbound,
-		"hop_count":   hopCount,
-		"reason":      "retry tunnel build initiated successfully",
 	}).Info("tunnel retry build initiated")
 
 	return nil
+}
+
+// logRetryFailure logs a tunnel build retry failure, downgrading to Warn for transport unavailability.
+func (p *Pool) logRetryFailure(tunnelID TunnelID, isInbound bool, hopCount int, err error) {
+	fields := logger.Fields{
+		"at":          "Pool.RetryTunnelBuild",
+		"original_id": tunnelID,
+		"is_inbound":  isInbound,
+		"hop_count":   hopCount,
+	}
+	if strings.Contains(err.Error(), "no transports available") {
+		log.WithError(err).WithFields(fields).Warn("tunnel build retry failed (no transports available)")
+	} else {
+		log.WithError(err).WithFields(fields).Error("failed to retry tunnel build after timeout")
+	}
 }
 
 // extractAndMarkFailedPeers extracts peer hashes from a build result and marks

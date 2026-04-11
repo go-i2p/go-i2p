@@ -335,6 +335,21 @@ func buildNTCP2Transport(r *Router, ri *router_info.RouterInfo) (*ntcp.NTCP2Tran
 		}
 		return 0
 	}())
+
+	ntcp2Transport, err := createNTCP2TransportInstance(r, ri, addr)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := publishNTCP2Address(r, ri, ntcp2Transport); err != nil {
+		return nil, err
+	}
+
+	return ntcp2Transport, nil
+}
+
+// createNTCP2TransportInstance creates and configures the NTCP2 transport with peer tracking.
+func createNTCP2TransportInstance(r *Router, ri *router_info.RouterInfo, addr string) (*ntcp.NTCP2Transport, error) {
 	log.WithFields(logger.Fields{"at": "buildNTCP2Transport", "addr": addr}).Debug("creating NTCP2 config")
 	ntcp2Config, err := ntcp.NewConfig(addr)
 	if err != nil {
@@ -349,44 +364,36 @@ func buildNTCP2Transport(r *Router, ri *router_info.RouterInfo) (*ntcp.NTCP2Tran
 		log.WithError(err).Error("Failed to create NTCP2 transport")
 		return nil, err
 	}
-	// Wire PeerTracker feedback so transport-layer failures are visible to
-	// peer selection (AUDIT P0 / RC-1).
 	if r.StdNetDB != nil && r.StdNetDB.PeerTracker != nil {
 		ntcp2Transport.SetPeerConnNotifier(r.StdNetDB.PeerTracker)
 	}
-	// Wire RouterInfo refresh so stale entries are evicted on handshake EOF
-	// (AUDIT P3 / RC-2).
 	if r.StdNetDB != nil {
 		ntcp2Transport.SetRouterInfoRefresher(r.StdNetDB)
 	}
 	log.WithFields(logger.Fields{"at": "buildNTCP2Transport"}).Debug("NTCP2 transport created successfully")
+	return ntcp2Transport, nil
+}
 
+// publishNTCP2Address adds the NTCP2 address to RouterInfo, re-signs, and verifies consistency.
+func publishNTCP2Address(r *Router, ri *router_info.RouterInfo, ntcp2Transport *ntcp.NTCP2Transport) error {
 	ntcpaddr := ntcp2Transport.Addr()
 	if err := validateAndAddTransportAddress(ri, ntcpaddr, "NTCP2", func() (*router_address.RouterAddress, error) {
 		return ntcp.ConvertToRouterAddress(ntcp2Transport)
 	}); err != nil {
-		return nil, err
+		return err
 	}
 
-	// Re-sign the RouterInfo now that the NTCP2 address has been added.
-	// ConstructRouterInfo(nil) signed with no addresses; AddAddress invalidated
-	// that signature. Without re-signing, i2pd rejects our RI in message 3
-	// with reason_code=15 (Alice RouterInfo signature verification failure).
 	if err := reSignAndVerifyRouterInfo(ri, r.RouterInfoKeystore); err != nil {
 		log.WithError(err).Error("Failed to re-sign RouterInfo after adding NTCP2 address")
-		return nil, err
+		return err
 	}
 	ntcp2Transport.UpdateLocalRouterInfo(*ri)
 	log.WithField("at", "buildNTCP2Transport").Debug("RouterInfo re-signed with NTCP2 address and pushed to transport")
 
-	// P1.1: Verify that the static key we use in Noise handshakes matches the
-	// public key we published in the RouterInfo "s=" option.  A mismatch causes
-	// 100% outbound NTCP2 handshake failures and makes us unreachable to peers.
 	if err := ntcp.VerifyStaticKeyConsistency(ntcp2Transport, *ri); err != nil {
-		return nil, oops.Wrapf(err, "NTCP2 static key consistency check failed")
+		return oops.Wrapf(err, "NTCP2 static key consistency check failed")
 	}
-
-	return ntcp2Transport, nil
+	return nil
 }
 
 // buildSSU2Transport creates the SSU2 transport, publishes its address to ri, and returns it.
@@ -398,6 +405,20 @@ func buildSSU2Transport(r *Router, ri *router_info.RouterInfo) (*ssu2.SSU2Transp
 		return 0
 	}())
 
+	ssu2Transport, err := createSSU2TransportInstance(r, ri, addr)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := publishSSU2Address(r, ri, ssu2Transport); err != nil {
+		return nil, err
+	}
+
+	return ssu2Transport, nil
+}
+
+// createSSU2TransportInstance creates and configures the SSU2 transport with peer tracking.
+func createSSU2TransportInstance(r *Router, ri *router_info.RouterInfo, addr string) (*ssu2.SSU2Transport, error) {
 	ssu2Config, err := ssu2.NewConfig(addr)
 	if err != nil {
 		log.WithError(err).Error("Failed to create SSU2 config")
@@ -410,12 +431,10 @@ func buildSSU2Transport(r *Router, ri *router_info.RouterInfo) (*ssu2.SSU2Transp
 		log.WithError(err).Error("Failed to create SSU2 transport")
 		return nil, err
 	}
-	// Wire PeerTracker feedback (AUDIT P0 / RC-1).
 	if r.StdNetDB != nil && r.StdNetDB.PeerTracker != nil {
 		ssu2Transport.SetPeerConnNotifier(r.StdNetDB.PeerTracker)
 	}
 
-	// Wire router lookup so SSU2 can connect via introducers.
 	ssu2Config.RouterLookupFunc = func(hash common.Hash) (router_info.RouterInfo, error) {
 		ch := r.StdNetDB.GetRouterInfo(hash)
 		ri, ok := <-ch
@@ -426,23 +445,23 @@ func buildSSU2Transport(r *Router, ri *router_info.RouterInfo) (*ssu2.SSU2Transp
 	}
 
 	log.WithFields(logger.Fields{"at": "buildSSU2Transport"}).Debug("SSU2 transport created successfully")
+	return ssu2Transport, nil
+}
 
+// publishSSU2Address adds the SSU2 address to RouterInfo and re-signs it.
+func publishSSU2Address(r *Router, ri *router_info.RouterInfo, ssu2Transport *ssu2.SSU2Transport) error {
 	ssu2addr := ssu2Transport.Addr()
 	if err := validateAndAddTransportAddress(ri, ssu2addr, "SSU2", func() (*router_address.RouterAddress, error) {
 		return ssu2.ConvertToRouterAddress(ssu2Transport)
 	}); err != nil {
-		return nil, err
+		return err
 	}
 
-	// Re-sign the RouterInfo now that the SSU2 address has been added so that
-	// the signature covers both transport addresses. Without this, remote peers
-	// that receive the RI in NTCP2 msg3 will reject it with a signature error.
 	if err := reSignAndVerifyRouterInfo(ri, r.RouterInfoKeystore); err != nil {
 		log.WithError(err).Error("Failed to re-sign RouterInfo after adding SSU2 address")
-		return nil, err
+		return err
 	}
-
-	return ssu2Transport, nil
+	return nil
 }
 
 // validateAndAddTransportAddress validates that addr is non-nil, logs it, and calls addTransportAddress.

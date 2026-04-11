@@ -266,6 +266,13 @@ func (s *SSU2Session) GetBandwidthStats() (bytesSent, bytesReceived uint64) {
 	return atomic.LoadUint64(&s.bytesSent), atomic.LoadUint64(&s.bytesReceived)
 }
 
+// DroppedMessages returns the number of received messages that were dropped
+// due to the receive channel being full (backpressure). A non-zero value
+// indicates the consumer is not keeping up with inbound message rate.
+func (s *SSU2Session) DroppedMessages() uint64 {
+	return atomic.LoadUint64(&s.droppedMessages)
+}
+
 // WriteBlocks writes raw SSU2 blocks directly to the underlying connection,
 // bypassing the I2NP send queue. Used for protocol-level blocks such as PeerTest
 // and Relay that must not be fragmented or queued alongside I2NP traffic.
@@ -495,6 +502,9 @@ func buildShortFollowOnFragments(messageID uint32, body []byte, offset, maxPaylo
 // sendTrackedData writes data via conn.Write (which handles fragmentation)
 // and tracks the data for retransmission.
 func (s *SSU2Session) sendTrackedData(data []byte) error {
+	if s.ctx.Err() != nil {
+		return ErrSessionClosed
+	}
 	seq := s.trackPending(data)
 	n, err := s.conn.Write(data)
 	if err != nil {
@@ -520,6 +530,9 @@ func (s *SSU2Session) waitForCongestionWindow(size int) error {
 
 // sendTrackedBlocks writes blocks to the connection and tracks for retransmission.
 func (s *SSU2Session) sendTrackedBlocks(data []byte, blocks []*ssu2noise.SSU2Block) error {
+	if s.ctx.Err() != nil {
+		return ErrSessionClosed
+	}
 	seq := s.trackPendingBlocks(data, blocks)
 	if err := s.conn.WriteBlocks(blocks); err != nil {
 		s.removePending(seq)
