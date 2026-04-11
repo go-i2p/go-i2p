@@ -4,11 +4,14 @@ go 1.26.1
 
 require (
 	github.com/beevik/ntp v1.5.0
+	github.com/charmbracelet/bubbletea v1.3.10
+	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/eyedeekay/go-unzip v0.0.0-20240201194209-560d8225b50e
 	github.com/go-i2p/common v0.1.4-0.20260406221321-5d52c2809acd
 	github.com/go-i2p/crypto v0.1.4-0.20260327201310-96101c044a62
 	github.com/go-i2p/go-nat-listener v0.0.0-20260402214544-c8773aeea918
 	github.com/go-i2p/go-noise v0.1.4-0.20260406215923-93b02ff49d4f
+	github.com/go-i2p/i2ptui v0.0.0-20260408024448-18dc7a0919f8
 	github.com/go-i2p/logger v0.1.5
 	github.com/go-i2p/su3 v0.0.2-0.20260406203134-0ec837609b00
 	github.com/samber/oops v1.21.0
@@ -25,9 +28,7 @@ require (
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/charmbracelet/bubbles v1.0.0 // indirect
-	github.com/charmbracelet/bubbletea v1.3.10 // indirect
 	github.com/charmbracelet/colorprofile v0.4.1 // indirect
-	github.com/charmbracelet/lipgloss v1.1.0 // indirect
 	github.com/charmbracelet/x/ansi v0.11.6 // indirect
 	github.com/charmbracelet/x/cellbuf v0.0.15 // indirect
 	github.com/charmbracelet/x/term v0.2.2 // indirect
@@ -40,7 +41,6 @@ require (
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/go-i2p/elgamal v0.0.2 // indirect
 	github.com/go-i2p/go-i2pcontrol v0.1.8 // indirect
-	github.com/go-i2p/i2ptui v0.0.0-20260408024448-18dc7a0919f8 // indirect
 	github.com/go-i2p/noise v1.1.1-0.20260327201800-8e41bb3d9f1e // indirect
 	github.com/go-i2p/red25519 v0.0.0-20260302212615-1093a31f680d // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
