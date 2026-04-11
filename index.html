@@ -13,7 +13,7 @@
         <a href="index.html">go-i2p/go-i2p</a>
       </h2>
       <div class="repo-meta">
-        📝 1659 commits
+        📝 1673 commits
          • 📜 MIT License
       </div>
     </div>
@@ -54,12 +54,12 @@
       <div class="repo-stats">
         
         <div class="repo-stat">
-          <span>📝</span> <span>1659 commits</span>
+          <span>📝</span> <span>1673 commits</span>
         </div>
         
         
         <div class="repo-stat">
-          <span>📅</span> <span>Last updated: April 10, 2026</span>
+          <span>📅</span> <span>Last updated: April 11, 2026</span>
         </div>
         
         
@@ -92,7 +92,11 @@
 
 <p>The core router functionality is now operational. We have tested functionality using i2psnark-standalone against our I2CP API server. Basic compatibility is available. We are now focused application layer protocols. We have a mostly-complete I2CP client, a prototype of a Streaming library, and a pretty boring Datagrams library, all of which are requirements for SAMv3.3(which we also have), which is what all our applications use. Refining these components and making them production-ready is the immediate goal.</p>
 
-<p><strong><code>go-i2p</code> is still in very early development.</strong> It has bugs. It is probably very distinct on the network. You probably should use a more established router for now. Developers: The API is still unstable. Users: It&rsquo;s probably not safe yet, nor does it do the things you want yet. However, we have reached significant milestones in interacting with the network and are beginning to use it more regularly in a handful of non-anonymous services.</p>
+<p><strong><code>go-i2p</code> is still in very early development.</strong> It has bugs. It is probably very distinct on the network. You probably should use a more established router for now.</p>
+
+<p>Advice for Developers: The API is still unstable below <code>go-i2p/onramp</code>. In fact, we&rsquo;re going to aggressively remove broken, crappy versions of functions from the low-level components over the <code>0.1.6</code> to `<code>0.2.0</code> development cycle. The <code>0.2.0</code> release will have only the type-safe, memory-safe, functionally-correct versions of everything. We&rsquo;ll apply <code>DEPRECATED</code> notices to the godoc of anything we&rsquo;re removing in advance of removing it but it <em>is going to go</em>. How much low-level stuff you want to use is going to affect how much your life is going to change in the next ~4 releases. Somewhat tacitly, this means that because <code>go-i2p/onramp</code> fully abstracts away the embedded router setup <code>go-i2p/onramp</code> will be fully stabilized after the <code>0.1.5</code> router release. If we can, we&rsquo;ll backport the embedded router feature from <code>go-i2p/onramp</code> to <code>go-i2p/go-sam-go</code> so everybody gets embedded routers automatically but for now it&rsquo;s more important that <code>go-i2p/go-sam-go</code> stays focused on being a complete, high-quality implementation of the SAMv3.3 API.</p>
+
+<p>Advice for Users: It&rsquo;s probably not safe yet, nor does it do the things you want yet. However, we have reached significant milestones in interacting with the network and are beginning to use it more regularly in a handful of non-anonymous services.</p>
 
 <h3 id="implemented-features">Implemented Features</h3>
 
@@ -216,7 +220,7 @@
 <li>[X] Gateway and endpoint implementation</li>
 <li>[X] Participant functionality</li>
 </ul></li>
-<li><a href="https://github.com/go-i2p/common" target="_blank">Common Data Structures(see also: https://github.com/go-i2p/common</a>
+<li><a href="https://github.com/go-i2p/common" target="_blank">Common Data Structures (see also: https://github.com/go-i2p/common)</a>
 
 <ul>
 <li>[X] Keys and Cert</li>
@@ -337,7 +341,7 @@ go-i2p --i2cp.network=unix --i2cp.address=/tmp/i2cp.sock
                 eyedeekay
               </div>
               <div class="contributor-commits">
-                1302 commits
+                1316 commits
               </div>
             </div>
           </div>
@@ -409,7 +413,7 @@ go-i2p --i2cp.network=unix --i2cp.address=/tmp/i2cp.sock
     </main>
     
     <footer class="page-footer">
-      <p>Generated on 2026-04-11 17:34:25 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
+      <p>Generated on 2026-04-11 18:07:14 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
     </footer>
   </div>
 </body>

@@ -13,7 +13,7 @@
         <a href="../index.html">go-i2p/go-i2p</a>
       </h2>
       <div class="repo-meta">
-        📝 1659 commits
+        📝 1673 commits
          • 📜 MIT License
       </div>
     </div>
@@ -157,8 +157,8 @@ routerDB := NewRouterNetDB(db)
 
 <p><strong>Changes</strong>: Each session now creates its own ephemeral ClientNetDB:</p>
 
-<pre><code class="language-go">func NewSession(id uint16, dest common.Destination, config *config.RouterConfig, _ string) (*Session, error) {
-    // Create ephemeral in-memory database (empty path)
+<pre><code class="language-go">func NewSession(id uint16, dest *destination.Destination, config *SessionConfig, privKeys ...interface{}) (*Session, error) {
+    // Create ephemeral in-memory database
     db := NewStdNetDB(&quot;&quot;)
     
     return &amp;Session{
@@ -170,7 +170,7 @@ routerDB := NewRouterNetDB(db)
 }
 </code></pre>
 
-<p>The <code>netDBPath</code> parameter is now ignored (for backward compatibility) since all client databases are ephemeral.</p>
+<p>All client databases are ephemeral in-memory instances.</p>
 
 <h2 id="database-message-routing">Database Message Routing</h2>
 
@@ -261,7 +261,7 @@ KEY ISOLATION RULES:
 <ul>
 <li><code>lib/netdb/client_netdb_test.go</code> - ClientNetDB operations and isolation</li>
 <li><code>lib/netdb/router_netdb_test.go</code> - RouterNetDB operations including floodfill</li>
-<li><code>lib/i2cp/session_test.go</code> - Session isolation and ephemeral storage</li>
+<li><code>lib/i2cp/session_unit_test.go</code> - Session isolation and ephemeral storage</li>
 </ul>
 
 <p>All tests verify:</p>
@@ -279,24 +279,18 @@ KEY ISOLATION RULES:
 <h3 id="breaking-changes">Breaking Changes</h3>
 
 <ol>
-<li><strong>NewSession signature</strong>: The <code>netDBPath</code> parameter is now ignored
-&ldquo;`go
-// Before: path was used
-session, err := NewSession(id, dest, config, &ldquo;/path/to/netdb&rdquo;)</li>
+<li><p><strong>NewSession signature</strong>: Uses variadic private keys instead of a path parameter</p>
+
+<pre><code class="language-go">// Current signature
+session, err := NewSession(id, dest, config, privKeys...)
+</code></pre></li>
+
+<li><p><strong>CreateSession signature</strong>: Same variadic private keys pattern</p>
+
+<pre><code class="language-go">// Current signature
+manager.CreateSession(dest, config, privKeys...)
+</code></pre></li>
 </ol>
-
-<p>// After: path is ignored (pass empty string)
-   session, err := NewSession(id, dest, config, &ldquo;&rdquo;)</p>
-
-<pre><code>
-2. **CreateSession signature**: Same as above
-   ```go
-   // Before
-   manager.CreateSession(dest, config, &quot;/path/to/netdb&quot;)
-   
-   // After: path ignored
-   manager.CreateSession(dest, config, &quot;&quot;)
-</code></pre>
 
 <h3 id="router-integration">Router Integration</h3>
 
@@ -331,7 +325,7 @@ routerDB.StoreLeaseSet(leaseSet)  // Direct database store operation
     </main>
     
     <footer class="page-footer">
-      <p>Generated on 2026-04-11 17:34:25 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
+      <p>Generated on 2026-04-11 18:07:14 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
     </footer>
   </div>
 </body>
