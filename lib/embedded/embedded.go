@@ -1,6 +1,7 @@
 package embedded
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -259,7 +260,7 @@ func (e *StandardEmbeddedRouter) Stop() error {
 
 // HardStop performs immediate termination without graceful cleanup.
 // Unlike Stop(), this does not wait for subsystems to shut down cleanly.
-// It calls Stop() with a short timeout, then marks the router stopped.
+// It calls StopWithContext() with a 5-second deadline, then marks the router stopped.
 // Use this only when Stop() fails or when immediate termination is required.
 func (e *StandardEmbeddedRouter) HardStop() {
 	router := e.prepareHardStop()
@@ -267,13 +268,24 @@ func (e *StandardEmbeddedRouter) HardStop() {
 		return
 	}
 
-	done := make(chan struct{})
-	go func() {
-		router.Stop()
-		close(done)
-	}()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
-	e.awaitGracefulStopOrForce(router, done)
+	if err := router.StopWithContext(ctx); err != nil {
+		log.WithFields(logger.Fields{
+			"at":     "StandardEmbeddedRouter.HardStop",
+			"phase":  "shutdown",
+			"reason": "graceful stop timed out, forcing resource release",
+			"error":  err.Error(),
+		}).Error("embedded router hard stop: graceful shutdown timed out")
+		e.forceCloseRouter(router)
+	} else {
+		log.WithFields(logger.Fields{
+			"at":     "StandardEmbeddedRouter.HardStop",
+			"phase":  "shutdown",
+			"reason": "graceful stop completed within timeout",
+		}).Info("embedded router hard stopped (graceful)")
+	}
 }
 
 // prepareHardStop validates the router state and marks it as not running
@@ -320,51 +332,15 @@ func (e *StandardEmbeddedRouter) prepareHardStop() *router.Router {
 	return r
 }
 
-// awaitGracefulStopOrForce waits for the graceful stop goroutine to finish
-// within a 5-second timeout. If the timeout expires, it force-closes the
-// router and waits briefly for the orphaned goroutine to exit.
-func (e *StandardEmbeddedRouter) awaitGracefulStopOrForce(r *router.Router, done chan struct{}) {
-	select {
-	case <-done:
-		log.WithFields(logger.Fields{
-			"at":     "StandardEmbeddedRouter.HardStop",
-			"phase":  "shutdown",
-			"reason": "graceful stop completed within timeout",
-		}).Info("embedded router hard stopped (graceful)")
-	case <-time.After(5 * time.Second):
-		log.WithFields(logger.Fields{
-			"at":     "StandardEmbeddedRouter.HardStop",
-			"phase":  "shutdown",
-			"reason": "graceful stop timed out, forcing resource release",
-		}).Error("embedded router hard stop: graceful shutdown timed out")
-		e.forceCloseAndWait(r, done)
-	}
-}
-
-// forceCloseAndWait calls Close() on the router to release resources and
-// waits briefly for the orphaned Stop() goroutine to exit.
-func (e *StandardEmbeddedRouter) forceCloseAndWait(r *router.Router, done chan struct{}) {
+// forceCloseRouter calls Close() on the router to release resources after
+// a timed-out StopWithContext call.
+func (e *StandardEmbeddedRouter) forceCloseRouter(r *router.Router) {
 	if err := r.Close(); err != nil {
 		log.WithFields(logger.Fields{
 			"at":    "StandardEmbeddedRouter.HardStop",
 			"phase": "shutdown",
 			"error": err.Error(),
 		}).Error("force close after timeout failed")
-	}
-
-	select {
-	case <-done:
-		log.WithFields(logger.Fields{
-			"at":     "StandardEmbeddedRouter.HardStop",
-			"phase":  "shutdown",
-			"reason": "orphaned Stop() goroutine exited after Close()",
-		}).Debug("orphaned Stop goroutine completed")
-	case <-time.After(2 * time.Second):
-		log.WithFields(logger.Fields{
-			"at":     "StandardEmbeddedRouter.HardStop",
-			"phase":  "shutdown",
-			"reason": "orphaned Stop() goroutine still running after Close()",
-		}).Warn("orphaned Stop goroutine did not exit after Close; goroutine leak")
 	}
 }
 

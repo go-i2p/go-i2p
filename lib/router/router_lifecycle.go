@@ -97,6 +97,42 @@ func (r *Router) Stop() {
 	logShutdownStep(4, "all subsystems stopped", "router stopped successfully")
 }
 
+// StopWithContext initiates router shutdown like Stop, but respects the
+// provided context for cancellation. If the context is cancelled before
+// all goroutines finish, the method returns the context error. This allows
+// HardStop to bound the time spent waiting for graceful shutdown.
+func (r *Router) StopWithContext(ctx context.Context) error {
+	logShutdownStep(1, "shutdown requested (with context)", "stopping router")
+	r.runMux.Lock()
+
+	if r.checkAlreadyStopped() {
+		return nil
+	}
+
+	r.running = false
+	r.runMux.Unlock()
+
+	r.cancelRouterContext()
+	r.stopAllSubsystems()
+
+	logShutdownStep(3, "waiting for goroutines to complete", "waiting for router goroutines to finish")
+
+	done := make(chan struct{})
+	go func() {
+		r.wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		logShutdownStep(4, "all subsystems stopped", "router stopped successfully")
+		return nil
+	case <-ctx.Done():
+		logShutdownStep(4, "context cancelled", "router stop interrupted by context")
+		return ctx.Err()
+	}
+}
+
 // stopNetDB shuts down the network database if it exists and logs the result.
 func (r *Router) stopNetDB() {
 	if r.StdNetDB != nil {

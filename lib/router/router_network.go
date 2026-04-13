@@ -353,6 +353,13 @@ func (r *Router) handleNewConnection(conn net.Conn) {
 		return
 	}
 
+	defer func() {
+		if rec := recover(); rec != nil {
+			session.Close()
+			panic(rec)
+		}
+	}()
+
 	r.addSession(peerHash, session)
 	r.wg.Add(1)
 	go func() {

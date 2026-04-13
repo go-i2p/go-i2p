@@ -127,7 +127,7 @@ func (ks *KeyStoreImpl) StoreKeys() error {
 	filename := fmt.Sprintf("private-%s.key", ks.KeyID())
 	fullPath := filepath.Join(ks.dir, filename)
 	log.WithField("path", fullPath).Debug("Writing private key to file")
-	err := os.WriteFile(fullPath, ks.privateKey.Bytes(), 0o600)
+	err := atomicWriteFile(fullPath, ks.privateKey.Bytes(), 0o600)
 	if err != nil {
 		log.WithError(err).WithField("path", fullPath).Error("Failed to write private key file")
 		return err

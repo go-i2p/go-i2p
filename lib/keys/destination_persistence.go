@@ -59,7 +59,7 @@ func (dks *DestinationKeyStore) StoreKeys(dir, name string) error {
 	}
 
 	filename := filepath.Join(dir, name+".dest.key")
-	if err := os.WriteFile(filename, data, 0o600); err != nil {
+	if err := atomicWriteFile(filename, data, 0o600); err != nil {
 		log.WithError(err).Error("Failed to write destination key file")
 		return oops.Wrapf(err, "failed to write destination key file")
 	}
@@ -359,7 +359,7 @@ func (dks *DestinationKeyStore) archiveCurrentKeys(dir, name string) error {
 	timestamp := time.Now().UTC().Format("20060102-150405")
 	archiveFilename := filepath.Join(dir, fmt.Sprintf("%s.dest.key.%s.archive", name, timestamp))
 
-	if err := os.WriteFile(archiveFilename, data, 0o600); err != nil {
+	if err := atomicWriteFile(archiveFilename, data, 0o600); err != nil {
 		return oops.Wrapf(err, "failed to write archive file")
 	}
 

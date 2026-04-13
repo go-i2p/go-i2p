@@ -199,7 +199,7 @@ func generateAndPersistEncryptionKey(fullPath string) (types.ReceivingPublicKey,
 		return nil, nil, err
 	}
 
-	if err := os.WriteFile(fullPath, encryptionPrivKey.Bytes(), 0o600); err != nil {
+	if err := atomicWriteFile(fullPath, encryptionPrivKey.Bytes(), 0o600); err != nil {
 		log.WithError(err).Error("Failed to write X25519 encryption key to disk")
 		return nil, nil, err
 	}
@@ -325,7 +325,7 @@ func (ks *RouterInfoKeystore) storeSigningKey(keyName string) error {
 		"at":   "StoreKeys",
 		"file": sigFilename,
 	}).Debug("Writing signing key file")
-	if err := os.WriteFile(sigFilename, ks.privateKey.Bytes(), 0o600); err != nil {
+	if err := atomicWriteFile(sigFilename, ks.privateKey.Bytes(), 0o600); err != nil {
 		log.WithError(err).WithField("at", "StoreKeys").Error("Failed to write signing key file")
 		return err
 	}
@@ -342,7 +342,7 @@ func (ks *RouterInfoKeystore) storeEncryptionKey(keyName string) error {
 		"at":   "StoreKeys",
 		"file": encFilename,
 	}).Debug("Writing encryption key file")
-	if err := os.WriteFile(encFilename, ks.encryptionPrivKey.Bytes(), 0o600); err != nil {
+	if err := atomicWriteFile(encFilename, ks.encryptionPrivKey.Bytes(), 0o600); err != nil {
 		log.WithError(err).WithField("at", "StoreKeys").Error("Failed to write encryption key file")
 		return err
 	}
@@ -642,7 +642,7 @@ func (ks *RouterInfoKeystore) generateAndPersistPadding(paddingPath string, padd
 		return nil, oops.Errorf("failed to generate padding: %w", err)
 	}
 
-	if err := os.WriteFile(paddingPath, padding, 0o600); err != nil {
+	if err := atomicWriteFile(paddingPath, padding, 0o600); err != nil {
 		log.WithError(err).Warn("Failed to persist identity padding to disk; identity hash may change on restart")
 	}
 	return padding, nil
