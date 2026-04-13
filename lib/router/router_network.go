@@ -243,6 +243,10 @@ func (r *Router) mainloop() {
 	log.WithField("at", "mainloop").Debug("signaling startup success")
 	r.startupErr <- nil
 
+	// Start health monitor for resource leak detection
+	log.WithField("at", "mainloop").Debug("starting health monitor")
+	r.startHealthMonitor()
+
 	// Start session monitors for inbound message processing
 	log.WithField("at", "mainloop").Debug("starting session monitors")
 	r.startSessionMonitors()

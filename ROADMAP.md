@@ -160,14 +160,14 @@
 
 - ✅ Explorer instantiated and started at router startup
 - ✅ Random-key XOR lookup for peer discovery
-- 🚧 Scheduling tuning (exploration interval based on netdb size)
+- ✅ Scheduling tuning (exploration interval based on netdb size)
 
 ### FloodfillServer
 
 - ✅ FloodfillServer instantiated and wired to DatabaseLookup dispatch
 - ✅ DatabaseStore/DatabaseSearchReply responses implemented
 - ✅ Per-peer rate limiting
-- 🚧 Enabled only when `netdb.floodfill_enabled = true` in config (disabled by default)
+- ✅ Enabled only when `netdb.floodfill_enabled = true` in config (disabled by default)
 
 ## Next Priority Components 🎯
 
