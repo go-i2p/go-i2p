@@ -178,18 +178,22 @@ func (db *StdNetDB) addLeaseSetToCache(key common.Hash, ls lease_set.LeaseSet) b
 // persistLeaseSetEntryToFile writes an Entry to the lease set skiplist file for the given key.
 // typeName is used in log and error messages. Filesystem persistence is best-effort;
 // a transient I/O error does not remove valid cached data.
-func (db *StdNetDB) persistLeaseSetEntryToFile(key common.Hash, entry *Entry, typeName string) error {
+func (db *StdNetDB) persistLeaseSetEntryToFile(key common.Hash, entry *Entry, typeName string) (err error) {
 	fpath := db.SkiplistFileForLeaseSet(key)
-	f, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
-	if err != nil {
-		log.WithError(err).Warn(fmt.Sprintf("Failed to open file for saving %s (in-memory entry preserved)", typeName))
-		return oops.Errorf("failed to open %s file: %w", typeName, err)
+	f, ferr := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	if ferr != nil {
+		log.WithError(ferr).Warn(fmt.Sprintf("Failed to open file for saving %s (in-memory entry preserved)", typeName))
+		return oops.Errorf("failed to open %s file: %w", typeName, ferr)
 	}
-	defer f.Close()
+	defer func() {
+		if cerr := f.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+	}()
 
-	if err := entry.Serialize(f); err != nil {
-		log.WithError(err).Warn(fmt.Sprintf("Failed to write %s to filesystem (in-memory entry preserved)", typeName))
-		return oops.Errorf("failed to save %s to filesystem: %w", typeName, err)
+	if serr := entry.Serialize(f); serr != nil {
+		log.WithError(serr).Warn(fmt.Sprintf("Failed to write %s to filesystem (in-memory entry preserved)", typeName))
+		return oops.Errorf("failed to save %s to filesystem: %w", typeName, serr)
 	}
 
 	return nil

@@ -557,7 +557,10 @@ func (r Reseed) writeZipFile(content []byte) (string, error) {
 		log.WithError(err).WithField("path", zipPath).Error("Failed to write reseed zip file")
 		return "", err
 	}
-	tempFile.Close()
+	if err := tempFile.Close(); err != nil {
+		os.Remove(zipPath)
+		return "", oops.Errorf("failed to close temp file: %w", err)
+	}
 	log.WithField("path", zipPath).Info("Successfully wrote reseed zip file to temporary location")
 	return zipPath, nil
 }

@@ -59,6 +59,10 @@ type SSU2Transport struct {
 	wg     sync.WaitGroup
 
 	logger *logger.Entry
+
+	// closeOnce ensures Close() is idempotent.
+	closeOnce sync.Once
+	closeErr  error
 }
 
 // KeystoreProvider provides access to the router's cryptographic keys.
@@ -224,7 +228,7 @@ func startSSU2Listener(t *SSU2Transport, udpConn net.PacketConn, ssu2Config *ssu
 	}
 
 	if err := listener.Start(); err != nil {
-		udpConn.Close()
+		listener.Close()
 		return WrapSSU2Error(err, "starting SSU2 listener")
 	}
 
@@ -425,13 +429,14 @@ func (t *SSU2Transport) promoteInboundConnection(conn net.Conn, original interfa
 	if !ok {
 		return nil, false
 	}
-	promoted := NewSSU2Session(ssu2Conn, t.ctx, t.logger)
+	promoted := NewSSU2SessionDeferred(ssu2Conn, t.ctx, t.logger)
 	promoted.maxRetransmit = t.config.GetMaxRetransmissions()
 	promoted.SetTransportCallbacks(t.buildTransportCallbacks())
 	if t.sessions.CompareAndSwap(routerHash, original, promoted) {
 		promoted.SetCleanupCallback(func() {
 			t.removeSession(routerHash)
 		})
+		promoted.StartWorkers()
 		return promoted, true
 	}
 	promoted.Close()
@@ -618,36 +623,39 @@ func (t *SSU2Transport) Compatible(routerInfo router_info.RouterInfo) bool {
 
 // Close closes the transport cleanly.
 func (t *SSU2Transport) Close() error {
-	t.logger.Info("Closing SSU2 transport")
-	t.cancel()
+	t.closeOnce.Do(func() {
+		t.logger.Info("Closing SSU2 transport")
+		t.cancel()
 
-	if t.relayManager != nil {
-		t.relayManager.Stop()
-	}
-
-	if t.keyRotationManager != nil {
-		t.keyRotationManager.Stop()
-	}
-
-	var listenerErr error
-	if t.listener != nil {
-		listenerErr = t.listener.Close()
-	}
-
-	t.sessions.Range(func(key, value interface{}) bool {
-		if session, ok := value.(*SSU2Session); ok {
-			session.Close()
-		} else if conn, ok := value.(net.Conn); ok {
-			conn.Close()
+		if t.relayManager != nil {
+			t.relayManager.Stop()
 		}
-		return true
+
+		if t.keyRotationManager != nil {
+			t.keyRotationManager.Stop()
+		}
+
+		var listenerErr error
+		if t.listener != nil {
+			listenerErr = t.listener.Close()
+		}
+
+		t.sessions.Range(func(key, value interface{}) bool {
+			if session, ok := value.(*SSU2Session); ok {
+				session.Close()
+			} else if conn, ok := value.(net.Conn); ok {
+				conn.Close()
+			}
+			return true
+		})
+
+		t.wg.Wait()
+		t.handler.Close()
+
+		t.logger.Info("SSU2 transport closed")
+		t.closeErr = listenerErr
 	})
-
-	t.wg.Wait()
-	t.handler.Close()
-
-	t.logger.Info("SSU2 transport closed")
-	return listenerErr
+	return t.closeErr
 }
 
 // Name returns the name of this transport.

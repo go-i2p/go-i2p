@@ -854,12 +854,12 @@ func closeRouter() error {
 		return nil
 	}
 
+	// Always close all registered resources, even if r.Close() fails
+	defer util.CloseAll()
+
 	if err := r.Close(); err != nil {
 		return fmt.Errorf("failed to close router: %w", err)
 	}
-
-	// Close all resources registered via util.RegisterCloser
-	util.CloseAll()
 
 	return nil
 }

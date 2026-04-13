@@ -60,6 +60,10 @@ type TransportMuxer struct {
 	// acceptWg tracks the persistent accept goroutines so Close() can wait
 	// for them to actually exit rather than hoping they will.
 	acceptWg sync.WaitGroup
+
+	// closeOnce ensures Close() is idempotent.
+	closeOnce sync.Once
+	closeErr  error
 }
 
 // mux a bunch of transports together
@@ -151,23 +155,26 @@ func (tmux *TransportMuxer) SetIdentity(ident router_info.RouterInfo) (err error
 
 // close every transport that this transport muxer has
 func (tmux *TransportMuxer) Close() (err error) {
-	log.WithFields(logger.Fields{
-		"at":              "(TransportMuxer) Close",
-		"reason":          "shutdown_requested",
-		"transport_count": len(tmux.trans),
-	}).Debug("closing all transports")
+	tmux.closeOnce.Do(func() {
+		log.WithFields(logger.Fields{
+			"at":              "(TransportMuxer) Close",
+			"reason":          "shutdown_requested",
+			"transport_count": len(tmux.trans),
+		}).Debug("closing all transports")
 
-	tmux.signalAcceptDone()
+		tmux.signalAcceptDone()
 
-	errs := tmux.closeAllTransports()
+		errs := tmux.closeAllTransports()
 
-	tmux.waitForAcceptGoroutines()
+		tmux.waitForAcceptGoroutines()
 
-	log.WithFields(logger.Fields{
-		"at":     "(TransportMuxer) Close",
-		"reason": "all_transports_closed",
-	}).Debug("all transports closed")
-	return errors.Join(errs...)
+		log.WithFields(logger.Fields{
+			"at":     "(TransportMuxer) Close",
+			"reason": "all_transports_closed",
+		}).Debug("all transports closed")
+		tmux.closeErr = errors.Join(errs...)
+	})
+	return tmux.closeErr
 }
 
 // signalAcceptDone closes the acceptDone channel to stop persistent accept loops.

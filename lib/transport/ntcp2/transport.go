@@ -63,6 +63,10 @@ type NTCP2Transport struct {
 
 	// Logging
 	logger *logger.Entry
+
+	// closeOnce ensures Close() is idempotent.
+	closeOnce sync.Once
+	closeErr  error
 }
 
 // KeystoreProvider is the interface that supplies the X25519 encryption private key required for NTCP2 handshake negotiation.
@@ -103,6 +107,7 @@ func NewNTCP2Transport(identity router_info.RouterInfo, config *Config, keystore
 	transport := buildTransportInstance(config, identity, keystore, ctx, cancel, logger)
 
 	if err := setupNetworkListener(transport, config, ntcp2Config); err != nil {
+		cancel()
 		logger.WithError(err).Error("Failed to setup network listener")
 		return nil, err
 	}
@@ -627,8 +632,10 @@ func (t *NTCP2Transport) validateExistingSession(s *NTCP2Session, routerHash dat
 
 // promoteInboundConnection promotes a raw inbound net.Conn to a full
 // NTCP2Session using CompareAndSwap to prevent double-promotion races.
+// Uses NewNTCP2SessionDeferred to avoid starting workers before CAS succeeds,
+// matching the pattern in resolveExistingSession.
 func (t *NTCP2Transport) promoteInboundConnection(conn net.Conn, original interface{}, routerHash data.Hash) (transport.TransportSession, bool) {
-	promoted := NewNTCP2Session(conn, t.ctx, t.logger)
+	promoted := NewNTCP2SessionDeferred(conn, t.ctx, t.logger)
 	if t.sessions.CompareAndSwap(routerHash, original, promoted) {
 		// Set cleanup callback AFTER the CAS succeeds, so only the winning
 		// session's cleanup can affect the session map. If set before CAS,
@@ -637,6 +644,7 @@ func (t *NTCP2Transport) promoteInboundConnection(conn net.Conn, original interf
 		promoted.SetCleanupCallback(func() {
 			t.removeSession(routerHash)
 		})
+		promoted.StartWorkers()
 		routerHashBytes := routerHash.Bytes()
 		t.logger.WithFields(map[string]interface{}{
 			"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
@@ -1185,14 +1193,17 @@ func (t *NTCP2Transport) GetTotalBandwidth() (totalBytesSent, totalBytesReceived
 
 // Close closes the transport cleanly.
 func (t *NTCP2Transport) Close() error {
-	t.logger.Info("Closing NTCP2 transport")
+	t.closeOnce.Do(func() {
+		t.logger.Info("Closing NTCP2 transport")
 
-	t.cancelTransportContext()
-	listenerErr := t.closeNetworkListener()
-	t.closeAllActiveSessions()
-	t.waitForBackgroundOperations()
+		t.cancelTransportContext()
+		listenerErr := t.closeNetworkListener()
+		t.closeAllActiveSessions()
+		t.waitForBackgroundOperations()
 
-	return t.handleCloseCompletion(listenerErr)
+		t.closeErr = t.handleCloseCompletion(listenerErr)
+	})
+	return t.closeErr
 }
 
 // cancelTransportContext stops all transport operations by canceling the context.

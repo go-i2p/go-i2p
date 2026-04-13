@@ -354,7 +354,11 @@ func (db *StdNetDB) SaveEntry(e *Entry) (err error) {
 	// if err == nil {
 	f, err = os.OpenFile(db.SkiplistFile(h), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err == nil {
-		defer f.Close()
+		defer func() {
+			if cerr := f.Close(); cerr != nil && err == nil {
+				err = cerr
+			}
+		}()
 		err = e.Serialize(f)
 		if err == nil {
 			log.WithFields(logger.Fields{"at": "SaveEntry"}).Debug("Successfully saved NetDB entry")
@@ -430,14 +434,18 @@ func (db *StdNetDB) saveAllLeaseSets() []error {
 }
 
 // saveLeaseSetEntry persists a single LeaseSet entry to the filesystem.
-func (db *StdNetDB) saveLeaseSetEntry(hash common.Hash, entry Entry) error {
+func (db *StdNetDB) saveLeaseSetEntry(hash common.Hash, entry Entry) (err error) {
 	fpath := db.SkiplistFileForLeaseSet(hash)
 	f, ferr := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if ferr != nil {
 		log.WithError(ferr).WithField("hash", hash).Error("Failed to open file for saving LeaseSet entry")
 		return ferr
 	}
-	defer f.Close()
+	defer func() {
+		if cerr := f.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+	}()
 	if werr := entry.Serialize(f); werr != nil {
 		log.WithError(werr).WithField("hash", hash).Error("Failed to write LeaseSet entry")
 		return werr

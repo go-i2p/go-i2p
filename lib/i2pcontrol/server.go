@@ -25,6 +25,7 @@ type Server struct {
 	ctx         context.Context
 	cancel      context.CancelFunc
 	wg          sync.WaitGroup
+	stopOnce    sync.Once
 }
 
 // NewServer creates a new I2PControl server with the given configuration and statistics provider.
@@ -225,30 +226,32 @@ func (s *Server) startTokenCleanup() {
 
 // Stop gracefully shuts down the server, waiting for active requests to complete.
 func (s *Server) Stop() {
-	log.WithFields(logger.Fields{
-		"at": "(Server).Stop",
-	}).Info("Stopping I2PControl server")
-
-	// Cancel context to signal goroutines
-	s.cancel()
-
-	// Shutdown HTTP server with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	if err := s.httpServer.Shutdown(ctx); err != nil {
+	s.stopOnce.Do(func() {
 		log.WithFields(logger.Fields{
-			"at":     "(Server).Stop",
-			"reason": err.Error(),
-		}).Error("Error during server shutdown")
-	}
+			"at": "(Server).Stop",
+		}).Info("Stopping I2PControl server")
 
-	// Wait for all goroutines to finish
-	s.wg.Wait()
+		// Cancel context to signal goroutines
+		s.cancel()
 
-	log.WithFields(logger.Fields{
-		"at": "(Server).Stop",
-	}).Info("I2PControl server stopped")
+		// Shutdown HTTP server with timeout
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := s.httpServer.Shutdown(ctx); err != nil {
+			log.WithFields(logger.Fields{
+				"at":     "(Server).Stop",
+				"reason": err.Error(),
+			}).Error("Error during server shutdown")
+		}
+
+		// Wait for all goroutines to finish
+		s.wg.Wait()
+
+		log.WithFields(logger.Fields{
+			"at": "(Server).Stop",
+		}).Info("I2PControl server stopped")
+	})
 }
 
 // handleRPC processes JSON-RPC requests on the /jsonrpc endpoint.
