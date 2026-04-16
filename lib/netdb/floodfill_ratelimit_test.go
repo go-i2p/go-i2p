@@ -73,7 +73,7 @@ func TestFloodfillRateLimiter_CleanupRemovesStaleEntries(t *testing.T) {
 	// Manually set the entry to be stale
 	rl.mu.Lock()
 	if pl, ok := rl.peers[peer]; ok {
-		pl.lastUpdate = time.Now().Add(-15 * time.Minute) // beyond 10-minute threshold
+		pl.lastUpdate = time.Now().Add(-3 * time.Minute) // beyond 2-minute threshold
 	}
 	rl.mu.Unlock()
 
@@ -81,8 +81,9 @@ func TestFloodfillRateLimiter_CleanupRemovesStaleEntries(t *testing.T) {
 	rl.mu.Lock()
 	now := time.Now()
 	for p, pl := range rl.peers {
-		if now.Sub(pl.lastUpdate) > 10*time.Minute {
+		if now.Sub(pl.lastUpdate) > 2*time.Minute {
 			delete(rl.peers, p)
+			delete(rl.lastSeen, p)
 		}
 	}
 	rl.mu.Unlock()
@@ -92,6 +93,18 @@ func TestFloodfillRateLimiter_CleanupRemovesStaleEntries(t *testing.T) {
 	_, exists := rl.peers[peer]
 	rl.mu.Unlock()
 	assert.False(t, exists, "stale peer entry should have been cleaned up")
+}
+
+func TestFloodfillRateLimiter_LastSeenUpdatesOnAllow(t *testing.T) {
+	rl := NewFloodfillRateLimiter(60, 2)
+	defer rl.Stop()
+
+	peer := testPeerHashRL(61)
+	assert.True(t, rl.Allow(peer))
+
+	seenAt, ok := rl.LastSeen(peer)
+	assert.True(t, ok, "last-seen entry should be recorded")
+	assert.WithinDuration(t, time.Now(), seenAt, 2*time.Second)
 }
 
 func TestFloodfillRateLimiter_GlobalCapAcrossPeers(t *testing.T) {

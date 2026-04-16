@@ -19,6 +19,8 @@ Advice for Developers: The API is still unstable below `go-i2p/onramp`. In fact,
 
 Advice for Users: It's probably not safe yet, nor does it do the things you want yet. However, we have reached significant milestones in interacting with the network and are beginning to use it more regularly in a handful of non-anonymous services.
 
+Anonymity-sensitive operators should review [Anonymity-Safe Logging](docs/anonymity-logging.md) and avoid debug logging in production.
+
 ### Implemented Features
 
 - Clients

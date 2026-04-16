@@ -4,6 +4,9 @@
 package router
 
 import (
+	"context"
+	"errors"
+	"io"
 	"net"
 	"testing"
 	"time"
@@ -11,6 +14,7 @@ import (
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/transport"
+	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -204,6 +208,37 @@ func TestProcessSessionMessagesRefusesUnauthenticatedPeer(t *testing.T) {
 	router.processSessionMessages(reader, staticAuthenticatedPeer{hash: peerHash, handshakeComplete: false})
 
 	assert.Equal(t, 0, reader.calls, "unauthenticated peers must not start message reads")
+}
+
+func TestIsBenignReadError(t *testing.T) {
+	assert.True(t, isBenignReadError(ntcp.ErrSessionClosed))
+	assert.True(t, isBenignReadError(io.EOF))
+	assert.True(t, isBenignReadError(io.ErrUnexpectedEOF))
+	assert.True(t, isBenignReadError(net.ErrClosed))
+	assert.True(t, isBenignReadError(context.Canceled))
+	assert.False(t, isBenignReadError(errors.New("invalid frame length")))
+}
+
+func TestIsFramingOrLengthViolation(t *testing.T) {
+	assert.True(t, isFramingOrLengthViolation(errors.New("invalid frame length")))
+	assert.True(t, isFramingOrLengthViolation(errors.New("payload exceeds limit")))
+	assert.False(t, isFramingOrLengthViolation(errors.New("connection reset by peer")))
+}
+
+func TestShouldLogReadWarnRateLimit(t *testing.T) {
+	peer := "testpeer"
+	readWarnLimiterMu.Lock()
+	readWarnLastByPeer = make(map[string]time.Time)
+	readWarnLimiterMu.Unlock()
+
+	assert.True(t, shouldLogReadWarn(peer), "first warning should pass")
+	assert.False(t, shouldLogReadWarn(peer), "immediate duplicate warning should be suppressed")
+
+	readWarnLimiterMu.Lock()
+	readWarnLastByPeer[peer] = time.Now().Add(-readWarnMinInterval - time.Second)
+	readWarnLimiterMu.Unlock()
+
+	assert.True(t, shouldLogReadWarn(peer), "warning should pass after interval")
 }
 
 // TestCreateSessionFromConnInvalidAddr tests error handling when connection

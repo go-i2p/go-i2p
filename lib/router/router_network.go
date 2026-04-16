@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"strconv"
+	"strings"
+	"sync"
 	"time"
 
 	common "github.com/go-i2p/common/data"
@@ -486,11 +489,56 @@ func (r *Router) readNextMessage(session i2npReader, peerHash common.Hash) i2np.
 func (r *Router) logReadError(err error, peerHash common.Hash) {
 	peerHashStr := fmt.Sprintf("%x", peerHash[:8])
 
-	if errors.Is(err, ntcp.ErrSessionClosed) {
+	if isBenignReadError(err) {
 		log.WithField("peer_hash", peerHashStr).Debug("Session closed normally")
-	} else {
-		log.WithError(err).WithField("peer_hash", peerHashStr).Warn("Error reading I2NP message from session")
+		return
 	}
+
+	if isFramingOrLengthViolation(err) {
+		if shouldLogReadWarn(peerHashStr) {
+			log.WithError(err).WithField("peer_hash", peerHashStr).Warn("Error reading I2NP message from session")
+		} else {
+			log.WithError(err).WithField("peer_hash", peerHashStr).Debug("Suppressed repeated read warning for noisy peer")
+		}
+	} else {
+		log.WithError(err).WithField("peer_hash", peerHashStr).Debug("Session read ended with non-framing error")
+	}
+}
+
+func isBenignReadError(err error) bool {
+	return errors.Is(err, ntcp.ErrSessionClosed) ||
+		errors.Is(err, io.EOF) ||
+		errors.Is(err, io.ErrUnexpectedEOF) ||
+		errors.Is(err, net.ErrClosed) ||
+		errors.Is(err, context.Canceled) ||
+		errors.Is(err, context.DeadlineExceeded)
+}
+
+func isFramingOrLengthViolation(err error) bool {
+	errText := strings.ToLower(err.Error())
+	return strings.Contains(errText, "frame") ||
+		strings.Contains(errText, "framing") ||
+		strings.Contains(errText, "length") ||
+		strings.Contains(errText, "payload")
+}
+
+var (
+	readWarnLimiterMu   sync.Mutex
+	readWarnLastByPeer  = make(map[string]time.Time)
+	readWarnMinInterval = 5 * time.Second
+)
+
+func shouldLogReadWarn(peerHash string) bool {
+	readWarnLimiterMu.Lock()
+	defer readWarnLimiterMu.Unlock()
+
+	now := time.Now()
+	last, ok := readWarnLastByPeer[peerHash]
+	if ok && now.Sub(last) < readWarnMinInterval {
+		return false
+	}
+	readWarnLastByPeer[peerHash] = now
+	return true
 }
 
 // handleIncomingMessage routes the message and logs any routing errors.

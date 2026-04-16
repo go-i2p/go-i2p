@@ -2,6 +2,7 @@ package netdb
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"sync"
 	"testing"
@@ -238,6 +239,49 @@ func TestGzipDecompressInvalidData(t *testing.T) {
 	_, err = gzipDecompress([]byte{})
 	if err == nil {
 		t.Error("Expected error for empty data, got nil")
+	}
+}
+
+func TestGzipDecompressRejectsBomb(t *testing.T) {
+	// Build highly compressible data well above 64 KiB decompression cap.
+	payload := bytes.Repeat([]byte("A"), 128*1024)
+
+	var compressed bytes.Buffer
+	zw := gzip.NewWriter(&compressed)
+	if _, err := zw.Write(payload); err != nil {
+		t.Fatalf("failed to build compressed payload: %v", err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatalf("failed to finalize compressed payload: %v", err)
+	}
+
+	_, err := gzipDecompress(compressed.Bytes())
+	if err == nil {
+		t.Fatal("expected zip-bomb style payload to be rejected")
+	}
+	if got := err.Error(); !bytes.Contains([]byte(got), []byte("zip bomb")) {
+		t.Fatalf("expected error to mention zip bomb, got: %s", got)
+	}
+}
+
+func TestGzipDecompressAcceptsValid(t *testing.T) {
+	payload := bytes.Repeat([]byte("B"), 8*1024)
+
+	var compressed bytes.Buffer
+	zw := gzip.NewWriter(&compressed)
+	if _, err := zw.Write(payload); err != nil {
+		t.Fatalf("failed to build compressed payload: %v", err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatalf("failed to finalize compressed payload: %v", err)
+	}
+
+	decompressed, err := gzipDecompress(compressed.Bytes())
+	if err != nil {
+		t.Fatalf("expected valid payload to decompress: %v", err)
+	}
+	if !bytes.Equal(payload, decompressed) {
+		t.Fatal("decompressed payload did not match input")
 	}
 }
 

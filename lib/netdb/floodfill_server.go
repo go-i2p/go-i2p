@@ -58,6 +58,7 @@ type FloodfillServer struct {
 type FloodfillRateLimiter struct {
 	mu         sync.Mutex
 	peers      map[common.Hash]*peerLimit
+	lastSeen   map[common.Hash]time.Time
 	maxBurst   int     // max tokens (requests) per peer
 	refillRate float64 // tokens added per second
 
@@ -90,6 +91,7 @@ func NewFloodfillRateLimiterWithGlobal(maxPerMinute, burstSize, globalPerMinute,
 	now := time.Now()
 	rl := &FloodfillRateLimiter{
 		peers:      make(map[common.Hash]*peerLimit),
+		lastSeen:   make(map[common.Hash]time.Time),
 		maxBurst:   burstSize,
 		refillRate: float64(maxPerMinute) / 60.0,
 
@@ -152,6 +154,7 @@ func (rl *FloodfillRateLimiter) allowPeer(peer common.Hash, now time.Time) bool 
 			tokens:     float64(rl.maxBurst) - 1,
 			lastUpdate: now,
 		}
+		rl.lastSeen[peer] = now
 		return true
 	}
 
@@ -165,8 +168,10 @@ func (rl *FloodfillRateLimiter) allowPeer(peer common.Hash, now time.Time) bool 
 
 	if pl.tokens >= 1.0 {
 		pl.tokens -= 1.0
+		rl.lastSeen[peer] = now
 		return true
 	}
+	rl.lastSeen[peer] = now
 	return false
 }
 
@@ -192,17 +197,26 @@ func (rl *FloodfillRateLimiter) cleanupLoop() {
 }
 
 // removeStalePeers purges rate-limiter entries for peers that have been idle
-// longer than the stale threshold (10 minutes). Must not be called concurrently
+// longer than the stale threshold (2 minutes). Must not be called concurrently
 // with Allow; it acquires rl.mu internally.
 func (rl *FloodfillRateLimiter) removeStalePeers() {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 	now := time.Now()
 	for peer, pl := range rl.peers {
-		if now.Sub(pl.lastUpdate) > 10*time.Minute {
+		if now.Sub(pl.lastUpdate) > 2*time.Minute {
 			delete(rl.peers, peer)
+			delete(rl.lastSeen, peer)
 		}
 	}
+}
+
+// LastSeen returns the last observed time for a peer, if present.
+func (rl *FloodfillRateLimiter) LastSeen(peer common.Hash) (time.Time, bool) {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	seenAt, ok := rl.lastSeen[peer]
+	return seenAt, ok
 }
 
 // Stop shuts down the rate limiter's cleanup goroutine.
@@ -212,7 +226,6 @@ func (rl *FloodfillRateLimiter) Stop() {
 }
 
 // FloodfillTransport defines the interface for sending I2NP messages back to lookup
-// requesters. This decouples the floodfill server from the transport layer.
 type FloodfillTransport interface {
 	// SendI2NPMessage sends an I2NP message to the router identified by routerHash.
 	SendI2NPMessage(ctx context.Context, routerHash common.Hash, msg i2np.I2NPMessage) error
