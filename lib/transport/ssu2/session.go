@@ -190,13 +190,16 @@ func (s *SSU2Session) StartWorkers() {
 func (s *SSU2Session) QueueSendI2NP(msg i2np.I2NPMessage) error {
 	atomic.AddInt32(&s.sendQueueSize, 1)
 
+	timer := time.NewTimer(500 * time.Millisecond)
+	defer timer.Stop()
+
 	select {
 	case s.sendQueue <- msg:
 		return nil
 	case <-s.ctx.Done():
 		atomic.AddInt32(&s.sendQueueSize, -1)
 		return oops.Errorf("session closed, message dropped (type=%d)", msg.Type())
-	case <-time.After(500 * time.Millisecond):
+	case <-timer.C:
 		atomic.AddInt32(&s.sendQueueSize, -1)
 		return oops.Errorf("send queue full, message dropped (type=%d)", msg.Type())
 	}
@@ -518,11 +521,14 @@ func (s *SSU2Session) sendTrackedData(data []byte) error {
 
 // waitForCongestionWindow blocks until the congestion window allows sending size bytes.
 func (s *SSU2Session) waitForCongestionWindow(size int) error {
+	timer := time.NewTimer(ccPollInterval)
+	defer timer.Stop()
 	for !s.congestionCtrl.CanSend(size) {
 		select {
 		case <-s.ctx.Done():
 			return ErrSessionClosed
-		case <-time.After(ccPollInterval):
+		case <-timer.C:
+			timer.Reset(ccPollInterval)
 		}
 	}
 	return nil
@@ -760,12 +766,14 @@ func (s *SSU2Session) updateRTTEstimate(recvAt time.Time) {
 
 // deliverMessage sends the message to the receive channel with timeout handling.
 func (s *SSU2Session) deliverMessage(msg i2np.I2NPMessage) error {
+	timer := time.NewTimer(100 * time.Millisecond)
+	defer timer.Stop()
 	select {
 	case s.recvChan <- msg:
 		return nil
 	case <-s.ctx.Done():
 		return s.ctx.Err()
-	case <-time.After(100 * time.Millisecond):
+	case <-timer.C:
 		atomic.AddUint64(&s.droppedMessages, 1)
 		s.logger.Warn("Receive channel full, dropping message")
 		return nil

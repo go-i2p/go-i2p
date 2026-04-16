@@ -1384,3 +1384,24 @@ func (db *StdNetDB) RequestRouterInfoRefresh(hash common.Hash) {
 		}).Info("Evicted stale RouterInfo from cache; will be refreshed on next reseed")
 	}
 }
+
+// sweepRefreshCooldown removes entries from riRefreshCooldown that are older
+// than riRefreshCooldownDuration. This prevents unbounded growth of the
+// sync.Map over the lifetime of a long-running router.
+func (db *StdNetDB) sweepRefreshCooldown() {
+	now := time.Now()
+	swept := 0
+	db.riRefreshCooldown.Range(func(key, value any) bool {
+		if t, ok := value.(time.Time); ok && now.Sub(t) > riRefreshCooldownDuration {
+			db.riRefreshCooldown.Delete(key)
+			swept++
+		}
+		return true
+	})
+	if swept > 0 {
+		log.WithFields(logger.Fields{
+			"at":    "StdNetDB.sweepRefreshCooldown",
+			"swept": swept,
+		}).Debug("Swept expired riRefreshCooldown entries")
+	}
+}

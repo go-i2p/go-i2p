@@ -1064,7 +1064,7 @@ func (db *StdNetDB) StartExpirationCleaner() {
 }
 
 // runPeriodicMaintenance performs less-frequent cleanup tasks every 10 ticks.
-// This includes RouterInfo expiration and peer tracker pruning.
+// This includes RouterInfo expiration, peer tracker pruning, and refresh cooldown sweeping.
 func (db *StdNetDB) runPeriodicMaintenance(tickCount int) {
 	if tickCount%10 != 0 {
 		return
@@ -1072,6 +1072,7 @@ func (db *StdNetDB) runPeriodicMaintenance(tickCount int) {
 
 	db.cleanExpiredRouterInfos()
 	db.pruneStalePeerEntries()
+	db.sweepRefreshCooldown()
 }
 
 // pruneStalePeerEntries removes peer tracking entries older than 24 hours.

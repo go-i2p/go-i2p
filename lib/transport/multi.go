@@ -78,6 +78,8 @@ func Mux(t ...Transport) (tmux *TransportMuxer) {
 		failedPeers: make(map[[32]byte]time.Time),
 	}
 	tmux.trans = append(tmux.trans, t...)
+	tmux.acceptWg.Add(1)
+	go tmux.failedPeersCleanupLoop()
 	log.WithFields(logger.Fields{
 		"at":     "Mux",
 		"reason": "created_successfully",
@@ -377,6 +379,35 @@ func (tmux *TransportMuxer) recordPeerFailure(peerHash [32]byte) {
 	defer tmux.peerCooldownMu.Unlock()
 
 	tmux.failedPeers[peerHash] = time.Now()
+}
+
+// cleanupExpiredPeers removes failedPeers entries whose cooldown has expired.
+// This prevents unbounded map growth for peers that fail once and are never
+// re-contacted.
+func (tmux *TransportMuxer) cleanupExpiredPeers() {
+	tmux.peerCooldownMu.Lock()
+	defer tmux.peerCooldownMu.Unlock()
+	for hash, failTime := range tmux.failedPeers {
+		if time.Since(failTime) >= peerCooldown {
+			delete(tmux.failedPeers, hash)
+		}
+	}
+}
+
+// failedPeersCleanupLoop periodically sweeps expired entries from the
+// failedPeers map to prevent unbounded growth over the router's lifetime.
+func (tmux *TransportMuxer) failedPeersCleanupLoop() {
+	defer tmux.acceptWg.Done()
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			tmux.cleanupExpiredPeers()
+		case <-tmux.acceptDone:
+			return
+		}
+	}
 }
 
 // get a transport session given a router info

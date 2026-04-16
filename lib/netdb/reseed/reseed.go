@@ -35,7 +35,7 @@ type Reseed struct {
 }
 
 // SingleReseed fetches and parses an SU3 reseed bundle from the given URI, returning the extracted RouterInfos.
-func (r Reseed) SingleReseed(uri string) ([]router_info.RouterInfo, error) {
+func (r *Reseed) SingleReseed(uri string) ([]router_info.RouterInfo, error) {
 	log.WithField("uri", uri).Debug("Starting single reseed operation")
 
 	response, err := r.performReseedRequest(uri)
@@ -68,14 +68,14 @@ func (r Reseed) SingleReseed(uri string) ([]router_info.RouterInfo, error) {
 }
 
 // ProcessLocalSU3File reads and processes a local SU3 reseed file
-func (r Reseed) ProcessLocalSU3File(filePath string) ([]router_info.RouterInfo, error) {
+func (r *Reseed) ProcessLocalSU3File(filePath string) ([]router_info.RouterInfo, error) {
 	return r.ProcessLocalSU3FileWithLimit(filePath, 0)
 }
 
 // ProcessLocalSU3FileWithLimit reads and processes a local SU3 reseed file with a limit on RouterInfos parsed.
 // If limit <= 0, all RouterInfos are parsed (same as ProcessLocalSU3File).
 // This prevents loading excessive RouterInfos into memory when only a small number is needed.
-func (r Reseed) ProcessLocalSU3FileWithLimit(filePath string, limit int) ([]router_info.RouterInfo, error) {
+func (r *Reseed) ProcessLocalSU3FileWithLimit(filePath string, limit int) ([]router_info.RouterInfo, error) {
 	log.WithFields(logger.Fields{
 		"file_path": filePath,
 		"limit":     limit,
@@ -104,7 +104,7 @@ func (r Reseed) ProcessLocalSU3FileWithLimit(filePath string, limit int) ([]rout
 }
 
 // readSU3FileFromDisk reads a SU3 file from the filesystem.
-func (r Reseed) readSU3FileFromDisk(filePath string) ([]byte, error) {
+func (r *Reseed) readSU3FileFromDisk(filePath string) ([]byte, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		log.WithError(err).WithField("file_path", filePath).Error("Failed to read SU3 file")
@@ -120,7 +120,7 @@ func (r Reseed) readSU3FileFromDisk(filePath string) ([]byte, error) {
 }
 
 // parseSU3File parses SU3 data and extracts the content.
-func (r Reseed) parseSU3File(data []byte) ([]byte, error) {
+func (r *Reseed) parseSU3File(data []byte) ([]byte, error) {
 	su3file, err := r.readSU3File(bytes.NewReader(data))
 	if err != nil {
 		return nil, err
@@ -134,7 +134,7 @@ func (r Reseed) parseSU3File(data []byte) ([]byte, error) {
 }
 
 // logSU3ProcessingSuccess logs successful SU3 file processing.
-func (r Reseed) logSU3ProcessingSuccess(filePath string, count int) {
+func (r *Reseed) logSU3ProcessingSuccess(filePath string, count int) {
 	log.WithFields(logger.Fields{
 		"file_path":         filePath,
 		"router_info_count": count,
@@ -142,14 +142,14 @@ func (r Reseed) logSU3ProcessingSuccess(filePath string, count int) {
 }
 
 // ProcessLocalZipFile reads and processes a local zip reseed file
-func (r Reseed) ProcessLocalZipFile(filePath string) ([]router_info.RouterInfo, error) {
+func (r *Reseed) ProcessLocalZipFile(filePath string) ([]router_info.RouterInfo, error) {
 	return r.ProcessLocalZipFileWithLimit(filePath, 0)
 }
 
 // ProcessLocalZipFileWithLimit reads and processes a local zip reseed file with a limit on RouterInfos parsed.
 // If limit <= 0, all RouterInfos are parsed (same as ProcessLocalZipFile).
 // This prevents loading excessive RouterInfos into memory when only a small number is needed.
-func (r Reseed) ProcessLocalZipFileWithLimit(filePath string, limit int) ([]router_info.RouterInfo, error) {
+func (r *Reseed) ProcessLocalZipFileWithLimit(filePath string, limit int) ([]router_info.RouterInfo, error) {
 	log.WithFields(logger.Fields{
 		"file_path": filePath,
 		"limit":     limit,
@@ -185,7 +185,7 @@ func (r Reseed) ProcessLocalZipFileWithLimit(filePath string, limit int) ([]rout
 // If the URL does not already include the standard SU3 path, it is appended automatically.
 // SECURITY: Only HTTPS URLs are accepted. Plain HTTP would expose the reseed
 // request to network observers, enabling traffic analysis and MITM attacks.
-func (r Reseed) performReseedRequest(uri string) (*http.Response, error) {
+func (r *Reseed) performReseedRequest(uri string) (*http.Response, error) {
 	log.WithField("uri", uri).Info("Initiating reseed HTTP request")
 
 	client := createReseedHTTPClient(r.DialContext)
@@ -380,7 +380,7 @@ func validateReseedResponse(response *http.Response, uri string) error {
 
 // readSU3File reads and parses the SU3 file from the response body.
 // Limits reads to 50 MB to prevent memory exhaustion from malicious servers.
-func (r Reseed) readSU3File(body io.Reader) (*su3.SU3, error) {
+func (r *Reseed) readSU3File(body io.Reader) (*su3.SU3, error) {
 	// Buffer the entire response to ensure complete data is available.
 	// This prevents issues with streaming/incomplete reads that can cause
 	// "Signature shorter than expected" errors when the su3 library tries
@@ -424,7 +424,7 @@ func (r Reseed) readSU3File(body io.Reader) (*su3.SU3, error) {
 }
 
 // validateSU3FileType checks if the SU3 file is a valid ZIP reseed file.
-func (r Reseed) validateSU3FileType(su3file *su3.SU3) error {
+func (r *Reseed) validateSU3FileType(su3file *su3.SU3) error {
 	log.WithFields(logger.Fields{
 		"file_type":             su3file.FileType,
 		"content_type":          su3file.ContentType,
@@ -446,7 +446,7 @@ func (r Reseed) validateSU3FileType(su3file *su3.SU3) error {
 // getPublicKeyForSigner returns the public key for a known reseed signer.
 // It uses the embedded certificate pool to look up certificates by signer ID.
 // Returns an error if the signer is not recognized (fail-closed security).
-func (r Reseed) getPublicKeyForSigner(signerID string) (interface{}, error) {
+func (r *Reseed) getPublicKeyForSigner(signerID string) (interface{}, error) {
 	// Get the default certificate pool (loaded from embedded certificates)
 	certPool, err := GetDefaultCertificatePool()
 	if err != nil {
@@ -470,7 +470,7 @@ func (r Reseed) getPublicKeyForSigner(signerID string) (interface{}, error) {
 // extractSU3Content extracts the content from the SU3 file with signature verification.
 // SECURITY: This function enforces signature verification - content is rejected if
 // verification fails or if the signer is unknown/untrusted.
-func (r Reseed) extractSU3Content(su3file *su3.SU3) ([]byte, error) {
+func (r *Reseed) extractSU3Content(su3file *su3.SU3) ([]byte, error) {
 	log.WithFields(logger.Fields{"at": "extractSU3Content"}).Debug("Extracting content from SU3 file")
 
 	// Get the public key for the signer - this will fail for unknown signers
@@ -505,13 +505,13 @@ func (r Reseed) extractSU3Content(su3file *su3.SU3) ([]byte, error) {
 }
 
 // processReseedZip writes the zip content to disk, extracts it, and parses router infos.
-func (r Reseed) processReseedZip(content []byte) ([]router_info.RouterInfo, error) {
+func (r *Reseed) processReseedZip(content []byte) ([]router_info.RouterInfo, error) {
 	return r.processReseedZipWithLimit(content, 0)
 }
 
 // processReseedZipWithLimit writes the zip content to disk, extracts it, and parses router infos with a limit.
 // If limit <= 0, all RouterInfos are parsed.
-func (r Reseed) processReseedZipWithLimit(content []byte, limit int) ([]router_info.RouterInfo, error) {
+func (r *Reseed) processReseedZipWithLimit(content []byte, limit int) ([]router_info.RouterInfo, error) {
 	zipPath, err := r.writeZipFile(content)
 	if err != nil {
 		return nil, err
@@ -528,7 +528,7 @@ func (r Reseed) processReseedZipWithLimit(content []byte, limit int) ([]router_i
 }
 
 // writeZipFile writes the zip content to a temporary file on disk.
-func (r Reseed) writeZipFile(content []byte) (string, error) {
+func (r *Reseed) writeZipFile(content []byte) (string, error) {
 	// Create temporary file in system temp directory with restrictive
 	// permissions. Write content directly to avoid TOCTOU races — do
 	// not close and reopen the file.
@@ -568,7 +568,7 @@ func (r Reseed) writeZipFile(content []byte) (string, error) {
 // extractZipFile extracts the zip file to a temporary directory and returns the temp directory path and list of extracted file paths.
 // The caller is responsible for cleaning up the temporary directory after use.
 // Validates that total decompressed size does not exceed maxDecompressedSize to prevent zip bombs.
-func (r Reseed) extractZipFile(zipPath string) (string, []string, error) {
+func (r *Reseed) extractZipFile(zipPath string) (string, []string, error) {
 	tempDir, err := r.createExtractionDir()
 	if err != nil {
 		return "", nil, err
@@ -600,7 +600,7 @@ func (r Reseed) extractZipFile(zipPath string) (string, []string, error) {
 }
 
 // createExtractionDir creates a temporary directory for zip extraction.
-func (r Reseed) createExtractionDir() (string, error) {
+func (r *Reseed) createExtractionDir() (string, error) {
 	tempDir, err := os.MkdirTemp("", "reseed-extract-*")
 	if err != nil {
 		log.WithError(err).Error("Failed to create temporary directory for reseed extraction")
@@ -610,7 +610,7 @@ func (r Reseed) createExtractionDir() (string, error) {
 }
 
 // extractAndValidateZip extracts the zip and validates it has content.
-func (r Reseed) extractAndValidateZip(zipPath, tempDir string) ([]string, error) {
+func (r *Reseed) extractAndValidateZip(zipPath, tempDir string) ([]string, error) {
 	files, err := unzip.New().Extract(zipPath, tempDir)
 	if err != nil {
 		log.WithError(err).WithFields(logger.Fields{
@@ -630,7 +630,7 @@ func (r Reseed) extractAndValidateZip(zipPath, tempDir string) ([]string, error)
 const maxDecompressedSize int64 = 200 * 1024 * 1024
 
 // validateDecompressedSize checks that extracted files don't exceed the size limit.
-func (r Reseed) validateDecompressedSize(tempDir string, files []string) error {
+func (r *Reseed) validateDecompressedSize(tempDir string, files []string) error {
 	var totalSize int64
 	for _, filename := range files {
 		fullPath := filepath.Join(tempDir, filename)
@@ -658,7 +658,7 @@ func buildFullPaths(tempDir string, files []string) []string {
 // parseRouterInfoFilesWithLimit reads and parses router info files from the extracted files with a limit.
 // If limit <= 0, all files are parsed. Otherwise, parsing stops after successfully parsing 'limit' RouterInfos.
 // This minimizes memory usage when only a small number of RouterInfos is needed.
-func (r Reseed) parseRouterInfoFilesWithLimit(files []string, limit int) ([]router_info.RouterInfo, error) {
+func (r *Reseed) parseRouterInfoFilesWithLimit(files []string, limit int) ([]router_info.RouterInfo, error) {
 	r.logParseStart(len(files), limit)
 
 	stats := &parseStats{}
@@ -684,7 +684,7 @@ type parseStats struct {
 }
 
 // logParseStart logs the start of the parsing operation.
-func (r Reseed) logParseStart(totalFiles, limit int) {
+func (r *Reseed) logParseStart(totalFiles, limit int) {
 	log.WithFields(logger.Fields{
 		"total_files": totalFiles,
 		"limit":       limit,
@@ -692,7 +692,7 @@ func (r Reseed) logParseStart(totalFiles, limit int) {
 }
 
 // parseFilesUntilLimit iterates through files and parses them until the limit is reached.
-func (r Reseed) parseFilesUntilLimit(files []string, limit int, stats *parseStats) []router_info.RouterInfo {
+func (r *Reseed) parseFilesUntilLimit(files []string, limit int, stats *parseStats) []router_info.RouterInfo {
 	var routerInfos []router_info.RouterInfo
 
 	for _, f := range files {
@@ -716,7 +716,7 @@ func (r Reseed) parseFilesUntilLimit(files []string, limit int, stats *parseStat
 }
 
 // hasReachedLimit checks if the parsing limit has been reached.
-func (r Reseed) hasReachedLimit(parsed, limit, totalFiles int) bool {
+func (r *Reseed) hasReachedLimit(parsed, limit, totalFiles int) bool {
 	if limit > 0 && parsed >= limit {
 		log.WithFields(logger.Fields{
 			"parsed":      parsed,
@@ -730,7 +730,7 @@ func (r Reseed) hasReachedLimit(parsed, limit, totalFiles int) bool {
 
 // tryParseRouterInfoFile attempts to read and parse a single router info file.
 // Returns the parsed RouterInfo and a boolean indicating success.
-func (r Reseed) tryParseRouterInfoFile(filePath string, stats *parseStats) (router_info.RouterInfo, bool) {
+func (r *Reseed) tryParseRouterInfoFile(filePath string, stats *parseStats) (router_info.RouterInfo, bool) {
 	riB, err := os.ReadFile(filePath)
 	if err != nil {
 		stats.readErrors++
@@ -755,7 +755,7 @@ func (r Reseed) tryParseRouterInfoFile(filePath string, stats *parseStats) (rout
 }
 
 // logParseComplete logs the completion of the parsing operation.
-func (r Reseed) logParseComplete(totalFiles int, stats *parseStats, parsedSuccess int) {
+func (r *Reseed) logParseComplete(totalFiles int, stats *parseStats, parsedSuccess int) {
 	log.WithFields(logger.Fields{
 		"total_files":    totalFiles,
 		"skipped_files":  stats.skippedFiles,
@@ -766,7 +766,7 @@ func (r Reseed) logParseComplete(totalFiles int, stats *parseStats, parsedSucces
 }
 
 // cleanupZipFile removes the temporary zip file from disk.
-func (r Reseed) cleanupZipFile(zipPath string) {
+func (r *Reseed) cleanupZipFile(zipPath string) {
 	log.WithField("path", zipPath).Debug("Cleaning up reseed zip file")
 	if err := os.Remove(zipPath); err != nil {
 		log.WithError(err).WithField("path", zipPath).Warn("Failed to remove reseed zip file")
@@ -776,7 +776,7 @@ func (r Reseed) cleanupZipFile(zipPath string) {
 }
 
 // cleanupTempDirectory removes the temporary extraction directory from disk.
-func (r Reseed) cleanupTempDirectory(tempDir string) {
+func (r *Reseed) cleanupTempDirectory(tempDir string) {
 	if tempDir == "" {
 		return
 	}
@@ -791,7 +791,7 @@ func (r Reseed) cleanupTempDirectory(tempDir string) {
 // isRouterInfoFile determines if a file path should be processed as a RouterInfo file.
 // RouterInfo files should have a .dat extension and contain "routerInfo-" in the filename.
 // This filters out directories and other non-RouterInfo files that may be extracted from the zip.
-func (r Reseed) isRouterInfoFile(filePath string) bool {
+func (r *Reseed) isRouterInfoFile(filePath string) bool {
 	// Get just the filename from the path
 	filename := filepath.Base(filePath)
 
