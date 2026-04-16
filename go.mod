@@ -9,7 +9,7 @@ require (
 	github.com/eyedeekay/go-unzip v0.0.0-20240201194209-560d8225b50e
 	github.com/go-i2p/common v0.1.4-0.20260406221321-5d52c2809acd
 	github.com/go-i2p/crypto v0.1.4-0.20260327201310-96101c044a62
-	github.com/go-i2p/go-nat-listener v0.0.0-20260402214544-c8773aeea918
+	github.com/go-i2p/go-nat-listener v0.0.0-20260402222111-bfda0025cb1b
 	github.com/go-i2p/go-noise v0.1.4-0.20260406215923-93b02ff49d4f
 	github.com/go-i2p/i2ptui v0.0.0-20260408024448-18dc7a0919f8
 	github.com/go-i2p/logger v0.1.5
@@ -18,7 +18,7 @@ require (
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
-	golang.org/x/crypto v0.49.0
+	golang.org/x/crypto v0.50.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -73,8 +73,8 @@ require (
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/net v0.52.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
-	golang.org/x/sys v0.42.0 // indirect
-	golang.org/x/text v0.35.0 // indirect
+	golang.org/x/sys v0.43.0 // indirect
+	golang.org/x/text v0.36.0 // indirect
 )
 
 // Preserve these commented-out replace directives for local development.
