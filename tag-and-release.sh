@@ -115,6 +115,7 @@ update_our_packages() {
   go get "github.com/go-i2p/go-sam-bridge@$GO_SAM_BRIDGE_TAG_HASH" >/dev/null 2>/dev/null || true
   go mod tidy -v 1>&2
   go build -v ./... 1>&2
+  gofumpt -w -s -extra .
   echo "Updated our packages to v$VERSION" 1>&2
   /usr/bin/git commit -am "Update dependencies to v$VERSION"
 }
