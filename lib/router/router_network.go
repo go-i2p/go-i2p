@@ -584,7 +584,7 @@ func (r *Router) routeMessage(msg i2np.I2NPMessage, fromPeer common.Hash) (err e
 	return r.dispatchByMessageType(msg, mr, fs)
 }
 
-func safeMessageMetadata(msg i2np.I2NPMessage) (messageType int, messageID int) {
+func safeMessageMetadata(msg i2np.I2NPMessage) (messageType, messageID int) {
 	return safeMessageType(msg), safeMessageID(msg)
 }
 
