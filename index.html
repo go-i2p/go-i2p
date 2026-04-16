@@ -13,7 +13,7 @@
         <a href="index.html">go-i2p/go-i2p</a>
       </h2>
       <div class="repo-meta">
-        📝 1680 commits
+        📝 1684 commits
          • 📜 MIT License
       </div>
     </div>
@@ -23,6 +23,8 @@
       
       
         <div class="nav-section-title">Documentation:</div>
+        
+          <li><a href="docs/docs/anonymity-logging.html">Anonymity-Safe Logging</a></li>
         
           <li><a href="docs/CONTRIBUTING.html">Contributing</a></li>
         
@@ -54,7 +56,7 @@
       <div class="repo-stats">
         
         <div class="repo-stat">
-          <span>📝</span> <span>1680 commits</span>
+          <span>📝</span> <span>1684 commits</span>
         </div>
         
         
@@ -97,6 +99,8 @@
 <p>Advice for Developers: The API is still unstable below <code>go-i2p/onramp</code>. In fact, we&rsquo;re going to aggressively remove broken, crappy versions of functions from the low-level components over the <code>0.1.6</code> to `<code>0.2.0</code> development cycle. The <code>0.2.0</code> release will have only the type-safe, memory-safe, functionally-correct versions of everything. We&rsquo;ll apply <code>DEPRECATED</code> notices to the godoc of anything we&rsquo;re removing in advance of removing it but it <em>is going to go</em>. How much low-level stuff you want to use is going to affect how much your life is going to change in the next ~4 releases. Somewhat tacitly, this means that because <code>go-i2p/onramp</code> fully abstracts away the embedded router setup <code>go-i2p/onramp</code> will be fully stabilized after the <code>0.1.5</code> router release. If we can, we&rsquo;ll backport the embedded router feature from <code>go-i2p/onramp</code> to <code>go-i2p/go-sam-go</code> so everybody gets embedded routers automatically but for now it&rsquo;s more important that <code>go-i2p/go-sam-go</code> stays focused on being a complete, high-quality implementation of the SAMv3.3 API.</p>
 
 <p>Advice for Users: It&rsquo;s probably not safe yet, nor does it do the things you want yet. However, we have reached significant milestones in interacting with the network and are beginning to use it more regularly in a handful of non-anonymous services.</p>
+
+<p>Anonymity-sensitive operators should review <a href="docs/anonymity-logging.md" target="_blank">Anonymity-Safe Logging</a> and avoid debug logging in production.</p>
 
 <h3 id="implemented-features">Implemented Features</h3>
 
@@ -341,7 +345,7 @@ go-i2p --i2cp.network=unix --i2cp.address=/tmp/i2cp.sock
                 eyedeekay
               </div>
               <div class="contributor-commits">
-                1323 commits
+                1327 commits
               </div>
             </div>
           </div>
@@ -413,7 +417,7 @@ go-i2p --i2cp.network=unix --i2cp.address=/tmp/i2cp.sock
     </main>
     
     <footer class="page-footer">
-      <p>Generated on 2026-04-16 20:52:37 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
+      <p>Generated on 2026-04-16 21:36:08 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
     </footer>
   </div>
 </body>

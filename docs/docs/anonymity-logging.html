@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Template - go-i2p/go-i2p</title>
+  <title>Anonymity-Safe Logging - go-i2p/go-i2p</title>
   <link rel="stylesheet" href="../style.css">
 </head>
 <body>
@@ -24,7 +24,7 @@
       
         <div class="nav-section-title">Documentation:</div>
         
-          <li><a href="../docs/docs/anonymity-logging.html" >Anonymity-Safe Logging</a></li>
+          <li><a href="../docs/docs/anonymity-logging.html" class="active">Anonymity-Safe Logging</a></li>
         
           <li><a href="../docs/CONTRIBUTING.html" >Contributing</a></li>
         
@@ -36,7 +36,7 @@
         
           <li><a href="../docs/RELEASE_NOTES.html" >RELEASE NOTES</a></li>
         
-          <li><a href="../docs/template.html" class="active">Template</a></li>
+          <li><a href="../docs/template.html" >Template</a></li>
         
           <li><a href="../docs/ROADMAP.html" >go-i2p Implementation Roadmap</a></li>
         
@@ -50,26 +50,41 @@
   
   <div class="main-content">
     <header class="page-header">
-      <h1>Template - go-i2p/go-i2p</h1>
+      <h1>Anonymity-Safe Logging - go-i2p/go-i2p</h1>
     </header>
     
     <main>
       <div class="doc-content">
-        <p>{{ .EmitHeader }}</p>
+        <h1 id="anonymity-safe-logging">Anonymity-Safe Logging</h1>
 
-<p><img src="../images/{{ .Name }}.svg" alt="{{ .Name }}.svg" /></p>
+<p>This document describes logging settings that are safer for anonymity-sensitive deployments.</p>
 
-<p>{{ .EmitSynopsis }}</p>
+<h2 id="production-defaults">Production Defaults</h2>
 
-<p>{{ .EmitUsage }}</p>
+<ul>
+<li>Production deployments MUST set <code>DEBUG_I2P=info</code> or stricter.</li>
+<li><code>DEBUG_I2P=debug</code> is for development and benchmarking only.</li>
+</ul>
 
-<p>{{ if .IsCommand  }} &hellip; {{ end }}</p>
+<h2 id="why-this-matters">Why This Matters</h2>
 
-<p>{{ .Name }}</p>
+<p>Debug logs can include detailed timing, session lifecycle, peer identifiers, and protocol event context. Even when secrets are not logged, high-detail operational logs can increase correlation risk and should be minimized in production.</p>
 
-<p>{{ .ImportPath }}</p>
+<h2 id="recommended-environment-profiles">Recommended Environment Profiles</h2>
 
-<p><a href="template.html" target="_blank">go-i2p template file</a></p>
+<ul>
+<li>Development: <code>DEBUG_I2P=debug</code></li>
+<li>Staging: <code>DEBUG_I2P=info</code></li>
+<li>Production: <code>DEBUG_I2P=info</code> (or stricter)</li>
+</ul>
+
+<h2 id="operational-guidance">Operational Guidance</h2>
+
+<ul>
+<li>Keep warning/error log retention short unless incident response requires otherwise.</li>
+<li>Restrict log file access to router operators only.</li>
+<li>Treat exported log bundles as sensitive operational metadata.</li>
+</ul>
 
       </div>
     </main>
