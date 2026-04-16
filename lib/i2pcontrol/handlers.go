@@ -44,7 +44,8 @@ func (h *EchoHandler) Handle(ctx context.Context, params json.RawMessage) (inter
 	}
 
 	if err := json.Unmarshal(params, &req); err != nil {
-		return nil, NewRPCErrorWithData(ErrCodeInvalidParams, "invalid Echo parameter", err.Error())
+		log.WithField("reason", err.Error()).Debug("i2pcontrol: Echo params unmarshal failed")
+		return nil, NewRPCError(ErrCodeInvalidParams, "malformed Echo parameters")
 	}
 
 	return map[string]interface{}{
@@ -91,7 +92,8 @@ func (h *GetRateHandler) Handle(ctx context.Context, params json.RawMessage) (in
 	// Parse request to see which fields are requested
 	var req map[string]interface{}
 	if err := json.Unmarshal(params, &req); err != nil {
-		return nil, NewRPCErrorWithData(ErrCodeInvalidParams, "invalid GetRate parameters", err.Error())
+		log.WithField("reason", err.Error()).Debug("i2pcontrol: GetRate params unmarshal failed")
+		return nil, NewRPCError(ErrCodeInvalidParams, "malformed GetRate parameters")
 	}
 
 	// Get current bandwidth stats
@@ -211,7 +213,8 @@ func selectRequestedOrDefaultFields(req, availableFields map[string]interface{})
 func (h *RouterInfoHandler) Handle(ctx context.Context, params json.RawMessage) (interface{}, error) {
 	var req map[string]interface{}
 	if err := json.Unmarshal(params, &req); err != nil {
-		return nil, NewRPCErrorWithData(ErrCodeInvalidParams, "invalid RouterInfo parameters", err.Error())
+		log.WithField("reason", err.Error()).Debug("i2pcontrol: RouterInfo params unmarshal failed")
+		return nil, NewRPCError(ErrCodeInvalidParams, "malformed RouterInfo parameters")
 	}
 
 	availableFields := h.buildAvailableFields()

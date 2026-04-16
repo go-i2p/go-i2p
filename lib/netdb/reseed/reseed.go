@@ -379,16 +379,17 @@ func validateReseedResponse(response *http.Response, uri string) error {
 }
 
 // readSU3File reads and parses the SU3 file from the response body.
-// Limits reads to 50 MB to prevent memory exhaustion from malicious servers.
+// Limits reads to 10 MB to prevent memory exhaustion from malicious servers.
 func (r *Reseed) readSU3File(body io.Reader) (*su3.SU3, error) {
 	// Buffer the entire response to ensure complete data is available.
 	// This prevents issues with streaming/incomplete reads that can cause
 	// "Signature shorter than expected" errors when the su3 library tries
 	// to read the signature bytes from the end of the file.
 	//
-	// Limit to 50 MB — reseed bundles are typically a few MB. This prevents
-	// a malicious server from sending an unbounded stream.
-	const maxReseedSize = 50 << 20 // 50 MB
+	// Limit to 10 MB — reseed bundles are typically a few MB. This caps the
+	// memory a malicious server can force us to allocate before signature
+	// verification runs.
+	const maxReseedSize = 10 << 20 // 10 MB
 	log.WithFields(logger.Fields{"at": "readSU3File"}).Debug("Buffering complete SU3 response")
 	limitedReader := io.LimitReader(body, maxReseedSize+1)
 	bufferedData, err := io.ReadAll(limitedReader)
@@ -623,8 +624,26 @@ func (r *Reseed) extractAndValidateZip(zipPath, tempDir string) ([]string, error
 		log.WithField("zip_path", zipPath).Error("Reseed zip file appears to have no content")
 		return nil, oops.Errorf("error: reseed appears to have no content")
 	}
+	// Defence in depth: reject archives whose entry count is grossly above
+	// what a legitimate reseed bundle requires. A normal bundle carries a
+	// few hundred RouterInfos. Rejecting archives larger than
+	// maxReseedEntries prevents a malicious server from forcing us to
+	// walk an enormous file list even when each entry is tiny.
+	if len(files) > maxReseedEntries {
+		log.WithFields(logger.Fields{
+			"zip_path":    zipPath,
+			"entry_count": len(files),
+			"max_entries": maxReseedEntries,
+		}).Error("Reseed zip entry count exceeds ceiling")
+		return nil, oops.Errorf("reseed archive has %d entries, exceeds maximum of %d", len(files), maxReseedEntries)
+	}
 	return files, nil
 }
+
+// maxReseedEntries caps the number of files accepted from a reseed archive.
+// Sized at 5x the default Bootstrap.MinimumReseedPeers (50) to leave generous
+// headroom for legitimate bundles while preventing pathological archives.
+const maxReseedEntries = 250
 
 // maxDecompressedSize is the maximum total decompressed output size (200 MB).
 const maxDecompressedSize int64 = 200 * 1024 * 1024

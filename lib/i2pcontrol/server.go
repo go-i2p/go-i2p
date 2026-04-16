@@ -161,7 +161,8 @@ func registerRPCHandlers(ctx context.Context, wg *sync.WaitGroup, stats RouterSt
 		}
 
 		if err := json.Unmarshal(params, &req); err != nil {
-			return nil, NewRPCErrorWithData(ErrCodeInvalidParams, "invalid parameters", err.Error())
+			log.WithField("reason", err.Error()).Debug("i2pcontrol: Authenticate params unmarshal failed")
+			return nil, NewRPCError(ErrCodeInvalidParams, "malformed Authenticate parameters")
 		}
 
 		if req.API != 1 {
@@ -379,7 +380,8 @@ func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
 
 	req, err := ParseRequest(body)
 	if err != nil {
-		s.writeErrorResponse(w, nil, NewRPCError(ErrCodeParseError, err.Error()))
+		log.WithField("reason", err.Error()).Debug("i2pcontrol: malformed JSON-RPC request")
+		s.writeErrorResponse(w, nil, NewRPCError(ErrCodeParseError, "malformed JSON-RPC request"))
 		return
 	}
 

@@ -103,7 +103,16 @@ func (s *Server) authenticateConnection(state *connectionState, username, passwo
 func (s *Server) SetAuthenticator(auth Authenticator) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.authenticator = auth
+	// Wrap with rate-limiting unless the caller already supplied a
+	// RateLimitedAuthenticator (avoids double-wrapping from tests or
+	// callers that need to share lockout state). A nil authenticator
+	// disables auth entirely.
+	switch auth.(type) {
+	case nil, *RateLimitedAuthenticator:
+		s.authenticator = auth
+	default:
+		s.authenticator = NewRateLimitedAuthenticator(auth)
+	}
 
 	if auth != nil {
 		log.WithFields(logger.Fields{"at": "SetAuthenticator"}).Info("i2cp_authentication_enabled")
