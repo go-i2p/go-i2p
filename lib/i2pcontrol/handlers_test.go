@@ -349,7 +349,9 @@ func TestNetworkSettingHandler_WriteOperation(t *testing.T) {
 	require.NoError(t, err)
 
 	resultMap := result.(map[string]interface{})
-	assert.Equal(t, float64(12345), resultMap["i2p.router.net.ntcp.port"])
+	// Port is normalized to int by applySettingChange so it round-trips
+	// through viper as an integer rather than a float64.
+	assert.Equal(t, 12345, resultMap["i2p.router.net.ntcp.port"])
 	assert.Equal(t, true, resultMap["SettingsSaved"])
 	assert.Equal(t, true, resultMap["RestartNeeded"])
 }

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/go-i2p/crypto/rand"
+	"github.com/go-i2p/go-i2p/lib/config"
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
@@ -103,7 +104,9 @@ func (pc *PersistentConfig) loadFile(path string, wantSize int, name string) ([]
 func (pc *PersistentConfig) generateAndStoreKey(path string, keySize int, name string) ([]byte, error) {
 	log.WithField("path", path).Infof("generating new SSU2 %s", name)
 
-	if err := os.MkdirAll(pc.workingDir, 0o755); err != nil {
+	// Ensure directory exists with owner-only permissions so key/IV filenames
+	// are not enumerable to other local users.
+	if err := config.CreateSecureDirectory(pc.workingDir); err != nil {
 		log.WithError(err).Error("failed to create config directory")
 		return nil, WrapSSU2Error(err, "creating config directory")
 	}

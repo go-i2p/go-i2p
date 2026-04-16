@@ -48,6 +48,19 @@ type I2PControlConfig struct {
 	// Default: 10 minutes
 	// Expired tokens must re-authenticate to get a new token
 	TokenExpiration time.Duration
+
+	// StrictAuth, when true, refuses to start if the configured password is
+	// the well-known default "itoopie". When false (the default), the legacy
+	// password is accepted on loopback binds for backward-compatibility with
+	// upstream Java I2P I2PControl clients. Operators who want a fail-closed
+	// posture should set this to true.
+	StrictAuth bool
+
+	// AllowPlaintextNonLoopback, when true, permits binding to a non-loopback
+	// interface with UseHTTPS=false. This is an escape hatch for operators
+	// who front the router with their own TLS-terminating reverse proxy.
+	// When false (the default), a non-loopback bind must use HTTPS.
+	AllowPlaintextNonLoopback bool
 }
 
 // DefaultI2PControlConfig returns sensible defaults for I2PControl server.
@@ -59,12 +72,14 @@ type I2PControlConfig struct {
 // - Standard default password (should be changed; config file creation generates a random one)
 func DefaultI2PControlConfig() I2PControlConfig {
 	return I2PControlConfig{
-		Enabled:         true,
-		Address:         "localhost:7650",
-		Password:        "itoopie",
-		UseHTTPS:        false,
-		CertFile:        "",
-		KeyFile:         "",
-		TokenExpiration: 10 * time.Minute,
+		Enabled:                   true,
+		Address:                   "localhost:7650",
+		Password:                  "itoopie",
+		UseHTTPS:                  false,
+		CertFile:                  "",
+		KeyFile:                   "",
+		TokenExpiration:           10 * time.Minute,
+		StrictAuth:                false,
+		AllowPlaintextNonLoopback: false,
 	}
 }

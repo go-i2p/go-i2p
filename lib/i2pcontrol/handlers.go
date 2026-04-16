@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"sync"
 	"time"
 
@@ -493,7 +494,12 @@ func (h *NetworkSettingHandler) applySettingChange(setting string, value interfa
 		return NewRPCErrorWithData(ErrCodeNotImpl, "setting is read-only", fmt.Sprintf("cannot modify %s", setting))
 	}
 
-	viper.Set(viperKey, value)
+	normalized, err := normalizeSettingValue(setting, value)
+	if err != nil {
+		return NewRPCErrorWithData(ErrCodeInvalidParams, "invalid setting value", err.Error())
+	}
+
+	viper.Set(viperKey, normalized)
 	if err := viper.WriteConfig(); err != nil {
 		log.WithFields(map[string]interface{}{
 			"at":      "applySettingChange",
@@ -502,11 +508,102 @@ func (h *NetworkSettingHandler) applySettingChange(setting string, value interfa
 		}).Warn("setting changed in memory but failed to persist to config file")
 	}
 
-	result[setting] = value
+	result[setting] = normalized
 	if restartRequiredSettings[setting] {
 		result["RestartNeeded"] = true
 	}
 	result["SettingsSaved"] = true
+	return nil
+}
+
+// normalizeSettingValue validates the type and range of a setting value before
+// it is written through viper. JSON numbers decode as float64; integers are
+// rounded-trip validated to catch non-integer payloads ("3.5", "abc").
+// Returns the canonical Go value (e.g. int for ports) on success.
+func normalizeSettingValue(setting string, value interface{}) (interface{}, error) {
+	switch setting {
+	case "i2p.router.net.ntcp.port":
+		port, err := coerceInt(value)
+		if err != nil {
+			return nil, fmt.Errorf("%s must be an integer: %w", setting, err)
+		}
+		if port < 1 || port > 65535 {
+			return nil, fmt.Errorf("%s must be in [1,65535], got %d", setting, port)
+		}
+		return port, nil
+	case "i2p.router.net.ntcp.hostname":
+		host, ok := value.(string)
+		if !ok {
+			return nil, fmt.Errorf("%s must be a string, got %T", setting, value)
+		}
+		if err := validateHostname(host); err != nil {
+			return nil, err
+		}
+		return host, nil
+	case "i2p.router.bandwidth.in", "i2p.router.bandwidth.out":
+		bw, err := coerceInt(value)
+		if err != nil {
+			return nil, fmt.Errorf("%s must be a non-negative integer: %w", setting, err)
+		}
+		if bw < 0 {
+			return nil, fmt.Errorf("%s must be non-negative, got %d", setting, bw)
+		}
+		return bw, nil
+	default:
+		// Future-proof: unknown keys fall through unchanged. settingViperKey
+		// gates entry to this function so this branch only fires if a new key
+		// is added without a matching validator.
+		return value, nil
+	}
+}
+
+// coerceInt converts a JSON-decoded value into a Go int. JSON numbers decode
+// as float64 by default; this helper rejects non-integer floats.
+func coerceInt(value interface{}) (int, error) {
+	switch v := value.(type) {
+	case int:
+		return v, nil
+	case int64:
+		return int(v), nil
+	case float64:
+		if v != float64(int(v)) {
+			return 0, fmt.Errorf("value %v is not an integer", v)
+		}
+		return int(v), nil
+	case json.Number:
+		n, err := v.Int64()
+		if err != nil {
+			return 0, err
+		}
+		return int(n), nil
+	default:
+		return 0, fmt.Errorf("unsupported type %T", value)
+	}
+}
+
+// validateHostname accepts IP literals, DNS hostnames, and the empty string
+// (interpreted by the transport as "bind-all"). It rejects overly long inputs
+// and characters that are invalid in DNS labels.
+func validateHostname(host string) error {
+	if host == "" {
+		return nil
+	}
+	if len(host) > 253 {
+		return fmt.Errorf("hostname exceeds 253 bytes")
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return nil
+	}
+	for _, r := range host {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= 'A' && r <= 'Z':
+		case r >= '0' && r <= '9':
+		case r == '-' || r == '.':
+		default:
+			return fmt.Errorf("hostname contains invalid character %q", r)
+		}
+	}
 	return nil
 }
 

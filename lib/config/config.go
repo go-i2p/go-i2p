@@ -160,6 +160,8 @@ func setI2PControlDefaults(defaults ConfigDefaults) {
 		{"i2pcontrol.cert_file", defaults.I2PControl.CertFile},
 		{"i2pcontrol.key_file", defaults.I2PControl.KeyFile},
 		{"i2pcontrol.token_expiration", defaults.I2PControl.TokenExpiration},
+		{"i2pcontrol.strict_auth", defaults.I2PControl.StrictAuth},
+		{"i2pcontrol.allow_plaintext_non_loopback", defaults.I2PControl.AllowPlaintextNonLoopback},
 	})
 }
 
@@ -313,13 +315,15 @@ func currentI2CPConfig() I2CPDefaults {
 
 func currentI2PControlConfig() I2PControlDefaults {
 	return I2PControlDefaults{
-		Enabled:         viper.GetBool("i2pcontrol.enabled"),
-		Address:         viper.GetString("i2pcontrol.address"),
-		Password:        viper.GetString("i2pcontrol.password"),
-		UseHTTPS:        viper.GetBool("i2pcontrol.use_https"),
-		CertFile:        viper.GetString("i2pcontrol.cert_file"),
-		KeyFile:         viper.GetString("i2pcontrol.key_file"),
-		TokenExpiration: viper.GetDuration("i2pcontrol.token_expiration"),
+		Enabled:                   viper.GetBool("i2pcontrol.enabled"),
+		Address:                   viper.GetString("i2pcontrol.address"),
+		Password:                  viper.GetString("i2pcontrol.password"),
+		UseHTTPS:                  viper.GetBool("i2pcontrol.use_https"),
+		CertFile:                  viper.GetString("i2pcontrol.cert_file"),
+		KeyFile:                   viper.GetString("i2pcontrol.key_file"),
+		TokenExpiration:           viper.GetDuration("i2pcontrol.token_expiration"),
+		StrictAuth:                viper.GetBool("i2pcontrol.strict_auth"),
+		AllowPlaintextNonLoopback: viper.GetBool("i2pcontrol.allow_plaintext_non_loopback"),
 	}
 }
 
@@ -439,13 +443,15 @@ func buildI2CPConfig() *I2CPConfig {
 // buildI2PControlConfig creates an I2PControlConfig from current viper settings.
 func buildI2PControlConfig() *I2PControlConfig {
 	return &I2PControlConfig{
-		Enabled:         viper.GetBool("i2pcontrol.enabled"),
-		Address:         viper.GetString("i2pcontrol.address"),
-		Password:        viper.GetString("i2pcontrol.password"),
-		UseHTTPS:        viper.GetBool("i2pcontrol.use_https"),
-		CertFile:        viper.GetString("i2pcontrol.cert_file"),
-		KeyFile:         viper.GetString("i2pcontrol.key_file"),
-		TokenExpiration: viper.GetDuration("i2pcontrol.token_expiration"),
+		Enabled:                   viper.GetBool("i2pcontrol.enabled"),
+		Address:                   viper.GetString("i2pcontrol.address"),
+		Password:                  viper.GetString("i2pcontrol.password"),
+		UseHTTPS:                  viper.GetBool("i2pcontrol.use_https"),
+		CertFile:                  viper.GetString("i2pcontrol.cert_file"),
+		KeyFile:                   viper.GetString("i2pcontrol.key_file"),
+		TokenExpiration:           viper.GetDuration("i2pcontrol.token_expiration"),
+		StrictAuth:                viper.GetBool("i2pcontrol.strict_auth"),
+		AllowPlaintextNonLoopback: viper.GetBool("i2pcontrol.allow_plaintext_non_loopback"),
 	}
 }
 

@@ -200,6 +200,14 @@ type I2PControlDefaults struct {
 	// TokenExpiration is how long authentication tokens remain valid
 	// Default: 10 minutes
 	TokenExpiration time.Duration
+
+	// StrictAuth refuses to start when the password is still the upstream
+	// default ("itoopie"). Default: false (retain backward-compatibility).
+	StrictAuth bool
+
+	// AllowPlaintextNonLoopback permits a non-loopback bind without HTTPS.
+	// Default: false (fail-closed for non-loopback plaintext binds).
+	AllowPlaintextNonLoopback bool
 }
 
 // TunnelDefaults contains default values for tunnel management
@@ -417,13 +425,15 @@ func buildI2CPDefaults() I2CPDefaults {
 // used with a security warning.
 func buildI2PControlDefaults() I2PControlDefaults {
 	return I2PControlDefaults{
-		Enabled:         true,
-		Address:         "localhost:7650",
-		Password:        "itoopie",
-		UseHTTPS:        false,
-		CertFile:        "",
-		KeyFile:         "",
-		TokenExpiration: 10 * time.Minute,
+		Enabled:                   true,
+		Address:                   "localhost:7650",
+		Password:                  "itoopie",
+		UseHTTPS:                  false,
+		CertFile:                  "",
+		KeyFile:                   "",
+		TokenExpiration:           10 * time.Minute,
+		StrictAuth:                false,
+		AllowPlaintextNonLoopback: false,
 	}
 }
 

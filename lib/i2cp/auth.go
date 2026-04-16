@@ -112,6 +112,49 @@ func (s *Server) SetAuthenticator(auth Authenticator) {
 	}
 }
 
+// enforceBindPolicy refuses to start the server when a non-loopback TCP bind
+// has no authenticator installed. Loopback TCP binds retain the legacy
+// behavior of permitting unauthenticated connections, matching the
+// backward-compatibility constraint documented for other local control
+// interfaces. Unix sockets are accepted because host-level access control is
+// enforced through the socket's file-system permissions (see the
+// corresponding chmod in Start()).
+func (s *Server) enforceBindPolicy() error {
+	if s.isAuthenticationRequired() {
+		return nil
+	}
+	if s.config.Network != "tcp" {
+		return nil
+	}
+	host, _, err := net.SplitHostPort(s.config.ListenAddr)
+	if err != nil {
+		// Malformed address — let net.Listen produce the canonical error.
+		return nil
+	}
+	if host == "" {
+		return oops.Errorf("i2cp: refusing to start unauthenticated TCP listener on wildcard address %q; configure i2cp.username/password or bind to loopback", s.config.ListenAddr)
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		if ip.IsLoopback() {
+			return nil
+		}
+		return oops.Errorf("i2cp: refusing to start unauthenticated TCP listener on non-loopback address %q; configure i2cp.username/password", s.config.ListenAddr)
+	}
+	if strings.EqualFold(host, "localhost") {
+		return nil
+	}
+	ips, lookupErr := net.LookupIP(host)
+	if lookupErr != nil || len(ips) == 0 {
+		return oops.Errorf("i2cp: refusing to start unauthenticated TCP listener on unresolved host %q; configure i2cp.username/password or bind to loopback", s.config.ListenAddr)
+	}
+	for _, ip := range ips {
+		if !ip.IsLoopback() {
+			return oops.Errorf("i2cp: refusing to start unauthenticated TCP listener on non-loopback host %q; configure i2cp.username/password", s.config.ListenAddr)
+		}
+	}
+	return nil
+}
+
 // requiresAuthentication returns true if the given message type requires
 // the connection to be authenticated before processing.
 // The following message types are allowed without authentication:

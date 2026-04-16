@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-i2p/crypto/rand"
 	"github.com/go-i2p/crypto/types"
+	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
@@ -83,8 +84,10 @@ func (pc *PersistentConfig) loadObfuscationIV(path string) ([]byte, error) {
 // Returns the generated IV or an error if generation/storage fails.
 func (pc *PersistentConfig) generateAndStoreObfuscationIV(path string) ([]byte, error) {
 	log.WithField("path", path).Info("Generating new obfuscation IV")
-	// Ensure directory exists
-	if err := os.MkdirAll(pc.workingDir, 0o755); err != nil {
+	// Ensure directory exists with owner-only permissions. Using
+	// config.CreateSecureDirectory keeps the obfuscation IV filename from
+	// leaking to other local users via a directory listing.
+	if err := config.CreateSecureDirectory(pc.workingDir); err != nil {
 		log.WithError(err).Error("Failed to create config directory")
 		return nil, WrapNTCP2Error(err, "creating config directory")
 	}

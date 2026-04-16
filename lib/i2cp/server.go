@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -203,6 +204,10 @@ func NewServer(config *ServerConfig) (*Server, error) {
 
 // Start begins listening for I2CP connections
 func (s *Server) Start() error {
+	if err := s.enforceBindPolicy(); err != nil {
+		return err
+	}
+
 	s.mu.Lock()
 	if s.running {
 		s.mu.Unlock()
@@ -221,6 +226,20 @@ func (s *Server) Start() error {
 	}
 
 	s.listener = listener
+
+	// Restrict Unix-socket access to the owning user. Without this chmod the
+	// socket inherits the process umask (typically 0o755 on Linux), which
+	// would let any local user connect — defeating the "use a Unix socket"
+	// hardening measure documented in the README.
+	if s.config.Network == "unix" && s.config.ListenAddr != "" {
+		if chmodErr := os.Chmod(s.config.ListenAddr, 0o600); chmodErr != nil {
+			_ = listener.Close()
+			s.mu.Lock()
+			s.running = false
+			s.mu.Unlock()
+			return oops.Errorf("failed to set Unix socket permissions on %s: %w", s.config.ListenAddr, chmodErr)
+		}
+	}
 
 	log.WithFields(logger.Fields{
 		"at":      "i2cp.Server.Start",
