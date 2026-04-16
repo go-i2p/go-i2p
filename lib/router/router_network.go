@@ -368,7 +368,7 @@ func (r *Router) handleNewConnection(conn net.Conn) {
 	r.wg.Add(1)
 	go func() {
 		defer r.wg.Done()
-		r.processSessionMessages(session, peerHash)
+		r.processSessionMessages(session, staticAuthenticatedPeer{hash: peerHash, handshakeComplete: true})
 	}()
 
 	log.WithField("peer_hash", fmt.Sprintf("%x", peerHash[:8])).Info("Started monitoring new inbound session")
@@ -409,20 +409,66 @@ type i2npReader interface {
 	ReadNextI2NP() (i2np.I2NPMessage, error)
 }
 
+// AuthenticatedPeer defines the minimum identity guarantees required before
+// starting a session message processor.
+type AuthenticatedPeer interface {
+	PeerHash() common.Hash
+	HandshakeComplete() bool
+}
+
+type staticAuthenticatedPeer struct {
+	hash              common.Hash
+	handshakeComplete bool
+}
+
+func (p staticAuthenticatedPeer) PeerHash() common.Hash {
+	return p.hash
+}
+
+func (p staticAuthenticatedPeer) HandshakeComplete() bool {
+	return p.handshakeComplete
+}
+
 // processSessionMessages reads and processes I2NP messages from a single session.
 // This method runs in a dedicated goroutine for each active session,
 // continuously reading messages until the session closes or the router stops.
 // Message processing errors are logged but don't terminate the session.
-func (r *Router) processSessionMessages(session i2npReader, peerHash common.Hash) {
+func (r *Router) processSessionMessages(session i2npReader, peer AuthenticatedPeer) {
+	if peer == nil || !peer.HandshakeComplete() {
+		log.WithField("at", "processSessionMessages").Warn("Refusing to start session message processor for unauthenticated peer")
+		return
+	}
+
+	peerHash := peer.PeerHash()
 	defer log.WithField("peer_hash", fmt.Sprintf("%x", peerHash[:8])).Debug("Session message processor stopped")
 
 	for r.shouldContinueMonitoring() {
-		if msg := r.readNextMessage(session, peerHash); msg != nil {
-			r.handleIncomingMessage(msg, peerHash)
-		} else {
+		if !r.processSessionMessageSafely(session, peerHash) {
 			return
 		}
 	}
+}
+
+// processSessionMessageSafely processes a single inbound message and recovers
+// from parser/dispatcher panics so one malicious payload cannot crash the router.
+func (r *Router) processSessionMessageSafely(session i2npReader, peerHash common.Hash) (keepProcessing bool) {
+	keepProcessing = true
+	defer func() {
+		if rec := recover(); rec != nil {
+			log.WithFields(logger.Fields{
+				"peer_hash": fmt.Sprintf("%x", peerHash[:8]),
+				"panic":     fmt.Sprintf("%v", rec),
+			}).Error("Recovered from panic in I2NP dispatch; dropping session")
+			keepProcessing = false
+		}
+	}()
+
+	msg := r.readNextMessage(session, peerHash)
+	if msg == nil {
+		return false
+	}
+	r.handleIncomingMessage(msg, peerHash)
+	return true
 }
 
 // readNextMessage reads the next I2NP message from the session.
@@ -462,10 +508,23 @@ func (r *Router) handleIncomingMessage(msg i2np.I2NPMessage, peerHash common.Has
 // This method serves as the main dispatch point for all incoming I2NP messages,
 // directing them to the correct processing subsystem (database, tunnel, or general).
 // Returns an error if the message type is unsupported or routing fails.
-func (r *Router) routeMessage(msg i2np.I2NPMessage, fromPeer common.Hash) error {
+func (r *Router) routeMessage(msg i2np.I2NPMessage, fromPeer common.Hash) (err error) {
+	messageType, messageID := safeMessageMetadata(msg)
+	defer func() {
+		if rec := recover(); rec != nil {
+			err = oops.Errorf("panic while routing I2NP message type %d: %v", messageType, rec)
+			log.WithError(err).WithFields(logger.Fields{
+				"message_type": messageType,
+				"message_id":   messageID,
+				"from_peer":    fmt.Sprintf("%x", fromPeer[:8]),
+				"panic":        fmt.Sprintf("%v", rec),
+			}).Error("Recovered from panic in routeMessage")
+		}
+	}()
+
 	log.WithFields(logger.Fields{
-		"message_type": msg.Type(),
-		"message_id":   msg.MessageID(),
+		"message_type": messageType,
+		"message_id":   messageID,
 		"from_peer":    fmt.Sprintf("%x", fromPeer[:8]),
 	}).Debug("Routing I2NP message")
 
@@ -475,6 +534,28 @@ func (r *Router) routeMessage(msg i2np.I2NPMessage, fromPeer common.Hash) error 
 	}
 
 	return r.dispatchByMessageType(msg, mr, fs)
+}
+
+func safeMessageMetadata(msg i2np.I2NPMessage) (messageType int, messageID int) {
+	return safeMessageType(msg), safeMessageID(msg)
+}
+
+func safeMessageType(msg i2np.I2NPMessage) (messageType int) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			messageType = -1
+		}
+	}()
+	return msg.Type()
+}
+
+func safeMessageID(msg i2np.I2NPMessage) (messageID int) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			messageID = -1
+		}
+	}()
+	return msg.MessageID()
 }
 
 // getRoutingComponents returns the message router and floodfill server under lock.
@@ -863,7 +944,7 @@ func (r *Router) registerNewSession(hash common.Hash, transportSession i2np.I2NP
 		r.wg.Add(1)
 		go func() {
 			defer r.wg.Done()
-			r.processSessionMessages(s, hash)
+			r.processSessionMessages(s, staticAuthenticatedPeer{hash: hash, handshakeComplete: true})
 		}()
 		log.WithField("peer_hash", fmt.Sprintf("%x", hash[:8])).Info("Established and registered new outbound NTCP2 session")
 	case *ssu2.SSU2Session:
@@ -871,7 +952,7 @@ func (r *Router) registerNewSession(hash common.Hash, transportSession i2np.I2NP
 		r.wg.Add(1)
 		go func() {
 			defer r.wg.Done()
-			r.processSessionMessages(s, hash)
+			r.processSessionMessages(s, staticAuthenticatedPeer{hash: hash, handshakeComplete: true})
 		}()
 		log.WithField("peer_hash", fmt.Sprintf("%x", hash[:8])).Info("Established and registered new outbound SSU2 session")
 	default:

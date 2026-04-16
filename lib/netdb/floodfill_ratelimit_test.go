@@ -93,3 +93,33 @@ func TestFloodfillRateLimiter_CleanupRemovesStaleEntries(t *testing.T) {
 	rl.mu.Unlock()
 	assert.False(t, exists, "stale peer entry should have been cleaned up")
 }
+
+func TestFloodfillRateLimiter_GlobalCapAcrossPeers(t *testing.T) {
+	rl := NewFloodfillRateLimiterWithGlobal(600, 100, 60, 2)
+	defer rl.Stop()
+
+	peer1 := testPeerHashRL(41)
+	peer2 := testPeerHashRL(42)
+	peer3 := testPeerHashRL(43)
+
+	assert.True(t, rl.Allow(peer1), "first request should pass global cap")
+	assert.True(t, rl.Allow(peer2), "second request should pass global cap")
+	assert.False(t, rl.Allow(peer3), "third immediate request should hit global burst cap")
+	assert.EqualValues(t, 1, rl.GlobalRejectedCount(), "global rejection counter should increment")
+}
+
+func TestFloodfillRateLimiter_RefundsGlobalTokenOnPeerRejection(t *testing.T) {
+	rl := NewFloodfillRateLimiterWithGlobal(60, 1, 60, 2)
+	defer rl.Stop()
+
+	peer1 := testPeerHashRL(51)
+	peer2 := testPeerHashRL(52)
+
+	// First request from peer1 consumes one token in both buckets.
+	assert.True(t, rl.Allow(peer1))
+	// Second request from same peer should be denied by per-peer limiter.
+	assert.False(t, rl.Allow(peer1))
+	// A different peer should still be allowed because global token was refunded.
+	assert.True(t, rl.Allow(peer2))
+	assert.EqualValues(t, 0, rl.GlobalRejectedCount(), "peer rejections should not count as global rejections")
+}

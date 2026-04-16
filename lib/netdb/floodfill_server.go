@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	common "github.com/go-i2p/common/data"
@@ -59,8 +60,15 @@ type FloodfillRateLimiter struct {
 	peers      map[common.Hash]*peerLimit
 	maxBurst   int     // max tokens (requests) per peer
 	refillRate float64 // tokens added per second
-	stopChan   chan struct{}
-	wg         sync.WaitGroup
+
+	globalTokens     float64
+	globalLastUpdate time.Time
+	globalMaxBurst   int
+	globalRefillRate float64
+	globalRejected   uint64
+
+	stopChan chan struct{}
+	wg       sync.WaitGroup
 }
 
 type peerLimit struct {
@@ -71,11 +79,26 @@ type peerLimit struct {
 // NewFloodfillRateLimiter creates a rate limiter allowing maxPerMinute requests
 // per peer per minute with burst capacity.
 func NewFloodfillRateLimiter(maxPerMinute, burstSize int) *FloodfillRateLimiter {
+	// Default global cap: 2000 requests/minute with burst 500.
+	// This bounds aggregate work across many peer identities.
+	return NewFloodfillRateLimiterWithGlobal(maxPerMinute, burstSize, 2000, 500)
+}
+
+// NewFloodfillRateLimiterWithGlobal creates a rate limiter with per-peer and
+// aggregate global token buckets.
+func NewFloodfillRateLimiterWithGlobal(maxPerMinute, burstSize, globalPerMinute, globalBurstSize int) *FloodfillRateLimiter {
+	now := time.Now()
 	rl := &FloodfillRateLimiter{
 		peers:      make(map[common.Hash]*peerLimit),
 		maxBurst:   burstSize,
 		refillRate: float64(maxPerMinute) / 60.0,
-		stopChan:   make(chan struct{}),
+
+		globalTokens:     float64(globalBurstSize),
+		globalLastUpdate: now,
+		globalMaxBurst:   globalBurstSize,
+		globalRefillRate: float64(globalPerMinute) / 60.0,
+
+		stopChan: make(chan struct{}),
 	}
 	rl.wg.Add(1)
 	go rl.cleanupLoop()
@@ -88,6 +111,41 @@ func (rl *FloodfillRateLimiter) Allow(peer common.Hash) bool {
 	defer rl.mu.Unlock()
 
 	now := time.Now()
+	if !rl.allowGlobal(now) {
+		atomic.AddUint64(&rl.globalRejected, 1)
+		return false
+	}
+
+	if !rl.allowPeer(peer, now) {
+		// Global limiter is checked first to bound aggregate load.
+		// Refund if peer-specific limiting rejects this request.
+		rl.globalTokens += 1.0
+		if rl.globalTokens > float64(rl.globalMaxBurst) {
+			rl.globalTokens = float64(rl.globalMaxBurst)
+		}
+		return false
+	}
+
+	return true
+}
+
+func (rl *FloodfillRateLimiter) allowGlobal(now time.Time) bool {
+	elapsed := now.Sub(rl.globalLastUpdate).Seconds()
+	rl.globalTokens += elapsed * rl.globalRefillRate
+	if rl.globalTokens > float64(rl.globalMaxBurst) {
+		rl.globalTokens = float64(rl.globalMaxBurst)
+	}
+	rl.globalLastUpdate = now
+
+	if rl.globalTokens >= 1.0 {
+		rl.globalTokens -= 1.0
+		return true
+	}
+
+	return false
+}
+
+func (rl *FloodfillRateLimiter) allowPeer(peer common.Hash, now time.Time) bool {
 	pl, exists := rl.peers[peer]
 	if !exists {
 		rl.peers[peer] = &peerLimit{
@@ -110,6 +168,11 @@ func (rl *FloodfillRateLimiter) Allow(peer common.Hash) bool {
 		return true
 	}
 	return false
+}
+
+// GlobalRejectedCount returns how many requests were rejected by the global bucket.
+func (rl *FloodfillRateLimiter) GlobalRejectedCount() uint64 {
+	return atomic.LoadUint64(&rl.globalRejected)
 }
 
 // cleanupLoop periodically removes stale entries (peers with full token buckets

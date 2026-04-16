@@ -135,6 +135,77 @@ func TestRouteMessageSwitchStatement(t *testing.T) {
 	assert.True(t, true, "routeMessage method exists and can be called")
 }
 
+type panicOnceReader struct {
+	calls int
+}
+
+func (r *panicOnceReader) ReadNextI2NP() (i2np.I2NPMessage, error) {
+	r.calls++
+	if r.calls == 1 {
+		panic("panic from ReadNextI2NP")
+	}
+	return nil, nil
+}
+
+type panicTypeMessage struct {
+	*i2np.BaseI2NPMessage
+}
+
+func (m *panicTypeMessage) Type() int {
+	panic("panic from Type")
+}
+
+func TestProcessSessionMessagesRecoversFromReadPanic(t *testing.T) {
+	router := &Router{running: true}
+	peerHash := common.Hash{}
+	copy(peerHash[:], "peer_panic_test_12345678901234567")
+
+	reader := &panicOnceReader{}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		router.processSessionMessages(reader, staticAuthenticatedPeer{hash: peerHash, handshakeComplete: true})
+	}()
+
+	select {
+	case <-done:
+		assert.Equal(t, 1, reader.calls, "processor should stop after recovering from panic")
+	case <-time.After(2 * time.Second):
+		t.Fatal("processSessionMessages did not stop after recovered panic")
+	}
+}
+
+func TestRouteMessageRecoversFromMessagePanic(t *testing.T) {
+	router := &Router{
+		messageRouter: i2np.NewI2NPMessageDispatcher(i2np.I2NPMessageDispatcherConfig{
+			MaxRetries:     3,
+			DefaultTimeout: 30,
+			EnableLogging:  false,
+		}),
+	}
+
+	peerHash := common.Hash{}
+	msg := &panicTypeMessage{BaseI2NPMessage: i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeData)}
+
+	var err error
+	assert.NotPanics(t, func() {
+		err = router.routeMessage(msg, peerHash)
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "panic while routing I2NP message")
+}
+
+func TestProcessSessionMessagesRefusesUnauthenticatedPeer(t *testing.T) {
+	router := &Router{running: true}
+	peerHash := common.Hash{}
+	copy(peerHash[:], "peer_unauth_test_1234567890123456")
+
+	reader := &panicOnceReader{}
+	router.processSessionMessages(reader, staticAuthenticatedPeer{hash: peerHash, handshakeComplete: false})
+
+	assert.Equal(t, 0, reader.calls, "unauthenticated peers must not start message reads")
+}
+
 // TestCreateSessionFromConnInvalidAddr tests error handling when connection
 // has invalid address type.
 func TestCreateSessionFromConnInvalidAddr(t *testing.T) {
