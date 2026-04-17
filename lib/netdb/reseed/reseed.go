@@ -17,8 +17,8 @@ import (
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 
-	"github.com/eyedeekay/go-unzip/pkg/unzip"
 	"github.com/go-i2p/common/router_info"
+	"github.com/go-i2p/go-unzip/pkg/unzip"
 	"github.com/go-i2p/su3"
 )
 
