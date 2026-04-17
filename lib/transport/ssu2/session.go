@@ -11,6 +11,7 @@ import (
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
+	"golang.org/x/time/rate"
 )
 
 // retransmitTickInterval is how often the send worker checks for expired
@@ -59,6 +60,10 @@ type SSU2Session struct {
 	maxRetransmit  int
 	lastSendNano   int64 // atomic unix-nano of most recent Write call
 
+	// peerTestLimiter enforces a per-session cap on PeerTest (Bob-role) relays.
+	// Burst of 3 with a sustained rate of 1/s (I2P spec allows infrequent tests).
+	peerTestLimiter *rate.Limiter
+
 	ctx       context.Context
 	cancel    context.CancelFunc
 	closeOnce sync.Once
@@ -102,6 +107,7 @@ func NewSSU2SessionDeferred(conn *ssu2noise.SSU2Conn, ctx context.Context, logge
 		cancel:         cancel,
 		logger:         sessionLogger,
 	}
+	s.peerTestLimiter = rate.NewLimiter(rate.Limit(1), 3)
 	s.wireDataHandlerCallbacks()
 	return s
 }

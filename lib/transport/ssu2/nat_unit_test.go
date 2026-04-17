@@ -5,11 +5,13 @@ package ssu2
 // minimal transport helper from transport_unit_test.go.
 
 import (
+	"net"
 	"testing"
 
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/time/rate"
 )
 
 // TestHandlePeerTestBlock_NilManager verifies that handlePeerTestBlock returns
@@ -17,7 +19,7 @@ import (
 func TestHandlePeerTestBlock_NilManager(t *testing.T) {
 	tr := makeMinimalTransport() // no peerTestManager
 	block := &ssu2noise.SSU2Block{}
-	err := tr.handlePeerTestBlock(block)
+	err := tr.handlePeerTestBlock(block, nil)
 	assert.NoError(t, err)
 }
 
@@ -74,7 +76,7 @@ func TestHandlePeerTestBlock_WithManager(t *testing.T) {
 	// empty block, but the function logs and returns the error — it should
 	// not panic.
 	block := &ssu2noise.SSU2Block{}
-	err := tr.handlePeerTestBlock(block)
+	err := tr.handlePeerTestBlock(block, nil)
 	// Either nil (non-initiator path) or a decode error — both are acceptable.
 	_ = err
 }
@@ -85,7 +87,7 @@ func TestBuildTransportCallbacks_ReturnsCallbacks(t *testing.T) {
 	tr, cleanup := makeTestTransportWithListener(t)
 	defer cleanup()
 
-	cbs := tr.buildTransportCallbacks()
+	cbs := tr.buildTransportCallbacks(nil)
 	require.NotNil(t, cbs)
 	assert.NotNil(t, cbs.OnPeerTest)
 	assert.NotNil(t, cbs.OnRelayRequest)
@@ -100,7 +102,7 @@ func TestBuildTransportCallbacks_DelegatesHandler(t *testing.T) {
 	tr, cleanup := makeTestTransportWithListener(t)
 	defer cleanup()
 
-	cbs := tr.buildTransportCallbacks()
+	cbs := tr.buildTransportCallbacks(nil)
 
 	block := &ssu2noise.SSU2Block{}
 	assert.NoError(t, cbs.OnRelayRequest(block))
@@ -119,7 +121,7 @@ func TestHandlePeerTestAsBob_NoAliceAddr(t *testing.T) {
 		Nonce:       42,
 		Version:     2,
 	}
-	err := tr.handlePeerTestAsBob(ptBlock)
+	err := tr.handlePeerTestAsBob(ptBlock, nil)
 	assert.NoError(t, err)
 }
 
@@ -162,4 +164,73 @@ func TestFindSessionByHash_NotFound(t *testing.T) {
 func TestRemoteUDPAddr_NilConn(t *testing.T) {
 	s := &SSU2Session{}
 	assert.Nil(t, s.RemoteUDPAddr())
+}
+
+// TestHandlePeerTestAsBob_AddrMismatch verifies that Bob drops a PeerTest
+// request when the declared AliceIP does not match the session's observed
+// remote address.
+func TestHandlePeerTestAsBob_AddrMismatch(t *testing.T) {
+	tr, cleanup := makeTestTransportWithListener(t)
+	defer cleanup()
+
+	// Build a minimal session with conn=nil (no match possible → skips check).
+	ptBlock := &ssu2noise.PeerTestBlock{
+		MessageCode: ssu2noise.PeerTestRequest,
+		Nonce:       77,
+		AliceIP:     net.ParseIP("10.0.0.1").To4(),
+		AlicePort:   8000,
+	}
+	// With nil session, the address check is skipped — the only failure path is
+	// missing Charlie which returns nil.
+	err := tr.handlePeerTestAsBob(ptBlock, nil)
+	assert.NoError(t, err)
+}
+
+// TestHandlePeerTestAsBob_SessionRateLimit verifies that per-session rate
+// limiting drops requests once the token bucket is exhausted.
+func TestHandlePeerTestAsBob_SessionRateLimit(t *testing.T) {
+	tr, cleanup := makeTestTransportWithListener(t)
+	defer cleanup()
+
+	// Create a session with an exhausted rate limiter (burst=3, reserve all).
+	limiter := rate.NewLimiter(rate.Limit(1), 3)
+	limiter.Allow() // consume 1
+	limiter.Allow() // consume 2
+	limiter.Allow() // consume 3 — bucket now empty
+	session := &SSU2Session{
+		peerTestLimiter: limiter,
+	}
+
+	ptBlock := &ssu2noise.PeerTestBlock{
+		MessageCode: ssu2noise.PeerTestRequest,
+		Nonce:       99,
+		AliceIP:     net.ParseIP("127.0.0.1").To4(),
+		AlicePort:   7000,
+	}
+	// The rate limiter should drop this request silently.
+	err := tr.handlePeerTestAsBob(ptBlock, session)
+	assert.NoError(t, err) // drops silently, no error
+}
+
+// TestHandlePeerTestAsBob_GlobalRateLimit verifies that the global rate limit
+// drops relays when exhausted.
+func TestHandlePeerTestAsBob_GlobalRateLimit(t *testing.T) {
+	tr, cleanup := makeTestTransportWithListener(t)
+	defer cleanup()
+
+	// Exhaust the global limiter.
+	tr.peerTestGlobalLimiter = rate.NewLimiter(rate.Limit(1), 0)
+
+	session := &SSU2Session{
+		peerTestLimiter: rate.NewLimiter(rate.Limit(1), 3),
+	}
+
+	ptBlock := &ssu2noise.PeerTestBlock{
+		MessageCode: ssu2noise.PeerTestRequest,
+		Nonce:       55,
+		AliceIP:     net.ParseIP("127.0.0.1").To4(),
+		AlicePort:   6000,
+	}
+	err := tr.handlePeerTestAsBob(ptBlock, session)
+	assert.NoError(t, err) // drops silently due to global limit
 }

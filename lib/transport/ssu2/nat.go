@@ -26,12 +26,14 @@ func initNATManagers(t *SSU2Transport) {
 }
 
 // buildTransportCallbacks returns a BlockCallbackConfig whose handlers delegate
-// to the transport's NAT managers. Sessions call this to supplement their own
-// local callbacks (termination, clock validation).
-func (t *SSU2Transport) buildTransportCallbacks() *BlockCallbackConfig {
+// to the transport's NAT managers. The session parameter is used by the
+// PeerTest handler to enforce per-session rate limits and source validation.
+// Sessions call this to supplement their own local callbacks (termination,
+// clock validation).
+func (t *SSU2Transport) buildTransportCallbacks(session *SSU2Session) *BlockCallbackConfig {
 	return &BlockCallbackConfig{
 		OnPeerTest: func(block *ssu2noise.SSU2Block) error {
-			return t.handlePeerTestBlock(block)
+			return t.handlePeerTestBlock(block, session)
 		},
 		OnRelayRequest: func(block *ssu2noise.SSU2Block) error {
 			return t.handleRelayRequestBlock(block)
@@ -48,7 +50,7 @@ func (t *SSU2Transport) buildTransportCallbacks() *BlockCallbackConfig {
 // handlePeerTestBlock processes an incoming PeerTest block, dispatching by
 // message code to support Alice (initiator), Bob (relay), and Charlie
 // (responder) roles in the SSU2 peer test protocol.
-func (t *SSU2Transport) handlePeerTestBlock(block *ssu2noise.SSU2Block) error {
+func (t *SSU2Transport) handlePeerTestBlock(block *ssu2noise.SSU2Block, session *SSU2Session) error {
 	if t.peerTestManager == nil {
 		return nil
 	}
@@ -59,7 +61,7 @@ func (t *SSU2Transport) handlePeerTestBlock(block *ssu2noise.SSU2Block) error {
 	}
 	switch ptBlock.MessageCode {
 	case ssu2noise.PeerTestRequest:
-		return t.handlePeerTestAsBob(ptBlock)
+		return t.handlePeerTestAsBob(ptBlock, session)
 	case ssu2noise.PeerTestRelay:
 		return t.handlePeerTestAsCharlie(ptBlock)
 	default:
@@ -90,9 +92,10 @@ func (t *SSU2Transport) handlePeerTestAsAlice(ptBlock *ssu2noise.PeerTestBlock) 
 }
 
 // handlePeerTestAsBob processes a PeerTest request where we act as Bob (relay).
-// We record the relay test and forward a PeerTestRelay to Charlie (identified
-// by RouterHash in the block).
-func (t *SSU2Transport) handlePeerTestAsBob(ptBlock *ssu2noise.PeerTestBlock) error {
+// It validates that Alice's declared address matches the session's observed
+// remote address to prevent source-address spoofing, enforces per-session and
+// global rate limits, then forwards a PeerTestRelay to Charlie.
+func (t *SSU2Transport) handlePeerTestAsBob(ptBlock *ssu2noise.PeerTestBlock, session *SSU2Session) error {
 	var aliceAddr *net.UDPAddr
 	if len(ptBlock.AliceIP) > 0 {
 		aliceAddr = &net.UDPAddr{
@@ -102,6 +105,30 @@ func (t *SSU2Transport) handlePeerTestAsBob(ptBlock *ssu2noise.PeerTestBlock) er
 	}
 	if aliceAddr == nil {
 		t.logger.Debug("PeerTest Bob: missing Alice address, ignoring")
+		return nil
+	}
+	// Validate that the declared AliceIP matches the session's observed address.
+	// Mismatched claims mean the peer is trying to use us as a relay forwarder
+	// to an arbitrary victim address — we reject such requests.
+	if session != nil {
+		if observed := session.RemoteUDPAddr(); observed != nil {
+			if !observed.IP.Equal(aliceAddr.IP) || observed.Port != aliceAddr.Port {
+				t.logger.WithFields(map[string]interface{}{
+					"declared": aliceAddr.String(),
+					"observed": observed.String(),
+				}).Warn("PeerTest Bob: AliceIP mismatch, dropping")
+				return nil
+			}
+		}
+	}
+	// Per-session rate limit: 1 PeerTest/s, burst 3.
+	if session != nil && !session.peerTestLimiter.Allow() {
+		t.logger.Debug("PeerTest Bob: per-session rate limit exceeded, dropping")
+		return nil
+	}
+	// Global rate limit: 100 PeerTestRelay emissions/s, burst 200.
+	if t.peerTestGlobalLimiter != nil && !t.peerTestGlobalLimiter.Allow() {
+		t.logger.Debug("PeerTest Bob: global rate limit exceeded, dropping")
 		return nil
 	}
 	charlieAddr := t.resolveCharlieAddr(ptBlock)

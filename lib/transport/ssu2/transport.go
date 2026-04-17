@@ -18,6 +18,7 @@ import (
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
+	"golang.org/x/time/rate"
 )
 
 // SSU2Transport implements transport.Transport for SSU2 connections.
@@ -60,6 +61,10 @@ type SSU2Transport struct {
 
 	logger *logger.Entry
 
+	// peerTestGlobalLimiter caps total PeerTestRelay emissions per second
+	// across all sessions to limit amplification.
+	peerTestGlobalLimiter *rate.Limiter
+
 	// closeOnce ensures Close() is idempotent.
 	closeOnce sync.Once
 	closeErr  error
@@ -101,14 +106,15 @@ func NewSSU2Transport(identity router_info.RouterInfo, config *Config, keystore 
 	config.SSU2Config = ssu2Config
 
 	t := &SSU2Transport{
-		config:        config,
-		identity:      identity,
-		keystore:      keystore,
-		handler:       NewDefaultHandler(),
-		natStateCache: &natState{},
-		ctx:           ctx,
-		cancel:        cancel,
-		logger:        l,
+		config:                config,
+		identity:              identity,
+		keystore:              keystore,
+		handler:               NewDefaultHandler(),
+		natStateCache:         &natState{},
+		peerTestGlobalLimiter: rate.NewLimiter(100, 200),
+		ctx:                   ctx,
+		cancel:                cancel,
+		logger:                l,
 	}
 
 	if err := setupUDPListener(t, config, ssu2Config); err != nil {
@@ -431,7 +437,7 @@ func (t *SSU2Transport) promoteInboundConnection(conn net.Conn, original interfa
 	}
 	promoted := NewSSU2SessionDeferred(ssu2Conn, t.ctx, t.logger)
 	promoted.maxRetransmit = t.config.GetMaxRetransmissions()
-	promoted.SetTransportCallbacks(t.buildTransportCallbacks())
+	promoted.SetTransportCallbacks(t.buildTransportCallbacks(promoted))
 	if t.sessions.CompareAndSwap(routerHash, original, promoted) {
 		promoted.SetCleanupCallback(func() {
 			t.removeSession(routerHash)
@@ -590,7 +596,7 @@ func extractRemoteStaticKey(routerInfo router_info.RouterInfo) ([]byte, error) {
 func (t *SSU2Transport) registerOrReuseSession(conn *ssu2noise.SSU2Conn, routerHash data.Hash) (*SSU2Session, bool, error) {
 	session := NewSSU2SessionDeferred(conn, t.ctx, t.logger)
 	session.maxRetransmit = t.config.GetMaxRetransmissions()
-	session.SetTransportCallbacks(t.buildTransportCallbacks())
+	session.SetTransportCallbacks(t.buildTransportCallbacks(session))
 
 	existing, loaded := t.sessions.LoadOrStore(routerHash, session)
 	if loaded {

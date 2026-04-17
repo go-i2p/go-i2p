@@ -158,7 +158,7 @@ func TestBuildTransportCallbacks(t *testing.T) {
 	tr, cleanup := makeTestTransportWithListener(t)
 	defer cleanup()
 
-	cfg := tr.buildTransportCallbacks()
+	cfg := tr.buildTransportCallbacks(nil)
 	require.NotNil(t, cfg)
 	assert.NotNil(t, cfg.OnPeerTest, "OnPeerTest should be set")
 	assert.NotNil(t, cfg.OnRelayRequest, "OnRelayRequest should be set")
