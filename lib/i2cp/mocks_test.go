@@ -120,6 +120,12 @@ type mockHostnameResolver struct {
 	err          error
 }
 
+type hostnameResolverFunc func(string) ([]byte, error)
+
+func (f hostnameResolverFunc) ResolveHostname(hostname string) ([]byte, error) {
+	return f(hostname)
+}
+
 func (m *mockHostnameResolver) ResolveHostname(hostname string) ([]byte, error) {
 	if m.err != nil {
 		return nil, m.err

@@ -915,6 +915,35 @@ func TestAllowHostLookup_RateLimitedPerConnection(t *testing.T) {
 	assert.Equal(t, byte(HostReplyTimeout), reply.ResultCode)
 }
 
+func TestProcessClientMessage_RecoversFromHandlerPanic(t *testing.T) {
+	server, err := NewServer(DefaultServerConfig())
+	require.NoError(t, err)
+
+	server.SetHostnameResolver(hostnameResolverFunc(func(string) ([]byte, error) {
+		panic("resolver boom")
+	}))
+
+	payload, err := (&HostLookupPayload{
+		RequestID:  88,
+		LookupType: HostLookupTypeHostname,
+		Query:      "panic.i2p",
+	}).MarshalBinary()
+	require.NoError(t, err)
+
+	client, peer := net.Pipe()
+	defer client.Close()
+	defer peer.Close()
+
+	var session *Session
+	response, err := server.processClientMessage(client, &Message{
+		Type:      MessageTypeHostLookup,
+		SessionID: 0,
+		Payload:   payload,
+	}, &session)
+	assert.Nil(t, response)
+	assert.Error(t, err)
+}
+
 // TestBuildMessageStatusResponse verifies MessageStatus message construction.
 func TestBuildMessageStatusResponse(t *testing.T) {
 	tests := []struct {

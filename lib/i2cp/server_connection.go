@@ -198,6 +198,7 @@ func (s *Server) shouldRejectConnection(conn net.Conn) bool {
 // handleConnection processes a single client connection
 func (s *Server) handleConnection(conn net.Conn) {
 	defer s.wg.Done()
+	defer s.recoverFromConnectionPanic(conn)
 	defer conn.Close()
 	defer s.cleanupConnectionState(conn)
 
@@ -213,6 +214,17 @@ func (s *Server) handleConnection(conn net.Conn) {
 	defer s.cleanupSessionConnection(&session)
 
 	s.runConnectionLoop(conn, &session)
+}
+
+func (s *Server) recoverFromConnectionPanic(conn net.Conn) {
+	if r := recover(); r != nil {
+		log.WithFields(logger.Fields{
+			"at":         "i2cp.Server.handleConnection",
+			"remoteAddr": conn.RemoteAddr().String(),
+			"localAddr":  conn.LocalAddr().String(),
+			"panic":      r,
+		}).Error("panic_in_connection_handler")
+	}
 }
 
 // logClientConnected logs when a client connects to the server.
@@ -560,8 +572,21 @@ func (s *Server) logReceivedMessage(msg *Message) {
 }
 
 // processClientMessage handles a client message and returns a response.
-func (s *Server) processClientMessage(conn net.Conn, msg *Message, sessionPtr **Session) (*Message, error) {
-	response, err := s.handleMessage(conn, msg, sessionPtr)
+func (s *Server) processClientMessage(conn net.Conn, msg *Message, sessionPtr **Session) (response *Message, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.WithFields(logger.Fields{
+				"at":         "i2cp.Server.processClientMessage",
+				"msgType":    MessageTypeName(msg.Type),
+				"remoteAddr": conn.RemoteAddr().String(),
+				"panic":      r,
+			}).Error("panic_in_message_handler")
+			response = nil
+			err = oops.Errorf("panic handling %s: %v", MessageTypeName(msg.Type), r)
+		}
+	}()
+
+	response, err = s.handleMessage(conn, msg, sessionPtr)
 	if err != nil {
 		log.WithError(err).Error("failed_to_handle_message")
 		return nil, err
