@@ -52,6 +52,27 @@ func TestServer_StartFailsClosedOnNonLoopbackTCPWithoutAuth(t *testing.T) {
 	}
 }
 
+// TestServer_StartRefusesHostnameWithoutAuth asserts that a non-localhost hostname
+// is rejected without a DNS lookup to prevent TOCTOU issues.
+func TestServer_StartRefusesHostnameWithoutAuth(t *testing.T) {
+	srv, err := NewServer(&ServerConfig{
+		ListenAddr:  "myhost.example.com:7654",
+		Network:     "tcp",
+		MaxSessions: 10,
+	})
+	if err != nil {
+		t.Fatalf("NewServer: %v", err)
+	}
+	err = srv.Start()
+	if err == nil {
+		srv.Stop()
+		t.Fatal("expected Start to refuse non-IP hostname without auth")
+	}
+	if !strings.Contains(err.Error(), "refusing") {
+		t.Fatalf("expected refusal error, got %q", err.Error())
+	}
+}
+
 // TestServer_UnixSocketPermissions asserts the I2CP server chmods its Unix
 // socket to 0o600 so only the owning user can connect. See AUDIT.md MEDIUM
 // — "Unix-domain socket permissions for the I2CP listener...".

@@ -164,16 +164,11 @@ func (s *Server) enforceBindPolicy() error {
 	if strings.EqualFold(host, "localhost") {
 		return nil
 	}
-	ips, lookupErr := net.LookupIP(host)
-	if lookupErr != nil || len(ips) == 0 {
-		return oops.Errorf("i2cp: refusing to start unauthenticated TCP listener on unresolved host %q; configure i2cp.username/password or bind to loopback", s.config.ListenAddr)
-	}
-	for _, ip := range ips {
-		if !ip.IsLoopback() {
-			return oops.Errorf("i2cp: refusing to start unauthenticated TCP listener on non-loopback host %q; configure i2cp.username/password", s.config.ListenAddr)
-		}
-	}
-	return nil
+	// Reject any non-literal-IP hostname that is not "localhost".  Resolving
+	// hostnames via DNS introduces a TOCTOU window: the address checked here
+	// could differ from the address actually bound by net.Listen moments
+	// later.  Operators must supply a literal IP or a Unix socket.
+	return oops.Errorf("i2cp: refusing to start unauthenticated TCP listener on hostname %q; use a literal loopback IP (127.0.0.1 / ::1) or configure i2cp.username/password", s.config.ListenAddr)
 }
 
 // requiresAuthentication returns true if the given message type requires
