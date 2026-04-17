@@ -188,7 +188,10 @@ func (r *Reseed) ProcessLocalZipFileWithLimit(filePath string, limit int) ([]rou
 func (r *Reseed) performReseedRequest(uri string) (*http.Response, error) {
 	log.WithField("uri", uri).Info("Initiating reseed HTTP request")
 
-	client := createReseedHTTPClient(r.DialContext)
+	client, err := createReseedHTTPClient(r.DialContext)
+	if err != nil {
+		return nil, err
+	}
 	URL, err := url.Parse(uri)
 	if err != nil {
 		log.WithError(err).WithField("uri", uri).Error("Failed to parse reseed URI")
@@ -226,8 +229,11 @@ func (r *Reseed) performReseedRequest(uri string) (*http.Response, error) {
 // createReseedHTTPClient creates an HTTP client configured for reseed operations.
 // The TLS configuration uses the system certificate pool merged with embedded
 // reseed certificates, so connections to reseed servers with non-standard CAs succeed.
-func createReseedHTTPClient(dialContext func(ctx context.Context, network, addr string) (net.Conn, error)) *http.Client {
-	rootCAs := buildReseedCertPool()
+func createReseedHTTPClient(dialContext func(ctx context.Context, network, addr string) (net.Conn, error)) (*http.Client, error) {
+	rootCAs, err := buildReseedCertPool()
+	if err != nil {
+		return nil, err
+	}
 
 	transport := http.Transport{
 		DialContext: dialContext,
@@ -241,7 +247,7 @@ func createReseedHTTPClient(dialContext func(ctx context.Context, network, addr 
 	return &http.Client{
 		Transport: &transport,
 		Timeout:   30 * time.Second,
-	}
+	}, nil
 }
 
 // buildReseedCertPool creates a certificate pool containing both system certificates
@@ -249,15 +255,15 @@ func createReseedHTTPClient(dialContext func(ctx context.Context, network, addr 
 // Reseed operators commonly use the same certificate for both SU3 content signing
 // and as their TLS server certificate (self-signed). Without merging the embedded
 // certs into the TLS pool, connections to these self-signed reseed servers would fail.
-func buildReseedCertPool() *x509.CertPool {
+func buildReseedCertPool() (*x509.CertPool, error) {
 	rootCAs, err := x509.SystemCertPool()
 	if err != nil {
-		log.WithError(err).Warn("Failed to load system cert pool, using empty pool")
-		rootCAs = x509.NewCertPool()
+		log.WithError(err).Error("Failed to load system cert pool; cannot create reseed HTTP client")
+		return nil, oops.Wrapf(err, "system cert pool unavailable")
 	}
 
 	mergeEmbeddedCerts(rootCAs)
-	return rootCAs
+	return rootCAs, nil
 }
 
 // mergeEmbeddedCerts adds embedded reseed and SSL certificates to the provided certificate pool.

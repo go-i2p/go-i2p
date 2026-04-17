@@ -23,7 +23,10 @@ func TestNewReseed(t *testing.T) {
 
 // TestCreateReseedHTTPClient verifies HTTP client configuration
 func TestCreateReseedHTTPClient(t *testing.T) {
-	client := createReseedHTTPClient(nil)
+	client, err := createReseedHTTPClient(nil)
+	if err != nil {
+		t.Skipf("system cert pool unavailable: %v", err)
+	}
 	require.NotNil(t, client)
 
 	// Verify timeout is set to 30 seconds
@@ -483,7 +486,10 @@ func TestPerformReseedRequest_AcceptsHTTPS(t *testing.T) {
 
 // TestCreateReseedHTTPClient_HasRootCAs verifies the TLS config has a custom RootCAs pool
 func TestCreateReseedHTTPClient_HasRootCAs(t *testing.T) {
-	client := createReseedHTTPClient(nil)
+	client, err := createReseedHTTPClient(nil)
+	if err != nil {
+		t.Skipf("system cert pool unavailable: %v", err)
+	}
 	require.NotNil(t, client)
 
 	transport, ok := client.Transport.(*http.Transport)
