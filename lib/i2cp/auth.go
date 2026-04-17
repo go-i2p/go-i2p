@@ -10,6 +10,10 @@ import (
 	"github.com/samber/oops"
 )
 
+type connectionAuthenticator interface {
+	AuthenticateConnection(conn net.Conn, username, password string) bool
+}
+
 // Authenticator validates I2CP client credentials.
 // Implementations must be safe for concurrent use.
 type Authenticator interface {
@@ -85,6 +89,14 @@ func (s *Server) authenticateConnection(state *connectionState, username, passwo
 
 	if auth == nil {
 		return true // No authenticator — always succeeds
+	}
+
+	if connAuth, ok := auth.(connectionAuthenticator); ok {
+		if connAuth.AuthenticateConnection(state.conn, username, password) {
+			state.authenticated.Store(true)
+			return true
+		}
+		return false
 	}
 
 	if auth.Authenticate(username, password) {
@@ -170,7 +182,6 @@ func (s *Server) enforceBindPolicy() error {
 //   - GetDate (type 32): Needed for handshake; also carries auth credentials
 //   - GetBandwidthLimits (type 8): Read-only informational query
 //   - Disconnect (type 30): Graceful disconnection always allowed
-//   - HostLookup (type 38): Read-only informational query
 //
 // All other message types (CreateSession, SendMessage, etc.) require auth.
 func (s *Server) requiresAuthentication(msgType byte) bool {
@@ -181,8 +192,7 @@ func (s *Server) requiresAuthentication(msgType byte) bool {
 	switch msgType {
 	case MessageTypeGetDate,
 		MessageTypeGetBandwidthLimits,
-		MessageTypeDisconnect,
-		MessageTypeHostLookup:
+		MessageTypeDisconnect:
 		return false // Allowed without authentication
 	default:
 		return true // All other operations require authentication

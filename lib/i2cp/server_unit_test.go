@@ -877,6 +877,44 @@ func TestSetHostnameResolver(t *testing.T) {
 	assert.Equal(t, resolver, server.hostnameResolver)
 }
 
+func TestAllowHostLookup_RateLimitedPerConnection(t *testing.T) {
+	server, err := NewServer(DefaultServerConfig())
+	require.NoError(t, err)
+
+	payload, err := (&HostLookupPayload{
+		RequestID:  77,
+		LookupType: HostLookupTypeHostname,
+		Query:      "forum.i2p",
+	}).MarshalBinary()
+	require.NoError(t, err)
+
+	msg := &Message{
+		Type:      MessageTypeHostLookup,
+		SessionID: 0,
+		Payload:   payload,
+	}
+
+	client, peer := net.Pipe()
+	defer client.Close()
+	defer peer.Close()
+
+	for i := 0; i < hostLookupBurst; i++ {
+		response, allowed := server.allowHostLookup(client, msg)
+		assert.True(t, allowed, "lookup %d should be allowed", i+1)
+		assert.Nil(t, response)
+	}
+
+	response, allowed := server.allowHostLookup(client, msg)
+	assert.False(t, allowed)
+	require.NotNil(t, response)
+	assert.Equal(t, MessageTypeHostReply, response.Type)
+
+	reply, err := ParseHostReplyPayload(response.Payload)
+	require.NoError(t, err)
+	assert.Equal(t, uint32(77), reply.RequestID)
+	assert.Equal(t, byte(HostReplyTimeout), reply.ResultCode)
+}
+
 // TestBuildMessageStatusResponse verifies MessageStatus message construction.
 func TestBuildMessageStatusResponse(t *testing.T) {
 	tests := []struct {

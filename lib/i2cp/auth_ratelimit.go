@@ -1,6 +1,8 @@
 package i2cp
 
 import (
+	"container/list"
+	"net"
 	"sync"
 	"time"
 
@@ -18,6 +20,16 @@ const maxI2CPFailedAttempts = 10
 // resets the counter. This mirrors lib/i2pcontrol/auth.go.
 const i2cpFailedAttemptLockout = 5 * time.Minute
 
+const maxTrackedI2CPAuthRemotes = 1024
+
+type authAttemptState struct {
+	remoteAddr        string
+	failedAttempts    int
+	lockoutUntil      time.Time
+	lastFailedAttempt time.Time
+	lruEntry          *list.Element
+}
+
 // RateLimitedAuthenticator wraps another Authenticator and refuses
 // authentication attempts after too many consecutive failures. While locked
 // out, Authenticate returns false without calling the delegate, which
@@ -29,16 +41,19 @@ const i2cpFailedAttemptLockout = 5 * time.Minute
 type RateLimitedAuthenticator struct {
 	delegate Authenticator
 
-	mu                sync.Mutex
-	failedAttempts    int
-	lockoutUntil      time.Time
-	lastFailedAttempt time.Time
+	mu      sync.Mutex
+	entries map[string]*authAttemptState
+	lru     *list.List
 }
 
 // NewRateLimitedAuthenticator wraps delegate with rate-limiting. If delegate
 // is nil, the returned authenticator rejects every request.
 func NewRateLimitedAuthenticator(delegate Authenticator) *RateLimitedAuthenticator {
-	return &RateLimitedAuthenticator{delegate: delegate}
+	return &RateLimitedAuthenticator{
+		delegate: delegate,
+		entries:  make(map[string]*authAttemptState),
+		lru:      list.New(),
+	}
 }
 
 // Authenticate implements Authenticator. When the authenticator is in a
@@ -46,14 +61,23 @@ func NewRateLimitedAuthenticator(delegate Authenticator) *RateLimitedAuthenticat
 // Otherwise the call is forwarded to the delegate; failures increment the
 // counter and may arm a new lockout window.
 func (r *RateLimitedAuthenticator) Authenticate(username, password string) bool {
+	return r.AuthenticateConnection(nil, username, password)
+}
+
+// AuthenticateConnection enforces lockouts independently for each remote
+// address so one failing client cannot deny service to unrelated clients.
+func (r *RateLimitedAuthenticator) AuthenticateConnection(conn net.Conn, username, password string) bool {
+	remoteAddr := remoteAddrKey(conn)
+
 	r.mu.Lock()
-	if !r.lockoutUntil.IsZero() && time.Now().Before(r.lockoutUntil) {
-		remaining := time.Until(r.lockoutUntil).Round(time.Second)
+	state := r.getOrCreateStateLocked(remoteAddr)
+	if !state.lockoutUntil.IsZero() && time.Now().Before(state.lockoutUntil) {
+		remaining := time.Until(state.lockoutUntil).Round(time.Second)
 		r.mu.Unlock()
 		log.WithFields(logger.Fields{
-			"at":        "RateLimitedAuthenticator.Authenticate",
-			"remaining": remaining.String(),
-			"username":  username,
+			"at":         "RateLimitedAuthenticator.Authenticate",
+			"remoteAddr": remoteAddr,
+			"remaining":  remaining.String(),
 		}).Warn("i2cp_authentication_rate_limited")
 		return false
 	}
@@ -61,39 +85,84 @@ func (r *RateLimitedAuthenticator) Authenticate(username, password string) bool 
 	r.mu.Unlock()
 
 	if delegate == nil {
-		r.recordFailure()
+		r.recordFailure(remoteAddr)
 		return false
 	}
 
 	if delegate.Authenticate(username, password) {
-		r.reset()
+		r.reset(remoteAddr)
 		return true
 	}
-	r.recordFailure()
+	r.recordFailure(remoteAddr)
 	return false
 }
 
 // recordFailure increments the failure counter and arms a lockout once the
 // configured threshold is reached.
-func (r *RateLimitedAuthenticator) recordFailure() {
+func (r *RateLimitedAuthenticator) recordFailure(remoteAddr string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.failedAttempts++
-	r.lastFailedAttempt = time.Now()
-	if r.failedAttempts >= maxI2CPFailedAttempts {
-		r.lockoutUntil = time.Now().Add(i2cpFailedAttemptLockout)
+	state := r.getOrCreateStateLocked(remoteAddr)
+	state.failedAttempts++
+	state.lastFailedAttempt = time.Now()
+	if state.failedAttempts >= maxI2CPFailedAttempts {
+		state.lockoutUntil = time.Now().Add(i2cpFailedAttemptLockout)
 		log.WithFields(logger.Fields{
-			"at":       "RateLimitedAuthenticator.recordFailure",
-			"attempts": r.failedAttempts,
-			"lockout":  i2cpFailedAttemptLockout.String(),
+			"at":         "RateLimitedAuthenticator.recordFailure",
+			"attempts":   state.failedAttempts,
+			"lockout":    i2cpFailedAttemptLockout.String(),
+			"remoteAddr": remoteAddr,
 		}).Warn("i2cp_authentication_lockout_triggered")
 	}
 }
 
 // reset clears the failure counter and lockout window after a success.
-func (r *RateLimitedAuthenticator) reset() {
+func (r *RateLimitedAuthenticator) reset(remoteAddr string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.failedAttempts = 0
-	r.lockoutUntil = time.Time{}
+	state := r.getOrCreateStateLocked(remoteAddr)
+	state.failedAttempts = 0
+	state.lockoutUntil = time.Time{}
+}
+
+func (r *RateLimitedAuthenticator) getOrCreateStateLocked(remoteAddr string) *authAttemptState {
+	if state, ok := r.entries[remoteAddr]; ok {
+		r.touchLocked(state)
+		return state
+	}
+
+	state := &authAttemptState{remoteAddr: remoteAddr}
+	state.lruEntry = r.lru.PushFront(state)
+	r.entries[remoteAddr] = state
+	r.evictIfNeededLocked()
+	return state
+}
+
+func (r *RateLimitedAuthenticator) touchLocked(state *authAttemptState) {
+	if state.lruEntry != nil {
+		r.lru.MoveToFront(state.lruEntry)
+	}
+}
+
+func (r *RateLimitedAuthenticator) evictIfNeededLocked() {
+	for len(r.entries) > maxTrackedI2CPAuthRemotes {
+		oldest := r.lru.Back()
+		if oldest == nil {
+			return
+		}
+		state, ok := oldest.Value.(*authAttemptState)
+		if !ok {
+			r.lru.Remove(oldest)
+			continue
+		}
+		delete(r.entries, state.remoteAddr)
+		r.lru.Remove(oldest)
+	}
+}
+
+func remoteAddrKey(conn net.Conn) string {
+	if conn == nil || conn.RemoteAddr() == nil {
+		return "unknown"
+	}
+	return conn.RemoteAddr().String()
 }

@@ -151,7 +151,7 @@ func TestServer_RequiresAuthentication_WithAuthenticator(t *testing.T) {
 		{"GetDate", MessageTypeGetDate, false},
 		{"GetBandwidthLimits", MessageTypeGetBandwidthLimits, false},
 		{"Disconnect", MessageTypeDisconnect, false},
-		{"HostLookup", MessageTypeHostLookup, false},
+		{"HostLookup", MessageTypeHostLookup, true},
 		{"CreateSession", MessageTypeCreateSession, true},
 		{"DestroySession", MessageTypeDestroySession, true},
 		{"SendMessage", MessageTypeSendMessage, true},

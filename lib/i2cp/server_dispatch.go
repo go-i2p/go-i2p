@@ -3,6 +3,7 @@ package i2cp
 import (
 	"encoding/binary"
 	"fmt"
+	"net"
 	"time"
 
 	common "github.com/go-i2p/common/data"
@@ -11,7 +12,7 @@ import (
 	"github.com/samber/oops"
 )
 
-func (s *Server) handleMessage(msg *Message, sessionPtr **Session) (*Message, error) {
+func (s *Server) handleMessage(conn net.Conn, msg *Message, sessionPtr **Session) (*Message, error) {
 	// i2psnark compatibility: Log all incoming messages for debugging
 	var currentSessionID uint16
 	if *sessionPtr != nil {
@@ -59,7 +60,7 @@ func (s *Server) handleMessage(msg *Message, sessionPtr **Session) (*Message, er
 		return s.handleDisconnect(msg, sessionPtr)
 
 	case MessageTypeHostLookup:
-		return s.handleHostLookup(msg)
+		return s.handleHostLookup(conn, msg)
 
 	case MessageTypeBlindingInfo:
 		return s.handleBlindingInfo(msg, sessionPtr)
@@ -762,7 +763,7 @@ func buildHostReplyMessage(sessionID uint16, replyPayload *HostReplyPayload) (*M
 // - Type 1 (hostname): Requires naming service integration (not yet implemented)
 //
 // For hash lookups, the destination is retrieved from the LeaseSet stored in NetDB.
-func (s *Server) handleHostLookup(msg *Message) (*Message, error) {
+func (s *Server) handleHostLookup(_ net.Conn, msg *Message) (*Message, error) {
 	lookupMsg, err := ParseHostLookupPayload(msg.Payload)
 	if err != nil {
 		logHostLookupParseError(msg.SessionID, len(msg.Payload), err)

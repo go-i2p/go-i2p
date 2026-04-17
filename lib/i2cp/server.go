@@ -16,6 +16,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
+	"golang.org/x/time/rate"
 )
 
 // errClientDisconnected is a sentinel error returned by handleDisconnect to
@@ -76,10 +77,12 @@ func DefaultServerConfig() *ServerConfig {
 
 // connectionState tracks per-connection rate limiting and authentication state
 type connectionState struct {
-	lastMessageTime time.Time
-	messageCount    int
-	bytesRead       uint64
-	authenticated   atomic.Bool // true if this connection has been authenticated (or auth not required)
+	conn              net.Conn
+	lastMessageTime   time.Time
+	messageCount      int
+	bytesRead         uint64
+	hostLookupLimiter *rate.Limiter
+	authenticated     atomic.Bool // true if this connection has been authenticated (or auth not required)
 }
 
 // Server is an I2CP protocol server that accepts client connections

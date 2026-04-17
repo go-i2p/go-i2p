@@ -174,7 +174,10 @@ func TestMessageTypeHandlers(t *testing.T) {
 			}
 
 			var session *Session
-			_, err = server.handleMessage(msg, &session)
+			client, peer := net.Pipe()
+			defer client.Close()
+			defer peer.Close()
+			_, err = server.handleMessage(client, msg, &session)
 
 			if tt.expectError && err == nil {
 				t.Errorf("Expected error for %s, got nil", tt.description)
@@ -201,7 +204,10 @@ func TestVersionNegotiation(t *testing.T) {
 	}
 
 	var session *Session
-	response, err := server.handleMessage(msg, &session)
+	client, peer := net.Pipe()
+	defer client.Close()
+	defer peer.Close()
+	response, err := server.handleMessage(client, msg, &session)
 	if err != nil {
 		t.Fatalf("handleMessage(GetDate) error = %v", err)
 	}

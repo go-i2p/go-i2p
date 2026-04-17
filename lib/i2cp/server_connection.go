@@ -10,6 +10,12 @@ import (
 
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
+	"golang.org/x/time/rate"
+)
+
+const (
+	hostLookupLimit = rate.Limit(10)
+	hostLookupBurst = 60
 )
 
 // recoverFromAcceptPanic recovers from any panic in the accept loop to prevent server crash.
@@ -346,12 +352,19 @@ func (s *Server) processOneMessage(conn net.Conn, sessionPtr **Session) bool {
 		return false
 	}
 
+	if rateLimitedResponse, allowed := s.allowHostLookup(conn, msg); !allowed {
+		if err := s.sendResponse(conn, rateLimitedResponse, sessionPtr); err != nil {
+			return false
+		}
+		return true
+	}
+
 	return s.processAndRespond(conn, msg, sessionPtr)
 }
 
-// checkMessageAuthentication verifies the client is authenticated for session-mutating
-// operations. GetDate, GetBandwidthLimits, HostLookup, and Disconnect are allowed
-// without authentication (needed for handshake and graceful disconnect).
+// checkMessageAuthentication verifies the client is authenticated for protected
+// operations. GetDate, GetBandwidthLimits, and Disconnect remain available
+// without authentication to preserve the I2CP handshake flow.
 func (s *Server) checkMessageAuthentication(conn net.Conn, msg *Message) bool {
 	if !s.requiresAuthentication(msg.Type) {
 		return true
@@ -371,7 +384,7 @@ func (s *Server) checkMessageAuthentication(conn net.Conn, msg *Message) bool {
 // processAndRespond processes the client message and sends the response.
 // Returns false if the connection should be closed, true to continue.
 func (s *Server) processAndRespond(conn net.Conn, msg *Message, sessionPtr **Session) bool {
-	response, err := s.processClientMessage(msg, sessionPtr)
+	response, err := s.processClientMessage(conn, msg, sessionPtr)
 	if err != nil {
 		if errors.Is(err, errClientDisconnected) {
 			return false
@@ -453,9 +466,11 @@ func (s *Server) checkConnectionRateLimit(conn net.Conn) bool {
 	state, exists := s.connStates[conn]
 	if !exists {
 		state = &connectionState{
-			lastMessageTime: time.Time{}, // Zero value allows first message immediately
-			messageCount:    0,
-			bytesRead:       0,
+			conn:              conn,
+			lastMessageTime:   time.Time{}, // Zero value allows first message immediately
+			messageCount:      0,
+			bytesRead:         0,
+			hostLookupLimiter: rate.NewLimiter(hostLookupLimit, hostLookupBurst),
 		}
 		s.connStates[conn] = state
 	}
@@ -478,11 +493,16 @@ func (s *Server) getOrCreateConnectionState(conn net.Conn) *connectionState {
 	state, exists := s.connStates[conn]
 	if !exists {
 		state = &connectionState{
-			lastMessageTime: time.Time{}, // Zero value allows first message immediately
-			messageCount:    0,
-			bytesRead:       0,
+			conn:              conn,
+			lastMessageTime:   time.Time{}, // Zero value allows first message immediately
+			messageCount:      0,
+			bytesRead:         0,
+			hostLookupLimiter: rate.NewLimiter(hostLookupLimit, hostLookupBurst),
 		}
 		s.connStates[conn] = state
+	}
+	if state.conn == nil {
+		state.conn = conn
 	}
 	return state
 }
@@ -540,13 +560,53 @@ func (s *Server) logReceivedMessage(msg *Message) {
 }
 
 // processClientMessage handles a client message and returns a response.
-func (s *Server) processClientMessage(msg *Message, sessionPtr **Session) (*Message, error) {
-	response, err := s.handleMessage(msg, sessionPtr)
+func (s *Server) processClientMessage(conn net.Conn, msg *Message, sessionPtr **Session) (*Message, error) {
+	response, err := s.handleMessage(conn, msg, sessionPtr)
 	if err != nil {
 		log.WithError(err).Error("failed_to_handle_message")
 		return nil, err
 	}
 	return response, nil
+}
+
+func (s *Server) allowHostLookup(conn net.Conn, msg *Message) (*Message, bool) {
+	if msg.Type != MessageTypeHostLookup {
+		return nil, true
+	}
+
+	state := s.getOrCreateConnectionState(conn)
+	if state.hostLookupLimiter.Allow() {
+		return nil, true
+	}
+
+	log.WithFields(logger.Fields{
+		"at":         "i2cp.Server.allowHostLookup",
+		"remoteAddr": conn.RemoteAddr().String(),
+		"burst":      hostLookupBurst,
+		"rate":       float64(hostLookupLimit),
+	}).Warn("host_lookup_rate_limited")
+
+	response, err := buildHostReplyMessage(msg.SessionID, &HostReplyPayload{
+		RequestID:  extractHostLookupRequestID(msg.Payload),
+		ResultCode: HostReplyTimeout,
+	})
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":    "i2cp.Server.allowHostLookup",
+			"error": err.Error(),
+		}).Warn("failed_to_build_host_lookup_rate_limit_reply")
+		return nil, false
+	}
+
+	return response, false
+}
+
+func extractHostLookupRequestID(payload []byte) uint32 {
+	lookupMsg, err := ParseHostLookupPayload(payload)
+	if err != nil {
+		return 0
+	}
+	return lookupMsg.RequestID
 }
 
 // handleNewSessionTracking tracks new session connections and starts message delivery.

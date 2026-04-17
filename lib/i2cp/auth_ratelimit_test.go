@@ -1,6 +1,10 @@
 package i2cp
 
-import "testing"
+import (
+	"net"
+	"testing"
+	"time"
+)
 
 // stubAuthenticator counts how many times Authenticate is called and always
 // returns the configured result. It lets tests verify that the rate limiter
@@ -14,6 +18,24 @@ func (s *stubAuthenticator) Authenticate(username, password string) bool {
 	s.calls++
 	return s.accept
 }
+
+type stubAddr string
+
+func (a stubAddr) Network() string { return "tcp" }
+func (a stubAddr) String() string  { return string(a) }
+
+type stubConn struct {
+	remote net.Addr
+}
+
+func (c *stubConn) Read(_ []byte) (int, error)         { return 0, nil }
+func (c *stubConn) Write(b []byte) (int, error)        { return len(b), nil }
+func (c *stubConn) Close() error                       { return nil }
+func (c *stubConn) LocalAddr() net.Addr                { return stubAddr("127.0.0.1:7654") }
+func (c *stubConn) RemoteAddr() net.Addr               { return c.remote }
+func (c *stubConn) SetDeadline(_ time.Time) error      { return nil }
+func (c *stubConn) SetReadDeadline(_ time.Time) error  { return nil }
+func (c *stubConn) SetWriteDeadline(_ time.Time) error { return nil }
 
 func TestRateLimitedAuthenticator_LocksOutAfterThreshold(t *testing.T) {
 	stub := &stubAuthenticator{accept: false}
@@ -72,10 +94,33 @@ func TestRateLimitedAuthenticator_SuccessResetsCounter(t *testing.T) {
 		}
 	}
 	limiter.mu.Lock()
-	locked := !limiter.lockoutUntil.IsZero()
+	locked := !limiter.entries["unknown"].lockoutUntil.IsZero()
 	limiter.mu.Unlock()
 	if locked {
 		t.Fatalf("lockout armed prematurely after counter reset")
+	}
+}
+
+func TestRateLimitedAuthenticator_IsolatesLockoutsPerRemote(t *testing.T) {
+	stub := &stubAuthenticator{accept: false}
+	limiter := NewRateLimitedAuthenticator(stub)
+
+	connA := &stubConn{remote: stubAddr("127.0.0.1:10001")}
+	connB := &stubConn{remote: stubAddr("127.0.0.1:10002")}
+
+	for i := 0; i < maxI2CPFailedAttempts; i++ {
+		if limiter.AuthenticateConnection(connA, "user", "bad") {
+			t.Fatalf("attempt %d unexpectedly succeeded", i+1)
+		}
+	}
+
+	stub.accept = true
+	if !limiter.AuthenticateConnection(connB, "user", "good") {
+		t.Fatal("valid credentials from a different remote should not be locked out")
+	}
+
+	if limiter.AuthenticateConnection(connA, "user", "good") {
+		t.Fatal("locked out remote unexpectedly authenticated")
 	}
 }
 
