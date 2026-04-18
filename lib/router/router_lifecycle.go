@@ -781,6 +781,7 @@ func (r *Router) awaitStartupResult() error {
 func (r *Router) initializeNetDB() error {
 	log.WithFields(logger.Fields{"at": "initializeNetDB"}).Debug("Initializing network database")
 	r.StdNetDB = netdb.NewStdNetDB(r.cfg.NetDb.Path)
+	r.StdNetDB.SetMaxRouterInfos(r.cfg.NetDb.MaxRouterInfos)
 	log.WithField("netdb_path", r.cfg.NetDb.Path).Debug("Created StdNetDB")
 	return nil
 }

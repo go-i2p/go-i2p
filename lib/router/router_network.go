@@ -581,7 +581,7 @@ func (r *Router) routeMessage(msg i2np.I2NPMessage, fromPeer common.Hash) (err e
 		return oops.Errorf("message router not available (router may be shutting down)")
 	}
 
-	return r.dispatchByMessageType(msg, mr, fs)
+	return r.dispatchByMessageType(msg, mr, fs, fromPeer)
 }
 
 func safeMessageMetadata(msg i2np.I2NPMessage) (messageType, messageID int) {
@@ -614,10 +614,10 @@ func (r *Router) getRoutingComponents() (*i2np.I2NPMessageDispatcher, *netdb.Flo
 }
 
 // dispatchByMessageType routes a message to the appropriate handler based on type.
-func (r *Router) dispatchByMessageType(msg i2np.I2NPMessage, mr *i2np.I2NPMessageDispatcher, fs *netdb.FloodfillServer) error {
+func (r *Router) dispatchByMessageType(msg i2np.I2NPMessage, mr *i2np.I2NPMessageDispatcher, fs *netdb.FloodfillServer, fromPeer common.Hash) error {
 	switch msg.Type() {
 	case i2np.I2NPMessageTypeDatabaseStore:
-		return r.routeDatabaseStore(msg, mr)
+		return r.routeDatabaseStore(msg, mr, fromPeer)
 	case i2np.I2NPMessageTypeDatabaseLookup:
 		return r.routeDatabaseLookup(msg, mr, fs)
 	case i2np.I2NPMessageTypeDatabaseSearchReply:
@@ -636,12 +636,12 @@ func (r *Router) dispatchByMessageType(msg i2np.I2NPMessage, mr *i2np.I2NPMessag
 }
 
 // routeDatabaseStore handles DatabaseStore message routing.
-func (r *Router) routeDatabaseStore(msg i2np.I2NPMessage, mr *i2np.I2NPMessageDispatcher) error {
+func (r *Router) routeDatabaseStore(msg i2np.I2NPMessage, mr *i2np.I2NPMessageDispatcher, fromPeer common.Hash) error {
 	dbStore, err := r.parseDatabaseStoreMessage(msg)
 	if err != nil {
 		return oops.Wrapf(err, "failed to parse DatabaseStore message")
 	}
-	return mr.RouteDatabaseMessage(dbStore)
+	return mr.RouteDatabaseMessageFromPeer(dbStore, &fromPeer)
 }
 
 // routeDatabaseLookup handles DatabaseLookup message routing with optional floodfill handling.

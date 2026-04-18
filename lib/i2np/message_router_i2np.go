@@ -124,11 +124,20 @@ func (mr *I2NPMessageDispatcher) RouteMessage(msg I2NPMessage) error {
 
 // RouteDatabaseMessage routes database-related messages
 func (mr *I2NPMessageDispatcher) RouteDatabaseMessage(msg interface{}) error {
+	return mr.RouteDatabaseMessageFromPeer(msg, nil)
+}
+
+// RouteDatabaseMessageFromPeer routes database messages with optional source
+// peer context so storage paths can apply source-aware admission controls.
+func (mr *I2NPMessageDispatcher) RouteDatabaseMessageFromPeer(msg interface{}, source *common.Hash) error {
 	if reader, ok := msg.(DatabaseReader); ok {
 		return mr.dbManager.PerformLookup(reader)
 	}
 
 	if writer, ok := msg.(DatabaseWriter); ok {
+		if source != nil {
+			return mr.dbManager.StoreDataFromPeer(writer, *source)
+		}
 		return mr.dbManager.StoreData(writer)
 	}
 

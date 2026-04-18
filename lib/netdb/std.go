@@ -30,6 +30,9 @@ type StdNetDB struct {
 	LeaseSets   map[common.Hash]Entry
 	lsMutex     sync.RWMutex // mutex for LeaseSets (RWMutex for read-heavy operations)
 
+	maxRouterInfos int
+	admission      *routerInfoAdmissionController
+
 	// Expiration tracking for LeaseSets
 	leaseSetExpiry map[common.Hash]time.Time // maps hash to expiration time
 
@@ -65,6 +68,7 @@ func NewStdNetDB(db string) *StdNetDB {
 		riMutex:          sync.RWMutex{},
 		LeaseSets:        make(map[common.Hash]Entry),
 		lsMutex:          sync.RWMutex{},
+		maxRouterInfos:   config.DefaultNetDbConfig.MaxRouterInfos,
 		leaseSetExpiry:   make(map[common.Hash]time.Time),
 		routerInfoExpiry: make(map[common.Hash]time.Time),
 		expiryMutex:      sync.RWMutex{},
@@ -72,8 +76,30 @@ func NewStdNetDB(db string) *StdNetDB {
 		ctx:              ctx,
 		cancel:           cancel,
 	}
+	ndb.admission = newRouterInfoAdmissionController(ndb.maxRouterInfos)
 	ndb.StartExpirationCleaner()
 	return ndb
+}
+
+// SetMaxRouterInfos updates the RouterInfo capacity used for admission control.
+// Values below 10 are ignored to preserve minimum validated configuration limits.
+func (db *StdNetDB) SetMaxRouterInfos(max int) {
+	if max < 10 {
+		return
+	}
+	db.riMutex.Lock()
+	db.maxRouterInfos = max
+	db.riMutex.Unlock()
+	if db.admission != nil {
+		db.admission.SetCapacity(max)
+	}
+}
+
+// GetMaxRouterInfos returns the current RouterInfo capacity.
+func (db *StdNetDB) GetMaxRouterInfos() int {
+	db.riMutex.RLock()
+	defer db.riMutex.RUnlock()
+	return db.maxRouterInfos
 }
 
 // GetRouterInfo returns a channel that yields the RouterInfo for the given hash,
@@ -705,7 +731,20 @@ func (db *StdNetDB) Store(key common.Hash, data []byte, dataType byte) error {
 // This is used internally by Store() and by adapters that receive RouterInfo from network messages.
 func (db *StdNetDB) StoreRouterInfoFromMessage(key common.Hash, data []byte, dataType byte) error {
 	log.WithField("hash", key).Debug("Storing RouterInfo from DatabaseStore message")
+	return db.storeRouterInfoFromMessageInternal(key, data, dataType, nil)
+}
 
+// StoreRouterInfoFromMessageWithSource stores a RouterInfo and records source-peer
+// identity for distinct-introduction admission control.
+func (db *StdNetDB) StoreRouterInfoFromMessageWithSource(key common.Hash, data []byte, dataType byte, source common.Hash) error {
+	log.WithFields(logger.Fields{
+		"hash":   key,
+		"source": source,
+	}).Debug("Storing RouterInfo from DatabaseStore message with source peer")
+	return db.storeRouterInfoFromMessageInternal(key, data, dataType, &source)
+}
+
+func (db *StdNetDB) storeRouterInfoFromMessageInternal(key common.Hash, data []byte, dataType byte, source *common.Hash) error {
 	if err := validateRouterInfoDataType(dataType); err != nil {
 		return err
 	}
@@ -731,11 +770,49 @@ func (db *StdNetDB) StoreRouterInfoFromMessage(key common.Hash, data []byte, dat
 		return err
 	}
 
+	if err := db.admitRouterInfoIntroduction(key, source); err != nil {
+		return err
+	}
+
 	if !db.addRouterInfoToCache(key, ri) {
 		return nil
 	}
 
 	return db.finalizeRouterInfoStorage(key, ri)
+}
+
+func (db *StdNetDB) admitRouterInfoIntroduction(key common.Hash, source *common.Hash) error {
+	db.riMutex.RLock()
+	_, exists := db.RouterInfos[key]
+	current := len(db.RouterInfos)
+	max := db.maxRouterInfos
+	db.riMutex.RUnlock()
+
+	if exists {
+		return nil
+	}
+
+	if max > 0 && current >= max {
+		return oops.Errorf("RouterInfo capacity reached (%d)", max)
+	}
+
+	if db.admission == nil {
+		return nil
+	}
+
+	if ok := db.admission.AllowIntroduction(source, key, current); !ok {
+		if source != nil {
+			log.WithFields(logger.Fields{
+				"source": source.String(),
+				"hash":   key.String(),
+			}).Warn("Rejecting RouterInfo introduction: source admission limit exceeded")
+		} else {
+			log.WithField("hash", key.String()).Warn("Rejecting RouterInfo introduction: source unavailable and under pressure")
+		}
+		return oops.Errorf("RouterInfo introduction rate limited")
+	}
+
+	return nil
 }
 
 // finalizeRouterInfoStorage tracks expiration and persists a cached RouterInfo to disk.

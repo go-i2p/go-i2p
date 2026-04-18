@@ -41,6 +41,12 @@ type I2NPNetDBStore interface {
 	Store(key common.Hash, data []byte, dataType byte) error
 }
 
+// I2NPNetDBStoreWithSource extends I2NPNetDBStore with source-peer context.
+// Implementations can use this for fairness/rate controls on first-seen entries.
+type I2NPNetDBStoreWithSource interface {
+	StoreFromPeer(key common.Hash, data []byte, dataType byte, source common.Hash) error
+}
+
 // NetDBRetriever defines the interface for retrieving RouterInfo entries
 type NetDBRetriever interface {
 	GetRouterInfoBytes(hash common.Hash) ([]byte, error)
@@ -408,6 +414,15 @@ func validateGzipSize(data []byte, maxUncompressed, maxRatio int) (int, error) {
 
 // StoreData stores data using DatabaseWriter interface and NetDB integration
 func (dm *DatabaseManager) StoreData(writer DatabaseWriter) error {
+	return dm.storeDataInternal(writer, nil)
+}
+
+// StoreDataFromPeer stores data with source peer context when available.
+func (dm *DatabaseManager) StoreDataFromPeer(writer DatabaseWriter, source common.Hash) error {
+	return dm.storeDataInternal(writer, &source)
+}
+
+func (dm *DatabaseManager) storeDataInternal(writer DatabaseWriter, source *common.Hash) error {
 	key := writer.GetStoreKey()
 	data := writer.GetStoreData()
 	dataType := writer.GetStoreType()
@@ -424,6 +439,11 @@ func (dm *DatabaseManager) StoreData(writer DatabaseWriter) error {
 	}).Debug("Storing data in NetDB")
 
 	if dm.netdb != nil {
+		if source != nil {
+			if withSource, ok := dm.netdb.(I2NPNetDBStoreWithSource); ok {
+				return withSource.StoreFromPeer(key, data, dataType, *source)
+			}
+		}
 		return dm.netdb.Store(key, data, dataType)
 	}
 

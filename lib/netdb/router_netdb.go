@@ -83,12 +83,31 @@ func (r *RouterNetDB) Store(key common.Hash, data []byte, dataType byte) error {
 	}
 }
 
+// StoreFromPeer stores a network database entry with source peer context.
+// Source is currently used for RouterInfo admission fairness.
+func (r *RouterNetDB) StoreFromPeer(key common.Hash, data []byte, dataType byte, source common.Hash) error {
+	switch dataType {
+	case 0:
+		log.WithFields(logger.Fields{"hash": key, "source": source}).Debug("RouterNetDB: Storing RouterInfo with source peer")
+		return r.db.StoreRouterInfoFromMessageWithSource(key, data, dataType, source)
+	default:
+		return r.Store(key, data, dataType)
+	}
+}
+
 // StoreRouterInfoFromMessage stores a RouterInfo entry in the database from an I2NP DatabaseStore message.
 // key is the router identity hash, data is the serialized RouterInfo,
 // and dataType should be 0 for RouterInfo.
 func (r *RouterNetDB) StoreRouterInfoFromMessage(key common.Hash, data []byte, dataType byte) error {
 	log.WithField("hash", key).Debug("RouterNetDB: Storing RouterInfo from message")
 	return r.db.StoreRouterInfoFromMessage(key, data, dataType)
+}
+
+// StoreRouterInfoFromMessageWithSource stores a RouterInfo from I2NP DatabaseStore
+// and records the source peer for admission fairness.
+func (r *RouterNetDB) StoreRouterInfoFromMessageWithSource(key common.Hash, data []byte, dataType byte, source common.Hash) error {
+	log.WithFields(logger.Fields{"hash": key, "source": source}).Debug("RouterNetDB: Storing RouterInfo from message with source")
+	return r.db.StoreRouterInfoFromMessageWithSource(key, data, dataType, source)
 }
 
 // StoreRouterInfo stores a RouterInfo locally, satisfying the NetworkDatabase interface.
