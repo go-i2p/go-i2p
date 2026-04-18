@@ -40,7 +40,7 @@ func (s *Server) acceptAndLogConnection() (net.Conn, bool) {
 		"at":         "i2cp.Server.acceptLoop",
 		"remoteAddr": conn.RemoteAddr().String(),
 		"localAddr":  conn.LocalAddr().String(),
-	}).Info("new_i2cp_connection")
+	}).Debug("new_i2cp_connection")
 
 	return conn, false
 }
@@ -236,7 +236,7 @@ func (s *Server) logClientConnected(conn net.Conn) {
 		"localAddr":      conn.LocalAddr().String(),
 		"network":        conn.RemoteAddr().Network(),
 		"activeSessions": s.manager.SessionCount(),
-	}).Info("client_connected")
+	}).Debug("client_connected")
 }
 
 // cleanupSessionConnection removes the session connection mapping on disconnect
@@ -318,7 +318,7 @@ func (s *Server) readProtocolByte(conn net.Conn) bool {
 		"at":           "i2cp.Server.readProtocolByte",
 		"remoteAddr":   conn.RemoteAddr().String(),
 		"protocolByte": fmt.Sprintf("0x%02x", protocolByte[0]),
-	}).Info("protocol_handshake_successful")
+	}).Debug("protocol_handshake_successful")
 
 	return true
 }
