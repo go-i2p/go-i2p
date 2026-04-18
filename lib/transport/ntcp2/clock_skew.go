@@ -54,18 +54,24 @@ func ValidateTimestamp(peerTime uint32) error {
 	}
 
 	localTime := uint32(time.Now().Unix())
-	skewSeconds := int64(peerTime) - int64(localTime)
-	skew := time.Duration(skewSeconds) * time.Second
-
-	if math.Abs(float64(skewSeconds)) > ClockSkewTolerance.Seconds() {
-		return &ClockSkewError{
-			PeerTime:  peerTime,
-			LocalTime: localTime,
-			Skew:      skew,
-		}
+	skewSeconds, skew := measureSkew(peerTime, localTime)
+	if isClockSkewWithinTolerance(skewSeconds) {
+		return nil
 	}
+	return &ClockSkewError{
+		PeerTime:  peerTime,
+		LocalTime: localTime,
+		Skew:      skew,
+	}
+}
 
-	return nil
+func measureSkew(peerTime, localTime uint32) (int64, time.Duration) {
+	skewSeconds := int64(peerTime) - int64(localTime)
+	return skewSeconds, time.Duration(skewSeconds) * time.Second
+}
+
+func isClockSkewWithinTolerance(skewSeconds int64) bool {
+	return math.Abs(float64(skewSeconds)) <= ClockSkewTolerance.Seconds()
 }
 
 // MeasureClockSkew returns the observed clock skew between a peer's timestamp
