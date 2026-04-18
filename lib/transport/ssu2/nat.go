@@ -86,7 +86,7 @@ func (t *SSU2Transport) handlePeerTestAsAlice(ptBlock *ssu2noise.PeerTestBlock) 
 		Reachable:    externalAddr != nil,
 	}
 	if completeErr := t.peerTestManager.CompleteTest(nonce, result); completeErr != nil {
-		t.logger.WithField("nonce", nonce).Debug("PeerTest complete (non-initiator path)")
+		t.logger.Debug("PeerTest complete (non-initiator path)")
 	}
 	return nil
 }
@@ -300,10 +300,7 @@ func (t *SSU2Transport) handleRelayResponseBlock(block *ssu2noise.SSU2Block) err
 		return nil
 	}
 
-	t.logger.WithFields(map[string]interface{}{
-		"nonce": resp.Nonce,
-		"code":  resp.Code,
-	}).Debug("relay response received")
+	t.logger.WithField("code", resp.Code).Debug("relay response received")
 
 	// Deliver to any waiting dialViaIntroducer call.
 	if ch, ok := t.pendingRelayResponses.Load(resp.Nonce); ok {
