@@ -45,6 +45,13 @@ type ConfigDefaults struct {
 	Congestion CongestionDefaults
 }
 
+const (
+	// MaxI2CPSessions is a defensive upper bound for I2CP session count.
+	// Session IDs are 16-bit and random allocation degrades under high occupancy,
+	// so this keeps deployments in a low-collision, operationally safe range.
+	MaxI2CPSessions = 320
+)
+
 // RouterDefaults contains default values for router configuration
 type RouterDefaults struct {
 	// BaseDir is where per-system defaults are stored
@@ -696,16 +703,27 @@ func validateReseedStrategyIfSet(strategy string) error {
 
 // validateI2CPMaxSessions validates the max sessions setting.
 func validateI2CPMaxSessions(maxSessions int) error {
-	if maxSessions >= 1 {
-		return nil
+	if maxSessions < 1 {
+		log.WithFields(logger.Fields{
+			"at":               "validateI2CPConfig",
+			"reason":           "max_sessions_too_low",
+			"max_sessions":     maxSessions,
+			"minimum_required": 1,
+		}).Error("invalid I2CP configuration")
+		return newValidationError("I2CP.MaxSessions must be at least 1")
 	}
-	log.WithFields(logger.Fields{
-		"at":               "validateI2CPConfig",
-		"reason":           "max_sessions_too_low",
-		"max_sessions":     maxSessions,
-		"minimum_required": 1,
-	}).Error("invalid I2CP configuration")
-	return newValidationError("I2CP.MaxSessions must be at least 1")
+
+	if maxSessions > MaxI2CPSessions {
+		log.WithFields(logger.Fields{
+			"at":              "validateI2CPConfig",
+			"reason":          "max_sessions_too_high",
+			"max_sessions":    maxSessions,
+			"maximum_allowed": MaxI2CPSessions,
+		}).Error("invalid I2CP configuration")
+		return newValidationError("I2CP.MaxSessions must be at most 320")
+	}
+
+	return nil
 }
 
 // validateI2CPMessageQueueSize validates the message queue size setting.

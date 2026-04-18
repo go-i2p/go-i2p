@@ -134,7 +134,7 @@ func registerI2CPFlags() {
 	RootCmd.PersistentFlags().String("i2cp.network", config.DefaultI2CPConfig.Network,
 		"I2CP network type (tcp or unix)")
 	RootCmd.PersistentFlags().Int("i2cp.max-sessions", config.DefaultI2CPConfig.MaxSessions,
-		"Maximum number of concurrent I2CP sessions")
+		"Maximum number of concurrent I2CP sessions (range: 1-320)")
 	RootCmd.PersistentFlags().String("i2cp.username", "",
 		"I2CP authentication username (empty = no auth)")
 	RootCmd.PersistentFlags().String("i2cp.password", "",

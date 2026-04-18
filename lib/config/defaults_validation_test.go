@@ -134,6 +134,22 @@ func TestValidate_I2CPInvalidMaxSessions(t *testing.T) {
 	requireValidationFails(t, cfg, "Validate() should fail when I2CP.MaxSessions < 1")
 }
 
+// TestValidate_I2CPInvalidMaxSessionsTooHigh verifies validation catches
+// values above the defensively allowed I2CP session ceiling.
+func TestValidate_I2CPInvalidMaxSessionsTooHigh(t *testing.T) {
+	cfg := Defaults()
+	cfg.I2CP.MaxSessions = MaxI2CPSessions + 1
+	requireValidationFails(t, cfg, "Validate() should fail when I2CP.MaxSessions > %d", MaxI2CPSessions)
+}
+
+// TestValidate_I2CPMaxSessionsUpperBoundAccepted verifies the documented
+// maximum value is still accepted.
+func TestValidate_I2CPMaxSessionsUpperBoundAccepted(t *testing.T) {
+	cfg := Defaults()
+	cfg.I2CP.MaxSessions = MaxI2CPSessions
+	require.NoError(t, Validate(cfg), "Validate() should pass when I2CP.MaxSessions == %d", MaxI2CPSessions)
+}
+
 // TestValidate_I2CPInvalidQueueSize verifies validation catches invalid queue size
 func TestValidate_I2CPInvalidQueueSize(t *testing.T) {
 	cfg := Defaults()

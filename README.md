@@ -172,6 +172,8 @@ go-i2p --i2cp.address=0.0.0.0:7654
 # Adjust maximum sessions (default is 100)
 go-i2p --i2cp.max-sessions=200
 
+# Valid range for i2cp.max-sessions is 1-320
+
 # Use Unix domain socket instead of TCP
 go-i2p --i2cp.network=unix --i2cp.address=/tmp/i2cp.sock
 ```
