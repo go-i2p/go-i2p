@@ -574,7 +574,7 @@ func (r *Reseed) writeZipFile(content []byte) (string, error) {
 
 // extractZipFile extracts the zip file to a temporary directory and returns the temp directory path and list of extracted file paths.
 // The caller is responsible for cleaning up the temporary directory after use.
-// Validates that total decompressed size does not exceed maxDecompressedSize to prevent zip bombs.
+// Validates that no entry exceeds maxPerEntrySize and total decompressed size does not exceed maxDecompressedSize to prevent zip bombs.
 func (r *Reseed) extractZipFile(zipPath string) (string, []string, error) {
 	tempDir, err := r.createExtractionDir()
 	if err != nil {
@@ -592,6 +592,13 @@ func (r *Reseed) extractZipFile(zipPath string) (string, []string, error) {
 		return "", nil, err
 	}
 
+	// Validate per-entry size to prevent individual entries from bloating filesystem
+	if err := r.validatePerEntrySize(tempDir, files); err != nil {
+		os.RemoveAll(tempDir)
+		return "", nil, err
+	}
+
+	// Validate total decompressed size to prevent zip bomb attacks
 	if err := r.validateDecompressedSize(tempDir, files); err != nil {
 		os.RemoveAll(tempDir)
 		return "", nil, err
@@ -617,7 +624,19 @@ func (r *Reseed) createExtractionDir() (string, error) {
 }
 
 // extractAndValidateZip extracts the zip and validates it has content.
-func (r *Reseed) extractAndValidateZip(zipPath, tempDir string) ([]string, error) {
+// Panics from the unzip library are recovered and converted to errors.
+func (r *Reseed) extractAndValidateZip(zipPath, tempDir string) (retFiles []string, retErr error) {
+	// Recover from any panic in unzip library to prevent router crash
+	defer func() {
+		if rec := recover(); rec != nil {
+			retErr = oops.Errorf("unzip library panic: %v", rec)
+			log.WithError(retErr).WithFields(logger.Fields{
+				"zip_path": zipPath,
+				"panic":    rec,
+			}).Error("Recovered from panic in zip extraction")
+		}
+	}()
+
 	files, err := unzip.New().Extract(zipPath, tempDir)
 	if err != nil {
 		log.WithError(err).WithFields(logger.Fields{
@@ -651,8 +670,29 @@ func (r *Reseed) extractAndValidateZip(zipPath, tempDir string) ([]string, error
 // headroom for legitimate bundles while preventing pathological archives.
 const maxReseedEntries = 250
 
+// maxPerEntrySize is the maximum uncompressed size per zip entry (1 MiB).
+// With post-quantum signatures (ML-DSA, etc.), RouterInfos will be significantly
+// larger than classical ECDSA. This generous limit accommodates PQ key material
+// while remaining small enough to prevent zip-bomb entries.
+const maxPerEntrySize int64 = 1024 * 1024
+
 // maxDecompressedSize is the maximum total decompressed output size (200 MB).
 const maxDecompressedSize int64 = 200 * 1024 * 1024
+
+// validatePerEntrySize checks that no extracted file exceeds the per-entry size limit.
+func (r *Reseed) validatePerEntrySize(tempDir string, files []string) error {
+	for _, filename := range files {
+		fullPath := filepath.Join(tempDir, filename)
+		info, err := os.Stat(fullPath)
+		if err != nil {
+			continue
+		}
+		if info.Size() > maxPerEntrySize {
+			return oops.Errorf("reseed entry %q exceeds %d KB size limit (possible zip bomb)", filename, maxPerEntrySize/1024)
+		}
+	}
+	return nil
+}
 
 // validateDecompressedSize checks that extracted files don't exceed the size limit.
 func (r *Reseed) validateDecompressedSize(tempDir string, files []string) error {
