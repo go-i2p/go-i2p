@@ -61,7 +61,7 @@ type RouterTimestamper struct {
 
 const (
 	minQueryFrequency     = 5 * time.Minute
-	defaultQueryFrequency = 30 * time.Minute
+	defaultQueryFrequency = 45 * time.Minute
 	defaultServerList     = "0.pool.ntp.org,1.pool.ntp.org,2.pool.ntp.org"
 	defaultDisabled       = false
 	defaultConcurring     = 2
