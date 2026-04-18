@@ -14,6 +14,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
+	"golang.org/x/time/rate"
 )
 
 // NTCP2Session represents an active NTCP2 connection session with a remote peer, managing message queues, bandwidth tracking, and rekeying state.
@@ -60,6 +61,10 @@ type NTCP2Session struct {
 	routerInfoMu       sync.Mutex
 	routerInfoCallback func([]byte)
 
+	// Per-session I2NP inbound rate limiter: 256 msg/s sustained, burst 512.
+	// Protects against message-flood DoS from a single peer.
+	inboundLimiter *rate.Limiter
+
 	// Logging
 	logger *logger.Entry
 }
@@ -87,18 +92,19 @@ func NewNTCP2SessionDeferred(conn net.Conn, ctx context.Context, logger *logger.
 	sessionLogger.Info("Creating new NTCP2 session")
 
 	session := &NTCP2Session{
-		conn:          conn,
-		sendQueue:     make(chan i2np.I2NPMessage, 256), // Buffered channel for send queue
-		recvChan:      make(chan i2np.I2NPMessage, 256), // Buffered channel for receive messages
-		ctx:           sessionCtx,
-		cancel:        cancel,
-		logger:        sessionLogger,
-		rekeyState:    newRekeyState(),
-		sendQueueSize: 0,
-		lastError:     nil,
-		errorOnce:     sync.Once{},
-		closeOnce:     sync.Once{},
-		wg:            sync.WaitGroup{},
+		conn:           conn,
+		sendQueue:      make(chan i2np.I2NPMessage, 256), // Buffered channel for send queue
+		recvChan:       make(chan i2np.I2NPMessage, 256), // Buffered channel for receive messages
+		ctx:            sessionCtx,
+		cancel:         cancel,
+		logger:         sessionLogger,
+		rekeyState:     newRekeyState(),
+		sendQueueSize:  0,
+		lastError:      nil,
+		errorOnce:      sync.Once{},
+		closeOnce:      sync.Once{},
+		wg:             sync.WaitGroup{},
+		inboundLimiter: rate.NewLimiter(256, 512),
 	}
 
 	sessionLogger.Info("NTCP2 session created (deferred workers)")
@@ -450,7 +456,21 @@ func (s *NTCP2Session) processNextInboundMessageFromBlocks(unframer *BlockUnfram
 		return s.handleReadResult(err)
 	}
 
+	if !s.allowInboundMessage(msg) {
+		return false
+	}
+
 	return s.queueReceivedMessage(msg)
+}
+
+func (s *NTCP2Session) allowInboundMessage(msg i2np.I2NPMessage) bool {
+	if s.inboundLimiter.Allow() {
+		return true
+	}
+	s.logger.WithField("message_type", msg.Type()).Warn("Inbound I2NP rate limit exceeded, closing session")
+	s.setError(oops.Errorf("inbound I2NP rate limit exceeded"))
+	go s.Close()
+	return false
 }
 
 // handleReadResult evaluates a read error and returns true if the loop should continue

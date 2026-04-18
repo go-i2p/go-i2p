@@ -39,19 +39,21 @@ type DefaultHandler struct {
 }
 
 // replayTTL is the time-to-live for replay cache entries (2× clock skew tolerance).
-const replayTTL = 120 * time.Second
+// Set to 60 s (2 × 30 s tolerance) to match the narrowed clock skew window.
+const replayTTL = 60 * time.Second
 
 // replayCleanupInterval is how often the background goroutine sweeps stale entries.
 const replayCleanupInterval = 5 * time.Minute
 
 // NewDefaultHandler creates a new DefaultHandler with ±60 second clock skew tolerance.
-// A background goroutine evicts replay cache entries older than 120 seconds every
+// We use ±30 s to narrow the post-restart replay window; see AUDIT.md.
+// A background goroutine evicts replay cache entries older than 60 seconds every
 // 5 minutes. Call Close() to stop it.
 func NewDefaultHandler() *DefaultHandler {
 	log.Debug("creating SSU2 default handler")
 	h := &DefaultHandler{
 		seen:    make(map[[32]byte]time.Time),
-		maxSkew: 60 * time.Second,
+		maxSkew: 30 * time.Second,
 		done:    make(chan struct{}),
 	}
 	go h.cleanupLoop()

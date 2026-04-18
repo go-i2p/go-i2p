@@ -64,6 +64,10 @@ type SSU2Session struct {
 	// Burst of 3 with a sustained rate of 1/s (I2P spec allows infrequent tests).
 	peerTestLimiter *rate.Limiter
 
+	// inboundLimiter enforces a per-session I2NP inbound rate limit: 256 msg/s
+	// sustained, burst 512. Protects against message-flood DoS from a single peer.
+	inboundLimiter *rate.Limiter
+
 	ctx       context.Context
 	cancel    context.CancelFunc
 	closeOnce sync.Once
@@ -108,6 +112,7 @@ func NewSSU2SessionDeferred(conn *ssu2noise.SSU2Conn, ctx context.Context, logge
 		logger:         sessionLogger,
 	}
 	s.peerTestLimiter = rate.NewLimiter(rate.Limit(1), 3)
+	s.inboundLimiter = rate.NewLimiter(256, 512)
 	s.wireDataHandlerCallbacks()
 	return s
 }
@@ -755,7 +760,19 @@ func (s *SSU2Session) dispatchReceived(frame []byte) error {
 		s.logger.WithError(err).Debug("Failed to parse I2NP message")
 		return nil // non-fatal: skip malformed frame
 	}
+	if err := s.checkInboundRateLimit(msg); err != nil {
+		return err
+	}
 	return s.deliverMessage(msg)
+}
+
+func (s *SSU2Session) checkInboundRateLimit(msg i2np.I2NPMessage) error {
+	if s.inboundLimiter.Allow() {
+		return nil
+	}
+	s.logger.WithField("message_type", msg.Type()).Warn("Inbound I2NP rate limit exceeded, closing session")
+	go s.Close()
+	return oops.Errorf("inbound I2NP rate limit exceeded")
 }
 
 // updateRTTEstimate updates the RTT estimate using time since last send as a rough proxy.

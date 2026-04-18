@@ -14,25 +14,25 @@ func TestValidateTimestamp_WithinTolerance(t *testing.T) {
 }
 
 func TestValidateTimestamp_SlightlySkewed(t *testing.T) {
-	// 30 seconds off — well within the 60s tolerance
-	peerTime := uint32(time.Now().Unix()) + 30
+	// 10 seconds off — well within the 30s tolerance
+	peerTime := uint32(time.Now().Unix()) + 10
 	assert.NoError(t, ValidateTimestamp(peerTime))
 
-	peerTime = uint32(time.Now().Unix()) - 30
+	peerTime = uint32(time.Now().Unix()) - 10
 	assert.NoError(t, ValidateTimestamp(peerTime))
 }
 
 func TestValidateTimestamp_ExceedsTolerance(t *testing.T) {
-	// 120 seconds ahead — exceeds 60s tolerance
-	peerTime := uint32(time.Now().Unix()) + 120
+	// 60 seconds ahead — exceeds 30s tolerance
+	peerTime := uint32(time.Now().Unix()) + 60
 	err := ValidateTimestamp(peerTime)
 	assert.Error(t, err)
 	assert.IsType(t, &ClockSkewError{}, err)
 }
 
 func TestValidateTimestamp_FarBehind(t *testing.T) {
-	// 120 seconds behind — exceeds 60s tolerance
-	peerTime := uint32(time.Now().Unix()) - 120
+	// 60 seconds behind — exceeds 30s tolerance
+	peerTime := uint32(time.Now().Unix()) - 60
 	err := ValidateTimestamp(peerTime)
 	assert.Error(t, err)
 }
@@ -45,14 +45,14 @@ func TestValidateTimestamp_Zero(t *testing.T) {
 func TestValidateTimestamp_BoundaryValues(t *testing.T) {
 	now := uint32(time.Now().Unix())
 
-	// Exactly at +60 seconds — should be within tolerance
-	assert.NoError(t, ValidateTimestamp(now+60))
+	// Exactly at +29 seconds — should be within tolerance
+	assert.NoError(t, ValidateTimestamp(now+29))
 
-	// Exactly at -60 seconds — should be within tolerance
-	assert.NoError(t, ValidateTimestamp(now-60))
+	// Exactly at -29 seconds — should be within tolerance
+	assert.NoError(t, ValidateTimestamp(now-29))
 
-	// 61 seconds off — just over the boundary
-	err := ValidateTimestamp(now + 61)
+	// 31 seconds off — just over the boundary
+	err := ValidateTimestamp(now + 31)
 	assert.Error(t, err)
 }
 

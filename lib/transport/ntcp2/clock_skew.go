@@ -12,9 +12,15 @@ import (
 // peer timestamps. Per the NTCP2 spec, connections with a clock skew
 // exceeding this value should be terminated with reason code 6.
 //
-// This is defined in go-noise/ntcp2 as the single source of truth and
-// re-exported here for backward compatibility within go-i2p.
-const ClockSkewTolerance = gonoise.ClockSkewTolerance
+// We intentionally use 30 s (half the go-noise default of 60 s) to narrow the
+// post-restart replay window: a captured handshake msg1 is only replayable for
+// up to 30 s rather than 60 s after a router restart that flushes the in-memory
+// replay cache. This is a security trade-off; operators with loose NTP discipline
+// should consider tightening NTP synchronisation rather than widening this value.
+const ClockSkewTolerance = 30 * time.Second
+
+// _ ensures the upstream constant is still importable to catch future changes.
+var _ = gonoise.ClockSkewTolerance
 
 // ClockSkewError is returned when a peer's timestamp exceeds the allowed skew.
 type ClockSkewError struct {
