@@ -193,6 +193,10 @@ LOGGER_TAG_HASH=$(tagandrelease logger) # 0
 SU3_TAG_HASH=$(tagandrelease su3) # 1
 CRYPTO_TAG_HASH=$(tagandrelease crypto) # 3
 COMMON_TAG_HASH=$(tagandrelease common) # 4
+if [ "$LIBS" = "true" ]; then
+  echo "LIBS is true, skipping noise, go-noise, go-i2p, go-i2cp, go-datagrams, go-streaming, and go-sam-bridge" 1>&2
+  exit 0
+fi
 NOISE_TAG_HASH=$(tagandrelease noise) # 5
 GO_NOISE_TAG_HASH=$(tagandrelease go-noise) # 6
 GO_I2P_TAG_HASH=$(tagandrelease go-i2p) # 7
