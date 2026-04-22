@@ -54,8 +54,8 @@ github.com/go-i2p/go-unzip v0.0.0-20260417162122-21146ed7aca8 h1:efCudZqf5/F4Mj/
 github.com/go-i2p/go-unzip v0.0.0-20260417162122-21146ed7aca8/go.mod h1:Jy8JMJDZNzy6u4s1FGNeVvDAsuBJn24nxyNLS0QmYpM=
 github.com/go-i2p/i2ptui v0.0.0-20260408024448-18dc7a0919f8 h1:QYFJjXoXYxGzeBB1MQa6rQyctxhhgXFhsT/PA/CrudA=
 github.com/go-i2p/i2ptui v0.0.0-20260408024448-18dc7a0919f8/go.mod h1:zSc5VbV02ct3L+w0hG9eHlOkCuzx9RFIi04jVM/PHQY=
-github.com/go-i2p/logger v0.1.5 h1:bqX0R59jRNhCTuOVm97gtvo6tH2+nU1NJ53WzAi3I4I=
-github.com/go-i2p/logger v0.1.5/go.mod h1:fEh2nRZ6HwLJNaWJuE25mCzDa6VpCI4O37u5OfGNvus=
+github.com/go-i2p/logger v0.1.51 h1:Albn4RgdgRnfvx7/V8/cPD4IjuMACIxqRlhAkuBEV+E=
+github.com/go-i2p/logger v0.1.51/go.mod h1:Z077r+kSscY66GYjJ4xqcsItK1LcLl8GvBNiaFgxYvs=
 github.com/go-i2p/noise v1.1.1-0.20260327201800-8e41bb3d9f1e h1:RUdNl2UXCZAGYaEHlthIpyvnjgq4kTI5adRxGpXV7FM=
 github.com/go-i2p/noise v1.1.1-0.20260327201800-8e41bb3d9f1e/go.mod h1:/tnXnzZXdjSLxU5lKMCKDDFKi9WUcsd7llNBSvyynJo=
 github.com/go-i2p/red25519 v0.0.0-20260302212615-1093a31f680d h1:a7DHsr9SOEjybZVtH3e0kJpXy40mZb1V+dGm9tptOl8=

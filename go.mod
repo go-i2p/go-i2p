@@ -12,7 +12,7 @@ require (
 	github.com/go-i2p/go-noise v0.1.4-0.20260406215923-93b02ff49d4f
 	github.com/go-i2p/go-unzip v0.0.0-20260417162122-21146ed7aca8
 	github.com/go-i2p/i2ptui v0.0.0-20260408024448-18dc7a0919f8
-	github.com/go-i2p/logger v0.1.5
+	github.com/go-i2p/logger v0.1.51
 	github.com/go-i2p/su3 v0.1.51
 	github.com/samber/oops v1.21.0
 	github.com/spf13/cobra v1.10.2
