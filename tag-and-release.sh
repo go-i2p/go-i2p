@@ -120,6 +120,41 @@ update_our_packages() {
   /usr/bin/git commit -am "Update dependencies to v$VERSION"
 }
 
+# go get all our packages at the new version
+# use go mod tidy to clean up unused deps
+correct_our_tags() {
+  echo "Updating the packages" 1>&2
+  go-check-updates -u
+  go get -u ./...
+  echo go get "github.com/go-i2p/logger@$VERSION" 1>&2
+  go get "github.com/go-i2p/logger@$VERSION" >/dev/null 2>/dev/null || true
+  echo go get "github.com/go-i2p/su3@$VERSION" 1>&2
+  go get "github.com/go-i2p/su3@$VERSION" >/dev/null 2>/dev/null || true
+  echo go get "github.com/go-i2p/crypto@$VERSION" 1>&2
+  go get "github.com/go-i2p/crypto@$VERSION" >/dev/null 2>/dev/null || true
+  echo go get "github.com/go-i2p/common@$VERSION" 1>&2
+  go get "github.com/go-i2p/common@$VERSION" >/dev/null 2>/dev/null || true
+  echo go get "github.com/go-i2p/noise@$VERSION" 1>&2
+  go get "github.com/go-i2p/noise@$VERSION" >/dev/null 2>/dev/null || true
+  echo go get "github.com/go-i2p/go-noise@$VERSION" 1>&2
+  go get "github.com/go-i2p/go-noise@$VERSION" >/dev/null 2>/dev/null || true
+  echo go get "github.com/go-i2p/go-i2p@$VERSION" 1>&2
+  go get "github.com/go-i2p/go-i2p@$VERSION" >/dev/null 2>/dev/null || true
+  echo go get "github.com/go-i2p/go-i2cp@$VERSION" 1>&2
+  go get "github.com/go-i2p/go-i2cp@$VERSION" >/dev/null 2>/dev/null || true
+  echo go get "github.com/go-i2p/go-datagrams@$VERSION" 1>&2
+  go get "github.com/go-i2p/go-datagrams@$VERSION" >/dev/null 2>/dev/null || true
+  echo go get "github.com/go-i2p/go-streaming@$VERSION" 1>&2
+  go get "github.com/go-i2p/go-streaming@$VERSION" >/dev/null 2>/dev/null || true
+  echo go get "github.com/go-i2p/go-sam-bridge@$VERSION" 1>&2
+  go get "github.com/go-i2p/go-sam-bridge@$VERSION" >/dev/null 2>/dev/null || true
+  go mod tidy -v 1>&2
+  go build -v ./... 1>&2
+  gofumpt -w -s -extra .
+  echo "Updated our packages to v$VERSION" 1>&2
+  /usr/bin/git commit -am "Update dependencies to v$VERSION"
+}
+
 cleanup() {
   /usr/bin/git push origin --delete "v$VERSION" 2> /dev/null || true
 }
@@ -176,6 +211,8 @@ tagandrelease() {
   TAG_HASH=$(git rev-parse "v$VERSION")
   echo "$1 v$VERSION tag hash: $TAG_HASH" 1>&2
   echo "$TAG_HASH"
+  push > /dev/null 2>/dev/null
+  correct_our_tags
   if [ -f RELEASE_NOTES.md ]; then
     github_release release \
       --user go-i2p \
@@ -184,7 +221,6 @@ tagandrelease() {
       --name "go-i2p v$VERSION" \
       --description "$(cat RELEASE_NOTES.md)" 1>&2
   fi
-  push > /dev/null 2>/dev/null
 }
 
 echo "Tagging and releasing version v$VERSION" 1>&2
