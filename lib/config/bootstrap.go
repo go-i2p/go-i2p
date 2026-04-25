@@ -3,8 +3,8 @@ package config
 // ReseedConfig holds configuration for a single reseed server.
 // Reseed servers provide initial peer RouterInfo files to bootstrap network connectivity.
 type ReseedConfig struct {
-	// Url is the HTTPS URL of the reseed server
-	Url string
+	// URL is the HTTPS URL of the reseed server
+	URL string
 	// SU3Fingerprint is the fingerprint of the reseed server's SU3 signing key
 	// used to verify the authenticity of downloaded reseed data
 	SU3Fingerprint string
@@ -43,7 +43,7 @@ type BootstrapConfig struct {
 	ReseedStrategy string
 }
 
-// default configuration for network bootstrap
+// DefaultBootstrapConfig is the default configuration for network bootstrap.
 // Uses all known reseed servers from KnownReseedServers for maximum availability.
 // MinReseedServers defaults to DefaultMinReseedServers (2) matching Java I2P.
 var DefaultBootstrapConfig = BootstrapConfig{

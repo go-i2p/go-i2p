@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// local network database configuration
+// NetDBConfig holds the local network database configuration.
 type NetDbConfig struct {
 	// path to network database directory
 	Path string
@@ -28,7 +28,7 @@ type NetDbConfig struct {
 	FloodfillEnabled bool
 }
 
-// default settings for netdb
+// DefaultNetDbConfig holds the default settings for netdb.
 var DefaultNetDbConfig = NetDbConfig{
 	Path:                     filepath.Join(defaultConfig(), "netDb"),
 	MaxRouterInfos:           5000,

@@ -49,7 +49,7 @@ type I2CPConfig struct {
 	WriteTimeout time.Duration
 }
 
-// router.config options
+// RouterConfig holds the router configuration options.
 type RouterConfig struct {
 	// the path to the base config directory where per-system defaults are stored
 	BaseDir string

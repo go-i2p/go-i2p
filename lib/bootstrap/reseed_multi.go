@@ -190,7 +190,7 @@ func (rb *ReseedBootstrap) fetchFromServerAsync(ctx context.Context, srv *config
 		defer func() { <-semaphore }()
 	case <-ctx.Done():
 		fs.appendResult(ReseedResult{
-			ServerURL: srv.Url,
+			ServerURL: srv.URL,
 			Error:     ctx.Err(),
 		})
 		return
@@ -245,20 +245,20 @@ func (rb *ReseedBootstrap) fetchFromSingleServer(ctx context.Context, server *co
 		"at":         "(ReseedBootstrap) fetchFromSingleServer",
 		"phase":      "bootstrap",
 		"reason":     "fetching from server",
-		"server_url": server.Url,
+		"server_url": server.URL,
 	}).Debug("starting fetch from reseed server")
 
 	// Check context before making request
 	if ctx.Err() != nil {
 		return ReseedResult{
-			ServerURL: server.Url,
+			ServerURL: server.URL,
 			Error:     ctx.Err(),
 			Duration:  time.Since(startTime),
 		}
 	}
 
 	reseeder := reseed.NewReseed()
-	routerInfos, err := reseeder.SingleReseed(server.Url)
+	routerInfos, err := reseeder.SingleReseed(server.URL)
 	duration := time.Since(startTime)
 
 	if err != nil {
@@ -266,31 +266,31 @@ func (rb *ReseedBootstrap) fetchFromSingleServer(ctx context.Context, server *co
 			"at":          "(ReseedBootstrap) fetchFromSingleServer",
 			"phase":       "bootstrap",
 			"reason":      "fetch failed",
-			"server_url":  server.Url,
+			"server_url":  server.URL,
 			"duration_ms": duration.Milliseconds(),
 		}).Warn("reseed fetch failed")
 		return ReseedResult{
-			ServerURL: server.Url,
+			ServerURL: server.URL,
 			Error:     err,
 			Duration:  duration,
 		}
 	}
 
 	// Validate and filter RouterInfos
-	validRouterInfos := rb.validateAndFilterRouterInfos(routerInfos, server.Url)
+	validRouterInfos := rb.validateAndFilterRouterInfos(routerInfos, server.URL)
 
 	log.WithFields(logger.Fields{
 		"at":            "(ReseedBootstrap) fetchFromSingleServer",
 		"phase":         "bootstrap",
 		"reason":        "fetch completed",
-		"server_url":    server.Url,
+		"server_url":    server.URL,
 		"duration_ms":   duration.Milliseconds(),
 		"total_fetched": len(routerInfos),
 		"valid_count":   len(validRouterInfos),
 	}).Info("reseed fetch completed")
 
 	return ReseedResult{
-		ServerURL:   server.Url,
+		ServerURL:   server.URL,
 		RouterInfos: validRouterInfos,
 		Duration:    duration,
 	}

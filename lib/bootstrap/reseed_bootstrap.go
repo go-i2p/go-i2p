@@ -44,7 +44,7 @@ func NewReseedBootstrap(config *config.BootstrapConfig) *ReseedBootstrap {
 			"step":            i + 2,
 			"reason":          "registering reseed server configuration",
 			"server_index":    i,
-			"server_url":      server.Url,
+			"server_url":      server.URL,
 			"has_fingerprint": server.SU3Fingerprint != "",
 			"fingerprint_len": len(server.SU3Fingerprint),
 		}).Debug("reseed server configured")
@@ -201,7 +201,7 @@ func (rb *ReseedBootstrap) logReseedAttemptStart(server *config.ReseedConfig, at
 		"phase":         "bootstrap",
 		"step":          attemptNumber,
 		"reason":        "attempting HTTP reseed from server",
-		"server_url":    server.Url,
+		"server_url":    server.URL,
 		"attempt":       attemptNumber,
 		"total_servers": len(rb.config.ReseedServers),
 	}).Info("attempting reseed from server")
@@ -214,7 +214,7 @@ func logReseedAttemptFailed(err error, server *config.ReseedConfig, attemptNumbe
 		"phase":       "bootstrap",
 		"step":        attemptNumber,
 		"reason":      "reseed attempt failed",
-		"server_url":  server.Url,
+		"server_url":  server.URL,
 		"attempt":     attemptNumber,
 		"duration_ms": elapsed.Milliseconds(),
 		"error_type":  fmt.Sprintf("%T", err),
@@ -228,7 +228,7 @@ func logReseedRequestComplete(server *config.ReseedConfig, attemptNumber int, el
 		"phase":        "bootstrap",
 		"step":         attemptNumber,
 		"reason":       "reseed request completed successfully",
-		"server_url":   server.Url,
+		"server_url":   server.URL,
 		"duration_ms":  elapsed.Milliseconds(),
 		"router_count": routerCount,
 	}).Debug("reseed HTTP request completed")
@@ -240,7 +240,7 @@ func logValidationComplete(server *config.ReseedConfig, totalReceived, validCoun
 		"at":                 "(ReseedBootstrap) attemptReseedFromServer",
 		"phase":              "validation",
 		"reason":             "RouterInfo validation completed",
-		"server_url":         server.Url,
+		"server_url":         server.URL,
 		"total_received":     totalReceived,
 		"valid_after_filter": validCount,
 	}).Debug("RouterInfo validation completed for reseed server")
@@ -253,7 +253,7 @@ func warnSlowReseed(server *config.ReseedConfig, elapsed time.Duration) {
 			"at":          "(ReseedBootstrap) attemptReseedFromServer",
 			"phase":       "bootstrap",
 			"reason":      "slow reseed operation detected",
-			"server_url":  server.Url,
+			"server_url":  server.URL,
 			"duration_ms": elapsed.Milliseconds(),
 			"threshold_s": 30,
 			"impact":      "may indicate network issues or server load",
@@ -268,7 +268,7 @@ func warnInsufficientRouters(server *config.ReseedConfig, validCount int) {
 			"at":           "(ReseedBootstrap) attemptReseedFromServer",
 			"phase":        "bootstrap",
 			"reason":       "insufficient valid routers from reseed server",
-			"server_url":   server.Url,
+			"server_url":   server.URL,
 			"router_count": validCount,
 			"minimum":      50,
 			"shortfall":    50 - validCount,
@@ -283,17 +283,17 @@ func (rb *ReseedBootstrap) attemptReseedFromServer(server *config.ReseedConfig, 
 	rb.logReseedAttemptStart(server, attemptNumber)
 
 	reseeder := reseed.NewReseed()
-	serverRIs, err := reseeder.SingleReseed(server.Url)
+	serverRIs, err := reseeder.SingleReseed(server.URL)
 	elapsed := time.Since(startTime)
 
 	if err != nil {
 		logReseedAttemptFailed(err, server, attemptNumber, elapsed)
-		return nil, oops.Errorf("reseed from %s failed: %v", server.Url, err)
+		return nil, oops.Errorf("reseed from %s failed: %v", server.URL, err)
 	}
 
 	logReseedRequestComplete(server, attemptNumber, elapsed, len(serverRIs))
 
-	validServerRIs := rb.validateAndFilterRouterInfos(serverRIs, server.Url)
+	validServerRIs := rb.validateAndFilterRouterInfos(serverRIs, server.URL)
 	logValidationComplete(server, len(serverRIs), len(validServerRIs))
 
 	warnSlowReseed(server, elapsed)
@@ -327,7 +327,7 @@ func (rb *ReseedBootstrap) logServerSuccess(server *config.ReseedConfig, count, 
 		"at":                 "(ReseedBootstrap) processReseedServer",
 		"phase":              "bootstrap",
 		"reason":             "successfully obtained router infos from server",
-		"server_url":         server.Url,
+		"server_url":         server.URL,
 		"routers_from_this":  count,
 		"routers_total":      total,
 		"successful_servers": successfulServers,
