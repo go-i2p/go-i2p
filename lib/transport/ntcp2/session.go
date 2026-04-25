@@ -493,12 +493,6 @@ func (s *NTCP2Session) createBlockUnframer() *BlockUnframer {
 	return unframer
 }
 
-// createMessageUnframer creates and returns a legacy I2NP unframer for this session's connection.
-// Deprecated: Use createBlockUnframer for NTCP2 spec-compliant block parsing.
-func (s *NTCP2Session) createMessageUnframer() *I2NPUnframer {
-	return NewI2NPUnframer(s.conn)
-}
-
 // handleNonI2NPBlock processes non-I2NP blocks received during the data phase.
 func (s *NTCP2Session) handleNonI2NPBlock(block Block) {
 	switch block.Type {
@@ -594,19 +588,6 @@ func (s *NTCP2Session) shouldStopReceiving() bool {
 
 // readNextMessageFromBlocks reads the next I2NP message from the block unframer and tracks bytes received.
 func (s *NTCP2Session) readNextMessageFromBlocks(unframer *BlockUnframer) (i2np.I2NPMessage, error) {
-	msg, err := unframer.ReadNextMessage()
-	if err == nil {
-		// Track bytes received atomically
-		bytesRead := unframer.BytesRead()
-		atomic.AddUint64(&s.bytesReceived, uint64(bytesRead))
-		s.logger.WithField("bytes_read", bytesRead).Debug("Message read successfully")
-	}
-	return msg, err
-}
-
-// readNextMessage reads the next I2NP message from the legacy unframer and tracks bytes received.
-// Deprecated: Use readNextMessageFromBlocks for NTCP2 spec-compliant block parsing.
-func (s *NTCP2Session) readNextMessage(unframer *I2NPUnframer) (i2np.I2NPMessage, error) {
 	msg, err := unframer.ReadNextMessage()
 	if err == nil {
 		// Track bytes received atomically

@@ -133,20 +133,20 @@ func ReadI2NPSecondGenTransportHeader(dat []byte) (I2NPSecondGenTransportHeader,
 func ReadI2NPSSUHeader(data []byte) (I2NPSSUHeader, error) {
 	header := I2NPSSUHeader{}
 
-	message_type, err := ReadI2NPType(data)
+	messageType, err := ReadI2NPType(data)
 	if err != nil {
 		log.WithError(err).Error("Failed to read I2NP type")
 		return header, err
 	} else {
-		header.Type = message_type
+		header.Type = messageType
 	}
 
-	message_date, err := ReadI2NPSSUMessageExpiration(data)
+	messageDate, err := ReadI2NPSSUMessageExpiration(data)
 	if err != nil {
 		log.WithError(err).Error("Failed to read I2NP SSU message expiration")
 		return header, err
 	} else {
-		header.Expiration = message_date.Time()
+		header.Expiration = messageDate.Time()
 	}
 	log.WithFields(logger.Fields{
 		"type": header.Type,
@@ -160,38 +160,38 @@ func ReadI2NPType(data []byte) (int, error) {
 		return 0, ErrI2NPNotEnoughData
 	}
 
-	message_type := common.Integer([]byte{data[0]})
+	messageType := common.Integer([]byte{data[0]})
 
 	// Types 4-9 and 12-17 are currently unassigned in the I2NP spec.
 	// Log at Debug level instead of Warn to avoid spurious warnings for
 	// types that may be assigned in future spec revisions.
-	if (message_type.Int() >= 4 && message_type.Int() <= 9) ||
-		(message_type.Int() >= 12 && message_type.Int() <= 17) {
+	if (messageType.Int() >= 4 && messageType.Int() <= 9) ||
+		(messageType.Int() >= 12 && messageType.Int() <= 17) {
 		log.WithFields(logger.Fields{
 			"at":   "i2np.ReadI2NPType",
-			"type": message_type,
+			"type": messageType,
 		}).Debug("unassigned_i2np_type")
 	}
 
-	if message_type.Int() >= 224 && message_type.Int() <= 254 {
+	if messageType.Int() >= 224 && messageType.Int() <= 254 {
 		log.WithFields(logger.Fields{
 			"at":   "i2np.ReadI2NPType",
-			"type": message_type,
+			"type": messageType,
 		}).Warn("experimental_i2np_type")
 	}
 
-	if message_type.Int() == 255 {
+	if messageType.Int() == 255 {
 		log.WithFields(logger.Fields{
 			"at":   "i2np.ReadI2NPType",
-			"type": message_type,
+			"type": messageType,
 		}).Warn("reserved_i2np_type")
 	}
 
 	log.WithFields(logger.Fields{
 		"at":   "i2np.ReadI2NPType",
-		"type": message_type,
+		"type": messageType,
 	}).Debug("parsed_i2np_type")
-	return message_type.Int(), nil
+	return messageType.Int(), nil
 }
 
 // ReadI2NPNTCPMessageID reads the message ID from NTCP data
@@ -200,13 +200,13 @@ func ReadI2NPNTCPMessageID(data []byte) (int, error) {
 		return 0, ErrI2NPNotEnoughData
 	}
 
-	message_id := common.Integer(data[1:5])
+	messageID := common.Integer(data[1:5])
 
 	log.WithFields(logger.Fields{
 		"at":   "i2np.ReadI2NPNTCPMessageID",
-		"type": message_id,
+		"type": messageID,
 	}).Debug("parsed_i2np_message_id")
-	return message_id.Int(), nil
+	return messageID.Int(), nil
 }
 
 // ReadI2NPNTCPMessageExpiration reads the expiration from NTCP data

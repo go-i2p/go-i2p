@@ -255,9 +255,7 @@ func DestinationToB32(destBytes []byte) string {
 func decodeB32Address(address string) ([]byte, error) {
 	// Strip .b32.i2p suffix if present
 	address = strings.ToLower(address)
-	if strings.HasSuffix(address, ".b32.i2p") {
-		address = strings.TrimSuffix(address, ".b32.i2p")
-	}
+	address = strings.TrimSuffix(address, ".b32.i2p")
 
 	// B32 addresses are 52 characters (256 bits in base32)
 	if len(address) != 52 {

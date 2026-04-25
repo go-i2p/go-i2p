@@ -51,7 +51,7 @@ total length: 528
 Cleartext:
 
 +----+----+----+----+----+----+----+----+
-| receive_tunnel    | our_ident         |
+| receiveTunnel    | our_ident         |
 +----+----+----+----+                   +
 |                                       |
 +                                       +
@@ -59,7 +59,7 @@ Cleartext:
 +                                       +
 |                                       |
 +                   +----+----+----+----+
-|                   | next_tunnel       |
+|                   | nextTunnel       |
 +----+----+----+----+----+----+----+----+
 | next_ident                            |
 +                                       +
@@ -108,13 +108,13 @@ Cleartext:
 |                             |
 +----+----+----+----+----+----+
 
-receive_tunnel :: TunnelId
+receiveTunnel :: TunnelId
                   length -> 4 bytes
 
 our_ident :: Hash
              length -> 32 bytes
 
-next_tunnel :: TunnelId
+nextTunnel :: TunnelId
                length -> 4 bytes
 
 next_ident :: Hash
@@ -139,7 +139,7 @@ request_time :: Integer
                 length -> 4 bytes
                 Hours since the epoch, i.e. current time / 3600
 
-send_message_id :: Integer
+sendMessageID :: Integer
                    length -> 4 bytes
 
 padding :: Data
@@ -293,15 +293,15 @@ func readBuildRequestRecordReceiveTunnel(data []byte) (tunnel.TunnelID, error) {
 		return 0, ErrBuildRequestRecordNotEnoughData
 	}
 
-	receive_tunnel := tunnel.TunnelID(
+	receiveTunnel := tunnel.TunnelID(
 		common.Integer(data[0:4]).Int(),
 	)
 
 	log.WithFields(logger.Fields{
 		"at":             "i2np.readBuildRequestRecordReceiveTunnel",
-		"receive_tunnel": receive_tunnel,
+		"receiveTunnel": receiveTunnel,
 	}).Debug("parsed_build_request_record_receive_tunnel")
-	return receive_tunnel, nil
+	return receiveTunnel, nil
 }
 
 func readBuildRequestRecordOurIdent(data []byte) (common.Hash, error) {
@@ -325,15 +325,15 @@ func readBuildRequestRecordNextTunnel(data []byte) (tunnel.TunnelID, error) {
 		return 0, ErrBuildRequestRecordNotEnoughData
 	}
 
-	next_tunnel := tunnel.TunnelID(
+	nextTunnel := tunnel.TunnelID(
 		common.Integer(data[36:40]).Int(),
 	)
 
 	log.WithFields(logger.Fields{
 		"at":          "i2np.readBuildRequestRecordNextTunnel",
-		"next_tunnel": next_tunnel,
+		"nextTunnel": nextTunnel,
 	}).Debug("parsed_build_request_record_next_tunnel")
-	return next_tunnel, nil
+	return nextTunnel, nil
 }
 
 func readBuildRequestRecordNextIdent(data []byte) (common.Hash, error) {
@@ -357,15 +357,15 @@ func readBuildRequestRecordLayerKey(data []byte) (session_key.SessionKey, error)
 		return session_key.SessionKey{}, ErrBuildRequestRecordNotEnoughData
 	}
 
-	session_key, _, err := session_key.ReadSessionKey(data[72:])
+	sessionKey, _, err := session_key.ReadSessionKey(data[72:])
 	if err != nil {
-		return session_key, err
+		return sessionKey, err
 	}
 
 	log.WithFields(logger.Fields{
 		"at": "i2np.readBuildRequestRecordLayerKey",
 	}).Debug("parsed_build_request_record_layer_key")
-	return session_key, nil
+	return sessionKey, nil
 }
 
 func readBuildRequestRecordIVKey(data []byte) (session_key.SessionKey, error) {
@@ -373,15 +373,15 @@ func readBuildRequestRecordIVKey(data []byte) (session_key.SessionKey, error) {
 		return session_key.SessionKey{}, ErrBuildRequestRecordNotEnoughData
 	}
 
-	session_key, _, err := session_key.ReadSessionKey(data[104:])
+	sessionKey, _, err := session_key.ReadSessionKey(data[104:])
 	if err != nil {
-		return session_key, err
+		return sessionKey, err
 	}
 
 	log.WithFields(logger.Fields{
 		"at": "i2np.readBuildRequestRecordIVKey",
 	}).Debug("parsed_build_request_record_iv_key")
-	return session_key, nil
+	return sessionKey, nil
 }
 
 func readBuildRequestRecordReplyKey(data []byte) (session_key.SessionKey, error) {
@@ -389,15 +389,15 @@ func readBuildRequestRecordReplyKey(data []byte) (session_key.SessionKey, error)
 		return session_key.SessionKey{}, ErrBuildRequestRecordNotEnoughData
 	}
 
-	session_key, _, err := session_key.ReadSessionKey(data[136:])
+	sessionKey, _, err := session_key.ReadSessionKey(data[136:])
 	if err != nil {
-		return session_key, err
+		return sessionKey, err
 	}
 
 	log.WithFields(logger.Fields{
 		"at": "i2np.readBuildRequestRecordReplyKey",
 	}).Debug("parsed_build_request_record_reply_key")
-	return session_key, nil
+	return sessionKey, nil
 }
 
 func readBuildRequestRecordReplyIV(data []byte) ([16]byte, error) {
@@ -447,12 +447,12 @@ func readBuildRequestRecordSendMessageID(data []byte) (int, error) {
 		return 0, ErrBuildRequestRecordNotEnoughData
 	}
 
-	send_message_id := common.Integer(data[189:193]).Int()
+	sendMessageID := common.Integer(data[189:193]).Int()
 
 	log.WithFields(logger.Fields{
 		"at": "i2np.readBuildRequestRecordSendMessageID",
 	}).Debug("parsed_build_request_record_send_message_id")
-	return send_message_id, nil
+	return sendMessageID, nil
 }
 
 func readBuildRequestRecordPadding(data []byte) ([29]byte, error) {
@@ -573,14 +573,14 @@ func (b *BuildRequestRecord) Bytes() []byte {
 //
 // Cleartext payload layout (154 bytes):
 //
-//	receive_tunnel:  4 bytes [0:4]
-//	next_tunnel:     4 bytes [4:8]
+//	receiveTunnel:  4 bytes [0:4]
+//	nextTunnel:     4 bytes [4:8]
 //	next_ident:     32 bytes [8:40]
 //	flag:            1 byte  [40] + 2 unused bytes [41:43]
 //	layer_enc_type:  1 byte  [43]
 //	request_time:    4 bytes [44:48] (minutes since epoch)
 //	expiration:      4 bytes [48:52] (seconds)
-//	send_message_id: 4 bytes [52:56]
+//	sendMessageID: 4 bytes [52:56]
 //	options/padding: 98 bytes [56:154]
 //
 // The caller is responsible for applying ECIES encryption.
@@ -596,12 +596,12 @@ func (b *BuildRequestRecord) ShortBytes() []byte {
 	// Cleartext payload starts at offset 48 (after toPeer + ephemeral key)
 	const payloadOff = 48
 
-	// receive_tunnel (4 bytes)
+	// receiveTunnel (4 bytes)
 	if tunnelInt, err := common.NewIntegerFromInt(int(b.ReceiveTunnel), 4); err == nil {
 		copy(data[payloadOff:payloadOff+4], tunnelInt.Bytes())
 	}
 
-	// next_tunnel (4 bytes)
+	// nextTunnel (4 bytes)
 	if tunnelInt, err := common.NewIntegerFromInt(int(b.NextTunnel), 4); err == nil {
 		copy(data[payloadOff+4:payloadOff+8], tunnelInt.Bytes())
 	}
@@ -626,7 +626,7 @@ func (b *BuildRequestRecord) ShortBytes() []byte {
 		copy(data[payloadOff+48:payloadOff+52], expInt.Bytes())
 	}
 
-	// send_message_id (4 bytes)
+	// sendMessageID (4 bytes)
 	if msgInt, err := common.NewIntegerFromInt(b.SendMessageID, 4); err == nil {
 		copy(data[payloadOff+52:payloadOff+56], msgInt.Bytes())
 	}
@@ -644,12 +644,12 @@ func (b *BuildRequestRecord) ShortBytes() []byte {
 //
 // Cleartext layout (154 bytes):
 //
-//	[0:4]    receive_tunnel (4 bytes)
-//	[4:8]    next_tunnel    (4 bytes)
+//	[0:4]    receiveTunnel (4 bytes)
+//	[4:8]    nextTunnel    (4 bytes)
 //	[8:40]   next_ident     (32 bytes)
 //	[40]     flag           (1 byte)
 //	[44:48]  request_time   (4 bytes, minutes since epoch)
-//	[52:56]  send_message_id (4 bytes)
+//	[52:56]  sendMessageID (4 bytes)
 func ReadShortBuildRequestRecord(data []byte) (BuildRequestRecord, error) {
 	if len(data) < ShortBuildRecordCleartextLen {
 		return BuildRequestRecord{}, ErrBuildRequestRecordNotEnoughData

@@ -250,9 +250,7 @@ func extractSignerID(cert *x509.Certificate, filename string) string {
 
 	// Convert filename format to email format
 	// e.g., "admin_at_stormycloud.org" -> "admin@stormycloud.org"
-	if strings.Contains(name, "_at_") {
-		name = strings.Replace(name, "_at_", "@", 1)
-	}
+	name = strings.Replace(name, "_at_", "@", 1)
 
 	return name
 }

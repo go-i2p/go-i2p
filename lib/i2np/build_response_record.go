@@ -123,14 +123,14 @@ func readBuildResponseRecordRandomData(data []byte) ([495]byte, error) {
 		return [495]byte{}, ErrBuildResponseRecordNotEnoughData
 	}
 
-	random_data := [495]byte{}
-	copy(random_data[:], data[32:527])
+	randomData := [495]byte{}
+	copy(randomData[:], data[32:527])
 
 	log.WithFields(logger.Fields{
 		"at":          "i2np.readBuildResponseRandomData",
-		"random_data": random_data,
+		"randomData": randomData,
 	}).Debug("parsed_build_response_record_random_data")
-	return random_data, nil
+	return randomData, nil
 }
 
 func readBuildResponseRecordReply(data []byte) (byte, error) {
@@ -148,7 +148,7 @@ func readBuildResponseRecordReply(data []byte) (byte, error) {
 }
 
 // validateBuildResponseRecord performs basic validation of a build response record.
-// It checks that the hash is non-zero and that SHA-256(random_data || reply_byte)
+// It checks that the hash is non-zero and that SHA-256(randomData || reply_byte)
 // matches the embedded hash. This is a standalone helper shared by all tunnel
 // build reply types.
 func validateBuildResponseRecord(record BuildResponseRecord) error {
@@ -164,7 +164,7 @@ func validateBuildResponseRecord(record BuildResponseRecord) error {
 		return oops.Errorf("response record has empty hash")
 	}
 
-	// Verify SHA-256 hash: hash should be SHA256(random_data + reply_byte)
+	// Verify SHA-256 hash: hash should be SHA256(randomData + reply_byte)
 	data := make([]byte, 496)
 	copy(data[0:495], record.RandomData[:])
 	data[495] = record.Reply

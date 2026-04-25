@@ -61,7 +61,6 @@ type SelectionMetrics struct {
 	InsufficientPeers  int64 // Times we couldn't find enough non-G peers
 	SelectionFailures  int64 // Total selection failures
 	AverageRetries     float64
-	lastRetryCount     int
 	totalRetryCount    int64
 	selectionWithRetry int64
 }

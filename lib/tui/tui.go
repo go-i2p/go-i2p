@@ -7,10 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/go-i2p/i2ptui"
-	"github.com/go-i2p/logger"
 )
-
-var log = logger.GetGoI2PLogger()
 
 // WrapperModel wraps the i2ptui Model and adds a password reveal panel
 // so that other applications can discover the I2PControl credentials.

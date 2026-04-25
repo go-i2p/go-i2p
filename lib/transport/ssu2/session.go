@@ -513,23 +513,6 @@ func buildShortFollowOnFragments(messageID uint32, body []byte, offset, maxPaylo
 	return blocks, nil
 }
 
-// sendTrackedData writes data via conn.Write (which handles fragmentation)
-// and tracks the data for retransmission.
-func (s *SSU2Session) sendTrackedData(data []byte) error {
-	if s.ctx.Err() != nil {
-		return ErrSessionClosed
-	}
-	seq := s.trackPending(data)
-	n, err := s.conn.Write(data)
-	if err != nil {
-		s.removePending(seq)
-		s.congestionCtrl.OnPacketLoss()
-		return err
-	}
-	s.updateSendStats(n)
-	return nil
-}
-
 // waitForCongestionWindow blocks until the congestion window allows sending size bytes.
 func (s *SSU2Session) waitForCongestionWindow(size int) error {
 	timer := time.NewTimer(ccPollInterval)

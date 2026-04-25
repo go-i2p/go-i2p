@@ -710,14 +710,6 @@ func (p *Pool) excludePreviouslyFailedPeers(req *BuildTunnelRequest, retry int, 
 	}
 }
 
-// extractPeerHashes returns the peer hashes from a successful build result.
-func (p *Pool) extractPeerHashes(result *BuildTunnelResult) []common.Hash {
-	if result != nil {
-		return result.PeerHashes
-	}
-	return nil
-}
-
 // logBuildFailure logs detailed information about a tunnel build failure.
 // Failures are typically caused by session establishment failures.
 func (p *Pool) logBuildFailure(err error, retry, maxRetries int, req *BuildTunnelRequest) {
@@ -734,30 +726,6 @@ func (p *Pool) logBuildFailure(err error, retry, maxRetries int, req *BuildTunne
 		"pool_size":      len(p.tunnels),
 		"excluded_peers": len(req.ExcludePeers),
 	}).Warn("failed to build tunnel")
-}
-
-// checkTunnelCollision checks if a tunnel ID already exists in the pool.
-// Returns true if collision detected (extremely rare), false if ID is available.
-func (p *Pool) checkTunnelCollision(tunnelID TunnelID, retry, maxRetries int) bool {
-	p.mutex.RLock()
-	_, exists := p.tunnels[tunnelID]
-	p.mutex.RUnlock()
-
-	if !exists {
-		return false
-	}
-
-	log.WithFields(logger.Fields{
-		"at":          "(Pool) attemptBuildTunnels",
-		"phase":       "tunnel_build",
-		"reason":      "tunnel ID collision detected",
-		"tunnel_id":   tunnelID,
-		"retry":       retry + 1,
-		"max_retries": maxRetries,
-		"probability": "extremely rare event",
-	}).Warn("tunnel ID collision detected, retrying with new ID")
-
-	return true
 }
 
 // SelectTunnel selects a tunnel from the pool using round-robin strategy.
