@@ -1,0 +1,25 @@
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+
+linters:
+  disable-all: true
+  enable:
+    - errcheck
+    - staticcheck
+    - ineffassign
+    - govet
+    - unused
+
+linters-settings:
+  errcheck:
+    check-type-assertions: false
+    check-blank: false
+
+issues:
+  max-same-issues: 0
+  exclude-rules:
+    # Test files get more latitude
+    - path: _test\.go
+      linters:
+        - errcheck

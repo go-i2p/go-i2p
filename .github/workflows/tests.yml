@@ -60,3 +60,16 @@ jobs:
         with:
           name: ${{ matrix.test_target }}-logs
           path: ./test-logs/${{ matrix.test_target }}.log  # Adjust this path as needed
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v4
+        with:
+          go-version: '1.26'
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          args: --timeout=5m
