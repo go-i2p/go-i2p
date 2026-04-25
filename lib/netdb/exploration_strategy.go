@@ -344,7 +344,7 @@ func (s *AdaptiveStrategy) randomizeLowerBits(key *common.Hash, bucketIdx int) e
 // randomBit returns a random boolean value
 func randomBit() bool {
 	var b [1]byte
-	rand.Read(b[:])
+	_, _ = rand.Read(b[:])
 	return (b[0] & 1) == 1
 }
 

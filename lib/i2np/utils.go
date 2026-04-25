@@ -5,7 +5,6 @@ import (
 	"time"
 
 	common "github.com/go-i2p/common/data"
-	datalib "github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/go-i2p/logger"
 )
@@ -111,7 +110,7 @@ func ReadI2NPSecondGenTransportHeader(dat []byte) (I2NPSecondGenTransportHeader,
 	}
 	header.Type = messageType
 
-	messageID := datalib.Integer(dat[1:5])
+	messageID := common.Integer(dat[1:5])
 	header.MessageID = messageID.Int()
 
 	// NTCP2/SSU2 uses a 4-byte expiration in seconds since epoch (not the
@@ -161,7 +160,7 @@ func ReadI2NPType(data []byte) (int, error) {
 		return 0, ErrI2NPNotEnoughData
 	}
 
-	message_type := datalib.Integer([]byte{data[0]})
+	message_type := common.Integer([]byte{data[0]})
 
 	// Types 4-9 and 12-17 are currently unassigned in the I2NP spec.
 	// Log at Debug level instead of Warn to avoid spurious warnings for
@@ -201,7 +200,7 @@ func ReadI2NPNTCPMessageID(data []byte) (int, error) {
 		return 0, ErrI2NPNotEnoughData
 	}
 
-	message_id := datalib.Integer(data[1:5])
+	message_id := common.Integer(data[1:5])
 
 	log.WithFields(logger.Fields{
 		"at":   "i2np.ReadI2NPNTCPMessageID",
@@ -211,14 +210,14 @@ func ReadI2NPNTCPMessageID(data []byte) (int, error) {
 }
 
 // ReadI2NPNTCPMessageExpiration reads the expiration from NTCP data
-func ReadI2NPNTCPMessageExpiration(data []byte) (datalib.Date, error) {
+func ReadI2NPNTCPMessageExpiration(data []byte) (common.Date, error) {
 	if len(data) < 13 {
-		return datalib.Date{}, ErrI2NPNotEnoughData
+		return common.Date{}, ErrI2NPNotEnoughData
 	}
 
-	date, _, err := datalib.ReadDate(data[5:])
+	date, _, err := common.ReadDate(data[5:])
 	if err != nil {
-		return datalib.Date{}, err
+		return common.Date{}, err
 	}
 
 	log.WithFields(logger.Fields{
@@ -232,9 +231,9 @@ func ReadI2NPNTCPMessageExpiration(data []byte) (datalib.Date, error) {
 // Note: Short expiration is a 4-byte unsigned integer that will wrap around
 // on February 7, 2106. As of that date, an offset must be added to get the
 // correct time. See I2NP specification for details.
-func ReadI2NPSSUMessageExpiration(data []byte) (datalib.Date, error) {
+func ReadI2NPSSUMessageExpiration(data []byte) (common.Date, error) {
 	if len(data) < 5 {
-		return datalib.Date{}, ErrI2NPNotEnoughData
+		return common.Date{}, ErrI2NPNotEnoughData
 	}
 
 	// SSU short expiration is a 4-byte unsigned integer in seconds since epoch.
@@ -243,7 +242,7 @@ func ReadI2NPSSUMessageExpiration(data []byte) (datalib.Date, error) {
 	seconds := binary.BigEndian.Uint32(data[1:5])
 	milliseconds := uint64(seconds) * 1000
 
-	date := datalib.Date{}
+	date := common.Date{}
 	binary.BigEndian.PutUint64(date[:], milliseconds)
 
 	log.WithFields(logger.Fields{
@@ -259,7 +258,7 @@ func ReadI2NPNTCPMessageSize(data []byte) (int, error) {
 		return 0, ErrI2NPNotEnoughData
 	}
 
-	size := datalib.Integer(data[13:15])
+	size := common.Integer(data[13:15])
 
 	log.WithFields(logger.Fields{
 		"at":   "i2np.ReadI2NPNTCPMessageSize",
@@ -274,7 +273,7 @@ func ReadI2NPNTCPMessageChecksum(data []byte) (int, error) {
 		return 0, ErrI2NPNotEnoughData
 	}
 
-	checksum := datalib.Integer(data[15:16])
+	checksum := common.Integer(data[15:16])
 
 	log.WithFields(logger.Fields{
 		"at":       "i2np.ReadI2NPNTCPMessageCHecksum",

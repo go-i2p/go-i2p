@@ -329,7 +329,7 @@ func (e *Explorer) performExploratoryLookup(index int, lookupHash common.Hash) e
 func (e *Explorer) generateRandomKeys(count int) []common.Hash {
 	keys := make([]common.Hash, count)
 	for i := 0; i < count; i++ {
-		rand.Read(keys[i][:])
+		_, _ = rand.Read(keys[i][:])
 	}
 	return keys
 }

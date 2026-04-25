@@ -304,14 +304,15 @@ type entrySerializer struct {
 // MetaLeaseSet, RouterInfo) and serializes the first one found.
 func (db *StdNetDB) serializeEntry(entry *Entry) ([]byte, error) {
 	serializers := db.collectSerializers(entry)
-	for _, s := range serializers {
-		data, err := s.serialize()
-		if err != nil {
-			return nil, oops.Errorf("failed to serialize %s from entry: %w", s.name, err)
-		}
-		return data, nil
+	if len(serializers) == 0 {
+		return nil, oops.Errorf("entry contains no valid data")
 	}
-	return nil, oops.Errorf("entry contains no valid data")
+	s := serializers[0]
+	data, err := s.serialize()
+	if err != nil {
+		return nil, oops.Errorf("failed to serialize %s from entry: %w", s.name, err)
+	}
+	return data, nil
 }
 
 // collectSerializers returns the serializers for all non-nil entry types.

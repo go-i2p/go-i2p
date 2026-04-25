@@ -96,8 +96,8 @@ func (m WrapperModel) renderPasswordPanel() string {
 	var b strings.Builder
 	b.WriteString(panelTitle.Render("I2PControl Credentials"))
 	b.WriteString("\n\n")
-	b.WriteString(fmt.Sprintf("  %s %s\n", panelLabel.Render("Address: "), panelValue.Render(m.address)))
-	b.WriteString(fmt.Sprintf("  %s %s\n", panelLabel.Render("Password:"), panelValue.Render(m.password)))
+	fmt.Fprintf(&b, "  %s %s\n", panelLabel.Render("Address: "), panelValue.Render(m.address))
+	fmt.Fprintf(&b, "  %s %s\n", panelLabel.Render("Password:"), panelValue.Render(m.password))
 	b.WriteString("\n")
 	b.WriteString("  Use these credentials to connect other I2P\n")
 	b.WriteString("  applications to this router's I2PControl API.\n\n")

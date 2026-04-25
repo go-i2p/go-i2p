@@ -400,7 +400,9 @@ func (tm *TunnelManager) selectBuildMessage(result *tunnel.TunnelBuildResult, me
 
 // queueBuildMessageToGateway queues the build message for sending to the gateway.
 func (tm *TunnelManager) queueBuildMessageToGateway(session I2NPTransportSession, buildMsg I2NPMessage, messageID int, peerHash [32]byte, useShortBuild bool) {
-	session.QueueSendI2NP(buildMsg)
+	if err := session.QueueSendI2NP(buildMsg); err != nil {
+		log.WithError(err).WithField("message_id", messageID).Warn("Failed to queue tunnel build message")
+	}
 
 	log.WithFields(logger.Fields{
 		"message_id":   messageID,
@@ -712,7 +714,9 @@ func (tm *TunnelManager) sendTunnelBuildRequests(records []BuildRequestRecord, p
 	if err != nil {
 		return oops.Wrapf(err, "failed to get session for gateway")
 	}
-	session.QueueSendI2NP(msg)
+	if err := session.QueueSendI2NP(msg); err != nil {
+		return oops.Wrapf(err, "failed to queue build message")
+	}
 
 	tm.logBuildRequestsCompleted(tunnelID)
 	return nil

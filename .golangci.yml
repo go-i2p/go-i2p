@@ -13,15 +13,29 @@ linters:
     - govet
     - unused
 
-linters-settings:
-  errcheck:
-    check-type-assertions: false
-    check-blank: false
+  settings:
+    errcheck:
+      check-type-assertions: false
+      check-blank: false
+      exclude-functions:
+        - os.Remove
+        - os.RemoveAll
+        - (io.Closer).Close
+        - (*os.File).Close
+        - (net.Conn).Close
+    staticcheck:
+      # Disable purely cosmetic/style suggestions
+      checks:
+        - "all"
+        - "-QF1003"
+        - "-QF1008"
+        - "-QF1012"
 
 issues:
   max-same-issues: 0
-  exclude-rules:
-    # Test files get more latitude
-    - path: _test\.go
-      linters:
-        - errcheck
+  exclusions:
+    rules:
+      # Test files: relax errcheck
+      - path: _test\.go
+        linters:
+          - errcheck

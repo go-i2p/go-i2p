@@ -18,7 +18,6 @@ import (
 	"github.com/go-i2p/common/signature"
 	"github.com/go-i2p/crypto/ed25519"
 	elgamal "github.com/go-i2p/crypto/elg"
-	"github.com/go-i2p/crypto/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -59,8 +58,7 @@ func CreateSignedTestRouterInfo(tb testing.TB, options map[string]string, addrCf
 	ed25519PubKeyRaw, err := ed25519PrivKeyTyped.Public()
 	require.NoError(tb, err, "Failed to derive Ed25519 public key")
 
-	ed25519PubKey, ok := ed25519PubKeyRaw.(types.SigningPublicKey)
-	require.True(tb, ok, "Failed to cast Ed25519 public key")
+	ed25519PubKey := ed25519PubKeyRaw
 
 	// Generate ElGamal encryption key pair
 	var elgPrivKey elgamal.PrivateKey

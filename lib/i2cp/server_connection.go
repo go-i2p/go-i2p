@@ -398,10 +398,7 @@ func (s *Server) checkMessageAuthentication(conn net.Conn, msg *Message) bool {
 func (s *Server) processAndRespond(conn net.Conn, msg *Message, sessionPtr **Session) bool {
 	response, err := s.processClientMessage(conn, msg, sessionPtr)
 	if err != nil {
-		if errors.Is(err, errClientDisconnected) {
-			return false
-		}
-		return true
+		return !errors.Is(err, errClientDisconnected)
 	}
 
 	s.handleNewSessionTracking(msg, sessionPtr, conn)

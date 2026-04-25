@@ -394,7 +394,7 @@ func validateGzipSize(data []byte, maxUncompressed, maxRatio int) (int, error) {
 	if err != nil {
 		return 0, oops.Wrapf(err, "invalid gzip data")
 	}
-	defer gr.Close()
+	defer func() { _ = gr.Close() }()
 
 	// Use limited reader to prevent full decompression of malicious data
 	lr := &io.LimitedReader{R: gr, N: int64(maxUncompressed + 1)}

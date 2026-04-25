@@ -644,7 +644,7 @@ func gzipDecompress(data []byte) ([]byte, error) {
 	if err != nil {
 		return nil, oops.Errorf("gzip: failed to create reader: %w", err)
 	}
-	defer r.Close()
+	defer func() { _ = r.Close() }()
 	var buf bytes.Buffer
 	// Limit decompressed size to 64 KiB to prevent zip-bomb attacks.
 	// A valid RouterInfo is typically under 4 KiB.
