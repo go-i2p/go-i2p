@@ -91,24 +91,32 @@ func (c *routerInfoAdmissionController) underPressure(currentCount int) bool {
 	return currentCount*100 >= c.capacity*c.pressurePct
 }
 
-func (c *routerInfoAdmissionController) cleanupIfNeeded(now time.Time) {
-	if len(c.sources) <= c.maxSources {
-		return
-	}
+func (c *routerInfoAdmissionController) deleteEmptyStaleSources(now time.Time) {
 	for source, window := range c.sources {
 		c.pruneWindow(window, now)
 		if len(window.introductions) == 0 && now.Sub(window.lastSeen) > c.window {
 			delete(c.sources, source)
 		}
 	}
-	if len(c.sources) <= c.maxSources {
-		return
-	}
+}
+
+func (c *routerInfoAdmissionController) deleteStaleSources(now time.Time) {
 	for source, window := range c.sources {
 		if now.Sub(window.lastSeen) > c.window {
 			delete(c.sources, source)
 		}
 	}
+}
+
+func (c *routerInfoAdmissionController) cleanupIfNeeded(now time.Time) {
+	if len(c.sources) <= c.maxSources {
+		return
+	}
+	c.deleteEmptyStaleSources(now)
+	if len(c.sources) <= c.maxSources {
+		return
+	}
+	c.deleteStaleSources(now)
 }
 
 func (c *routerInfoAdmissionController) pruneWindow(window *sourceAdmissionWindow, now time.Time) {

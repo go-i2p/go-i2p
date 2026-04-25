@@ -143,6 +143,21 @@ func (d *DatabaseSearchReply) MarshalBinary() ([]byte, error) {
 	return d.BaseI2NPMessage.MarshalBinary()
 }
 
+// readPeerHashes reads count peer hashes from remainder, returning the hashes
+// and the bytes that follow.
+func readPeerHashes(remainder []byte, count int) ([]common.Hash, []byte, error) {
+	hashes := make([]common.Hash, count)
+	for i := 0; i < count; i++ {
+		h, rem, err := common.ReadHash(remainder)
+		if err != nil {
+			return nil, nil, ErrDatabaseSearchReplyNotEnoughData
+		}
+		hashes[i] = h
+		remainder = rem
+	}
+	return hashes, remainder, nil
+}
+
 // UnmarshalBinary deserializes the DatabaseSearchReply message from binary data.
 func (d *DatabaseSearchReply) UnmarshalBinary(data []byte) error {
 	// Minimum size: key(32) + count(1) + from(32) = 65 bytes
@@ -164,20 +179,14 @@ func (d *DatabaseSearchReply) UnmarshalBinary(data []byte) error {
 	remainder = remainder[1:]
 
 	// Validate total length
-	expectedLen := 32 + 1 + (d.Count * 32) + 32
-	if len(data) < expectedLen {
+	if len(data) < 32+1+(d.Count*32)+32 {
 		return ErrDatabaseSearchReplyNotEnoughData
 	}
 
 	// Peer hashes (count * 32 bytes)
-	d.PeerHashes = make([]common.Hash, d.Count)
-	for i := 0; i < d.Count; i++ {
-		peerHash, rem, err := common.ReadHash(remainder)
-		if err != nil {
-			return ErrDatabaseSearchReplyNotEnoughData
-		}
-		d.PeerHashes[i] = peerHash
-		remainder = rem
+	d.PeerHashes, remainder, err = readPeerHashes(remainder, d.Count)
+	if err != nil {
+		return err
 	}
 
 	// From (32 bytes)

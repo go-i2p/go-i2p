@@ -271,6 +271,25 @@ func (d *DatabaseStore) MarshalBinary() ([]byte, error) {
 	return result, nil
 }
 
+// readReplyRoutingInfo reads the optional reply-routing-info fields from data
+// when the reply token is non-zero. Returns the fields and the remaining bytes.
+func readReplyRoutingInfo(d *DatabaseStore, remainder []byte) ([]byte, error) {
+	if d.ReplyToken == ([4]byte{}) {
+		return remainder, nil
+	}
+	if len(remainder) < 36 {
+		return nil, oops.Errorf("DatabaseStore with reply token truncated")
+	}
+	copy(d.ReplyTunnelID[:], remainder[:4])
+	remainder = remainder[4:]
+	gateway, rem, err := common.ReadHash(remainder)
+	if err != nil {
+		return nil, oops.Wrapf(err, "DatabaseStore: failed to read reply gateway hash")
+	}
+	d.ReplyGateway = gateway
+	return rem, nil
+}
+
 // UnmarshalBinary deserializes the DatabaseStore message from I2NP message data
 func (d *DatabaseStore) UnmarshalBinary(data []byte) error {
 	if len(data) < 37 { // Minimum: key(32) + type(1) + replyToken(4)
@@ -294,23 +313,9 @@ func (d *DatabaseStore) UnmarshalBinary(data []byte) error {
 	copy(d.ReplyToken[:], remainder[:4])
 	remainder = remainder[4:]
 
-	// Check if reply token > 0 (has reply routing info)
-	hasReply := d.ReplyToken != [4]byte{0, 0, 0, 0}
-	if hasReply {
-		if len(remainder) < 36 { // Need replyTunnelID(4) + replyGateway(32)
-			return oops.Errorf("DatabaseStore with reply token truncated")
-		}
-		// Reply Tunnel ID (4 bytes)
-		copy(d.ReplyTunnelID[:], remainder[:4])
-		remainder = remainder[4:]
-
-		// Reply Gateway (32 bytes)
-		gateway, rem, err := common.ReadHash(remainder)
-		if err != nil {
-			return oops.Wrapf(err, "DatabaseStore: failed to read reply gateway hash")
-		}
-		d.ReplyGateway = gateway
-		remainder = rem
+	remainder, err = readReplyRoutingInfo(d, remainder)
+	if err != nil {
+		return err
 	}
 
 	// Data (remaining bytes) - validate size before allocation
@@ -333,7 +338,7 @@ func (d *DatabaseStore) UnmarshalBinary(data []byte) error {
 		"data_type": d.StoreType,
 		"data_size": len(d.Data),
 		"key":       fmt.Sprintf("%x", d.Key[:8]),
-		"has_reply": hasReply,
+		"has_reply": d.ReplyToken != ([4]byte{}),
 	}).Debug("DatabaseStore unmarshaled successfully")
 
 	return nil

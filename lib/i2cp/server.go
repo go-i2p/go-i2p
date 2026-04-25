@@ -205,6 +205,22 @@ func NewServer(config *ServerConfig) (*Server, error) {
 	}, nil
 }
 
+// createAndSecureListener opens the network listener and, for Unix sockets,
+// applies restrictive file permissions. Returns an error if either step fails.
+func (s *Server) createAndSecureListener() (net.Listener, error) {
+	listener, err := net.Listen(s.config.Network, s.config.ListenAddr)
+	if err != nil {
+		return nil, oops.Errorf("failed to listen on %s: %w", s.config.ListenAddr, err)
+	}
+	if s.config.Network == "unix" && s.config.ListenAddr != "" {
+		if chmodErr := os.Chmod(s.config.ListenAddr, 0o600); chmodErr != nil {
+			_ = listener.Close()
+			return nil, oops.Errorf("failed to set Unix socket permissions on %s: %w", s.config.ListenAddr, chmodErr)
+		}
+	}
+	return listener, nil
+}
+
 // Start begins listening for I2CP connections
 func (s *Server) Start() error {
 	if err := s.enforceBindPolicy(); err != nil {
@@ -219,30 +235,15 @@ func (s *Server) Start() error {
 	s.running = true
 	s.mu.Unlock()
 
-	// Create listener
-	listener, err := net.Listen(s.config.Network, s.config.ListenAddr)
+	listener, err := s.createAndSecureListener()
 	if err != nil {
 		s.mu.Lock()
 		s.running = false
 		s.mu.Unlock()
-		return oops.Errorf("failed to listen on %s: %w", s.config.ListenAddr, err)
+		return err
 	}
 
 	s.listener = listener
-
-	// Restrict Unix-socket access to the owning user. Without this chmod the
-	// socket inherits the process umask (typically 0o755 on Linux), which
-	// would let any local user connect — defeating the "use a Unix socket"
-	// hardening measure documented in the README.
-	if s.config.Network == "unix" && s.config.ListenAddr != "" {
-		if chmodErr := os.Chmod(s.config.ListenAddr, 0o600); chmodErr != nil {
-			_ = listener.Close()
-			s.mu.Lock()
-			s.running = false
-			s.mu.Unlock()
-			return oops.Errorf("failed to set Unix socket permissions on %s: %w", s.config.ListenAddr, chmodErr)
-		}
-	}
 
 	log.WithFields(logger.Fields{
 		"at":      "i2cp.Server.Start",
