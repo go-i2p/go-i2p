@@ -88,11 +88,11 @@ Anonymity-sensitive operators should review [Anonymity-Safe Logging](docs/anonym
     - [X] I2NP message framing and unframing
     - [X] Session lifecycle management
     - [X] Message queuing and worker threads
-  - SSU2
+  - SSU2 (**currently experimental** — see `--transport.ssu2-enabled` help text)
     - [X] Session handshake
     - [X] Connection management
-    - [X] Peer Tests
-    - [X] Introducers
+    - [X] Peer Tests (experimental — all roles implemented; end-to-end integration ongoing)
+    - [X] Introducers (experimental — registration and republish wired)
   - [Noise Subsystem (see also https://github.com/go-i2p/go-noise)](https://github.com/go-i2p/go-noise)
     - [X] Noise Socket Framework
     - [X] NTCP2 Socket Framework
@@ -184,6 +184,11 @@ go-i2p --i2cp.network=unix --i2cp.address=/tmp/i2cp.sock
 - **Message Protocol**: Full I2CP v0.9.67 protocol implementation
 - **Multi-client Support**: Handle multiple concurrent client sessions (default: 100)
 - **Thread-safe**: Concurrent session access with proper synchronization
+
+> **Note:** `messageReliability=Guaranteed` is not yet implemented. Sessions
+> requesting guaranteed delivery fall back to `BestEffort` silently. Applications
+> requiring acknowledgment must implement their own delivery-confirmation layer
+> (e.g., via the go-streaming library).
 
 For more details, see `lib/i2cp/README.md`.
 

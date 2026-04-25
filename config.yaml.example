@@ -17,6 +17,12 @@ router:
   message_expiration_time: 60s
   # Maximum number of active transport sessions
   max_concurrent_sessions: 200
+  # Participate in transit tunnels for the network
+  accept_tunnels: true
+  # Maximum bandwidth in bytes/sec (0 = unlimited)
+  max_bandwidth: 1048576
+  # Maximum concurrent transport connections
+  max_connections: 200
 
 # Network Database Configuration
 netdb:
@@ -135,10 +141,9 @@ i2cp:
 # I2PControl provides a JSON-RPC 2.0 API for monitoring router status
 # Useful for development, debugging, and integration with monitoring tools
 i2pcontrol:
-  # Enable I2PControl server (disabled by default for security)
-  # The default password 'itoopie' over HTTP allows local privilege escalation.
-  # Change the password before enabling, or enable HTTPS.
-  enabled: false
+  # Enable I2PControl server (enabled by default; change password before
+  # exposing outside localhost)
+  enabled: true
   
   # Listen address for I2PControl server
   # Default: localhost:7650 (I2PControl standard port)
@@ -236,3 +241,30 @@ performance:
   fragment_cache_size: 500
   # How often to run cleanup tasks
   cleanup_interval: 5m
+
+# Congestion Control
+# These thresholds determine when the router advertises congestion flags in its
+# RouterInfo to signal to tunnel builders how loaded this router is.
+congestion:
+  # Duration to average congestion metrics over
+  averaging_window: 5m
+  # Participating tunnel ratio to advertise D (medium congestion) flag
+  d_flag_threshold: 0.7
+  # Participating tunnel ratio to advertise E (high congestion) flag
+  e_flag_threshold: 0.85
+  # Participating tunnel ratio to advertise G (critical congestion) flag
+  g_flag_threshold: 1.0
+  # Ratio to clear D flag and return to normal
+  clear_d_flag_threshold: 0.6
+  # Ratio to clear E flag (downgrade to D or clear)
+  clear_e_flag_threshold: 0.75
+  # Ratio to clear G flag (downgrade to E)
+  clear_g_flag_threshold: 0.95
+  # Capacity multiplier for D-flagged peers in tunnel building
+  d_flag_capacity_multiplier: 0.5
+  # Capacity multiplier for E-flagged peers in tunnel building
+  e_flag_capacity_multiplier: 0.1
+  # When E flag on stale RouterInfo is treated as D flag
+  e_flag_age_threshold: 15m
+  # Capacity multiplier for E-flagged peers with stale RouterInfo
+  stale_e_flag_capacity_multiplier: 0.5
