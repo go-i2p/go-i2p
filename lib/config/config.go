@@ -82,7 +82,7 @@ func setDefaults() {
 // viperDefault pairs a configuration key with its default value.
 type viperDefault struct {
 	key string
-	val any
+	val interface{}
 }
 
 // applyViperDefaults sets multiple viper configuration defaults from a table

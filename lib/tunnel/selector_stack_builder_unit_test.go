@@ -246,25 +246,25 @@ func TestCompositeFilter_Name(t *testing.T) {
 
 func TestAnyFilter_Empty(t *testing.T) {
 	// Empty OR filter should accept all (no conditions to fail)
-	any := NewAnyFilter("Empty")
-	assert.True(t, any.Accept(router_info.RouterInfo{}))
+	anyFilter := NewAnyFilter("Empty")
+	assert.True(t, anyFilter.Accept(router_info.RouterInfo{}))
 }
 
 func TestAnyFilter_AllReject(t *testing.T) {
-	any := NewAnyFilter("AllReject",
+	anyFilter := NewAnyFilter("AllReject",
 		&alwaysRejectFilter{},
 		&alwaysRejectFilter{},
 	)
-	assert.False(t, any.Accept(router_info.RouterInfo{}))
+	assert.False(t, anyFilter.Accept(router_info.RouterInfo{}))
 }
 
 func TestAnyFilter_OneAccepts(t *testing.T) {
-	any := NewAnyFilter("OneAccepts",
+	anyFilter := NewAnyFilter("OneAccepts",
 		&alwaysRejectFilter{},
 		&alwaysAcceptFilter{},
 		&alwaysRejectFilter{},
 	)
-	assert.True(t, any.Accept(router_info.RouterInfo{}))
+	assert.True(t, anyFilter.Accept(router_info.RouterInfo{}))
 }
 
 // =============================================================================

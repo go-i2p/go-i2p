@@ -183,8 +183,8 @@ func mergeBlockCallbacks(cbs *ssu2noise.DataHandlerCallbacks, cfg *BlockCallback
 }
 
 // setIfNotNil is a type-parameterized helper that sets *dest = src if src != nil.
-func setIfNotNil[T any](dest *T, src T) {
-	if any(src) != nil {
+func setIfNotNil[T interface{}](dest *T, src T) {
+	if interface{}(src) != nil {
 		*dest = src
 	}
 }

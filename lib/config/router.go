@@ -190,7 +190,7 @@ func copyBaseFields(src *RouterConfig) *RouterConfig {
 
 // copyPtr creates a shallow copy of a pointer value.
 // Returns nil if src is nil, otherwise returns a pointer to a copy of the value.
-func copyPtr[T any](src *T) *T {
+func copyPtr[T interface{}](src *T) *T {
 	if src == nil {
 		return nil
 	}

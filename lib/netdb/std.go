@@ -1468,7 +1468,7 @@ func (db *StdNetDB) RequestRouterInfoRefresh(hash common.Hash) {
 func (db *StdNetDB) sweepRefreshCooldown() {
 	now := time.Now()
 	swept := 0
-	db.riRefreshCooldown.Range(func(key, value any) bool {
+	db.riRefreshCooldown.Range(func(key, value interface{}) bool {
 		if t, ok := value.(time.Time); ok && now.Sub(t) > riRefreshCooldownDuration {
 			db.riRefreshCooldown.Delete(key)
 			swept++
