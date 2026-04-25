@@ -567,6 +567,11 @@ func (t *SSU2Transport) checkPeerTestComplete(nonce uint32, candidates []router_
 
 	if natType == ssu2noise.NATRestricted || natType == ssu2noise.NATSymmetric {
 		t.registerIntroducers(candidates, republish)
+	} else if natType == ssu2noise.NATCone && extStr != "" && republish != nil {
+		// Full-cone NAT with a detected external address: republish immediately
+		// so the correct public IP is advertised without waiting for the next
+		// periodic republish interval.
+		republish()
 	}
 	return true
 }
