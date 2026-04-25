@@ -141,3 +141,34 @@ func TestLoadNATState_InvalidJSON(t *testing.T) {
 func testLogger() *logger.Entry {
 	return logger.WithField("test", "nat_state")
 }
+
+// TestNatState_GetExternal verifies that getExternal returns the cached
+// external address string when the cache is fresh.
+func TestNatState_GetExternal(t *testing.T) {
+	ns := &natState{}
+	ns.set(ssu2noise.NATCone, "203.0.113.10")
+
+	ext := ns.getExternal()
+	assert.Equal(t, "203.0.113.10", ext)
+}
+
+// TestNatState_GetExternal_Empty verifies that getExternal returns an empty
+// string when no result has been cached.
+func TestNatState_GetExternal_Empty(t *testing.T) {
+	ns := &natState{}
+	assert.Equal(t, "", ns.getExternal())
+}
+
+// TestNatState_GetExternal_Expired verifies that getExternal returns an empty
+// string when the cached result has expired.
+func TestNatState_GetExternal_Expired(t *testing.T) {
+	ns := &natState{}
+	ns.set(ssu2noise.NATCone, "203.0.113.10")
+
+	// Force expiry by backdating the timestamp.
+	ns.mu.Lock()
+	ns.updated = time.Now().Add(-natResultTTL - time.Second)
+	ns.mu.Unlock()
+
+	assert.Equal(t, "", ns.getExternal())
+}

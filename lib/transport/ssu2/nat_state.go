@@ -56,6 +56,18 @@ func (ns *natState) get() (ssu2noise.NATType, bool) {
 	return ns.natType, true
 }
 
+// getExternal returns the cached external address string from the last
+// successful PeerTest. Returns an empty string if no result is cached or the
+// cache has expired.
+func (ns *natState) getExternal() string {
+	ns.mu.RLock()
+	defer ns.mu.RUnlock()
+	if ns.updated.IsZero() || time.Since(ns.updated) > natResultTTL {
+		return ""
+	}
+	return ns.external
+}
+
 // startNATCleanup spawns a goroutine that periodically calls CleanupExpired
 // on the PeerTestManager and invalidates the cached NAT state when stale.
 // The goroutine exits when the transport context is cancelled.

@@ -216,6 +216,18 @@ func ConvertToRouterAddress(transport *SSU2Transport) (*router_address.RouterAdd
 		return nil, err
 	}
 
+	// If the listener address is a private IP and a PeerTest-detected external
+	// address is available, use the external address as the published host.
+	// This ensures that routers behind NAT with manual port forwarding (but
+	// without UPnP/NAT-PMP) publish a reachable host in their RouterAddress.
+	if ip := net.ParseIP(host); ip != nil && ip.IsPrivate() {
+		if transport.natStateCache != nil {
+			if cachedExt := transport.natStateCache.getExternal(); cachedExt != "" {
+				host = cachedExt
+			}
+		}
+	}
+
 	options := buildBaseSSU2Options(host, portStr)
 	addStaticKeyOption(options, transport)
 	addIntroKeyOption(options, transport)
