@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 	"sync"
-	"time"
 
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/logger"
@@ -350,10 +349,6 @@ func (h *RouterManagerHandler) handleRestart(req, result map[string]interface{})
 	}
 }
 
-// reseedTimeout is the maximum duration allowed for a Reseed operation
-// triggered via I2PControl before the goroutine is cancelled.
-const reseedTimeout = 120 * time.Second
-
 // handleReseed triggers a manual NetDB reseed operation if requested.
 func (h *RouterManagerHandler) handleReseed(req, result map[string]interface{}) {
 	if _, ok := req["Reseed"]; ok {
@@ -365,18 +360,9 @@ func (h *RouterManagerHandler) handleReseed(req, result map[string]interface{}) 
 		h.wg.Add(1)
 		go func() {
 			defer h.wg.Done()
-			reseedCtx, cancel := context.WithTimeout(h.ctx, reseedTimeout)
-			defer cancel()
 			log.WithFields(logger.Fields{"at": "handleReseed"}).Info("Reseed requested via I2PControl")
-			done := make(chan error, 1)
-			go func() { done <- h.RouterControl.Reseed() }()
-			select {
-			case err := <-done:
-				if err != nil {
-					log.WithError(err).Error("Reseed via I2PControl failed")
-				}
-			case <-reseedCtx.Done():
-				log.WithFields(logger.Fields{"at": "handleReseed"}).Warn("Reseed via I2PControl timed out or cancelled")
+			if err := h.RouterControl.Reseed(); err != nil {
+				log.WithError(err).Error("Reseed via I2PControl failed")
 			}
 		}()
 		result["Reseed"] = nil
@@ -384,24 +370,15 @@ func (h *RouterManagerHandler) handleReseed(req, result map[string]interface{}) 
 }
 
 // NetworkSettingHandler implements the NetworkSetting RPC method.
-// Provides read-only access to router configuration.
+// Supports both reading and writing router network configuration.
 //
-// Request params:
+// Writable settings (pass a non-null value to change):
+//   - "i2p.router.net.ntcp.port"     → transport.ntcp2_port     (restart required)
+//   - "i2p.router.net.ntcp.hostname" → transport.ntcp2_hostname  (restart required)
+//   - "i2p.router.bandwidth.in"      → router.max_bandwidth      (live update)
+//   - "i2p.router.bandwidth.out"     → router.max_bandwidth      (live update)
 //
-//	{
-//	  "i2p.router.net.ntcp.port": null,
-//	  "i2p.router.net.ntcp.hostname": null
-//	}
-//
-// Response:
-//
-//	{
-//	  "i2p.router.net.ntcp.port": 12345,
-//	  "i2p.router.net.ntcp.hostname": "localhost"
-//	}
-//
-// Note: Only read operations are supported initially.
-// Write operations (changing config) will be added later.
+// Pass null as the value to read the current setting without changing it.
 type NetworkSettingHandler struct {
 	stats RouterStatsProvider
 }

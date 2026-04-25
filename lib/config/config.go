@@ -38,8 +38,8 @@ func InitConfig() error {
 		return oops.Wrapf(err, "fatal configuration error")
 	}
 
-	// Update RouterConfigProperties
-	UpdateRouterConfig()
+	// Update global router config from viper settings
+	SetRouterConfig(NewRouterConfigFromViper())
 
 	// Validate the actual merged configuration (defaults + config file + flags),
 	// not just the hardcoded defaults. This catches invalid user-provided values
@@ -385,13 +385,6 @@ func currentCongestionConfig() CongestionDefaults {
 		EFlagCapacityMultiplier:      viper.GetFloat64("router.congestion.e_flag_capacity_multiplier"),
 		StaleEFlagCapacityMultiplier: viper.GetFloat64("router.congestion.stale_e_flag_capacity_multiplier"),
 	}
-}
-
-// UpdateRouterConfig updates the global routerConfigProperties from viper settings.
-// DEPRECATED: Use NewRouterConfigFromViper() + SetRouterConfig() instead.
-// This function is thread-safe and can be called during SIGHUP reloads.
-func UpdateRouterConfig() {
-	SetRouterConfig(NewRouterConfigFromViper())
 }
 
 // buildNetDbConfig creates a NetDbConfig from current viper settings.

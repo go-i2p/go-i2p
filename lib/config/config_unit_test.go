@@ -162,7 +162,7 @@ func TestNewRouterConfigFromViperSubsystemFields(t *testing.T) {
 	assert.Equal(t, defaults.Congestion.DFlagThreshold, cfg.Congestion.DFlagThreshold, "Congestion.DFlagThreshold")
 }
 
-// TestUpdateRouterConfigSubsystemFields verifies that UpdateRouterConfig
+// TestSetRouterConfigSubsystemFields verifies that SetRouterConfig(NewRouterConfigFromViper())
 // propagates Tunnel, Transport, Performance, and Congestion config.
 func TestUpdateRouterConfigSubsystemFields(t *testing.T) {
 	configTestSetup(t)
@@ -173,7 +173,7 @@ func TestUpdateRouterConfigSubsystemFields(t *testing.T) {
 	viper.Set("performance.worker_pool_size", 16)
 	viper.Set("router.congestion.d_flag_threshold", 0.80)
 
-	UpdateRouterConfig()
+	SetRouterConfig(NewRouterConfigFromViper())
 
 	cfg := GetRouterConfig()
 	requireSubsystemConfigsNotNil(t, cfg)
@@ -186,7 +186,7 @@ func TestUpdateRouterConfigSubsystemFields(t *testing.T) {
 // TestGetRouterConfigDeepCopySubsystems verifies deep copy includes subsystem configs.
 func TestGetRouterConfigDeepCopySubsystems(t *testing.T) {
 	configTestSetup(t)
-	UpdateRouterConfig()
+	SetRouterConfig(NewRouterConfigFromViper())
 
 	cfg := GetRouterConfig()
 	require.NotNil(t, cfg.Tunnel, "Tunnel config is nil")
@@ -201,8 +201,8 @@ func TestGetRouterConfigDeepCopySubsystems(t *testing.T) {
 	assert.NotEqual(t, 99, original.Transport.NTCP2MaxConnections, "Transport deep copy failed: original was modified")
 }
 
-// TestUpdateRouterConfig_IncludesAllFields verifies UpdateRouterConfig propagates all fields.
-// (Moved from defaults_test.go — tests config.go's UpdateRouterConfig)
+// TestSetRouterConfigIncludesAllFields verifies SetRouterConfig(NewRouterConfigFromViper()) propagates all fields.
+// (Moved from defaults_test.go)
 func TestUpdateRouterConfig_IncludesAllFields(t *testing.T) {
 	configTestSetup(t)
 
@@ -210,7 +210,7 @@ func TestUpdateRouterConfig_IncludesAllFields(t *testing.T) {
 	viper.Set("router.max_connections", 500)
 	viper.Set("router.accept_tunnels", false)
 
-	UpdateRouterConfig()
+	SetRouterConfig(NewRouterConfigFromViper())
 
 	cfg := GetRouterConfig()
 	assert.Equal(t, uint64(2048000), cfg.MaxBandwidth, "MaxBandwidth")

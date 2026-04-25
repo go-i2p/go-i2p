@@ -58,10 +58,14 @@ const (
 	// Deprecated/legacy message types
 	MessageTypeDestLookup uint8 = 34 // Client -> Router: Deprecated in v0.9.67, use type 38 (SPEC: 34, was 13)
 	MessageTypeDestReply  uint8 = 35 // Router -> Client: Deprecated in v0.9.67, use type 39 (SPEC: 35, was 14)
+)
 
-	// Deprecated receive messages (unused in fast receive mode)
-	MessageTypeReceiveMessageBegin uint8 = 6 // Client -> Router: DEPRECATED, not supported
-	MessageTypeReceiveMessageEnd   uint8 = 7 // Client -> Router: DEPRECATED, not supported
+// messageTypeReceiveMessageBegin and messageTypeReceiveMessageEnd are legacy I2CP message
+// types (6 and 7) that are not supported in fast-receive mode. They are retained as
+// unexported constants so the session-ID extraction switch can handle them without magic numbers.
+const (
+	messageTypeReceiveMessageBegin uint8 = 6 // Client -> Router: removed, not supported
+	messageTypeReceiveMessageEnd   uint8 = 7 // Client -> Router: removed, not supported
 )
 
 // messageTypeNames maps message type constants to human-readable names.
@@ -88,8 +92,8 @@ var messageTypeNames = map[uint8]string{
 	MessageTypeBlindingInfo:            "BlindingInfo",
 	MessageTypeDestLookup:              "DestLookup (deprecated)",
 	MessageTypeDestReply:               "DestReply (deprecated)",
-	MessageTypeReceiveMessageBegin:     "ReceiveMessageBegin (deprecated)",
-	MessageTypeReceiveMessageEnd:       "ReceiveMessageEnd (deprecated)",
+	messageTypeReceiveMessageBegin:     "ReceiveMessageBegin (removed)",
+	messageTypeReceiveMessageEnd:       "ReceiveMessageEnd (removed)",
 }
 
 // Reserved session IDs
@@ -358,8 +362,8 @@ func extractSessionIDFromPayload(msgType uint8, payload []byte) uint16 {
 		MessageTypeReconfigureSession,
 		MessageTypeDestroySession,
 		MessageTypeSendMessage,
-		MessageTypeReceiveMessageBegin,
-		MessageTypeReceiveMessageEnd,
+		messageTypeReceiveMessageBegin,
+		messageTypeReceiveMessageEnd,
 		MessageTypeCreateLeaseSet,
 		MessageTypeCreateLeaseSet2,
 		MessageTypeSendMessageExpires:

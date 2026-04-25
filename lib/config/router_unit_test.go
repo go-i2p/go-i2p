@@ -142,15 +142,15 @@ func TestLockRouterConfigForWrite(t *testing.T) {
 	UnlockRouterConfigWrite()
 }
 
-// TestRouterConfigProperties_ReturnsCopy verifies RouterConfigProperties returns a deep copy.
-// (Moved from defaults_test.go — tests router.go's RouterConfigProperties)
+// TestGetRouterConfigReturnsCopy verifies GetRouterConfig returns a deep copy.
+// (Moved from defaults_test.go)
 func TestRouterConfigProperties_ReturnsCopy(t *testing.T) {
-	cfg1 := RouterConfigProperties()
-	cfg2 := RouterConfigProperties()
+	cfg1 := GetRouterConfig()
+	cfg2 := GetRouterConfig()
 
 	// Modifying cfg1 should not affect cfg2
 	cfg1.MaxBandwidth = 999999
-	assert.NotEqual(t, uint64(999999), cfg2.MaxBandwidth, "RouterConfigProperties() should return independent copies")
+	assert.NotEqual(t, uint64(999999), cfg2.MaxBandwidth, "GetRouterConfig() should return independent copies")
 }
 
 // TestI2CPPortDefaultIs7654 verifies the I2CP port constant per spec.

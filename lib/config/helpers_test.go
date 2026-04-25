@@ -38,10 +38,10 @@ func initConfigAndNewFromViper(t *testing.T) *RouterConfig {
 	return NewRouterConfigFromViper()
 }
 
-// initConfigAndUpdate calls InitConfig and UpdateRouterConfig, failing the
-// test on InitConfig error.
+// initConfigAndUpdate calls InitConfig and applies viper settings to router config,
+// failing the test on InitConfig error.
 func initConfigAndUpdate(t *testing.T) {
 	t.Helper()
 	require.NoError(t, InitConfig(), "InitConfig failed")
-	UpdateRouterConfig()
+	SetRouterConfig(NewRouterConfigFromViper())
 }

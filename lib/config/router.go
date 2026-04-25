@@ -156,23 +156,11 @@ func DefaultRouterConfig() *RouterConfig {
 }
 
 // routerConfigProperties is the internal global configuration object.
-// All access must go through GetRouterConfig() (reads) or UpdateRouterConfig() (writes)
+// All access must go through GetRouterConfig() (reads) or SetRouterConfig() (writes)
 // which hold routerConfigMutex. Direct field access is a data race.
 var routerConfigProperties = DefaultRouterConfig()
 
-// RouterConfigProperties returns a deep copy of the current router configuration
-// for backward compatibility. DEPRECATED: Use GetRouterConfig() instead.
-//
-// Prior to this fix, this function returned the internal pointer under RLock,
-// which was released on return — callers could then race with UpdateRouterConfig().
-// Now returns a deep copy (identical behavior to GetRouterConfig()).
-//
-//nolint:revive // deprecated but kept for API compatibility; converted from var to func
-func RouterConfigProperties() *RouterConfig {
-	return GetRouterConfig()
-}
-
-// routerConfigMutex protects RouterConfigProperties from concurrent access
+// routerConfigMutex protects routerConfigProperties from concurrent access
 // during configuration updates (e.g., SIGHUP reload).
 var routerConfigMutex sync.RWMutex
 
@@ -258,14 +246,14 @@ func SetRouterConfig(cfg *RouterConfig) {
 	routerConfigProperties = cfg
 }
 
-// LockRouterConfigForWrite acquires an exclusive write lock on RouterConfigProperties.
-// This must be called before directly modifying RouterConfigProperties.
+// LockRouterConfigForWrite acquires an exclusive write lock on routerConfigProperties.
+// This must be called before directly modifying routerConfigProperties.
 // Always defer UnlockRouterConfigWrite() after acquiring the lock.
 func LockRouterConfigForWrite() {
 	routerConfigMutex.Lock()
 }
 
-// UnlockRouterConfigWrite releases the write lock on RouterConfigProperties.
+// UnlockRouterConfigWrite releases the write lock on routerConfigProperties.
 func UnlockRouterConfigWrite() {
 	routerConfigMutex.Unlock()
 }
