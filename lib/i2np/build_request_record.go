@@ -203,7 +203,7 @@ type fieldParser struct {
 func applyFieldParsers(data []byte, record *BuildRequestRecord, parsers []fieldParser) error {
 	for _, p := range parsers {
 		if err := p.parse(data, record); err != nil {
-			log.WithError(err).Error("Failed to read " + p.name)
+			log.WithError(err).WithField("field", p.name).Error("failed to read field")
 			return err
 		}
 	}

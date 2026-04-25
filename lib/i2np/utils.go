@@ -73,7 +73,7 @@ func executeHeaderParsers(data []byte, header *I2NPNTCPHeader) error {
 
 	for _, p := range parsers {
 		if err := p.parse(data, header); err != nil {
-			log.WithError(err).Error("Failed to read " + p.name)
+			log.WithError(err).WithField("field", p.name).Error("failed to read field")
 			return err
 		}
 	}

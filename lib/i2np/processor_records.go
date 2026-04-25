@@ -143,25 +143,36 @@ func extractBuildReplyData(msg I2NPMessage) ([]byte, error) {
 	return data, nil
 }
 
-// parseFixedBuildRecords parses a fixed number of build response records from data.
-func parseFixedBuildRecords(data []byte, count, recordSize int) ([8]BuildResponseRecord, [][]byte, error) {
-	var records [8]BuildResponseRecord
+// parseResponseRecords reads count response records of recordSize bytes each from data,
+// starting at startOffset. It returns the parsed records, a raw byte copy of each record,
+// and any parse error. The caller is responsible for bounds-checking data before calling.
+func parseResponseRecords(data []byte, count, recordSize, startOffset int) ([]BuildResponseRecord, [][]byte, error) {
+	records := make([]BuildResponseRecord, count)
 	rawRecords := make([][]byte, count)
-	offset := 0
-
+	offset := startOffset
 	for i := 0; i < count; i++ {
 		recordData := data[offset : offset+recordSize]
 		rawCopy := make([]byte, recordSize)
 		copy(rawCopy, recordData)
 		rawRecords[i] = rawCopy
-
 		record, err := ReadBuildResponseRecord(recordData)
 		if err != nil {
-			return records, nil, oops.Wrapf(err, "failed to parse response record %d", i)
+			return nil, nil, oops.Wrapf(err, "failed to parse response record %d", i)
 		}
 		records[i] = record
 		offset += recordSize
 	}
+	return records, rawRecords, nil
+}
+
+// parseFixedBuildRecords parses a fixed number of build response records from data.
+func parseFixedBuildRecords(data []byte, count, recordSize int) ([8]BuildResponseRecord, [][]byte, error) {
+	var records [8]BuildResponseRecord
+	sliceRecords, rawRecords, err := parseResponseRecords(data, count, recordSize, 0)
+	if err != nil {
+		return records, nil, err
+	}
+	copy(records[:], sliceRecords)
 	return records, rawRecords, nil
 }
 
@@ -252,25 +263,7 @@ func (p *MessageProcessor) parseBuildResponseRecords(data []byte, isShortBuild b
 		return nil, nil, oops.Errorf("insufficient data for %d records: have %d, need %d", recordCount, len(data), expectedLen)
 	}
 
-	records := make([]BuildResponseRecord, recordCount)
-	rawRecords := make([][]byte, recordCount)
-	offset := 1
-	for i := 0; i < recordCount; i++ {
-		recordData := data[offset : offset+recordSize]
-		// Preserve original encrypted bytes before parsing
-		rawCopy := make([]byte, recordSize)
-		copy(rawCopy, recordData)
-		rawRecords[i] = rawCopy
-
-		record, err := ReadBuildResponseRecord(recordData)
-		if err != nil {
-			return nil, nil, oops.Wrapf(err, "failed to parse response record %d", i)
-		}
-		records[i] = record
-		offset += recordSize
-	}
-
-	return records, rawRecords, nil
+	return parseResponseRecords(data, recordCount, recordSize, 1)
 }
 
 // processTunnelBuildRequest is the common handler for both STBM and VTB messages.
