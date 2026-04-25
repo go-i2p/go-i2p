@@ -106,6 +106,24 @@ func validateBindPolicy(cfg *config.I2PControlConfig) error {
 	return nil
 }
 
+// resolveHostnameIsLoopback reports whether hostname resolves exclusively to
+// loopback addresses. Falls back to a string comparison with "localhost" when
+// DNS is unavailable.
+func resolveHostnameIsLoopback(hostname string) bool {
+	ips, err := net.LookupIP(hostname)
+	if err != nil || len(ips) == 0 {
+		// Fall back to a syntactic check for the common "localhost" alias so
+		// tests and offline starts continue to work without DNS.
+		return strings.EqualFold(hostname, "localhost")
+	}
+	for _, ip := range ips {
+		if !ip.IsLoopback() {
+			return false
+		}
+	}
+	return true
+}
+
 // isLoopbackBind reports whether the host portion of addr resolves exclusively
 // to loopback addresses. An empty host or a wildcard bind (0.0.0.0, ::) is
 // treated as non-loopback.
@@ -120,19 +138,7 @@ func isLoopbackBind(addr string) (bool, error) {
 	if ip := net.ParseIP(host); ip != nil {
 		return ip.IsLoopback(), nil
 	}
-	// Hostname form — resolve and require every answer to be loopback.
-	ips, err := net.LookupIP(host)
-	if err != nil || len(ips) == 0 {
-		// Fall back to a syntactic check for the common "localhost" alias so
-		// tests and offline starts continue to work without DNS.
-		return strings.EqualFold(host, "localhost"), nil
-	}
-	for _, ip := range ips {
-		if !ip.IsLoopback() {
-			return false, nil
-		}
-	}
-	return true, nil
+	return resolveHostnameIsLoopback(host), nil
 }
 
 // initializeAuthManager creates and initializes the authentication manager with the given password.

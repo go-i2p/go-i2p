@@ -83,6 +83,28 @@ var (
 
 // probeIPv6 returns true if the host has at least one non-loopback, globally
 // unicast IPv6 interface. The result is cached after the first call.
+// hasGlobalUnicastIPv6OnIface returns true if the given network interface has
+// at least one globally reachable IPv6 address.
+func hasGlobalUnicastIPv6OnIface(iface net.Interface) bool {
+	addrs, err := iface.Addrs()
+	if err != nil {
+		return false
+	}
+	for _, a := range addrs {
+		var ip net.IP
+		switch v := a.(type) {
+		case *net.IPNet:
+			ip = v.IP
+		case *net.IPAddr:
+			ip = v.IP
+		}
+		if ip != nil && ip.To4() == nil && ip.IsGlobalUnicast() {
+			return true
+		}
+	}
+	return false
+}
+
 func probeIPv6() bool {
 	ssu2IPv6Once.Do(func() {
 		ifaces, err := net.Interfaces()
@@ -93,22 +115,9 @@ func probeIPv6() bool {
 			if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
 				continue
 			}
-			addrs, err := iface.Addrs()
-			if err != nil {
-				continue
-			}
-			for _, a := range addrs {
-				var ip net.IP
-				switch v := a.(type) {
-				case *net.IPNet:
-					ip = v.IP
-				case *net.IPAddr:
-					ip = v.IP
-				}
-				if ip != nil && ip.To4() == nil && ip.IsGlobalUnicast() {
-					ssu2HasIPv6Support = true
-					return
-				}
+			if hasGlobalUnicastIPv6OnIface(iface) {
+				ssu2HasIPv6Support = true
+				return
 			}
 		}
 	})
@@ -199,6 +208,21 @@ func resolveUDPAddress(addr *router_address.RouterAddress) (*net.UDPAddr, error)
 	return udpAddr, nil
 }
 
+// resolvePublishedHost returns the best host to publish in the RouterAddress.
+// If the listener is on a private IP and a PeerTest-detected external address
+// is cached in the transport's natStateCache, the external address is returned;
+// otherwise the raw listener host is returned unchanged.
+func resolvePublishedHost(host string, transport *SSU2Transport) string {
+	if ip := net.ParseIP(host); ip != nil && ip.IsPrivate() {
+		if transport.natStateCache != nil {
+			if cachedExt := transport.natStateCache.getExternal(); cachedExt != "" {
+				return cachedExt
+			}
+		}
+	}
+	return host
+}
+
 // ConvertToRouterAddress converts an SSU2Transport's listening address to a RouterAddress
 // suitable for publishing in RouterInfo.
 func ConvertToRouterAddress(transport *SSU2Transport) (*router_address.RouterAddress, error) {
@@ -216,17 +240,7 @@ func ConvertToRouterAddress(transport *SSU2Transport) (*router_address.RouterAdd
 		return nil, err
 	}
 
-	// If the listener address is a private IP and a PeerTest-detected external
-	// address is available, use the external address as the published host.
-	// This ensures that routers behind NAT with manual port forwarding (but
-	// without UPnP/NAT-PMP) publish a reachable host in their RouterAddress.
-	if ip := net.ParseIP(host); ip != nil && ip.IsPrivate() {
-		if transport.natStateCache != nil {
-			if cachedExt := transport.natStateCache.getExternal(); cachedExt != "" {
-				host = cachedExt
-			}
-		}
-	}
+	host = resolvePublishedHost(host, transport)
 
 	options := buildBaseSSU2Options(host, portStr)
 	addStaticKeyOption(options, transport)
@@ -354,6 +368,50 @@ func ExtractIntroducers(addr *router_address.RouterAddress) []IntroducerAddr {
 	return result
 }
 
+// parseIntroducerHash decodes the base64 router hash from slot in addr.
+// Returns a zero Hash and false if the option is absent or malformed.
+func parseIntroducerHash(addr *router_address.RouterAddress, slot int) (data.Hash, bool) {
+	hashStr, err := addr.IntroducerHashString(slot).Data()
+	if err != nil || hashStr == "" {
+		return data.Hash{}, false
+	}
+	hashBytes, err := i2pbase64.DecodeString(hashStr)
+	if err != nil || len(hashBytes) != 32 {
+		return data.Hash{}, false
+	}
+	var h data.Hash
+	copy(h[:], hashBytes)
+	return h, true
+}
+
+// parseRelayTag parses the relay tag integer from slot in addr.
+// Returns 0, false if the option is absent, malformed, or zero-valued.
+func parseRelayTag(addr *router_address.RouterAddress, slot int) (uint32, bool) {
+	tagStr, err := addr.IntroducerTagString(slot).Data()
+	if err != nil || tagStr == "" {
+		return 0, false
+	}
+	tag64, err := strconv.ParseUint(tagStr, 10, 32)
+	if err != nil || tag64 == 0 {
+		return 0, false
+	}
+	return uint32(tag64), true
+}
+
+// parseIntroducerExpiry returns the Unix expiry timestamp for slot, or 0 if
+// the option is absent or cannot be parsed.
+func parseIntroducerExpiry(addr *router_address.RouterAddress, slot int) int64 {
+	expStr, err := addr.IntroducerExpirationString(slot).Data()
+	if err != nil || expStr == "" {
+		return 0
+	}
+	exp, err := strconv.ParseInt(expStr, 10, 64)
+	if err != nil {
+		return 0
+	}
+	return exp
+}
+
 // extractIntroducerAtSlot attempts to parse a single introducer entry at the
 // given slot index. Returns the parsed introducer and true if valid, or a zero
 // value and false if the entry is missing, malformed, or expired.
@@ -361,38 +419,21 @@ func extractIntroducerAtSlot(addr *router_address.RouterAddress, slot int, now i
 	if !addr.CheckOption(router_address.INTRODUCER_HASH_PREFIX + strconv.Itoa(slot)) {
 		return IntroducerAddr{}, false
 	}
-	hashStr, err := addr.IntroducerHashString(slot).Data()
-	if err != nil || hashStr == "" {
+	routerHash, ok := parseIntroducerHash(addr, slot)
+	if !ok {
 		return IntroducerAddr{}, false
 	}
-	hashBytes, err := i2pbase64.DecodeString(hashStr)
-	if err != nil || len(hashBytes) != 32 {
+	tag, ok := parseRelayTag(addr, slot)
+	if !ok {
 		return IntroducerAddr{}, false
 	}
-	tagStr, err := addr.IntroducerTagString(slot).Data()
-	if err != nil || tagStr == "" {
-		return IntroducerAddr{}, false
-	}
-	tag64, err := strconv.ParseUint(tagStr, 10, 32)
-	if err != nil || tag64 == 0 {
-		return IntroducerAddr{}, false
-	}
-
-	var expiry int64
-	if expStr, err2 := addr.IntroducerExpirationString(slot).Data(); err2 == nil && expStr != "" {
-		if exp, err3 := strconv.ParseInt(expStr, 10, 64); err3 == nil {
-			expiry = exp
-		}
-	}
+	expiry := parseIntroducerExpiry(addr, slot)
 	if expiry > 0 && expiry < now {
 		return IntroducerAddr{}, false
 	}
-
-	var routerHash data.Hash
-	copy(routerHash[:], hashBytes)
 	return IntroducerAddr{
 		RouterHash: routerHash,
-		RelayTag:   uint32(tag64),
+		RelayTag:   tag,
 		Expiry:     expiry,
 	}, true
 }

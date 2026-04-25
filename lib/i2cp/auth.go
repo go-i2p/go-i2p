@@ -137,6 +137,30 @@ func (s *Server) SetAuthenticator(auth Authenticator) {
 // has no authenticator installed. Loopback TCP binds retain the legacy
 // behavior of permitting unauthenticated connections, matching the
 // backward-compatibility constraint documented for other local control
+// isPermittedUnauthenticatedBindHost returns nil if host is safe for an
+// unauthenticated TCP listener, or a descriptive error otherwise.
+// Loopback IPs and the literal string "localhost" are permitted; wildcard,
+// non-loopback IPs, and unresolved hostnames are rejected.
+func isPermittedUnauthenticatedBindHost(host, listenAddr string) error {
+	if host == "" {
+		return oops.Errorf("i2cp: refusing to start unauthenticated TCP listener on wildcard address %q; configure i2cp.username/password or bind to loopback", listenAddr)
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		if ip.IsLoopback() {
+			return nil
+		}
+		return oops.Errorf("i2cp: refusing to start unauthenticated TCP listener on non-loopback address %q; configure i2cp.username/password", listenAddr)
+	}
+	if strings.EqualFold(host, "localhost") {
+		return nil
+	}
+	// Reject any non-literal-IP hostname that is not "localhost". Resolving
+	// hostnames via DNS introduces a TOCTOU window: the address checked here
+	// could differ from the address actually bound by net.Listen moments
+	// later. Operators must supply a literal IP or a Unix socket.
+	return oops.Errorf("i2cp: refusing to start unauthenticated TCP listener on hostname %q; use a literal loopback IP (127.0.0.1 / ::1) or configure i2cp.username/password", listenAddr)
+}
+
 // interfaces. Unix sockets are accepted because host-level access control is
 // enforced through the socket's file-system permissions (see the
 // corresponding chmod in Start()).
@@ -152,23 +176,7 @@ func (s *Server) enforceBindPolicy() error {
 		// Malformed address — let net.Listen produce the canonical error.
 		return nil
 	}
-	if host == "" {
-		return oops.Errorf("i2cp: refusing to start unauthenticated TCP listener on wildcard address %q; configure i2cp.username/password or bind to loopback", s.config.ListenAddr)
-	}
-	if ip := net.ParseIP(host); ip != nil {
-		if ip.IsLoopback() {
-			return nil
-		}
-		return oops.Errorf("i2cp: refusing to start unauthenticated TCP listener on non-loopback address %q; configure i2cp.username/password", s.config.ListenAddr)
-	}
-	if strings.EqualFold(host, "localhost") {
-		return nil
-	}
-	// Reject any non-literal-IP hostname that is not "localhost".  Resolving
-	// hostnames via DNS introduces a TOCTOU window: the address checked here
-	// could differ from the address actually bound by net.Listen moments
-	// later.  Operators must supply a literal IP or a Unix socket.
-	return oops.Errorf("i2cp: refusing to start unauthenticated TCP listener on hostname %q; use a literal loopback IP (127.0.0.1 / ::1) or configure i2cp.username/password", s.config.ListenAddr)
+	return isPermittedUnauthenticatedBindHost(host, s.config.ListenAddr)
 }
 
 // requiresAuthentication returns true if the given message type requires

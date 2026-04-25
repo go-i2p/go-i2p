@@ -20,6 +20,28 @@ var (
 	hasIPv6Support bool
 )
 
+// hasGlobalUnicastIPv6OnIface returns true if the given network interface has
+// at least one globally reachable IPv6 address.
+func hasGlobalUnicastIPv6OnIface(iface net.Interface) bool {
+	addrs, err := iface.Addrs()
+	if err != nil {
+		return false
+	}
+	for _, a := range addrs {
+		var ip net.IP
+		switch v := a.(type) {
+		case *net.IPNet:
+			ip = v.IP
+		case *net.IPAddr:
+			ip = v.IP
+		}
+		if ip != nil && ip.To4() == nil && ip.IsGlobalUnicast() {
+			return true
+		}
+	}
+	return false
+}
+
 // probeIPv6 returns true if the host has at least one non-loopback, globally
 // unicast IPv6 interface. The result is cached after the first call.
 func probeIPv6() bool {
@@ -32,22 +54,9 @@ func probeIPv6() bool {
 			if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
 				continue
 			}
-			addrs, err := iface.Addrs()
-			if err != nil {
-				continue
-			}
-			for _, a := range addrs {
-				var ip net.IP
-				switch v := a.(type) {
-				case *net.IPNet:
-					ip = v.IP
-				case *net.IPAddr:
-					ip = v.IP
-				}
-				if ip != nil && ip.To4() == nil && ip.IsGlobalUnicast() {
-					hasIPv6Support = true
-					return
-				}
+			if hasGlobalUnicastIPv6OnIface(iface) {
+				hasIPv6Support = true
+				return
 			}
 		}
 	})

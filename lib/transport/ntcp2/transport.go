@@ -204,6 +204,47 @@ func buildTransportInstance(config *Config, identity router_info.RouterInfo, key
 }
 
 // setupNetworkListener creates and attaches the TCP and NTCP2 listeners to the transport.
+// bindOSAssignedPort creates a TCP listener on the OS-assigned port (port 0).
+// NAT traversal is skipped because a specific port is required for UPnP/NAT-PMP.
+func bindOSAssignedPort(config *Config) (net.Listener, error) {
+	l, err := net.Listen("tcp", config.ListenerAddress)
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to create TCP listener")
+	}
+	config.ListenerAddress = l.Addr().String()
+	log.WithField("address", config.ListenerAddress).Info("TCP listener started (no NAT traversal for OS-assigned port)")
+	return l, nil
+}
+
+// bindWithNATTraversal creates a TCP listener on the specified port, attempting
+// NAT traversal (UPnP/NAT-PMP) with a 10-second timeout context.
+func bindWithNATTraversal(config *Config, port int) (net.Listener, error) {
+	natCtx, natCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer natCancel()
+	l, err := nattraversal.ListenWithFallbackContext(natCtx, port)
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to create TCP listener")
+	}
+	if boundAddr := l.Addr().String(); boundAddr != config.ListenerAddress {
+		config.ListenerAddress = boundAddr
+	}
+	return l, nil
+}
+
+// attachNTCP2Listener wraps tcpListener in an NTCP2 listener and stores it on
+// the transport. Closes tcpListener on NTCP2 setup failure.
+func attachNTCP2Listener(transport *NTCP2Transport, tcpListener net.Listener, ntcp2Config *ntcp2.NTCP2Config) error {
+	listener, err := ntcp2.NewNTCP2Listener(tcpListener, ntcp2Config)
+	if err != nil {
+		if closeErr := tcpListener.Close(); closeErr != nil {
+			log.WithError(closeErr).Warn("Failed to close TCP listener after NTCP2 listener creation failure")
+		}
+		return err
+	}
+	transport.listener = listener
+	return nil
+}
+
 func setupNetworkListener(transport *NTCP2Transport, config *Config, ntcp2Config *ntcp2.NTCP2Config) error {
 	_, portStr, err := net.SplitHostPort(config.ListenerAddress)
 	if err != nil {
@@ -215,45 +256,15 @@ func setupNetworkListener(transport *NTCP2Transport, config *Config, ntcp2Config
 	}
 
 	var tcpListener net.Listener
-
 	if iport == 0 {
-		// Port 0 means "let the OS choose". NAT traversal (UPnP/NAT-PMP) requires
-		// a specific port to map, so attempting it with port 0 always fails. Create
-		// the listener directly so the OS assigns a real port, then skip NAT mapping.
-		tcpListener, err = net.Listen("tcp", config.ListenerAddress)
-		if err != nil {
-			return oops.Wrapf(err, "failed to create TCP listener")
-		}
-		config.ListenerAddress = tcpListener.Addr().String()
-		log.WithField("address", config.ListenerAddress).Info("TCP listener started (no NAT traversal for OS-assigned port)")
+		tcpListener, err = bindOSAssignedPort(config)
 	} else {
-		// A specific port was requested — attempt NAT traversal with fallback.
-		// Use a timeout context to prevent indefinite blocking in environments
-		// without UPnP/NAT-PMP gateways (e.g. Docker containers).
-		natCtx, natCancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer natCancel()
-		tcpListener, err = nattraversal.ListenWithFallbackContext(natCtx, iport)
-		if err != nil {
-			return oops.Wrapf(err, "failed to create TCP listener")
-		}
-		// Keep config in sync with the actual bound address so that
-		// createNewListenerWithConfig (used by SetIdentity) rebinds to the same port.
-		if boundAddr := tcpListener.Addr().String(); boundAddr != config.ListenerAddress {
-			config.ListenerAddress = boundAddr
-		}
+		tcpListener, err = bindWithNATTraversal(config, iport)
 	}
-
-	listener, err := ntcp2.NewNTCP2Listener(tcpListener, ntcp2Config)
 	if err != nil {
-		// Close the TCP listener to prevent file descriptor leak.
-		if closeErr := tcpListener.Close(); closeErr != nil {
-			log.WithError(closeErr).Warn("Failed to close TCP listener after NTCP2 listener creation failure")
-		}
 		return err
 	}
-
-	transport.listener = listener
-	return nil
+	return attachNTCP2Listener(transport, tcpListener, ntcp2Config)
 }
 
 // Accept accepts an incoming session.

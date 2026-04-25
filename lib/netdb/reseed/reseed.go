@@ -267,27 +267,29 @@ func buildReseedCertPool() (*x509.CertPool, error) {
 }
 
 // mergeEmbeddedCerts adds embedded reseed and SSL certificates to the provided certificate pool.
-// This ensures connections to reseed servers whose TLS certificates are self-signed
-// (using the same key as their SU3 signing certificate) will still succeed.
-// It also adds SSL root CA certificates (e.g., ISRG Root X1 for Let's Encrypt)
-// so connections to reseed servers using standard CAs succeed even in minimal
-// environments without a complete system certificate store.
-func mergeEmbeddedCerts(rootCAs *x509.CertPool) {
-	// Add reseed signing certificates (some operators use these as TLS certs too)
+// addReseedCertsToPool adds embedded reseed signing certificates to rootCAs.
+// Some operators use their signing certificate as TLS cert too.
+func addReseedCertsToPool(rootCAs *x509.CertPool) {
 	certPool, err := GetDefaultCertificatePool()
 	if err != nil {
 		log.WithError(err).Warn("Failed to load embedded reseed certificates for TLS")
-	} else if certPool != nil {
-		for _, signerID := range certPool.ListSignerIDs() {
-			cert, ok := certPool.GetCertificate(signerID)
-			if ok && cert != nil {
-				rootCAs.AddCert(cert)
-			}
-		}
-		log.WithFields(logger.Fields{"at": "mergeEmbeddedCerts"}).Debug("Added embedded reseed certificates to TLS root CA pool")
+		return
 	}
+	if certPool == nil {
+		return
+	}
+	for _, signerID := range certPool.ListSignerIDs() {
+		cert, ok := certPool.GetCertificate(signerID)
+		if ok && cert != nil {
+			rootCAs.AddCert(cert)
+		}
+	}
+	log.WithFields(logger.Fields{"at": "mergeEmbeddedCerts"}).Debug("Added embedded reseed certificates to TLS root CA pool")
+}
 
-	// Add SSL certificates (e.g., ISRG Root X1 / Let's Encrypt root CA)
+// addSSLCertsToPool adds embedded SSL root CA certificates (e.g., ISRG Root
+// X1) to rootCAs.
+func addSSLCertsToPool(rootCAs *x509.CertPool) {
 	sslCerts, err := GetSSLCertificates()
 	if err != nil {
 		log.WithError(err).Warn("Failed to load embedded SSL certificates for TLS")
@@ -301,6 +303,16 @@ func mergeEmbeddedCerts(rootCAs *x509.CertPool) {
 			"count": len(sslCerts),
 		}).Debug("Added embedded SSL certificates to TLS root CA pool")
 	}
+}
+
+// This ensures connections to reseed servers whose TLS certificates are self-signed
+// (using the same key as their SU3 signing certificate) will still succeed.
+// It also adds SSL root CA certificates (e.g., ISRG Root X1 for Let's Encrypt)
+// so connections to reseed servers using standard CAs succeed even in minimal
+// environments without a complete system certificate store.
+func mergeEmbeddedCerts(rootCAs *x509.CertPool) {
+	addReseedCertsToPool(rootCAs)
+	addSSLCertsToPool(rootCAs)
 }
 
 // buildReseedHTTPRequest constructs the HTTP request for reseed operations.

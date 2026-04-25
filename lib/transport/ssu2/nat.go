@@ -91,44 +91,67 @@ func (t *SSU2Transport) handlePeerTestAsAlice(ptBlock *ssu2noise.PeerTestBlock) 
 	return nil
 }
 
+// parsePeerTestAliceAddr extracts Alice's UDP address from a PeerTest block.
+// Returns nil if no address is declared.
+func parsePeerTestAliceAddr(ptBlock *ssu2noise.PeerTestBlock) *net.UDPAddr {
+	if len(ptBlock.AliceIP) == 0 {
+		return nil
+	}
+	return &net.UDPAddr{
+		IP:   net.IP(ptBlock.AliceIP),
+		Port: int(ptBlock.AlicePort),
+	}
+}
+
+// validateBobAliceAddress checks that the declared AliceIP in the PeerTest
+// block matches the session's observed remote address. Returns false if a
+// mismatch is detected (relay-forwarder spoofing attempt).
+func (t *SSU2Transport) validateBobAliceAddress(session *SSU2Session, aliceAddr *net.UDPAddr) bool {
+	if session == nil {
+		return true
+	}
+	observed := session.RemoteUDPAddr()
+	if observed == nil {
+		return true
+	}
+	if observed.IP.Equal(aliceAddr.IP) && observed.Port == aliceAddr.Port {
+		return true
+	}
+	t.logger.WithFields(map[string]interface{}{
+		"declared": aliceAddr.String(),
+		"observed": observed.String(),
+	}).Warn("PeerTest Bob: AliceIP mismatch, dropping")
+	return false
+}
+
+// checkBobRateLimits checks per-session and global PeerTest rate limits.
+// Returns false if any limit is exceeded.
+func (t *SSU2Transport) checkBobRateLimits(session *SSU2Session) bool {
+	if session != nil && !session.peerTestLimiter.Allow() {
+		t.logger.Debug("PeerTest Bob: per-session rate limit exceeded, dropping")
+		return false
+	}
+	if t.peerTestGlobalLimiter != nil && !t.peerTestGlobalLimiter.Allow() {
+		t.logger.Debug("PeerTest Bob: global rate limit exceeded, dropping")
+		return false
+	}
+	return true
+}
+
 // handlePeerTestAsBob processes a PeerTest request where we act as Bob (relay).
 // It validates that Alice's declared address matches the session's observed
 // remote address to prevent source-address spoofing, enforces per-session and
 // global rate limits, then forwards a PeerTestRelay to Charlie.
 func (t *SSU2Transport) handlePeerTestAsBob(ptBlock *ssu2noise.PeerTestBlock, session *SSU2Session) error {
-	var aliceAddr *net.UDPAddr
-	if len(ptBlock.AliceIP) > 0 {
-		aliceAddr = &net.UDPAddr{
-			IP:   net.IP(ptBlock.AliceIP),
-			Port: int(ptBlock.AlicePort),
-		}
-	}
+	aliceAddr := parsePeerTestAliceAddr(ptBlock)
 	if aliceAddr == nil {
 		t.logger.Debug("PeerTest Bob: missing Alice address, ignoring")
 		return nil
 	}
-	// Validate that the declared AliceIP matches the session's observed address.
-	// Mismatched claims mean the peer is trying to use us as a relay forwarder
-	// to an arbitrary victim address — we reject such requests.
-	if session != nil {
-		if observed := session.RemoteUDPAddr(); observed != nil {
-			if !observed.IP.Equal(aliceAddr.IP) || observed.Port != aliceAddr.Port {
-				t.logger.WithFields(map[string]interface{}{
-					"declared": aliceAddr.String(),
-					"observed": observed.String(),
-				}).Warn("PeerTest Bob: AliceIP mismatch, dropping")
-				return nil
-			}
-		}
-	}
-	// Per-session rate limit: 1 PeerTest/s, burst 3.
-	if session != nil && !session.peerTestLimiter.Allow() {
-		t.logger.Debug("PeerTest Bob: per-session rate limit exceeded, dropping")
+	if !t.validateBobAliceAddress(session, aliceAddr) {
 		return nil
 	}
-	// Global rate limit: 100 PeerTestRelay emissions/s, burst 200.
-	if t.peerTestGlobalLimiter != nil && !t.peerTestGlobalLimiter.Allow() {
-		t.logger.Debug("PeerTest Bob: global rate limit exceeded, dropping")
+	if !t.checkBobRateLimits(session) {
 		return nil
 	}
 	charlieAddr := t.resolveCharlieAddr(ptBlock)

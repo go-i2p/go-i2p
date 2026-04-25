@@ -62,6 +62,32 @@ func SetSSLCertificateProvider(provider CertificateFSProvider) {
 
 // GetSSLCertificates returns parsed x509 certificates from the SSL certificate provider.
 // Returns nil if no SSL certificate provider has been set.
+// parseCertificateEntry reads, PEM-decodes, and X.509-parses a single .crt
+// file from sslFS. Non-fatal failures (bad PEM, parse errors) are logged and
+// return nil. Returns nil,false for entries that should be skipped silently
+// (directories, non-.crt files).
+func parseCertificateEntry(sslFS fs.FS, entry fs.DirEntry) (*x509.Certificate, bool) {
+	if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".crt") {
+		return nil, false
+	}
+	data, err := fs.ReadFile(sslFS, entry.Name())
+	if err != nil {
+		log.WithError(err).WithField("filename", entry.Name()).Warn("Failed to read SSL certificate, skipping")
+		return nil, false
+	}
+	block, _ := pem.Decode(data)
+	if block == nil {
+		log.WithField("filename", entry.Name()).Warn("Failed to decode SSL certificate PEM, skipping")
+		return nil, false
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		log.WithError(err).WithField("filename", entry.Name()).Warn("Failed to parse SSL certificate, skipping")
+		return nil, false
+	}
+	return cert, true
+}
+
 func GetSSLCertificates() ([]*x509.Certificate, error) {
 	if defaultSSLCertProvider == nil {
 		return nil, nil
@@ -79,31 +105,10 @@ func GetSSLCertificates() ([]*x509.Certificate, error) {
 
 	var certs []*x509.Certificate
 	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".crt") {
-			continue
+		if cert, ok := parseCertificateEntry(sslFS, entry); ok {
+			certs = append(certs, cert)
 		}
-
-		data, err := fs.ReadFile(sslFS, entry.Name())
-		if err != nil {
-			log.WithError(err).WithField("filename", entry.Name()).Warn("Failed to read SSL certificate, skipping")
-			continue
-		}
-
-		block, _ := pem.Decode(data)
-		if block == nil {
-			log.WithField("filename", entry.Name()).Warn("Failed to decode SSL certificate PEM, skipping")
-			continue
-		}
-
-		cert, err := x509.ParseCertificate(block.Bytes)
-		if err != nil {
-			log.WithError(err).WithField("filename", entry.Name()).Warn("Failed to parse SSL certificate, skipping")
-			continue
-		}
-
-		certs = append(certs, cert)
 	}
-
 	return certs, nil
 }
 

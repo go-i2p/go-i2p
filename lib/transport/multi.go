@@ -412,6 +412,29 @@ func (tmux *TransportMuxer) failedPeersCleanupLoop() {
 
 // get a transport session given a router info
 // return session and nil if successful
+// findCompatibleSession tries each registered transport in order and returns
+// the first successfully established session. Returns the session, whether any
+// compatible transport was found, whether a slot was consumed, and any error.
+func (tmux *TransportMuxer) findCompatibleSession(routerInfo router_info.RouterInfo) (TransportSession, bool, bool, error) {
+	for i, t := range tmux.trans {
+		if !t.Compatible(routerInfo) {
+			continue
+		}
+		s, err := tmux.tryGetSessionFromTransport(t, routerInfo, i)
+		if err != nil {
+			continue
+		}
+		return s, true, true, nil
+	}
+	// Walk again to report whether any compatible transport existed.
+	for _, t := range tmux.trans {
+		if t.Compatible(routerInfo) {
+			return nil, true, false, nil
+		}
+	}
+	return nil, false, false, nil
+}
+
 // return nil and ErrNoTransportAvailable if we failed to get a session
 // return nil and ErrConnectionPoolFull if the connection limit has been reached
 func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s TransportSession, err error) {
@@ -450,18 +473,10 @@ func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s Tra
 		}
 	}()
 
-	compatibleFound := false
-	for i, t := range tmux.trans {
-		if t.Compatible(routerInfo) {
-			compatibleFound = true
-			s, err = tmux.tryGetSessionFromTransport(t, routerInfo, i)
-			if err != nil {
-				continue
-			}
-			// Slot was already reserved by checkConnectionLimit
-			slotUsed = true
-			return &trackedSession{TransportSession: s, mux: tmux}, err
-		}
+	session, compatibleFound, slotConsumed, _ := tmux.findCompatibleSession(routerInfo)
+	if slotConsumed {
+		slotUsed = true
+		return &trackedSession{TransportSession: session, mux: tmux}, nil
 	}
 
 	// No session established — slot will be released by defer

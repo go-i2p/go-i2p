@@ -607,12 +607,11 @@ type retransmitCandidate struct {
 // handleRetransmissions checks all pending I2NP messages and retransmits any
 // that have exceeded their RTO deadline.  Returns true if the session should
 // be closed (max retransmissions exceeded for at least one message).
-func (s *SSU2Session) handleRetransmissions() (shouldClose bool) {
-	now := time.Now()
+// collectExpiredPendingMessages returns all pending messages whose deadline has
+// passed and a flag indicating whether any expired messages were found.
+func (s *SSU2Session) collectExpiredPendingMessages(now time.Time) ([]retransmitCandidate, bool) {
 	var candidates []retransmitCandidate
 	var hadLoss bool
-
-	// Collect candidates under lock without performing I/O.
 	s.pendingMsgsMu.Lock()
 	for seq, p := range s.pendingMsgs {
 		if now.Before(p.deadline) {
@@ -622,9 +621,13 @@ func (s *SSU2Session) handleRetransmissions() (shouldClose bool) {
 		candidates = append(candidates, retransmitCandidate{seq: seq, pending: p})
 	}
 	s.pendingMsgsMu.Unlock()
+	return candidates, hadLoss
+}
 
-	// Process retransmissions without holding the lock.
-	var toDelete []uint64
+// processRetransmitCandidates iterates candidates and returns sequence numbers
+// to delete and whether the session should be closed due to max retransmit
+// exceeded.
+func (s *SSU2Session) processRetransmitCandidates(candidates []retransmitCandidate, now time.Time) (toDelete []uint64, shouldClose bool) {
 	for _, c := range candidates {
 		action := s.processRetransmission(c.pending, now)
 		if action == retransmitDelete || action == retransmitMaxExceeded {
@@ -634,16 +637,27 @@ func (s *SSU2Session) handleRetransmissions() (shouldClose bool) {
 			}
 		}
 	}
+	return toDelete, shouldClose
+}
 
-	// Re-acquire lock to clean up completed entries.
-	if len(toDelete) > 0 {
-		s.pendingMsgsMu.Lock()
-		for _, seq := range toDelete {
-			delete(s.pendingMsgs, seq)
-		}
-		s.pendingMsgsMu.Unlock()
+// deleteExpiredMessages removes completed retransmit entries from pendingMsgs
+// under lock.
+func (s *SSU2Session) deleteExpiredMessages(toDelete []uint64) {
+	if len(toDelete) == 0 {
+		return
 	}
+	s.pendingMsgsMu.Lock()
+	for _, seq := range toDelete {
+		delete(s.pendingMsgs, seq)
+	}
+	s.pendingMsgsMu.Unlock()
+}
 
+func (s *SSU2Session) handleRetransmissions() (shouldClose bool) {
+	now := time.Now()
+	candidates, hadLoss := s.collectExpiredPendingMessages(now)
+	toDelete, shouldClose := s.processRetransmitCandidates(candidates, now)
+	s.deleteExpiredMessages(toDelete)
 	if hadLoss {
 		s.congestionCtrl.OnRetransmissionTimeout()
 	}

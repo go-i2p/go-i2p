@@ -194,6 +194,23 @@ func (dks *DestinationKeyStore) marshal() ([]byte, error) {
 
 // unmarshalDestinationKeyStore deserializes private keys (and padding if v2)
 // and reconstructs the full DestinationKeyStore including the destination.
+// readV2Padding reads the padding field from version-2 format data.
+// Returns nil, nil when version != 2.
+func readV2Padding(data []byte, offset, version int) ([]byte, error) {
+	if version != 2 {
+		return nil, nil
+	}
+	_, afterKeys, err := readPrivateKeyFieldsWithOffset(data, offset)
+	if err != nil {
+		return nil, err
+	}
+	padding, _, err := readLengthPrefixedField(data, afterKeys, "padding")
+	if err != nil {
+		return nil, err
+	}
+	return padding, nil
+}
+
 func unmarshalDestinationKeyStore(data []byte) (*DestinationKeyStore, error) {
 	version, offset, err := detectFormatVersion(data)
 	if err != nil {
@@ -205,17 +222,9 @@ func unmarshalDestinationKeyStore(data []byte) (*DestinationKeyStore, error) {
 		return nil, err
 	}
 
-	var padding []byte
-	if version == 2 {
-		// Read past private key fields to find padding offset
-		_, afterKeys, err := readPrivateKeyFieldsWithOffset(data, offset)
-		if err != nil {
-			return nil, err
-		}
-		padding, _, err = readLengthPrefixedField(data, afterKeys, "padding")
-		if err != nil {
-			return nil, err
-		}
+	padding, err := readV2Padding(data, offset, version)
+	if err != nil {
+		return nil, err
 	}
 
 	sigPrivKey, encPrivKey, err := reconstructPrivateKeys(sigPrivBytes, encPrivBytes)

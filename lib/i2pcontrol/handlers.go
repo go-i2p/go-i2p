@@ -497,42 +497,57 @@ func (h *NetworkSettingHandler) applySettingChange(setting string, value interfa
 }
 
 // normalizeSettingValue validates the type and range of a setting value before
+// validatePortSetting coerces value to an integer and validates it as a valid
+// TCP/UDP port number in the range [1, 65535].
+func validatePortSetting(setting string, value interface{}) (interface{}, error) {
+	port, err := coerceInt(value)
+	if err != nil {
+		return nil, fmt.Errorf("%s must be an integer: %w", setting, err)
+	}
+	if port < 1 || port > 65535 {
+		return nil, fmt.Errorf("%s must be in [1,65535], got %d", setting, port)
+	}
+	return port, nil
+}
+
+// validateHostnameSetting checks that value is a string containing a valid
+// hostname.
+func validateHostnameSetting(setting string, value interface{}) (interface{}, error) {
+	host, ok := value.(string)
+	if !ok {
+		return nil, fmt.Errorf("%s must be a string, got %T", setting, value)
+	}
+	if err := validateHostname(host); err != nil {
+		return nil, err
+	}
+	return host, nil
+}
+
+// validateBandwidthSetting coerces value to a non-negative integer bandwidth.
+func validateBandwidthSetting(setting string, value interface{}) (interface{}, error) {
+	bw, err := coerceInt(value)
+	if err != nil {
+		return nil, fmt.Errorf("%s must be a non-negative integer: %w", setting, err)
+	}
+	if bw < 0 {
+		return nil, fmt.Errorf("%s must be non-negative, got %d", setting, bw)
+	}
+	return bw, nil
+}
+
 // it is written through viper. JSON numbers decode as float64; integers are
 // rounded-trip validated to catch non-integer payloads ("3.5", "abc").
 // Returns the canonical Go value (e.g. int for ports) on success.
 func normalizeSettingValue(setting string, value interface{}) (interface{}, error) {
 	switch setting {
 	case "i2p.router.net.ntcp.port":
-		port, err := coerceInt(value)
-		if err != nil {
-			return nil, fmt.Errorf("%s must be an integer: %w", setting, err)
-		}
-		if port < 1 || port > 65535 {
-			return nil, fmt.Errorf("%s must be in [1,65535], got %d", setting, port)
-		}
-		return port, nil
+		return validatePortSetting(setting, value)
 	case "i2p.router.net.ntcp.hostname":
-		host, ok := value.(string)
-		if !ok {
-			return nil, fmt.Errorf("%s must be a string, got %T", setting, value)
-		}
-		if err := validateHostname(host); err != nil {
-			return nil, err
-		}
-		return host, nil
+		return validateHostnameSetting(setting, value)
 	case "i2p.router.bandwidth.in", "i2p.router.bandwidth.out":
-		bw, err := coerceInt(value)
-		if err != nil {
-			return nil, fmt.Errorf("%s must be a non-negative integer: %w", setting, err)
-		}
-		if bw < 0 {
-			return nil, fmt.Errorf("%s must be non-negative, got %d", setting, bw)
-		}
-		return bw, nil
+		return validateBandwidthSetting(setting, value)
 	default:
-		// Future-proof: unknown keys fall through unchanged. settingViperKey
-		// gates entry to this function so this branch only fires if a new key
-		// is added without a matching validator.
+		// Future-proof: unknown keys fall through unchanged.
 		return value, nil
 	}
 }
