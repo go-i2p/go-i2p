@@ -73,7 +73,7 @@ func TestBootstrapTypeConfiguration(t *testing.T) {
 			case "reseed":
 				bootstrapper = NewReseedBootstrap(cfg)
 			case "local":
-				bootstrapper = NewLocalNetDbBootstrap(cfg)
+				bootstrapper = NewLocalNetDBBootstrap(cfg)
 			case "auto", "":
 				bootstrapper = NewCompositeBootstrap(cfg)
 			default:

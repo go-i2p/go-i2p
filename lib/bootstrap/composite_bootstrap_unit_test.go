@@ -20,8 +20,8 @@ func TestCompositeBootstrapBehavior(t *testing.T) {
 	if cb.reseedBootstrap == nil {
 		t.Error("CompositeBootstrap should have reseedBootstrap initialized")
 	}
-	if cb.localNetDbBootstrap == nil {
-		t.Error("CompositeBootstrap should have localNetDbBootstrap initialized")
+	if cb.localNetDBBootstrap == nil {
+		t.Error("CompositeBootstrap should have localNetDBBootstrap initialized")
 	}
 	// fileBootstrap should be nil since no ReseedFilePath is set
 	if cb.fileBootstrap != nil {

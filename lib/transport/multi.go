@@ -26,8 +26,8 @@ const peerCooldown = 60 * time.Second
 // Compile-time check that TransportMuxer implements Transport interface
 var _ Transport = (*TransportMuxer)(nil)
 
-// muxes multiple transports into 1 Transport
-// implements transport.Transport
+// TransportMuxer muxes multiple transports into one Transport.
+// It implements transport.Transport.
 type TransportMuxer struct {
 	// the underlying transports we are using in order of most prominant to least
 	trans []Transport
@@ -66,7 +66,7 @@ type TransportMuxer struct {
 	closeErr  error
 }
 
-// mux a bunch of transports together
+// Mux combines a set of transports together.
 func Mux(t ...Transport) (tmux *TransportMuxer) {
 	log.WithFields(logger.Fields{
 		"at":              "Mux",
@@ -121,7 +121,7 @@ func (tmux *TransportMuxer) ReleaseSession() {
 	}).Debug("session released")
 }
 
-// set the identity for every transport
+// SetIdentity sets the identity for every transport.
 func (tmux *TransportMuxer) SetIdentity(ident router_info.RouterInfo) (err error) {
 	identHash, _ := ident.IdentHash()
 	log.WithFields(logger.Fields{
@@ -155,7 +155,7 @@ func (tmux *TransportMuxer) SetIdentity(ident router_info.RouterInfo) (err error
 	return err
 }
 
-// close every transport that this transport muxer has
+// Close closes every transport that this transport muxer has.
 func (tmux *TransportMuxer) Close() (err error) {
 	tmux.closeOnce.Do(func() {
 		log.WithFields(logger.Fields{
@@ -236,7 +236,7 @@ func (tmux *TransportMuxer) waitForAcceptGoroutines() {
 	}
 }
 
-// the name of this transport with the names of all the ones that we mux
+// Name returns the name of this transport combined with the names of all the ones that we mux.
 func (tmux *TransportMuxer) Name() string {
 	log.WithFields(logger.Fields{
 		"at":     "(TransportMuxer) Name",
@@ -435,8 +435,8 @@ func (tmux *TransportMuxer) findCompatibleSession(routerInfo router_info.RouterI
 	return nil, false, false, nil
 }
 
-// return nil and ErrNoTransportAvailable if we failed to get a session
-// return nil and ErrConnectionPoolFull if the connection limit has been reached
+// GetSession returns nil and ErrNoTransportAvailable if we failed to get a session,
+// or nil and ErrConnectionPoolFull if the connection limit has been reached.
 func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s TransportSession, err error) {
 	peerHash, _ := routerInfo.IdentHash()
 
@@ -489,7 +489,7 @@ func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s Tra
 	return s, err
 }
 
-// is there a transport that we mux that is compatible with this router info?
+// Compatible returns true if there is a transport that we mux that is compatible with this router info.
 func (tmux *TransportMuxer) Compatible(routerInfo router_info.RouterInfo) bool {
 	peerHash, _ := routerInfo.IdentHash()
 	log.WithFields(logger.Fields{

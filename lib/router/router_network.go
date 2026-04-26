@@ -136,7 +136,7 @@ func (r *Router) createReseedBootstrapper() bootstrap.Bootstrap {
 // createLocalBootstrapper creates a bootstrapper that reads from local netDb directories.
 func (r *Router) createLocalBootstrapper() bootstrap.Bootstrap {
 	log.WithFields(logger.Fields{"at": "createLocalBootstrapper"}).Info("Using local netDb bootstrap only (as specified by bootstrap_type)")
-	return bootstrap.NewLocalNetDbBootstrap(r.cfg.Bootstrap)
+	return bootstrap.NewLocalNetDBBootstrap(r.cfg.Bootstrap)
 }
 
 // createCompositeBootstrapper creates a bootstrapper that tries all methods sequentially.

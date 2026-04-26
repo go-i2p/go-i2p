@@ -155,21 +155,6 @@ func CreateRouter(cfg *config.RouterConfig) (*Router, error) {
 	return r, nil
 }
 
-// logStartup logs a startup-phase debug message.
-func logStartup(reason, baseDir, workingDir string) {
-	fields := logger.Fields{
-		"at":     "(Router) CreateRouter",
-		"phase":  "startup",
-		"reason": reason,
-	}
-	if baseDir != "" {
-		fields["base_dir"] = baseDir
-	}
-	if workingDir != "" {
-		fields["working_dir"] = workingDir
-	}
-	log.WithFields(fields).Debug(reason)
-}
 
 // logError logs a startup-phase error.
 func logError(reason string, err error) {
@@ -483,7 +468,9 @@ func addTransportAddress(ri *router_info.RouterInfo, addr net.Addr, proto string
 		log.WithError(err).Errorf("Failed to convert %s address to RouterAddress", proto)
 		return oops.Wrapf(err, "failed to convert %s address", proto)
 	}
-	ri.AddAddress(routerAddress)
+        if err := ri.AddAddress(routerAddress); err != nil {
+                log.WithError(err).Warn("failed to add address to RouterInfo")
+        }
 	log.WithFields(logger.Fields{
 		"host": addr.String(),
 		"cost": routerAddress.Cost(),

@@ -11,9 +11,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestLocalNetDbBootstrap_GetDefaultSearchPaths verifies default search paths are populated.
-func TestLocalNetDbBootstrap_GetDefaultSearchPaths(t *testing.T) {
-	paths := getDefaultNetDbSearchPaths()
+// TestLocalNetDBBootstrap_GetDefaultSearchPaths verifies default search paths are populated.
+func TestLocalNetDBBootstrap_GetDefaultSearchPaths(t *testing.T) {
+	paths := getDefaultNetDBSearchPaths()
 	assert.NotEmpty(t, paths, "Default search paths should not be empty")
 
 	// All paths should be absolute or contain home directory references
@@ -23,8 +23,8 @@ func TestLocalNetDbBootstrap_GetDefaultSearchPaths(t *testing.T) {
 	}
 }
 
-// TestLocalNetDbBootstrap_ExpandPath verifies tilde and absolute path expansion.
-func TestLocalNetDbBootstrap_ExpandPath(t *testing.T) {
+// TestLocalNetDBBootstrap_ExpandPath verifies tilde and absolute path expansion.
+func TestLocalNetDBBootstrap_ExpandPath(t *testing.T) {
 	homeDir, err := os.UserHomeDir()
 	require.NoError(t, err)
 
@@ -53,8 +53,8 @@ func TestLocalNetDbBootstrap_ExpandPath(t *testing.T) {
 	}
 }
 
-// TestLocalNetDbBootstrap_IsValidNetDbDirectory tests netDb directory validation.
-func TestLocalNetDbBootstrap_IsValidNetDbDirectory(t *testing.T) {
+// TestLocalNetDBBootstrap_IsValidNetDbDirectory tests netDb directory validation.
+func TestLocalNetDBBootstrap_IsValidNetDbDirectory(t *testing.T) {
 	// Create a temporary test directory structure
 	tmpDir := t.TempDir()
 
@@ -106,17 +106,17 @@ func TestLocalNetDbBootstrap_IsValidNetDbDirectory(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			path := tt.setupFunc()
-			lb := &LocalNetDbBootstrap{}
-			result := lb.isValidNetDbDirectory(path)
+			lb := &LocalNetDBBootstrap{}
+			result := lb.isValidNetDBDirectory(path)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
 
-// TestLocalNetDbBootstrap_GetPeers_NoNetDb verifies error when no netDb is found.
-func TestLocalNetDbBootstrap_GetPeers_NoNetDb(t *testing.T) {
+// TestLocalNetDBBootstrap_GetPeers_NoNetDb verifies error when no netDb is found.
+func TestLocalNetDBBootstrap_GetPeers_NoNetDb(t *testing.T) {
 	// Create bootstrap with non-existent paths
-	lb := NewLocalNetDbBootstrapWithPaths([]string{testNonExistentNetDbPath})
+	lb := NewLocalNetDBBootstrapWithPaths([]string{testNonExistentNetDBPath})
 
 	ctx := context.Background()
 	peers, err := lb.GetPeers(ctx, 10)
@@ -126,27 +126,27 @@ func TestLocalNetDbBootstrap_GetPeers_NoNetDb(t *testing.T) {
 	assert.Contains(t, err.Error(), "no local netDb found")
 }
 
-// TestNewLocalNetDbBootstrap_UsesDefaultPaths verifies default path population.
-func TestNewLocalNetDbBootstrap_UsesDefaultPaths(t *testing.T) {
+// TestNewLocalNetDBBootstrap_UsesDefaultPaths verifies default path population.
+func TestNewLocalNetDBBootstrap_UsesDefaultPaths(t *testing.T) {
 	cfg := &config.BootstrapConfig{
 		LowPeerThreshold: testLowPeerThreshold,
 	}
 
-	lb := NewLocalNetDbBootstrap(cfg)
+	lb := NewLocalNetDBBootstrap(cfg)
 
 	assert.NotNil(t, lb)
 	assert.NotEmpty(t, lb.searchPaths, "Search paths should be populated with defaults")
 }
 
-// TestNewLocalNetDbBootstrap_UsesCustomPaths verifies custom paths are prepended.
-func TestNewLocalNetDbBootstrap_UsesCustomPaths(t *testing.T) {
+// TestNewLocalNetDBBootstrap_UsesCustomPaths verifies custom paths are prepended.
+func TestNewLocalNetDBBootstrap_UsesCustomPaths(t *testing.T) {
 	customPaths := []string{"/custom/path/1", "/custom/path/2"}
 	cfg := &config.BootstrapConfig{
 		LowPeerThreshold: testLowPeerThreshold,
 		LocalNetDBPaths:  customPaths,
 	}
 
-	lb := NewLocalNetDbBootstrap(cfg)
+	lb := NewLocalNetDBBootstrap(cfg)
 
 	assert.NotNil(t, lb)
 	// Custom paths should be prepended to default paths
@@ -157,8 +157,8 @@ func TestNewLocalNetDbBootstrap_UsesCustomPaths(t *testing.T) {
 	assert.Equal(t, customPaths[1], lb.searchPaths[1])
 }
 
-// TestLocalNetDbBootstrap_ContextCancellation verifies context cancellation is respected.
-func TestLocalNetDbBootstrap_ContextCancellation(t *testing.T) {
+// TestLocalNetDBBootstrap_ContextCancellation verifies context cancellation is respected.
+func TestLocalNetDBBootstrap_ContextCancellation(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create a directory with many dummy files to make reading slow
@@ -172,7 +172,7 @@ func TestLocalNetDbBootstrap_ContextCancellation(t *testing.T) {
 		f.Close()
 	}
 
-	lb := NewLocalNetDbBootstrapWithPaths([]string{netDbPath})
+	lb := NewLocalNetDBBootstrapWithPaths([]string{netDbPath})
 
 	// Create a context that cancels immediately
 	ctx, cancel := context.WithCancel(context.Background())

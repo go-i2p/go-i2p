@@ -17,16 +17,16 @@ import (
 	"github.com/go-i2p/go-i2p/lib/config"
 )
 
-// LocalNetDbBootstrap implements the Bootstrap interface by reading RouterInfos
+// LocalNetDBBootstrap implements the Bootstrap interface by reading RouterInfos
 // from a local netDb directory (Java I2P or i2pd compatible)
-type LocalNetDbBootstrap struct {
+type LocalNetDBBootstrap struct {
 	// Paths to search for existing netDb directories
 	searchPaths []string
 }
 
-// NewLocalNetDbBootstrap creates a new local netDb bootstrap with default search paths
-func NewLocalNetDbBootstrap(cfg *config.BootstrapConfig) *LocalNetDbBootstrap {
-	searchPaths := getDefaultNetDbSearchPaths()
+// NewLocalNetDBBootstrap creates a new local netDb bootstrap with default search paths
+func NewLocalNetDBBootstrap(cfg *config.BootstrapConfig) *LocalNetDBBootstrap {
+	searchPaths := getDefaultNetDBSearchPaths()
 
 	// Add user-configured paths if available
 	if cfg != nil && len(cfg.LocalNetDBPaths) > 0 {
@@ -34,30 +34,30 @@ func NewLocalNetDbBootstrap(cfg *config.BootstrapConfig) *LocalNetDbBootstrap {
 	}
 
 	log.WithFields(logger.Fields{
-		"at":                "(LocalNetDbBootstrap) NewLocalNetDbBootstrap",
+		"at":                "(LocalNetDBBootstrap) NewLocalNetDBBootstrap",
 		"phase":             "bootstrap",
 		"step":              1,
 		"reason":            "initializing local netdb bootstrap",
 		"search_path_count": len(searchPaths),
 		"search_paths":      searchPaths,
 	}).Info("initializing local netDb bootstrap")
-	return &LocalNetDbBootstrap{
+	return &LocalNetDBBootstrap{
 		searchPaths: searchPaths,
 	}
 }
 
-// NewLocalNetDbBootstrapWithPaths creates a new local netDb bootstrap with custom paths
-func NewLocalNetDbBootstrapWithPaths(paths []string) *LocalNetDbBootstrap {
+// NewLocalNetDBBootstrapWithPaths creates a new local netDb bootstrap with custom paths
+func NewLocalNetDBBootstrapWithPaths(paths []string) *LocalNetDBBootstrap {
 	log.WithField("custom_paths", paths).Info("Initializing local netDb bootstrap with custom paths")
-	return &LocalNetDbBootstrap{
+	return &LocalNetDBBootstrap{
 		searchPaths: paths,
 	}
 }
 
 // GetPeers implements the Bootstrap interface by reading RouterInfos from local netDb
-func (lb *LocalNetDbBootstrap) GetPeers(ctx context.Context, n int) ([]router_info.RouterInfo, error) {
+func (lb *LocalNetDBBootstrap) GetPeers(ctx context.Context, n int) ([]router_info.RouterInfo, error) {
 	log.WithFields(logger.Fields{
-		"at":              "(LocalNetDbBootstrap) GetPeers",
+		"at":              "(LocalNetDBBootstrap) GetPeers",
 		"phase":           "bootstrap",
 		"step":            "start",
 		"reason":          "searching for existing I2P netdb directories",
@@ -66,42 +66,42 @@ func (lb *LocalNetDbBootstrap) GetPeers(ctx context.Context, n int) ([]router_in
 	}).Info("starting local netDb bootstrap")
 
 	// Find the first available netDb directory
-	netDbPath, err := lb.findNetDbDirectory()
+	netDBPath, err := lb.findNetDBDirectory()
 	if err != nil {
 		return nil, oops.Wrapf(err, "no local netDb found")
 	}
 
 	log.WithFields(logger.Fields{
-		"at":       "(LocalNetDbBootstrap) GetPeers",
+		"at":       "(LocalNetDBBootstrap) GetPeers",
 		"phase":    "bootstrap",
 		"step":     "directory_found",
 		"reason":   "found valid netdb directory",
-		"path":     netDbPath,
+		"path":     netDBPath,
 		"searched": len(lb.searchPaths),
 	}).Info("found local netDb directory")
 
 	// Read RouterInfos from the directory
-	routerInfos, err := lb.readRouterInfosFromDirectory(ctx, netDbPath, n)
+	routerInfos, err := lb.readRouterInfosFromDirectory(ctx, netDBPath, n)
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to read RouterInfos from local netDb")
 	}
 
 	log.WithFields(logger.Fields{
-		"at":           "(LocalNetDbBootstrap) GetPeers",
+		"at":           "(LocalNetDBBootstrap) GetPeers",
 		"phase":        "bootstrap",
 		"step":         "complete",
 		"reason":       "successfully loaded routers from local netdb",
 		"router_count": len(routerInfos),
 		"requested":    n,
-		"netdb_path":   netDbPath,
+		"netdb_path":   netDBPath,
 	}).Info("successfully loaded RouterInfos from local netDb")
 	return routerInfos, nil
 }
 
-// findNetDbDirectory searches for an existing netDb directory
-func (lb *LocalNetDbBootstrap) findNetDbDirectory() (string, error) {
+// findNetDBDirectory searches for an existing netDb directory
+func (lb *LocalNetDBBootstrap) findNetDBDirectory() (string, error) {
 	log.WithFields(logger.Fields{
-		"at":         "(LocalNetDbBootstrap) findNetDbDirectory",
+		"at":         "(LocalNetDBBootstrap) findNetDBDirectory",
 		"phase":      "bootstrap",
 		"reason":     "searching for existing netdb directory",
 		"path_count": len(lb.searchPaths),
@@ -111,7 +111,7 @@ func (lb *LocalNetDbBootstrap) findNetDbDirectory() (string, error) {
 		expanded := expandPath(path)
 
 		log.WithFields(logger.Fields{
-			"at":     "(LocalNetDbBootstrap) findNetDbDirectory",
+			"at":     "(LocalNetDBBootstrap) findNetDBDirectory",
 			"phase":  "bootstrap",
 			"reason": "checking search path",
 			"index":  i + 1,
@@ -120,9 +120,9 @@ func (lb *LocalNetDbBootstrap) findNetDbDirectory() (string, error) {
 		}).Debug("checking netdb search path")
 
 		// Check if this is a valid netDb directory
-		if lb.isValidNetDbDirectory(expanded) {
+		if lb.isValidNetDBDirectory(expanded) {
 			log.WithFields(logger.Fields{
-				"at":      "(LocalNetDbBootstrap) findNetDbDirectory",
+				"at":      "(LocalNetDBBootstrap) findNetDBDirectory",
 				"phase":   "bootstrap",
 				"reason":  "found valid netdb directory",
 				"path":    expanded,
@@ -133,7 +133,7 @@ func (lb *LocalNetDbBootstrap) findNetDbDirectory() (string, error) {
 	}
 
 	log.WithFields(logger.Fields{
-		"at":         "(LocalNetDbBootstrap) findNetDbDirectory",
+		"at":         "(LocalNetDBBootstrap) findNetDBDirectory",
 		"phase":      "bootstrap",
 		"reason":     "no valid netdb directory found",
 		"searched":   len(lb.searchPaths),
@@ -145,8 +145,8 @@ func (lb *LocalNetDbBootstrap) findNetDbDirectory() (string, error) {
 	return "", oops.Errorf("no valid netDb directory found in search paths: %v", lb.searchPaths)
 }
 
-// isValidNetDbDirectory checks if a path contains a valid netDb structure
-func (lb *LocalNetDbBootstrap) isValidNetDbDirectory(path string) bool {
+// isValidNetDBDirectory checks if a path contains a valid netDb structure
+func (lb *LocalNetDBBootstrap) isValidNetDBDirectory(path string) bool {
 	// Check if directory exists
 	info, err := os.Stat(path)
 	if err != nil || !info.IsDir() {
@@ -159,11 +159,11 @@ func (lb *LocalNetDbBootstrap) isValidNetDbDirectory(path string) bool {
 		return false
 	}
 
-	return lb.hasValidNetDbStructure(entries)
+	return lb.hasValidNetDBStructure(entries)
 }
 
-// hasValidNetDbStructure checks if entries contain valid netDb structure.
-func (lb *LocalNetDbBootstrap) hasValidNetDbStructure(entries []os.DirEntry) bool {
+// hasValidNetDBStructure checks if entries contain valid netDb structure.
+func (lb *LocalNetDBBootstrap) hasValidNetDBStructure(entries []os.DirEntry) bool {
 	// Look for netDb subdirectories or routerInfo files
 	for _, entry := range entries {
 		name := entry.Name()
@@ -183,17 +183,17 @@ func (lb *LocalNetDbBootstrap) hasValidNetDbStructure(entries []os.DirEntry) boo
 }
 
 // isJavaI2PSubdirectory checks if an entry is a Java I2P style subdirectory.
-func (lb *LocalNetDbBootstrap) isJavaI2PSubdirectory(entry os.DirEntry, name string) bool {
+func (lb *LocalNetDBBootstrap) isJavaI2PSubdirectory(entry os.DirEntry, name string) bool {
 	return entry.IsDir() && len(name) == 2 && name[0] == 'r'
 }
 
 // isRouterInfoFile checks if an entry is a routerInfo file.
-func (lb *LocalNetDbBootstrap) isRouterInfoFile(entry os.DirEntry, name string) bool {
+func (lb *LocalNetDBBootstrap) isRouterInfoFile(entry os.DirEntry, name string) bool {
 	return !entry.IsDir() && strings.HasPrefix(name, "routerInfo-") && strings.HasSuffix(name, ".dat")
 }
 
 // readRouterInfosFromDirectory reads RouterInfo files from a netDb directory
-func (lb *LocalNetDbBootstrap) readRouterInfosFromDirectory(ctx context.Context, path string, maxCount int) ([]router_info.RouterInfo, error) {
+func (lb *LocalNetDBBootstrap) readRouterInfosFromDirectory(ctx context.Context, path string, maxCount int) ([]router_info.RouterInfo, error) {
 	routerInfos := make([]router_info.RouterInfo, 0)
 	count := 0
 
@@ -211,7 +211,7 @@ func (lb *LocalNetDbBootstrap) readRouterInfosFromDirectory(ctx context.Context,
 }
 
 // createWalkFunction creates a filepath.WalkFunc that processes RouterInfo files
-func (lb *LocalNetDbBootstrap) createWalkFunction(ctx context.Context, routerInfos *[]router_info.RouterInfo, count *int, maxCount int) filepath.WalkFunc {
+func (lb *LocalNetDBBootstrap) createWalkFunction(ctx context.Context, routerInfos *[]router_info.RouterInfo, count *int, maxCount int) filepath.WalkFunc {
 	return func(filePath string, info os.FileInfo, err error) error {
 		if shouldStopWalk(ctx, *count, maxCount) {
 			return filepath.SkipAll
@@ -239,9 +239,9 @@ func (lb *LocalNetDbBootstrap) createWalkFunction(ctx context.Context, routerInf
 }
 
 // logReadFailure logs a failed RouterInfo file read during bootstrap walking.
-func (lb *LocalNetDbBootstrap) logReadFailure(filePath string, err error) {
+func (lb *LocalNetDBBootstrap) logReadFailure(filePath string, err error) {
 	log.WithError(err).WithFields(logger.Fields{
-		"at":         "(LocalNetDbBootstrap) createWalkFunction",
+		"at":         "(LocalNetDBBootstrap) createWalkFunction",
 		"phase":      "bootstrap",
 		"reason":     "failed to read RouterInfo file",
 		"file":       filePath,
@@ -256,7 +256,7 @@ func (lb *LocalNetDbBootstrap) logReadFailure(filePath string, err error) {
 func validateRouterInfoForBootstrap(ri router_info.RouterInfo, filePath string) error {
 	if !HasDirectConnectivity(ri) {
 		log.WithFields(logger.Fields{
-			"at":     "(LocalNetDbBootstrap) createWalkFunction",
+			"at":     "(LocalNetDBBootstrap) createWalkFunction",
 			"phase":  "pre-filter",
 			"reason": "no direct NTCP2 connectivity",
 			"file":   filePath,
@@ -266,7 +266,7 @@ func validateRouterInfoForBootstrap(ri router_info.RouterInfo, filePath string) 
 
 	if err := ValidateRouterInfo(ri); err != nil {
 		log.WithFields(logger.Fields{
-			"at":     "(LocalNetDbBootstrap) createWalkFunction",
+			"at":     "(LocalNetDBBootstrap) createWalkFunction",
 			"phase":  "validation",
 			"reason": "invalid RouterInfo",
 			"file":   filePath,
@@ -277,7 +277,7 @@ func validateRouterInfoForBootstrap(ri router_info.RouterInfo, filePath string) 
 
 	if err := VerifyRouterInfoSignature(ri); err != nil {
 		log.WithFields(logger.Fields{
-			"at":     "(LocalNetDbBootstrap) createWalkFunction",
+			"at":     "(LocalNetDBBootstrap) createWalkFunction",
 			"phase":  "validation",
 			"reason": "signature verification failed",
 			"file":   filePath,
@@ -318,7 +318,7 @@ func shouldProcessFile(filePath string, info os.FileInfo, err error) bool {
 }
 
 // readRouterInfoFromFile reads and parses a single RouterInfo file
-func (lb *LocalNetDbBootstrap) readRouterInfoFromFile(filePath string) (router_info.RouterInfo, error) {
+func (lb *LocalNetDBBootstrap) readRouterInfoFromFile(filePath string) (router_info.RouterInfo, error) {
 	data, err := readRouterInfoBytes(filePath)
 	if err != nil {
 		return router_info.RouterInfo{}, err
@@ -378,20 +378,20 @@ func validateRouterInfoFreshness(ri router_info.RouterInfo) error {
 	return nil
 }
 
-// getDefaultNetDbSearchPaths returns default search paths for netDb directories
+// getDefaultNetDBSearchPaths returns default search paths for netDb directories
 // based on the operating system. It delegates to OS-specific helper functions.
-func getDefaultNetDbSearchPaths() []string {
+func getDefaultNetDBSearchPaths() []string {
 	homeDir := getHomeDir()
 
 	switch runtime.GOOS {
 	case "linux":
-		return getLinuxNetDbPaths(homeDir)
+		return getLinuxNetDBPaths(homeDir)
 	case "darwin":
-		return getDarwinNetDbPaths(homeDir)
+		return getDarwinNetDBPaths(homeDir)
 	case "windows":
-		return getWindowsNetDbPaths(homeDir)
+		return getWindowsNetDBPaths(homeDir)
 	default:
-		return getGenericNetDbPaths(homeDir)
+		return getGenericNetDBPaths(homeDir)
 	}
 }
 
@@ -409,8 +409,8 @@ func getHomeDir() string {
 	return homeDir
 }
 
-// getLinuxNetDbPaths returns netDb search paths for Linux systems.
-func getLinuxNetDbPaths(homeDir string) []string {
+// getLinuxNetDBPaths returns netDb search paths for Linux systems.
+func getLinuxNetDBPaths(homeDir string) []string {
 	return []string{
 		// Java I2P default locations on Linux
 		filepath.Join(homeDir, ".i2p/netDb"),
@@ -422,8 +422,8 @@ func getLinuxNetDbPaths(homeDir string) []string {
 	}
 }
 
-// getDarwinNetDbPaths returns netDb search paths for macOS systems.
-func getDarwinNetDbPaths(homeDir string) []string {
+// getDarwinNetDBPaths returns netDb search paths for macOS systems.
+func getDarwinNetDBPaths(homeDir string) []string {
 	return []string{
 		// Java I2P default locations on macOS
 		filepath.Join(homeDir, "Library/Application Support/i2p/netDb"),
@@ -434,8 +434,8 @@ func getDarwinNetDbPaths(homeDir string) []string {
 	}
 }
 
-// getWindowsNetDbPaths returns netDb search paths for Windows systems.
-func getWindowsNetDbPaths(homeDir string) []string {
+// getWindowsNetDBPaths returns netDb search paths for Windows systems.
+func getWindowsNetDBPaths(homeDir string) []string {
 	appData := getWindowsAppData(homeDir)
 	return []string{
 		// Java I2P default locations on Windows
@@ -463,8 +463,8 @@ func getWindowsAppData(homeDir string) string {
 	return appData
 }
 
-// getGenericNetDbPaths returns generic fallback netDb search paths.
-func getGenericNetDbPaths(homeDir string) []string {
+// getGenericNetDBPaths returns generic fallback netDb search paths.
+func getGenericNetDBPaths(homeDir string) []string {
 	return []string{
 		filepath.Join(homeDir, ".i2p/netDb"),
 		filepath.Join(homeDir, ".i2pd/netDb"),

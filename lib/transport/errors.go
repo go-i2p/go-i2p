@@ -2,7 +2,7 @@ package transport
 
 import "errors"
 
-// error for when we have no transports available to use
+// ErrNoTransportAvailable is returned when no transports are available to use.
 var ErrNoTransportAvailable = errors.New("no transports available")
 
 // ErrConnectionPoolFull is returned when a connection pool has reached its

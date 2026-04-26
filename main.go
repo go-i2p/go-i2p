@@ -50,7 +50,7 @@ func init() {
 	cobra.OnInitialize(config.InitConfigOrExit)
 	registerGlobalFlags()
 	registerRouterFlags()
-	registerNetDbFlags()
+	registerNetDBFlags()
 	registerBootstrapFlags()
 	registerI2CPFlags()
 	registerI2PControlFlags()
@@ -86,8 +86,8 @@ func registerRouterFlags() {
 		"Maximum active transport sessions")
 }
 
-// registerNetDbFlags registers NetDB configuration flags.
-func registerNetDbFlags() {
+// registerNetDBFlags registers NetDB configuration flags.
+func registerNetDBFlags() {
 	defaults := config.Defaults()
 	RootCmd.PersistentFlags().String("netdb.path", config.DefaultNetDBConfig.Path, "Path to the netDb")
 	RootCmd.PersistentFlags().Int("netdb.max-router-infos", defaults.NetDB.MaxRouterInfos,
@@ -282,7 +282,7 @@ func mustBindPFlag(viperKey, flagName string) {
 // bindFlagsToViper binds all command-line flags to viper configuration keys.
 func bindFlagsToViper() {
 	bindRouterFlagsToViper()
-	bindNetDbFlagsToViper()
+	bindNetDBFlagsToViper()
 	bindBootstrapFlagsToViper()
 	bindI2CPFlagsToViper()
 	bindI2PControlFlagsToViper()
@@ -318,11 +318,11 @@ func bindRouterFlagsToViper() {
 	mustBindPFlag("router.max_concurrent_sessions", "router.max-concurrent-sessions")
 }
 
-// bindNetDbFlagsToViper binds NetDB flags to viper configuration.
-func bindNetDbFlagsToViper() {
+// bindNetDBFlagsToViper binds NetDB flags to viper configuration.
+func bindNetDBFlagsToViper() {
 	if err := viper.BindPFlag("netdb.path", RootCmd.PersistentFlags().Lookup("netdb.path")); err != nil {
 		log.WithError(err).WithFields(logger.Fields{
-			"at":     "bindNetDbFlagsToViper",
+			"at":     "bindNetDBFlagsToViper",
 			"phase":  "startup",
 			"reason": "failed to bind netdb.path configuration flag",
 			"flag":   "netdb.path",
@@ -869,7 +869,7 @@ func runRouter() {
 
 	logStartupConfiguration()
 	logConfigurationSource()
-	logNetDbPath()
+	logNetDBPath()
 	runNetworkPreChecks()
 	launchRouterLifecycle()
 }
@@ -886,8 +886,8 @@ func logStartupConfiguration() {
 	}).Info("parsing i2p router configuration")
 }
 
-// logNetDbPath logs the configured NetDB path.
-func logNetDbPath() {
+// logNetDBPath logs the configured NetDB path.
+func logNetDBPath() {
 	routerCfg := config.GetRouterConfig()
 	log.WithFields(logger.Fields{
 		"at":         "runRouter",

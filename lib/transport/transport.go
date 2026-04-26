@@ -39,7 +39,7 @@ type RouterInfoRefresher interface {
 	RequestRouterInfoRefresh(hash common.Hash)
 }
 
-// a session between 2 routers for tranmitting i2np messages securly
+// TransportSession is a session between 2 routers for transmitting i2np messages securely.
 type TransportSession interface {
 	// queue an i2np message to be sent over the session
 	// returns an error if the session is closed or the send queue is full

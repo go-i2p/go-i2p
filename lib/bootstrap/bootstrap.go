@@ -6,7 +6,7 @@ import (
 	"github.com/go-i2p/common/router_info"
 )
 
-// interface defining a way to bootstrap into the i2p network
+// Bootstrap defines a way to bootstrap into the i2p network.
 type Bootstrap interface {
 	// get more peers for bootstrap
 	// try obtaining at most n router infos

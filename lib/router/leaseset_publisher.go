@@ -177,7 +177,9 @@ func (p *LeaseSetPublisher) sendToFloodfill(ffHash common.Hash, dbStore *i2np.Da
 	msg.SetData(data)
 
 	// Queue the DatabaseStore message for transmission
-	session.QueueSendI2NP(msg)
+        if err := session.QueueSendI2NP(msg); err != nil {
+                return oops.Wrapf(err, "failed to queue DatabaseStore message")
+        }
 
 	return nil
 }

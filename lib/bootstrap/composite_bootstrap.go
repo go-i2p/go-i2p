@@ -18,7 +18,7 @@ import (
 type CompositeBootstrap struct {
 	fileBootstrap       *FileBootstrap
 	reseedBootstrap     *ReseedBootstrap
-	localNetDBBootstrap *LocalNetDbBootstrap
+	localNetDBBootstrap *LocalNetDBBootstrap
 	config              *config.BootstrapConfig
 }
 
@@ -33,7 +33,7 @@ func NewCompositeBootstrap(cfg *config.BootstrapConfig) *CompositeBootstrap {
 
 	cb := &CompositeBootstrap{
 		reseedBootstrap:     NewReseedBootstrap(cfg),
-		localNetDBBootstrap: NewLocalNetDbBootstrap(cfg),
+		localNetDBBootstrap: NewLocalNetDBBootstrap(cfg),
 		config:              cfg,
 	}
 
@@ -209,7 +209,7 @@ func tryReseedBootstrap(rb *ReseedBootstrap, ctx context.Context, n int) ([]rout
 }
 
 // tryLocalNetDBBootstrap attempts to obtain peers from local netDb directories.
-func tryLocalNetDBBootstrap(lb *LocalNetDbBootstrap, ctx context.Context, n int) ([]router_info.RouterInfo, error) {
+func tryLocalNetDBBootstrap(lb *LocalNetDBBootstrap, ctx context.Context, n int) ([]router_info.RouterInfo, error) {
 	log.WithFields(logger.Fields{
 		"at":     "(CompositeBootstrap) tryLocalNetDBBootstrap",
 		"phase":  "bootstrap",

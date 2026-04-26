@@ -23,8 +23,8 @@ const (
 	// testNonExistentFilePath is a file path that should never exist, for error testing.
 	testNonExistentFilePath = "/nonexistent/test.su3"
 
-	// testNonExistentNetDbPath is a netDb path that should never exist.
-	testNonExistentNetDbPath = "/tmp/non-existent-netdb-12345"
+	// testNonExistentNetDBPath is a netDb path that should never exist.
+	testNonExistentNetDBPath = "/tmp/non-existent-netdb-12345"
 
 	// testHost is the standard test IP address for router addresses.
 	testHost = "192.168.1.1"

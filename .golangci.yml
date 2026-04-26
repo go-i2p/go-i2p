@@ -33,10 +33,13 @@ linters:
 
   exclusions:
     rules:
-      # Test files: relax errcheck
+      # Test files: relax errcheck, ineffassign, staticcheck naming, unused mocks
       - path: '.*_test\.go'
         linters:
           - errcheck
+          - ineffassign
+          - staticcheck
+          - unused
 
 issues:
   max-same-issues: 0

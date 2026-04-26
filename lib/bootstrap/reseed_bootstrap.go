@@ -304,19 +304,19 @@ func (rb *ReseedBootstrap) attemptReseedFromServer(server *config.ReseedConfig, 
 
 // validateAndFilterRouterInfos validates all RouterInfos and returns only valid ones.
 // It also collects and logs statistics about the validation process.
-func (rb *ReseedBootstrap) validateAndFilterRouterInfos(routerInfos []router_info.RouterInfo, serverUrl string) []router_info.RouterInfo {
+func (rb *ReseedBootstrap) validateAndFilterRouterInfos(routerInfos []router_info.RouterInfo, serverURL string) []router_info.RouterInfo {
 	const caller = "(ReseedBootstrap) validateAndFilterRouterInfos"
 	stats := NewValidationStats()
 	validRouterInfos := make([]router_info.RouterInfo, 0, len(routerInfos))
 
 	for _, ri := range routerInfos {
-		if classifyRouterInfo(ri, stats, caller, serverUrl) {
+		if classifyRouterInfo(ri, stats, caller, serverURL) {
 			validRouterInfos = append(validRouterInfos, ri)
 		}
 	}
 
 	stats.LogSummary("reseed_bootstrap")
-	logInvalidRouterInfos(stats, caller, serverUrl)
+	logInvalidRouterInfos(stats, caller, serverURL)
 
 	return validRouterInfos
 }

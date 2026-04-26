@@ -320,6 +320,7 @@ func (s *Server) SetPeerSelector(selector tunnel.PeerSelector) {
 }
 
 // recoverFromAcceptPanic recovers from any panic in the accept loop to prevent server crash.
+
 // ErrNoDestinationResolver is returned when a message cannot be routed because
 // no destination resolver has been configured on the I2CP server. Without a
 // resolver, the server cannot look up the recipient's public key, so encryption
