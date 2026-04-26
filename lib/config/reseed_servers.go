@@ -12,26 +12,26 @@ package config
 // when using the default "auto" bootstrap type.
 var KnownReseedServers = []*ReseedConfig{
 	// go-i2p dev team server (primary)
-	{Url: "https://reseed.i2pgit.org/", SU3Fingerprint: "hankhill19580_at_gmail.com.crt"},
+	{URL: "https://reseed.i2pgit.org/", SU3Fingerprint: "hankhill19580_at_gmail.com.crt"},
 	// Community servers
-	{Url: "https://reseed.sahil.world/", SU3Fingerprint: "sahil_at_mail.i2p.crt"},
-	{Url: "https://i2p.diyarciftci.xyz/", SU3Fingerprint: "diyarciftci_at_protonmail.com.crt"},
-	{Url: "https://coconut.incognet.io/", SU3Fingerprint: "rambler_at_mail.i2p.crt"},
-	{Url: "https://reseed.stormycloud.org/", SU3Fingerprint: "admin_at_stormycloud.org.crt"},
+	{URL: "https://reseed.sahil.world/", SU3Fingerprint: "sahil_at_mail.i2p.crt"},
+	{URL: "https://i2p.diyarciftci.xyz/", SU3Fingerprint: "diyarciftci_at_protonmail.com.crt"},
+	{URL: "https://coconut.incognet.io/", SU3Fingerprint: "rambler_at_mail.i2p.crt"},
+	{URL: "https://reseed.stormycloud.org/", SU3Fingerprint: "admin_at_stormycloud.org.crt"},
 	// i2pd mirrors (same certificate)
-	{Url: "https://reseed-pl.i2pd.xyz/", SU3Fingerprint: "r4sas-reseed_at_mail.i2p.crt"},
-	{Url: "https://reseed-fr.i2pd.xyz/", SU3Fingerprint: "r4sas-reseed_at_mail.i2p.crt"},
+	{URL: "https://reseed-pl.i2pd.xyz/", SU3Fingerprint: "r4sas-reseed_at_mail.i2p.crt"},
+	{URL: "https://reseed-fr.i2pd.xyz/", SU3Fingerprint: "r4sas-reseed_at_mail.i2p.crt"},
 	// Additional community servers
-	{Url: "https://www2.mk16.de/", SU3Fingerprint: "i2p-reseed_at_mk16.de.crt"},
+	{URL: "https://www2.mk16.de/", SU3Fingerprint: "i2p-reseed_at_mk16.de.crt"},
 	// reseed2.i2p.net removed: persistently returns connection-refused on every bootstrap
 	// attempt. Bootstrap completes via the other servers.
-	{Url: "https://reseed.diva.exchange/", SU3Fingerprint: "reseed_at_diva.exchange.crt"},
-	{Url: "https://i2p.novg.net/", SU3Fingerprint: "igor_at_novg.net.crt"},
+	{URL: "https://reseed.diva.exchange/", SU3Fingerprint: "reseed_at_diva.exchange.crt"},
+	{URL: "https://i2p.novg.net/", SU3Fingerprint: "igor_at_novg.net.crt"},
 	// i2pseed.creativecowpat.net:8443 removed: TLS certificate uses only a Legacy
 	// Common Name with no Subject Alternative Names (SANs). Go's TLS stack rejects
 	// such certificates since Go 1.15 (x509: certificate relies on legacy Common
 	// Name field), causing a permanent failure on every bootstrap attempt.
-	{Url: "https://reseed.onion.im/", SU3Fingerprint: "lazygravy_at_mail.i2p.crt"},
+	{URL: "https://reseed.onion.im/", SU3Fingerprint: "lazygravy_at_mail.i2p.crt"},
 }
 
 // ReseedStrategyUnion combines all unique RouterInfos from any successful server response.

@@ -6,7 +6,7 @@ import (
 )
 
 // NetDBConfig holds the local network database configuration.
-type NetDbConfig struct {
+type NetDBConfig struct {
 	// path to network database directory
 	Path string
 	// MaxRouterInfos is the maximum number of RouterInfos to store locally.
@@ -28,8 +28,8 @@ type NetDbConfig struct {
 	FloodfillEnabled bool
 }
 
-// DefaultNetDbConfig holds the default settings for netdb.
-var DefaultNetDbConfig = NetDbConfig{
+// DefaultNetDBConfig holds the default settings for netdb.
+var DefaultNetDBConfig = NetDBConfig{
 	Path:                     filepath.Join(defaultConfig(), "netDb"),
 	MaxRouterInfos:           5000,
 	MaxLeaseSets:             1000,

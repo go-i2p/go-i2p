@@ -323,7 +323,7 @@ func (t *NTCP2Transport) performInboundHandshake(conn net.Conn) error {
 		raw := extractRawConn(ntcp2Conn.UnderlyingConn())
 		t.logger.WithError(err).Debug("Inbound handshake failed, applying probing resistance")
 		applyProbingResistance(raw)
-		ntcp2Conn.Close()
+		_ = ntcp2Conn.Close()
 		t.unreserveSessionSlot()
 		return WrapNTCP2Error(err, "inbound handshake (probing resistance applied)")
 	}
@@ -664,7 +664,7 @@ func (t *NTCP2Transport) promoteInboundConnection(conn net.Conn, original interf
 	}
 	// Another goroutine won the promotion race — close our duplicate
 	// No cleanup callback is set, so Close() won't affect the session map
-	promoted.Close()
+	_ = promoted.Close()
 	if winner, exists := t.sessions.Load(routerHash); exists {
 		if winnerSession, ok := winner.(*NTCP2Session); ok {
 			return winnerSession, true
@@ -854,7 +854,7 @@ func (t *NTCP2Transport) performNTCP2Handshake(ntcp2Addr net.Addr, tcpAddrString
 		raw := extractRawConn(conn.UnderlyingConn())
 		t.logger.WithError(err).Debug("Outbound handshake failed, applying probing resistance")
 		applyProbingResistance(raw)
-		conn.Close()
+		_ = conn.Close()
 		return nil, WrapNTCP2Error(err, "NTCP2 handshake (probing resistance applied)")
 	}
 
@@ -1038,7 +1038,7 @@ func (t *NTCP2Transport) setupSession(conn *ntcp2.NTCP2Conn, routerHash data.Has
 		// A session already exists for this peer. Close the newly created
 		// session (no workers running, just closes conn and channels) and
 		// return the existing one. Release the reserved session slot.
-		session.Close()
+		_ = session.Close()
 		t.unreserveSessionSlot()
 		resolved := t.resolveExistingSession(existing, routerHash)
 		if resolved == nil {
@@ -1098,7 +1098,7 @@ func (t *NTCP2Transport) resolveExistingSession(existing interface{}, routerHash
 		// Another goroutine won the promotion race — discard ours and
 		// return whatever is in the map now. No cleanup callback was
 		// set and no workers were started, so Close() is lightweight.
-		promoted.Close()
+		_ = promoted.Close()
 		if winner, exists := t.sessions.Load(routerHash); exists {
 			if winnerSession, ok := winner.(*NTCP2Session); ok {
 				return winnerSession

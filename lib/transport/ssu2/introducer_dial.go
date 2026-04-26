@@ -214,7 +214,7 @@ func (t *SSU2Transport) dialCharlieDirectly(charlieRI router_info.RouterInfo, ch
 	}
 
 	if err := t.checkSessionLimit(); err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return nil, err
 	}
 

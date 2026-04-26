@@ -22,7 +22,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/netdb/reseed"
 )
 
-// standard network database implementation using local filesystem skiplist
+// StdNetDB is the standard network database implementation using local filesystem skiplist.
 type StdNetDB struct {
 	DB          string
 	RouterInfos map[common.Hash]Entry
@@ -68,7 +68,7 @@ func NewStdNetDB(db string) *StdNetDB {
 		riMutex:          sync.RWMutex{},
 		LeaseSets:        make(map[common.Hash]Entry),
 		lsMutex:          sync.RWMutex{},
-		maxRouterInfos:   config.DefaultNetDbConfig.MaxRouterInfos,
+		maxRouterInfos:   config.DefaultNetDBConfig.MaxRouterInfos,
 		leaseSetExpiry:   make(map[common.Hash]time.Time),
 		routerInfoExpiry: make(map[common.Hash]time.Time),
 		expiryMutex:      sync.RWMutex{},
@@ -224,7 +224,7 @@ func (db *StdNetDB) parseAndCacheRouterInfo(hash common.Hash, data []byte) (rout
 	return ri, nil
 }
 
-// get the skiplist file that a RouterInfo with this hash would go in
+// SkiplistFile returns the skiplist file path for a RouterInfo with the given hash.
 func (db *StdNetDB) SkiplistFile(hash common.Hash) (fpath string) {
 	fname := base64.EncodeToString(hash[:])
 	fpath = filepath.Join(db.Path(), fmt.Sprintf("r%c", fname[0]), fmt.Sprintf("routerInfo-%s.dat", fname))
@@ -232,7 +232,7 @@ func (db *StdNetDB) SkiplistFile(hash common.Hash) (fpath string) {
 	return fpath
 }
 
-// get netdb path
+// Path returns the netdb directory path.
 func (db *StdNetDB) Path() string {
 	return string(db.DB)
 }
@@ -350,7 +350,7 @@ func (db *StdNetDB) RecalculateSize() error {
 	return nil
 }
 
-// return true if the network db directory exists and is writable
+// Exists returns true if the network db directory exists and is writable.
 func (db *StdNetDB) Exists() bool {
 	p := db.Path()
 	// check root directory
@@ -479,8 +479,8 @@ func (db *StdNetDB) saveLeaseSetEntry(hash common.Hash, entry Entry) (err error)
 	return nil
 }
 
-// reseed if we have less than minRouters known routers
-// returns error if reseed failed
+// Reseed performs a reseed if we have less than minRouters known routers.
+// Returns error if reseed failed.
 func (db *StdNetDB) Reseed(b bootstrap.Bootstrap, minRouters int) (err error) {
 	if !db.isReseedRequired(minRouters) {
 		return nil
@@ -856,7 +856,7 @@ func (db *StdNetDB) StoreRouterInfo(ri router_info.RouterInfo) {
 	}
 }
 
-// ensure that the network database exists and load existing RouterInfos
+// Ensure ensures that the network database exists and loads existing RouterInfos.
 func (db *StdNetDB) Ensure() (err error) {
 	if !db.Exists() {
 		log.WithFields(logger.Fields{"at": "Ensure"}).Debug("NetDB directory does not exist, creating it")
@@ -1301,7 +1301,7 @@ func (db *StdNetDB) GetRouterInfoCount() int {
 // This checks the global router configuration for the floodfill flag.
 func (db *StdNetDB) IsFloodfill() bool {
 	cfg := config.GetRouterConfig()
-	return cfg.NetDb.FloodfillEnabled
+	return cfg.NetDB.FloodfillEnabled
 }
 
 // GetActivePeerCount returns the number of peers with successful connections in the last hour.

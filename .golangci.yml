@@ -5,7 +5,7 @@ run:
   modules-download-mode: readonly
 
 linters:
-  disable-all: true
+  default: none
   enable:
     - errcheck
     - staticcheck
@@ -31,11 +31,12 @@ linters:
         - "-QF1008"
         - "-QF1012"
 
-issues:
-  max-same-issues: 0
   exclusions:
     rules:
       # Test files: relax errcheck
-      - path: _test\.go
+      - path: '.*_test\.go'
         linters:
           - errcheck
+
+issues:
+  max-same-issues: 0

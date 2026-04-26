@@ -29,8 +29,8 @@ func NewLocalNetDbBootstrap(cfg *config.BootstrapConfig) *LocalNetDbBootstrap {
 	searchPaths := getDefaultNetDbSearchPaths()
 
 	// Add user-configured paths if available
-	if cfg != nil && len(cfg.LocalNetDbPaths) > 0 {
-		searchPaths = append(cfg.LocalNetDbPaths, searchPaths...)
+	if cfg != nil && len(cfg.LocalNetDBPaths) > 0 {
+		searchPaths = append(cfg.LocalNetDBPaths, searchPaths...)
 	}
 
 	log.WithFields(logger.Fields{

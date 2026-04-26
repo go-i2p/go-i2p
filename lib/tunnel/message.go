@@ -162,45 +162,45 @@ func (tm EncryptedTunnelMessage) Data() ([]byte, error) {
 type DecryptedTunnelMessage [1028]byte
 
 // ID returns the TunnelID from the first 4 bytes of the decrypted tunnel message.
-func (decrypted_tunnel_message DecryptedTunnelMessage) ID() TunnelID {
+func (dtm DecryptedTunnelMessage) ID() TunnelID {
 	return TunnelID(binary.BigEndian.Uint32(
-		decrypted_tunnel_message[:4],
+		dtm[:4],
 	))
 }
 
 // IV returns the 16-byte initialization vector from the decrypted tunnel message.
-func (decrypted_tunnel_message DecryptedTunnelMessage) IV() tunnel.TunnelIV {
-	return decrypted_tunnel_message[4 : 4+16]
+func (dtm DecryptedTunnelMessage) IV() tunnel.TunnelIV {
+	return dtm[4 : 4+16]
 }
 
 // Checksum returns the 4-byte checksum from the decrypted tunnel message, located after the TunnelID and IV fields.
-func (decrypted_tunnel_message DecryptedTunnelMessage) Checksum() []byte {
-	return decrypted_tunnel_message[4+16 : 4+4+16]
+func (dtm DecryptedTunnelMessage) Checksum() []byte {
+	return dtm[4+16 : 4+4+16]
 }
 
 // Returns the contents of a decrypted tunnel message that contain the data for the
 // DeliveryInstructions.
-func (decrypted_tunnel_message DecryptedTunnelMessage) deliveryInstructionData() []byte {
+func (dtm DecryptedTunnelMessage) deliveryInstructionData() []byte {
 	log.WithFields(logger.Fields{"at": "deliveryInstructionData"}).Debug("Retrieving delivery instruction data from DecryptedTunnelMessage")
-	data_area := decrypted_tunnel_message[4+4+16:]
-	for i := 0; i < len(data_area); i++ {
-		if data_area[i] == 0x00 {
-			delivery_data := data_area[i+1:]
-			log.WithField("delivery_data_length", len(delivery_data)).Debug("Retrieved delivery instruction data")
-			return delivery_data
+	dataArea := dtm[4+4+16:]
+	for i := 0; i < len(dataArea); i++ {
+		if dataArea[i] == 0x00 {
+			deliveryData := dataArea[i+1:]
+			log.WithField("delivery_data_length", len(deliveryData)).Debug("Retrieved delivery instruction data")
+			return deliveryData
 		}
 	}
 	log.WithFields(logger.Fields{"at": "deliveryInstructionData"}).Warn("No delivery instruction data found in DecryptedTunnelMessage")
 	return []byte{}
 }
 
-// Returns a slice of DeliveryInstructionWithFragment structures, which all of the Delivery Instructions
+// DeliveryInstructionsWithFragments returns a slice of DeliveryInstructionWithFragment structures, which all of the Delivery Instructions
 // in the tunnel message and their corresponding MessageFragment structures.
 // Also returns an error if any delivery instructions could not be fully parsed;
 // in that case the returned slice contains any successfully parsed entries.
-func (decrypted_tunnel_message DecryptedTunnelMessage) DeliveryInstructionsWithFragments() ([]DeliveryInstructionsWithFragment, error) {
+func (dtm DecryptedTunnelMessage) DeliveryInstructionsWithFragments() ([]DeliveryInstructionsWithFragment, error) {
 	set := make([]DeliveryInstructionsWithFragment, 0)
-	data := decrypted_tunnel_message.deliveryInstructionData()
+	data := dtm.deliveryInstructionData()
 	var parseErr error
 	for {
 		instructions, remainder, err := readDeliveryInstructions(data)
@@ -213,7 +213,7 @@ func (decrypted_tunnel_message DecryptedTunnelMessage) DeliveryInstructionsWithF
 			break
 		}
 
-		fragment_size, err := instructions.FragmentSize()
+		fragmentSize, err := instructions.FragmentSize()
 		if err != nil {
 			log.WithFields(logger.Fields{
 				"at":  "(DecryptedTunnelMessage) DeliveryInstructionsWithFragments",
@@ -223,24 +223,24 @@ func (decrypted_tunnel_message DecryptedTunnelMessage) DeliveryInstructionsWithF
 			break
 		}
 
-		// Validate fragment_size doesn't exceed remaining data to prevent index out of bounds
-		if int(fragment_size) > len(remainder) {
+		// Validate fragmentSize doesn't exceed remaining data to prevent index out of bounds
+		if int(fragmentSize) > len(remainder) {
 			log.WithFields(logger.Fields{
 				"at":            "(DecryptedTunnelMessage) DeliveryInstructionsWithFragments",
-				"fragment_size": fragment_size,
+				"fragmentSize":  fragmentSize,
 				"remainder_len": len(remainder),
 			}).Error("fragment size exceeds remaining data")
-			parseErr = oops.Errorf("fragment size %d exceeds remaining data %d", fragment_size, len(remainder))
+			parseErr = oops.Errorf("fragment size %d exceeds remaining data %d", fragmentSize, len(remainder))
 			break
 		}
 
-		fragment_data := remainder[:fragment_size]
+		fragmentData := remainder[:fragmentSize]
 		pair := DeliveryInstructionsWithFragment{
 			DeliveryInstructions: instructions,
-			MessageFragment:      fragment_data,
+			MessageFragment:      fragmentData,
 		}
 
-		data = remainder[fragment_size:]
+		data = remainder[fragmentSize:]
 		set = append(set, pair)
 	}
 	return set, parseErr

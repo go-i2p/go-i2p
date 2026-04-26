@@ -445,9 +445,9 @@ type RouterInfoOptions struct {
 	// capability. When true, "f" replaces "N" (not floodfill) in the caps string.
 	// Floodfills store and distribute netDB entries.
 	Floodfill bool
-	// NetId is the network identifier. Defaults to "2" (production I2P network).
+	// NetID is the network identifier. Defaults to "2" (production I2P network).
 	// Set to "3" for testnet or other values for experimental networks.
-	NetId string
+	NetID string
 	// Version is the router.version string advertised in RouterInfo options.
 	// Defaults to "0.9.63". Must be >= "0.9.58" to pass i2pd's NETDB_MIN_ALLOWED_VERSION check.
 	Version string
@@ -515,8 +515,8 @@ func (ks *RouterInfoKeystore) mergeOptions(opts []RouterInfoOptions) RouterInfoO
 		if opt.Floodfill {
 			options.Floodfill = true
 		}
-		if opt.NetId != "" {
-			options.NetId = opt.NetId
+		if opt.NetID != "" {
+			options.NetID = opt.NetID
 		}
 		if opt.Version != "" {
 			options.Version = opt.Version
@@ -667,9 +667,9 @@ func (ks *RouterInfoKeystore) assembleRouterInfo(routerIdentity *router_identity
 	// Build caps string - base caps then congestion flag per PROP_162
 	caps := ks.buildCapsString(opts.CongestionFlag, opts.Reachable, opts.Floodfill)
 
-	netId := opts.NetId
-	if netId == "" {
-		netId = "2" // Default: production I2P network
+	netID := opts.NetID
+	if netID == "" {
+		netID = "2" // Default: production I2P network
 	}
 
 	// router.version is required by i2pd (and Java I2P): if absent, i2pd sets
@@ -683,7 +683,7 @@ func (ks *RouterInfoKeystore) assembleRouterInfo(routerIdentity *router_identity
 
 	options := map[string]string{
 		"caps":           caps,
-		"netId":          netId,
+		"netID":          netID,
 		"router.version": routerVersion,
 	}
 
@@ -691,7 +691,7 @@ func (ks *RouterInfoKeystore) assembleRouterInfo(routerIdentity *router_identity
 		"at":              "assembleRouterInfo",
 		"timestamp":       publishedTime.Unix(),
 		"caps":            options["caps"],
-		"netId":           options["netId"],
+		"netID":           options["netID"],
 		"router.version":  options["router.version"],
 		"congestion_flag": opts.CongestionFlag,
 	}).Debug("Creating RouterInfo with options")

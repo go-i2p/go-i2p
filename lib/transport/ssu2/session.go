@@ -768,7 +768,7 @@ func (s *SSU2Session) checkInboundRateLimit(msg i2np.I2NPMessage) error {
 		return nil
 	}
 	s.logger.WithField("message_type", msg.Type()).Warn("Inbound I2NP rate limit exceeded, closing session")
-	go s.Close()
+	go func() { _ = s.Close() }()
 	return oops.Errorf("inbound I2NP rate limit exceeded")
 }
 

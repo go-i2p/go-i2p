@@ -27,10 +27,10 @@ type BootstrapConfig struct {
 	// ReseedServers is the list of remote reseed servers to contact.
 	// By default, uses KnownReseedServers which includes all verified I2P reseed servers.
 	ReseedServers []*ReseedConfig
-	// LocalNetDbPaths lists directories to search for existing RouterInfo files.
+	// LocalNetDBPaths lists directories to search for existing RouterInfo files.
 	// Supports Java I2P and i2pd netDb directory formats.
 	// These paths are populated at runtime based on the operating system.
-	LocalNetDbPaths []string
+	LocalNetDBPaths []string
 	// MinReseedServers is the minimum number of successful reseed servers required.
 	// If fewer servers respond successfully, the reseed operation fails.
 	// Default: DefaultMinReseedServers (2), matching Java I2P MIN_RESEED_SERVERS
@@ -53,7 +53,7 @@ var DefaultBootstrapConfig = BootstrapConfig{
 	// Use all known reseed servers for maximum availability
 	ReseedServers: KnownReseedServers,
 	// Local netDb paths are populated at runtime based on OS
-	LocalNetDbPaths: []string{},
+	LocalNetDBPaths: []string{},
 	// Minimum successful servers required (1 for backward compatibility)
 	MinReseedServers: DefaultMinReseedServers,
 	// Default to union strategy for maximum peer discovery

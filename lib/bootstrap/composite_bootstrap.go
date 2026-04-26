@@ -18,7 +18,7 @@ import (
 type CompositeBootstrap struct {
 	fileBootstrap       *FileBootstrap
 	reseedBootstrap     *ReseedBootstrap
-	localNetDbBootstrap *LocalNetDbBootstrap
+	localNetDBBootstrap *LocalNetDbBootstrap
 	config              *config.BootstrapConfig
 }
 
@@ -33,7 +33,7 @@ func NewCompositeBootstrap(cfg *config.BootstrapConfig) *CompositeBootstrap {
 
 	cb := &CompositeBootstrap{
 		reseedBootstrap:     NewReseedBootstrap(cfg),
-		localNetDbBootstrap: NewLocalNetDbBootstrap(cfg),
+		localNetDBBootstrap: NewLocalNetDbBootstrap(cfg),
 		config:              cfg,
 	}
 
@@ -111,13 +111,13 @@ func (cb *CompositeBootstrap) getPeersReseedOnly(ctx context.Context, n int) ([]
 
 // getPeersLocalOnly uses only the local netDb bootstrap method.
 func (cb *CompositeBootstrap) getPeersLocalOnly(ctx context.Context, n int) ([]router_info.RouterInfo, error) {
-	return tryLocalNetDbBootstrap(cb.localNetDbBootstrap, ctx, n)
+	return tryLocalNetDBBootstrap(cb.localNetDBBootstrap, ctx, n)
 }
 
 // getPeersAutoFallback tries all methods in sequence: file → reseed → local netDb.
 func (cb *CompositeBootstrap) getPeersAutoFallback(ctx context.Context, n int) ([]router_info.RouterInfo, error) {
 	// Collect errors from all methods for better debugging
-	var fileErr, reseedErr, netDbErr error
+	var fileErr, reseedErr, netDBErr error
 
 	// Try file bootstrap first if configured
 	if cb.fileBootstrap != nil {
@@ -136,14 +136,14 @@ func (cb *CompositeBootstrap) getPeersAutoFallback(ctx context.Context, n int) (
 	reseedErr = err
 
 	// Fall back to local netDb
-	peers, err = tryLocalNetDbBootstrap(cb.localNetDbBootstrap, ctx, n)
+	peers, err = tryLocalNetDBBootstrap(cb.localNetDBBootstrap, ctx, n)
 	if err == nil {
 		return peers, nil
 	}
-	netDbErr = err
+	netDBErr = err
 
 	// All methods failed - return aggregated error for debugging
-	return nil, buildAggregatedError(fileErr, reseedErr, netDbErr)
+	return nil, buildAggregatedError(fileErr, reseedErr, netDBErr)
 }
 
 // tryFileBootstrap attempts to obtain peers from the local reseed file.
@@ -208,10 +208,10 @@ func tryReseedBootstrap(rb *ReseedBootstrap, ctx context.Context, n int) ([]rout
 	return nil, oops.Errorf("reseed bootstrap returned no peers")
 }
 
-// tryLocalNetDbBootstrap attempts to obtain peers from local netDb directories.
-func tryLocalNetDbBootstrap(lb *LocalNetDbBootstrap, ctx context.Context, n int) ([]router_info.RouterInfo, error) {
+// tryLocalNetDBBootstrap attempts to obtain peers from local netDb directories.
+func tryLocalNetDBBootstrap(lb *LocalNetDbBootstrap, ctx context.Context, n int) ([]router_info.RouterInfo, error) {
 	log.WithFields(logger.Fields{
-		"at":     "(CompositeBootstrap) tryLocalNetDbBootstrap",
+		"at":     "(CompositeBootstrap) tryLocalNetDBBootstrap",
 		"phase":  "bootstrap",
 		"step":   3,
 		"reason": "attempting local netdb bootstrap fallback",
@@ -220,7 +220,7 @@ func tryLocalNetDbBootstrap(lb *LocalNetDbBootstrap, ctx context.Context, n int)
 	peers, err := lb.GetPeers(ctx, n)
 	if err != nil {
 		log.WithError(err).WithFields(logger.Fields{
-			"at":     "(CompositeBootstrap) tryLocalNetDbBootstrap",
+			"at":     "(CompositeBootstrap) tryLocalNetDBBootstrap",
 			"phase":  "bootstrap",
 			"step":   3,
 			"reason": "local netdb bootstrap failed",
@@ -234,7 +234,7 @@ func tryLocalNetDbBootstrap(lb *LocalNetDbBootstrap, ctx context.Context, n int)
 	}
 
 	log.WithFields(logger.Fields{
-		"at":           "(CompositeBootstrap) tryLocalNetDbBootstrap",
+		"at":           "(CompositeBootstrap) tryLocalNetDBBootstrap",
 		"phase":        "bootstrap",
 		"step":         3,
 		"reason":       "local netdb bootstrap succeeded",
@@ -297,7 +297,7 @@ func logReseedFailure(err error) {
 }
 
 // buildAggregatedError creates a detailed error message including all bootstrap method failures.
-func buildAggregatedError(fileErr, reseedErr, netDbErr error) error {
+func buildAggregatedError(fileErr, reseedErr, netDBErr error) error {
 	// Helper function to count failures
 	countFailures := func(errs ...error) int {
 		count := 0
@@ -315,9 +315,9 @@ func buildAggregatedError(fileErr, reseedErr, netDbErr error) error {
 		"reason":         "all_methods_exhausted",
 		"file_attempted": fileErr != nil,
 		"reseed_failed":  reseedErr != nil,
-		"netdb_failed":   netDbErr != nil,
+		"netdb_failed":   netDBErr != nil,
 		"methods_tried":  3,
-		"methods_failed": countFailures(fileErr, reseedErr, netDbErr),
+		"methods_failed": countFailures(fileErr, reseedErr, netDBErr),
 		"recommendation": "check network connectivity and reseed server availability",
 	}).Error("all bootstrap methods failed")
 
@@ -334,8 +334,8 @@ func buildAggregatedError(fileErr, reseedErr, netDbErr error) error {
 		errMsg += fmt.Sprintf(" reseed=%v;", reseedErr)
 	}
 
-	if netDbErr != nil {
-		errMsg += fmt.Sprintf(" netDb=%v", netDbErr)
+	if netDBErr != nil {
+		errMsg += fmt.Sprintf(" netDb=%v", netDBErr)
 	}
 
 	return oops.Errorf("%s", errMsg)

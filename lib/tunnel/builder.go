@@ -165,7 +165,7 @@ func logBuildRequestComplete(req BuildTunnelRequest, tunnelID TunnelID, recordCo
 	}).Debug("tunnel build request creation complete")
 }
 
-// The process:
+// CreateBuildRequest builds a tunnel by performing the following process:
 // 1. Select peers for tunnel hops using the peer selector
 // 2. Generate a unique tunnel ID for this tunnel
 // 3. Create build request records for each hop with cryptographic keys

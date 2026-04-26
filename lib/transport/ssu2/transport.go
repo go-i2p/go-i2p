@@ -229,12 +229,12 @@ func listenWithNATTraversal(config *Config, iport int) (net.PacketConn, error) {
 func startSSU2Listener(t *SSU2Transport, udpConn net.PacketConn, ssu2Config *ssu2noise.SSU2Config) error {
 	listener, err := ssu2noise.NewSSU2Listener(udpConn, ssu2Config)
 	if err != nil {
-		udpConn.Close()
+		_ = udpConn.Close()
 		return WrapSSU2Error(err, "creating SSU2 listener")
 	}
 
 	if err := listener.Start(); err != nil {
-		listener.Close()
+		_ = listener.Close()
 		return WrapSSU2Error(err, "starting SSU2 listener")
 	}
 
@@ -445,7 +445,7 @@ func (t *SSU2Transport) promoteInboundConnection(conn net.Conn, original interfa
 		promoted.StartWorkers()
 		return promoted, true
 	}
-	promoted.Close()
+	_ = promoted.Close()
 	if winner, exists := t.sessions.Load(routerHash); exists {
 		if winnerSession, ok := winner.(*SSU2Session); ok {
 			return winnerSession, true
@@ -600,7 +600,7 @@ func (t *SSU2Transport) registerOrReuseSession(conn *ssu2noise.SSU2Conn, routerH
 
 	existing, loaded := t.sessions.LoadOrStore(routerHash, session)
 	if loaded {
-		session.Close()
+		_ = session.Close()
 		if existingSession, ok := existing.(*SSU2Session); ok {
 			return existingSession, false, nil // Reusing existing, slot not used
 		}
@@ -648,9 +648,9 @@ func (t *SSU2Transport) Close() error {
 
 		t.sessions.Range(func(key, value interface{}) bool {
 			if session, ok := value.(*SSU2Session); ok {
-				session.Close()
+				_ = session.Close()
 			} else if conn, ok := value.(net.Conn); ok {
-				conn.Close()
+				_ = conn.Close()
 			}
 			return true
 		})

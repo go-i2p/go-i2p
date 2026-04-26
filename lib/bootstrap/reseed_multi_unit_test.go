@@ -59,7 +59,7 @@ func TestShouldUseMultiServerReseed(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			servers := make([]*config.ReseedConfig, tc.serverCount)
 			for i := 0; i < tc.serverCount; i++ {
-				servers[i] = &config.ReseedConfig{Url: "https://server" + string(rune('1'+i)) + "/"}
+				servers[i] = &config.ReseedConfig{URL: "https://server" + string(rune('1'+i)) + "/"}
 			}
 
 			cfg := &config.BootstrapConfig{
@@ -105,9 +105,9 @@ func TestSingleServerModeBackwardCompatibility(t *testing.T) {
 	cfg := &config.BootstrapConfig{
 		MinReseedServers: 1,
 		ReseedServers: []*config.ReseedConfig{
-			{Url: "https://server1/"},
-			{Url: "https://server2/"},
-			{Url: "https://server3/"},
+			{URL: "https://server1/"},
+			{URL: "https://server2/"},
+			{URL: "https://server3/"},
 		},
 		ReseedStrategy: config.ReseedStrategyUnion,
 	}
@@ -179,11 +179,11 @@ func TestFilterSuccessful(t *testing.T) {
 func TestShuffleServers(t *testing.T) {
 	cfg := &config.BootstrapConfig{
 		ReseedServers: []*config.ReseedConfig{
-			{Url: "https://server1/"},
-			{Url: "https://server2/"},
-			{Url: "https://server3/"},
-			{Url: "https://server4/"},
-			{Url: "https://server5/"},
+			{URL: "https://server1/"},
+			{URL: "https://server2/"},
+			{URL: "https://server3/"},
+			{URL: "https://server4/"},
+			{URL: "https://server5/"},
 		},
 	}
 
@@ -192,7 +192,7 @@ func TestShuffleServers(t *testing.T) {
 	// Run shuffle multiple times to verify randomization
 	originalOrder := make([]string, len(cfg.ReseedServers))
 	for i, s := range cfg.ReseedServers {
-		originalOrder[i] = s.Url
+		originalOrder[i] = s.URL
 	}
 
 	// Verify shuffle produces same length
@@ -203,7 +203,7 @@ func TestShuffleServers(t *testing.T) {
 
 	// Verify original slice is not modified
 	for i, s := range cfg.ReseedServers {
-		if s.Url != originalOrder[i] {
+		if s.URL != originalOrder[i] {
 			t.Error("shuffleServers() modified original slice")
 		}
 	}
@@ -211,7 +211,7 @@ func TestShuffleServers(t *testing.T) {
 	// Verify all servers are present in shuffled result
 	urlSet := make(map[string]bool)
 	for _, s := range shuffled {
-		urlSet[s.Url] = true
+		urlSet[s.URL] = true
 	}
 	for _, url := range originalOrder {
 		if !urlSet[url] {
@@ -224,7 +224,7 @@ func TestShuffleServers(t *testing.T) {
 func TestReseedBootstrap_ShuffleServersSingleServer(t *testing.T) {
 	cfg := &config.BootstrapConfig{
 		ReseedServers: []*config.ReseedConfig{
-			{Url: "https://only-server/"},
+			{URL: "https://only-server/"},
 		},
 	}
 
@@ -234,7 +234,7 @@ func TestReseedBootstrap_ShuffleServersSingleServer(t *testing.T) {
 	if len(shuffled) != 1 {
 		t.Errorf("shuffleServers() returned %d servers for single server input", len(shuffled))
 	}
-	if shuffled[0].Url != "https://only-server/" {
+	if shuffled[0].URL != "https://only-server/" {
 		t.Errorf("shuffleServers() returned wrong server URL")
 	}
 }
@@ -343,7 +343,7 @@ func TestMinReseedServersDefault(t *testing.T) {
 	cfg := &config.BootstrapConfig{
 		MinReseedServers: 0, // Should default to 1
 		ReseedServers: []*config.ReseedConfig{
-			{Url: "https://s1/"},
+			{URL: "https://s1/"},
 		},
 	}
 
@@ -362,8 +362,8 @@ func TestContextCancellation(t *testing.T) {
 	cfg := &config.BootstrapConfig{
 		MinReseedServers: 2,
 		ReseedServers: []*config.ReseedConfig{
-			{Url: "https://s1/"},
-			{Url: "https://s2/"},
+			{URL: "https://s1/"},
+			{URL: "https://s2/"},
 		},
 	}
 

@@ -39,7 +39,7 @@ const (
 // newTestInvalidReseedServer creates a ReseedConfig pointing to an unreachable server.
 func newTestInvalidReseedServer() *config.ReseedConfig {
 	return &config.ReseedConfig{
-		Url:            testInvalidServerURL,
+		URL:            testInvalidServerURL,
 		SU3Fingerprint: testServerFingerprint,
 	}
 }

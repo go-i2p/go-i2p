@@ -20,14 +20,14 @@ func TestGetRouterConfigConcurrentAccess(t *testing.T) {
 	LockRouterConfigForWrite()
 	routerConfigProperties.BaseDir = "/test/base"
 	routerConfigProperties.WorkingDir = "/test/working"
-	routerConfigProperties.NetDb = &NetDbConfig{Path: "/test/netdb"}
+	routerConfigProperties.NetDB = &NetDBConfig{Path: "/test/netdb"}
 	routerConfigProperties.Bootstrap = &BootstrapConfig{
 		LowPeerThreshold: 10,
 		BootstrapType:    "reseed",
 		ReseedServers: []*ReseedConfig{
-			{Url: "https://test.example.com", SU3Fingerprint: "testkey"},
+			{URL: "https://test.example.com", SU3Fingerprint: "testkey"},
 		},
-		LocalNetDbPaths: []string{"/path1", "/path2"},
+		LocalNetDBPaths: []string{"/path1", "/path2"},
 	}
 	routerConfigProperties.I2CP = &I2CPConfig{
 		Enabled: true,
@@ -56,14 +56,14 @@ func TestGetRouterConfigConcurrentAccess(t *testing.T) {
 				// Access various fields to verify they're readable
 				_ = cfg.BaseDir
 				_ = cfg.WorkingDir
-				if cfg.NetDb != nil {
-					_ = cfg.NetDb.Path
+				if cfg.NetDB != nil {
+					_ = cfg.NetDB.Path
 				}
 				if cfg.Bootstrap != nil {
 					_ = cfg.Bootstrap.LowPeerThreshold
 					for _, server := range cfg.Bootstrap.ReseedServers {
 						if server != nil {
-							_ = server.Url
+							_ = server.URL
 						}
 					}
 				}
@@ -86,8 +86,8 @@ func TestGetRouterConfigConcurrentAccess(t *testing.T) {
 				LockRouterConfigForWrite()
 				routerConfigProperties.BaseDir = "/updated/base"
 				routerConfigProperties.WorkingDir = "/updated/working"
-				if routerConfigProperties.NetDb != nil {
-					routerConfigProperties.NetDb.Path = "/updated/netdb"
+				if routerConfigProperties.NetDB != nil {
+					routerConfigProperties.NetDB.Path = "/updated/netdb"
 				}
 				if routerConfigProperties.Bootstrap != nil {
 					routerConfigProperties.Bootstrap.LowPeerThreshold = id*100 + j
@@ -109,9 +109,9 @@ func TestGetRouterConfigReturnsDeepCopy(t *testing.T) {
 	routerConfigProperties.Bootstrap = &BootstrapConfig{
 		LowPeerThreshold: 5,
 		ReseedServers: []*ReseedConfig{
-			{Url: "https://original.example.com"},
+			{URL: "https://original.example.com"},
 		},
-		LocalNetDbPaths: []string{"/original/path"},
+		LocalNetDBPaths: []string{"/original/path"},
 	}
 	UnlockRouterConfigWrite()
 
@@ -121,15 +121,15 @@ func TestGetRouterConfigReturnsDeepCopy(t *testing.T) {
 	// Modify the copy
 	cfg.BaseDir = "/modified/base"
 	cfg.Bootstrap.LowPeerThreshold = 999
-	cfg.Bootstrap.ReseedServers[0].Url = "https://modified.example.com"
-	cfg.Bootstrap.LocalNetDbPaths[0] = "/modified/path"
+	cfg.Bootstrap.ReseedServers[0].URL = "https://modified.example.com"
+	cfg.Bootstrap.LocalNetDBPaths[0] = "/modified/path"
 
 	// Verify original is unchanged
 	original := GetRouterConfig()
 	assert.Equal(t, "/original/base", original.BaseDir, "BaseDir was modified")
 	assert.Equal(t, 5, original.Bootstrap.LowPeerThreshold, "LowPeerThreshold was modified")
-	assert.Equal(t, "https://original.example.com", original.Bootstrap.ReseedServers[0].Url, "ReseedServer Url was modified")
-	assert.Equal(t, "/original/path", original.Bootstrap.LocalNetDbPaths[0], "LocalNetDbPaths was modified")
+	assert.Equal(t, "https://original.example.com", original.Bootstrap.ReseedServers[0].URL, "ReseedServer URL was modified")
+	assert.Equal(t, "/original/path", original.Bootstrap.LocalNetDBPaths[0], "LocalNetDBPaths was modified")
 }
 
 // TestLockRouterConfigForWrite verifies that the write lock provides exclusive access

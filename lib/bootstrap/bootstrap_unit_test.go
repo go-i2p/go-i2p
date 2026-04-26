@@ -57,7 +57,7 @@ func TestBootstrapTypeConfiguration(t *testing.T) {
 				ReseedFilePath:   tt.reseedFilePath,
 				ReseedServers: []*config.ReseedConfig{
 					{
-						Url:            testReseedServerURL,
+						URL:            testReseedServerURL,
 						SU3Fingerprint: testReseedFingerprint,
 					},
 				},

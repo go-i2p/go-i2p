@@ -48,7 +48,7 @@ const (
 	DefaultExpirationSeconds        = 480 // Default tunnel expiration: 8 minutes
 )
 
-// Default expiration tolerance for clock skew (5 minutes into the past)
+// DefaultExpirationTolerance is the default expiration tolerance for clock skew (5 minutes into the past).
 // This allows for reasonable clock differences between I2P routers while
 // still rejecting clearly expired messages.
 const DefaultExpirationTolerance = 5 * 60 // 5 minutes in seconds

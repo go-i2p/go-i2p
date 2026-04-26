@@ -87,7 +87,7 @@ func (h *LookupResponseHandler) HandleResponse(messageID, msgType int, data []by
 	}
 }
 
-// resolves router infos with recursive kademlia lookup
+// KademliaResolver resolves router infos with recursive kademlia lookup.
 type KademliaResolver struct {
 	// netdb to store result into
 	NetworkDatabase

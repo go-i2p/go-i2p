@@ -9,13 +9,13 @@ import (
 )
 
 // =============================================================================
-// Unit Tests for netdb.go — DefaultNetDbConfig, viper round-trips
+// Unit Tests for netdb.go — DefaultNetDBConfig, viper round-trips
 // =============================================================================
 
-// TestDefaultNetDbConfig verifies that DefaultNetDbConfig has sensible defaults
+// TestDefaultNetDbConfig verifies that DefaultNetDBConfig has sensible defaults
 // for all fields, including the previously missing max size and interval fields.
 func TestDefaultNetDbConfig(t *testing.T) {
-	cfg := DefaultNetDbConfig
+	cfg := DefaultNetDBConfig
 
 	assert.NotEmpty(t, cfg.Path, "Path should not be empty")
 	assert.Equal(t, 5000, cfg.MaxRouterInfos, "MaxRouterInfos")
@@ -26,26 +26,26 @@ func TestDefaultNetDbConfig(t *testing.T) {
 	assert.False(t, cfg.FloodfillEnabled, "FloodfillEnabled should be false by default")
 }
 
-// TestNetDbConfigViperRoundTrip verifies that NetDbConfig fields are populated
+// TestNetDbConfigViperRoundTrip verifies that NetDBConfig fields are populated
 // from viper when using NewRouterConfigFromViper.
 func TestNetDbConfigViperRoundTrip(t *testing.T) {
 	cfg := initConfigAndNewFromViper(t)
-	require.NotNil(t, cfg.NetDb, "NetDb config should not be nil")
+	require.NotNil(t, cfg.NetDB, "NetDB config should not be nil")
 
-	assert.NotZero(t, cfg.NetDb.MaxRouterInfos, "MaxRouterInfos should be populated from viper defaults")
-	assert.NotZero(t, cfg.NetDb.MaxLeaseSets, "MaxLeaseSets should be populated from viper defaults")
-	assert.NotZero(t, cfg.NetDb.ExpirationCheckInterval, "ExpirationCheckInterval should be populated")
-	assert.NotZero(t, cfg.NetDb.LeaseSetRefreshThreshold, "LeaseSetRefreshThreshold should be populated")
-	assert.NotZero(t, cfg.NetDb.ExplorationInterval, "ExplorationInterval should be populated")
+	assert.NotZero(t, cfg.NetDB.MaxRouterInfos, "MaxRouterInfos should be populated from viper defaults")
+	assert.NotZero(t, cfg.NetDB.MaxLeaseSets, "MaxLeaseSets should be populated from viper defaults")
+	assert.NotZero(t, cfg.NetDB.ExpirationCheckInterval, "ExpirationCheckInterval should be populated")
+	assert.NotZero(t, cfg.NetDB.LeaseSetRefreshThreshold, "LeaseSetRefreshThreshold should be populated")
+	assert.NotZero(t, cfg.NetDB.ExplorationInterval, "ExplorationInterval should be populated")
 }
 
 // TestNetDbConfigUpdateRoundTrip verifies that UpdateRouterConfig populates
-// all NetDbConfig fields from viper.
+// all NetDBConfig fields from viper.
 func TestNetDbConfigUpdateRoundTrip(t *testing.T) {
 	initConfigAndUpdate(t)
 
-	netdb := routerConfigProperties.NetDb
-	require.NotNil(t, netdb, "NetDb config should not be nil after UpdateRouterConfig")
+	netdb := routerConfigProperties.NetDB
+	require.NotNil(t, netdb, "NetDB config should not be nil after UpdateRouterConfig")
 
 	assert.NotZero(t, netdb.MaxRouterInfos, "MaxRouterInfos should be populated after UpdateRouterConfig")
 	assert.NotZero(t, netdb.MaxLeaseSets, "MaxLeaseSets should be populated after UpdateRouterConfig")

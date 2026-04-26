@@ -305,8 +305,8 @@ func (r *Router) startFloodfillServer() {
 	}
 	adapter := &floodfillTransportAdapter{muxer: r.TransportMuxer, db: r.StdNetDB}
 	cfg := netdb.DefaultFloodfillConfig()
-	if r.cfg != nil && r.cfg.NetDb != nil {
-		cfg.Enabled = r.cfg.NetDb.FloodfillEnabled
+	if r.cfg != nil && r.cfg.NetDB != nil {
+		cfg.Enabled = r.cfg.NetDB.FloodfillEnabled
 	}
 	ourHash, err := r.getOurRouterHash()
 	if err == nil {
@@ -780,9 +780,9 @@ func (r *Router) awaitStartupResult() error {
 // initializeNetDB creates and configures the network database
 func (r *Router) initializeNetDB() error {
 	log.WithFields(logger.Fields{"at": "initializeNetDB"}).Debug("Initializing network database")
-	r.StdNetDB = netdb.NewStdNetDB(r.cfg.NetDb.Path)
-	r.StdNetDB.SetMaxRouterInfos(r.cfg.NetDb.MaxRouterInfos)
-	log.WithField("netdb_path", r.cfg.NetDb.Path).Debug("Created StdNetDB")
+	r.StdNetDB = netdb.NewStdNetDB(r.cfg.NetDB.Path)
+	r.StdNetDB.SetMaxRouterInfos(r.cfg.NetDB.MaxRouterInfos)
+	log.WithField("netdb_path", r.cfg.NetDB.Path).Debug("Created StdNetDB")
 	return nil
 }
 

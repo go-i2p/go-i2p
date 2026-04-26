@@ -12,17 +12,17 @@ import (
 )
 
 // BuildRecordCrypto provides encryption/decryption for tunnel build records.
-// This is a thin adapter that delegates to go-noise/ratchet.BuildRecordCrypto
+// This is a thin adapter that delegates to go-noise/ratchet.BuildReplyCrypto
 // while handling I2P-specific type conversions (SessionKey, BuildResponseRecord,
 // BuildRequestRecord, RouterInfo).
 type BuildRecordCrypto struct {
-	inner *ratchet.BuildRecordCrypto
+	inner *ratchet.BuildReplyCrypto
 }
 
 // NewBuildRecordCrypto creates a new build record crypto handler.
 func NewBuildRecordCrypto() *BuildRecordCrypto {
 	return &BuildRecordCrypto{
-		inner: ratchet.NewBuildRecordCrypto(),
+		inner: ratchet.NewBuildReplyCrypto(),
 	}
 }
 
@@ -124,7 +124,7 @@ func EncryptBuildRequestRecord(record BuildRequestRecord, recipientRouterInfo ro
 	copy(pubKeyArr[:], recipientPubKey)
 
 	// Delegate ECIES encryption to go-noise
-	crypto := ratchet.NewBuildRecordCrypto()
+	crypto := ratchet.NewBuildRequestCrypto()
 	return crypto.EncryptBuildRequest(cleartext, pubKeyArr, identityHash)
 }
 
@@ -141,7 +141,7 @@ func (c *BuildRecordCrypto) DecryptRecord(encrypted [528]byte, privateKey []byte
 // the resulting 222-byte cleartext into a BuildRequestRecord.
 func DecryptBuildRequestRecord(encrypted [528]byte, privateKey []byte) (BuildRequestRecord, error) {
 	// Delegate ECIES decryption to go-noise
-	crypto := ratchet.NewBuildRecordCrypto()
+	crypto := ratchet.NewBuildRequestCrypto()
 	cleartext, err := crypto.DecryptBuildRequest(encrypted, privateKey)
 	if err != nil {
 		return BuildRequestRecord{}, oops.Wrapf(err, "ECIES decryption failed")
@@ -250,7 +250,7 @@ func VerifyIdentityHash(encrypted [528]byte, ourRouterInfo router_info.RouterInf
 		return false
 	}
 
-	crypto := ratchet.NewBuildRecordCrypto()
+	crypto := ratchet.NewBuildRequestCrypto()
 	return crypto.VerifyIdentityHash(encrypted, ourHash)
 }
 

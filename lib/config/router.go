@@ -56,7 +56,7 @@ type RouterConfig struct {
 	// the path to the working config directory where files are changed
 	WorkingDir string
 	// netdb configuration
-	NetDb *NetDbConfig
+	NetDB *NetDBConfig
 	// configuration for bootstrapping into the network
 	Bootstrap *BootstrapConfig
 	// I2CP server configuration
@@ -107,7 +107,7 @@ var DefaultTransportConfig = buildTransportDefaults()
 
 // defaults for router
 var defaultRouterConfig = &RouterConfig{
-	NetDb:          &DefaultNetDbConfig,
+	NetDB:          &DefaultNetDBConfig,
 	Bootstrap:      &DefaultBootstrapConfig,
 	I2CP:           &DefaultI2CPConfig,
 	I2PControl:     defaultI2PControlConfigPtr(),
@@ -200,7 +200,7 @@ func copyPtr[T interface{}](src *T) *T {
 
 // copyNestedConfigs deep-copies all nested configuration structs from src into dst.
 func copyNestedConfigs(dst, src *RouterConfig) {
-	dst.NetDb = copyPtr(src.NetDb)
+	dst.NetDB = copyPtr(src.NetDB)
 	dst.Bootstrap = copyBootstrapConfig(src.Bootstrap)
 	dst.I2CP = copyPtr(src.I2CP)
 	dst.I2PControl = copyPtr(src.I2PControl)
@@ -228,9 +228,9 @@ func copyBootstrapConfig(src *BootstrapConfig) *BootstrapConfig {
 		}
 	}
 
-	if src.LocalNetDbPaths != nil {
-		bootstrapCopy.LocalNetDbPaths = make([]string, len(src.LocalNetDbPaths))
-		copy(bootstrapCopy.LocalNetDbPaths, src.LocalNetDbPaths)
+	if src.LocalNetDBPaths != nil {
+		bootstrapCopy.LocalNetDBPaths = make([]string, len(src.LocalNetDBPaths))
+		copy(bootstrapCopy.LocalNetDBPaths, src.LocalNetDBPaths)
 	}
 
 	return &bootstrapCopy

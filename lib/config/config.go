@@ -235,7 +235,7 @@ func NewRouterConfigFromViper() *RouterConfig {
 	return &RouterConfig{
 		BaseDir:        viper.GetString("base_dir"),
 		WorkingDir:     viper.GetString("working_dir"),
-		NetDb:          buildNetDbConfig(),
+		NetDB:          buildNetDBConfig(),
 		Bootstrap:      buildBootstrapConfig("NewRouterConfigFromViper"),
 		I2CP:           buildI2CPConfig(),
 		I2PControl:     buildI2PControlConfig(),
@@ -387,9 +387,9 @@ func currentCongestionConfig() CongestionDefaults {
 	}
 }
 
-// buildNetDbConfig creates a NetDbConfig from current viper settings.
-func buildNetDbConfig() *NetDbConfig {
-	return &NetDbConfig{
+// buildNetDBConfig creates a NetDBConfig from current viper settings.
+func buildNetDBConfig() *NetDBConfig {
+	return &NetDBConfig{
 		Path:                     viper.GetString("netdb.path"),
 		MaxRouterInfos:           viper.GetInt("netdb.max_router_infos"),
 		MaxLeaseSets:             viper.GetInt("netdb.max_lease_sets"),
@@ -404,14 +404,14 @@ func buildNetDbConfig() *NetDbConfig {
 // The caller parameter identifies the calling function for log context.
 func buildBootstrapConfig(caller string) *BootstrapConfig {
 	reseedServers := parseReseedServers(caller)
-	localNetDbPaths := parseLocalNetDbPaths(caller)
+	localNetDBPaths := parseLocalNetDBPaths(caller)
 
 	return &BootstrapConfig{
 		LowPeerThreshold: viper.GetInt("bootstrap.low_peer_threshold"),
 		BootstrapType:    viper.GetString("bootstrap.bootstrap_type"),
 		ReseedFilePath:   viper.GetString("bootstrap.reseed_file_path"),
 		ReseedServers:    reseedServers,
-		LocalNetDbPaths:  localNetDbPaths,
+		LocalNetDBPaths:  localNetDBPaths,
 		MinReseedServers: viper.GetInt("bootstrap.min_reseed_servers"),
 		ReseedStrategy:   viper.GetString("bootstrap.reseed_strategy"),
 	}
@@ -528,19 +528,19 @@ func parseReseedServers(caller string) []*ReseedConfig {
 	return reseedServers
 }
 
-// parseLocalNetDbPaths reads local netdb paths from viper, returning an empty
+// parseLocalNetDBPaths reads local netdb paths from viper, returning an empty
 // slice when none are configured.
-func parseLocalNetDbPaths(caller string) []string {
-	var localNetDbPaths []string
-	if err := viper.UnmarshalKey("bootstrap.local_netdb_paths", &localNetDbPaths); err != nil {
+func parseLocalNetDBPaths(caller string) []string {
+	var localNetDBPaths []string
+	if err := viper.UnmarshalKey("bootstrap.local_netdb_paths", &localNetDBPaths); err != nil {
 		log.WithFields(logger.Fields{
 			"at":     caller,
 			"reason": "no_local_netdb_paths_configured",
 			"phase":  "startup",
 		}).Debug("using default netDb paths")
-		localNetDbPaths = []string{}
+		localNetDBPaths = []string{}
 	}
-	return localNetDbPaths
+	return localNetDBPaths
 }
 
 func createDefaultConfig(defaultConfigDir string) error {

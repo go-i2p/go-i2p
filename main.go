@@ -86,10 +86,10 @@ func registerRouterFlags() {
 		"Maximum active transport sessions")
 }
 
-// registerNetDbFlags registers NetDb configuration flags.
+// registerNetDbFlags registers NetDB configuration flags.
 func registerNetDbFlags() {
 	defaults := config.Defaults()
-	RootCmd.PersistentFlags().String("netdb.path", config.DefaultNetDbConfig.Path, "Path to the netDb")
+	RootCmd.PersistentFlags().String("netdb.path", config.DefaultNetDBConfig.Path, "Path to the netDb")
 	RootCmd.PersistentFlags().Int("netdb.max-router-infos", defaults.NetDB.MaxRouterInfos,
 		"Maximum RouterInfos to store locally")
 	RootCmd.PersistentFlags().Int("netdb.max-lease-sets", defaults.NetDB.MaxLeaseSets,
@@ -318,7 +318,7 @@ func bindRouterFlagsToViper() {
 	mustBindPFlag("router.max_concurrent_sessions", "router.max-concurrent-sessions")
 }
 
-// bindNetDbFlagsToViper binds NetDb flags to viper configuration.
+// bindNetDbFlagsToViper binds NetDB flags to viper configuration.
 func bindNetDbFlagsToViper() {
 	if err := viper.BindPFlag("netdb.path", RootCmd.PersistentFlags().Lookup("netdb.path")); err != nil {
 		log.WithError(err).WithFields(logger.Fields{
@@ -581,7 +581,7 @@ var configCmd = &cobra.Command{
 			"at":         "configCmd",
 			"phase":      "startup",
 			"reason":     "netdb configuration loaded",
-			"netdb_path": cfg.NetDb.Path,
+			"netdb_path": cfg.NetDB.Path,
 		}).Info("netDb configuration")
 
 		log.WithFields(logger.Fields{
@@ -604,7 +604,7 @@ var configCmd = &cobra.Command{
 				"phase":           "startup",
 				"reason":          "reseed server configured",
 				"index":           i,
-				"url":             server.Url,
+				"url":             server.URL,
 				"su3_fingerprint": server.SU3Fingerprint,
 			}).Info("  reseed server")
 		}
@@ -616,12 +616,12 @@ func debugPrintConfig() {
 	currentConfig := struct {
 		BaseDir    string                  `yaml:"base_dir"`
 		WorkingDir string                  `yaml:"working_dir"`
-		NetDB      *config.NetDbConfig     `yaml:"netdb,omitempty"`
+		NetDB      *config.NetDBConfig     `yaml:"netdb,omitempty"`
 		Bootstrap  *config.BootstrapConfig `yaml:"bootstrap,omitempty"`
 	}{
 		BaseDir:    cfg.BaseDir,
 		WorkingDir: cfg.WorkingDir,
-		NetDB:      cfg.NetDb,
+		NetDB:      cfg.NetDB,
 		Bootstrap:  cfg.Bootstrap,
 	}
 
@@ -894,9 +894,9 @@ func logNetDbPath() {
 		"phase":      "startup",
 		"step":       2,
 		"reason":     "netdb path configured",
-		"netdb_path": routerCfg.NetDb.Path,
+		"netdb_path": routerCfg.NetDB.Path,
 		"source":     "configuration",
-	}).Info("using netDb path: " + routerCfg.NetDb.Path)
+	}).Info("using netDb path: " + routerCfg.NetDB.Path)
 }
 
 // runNetworkPreChecks tests network connectivity and logs a warning on failure.

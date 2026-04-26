@@ -469,7 +469,7 @@ func (s *NTCP2Session) allowInboundMessage(msg i2np.I2NPMessage) bool {
 	}
 	s.logger.WithField("message_type", msg.Type()).Warn("Inbound I2NP rate limit exceeded, closing session")
 	s.setError(oops.Errorf("inbound I2NP rate limit exceeded"))
-	go s.Close()
+	go func() { _ = s.Close() }()
 	return false
 }
 
@@ -518,7 +518,7 @@ func (s *NTCP2Session) handleNonI2NPBlock(block Block) {
 		}).Warn("Received Termination block from peer, closing session")
 		// Close in a goroutine to avoid deadlock: Close() calls wg.Wait(),
 		// and this callback runs inside the receive worker goroutine.
-		go s.Close()
+		go func() { _ = s.Close() }()
 	default:
 		s.logger.WithField("block_type", block.Type).Debug("Received unknown block type")
 	}
@@ -572,7 +572,7 @@ func decompressGzip(data []byte) ([]byte, error) {
 	if err != nil {
 		return nil, oops.Wrapf(err, "gzip reader")
 	}
-	defer r.Close()
+	defer func() { _ = r.Close() }()
 	return io.ReadAll(io.LimitReader(r, maxRouterInfoSize))
 }
 

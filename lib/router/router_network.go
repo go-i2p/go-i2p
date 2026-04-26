@@ -362,7 +362,7 @@ func (r *Router) handleNewConnection(conn net.Conn) {
 
 	defer func() {
 		if rec := recover(); rec != nil {
-			session.Close()
+			_ = session.Close()
 			panic(rec)
 		}
 	}()

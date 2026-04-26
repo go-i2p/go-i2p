@@ -22,17 +22,17 @@ func TestKnownReseedServers_MinimumCount(t *testing.T) {
 
 func TestKnownReseedServers_ValidURLs(t *testing.T) {
 	for i, server := range KnownReseedServers {
-		t.Run(server.Url, func(t *testing.T) {
-			assert.NotEmpty(t, server.Url, "server %d has empty URL", i)
-			assert.True(t, strings.HasPrefix(server.Url, "https://"), "server %d URL should use HTTPS: %s", i, server.Url)
-			assert.True(t, strings.HasSuffix(server.Url, "/"), "server %d URL should end with /: %s", i, server.Url)
+		t.Run(server.URL, func(t *testing.T) {
+			assert.NotEmpty(t, server.URL, "server %d has empty URL", i)
+			assert.True(t, strings.HasPrefix(server.URL, "https://"), "server %d URL should use HTTPS: %s", i, server.URL)
+			assert.True(t, strings.HasSuffix(server.URL, "/"), "server %d URL should end with /: %s", i, server.URL)
 		})
 	}
 }
 
 func TestKnownReseedServers_ValidFingerprints(t *testing.T) {
 	for i, server := range KnownReseedServers {
-		t.Run(server.Url, func(t *testing.T) {
+		t.Run(server.URL, func(t *testing.T) {
 			assert.NotEmpty(t, server.SU3Fingerprint, "server %d has empty SU3Fingerprint", i)
 			assert.True(t, strings.HasSuffix(server.SU3Fingerprint, ".crt"),
 				"server %d SU3Fingerprint should end with .crt: %s", i, server.SU3Fingerprint)
@@ -43,15 +43,15 @@ func TestKnownReseedServers_ValidFingerprints(t *testing.T) {
 func TestKnownReseedServers_NoDuplicateURLs(t *testing.T) {
 	seen := make(map[string]bool)
 	for _, server := range KnownReseedServers {
-		assert.False(t, seen[server.Url], "duplicate URL found: %s", server.Url)
-		seen[server.Url] = true
+		assert.False(t, seen[server.URL], "duplicate URL found: %s", server.URL)
+		seen[server.URL] = true
 	}
 }
 
 func TestKnownReseedServers_ContainsI2pGitOrg(t *testing.T) {
 	found := false
 	for _, server := range KnownReseedServers {
-		if strings.Contains(server.Url, "reseed.i2pgit.org") {
+		if strings.Contains(server.URL, "reseed.i2pgit.org") {
 			found = true
 			break
 		}

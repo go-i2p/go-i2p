@@ -417,266 +417,266 @@ func (di *DeliveryInstructions) appendFragmentSize(result []byte) []byte {
 	return result
 }
 
-// Return if the DeliveryInstructions are of type FirstFragment or FollowOnFragment.
-func (delivery_instructions *DeliveryInstructions) Type() (int, error) {
+// Type returns if the DeliveryInstructions are of type FirstFragment or FollowOnFragment.
+func (di *DeliveryInstructions) Type() (int, error) {
 	log.WithFields(logger.Fields{"at": "Type"}).Debug("Determining DeliveryInstructions type")
-	if delivery_instructions == nil {
+	if di == nil {
 		log.WithFields(logger.Fields{"at": "Type"}).Error("DeliveryInstructions is nil")
 		return 0, oops.Errorf("DeliveryInstructions is nil")
 	}
-	log.WithField("fragment_type", delivery_instructions.fragmentType).Debug("DeliveryInstructions type retrieved")
-	return delivery_instructions.fragmentType, nil
+	log.WithField("fragment_type", di.fragmentType).Debug("DeliveryInstructions type retrieved")
+	return di.fragmentType, nil
 }
 
-// Read the integer stored in the 6-1 bits of a FollowOnFragment's flag, indicating
+// FragmentNumber reads the integer stored in the 6-1 bits of a FollowOnFragment's flag, indicating
 // the fragment number.
-func (delivery_instructions *DeliveryInstructions) FragmentNumber() (int, error) {
+func (di *DeliveryInstructions) FragmentNumber() (int, error) {
 	log.WithFields(logger.Fields{"at": "FragmentNumber"}).Debug("Getting FragmentNumber")
-	if delivery_instructions == nil {
+	if di == nil {
 		log.WithFields(logger.Fields{"at": "FragmentNumber"}).Error("DeliveryInstructions is nil")
 		return 0, oops.Errorf("DeliveryInstructions is nil")
 	}
-	if delivery_instructions.fragmentType != FollowOnFragment {
+	if di.fragmentType != FollowOnFragment {
 		log.WithFields(logger.Fields{"at": "FragmentNumber"}).Error("Fragment Number only exists on FollowOnFragment Delivery Instructions")
 		return 0, oops.Errorf("Fragment Number only exists on FollowOnFragment Delivery Instructions")
 	}
-	log.WithField("fragment_number", delivery_instructions.fragmentNumber).Debug("FragmentNumber retrieved")
-	return delivery_instructions.fragmentNumber, nil
+	log.WithField("fragment_number", di.fragmentNumber).Debug("FragmentNumber retrieved")
+	return di.fragmentNumber, nil
 }
 
-// Read the value of the 0 bit of a FollowOnFragment, which is set to 1 to indicate the
+// LastFollowOnFragment reads the value of the 0 bit of a FollowOnFragment, which is set to 1 to indicate the
 // last fragment.
-func (delivery_instructions *DeliveryInstructions) LastFollowOnFragment() (bool, error) {
+func (di *DeliveryInstructions) LastFollowOnFragment() (bool, error) {
 	log.WithFields(logger.Fields{"at": "LastFollowOnFragment"}).Debug("Checking if this is the LastFollowOnFragment")
-	if delivery_instructions == nil {
+	if di == nil {
 		log.WithFields(logger.Fields{"at": "LastFollowOnFragment"}).Error("DeliveryInstructions is nil")
 		return false, oops.Errorf("DeliveryInstructions is nil")
 	}
-	if delivery_instructions.fragmentType != FollowOnFragment {
+	if di.fragmentType != FollowOnFragment {
 		log.WithFields(logger.Fields{"at": "LastFollowOnFragment"}).Error("Last Fragment only exists for FollowOnFragment Delivery Instructions")
 		return false, oops.Errorf("Last Fragment only exists for FollowOnFragment Delivery Instructions")
 	}
-	log.WithField("is_last", delivery_instructions.lastFragment).Debug("LastFollowOnFragment status determined")
-	return delivery_instructions.lastFragment, nil
+	log.WithField("is_last", di.lastFragment).Debug("LastFollowOnFragment status determined")
+	return di.lastFragment, nil
 }
 
-// Return the delivery type for these DeliveryInstructions, can be of type
+// DeliveryType returns the delivery type for these DeliveryInstructions, can be of type
 // DTLocal, DTTunnel, DTRouter, or DTUnused.
-func (delivery_instructions *DeliveryInstructions) DeliveryType() (byte, error) {
+func (di *DeliveryInstructions) DeliveryType() (byte, error) {
 	log.WithFields(logger.Fields{"at": "DeliveryType"}).Debug("Getting DeliveryType")
-	if delivery_instructions == nil {
+	if di == nil {
 		log.WithFields(logger.Fields{"at": "DeliveryType"}).Error("DeliveryInstructions is nil")
 		return 0, oops.Errorf("DeliveryInstructions is nil")
 	}
-	if delivery_instructions.fragmentType != FirstFragment {
+	if di.fragmentType != FirstFragment {
 		log.WithFields(logger.Fields{"at": "DeliveryType"}).Error("DeliveryType only exists for FirstFragment Delivery Instructions")
 		return 0, oops.Errorf("DeliveryType only exists for FirstFragment Delivery Instructions")
 	}
-	log.WithField("delivery_type", delivery_instructions.deliveryType).Debug("DeliveryType retrieved")
-	return delivery_instructions.deliveryType, nil
+	log.WithField("delivery_type", di.deliveryType).Debug("DeliveryType retrieved")
+	return di.deliveryType, nil
 }
 
-// Check if the delay bit is set.  This feature in unimplemented in the Java router.
-func (delivery_instructions *DeliveryInstructions) HasDelay() (bool, error) {
+// HasDelay checks if the delay bit is set. This feature is unimplemented in the Java router.
+func (di *DeliveryInstructions) HasDelay() (bool, error) {
 	log.WithFields(logger.Fields{"at": "HasDelay"}).Debug("Checking if DeliveryInstructions has delay")
-	if delivery_instructions == nil {
+	if di == nil {
 		log.WithFields(logger.Fields{"at": "HasDelay"}).Error("DeliveryInstructions is nil")
 		return false, oops.Errorf("DeliveryInstructions is nil")
 	}
-	if delivery_instructions.fragmentType != FirstFragment {
+	if di.fragmentType != FirstFragment {
 		log.WithFields(logger.Fields{"at": "HasDelay"}).Error("HasDelay only exists for FirstFragment Delivery Instructions")
 		return false, oops.Errorf("HasDelay only exists for FirstFragment Delivery Instructions")
 	}
-	if delivery_instructions.hasDelay {
+	if di.hasDelay {
 		log.WithFields(logger.Fields{
 			"at":   "(DeliveryInstructions) HasDelay",
 			"info": "this feature is unimplemented in the Java router",
 		}).Warn("DeliveryInstructions found with delay bit set")
 	}
-	log.WithField("has_delay", delivery_instructions.hasDelay).Debug("HasDelay status determined")
-	return delivery_instructions.hasDelay, nil
+	log.WithField("has_delay", di.hasDelay).Debug("HasDelay status determined")
+	return di.hasDelay, nil
 }
 
-// Returns true if the Delivery Instructions are fragmented or false
+// Fragmented returns true if the Delivery Instructions are fragmented or false
 // if the following data contains the entire message
-func (delivery_instructions *DeliveryInstructions) Fragmented() (bool, error) {
+func (di *DeliveryInstructions) Fragmented() (bool, error) {
 	log.WithFields(logger.Fields{"at": "Fragmented"}).Debug("Checking if DeliveryInstructions is fragmented")
-	if delivery_instructions == nil {
+	if di == nil {
 		log.WithFields(logger.Fields{"at": "Fragmented"}).Error("DeliveryInstructions is nil")
 		return false, oops.Errorf("DeliveryInstructions is nil")
 	}
-	if delivery_instructions.fragmentType != FirstFragment {
+	if di.fragmentType != FirstFragment {
 		log.WithFields(logger.Fields{"at": "Fragmented"}).Error("Fragmented only exists for FirstFragment Delivery Instructions")
 		return false, oops.Errorf("Fragmented only exists for FirstFragment Delivery Instructions")
 	}
-	log.WithField("fragmented", delivery_instructions.fragmented).Debug("Fragmented status determined")
-	return delivery_instructions.fragmented, nil
+	log.WithField("fragmented", di.fragmented).Debug("Fragmented status determined")
+	return di.fragmented, nil
 }
 
-// Check if the extended options bit is set.  This feature in unimplemented in the Java router.
-func (delivery_instructions *DeliveryInstructions) HasExtendedOptions() (bool, error) {
+// HasExtendedOptions checks if the extended options bit is set. This feature is unimplemented in the Java router.
+func (di *DeliveryInstructions) HasExtendedOptions() (bool, error) {
 	log.WithFields(logger.Fields{"at": "HasExtendedOptions"}).Debug("Checking if DeliveryInstructions has extended options")
-	if delivery_instructions == nil {
+	if di == nil {
 		log.WithFields(logger.Fields{"at": "HasExtendedOptions"}).Error("DeliveryInstructions is nil")
 		return false, oops.Errorf("DeliveryInstructions is nil")
 	}
-	if delivery_instructions.fragmentType != FirstFragment {
+	if di.fragmentType != FirstFragment {
 		log.WithFields(logger.Fields{"at": "HasExtendedOptions"}).Error("HasExtendedOptions only exists for FirstFragment Delivery Instructions")
 		return false, oops.Errorf("HasExtendedOptions only exists for FirstFragment Delivery Instructions")
 	}
-	if delivery_instructions.hasExtOptions {
+	if di.hasExtOptions {
 		log.WithFields(logger.Fields{
 			"at":   "(DeliveryInstructions) ExtendedOptions",
 			"info": "this feature is unimplemented in the Java router",
 		}).Warn("DeliveryInstructions found with extended_options bit set")
 	}
-	log.WithField("has_extended_options", delivery_instructions.hasExtOptions).Debug("HasExtendedOptions status determined")
-	return delivery_instructions.hasExtOptions, nil
+	log.WithField("has_extended_options", di.hasExtOptions).Debug("HasExtendedOptions status determined")
+	return di.hasExtOptions, nil
 }
 
-// Check if the DeliveryInstructions is of type DTTunnel.
-func (delivery_instructions *DeliveryInstructions) HasTunnelID() (bool, error) {
+// HasTunnelID checks if the DeliveryInstructions is of type DTTunnel.
+func (di *DeliveryInstructions) HasTunnelID() (bool, error) {
 	log.WithFields(logger.Fields{"at": "HasTunnelID"}).Debug("Checking if DeliveryInstructions has TunnelID")
-	if delivery_instructions == nil {
+	if di == nil {
 		log.WithFields(logger.Fields{"at": "HasTunnelID"}).Error("DeliveryInstructions is nil")
 		return false, oops.Errorf("DeliveryInstructions is nil")
 	}
-	if delivery_instructions.fragmentType != FirstFragment {
+	if di.fragmentType != FirstFragment {
 		log.WithFields(logger.Fields{"at": "HasTunnelID"}).Error("HasTunnelID only exists for FirstFragment Delivery Instructions")
 		return false, oops.Errorf("HasTunnelID only exists for FirstFragment Delivery Instructions")
 	}
-	hasTunnelID := delivery_instructions.deliveryType == DTTunnel
+	hasTunnelID := di.deliveryType == DTTunnel
 	log.WithField("has_tunnel_id", hasTunnelID).Debug("HasTunnelID status determined")
 	return hasTunnelID, nil
 }
 
 // HasHash returns true if the DeliveryInstructions contain a hash field, which is present for DTTunnel and DTRouter delivery types.
-func (delivery_instructions *DeliveryInstructions) HasHash() (bool, error) {
+func (di *DeliveryInstructions) HasHash() (bool, error) {
 	log.WithFields(logger.Fields{"at": "HasHash"}).Debug("Checking if DeliveryInstructions has Hash")
-	if delivery_instructions == nil {
+	if di == nil {
 		log.WithFields(logger.Fields{"at": "HasHash"}).Error("DeliveryInstructions is nil")
 		return false, oops.Errorf("DeliveryInstructions is nil")
 	}
-	if delivery_instructions.fragmentType != FirstFragment {
+	if di.fragmentType != FirstFragment {
 		log.WithFields(logger.Fields{"at": "HasHash"}).Error("HasHash only exists for FirstFragment Delivery Instructions")
 		return false, oops.Errorf("HasHash only exists for FirstFragment Delivery Instructions")
 	}
-	hasHash := delivery_instructions.deliveryType == DTTunnel || delivery_instructions.deliveryType == DTRouter
+	hasHash := di.deliveryType == DTTunnel || di.deliveryType == DTRouter
 	log.WithField("has_hash", hasHash).Debug("HasHash status determined")
 	return hasHash, nil
 }
 
-// Return the tunnel ID in this DeliveryInstructions or 0 and an error if the
+// TunnelID returns the tunnel ID in this DeliveryInstructions or 0 and an error if the
 // DeliveryInstructions are not of type DTTunnel.
-func (delivery_instructions *DeliveryInstructions) TunnelID() (tunnel_id uint32, err error) {
+func (di *DeliveryInstructions) TunnelID() (tunnelID uint32, err error) {
 	log.WithFields(logger.Fields{"at": "TunnelID"}).Debug("Getting TunnelID")
-	if delivery_instructions == nil {
+	if di == nil {
 		log.WithFields(logger.Fields{"at": "TunnelID"}).Error("DeliveryInstructions is nil")
 		return 0, oops.Errorf("DeliveryInstructions is nil")
 	}
-	if delivery_instructions.fragmentType != FirstFragment {
+	if di.fragmentType != FirstFragment {
 		log.WithFields(logger.Fields{"at": "TunnelID"}).Error("TunnelID only exists for FirstFragment Delivery Instructions")
 		return 0, oops.Errorf("TunnelID only exists for FirstFragment Delivery Instructions")
 	}
-	if delivery_instructions.deliveryType != DTTunnel {
+	if di.deliveryType != DTTunnel {
 		log.WithFields(logger.Fields{"at": "TunnelID"}).Error("DeliveryInstructions are not of type DTTunnel")
 		return 0, oops.Errorf("DeliveryInstructions are not of type DTTunnel")
 	}
-	log.WithField("tunnel_id", delivery_instructions.tunnelID).Debug("TunnelID retrieved")
-	return delivery_instructions.tunnelID, nil
+	log.WithField("tunnelID", di.tunnelID).Debug("TunnelID retrieved")
+	return di.tunnelID, nil
 }
 
-// Return the hash for these DeliveryInstructions, which varies by hash type.
+// Hash returns the hash for these DeliveryInstructions, which varies by hash type.
 //
 //	If the type is DTTunnel, hash is the SHA256 of the gateway router, if
 //	the type is DTRouter it is the SHA256 of the router.
-func (delivery_instructions *DeliveryInstructions) Hash() (hash common.Hash, err error) {
+func (di *DeliveryInstructions) Hash() (hash common.Hash, err error) {
 	log.WithFields(logger.Fields{"at": "Hash"}).Debug("Getting Hash")
-	if delivery_instructions == nil {
+	if di == nil {
 		log.WithFields(logger.Fields{"at": "Hash"}).Error("DeliveryInstructions is nil")
 		return common.Hash{}, oops.Errorf("DeliveryInstructions is nil")
 	}
-	if delivery_instructions.fragmentType != FirstFragment {
+	if di.fragmentType != FirstFragment {
 		log.WithFields(logger.Fields{"at": "Hash"}).Error("Hash only exists for FirstFragment Delivery Instructions")
 		return common.Hash{}, oops.Errorf("Hash only exists for FirstFragment Delivery Instructions")
 	}
-	if delivery_instructions.deliveryType != DTTunnel && delivery_instructions.deliveryType != DTRouter {
+	if di.deliveryType != DTTunnel && di.deliveryType != DTRouter {
 		log.WithFields(logger.Fields{"at": "Hash"}).Error("No Hash on DeliveryInstructions not of type DTTunnel or DTRouter")
 		return common.Hash{}, oops.Errorf("No Hash on DeliveryInstructions not of type DTTunnel or DTRouter")
 	}
-	log.WithField("hash", delivery_instructions.hash).Debug("Hash retrieved")
-	return delivery_instructions.hash, nil
+	log.WithField("hash", di.hash).Debug("Hash retrieved")
+	return di.hash, nil
 }
 
 // Delay returns the delay factor for these DeliveryInstructions, or an error if the instructions are not a FirstFragment or have no delay set.
-func (delivery_instructions *DeliveryInstructions) Delay() (delay_factor DelayFactor, err error) {
+func (di *DeliveryInstructions) Delay() (delayFactor DelayFactor, err error) {
 	log.WithFields(logger.Fields{"at": "Delay"}).Debug("Getting Delay")
-	if delivery_instructions == nil {
+	if di == nil {
 		log.WithFields(logger.Fields{"at": "Delay"}).Error("DeliveryInstructions is nil")
 		return 0, oops.Errorf("DeliveryInstructions is nil")
 	}
-	if delivery_instructions.fragmentType != FirstFragment {
+	if di.fragmentType != FirstFragment {
 		log.WithFields(logger.Fields{"at": "Delay"}).Error("Delay only exists for FirstFragment Delivery Instructions")
 		return 0, oops.Errorf("Delay only exists for FirstFragment Delivery Instructions")
 	}
-	if !delivery_instructions.hasDelay {
+	if !di.hasDelay {
 		return 0, nil
 	}
-	if delivery_instructions.deliveryType != DTTunnel && delivery_instructions.deliveryType != DTRouter {
+	if di.deliveryType != DTTunnel && di.deliveryType != DTRouter {
 		log.WithFields(logger.Fields{
 			"at": "(DeliveryInstructions) Delay",
 		}).Warn("Delay not present on DeliveryInstructions not of type DTTunnel or DTRouter")
 	}
-	log.WithField("delay_factor", delivery_instructions.delay).Debug("Delay factor retrieved")
-	return delivery_instructions.delay, nil
+	log.WithField("delayFactor", di.delay).Debug("Delay factor retrieved")
+	return di.delay, nil
 }
 
-// Return the I2NP Message ID or 0 and an error if the data is not available for this
+// MessageID returns the I2NP Message ID or 0 and an error if the data is not available for this
 // DeliveryInstructions.
-func (delivery_instructions *DeliveryInstructions) MessageID() (msgid uint32, err error) {
+func (di *DeliveryInstructions) MessageID() (msgid uint32, err error) {
 	log.WithFields(logger.Fields{"at": "MessageID"}).Debug("Getting MessageID")
-	if delivery_instructions == nil {
+	if di == nil {
 		log.WithFields(logger.Fields{"at": "MessageID"}).Error("DeliveryInstructions is nil")
 		return 0, oops.Errorf("DeliveryInstructions is nil")
 	}
 	// MessageID is present for both FirstFragment (if fragmented) and FollowOnFragment
-	if delivery_instructions.fragmentType == FirstFragment && !delivery_instructions.fragmented {
+	if di.fragmentType == FirstFragment && !di.fragmented {
 		log.WithFields(logger.Fields{"at": "MessageID"}).Error("No Message ID for non-fragmented FirstFragment Delivery Instructions")
 		return 0, oops.Errorf("No Message ID for non-fragmented FirstFragment Delivery Instructions")
 	}
-	log.WithField("message_id", delivery_instructions.messageID).Debug("MessageID retrieved")
-	return delivery_instructions.messageID, nil
+	log.WithField("message_id", di.messageID).Debug("MessageID retrieved")
+	return di.messageID, nil
 }
 
-// Return the Extended Options data if present, or an error if not present.  Extended Options in unimplemented
+// ExtendedOptions returns the Extended Options data if present, or an error if not present. Extended Options is unimplemented
 // in the Java router and the presence of extended options will generate a warning.
-func (delivery_instructions *DeliveryInstructions) ExtendedOptions() (data []byte, err error) {
+func (di *DeliveryInstructions) ExtendedOptions() (data []byte, err error) {
 	log.WithFields(logger.Fields{"at": "ExtendedOptions"}).Debug("Getting ExtendedOptions")
-	if delivery_instructions == nil {
+	if di == nil {
 		log.WithFields(logger.Fields{"at": "ExtendedOptions"}).Error("DeliveryInstructions is nil")
 		return nil, oops.Errorf("DeliveryInstructions is nil")
 	}
-	if delivery_instructions.fragmentType != FirstFragment {
+	if di.fragmentType != FirstFragment {
 		log.WithFields(logger.Fields{"at": "ExtendedOptions"}).Error("ExtendedOptions only exists for FirstFragment Delivery Instructions")
 		return nil, oops.Errorf("ExtendedOptions only exists for FirstFragment Delivery Instructions")
 	}
-	if !delivery_instructions.hasExtOptions {
+	if !di.hasExtOptions {
 		log.WithFields(logger.Fields{"at": "ExtendedOptions"}).Error("DeliveryInstruction does not have the ExtendedOptions flag set")
 		return nil, oops.Errorf("DeliveryInstruction does not have the ExtendedOptions flag set")
 	}
-	log.WithField("extended_options_length", len(delivery_instructions.extendedOpts)).Debug("Extended Options retrieved")
-	return delivery_instructions.extendedOpts, nil
+	log.WithField("extended_options_length", len(di.extendedOpts)).Debug("Extended Options retrieved")
+	return di.extendedOpts, nil
 }
 
-// Return the size of the associated I2NP fragment and an error if the data is unavailable.
-func (delivery_instructions *DeliveryInstructions) FragmentSize() (frag_size uint16, err error) {
+// FragmentSize returns the size of the associated I2NP fragment and an error if the data is unavailable.
+func (di *DeliveryInstructions) FragmentSize() (fragSize uint16, err error) {
 	log.WithFields(logger.Fields{"at": "FragmentSize"}).Debug("Getting FragmentSize")
-	if delivery_instructions == nil {
+	if di == nil {
 		log.WithFields(logger.Fields{"at": "FragmentSize"}).Error("DeliveryInstructions is nil")
 		return 0, oops.Errorf("DeliveryInstructions is nil")
 	}
-	log.WithField("fragment_size", delivery_instructions.fragmentSize).Debug("FragmentSize retrieved")
-	return delivery_instructions.fragmentSize, nil
+	log.WithField("fragment_size", di.fragmentSize).Debug("FragmentSize retrieved")
+	return di.fragmentSize, nil
 }
 
 // Legacy helper functions have been removed - no longer needed with struct-based implementation

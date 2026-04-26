@@ -30,7 +30,7 @@ func loadTimezoneCountryMap() map[string]string {
 		log.WithError(err).Warn("Failed to open zone_to_country.txt")
 		return m
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {

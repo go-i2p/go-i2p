@@ -34,9 +34,8 @@ const (
 	FileTypeMetaLeaseSet      = 7
 )
 
-// netdb entry
-// wraps a router info, lease set, lease set2, encrypted lease set, or meta lease set
-// and provides serialization
+// Entry is a netdb entry that wraps a router info, lease set, lease set2, encrypted lease set, or meta lease set
+// and provides serialization.
 type Entry struct {
 	*router_info.RouterInfo
 	*lease_set.LeaseSet

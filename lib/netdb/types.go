@@ -15,16 +15,14 @@ type LeaseSetEntry struct {
 	Entry Entry       // The actual LeaseSet entry (can be LeaseSet, LeaseSet2, EncryptedLeaseSet, or MetaLeaseSet)
 }
 
-// Moved from: netdb.go
-// resolves unknown RouterInfos given the hash of their RouterIdentity
+// Resolver resolves unknown RouterInfos given the hash of their RouterIdentity.
 type Resolver interface {
 	// resolve a router info by hash
 	// return a chan that yields the found RouterInfo or nil if it could not be found after timeout
 	Lookup(hash common.Hash, timeout time.Duration) (*router_info.RouterInfo, error)
 }
 
-// Moved from: netdb.go
-// i2p network database, storage of i2p RouterInfos
+// NetworkDatabase is the I2P network database for storing RouterInfos.
 type NetworkDatabase interface {
 	// obtain a RouterInfo by its hash locally
 	// return a channel that yields the RouterInfo if found locally

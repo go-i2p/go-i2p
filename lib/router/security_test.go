@@ -109,7 +109,7 @@ func makeHash(fill byte) common.Hash {
 // 8. Session monitors
 func TestStartupSequence_InitializationOrder(t *testing.T) {
 	cfg := newTestConfig(t)
-	cfg.NetDb.Path = cfg.WorkingDir + "/netdb"
+	cfg.NetDB.Path = cfg.WorkingDir + "/netdb"
 	router := newTestRouter(t, cfg)
 
 	// Verify pre-start state
@@ -166,7 +166,7 @@ func TestStartupSequence_DoubleStart(t *testing.T) {
 // TestShutdownSequence_GracefulCleanup verifies that all subsystems are properly stopped
 func TestShutdownSequence_GracefulCleanup(t *testing.T) {
 	cfg := newTestConfig(t)
-	cfg.NetDb.Path = cfg.WorkingDir + "/netdb"
+	cfg.NetDB.Path = cfg.WorkingDir + "/netdb"
 	cfg.Bootstrap.BootstrapType = "local"
 
 	router, err := CreateRouter(cfg)
@@ -621,7 +621,7 @@ func TestRouterAccessInterface_GetMethods(t *testing.T) {
 func TestErrorRecovery_NetDBFailure(t *testing.T) {
 	cfg := config.DefaultRouterConfig()
 	cfg.WorkingDir = "/nonexistent/path/that/does/not/exist"
-	cfg.NetDb.Path = "/nonexistent/path/netdb"
+	cfg.NetDB.Path = "/nonexistent/path/netdb"
 	cfg.I2CP.Enabled = false
 	cfg.I2PControl.Enabled = false
 

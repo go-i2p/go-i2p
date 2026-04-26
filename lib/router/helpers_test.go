@@ -113,7 +113,7 @@ func createTestRouterConfig(tmpDir string) *config.RouterConfig {
 		I2CP: &config.I2CPConfig{
 			Enabled: false,
 		},
-		NetDb: &config.NetDbConfig{
+		NetDB: &config.NetDBConfig{
 			Path: tmpDir + "/netdb",
 		},
 		Bootstrap: &config.BootstrapConfig{

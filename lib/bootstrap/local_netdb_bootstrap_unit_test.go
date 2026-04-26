@@ -143,7 +143,7 @@ func TestNewLocalNetDbBootstrap_UsesCustomPaths(t *testing.T) {
 	customPaths := []string{"/custom/path/1", "/custom/path/2"}
 	cfg := &config.BootstrapConfig{
 		LowPeerThreshold: testLowPeerThreshold,
-		LocalNetDbPaths:  customPaths,
+		LocalNetDBPaths:  customPaths,
 	}
 
 	lb := NewLocalNetDbBootstrap(cfg)

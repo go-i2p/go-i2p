@@ -80,14 +80,14 @@ func FrameI2NPMessage(msg i2np.I2NPMessage) ([]byte, error) {
 	return framedMessage, nil
 }
 
-// Unframe I2NP messages from NTCP2 data stream
+// UnframeI2NPMessage unframes I2NP messages from an NTCP2 data stream.
 func UnframeI2NPMessage(conn net.Conn) (i2np.I2NPMessage, error) {
 	// Read the next message from the connection
 	unframer := NewI2NPUnframer(conn)
 	return unframer.ReadNextMessage()
 }
 
-// Stream-based unframing for continuous reading
+// I2NPUnframer provides stream-based unframing for continuous reading.
 type I2NPUnframer struct {
 	conn           net.Conn
 	bytesRead      int // Track bytes read in last operation

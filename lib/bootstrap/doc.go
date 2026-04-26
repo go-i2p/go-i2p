@@ -1,4 +1,4 @@
-// provides generic interfaces for initial bootstrap into network and network reseeding
+// Package bootstrap provides generic interfaces for initial bootstrap into network and network reseeding
 //
 // # RouterInfo Validation
 //

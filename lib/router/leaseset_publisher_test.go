@@ -19,7 +19,7 @@ func setupTestRouter(t *testing.T) *Router {
 
 	cfg := &config.RouterConfig{
 		WorkingDir: tempDir,
-		NetDb: &config.NetDbConfig{
+		NetDB: &config.NetDBConfig{
 			Path: tempDir + "/netdb",
 		},
 	}

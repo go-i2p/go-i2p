@@ -6,16 +6,15 @@ import (
 	"github.com/go-i2p/logger"
 )
 
-// Moved from: kad.go
-// NewKademliaResolver creates a new resolver that stores result into a NetworkDatabase and uses a tunnel pool for the lookup
-func NewKademliaResolver(netDb NetworkDatabase, pool *tunnel.Pool) (r Resolver) {
-	if pool != nil && netDb != nil {
+// NewKademliaResolver creates a new resolver that stores result into a NetworkDatabase and uses a tunnel pool for the lookup.
+func NewKademliaResolver(netDB NetworkDatabase, pool *tunnel.Pool) (r Resolver) {
+	if pool != nil && netDB != nil {
 		log.WithFields(logger.Fields{
 			"at":     "NewKademliaResolver",
 			"reason": "initialization",
 		}).Debug("creating Kademlia resolver")
 		r = &KademliaResolver{
-			NetworkDatabase: netDb,
+			NetworkDatabase: netDB,
 			pool:            pool,
 			responseHandler: NewLookupResponseHandler(),
 		}
@@ -23,7 +22,7 @@ func NewKademliaResolver(netDb NetworkDatabase, pool *tunnel.Pool) (r Resolver) 
 		log.WithFields(logger.Fields{
 			"at":     "NewKademliaResolver",
 			"reason": "nil_dependencies",
-		}).Warn("cannot create resolver: pool or netDb is nil")
+		}).Warn("cannot create resolver: pool or netDB is nil")
 	}
 	return r
 }
@@ -32,16 +31,16 @@ func NewKademliaResolver(netDb NetworkDatabase, pool *tunnel.Pool) (r Resolver) 
 // This enables the resolver to send DatabaseLookup messages to peers and receive responses.
 //
 // Parameters:
-//   - netDb: The network database to store discovered RouterInfos
+//   - netDB: The network database to store discovered RouterInfos
 //   - pool: The tunnel pool for sending messages (used for privacy)
 //   - transport: The transport interface for sending DatabaseLookup messages
 //   - ourHash: Our router's identity hash for constructing lookup messages
-func NewKademliaResolverWithTransport(netDb NetworkDatabase, pool *tunnel.Pool, transport LookupTransport, ourHash common.Hash) *KademliaResolver {
-	if netDb == nil {
+func NewKademliaResolverWithTransport(netDB NetworkDatabase, pool *tunnel.Pool, transport LookupTransport, ourHash common.Hash) *KademliaResolver {
+	if netDB == nil {
 		log.WithFields(logger.Fields{
 			"at":     "NewKademliaResolverWithTransport",
 			"reason": "nil_netdb",
-		}).Warn("cannot create resolver: netDb is nil")
+		}).Warn("cannot create resolver: netDB is nil")
 		return nil
 	}
 
@@ -53,7 +52,7 @@ func NewKademliaResolverWithTransport(netDb NetworkDatabase, pool *tunnel.Pool, 
 	}).Debug("creating Kademlia resolver with transport")
 
 	return &KademliaResolver{
-		NetworkDatabase: netDb,
+		NetworkDatabase: netDB,
 		pool:            pool,
 		transport:       transport,
 		ourHash:         ourHash,

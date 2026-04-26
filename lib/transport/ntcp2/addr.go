@@ -333,7 +333,7 @@ func SupportsNTCP2(routerInfo *router_info.RouterInfo) bool {
 	return false
 }
 
-// Convert net.Addr to NTCP2Addr
+// WrapNTCP2Addr converts a net.Addr to NTCP2Addr.
 func WrapNTCP2Addr(addr net.Addr, routerHash data.Hash) (*ntcp2.NTCP2Addr, error) {
 	if ntcp2Addr, ok := addr.(*ntcp2.NTCP2Addr); ok {
 		return ntcp2Addr, nil

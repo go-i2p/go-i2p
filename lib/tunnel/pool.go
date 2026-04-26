@@ -892,7 +892,6 @@ func (p *Pool) extractAndMarkFailedPeers(result *BuildTunnelResult) []common.Has
 	return result.PeerHashes
 }
 
-// FIX #5: Failed peer tracking to avoid retry loops
 // MarkPeerFailed records that a peer failed to establish a connection.
 // This peer will be avoided for a cooldown period to prevent wasted retry attempts.
 // If a PeerTracker is configured, the failure is also reported for reputation tracking.

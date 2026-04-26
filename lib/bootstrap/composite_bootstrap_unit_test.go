@@ -11,7 +11,7 @@ import (
 func TestCompositeBootstrapBehavior(t *testing.T) {
 	cb := newTestCompositeBootstrap(t, "auto", "", []*config.ReseedConfig{
 		{
-			Url:            testReseedServerURL,
+			URL:            testReseedServerURL,
 			SU3Fingerprint: testReseedFingerprint,
 		},
 	})
