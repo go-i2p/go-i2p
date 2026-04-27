@@ -138,6 +138,8 @@ func (h *GetRateHandler) resolveStatName(statName interface{}) float64 {
 		return bw.OutboundRate
 	case "bw.receiveBps":
 		return bw.InboundRate
+	case "bw.combined":
+		return bw.InboundRate + bw.OutboundRate
 	// Participating tunnels (used with different periods for avg/hourAvg)
 	case "tunnel.participatingTunnels":
 		return float64(ri.ParticipatingTunnels)
@@ -260,18 +262,27 @@ func (h *RouterInfoHandler) Handle(ctx context.Context, params json.RawMessage) 
 }
 
 // getStatusCode converts running status to I2PControl status code.
-// Status codes:
-//   - 0: OK (running normally)
-//   - 1: Testing
-//   - 2: Firewalled
-//   - 3: Hidden
-//   - 4: Warning
-//   - 5: Error
+// Status codes defined by the I2PControl spec:
+//   - 0:  OK (running normally)
+//   - 1:  TESTING
+//   - 2:  FIREWALLED
+//   - 3:  HIDDEN
+//   - 4:  WARN_FIREWALLED_AND_FAST
+//   - 5:  WARN_FIREWALLED_AND_FLOODFILL
+//   - 6:  WARN_FIREWALLED_WITH_INBOUND_TCP
+//   - 7:  WARN_FIREWALLED_WITH_UDP_DISABLED
+//   - 8:  ERROR_I2CP
+//   - 9:  ERROR_CLOCK_SKEW
+//   - 10: ERROR_PRIVATE_TCP_ADDRESS
+//   - 11: ERROR_SYMMETRIC_NAT
+//   - 12: ERROR_UDP_PORT_IN_USE
+//   - 13: ERROR_NO_ACTIVE_PEERS_CHECK_CONNECTION_AND_FIREWALL
+//   - 14: ERROR_CLOCK_SKEW_NOT_ENOUGH_ACTIVE_PEERS
 func getStatusCode(running bool) int {
 	if running {
 		return 0 // OK
 	}
-	return 5 // Error (not running)
+	return 8 // ERROR_I2CP — generic connection/IPC error when router is not running
 }
 
 // RouterManagerHandler implements the RouterManager RPC method.
@@ -366,7 +377,7 @@ func (h *RouterManagerHandler) handleShutdown(req, result map[string]interface{}
 			h.RouterControl.Stop()
 			log.WithFields(logger.Fields{"at": "handleShutdown"}).Info("Router shutdown completed via I2PControl")
 		}()
-		result["Shutdown"] = "initiated"
+		result["Shutdown"] = nil
 	}
 }
 
@@ -386,7 +397,7 @@ func (h *RouterManagerHandler) handleRestart(req, result map[string]interface{})
 			h.RouterControl.Stop()
 			log.WithFields(logger.Fields{"at": "handleRestart"}).Info("Router restart/stop completed via I2PControl")
 		}()
-		result["Restart"] = "initiated (shutdown only — external supervisor must restart the process)"
+		result["Restart"] = nil
 	}
 }
 
@@ -426,7 +437,7 @@ func (h *RouterManagerHandler) handleShutdownGraceful(req, result map[string]int
 			log.WithFields(logger.Fields{"at": "handleShutdownGraceful"}).Info("ShutdownGraceful requested via I2PControl")
 			h.RouterControl.Stop()
 		}()
-		result["ShutdownGraceful"] = "initiated"
+		result["ShutdownGraceful"] = nil
 	}
 }
 
@@ -446,7 +457,7 @@ func (h *RouterManagerHandler) handleRestartGraceful(req, result map[string]inte
 			log.WithFields(logger.Fields{"at": "handleRestartGraceful"}).Info("RestartGraceful requested via I2PControl (stop only; supervisor must restart)")
 			h.RouterControl.Stop()
 		}()
-		result["RestartGraceful"] = "initiated"
+		result["RestartGraceful"] = nil
 	}
 }
 
@@ -463,10 +474,10 @@ func (h *RouterManagerHandler) handleFindUpdates(req, result map[string]interfac
 
 // handleUpdate responds to the Update RouterManager operation.
 // go-i2p does not support in-process updates; the operation is acknowledged
-// but no action is taken.
+// per the spec (null result) but no action is taken.
 func (h *RouterManagerHandler) handleUpdate(req, result map[string]interface{}) {
 	if _, ok := req["Update"]; ok {
-		result["Update"] = "not available: go-i2p does not support in-process updates"
+		result["Update"] = nil
 	}
 }
 
@@ -538,9 +549,8 @@ func (h *NetworkSettingHandler) buildAvailableSettings(netConfig NetworkConfig) 
 		// limit; return 0 so the client gets a valid value.
 		"i2p.router.net.bw.share": 0,
 
-		// UPnP — not implemented; nil signals "disabled" to go-i2pcontrol
-		// (the client does a nil-check before type-asserting).
-		"i2p.router.net.upnp":     nil,
+		// UPnP — not implemented; return false (spec type: bool)
+		"i2p.router.net.upnp":     false,
 		"i2p.router.upnp.enabled": false,
 	}
 }
