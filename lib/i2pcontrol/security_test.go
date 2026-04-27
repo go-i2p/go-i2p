@@ -248,7 +248,7 @@ func TestAuthorizationInvalidTokenRejected(t *testing.T) {
 
 	assert.NotNil(t, rpcResp.Error, "Expected error for invalid token")
 	if rpcResp.Error != nil {
-		assert.Equal(t, ErrCodeAuthRequired, rpcResp.Error.Code)
+		assert.Equal(t, ErrCodeTokenNotExist, rpcResp.Error.Code)
 	}
 }
 
@@ -844,11 +844,17 @@ func TestRPCErrorCodesCorrect(t *testing.T) {
 	assert.Equal(t, -32602, ErrCodeInvalidParams)
 	assert.Equal(t, -32603, ErrCodeInternalError)
 
-	// Implementation-defined codes should be in -32000 to -32099 range
-	implCodes := []int{ErrCodeAuthRequired, ErrCodeAuthFailed, ErrCodeNotImpl}
+	// Implementation-defined codes should be in -32001 to -32099 range
+	implCodes := []int{
+		ErrCodeAuthFailed,
+		ErrCodeAuthRequired,
+		ErrCodeTokenNotExist,
+		ErrCodeTokenExpired,
+		ErrCodeNotImpl,
+	}
 	for _, code := range implCodes {
-		assert.True(t, code >= -32099 && code <= -32000,
-			"Implementation code %d not in range -32099 to -32000", code)
+		assert.True(t, code >= -32099 && code <= -32001,
+			"Implementation code %d not in range -32099 to -32001", code)
 	}
 
 	t.Logf("Standard codes verified: %v", standardCodes)

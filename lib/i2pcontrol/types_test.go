@@ -340,9 +340,11 @@ func TestErrorCodes(t *testing.T) {
 		{"MethodNotFound", ErrCodeMethodNotFound, -32601},
 		{"InvalidParams", ErrCodeInvalidParams, -32602},
 		{"InternalError", ErrCodeInternalError, -32603},
-		{"AuthRequired", ErrCodeAuthRequired, -32000},
 		{"AuthFailed", ErrCodeAuthFailed, -32001},
-		{"NotImplemented", ErrCodeNotImpl, -32002},
+		{"AuthRequired", ErrCodeAuthRequired, -32002},
+		{"TokenNotExist", ErrCodeTokenNotExist, -32003},
+		{"TokenExpired", ErrCodeTokenExpired, -32004},
+		{"NotImplemented", ErrCodeNotImpl, -32099},
 	}
 
 	for _, tt := range tests {

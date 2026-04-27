@@ -287,8 +287,8 @@ func TestEchoHandler(t *testing.T) {
 		if resp.Error == nil {
 			t.Fatal("Expected error for missing token")
 		}
-		if resp.Error.Code != ErrCodeInvalidParams {
-			t.Errorf("Expected ErrCodeInvalidParams, got %d", resp.Error.Code)
+		if resp.Error.Code != ErrCodeAuthRequired {
+			t.Errorf("Expected ErrCodeAuthRequired, got %d", resp.Error.Code)
 		}
 	})
 
@@ -301,8 +301,8 @@ func TestEchoHandler(t *testing.T) {
 		if resp.Error == nil {
 			t.Fatal("Expected error for invalid token")
 		}
-		if resp.Error.Code != ErrCodeAuthRequired {
-			t.Errorf("Expected ErrCodeAuthRequired, got %d", resp.Error.Code)
+		if resp.Error.Code != ErrCodeTokenNotExist {
+			t.Errorf("Expected ErrCodeTokenNotExist, got %d", resp.Error.Code)
 		}
 	})
 }
