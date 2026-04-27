@@ -62,6 +62,16 @@ func (s *Server) handleMessage(conn net.Conn, msg *Message, sessionPtr **Session
 	case MessageTypeHostLookup:
 		return s.handleHostLookup(conn, msg)
 
+	// Legacy I2CP message types deprecated in v0.9.67. Payload formats differ
+	// from their modern equivalents (38/39) so a transparent shim is not safe.
+	// Return an explicit error so old clients can be updated.
+	case MessageTypeDestLookup:
+		log.WithFields(logger.Fields{
+			"at":      "i2cp.Server.handleMessage",
+			"msgType": MessageTypeName(msg.Type),
+		}).Warn("legacy DestLookup (type 34) received; use HostLookup (type 38)")
+		return nil, oops.Errorf("legacy message type %d (DestLookup) not supported; use HostLookup (type 38)", msg.Type)
+
 	case MessageTypeBlindingInfo:
 		return s.handleBlindingInfo(msg, sessionPtr)
 

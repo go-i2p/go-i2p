@@ -207,8 +207,10 @@ func TestRouterInfoHandler_BandwidthFields(t *testing.T) {
 		assert.Contains(t, resultMap, field)
 	}
 
+	// NC-3: .1s keys now return the 1-second samples from GetBandwidthRates1s (mock: 0, 512)
+	// .15s keys return the 15-second rolling averages from GetBandwidthRates (mock: 0, 1024)
 	assert.Equal(t, 0.0, resultMap["i2p.router.net.bw.inbound.1s"])
-	assert.Equal(t, 1024.0, resultMap["i2p.router.net.bw.outbound.1s"])
+	assert.Equal(t, 512.0, resultMap["i2p.router.net.bw.outbound.1s"])
 }
 
 // Test RouterManager Handler
@@ -288,10 +290,11 @@ func TestNetworkSettingHandler_AllSettings(t *testing.T) {
 
 	resultMap := result.(map[string]interface{})
 
-	assert.Equal(t, 12345, resultMap["i2p.router.net.ntcp.port"])
+	// NC-4: all NetworkSetting read responses are strings per spec.
+	assert.Equal(t, "12345", resultMap["i2p.router.net.ntcp.port"])
 	assert.Equal(t, "127.0.0.1", resultMap["i2p.router.net.ntcp.hostname"])
-	assert.Equal(t, 1024, resultMap["i2p.router.bandwidth.in"])
-	assert.Equal(t, 2048, resultMap["i2p.router.bandwidth.out"])
+	assert.Equal(t, "1024", resultMap["i2p.router.bandwidth.in"])
+	assert.Equal(t, "2048", resultMap["i2p.router.bandwidth.out"])
 }
 
 func TestNetworkSettingHandler_DefaultSettings(t *testing.T) {
@@ -322,7 +325,8 @@ func TestNetworkSettingHandler_DefaultSettings(t *testing.T) {
 		assert.Contains(t, resultMap, field)
 	}
 
-	assert.Equal(t, 9999, resultMap["i2p.router.net.ntcp.port"])
+	// NC-4: port and hostname returned as strings.
+	assert.Equal(t, "9999", resultMap["i2p.router.net.ntcp.port"])
 	assert.Equal(t, "0.0.0.0", resultMap["i2p.router.net.ntcp.hostname"])
 }
 
@@ -349,9 +353,8 @@ func TestNetworkSettingHandler_WriteOperation(t *testing.T) {
 	require.NoError(t, err)
 
 	resultMap := result.(map[string]interface{})
-	// Port is normalized to int by applySettingChange so it round-trips
-	// through viper as an integer rather than a float64.
-	assert.Equal(t, 12345, resultMap["i2p.router.net.ntcp.port"])
+	// NC-4: applySettingChange now stringifies all values per spec.
+	assert.Equal(t, "12345", resultMap["i2p.router.net.ntcp.port"])
 	assert.Equal(t, true, resultMap["SettingsSaved"])
 	assert.Equal(t, true, resultMap["RestartNeeded"])
 }
@@ -373,8 +376,8 @@ func TestNetworkSettingHandler_HostnameAndBandwidth(t *testing.T) {
 		name             string
 		config           NetworkConfig
 		wantHostname     string
-		wantBandwidthIn  int
-		wantBandwidthOut int
+		wantBandwidthIn  string
+		wantBandwidthOut string
 	}{
 		{
 			name: "IPv4 with bandwidth limits",
@@ -386,8 +389,8 @@ func TestNetworkSettingHandler_HostnameAndBandwidth(t *testing.T) {
 				BandwidthLimitOut: 1000,
 			},
 			wantHostname:     "192.168.1.1",
-			wantBandwidthIn:  500,
-			wantBandwidthOut: 1000,
+			wantBandwidthIn:  "500",
+			wantBandwidthOut: "1000",
 		},
 		{
 			name: "IPv6 with unlimited bandwidth",
@@ -399,8 +402,8 @@ func TestNetworkSettingHandler_HostnameAndBandwidth(t *testing.T) {
 				BandwidthLimitOut: 0,
 			},
 			wantHostname:     "::1",
-			wantBandwidthIn:  0,
-			wantBandwidthOut: 0,
+			wantBandwidthIn:  "0",
+			wantBandwidthOut: "0",
 		},
 	}
 
@@ -421,30 +424,9 @@ func TestNetworkSettingHandler_HostnameAndBandwidth(t *testing.T) {
 			require.NoError(t, err)
 
 			resultMap := result.(map[string]interface{})
-
-			assert.Equal(t, tt.wantHostname, resultMap["i2p.router.net.ntcp.hostname"])
+			// NC-4: hostname stays as string; bandwidth values now returned as strings.			assert.Equal(t, tt.wantHostname, resultMap["i2p.router.net.ntcp.hostname"])
 			assert.Equal(t, tt.wantBandwidthIn, resultMap["i2p.router.bandwidth.in"])
 			assert.Equal(t, tt.wantBandwidthOut, resultMap["i2p.router.bandwidth.out"])
-		})
-	}
-}
-
-// Test getStatusCode helper
-
-func TestGetStatusCode(t *testing.T) {
-	tests := []struct {
-		name    string
-		running bool
-		want    int
-	}{
-		{"running", true, 0},
-		{"not running", false, 8},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := getStatusCode(tt.running)
-			assert.Equal(t, tt.want, got)
 		})
 	}
 }
@@ -764,10 +746,14 @@ func TestRouterManagerHandler_FindUpdates(t *testing.T) {
 // accepted without error (previously returned ErrCodeInvalidParams).
 func TestRouterManagerHandler_RestartGraceful(t *testing.T) {
 	mockControl := &mockRouterControl{}
-	handler := NewRouterManagerHandler(context.Background(), &sync.WaitGroup{}, mockControl)
+	wg := &sync.WaitGroup{}
+	handler := NewRouterManagerHandler(context.Background(), wg, mockControl)
 
 	result, err := handler.Handle(context.Background(), json.RawMessage(`{"RestartGraceful":null}`))
 	require.NoError(t, err)
+
+	// Wait for the background goroutine to finish before the test exits.
+	wg.Wait()
 
 	m := result.(map[string]interface{})
 	assert.Contains(t, m, "RestartGraceful")
@@ -777,10 +763,14 @@ func TestRouterManagerHandler_RestartGraceful(t *testing.T) {
 // accepted without error (previously returned ErrCodeInvalidParams).
 func TestRouterManagerHandler_ShutdownGraceful(t *testing.T) {
 	mockControl := &mockRouterControl{}
-	handler := NewRouterManagerHandler(context.Background(), &sync.WaitGroup{}, mockControl)
+	wg := &sync.WaitGroup{}
+	handler := NewRouterManagerHandler(context.Background(), wg, mockControl)
 
 	result, err := handler.Handle(context.Background(), json.RawMessage(`{"ShutdownGraceful":null}`))
 	require.NoError(t, err)
+
+	// Wait for the background goroutine to finish before the test exits.
+	wg.Wait()
 
 	m := result.(map[string]interface{})
 	assert.Contains(t, m, "ShutdownGraceful")
@@ -810,10 +800,55 @@ func TestNetworkSettingHandler_SpecBwFields(t *testing.T) {
 	require.NoError(t, err)
 
 	m := result.(map[string]interface{})
-	assert.Equal(t, 768, m["i2p.router.net.bw.in"])
-	assert.Equal(t, 1536, m["i2p.router.net.bw.out"])
+	// NC-4: bandwidth values returned as strings per spec.
+	assert.Equal(t, "768", m["i2p.router.net.bw.in"])
+	assert.Equal(t, "1536", m["i2p.router.net.bw.out"])
 	// bw.share is present (value 0 — not enforced by go-i2p)
 	assert.Contains(t, m, "i2p.router.net.bw.share")
-	// upnp is present (nil — not implemented)
+	// upnp is present
 	assert.Contains(t, m, "i2p.router.net.upnp")
+}
+
+// TestAdvancedSettingsHandler_WriteWrapsInSetKey verifies that write responses
+// are wrapped in a top-level "Set" key per the I2PControl spec (NC-5).
+func TestAdvancedSettingsHandler_WriteWrapsInSetKey(t *testing.T) {
+	handler := NewAdvancedSettingsHandler()
+
+	params := json.RawMessage(`{"Set": {"someKey": "someValue"}}`)
+	result, err := handler.Handle(context.Background(), params)
+	require.NoError(t, err)
+
+	outer, ok := result.(map[string]interface{})
+	require.True(t, ok, "result should be map[string]interface{}")
+	_, hasSet := outer["Set"]
+	assert.True(t, hasSet, "write response must contain top-level 'Set' key per spec")
+}
+
+// TestI2PControlHandler_PortAndAddressNullRead verifies that null-value requests
+// for i2pcontrol.port and i2pcontrol.address return the current configured values (M-1).
+func TestI2PControlHandler_PortAndAddressNullRead(t *testing.T) {
+	authMgr := &mockAuthManager{password: "testpass"}
+	handler := NewI2PControlHandler(authMgr, &config.I2PControlConfig{})
+
+	params := json.RawMessage(`{"i2pcontrol.port": null, "i2pcontrol.address": null}`)
+	result, err := handler.Handle(context.Background(), params)
+	require.NoError(t, err)
+
+	m := result.(map[string]interface{})
+	assert.Contains(t, m, "i2pcontrol.port", "null port read must return current port")
+	assert.Contains(t, m, "i2pcontrol.address", "null address read must return current address")
+}
+
+// TestGetRateHandler_UnknownLegacyKey verifies that an unknown GetRate key
+// returns ErrCodeInvalidParams rather than silently ignoring it (M-2).
+func TestGetRateHandler_UnknownLegacyKey(t *testing.T) {
+	handler := NewGetRateHandler(newStatsHandler(true, "0.1.0"))
+
+	params := json.RawMessage(`{"i2p.router.net.bw.unknown": null}`)
+	_, err := handler.Handle(context.Background(), params)
+	require.Error(t, err)
+
+	rpcErr, ok := err.(*RPCError)
+	require.True(t, ok, "error should be *RPCError")
+	assert.Equal(t, ErrCodeInvalidParams, rpcErr.Code)
 }

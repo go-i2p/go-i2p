@@ -671,25 +671,26 @@ func (rsp *routerStatsProvider) GetRateForPeriod(stat string, periodMs int64) fl
 	rsp.maybeRecordSample()
 
 	switch stat {
-	// Bandwidth — windowed average, with fallback to instantaneous 15-second rate
+	// Bandwidth — windowed average. Return 0 until at least 2 samples have been
+	// collected so that callers (e.g. the hourly average TUI row) receive a neutral
+	// placeholder during the warm-up period rather than the instantaneous 15-second rate.
 	case "bw.sendBps":
-		if avg := rsp.bwOutWindow.Average(periodMs); avg > 0 {
-			return avg
+		if rsp.bwOutWindow.Len(periodMs) >= 2 {
+			return rsp.bwOutWindow.Average(periodMs)
 		}
-		return rsp.GetBandwidthStats().OutboundRate
+		return 0
 	case "bw.receiveBps":
-		if avg := rsp.bwInWindow.Average(periodMs); avg > 0 {
-			return avg
+		if rsp.bwInWindow.Len(periodMs) >= 2 {
+			return rsp.bwInWindow.Average(periodMs)
 		}
-		return rsp.GetBandwidthStats().InboundRate
+		return 0
 	case "bw.combined":
-		inAvg := rsp.bwInWindow.Average(periodMs)
-		outAvg := rsp.bwOutWindow.Average(periodMs)
-		if inAvg > 0 || outAvg > 0 {
-			return inAvg + outAvg
+		inLen := rsp.bwInWindow.Len(periodMs)
+		outLen := rsp.bwOutWindow.Len(periodMs)
+		if inLen >= 2 || outLen >= 2 {
+			return rsp.bwInWindow.Average(periodMs) + rsp.bwOutWindow.Average(periodMs)
 		}
-		bw := rsp.GetBandwidthStats()
-		return bw.InboundRate + bw.OutboundRate
+		return 0
 
 	// Participating tunnels — windowed average, with fallback to instantaneous count
 	case "tunnel.participatingTunnels":

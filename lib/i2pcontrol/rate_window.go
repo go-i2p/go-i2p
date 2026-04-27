@@ -53,6 +53,21 @@ func (w *RateWindow) Average(windowMs int64) float64 {
 	return sum / float64(n)
 }
 
+// Len returns the number of samples within windowMs milliseconds.
+// Used to detect the warm-up period (< 2 samples) and avoid misleading fallbacks.
+func (w *RateWindow) Len(windowMs int64) int {
+	cutoff := time.Now().Add(-time.Duration(windowMs) * time.Millisecond)
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	n := 0
+	for _, s := range w.samples {
+		if !s.at.Before(cutoff) {
+			n++
+		}
+	}
+	return n
+}
+
 // Count returns the sum of sample values within windowMs milliseconds.
 // When each sample has value 1.0, this counts discrete events in the window.
 func (w *RateWindow) Count(windowMs int64) float64 {

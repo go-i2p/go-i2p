@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/logger"
@@ -110,14 +111,19 @@ func (h *GetRateHandler) Handle(ctx context.Context, params json.RawMessage) (in
 	}
 
 	// Legacy field-list style: {"i2p.router.net.bw.inbound.15s": null, ...}
+	// Only the two bandwidth keys are supported; unknown keys return an error (M-2).
 	bwStats := h.stats.GetBandwidthStats()
 	result := make(map[string]interface{})
 
-	if _, ok := req["i2p.router.net.bw.inbound.15s"]; ok {
-		result["i2p.router.net.bw.inbound.15s"] = bwStats.InboundRate
-	}
-	if _, ok := req["i2p.router.net.bw.outbound.15s"]; ok {
-		result["i2p.router.net.bw.outbound.15s"] = bwStats.OutboundRate
+	for key := range req {
+		switch key {
+		case "i2p.router.net.bw.inbound.15s":
+			result[key] = bwStats.InboundRate
+		case "i2p.router.net.bw.outbound.15s":
+			result[key] = bwStats.OutboundRate
+		default:
+			return nil, NewRPCError(ErrCodeInvalidParams, fmt.Sprintf("unsupported GetRate key: %s", key))
+		}
 	}
 
 	// Return all fields when none were explicitly requested.
@@ -198,10 +204,10 @@ func (h *RouterInfoHandler) buildAvailableFields() map[string]interface{} {
 		"i2p.router.netdb.isreseeding":         routerStats.IsReseeding,
 		"i2p.router.net.tunnels.inbound":       routerStats.InboundTunnels,
 		"i2p.router.net.tunnels.outbound":      routerStats.OutboundTunnels,
-		"i2p.router.net.status":                getStatusCode(h.stats.IsRunning()),
-		"i2p.router.net.bw.inbound.1s":         bandwidthStats.InboundRate,
+		"i2p.router.net.status":                h.stats.GetNetworkStatus(),
+		"i2p.router.net.bw.inbound.1s":         bandwidthStats.InboundRate1s,
 		"i2p.router.net.bw.inbound.15s":        bandwidthStats.InboundRate,
-		"i2p.router.net.bw.outbound.1s":        bandwidthStats.OutboundRate,
+		"i2p.router.net.bw.outbound.1s":        bandwidthStats.OutboundRate1s,
 		"i2p.router.net.bw.outbound.15s":       bandwidthStats.OutboundRate,
 	}
 }
@@ -242,32 +248,6 @@ func (h *RouterInfoHandler) Handle(ctx context.Context, params json.RawMessage) 
 	result := selectRequestedOrDefaultFields(req, availableFields)
 
 	return result, nil
-}
-
-// getStatusCode converts running status to I2PControl status code.
-// Status codes defined by the I2PControl spec:
-//   - 0:  OK (running normally)
-//   - 1:  TESTING
-//   - 2:  FIREWALLED
-//   - 3:  HIDDEN
-//   - 4:  WARN_FIREWALLED_AND_FAST
-//   - 5:  WARN_FIREWALLED_AND_FLOODFILL
-//   - 6:  WARN_FIREWALLED_WITH_INBOUND_TCP
-//   - 7:  WARN_FIREWALLED_WITH_UDP_DISABLED
-//   - 8:  ERROR_I2CP
-//   - 9:  ERROR_CLOCK_SKEW
-//   - 10: ERROR_PRIVATE_TCP_ADDRESS
-//   - 11: ERROR_SYMMETRIC_NAT
-//   - 12: ERROR_UDP_PORT_IN_USE
-//   - 13: ERROR_NO_ACTIVE_PEERS_CHECK_CONNECTION_AND_FIREWALL
-//   - 14: ERROR_UDP_DISABLED_AND_TCP_UNSET
-//
-// Deprecated: Use RouterStatsProvider.GetNetworkStatus() and networkStatusString() directly.
-func getStatusCode(running bool) int {
-	if running {
-		return 0 // OK
-	}
-	return 8 // ERROR_I2CP — generic connection/IPC error when router is not running
 }
 
 // networkStatusString maps an I2PControl numeric status code to the human-readable
@@ -446,8 +426,9 @@ func (h *RouterManagerHandler) handleReseed(req, result map[string]interface{}) 
 }
 
 // handleShutdownGraceful is the spec-compliant alias for a graceful shutdown.
-// Java I2P delays the shutdown by ~11 minutes; go-i2p delegates to the same
-// Stop() path as immediate shutdown and relies on the process supervisor.
+// Java I2P delays the shutdown by ~11 minutes; go-i2p uses a configurable
+// drain delay (i2pcontrol.graceful_stop_delay, default 0) and then calls Stop().
+// Set i2pcontrol.graceful_stop_delay to e.g. "11m" to approximate Java I2P behaviour.
 func (h *RouterManagerHandler) handleShutdownGraceful(req, result map[string]interface{}) {
 	if _, ok := req["ShutdownGraceful"]; ok {
 		if h.RouterControl == nil {
@@ -459,6 +440,10 @@ func (h *RouterManagerHandler) handleShutdownGraceful(req, result map[string]int
 		go func() {
 			defer h.wg.Done()
 			log.WithFields(logger.Fields{"at": "handleShutdownGraceful"}).Info("ShutdownGraceful requested via I2PControl")
+			if delay := viper.GetDuration("i2pcontrol.graceful_stop_delay"); delay > 0 {
+				log.WithFields(logger.Fields{"delay": delay}).Info("ShutdownGraceful: waiting for participating tunnels to drain")
+				time.Sleep(delay)
+			}
 			h.RouterControl.Stop()
 		}()
 		result["ShutdownGraceful"] = nil
@@ -466,8 +451,9 @@ func (h *RouterManagerHandler) handleShutdownGraceful(req, result map[string]int
 }
 
 // handleRestartGraceful is the spec-compliant alias for a graceful restart.
-// Like handleShutdownGraceful, go-i2p performs a clean stop and relies on the
-// external process supervisor to restart the process.
+// Like handleShutdownGraceful, go-i2p waits for the configurable drain delay
+// (i2pcontrol.graceful_stop_delay, default 0) and then calls Stop().
+// The external process supervisor is responsible for restarting the process.
 func (h *RouterManagerHandler) handleRestartGraceful(req, result map[string]interface{}) {
 	if _, ok := req["RestartGraceful"]; ok {
 		if h.RouterControl == nil {
@@ -479,6 +465,10 @@ func (h *RouterManagerHandler) handleRestartGraceful(req, result map[string]inte
 		go func() {
 			defer h.wg.Done()
 			log.WithFields(logger.Fields{"at": "handleRestartGraceful"}).Info("RestartGraceful requested via I2PControl (stop only; supervisor must restart)")
+			if delay := viper.GetDuration("i2pcontrol.graceful_stop_delay"); delay > 0 {
+				log.WithFields(logger.Fields{"delay": delay}).Info("RestartGraceful: waiting for participating tunnels to drain")
+				time.Sleep(delay)
+			}
 			h.RouterControl.Stop()
 		}()
 		result["RestartGraceful"] = nil
@@ -554,33 +544,40 @@ func (h *NetworkSettingHandler) Handle(ctx context.Context, params json.RawMessa
 // buildAvailableSettings creates a map of all available network settings with their current values.
 // Includes both the go-i2p native keys and the Java I2P spec aliases so that
 // the go-i2pcontrol client library (and i2ptui) can read them without panicking.
+// NC-4: all values are returned as strings per the I2PControl spec.
+// NC-7: i2p.router.net.ntcp.autoip is read from transport.ntcp2_autoip config (default true).
 func (h *NetworkSettingHandler) buildAvailableSettings(netConfig NetworkConfig) map[string]interface{} {
+	// NC-7: read autoip from config; default true (auto-detect external IP address).
+	ntcpAutoIP := true
+	if viper.IsSet("transport.ntcp2_autoip") {
+		ntcpAutoIP = viper.GetBool("transport.ntcp2_autoip")
+	}
+	upnpEnabled := viper.GetBool("router.upnp_enabled")
+
 	return map[string]interface{}{
-		// NTCP2 transport settings
-		"i2p.router.net.ntcp.port":     netConfig.NTCP2Port,
+		// NTCP2 transport settings — NC-4: all values as strings per spec.
+		"i2p.router.net.ntcp.port":     fmt.Sprintf("%d", netConfig.NTCP2Port),
 		"i2p.router.net.ntcp.hostname": netConfig.NTCP2Hostname,
-		"i2p.router.net.ntcp.autoip":   true,
+		"i2p.router.net.ntcp.autoip":   fmt.Sprintf("%t", ntcpAutoIP),
 
 		// SSU2 (UDP) transport settings
-		"i2p.router.net.ssu2.port":     netConfig.SSU2Port,
+		"i2p.router.net.ssu2.port":     fmt.Sprintf("%d", netConfig.SSU2Port),
 		"i2p.router.net.ssu2.hostname": netConfig.SSU2Hostname,
 		// Alias: some clients use "i2p.router.net.ssu.port" for SSU2
-		"i2p.router.net.ssu.port": netConfig.SSU2Port,
+		"i2p.router.net.ssu.port": fmt.Sprintf("%d", netConfig.SSU2Port),
 
-		// Bandwidth limits — exposed under both the go-i2p key and the Java I2P
-		// NetworkSetting spec key (i2p.router.net.bw.*). The TUI calls the
-		// spec keys; returning them prevents the client from showing "N/A".
-		"i2p.router.bandwidth.in":  netConfig.BandwidthLimitIn,
-		"i2p.router.bandwidth.out": netConfig.BandwidthLimitOut,
-		"i2p.router.net.bw.in":     netConfig.BandwidthLimitIn,
-		"i2p.router.net.bw.out":    netConfig.BandwidthLimitOut,
+		// Bandwidth limits — NC-4: returned as strings per spec.
+		"i2p.router.bandwidth.in":  fmt.Sprintf("%d", netConfig.BandwidthLimitIn),
+		"i2p.router.bandwidth.out": fmt.Sprintf("%d", netConfig.BandwidthLimitOut),
+		"i2p.router.net.bw.in":     fmt.Sprintf("%d", netConfig.BandwidthLimitIn),
+		"i2p.router.net.bw.out":    fmt.Sprintf("%d", netConfig.BandwidthLimitOut),
 
 		// Bandwidth share percentage (0–100).
-		"i2p.router.net.bw.share": netConfig.SharePercentage,
+		"i2p.router.net.bw.share": fmt.Sprintf("%d", netConfig.SharePercentage),
 
-		// UPnP — not yet implemented; returned as a readable bool
-		"i2p.router.net.upnp":     viper.GetBool("router.upnp_enabled"),
-		"i2p.router.upnp.enabled": viper.GetBool("router.upnp_enabled"),
+		// UPnP — NC-4: returned as string "true"/"false" per spec.
+		"i2p.router.net.upnp":     fmt.Sprintf("%t", upnpEnabled),
+		"i2p.router.upnp.enabled": fmt.Sprintf("%t", upnpEnabled),
 	}
 }
 
@@ -654,7 +651,8 @@ func (h *NetworkSettingHandler) applySettingChange(setting string, value interfa
 		}).Warn("setting changed in memory but failed to persist to config file")
 	}
 
-	result[setting] = normalized
+	// NC-4: return value as string per spec.
+	result[setting] = fmt.Sprintf("%v", normalized)
 	if restartRequiredSettings[setting] {
 		result["RestartNeeded"] = true
 	}
@@ -808,17 +806,18 @@ func validateHostname(host string) error {
 // buildDefaultSettings returns a map containing the most commonly requested network settings.
 // Includes the Java I2P spec keys (i2p.router.net.bw.*) alongside the go-i2p
 // native keys so that the TUI and go-i2pcontrol library see populated values.
+// NC-4: all values are returned as strings per the I2PControl spec.
 func (h *NetworkSettingHandler) buildDefaultSettings(netConfig NetworkConfig) map[string]interface{} {
 	return map[string]interface{}{
-		"i2p.router.net.ntcp.port":     netConfig.NTCP2Port,
+		"i2p.router.net.ntcp.port":     fmt.Sprintf("%d", netConfig.NTCP2Port),
 		"i2p.router.net.ntcp.hostname": netConfig.NTCP2Hostname,
-		"i2p.router.bandwidth.in":      netConfig.BandwidthLimitIn,
-		"i2p.router.bandwidth.out":     netConfig.BandwidthLimitOut,
-		"i2p.router.net.bw.in":         netConfig.BandwidthLimitIn,
-		"i2p.router.net.bw.out":        netConfig.BandwidthLimitOut,
-		"i2p.router.net.bw.share":      netConfig.SharePercentage,
-		"i2p.router.net.ssu2.port":     netConfig.SSU2Port,
-		"i2p.router.net.upnp":          viper.GetBool("router.upnp_enabled"),
+		"i2p.router.bandwidth.in":      fmt.Sprintf("%d", netConfig.BandwidthLimitIn),
+		"i2p.router.bandwidth.out":     fmt.Sprintf("%d", netConfig.BandwidthLimitOut),
+		"i2p.router.net.bw.in":         fmt.Sprintf("%d", netConfig.BandwidthLimitIn),
+		"i2p.router.net.bw.out":        fmt.Sprintf("%d", netConfig.BandwidthLimitOut),
+		"i2p.router.net.bw.share":      fmt.Sprintf("%d", netConfig.SharePercentage),
+		"i2p.router.net.ssu2.port":     fmt.Sprintf("%d", netConfig.SSU2Port),
+		"i2p.router.net.upnp":          fmt.Sprintf("%t", viper.GetBool("router.upnp_enabled")),
 	}
 }
 
@@ -878,16 +877,26 @@ func (h *I2PControlHandler) Handle(ctx context.Context, params json.RawMessage) 
 		return nil, err
 	}
 
-	// Persist port/address changes (restart required)
-	if val, ok := req["i2pcontrol.port"]; ok && val != nil {
-		settingsSaved = true
-		result["RestartNeeded"] = true
-		result["i2pcontrol.port"] = val
+	// Handle port: null value = read current; non-null = write (restart required).
+	// M-1: null-value reads now return the current configured value instead of ErrCodeInvalidParams.
+	if val, ok := req["i2pcontrol.port"]; ok {
+		if val == nil {
+			result["i2pcontrol.port"] = viper.GetInt("i2pcontrol.port")
+		} else {
+			settingsSaved = true
+			result["RestartNeeded"] = true
+			result["i2pcontrol.port"] = val
+		}
 	}
-	if val, ok := req["i2pcontrol.address"]; ok && val != nil {
-		settingsSaved = true
-		result["RestartNeeded"] = true
-		result["i2pcontrol.address"] = val
+	// Handle address: null value = read current; non-null = write (restart required).
+	if val, ok := req["i2pcontrol.address"]; ok {
+		if val == nil {
+			result["i2pcontrol.address"] = viper.GetString("i2pcontrol.address")
+		} else {
+			settingsSaved = true
+			result["RestartNeeded"] = true
+			result["i2pcontrol.address"] = val
+		}
 	}
 
 	if err := validateNotImplementedSettings(req); err != nil {
@@ -1031,7 +1040,8 @@ func (h *AdvancedSettingsHandler) Handle(ctx context.Context, params json.RawMes
 				}
 			}
 		}
-		return result, nil
+		// NC-5: spec requires write responses to be wrapped in a "Set" key.
+		return map[string]interface{}{"Set": result}, nil
 	}
 
 	// Read: return current values for all requested keys (null means "read")

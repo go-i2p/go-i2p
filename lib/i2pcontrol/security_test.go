@@ -720,10 +720,10 @@ func (m *mockRouterAccessBandwidth) GetTransportAddr() interface{} { return nil 
 func (m *mockRouterAccessBandwidth) GetBandwidthRates1s() (inbound, outbound uint64) {
 	return m.inbound / 2, m.outbound / 2
 }
-func (m *mockRouterAccessBandwidth) GetNetworkStatus() int  { return 0 }
+func (m *mockRouterAccessBandwidth) GetNetworkStatus() int    { return 0 }
 func (m *mockRouterAccessBandwidth) GetSSU2Addr() interface{} { return nil }
-func (m *mockRouterAccessBandwidth) Stop()                         {}
-func (m *mockRouterAccessBandwidth) Reseed() error                 { return nil }
+func (m *mockRouterAccessBandwidth) Stop()                    {}
+func (m *mockRouterAccessBandwidth) Reseed() error            { return nil }
 
 // TestBandwidthStatsZeroValues verifies zero bandwidth is handled correctly.
 func TestBandwidthStatsZeroValues(t *testing.T) {

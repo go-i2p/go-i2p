@@ -324,7 +324,7 @@ func (r *Router) startExplorer() {
 		log.WithFields(logger.Fields{"at": "startExplorer"}).Debug("NetDB explorer deferred: NetDB or tunnel manager not ready")
 		return
 	}
-	tunnelPool := r.tunnelManager.GetPool()
+	tunnelPool := r.tunnelManager.GetOutboundPool()
 	if tunnelPool == nil {
 		log.WithFields(logger.Fields{"at": "startExplorer"}).Debug("NetDB explorer deferred: tunnel pool not available")
 		return
@@ -376,7 +376,7 @@ func (r *Router) resolvePublisherDependencies() (*tunnel.Pool, error) {
 	}
 	var tunnelPool *tunnel.Pool
 	if r.tunnelManager != nil {
-		tunnelPool = r.tunnelManager.GetPool()
+		tunnelPool = r.tunnelManager.GetOutboundPool()
 	}
 	if tunnelPool == nil {
 		return nil, oops.Errorf("Cannot start publisher: tunnel pool not available")
@@ -871,7 +871,7 @@ func (r *Router) initializeTunnelManager() {
 	r.runMux.Unlock()
 
 	// Configure automatic tunnel pool maintenance
-	pool := tm.GetPool()
+	pool := tm.GetOutboundPool()
 	pool.SetTunnelBuilder(tm) // TunnelManager implements BuilderInterface
 
 	pool.SetPeerTracker(r.StdNetDB.PeerTracker)
@@ -905,7 +905,7 @@ func (r *Router) initializeGarlicRouter() {
 	// Get tunnel pool from tunnel manager if available, otherwise nil
 	var tunnelPool *tunnel.Pool
 	if r.tunnelManager != nil {
-		tunnelPool = r.tunnelManager.GetPool()
+		tunnelPool = r.tunnelManager.GetOutboundPool()
 	}
 
 	// Create garlic message router with router infrastructure
