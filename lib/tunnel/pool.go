@@ -80,6 +80,9 @@ type PoolConfig struct {
 	HopCount int
 	// IsInbound indicates if this pool manages inbound tunnels
 	IsInbound bool
+	// IsClientPool indicates this pool belongs to an I2CP client session (vs exploratory router pools).
+	// When true, successful builds are counted as client tunnel successes for I2PControl stats.
+	IsClientPool bool
 }
 
 // DefaultPoolConfig returns a configuration with sensible defaults
@@ -646,6 +649,7 @@ func (p *Pool) prepareBuildRequest(excludePeers []common.Hash) BuildTunnelReques
 	return BuildTunnelRequest{
 		HopCount:                  p.config.HopCount,
 		IsInbound:                 p.config.IsInbound,
+		IsClientTunnel:            p.config.IsClientPool,
 		UseShortBuild:             true, // Use modern STBM by default
 		ExcludePeers:              progressiveExclude,
 		RequireDirectConnectivity: true, // FIX: Only select directly-contactable peers
@@ -833,6 +837,7 @@ func (p *Pool) RetryTunnelBuild(tunnelID TunnelID, isInbound bool, hopCount int)
 
 	req := BuildTunnelRequest{
 		IsInbound:                 isInbound,
+		IsClientTunnel:            p.config.IsClientPool,
 		HopCount:                  hopCount,
 		ExcludePeers:              p.GetFailedPeers(),
 		RequireDirectConnectivity: true,

@@ -18,15 +18,16 @@ import (
 // buildRequest tracks a pending tunnel build request for correlation with replies.
 // This enables matching build replies to the original request and managing timeouts.
 type buildRequest struct {
-	tunnelID      tunnel.TunnelID          // Unique tunnel ID for this request
-	messageID     int                      // I2NP message ID for correlation
-	hopCount      int                      // Number of hops in the tunnel
-	replyKeys     []session_key.SessionKey // Reply decryption keys for each hop
-	replyIVs      [][16]byte               // Reply IVs for each hop
-	createdAt     time.Time                // When the request was created
-	retryCount    int                      // Number of retry attempts
-	useShortBuild bool                     // True if using STBM, false for legacy VTB
-	isInbound     bool                     // True if this is an inbound tunnel
+	tunnelID       tunnel.TunnelID          // Unique tunnel ID for this request
+	messageID      int                      // I2NP message ID for correlation
+	hopCount       int                      // Number of hops in the tunnel
+	replyKeys      []session_key.SessionKey // Reply decryption keys for each hop
+	replyIVs       [][16]byte               // Reply IVs for each hop
+	createdAt      time.Time                // When the request was created
+	retryCount     int                      // Number of retry attempts
+	useShortBuild  bool                     // True if using STBM, false for legacy VTB
+	isInbound      bool                     // True if this is an inbound tunnel
+	isClientTunnel bool                     // True if this tunnel belongs to an I2CP client session
 }
 
 // TunnelManager coordinates tunnel building and management
@@ -46,10 +47,11 @@ type TunnelManager struct {
 	// Build event windows for period-aware statistics (retained for 2 hours).
 	// These track tunnel build outcomes so GetRate("tunnel.buildExploratorySuccess", period)
 	// can return the count of successful builds within the requested time window.
-	buildSuccessWindow *buildEventWindow // successful exploratory tunnel builds
-	buildRejectWindow  *buildEventWindow // explicitly rejected tunnel builds
-	buildExpireWindow  *buildEventWindow // timed-out tunnel builds
-	buildTimeWindow    *buildEventWindow // build duration in milliseconds
+	buildSuccessWindow       *buildEventWindow // successful exploratory tunnel builds
+	buildRejectWindow        *buildEventWindow // explicitly rejected tunnel builds
+	buildExpireWindow        *buildEventWindow // timed-out tunnel builds
+	buildTimeWindow          *buildEventWindow // build duration in milliseconds
+	clientBuildSuccessWindow *buildEventWindow // successful I2CP client session tunnel builds
 }
 
 // NewTunnelManager creates a new tunnel manager with build request tracking.
@@ -68,15 +70,16 @@ func NewTunnelManager(peerSelector tunnel.PeerSelector) *TunnelManager {
 
 	const buildWindowMaxAge = 2 * time.Hour
 	tm := &TunnelManager{
-		inboundPool:        inboundPool,
-		outboundPool:       outboundPool,
-		peerSelector:       peerSelector,
-		pendingBuilds:      make(map[int]*buildRequest),
-		cleanupStop:        make(chan struct{}),
-		buildSuccessWindow: newBuildEventWindow(buildWindowMaxAge),
-		buildRejectWindow:  newBuildEventWindow(buildWindowMaxAge),
-		buildExpireWindow:  newBuildEventWindow(buildWindowMaxAge),
-		buildTimeWindow:    newBuildEventWindow(buildWindowMaxAge),
+		inboundPool:              inboundPool,
+		outboundPool:             outboundPool,
+		peerSelector:             peerSelector,
+		pendingBuilds:            make(map[int]*buildRequest),
+		cleanupStop:              make(chan struct{}),
+		buildSuccessWindow:       newBuildEventWindow(buildWindowMaxAge),
+		buildRejectWindow:        newBuildEventWindow(buildWindowMaxAge),
+		buildExpireWindow:        newBuildEventWindow(buildWindowMaxAge),
+		buildTimeWindow:          newBuildEventWindow(buildWindowMaxAge),
+		clientBuildSuccessWindow: newBuildEventWindow(buildWindowMaxAge),
 	}
 
 	// Initialize ReplyProcessor with default config for reply decryption
@@ -214,7 +217,7 @@ func (tm *TunnelManager) BuildTunnelFromRequest(req tunnel.BuildTunnelRequest) (
 	tunnelState := tm.createTunnelStateFromResult(result)
 	pool := tm.getPoolForTunnel(req.IsInbound)
 	pool.AddTunnel(tunnelState)
-	tm.trackPendingBuild(result, messageID)
+	tm.trackPendingBuild(result, messageID, req.IsClientTunnel)
 
 	// Register with ReplyProcessor for decryption key management
 	if regErr := tm.replyProcessor.RegisterPendingBuild(
@@ -311,8 +314,9 @@ func (tm *TunnelManager) createTunnelStateFromResult(result *tunnel.TunnelBuildR
 	return tunnelState
 }
 
-// trackPendingBuild records the pending build request for reply correlation
-func (tm *TunnelManager) trackPendingBuild(result *tunnel.TunnelBuildResult, messageID int) {
+// trackPendingBuild records the pending build request for reply correlation.
+// isClientTunnel indicates whether the build originated from an I2CP client session pool.
+func (tm *TunnelManager) trackPendingBuild(result *tunnel.TunnelBuildResult, messageID int, isClientTunnel bool) {
 	// Lazily start the cleanup goroutine on the first build request
 	tm.ensureCleanupStarted()
 
@@ -320,15 +324,16 @@ func (tm *TunnelManager) trackPendingBuild(result *tunnel.TunnelBuildResult, mes
 	defer tm.buildMutex.Unlock()
 
 	tm.pendingBuilds[messageID] = &buildRequest{
-		tunnelID:      result.TunnelID,
-		messageID:     messageID,
-		hopCount:      len(result.Hops),
-		replyKeys:     result.ReplyKeys,
-		replyIVs:      result.ReplyIVs,
-		createdAt:     time.Now(),
-		retryCount:    0,
-		useShortBuild: result.UseShortBuild,
-		isInbound:     result.IsInbound,
+		tunnelID:       result.TunnelID,
+		messageID:      messageID,
+		hopCount:       len(result.Hops),
+		replyKeys:      result.ReplyKeys,
+		replyIVs:       result.ReplyIVs,
+		createdAt:      time.Now(),
+		retryCount:     0,
+		useShortBuild:  result.UseShortBuild,
+		isInbound:      result.IsInbound,
+		isClientTunnel: isClientTunnel,
 	}
 }
 
@@ -937,13 +942,24 @@ func (tm *TunnelManager) updateTunnelBasedOnReply(matchingTunnel *tunnel.TunnelS
 func (tm *TunnelManager) handleSuccessfulBuild(matchingTunnel *tunnel.TunnelState, messageID int) {
 	buildTimeMs := float64(time.Since(matchingTunnel.CreatedAt).Milliseconds())
 	matchingTunnel.State = tunnel.TunnelReady
-	tm.buildSuccessWindow.recordEvent()
+
+	// Route the build success event to the appropriate window based on tunnel origin.
+	// Client tunnels (I2CP session pools) are tracked separately from exploratory tunnels.
+	tm.buildMutex.RLock()
+	req, known := tm.pendingBuilds[messageID]
+	tm.buildMutex.RUnlock()
+	if known && req.isClientTunnel {
+		tm.clientBuildSuccessWindow.recordEvent()
+	} else {
+		tm.buildSuccessWindow.recordEvent()
+	}
 	tm.buildTimeWindow.recordDuration(buildTimeMs)
 
 	log.WithFields(logger.Fields{
-		"tunnel_id":     matchingTunnel.ID,
-		"message_id":    messageID,
-		"build_time_ms": buildTimeMs,
+		"tunnel_id":        matchingTunnel.ID,
+		"message_id":       messageID,
+		"build_time_ms":    buildTimeMs,
+		"is_client_tunnel": known && req.isClientTunnel,
 	}).Info("Tunnel build completed successfully")
 }
 
@@ -1137,4 +1153,10 @@ func (tm *TunnelManager) GetBuildExpireCount(windowMs int64) float64 {
 // Returns 0 if no successful builds have been recorded in the window.
 func (tm *TunnelManager) GetBuildAvgTimeMs(windowMs int64) float64 {
 	return tm.buildTimeWindow.avgInWindow(windowMs)
+}
+
+// GetClientBuildSuccessCount returns the number of successful I2CP client session tunnel builds
+// within windowMs milliseconds. Maps to the Java I2P stat "tunnel.buildClientSuccess".
+func (tm *TunnelManager) GetClientBuildSuccessCount(windowMs int64) float64 {
+	return tm.clientBuildSuccessWindow.countInWindow(windowMs)
 }

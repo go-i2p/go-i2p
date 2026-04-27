@@ -717,7 +717,9 @@ func (rsp *routerStatsProvider) GetRateForPeriod(stat string, periodMs int64) fl
 		}
 		return 0
 	case "tunnel.buildClientSuccess":
-		// Client tunnels are not yet implemented; always 0.
+		if tm := rsp.router.GetTunnelManager(); tm != nil {
+			return tm.GetClientBuildSuccessCount(periodMs)
+		}
 		return 0
 	case "tunnel.buildRequestTime":
 		if tm := rsp.router.GetTunnelManager(); tm != nil {

@@ -97,6 +97,8 @@ func (s *Server) createOutboundPool(session *Session, config *SessionConfig, bui
 }
 
 // buildPoolConfig constructs a tunnel pool configuration with standard timeouts.
+// All pools created here belong to I2CP client sessions and are marked IsClientPool=true
+// so that successful builds are counted separately from the router's exploratory tunnels.
 func buildPoolConfig(tunnelCount, backupQty, tunnelLength, lengthVariance int, isInbound bool) tunnel.PoolConfig {
 	return tunnel.PoolConfig{
 		MinTunnels:       tunnelCount,
@@ -107,6 +109,7 @@ func buildPoolConfig(tunnelCount, backupQty, tunnelLength, lengthVariance int, i
 		MaxBuildRetries:  3,
 		HopCount:         applyLengthVariance(tunnelLength, lengthVariance),
 		IsInbound:        isInbound,
+		IsClientPool:     true,
 	}
 }
 
