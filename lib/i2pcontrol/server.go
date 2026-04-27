@@ -455,11 +455,11 @@ func (s *Server) validateAuthentication(req *Request) *RPCError {
 		Token string `json:"Token"`
 	}
 	if err := json.Unmarshal(req.Params, &params); err != nil || params.Token == "" {
-		return NewRPCError(ErrCodeInvalidParams, "Missing or invalid Token parameter")
+		return NewRPCError(ErrCodeAuthRequired, "No authentication token presented")
 	}
 
 	if !s.authManager.ValidateToken(params.Token) {
-		return NewRPCError(ErrCodeAuthRequired, "Invalid or expired authentication token")
+		return NewRPCError(ErrCodeTokenNotExist, "Authentication token does not exist or has expired")
 	}
 
 	return nil
