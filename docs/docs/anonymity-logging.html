@@ -13,7 +13,7 @@
         <a href="../index.html">go-i2p/go-i2p</a>
       </h2>
       <div class="repo-meta">
-        📝 1707 commits
+        📝 1724 commits
          • 📜 MIT License
       </div>
     </div>
@@ -62,9 +62,22 @@
 <h2 id="production-defaults">Production Defaults</h2>
 
 <ul>
-<li>Production deployments MUST set <code>DEBUG_I2P=info</code> or stricter.</li>
+<li>Production deployments MUST set <code>DEBUG_I2P=warn</code> or stricter.</li>
 <li><code>DEBUG_I2P=debug</code> is for development and benchmarking only.</li>
 </ul>
+
+<h2 id="supported-log-levels">Supported Log Levels</h2>
+
+<p>The router recognises three log levels (most verbose to least verbose):</p>
+
+<ul>
+<li><code>debug</code> — full diagnostic output; <strong>never use in production</strong></li>
+<li><code>warn</code> — warnings and errors only; recommended for production</li>
+<li><code>error</code> — errors only; most restrictive option</li>
+</ul>
+
+<p>Any unrecognised value (including the previously-documented <code>info</code>) falls back to
+<code>debug</code>. Always use one of the three values listed above.</p>
 
 <h2 id="why-this-matters">Why This Matters</h2>
 
@@ -74,8 +87,8 @@
 
 <ul>
 <li>Development: <code>DEBUG_I2P=debug</code></li>
-<li>Staging: <code>DEBUG_I2P=info</code></li>
-<li>Production: <code>DEBUG_I2P=info</code> (or stricter)</li>
+<li>Staging: <code>DEBUG_I2P=warn</code></li>
+<li>Production: <code>DEBUG_I2P=warn</code> (or <code>DEBUG_I2P=error</code> for strictest setting)</li>
 </ul>
 
 <h2 id="operational-guidance">Operational Guidance</h2>
@@ -90,7 +103,7 @@
     </main>
     
     <footer class="page-footer">
-      <p>Generated on 2026-04-26 23:41:27 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
+      <p>Generated on 2026-04-27 02:58:43 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
     </footer>
   </div>
 </body>
