@@ -236,6 +236,11 @@ func extractHostPort(addr net.Addr) (string, string, error) {
 		if err != nil {
 			return "", "", oops.Wrapf(err, "failed to parse NATAddr external address %q", a.ExternalAddr())
 		}
+		if parsedIP := net.ParseIP(host); parsedIP != nil && parsedIP.IsUnspecified() {
+			if ext := detectExternalIP(); ext != "" {
+				host = ext
+			}
+		}
 		return host, port, nil
 	default:
 		return "", "", oops.Errorf("unsupported underlying address type %T", addr)
