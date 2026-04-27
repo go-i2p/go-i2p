@@ -15,7 +15,9 @@ The core router functionality is now operational. We have tested functionality u
 
 **`go-i2p` is still in very early development.** It has bugs. It is probably very distinct on the network. You probably should use a more established router for now.
 
-Advice for Developers: The API is still unstable below `go-i2p/onramp`. In fact, we're going to aggressively remove broken, crappy versions of functions from the low-level components over the `0.1.6` to `0.2.0` development cycle. The `0.2.0` release will have only the type-safe, memory-safe, functionally-correct versions of everything. We'll apply `DEPRECATED` notices to the godoc of anything we're removing in advance of removing it but it *is going to go*. How much low-level stuff you want to use is going to affect how much your life is going to change in the next ~4 releases.
+Advice for Developers: The API is still unstable below `go-i2p/onramp`. In fact, we're going to aggressively remove broken, crappy versions of functions from the low-level components over the `0.1.6` to `0.2.0` development cycle. The `0.2.0` release will have only the type-safe, memory-safe, functionally-correct versions of everything. We'll apply `DEPRECATED` notices to the godoc of anything we're removing in advance of removing it but it *is going to go*. How much low-level stuff you want to use is going to affect how much your life is going to change in the next ~4 big releases.
+
+Also, we're picking up the pace. More little points between big releases. This is because issues surfaced in one repository may actually require fixes in an upstream repo and this way it's easier to keep the tags in sync.
 
 Advice for Users: It's probably not safe yet, nor does it do the things you want yet. However, we have reached significant milestones in interacting with the network and are beginning to use it more regularly in a handful of non-anonymous services.
 

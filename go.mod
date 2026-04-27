@@ -11,7 +11,7 @@ require (
 	github.com/go-i2p/go-nat-listener v0.0.0-20260402222111-bfda0025cb1b
 	github.com/go-i2p/go-noise v0.1.52
 	github.com/go-i2p/go-unzip v0.0.0-20260417162122-21146ed7aca8
-	github.com/go-i2p/i2ptui v0.0.0-20260408024448-18dc7a0919f8
+	github.com/go-i2p/i2ptui v0.0.0-20260427044928-3c148bc8b2c0
 	github.com/go-i2p/logger v0.1.52
 	github.com/go-i2p/su3 v0.1.52
 	github.com/samber/oops v1.21.0
@@ -48,7 +48,7 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jackpal/go-nat-pmp v1.0.2 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.0 // indirect
-	github.com/mattn/go-isatty v0.0.21 // indirect
+	github.com/mattn/go-isatty v0.0.22 // indirect
 	github.com/mattn/go-localereader v0.0.1 // indirect
 	github.com/mattn/go-runewidth v0.0.23 // indirect
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6 // indirect

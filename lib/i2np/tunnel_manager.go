@@ -42,6 +42,14 @@ type TunnelManager struct {
 	cleanupOnce     sync.Once             // Ensures cleanup goroutine starts at most once
 	stopOnce        sync.Once             // Ensures Stop() is idempotent (no double-close panic)
 	replyProcessor  *ReplyProcessor       // Handles reply decryption and processing
+
+	// Build event windows for period-aware statistics (retained for 2 hours).
+	// These track tunnel build outcomes so GetRate("tunnel.buildExploratorySuccess", period)
+	// can return the count of successful builds within the requested time window.
+	buildSuccessWindow *buildEventWindow // successful exploratory tunnel builds
+	buildRejectWindow  *buildEventWindow // explicitly rejected tunnel builds
+	buildExpireWindow  *buildEventWindow // timed-out tunnel builds
+	buildTimeWindow    *buildEventWindow // build duration in milliseconds
 }
 
 // NewTunnelManager creates a new tunnel manager with build request tracking.
@@ -58,12 +66,17 @@ func NewTunnelManager(peerSelector tunnel.PeerSelector) *TunnelManager {
 	outboundConfig.IsInbound = false
 	outboundPool := tunnel.NewTunnelPoolWithConfig(peerSelector, outboundConfig)
 
+	const buildWindowMaxAge = 2 * time.Hour
 	tm := &TunnelManager{
-		inboundPool:   inboundPool,
-		outboundPool:  outboundPool,
-		peerSelector:  peerSelector,
-		pendingBuilds: make(map[int]*buildRequest),
-		cleanupStop:   make(chan struct{}),
+		inboundPool:        inboundPool,
+		outboundPool:       outboundPool,
+		peerSelector:       peerSelector,
+		pendingBuilds:      make(map[int]*buildRequest),
+		cleanupStop:        make(chan struct{}),
+		buildSuccessWindow: newBuildEventWindow(buildWindowMaxAge),
+		buildRejectWindow:  newBuildEventWindow(buildWindowMaxAge),
+		buildExpireWindow:  newBuildEventWindow(buildWindowMaxAge),
+		buildTimeWindow:    newBuildEventWindow(buildWindowMaxAge),
 	}
 
 	// Initialize ReplyProcessor with default config for reply decryption
@@ -922,17 +935,22 @@ func (tm *TunnelManager) updateTunnelBasedOnReply(matchingTunnel *tunnel.TunnelS
 
 // handleSuccessfulBuild processes a successful tunnel build.
 func (tm *TunnelManager) handleSuccessfulBuild(matchingTunnel *tunnel.TunnelState, messageID int) {
+	buildTimeMs := float64(time.Since(matchingTunnel.CreatedAt).Milliseconds())
 	matchingTunnel.State = tunnel.TunnelReady
+	tm.buildSuccessWindow.recordEvent()
+	tm.buildTimeWindow.recordDuration(buildTimeMs)
 
 	log.WithFields(logger.Fields{
-		"tunnel_id":  matchingTunnel.ID,
-		"message_id": messageID,
+		"tunnel_id":    matchingTunnel.ID,
+		"message_id":  messageID,
+		"build_time_ms": buildTimeMs,
 	}).Info("Tunnel build completed successfully")
 }
 
 // handleFailedBuild processes a failed tunnel build and schedules cleanup.
 func (tm *TunnelManager) handleFailedBuild(matchingTunnel *tunnel.TunnelState, messageID int, replyErr error) {
 	matchingTunnel.State = tunnel.TunnelFailed
+	tm.buildRejectWindow.recordEvent()
 
 	log.WithFields(logger.Fields{
 		"tunnel_id":  matchingTunnel.ID,
@@ -1038,6 +1056,7 @@ func (tm *TunnelManager) handleExpiredRequest(req *buildRequest, msgID int, now 
 	}
 
 	tunnelState.State = tunnel.TunnelFailed
+	tm.buildExpireWindow.recordEvent()
 	log.WithFields(logger.Fields{
 		"tunnel_id":  req.tunnelID,
 		"message_id": msgID,
@@ -1083,6 +1102,7 @@ func (tm *TunnelManager) cleanupExpiredBuildByID(messageID int) {
 		pool := tm.getPoolForTunnel(req.isInbound)
 		if tunnelState, exists := pool.GetTunnel(req.tunnelID); exists {
 			tunnelState.State = tunnel.TunnelFailed
+			tm.buildExpireWindow.recordEvent()
 			tm.cleanupFailedTunnel(req.tunnelID, req.isInbound)
 		}
 
@@ -1092,4 +1112,29 @@ func (tm *TunnelManager) cleanupExpiredBuildByID(messageID int) {
 			"age":        time.Since(req.createdAt),
 		}).Debug("Cleaned up expired tunnel build via timeout")
 	}
+}
+
+// GetBuildSuccessCount returns the number of successful tunnel builds within windowMs milliseconds.
+// Maps to the Java I2P stat "tunnel.buildExploratorySuccess".
+func (tm *TunnelManager) GetBuildSuccessCount(windowMs int64) float64 {
+	return tm.buildSuccessWindow.countInWindow(windowMs)
+}
+
+// GetBuildRejectCount returns the number of explicitly rejected tunnel builds within windowMs milliseconds.
+// Maps to the Java I2P stat "tunnel.buildExploratoryReject".
+func (tm *TunnelManager) GetBuildRejectCount(windowMs int64) float64 {
+	return tm.buildRejectWindow.countInWindow(windowMs)
+}
+
+// GetBuildExpireCount returns the number of timed-out tunnel builds within windowMs milliseconds.
+// Maps to the Java I2P stat "tunnel.buildExploratoryExpire".
+func (tm *TunnelManager) GetBuildExpireCount(windowMs int64) float64 {
+	return tm.buildExpireWindow.countInWindow(windowMs)
+}
+
+// GetBuildAvgTimeMs returns the average tunnel build time in milliseconds for builds completed
+// within windowMs milliseconds. Maps to the Java I2P stat "tunnel.buildRequestTime".
+// Returns 0 if no successful builds have been recorded in the window.
+func (tm *TunnelManager) GetBuildAvgTimeMs(windowMs int64) float64 {
+	return tm.buildTimeWindow.avgInWindow(windowMs)
 }
