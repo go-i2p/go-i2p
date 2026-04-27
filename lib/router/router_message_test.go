@@ -241,11 +241,14 @@ func TestShouldLogReadWarnRateLimit(t *testing.T) {
 	assert.True(t, shouldLogReadWarn(peer), "warning should pass after interval")
 }
 
-// TestCreateSessionFromConnInvalidAddr tests error handling when connection
-// has invalid address type.
-func TestCreateSessionFromConnInvalidAddr(t *testing.T) {
+// TestHandleNewConnectionInvalidAddr tests that handleNewConnection does not
+// panic and gracefully handles an unrecognised remote address type.
+func TestHandleNewConnectionInvalidAddr(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	router := &Router{
 		activeSessions: make(map[common.Hash]transport.TransportSession),
+		ctx:            ctx,
 	}
 
 	// Create a mock connection with wrong address type
@@ -253,14 +256,11 @@ func TestCreateSessionFromConnInvalidAddr(t *testing.T) {
 		remoteAddr: &mockAddr{network: "tcp", address: "127.0.0.1:12345"},
 	}
 
-	// Attempt to create session from connection
-	session, peerHash, err := router.createSessionFromConn(mockConn)
-
-	// Should return error for invalid address type
-	require.Error(t, err, "Should return error for non-NTCP2Addr address")
-	assert.Contains(t, err.Error(), "invalid connection type", "Error should mention invalid connection type")
-	assert.Nil(t, session, "Session should be nil on error")
-	assert.Equal(t, common.Hash{}, peerHash, "Peer hash should be empty on error")
+	// Should not panic; the connection should be closed and no session registered
+	require.NotPanics(t, func() {
+		router.handleNewConnection(mockConn)
+	})
+	assert.Empty(t, router.activeSessions, "No session should be registered for unrecognised address type")
 }
 
 // mockAddr implements net.Addr for testing

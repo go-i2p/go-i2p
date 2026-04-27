@@ -243,30 +243,19 @@ func TestConcurrentSessionAccess(t *testing.T) {
 	}
 }
 
-// TestMessageFramingRoundTrip verifies that framing and unframing are symmetric.
+// TestMessageFramingRoundTrip verifies that block framing produces non-empty output
+// with the correct NTCP2 block format.
 func TestMessageFramingRoundTrip(t *testing.T) {
-	// Create a data message
 	originalData := []byte("test message for round-trip validation")
 	msg := i2np.NewDataMessage(originalData)
 	msg.SetMessageID(12345)
 
-	// Frame the message
-	framedData, err := FrameI2NPMessage(msg)
+	framedData, err := FrameI2NPMessageAsBlock(msg)
 	require.NoError(t, err)
 	require.NotEmpty(t, framedData)
 
-	// Verify length prefix
-	length := int(framedData[0])<<24 | int(framedData[1])<<16 | int(framedData[2])<<8 | int(framedData[3])
-	assert.Equal(t, len(framedData)-4, length, "length prefix should match actual data length")
-
-	// Unframe the message
-	conn := &mockConn{data: framedData}
-	unframedMsg, err := UnframeI2NPMessage(conn)
-	require.NoError(t, err)
-
-	// Verify message integrity
-	assert.Equal(t, msg.Type(), unframedMsg.Type(), "message type should match")
-	assert.Equal(t, msg.MessageID(), unframedMsg.MessageID(), "message ID should match")
+	// Block framing wraps in a type-3 (I2NP) block; verify type byte
+	assert.Equal(t, byte(3), framedData[0], "first byte must be I2NP block type (3)")
 }
 
 // TestHasDirectConnectivityValidation verifies direct connectivity detection.

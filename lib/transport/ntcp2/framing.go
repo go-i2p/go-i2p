@@ -49,37 +49,6 @@ func FrameI2NPMessageAsBlock(msg i2np.I2NPMessage) ([]byte, error) {
 	return payload, nil
 }
 
-// FrameI2NPMessage frames an I2NP message using legacy 4-byte length prefix format.
-// Deprecated: Use FrameI2NPMessageAsBlock for NTCP2 spec-compliant framing.
-func FrameI2NPMessage(msg i2np.I2NPMessage) ([]byte, error) {
-	log.WithField("message_type", msg.Type()).Debug("Framing I2NP message")
-
-	// Convert I2NP message to bytes
-	data, err := msg.MarshalBinary()
-	if err != nil {
-		log.WithError(err).Error("Failed to marshal I2NP message")
-		return nil, err
-	}
-
-	// Create a framed message with length prefix
-	length := len(data)
-	framedMessage := make([]byte, 4+length)
-	copy(framedMessage[4:], data)
-
-	// Write the length prefix
-	framedMessage[0] = byte(length >> 24)
-	framedMessage[1] = byte(length >> 16)
-	framedMessage[2] = byte(length >> 8)
-	framedMessage[3] = byte(length)
-
-	log.WithFields(map[string]interface{}{
-		"message_type":   msg.Type(),
-		"message_length": length,
-		"framed_length":  len(framedMessage),
-	}).Debug("I2NP message framed successfully")
-	return framedMessage, nil
-}
-
 // UnframeI2NPMessage unframes I2NP messages from an NTCP2 data stream.
 func UnframeI2NPMessage(conn net.Conn) (i2np.I2NPMessage, error) {
 	// Read the next message from the connection

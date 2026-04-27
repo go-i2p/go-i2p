@@ -22,6 +22,7 @@ import (
 	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
 	ssu2 "github.com/go-i2p/go-i2p/lib/transport/ssu2"
 	ntcp2 "github.com/go-i2p/go-noise/ntcp2"
+	ssu2noise "github.com/go-i2p/go-noise/ssu2"
 	"github.com/samber/oops"
 
 	"github.com/go-i2p/logger"
@@ -352,58 +353,48 @@ func (r *Router) acceptInboundConnection() net.Conn {
 }
 
 // handleNewConnection processes a new inbound connection by creating and starting a session.
+// It supports both NTCP2 (remote address is *ntcp2.NTCP2Addr) and SSU2 (remote address is
+// *ssu2noise.SSU2Addr) inbound connections via a type switch on the connection's remote address.
 func (r *Router) handleNewConnection(conn net.Conn) {
-	session, peerHash, err := r.createSessionFromConn(conn)
-	if err != nil {
-		log.WithError(err).Error("Failed to create session from connection")
-		conn.Close()
-		return
-	}
+	sessionLogger := logger.WithField("remote_addr", conn.RemoteAddr().String())
 
-	defer func() {
-		if rec := recover(); rec != nil {
-			_ = session.Close()
-			panic(rec)
+	switch addr := conn.RemoteAddr().(type) {
+	case *ntcp2.NTCP2Addr:
+		peerHash := common.Hash(addr.RouterHash())
+		sessionLog := logger.WithField("peer_hash", fmt.Sprintf("%x", peerHash[:8]))
+		session := ntcp.NewNTCP2Session(conn, r.ctx, sessionLog)
+		session.SetCleanupCallback(func() { r.removeSession(peerHash) })
+		r.addSession(peerHash, session)
+		r.wg.Add(1)
+		go func() {
+			defer r.wg.Done()
+			r.processSessionMessages(session, staticAuthenticatedPeer{hash: peerHash, handshakeComplete: true})
+		}()
+		sessionLog.Info("Started monitoring new inbound NTCP2 session")
+
+	case *ssu2noise.SSU2Addr:
+		peerHash := common.Hash(addr.RouterHash())
+		sessionLog := logger.WithField("peer_hash", fmt.Sprintf("%x", peerHash[:8]))
+		ssu2Conn, ok := conn.(*ssu2noise.SSU2Conn)
+		if !ok {
+			sessionLog.WithField("conn_type", fmt.Sprintf("%T", conn)).Error("Inbound SSU2 connection is not *ssu2noise.SSU2Conn, dropping")
+			conn.Close()
+			return
 		}
-	}()
+		session := ssu2.NewSSU2Session(ssu2Conn, r.ctx, sessionLog)
+		session.SetCleanupCallback(func() { r.removeSession(peerHash) })
+		r.addSession(peerHash, session)
+		r.wg.Add(1)
+		go func() {
+			defer r.wg.Done()
+			r.processSessionMessages(session, staticAuthenticatedPeer{hash: peerHash, handshakeComplete: true})
+		}()
+		sessionLog.Info("Started monitoring new inbound SSU2 session")
 
-	r.addSession(peerHash, session)
-	r.wg.Add(1)
-	go func() {
-		defer r.wg.Done()
-		r.processSessionMessages(session, staticAuthenticatedPeer{hash: peerHash, handshakeComplete: true})
-	}()
-
-	log.WithField("peer_hash", fmt.Sprintf("%x", peerHash[:8])).Info("Started monitoring new inbound session")
-}
-
-// createSessionFromConn creates an NTCP2Session from a net.Conn.
-// This method extracts the peer's router hash from the connection address
-// and configures a cleanup callback for session lifecycle management.
-// Returns the session, peer hash, and any error encountered.
-func (r *Router) createSessionFromConn(conn net.Conn) (*ntcp.NTCP2Session, common.Hash, error) {
-	// Type assert to NTCP2Addr to extract peer router hash
-	ntcpAddr, ok := conn.RemoteAddr().(*ntcp2.NTCP2Addr)
-	if !ok {
-		return nil, common.Hash{}, oops.Errorf("invalid connection type: expected NTCP2Addr, got %T", conn.RemoteAddr())
+	default:
+		sessionLogger.WithField("addr_type", fmt.Sprintf("%T", conn.RemoteAddr())).Error("Unrecognised inbound connection address type, dropping")
+		conn.Close()
 	}
-
-	// Extract router hash from NTCP2 address
-	peerHashBytes := ntcpAddr.RouterHash()
-
-	peerHash := common.Hash(peerHashBytes)
-
-	// Create session with router's lifecycle context
-	// When the router stops, this context is cancelled, closing all sessions
-	sessionLogger := logger.WithField("peer_hash", fmt.Sprintf("%x", peerHash[:8]))
-	session := ntcp.NewNTCP2Session(conn, r.ctx, sessionLogger)
-
-	// Configure cleanup callback to remove session when it closes
-	session.SetCleanupCallback(func() {
-		r.removeSession(peerHash)
-	})
-
-	return session, peerHash, nil
 }
 
 // i2npReader is a transport session that supports reading inbound I2NP messages.

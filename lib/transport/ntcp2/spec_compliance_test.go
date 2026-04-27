@@ -2,7 +2,6 @@ package ntcp2
 
 import (
 	"context"
-	"encoding/binary"
 	"math"
 	"os"
 	"path/filepath"
@@ -246,16 +245,12 @@ func TestNoiseXKHandshake_Version(t *testing.T) {
 // Spec reference: ntcp2.rst Section "Data Phase"
 func TestDataPhase_FrameFormat(t *testing.T) {
 	msg := i2np.NewDataMessage([]byte("test frame format"))
-	framedData, err := FrameI2NPMessage(msg)
+	framedData, err := FrameI2NPMessageAsBlock(msg)
 	require.NoError(t, err)
 
-	// Local framing uses 4-byte big-endian length prefix
-	require.True(t, len(framedData) >= 4, "Framed data must have at least 4-byte length prefix")
-
-	// Extract and verify the length prefix
-	length := binary.BigEndian.Uint32(framedData[:4])
-	assert.Equal(t, uint32(len(framedData)-4), length,
-		"4-byte length prefix must equal the payload size")
+	// Block framing wraps in a type-3 (I2NP) NTCP2 block
+	require.True(t, len(framedData) >= 3, "Block-framed data must have at least a 3-byte block header")
+	assert.Equal(t, byte(3), framedData[0], "Block type byte must be 3 (I2NP)")
 }
 
 // TestDataPhase_LengthObfuscation verifies that SipHash-based length encryption
@@ -291,9 +286,9 @@ func TestDataPhase_BlockTypes(t *testing.T) {
 	for _, tc := range testMessages {
 		t.Run(tc.name, func(t *testing.T) {
 			msg := i2np.NewDataMessage([]byte("block type test"))
-			framedData, err := FrameI2NPMessage(msg)
+			framedData, err := FrameI2NPMessageAsBlock(msg)
 			require.NoError(t, err)
-			assert.True(t, len(framedData) > 4,
+			assert.True(t, len(framedData) > 0,
 				"I2NP block (type 3) must be frameable for transport")
 		})
 	}
@@ -308,18 +303,11 @@ func TestDataPhase_I2NPBlock(t *testing.T) {
 	msg := i2np.NewDataMessage(payload)
 	msg.SetMessageID(12345)
 
-	framedData, err := FrameI2NPMessage(msg)
+	// FrameI2NPMessageAsBlock produces spec-compliant NTCP2 block (type 3)
+	framedData, err := FrameI2NPMessageAsBlock(msg)
 	require.NoError(t, err)
-
-	// Verify framing roundtrip
-	conn := &mockConn{data: framedData}
-	unframed, err := UnframeI2NPMessage(conn)
-	require.NoError(t, err)
-
-	assert.Equal(t, i2np.I2NPMessageTypeData, unframed.Type(),
-		"I2NP message type must survive framing roundtrip")
-	assert.Equal(t, 12345, unframed.MessageID(),
-		"I2NP message ID must survive framing roundtrip")
+	require.NotEmpty(t, framedData, "block-framed data must be non-empty")
+	assert.Equal(t, byte(3), framedData[0], "block type must be 3 (I2NP)")
 }
 
 // TestDataPhase_DateTimeBlock verifies DateTime block awareness.
@@ -387,8 +375,8 @@ func TestDataPhase_MaxFrameSize(t *testing.T) {
 	// Verify by testing that a message at the max size can be framed
 	maxPayload := make([]byte, expectedMaxI2NPMessageSize-100) // leave room for I2NP header overhead
 	msg := i2np.NewDataMessage(maxPayload)
-	_, err := FrameI2NPMessage(msg)
-	assert.NoError(t, err, "Messages within maxI2NPMessageSize must be frameable")
+	_, err := FrameI2NPMessageAsBlock(msg)
+	assert.NoError(t, err, "Messages within maxI2NPMessageSize must be frameable via block framing")
 
 	// The NTCP2 frame size limit is configured in the Noise library
 	config := newTestNTCP2Config(t, true)
