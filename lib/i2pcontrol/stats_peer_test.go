@@ -53,6 +53,18 @@ func (m *mockRouterAccessForPeerStats) GetTransportAddr() interface{} {
 	return nil
 }
 
+func (m *mockRouterAccessForPeerStats) GetBandwidthRates1s() (inbound, outbound uint64) {
+	return 0, 0
+}
+
+func (m *mockRouterAccessForPeerStats) GetNetworkStatus() int {
+	return 0
+}
+
+func (m *mockRouterAccessForPeerStats) GetSSU2Addr() interface{} {
+	return nil
+}
+
 func (m *mockRouterAccessForPeerStats) Stop() {
 	// Mock implementation - no-op for test
 }

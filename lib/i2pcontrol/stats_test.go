@@ -65,6 +65,17 @@ func (m *mockRouterAccess) GetBandwidthRates() (inbound, outbound uint64) {
 	return 0, 1024
 }
 
+func (m *mockRouterAccess) GetBandwidthRates1s() (inbound, outbound uint64) {
+	return 0, 512
+}
+
+func (m *mockRouterAccess) GetNetworkStatus() int {
+	if !m.running {
+		return 8
+	}
+	return 0
+}
+
 func (m *mockRouterAccess) GetActiveSessionCount() int {
 	return 0
 }
@@ -73,6 +84,10 @@ func (m *mockRouterAccess) GetTransportAddr() interface{} {
 	// Return a mock TCP address for testing
 	type mockAddr struct{}
 	return &mockAddr{}
+}
+
+func (m *mockRouterAccess) GetSSU2Addr() interface{} {
+	return nil
 }
 
 func (m *mockRouterAccess) Stop() {

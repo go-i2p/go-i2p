@@ -33,6 +33,12 @@ func (m *mockServerStatsProvider) IsRunning() bool                   { return m.
 func (m *mockServerStatsProvider) GetRateForPeriod(stat string, periodMs int64) float64 {
 	return 0
 }
+func (m *mockServerStatsProvider) GetNetworkStatus() int {
+	if !m.running {
+		return 8
+	}
+	return 0
+}
 func (m *mockServerStatsProvider) GetRouterControl() interface {
 	Stop()
 	Reseed() error

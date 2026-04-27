@@ -981,3 +981,75 @@ func buildResultWithSettingsSaved(result map[string]interface{}, settingsSaved b
 	result["SettingsSaved"] = settingsSaved
 	return result, nil
 }
+
+// AdvancedSettingsHandler implements the AdvancedSettings RPC method.
+// Provides bulk get/set access to arbitrary router configuration keys via Viper.
+//
+// Request params (read):
+//
+//	{"i2p.router.some.key": null, ...}
+//
+// Request params (write):
+//
+//	{"Set": {"i2p.router.some.key": "value", ...}}
+//
+// Response always returns the current value of each key requested or set:
+//
+//	{"i2p.router.some.key": "current_value", ...}
+//
+// Keys use the Java I2P dotted format. They are mapped to Viper config keys
+// by replacing "i2p.router." with "" and dots with underscores as needed,
+// or by exact key lookup.
+type AdvancedSettingsHandler struct{}
+
+// NewAdvancedSettingsHandler creates a new AdvancedSettings handler.
+func NewAdvancedSettingsHandler() *AdvancedSettingsHandler {
+	return &AdvancedSettingsHandler{}
+}
+
+// Handle processes the AdvancedSettings request.
+// Reads or writes arbitrary Viper config keys.
+func (h *AdvancedSettingsHandler) Handle(ctx context.Context, params json.RawMessage) (interface{}, error) {
+	var req map[string]interface{}
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, NewRPCError(ErrCodeInvalidParams, "malformed AdvancedSettings parameters")
+	}
+
+	result := make(map[string]interface{})
+
+	// Handle "Set" sub-object for writes: {"Set": {"key": value, ...}}
+	if setObj, ok := req["Set"]; ok {
+		if setMap, ok := setObj.(map[string]interface{}); ok {
+			for key, val := range setMap {
+				viperKey := advancedSettingViperKey(key)
+				viper.Set(viperKey, val)
+				result[key] = viper.Get(viperKey)
+			}
+			if len(setMap) > 0 {
+				if err := viper.WriteConfig(); err != nil {
+					log.WithField("error", err.Error()).Warn("AdvancedSettings: changes applied but config file write failed")
+				}
+			}
+		}
+		return result, nil
+	}
+
+	// Read: return current values for all requested keys (null means "read")
+	for key := range req {
+		viperKey := advancedSettingViperKey(key)
+		result[key] = viper.Get(viperKey)
+	}
+
+	// If no keys requested, return nothing (spec does not define a default set)
+	return result, nil
+}
+
+// advancedSettingViperKey maps an I2PControl dotted key to the corresponding
+// Viper config key. Keys that have explicit mappings in settingViperKey use
+// those; all others are returned as-is so callers can use raw Viper keys.
+func advancedSettingViperKey(i2pKey string) string {
+	if viperKey, ok := settingViperKey[i2pKey]; ok {
+		return viperKey
+	}
+	return i2pKey
+}

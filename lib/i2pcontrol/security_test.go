@@ -164,6 +164,12 @@ func (m *mockStatsForAuth) GetNetDBStats() NetDBStats                           
 func (m *mockStatsForAuth) GetNetworkConfig() NetworkConfig                      { return NetworkConfig{} }
 func (m *mockStatsForAuth) IsRunning() bool                                      { return m.running }
 func (m *mockStatsForAuth) GetRateForPeriod(stat string, periodMs int64) float64 { return 0 }
+func (m *mockStatsForAuth) GetNetworkStatus() int {
+	if !m.running {
+		return 8
+	}
+	return 0
+}
 func (m *mockStatsForAuth) GetRouterControl() interface {
 	Stop()
 	Reseed() error
@@ -711,6 +717,11 @@ func (m *mockRouterAccessBandwidth) GetBandwidthRates() (inbound, outbound uint6
 }
 func (m *mockRouterAccessBandwidth) GetActiveSessionCount() int    { return 0 }
 func (m *mockRouterAccessBandwidth) GetTransportAddr() interface{} { return nil }
+func (m *mockRouterAccessBandwidth) GetBandwidthRates1s() (inbound, outbound uint64) {
+	return m.inbound / 2, m.outbound / 2
+}
+func (m *mockRouterAccessBandwidth) GetNetworkStatus() int  { return 0 }
+func (m *mockRouterAccessBandwidth) GetSSU2Addr() interface{} { return nil }
 func (m *mockRouterAccessBandwidth) Stop()                         {}
 func (m *mockRouterAccessBandwidth) Reseed() error                 { return nil }
 
