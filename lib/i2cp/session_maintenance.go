@@ -164,6 +164,9 @@ func (s *Session) evaluateLeaseSetAge() bool {
 	now := time.Now()
 	age := now.Sub(s.leaseSetPublishedAt)
 	regenerationThreshold := s.config.TunnelLifetime / 2
+	if regenerationThreshold <= 0 {
+		regenerationThreshold = 5 * time.Minute
+	}
 
 	if age > regenerationThreshold {
 		s.logLeaseSetExpiration(age, regenerationThreshold)

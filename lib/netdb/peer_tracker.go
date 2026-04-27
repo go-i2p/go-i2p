@@ -270,6 +270,11 @@ func (pt *PeerTracker) GetReliablePeers(minAttempts int) []common.Hash {
 			continue
 		}
 
+		// Skip peers with no recorded attempts to avoid 0/0 NaN
+		if stats.TotalAttempts == 0 {
+			continue
+		}
+
 		// Check success rate
 		successRate := float64(stats.SuccessCount) / float64(stats.TotalAttempts)
 		if successRate >= highSuccessRateThreshold {

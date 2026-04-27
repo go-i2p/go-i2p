@@ -94,11 +94,14 @@ func (v *VariableTunnelBuildReply) processAllHops() (int, error) {
 
 // logReplyCompletion logs the final processing results with success rate.
 func (v *VariableTunnelBuildReply) logReplyCompletion(successCount, recordCount int) {
-	log.WithFields(logger.Fields{
+	fields := logger.Fields{
 		"success_count": successCount,
 		"total_hops":    recordCount,
-		"success_rate":  float64(successCount) / float64(recordCount),
-	}).Info("VariableTunnelBuildReply processing completed")
+	}
+	if recordCount > 0 {
+		fields["success_rate"] = float64(successCount) / float64(recordCount)
+	}
+	log.WithFields(fields).Info("VariableTunnelBuildReply processing completed")
 }
 
 // determineBuildResult determines the final result based on success count.
