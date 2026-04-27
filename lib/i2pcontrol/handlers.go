@@ -260,12 +260,53 @@ func (h *RouterInfoHandler) Handle(ctx context.Context, params json.RawMessage) 
 //   - 11: ERROR_SYMMETRIC_NAT
 //   - 12: ERROR_UDP_PORT_IN_USE
 //   - 13: ERROR_NO_ACTIVE_PEERS_CHECK_CONNECTION_AND_FIREWALL
-//   - 14: ERROR_CLOCK_SKEW_NOT_ENOUGH_ACTIVE_PEERS
+//   - 14: ERROR_UDP_DISABLED_AND_TCP_UNSET
+//
+// Deprecated: Use RouterStatsProvider.GetNetworkStatus() and networkStatusString() directly.
 func getStatusCode(running bool) int {
 	if running {
 		return 0 // OK
 	}
 	return 8 // ERROR_I2CP — generic connection/IPC error when router is not running
+}
+
+// networkStatusString maps an I2PControl numeric status code to the human-readable
+// status name used in the i2p.router.status RouterInfo field.
+func networkStatusString(code int) string {
+	switch code {
+	case 0:
+		return "OK"
+	case 1:
+		return "TESTING"
+	case 2:
+		return "FIREWALLED"
+	case 3:
+		return "HIDDEN"
+	case 4:
+		return "WARN_FIREWALLED_AND_FAST"
+	case 5:
+		return "WARN_FIREWALLED_AND_FLOODFILL"
+	case 6:
+		return "WARN_FIREWALLED_WITH_INBOUND_TCP"
+	case 7:
+		return "WARN_FIREWALLED_WITH_UDP_DISABLED"
+	case 8:
+		return "ERROR_I2CP"
+	case 9:
+		return "ERROR_CLOCK_SKEW"
+	case 10:
+		return "ERROR_PRIVATE_TCP_ADDRESS"
+	case 11:
+		return "ERROR_SYMMETRIC_NAT"
+	case 12:
+		return "ERROR_UDP_PORT_IN_USE"
+	case 13:
+		return "ERROR_NO_ACTIVE_PEERS_CHECK_CONNECTION_AND_FIREWALL"
+	case 14:
+		return "ERROR_UDP_DISABLED_AND_TCP_UNSET"
+	default:
+		return "UNKNOWN"
+	}
 }
 
 // RouterManagerHandler implements the RouterManager RPC method.
@@ -520,6 +561,12 @@ func (h *NetworkSettingHandler) buildAvailableSettings(netConfig NetworkConfig) 
 		"i2p.router.net.ntcp.hostname": netConfig.NTCP2Hostname,
 		"i2p.router.net.ntcp.autoip":   true,
 
+		// SSU2 (UDP) transport settings
+		"i2p.router.net.ssu2.port":     netConfig.SSU2Port,
+		"i2p.router.net.ssu2.hostname": netConfig.SSU2Hostname,
+		// Alias: some clients use "i2p.router.net.ssu.port" for SSU2
+		"i2p.router.net.ssu.port": netConfig.SSU2Port,
+
 		// Bandwidth limits — exposed under both the go-i2p key and the Java I2P
 		// NetworkSetting spec key (i2p.router.net.bw.*). The TUI calls the
 		// spec keys; returning them prevents the client from showing "N/A".
@@ -528,13 +575,12 @@ func (h *NetworkSettingHandler) buildAvailableSettings(netConfig NetworkConfig) 
 		"i2p.router.net.bw.in":     netConfig.BandwidthLimitIn,
 		"i2p.router.net.bw.out":    netConfig.BandwidthLimitOut,
 
-		// Bandwidth share percentage (0–100). go-i2p does not enforce a share
-		// limit; return 0 so the client gets a valid value.
-		"i2p.router.net.bw.share": 0,
+		// Bandwidth share percentage (0–100).
+		"i2p.router.net.bw.share": netConfig.SharePercentage,
 
-		// UPnP — not implemented; return false (spec type: bool)
-		"i2p.router.net.upnp":     false,
-		"i2p.router.upnp.enabled": false,
+		// UPnP — not yet implemented; returned as a readable bool
+		"i2p.router.net.upnp":     viper.GetBool("router.upnp_enabled"),
+		"i2p.router.upnp.enabled": viper.GetBool("router.upnp_enabled"),
 	}
 }
 
@@ -567,14 +613,23 @@ func (h *NetworkSettingHandler) processRequestedSettings(req, availableSettings 
 var settingViperKey = map[string]string{
 	"i2p.router.net.ntcp.port":     "transport.ntcp2_port",
 	"i2p.router.net.ntcp.hostname": "transport.ntcp2_hostname",
-	"i2p.router.bandwidth.in":      "router.max_bandwidth",
-	"i2p.router.bandwidth.out":     "router.max_bandwidth",
+	"i2p.router.bandwidth.in":      "router.max_bandwidth_in",
+	"i2p.router.bandwidth.out":     "router.max_bandwidth_out",
+	"i2p.router.net.bw.in":         "router.max_bandwidth_in",
+	"i2p.router.net.bw.out":        "router.max_bandwidth_out",
+	"i2p.router.net.bw.share":      "router.share_percentage",
+	"i2p.router.net.ssu2.port":     "transport.ssu2_port",
+	"i2p.router.net.ssu.port":      "transport.ssu2_port",
+	"i2p.router.net.upnp":          "router.upnp_enabled",
+	"i2p.router.upnp.enabled":      "router.upnp_enabled",
 }
 
 // restartRequiredSettings is the set of settings whose changes require a router restart.
 var restartRequiredSettings = map[string]bool{
 	"i2p.router.net.ntcp.port":     true,
 	"i2p.router.net.ntcp.hostname": true,
+	"i2p.router.net.ssu2.port":     true,
+	"i2p.router.net.ssu.port":      true,
 }
 
 // applySettingChange persists a single setting change via Viper.
@@ -646,17 +701,54 @@ func validateBandwidthSetting(setting string, value interface{}) (interface{}, e
 	return bw, nil
 }
 
+// validateSharePercentage validates the bandwidth share percentage (0–100).
+func validateSharePercentage(setting string, value interface{}) (interface{}, error) {
+	v, err := coerceInt(value)
+	if err != nil {
+		return nil, fmt.Errorf("%s must be an integer: %w", setting, err)
+	}
+	if v < 0 || v > 100 {
+		return nil, fmt.Errorf("%s must be in [0,100], got %d", setting, v)
+	}
+	return v, nil
+}
+
+// validateBoolSetting coerces value to a boolean.
+func validateBoolSetting(setting string, value interface{}) (interface{}, error) {
+	switch v := value.(type) {
+	case bool:
+		return v, nil
+	case string:
+		switch v {
+		case "true", "1", "yes":
+			return true, nil
+		case "false", "0", "no":
+			return false, nil
+		}
+		return nil, fmt.Errorf("%s must be a boolean, got %q", setting, v)
+	case float64:
+		return v != 0, nil
+	default:
+		return nil, fmt.Errorf("%s must be a boolean, got %T", setting, value)
+	}
+}
+
 // it is written through viper. JSON numbers decode as float64; integers are
 // rounded-trip validated to catch non-integer payloads ("3.5", "abc").
 // Returns the canonical Go value (e.g. int for ports) on success.
 func normalizeSettingValue(setting string, value interface{}) (interface{}, error) {
 	switch setting {
-	case "i2p.router.net.ntcp.port":
+	case "i2p.router.net.ntcp.port", "i2p.router.net.ssu2.port", "i2p.router.net.ssu.port":
 		return validatePortSetting(setting, value)
 	case "i2p.router.net.ntcp.hostname":
 		return validateHostnameSetting(setting, value)
-	case "i2p.router.bandwidth.in", "i2p.router.bandwidth.out":
+	case "i2p.router.bandwidth.in", "i2p.router.bandwidth.out",
+		"i2p.router.net.bw.in", "i2p.router.net.bw.out":
 		return validateBandwidthSetting(setting, value)
+	case "i2p.router.net.bw.share":
+		return validateSharePercentage(setting, value)
+	case "i2p.router.net.upnp", "i2p.router.upnp.enabled":
+		return validateBoolSetting(setting, value)
 	default:
 		// Future-proof: unknown keys fall through unchanged.
 		return value, nil
@@ -724,8 +816,9 @@ func (h *NetworkSettingHandler) buildDefaultSettings(netConfig NetworkConfig) ma
 		"i2p.router.bandwidth.out":     netConfig.BandwidthLimitOut,
 		"i2p.router.net.bw.in":         netConfig.BandwidthLimitIn,
 		"i2p.router.net.bw.out":        netConfig.BandwidthLimitOut,
-		"i2p.router.net.bw.share":      0,
-		"i2p.router.net.upnp":          nil,
+		"i2p.router.net.bw.share":      netConfig.SharePercentage,
+		"i2p.router.net.ssu2.port":     netConfig.SSU2Port,
+		"i2p.router.net.upnp":          viper.GetBool("router.upnp_enabled"),
 	}
 }
 

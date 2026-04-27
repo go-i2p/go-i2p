@@ -541,6 +541,46 @@ func (r *Router) GetTransportAddr() interface{} {
 	return transports[0].Addr()
 }
 
+// GetBandwidthRates1s returns the most recent 1-second inbound and outbound bandwidth rates.
+// Returns rates in bytes per second.
+func (r *Router) GetBandwidthRates1s() (inbound, outbound uint64) {
+	if r.bandwidthTracker == nil {
+		return 0, 0
+	}
+	return r.bandwidthTracker.GetRate1s()
+}
+
+// GetSSU2Addr returns the listening UDP address of the SSU2 transport.
+// Returns nil if SSU2 is not available or not yet bound.
+func (r *Router) GetSSU2Addr() interface{} {
+	muxer := r.TransportMuxer
+	if muxer == nil {
+		return nil
+	}
+	for _, t := range muxer.GetTransports() {
+		if _, ok := t.(*ssu2.SSU2Transport); ok {
+			return t.Addr()
+		}
+	}
+	return nil
+}
+
+// GetNetworkStatus returns the I2PControl network status code.
+// Status codes:
+//
+//	0  = OK
+//	1  = TESTING (not yet connected to any peers)
+//	8  = ERROR_I2CP (router not running)
+func (r *Router) GetNetworkStatus() int {
+	if !r.IsRunning() {
+		return 8 // ERROR_I2CP
+	}
+	if r.IsReseeding() || r.GetActiveSessionCount() == 0 {
+		return 1 // TESTING — no active peers yet
+	}
+	return 0 // OK
+}
+
 // FromConfig creates a minimal Router stub from config. This is a low-level
 // internal function used by CreateRouter. It only initializes cfg and closeChnl.
 //
