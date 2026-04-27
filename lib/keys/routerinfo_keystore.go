@@ -683,7 +683,7 @@ func (ks *RouterInfoKeystore) assembleRouterInfo(routerIdentity *router_identity
 
 	options := map[string]string{
 		"caps":           caps,
-		"netID":          netID,
+		"netId":          netID,
 		"router.version": routerVersion,
 	}
 
@@ -691,7 +691,7 @@ func (ks *RouterInfoKeystore) assembleRouterInfo(routerIdentity *router_identity
 		"at":              "assembleRouterInfo",
 		"timestamp":       publishedTime.Unix(),
 		"caps":            options["caps"],
-		"netID":           options["netID"],
+		"netId":           options["netId"],
 		"router.version":  options["router.version"],
 		"congestion_flag": opts.CongestionFlag,
 	}).Debug("Creating RouterInfo with options")
