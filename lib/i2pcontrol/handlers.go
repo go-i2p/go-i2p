@@ -94,9 +94,16 @@ func (h *GetRateHandler) Handle(ctx context.Context, params json.RawMessage) (in
 	// go-i2pcontrol and the i2ptui TUI use this format. Without it the client
 	// does retpre["Result"].(float64) on a nil map value and panics.
 	if statName, ok := req["Stat"]; ok {
-		val := h.resolveStatName(statName)
+		var periodMs int64 = 60000 // default 60s
+		if raw, ok := req["Period"]; ok {
+			if v, ok := raw.(float64); ok {
+				periodMs = int64(v)
+			}
+		}
+		val := h.resolveStatName(statName, periodMs)
 		log.WithFields(map[string]interface{}{
 			"stat":   statName,
+			"period": periodMs,
 			"result": val,
 		}).Debug("i2pcontrol: GetRate Stat/Period style")
 		return map[string]interface{}{"Result": val}, nil
@@ -122,39 +129,15 @@ func (h *GetRateHandler) Handle(ctx context.Context, params json.RawMessage) (in
 	return result, nil
 }
 
-// resolveStatName maps a Java I2P stat name to a float64 value.
-// Stat names that go-i2p does not track are returned as 0 so the caller gets
-// a valid float64 rather than a nil interface that would panic on type-assertion.
-func (h *GetRateHandler) resolveStatName(statName interface{}) float64 {
+// resolveStatName maps a Java I2P stat name to a float64 value for the given
+// period window (in milliseconds). Delegates to GetRateForPeriod so that all
+// stat/period logic lives in one place.
+func (h *GetRateHandler) resolveStatName(statName interface{}, periodMs int64) float64 {
 	name, ok := statName.(string)
 	if !ok {
 		return 0
 	}
-	bw := h.stats.GetBandwidthStats()
-	ri := h.stats.GetRouterInfo()
-	switch name {
-	// Bandwidth
-	case "bw.sendBps":
-		return bw.OutboundRate
-	case "bw.receiveBps":
-		return bw.InboundRate
-	case "bw.combined":
-		return bw.InboundRate + bw.OutboundRate
-	// Participating tunnels (used with different periods for avg/hourAvg)
-	case "tunnel.participatingTunnels":
-		return float64(ri.ParticipatingTunnels)
-	// Tunnel build stats — not yet tracked per-period; return 0 so client
-	// gets a valid Result rather than panicking.
-	case "tunnel.buildExploratorySuccess",
-		"tunnel.buildExploratoryReject",
-		"tunnel.buildExploratoryExpire",
-		"tunnel.buildClientSuccess",
-		"tunnel.buildRequestTime":
-		return 0
-	default:
-		log.WithField("stat", name).Debug("i2pcontrol: GetRate unknown stat name, returning 0")
-		return 0
-	}
+	return h.stats.GetRateForPeriod(name, periodMs)
 }
 
 // RouterInfoHandler implements the RouterInfo RPC method.

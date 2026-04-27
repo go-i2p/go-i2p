@@ -941,8 +941,8 @@ func (tm *TunnelManager) handleSuccessfulBuild(matchingTunnel *tunnel.TunnelStat
 	tm.buildTimeWindow.recordDuration(buildTimeMs)
 
 	log.WithFields(logger.Fields{
-		"tunnel_id":    matchingTunnel.ID,
-		"message_id":  messageID,
+		"tunnel_id":     matchingTunnel.ID,
+		"message_id":    messageID,
 		"build_time_ms": buildTimeMs,
 	}).Info("Tunnel build completed successfully")
 }

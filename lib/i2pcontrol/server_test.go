@@ -30,6 +30,9 @@ func (m *mockServerStatsProvider) GetTunnelStats() TunnelStats       { return m.
 func (m *mockServerStatsProvider) GetNetDBStats() NetDBStats         { return m.netdb }
 func (m *mockServerStatsProvider) GetNetworkConfig() NetworkConfig   { return m.network }
 func (m *mockServerStatsProvider) IsRunning() bool                   { return m.running }
+func (m *mockServerStatsProvider) GetRateForPeriod(stat string, periodMs int64) float64 {
+	return 0
+}
 func (m *mockServerStatsProvider) GetRouterControl() interface {
 	Stop()
 	Reseed() error

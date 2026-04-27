@@ -159,10 +159,11 @@ func (m *mockStatsForAuth) GetBandwidthStats() BandwidthStats {
 func (m *mockStatsForAuth) GetRouterInfo() RouterInfoStats {
 	return RouterInfoStats{Version: "test", Uptime: 1000}
 }
-func (m *mockStatsForAuth) GetTunnelStats() TunnelStats     { return TunnelStats{} }
-func (m *mockStatsForAuth) GetNetDBStats() NetDBStats       { return NetDBStats{} }
-func (m *mockStatsForAuth) GetNetworkConfig() NetworkConfig { return NetworkConfig{} }
-func (m *mockStatsForAuth) IsRunning() bool                 { return m.running }
+func (m *mockStatsForAuth) GetTunnelStats() TunnelStats                          { return TunnelStats{} }
+func (m *mockStatsForAuth) GetNetDBStats() NetDBStats                            { return NetDBStats{} }
+func (m *mockStatsForAuth) GetNetworkConfig() NetworkConfig                      { return NetworkConfig{} }
+func (m *mockStatsForAuth) IsRunning() bool                                      { return m.running }
+func (m *mockStatsForAuth) GetRateForPeriod(stat string, periodMs int64) float64 { return 0 }
 func (m *mockStatsForAuth) GetRouterControl() interface {
 	Stop()
 	Reseed() error

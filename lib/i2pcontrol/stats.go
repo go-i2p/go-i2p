@@ -1,6 +1,7 @@
 package i2pcontrol
 
 import (
+	"sync"
 	"time"
 
 	"github.com/go-i2p/go-i2p/lib/config"
@@ -47,6 +48,20 @@ type RouterStatsProvider interface {
 		Stop()
 		Reseed() error
 	}
+
+	// GetRateForPeriod returns the windowed average or event count for a named stat over
+	// the most recent periodMs milliseconds. It mirrors the Java I2P StatManager.getRate()
+	// semantic used by the I2PControl GetRate RPC.
+	//
+	// Supported stat names:
+	//   bw.sendBps, bw.receiveBps, bw.combined         — bandwidth in bytes/sec
+	//   tunnel.participatingTunnels                     — participating tunnel count
+	//   tunnel.buildExploratorySuccess                  — count of successful exploratory builds
+	//   tunnel.buildExploratoryReject                   — count of rejected exploratory builds
+	//   tunnel.buildExploratoryExpire                   — count of timed-out exploratory builds
+	//   tunnel.buildClientSuccess                       — count of successful client builds (0 until client tunnels are implemented)
+	//   tunnel.buildRequestTime                         — average build duration in milliseconds
+	GetRateForPeriod(stat string, periodMs int64) float64
 }
 
 // BandwidthStats contains bandwidth usage statistics.
@@ -179,6 +194,17 @@ type routerStatsProvider struct {
 	// version is the router version string
 	// Hardcoded for now as version is not tracked in router
 	version string
+
+	// Sliding-window samples for period-aware GetRate responses (kept for 2 hours).
+	// Samples are recorded lazily (rate-limited to once per sampleInterval) the first
+	// time GetRateForPeriod is called after the interval has elapsed.
+	bwInWindow  *RateWindow // inbound bytes/sec samples
+	bwOutWindow *RateWindow // outbound bytes/sec samples
+	partWindow  *RateWindow // participating tunnel count samples
+
+	// sampleMu protects lastSampleAt to avoid concurrent double-sampling.
+	sampleMu     sync.Mutex
+	lastSampleAt time.Time
 }
 
 // RouterAccess defines the minimal interface needed to collect router statistics.
@@ -236,11 +262,15 @@ type RouterAccess interface {
 // Returns:
 //   - RouterStatsProvider: The statistics provider
 func NewRouterStatsProvider(router RouterAccess, version string) RouterStatsProvider {
+	const sampleWindowMaxAge = 2 * time.Hour
 	log.WithField("version", version).Debug("creating router stats provider")
 	return &routerStatsProvider{
-		router:    router,
-		startTime: time.Now(),
-		version:   version,
+		router:      router,
+		startTime:   time.Now(),
+		version:     version,
+		bwInWindow:  newRateWindow(sampleWindowMaxAge),
+		bwOutWindow: newRateWindow(sampleWindowMaxAge),
+		partWindow:  newRateWindow(sampleWindowMaxAge),
 	}
 }
 
@@ -541,6 +571,100 @@ func (rsp *routerStatsProvider) GetRouterControl() interface {
 func (rsp *routerStatsProvider) calculateUptime() int64 {
 	duration := time.Since(rsp.startTime)
 	return duration.Milliseconds()
+}
+
+// sampleInterval is the minimum time between successive bandwidth/participating-tunnel samples.
+// Balances measurement accuracy against the overhead of calling GetBandwidthRates.
+const sampleInterval = 5 * time.Second
+
+// maybeRecordSample records a bandwidth and participating-tunnel sample if sampleInterval has
+// elapsed since the last sample. Safe to call concurrently from multiple goroutines.
+func (rsp *routerStatsProvider) maybeRecordSample() {
+	rsp.sampleMu.Lock()
+	defer rsp.sampleMu.Unlock()
+	if time.Since(rsp.lastSampleAt) < sampleInterval {
+		return
+	}
+	rsp.lastSampleAt = time.Now()
+
+	inbound, outbound := rsp.router.GetBandwidthRates()
+	rsp.bwInWindow.Record(float64(inbound))
+	rsp.bwOutWindow.Record(float64(outbound))
+
+	if pm := rsp.router.GetParticipantManager(); pm != nil {
+		rsp.partWindow.Record(float64(pm.ParticipantCount()))
+	}
+}
+
+// GetRateForPeriod returns the windowed average or event count for the named stat over
+// the most recent periodMs milliseconds. It mirrors the Java I2P StatManager.getRate()
+// semantic used by the I2PControl GetRate RPC.
+//
+// For bandwidth stats, returns the mean bytes/sec over the window (falling back to the
+// current 15-second rate when fewer than two samples have been recorded).
+// For count stats (tunnel build success/reject/expire), returns the total event count
+// within the window.
+func (rsp *routerStatsProvider) GetRateForPeriod(stat string, periodMs int64) float64 {
+	rsp.maybeRecordSample()
+
+	switch stat {
+	// Bandwidth — windowed average, with fallback to instantaneous 15-second rate
+	case "bw.sendBps":
+		if avg := rsp.bwOutWindow.Average(periodMs); avg > 0 {
+			return avg
+		}
+		return rsp.GetBandwidthStats().OutboundRate
+	case "bw.receiveBps":
+		if avg := rsp.bwInWindow.Average(periodMs); avg > 0 {
+			return avg
+		}
+		return rsp.GetBandwidthStats().InboundRate
+	case "bw.combined":
+		inAvg := rsp.bwInWindow.Average(periodMs)
+		outAvg := rsp.bwOutWindow.Average(periodMs)
+		if inAvg > 0 || outAvg > 0 {
+			return inAvg + outAvg
+		}
+		bw := rsp.GetBandwidthStats()
+		return bw.InboundRate + bw.OutboundRate
+
+	// Participating tunnels — windowed average, with fallback to instantaneous count
+	case "tunnel.participatingTunnels":
+		if avg := rsp.partWindow.Average(periodMs); avg > 0 {
+			return avg
+		}
+		ri := rsp.GetRouterInfo()
+		return float64(ri.ParticipatingTunnels)
+
+	// Tunnel build stats — event counts within the requested window
+	case "tunnel.buildExploratorySuccess":
+		if tm := rsp.router.GetTunnelManager(); tm != nil {
+			return tm.GetBuildSuccessCount(periodMs)
+		}
+		return 0
+	case "tunnel.buildExploratoryReject":
+		if tm := rsp.router.GetTunnelManager(); tm != nil {
+			return tm.GetBuildRejectCount(periodMs)
+		}
+		return 0
+	case "tunnel.buildExploratoryExpire":
+		if tm := rsp.router.GetTunnelManager(); tm != nil {
+			return tm.GetBuildExpireCount(periodMs)
+		}
+		return 0
+	case "tunnel.buildClientSuccess":
+		// Client tunnels are not yet implemented; always 0.
+		return 0
+	case "tunnel.buildRequestTime":
+		if tm := rsp.router.GetTunnelManager(); tm != nil {
+			return tm.GetBuildAvgTimeMs(periodMs)
+		}
+		return 0
+
+	default:
+		log.WithField("stat", stat).Debug("i2pcontrol: GetRateForPeriod unknown stat name, returning 0")
+		return 0
+	}
 }
 
 // RealRouter is an adapter that makes *router.Router implement RouterAccess.
