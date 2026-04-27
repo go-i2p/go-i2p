@@ -162,7 +162,7 @@ func registerRPCHandlers(ctx context.Context, wg *sync.WaitGroup, stats RouterSt
 
 	registry.Register("Authenticate", RPCHandlerFunc(func(ctx context.Context, params json.RawMessage) (interface{}, error) {
 		var req struct {
-			API      int    `json:"API"`
+			API      *int   `json:"API"`
 			Password string `json:"Password"`
 		}
 
@@ -171,8 +171,11 @@ func registerRPCHandlers(ctx context.Context, wg *sync.WaitGroup, stats RouterSt
 			return nil, NewRPCError(ErrCodeInvalidParams, "malformed Authenticate parameters")
 		}
 
-		if req.API != 1 {
-			return nil, NewRPCError(ErrCodeInvalidParams, "unsupported API version")
+		if req.API == nil {
+			return nil, NewRPCError(ErrCodeAPIVersionNotSpecified, "API version not specified")
+		}
+		if *req.API != 1 {
+			return nil, NewRPCError(ErrCodeAPIVersionNotSupported, fmt.Sprintf("API version %d is not supported", *req.API))
 		}
 
 		token, err := authManager.Authenticate(req.Password, cfg.TokenExpiration)
@@ -181,7 +184,7 @@ func registerRPCHandlers(ctx context.Context, wg *sync.WaitGroup, stats RouterSt
 		}
 
 		resp := map[string]interface{}{
-			"API":   req.API,
+			"API":   *req.API,
 			"Token": token,
 		}
 		if req.Password == defaultI2PControlPassword {
@@ -194,6 +197,7 @@ func registerRPCHandlers(ctx context.Context, wg *sync.WaitGroup, stats RouterSt
 	registry.Register("RouterManager", NewRouterManagerHandler(ctx, wg, stats.GetRouterControl()))
 	registry.Register("NetworkSetting", NewNetworkSettingHandler(stats))
 	registry.Register("I2PControl", NewI2PControlHandler(authManager, cfg))
+	registry.Register("AdvancedSettings", NewAdvancedSettingsHandler())
 
 	return registry
 }

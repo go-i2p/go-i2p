@@ -19,11 +19,13 @@ const (
 	// Codes -32001 through -32006 are assigned by the I2PControl spec.
 	// Code -32099 is used for implementation-defined "not implemented" to avoid
 	// colliding with the spec-defined range.
-	ErrCodeAuthFailed    = -32001 // Authentication failed (invalid password)
-	ErrCodeAuthRequired  = -32002 // No authentication token presented
-	ErrCodeTokenNotExist = -32003 // Authentication token does not exist
-	ErrCodeTokenExpired  = -32004 // Authentication token expired and removed
-	ErrCodeNotImpl       = -32099 // Method not yet implemented
+	ErrCodeAuthFailed             = -32001 // Authentication failed (invalid password)
+	ErrCodeAuthRequired           = -32002 // No authentication token presented
+	ErrCodeTokenNotExist          = -32003 // Authentication token does not exist
+	ErrCodeTokenExpired           = -32004 // Authentication token expired and removed
+	ErrCodeAPIVersionNotSpecified = -32005 // API version not specified in Authenticate request
+	ErrCodeAPIVersionNotSupported = -32006 // API version specified is not supported
+	ErrCodeNotImpl                = -32099 // Method not yet implemented
 )
 
 // Request represents a JSON-RPC 2.0 request.
