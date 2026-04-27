@@ -127,7 +127,7 @@ func readBuildResponseRecordRandomData(data []byte) ([495]byte, error) {
 	copy(randomData[:], data[32:527])
 
 	log.WithFields(logger.Fields{
-		"at":          "i2np.readBuildResponseRandomData",
+		"at":         "i2np.readBuildResponseRandomData",
 		"randomData": randomData,
 	}).Debug("parsed_build_response_record_random_data")
 	return randomData, nil

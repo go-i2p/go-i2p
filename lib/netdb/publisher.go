@@ -221,6 +221,10 @@ func (p *Publisher) publishOurRouterInfo() {
 		log.WithFields(logger.Fields{"at": "publishOurRouterInfo"}).Warn("Local RouterInfo is invalid, skipping publishing")
 		return
 	}
+	if err := ri.ValidatePublishable(); err != nil {
+		log.WithError(err).Warn("Local RouterInfo contains unpublishable addresses, skipping publishing")
+		return
+	}
 
 	// Publish the RouterInfo using the existing PublishRouterInfo method
 	if err := p.PublishRouterInfo(*ri); err != nil {

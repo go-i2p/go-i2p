@@ -155,7 +155,6 @@ func CreateRouter(cfg *config.RouterConfig) (*Router, error) {
 	return r, nil
 }
 
-
 // logError logs a startup-phase error.
 func logError(reason string, err error) {
 	log.WithError(err).WithFields(logger.Fields{
@@ -468,9 +467,10 @@ func addTransportAddress(ri *router_info.RouterInfo, addr net.Addr, proto string
 		log.WithError(err).Errorf("Failed to convert %s address to RouterAddress", proto)
 		return oops.Wrapf(err, "failed to convert %s address", proto)
 	}
-        if err := ri.AddAddress(routerAddress); err != nil {
-                log.WithError(err).Warn("failed to add address to RouterInfo")
-        }
+	if err := ri.AddAddress(routerAddress); err != nil {
+		log.WithError(err).Errorf("failed to add %s address to RouterInfo", proto)
+		return oops.Wrapf(err, "failed to add %s address", proto)
+	}
 	log.WithFields(logger.Fields{
 		"host": addr.String(),
 		"cost": routerAddress.Cost(),

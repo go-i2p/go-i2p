@@ -298,7 +298,7 @@ func readBuildRequestRecordReceiveTunnel(data []byte) (tunnel.TunnelID, error) {
 	)
 
 	log.WithFields(logger.Fields{
-		"at":             "i2np.readBuildRequestRecordReceiveTunnel",
+		"at":            "i2np.readBuildRequestRecordReceiveTunnel",
 		"receiveTunnel": receiveTunnel,
 	}).Debug("parsed_build_request_record_receive_tunnel")
 	return receiveTunnel, nil
@@ -330,7 +330,7 @@ func readBuildRequestRecordNextTunnel(data []byte) (tunnel.TunnelID, error) {
 	)
 
 	log.WithFields(logger.Fields{
-		"at":          "i2np.readBuildRequestRecordNextTunnel",
+		"at":         "i2np.readBuildRequestRecordNextTunnel",
 		"nextTunnel": nextTunnel,
 	}).Debug("parsed_build_request_record_next_tunnel")
 	return nextTunnel, nil

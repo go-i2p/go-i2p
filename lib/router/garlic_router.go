@@ -508,9 +508,9 @@ func (gr *GarlicMessageRouter) sendMessageToRouter(routerHash common.Hash, route
 		return oops.Wrapf(err, "failed to get session for router %x", routerHash[:8])
 	}
 
-        if err := session.QueueSendI2NP(msg); err != nil {
-                log.WithError(err).Warn("failed to queue I2NP message to session")
-        }
+	if err := session.QueueSendI2NP(msg); err != nil {
+		log.WithError(err).Warn("failed to queue I2NP message to session")
+	}
 	log.WithFields(logger.Fields{
 		"at":           "sendMessageToRouter",
 		"router_hash":  fmt.Sprintf("%x", routerHash[:8]),

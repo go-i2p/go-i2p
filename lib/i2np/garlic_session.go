@@ -74,7 +74,7 @@ func (sm *GarlicSessionManager) EncryptGarlicMessage(
 	destinationPubKey [32]byte,
 	plaintextGarlic []byte,
 ) ([]byte, error) {
-	var hashArr = [32]byte(destinationHash)
+	hashArr := [32]byte(destinationHash)
 
 	// Wrap raw garlic bytes in the ratchet payload format required by go-noise.
 	// BuildNSPayload prepends a DateTime block and wraps the data as a GarlicClove block.
