@@ -3,7 +3,9 @@ package i2np
 import (
 	"fmt"
 
+	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/session_key"
+	"github.com/go-i2p/go-i2p/lib/tunnel"
 )
 
 // Compile-time interface verification for mocks.
@@ -115,4 +117,47 @@ func mockGarlicDecryptorRoundTrip() *mockGarlicDecryptor {
 			return encrypted, [8]byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}, nil, nil
 		},
 	}
+}
+
+// mockCloveForwarder implements GarlicCloveForwarder for unit testing
+// the DESTINATION, ROUTER, and TUNNEL delivery dispatch paths in
+// processor_handlers.go without requiring a real GarlicMessageRouter.
+type mockCloveForwarder struct {
+	// Per-call return errors (nil means success).
+	destErr   error
+	routerErr error
+	tunnelErr error
+
+	// Captured arguments for assertion.
+	destHash    common.Hash
+	routerHash  common.Hash
+	gatewayHash common.Hash
+	tunnelID    tunnel.TunnelID
+
+	// Call counters.
+	destCalls   int
+	routerCalls int
+	tunnelCalls int
+}
+
+// Compile-time check: mockCloveForwarder must satisfy GarlicCloveForwarder.
+var _ GarlicCloveForwarder = (*mockCloveForwarder)(nil)
+
+func (m *mockCloveForwarder) ForwardToDestination(destHash common.Hash, msg I2NPMessage) error {
+	m.destCalls++
+	m.destHash = destHash
+	return m.destErr
+}
+
+func (m *mockCloveForwarder) ForwardToRouter(routerHash common.Hash, msg I2NPMessage) error {
+	m.routerCalls++
+	m.routerHash = routerHash
+	return m.routerErr
+}
+
+func (m *mockCloveForwarder) ForwardThroughTunnel(gatewayHash common.Hash, tunnelID tunnel.TunnelID, msg I2NPMessage) error {
+	m.tunnelCalls++
+	m.gatewayHash = gatewayHash
+	m.tunnelID = tunnelID
+	return m.tunnelErr
 }
