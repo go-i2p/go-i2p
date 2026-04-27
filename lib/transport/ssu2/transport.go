@@ -196,19 +196,28 @@ func createUDPConn(config *Config, iport int) (net.PacketConn, error) {
 	return listenWithNATTraversal(config, iport)
 }
 
-// listenWithOSPort creates a UDP listener with an OS-assigned port.
+// listenWithOSPort discovers a free UDP port via a temporary OS-assigned binding,
+// then re-binds through NAT traversal (UPnP/NAT-PMP with fallback) on that port
+// so the resulting connection carries a real external address.
 func listenWithOSPort(config *Config) (net.PacketConn, error) {
+	// Step 1: ask the OS for any available UDP port.
 	udpAddr, err := net.ResolveUDPAddr("udp", config.ListenerAddress)
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to resolve UDP address")
 	}
-	rawConn, err := net.ListenUDP("udp", udpAddr)
+	temp, err := net.ListenUDP("udp", udpAddr)
 	if err != nil {
-		return nil, oops.Wrapf(err, "failed to create UDP listener")
+		return nil, oops.Wrapf(err, "failed to probe UDP port")
 	}
-	config.ListenerAddress = rawConn.LocalAddr().String()
-	log.WithField("address", config.ListenerAddress).Info("UDP listener started (no NAT traversal for OS-assigned port)")
-	return rawConn, nil
+	assignedPort := temp.LocalAddr().(*net.UDPAddr).Port
+	if closeErr := temp.Close(); closeErr != nil {
+		log.WithError(closeErr).Warn("failed to close probe UDP listener")
+	}
+
+	// Step 2: re-bind on the discovered port with NAT traversal so the connection
+	// address carries the external IP instead of the unspecified "::" host.
+	log.WithField("port", assignedPort).Info("probed OS-assigned UDP port; attempting NAT traversal")
+	return listenWithNATTraversal(config, assignedPort)
 }
 
 // listenWithNATTraversal creates a UDP listener with NAT port mapping.

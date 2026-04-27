@@ -267,13 +267,55 @@ func extractHostPort(addr net.Addr) (string, string, error) {
 		if err != nil {
 			return "", "", oops.Wrapf(err, "failed to parse NATAddr external address %q", natAddr.ExternalAddr())
 		}
+		if parsedIP := net.ParseIP(host); parsedIP != nil && parsedIP.IsUnspecified() {
+			if ext := detectExternalIP(); ext != "" {
+				host = ext
+			}
+		}
 		return host, portStr, nil
 	}
 	host, portStr, err := net.SplitHostPort(effectiveAddr.String())
 	if err != nil {
 		return "", "", oops.Wrapf(err, "failed to parse listener address")
 	}
+	if parsedIP := net.ParseIP(host); parsedIP != nil && parsedIP.IsUnspecified() {
+		if ext := detectExternalIP(); ext != "" {
+			host = ext
+		}
+	}
 	return host, portStr, nil
+}
+
+// detectExternalIP returns the best routable local IP address to advertise when
+// the listener is bound to an unspecified address (:: or 0.0.0.0). It prefers
+// globally-routable IPv4 addresses, then any non-loopback non-link-local address.
+// Returns "" if no suitable address is found.
+func detectExternalIP() string {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		log.WithError(err).Warn("detectExternalIP: failed to enumerate interface addresses")
+		return ""
+	}
+	var fallback string
+	for _, addr := range addrs {
+		var ip net.IP
+		switch v := addr.(type) {
+		case *net.IPNet:
+			ip = v.IP
+		case *net.IPAddr:
+			ip = v.IP
+		}
+		if ip == nil || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+			continue
+		}
+		if ip4 := ip.To4(); ip4 != nil && ip.IsGlobalUnicast() {
+			return ip4.String()
+		}
+		if fallback == "" {
+			fallback = ip.String()
+		}
+	}
+	return fallback
 }
 
 // buildBaseSSU2Options creates the base options map for an SSU2 RouterAddress.

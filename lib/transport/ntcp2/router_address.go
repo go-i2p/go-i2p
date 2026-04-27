@@ -136,6 +136,38 @@ func ConvertToRouterAddress(transport *NTCP2Transport) (*router_address.RouterAd
 	return routerAddress, nil
 }
 
+// detectExternalIP returns the best routable local IP address to advertise when
+// the listener is bound to an unspecified address (:: or 0.0.0.0). It prefers
+// globally-routable IPv4 addresses, then any non-loopback non-link-local address.
+// Returns "" if no suitable address is found.
+func detectExternalIP() string {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		log.WithError(err).Warn("detectExternalIP: failed to enumerate interface addresses")
+		return ""
+	}
+	var fallback string
+	for _, addr := range addrs {
+		var ip net.IP
+		switch v := addr.(type) {
+		case *net.IPNet:
+			ip = v.IP
+		case *net.IPAddr:
+			ip = v.IP
+		}
+		if ip == nil || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+			continue
+		}
+		if ip4 := ip.To4(); ip4 != nil && ip.IsGlobalUnicast() {
+			return ip4.String()
+		}
+		if fallback == "" {
+			fallback = ip.String()
+		}
+	}
+	return fallback
+}
+
 // extractTransportAddress extracts and validates the host and port from the transport's listening address.
 // Returns the host IP string, port string, and any error encountered during extraction.
 func extractTransportAddress(transport *NTCP2Transport) (string, string, error) {
@@ -158,13 +190,27 @@ func extractTransportAddress(transport *NTCP2Transport) (string, string, error) 
 			return "", "", oops.Wrapf(err, "NTCP2Addr underlying address extraction failed")
 		}
 	case *net.TCPAddr:
-		host = typedAddr.IP.String()
+		ip := typedAddr.IP
+		if ip == nil || ip.IsUnspecified() {
+			if ext := detectExternalIP(); ext != "" {
+				host = ext
+			} else {
+				host = ip.String()
+			}
+		} else {
+			host = ip.String()
+		}
 		port = fmt.Sprintf("%d", typedAddr.Port)
 	case *nattraversal.NATAddr:
 		var err error
 		host, port, err = net.SplitHostPort(typedAddr.ExternalAddr())
 		if err != nil {
 			return "", "", oops.Wrapf(err, "failed to parse NATAddr external address %q", typedAddr.ExternalAddr())
+		}
+		if parsedIP := net.ParseIP(host); parsedIP != nil && parsedIP.IsUnspecified() {
+			if ext := detectExternalIP(); ext != "" {
+				host = ext
+			}
 		}
 	default:
 		log.Errorf("Expected *net.TCPAddr, *ntcp2.NTCP2Addr, or *nattraversal.NATAddr, got %T", addr)
@@ -178,6 +224,12 @@ func extractTransportAddress(transport *NTCP2Transport) (string, string, error) 
 func extractHostPort(addr net.Addr) (string, string, error) {
 	switch a := addr.(type) {
 	case *net.TCPAddr:
+		ip := a.IP
+		if ip == nil || ip.IsUnspecified() {
+			if ext := detectExternalIP(); ext != "" {
+				return ext, fmt.Sprintf("%d", a.Port), nil
+			}
+		}
 		return a.IP.String(), fmt.Sprintf("%d", a.Port), nil
 	case *nattraversal.NATAddr:
 		host, port, err := net.SplitHostPort(a.ExternalAddr())

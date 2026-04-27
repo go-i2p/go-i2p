@@ -204,16 +204,24 @@ func buildTransportInstance(config *Config, identity router_info.RouterInfo, key
 }
 
 // setupNetworkListener creates and attaches the TCP and NTCP2 listeners to the transport.
-// bindOSAssignedPort creates a TCP listener on the OS-assigned port (port 0).
-// NAT traversal is skipped because a specific port is required for UPnP/NAT-PMP.
+// bindOSAssignedPort discovers a free port via a temporary OS-assigned binding, then
+// re-binds through NAT traversal (UPnP/NAT-PMP with fallback) on that port so that
+// the resulting listener carries a real external address rather than the unspecified "::" host.
 func bindOSAssignedPort(config *Config) (net.Listener, error) {
-	l, err := net.Listen("tcp", config.ListenerAddress)
+	// Step 1: ask the OS for any available port.
+	temp, err := net.Listen("tcp", config.ListenerAddress)
 	if err != nil {
-		return nil, oops.Wrapf(err, "failed to create TCP listener")
+		return nil, oops.Wrapf(err, "failed to probe available port")
 	}
-	config.ListenerAddress = l.Addr().String()
-	log.WithField("address", config.ListenerAddress).Info("TCP listener started (no NAT traversal for OS-assigned port)")
-	return l, nil
+	assignedPort := temp.Addr().(*net.TCPAddr).Port
+	if closeErr := temp.Close(); closeErr != nil {
+		log.WithError(closeErr).Warn("failed to close probe listener")
+	}
+
+	// Step 2: re-bind on the discovered port with NAT traversal so the listener
+	// address carries the external IP instead of the unspecified "::" host.
+	log.WithField("port", assignedPort).Info("probed OS-assigned port; attempting NAT traversal")
+	return bindWithNATTraversal(config, assignedPort)
 }
 
 // bindWithNATTraversal creates a TCP listener on the specified port, attempting
