@@ -157,8 +157,8 @@ func TestRouterInfoHandler_NotRunning(t *testing.T) {
 	handler := NewRouterInfoHandler(newStatsHandler(false, "0.1.0"))
 	resultMap := invokeHandler(t, handler, `{"i2p.router.net.status": null}`)
 
-	// Status should be 5 (Error) when not running
-	assert.Equal(t, 5, resultMap["i2p.router.net.status"])
+	// Status should be 8 (ERROR_I2CP) when not running
+	assert.Equal(t, 8, resultMap["i2p.router.net.status"])
 }
 
 func TestRouterInfoHandler_InvalidJSON(t *testing.T) {
@@ -438,7 +438,7 @@ func TestGetStatusCode(t *testing.T) {
 		want    int
 	}{
 		{"running", true, 0},
-		{"not running", false, 5},
+		{"not running", false, 8},
 	}
 
 	for _, tt := range tests {
