@@ -53,24 +53,20 @@ func (h *EchoHandler) Handle(ctx context.Context, params json.RawMessage) (inter
 }
 
 // GetRateHandler implements the GetRate RPC method.
-// Returns bandwidth statistics from the router.
+// Supports two calling conventions:
 //
-// Request params:
+// 1. Java I2P spec style (used by go-i2pcontrol / go-i2p TUI):
 //
-//	{
-//	  "i2p.router.net.bw.inbound.15s": null,
-//	  "i2p.router.net.bw.outbound.15s": null
-//	}
+//	{"Stat": "bw.sendBps", "Period": 300000}
+//	→ {"Result": 12345.0}
 //
-// Response:
+// 2. Legacy field-list style:
 //
-//	{
-//	  "i2p.router.net.bw.inbound.15s": 12345.67,
-//	  "i2p.router.net.bw.outbound.15s": 23456.78
-//	}
+//	{"i2p.router.net.bw.inbound.15s": null, "i2p.router.net.bw.outbound.15s": null}
+//	→ {"i2p.router.net.bw.inbound.15s": 12345.67, ...}
 //
-// The request specifies which statistics are desired.
-// Any field with a null value will be populated in the response.
+// The Stat/Period style MUST return {"Result": float64} or clients like
+// go-i2pcontrol will panic when they type-assert retpre["Result"].(float64).
 type GetRateHandler struct {
 	stats RouterStatsProvider
 }
@@ -86,22 +82,30 @@ func NewGetRateHandler(stats RouterStatsProvider) *GetRateHandler {
 }
 
 // Handle processes the GetRate request.
-// Returns bandwidth statistics for requested fields.
+// Detects Stat/Period format first; falls back to legacy field-list format.
 func (h *GetRateHandler) Handle(ctx context.Context, params json.RawMessage) (interface{}, error) {
-	// Parse request to see which fields are requested
 	var req map[string]interface{}
 	if err := json.Unmarshal(params, &req); err != nil {
 		log.WithField("reason", err.Error()).Debug("i2pcontrol: GetRate params unmarshal failed")
 		return nil, NewRPCError(ErrCodeInvalidParams, "malformed GetRate parameters")
 	}
 
-	// Get current bandwidth stats
-	bwStats := h.stats.GetBandwidthStats()
+	// Java I2P spec: {"Stat": "statName", "Period": ms} → {"Result": float64}
+	// go-i2pcontrol and the i2ptui TUI use this format. Without it the client
+	// does retpre["Result"].(float64) on a nil map value and panics.
+	if statName, ok := req["Stat"]; ok {
+		val := h.resolveStatName(statName)
+		log.WithFields(map[string]interface{}{
+			"stat":   statName,
+			"result": val,
+		}).Debug("i2pcontrol: GetRate Stat/Period style")
+		return map[string]interface{}{"Result": val}, nil
+	}
 
-	// Build response with requested fields
+	// Legacy field-list style: {"i2p.router.net.bw.inbound.15s": null, ...}
+	bwStats := h.stats.GetBandwidthStats()
 	result := make(map[string]interface{})
 
-	// Check which fields were requested (any field present in req)
 	if _, ok := req["i2p.router.net.bw.inbound.15s"]; ok {
 		result["i2p.router.net.bw.inbound.15s"] = bwStats.InboundRate
 	}
@@ -109,13 +113,46 @@ func (h *GetRateHandler) Handle(ctx context.Context, params json.RawMessage) (in
 		result["i2p.router.net.bw.outbound.15s"] = bwStats.OutboundRate
 	}
 
-	// If no specific fields requested, return all
+	// Return all fields when none were explicitly requested.
 	if len(result) == 0 {
 		result["i2p.router.net.bw.inbound.15s"] = bwStats.InboundRate
 		result["i2p.router.net.bw.outbound.15s"] = bwStats.OutboundRate
 	}
 
 	return result, nil
+}
+
+// resolveStatName maps a Java I2P stat name to a float64 value.
+// Stat names that go-i2p does not track are returned as 0 so the caller gets
+// a valid float64 rather than a nil interface that would panic on type-assertion.
+func (h *GetRateHandler) resolveStatName(statName interface{}) float64 {
+	name, ok := statName.(string)
+	if !ok {
+		return 0
+	}
+	bw := h.stats.GetBandwidthStats()
+	ri := h.stats.GetRouterInfo()
+	switch name {
+	// Bandwidth
+	case "bw.sendBps":
+		return bw.OutboundRate
+	case "bw.receiveBps":
+		return bw.InboundRate
+	// Participating tunnels (used with different periods for avg/hourAvg)
+	case "tunnel.participatingTunnels":
+		return float64(ri.ParticipatingTunnels)
+	// Tunnel build stats — not yet tracked per-period; return 0 so client
+	// gets a valid Result rather than panicking.
+	case "tunnel.buildExploratorySuccess",
+		"tunnel.buildExploratoryReject",
+		"tunnel.buildExploratoryExpire",
+		"tunnel.buildClientSuccess",
+		"tunnel.buildRequestTime":
+		return 0
+	default:
+		log.WithField("stat", name).Debug("i2pcontrol: GetRate unknown stat name, returning 0")
+		return 0
+	}
 }
 
 // RouterInfoHandler implements the RouterInfo RPC method.
@@ -298,8 +335,12 @@ func (h *RouterManagerHandler) Handle(ctx context.Context, params json.RawMessag
 
 	result := make(map[string]interface{})
 	h.handleShutdown(req, result)
+	h.handleShutdownGraceful(req, result)
 	h.handleRestart(req, result)
+	h.handleRestartGraceful(req, result)
 	h.handleReseed(req, result)
+	h.handleFindUpdates(req, result)
+	h.handleUpdate(req, result)
 
 	if len(result) == 0 {
 		return nil, NewRPCErrorWithData(ErrCodeInvalidParams, "no operations specified", "specify at least one operation")
@@ -369,6 +410,66 @@ func (h *RouterManagerHandler) handleReseed(req, result map[string]interface{}) 
 	}
 }
 
+// handleShutdownGraceful is the spec-compliant alias for a graceful shutdown.
+// Java I2P delays the shutdown by ~11 minutes; go-i2p delegates to the same
+// Stop() path as immediate shutdown and relies on the process supervisor.
+func (h *RouterManagerHandler) handleShutdownGraceful(req, result map[string]interface{}) {
+	if _, ok := req["ShutdownGraceful"]; ok {
+		if h.RouterControl == nil {
+			log.WithFields(logger.Fields{"at": "handleShutdownGraceful"}).Warn("ShutdownGraceful requested but RouterControl is nil")
+			result["ShutdownGraceful"] = "error: router control not available"
+			return
+		}
+		h.wg.Add(1)
+		go func() {
+			defer h.wg.Done()
+			log.WithFields(logger.Fields{"at": "handleShutdownGraceful"}).Info("ShutdownGraceful requested via I2PControl")
+			h.RouterControl.Stop()
+		}()
+		result["ShutdownGraceful"] = "initiated"
+	}
+}
+
+// handleRestartGraceful is the spec-compliant alias for a graceful restart.
+// Like handleShutdownGraceful, go-i2p performs a clean stop and relies on the
+// external process supervisor to restart the process.
+func (h *RouterManagerHandler) handleRestartGraceful(req, result map[string]interface{}) {
+	if _, ok := req["RestartGraceful"]; ok {
+		if h.RouterControl == nil {
+			log.WithFields(logger.Fields{"at": "handleRestartGraceful"}).Warn("RestartGraceful requested but RouterControl is nil")
+			result["RestartGraceful"] = "error: router control not available"
+			return
+		}
+		h.wg.Add(1)
+		go func() {
+			defer h.wg.Done()
+			log.WithFields(logger.Fields{"at": "handleRestartGraceful"}).Info("RestartGraceful requested via I2PControl (stop only; supervisor must restart)")
+			h.RouterControl.Stop()
+		}()
+		result["RestartGraceful"] = "initiated"
+	}
+}
+
+// handleFindUpdates responds to the FindUpdates RouterManager operation.
+// go-i2p does not have an auto-update mechanism, so this always returns false.
+// Returning a valid bool prevents clients (go-i2pcontrol) from panicking on
+// the type assertion retpre["FindUpdates"].(bool).
+func (h *RouterManagerHandler) handleFindUpdates(req, result map[string]interface{}) {
+	if _, ok := req["FindUpdates"]; ok {
+		// No update mechanism in go-i2p; return false (no updates available).
+		result["FindUpdates"] = false
+	}
+}
+
+// handleUpdate responds to the Update RouterManager operation.
+// go-i2p does not support in-process updates; the operation is acknowledged
+// but no action is taken.
+func (h *RouterManagerHandler) handleUpdate(req, result map[string]interface{}) {
+	if _, ok := req["Update"]; ok {
+		result["Update"] = "not available: go-i2p does not support in-process updates"
+	}
+}
+
 // NetworkSettingHandler implements the NetworkSetting RPC method.
 // Supports both reading and writing router network configuration.
 //
@@ -416,14 +517,31 @@ func (h *NetworkSettingHandler) Handle(ctx context.Context, params json.RawMessa
 }
 
 // buildAvailableSettings creates a map of all available network settings with their current values.
+// Includes both the go-i2p native keys and the Java I2P spec aliases so that
+// the go-i2pcontrol client library (and i2ptui) can read them without panicking.
 func (h *NetworkSettingHandler) buildAvailableSettings(netConfig NetworkConfig) map[string]interface{} {
 	return map[string]interface{}{
+		// NTCP2 transport settings
 		"i2p.router.net.ntcp.port":     netConfig.NTCP2Port,
 		"i2p.router.net.ntcp.hostname": netConfig.NTCP2Hostname,
-		"i2p.router.net.ntcp.autoip":   true,  // Default behavior
-		"i2p.router.upnp.enabled":      false, // Not yet implemented
-		"i2p.router.bandwidth.in":      netConfig.BandwidthLimitIn,
-		"i2p.router.bandwidth.out":     netConfig.BandwidthLimitOut,
+		"i2p.router.net.ntcp.autoip":   true,
+
+		// Bandwidth limits — exposed under both the go-i2p key and the Java I2P
+		// NetworkSetting spec key (i2p.router.net.bw.*). The TUI calls the
+		// spec keys; returning them prevents the client from showing "N/A".
+		"i2p.router.bandwidth.in":  netConfig.BandwidthLimitIn,
+		"i2p.router.bandwidth.out": netConfig.BandwidthLimitOut,
+		"i2p.router.net.bw.in":     netConfig.BandwidthLimitIn,
+		"i2p.router.net.bw.out":    netConfig.BandwidthLimitOut,
+
+		// Bandwidth share percentage (0–100). go-i2p does not enforce a share
+		// limit; return 0 so the client gets a valid value.
+		"i2p.router.net.bw.share": 0,
+
+		// UPnP — not implemented; nil signals "disabled" to go-i2pcontrol
+		// (the client does a nil-check before type-asserting).
+		"i2p.router.net.upnp":     nil,
+		"i2p.router.upnp.enabled": false,
 	}
 }
 
@@ -603,12 +721,18 @@ func validateHostname(host string) error {
 }
 
 // buildDefaultSettings returns a map containing the most commonly requested network settings.
+// Includes the Java I2P spec keys (i2p.router.net.bw.*) alongside the go-i2p
+// native keys so that the TUI and go-i2pcontrol library see populated values.
 func (h *NetworkSettingHandler) buildDefaultSettings(netConfig NetworkConfig) map[string]interface{} {
 	return map[string]interface{}{
 		"i2p.router.net.ntcp.port":     netConfig.NTCP2Port,
 		"i2p.router.net.ntcp.hostname": netConfig.NTCP2Hostname,
 		"i2p.router.bandwidth.in":      netConfig.BandwidthLimitIn,
 		"i2p.router.bandwidth.out":     netConfig.BandwidthLimitOut,
+		"i2p.router.net.bw.in":         netConfig.BandwidthLimitIn,
+		"i2p.router.net.bw.out":        netConfig.BandwidthLimitOut,
+		"i2p.router.net.bw.share":      0,
+		"i2p.router.net.upnp":          nil,
 	}
 }
 

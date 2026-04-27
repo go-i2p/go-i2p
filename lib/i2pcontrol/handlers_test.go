@@ -651,3 +651,169 @@ func BenchmarkI2PControlHandler(b *testing.B) {
 		_, _ = handler.Handle(ctx, params)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Regression tests for panic fix and spec-compliance additions
+// ---------------------------------------------------------------------------
+
+// TestGetRateHandler_StatPeriodStyle verifies the Java I2P / go-i2pcontrol
+// calling convention: {"Stat":"bw.sendBps","Period":300000} must return
+// {"Result": float64}. Without this, retpre["Result"].(float64) panics in the
+// client.
+func TestGetRateHandler_StatPeriodStyle(t *testing.T) {
+	handler := NewGetRateHandler(newStatsHandler(true, "0.1.0"))
+
+	result, err := handler.Handle(context.Background(), json.RawMessage(`{"Stat":"bw.sendBps","Period":300000}`))
+	require.NoError(t, err)
+
+	resultMap, ok := result.(map[string]interface{})
+	require.True(t, ok, "result type = %T, want map[string]interface{}", result)
+
+	// "Result" key must be present so go-i2pcontrol's type assertion doesn't panic.
+	val, exists := resultMap["Result"]
+	require.True(t, exists, `result map must contain "Result" key to prevent client panic`)
+
+	_, isFloat := val.(float64)
+	require.True(t, isFloat, `"Result" value must be float64, got %T`, val)
+}
+
+// TestGetRateHandler_BandwidthStatNames verifies the two bandwidth stat names
+// expected by go-i2pcontrol v0.1.8 / i2ptui both return non-negative float64.
+func TestGetRateHandler_BandwidthStatNames(t *testing.T) {
+	handler := NewGetRateHandler(newStatsHandler(true, "0.1.0"))
+
+	cases := []struct {
+		statName string
+	}{
+		{"bw.sendBps"},
+		{"bw.receiveBps"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.statName, func(t *testing.T) {
+			params := `{"Stat":"` + tc.statName + `","Period":300000}`
+			result, err := handler.Handle(context.Background(), json.RawMessage(params))
+			require.NoError(t, err)
+
+			m := result.(map[string]interface{})
+			val, ok := m["Result"].(float64)
+			require.True(t, ok, "Result must be float64 for stat %s, got %T", tc.statName, m["Result"])
+			assert.GreaterOrEqual(t, val, 0.0)
+		})
+	}
+}
+
+// TestGetRateHandler_TunnelStatNames verifies that untracked tunnel build
+// stats return float64(0) rather than panicking.
+func TestGetRateHandler_TunnelStatNames(t *testing.T) {
+	handler := NewGetRateHandler(newStatsHandler(true, "0.1.0"))
+
+	tunnelStats := []string{
+		"tunnel.participatingTunnels",
+		"tunnel.buildClientSuccess",
+		"tunnel.buildRequestTime",
+		"tunnel.buildExploratoryExpire",
+		"tunnel.buildExploratoryReject",
+		"tunnel.buildExploratorySuccess",
+	}
+
+	for _, stat := range tunnelStats {
+		t.Run(stat, func(t *testing.T) {
+			params := `{"Stat":"` + stat + `","Period":600000}`
+			result, err := handler.Handle(context.Background(), json.RawMessage(params))
+			require.NoError(t, err)
+
+			m := result.(map[string]interface{})
+			_, ok := m["Result"].(float64)
+			require.True(t, ok, "Result must be float64 for stat %s, got %T", stat, m["Result"])
+		})
+	}
+}
+
+// TestGetRateHandler_UnknownStat verifies that an unknown stat name returns
+// {"Result": 0.0} without error — safe for the client to receive.
+func TestGetRateHandler_UnknownStat(t *testing.T) {
+	handler := NewGetRateHandler(newStatsHandler(true, "0.1.0"))
+
+	result, err := handler.Handle(context.Background(), json.RawMessage(`{"Stat":"no.such.stat","Period":60000}`))
+	require.NoError(t, err)
+
+	m := result.(map[string]interface{})
+	val, ok := m["Result"].(float64)
+	require.True(t, ok, "unknown stat must still return float64 Result, got %T", m["Result"])
+	assert.Equal(t, 0.0, val)
+}
+
+// TestRouterManagerHandler_FindUpdates verifies that the FindUpdates operation
+// returns {"FindUpdates": false} (bool). go-i2pcontrol does a type assertion
+// retpre["FindUpdates"].(bool); returning false prevents a panic.
+func TestRouterManagerHandler_FindUpdates(t *testing.T) {
+	mockControl := &mockRouterControl{}
+	handler := NewRouterManagerHandler(context.Background(), &sync.WaitGroup{}, mockControl)
+
+	result, err := handler.Handle(context.Background(), json.RawMessage(`{"FindUpdates":null}`))
+	require.NoError(t, err)
+
+	m := result.(map[string]interface{})
+	val, ok := m["FindUpdates"].(bool)
+	require.True(t, ok, "FindUpdates must return bool, got %T", m["FindUpdates"])
+	assert.False(t, val, "go-i2p has no update mechanism; FindUpdates must return false")
+}
+
+// TestRouterManagerHandler_RestartGraceful verifies that RestartGraceful is
+// accepted without error (previously returned ErrCodeInvalidParams).
+func TestRouterManagerHandler_RestartGraceful(t *testing.T) {
+	mockControl := &mockRouterControl{}
+	handler := NewRouterManagerHandler(context.Background(), &sync.WaitGroup{}, mockControl)
+
+	result, err := handler.Handle(context.Background(), json.RawMessage(`{"RestartGraceful":null}`))
+	require.NoError(t, err)
+
+	m := result.(map[string]interface{})
+	assert.Contains(t, m, "RestartGraceful")
+}
+
+// TestRouterManagerHandler_ShutdownGraceful verifies that ShutdownGraceful is
+// accepted without error (previously returned ErrCodeInvalidParams).
+func TestRouterManagerHandler_ShutdownGraceful(t *testing.T) {
+	mockControl := &mockRouterControl{}
+	handler := NewRouterManagerHandler(context.Background(), &sync.WaitGroup{}, mockControl)
+
+	result, err := handler.Handle(context.Background(), json.RawMessage(`{"ShutdownGraceful":null}`))
+	require.NoError(t, err)
+
+	m := result.(map[string]interface{})
+	assert.Contains(t, m, "ShutdownGraceful")
+}
+
+// TestNetworkSettingHandler_SpecBwFields verifies that the Java I2P spec keys
+// i2p.router.net.bw.in and i2p.router.net.bw.out are present and match the
+// configured bandwidth limits.
+func TestNetworkSettingHandler_SpecBwFields(t *testing.T) {
+	stats := &mockServerStatsProvider{
+		network: NetworkConfig{
+			NTCP2Port:         4444,
+			NTCP2Hostname:     "127.0.0.1",
+			BandwidthLimitIn:  768,
+			BandwidthLimitOut: 1536,
+		},
+	}
+	handler := NewNetworkSettingHandler(stats)
+
+	params := json.RawMessage(`{
+		"i2p.router.net.bw.in": null,
+		"i2p.router.net.bw.out": null,
+		"i2p.router.net.bw.share": null,
+		"i2p.router.net.upnp": null
+	}`)
+	result, err := handler.Handle(context.Background(), params)
+	require.NoError(t, err)
+
+	m := result.(map[string]interface{})
+	assert.Equal(t, 768, m["i2p.router.net.bw.in"])
+	assert.Equal(t, 1536, m["i2p.router.net.bw.out"])
+	// bw.share is present (value 0 — not enforced by go-i2p)
+	assert.Contains(t, m, "i2p.router.net.bw.share")
+	// upnp is present (nil — not implemented)
+	assert.Contains(t, m, "i2p.router.net.upnp")
+}
