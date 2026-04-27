@@ -49,6 +49,16 @@ type RouterStatsProvider interface {
 		Reseed() error
 	}
 
+	// GetNetworkStatus returns the I2PControl network status code (0–14).
+	// 0=OK, 1=TESTING, 2=FIREWALLED, 3=HIDDEN, 4=WARN_FIREWALLED_AND_FAST,
+	// 5=WARN_FIREWALLED_AND_FLOODFILL, 6=WARN_FIREWALLED_AND_INBOUND_TCP,
+	// 7=WARN_SLOW_FOREIGN_SEEDNODES, 8=ERROR_I2CP,
+	// 9=ERROR_CLOCK_SKEW, 10=ERROR_PRIVATE_TCP_ADDRESS,
+	// 11=ERROR_SYMMETRIC_NAT, 12=ERROR_UDP_PORT_IN_USE,
+	// 13=ERROR_NO_ACTIVE_PEERS_CHECK_CONNECTION_AND_FIREWALL,
+	// 14=ERROR_UDP_DISABLED_AND_TCP_UNSET
+	GetNetworkStatus() int
+
 	// GetRateForPeriod returns the windowed average or event count for a named stat over
 	// the most recent periodMs milliseconds. It mirrors the Java I2P StatManager.getRate()
 	// semantic used by the I2PControl GetRate RPC.
@@ -65,15 +75,18 @@ type RouterStatsProvider interface {
 }
 
 // BandwidthStats contains bandwidth usage statistics.
-// Rates are measured in bytes per second (15-second rolling average).
 type BandwidthStats struct {
-	// InboundRate is the inbound data rate (bytes/sec)
-	// Tracks received bytes from all transport sessions.
+	// InboundRate is the 15-second rolling average inbound data rate (bytes/sec).
 	InboundRate float64
 
-	// OutboundRate is the outbound data rate (bytes/sec)
-	// Tracks sent bytes from all transport sessions.
+	// OutboundRate is the 15-second rolling average outbound data rate (bytes/sec).
 	OutboundRate float64
+
+	// InboundRate1s is the most recent 1-second inbound sample (bytes/sec).
+	InboundRate1s float64
+
+	// OutboundRate1s is the most recent 1-second outbound sample (bytes/sec).
+	OutboundRate1s float64
 }
 
 // RouterInfoStats contains general router status information.
@@ -153,25 +166,40 @@ type NetDBStats struct {
 // NetworkConfig contains network configuration settings.
 // This maps to I2PControl NetworkSetting method responses.
 type NetworkConfig struct {
-	// NTCP2Port is the port number the NTCP2 transport is listening on
-	// Returns 0 if NTCP2 is not available
+	// NTCP2Port is the port number the NTCP2 transport is listening on.
+	// Returns 0 if NTCP2 is not available.
 	NTCP2Port int
 
-	// NTCP2Address is the full address string (IP:port) the NTCP2 transport is listening on
-	// Returns empty string if NTCP2 is not available
+	// NTCP2Address is the full address string (IP:port) the NTCP2 transport is listening on.
+	// Returns empty string if NTCP2 is not available.
 	NTCP2Address string
 
-	// NTCP2Hostname is the hostname/IP address (without port) that NTCP2 is listening on
-	// Extracted from NTCP2Address
+	// NTCP2Hostname is the hostname/IP address (without port) that NTCP2 is listening on.
+	// Extracted from NTCP2Address.
 	NTCP2Hostname string
 
-	// BandwidthLimitIn is the inbound bandwidth limit in KB/s
-	// Returns 0 if no limit is configured (unlimited)
+	// BandwidthLimitIn is the inbound bandwidth limit in KB/s.
+	// Returns 0 if no limit is configured (unlimited).
 	BandwidthLimitIn int
 
-	// BandwidthLimitOut is the outbound bandwidth limit in KB/s
-	// Returns 0 if no limit is configured (unlimited)
+	// BandwidthLimitOut is the outbound bandwidth limit in KB/s.
+	// Returns 0 if no limit is configured (unlimited).
 	BandwidthLimitOut int
+
+	// SSU2Port is the UDP port number the SSU2 transport is listening on.
+	// Returns 0 if SSU2 is disabled or the port is not yet known.
+	SSU2Port int
+
+	// SSU2Address is the full UDP address string (IP:port) the SSU2 transport is listening on.
+	// Returns empty string if SSU2 is not available.
+	SSU2Address string
+
+	// SSU2Hostname is the hostname/IP address (without port) that SSU2 is listening on.
+	// Extracted from SSU2Address.
+	SSU2Hostname string
+
+	// SharePercentage is the configured percentage (0–100) of bandwidth shared for transit tunnels.
+	SharePercentage int
 }
 
 // routerStatsProvider implements RouterStatsProvider by wrapping the actual Router.
@@ -228,27 +256,37 @@ type RouterAccess interface {
 	// GetConfig returns the router configuration
 	GetConfig() *config.RouterConfig
 
-	// GetTransportAddr returns the listening address of the first available transport
-	// Returns nil if no transports are available
-	// This is used to extract NTCP2 port and address for NetworkSetting RPC method
+	// GetTransportAddr returns the listening address of the first available transport.
+	// Returns nil if no transports are available.
+	// This is used to extract NTCP2 port and address for NetworkSetting RPC method.
 	GetTransportAddr() interface{}
 
-	// IsRunning returns whether the router is currently operational
+	// GetSSU2Addr returns the listening UDP address of the SSU2 transport.
+	// Returns nil if SSU2 is not available.
+	GetSSU2Addr() interface{}
+
+	// IsRunning returns whether the router is currently operational.
 	IsRunning() bool
 
-	// IsReseeding returns whether the router is currently performing a NetDB reseed operation
+	// IsReseeding returns whether the router is currently performing a NetDB reseed operation.
 	IsReseeding() bool
 
-	// GetBandwidthRates returns the current 15-second inbound and outbound bandwidth rates in bytes per second
+	// GetBandwidthRates returns the current 15-second inbound and outbound bandwidth rates in bytes per second.
 	GetBandwidthRates() (inbound, outbound uint64)
 
-	// GetActiveSessionCount returns the number of active transport sessions (connected peers)
+	// GetBandwidthRates1s returns the most recent 1-second inbound and outbound bandwidth rates in bytes per second.
+	GetBandwidthRates1s() (inbound, outbound uint64)
+
+	// GetNetworkStatus returns the I2PControl network status code (0–14).
+	GetNetworkStatus() int
+
+	// GetActiveSessionCount returns the number of active transport sessions (connected peers).
 	GetActiveSessionCount() int
 
-	// Stop initiates graceful shutdown of the router
+	// Stop initiates graceful shutdown of the router.
 	Stop()
 
-	// Reseed triggers a manual NetDB reseed operation
+	// Reseed triggers a manual NetDB reseed operation.
 	Reseed() error
 }
 
@@ -275,21 +313,30 @@ func NewRouterStatsProvider(router RouterAccess, version string) RouterStatsProv
 }
 
 // GetBandwidthStats returns current bandwidth statistics.
-// Returns 15-second rolling average bandwidth rates for inbound and outbound.
+// Returns both 15-second rolling average and 1-second instantaneous rates.
 // Rates are in bytes per second.
 func (rsp *routerStatsProvider) GetBandwidthStats() BandwidthStats {
-	// Get 15-second inbound and outbound rates (more stable than 1s)
-	inbound, outbound := rsp.router.GetBandwidthRates()
+	inbound15s, outbound15s := rsp.router.GetBandwidthRates()
+	inbound1s, outbound1s := rsp.router.GetBandwidthRates1s()
 
 	log.WithFields(map[string]interface{}{
-		"inbound_bps":  inbound,
-		"outbound_bps": outbound,
+		"inbound_15s":  inbound15s,
+		"outbound_15s": outbound15s,
+		"inbound_1s":   inbound1s,
+		"outbound_1s":  outbound1s,
 	}).Debug("collected bandwidth stats")
 
 	return BandwidthStats{
-		InboundRate:  float64(inbound),  // 15-second average in bytes/sec
-		OutboundRate: float64(outbound), // 15-second average in bytes/sec
+		InboundRate:    float64(inbound15s),
+		OutboundRate:   float64(outbound15s),
+		InboundRate1s:  float64(inbound1s),
+		OutboundRate1s: float64(outbound1s),
 	}
+}
+
+// GetNetworkStatus returns the I2PControl network status code (0–14).
+func (rsp *routerStatsProvider) GetNetworkStatus() int {
+	return rsp.router.GetNetworkStatus()
 }
 
 // GetRouterInfo returns general router status information.
@@ -413,28 +460,29 @@ func (rsp *routerStatsProvider) GetNetDBStats() NetDBStats {
 }
 
 // GetNetworkConfig returns network configuration settings.
-// Extracts NTCP2 port, hostname, and bandwidth limits from the router.
-// Returns zero values if transport is not available or not NTCP2.
+// Extracts NTCP2/SSU2 ports, hostnames, and bandwidth limits from the router.
+// Returns zero values if transport is not available.
 func (rsp *routerStatsProvider) GetNetworkConfig() NetworkConfig {
-	netConfig := NetworkConfig{
-		NTCP2Port:         0,
-		NTCP2Address:      "",
-		NTCP2Hostname:     "",
-		BandwidthLimitIn:  0, // 0 means unlimited
-		BandwidthLimitOut: 0, // 0 means unlimited
-	}
+	netConfig := NetworkConfig{}
 
 	// Report configured bandwidth limits from RouterConfig.
-	// These are independent of transport availability.
 	// Bandwidth limits are in KB/s for the I2PControl protocol.
 	cfg := rsp.router.GetConfig()
-	if cfg != nil && cfg.MaxBandwidth > 0 {
-		limitKBs := int(cfg.MaxBandwidth / 1024)
-		netConfig.BandwidthLimitIn = limitKBs
-		netConfig.BandwidthLimitOut = limitKBs
+	if cfg != nil {
+		if cfg.MaxBandwidthIn > 0 {
+			netConfig.BandwidthLimitIn = int(cfg.MaxBandwidthIn / 1024)
+		} else if cfg.MaxBandwidth > 0 {
+			netConfig.BandwidthLimitIn = int(cfg.MaxBandwidth / 1024)
+		}
+		if cfg.MaxBandwidthOut > 0 {
+			netConfig.BandwidthLimitOut = int(cfg.MaxBandwidthOut / 1024)
+		} else if cfg.MaxBandwidth > 0 {
+			netConfig.BandwidthLimitOut = int(cfg.MaxBandwidth / 1024)
+		}
+		netConfig.SharePercentage = cfg.SharePercentage
 	}
 
-	// Get transport address from router
+	// Populate NTCP2 address info.
 	addr := rsp.router.GetTransportAddr()
 	if addr == nil {
 		return netConfig
@@ -457,6 +505,21 @@ func (rsp *routerStatsProvider) GetNetworkConfig() NetworkConfig {
 	hostname, port := rsp.parseHostPort(addrStr)
 	netConfig.NTCP2Hostname = hostname
 	netConfig.NTCP2Port = port
+
+	// Populate SSU2 address info.
+	ssu2Addr := rsp.router.GetSSU2Addr()
+	if ssu2Addr != nil {
+		ssu2AddrStr := ""
+		if netAddr, ok := ssu2Addr.(interface{ String() string }); ok {
+			ssu2AddrStr = netAddr.String()
+		}
+		if ssu2AddrStr != "" {
+			netConfig.SSU2Address = ssu2AddrStr
+			ssu2Host, ssu2Port := rsp.parseHostPort(ssu2AddrStr)
+			netConfig.SSU2Hostname = ssu2Host
+			netConfig.SSU2Port = ssu2Port
+		}
+	}
 
 	return netConfig
 }
@@ -690,10 +753,13 @@ type RealRouter struct {
 		IsRunning() bool
 		IsReseeding() bool
 		GetBandwidthRates() (inbound, outbound uint64)
+		GetBandwidthRates1s() (inbound, outbound uint64)
+		GetNetworkStatus() int
 		GetActiveSessionCount() int
 		Stop()
 		Reseed() error
 		GetTransportAddr() interface{}
+		GetSSU2Addr() interface{}
 	}
 }
 
@@ -750,6 +816,21 @@ func (rr RealRouter) Reseed() error {
 // GetTransportAddr returns the listening address of the first transport (implements RouterAccess)
 func (rr RealRouter) GetTransportAddr() interface{} {
 	return rr.Router.GetTransportAddr()
+}
+
+// GetSSU2Addr returns the listening UDP address of the SSU2 transport (implements RouterAccess)
+func (rr RealRouter) GetSSU2Addr() interface{} {
+	return rr.Router.GetSSU2Addr()
+}
+
+// GetBandwidthRates1s returns 1-second inbound and outbound bandwidth rates (implements RouterAccess)
+func (rr RealRouter) GetBandwidthRates1s() (inbound, outbound uint64) {
+	return rr.Router.GetBandwidthRates1s()
+}
+
+// GetNetworkStatus returns the I2PControl network status code (implements RouterAccess)
+func (rr RealRouter) GetNetworkStatus() int {
+	return rr.Router.GetNetworkStatus()
 }
 
 // Compile-time interface satisfaction check

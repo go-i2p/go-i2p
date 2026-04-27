@@ -102,6 +102,9 @@ func setRouterDefaults(defaults ConfigDefaults) {
 		{"router.message_expiration_time", defaults.Router.MessageExpirationTime},
 		{"router.max_concurrent_sessions", defaults.Router.MaxConcurrentSessions},
 		{"router.max_bandwidth", uint64(1024 * 1024)},
+		{"router.max_bandwidth_in", uint64(0)},
+		{"router.max_bandwidth_out", uint64(0)},
+		{"router.share_percentage", 0},
 		{"router.max_connections", 200},
 		{"router.accept_tunnels", true},
 	})
@@ -233,19 +236,22 @@ func setCongestionDefaults(defaults ConfigDefaults) {
 // This is the preferred way to get config instead of using the global RouterConfigProperties.
 func NewRouterConfigFromViper() *RouterConfig {
 	return &RouterConfig{
-		BaseDir:        viper.GetString("base_dir"),
-		WorkingDir:     viper.GetString("working_dir"),
-		NetDB:          buildNetDBConfig(),
-		Bootstrap:      buildBootstrapConfig("NewRouterConfigFromViper"),
-		I2CP:           buildI2CPConfig(),
-		I2PControl:     buildI2PControlConfig(),
-		MaxBandwidth:   viper.GetUint64("router.max_bandwidth"),
-		MaxConnections: viper.GetInt("router.max_connections"),
-		AcceptTunnels:  viper.GetBool("router.accept_tunnels"),
-		Tunnel:         buildTunnelConfig(),
-		Transport:      buildTransportConfig(),
-		Performance:    buildPerformanceConfig(),
-		Congestion:     buildCongestionConfig(),
+		BaseDir:         viper.GetString("base_dir"),
+		WorkingDir:      viper.GetString("working_dir"),
+		NetDB:           buildNetDBConfig(),
+		Bootstrap:       buildBootstrapConfig("NewRouterConfigFromViper"),
+		I2CP:            buildI2CPConfig(),
+		I2PControl:      buildI2PControlConfig(),
+		MaxBandwidth:    viper.GetUint64("router.max_bandwidth"),
+		MaxBandwidthIn:  viper.GetUint64("router.max_bandwidth_in"),
+		MaxBandwidthOut: viper.GetUint64("router.max_bandwidth_out"),
+		SharePercentage: viper.GetInt("router.share_percentage"),
+		MaxConnections:  viper.GetInt("router.max_connections"),
+		AcceptTunnels:   viper.GetBool("router.accept_tunnels"),
+		Tunnel:          buildTunnelConfig(),
+		Transport:       buildTransportConfig(),
+		Performance:     buildPerformanceConfig(),
+		Congestion:      buildCongestionConfig(),
 	}
 }
 

@@ -66,6 +66,15 @@ type RouterConfig struct {
 	// MaxBandwidth is the maximum bandwidth limit in bytes per second.
 	// Default: 1048576 (1 MB/s). Set to 0 for unlimited.
 	MaxBandwidth uint64
+	// MaxBandwidthIn is the inbound bandwidth limit in bytes per second.
+	// Set to 0 to fall back to MaxBandwidth. Set to 0 with MaxBandwidth=0 for unlimited.
+	MaxBandwidthIn uint64
+	// MaxBandwidthOut is the outbound bandwidth limit in bytes per second.
+	// Set to 0 to fall back to MaxBandwidth. Set to 0 with MaxBandwidth=0 for unlimited.
+	MaxBandwidthOut uint64
+	// SharePercentage is the percentage (0–100) of bandwidth to share for transit tunnels.
+	// Default: 0 (no explicit limit — router participates if AcceptTunnels is true).
+	SharePercentage int
 	// MaxConnections is the maximum number of concurrent transport connections.
 	// Default: 200.
 	MaxConnections int
@@ -180,11 +189,14 @@ func GetRouterConfig() *RouterConfig {
 // copyBaseFields creates a shallow copy of the scalar fields in a RouterConfig.
 func copyBaseFields(src *RouterConfig) *RouterConfig {
 	return &RouterConfig{
-		BaseDir:        src.BaseDir,
-		WorkingDir:     src.WorkingDir,
-		MaxBandwidth:   src.MaxBandwidth,
-		MaxConnections: src.MaxConnections,
-		AcceptTunnels:  src.AcceptTunnels,
+		BaseDir:         src.BaseDir,
+		WorkingDir:      src.WorkingDir,
+		MaxBandwidth:    src.MaxBandwidth,
+		MaxBandwidthIn:  src.MaxBandwidthIn,
+		MaxBandwidthOut: src.MaxBandwidthOut,
+		SharePercentage: src.SharePercentage,
+		MaxConnections:  src.MaxConnections,
+		AcceptTunnels:   src.AcceptTunnels,
 	}
 }
 
