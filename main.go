@@ -561,52 +561,28 @@ var configCmd = &cobra.Command{
 	Short: "Show current configuration",
 	Run: func(cmd *cobra.Command, args []string) {
 		cfg := config.GetRouterConfig()
+		out := cmd.OutOrStdout()
 
-		log.WithFields(logger.Fields{
-			"at":          "configCmd",
-			"phase":       "startup",
-			"reason":      "displaying configuration",
-			"config_file": viper.ConfigFileUsed(),
-		}).Info("configuration file")
-
-		log.WithFields(logger.Fields{
-			"at":          "configCmd",
-			"phase":       "startup",
-			"reason":      "router configuration loaded",
-			"base_dir":    cfg.BaseDir,
-			"working_dir": cfg.WorkingDir,
-		}).Info("router configuration")
-
-		log.WithFields(logger.Fields{
-			"at":         "configCmd",
-			"phase":      "startup",
-			"reason":     "netdb configuration loaded",
-			"netdb_path": cfg.NetDB.Path,
-		}).Info("netDb configuration")
-
-		log.WithFields(logger.Fields{
-			"at":                 "configCmd",
-			"phase":              "startup",
-			"reason":             "bootstrap configuration loaded",
-			"low_peer_threshold": cfg.Bootstrap.LowPeerThreshold,
-			"bootstrap_type":     cfg.Bootstrap.BootstrapType,
-		}).Info("bootstrap configuration")
-
-		log.WithFields(logger.Fields{
-			"at":     "configCmd",
-			"phase":  "startup",
-			"reason": "displaying reseed servers",
-			"count":  len(cfg.Bootstrap.ReseedServers),
-		}).Info("reseed servers:")
-		for i, server := range cfg.Bootstrap.ReseedServers {
-			log.WithFields(logger.Fields{
-				"at":              "configCmd",
-				"phase":           "startup",
-				"reason":          "reseed server configured",
-				"index":           i,
-				"url":             server.URL,
-				"su3_fingerprint": server.SU3Fingerprint,
-			}).Info("  reseed server")
+		configFile := viper.ConfigFileUsed()
+		if configFile == "" {
+			configFile = "(none; using defaults and command-line flags)"
+		}
+		fmt.Fprintf(out, "configuration file: %s\n", configFile)
+		fmt.Fprintf(out, "base directory:     %s\n", cfg.BaseDir)
+		fmt.Fprintf(out, "working directory:  %s\n", cfg.WorkingDir)
+		if cfg.NetDB != nil {
+			fmt.Fprintf(out, "netDb path:         %s\n", cfg.NetDB.Path)
+		}
+		if cfg.Bootstrap != nil {
+			fmt.Fprintf(out, "bootstrap type:     %s\n", cfg.Bootstrap.BootstrapType)
+			fmt.Fprintf(out, "low peer threshold: %d\n", cfg.Bootstrap.LowPeerThreshold)
+			fmt.Fprintf(out, "reseed servers (%d):\n", len(cfg.Bootstrap.ReseedServers))
+			for i, server := range cfg.Bootstrap.ReseedServers {
+				fmt.Fprintf(out, "  [%d] %s\n", i, server.URL)
+				if server.SU3Fingerprint != "" {
+					fmt.Fprintf(out, "      su3 fingerprint: %s\n", server.SU3Fingerprint)
+				}
+			}
 		}
 	},
 }
