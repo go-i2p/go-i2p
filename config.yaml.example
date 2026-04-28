@@ -19,6 +19,13 @@ router:
   max_concurrent_sessions: 200
   # Participate in transit tunnels for the network
   accept_tunnels: true
+  # Hidden mode: client-only operation behind NAT/firewall.
+  # When true, this router publishes caps containing "H" (hidden) and "U"
+  # (unreachable), publishes no transport addresses with host/port, and
+  # refuses to participate in any transit tunnels. Use this if your router
+  # cannot accept inbound connections from the I2P network. Trade-off: no
+  # transit, no inbound connections except via tunnels we built ourselves.
+  hidden: false
   # Maximum bandwidth in bytes/sec (0 = unlimited)
   max_bandwidth: 1048576
   # Maximum concurrent transport connections

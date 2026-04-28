@@ -288,9 +288,37 @@ func TestRouterInfoKeystore_BuildCapsString(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := ks.buildCapsString(tt.congestionFlag, tt.reachable, false)
+			result := ks.buildCapsString(tt.congestionFlag, tt.reachable, false, false)
 			if result != tt.expected {
-				t.Errorf("buildCapsString(%q, %v, false) = %q, want %q", tt.congestionFlag, tt.reachable, result, tt.expected)
+				t.Errorf("buildCapsString(%q, %v, false, false) = %q, want %q", tt.congestionFlag, tt.reachable, result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestRouterInfoKeystore_BuildCapsString_Hidden verifies that hidden mode forces
+// the U flag and appends H, regardless of the reachable input. This matches
+// Java I2P's hidden-mode RouterInfo semantics.
+func TestRouterInfoKeystore_BuildCapsString_Hidden(t *testing.T) {
+	ks := &RouterInfoKeystore{}
+	tests := []struct {
+		name      string
+		reachable bool
+		floodfill bool
+		flag      string
+		expected  string
+	}{
+		{"hidden, unreachable, no congestion", false, false, "", "NUH"},
+		{"hidden, reachable input ignored", true, false, "", "NUH"},
+		{"hidden, floodfill", false, true, "", "fUH"},
+		{"hidden with G congestion", false, false, "G", "NUHG"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ks.buildCapsString(tt.flag, tt.reachable, tt.floodfill, true)
+			if result != tt.expected {
+				t.Errorf("buildCapsString(%q, %v, %v, true) = %q, want %q",
+					tt.flag, tt.reachable, tt.floodfill, result, tt.expected)
 			}
 		})
 	}

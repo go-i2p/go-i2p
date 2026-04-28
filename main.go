@@ -78,6 +78,8 @@ func registerRouterFlags() {
 		"Maximum concurrent transport connections")
 	RootCmd.PersistentFlags().Bool("router.accept-tunnels", routerCfg.AcceptTunnels,
 		"Participate in transit tunnels for the network")
+	RootCmd.PersistentFlags().Bool("router.hidden", routerCfg.Hidden,
+		"Hidden mode: client-only operation, no transit, no published transport addresses")
 	RootCmd.PersistentFlags().Duration("router.info-refresh-interval", defaults.Router.RouterInfoRefreshInterval,
 		"How often to refresh our RouterInfo")
 	RootCmd.PersistentFlags().Duration("router.message-expiration-time", defaults.Router.MessageExpirationTime,
@@ -313,6 +315,7 @@ func bindRouterFlagsToViper() {
 	mustBindPFlag("router.max_bandwidth", "router.max-bandwidth")
 	mustBindPFlag("router.max_connections", "router.max-connections")
 	mustBindPFlag("router.accept_tunnels", "router.accept-tunnels")
+	mustBindPFlag("router.hidden", "router.hidden")
 	mustBindPFlag("router.info_refresh_interval", "router.info-refresh-interval")
 	mustBindPFlag("router.message_expiration_time", "router.message-expiration-time")
 	mustBindPFlag("router.max_concurrent_sessions", "router.max-concurrent-sessions")

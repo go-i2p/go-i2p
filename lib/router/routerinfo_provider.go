@@ -52,14 +52,24 @@ func (p *routerInfoProvider) GetRouterInfo() (*router_info.RouterInfo, error) {
 	// Build options with congestion flag if available
 	opts := p.buildRouterInfoOptions()
 
+	// Hidden mode (Java I2P semantics): publish caps with H + U, drop all
+	// transport addresses. The router will not be advertised as reachable
+	// and other peers will not select it for transit tunnels.
+	hidden := p.router.cfg != nil && p.router.cfg.Hidden
+	opts.Hidden = hidden
+
 	// Collect transport addresses from the TransportMuxer so that published
 	// RouterInfo includes our actual NTCP2 listening address(es). Without
 	// this, peers looking us up in NetDB would see no addresses and be
 	// unable to connect.
-	addresses := p.collectTransportAddresses()
+	var addresses []*router_address.RouterAddress
+	if !hidden {
+		addresses = p.collectTransportAddresses()
+	}
 
-	// Router is reachable if it has at least one transport address
-	opts.Reachable = len(addresses) > 0
+	// Router is reachable if it has at least one transport address and is not
+	// running in hidden mode.
+	opts.Reachable = !hidden && len(addresses) > 0
 
 	ri, err := ks.ConstructRouterInfo(addresses, opts)
 	if err != nil {

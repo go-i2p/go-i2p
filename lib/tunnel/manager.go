@@ -60,6 +60,12 @@ type Manager struct {
 	sourceLimiter        *SourceLimiter // Rate limiter for per-source limiting
 	sourceLimiterEnabled bool           // Whether per-source limiting is enabled
 
+	// refuseAllTransit, when non-zero, causes ProcessBuildRequest to reject
+	// every incoming tunnel build request. Used by hidden-mode (and any
+	// AcceptTunnels=false configuration) to refuse to participate as a transit
+	// hop. Atomic for lock-free read/write from the build-request hot path.
+	refuseAllTransit atomic.Bool
+
 	// Rejection statistics (atomic for lock-free access)
 	rejectCountTotal  uint64 // Total rejections due to limits
 	rejectCountRecent uint64 // Recent rejections (reset periodically)
@@ -365,6 +371,24 @@ func (m *Manager) GetLimitConfig() (maxParticipants, softLimit int, limitsEnable
 	return m.maxParticipants, m.softLimit(), m.limitsEnabled
 }
 
+// SetRefuseAllTransit toggles unconditional rejection of incoming tunnel build
+// requests. When true, ProcessBuildRequest rejects every request before any
+// other limit check. Used by hidden-mode operation and by AcceptTunnels=false
+// to ensure the router never serves as a transit hop.
+func (m *Manager) SetRefuseAllTransit(refuse bool) {
+	m.refuseAllTransit.Store(refuse)
+	log.WithFields(logger.Fields{
+		"at":     "Manager.SetRefuseAllTransit",
+		"refuse": refuse,
+	}).Info("transit-tunnel acceptance policy updated")
+}
+
+// RefuseAllTransit reports whether the manager is currently rejecting all
+// incoming tunnel build requests.
+func (m *Manager) RefuseAllTransit() bool {
+	return m.refuseAllTransit.Load()
+}
+
 // ProcessBuildRequest validates a tunnel build request against all limits.
 // This should be called before accepting any participating tunnel.
 //
@@ -379,6 +403,19 @@ func (m *Manager) GetLimitConfig() (maxParticipants, softLimit int, limitsEnable
 // Note: Per I2P specification, we use BuildReplyCodeBandwidth (30) for most
 // rejections to hide the specific rejection reason from peers.
 func (m *Manager) ProcessBuildRequest(sourceHash common.Hash) (accepted bool, rejectCode byte, reason string) {
+	// Check 0: hidden / no-transit mode — reject everything before consulting
+	// participation limits or rate limiters.
+	if m.refuseAllTransit.Load() {
+		log.WithFields(logger.Fields{
+			"at":     "Manager.ProcessBuildRequest",
+			"phase":  "tunnel_build",
+			"source": truncateHash(sourceHash),
+			"reason": "transit_refused_hidden_or_no_transit_mode",
+			"action": "reject_build_request",
+		}).Debug("rejecting tunnel build request: router is configured to refuse all transit")
+		return false, BuildReplyCodeBandwidth, "transit_refused"
+	}
+
 	// Check 1: Global participating tunnel limit
 	if canAccept, limitReason := m.CanAcceptParticipant(); !canAccept {
 		log.WithFields(logger.Fields{

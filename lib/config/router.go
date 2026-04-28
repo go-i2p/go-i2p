@@ -81,6 +81,14 @@ type RouterConfig struct {
 	// AcceptTunnels controls whether the router participates in transit tunnels.
 	// Default: true.
 	AcceptTunnels bool
+	// Hidden enables hidden-mode operation per Java I2P semantics. When true:
+	//   - the published RouterInfo caps include "H" and "U" (no "R"),
+	//   - no transport addresses with host/port are published,
+	//   - the router refuses to participate in transit tunnels.
+	// Hidden mode is intended for client-only operation behind NAT / firewalls
+	// where the router cannot be reached by other peers.
+	// Default: false.
+	Hidden bool
 	// Tunnel configuration for tunnel pool management and building.
 	Tunnel *TunnelDefaults
 	// Transport configuration for NTCP2/SSU2 transports.
@@ -197,6 +205,7 @@ func copyBaseFields(src *RouterConfig) *RouterConfig {
 		SharePercentage: src.SharePercentage,
 		MaxConnections:  src.MaxConnections,
 		AcceptTunnels:   src.AcceptTunnels,
+		Hidden:          src.Hidden,
 	}
 }
 

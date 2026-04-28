@@ -451,6 +451,12 @@ type RouterInfoOptions struct {
 	// Version is the router.version string advertised in RouterInfo options.
 	// Defaults to "0.9.63". Must be >= "0.9.58" to pass i2pd's NETDB_MIN_ALLOWED_VERSION check.
 	Version string
+	// Hidden indicates that the router operates in hidden mode (Java I2P
+	// semantics). When true, the caps string includes "H" (hidden) and forces
+	// "U" (unreachable) regardless of the Reachable flag, signalling to the
+	// rest of the network that this router will not accept inbound connections
+	// or transit tunnels.
+	Hidden bool
 }
 
 // ConstructRouterInfo creates a complete RouterInfo structure with signing keys and certificate.
@@ -520,6 +526,9 @@ func (ks *RouterInfoKeystore) mergeOptions(opts []RouterInfoOptions) RouterInfoO
 		}
 		if opt.Version != "" {
 			options.Version = opt.Version
+		}
+		if opt.Hidden {
+			options.Hidden = true
 		}
 	}
 	return options
@@ -665,7 +674,7 @@ func (ks *RouterInfoKeystore) assembleRouterInfo(routerIdentity *router_identity
 	publishedTime := rawTime.Round(time.Second)
 
 	// Build caps string - base caps then congestion flag per PROP_162
-	caps := ks.buildCapsString(opts.CongestionFlag, opts.Reachable, opts.Floodfill)
+	caps := ks.buildCapsString(opts.CongestionFlag, opts.Reachable, opts.Floodfill, opts.Hidden)
 
 	netID := opts.NetID
 	if netID == "" {
@@ -715,10 +724,12 @@ func (ks *RouterInfoKeystore) assembleRouterInfo(routerIdentity *router_identity
 
 // buildCapsString constructs the capabilities string for RouterInfo.
 // Per PROP_162, congestion flags (D/E/G) are appended after R/U.
-// Capabilities: f = Floodfill, N = Not floodfill, R = Reachable, U = Unreachable
-func (ks *RouterInfoKeystore) buildCapsString(congestionFlag string, reachable, floodfill bool) string {
+// Capabilities: f = Floodfill, N = Not floodfill, R = Reachable, U = Unreachable, H = Hidden.
+// When hidden is true, the reachability flag is forced to "U" and "H" is appended,
+// matching Java I2P's hidden-mode RouterInfo semantics.
+func (ks *RouterInfoKeystore) buildCapsString(congestionFlag string, reachable, floodfill, hidden bool) string {
 	reachabilityFlag := "U"
-	if reachable {
+	if reachable && !hidden {
 		reachabilityFlag = "R"
 	}
 
@@ -728,6 +739,9 @@ func (ks *RouterInfoKeystore) buildCapsString(congestionFlag string, reachable, 
 	}
 
 	baseCaps := floodfillFlag + reachabilityFlag
+	if hidden {
+		baseCaps += "H"
+	}
 
 	if congestionFlag == "" {
 		return baseCaps

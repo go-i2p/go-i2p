@@ -251,9 +251,14 @@ func (r *Router) getMaxConnections() int {
 }
 
 // isAcceptingTunnels returns true if the router is accepting tunnel participation.
-// Reads from RouterConfig.AcceptTunnels.
+// Reads from RouterConfig.AcceptTunnels. Hidden mode forces this to false so the
+// PROP_162 congestion monitor advertises the "G" flag (rejecting all tunnels)
+// in addition to the "H"/"U" caps published by the routerinfo provider.
 func (r *Router) isAcceptingTunnels() bool {
 	if r.cfg != nil {
+		if r.cfg.Hidden {
+			return false
+		}
 		return r.cfg.AcceptTunnels
 	}
 	return true // Default to accepting
@@ -774,6 +779,14 @@ func (r *Router) awaitStartupResult() error {
 		"phase":  "running",
 		"reason": "all startup-critical subsystems initialized",
 	}).Info("router started successfully")
+	if r.cfg != nil && r.cfg.Hidden {
+		log.WithFields(logger.Fields{
+			"at":     "(Router) Start",
+			"phase":  "running",
+			"reason": "hidden mode active",
+			"caps":   "NUH (no transit, no inbound from network)",
+		}).Info("router is in hidden mode: refusing transit, publishing no transport addresses")
+	}
 	return nil
 }
 
@@ -833,6 +846,11 @@ func (r *Router) wireParticipantManager() {
 	r.participantManager = tunnel.NewManager()
 	r.messageRouter.GetProcessor().SetParticipantManager(r.participantManager)
 	r.messageRouter.GetProcessor().SetBuildReplyForwarder(&transportBuildReplyForwarder{sessionProvider: r})
+	// Apply the no-transit policy: hidden mode or AcceptTunnels=false both
+	// require unconditional rejection of incoming tunnel build requests.
+	if r.cfg != nil && (r.cfg.Hidden || !r.cfg.AcceptTunnels) {
+		r.participantManager.SetRefuseAllTransit(true)
+	}
 	log.WithFields(logger.Fields{"at": "initializeMessageRouter"}).Debug("Participant manager and build reply forwarder wired into message processor")
 }
 

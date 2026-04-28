@@ -164,3 +164,28 @@ func TestI2CPPortDefaultIs7654(t *testing.T) {
 func TestDefaultI2CPConfigAddressHasCorrectPort(t *testing.T) {
 	assert.Equal(t, "localhost:7654", DefaultI2CPConfig.Address, "DefaultI2CPConfig.Address")
 }
+
+// TestRouterConfigHiddenDefaultIsFalse verifies the Hidden field defaults to
+// false in DefaultRouterConfig — hidden mode is opt-in and must never be
+// enabled implicitly.
+func TestRouterConfigHiddenDefaultIsFalse(t *testing.T) {
+	cfg := DefaultRouterConfig()
+	assert.False(t, cfg.Hidden, "Hidden must default to false; hidden mode is opt-in")
+}
+
+// TestRouterConfigHiddenIsCopied verifies that the Hidden field survives the
+// deep copy performed by GetRouterConfig / DefaultRouterConfig.
+func TestRouterConfigHiddenIsCopied(t *testing.T) {
+	LockRouterConfigForWrite()
+	prev := routerConfigProperties.Hidden
+	routerConfigProperties.Hidden = true
+	UnlockRouterConfigWrite()
+	defer func() {
+		LockRouterConfigForWrite()
+		routerConfigProperties.Hidden = prev
+		UnlockRouterConfigWrite()
+	}()
+
+	cfg := GetRouterConfig()
+	assert.True(t, cfg.Hidden, "GetRouterConfig must propagate Hidden=true")
+}

@@ -107,6 +107,7 @@ func setRouterDefaults(defaults ConfigDefaults) {
 		{"router.share_percentage", 0},
 		{"router.max_connections", 200},
 		{"router.accept_tunnels", true},
+		{"router.hidden", false},
 	})
 }
 
@@ -248,6 +249,7 @@ func NewRouterConfigFromViper() *RouterConfig {
 		SharePercentage: viper.GetInt("router.share_percentage"),
 		MaxConnections:  viper.GetInt("router.max_connections"),
 		AcceptTunnels:   viper.GetBool("router.accept_tunnels"),
+		Hidden:          viper.GetBool("router.hidden"),
 		Tunnel:          buildTunnelConfig(),
 		Transport:       buildTransportConfig(),
 		Performance:     buildPerformanceConfig(),
