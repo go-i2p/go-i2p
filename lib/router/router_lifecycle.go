@@ -881,18 +881,31 @@ func (r *Router) initializeTunnelManager() {
 	r.tunnelManager = tm
 	r.runMux.Unlock()
 
-	// Configure automatic tunnel pool maintenance
-	pool := tm.GetOutboundPool()
-	pool.SetTunnelBuilder(tm) // TunnelManager implements BuilderInterface
+	// Configure automatic tunnel pool maintenance.
+	// BOTH inbound and outbound exploratory pools must be started: an outbound
+	// tunnel build's reply (VTBRM) is delivered to the requester via one of the
+	// requester's inbound tunnels. Without a maintained inbound pool the reply
+	// has no path back, every outbound build times out at 90 s, and the router
+	// never establishes a working exploratory tunnel set.
+	outboundPool := tm.GetOutboundPool()
+	inboundPool := tm.GetInboundPool()
 
-	pool.SetPeerTracker(r.StdNetDB.PeerTracker)
-	log.WithFields(logger.Fields{"at": "initializeTunnelManager"}).Debug("Tunnel pool configured with NetDB peer tracker for reputation tracking")
-
-	if err := pool.StartMaintenance(); err != nil {
-		log.WithError(err).Error("Failed to start tunnel pool maintenance")
-	} else {
-		log.WithFields(logger.Fields{"at": "initializeTunnelManager"}).Debug("Tunnel pool automatic maintenance started")
+	for _, pool := range []*tunnel.Pool{outboundPool, inboundPool} {
+		if pool == nil {
+			continue
+		}
+		pool.SetTunnelBuilder(tm) // TunnelManager implements BuilderInterface
+		pool.SetPeerTracker(r.StdNetDB.PeerTracker)
+		if err := pool.StartMaintenance(); err != nil {
+			log.WithError(err).Error("Failed to start tunnel pool maintenance")
+		}
 	}
+	log.WithFields(logger.Fields{
+		"at":            "initializeTunnelManager",
+		"inbound_pool":  inboundPool != nil,
+		"outbound_pool": outboundPool != nil,
+		"peer_tracker":  r.StdNetDB.PeerTracker != nil,
+	}).Debug("Tunnel pools configured and maintenance started")
 
 	log.WithFields(logger.Fields{
 		"peer_selector": "netdb",
