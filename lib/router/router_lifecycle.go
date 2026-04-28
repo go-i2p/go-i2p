@@ -918,6 +918,24 @@ func (r *Router) initializeTunnelManager() {
 			log.WithError(err).Error("Failed to start tunnel pool maintenance")
 		}
 	}
+
+	// Hidden mode and AlwaysZeroHopInbound force the inbound exploratory pool
+	// to build 0-hop tunnels (we serve as both IBGW and IBEP). This is the
+	// only way to receive build replies on a host with no reachable address;
+	// without it every outbound build expires at 90s because the second-to-last
+	// hop has no path to deliver the reply back to us.
+	zeroHopInbound := r.cfg != nil && (r.cfg.Hidden || r.cfg.AlwaysZeroHopInbound)
+	if zeroHopInbound && inboundPool != nil {
+		if err := inboundPool.SetHopCount(0); err != nil {
+			log.WithError(err).Error("Failed to enable zero-hop inbound tunnels")
+		} else {
+			log.WithFields(logger.Fields{
+				"at":                      "initializeTunnelManager",
+				"hidden":                  r.cfg.Hidden,
+				"always_zero_hop_inbound": r.cfg.AlwaysZeroHopInbound,
+			}).Info("Inbound exploratory pool configured for zero-hop tunnels")
+		}
+	}
 	log.WithFields(logger.Fields{
 		"at":            "initializeTunnelManager",
 		"inbound_pool":  inboundPool != nil,

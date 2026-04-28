@@ -89,6 +89,13 @@ type RouterConfig struct {
 	// where the router cannot be reached by other peers.
 	// Default: false.
 	Hidden bool
+	// AlwaysZeroHopInbound forces every exploratory inbound tunnel to be built
+	// as a 0-hop tunnel (we serve as both inbound gateway and inbound endpoint).
+	// This bypasses the requirement that the second-to-last hop deliver build
+	// replies back to us — useful when running behind a strict NAT without
+	// publishing a reachable address. Hidden=true implies this behavior.
+	// Default: false.
+	AlwaysZeroHopInbound bool
 	// Tunnel configuration for tunnel pool management and building.
 	Tunnel *TunnelDefaults
 	// Transport configuration for NTCP2/SSU2 transports.
@@ -197,15 +204,16 @@ func GetRouterConfig() *RouterConfig {
 // copyBaseFields creates a shallow copy of the scalar fields in a RouterConfig.
 func copyBaseFields(src *RouterConfig) *RouterConfig {
 	return &RouterConfig{
-		BaseDir:         src.BaseDir,
-		WorkingDir:      src.WorkingDir,
-		MaxBandwidth:    src.MaxBandwidth,
-		MaxBandwidthIn:  src.MaxBandwidthIn,
-		MaxBandwidthOut: src.MaxBandwidthOut,
-		SharePercentage: src.SharePercentage,
-		MaxConnections:  src.MaxConnections,
-		AcceptTunnels:   src.AcceptTunnels,
-		Hidden:          src.Hidden,
+		BaseDir:              src.BaseDir,
+		WorkingDir:           src.WorkingDir,
+		MaxBandwidth:         src.MaxBandwidth,
+		MaxBandwidthIn:       src.MaxBandwidthIn,
+		MaxBandwidthOut:      src.MaxBandwidthOut,
+		SharePercentage:      src.SharePercentage,
+		MaxConnections:       src.MaxConnections,
+		AcceptTunnels:        src.AcceptTunnels,
+		Hidden:               src.Hidden,
+		AlwaysZeroHopInbound: src.AlwaysZeroHopInbound,
 	}
 }
 

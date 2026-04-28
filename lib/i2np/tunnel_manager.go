@@ -207,6 +207,13 @@ func (tm *TunnelManager) BuildTunnel(req tunnel.BuildTunnelRequest) (*tunnel.Bui
 // 4. Sends the build request via appropriate transport
 // 5. Returns the tunnel ID, selected peer hashes, and any error
 func (tm *TunnelManager) BuildTunnelFromRequest(req tunnel.BuildTunnelRequest) (tunnel.TunnelID, []common.Hash, error) {
+	// Zero-hop inbound short-circuit: no remote hop, no build message,
+	// no pending-build tracking. Register the tunnel directly as Active so
+	// the inbound pool exposes it as a usable reply path immediately.
+	if req.HopCount == 0 && req.IsInbound {
+		return tm.buildZeroHopInbound(req)
+	}
+
 	result, messageID, err := tm.createBuildRequestAndID(req)
 	if err != nil {
 		return 0, nil, err
@@ -246,6 +253,40 @@ func (tm *TunnelManager) BuildTunnelFromRequest(req tunnel.BuildTunnelRequest) (
 
 	tm.logBuildRequestSent(result, messageID)
 	return result.TunnelID, peerHashes, nil
+}
+
+// buildZeroHopInbound registers a zero-hop inbound tunnel directly into the
+// inbound pool as Active. No peer is selected, no STBM is emitted, and no
+// pending build is tracked: we are simultaneously the inbound gateway and
+// inbound endpoint, so the tunnel is operational the moment its ID is
+// allocated. Returns the tunnel ID and a nil peer-hash slice.
+func (tm *TunnelManager) buildZeroHopInbound(req tunnel.BuildTunnelRequest) (tunnel.TunnelID, []common.Hash, error) {
+	builder, err := tunnel.NewTunnelBuilder(tm.peerSelector)
+	if err != nil {
+		return 0, nil, oops.Wrapf(err, "failed to create tunnel builder for zero-hop inbound")
+	}
+	result, err := builder.CreateBuildRequest(req)
+	if err != nil {
+		return 0, nil, oops.Wrapf(err, "failed to create zero-hop inbound build request")
+	}
+	state := &tunnel.TunnelState{
+		ID:        result.TunnelID,
+		Hops:      nil,
+		State:     tunnel.TunnelReady,
+		CreatedAt: time.Now(),
+		Responses: nil,
+		IsInbound: true,
+	}
+	tm.inboundPool.AddTunnel(state)
+	log.WithFields(logger.Fields{
+		"at":               "BuildTunnelFromRequest",
+		"tunnel_id":        result.TunnelID,
+		"is_inbound":       true,
+		"hop_count":        0,
+		"is_client_tunnel": req.IsClientTunnel,
+		"reason":           "zero-hop inbound tunnel registered as active without build message",
+	}).Info("Zero-hop inbound tunnel built")
+	return result.TunnelID, nil, nil
 }
 
 // createBuildRequestAndID validates prerequisites and creates the build request with message ID

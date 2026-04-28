@@ -173,15 +173,30 @@ func logBuildRequestComplete(req BuildTunnelRequest, tunnelID TunnelID, recordCo
 // 4. Prepare reply decryption keys for processing build replies
 //
 // Returns TunnelBuildResult with all necessary information, or an error if:
-// - HopCount is invalid (must be 1-8)
+// - HopCount is invalid (must be 1-8 for outbound, 0-8 for inbound)
 // - Peer selection fails
 // - Cryptographic key generation fails
+//
+// Special case: HopCount=0 with IsInbound=true produces a zero-hop inbound
+// tunnel where we are simultaneously the inbound gateway (IBGW) and inbound
+// endpoint (IBEP). No peers are selected, no build records are emitted, and
+// no on-the-wire build message will be sent. This matches Java I2P's
+// hidden-mode fallback used when the router has no public reachability.
+// Outbound zero-hop is rejected because the OBGW is always us — a 0-hop
+// outbound tunnel has no path to the network.
 func (tb *TunnelBuilder) CreateBuildRequest(req BuildTunnelRequest) (*TunnelBuildResult, error) {
 	logBuildRequestStart(req)
 
-	if err := tb.validateHopCount(req.HopCount); err != nil {
+	if err := tb.validateHopCount(req.HopCount, req.IsInbound); err != nil {
 		logHopCountError(err, req.HopCount)
 		return nil, err
+	}
+
+	// Zero-hop inbound short-circuit: we are both IBGW and IBEP, so there are no
+	// peers to select, no build records to emit, and no build message to send.
+	// The Pool will register the resulting tunnel directly as Active.
+	if req.HopCount == 0 && req.IsInbound {
+		return tb.createZeroHopInboundResult(req)
 	}
 
 	peers, err := tb.selectTunnelPeers(req)
@@ -270,22 +285,58 @@ func (tb *TunnelBuilder) BuildTunnel(req BuildTunnelRequest) (*BuildTunnelResult
 	}, nil
 }
 
-// validateHopCount validates that the hop count is within I2P spec limits (1-8).
-func (tb *TunnelBuilder) validateHopCount(hopCount int) error {
+// validateHopCount validates that the hop count is within I2P spec limits.
+// Outbound tunnels require 1-8 hops. Inbound tunnels accept 0-8 hops, where
+// 0 means a zero-hop inbound tunnel with us serving as both gateway and
+// endpoint (used in hidden mode and as a NAT-fallback reply path).
+func (tb *TunnelBuilder) validateHopCount(hopCount int, isInbound bool) error {
 	log.WithFields(logger.Fields{
-		"at":        "validateHopCount",
-		"hop_count": hopCount,
+		"at":         "validateHopCount",
+		"hop_count":  hopCount,
+		"is_inbound": isInbound,
 	}).Debug("Validating hop count")
 
-	if hopCount < 1 || hopCount > 8 {
+	minHops := 1
+	if isInbound {
+		minHops = 0
+	}
+	if hopCount < minHops || hopCount > 8 {
 		log.WithFields(logger.Fields{
-			"at":        "validateHopCount",
-			"hop_count": hopCount,
-			"reason":    "hop count out of range (1-8)",
+			"at":         "validateHopCount",
+			"hop_count":  hopCount,
+			"is_inbound": isInbound,
+			"min_hops":   minHops,
+			"reason":     "hop count out of range",
 		}).Error("Invalid hop count")
-		return oops.Errorf("hop count must be between 1 and 8, got %d", hopCount)
+		return oops.Errorf("hop count must be between %d and 8, got %d", minHops, hopCount)
 	}
 	return nil
+}
+
+// createZeroHopInboundResult builds a TunnelBuildResult for a zero-hop inbound
+// tunnel. The tunnel ID is freshly generated, but Hops, Records, ReplyKeys,
+// and ReplyIVs are all empty: there is no remote hop to encrypt for and no
+// build reply to wait for.
+func (tb *TunnelBuilder) createZeroHopInboundResult(req BuildTunnelRequest) (*TunnelBuildResult, error) {
+	tunnelID, err := generateTunnelID()
+	if err != nil {
+		return nil, oops.Errorf("failed to generate tunnel ID for zero-hop inbound: %w", err)
+	}
+	logTunnelIDGenerated(tunnelID)
+	log.WithFields(logger.Fields{
+		"at":        "(TunnelBuilder) createZeroHopInboundResult",
+		"tunnel_id": tunnelID,
+		"reason":    "zero-hop inbound tunnel built locally; no build message required",
+	}).Debug("created zero-hop inbound tunnel")
+	return &TunnelBuildResult{
+		TunnelID:      tunnelID,
+		Hops:          nil,
+		Records:       nil,
+		ReplyKeys:     nil,
+		ReplyIVs:      nil,
+		UseShortBuild: req.UseShortBuild,
+		IsInbound:     true,
+	}, nil
 }
 
 // selectTunnelPeers selects and validates peers for tunnel hops.

@@ -167,6 +167,37 @@ func (p *Pool) SetTunnelBuilder(builder BuilderInterface) {
 	p.tunnelBuilder = builder
 }
 
+// SetHopCount overrides the configured per-tunnel hop count for this pool.
+// HopCount=0 is only permitted on inbound pools, where it requests a
+// zero-hop inbound tunnel (we are simultaneously gateway and endpoint).
+// Returns an error if hopCount is out of range or 0 is requested on an
+// outbound pool.
+func (p *Pool) SetHopCount(hopCount int) error {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	minHops := 1
+	if p.config.IsInbound {
+		minHops = 0
+	}
+	if hopCount < minHops || hopCount > 8 {
+		return oops.Errorf("hop count must be between %d and 8, got %d", minHops, hopCount)
+	}
+	p.config.HopCount = hopCount
+	log.WithFields(logger.Fields{
+		"at":         "Pool.SetHopCount",
+		"hop_count":  hopCount,
+		"is_inbound": p.config.IsInbound,
+	}).Debug("pool hop count updated")
+	return nil
+}
+
+// HopCount returns the configured hop count for this pool.
+func (p *Pool) HopCount() int {
+	p.mutex.RLock()
+	defer p.mutex.RUnlock()
+	return p.config.HopCount
+}
+
 // getTunnelBuilder returns the tunnel builder, safely read under the lock.
 func (p *Pool) getTunnelBuilder() BuilderInterface {
 	p.mutex.RLock()
