@@ -862,6 +862,9 @@ func (t *SSU2Transport) maybeAutoInitiatePeerTest(remote net.Addr) {
 // to allow diagnostic correlation. The goroutine exits when t.ctx is
 // cancelled (i.e., when the transport is closed).
 func (t *SSU2Transport) startNATPortMapRetry() {
+	if t.config == nil {
+		return
+	}
 	// Extract the internal port from the currently bound address.
 	_, portStr, err := net.SplitHostPort(t.config.ListenerAddress)
 	if err != nil {

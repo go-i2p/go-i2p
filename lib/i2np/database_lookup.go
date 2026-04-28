@@ -651,6 +651,11 @@ func NewDatabaseLookupWithTunnel(key, replyGateway common.Hash, replyTunnelID [4
 // MarshalBinary serializes the DatabaseLookup message to binary format.
 // The format follows the I2NP specification for DatabaseLookup messages.
 func (d *DatabaseLookup) MarshalBinary() ([]byte, error) {
+	// Always recompute Size from the actual slice length so that the wire field
+	// and the in-memory slice are consistent, regardless of how the struct was
+	// constructed or mutated after NewDatabaseLookup.
+	d.Size = len(d.ExcludedPeers)
+
 	log.WithFields(logger.Fields{
 		"at":            "DatabaseLookup.MarshalBinary",
 		"key":           d.Key.String()[:8],
