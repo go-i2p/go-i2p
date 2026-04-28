@@ -508,12 +508,21 @@ func (p *Pool) cleanupExpiredTunnelsLocked() {
 			hasActiveTunnel = true
 		}
 
-		// Remove failed tunnels
+		// Remove failed tunnels.
+		// If the failure is an inbound build that aged past the 90-second VTBRM
+		// deadline, count it toward the auto-fallback heuristic.  TunnelManager
+		// marks these TunnelFailed (via handleExpiredRequest) before the pool's
+		// cleanup loop runs, so the TunnelBuilding timeout path below never fires
+		// in practice; we detect them here instead.
 		if tunnel.State == TunnelFailed {
 			expired = append(expired, id)
+			if p.config.IsInbound && age >= tunnelBuildTimeout {
+				buildTimeouts++
+			}
 		}
 
 		// Remove in-flight builds that exceeded the 90-second VTBRM deadline.
+		// This path handles pools used without TunnelManager (e.g. unit tests).
 		if tunnel.State == TunnelBuilding && age > tunnelBuildTimeout {
 			expired = append(expired, id)
 			if p.config.IsInbound {
