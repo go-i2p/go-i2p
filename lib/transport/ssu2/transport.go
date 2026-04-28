@@ -76,6 +76,9 @@ type SSU2Transport struct {
 	// closeOnce ensures Close() is idempotent.
 	closeOnce sync.Once
 	closeErr  error
+
+	// reachMetrics tracks reachability-related events for monitoring.
+	reachMetrics reachabilityMetrics
 }
 
 // KeystoreProvider provides access to the router's cryptographic keys.

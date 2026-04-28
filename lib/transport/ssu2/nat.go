@@ -110,11 +110,13 @@ func (t *SSU2Transport) handlePeerTestAsAlice(ptBlock *ssu2noise.PeerTestBlock) 
 	if externalAddr != nil && t.natStateCache != nil {
 		confirmed := t.natStateCache.recordObservation(externalAddr.String())
 		if confirmed != "" && confirmed != t.natStateCache.getExternal() {
+			t.reachMetrics.peerTestConfirmed.Add(1)
 			t.logger.WithField("external_addr", confirmed).
 				Info("PeerTest: external address confirmed by multiple observations")
 			t.natStateCache.set(ssu2noise.NATCone, confirmed)
 			t.saveNATState()
 			if fn, ok := t.peerTestRepublish.Load().(func()); ok && fn != nil {
+				t.reachMetrics.publishedAddrChanged.Add(1)
 				go fn()
 			}
 		}
@@ -890,6 +892,7 @@ func (t *SSU2Transport) startNATPortMapRetry() {
 			mapper, err := nattraversal.NewPortMapperContext(mapCtx)
 			mapCancel()
 			if err != nil {
+				t.reachMetrics.natMappingFailure.Add(1)
 				t.logger.WithFields(map[string]interface{}{
 					"error":   err,
 					"backoff": backoff.String(),
@@ -911,6 +914,7 @@ func (t *SSU2Transport) startNATPortMapRetry() {
 
 			_, err = mapper.MapPort("udp", internalPort, 1*time.Hour)
 			if err != nil {
+				t.reachMetrics.natMappingFailure.Add(1)
 				t.logger.WithFields(map[string]interface{}{
 					"error":   err,
 					"gateway": gwIP,
@@ -924,6 +928,7 @@ func (t *SSU2Transport) startNATPortMapRetry() {
 				}
 				continue
 			}
+			t.reachMetrics.natMappingSuccess.Add(1)
 			extIP, _ := mapper.GetExternalIP()
 			t.logger.WithFields(map[string]interface{}{
 				"external_ip":   extIP,
