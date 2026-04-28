@@ -225,9 +225,22 @@ func bindOSAssignedPort(config *Config) (net.Listener, error) {
 }
 
 // bindWithNATTraversal creates a TCP listener on the specified port, attempting
-// NAT traversal (UPnP/NAT-PMP) with a 10-second timeout context.
+// NAT traversal (UPnP/NAT-PMP) with a 3-second timeout context.
+// Loopback addresses (127.x.x.x, ::1) bypass NAT traversal entirely because
+// they are unreachable from the internet. For all other addresses a 3-second
+// timeout keeps startup fast in environments without UPnP/NAT-PMP; the
+// fallback to a plain TCP listener is transparent to callers.
 func bindWithNATTraversal(config *Config, port int) (net.Listener, error) {
-	natCtx, natCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	host, _, _ := net.SplitHostPort(config.ListenerAddress)
+	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+		l, err := net.Listen("tcp", fmt.Sprintf("%s:%d", host, port))
+		if err != nil {
+			return nil, oops.Wrapf(err, "failed to create TCP listener")
+		}
+		config.ListenerAddress = l.Addr().String()
+		return l, nil
+	}
+	natCtx, natCancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer natCancel()
 	l, err := nattraversal.ListenWithFallbackContext(natCtx, port)
 	if err != nil {

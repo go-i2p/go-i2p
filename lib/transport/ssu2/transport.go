@@ -221,8 +221,21 @@ func listenWithOSPort(config *Config) (net.PacketConn, error) {
 }
 
 // listenWithNATTraversal creates a UDP listener with NAT port mapping.
+// Loopback addresses (127.x.x.x, ::1) bypass NAT traversal entirely because
+// they are unreachable from the internet. For all other addresses a 3-second
+// timeout keeps startup fast in environments without UPnP/NAT-PMP; the
+// fallback to a plain UDP listener is transparent to callers.
 func listenWithNATTraversal(config *Config, iport int) (net.PacketConn, error) {
-	natCtx, natCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	host, _, _ := net.SplitHostPort(config.ListenerAddress)
+	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+		conn, err := net.ListenPacket("udp", fmt.Sprintf("%s:%d", host, iport))
+		if err != nil {
+			return nil, oops.Wrapf(err, "failed to create UDP listener")
+		}
+		config.ListenerAddress = conn.LocalAddr().String()
+		return conn, nil
+	}
+	natCtx, natCancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer natCancel()
 	natPL, err := nattraversal.ListenPacketWithFallbackContext(natCtx, iport)
 	if err != nil {
