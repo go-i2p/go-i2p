@@ -935,6 +935,14 @@ func (r *Router) initializeTunnelManager() {
 				"always_zero_hop_inbound": r.cfg.AlwaysZeroHopInbound,
 			}).Info("Inbound exploratory pool configured for zero-hop tunnels")
 		}
+	} else if !zeroHopInbound && inboundPool != nil {
+		// Wire auto-fallback: after autoFallbackThreshold consecutive build
+		// timeouts (VTBRM never received), automatically switch to 0-hop inbound
+		// when no public address is confirmed. This implements the follow-up
+		// from PLAN.md B4 without requiring operator intervention.
+		inboundPool.SetAutoFallbackCheck(func() bool {
+			return r.collectBestExternalAddr() == ""
+		})
 	}
 	log.WithFields(logger.Fields{
 		"at":            "initializeTunnelManager",

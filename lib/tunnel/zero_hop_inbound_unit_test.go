@@ -2,6 +2,7 @@ package tunnel
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -88,4 +89,102 @@ func TestPool_SetHopCount_OutboundRejectsZero(t *testing.T) {
 	assert.Error(t, pool.SetHopCount(0), "0-hop outbound must be rejected")
 	require.NoError(t, pool.SetHopCount(2))
 	assert.Equal(t, 2, pool.HopCount())
+}
+
+// TestPool_AutoFallback_SwitchesToZeroHop verifies that after
+// autoFallbackThreshold consecutive in-flight build timeouts on an inbound
+// pool with no public address, the pool automatically switches to 0-hop.
+func TestPool_AutoFallback_SwitchesToZeroHop(t *testing.T) {
+	cfg := DefaultPoolConfig()
+	cfg.IsInbound = true
+	pool := NewTunnelPoolWithConfig(&emptyPeerSelector{}, cfg)
+	defer pool.Stop()
+
+	noPublicAddr := func() bool { return true } // simulate no public address
+	pool.SetAutoFallbackCheck(noPublicAddr)
+
+	// Inject TunnelBuilding tunnels older than tunnelBuildTimeout.
+	pool.mutex.Lock()
+	for i := TunnelID(1); i <= TunnelID(autoFallbackThreshold); i++ {
+		pool.tunnels[i] = &TunnelState{
+			ID:        i,
+			State:     TunnelBuilding,
+			CreatedAt: time.Now().Add(-(tunnelBuildTimeout + time.Second)),
+			IsInbound: true,
+		}
+	}
+	pool.mutex.Unlock()
+
+	// cleanupExpiredTunnelsLocked should detect the timeouts and update the counter.
+	pool.mutex.Lock()
+	pool.cleanupExpiredTunnelsLocked()
+	pool.mutex.Unlock()
+
+	// Threshold met — checkAutoFallback should flip to 0-hop.
+	pool.checkAutoFallback()
+	assert.Equal(t, 0, pool.HopCount(), "inbound pool should fall back to zero-hop after repeated build timeouts")
+}
+
+// TestPool_AutoFallback_SkipsWhenPublicAddr verifies that the auto-fallback
+// does NOT activate when the router has a confirmed public address.
+func TestPool_AutoFallback_SkipsWhenPublicAddr(t *testing.T) {
+	cfg := DefaultPoolConfig()
+	cfg.IsInbound = true
+	pool := NewTunnelPoolWithConfig(&emptyPeerSelector{}, cfg)
+	defer pool.Stop()
+
+	hasPublicAddr := func() bool { return false } // simulate public address present
+	pool.SetAutoFallbackCheck(hasPublicAddr)
+
+	// Inject expired in-flight builds.
+	pool.mutex.Lock()
+	for i := TunnelID(1); i <= TunnelID(autoFallbackThreshold); i++ {
+		pool.tunnels[i] = &TunnelState{
+			ID:        i,
+			State:     TunnelBuilding,
+			CreatedAt: time.Now().Add(-(tunnelBuildTimeout + time.Second)),
+			IsInbound: true,
+		}
+	}
+	pool.cleanupExpiredTunnelsLocked()
+	pool.mutex.Unlock()
+
+	pool.checkAutoFallback()
+	assert.Equal(t, 3, pool.HopCount(), "hop count must stay at 3 when public address is present")
+}
+
+// TestPool_AutoFallback_ResetsOnSuccess verifies that the in-flight expired
+// counter is reset when active (ready) tunnels are present in the pool.
+func TestPool_AutoFallback_ResetsOnSuccess(t *testing.T) {
+	cfg := DefaultPoolConfig()
+	cfg.IsInbound = true
+	pool := NewTunnelPoolWithConfig(&emptyPeerSelector{}, cfg)
+	defer pool.Stop()
+
+	noPublicAddr := func() bool { return true }
+	pool.SetAutoFallbackCheck(noPublicAddr)
+
+	// Seed one expired in-flight build to start incrementing the counter.
+	pool.mutex.Lock()
+	pool.tunnels[1] = &TunnelState{
+		ID:        1,
+		State:     TunnelBuilding,
+		CreatedAt: time.Now().Add(-(tunnelBuildTimeout + time.Second)),
+		IsInbound: true,
+	}
+	// Also add an active TunnelReady tunnel that has not expired.
+	pool.tunnels[2] = &TunnelState{
+		ID:        2,
+		State:     TunnelReady,
+		CreatedAt: time.Now(),
+		IsInbound: true,
+	}
+	pool.cleanupExpiredTunnelsLocked()
+	pool.mutex.Unlock()
+
+	// The counter should have been reset because an active tunnel was present.
+	pool.mutex.RLock()
+	count := pool.inFlightExpiredCount
+	pool.mutex.RUnlock()
+	assert.Equal(t, 0, count, "in-flight expired counter must reset when active tunnels exist")
 }

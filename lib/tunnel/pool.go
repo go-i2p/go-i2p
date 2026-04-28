@@ -34,6 +34,18 @@ const (
 	TunnelFailed                           // Tunnel build failed
 )
 
+const (
+	// tunnelBuildTimeout is the maximum time a tunnel may remain in the
+	// TunnelBuilding state before being treated as an expired in-flight build.
+	// Matches the I2P spec's 90-second VTBRM deadline.
+	tunnelBuildTimeout = 90 * time.Second
+
+	// autoFallbackThreshold is the number of consecutive inbound build
+	// timeouts that trigger the zero-hop auto-fallback when no public
+	// address is available.
+	autoFallbackThreshold = 3
+)
+
 // BuildResponse represents a response from a tunnel hop
 type BuildResponse struct {
 	HopIndex int    // Index of the hop that responded
@@ -101,22 +113,24 @@ func DefaultPoolConfig() PoolConfig {
 
 // Pool manages a collection of tunnels with automatic maintenance
 type Pool struct {
-	tunnels        map[TunnelID]*TunnelState
-	mutex          sync.RWMutex
-	peerSelector   PeerSelector
-	tunnelBuilder  BuilderInterface
-	config         PoolConfig
-	selectionIndex int       // For round-robin selection
-	lastBuildTime  time.Time // Track last build attempt for backoff
-	buildFailures  int       // Consecutive build failures
-	ctx            context.Context
-	cancel         context.CancelFunc
-	maintWg        sync.WaitGroup            // Track maintenance goroutine
-	failedPeers    map[common.Hash]time.Time // FIX #5: Track failed peer connection attempts
-	failedPeersMu  sync.RWMutex              // FIX #5: Protect failed peers map
-	peerTracker    PeerTracker               // Optional peer reputation tracking (netdb integration)
-	cachedActive   []*TunnelState            // Cached sorted active tunnels
-	cachedDirty    bool                      // True when cache needs rebuild
+	tunnels              map[TunnelID]*TunnelState
+	mutex                sync.RWMutex
+	peerSelector         PeerSelector
+	tunnelBuilder        BuilderInterface
+	config               PoolConfig
+	selectionIndex       int       // For round-robin selection
+	lastBuildTime        time.Time // Track last build attempt for backoff
+	buildFailures        int       // Consecutive build failures
+	ctx                  context.Context
+	cancel               context.CancelFunc
+	maintWg              sync.WaitGroup            // Track maintenance goroutine
+	failedPeers          map[common.Hash]time.Time // FIX #5: Track failed peer connection attempts
+	failedPeersMu        sync.RWMutex              // FIX #5: Protect failed peers map
+	peerTracker          PeerTracker               // Optional peer reputation tracking (netdb integration)
+	cachedActive         []*TunnelState            // Cached sorted active tunnels
+	cachedDirty          bool                      // True when cache needs rebuild
+	inFlightExpiredCount int                       // Consecutive inbound build timeouts (no VTBRM received)
+	autoFallbackFn       func() bool               // Returns true when no public address is available
 }
 
 // PeerTracker interface for recording peer connection outcomes.
@@ -165,6 +179,41 @@ func (p *Pool) SetTunnelBuilder(builder BuilderInterface) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 	p.tunnelBuilder = builder
+}
+
+// SetAutoFallbackCheck registers a callback that the pool calls when
+// autoFallbackThreshold consecutive inbound build timeouts have occurred.
+// The callback should return true when the router has no publicly-reachable
+// address, which is the condition under which 0-hop inbound tunnels make
+// sense. Passing nil disables auto-fallback.
+func (p *Pool) SetAutoFallbackCheck(fn func() bool) {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	p.autoFallbackFn = fn
+}
+
+// checkAutoFallback switches this inbound pool to zero-hop tunnels when the
+// registered callback confirms no public address is available. It is a no-op
+// if the pool is already at hop-count 0, is an outbound pool, or no callback
+// was registered.
+func (p *Pool) checkAutoFallback() {
+	p.mutex.RLock()
+	fn := p.autoFallbackFn
+	hopCount := p.config.HopCount
+	p.mutex.RUnlock()
+
+	if fn == nil || hopCount == 0 || !p.config.IsInbound {
+		return
+	}
+	if !fn() {
+		return // public address present — no fallback needed
+	}
+	if err := p.SetHopCount(0); err == nil {
+		log.WithFields(logger.Fields{
+			"at":     "Pool.checkAutoFallback",
+			"reason": "consecutive inbound build timeouts with no public address",
+		}).Info("auto-fallback: switched inbound exploratory pool to zero-hop tunnels")
+	}
 }
 
 // SetHopCount overrides the configured per-tunnel hop count for this pool.
@@ -374,13 +423,21 @@ func (p *Pool) maintenanceLoop() {
 // maintainPool checks pool health and builds tunnels if needed
 func (p *Pool) maintainPool() {
 	var needed int
+	var expiredCount int
 
 	// Hold mutex only for inspection and calculation
 	p.mutex.Lock()
 	p.cleanupExpiredTunnelsLocked()
+	expiredCount = p.inFlightExpiredCount
 	activeCount, nearExpiry := p.countTunnelsLocked()
 	needed = p.calculateNeededTunnels(activeCount, nearExpiry)
 	p.mutex.Unlock()
+
+	// Auto-fallback: switch inbound pool to 0-hop after repeated build timeouts
+	// when no public address is available.
+	if p.config.IsInbound && expiredCount >= autoFallbackThreshold {
+		p.checkAutoFallback()
+	}
 
 	if needed > 0 {
 		p.rebuildTunnels(needed)
@@ -423,10 +480,15 @@ func (p *Pool) rebuildTunnels(needed int) {
 	}).Debug("tunnel build attempt completed")
 }
 
-// cleanupExpiredTunnelsLocked removes expired tunnels (must hold mutex)
+// cleanupExpiredTunnelsLocked removes expired tunnels (must hold mutex).
+// It also tracks in-flight build timeouts to support the auto-fallback
+// heuristic: three consecutive timeouts on an inbound pool with no public
+// address will cause the pool to switch to zero-hop inbound tunnels.
 func (p *Pool) cleanupExpiredTunnelsLocked() {
 	now := time.Now()
 	var expired []TunnelID
+	var hasActiveTunnel bool
+	var buildTimeouts int
 
 	for id, tunnel := range p.tunnels {
 		age := now.Sub(tunnel.CreatedAt)
@@ -442,16 +504,34 @@ func (p *Pool) cleanupExpiredTunnelsLocked() {
 				"age":          age,
 				"max_lifetime": p.config.TunnelLifetime,
 			}).Debug("tunnel expired")
+		} else if tunnel.State == TunnelReady {
+			hasActiveTunnel = true
 		}
 
 		// Remove failed tunnels
 		if tunnel.State == TunnelFailed {
 			expired = append(expired, id)
 		}
+
+		// Remove in-flight builds that exceeded the 90-second VTBRM deadline.
+		if tunnel.State == TunnelBuilding && age > tunnelBuildTimeout {
+			expired = append(expired, id)
+			if p.config.IsInbound {
+				buildTimeouts++
+			}
+		}
 	}
 
 	for _, id := range expired {
 		delete(p.tunnels, id)
+	}
+
+	// Update the in-flight expired counter for the auto-fallback heuristic.
+	// Reset when builds are succeeding (active tunnels present), increment otherwise.
+	if hasActiveTunnel {
+		p.inFlightExpiredCount = 0
+	} else if buildTimeouts > 0 {
+		p.inFlightExpiredCount += buildTimeouts
 	}
 
 	if len(expired) > 0 {
