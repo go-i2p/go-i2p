@@ -65,7 +65,8 @@ func createTestTransport(t *testing.T, listenAddr string) *NTCP2Transport {
 }
 
 // assertValidNTCP2RouterAddress verifies the common fields of a converted RouterAddress:
-// transport style is "NTCP2", host/port are set, and static key is valid base64.
+// transport style is "NTCP2" and static key is valid base64. Host/port are only required
+// for publicly-routable IPs; private/loopback addresses produce caps-only addresses.
 func assertValidNTCP2RouterAddress(t *testing.T, routerAddr *router_address.RouterAddress) {
 	t.Helper()
 
@@ -73,14 +74,6 @@ func assertValidNTCP2RouterAddress(t *testing.T, routerAddr *router_address.Rout
 	styleData, err := style.Data()
 	require.NoError(t, err)
 	assert.Equal(t, router_address.NTCP2_TRANSPORT_STYLE, styleData)
-
-	host, err := routerAddr.Host()
-	require.NoError(t, err)
-	assert.NotNil(t, host)
-
-	port, err := routerAddr.Port()
-	require.NoError(t, err)
-	assert.NotEmpty(t, port)
 
 	staticKeyString := routerAddr.StaticKeyString()
 	staticKeyData, err := staticKeyString.Data()
@@ -110,7 +103,9 @@ func TestConvertToRouterAddress_Success(t *testing.T) {
 	assert.NotEmpty(t, bytes)
 }
 
-// TestConvertToRouterAddress_WithObfuscationIV tests conversion with IV configured
+// TestConvertToRouterAddress_WithObfuscationIV tests conversion with IV configured.
+// When the address is private/loopback (127.0.0.1), the result is a caps-only address;
+// the IV is NOT published (per spec, 'i' is only for published addresses).
 func TestConvertToRouterAddress_WithObfuscationIV(t *testing.T) {
 	transport := createTestTransport(t, "127.0.0.1:0")
 
@@ -125,16 +120,12 @@ func TestConvertToRouterAddress_WithObfuscationIV(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, routerAddr)
 
-	// Verify IV is present in options
-	ivString := routerAddr.InitializationVectorString()
-	ivData, err := ivString.Data()
+	// 127.0.0.1 is a loopback address and not publicly routable;
+	// the resulting address must be caps-only (no host, no port, no IV).
+	capsString := routerAddr.CapsString()
+	capsData, err := capsString.Data()
 	require.NoError(t, err)
-	assert.NotEmpty(t, ivData)
-
-	// Verify IV can be decoded and matches
-	decodedIV, err := i2pbase64.I2PEncoding.DecodeString(ivData)
-	require.NoError(t, err)
-	assert.Equal(t, iv, decodedIV)
+	assert.NotEmpty(t, capsData, "caps-only address must have 'caps' option")
 }
 
 // TestConvertToRouterAddress_NilTransport tests error handling for nil transport
@@ -186,21 +177,23 @@ func TestConvertToRouterAddress_InvalidIV(t *testing.T) {
 	assertConvertToRouterAddressError(t, transport, "invalid IV length")
 }
 
-// TestConvertToRouterAddress_SpecificPort tests conversion with specific port
+// TestConvertToRouterAddress_SpecificPort tests conversion with specific port.
+// When the address is private/loopback (127.0.0.1), the result is a caps-only address
+// without an explicit port (port is only published for public addresses).
 func TestConvertToRouterAddress_SpecificPort(t *testing.T) {
-	// Try to bind to specific port, fall back to random if unavailable
 	transport := createTestTransport(t, "127.0.0.1:0")
 
 	routerAddr, err := ConvertToRouterAddress(transport)
 	require.NoError(t, err)
 
-	// Verify the address contains valid port
-	port, err := routerAddr.Port()
+	// Private IP → caps-only; static key must still be present
+	staticKeyData, err := routerAddr.StaticKeyString().Data()
 	require.NoError(t, err)
-	assert.NotEmpty(t, port)
+	assert.NotEmpty(t, staticKeyData)
 }
 
-// TestConvertToRouterAddress_IPv6 tests conversion with IPv6 address
+// TestConvertToRouterAddress_IPv6 tests conversion with IPv6 loopback address.
+// ::1 is loopback and not publicly routable; result is a caps-only address.
 func TestConvertToRouterAddress_IPv6(t *testing.T) {
 	transport := createTestTransport(t, "[::1]:0")
 
@@ -208,11 +201,10 @@ func TestConvertToRouterAddress_IPv6(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, routerAddr)
 
-	// Verify host is IPv6
-	hostString := routerAddr.HostString()
-	hostData, err := hostString.Data()
+	// ::1 is loopback → caps-only; static key must be present
+	staticKeyData, err := routerAddr.StaticKeyString().Data()
 	require.NoError(t, err)
-	assert.Contains(t, hostData, ":")
+	assert.NotEmpty(t, staticKeyData)
 }
 
 // TestConvertToRouterAddress_ExpirationTime tests that expiration is set correctly

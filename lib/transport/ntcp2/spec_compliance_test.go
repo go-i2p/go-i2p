@@ -218,7 +218,7 @@ func TestNoiseXKHandshake_Version(t *testing.T) {
 		ObfuscationIV: make([]byte, 16),
 	}
 
-	options, err := buildRouterAddressOptions("127.0.0.1", "8080", staticKey, ntcp2Config)
+	options, err := buildRouterAddressOptions("8.8.8.8", "8080", staticKey, ntcp2Config)
 	require.NoError(t, err)
 
 	assert.Equal(t, "2", options["v"],

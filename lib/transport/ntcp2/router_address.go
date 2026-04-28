@@ -126,7 +126,13 @@ func ConvertToRouterAddress(transport *NTCP2Transport) (*router_address.RouterAd
 		return nil, err
 	}
 
-	routerAddress, err := router_address.NewRouterAddress(10, time.Time{}, router_address.NTCP2_TRANSPORT_STYLE, options)
+	// Cost: 3 for published NTCP2 address, 14 for caps-only (unpublished).
+	// These match i2pd's COST_NTCP2_PUBLISHED and COST_NTCP2_NON_PUBLISHED constants.
+	cost := uint8(14)
+	if _, hasHost := options["host"]; hasHost {
+		cost = 3
+	}
+	routerAddress, err := router_address.NewRouterAddress(cost, time.Time{}, router_address.NTCP2_TRANSPORT_STYLE, options)
 	if err != nil {
 		logRouterAddressCreationError(err)
 		return nil, oops.Wrapf(err, "failed to create RouterAddress")
@@ -158,14 +164,24 @@ func detectExternalIP() string {
 		if ip == nil || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
 			continue
 		}
-		if ip4 := ip.To4(); ip4 != nil && ip.IsGlobalUnicast() {
+		if ip4 := ip.To4(); ip4 != nil && ip.IsGlobalUnicast() && !ip.IsPrivate() {
 			return ip4.String()
 		}
-		if fallback == "" {
+		if fallback == "" && !ip.IsPrivate() {
 			fallback = ip.String()
 		}
 	}
 	return fallback
+}
+
+// isPublicIP returns true if the IP string represents a publicly routable address
+// that remote peers can reach. Private/RFC1918 and reserved ranges return false.
+func isPublicIP(ipStr string) bool {
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		return false
+	}
+	return ip.IsGlobalUnicast() && !ip.IsPrivate()
 }
 
 // extractTransportAddress extracts and validates the host and port from the transport's listening address.
@@ -301,17 +317,30 @@ func buildRouterAddressOptions(host, port, staticKey string, ntcp2Config *ntcp2n
 		return nil, oops.Errorf("invalid IV length: expected 16 bytes, got %d", len(ntcp2Config.ObfuscationIV))
 	}
 
-	// Encode IV to I2P base64 (same alphabet as other I2P addresses: - and ~ instead of + and /)
-	// Note: The ObfuscationIV is already in the correct byte order from go-noise library
-	ivB64 := i2pbase64.I2PEncoding.EncodeToString(ntcp2Config.ObfuscationIV)
-
-	options := map[string]string{
-		"host": host,
-		"port": port,
-		"s":    staticKey, // Static key (already validated and Base64-encoded in validateAndExtractStaticKey)
-		"i":    ivB64,     // IV for AES obfuscation (big-endian, Base64-encoded)
-		"v":    "2",       // NTCP2 protocol version
+	if isPublicIP(host) {
+		// Published address: include host, port, and IV so remote peers can connect directly.
+		// Per I2P spec, 'i' (IV) is only present for published NTCP2 addresses.
+		ivB64 := i2pbase64.I2PEncoding.EncodeToString(ntcp2Config.ObfuscationIV)
+		options := map[string]string{
+			"host": host,
+			"port": port,
+			"s":    staticKey,
+			"i":    ivB64,
+			"v":    "2",
+		}
+		return options, nil
 	}
 
+	// Unpublished (caps-only) address: the host is private/RFC1918 or unknown.
+	// i2pd marks addresses with reserved-range IPs as eTransportUnknown, which sets
+	// m_SupportedTransports=0 and triggers SetUnreachable(true) → reason_code=15.
+	// Publishing a caps-only NTCP2 address (static key + caps, no host/port/IV) causes
+	// i2pd to set address->published=false and still add eNTCP2V4 to supportedTransports.
+	log.WithField("host", host).Debug("Host is not publicly routable; publishing caps-only NTCP2 address")
+	options := map[string]string{
+		"s":    staticKey,
+		"caps": "4", // eV4 = 1 in i2pd AddressCaps; signals IPv4 NTCP2 capability
+		"v":    "2",
+	}
 	return options, nil
 }
