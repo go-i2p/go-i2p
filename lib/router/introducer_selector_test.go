@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/transport"
 )
@@ -81,4 +82,31 @@ func TestStartIntroducerSelector_NoOpWhenNotHidden(t *testing.T) {
 	r.startIntroducerSelector()
 	// Goroutine count is hard to assert directly; the absence of a panic
 	// (no r.wg.Add, no r.ctx access) is the signal of correct gating.
+}
+
+// TestCollectIntroducerCandidates_NilNetDB is the C7.2 unit test: verifies
+// that collectIntroducerCandidates returns nil without panicking when no
+// netdb is wired up. A nil netdb means we have no peers to evaluate.
+func TestCollectIntroducerCandidates_NilNetDB(t *testing.T) {
+	r := &Router{}
+	got := r.collectIntroducerCandidates(3)
+	if got != nil {
+		t.Errorf("expected nil with nil StdNetDB, got %v", got)
+	}
+}
+
+// TestIsIntroducerCandidate_RejectsNonR verifies that isIntroducerCandidate
+// rejects a zero-value RouterInfo (hash lookup fails → not a candidate). The
+// caps filter (capsContainsReachable) is exercised by TestCapsContainsReachable;
+// HasDialableSSU2Address is exercised by TestHasDialableSSU2Address_*.
+// This test confirms the early-return on hash error.
+func TestIsIntroducerCandidate_RejectsNonR(t *testing.T) {
+	r := &Router{}
+	var emptyHash common.Hash
+	var ri router_info.RouterInfo
+	// Zero-value RouterInfo has no signing key, so ri.IdentHash() returns an
+	// error and isIntroducerCandidate returns false immediately.
+	if r.isIntroducerCandidate(ri, emptyHash, nil, nil) {
+		t.Error("expected false for zero-value RouterInfo (hash error path)")
+	}
 }

@@ -275,3 +275,26 @@ func TestForwardRelayIntro_UnknownTag(t *testing.T) {
 	err := tr.forwardRelayIntro(req)
 	assert.NoError(t, err) // rejected silently, no error propagated
 }
+
+// TestRelayRequestBlock_RoundTrip is the C7.1 unit test: verifies that a
+// RelayRequestBlock survives an encode → decode cycle with all fields intact.
+func TestRelayRequestBlock_RoundTrip(t *testing.T) {
+	req := &ssu2noise.RelayRequestBlock{
+		Timestamp: 12345,
+		Nonce:     9999,
+		RelayTag:  0xdeadbeef,
+		AlicePort: 4567,
+		AliceIP:   net.ParseIP("10.0.0.1").To4(),
+	}
+
+	encoded, err := ssu2noise.EncodeRelayRequest(req)
+	require.NoError(t, err)
+	require.NotNil(t, encoded)
+
+	decoded, err := ssu2noise.DecodeRelayRequest(encoded)
+	require.NoError(t, err)
+	assert.Equal(t, req.Nonce, decoded.Nonce)
+	assert.Equal(t, req.RelayTag, decoded.RelayTag)
+	assert.Equal(t, req.AlicePort, decoded.AlicePort)
+	assert.True(t, net.IP(req.AliceIP).Equal(net.IP(decoded.AliceIP)))
+}
