@@ -37,7 +37,7 @@ func (t *SSU2Transport) buildTransportCallbacks(session *SSU2Session) *BlockCall
 			return t.handlePeerTestBlock(block, session)
 		},
 		OnRelayRequest: func(block *ssu2noise.SSU2Block) error {
-			return t.handleRelayRequestBlock(block)
+			return t.handleRelayRequestBlock(block, session)
 		},
 		OnRelayResponse: func(block *ssu2noise.SSU2Block) error {
 			return t.handleRelayResponseBlock(block)
@@ -263,10 +263,17 @@ func (t *SSU2Transport) anyActiveSession() *SSU2Session {
 }
 
 // handleRelayRequestBlock processes a RelayRequest from Alice (we are Bob).
-// It decodes the request, validates the relay tag, and forwards a RelayIntro
-// to Charlie via the session associated with the relay tag.
-func (t *SSU2Transport) handleRelayRequestBlock(block *ssu2noise.SSU2Block) error {
+// It enforces a per-Alice-session rate limit, decodes the request, and
+// forwards a RelayIntro to Charlie via the session associated with the relay
+// tag. Signature verification is deferred until the transport gains netdb
+// access for Alice's Ed25519 signing key (tracked as a known gap).
+func (t *SSU2Transport) handleRelayRequestBlock(block *ssu2noise.SSU2Block, session *SSU2Session) error {
 	if t.relayManager == nil || block == nil {
+		return nil
+	}
+	// Rate-limit per Alice session using the same token bucket as PeerTest.
+	if session != nil && !session.peerTestLimiter.Allow() {
+		t.logger.Debug("RelayRequest: per-session rate limit exceeded, dropping")
 		return nil
 	}
 	req, err := ssu2noise.DecodeRelayRequest(block)
@@ -279,18 +286,22 @@ func (t *SSU2Transport) handleRelayRequestBlock(block *ssu2noise.SSU2Block) erro
 
 // forwardRelayIntro looks up the relay tag target (Charlie), builds a
 // RelayIntro block, and writes it to Charlie's session.
+// Rejects when no relay tag is registered for the requested tag value or when
+// there is no active session to Charlie.
+// Note: caps=B check on Charlie requires netdb RouterInfo lookup; relay tag
+// registration serves as a local proxy for introducer capability.
 func (t *SSU2Transport) forwardRelayIntro(req *ssu2noise.RelayRequestBlock) error {
 	tag := t.relayManager.GetRelayTag(req.RelayTag)
 	if tag == nil {
-		t.logger.WithField("relay_tag", req.RelayTag).Warn("relay tag not found")
+		t.logger.WithField("relay_tag", req.RelayTag).Warn("RelayRequest rejected: unknown or expired relay tag")
+		return nil
+	}
+	session := t.findSessionByAddr(tag.ForAddr)
+	if session == nil {
+		t.logger.WithField("charlie_addr", tag.ForAddr).Warn("RelayRequest rejected: no active session to Charlie")
 		return nil
 	}
 	intro := buildRelayIntro(req)
-	session := t.findSessionByAddr(tag.ForAddr)
-	if session == nil {
-		t.logger.Warn("no session to relay target")
-		return nil
-	}
 	encoded, err := ssu2noise.EncodeRelayIntro(intro)
 	if err != nil {
 		return err

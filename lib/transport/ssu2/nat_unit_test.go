@@ -24,17 +24,18 @@ func TestHandlePeerTestBlock_NilManager(t *testing.T) {
 }
 
 // TestHandleRelayRequestBlock_NilManager verifies that handleRelayRequestBlock
-// returns nil when relayManager is nil.
+// returns nil without panicking when relayManager is not initialised.
 func TestHandleRelayRequestBlock_NilManager(t *testing.T) {
-	tr := makeMinimalTransport()
-	err := tr.handleRelayRequestBlock(&ssu2noise.SSU2Block{})
+	tr := makeMinimalTransport() // no relayManager
+	block := &ssu2noise.SSU2Block{}
+	err := tr.handleRelayRequestBlock(block, nil)
 	assert.NoError(t, err)
 }
 
 // TestHandleRelayRequestBlock_NilBlock verifies that a nil block is also safe.
 func TestHandleRelayRequestBlock_NilBlock(t *testing.T) {
 	tr := makeMinimalTransport()
-	err := tr.handleRelayRequestBlock(nil)
+	err := tr.handleRelayRequestBlock(nil, nil)
 	assert.NoError(t, err)
 }
 
@@ -233,4 +234,44 @@ func TestHandlePeerTestAsBob_GlobalRateLimit(t *testing.T) {
 	}
 	err := tr.handlePeerTestAsBob(ptBlock, session)
 	assert.NoError(t, err) // drops silently due to global limit
+}
+
+// TestHandleRelayRequestBlock_SessionRateLimit verifies that per-session rate
+// limiting drops RelayRequest blocks once the token bucket is exhausted.
+func TestHandleRelayRequestBlock_SessionRateLimit(t *testing.T) {
+	tr, cleanup := makeTestTransportWithListener(t)
+	defer cleanup()
+
+	// Exhaust the session rate limiter (burst=3, consume all three tokens).
+	limiter := rate.NewLimiter(rate.Limit(1), 3)
+	limiter.Allow()
+	limiter.Allow()
+	limiter.Allow()
+	session := &SSU2Session{peerTestLimiter: limiter}
+
+	// handleRelayRequestBlock should drop silently — no error.
+	err := tr.handleRelayRequestBlock(&ssu2noise.SSU2Block{}, session)
+	assert.NoError(t, err)
+}
+
+// TestHandleRelayRequestBlock_NilSession verifies that a nil session bypasses
+// the rate limit (compatible with internal callers that have no session).
+func TestHandleRelayRequestBlock_NilSession(t *testing.T) {
+	tr, cleanup := makeTestTransportWithListener(t)
+	defer cleanup()
+
+	// nil session: rate limit is skipped, decode fails on empty block → no error.
+	err := tr.handleRelayRequestBlock(&ssu2noise.SSU2Block{}, nil)
+	assert.NoError(t, err)
+}
+
+// TestForwardRelayIntro_UnknownTag verifies that forwardRelayIntro rejects a
+// RelayRequest with an unregistered relay tag.
+func TestForwardRelayIntro_UnknownTag(t *testing.T) {
+	tr, cleanup := makeTestTransportWithListener(t)
+	defer cleanup()
+
+	req := &ssu2noise.RelayRequestBlock{RelayTag: 0xdeadbeef}
+	err := tr.forwardRelayIntro(req)
+	assert.NoError(t, err) // rejected silently, no error propagated
 }
