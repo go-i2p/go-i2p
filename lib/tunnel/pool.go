@@ -192,6 +192,27 @@ func (p *Pool) SetAutoFallbackCheck(fn func() bool) {
 	p.autoFallbackFn = fn
 }
 
+// RecordInboundBuildTimeout is called by TunnelManager whenever an inbound
+// tunnel build times out. It increments the in-flight expired counter and
+// triggers checkAutoFallback when the threshold is reached. This is the
+// authoritative notification path: pool.cleanupExpiredTunnelsLocked cannot
+// reliably observe TunnelFailed state because TunnelManager removes those
+// tunnels from the pool within ~1 s of marking them failed — well inside the
+// 30-second pool-maintenance interval.
+func (p *Pool) RecordInboundBuildTimeout() {
+	if !p.config.IsInbound {
+		return
+	}
+	p.mutex.Lock()
+	p.inFlightExpiredCount++
+	count := p.inFlightExpiredCount
+	p.mutex.Unlock()
+
+	if count >= autoFallbackThreshold {
+		p.checkAutoFallback()
+	}
+}
+
 // checkAutoFallback switches this inbound pool to zero-hop tunnels when the
 // registered callback confirms no public address is available. It is a no-op
 // if the pool is already at hop-count 0, is an outbound pool, or no callback

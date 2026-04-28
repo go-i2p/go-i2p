@@ -91,6 +91,42 @@ func TestPool_SetHopCount_OutboundRejectsZero(t *testing.T) {
 	assert.Equal(t, 2, pool.HopCount())
 }
 
+// TestPool_AutoFallback_RecordInboundBuildTimeout verifies the production code
+// path where TunnelManager calls RecordInboundBuildTimeout() directly. Unlike
+// the cleanup-loop tests below, this path does not require injecting stale
+// TunnelBuilding entries — it mirrors what handleExpiredRequest does.
+func TestPool_AutoFallback_RecordInboundBuildTimeout(t *testing.T) {
+	cfg := DefaultPoolConfig()
+	cfg.IsInbound = true
+	pool := NewTunnelPoolWithConfig(&emptyPeerSelector{}, cfg)
+	defer pool.Stop()
+
+	noPublicAddr := func() bool { return true }
+	pool.SetAutoFallbackCheck(noPublicAddr)
+
+	// Simulate TunnelManager firing autoFallbackThreshold build timeouts.
+	for i := 0; i < autoFallbackThreshold-1; i++ {
+		pool.RecordInboundBuildTimeout()
+		assert.Equal(t, 3, pool.HopCount(), "must not switch before threshold")
+	}
+	pool.RecordInboundBuildTimeout() // reaches threshold — should flip
+	assert.Equal(t, 0, pool.HopCount(), "should switch to zero-hop at threshold")
+}
+
+// TestPool_AutoFallback_RecordTimeout_OutboundNoOp verifies RecordInboundBuildTimeout
+// is a no-op for outbound pools.
+func TestPool_AutoFallback_RecordTimeout_OutboundNoOp(t *testing.T) {
+	cfg := DefaultPoolConfig()
+	cfg.IsInbound = false
+	pool := NewTunnelPoolWithConfig(&emptyPeerSelector{}, cfg)
+	defer pool.Stop()
+
+	for i := 0; i < autoFallbackThreshold+1; i++ {
+		pool.RecordInboundBuildTimeout()
+	}
+	assert.Equal(t, 3, pool.HopCount(), "outbound pool must never switch to zero-hop")
+}
+
 // TestPool_AutoFallback_SwitchesToZeroHop verifies that after
 // autoFallbackThreshold consecutive in-flight build timeouts on an inbound
 // pool with no public address, the pool automatically switches to 0-hop.
