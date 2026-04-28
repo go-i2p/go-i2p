@@ -116,7 +116,7 @@ func TestCreateShortTunnelBuildMessage_EncryptsRecords(t *testing.T) {
 	require.NoError(t, err, "deriving hop1 chaining key should succeed")
 	rk1, err := DeriveSTBMReplyKey(ck1)
 	require.NoError(t, err, "deriving hop1 reply key should succeed")
-	require.NoError(t, peelSTBMRecordLayer(&enc2, rk1, 1), "peeling hop1 layer off record 2 should succeed")
+	require.NoError(t, chacha20XORRecord(&enc2, rk1, 1), "peeling hop1 layer off record 2 should succeed")
 
 	decrypted2, err := DecryptShortBuildRequestRecord(enc2, hop2KS.GetEncryptionPrivateKey().Bytes())
 	require.NoError(t, err, "decryption of record 2 should succeed with hop2's key after layer peel")

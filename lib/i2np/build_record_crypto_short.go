@@ -200,3 +200,44 @@ func DecryptShortBuildRequestRecordNoise(encrypted [218]byte, privateKey []byte)
 		Debug("STBM build request record decrypted (Noise_N)")
 	return ReadShortBuildRequestRecord(cleartext)
 }
+
+// DecryptSTBMRecordReturningChainingKey performs the same Noise_N AEAD-decrypt
+// as DecryptShortBuildRequestRecordNoise but returns the post-decrypt Noise
+// chaining key instead of the cleartext record. This chaining key is what the
+// hop needs to derive its replyKey (via DeriveSTBMReplyKey) so it can:
+//
+//  1. Peel its own layer off all subsequent records via ChaCha20 stream.
+//  2. AEAD-decrypt the build response record addressed to it.
+//
+// Used by the test harness to validate the sender-side chained ChaCha20 layer
+// obfuscation, and intended for use by the real receive path once we wire up
+// inbound STBM handling.
+func DecryptSTBMRecordReturningChainingKey(encrypted [218]byte, privateKey []byte) ([32]byte, error) {
+	var chainingKey [32]byte
+	if len(privateKey) != 32 {
+		return chainingKey, oops.Errorf("invalid private key size: expected 32 bytes, got %d", len(privateKey))
+	}
+	priv := x25519.PrivateKey(privateKey)
+	ourStaticPubBytes, err := priv.PublicKey()
+	if err != nil {
+		return chainingKey, oops.Wrapf(err, "failed to derive static public key from private key")
+	}
+
+	ephPub := encrypted[16:48]
+	ct := encrypted[48:218]
+
+	ns := initSTBMNoiseN(ourStaticPubBytes)
+	ns.MixHash(ephPub)
+
+	sharedSecret, err := priv.SharedKey(x25519.PublicKey(ephPub))
+	if err != nil {
+		return chainingKey, oops.Wrapf(err, "X25519 key agreement failed")
+	}
+	ns.MixKey(sharedSecret)
+
+	if _, err := ns.DecryptAndHash(nil, ct); err != nil {
+		return chainingKey, oops.Wrapf(err, "Noise DecryptAndHash failed")
+	}
+	copy(chainingKey[:], ns.ChainingKey())
+	return chainingKey, nil
+}

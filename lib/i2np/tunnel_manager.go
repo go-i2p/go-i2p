@@ -1207,12 +1207,12 @@ func (tm *TunnelManager) GetClientBuildSuccessCount(windowMs int64) float64 {
 // ShortECIESTunnelHopConfig::DecryptRecord. Because ChaCha20 is a stream
 // cipher, the same operation both applies and removes the layer.
 func chacha20XORRecord(record *[ShortBuildRecordSize]byte, key [32]byte, index int) error {
-var nonce [12]byte
-nonce[4] = byte(index)
-c, err := chacha20.NewUnauthenticatedCipher(key[:], nonce[:])
-if err != nil {
-return oops.Wrapf(err, "ChaCha20 init failed")
-}
-c.XORKeyStream(record[:], record[:])
-return nil
+	var nonce [12]byte
+	nonce[4] = byte(index)
+	c, err := chacha20.NewUnauthenticatedCipher(key[:], nonce[:])
+	if err != nil {
+		return oops.Wrapf(err, "ChaCha20 init failed")
+	}
+	c.XORKeyStream(record[:], record[:])
+	return nil
 }
