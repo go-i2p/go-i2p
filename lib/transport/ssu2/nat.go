@@ -4,6 +4,7 @@ import (
 	"net"
 	"time"
 
+	i2pbase64 "github.com/go-i2p/common/base64"
 	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
@@ -431,6 +432,29 @@ func (t *SSU2Transport) GetIntroducers() []*ssu2noise.RegisteredIntroducer {
 	return t.introducerRegistry.GetIntroducers()
 }
 
+// RemoveIntroducerByAddr removes a previously-registered introducer by its
+// UDP address. No-op when the registry is uninitialised or the address is
+// nil. Used by the router's hidden-mode introducer selector to drop
+// disconnected peers (PLAN.md Track C2).
+func (t *SSU2Transport) RemoveIntroducerByAddr(addr *net.UDPAddr) {
+	if t.introducerRegistry == nil || addr == nil {
+		return
+	}
+	t.introducerRegistry.RemoveIntroducer(addr)
+}
+
+// IntroducerFromRouterInfo builds a RegisteredIntroducer for ri using this
+// transport's relay-tag allocator. Exported for use by the router-level
+// introducer selector; returns the same value that RegisterIntroducer would
+// accept. Allocates a relay tag as a side effect — the caller must register
+// the result (or discard it) to avoid leaking allocations.
+func (t *SSU2Transport) IntroducerFromRouterInfo(ri router_info.RouterInfo) (*ssu2noise.RegisteredIntroducer, error) {
+	if t.relayManager == nil {
+		return nil, ErrTransportNotStarted
+	}
+	return t.createIntroducerFromRouterInfo(ri)
+}
+
 // AllocateRelayTag allocates a relay tag for the given peer address so that
 // this router can act as an introducer for that peer.
 func (t *SSU2Transport) AllocateRelayTag(addr *net.UDPAddr) (uint32, error) {
@@ -639,7 +663,9 @@ func (t *SSU2Transport) tryRegisterIntroducer(ri router_info.RouterInfo) bool {
 }
 
 // createIntroducerFromRouterInfo extracts SSU2 address and identity, allocates a relay tag,
-// and builds a RegisteredIntroducer.
+// and builds a RegisteredIntroducer. StaticKey and IntroKey are populated from
+// the peer's SSU2 RouterAddress and base64-encoded as required by
+// ssu2noise.IntroducerRegistry validation (44-byte base64 of 32-byte raw keys).
 func (t *SSU2Transport) createIntroducerFromRouterInfo(ri router_info.RouterInfo) (*ssu2noise.RegisteredIntroducer, error) {
 	addr, err := ExtractSSU2Addr(ri)
 	if err != nil {
@@ -649,6 +675,14 @@ func (t *SSU2Transport) createIntroducerFromRouterInfo(ri router_info.RouterInfo
 	if err != nil {
 		return nil, err
 	}
+	staticRaw, err := extractRemoteStaticKey(ri)
+	if err != nil {
+		return nil, oops.Wrapf(err, "extract static key for introducer")
+	}
+	introRaw, err := ExtractSSU2IntroKey(ri)
+	if err != nil {
+		return nil, oops.Wrapf(err, "extract intro key for introducer")
+	}
 	hBytes := h.Bytes()
 	tag, err := t.AllocateRelayTag(addr)
 	if err != nil {
@@ -657,6 +691,8 @@ func (t *SSU2Transport) createIntroducerFromRouterInfo(ri router_info.RouterInfo
 	return &ssu2noise.RegisteredIntroducer{
 		Addr:       addr,
 		RouterHash: hBytes[:],
+		StaticKey:  []byte(i2pbase64.EncodeToString(staticRaw)),
+		IntroKey:   []byte(i2pbase64.EncodeToString(introRaw)),
 		RelayTag:   tag,
 		AddedAt:    time.Now(),
 		LastSeen:   time.Now(),

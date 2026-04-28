@@ -242,6 +242,8 @@ func (r *Router) mainloop() {
 	r.startFloodfillServer()
 	log.WithField("at", "mainloop").Debug("step 7: starting SSU2 NAT detection")
 	r.startSSU2NATDetection()
+	log.WithField("at", "mainloop").Debug("step 7b: starting hidden-mode introducer selector")
+	r.startIntroducerSelector()
 
 	// Signal Start() that all startup-critical initialization succeeded
 	log.WithField("at", "mainloop").Debug("signaling startup success")
