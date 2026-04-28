@@ -244,6 +244,8 @@ func (r *Router) mainloop() {
 	r.startSSU2NATDetection()
 	log.WithField("at", "mainloop").Debug("step 7b: starting hidden-mode introducer selector")
 	r.startIntroducerSelector()
+	log.WithField("at", "mainloop").Debug("step 7c: starting reachability loop")
+	r.startReachabilityLoop()
 
 	// Signal Start() that all startup-critical initialization succeeded
 	log.WithField("at", "mainloop").Debug("signaling startup success")

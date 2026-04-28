@@ -65,6 +65,14 @@ type SSU2Transport struct {
 	// across all sessions to limit amplification.
 	peerTestGlobalLimiter *rate.Limiter
 
+	// startupPeerTestCount tracks how many auto peer-tests have been sent at
+	// startup (capped at 3 per D3 spec).
+	startupPeerTestCount int32
+
+	// peerTestRepublish is an optional callback invoked when PeerTest
+	// observations confirm a new external address. Set after construction.
+	peerTestRepublish atomic.Value // stores func()
+
 	// closeOnce ensures Close() is idempotent.
 	closeOnce sync.Once
 	closeErr  error
@@ -288,6 +296,10 @@ func (t *SSU2Transport) trackInboundConnection(conn net.Conn) net.Conn {
 	peerHash := t.extractPeerHash(conn)
 	if _, loaded := t.sessions.LoadOrStore(peerHash, conn); loaded {
 		t.unreserveSessionSlot()
+	}
+	// Auto-initiate a PeerTest against the first 3 peers that connect (D3).
+	if ssu2Conn, ok := conn.(*ssu2noise.SSU2Conn); ok {
+		t.maybeAutoInitiatePeerTest(ssu2Conn.RemoteAddr())
 	}
 	return &trackedConn{
 		Conn: conn,

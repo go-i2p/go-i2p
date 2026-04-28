@@ -20,7 +20,21 @@ const (
 
 	// natCleanupInterval is how often the cleanup goroutine runs.
 	natCleanupInterval = 60 * time.Second
+
+	// peerTestObservationWindow is the window within which 2+ observations
+	// of the same external address are required to confirm it.
+	peerTestObservationWindow = 10 * time.Minute
+
+	// peerTestConfirmThreshold is the minimum number of matching observations
+	// required to confirm an external address.
+	peerTestConfirmThreshold = 2
 )
+
+// externalAddrObservation records a single PeerTest-observed external address.
+type externalAddrObservation struct {
+	addr string    // net.UDPAddr.String()
+	at   time.Time // when the observation was received
+}
 
 // natState holds a cached NAT detection result with its timestamp.
 type natState struct {
@@ -28,6 +42,10 @@ type natState struct {
 	natType  ssu2noise.NATType
 	updated  time.Time
 	external string // cached external address string
+
+	// observations accumulates external-address reports from PeerTest
+	// replies to allow majority confirmation.
+	observations []externalAddrObservation
 }
 
 // persistedNATState is the on-disk JSON representation of NAT state.
@@ -66,6 +84,40 @@ func (ns *natState) getExternal() string {
 		return ""
 	}
 	return ns.external
+}
+
+// recordObservation appends a PeerTest-observed external address. Prunes
+// observations older than peerTestObservationWindow before appending.
+// Returns the confirmed address string if peerTestConfirmThreshold or more
+// observations agree on the same address within the window; otherwise empty.
+func (ns *natState) recordObservation(addr string) string {
+	ns.mu.Lock()
+	defer ns.mu.Unlock()
+
+	now := time.Now()
+	cutoff := now.Add(-peerTestObservationWindow)
+
+	// Prune stale observations.
+	live := ns.observations[:0]
+	for _, o := range ns.observations {
+		if o.at.After(cutoff) {
+			live = append(live, o)
+		}
+	}
+	live = append(live, externalAddrObservation{addr: addr, at: now})
+	ns.observations = live
+
+	// Count occurrences per address.
+	counts := make(map[string]int, len(live))
+	for _, o := range live {
+		counts[o.addr]++
+	}
+	for a, n := range counts {
+		if n >= peerTestConfirmThreshold {
+			return a
+		}
+	}
+	return ""
 }
 
 // startNATCleanup spawns a goroutine that periodically calls CleanupExpired

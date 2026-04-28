@@ -6,6 +6,7 @@ import (
 	cryptorand "crypto/rand"
 	"net"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	i2pbase64 "github.com/go-i2p/common/base64"
@@ -78,7 +79,9 @@ func (t *SSU2Transport) handlePeerTestBlock(block *ssu2noise.SSU2Block, session 
 
 // handlePeerTestAsAlice processes a PeerTest response/probe/result directed at
 // the test initiator (Alice). It reconstructs the observed external address
-// and completes the pending test.
+// and completes the pending test. If 2+ PeerTest observations agree on the
+// same external address within peerTestObservationWindow, the republish
+// callback is invoked so the new address can be published to the netdb.
 func (t *SSU2Transport) handlePeerTestAsAlice(ptBlock *ssu2noise.PeerTestBlock) error {
 	nonce := ptBlock.Nonce
 	var externalAddr *net.UDPAddr
@@ -94,6 +97,19 @@ func (t *SSU2Transport) handlePeerTestAsAlice(ptBlock *ssu2noise.PeerTestBlock) 
 	}
 	if completeErr := t.peerTestManager.CompleteTest(nonce, result); completeErr != nil {
 		t.logger.Debug("PeerTest complete (non-initiator path)")
+	}
+	// Record observation for majority-confirmation logic (D3).
+	if externalAddr != nil && t.natStateCache != nil {
+		confirmed := t.natStateCache.recordObservation(externalAddr.String())
+		if confirmed != "" && confirmed != t.natStateCache.getExternal() {
+			t.logger.WithField("external_addr", confirmed).
+				Info("PeerTest: external address confirmed by multiple observations")
+			t.natStateCache.set(ssu2noise.NATCone, confirmed)
+			t.saveNATState()
+			if fn, ok := t.peerTestRepublish.Load().(func()); ok && fn != nil {
+				go fn()
+			}
+		}
 	}
 	return nil
 }
@@ -488,6 +504,16 @@ func (t *SSU2Transport) GetCachedNATType() ssu2noise.NATType {
 	return natType
 }
 
+// GetCachedExternalAddr returns the external address string confirmed by
+// PeerTest observations (or by NAT-PMP/UPnP mapping). Returns "" when no
+// confirmed external address is available yet.
+func (t *SSU2Transport) GetCachedExternalAddr() string {
+	if t.natStateCache == nil {
+		return ""
+	}
+	return t.natStateCache.getExternal()
+}
+
 // GetExternalAddr returns the external UDP address detected from the most
 // recent peer-test result. Returns nil if no result is available.
 func (t *SSU2Transport) GetExternalAddr(peerAddr *net.UDPAddr) *net.UDPAddr {
@@ -785,6 +811,39 @@ func (t *SSU2Transport) createIntroducerFromRouterInfo(ri router_info.RouterInfo
 		LastSeen:   time.Now(),
 	}, nil
 }
+
+// maybeAutoInitiatePeerTest fires a best-effort PeerTest towards a newly
+// connected peer for the first startupPeerTestMax connections. This
+// implements the D3 startup probe: 3 peers report our external address so
+// the majority-confirmation logic can confirm and republish it.
+func (t *SSU2Transport) maybeAutoInitiatePeerTest(remote net.Addr) {
+	const startupPeerTestMax = 3
+	if t.peerTestManager == nil {
+		return
+	}
+	if atomic.AddInt32(&t.startupPeerTestCount, 1) > startupPeerTestMax {
+		atomic.AddInt32(&t.startupPeerTestCount, -1) // don't overflow
+		return
+	}
+	udpAddr, ok := remote.(*net.UDPAddr)
+	if !ok {
+		// Try SSU2Addr unwrapping.
+		if ssu2a, ok2 := remote.(*ssu2noise.SSU2Addr); ok2 {
+			if u := ssu2a.UnderlyingAddr(); u != nil {
+				udpAddr, _ = u.(*net.UDPAddr)
+			}
+		}
+	}
+	if udpAddr == nil {
+		return
+	}
+	go func() {
+		if _, err := t.peerTestManager.InitiatePeerTest(udpAddr); err != nil {
+			t.logger.WithField("error", err).Debug("startup PeerTest initiation failed (non-fatal)")
+		}
+	}()
+}
+
 // startNATPortMapRetry launches a background goroutine that periodically
 // re-attempts UPnP/NAT-PMP port mapping using exponential back-off
 // (initial 30 s, doubling each failure, capped at 30 min). On success the
