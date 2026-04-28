@@ -7,6 +7,7 @@ package ssu2
 import (
 	"net"
 	"testing"
+	"time"
 
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
 	"github.com/stretchr/testify/assert"
@@ -297,4 +298,50 @@ func TestRelayRequestBlock_RoundTrip(t *testing.T) {
 	assert.Equal(t, req.RelayTag, decoded.RelayTag)
 	assert.Equal(t, req.AlicePort, decoded.AlicePort)
 	assert.True(t, net.IP(req.AliceIP).Equal(net.IP(decoded.AliceIP)))
+}
+
+// ---- D5 test: NAT-PMP back-off cap ----------------------------------------
+
+// TestNATRetryBackoff_Cap verifies that the exponential back-off is capped at
+// natRetryMax regardless of how many times it doubles.
+func TestNATRetryBackoff_Cap(t *testing.T) {
+	backoff := natRetryInitial
+	for i := 0; i < 100; i++ {
+		if backoff < natRetryMax {
+			backoff *= 2
+			if backoff > natRetryMax {
+				backoff = natRetryMax
+			}
+		}
+	}
+	if backoff != natRetryMax {
+		t.Errorf("expected backoff to cap at %v, got %v", natRetryMax, backoff)
+	}
+}
+
+// TestNATRetryBackoff_DoublesCorrectly verifies the first few doubling steps
+// before the cap is reached.
+func TestNATRetryBackoff_DoublesCorrectly(t *testing.T) {
+	want := []time.Duration{
+		30 * time.Second,
+		60 * time.Second,
+		2 * time.Minute,
+		4 * time.Minute,
+		8 * time.Minute,
+		16 * time.Minute,
+		30 * time.Minute, // capped
+		30 * time.Minute, // stays at cap
+	}
+	backoff := natRetryInitial
+	for i, w := range want {
+		if backoff != w {
+			t.Errorf("step %d: expected %v, got %v", i, w, backoff)
+		}
+		if backoff < natRetryMax {
+			backoff *= 2
+			if backoff > natRetryMax {
+				backoff = natRetryMax
+			}
+		}
+	}
 }

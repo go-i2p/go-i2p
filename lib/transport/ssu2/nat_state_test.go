@@ -172,3 +172,68 @@ func TestNatState_GetExternal_Expired(t *testing.T) {
 
 	assert.Equal(t, "", ns.getExternal())
 }
+
+// ---- D5 tests: PeerTest aggregator confirmation logic -------------------
+
+// TestRecordObservation_ConfirmsAfterThreshold verifies that recordObservation
+// returns a confirmed address only once the peerTestConfirmThreshold is met.
+func TestRecordObservation_ConfirmsAfterThreshold(t *testing.T) {
+	ns := &natState{}
+	addr := "1.2.3.4:4567"
+
+	// First observation — below threshold, no confirmation yet.
+	confirmed := ns.recordObservation(addr)
+	assert.Equal(t, "", confirmed, "should not confirm on first observation")
+
+	// Second observation of the same address — meets threshold (2).
+	confirmed = ns.recordObservation(addr)
+	assert.Equal(t, addr, confirmed, "should confirm after peerTestConfirmThreshold observations")
+}
+
+// TestRecordObservation_DifferentAddressesNotConfirmed verifies that
+// disagreeing observations (different peers report different addresses) do not
+// produce a confirmation for either address independently.
+func TestRecordObservation_DifferentAddressesNotConfirmed(t *testing.T) {
+	ns := &natState{}
+
+	confirmed := ns.recordObservation("1.2.3.4:4567")
+	assert.Equal(t, "", confirmed)
+
+	confirmed = ns.recordObservation("5.6.7.8:4567")
+	assert.Equal(t, "", confirmed, "different addresses should not trigger confirmation")
+}
+
+// TestRecordObservation_StaleObservationsPruned verifies that observations
+// older than peerTestObservationWindow are pruned and do not contribute to the
+// confirmation count.
+func TestRecordObservation_StaleObservationsPruned(t *testing.T) {
+	ns := &natState{}
+	addr := "1.2.3.4:4567"
+
+	// Inject a stale observation directly.
+	ns.mu.Lock()
+	ns.observations = append(ns.observations, externalAddrObservation{
+		addr: addr,
+		at:   time.Now().Add(-peerTestObservationWindow - time.Second),
+	})
+	ns.mu.Unlock()
+
+	// This fresh observation is the first non-stale one, so no confirmation.
+	confirmed := ns.recordObservation(addr)
+	assert.Equal(t, "", confirmed, "stale observation must not count towards threshold")
+}
+
+// TestRecordObservation_MixedAddressesConfirmsCorrect verifies that when one
+// address reaches threshold among mixed observations, only that address is
+// confirmed.
+func TestRecordObservation_MixedAddressesConfirmsCorrect(t *testing.T) {
+	ns := &natState{}
+	target := "1.2.3.4:4567"
+	noise := "9.9.9.9:9999"
+
+	ns.recordObservation(noise)
+	ns.recordObservation(target)
+
+	confirmed := ns.recordObservation(target) // second occurrence of target
+	assert.Equal(t, target, confirmed)
+}

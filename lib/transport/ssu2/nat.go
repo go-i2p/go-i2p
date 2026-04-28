@@ -17,6 +17,14 @@ import (
 	"github.com/samber/oops"
 )
 
+// NAT-PMP/UPnP port-map retry timing constants.
+const (
+	// natRetryInitial is the initial wait before the first retry attempt.
+	natRetryInitial = 30 * time.Second
+	// natRetryMax caps the exponential back-off between retry attempts.
+	natRetryMax = 30 * time.Minute
+)
+
 // initNATManagers allocates and wires the PeerTestManager, RelayManager,
 // IntroducerRegistry, and HolePunchCoordinator on a freshly started transport.
 // Must be called after t.listener is initialised.
@@ -866,11 +874,6 @@ func (t *SSU2Transport) startNATPortMapRetry() {
 	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
 		return
 	}
-
-	const (
-		natRetryInitial = 30 * time.Second
-		natRetryMax     = 30 * time.Minute
-	)
 
 	t.wg.Add(1)
 	go func() {
