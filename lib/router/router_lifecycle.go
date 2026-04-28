@@ -777,8 +777,19 @@ func (r *Router) awaitStartupResult() error {
 	return nil
 }
 
-// initializeNetDB creates and configures the network database
+// initializeNetDB creates and configures the network database.
+// Idempotent: if r.StdNetDB has already been initialized (for example from
+// CreateRouter, where it is created early so that transports can wire their
+// PeerConnNotifier into r.StdNetDB.PeerTracker), this call is a no-op. This
+// matters because r.StdNetDB MUST exist before initializeTransports runs;
+// otherwise NTCP2/SSU2 transports silently skip SetPeerConnNotifier and
+// successful connections are never recorded in PeerTracker, causing every
+// known-good peer to be marked stale on its first tunnel-build failure.
 func (r *Router) initializeNetDB() error {
+	if r.StdNetDB != nil {
+		log.WithFields(logger.Fields{"at": "initializeNetDB"}).Debug("NetDB already initialized; skipping")
+		return nil
+	}
 	log.WithFields(logger.Fields{"at": "initializeNetDB"}).Debug("Initializing network database")
 	r.StdNetDB = netdb.NewStdNetDB(r.cfg.NetDB.Path)
 	r.StdNetDB.SetMaxRouterInfos(r.cfg.NetDB.MaxRouterInfos)

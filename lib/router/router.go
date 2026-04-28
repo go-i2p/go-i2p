@@ -145,6 +145,15 @@ func CreateRouter(cfg *config.RouterConfig) (*Router, error) {
 	}
 
 	log.WithField("at", "CreateRouter").Debug("step 5/6: initializing transports")
+	// NetDB MUST be initialized before transports so that NTCP2/SSU2 can wire
+	// their PeerConnNotifier into r.StdNetDB.PeerTracker. Without this, the
+	// peer-tracker only ever sees tunnel-build failures (recorded by Pool),
+	// never transport-level dial attempts or successes, and every reachable
+	// peer is marked stale after a single tunnel-build failure.
+	if err := r.initializeNetDB(); err != nil {
+		logError("failed to initialize NetDB before transports", err)
+		return nil, err
+	}
 	transports, err := initializeTransports(r, ri, cfg)
 	if err != nil {
 		return nil, err
