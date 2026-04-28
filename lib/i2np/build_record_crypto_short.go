@@ -2,12 +2,15 @@ package i2np
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
+	"io"
 
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/logger"
 	"github.com/go-i2p/noise"
 	"github.com/samber/oops"
 	"go.step.sm/crypto/x25519"
+	"golang.org/x/crypto/hkdf"
 )
 
 // stbmNoiseProtocolName is the Noise protocol name used by Java I2P and i2pd
@@ -61,62 +64,65 @@ func initSTBMNoiseN(recipientStaticPub []byte) *noise.SymmetricState {
 //	ciphertext = AEAD_ChaCha20Poly1305(key=ck[32:64], nonce=0, ad=h, plaintext)
 //	MixHash(ciphertext)
 func EncryptShortBuildRequestRecord(record BuildRequestRecord, recipientRouterInfo router_info.RouterInfo) ([218]byte, error) {
-	var encrypted [218]byte
+	encrypted, _, err := EncryptShortBuildRequestRecordWithChain(record, recipientRouterInfo)
+	return encrypted, err
+}
 
-	// Serialize the full 218-byte short record. ShortBytes fills [0:16]
-	// (toPeer) and the cleartext bytes at [48:48+154]; the ephemeral key
-	// slot [16:48] and AEAD tag slot [202:218] are left zero for us.
+// EncryptShortBuildRequestRecordWithChain is the same as EncryptShortBuildRequestRecord
+// but also returns the post-encryption Noise chaining key (32 bytes). The caller
+// needs this chaining key to derive the per-hop reply/layer/IV keys via i2p HKDF
+// (info="SMTunnelReplyKey" etc.) — the reply key in particular is required to
+// apply the chained ChaCha20 stream-cipher layer obfuscation that the I2P tunnel
+// build protocol mandates over records following each hop.
+//
+// See i2pd ShortECIESTunnelHopConfig::CreateBuildRequestRecord for the full
+// per-hop key derivation chain.
+func EncryptShortBuildRequestRecordWithChain(record BuildRequestRecord, recipientRouterInfo router_info.RouterInfo) ([218]byte, [32]byte, error) {
+	var encrypted [218]byte
+	var chainingKey [32]byte
+
 	full := record.ShortBytes()
 	if len(full) != ShortBuildRecordSize {
-		return encrypted, oops.Errorf("invalid ShortBytes size: expected %d, got %d", ShortBuildRecordSize, len(full))
+		return encrypted, chainingKey, oops.Errorf("invalid ShortBytes size: expected %d, got %d", ShortBuildRecordSize, len(full))
 	}
 
-	// Extract recipient X25519 static public key from RouterInfo.
 	recipientPubKey, err := extractEncryptionPublicKey(recipientRouterInfo)
 	if err != nil {
-		return encrypted, oops.Wrapf(err, "failed to extract encryption public key")
+		return encrypted, chainingKey, oops.Wrapf(err, "failed to extract encryption public key")
 	}
 	if len(recipientPubKey) != 32 {
-		return encrypted, oops.Errorf("invalid recipient pubkey length: %d", len(recipientPubKey))
+		return encrypted, chainingKey, oops.Errorf("invalid recipient pubkey length: %d", len(recipientPubKey))
 	}
 
-	// Generate sender's ephemeral X25519 keypair.
 	ephemeralPub, ephemeralPriv, err := x25519.GenerateKey(rand.Reader)
 	if err != nil {
-		return encrypted, oops.Wrapf(err, "failed to generate ephemeral X25519 keypair")
+		return encrypted, chainingKey, oops.Wrapf(err, "failed to generate ephemeral X25519 keypair")
 	}
 
-	// Build the Noise_N symmetric state for this hop and step the transcript:
-	//   state = InitNoiseN(rs)
-	//   MixHash(eph_pub)
-	//   MixKey(X25519(eph_priv, rs))
 	ns := initSTBMNoiseN(recipientPubKey)
 	ns.MixHash(ephemeralPub)
 
 	sharedSecret, err := ephemeralPriv.SharedKey(x25519.PublicKey(recipientPubKey))
 	if err != nil {
-		return encrypted, oops.Wrapf(err, "X25519 key agreement failed")
+		return encrypted, chainingKey, oops.Wrapf(err, "X25519 key agreement failed")
 	}
 	ns.MixKey(sharedSecret)
 
-	// EncryptAndHash performs:
-	//   ct = AEAD(k, nonce=0, ad=h, plaintext)
-	//   MixHash(ct)
-	// matching i2pd's EncryptECIES in TunnelConfig.cpp.
 	cleartext := full[48 : 48+ShortBuildRecordCleartextLen]
 	ct, err := ns.EncryptAndHash(nil, cleartext)
 	if err != nil {
-		return encrypted, oops.Wrapf(err, "Noise EncryptAndHash failed")
+		return encrypted, chainingKey, oops.Wrapf(err, "Noise EncryptAndHash failed")
 	}
 	if len(ct) != ShortBuildRecordCleartextLen+16 {
-		return encrypted, oops.Errorf("unexpected ciphertext length: got %d, want %d",
+		return encrypted, chainingKey, oops.Errorf("unexpected ciphertext length: got %d, want %d",
 			len(ct), ShortBuildRecordCleartextLen+16)
 	}
 
-	// Assemble the wire record.
-	copy(encrypted[0:16], full[0:16])    // toPeer prefix
-	copy(encrypted[16:48], ephemeralPub) // sender ephemeral X25519 public key
-	copy(encrypted[48:218], ct)          // ciphertext + Poly1305 tag
+	copy(encrypted[0:16], full[0:16])
+	copy(encrypted[16:48], ephemeralPub)
+	copy(encrypted[48:218], ct)
+
+	copy(chainingKey[:], ns.ChainingKey())
 
 	log.WithFields(logger.Fields{
 		"at":             "EncryptShortBuildRequestRecord",
@@ -124,7 +130,29 @@ func EncryptShortBuildRequestRecord(record BuildRequestRecord, recipientRouterIn
 		"cleartext_size": ShortBuildRecordCleartextLen,
 	}).Debug("STBM build request record encrypted (Noise_N)")
 
-	return encrypted, nil
+	return encrypted, chainingKey, nil
+}
+
+// DeriveSTBMReplyKey derives the per-hop ChaCha20 reply key from a hop's
+// post-encryption Noise chaining key. This key is used both for the chained
+// stream-cipher layer obfuscation that the sender applies to records following
+// this hop, and for AEAD-decrypting that hop's build response record.
+//
+// The derivation matches i2pd:
+//
+//	HKDF-SHA256(salt=ck, ikm="", info="SMTunnelReplyKey", out=64)
+//	-> new_ck (bytes 0:32) || replyKey (bytes 32:64)
+//
+// We only need the replyKey here.
+func DeriveSTBMReplyKey(chainingKey [32]byte) ([32]byte, error) {
+	var replyKey [32]byte
+	r := hkdf.New(sha256.New, []byte{}, chainingKey[:], []byte("SMTunnelReplyKey"))
+	var out [64]byte
+	if _, err := io.ReadFull(r, out[:]); err != nil {
+		return replyKey, oops.Wrapf(err, "HKDF for SMTunnelReplyKey failed")
+	}
+	copy(replyKey[:], out[32:64])
+	return replyKey, nil
 }
 
 // DecryptShortBuildRequestRecordNoise is the inverse of EncryptShortBuildRequestRecord:

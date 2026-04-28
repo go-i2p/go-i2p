@@ -13,6 +13,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
+	"golang.org/x/crypto/chacha20"
 )
 
 // buildRequest tracks a pending tunnel build request for correlation with replies.
@@ -449,16 +450,46 @@ func (tm *TunnelManager) createShortTunnelBuildMessage(result *tunnel.TunnelBuil
 	// Encrypt each record with the corresponding hop's public key.
 	// Each encrypted STBM record is exactly 218 bytes:
 	//   16 (toPeer) + 32 (ephemeralKey) + 154 (ciphertext) + 16 (poly1305 tag).
+	// We also keep each hop's per-hop reply key (derived from the post-encrypt
+	// Noise chaining key via HKDF info="SMTunnelReplyKey") because the I2P
+	// short-tunnel-build protocol requires the sender to apply chained ChaCha20
+	// stream-cipher layer obfuscation across all records following each hop —
+	// without that step every hop after the first reads garbage and silently
+	// drops the message (no build reply ever returns).
+	// See i2pd Tunnel::Build() in libi2pd/Tunnel.cpp and
+	// ShortECIESTunnelHopConfig::DecryptRecord in libi2pd/TunnelConfig.cpp.
 	encryptedRecords := make([][ShortBuildRecordSize]byte, len(i2npRecords))
+	replyKeys := make([][32]byte, len(i2npRecords))
 	for i, record := range i2npRecords {
 		if i >= len(result.Hops) {
 			return nil, oops.Errorf("record %d has no corresponding hop RouterInfo", i)
 		}
-		encrypted, err := EncryptShortBuildRequestRecord(record, result.Hops[i])
+		encrypted, ck, err := EncryptShortBuildRequestRecordWithChain(record, result.Hops[i])
 		if err != nil {
 			return nil, oops.Wrapf(err, "failed to encrypt short build record %d", i)
 		}
 		encryptedRecords[i] = encrypted
+		rk, err := DeriveSTBMReplyKey(ck)
+		if err != nil {
+			return nil, oops.Wrapf(err, "failed to derive reply key for hop %d", i)
+		}
+		replyKeys[i] = rk
+	}
+
+	// Apply chained ChaCha20 layer obfuscation. For each hop i (from
+	// second-to-last down to first), XOR every record at index j > i with
+	// ChaCha20(key=replyKeys[i], nonce[4]=j, rest=0). This way when hop 0
+	// receives the message it AEAD-decrypts its own record, then peels its
+	// layer off all later records using the same ChaCha20 stream — leaving
+	// records[1..N-1] in the state hop 1 can decrypt; and so on.
+	if len(encryptedRecords) >= 2 {
+		for i := len(encryptedRecords) - 2; i >= 0; i-- {
+			for j := i + 1; j < len(encryptedRecords); j++ {
+				if err := chacha20XORRecord(&encryptedRecords[j], replyKeys[i], j); err != nil {
+					return nil, oops.Wrapf(err, "ChaCha20 layer obfuscation failed at hop %d record %d", i, j)
+				}
+			}
+		}
 	}
 
 	// Serialize encrypted records: [count:1][encrypted_records...]
@@ -1167,4 +1198,21 @@ func (tm *TunnelManager) GetBuildAvgTimeMs(windowMs int64) float64 {
 // within windowMs milliseconds. Maps to the Java I2P stat "tunnel.buildClientSuccess".
 func (tm *TunnelManager) GetClientBuildSuccessCount(windowMs int64) float64 {
 	return tm.clientBuildSuccessWindow.countInWindow(windowMs)
+}
+
+// chacha20XORRecord applies the I2P short-tunnel-build chained layer
+// obfuscation to a single 218-byte STBM record using ChaCha20 as a raw
+// stream cipher (no Poly1305). The nonce is 12 zero bytes with nonce[4]
+// set to the record's index in the message — matching i2pd's
+// ShortECIESTunnelHopConfig::DecryptRecord. Because ChaCha20 is a stream
+// cipher, the same operation both applies and removes the layer.
+func chacha20XORRecord(record *[ShortBuildRecordSize]byte, key [32]byte, index int) error {
+var nonce [12]byte
+nonce[4] = byte(index)
+c, err := chacha20.NewUnauthenticatedCipher(key[:], nonce[:])
+if err != nil {
+return oops.Wrapf(err, "ChaCha20 init failed")
+}
+c.XORKeyStream(record[:], record[:])
+return nil
 }

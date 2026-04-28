@@ -101,11 +101,25 @@ func TestCreateShortTunnelBuildMessage_EncryptsRecords(t *testing.T) {
 	assert.Equal(t, rec1.SendMessageID, decrypted1.SendMessageID,
 		"decrypted SendMessageID should match original")
 
-	// Decrypt record 2 with hop2's private key and verify
+	// Decrypt record 2 with hop2's private key and verify.
+	// Per I2P short-tunnel-build protocol, the sender applies chained ChaCha20
+	// layer obfuscation: record j has been XOR'd with ChaCha20 streams keyed
+	// from each preceding hop's reply key. To decrypt record 2 we must first
+	// peel hop1's layer the same way the receiving network would: hop1
+	// AEAD-decrypts record 1, derives its replyKey from the resulting Noise
+	// chaining key, then XORs the same ChaCha20 stream over record 2.
 	var enc2 [ShortBuildRecordSize]byte
 	copy(enc2[:], encRec2Data)
+
+	hop1Priv := hop1KS.GetEncryptionPrivateKey().Bytes()
+	ck1, err := DecryptSTBMRecordReturningChainingKey(enc1, hop1Priv)
+	require.NoError(t, err, "deriving hop1 chaining key should succeed")
+	rk1, err := DeriveSTBMReplyKey(ck1)
+	require.NoError(t, err, "deriving hop1 reply key should succeed")
+	require.NoError(t, peelSTBMRecordLayer(&enc2, rk1, 1), "peeling hop1 layer off record 2 should succeed")
+
 	decrypted2, err := DecryptShortBuildRequestRecord(enc2, hop2KS.GetEncryptionPrivateKey().Bytes())
-	require.NoError(t, err, "decryption of record 2 should succeed with hop2's key")
+	require.NoError(t, err, "decryption of record 2 should succeed with hop2's key after layer peel")
 	assert.Equal(t, rec2.ReceiveTunnel, decrypted2.ReceiveTunnel,
 		"decrypted ReceiveTunnel should match original")
 	assert.Equal(t, rec2.SendMessageID, decrypted2.SendMessageID,
