@@ -1,12 +1,17 @@
 package ssu2
 
 import (
+	"context"
+	"crypto/ed25519"
+	cryptorand "crypto/rand"
 	"net"
+	"strconv"
 	"time"
 
 	i2pbase64 "github.com/go-i2p/common/base64"
 	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
+	nattraversal "github.com/go-i2p/go-nat-listener"
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
 	"github.com/samber/oops"
 )
@@ -24,6 +29,7 @@ func initNATManagers(t *SSU2Transport) {
 	}
 	t.loadNATState()
 	t.startNATCleanup()
+	t.startNATPortMapRetry()
 }
 
 // buildTransportCallbacks returns a BlockCallbackConfig whose handlers delegate
@@ -43,7 +49,7 @@ func (t *SSU2Transport) buildTransportCallbacks(session *SSU2Session) *BlockCall
 			return t.handleRelayResponseBlock(block)
 		},
 		OnRelayIntro: func(block *ssu2noise.SSU2Block) error {
-			return t.handleRelayIntroBlock(block)
+			return t.handleRelayIntroBlock(block, session)
 		},
 	}
 }
@@ -350,9 +356,10 @@ func (t *SSU2Transport) handleRelayResponseBlock(block *ssu2noise.SSU2Block) err
 }
 
 // handleRelayIntroBlock processes a RelayIntro (we are Charlie). It decodes
-// the intro and initiates a hole-punch towards Alice using the coordinates
-// embedded in the block.
-func (t *SSU2Transport) handleRelayIntroBlock(block *ssu2noise.SSU2Block) error {
+// the intro, sends a HolePunch to Alice, and sends a RelayResponse back to
+// Bob so Bob can forward it to Alice. bobSession is the session from which
+// the RelayIntro arrived.
+func (t *SSU2Transport) handleRelayIntroBlock(block *ssu2noise.SSU2Block, bobSession *SSU2Session) error {
 	if t.holePunchCoord == nil || block == nil {
 		return nil
 	}
@@ -361,22 +368,91 @@ func (t *SSU2Transport) handleRelayIntroBlock(block *ssu2noise.SSU2Block) error 
 		t.logger.WithField("error", err).Warn("failed to decode RelayIntro")
 		return nil
 	}
-	return t.initiateHolePunch(intro)
+	return t.initiateHolePunch(intro, bobSession)
 }
 
-// initiateHolePunch starts a hole-punch towards Alice based on a RelayIntro.
-func (t *SSU2Transport) initiateHolePunch(intro *ssu2noise.RelayIntroBlock) error {
+// initiateHolePunch starts a hole-punch towards Alice based on a RelayIntro,
+// sends a HolePunch datagram to Alice, and sends a RelayResponse to Bob.
+// bobSession carries Bob's session (from which the RelayIntro arrived).
+func (t *SSU2Transport) initiateHolePunch(intro *ssu2noise.RelayIntroBlock, bobSession *SSU2Session) error {
 	aliceAddr := &net.UDPAddr{
 		IP:   net.IP(intro.AliceIP),
 		Port: int(intro.AlicePort),
 	}
-	_, err := t.holePunchCoord.InitiateHolePunch(aliceAddr, nil, intro.AliceRelayTag)
-	if err != nil {
-		t.logger.WithField("error", err).Warn("hole-punch initiation failed")
+	if bobSession == nil {
+		t.logger.Debug("hole-punch: no Bob session provided, skipping")
+		return nil
+	}
+	bobAddr := bobSession.RemoteUDPAddr()
+	if bobAddr != nil {
+		if _, err := t.holePunchCoord.InitiateHolePunch(aliceAddr, bobAddr, intro.AliceRelayTag); err != nil {
+			t.logger.WithField("error", err).Debug("hole-punch coordinator registration failed (non-fatal)")
+		}
+	}
+	t.sendHolePunchToAlice(intro, aliceAddr)
+	if err := t.sendRelayResponseToBob(bobSession, intro); err != nil {
+		t.logger.WithField("error", err).Warn("failed to send RelayResponse to Bob")
 		return err
 	}
 	t.logger.WithField("alice_addr", aliceAddr).Debug("hole-punch initiated towards Alice")
 	return nil
+}
+
+// sendHolePunchToAlice sends a best-effort HolePunch UDP datagram to Alice.
+// Uses the same wire format as RelayIntro (block type 9; the receiver ignores
+// the type byte for UDP hole-punch purposes). Non-fatal on failure.
+func (t *SSU2Transport) sendHolePunchToAlice(intro *ssu2noise.RelayIntroBlock, aliceAddr *net.UDPAddr) {
+	session := t.anyActiveSession()
+	if session == nil || session.conn == nil {
+		t.logger.Debug("hole-punch: no active session available to send from")
+		return
+	}
+	encoded, err := ssu2noise.EncodeRelayIntro(intro)
+	if err != nil {
+		t.logger.WithField("error", err).Debug("hole-punch: encode block failed")
+		return
+	}
+	if err := session.conn.SendToAddress(encoded, aliceAddr); err != nil {
+		t.logger.WithField("error", err).Debug("hole-punch: send to Alice failed")
+	}
+}
+
+// sendRelayResponseToBob signs and sends a RelayResponse (code=0) to Bob so
+// that Bob can forward it to Alice. Alice uses Charlie's IP/Port and token to
+// send the SSU2 SessionRequest directly to us.
+func (t *SSU2Transport) sendRelayResponseToBob(bobSession *SSU2Session, intro *ssu2noise.RelayIntroBlock) error {
+	charlieIP, charliePort, err := t.localIPPort()
+	if err != nil {
+		return oops.Wrapf(err, "hole-punch: local address")
+	}
+	signingKey := t.keystore.GetSigningPrivateKey()
+	if signingKey == nil {
+		return oops.Errorf("hole-punch: signing key unavailable")
+	}
+	token := make([]byte, 8)
+	if _, err := cryptorand.Read(token); err != nil {
+		return oops.Wrapf(err, "hole-punch: token generation")
+	}
+	var bobHash data.Hash
+	if ssu2Addr, ok := bobSession.conn.RemoteAddr().(*ssu2noise.SSU2Addr); ok {
+		bobHash = ssu2Addr.RouterHash()
+	}
+	timestamp := uint32(time.Now().Unix())
+	ed25519Key := ed25519.PrivateKey(signingKey.Bytes())
+	sig, err := ssu2noise.SignRelayResponse(ed25519Key, bobHash, intro.Nonce, timestamp, intro.Version, charliePort, charlieIP)
+	if err != nil {
+		return oops.Wrapf(err, "hole-punch: sign RelayResponse")
+	}
+	resp := &ssu2noise.RelayResponseBlock{
+		Code: 0, Nonce: intro.Nonce, Timestamp: timestamp,
+		Version: intro.Version, CharliePort: charliePort, CharlieIP: charlieIP,
+		Signature: sig, Token: token,
+	}
+	encoded, err := ssu2noise.EncodeRelayResponse(resp)
+	if err != nil {
+		return oops.Wrapf(err, "hole-punch: encode RelayResponse")
+	}
+	return bobSession.WriteBlocks([]*ssu2noise.SSU2Block{encoded})
 }
 
 // InitiateNATDetection starts a peer-test as Alice against the specified Bob
@@ -708,4 +784,90 @@ func (t *SSU2Transport) createIntroducerFromRouterInfo(ri router_info.RouterInfo
 		AddedAt:    time.Now(),
 		LastSeen:   time.Now(),
 	}, nil
+}
+// startNATPortMapRetry launches a background goroutine that periodically
+// re-attempts UPnP/NAT-PMP port mapping using exponential back-off
+// (initial 30 s, doubling each failure, capped at 30 min). On success the
+// external address is logged at INFO level and the goroutine exits. Each
+// failed attempt is logged at DEBUG level together with the gateway address
+// to allow diagnostic correlation. The goroutine exits when t.ctx is
+// cancelled (i.e., when the transport is closed).
+func (t *SSU2Transport) startNATPortMapRetry() {
+	// Extract the internal port from the currently bound address.
+	_, portStr, err := net.SplitHostPort(t.config.ListenerAddress)
+	if err != nil {
+		return
+	}
+	internalPort, err := strconv.Atoi(portStr)
+	if err != nil || internalPort <= 0 {
+		return
+	}
+	// Don't run on loopback.
+	host, _, _ := net.SplitHostPort(t.config.ListenerAddress)
+	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+		return
+	}
+
+	const (
+		natRetryInitial = 30 * time.Second
+		natRetryMax     = 30 * time.Minute
+	)
+
+	t.wg.Add(1)
+	go func() {
+		defer t.wg.Done()
+		backoff := natRetryInitial
+		for {
+			select {
+			case <-t.ctx.Done():
+				return
+			case <-time.After(backoff):
+			}
+
+			mapCtx, mapCancel := context.WithTimeout(t.ctx, 5*time.Second)
+			mapper, err := nattraversal.NewPortMapperContext(mapCtx)
+			mapCancel()
+			if err != nil {
+				t.logger.WithFields(map[string]interface{}{
+					"error":   err,
+					"backoff": backoff.String(),
+				}).Debug("NAT-PMP/UPnP port mapper unavailable; will retry")
+				if backoff < natRetryMax {
+					backoff *= 2
+					if backoff > natRetryMax {
+						backoff = natRetryMax
+					}
+				}
+				continue
+			}
+
+			gwIP, err := mapper.GetExternalIP()
+			t.logger.WithFields(map[string]interface{}{
+				"gateway": gwIP,
+				"port":    internalPort,
+			}).Debug("NAT-PMP retry: attempting port mapping")
+
+			_, err = mapper.MapPort("udp", internalPort, 1*time.Hour)
+			if err != nil {
+				t.logger.WithFields(map[string]interface{}{
+					"error":   err,
+					"gateway": gwIP,
+					"backoff": backoff.String(),
+				}).Debug("NAT-PMP port mapping failed; will retry")
+				if backoff < natRetryMax {
+					backoff *= 2
+					if backoff > natRetryMax {
+						backoff = natRetryMax
+					}
+				}
+				continue
+			}
+			extIP, _ := mapper.GetExternalIP()
+			t.logger.WithFields(map[string]interface{}{
+				"external_ip":   extIP,
+				"internal_port": internalPort,
+			}).Info("NAT-PMP/UPnP port mapping succeeded")
+			return // success — no need to retry further
+		}
+	}()
 }

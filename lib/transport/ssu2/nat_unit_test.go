@@ -56,14 +56,14 @@ func TestHandleRelayResponseBlock_NilBlock(t *testing.T) {
 // TestHandleRelayIntroBlock_NilManager verifies the nil-coordinator guard.
 func TestHandleRelayIntroBlock_NilManager(t *testing.T) {
 	tr := makeMinimalTransport()
-	err := tr.handleRelayIntroBlock(&ssu2noise.SSU2Block{})
+	err := tr.handleRelayIntroBlock(&ssu2noise.SSU2Block{}, nil)
 	assert.NoError(t, err)
 }
 
 // TestHandleRelayIntroBlock_NilBlock verifies the nil-block guard.
 func TestHandleRelayIntroBlock_NilBlock(t *testing.T) {
 	tr := makeMinimalTransport()
-	err := tr.handleRelayIntroBlock(nil)
+	err := tr.handleRelayIntroBlock(nil, nil)
 	assert.NoError(t, err)
 }
 
