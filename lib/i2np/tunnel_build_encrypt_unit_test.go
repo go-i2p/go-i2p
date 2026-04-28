@@ -69,28 +69,32 @@ func TestCreateShortTunnelBuildMessage_EncryptsRecords(t *testing.T) {
 	require.NoError(t, err, "createShortTunnelBuildMessage should not fail")
 	require.NotNil(t, msg)
 
-	// The message data should be: 1 byte count + 2*528 bytes encrypted records
+	// The message data should be: 1 byte count + 2*218 bytes encrypted STBM records
 	baseMsg := msg.(*BaseI2NPMessage)
 	data := baseMsg.GetData()
-	require.Equal(t, 1+2*528, len(data), "STBM data should be 1 + 2*528 bytes")
+	require.Equal(t, 1+2*ShortBuildRecordSize, len(data),
+		"STBM data should be 1 + 2*%d bytes", ShortBuildRecordSize)
 
 	// First byte is the record count
 	assert.Equal(t, byte(2), data[0], "record count should be 2")
 
-	// Extract encrypted records
-	encRec1Data := data[1 : 1+528]
-	encRec2Data := data[1+528 : 1+2*528]
+	// Extract encrypted records (218 bytes each per STBM spec)
+	encRec1Data := data[1 : 1+ShortBuildRecordSize]
+	encRec2Data := data[1+ShortBuildRecordSize : 1+2*ShortBuildRecordSize]
 
-	// Verify records are NOT cleartext (first 222 bytes should differ from cleartext)
+	// Verify records are NOT cleartext: the cleartext portion (offsets 48..202
+	// in ShortBytes) must differ from the encrypted ciphertext at the same offsets.
 	i2npRec1 := convertToI2NPRecord(rec1)
-	cleartextRec1 := i2npRec1.Bytes()
-	assert.NotEqual(t, cleartextRec1, encRec1Data[:222],
+	cleartextShort := i2npRec1.ShortBytes()
+	assert.NotEqual(t,
+		cleartextShort[48:48+ShortBuildRecordCleartextLen],
+		encRec1Data[48:48+ShortBuildRecordCleartextLen],
 		"encrypted record should not contain cleartext data")
 
 	// Decrypt record 1 with hop1's private key and verify
-	var enc1 [528]byte
+	var enc1 [ShortBuildRecordSize]byte
 	copy(enc1[:], encRec1Data)
-	decrypted1, err := DecryptBuildRequestRecord(enc1, hop1KS.GetEncryptionPrivateKey().Bytes())
+	decrypted1, err := DecryptShortBuildRequestRecord(enc1, hop1KS.GetEncryptionPrivateKey().Bytes())
 	require.NoError(t, err, "decryption of record 1 should succeed with hop1's key")
 	assert.Equal(t, rec1.ReceiveTunnel, decrypted1.ReceiveTunnel,
 		"decrypted ReceiveTunnel should match original")
@@ -98,9 +102,9 @@ func TestCreateShortTunnelBuildMessage_EncryptsRecords(t *testing.T) {
 		"decrypted SendMessageID should match original")
 
 	// Decrypt record 2 with hop2's private key and verify
-	var enc2 [528]byte
+	var enc2 [ShortBuildRecordSize]byte
 	copy(enc2[:], encRec2Data)
-	decrypted2, err := DecryptBuildRequestRecord(enc2, hop2KS.GetEncryptionPrivateKey().Bytes())
+	decrypted2, err := DecryptShortBuildRequestRecord(enc2, hop2KS.GetEncryptionPrivateKey().Bytes())
 	require.NoError(t, err, "decryption of record 2 should succeed with hop2's key")
 	assert.Equal(t, rec2.ReceiveTunnel, decrypted2.ReceiveTunnel,
 		"decrypted ReceiveTunnel should match original")
@@ -108,7 +112,7 @@ func TestCreateShortTunnelBuildMessage_EncryptsRecords(t *testing.T) {
 		"decrypted SendMessageID should match original")
 
 	// Cross-check: hop2's key should NOT decrypt record 1 successfully
-	_, err = DecryptBuildRequestRecord(enc1, hop2KS.GetEncryptionPrivateKey().Bytes())
+	_, err = DecryptShortBuildRequestRecord(enc1, hop2KS.GetEncryptionPrivateKey().Bytes())
 	assert.Error(t, err, "record 1 should NOT decrypt with hop2's key")
 }
 
@@ -280,8 +284,9 @@ func TestCreateShortTunnelBuildMessage_NonDeterministic(t *testing.T) {
 	data1 := msg1.(*BaseI2NPMessage).GetData()
 	data2 := msg2.(*BaseI2NPMessage).GetData()
 
-	// The encrypted records should differ (ECIES uses ephemeral keys)
-	assert.NotEqual(t, data1[1:529], data2[1:529],
+	// The encrypted records should differ (each STBM uses a fresh ephemeral X25519 key)
+	end := 1 + ShortBuildRecordSize
+	assert.NotEqual(t, data1[1:end], data2[1:end],
 		"two encryptions of the same record should produce different ciphertext")
 }
 

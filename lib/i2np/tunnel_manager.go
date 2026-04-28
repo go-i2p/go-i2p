@@ -432,7 +432,13 @@ func (tm *TunnelManager) queueBuildMessageToGateway(session I2NPTransportSession
 
 // createShortTunnelBuildMessage creates a Short Tunnel Build Message (STBM).
 // Each build record is encrypted with the corresponding hop's X25519 public key
-// using ECIES-X25519-AEAD encryption before being placed into the message.
+// using the STBM-format ECIES-X25519-AEAD encryption (zero nonce, ephemeral key
+// as AD) before being placed into the message.
+//
+// Per the I2P tunnel-creation-ECIES specification (proposal 152), STBM records
+// are 218 bytes each on the wire. Using the long-format 528-byte records here
+// causes peers to reject the entire message (silent EOF after the NTCP2
+// handshake), since the count byte is interpreted against the wrong stride.
 func (tm *TunnelManager) createShortTunnelBuildMessage(result *tunnel.TunnelBuildResult, messageID int) (I2NPMessage, error) {
 	// Convert tunnel.BuildRequestRecord to i2np.BuildRequestRecord
 	i2npRecords := make([]BuildRequestRecord, len(result.Records))
@@ -441,25 +447,26 @@ func (tm *TunnelManager) createShortTunnelBuildMessage(result *tunnel.TunnelBuil
 	}
 
 	// Encrypt each record with the corresponding hop's public key.
-	// Each encrypted record is 528 bytes (16-byte identity hash prefix + 512 bytes ECIES ciphertext).
-	encryptedRecords := make([][528]byte, len(i2npRecords))
+	// Each encrypted STBM record is exactly 218 bytes:
+	//   16 (toPeer) + 32 (ephemeralKey) + 154 (ciphertext) + 16 (poly1305 tag).
+	encryptedRecords := make([][ShortBuildRecordSize]byte, len(i2npRecords))
 	for i, record := range i2npRecords {
 		if i >= len(result.Hops) {
 			return nil, oops.Errorf("record %d has no corresponding hop RouterInfo", i)
 		}
-		encrypted, err := EncryptBuildRequestRecord(record, result.Hops[i])
+		encrypted, err := EncryptShortBuildRequestRecord(record, result.Hops[i])
 		if err != nil {
-			return nil, oops.Wrapf(err, "failed to encrypt build record %d", i)
+			return nil, oops.Wrapf(err, "failed to encrypt short build record %d", i)
 		}
 		encryptedRecords[i] = encrypted
 	}
 
 	// Serialize encrypted records: [count:1][encrypted_records...]
-	// Each encrypted record is 528 bytes
-	data := make([]byte, 1+len(encryptedRecords)*528)
+	// Each encrypted STBM record is 218 bytes (see ShortBuildRecordSize).
+	data := make([]byte, 1+len(encryptedRecords)*ShortBuildRecordSize)
 	data[0] = byte(len(encryptedRecords))
 	for i, enc := range encryptedRecords {
-		copy(data[1+i*528:1+(i+1)*528], enc[:])
+		copy(data[1+i*ShortBuildRecordSize:1+(i+1)*ShortBuildRecordSize], enc[:])
 	}
 
 	// Wrap in I2NP message
@@ -471,6 +478,7 @@ func (tm *TunnelManager) createShortTunnelBuildMessage(result *tunnel.TunnelBuil
 		"at":           "createShortTunnelBuildMessage",
 		"record_count": len(encryptedRecords),
 		"data_size":    len(data),
+		"record_size":  ShortBuildRecordSize,
 		"encrypted":    true,
 	}).Debug("Created encrypted Short Tunnel Build message")
 
