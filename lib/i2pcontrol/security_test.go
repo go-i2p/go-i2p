@@ -170,6 +170,7 @@ func (m *mockStatsForAuth) GetNetworkStatus() int {
 	}
 	return 0
 }
+
 func (m *mockStatsForAuth) GetRouterControl() interface {
 	Stop()
 	Reseed() error
