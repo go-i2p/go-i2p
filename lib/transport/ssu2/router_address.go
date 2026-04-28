@@ -242,16 +242,65 @@ func ConvertToRouterAddress(transport *SSU2Transport) (*router_address.RouterAdd
 
 	host = resolvePublishedHost(host, transport)
 
-	options := buildBaseSSU2Options(host, portStr)
-	addStaticKeyOption(options, transport)
-	addIntroKeyOption(options, transport)
-	addIntroducerOptions(options, transport.GetIntroducers())
+	introducers := transport.GetIntroducers()
+	options := buildSSU2Options(host, portStr, transport, introducers)
 
 	ra, err := router_address.NewRouterAddress(0, time.Time{}, "SSU2", options)
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to create RouterAddress")
 	}
 	return ra, nil
+}
+
+// buildSSU2Options assembles the option map for the published RouterAddress.
+// When the host is not publicly routable AND we have at least one active
+// introducer, the address is published in introducer-only form (no host/port,
+// caps=B per the SSU2 spec) so that remote peers attempt to reach us via the
+// listed introducers (Track C, hidden / firewalled router as "Charlie").
+// Otherwise the standard direct-connection options (host + port + keys +
+// optional introducer hints) are emitted.
+func buildSSU2Options(host, portStr string, transport *SSU2Transport, introducers []*ssu2noise.RegisteredIntroducer) map[string]string {
+	if !isPublicHost(host) && hasUsableIntroducer(introducers) {
+		options := map[string]string{
+			router_address.PROTOCOL_VERSION_OPTION_KEY: "2",
+			router_address.CAPS_OPTION_KEY:             "B",
+		}
+		addStaticKeyOption(options, transport)
+		addIntroKeyOption(options, transport)
+		addIntroducerOptions(options, introducers)
+		return options
+	}
+	options := buildBaseSSU2Options(host, portStr)
+	addStaticKeyOption(options, transport)
+	addIntroKeyOption(options, transport)
+	addIntroducerOptions(options, introducers)
+	return options
+}
+
+// isPublicHost returns true if host is a globally-routable, non-private IP.
+// Mirrors ntcp2.isPublicIP so introducer-only publication uses the same
+// reachability criterion as NTCP2's caps-only fallback.
+func isPublicHost(host string) bool {
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	return ip.IsGlobalUnicast() && !ip.IsPrivate()
+}
+
+// hasUsableIntroducer returns true if at least one entry in introducers carries
+// both a router hash and a non-zero relay tag (the minimum needed for a remote
+// peer to drive the introducer flow).
+func hasUsableIntroducer(introducers []*ssu2noise.RegisteredIntroducer) bool {
+	for _, intro := range introducers {
+		if intro == nil {
+			continue
+		}
+		if len(intro.RouterHash) > 0 && intro.RelayTag != 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // extractHostPort unwraps SSU2Addr and extracts host and port from the listener address.
