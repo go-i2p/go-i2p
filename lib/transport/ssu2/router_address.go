@@ -245,7 +245,19 @@ func ConvertToRouterAddress(transport *SSU2Transport) (*router_address.RouterAdd
 	introducers := transport.GetIntroducers()
 	options := buildSSU2Options(host, portStr, transport, introducers)
 
-	ra, err := router_address.NewRouterAddress(0, time.Time{}, "SSU2", options)
+	// Cost: 8 for published / introducer-reachable SSU2 address (host+port
+	// present, or caps=B with usable introducers); 15 for caps-only
+	// unpublished. These match i2pd's COST_SSU2_DIRECT and
+	// COST_SSU2_NON_PUBLISHED constants.
+	cost := uint8(15)
+	if _, hasHost := options["host"]; hasHost {
+		cost = 8
+	} else if caps, hasCaps := options["caps"]; hasCaps && caps == "B" {
+		// Introducer-reachable: peers can reach us via the listed
+		// introducers, so this is "directly reachable" in cost terms.
+		cost = 8
+	}
+	ra, err := router_address.NewRouterAddress(cost, time.Time{}, "SSU2", options)
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to create RouterAddress")
 	}
