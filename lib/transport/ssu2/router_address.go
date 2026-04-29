@@ -257,6 +257,14 @@ func ConvertToRouterAddress(transport *SSU2Transport) (*router_address.RouterAdd
 // introducer, the address is published in introducer-only form (no host/port,
 // caps=B per the SSU2 spec) so that remote peers attempt to reach us via the
 // listed introducers (Track C, hidden / firewalled router as "Charlie").
+// When the host is not publicly routable AND no usable introducer is
+// available, a caps-only SSU2 address is published (static key + intro key
+// + caps, no host/port). Mirrors the NTCP2 caps-only fallback in
+// ntcp2/router_address.go::buildRouterAddressOptions: publishing a private
+// RFC1918 host in our RouterInfo causes Java I2P / i2pd to reject the entire
+// RouterInfo as malformed, which silently kills NTCP2 SessionConfirmed (peer
+// closes TCP without sending a Termination block) and prevents tunnel-build
+// replies from ever returning to us.
 // Otherwise the standard direct-connection options (host + port + keys +
 // optional introducer hints) are emitted.
 func buildSSU2Options(host, portStr string, transport *SSU2Transport, introducers []*ssu2noise.RegisteredIntroducer) map[string]string {
@@ -268,6 +276,20 @@ func buildSSU2Options(host, portStr string, transport *SSU2Transport, introducer
 		addStaticKeyOption(options, transport)
 		addIntroKeyOption(options, transport)
 		addIntroducerOptions(options, introducers)
+		return options
+	}
+	if !isPublicHost(host) {
+		// Hidden / firewalled with no introducer: publish caps-only so the
+		// RouterInfo is still spec-conformant (no private hosts leaked) while
+		// still advertising SSU2 capability. Peers cannot dial us directly,
+		// which is correct: outbound sessions we initiated remain usable for
+		// reply traffic (build replies, etc.).
+		options := map[string]string{
+			router_address.PROTOCOL_VERSION_OPTION_KEY: "2",
+			router_address.CAPS_OPTION_KEY:             "4", // IPv4 SSU2 capability, unpublished
+		}
+		addStaticKeyOption(options, transport)
+		addIntroKeyOption(options, transport)
 		return options
 	}
 	options := buildBaseSSU2Options(host, portStr)

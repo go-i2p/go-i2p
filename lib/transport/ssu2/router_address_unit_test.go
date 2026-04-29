@@ -129,6 +129,8 @@ func TestConvertToRouterAddress_NoListener(t *testing.T) {
 
 // TestConvertToRouterAddress_WithListener verifies ConvertToRouterAddress
 // returns a valid SSU2 RouterAddress when the transport has an active listener.
+// Because the test listener binds to a non-public address (loopback / RFC1918),
+// the published address is the caps-only fallback (no host/port leaked).
 func TestConvertToRouterAddress_WithListener(t *testing.T) {
 	tr, cleanup := makeTestTransportWithListener(t)
 	defer cleanup()
@@ -143,9 +145,13 @@ func TestConvertToRouterAddress_WithListener(t *testing.T) {
 	require.NoError(t, err2)
 	assert.Equal(t, "SSU2", styleStr)
 
-	// Host and port options must be present.
-	assert.True(t, ra.CheckOption(router_address.HOST_OPTION_KEY))
-	assert.True(t, ra.CheckOption(router_address.PORT_OPTION_KEY))
+	// Non-public listener: caps-only address — host/port must be suppressed.
+	assert.False(t, ra.CheckOption(router_address.HOST_OPTION_KEY),
+		"host must NOT be published when listener is non-public (private-IP leak guard)")
+	assert.False(t, ra.CheckOption(router_address.PORT_OPTION_KEY),
+		"port must NOT be published when host is suppressed")
+	assert.True(t, ra.CheckOption(router_address.CAPS_OPTION_KEY),
+		"caps MUST be set on the caps-only SSU2 fallback")
 }
 
 // TestConvertToRouterAddress_WithStaticKey verifies that a 32-byte StaticKey

@@ -119,9 +119,11 @@ func TestConvertToRouterAddress_IntroducerOnly(t *testing.T) {
 }
 
 // TestConvertToRouterAddress_NonPublicNoIntroducers verifies that a transport
-// bound to a non-public address with no introducers continues to publish the
-// direct-connection address unchanged (host/port present, no caps=B). This
-// preserves the behaviour relied on by existing local/loopback tests.
+// bound to a non-public (RFC1918 / loopback) address with no introducers
+// publishes a caps-only SSU2 address (no host/port leaked, caps="4") so that
+// the RouterInfo remains spec-conformant. Publishing a private host would
+// cause Java I2P / i2pd to reject our entire RouterInfo as malformed and
+// silently kill NTCP2 SessionConfirmed, breaking all tunnel builds.
 func TestConvertToRouterAddress_NonPublicNoIntroducers(t *testing.T) {
 	tr, cleanup := makeTestTransportWithListener(t)
 	defer cleanup()
@@ -130,8 +132,10 @@ func TestConvertToRouterAddress_NonPublicNoIntroducers(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, ra)
 
-	assert.True(t, ra.CheckOption(router_address.HOST_OPTION_KEY))
-	assert.True(t, ra.CheckOption(router_address.PORT_OPTION_KEY))
-	assert.False(t, ra.CheckOption(router_address.CAPS_OPTION_KEY),
-		"caps must NOT be set when no introducer is registered (regression guard)")
+	assert.False(t, ra.CheckOption(router_address.HOST_OPTION_KEY),
+		"host must NOT be published when not publicly routable (private-IP leak guard)")
+	assert.False(t, ra.CheckOption(router_address.PORT_OPTION_KEY),
+		"port must NOT be published when host is suppressed")
+	assert.True(t, ra.CheckOption(router_address.CAPS_OPTION_KEY),
+		"caps MUST be set on a caps-only SSU2 fallback to advertise SSU2 capability")
 }
