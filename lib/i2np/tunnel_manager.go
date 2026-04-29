@@ -1280,6 +1280,8 @@ func (tm *TunnelManager) cleanupExpiredBuildByID(messageID int) {
 			tm.buildExpireWindow.recordEvent()
 			if req.isInbound {
 				pool.RecordInboundBuildTimeout()
+			} else {
+				pool.RecordOutboundBuildTimeout()
 			}
 			tm.cleanupFailedTunnel(req.tunnelID, req.isInbound)
 		}
