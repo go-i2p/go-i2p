@@ -949,6 +949,20 @@ func (r *Router) initializeTunnelManager() {
 		inboundPool.SetAutoFallbackCheck(func() bool {
 			return r.collectBestExternalAddr() == ""
 		})
+		// Startup proactive check: after one build-timeout period, if no inbound
+		// tunnel is established yet and we have no confirmed public address,
+		// switch to 0-hop immediately rather than waiting for
+		// autoFallbackThreshold (3×) failures.
+		go func() {
+			select {
+			case <-r.ctx.Done():
+				return
+			case <-time.After(tunnel.BuildTimeout + 5*time.Second):
+				if len(inboundPool.GetActiveTunnels()) == 0 {
+					inboundPool.TriggerAutoFallbackCheck()
+				}
+			}
+		}()
 	}
 
 	// Hidden mode and AlwaysOneHopOutbound force the outbound exploratory pool
@@ -974,6 +988,19 @@ func (r *Router) initializeTunnelManager() {
 		outboundPool.SetAutoFallbackCheck(func() bool {
 			return r.collectBestExternalAddr() == ""
 		})
+		// Startup proactive check: mirrors the inbound check above. If no
+		// outbound tunnel is live after one build-timeout period and we have no
+		// confirmed external address, switch to 1-hop immediately.
+		go func() {
+			select {
+			case <-r.ctx.Done():
+				return
+			case <-time.After(tunnel.BuildTimeout + 5*time.Second):
+				if len(outboundPool.GetActiveTunnels()) == 0 {
+					outboundPool.TriggerAutoFallbackCheck()
+				}
+			}
+		}()
 	}
 	log.WithFields(logger.Fields{
 		"at":            "initializeTunnelManager",

@@ -40,8 +40,13 @@ const (
 	// Matches the I2P spec's 90-second VTBRM deadline.
 	tunnelBuildTimeout = 90 * time.Second
 
-	// autoFallbackThreshold is the number of consecutive inbound build
-	// timeouts that trigger the zero-hop auto-fallback when no public
+	// BuildTimeout is the exported form of tunnelBuildTimeout for packages
+	// that need to schedule operations relative to the build deadline
+	// (e.g. the startup reachability check in the router).
+	BuildTimeout = tunnelBuildTimeout
+
+	// autoFallbackThreshold is the number of consecutive exploratory build
+	// timeouts that trigger the hop-reduction auto-fallback when no public
 	// address is available.
 	autoFallbackThreshold = 3
 )
@@ -207,8 +212,10 @@ func (p *Pool) SetAutoFallbackCheck(fn func() bool) {
 // reliably observe TunnelFailed state because TunnelManager removes those
 // tunnels from the pool within ~1 s of marking them failed — well inside the
 // 30-second pool-maintenance interval.
+// No-op for client pools: client tunnel hop counts are application-specified
+// and must never be reduced by the auto-fallback mechanism.
 func (p *Pool) RecordInboundBuildTimeout() {
-	if !p.config.IsInbound {
+	if !p.config.IsInbound || p.config.IsClientPool {
 		return
 	}
 	p.mutex.Lock()
@@ -225,8 +232,10 @@ func (p *Pool) RecordInboundBuildTimeout() {
 // tunnel build times out. After autoFallbackThreshold consecutive timeouts with
 // no public address, the pool falls back to 1-hop outbound tunnels so that the
 // single OBEP (which we just dialled) can reply via the existing session.
+// No-op for client pools: client tunnel hop counts are application-specified
+// and must never be reduced by the auto-fallback mechanism.
 func (p *Pool) RecordOutboundBuildTimeout() {
-	if p.config.IsInbound {
+	if p.config.IsInbound || p.config.IsClientPool {
 		return
 	}
 	p.mutex.Lock()
@@ -245,14 +254,19 @@ func (p *Pool) RecordOutboundBuildTimeout() {
 //   - Outbound pool: falls back to 1-hop (the single OBEP we dialled can reply
 //     via the already-open session, bypassing the need for inbound reachability).
 //
-// It is a no-op if the hop-count is already at the fallback minimum, or if no
-// callback was registered.
+// It is a no-op for client pools (hop count is application-specified), if the
+// hop-count is already at the fallback minimum, or if no callback was registered.
 func (p *Pool) checkAutoFallback() {
 	p.mutex.RLock()
 	fn := p.autoFallbackFn
 	hopCount := p.config.HopCount
 	isInbound := p.config.IsInbound
+	isClient := p.config.IsClientPool
 	p.mutex.RUnlock()
+
+	if isClient {
+		return // client tunnel hop counts are application-specified; never reduce them
+	}
 
 	if fn == nil {
 		return
@@ -282,6 +296,18 @@ func (p *Pool) checkAutoFallback() {
 			}).Info("auto-fallback: switched outbound exploratory pool to one-hop tunnels")
 		}
 	}
+}
+
+// TriggerAutoFallbackCheck immediately evaluates the auto-fallback condition
+// against the registered callback (e.g. "do we have a public address?"). Unlike
+// the counter-based paths (RecordInboundBuildTimeout / RecordOutboundBuildTimeout),
+// this bypasses the threshold check and fires unconditionally. It is intended for
+// use by the router's startup goroutine so that a firewalled router can switch to
+// reduced hops after one build-timeout period rather than waiting for
+// autoFallbackThreshold consecutive failures.
+// No-op for client pools (their hop count is application-specified).
+func (p *Pool) TriggerAutoFallbackCheck() {
+	p.checkAutoFallback()
 }
 
 // SetHopCount overrides the configured per-tunnel hop count for this pool.
@@ -501,9 +527,10 @@ func (p *Pool) maintainPool() {
 	needed = p.calculateNeededTunnels(activeCount, nearExpiry)
 	p.mutex.Unlock()
 
-	// Auto-fallback: switch inbound pool to 0-hop after repeated build timeouts
-	// when no public address is available.
-	if p.config.IsInbound && expiredCount >= autoFallbackThreshold {
+	// Auto-fallback: switch exploratory inbound pool to 0-hop after repeated
+	// build timeouts when no public address is available. Client pools are
+	// excluded — their hop count is set by the application.
+	if p.config.IsInbound && !p.config.IsClientPool && expiredCount >= autoFallbackThreshold {
 		p.checkAutoFallback()
 	}
 
