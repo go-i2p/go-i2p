@@ -1044,6 +1044,7 @@ func (t *NTCP2Transport) attachLocalRouterInfo(config *ntcp2.NTCP2Config) error 
 		"sig_verify_err":  fmt.Sprintf("%v", sigErr),
 		"ri_bytes_prefix": fmt.Sprintf("%x", riBytes[:min(16, len(riBytes))]),
 		"ri_bytes_suffix": fmt.Sprintf("%x", riBytes[max(0, len(riBytes)-16):]),
+		"ri_bytes_full":   fmt.Sprintf("%x", riBytes),
 	}).Info("LocalRouterInfo for msg3 outbound")
 	config.WithLocalRouterInfo(riBytes)
 	return nil

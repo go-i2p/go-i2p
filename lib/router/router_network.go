@@ -983,6 +983,7 @@ func (r *Router) registerNewSession(hash common.Hash, transportSession i2np.I2NP
 
 	switch s := transportSession.(type) {
 	case *ntcp.NTCP2Session:
+		s.SetCleanupCallback(func() { r.removeSession(hash) })
 		r.addSession(hash, s)
 		r.wg.Add(1)
 		go func() {
@@ -991,6 +992,7 @@ func (r *Router) registerNewSession(hash common.Hash, transportSession i2np.I2NP
 		}()
 		log.WithField("peer_hash", fmt.Sprintf("%x", hash[:8])).Info("Established and registered new outbound NTCP2 session")
 	case *ssu2.SSU2Session:
+		s.SetCleanupCallback(func() { r.removeSession(hash) })
 		r.addSession(hash, s)
 		r.wg.Add(1)
 		go func() {

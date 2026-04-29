@@ -227,8 +227,11 @@ func (rp *ReplyProcessor) processReplyWithHandler(handler TunnelReplyHandler, tu
 }
 
 // decryptReplyRecords decrypts encrypted build reply records using the stored reply keys.
-// Each hop's reply is encrypted with ECIES-X25519-AEAD (ChaCha20/Poly1305) using the reply key
-// from the build request. This is the modern I2P standard, replacing legacy AES-256-CBC.
+// Two formats are handled depending on record size:
+//   - 218 bytes (ShortBuildRecordSize): STBM format — ChaCha20 stream XOR (no Poly1305 tag).
+//     After XOR, byte 0 is the reply code. No hash integrity check (not part of STBM format).
+//   - 544 bytes: Modern VTB — ChaCha20-Poly1305 AEAD (528 ciphertext + 16 auth tag).
+//   - 528 bytes: Legacy VTB — AES-256-CBC.
 //
 // Uses raw encrypted bytes from GetRawReplyRecords() instead of re-serializing parsed records,
 // because round-tripping through parse/serialize corrupts the original ciphertext.
@@ -247,7 +250,17 @@ func (rp *ReplyProcessor) decryptReplyRecords(handler TunnelReplyHandler, pendin
 	}
 
 	for i := range records {
-		// Decrypt this hop's reply record using the raw encrypted bytes
+		if len(rawRecords[i]) == ShortBuildRecordSize {
+			// STBM reply record: peel ChaCha20 stream layer, read reply byte from offset 0.
+			decryptedRecord, err := rp.decryptSTBMReplyRecord(rawRecords[i], pending.ReplyKeys[i], i)
+			if err != nil {
+				return oops.Wrapf(err, "failed to decrypt STBM reply record %d", i)
+			}
+			records[i] = decryptedRecord
+			continue
+		}
+
+		// Standard VTB reply record: ChaCha20-Poly1305 AEAD (544 bytes) or AES-256-CBC (528 bytes).
 		decrypted, err := rp.decryptRecord(rawRecords[i], pending.ReplyKeys[i], pending.ReplyIVs[i])
 		if err != nil {
 			return oops.Wrapf(err, "failed to decrypt record %d", i)
@@ -263,8 +276,38 @@ func (rp *ReplyProcessor) decryptReplyRecords(handler TunnelReplyHandler, pendin
 		records[i] = decryptedRecord
 	}
 
-	log.WithField("record_count", len(records)).Debug("Decrypted all reply records using ChaCha20/Poly1305 AEAD")
+	log.WithField("record_count", len(records)).Debug("Decrypted all reply records")
 	return nil
+}
+
+// decryptSTBMReplyRecord peels the ChaCha20 stream layer from a 218-byte STBM reply slot.
+// Each hop encrypts its reply slot using ChaCha20 XOR (no Poly1305 auth tag) with the
+// reply key from the build request record and a nonce whose byte 4 equals the slot index.
+// After XOR, byte 0 of the cleartext is the 1-byte reply code (0x00 = accept).
+// The remaining bytes are padding and are not parsed.
+func (rp *ReplyProcessor) decryptSTBMReplyRecord(
+	encrypted []byte,
+	replyKey session_key.SessionKey,
+	index int,
+) (BuildResponseRecord, error) {
+	if len(encrypted) != ShortBuildRecordSize {
+		return BuildResponseRecord{}, oops.Errorf("STBM record: expected %d bytes, got %d",
+			ShortBuildRecordSize, len(encrypted))
+	}
+
+	var record [ShortBuildRecordSize]byte
+	copy(record[:], encrypted)
+
+	var key [32]byte
+	copy(key[:], replyKey[:])
+
+	if err := chacha20XORRecord(&record, key, index); err != nil {
+		return BuildResponseRecord{}, oops.Wrapf(err, "chacha20 XOR failed for STBM reply record %d", index)
+	}
+
+	// Byte 0 of the ChaCha20 cleartext is the reply code.
+	// (0x00 = TunnelBuildReplySuccess, non-zero = rejection reason)
+	return BuildResponseRecord{Reply: record[0]}, nil
 }
 
 // decryptRecord decrypts a single encrypted build response record from raw bytes.
