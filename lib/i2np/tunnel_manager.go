@@ -240,21 +240,33 @@ func (tm *TunnelManager) BuildTunnelFromRequest(req tunnel.BuildTunnelRequest) (
 	pool.AddTunnel(tunnelState)
 	tm.trackPendingBuild(result, messageID, req.IsClientTunnel)
 
-	// Schedule immediate cleanup on timeout (90 seconds per I2P spec)
-	// This prevents memory leaks from failed/timeout builds between periodic cleanups
-	time.AfterFunc(90*time.Second, func() {
-		tm.cleanupExpiredBuildByID(messageID)
-	})
-
 	// Send the build message first. For STBM, createShortTunnelBuildMessage
 	// overwrites result.ReplyKeys with the HKDF-derived keys that the remote
 	// hops will actually use to encrypt their reply slots. Registration must
 	// happen after send so it captures the correct keys.
+	//
+	// IMPORTANT: sendBuildMessage may block for tens of seconds while
+	// sessionProvider.GetSessionByHash performs a NetDB RouterInfo lookup
+	// (up to 30s) plus the outbound NTCP2/SSU2 dial and Noise handshake. The
+	// 90-second build expiration window per I2P spec is measured from when
+	// the build message leaves the originator, NOT from when the in-process
+	// build request struct is created. Arming the timer and resetting
+	// createdAt below — after sendBuildMessage returns — keeps the spec
+	// window aligned with reality and prevents builds whose gateway dial is
+	// slow from being declared expired before any reply has a chance to
+	// arrive (RCA: 100% exploratory tunnel build expiration).
 	err = tm.sendBuildMessage(result, messageID)
 	if err != nil {
 		tm.cleanupFailedBuild(result.TunnelID, messageID, req.IsInbound)
 		return 0, peerHashes, oops.Wrapf(err, "failed to send build request")
 	}
+
+	// Anchor the 90-second expiration window to the moment the build message
+	// actually left this router, then arm immediate cleanup at that horizon.
+	tm.resetPendingBuildCreatedAt(messageID)
+	time.AfterFunc(90*time.Second, func() {
+		tm.cleanupExpiredBuildByID(messageID)
+	})
 
 	// Register with ReplyProcessor now that result.ReplyKeys holds the
 	// HKDF-derived reply keys written by createShortTunnelBuildMessage.
@@ -395,6 +407,22 @@ func (tm *TunnelManager) trackPendingBuild(result *tunnel.TunnelBuildResult, mes
 		useShortBuild:  result.UseShortBuild,
 		isInbound:      result.IsInbound,
 		isClientTunnel: isClientTunnel,
+	}
+}
+
+// resetPendingBuildCreatedAt re-anchors the createdAt timestamp of a tracked
+// pending build to time.Now(). Called immediately after the build message has
+// actually been queued onto the gateway session, so that the 90-second I2P
+// build expiration window is measured from when the message left the
+// originator rather than from in-process struct creation. Without this, slow
+// outbound dials (RouterInfo lookup up to 30s + NTCP2/SSU2 handshake) eat
+// most of the window before the message is even sent, causing replies to
+// arrive after expiration cleanup has already fired.
+func (tm *TunnelManager) resetPendingBuildCreatedAt(messageID int) {
+	tm.buildMutex.Lock()
+	defer tm.buildMutex.Unlock()
+	if req, ok := tm.pendingBuilds[messageID]; ok {
+		req.createdAt = time.Now()
 	}
 }
 
