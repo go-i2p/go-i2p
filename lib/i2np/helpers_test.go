@@ -133,7 +133,7 @@ func processDirectBuildRecord(t *testing.T, processor *MessageProcessor, message
 	t.Helper()
 	record := createTestBuildRequestRecord(t)
 	record.NextTunnel = 0
-	processor.processSingleBuildRecord(messageID, 0, record, false)
+	processor.processSingleBuildRecord(messageID, 0, record, nil, false)
 	return record
 }
 

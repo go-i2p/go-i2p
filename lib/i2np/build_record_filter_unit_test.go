@@ -31,7 +31,7 @@ func TestProcessAllBuildRecords_FiltersRecordsNotForUs(t *testing.T) {
 	// Mark record 2 as ours.
 	records[2].OurIdent = ourHash
 
-	processor.processAllBuildRecords(42, records, false)
+	processor.processAllBuildRecords(42, records, nil, false)
 
 	// Only 1 record should be processed (registered).
 	assert.Equal(t, 1, mockParticipant.getRegisteredCount(),
@@ -56,7 +56,7 @@ func TestProcessAllBuildRecords_NoProcessingWhenHashUnset(t *testing.T) {
 		records[i].NextTunnel = 0
 	}
 
-	processor.processAllBuildRecords(43, records, false)
+	processor.processAllBuildRecords(43, records, nil, false)
 
 	// With zero hash, NO records should be processed (safety guard).
 	assert.Equal(t, 0, mockParticipant.getRegisteredCount(),

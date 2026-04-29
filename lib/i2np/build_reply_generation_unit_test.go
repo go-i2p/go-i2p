@@ -73,7 +73,7 @@ func TestProcessSingleBuildRecord_TunnelForwarding(t *testing.T) {
 	messageID := 1003
 
 	// Execute
-	processor.processSingleBuildRecord(messageID, 0, record, false)
+	processor.processSingleBuildRecord(messageID, 0, record, nil, false)
 
 	// Verify
 	tunnelCalls := mockForwarder.getTunnelCalls()
@@ -101,7 +101,7 @@ func TestProcessSingleBuildRecord_NoForwarder(t *testing.T) {
 	messageID := 1004
 
 	// Execute - should not panic, just log warning
-	processor.processSingleBuildRecord(messageID, 0, record, false)
+	processor.processSingleBuildRecord(messageID, 0, record, nil, false)
 
 	// Verify - participant should still be registered even without forwarder
 	assert.Equal(t, 1, mockParticipant.getRegisteredCount(), "Participant should still be registered")
@@ -115,7 +115,7 @@ func TestGenerateAndSendBuildReply_EncryptionWorks(t *testing.T) {
 	messageID := 1005
 
 	// Execute
-	err := processor.generateAndSendBuildReply(messageID, 0, record, TunnelBuildReplySuccess, false)
+	err := processor.generateAndSendBuildReply(messageID, 0, record, TunnelBuildReplySuccess, nil, false)
 
 	// Verify
 	require.NoError(t, err, "Should successfully generate and send reply")
@@ -152,7 +152,7 @@ func TestGenerateAndSendBuildReply_AllReplyCodes(t *testing.T) {
 			record := createTestBuildRequestRecord(t)
 			record.NextTunnel = 0 // Force direct router forwarding
 
-			err := processor.generateAndSendBuildReply(1, 0, record, tc.replyCode, false)
+			err := processor.generateAndSendBuildReply(1, 0, record, tc.replyCode, nil, false)
 			require.NoError(t, err)
 
 			routerCalls := mockForwarder.getRouterCalls()
@@ -228,7 +228,7 @@ func TestMultipleBuildRecords_Processing(t *testing.T) {
 	messageID := 2000
 
 	// Execute
-	processor.processAllBuildRecords(messageID, records, false)
+	processor.processAllBuildRecords(messageID, records, nil, false)
 
 	// Verify
 	assert.Equal(t, 5, mockParticipant.getRegisteredCount(), "All participants should be registered")

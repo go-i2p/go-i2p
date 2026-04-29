@@ -5,6 +5,7 @@ import (
 	"time"
 
 	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/common/session_key"
 	"github.com/go-i2p/crypto/rand"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
@@ -54,7 +55,7 @@ func (p *MessageProcessor) processFixedTunnelBuildRequest(msg I2NPMessage) error
 	}
 
 	p.logParsedBuildRequest(msg.MessageID(), len(records), false)
-	return p.processAllBuildRecords(msg.MessageID(), records, false)
+	return p.processAllBuildRecords(msg.MessageID(), records, data, false)
 }
 
 // parseFixedTunnelBuildRecords parses TunnelBuild (type 21) records.
@@ -288,7 +289,7 @@ func (p *MessageProcessor) processTunnelBuildRequest(msg I2NPMessage, isShortBui
 	}
 
 	p.logParsedBuildRequest(msg.MessageID(), len(records), isShortBuild)
-	return p.processAllBuildRecords(msg.MessageID(), records, isShortBuild)
+	return p.processAllBuildRecords(msg.MessageID(), records, data, isShortBuild)
 }
 
 // validateParticipantManager checks if the participant manager is configured.
@@ -337,7 +338,7 @@ func (p *MessageProcessor) logParsedBuildRequest(messageID, recordCount int, isS
 // This prevents the router from incorrectly participating in all hops of a tunnel
 // when its identity is unknown. Callers must call SetOurRouterHash before processing
 // any tunnel build messages.
-func (p *MessageProcessor) processAllBuildRecords(messageID int, records []BuildRequestRecord, isShortBuild bool) error {
+func (p *MessageProcessor) processAllBuildRecords(messageID int, records []BuildRequestRecord, rawData []byte, isShortBuild bool) error {
 	var zeroHash common.Hash
 	if p.ourRouterHash == zeroHash {
 		log.WithFields(logger.Fields{
@@ -357,7 +358,7 @@ func (p *MessageProcessor) processAllBuildRecords(messageID int, records []Build
 			}).Debug("Skipping build record not destined for us")
 			continue
 		}
-		p.processSingleBuildRecord(messageID, i, record, isShortBuild)
+		p.processSingleBuildRecord(messageID, i, record, rawData, isShortBuild)
 	}
 	return nil
 }
@@ -365,7 +366,7 @@ func (p *MessageProcessor) processAllBuildRecords(messageID int, records []Build
 // processSingleBuildRecord validates and processes a single build request record.
 // After validating and accepting/rejecting the request, it generates an encrypted
 // BuildResponseRecord and forwards it to the next hop.
-func (p *MessageProcessor) processSingleBuildRecord(messageID, index int, record BuildRequestRecord, isShortBuild bool) {
+func (p *MessageProcessor) processSingleBuildRecord(messageID, index int, record BuildRequestRecord, rawData []byte, isShortBuild bool) {
 	accepted, rejectCode, reason := p.participantManager.ProcessBuildRequest(record.OurIdent)
 
 	if accepted {
@@ -383,7 +384,7 @@ func (p *MessageProcessor) processSingleBuildRecord(messageID, index int, record
 	}
 
 	// Generate and send build reply message
-	if err := p.generateAndSendBuildReply(messageID, index, record, rejectCode, isShortBuild); err != nil {
+	if err := p.generateAndSendBuildReply(messageID, index, record, rejectCode, rawData, isShortBuild); err != nil {
 		log.WithError(err).WithFields(logger.Fields{
 			"at":             "processSingleBuildRecord",
 			"message_id":     messageID,
@@ -395,36 +396,55 @@ func (p *MessageProcessor) processSingleBuildRecord(messageID, index int, record
 
 // generateAndSendBuildReply creates an encrypted BuildResponseRecord and forwards it.
 // This implements the core of tunnel participation response handling.
-func (p *MessageProcessor) generateAndSendBuildReply(messageID, index int, record BuildRequestRecord, replyCode byte, isShortBuild bool) error {
-	// Step 1: Generate random data for the response record
-	var randomData [495]byte
-	if _, err := rand.Read(randomData[:]); err != nil {
-		return oops.Wrapf(err, "failed to generate random data for reply")
+//
+// For STBM (isShortBuild=true) the wire format differs from VTB:
+//   - Reply record: 218 bytes, ChaCha20 stream XOR (no Poly1305 tag)
+//   - Our reply slot is written at position 'index' in the full N-slot message
+//   - All other slots carry the original (opaque) build-request bytes so the
+//     reply message has the correct wire size: 1 byte count + N × 218 bytes
+//
+// For VTB (isShortBuild=false) the original AEAD path is unchanged:
+//   - 528-byte cleartext → ChaCha20-Poly1305 AEAD → 544-byte ciphertext
+func (p *MessageProcessor) generateAndSendBuildReply(messageID, index int, record BuildRequestRecord, replyCode byte, rawData []byte, isShortBuild bool) error {
+	var encryptedReply []byte
+
+	if isShortBuild {
+		// STBM path: 218-byte ChaCha20 stream XOR reply, assembled into a full
+		// N-slot ShortTunnelBuildReply message body.
+		var err error
+		encryptedReply, err = p.buildSTBMReplyMessage(rawData, index, record.ReplyKey, replyCode)
+		if err != nil {
+			return oops.Wrapf(err, "failed to build STBM reply message")
+		}
+	} else {
+		// VTB path: 528-byte cleartext → ChaCha20-Poly1305 AEAD → 544 bytes.
+		var randomData [495]byte
+		if _, err := rand.Read(randomData[:]); err != nil {
+			return oops.Wrapf(err, "failed to generate random data for VTB reply")
+		}
+		responseRecord := CreateBuildResponseRecord(replyCode, randomData)
+
+		if p.buildRecordCrypto == nil {
+			log.WithFields(logger.Fields{
+				"at":           "generateAndSendBuildReply",
+				"message_id":   messageID,
+				"record_index": index,
+			}).Warn("build record crypto not initialized - cannot encrypt reply")
+			return oops.Errorf("build record crypto not initialized")
+		}
+
+		var err error
+		encryptedReply, err = p.buildRecordCrypto.EncryptReplyRecord(
+			responseRecord,
+			record.ReplyKey,
+			record.ReplyIV,
+		)
+		if err != nil {
+			return oops.Wrapf(err, "failed to encrypt VTB build response record")
+		}
 	}
 
-	// Step 2: Create the BuildResponseRecord with proper hash
-	responseRecord := CreateBuildResponseRecord(replyCode, randomData)
-
-	// Step 3: Encrypt the response record using the reply key and IV from the request
-	if p.buildRecordCrypto == nil {
-		log.WithFields(logger.Fields{
-			"at":           "generateAndSendBuildReply",
-			"message_id":   messageID,
-			"record_index": index,
-		}).Warn("build record crypto not initialized - cannot encrypt reply")
-		return oops.Errorf("build record crypto not initialized")
-	}
-
-	encryptedReply, err := p.buildRecordCrypto.EncryptReplyRecord(
-		responseRecord,
-		record.ReplyKey,
-		record.ReplyIV,
-	)
-	if err != nil {
-		return oops.Wrapf(err, "failed to encrypt build response record")
-	}
-
-	// Step 4: Forward the encrypted reply to the next hop
+	// Forward the encrypted reply to the reply tunnel / next router.
 	if err := p.forwardBuildReply(messageID, record, encryptedReply, isShortBuild); err != nil {
 		return oops.Wrapf(err, "failed to forward build reply")
 	}
@@ -436,9 +456,73 @@ func (p *MessageProcessor) generateAndSendBuildReply(messageID, index int, recor
 		"reply_code":    replyCode,
 		"next_tunnel":   record.NextTunnel,
 		"encrypted_len": len(encryptedReply),
+		"is_short_build": isShortBuild,
 	}).Debug("generated and sent build reply successfully")
 
 	return nil
+}
+
+// buildSTBMReplyMessage assembles the ShortTunnelBuildReply body (type 26):
+//
+//	[count:1][slot_0:218][slot_1:218]...[slot_N-1:218]
+//
+// The slot at position ourIndex is replaced with a fresh 218-byte ChaCha20
+// stream-cipher reply: byte 0 = replyCode, bytes 1-217 = random, then XOR'd
+// with ChaCha20(key=replyKey, nonce[4]=ourIndex). All other slots are copied
+// verbatim from the original incoming build message so the reply carries the
+// correct number of records and wire-length.
+//
+// Note: intermediate hops in a multi-hop STBM will fill their own slot here;
+// the other slots will still contain the incoming ECIES ciphertext and will
+// decode as random bytes at the initiator. Full hop-by-hop relay forwarding
+// (peeling layers, passing the modified message onward) is a separate TODO.
+func (p *MessageProcessor) buildSTBMReplyMessage(rawData []byte, ourIndex int, replyKey session_key.SessionKey, replyCode byte) ([]byte, error) {
+	if len(rawData) < 1 {
+		return nil, oops.Errorf("STBM rawData empty")
+	}
+	count := int(rawData[0])
+	if count < 1 || count > 8 {
+		return nil, oops.Errorf("STBM invalid record count: %d (want 1-8)", count)
+	}
+	expected := 1 + count*ShortBuildRecordSize
+	if len(rawData) < expected {
+		return nil, oops.Errorf("STBM rawData too short: have %d, need %d", len(rawData), expected)
+	}
+	if ourIndex < 0 || ourIndex >= count {
+		return nil, oops.Errorf("STBM slot index %d out of range [0, %d)", ourIndex, count)
+	}
+
+	// Copy all slots from the incoming build message verbatim.
+	replyData := make([]byte, expected)
+	replyData[0] = byte(count)
+	copy(replyData[1:], rawData[1:expected])
+
+	// Build our 218-byte reply slot: byte 0 = replyCode, bytes 1-217 = random.
+	var ourSlot [ShortBuildRecordSize]byte
+	ourSlot[0] = replyCode
+	if _, err := rand.Read(ourSlot[1:]); err != nil {
+		return nil, oops.Wrapf(err, "failed to generate STBM reply padding")
+	}
+
+	// XOR with ChaCha20 stream: key = replyKey, nonce[4] = ourIndex.
+	var key [32]byte
+	copy(key[:], replyKey[:])
+	if err := chacha20XORRecord(&ourSlot, key, ourIndex); err != nil {
+		return nil, oops.Wrapf(err, "chacha20XOR failed for STBM reply slot %d", ourIndex)
+	}
+
+	// Place our reply slot at the correct offset in the reply body.
+	slotOffset := 1 + ourIndex*ShortBuildRecordSize
+	copy(replyData[slotOffset:slotOffset+ShortBuildRecordSize], ourSlot[:])
+
+	log.WithFields(logger.Fields{
+		"at":         "buildSTBMReplyMessage",
+		"slot_count": count,
+		"our_index":  ourIndex,
+		"reply_code": replyCode,
+	}).Debug("assembled STBM reply message")
+
+	return replyData, nil
 }
 
 // forwardBuildReply sends the encrypted build reply to the appropriate next hop.
