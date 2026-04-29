@@ -169,3 +169,62 @@ func VerifyStaticKeyConsistency(transport *NTCP2Transport, identity router_info.
 	log.WithField("at", "VerifyStaticKeyConsistency").Debug("NTCP2 static key consistency verified: live key matches published RouterInfo")
 	return nil
 }
+
+// verifyLocalRouterInfoMatchesStaticKey derives the Curve25519 public key from
+// staticPriv (32-byte scalar) and checks that at least one NTCP2 RouterAddress
+// in localRI publishes that exact key as its "s=" option.
+//
+// This mirrors i2pd's RouterInfo::GetNTCP2AddressWithStaticKey check that runs
+// inside HandleSessionConfirmedReceived: if no matching address is found, i2pd
+// silently closes the TCP connection with zero data-phase bytes (no termination
+// frame), producing the "frame #0 EOF" symptom.
+//
+// Returns nil if a matching address is found, otherwise a structured error with
+// the derived key and every published key in base64 for easy comparison.
+func verifyLocalRouterInfoMatchesStaticKey(localRI router_info.RouterInfo, staticPriv []byte) error {
+	if len(staticPriv) != 32 {
+		return oops.Errorf("static key is %d bytes (want 32)", len(staticPriv))
+	}
+
+	priv, err := i2pcurve25519.NewCurve25519PrivateKey(staticPriv)
+	if err != nil {
+		return oops.Wrapf(err, "failed to construct Curve25519 private key")
+	}
+	pub, err := priv.Public()
+	if err != nil {
+		return oops.Wrapf(err, "failed to derive Curve25519 public key")
+	}
+	derivedPubKey := pub.Bytes()
+
+	var publishedKeys [][]byte
+	var ntcp2Count int
+	for _, addr := range localRI.RouterAddresses() {
+		styleStr, err := addr.TransportStyle().Data()
+		if err != nil || !strings.EqualFold(styleStr, "ntcp2") {
+			continue
+		}
+		ntcp2Count++
+		publishedStaticKey, err := addr.StaticKey()
+		if err != nil {
+			continue
+		}
+		publishedKeys = append(publishedKeys, publishedStaticKey[:])
+		if bytes.Equal(publishedStaticKey[:], derivedPubKey) {
+			return nil // match found
+		}
+	}
+
+	pubB64 := base64.StdEncoding.EncodeToString(derivedPubKey)
+	var publishedB64 []string
+	for _, k := range publishedKeys {
+		publishedB64 = append(publishedB64, base64.StdEncoding.EncodeToString(k))
+	}
+	return oops.
+		Code("STATIC_KEY_RI_MISMATCH").
+		With("derived_public_key_b64", pubB64).
+		With("published_ntcp2_keys_b64", publishedB64).
+		With("ntcp2_address_count", ntcp2Count).
+		Errorf("derived public key from live NTCP2 static private key is not "+
+			"published as `s=` in any of %d NTCP2 router addresses",
+			ntcp2Count)
+}

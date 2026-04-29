@@ -587,7 +587,17 @@ func (t *NTCP2Transport) Addr() net.Addr {
 func (t *NTCP2Transport) UpdateLocalRouterInfo(ri router_info.RouterInfo) {
 	t.identityMu.Lock()
 	t.identity = ri
+	staticKey := t.config.NTCP2Config.StaticKey
 	t.identityMu.Unlock()
+
+	if err := verifyLocalRouterInfoMatchesStaticKey(ri, staticKey); err != nil {
+		t.logger.WithError(err).Error(
+			"UpdateLocalRouterInfo: new RouterInfo's NTCP2 `s=` does not match " +
+				"live static key — all subsequent outbound NTCP2 handshakes will " +
+				"succeed cryptographically but be closed by remote peers (i2pd " +
+				"GetNTCP2AddressWithStaticKey check). Investigate the call site that " +
+				"supplied this RouterInfo.")
+	}
 }
 
 // SetPeerConnNotifier wires a connection-outcome notifier into the transport.
@@ -1165,7 +1175,21 @@ func (t *NTCP2Transport) createNTCP2Config(routerInfo router_info.RouterInfo) (*
 func (t *NTCP2Transport) attachLocalRouterInfo(config *ntcp2.NTCP2Config) error {
 	t.identityMu.RLock()
 	localRI := t.identity
+	ourStaticKey := t.config.NTCP2Config.StaticKey
 	t.identityMu.RUnlock()
+
+	// Per-dial sanity check: mirror i2pd's GetNTCP2AddressWithStaticKey.
+	// i2pd silently terminates with zero data-phase bytes if the static key
+	// we sent in msg1 is not published in any NTCP2 address of the RouterInfo
+	// we send in msg3. This produces "frame #0 EOF" after a successful Noise
+	// handshake. Detect and surface the mismatch here, before opening TCP.
+	if err := verifyLocalRouterInfoMatchesStaticKey(localRI, ourStaticKey); err != nil {
+		return oops.Wrapf(err,
+			"outbound NTCP2: local RouterInfo does not advertise the static key "+
+				"we will send in the Noise handshake; remote peers will silently "+
+				"drop the connection after msg3")
+	}
+
 	riBytes, err := localRI.Bytes()
 	if err != nil {
 		return oops.Wrapf(err, "cannot serialize local RouterInfo for NTCP2 msg3")
