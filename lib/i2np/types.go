@@ -70,7 +70,7 @@ type PayloadCarrier interface {
 }
 
 // TunnelCarrier represents messages that carry tunnel-related data.
-// Per I2P spec, TunnelData messages contain a 4-byte TunnelID and 1024 bytes of data.
+// Per I2P spec (tunnel-message.rst), TunnelData messages contain TunnelID(4) + IV(16) + EncryptedData(1008) = 1028 bytes.
 type TunnelCarrier interface {
 	GetTunnelData() []byte
 	GetTunnelID() tunnel.TunnelID

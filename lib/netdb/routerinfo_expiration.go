@@ -11,9 +11,9 @@ import (
 )
 
 // RouterInfoMaxAge defines the maximum age for a RouterInfo before it is considered stale.
-// Per the I2P specification, RouterInfos are typically considered stale after about 27 hours,
-// though some implementations use longer thresholds. We use 48 hours to be conservative
-// and reduce unnecessary churn during periods of intermittent connectivity.
+// The I2P spec does not specify a universal 27-hour threshold; expiry depends on network size
+// (~30h for a ~300-router network). We use 48 hours as a conservative implementation choice
+// to reduce unnecessary churn during periods of intermittent connectivity.
 const RouterInfoMaxAge = 48 * time.Hour
 
 // RouterInfoCleanupInterval defines how often the RouterInfo expiration cleaner runs.

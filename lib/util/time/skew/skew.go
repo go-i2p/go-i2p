@@ -7,9 +7,9 @@ import (
 )
 
 // MaxClockSkew is the maximum acceptable difference between a RouterInfo's
-// published timestamp and the current time. Per the I2P specification
-// (common-structures RouterInfo notes), routers MUST reject RouterInfo with
-// a published timestamp more than 60 minutes in the future or past.
+// published timestamp and the current time. The 60-minute threshold applies
+// specifically to floodfill routers rejecting RouterInfo (per network-database.rst);
+// it is used here as a general implementation convention for clock skew validation.
 const MaxClockSkew = 60 * time.Minute
 
 // nowFunc is overridable for testing. Defaults to time.Now.

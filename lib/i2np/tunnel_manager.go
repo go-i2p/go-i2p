@@ -248,7 +248,7 @@ func (tm *TunnelManager) BuildTunnelFromRequest(req tunnel.BuildTunnelRequest) (
 	// IMPORTANT: sendBuildMessage may block for tens of seconds while
 	// sessionProvider.GetSessionByHash performs a NetDB RouterInfo lookup
 	// (up to 30s) plus the outbound NTCP2/SSU2 dial and Noise handshake. The
-	// 90-second build expiration window per I2P spec is measured from when
+	// 90-second build expiration window is an implementation convention —
 	// the build message leaves the originator, NOT from when the in-process
 	// build request struct is created. Arming the timer and resetting
 	// createdAt below — after sendBuildMessage returns — keeps the spec
@@ -1188,7 +1188,7 @@ func (tm *TunnelManager) cleanupFailedTunnel(tunnelID tunnel.TunnelID, isInbound
 }
 
 // cleanupExpiredBuilds periodically removes expired build requests.
-// Build requests timeout after 90 seconds per I2P specification.
+// Build requests timeout after 90 seconds (implementation convention; no specific spec value).
 func (tm *TunnelManager) cleanupExpiredBuilds() {
 	for {
 		select {
@@ -1283,7 +1283,7 @@ func (tm *TunnelManager) cleanupExpiredBuildByID(messageID int) {
 		return
 	}
 
-	// Verify request has actually expired (90 second timeout per I2P spec)
+	// Verify request has actually expired (90 second timeout — implementation convention)
 	const buildTimeout = 90 * time.Second
 	if time.Since(req.createdAt) > buildTimeout {
 		delete(tm.pendingBuilds, messageID)

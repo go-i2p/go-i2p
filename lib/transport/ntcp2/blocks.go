@@ -25,7 +25,9 @@ const (
 	BlockTypeOptions byte = 1
 
 	// BlockTypeRouterInfo is a RouterInfo block (type 2).
-	// Payload: 1-byte flag + gzip-compressed or raw RouterInfo.
+	// Payload: 1-byte flag + raw RouterInfo (never gzip-compressed in NTCP2).
+	// Flag byte: bit 0 = 0 (local store) or 1 (flood request); bits 1-7 unused.
+	// Spec: ntcp2.rst §1575-1577.
 	BlockTypeRouterInfo byte = 2
 
 	// BlockTypeI2NP is an I2NP message block (type 3).
@@ -43,6 +45,16 @@ const (
 
 // blockHeaderSize is the size of a block header: type (1 byte) + size (2 bytes).
 const blockHeaderSize = 3
+
+// NTCP2 RouterInfo block flag byte constants (ntcp2.rst §1575-1577).
+// Bit 0: 0 = local store, 1 = flood request. Bits 1-7: unused, must be 0.
+// NOTE: RouterInfo in NTCP2 blocks is NEVER gzip-compressed (unlike DatabaseStore).
+const (
+	// RouterInfoFlagLocalStore indicates the peer should store the RouterInfo locally only.
+	RouterInfoFlagLocalStore byte = 0x00
+	// RouterInfoFlagFloodRequest indicates the peer should flood the RouterInfo to the netdb.
+	RouterInfoFlagFloodRequest byte = 0x01
+)
 
 // Block represents a single parsed NTCP2 data-phase block.
 type Block struct {
@@ -148,11 +160,13 @@ func NewPaddingBlock(size int) Block {
 }
 
 // NewRouterInfoBlock creates a RouterInfo block (type 2) with a flag byte
-// prepended. Per the spec, the flag byte indicates how the RouterInfo is encoded:
+// prepended. Per ntcp2.rst §1575-1577, the flag byte encodes:
 //
-//	0x00 = uncompressed
-//	0x01 = gzip compressed
-//	bit 1 (0x02) = flood request (peer should flood this RouterInfo)
+//	bit 0: 0 = local store (RouterInfoFlagLocalStore), 1 = flood request (RouterInfoFlagFloodRequest)
+//	bits 1-7: unused, must be 0
+//
+// IMPORTANT: RouterInfo in NTCP2 blocks is NEVER gzip-compressed.
+// Use RouterInfoFlagLocalStore (0x00) or RouterInfoFlagFloodRequest (0x01).
 func NewRouterInfoBlock(routerInfoBytes []byte, flag byte) Block {
 	data := make([]byte, 1+len(routerInfoBytes))
 	data[0] = flag

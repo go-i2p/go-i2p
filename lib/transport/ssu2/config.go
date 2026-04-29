@@ -12,7 +12,9 @@ import (
 // DefaultMaxSessions is the default maximum number of concurrent SSU2 sessions.
 const DefaultMaxSessions = 512
 
-// DefaultKeepaliveInterval is the SSU2 keepalive interval per the spec (15 s).
+// DefaultKeepaliveInterval is the SSU2 keepalive interval used by this implementation (15 s).
+// NOTE: The SSU2 spec's 15-second value is a retransmit timeout, not a keepalive interval;
+// this value is an implementation choice.
 // Shorter values help aggressive NATs at the cost of extra traffic.
 const DefaultKeepaliveInterval = 15 * time.Second
 

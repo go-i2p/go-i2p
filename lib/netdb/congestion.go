@@ -339,7 +339,7 @@ func (t *NetDBCongestionTracker) IsStaleEFlag(hash common.Hash) bool {
 func (t *NetDBCongestionTracker) GetEffectiveCongestionFlag(hash common.Hash) config.CongestionFlag {
 	flag := t.GetPeerCongestionFlag(hash)
 
-	// Per spec: E flag with stale RouterInfo is treated as D
+	// Per Proposal 162 (open proposal): E flag with stale RouterInfo is treated as D
 	if flag == config.CongestionFlagE && t.IsStaleEFlag(hash) {
 		log.WithFields(logger.Fields{
 			"at":     "NetDBCongestionTracker.GetEffectiveCongestionFlag",

@@ -8,7 +8,8 @@ import (
 )
 
 // TunnelDataMessage represents an I2NP TunnelData message.
-// Per I2P spec, TunnelData is TunnelID(4 bytes) + Data(1024 bytes) = 1028 bytes.
+// Per I2P spec (tunnel-message.rst), TunnelData is TunnelID(4) + IV(16) + EncryptedData(1008) = 1028 bytes.
+// The IV precedes the encrypted payload; the 1024 non-TunnelID bytes are not a monolithic "data" field.
 //
 // https://geti2p.net/spec/i2np#tunneldata
 type TunnelDataMessage struct {

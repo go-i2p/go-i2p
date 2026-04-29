@@ -1223,12 +1223,17 @@ func (s *Session) encryptInnerLeaseSet(ls2 *lease_set2.LeaseSet2, cookie [32]byt
 		return nil, oops.Errorf("failed to get blinded signing public key: %w", err)
 	}
 
-	// Derive subcredential per I2P spec:
-	//   credential    = SHA-256("credential" || destSigningPubKey)
+	// Derive subcredential per I2P spec (encryptedleaseset.rst §473-499):
+	//   keydata       = A || stA || stA'
+	//   credential    = SHA-256("credential" || keydata)
 	//   subcredential = SHA-256("subcredential" || credential || blindedPubKey)
+	sigTypeA := uint16(s.destination.KeyCertificate.SigningPublicKeyType())
+	sigTypeBlinded := uint16(s.blindedDestination.KeyCertificate.SigningPublicKeyType())
 	subcredential := encrypted_leaseset.DeriveSubcredential(
 		destSigningPubKey.Bytes(),
+		sigTypeA,
 		blindedSigningPubKey.Bytes(),
+		sigTypeBlinded,
 	)
 
 	// Published timestamp (seconds since epoch)

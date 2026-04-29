@@ -153,10 +153,10 @@ func TestNewPaddingBlock(t *testing.T) {
 
 func TestNewRouterInfoBlock(t *testing.T) {
 	ri := []byte{0x01, 0x02, 0x03}
-	block := NewRouterInfoBlock(ri, 0x01) // gzip flag
+	block := NewRouterInfoBlock(ri, RouterInfoFlagFloodRequest)
 	assert.Equal(t, BlockTypeRouterInfo, block.Type)
 	assert.Len(t, block.Data, 4) // 1 flag + 3 RI
-	assert.Equal(t, byte(0x01), block.Data[0])
+	assert.Equal(t, RouterInfoFlagFloodRequest, block.Data[0])
 	assert.Equal(t, ri, block.Data[1:])
 }
 

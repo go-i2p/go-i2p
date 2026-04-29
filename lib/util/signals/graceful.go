@@ -30,8 +30,8 @@ var (
 // given an individual timeout (total timeout / handler count) so that a single
 // stuck handler cannot block the entire shutdown chain.
 //
-// Per the I2P specification (common-structures RouterInfo notes), a router
-// MUST send a DatabaseStore with zero addresses before disconnecting.
+// Per convention (not formally specified in common-structures.rst), a router
+// MAY send a DatabaseStore with zero addresses before disconnecting.
 //
 // Returns a HandlerID that can be passed to DeregisterPreShutdownHandler.
 // Nil handlers are silently ignored and return -1.

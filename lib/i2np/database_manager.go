@@ -221,10 +221,11 @@ func (dm *DatabaseManager) sendDatabaseStoreResponse(key common.Hash, data []byt
 // floodfill routers to the target hash using Kademlia XOR distance metric.
 //
 // Per I2P specification, when acting as a floodfill router:
-// 1. If the requested key is not in our NetDB
-// 2. We respond with a DatabaseSearchReply containing hashes of other floodfill routers
-// 3. These routers are selected as the closest to the target key by XOR distance
-// 4. Typically 3-7 peer hashes are included to help the requester continue their search
+//  1. If the requested key is not in our NetDB
+//  2. We respond with a DatabaseSearchReply containing hashes of other floodfill routers
+//  3. These routers are selected as the closest to the target key by XOR distance
+//  4. The spec allows 0-255 peer hashes (1-byte count field); implementations typically
+//     include 3-7 to help the requester continue their search
 func (dm *DatabaseManager) sendDatabaseSearchReply(key, to common.Hash) error {
 	// Select closest floodfill routers to suggest
 	peerHashes := dm.selectClosestFloodfills(key)
@@ -237,7 +238,7 @@ func (dm *DatabaseManager) sendDatabaseSearchReply(key, to common.Hash) error {
 }
 
 // selectClosestFloodfills selects the closest floodfill routers to suggest for a lookup.
-// Returns up to 7 peer hashes (standard I2P practice) sorted by XOR distance to target.
+// Returns up to 7 peer hashes (implementation convention; spec allows 0-255) sorted by XOR distance to target.
 // If no floodfill selector is configured, returns empty list for backward compatibility.
 func (dm *DatabaseManager) selectClosestFloodfills(targetKey common.Hash) []common.Hash {
 	const defaultFloodfillCount = 7 // I2P standard practice

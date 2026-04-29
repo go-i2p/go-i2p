@@ -9,12 +9,12 @@ import (
 )
 
 // BandwidthClass represents a single-letter bandwidth capability flag
-// per the I2P common-structures specification.
+// per the I2P network-database specification and Proposal 162.
 //
 // The bandwidth class is determined by the router's shared bandwidth limit
 // and advertised in the RouterInfo caps string.
 //
-// Spec: https://geti2p.net/spec/common-structures#router-info
+// Spec: https://geti2p.net/spec/network-database#routerinfo
 type BandwidthClass string
 
 const (
@@ -43,7 +43,7 @@ const (
 // BandwidthClassFromRate returns the I2P bandwidth class letter for the
 // given shared bandwidth in bytes per second.
 //
-// Per the I2P spec (common-structures.rst):
+// Per Proposal 162 (open proposal, not yet a finalized spec):
 //
 //   - K: < 12 KBps (< 12288 bytes/s)
 //   - L: 12–48 KBps
@@ -258,7 +258,7 @@ func BuildCapsString(bandwidth BandwidthClass, reachable, floodfill, hidden bool
 // specification for RouterInfo. Any key NOT in this set may cause the
 // RouterInfo to be rejected or ignored by other routers.
 //
-// Spec: https://geti2p.net/spec/common-structures#routerinfo
+// Spec: https://geti2p.net/spec/network-database#routerinfo
 var SpecRouterInfoOptionKeys = map[string]string{
 	"router.version":       "Router software version (e.g. 0.9.64)",
 	"caps":                 "Capability flags string",

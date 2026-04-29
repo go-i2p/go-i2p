@@ -55,9 +55,9 @@ type CongestionDefaults struct {
 	// === Averaging Window ===
 
 	// AveragingWindow is the duration over which to average congestion metrics.
-	// Per spec, congestion state should be based on an average over several minutes,
+	// Per Proposal 162 (open proposal), congestion state should be based on an average over several minutes,
 	// not instantaneous measurement, to prevent rapid flag changes.
-	// Default: 5 minutes (per spec recommendation)
+	// Default: 5 minutes (implementation convention; no spec source for this value)
 	AveragingWindow time.Duration
 
 	// === RouterInfo Age Threshold ===
@@ -65,7 +65,7 @@ type CongestionDefaults struct {
 	// EFlagAgeThreshold is when E flag is treated as D due to stale RouterInfo.
 	// If a remote peer's RouterInfo is older than this and has E flag,
 	// treat it as D flag instead (assume congestion may have cleared).
-	// Default: 15 minutes (per spec)
+	// Default: 15 minutes (implementation convention; no spec source)
 	EFlagAgeThreshold time.Duration
 
 	// === Peer Selection Derating ===
@@ -85,7 +85,7 @@ type CongestionDefaults struct {
 
 	// StaleEFlagCapacityMultiplier is the multiplier for E-flagged peers with old RouterInfo.
 	// When RouterInfo is older than EFlagAgeThreshold, use this instead of EFlagCapacityMultiplier.
-	// Per spec, stale E flags should be treated as D flags.
+	// Per Proposal 162 (open proposal), stale E flags should be treated as D flags.
 	// Default: 0.5 (same as D flag)
 	StaleEFlagCapacityMultiplier float64
 }
@@ -144,10 +144,10 @@ func buildCongestionDefaults() CongestionDefaults {
 		ClearEFlagThreshold: 0.75,
 		ClearGFlagThreshold: 0.95,
 
-		// Averaging window per spec recommendation
+		// Averaging window (implementation convention)
 		AveragingWindow: 5 * time.Minute,
 
-		// RouterInfo age threshold per spec
+		// RouterInfo age threshold (implementation convention)
 		EFlagAgeThreshold: 15 * time.Minute,
 
 		// Peer selection derating multipliers

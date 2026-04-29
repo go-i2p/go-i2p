@@ -538,7 +538,7 @@ func (t *SSU2Transport) GetExternalAddr(peerAddr *net.UDPAddr) *net.UDPAddr {
 }
 
 // RegisterIntroducer adds an introducer to the registry for inclusion in our
-// published RouterInfo. Up to 3 introducers are maintained per the I2P spec.
+// published RouterInfo. Up to 3 introducers are maintained (implementation convention; up to 3 is common practice in I2P implementations).
 func (t *SSU2Transport) RegisterIntroducer(intro *ssu2noise.RegisteredIntroducer) error {
 	if t.introducerRegistry == nil {
 		return ErrTransportNotStarted
