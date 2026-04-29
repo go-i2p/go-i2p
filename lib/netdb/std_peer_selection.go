@@ -3,6 +3,7 @@ package netdb
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/go-i2p/crypto/rand"
 	"github.com/samber/oops"
@@ -13,6 +14,23 @@ import (
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/bootstrap"
 )
+
+// capsAllowsTunnelParticipation returns true when the router's caps string
+// indicates it is willing and able to participate as a tunnel hop. Per the
+// I2P protocol, a router that does not advertise 'R' (reachable) cannot
+// receive forwarded build records from a preceding hop, and a router that
+// advertises 'H' (hidden) refuses to participate in others' tunnels.
+// RouterInfo.RouterCapabilities() may include a leading I2P length byte,
+// so substring matching is used rather than equality.
+func capsAllowsTunnelParticipation(caps string) bool {
+	if !strings.ContainsRune(caps, 'R') {
+		return false
+	}
+	if strings.ContainsRune(caps, 'H') {
+		return false
+	}
+	return true
+}
 
 // GetAllRouterInfos returns all cached RouterInfos as a slice.
 func (db *StdNetDB) GetAllRouterInfos() (ri []router_info.RouterInfo) {
@@ -91,6 +109,7 @@ type peerFilterStats struct {
 	skippedNotReachable int // no NTCP2/SSU2 direct address and no SSU2 introducer
 	skippedHashError    int
 	skippedStale        int
+	skippedNoRCap       int // caps lacks 'R' or advertises 'H' — cannot be a tunnel hop
 	directCount         int // accepted with direct NTCP2 or SSU2 connectivity
 	viaIntroducer       int // accepted via SSU2 introducers
 }
@@ -145,6 +164,21 @@ func shouldSkipPeer(ri router_info.RouterInfo, excludeMap map[common.Hash]bool, 
 		stats.skippedStale++
 		return true
 	}
+	// Tunnel hop participation requires the 'R' (reachable) capability and
+	// disqualifies routers advertising 'H' (hidden). Without this filter,
+	// 'U' (unreachable) and hidden peers are picked as middle/end hops, the
+	// preceding hop fails to forward the build record to them, and every
+	// exploratory build expires without a reply (RCA: 100% exploratory
+	// tunnel build expiration).
+	if !capsAllowsTunnelParticipation(ri.RouterCapabilities()) {
+		log.WithFields(logger.Fields{
+			"peer_hash": fmt.Sprintf("%x", riHash[:8]),
+			"caps":      ri.RouterCapabilities(),
+			"reason":    "caps_lacks_R_or_advertises_H",
+		}).Debug("Skipping peer ineligible to participate in tunnels")
+		stats.skippedNoRCap++
+		return true
+	}
 	return false
 }
 
@@ -161,6 +195,7 @@ func logPeerFilteringResults(allRouterInfos, available []router_info.RouterInfo,
 		"skipped_no_addresses":  stats.skippedNoAddresses,
 		"skipped_not_reachable": stats.skippedNotReachable,
 		"skipped_stale":         stats.skippedStale,
+		"skipped_no_r_cap":      stats.skippedNoRCap,
 		"skipped_hash_error":    stats.skippedHashError,
 		"usability_ratio":       fmt.Sprintf("%.1f%%", float64(len(available))*100.0/float64(len(allRouterInfos))),
 	}).Info("Peer filtering complete")
