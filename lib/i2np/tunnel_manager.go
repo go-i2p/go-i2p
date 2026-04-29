@@ -240,7 +240,24 @@ func (tm *TunnelManager) BuildTunnelFromRequest(req tunnel.BuildTunnelRequest) (
 	pool.AddTunnel(tunnelState)
 	tm.trackPendingBuild(result, messageID, req.IsClientTunnel)
 
-	// Register with ReplyProcessor for decryption key management
+	// Schedule immediate cleanup on timeout (90 seconds per I2P spec)
+	// This prevents memory leaks from failed/timeout builds between periodic cleanups
+	time.AfterFunc(90*time.Second, func() {
+		tm.cleanupExpiredBuildByID(messageID)
+	})
+
+	// Send the build message first. For STBM, createShortTunnelBuildMessage
+	// overwrites result.ReplyKeys with the HKDF-derived keys that the remote
+	// hops will actually use to encrypt their reply slots. Registration must
+	// happen after send so it captures the correct keys.
+	err = tm.sendBuildMessage(result, messageID)
+	if err != nil {
+		tm.cleanupFailedBuild(result.TunnelID, messageID, req.IsInbound)
+		return 0, peerHashes, oops.Wrapf(err, "failed to send build request")
+	}
+
+	// Register with ReplyProcessor now that result.ReplyKeys holds the
+	// HKDF-derived reply keys written by createShortTunnelBuildMessage.
 	if regErr := tm.replyProcessor.RegisterPendingBuild(
 		result.TunnelID,
 		result.ReplyKeys,
@@ -248,20 +265,9 @@ func (tm *TunnelManager) BuildTunnelFromRequest(req tunnel.BuildTunnelRequest) (
 		req.IsInbound,
 		len(result.Hops),
 	); regErr != nil {
+		// The message is already sent; best-effort cleanup.
 		tm.cleanupFailedBuild(result.TunnelID, messageID, req.IsInbound)
 		return 0, peerHashes, oops.Wrapf(regErr, "failed to register pending build")
-	}
-
-	// Schedule immediate cleanup on timeout (90 seconds per I2P spec)
-	// This prevents memory leaks from failed/timeout builds between periodic cleanups
-	time.AfterFunc(90*time.Second, func() {
-		tm.cleanupExpiredBuildByID(messageID)
-	})
-
-	err = tm.sendBuildMessage(result, messageID)
-	if err != nil {
-		tm.cleanupFailedBuild(result.TunnelID, messageID, req.IsInbound)
-		return 0, peerHashes, oops.Wrapf(err, "failed to send build request")
 	}
 
 	tm.logBuildRequestSent(result, messageID)
@@ -501,6 +507,20 @@ func (tm *TunnelManager) createShortTunnelBuildMessage(result *tunnel.TunnelBuil
 		i2npRecords[i] = convertTunnelBuildRecord(rec)
 	}
 
+	// Override SendMessageID in every hop record with the tunnel manager's
+	// messageID, which is the I2NP header message ID of this STBM and the
+	// key used in tm.pendingBuilds for reply correlation.
+	//
+	// The builder generates a random sendMessageID per hop (used only for
+	// the standard VTB format). For STBM, the remote OBEP reads
+	// sendMessageID from its decrypted record cleartext and uses it as the
+	// I2NP message ID of the ShortTunnelBuildReply it sends back. If that
+	// value differs from our pendingBuilds key, ProcessTunnelBuildReply
+	// cannot correlate the reply and every build expires.
+	for i := range i2npRecords {
+		i2npRecords[i].SendMessageID = messageID
+	}
+
 	// Encrypt each record with the corresponding hop's public key.
 	// Each encrypted STBM record is exactly 218 bytes:
 	//   16 (toPeer) + 32 (ephemeralKey) + 154 (ciphertext) + 16 (poly1305 tag).
@@ -528,6 +548,19 @@ func (tm *TunnelManager) createShortTunnelBuildMessage(result *tunnel.TunnelBuil
 			return nil, oops.Wrapf(err, "failed to derive reply key for hop %d", i)
 		}
 		replyKeys[i] = rk
+	}
+
+	// Per STBM spec (proposal 152), the ReplyKey field is absent from the
+	// 154-byte cleartext. Each hop derives its reply key via:
+	//   HKDF(ck, "", "SMTunnelReplyKey", 64) → new_ck || replyKey
+	// where ck is the post-encryption Noise chaining key. The builder's
+	// CreateBuildRequest generates a random ReplyKey that is never sent to
+	// the hop and is therefore useless for reply decryption. We must
+	// overwrite result.ReplyKeys with the HKDF-derived keys so that
+	// RegisterPendingBuild and decryptSTBMReplyRecord use the correct key.
+	result.ReplyKeys = make([]session_key.SessionKey, len(replyKeys))
+	for i, rk := range replyKeys {
+		result.ReplyKeys[i] = session_key.SessionKey(rk)
 	}
 
 	// Apply chained ChaCha20 layer obfuscation. For each hop i (from

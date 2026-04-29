@@ -98,8 +98,10 @@ func TestCreateShortTunnelBuildMessage_EncryptsRecords(t *testing.T) {
 	require.NoError(t, err, "decryption of record 1 should succeed with hop1's key")
 	assert.Equal(t, rec1.ReceiveTunnel, decrypted1.ReceiveTunnel,
 		"decrypted ReceiveTunnel should match original")
-	assert.Equal(t, rec1.SendMessageID, decrypted1.SendMessageID,
-		"decrypted SendMessageID should match original")
+	// SendMessageID is overridden by createShortTunnelBuildMessage to the
+	// TM's messageID so that the OBEP can correlate the reply correctly.
+	assert.Equal(t, 1001, decrypted1.SendMessageID,
+		"decrypted SendMessageID should equal the build message ID")
 
 	// Decrypt record 2 with hop2's private key and verify.
 	// Per I2P short-tunnel-build protocol, the sender applies chained ChaCha20
@@ -122,8 +124,8 @@ func TestCreateShortTunnelBuildMessage_EncryptsRecords(t *testing.T) {
 	require.NoError(t, err, "decryption of record 2 should succeed with hop2's key after layer peel")
 	assert.Equal(t, rec2.ReceiveTunnel, decrypted2.ReceiveTunnel,
 		"decrypted ReceiveTunnel should match original")
-	assert.Equal(t, rec2.SendMessageID, decrypted2.SendMessageID,
-		"decrypted SendMessageID should match original")
+	assert.Equal(t, 1001, decrypted2.SendMessageID,
+		"decrypted SendMessageID should equal the build message ID")
 
 	// Cross-check: hop2's key should NOT decrypt record 1 successfully
 	_, err = DecryptShortBuildRequestRecord(enc1, hop2KS.GetEncryptionPrivateKey().Bytes())
