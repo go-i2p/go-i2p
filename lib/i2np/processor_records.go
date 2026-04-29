@@ -450,12 +450,12 @@ func (p *MessageProcessor) generateAndSendBuildReply(messageID, index int, recor
 	}
 
 	log.WithFields(logger.Fields{
-		"at":            "generateAndSendBuildReply",
-		"message_id":    messageID,
-		"record_index":  index,
-		"reply_code":    replyCode,
-		"next_tunnel":   record.NextTunnel,
-		"encrypted_len": len(encryptedReply),
+		"at":             "generateAndSendBuildReply",
+		"message_id":     messageID,
+		"record_index":   index,
+		"reply_code":     replyCode,
+		"next_tunnel":    record.NextTunnel,
+		"encrypted_len":  len(encryptedReply),
 		"is_short_build": isShortBuild,
 	}).Debug("generated and sent build reply successfully")
 
