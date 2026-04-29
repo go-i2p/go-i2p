@@ -1168,6 +1168,8 @@ func (tm *TunnelManager) handleExpiredRequest(req *buildRequest, msgID int, now 
 	tm.buildExpireWindow.recordEvent()
 	if req.isInbound {
 		pool.RecordInboundBuildTimeout()
+	} else {
+		pool.RecordOutboundBuildTimeout()
 	}
 	log.WithFields(logger.Fields{
 		"tunnel_id":  req.tunnelID,

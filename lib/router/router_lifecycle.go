@@ -950,6 +950,31 @@ func (r *Router) initializeTunnelManager() {
 			return r.collectBestExternalAddr() == ""
 		})
 	}
+
+	// Hidden mode and AlwaysOneHopOutbound force the outbound exploratory pool
+	// to build 1-hop tunnels. With a single hop the OBEP is the peer we just
+	// dialled, so it already has an open session to us and can deliver the
+	// ShortTunnelBuildReply without needing to dial a new inbound connection.
+	// Without this, every outbound build on a firewalled router expires because
+	// the 3rd-hop OBEP cannot reach us.
+	oneHopOutbound := r.cfg != nil && (r.cfg.Hidden || r.cfg.AlwaysOneHopOutbound)
+	if oneHopOutbound && outboundPool != nil {
+		if err := outboundPool.SetHopCount(1); err != nil {
+			log.WithError(err).Error("Failed to enable one-hop outbound tunnels")
+		} else {
+			log.WithFields(logger.Fields{
+				"at":                      "initializeTunnelManager",
+				"hidden":                  r.cfg.Hidden,
+				"always_one_hop_outbound": r.cfg.AlwaysOneHopOutbound,
+			}).Info("Outbound exploratory pool configured for one-hop tunnels")
+		}
+	} else if !oneHopOutbound && outboundPool != nil {
+		// Wire auto-fallback: after autoFallbackThreshold consecutive outbound
+		// build timeouts with no public address, switch to 1-hop outbound.
+		outboundPool.SetAutoFallbackCheck(func() bool {
+			return r.collectBestExternalAddr() == ""
+		})
+	}
 	log.WithFields(logger.Fields{
 		"at":            "initializeTunnelManager",
 		"inbound_pool":  inboundPool != nil,

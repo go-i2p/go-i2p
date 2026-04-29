@@ -25,7 +25,14 @@ router:
   # refuses to participate in any transit tunnels. Use this if your router
   # cannot accept inbound connections from the I2P network. Trade-off: no
   # transit, no inbound connections except via tunnels we built ourselves.
+  # Setting hidden: true automatically implies always_one_hop_outbound: true.
   hidden: false
+  # Force outbound exploratory tunnels to use only 1 hop. With a single hop
+  # the OBEP is the peer we directly dialled, so it already has an open
+  # session back to us and can deliver the build reply without needing to
+  # dial a new inbound connection. Recommended for firewalled/NATted routers.
+  # Implied by hidden: true.
+  always_one_hop_outbound: false
   # Maximum bandwidth in bytes/sec (0 = unlimited)
   max_bandwidth: 1048576
   # Maximum concurrent transport connections

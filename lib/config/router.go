@@ -96,6 +96,14 @@ type RouterConfig struct {
 	// publishing a reachable address. Hidden=true implies this behavior.
 	// Default: false.
 	AlwaysZeroHopInbound bool
+	// AlwaysOneHopOutbound forces every exploratory outbound tunnel to be built
+	// as a 1-hop tunnel. With a single hop the OBEP is the peer we directly
+	// connected to, so it already has an open session to us and can deliver the
+	// build reply without needing to dial a new inbound connection — critical for
+	// firewalled routers that cannot accept inbound connections. Hidden=true
+	// implies this behavior.
+	// Default: false.
+	AlwaysOneHopOutbound bool
 	// Tunnel configuration for tunnel pool management and building.
 	Tunnel *TunnelDefaults
 	// Transport configuration for NTCP2/SSU2 transports.
@@ -214,6 +222,7 @@ func copyBaseFields(src *RouterConfig) *RouterConfig {
 		AcceptTunnels:        src.AcceptTunnels,
 		Hidden:               src.Hidden,
 		AlwaysZeroHopInbound: src.AlwaysZeroHopInbound,
+		AlwaysOneHopOutbound: src.AlwaysOneHopOutbound,
 	}
 }
 

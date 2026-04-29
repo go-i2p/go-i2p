@@ -221,27 +221,66 @@ func (p *Pool) RecordInboundBuildTimeout() {
 	}
 }
 
-// checkAutoFallback switches this inbound pool to zero-hop tunnels when the
-// registered callback confirms no public address is available. It is a no-op
-// if the pool is already at hop-count 0, is an outbound pool, or no callback
-// was registered.
+// RecordOutboundBuildTimeout is called by TunnelManager whenever an outbound
+// tunnel build times out. After autoFallbackThreshold consecutive timeouts with
+// no public address, the pool falls back to 1-hop outbound tunnels so that the
+// single OBEP (which we just dialled) can reply via the existing session.
+func (p *Pool) RecordOutboundBuildTimeout() {
+	if p.config.IsInbound {
+		return
+	}
+	p.mutex.Lock()
+	p.inFlightExpiredCount++
+	count := p.inFlightExpiredCount
+	p.mutex.Unlock()
+
+	if count >= autoFallbackThreshold {
+		p.checkAutoFallback()
+	}
+}
+
+// checkAutoFallback switches this pool to reduced-hop tunnels when the
+// registered callback confirms no public address is available.
+//   - Inbound pool: falls back to 0-hop (we are our own IBGW/IBEP).
+//   - Outbound pool: falls back to 1-hop (the single OBEP we dialled can reply
+//     via the already-open session, bypassing the need for inbound reachability).
+//
+// It is a no-op if the hop-count is already at the fallback minimum, or if no
+// callback was registered.
 func (p *Pool) checkAutoFallback() {
 	p.mutex.RLock()
 	fn := p.autoFallbackFn
 	hopCount := p.config.HopCount
+	isInbound := p.config.IsInbound
 	p.mutex.RUnlock()
 
-	if fn == nil || hopCount == 0 || !p.config.IsInbound {
+	if fn == nil {
 		return
 	}
 	if !fn() {
 		return // public address present — no fallback needed
 	}
-	if err := p.SetHopCount(0); err == nil {
-		log.WithFields(logger.Fields{
-			"at":     "Pool.checkAutoFallback",
-			"reason": "consecutive inbound build timeouts with no public address",
-		}).Info("auto-fallback: switched inbound exploratory pool to zero-hop tunnels")
+
+	if isInbound {
+		if hopCount == 0 {
+			return // already at minimum
+		}
+		if err := p.SetHopCount(0); err == nil {
+			log.WithFields(logger.Fields{
+				"at":     "Pool.checkAutoFallback",
+				"reason": "consecutive inbound build timeouts with no public address",
+			}).Info("auto-fallback: switched inbound exploratory pool to zero-hop tunnels")
+		}
+	} else {
+		if hopCount <= 1 {
+			return // already at minimum
+		}
+		if err := p.SetHopCount(1); err == nil {
+			log.WithFields(logger.Fields{
+				"at":     "Pool.checkAutoFallback",
+				"reason": "consecutive outbound build timeouts with no public address",
+			}).Info("auto-fallback: switched outbound exploratory pool to one-hop tunnels")
+		}
 	}
 }
 

@@ -108,6 +108,7 @@ func setRouterDefaults(defaults ConfigDefaults) {
 		{"router.max_connections", 200},
 		{"router.accept_tunnels", true},
 		{"router.hidden", false},
+		{"router.always_one_hop_outbound", false},
 	})
 }
 
@@ -237,23 +238,24 @@ func setCongestionDefaults(defaults ConfigDefaults) {
 // This is the preferred way to get config instead of using the global RouterConfigProperties.
 func NewRouterConfigFromViper() *RouterConfig {
 	return &RouterConfig{
-		BaseDir:         viper.GetString("base_dir"),
-		WorkingDir:      viper.GetString("working_dir"),
-		NetDB:           buildNetDBConfig(),
-		Bootstrap:       buildBootstrapConfig("NewRouterConfigFromViper"),
-		I2CP:            buildI2CPConfig(),
-		I2PControl:      buildI2PControlConfig(),
-		MaxBandwidth:    viper.GetUint64("router.max_bandwidth"),
-		MaxBandwidthIn:  viper.GetUint64("router.max_bandwidth_in"),
-		MaxBandwidthOut: viper.GetUint64("router.max_bandwidth_out"),
-		SharePercentage: viper.GetInt("router.share_percentage"),
-		MaxConnections:  viper.GetInt("router.max_connections"),
-		AcceptTunnels:   viper.GetBool("router.accept_tunnels"),
-		Hidden:          viper.GetBool("router.hidden"),
-		Tunnel:          buildTunnelConfig(),
-		Transport:       buildTransportConfig(),
-		Performance:     buildPerformanceConfig(),
-		Congestion:      buildCongestionConfig(),
+		BaseDir:              viper.GetString("base_dir"),
+		WorkingDir:           viper.GetString("working_dir"),
+		NetDB:                buildNetDBConfig(),
+		Bootstrap:            buildBootstrapConfig("NewRouterConfigFromViper"),
+		I2CP:                 buildI2CPConfig(),
+		I2PControl:           buildI2PControlConfig(),
+		MaxBandwidth:         viper.GetUint64("router.max_bandwidth"),
+		MaxBandwidthIn:       viper.GetUint64("router.max_bandwidth_in"),
+		MaxBandwidthOut:      viper.GetUint64("router.max_bandwidth_out"),
+		SharePercentage:      viper.GetInt("router.share_percentage"),
+		MaxConnections:       viper.GetInt("router.max_connections"),
+		AcceptTunnels:        viper.GetBool("router.accept_tunnels"),
+		Hidden:               viper.GetBool("router.hidden"),
+		AlwaysOneHopOutbound: viper.GetBool("router.always_one_hop_outbound"),
+		Tunnel:               buildTunnelConfig(),
+		Transport:            buildTransportConfig(),
+		Performance:          buildPerformanceConfig(),
+		Congestion:           buildCongestionConfig(),
 	}
 }
 
