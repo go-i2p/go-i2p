@@ -143,6 +143,19 @@ func (tm *TunnelManager) SetSessionProvider(provider SessionProvider) {
 	tm.sessionProvider = provider
 }
 
+// SetOurRouterHash propagates our router's identity hash to both tunnel pools
+// so they can populate the ReplyGateway field in build requests. Without this,
+// the last hop in every tunnel build sends its reply to an all-zeros peer and
+// the reply is never received.
+func (tm *TunnelManager) SetOurRouterHash(hash common.Hash) {
+	if tm.inboundPool != nil {
+		tm.inboundPool.SetRouterHash(hash)
+	}
+	if tm.outboundPool != nil {
+		tm.outboundPool.SetRouterHash(hash)
+	}
+}
+
 // GetPool returns the outbound tunnel pool for backward compatibility.
 // Deprecated: Use GetInboundPool() or GetOutboundPool() for specific pools.
 func (tm *TunnelManager) GetPool() *tunnel.Pool {

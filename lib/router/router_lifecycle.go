@@ -874,6 +874,12 @@ func (r *Router) wireBuildRecordIdentity() {
 	r.messageRouter.GetProcessor().SetOurRouterHash(routerHash)
 	r.messageRouter.GetProcessor().SetBuildRequestDecryptor(buildCrypto)
 	r.messageRouter.GetProcessor().SetOurPrivateKey(privKeyBytes)
+	// Propagate our router hash to the tunnel manager so pools can set
+	// ReplyGateway correctly. Without this, the last hop in every build
+	// sends the reply to an all-zeros peer and builds always expire.
+	if r.tunnelManager != nil {
+		r.tunnelManager.SetOurRouterHash(routerHash)
+	}
 	log.WithFields(logger.Fields{"at": "initializeMessageRouter"}).Debug("MessageProcessor identity, decryptor, and private key wired for build record decryption")
 }
 

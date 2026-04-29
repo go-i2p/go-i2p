@@ -651,7 +651,7 @@ func (tb *TunnelBuilder) determineRoutingParams(
 			return 0, 0, common.Hash{}, common.Hash{}, err
 		}
 	} else {
-		receiveTunnel, nextTunnel, nextIdent, err = tb.determineOutboundRouting(hopIndex, hopTunnelIDs, peers)
+		receiveTunnel, nextTunnel, nextIdent, err = tb.determineOutboundRouting(hopIndex, hopTunnelIDs, peers, req.OurIdentity)
 		if err != nil {
 			return 0, 0, common.Hash{}, common.Hash{}, err
 		}
@@ -692,6 +692,7 @@ func (tb *TunnelBuilder) determineOutboundRouting(
 	hopIndex int,
 	hopTunnelIDs []TunnelID,
 	peers []router_info.RouterInfo,
+	ourIdentity common.Hash,
 ) (receiveTunnel, nextTunnel TunnelID, nextIdent common.Hash, err error) {
 	isLastHop := hopIndex == len(peers)-1
 
@@ -700,9 +701,11 @@ func (tb *TunnelBuilder) determineOutboundRouting(
 	receiveTunnel = hopTunnelIDs[hopIndex]
 
 	if isLastHop {
-		// Endpoint sends to destination (tunnel ID set per message)
+		// Endpoint sends the build reply directly back to the originator.
+		// nextTunnel=0 means direct delivery (not via an intermediate tunnel).
+		// nextIdent is our own router hash so the OBEP knows where to send the reply.
 		nextTunnel = 0
-		nextIdent = common.Hash{} // Empty hash, set per message
+		nextIdent = ourIdentity
 	} else {
 		// Gateway/middle sends to next hop using that hop's receive tunnel ID
 		nextTunnel = hopTunnelIDs[hopIndex+1]

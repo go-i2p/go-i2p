@@ -131,6 +131,14 @@ type Pool struct {
 	cachedDirty          bool                      // True when cache needs rebuild
 	inFlightExpiredCount int                       // Consecutive inbound build timeouts (no VTBRM received)
 	autoFallbackFn       func() bool               // Returns true when no public address is available
+	routerHash           common.Hash               // Our router's identity hash, used as ReplyGateway in build requests
+}
+
+// SetRouterHash sets our router's identity hash so it can be used as the
+// ReplyGateway field in outgoing tunnel build requests. This tells the last
+// hop in the build chain where to send the build reply.
+func (p *Pool) SetRouterHash(hash common.Hash) {
+	p.routerHash = hash
 }
 
 // PeerTracker interface for recording peer connection outcomes.
@@ -793,7 +801,10 @@ func (p *Pool) prepareBuildRequest(excludePeers []common.Hash) BuildTunnelReques
 		IsClientTunnel:            p.config.IsClientPool,
 		UseShortBuild:             true, // Use modern STBM by default
 		ExcludePeers:              progressiveExclude,
-		RequireDirectConnectivity: true, // FIX: Only select directly-contactable peers
+		RequireDirectConnectivity: true,    // FIX: Only select directly-contactable peers
+		OurIdentity:               p.routerHash, // Our router hash for reply routing
+		ReplyGateway:              p.routerHash, // Last hop sends reply directly to us
+		ReplyTunnelID:             0,            // 0 = direct delivery (no intermediate inbound tunnel)
 	}
 }
 
@@ -982,6 +993,9 @@ func (p *Pool) RetryTunnelBuild(tunnelID TunnelID, isInbound bool, hopCount int)
 		HopCount:                  hopCount,
 		ExcludePeers:              p.GetFailedPeers(),
 		RequireDirectConnectivity: true,
+		OurIdentity:               p.routerHash,
+		ReplyGateway:              p.routerHash,
+		ReplyTunnelID:             0,
 	}
 
 	result, err := builder.BuildTunnel(req)

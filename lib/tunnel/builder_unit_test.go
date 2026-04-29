@@ -306,7 +306,7 @@ func TestOutboundHopNextTunnelChaining(t *testing.T) {
 	builder := &TunnelBuilder{}
 
 	// Test last hop (endpoint) — does not call IdentHash on next peer
-	receiveTunnel, nextTunnel, _, err := builder.determineOutboundRouting(hopCount-1, hopTunnelIDs, peers)
+	receiveTunnel, nextTunnel, _, err := builder.determineOutboundRouting(hopCount-1, hopTunnelIDs, peers, common.Hash{})
 	if err != nil {
 		t.Fatalf("last hop error: %v", err)
 	}
@@ -391,7 +391,7 @@ func TestSingleHopTunnelIDs(t *testing.T) {
 		peers := make([]router_info.RouterInfo, 1)
 		builder := &TunnelBuilder{}
 
-		receiveTunnel, nextTunnel, _, err := builder.determineOutboundRouting(0, hopTunnelIDs, peers)
+		receiveTunnel, nextTunnel, _, err := builder.determineOutboundRouting(0, hopTunnelIDs, peers, common.Hash{})
 		if err != nil {
 			t.Fatalf("determineOutboundRouting error: %v", err)
 		}
