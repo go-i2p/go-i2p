@@ -801,7 +801,7 @@ func (p *Pool) prepareBuildRequest(excludePeers []common.Hash) BuildTunnelReques
 		IsClientTunnel:            p.config.IsClientPool,
 		UseShortBuild:             true, // Use modern STBM by default
 		ExcludePeers:              progressiveExclude,
-		RequireDirectConnectivity: true,    // FIX: Only select directly-contactable peers
+		RequireDirectConnectivity: true,         // FIX: Only select directly-contactable peers
 		OurIdentity:               p.routerHash, // Our router hash for reply routing
 		ReplyGateway:              p.routerHash, // Last hop sends reply directly to us
 		ReplyTunnelID:             0,            // 0 = direct delivery (no intermediate inbound tunnel)
