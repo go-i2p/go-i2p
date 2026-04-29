@@ -1057,6 +1057,7 @@ func (p *Pool) RetryTunnelBuild(tunnelID TunnelID, isInbound bool, hopCount int)
 		IsInbound:                 isInbound,
 		IsClientTunnel:            p.config.IsClientPool,
 		HopCount:                  hopCount,
+		UseShortBuild:             true, // Modern STBM (type 25); legacy VTB (type 21) is rejected by current peers
 		ExcludePeers:              p.GetFailedPeers(),
 		RequireDirectConnectivity: true,
 		OurIdentity:               p.routerHash,

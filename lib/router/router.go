@@ -197,8 +197,51 @@ func initializeTransports(r *Router, ri *router_info.RouterInfo, cfg *config.Rou
 		}
 	}
 
+	// Now that all transport addresses have been added, recompute the
+	// 'R' / 'U' capability flag based on whether any of those addresses
+	// carries a publishable host. If we end up upgrading caps to 'R',
+	// re-publish the corrected RI to NTCP2 so msg3 reflects it.
+	if err := recomputeReachabilityCaps(r, ri, ntcp2Transport); err != nil {
+		log.WithError(err).Warn("failed to recompute reachability caps after transport setup")
+	}
+
 	log.WithFields(logger.Fields{"at": "initializeTransports", "count": len(transports)}).Debug("all transports initialized")
 	return transports, nil
+}
+
+// recomputeReachabilityCaps inspects the addresses on ri after transport
+// setup completes and reconstructs the RouterInfo with the correct
+// Reachable flag if it changed. This prevents publishing 'R' caps when we
+// have only caps-only / private-host transport addresses, which causes
+// peers to silently reject our RI and close the NTCP2 session right after
+// msg3 (manifests as 100% tunnel build expiry).
+func recomputeReachabilityCaps(r *Router, ri *router_info.RouterInfo, ntcp2Transport *ntcp.NTCP2Transport) error {
+	addrs := ri.RouterAddresses()
+	wantReachable := hasReachableAddress(addrs)
+	currentCaps := ri.RouterCapabilities()
+	hasR := strings.ContainsRune(string(currentCaps), 'R')
+
+	// No change needed.
+	if wantReachable == hasR {
+		return nil
+	}
+
+	rebuilt, err := r.RouterInfoKeystore.ConstructRouterInfo(addrs, keys.RouterInfoOptions{Reachable: wantReachable})
+	if err != nil {
+		return oops.Wrapf(err, "rebuilding RouterInfo with Reachable=%v", wantReachable)
+	}
+	*ri = *rebuilt
+	if ntcp2Transport != nil {
+		ntcp2Transport.UpdateLocalRouterInfo(*ri)
+	}
+	log.WithFields(logger.Fields{
+		"at":            "recomputeReachabilityCaps",
+		"old_caps":      string(currentCaps),
+		"new_caps":      string(ri.RouterCapabilities()),
+		"want_reach":    wantReachable,
+		"address_count": ri.RouterAddressCount(),
+	}).Info("RouterInfo caps updated based on actual transport addresses")
+	return nil
 }
 
 // initializeRouterKeystore creates and stores the router keystore
@@ -258,13 +301,19 @@ func validateRouterKeys(r *Router) error {
 	return nil
 }
 
-// constructRouterInfo builds the router info from the keystore.
-// Reachable:true is set because we always start a transport listener
-// immediately after; the caps string must say "R" not "U" or remote peers
-// will reject our published RI and our message-3 RouterInfo payload.
+// constructRouterInfo builds the initial router info from the keystore.
+//
+// We start with Reachable:false (caps='U') because at this point no
+// transport addresses have been added — the addresses are appended later
+// by buildNTCP2Transport / buildSSU2Transport. After all transports have
+// been added, recomputeReachabilityCaps reconstructs the RouterInfo with
+// Reachable:true *only* if at least one of those transport addresses
+// carries a publishable host. This avoids the Java I2P / i2pd silent-drop
+// (TCP close after msg3) that occurs when an RI advertises 'R' alongside
+// no public endpoint or only private (RFC1918 / loopback) hosts.
 func constructRouterInfo(r *Router) (*router_info.RouterInfo, error) {
 	log.WithField("at", "constructRouterInfo").Debug("calling ConstructRouterInfo")
-	ri, err := r.RouterInfoKeystore.ConstructRouterInfo(nil, keys.RouterInfoOptions{Reachable: true})
+	ri, err := r.RouterInfoKeystore.ConstructRouterInfo(nil, keys.RouterInfoOptions{Reachable: false})
 	if err != nil {
 		log.WithError(err).Error("Failed to construct RouterInfo")
 		return nil, err

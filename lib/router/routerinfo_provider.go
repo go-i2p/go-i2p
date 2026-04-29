@@ -67,9 +67,11 @@ func (p *routerInfoProvider) GetRouterInfo() (*router_info.RouterInfo, error) {
 		addresses = p.collectTransportAddresses()
 	}
 
-	// Router is reachable if it has at least one transport address and is not
-	// running in hidden mode.
-	opts.Reachable = !hidden && len(addresses) > 0
+	// Router is reachable only when not hidden AND at least one transport
+	// address actually carries a publishable network endpoint (host:port).
+	// Caps-only addresses (s + i + caps="4" / "6", no host) signify that
+	// we are firewalled/unintroduced and should advertise 'U' (unreachable).
+	opts.Reachable = !hidden && hasReachableAddress(addresses)
 
 	ri, err := ks.ConstructRouterInfo(addresses, opts)
 	if err != nil {
@@ -177,3 +179,20 @@ func newRouterInfoProvider(r *Router) *routerInfoProvider {
 
 // Compile-time interface check
 var _ netdb.RouterInfoProvider = (*routerInfoProvider)(nil)
+
+// hasReachableAddress reports whether at least one of the supplied
+// RouterAddress entries advertises a publishable network endpoint
+// (a "host" option). A caps-only address (no host) signals an
+// unintroduced firewalled / hidden listener and must not contribute
+// the 'R' (reachable) capability flag to the published RouterInfo.
+func hasReachableAddress(addresses []*router_address.RouterAddress) bool {
+	for _, addr := range addresses {
+		if addr == nil {
+			continue
+		}
+		if addr.CheckOption(router_address.HOST_OPTION_KEY) {
+			return true
+		}
+	}
+	return false
+}

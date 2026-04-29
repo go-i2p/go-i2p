@@ -4,6 +4,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	ntcp2 "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
 	ssu2 "github.com/go-i2p/go-i2p/lib/transport/ssu2"
 	"github.com/go-i2p/logger"
 )
@@ -90,8 +91,44 @@ func (r *Router) runReachabilityCheck(lastPublished *atomic.Value, lastResignAt 
 		r.publisher.PublishOurRouterInfo()
 	}
 
+	// Push the freshly-rebuilt RI into NTCP2 so msg3 reflects the new caps
+	// (e.g. 'U' → 'R' once SSU2 PeerTest confirms a public IPv4). Without
+	// this, the NTCP2 transport keeps shipping the stale handshake-time
+	// RouterInfo to peers and they will not learn we became reachable until
+	// our floodfill publication propagates back to them.
+	r.refreshNTCP2LocalRouterInfo()
+
 	lastPublished.Store(ext)
 	*lastResignAt = now
+}
+
+// refreshNTCP2LocalRouterInfo asks the routerInfoProvider for a fresh
+// RouterInfo (with caps recomputed from current transport addresses) and
+// pushes it into the NTCP2 transport for use as the msg3 payload.
+// Best-effort: silently no-ops when any required component is unavailable.
+func (r *Router) refreshNTCP2LocalRouterInfo() {
+	if r.routerInfoProv == nil {
+		return
+	}
+	ri, err := r.routerInfoProv.GetRouterInfo()
+	if err != nil || ri == nil {
+		log.WithError(err).Debug("could not refresh NTCP2 local RouterInfo")
+		return
+	}
+	muxer := r.TransportMuxer
+	if muxer == nil {
+		return
+	}
+	for _, t := range muxer.GetTransports() {
+		if nt, ok := t.(*ntcp2.NTCP2Transport); ok {
+			nt.UpdateLocalRouterInfo(*ri)
+			log.WithFields(logger.Fields{
+				"at":   "refreshNTCP2LocalRouterInfo",
+				"caps": ri.RouterCapabilities(),
+			}).Info("NTCP2 local RouterInfo refreshed for msg3")
+			return
+		}
+	}
 }
 
 // collectBestExternalAddr returns the best confirmed external address from

@@ -465,7 +465,9 @@ func (tm *TunnelManager) sendBuildMessage(result *tunnel.TunnelBuildResult, mess
 	if err != nil {
 		return oops.Wrapf(err, "failed to create build message")
 	}
-	tm.queueBuildMessageToGateway(session, buildMsg, messageID, peerHash, result.UseShortBuild)
+	if err := tm.queueBuildMessageToGateway(session, buildMsg, messageID, peerHash, result.UseShortBuild); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -506,9 +508,21 @@ func (tm *TunnelManager) selectBuildMessage(result *tunnel.TunnelBuildResult, me
 }
 
 // queueBuildMessageToGateway queues the build message for sending to the gateway.
-func (tm *TunnelManager) queueBuildMessageToGateway(session I2NPTransportSession, buildMsg I2NPMessage, messageID int, peerHash [32]byte, useShortBuild bool) {
+// Returns an error when QueueSendI2NP fails (e.g. session was closed by the
+// peer between getGatewaySession and now): without this, the caller would
+// register a pending build entry whose message never actually leaves and the
+// build would silently expire 90s later. Propagating the error lets
+// BuildTunnelFromRequest run cleanupFailedBuild immediately and free the
+// tunnel/pending-build slots.
+func (tm *TunnelManager) queueBuildMessageToGateway(session I2NPTransportSession, buildMsg I2NPMessage, messageID int, peerHash [32]byte, useShortBuild bool) error {
 	if err := session.QueueSendI2NP(buildMsg); err != nil {
-		log.WithError(err).WithField("message_id", messageID).Warn("Failed to queue tunnel build message")
+		log.WithError(err).WithFields(logger.Fields{
+			"message_id":   messageID,
+			"gateway_hash": fmt.Sprintf("%x", peerHash[:8]),
+			"message_type": buildMsg.Type(),
+			"use_stbm":     useShortBuild,
+		}).Warn("Failed to queue tunnel build message")
+		return oops.Wrapf(err, "failed to queue tunnel build message to gateway %x", peerHash[:8])
 	}
 
 	log.WithFields(logger.Fields{
@@ -517,6 +531,7 @@ func (tm *TunnelManager) queueBuildMessageToGateway(session I2NPTransportSession
 		"message_type": buildMsg.Type(),
 		"use_stbm":     useShortBuild,
 	}).Debug("Queued tunnel build message")
+	return nil
 }
 
 // createShortTunnelBuildMessage creates a Short Tunnel Build Message (STBM).
