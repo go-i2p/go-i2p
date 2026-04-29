@@ -39,6 +39,14 @@ type RouterInfoRefresher interface {
 	RequestRouterInfoRefresh(hash common.Hash)
 }
 
+// RouterInfoStorer persists a peer RouterInfo learned during an inbound
+// NTCP2 handshake into the local network database. Implementations must
+// be safe for concurrent use.
+type RouterInfoStorer interface {
+	// StoreRouterInfo inserts or replaces the RouterInfo record in the NetDB.
+	StoreRouterInfo(ri router_info.RouterInfo)
+}
+
 // TransportSession is a session between 2 routers for transmitting i2np messages securely.
 type TransportSession interface {
 	// queue an i2np message to be sent over the session

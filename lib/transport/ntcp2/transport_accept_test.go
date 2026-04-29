@@ -60,6 +60,7 @@ type mockListener struct {
 	conns   chan net.Conn
 	closed  bool
 	closeMu sync.Mutex
+	closeCh chan struct{}
 }
 
 func newMockListener(conns ...net.Conn) *mockListener {
@@ -67,28 +68,28 @@ func newMockListener(conns ...net.Conn) *mockListener {
 	for _, c := range conns {
 		ch <- c
 	}
-	return &mockListener{conns: ch}
+	return &mockListener{conns: ch, closeCh: make(chan struct{})}
 }
 
 func (l *mockListener) Accept() (net.Conn, error) {
-	l.closeMu.Lock()
-	closed := l.closed
-	l.closeMu.Unlock()
-	if closed {
-		return nil, net.ErrClosed
-	}
 	select {
-	case c := <-l.conns:
+	case c, ok := <-l.conns:
+		if !ok {
+			return nil, net.ErrClosed
+		}
 		return c, nil
-	default:
+	case <-l.closeCh:
 		return nil, net.ErrClosed
 	}
 }
 
 func (l *mockListener) Close() error {
 	l.closeMu.Lock()
-	l.closed = true
-	l.closeMu.Unlock()
+	defer l.closeMu.Unlock()
+	if !l.closed {
+		l.closed = true
+		close(l.closeCh)
+	}
 	return nil
 }
 
@@ -166,8 +167,10 @@ func TestAccept_DoubleCloseIsIdempotent(t *testing.T) {
 		"session count should be 0 after double-close")
 }
 
-// TestAccept_EnforcesSessionLimit verifies that Accept() returns
-// ErrConnectionPoolFull when the maximum session count is reached.
+// TestAccept_EnforcesSessionLimit verifies that when the maximum session count
+// is reached, over-limit inbound connections are dropped (closed by the accept
+// runner) rather than propagated to Accept() callers. Accept() should block
+// until a slot is free or the transport is closed.
 func TestAccept_EnforcesSessionLimit(t *testing.T) {
 	conn1 := newAcceptMockConn("10.0.0.1:5001")
 	conn2 := newAcceptMockConn("10.0.0.2:5002")
@@ -176,7 +179,7 @@ func TestAccept_EnforcesSessionLimit(t *testing.T) {
 	transport := newTestTransport(listener, 2)
 	defer transport.cancel()
 
-	// Accept two connections
+	// Accept two connections to fill the pool.
 	accepted1, err := transport.Accept()
 	require.NoError(t, err)
 	require.NotNil(t, accepted1)
@@ -187,14 +190,34 @@ func TestAccept_EnforcesSessionLimit(t *testing.T) {
 
 	assert.Equal(t, 2, transport.GetSessionCount())
 
-	// Third Accept should fail with pool full
+	// Enqueue a third connection. The accept runner will see it, detect the limit
+	// and close it — it is never sent on pendingConns.
 	conn3 := newAcceptMockConn("10.0.0.3:5003")
 	listener.conns <- conn3
 
-	_, err = transport.Accept()
-	assert.Error(t, err, "Accept should fail when session limit is reached")
-	assert.Contains(t, err.Error(), "pool full",
-		"error should indicate connection pool is full")
+	// Accept() should block because no new connection is delivered.
+	// Cancel the transport context to unblock it.
+	done := make(chan error, 1)
+	go func() {
+		_, err := transport.Accept()
+		done <- err
+	}()
+
+	// Give the accept runner a moment to process and drop conn3.
+	time.Sleep(50 * time.Millisecond)
+
+	// Transport should still be at 2 sessions (conn3 was dropped).
+	assert.Equal(t, 2, transport.GetSessionCount())
+
+	// Cancel the transport — Accept() should unblock with ErrSessionClosed.
+	transport.cancel()
+
+	select {
+	case err := <-done:
+		assert.Error(t, err, "Accept should return an error when transport is closed")
+	case <-time.After(2 * time.Second):
+		t.Fatal("Accept() did not unblock after transport cancel")
+	}
 
 	_ = accepted1.Close()
 	_ = accepted2.Close()

@@ -362,6 +362,7 @@ func createNTCP2TransportInstance(r *Router, ri *router_info.RouterInfo, addr st
 	}
 	if r.StdNetDB != nil {
 		ntcp2Transport.SetRouterInfoRefresher(r.StdNetDB)
+		ntcp2Transport.SetRouterInfoStorer(r.StdNetDB)
 	}
 	log.WithFields(logger.Fields{"at": "buildNTCP2Transport"}).Debug("NTCP2 transport created successfully")
 	return ntcp2Transport, nil

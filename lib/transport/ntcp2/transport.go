@@ -48,6 +48,17 @@ type NTCP2Transport struct {
 	// Set via SetRouterInfoRefresher after construction.
 	routerInfoRefresher transport.RouterInfoRefresher
 
+	// routerInfoStorer persists peer RouterInfos learned during inbound NTCP2 handshakes
+	// into the local NetDB. Set via SetRouterInfoStorer after construction.
+	routerInfoStorer atomic.Value // stores transport.RouterInfoStorer
+
+	// pendingConns receives fully-handshaked inbound connections ready for Accept().
+	// Initialized lazily by startInboundAcceptRunner on the first Accept() call.
+	pendingConns chan net.Conn
+
+	// acceptRunOnce ensures the background inbound accept runner is started exactly once.
+	acceptRunOnce sync.Once
+
 	// Session management
 	sessions     sync.Map // map[string]*NTCP2Session (keyed by router hash)
 	sessionCount int32    // atomic O(1) session counter
@@ -294,11 +305,9 @@ func setupNetworkListener(transport *NTCP2Transport, config *Config, ntcp2Config
 // and outbound sessions. A cleanup callback is registered to remove the
 // tracking entry when the connection is closed.
 //
-// Unlike using AcceptWithHandshake directly, this method performs the Noise XK
-// handshake manually so that handshake-phase AEAD failures trigger probing
-// resistance (random delay + junk read) before closing the connection. This
-// prevents active probers from distinguishing an NTCP2 listener from a random
-// TCP service by timing how quickly the connection closes.
+// Handshakes run in per-connection goroutines so that one slow or malicious
+// peer cannot block the accept loop. The background runner is started lazily
+// on the first call to Accept().
 //
 // Spec reference: https://geti2p.net/spec/ntcp2#probing-resistance
 func (t *NTCP2Transport) Accept() (net.Conn, error) {
@@ -307,33 +316,100 @@ func (t *NTCP2Transport) Accept() (net.Conn, error) {
 		return nil, ErrSessionClosed
 	}
 
-	if err := t.checkSessionLimit(); err != nil {
-		t.logger.WithFields(map[string]interface{}{
-			"session_count": t.GetSessionCount(),
-			"max_sessions":  t.config.GetMaxSessions(),
-		}).Warn("Rejecting inbound connection: session limit reached")
-		return nil, err
+	t.startInboundAcceptRunner()
+
+	select {
+	case conn, ok := <-t.pendingConns:
+		if !ok {
+			return nil, ErrSessionClosed
+		}
+		return conn, nil
+	case <-t.ctx.Done():
+		return nil, ErrSessionClosed
 	}
+}
 
-	t.logger.Debug("Accepting incoming NTCP2 connection")
+// startInboundAcceptRunner starts the background accept loop exactly once.
+// It initialises pendingConns and spawns the goroutine that continuously
+// calls listener.Accept() and hands off raw connections to per-connection
+// handshake workers. A second goroutine closes the listener when the
+// transport context is cancelled so that a blocking listener.Accept() call
+// is unblocked promptly on shutdown.
+func (t *NTCP2Transport) startInboundAcceptRunner() {
+	t.acceptRunOnce.Do(func() {
+		t.pendingConns = make(chan net.Conn, 64)
+		t.wg.Add(1)
+		go t.runInboundAcceptLoop()
+		// Ensure listener.Accept() unblocks when the transport is cancelled.
+		go func() {
+			<-t.ctx.Done()
+			if t.listener != nil {
+				t.listener.Close()
+			}
+		}()
+	})
+}
 
-	conn, err := t.listener.Accept()
-	if err != nil {
-		t.unreserveSessionSlot()
-		t.logger.WithError(err).Warn("Failed to accept incoming connection")
-		return nil, err
+// runInboundAcceptLoop is the background goroutine that accepts raw TCP
+// connections from the listener and dispatches per-connection handshake
+// goroutines. It terminates when the listener is closed or the transport
+// context is cancelled.
+func (t *NTCP2Transport) runInboundAcceptLoop() {
+	defer t.wg.Done()
+	for {
+		rawConn, err := t.listener.Accept()
+
+		// Stop if the transport is shutting down.
+		select {
+		case <-t.ctx.Done():
+			if rawConn != nil {
+				rawConn.Close()
+			}
+			return
+		default:
+		}
+
+		if err != nil {
+			t.logger.WithError(err).Warn("Listener Accept() error; closing accept loop")
+			return
+		}
+
+		if err := t.checkSessionLimit(); err != nil {
+			t.logger.WithFields(map[string]interface{}{
+				"session_count": t.GetSessionCount(),
+				"max_sessions":  t.config.GetMaxSessions(),
+			}).Warn("Session limit reached — dropping inbound TCP connection")
+			rawConn.Close()
+			continue
+		}
+
+		go t.inboundHandshakeWorker(rawConn)
 	}
+}
 
+// inboundHandshakeWorker performs the full NTCP2 inbound handshake for a
+// single raw TCP connection. On success the tracked connection is sent on
+// pendingConns for consumption by Accept(). On failure the connection and
+// the reserved session slot are cleaned up.
+func (t *NTCP2Transport) inboundHandshakeWorker(conn net.Conn) {
 	if err := t.performInboundHandshake(conn); err != nil {
-		return nil, err
+		// performInboundHandshake already closes conn and unreserves the slot.
+		return
 	}
 
-	return t.trackInboundConnection(conn), nil
+	tracked := t.trackInboundConnection(conn)
+	select {
+	case t.pendingConns <- tracked:
+	case <-t.ctx.Done():
+		tracked.Close()
+		t.unreserveSessionSlot()
+	}
 }
 
 // performInboundHandshake performs the Noise XK handshake on an accepted connection.
 // On failure, applies probing resistance and releases the reserved session slot.
-// On success, propagates the peer's static key to derive the remote router hash.
+// On success, propagates the peer's static key, extracts and stores the peer's
+// RouterInfo from message 3, and wires the AEAD-error termination callback.
 func (t *NTCP2Transport) performInboundHandshake(conn net.Conn) error {
 	ntcp2Conn, ok := conn.(*ntcp2.NTCP2Conn)
 	if !ok {
@@ -352,6 +428,49 @@ func (t *NTCP2Transport) performInboundHandshake(conn net.Conn) error {
 	// remote NTCP2Addr so that extractPeerHash returns the real router hash
 	// instead of the fallback address-derived hash.
 	ntcp2Conn.PropagatePeerStaticKey()
+
+	// Wire AEAD error callback: send a Termination block before the TCP RST so
+	// the peer knows why the connection was dropped. This must be done before
+	// any data-phase reads so the callback is already installed when the first
+	// encrypted frame arrives.
+	ntcp2Conn.OnAEADError = func(rawConn net.Conn) {
+		term := BuildTerminationBlock(TerminationAEADFailure)
+		_, _ = rawConn.Write(term)
+	}
+
+	// Extract the peer's RouterInfo from Noise message 3 part 2. Alice MUST
+	// include her RouterInfo here; if it is absent the handshake is a protocol
+	// violation and we close the connection.
+	riBytes := ntcp2Conn.PeerRouterInfoBytes()
+	if len(riBytes) == 0 {
+		t.logger.WithField("remote_addr", conn.RemoteAddr().String()).
+			Warn("Inbound NTCP2: no RouterInfo block in msg3 — protocol violation; closing")
+		_ = ntcp2Conn.Close()
+		t.unreserveSessionSlot()
+		return errors.New("inbound NTCP2: missing RouterInfo block in msg3")
+	}
+
+	peerRI, _, parseErr := router_info.ReadRouterInfo(riBytes)
+	if parseErr != nil {
+		t.logger.WithError(parseErr).WithField("remote_addr", conn.RemoteAddr().String()).
+			Warn("Inbound NTCP2: failed to parse peer RouterInfo from msg3; proceeding with degraded routing")
+	} else {
+		// Recompute the real router hash from the parsed identity and update the
+		// remote address so that the sessions map is keyed by the true ident hash.
+		if identHash, hashErr := peerRI.IdentHash(); hashErr == nil {
+			if remoteAddr, addrOk := ntcp2Conn.RemoteAddr().(*ntcp2.NTCP2Addr); addrOk {
+				remoteAddr.SetRouterHash(identHash)
+			}
+		}
+
+		// Store the RouterInfo in the local NetDB so that tunnel-build reply
+		// routing (OBEP → ShortTunnelBuildReply) can locate our NTCP2 address.
+		if storer := t.getRouterInfoStorer(); storer != nil {
+			storer.StoreRouterInfo(peerRI)
+			t.logger.WithField("remote_addr", conn.RemoteAddr().String()).
+				Debug("Inbound NTCP2: stored peer RouterInfo in NetDB")
+		}
+	}
 
 	// Log what the remote peer sent as their RouterInfo (Alice's msg3 payload).
 	// This allows post-hoc diagnosis of E2-pattern EOFs: if Alice closes immediately
@@ -492,6 +611,22 @@ func (t *NTCP2Transport) getPeerConnNotifier() transport.PeerConnNotifier {
 // stale entries are removed from NetDB after a handshake EOF failure.
 func (t *NTCP2Transport) SetRouterInfoRefresher(r transport.RouterInfoRefresher) {
 	t.routerInfoRefresher = r
+}
+
+// SetRouterInfoStorer wires a NetDB store so that RouterInfos received from
+// inbound peers during the NTCP2 handshake are persisted locally. This is
+// required for tunnel-build reply routing to work: the OBEP looks up the
+// originator's RouterInfo in the NetDB when delivering a ShortTunnelBuildReply.
+func (t *NTCP2Transport) SetRouterInfoStorer(s transport.RouterInfoStorer) {
+	t.routerInfoStorer.Store(s)
+}
+
+// getRouterInfoStorer returns the current RouterInfoStorer, or nil if none is set.
+func (t *NTCP2Transport) getRouterInfoStorer() transport.RouterInfoStorer {
+	if v := t.routerInfoStorer.Load(); v != nil {
+		return v.(transport.RouterInfoStorer)
+	}
+	return nil
 }
 
 // SetIdentity sets the router identity for this transport.
