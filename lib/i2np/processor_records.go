@@ -147,7 +147,7 @@ func extractBuildReplyData(msg I2NPMessage) ([]byte, error) {
 // parseResponseRecords reads count response records of recordSize bytes each from data,
 // starting at startOffset. It returns the parsed records, a raw byte copy of each record,
 // and any parse error. The caller is responsible for bounds-checking data before calling.
-func parseResponseRecords(data []byte, count, recordSize, startOffset int) ([]BuildResponseRecord, [][]byte, error) {
+func parseResponseRecords(data []byte, count, recordSize, startOffset int, isShortBuild bool) ([]BuildResponseRecord, [][]byte, error) {
 	records := make([]BuildResponseRecord, count)
 	rawRecords := make([][]byte, count)
 	offset := startOffset
@@ -156,6 +156,15 @@ func parseResponseRecords(data []byte, count, recordSize, startOffset int) ([]Bu
 		rawCopy := make([]byte, recordSize)
 		copy(rawCopy, recordData)
 		rawRecords[i] = rawCopy
+		if isShortBuild {
+			// Type-26 short replies carry 218-byte encrypted slots. They are
+			// decrypted later in ReplyProcessor using pending build keys, so
+			// populate a conservative placeholder record here and preserve raw
+			// ciphertext in rawRecords for deferred decryption.
+			records[i] = BuildResponseRecord{Reply: TunnelBuildReplyReject}
+			offset += recordSize
+			continue
+		}
 		record, err := ReadBuildResponseRecord(recordData)
 		if err != nil {
 			return nil, nil, oops.Wrapf(err, "failed to parse response record %d", i)
@@ -169,7 +178,7 @@ func parseResponseRecords(data []byte, count, recordSize, startOffset int) ([]Bu
 // parseFixedBuildRecords parses a fixed number of build response records from data.
 func parseFixedBuildRecords(data []byte, count, recordSize int) ([8]BuildResponseRecord, [][]byte, error) {
 	var records [8]BuildResponseRecord
-	sliceRecords, rawRecords, err := parseResponseRecords(data, count, recordSize, 0)
+	sliceRecords, rawRecords, err := parseResponseRecords(data, count, recordSize, 0, false)
 	if err != nil {
 		return records, nil, err
 	}
@@ -264,7 +273,7 @@ func (p *MessageProcessor) parseBuildResponseRecords(data []byte, isShortBuild b
 		return nil, nil, oops.Errorf("insufficient data for %d records: have %d, need %d", recordCount, len(data), expectedLen)
 	}
 
-	return parseResponseRecords(data, recordCount, recordSize, 1)
+	return parseResponseRecords(data, recordCount, recordSize, 1, isShortBuild)
 }
 
 // processTunnelBuildRequest is the common handler for both STBM and VTB messages.

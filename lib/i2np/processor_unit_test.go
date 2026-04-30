@@ -413,6 +413,57 @@ func TestProcessBuildReplyCommon_InvalidRecordCount(t *testing.T) {
 	assert.False(t, proc.called)
 }
 
+// TestProcessBuildReplyCommon_ShortReply_EncryptedSlots verifies that type-26
+// replies carrying 218-byte encrypted slots are forwarded to the build reply
+// processor without premature legacy 528-byte parsing.
+func TestProcessBuildReplyCommon_ShortReply_EncryptedSlots(t *testing.T) {
+	processor := NewMessageProcessor()
+	proc := &mockBuildReplyProcessor{}
+	processor.SetBuildReplyProcessor(proc)
+
+	msg := NewBaseI2NPMessage(I2NPMessageTypeShortTunnelBuildReply)
+	msg.SetMessageID(12345)
+
+	data := make([]byte, 1+ShortBuildRecordSize)
+	data[0] = 1 // one short reply slot
+	msg.SetData(data)
+
+	err := processor.processBuildReplyCommon(msg, true)
+	assert.NoError(t, err)
+	assert.True(t, proc.called)
+	assert.Equal(t, 12345, proc.messageID)
+
+	handler, ok := proc.handler.(*ShortTunnelBuildReply)
+	if !ok {
+		t.Fatalf("expected *ShortTunnelBuildReply handler, got %T", proc.handler)
+	}
+
+	assert.Equal(t, 1, handler.Count)
+	assert.Len(t, handler.RawRecordData, 1)
+	assert.Len(t, handler.RawRecordData[0], ShortBuildRecordSize)
+	assert.Len(t, handler.BuildResponseRecords, 1)
+	assert.Equal(t, byte(TunnelBuildReplyReject), handler.BuildResponseRecords[0].Reply)
+}
+
+// TestProcessMessageDispatch_ShortReply_EncryptedSlots verifies dispatch path
+// integration for ShortTunnelBuildReply parsing with 218-byte records.
+func TestProcessMessageDispatch_ShortReply_EncryptedSlots(t *testing.T) {
+	processor := NewMessageProcessor()
+	proc := &mockBuildReplyProcessor{}
+	processor.SetBuildReplyProcessor(proc)
+
+	msg := NewBaseI2NPMessage(I2NPMessageTypeShortTunnelBuildReply)
+	msg.SetMessageID(777)
+	data := make([]byte, 1+ShortBuildRecordSize)
+	data[0] = 1
+	msg.SetData(data)
+
+	err := processor.processMessageDispatch(msg)
+	assert.NoError(t, err)
+	assert.True(t, proc.called)
+	assert.Equal(t, 777, proc.messageID)
+}
+
 // TestProcessMessageDispatch_TunnelBuildReply tests dispatch routing for reply types
 func TestProcessMessageDispatch_TunnelBuildReply(t *testing.T) {
 	processor := NewMessageProcessor()
