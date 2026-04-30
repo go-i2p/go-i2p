@@ -627,15 +627,25 @@ func (r *Router) GetSSU2Addr() interface{} {
 // GetNetworkStatus returns the I2PControl network status code.
 // Status codes:
 //
-//	0  = OK
-//	1  = TESTING (not yet connected to any peers)
-//	8  = ERROR_I2CP (router not running)
+//	0  = OK          (running, reachable confirmed external address)
+//	1  = TESTING     (not yet connected to any peers)
+//	2  = FIREWALLED  (running, has peers, but no confirmed external address)
+//	3  = HIDDEN      (router is in hidden mode by configuration)
+//	8  = ERROR_I2CP  (router not running)
 func (r *Router) GetNetworkStatus() int {
 	if !r.IsRunning() {
 		return 8 // ERROR_I2CP
 	}
 	if r.IsReseeding() || r.GetActiveSessionCount() == 0 {
 		return 1 // TESTING — no active peers yet
+	}
+	// Hidden mode: never externally reachable by design.
+	if r.cfg != nil && r.cfg.Hidden {
+		return 3 // HIDDEN
+	}
+	// Firewalled: has peers but no confirmed external address.
+	if r.collectBestExternalAddr() == "" {
+		return 2 // FIREWALLED
 	}
 	return 0 // OK
 }

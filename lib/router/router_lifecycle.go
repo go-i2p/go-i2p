@@ -881,16 +881,16 @@ type tunnelGatewayDispatcher struct {
 }
 
 func (d *tunnelGatewayDispatcher) HandleGateway(tunnelID tunnel.TunnelID, payload []byte) error {
-	if len(payload) < 16 {
+	// BUG-4 fix: use the short-format minimum (9 bytes) as the floor so that
+	// valid 9–15 byte short I2NP messages are not rejected before the fallback
+	// path is attempted. The previous guard of < 16 was too strict.
+	if len(payload) < i2np.ShortI2NPHeaderSize {
 		return oops.Errorf("TunnelGateway payload too short: %d bytes", len(payload))
 	}
 	inner := &i2np.BaseI2NPMessage{}
 	if err := inner.UnmarshalBinary(payload); err != nil {
 		// Fall back to short I2NP format (9-byte header) in case the payload
 		// uses NTCP2 short format.
-		if len(payload) < i2np.ShortI2NPHeaderSize {
-			return oops.Errorf("TunnelGateway payload too short for any I2NP format: %d bytes", len(payload))
-		}
 		inner2 := &i2np.BaseI2NPMessage{}
 		if err2 := inner2.UnmarshalShortI2NP(payload); err2 != nil {
 			return oops.Wrapf(err, "failed to parse inner I2NP message from TunnelGateway payload (standard: %v, short: %v)", err, err2)
