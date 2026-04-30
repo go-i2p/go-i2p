@@ -49,6 +49,10 @@ type TunnelManager struct {
 	cleanupOnce     sync.Once             // Ensures cleanup goroutine starts at most once
 	stopOnce        sync.Once             // Ensures Stop() is idempotent (no double-close panic)
 	replyProcessor  *ReplyProcessor       // Handles reply decryption and processing
+	// garlicKeyRegistrar receives one-time garlic keys derived from STBM Noise
+	// transcript hashes so that incoming ShortTunnelBuildReply garlic messages
+	// can be decrypted. Set via SetGarlicKeyRegistrar after construction.
+	garlicKeyRegistrar GarlicKeyRegistrar
 
 	// Build event windows for period-aware statistics (retained for 2 hours).
 	// These track tunnel build outcomes so GetRate("tunnel.buildExploratorySuccess", period)
@@ -120,6 +124,13 @@ func (tm *TunnelManager) ensureCleanupStarted() {
 		go tm.cleanupExpiredBuilds()
 		log.WithFields(logger.Fields{"at": "ensureCleanupStarted"}).Debug("Tunnel manager cleanup goroutine started (lazy)")
 	})
+}
+
+// SetGarlicKeyRegistrar wires the GarlicKeyRegistrar so that one-time garlic
+// reply keys derived from STBM builds can be registered for later decryption.
+// Must be called before the first tunnel build is initiated.
+func (tm *TunnelManager) SetGarlicKeyRegistrar(r GarlicKeyRegistrar) {
+	tm.garlicKeyRegistrar = r
 }
 
 // Stop gracefully stops the tunnel manager and cleans up resources.
@@ -642,6 +653,27 @@ func (tm *TunnelManager) createShortTunnelBuildMessage(result *tunnel.TunnelBuil
 	}
 	// Store per-hop Noise transcript hashes for STBM reply AEAD decryption.
 	result.NoiseHashes = noiseHashes
+
+	// Derive and register the one-time garlic key for the OBEP's reply.
+	// The OBEP wraps its ShortTunnelBuildReply (type 26) in a garlic message
+	// (type 11) encrypted with a key derived from the last-hop Noise transcript
+	// hash via HKDF("AttachLayerEncryption"). Without registering this key the
+	// garlic reply cannot be decrypted and every exploratory build times out.
+	if tm.garlicKeyRegistrar != nil && len(noiseHashes) > 0 {
+		lastHop := len(noiseHashes) - 1
+		garlicKeyMaterial, err := DeriveSTBMGarlicKey(noiseHashes[lastHop])
+		if err != nil {
+			return nil, oops.Wrapf(err, "failed to derive STBM garlic reply key")
+		}
+		var tag [8]byte
+		copy(tag[:], garlicKeyMaterial[24:32])
+		tm.garlicKeyRegistrar.RegisterOneTimeGarlicKey(tag, garlicKeyMaterial)
+		log.WithFields(logger.Fields{
+			"at":       "createShortTunnelBuildMessage",
+			"tag":      fmt.Sprintf("%x", tag),
+			"last_hop": lastHop,
+		}).Debug("Registered one-time garlic reply key for STBM build")
+	}
 
 	// Apply chained ChaCha20 layer obfuscation. For each hop i (from
 	// second-to-last down to first), XOR every record at index j > i with

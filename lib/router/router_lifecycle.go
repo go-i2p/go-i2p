@@ -1171,6 +1171,9 @@ func (r *Router) wireGarlicSessionManager() {
 		return
 	}
 	r.messageRouter.GetProcessor().SetGarlicSessionManager(garlicMgr)
+	if r.tunnelManager != nil {
+		r.tunnelManager.SetGarlicKeyRegistrar(garlicMgr)
+	}
 	log.WithFields(logger.Fields{"at": "wireGarlicSessionManager"}).Debug("Garlic session manager wired into message processor")
 }
 

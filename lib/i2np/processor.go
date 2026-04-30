@@ -146,6 +146,14 @@ type GarlicMessageDecryptor interface {
 	DecryptGarlicMessage(encrypted []byte) (plaintext []byte, sessionTag [8]byte, sessionHash *[32]byte, err error)
 }
 
+// GarlicKeyRegistrar allows callers to register one-time symmetric garlic keys
+// derived from STBM Noise transcript hashes. Implemented by *GarlicSessionManager.
+type GarlicKeyRegistrar interface {
+	// RegisterOneTimeGarlicKey stores a single-use garlic key for a pending
+	// ShortTunnelBuildReply. tag is garlicKeyMaterial[24:32], key is [0:32].
+	RegisterOneTimeGarlicKey(tag [8]byte, key [32]byte)
+}
+
 // ReplyRecordEncryptor encrypts tunnel build reply records.
 // This interface is satisfied by both BuildRecordCrypto (the concrete adapter)
 // and test mocks.

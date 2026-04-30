@@ -188,6 +188,25 @@ func DeriveSTBMReplyKey(chainingKey [32]byte) ([32]byte, error) {
 	return replyKey, nil
 }
 
+// DeriveSTBMGarlicKey derives the one-time symmetric garlic key used by the
+// OBEP to wrap the ShortTunnelBuildReply in a garlic message (type 11).
+//
+// Derivation matches i2pd:
+//
+//	HKDF-SHA256(salt=noiseHash, ikm="", info="AttachLayerEncryption", out=32)
+//
+// The last 8 bytes of the output are the garlic tag; the full 32 bytes are
+// the ChaCha20-Poly1305 key. Both are returned so the caller can register
+// the (tag, key) pair with the GarlicSessionManager.
+func DeriveSTBMGarlicKey(noiseHash [32]byte) ([32]byte, error) {
+	var key [32]byte
+	r := hkdf.New(sha256.New, []byte{}, noiseHash[:], []byte("AttachLayerEncryption"))
+	if _, err := io.ReadFull(r, key[:]); err != nil {
+		return key, oops.Wrapf(err, "HKDF for AttachLayerEncryption failed")
+	}
+	return key, nil
+}
+
 // DecryptShortBuildRequestRecordNoise is the inverse of EncryptShortBuildRequestRecord:
 // it decrypts a 218-byte STBM record using the Noise_N_25519_ChaChaPoly_SHA256
 // transcript described above. The caller supplies the local router's static

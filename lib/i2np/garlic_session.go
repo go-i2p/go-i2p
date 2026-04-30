@@ -136,6 +136,16 @@ func (sm *GarlicSessionManager) ProcessIncomingDHRatchet(sessionTag [8]byte, new
 	return sm.inner.ProcessIncomingDHRatchet(sessionTag, newRemotePubKey)
 }
 
+// RegisterOneTimeGarlicKey registers a one-time symmetric garlic key derived
+// from a STBM Noise transcript hash via HKDF("AttachLayerEncryption"). The
+// OBEP uses this key to wrap the ShortTunnelBuildReply garlic; it is consumed
+// on first use and never reused.
+//
+// tag is garlicKeyMaterial[24:32], key is garlicKeyMaterial[0:32].
+func (sm *GarlicSessionManager) RegisterOneTimeGarlicKey(tag [8]byte, key [32]byte) {
+	sm.inner.RegisterOneTimeKey(tag, key)
+}
+
 // GetPublicKey returns this session manager's X25519 public key.
 func (sm *GarlicSessionManager) GetPublicKey() [32]byte {
 	return sm.inner.GetPublicKey()
