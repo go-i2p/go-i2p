@@ -962,18 +962,77 @@ func (r *Router) initializeTunnelManager() {
 	// ReplyGateway (NextIdent in the endpoint's STBM cleartext record).
 	// Without this the endpoint writes all-zeros for NextIdent and i2pd drops
 	// every build reply, causing 100% expiry.
-	if routerHash, err := r.getOurRouterHash(); err != nil {
-		log.WithError(err).Error("Failed to get router hash for tunnel pools — build replies will not be routed correctly")
-	} else {
-		outboundPool.SetRouterHash(routerHash)
-		inboundPool.SetRouterHash(routerHash)
+	routerHash, err := r.getOurRouterHash()
+	if err != nil {
+		log.WithError(err).Error("Failed to get router hash for tunnel pools; skipping maintenance startup until identity is available")
+		return
 	}
+	outboundPool.SetRouterHash(routerHash)
+	inboundPool.SetRouterHash(routerHash)
 
 	// BUG-1 fix: start inbound pool BEFORE outbound and gate the outbound pool's
 	// first build attempt on the inbound pool having at least one active tunnel.
 	// Without this ordering both goroutines race and the outbound pool's first
 	// maintainPool() call finds SelectTunnel()==nil, setting ReplyTunnelID=0 in
 	// every STBM OBEP record so i2pd cannot route the ShortTunnelBuildReply back.
+	// Apply all pool policies (hop count, fallback callbacks) BEFORE starting
+	// maintenance so that the very first maintainPool() invocation observes the
+	// correct configuration. Starting maintenance first creates a startup race
+	// where the initial build uses default 3-hop counts on hidden/firewalled
+	// nodes (audit item #5).
+
+	// Hidden mode and AlwaysZeroHopInbound force the inbound exploratory pool
+	// to build 0-hop tunnels (we serve as both IBGW and IBEP). This is the
+	// only way to receive build replies on a host with no reachable address;
+	// without it every outbound build expires at 90s because the second-to-last
+	// hop has no path to deliver the reply back to us.
+	zeroHopInbound := r.cfg != nil && (r.cfg.Hidden || r.cfg.AlwaysZeroHopInbound)
+	if zeroHopInbound && inboundPool != nil {
+		if err := inboundPool.SetHopCount(0); err != nil {
+			log.WithError(err).Error("Failed to enable zero-hop inbound tunnels")
+		} else {
+			log.WithFields(logger.Fields{
+				"at":                      "initializeTunnelManager",
+				"hidden":                  r.cfg.Hidden,
+				"always_zero_hop_inbound": r.cfg.AlwaysZeroHopInbound,
+			}).Info("Inbound exploratory pool configured for zero-hop tunnels")
+		}
+	} else if !zeroHopInbound && inboundPool != nil {
+		// Wire auto-fallback: after autoFallbackThreshold consecutive build
+		// timeouts (VTBRM never received), automatically switch to 0-hop inbound
+		// when no public address is confirmed.
+		inboundPool.SetAutoFallbackCheck(func() bool {
+			return r.collectBestExternalAddr() == ""
+		})
+	}
+
+	// Hidden mode and AlwaysOneHopOutbound force the outbound exploratory pool
+	// to build 1-hop tunnels. With a single hop the OBEP is the peer we just
+	// dialled, so it already has an open session to us and can deliver the
+	// ShortTunnelBuildReply without needing to dial a new inbound connection.
+	// Without this, every outbound build on a firewalled router expires because
+	// the 3rd-hop OBEP cannot reach us.
+	oneHopOutbound := r.cfg != nil && (r.cfg.Hidden || r.cfg.AlwaysOneHopOutbound)
+	if oneHopOutbound && outboundPool != nil {
+		if err := outboundPool.SetHopCount(1); err != nil {
+			log.WithError(err).Error("Failed to enable one-hop outbound tunnels")
+		} else {
+			log.WithFields(logger.Fields{
+				"at":                      "initializeTunnelManager",
+				"hidden":                  r.cfg.Hidden,
+				"always_one_hop_outbound": r.cfg.AlwaysOneHopOutbound,
+			}).Info("Outbound exploratory pool configured for one-hop tunnels")
+		}
+	} else if !oneHopOutbound && outboundPool != nil {
+		// Wire auto-fallback: after autoFallbackThreshold consecutive outbound
+		// build timeouts with no public address, switch to 1-hop outbound.
+		outboundPool.SetAutoFallbackCheck(func() bool {
+			return r.collectBestExternalAddr() == ""
+		})
+	}
+
+	// Gate outbound pool's first build on inbound readiness BEFORE starting
+	// maintenance so the gate is installed before any goroutine can read it.
 	inboundReady := make(chan struct{})
 	if outboundPool != nil {
 		outboundPool.SetStartupGate(inboundReady)
@@ -1023,34 +1082,12 @@ func (r *Router) initializeTunnelManager() {
 		}
 	}()
 
-	// Hidden mode and AlwaysZeroHopInbound force the inbound exploratory pool
-	// to build 0-hop tunnels (we serve as both IBGW and IBEP). This is the
-	// only way to receive build replies on a host with no reachable address;
-	// without it every outbound build expires at 90s because the second-to-last
-	// hop has no path to deliver the reply back to us.
-	zeroHopInbound := r.cfg != nil && (r.cfg.Hidden || r.cfg.AlwaysZeroHopInbound)
-	if zeroHopInbound && inboundPool != nil {
-		if err := inboundPool.SetHopCount(0); err != nil {
-			log.WithError(err).Error("Failed to enable zero-hop inbound tunnels")
-		} else {
-			log.WithFields(logger.Fields{
-				"at":                      "initializeTunnelManager",
-				"hidden":                  r.cfg.Hidden,
-				"always_zero_hop_inbound": r.cfg.AlwaysZeroHopInbound,
-			}).Info("Inbound exploratory pool configured for zero-hop tunnels")
-		}
-	} else if !zeroHopInbound && inboundPool != nil {
-		// Wire auto-fallback: after autoFallbackThreshold consecutive build
-		// timeouts (VTBRM never received), automatically switch to 0-hop inbound
-		// when no public address is confirmed. This implements the follow-up
-		// from PLAN.md B4 without requiring operator intervention.
-		inboundPool.SetAutoFallbackCheck(func() bool {
-			return r.collectBestExternalAddr() == ""
-		})
-		// Startup proactive check: after one build-timeout period, if no inbound
-		// tunnel is established yet and we have no confirmed public address,
-		// switch to 0-hop immediately rather than waiting for
-		// autoFallbackThreshold (3×) failures.
+	// Startup proactive fallback checks: after one build-timeout period, if
+	// no tunnels are live and we have no confirmed public address, trigger
+	// auto-fallback immediately rather than waiting for autoFallbackThreshold
+	// (3×) failures. These are started after maintenance so the pools are
+	// actually running when the timer fires.
+	if !zeroHopInbound && inboundPool != nil {
 		go func() {
 			select {
 			case <-r.ctx.Done():
@@ -1062,33 +1099,7 @@ func (r *Router) initializeTunnelManager() {
 			}
 		}()
 	}
-
-	// Hidden mode and AlwaysOneHopOutbound force the outbound exploratory pool
-	// to build 1-hop tunnels. With a single hop the OBEP is the peer we just
-	// dialled, so it already has an open session to us and can deliver the
-	// ShortTunnelBuildReply without needing to dial a new inbound connection.
-	// Without this, every outbound build on a firewalled router expires because
-	// the 3rd-hop OBEP cannot reach us.
-	oneHopOutbound := r.cfg != nil && (r.cfg.Hidden || r.cfg.AlwaysOneHopOutbound)
-	if oneHopOutbound && outboundPool != nil {
-		if err := outboundPool.SetHopCount(1); err != nil {
-			log.WithError(err).Error("Failed to enable one-hop outbound tunnels")
-		} else {
-			log.WithFields(logger.Fields{
-				"at":                      "initializeTunnelManager",
-				"hidden":                  r.cfg.Hidden,
-				"always_one_hop_outbound": r.cfg.AlwaysOneHopOutbound,
-			}).Info("Outbound exploratory pool configured for one-hop tunnels")
-		}
-	} else if !oneHopOutbound && outboundPool != nil {
-		// Wire auto-fallback: after autoFallbackThreshold consecutive outbound
-		// build timeouts with no public address, switch to 1-hop outbound.
-		outboundPool.SetAutoFallbackCheck(func() bool {
-			return r.collectBestExternalAddr() == ""
-		})
-		// Startup proactive check: mirrors the inbound check above. If no
-		// outbound tunnel is live after one build-timeout period and we have no
-		// confirmed external address, switch to 1-hop immediately.
+	if !oneHopOutbound && outboundPool != nil {
 		go func() {
 			select {
 			case <-r.ctx.Done():
@@ -1100,6 +1111,7 @@ func (r *Router) initializeTunnelManager() {
 			}
 		}()
 	}
+
 	log.WithFields(logger.Fields{
 		"at":            "initializeTunnelManager",
 		"inbound_pool":  inboundPool != nil,

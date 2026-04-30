@@ -1,6 +1,7 @@
 package router
 
 import (
+	"net"
 	"sync"
 	"sync/atomic"
 
@@ -187,12 +188,42 @@ var _ netdb.RouterInfoProvider = (*routerInfoProvider)(nil)
 // the 'R' (reachable) capability flag to the published RouterInfo.
 func hasReachableAddress(addresses []*router_address.RouterAddress) bool {
 	for _, addr := range addresses {
-		if addr == nil {
-			continue
-		}
-		if addr.CheckOption(router_address.HOST_OPTION_KEY) {
+		if isPubliclyReachableRouterAddress(addr) {
 			return true
 		}
 	}
 	return false
+}
+
+// isPubliclyReachableRouterAddress reports whether addr has a host option that
+// is a publicly routable IP address suitable for publishing reachability.
+func isPubliclyReachableRouterAddress(addr *router_address.RouterAddress) bool {
+	if addr == nil || !addr.CheckOption(router_address.HOST_OPTION_KEY) {
+		return false
+	}
+	hostStr := addr.HostString()
+	if hostStr == nil {
+		return false
+	}
+	host, err := hostStr.Data()
+	if err != nil {
+		return false
+	}
+	return isPubliclyRoutableHost(host)
+}
+
+// isPubliclyRoutableHost reports whether host is a parseable IP literal that is
+// globally routable and non-private.
+func isPubliclyRoutableHost(host string) bool {
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	if !ip.IsGlobalUnicast() {
+		return false
+	}
+	if ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
+		return false
+	}
+	return true
 }

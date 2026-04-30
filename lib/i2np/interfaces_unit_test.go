@@ -94,9 +94,13 @@ func TestTunnelManager(t *testing.T) {
 	manager := NewTunnelManager(&MockTestPeerSelector{}) // Use mock peer selector for test
 
 	// Test with outbound tunnel build request - should get error due to insufficient peers
+	var ourHash common.Hash
+	ourHash[0] = 0x01
 	req := tunnel.BuildTunnelRequest{
-		IsInbound: false,
-		HopCount:  3,
+		IsInbound:     false,
+		HopCount:      3,
+		OurIdentity:   ourHash,
+		ReplyTunnelID: 1, // non-zero: bypass inbound-pool injection
 	}
 	result, err := manager.BuildTunnel(req)
 	assert.Error(t, err)
@@ -105,8 +109,10 @@ func TestTunnelManager(t *testing.T) {
 
 	// Test with inbound tunnel build request - should also get error
 	inboundReq := tunnel.BuildTunnelRequest{
-		IsInbound: true,
-		HopCount:  2,
+		IsInbound:    true,
+		HopCount:     2,
+		OurIdentity:  ourHash,
+		ReplyGateway: ourHash,
 	}
 	result, err = manager.BuildTunnel(inboundReq)
 	assert.Error(t, err)

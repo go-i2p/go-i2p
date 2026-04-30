@@ -2,7 +2,9 @@ package router
 
 import (
 	"testing"
+	"time"
 
+	"github.com/go-i2p/common/router_address"
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -287,5 +289,69 @@ func TestRouterInfoProvider_CongestionFlagTransitions(t *testing.T) {
 		// RouterCapabilities may include I2P length prefix, so use Contains
 		caps := ri.RouterCapabilities()
 		assert.Contains(t, caps, tt.expectedCaps, "Caps should contain %q for flag %q", tt.expectedCaps, tt.flag)
+	}
+}
+
+func TestIsPubliclyRoutableHost(t *testing.T) {
+	tests := []struct {
+		name string
+		host string
+		want bool
+	}{
+		{name: "empty", host: "", want: false},
+		{name: "hostname", host: "example.com", want: false},
+		{name: "private ipv4", host: "192.168.1.10", want: false},
+		{name: "loopback ipv4", host: "127.0.0.1", want: false},
+		{name: "link local ipv4", host: "169.254.1.1", want: false},
+		{name: "loopback ipv6", host: "::1", want: false},
+		{name: "link local ipv6", host: "fe80::1", want: false},
+		{name: "unique local ipv6", host: "fc00::1", want: false},
+		{name: "public ipv4", host: "8.8.8.8", want: true},
+		{name: "public ipv6", host: "2001:4860:4860::8888", want: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, isPubliclyRoutableHost(tt.host))
+		})
+	}
+}
+
+func TestHasReachableAddress_UsesPublicRoutableHostPolicy(t *testing.T) {
+	makeAddr := func(host string) *router_address.RouterAddress {
+		opts := map[string]string{
+			router_address.PORT_OPTION_KEY: "12345",
+		}
+		if host != "" {
+			opts[router_address.HOST_OPTION_KEY] = host
+		}
+		addr, err := router_address.NewRouterAddress(10, time.Time{}, "NTCP2", opts)
+		require.NoError(t, err)
+		return addr
+	}
+
+	tests := []struct {
+		name  string
+		hosts []string
+		want  bool
+	}{
+		{name: "nil address list", hosts: nil, want: false},
+		{name: "no host option", hosts: []string{""}, want: false},
+		{name: "private only", hosts: []string{"10.0.0.3", "192.168.1.2"}, want: false},
+		{name: "loopback only", hosts: []string{"127.0.0.1", "::1"}, want: false},
+		{name: "link local only", hosts: []string{"169.254.2.2", "fe80::2"}, want: false},
+		{name: "public ipv4 present", hosts: []string{"10.0.0.3", "8.8.8.8"}, want: true},
+		{name: "public ipv6 present", hosts: []string{"fc00::2", "2001:4860:4860::8888"}, want: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			addresses := make([]*router_address.RouterAddress, 0, len(tt.hosts)+1)
+			addresses = append(addresses, nil) // Ensure nil entries are ignored.
+			for _, host := range tt.hosts {
+				addresses = append(addresses, makeAddr(host))
+			}
+			assert.Equal(t, tt.want, hasReachableAddress(addresses))
+		})
 	}
 }

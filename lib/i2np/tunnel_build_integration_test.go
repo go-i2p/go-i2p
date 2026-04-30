@@ -122,9 +122,13 @@ func TestTunnelManager_BuildTunnel_InsufficientPeers(t *testing.T) {
 	tm := NewTunnelManager(insufficientPeerSelector)
 
 	// Build request for outbound tunnel
+	var ourHash common.Hash
+	ourHash[0] = 0x01
 	req := tunnel.BuildTunnelRequest{
-		IsInbound: false,
-		HopCount:  3,
+		IsInbound:     false,
+		HopCount:      3,
+		OurIdentity:   ourHash,
+		ReplyTunnelID: 1, // non-zero: bypass inbound-pool injection
 	}
 
 	// Should fail due to insufficient peers

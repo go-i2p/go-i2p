@@ -3,6 +3,7 @@ package i2np
 import (
 	"testing"
 
+	common "github.com/go-i2p/common/data"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -16,9 +17,14 @@ func TestBuildTunnelFromRequest_ZeroHopInbound(t *testing.T) {
 	tm := NewTunnelManager(&MockTestPeerSelector{})
 	defer tm.Stop()
 
+	var ourHash common.Hash
+	ourHash[0] = 0x01
+
 	req := tunnel.BuildTunnelRequest{
-		IsInbound: true,
-		HopCount:  0,
+		IsInbound:    true,
+		HopCount:     0,
+		OurIdentity:  ourHash,
+		ReplyGateway: ourHash,
 	}
 	tunnelID, peerHashes, err := tm.BuildTunnelFromRequest(req)
 	require.NoError(t, err, "0-hop inbound build must not fail even with zero peers available")
@@ -36,4 +42,31 @@ func TestBuildTunnelFromRequest_ZeroHopInbound(t *testing.T) {
 	assert.Equal(t, tunnel.TunnelReady, state.State)
 	assert.True(t, state.IsInbound)
 	assert.Empty(t, state.Hops, "0-hop tunnel has no remote hops")
+}
+
+func TestBuildTunnelFromRequest_RejectsZeroRouterIdentity(t *testing.T) {
+	tm := NewTunnelManager(&MockTestPeerSelector{})
+	defer tm.Stop()
+
+	_, _, err := tm.BuildTunnelFromRequest(tunnel.BuildTunnelRequest{IsInbound: true, HopCount: 0})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "identity is unset")
+}
+
+func TestBuildTunnelFromRequest_RejectsOutboundWithoutInboundReplyPath(t *testing.T) {
+	tm := NewTunnelManager(&MockTestPeerSelector{})
+	defer tm.Stop()
+
+	var ourHash common.Hash
+	ourHash[0] = 0x02
+
+	_, _, err := tm.BuildTunnelFromRequest(tunnel.BuildTunnelRequest{
+		IsInbound:     false,
+		HopCount:      1,
+		OurIdentity:   ourHash,
+		ReplyGateway:  ourHash,
+		ReplyTunnelID: 0,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "requires active inbound tunnel")
 }

@@ -236,6 +236,15 @@ func (tm *TunnelManager) BuildTunnel(req tunnel.BuildTunnelRequest) (*tunnel.Bui
 // 4. Sends the build request via appropriate transport
 // 5. Returns the tunnel ID, selected peer hashes, and any error
 func (tm *TunnelManager) BuildTunnelFromRequest(req tunnel.BuildTunnelRequest) (tunnel.TunnelID, []common.Hash, error) {
+	var zeroHash common.Hash
+	if req.OurIdentity == zeroHash {
+		return 0, nil, oops.Errorf("invalid build request: router identity is unset")
+	}
+	// ReplyGateway is only required for inbound tunnels; outbound builds use ReplyTunnelID instead.
+	if req.IsInbound && req.ReplyGateway == zeroHash {
+		return 0, nil, oops.Errorf("invalid build request: reply gateway is unset for inbound tunnel")
+	}
+
 	// Zero-hop inbound short-circuit: no remote hop, no build message,
 	// no pending-build tracking. Register the tunnel directly as Active so
 	// the inbound pool exposes it as a usable reply path immediately.
@@ -255,9 +264,7 @@ func (tm *TunnelManager) BuildTunnelFromRequest(req tunnel.BuildTunnelRequest) (
 				"reply_tunnel_id": inbound.ID,
 			}).Debug("injected inbound tunnel ID into outbound build request for OBEP reply routing")
 		} else {
-			log.WithFields(logger.Fields{
-				"at": "BuildTunnelFromRequest",
-			}).Warn("no active inbound tunnels available; outbound build will use ReplyTunnelID=0 (reply routing may fail)")
+			return 0, nil, oops.Errorf("outbound build requires active inbound tunnel for reply routing")
 		}
 	}
 
