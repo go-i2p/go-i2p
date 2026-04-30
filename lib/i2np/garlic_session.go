@@ -3,6 +3,8 @@ package i2np
 import (
 	"context"
 	"encoding/binary"
+	"fmt"
+	"sync"
 	"time"
 
 	common "github.com/go-i2p/common/data"
@@ -25,6 +27,11 @@ import (
 //  3. Session Expiry: Sessions expire after inactivity timeout
 type GarlicSessionManager struct {
 	inner *noiseratchet.SessionManager
+
+	// oneTimeDiag mirrors one-time tag registrations for diagnostics only.
+	// It helps correlate inbound garlic tags with registration activity.
+	oneTimeDiagMu sync.Mutex
+	oneTimeDiag   map[[8]byte]struct{}
 }
 
 // NewGarlicSessionManager creates a new garlic session manager with the given private key.
@@ -39,7 +46,7 @@ func NewGarlicSessionManager(privateKey [32]byte) (*GarlicSessionManager, error)
 		return nil, oops.Wrapf(err, "failed to create session manager")
 	}
 
-	return &GarlicSessionManager{inner: inner}, nil
+	return &GarlicSessionManager{inner: inner, oneTimeDiag: make(map[[8]byte]struct{})}, nil
 }
 
 // GenerateGarlicSessionManager creates a session manager with a fresh key pair.
@@ -53,7 +60,7 @@ func GenerateGarlicSessionManager() (*GarlicSessionManager, error) {
 		return nil, oops.Wrapf(err, "failed to generate session manager")
 	}
 
-	return &GarlicSessionManager{inner: inner}, nil
+	return &GarlicSessionManager{inner: inner, oneTimeDiag: make(map[[8]byte]struct{})}, nil
 }
 
 // EncryptGarlicMessage encrypts a plaintext garlic message for the given destination.
@@ -98,9 +105,62 @@ func (sm *GarlicSessionManager) EncryptGarlicMessage(
 //     Callers that need to send a New Session Reply must pass the dereferenced
 //     value to EncryptNewSessionReply.
 func (sm *GarlicSessionManager) DecryptGarlicMessage(encryptedGarlic []byte) ([]byte, [8]byte, *[32]byte, error) {
+	var incomingTag [8]byte
+	if len(encryptedGarlic) >= 8 {
+		copy(incomingTag[:], encryptedGarlic[:8])
+	}
+
+	sm.oneTimeDiagMu.Lock()
+	_, oneTimeTagRegistered := sm.oneTimeDiag[incomingTag]
+	oneTimeTagMapSizeBefore := len(sm.oneTimeDiag)
+	sm.oneTimeDiagMu.Unlock()
+
+	if len(encryptedGarlic) >= 8 {
+		log.WithFields(logger.Fields{
+			"at":                           "DecryptGarlicMessage",
+			"incoming_tag":                 fmt.Sprintf("%x", incomingTag),
+			"one_time_tag_registered":      oneTimeTagRegistered,
+			"one_time_tag_map_size_before": oneTimeTagMapSizeBefore,
+			"encrypted_size":               len(encryptedGarlic),
+		}).Debug("Garlic decrypt diagnostics")
+	}
+
 	payload, sessionTag, sessionHash, err := sm.inner.DecryptGarlicMessage(encryptedGarlic)
 	if err != nil {
+		sm.oneTimeDiagMu.Lock()
+		if oneTimeTagRegistered {
+			delete(sm.oneTimeDiag, incomingTag)
+		}
+		oneTimeTagMapSizeAfter := len(sm.oneTimeDiag)
+		sm.oneTimeDiagMu.Unlock()
+
+		if len(encryptedGarlic) >= 8 {
+			log.WithFields(logger.Fields{
+				"at":                          "DecryptGarlicMessage",
+				"incoming_tag":                fmt.Sprintf("%x", incomingTag),
+				"one_time_tag_registered":     oneTimeTagRegistered,
+				"one_time_tag_map_size_after": oneTimeTagMapSizeAfter,
+				"error":                       err,
+			}).Debug("Garlic decrypt failed")
+		}
 		return nil, [8]byte{}, nil, err
+	}
+
+	sm.oneTimeDiagMu.Lock()
+	if oneTimeTagRegistered {
+		delete(sm.oneTimeDiag, incomingTag)
+	}
+	oneTimeTagMapSizeAfter := len(sm.oneTimeDiag)
+	sm.oneTimeDiagMu.Unlock()
+
+	if len(encryptedGarlic) >= 8 {
+		log.WithFields(logger.Fields{
+			"at":                          "DecryptGarlicMessage",
+			"incoming_tag":                fmt.Sprintf("%x", incomingTag),
+			"one_time_tag_registered":     oneTimeTagRegistered,
+			"one_time_tag_map_size_after": oneTimeTagMapSizeAfter,
+			"session_tag":                 fmt.Sprintf("%x", sessionTag),
+		}).Debug("Garlic decrypt succeeded")
 	}
 
 	// Extract raw garlic bytes from the ratchet payload format.
@@ -143,6 +203,17 @@ func (sm *GarlicSessionManager) ProcessIncomingDHRatchet(sessionTag [8]byte, new
 //
 // tag is garlicKeyMaterial[24:32], key is garlicKeyMaterial[0:32].
 func (sm *GarlicSessionManager) RegisterOneTimeGarlicKey(tag [8]byte, key [32]byte) {
+	sm.oneTimeDiagMu.Lock()
+	sm.oneTimeDiag[tag] = struct{}{}
+	oneTimeTagMapSize := len(sm.oneTimeDiag)
+	sm.oneTimeDiagMu.Unlock()
+
+	log.WithFields(logger.Fields{
+		"at":                    "RegisterOneTimeGarlicKey",
+		"tag":                   fmt.Sprintf("%x", tag),
+		"one_time_tag_map_size": oneTimeTagMapSize,
+	}).Debug("Registered one-time garlic key (diagnostic mirror)")
+
 	sm.inner.RegisterOneTimeKey(tag, key)
 }
 

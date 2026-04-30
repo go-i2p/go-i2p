@@ -1,6 +1,7 @@
 package i2np
 
 import (
+	"encoding/binary"
 	"fmt"
 	"testing"
 	"time"
@@ -572,4 +573,34 @@ func TestValidateGarlicSession_WithMock(t *testing.T) {
 
 	err := processor.validateGarlicSession()
 	assert.NoError(t, err)
+}
+
+func TestExtractGarlicData_StripsLengthPrefix(t *testing.T) {
+	processor := NewMessageProcessor()
+
+	ciphertext := []byte{0x11, 0x22, 0x33, 0x44, 0x55}
+	framed := make([]byte, 4+len(ciphertext))
+	binary.BigEndian.PutUint32(framed[:4], uint32(len(ciphertext)))
+	copy(framed[4:], ciphertext)
+
+	msg := NewBaseI2NPMessage(I2NPMessageTypeGarlic)
+	msg.SetMessageID(123)
+	msg.SetData(framed)
+
+	got, err := processor.extractGarlicData(msg)
+	assert.NoError(t, err)
+	assert.Equal(t, ciphertext, got)
+}
+
+func TestExtractGarlicData_LeavesUnframedPayloadUntouched(t *testing.T) {
+	processor := NewMessageProcessor()
+
+	raw := []byte{0xAA, 0xBB, 0xCC, 0xDD, 0xEE}
+	msg := NewBaseI2NPMessage(I2NPMessageTypeGarlic)
+	msg.SetMessageID(124)
+	msg.SetData(raw)
+
+	got, err := processor.extractGarlicData(msg)
+	assert.NoError(t, err)
+	assert.Equal(t, raw, got)
 }

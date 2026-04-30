@@ -323,14 +323,45 @@ func (p *MessageProcessor) extractGarlicData(msg I2NPMessage) ([]byte, error) {
 		return nil, oops.Errorf("garlic message contains no data")
 	}
 
+	// Garlic (type 11) encrypted payload on the wire is length-prefixed:
+	//   [4-byte big-endian length][ciphertext bytes]
+	// DecryptGarlicMessage expects ciphertext to begin with the 8-byte session
+	// tag, so strip the prefix when it is present and consistent.
+	if len(encryptedData) >= 4 {
+		declaredLen := int(binary.BigEndian.Uint32(encryptedData[0:4]))
+		if declaredLen == len(encryptedData)-4 {
+			payload := encryptedData[4:]
+			tagHead := ""
+			if len(payload) >= 8 {
+				tagHead = fmt.Sprintf("%x", payload[:8])
+			} else {
+				tagHead = fmt.Sprintf("%x", payload)
+			}
+			log.WithFields(logger.Fields{
+				"msg_id":              msg.MessageID(),
+				"framed_size":         len(encryptedData),
+				"declared_size":       declaredLen,
+				"ciphertext_size":     len(payload),
+				"ciphertext_tag_head": tagHead,
+			}).Debug("Stripped Garlic length prefix before decryption")
+			return payload, nil
+		}
+	}
+
 	return encryptedData, nil
 }
 
 // decryptGarlicData decrypts the garlic message using the session manager.
 func (p *MessageProcessor) decryptGarlicData(msgID int, encryptedData []byte) ([]byte, [8]byte, error) {
+	incomingTag := ""
+	if len(encryptedData) >= 8 {
+		incomingTag = fmt.Sprintf("%x", encryptedData[:8])
+	}
+
 	log.WithFields(logger.Fields{
 		"msg_id":         msgID,
 		"encrypted_size": len(encryptedData),
+		"incoming_tag":   incomingTag,
 	}).Debug("Decrypting garlic message")
 
 	decryptedData, sessionTag, _, err := p.garlicSessions.DecryptGarlicMessage(encryptedData)
