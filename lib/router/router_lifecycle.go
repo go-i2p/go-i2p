@@ -914,6 +914,18 @@ func (r *Router) initializeTunnelManager() {
 	outboundPool := tm.GetOutboundPool()
 	inboundPool := tm.GetInboundPool()
 
+	// Set our router hash on both pools BEFORE starting maintenance so that
+	// the very first prepareBuildRequest() call has a valid OurIdentity and
+	// ReplyGateway (NextIdent in the endpoint's STBM cleartext record).
+	// Without this the endpoint writes all-zeros for NextIdent and i2pd drops
+	// every build reply, causing 100% expiry.
+	if routerHash, err := r.getOurRouterHash(); err != nil {
+		log.WithError(err).Error("Failed to get router hash for tunnel pools — build replies will not be routed correctly")
+	} else {
+		outboundPool.SetRouterHash(routerHash)
+		inboundPool.SetRouterHash(routerHash)
+	}
+
 	for _, pool := range []*tunnel.Pool{outboundPool, inboundPool} {
 		if pool == nil {
 			continue

@@ -143,6 +143,8 @@ type Pool struct {
 // ReplyGateway field in outgoing tunnel build requests. This tells the last
 // hop in the build chain where to send the build reply.
 func (p *Pool) SetRouterHash(hash common.Hash) {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
 	p.routerHash = hash
 }
 
@@ -861,16 +863,20 @@ func (p *Pool) prepareBuildRequest(excludePeers []common.Hash) BuildTunnelReques
 	progressiveExclude := make([]common.Hash, len(excludePeers))
 	copy(progressiveExclude, excludePeers)
 
+	p.mutex.RLock()
+	ourHash := p.routerHash
+	p.mutex.RUnlock()
+
 	return BuildTunnelRequest{
 		HopCount:                  p.config.HopCount,
 		IsInbound:                 p.config.IsInbound,
 		IsClientTunnel:            p.config.IsClientPool,
 		UseShortBuild:             true, // Use modern STBM by default
 		ExcludePeers:              progressiveExclude,
-		RequireDirectConnectivity: true,         // FIX: Only select directly-contactable peers
-		OurIdentity:               p.routerHash, // Our router hash for reply routing
-		ReplyGateway:              p.routerHash, // Last hop sends reply directly to us
-		ReplyTunnelID:             0,            // 0 = direct delivery (no intermediate inbound tunnel)
+		RequireDirectConnectivity: true,    // FIX: Only select directly-contactable peers
+		OurIdentity:               ourHash, // Our router hash for reply routing
+		ReplyGateway:              ourHash, // Last hop sends reply directly to us
+		ReplyTunnelID:             0,       // 0 = direct delivery (no intermediate inbound tunnel)
 	}
 }
 
