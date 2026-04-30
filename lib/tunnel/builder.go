@@ -89,6 +89,7 @@ type TunnelBuildResult struct {
 	Records       []BuildRequestRecord     // Build records for each hop
 	ReplyKeys     []session_key.SessionKey // Reply decryption keys for each hop
 	ReplyIVs      [][16]byte               // Reply IVs for each hop
+	NoiseHashes   [][32]byte               // Per-hop Noise transcript hashes (m_H) for STBM reply AEAD decryption
 	UseShortBuild bool                     // True if using Short Tunnel Build (STBM), false for Variable Tunnel Build
 	IsInbound     bool                     // True if this is an inbound tunnel
 }

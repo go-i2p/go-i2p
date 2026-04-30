@@ -165,6 +165,14 @@ type BuildRequestDecryptor interface {
 }
 
 // MessageProcessor demonstrates interface-based message processing
+// stbmSlotCrypto holds the Noise-derived reply key and transcript hash for a single
+// STBM build request record slot. These are computed during ECIES decryption and
+// required later when building the AEAD-encrypted reply record.
+type stbmSlotCrypto struct {
+	replyKey  [32]byte
+	noiseHash [32]byte
+}
+
 type MessageProcessor struct {
 	mu                    sync.RWMutex
 	factory               *I2NPMessageFactory
@@ -185,6 +193,7 @@ type MessageProcessor struct {
 	ourRouterHash         common.Hash               // Our router identity hash for filtering build records
 	ourPrivateKey         []byte                    // Our router's static X25519 private key for build record decryption
 	garlicRecursionDepth  int32                     // Atomic counter for garlic nesting depth
+	stbmSlotCrypto        map[int]stbmSlotCrypto    // Per-slot STBM crypto state (valid during one message processing call)
 }
 
 // NewMessageProcessor creates a new message processor

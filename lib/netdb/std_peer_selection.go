@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/go-i2p/crypto/rand"
 	"github.com/samber/oops"
@@ -14,6 +15,12 @@ import (
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/bootstrap"
 )
+
+// maxRouterInfoAge is the maximum age of a RouterInfo before it is considered
+// too stale for tunnel building. Peers with stale RIs may have rotated their
+// X25519 encryption keys, causing STBM record decryption failures.
+// I2P spec considers RIs stale after 1 hour; we use 2 hours to be conservative.
+const maxRouterInfoAge = 2 * time.Hour
 
 // capsAllowsTunnelParticipation returns true when the router's caps string
 // indicates it is willing and able to participate as a tunnel hop. Per the
@@ -178,6 +185,21 @@ func shouldSkipPeer(ri router_info.RouterInfo, excludeMap map[common.Hash]bool, 
 		}).Debug("Skipping peer ineligible to participate in tunnels")
 		stats.skippedNoRCap++
 		return true
+	}
+	// Reject RouterInfos that are too old. Peers may rotate their X25519
+	// encryption keys; if we encrypt STBM records with a stale key the
+	// remote peer cannot decrypt the record and silently drops the message.
+	if published := ri.Published(); published != nil {
+		age := time.Since(published.Time())
+		if age > maxRouterInfoAge {
+			log.WithFields(logger.Fields{
+				"peer_hash": fmt.Sprintf("%x", riHash[:8]),
+				"ri_age_s":  int(age.Seconds()),
+				"reason":    "router_info_too_old",
+			}).Debug("Skipping peer with stale RouterInfo")
+			stats.skippedStale++
+			return true
+		}
 	}
 	return false
 }

@@ -5,10 +5,10 @@ import (
 	"time"
 
 	common "github.com/go-i2p/common/data"
-	"github.com/go-i2p/common/session_key"
 	"github.com/go-i2p/crypto/rand"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
+	"golang.org/x/crypto/chacha20poly1305"
 )
 
 // processShortTunnelBuildMessage processes Short Tunnel Build Messages (STBM).
@@ -409,10 +409,14 @@ func (p *MessageProcessor) generateAndSendBuildReply(messageID, index int, recor
 	var encryptedReply []byte
 
 	if isShortBuild {
-		// STBM path: 218-byte ChaCha20 stream XOR reply, assembled into a full
-		// N-slot ShortTunnelBuildReply message body.
+		// STBM path: 218-byte ChaCha20-Poly1305 AEAD reply at our slot, ChaCha20 XOR for other slots.
+		// The derived reply key and noise hash are stored in stbmSlotCrypto by decryptShortRecord.
+		var crypto stbmSlotCrypto
+		if p.stbmSlotCrypto != nil {
+			crypto = p.stbmSlotCrypto[index]
+		}
 		var err error
-		encryptedReply, err = p.buildSTBMReplyMessage(rawData, index, record.ReplyKey, replyCode)
+		encryptedReply, err = p.buildSTBMReplyMessage(rawData, index, crypto, replyCode)
 		if err != nil {
 			return oops.Wrapf(err, "failed to build STBM reply message")
 		}
@@ -466,17 +470,10 @@ func (p *MessageProcessor) generateAndSendBuildReply(messageID, index int, recor
 //
 //	[count:1][slot_0:218][slot_1:218]...[slot_N-1:218]
 //
-// The slot at position ourIndex is replaced with a fresh 218-byte ChaCha20
-// stream-cipher reply: byte 0 = replyCode, bytes 1-217 = random, then XOR'd
-// with ChaCha20(key=replyKey, nonce[4]=ourIndex). All other slots are copied
-// verbatim from the original incoming build message so the reply carries the
-// correct number of records and wire-length.
-//
-// Note: intermediate hops in a multi-hop STBM will fill their own slot here;
-// the other slots will still contain the incoming ECIES ciphertext and will
-// decode as random bytes at the initiator. Full hop-by-hop relay forwarding
-// (peeling layers, passing the modified message onward) is a separate TODO.
-func (p *MessageProcessor) buildSTBMReplyMessage(rawData []byte, ourIndex int, replyKey session_key.SessionKey, replyCode byte) ([]byte, error) {
+// Our slot (ourIndex) is encrypted with ChaCha20-Poly1305 AEAD using the Noise-derived
+// replyKey and noiseHash as AD. All other slots are ChaCha20-XOR'd with the same replyKey.
+// Matches i2pd I2NPProtocol.cpp transit-hop reply construction.
+func (p *MessageProcessor) buildSTBMReplyMessage(rawData []byte, ourIndex int, crypto stbmSlotCrypto, replyCode byte) ([]byte, error) {
 	if len(rawData) < 1 {
 		return nil, oops.Errorf("STBM rawData empty")
 	}
@@ -492,28 +489,48 @@ func (p *MessageProcessor) buildSTBMReplyMessage(rawData []byte, ourIndex int, r
 		return nil, oops.Errorf("STBM slot index %d out of range [0, %d)", ourIndex, count)
 	}
 
-	// Copy all slots from the incoming build message verbatim.
+	// Start with a verbatim copy of the full incoming build message.
 	replyData := make([]byte, expected)
 	replyData[0] = byte(count)
 	copy(replyData[1:], rawData[1:expected])
 
-	// Build our 218-byte reply slot: byte 0 = replyCode, bytes 1-217 = random.
-	var ourSlot [ShortBuildRecordSize]byte
-	ourSlot[0] = replyCode
-	if _, err := rand.Read(ourSlot[1:]); err != nil {
-		return nil, oops.Wrapf(err, "failed to generate STBM reply padding")
+	// For each slot: apply ChaCha20 XOR to all slots (including ours), then
+	// AEAD-encrypt ours in-place to overwrite the XOR result for that slot.
+	//
+	// i2pd does it slightly differently (sets options+retCode then AEAD for ours, XOR for others),
+	// but the spec says each hop AEAD-encrypts its slot. We follow i2pd exactly:
+	//   - own slot: zero out options(2 bytes), set retCode, then AEAD-encrypt
+	//   - other slots: ChaCha20 XOR
+	var nonce [12]byte
+	for j := 0; j < count; j++ {
+		slotOffset := 1 + j*ShortBuildRecordSize
+		nonce[4] = byte(j)
+		if j == ourIndex {
+			// Prepare 202-byte cleartext: zero options, random padding, retCode at [201].
+			var cleartext [ShortBuildRecordSize - 16]byte // 202 bytes
+			cleartext[0] = 0x00                           // options high byte
+			cleartext[1] = 0x00                           // options low byte
+			if _, err := rand.Read(cleartext[2:201]); err != nil {
+				return nil, oops.Wrapf(err, "failed to generate STBM reply padding")
+			}
+			cleartext[201] = replyCode
+			// AEAD-encrypt 202-byte cleartext → 218 bytes.
+			aead, err := chacha20poly1305.New(crypto.replyKey[:])
+			if err != nil {
+				return nil, oops.Wrapf(err, "ChaCha20-Poly1305 init failed")
+			}
+			ciphertext := aead.Seal(nil, nonce[:], cleartext[:], crypto.noiseHash[:])
+			copy(replyData[slotOffset:], ciphertext[:ShortBuildRecordSize])
+		} else {
+			// XOR other slots with replyKey so the next hop can peel our layer.
+			var slot [ShortBuildRecordSize]byte
+			copy(slot[:], replyData[slotOffset:slotOffset+ShortBuildRecordSize])
+			if err := chacha20XORRecord(&slot, crypto.replyKey, j); err != nil {
+				return nil, oops.Wrapf(err, "ChaCha20 XOR failed for STBM reply slot %d", j)
+			}
+			copy(replyData[slotOffset:slotOffset+ShortBuildRecordSize], slot[:])
+		}
 	}
-
-	// XOR with ChaCha20 stream: key = replyKey, nonce[4] = ourIndex.
-	var key [32]byte
-	copy(key[:], replyKey[:])
-	if err := chacha20XORRecord(&ourSlot, key, ourIndex); err != nil {
-		return nil, oops.Wrapf(err, "chacha20XOR failed for STBM reply slot %d", ourIndex)
-	}
-
-	// Place our reply slot at the correct offset in the reply body.
-	slotOffset := 1 + ourIndex*ShortBuildRecordSize
-	copy(replyData[slotOffset:slotOffset+ShortBuildRecordSize], ourSlot[:])
 
 	log.WithFields(logger.Fields{
 		"at":         "buildSTBMReplyMessage",
@@ -686,9 +703,23 @@ func (p *MessageProcessor) tryParseShortRecord(records *[]BuildRequestRecord, re
 }
 
 // decryptShortRecord decrypts a 218-byte STBM record using ECIES-X25519-AEAD.
+// As a side effect it populates p.stbmSlotCrypto[index] with the Noise-derived
+// reply key and transcript hash that are needed to build the AEAD reply.
 func (p *MessageProcessor) decryptShortRecord(recordData []byte, index int) (BuildRequestRecord, error) {
 	var encrypted [218]byte
 	copy(encrypted[:], recordData[:218])
+	ck, noiseHash, err := DecryptSTBMRecordReturningChainingKeyAndHash(encrypted, p.ourPrivateKey)
+	if err != nil {
+		return BuildRequestRecord{}, err
+	}
+	replyKey, err := DeriveSTBMReplyKey(ck)
+	if err != nil {
+		return BuildRequestRecord{}, oops.Wrapf(err, "failed to derive STBM reply key for slot %d", index)
+	}
+	if p.stbmSlotCrypto == nil {
+		p.stbmSlotCrypto = make(map[int]stbmSlotCrypto)
+	}
+	p.stbmSlotCrypto[index] = stbmSlotCrypto{replyKey: replyKey, noiseHash: noiseHash}
 	return DecryptShortBuildRequestRecord(encrypted, p.ourPrivateKey)
 }
 

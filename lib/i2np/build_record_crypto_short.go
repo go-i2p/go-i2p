@@ -3,7 +3,9 @@ package i2np
 import (
 	"crypto/rand"
 	"crypto/sha256"
+	"fmt"
 	"io"
+	"time"
 
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/logger"
@@ -64,7 +66,7 @@ func initSTBMNoiseN(recipientStaticPub []byte) *noise.SymmetricState {
 //	ciphertext = AEAD_ChaCha20Poly1305(key=ck[32:64], nonce=0, ad=h, plaintext)
 //	MixHash(ciphertext)
 func EncryptShortBuildRequestRecord(record BuildRequestRecord, recipientRouterInfo router_info.RouterInfo) ([218]byte, error) {
-	encrypted, _, err := EncryptShortBuildRequestRecordWithChain(record, recipientRouterInfo)
+	encrypted, _, _, err := EncryptShortBuildRequestRecordWithChain(record, recipientRouterInfo)
 	return encrypted, err
 }
 
@@ -76,27 +78,30 @@ func EncryptShortBuildRequestRecord(record BuildRequestRecord, recipientRouterIn
 // build protocol mandates over records following each hop.
 //
 // See i2pd ShortECIESTunnelHopConfig::CreateBuildRequestRecord for the full
-// per-hop key derivation chain.
-func EncryptShortBuildRequestRecordWithChain(record BuildRequestRecord, recipientRouterInfo router_info.RouterInfo) ([218]byte, [32]byte, error) {
+// per-hop key derivation chain. Also returns the Noise transcript hash (m_H)
+// after EncryptAndHash, which the initiator stores and later uses as AEAD
+// associated data when decrypting each hop's ShortTunnelBuildReply record.
+func EncryptShortBuildRequestRecordWithChain(record BuildRequestRecord, recipientRouterInfo router_info.RouterInfo) ([218]byte, [32]byte, [32]byte, error) {
 	var encrypted [218]byte
 	var chainingKey [32]byte
+	var noiseHash [32]byte
 
 	full := record.ShortBytes()
 	if len(full) != ShortBuildRecordSize {
-		return encrypted, chainingKey, oops.Errorf("invalid ShortBytes size: expected %d, got %d", ShortBuildRecordSize, len(full))
+		return encrypted, chainingKey, noiseHash, oops.Errorf("invalid ShortBytes size: expected %d, got %d", ShortBuildRecordSize, len(full))
 	}
 
 	recipientPubKey, err := extractEncryptionPublicKey(recipientRouterInfo)
 	if err != nil {
-		return encrypted, chainingKey, oops.Wrapf(err, "failed to extract encryption public key")
+		return encrypted, chainingKey, noiseHash, oops.Wrapf(err, "failed to extract encryption public key")
 	}
 	if len(recipientPubKey) != 32 {
-		return encrypted, chainingKey, oops.Errorf("invalid recipient pubkey length: %d", len(recipientPubKey))
+		return encrypted, chainingKey, noiseHash, oops.Errorf("invalid recipient pubkey length: %d", len(recipientPubKey))
 	}
 
 	ephemeralPub, ephemeralPriv, err := x25519.GenerateKey(rand.Reader)
 	if err != nil {
-		return encrypted, chainingKey, oops.Wrapf(err, "failed to generate ephemeral X25519 keypair")
+		return encrypted, chainingKey, noiseHash, oops.Wrapf(err, "failed to generate ephemeral X25519 keypair")
 	}
 
 	ns := initSTBMNoiseN(recipientPubKey)
@@ -104,17 +109,43 @@ func EncryptShortBuildRequestRecordWithChain(record BuildRequestRecord, recipien
 
 	sharedSecret, err := ephemeralPriv.SharedKey(x25519.PublicKey(recipientPubKey))
 	if err != nil {
-		return encrypted, chainingKey, oops.Wrapf(err, "X25519 key agreement failed")
+		return encrypted, chainingKey, noiseHash, oops.Wrapf(err, "X25519 key agreement failed")
 	}
 	ns.MixKey(sharedSecret)
 
 	cleartext := full[48 : 48+ShortBuildRecordCleartextLen]
+
+	// Diagnostic breadcrumb: log per-record ECIES inputs at Warn level so they
+	// appear at the default log level. Compare a working peer vs a failing peer
+	// to determine whether the enckey in our cache is stale.
+	{
+		peerHashHex := "(hash-error)"
+		if ph, hErr := recipientRouterInfo.IdentHash(); hErr == nil {
+			peerHashHex = fmt.Sprintf("%x", ph[:])
+		}
+		riPublished := "(nil)"
+		riAgeStr := "(nil)"
+		if pub := recipientRouterInfo.Published(); pub != nil {
+			pubTime := pub.Time()
+			riPublished = pubTime.UTC().Format(time.RFC3339)
+			riAgeStr = fmt.Sprintf("%.0fs", time.Since(pubTime).Seconds())
+		}
+		log.WithFields(logger.Fields{
+			"at":            "EncryptShortBuildRequestRecord",
+			"peer_hash":     peerHashHex,
+			"enckey_hex":    fmt.Sprintf("%x", recipientPubKey),
+			"ri_published":  riPublished,
+			"ri_age":        riAgeStr,
+			"cleartext_hex": fmt.Sprintf("%x", cleartext),
+		}).Warn("stbm_record_pre_encrypt")
+	}
+
 	ct, err := ns.EncryptAndHash(nil, cleartext)
 	if err != nil {
-		return encrypted, chainingKey, oops.Wrapf(err, "Noise EncryptAndHash failed")
+		return encrypted, chainingKey, noiseHash, oops.Wrapf(err, "Noise EncryptAndHash failed")
 	}
 	if len(ct) != ShortBuildRecordCleartextLen+16 {
-		return encrypted, chainingKey, oops.Errorf("unexpected ciphertext length: got %d, want %d",
+		return encrypted, chainingKey, noiseHash, oops.Errorf("unexpected ciphertext length: got %d, want %d",
 			len(ct), ShortBuildRecordCleartextLen+16)
 	}
 
@@ -123,6 +154,7 @@ func EncryptShortBuildRequestRecordWithChain(record BuildRequestRecord, recipien
 	copy(encrypted[48:218], ct)
 
 	copy(chainingKey[:], ns.ChainingKey())
+	copy(noiseHash[:], ns.HandshakeHash())
 
 	log.WithFields(logger.Fields{
 		"at":             "EncryptShortBuildRequestRecord",
@@ -130,7 +162,7 @@ func EncryptShortBuildRequestRecordWithChain(record BuildRequestRecord, recipien
 		"cleartext_size": ShortBuildRecordCleartextLen,
 	}).Debug("STBM build request record encrypted (Noise_N)")
 
-	return encrypted, chainingKey, nil
+	return encrypted, chainingKey, noiseHash, nil
 }
 
 // DeriveSTBMReplyKey derives the per-hop ChaCha20 reply key from a hop's
@@ -240,4 +272,40 @@ func DecryptSTBMRecordReturningChainingKey(encrypted [218]byte, privateKey []byt
 	}
 	copy(chainingKey[:], ns.ChainingKey())
 	return chainingKey, nil
+}
+
+// DecryptSTBMRecordReturningChainingKeyAndHash performs the same Noise_N AEAD-decrypt
+// as DecryptSTBMRecordReturningChainingKey but also returns the post-decrypt Noise
+// handshake hash (m_H). The transit hop needs m_H as AEAD associated data when
+// constructing its ShortTunnelBuildReply record.
+func DecryptSTBMRecordReturningChainingKeyAndHash(encrypted [218]byte, privateKey []byte) ([32]byte, [32]byte, error) {
+	var chainingKey [32]byte
+	var noiseHash [32]byte
+	if len(privateKey) != 32 {
+		return chainingKey, noiseHash, oops.Errorf("invalid private key size: expected 32 bytes, got %d", len(privateKey))
+	}
+	priv := x25519.PrivateKey(privateKey)
+	ourStaticPubBytes, err := priv.PublicKey()
+	if err != nil {
+		return chainingKey, noiseHash, oops.Wrapf(err, "failed to derive static public key from private key")
+	}
+
+	ephPub := encrypted[16:48]
+	ct := encrypted[48:218]
+
+	ns := initSTBMNoiseN(ourStaticPubBytes)
+	ns.MixHash(ephPub)
+
+	sharedSecret, err := priv.SharedKey(x25519.PublicKey(ephPub))
+	if err != nil {
+		return chainingKey, noiseHash, oops.Wrapf(err, "X25519 key agreement failed")
+	}
+	ns.MixKey(sharedSecret)
+
+	if _, err := ns.DecryptAndHash(nil, ct); err != nil {
+		return chainingKey, noiseHash, oops.Wrapf(err, "Noise DecryptAndHash failed")
+	}
+	copy(chainingKey[:], ns.ChainingKey())
+	copy(noiseHash[:], ns.HandshakeHash())
+	return chainingKey, noiseHash, nil
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/go-i2p/go-noise/ratchet"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
+	"golang.org/x/crypto/chacha20poly1305"
 )
 
 // ReplyProcessorConfig configures tunnel reply processing behavior.
@@ -48,6 +49,7 @@ type PendingBuildRequest struct {
 	RequestedAt  time.Time
 	ReplyKeys    []session_key.SessionKey // ECIES-X25519-AEAD keys for decrypting each hop's reply
 	ReplyIVs     [][16]byte               // Nonces/IVs for AEAD decryption
+	NoiseHashes  [][32]byte               // Per-hop Noise transcript hash (m_H) used as AEAD AD for STBM reply decryption
 	Retries      int                      // Number of retry attempts
 	IsInbound    bool                     // True for inbound tunnel, false for outbound
 	HopCount     int                      // Number of hops in tunnel
@@ -147,6 +149,22 @@ func (rp *ReplyProcessor) RegisterPendingBuild(
 	return nil
 }
 
+// SetPendingBuildNoiseHashes stores the per-hop Noise transcript hashes for an
+// in-progress STBM build. These are the m_H values (Noise handshake hash after
+// EncryptAndHash) needed as AEAD associated data when decrypting each hop's
+// ShortTunnelBuildReply record. Must be called immediately after RegisterPendingBuild.
+func (rp *ReplyProcessor) SetPendingBuildNoiseHashes(tunnelID tunnel.TunnelID, noiseHashes [][32]byte) error {
+	rp.mutex.Lock()
+	defer rp.mutex.Unlock()
+
+	pending, exists := rp.pendingBuilds[tunnelID]
+	if !exists {
+		return oops.Errorf("no pending build for tunnel %d when setting noise hashes", tunnelID)
+	}
+	pending.NoiseHashes = noiseHashes
+	return nil
+}
+
 // ProcessBuildReply processes a tunnel build reply message.
 // It decrypts encrypted reply records, validates responses, and updates tunnel state.
 //
@@ -228,8 +246,8 @@ func (rp *ReplyProcessor) processReplyWithHandler(handler TunnelReplyHandler, tu
 
 // decryptReplyRecords decrypts encrypted build reply records using the stored reply keys.
 // Two formats are handled depending on record size:
-//   - 218 bytes (ShortBuildRecordSize): STBM format — ChaCha20 stream XOR (no Poly1305 tag).
-//     After XOR, byte 0 is the reply code. No hash integrity check (not part of STBM format).
+//   - 218 bytes (ShortBuildRecordSize): STBM format — multi-pass ChaCha20 layer peel
+//     followed by ChaCha20-Poly1305 AEAD decrypt. Ret code at plaintext[201].
 //   - 544 bytes: Modern VTB — ChaCha20-Poly1305 AEAD (528 ciphertext + 16 auth tag).
 //   - 528 bytes: Legacy VTB — AES-256-CBC.
 //
@@ -249,65 +267,108 @@ func (rp *ReplyProcessor) decryptReplyRecords(handler TunnelReplyHandler, pendin
 			len(rawRecords), len(records))
 	}
 
-	for i := range records {
-		if len(rawRecords[i]) == ShortBuildRecordSize {
-			// STBM reply record: peel ChaCha20 stream layer, read reply byte from offset 0.
-			decryptedRecord, err := rp.decryptSTBMReplyRecord(rawRecords[i], pending.ReplyKeys[i], i)
-			if err != nil {
-				return oops.Wrapf(err, "failed to decrypt STBM reply record %d", i)
-			}
-			records[i] = decryptedRecord
-			continue
-		}
-
-		// Standard VTB reply record: ChaCha20-Poly1305 AEAD (544 bytes) or AES-256-CBC (528 bytes).
-		decrypted, err := rp.decryptRecord(rawRecords[i], pending.ReplyKeys[i], pending.ReplyIVs[i])
-		if err != nil {
-			return oops.Wrapf(err, "failed to decrypt record %d", i)
-		}
-
-		// Parse decrypted data into BuildResponseRecord
-		decryptedRecord, err := ReadBuildResponseRecord(decrypted)
-		if err != nil {
-			return oops.Wrapf(err, "failed to parse decrypted record %d", i)
-		}
-
-		// Update the record in-place (this modifies the handler's records)
-		records[i] = decryptedRecord
+	// Determine format from the first record's size.
+	if len(rawRecords) == 0 {
+		return nil
 	}
 
-	log.WithField("record_count", len(records)).Debug("Decrypted all reply records")
+	isShortBuild := len(rawRecords[0]) == ShortBuildRecordSize
+
+	if !isShortBuild {
+		// Standard VTB path: simple per-record AEAD or AES decrypt.
+		for i := range records {
+			decrypted, err := rp.decryptRecord(rawRecords[i], pending.ReplyKeys[i], pending.ReplyIVs[i])
+			if err != nil {
+				return oops.Wrapf(err, "failed to decrypt record %d", i)
+			}
+			decryptedRecord, err := ReadBuildResponseRecord(decrypted)
+			if err != nil {
+				return oops.Wrapf(err, "failed to parse decrypted record %d", i)
+			}
+			records[i] = decryptedRecord
+		}
+		log.WithField("record_count", len(records)).Debug("Decrypted all VTB reply records")
+		return nil
+	}
+
+	// STBM reply decryption: i2pd-compatible 2-pass algorithm.
+	//
+	// After all N hops have processed the STBM and generated their reply:
+	//   record[i] = AEAD(hop_i_reply, key_i) XOR'd by all hops j > i
+	//
+	// Creator decrypts from LAST hop to FIRST:
+	//  1. For hop i (last→first): XOR-peel hop i's layer from all records j < i
+	//  2. AEAD-decrypt hop i's own record with replyKey[i], nonce[4]=i, AD=noiseHash[i]
+	//  3. Ret code is at cleartext[201] of the 202-byte plaintext
+	//
+	// Matches i2pd Tunnel::HandleTunnelBuildResponse() + ShortECIESTunnelHopConfig.
+	n := len(rawRecords)
+	work := make([][ShortBuildRecordSize]byte, n)
+	for i, raw := range rawRecords {
+		if len(raw) < ShortBuildRecordSize {
+			return oops.Errorf("STBM record %d too short: %d bytes", i, len(raw))
+		}
+		copy(work[i][:], raw[:ShortBuildRecordSize])
+	}
+
+	for i := n - 1; i >= 0; i-- {
+		var key [32]byte
+		copy(key[:], pending.ReplyKeys[i][:])
+
+		// Step 1: peel hop i's ChaCha20 layer from all records with index j < i.
+		for j := 0; j < i; j++ {
+			if err := chacha20XORRecord(&work[j], key, j); err != nil {
+				return oops.Wrapf(err, "ChaCha20 peel failed for hop %d record %d", i, j)
+			}
+		}
+
+		// Step 2: AEAD-decrypt hop i's own record.
+		var noiseHash [32]byte
+		if i < len(pending.NoiseHashes) {
+			noiseHash = pending.NoiseHashes[i]
+		}
+		cleartext, err := decryptSTBMReplySlot(work[i][:], key, noiseHash, i)
+		if err != nil {
+			return oops.Wrapf(err, "STBM AEAD decrypt failed for hop %d", i)
+		}
+
+		// Step 3: ret code is at offset 201 of the 202-byte plaintext.
+		records[i] = BuildResponseRecord{Reply: cleartext[201]}
+	}
+
+	log.WithField("record_count", n).Debug("Decrypted all STBM reply records")
 	return nil
 }
 
-// decryptSTBMReplyRecord peels the ChaCha20 stream layer from a 218-byte STBM reply slot.
-// Each hop encrypts its reply slot using ChaCha20 XOR (no Poly1305 auth tag) with the
-// reply key from the build request record and a nonce whose byte 4 equals the slot index.
-// After XOR, byte 0 of the cleartext is the 1-byte reply code (0x00 = accept).
-// The remaining bytes are padding and are not parsed.
-func (rp *ReplyProcessor) decryptSTBMReplyRecord(
-	encrypted []byte,
-	replyKey session_key.SessionKey,
-	index int,
-) (BuildResponseRecord, error) {
-	if len(encrypted) != ShortBuildRecordSize {
-		return BuildResponseRecord{}, oops.Errorf("STBM record: expected %d bytes, got %d",
-			ShortBuildRecordSize, len(encrypted))
+// decryptSTBMReplySlot AEAD-decrypts a single 218-byte STBM reply record slot.
+//
+// Per proposal 157 and i2pd TunnelConfig.cpp ShortECIESTunnelHopConfig::DecryptBuildResponseRecord:
+//   - Cipher: ChaCha20-Poly1305
+//   - Key: 32-byte reply key (derived from HKDF(ck, "", "SMTunnelReplyKey")[32:64])
+//   - Nonce: 12 bytes, nonce[4] = record index (byte 4 of nonce = slot position)
+//   - AD: 32-byte Noise transcript hash (m_H after EncryptAndHash on creator side)
+//   - Input: 218 bytes (202 ciphertext + 16 Poly1305 MAC)
+//   - Output: 202 bytes plaintext; ret code at offset 201
+func decryptSTBMReplySlot(encrypted []byte, key [32]byte, noiseHash [32]byte, index int) ([]byte, error) {
+	if len(encrypted) < ShortBuildRecordSize {
+		return nil, oops.Errorf("STBM reply slot too short: got %d bytes, need %d", len(encrypted), ShortBuildRecordSize)
 	}
-
-	var record [ShortBuildRecordSize]byte
-	copy(record[:], encrypted)
-
-	var key [32]byte
-	copy(key[:], replyKey[:])
-
-	if err := chacha20XORRecord(&record, key, index); err != nil {
-		return BuildResponseRecord{}, oops.Wrapf(err, "chacha20 XOR failed for STBM reply record %d", index)
+	aead, err := chacha20poly1305.New(key[:])
+	if err != nil {
+		return nil, oops.Wrapf(err, "ChaCha20-Poly1305 init failed")
 	}
-
-	// Byte 0 of the ChaCha20 cleartext is the reply code.
-	// (0x00 = TunnelBuildReplySuccess, non-zero = rejection reason)
-	return BuildResponseRecord{Reply: record[0]}, nil
+	var nonce [12]byte
+	nonce[4] = byte(index)
+	cleartext, err := aead.Open(nil, nonce[:], encrypted[:ShortBuildRecordSize], noiseHash[:])
+	if err != nil {
+		return nil, oops.Wrapf(err, "ChaCha20-Poly1305 Open failed for STBM reply slot %d", index)
+	}
+	// AEAD removes the 16-byte tag: 218 - 16 = 202 bytes of plaintext.
+	if len(cleartext) != ShortBuildRecordSize-chacha20poly1305.Overhead {
+		return nil, oops.Errorf("unexpected STBM cleartext length: got %d, want %d",
+			len(cleartext), ShortBuildRecordSize-chacha20poly1305.Overhead)
+	}
+	return cleartext, nil
 }
 
 // decryptRecord decrypts a single encrypted build response record from raw bytes.

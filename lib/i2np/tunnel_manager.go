@@ -282,6 +282,13 @@ func (tm *TunnelManager) BuildTunnelFromRequest(req tunnel.BuildTunnelRequest) (
 		return 0, peerHashes, oops.Wrapf(regErr, "failed to register pending build")
 	}
 
+	// Store Noise transcript hashes for STBM reply AEAD decryption.
+	if len(result.NoiseHashes) > 0 {
+		if setErr := tm.replyProcessor.SetPendingBuildNoiseHashes(result.TunnelID, result.NoiseHashes); setErr != nil {
+			log.WithError(setErr).WithField("tunnel_id", result.TunnelID).Warn("Failed to set STBM noise hashes")
+		}
+	}
+
 	tm.logBuildRequestSent(result, messageID)
 	return result.TunnelID, peerHashes, nil
 }
@@ -577,15 +584,17 @@ func (tm *TunnelManager) createShortTunnelBuildMessage(result *tunnel.TunnelBuil
 	// ShortECIESTunnelHopConfig::DecryptRecord in libi2pd/TunnelConfig.cpp.
 	encryptedRecords := make([][ShortBuildRecordSize]byte, len(i2npRecords))
 	replyKeys := make([][32]byte, len(i2npRecords))
+	noiseHashes := make([][32]byte, len(i2npRecords))
 	for i, record := range i2npRecords {
 		if i >= len(result.Hops) {
 			return nil, oops.Errorf("record %d has no corresponding hop RouterInfo", i)
 		}
-		encrypted, ck, err := EncryptShortBuildRequestRecordWithChain(record, result.Hops[i])
+		encrypted, ck, nh, err := EncryptShortBuildRequestRecordWithChain(record, result.Hops[i])
 		if err != nil {
 			return nil, oops.Wrapf(err, "failed to encrypt short build record %d", i)
 		}
 		encryptedRecords[i] = encrypted
+		noiseHashes[i] = nh
 		rk, err := DeriveSTBMReplyKey(ck)
 		if err != nil {
 			return nil, oops.Wrapf(err, "failed to derive reply key for hop %d", i)
@@ -605,6 +614,8 @@ func (tm *TunnelManager) createShortTunnelBuildMessage(result *tunnel.TunnelBuil
 	for i, rk := range replyKeys {
 		result.ReplyKeys[i] = session_key.SessionKey(rk)
 	}
+	// Store per-hop Noise transcript hashes for STBM reply AEAD decryption.
+	result.NoiseHashes = noiseHashes
 
 	// Apply chained ChaCha20 layer obfuscation. For each hop i (from
 	// second-to-last down to first), XOR every record at index j > i with
