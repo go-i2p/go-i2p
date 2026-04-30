@@ -622,6 +622,7 @@ func (tm *TunnelManager) createShortTunnelBuildMessage(result *tunnel.TunnelBuil
 	encryptedRecords := make([][ShortBuildRecordSize]byte, len(i2npRecords))
 	replyKeys := make([][32]byte, len(i2npRecords))
 	noiseHashes := make([][32]byte, len(i2npRecords))
+	postReplyCKs := make([][32]byte, len(i2npRecords)) // chaining key after SMTunnelReplyKey, needed for garlic derivation
 	for i, record := range i2npRecords {
 		if i >= len(result.Hops) {
 			return nil, oops.Errorf("record %d has no corresponding hop RouterInfo", i)
@@ -632,11 +633,12 @@ func (tm *TunnelManager) createShortTunnelBuildMessage(result *tunnel.TunnelBuil
 		}
 		encryptedRecords[i] = encrypted
 		noiseHashes[i] = nh
-		rk, err := DeriveSTBMReplyKey(ck)
+		rk, newCK, err := DeriveSTBMReplyKey(ck)
 		if err != nil {
 			return nil, oops.Wrapf(err, "failed to derive reply key for hop %d", i)
 		}
 		replyKeys[i] = rk
+		postReplyCKs[i] = newCK
 	}
 
 	// Per STBM spec (proposal 152), the ReplyKey field is absent from the
@@ -656,18 +658,17 @@ func (tm *TunnelManager) createShortTunnelBuildMessage(result *tunnel.TunnelBuil
 
 	// Derive and register the one-time garlic key for the OBEP's reply.
 	// The OBEP wraps its ShortTunnelBuildReply (type 26) in a garlic message
-	// (type 11) encrypted with a key derived from the last-hop Noise transcript
-	// hash via HKDF("AttachLayerEncryption"). Without registering this key the
-	// garlic reply cannot be decrypted and every exploratory build times out.
-	if tm.garlicKeyRegistrar != nil && len(noiseHashes) > 0 {
-		lastHop := len(noiseHashes) - 1
-		garlicKeyMaterial, err := DeriveSTBMGarlicKey(noiseHashes[lastHop])
+	// (type 11) encrypted with a key derived via the i2pd HKDF chain:
+	//   SMTunnelLayerKey → TunnelLayerIVKey → RGarlicKeyAndTag
+	// starting from the chaining key that follows SMTunnelReplyKey.
+	// tag = RGarlicKeyAndTag_out[0:8], key = RGarlicKeyAndTag_out[32:64].
+	if tm.garlicKeyRegistrar != nil && len(postReplyCKs) > 0 {
+		lastHop := len(postReplyCKs) - 1
+		garlicKey, tag, err := DeriveSTBMGarlicKey(postReplyCKs[lastHop])
 		if err != nil {
 			return nil, oops.Wrapf(err, "failed to derive STBM garlic reply key")
 		}
-		var tag [8]byte
-		copy(tag[:], garlicKeyMaterial[24:32])
-		tm.garlicKeyRegistrar.RegisterOneTimeGarlicKey(tag, garlicKeyMaterial)
+		tm.garlicKeyRegistrar.RegisterOneTimeGarlicKey(tag, garlicKey)
 		log.WithFields(logger.Fields{
 			"at":       "createShortTunnelBuildMessage",
 			"tag":      fmt.Sprintf("%x", tag),

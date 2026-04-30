@@ -176,35 +176,71 @@ func EncryptShortBuildRequestRecordWithChain(record BuildRequestRecord, recipien
 //	HKDF-SHA256(salt=ck, ikm="", info="SMTunnelReplyKey", out=64)
 //	-> new_ck (bytes 0:32) || replyKey (bytes 32:64)
 //
-// We only need the replyKey here.
-func DeriveSTBMReplyKey(chainingKey [32]byte) ([32]byte, error) {
-	var replyKey [32]byte
+// Returns both the replyKey and the new chaining key so callers can continue
+// the HKDF chain (e.g. for layer/IV/garlic key derivation).
+func DeriveSTBMReplyKey(chainingKey [32]byte) ([32]byte, [32]byte, error) {
+	var replyKey, newCK [32]byte
 	r := hkdf.New(sha256.New, []byte{}, chainingKey[:], []byte("SMTunnelReplyKey"))
 	var out [64]byte
 	if _, err := io.ReadFull(r, out[:]); err != nil {
-		return replyKey, oops.Wrapf(err, "HKDF for SMTunnelReplyKey failed")
+		return replyKey, newCK, oops.Wrapf(err, "HKDF for SMTunnelReplyKey failed")
 	}
+	copy(newCK[:], out[0:32])
 	copy(replyKey[:], out[32:64])
-	return replyKey, nil
+	return replyKey, newCK, nil
+}
+
+// hkdf64 performs one HKDF-SHA256 step matching i2pd's HKDF(salt, nil, 0, info, out, 64):
+// output is 64 bytes, [0:32]=new chaining key, [32:64]=derived key.
+func hkdf64(ck [32]byte, info string) ([64]byte, error) {
+	var out [64]byte
+	r := hkdf.New(sha256.New, []byte{}, ck[:], []byte(info))
+	_, err := io.ReadFull(r, out[:])
+	return out, err
 }
 
 // DeriveSTBMGarlicKey derives the one-time symmetric garlic key used by the
 // OBEP to wrap the ShortTunnelBuildReply in a garlic message (type 11).
 //
-// Derivation matches i2pd:
+// Derivation matches i2pd ShortECIESTunnelHopConfig::CreateBuildRequestRecord
+// for an endpoint hop. Starting from the post-encryption chaining key (after
+// SMTunnelReplyKey has already been applied), the chain is:
 //
-//	HKDF-SHA256(salt=noiseHash, ikm="", info="AttachLayerEncryption", out=32)
+//	HKDF(ck, "", "SMTunnelLayerKey") → new_ck, layerKey (discarded)
+//	HKDF(ck, "", "TunnelLayerIVKey") → new_ck, ivKey (discarded)
+//	HKDF(ck, "", "RGarlicKeyAndTag") → new_ck
+//	  tag = new_ck[0:8]   (first 8 bytes of the new chaining key)
+//	  key = new_ck[32:64] (second 32 bytes)
 //
-// The last 8 bytes of the output are the garlic tag; the full 32 bytes are
-// the ChaCha20-Poly1305 key. Both are returned so the caller can register
-// the (tag, key) pair with the GarlicSessionManager.
-func DeriveSTBMGarlicKey(noiseHash [32]byte) ([32]byte, error) {
-	var key [32]byte
-	r := hkdf.New(sha256.New, []byte{}, noiseHash[:], []byte("AttachLayerEncryption"))
-	if _, err := io.ReadFull(r, key[:]); err != nil {
-		return key, oops.Wrapf(err, "HKDF for AttachLayerEncryption failed")
+// The ckAfterReplyKey must be the new chaining key returned by DeriveSTBMReplyKey.
+func DeriveSTBMGarlicKey(ckAfterReplyKey [32]byte) ([32]byte, [8]byte, error) {
+	var garlicKey [32]byte
+	var tag [8]byte
+
+	// Step 2: SMTunnelLayerKey
+	out, err := hkdf64(ckAfterReplyKey, "SMTunnelLayerKey")
+	if err != nil {
+		return garlicKey, tag, oops.Wrapf(err, "HKDF for SMTunnelLayerKey failed")
 	}
-	return key, nil
+	var ck [32]byte
+	copy(ck[:], out[0:32])
+
+	// Step 3: TunnelLayerIVKey
+	out, err = hkdf64(ck, "TunnelLayerIVKey")
+	if err != nil {
+		return garlicKey, tag, oops.Wrapf(err, "HKDF for TunnelLayerIVKey failed")
+	}
+	copy(ck[:], out[0:32])
+
+	// Step 4: RGarlicKeyAndTag
+	out, err = hkdf64(ck, "RGarlicKeyAndTag")
+	if err != nil {
+		return garlicKey, tag, oops.Wrapf(err, "HKDF for RGarlicKeyAndTag failed")
+	}
+	// tag = new_ck[0:8], key = new_ck[32:64]
+	copy(tag[:], out[0:8])
+	copy(garlicKey[:], out[32:64])
+	return garlicKey, tag, nil
 }
 
 // DecryptShortBuildRequestRecordNoise is the inverse of EncryptShortBuildRequestRecord:

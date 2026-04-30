@@ -712,7 +712,7 @@ func (p *MessageProcessor) decryptShortRecord(recordData []byte, index int) (Bui
 	if err != nil {
 		return BuildRequestRecord{}, err
 	}
-	replyKey, err := DeriveSTBMReplyKey(ck)
+	replyKey, _, err := DeriveSTBMReplyKey(ck)
 	if err != nil {
 		return BuildRequestRecord{}, oops.Wrapf(err, "failed to derive STBM reply key for slot %d", index)
 	}
