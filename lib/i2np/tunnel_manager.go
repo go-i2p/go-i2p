@@ -922,23 +922,44 @@ func (tm *TunnelManager) sendTunnelBuildRequests(records []BuildRequestRecord, p
 
 	tm.logSendingBuildRequests(tunnelID, len(peers))
 
+	// GAP-5 fix: For type-21 TunnelBuild, the reply message ID equals the
+	// tunnelID (not a random message ID).  Register a pendingBuilds entry
+	// keyed by int(tunnelID) so ProcessTunnelReply can correlate the reply.
+	messageID := int(tunnelID)
+	tm.buildMutex.Lock()
+	tm.pendingBuilds[messageID] = &buildRequest{
+		tunnelID:  tunnelID,
+		messageID: messageID,
+		hopCount:  len(records),
+		createdAt: time.Now(),
+		isInbound: false,
+	}
+	tm.buildMutex.Unlock()
+	time.AfterFunc(90*time.Second+buildExpireGrace, func() {
+		tm.cleanupExpiredBuildByID(messageID)
+	})
+
 	// Encrypt each record with the corresponding hop's public key and
 	// assemble all records into a single 8-slot TunnelBuild message.
 	msg, err := tm.createCombinedBuildMessage(records, peers, tunnelID)
 	if err != nil {
+		tm.removePendingBuildRequest(messageID)
 		return oops.Wrapf(err, "failed to create combined tunnel build message")
 	}
 
 	// Send only to the first hop (gateway) — it will forward onion-style.
 	firstPeerHash, err := peers[0].IdentHash()
 	if err != nil {
+		tm.removePendingBuildRequest(messageID)
 		return oops.Wrapf(err, "failed to get first hop hash")
 	}
 	session, err := tm.getSessionForPeer(firstPeerHash)
 	if err != nil {
+		tm.removePendingBuildRequest(messageID)
 		return oops.Wrapf(err, "failed to get session for gateway")
 	}
 	if err := session.QueueSendI2NP(msg); err != nil {
+		tm.removePendingBuildRequest(messageID)
 		return oops.Wrapf(err, "failed to queue build message")
 	}
 

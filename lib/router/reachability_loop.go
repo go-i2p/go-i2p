@@ -14,6 +14,12 @@ const (
 	// external-address changes and conditionally republishes our RouterInfo.
 	reachabilityLoopInterval = 5 * time.Minute
 
+	// reachabilityInitialDelay is how long after startup to fire the first
+	// reachability check.  Java I2P updates within ~90 seconds; we use 90s
+	// here so stale 'U' caps are corrected quickly on the first tick
+	// (GAP-4 fix — previously the first check was delayed 5 minutes).
+	reachabilityInitialDelay = 90 * time.Second
+
 	// reachabilityResignMinInterval rate-limits RouterInfo re-publication to
 	// at most once every 30 seconds (prevents floodfill storming).
 	reachabilityResignMinInterval = 30 * time.Second
@@ -36,6 +42,11 @@ func (r *Router) reachabilityLoop() {
 	ticker := time.NewTicker(reachabilityLoopInterval)
 	defer ticker.Stop()
 
+	// initialTimer fires once at reachabilityInitialDelay to run the first
+	// reachability check quickly after startup (GAP-4 fix).
+	initialTimer := time.NewTimer(reachabilityInitialDelay)
+	defer initialTimer.Stop()
+
 	// lastPublishedExternal records what external address was last used for
 	// re-publication so we only republish on changes.
 	var lastPublishedExternal atomic.Value // stores string
@@ -49,6 +60,8 @@ func (r *Router) reachabilityLoop() {
 		select {
 		case <-r.ctx.Done():
 			return
+		case <-initialTimer.C:
+			r.runReachabilityCheck(&lastPublishedExternal, &lastResignAt)
 		case <-ticker.C:
 			r.runReachabilityCheck(&lastPublishedExternal, &lastResignAt)
 		}
