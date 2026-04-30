@@ -523,3 +523,50 @@ func TestStatsActivePeers(t *testing.T) {
 		})
 	}
 }
+
+// mockRouterWithNetworkStatus is a minimal RouterAccess that lets tests control
+// both the process-running flag and the detailed network-status code.
+type mockRouterWithNetworkStatus struct {
+	mockRouterAccess
+	netStatus int
+}
+
+func (m *mockRouterWithNetworkStatus) GetNetworkStatus() int { return m.netStatus }
+
+// TestStatusFieldCoherence verifies the Audit #3 invariant: the "Status" field
+// in RouterInfoStats reflects only process-health (OK / ERROR), while
+// GetNetworkStatus() can independently report detailed reachability codes such
+// as FIREWALLED (2), HIDDEN (3), or TESTING (1). The two fields must never be
+// conflated.
+func TestStatusFieldCoherence(t *testing.T) {
+	cases := []struct {
+		name          string
+		running       bool
+		netStatus     int
+		wantStatus    string // process-health only: "OK" or "ERROR"
+		wantNetStatus int
+	}{
+		{"running-ok", true, 0, "OK", 0},
+		{"running-firewalled", true, 2, "OK", 2}, // FIREWALLED → Status still OK
+		{"running-hidden", true, 3, "OK", 3},     // HIDDEN     → Status still OK
+		{"running-testing", true, 1, "OK", 1},    // TESTING    → Status still OK
+		{"not-running", false, 8, "ERROR", 8},    // process down → ERROR
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			router := &mockRouterWithNetworkStatus{
+				mockRouterAccess: mockRouterAccess{running: c.running},
+				netStatus:        c.netStatus,
+			}
+			provider := NewRouterStatsProvider(router, "0.1.0-test")
+
+			info := provider.GetRouterInfo()
+			if info.Status != c.wantStatus {
+				t.Errorf("Status = %q, want %q", info.Status, c.wantStatus)
+			}
+			if got := provider.GetNetworkStatus(); got != c.wantNetStatus {
+				t.Errorf("GetNetworkStatus() = %d, want %d", got, c.wantNetStatus)
+			}
+		})
+	}
+}

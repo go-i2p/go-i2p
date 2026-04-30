@@ -1067,9 +1067,42 @@ func (r *Router) initializeTunnelManager() {
 				log.WithFields(logger.Fields{
 					"at":      "initializeTunnelManager",
 					"timeout": 2 * tunnel.BuildTimeout,
-				}).Warn("inbound pool readiness timeout; releasing outbound pool startup gate")
-				close(inboundReady)
-				return
+				}).Warn("inbound pool readiness timeout; enforcing fallback before releasing outbound gate")
+				// Force inbound to 0-hop and trigger an immediate build so the
+				// outbound pool has a valid reply path when it unblocks.
+				if inboundPool != nil {
+					inboundPool.TriggerAutoFallbackCheck()
+					inboundPool.RunMaintenanceNow()
+				}
+				// Secondary poll: wait up to 5 s for the 0-hop inbound to appear.
+				fallbackPoll := time.NewTicker(300 * time.Millisecond)
+				fallbackDeadline := time.NewTimer(5 * time.Second)
+				for {
+					select {
+					case <-r.ctx.Done():
+						fallbackPoll.Stop()
+						fallbackDeadline.Stop()
+						close(inboundReady)
+						return
+					case <-fallbackDeadline.C:
+						fallbackPoll.Stop()
+						log.WithFields(logger.Fields{
+							"at": "initializeTunnelManager",
+						}).Warn("secondary fallback readiness timeout; releasing outbound gate")
+						close(inboundReady)
+						return
+					case <-fallbackPoll.C:
+						if inboundPool != nil && len(inboundPool.GetActiveTunnels()) > 0 {
+							fallbackPoll.Stop()
+							fallbackDeadline.Stop()
+							log.WithFields(logger.Fields{
+								"at": "initializeTunnelManager",
+							}).Debug("0-hop inbound ready after fallback; releasing outbound gate")
+							close(inboundReady)
+							return
+						}
+					}
+				}
 			case <-poll.C:
 				if inboundPool != nil && len(inboundPool.GetActiveTunnels()) > 0 {
 					log.WithFields(logger.Fields{

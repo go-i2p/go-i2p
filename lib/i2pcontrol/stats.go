@@ -357,8 +357,12 @@ func (rsp *routerStatsProvider) GetRouterInfo() RouterInfoStats {
 	return stats
 }
 
-// determineRouterStatus returns the router status string based on whether the router is running.
-// Returns "OK" if the router is running, "ERROR" otherwise.
+// determineRouterStatus returns the router process-health status string.
+// It reports only whether the router process is running (OK) or not (ERROR).
+// It is intentionally independent of network reachability — for detailed
+// reachability state (TESTING / FIREWALLED / HIDDEN / OK) operators must
+// consult the i2p.router.net.status I2PControl field, which is backed by
+// Router.GetNetworkStatus().
 func (rsp *routerStatsProvider) determineRouterStatus() string {
 	if rsp.router.IsRunning() {
 		return "OK"

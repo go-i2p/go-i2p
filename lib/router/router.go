@@ -636,12 +636,13 @@ func (r *Router) GetNetworkStatus() int {
 	if !r.IsRunning() {
 		return 8 // ERROR_I2CP
 	}
-	if r.IsReseeding() || r.GetActiveSessionCount() == 0 {
-		return 1 // TESTING — no active peers yet
-	}
-	// Hidden mode: never externally reachable by design.
+	// Hidden mode is a configuration posture that must be reported regardless
+	// of transient peer-count or reseeding state; check it first.
 	if r.cfg != nil && r.cfg.Hidden {
 		return 3 // HIDDEN
+	}
+	if r.IsReseeding() || r.GetActiveSessionCount() == 0 {
+		return 1 // TESTING — no active peers yet
 	}
 	// Firewalled: has peers but no confirmed external address.
 	if r.collectBestExternalAddr() == "" {

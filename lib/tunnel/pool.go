@@ -325,6 +325,14 @@ func (p *Pool) TriggerAutoFallbackCheck() {
 	p.checkAutoFallback()
 }
 
+// RunMaintenanceNow triggers an immediate pool maintenance cycle outside the
+// normal 30-second ticker interval. It is intended for use by startup logic
+// that needs tunnels to be built without waiting for the next scheduled tick,
+// for example after switching to zero-hop mode via TriggerAutoFallbackCheck.
+func (p *Pool) RunMaintenanceNow() {
+	p.maintainPool()
+}
+
 // SetHopCount overrides the configured per-tunnel hop count for this pool.
 // HopCount=0 is only permitted on inbound pools, where it requests a
 // zero-hop inbound tunnel (we are simultaneously gateway and endpoint).
