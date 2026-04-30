@@ -1,6 +1,7 @@
 package router
 
 import (
+	"net"
 	"sync/atomic"
 	"time"
 
@@ -181,6 +182,12 @@ func (r *Router) collectBestExternalAddr() string {
 		host, hErr := hostStr.Data()
 		port, pErr := portStr.Data()
 		if hErr != nil || pErr != nil || host == "" || port == "" {
+			continue
+		}
+		// Only count globally-routable addresses; RFC1918/wireguard hosts
+		// are not reachable by remote peers and must not suppress fallback.
+		ip := net.ParseIP(host)
+		if ip == nil || !ip.IsGlobalUnicast() || ip.IsPrivate() {
 			continue
 		}
 		return host + ":" + port
