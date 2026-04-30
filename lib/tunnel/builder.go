@@ -652,7 +652,7 @@ func (tb *TunnelBuilder) determineRoutingParams(
 			return 0, 0, common.Hash{}, common.Hash{}, err
 		}
 	} else {
-		receiveTunnel, nextTunnel, nextIdent, err = tb.determineOutboundRouting(hopIndex, hopTunnelIDs, peers, req.OurIdentity)
+		receiveTunnel, nextTunnel, nextIdent, err = tb.determineOutboundRouting(hopIndex, req, hopTunnelIDs, peers)
 		if err != nil {
 			return 0, 0, common.Hash{}, common.Hash{}, err
 		}
@@ -691,9 +691,9 @@ func (tb *TunnelBuilder) determineInboundRouting(
 
 func (tb *TunnelBuilder) determineOutboundRouting(
 	hopIndex int,
+	req BuildTunnelRequest,
 	hopTunnelIDs []TunnelID,
 	peers []router_info.RouterInfo,
-	ourIdentity common.Hash,
 ) (receiveTunnel, nextTunnel TunnelID, nextIdent common.Hash, err error) {
 	isLastHop := hopIndex == len(peers)-1
 
@@ -702,11 +702,12 @@ func (tb *TunnelBuilder) determineOutboundRouting(
 	receiveTunnel = hopTunnelIDs[hopIndex]
 
 	if isLastHop {
-		// Endpoint sends the build reply directly back to the originator.
-		// nextTunnel=0 means direct delivery (not via an intermediate tunnel).
-		// nextIdent is our own router hash so the OBEP knows where to send the reply.
-		nextTunnel = 0
-		nextIdent = ourIdentity
+		// The OBEP wraps the build reply in a TunnelGateway addressed to
+		// req.ReplyTunnelID at req.ReplyGateway (our inbound tunnel gateway).
+		// A non-zero ReplyTunnelID is required so i2pd knows which inbound
+		// tunnel to deliver the reply to.
+		nextTunnel = req.ReplyTunnelID
+		nextIdent = req.ReplyGateway
 	} else {
 		// Gateway/middle sends to next hop using that hop's receive tunnel ID
 		nextTunnel = hopTunnelIDs[hopIndex+1]

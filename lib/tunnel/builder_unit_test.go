@@ -306,7 +306,8 @@ func TestOutboundHopNextTunnelChaining(t *testing.T) {
 	builder := &TunnelBuilder{}
 
 	// Test last hop (endpoint) — does not call IdentHash on next peer
-	receiveTunnel, nextTunnel, _, err := builder.determineOutboundRouting(hopCount-1, hopTunnelIDs, peers, common.Hash{})
+	// Use a zero ReplyTunnelID so nextTunnel is expected to be 0.
+	receiveTunnel, nextTunnel, _, err := builder.determineOutboundRouting(hopCount-1, BuildTunnelRequest{}, hopTunnelIDs, peers)
 	if err != nil {
 		t.Fatalf("last hop error: %v", err)
 	}
@@ -314,7 +315,7 @@ func TestOutboundHopNextTunnelChaining(t *testing.T) {
 		t.Errorf("last hop receiveTunnel = %d, want %d", receiveTunnel, hopTunnelIDs[hopCount-1])
 	}
 	if nextTunnel != 0 {
-		t.Errorf("last hop nextTunnel should be 0, got %d", nextTunnel)
+		t.Errorf("last hop nextTunnel should be 0 (ReplyTunnelID not set), got %d", nextTunnel)
 	}
 }
 
@@ -391,7 +392,8 @@ func TestSingleHopTunnelIDs(t *testing.T) {
 		peers := make([]router_info.RouterInfo, 1)
 		builder := &TunnelBuilder{}
 
-		receiveTunnel, nextTunnel, _, err := builder.determineOutboundRouting(0, hopTunnelIDs, peers, common.Hash{})
+		// ReplyTunnelID not set → nextTunnel expected to be 0.
+		receiveTunnel, nextTunnel, _, err := builder.determineOutboundRouting(0, BuildTunnelRequest{}, hopTunnelIDs, peers)
 		if err != nil {
 			t.Fatalf("determineOutboundRouting error: %v", err)
 		}
@@ -399,7 +401,7 @@ func TestSingleHopTunnelIDs(t *testing.T) {
 			t.Errorf("receiveTunnel should be hopTunnelIDs[0] (%d), got %d", hopTunnelIDs[0], receiveTunnel)
 		}
 		if nextTunnel != 0 {
-			t.Errorf("single-hop outbound nextTunnel should be 0, got %d", nextTunnel)
+			t.Errorf("single-hop outbound nextTunnel should be 0 (ReplyTunnelID not set), got %d", nextTunnel)
 		}
 	})
 

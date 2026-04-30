@@ -978,12 +978,13 @@ func TestTunnelCreation_UseShortBuild(t *testing.T) {
 }
 
 func TestTunnelCreation_RoutingParamsOutbound(t *testing.T) {
-	// Outbound tunnel: first hop is gateway, last hop is endpoint
+	// Outbound tunnel: first hop is gateway, last hop is endpoint.
+	// When ReplyTunnelID is not set (zero), the OBEP NextTunnel is also zero.
 	result := buildTestTunnelResult(t, 3, BuildTunnelRequest{HopCount: 3, IsInbound: false})
 
-	// Last hop (endpoint) should have NextTunnel=0 for outbound
+	// Last hop (endpoint) should have NextTunnel=0 when ReplyTunnelID not set
 	lastRecord := result.Records[2]
-	assert.Equal(t, TunnelID(0), lastRecord.NextTunnel, "outbound endpoint NextTunnel should be 0")
+	assert.Equal(t, TunnelID(0), lastRecord.NextTunnel, "outbound endpoint NextTunnel should equal ReplyTunnelID (0 when unset)")
 
 	// Middle hops should chain to next hop's receive tunnel
 	for i := 0; i < 2; i++ {

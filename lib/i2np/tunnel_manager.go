@@ -227,6 +227,24 @@ func (tm *TunnelManager) BuildTunnelFromRequest(req tunnel.BuildTunnelRequest) (
 		return tm.buildZeroHopInbound(req)
 	}
 
+	// For outbound tunnels, the OBEP record must contain a non-zero
+	// ReplyTunnelID so that the remote endpoint knows which inbound tunnel
+	// to wrap the ShortTunnelBuildReply in (via TunnelGateway). Without
+	// this, i2pd sees NextTunnelId=0 and cannot route the reply back to us.
+	if !req.IsInbound && req.ReplyTunnelID == 0 {
+		if inbound := tm.inboundPool.SelectTunnel(); inbound != nil {
+			req.ReplyTunnelID = inbound.ID
+			log.WithFields(logger.Fields{
+				"at":              "BuildTunnelFromRequest",
+				"reply_tunnel_id": inbound.ID,
+			}).Debug("injected inbound tunnel ID into outbound build request for OBEP reply routing")
+		} else {
+			log.WithFields(logger.Fields{
+				"at": "BuildTunnelFromRequest",
+			}).Warn("no active inbound tunnels available; outbound build will use ReplyTunnelID=0 (reply routing may fail)")
+		}
+	}
+
 	result, messageID, err := tm.createBuildRequestAndID(req)
 	if err != nil {
 		return 0, nil, err
