@@ -16,6 +16,11 @@ import (
 	"golang.org/x/crypto/chacha20"
 )
 
+// buildExpireGrace is the extra window added to the cleanup timer and expiry
+// threshold to close the race between a late-arriving reply and the
+// time.AfterFunc cleanup goroutine (BUG-5 fix).
+const buildExpireGrace = 200 * time.Millisecond
+
 // buildRequest tracks a pending tunnel build request for correlation with replies.
 // This enables matching build replies to the original request and managing timeouts.
 type buildRequest struct {
@@ -280,9 +285,12 @@ func (tm *TunnelManager) BuildTunnelFromRequest(req tunnel.BuildTunnelRequest) (
 	}
 
 	// Anchor the 90-second expiration window to the moment the build message
-	// actually left this router, then arm immediate cleanup at that horizon.
+	// actually left this router, then arm cleanup at that horizon.
+	// BUG-5 fix: arm the timer at buildTimeout + buildExpireGrace (200ms) so
+	// replies that arrive on the boundary do not race the cleanup goroutine
+	// and get mis-routed to processUncorrelatedReply without decryption.
 	tm.resetPendingBuildCreatedAt(messageID)
-	time.AfterFunc(90*time.Second, func() {
+	time.AfterFunc(90*time.Second+buildExpireGrace, func() {
 		tm.cleanupExpiredBuildByID(messageID)
 	})
 
@@ -1312,9 +1320,12 @@ func (tm *TunnelManager) cleanupExpiredBuildByID(messageID int) {
 		return
 	}
 
-	// Verify request has actually expired (90 second timeout — implementation convention)
+	// BUG-5 fix: include a grace window in the expiry check to match the
+	// deferred AfterFunc firing time (buildTimeout + buildExpireGrace).
+	// This ensures a reply that races the cleanup goroutine on the 90s
+	// boundary still wins and the entry survives until the timer fires.
 	const buildTimeout = 90 * time.Second
-	if time.Since(req.createdAt) > buildTimeout {
+	if time.Since(req.createdAt) > buildTimeout+buildExpireGrace {
 		delete(tm.pendingBuilds, messageID)
 
 		// Mark tunnel as failed and schedule async cleanup
