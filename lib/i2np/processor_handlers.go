@@ -166,14 +166,20 @@ func (p *MessageProcessor) processTunnelGatewayMessage(msg I2NPMessage) error {
 			}).Error("Message is not a TunnelGateway and has no data carrier")
 			return oops.Errorf("message is not a TunnelGateway")
 		}
-		tgMsg = &TunnelGateway{}
-		if err := tgMsg.UnmarshalBinary(carrier.GetData()); err != nil {
-			log.WithFields(logger.Fields{
-				"at":     "processTunnelGatewayMessage",
-				"reason": "unmarshal_failed",
-			}).WithError(err).Error("Failed to unmarshal TunnelGateway from data carrier")
-			return oops.Wrapf(err, "failed to unmarshal TunnelGateway")
+		// carrier.GetData() returns the raw I2NP payload (no header).
+		// Parse TunnelGateway wire format directly: 4-byte TunnelID + 2-byte Length + data.
+		payload := carrier.GetData()
+		if len(payload) < 6 {
+			return oops.Errorf("TunnelGateway payload too short: %d bytes", len(payload))
 		}
+		tgMsg = &TunnelGateway{}
+		tgMsg.TunnelID = tunnel.TunnelID(binary.BigEndian.Uint32(payload[0:4]))
+		tgMsg.Length = int(binary.BigEndian.Uint16(payload[4:6]))
+		if len(payload) < 6+tgMsg.Length {
+			return oops.Errorf("TunnelGateway payload truncated: expected %d bytes, got %d", 6+tgMsg.Length, len(payload))
+		}
+		tgMsg.Data = make([]byte, tgMsg.Length)
+		copy(tgMsg.Data, payload[6:6+tgMsg.Length])
 	}
 
 	log.WithFields(logger.Fields{

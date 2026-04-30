@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -555,12 +556,15 @@ func (r *Router) routeMessage(msg i2np.I2NPMessage, fromPeer common.Hash) (err e
 	messageType, messageID := safeMessageMetadata(msg)
 	defer func() {
 		if rec := recover(); rec != nil {
+			buf := make([]byte, 8192)
+			n := runtime.Stack(buf, false)
 			err = oops.Errorf("panic while routing I2NP message type %d: %v", messageType, rec)
 			log.WithError(err).WithFields(logger.Fields{
 				"message_type": messageType,
 				"message_id":   messageID,
 				"from_peer":    fmt.Sprintf("%x", fromPeer[:8]),
 				"panic":        fmt.Sprintf("%v", rec),
+				"stack":        string(buf[:n]),
 			}).Error("Recovered from panic in routeMessage")
 		}
 	}()

@@ -136,6 +136,7 @@ func EncryptShortBuildRequestRecordWithChain(record BuildRequestRecord, recipien
 			"enckey_hex":    fmt.Sprintf("%x", recipientPubKey),
 			"ri_published":  riPublished,
 			"ri_age":        riAgeStr,
+			"record_flag":   fmt.Sprintf("0x%02x", record.Flag),
 			"cleartext_hex": fmt.Sprintf("%x", cleartext),
 		}).Warn("stbm_record_pre_encrypt")
 	}

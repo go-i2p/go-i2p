@@ -881,12 +881,21 @@ type tunnelGatewayDispatcher struct {
 }
 
 func (d *tunnelGatewayDispatcher) HandleGateway(tunnelID tunnel.TunnelID, payload []byte) error {
-	if len(payload) < i2np.ShortI2NPHeaderSize {
+	if len(payload) < 16 {
 		return oops.Errorf("TunnelGateway payload too short: %d bytes", len(payload))
 	}
 	inner := &i2np.BaseI2NPMessage{}
-	if err := inner.UnmarshalShortI2NP(payload); err != nil {
-		return oops.Wrapf(err, "failed to parse inner I2NP message from TunnelGateway payload")
+	if err := inner.UnmarshalBinary(payload); err != nil {
+		// Fall back to short I2NP format (9-byte header) in case the payload
+		// uses NTCP2 short format.
+		if len(payload) < i2np.ShortI2NPHeaderSize {
+			return oops.Errorf("TunnelGateway payload too short for any I2NP format: %d bytes", len(payload))
+		}
+		inner2 := &i2np.BaseI2NPMessage{}
+		if err2 := inner2.UnmarshalShortI2NP(payload); err2 != nil {
+			return oops.Wrapf(err, "failed to parse inner I2NP message from TunnelGateway payload (standard: %v, short: %v)", err, err2)
+		}
+		inner = inner2
 	}
 	log.WithFields(logger.Fields{
 		"tunnel_id":    tunnelID,
