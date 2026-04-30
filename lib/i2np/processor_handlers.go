@@ -154,14 +154,26 @@ func (p *MessageProcessor) processDatabaseSearchReplyMessage(msg I2NPMessage) er
 // These messages wrap I2NP messages destined for delivery through a tunnel.
 // The gateway extracts the inner message and forwards it into the tunnel.
 func (p *MessageProcessor) processTunnelGatewayMessage(msg I2NPMessage) error {
-	// Type assert to *TunnelGateway
+	// Type assert to *TunnelGateway — may fail if message arrived as BaseI2NPMessage
 	tgMsg, ok := msg.(*TunnelGateway)
 	if !ok {
-		log.WithFields(logger.Fields{
-			"at":     "processTunnelGatewayMessage",
-			"reason": "type_assertion_failed",
-		}).Error("Message is not a TunnelGateway")
-		return oops.Errorf("message is not a TunnelGateway")
+		// Fall back: unmarshal from raw payload (e.g. BaseI2NPMessage from NTCP2 parser)
+		carrier, ok2 := msg.(DataCarrier)
+		if !ok2 {
+			log.WithFields(logger.Fields{
+				"at":     "processTunnelGatewayMessage",
+				"reason": "type_assertion_failed",
+			}).Error("Message is not a TunnelGateway and has no data carrier")
+			return oops.Errorf("message is not a TunnelGateway")
+		}
+		tgMsg = &TunnelGateway{}
+		if err := tgMsg.UnmarshalBinary(carrier.GetData()); err != nil {
+			log.WithFields(logger.Fields{
+				"at":     "processTunnelGatewayMessage",
+				"reason": "unmarshal_failed",
+			}).WithError(err).Error("Failed to unmarshal TunnelGateway from data carrier")
+			return oops.Wrapf(err, "failed to unmarshal TunnelGateway")
+		}
 	}
 
 	log.WithFields(logger.Fields{

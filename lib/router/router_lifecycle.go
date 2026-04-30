@@ -828,6 +828,7 @@ func (r *Router) initializeMessageRouter() {
 	r.initializeGarlicRouter()
 	r.wireGarlicSessionManager()
 	r.wireTunnelDataHandler()
+	r.wireTunnelGatewayHandler()
 	r.wireBuildRecordIdentity()
 	r.wireI2CPTunnelBuilder()
 
@@ -860,6 +861,39 @@ func (r *Router) wireTunnelDataHandler() {
 		r.messageRouter.GetProcessor().SetTunnelDataHandler(r.inboundHandler)
 		log.WithFields(logger.Fields{"at": "initializeMessageRouter"}).Debug("InboundMessageHandler wired as TunnelData handler on message processor")
 	}
+}
+
+// wireTunnelGatewayHandler wires a TunnelGateway handler that re-parses the
+// inner I2NP message from the gateway payload and dispatches it through the
+// message processor. This is needed so that STBM build replies (type 26)
+// wrapped inside a TunnelGateway (type 19) are properly processed.
+func (r *Router) wireTunnelGatewayHandler() {
+	r.messageRouter.GetProcessor().SetTunnelGatewayHandler(&tunnelGatewayDispatcher{
+		processor: r.messageRouter.GetProcessor(),
+	})
+	log.WithFields(logger.Fields{"at": "initializeMessageRouter"}).Debug("TunnelGateway dispatcher wired into message processor")
+}
+
+// tunnelGatewayDispatcher implements i2np.TunnelGatewayHandler by parsing the
+// inner I2NP message from a TunnelGateway payload and re-dispatching it.
+type tunnelGatewayDispatcher struct {
+	processor *i2np.MessageProcessor
+}
+
+func (d *tunnelGatewayDispatcher) HandleGateway(tunnelID tunnel.TunnelID, payload []byte) error {
+	if len(payload) < i2np.ShortI2NPHeaderSize {
+		return oops.Errorf("TunnelGateway payload too short: %d bytes", len(payload))
+	}
+	inner := &i2np.BaseI2NPMessage{}
+	if err := inner.UnmarshalShortI2NP(payload); err != nil {
+		return oops.Wrapf(err, "failed to parse inner I2NP message from TunnelGateway payload")
+	}
+	log.WithFields(logger.Fields{
+		"tunnel_id":    tunnelID,
+		"inner_type":   inner.Type(),
+		"inner_msg_id": inner.MessageID(),
+	}).Debug("TunnelGateway: dispatching inner I2NP message")
+	return d.processor.ProcessMessage(inner)
 }
 
 // wireBuildRecordIdentity wires router identity and crypto keys for build record decryption.
