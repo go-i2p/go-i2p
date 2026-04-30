@@ -629,7 +629,7 @@ func (tm *TunnelManager) createShortTunnelBuildMessage(result *tunnel.TunnelBuil
 	encryptedRecords := make([][ShortBuildRecordSize]byte, len(i2npRecords))
 	replyKeys := make([][32]byte, len(i2npRecords))
 	noiseHashes := make([][32]byte, len(i2npRecords))
-	postReplyCKs := make([][32]byte, len(i2npRecords)) // chaining key after SMTunnelReplyKey, needed for garlic derivation
+	postReplyCKs := make([][32]byte, len(i2npRecords))
 	for i, record := range i2npRecords {
 		if i >= len(result.Hops) {
 			return nil, oops.Errorf("record %d has no corresponding hop RouterInfo", i)
@@ -664,14 +664,12 @@ func (tm *TunnelManager) createShortTunnelBuildMessage(result *tunnel.TunnelBuil
 	result.NoiseHashes = noiseHashes
 
 	// Derive and register the one-time garlic key for the OBEP's reply.
-	// The OBEP wraps its ShortTunnelBuildReply (type 26) in a garlic message
-	// (type 11) encrypted with a key derived via the i2pd HKDF chain:
-	//   SMTunnelLayerKey → TunnelLayerIVKey → RGarlicKeyAndTag
-	// starting from the chaining key that follows SMTunnelReplyKey.
-	// tag = RGarlicKeyAndTag_out[0:8], key = RGarlicKeyAndTag_out[32:64].
-	if tm.garlicKeyRegistrar != nil && len(postReplyCKs) > 0 {
-		lastHop := len(postReplyCKs) - 1
-		garlicKey, tag, err := DeriveSTBMGarlicKey(postReplyCKs[lastHop])
+	// The key/tag are derived from the last-hop STBM Noise transcript hash via
+	// HKDF("AttachLayerEncryption") so the inbound one-time garlic decryptor can
+	// match the OBEP's tag and decrypt the wrapped ShortTunnelBuildReply.
+	if tm.garlicKeyRegistrar != nil && len(noiseHashes) > 0 {
+		lastHop := len(noiseHashes) - 1
+		garlicKey, tag, err := DeriveSTBMGarlicKey(noiseHashes[lastHop])
 		if err != nil {
 			return nil, oops.Wrapf(err, "failed to derive STBM garlic reply key")
 		}

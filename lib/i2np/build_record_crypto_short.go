@@ -200,46 +200,23 @@ func hkdf64(ck [32]byte, info string) ([64]byte, error) {
 }
 
 // DeriveSTBMGarlicKey derives the one-time symmetric garlic key used by the
-// OBEP to wrap the ShortTunnelBuildReply in a garlic message (type 11).
+// OBEP to wrap a ShortTunnelBuildReply in a garlic message (type 11).
 //
-// Derivation matches i2pd ShortECIESTunnelHopConfig::CreateBuildRequestRecord
-// for an endpoint hop. Starting from the post-encryption chaining key (after
-// SMTunnelReplyKey has already been applied), the chain is:
+// The key material is derived from the STBM Noise transcript hash using:
 //
-//	HKDF(ck, "", "SMTunnelLayerKey") → new_ck, layerKey (discarded)
-//	HKDF(ck, "", "TunnelLayerIVKey") → new_ck, ivKey (discarded)
-//	HKDF(ck, "", "RGarlicKeyAndTag") → new_ck
-//	  tag = new_ck[0:8]   (first 8 bytes of the new chaining key)
-//	  key = new_ck[32:64] (second 32 bytes)
+//	HKDF(noiseHash, "", "AttachLayerEncryption") -> 32 bytes
 //
-// The ckAfterReplyKey must be the new chaining key returned by DeriveSTBMReplyKey.
-func DeriveSTBMGarlicKey(ckAfterReplyKey [32]byte) ([32]byte, [8]byte, error) {
+// Slicing follows the one-time garlic decryptor contract in go-noise:
+//   - key = keyMaterial[0:32]
+//   - tag = keyMaterial[24:32]
+func DeriveSTBMGarlicKey(noiseHash [32]byte) ([32]byte, [8]byte, error) {
 	var garlicKey [32]byte
 	var tag [8]byte
-
-	// Step 2: SMTunnelLayerKey
-	out, err := hkdf64(ckAfterReplyKey, "SMTunnelLayerKey")
-	if err != nil {
-		return garlicKey, tag, oops.Wrapf(err, "HKDF for SMTunnelLayerKey failed")
+	r := hkdf.New(sha256.New, []byte{}, noiseHash[:], []byte("AttachLayerEncryption"))
+	if _, err := io.ReadFull(r, garlicKey[:]); err != nil {
+		return garlicKey, tag, oops.Wrapf(err, "HKDF for AttachLayerEncryption failed")
 	}
-	var ck [32]byte
-	copy(ck[:], out[0:32])
-
-	// Step 3: TunnelLayerIVKey
-	out, err = hkdf64(ck, "TunnelLayerIVKey")
-	if err != nil {
-		return garlicKey, tag, oops.Wrapf(err, "HKDF for TunnelLayerIVKey failed")
-	}
-	copy(ck[:], out[0:32])
-
-	// Step 4: RGarlicKeyAndTag
-	out, err = hkdf64(ck, "RGarlicKeyAndTag")
-	if err != nil {
-		return garlicKey, tag, oops.Wrapf(err, "HKDF for RGarlicKeyAndTag failed")
-	}
-	// tag = new_ck[0:8], key = new_ck[32:64]
-	copy(tag[:], out[0:8])
-	copy(garlicKey[:], out[32:64])
+	copy(tag[:], garlicKey[24:32])
 	return garlicKey, tag, nil
 }
 
