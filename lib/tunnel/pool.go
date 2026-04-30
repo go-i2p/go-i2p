@@ -137,6 +137,19 @@ type Pool struct {
 	inFlightExpiredCount int                       // Consecutive inbound build timeouts (no VTBRM received)
 	autoFallbackFn       func() bool               // Returns true when no public address is available
 	routerHash           common.Hash               // Our router's identity hash, used as ReplyGateway in build requests
+	startupGate          <-chan struct{}           // BUG-1: closed when pre-conditions for first build are met
+}
+
+// SetStartupGate sets a channel that maintenanceLoop waits on before
+// executing its first maintainPool() call. This allows the outbound pool to
+// delay its initial build attempt until the inbound pool has at least one
+// active tunnel ready to receive build replies (BUG-1 fix).
+// The gate must be closed (not just sent to) to unblock the loop.
+// A nil channel means no gate — the initial build runs immediately.
+func (p *Pool) SetStartupGate(gate <-chan struct{}) {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	p.startupGate = gate
 }
 
 // SetRouterHash sets our router's identity hash so it can be used as the
@@ -497,6 +510,21 @@ func (p *Pool) maintenanceLoop() {
 	// Check pool health every 30 seconds
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
+
+	// BUG-1: If a startup gate is set, wait for it (or context cancellation)
+	// before the first build attempt. This ensures the outbound pool does not
+	// dispatch builds with ReplyTunnelID=0 before the inbound pool is ready.
+	p.mutex.RLock()
+	gate := p.startupGate
+	p.mutex.RUnlock()
+	if gate != nil {
+		select {
+		case <-gate:
+			// Inbound pool signalled readiness; proceed with initial build.
+		case <-p.ctx.Done():
+			return
+		}
+	}
 
 	// Perform initial check immediately
 	p.maintainPool()

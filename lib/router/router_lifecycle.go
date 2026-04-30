@@ -969,7 +969,17 @@ func (r *Router) initializeTunnelManager() {
 		inboundPool.SetRouterHash(routerHash)
 	}
 
-	for _, pool := range []*tunnel.Pool{outboundPool, inboundPool} {
+	// BUG-1 fix: start inbound pool BEFORE outbound and gate the outbound pool's
+	// first build attempt on the inbound pool having at least one active tunnel.
+	// Without this ordering both goroutines race and the outbound pool's first
+	// maintainPool() call finds SelectTunnel()==nil, setting ReplyTunnelID=0 in
+	// every STBM OBEP record so i2pd cannot route the ShortTunnelBuildReply back.
+	inboundReady := make(chan struct{})
+	if outboundPool != nil {
+		outboundPool.SetStartupGate(inboundReady)
+	}
+
+	for _, pool := range []*tunnel.Pool{inboundPool, outboundPool} {
 		if pool == nil {
 			continue
 		}
@@ -979,6 +989,39 @@ func (r *Router) initializeTunnelManager() {
 			log.WithError(err).Error("Failed to start tunnel pool maintenance")
 		}
 	}
+
+	// Launch a watcher that closes inboundReady as soon as the inbound pool
+	// has at least one active (TunnelReady) tunnel, or after a safety timeout
+	// equal to two build-timeout periods so the outbound pool is never blocked
+	// indefinitely.
+	go func() {
+		deadline := time.NewTimer(2 * tunnel.BuildTimeout)
+		defer deadline.Stop()
+		poll := time.NewTicker(500 * time.Millisecond)
+		defer poll.Stop()
+		for {
+			select {
+			case <-r.ctx.Done():
+				close(inboundReady)
+				return
+			case <-deadline.C:
+				log.WithFields(logger.Fields{
+					"at":      "initializeTunnelManager",
+					"timeout": 2 * tunnel.BuildTimeout,
+				}).Warn("inbound pool readiness timeout; releasing outbound pool startup gate")
+				close(inboundReady)
+				return
+			case <-poll.C:
+				if inboundPool != nil && len(inboundPool.GetActiveTunnels()) > 0 {
+					log.WithFields(logger.Fields{
+						"at": "initializeTunnelManager",
+					}).Debug("inbound pool ready; releasing outbound pool startup gate")
+					close(inboundReady)
+					return
+				}
+			}
+		}
+	}()
 
 	// Hidden mode and AlwaysZeroHopInbound force the inbound exploratory pool
 	// to build 0-hop tunnels (we serve as both IBGW and IBEP). This is the

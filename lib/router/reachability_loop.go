@@ -4,8 +4,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/go-i2p/common/router_address"
 	ntcp2 "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
-	ssu2 "github.com/go-i2p/go-i2p/lib/transport/ssu2"
 	"github.com/go-i2p/logger"
 )
 
@@ -134,15 +134,43 @@ func (r *Router) refreshNTCP2LocalRouterInfo() {
 // collectBestExternalAddr returns the best confirmed external address from
 // available evidence sources, in priority order:
 //  1. SSU2 PeerTest / NAT-PMP confirmed address (cached in natStateCache)
+//  2. NTCP2 published host:port from the current RouterInfo addresses
+//     (BUG-2 fix: NTCP2-only routers were always returning "" here)
 //
 // Returns "" when no evidence is available.
 func (r *Router) collectBestExternalAddr() string {
+	// 1. SSU2 PeerTest / NAT-PMP is the highest-quality source.
 	ssu2Transport := r.getSSU2Transport()
-	if ssu2Transport == nil {
+	if ssu2Transport != nil {
+		if addr := ssu2Transport.GetCachedExternalAddr(); addr != "" {
+			return addr
+		}
+	}
+
+	// 2. Fall back to the NTCP2 address from the current RouterInfo.
+	//    This covers NTCP2-only deployments on static or NAT-forwarded IPs.
+	if r.routerInfoProv == nil {
 		return ""
 	}
-	return ssu2Transport.GetCachedExternalAddr()
+	ri, err := r.routerInfoProv.GetRouterInfo()
+	if err != nil || ri == nil {
+		return ""
+	}
+	for _, addr := range ri.RouterAddresses() {
+		if addr == nil {
+			continue
+		}
+		if !addr.CheckOption(router_address.HOST_OPTION_KEY) {
+			continue
+		}
+		hostStr := addr.HostString()
+		portStr := addr.PortString()
+		host, hErr := hostStr.Data()
+		port, pErr := portStr.Data()
+		if hErr != nil || pErr != nil || host == "" || port == "" {
+			continue
+		}
+		return host + ":" + port
+	}
+	return ""
 }
-
-// Ensure the ssu2 import is used even if getSSU2Transport is in another file.
-var _ *ssu2.SSU2Transport
