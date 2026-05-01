@@ -427,6 +427,10 @@ func (p *Publisher) sendDatabaseStoreToFloodfill(hash common.Hash, data []byte, 
 	// Select and validate outbound tunnel
 	selectedTunnel, gatewayHash, err := p.selectAndValidateTunnel()
 	if err != nil {
+		if dataType == i2np.DatabaseStoreTypeRouterInfo {
+			log.WithError(err).WithField("hash", fmt.Sprintf("%x", hash[:8])).Info("No outbound tunnel available; falling back to direct RouterInfo publication")
+			return p.sendDatabaseStoreDirect(hash, data, dataType, floodfill)
+		}
 		return err
 	}
 
@@ -467,6 +471,43 @@ func (p *Publisher) sendDatabaseStoreToFloodfill(hash common.Hash, data []byte, 
 		"gateway_hash":   fmt.Sprintf("%x", gatewayHash[:8]),
 	}).Debug("DatabaseStore sent to tunnel gateway for transmission")
 
+	return nil
+}
+
+// sendDatabaseStoreDirect sends a DatabaseStore message directly to a floodfill
+// over the transport session. This is only used as a bootstrap path for
+// RouterInfo publication when no outbound exploratory tunnel is available yet.
+func (p *Publisher) sendDatabaseStoreDirect(hash common.Hash, data []byte, dataType byte, floodfill router_info.RouterInfo) error {
+	msg, err := p.createDatabaseStoreMessage(hash, data, dataType)
+	if err != nil {
+		return err
+	}
+
+	ffHash, err := floodfill.IdentHash()
+	if err != nil {
+		return oops.Errorf("failed to get floodfill hash: %w", err)
+	}
+
+	log.WithFields(logger.Fields{
+		"data_hash":      fmt.Sprintf("%x", hash[:8]),
+		"floodfill_hash": fmt.Sprintf("%x", ffHash[:8]),
+		"msg_type":       msg.Type(),
+	}).Debug("Sending DatabaseStore directly to floodfill")
+
+	p.fieldMu.RLock()
+	transport := p.transport
+	p.fieldMu.RUnlock()
+	if transport == nil {
+		return oops.Errorf("transport manager not available")
+	}
+
+	session, err := transport.GetSession(floodfill)
+	if err != nil {
+		return oops.Errorf("failed to get transport session to floodfill: %w", err)
+	}
+	if err := session.QueueSendI2NP(msg); err != nil {
+		return oops.Errorf("failed to queue direct DatabaseStore transmission: %w", err)
+	}
 	return nil
 }
 

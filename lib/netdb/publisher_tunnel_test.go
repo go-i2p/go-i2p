@@ -167,6 +167,27 @@ func TestSendDatabaseStoreToFloodfill_NoActiveTunnels(t *testing.T) {
 	assert.Contains(t, err.Error(), "no active outbound tunnels")
 }
 
+func TestSendDatabaseStoreToFloodfill_RouterInfoFallsBackToDirectTransport(t *testing.T) {
+	db := newMockNetDB()
+	transport := newMockTransportManager()
+	selector := &mockPeerSelector{}
+	pool := tunnel.NewTunnelPool(selector)
+	publisher := NewPublisher(db, pool, transport, nil, DefaultPublisherConfig())
+
+	hash := common.Hash{1, 2, 3, 4, 5, 6, 7, 8}
+	data := []byte("compressed routerinfo bytes")
+	floodfill := createValidRouterInfo(t)
+	floodfillHash, err := floodfill.IdentHash()
+	require.NoError(t, err)
+
+	err = publisher.sendDatabaseStoreToFloodfill(hash, data, i2np.DatabaseStoreTypeRouterInfo, floodfill)
+	assert.NoError(t, err)
+
+	sentMessages := transport.GetSentMessages(floodfillHash)
+	require.Len(t, sentMessages, 1, "Expected direct DatabaseStore message to floodfill")
+	assert.Equal(t, i2np.I2NPMessageTypeDatabaseStore, sentMessages[0].Type(), "Expected direct DatabaseStore message type")
+}
+
 // TestSendDatabaseStoreToFloodfill_WithActiveTunnel tests successful tunnel selection and message transmission
 func TestSendDatabaseStoreToFloodfill_WithActiveTunnel(t *testing.T) {
 	env := setupPublisherWithTunnel(t, 12345, []common.Hash{
