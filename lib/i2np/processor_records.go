@@ -195,6 +195,17 @@ func (p *MessageProcessor) processVariableTunnelBuildReplyMessage(msg I2NPMessag
 // processShortTunnelBuildReplyMessage processes ShortTunnelBuildReply (type 26) messages.
 // Uses the newer short tunnel build format (v0.9.51+).
 func (p *MessageProcessor) processShortTunnelBuildReplyMessage(msg I2NPMessage) error {
+	// F-5 audit fix: Log type-26 processing for delivery path analysis.
+	// Type-26 can arrive via two paths:
+	//   1. Wrapped in garlic (type 11) by OBEP - appears in garlic clove processing logs first
+	//   2. Direct via SSU2 short-reply - appears only here
+	// Correlate with garlic clove logs by message_id to distinguish delivery paths.
+	log.WithFields(logger.Fields{
+		"at":         "processShortTunnelBuildReplyMessage",
+		"message_id": msg.MessageID(),
+		"type":       msg.Type(),
+	}).Debug("Processing ShortTunnelBuildReply (type 26)")
+
 	return p.processBuildReplyCommon(msg, true)
 }
 
@@ -721,9 +732,10 @@ func (p *MessageProcessor) decryptShortRecord(recordData []byte, index int) (Bui
 	if err != nil {
 		return BuildRequestRecord{}, err
 	}
-	replyKey, _, err := DeriveSTBMReplyKey(ck)
+	// Derive per-hop keys in the correct order matching i2p proposal 157
+	_, _, replyKey, _, err := DeriveSTBMHopKeys(ck)
 	if err != nil {
-		return BuildRequestRecord{}, oops.Wrapf(err, "failed to derive STBM reply key for slot %d", index)
+		return BuildRequestRecord{}, oops.Wrapf(err, "failed to derive STBM hop keys for slot %d", index)
 	}
 	if p.stbmSlotCrypto == nil {
 		p.stbmSlotCrypto = make(map[int]stbmSlotCrypto)

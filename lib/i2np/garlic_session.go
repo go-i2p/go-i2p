@@ -113,16 +113,38 @@ func (sm *GarlicSessionManager) DecryptGarlicMessage(encryptedGarlic []byte) ([]
 	sm.oneTimeDiagMu.Lock()
 	_, oneTimeTagRegistered := sm.oneTimeDiag[incomingTag]
 	oneTimeTagMapSizeBefore := len(sm.oneTimeDiag)
+
+	// Capture registered tags for diagnostics when tag is not found
+	var registeredTags []string
+	if !oneTimeTagRegistered && oneTimeTagMapSizeBefore > 0 {
+		maxTags := 20
+		if oneTimeTagMapSizeBefore < maxTags {
+			maxTags = oneTimeTagMapSizeBefore
+		}
+		registeredTags = make([]string, 0, maxTags)
+		count := 0
+		for tag := range sm.oneTimeDiag {
+			if count >= maxTags {
+				break
+			}
+			registeredTags = append(registeredTags, fmt.Sprintf("%x", tag))
+			count++
+		}
+	}
 	sm.oneTimeDiagMu.Unlock()
 
 	if len(encryptedGarlic) >= 8 {
-		log.WithFields(logger.Fields{
+		fields := logger.Fields{
 			"at":                           "DecryptGarlicMessage",
 			"incoming_tag":                 fmt.Sprintf("%x", incomingTag),
 			"one_time_tag_registered":      oneTimeTagRegistered,
 			"one_time_tag_map_size_before": oneTimeTagMapSizeBefore,
 			"encrypted_size":               len(encryptedGarlic),
-		}).Debug("Garlic decrypt diagnostics")
+		}
+		if !oneTimeTagRegistered && len(registeredTags) > 0 {
+			fields["registered_tags"] = registeredTags
+		}
+		log.WithFields(fields).Debug("Garlic decrypt diagnostics")
 	}
 
 	payload, sessionTag, sessionHash, err := sm.inner.DecryptGarlicMessage(encryptedGarlic)
@@ -211,6 +233,7 @@ func (sm *GarlicSessionManager) RegisterOneTimeGarlicKey(tag [8]byte, key [32]by
 	log.WithFields(logger.Fields{
 		"at":                    "RegisterOneTimeGarlicKey",
 		"tag":                   fmt.Sprintf("%x", tag),
+		"key":                   fmt.Sprintf("%x", key),
 		"one_time_tag_map_size": oneTimeTagMapSize,
 	}).Debug("Registered one-time garlic key (diagnostic mirror)")
 

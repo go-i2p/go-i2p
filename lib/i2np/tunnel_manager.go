@@ -2,6 +2,7 @@ package i2np
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -15,6 +16,10 @@ import (
 	"github.com/samber/oops"
 	"golang.org/x/crypto/chacha20"
 )
+
+// ErrBuildReplyNotCorrelated is returned when a tunnel build reply arrives
+// without a corresponding pending build request (F-4 audit fix).
+var ErrBuildReplyNotCorrelated = errors.New("tunnel build reply received without pending request")
 
 // buildExpireGrace is the extra window added to the cleanup timer and expiry
 // threshold to close the race between a late-arriving reply and the
@@ -685,8 +690,7 @@ func (tm *TunnelManager) createShortTunnelBuildMessage(result *tunnel.TunnelBuil
 	encryptedRecords := make([][ShortBuildRecordSize]byte, len(i2npRecords))
 	replyKeys := make([][32]byte, len(i2npRecords))
 	noiseHashes := make([][32]byte, len(i2npRecords))
-	preReplyCKs := make([][32]byte, len(i2npRecords))
-	postReplyCKs := make([][32]byte, len(i2npRecords))
+	noiseCKs := make([][32]byte, len(i2npRecords)) // raw post-Noise chaining keys
 	for i, record := range i2npRecords {
 		if i >= len(result.Hops) {
 			return nil, oops.Errorf("record %d has no corresponding hop RouterInfo", i)
@@ -697,13 +701,17 @@ func (tm *TunnelManager) createShortTunnelBuildMessage(result *tunnel.TunnelBuil
 		}
 		encryptedRecords[i] = encrypted
 		noiseHashes[i] = nh
-		preReplyCKs[i] = ck
-		rk, newCK, err := DeriveSTBMReplyKey(ck)
+		noiseCKs[i] = ck
+
+		// Derive per-hop keys in the correct order matching i2p proposal 157:
+		//   ck → HKDF("SMTunnelLayerKey") → ck1, layerKey
+		//   ck1 → HKDF("TunnelLayerIVKey") → ck2, ivKey
+		//   ck2 → HKDF("SMTunnelReplyKey") → ck3, replyKey
+		_, _, rk, _, err := DeriveSTBMHopKeys(ck)
 		if err != nil {
-			return nil, oops.Wrapf(err, "failed to derive reply key for hop %d", i)
+			return nil, oops.Wrapf(err, "failed to derive hop keys for hop %d", i)
 		}
 		replyKeys[i] = rk
-		postReplyCKs[i] = newCK
 	}
 
 	// Per STBM spec (proposal 152), the ReplyKey field is absent from the
@@ -723,18 +731,16 @@ func (tm *TunnelManager) createShortTunnelBuildMessage(result *tunnel.TunnelBuil
 
 	// Derive and register one-time garlic keys for the OBEP's reply.
 	//
-	// Primary derivation follows the go-noise one-time key path from the last
-	// hop Noise transcript hash. As an interoperability fallback, also register
-	// a derivation from the post-reply HKDF chaining key used in STBM key
-	// evolution, since some implementations derive AttachLayerEncryption from CK.
-	if tm.garlicKeyRegistrar != nil && len(postReplyCKs) > 0 {
-		lastHop := len(postReplyCKs) - 1
-		// Derive the exact garlic key/tag that the OBEP uses when wrapping its
-		// ShortTunnelBuildReply (matches i2pd TransitTunnel.cpp exactly):
-		//   HKDF(postReplyCK, "SMTunnelLayerKey") -> ck1
-		//   HKDF(ck1, "TunnelLayerIVKey")         -> ck2
-		//   HKDF(ck2, "RGarlicKeyAndTag")          -> tag=ck3[0:8], key=ck3[32:64]
-		obepKey, obepTag, obepErr := DeriveSTBMOBEPGarlicKeyAndTag(postReplyCKs[lastHop])
+	// The derivation follows the full HKDF chain in the correct order:
+	//   ck → HKDF("SMTunnelLayerKey") → ck1, layerKey
+	//   ck1 → HKDF("TunnelLayerIVKey") → ck2, ivKey
+	//   ck2 → HKDF("SMTunnelReplyKey") → ck3, replyKey
+	//   ck3 → HKDF("RGarlicKeyAndTag") → ck4, garlicKey (tag from ck4[0:8])
+	if tm.garlicKeyRegistrar != nil && len(noiseCKs) > 0 {
+		lastHop := len(noiseCKs) - 1
+		// Pass the raw post-Noise chaining key to DeriveSTBMOBEPGarlicKeyAndTag.
+		// It will perform the full four-step chain internally.
+		obepKey, obepTag, obepErr := DeriveSTBMOBEPGarlicKeyAndTag(noiseCKs[lastHop])
 		if obepErr != nil {
 			return nil, oops.Wrapf(obepErr, "failed to derive OBEP garlic reply key")
 		}
@@ -1174,20 +1180,11 @@ func (tm *TunnelManager) retrievePendingBuildRequest(messageID int) (*buildReque
 }
 
 // processUncorrelatedReply handles replies without a pending build request.
+// Per F-4 audit fix: returns error without processing to avoid state corruption
+// from mis-routed or delayed replies.
 func (tm *TunnelManager) processUncorrelatedReply(handler TunnelReplyHandler, messageID int, records []BuildResponseRecord) error {
-	log.WithField("message_id", messageID).Warn("No pending build request found for reply - processing without correlation")
-
-	err := handler.ProcessReply()
-	if err != nil {
-		return err
-	}
-
-	// Update tunnel states if possible (without decryption)
-	if tm.inboundPool != nil || tm.outboundPool != nil {
-		tm.updateTunnelStatesFromReply(messageID, records, nil)
-	}
-
-	return nil
+	log.WithField("message_id", messageID).Warn("No pending build request found for reply - rejecting uncorrelated reply")
+	return ErrBuildReplyNotCorrelated
 }
 
 // processCorrelatedReply handles replies with a pending build request.
@@ -1453,11 +1450,17 @@ func (tm *TunnelManager) cleanupExpiredBuildByID(messageID int) {
 	// boundary still wins and the entry survives until the timer fires.
 	const buildTimeout = 90 * time.Second
 	if time.Since(req.createdAt) > buildTimeout+buildExpireGrace {
+		tunnelID := req.tunnelID
 		delete(tm.pendingBuilds, messageID)
+
+		// F-3 audit fix: Coordinate cleanup with ReplyProcessor to prevent
+		// racing timeout mechanisms. This removes the timeout timer and
+		// pending build entry from both tracking maps.
+		tm.replyProcessor.RemovePendingBuild(tunnelID)
 
 		// Mark tunnel as failed and schedule async cleanup
 		pool := tm.getPoolForTunnel(req.isInbound)
-		if tunnelState, exists := pool.GetTunnel(req.tunnelID); exists {
+		if tunnelState, exists := pool.GetTunnel(tunnelID); exists {
 			tunnelState.State = tunnel.TunnelFailed
 			tm.buildExpireWindow.recordEvent()
 			if req.isInbound {
@@ -1465,12 +1468,12 @@ func (tm *TunnelManager) cleanupExpiredBuildByID(messageID int) {
 			} else {
 				pool.RecordOutboundBuildTimeout()
 			}
-			tm.cleanupFailedTunnel(req.tunnelID, req.isInbound)
+			tm.cleanupFailedTunnel(tunnelID, req.isInbound)
 		}
 
 		log.WithFields(logger.Fields{
 			"message_id": messageID,
-			"tunnel_id":  req.tunnelID,
+			"tunnel_id":  tunnelID,
 			"age":        time.Since(req.createdAt),
 		}).Debug("Cleaned up expired tunnel build via timeout")
 	}
