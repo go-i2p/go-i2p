@@ -351,6 +351,42 @@ func (p *MessageProcessor) extractGarlicData(msg I2NPMessage) ([]byte, error) {
 	return encryptedData, nil
 }
 
+func parseECIESGarlicClove(data []byte) (*Garlic, error) {
+	if len(data) == 0 {
+		return nil, oops.Errorf("empty ECIES garlic clove")
+	}
+
+	deliveryInstructions, bytesRead, err := deserializeDeliveryInstructions(data)
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to parse ECIES garlic delivery instructions")
+	}
+	if len(data) < bytesRead+ShortI2NPHeaderSize {
+		return nil, oops.Errorf("ECIES garlic clove too short for short I2NP header: have %d bytes, need at least %d", len(data)-bytesRead, ShortI2NPHeaderSize)
+	}
+
+	msgType := int(data[bytesRead])
+	i2npMsg := NewI2NPMessage(msgType)
+	baseMsg, ok := i2npMsg.(*BaseI2NPMessage)
+	if !ok {
+		return nil, oops.Errorf("failed to create base I2NP message for type %d", msgType)
+	}
+	if err := baseMsg.UnmarshalShortI2NP(data[bytesRead:]); err != nil {
+		return nil, oops.Wrapf(err, "failed to parse ECIES short I2NP message (type %d)", msgType)
+	}
+
+	clove := GarlicClove{
+		DeliveryInstructions: *deliveryInstructions,
+		I2NPMessage:          baseMsg,
+	}
+
+	return &Garlic{
+		Count:      1,
+		Cloves:     []GarlicClove{clove},
+		MessageID:  baseMsg.MessageID(),
+		Expiration: baseMsg.Expiration(),
+	}, nil
+}
+
 // decryptGarlicData decrypts the garlic message using the session manager.
 func (p *MessageProcessor) decryptGarlicData(msgID int, encryptedData []byte) ([]byte, [8]byte, error) {
 	incomingTag := ""
@@ -378,19 +414,20 @@ func (p *MessageProcessor) decryptGarlicData(msgID int, encryptedData []byte) ([
 	return decryptedData, sessionTag, nil
 }
 
-// parseAndLogGarlic parses the decrypted garlic structure and logs the result.
-// Uses DeserializeGarlic from garlic_builder.go as the single canonical parser
-// to avoid duplicate parsing logic and ensure consistent validation.
+// parseAndLogGarlic parses the decrypted ECIES clove payload and logs the result.
 func (p *MessageProcessor) parseAndLogGarlic(msgID int, decryptedData []byte, sessionTag [8]byte) (*Garlic, error) {
-	garlic, err := DeserializeGarlic(decryptedData, 0)
+	garlic, err := parseECIESGarlicClove(decryptedData)
 	if err != nil {
-		return nil, oops.Wrapf(err, "failed to parse decrypted garlic structure")
+		return nil, oops.Wrapf(err, "failed to parse decrypted ECIES garlic clove")
 	}
 
 	log.WithFields(logger.Fields{
-		"msg_id":      msgID,
-		"clove_count": len(garlic.Cloves),
-	}).Debug("Processing garlic cloves")
+		"msg_id":        msgID,
+		"clove_count":   len(garlic.Cloves),
+		"session_tag":   fmt.Sprintf("%x", sessionTag[:]),
+		"delivery_flag": garlic.Cloves[0].DeliveryInstructions.Flag,
+		"wrapped_type":  garlic.Cloves[0].I2NPMessage.Type(),
+	}).Debug("Processing decrypted ECIES garlic clove")
 
 	return garlic, nil
 }
