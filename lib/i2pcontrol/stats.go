@@ -283,6 +283,12 @@ type RouterAccess interface {
 	// GetActiveSessionCount returns the number of active transport sessions (connected peers).
 	GetActiveSessionCount() int
 
+	// GetNTCP2SessionCount returns the number of active NTCP2 (TCP) sessions.
+	GetNTCP2SessionCount() int
+
+	// GetSSU2SessionCount returns the number of active SSU2 (UDP) sessions.
+	GetSSU2SessionCount() int
+
 	// Stop initiates graceful shutdown of the router.
 	Stop()
 
@@ -731,6 +737,12 @@ func (rsp *routerStatsProvider) GetRateForPeriod(stat string, periodMs int64) fl
 		}
 		return 0
 
+	// Transport session counts — instantaneous counts, not windowed averages
+	case "tcp.activePeers":
+		return float64(rsp.router.GetNTCP2SessionCount())
+	case "udp.activePeers":
+		return float64(rsp.router.GetSSU2SessionCount())
+
 	default:
 		log.WithField("stat", stat).Debug("i2pcontrol: GetRateForPeriod unknown stat name, returning 0")
 		return 0
@@ -763,6 +775,8 @@ type RealRouter struct {
 		GetBandwidthRates1s() (inbound, outbound uint64)
 		GetNetworkStatus() int
 		GetActiveSessionCount() int
+		GetNTCP2SessionCount() int
+		GetSSU2SessionCount() int
 		Stop()
 		Reseed() error
 		GetTransportAddr() interface{}
@@ -808,6 +822,16 @@ func (rr RealRouter) GetBandwidthRates() (inbound, outbound uint64) {
 // GetActiveSessionCount returns active transport session count (implements RouterAccess)
 func (rr RealRouter) GetActiveSessionCount() int {
 	return rr.Router.GetActiveSessionCount()
+}
+
+// GetNTCP2SessionCount returns active NTCP2 (TCP) session count (implements RouterAccess)
+func (rr RealRouter) GetNTCP2SessionCount() int {
+	return rr.Router.GetNTCP2SessionCount()
+}
+
+// GetSSU2SessionCount returns active SSU2 (UDP) session count (implements RouterAccess)
+func (rr RealRouter) GetSSU2SessionCount() int {
+	return rr.Router.GetSSU2SessionCount()
 }
 
 // Stop initiates graceful shutdown (implements RouterAccess)

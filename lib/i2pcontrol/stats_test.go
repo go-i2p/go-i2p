@@ -80,6 +80,14 @@ func (m *mockRouterAccess) GetActiveSessionCount() int {
 	return 0
 }
 
+func (m *mockRouterAccess) GetNTCP2SessionCount() int {
+	return 0
+}
+
+func (m *mockRouterAccess) GetSSU2SessionCount() int {
+	return 0
+}
+
 func (m *mockRouterAccess) GetTransportAddr() interface{} {
 	// Return a mock TCP address for testing
 	type mockAddr struct{}
@@ -519,6 +527,60 @@ func TestStatsActivePeers(t *testing.T) {
 
 			if stats.ActivePeers != tt.sessions {
 				t.Errorf("ActivePeers = %d, want %d", stats.ActivePeers, tt.sessions)
+			}
+		})
+	}
+}
+
+// mockRouterAccessWithTransportSessions wraps mockRouterAccess with configurable
+// per-transport session counts for testing tcp.activePeers and udp.activePeers stats.
+type mockRouterAccessWithTransportSessions struct {
+	mockRouterAccess
+	ntcp2Count int
+	ssu2Count  int
+}
+
+func (m *mockRouterAccessWithTransportSessions) GetNTCP2SessionCount() int {
+	return m.ntcp2Count
+}
+
+func (m *mockRouterAccessWithTransportSessions) GetSSU2SessionCount() int {
+	return m.ssu2Count
+}
+
+// TestStatsTransportActivePeers verifies that tcp.activePeers and udp.activePeers
+// stats correctly return the per-transport session counts.
+func TestStatsTransportActivePeers(t *testing.T) {
+	tests := []struct {
+		name       string
+		ntcp2Count int
+		ssu2Count  int
+	}{
+		{"no sessions", 0, 0},
+		{"only ntcp2", 5, 0},
+		{"only ssu2", 0, 3},
+		{"both transports", 10, 7},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			router := &mockRouterAccessWithTransportSessions{
+				mockRouterAccess: mockRouterAccess{running: true},
+				ntcp2Count:       tt.ntcp2Count,
+				ssu2Count:        tt.ssu2Count,
+			}
+			provider := NewRouterStatsProvider(router, "0.1.0-test")
+
+			// Test tcp.activePeers (NTCP2)
+			tcpPeers := provider.GetRateForPeriod("tcp.activePeers", 60000)
+			if tcpPeers != float64(tt.ntcp2Count) {
+				t.Errorf("tcp.activePeers = %v, want %d", tcpPeers, tt.ntcp2Count)
+			}
+
+			// Test udp.activePeers (SSU2)
+			udpPeers := provider.GetRateForPeriod("udp.activePeers", 60000)
+			if udpPeers != float64(tt.ssu2Count) {
+				t.Errorf("udp.activePeers = %v, want %d", udpPeers, tt.ssu2Count)
 			}
 		})
 	}

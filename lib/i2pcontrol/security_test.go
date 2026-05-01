@@ -717,6 +717,8 @@ func (m *mockRouterAccessBandwidth) GetBandwidthRates() (inbound, outbound uint6
 	return m.inbound, m.outbound
 }
 func (m *mockRouterAccessBandwidth) GetActiveSessionCount() int    { return 0 }
+func (m *mockRouterAccessBandwidth) GetNTCP2SessionCount() int     { return 0 }
+func (m *mockRouterAccessBandwidth) GetSSU2SessionCount() int      { return 0 }
 func (m *mockRouterAccessBandwidth) GetTransportAddr() interface{} { return nil }
 func (m *mockRouterAccessBandwidth) GetBandwidthRates1s() (inbound, outbound uint64) {
 	return m.inbound / 2, m.outbound / 2

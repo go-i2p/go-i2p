@@ -581,6 +581,36 @@ func (r *Router) GetActiveSessionCount() int {
 	return len(r.activeSessions)
 }
 
+// GetNTCP2SessionCount returns the number of active NTCP2 (TCP) sessions.
+// Returns 0 if the NTCP2 transport is not available.
+func (r *Router) GetNTCP2SessionCount() int {
+	muxer := r.TransportMuxer
+	if muxer == nil {
+		return 0
+	}
+	for _, t := range muxer.GetTransports() {
+		if ntcp2Transport, ok := t.(*ntcp.NTCP2Transport); ok {
+			return ntcp2Transport.GetSessionCount()
+		}
+	}
+	return 0
+}
+
+// GetSSU2SessionCount returns the number of active SSU2 (UDP) sessions.
+// Returns 0 if the SSU2 transport is not available.
+func (r *Router) GetSSU2SessionCount() int {
+	muxer := r.TransportMuxer
+	if muxer == nil {
+		return 0
+	}
+	for _, t := range muxer.GetTransports() {
+		if ssu2Transport, ok := t.(*ssu2.SSU2Transport); ok {
+			return ssu2Transport.GetSessionCount()
+		}
+	}
+	return 0
+}
+
 // GetTransportAddr returns the listening address of the first available transport.
 // This is used by I2PControl to expose NTCP2 port and address information.
 // Returns nil if no transports are available.

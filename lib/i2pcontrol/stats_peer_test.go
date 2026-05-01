@@ -49,6 +49,14 @@ func (m *mockRouterAccessForPeerStats) GetActiveSessionCount() int {
 	return 0
 }
 
+func (m *mockRouterAccessForPeerStats) GetNTCP2SessionCount() int {
+	return 0
+}
+
+func (m *mockRouterAccessForPeerStats) GetSSU2SessionCount() int {
+	return 0
+}
+
 func (m *mockRouterAccessForPeerStats) GetTransportAddr() interface{} {
 	return nil
 }
