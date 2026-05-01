@@ -1097,10 +1097,18 @@ func (r *Router) initializeTunnelManager() {
 					"at":      "initializeTunnelManager",
 					"timeout": 2 * tunnel.BuildTimeout,
 				}).Warn("inbound pool readiness timeout; enforcing fallback before releasing outbound gate")
-				// Force inbound to 0-hop and trigger an immediate build so the
-				// outbound pool has a valid reply path when it unblocks.
+				// Force inbound to 0-hop unconditionally and trigger an immediate
+				// build so the outbound pool has a valid reply path when it
+				// unblocks. TriggerAutoFallbackCheck() is conditional on callback
+				// predicates (e.g. no-public-address) and therefore is not a true
+				// force-path when external address detection yields false positives.
 				if inboundPool != nil {
-					inboundPool.TriggerAutoFallbackCheck()
+					if err := inboundPool.SetHopCount(0); err != nil {
+						log.WithFields(logger.Fields{
+							"at":    "initializeTunnelManager",
+							"error": err.Error(),
+						}).Warn("failed to force inbound exploratory pool to zero-hop")
+					}
 					inboundPool.RunMaintenanceNow()
 				}
 				// Secondary poll: wait up to 5 s for the 0-hop inbound to appear.
