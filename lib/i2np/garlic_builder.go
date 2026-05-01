@@ -631,14 +631,37 @@ func parseGarlicCloveCount(data []byte, maxCloves int) (int, int, error) {
 // parseGarlicCloves parses all cloves from the data buffer starting at the given offset.
 func parseGarlicCloves(data []byte, offset, cloveCount, nestingDepth int) ([]GarlicClove, int, error) {
 	cloves := make([]GarlicClove, cloveCount)
+
+	log.WithFields(logger.Fields{
+		"at":           "parseGarlicCloves",
+		"data_len":     len(data),
+		"start_offset": offset,
+		"clove_count":  cloveCount,
+	}).Debug("Starting clove parsing")
+
 	for i := 0; i < cloveCount; i++ {
 		clove, bytesRead, err := deserializeGarlicClove(data[offset:], nestingDepth)
 		if err != nil {
 			return nil, 0, oops.Wrapf(err, "failed to parse clove %d", i)
 		}
 		cloves[i] = *clove
+
+		log.WithFields(logger.Fields{
+			"at":          "parseGarlicCloves",
+			"clove_index": i,
+			"bytes_read":  bytesRead,
+			"new_offset":  offset + bytesRead,
+		}).Debug("Parsed clove")
+
 		offset += bytesRead
 	}
+
+	log.WithFields(logger.Fields{
+		"at":           "parseGarlicCloves",
+		"final_offset": offset,
+		"data_len":     len(data),
+	}).Debug("Finished clove parsing")
+
 	return cloves, offset, nil
 }
 
@@ -653,9 +676,24 @@ func parseGarlicMetadata(data []byte, offset int) (certificate.Certificate, int,
 	// Validate garlic-level certificate: spec says "always NULL in the current implementation"
 	certType := data[offset]
 	certLen := binary.BigEndian.Uint16(data[offset+1 : offset+3])
+
+	// Debug logging to diagnose offset calculation issues
+	dumpLen := 32
+	if offset+dumpLen > len(data) {
+		dumpLen = len(data) - offset
+	}
+	log.WithFields(logger.Fields{
+		"at":        "parseGarlicMetadata",
+		"data_len":  len(data),
+		"offset":    offset,
+		"certType":  certType,
+		"certLen":   certLen,
+		"bytes_hex": fmt.Sprintf("%x", data[offset:offset+dumpLen]),
+	}).Debug("Parsing garlic metadata")
+
 	if certType != 0 || certLen != 0 {
 		return certificate.Certificate{}, 0, time.Time{}, oops.Errorf(
-			"unsupported non-NULL garlic certificate (type=%d, len=%d)", certType, certLen)
+			"unsupported non-NULL garlic certificate (type=%d, len=%d) at offset=%d, data_len=%d", certType, certLen, offset, len(data))
 	}
 	cert := *certificate.NewCertificate()
 	offset += 3
@@ -722,6 +760,15 @@ func parseEmbeddedI2NPMessage(data []byte, offset int) (I2NPMessage, int, error)
 
 	// The first byte of the I2NP header is the message type
 	msgType := int(data[offset])
+
+	log.WithFields(logger.Fields{
+		"at":             "parseEmbeddedI2NPMessage",
+		"msg_type":       msgType,
+		"message_length": messageLength,
+		"offset":         offset,
+		"data_len":       len(data),
+	}).Debug("Parsing embedded I2NP message")
+
 	msg := NewBaseI2NPMessage(msgType)
 
 	// UnmarshalBinary will parse the full NTCP-format header + payload

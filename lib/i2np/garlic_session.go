@@ -176,13 +176,37 @@ func (sm *GarlicSessionManager) DecryptGarlicMessage(encryptedGarlic []byte) ([]
 // extractGarlicFromPayload parses a ratchet payload and returns the data from
 // the first GarlicClove block. Returns an error if no GarlicClove block is found.
 func extractGarlicFromPayload(payload []byte) ([]byte, error) {
+	log.WithFields(logger.Fields{
+		"at":          "extractGarlicFromPayload",
+		"payload_len": len(payload),
+		"payload_hex": fmt.Sprintf("%x", payload[:min(len(payload), 64)]),
+	}).Debug("Extracting garlic from ratchet payload")
+
 	blocks, err := noiseratchet.ParsePayload(payload)
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to parse ratchet payload")
 	}
 
-	for _, block := range blocks {
+	log.WithFields(logger.Fields{
+		"at":          "extractGarlicFromPayload",
+		"block_count": len(blocks),
+	}).Debug("Parsed ratchet payload blocks")
+
+	for i, block := range blocks {
+		log.WithFields(logger.Fields{
+			"at":         "extractGarlicFromPayload",
+			"block_idx":  i,
+			"block_type": block.Type,
+			"data_len":   len(block.Data),
+			"data_hex":   fmt.Sprintf("%x", block.Data[:min(len(block.Data), 32)]),
+		}).Debug("Ratchet payload block")
+
 		if block.Type == noiseratchet.BlockGarlicClove {
+			log.WithFields(logger.Fields{
+				"at":        "extractGarlicFromPayload",
+				"data_len":  len(block.Data),
+				"data_head": fmt.Sprintf("%x", block.Data[:min(len(block.Data), 32)]),
+			}).Debug("Found GarlicClove block")
 			return block.Data, nil
 		}
 	}
