@@ -138,6 +138,7 @@ type Pool struct {
 	autoFallbackFn       func() bool               // Returns true when no public address is available
 	routerHash           common.Hash               // Our router's identity hash, used as ReplyGateway in build requests
 	startupGate          <-chan struct{}           // BUG-1: closed when pre-conditions for first build are met
+	replyTunnelProvider  func() (TunnelID, bool)   // Returns an active inbound tunnel ID for reply routing (nil = direct delivery)
 }
 
 // SetStartupGate sets a channel that maintenanceLoop waits on before
@@ -150,6 +151,19 @@ func (p *Pool) SetStartupGate(gate <-chan struct{}) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 	p.startupGate = gate
+}
+
+// SetReplyTunnelProvider sets a function that the pool calls when building
+// tunnel requests to obtain an active inbound tunnel ID to use as the
+// ReplyTunnelID. When the provider returns a non-zero tunnel ID, build
+// requests use TUNNEL delivery mode (wrapping the reply in a TunnelGateway
+// on the existing NTCP2 session) rather than ROUTER delivery mode (direct
+// type-26 to our router address, which fails behind NAT).
+// A nil provider (default) leaves ReplyTunnelID=0 (ROUTER delivery).
+func (p *Pool) SetReplyTunnelProvider(fn func() (TunnelID, bool)) {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	p.replyTunnelProvider = fn
 }
 
 // SetRouterHash sets our router's identity hash so it can be used as the
@@ -901,7 +915,15 @@ func (p *Pool) prepareBuildRequest(excludePeers []common.Hash) BuildTunnelReques
 
 	p.mutex.RLock()
 	ourHash := p.routerHash
+	provider := p.replyTunnelProvider
 	p.mutex.RUnlock()
+
+	replyTunnelID := TunnelID(0)
+	if provider != nil {
+		if id, ok := provider(); ok {
+			replyTunnelID = id
+		}
+	}
 
 	return BuildTunnelRequest{
 		HopCount:                  p.config.HopCount,
@@ -909,10 +931,10 @@ func (p *Pool) prepareBuildRequest(excludePeers []common.Hash) BuildTunnelReques
 		IsClientTunnel:            p.config.IsClientPool,
 		UseShortBuild:             true, // Use modern STBM by default
 		ExcludePeers:              progressiveExclude,
-		RequireDirectConnectivity: true,    // FIX: Only select directly-contactable peers
-		OurIdentity:               ourHash, // Our router hash for reply routing
-		ReplyGateway:              ourHash, // Last hop sends reply directly to us
-		ReplyTunnelID:             0,       // 0 = direct delivery (no intermediate inbound tunnel)
+		RequireDirectConnectivity: true,          // FIX: Only select directly-contactable peers
+		OurIdentity:               ourHash,       // Our router hash for reply routing
+		ReplyGateway:              ourHash,       // Last hop sends reply to our inbound tunnel gateway (us)
+		ReplyTunnelID:             replyTunnelID, // Non-zero = TUNNEL delivery via existing session (NAT-safe)
 	}
 }
 
@@ -1095,6 +1117,18 @@ func (p *Pool) RetryTunnelBuild(tunnelID TunnelID, isInbound bool, hopCount int)
 		return oops.Errorf("tunnel builder not set; cannot retry tunnel build for tunnel %d", tunnelID)
 	}
 
+	p.mutex.RLock()
+	routerHash := p.routerHash
+	provider := p.replyTunnelProvider
+	p.mutex.RUnlock()
+
+	replyTunnelID := TunnelID(0)
+	if provider != nil {
+		if id, ok := provider(); ok {
+			replyTunnelID = id
+		}
+	}
+
 	req := BuildTunnelRequest{
 		IsInbound:                 isInbound,
 		IsClientTunnel:            p.config.IsClientPool,
@@ -1102,9 +1136,9 @@ func (p *Pool) RetryTunnelBuild(tunnelID TunnelID, isInbound bool, hopCount int)
 		UseShortBuild:             true, // Modern STBM (type 25); legacy VTB (type 21) is rejected by current peers
 		ExcludePeers:              p.GetFailedPeers(),
 		RequireDirectConnectivity: true,
-		OurIdentity:               p.routerHash,
-		ReplyGateway:              p.routerHash,
-		ReplyTunnelID:             0,
+		OurIdentity:               routerHash,
+		ReplyGateway:              routerHash,
+		ReplyTunnelID:             replyTunnelID, // Non-zero = TUNNEL delivery via existing session (NAT-safe)
 	}
 
 	result, err := builder.BuildTunnel(req)

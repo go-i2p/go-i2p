@@ -1038,6 +1038,35 @@ func (r *Router) initializeTunnelManager() {
 		outboundPool.SetStartupGate(inboundReady)
 	}
 
+	// Wire the reply-tunnel provider so that build requests use TUNNEL delivery
+	// mode (ReplyTunnelID != 0) rather than ROUTER delivery mode (ReplyTunnelID=0).
+	// ROUTER delivery mode requires i2pd to open a fresh connection to our
+	// published address; behind NAT our address is non-routable, so every
+	// reply is silently dropped. TUNNEL delivery mode wraps the reply in a
+	// TunnelGateway and sends it on the existing NTCP2 session, which works
+	// regardless of NAT.
+	//
+	// - The inbound pool's own builds use the inbound pool's active tunnels
+	//   (a 0-hop tunnel whose gateway IS our router — we deliver locally).
+	// - The outbound pool's builds use the inbound pool's active tunnels as
+	//   the reply path (OBEP → TunnelGateway(inboundTunnelID) → us).
+	if inboundPool != nil {
+		makeProvider := func(pool *tunnel.Pool) func() (tunnel.TunnelID, bool) {
+			return func() (tunnel.TunnelID, bool) {
+				active := pool.GetActiveTunnels()
+				if len(active) == 0 {
+					return 0, false
+				}
+				// Prefer the oldest active tunnel for stability.
+				return active[0].ID, true
+			}
+		}
+		inboundPool.SetReplyTunnelProvider(makeProvider(inboundPool))
+		if outboundPool != nil {
+			outboundPool.SetReplyTunnelProvider(makeProvider(inboundPool))
+		}
+	}
+
 	for _, pool := range []*tunnel.Pool{inboundPool, outboundPool} {
 		if pool == nil {
 			continue
