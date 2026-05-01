@@ -349,7 +349,7 @@ func (rp *ReplyProcessor) decryptReplyRecords(handler TunnelReplyHandler, pendin
 //   - AD: 32-byte Noise transcript hash (m_H after EncryptAndHash on creator side)
 //   - Input: 218 bytes (202 ciphertext + 16 Poly1305 MAC)
 //   - Output: 202 bytes plaintext; ret code at offset 201
-func decryptSTBMReplySlot(encrypted []byte, key [32]byte, noiseHash [32]byte, index int) ([]byte, error) {
+func decryptSTBMReplySlot(encrypted []byte, key, noiseHash [32]byte, index int) ([]byte, error) {
 	if len(encrypted) < ShortBuildRecordSize {
 		return nil, oops.Errorf("STBM reply slot too short: got %d bytes, need %d", len(encrypted), ShortBuildRecordSize)
 	}

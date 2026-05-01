@@ -19,8 +19,10 @@ import (
 // maxRouterInfoAge is the maximum age of a RouterInfo before it is considered
 // too stale for tunnel building. Peers with stale RIs may have rotated their
 // X25519 encryption keys, causing STBM record decryption failures.
-// I2P spec considers RIs stale after 1 hour; we use 2 hours to be conservative.
-const maxRouterInfoAge = 2 * time.Hour
+// Java I2P accepts reseed-sourced RIs up to 48 hours old during bootstrapping.
+// Using 48 hours here matches that tolerance and avoids rejecting all reseed
+// peers on a cold start when no fresh NetDB data is available.
+const maxRouterInfoAge = 48 * time.Hour
 
 // capsAllowsTunnelParticipation returns true when the router's caps string
 // indicates it is willing and able to participate as a tunnel hop. Per the

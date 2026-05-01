@@ -220,6 +220,61 @@ func DeriveSTBMGarlicKey(noiseHash [32]byte) ([32]byte, [8]byte, error) {
 	return garlicKey, tag, nil
 }
 
+// DeriveSTBMGarlicKeyFromChainingKey derives the one-time symmetric garlic
+// key/tag from the post-reply HKDF chaining key as a compatibility fallback.
+//
+// Some implementations derive the attach-layer key from the Noise transcript
+// hash, while others derive it from the evolving HKDF chaining key used for
+// SMTunnelReplyKey and subsequent per-hop keys. Registering both derivations
+// allows inbound decrypt to match either sender behavior.
+func DeriveSTBMGarlicKeyFromChainingKey(chainingKey [32]byte) ([32]byte, [8]byte, error) {
+	var garlicKey [32]byte
+	var tag [8]byte
+	r := hkdf.New(sha256.New, []byte{}, chainingKey[:], []byte("AttachLayerEncryption"))
+	if _, err := io.ReadFull(r, garlicKey[:]); err != nil {
+		return garlicKey, tag, oops.Wrapf(err, "HKDF for AttachLayerEncryption (chaining key) failed")
+	}
+	copy(tag[:], garlicKey[24:32])
+	return garlicKey, tag, nil
+}
+
+// DeriveSTBMLegacyGarlicKeyFromChainingKey derives a compatibility one-time
+// garlic key/tag using the legacy CK HKDF chain observed in some STBM
+// implementations:
+//
+//	HKDF64(ck, "SMTunnelLayerKey") -> ck1 || layerKey
+//	HKDF64(ck1, "TunnelLayerIVKey") -> ck2 || ivKey
+//	HKDF64(ck2, "RGarlicKeyAndTag") -> ck3 || garlicKey
+//
+// tag is still key[24:32] to match one-time decrypt lookup semantics.
+func DeriveSTBMLegacyGarlicKeyFromChainingKey(chainingKey [32]byte) ([32]byte, [8]byte, error) {
+	var garlicKey [32]byte
+	var tag [8]byte
+
+	out1, err := hkdf64(chainingKey, "SMTunnelLayerKey")
+	if err != nil {
+		return garlicKey, tag, oops.Wrapf(err, "HKDF for SMTunnelLayerKey failed")
+	}
+	var ck1 [32]byte
+	copy(ck1[:], out1[0:32])
+
+	out2, err := hkdf64(ck1, "TunnelLayerIVKey")
+	if err != nil {
+		return garlicKey, tag, oops.Wrapf(err, "HKDF for TunnelLayerIVKey failed")
+	}
+	var ck2 [32]byte
+	copy(ck2[:], out2[0:32])
+
+	out3, err := hkdf64(ck2, "RGarlicKeyAndTag")
+	if err != nil {
+		return garlicKey, tag, oops.Wrapf(err, "HKDF for RGarlicKeyAndTag failed")
+	}
+	copy(garlicKey[:], out3[32:64])
+	copy(tag[:], garlicKey[24:32])
+
+	return garlicKey, tag, nil
+}
+
 // DecryptShortBuildRequestRecordNoise is the inverse of EncryptShortBuildRequestRecord:
 // it decrypts a 218-byte STBM record using the Noise_N_25519_ChaChaPoly_SHA256
 // transcript described above. The caller supplies the local router's static

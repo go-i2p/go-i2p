@@ -15,15 +15,27 @@ import (
 )
 
 type captureGarlicKeyRegistrar struct {
-	called bool
-	tag    [8]byte
-	key    [32]byte
+	called        bool
+	registrations []garlicRegistration
+}
+
+type garlicRegistration struct {
+	tag [8]byte
+	key [32]byte
 }
 
 func (c *captureGarlicKeyRegistrar) RegisterOneTimeGarlicKey(tag [8]byte, key [32]byte) {
 	c.called = true
-	c.tag = tag
-	c.key = key
+	c.registrations = append(c.registrations, garlicRegistration{tag: tag, key: key})
+}
+
+func (c *captureGarlicKeyRegistrar) contains(tag [8]byte, key [32]byte) bool {
+	for _, reg := range c.registrations {
+		if reg.tag == tag && reg.key == key {
+			return true
+		}
+	}
+	return false
 }
 
 func deriveAttachLayerGarlicKeyFromNoiseHash(noiseHash [32]byte) ([32]byte, [8]byte, error) {
@@ -183,13 +195,12 @@ func TestCreateShortTunnelBuildMessage_RegistersAttachLayerOneTimeGarlicKey(t *t
 	_, err := tm.createShortTunnelBuildMessage(result, 1001)
 	require.NoError(t, err)
 	require.True(t, registrar.called, "expected one-time garlic key to be registered")
+	require.NotEmpty(t, registrar.registrations, "expected at least one one-time garlic registration")
 	require.Len(t, result.NoiseHashes, 2, "expected per-hop STBM noise hashes")
 
 	expectedKey, expectedTag, err := deriveAttachLayerGarlicKeyFromNoiseHash(result.NoiseHashes[1])
 	require.NoError(t, err)
-
-	assert.Equal(t, expectedTag, registrar.tag, "registered one-time garlic tag mismatch")
-	assert.Equal(t, expectedKey, registrar.key, "registered one-time garlic key mismatch")
+	assert.True(t, registrar.contains(expectedTag, expectedKey), "expected noise-hash-derived one-time garlic key registration")
 }
 
 // TestCreateBuildMessage_EncryptsRecords verifies that both TunnelBuild (type 21)

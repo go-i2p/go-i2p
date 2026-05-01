@@ -73,15 +73,34 @@ func (r *Router) reachabilityLoop() {
 func (r *Router) runReachabilityCheck(lastPublished *atomic.Value, lastResignAt *time.Time) {
 	// Collect external address evidence from SSU2 transport.
 	ext := r.collectBestExternalAddr()
-	if ext == "" {
-		log.WithField("at", "reachabilityLoop").Debug("no confirmed external address yet; skipping republication")
-		return
-	}
 
 	// Compare with what we last published.
 	prev, _ := lastPublished.Load().(string)
 	if ext == prev {
+		if ext == "" {
+			log.WithField("at", "reachabilityLoop").Debug("no confirmed external address yet; skipping republication")
+		}
 		return // no change
+	}
+
+	// If we've lost our external address (ext == ""), we still need to
+	// republish the RouterInfo to remove the stale address and refresh
+	// the NTCP2 msg3 payload. Without this, remote peers will keep trying
+	// to connect back to the stale address when delivering tunnel build
+	// replies, causing all outbound tunnel builds to time out.
+	if ext == "" {
+		log.WithFields(logger.Fields{
+			"at":       "reachabilityLoop",
+			"prev_ext": prev,
+		}).Info("external address lost — republishing RouterInfo with caps-only addresses")
+
+		if r.publisher != nil {
+			r.publisher.PublishOurRouterInfo()
+		}
+		r.refreshNTCP2LocalRouterInfo()
+		lastPublished.Store(ext)
+		*lastResignAt = time.Now()
+		return
 	}
 
 	// Rate-limit to avoid storming the floodfills.

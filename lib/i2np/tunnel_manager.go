@@ -333,7 +333,8 @@ func (tm *TunnelManager) BuildTunnelFromRequest(req tunnel.BuildTunnelRequest) (
 		}
 	}
 
-	tm.logBuildRequestSent(result, messageID)
+	tm.logBuildRequestSent(result, messageID, req.ReplyTunnelID, req.IsInbound)
+	tm.logExpectedReplyTagCandidates(result, messageID, req.ReplyTunnelID, req.IsInbound)
 	return result.TunnelID, peerHashes, nil
 }
 
@@ -487,13 +488,68 @@ func (tm *TunnelManager) cleanupFailedBuild(tunnelID tunnel.TunnelID, messageID 
 }
 
 // logBuildRequestSent logs successful tunnel build request submission
-func (tm *TunnelManager) logBuildRequestSent(result *tunnel.TunnelBuildResult, messageID int) {
+func (tm *TunnelManager) logBuildRequestSent(result *tunnel.TunnelBuildResult, messageID int, replyTunnelID tunnel.TunnelID, isInbound bool) {
 	log.WithFields(logger.Fields{
-		"tunnel_id":  result.TunnelID,
-		"message_id": messageID,
-		"hop_count":  len(result.Hops),
-		"use_stbm":   result.UseShortBuild,
+		"tunnel_id":        result.TunnelID,
+		"message_id":       messageID,
+		"hop_count":        len(result.Hops),
+		"use_stbm":         result.UseShortBuild,
+		"is_inbound_build": isInbound,
+		"reply_tunnel_id":  replyTunnelID,
 	}).Info("Tunnel build request sent")
+}
+
+// logExpectedReplyTagCandidates logs expected one-time garlic tag candidates for
+// outbound STBM builds so fresh logs can be correlated against incoming type-11
+// decrypt attempts on reply_tunnel_id.
+func (tm *TunnelManager) logExpectedReplyTagCandidates(result *tunnel.TunnelBuildResult, messageID int, replyTunnelID tunnel.TunnelID, isInbound bool) {
+	if isInbound || replyTunnelID == 0 || !result.UseShortBuild {
+		return
+	}
+
+	tags := []string{}
+	seen := map[[8]byte]struct{}{}
+	appendTag := func(source string, tag [8]byte) {
+		if _, ok := seen[tag]; ok {
+			return
+		}
+		seen[tag] = struct{}{}
+		tags = append(tags, fmt.Sprintf("%s:%x", source, tag))
+	}
+
+	if len(result.NoiseHashes) > 0 {
+		lastHop := len(result.NoiseHashes) - 1
+		if key, tag, err := DeriveSTBMGarlicKey(result.NoiseHashes[lastHop]); err == nil {
+			_ = key
+			appendTag("noise_hash", tag)
+		}
+	}
+
+	if len(result.ReplyKeys) > 0 {
+		lastHop := len(result.ReplyKeys) - 1
+		var rawReplyKey [32]byte
+		copy(rawReplyKey[:], result.ReplyKeys[lastHop][:])
+		var rawTag [8]byte
+		copy(rawTag[:], rawReplyKey[24:32])
+		appendTag("raw_reply_key", rawTag)
+		if key, tag, err := DeriveSTBMGarlicKeyFromChainingKey(rawReplyKey); err == nil {
+			_ = key
+			appendTag("reply_key_attachlayer", tag)
+		}
+	}
+
+	if len(tags) == 0 {
+		return
+	}
+
+	log.WithFields(logger.Fields{
+		"at":                 "BuildTunnelFromRequest",
+		"message_id":         messageID,
+		"tunnel_id":          result.TunnelID,
+		"reply_tunnel_id":    replyTunnelID,
+		"expected_tag_count": len(tags),
+		"expected_tags":      tags,
+	}).Debug("Computed expected one-time garlic tag candidates for outbound STBM build")
 }
 
 // sendBuildMessage sends a tunnel build message (STBM or VTB) based on the result.
@@ -629,6 +685,7 @@ func (tm *TunnelManager) createShortTunnelBuildMessage(result *tunnel.TunnelBuil
 	encryptedRecords := make([][ShortBuildRecordSize]byte, len(i2npRecords))
 	replyKeys := make([][32]byte, len(i2npRecords))
 	noiseHashes := make([][32]byte, len(i2npRecords))
+	preReplyCKs := make([][32]byte, len(i2npRecords))
 	postReplyCKs := make([][32]byte, len(i2npRecords))
 	for i, record := range i2npRecords {
 		if i >= len(result.Hops) {
@@ -640,6 +697,7 @@ func (tm *TunnelManager) createShortTunnelBuildMessage(result *tunnel.TunnelBuil
 		}
 		encryptedRecords[i] = encrypted
 		noiseHashes[i] = nh
+		preReplyCKs[i] = ck
 		rk, newCK, err := DeriveSTBMReplyKey(ck)
 		if err != nil {
 			return nil, oops.Wrapf(err, "failed to derive reply key for hop %d", i)
@@ -663,22 +721,77 @@ func (tm *TunnelManager) createShortTunnelBuildMessage(result *tunnel.TunnelBuil
 	// Store per-hop Noise transcript hashes for STBM reply AEAD decryption.
 	result.NoiseHashes = noiseHashes
 
-	// Derive and register the one-time garlic key for the OBEP's reply.
-	// The key/tag are derived from the last-hop STBM Noise transcript hash via
-	// HKDF("AttachLayerEncryption") so the inbound one-time garlic decryptor can
-	// match the OBEP's tag and decrypt the wrapped ShortTunnelBuildReply.
+	// Derive and register one-time garlic keys for the OBEP's reply.
+	//
+	// Primary derivation follows the go-noise one-time key path from the last
+	// hop Noise transcript hash. As an interoperability fallback, also register
+	// a derivation from the post-reply HKDF chaining key used in STBM key
+	// evolution, since some implementations derive AttachLayerEncryption from CK.
 	if tm.garlicKeyRegistrar != nil && len(noiseHashes) > 0 {
 		lastHop := len(noiseHashes) - 1
+		registeredTags := make(map[[8]byte]struct{})
+		registerCandidate := func(tag [8]byte, key [32]byte, source string) {
+			if _, seen := registeredTags[tag]; seen {
+				return
+			}
+			tm.garlicKeyRegistrar.RegisterOneTimeGarlicKey(tag, key)
+			registeredTags[tag] = struct{}{}
+			log.WithFields(logger.Fields{
+				"at":         "createShortTunnelBuildMessage",
+				"tag":        fmt.Sprintf("%x", tag),
+				"last_hop":   lastHop,
+				"tag_source": source,
+				"message_id": messageID,
+				"tunnel_id":  result.TunnelID,
+			}).Debug("Registered one-time garlic reply key for STBM build")
+		}
+
 		garlicKey, tag, err := DeriveSTBMGarlicKey(noiseHashes[lastHop])
 		if err != nil {
 			return nil, oops.Wrapf(err, "failed to derive STBM garlic reply key")
 		}
-		tm.garlicKeyRegistrar.RegisterOneTimeGarlicKey(tag, garlicKey)
-		log.WithFields(logger.Fields{
-			"at":       "createShortTunnelBuildMessage",
-			"tag":      fmt.Sprintf("%x", tag),
-			"last_hop": lastHop,
-		}).Debug("Registered one-time garlic reply key for STBM build")
+		registerCandidate(tag, garlicKey, "noise_hash")
+
+		if len(preReplyCKs) > lastHop {
+			preCKAttachKey, preCKAttachTag, preCKAttachErr := DeriveSTBMGarlicKeyFromChainingKey(preReplyCKs[lastHop])
+			if preCKAttachErr != nil {
+				return nil, oops.Wrapf(preCKAttachErr, "failed to derive STBM garlic reply key from pre-reply chaining key")
+			}
+			registerCandidate(preCKAttachTag, preCKAttachKey, "pre_reply_ck")
+
+			preCKLegacyKey, preCKLegacyTag, preCKLegacyErr := DeriveSTBMLegacyGarlicKeyFromChainingKey(preReplyCKs[lastHop])
+			if preCKLegacyErr != nil {
+				return nil, oops.Wrapf(preCKLegacyErr, "failed to derive legacy STBM garlic reply key from pre-reply chaining key")
+			}
+			registerCandidate(preCKLegacyTag, preCKLegacyKey, "legacy_pre_reply_ck_chain")
+		}
+
+		if len(postReplyCKs) > lastHop {
+			compatKey, compatTag, compatErr := DeriveSTBMGarlicKeyFromChainingKey(postReplyCKs[lastHop])
+			if compatErr != nil {
+				return nil, oops.Wrapf(compatErr, "failed to derive STBM garlic reply key from chaining key")
+			}
+			registerCandidate(compatTag, compatKey, "post_reply_ck")
+
+			legacyKey, legacyTag, legacyErr := DeriveSTBMLegacyGarlicKeyFromChainingKey(postReplyCKs[lastHop])
+			if legacyErr != nil {
+				return nil, oops.Wrapf(legacyErr, "failed to derive legacy STBM garlic reply key from chaining key")
+			}
+			registerCandidate(legacyTag, legacyKey, "legacy_ck_chain")
+		}
+
+		if len(replyKeys) > lastHop {
+			rawReplyKey := replyKeys[lastHop]
+			var rawReplyTag [8]byte
+			copy(rawReplyTag[:], rawReplyKey[24:32])
+			registerCandidate(rawReplyTag, rawReplyKey, "raw_reply_key")
+
+			replyAttachKey, replyAttachTag, replyAttachErr := DeriveSTBMGarlicKeyFromChainingKey(rawReplyKey)
+			if replyAttachErr != nil {
+				return nil, oops.Wrapf(replyAttachErr, "failed to derive STBM garlic reply key from raw reply key")
+			}
+			registerCandidate(replyAttachTag, replyAttachKey, "reply_key_attachlayer")
+		}
 	}
 
 	// Apply chained ChaCha20 layer obfuscation. For each hop i (from
