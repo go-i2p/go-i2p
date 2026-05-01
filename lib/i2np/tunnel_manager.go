@@ -727,71 +727,26 @@ func (tm *TunnelManager) createShortTunnelBuildMessage(result *tunnel.TunnelBuil
 	// hop Noise transcript hash. As an interoperability fallback, also register
 	// a derivation from the post-reply HKDF chaining key used in STBM key
 	// evolution, since some implementations derive AttachLayerEncryption from CK.
-	if tm.garlicKeyRegistrar != nil && len(noiseHashes) > 0 {
-		lastHop := len(noiseHashes) - 1
-		registeredTags := make(map[[8]byte]struct{})
-		registerCandidate := func(tag [8]byte, key [32]byte, source string) {
-			if _, seen := registeredTags[tag]; seen {
-				return
-			}
-			tm.garlicKeyRegistrar.RegisterOneTimeGarlicKey(tag, key)
-			registeredTags[tag] = struct{}{}
-			log.WithFields(logger.Fields{
-				"at":         "createShortTunnelBuildMessage",
-				"tag":        fmt.Sprintf("%x", tag),
-				"last_hop":   lastHop,
-				"tag_source": source,
-				"message_id": messageID,
-				"tunnel_id":  result.TunnelID,
-			}).Debug("Registered one-time garlic reply key for STBM build")
+	if tm.garlicKeyRegistrar != nil && len(postReplyCKs) > 0 {
+		lastHop := len(postReplyCKs) - 1
+		// Derive the exact garlic key/tag that the OBEP uses when wrapping its
+		// ShortTunnelBuildReply (matches i2pd TransitTunnel.cpp exactly):
+		//   HKDF(postReplyCK, "SMTunnelLayerKey") -> ck1
+		//   HKDF(ck1, "TunnelLayerIVKey")         -> ck2
+		//   HKDF(ck2, "RGarlicKeyAndTag")          -> tag=ck3[0:8], key=ck3[32:64]
+		obepKey, obepTag, obepErr := DeriveSTBMOBEPGarlicKeyAndTag(postReplyCKs[lastHop])
+		if obepErr != nil {
+			return nil, oops.Wrapf(obepErr, "failed to derive OBEP garlic reply key")
 		}
-
-		garlicKey, tag, err := DeriveSTBMGarlicKey(noiseHashes[lastHop])
-		if err != nil {
-			return nil, oops.Wrapf(err, "failed to derive STBM garlic reply key")
-		}
-		registerCandidate(tag, garlicKey, "noise_hash")
-
-		if len(preReplyCKs) > lastHop {
-			preCKAttachKey, preCKAttachTag, preCKAttachErr := DeriveSTBMGarlicKeyFromChainingKey(preReplyCKs[lastHop])
-			if preCKAttachErr != nil {
-				return nil, oops.Wrapf(preCKAttachErr, "failed to derive STBM garlic reply key from pre-reply chaining key")
-			}
-			registerCandidate(preCKAttachTag, preCKAttachKey, "pre_reply_ck")
-
-			preCKLegacyKey, preCKLegacyTag, preCKLegacyErr := DeriveSTBMLegacyGarlicKeyFromChainingKey(preReplyCKs[lastHop])
-			if preCKLegacyErr != nil {
-				return nil, oops.Wrapf(preCKLegacyErr, "failed to derive legacy STBM garlic reply key from pre-reply chaining key")
-			}
-			registerCandidate(preCKLegacyTag, preCKLegacyKey, "legacy_pre_reply_ck_chain")
-		}
-
-		if len(postReplyCKs) > lastHop {
-			compatKey, compatTag, compatErr := DeriveSTBMGarlicKeyFromChainingKey(postReplyCKs[lastHop])
-			if compatErr != nil {
-				return nil, oops.Wrapf(compatErr, "failed to derive STBM garlic reply key from chaining key")
-			}
-			registerCandidate(compatTag, compatKey, "post_reply_ck")
-
-			legacyKey, legacyTag, legacyErr := DeriveSTBMLegacyGarlicKeyFromChainingKey(postReplyCKs[lastHop])
-			if legacyErr != nil {
-				return nil, oops.Wrapf(legacyErr, "failed to derive legacy STBM garlic reply key from chaining key")
-			}
-			registerCandidate(legacyTag, legacyKey, "legacy_ck_chain")
-		}
-
-		if len(replyKeys) > lastHop {
-			rawReplyKey := replyKeys[lastHop]
-			var rawReplyTag [8]byte
-			copy(rawReplyTag[:], rawReplyKey[24:32])
-			registerCandidate(rawReplyTag, rawReplyKey, "raw_reply_key")
-
-			replyAttachKey, replyAttachTag, replyAttachErr := DeriveSTBMGarlicKeyFromChainingKey(rawReplyKey)
-			if replyAttachErr != nil {
-				return nil, oops.Wrapf(replyAttachErr, "failed to derive STBM garlic reply key from raw reply key")
-			}
-			registerCandidate(replyAttachTag, replyAttachKey, "reply_key_attachlayer")
-		}
+		tm.garlicKeyRegistrar.RegisterOneTimeGarlicKey(obepTag, obepKey)
+		log.WithFields(logger.Fields{
+			"at":         "createShortTunnelBuildMessage",
+			"tag":        fmt.Sprintf("%x", obepTag),
+			"last_hop":   lastHop,
+			"tag_source": "obep_rgarlickey",
+			"message_id": messageID,
+			"tunnel_id":  result.TunnelID,
+		}).Debug("Registered one-time garlic reply key for STBM build")
 	}
 
 	// Apply chained ChaCha20 layer obfuscation. For each hop i (from

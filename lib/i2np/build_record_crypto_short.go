@@ -238,20 +238,23 @@ func DeriveSTBMGarlicKeyFromChainingKey(chainingKey [32]byte) ([32]byte, [8]byte
 	return garlicKey, tag, nil
 }
 
-// DeriveSTBMLegacyGarlicKeyFromChainingKey derives a compatibility one-time
-// garlic key/tag using the legacy CK HKDF chain observed in some STBM
-// implementations:
+// DeriveSTBMOBEPGarlicKeyAndTag derives the one-time garlic key and tag that
+// the OBEP uses to wrap its ShortTunnelBuildReply, matching i2pd exactly.
 //
-//	HKDF64(ck, "SMTunnelLayerKey") -> ck1 || layerKey
-//	HKDF64(ck1, "TunnelLayerIVKey") -> ck2 || ivKey
-//	HKDF64(ck2, "RGarlicKeyAndTag") -> ck3 || garlicKey
+// Input: postReplyCK — the Noise chaining key after "SMTunnelReplyKey" HKDF step.
 //
-// tag is still key[24:32] to match one-time decrypt lookup semantics.
-func DeriveSTBMLegacyGarlicKeyFromChainingKey(chainingKey [32]byte) ([32]byte, [8]byte, error) {
+// Derivation (from TransitTunnel.cpp::HandleShortTransitTunnelBuildMsg):
+//
+//	HKDF64(postReplyCK, "SMTunnelLayerKey") -> ck1 || layerKey
+//	HKDF64(ck1, "TunnelLayerIVKey")         -> ck2 || ivKey
+//	HKDF64(ck2, "RGarlicKeyAndTag")          -> ck3 || garlicEncKey
+//	  TAG = ck3[0:8]         (first 8 bytes of new chaining key)
+//	  KEY = garlicEncKey     (output key, 32 bytes)
+func DeriveSTBMOBEPGarlicKeyAndTag(postReplyCK [32]byte) ([32]byte, [8]byte, error) {
 	var garlicKey [32]byte
 	var tag [8]byte
 
-	out1, err := hkdf64(chainingKey, "SMTunnelLayerKey")
+	out1, err := hkdf64(postReplyCK, "SMTunnelLayerKey")
 	if err != nil {
 		return garlicKey, tag, oops.Wrapf(err, "HKDF for SMTunnelLayerKey failed")
 	}
@@ -269,10 +272,18 @@ func DeriveSTBMLegacyGarlicKeyFromChainingKey(chainingKey [32]byte) ([32]byte, [
 	if err != nil {
 		return garlicKey, tag, oops.Wrapf(err, "HKDF for RGarlicKeyAndTag failed")
 	}
-	copy(garlicKey[:], out3[32:64])
-	copy(tag[:], garlicKey[24:32])
+	copy(garlicKey[:], out3[32:64]) // output key
+	copy(tag[:], out3[0:8])         // first 8 bytes of new chaining key (NOT output key)
 
 	return garlicKey, tag, nil
+}
+
+// DeriveSTBMLegacyGarlicKeyFromChainingKey is retained for compatibility.
+// It wraps DeriveSTBMOBEPGarlicKeyAndTag with the old name.
+//
+// Deprecated: use DeriveSTBMOBEPGarlicKeyAndTag directly.
+func DeriveSTBMLegacyGarlicKeyFromChainingKey(chainingKey [32]byte) ([32]byte, [8]byte, error) {
+	return DeriveSTBMOBEPGarlicKeyAndTag(chainingKey)
 }
 
 // DecryptShortBuildRequestRecordNoise is the inverse of EncryptShortBuildRequestRecord:
