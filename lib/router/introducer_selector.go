@@ -64,9 +64,14 @@ func (r *Router) runIntroducerSelector() {
 func (r *Router) refreshIntroducers() {
 	transport := r.getSSU2Transport()
 	if transport == nil {
+		log.Debug("refreshIntroducers: no SSU2 transport")
 		return
 	}
 	candidates := r.collectIntroducerCandidates(introducerMaxCount)
+	log.WithFields(logger.Fields{
+		"at":              "refreshIntroducers",
+		"candidate_count": len(candidates),
+	}).Debug("introducer candidate collection complete")
 	changed := r.applyIntroducerCandidates(transport, candidates)
 	if changed && r.publisher != nil {
 		log.WithFields(logger.Fields{
@@ -83,27 +88,72 @@ const introducerMaxCount = 3
 
 // collectIntroducerCandidates filters the netdb for RouterInfos suitable to
 // act as our introducers: dialable SSU2 address, caps containing 'R'
-// (reachable), an active session in this router, and not ourselves. The
-// result is capped at maxCount entries. Order is the natural netdb iteration
-// order, which is acceptable because all candidates are equally suitable.
+// (reachable), and not ourselves. The result is capped at maxCount entries.
+//
+// NOTE: Unlike peer selection for tunnel building, introducer selection does
+// NOT require an existing session. Java I2P sends RelayRequest messages via
+// NTCP2 or tunnels to routers that will serve as introducers, allowing
+// firewalled routers to bootstrap SSU2 connectivity without a chicken-egg
+// problem. The introducer initiates RelayIntro containing a HolePunch that
+// allows the firewalled router to establish its first SSU2 session.
 func (r *Router) collectIntroducerCandidates(maxCount int) []router_info.RouterInfo {
 	if r.StdNetDB == nil {
+		log.Debug("collectIntroducerCandidates: no netdb")
 		return nil
 	}
 	ourHash, ourHashErr := r.getOurRouterHash()
 	all := r.StdNetDB.GetAllRouterInfos()
-	connected := r.snapshotConnectedHashes()
+
+	log.WithFields(logger.Fields{
+		"at":                "collectIntroducerCandidates",
+		"total_routerinfos": len(all),
+	}).Debug("starting introducer candidate search")
+
 	out := make([]router_info.RouterInfo, 0, maxCount)
+	checked := 0
+	noSSU2 := 0
+	noRCap := 0
+
 	for i := range all {
 		ri := all[i]
-		if !r.isIntroducerCandidate(ri, ourHash, ourHashErr, connected) {
+		checked++
+
+		// Detailed filtering with counts
+		h, err := ri.IdentHash()
+		if err != nil {
 			continue
 		}
+		if ourHashErr == nil && h == ourHash {
+			continue
+		}
+		if !ssu2.HasDialableSSU2Address(&ri) {
+			noSSU2++
+			continue
+		}
+		if !capsContainsReachable(ri.RouterCapabilities()) {
+			noRCap++
+			continue
+		}
+
+		// BUG FIX: Removed the connected session requirement. Introducers can be
+		// contacted via NTCP2 or tunnels; an SSU2 session is not required.
+		// This allows firewalled routers to register introducers before having
+		// any SSU2 connectivity (Java I2P behavior).
+
 		out = append(out, ri)
 		if len(out) >= maxCount {
 			break
 		}
 	}
+
+	log.WithFields(logger.Fields{
+		"at":                "collectIntroducerCandidates",
+		"checked":           checked,
+		"found":             len(out),
+		"rejected_no_ssu2":  noSSU2,
+		"rejected_no_r_cap": noRCap,
+	}).Info("introducer candidate search complete")
+
 	return out
 }
 

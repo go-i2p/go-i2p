@@ -11,7 +11,7 @@ require (
 	github.com/go-i2p/go-nat-listener v0.0.0-20260402222111-bfda0025cb1b
 	github.com/go-i2p/go-noise v0.1.52
 	github.com/go-i2p/go-unzip v0.0.0-20260417162122-21146ed7aca8
-	github.com/go-i2p/i2ptui v0.0.0-20260427044928-3c148bc8b2c0
+	github.com/go-i2p/i2ptui v0.0.0-20260501200659-b54dc6831b61
 	github.com/go-i2p/logger v0.1.52
 	github.com/go-i2p/su3 v0.1.52
 	github.com/samber/oops v1.21.0
