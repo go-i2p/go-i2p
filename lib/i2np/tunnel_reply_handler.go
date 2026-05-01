@@ -130,17 +130,20 @@ func (rp *ReplyProcessor) RegisterPendingBuild(
 		Retries:     0,
 		IsInbound:   isInbound,
 		HopCount:    hopCount,
-		// Note: TimeoutTimer no longer used here; cleanup is coordinated
-		// via TunnelManager.cleanupExpiredBuildByID to avoid racing
-		// cleanup mechanisms (F-3 audit fix).
 	}
+
+	// Set up timeout timer
+	pending.TimeoutTimer = time.AfterFunc(rp.config.BuildTimeout, func() {
+		rp.handleBuildTimeout(tunnelID)
+	})
 
 	rp.pendingBuilds[tunnelID] = pending
 
 	log.WithFields(logger.Fields{
-		"tunnel_id":  tunnelID,
-		"is_inbound": isInbound,
-		"hop_count":  hopCount,
+		"tunnel_id":    tunnelID,
+		"is_inbound":   isInbound,
+		"hop_count":    hopCount,
+		"timeout_secs": rp.config.BuildTimeout.Seconds(),
 	}).Debug("Registered pending tunnel build")
 
 	return nil
@@ -206,27 +209,6 @@ func (rp *ReplyProcessor) retrieveAndRemovePendingBuild(tunnelID tunnel.TunnelID
 
 	delete(rp.pendingBuilds, tunnelID)
 	return pending, nil
-}
-
-// RemovePendingBuild removes a pending build without returning it.
-// This is used by external cleanup mechanisms (e.g., TunnelManager's
-// cleanupExpiredBuildByID) to avoid duplicate timeout handling.
-// Returns true if the build was found and removed, false otherwise.
-func (rp *ReplyProcessor) RemovePendingBuild(tunnelID tunnel.TunnelID) bool {
-	rp.mutex.Lock()
-	defer rp.mutex.Unlock()
-
-	pending, exists := rp.pendingBuilds[tunnelID]
-	if !exists {
-		return false
-	}
-
-	if pending.TimeoutTimer != nil {
-		pending.TimeoutTimer.Stop()
-	}
-
-	delete(rp.pendingBuilds, tunnelID)
-	return true
 }
 
 func (rp *ReplyProcessor) logReplyProcessing(tunnelID tunnel.TunnelID, pending *PendingBuildRequest) {

@@ -178,11 +178,6 @@ func EncryptShortBuildRequestRecordWithChain(record BuildRequestRecord, recipien
 //
 // Returns both the replyKey and the new chaining key so callers can continue
 // the HKDF chain (e.g. for layer/IV/garlic key derivation).
-//
-// Deprecated: This function applies SMTunnelReplyKey derivation in isolation,
-// which produces incorrect results when used as the first step in the HKDF chain.
-// Use DeriveSTBMHopKeys instead, which performs the full chain in the correct order:
-// LayerKey → IVKey → ReplyKey.
 func DeriveSTBMReplyKey(chainingKey [32]byte) ([32]byte, [32]byte, error) {
 	var replyKey, newCK [32]byte
 	r := hkdf.New(sha256.New, []byte{}, chainingKey[:], []byte("SMTunnelReplyKey"))
@@ -204,47 +199,6 @@ func hkdf64(ck [32]byte, info string) ([64]byte, error) {
 	return out, err
 }
 
-// DeriveSTBMHopKeys derives all per-hop keys from the post-Noise chaining key
-// in the correct order matching i2p proposal 157 (ShortECIESTunnelHopConfig).
-//
-// Correct derivation order:
-//
-//	ck → HKDF("SMTunnelLayerKey") → ck1, layerKey
-//	ck1 → HKDF("TunnelLayerIVKey") → ck2, ivKey
-//	ck2 → HKDF("SMTunnelReplyKey") → ck3, replyKey
-//
-// Returns layerKey, ivKey, replyKey, and the final chaining key ck3.
-// For the OBEP, the caller should continue the chain with DeriveSTBMOBEPGarlicKeyAndTag(ck3).
-func DeriveSTBMHopKeys(noiseCK [32]byte) (layerKey, ivKey, replyKey, ck3 [32]byte, err error) {
-	// Step 1: SMTunnelLayerKey
-	out1, err := hkdf64(noiseCK, "SMTunnelLayerKey")
-	if err != nil {
-		return layerKey, ivKey, replyKey, ck3, oops.Wrapf(err, "HKDF for SMTunnelLayerKey failed")
-	}
-	var ck1 [32]byte
-	copy(ck1[:], out1[0:32])
-	copy(layerKey[:], out1[32:64])
-
-	// Step 2: TunnelLayerIVKey
-	out2, err := hkdf64(ck1, "TunnelLayerIVKey")
-	if err != nil {
-		return layerKey, ivKey, replyKey, ck3, oops.Wrapf(err, "HKDF for TunnelLayerIVKey failed")
-	}
-	var ck2 [32]byte
-	copy(ck2[:], out2[0:32])
-	copy(ivKey[:], out2[32:64])
-
-	// Step 3: SMTunnelReplyKey
-	out3, err := hkdf64(ck2, "SMTunnelReplyKey")
-	if err != nil {
-		return layerKey, ivKey, replyKey, ck3, oops.Wrapf(err, "HKDF for SMTunnelReplyKey failed")
-	}
-	copy(ck3[:], out3[0:32])
-	copy(replyKey[:], out3[32:64])
-
-	return layerKey, ivKey, replyKey, ck3, nil
-}
-
 // DeriveSTBMGarlicKey derives the one-time symmetric garlic key used by the
 // OBEP to wrap a ShortTunnelBuildReply in a garlic message (type 11).
 //
@@ -255,10 +209,6 @@ func DeriveSTBMHopKeys(noiseCK [32]byte) (layerKey, ivKey, replyKey, ck3 [32]byt
 // Slicing follows the one-time garlic decryptor contract in go-noise:
 //   - key = keyMaterial[0:32]
 //   - tag = keyMaterial[24:32]
-//
-// Deprecated: This derivation from the Noise transcript hash is superseded by
-// DeriveSTBMOBEPGarlicKeyAndTag, which derives from the post-HKDF chaining key
-// in the correct order. Kept for reference and test compatibility.
 func DeriveSTBMGarlicKey(noiseHash [32]byte) ([32]byte, [8]byte, error) {
 	var garlicKey [32]byte
 	var tag [8]byte
@@ -291,33 +241,39 @@ func DeriveSTBMGarlicKeyFromChainingKey(chainingKey [32]byte) ([32]byte, [8]byte
 // DeriveSTBMOBEPGarlicKeyAndTag derives the one-time garlic key and tag that
 // the OBEP uses to wrap its ShortTunnelBuildReply, matching i2pd exactly.
 //
-// Input: noiseCK — the raw Noise chaining key after Noise_N EncryptAndHash.
+// Input: postReplyCK — the Noise chaining key after "SMTunnelReplyKey" HKDF step.
 //
-// Full derivation chain (from proposal 157 ShortECIESTunnelHopConfig::CreateBuildRequestRecord):
+// Derivation (from TransitTunnel.cpp::HandleShortTransitTunnelBuildMsg):
 //
-//	HKDF64(noiseCK, "SMTunnelLayerKey") -> ck1 || layerKey
-//	HKDF64(ck1, "TunnelLayerIVKey")     -> ck2 || ivKey
-//	HKDF64(ck2, "SMTunnelReplyKey")     -> ck3 || replyKey
-//	HKDF64(ck3, "RGarlicKeyAndTag")     -> ck4 || garlicEncKey
-//	  TAG = ck4[0:8]         (first 8 bytes of new chaining key)
+//	HKDF64(postReplyCK, "SMTunnelLayerKey") -> ck1 || layerKey
+//	HKDF64(ck1, "TunnelLayerIVKey")         -> ck2 || ivKey
+//	HKDF64(ck2, "RGarlicKeyAndTag")          -> ck3 || garlicEncKey
+//	  TAG = ck3[0:8]         (first 8 bytes of new chaining key)
 //	  KEY = garlicEncKey     (output key, 32 bytes)
-func DeriveSTBMOBEPGarlicKeyAndTag(noiseCK [32]byte) ([32]byte, [8]byte, error) {
+func DeriveSTBMOBEPGarlicKeyAndTag(postReplyCK [32]byte) ([32]byte, [8]byte, error) {
 	var garlicKey [32]byte
 	var tag [8]byte
 
-	// Perform the full chain: LayerKey -> IVKey -> ReplyKey
-	_, _, _, ck3, err := DeriveSTBMHopKeys(noiseCK)
+	out1, err := hkdf64(postReplyCK, "SMTunnelLayerKey")
 	if err != nil {
-		return garlicKey, tag, oops.Wrapf(err, "DeriveSTBMHopKeys failed")
+		return garlicKey, tag, oops.Wrapf(err, "HKDF for SMTunnelLayerKey failed")
 	}
+	var ck1 [32]byte
+	copy(ck1[:], out1[0:32])
 
-	// Final step: RGarlicKeyAndTag from ck3
-	out4, err := hkdf64(ck3, "RGarlicKeyAndTag")
+	out2, err := hkdf64(ck1, "TunnelLayerIVKey")
+	if err != nil {
+		return garlicKey, tag, oops.Wrapf(err, "HKDF for TunnelLayerIVKey failed")
+	}
+	var ck2 [32]byte
+	copy(ck2[:], out2[0:32])
+
+	out3, err := hkdf64(ck2, "RGarlicKeyAndTag")
 	if err != nil {
 		return garlicKey, tag, oops.Wrapf(err, "HKDF for RGarlicKeyAndTag failed")
 	}
-	copy(garlicKey[:], out4[32:64]) // output key
-	copy(tag[:], out4[0:8])         // first 8 bytes of new chaining key (NOT output key)
+	copy(garlicKey[:], out3[32:64]) // output key
+	copy(tag[:], out3[0:8])         // first 8 bytes of new chaining key (NOT output key)
 
 	return garlicKey, tag, nil
 }
