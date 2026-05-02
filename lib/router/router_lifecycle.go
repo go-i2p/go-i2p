@@ -897,10 +897,12 @@ func (d *tunnelGatewayDispatcher) HandleGateway(tunnelID tunnel.TunnelID, payloa
 		}
 		inner = inner2
 	}
+	i2np.RecordExploratoryReplyStage(i2np.ExploratoryReplyStageTunnelGatewayParsed)
 	log.WithFields(logger.Fields{
-		"tunnel_id":    tunnelID,
-		"inner_type":   inner.Type(),
-		"inner_msg_id": inner.MessageID(),
+		"outer_tunnel_id": tunnelID,
+		"inner_type":      inner.Type(),
+		"inner_msg_id":    inner.MessageID(),
+		"payload_size":    len(payload),
 	}).Debug("TunnelGateway: dispatching inner I2NP message")
 	return d.processor.ProcessMessage(inner)
 }

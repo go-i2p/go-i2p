@@ -478,7 +478,34 @@ func (r *Router) readNextMessage(session i2npReader, peerHash common.Hash) i2np.
 		r.logReadError(err, peerHash)
 		return nil
 	}
+	r.logInboundI2NPIngress(msg, peerHash, session)
 	return msg
+}
+
+// logInboundI2NPIngress records transport-to-I2NP ingress metadata for every
+// inbound message so reply-path audits can verify where messages are lost.
+func (r *Router) logInboundI2NPIngress(msg i2np.I2NPMessage, peerHash common.Hash, session i2npReader) {
+	i2np.RecordExploratoryReplyStage(i2np.ExploratoryReplyStageInboundI2NPReceived)
+	log.WithFields(logger.Fields{
+		"at":           "readNextMessage",
+		"message_type": msg.Type(),
+		"message_size": estimateI2NPMessageSize(msg),
+		"source_peer":  fmt.Sprintf("%x", peerHash[:8]),
+		"session_id":   fmt.Sprintf("%T:%p", session, session),
+	}).Debug("Inbound I2NP ingress")
+}
+
+func estimateI2NPMessageSize(msg i2np.I2NPMessage) int {
+	encoded, err := msg.MarshalBinary()
+	if err == nil {
+		return len(encoded)
+	}
+
+	if carrier, ok := msg.(i2np.DataCarrier); ok {
+		return len(carrier.GetData())
+	}
+
+	return -1
 }
 
 // logReadError logs the appropriate error message based on error type.

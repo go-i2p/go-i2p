@@ -389,6 +389,7 @@ func parseECIESGarlicClove(data []byte) (*Garlic, error) {
 
 // decryptGarlicData decrypts the garlic message using the session manager.
 func (p *MessageProcessor) decryptGarlicData(msgID int, encryptedData []byte) ([]byte, [8]byte, error) {
+	RecordExploratoryReplyStage(ExploratoryReplyStageGarlicDecryptAttempt)
 	incomingTag := ""
 	if len(encryptedData) >= 8 {
 		incomingTag = fmt.Sprintf("%x", encryptedData[:8])
@@ -404,6 +405,7 @@ func (p *MessageProcessor) decryptGarlicData(msgID int, encryptedData []byte) ([
 	if err != nil {
 		return nil, [8]byte{}, oops.Wrapf(err, "failed to decrypt garlic message")
 	}
+	RecordExploratoryReplyStage(ExploratoryReplyStageGarlicDecryptSuccess)
 
 	log.WithFields(logger.Fields{
 		"msg_id":         msgID,

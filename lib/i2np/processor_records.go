@@ -230,6 +230,7 @@ func (p *MessageProcessor) processBuildReplyCommon(msg I2NPMessage, isShortBuild
 	// Wrap parsed records in a TunnelReplyHandler
 	var handler TunnelReplyHandler
 	if isShortBuild {
+		RecordExploratoryReplyStage(ExploratoryReplyStageShortReplyDispatched)
 		handler = &ShortTunnelBuildReply{
 			Count:                len(records),
 			BuildResponseRecords: records,

@@ -26,6 +26,7 @@ const buildExpireGrace = 200 * time.Millisecond
 type buildRequest struct {
 	tunnelID       tunnel.TunnelID          // Unique tunnel ID for this request
 	messageID      int                      // I2NP message ID for correlation
+	replyTunnelID  tunnel.TunnelID          // Reply tunnel ID selected for outbound build replies
 	hopCount       int                      // Number of hops in the tunnel
 	replyKeys      []session_key.SessionKey // Reply decryption keys for each hop
 	replyIVs       [][16]byte               // Reply IVs for each hop
@@ -279,7 +280,7 @@ func (tm *TunnelManager) BuildTunnelFromRequest(req tunnel.BuildTunnelRequest) (
 	tunnelState := tm.createTunnelStateFromResult(result)
 	pool := tm.getPoolForTunnel(req.IsInbound)
 	pool.AddTunnel(tunnelState)
-	tm.trackPendingBuild(result, messageID, req.IsClientTunnel)
+	tm.trackPendingBuild(result, messageID, req.IsClientTunnel, req.ReplyTunnelID)
 
 	// Send the build message first. For STBM, createShortTunnelBuildMessage
 	// overwrites result.ReplyKeys with the HKDF-derived keys that the remote
@@ -441,7 +442,7 @@ func (tm *TunnelManager) createTunnelStateFromResult(result *tunnel.TunnelBuildR
 
 // trackPendingBuild records the pending build request for reply correlation.
 // isClientTunnel indicates whether the build originated from an I2CP client session pool.
-func (tm *TunnelManager) trackPendingBuild(result *tunnel.TunnelBuildResult, messageID int, isClientTunnel bool) {
+func (tm *TunnelManager) trackPendingBuild(result *tunnel.TunnelBuildResult, messageID int, isClientTunnel bool, replyTunnelID tunnel.TunnelID) {
 	// Lazily start the cleanup goroutine on the first build request
 	tm.ensureCleanupStarted()
 
@@ -451,6 +452,7 @@ func (tm *TunnelManager) trackPendingBuild(result *tunnel.TunnelBuildResult, mes
 	tm.pendingBuilds[messageID] = &buildRequest{
 		tunnelID:       result.TunnelID,
 		messageID:      messageID,
+		replyTunnelID:  replyTunnelID,
 		hopCount:       len(result.Hops),
 		replyKeys:      result.ReplyKeys,
 		replyIVs:       result.ReplyIVs,
@@ -729,6 +731,14 @@ func (tm *TunnelManager) createShortTunnelBuildMessage(result *tunnel.TunnelBuil
 	// evolution, since some implementations derive AttachLayerEncryption from CK.
 	if tm.garlicKeyRegistrar != nil && len(postReplyCKs) > 0 {
 		lastHop := len(postReplyCKs) - 1
+		if len(noiseHashes) > lastHop {
+			compatKey, compatTag, compatErr := DeriveSTBMGarlicKey(noiseHashes[lastHop])
+			if compatErr != nil {
+				return nil, oops.Wrapf(compatErr, "failed to derive compatibility garlic reply key")
+			}
+			tm.garlicKeyRegistrar.RegisterOneTimeGarlicKey(compatTag, compatKey)
+		}
+
 		// Derive the exact garlic key/tag that the OBEP uses when wrapping its
 		// ShortTunnelBuildReply (matches i2pd TransitTunnel.cpp exactly):
 		//   HKDF(postReplyCK, "SMTunnelLayerKey") -> ck1
@@ -1175,6 +1185,7 @@ func (tm *TunnelManager) retrievePendingBuildRequest(messageID int) (*buildReque
 
 // processUncorrelatedReply handles replies without a pending build request.
 func (tm *TunnelManager) processUncorrelatedReply(handler TunnelReplyHandler, messageID int, records []BuildResponseRecord) error {
+	RecordExploratoryReplyStage(ExploratoryReplyStageShortReplyUncorrelated)
 	log.WithField("message_id", messageID).Warn("No pending build request found for reply - processing without correlation")
 
 	err := handler.ProcessReply()
@@ -1192,6 +1203,7 @@ func (tm *TunnelManager) processUncorrelatedReply(handler TunnelReplyHandler, me
 
 // processCorrelatedReply handles replies with a pending build request.
 func (tm *TunnelManager) processCorrelatedReply(handler TunnelReplyHandler, req *buildRequest, messageID int, records []BuildResponseRecord) error {
+	RecordExploratoryReplyStage(ExploratoryReplyStageShortReplyCorrelated)
 	// Use ReplyProcessor to decrypt and process the reply with proper key handling
 	err := tm.replyProcessor.ProcessBuildReply(handler, req.tunnelID)
 
@@ -1357,11 +1369,47 @@ func (tm *TunnelManager) cleanupExpiredBuilds() {
 	for {
 		select {
 		case <-tm.cleanupTicker.C:
+			tm.logExploratoryReplyFunnelSummary()
 			tm.removeExpiredBuildRequests()
 		case <-tm.cleanupStop:
 			return
 		}
 	}
+}
+
+func safeRatio(numerator, denominator uint64) float64 {
+	if denominator == 0 {
+		return 0
+	}
+	return float64(numerator) / float64(denominator)
+}
+
+// logExploratoryReplyFunnelSummary emits a periodic stage-level summary for
+// exploratory reply processing. It runs on the 30-second cleanup ticker.
+func (tm *TunnelManager) logExploratoryReplyFunnelSummary() {
+	counters := SnapshotExploratoryReplyStages()
+	inbound := counters[ExploratoryReplyStageInboundI2NPReceived]
+	parsed := counters[ExploratoryReplyStageTunnelGatewayParsed]
+	decryptAttempt := counters[ExploratoryReplyStageGarlicDecryptAttempt]
+	decryptSuccess := counters[ExploratoryReplyStageGarlicDecryptSuccess]
+	dispatched := counters[ExploratoryReplyStageShortReplyDispatched]
+	correlated := counters[ExploratoryReplyStageShortReplyCorrelated]
+	uncorrelated := counters[ExploratoryReplyStageShortReplyUncorrelated]
+
+	log.WithFields(logger.Fields{
+		"interval_sec":                     30,
+		"inbound_i2np_received":            inbound,
+		"tunnel_gateway_inner_parsed":      parsed,
+		"garlic_decrypt_attempted":         decryptAttempt,
+		"garlic_decrypt_succeeded":         decryptSuccess,
+		"short_build_reply_dispatched":     dispatched,
+		"short_build_reply_correlated":     correlated,
+		"short_build_reply_uncorrelated":   uncorrelated,
+		"gateway_parse_ratio":              safeRatio(parsed, inbound),
+		"garlic_decrypt_success_ratio":     safeRatio(decryptSuccess, decryptAttempt),
+		"short_reply_correlation_ratio":    safeRatio(correlated, correlated+uncorrelated),
+		"short_reply_dispatch_correlation": safeRatio(correlated, dispatched),
+	}).Info("Exploratory reply funnel summary")
 }
 
 // removeExpiredBuildRequests removes build requests older than 90 seconds.
@@ -1412,9 +1460,11 @@ func (tm *TunnelManager) handleExpiredRequest(req *buildRequest, msgID int, now 
 		pool.RecordOutboundBuildTimeout()
 	}
 	log.WithFields(logger.Fields{
-		"tunnel_id":  req.tunnelID,
-		"message_id": msgID,
-		"age":        now.Sub(req.createdAt),
+		"message_id":       msgID,
+		"tunnel_id":        req.tunnelID,
+		"reply_tunnel_id":  req.replyTunnelID,
+		"is_inbound_build": req.isInbound,
+		"elapsed":          now.Sub(req.createdAt),
 	}).Warn("Tunnel build timed out")
 
 	tm.cleanupFailedTunnel(req.tunnelID, req.isInbound)
@@ -1469,9 +1519,11 @@ func (tm *TunnelManager) cleanupExpiredBuildByID(messageID int) {
 		}
 
 		log.WithFields(logger.Fields{
-			"message_id": messageID,
-			"tunnel_id":  req.tunnelID,
-			"age":        time.Since(req.createdAt),
+			"message_id":       messageID,
+			"tunnel_id":        req.tunnelID,
+			"reply_tunnel_id":  req.replyTunnelID,
+			"is_inbound_build": req.isInbound,
+			"elapsed":          time.Since(req.createdAt),
 		}).Debug("Cleaned up expired tunnel build via timeout")
 	}
 }
