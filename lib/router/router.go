@@ -120,6 +120,11 @@ type Router struct {
 
 // CreateRouter creates a router with the provided configuration
 func CreateRouter(cfg *config.RouterConfig) (*Router, error) {
+	if err := validateCreateRouterConfig(cfg); err != nil {
+		logError("invalid router configuration", err)
+		return nil, err
+	}
+
 	log.WithField("at", "CreateRouter").Debug("step 1/6: creating router from config")
 
 	r, err := FromConfig(cfg)
@@ -162,6 +167,19 @@ func CreateRouter(cfg *config.RouterConfig) (*Router, error) {
 	r.TransportMuxer = transport.Mux(transports...)
 	log.WithField("at", "CreateRouter").Debug("step 6/6: router created successfully")
 	return r, nil
+}
+
+func validateCreateRouterConfig(cfg *config.RouterConfig) error {
+	if cfg == nil {
+		return oops.Errorf("router config cannot be nil")
+	}
+	if cfg.NetDB == nil {
+		return oops.Errorf("router config NetDB cannot be nil")
+	}
+	if cfg.NetDB.Path == "" {
+		return oops.Errorf("router config NetDB.Path cannot be empty")
+	}
+	return nil
 }
 
 // logError logs a startup-phase error.

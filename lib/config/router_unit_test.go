@@ -189,3 +189,41 @@ func TestRouterConfigHiddenIsCopied(t *testing.T) {
 	cfg := GetRouterConfig()
 	assert.True(t, cfg.Hidden, "GetRouterConfig must propagate Hidden=true")
 }
+
+// TestSetRouterConfigNilIsIgnored verifies nil assignment is rejected and does
+// not clobber the active global configuration.
+func TestSetRouterConfigNilIsIgnored(t *testing.T) {
+	LockRouterConfigForWrite()
+	prev := routerConfigProperties
+	UnlockRouterConfigWrite()
+	defer func() {
+		SetRouterConfig(prev)
+	}()
+
+	cfg := DefaultRouterConfig()
+	cfg.BaseDir = "/preserved/base"
+	SetRouterConfig(cfg)
+
+	SetRouterConfig(nil)
+
+	current := GetRouterConfig()
+	assert.Equal(t, "/preserved/base", current.BaseDir, "nil update must not replace existing config")
+}
+
+// TestGetRouterConfigHandlesNilGlobal verifies callers never panic even if the
+// internal global config pointer is unexpectedly nil.
+func TestGetRouterConfigHandlesNilGlobal(t *testing.T) {
+	LockRouterConfigForWrite()
+	prev := routerConfigProperties
+	routerConfigProperties = nil
+	UnlockRouterConfigWrite()
+	defer func() {
+		SetRouterConfig(prev)
+	}()
+
+	assert.NotPanics(t, func() {
+		cfg := GetRouterConfig()
+		assert.NotNil(t, cfg)
+		assert.NotNil(t, cfg.NetDB)
+	}, "GetRouterConfig should recover safely when global config is nil")
+}

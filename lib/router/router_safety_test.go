@@ -4,6 +4,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -50,4 +51,32 @@ func TestFinalizeCloseChannel_NilChannel(t *testing.T) {
 	// Should not panic
 	r.finalizeCloseChannel()
 	assert.Nil(t, r.closeChnl)
+}
+
+// TestCreateRouter_NilNetDBReturnsError verifies CreateRouter fails fast with
+// a typed error when required nested NetDB config is missing.
+func TestCreateRouter_NilNetDBReturnsError(t *testing.T) {
+	cfg := config.DefaultRouterConfig()
+	cfg.WorkingDir = t.TempDir()
+	cfg.NetDB = nil
+
+	assert.NotPanics(t, func() {
+		r, err := CreateRouter(cfg)
+		assert.Nil(t, r, "router should be nil when NetDB config is nil")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "NetDB")
+	})
+}
+
+// TestCreateRouter_EmptyNetDBPathReturnsError verifies constructor validation
+// rejects empty NetDB path before touching startup subsystems.
+func TestCreateRouter_EmptyNetDBPathReturnsError(t *testing.T) {
+	cfg := config.DefaultRouterConfig()
+	cfg.WorkingDir = t.TempDir()
+	cfg.NetDB.Path = ""
+
+	r, err := CreateRouter(cfg)
+	assert.Nil(t, r, "router should be nil when NetDB path is empty")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "NetDB.Path")
 }

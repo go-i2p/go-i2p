@@ -203,14 +203,24 @@ func GetRouterConfig() *RouterConfig {
 	routerConfigMutex.RLock()
 	defer routerConfigMutex.RUnlock()
 
-	configCopy := copyBaseFields(routerConfigProperties)
-	copyNestedConfigs(configCopy, routerConfigProperties)
+	currentConfig := routerConfigProperties
+	if currentConfig == nil {
+		log.Warn("global router configuration is nil; returning defaults")
+		currentConfig = defaultRouterConfig
+	}
+
+	configCopy := copyBaseFields(currentConfig)
+	copyNestedConfigs(configCopy, currentConfig)
 
 	return configCopy
 }
 
 // copyBaseFields creates a shallow copy of the scalar fields in a RouterConfig.
 func copyBaseFields(src *RouterConfig) *RouterConfig {
+	if src == nil {
+		return &RouterConfig{}
+	}
+
 	return &RouterConfig{
 		BaseDir:              src.BaseDir,
 		WorkingDir:           src.WorkingDir,
@@ -238,6 +248,10 @@ func copyPtr[T interface{}](src *T) *T {
 
 // copyNestedConfigs deep-copies all nested configuration structs from src into dst.
 func copyNestedConfigs(dst, src *RouterConfig) {
+	if dst == nil || src == nil {
+		return
+	}
+
 	dst.NetDB = copyPtr(src.NetDB)
 	dst.Bootstrap = copyBootstrapConfig(src.Bootstrap)
 	dst.I2CP = copyPtr(src.I2CP)
@@ -280,6 +294,10 @@ func copyBootstrapConfig(src *BootstrapConfig) *BootstrapConfig {
 func SetRouterConfig(cfg *RouterConfig) {
 	routerConfigMutex.Lock()
 	defer routerConfigMutex.Unlock()
+	if cfg == nil {
+		log.Warn("refusing to replace global router configuration with nil")
+		return
+	}
 	log.Debug("replacing global router configuration")
 	routerConfigProperties = cfg
 }
