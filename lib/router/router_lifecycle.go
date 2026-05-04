@@ -1106,6 +1106,16 @@ func (r *Router) initializeTunnelManager() {
 				// unblocks. TriggerAutoFallbackCheck() is conditional on callback
 				// predicates (e.g. no-public-address) and therefore is not a true
 				// force-path when external address detection yields false positives.
+				// Force outbound to 1-hop first, before any blocking maintenance
+				// call, so the hop-count update is guaranteed to execute.
+				if outboundPool != nil {
+					if err := outboundPool.SetHopCount(1); err != nil {
+						log.WithFields(logger.Fields{
+							"at":    "initializeTunnelManager",
+							"error": err.Error(),
+						}).Warn("failed to force outbound exploratory pool to one-hop")
+					}
+				}
 				if inboundPool != nil {
 					if err := inboundPool.SetHopCount(0); err != nil {
 						log.WithFields(logger.Fields{
