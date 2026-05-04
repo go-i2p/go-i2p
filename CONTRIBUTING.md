@@ -15,9 +15,9 @@ The instructions will be similar for other Linux distributions with slightly dif
 # For obtaining, modifying, compiling, and tracking changes to go-i2p, install:
 sudo apt-get install golang-go make git
 # If you want to generate markdown versions of the godoc locally, also install:
-go install github.com/robertkrimen/godocdown/godocdown@master
+go install github.com/robertkrimen/godocdown@latest
 # If you want to generate call graphs locally, also install:
-go install github.com/ofabry/go-callvis@master
+go install github.com/ofabry/go-callvis@latest
 ```
 
 On Windows, one must install the latest versions of Go and Git Bash from their respective sources.

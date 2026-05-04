@@ -88,7 +88,7 @@ Save the token for subsequent requests.
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `enabled` | bool | `false` | Enable I2PControl server |
+| `enabled` | bool | `true` | Enable I2PControl server |
 | `address` | string | `"localhost:7650"` | Listen address (host:port) |
 | `password` | string | `"itoopie"` | Authentication password |
 | `use_https` | bool | `false` | Enable HTTPS/TLS |
