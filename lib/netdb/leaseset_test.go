@@ -46,13 +46,15 @@ func leaseSetConfig() leaseSetTestConfig {
 
 // --- Shared tests delegated to helpers ---
 
-func TestStoreLeaseSetParseError(t *testing.T)      { testStoreParseError(t, leaseSetConfig()) }
+func TestStoreLeaseSetParseError(t *testing.T) { testStoreParseError(t, leaseSetConfig()) }
+
 func TestStoreLeaseSetInvalidDataType(t *testing.T) { testStoreInvalidDataType(t, leaseSetConfig()) }
 func TestStoreLeaseSetEmptyData(t *testing.T)       { testStoreEmptyData(t, leaseSetConfig()) }
 func TestStoreLeaseSetNilData(t *testing.T)         { testStoreNilData(t, leaseSetConfig()) }
 func TestGetLeaseSetNotFound(t *testing.T)          { testGetNotFound(t, leaseSetConfig()) }
 func TestGetLeaseSetBytesNotFound(t *testing.T)     { testGetBytesNotFound(t, leaseSetConfig()) }
-func TestLeaseSetThreadSafety(t *testing.T)         { testLeaseSetThreadSafety(t, leaseSetConfig()) }
+func TestLeaseSetThreadSafety(t *testing.T) { testLeaseSetThreadSafety(t, leaseSetConfig()) }
+
 func TestLeaseSetConcurrentStoreAndRetrieve(t *testing.T) {
 	testConcurrentStoreAndRetrieve(t, leaseSetConfig())
 }

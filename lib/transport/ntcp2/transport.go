@@ -596,7 +596,8 @@ func (t *NTCP2Transport) UpdateLocalRouterInfo(ri router_info.RouterInfo) {
 				"live static key — all subsequent outbound NTCP2 handshakes will " +
 				"succeed cryptographically but be closed by remote peers (i2pd " +
 				"GetNTCP2AddressWithStaticKey check). Investigate the call site that " +
-				"supplied this RouterInfo.")
+				"supplied this RouterInfo.",
+		)
 	}
 }
 

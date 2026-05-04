@@ -42,8 +42,10 @@ total length: 528
 */
 
 type (
+	// BuildResponseRecordELGamalAES stores a legacy fixed-size ElGamal/AES build response record.
 	BuildResponseRecordELGamalAES [528]byte
-	BuildResponseRecordELGamal    [528]byte
+	// BuildResponseRecordELGamal is a legacy alias for ElGamal/AES build response record bytes.
+	BuildResponseRecordELGamal [528]byte
 )
 
 /*

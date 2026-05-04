@@ -23,7 +23,7 @@ func TestDiag_OopsWrappedTimeout_DirectTypeAssertion(t *testing.T) {
 	original := fakeTimeoutErr{}
 
 	// Confirm the unwrapped error satisfies net.Error
-	if _, ok := (error)(original).(net.Error); !ok {
+	if _, ok := error(original).(net.Error); !ok {
 		t.Fatal("unwrapped fakeTimeoutErr should satisfy net.Error")
 	}
 

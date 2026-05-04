@@ -693,7 +693,8 @@ func parseGarlicMetadata(data []byte, offset int) (certificate.Certificate, int,
 
 	if certType != 0 || certLen != 0 {
 		return certificate.Certificate{}, 0, time.Time{}, oops.Errorf(
-			"unsupported non-NULL garlic certificate (type=%d, len=%d) at offset=%d, data_len=%d", certType, certLen, offset, len(data))
+			"unsupported non-NULL garlic certificate (type=%d, len=%d) at offset=%d, data_len=%d", certType, certLen, offset, len(data),
+		)
 	}
 	cert := *certificate.NewCertificate()
 	offset += 3
@@ -831,10 +832,12 @@ func parseCloveMetadata(data []byte, offset int) (int, time.Time, certificate.Ce
 		if len(data) < offset+15+int(certLen) {
 			return 0, time.Time{}, certificate.Certificate{}, oops.Errorf(
 				"insufficient data for certificate payload: need %d bytes, have %d",
-				offset+15+int(certLen), len(data))
+				offset+15+int(certLen), len(data),
+			)
 		}
 		return 0, time.Time{}, certificate.Certificate{}, oops.Errorf(
-			"unsupported non-NULL certificate in garlic clove (type=%d, len=%d)", certType, certLen)
+			"unsupported non-NULL certificate in garlic clove (type=%d, len=%d)", certType, certLen,
+		)
 	}
 
 	cert := *certificate.NewCertificate()

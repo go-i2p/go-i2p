@@ -6,6 +6,7 @@ import (
 )
 
 const (
+	// DefaultDialTimeout is the default timeout for reseed HTTP connection attempts.
 	DefaultDialTimeout = 30 * time.Second // 30 seconds for HTTP requests
 	DefaultKeepAlive   = 30 * time.Second // 30 seconds keep-alive
 )

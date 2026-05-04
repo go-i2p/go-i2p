@@ -150,8 +150,10 @@ total length: 222
 */
 
 type (
+	// BuildRequestRecordElGamalAES stores a legacy fixed-size ElGamal/AES build request record.
 	BuildRequestRecordElGamalAES [528]byte
-	BuildRequestRecordElGamal    [528]byte
+	// BuildRequestRecordElGamal is a legacy alias for ElGamal/AES build request record bytes.
+	BuildRequestRecordElGamal [528]byte
 )
 
 // BuildRequestRecord represents a single record in a tunnel build request, containing the cryptographic keys and routing information needed to construct one hop in a tunnel.

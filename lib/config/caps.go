@@ -201,11 +201,13 @@ func validateCapsCounts(c capsFlagCounts) error {
 	}
 	if c.reachability > 1 {
 		return newValidationError(fmt.Sprintf(
-			"caps string must contain at most one reachability flag (R/U), found %d", c.reachability))
+			"caps string must contain at most one reachability flag (R/U), found %d", c.reachability,
+		))
 	}
 	if c.congestion > 1 {
 		return newValidationError(fmt.Sprintf(
-			"caps string must contain at most one congestion flag (D/E/G), found %d", c.congestion))
+			"caps string must contain at most one congestion flag (D/E/G), found %d", c.congestion,
+		))
 	}
 	return nil
 }
@@ -316,7 +318,8 @@ func ValidateRouterInfoOptionKeys(options map[string]string) error {
 	if len(unknownKeys) > 0 {
 		sort.Strings(unknownKeys)
 		return newValidationError(fmt.Sprintf(
-			"unrecognized RouterInfo option keys: %s", strings.Join(unknownKeys, ", ")))
+			"unrecognized RouterInfo option keys: %s", strings.Join(unknownKeys, ", "),
+		))
 	}
 
 	log.WithFields(logger.Fields{
@@ -335,6 +338,7 @@ func ValidateCongestionFlag(flag CongestionFlag) error {
 		return nil
 	default:
 		return newValidationError(fmt.Sprintf(
-			"invalid congestion flag: %q (must be empty, D, E, or G)", flag))
+			"invalid congestion flag: %q (must be empty, D, E, or G)", flag,
+		))
 	}
 }

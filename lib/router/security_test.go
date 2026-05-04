@@ -295,6 +295,7 @@ func (m *mockTunnelCarrier) GetTunnelID() tunnel.TunnelID {
 	}
 	return 0
 }
+
 func (m *mockTunnelCarrier) Type() int                      { return int(i2np.I2NPMessageTypeTunnelData) }
 func (m *mockTunnelCarrier) MessageID() int                 { return m.msgID }
 func (m *mockTunnelCarrier) SetMessageID(id int)            { m.msgID = id }

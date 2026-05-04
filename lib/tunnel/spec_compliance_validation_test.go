@@ -1380,7 +1380,8 @@ func TestPeerSelection_ScoringPeerSelectorThreshold(t *testing.T) {
 
 	// Scorer that gives zero score to all peers
 	zeroScorer := &specMockScorer{score: 0.0}
-	scored, err := NewScoringPeerSelector(base,
+	scored, err := NewScoringPeerSelector(
+		base,
 		WithScorers(zeroScorer),
 		WithScoreThreshold(0.5),
 		WithScoringMaxRetries(1),

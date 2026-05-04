@@ -80,7 +80,8 @@ func TestReadDeliveryInstructions(t *testing.T) {
 // This test verifies the variable shadowing bug fix where hash_start and hash_end
 // must be reassigned (not redeclared) to adjust offsets correctly.
 func TestDeliveryInstructionsHashTunnel(t *testing.T) {
-	assertDeliveryInstructionHash(t,
+	assertDeliveryInstructionHash(
+		t,
 		0x20,                           // DTTunnel flag
 		[]byte{0x00, 0x00, 0x30, 0x39}, // tunnelID = 12345
 		func(i int) byte { return byte(i) },
@@ -89,7 +90,8 @@ func TestDeliveryInstructionsHashTunnel(t *testing.T) {
 
 // TestDeliveryInstructionsHashRouter tests Hash() method for DTRouter delivery type
 func TestDeliveryInstructionsHashRouter(t *testing.T) {
-	assertDeliveryInstructionHash(t,
+	assertDeliveryInstructionHash(
+		t,
 		0x40, // DTRouter flag
 		nil,  // no tunnelID
 		func(i int) byte { return byte(255 - i) },

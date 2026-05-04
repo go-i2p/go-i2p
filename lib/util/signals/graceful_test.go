@@ -148,7 +148,8 @@ func TestPreShutdownHandlers_HungHandlerDoesNotBlockChain(t *testing.T) {
 func TestDeregisterPreShutdownHandler(t *testing.T) {
 	resetPreShutdownHandlers(t, false)
 
-	assertDeregisterRemovesHandler(t,
+	assertDeregisterRemovesHandler(
+		t,
 		RegisterPreShutdownHandler,
 		DeregisterPreShutdownHandler,
 		func() { handlePreShutdown() },

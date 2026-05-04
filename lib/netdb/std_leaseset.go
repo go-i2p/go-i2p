@@ -399,7 +399,8 @@ func (db *StdNetDB) fetchLeaseSetBytes(
 
 // GetLeaseSetBytes retrieves LeaseSet data as bytes from the database.
 func (db *StdNetDB) GetLeaseSetBytes(hash common.Hash) ([]byte, error) {
-	return db.fetchLeaseSetBytes(hash, "LeaseSet",
+	return db.fetchLeaseSetBytes(
+		hash, "LeaseSet",
 		func(e Entry) ([]byte, error) {
 			if e.LeaseSet == nil {
 				return nil, nil
@@ -472,7 +473,8 @@ func (db *StdNetDB) storeLeaseSetVariant(
 // dataType should be 3 for LeaseSet2 (matching I2P protocol specification).
 func (db *StdNetDB) StoreLeaseSet2(key common.Hash, data []byte, dataType byte) error {
 	var ls2 lease_set2.LeaseSet2
-	return db.storeLeaseSetVariant(key, dataType, leaseSet2Type, "LeaseSet2",
+	return db.storeLeaseSetVariant(
+		key, dataType, leaseSet2Type, "LeaseSet2",
 		func() (verifiableLeaseSet, error) {
 			var err error
 			ls2, err = parseLeaseSet2Data(data)
@@ -644,7 +646,8 @@ func (db *StdNetDB) parseAndCacheLeaseSet2(hash common.Hash, data []byte) (lease
 
 // GetLeaseSet2Bytes retrieves LeaseSet2 data as bytes from the database.
 func (db *StdNetDB) GetLeaseSet2Bytes(hash common.Hash) ([]byte, error) {
-	return db.fetchLeaseSetBytes(hash, "LeaseSet2",
+	return db.fetchLeaseSetBytes(
+		hash, "LeaseSet2",
 		func(e Entry) ([]byte, error) {
 			if e.LeaseSet2 == nil {
 				return nil, nil
@@ -667,7 +670,8 @@ func (db *StdNetDB) GetLeaseSet2Bytes(hash common.Hash) ([]byte, error) {
 // dataType should be 5 for EncryptedLeaseSet (matching I2P protocol specification).
 func (db *StdNetDB) StoreEncryptedLeaseSet(key common.Hash, data []byte, dataType byte) error {
 	var els encrypted_leaseset.EncryptedLeaseSet
-	return db.storeLeaseSetVariant(key, dataType, encryptedLeaseSetType, "EncryptedLeaseSet",
+	return db.storeLeaseSetVariant(
+		key, dataType, encryptedLeaseSetType, "EncryptedLeaseSet",
 		func() (verifiableLeaseSet, error) {
 			var err error
 			els, err = parseEncryptedLeaseSetData(data)
@@ -787,7 +791,8 @@ func (db *StdNetDB) parseAndCacheEncryptedLeaseSet(hash common.Hash, data []byte
 
 // GetEncryptedLeaseSetBytes retrieves EncryptedLeaseSet data as bytes from the database.
 func (db *StdNetDB) GetEncryptedLeaseSetBytes(hash common.Hash) ([]byte, error) {
-	return db.fetchLeaseSetBytes(hash, "EncryptedLeaseSet",
+	return db.fetchLeaseSetBytes(
+		hash, "EncryptedLeaseSet",
 		func(e Entry) ([]byte, error) {
 			if e.EncryptedLeaseSet == nil {
 				return nil, nil
@@ -810,7 +815,8 @@ func (db *StdNetDB) GetEncryptedLeaseSetBytes(hash common.Hash) ([]byte, error) 
 // dataType should be 7 for MetaLeaseSet (matching I2P protocol specification).
 func (db *StdNetDB) StoreMetaLeaseSet(key common.Hash, data []byte, dataType byte) error {
 	var mls meta_leaseset.MetaLeaseSet
-	return db.storeLeaseSetVariant(key, dataType, metaLeaseSetType, "MetaLeaseSet",
+	return db.storeLeaseSetVariant(
+		key, dataType, metaLeaseSetType, "MetaLeaseSet",
 		func() (verifiableLeaseSet, error) {
 			var err error
 			mls, err = parseMetaLeaseSetData(data)
@@ -931,7 +937,8 @@ func (db *StdNetDB) parseAndCacheMetaLeaseSet(hash common.Hash, data []byte) (me
 
 // GetMetaLeaseSetBytes retrieves MetaLeaseSet data as bytes from the database.
 func (db *StdNetDB) GetMetaLeaseSetBytes(hash common.Hash) ([]byte, error) {
-	return db.fetchLeaseSetBytes(hash, "MetaLeaseSet",
+	return db.fetchLeaseSetBytes(
+		hash, "MetaLeaseSet",
 		func(e Entry) ([]byte, error) {
 			if e.MetaLeaseSet == nil {
 				return nil, nil

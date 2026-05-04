@@ -415,7 +415,7 @@ func TestRekey_ThresholdAndMechanism(t *testing.T) {
 		"RekeyThreshold must be less than 2^64-1 (spec max)")
 
 	// Verify the Rekeyer interface exists and is well-defined
-	var _ Rekeyer = (Rekeyer)(nil)
+	var _ Rekeyer = Rekeyer(nil)
 	rekeyerType := reflect.TypeOf((*Rekeyer)(nil)).Elem()
 	assert.True(t, rekeyerType.Kind() == reflect.Interface,
 		"Rekeyer must be an interface type")

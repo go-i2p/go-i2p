@@ -1054,7 +1054,8 @@ func (s *Server) handleSendMessage(msg *Message, sessionPtr **Session) (*Message
 		return nil, err
 	}
 
-	acceptMsg := s.acceptAndRouteMessage(session, sendMsg.Destination, len(sendMsg.Payload), 0,
+	acceptMsg := s.acceptAndRouteMessage(
+		session, sendMsg.Destination, len(sendMsg.Payload), 0,
 		logger.Fields{"at": "i2cp.Server.handleSendMessage"},
 		func(messageID uint32) { s.routeMessageWithStatus(session, messageID, sendMsg) },
 	)
@@ -1192,7 +1193,8 @@ func (s *Server) handleSendMessageExpires(msg *Message, sessionPtr **Session) (*
 		return nil, err
 	}
 
-	acceptMsg := s.acceptAndRouteMessage(session, sendMsgExpires.Destination, len(sendMsgExpires.Payload), sendMsgExpires.Nonce,
+	acceptMsg := s.acceptAndRouteMessage(
+		session, sendMsgExpires.Destination, len(sendMsgExpires.Payload), sendMsgExpires.Nonce,
 		logger.Fields{
 			"at":         "i2cp.Server.handleSendMessageExpires",
 			"nonce":      sendMsgExpires.Nonce,

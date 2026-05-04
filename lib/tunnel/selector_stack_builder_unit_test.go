@@ -219,7 +219,8 @@ func TestCompositeFilter_Empty(t *testing.T) {
 }
 
 func TestCompositeFilter_AllAccept(t *testing.T) {
-	composite := NewCompositeFilter("AllAccept",
+	composite := NewCompositeFilter(
+		"AllAccept",
 		&alwaysAcceptFilter{},
 		&alwaysAcceptFilter{},
 	)
@@ -227,7 +228,8 @@ func TestCompositeFilter_AllAccept(t *testing.T) {
 }
 
 func TestCompositeFilter_OneRejects(t *testing.T) {
-	composite := NewCompositeFilter("OneRejects",
+	composite := NewCompositeFilter(
+		"OneRejects",
 		&alwaysAcceptFilter{},
 		&alwaysRejectFilter{},
 		&alwaysAcceptFilter{},
@@ -251,7 +253,8 @@ func TestAnyFilter_Empty(t *testing.T) {
 }
 
 func TestAnyFilter_AllReject(t *testing.T) {
-	anyFilter := NewAnyFilter("AllReject",
+	anyFilter := NewAnyFilter(
+		"AllReject",
 		&alwaysRejectFilter{},
 		&alwaysRejectFilter{},
 	)
@@ -259,7 +262,8 @@ func TestAnyFilter_AllReject(t *testing.T) {
 }
 
 func TestAnyFilter_OneAccepts(t *testing.T) {
-	anyFilter := NewAnyFilter("OneAccepts",
+	anyFilter := NewAnyFilter(
+		"OneAccepts",
 		&alwaysRejectFilter{},
 		&alwaysAcceptFilter{},
 		&alwaysRejectFilter{},

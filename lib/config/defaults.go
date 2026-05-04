@@ -609,7 +609,8 @@ func runValidation(name, startMsg, successMsg string, validators ...func() error
 
 // validateNetDB validates network database configuration settings.
 func validateNetDB(netdb NetDBDefaults) error {
-	return runValidation("validateNetDBConfig", "validating_netdb_settings", "NetDB configuration validated successfully",
+	return runValidation(
+		"validateNetDBConfig", "validating_netdb_settings", "NetDB configuration validated successfully",
 		func() error { return validateNetDBPath(netdb.Path) },
 		func() error { return validateNetDBMaxRouterInfos(netdb.MaxRouterInfos) },
 		func() error { return validateNetDBMaxLeaseSets(netdb.MaxLeaseSets) },
@@ -618,7 +619,8 @@ func validateNetDB(netdb NetDBDefaults) error {
 
 // validateBootstrap validates bootstrap configuration settings.
 func validateBootstrap(bootstrap BootstrapDefaults) error {
-	return runValidation("validateBootstrapConfig", "validating_bootstrap_settings", "bootstrap configuration validated successfully",
+	return runValidation(
+		"validateBootstrapConfig", "validating_bootstrap_settings", "bootstrap configuration validated successfully",
 		func() error { return validateLowPeerThreshold(bootstrap.LowPeerThreshold) },
 		func() error { return validateMinimumReseedPeers(bootstrap.MinimumReseedPeers) },
 		func() error { return validateBootstrapType(bootstrap.BootstrapType) },
@@ -756,7 +758,8 @@ func validateI2CPNetworkType(network string) error {
 
 // validateI2CP validates I2CP server configuration settings.
 func validateI2CP(i2cp I2CPDefaults) error {
-	return runValidation("validateI2CPConfig", "validating_i2cp_settings", "I2CP configuration validated successfully",
+	return runValidation(
+		"validateI2CPConfig", "validating_i2cp_settings", "I2CP configuration validated successfully",
 		func() error { return validateI2CPMaxSessions(i2cp.MaxSessions) },
 		func() error { return validateI2CPMessageQueueSize(i2cp.MessageQueueSize) },
 		func() error { return validateI2CPNetworkType(i2cp.Network) },

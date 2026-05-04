@@ -430,6 +430,7 @@ func TestMessageRoundTrip(t *testing.T) {
 		})
 	}
 } // TestReservedSessionIDConstants tests that reserved session ID constants have correct values.
+
 func TestReservedSessionIDConstants(t *testing.T) {
 	tests := []struct {
 		name       string

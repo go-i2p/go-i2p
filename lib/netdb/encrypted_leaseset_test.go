@@ -61,8 +61,11 @@ func TestStoreEncryptedLeaseSetParseError(t *testing.T) {
 func TestStoreEncryptedLeaseSetEmptyData(t *testing.T) {
 	testStoreEmptyData(t, encryptedLeaseSetConfig())
 }
+
 func TestStoreEncryptedLeaseSetNilData(t *testing.T) { testStoreNilData(t, encryptedLeaseSetConfig()) }
-func TestGetEncryptedLeaseSetNotFound(t *testing.T)  { testGetNotFound(t, encryptedLeaseSetConfig()) }
+
+func TestGetEncryptedLeaseSetNotFound(t *testing.T) { testGetNotFound(t, encryptedLeaseSetConfig()) }
+
 func TestGetEncryptedLeaseSetBytesNotFound(t *testing.T) {
 	testGetBytesNotFound(t, encryptedLeaseSetConfig())
 }

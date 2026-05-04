@@ -34,7 +34,8 @@ func (m *mockPrivateKeyNotSigning) Zero()                                   {}
 
 type mockEncryptionPublicKey struct{}
 
-func (m *mockEncryptionPublicKey) Len() int                               { return testEd25519PubKeySize }
+func (m *mockEncryptionPublicKey) Len() int { return testEd25519PubKeySize }
+
 func (m *mockEncryptionPublicKey) Bytes() []byte                          { return make([]byte, testEd25519PubKeySize) }
 func (m *mockEncryptionPublicKey) NewEncrypter() (types.Encrypter, error) { return nil, nil }
 

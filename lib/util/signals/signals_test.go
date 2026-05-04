@@ -292,7 +292,8 @@ func TestDeregisterReloadHandler(t *testing.T) {
 func TestDeregisterInterruptHandler(t *testing.T) {
 	resetSignalHandlers(t, false, true)
 
-	assertDeregisterRemovesHandler(t,
+	assertDeregisterRemovesHandler(
+		t,
 		RegisterInterruptHandler,
 		DeregisterInterruptHandler,
 		handleInterrupted,

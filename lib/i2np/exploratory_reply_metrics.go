@@ -3,6 +3,7 @@ package i2np
 import "sync/atomic"
 
 const (
+	// ExploratoryReplyStage* constants identify checkpoints in the exploratory reply funnel.
 	ExploratoryReplyStageInboundI2NPReceived    = "inbound_i2np_received"
 	ExploratoryReplyStageTunnelGatewayParsed    = "tunnel_gateway_inner_parsed"
 	ExploratoryReplyStageGarlicDecryptAttempt   = "garlic_decrypt_attempted"
