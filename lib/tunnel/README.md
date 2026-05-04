@@ -95,6 +95,7 @@ allow messages to anyone (outbound endpoint)
 
 ```go
 const (
+	// DTLocal indicates delivery to the local router context.
 	DTLocal = iota
 	DTTunnel
 	DTRouter
@@ -104,6 +105,7 @@ const (
 
 ```go
 const (
+	// FirstFragment marks the first fragment in a message sequence.
 	FirstFragment = iota
 	FollowOnFragment
 )
@@ -111,6 +113,7 @@ const (
 
 ```go
 const (
+	// FlagSize is the size in bytes of a fragment flag field.
 	FlagSize               = 1
 	TunnelIDSize           = 4
 	HashSize               = 32
@@ -179,7 +182,7 @@ var (
 
 ```go
 var (
-	// ErrNilDecryption is returned when decryption is nil
+	// ErrNilParticipantDecryption is returned when participant decryption is nil.
 	ErrNilParticipantDecryption = errors.New("participant decryption cannot be nil")
 
 	// ErrInvalidParticipantData is returned when tunnel data is malformed
@@ -2299,6 +2302,7 @@ TunnelBuildState represents different states during tunnel building
 
 ```go
 const (
+	// TunnelBuilding indicates that tunnel construction is currently in progress.
 	TunnelBuilding TunnelBuildState = iota // Tunnel is being built
 	TunnelReady                            // Tunnel is ready for use
 	TunnelFailed                           // Tunnel build failed

@@ -11,6 +11,7 @@ the I2P NetDB from trusted reseed servers.
 
 ```go
 const (
+	// DefaultDialTimeout is the default timeout for reseed HTTP connection attempts.
 	DefaultDialTimeout = 30 * time.Second // 30 seconds for HTTP requests
 	DefaultKeepAlive   = 30 * time.Second // 30 seconds keep-alive
 )
@@ -18,6 +19,7 @@ const (
 
 ```go
 const (
+	// I2pUserAgent is the default User-Agent header used for reseed HTTP requests.
 	I2pUserAgent = "Wget/1.11.4"
 	// ReseedSU3Path is the standard I2P reseed path for SU3 files.
 	// Reseed servers expect clients to request the SU3 file at this path.

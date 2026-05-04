@@ -5,6 +5,7 @@ import (
 )
 
 var (
+	// ErrNTCP2NotSupported indicates that a peer/router does not advertise NTCP2 support.
 	ErrNTCP2NotSupported      = oops.New("router does not support NTCP2")
 	ErrSessionClosed          = oops.New("NTCP2 session is closed")
 	ErrHandshakeFailed        = oops.New("NTCP2 handshake failed")

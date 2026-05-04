@@ -29,6 +29,7 @@ type TunnelState struct {
 type TunnelBuildState int
 
 const (
+	// TunnelBuilding indicates that tunnel construction is currently in progress.
 	TunnelBuilding TunnelBuildState = iota // Tunnel is being built
 	TunnelReady                            // Tunnel is ready for use
 	TunnelFailed                           // Tunnel build failed

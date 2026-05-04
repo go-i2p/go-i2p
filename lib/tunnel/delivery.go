@@ -125,6 +125,7 @@ total length: 7 bytes
 */
 
 const (
+	// DTLocal indicates delivery to the local router context.
 	DTLocal = iota
 	DTTunnel
 	DTRouter
@@ -132,11 +133,13 @@ const (
 )
 
 const (
+	// FirstFragment marks the first fragment in a message sequence.
 	FirstFragment = iota
 	FollowOnFragment
 )
 
 const (
+	// FlagSize is the size in bytes of a fragment flag field.
 	FlagSize               = 1
 	TunnelIDSize           = 4
 	HashSize               = 32

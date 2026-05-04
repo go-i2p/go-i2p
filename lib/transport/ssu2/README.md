@@ -59,6 +59,7 @@ DefaultMaxSessions is the default maximum number of concurrent SSU2 sessions.
 
 ```go
 var (
+	// ErrSSU2NotSupported indicates that a peer/router does not advertise SSU2 support.
 	ErrSSU2NotSupported       = oops.New("router does not support SSU2")
 	ErrSessionClosed          = oops.New("SSU2 session is closed")
 	ErrHandshakeFailed        = oops.New("SSU2 handshake failed")

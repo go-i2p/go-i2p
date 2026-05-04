@@ -52,7 +52,7 @@ type Participant struct {
 }
 
 var (
-	// ErrNilDecryption is returned when decryption is nil
+	// ErrNilParticipantDecryption is returned when participant decryption is nil.
 	ErrNilParticipantDecryption = errors.New("participant decryption cannot be nil")
 
 	// ErrInvalidParticipantData is returned when tunnel data is malformed

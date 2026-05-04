@@ -45,6 +45,7 @@ management, and message delivery
 
 ```go
 const (
+	// HostLookupTypeHash requests a destination lookup by hash value.
 	HostLookupTypeHash     uint16 = 0 // Lookup by destination hash
 	HostLookupTypeHostname uint16 = 1 // Lookup by hostname
 )
@@ -52,6 +53,7 @@ const (
 
 ```go
 const (
+	// HostReplySuccess indicates that the requested destination was found.
 	HostReplySuccess  uint8 = 0 // Destination found
 	HostReplyNotFound uint8 = 1 // Destination not found
 	HostReplyTimeout  uint8 = 2 // Lookup timed out

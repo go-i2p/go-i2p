@@ -163,6 +163,7 @@ Size limits for DatabaseStore data payloads
 
 ```go
 const (
+	// ExploratoryReplyStage* constants identify checkpoints in the exploratory reply funnel.
 	ExploratoryReplyStageInboundI2NPReceived    = "inbound_i2np_received"
 	ExploratoryReplyStageTunnelGatewayParsed    = "tunnel_gateway_inner_parsed"
 	ExploratoryReplyStageGarlicDecryptAttempt   = "garlic_decrypt_attempted"
@@ -941,6 +942,8 @@ The caller is responsible for applying ECIES encryption.
 type BuildRequestRecordElGamal [528]byte
 ```
 
+BuildRequestRecordElGamal is a legacy alias for ElGamal/AES build request record
+bytes.
 
 #### type BuildRequestRecordElGamalAES
 
@@ -948,6 +951,8 @@ type BuildRequestRecordElGamal [528]byte
 type BuildRequestRecordElGamalAES [528]byte
 ```
 
+BuildRequestRecordElGamalAES stores a legacy fixed-size ElGamal/AES build
+request record.
 
 #### type BuildResponseRecord
 
@@ -993,6 +998,8 @@ slice.
 type BuildResponseRecordELGamal [528]byte
 ```
 
+BuildResponseRecordELGamal is a legacy alias for ElGamal/AES build response
+record bytes.
 
 #### type BuildResponseRecordELGamalAES
 
@@ -1000,6 +1007,8 @@ type BuildResponseRecordELGamal [528]byte
 type BuildResponseRecordELGamalAES [528]byte
 ```
 
+BuildResponseRecordELGamalAES stores a legacy fixed-size ElGamal/AES build
+response record.
 
 #### type Data
 
