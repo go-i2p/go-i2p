@@ -109,21 +109,22 @@ Anonymity-sensitive operators should review [Anonymity-Safe Logging](docs/anonym
   - [X] Gateway and endpoint implementation
   - [X] Participant functionality
 - [Common Data Structures (see also: https://github.com/go-i2p/common)](https://github.com/go-i2p/common)
-    - [X] Keys and Cert
-    - [X] Key Certificates
-    - [X] Certificate
-    - [X] Lease
-    - [X] Lease Set
-    - [X] Router Info
-    - [X] Router Identity
-    - [X] Router Address
-    - [X] Session Key
-    - [X] Signature Types
-    - [X] Destination
-    - [X] Data Types
-    - [X] Session Tag
+  - [X] Keys and Cert
+  - [X] Key Certificates
+  - [X] Certificate
+  - [X] Lease
+  - [X] Lease Set
+  - [X] Router Info
+  - [X] Router Identity
+  - [X] Router Address
+  - [X] Session Key
+  - [X] Signature Types
+  - [X] Destination
+  - [X] Data Types
+  - [X] Session Tag
 
-## Verbosity ##
+## Verbosity
+
 Logging can be enabled and configured using the `DEBUG_I2P` environment variable. By default, logging is disabled.
 
 > **Note:** Logging is configured via environment variables (not config.yaml or command-line flags) because it is managed by an external logger package and needs to be set before the application starts.
@@ -131,21 +132,26 @@ Logging can be enabled and configured using the `DEBUG_I2P` environment variable
 There are three available log levels:
 
 - Debug
+
 ```shell
 export DEBUG_I2P=debug
 ```
+
 - Warn
+
 ```shell
 export DEBUG_I2P=warn
 ```
+
 - Error
+
 ```shell
 export DEBUG_I2P=error
 ```
 
 If DEBUG_I2P is set to an unrecognized variable, it will fall back to "debug".
 
-## Fast-Fail mode ##
+## Fast-Fail mode
 
 Fast-Fail mode can be activated by setting `WARNFAIL_I2P` to any non-empty value. When set, every warning or error is Fatal.
 It is unsafe for production use, and intended only for debugging and testing purposes.
