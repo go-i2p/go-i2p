@@ -41,7 +41,9 @@ The router configuration supports SSU2 settings:
 ```go
 const DefaultKeepaliveInterval = 15 * time.Second
 ```
-DefaultKeepaliveInterval is the SSU2 keepalive interval per the spec (15 s).
+DefaultKeepaliveInterval is the SSU2 keepalive interval used by this
+implementation (15 s). NOTE: The SSU2 spec's 15-second value is a retransmit
+timeout, not a keepalive interval; this value is an implementation choice.
 Shorter values help aggressive NATs at the cost of extra traffic.
 
 ```go
@@ -82,7 +84,19 @@ RouterAddress suitable for publishing in RouterInfo.
 func ExtractSSU2Addr(routerInfo router_info.RouterInfo) (*net.UDPAddr, error)
 ```
 ExtractSSU2Addr extracts the SSU2 network address from a RouterInfo structure.
-It returns a *net.UDPAddr for the first valid SSU2 transport address found.
+It returns a *net.UDPAddr for the best SSU2 transport address found, using a
+two-pass strategy: IPv4 addresses are preferred; IPv6 is only returned when the
+host has confirmed global-unicast IPv6 connectivity (AUDIT FIX-2 / RC-C).
+
+#### func  ExtractSSU2IntroKey
+
+```go
+func ExtractSSU2IntroKey(ri router_info.RouterInfo) ([]byte, error)
+```
+ExtractSSU2IntroKey extracts the 32-byte introduction key from the "i" option of
+the first SSU2 RouterAddress found in ri. The option value is I2P-base64-encoded
+(same alphabet as static keys). Returns an error if no SSU2 address carries a
+valid 32-byte intro key.
 
 #### func  ExtractSSU2NoiseAddr
 
@@ -135,6 +149,16 @@ HasDirectConnectivity checks if a RouterAddress has direct SSU2 connectivity.
 Returns true if the address has both host and port (directly dialable). Returns
 false for introducer-only addresses.
 
+#### func  HasIntroducerOnlySSU2Address
+
+```go
+func HasIntroducerOnlySSU2Address(ri *router_info.RouterInfo) bool
+```
+HasIntroducerOnlySSU2Address returns true if the RouterInfo has at least one
+SSU2 address containing a valid introducer entry (ih0/itag0 present) but no
+directly dialable address. Used by Compatible() and GetSession() to decide
+whether the introducer path should be attempted.
+
 #### func  NewDateTimeBlock
 
 ```go
@@ -175,7 +199,7 @@ SupportsSSU2 checks if a RouterInfo has an SSU2 transport address.
 #### func  WrapSSU2Addr
 
 ```go
-func WrapSSU2Addr(addr net.Addr, routerHash []byte) (*ssu2noise.SSU2Addr, error)
+func WrapSSU2Addr(addr net.Addr, routerHash data.Hash) (*ssu2noise.SSU2Addr, error)
 ```
 WrapSSU2Addr wraps an existing net.Addr as an SSU2Addr with associated router
 hash metadata.
@@ -192,7 +216,9 @@ WrapSSU2Error wraps an error with SSU2 operation context.
 ```go
 type BlockCallbackConfig struct {
 	// OnTermination is called when a peer sends a Termination block (type 6).
-	OnTermination func(reason uint8, additionalData []byte)
+	// validDataReceived is the number of valid data bytes received in this session;
+	// reason is the termination reason code; additionalData carries optional extended data.
+	OnTermination func(validDataReceived uint64, reason uint8, additionalData []byte)
 
 	// OnRouterInfo is called when a RouterInfo block (type 2) is received.
 	// The data should be forwarded to the NetDB subsystem.
@@ -252,7 +278,9 @@ that need real handling.
 func (c *BlockCallbackConfig) ToDataHandlerCallbacks() ssu2noise.DataHandlerCallbacks
 ```
 ToDataHandlerCallbacks converts BlockCallbackConfig into go-noise/ssu2
-DataHandlerCallbacks for wiring into the DataHandler.
+DataHandlerCallbacks for wiring into the DataHandler. OnTermination is applied
+first; then all remaining non-nil callbacks are merged via mergeBlockCallbacks
+(shared with session.go) to avoid duplication.
 
 #### type Config
 
@@ -263,6 +291,12 @@ type Config struct {
 	MaxSessions        int           // Maximum concurrent sessions (0 = DefaultMaxSessions)
 	KeepaliveInterval  time.Duration // How often keepalive packets are sent (0 = DefaultKeepaliveInterval)
 	MaxRetransmissions int           // I2NP retransmission attempts before teardown (0 = DefaultMaxRetransmissions)
+
+	// RouterLookupFunc looks up a RouterInfo by identity hash.
+	// Required for SSU2 via introducers: Alice looks up Bob (the introducer)
+	// to get a direct dialable address before sending the RelayRequest.
+	RouterLookupFunc func(hash data.Hash) (router_info.RouterInfo, error)
+
 	*ssu2noise.SSU2Config
 }
 ```
@@ -314,7 +348,9 @@ type DefaultHandler struct {
 ```
 
 DefaultHandler implements SSU2Handler with replay detection and clock skew
-validation suitable for production use.
+validation suitable for production use. A background goroutine periodically
+evicts stale entries from the replay cache to prevent unbounded memory growth.
+Call Close() when the handler is no longer needed to stop the cleanup goroutine.
 
 #### func  NewDefaultHandler
 
@@ -322,7 +358,9 @@ validation suitable for production use.
 func NewDefaultHandler() *DefaultHandler
 ```
 NewDefaultHandler creates a new DefaultHandler with ±60 second clock skew
-tolerance.
+tolerance. We use ±30 s to narrow the post-restart replay window; see AUDIT.md.
+A background goroutine evicts replay cache entries older than 60 seconds every 5
+minutes. Call Close() to stop it.
 
 #### func (*DefaultHandler) CheckReplay
 
@@ -337,7 +375,14 @@ if the key is a duplicate (replay attack).
 ```go
 func (h *DefaultHandler) Close()
 ```
-Close releases resources held by the handler.
+Close stops the background cleanup goroutine and resets the replay cache.
+
+#### func (*DefaultHandler) ReplayCacheSize
+
+```go
+func (h *DefaultHandler) ReplayCacheSize() int
+```
+ReplayCacheSize returns the current number of entries in the replay cache.
 
 #### func (*DefaultHandler) SendTermination
 
@@ -354,15 +399,43 @@ func (h *DefaultHandler) ValidateTimestamp(peerTime uint32) error
 ValidateTimestamp checks whether a peer's timestamp is within ±60 seconds of the
 local clock.
 
+#### type IntroducerAddr
+
+```go
+type IntroducerAddr struct {
+	// RouterHash is Bob's 32-byte router identity hash (from the ih<N> option).
+	RouterHash data.Hash
+
+	// RelayTag is the relay tag assigned by Bob to Charlie (from the itag<N> option).
+	RelayTag uint32
+
+	// Expiry is the Unix timestamp (seconds) after which the introduction expires.
+	Expiry int64
+}
+```
+
+IntroducerAddr holds the parsed fields of a single SSU2 introducer entry from a
+RouterAddress's options (ih0/itag0/iexp0 through ih2/itag2/iexp2).
+
+#### func  ExtractIntroducers
+
+```go
+func ExtractIntroducers(addr *router_address.RouterAddress) []IntroducerAddr
+```
+ExtractIntroducers parses the introducer entries (indices 0-2) from a single
+SSU2 RouterAddress, returning all valid entries. Invalid or missing entries
+(e.g. empty hash, zero relay tag, already-expired) are silently skipped.
+
 #### type KeystoreProvider
 
 ```go
 type KeystoreProvider interface {
 	GetEncryptionPrivateKey() types.PrivateEncryptionKey
+	GetSigningPrivateKey() types.PrivateKey
 }
 ```
 
-KeystoreProvider provides access to the router's encryption private key.
+KeystoreProvider provides access to the router's cryptographic keys.
 
 #### type PersistentConfig
 
@@ -400,6 +473,25 @@ func (pc *PersistentConfig) LoadOrGenerateObfuscationIV() ([]byte, error)
 LoadOrGenerateObfuscationIV loads the 8-byte ChaCha20 obfuscation IV from
 persistent storage, or generates and stores a new one if the file is absent.
 Returns an error if the file exists but contains invalid data.
+
+#### type ReachabilitySnapshot
+
+```go
+type ReachabilitySnapshot struct {
+	// NATMappingSuccess is the number of successful NAT-PMP/UPnP port mappings.
+	NATMappingSuccess uint64
+	// NATMappingFailure is the number of failed NAT-PMP/UPnP port map attempts.
+	NATMappingFailure uint64
+	// PeerTestConfirmed is the number of times an external address was
+	// confirmed by the PeerTest majority-vote logic.
+	PeerTestConfirmed uint64
+	// PublishedAddrChanged is the number of times the RouterInfo was
+	// republished because the confirmed external address changed.
+	PublishedAddrChanged uint64
+}
+```
+
+ReachabilitySnapshot is a point-in-time copy of all reachability counters.
 
 #### type SSU2Handler
 
@@ -453,7 +545,24 @@ StartWorkers() after confirming the session will be used.
 ```go
 func (s *SSU2Session) Close() error
 ```
-Close closes the session cleanly.
+Close closes the session cleanly with a normal-close termination reason.
+
+#### func (*SSU2Session) CloseWithReason
+
+```go
+func (s *SSU2Session) CloseWithReason(reason ssu2noise.TerminationReason) error
+```
+CloseWithReason closes the session with the specified termination reason code. A
+termination block is sent to the remote peer before closing the connection.
+
+#### func (*SSU2Session) DroppedMessages
+
+```go
+func (s *SSU2Session) DroppedMessages() uint64
+```
+DroppedMessages returns the number of received messages that were dropped due to
+the receive channel being full (backpressure). A non-zero value indicates the
+consumer is not keeping up with inbound message rate.
 
 #### func (*SSU2Session) GetBandwidthStats
 
@@ -475,6 +584,14 @@ QueueSendI2NP queues an I2NP message to be sent over the session.
 func (s *SSU2Session) ReadNextI2NP() (i2np.I2NPMessage, error)
 ```
 ReadNextI2NP blocking reads the next fully received I2NP message.
+
+#### func (*SSU2Session) RemoteUDPAddr
+
+```go
+func (s *SSU2Session) RemoteUDPAddr() *net.UDPAddr
+```
+RemoteUDPAddr returns the remote UDP address of the session's underlying SSU2
+connection.
 
 #### func (*SSU2Session) SendQueueSize
 
@@ -506,6 +623,15 @@ construction and before or after StartWorkers().
 func (s *SSU2Session) StartWorkers()
 ```
 StartWorkers launches the background send and receive goroutines.
+
+#### func (*SSU2Session) WriteBlocks
+
+```go
+func (s *SSU2Session) WriteBlocks(blocks []*ssu2noise.SSU2Block) error
+```
+WriteBlocks writes raw SSU2 blocks directly to the underlying connection,
+bypassing the I2NP send queue. Used for protocol-level blocks such as PeerTest
+and Relay that must not be fragmented or queued alongside I2NP traffic.
 
 #### type SSU2Transport
 
@@ -557,7 +683,27 @@ Close closes the transport cleanly.
 ```go
 func (t *SSU2Transport) Compatible(routerInfo router_info.RouterInfo) bool
 ```
-Compatible returns true if the RouterInfo has an SSU2 transport address.
+Compatible returns true if we can reach this router over SSU2 — either by
+dialling it directly or by going through one of its introducers (when a
+RouterLookupFunc is configured).
+
+#### func (*SSU2Transport) GetCachedExternalAddr
+
+```go
+func (t *SSU2Transport) GetCachedExternalAddr() string
+```
+GetCachedExternalAddr returns the external address string confirmed by PeerTest
+observations (or by NAT-PMP/UPnP mapping). Returns "" when no confirmed external
+address is available yet.
+
+#### func (*SSU2Transport) GetCachedNATType
+
+```go
+func (t *SSU2Transport) GetCachedNATType() ssu2noise.NATType
+```
+GetCachedNATType returns the most recently cached NAT type from the
+transport-level cache. Returns NATUnknown if the cache is empty or expired
+(30-minute TTL).
 
 #### func (*SSU2Transport) GetExternalAddr
 
@@ -591,12 +737,22 @@ func (t *SSU2Transport) GetNATType(peerAddr *net.UDPAddr) ssu2noise.NATType
 GetNATType returns the NAT type determined from the most recent peer-test result
 for the given address. Returns NATUnknown if no result is available.
 
+#### func (*SSU2Transport) GetReachabilityCounters
+
+```go
+func (t *SSU2Transport) GetReachabilityCounters() ReachabilitySnapshot
+```
+GetReachabilityCounters returns a point-in-time snapshot of all
+reachability-related counters for monitoring and diagnostics.
+
 #### func (*SSU2Transport) GetSession
 
 ```go
 func (t *SSU2Transport) GetSession(routerInfo router_info.RouterInfo) (transport.TransportSession, error)
 ```
-GetSession obtains a transport session with a router given its RouterInfo.
+GetSession obtains a transport session with a router given its RouterInfo. It
+tries direct dial first; if the peer only advertises introducer addresses and a
+RouterLookupFunc is configured, it falls back to the relay path.
 
 #### func (*SSU2Transport) GetSessionCount
 
@@ -621,6 +777,17 @@ func (t *SSU2Transport) InitiateNATDetection(bobAddr *net.UDPAddr) (uint32, erro
 InitiateNATDetection starts a peer-test as Alice against the specified Bob
 address. Returns the test nonce so the caller can correlate the result.
 
+#### func (*SSU2Transport) IntroducerFromRouterInfo
+
+```go
+func (t *SSU2Transport) IntroducerFromRouterInfo(ri router_info.RouterInfo) (*ssu2noise.RegisteredIntroducer, error)
+```
+IntroducerFromRouterInfo builds a RegisteredIntroducer for ri using this
+transport's relay-tag allocator. Exported for use by the router-level introducer
+selector; returns the same value that RegisterIntroducer would accept. Allocates
+a relay tag as a side effect — the caller must register the result (or discard
+it) to avoid leaking allocations.
+
 #### func (*SSU2Transport) Name
 
 ```go
@@ -634,7 +801,18 @@ Name returns the name of this transport.
 func (t *SSU2Transport) RegisterIntroducer(intro *ssu2noise.RegisteredIntroducer) error
 ```
 RegisterIntroducer adds an introducer to the registry for inclusion in our
-published RouterInfo. Up to 3 introducers are maintained per the I2P spec.
+published RouterInfo. Up to 3 introducers are maintained (implementation
+convention; up to 3 is common practice in I2P implementations).
+
+#### func (*SSU2Transport) RemoveIntroducerByAddr
+
+```go
+func (t *SSU2Transport) RemoveIntroducerByAddr(addr *net.UDPAddr)
+```
+RemoveIntroducerByAddr removes a previously-registered introducer by its UDP
+address. No-op when the registry is uninitialised or the address is nil. Used by
+the router's hidden-mode introducer selector to drop disconnected peers (PLAN.md
+Track C2).
 
 #### func (*SSU2Transport) SetIdentity
 
@@ -643,10 +821,35 @@ func (t *SSU2Transport) SetIdentity(ident router_info.RouterInfo) error
 ```
 SetIdentity sets the router identity for this transport.
 
+#### func (*SSU2Transport) SetPeerConnNotifier
+
+```go
+func (t *SSU2Transport) SetPeerConnNotifier(n transport.PeerConnNotifier)
+```
+SetPeerConnNotifier wires a connection-outcome notifier into the transport. Call
+this after construction to enable PeerTracker feedback.
+
+#### func (*SSU2Transport) StartNATDetection
+
+```go
+func (t *SSU2Transport) StartNATDetection(candidates []router_info.RouterInfo, republish func())
+```
+StartNATDetection spawns a background goroutine that performs SSU2 peer testing
+to determine our NAT type. candidates must contain at least two SSU2-capable
+RouterInfos: the first is Bob (relay peer), the second is Charlie (responder
+peer).
+
+On NAT types that require introducers (Restricted or Symmetric), up to three
+candidates are registered in the IntroducerRegistry and republish (if non-nil)
+is invoked so the caller can re-publish the updated RouterInfo.
+
+The goroutine is tracked in the transport WaitGroup and exits cleanly when the
+transport context is cancelled.
+
 
 
 ssu2 
 
 github.com/go-i2p/go-i2p/lib/transport/ssu2
 
-[go-i2p template file](/template.md)
+[go-i2p template file](template.md)

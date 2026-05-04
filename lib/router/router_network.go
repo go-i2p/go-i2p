@@ -420,10 +420,12 @@ type staticAuthenticatedPeer struct {
 	handshakeComplete bool
 }
 
+// PeerHash returns the authenticated peer hash.
 func (p staticAuthenticatedPeer) PeerHash() common.Hash {
 	return p.hash
 }
 
+// HandshakeComplete reports whether the peer handshake completed.
 func (p staticAuthenticatedPeer) HandshakeComplete() bool {
 	return p.handshakeComplete
 }

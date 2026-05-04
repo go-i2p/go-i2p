@@ -25,6 +25,14 @@ const (
 )
 ```
 
+#### func  GetSSLCertificates
+
+```go
+func GetSSLCertificates() ([]*x509.Certificate, error)
+```
+GetSSLCertificates returns parsed X.509 certificates from the configured SSL
+certificate provider. It returns nil, nil when no SSL provider is configured.
+
 #### func  SetCertificateProvider
 
 ```go
@@ -33,6 +41,16 @@ func SetCertificateProvider(provider CertificateFSProvider)
 SetCertificateProvider sets the function that provides the reseed certificate
 filesystem. This must be called before GetDefaultCertificatePool is called for
 the first time. Typically called by the embedded package during initialization.
+
+#### func  SetSSLCertificateProvider
+
+```go
+func SetSSLCertificateProvider(provider CertificateFSProvider)
+```
+SetSSLCertificateProvider sets the function that provides the SSL certificate
+filesystem. SSL certificates are used for TLS verification when connecting to
+reseed servers. This must be called before buildReseedCertPool is used for the
+first time.
 
 #### type CertificateFSProvider
 
@@ -143,52 +161,58 @@ type Reseed struct {
 }
 ```
 
+Reseed provides methods for bootstrapping the NetDB by fetching RouterInfo
+bundles from reseed servers.
 
 #### func  NewReseed
 
 ```go
 func NewReseed() *Reseed
 ```
+NewReseed creates a new Reseed instance with default dial timeout and keep-alive
+settings.
 
-#### func (Reseed) ProcessLocalSU3File
+#### func (*Reseed) ProcessLocalSU3File
 
 ```go
-func (r Reseed) ProcessLocalSU3File(filePath string) ([]router_info.RouterInfo, error)
+func (r *Reseed) ProcessLocalSU3File(filePath string) ([]router_info.RouterInfo, error)
 ```
 ProcessLocalSU3File reads and processes a local SU3 reseed file
 
-#### func (Reseed) ProcessLocalSU3FileWithLimit
+#### func (*Reseed) ProcessLocalSU3FileWithLimit
 
 ```go
-func (r Reseed) ProcessLocalSU3FileWithLimit(filePath string, limit int) ([]router_info.RouterInfo, error)
+func (r *Reseed) ProcessLocalSU3FileWithLimit(filePath string, limit int) ([]router_info.RouterInfo, error)
 ```
 ProcessLocalSU3FileWithLimit reads and processes a local SU3 reseed file with a
 limit on RouterInfos parsed. If limit <= 0, all RouterInfos are parsed (same as
 ProcessLocalSU3File). This prevents loading excessive RouterInfos into memory
 when only a small number is needed.
 
-#### func (Reseed) ProcessLocalZipFile
+#### func (*Reseed) ProcessLocalZipFile
 
 ```go
-func (r Reseed) ProcessLocalZipFile(filePath string) ([]router_info.RouterInfo, error)
+func (r *Reseed) ProcessLocalZipFile(filePath string) ([]router_info.RouterInfo, error)
 ```
 ProcessLocalZipFile reads and processes a local zip reseed file
 
-#### func (Reseed) ProcessLocalZipFileWithLimit
+#### func (*Reseed) ProcessLocalZipFileWithLimit
 
 ```go
-func (r Reseed) ProcessLocalZipFileWithLimit(filePath string, limit int) ([]router_info.RouterInfo, error)
+func (r *Reseed) ProcessLocalZipFileWithLimit(filePath string, limit int) ([]router_info.RouterInfo, error)
 ```
 ProcessLocalZipFileWithLimit reads and processes a local zip reseed file with a
 limit on RouterInfos parsed. If limit <= 0, all RouterInfos are parsed (same as
 ProcessLocalZipFile). This prevents loading excessive RouterInfos into memory
 when only a small number is needed.
 
-#### func (Reseed) SingleReseed
+#### func (*Reseed) SingleReseed
 
 ```go
-func (r Reseed) SingleReseed(uri string) ([]router_info.RouterInfo, error)
+func (r *Reseed) SingleReseed(uri string) ([]router_info.RouterInfo, error)
 ```
+SingleReseed fetches and parses an SU3 reseed bundle from the given URI,
+returning the extracted RouterInfos.
 
 
 
@@ -196,4 +220,4 @@ reseed
 
 github.com/go-i2p/go-i2p/lib/netdb/reseed
 
-[go-i2p template file](/template.md)
+[go-i2p template file](template.md)

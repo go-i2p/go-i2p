@@ -21,7 +21,9 @@ const (
 	BlockTypeOptions byte = 1
 
 	// BlockTypeRouterInfo is a RouterInfo block (type 2).
-	// Payload: 1-byte flag + gzip-compressed or raw RouterInfo.
+	// Payload: 1-byte flag + raw RouterInfo (never gzip-compressed in NTCP2).
+	// Flag byte: bit 0 = 0 (local store) or 1 (flood request); bits 1-7 unused.
+	// Spec: ntcp2.rst §1575-1577.
 	BlockTypeRouterInfo byte = 2
 
 	// BlockTypeI2NP is an I2NP message block (type 3).
@@ -47,46 +49,80 @@ blocks. Every block begins with a 3-byte header: [type:1][size:2].
 
 ```go
 const (
+	// RouterInfoFlagLocalStore indicates the peer should store the RouterInfo locally only.
+	RouterInfoFlagLocalStore byte = 0x00
+	// RouterInfoFlagFloodRequest indicates the peer should flood the RouterInfo to the netdb.
+	RouterInfoFlagFloodRequest byte = 0x01
+)
+```
+NTCP2 RouterInfo block flag byte constants (ntcp2.rst §1575-1577). Bit 0: 0 =
+local store, 1 = flood request. Bits 1-7: unused, must be 0. NOTE: RouterInfo in
+NTCP2 blocks is NEVER gzip-compressed (unlike DatabaseStore).
+
+```go
+const (
 	// TerminationNormalClose indicates a graceful session shutdown.
 	TerminationNormalClose byte = 0
 
-	// TerminationRouterUpdated indicates the router's RouterInfo has been updated
-	// and the peer should re-fetch it.
-	TerminationRouterUpdated byte = 1
+	// TerminationOppositeDirectionTerminated indicates a Termination block was
+	// received from the peer; this router is responding with its own termination.
+	TerminationOppositeDirectionTerminated byte = 1
 
-	// TerminationAEADFrameError indicates an AEAD decryption failure in the data phase.
+	// TerminationIdleTimeout indicates the session was terminated due to inactivity.
+	TerminationIdleTimeout byte = 2
+
+	// TerminationRouterShutdown indicates the router is shutting down.
+	TerminationRouterShutdown byte = 3
+
+	// TerminationAEADFailure indicates an AEAD decryption failure in the data phase.
 	// When this is the reason, the termination block MUST NOT be sent if the cipher
 	// state may be corrupted — only probing-resistance junk-read should be performed.
-	TerminationAEADFrameError byte = 4
+	TerminationAEADFailure byte = 4
 
-	// TerminationOptionsError indicates an error in the session options negotiation.
-	TerminationOptionsError byte = 5
+	// TerminationIncompatibleOptions indicates an error in the session options negotiation
+	// (version, network ID, or option values are incompatible).
+	TerminationIncompatibleOptions byte = 5
 
-	// TerminationSignatureError indicates a signature verification failure.
-	TerminationSignatureError byte = 6
+	// TerminationIncompatibleSignatureType indicates the peer uses a signature type
+	// that this router does not support.
+	TerminationIncompatibleSignatureType byte = 6
 
-	// TerminationFrameTimeout indicates the peer did not send a frame within
-	// the expected time.
-	TerminationFrameTimeout byte = 11
-
-	// TerminationPayloadFormatError indicates the payload format was invalid.
-	TerminationPayloadFormatError byte = 12
-
-	// TerminationMessage1Error indicates an error during Noise handshake message 1.
-	TerminationMessage1Error byte = 13
-
-	// TerminationMessage2Error indicates an error during Noise handshake message 2.
-	TerminationMessage2Error byte = 14
-
-	// TerminationMessage3Error indicates an error during Noise handshake message 3.
-	TerminationMessage3Error byte = 15
-
-	// TerminationFrameLengthOutOfRange indicates the frame length was outside
-	// the allowed range.
-	TerminationFrameLengthOutOfRange byte = 16
+	// TerminationClockSkew indicates the peer's timestamp is too far from local time.
+	TerminationClockSkew byte = 7
 
 	// TerminationPaddingViolation indicates padding rules were violated.
-	TerminationPaddingViolation byte = 17
+	TerminationPaddingViolation byte = 8
+
+	// TerminationAEADFramingError indicates an AEAD framing error (e.g. wrong frame length).
+	TerminationAEADFramingError byte = 9
+
+	// TerminationPayloadFormatError indicates the payload format was invalid.
+	TerminationPayloadFormatError byte = 10
+
+	// TerminationMsg1DecryptionFailure indicates message 1 (handshake) decryption failed.
+	TerminationMsg1DecryptionFailure byte = 11
+
+	// TerminationMsg2DecryptionFailure indicates message 2 (handshake) decryption failed.
+	TerminationMsg2DecryptionFailure byte = 12
+
+	// TerminationMsg3DecryptionFailure1 indicates message 3 part 1 (handshake) decryption failed.
+	TerminationMsg3DecryptionFailure1 byte = 13
+
+	// TerminationMsg3DecryptionFailure2 indicates message 3 part 2 (handshake) decryption failed.
+	TerminationMsg3DecryptionFailure2 byte = 14
+
+	// TerminationBadAliceRouterInfo indicates Alice's RouterInfo in message 3 was invalid
+	// (could not be parsed, missing required fields, or the RouterInfo public key does not
+	// match the static key from the Noise handshake).
+	TerminationBadAliceRouterInfo byte = 15
+
+	// TerminationBadAliceRouterInfoSignature indicates Alice's RouterInfo signature
+	// verification failed.
+	TerminationBadAliceRouterInfoSignature byte = 16
+
+	// TerminationStaticKeysMismatch indicates the static key from the Noise handshake
+	// does not match the encryption key published in Alice's RouterInfo.
+	TerminationStaticKeysMismatch byte = 17
 )
 ```
 Termination reason codes per the NTCP2 specification. These are used in the
@@ -95,14 +131,17 @@ termination block (block type 0x04) to indicate why the session is being closed.
 Spec reference: https://geti2p.net/spec/ntcp2#termination
 
 ```go
-const ClockSkewTolerance = gonoise.ClockSkewTolerance
+const ClockSkewTolerance = 30 * time.Second
 ```
 ClockSkewTolerance is the maximum allowed difference between local and peer
 timestamps. Per the NTCP2 spec, connections with a clock skew exceeding this
 value should be terminated with reason code 6.
 
-This is defined in go-noise/ntcp2 as the single source of truth and re-exported
-here for backward compatibility within go-i2p.
+We intentionally use 30 s (half the go-noise default of 60 s) to narrow the
+post-restart replay window: a captured handshake msg1 is only replayable for up
+to 30 s rather than 60 s after a router restart that flushes the in-memory
+replay cache. This is a security trade-off; operators with loose NTP discipline
+should consider tightening NTP synchronisation rather than widening this value.
 
 ```go
 const DefaultMaxSessions = 512
@@ -147,11 +186,13 @@ BuildTerminationBlock constructs a termination block payload suitable for
 sending through NTCP2Conn.Write, which will encrypt it with the session's Noise
 cipher state and apply SipHash length obfuscation.
 
-The termination block format is:
+The termination block format per NTCP2 spec is:
 
-    [type:1=0x04][size:2][version:4][networkID:1][time:4][reason:1]
+    [type:1=0x04][size:2=0x0009][sessionDuration:8][reason:1]
 
-Total: 13 bytes (3 header + 10 payload).
+Total: 12 bytes (3 header + 9 payload). sessionDuration is elapsed seconds since
+the session was established; zero is acceptable when the caller does not track
+session start time.
 
 #### func  ConfigureDialConfig
 
@@ -178,7 +219,7 @@ The function extracts: - Host IP address from the transport's listener - Port
 number from the transport's listener - Static public key from the NTCP2
 configuration - Initialization vector (IV) for AES obfuscation
 
-Returns a RouterAddress with transport style "ntcp2" and all required options,
+Returns a RouterAddress with transport style "NTCP2" and all required options,
 or an error if address extraction or conversion fails.
 
 #### func  ExtractNTCP2Addr
@@ -219,12 +260,16 @@ Returns the 32-byte static key or an error if:
     - No NTCP2 address has a valid "s=" option
     - The "s=" value cannot be decoded or is not 32 bytes
 
-#### func  FrameI2NPMessage
+#### func  FrameI2NPMessageAsBlock
 
 ```go
-func FrameI2NPMessage(msg i2np.I2NPMessage) ([]byte, error)
+func FrameI2NPMessageAsBlock(msg i2np.I2NPMessage) ([]byte, error)
 ```
-Frame an I2NP message for transmission over NTCP2
+FrameI2NPMessageAsBlock frames an I2NP message using NTCP2 block format. The
+message is serialized with a 9-byte short header and wrapped in a type-3 (I2NP)
+block. The result can be combined with other blocks via SerializeBlocks.
+
+Spec reference: https://geti2p.net/spec/ntcp2#data-phase
 
 #### func  GetStaticKeyFromRouter
 
@@ -250,7 +295,7 @@ Returns:
 func HasDialableNTCP2Address(routerInfo *router_info.RouterInfo) bool
 ```
 HasDialableNTCP2Address checks if a RouterInfo has at least one directly
-dialable NTCP2 address (i.e., an NTCP2 address with a valid host and port).
+dialable NTCP2 address (i.e., an NTCP2 address with both host and port).
 Introducer-only addresses are not dialable and will return false.
 
 #### func  HasDirectConnectivity
@@ -261,8 +306,6 @@ func HasDirectConnectivity(addr *router_address.RouterAddress) bool
 HasDirectConnectivity checks if a RouterAddress has direct NTCP2 connectivity.
 Returns true if the address has both host and port keys (directly dialable).
 Returns false if the address is introducer-only (requires NAT traversal).
-Returns false for nil addresses. CRITICAL FIX #1: Pre-filtering utility for peer
-selection.
 
 #### func  IsAEADFailureReason
 
@@ -305,9 +348,8 @@ payload suitable for writing via NTCP2Conn.Write().
 func SupportsDirectNTCP2(routerInfo *router_info.RouterInfo) bool
 ```
 SupportsDirectNTCP2 checks if a RouterInfo has at least one directly dialable
-NTCP2 address. This is a convenience function for peer selection - filters out
-introducer-only routers. CRITICAL FIX #1: Exported function for use in peer
-selection/filtering.
+NTCP2 address. Convenience function for peer selection; filters out
+introducer-only routers.
 
 #### func  SupportsNTCP2
 
@@ -322,14 +364,14 @@ SupportsNTCP2 checks if RouterInfo has an NTCP2 transport address.
 func TerminationReasonString(reason byte) string
 ```
 TerminationReasonString returns a human-readable string for a termination reason
-code.
+code received from a peer. The descriptions match i2pd's definitions.
 
 #### func  UnframeI2NPMessage
 
 ```go
 func UnframeI2NPMessage(conn net.Conn) (i2np.I2NPMessage, error)
 ```
-Unframe I2NP messages from NTCP2 data stream
+UnframeI2NPMessage unframes I2NP messages from an NTCP2 data stream.
 
 #### func  ValidateTimestamp
 
@@ -346,12 +388,29 @@ A peerTime of 0 is treated as "timestamp not provided" and is accepted without
 validation, since some peers may not include timestamps during early protocol
 negotiation.
 
+#### func  VerifyStaticKeyConsistency
+
+```go
+func VerifyStaticKeyConsistency(transport *NTCP2Transport, identity router_info.RouterInfo) error
+```
+VerifyStaticKeyConsistency checks that the Noise static private key stored in
+the transport config produces the same public key that was published in the
+NTCP2 RouterInfo "s=" option.
+
+A mismatch means every remote peer will reject our Noise message 1 immediately
+after verifying our static key, causing 100% outbound NTCP2 handshake failures
+and making us unreachable to all NTCP2 peers.
+
+Should be called once at startup after the RouterInfo has been built and signed.
+Returns a descriptive error (with both keys base64-encoded) if a mismatch is
+found.
+
 #### func  WrapNTCP2Addr
 
 ```go
-func WrapNTCP2Addr(addr net.Addr, routerHash []byte) (*ntcp2.NTCP2Addr, error)
+func WrapNTCP2Addr(addr net.Addr, routerHash data.Hash) (*ntcp2.NTCP2Addr, error)
 ```
-Convert net.Addr to NTCP2Addr
+WrapNTCP2Addr converts a net.Addr to NTCP2Addr.
 
 #### func  WrapNTCP2Error
 
@@ -412,11 +471,13 @@ zero bytes. The receiver ignores the content.
 func NewRouterInfoBlock(routerInfoBytes []byte, flag byte) Block
 ```
 NewRouterInfoBlock creates a RouterInfo block (type 2) with a flag byte
-prepended. Per the spec, the flag byte indicates how the RouterInfo is encoded:
+prepended. Per ntcp2.rst §1575-1577, the flag byte encodes:
 
-    0x00 = uncompressed
-    0x01 = gzip compressed
-    bit 1 (0x02) = flood request (peer should flood this RouterInfo)
+    bit 0: 0 = local store (RouterInfoFlagLocalStore), 1 = flood request (RouterInfoFlagFloodRequest)
+    bits 1-7: unused, must be 0
+
+IMPORTANT: RouterInfo in NTCP2 blocks is NEVER gzip-compressed. Use
+RouterInfoFlagLocalStore (0x00) or RouterInfoFlagFloodRequest (0x01).
 
 #### func  ParseBlocks
 
@@ -428,6 +489,42 @@ The payload consists of zero or more concatenated [type:1][size:2][data:size]
 blocks. Unknown block types are preserved (returned with their raw data) so the
 caller can decide how to handle them. Returns an error if the payload is
 truncated.
+
+#### type BlockUnframer
+
+```go
+type BlockUnframer struct {
+
+	// BlockCallback is called for non-I2NP blocks (DateTime, Options, etc.)
+	BlockCallback func(block Block)
+}
+```
+
+BlockUnframer reads NTCP2 block-framed data from a connection and extracts I2NP
+messages. It handles all block types per the NTCP2 spec.
+
+#### func  NewBlockUnframer
+
+```go
+func NewBlockUnframer(conn net.Conn) *BlockUnframer
+```
+NewBlockUnframer creates an unframer for NTCP2 block-based protocol.
+
+#### func (*BlockUnframer) BytesRead
+
+```go
+func (u *BlockUnframer) BytesRead() int
+```
+BytesRead returns the number of bytes read during the last ReadNextMessage call.
+
+#### func (*BlockUnframer) ReadNextMessage
+
+```go
+func (u *BlockUnframer) ReadNextMessage() (i2np.I2NPMessage, error)
+```
+ReadNextMessage reads and parses the next NTCP2 frame, returning the first I2NP
+message found. Non-I2NP blocks are passed to BlockCallback if set. Multiple I2NP
+messages in a single frame are buffered for subsequent calls.
 
 #### type ClockSkewError
 
@@ -449,6 +546,8 @@ ClockSkewError is returned when a peer's timestamp exceeds the allowed skew.
 ```go
 func (e *ClockSkewError) Error() string
 ```
+Error returns a human-readable description of the clock skew violation,
+including the peer and local timestamps, observed skew, and tolerance.
 
 #### type Config
 
@@ -461,12 +560,16 @@ type Config struct {
 }
 ```
 
+Config holds the configuration parameters for an NTCP2 transport instance,
+including listener address, working directory, and session limits.
 
 #### func  NewConfig
 
 ```go
 func NewConfig(listenerAddress string) (*Config, error)
 ```
+NewConfig creates a new Config with the specified listener address and default
+values for other fields.
 
 #### func (*Config) GetMaxSessions
 
@@ -481,6 +584,8 @@ DefaultMaxSessions if MaxSessions is not set (0 or negative).
 ```go
 func (c *Config) Validate() error
 ```
+Validate checks the Config for required fields and returns an error if the
+configuration is invalid.
 
 #### type DefaultHandler
 
@@ -557,13 +662,15 @@ type I2NPUnframer struct {
 }
 ```
 
-Stream-based unframing for continuous reading
+I2NPUnframer provides stream-based unframing for continuous reading.
 
 #### func  NewI2NPUnframer
 
 ```go
 func NewI2NPUnframer(conn net.Conn) *I2NPUnframer
 ```
+NewI2NPUnframer creates a new I2NPUnframer that reads length-prefixed I2NP
+messages from the given connection.
 
 #### func (*I2NPUnframer) BytesRead
 
@@ -577,6 +684,8 @@ BytesRead returns the number of bytes read during the last ReadNextMessage call
 ```go
 func (u *I2NPUnframer) ReadNextMessage() (i2np.I2NPMessage, error)
 ```
+ReadNextMessage reads the next length-prefixed I2NP message from the underlying
+connection and returns the parsed message.
 
 #### type KeystoreProvider
 
@@ -586,6 +695,8 @@ type KeystoreProvider interface {
 }
 ```
 
+KeystoreProvider is the interface that supplies the X25519 encryption private
+key required for NTCP2 handshake negotiation.
 
 #### type NTCP2Handler
 
@@ -638,6 +749,8 @@ type NTCP2Session struct {
 }
 ```
 
+NTCP2Session represents an active NTCP2 connection session with a remote peer,
+managing message queues, bandwidth tracking, and rekeying state.
 
 #### func  NewNTCP2Session
 
@@ -746,6 +859,14 @@ SetCleanupCallback sets a callback function that will be called when the session
 closes. Thread-safe: protected by callbackMu to prevent data race with
 callCleanupCallback.
 
+#### func (*NTCP2Session) SetRouterInfoCallback
+
+```go
+func (s *NTCP2Session) SetRouterInfoCallback(cb func([]byte))
+```
+SetRouterInfoCallback sets a callback for RouterInfo blocks received from the
+peer. The callback receives the raw (decompressed) RouterInfo bytes.
+
 #### func (*NTCP2Session) StartWorkers
 
 ```go
@@ -761,12 +882,16 @@ type NTCP2Transport struct {
 }
 ```
 
+NTCP2Transport implements the I2P NTCP2 transport protocol, managing listener
+setup, session lifecycle, and peer connections.
 
 #### func  NewNTCP2Transport
 
 ```go
 func NewNTCP2Transport(identity router_info.RouterInfo, config *Config, keystore KeystoreProvider) (*NTCP2Transport, error)
 ```
+NewNTCP2Transport creates and initializes a new NTCP2Transport with the given
+router identity, configuration, and keystore provider.
 
 #### func (*NTCP2Transport) Accept
 
@@ -778,11 +903,9 @@ transport's session map so that GetSessionCount() and checkSessionLimit()
 accurately reflect both inbound and outbound sessions. A cleanup callback is
 registered to remove the tracking entry when the connection is closed.
 
-Unlike using AcceptWithHandshake directly, this method performs the Noise XK
-handshake manually so that handshake-phase AEAD failures trigger probing
-resistance (random delay + junk read) before closing the connection. This
-prevents active probers from distinguishing an NTCP2 listener from a random TCP
-service by timing how quickly the connection closes.
+Handshakes run in per-connection goroutines so that one slow or malicious peer
+cannot block the accept loop. The background runner is started lazily on the
+first call to Accept().
 
 Spec reference: https://geti2p.net/spec/ntcp2#probing-resistance
 
@@ -848,6 +971,45 @@ func (t *NTCP2Transport) SetIdentity(ident router_info.RouterInfo) error
 ```
 SetIdentity sets the router identity for this transport. Protected by identityMu
 to prevent races with GetSession/Accept/Compatible.
+
+#### func (*NTCP2Transport) SetPeerConnNotifier
+
+```go
+func (t *NTCP2Transport) SetPeerConnNotifier(n transport.PeerConnNotifier)
+```
+SetPeerConnNotifier wires a connection-outcome notifier into the transport. Call
+this after construction to enable PeerTracker feedback. Safe to call
+concurrently; the field is only read under t.identityMu or from the goroutine
+that dials (no hot-path lock needed because the pointer is set once before any
+sessions are created).
+
+#### func (*NTCP2Transport) SetRouterInfoRefresher
+
+```go
+func (t *NTCP2Transport) SetRouterInfoRefresher(r transport.RouterInfoRefresher)
+```
+SetRouterInfoRefresher wires a RouterInfo cache-eviction notifier so that stale
+entries are removed from NetDB after a handshake EOF failure.
+
+#### func (*NTCP2Transport) SetRouterInfoStorer
+
+```go
+func (t *NTCP2Transport) SetRouterInfoStorer(s transport.RouterInfoStorer)
+```
+SetRouterInfoStorer wires a NetDB store so that RouterInfos received from
+inbound peers during the NTCP2 handshake are persisted locally. This is required
+for tunnel-build reply routing to work: the OBEP looks up the originator's
+RouterInfo in the NetDB when delivering a ShortTunnelBuildReply.
+
+#### func (*NTCP2Transport) UpdateLocalRouterInfo
+
+```go
+func (t *NTCP2Transport) UpdateLocalRouterInfo(ri router_info.RouterInfo)
+```
+UpdateLocalRouterInfo replaces the stored local RouterInfo with a re-signed
+version that includes the transport's address. Safe to call during transport
+initialization (before the router starts accepting connections). Unlike
+SetIdentity, this does NOT recreate the listener.
 
 #### type Options
 
@@ -967,4 +1129,4 @@ ntcp2
 
 github.com/go-i2p/go-i2p/lib/transport/ntcp2
 
-[go-i2p template file](/template.md)
+[go-i2p template file](template.md)

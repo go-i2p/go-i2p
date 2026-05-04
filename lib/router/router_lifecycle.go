@@ -880,6 +880,8 @@ type tunnelGatewayDispatcher struct {
 	processor *i2np.MessageProcessor
 }
 
+// HandleGateway parses and dispatches an inner I2NP message carried in a
+// TunnelGateway payload.
 func (d *tunnelGatewayDispatcher) HandleGateway(tunnelID tunnel.TunnelID, payload []byte) error {
 	// BUG-4 fix: use the short-format minimum (9 bytes) as the floor so that
 	// valid 9–15 byte short I2NP messages are not rejected before the fallback

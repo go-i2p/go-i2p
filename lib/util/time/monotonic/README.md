@@ -201,4 +201,4 @@ monotonic
 
 github.com/go-i2p/go-i2p/lib/util/time/monotonic
 
-[go-i2p template file](/template.md)
+[go-i2p template file](template.md)

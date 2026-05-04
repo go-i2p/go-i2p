@@ -60,6 +60,17 @@ sources.
 ```go
 const GoI2PBaseDir = ".go-i2p"
 ```
+GoI2PBaseDir is the name of the base directory under the user's home directory
+where go-i2p stores its data.
+
+```go
+const (
+	// MaxI2CPSessions is a defensive upper bound for I2CP session count.
+	// Session IDs are 16-bit and random allocation degrades under high occupancy,
+	// so this keeps deployments in a low-collision, operationally safe range.
+	MaxI2CPSessions = 320
+)
+```
 
 ```go
 const ReseedStrategyIntersection = "intersection"
@@ -105,6 +116,8 @@ StandardFilePermissions for non-sensitive configuration files
 ```go
 var CfgFile string
 ```
+CfgFile holds the path to the user-specified configuration file, overriding the
+default location.
 
 ```go
 var DefaultBootstrapConfig = BootstrapConfig{
@@ -114,16 +127,16 @@ var DefaultBootstrapConfig = BootstrapConfig{
 
 	ReseedServers: KnownReseedServers,
 
-	LocalNetDbPaths: []string{},
+	LocalNetDBPaths: []string{},
 
 	MinReseedServers: DefaultMinReseedServers,
 
 	ReseedStrategy: ReseedStrategyUnion,
 }
 ```
-default configuration for network bootstrap Uses all known reseed servers from
-KnownReseedServers for maximum availability. MinReseedServers defaults to
-DefaultMinReseedServers (2) matching Java I2P.
+DefaultBootstrapConfig is the default configuration for network bootstrap. Uses
+all known reseed servers from KnownReseedServers for maximum availability.
+MinReseedServers defaults to DefaultMinReseedServers (2) matching Java I2P.
 
 ```go
 var DefaultI2CPConfig = I2CPConfig{
@@ -140,7 +153,7 @@ var DefaultI2CPConfig = I2CPConfig{
 DefaultI2CPConfig provides default I2CP server configuration
 
 ```go
-var DefaultNetDbConfig = NetDbConfig{
+var DefaultNetDBConfig = NetDBConfig{
 	Path:                     filepath.Join(defaultConfig(), "netDb"),
 	MaxRouterInfos:           5000,
 	MaxLeaseSets:             1000,
@@ -149,7 +162,12 @@ var DefaultNetDbConfig = NetDbConfig{
 	ExplorationInterval:      5 * time.Minute,
 }
 ```
-default settings for netdb
+DefaultNetDBConfig holds the default settings for netdb.
+
+```go
+var DefaultTransportConfig = buildTransportDefaults()
+```
+DefaultTransportConfig provides default transport layer configuration
 
 ```go
 var DeprecatedRouterInfoOptionKeys = map[string]string{
@@ -167,22 +185,22 @@ coreVersion: Never used, removed in release 0.9.24 stat_uptime: Unused since
 ```go
 var KnownReseedServers = []*ReseedConfig{
 
-	{Url: "https://reseed.i2pgit.org/", SU3Fingerprint: "hankhill19580_at_gmail.com.crt"},
+	{URL: "https://reseed.i2pgit.org/", SU3Fingerprint: "hankhill19580_at_gmail.com.crt"},
 
-	{Url: "https://reseed.sahil.world/", SU3Fingerprint: "sahil_at_mail.i2p.crt"},
-	{Url: "https://i2p.diyarciftci.xyz/", SU3Fingerprint: "diyarciftci_at_protonmail.com.crt"},
-	{Url: "https://coconut.incognet.io/", SU3Fingerprint: "rambler_at_mail.i2p.crt"},
-	{Url: "https://reseed.stormycloud.org/", SU3Fingerprint: "admin_at_stormycloud.org.crt"},
+	{URL: "https://reseed.sahil.world/", SU3Fingerprint: "sahil_at_mail.i2p.crt"},
+	{URL: "https://i2p.diyarciftci.xyz/", SU3Fingerprint: "diyarciftci_at_protonmail.com.crt"},
+	{URL: "https://coconut.incognet.io/", SU3Fingerprint: "rambler_at_mail.i2p.crt"},
+	{URL: "https://reseed.stormycloud.org/", SU3Fingerprint: "admin_at_stormycloud.org.crt"},
 
-	{Url: "https://reseed-pl.i2pd.xyz/", SU3Fingerprint: "r4sas-reseed_at_mail.i2p.crt"},
-	{Url: "https://reseed-fr.i2pd.xyz/", SU3Fingerprint: "r4sas-reseed_at_mail.i2p.crt"},
+	{URL: "https://reseed-pl.i2pd.xyz/", SU3Fingerprint: "r4sas-reseed_at_mail.i2p.crt"},
+	{URL: "https://reseed-fr.i2pd.xyz/", SU3Fingerprint: "r4sas-reseed_at_mail.i2p.crt"},
 
-	{Url: "https://www2.mk16.de/", SU3Fingerprint: "i2p-reseed_at_mk16.de.crt"},
-	{Url: "https://reseed2.i2p.net/", SU3Fingerprint: "echelon3_at_mail.i2p.crt"},
-	{Url: "https://reseed.diva.exchange/", SU3Fingerprint: "reseed_at_diva.exchange.crt"},
-	{Url: "https://i2p.novg.net/", SU3Fingerprint: "igor_at_novg.net.crt"},
-	{Url: "https://i2pseed.creativecowpat.net:8443/", SU3Fingerprint: "creativecowpat_at_mail.i2p.crt"},
-	{Url: "https://reseed.onion.im/", SU3Fingerprint: "lazygravy_at_mail.i2p.crt"},
+	{URL: "https://www2.mk16.de/", SU3Fingerprint: "i2p-reseed_at_mk16.de.crt"},
+
+	{URL: "https://reseed.diva.exchange/", SU3Fingerprint: "reseed_at_diva.exchange.crt"},
+	{URL: "https://i2p.novg.net/", SU3Fingerprint: "igor_at_novg.net.crt"},
+
+	{URL: "https://reseed.onion.im/", SU3Fingerprint: "lazygravy_at_mail.i2p.crt"},
 }
 ```
 KnownReseedServers contains all verified I2P reseed servers. This list matches
@@ -213,7 +231,7 @@ SpecRouterInfoOptionKeys is the set of option keys recognized by the I2P
 specification for RouterInfo. Any key NOT in this set may cause the RouterInfo
 to be rejected or ignored by other routers.
 
-Spec: https://geti2p.net/spec/common-structures#routerinfo
+Spec: https://geti2p.net/spec/network-database#routerinfo
 
 #### func  BuildCapsString
 
@@ -234,6 +252,8 @@ ordering.
 ```go
 func BuildI2PDirPath() string
 ```
+BuildI2PDirPath returns the absolute path to the go-i2p data directory under the
+user's home directory.
 
 #### func  CheckDefaultPasswordWarning
 
@@ -258,6 +278,14 @@ func CreateStandardDirectory(path string) error
 ```
 CreateStandardDirectory creates a directory with standard permissions. Use this
 for directories containing non-sensitive configuration.
+
+#### func  GenerateRandomPassword
+
+```go
+func GenerateRandomPassword() (string, error)
+```
+GenerateRandomPassword generates a cryptographically random password encoded as
+URL-safe base64 (24 random bytes → 32-character string).
 
 #### func  InitConfig
 
@@ -298,8 +326,8 @@ IsValidReseedStrategy checks if the given strategy is valid.
 func LockRouterConfigForWrite()
 ```
 LockRouterConfigForWrite acquires an exclusive write lock on
-RouterConfigProperties. This must be called before directly modifying
-RouterConfigProperties. Always defer UnlockRouterConfigWrite() after acquiring
+routerConfigProperties. This must be called before directly modifying
+routerConfigProperties. Always defer UnlockRouterConfigWrite() after acquiring
 the lock.
 
 #### func  SanitizePath
@@ -340,16 +368,7 @@ NewRouterConfigFromViper(). Thread-safe.
 ```go
 func UnlockRouterConfigWrite()
 ```
-UnlockRouterConfigWrite releases the write lock on RouterConfigProperties.
-
-#### func  UpdateRouterConfig
-
-```go
-func UpdateRouterConfig()
-```
-UpdateRouterConfig updates the global routerConfigProperties from viper
-settings. DEPRECATED: Use NewRouterConfigFromViper() + SetRouterConfig()
-instead. This function is thread-safe and can be called during SIGHUP reloads.
+UnlockRouterConfigWrite releases the write lock on routerConfigProperties.
 
 #### func  ValidReseedStrategies
 
@@ -428,12 +447,12 @@ type BandwidthClass string
 ```
 
 BandwidthClass represents a single-letter bandwidth capability flag per the I2P
-common-structures specification.
+network-database specification and Proposal 162.
 
 The bandwidth class is determined by the router's shared bandwidth limit and
 advertised in the RouterInfo caps string.
 
-Spec: https://geti2p.net/spec/common-structures#router-info
+Spec: https://geti2p.net/spec/network-database#routerinfo
 
 ```go
 const (
@@ -468,7 +487,7 @@ func BandwidthClassFromRate(bytesPerSec uint64) BandwidthClass
 BandwidthClassFromRate returns the I2P bandwidth class letter for the given
 shared bandwidth in bytes per second.
 
-Per the I2P spec (common-structures.rst):
+Per Proposal 162 (open proposal, not yet a finalized spec):
 
     - K: < 12 KBps (< 12288 bytes/s)
     - L: 12–48 KBps
@@ -502,10 +521,10 @@ type BootstrapConfig struct {
 	// ReseedServers is the list of remote reseed servers to contact.
 	// By default, uses KnownReseedServers which includes all verified I2P reseed servers.
 	ReseedServers []*ReseedConfig
-	// LocalNetDbPaths lists directories to search for existing RouterInfo files.
+	// LocalNetDBPaths lists directories to search for existing RouterInfo files.
 	// Supports Java I2P and i2pd netDb directory formats.
 	// These paths are populated at runtime based on the operating system.
-	LocalNetDbPaths []string
+	LocalNetDBPaths []string
 	// MinReseedServers is the minimum number of successful reseed servers required.
 	// If fewer servers respond successfully, the reseed operation fails.
 	// Default: DefaultMinReseedServers (2), matching Java I2P MIN_RESEED_SERVERS
@@ -654,15 +673,15 @@ type CongestionDefaults struct {
 	ClearGFlagThreshold float64
 
 	// AveragingWindow is the duration over which to average congestion metrics.
-	// Per spec, congestion state should be based on an average over several minutes,
+	// Per Proposal 162 (open proposal), congestion state should be based on an average over several minutes,
 	// not instantaneous measurement, to prevent rapid flag changes.
-	// Default: 5 minutes (per spec recommendation)
+	// Default: 5 minutes (implementation convention; no spec source for this value)
 	AveragingWindow time.Duration
 
 	// EFlagAgeThreshold is when E flag is treated as D due to stale RouterInfo.
 	// If a remote peer's RouterInfo is older than this and has E flag,
 	// treat it as D flag instead (assume congestion may have cleared).
-	// Default: 15 minutes (per spec)
+	// Default: 15 minutes (implementation convention; no spec source)
 	EFlagAgeThreshold time.Duration
 
 	// DFlagCapacityMultiplier is the capacity multiplier for D-flagged peers.
@@ -677,7 +696,7 @@ type CongestionDefaults struct {
 
 	// StaleEFlagCapacityMultiplier is the multiplier for E-flagged peers with old RouterInfo.
 	// When RouterInfo is older than EFlagAgeThreshold, use this instead of EFlagCapacityMultiplier.
-	// Per spec, stale E flags should be treated as D flags.
+	// Per Proposal 162 (open proposal), stale E flags should be treated as D flags.
 	// Default: 0.5 (same as D flag)
 	StaleEFlagCapacityMultiplier float64
 }
@@ -837,7 +856,7 @@ I2CPDefaults contains default values for I2CP server
 ```go
 type I2PControlConfig struct {
 	// Enabled determines if the I2PControl server should start
-	// Default: false (disabled for security — must be explicitly enabled)
+	// Default: true (enabled to support the embedded TUI)
 	Enabled bool
 
 	// Address is the listen address for the I2PControl server
@@ -871,6 +890,19 @@ type I2PControlConfig struct {
 	// Default: 10 minutes
 	// Expired tokens must re-authenticate to get a new token
 	TokenExpiration time.Duration
+
+	// StrictAuth, when true, refuses to start if the configured password is
+	// the well-known default "itoopie". When false (the default), the legacy
+	// password is accepted on loopback binds for backward-compatibility with
+	// upstream Java I2P I2PControl clients. Operators who want a fail-closed
+	// posture should set this to true.
+	StrictAuth bool
+
+	// AllowPlaintextNonLoopback, when true, permits binding to a non-loopback
+	// interface with UseHTTPS=false. This is an escape hatch for operators
+	// who front the router with their own TLS-terminating reverse proxy.
+	// When false (the default), a non-loopback bind must use HTTPS.
+	AllowPlaintextNonLoopback bool
 }
 ```
 
@@ -888,19 +920,19 @@ configuration.
 func DefaultI2PControlConfig() I2PControlConfig
 ```
 DefaultI2PControlConfig returns sensible defaults for I2PControl server. Returns
-a fresh copy each time to prevent mutation of shared state. These defaults
-prioritize security: - Disabled by default (must be explicitly enabled) -
-Localhost-only binding (not exposed to network) - HTTP only (HTTPS requires
-explicit cert configuration) - Standard I2PControl port (7650) - Standard
-default password (should be changed before enabling)
+a fresh copy each time to prevent mutation of shared state. I2PControl is
+enabled by default to support the embedded TUI. - Localhost-only binding (not
+exposed to network) - HTTP only (HTTPS requires explicit cert configuration) -
+Standard I2PControl port (7650) - Standard default password (should be changed;
+config file creation generates a random one)
 
 #### type I2PControlDefaults
 
 ```go
 type I2PControlDefaults struct {
 	// Enabled determines if I2PControl server starts automatically
-	// Default: false (disabled for security — default password over HTTP allows
-	// any local process to control the router; must be explicitly enabled)
+	// Default: true (enabled to support the embedded TUI; config file creation
+	// generates a random password to replace the default)
 	Enabled bool
 
 	// Address is the listen address for I2PControl server
@@ -927,10 +959,46 @@ type I2PControlDefaults struct {
 	// TokenExpiration is how long authentication tokens remain valid
 	// Default: 10 minutes
 	TokenExpiration time.Duration
+
+	// StrictAuth refuses to start when the password is still the upstream
+	// default ("itoopie"). Default: false (retain backward-compatibility).
+	StrictAuth bool
+
+	// AllowPlaintextNonLoopback permits a non-loopback bind without HTTPS.
+	// Default: false (fail-closed for non-loopback plaintext binds).
+	AllowPlaintextNonLoopback bool
 }
 ```
 
 I2PControlDefaults contains default values for I2PControl JSON-RPC server
+
+#### type NetDBConfig
+
+```go
+type NetDBConfig struct {
+	// path to network database directory
+	Path string
+	// MaxRouterInfos is the maximum number of RouterInfos to store locally.
+	// When exceeded, oldest entries are evicted. Default: 5000.
+	MaxRouterInfos int
+	// MaxLeaseSets is the maximum number of LeaseSets to cache.
+	// When exceeded, oldest entries are evicted. Default: 1000.
+	MaxLeaseSets int
+	// ExpirationCheckInterval is how often to check for and remove expired entries.
+	// Default: 1 minute.
+	ExpirationCheckInterval time.Duration
+	// LeaseSetRefreshThreshold is how far before expiration a LeaseSet should be refreshed.
+	// Default: 2 minutes.
+	LeaseSetRefreshThreshold time.Duration
+	// ExplorationInterval is how often to explore the network for new peers.
+	// Default: 5 minutes.
+	ExplorationInterval time.Duration
+	// FloodfillEnabled determines if this router operates as a floodfill router
+	FloodfillEnabled bool
+}
+```
+
+NetDBConfig holds the local network database configuration.
 
 #### type NetDBDefaults
 
@@ -968,34 +1036,6 @@ type NetDBDefaults struct {
 
 NetDBDefaults contains default values for network database configuration
 
-#### type NetDbConfig
-
-```go
-type NetDbConfig struct {
-	// path to network database directory
-	Path string
-	// MaxRouterInfos is the maximum number of RouterInfos to store locally.
-	// When exceeded, oldest entries are evicted. Default: 5000.
-	MaxRouterInfos int
-	// MaxLeaseSets is the maximum number of LeaseSets to cache.
-	// When exceeded, oldest entries are evicted. Default: 1000.
-	MaxLeaseSets int
-	// ExpirationCheckInterval is how often to check for and remove expired entries.
-	// Default: 1 minute.
-	ExpirationCheckInterval time.Duration
-	// LeaseSetRefreshThreshold is how far before expiration a LeaseSet should be refreshed.
-	// Default: 2 minutes.
-	LeaseSetRefreshThreshold time.Duration
-	// ExplorationInterval is how often to explore the network for new peers.
-	// Default: 5 minutes.
-	ExplorationInterval time.Duration
-	// FloodfillEnabled determines if this router operates as a floodfill router
-	FloodfillEnabled bool
-}
-```
-
-local network database configuration
-
 #### type PerformanceDefaults
 
 ```go
@@ -1028,8 +1068,8 @@ PerformanceDefaults contains default values for performance tuning
 
 ```go
 type ReseedConfig struct {
-	// Url is the HTTPS URL of the reseed server
-	Url string
+	// URL is the HTTPS URL of the reseed server
+	URL string
 	// SU3Fingerprint is the fingerprint of the reseed server's SU3 signing key
 	// used to verify the authenticity of downloaded reseed data
 	SU3Fingerprint string
@@ -1048,7 +1088,7 @@ type RouterConfig struct {
 	// the path to the working config directory where files are changed
 	WorkingDir string
 	// netdb configuration
-	NetDb *NetDbConfig
+	NetDB *NetDBConfig
 	// configuration for bootstrapping into the network
 	Bootstrap *BootstrapConfig
 	// I2CP server configuration
@@ -1058,12 +1098,44 @@ type RouterConfig struct {
 	// MaxBandwidth is the maximum bandwidth limit in bytes per second.
 	// Default: 1048576 (1 MB/s). Set to 0 for unlimited.
 	MaxBandwidth uint64
+	// MaxBandwidthIn is the inbound bandwidth limit in bytes per second.
+	// Set to 0 to fall back to MaxBandwidth. Set to 0 with MaxBandwidth=0 for unlimited.
+	MaxBandwidthIn uint64
+	// MaxBandwidthOut is the outbound bandwidth limit in bytes per second.
+	// Set to 0 to fall back to MaxBandwidth. Set to 0 with MaxBandwidth=0 for unlimited.
+	MaxBandwidthOut uint64
+	// SharePercentage is the percentage (0–100) of bandwidth to share for transit tunnels.
+	// Default: 0 (no explicit limit — router participates if AcceptTunnels is true).
+	SharePercentage int
 	// MaxConnections is the maximum number of concurrent transport connections.
 	// Default: 200.
 	MaxConnections int
 	// AcceptTunnels controls whether the router participates in transit tunnels.
 	// Default: true.
 	AcceptTunnels bool
+	// Hidden enables hidden-mode operation per Java I2P semantics. When true:
+	//   - the published RouterInfo caps include "H" and "U" (no "R"),
+	//   - no transport addresses with host/port are published,
+	//   - the router refuses to participate in transit tunnels.
+	// Hidden mode is intended for client-only operation behind NAT / firewalls
+	// where the router cannot be reached by other peers.
+	// Default: false.
+	Hidden bool
+	// AlwaysZeroHopInbound forces every exploratory inbound tunnel to be built
+	// as a 0-hop tunnel (we serve as both inbound gateway and inbound endpoint).
+	// This bypasses the requirement that the second-to-last hop deliver build
+	// replies back to us — useful when running behind a strict NAT without
+	// publishing a reachable address. Hidden=true implies this behavior.
+	// Default: false.
+	AlwaysZeroHopInbound bool
+	// AlwaysOneHopOutbound forces every exploratory outbound tunnel to be built
+	// as a 1-hop tunnel. With a single hop the OBEP is the peer we directly
+	// connected to, so it already has an open session to us and can deliver the
+	// build reply without needing to dial a new inbound connection — critical for
+	// firewalled routers that cannot accept inbound connections. Hidden=true
+	// implies this behavior.
+	// Default: false.
+	AlwaysOneHopOutbound bool
 	// Tunnel configuration for tunnel pool management and building.
 	Tunnel *TunnelDefaults
 	// Transport configuration for NTCP2/SSU2 transports.
@@ -1075,13 +1147,15 @@ type RouterConfig struct {
 }
 ```
 
-router.config options
+RouterConfig holds the router configuration options.
 
 #### func  DefaultRouterConfig
 
 ```go
 func DefaultRouterConfig() *RouterConfig
 ```
+DefaultRouterConfig returns a deep copy of the default RouterConfig so callers
+cannot mutate the package-level default.
 
 #### func  GetRouterConfig
 
@@ -1100,19 +1174,6 @@ func NewRouterConfigFromViper() *RouterConfig
 NewRouterConfigFromViper creates a new RouterConfig from current viper settings.
 This is the preferred way to get config instead of using the global
 RouterConfigProperties.
-
-#### func  RouterConfigProperties
-
-```go
-func RouterConfigProperties() *RouterConfig
-```
-RouterConfigProperties returns a deep copy of the current router configuration
-for backward compatibility. DEPRECATED: Use GetRouterConfig() instead.
-
-Prior to this fix, this function returned the internal pointer under RLock,
-which was released on return — callers could then race with
-UpdateRouterConfig(). Now returns a deep copy (identical behavior to
-GetRouterConfig()).
 
 #### type RouterDefaults
 
@@ -1159,7 +1220,7 @@ type TransportDefaults struct {
 	NTCP2MaxConnections int
 
 	// SSU2Enabled determines if SSU2 transport is active
-	// Default: false (not yet implemented)
+	// Default: true
 	SSU2Enabled bool
 
 	// SSU2Port is the listen port for SSU2
@@ -1270,4 +1331,4 @@ config
 
 github.com/go-i2p/go-i2p/lib/config
 
-[go-i2p template file](/template.md)
+[go-i2p template file](template.md)

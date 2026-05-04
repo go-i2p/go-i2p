@@ -60,8 +60,6 @@ func SetSSLCertificateProvider(provider CertificateFSProvider) {
 	defaultSSLCertProvider = provider
 }
 
-// GetSSLCertificates returns parsed x509 certificates from the SSL certificate provider.
-// Returns nil if no SSL certificate provider has been set.
 // parseCertificateEntry reads, PEM-decodes, and X.509-parses a single .crt
 // file from sslFS. Non-fatal failures (bad PEM, parse errors) are logged and
 // return nil. Returns nil,false for entries that should be skipped silently
@@ -88,6 +86,8 @@ func parseCertificateEntry(sslFS fs.FS, entry fs.DirEntry) (*x509.Certificate, b
 	return cert, true
 }
 
+// GetSSLCertificates returns parsed X.509 certificates from the configured SSL
+// certificate provider. It returns nil, nil when no SSL provider is configured.
 func GetSSLCertificates() ([]*x509.Certificate, error) {
 	if defaultSSLCertProvider == nil {
 		return nil, nil

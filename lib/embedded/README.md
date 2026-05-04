@@ -226,9 +226,9 @@ documented constructor + Configure pattern.
 func (e *StandardEmbeddedRouter) HardStop()
 ```
 HardStop performs immediate termination without graceful cleanup. Unlike Stop(),
-this does not wait for subsystems to shut down cleanly. It calls Stop() with a
-short timeout, then marks the router stopped. Use this only when Stop() fails or
-when immediate termination is required.
+this does not wait for subsystems to shut down cleanly. It calls
+StopWithContext() with a 5-second deadline, then marks the router stopped. Use
+this only when Stop() fails or when immediate termination is required.
 
 #### func (*StandardEmbeddedRouter) IsConfigured
 
@@ -279,4 +279,4 @@ embedded
 
 github.com/go-i2p/go-i2p/lib/embedded
 
-[go-i2p template file](/template.md)
+[go-i2p template file](template.md)

@@ -23,7 +23,7 @@ file exists and its modification time is older than maxAge minutes.
 ```go
 func CheckFileExists(fpath string) bool
 ```
-Check if a file exists and is readable etc returns false if not
+CheckFileExists checks if a file exists and is readable. Returns false if not.
 
 #### func  CloseAll
 
@@ -78,4 +78,4 @@ util
 
 github.com/go-i2p/go-i2p/lib/util
 
-[go-i2p template file](/template.md)
+[go-i2p template file](template.md)

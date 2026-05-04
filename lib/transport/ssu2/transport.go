@@ -340,6 +340,7 @@ type trackedConn struct {
 	closeOnce sync.Once
 }
 
+// Close closes the underlying connection and runs the close callback once.
 func (tc *trackedConn) Close() error {
 	err := tc.Conn.Close()
 	tc.closeOnce.Do(tc.onClose)

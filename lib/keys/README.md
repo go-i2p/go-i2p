@@ -107,6 +107,44 @@ IdentityPadding returns the identity padding bytes used in the KeysAndCert. This
 must be preserved across store/load cycles (and passed to
 NewDestinationKeyStoreFromKeys) to maintain a stable .b32.i2p address.
 
+#### func (*DestinationKeyStore) RotateDestinationKeys
+
+```go
+func (dks *DestinationKeyStore) RotateDestinationKeys(dir, name string) (*DestinationKeyStore, error)
+```
+RotateDestinationKeys generates new destination keys, archives the old keys, and
+persists the new keys. The new keys will produce a different .b32.i2p address,
+which is expected behavior for key rotation (forward secrecy).
+
+Important: After rotation, the old destination address becomes invalid. Any
+services or clients using the old address must be updated.
+
+The old keys are archived to a timestamped file in the same directory, allowing
+recovery of old keys if needed for decrypting previous messages.
+
+Returns the new DestinationKeyStore with freshly generated keys.
+
+#### func (*DestinationKeyStore) RotateKeys
+
+```go
+func (dks *DestinationKeyStore) RotateKeys(dir, name string) (*destination.Destination, error)
+```
+RotateKeys generates new encryption and signing keys, updating the destination
+identity. The old keys are archived to disk with a timestamp suffix before being
+replaced. This provides forward secrecy at the destination level.
+
+NOTE: Key rotation changes the .b32.i2p address. Any peers holding the old
+address will no longer be able to reach this destination. The old keys are
+preserved in an archive file for potential recovery or decryption of old
+messages.
+
+Parameters:
+
+    - dir: directory to store keys (and archive)
+    - name: base name for key files
+
+Returns the previous destination (for logging/notification) and any error.
+
 #### func (*DestinationKeyStore) SigningPrivateKey
 
 ```go
@@ -152,12 +190,16 @@ type KeyStoreImpl struct {
 }
 ```
 
+KeyStoreImpl is a filesystem-backed implementation of the KeyStore interface
+that manages a single private key and its derived public key.
 
 #### func  NewKeyStoreImpl
 
 ```go
 func NewKeyStoreImpl(dir, name string, privateKey types.PrivateKey) *KeyStoreImpl
 ```
+NewKeyStoreImpl creates a new KeyStoreImpl that stores keys in the given
+directory with the specified name prefix.
 
 #### func (*KeyStoreImpl) Close
 
@@ -173,18 +215,23 @@ cryptographic best practices.
 ```go
 func (ks *KeyStoreImpl) GetKeys() (types.PublicKey, types.PrivateKey, error)
 ```
+GetKeys returns the public and private key pair managed by this KeyStoreImpl.
 
 #### func (*KeyStoreImpl) KeyID
 
 ```go
 func (ks *KeyStoreImpl) KeyID() string
 ```
+KeyID returns a stable, filesystem-safe identifier for this keystore, using the
+configured name or a hex-encoded prefix of the public key.
 
 #### func (*KeyStoreImpl) StoreKeys
 
 ```go
 func (ks *KeyStoreImpl) StoreKeys() error
 ```
+StoreKeys persists the private key to the filesystem in the configured directory
+with appropriate permissions.
 
 #### type RouterInfoKeystore
 
@@ -238,18 +285,31 @@ consistent peer identification across router restarts.
 ```go
 func (ks *RouterInfoKeystore) GetKeys() (types.PublicKey, types.PrivateKey, error)
 ```
+GetKeys returns the public and private signing key pair held by this
+RouterInfoKeystore.
+
+#### func (*RouterInfoKeystore) GetSigningPrivateKey
+
+```go
+func (ks *RouterInfoKeystore) GetSigningPrivateKey() types.PrivateKey
+```
+GetSigningPrivateKey returns the Ed25519 signing private key.
 
 #### func (*RouterInfoKeystore) KeyID
 
 ```go
 func (ks *RouterInfoKeystore) KeyID() string
 ```
+KeyID returns a stable, filesystem-safe identifier for this keystore, derived
+from the configured name or the public key.
 
 #### func (*RouterInfoKeystore) StoreKeys
 
 ```go
 func (ks *RouterInfoKeystore) StoreKeys() error
 ```
+StoreKeys persists the signing and encryption private keys to disk in the
+configured directory.
 
 #### type RouterInfoOptions
 
@@ -266,9 +326,18 @@ type RouterInfoOptions struct {
 	// capability. When true, "f" replaces "N" (not floodfill) in the caps string.
 	// Floodfills store and distribute netDB entries.
 	Floodfill bool
-	// NetId is the network identifier. Defaults to "2" (production I2P network).
+	// NetID is the network identifier. Defaults to "2" (production I2P network).
 	// Set to "3" for testnet or other values for experimental networks.
-	NetId string
+	NetID string
+	// Version is the router.version string advertised in RouterInfo options.
+	// Defaults to "0.9.63". Must be >= "0.9.58" to pass i2pd's NETDB_MIN_ALLOWED_VERSION check.
+	Version string
+	// Hidden indicates that the router operates in hidden mode (Java I2P
+	// semantics). When true, the caps string includes "H" (hidden) and forces
+	// "U" (unreachable) regardless of the Reachable flag, signalling to the
+	// rest of the network that this router will not accept inbound connections
+	// or transit tunnels.
+	Hidden bool
 }
 ```
 
@@ -281,4 +350,4 @@ keys
 
 github.com/go-i2p/go-i2p/lib/keys
 
-[go-i2p template file](/template.md)
+[go-i2p template file](template.md)

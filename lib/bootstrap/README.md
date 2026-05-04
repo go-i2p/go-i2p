@@ -4,8 +4,8 @@
 
 ![bootstrap.svg](bootstrap.svg)
 
-provides generic interfaces for initial bootstrap into network and network
-### reseeding
+Package bootstrap provides generic interfaces for initial bootstrap into network
+and network reseeding
 
 # RouterInfo Validation
 
@@ -85,6 +85,16 @@ attempting to extract host keys from introducer-only addresses.
 CRITICAL FIX #1: Pre-filter bootstrap peers before validation to prevent
 "RouterAddress missing required host key" errors for introducer-only addresses.
 
+#### func  HasSSU2IntroducerConnectivity
+
+```go
+func HasSSU2IntroducerConnectivity(ri router_info.RouterInfo) bool
+```
+HasSSU2IntroducerConnectivity checks if a RouterInfo has at least one SSU2
+address reachable via introducers (ih0 key set, even without a direct
+host/port). This identifies firewalled/NAT'd routers that can be reached via the
+SSU2 relay/introducer protocol.
+
 #### func  ValidateNTCP2Address
 
 ```go
@@ -141,7 +151,7 @@ type Bootstrap interface {
 }
 ```
 
-interface defining a way to bootstrap into the i2p network
+Bootstrap defines a way to bootstrap into the i2p network.
 
 #### type CompositeBootstrap
 
@@ -197,36 +207,36 @@ func (fb *FileBootstrap) GetPeers(ctx context.Context, n int) ([]router_info.Rou
 GetPeers implements the Bootstrap interface by reading RouterInfos from a local
 file
 
-#### type LocalNetDbBootstrap
+#### type LocalNetDBBootstrap
 
 ```go
-type LocalNetDbBootstrap struct {
+type LocalNetDBBootstrap struct {
 }
 ```
 
-LocalNetDbBootstrap implements the Bootstrap interface by reading RouterInfos
+LocalNetDBBootstrap implements the Bootstrap interface by reading RouterInfos
 from a local netDb directory (Java I2P or i2pd compatible)
 
-#### func  NewLocalNetDbBootstrap
+#### func  NewLocalNetDBBootstrap
 
 ```go
-func NewLocalNetDbBootstrap(cfg *config.BootstrapConfig) *LocalNetDbBootstrap
+func NewLocalNetDBBootstrap(cfg *config.BootstrapConfig) *LocalNetDBBootstrap
 ```
-NewLocalNetDbBootstrap creates a new local netDb bootstrap with default search
+NewLocalNetDBBootstrap creates a new local netDb bootstrap with default search
 paths
 
-#### func  NewLocalNetDbBootstrapWithPaths
+#### func  NewLocalNetDBBootstrapWithPaths
 
 ```go
-func NewLocalNetDbBootstrapWithPaths(paths []string) *LocalNetDbBootstrap
+func NewLocalNetDBBootstrapWithPaths(paths []string) *LocalNetDBBootstrap
 ```
-NewLocalNetDbBootstrapWithPaths creates a new local netDb bootstrap with custom
+NewLocalNetDBBootstrapWithPaths creates a new local netDb bootstrap with custom
 paths
 
-#### func (*LocalNetDbBootstrap) GetPeers
+#### func (*LocalNetDBBootstrap) GetPeers
 
 ```go
-func (lb *LocalNetDbBootstrap) GetPeers(ctx context.Context, n int) ([]router_info.RouterInfo, error)
+func (lb *LocalNetDBBootstrap) GetPeers(ctx context.Context, n int) ([]router_info.RouterInfo, error)
 ```
 GetPeers implements the Bootstrap interface by reading RouterInfos from local
 netDb
@@ -343,4 +353,4 @@ bootstrap
 
 github.com/go-i2p/go-i2p/lib/bootstrap
 
-[go-i2p template file](/template.md)
+[go-i2p template file](template.md)

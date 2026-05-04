@@ -312,15 +312,61 @@ const (
 	ErrCodeInvalidParams  = -32602 // Invalid method parameters
 	ErrCodeInternalError  = -32603 // Internal JSON-RPC error
 
-	// I2PControl-specific error codes
-	// Using -32000 to -32099 range (reserved for implementation-defined errors)
-	ErrCodeAuthRequired = -32000 // Authentication token required
-	ErrCodeAuthFailed   = -32001 // Authentication failed (invalid password)
-	ErrCodeNotImpl      = -32002 // Method not yet implemented
+	// I2PControl-specific error codes.
+	// Codes -32001 through -32006 are assigned by the I2PControl spec.
+	// Code -32099 is used for implementation-defined "not implemented" to avoid
+	// colliding with the spec-defined range.
+	ErrCodeAuthFailed             = -32001 // Authentication failed (invalid password)
+	ErrCodeAuthRequired           = -32002 // No authentication token presented
+	ErrCodeTokenNotExist          = -32003 // Authentication token does not exist
+	ErrCodeTokenExpired           = -32004 // Authentication token expired and removed
+	ErrCodeAPIVersionNotSpecified = -32005 // API version not specified in Authenticate request
+	ErrCodeAPIVersionNotSupported = -32006 // API version specified is not supported
+	ErrCodeNotImpl                = -32099 // Method not yet implemented
 )
 ```
 JSON-RPC 2.0 specification error codes Reference:
 https://www.jsonrpc.org/specification
+
+#### type AdvancedSettingsHandler
+
+```go
+type AdvancedSettingsHandler struct{}
+```
+
+AdvancedSettingsHandler implements the AdvancedSettings RPC method. Provides
+bulk get/set access to arbitrary router configuration keys via Viper.
+
+Request params (read):
+
+    {"i2p.router.some.key": null, ...}
+
+Request params (write):
+
+    {"Set": {"i2p.router.some.key": "value", ...}}
+
+Response always returns the current value of each key requested or set:
+
+    {"i2p.router.some.key": "current_value", ...}
+
+Keys use the Java I2P dotted format. They are mapped to Viper config keys by
+replacing "i2p.router." with "" and dots with underscores as needed, or by exact
+key lookup.
+
+#### func  NewAdvancedSettingsHandler
+
+```go
+func NewAdvancedSettingsHandler() *AdvancedSettingsHandler
+```
+NewAdvancedSettingsHandler creates a new AdvancedSettings handler.
+
+#### func (*AdvancedSettingsHandler) Handle
+
+```go
+func (h *AdvancedSettingsHandler) Handle(ctx context.Context, params json.RawMessage) (interface{}, error)
+```
+Handle processes the AdvancedSettings request. Reads or writes arbitrary Viper
+config keys.
 
 #### type AuthManager
 
@@ -456,18 +502,21 @@ Returns:
 
 ```go
 type BandwidthStats struct {
-	// InboundRate is the inbound data rate (bytes/sec)
-	// Tracks received bytes from all transport sessions.
+	// InboundRate is the 15-second rolling average inbound data rate (bytes/sec).
 	InboundRate float64
 
-	// OutboundRate is the outbound data rate (bytes/sec)
-	// Tracks sent bytes from all transport sessions.
+	// OutboundRate is the 15-second rolling average outbound data rate (bytes/sec).
 	OutboundRate float64
+
+	// InboundRate1s is the most recent 1-second inbound sample (bytes/sec).
+	InboundRate1s float64
+
+	// OutboundRate1s is the most recent 1-second outbound sample (bytes/sec).
+	OutboundRate1s float64
 }
 ```
 
-BandwidthStats contains bandwidth usage statistics. Rates are measured in bytes
-per second (15-second rolling average).
+BandwidthStats contains bandwidth usage statistics.
 
 #### type EchoHandler
 
@@ -512,25 +561,21 @@ type GetRateHandler struct {
 }
 ```
 
-GetRateHandler implements the GetRate RPC method. Returns bandwidth statistics
-from the router.
+GetRateHandler implements the GetRate RPC method. Supports two calling
+conventions:
 
-Request params:
+1. Java I2P spec style (used by go-i2pcontrol / go-i2p TUI):
 
-    {
-      "i2p.router.net.bw.inbound.15s": null,
-      "i2p.router.net.bw.outbound.15s": null
-    }
+    {"Stat": "bw.sendBps", "Period": 300000}
+    → {"Result": 12345.0}
 
-Response:
+2. Legacy field-list style:
 
-    {
-      "i2p.router.net.bw.inbound.15s": 12345.67,
-      "i2p.router.net.bw.outbound.15s": 23456.78
-    }
+    {"i2p.router.net.bw.inbound.15s": null, "i2p.router.net.bw.outbound.15s": null}
+    → {"i2p.router.net.bw.inbound.15s": 12345.67, ...}
 
-The request specifies which statistics are desired. Any field with a null value
-will be populated in the response.
+The Stat/Period style MUST return {"Result": float64} or clients like
+go-i2pcontrol will panic when they type-assert retpre["Result"].(float64).
 
 #### func  NewGetRateHandler
 
@@ -548,8 +593,8 @@ Parameters:
 ```go
 func (h *GetRateHandler) Handle(ctx context.Context, params json.RawMessage) (interface{}, error)
 ```
-Handle processes the GetRate request. Returns bandwidth statistics for requested
-fields.
+Handle processes the GetRate request. Detects Stat/Period format first; falls
+back to legacy field-list format.
 
 #### type I2PControlHandler
 
@@ -772,25 +817,40 @@ the local database size and role.
 
 ```go
 type NetworkConfig struct {
-	// NTCP2Port is the port number the NTCP2 transport is listening on
-	// Returns 0 if NTCP2 is not available
+	// NTCP2Port is the port number the NTCP2 transport is listening on.
+	// Returns 0 if NTCP2 is not available.
 	NTCP2Port int
 
-	// NTCP2Address is the full address string (IP:port) the NTCP2 transport is listening on
-	// Returns empty string if NTCP2 is not available
+	// NTCP2Address is the full address string (IP:port) the NTCP2 transport is listening on.
+	// Returns empty string if NTCP2 is not available.
 	NTCP2Address string
 
-	// NTCP2Hostname is the hostname/IP address (without port) that NTCP2 is listening on
-	// Extracted from NTCP2Address
+	// NTCP2Hostname is the hostname/IP address (without port) that NTCP2 is listening on.
+	// Extracted from NTCP2Address.
 	NTCP2Hostname string
 
-	// BandwidthLimitIn is the inbound bandwidth limit in KB/s
-	// Returns 0 if no limit is configured (unlimited)
+	// BandwidthLimitIn is the inbound bandwidth limit in KB/s.
+	// Returns 0 if no limit is configured (unlimited).
 	BandwidthLimitIn int
 
-	// BandwidthLimitOut is the outbound bandwidth limit in KB/s
-	// Returns 0 if no limit is configured (unlimited)
+	// BandwidthLimitOut is the outbound bandwidth limit in KB/s.
+	// Returns 0 if no limit is configured (unlimited).
 	BandwidthLimitOut int
+
+	// SSU2Port is the UDP port number the SSU2 transport is listening on.
+	// Returns 0 if SSU2 is disabled or the port is not yet known.
+	SSU2Port int
+
+	// SSU2Address is the full UDP address string (IP:port) the SSU2 transport is listening on.
+	// Returns empty string if SSU2 is not available.
+	SSU2Address string
+
+	// SSU2Hostname is the hostname/IP address (without port) that SSU2 is listening on.
+	// Extracted from SSU2Address.
+	SSU2Hostname string
+
+	// SharePercentage is the configured percentage (0–100) of bandwidth shared for transit tunnels.
+	SharePercentage int
 }
 ```
 
@@ -804,25 +864,17 @@ type NetworkSettingHandler struct {
 }
 ```
 
-NetworkSettingHandler implements the NetworkSetting RPC method. Provides
-read-only access to router configuration.
+NetworkSettingHandler implements the NetworkSetting RPC method. Supports both
+reading and writing router network configuration.
 
-Request params:
+Writable settings (pass a non-null value to change):
 
-    {
-      "i2p.router.net.ntcp.port": null,
-      "i2p.router.net.ntcp.hostname": null
-    }
+    - "i2p.router.net.ntcp.port"     → transport.ntcp2_port     (restart required)
+    - "i2p.router.net.ntcp.hostname" → transport.ntcp2_hostname  (restart required)
+    - "i2p.router.bandwidth.in"      → router.max_bandwidth      (live update)
+    - "i2p.router.bandwidth.out"     → router.max_bandwidth      (live update)
 
-Response:
-
-    {
-      "i2p.router.net.ntcp.port": 12345,
-      "i2p.router.net.ntcp.hostname": "localhost"
-    }
-
-Note: Only read operations are supported initially. Write operations (changing
-config) will be added later.
+Pass null as the value to read the current setting without changing it.
 
 #### func  NewNetworkSettingHandler
 
@@ -933,6 +985,47 @@ func (f RPCHandlerFunc) Handle(ctx context.Context, params json.RawMessage) (int
 Handle calls the underlying function. This makes RPCHandlerFunc satisfy the
 RPCHandler interface.
 
+#### type RateWindow
+
+```go
+type RateWindow struct {
+}
+```
+
+RateWindow stores time-series samples and computes windowed statistics. It is
+safe for concurrent use.
+
+#### func (*RateWindow) Average
+
+```go
+func (w *RateWindow) Average(windowMs int64) float64
+```
+Average returns the arithmetic mean of all samples within windowMs milliseconds.
+Returns 0 if no samples fall within the window.
+
+#### func (*RateWindow) Count
+
+```go
+func (w *RateWindow) Count(windowMs int64) float64
+```
+Count returns the sum of sample values within windowMs milliseconds. When each
+sample has value 1.0, this counts discrete events in the window.
+
+#### func (*RateWindow) Len
+
+```go
+func (w *RateWindow) Len(windowMs int64) int
+```
+Len returns the number of samples within windowMs milliseconds. Used to detect
+the warm-up period (< 2 samples) and avoid misleading fallbacks.
+
+#### func (*RateWindow) Record
+
+```go
+func (w *RateWindow) Record(value float64)
+```
+Record appends a sample with the current timestamp.
+
 #### type RealRouter
 
 ```go
@@ -947,10 +1040,15 @@ type RealRouter struct {
 		IsRunning() bool
 		IsReseeding() bool
 		GetBandwidthRates() (inbound, outbound uint64)
+		GetBandwidthRates1s() (inbound, outbound uint64)
+		GetNetworkStatus() int
 		GetActiveSessionCount() int
+		GetNTCP2SessionCount() int
+		GetSSU2SessionCount() int
 		Stop()
 		Reseed() error
 		GetTransportAddr() interface{}
+		GetSSU2Addr() interface{}
 	}
 }
 ```
@@ -983,12 +1081,28 @@ func (rr RealRouter) GetBandwidthRates() (inbound, outbound uint64)
 ```
 GetBandwidthRates returns current bandwidth rates (implements RouterAccess)
 
+#### func (RealRouter) GetBandwidthRates1s
+
+```go
+func (rr RealRouter) GetBandwidthRates1s() (inbound, outbound uint64)
+```
+GetBandwidthRates1s returns 1-second inbound and outbound bandwidth rates
+(implements RouterAccess)
+
 #### func (RealRouter) GetConfig
 
 ```go
 func (rr RealRouter) GetConfig() *config.RouterConfig
 ```
 GetConfig returns the router configuration (implements RouterAccess)
+
+#### func (RealRouter) GetNTCP2SessionCount
+
+```go
+func (rr RealRouter) GetNTCP2SessionCount() int
+```
+GetNTCP2SessionCount returns active NTCP2 (TCP) session count (implements
+RouterAccess)
 
 #### func (RealRouter) GetNetDB
 
@@ -997,12 +1111,36 @@ func (rr RealRouter) GetNetDB() *netdb.StdNetDB
 ```
 GetNetDB returns the NetDB (implements RouterAccess)
 
+#### func (RealRouter) GetNetworkStatus
+
+```go
+func (rr RealRouter) GetNetworkStatus() int
+```
+GetNetworkStatus returns the I2PControl network status code (implements
+RouterAccess)
+
 #### func (RealRouter) GetParticipantManager
 
 ```go
 func (rr RealRouter) GetParticipantManager() *tunnel.Manager
 ```
 GetParticipantManager returns the participant manager (implements RouterAccess)
+
+#### func (RealRouter) GetSSU2Addr
+
+```go
+func (rr RealRouter) GetSSU2Addr() interface{}
+```
+GetSSU2Addr returns the listening UDP address of the SSU2 transport (implements
+RouterAccess)
+
+#### func (RealRouter) GetSSU2SessionCount
+
+```go
+func (rr RealRouter) GetSSU2SessionCount() int
+```
+GetSSU2SessionCount returns active SSU2 (UDP) session count (implements
+RouterAccess)
 
 #### func (RealRouter) GetTransportAddr
 
@@ -1183,27 +1321,43 @@ type RouterAccess interface {
 	// GetConfig returns the router configuration
 	GetConfig() *config.RouterConfig
 
-	// GetTransportAddr returns the listening address of the first available transport
-	// Returns nil if no transports are available
-	// This is used to extract NTCP2 port and address for NetworkSetting RPC method
+	// GetTransportAddr returns the listening address of the first available transport.
+	// Returns nil if no transports are available.
+	// This is used to extract NTCP2 port and address for NetworkSetting RPC method.
 	GetTransportAddr() interface{}
 
-	// IsRunning returns whether the router is currently operational
+	// GetSSU2Addr returns the listening UDP address of the SSU2 transport.
+	// Returns nil if SSU2 is not available.
+	GetSSU2Addr() interface{}
+
+	// IsRunning returns whether the router is currently operational.
 	IsRunning() bool
 
-	// IsReseeding returns whether the router is currently performing a NetDB reseed operation
+	// IsReseeding returns whether the router is currently performing a NetDB reseed operation.
 	IsReseeding() bool
 
-	// GetBandwidthRates returns the current 15-second inbound and outbound bandwidth rates in bytes per second
+	// GetBandwidthRates returns the current 15-second inbound and outbound bandwidth rates in bytes per second.
 	GetBandwidthRates() (inbound, outbound uint64)
 
-	// GetActiveSessionCount returns the number of active transport sessions (connected peers)
+	// GetBandwidthRates1s returns the most recent 1-second inbound and outbound bandwidth rates in bytes per second.
+	GetBandwidthRates1s() (inbound, outbound uint64)
+
+	// GetNetworkStatus returns the I2PControl network status code (0–14).
+	GetNetworkStatus() int
+
+	// GetActiveSessionCount returns the number of active transport sessions (connected peers).
 	GetActiveSessionCount() int
 
-	// Stop initiates graceful shutdown of the router
+	// GetNTCP2SessionCount returns the number of active NTCP2 (TCP) sessions.
+	GetNTCP2SessionCount() int
+
+	// GetSSU2SessionCount returns the number of active SSU2 (UDP) sessions.
+	GetSSU2SessionCount() int
+
+	// Stop initiates graceful shutdown of the router.
 	Stop()
 
-	// Reseed triggers a manual NetDB reseed operation
+	// Reseed triggers a manual NetDB reseed operation.
 	Reseed() error
 }
 ```
@@ -1266,6 +1420,8 @@ Parameters:
 ```go
 func (h *RouterInfoHandler) Handle(ctx context.Context, params json.RawMessage) (interface{}, error)
 ```
+Handle processes an I2PControl RouterInfo RPC request, returning the requested
+or default router information fields.
 
 #### type RouterInfoStats
 
@@ -1350,7 +1506,7 @@ process. Shutdown will stop the router gracefully.
 #### func  NewRouterManagerHandler
 
 ```go
-func NewRouterManagerHandler(control interface {
+func NewRouterManagerHandler(ctx context.Context, wg *sync.WaitGroup, control interface {
 	Stop()
 	Reseed() error
 },
@@ -1360,6 +1516,8 @@ NewRouterManagerHandler creates a new RouterManager handler.
 
 Parameters:
 
+    - ctx: server context for cancellation propagation to handler goroutines
+    - wg: WaitGroup to track handler goroutines for clean shutdown
     - control: Router control interface (typically the Router itself)
 
 #### func (*RouterManagerHandler) Handle
@@ -1403,6 +1561,30 @@ type RouterStatsProvider interface {
 		Stop()
 		Reseed() error
 	}
+
+	// GetNetworkStatus returns the I2PControl network status code (0–14).
+	// 0=OK, 1=TESTING, 2=FIREWALLED, 3=HIDDEN, 4=WARN_FIREWALLED_AND_FAST,
+	// 5=WARN_FIREWALLED_AND_FLOODFILL, 6=WARN_FIREWALLED_AND_INBOUND_TCP,
+	// 7=WARN_SLOW_FOREIGN_SEEDNODES, 8=ERROR_I2CP,
+	// 9=ERROR_CLOCK_SKEW, 10=ERROR_PRIVATE_TCP_ADDRESS,
+	// 11=ERROR_SYMMETRIC_NAT, 12=ERROR_UDP_PORT_IN_USE,
+	// 13=ERROR_NO_ACTIVE_PEERS_CHECK_CONNECTION_AND_FIREWALL,
+	// 14=ERROR_UDP_DISABLED_AND_TCP_UNSET
+	GetNetworkStatus() int
+
+	// GetRateForPeriod returns the windowed average or event count for a named stat over
+	// the most recent periodMs milliseconds. It mirrors the Java I2P StatManager.getRate()
+	// semantic used by the I2PControl GetRate RPC.
+	//
+	// Supported stat names:
+	//   bw.sendBps, bw.receiveBps, bw.combined         — bandwidth in bytes/sec
+	//   tunnel.participatingTunnels                     — participating tunnel count
+	//   tunnel.buildExploratorySuccess                  — count of successful exploratory builds
+	//   tunnel.buildExploratoryReject                   — count of rejected exploratory builds
+	//   tunnel.buildExploratoryExpire                   — count of timed-out exploratory builds
+	//   tunnel.buildClientSuccess                       — count of successful client builds (0 until client tunnels are implemented)
+	//   tunnel.buildRequestTime                         — average build duration in milliseconds
+	GetRateForPeriod(stat string, periodMs int64) float64
 }
 ```
 
@@ -1499,4 +1681,4 @@ i2pcontrol
 
 github.com/go-i2p/go-i2p/lib/i2pcontrol
 
-[go-i2p template file](/template.md)
+[go-i2p template file](template.md)

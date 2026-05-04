@@ -148,10 +148,10 @@ is sufficient.
 const RouterInfoMaxAge = 48 * time.Hour
 ```
 RouterInfoMaxAge defines the maximum age for a RouterInfo before it is
-considered stale. Per the I2P specification, RouterInfos are typically
-considered stale after about 27 hours, though some implementations use longer
-thresholds. We use 48 hours to be conservative and reduce unnecessary churn
-during periods of intermittent connectivity.
+considered stale. The I2P spec does not specify a universal 27-hour threshold;
+expiry depends on network size (~30h for a ~300-router network). We use 48 hours
+as a conservative implementation choice to reduce unnecessary churn during
+periods of intermittent connectivity.
 
 #### func  CalculateXORDistance
 
@@ -540,14 +540,16 @@ type Entry struct {
 }
 ```
 
-netdb entry wraps a router info, lease set, lease set2, encrypted lease set, or
-meta lease set and provides serialization
+Entry is a netdb entry that wraps a router info, lease set, lease set2,
+encrypted lease set, or meta lease set and provides serialization.
 
 #### func (*Entry) Deserialize
 
 ```go
 func (e *Entry) Deserialize(r io.Reader) (err error)
 ```
+Deserialize reads an Entry from the given reader, parsing the entry type
+indicator and data payload.
 
 #### func (*Entry) Serialize
 
@@ -749,12 +751,35 @@ func NewFloodfillRateLimiter(maxPerMinute, burstSize int) *FloodfillRateLimiter
 NewFloodfillRateLimiter creates a rate limiter allowing maxPerMinute requests
 per peer per minute with burst capacity.
 
+#### func  NewFloodfillRateLimiterWithGlobal
+
+```go
+func NewFloodfillRateLimiterWithGlobal(maxPerMinute, burstSize, globalPerMinute, globalBurstSize int) *FloodfillRateLimiter
+```
+NewFloodfillRateLimiterWithGlobal creates a rate limiter with per-peer and
+aggregate global token buckets.
+
 #### func (*FloodfillRateLimiter) Allow
 
 ```go
 func (rl *FloodfillRateLimiter) Allow(peer common.Hash) bool
 ```
 Allow returns true if the peer is within its rate limit.
+
+#### func (*FloodfillRateLimiter) GlobalRejectedCount
+
+```go
+func (rl *FloodfillRateLimiter) GlobalRejectedCount() uint64
+```
+GlobalRejectedCount returns how many requests were rejected by the global
+bucket.
+
+#### func (*FloodfillRateLimiter) LastSeen
+
+```go
+func (rl *FloodfillRateLimiter) LastSeen(peer common.Hash) (time.Time, bool)
+```
+LastSeen returns the last observed time for a peer, if present.
 
 #### func (*FloodfillRateLimiter) Stop
 
@@ -868,7 +893,7 @@ type FloodfillTransport interface {
 ```
 
 FloodfillTransport defines the interface for sending I2NP messages back to
-lookup requesters. This decouples the floodfill server from the transport layer.
+lookup
 
 #### type I2NPSender
 
@@ -891,12 +916,12 @@ type KademliaResolver struct {
 }
 ```
 
-resolves router infos with recursive kademlia lookup
+KademliaResolver resolves router infos with recursive kademlia lookup.
 
 #### func  NewKademliaResolverWithTransport
 
 ```go
-func NewKademliaResolverWithTransport(netDb NetworkDatabase, pool *tunnel.Pool, transport LookupTransport, ourHash common.Hash) *KademliaResolver
+func NewKademliaResolverWithTransport(netDB NetworkDatabase, pool *tunnel.Pool, transport LookupTransport, ourHash common.Hash) *KademliaResolver
 ```
 NewKademliaResolverWithTransport creates a resolver with transport capability
 for network lookups. This enables the resolver to send DatabaseLookup messages
@@ -904,7 +929,7 @@ to peers and receive responses.
 
 Parameters:
 
-    - netDb: The network database to store discovered RouterInfos
+    - netDB: The network database to store discovered RouterInfos
     - pool: The tunnel pool for sending messages (used for privacy)
     - transport: The transport interface for sending DatabaseLookup messages
     - ourHash: Our router's identity hash for constructing lookup messages
@@ -923,6 +948,9 @@ DatabaseStore and DatabaseSearchReply messages to waiting lookups.
 ```go
 func (kr *KademliaResolver) Lookup(h common.Hash, timeout time.Duration) (*router_info.RouterInfo, error)
 ```
+Lookup performs a Kademlia-based iterative lookup for the RouterInfo identified
+by the given hash, trying the local NetDB first and querying progressively
+closer peers until the timeout expires.
 
 #### func (*KademliaResolver) SetOurHash
 
@@ -1135,7 +1163,7 @@ type NetworkDatabase interface {
 }
 ```
 
-Moved from: netdb.go i2p network database, storage of i2p RouterInfos
+NetworkDatabase is the I2P network database for storing RouterInfos.
 
 #### type PeerCongestionInfo
 
@@ -1175,7 +1203,6 @@ type PeerStats struct {
 ```
 
 PeerStats tracks connection success/failure statistics for a peer.
-Stale peer detection through connection tracking.
 
 #### type PeerTracker
 
@@ -1185,8 +1212,7 @@ type PeerTracker struct {
 ```
 
 PeerTracker maintains reputation/connectivity statistics for peers. Helps
-identify stale peers and prioritize reliable ones for tunnel building. HIGH
-PRIORITY FIX #3: Infrastructure for peer reputation scoring.
+identify stale peers and prioritize reliable ones for tunnel building.
 
 #### func  NewPeerTracker
 
@@ -1257,6 +1283,18 @@ func (pt *PeerTracker) RecordFailure(hash common.Hash, reason string)
 ```
 RecordFailure records a failed connection attempt to a peer.
 
+#### func (*PeerTracker) RecordPermanentFailure
+
+```go
+func (pt *PeerTracker) RecordPermanentFailure(hash common.Hash, reason string)
+```
+RecordPermanentFailure records a structurally permanent connection failure (e.g.
+IPv6-only peer with no local IPv6, malformed RouterInfo with no valid address).
+Unlike RecordFailure, which increments the consecutive-failure counter by one,
+this method immediately advances it to the staleness threshold so that
+IsLikelyStale() returns true on the very next call, preventing repeated wasted
+dial attempts to permanently unreachable peers.
+
 #### func (*PeerTracker) RecordSuccess
 
 ```go
@@ -1317,6 +1355,15 @@ PublishLeaseSet publishes a specific LeaseSet (original type) to floodfill
 routers. This is the main publishing logic that sends DatabaseStore messages to
 the closest floodfill routers. Note: This method publishes original LeaseSets
 (type 1), not LeaseSet2.
+
+#### func (*Publisher) PublishOurRouterInfo
+
+```go
+func (p *Publisher) PublishOurRouterInfo()
+```
+PublishOurRouterInfo triggers an immediate republication of our RouterInfo to
+floodfill routers. Use this when the RouterInfo has changed (e.g. after
+introducer addresses are updated following NAT detection).
 
 #### func (*Publisher) PublishRouterInfo
 
@@ -1395,16 +1442,15 @@ type Resolver interface {
 }
 ```
 
-Moved from: netdb.go resolves unknown RouterInfos given the hash of their
-RouterIdentity
+Resolver resolves unknown RouterInfos given the hash of their RouterIdentity.
 
 #### func  NewKademliaResolver
 
 ```go
-func NewKademliaResolver(netDb NetworkDatabase, pool *tunnel.Pool) (r Resolver)
+func NewKademliaResolver(netDB NetworkDatabase, pool *tunnel.Pool) (r Resolver)
 ```
-Moved from: kad.go NewKademliaResolver creates a new resolver that stores result
-into a NetworkDatabase and uses a tunnel pool for the lookup
+NewKademliaResolver creates a new resolver that stores result into a
+NetworkDatabase and uses a tunnel pool for the lookup.
 
 #### type RouterInfoProvider
 
@@ -1587,6 +1633,14 @@ StoreEncryptedLeaseSet stores an EncryptedLeaseSet in the database from direct
 router operations. key is the blinded destination hash, data is the serialized
 EncryptedLeaseSet, and dataType should be 5 for EncryptedLeaseSet.
 
+#### func (*RouterNetDB) StoreFromPeer
+
+```go
+func (r *RouterNetDB) StoreFromPeer(key common.Hash, data []byte, dataType byte, source common.Hash) error
+```
+StoreFromPeer stores a network database entry with source peer context. Source
+is currently used for RouterInfo admission fairness.
+
 #### func (*RouterNetDB) StoreLeaseSet
 
 ```go
@@ -1631,6 +1685,14 @@ StoreRouterInfoFromMessage stores a RouterInfo entry in the database from an
 I2NP DatabaseStore message. key is the router identity hash, data is the
 serialized RouterInfo, and dataType should be 0 for RouterInfo.
 
+#### func (*RouterNetDB) StoreRouterInfoFromMessageWithSource
+
+```go
+func (r *RouterNetDB) StoreRouterInfoFromMessageWithSource(key common.Hash, data []byte, dataType byte, source common.Hash) error
+```
+StoreRouterInfoFromMessageWithSource stores a RouterInfo from I2NP DatabaseStore
+and records the source peer for admission fairness.
+
 #### type SearchReplyError
 
 ```go
@@ -1648,6 +1710,8 @@ lookup.
 ```go
 func (e *SearchReplyError) Error() string
 ```
+Error returns a human-readable description of the SearchReplyError, including
+the number of suggested alternative peers.
 
 #### type SessionProvider
 
@@ -1678,39 +1742,48 @@ type StdNetDB struct {
 }
 ```
 
-standard network database implementation using local filesystem skiplist
+StdNetDB is the standard network database implementation using local filesystem
+skiplist.
 
 #### func  NewStdNetDB
 
 ```go
 func NewStdNetDB(db string) *StdNetDB
 ```
+NewStdNetDB creates and returns a new StdNetDB rooted at the given directory
+path, initializing in-memory caches and starting the background expiration
+cleaner.
 
 #### func (*StdNetDB) CheckFilePathValid
 
 ```go
 func (db *StdNetDB) CheckFilePathValid(fpath string) bool
 ```
+CheckFilePathValid reports whether the given file path is a valid NetDB entry
+path, verifying it has the correct extension, resolves within the NetDB
+directory, and passes security checks.
 
 #### func (*StdNetDB) Create
 
 ```go
 func (db *StdNetDB) Create() (err error)
 ```
+Create initializes the on-disk NetDB directory structure, creating the root
+directory and all skiplist subdirectories for RouterInfo and LeaseSet storage.
 
 #### func (*StdNetDB) Ensure
 
 ```go
 func (db *StdNetDB) Ensure() (err error)
 ```
-ensure that the network database exists and load existing RouterInfos
+Ensure ensures that the network database exists and loads existing RouterInfos.
 
 #### func (*StdNetDB) Exists
 
 ```go
 func (db *StdNetDB) Exists() bool
 ```
-return true if the network db directory exists and is writable
+Exists returns true if the network db directory exists and is writable.
 
 #### func (*StdNetDB) GetActivePeerCount
 
@@ -1835,6 +1908,13 @@ func (db *StdNetDB) GetLeaseSetExpirationStats() (total, expired int, nextExpiry
 GetLeaseSetExpirationStats returns statistics about LeaseSet expiration
 tracking. Returns total count, expired count, and time until next expiration.
 
+#### func (*StdNetDB) GetMaxRouterInfos
+
+```go
+func (db *StdNetDB) GetMaxRouterInfos() int
+```
+GetMaxRouterInfos returns the current RouterInfo capacity.
+
 #### func (*StdNetDB) GetMetaLeaseSet
 
 ```go
@@ -1856,6 +1936,8 @@ GetMetaLeaseSetBytes retrieves MetaLeaseSet data as bytes from the database.
 ```go
 func (db *StdNetDB) GetRouterInfo(hash common.Hash) (chnl chan router_info.RouterInfo)
 ```
+GetRouterInfo returns a channel that yields the RouterInfo for the given hash,
+checking the in-memory cache first and falling back to disk.
 
 #### func (*StdNetDB) GetRouterInfoBytes
 
@@ -1894,7 +1976,7 @@ router. This checks the global router configuration for the floodfill flag.
 ```go
 func (db *StdNetDB) Path() string
 ```
-get netdb path
+Path returns the netdb directory path.
 
 #### func (*StdNetDB) RecalculateSize
 
@@ -1904,25 +1986,42 @@ func (db *StdNetDB) RecalculateSize() error
 RecalculateSize is maintained for interface compatibility. Since Size() now
 operates directly on in-memory data, this is a no-op.
 
+#### func (*StdNetDB) RequestRouterInfoRefresh
+
+```go
+func (db *StdNetDB) RequestRouterInfoRefresh(hash common.Hash)
+```
+RequestRouterInfoRefresh evicts a peer's RouterInfo from the in-memory cache so
+that subsequent peer selection will not reuse the stale entry. The method
+enforces a per-peer cooldown of riRefreshCooldownDuration to prevent repeated
+evictions (e.g. when a key-rotated peer causes many handshake failures in quick
+succession).
+
+After eviction the entry will be re-populated on the next reseed or bootstrap
+cycle.
+
 #### func (*StdNetDB) Reseed
 
 ```go
 func (db *StdNetDB) Reseed(b bootstrap.Bootstrap, minRouters int) (err error)
 ```
-reseed if we have less than minRouters known routers returns error if reseed
-failed
+Reseed performs a reseed if we have less than minRouters known routers. Returns
+error if reseed failed.
 
 #### func (*StdNetDB) Save
 
 ```go
 func (db *StdNetDB) Save() error
 ```
+Save persists all in-memory RouterInfo and LeaseSet entries to disk.
 
 #### func (*StdNetDB) SaveEntry
 
 ```go
 func (db *StdNetDB) SaveEntry(e *Entry) (err error)
 ```
+SaveEntry persists a single RouterInfo Entry to disk in the NetDB skiplist
+directory.
 
 #### func (*StdNetDB) SelectFloodfillRouters
 
@@ -1954,6 +2053,14 @@ func (db *StdNetDB) SelectPeers(count int, exclude []common.Hash) ([]router_info
 SelectPeers selects a random subset of peers for tunnel building Filters out
 unreachable routers and excludes specified hashes
 
+#### func (*StdNetDB) SetMaxRouterInfos
+
+```go
+func (db *StdNetDB) SetMaxRouterInfos(max int)
+```
+SetMaxRouterInfos updates the RouterInfo capacity used for admission control.
+Values below 10 are ignored to preserve minimum validated configuration limits.
+
 #### func (*StdNetDB) Size
 
 ```go
@@ -1967,7 +2074,8 @@ This is a direct in-memory count and does not require filesystem access.
 ```go
 func (db *StdNetDB) SkiplistFile(hash common.Hash) (fpath string)
 ```
-get the skiplist file that a RouterInfo with this hash would go in
+SkiplistFile returns the skiplist file path for a RouterInfo with the given
+hash.
 
 #### func (*StdNetDB) SkiplistFileForLeaseSet
 
@@ -2070,6 +2178,14 @@ DatabaseStore message. It takes the pre-computed identity hash, raw serialized
 data, and data type byte. This is used internally by Store() and by adapters
 that receive RouterInfo from network messages.
 
+#### func (*StdNetDB) StoreRouterInfoFromMessageWithSource
+
+```go
+func (db *StdNetDB) StoreRouterInfoFromMessageWithSource(key common.Hash, data []byte, dataType byte, source common.Hash) error
+```
+StoreRouterInfoFromMessageWithSource stores a RouterInfo and records source-peer
+identity for distinct-introduction admission control.
+
 #### type StrategyStats
 
 ```go
@@ -2090,4 +2206,4 @@ netdb
 
 github.com/go-i2p/go-i2p/lib/netdb
 
-[go-i2p template file](/template.md)
+[go-i2p template file](template.md)

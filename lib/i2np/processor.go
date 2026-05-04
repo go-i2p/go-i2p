@@ -172,7 +172,6 @@ type BuildRequestDecryptor interface {
 	DecryptRecord(encrypted [528]byte, privateKey []byte) (BuildRequestRecord, error)
 }
 
-// MessageProcessor demonstrates interface-based message processing
 // stbmSlotCrypto holds the Noise-derived reply key and transcript hash for a single
 // STBM build request record slot. These are computed during ECIES decryption and
 // required later when building the AEAD-encrypted reply record.
@@ -181,6 +180,8 @@ type stbmSlotCrypto struct {
 	noiseHash [32]byte
 }
 
+// MessageProcessor routes inbound I2NP messages to type-specific handlers and
+// pluggable subsystem interfaces.
 type MessageProcessor struct {
 	mu                    sync.RWMutex
 	factory               *I2NPMessageFactory

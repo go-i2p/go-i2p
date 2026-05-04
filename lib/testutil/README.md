@@ -53,4 +53,4 @@ testutil
 
 github.com/go-i2p/go-i2p/lib/testutil
 
-[go-i2p template file](/template.md)
+[go-i2p template file](template.md)

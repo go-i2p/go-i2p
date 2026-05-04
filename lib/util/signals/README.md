@@ -37,6 +37,8 @@ DeregisterReloadHandler removes a previously registered reload handler by ID.
 ```go
 func Handle()
 ```
+Handle registers OS signal handlers and blocks, dispatching signals to the
+appropriate shutdown or reload routines.
 
 #### func  SetGracefulTimeout
 
@@ -95,7 +97,7 @@ Pre-shutdown handlers run in registration order (FIFO). Each handler is given an
 individual timeout (total timeout / handler count) so that a single stuck
 handler cannot block the entire shutdown chain.
 
-Per the I2P specification (common-structures RouterInfo notes), a router MUST
+Per convention (not formally specified in common-structures.rst), a router MAY
 send a DatabaseStore with zero addresses before disconnecting.
 
 Returns a HandlerID that can be passed to DeregisterPreShutdownHandler. Nil
@@ -116,4 +118,4 @@ signals
 
 github.com/go-i2p/go-i2p/lib/util/signals
 
-[go-i2p template file](/template.md)
+[go-i2p template file](template.md)

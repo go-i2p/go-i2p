@@ -80,15 +80,68 @@ DefaultMaxConnections is the default maximum number of concurrent connections
 across all muxed transports. This prevents resource exhaustion under heavy load.
 
 ```go
-var ErrConnectionPoolFull = oops.Errorf("connection pool full")
+var ErrConnectionPoolFull = errors.New("connection pool full")
 ```
 ErrConnectionPoolFull is returned when a connection pool has reached its maximum
 capacity and cannot accept new connections.
 
 ```go
-var ErrNoTransportAvailable = oops.Errorf("no transports available")
+var ErrNoTransportAvailable = errors.New("no transports available")
 ```
-error for when we have no transports available to use
+ErrNoTransportAvailable is returned when no transports are available to use.
+
+#### type PeerConnNotifier
+
+```go
+type PeerConnNotifier interface {
+	// RecordAttempt is called just before a dial attempt begins.
+	RecordAttempt(hash common.Hash)
+	// RecordSuccess is called when a handshake completes successfully.
+	// responseTimeMs is the round-trip to fully-established session in ms.
+	RecordSuccess(hash common.Hash, responseTimeMs int64)
+	// RecordFailure is called when a dial or handshake fails.
+	RecordFailure(hash common.Hash, reason string)
+	// RecordPermanentFailure is called when a peer is structurally unreachable
+	// (e.g. IPv6-only peer with no local IPv6 connectivity, or a malformed
+	// RouterInfo with no valid address).  It immediately advances the peer's
+	// consecutive-failure counter to the staleness threshold so that
+	// IsLikelyStale() returns true on the very next hop-selection pass,
+	// preventing repeated wasted dial attempts.
+	RecordPermanentFailure(hash common.Hash, reason string)
+}
+```
+
+PeerConnNotifier receives transport-layer connection feedback so that
+higher-level routing components (e.g. PeerTracker) can update peer reputation
+without coupling the transport packages to netdb.
+
+#### type RouterInfoRefresher
+
+```go
+type RouterInfoRefresher interface {
+	// RequestRouterInfoRefresh marks a peer's RouterInfo as stale and removes
+	// it from the in-memory cache. The implementation must honour a per-peer
+	// cooldown (e.g. one eviction per 5 minutes).
+	RequestRouterInfoRefresh(hash common.Hash)
+}
+```
+
+RouterInfoRefresher allows transport layers to request a stale RouterInfo be
+evicted from the local NetDB cache. Implementations should enforce a per-peer
+cooldown to prevent thundering-herd on popular peers.
+
+#### type RouterInfoStorer
+
+```go
+type RouterInfoStorer interface {
+	// StoreRouterInfo inserts or replaces the RouterInfo record in the NetDB.
+	StoreRouterInfo(ri router_info.RouterInfo)
+}
+```
+
+RouterInfoStorer persists a peer RouterInfo learned during an inbound NTCP2
+handshake into the local network database. Implementations must be safe for
+concurrent use.
 
 #### type Transport
 
@@ -125,6 +178,8 @@ type Transport interface {
 }
 ```
 
+Transport defines the interface for an I2P transport layer capable of accepting
+connections, managing sessions, and binding to a router identity.
 
 #### type TransportMuxer
 
@@ -137,14 +192,15 @@ type TransportMuxer struct {
 }
 ```
 
-muxes multiple transports into 1 Transport implements transport.Transport
+TransportMuxer muxes multiple transports into one Transport. It implements
+transport.Transport.
 
 #### func  Mux
 
 ```go
 func Mux(t ...Transport) (tmux *TransportMuxer)
 ```
-mux a bunch of transports together
+Mux combines a set of transports together.
 
 #### func  MuxWithLimit
 
@@ -197,23 +253,24 @@ Transport interface requirement. Returns nil if no transports are configured.
 ```go
 func (tmux *TransportMuxer) Close() (err error)
 ```
-close every transport that this transport muxer has
+Close closes every transport that this transport muxer has.
 
 #### func (*TransportMuxer) Compatible
 
 ```go
 func (tmux *TransportMuxer) Compatible(routerInfo router_info.RouterInfo) bool
 ```
-is there a transport that we mux that is compatible with this router info?
+Compatible returns true if there is a transport that we mux that is compatible
+with this router info.
 
 #### func (*TransportMuxer) GetSession
 
 ```go
 func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s TransportSession, err error)
 ```
-get a transport session given a router info return session and nil if successful
-return nil and ErrNoTransportAvailable if we failed to get a session return nil
-and ErrConnectionPoolFull if the connection limit has been reached
+GetSession returns nil and ErrNoTransportAvailable if we failed to get a
+session, or nil and ErrConnectionPoolFull if the connection limit has been
+reached.
 
 #### func (*TransportMuxer) GetTransports
 
@@ -228,7 +285,8 @@ allows external code to iterate over transports without exposing internal state.
 ```go
 func (tmux *TransportMuxer) Name() string
 ```
-the name of this transport with the names of all the ones that we mux
+Name returns the name of this transport combined with the names of all the ones
+that we mux.
 
 #### func (*TransportMuxer) ReleaseSession
 
@@ -245,7 +303,7 @@ value.
 ```go
 func (tmux *TransportMuxer) SetIdentity(ident router_info.RouterInfo) (err error)
 ```
-set the identity for every transport
+SetIdentity sets the identity for every transport.
 
 #### type TransportSession
 
@@ -264,7 +322,8 @@ type TransportSession interface {
 }
 ```
 
-a session between 2 routers for tranmitting i2np messages securly
+TransportSession is a session between 2 routers for transmitting i2np messages
+securely.
 
 
 
@@ -272,4 +331,4 @@ transport
 
 github.com/go-i2p/go-i2p/lib/transport
 
-[go-i2p template file](/template.md)
+[go-i2p template file](template.md)

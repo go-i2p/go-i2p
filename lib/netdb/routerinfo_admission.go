@@ -40,6 +40,8 @@ func newRouterInfoAdmissionController(capacity int) *routerInfoAdmissionControll
 	}
 }
 
+// SetCapacity updates the RouterInfo capacity used by pressure-based admission
+// checks. Non-positive capacity values are ignored.
 func (c *routerInfoAdmissionController) SetCapacity(capacity int) {
 	if capacity <= 0 {
 		return
@@ -49,6 +51,8 @@ func (c *routerInfoAdmissionController) SetCapacity(capacity int) {
 	c.mu.Unlock()
 }
 
+// AllowIntroduction returns true when a RouterInfo introduction from source for
+// key should be accepted under current admission pressure and per-source limits.
 func (c *routerInfoAdmissionController) AllowIntroduction(source *common.Hash, key common.Hash, currentCount int) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()

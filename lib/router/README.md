@@ -43,6 +43,18 @@ Core routing functional, I2CP complete, LeaseSet2 supported.
 
 ## Usage
 
+#### type AuthenticatedPeer
+
+```go
+type AuthenticatedPeer interface {
+	PeerHash() common.Hash
+	HandshakeComplete() bool
+}
+```
+
+AuthenticatedPeer defines the minimum identity guarantees required before
+starting a session message processor.
+
 #### type BandwidthSample
 
 ```go
@@ -572,6 +584,9 @@ type Router struct {
 }
 ```
 
+Router is the core I2P router implementation that manages transports, the
+network database, tunnel pools, and message routing for participating in the I2P
+network.
 
 #### func  CreateRouter
 
@@ -630,6 +645,14 @@ func (r *Router) GetBandwidthRates() (inbound, outbound uint64)
 GetBandwidthRates returns the current 15-second inbound and outbound bandwidth
 rates. Returns rates in bytes per second.
 
+#### func (*Router) GetBandwidthRates1s
+
+```go
+func (r *Router) GetBandwidthRates1s() (inbound, outbound uint64)
+```
+GetBandwidthRates1s returns the most recent 1-second inbound and outbound
+bandwidth rates. Returns rates in bytes per second.
+
 #### func (*Router) GetConfig
 
 ```go
@@ -653,11 +676,33 @@ func (r *Router) GetGarlicRouter() *GarlicMessageRouter
 GetGarlicRouter returns the garlic router in a thread-safe manner. Returns nil
 if the garlic router has not been initialized yet.
 
+#### func (*Router) GetNTCP2SessionCount
+
+```go
+func (r *Router) GetNTCP2SessionCount() int
+```
+GetNTCP2SessionCount returns the number of active NTCP2 (TCP) sessions. Returns
+0 if the NTCP2 transport is not available.
+
 #### func (*Router) GetNetDB
 
 ```go
 func (r *Router) GetNetDB() *netdb.StdNetDB
 ```
+GetNetDB returns the router's underlying network database instance.
+
+#### func (*Router) GetNetworkStatus
+
+```go
+func (r *Router) GetNetworkStatus() int
+```
+GetNetworkStatus returns the I2PControl network status code. Status codes:
+
+    0  = OK          (running, reachable confirmed external address)
+    1  = TESTING     (not yet connected to any peers)
+    2  = FIREWALLED  (running, has peers, but no confirmed external address)
+    3  = HIDDEN      (router is in hidden mode by configuration)
+    8  = ERROR_I2CP  (router not running)
 
 #### func (*Router) GetParticipantManager
 
@@ -666,6 +711,22 @@ func (r *Router) GetParticipantManager() *tunnel.Manager
 ```
 GetParticipantManager returns the participant manager for transit tunnel
 tracking. Returns nil if not initialized.
+
+#### func (*Router) GetSSU2Addr
+
+```go
+func (r *Router) GetSSU2Addr() interface{}
+```
+GetSSU2Addr returns the listening UDP address of the SSU2 transport. Returns nil
+if SSU2 is not available or not yet bound.
+
+#### func (*Router) GetSSU2SessionCount
+
+```go
+func (r *Router) GetSSU2SessionCount() int
+```
+GetSSU2SessionCount returns the number of active SSU2 (UDP) sessions. Returns 0
+if the SSU2 transport is not available.
 
 #### func (*Router) GetSessionByHash
 
@@ -740,6 +801,16 @@ func (r *Router) Stop()
 ```
 Stop initiates router shutdown and waits for all goroutines to complete. This
 method blocks until the router is fully stopped.
+
+#### func (*Router) StopWithContext
+
+```go
+func (r *Router) StopWithContext(ctx context.Context) error
+```
+StopWithContext initiates router shutdown like Stop, but respects the provided
+context for cancellation. If the context is cancelled before all goroutines
+finish, the method returns the context error. This allows HardStop to bound the
+time spent waiting for graceful shutdown.
 
 #### func (*Router) Wait
 
@@ -857,4 +928,4 @@ router
 
 github.com/go-i2p/go-i2p/lib/router
 
-[go-i2p template file](/template.md)
+[go-i2p template file](template.md)

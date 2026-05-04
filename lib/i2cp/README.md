@@ -22,6 +22,14 @@ Main components:
     - MessageRouter: Routes messages through tunnel system
     - Publisher: Publishes LeaseSets to NetDB
 
+# Known Limitations
+
+Message Reliability: The i2cp.messageReliability option is parsed and stored but
+all reliability modes (BestEffort, Guaranteed, None) are currently treated as
+BestEffort. Guaranteed delivery acknowledgment tracking is not implemented.
+Applications requiring guaranteed delivery must implement their own
+acknowledgment layer (e.g., via the go-streaming library).
+
 Package i2cp implements the I2P Client Protocol (I2CP) v0.9.67.
 
 I2CP is the protocol used by client applications to communicate with the I2P
@@ -88,10 +96,6 @@ const (
 	// Deprecated/legacy message types
 	MessageTypeDestLookup uint8 = 34 // Client -> Router: Deprecated in v0.9.67, use type 38 (SPEC: 34, was 13)
 	MessageTypeDestReply  uint8 = 35 // Router -> Client: Deprecated in v0.9.67, use type 39 (SPEC: 35, was 14)
-
-	// Deprecated receive messages (unused in fast receive mode)
-	MessageTypeReceiveMessageBegin uint8 = 6 // Client -> Router: DEPRECATED, not supported
-	MessageTypeReceiveMessageEnd   uint8 = 7 // Client -> Router: DEPRECATED, not supported
 )
 ```
 Message type constants as defined in I2CP v0.9.67
@@ -190,18 +194,17 @@ Protocol limits as per I2CP specification
 ```go
 var ErrNoDestinationResolver = errors.New("no destination resolver configured: cannot resolve encryption key")
 ```
-recoverFromAcceptPanic recovers from any panic in the accept loop to prevent
-server crash. ErrNoDestinationResolver is returned when a message cannot be
-routed because no destination resolver has been configured on the I2CP server.
-Without a resolver, the server cannot look up the recipient's public key, so
-encryption (and therefore routing) is impossible.
+ErrNoDestinationResolver is returned when a message cannot be routed because no
+destination resolver has been configured on the I2CP server. Without a resolver,
+the server cannot look up the recipient's public key, so encryption (and
+therefore routing) is impossible.
 
 #### func  MessageTypeName
 
 ```go
 func MessageTypeName(msgType uint8) string
 ```
-MessageTypeName returns a human-readable name for the message type
+MessageTypeName returns a human-readable name for the message type.
 
 #### func  ValidateSessionConfig
 
@@ -711,6 +714,48 @@ func (a *PasswordAuthenticator) Authenticate(username, password string) bool
 Authenticate checks if the provided credentials match the configured pair. Uses
 constant-time comparison to prevent timing side-channel attacks.
 
+#### type RateLimitedAuthenticator
+
+```go
+type RateLimitedAuthenticator struct {
+}
+```
+
+RateLimitedAuthenticator wraps another Authenticator and refuses authentication
+attempts after too many consecutive failures. While locked out, Authenticate
+returns false without calling the delegate, which preserves constant-time
+behavior and prevents credential-stuffing / brute-force attacks from observing
+differential timing.
+
+The lockout clears either when the lockout window elapses or when a successful
+authentication occurs once the window has passed.
+
+#### func  NewRateLimitedAuthenticator
+
+```go
+func NewRateLimitedAuthenticator(delegate Authenticator) *RateLimitedAuthenticator
+```
+NewRateLimitedAuthenticator wraps delegate with rate-limiting. If delegate is
+nil, the returned authenticator rejects every request.
+
+#### func (*RateLimitedAuthenticator) Authenticate
+
+```go
+func (r *RateLimitedAuthenticator) Authenticate(username, password string) bool
+```
+Authenticate implements Authenticator. When the authenticator is in a lockout
+window, the delegate is NOT called and the method returns false. Otherwise the
+call is forwarded to the delegate; failures increment the counter and may arm a
+new lockout window.
+
+#### func (*RateLimitedAuthenticator) AuthenticateConnection
+
+```go
+func (r *RateLimitedAuthenticator) AuthenticateConnection(conn net.Conn, username, password string) bool
+```
+AuthenticateConnection enforces lockouts independently for each remote address
+so one failing client cannot deny service to unrelated clients.
+
 #### type RouteRequest
 
 ```go
@@ -761,7 +806,7 @@ Currently should be set to 0.
 #### func  ParseSendMessageExpiresPayload
 
 ```go
-func ParseSendMessageExpiresPayload(data []byte) (*SendMessageExpiresPayload, error)
+func ParseSendMessageExpiresPayload(rawData []byte) (*SendMessageExpiresPayload, error)
 ```
 ParseSendMessageExpiresPayload deserializes a SendMessageExpires payload from
 wire format. Returns an error if the payload is too short or malformed.
@@ -815,7 +860,7 @@ application layer, though i2psnark file transfers can use the full 256 KB limit.
 #### func  ParseSendMessagePayload
 
 ```go
-func ParseSendMessagePayload(data []byte) (*SendMessagePayload, error)
+func ParseSendMessagePayload(rawData []byte) (*SendMessagePayload, error)
 ```
 ParseSendMessagePayload deserializes a SendMessage payload from wire format.
 Returns an error if the payload is too short or malformed.
@@ -1300,6 +1345,13 @@ type SessionConfig struct {
 
 	// Message delivery semantics (per I2CP spec)
 	// Supported values: "BestEffort" (default), "Guaranteed", "None"
+	//
+	// NOTE: Currently all modes are treated as BestEffort. Guaranteed mode
+	// acknowledgment tracking is not implemented. This field is parsed and
+	// stored to support future delivery confirmation features and to allow
+	// clients to configure their preferred semantics. Applications requiring
+	// guaranteed delivery must implement their own acknowledgment layer
+	// (e.g., via the streaming library).
 	MessageReliability string // Message reliability mode (default: "BestEffort")
 
 	// LeaseSet configuration
@@ -1454,4 +1506,4 @@ i2cp
 
 github.com/go-i2p/go-i2p/lib/i2cp
 
-[go-i2p template file](/template.md)
+[go-i2p template file](template.md)

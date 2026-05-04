@@ -133,6 +133,16 @@ const (
 Build reply codes per I2P specification (TUNNEL-CREATION)
 
 ```go
+const (
+
+	// BuildTimeout is the exported form of tunnelBuildTimeout for packages
+	// that need to schedule operations relative to the build deadline
+	// (e.g. the startup reachability check in the router).
+	BuildTimeout = tunnelBuildTimeout
+)
+```
+
+```go
 const DefaultIdleTimeout = 2 * time.Minute
 ```
 DefaultIdleTimeout is the default duration after which an idle tunnel is
@@ -258,6 +268,7 @@ BuildResponse represents a response from a tunnel hop
 type BuildTunnelRequest struct {
 	HopCount                  int           // Number of hops in the tunnel (1-8)
 	IsInbound                 bool          // True for inbound tunnel, false for outbound
+	IsClientTunnel            bool          // True for I2CP session-scoped client pools (vs exploratory router pools)
 	OurIdentity               common.Hash   // Our router identity hash
 	ExcludePeers              []common.Hash // Peers to exclude from selection
 	ReplyTunnelID             TunnelID      // Tunnel ID for receiving build replies (0 for outbound)
@@ -402,12 +413,15 @@ NewCongestionFilter creates a filter that excludes G-flagged peers.
 ```go
 func (f *CongestionFilter) Accept(ri router_info.RouterInfo) bool
 ```
+Accept returns true if the given peer should be considered for tunnel
+participation, rejecting peers with a G congestion flag.
 
 #### func (*CongestionFilter) Name
 
 ```go
 func (f *CongestionFilter) Name() string
 ```
+Name returns the name of the CongestionFilter.
 
 #### type CongestionInfoProvider
 
@@ -444,12 +458,15 @@ NewCongestionScorer creates a scorer that derates congested peers.
 ```go
 func (s *CongestionScorer) Name() string
 ```
+Name returns the name of the CongestionScorer.
 
 #### func (*CongestionScorer) Score
 
 ```go
 func (s *CongestionScorer) Score(ri router_info.RouterInfo) float64
 ```
+Score returns a score between 0.0 and 1.0 for the given peer based on its
+congestion flag, with lower scores indicating higher congestion.
 
 #### type DecryptedTunnelMessage
 
@@ -457,35 +474,42 @@ func (s *CongestionScorer) Score(ri router_info.RouterInfo) float64
 type DecryptedTunnelMessage [1028]byte
 ```
 
+DecryptedTunnelMessage represents a decrypted 1028-byte I2P tunnel message
+containing a TunnelID, IV, checksum, and delivery instructions.
 
 #### func (DecryptedTunnelMessage) Checksum
 
 ```go
-func (decrypted_tunnel_message DecryptedTunnelMessage) Checksum() []byte
+func (dtm DecryptedTunnelMessage) Checksum() []byte
 ```
+Checksum returns the 4-byte checksum from the decrypted tunnel message, located
+after the TunnelID and IV fields.
 
 #### func (DecryptedTunnelMessage) DeliveryInstructionsWithFragments
 
 ```go
-func (decrypted_tunnel_message DecryptedTunnelMessage) DeliveryInstructionsWithFragments() ([]DeliveryInstructionsWithFragment, error)
+func (dtm DecryptedTunnelMessage) DeliveryInstructionsWithFragments() ([]DeliveryInstructionsWithFragment, error)
 ```
-Returns a slice of DeliveryInstructionWithFragment structures, which all of the
-Delivery Instructions in the tunnel message and their corresponding
-MessageFragment structures. Also returns an error if any delivery instructions
-could not be fully parsed; in that case the returned slice contains any
-successfully parsed entries.
+DeliveryInstructionsWithFragments returns a slice of
+DeliveryInstructionWithFragment structures, which all of the Delivery
+Instructions in the tunnel message and their corresponding MessageFragment
+structures. Also returns an error if any delivery instructions could not be
+fully parsed; in that case the returned slice contains any successfully parsed
+entries.
 
 #### func (DecryptedTunnelMessage) ID
 
 ```go
-func (decrypted_tunnel_message DecryptedTunnelMessage) ID() TunnelID
+func (dtm DecryptedTunnelMessage) ID() TunnelID
 ```
+ID returns the TunnelID from the first 4 bytes of the decrypted tunnel message.
 
 #### func (DecryptedTunnelMessage) IV
 
 ```go
-func (decrypted_tunnel_message DecryptedTunnelMessage) IV() tunnel.TunnelIV
+func (dtm DecryptedTunnelMessage) IV() tunnel.TunnelIV
 ```
+IV returns the 16-byte initialization vector from the decrypted tunnel message.
 
 #### type DefaultCongestionAwarePeerSelector
 
@@ -591,6 +615,8 @@ an error for invalid arguments or if the underlying selector fails.
 type DelayFactor byte
 ```
 
+DelayFactor represents a delay factor byte for tunnel message delivery
+instructions.
 
 #### type DeliveryConfig
 
@@ -716,84 +742,89 @@ Bytes serializes the DeliveryInstructions to bytes
 #### func (*DeliveryInstructions) Delay
 
 ```go
-func (delivery_instructions *DeliveryInstructions) Delay() (delay_factor DelayFactor, err error)
+func (di *DeliveryInstructions) Delay() (delayFactor DelayFactor, err error)
 ```
+Delay returns the delay factor for these DeliveryInstructions, or an error if
+the instructions are not a FirstFragment or have no delay set.
 
 #### func (*DeliveryInstructions) DeliveryType
 
 ```go
-func (delivery_instructions *DeliveryInstructions) DeliveryType() (byte, error)
+func (di *DeliveryInstructions) DeliveryType() (byte, error)
 ```
-Return the delivery type for these DeliveryInstructions, can be of type DTLocal,
-DTTunnel, DTRouter, or DTUnused.
+DeliveryType returns the delivery type for these DeliveryInstructions, can be of
+type DTLocal, DTTunnel, DTRouter, or DTUnused.
 
 #### func (*DeliveryInstructions) ExtendedOptions
 
 ```go
-func (delivery_instructions *DeliveryInstructions) ExtendedOptions() (data []byte, err error)
+func (di *DeliveryInstructions) ExtendedOptions() (data []byte, err error)
 ```
-Return the Extended Options data if present, or an error if not present.
-Extended Options in unimplemented in the Java router and the presence of
-extended options will generate a warning.
+ExtendedOptions returns the Extended Options data if present, or an error if not
+present. Extended Options is unimplemented in the Java router and the presence
+of extended options will generate a warning.
 
 #### func (*DeliveryInstructions) FragmentNumber
 
 ```go
-func (delivery_instructions *DeliveryInstructions) FragmentNumber() (int, error)
+func (di *DeliveryInstructions) FragmentNumber() (int, error)
 ```
-Read the integer stored in the 6-1 bits of a FollowOnFragment's flag, indicating
-the fragment number.
+FragmentNumber reads the integer stored in the 6-1 bits of a FollowOnFragment's
+flag, indicating the fragment number.
 
 #### func (*DeliveryInstructions) FragmentSize
 
 ```go
-func (delivery_instructions *DeliveryInstructions) FragmentSize() (frag_size uint16, err error)
+func (di *DeliveryInstructions) FragmentSize() (fragSize uint16, err error)
 ```
-Return the size of the associated I2NP fragment and an error if the data is
-unavailable.
+FragmentSize returns the size of the associated I2NP fragment and an error if
+the data is unavailable.
 
 #### func (*DeliveryInstructions) Fragmented
 
 ```go
-func (delivery_instructions *DeliveryInstructions) Fragmented() (bool, error)
+func (di *DeliveryInstructions) Fragmented() (bool, error)
 ```
-Returns true if the Delivery Instructions are fragmented or false if the
-following data contains the entire message
+Fragmented returns true if the Delivery Instructions are fragmented or false if
+the following data contains the entire message
 
 #### func (*DeliveryInstructions) HasDelay
 
 ```go
-func (delivery_instructions *DeliveryInstructions) HasDelay() (bool, error)
+func (di *DeliveryInstructions) HasDelay() (bool, error)
 ```
-Check if the delay bit is set. This feature in unimplemented in the Java router.
+HasDelay checks if the delay bit is set. This feature is unimplemented in the
+Java router.
 
 #### func (*DeliveryInstructions) HasExtendedOptions
 
 ```go
-func (delivery_instructions *DeliveryInstructions) HasExtendedOptions() (bool, error)
+func (di *DeliveryInstructions) HasExtendedOptions() (bool, error)
 ```
-Check if the extended options bit is set. This feature in unimplemented in the
-Java router.
+HasExtendedOptions checks if the extended options bit is set. This feature is
+unimplemented in the Java router.
 
 #### func (*DeliveryInstructions) HasHash
 
 ```go
-func (delivery_instructions *DeliveryInstructions) HasHash() (bool, error)
+func (di *DeliveryInstructions) HasHash() (bool, error)
 ```
+HasHash returns true if the DeliveryInstructions contain a hash field, which is
+present for DTTunnel and DTRouter delivery types.
 
 #### func (*DeliveryInstructions) HasTunnelID
 
 ```go
-func (delivery_instructions *DeliveryInstructions) HasTunnelID() (bool, error)
+func (di *DeliveryInstructions) HasTunnelID() (bool, error)
 ```
-Check if the DeliveryInstructions is of type DTTunnel.
+HasTunnelID checks if the DeliveryInstructions is of type DTTunnel.
 
 #### func (*DeliveryInstructions) Hash
 
 ```go
-func (delivery_instructions *DeliveryInstructions) Hash() (hash common.Hash, err error)
+func (di *DeliveryInstructions) Hash() (hash common.Hash, err error)
 ```
-Return the hash for these DeliveryInstructions, which varies by hash type.
+Hash returns the hash for these DeliveryInstructions, which varies by hash type.
 
     If the type is DTTunnel, hash is the SHA256 of the gateway router, if
     the type is DTRouter it is the SHA256 of the router.
@@ -801,33 +832,33 @@ Return the hash for these DeliveryInstructions, which varies by hash type.
 #### func (*DeliveryInstructions) LastFollowOnFragment
 
 ```go
-func (delivery_instructions *DeliveryInstructions) LastFollowOnFragment() (bool, error)
+func (di *DeliveryInstructions) LastFollowOnFragment() (bool, error)
 ```
-Read the value of the 0 bit of a FollowOnFragment, which is set to 1 to indicate
-the last fragment.
+LastFollowOnFragment reads the value of the 0 bit of a FollowOnFragment, which
+is set to 1 to indicate the last fragment.
 
 #### func (*DeliveryInstructions) MessageID
 
 ```go
-func (delivery_instructions *DeliveryInstructions) MessageID() (msgid uint32, err error)
+func (di *DeliveryInstructions) MessageID() (msgid uint32, err error)
 ```
-Return the I2NP Message ID or 0 and an error if the data is not available for
-this DeliveryInstructions.
+MessageID returns the I2NP Message ID or 0 and an error if the data is not
+available for this DeliveryInstructions.
 
 #### func (*DeliveryInstructions) TunnelID
 
 ```go
-func (delivery_instructions *DeliveryInstructions) TunnelID() (tunnel_id uint32, err error)
+func (di *DeliveryInstructions) TunnelID() (tunnelID uint32, err error)
 ```
-Return the tunnel ID in this DeliveryInstructions or 0 and an error if the
-DeliveryInstructions are not of type DTTunnel.
+TunnelID returns the tunnel ID in this DeliveryInstructions or 0 and an error if
+the DeliveryInstructions are not of type DTTunnel.
 
 #### func (*DeliveryInstructions) Type
 
 ```go
-func (delivery_instructions *DeliveryInstructions) Type() (int, error)
+func (di *DeliveryInstructions) Type() (int, error)
 ```
-Return if the DeliveryInstructions are of type FirstFragment or
+Type returns if the DeliveryInstructions are of type FirstFragment or
 FollowOnFragment.
 
 #### type DeliveryInstructionsWithFragment
@@ -839,6 +870,8 @@ type DeliveryInstructionsWithFragment struct {
 }
 ```
 
+DeliveryInstructionsWithFragment pairs a set of DeliveryInstructions with the
+corresponding message fragment payload.
 
 #### type EncryptedTunnelMessage
 
@@ -846,6 +879,8 @@ type DeliveryInstructionsWithFragment struct {
 type EncryptedTunnelMessage tunnel.TunnelData
 ```
 
+EncryptedTunnelMessage represents an encrypted I2P tunnel message consisting of
+a TunnelID, IV, and encrypted data.
 
 #### func (EncryptedTunnelMessage) Data
 
@@ -862,12 +897,14 @@ decrypted format.
 ```go
 func (tm EncryptedTunnelMessage) ID() (tid TunnelID, err error)
 ```
+ID returns the TunnelID from the first 4 bytes of the encrypted tunnel message.
 
 #### func (EncryptedTunnelMessage) IV
 
 ```go
 func (tm EncryptedTunnelMessage) IV() (tunnel.TunnelIV, error)
 ```
+IV returns the 16-byte initialization vector from the encrypted tunnel message.
 
 #### type Endpoint
 
@@ -1303,6 +1340,14 @@ Human-readable reason for logging (empty if accepted)
 Note: Per I2P specification, we use BuildReplyCodeBandwidth (30) for most
 rejections to hide the specific rejection reason from peers.
 
+#### func (*Manager) RefuseAllTransit
+
+```go
+func (m *Manager) RefuseAllTransit() bool
+```
+RefuseAllTransit reports whether the manager is currently rejecting all incoming
+tunnel build requests.
+
 #### func (*Manager) RegisterParticipant
 
 ```go
@@ -1337,6 +1382,16 @@ func (m *Manager) ResetRecentRejectCount()
 ```
 ResetRecentRejectCount resets the recent rejection counter. This is typically
 called periodically for monitoring purposes.
+
+#### func (*Manager) SetRefuseAllTransit
+
+```go
+func (m *Manager) SetRefuseAllTransit(refuse bool)
+```
+SetRefuseAllTransit toggles unconditional rejection of incoming tunnel build
+requests. When true, ProcessBuildRequest rejects every request before any other
+limit check. Used by hidden-mode operation and by AcceptTunnels=false to ensure
+the router never serves as a transit hop.
 
 #### func (*Manager) Stop
 
@@ -1768,6 +1823,13 @@ func (p *Pool) GetTunnel(id TunnelID) (*TunnelState, bool)
 ```
 GetTunnel retrieves a tunnel by ID
 
+#### func (*Pool) HopCount
+
+```go
+func (p *Pool) HopCount() int
+```
+HopCount returns the configured hop count for this pool.
+
 #### func (*Pool) IsPeerFailed
 
 ```go
@@ -1781,10 +1843,35 @@ the peer failed recently and is still in cooldown.
 ```go
 func (p *Pool) MarkPeerFailed(peerHash common.Hash)
 ```
-FIX #5: Failed peer tracking to avoid retry loops MarkPeerFailed records that a
-peer failed to establish a connection. This peer will be avoided for a cooldown
-period to prevent wasted retry attempts. If a PeerTracker is configured, the
-failure is also reported for reputation tracking.
+MarkPeerFailed records that a peer failed to establish a connection. This peer
+will be avoided for a cooldown period to prevent wasted retry attempts. If a
+PeerTracker is configured, the failure is also reported for reputation tracking.
+
+#### func (*Pool) RecordInboundBuildTimeout
+
+```go
+func (p *Pool) RecordInboundBuildTimeout()
+```
+RecordInboundBuildTimeout is called by TunnelManager whenever an inbound tunnel
+build times out. It increments the in-flight expired counter and triggers
+checkAutoFallback when the threshold is reached. This is the authoritative
+notification path: pool.cleanupExpiredTunnelsLocked cannot reliably observe
+TunnelFailed state because TunnelManager removes those tunnels from the pool
+within ~1 s of marking them failed — well inside the 30-second pool-maintenance
+interval. No-op for client pools: client tunnel hop counts are
+application-specified and must never be reduced by the auto-fallback mechanism.
+
+#### func (*Pool) RecordOutboundBuildTimeout
+
+```go
+func (p *Pool) RecordOutboundBuildTimeout()
+```
+RecordOutboundBuildTimeout is called by TunnelManager whenever an outbound
+tunnel build times out. After autoFallbackThreshold consecutive timeouts with no
+public address, the pool falls back to 1-hop outbound tunnels so that the single
+OBEP (which we just dialled) can reply via the existing session. No-op for
+client pools: client tunnel hop counts are application-specified and must never
+be reduced by the auto-fallback mechanism.
 
 #### func (*Pool) RemoveTunnel
 
@@ -1810,6 +1897,16 @@ Parameters:
 
 Returns error if the tunnel cannot be built (e.g., peer selection fails).
 
+#### func (*Pool) RunMaintenanceNow
+
+```go
+func (p *Pool) RunMaintenanceNow()
+```
+RunMaintenanceNow triggers an immediate pool maintenance cycle outside the
+normal 30-second ticker interval. It is intended for use by startup logic that
+needs tunnels to be built without waiting for the next scheduled tick, for
+example after switching to zero-hop mode via TriggerAutoFallbackCheck.
+
 #### func (*Pool) SelectTunnel
 
 ```go
@@ -1818,6 +1915,27 @@ func (p *Pool) SelectTunnel() *TunnelState
 SelectTunnel selects a tunnel from the pool using round-robin strategy. Returns
 nil if no active tunnels are available.
 
+#### func (*Pool) SetAutoFallbackCheck
+
+```go
+func (p *Pool) SetAutoFallbackCheck(fn func() bool)
+```
+SetAutoFallbackCheck registers a callback that the pool calls when
+autoFallbackThreshold consecutive inbound build timeouts have occurred. The
+callback should return true when the router has no publicly-reachable address,
+which is the condition under which 0-hop inbound tunnels make sense. Passing nil
+disables auto-fallback.
+
+#### func (*Pool) SetHopCount
+
+```go
+func (p *Pool) SetHopCount(hopCount int) error
+```
+SetHopCount overrides the configured per-tunnel hop count for this pool.
+HopCount=0 is only permitted on inbound pools, where it requests a zero-hop
+inbound tunnel (we are simultaneously gateway and endpoint). Returns an error if
+hopCount is out of range or 0 is requested on an outbound pool.
+
 #### func (*Pool) SetPeerTracker
 
 ```go
@@ -1825,6 +1943,40 @@ func (p *Pool) SetPeerTracker(tracker PeerTracker)
 ```
 SetPeerTracker sets the peer tracker for NetDB integration. This allows the pool
 to report connection results for reputation tracking.
+
+#### func (*Pool) SetReplyTunnelProvider
+
+```go
+func (p *Pool) SetReplyTunnelProvider(fn func() (TunnelID, bool))
+```
+SetReplyTunnelProvider sets a function that the pool calls when building tunnel
+requests to obtain an active inbound tunnel ID to use as the ReplyTunnelID. When
+the provider returns a non-zero tunnel ID, build requests use TUNNEL delivery
+mode (wrapping the reply in a TunnelGateway on the existing NTCP2 session)
+rather than ROUTER delivery mode (direct type-26 to our router address, which
+fails behind NAT). A nil provider (default) leaves ReplyTunnelID=0 (ROUTER
+delivery).
+
+#### func (*Pool) SetRouterHash
+
+```go
+func (p *Pool) SetRouterHash(hash common.Hash)
+```
+SetRouterHash sets our router's identity hash so it can be used as the
+ReplyGateway field in outgoing tunnel build requests. This tells the last hop in
+the build chain where to send the build reply.
+
+#### func (*Pool) SetStartupGate
+
+```go
+func (p *Pool) SetStartupGate(gate <-chan struct{})
+```
+SetStartupGate sets a channel that maintenanceLoop waits on before executing its
+first maintainPool() call. This allows the outbound pool to delay its initial
+build attempt until the inbound pool has at least one active tunnel ready to
+receive build replies (BUG-1 fix). The gate must be closed (not just sent to) to
+unblock the loop. A nil channel means no gate — the initial build runs
+immediately.
 
 #### func (*Pool) SetTunnelBuilder
 
@@ -1849,6 +2001,20 @@ func (p *Pool) Stop()
 ```
 Stop gracefully stops the pool maintenance goroutine
 
+#### func (*Pool) TriggerAutoFallbackCheck
+
+```go
+func (p *Pool) TriggerAutoFallbackCheck()
+```
+TriggerAutoFallbackCheck immediately evaluates the auto-fallback condition
+against the registered callback (e.g. "do we have a public address?"). Unlike
+the counter-based paths (RecordInboundBuildTimeout /
+RecordOutboundBuildTimeout), this bypasses the threshold check and fires
+unconditionally. It is intended for use by the router's startup goroutine so
+that a firewalled router can switch to reduced hops after one build-timeout
+period rather than waiting for autoFallbackThreshold consecutive failures. No-op
+for client pools (their hop count is application-specified).
+
 #### type PoolConfig
 
 ```go
@@ -1869,6 +2035,9 @@ type PoolConfig struct {
 	HopCount int
 	// IsInbound indicates if this pool manages inbound tunnels
 	IsInbound bool
+	// IsClientPool indicates this pool belongs to an I2CP client session (vs exploratory router pools).
+	// When true, successful builds are counted as client tunnel successes for I2PControl stats.
+	IsClientPool bool
 }
 ```
 
@@ -1927,6 +2096,8 @@ AddScorer adds a scorer to the selector.
 ```go
 func (s *ScoringPeerSelector) ComputeScore(ri router_info.RouterInfo) float64
 ```
+ComputeScore computes the multiplicative combined score for a peer from all
+registered scorers.
 
 #### func (*ScoringPeerSelector) SelectPeers
 
@@ -2110,6 +2281,7 @@ type TunnelBuildResult struct {
 	Records       []BuildRequestRecord     // Build records for each hop
 	ReplyKeys     []session_key.SessionKey // Reply decryption keys for each hop
 	ReplyIVs      [][16]byte               // Reply IVs for each hop
+	NoiseHashes   [][32]byte               // Per-hop Noise transcript hashes (m_H) for STBM reply AEAD decryption
 	UseShortBuild bool                     // True if using Short Tunnel Build (STBM), false for Variable Tunnel Build
 	IsInbound     bool                     // True if this is an inbound tunnel
 }
@@ -2154,19 +2326,39 @@ peer selector is used to choose routers for tunnel hops.
 
 Returns an error if the peer selector is nil.
 
+#### func (*TunnelBuilder) BuildTunnel
+
+```go
+func (tb *TunnelBuilder) BuildTunnel(req BuildTunnelRequest) (*BuildTunnelResult, error)
+```
+BuildTunnel implements BuilderInterface by invoking CreateBuildRequest and
+converting the result to BuildTunnelResult. This enables TunnelBuilder to be
+used directly by Pool without requiring a wrapper or mock in production.
+
+Returns a BuildTunnelResult containing the tunnel ID and hashes of selected
+peers, or an error if tunnel building fails.
+
 #### func (*TunnelBuilder) CreateBuildRequest
 
 ```go
 func (tb *TunnelBuilder) CreateBuildRequest(req BuildTunnelRequest) (*TunnelBuildResult, error)
 ```
-The process: 1. Select peers for tunnel hops using the peer selector 2. Generate
-a unique tunnel ID for this tunnel 3. Create build request records for each hop
-with cryptographic keys 4. Prepare reply decryption keys for processing build
-replies
+CreateBuildRequest builds a tunnel by performing the following process: 1.
+Select peers for tunnel hops using the peer selector 2. Generate a unique tunnel
+ID for this tunnel 3. Create build request records for each hop with
+cryptographic keys 4. Prepare reply decryption keys for processing build replies
 
 Returns TunnelBuildResult with all necessary information, or an error if: -
-HopCount is invalid (must be 1-8) - Peer selection fails - Cryptographic key
-generation fails
+HopCount is invalid (must be 1-8 for outbound, 0-8 for inbound) - Peer selection
+fails - Cryptographic key generation fails
+
+Special case: HopCount=0 with IsInbound=true produces a zero-hop inbound tunnel
+where we are simultaneously the inbound gateway (IBGW) and inbound endpoint
+(IBEP). No peers are selected, no build records are emitted, and no on-the-wire
+build message will be sent. This matches Java I2P's hidden-mode fallback used
+when the router has no public reachability. Outbound zero-hop is rejected
+because the OBGW is always us — a 0-hop outbound tunnel has no path to the
+network.
 
 #### type TunnelID
 
@@ -2174,6 +2366,8 @@ generation fails
 type TunnelID uint32
 ```
 
+TunnelID represents a 4-byte tunnel identifier used to route messages through
+I2P tunnels.
 
 #### type TunnelLimitStats
 
@@ -2388,4 +2582,4 @@ tunnel
 
 github.com/go-i2p/go-i2p/lib/tunnel
 
-[go-i2p template file](/template.md)
+[go-i2p template file](template.md)
