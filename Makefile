@@ -31,10 +31,13 @@ check_comply:
 
 #message about deps:
 help_deps:
-	@echo "Or install them using go install"
+	@echo "# Or install them using go install"
 	@echo "go install github.com/aquasecurity/trivy/cmd/trivy@latest"
 	@echo "go install github.com/leaanthony/comply@latest"
 	@echo "go install mvdan.cc/gofumpt@latest"
+	@echo "go install github.com/robertkrimen/godocdown@latest"
+	@echo "go install github.com/github-release/github-release@latest"
+	@echo "go install github.com/ofabry/go-callvis@latest"
 
 build: clean $(EXE)
 
