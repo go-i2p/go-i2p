@@ -1386,10 +1386,17 @@ func (tm *TunnelManager) removePendingBuildRequest(messageID int) {
 // updateTunnelStatesFromReply updates tunnel states in the pool based on build reply results.
 // Uses message ID to find the matching tunnel via the pending build request.
 func (tm *TunnelManager) updateTunnelStatesFromReply(messageID int, records []BuildResponseRecord, replyErr error) {
+	tm.buildMutex.RLock()
+	req, reqExists := tm.pendingBuilds[messageID]
+	tm.buildMutex.RUnlock()
+
 	matchingTunnel := tm.findMatchingBuildingTunnel(messageID)
 
 	if matchingTunnel == nil {
 		tm.logNoMatchingTunnel(messageID, len(records))
+		if reqExists {
+			tm.accountCorrelatedReplyWithoutTunnelState(req, messageID, replyErr)
+		}
 		return
 	}
 
@@ -1397,6 +1404,42 @@ func (tm *TunnelManager) updateTunnelStatesFromReply(messageID int, records []Bu
 
 	responses := tm.createBuildResponses(records)
 	tm.updateTunnelBasedOnReply(matchingTunnel, messageID, responses, replyErr)
+}
+
+func (tm *TunnelManager) accountCorrelatedReplyWithoutTunnelState(req *buildRequest, messageID int, replyErr error) {
+	if req == nil {
+		return
+	}
+
+	if replyErr == nil {
+		if req.isClientTunnel {
+			tm.clientBuildSuccessWindow.recordEvent()
+		} else {
+			tm.buildSuccessWindow.recordEvent()
+		}
+		buildTimeMs := float64(time.Since(req.createdAt).Milliseconds())
+		tm.buildTimeWindow.recordDuration(buildTimeMs)
+		log.WithFields(logger.Fields{
+			"tunnel_id":        req.tunnelID,
+			"message_id":       messageID,
+			"build_time_ms":    buildTimeMs,
+			"is_client_tunnel": req.isClientTunnel,
+		}).Warn("Counted successful tunnel build reply without tunnel state in pool")
+		return
+	}
+
+	if req.isClientTunnel {
+		tm.clientBuildRejectWindow.recordEvent()
+	} else {
+		tm.buildRejectWindow.recordEvent()
+	}
+	log.WithFields(logger.Fields{
+		"tunnel_id":        req.tunnelID,
+		"message_id":       messageID,
+		"error":            replyErr,
+		"is_client_tunnel": req.isClientTunnel,
+	}).Warn("Counted failed tunnel build reply without tunnel state in pool")
+	tm.cleanupFailedTunnel(req.tunnelID, req.isInbound)
 }
 
 // logNoMatchingTunnel logs a warning when no building tunnel matches the reply.

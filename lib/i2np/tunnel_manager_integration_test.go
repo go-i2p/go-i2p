@@ -2,6 +2,7 @@ package i2np
 
 import (
 	"testing"
+	"time"
 
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/stretchr/testify/assert"
@@ -118,4 +119,24 @@ func TestTunnelManager_CleanupFailedTunnel(t *testing.T) {
 	// Give goroutines time to execute (this is primarily a no-panic test)
 	// In practice, we can't easily verify the tunnel was removed without
 	// better pool access methods
+}
+
+func TestTunnelManager_UpdateTunnelStatesFromReply_FallbackRejectWhenTunnelMissing(t *testing.T) {
+	peerSelector := &SimpleMockPeerSelector{}
+	tm := NewTunnelManager(peerSelector)
+
+	messageID := 777
+	tm.pendingBuilds[messageID] = &buildRequest{
+		tunnelID:      tunnel.TunnelID(4242),
+		messageID:     messageID,
+		createdAt:     time.Now(),
+		isInbound:     false,
+		hopCount:      3,
+		useShortBuild: false,
+	}
+
+	tm.updateTunnelStatesFromReply(messageID, nil, assert.AnError)
+
+	assert.Equal(t, 1.0, tm.buildRejectWindow.countInWindow(60_000))
+	assert.Equal(t, 0.0, tm.buildSuccessWindow.countInWindow(60_000))
 }

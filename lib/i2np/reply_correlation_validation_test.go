@@ -260,7 +260,8 @@ func TestReplyProcessor_RetryCorrelation(t *testing.T) {
 	// Process failing reply
 	handler := createRejectedVariableTunnelBuildReply(2)
 	err = rp.ProcessBuildReply(handler, tunnelID)
-	assert.NoError(t, err, "Should not error when retry was successfully scheduled")
+	assert.Error(t, err, "Should surface the current build failure even when retry was successfully scheduled")
+	assert.Contains(t, err.Error(), "retry scheduled")
 
 	// Wait for retry callback
 	time.Sleep(50 * time.Millisecond)

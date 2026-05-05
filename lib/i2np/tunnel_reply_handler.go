@@ -460,7 +460,10 @@ func (rp *ReplyProcessor) handleBuildFailure(
 
 	// Check if we should retry
 	if pending.Retries < rp.config.MaxRetries {
-		return rp.retryBuild(tunnelID, pending)
+		if err := rp.retryBuild(tunnelID, pending); err != nil {
+			return oops.Wrapf(buildErr, "tunnel build failed and retry scheduling failed: %v", err)
+		}
+		return oops.Wrapf(buildErr, "tunnel build failed; retry scheduled")
 	}
 
 	// Exceeded retry limit - fail permanently
