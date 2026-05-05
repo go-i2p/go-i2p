@@ -30,6 +30,7 @@ type buildRequest struct {
 	hopCount       int                      // Number of hops in the tunnel
 	replyKeys      []session_key.SessionKey // Reply decryption keys for each hop
 	replyIVs       [][16]byte               // Reply IVs for each hop
+	noiseHashes    [][32]byte               // STBM per-hop Noise transcript hashes for reply AEAD decryption
 	createdAt      time.Time                // When the request was created
 	retryCount     int                      // Number of retry attempts
 	useShortBuild  bool                     // True if using STBM, false for legacy VTB
@@ -317,6 +318,11 @@ func (tm *TunnelManager) BuildTunnelFromRequest(req tunnel.BuildTunnelRequest) (
 		return 0, peerHashes, oops.Wrapf(err, "failed to send build request")
 	}
 
+	// STBM message construction updates result.ReplyKeys/NoiseHashes to the
+	// final HKDF-derived values used for reply decryption. Persist the final
+	// crypto context so late uncorrelated replies can be best-effort decrypted.
+	tm.updatePendingBuildReplyCrypto(messageID, result.ReplyKeys, result.ReplyIVs, result.NoiseHashes)
+
 	// Anchor the 90-second expiration window to the moment the build message
 	// actually left this router, then arm cleanup at that horizon.
 	// BUG-5 fix: arm the timer at buildTimeout + buildExpireGrace (200ms) so
@@ -470,12 +476,27 @@ func (tm *TunnelManager) trackPendingBuild(result *tunnel.TunnelBuildResult, mes
 		hopCount:       len(result.Hops),
 		replyKeys:      result.ReplyKeys,
 		replyIVs:       result.ReplyIVs,
+		noiseHashes:    result.NoiseHashes,
 		createdAt:      time.Now(),
 		retryCount:     0,
 		useShortBuild:  result.UseShortBuild,
 		isInbound:      result.IsInbound,
 		isClientTunnel: isClientTunnel,
 	}
+}
+
+// updatePendingBuildReplyCrypto refreshes the pending build's reply-decryption
+// context after message creation has finalized STBM-derived keys and hashes.
+func (tm *TunnelManager) updatePendingBuildReplyCrypto(messageID int, replyKeys []session_key.SessionKey, replyIVs [][16]byte, noiseHashes [][32]byte) {
+	tm.buildMutex.Lock()
+	defer tm.buildMutex.Unlock()
+	req, ok := tm.pendingBuilds[messageID]
+	if !ok {
+		return
+	}
+	req.replyKeys = replyKeys
+	req.replyIVs = replyIVs
+	req.noiseHashes = noiseHashes
 }
 
 // resetPendingBuildCreatedAt re-anchors the createdAt timestamp of a tracked
@@ -1205,16 +1226,17 @@ func (tm *TunnelManager) processUncorrelatedReply(handler TunnelReplyHandler, me
 
 	expired, foundExpired := tm.consumeExpiredBuildForLateReply(messageID)
 	if foundExpired && expired.req.useShortBuild {
-		RecordExploratoryReplyStage(ExploratoryReplyStageLateReplyShortSkipped)
-		// STBM late replies generally cannot be safely reclassified without the
-		// in-flight decryption context; preserve the expiration classification.
-		log.WithFields(logger.Fields{
-			"message_id":       messageID,
-			"tunnel_id":        expired.req.tunnelID,
-			"is_client_tunnel": expired.req.isClientTunnel,
-			"reason":           "late short-build reply without correlation context",
-		}).Warn("Ignoring late uncorrelated STBM reply for reclassification")
-		return nil
+		if decryptErr := tm.tryDecryptLateShortBuildReply(handler, expired.req); decryptErr != nil {
+			RecordExploratoryReplyStage(ExploratoryReplyStageLateReplyShortSkipped)
+			log.WithFields(logger.Fields{
+				"message_id":       messageID,
+				"tunnel_id":        expired.req.tunnelID,
+				"is_client_tunnel": expired.req.isClientTunnel,
+				"error":            decryptErr,
+				"reason":           "late short-build reply missing/invalid decrypt context",
+			}).Warn("Ignoring late uncorrelated STBM reply for reclassification")
+			return nil
+		}
 	}
 
 	err := handler.ProcessReply()
@@ -1240,6 +1262,26 @@ func (tm *TunnelManager) processUncorrelatedReply(handler TunnelReplyHandler, me
 	}
 
 	return nil
+}
+
+// tryDecryptLateShortBuildReply performs a best-effort STBM reply decrypt using
+// decryption material retained from the original build request.
+func (tm *TunnelManager) tryDecryptLateShortBuildReply(handler TunnelReplyHandler, req *buildRequest) error {
+	if req == nil {
+		return oops.Errorf("missing expired build context")
+	}
+	if len(req.replyKeys) == 0 || len(req.noiseHashes) == 0 {
+		return oops.Errorf("missing STBM decryption keys/noise hashes")
+	}
+	pending := &PendingBuildRequest{
+		ReplyKeys:   req.replyKeys,
+		ReplyIVs:    req.replyIVs,
+		NoiseHashes: req.noiseHashes,
+	}
+	if tm.replyProcessor == nil {
+		return oops.Errorf("reply processor unavailable")
+	}
+	return tm.replyProcessor.decryptReplyRecords(handler, pending)
 }
 
 // consumeExpiredBuildForLateReply retrieves and removes a recently expired build
@@ -1276,8 +1318,8 @@ func (tm *TunnelManager) pruneExpiredBuildCacheLocked(now time.Time) {
 	}
 }
 
-// reclassifyExpiredBuildFromLateReply compensates one previously-recorded expiration
-// event with a late reply outcome for non-STBM builds.
+// reclassifyExpiredBuildFromLateReply compensates one previously-recorded
+// expiration event with a late reply outcome.
 func (tm *TunnelManager) reclassifyExpiredBuildFromLateReply(messageID int, expired expiredBuild, replyErr error) {
 	req := expired.req
 	if req == nil {
