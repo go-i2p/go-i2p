@@ -37,6 +37,14 @@ type buildRequest struct {
 	isClientTunnel bool                     // True if this tunnel belongs to an I2CP client session
 }
 
+// expiredBuild tracks a recently expired build request for late-reply accounting.
+// Entries are retained briefly so uncorrelated late replies can be attributed to
+// their original build origin (exploratory vs client) for metrics correction.
+type expiredBuild struct {
+	req       *buildRequest
+	expiredAt time.Time
+}
+
 // TunnelManager coordinates tunnel building and management
 type TunnelManager struct {
 	inboundPool     *tunnel.Pool
@@ -44,6 +52,7 @@ type TunnelManager struct {
 	sessionProvider SessionProvider
 	peerSelector    tunnel.PeerSelector
 	pendingBuilds   map[int]*buildRequest // Track pending builds by message ID
+	expiredBuilds   map[int]expiredBuild  // Recently expired builds retained for late-reply accounting
 	buildMutex      sync.RWMutex          // Protect pending builds map
 	cleanupTicker   *time.Ticker          // Periodic cleanup of expired requests
 	cleanupStop     chan struct{}         // Signal to stop cleanup goroutine
@@ -87,6 +96,7 @@ func NewTunnelManager(peerSelector tunnel.PeerSelector) *TunnelManager {
 		outboundPool:             outboundPool,
 		peerSelector:             peerSelector,
 		pendingBuilds:            make(map[int]*buildRequest),
+		expiredBuilds:            make(map[int]expiredBuild),
 		cleanupStop:              make(chan struct{}),
 		buildSuccessWindow:       newBuildEventWindow(buildWindowMaxAge),
 		buildRejectWindow:        newBuildEventWindow(buildWindowMaxAge),
@@ -1193,9 +1203,25 @@ func (tm *TunnelManager) processUncorrelatedReply(handler TunnelReplyHandler, me
 	RecordExploratoryReplyStage(ExploratoryReplyStageShortReplyUncorrelated)
 	log.WithField("message_id", messageID).Warn("No pending build request found for reply - processing without correlation")
 
+	expired, foundExpired := tm.consumeExpiredBuildForLateReply(messageID)
+	if foundExpired && expired.req.useShortBuild {
+		// STBM late replies generally cannot be safely reclassified without the
+		// in-flight decryption context; preserve the expiration classification.
+		log.WithFields(logger.Fields{
+			"message_id":       messageID,
+			"tunnel_id":        expired.req.tunnelID,
+			"is_client_tunnel": expired.req.isClientTunnel,
+			"reason":           "late short-build reply without correlation context",
+		}).Warn("Ignoring late uncorrelated STBM reply for reclassification")
+		return nil
+	}
+
 	err := handler.ProcessReply()
+	if foundExpired {
+		tm.reclassifyExpiredBuildFromLateReply(messageID, expired, err)
+	}
 	if err != nil {
-		return err
+		return nil
 	}
 
 	// Update tunnel states if possible (without decryption)
@@ -1204,6 +1230,78 @@ func (tm *TunnelManager) processUncorrelatedReply(handler TunnelReplyHandler, me
 	}
 
 	return nil
+}
+
+// consumeExpiredBuildForLateReply retrieves and removes a recently expired build
+// entry for one-time late-reply reclassification.
+func (tm *TunnelManager) consumeExpiredBuildForLateReply(messageID int) (expiredBuild, bool) {
+	tm.buildMutex.Lock()
+	defer tm.buildMutex.Unlock()
+	entry, ok := tm.expiredBuilds[messageID]
+	if !ok {
+		return expiredBuild{}, false
+	}
+	delete(tm.expiredBuilds, messageID)
+	return entry, true
+}
+
+// rememberExpiredBuild records an expired build for a short retention period so
+// a late uncorrelated reply can update outcome accounting.
+func (tm *TunnelManager) rememberExpiredBuild(messageID int, req *buildRequest) {
+	tm.expiredBuilds[messageID] = expiredBuild{
+		req:       req,
+		expiredAt: time.Now(),
+	}
+}
+
+// pruneExpiredBuildCacheLocked removes stale expired-build entries.
+// Caller must hold tm.buildMutex.
+func (tm *TunnelManager) pruneExpiredBuildCacheLocked(now time.Time) {
+	const keep = 2 * time.Minute
+	cutoff := now.Add(-keep)
+	for msgID, entry := range tm.expiredBuilds {
+		if entry.expiredAt.Before(cutoff) {
+			delete(tm.expiredBuilds, msgID)
+		}
+	}
+}
+
+// reclassifyExpiredBuildFromLateReply compensates one previously-recorded expiration
+// event with a late reply outcome for non-STBM builds.
+func (tm *TunnelManager) reclassifyExpiredBuildFromLateReply(messageID int, expired expiredBuild, replyErr error) {
+	req := expired.req
+	if req == nil {
+		return
+	}
+
+	if req.isClientTunnel {
+		tm.clientBuildExpireWindow.recordValue(-1)
+		if replyErr == nil {
+			tm.clientBuildSuccessWindow.recordEvent()
+		} else {
+			tm.clientBuildRejectWindow.recordEvent()
+		}
+	} else {
+		tm.buildExpireWindow.recordValue(-1)
+		if replyErr == nil {
+			tm.buildSuccessWindow.recordEvent()
+		} else {
+			tm.buildRejectWindow.recordEvent()
+		}
+	}
+
+	fields := logger.Fields{
+		"message_id":       messageID,
+		"tunnel_id":        req.tunnelID,
+		"is_client_tunnel": req.isClientTunnel,
+		"late_age":         time.Since(expired.expiredAt),
+	}
+	if replyErr == nil {
+		log.WithFields(fields).Info("Late reply reclassified prior expiration as success")
+		return
+	}
+	fields["error"] = replyErr
+	log.WithFields(fields).Info("Late reply reclassified prior expiration as reject")
 }
 
 // processCorrelatedReply handles replies with a pending build request.
@@ -1434,6 +1532,7 @@ func (tm *TunnelManager) removeExpiredBuildRequests() {
 	tm.buildMutex.Lock()
 	defer tm.buildMutex.Unlock()
 
+	tm.pruneExpiredBuildCacheLocked(time.Now())
 	expired := tm.identifyExpiredRequests()
 	tm.removeExpiredFromMap(expired)
 	tm.logCleanupResults(expired)
@@ -1488,6 +1587,8 @@ func (tm *TunnelManager) handleExpiredRequest(req *buildRequest, msgID int, now 
 		"elapsed":          now.Sub(req.createdAt),
 	}).Warn("Tunnel build timed out")
 
+	tm.rememberExpiredBuild(msgID, req)
+
 	tm.cleanupFailedTunnel(req.tunnelID, req.isInbound)
 }
 
@@ -1524,6 +1625,7 @@ func (tm *TunnelManager) cleanupExpiredBuildByID(messageID int) {
 	// boundary still wins and the entry survives until the timer fires.
 	const buildTimeout = 90 * time.Second
 	if time.Since(req.createdAt) > buildTimeout+buildExpireGrace {
+		tm.rememberExpiredBuild(messageID, req)
 		delete(tm.pendingBuilds, messageID)
 
 		// Mark tunnel as failed and schedule async cleanup

@@ -479,12 +479,17 @@ func (rp *ReplyProcessor) retryBuild(tunnelID tunnel.TunnelID, pending *PendingB
 		return oops.Errorf("retry not available")
 	}
 
+	// Advance retry state before scheduling so max retry enforcement and
+	// exponential backoff are based on actual attempt number.
+	pending.Retries++
+	retryAttempt := pending.Retries
+
 	// Calculate backoff delay with exponential increase
-	backoffDelay := rp.config.RetryBackoff * time.Duration(1<<pending.Retries)
+	backoffDelay := rp.config.RetryBackoff * time.Duration(1<<(retryAttempt-1))
 
 	log.WithFields(logger.Fields{
 		"tunnel_id":     tunnelID,
-		"retry_count":   pending.Retries + 1,
+		"retry_count":   retryAttempt,
 		"backoff_delay": backoffDelay.Seconds(),
 	}).Info("Scheduling tunnel build retry")
 

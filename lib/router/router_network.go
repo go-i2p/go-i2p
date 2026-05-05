@@ -790,6 +790,12 @@ func (r *Router) createI2CPServer() (*i2cp.Server, error) {
 func (r *Router) configureI2CPServerInfrastructure(server *i2cp.Server) {
 	server.SetNetDB(r.StdNetDB)
 
+	if routerHash, hashErr := r.getOurRouterHash(); hashErr != nil {
+		log.WithError(hashErr).Warn("I2CP server: unable to configure router hash for session tunnel pools")
+	} else {
+		server.SetRouterHash(routerHash)
+	}
+
 	if r.cfg.I2CP.Username != "" && r.cfg.I2CP.Password != "" {
 		auth, authErr := i2cp.NewPasswordAuthenticator(r.cfg.I2CP.Username, r.cfg.I2CP.Password)
 		if authErr == nil {

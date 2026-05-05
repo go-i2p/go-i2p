@@ -27,19 +27,22 @@ func newBuildEventWindow(maxAge time.Duration) *buildEventWindow {
 
 // recordEvent appends a discrete event (value 1) with the current timestamp.
 func (w *buildEventWindow) recordEvent() {
-	now := time.Now()
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	w.samples = append(w.samples, buildEventSample{at: now, valueMs: 1})
-	w.pruneOldLocked(now)
+	w.recordValue(1)
 }
 
 // recordDuration appends a duration measurement in milliseconds.
 func (w *buildEventWindow) recordDuration(ms float64) {
+	w.recordValue(ms)
+}
+
+// recordValue appends an arbitrary value sample with the current timestamp.
+// Positive values increment counters, negative values can be used for
+// compensating reclassification events (for example, late replies).
+func (w *buildEventWindow) recordValue(value float64) {
 	now := time.Now()
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	w.samples = append(w.samples, buildEventSample{at: now, valueMs: ms})
+	w.samples = append(w.samples, buildEventSample{at: now, valueMs: value})
 	w.pruneOldLocked(now)
 }
 

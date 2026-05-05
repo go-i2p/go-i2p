@@ -124,6 +124,8 @@ type Server struct {
 	// Tunnel infrastructure for session tunnel pool initialization
 	tunnelBuilder tunnel.BuilderInterface
 	peerSelector  tunnel.PeerSelector
+	routerHash    common.Hash
+	hasRouterHash bool
 
 	// Connection tracking for message delivery
 	mu           sync.RWMutex
@@ -325,6 +327,29 @@ func (s *Server) SetPeerSelector(selector tunnel.PeerSelector) {
 	}).Debug("peer selector set for I2CP server")
 
 	s.backfillSessionTunnelPools(builder, selector)
+}
+
+// SetRouterHash configures the router identity hash used by session tunnel pools
+// when building requests (OurIdentity/ReplyGateway fields).
+func (s *Server) SetRouterHash(hash common.Hash) {
+	s.mu.Lock()
+	s.routerHash = hash
+	s.hasRouterHash = true
+	s.mu.Unlock()
+
+	for _, session := range s.manager.GetAllSessions() {
+		if inbound := session.InboundPool(); inbound != nil {
+			inbound.SetRouterHash(hash)
+		}
+		if outbound := session.OutboundPool(); outbound != nil {
+			outbound.SetRouterHash(hash)
+		}
+	}
+
+	log.WithFields(logger.Fields{
+		"at":          "i2cp.Server.SetRouterHash",
+		"router_hash": fmt.Sprintf("%x", hash[:8]),
+	}).Debug("router hash configured for I2CP session tunnel pools")
 }
 
 func (s *Server) backfillSessionTunnelPools(builder tunnel.BuilderInterface, selector tunnel.PeerSelector) {

@@ -5,6 +5,7 @@ import (
 	"net"
 	"time"
 
+	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
@@ -77,6 +78,8 @@ func (s *Server) createInboundPool(session *Session, config *SessionConfig, buil
 
 	pool := tunnel.NewTunnelPoolWithConfig(selector, poolConfig)
 	pool.SetTunnelBuilder(builder)
+	s.applySessionPoolRoutingConfig(pool)
+	pool.SetReplyTunnelProvider(makeReplyTunnelProvider(pool))
 	session.SetInboundPool(pool)
 
 	if err := pool.StartMaintenance(); err != nil {
@@ -92,6 +95,8 @@ func (s *Server) createOutboundPool(session *Session, config *SessionConfig, bui
 
 	pool := tunnel.NewTunnelPoolWithConfig(selector, poolConfig)
 	pool.SetTunnelBuilder(builder)
+	s.applySessionPoolRoutingConfig(pool)
+	pool.SetReplyTunnelProvider(makeReplyTunnelProvider(inboundPool))
 	session.SetOutboundPool(pool)
 
 	if err := pool.StartMaintenance(); err != nil {
@@ -115,6 +120,42 @@ func buildPoolConfig(tunnelCount, backupQty, tunnelLength, lengthVariance int, i
 		HopCount:         applyLengthVariance(tunnelLength, lengthVariance),
 		IsInbound:        isInbound,
 		IsClientPool:     true,
+	}
+}
+
+// applySessionPoolRoutingConfig applies server-level routing identity settings
+// to a newly-created session tunnel pool.
+func (s *Server) applySessionPoolRoutingConfig(pool *tunnel.Pool) {
+	s.mu.RLock()
+	hash := s.routerHash
+	hasHash := s.hasRouterHash
+	s.mu.RUnlock()
+
+	if hasHash {
+		pool.SetRouterHash(hash)
+		return
+	}
+
+	var zeroHash common.Hash
+	pool.SetRouterHash(zeroHash)
+	log.WithFields(logger.Fields{
+		"at":     "i2cp.Server.applySessionPoolRoutingConfig",
+		"reason": "router hash not yet configured for session pool",
+	}).Warn("session pool router hash not configured")
+}
+
+// makeReplyTunnelProvider returns a provider that picks a stable active tunnel
+// from the given pool for reply routing.
+func makeReplyTunnelProvider(pool *tunnel.Pool) func() (tunnel.TunnelID, bool) {
+	return func() (tunnel.TunnelID, bool) {
+		if pool == nil {
+			return 0, false
+		}
+		active := pool.GetActiveTunnels()
+		if len(active) == 0 {
+			return 0, false
+		}
+		return active[0].ID, true
 	}
 }
 
