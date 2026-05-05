@@ -1205,6 +1205,7 @@ func (tm *TunnelManager) processUncorrelatedReply(handler TunnelReplyHandler, me
 
 	expired, foundExpired := tm.consumeExpiredBuildForLateReply(messageID)
 	if foundExpired && expired.req.useShortBuild {
+		RecordExploratoryReplyStage(ExploratoryReplyStageLateReplyShortSkipped)
 		// STBM late replies generally cannot be safely reclassified without the
 		// in-flight decryption context; preserve the expiration classification.
 		log.WithFields(logger.Fields{
@@ -1221,6 +1222,15 @@ func (tm *TunnelManager) processUncorrelatedReply(handler TunnelReplyHandler, me
 		tm.reclassifyExpiredBuildFromLateReply(messageID, expired, err)
 	}
 	if err != nil {
+		if foundExpired {
+			// Late replies were already accounted/reclassified above.
+			return nil
+		}
+		// Preserve historical behavior for non-late uncorrelated replies.
+		return err
+	}
+
+	if foundExpired {
 		return nil
 	}
 
@@ -1277,15 +1287,19 @@ func (tm *TunnelManager) reclassifyExpiredBuildFromLateReply(messageID int, expi
 	if req.isClientTunnel {
 		tm.clientBuildExpireWindow.recordValue(-1)
 		if replyErr == nil {
+			RecordExploratoryReplyStage(ExploratoryReplyStageLateReplyReclassedOK)
 			tm.clientBuildSuccessWindow.recordEvent()
 		} else {
+			RecordExploratoryReplyStage(ExploratoryReplyStageLateReplyReclassedFail)
 			tm.clientBuildRejectWindow.recordEvent()
 		}
 	} else {
 		tm.buildExpireWindow.recordValue(-1)
 		if replyErr == nil {
+			RecordExploratoryReplyStage(ExploratoryReplyStageLateReplyReclassedOK)
 			tm.buildSuccessWindow.recordEvent()
 		} else {
+			RecordExploratoryReplyStage(ExploratoryReplyStageLateReplyReclassedFail)
 			tm.buildRejectWindow.recordEvent()
 		}
 	}
@@ -1509,6 +1523,9 @@ func (tm *TunnelManager) logExploratoryReplyFunnelSummary() {
 	dispatched := counters[ExploratoryReplyStageShortReplyDispatched]
 	correlated := counters[ExploratoryReplyStageShortReplyCorrelated]
 	uncorrelated := counters[ExploratoryReplyStageShortReplyUncorrelated]
+	lateReclassedSuccess := counters[ExploratoryReplyStageLateReplyReclassedOK]
+	lateReclassedReject := counters[ExploratoryReplyStageLateReplyReclassedFail]
+	lateShortSkipped := counters[ExploratoryReplyStageLateReplyShortSkipped]
 
 	log.WithFields(logger.Fields{
 		"interval_sec":                     30,
@@ -1519,6 +1536,9 @@ func (tm *TunnelManager) logExploratoryReplyFunnelSummary() {
 		"short_build_reply_dispatched":     dispatched,
 		"short_build_reply_correlated":     correlated,
 		"short_build_reply_uncorrelated":   uncorrelated,
+		"late_reply_reclassified_success":  lateReclassedSuccess,
+		"late_reply_reclassified_reject":   lateReclassedReject,
+		"late_reply_short_build_skipped":   lateShortSkipped,
 		"gateway_parse_ratio":              safeRatio(parsed, inbound),
 		"garlic_decrypt_success_ratio":     safeRatio(decryptSuccess, decryptAttempt),
 		"short_reply_correlation_ratio":    safeRatio(correlated, correlated+uncorrelated),

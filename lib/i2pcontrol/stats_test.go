@@ -632,3 +632,21 @@ func TestStatusFieldCoherence(t *testing.T) {
 		})
 	}
 }
+
+func TestGetRateForPeriod_ClientBuildRejectExpireStats(t *testing.T) {
+	router := &mockRouterAccess{
+		tunnelManager: i2np.NewTunnelManager(nil),
+		running:       true,
+	}
+	provider := NewRouterStatsProvider(router, "0.1.0-test")
+
+	reject := provider.GetRateForPeriod("tunnel.buildClientReject", 60000)
+	expire := provider.GetRateForPeriod("tunnel.buildClientExpire", 60000)
+
+	if reject != 0 {
+		t.Errorf("tunnel.buildClientReject = %v, want 0", reject)
+	}
+	if expire != 0 {
+		t.Errorf("tunnel.buildClientExpire = %v, want 0", expire)
+	}
+}

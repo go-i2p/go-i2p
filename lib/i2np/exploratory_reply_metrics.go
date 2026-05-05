@@ -11,6 +11,9 @@ const (
 	ExploratoryReplyStageShortReplyDispatched   = "short_build_reply_dispatched"
 	ExploratoryReplyStageShortReplyCorrelated   = "short_build_reply_correlated"
 	ExploratoryReplyStageShortReplyUncorrelated = "short_build_reply_uncorrelated"
+	ExploratoryReplyStageLateReplyReclassedOK   = "late_reply_reclassified_success"
+	ExploratoryReplyStageLateReplyReclassedFail = "late_reply_reclassified_reject"
+	ExploratoryReplyStageLateReplyShortSkipped  = "late_reply_short_build_skipped"
 )
 
 var exploratoryReplyCounters = struct {
@@ -21,6 +24,9 @@ var exploratoryReplyCounters = struct {
 	shortReplyDispatched   atomic.Uint64
 	shortReplyCorrelated   atomic.Uint64
 	shortReplyUncorrelated atomic.Uint64
+	lateReplyReclassedOK   atomic.Uint64
+	lateReplyReclassedFail atomic.Uint64
+	lateReplyShortSkipped  atomic.Uint64
 }{}
 
 // RecordExploratoryReplyStage increments a stage counter used to audit the
@@ -41,6 +47,12 @@ func RecordExploratoryReplyStage(stage string) {
 		exploratoryReplyCounters.shortReplyCorrelated.Add(1)
 	case ExploratoryReplyStageShortReplyUncorrelated:
 		exploratoryReplyCounters.shortReplyUncorrelated.Add(1)
+	case ExploratoryReplyStageLateReplyReclassedOK:
+		exploratoryReplyCounters.lateReplyReclassedOK.Add(1)
+	case ExploratoryReplyStageLateReplyReclassedFail:
+		exploratoryReplyCounters.lateReplyReclassedFail.Add(1)
+	case ExploratoryReplyStageLateReplyShortSkipped:
+		exploratoryReplyCounters.lateReplyShortSkipped.Add(1)
 	}
 }
 
@@ -54,5 +66,8 @@ func SnapshotExploratoryReplyStages() map[string]uint64 {
 		ExploratoryReplyStageShortReplyDispatched:   exploratoryReplyCounters.shortReplyDispatched.Load(),
 		ExploratoryReplyStageShortReplyCorrelated:   exploratoryReplyCounters.shortReplyCorrelated.Load(),
 		ExploratoryReplyStageShortReplyUncorrelated: exploratoryReplyCounters.shortReplyUncorrelated.Load(),
+		ExploratoryReplyStageLateReplyReclassedOK:   exploratoryReplyCounters.lateReplyReclassedOK.Load(),
+		ExploratoryReplyStageLateReplyReclassedFail: exploratoryReplyCounters.lateReplyReclassedFail.Load(),
+		ExploratoryReplyStageLateReplyShortSkipped:  exploratoryReplyCounters.lateReplyShortSkipped.Load(),
 	}
 }
