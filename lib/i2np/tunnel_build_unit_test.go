@@ -100,6 +100,7 @@ func TestTunnelBuildMessage_EmptyRecords(t *testing.T) {
 func TestTunnelBuildMessage_InvalidDataSize(t *testing.T) {
 	msg := &TunnelBuildMessage{
 		BaseI2NPMessage: NewBaseI2NPMessage(I2NPMessageTypeTunnelBuild),
+		encrypted:       true,
 	}
 
 	// Set invalid data size

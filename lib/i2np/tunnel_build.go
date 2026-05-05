@@ -2,7 +2,6 @@ package i2np
 
 import (
 	"github.com/go-i2p/common/router_info"
-	"github.com/go-i2p/crypto/rand"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
@@ -58,71 +57,6 @@ func NewTunnelBuilder(records [8]BuildRequestRecord) TunnelBuilder {
 	return &tb
 }
 
-// newTunnelBuildMessage creates a new TunnelBuild I2NP message
-//
-// SPECIFICATION COMPLIANCE NOTE:
-// According to I2P specification (https://geti2p.net/spec/i2np), BuildRequestRecords
-// MUST be encrypted before transmission using either:
-//   - ElGamal-2048 encryption (legacy format, 528 bytes)
-//   - ECIES-X25519-AEAD-Ratchet encryption (modern format, I2P 0.9.44+)
-//
-// CURRENT LIMITATION:
-// This implementation currently creates CLEARTEXT records (222 bytes + 306 padding = 528 bytes).
-// For specification-compliant tunnel building, use EncryptBuildRequestRecord() from build_record_crypto.go
-// which implements proper ECIES-X25519-AEAD encryption.
-//
-// For specification-compliant tunnel building, encryption must be added using:
-//  1. Recipient router's encryption public key (from RouterInfo)
-//  2. ECIES-X25519-AEAD encryption (see build_record_crypto.go)
-//  3. Proper padding and formatting per specification
-//
-// Use EncryptBuildRequestRecord() function (defined in build_record_crypto.go) that takes:
-//   - BuildRequestRecord (cleartext)
-//   - Recipient RouterInfo (for encryption public key)
-//   - Returns encrypted 528-byte record
-//
-// This method is suitable for:
-//   - Local testing with cooperating routers that accept cleartext
-//   - Internal message structure creation before encryption
-//   - Unit testing of serialization logic
-//
-// DO NOT USE for production tunnel building without implementing encryption first.
-func newTunnelBuildMessage(records [8]BuildRequestRecord) *TunnelBuildMessage {
-	log.WithFields(logger.Fields{
-		"at":           "newTunnelBuildMessage",
-		"record_count": 8,
-	}).Debug("Creating new TunnelBuild message")
-
-	msg := &TunnelBuildMessage{
-		BaseI2NPMessage: NewBaseI2NPMessage(I2NPMessageTypeTunnelBuild),
-		Records:         TunnelBuild(records),
-	}
-
-	// Serialize cleartext records (NOT specification-compliant for network transmission)
-	// Each record: 222 bytes cleartext + 306 bytes random padding = 528 bytes total
-	data := make([]byte, 8*528)
-	for i := 0; i < 8; i++ {
-		cleartext := records[i].Bytes() // 222 bytes cleartext per I2P spec
-		copy(data[i*528:i*528+222], cleartext)
-		// Fill remaining 306 bytes with random padding so unused bytes are
-		// indistinguishable from encrypted data (spec requirement).
-		if _, err := rand.Read(data[i*528+222 : (i+1)*528]); err != nil {
-			log.WithFields(logger.Fields{
-				"at":     "newTunnelBuildMessage",
-				"record": i,
-			}).Warn("Failed to generate random padding for record")
-		}
-	}
-	msg.SetData(data)
-
-	log.WithFields(logger.Fields{
-		"at":        "newTunnelBuildMessage",
-		"data_size": len(data),
-	}).Debug("TunnelBuild message created successfully (cleartext, requires encryption)")
-
-	return msg
-}
-
 // GetBuildRecords implements TunnelBuilder interface
 func (msg *TunnelBuildMessage) GetBuildRecords() []BuildRequestRecord {
 	return msg.Records[:]
@@ -134,13 +68,11 @@ func (msg *TunnelBuildMessage) GetRecordCount() int {
 }
 
 // MarshalBinary serializes the TunnelBuild message using BaseI2NPMessage.
-// Logs a warning if the records have not been encrypted, as cleartext
+// Returns an error if records are not encrypted, because cleartext
 // build records are not specification-compliant for network transmission.
 func (msg *TunnelBuildMessage) MarshalBinary() ([]byte, error) {
 	if !msg.encrypted {
-		log.WithFields(logger.Fields{
-			"at": "TunnelBuildMessage.MarshalBinary",
-		}).Warn("Serializing cleartext TunnelBuild records — not safe for network transmission")
+		return nil, oops.Errorf("TunnelBuild records must be encrypted before serialization")
 	}
 	return msg.BaseI2NPMessage.MarshalBinary()
 }
