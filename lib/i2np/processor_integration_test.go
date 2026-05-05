@@ -6,8 +6,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-
-	"github.com/stretchr/testify/assert"
 )
 
 // TestProcessMessage_NoDeadlockOnGarlicLocalDelivery verifies that processing
