@@ -63,6 +63,8 @@ type TunnelManager struct {
 	buildExpireWindow        *buildEventWindow // timed-out tunnel builds
 	buildTimeWindow          *buildEventWindow // build duration in milliseconds
 	clientBuildSuccessWindow *buildEventWindow // successful I2CP client session tunnel builds
+	clientBuildRejectWindow  *buildEventWindow // rejected I2CP client session tunnel builds
+	clientBuildExpireWindow  *buildEventWindow // timed-out I2CP client session tunnel builds
 }
 
 // NewTunnelManager creates a new tunnel manager with build request tracking.
@@ -91,6 +93,8 @@ func NewTunnelManager(peerSelector tunnel.PeerSelector) *TunnelManager {
 		buildExpireWindow:        newBuildEventWindow(buildWindowMaxAge),
 		buildTimeWindow:          newBuildEventWindow(buildWindowMaxAge),
 		clientBuildSuccessWindow: newBuildEventWindow(buildWindowMaxAge),
+		clientBuildRejectWindow:  newBuildEventWindow(buildWindowMaxAge),
+		clientBuildExpireWindow:  newBuildEventWindow(buildWindowMaxAge),
 	}
 
 	// Initialize ReplyProcessor with default config for reply decryption
@@ -1312,12 +1316,23 @@ func (tm *TunnelManager) handleSuccessfulBuild(matchingTunnel *tunnel.TunnelStat
 // handleFailedBuild processes a failed tunnel build and schedules cleanup.
 func (tm *TunnelManager) handleFailedBuild(matchingTunnel *tunnel.TunnelState, messageID int, replyErr error) {
 	matchingTunnel.State = tunnel.TunnelFailed
-	tm.buildRejectWindow.recordEvent()
+
+	// Keep exploratory and I2CP client build outcomes in separate windows.
+	// This prevents client failures from skewing exploratory reject statistics.
+	tm.buildMutex.RLock()
+	req, known := tm.pendingBuilds[messageID]
+	tm.buildMutex.RUnlock()
+	if known && req.isClientTunnel {
+		tm.clientBuildRejectWindow.recordEvent()
+	} else {
+		tm.buildRejectWindow.recordEvent()
+	}
 
 	log.WithFields(logger.Fields{
-		"tunnel_id":  matchingTunnel.ID,
-		"message_id": messageID,
-		"error":      replyErr,
+		"tunnel_id":        matchingTunnel.ID,
+		"message_id":       messageID,
+		"error":            replyErr,
+		"is_client_tunnel": known && req.isClientTunnel,
 	}).Warn("Tunnel build failed")
 
 	tm.cleanupFailedTunnel(matchingTunnel.ID, matchingTunnel.IsInbound)
@@ -1454,7 +1469,11 @@ func (tm *TunnelManager) handleExpiredRequest(req *buildRequest, msgID int, now 
 	}
 
 	tunnelState.State = tunnel.TunnelFailed
-	tm.buildExpireWindow.recordEvent()
+	if req.isClientTunnel {
+		tm.clientBuildExpireWindow.recordEvent()
+	} else {
+		tm.buildExpireWindow.recordEvent()
+	}
 	if req.isInbound {
 		pool.RecordInboundBuildTimeout()
 	} else {
@@ -1465,6 +1484,7 @@ func (tm *TunnelManager) handleExpiredRequest(req *buildRequest, msgID int, now 
 		"tunnel_id":        req.tunnelID,
 		"reply_tunnel_id":  req.replyTunnelID,
 		"is_inbound_build": req.isInbound,
+		"is_client_tunnel": req.isClientTunnel,
 		"elapsed":          now.Sub(req.createdAt),
 	}).Warn("Tunnel build timed out")
 
@@ -1510,7 +1530,11 @@ func (tm *TunnelManager) cleanupExpiredBuildByID(messageID int) {
 		pool := tm.getPoolForTunnel(req.isInbound)
 		if tunnelState, exists := pool.GetTunnel(req.tunnelID); exists {
 			tunnelState.State = tunnel.TunnelFailed
-			tm.buildExpireWindow.recordEvent()
+			if req.isClientTunnel {
+				tm.clientBuildExpireWindow.recordEvent()
+			} else {
+				tm.buildExpireWindow.recordEvent()
+			}
 			if req.isInbound {
 				pool.RecordInboundBuildTimeout()
 			} else {
@@ -1524,6 +1548,7 @@ func (tm *TunnelManager) cleanupExpiredBuildByID(messageID int) {
 			"tunnel_id":        req.tunnelID,
 			"reply_tunnel_id":  req.replyTunnelID,
 			"is_inbound_build": req.isInbound,
+			"is_client_tunnel": req.isClientTunnel,
 			"elapsed":          time.Since(req.createdAt),
 		}).Debug("Cleaned up expired tunnel build via timeout")
 	}
@@ -1558,6 +1583,18 @@ func (tm *TunnelManager) GetBuildAvgTimeMs(windowMs int64) float64 {
 // within windowMs milliseconds. Maps to the Java I2P stat "tunnel.buildClientSuccess".
 func (tm *TunnelManager) GetClientBuildSuccessCount(windowMs int64) float64 {
 	return tm.clientBuildSuccessWindow.countInWindow(windowMs)
+}
+
+// GetClientBuildRejectCount returns the number of explicitly rejected I2CP client session
+// tunnel builds within windowMs milliseconds.
+func (tm *TunnelManager) GetClientBuildRejectCount(windowMs int64) float64 {
+	return tm.clientBuildRejectWindow.countInWindow(windowMs)
+}
+
+// GetClientBuildExpireCount returns the number of timed-out I2CP client session tunnel
+// builds within windowMs milliseconds.
+func (tm *TunnelManager) GetClientBuildExpireCount(windowMs int64) float64 {
+	return tm.clientBuildExpireWindow.countInWindow(windowMs)
 }
 
 // chacha20XORRecord applies the I2P short-tunnel-build chained layer

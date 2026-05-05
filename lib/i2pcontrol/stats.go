@@ -69,7 +69,9 @@ type RouterStatsProvider interface {
 	//   tunnel.buildExploratorySuccess                  — count of successful exploratory builds
 	//   tunnel.buildExploratoryReject                   — count of rejected exploratory builds
 	//   tunnel.buildExploratoryExpire                   — count of timed-out exploratory builds
-	//   tunnel.buildClientSuccess                       — count of successful client builds (0 until client tunnels are implemented)
+	//   tunnel.buildClientSuccess                       — count of successful client builds
+	//   tunnel.buildClientReject                        — count of rejected client builds
+	//   tunnel.buildClientExpire                        — count of timed-out client builds
 	//   tunnel.buildRequestTime                         — average build duration in milliseconds
 	GetRateForPeriod(stat string, periodMs int64) float64
 }
@@ -729,6 +731,16 @@ func (rsp *routerStatsProvider) GetRateForPeriod(stat string, periodMs int64) fl
 	case "tunnel.buildClientSuccess":
 		if tm := rsp.router.GetTunnelManager(); tm != nil {
 			return tm.GetClientBuildSuccessCount(periodMs)
+		}
+		return 0
+	case "tunnel.buildClientReject":
+		if tm := rsp.router.GetTunnelManager(); tm != nil {
+			return tm.GetClientBuildRejectCount(periodMs)
+		}
+		return 0
+	case "tunnel.buildClientExpire":
+		if tm := rsp.router.GetTunnelManager(); tm != nil {
+			return tm.GetClientBuildExpireCount(periodMs)
 		}
 		return 0
 	case "tunnel.buildRequestTime":
