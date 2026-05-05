@@ -110,6 +110,17 @@ func NewTunnelManager(peerSelector tunnel.PeerSelector) *TunnelManager {
 
 	// Initialize ReplyProcessor with default config for reply decryption
 	tm.replyProcessor = NewReplyProcessor(DefaultReplyProcessorConfig(), tm)
+	replyTunnelProvider := func() (tunnel.TunnelID, bool) {
+		if tm.inboundPool == nil {
+			return 0, false
+		}
+		if inbound := tm.inboundPool.SelectTunnel(); inbound != nil {
+			return inbound.ID, true
+		}
+		return 0, false
+	}
+	tm.inboundPool.SetReplyTunnelProvider(replyTunnelProvider)
+	tm.outboundPool.SetReplyTunnelProvider(replyTunnelProvider)
 
 	// Wire retry callback for both pools: tunnel build timeouts will automatically retry
 	tm.replyProcessor.SetRetryCallback(tm.retryTunnelBuild)

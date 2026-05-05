@@ -6,7 +6,19 @@ import (
 
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+type captureBuildRequestBuilder struct {
+	lastReq tunnel.BuildTunnelRequest
+	called  bool
+}
+
+func (b *captureBuildRequestBuilder) BuildTunnel(req tunnel.BuildTunnelRequest) (*tunnel.BuildTunnelResult, error) {
+	b.lastReq = req
+	b.called = true
+	return &tunnel.BuildTunnelResult{TunnelID: tunnel.TunnelID(999)}, nil
+}
 
 // TestTunnelManager_ProcessTunnelReply_WithPool tests the enhanced ProcessTunnelReply with pool integration
 func TestTunnelManager_ProcessTunnelReply_WithPool(t *testing.T) {
@@ -139,4 +151,25 @@ func TestTunnelManager_UpdateTunnelStatesFromReply_FallbackRejectWhenTunnelMissi
 
 	assert.Equal(t, 1.0, tm.buildRejectWindow.countInWindow(60_000))
 	assert.Equal(t, 0.0, tm.buildSuccessWindow.countInWindow(60_000))
+}
+
+func TestNewTunnelManager_WiresExploratoryReplyTunnelProvider(t *testing.T) {
+	tm := NewTunnelManager(&SimpleMockPeerSelector{})
+	builder := &captureBuildRequestBuilder{}
+	inboundPool := tm.GetInboundPool()
+	require.NotNil(t, inboundPool)
+	inboundPool.SetTunnelBuilder(builder)
+
+	const replyTunnelID = tunnel.TunnelID(31337)
+	inboundPool.AddTunnel(&tunnel.TunnelState{
+		ID:        replyTunnelID,
+		State:     tunnel.TunnelReady,
+		CreatedAt: time.Now(),
+		IsInbound: true,
+	})
+
+	err := inboundPool.RetryTunnelBuild(tunnel.TunnelID(7), true, 2)
+	require.NoError(t, err)
+	require.True(t, builder.called)
+	assert.Equal(t, replyTunnelID, builder.lastReq.ReplyTunnelID)
 }
