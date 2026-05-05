@@ -1107,6 +1107,7 @@ func (tm *TunnelManager) createCombinedBuildMessage(records []BuildRequestRecord
 
 	msg := &TunnelBuildMessage{
 		BaseI2NPMessage: NewBaseI2NPMessage(I2NPMessageTypeTunnelBuild),
+		encrypted:       true,
 	}
 	msg.SetData(data)
 	msg.SetMessageID(int(tunnelID))
