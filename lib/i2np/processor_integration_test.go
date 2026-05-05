@@ -4,6 +4,10 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // TestProcessMessage_NoDeadlockOnGarlicLocalDelivery verifies that processing
@@ -168,4 +172,42 @@ func TestProcessMessage_ReentrantLocalDelivery(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("Re-entrant LOCAL delivery did not complete within 5 seconds")
 	}
+}
+
+// TestProcessGarlicCloves_LocalDeliveryFailure verifies that a failing inner
+// LOCAL-delivery message now propagates an error instead of being silently
+// swallowed by the garlic layer.
+func TestProcessGarlicCloves_LocalDeliveryFailure(t *testing.T) {
+	processor := NewMessageProcessor()
+	processor.DisableExpirationCheck()
+
+	innerMsg := NewBaseI2NPMessage(123)
+	clove := GarlicClove{
+		DeliveryInstructions: GarlicCloveDeliveryInstructions{Flag: 0x00},
+		I2NPMessage:          innerMsg,
+		CloveID:              9,
+		Expiration:           time.Now().Add(5 * time.Minute),
+	}
+
+	err := processor.processGarlicCloves([]GarlicClove{clove})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to process LOCAL clove")
+}
+
+// TestProcessGarlicCloves_NilInnerMessage verifies that malformed cloves are
+// rejected instead of being silently dropped.
+func TestProcessGarlicCloves_NilInnerMessage(t *testing.T) {
+	processor := NewMessageProcessor()
+	processor.DisableExpirationCheck()
+
+	clove := GarlicClove{
+		DeliveryInstructions: GarlicCloveDeliveryInstructions{Flag: 0x00},
+		I2NPMessage:          nil,
+		CloveID:              10,
+		Expiration:           time.Now().Add(5 * time.Minute),
+	}
+
+	err := processor.processGarlicCloves([]GarlicClove{clove})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "nil I2NP message")
 }

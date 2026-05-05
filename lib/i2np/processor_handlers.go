@@ -299,8 +299,7 @@ func (p *MessageProcessor) processGarlicMessage(msg I2NPMessage) error {
 		return err
 	}
 
-	p.processGarlicCloves(garlic.Cloves)
-	return nil
+	return p.processGarlicCloves(garlic.Cloves)
 }
 
 // validateGarlicSession verifies that the garlic session manager is configured.
@@ -435,15 +434,23 @@ func (p *MessageProcessor) parseAndLogGarlic(msgID int, decryptedData []byte, se
 }
 
 // processGarlicCloves processes each clove in the garlic message.
-func (p *MessageProcessor) processGarlicCloves(cloves []GarlicClove) {
+func (p *MessageProcessor) processGarlicCloves(cloves []GarlicClove) error {
 	for i, clove := range cloves {
-		p.processSingleClove(i, clove)
+		if err := p.processSingleClove(i, clove); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // processSingleClove processes a single garlic clove based on its delivery type.
-func (p *MessageProcessor) processSingleClove(index int, clove GarlicClove) {
+func (p *MessageProcessor) processSingleClove(index int, clove GarlicClove) error {
 	deliveryType := (clove.DeliveryInstructions.Flag >> 5) & 0x03
+
+	if clove.I2NPMessage == nil {
+		log.WithField("clove_index", index).Warn("Garlic clove contains nil I2NP message")
+		return oops.Errorf("garlic clove %d contains nil I2NP message", index)
+	}
 
 	log.WithFields(logger.Fields{
 		"clove_index":   index,
@@ -452,31 +459,30 @@ func (p *MessageProcessor) processSingleClove(index int, clove GarlicClove) {
 		"wrapped_type":  clove.I2NPMessage.Type(),
 	}).Debug("Processing garlic clove")
 
-	if clove.I2NPMessage == nil {
-		log.WithField("clove_index", index).Warn("Garlic clove contains nil I2NP message")
-		return
-	}
-
-	p.routeCloveByType(index, deliveryType, clove)
+	return p.routeCloveByType(index, deliveryType, clove)
 }
 
 // routeCloveByType routes a clove to its destination based on delivery type.
-func (p *MessageProcessor) routeCloveByType(index int, deliveryType byte, clove GarlicClove) {
+func (p *MessageProcessor) routeCloveByType(index int, deliveryType byte, clove GarlicClove) error {
 	switch deliveryType {
 	case 0x00:
-		p.handleLocalDelivery(index, clove)
+		return p.handleLocalDelivery(index, clove)
 	case 0x01:
 		p.handleDestinationDelivery(index, clove)
+		return nil
 	case 0x02:
 		p.handleRouterDelivery(index, clove)
+		return nil
 	case 0x03:
 		p.handleTunnelDelivery(index, clove)
+		return nil
 	}
+	return oops.Errorf("unsupported garlic clove delivery type %d at index %d", deliveryType, index)
 }
 
 // handleLocalDelivery processes a LOCAL delivery clove.
 // Guards against infinite recursion from nested garlic messages by tracking depth.
-func (p *MessageProcessor) handleLocalDelivery(index int, clove GarlicClove) {
+func (p *MessageProcessor) handleLocalDelivery(index int, clove GarlicClove) error {
 	const maxGarlicNestingDepth = 4
 	depth := atomic.AddInt32(&p.garlicRecursionDepth, 1)
 	defer atomic.AddInt32(&p.garlicRecursionDepth, -1)
@@ -487,7 +493,7 @@ func (p *MessageProcessor) handleLocalDelivery(index int, clove GarlicClove) {
 			"nesting_depth": depth,
 			"max_depth":     maxGarlicNestingDepth,
 		}).Error("Garlic nesting depth exceeded, dropping clove to prevent recursion bomb")
-		return
+		return oops.Errorf("garlic nesting depth exceeded for clove %d", index)
 	}
 
 	if err := p.ProcessMessage(clove.I2NPMessage); err != nil {
@@ -495,9 +501,10 @@ func (p *MessageProcessor) handleLocalDelivery(index int, clove GarlicClove) {
 			"clove_index": index,
 			"error":       err,
 		}).Error("Failed to process LOCAL clove message")
-		return
+		return oops.Wrapf(err, "failed to process LOCAL clove %d", index)
 	}
 	log.WithField("clove_index", index).Debug("Successfully processed LOCAL clove")
+	return nil
 }
 
 // handleDestinationDelivery forwards a clove to a destination hash.
