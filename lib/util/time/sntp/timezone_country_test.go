@@ -2,6 +2,7 @@ package sntp
 
 import (
 	"os"
+	"strings"
 	"sync"
 	"testing"
 
@@ -41,6 +42,15 @@ func TestLoadTimezoneCountryMap(t *testing.T) {
 			assert.Equal(t, tc.country, got)
 		})
 	}
+}
+
+func TestParseTimezoneCountryMap_ScannerError(t *testing.T) {
+	longLine := strings.Repeat("A", 70*1024)
+	r := strings.NewReader(longLine)
+
+	m, err := parseTimezoneCountryMap(r)
+	assert.Error(t, err, "expected scanner error for oversized token")
+	assert.Empty(t, m, "map should be empty when input contains only an invalid oversized line")
 }
 
 func TestLookupCountryByTimezone(t *testing.T) {

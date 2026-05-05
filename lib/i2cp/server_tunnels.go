@@ -38,6 +38,11 @@ func (s *Server) initializeSessionTunnelPools(session *Session, config *SessionC
 		return err
 	}
 
+	return s.initializeSessionTunnelPoolsWithInfrastructure(session, config, builder, selector)
+}
+
+func (s *Server) initializeSessionTunnelPoolsWithInfrastructure(session *Session, config *SessionConfig, builder tunnel.BuilderInterface, selector tunnel.PeerSelector) error {
+
 	inboundPool, err := s.createInboundPool(session, config, builder, selector)
 	if err != nil {
 		return err

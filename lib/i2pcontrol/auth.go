@@ -3,6 +3,7 @@ package i2pcontrol
 import (
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -30,6 +31,7 @@ type AuthManager struct {
 	tokens   map[string]time.Time // Active tokens with expiration times
 	mu       sync.RWMutex         // Protects tokens map
 	secret   []byte               // HMAC secret key for token generation
+	randRead func([]byte) (int, error)
 
 	// Rate limiting fields
 	failedAttempts    int       // Consecutive failed authentication attempts
@@ -46,6 +48,8 @@ const (
 	// maxFailedAttempts consecutive failures.
 	failedAttemptLockout = 5 * time.Minute
 )
+
+var errTokenEntropyFailure = errors.New("failed to read entropy for token generation")
 
 // NewAuthManager creates a new authentication manager.
 // The password is used to validate authentication requests.
@@ -69,6 +73,7 @@ func NewAuthManager(password string) (*AuthManager, error) {
 		password: password,
 		tokens:   make(map[string]time.Time),
 		secret:   secret,
+		randRead: rand.Read,
 	}, nil
 }
 
@@ -135,7 +140,10 @@ func (am *AuthManager) Authenticate(password string, expiration time.Duration) (
 	// Generate token from current timestamp
 	// Using time ensures each token is unique even for rapid requests
 	timestamp := time.Now().UnixNano()
-	token := am.generateToken(timestamp)
+	token, err := am.generateToken(timestamp)
+	if err != nil {
+		return "", oops.Wrapf(err, "failed to generate authentication token")
+	}
 
 	// Store token with expiration time
 	am.mu.Lock()
@@ -272,14 +280,12 @@ func (am *AuthManager) ChangePassword(newPassword string) int {
 //
 // Returns:
 //   - string: Base64-encoded HMAC signature
-func (am *AuthManager) generateToken(timestamp int64) string {
+func (am *AuthManager) generateToken(timestamp int64) (string, error) {
 	// Include a random nonce alongside the timestamp so that tokens
 	// are not predictable even if an attacker knows the timestamp.
 	nonce := make([]byte, 16)
-	if _, err := rand.Read(nonce); err != nil {
-		// If the system CSPRNG fails, tokens cannot be secure.
-		// Panic rather than silently producing predictable tokens.
-		panic(fmt.Sprintf("crypto/rand.Read failed: %v", err))
+	if _, err := am.randRead(nonce); err != nil {
+		return "", oops.Wrapf(errTokenEntropyFailure, "crypto/rand.Read failed: %v", err)
 	}
 
 	h := hmac.New(sha256.New, am.secret)
@@ -288,5 +294,5 @@ func (am *AuthManager) generateToken(timestamp int64) string {
 	signature := h.Sum(nil)
 
 	// Encode as base64 for JSON transport
-	return base64.StdEncoding.EncodeToString(signature)
+	return base64.StdEncoding.EncodeToString(signature), nil
 }

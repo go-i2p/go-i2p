@@ -107,20 +107,21 @@ func handlePreShutdown() bool {
 // runHandlerWithTimeout executes a single handler in a goroutine with the
 // given timeout. Returns true if the handler completed, false if it timed out.
 func runHandlerWithTimeout(h Handler, timeout time.Duration) bool {
-	done := make(chan struct{})
+	done := make(chan bool, 1)
 	go func() {
-		defer close(done)
 		defer func() {
 			if r := recover(); r != nil {
 				fmt.Fprintf(os.Stderr, "signals: panic in pre-shutdown handler: %v\n", r)
+				done <- false
 			}
 		}()
 		h()
+		done <- true
 	}()
 
 	select {
-	case <-done:
-		return true
+	case completed := <-done:
+		return completed
 	case <-time.After(timeout):
 		log.WithField("timeout", timeout).Warn("pre-shutdown handler timed out")
 		fmt.Fprintf(os.Stderr, "signals: pre-shutdown handler timed out after %s\n", timeout)

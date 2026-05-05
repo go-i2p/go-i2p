@@ -3,6 +3,7 @@ package i2pcontrol
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -180,6 +181,10 @@ func registerRPCHandlers(ctx context.Context, wg *sync.WaitGroup, stats RouterSt
 
 		token, err := authManager.Authenticate(req.Password, cfg.TokenExpiration)
 		if err != nil {
+			if errors.Is(err, errTokenEntropyFailure) {
+				log.WithField("reason", err.Error()).Error("i2pcontrol: failed to generate authentication token")
+				return nil, NewRPCError(ErrCodeInternalError, "authentication temporarily unavailable")
+			}
 			return nil, NewRPCError(ErrCodeAuthFailed, err.Error())
 		}
 

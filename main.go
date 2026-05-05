@@ -724,8 +724,6 @@ func manageRouterLifecycle() error {
 		return err
 	}
 
-	registerSignalHandlers()
-
 	if err := startAndRunRouter(); err != nil {
 		return err
 	}
@@ -844,6 +842,7 @@ func closeRouter() error {
 }
 
 func runRouter() {
+	registerSignalHandlers()
 	go signals.Handle()
 
 	logStartupConfiguration()

@@ -1,6 +1,7 @@
 package i2pcontrol
 
 import (
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -59,6 +60,23 @@ func TestAuthenticateInvalidPassword(t *testing.T) {
 	assert.Error(t, err, "Authenticate should fail with wrong password")
 	assert.Empty(t, token)
 	assert.Equal(t, 0, am.TokenCount())
+}
+
+// TestAuthenticateEntropyFailure verifies token generation errors are returned
+// instead of panicking when CSPRNG reads fail.
+func TestAuthenticateEntropyFailure(t *testing.T) {
+	am, err := NewAuthManager("correct_password")
+	require.NoError(t, err)
+
+	am.randRead = func([]byte) (int, error) {
+		return 0, errors.New("entropy unavailable")
+	}
+
+	token, err := am.Authenticate("correct_password", 10*time.Minute)
+	assert.Error(t, err, "Authenticate should fail when entropy read fails")
+	assert.Empty(t, token)
+	assert.Equal(t, 0, am.TokenCount())
+	assert.ErrorIs(t, err, errTokenEntropyFailure)
 }
 
 // TestAuthenticateEmptyPassword tests edge case with empty password

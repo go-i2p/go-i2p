@@ -299,24 +299,58 @@ func (s *Server) Stop() error {
 // Must be called before sessions are created. Thread-safe.
 func (s *Server) SetTunnelBuilder(builder tunnel.BuilderInterface) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.tunnelBuilder = builder
+	selector := s.peerSelector
+	s.mu.Unlock()
+
 	log.WithFields(logger.Fields{
 		"at":     "i2cp.Server.SetTunnelBuilder",
 		"reason": "tunnel builder configured",
 	}).Debug("tunnel builder set for I2CP server")
+
+	s.backfillSessionTunnelPools(builder, selector)
 }
 
 // SetPeerSelector sets the peer selector for session tunnel pool initialization.
 // Must be called before sessions are created. Thread-safe.
 func (s *Server) SetPeerSelector(selector tunnel.PeerSelector) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.peerSelector = selector
+	builder := s.tunnelBuilder
+	s.mu.Unlock()
+
 	log.WithFields(logger.Fields{
 		"at":     "i2cp.Server.SetPeerSelector",
 		"reason": "peer selector configured",
 	}).Debug("peer selector set for I2CP server")
+
+	s.backfillSessionTunnelPools(builder, selector)
+}
+
+func (s *Server) backfillSessionTunnelPools(builder tunnel.BuilderInterface, selector tunnel.PeerSelector) {
+	if builder == nil || selector == nil {
+		return
+	}
+
+	for _, session := range s.manager.GetAllSessions() {
+		if session.InboundPool() != nil && session.OutboundPool() != nil {
+			continue
+		}
+
+		if err := s.initializeSessionTunnelPoolsWithInfrastructure(session, session.Config(), builder, selector); err != nil {
+			log.WithFields(logger.Fields{
+				"at":        "i2cp.Server.backfillSessionTunnelPools",
+				"sessionID": session.ID(),
+				"error":     err.Error(),
+			}).Warn("failed to backfill session tunnel pools")
+			continue
+		}
+
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Server.backfillSessionTunnelPools",
+			"sessionID": session.ID(),
+		}).Info("backfilled session tunnel pools")
+	}
 }
 
 // recoverFromAcceptPanic recovers from any panic in the accept loop to prevent server crash.

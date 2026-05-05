@@ -3,6 +3,7 @@ package sntp
 import (
 	"bufio"
 	"embed"
+	"io"
 	"os"
 	"strings"
 	"sync"
@@ -23,16 +24,24 @@ var (
 // loadTimezoneCountryMap parses the embedded zone_to_country.txt file.
 // Each line has the format "TimezoneName,CC" (e.g. "America/New_York,US").
 func loadTimezoneCountryMap() map[string]string {
-	m := make(map[string]string, 420)
-
 	f, err := zoneToCountryFS.Open("zone_to_country.txt")
 	if err != nil {
 		log.WithError(err).Warn("Failed to open zone_to_country.txt")
-		return m
+		return make(map[string]string, 420)
 	}
 	defer func() { _ = f.Close() }()
 
-	scanner := bufio.NewScanner(f)
+	m, err := parseTimezoneCountryMap(f)
+	if err != nil {
+		log.WithError(err).Warn("Failed to parse zone_to_country.txt")
+	}
+
+	return m
+}
+
+func parseTimezoneCountryMap(r io.Reader) (map[string]string, error) {
+	m := make(map[string]string, 420)
+	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" || strings.HasPrefix(line, "#") {
@@ -48,8 +57,11 @@ func loadTimezoneCountryMap() map[string]string {
 			m[tz] = cc
 		}
 	}
+	if err := scanner.Err(); err != nil {
+		return m, err
+	}
 
-	return m
+	return m, nil
 }
 
 // getTimezoneCountryMap returns the timezone→country map, loading it once.

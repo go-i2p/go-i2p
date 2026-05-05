@@ -166,8 +166,8 @@ func TestPreShutdownHandlers_PanicRecovery(t *testing.T) {
 		result = handlePreShutdown()
 	})
 
-	if !result {
-		t.Error("expected true even with panicking handler (others completed)")
+	if result {
+		t.Error("expected false when a pre-shutdown handler panics")
 	}
 }
 

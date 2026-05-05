@@ -435,7 +435,7 @@ func (t *NTCP2Transport) performInboundHandshake(conn net.Conn) error {
 	// encrypted frame arrives.
 	ntcp2Conn.OnAEADError = func(rawConn net.Conn) {
 		term := BuildTerminationBlock(TerminationAEADFailure)
-		_, _ = rawConn.Write(term)
+		t.writeTerminationBlockBestEffort(rawConn, term)
 	}
 
 	// Extract the peer's RouterInfo from Noise message 3 part 2. Alice MUST
@@ -487,6 +487,23 @@ func (t *NTCP2Transport) performInboundHandshake(conn net.Conn) error {
 		"local_addr_count": localAddrCount,
 	}).Info("Inbound Noise XK handshake completed successfully (responder role)")
 	return nil
+}
+
+func (t *NTCP2Transport) writeTerminationBlockBestEffort(rawConn net.Conn, term []byte) {
+	n, err := rawConn.Write(term)
+	if err != nil || n != len(term) {
+		remoteAddr := "<unknown>"
+		if ra := rawConn.RemoteAddr(); ra != nil {
+			remoteAddr = ra.String()
+		}
+		if t.logger != nil {
+			t.logger.WithFields(map[string]interface{}{
+				"written_bytes":  n,
+				"expected_bytes": len(term),
+				"remote_addr":    remoteAddr,
+			}).WithError(err).Warn("Failed to write AEAD termination block")
+		}
+	}
 }
 
 // trackInboundConnection registers the accepted connection for session counting

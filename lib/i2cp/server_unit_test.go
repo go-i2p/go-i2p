@@ -124,6 +124,34 @@ func TestServerCreateSession(t *testing.T) {
 	assert.Equal(t, 1, server.SessionManager().SessionCount(), "SessionCount()")
 }
 
+func TestServerCreateSession_BackfillsTunnelPoolsAfterInfrastructureSet(t *testing.T) {
+	server := newTestI2CPServer(t, "localhost:0")
+
+	msg := &Message{
+		Type:      MessageTypeCreateSession,
+		SessionID: SessionIDReservedControl,
+		Payload:   []byte{},
+	}
+
+	var sessionPtr *Session
+	_, err := server.handleCreateSession(msg, &sessionPtr)
+	require.NoError(t, err, "handleCreateSession() error")
+	require.NotNil(t, sessionPtr)
+	t.Cleanup(func() {
+		sessionPtr.StopTunnelPools()
+		server.SessionManager().StopAll()
+	})
+
+	assert.Nil(t, sessionPtr.InboundPool(), "inbound pool should be nil before infrastructure is configured")
+	assert.Nil(t, sessionPtr.OutboundPool(), "outbound pool should be nil before infrastructure is configured")
+
+	server.SetPeerSelector(&mockPeerSelector{})
+	server.SetTunnelBuilder(&mockTunnelBuilder{})
+
+	assert.NotNil(t, sessionPtr.InboundPool(), "inbound pool should be backfilled after infrastructure is set")
+	assert.NotNil(t, sessionPtr.OutboundPool(), "outbound pool should be backfilled after infrastructure is set")
+}
+
 func TestServerDestroySession(t *testing.T) {
 	server := newTestI2CPServer(t, "localhost:17659")
 	conn := startServerAndConnect(t, server, "localhost:17659")
