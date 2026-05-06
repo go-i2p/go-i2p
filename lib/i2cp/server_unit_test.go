@@ -15,8 +15,12 @@ import (
 )
 
 // newTestI2CPServer creates an I2CP server with standard test config.
+// Uses ephemeral port (127.0.0.1:0) if addr is empty.
 func newTestI2CPServer(t *testing.T, addr string) *Server {
 	t.Helper()
+	if addr == "" {
+		addr = "127.0.0.1:0"
+	}
 	config := &ServerConfig{
 		ListenAddr:  addr,
 		Network:     "tcp",
@@ -29,13 +33,14 @@ func newTestI2CPServer(t *testing.T, addr string) *Server {
 
 // startServerAndConnect starts the server, waits, and returns a connected client.
 // The connection and server are registered for cleanup via t.Cleanup.
-func startServerAndConnect(t *testing.T, server *Server, addr string) net.Conn {
+func startServerAndConnect(t *testing.T, server *Server) net.Conn {
 	t.Helper()
 	require.NoError(t, server.Start(), "Start() error")
 	t.Cleanup(func() { server.Stop() })
 
 	time.Sleep(10 * time.Millisecond)
 
+	addr := server.Addr().String()
 	conn, err := dialI2CPClient(addr)
 	require.NoError(t, err, "Failed to connect to server")
 	t.Cleanup(func() { conn.Close() })
@@ -58,7 +63,7 @@ func createSessionOnConn(t *testing.T, conn net.Conn) uint16 {
 }
 
 func TestServerStartStop(t *testing.T) {
-	server := newTestI2CPServer(t, "localhost:17654")
+	server := newTestI2CPServer(t, "")
 
 	require.NoError(t, server.Start(), "Start() error")
 	assert.True(t, server.IsRunning(), "Server should be running after Start()")
@@ -71,7 +76,7 @@ func TestServerStartStop(t *testing.T) {
 }
 
 func TestServerDoubleStart(t *testing.T) {
-	server := newTestI2CPServer(t, "localhost:17655")
+	server := newTestI2CPServer(t, "")
 	defer server.Stop()
 
 	require.NoError(t, server.Start(), "Start() error")
@@ -81,7 +86,7 @@ func TestServerDoubleStart(t *testing.T) {
 }
 
 func TestServerCreateSession(t *testing.T) {
-	server := newTestI2CPServer(t, "localhost:17656")
+	server := newTestI2CPServer(t, "")
 
 	require.NoError(t, server.Start(), "Start() error")
 	defer server.Stop()
@@ -90,7 +95,7 @@ func TestServerCreateSession(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 
 	// Connect to server
-	conn, err := dialI2CPClient("localhost:17656")
+	conn, err := dialI2CPClient(server.Addr().String())
 	require.NoError(t, err, "Failed to connect to server")
 	defer conn.Close()
 
@@ -153,8 +158,8 @@ func TestServerCreateSession_BackfillsTunnelPoolsAfterInfrastructureSet(t *testi
 }
 
 func TestServerDestroySession(t *testing.T) {
-	server := newTestI2CPServer(t, "localhost:17659")
-	conn := startServerAndConnect(t, server, "localhost:17659")
+	server := newTestI2CPServer(t, "")
+	conn := startServerAndConnect(t, server)
 
 	sessionID := createSessionOnConn(t, conn)
 
@@ -176,7 +181,7 @@ func TestServerDestroySession(t *testing.T) {
 
 func TestServerMaxSessions(t *testing.T) {
 	config := &ServerConfig{
-		ListenAddr:  "localhost:17654", // Different port
+		ListenAddr:  "127.0.0.1:0", // Use ephemeral port
 		Network:     "tcp",
 		MaxSessions: 2,
 	}
@@ -189,10 +194,12 @@ func TestServerMaxSessions(t *testing.T) {
 
 	time.Sleep(10 * time.Millisecond)
 
+	serverAddr := server.Addr().String()
+
 	// Create 2 sessions (should succeed)
 	var conns []net.Conn
 	for i := 0; i < 2; i++ {
-		conn, err := dialI2CPClient("localhost:17654")
+		conn, err := dialI2CPClient(serverAddr)
 		require.NoError(t, err, "Failed to connect")
 		defer conn.Close()
 		conns = append(conns, conn)
@@ -212,7 +219,7 @@ func TestServerMaxSessions(t *testing.T) {
 	assert.Equal(t, 2, server.SessionManager().SessionCount(), "SessionCount()")
 
 	// Third connection should be rejected immediately
-	conn3, err := dialI2CPClient("localhost:17654")
+	conn3, err := dialI2CPClient(serverAddr)
 	require.NoError(t, err, "Failed to connect")
 	defer conn3.Close()
 
@@ -234,8 +241,8 @@ func TestServerMaxSessions(t *testing.T) {
 }
 
 func TestServerGetDate(t *testing.T) {
-	server := newTestI2CPServer(t, "localhost:17658")
-	conn := startServerAndConnect(t, server, "localhost:17658")
+	server := newTestI2CPServer(t, "")
+	conn := startServerAndConnect(t, server)
 
 	getDateMsg := &Message{
 		Type:      MessageTypeGetDate,
@@ -252,8 +259,8 @@ func TestServerGetDate(t *testing.T) {
 }
 
 func TestServerHandleCreateLeaseSet(t *testing.T) {
-	server := newTestI2CPServer(t, "localhost:17659")
-	conn := startServerAndConnect(t, server, "localhost:17659")
+	server := newTestI2CPServer(t, "")
+	conn := startServerAndConnect(t, server)
 	sessionID := createSessionOnConn(t, conn)
 
 	// Send CreateLeaseSet - should fail because no inbound pool
@@ -330,7 +337,7 @@ func TestServerConnWriteMuInitialized(t *testing.T) {
 // a 3-byte SessionStatus payload (SessionID + Status) with status byte 0x00
 // (Destroyed) per I2CP spec.
 func TestSessionStatusDestroyedCode(t *testing.T) {
-	server := newTestI2CPServer(t, "localhost:17690")
+	server := newTestI2CPServer(t, "")
 
 	session, err := server.manager.CreateSession(nil, nil)
 	require.NoError(t, err, "CreateSession() error")
@@ -1348,13 +1355,13 @@ func createTestServerWithPublisher(t *testing.T, addr string, publisher LeaseSet
 // TestServerWithLeaseSetPublisher tests I2CP server with publisher
 func TestServerWithLeaseSetPublisher(t *testing.T) {
 	publisher := newMockLeaseSetPublisher()
-	server := createTestServerWithPublisher(t, "localhost:17670", publisher)
+	server := createTestServerWithPublisher(t, "", publisher)
 	assert.NotNil(t, server.leaseSetPublisher, "Server should have publisher")
 }
 
 // TestServerWithoutLeaseSetPublisher tests I2CP server without publisher
 func TestServerWithoutLeaseSetPublisher(t *testing.T) {
-	server := createTestServerWithPublisher(t, "localhost:17671", nil)
+	server := createTestServerWithPublisher(t, "", nil)
 	assert.Nil(t, server.leaseSetPublisher, "Server should have nil publisher")
 }
 

@@ -14,13 +14,14 @@ import (
 
 // TestI2PControlStartStop tests that I2PControl server can be started and stopped
 func TestI2PControlStartStop(t *testing.T) {
-	// Create minimal router configuration with I2PControl enabled
+	// Create minimal router configuration with I2PControl enabled on ephemeral port
 	cfg := &config.RouterConfig{
 		I2PControl: &config.I2PControlConfig{
-			Enabled:  true,
-			Address:  "127.0.0.1:17650",
-			Password: "test-password",
-			UseHTTPS: false,
+			Enabled:         true,
+			Address:         "127.0.0.1:0",
+			Password:        "test-password",
+			UseHTTPS:        false,
+			TokenExpiration: 10 * time.Minute,
 		},
 	}
 
@@ -45,8 +46,11 @@ func TestI2PControlStartStop(t *testing.T) {
 	// Wait for server to start
 	time.Sleep(100 * time.Millisecond)
 
+	// Get the actual bound address
+	serverAddr := r.i2pcontrolServer.Addr().String()
+
 	// Test that server is responding
-	resp := doRPCRequest(t, cfg.I2PControl.Address, "Authenticate", map[string]interface{}{
+	resp := doRPCRequest(t, serverAddr, "Authenticate", map[string]interface{}{
 		"API":      1,
 		"Password": cfg.I2PControl.Password,
 	})
@@ -62,7 +66,7 @@ func TestI2PControlStartStop(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Verify server is stopped
-	_, err = http.Get(fmt.Sprintf("http://%s/jsonrpc", cfg.I2PControl.Address))
+	_, err = http.Get(fmt.Sprintf("http://%s/jsonrpc", serverAddr))
 	if err == nil {
 		t.Error("Expected error connecting to stopped server")
 	}
@@ -74,7 +78,7 @@ func TestI2PControlDisabledInConfig(t *testing.T) {
 	cfg := &config.RouterConfig{
 		I2PControl: &config.I2PControlConfig{
 			Enabled:  false,
-			Address:  "127.0.0.1:17651",
+			Address:  "127.0.0.1:0",
 			Password: "test",
 		},
 	}

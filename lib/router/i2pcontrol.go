@@ -1,6 +1,7 @@
 package router
 
 import (
+	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/i2pcontrol"
 	"github.com/go-i2p/logger"
 )
@@ -17,6 +18,12 @@ func (r *Router) startI2PControlServer() error {
 			"reason": "I2PControl disabled in configuration",
 		}).Debug("I2PControl server not starting")
 		return nil
+	}
+
+	// Merge defaults to ensure partially-initialized configs don't wedge the server
+	defaultCfg := config.DefaultI2PControlConfig()
+	if r.cfg.I2PControl.TokenExpiration == 0 {
+		r.cfg.I2PControl.TokenExpiration = defaultCfg.TokenExpiration
 	}
 
 	log.WithFields(logger.Fields{

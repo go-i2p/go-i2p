@@ -469,6 +469,18 @@ func (s *Server) IsRunning() bool {
 	return s.running
 }
 
+// Addr returns the network address the server is listening on.
+// Returns nil if the server is not running or listener is not initialized.
+// This is useful for tests that use ephemeral ports (e.g., "127.0.0.1:0").
+func (s *Server) Addr() net.Addr {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.listener == nil {
+		return nil
+	}
+	return s.listener.Addr()
+}
+
 // deliverMessagesToClient runs in a goroutine to deliver incoming messages to a client.
 // This monitors the session's incoming message queue and sends MessagePayload messages
 // to the client connection when messages arrive from the I2P network.

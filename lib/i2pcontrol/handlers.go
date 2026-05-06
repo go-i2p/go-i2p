@@ -367,6 +367,7 @@ func (h *RouterManagerHandler) Handle(ctx context.Context, params json.RawMessag
 // handleShutdown initiates a graceful router shutdown if requested.
 // The shutdown runs asynchronously — the response confirms the request was accepted,
 // not that shutdown completed. The client connection may be closed before Stop() finishes.
+// The shutdown observes server context cancellation.
 func (h *RouterManagerHandler) handleShutdown(req, result map[string]interface{}) {
 	if _, ok := req["Shutdown"]; ok {
 		if h.RouterControl == nil {
@@ -377,6 +378,12 @@ func (h *RouterManagerHandler) handleShutdown(req, result map[string]interface{}
 		h.wg.Add(1)
 		go func() {
 			defer h.wg.Done()
+			select {
+			case <-h.ctx.Done():
+				log.WithFields(logger.Fields{"at": "handleShutdown"}).Info("Shutdown cancelled before execution")
+				return
+			default:
+			}
 			log.WithFields(logger.Fields{"at": "handleShutdown"}).Info("Shutdown requested via I2PControl")
 			h.RouterControl.Stop()
 			log.WithFields(logger.Fields{"at": "handleShutdown"}).Info("Router shutdown completed via I2PControl")
@@ -387,6 +394,7 @@ func (h *RouterManagerHandler) handleShutdown(req, result map[string]interface{}
 
 // handleRestart performs a graceful shutdown for supervisor-managed restart if requested.
 // Like handleShutdown, the response confirms the request was accepted, not completion.
+// The restart observes server context cancellation.
 func (h *RouterManagerHandler) handleRestart(req, result map[string]interface{}) {
 	if _, ok := req["Restart"]; ok {
 		if h.RouterControl == nil {
@@ -397,6 +405,12 @@ func (h *RouterManagerHandler) handleRestart(req, result map[string]interface{})
 		h.wg.Add(1)
 		go func() {
 			defer h.wg.Done()
+			select {
+			case <-h.ctx.Done():
+				log.WithFields(logger.Fields{"at": "handleRestart"}).Info("Restart cancelled before execution")
+				return
+			default:
+			}
 			log.WithFields(logger.Fields{"at": "handleRestart"}).Info("Restart requested via I2PControl (performing shutdown for supervisor restart)")
 			h.RouterControl.Stop()
 			log.WithFields(logger.Fields{"at": "handleRestart"}).Info("Router restart/stop completed via I2PControl")
@@ -406,6 +420,8 @@ func (h *RouterManagerHandler) handleRestart(req, result map[string]interface{})
 }
 
 // handleReseed triggers a manual NetDB reseed operation if requested.
+// Reseed is bounded by a 2-minute timeout to prevent hung network operations
+// from blocking server shutdown.
 func (h *RouterManagerHandler) handleReseed(req, result map[string]interface{}) {
 	if _, ok := req["Reseed"]; ok {
 		if h.RouterControl == nil {
@@ -416,9 +432,30 @@ func (h *RouterManagerHandler) handleReseed(req, result map[string]interface{}) 
 		h.wg.Add(1)
 		go func() {
 			defer h.wg.Done()
+
+			// Create a timeout context for the reseed operation
+			reseedCtx, cancel := context.WithTimeout(h.ctx, 2*time.Minute)
+			defer cancel()
+
 			log.WithFields(logger.Fields{"at": "handleReseed"}).Info("Reseed requested via I2PControl")
-			if err := h.RouterControl.Reseed(); err != nil {
-				log.WithError(err).Error("Reseed via I2PControl failed")
+
+			// Run reseed in a separate goroutine and wait for completion or timeout
+			done := make(chan error, 1)
+			go func() {
+				done <- h.RouterControl.Reseed()
+			}()
+
+			select {
+			case err := <-done:
+				if err != nil {
+					log.WithError(err).Error("Reseed via I2PControl failed")
+				}
+			case <-reseedCtx.Done():
+				if reseedCtx.Err() == context.DeadlineExceeded {
+					log.WithFields(logger.Fields{"at": "handleReseed"}).Warn("Reseed via I2PControl timed out after 2 minutes")
+				} else {
+					log.WithFields(logger.Fields{"at": "handleReseed"}).Info("Reseed via I2PControl cancelled")
+				}
 			}
 		}()
 		result["Reseed"] = nil
@@ -429,6 +466,7 @@ func (h *RouterManagerHandler) handleReseed(req, result map[string]interface{}) 
 // Java I2P delays the shutdown by ~11 minutes; go-i2p uses a configurable
 // drain delay (i2pcontrol.graceful_stop_delay, default 0) and then calls Stop().
 // Set i2pcontrol.graceful_stop_delay to e.g. "11m" to approximate Java I2P behaviour.
+// The shutdown observes server context cancellation.
 func (h *RouterManagerHandler) handleShutdownGraceful(req, result map[string]interface{}) {
 	if _, ok := req["ShutdownGraceful"]; ok {
 		if h.RouterControl == nil {
@@ -439,10 +477,21 @@ func (h *RouterManagerHandler) handleShutdownGraceful(req, result map[string]int
 		h.wg.Add(1)
 		go func() {
 			defer h.wg.Done()
+			select {
+			case <-h.ctx.Done():
+				log.WithFields(logger.Fields{"at": "handleShutdownGraceful"}).Info("ShutdownGraceful cancelled before execution")
+				return
+			default:
+			}
 			log.WithFields(logger.Fields{"at": "handleShutdownGraceful"}).Info("ShutdownGraceful requested via I2PControl")
 			if delay := viper.GetDuration("i2pcontrol.graceful_stop_delay"); delay > 0 {
 				log.WithFields(logger.Fields{"delay": delay}).Info("ShutdownGraceful: waiting for participating tunnels to drain")
-				time.Sleep(delay)
+				select {
+				case <-time.After(delay):
+				case <-h.ctx.Done():
+					log.WithFields(logger.Fields{"at": "handleShutdownGraceful"}).Info("ShutdownGraceful cancelled during drain delay")
+					return
+				}
 			}
 			h.RouterControl.Stop()
 		}()
@@ -454,6 +503,7 @@ func (h *RouterManagerHandler) handleShutdownGraceful(req, result map[string]int
 // Like handleShutdownGraceful, go-i2p waits for the configurable drain delay
 // (i2pcontrol.graceful_stop_delay, default 0) and then calls Stop().
 // The external process supervisor is responsible for restarting the process.
+// The restart observes server context cancellation.
 func (h *RouterManagerHandler) handleRestartGraceful(req, result map[string]interface{}) {
 	if _, ok := req["RestartGraceful"]; ok {
 		if h.RouterControl == nil {
@@ -464,10 +514,21 @@ func (h *RouterManagerHandler) handleRestartGraceful(req, result map[string]inte
 		h.wg.Add(1)
 		go func() {
 			defer h.wg.Done()
+			select {
+			case <-h.ctx.Done():
+				log.WithFields(logger.Fields{"at": "handleRestartGraceful"}).Info("RestartGraceful cancelled before execution")
+				return
+			default:
+			}
 			log.WithFields(logger.Fields{"at": "handleRestartGraceful"}).Info("RestartGraceful requested via I2PControl (stop only; supervisor must restart)")
 			if delay := viper.GetDuration("i2pcontrol.graceful_stop_delay"); delay > 0 {
 				log.WithFields(logger.Fields{"delay": delay}).Info("RestartGraceful: waiting for participating tunnels to drain")
-				time.Sleep(delay)
+				select {
+				case <-time.After(delay):
+				case <-h.ctx.Done():
+					log.WithFields(logger.Fields{"at": "handleRestartGraceful"}).Info("RestartGraceful cancelled during drain delay")
+					return
+				}
 			}
 			h.RouterControl.Stop()
 		}()

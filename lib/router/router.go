@@ -73,6 +73,7 @@ type Router struct {
 	i2pcontrolServer interface {
 		Start() error
 		Stop()
+		Addr() net.Addr
 	}
 
 	// bandwidthTracker tracks bandwidth usage and calculates rolling averages

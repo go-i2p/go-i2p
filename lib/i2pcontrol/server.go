@@ -25,6 +25,8 @@ type Server struct {
 	registry    *MethodRegistry
 	stats       RouterStatsProvider
 	httpServer  *http.Server
+	listener    net.Listener // Listener for exposing actual bound address
+	mu          sync.RWMutex // Protects listener field
 	ctx         context.Context
 	cancel      context.CancelFunc
 	wg          sync.WaitGroup
@@ -237,6 +239,18 @@ func (s *Server) Start() error {
 	return nil
 }
 
+// Addr returns the network address the server is listening on.
+// Returns nil if the server has not started or listener is not initialized.
+// This is useful for tests that use ephemeral ports (e.g., "127.0.0.1:0").
+func (s *Server) Addr() net.Addr {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.listener == nil {
+		return nil
+	}
+	return s.listener.Addr()
+}
+
 // startHTTPServer launches the HTTP or HTTPS server in a background goroutine.
 func (s *Server) startHTTPServer() {
 	s.wg.Add(1)
@@ -277,7 +291,21 @@ func (s *Server) startHTTPSServer() error {
 		"protocol": "HTTPS",
 	}).Info("Starting I2PControl server")
 
-	return s.httpServer.ListenAndServeTLS(s.config.CertFile, s.config.KeyFile)
+	listener, err := net.Listen("tcp", s.config.Address)
+	if err != nil {
+		return oops.Wrapf(err, "failed to create listener")
+	}
+
+	s.mu.Lock()
+	s.listener = listener
+	s.mu.Unlock()
+
+	log.WithFields(logger.Fields{
+		"at":      "(Server).startHTTPSServer",
+		"address": listener.Addr().String(),
+	}).Info("I2PControl server listening")
+
+	return s.httpServer.ServeTLS(listener, s.config.CertFile, s.config.KeyFile)
 }
 
 // startPlainHTTPServer starts the HTTP server without TLS.
@@ -288,7 +316,21 @@ func (s *Server) startPlainHTTPServer() error {
 		"protocol": "HTTP",
 	}).Info("Starting I2PControl server")
 
-	return s.httpServer.ListenAndServe()
+	listener, err := net.Listen("tcp", s.config.Address)
+	if err != nil {
+		return oops.Wrapf(err, "failed to create listener")
+	}
+
+	s.mu.Lock()
+	s.listener = listener
+	s.mu.Unlock()
+
+	log.WithFields(logger.Fields{
+		"at":      "(Server).startPlainHTTPServer",
+		"address": listener.Addr().String(),
+	}).Info("I2PControl server listening")
+
+	return s.httpServer.Serve(listener)
 }
 
 // defaultPasswordWarnInterval throttles the repeated advisory emitted when
