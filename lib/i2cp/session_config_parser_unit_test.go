@@ -338,15 +338,23 @@ func TestParseCreateSessionPayload_BoundaryValues(t *testing.T) {
 
 // TestApplyMessageOptions_Reliability tests that i2cp.messageReliability is wired into SessionConfig.
 func TestApplyMessageOptions_Reliability(t *testing.T) {
-	for _, rel := range []string{"BestEffort", "None"} {
-		t.Run(rel, func(t *testing.T) {
-			config := DefaultSessionConfig()
-			options := map[string]string{"i2cp.messageReliability": rel}
-			applyMessageOptions(config, options)
-			assert.Equal(t, rel, config.MessageReliability, "MessageReliability")
-			assert.True(t, config.ExplicitlySetFields["MessageReliability"], "MessageReliability not marked as explicitly set")
-		})
-	}
+	t.Run("BestEffort", func(t *testing.T) {
+		config := DefaultSessionConfig()
+		options := map[string]string{"i2cp.messageReliability": "BestEffort"}
+		applyMessageOptions(config, options)
+		assert.Equal(t, "BestEffort", config.MessageReliability, "MessageReliability")
+		assert.True(t, config.ExplicitlySetFields["MessageReliability"], "MessageReliability not marked as explicitly set")
+		assert.Nil(t, config.UnsupportedOptions, "BestEffort should not be in UnsupportedOptions")
+	})
+	t.Run("None", func(t *testing.T) {
+		config := DefaultSessionConfig()
+		options := map[string]string{"i2cp.messageReliability": "None"}
+		applyMessageOptions(config, options)
+		assert.Equal(t, "BestEffort", config.MessageReliability, "None should fall back to BestEffort")
+		assert.True(t, config.ExplicitlySetFields["MessageReliability"])
+		assert.Contains(t, config.UnsupportedOptions, "i2cp.messageReliability", "None should be recorded as unsupported")
+		assert.Equal(t, "None", config.UnsupportedOptions["i2cp.messageReliability"])
+	})
 	t.Run("Guaranteed", func(t *testing.T) {
 		config := DefaultSessionConfig()
 		options := map[string]string{"i2cp.messageReliability": "Guaranteed"}
@@ -354,6 +362,7 @@ func TestApplyMessageOptions_Reliability(t *testing.T) {
 		assert.Equal(t, "BestEffort", config.MessageReliability, "Guaranteed should fall back to BestEffort")
 		assert.True(t, config.ExplicitlySetFields["MessageReliability"])
 		assert.Contains(t, config.UnsupportedOptions, "i2cp.messageReliability")
+		assert.Equal(t, "Guaranteed", config.UnsupportedOptions["i2cp.messageReliability"])
 	})
 	t.Run("unknown_value", func(t *testing.T) {
 		config := DefaultSessionConfig()

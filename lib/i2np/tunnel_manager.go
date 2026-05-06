@@ -200,7 +200,7 @@ func (tm *TunnelManager) SetOurRouterHash(hash common.Hash) {
 }
 
 // GetPool returns the outbound tunnel pool for backward compatibility.
-// Deprecated: Use GetInboundPool() or GetOutboundPool() for specific pools.
+// Deprecated: Use GetInboundPool() or GetOutboundPool() for specific pools. Will be removed in v0.2.0.
 func (tm *TunnelManager) GetPool() *tunnel.Pool {
 	return tm.outboundPool
 }

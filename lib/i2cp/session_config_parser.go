@@ -402,7 +402,7 @@ func applyMessageReliability(config *SessionConfig, options map[string]string) {
 		return
 	}
 	switch val {
-	case "BestEffort", "None":
+	case "BestEffort":
 		config.MessageReliability = val
 		markExplicitlySet(config, "MessageReliability")
 		log.WithFields(logger.Fields{
@@ -410,6 +410,23 @@ func applyMessageReliability(config *SessionConfig, options map[string]string) {
 			"option":      "i2cp.messageReliability",
 			"reliability": val,
 		}).Debug("applied_message_reliability")
+	case "None":
+		// "None" delivery mode is not fully implemented; semantically it should
+		// mean "don't even attempt delivery confirmation," but in practice this
+		// implementation treats it the same as BestEffort (single attempt, no ack).
+		config.MessageReliability = "BestEffort"
+		markExplicitlySet(config, "MessageReliability")
+		if config.UnsupportedOptions == nil {
+			config.UnsupportedOptions = make(map[string]string)
+		}
+		config.UnsupportedOptions["i2cp.messageReliability"] = "None"
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.applyMessageOptions",
+			"option":    "i2cp.messageReliability",
+			"requested": "None",
+			"effective": "BestEffort",
+			"reason":    "only BestEffort is implemented",
+		}).Warn("message_reliability_downgrade")
 	case "Guaranteed":
 		// Guaranteed delivery is not implemented; fall back to BestEffort
 		// and record the unsupported option so clients can detect this.
@@ -420,10 +437,12 @@ func applyMessageReliability(config *SessionConfig, options map[string]string) {
 		}
 		config.UnsupportedOptions["i2cp.messageReliability"] = "Guaranteed"
 		log.WithFields(logger.Fields{
-			"at":     "i2cp.applyMessageOptions",
-			"option": "i2cp.messageReliability",
-			"reason": "Guaranteed delivery not implemented, falling back to BestEffort",
-		}).Warn("guaranteed_delivery_unsupported")
+			"at":        "i2cp.applyMessageOptions",
+			"option":    "i2cp.messageReliability",
+			"requested": "Guaranteed",
+			"effective": "BestEffort",
+			"reason":    "only BestEffort is implemented",
+		}).Warn("message_reliability_downgrade")
 	default:
 		log.WithFields(logger.Fields{
 			"at":     "i2cp.applyMessageOptions",
