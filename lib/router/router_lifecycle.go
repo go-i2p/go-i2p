@@ -938,6 +938,252 @@ func (r *Router) wireI2CPTunnelBuilder() {
 	}
 }
 
+// configureRouterHashOnPools sets the router's hash on both tunnel pools.
+// This must be done before starting maintenance to ensure build requests
+// have valid identity information.
+func (r *Router) configureRouterHashOnPools(inboundPool, outboundPool *tunnel.Pool) error {
+	routerHash, err := r.getOurRouterHash()
+	if err != nil {
+		return err
+	}
+	if outboundPool != nil {
+		outboundPool.SetRouterHash(routerHash)
+	}
+	if inboundPool != nil {
+		inboundPool.SetRouterHash(routerHash)
+	}
+	return nil
+}
+
+// configureInboundPoolPolicy configures hop count and auto-fallback for the inbound pool.
+// Returns true if zero-hop mode is enabled.
+func (r *Router) configureInboundPoolPolicy(inboundPool *tunnel.Pool) bool {
+	if inboundPool == nil {
+		return false
+	}
+
+	zeroHopInbound := r.cfg != nil && (r.cfg.Hidden || r.cfg.AlwaysZeroHopInbound)
+	if zeroHopInbound {
+		if err := inboundPool.SetHopCount(0); err != nil {
+			log.WithError(err).Error("Failed to enable zero-hop inbound tunnels")
+		} else {
+			log.WithFields(logger.Fields{
+				"at":                      "configureInboundPoolPolicy",
+				"hidden":                  r.cfg.Hidden,
+				"always_zero_hop_inbound": r.cfg.AlwaysZeroHopInbound,
+			}).Info("Inbound exploratory pool configured for zero-hop tunnels")
+		}
+	} else {
+		// Wire auto-fallback: after autoFallbackThreshold consecutive build
+		// timeouts, automatically switch to 0-hop inbound when no public
+		// address is confirmed.
+		inboundPool.SetAutoFallbackCheck(func() bool {
+			return r.collectBestExternalAddr() == ""
+		})
+	}
+	return zeroHopInbound
+}
+
+// configureOutboundPoolPolicy configures hop count and auto-fallback for the outbound pool.
+// Returns true if one-hop mode is enabled.
+func (r *Router) configureOutboundPoolPolicy(outboundPool *tunnel.Pool) bool {
+	if outboundPool == nil {
+		return false
+	}
+
+	oneHopOutbound := r.cfg != nil && (r.cfg.Hidden || r.cfg.AlwaysOneHopOutbound)
+	if oneHopOutbound {
+		if err := outboundPool.SetHopCount(1); err != nil {
+			log.WithError(err).Error("Failed to enable one-hop outbound tunnels")
+		} else {
+			log.WithFields(logger.Fields{
+				"at":                      "configureOutboundPoolPolicy",
+				"hidden":                  r.cfg.Hidden,
+				"always_one_hop_outbound": r.cfg.AlwaysOneHopOutbound,
+			}).Info("Outbound exploratory pool configured for one-hop tunnels")
+		}
+	} else {
+		// Wire auto-fallback: after autoFallbackThreshold consecutive outbound
+		// build timeouts with no public address, switch to 1-hop outbound.
+		outboundPool.SetAutoFallbackCheck(func() bool {
+			return r.collectBestExternalAddr() == ""
+		})
+	}
+	return oneHopOutbound
+}
+
+// wireReplyTunnelProviders configures reply tunnel providers for both pools.
+// This enables TUNNEL delivery mode instead of ROUTER delivery mode,
+// which works better behind NAT.
+func (r *Router) wireReplyTunnelProviders(inboundPool, outboundPool *tunnel.Pool) {
+	if inboundPool == nil {
+		return
+	}
+
+	makeProvider := func(pool *tunnel.Pool) func() (tunnel.TunnelID, bool) {
+		return func() (tunnel.TunnelID, bool) {
+			active := pool.GetActiveTunnels()
+			if len(active) == 0 {
+				return 0, false
+			}
+			// Prefer the oldest active tunnel for stability.
+			return active[0].ID, true
+		}
+	}
+
+	inboundPool.SetReplyTunnelProvider(makeProvider(inboundPool))
+	if outboundPool != nil {
+		outboundPool.SetReplyTunnelProvider(makeProvider(inboundPool))
+	}
+}
+
+// startPoolMaintenance starts maintenance goroutines for both tunnel pools.
+func (r *Router) startPoolMaintenance(tm *i2np.TunnelManager, inboundPool, outboundPool *tunnel.Pool) {
+	for _, pool := range []*tunnel.Pool{inboundPool, outboundPool} {
+		if pool == nil {
+			continue
+		}
+		pool.SetTunnelBuilder(tm)
+		pool.SetPeerTracker(r.StdNetDB.PeerTracker)
+		if err := pool.StartMaintenance(); err != nil {
+			log.WithError(err).Error("Failed to start tunnel pool maintenance")
+		}
+	}
+}
+
+// launchInboundReadinessWatcher launches a goroutine that monitors inbound pool
+// readiness and closes the gate channel when ready or on timeout.
+func (r *Router) launchInboundReadinessWatcher(inboundPool, outboundPool *tunnel.Pool, inboundReady chan struct{}) {
+	go func() {
+		deadline := time.NewTimer(2 * tunnel.BuildTimeout)
+		defer deadline.Stop()
+		poll := time.NewTicker(500 * time.Millisecond)
+		defer poll.Stop()
+
+		for {
+			select {
+			case <-r.ctx.Done():
+				close(inboundReady)
+				return
+			case <-deadline.C:
+				r.handleInboundReadinessTimeout(inboundPool, outboundPool, inboundReady)
+				return
+			case <-poll.C:
+				if inboundPool != nil && len(inboundPool.GetActiveTunnels()) > 0 {
+					log.WithFields(logger.Fields{
+						"at": "launchInboundReadinessWatcher",
+					}).Debug("inbound pool ready; releasing outbound pool startup gate")
+					close(inboundReady)
+					return
+				}
+			}
+		}
+	}()
+}
+
+// handleInboundReadinessTimeout handles the case when inbound pool doesn't
+// become ready within the timeout period.
+func (r *Router) handleInboundReadinessTimeout(inboundPool, outboundPool *tunnel.Pool, inboundReady chan struct{}) {
+	log.WithFields(logger.Fields{
+		"at":      "handleInboundReadinessTimeout",
+		"timeout": 2 * tunnel.BuildTimeout,
+	}).Warn("inbound pool readiness timeout; enforcing fallback before releasing outbound gate")
+
+	// Force outbound to 1-hop first
+	if outboundPool != nil {
+		if err := outboundPool.SetHopCount(1); err != nil {
+			log.WithFields(logger.Fields{
+				"at":    "handleInboundReadinessTimeout",
+				"error": err.Error(),
+			}).Warn("failed to force outbound exploratory pool to one-hop")
+		}
+	}
+
+	// Force inbound to 0-hop
+	if inboundPool != nil {
+		if err := inboundPool.SetHopCount(0); err != nil {
+			log.WithFields(logger.Fields{
+				"at":    "handleInboundReadinessTimeout",
+				"error": err.Error(),
+			}).Warn("failed to force inbound exploratory pool to zero-hop")
+		}
+		inboundPool.RunMaintenanceNow()
+	}
+
+	// Wait for 0-hop inbound to appear
+	r.waitForFallbackInbound(inboundPool, inboundReady)
+}
+
+// waitForFallbackInbound waits up to 5s for 0-hop inbound tunnel after fallback.
+func (r *Router) waitForFallbackInbound(inboundPool *tunnel.Pool, inboundReady chan struct{}) {
+	fallbackPoll := time.NewTicker(300 * time.Millisecond)
+	fallbackDeadline := time.NewTimer(5 * time.Second)
+	defer fallbackPoll.Stop()
+	defer fallbackDeadline.Stop()
+
+	for {
+		select {
+		case <-r.ctx.Done():
+			close(inboundReady)
+			return
+		case <-fallbackDeadline.C:
+			log.WithFields(logger.Fields{
+				"at": "waitForFallbackInbound",
+			}).Warn("secondary fallback readiness timeout; releasing outbound gate")
+			close(inboundReady)
+			return
+		case <-fallbackPoll.C:
+			if inboundPool != nil && len(inboundPool.GetActiveTunnels()) > 0 {
+				log.WithFields(logger.Fields{
+					"at": "waitForFallbackInbound",
+				}).Debug("0-hop inbound ready after fallback; releasing outbound gate")
+				close(inboundReady)
+				return
+			}
+		}
+	}
+}
+
+// launchProactiveFallbackChecks starts goroutines that trigger auto-fallback
+// after one build timeout if no tunnels are established.
+func (r *Router) launchProactiveFallbackChecks(inboundPool, outboundPool *tunnel.Pool, zeroHopInbound, oneHopOutbound bool) {
+	if !zeroHopInbound && inboundPool != nil {
+		r.launchInboundFallbackCheck(inboundPool)
+	}
+
+	if !oneHopOutbound && outboundPool != nil {
+		r.launchOutboundFallbackCheck(outboundPool)
+	}
+}
+
+// launchInboundFallbackCheck starts a goroutine to trigger inbound fallback after timeout.
+func (r *Router) launchInboundFallbackCheck(pool *tunnel.Pool) {
+	go func() {
+		select {
+		case <-r.ctx.Done():
+			return
+		case <-time.After(tunnel.BuildTimeout + 5*time.Second):
+			if len(pool.GetActiveTunnels()) == 0 {
+				pool.TriggerAutoFallbackCheck()
+			}
+		}
+	}()
+}
+
+// launchOutboundFallbackCheck starts a goroutine to trigger outbound fallback after timeout.
+func (r *Router) launchOutboundFallbackCheck(pool *tunnel.Pool) {
+	go func() {
+		select {
+		case <-r.ctx.Done():
+			return
+		case <-time.After(tunnel.BuildTimeout + 5*time.Second):
+			if len(pool.GetActiveTunnels()) == 0 {
+				pool.TriggerAutoFallbackCheck()
+			}
+		}
+	}()
+}
+
 // initializeTunnelManager creates and configures the tunnel manager for building and maintaining tunnels.
 // The tunnel manager coordinates tunnel building, maintains tunnel pools, and handles tunnel lifecycle.
 func (r *Router) initializeTunnelManager() {
@@ -952,249 +1198,37 @@ func (r *Router) initializeTunnelManager() {
 	r.tunnelManager = tm
 	r.runMux.Unlock()
 
-	// Configure automatic tunnel pool maintenance.
-	// BOTH inbound and outbound exploratory pools must be started: an outbound
-	// tunnel build's reply (VTBRM) is delivered to the requester via one of the
-	// requester's inbound tunnels. Without a maintained inbound pool the reply
-	// has no path back, every outbound build times out at 90 s, and the router
-	// never establishes a working exploratory tunnel set.
+	// Get tunnel pools
 	outboundPool := tm.GetOutboundPool()
 	inboundPool := tm.GetInboundPool()
 
-	// Set our router hash on both pools BEFORE starting maintenance so that
-	// the very first prepareBuildRequest() call has a valid OurIdentity and
-	// ReplyGateway (NextIdent in the endpoint's STBM cleartext record).
-	// Without this the endpoint writes all-zeros for NextIdent and i2pd drops
-	// every build reply, causing 100% expiry.
-	routerHash, err := r.getOurRouterHash()
-	if err != nil {
+	// Set router hash on pools before starting maintenance
+	if err := r.configureRouterHashOnPools(inboundPool, outboundPool); err != nil {
 		log.WithError(err).Error("Failed to get router hash for tunnel pools; skipping maintenance startup until identity is available")
 		return
 	}
-	outboundPool.SetRouterHash(routerHash)
-	inboundPool.SetRouterHash(routerHash)
 
-	// BUG-1 fix: start inbound pool BEFORE outbound and gate the outbound pool's
-	// first build attempt on the inbound pool having at least one active tunnel.
-	// Without this ordering both goroutines race and the outbound pool's first
-	// maintainPool() call finds SelectTunnel()==nil, setting ReplyTunnelID=0 in
-	// every STBM OBEP record so i2pd cannot route the ShortTunnelBuildReply back.
-	// Apply all pool policies (hop count, fallback callbacks) BEFORE starting
-	// maintenance so that the very first maintainPool() invocation observes the
-	// correct configuration. Starting maintenance first creates a startup race
-	// where the initial build uses default 3-hop counts on hidden/firewalled
-	// nodes (audit item #5).
+	// Configure pool policies (hop count, auto-fallback) before starting maintenance
+	zeroHopInbound := r.configureInboundPoolPolicy(inboundPool)
+	oneHopOutbound := r.configureOutboundPoolPolicy(outboundPool)
 
-	// Hidden mode and AlwaysZeroHopInbound force the inbound exploratory pool
-	// to build 0-hop tunnels (we serve as both IBGW and IBEP). This is the
-	// only way to receive build replies on a host with no reachable address;
-	// without it every outbound build expires at 90s because the second-to-last
-	// hop has no path to deliver the reply back to us.
-	zeroHopInbound := r.cfg != nil && (r.cfg.Hidden || r.cfg.AlwaysZeroHopInbound)
-	if zeroHopInbound && inboundPool != nil {
-		if err := inboundPool.SetHopCount(0); err != nil {
-			log.WithError(err).Error("Failed to enable zero-hop inbound tunnels")
-		} else {
-			log.WithFields(logger.Fields{
-				"at":                      "initializeTunnelManager",
-				"hidden":                  r.cfg.Hidden,
-				"always_zero_hop_inbound": r.cfg.AlwaysZeroHopInbound,
-			}).Info("Inbound exploratory pool configured for zero-hop tunnels")
-		}
-	} else if !zeroHopInbound && inboundPool != nil {
-		// Wire auto-fallback: after autoFallbackThreshold consecutive build
-		// timeouts (VTBRM never received), automatically switch to 0-hop inbound
-		// when no public address is confirmed.
-		inboundPool.SetAutoFallbackCheck(func() bool {
-			return r.collectBestExternalAddr() == ""
-		})
-	}
-
-	// Hidden mode and AlwaysOneHopOutbound force the outbound exploratory pool
-	// to build 1-hop tunnels. With a single hop the OBEP is the peer we just
-	// dialled, so it already has an open session to us and can deliver the
-	// ShortTunnelBuildReply without needing to dial a new inbound connection.
-	// Without this, every outbound build on a firewalled router expires because
-	// the 3rd-hop OBEP cannot reach us.
-	oneHopOutbound := r.cfg != nil && (r.cfg.Hidden || r.cfg.AlwaysOneHopOutbound)
-	if oneHopOutbound && outboundPool != nil {
-		if err := outboundPool.SetHopCount(1); err != nil {
-			log.WithError(err).Error("Failed to enable one-hop outbound tunnels")
-		} else {
-			log.WithFields(logger.Fields{
-				"at":                      "initializeTunnelManager",
-				"hidden":                  r.cfg.Hidden,
-				"always_one_hop_outbound": r.cfg.AlwaysOneHopOutbound,
-			}).Info("Outbound exploratory pool configured for one-hop tunnels")
-		}
-	} else if !oneHopOutbound && outboundPool != nil {
-		// Wire auto-fallback: after autoFallbackThreshold consecutive outbound
-		// build timeouts with no public address, switch to 1-hop outbound.
-		outboundPool.SetAutoFallbackCheck(func() bool {
-			return r.collectBestExternalAddr() == ""
-		})
-	}
-
-	// Gate outbound pool's first build on inbound readiness BEFORE starting
-	// maintenance so the gate is installed before any goroutine can read it.
+	// Gate outbound pool's first build on inbound readiness
 	inboundReady := make(chan struct{})
 	if outboundPool != nil {
 		outboundPool.SetStartupGate(inboundReady)
 	}
 
-	// Wire the reply-tunnel provider so that build requests use TUNNEL delivery
-	// mode (ReplyTunnelID != 0) rather than ROUTER delivery mode (ReplyTunnelID=0).
-	// ROUTER delivery mode requires i2pd to open a fresh connection to our
-	// published address; behind NAT our address is non-routable, so every
-	// reply is silently dropped. TUNNEL delivery mode wraps the reply in a
-	// TunnelGateway and sends it on the existing NTCP2 session, which works
-	// regardless of NAT.
-	//
-	// - The inbound pool's own builds use the inbound pool's active tunnels
-	//   (a 0-hop tunnel whose gateway IS our router — we deliver locally).
-	// - The outbound pool's builds use the inbound pool's active tunnels as
-	//   the reply path (OBEP → TunnelGateway(inboundTunnelID) → us).
-	if inboundPool != nil {
-		makeProvider := func(pool *tunnel.Pool) func() (tunnel.TunnelID, bool) {
-			return func() (tunnel.TunnelID, bool) {
-				active := pool.GetActiveTunnels()
-				if len(active) == 0 {
-					return 0, false
-				}
-				// Prefer the oldest active tunnel for stability.
-				return active[0].ID, true
-			}
-		}
-		inboundPool.SetReplyTunnelProvider(makeProvider(inboundPool))
-		if outboundPool != nil {
-			outboundPool.SetReplyTunnelProvider(makeProvider(inboundPool))
-		}
-	}
+	// Wire reply tunnel providers for both pools
+	r.wireReplyTunnelProviders(inboundPool, outboundPool)
 
-	for _, pool := range []*tunnel.Pool{inboundPool, outboundPool} {
-		if pool == nil {
-			continue
-		}
-		pool.SetTunnelBuilder(tm) // TunnelManager implements BuilderInterface
-		pool.SetPeerTracker(r.StdNetDB.PeerTracker)
-		if err := pool.StartMaintenance(); err != nil {
-			log.WithError(err).Error("Failed to start tunnel pool maintenance")
-		}
-	}
+	// Start maintenance on both pools
+	r.startPoolMaintenance(tm, inboundPool, outboundPool)
 
-	// Launch a watcher that closes inboundReady as soon as the inbound pool
-	// has at least one active (TunnelReady) tunnel, or after a safety timeout
-	// equal to two build-timeout periods so the outbound pool is never blocked
-	// indefinitely.
-	go func() {
-		deadline := time.NewTimer(2 * tunnel.BuildTimeout)
-		defer deadline.Stop()
-		poll := time.NewTicker(500 * time.Millisecond)
-		defer poll.Stop()
-		for {
-			select {
-			case <-r.ctx.Done():
-				close(inboundReady)
-				return
-			case <-deadline.C:
-				log.WithFields(logger.Fields{
-					"at":      "initializeTunnelManager",
-					"timeout": 2 * tunnel.BuildTimeout,
-				}).Warn("inbound pool readiness timeout; enforcing fallback before releasing outbound gate")
-				// Force inbound to 0-hop unconditionally and trigger an immediate
-				// build so the outbound pool has a valid reply path when it
-				// unblocks. TriggerAutoFallbackCheck() is conditional on callback
-				// predicates (e.g. no-public-address) and therefore is not a true
-				// force-path when external address detection yields false positives.
-				// Force outbound to 1-hop first, before any blocking maintenance
-				// call, so the hop-count update is guaranteed to execute.
-				if outboundPool != nil {
-					if err := outboundPool.SetHopCount(1); err != nil {
-						log.WithFields(logger.Fields{
-							"at":    "initializeTunnelManager",
-							"error": err.Error(),
-						}).Warn("failed to force outbound exploratory pool to one-hop")
-					}
-				}
-				if inboundPool != nil {
-					if err := inboundPool.SetHopCount(0); err != nil {
-						log.WithFields(logger.Fields{
-							"at":    "initializeTunnelManager",
-							"error": err.Error(),
-						}).Warn("failed to force inbound exploratory pool to zero-hop")
-					}
-					inboundPool.RunMaintenanceNow()
-				}
-				// Secondary poll: wait up to 5 s for the 0-hop inbound to appear.
-				fallbackPoll := time.NewTicker(300 * time.Millisecond)
-				fallbackDeadline := time.NewTimer(5 * time.Second)
-				for {
-					select {
-					case <-r.ctx.Done():
-						fallbackPoll.Stop()
-						fallbackDeadline.Stop()
-						close(inboundReady)
-						return
-					case <-fallbackDeadline.C:
-						fallbackPoll.Stop()
-						log.WithFields(logger.Fields{
-							"at": "initializeTunnelManager",
-						}).Warn("secondary fallback readiness timeout; releasing outbound gate")
-						close(inboundReady)
-						return
-					case <-fallbackPoll.C:
-						if inboundPool != nil && len(inboundPool.GetActiveTunnels()) > 0 {
-							fallbackPoll.Stop()
-							fallbackDeadline.Stop()
-							log.WithFields(logger.Fields{
-								"at": "initializeTunnelManager",
-							}).Debug("0-hop inbound ready after fallback; releasing outbound gate")
-							close(inboundReady)
-							return
-						}
-					}
-				}
-			case <-poll.C:
-				if inboundPool != nil && len(inboundPool.GetActiveTunnels()) > 0 {
-					log.WithFields(logger.Fields{
-						"at": "initializeTunnelManager",
-					}).Debug("inbound pool ready; releasing outbound pool startup gate")
-					close(inboundReady)
-					return
-				}
-			}
-		}
-	}()
+	// Launch watcher for inbound pool readiness
+	r.launchInboundReadinessWatcher(inboundPool, outboundPool, inboundReady)
 
-	// Startup proactive fallback checks: after one build-timeout period, if
-	// no tunnels are live and we have no confirmed public address, trigger
-	// auto-fallback immediately rather than waiting for autoFallbackThreshold
-	// (3×) failures. These are started after maintenance so the pools are
-	// actually running when the timer fires.
-	if !zeroHopInbound && inboundPool != nil {
-		go func() {
-			select {
-			case <-r.ctx.Done():
-				return
-			case <-time.After(tunnel.BuildTimeout + 5*time.Second):
-				if len(inboundPool.GetActiveTunnels()) == 0 {
-					inboundPool.TriggerAutoFallbackCheck()
-				}
-			}
-		}()
-	}
-	if !oneHopOutbound && outboundPool != nil {
-		go func() {
-			select {
-			case <-r.ctx.Done():
-				return
-			case <-time.After(tunnel.BuildTimeout + 5*time.Second):
-				if len(outboundPool.GetActiveTunnels()) == 0 {
-					outboundPool.TriggerAutoFallbackCheck()
-				}
-			}
-		}()
-	}
+	// Launch proactive fallback checks after one build timeout
+	r.launchProactiveFallbackChecks(inboundPool, outboundPool, zeroHopInbound, oneHopOutbound)
 
 	log.WithFields(logger.Fields{
 		"at":            "initializeTunnelManager",
