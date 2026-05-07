@@ -370,9 +370,10 @@ func (di *DeliveryInstructions) buildFlagByte() byte {
 // appendTunnelIDIfPresent adds the tunnel ID to the result if delivery type is DTTunnel.
 func (di *DeliveryInstructions) appendTunnelIDIfPresent(result []byte) []byte {
 	if di.deliveryType == DTTunnel {
-		tunnelBytes := make([]byte, 4)
-		binary.BigEndian.PutUint32(tunnelBytes, di.tunnelID)
-		result = append(result, tunnelBytes...)
+		// Use stack-allocated array to avoid heap allocation
+		var tunnelBytes [4]byte
+		binary.BigEndian.PutUint32(tunnelBytes[:], di.tunnelID)
+		result = append(result, tunnelBytes[:]...)
 	}
 	return result
 }
@@ -396,9 +397,10 @@ func (di *DeliveryInstructions) appendDelayIfPresent(result []byte) []byte {
 // appendMessageIDIfFragmented adds the message ID to the result if the message is fragmented.
 func (di *DeliveryInstructions) appendMessageIDIfFragmented(result []byte) []byte {
 	if di.fragmented {
-		msgBytes := make([]byte, 4)
-		binary.BigEndian.PutUint32(msgBytes, di.messageID)
-		result = append(result, msgBytes...)
+		// Use stack-allocated array to avoid heap allocation
+		var msgBytes [4]byte
+		binary.BigEndian.PutUint32(msgBytes[:], di.messageID)
+		result = append(result, msgBytes[:]...)
 	}
 	return result
 }
@@ -414,9 +416,10 @@ func (di *DeliveryInstructions) appendExtendedOptionsIfPresent(result []byte) []
 
 // appendFragmentSize adds the fragment size field to the result.
 func (di *DeliveryInstructions) appendFragmentSize(result []byte) []byte {
-	sizeBytes := make([]byte, 2)
-	binary.BigEndian.PutUint16(sizeBytes, di.fragmentSize)
-	result = append(result, sizeBytes...)
+	// Use stack-allocated array to avoid heap allocation
+	var sizeBytes [2]byte
+	binary.BigEndian.PutUint16(sizeBytes[:], di.fragmentSize)
+	result = append(result, sizeBytes[:]...)
 	return result
 }
 
