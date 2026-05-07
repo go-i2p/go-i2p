@@ -45,7 +45,8 @@ type StdNetDB struct {
 
 	// riRefreshCooldown stores the time of the last RequestRouterInfoRefresh
 	// call per peer hash to prevent thundering-herd re-fetches.
-	riRefreshCooldown sync.Map // map[common.Hash]time.Time
+	// Uses time-bucketed structure for O(1) cleanup without iteration.
+	riRefreshCooldown *timeBucketedCooldown
 
 	// Cleanup goroutine management
 	ctx       context.Context
@@ -63,18 +64,19 @@ func NewStdNetDB(db string) *StdNetDB {
 	}).Debug("creating new StdNetDB")
 	ctx, cancel := context.WithCancel(context.Background())
 	ndb := &StdNetDB{
-		DB:               db,
-		RouterInfos:      make(map[common.Hash]Entry),
-		riMutex:          sync.RWMutex{},
-		LeaseSets:        make(map[common.Hash]Entry),
-		lsMutex:          sync.RWMutex{},
-		maxRouterInfos:   config.DefaultNetDBConfig.MaxRouterInfos,
-		leaseSetExpiry:   make(map[common.Hash]time.Time),
-		routerInfoExpiry: make(map[common.Hash]time.Time),
-		expiryMutex:      sync.RWMutex{},
-		PeerTracker:      NewPeerTracker(),
-		ctx:              ctx,
-		cancel:           cancel,
+		DB:                db,
+		RouterInfos:       make(map[common.Hash]Entry),
+		riMutex:           sync.RWMutex{},
+		LeaseSets:         make(map[common.Hash]Entry),
+		lsMutex:           sync.RWMutex{},
+		maxRouterInfos:    config.DefaultNetDBConfig.MaxRouterInfos,
+		leaseSetExpiry:    make(map[common.Hash]time.Time),
+		routerInfoExpiry:  make(map[common.Hash]time.Time),
+		expiryMutex:       sync.RWMutex{},
+		PeerTracker:       NewPeerTracker(),
+		riRefreshCooldown: newTimeBucketedCooldown(riRefreshCooldownDuration),
+		ctx:               ctx,
+		cancel:            cancel,
 	}
 	ndb.admission = newRouterInfoAdmissionController(ndb.maxRouterInfos)
 	ndb.StartExpirationCleaner()
@@ -1463,18 +1465,11 @@ func (db *StdNetDB) RequestRouterInfoRefresh(hash common.Hash) {
 }
 
 // sweepRefreshCooldown removes entries from riRefreshCooldown that are older
-// than riRefreshCooldownDuration. This prevents unbounded growth of the
-// sync.Map over the lifetime of a long-running router.
+// than riRefreshCooldownDuration. Uses time-bucketed cleanup for O(1) operation
+// (no iteration required).
 func (db *StdNetDB) sweepRefreshCooldown() {
 	now := time.Now()
-	swept := 0
-	db.riRefreshCooldown.Range(func(key, value interface{}) bool {
-		if t, ok := value.(time.Time); ok && now.Sub(t) > riRefreshCooldownDuration {
-			db.riRefreshCooldown.Delete(key)
-			swept++
-		}
-		return true
-	})
+	swept := db.riRefreshCooldown.Sweep(now)
 	if swept > 0 {
 		log.WithFields(logger.Fields{
 			"at":    "StdNetDB.sweepRefreshCooldown",

@@ -218,6 +218,11 @@ func TestParticipant_HopProcessingCorrectness(t *testing.T) {
 	})
 
 	t.Run("updates_last_activity", func(t *testing.T) {
+		// Disable timestamp granularity for this test (immediate updates)
+		oldGranularity := activityTimestampGranularitySec
+		activityTimestampGranularitySec = 0
+		defer func() { activityTimestampGranularitySec = oldGranularity }()
+
 		dec := &mockSecurityEncryptor{}
 		p, _ := NewParticipant(12345, dec)
 
@@ -269,6 +274,9 @@ func TestParticipant_ExpirationAndIdleTracking(t *testing.T) {
 		dec := &mockSecurityEncryptor{}
 		p, _ := NewParticipant(12345, dec)
 		p.SetIdleTimeout(50 * time.Millisecond)
+
+		// Add small delay to avoid timestamp precision issues
+		time.Sleep(1 * time.Millisecond)
 
 		if p.IsIdle(time.Now()) {
 			t.Error("should not be idle immediately")

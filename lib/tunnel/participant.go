@@ -3,7 +3,7 @@ package tunnel
 import (
 	"encoding/binary"
 	"errors"
-	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-i2p/crypto/tunnel"
@@ -22,7 +22,7 @@ import (
 // - Stateless processing for better performance
 // - Tracks creation time and expiration (tunnels typically last 10 minutes)
 // - Tracks last activity to detect idle tunnels (protection against resource exhaustion attacks)
-// - Thread-safe: lastActivity is protected by a mutex
+// - Thread-safe: lastActivity uses atomic operations with 5-second granularity
 type Participant struct {
 	// tunnelID is this participant's tunnel ID (not used for processing,
 	// but kept for logging and debugging)
@@ -34,21 +34,20 @@ type Participant struct {
 	// createdAt tracks when this participant tunnel was created
 	createdAt time.Time
 
-	// lifetime is how long this participant tunnel is valid
+	// lifetime is how long this participant tunnel is valid (nanoseconds)
 	// Typically 10 minutes for I2P tunnels
-	lifetime time.Duration
+	// Uses atomic operations for thread-safe access
+	lifetime atomic.Int64
 
-	// mu protects lastActivity from concurrent access
-	mu sync.Mutex
-
-	// lastActivity tracks when data was last processed through this tunnel
+	// lastActivity tracks when data was last processed through this tunnel (UnixNano)
 	// Used to detect idle tunnels that may be part of a resource exhaustion attack
-	// Protected by mu
-	lastActivity time.Time
+	// Uses atomic operations with 5-second granularity to reduce syscall overhead
+	lastActivity atomic.Int64
 
-	// idleTimeout is how long a tunnel can be idle before being dropped
+	// idleTimeout is how long a tunnel can be idle before being dropped (nanoseconds)
 	// Default is 2 minutes to mitigate attackers requesting excessive tunnels
-	idleTimeout time.Duration
+	// Uses atomic operations for thread-safe access
+	idleTimeout atomic.Int64
 }
 
 var (
@@ -63,6 +62,12 @@ var (
 // This helps mitigate resource exhaustion attacks where attackers request
 // excessive tunnels but send no data through them.
 const DefaultIdleTimeout = 2 * time.Minute
+
+// activityTimestampGranularitySec is the granularity for lastActivity timestamp updates (in seconds).
+// Timestamps are only updated if at least this many seconds have passed since the last update.
+// This reduces time.Now() syscall overhead from 50+/sec to <1/sec per tunnel.
+// Can be overridden in tests to 0 for immediate updates.
+var activityTimestampGranularitySec int64 = 5
 
 // NewParticipant creates a new tunnel participant.
 //
@@ -84,13 +89,16 @@ func NewParticipant(tunnelID TunnelID, decryption tunnel.TunnelEncryptor) (*Part
 
 	now := time.Now()
 	p := &Participant{
-		tunnelID:     tunnelID,
-		decryption:   decryption,
-		createdAt:    now,
-		lifetime:     10 * time.Minute, // Standard I2P tunnel lifetime
-		lastActivity: now,              // Initialize to creation time
-		idleTimeout:  DefaultIdleTimeout,
+		tunnelID:   tunnelID,
+		decryption: decryption,
+		createdAt:  now,
 	}
+	// Initialize atomic fields
+	p.lifetime.Store(int64(10 * time.Minute)) // Standard I2P tunnel lifetime
+	// Initialize lastActivity atomically to creation time (UnixNano)
+	p.lastActivity.Store(now.UnixNano())
+	// Initialize idleTimeout atomically (nanoseconds)
+	p.idleTimeout.Store(int64(DefaultIdleTimeout))
 
 	log.WithFields(logger.Fields{
 		"at":           "NewParticipant",
@@ -123,11 +131,17 @@ func NewParticipant(tunnelID TunnelID, decryption tunnel.TunnelEncryptor) (*Part
 // - The tunnel ID in the message header specifies the next hop, not this hop
 // - All 1028 bytes are returned; the next hop will decrypt further
 func (p *Participant) Process(encryptedData []byte) (nextHopID TunnelID, decryptedData []byte, err error) {
-	// Update last activity timestamp to track tunnel usage
+	// Update last activity timestamp to track tunnel usage (configurable granularity)
 	// This helps detect idle tunnels that may be part of a resource exhaustion attack
-	p.mu.Lock()
-	p.lastActivity = time.Now()
-	p.mu.Unlock()
+	// Only update if >= activityTimestampGranularitySec seconds have passed to reduce time.Now() syscall overhead
+	now := time.Now()
+	nowNano := now.UnixNano()
+	lastNano := p.lastActivity.Load()
+	// Check if enough seconds have passed (convert nanoseconds to seconds for comparison)
+	if (nowNano-lastNano)/1e9 >= activityTimestampGranularitySec {
+		// Use CompareAndSwap to handle concurrent updates without mutex
+		p.lastActivity.CompareAndSwap(lastNano, nowNano)
+	}
 
 	// Validate input size
 	if len(encryptedData) != 1028 {
@@ -188,26 +202,21 @@ func (p *Participant) TunnelID() TunnelID {
 //
 // Parameters:
 // - now: the current time to check against
+// Returns true if the current time is past createdAt + lifetime.
 //
 // This is used by the tunnel manager to clean up expired participants.
-// Thread-safe: protected by mutex.
+// Thread-safe: uses atomic load for lifetime.
 func (p *Participant) IsExpired(now time.Time) bool {
-	// createdAt is immutable after construction and does not need the lock.
-	// Only lifetime (mutable via SetLifetime) needs synchronization.
-	p.mu.Lock()
-	lifetime := p.lifetime
-	p.mu.Unlock()
+	lifetime := time.Duration(p.lifetime.Load())
 	expirationTime := p.createdAt.Add(lifetime)
 	return now.After(expirationTime)
 }
 
 // SetLifetime updates the lifetime for this participant tunnel.
 // This allows customization beyond the default 10 minutes if needed.
-// Thread-safe: protected by mutex.
+// Thread-safe: uses atomic store.
 func (p *Participant) SetLifetime(lifetime time.Duration) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.lifetime = lifetime
+	p.lifetime.Store(int64(lifetime))
 }
 
 // CreatedAt returns when this participant tunnel was created.
@@ -216,34 +225,30 @@ func (p *Participant) CreatedAt() time.Time {
 }
 
 // LastActivity returns when data was last processed through this tunnel.
-// Thread-safe: protected by mutex.
+// Thread-safe: uses atomic load with 5-second granularity.
 func (p *Participant) LastActivity() time.Time {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.lastActivity
+	return time.Unix(0, p.lastActivity.Load())
 }
 
 // IsIdle checks if this participant tunnel has been idle for too long.
 // Returns true if no data has been processed within the idle timeout period.
 // This helps detect tunnels that may be part of a resource exhaustion attack
 // where attackers request excessive tunnels but send no data through them.
-// Thread-safe: protected by mutex.
+// Thread-safe: uses atomic load with 5-second granularity.
 //
 // Parameters:
 // - now: the current time to check against
 //
 // This is used by the tunnel manager to clean up idle participants.
 func (p *Participant) IsIdle(now time.Time) bool {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return now.Sub(p.lastActivity) > p.idleTimeout
+	lastActivity := time.Unix(0, p.lastActivity.Load())
+	idleTimeout := time.Duration(p.idleTimeout.Load())
+	return now.Sub(lastActivity) > idleTimeout
 }
 
 // SetIdleTimeout updates the idle timeout for this participant tunnel.
 // This allows customization beyond the default 2 minutes if needed.
-// Thread-safe: protected by mutex.
+// Thread-safe: uses atomic store.
 func (p *Participant) SetIdleTimeout(timeout time.Duration) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.idleTimeout = timeout
+	p.idleTimeout.Store(int64(timeout))
 }

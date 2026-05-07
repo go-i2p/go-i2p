@@ -481,14 +481,16 @@ func (m *Manager) RegisterParticipant(tunnelID TunnelID, sourceHash common.Hash,
 	}
 
 	// Create the participant with proper decryption
+	now := time.Now()
 	participant := &Participant{
-		tunnelID:     tunnelID,
-		createdAt:    time.Now(),
-		lifetime:     lifetime,
-		lastActivity: time.Now(),
-		idleTimeout:  DefaultIdleTimeout,
-		decryption:   decryption,
+		tunnelID:   tunnelID,
+		createdAt:  now,
+		decryption: decryption,
 	}
+	// Initialize atomic fields
+	participant.lifetime.Store(int64(lifetime))
+	participant.lastActivity.Store(now.UnixNano())
+	participant.idleTimeout.Store(int64(DefaultIdleTimeout))
 
 	// Add to tracking
 	err = m.AddParticipant(participant)

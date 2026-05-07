@@ -344,7 +344,7 @@ func TestCleanupIdleParticipants(t *testing.T) {
 
 	// Create a participant that has been idle too long (no activity for 3 minutes)
 	idleParticipant := addParticipantToManager(t, m, 11111)
-	idleParticipant.lastActivity = time.Now().Add(-3 * time.Minute) // Idle for 3 minutes
+	idleParticipant.lastActivity.Store(time.Now().Add(-3 * time.Minute).UnixNano()) // Idle for 3 minutes
 
 	// Create an active participant (recent activity)
 	addParticipantToManager(t, m, 22222)
@@ -352,7 +352,7 @@ func TestCleanupIdleParticipants(t *testing.T) {
 
 	// Create a participant that's idle but not yet past the threshold
 	almostIdleParticipant := addParticipantToManager(t, m, 33333)
-	almostIdleParticipant.lastActivity = time.Now().Add(-1 * time.Minute) // Only idle for 1 minute
+	almostIdleParticipant.lastActivity.Store(time.Now().Add(-1 * time.Minute).UnixNano()) // Only idle for 1 minute
 
 	// Verify all three were added
 	if m.ParticipantCount() != 3 {
@@ -377,7 +377,7 @@ func TestIdleAndExpiredParticipantCleanup(t *testing.T) {
 
 	// Create an idle participant
 	idleParticipant := addParticipantToManager(t, m, 22222)
-	idleParticipant.lastActivity = time.Now().Add(-3 * time.Minute) // Idle
+	idleParticipant.lastActivity.Store(time.Now().Add(-3 * time.Minute).UnixNano()) // Idle
 
 	// Create a healthy participant
 	addParticipantToManager(t, m, 33333)

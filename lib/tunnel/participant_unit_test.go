@@ -374,6 +374,11 @@ func TestParticipantIdleDetection(t *testing.T) {
 
 // TestParticipantProcessUpdatesActivity tests that Process updates last activity
 func TestParticipantProcessUpdatesActivity(t *testing.T) {
+	// Disable timestamp granularity for this test (immediate updates)
+	oldGranularity := activityTimestampGranularitySec
+	activityTimestampGranularitySec = 0
+	defer func() { activityTimestampGranularitySec = oldGranularity }()
+
 	p, _ := createTestParticipant(t, 12345)
 
 	initialActivity := p.LastActivity()

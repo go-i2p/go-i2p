@@ -85,8 +85,9 @@ func (u *I2NPUnframer) ReadNextMessage() (i2np.I2NPMessage, error) {
 	u.bytesRead = 0
 
 	// Read the NTCP2 length prefix (4 bytes)
-	lengthBuf := make([]byte, 4)
-	if err := u.readFull(lengthBuf); err != nil {
+	// Use stack-allocated array to avoid heap allocation on every message
+	var lengthBuf [4]byte
+	if err := u.readFull(lengthBuf[:]); err != nil {
 		log.WithError(err).Error("Failed to read message length prefix")
 		return nil, err
 	}
