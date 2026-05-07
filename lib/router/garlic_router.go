@@ -93,6 +93,21 @@ func newNetDBAdapter(netdb *netdb.StdNetDB) GarlicNetDB {
 //   - Accesses NetDB for destination/router lookups
 //   - Uses transport layer for direct router-to-router messaging
 //   - Uses tunnel pools for destination and tunnel delivery
+//
+// drainRequest encapsulates a channel that needs to be drained to prevent
+// blocking the NetDB sender goroutine.
+type drainRequest struct {
+	leaseSetCh   chan lease_set.LeaseSet
+	routerInfoCh chan router_info.RouterInfo
+}
+
+const (
+	// Maximum number of concurrent drain workers
+	maxDrainWorkers = 100
+	// Buffer size for drain request channel
+	drainRequestBuffer = 1000
+)
+
 type GarlicMessageRouter struct {
 	// Router infrastructure dependencies
 	netdb          GarlicNetDB               // NetDB with LeaseSet support
@@ -109,6 +124,9 @@ type GarlicMessageRouter struct {
 	ctx          context.Context                  // Context for graceful shutdown
 	cancel       context.CancelFunc               // Cancel function for shutdown
 	wg           sync.WaitGroup                   // Tracks background goroutines
+
+	// Channel draining worker pool
+	drainRequests chan drainRequest // Bounded channel for drain requests
 }
 
 // NewGarlicMessageRouter creates a new garlic message router with required dependencies.
@@ -133,6 +151,16 @@ func NewGarlicMessageRouter(
 		pendingMsgs:    make(map[common.Hash][]pendingMessage),
 		ctx:            ctx,
 		cancel:         cancel,
+		drainRequests:  make(chan drainRequest, drainRequestBuffer),
+	}
+
+	// Start bounded pool of drain workers
+	for i := 0; i < maxDrainWorkers; i++ {
+		gr.wg.Add(1)
+		go func() {
+			defer gr.wg.Done()
+			gr.drainWorker()
+		}()
 	}
 
 	// Start background goroutine to process pending messages
@@ -149,6 +177,34 @@ func NewGarlicMessageRouter(
 // This enables the router to process messages locally when needed (e.g., reflexive ROUTER delivery).
 func (gr *GarlicMessageRouter) SetMessageProcessor(processor *i2np.MessageProcessor) {
 	gr.processor = processor
+}
+
+// drainWorker processes drain requests from the bounded drain queue.
+// Each worker runs until the router context is cancelled.
+func (gr *GarlicMessageRouter) drainWorker() {
+	for {
+		select {
+		case req := <-gr.drainRequests:
+			// Drain the appropriate channel based on which is non-nil
+			if req.leaseSetCh != nil {
+				select {
+				case <-req.leaseSetCh:
+					// Channel drained
+				case <-gr.ctx.Done():
+					return
+				}
+			} else if req.routerInfoCh != nil {
+				select {
+				case <-req.routerInfoCh:
+					// Channel drained
+				case <-gr.ctx.Done():
+					return
+				}
+			}
+		case <-gr.ctx.Done():
+			return
+		}
+	}
 }
 
 // ForwardToDestination implements GarlicCloveForwarder interface.
@@ -224,13 +280,24 @@ func (gr *GarlicMessageRouter) awaitLeaseSetResult(destHash common.Hash, leaseSe
 
 // drainLeaseSetChannel consumes from a LeaseSet channel in the background to prevent
 // the NetDB sender goroutine from blocking on an abandoned channel.
+// Submits the channel to a bounded worker pool instead of spawning a new goroutine.
 func (gr *GarlicMessageRouter) drainLeaseSetChannel(ch chan lease_set.LeaseSet) {
-	go func() {
-		select {
-		case <-ch:
-		case <-gr.ctx.Done():
-		}
-	}()
+	select {
+	case gr.drainRequests <- drainRequest{leaseSetCh: ch}:
+		// Successfully queued for draining
+	case <-gr.ctx.Done():
+		// Router shutting down, abandon drain
+	default:
+		// Drain queue full; spawn emergency goroutine
+		// This should be rare and indicates high lookup failure rate
+		log.WithField("at", "drainLeaseSetChannel").Warn("Drain queue full, using fallback")
+		go func() {
+			select {
+			case <-ch:
+			case <-gr.ctx.Done():
+			}
+		}()
+	}
 }
 
 // validateAndExtractLeases validates a LeaseSet and extracts its leases.
@@ -463,13 +530,24 @@ func (gr *GarlicMessageRouter) handleRouterInfoChannelClosed(routerHash common.H
 
 // drainRouterInfoChannel consumes from a RouterInfo channel in the background to prevent
 // the NetDB sender goroutine from blocking on an abandoned channel.
+// Submits the channel to a bounded worker pool instead of spawning a new goroutine.
 func (gr *GarlicMessageRouter) drainRouterInfoChannel(ch chan router_info.RouterInfo) {
-	go func() {
-		select {
-		case <-ch:
-		case <-gr.ctx.Done():
-		}
-	}()
+	select {
+	case gr.drainRequests <- drainRequest{routerInfoCh: ch}:
+		// Successfully queued for draining
+	case <-gr.ctx.Done():
+		// Router shutting down, abandon drain
+	default:
+		// Drain queue full; spawn emergency goroutine
+		// This should be rare and indicates high lookup failure rate
+		log.WithField("at", "drainRouterInfoChannel").Warn("Drain queue full, using fallback")
+		go func() {
+			select {
+			case <-ch:
+			case <-gr.ctx.Done():
+			}
+		}()
+	}
 }
 
 // handleRouterInfoTimeout returns an error when a RouterInfo lookup exceeds the deadline.

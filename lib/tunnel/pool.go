@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	common "github.com/go-i2p/common/data"
@@ -124,17 +125,17 @@ type Pool struct {
 	peerSelector         PeerSelector
 	tunnelBuilder        BuilderInterface
 	config               PoolConfig
-	selectionIndex       int       // For round-robin selection
-	lastBuildTime        time.Time // Track last build attempt for backoff
-	buildFailures        int       // Consecutive build failures
+	selectionIndex       atomic.Uint32 // Lock-free round-robin counter
+	lastBuildTime        time.Time     // Track last build attempt for backoff
+	buildFailures        int           // Consecutive build failures
 	ctx                  context.Context
 	cancel               context.CancelFunc
 	maintWg              sync.WaitGroup            // Track maintenance goroutine
 	failedPeers          map[common.Hash]time.Time // FIX #5: Track failed peer connection attempts
 	failedPeersMu        sync.RWMutex              // FIX #5: Protect failed peers map
 	peerTracker          PeerTracker               // Optional peer reputation tracking (netdb integration)
-	cachedActive         []*TunnelState            // Cached sorted active tunnels
-	cachedDirty          bool                      // True when cache needs rebuild
+	cachedActive         atomic.Value              // []*TunnelState - lock-free cached sorted active tunnels
+	cachedDirty          atomic.Bool               // True when cache needs rebuild
 	inFlightExpiredCount int                       // Consecutive inbound build timeouts (no VTBRM received)
 	autoFallbackFn       func() bool               // Returns true when no public address is available
 	routerHash           common.Hash               // Our router's identity hash, used as ReplyGateway in build requests
@@ -191,17 +192,19 @@ func NewTunnelPool(selector PeerSelector) *Pool {
 // NewTunnelPoolWithConfig creates a new tunnel pool with custom configuration
 func NewTunnelPoolWithConfig(selector PeerSelector, config PoolConfig) *Pool {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Pool{
+	p := &Pool{
 		tunnels:       make(map[TunnelID]*TunnelState),
 		peerSelector:  selector,
 		config:        config,
 		lastBuildTime: time.Time{},                     // Zero time
 		failedPeers:   make(map[common.Hash]time.Time), // FIX #5: Track failed connection attempts
-		cachedDirty:   true,
 		ctx:           ctx,
 		cancel:        cancel,
 		peerTracker:   nil, // Will be set via SetPeerTracker if NetDB integration is enabled
 	}
+	// Initialize atomic fields
+	p.cachedDirty.Store(true)
+	return p
 }
 
 // SetPeerTracker sets the peer tracker for NetDB integration.
@@ -399,7 +402,7 @@ func (p *Pool) AddTunnel(tunnel *TunnelState) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 	p.tunnels[tunnel.ID] = tunnel
-	p.cachedDirty = true
+	p.cachedDirty.Store(true)
 	log.WithFields(logger.Fields{
 		"at":           "(Pool) AddTunnel",
 		"phase":        "tunnel_build",
@@ -417,7 +420,7 @@ func (p *Pool) RemoveTunnel(id TunnelID) {
 	defer p.mutex.Unlock()
 	tunnel, existed := p.tunnels[id]
 	delete(p.tunnels, id)
-	p.cachedDirty = true
+	p.cachedDirty.Store(true)
 	log.WithFields(logger.Fields{
 		"at":        "(Pool) RemoveTunnel",
 		"phase":     "tunnel_build",
@@ -1017,34 +1020,55 @@ func (p *Pool) logBuildFailure(err error, retry, maxRetries int, req *BuildTunne
 
 // SelectTunnel selects a tunnel from the pool using round-robin strategy.
 // Returns nil if no active tunnels are available.
+// SelectTunnel returns an active tunnel using lock-free round-robin selection.
+// Returns nil if no active tunnels are available.
+// This is a hot-path function called on every message send.
 func (p *Pool) SelectTunnel() *TunnelState {
-	p.mutex.Lock()
-	defer p.mutex.Unlock()
-
-	active := p.getActiveTunnelsLocked()
+	// Lock-free read of cached active tunnels
+	active := p.getActiveTunnels()
 	if len(active) == 0 {
 		log.WithFields(logger.Fields{
 			"at":          "(Pool) SelectTunnel",
 			"phase":       "tunnel_build",
 			"reason":      "no active tunnels available for selection",
-			"pool_size":   len(p.tunnels),
+			"pool_size":   p.getTunnelCount(),
 			"min_tunnels": p.config.MinTunnels,
 			"impact":      "traffic cannot be routed until tunnels are built",
 		}).Warn("no active tunnels available")
 		return nil
 	}
 
-	// Round-robin selection - select first, then increment
-	selected := active[p.selectionIndex%len(active)]
-	p.selectionIndex++
+	// Lock-free round-robin selection using atomic increment
+	index := p.selectionIndex.Add(1) - 1
+	selected := active[index%uint32(len(active))]
 	return selected
 }
 
-// getActiveTunnelsLocked returns active tunnels sorted by ID for deterministic order (must hold mutex)
-func (p *Pool) getActiveTunnelsLocked() []*TunnelState {
-	if !p.cachedDirty && p.cachedActive != nil {
-		return p.cachedActive
+// getActiveTunnels returns the cached active tunnel slice with lock-free read.
+// If the cache is dirty, it rebuilds the cache under a write lock.
+func (p *Pool) getActiveTunnels() []*TunnelState {
+	// Fast path: lock-free read of cached value
+	if !p.cachedDirty.Load() {
+		if cached := p.cachedActive.Load(); cached != nil {
+			return cached.([]*TunnelState)
+		}
 	}
+
+	// Slow path: rebuild cache under write lock
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	return p.rebuildActiveCacheLocked()
+}
+
+// rebuildActiveCacheLocked rebuilds the active tunnel cache (must hold write lock).
+func (p *Pool) rebuildActiveCacheLocked() []*TunnelState {
+	// Check again after acquiring lock (another goroutine may have rebuilt it)
+	if !p.cachedDirty.Load() {
+		if cached := p.cachedActive.Load(); cached != nil {
+			return cached.([]*TunnelState)
+		}
+	}
+
 	var active []*TunnelState
 	for _, tunnel := range p.tunnels {
 		if tunnel.State == TunnelReady {
@@ -1054,9 +1078,24 @@ func (p *Pool) getActiveTunnelsLocked() []*TunnelState {
 	sort.Slice(active, func(i, j int) bool {
 		return active[i].ID < active[j].ID
 	})
-	p.cachedActive = active
-	p.cachedDirty = false
+
+	// Atomic store of new cache
+	p.cachedActive.Store(active)
+	p.cachedDirty.Store(false)
 	return active
+}
+
+// getTunnelCount returns the number of tunnels in the pool (lock-free read).
+func (p *Pool) getTunnelCount() int {
+	p.mutex.RLock()
+	defer p.mutex.RUnlock()
+	return len(p.tunnels)
+}
+
+// getActiveTunnelsLocked returns active tunnels sorted by ID for deterministic order (must hold mutex)
+// DEPRECATED: Use getActiveTunnels() for lock-free access. This function remains for legacy callers.
+func (p *Pool) getActiveTunnelsLocked() []*TunnelState {
+	return p.rebuildActiveCacheLocked()
 }
 
 // GetPoolStats returns statistics about the pool
