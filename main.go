@@ -17,6 +17,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/util/signals"
 	"github.com/go-i2p/i2ptui"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
@@ -742,7 +743,7 @@ func createAndConfigureRouter() error {
 	var err error
 	embeddedRouter, err = embedded.NewStandardEmbeddedRouter(routerCfg)
 	if err != nil {
-		return fmt.Errorf("failed to create embedded router: %w", err)
+		return oops.Errorf("failed to create embedded router: %w", err)
 	}
 	log.WithField("at", "createAndConfigureRouter").Debug("NewStandardEmbeddedRouter returned")
 
@@ -751,7 +752,7 @@ func createAndConfigureRouter() error {
 	// constructor + Configure pattern.
 	log.WithField("at", "createAndConfigureRouter").Debug("calling Configure (expected no-op)")
 	if err := embeddedRouter.Configure(routerCfg); err != nil {
-		return fmt.Errorf("failed to configure router: %w", err)
+		return oops.Errorf("failed to configure router: %w", err)
 	}
 	log.WithField("at", "createAndConfigureRouter").Debug("router creation and configuration complete")
 	return nil
@@ -798,11 +799,11 @@ func startAndRunRouter() error {
 	embeddedRouterMu.Unlock()
 
 	if r == nil {
-		return fmt.Errorf("router not initialized")
+		return oops.Errorf("router not initialized")
 	}
 
 	if err := r.Start(); err != nil {
-		return fmt.Errorf("failed to start router: %w", err)
+		return oops.Errorf("failed to start router: %w", err)
 	}
 
 	log.WithFields(logger.Fields{
@@ -835,7 +836,7 @@ func closeRouter() error {
 	defer util.CloseAll()
 
 	if err := r.Close(); err != nil {
-		return fmt.Errorf("failed to close router: %w", err)
+		return oops.Errorf("failed to close router: %w", err)
 	}
 
 	return nil

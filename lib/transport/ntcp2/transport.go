@@ -447,7 +447,7 @@ func (t *NTCP2Transport) performInboundHandshake(conn net.Conn) error {
 			Warn("Inbound NTCP2: no RouterInfo block in msg3 — protocol violation; closing")
 		_ = ntcp2Conn.Close()
 		t.unreserveSessionSlot()
-		return errors.New("inbound NTCP2: missing RouterInfo block in msg3")
+		return oops.Errorf("inbound NTCP2: missing RouterInfo block in msg3")
 	}
 
 	peerRI, _, parseErr := router_info.ReadRouterInfo(riBytes)

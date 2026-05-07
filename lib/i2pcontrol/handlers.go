@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 	"github.com/spf13/viper"
 )
 
@@ -727,10 +728,10 @@ func (h *NetworkSettingHandler) applySettingChange(setting string, value interfa
 func validatePortSetting(setting string, value interface{}) (interface{}, error) {
 	port, err := coerceInt(value)
 	if err != nil {
-		return nil, fmt.Errorf("%s must be an integer: %w", setting, err)
+		return nil, oops.Errorf("%s must be an integer: %w", setting, err)
 	}
 	if port < 1 || port > 65535 {
-		return nil, fmt.Errorf("%s must be in [1,65535], got %d", setting, port)
+		return nil, oops.Errorf("%s must be in [1,65535], got %d", setting, port)
 	}
 	return port, nil
 }
@@ -740,7 +741,7 @@ func validatePortSetting(setting string, value interface{}) (interface{}, error)
 func validateHostnameSetting(setting string, value interface{}) (interface{}, error) {
 	host, ok := value.(string)
 	if !ok {
-		return nil, fmt.Errorf("%s must be a string, got %T", setting, value)
+		return nil, oops.Errorf("%s must be a string, got %T", setting, value)
 	}
 	if err := validateHostname(host); err != nil {
 		return nil, err
@@ -752,10 +753,10 @@ func validateHostnameSetting(setting string, value interface{}) (interface{}, er
 func validateBandwidthSetting(setting string, value interface{}) (interface{}, error) {
 	bw, err := coerceInt(value)
 	if err != nil {
-		return nil, fmt.Errorf("%s must be a non-negative integer: %w", setting, err)
+		return nil, oops.Errorf("%s must be a non-negative integer: %w", setting, err)
 	}
 	if bw < 0 {
-		return nil, fmt.Errorf("%s must be non-negative, got %d", setting, bw)
+		return nil, oops.Errorf("%s must be non-negative, got %d", setting, bw)
 	}
 	return bw, nil
 }
@@ -764,10 +765,10 @@ func validateBandwidthSetting(setting string, value interface{}) (interface{}, e
 func validateSharePercentage(setting string, value interface{}) (interface{}, error) {
 	v, err := coerceInt(value)
 	if err != nil {
-		return nil, fmt.Errorf("%s must be an integer: %w", setting, err)
+		return nil, oops.Errorf("%s must be an integer: %w", setting, err)
 	}
 	if v < 0 || v > 100 {
-		return nil, fmt.Errorf("%s must be in [0,100], got %d", setting, v)
+		return nil, oops.Errorf("%s must be in [0,100], got %d", setting, v)
 	}
 	return v, nil
 }
@@ -784,11 +785,11 @@ func validateBoolSetting(setting string, value interface{}) (interface{}, error)
 		case "false", "0", "no":
 			return false, nil
 		}
-		return nil, fmt.Errorf("%s must be a boolean, got %q", setting, v)
+		return nil, oops.Errorf("%s must be a boolean, got %q", setting, v)
 	case float64:
 		return v != 0, nil
 	default:
-		return nil, fmt.Errorf("%s must be a boolean, got %T", setting, value)
+		return nil, oops.Errorf("%s must be a boolean, got %T", setting, value)
 	}
 }
 
@@ -824,7 +825,7 @@ func coerceInt(value interface{}) (int, error) {
 		return int(v), nil
 	case float64:
 		if v != float64(int(v)) {
-			return 0, fmt.Errorf("value %v is not an integer", v)
+			return 0, oops.Errorf("value %v is not an integer", v)
 		}
 		return int(v), nil
 	case json.Number:
@@ -834,7 +835,7 @@ func coerceInt(value interface{}) (int, error) {
 		}
 		return int(n), nil
 	default:
-		return 0, fmt.Errorf("unsupported type %T", value)
+		return 0, oops.Errorf("unsupported type %T", value)
 	}
 }
 
@@ -846,7 +847,7 @@ func validateHostname(host string) error {
 		return nil
 	}
 	if len(host) > 253 {
-		return fmt.Errorf("hostname exceeds 253 bytes")
+		return oops.Errorf("hostname exceeds 253 bytes")
 	}
 	if ip := net.ParseIP(host); ip != nil {
 		return nil
@@ -858,7 +859,7 @@ func validateHostname(host string) error {
 		case r >= '0' && r <= '9':
 		case r == '-' || r == '.':
 		default:
-			return fmt.Errorf("hostname contains invalid character %q", r)
+			return oops.Errorf("hostname contains invalid character %q", r)
 		}
 	}
 	return nil
