@@ -8,12 +8,12 @@ if [ -z "$VERSION" ]; then
   exit 1
 fi
 
-if [ $DRY_RUN = true ]; then
+if [ "$DRY_RUN" = true ]; then
   echo "Attempting a dry run, dependencies will be updated but not checked in"
 fi
 
 git() {
-  if [ $DRY_RUN = true ]; then
+  if [ "$DRY_RUN" = true ]; then
     echo "git $*"
   else
     command git "$@"
@@ -21,7 +21,7 @@ git() {
 }
 
 github_release() {
-  if [ $DRY_RUN = true ]; then
+  if [ "$DRY_RUN" = true ]; then
     echo "github-release $*"
   else
     command github-release "$@"
