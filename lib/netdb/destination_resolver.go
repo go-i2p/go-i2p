@@ -354,13 +354,9 @@ func (dr *DestinationResolver) decryptEncryptedLeaseSet(dest destination.Destina
 	if err != nil {
 		return nil, oops.Errorf("failed to get original signing key: %w", err)
 	}
-	sigTypeA := uint16(dest.KeyCertificate.SigningPublicKeyType())
-	sigTypeBlinded := els.SigType()
 	subcredential := encrypted_leaseset.DeriveSubcredential(
 		origSigningKey.Bytes(),
-		sigTypeA,
 		els.BlindedPublicKey(),
-		sigTypeBlinded,
 	)
 
 	innerLS2, err := els.DecryptInnerData(subcredential)
