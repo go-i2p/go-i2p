@@ -1,4 +1,4 @@
-Release notes for: `go-i2p` Version `0.1.54`
+Release notes for: `go-i2p` Version `0.1.55`
 ==========================================
 
 This release is only recommended for developers at this time.
