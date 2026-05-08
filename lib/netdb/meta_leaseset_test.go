@@ -53,10 +53,10 @@ func metaLeaseSetConfig() leaseSetTestConfig {
 func TestStoreMetaLeaseSetInvalidDataType(t *testing.T) {
 	testStoreInvalidDataType(t, metaLeaseSetConfig())
 }
-func TestStoreMetaLeaseSetParseError(t *testing.T) { testStoreParseError(t, metaLeaseSetConfig()) }
-func TestStoreMetaLeaseSetEmptyData(t *testing.T)  { testStoreEmptyData(t, metaLeaseSetConfig()) }
-func TestStoreMetaLeaseSetNilData(t *testing.T)    { testStoreNilData(t, metaLeaseSetConfig()) }
-func TestGetMetaLeaseSetNotFound(t *testing.T)     { testGetNotFound(t, metaLeaseSetConfig()) }
+func TestStoreMetaLeaseSetParseError(t *testing.T)  { testStoreParseError(t, metaLeaseSetConfig()) }
+func TestStoreMetaLeaseSetEmptyData(t *testing.T)   { testStoreEmptyData(t, metaLeaseSetConfig()) }
+func TestStoreMetaLeaseSetNilData(t *testing.T)     { testStoreNilData(t, metaLeaseSetConfig()) }
+func TestGetMetaLeaseSetNotFound(t *testing.T)      { testGetNotFound(t, metaLeaseSetConfig()) }
 func TestGetMetaLeaseSetBytesNotFound(t *testing.T) { testGetBytesNotFound(t, metaLeaseSetConfig()) }
 
 func TestMetaLeaseSetThreadSafety(t *testing.T) { testLeaseSetThreadSafety(t, metaLeaseSetConfig()) }

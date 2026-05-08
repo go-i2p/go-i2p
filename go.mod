@@ -13,11 +13,13 @@ require (
 	github.com/go-i2p/go-unzip v0.0.0-20260417162122-21146ed7aca8
 	github.com/go-i2p/i2ptui v0.0.0-20260501200659-b54dc6831b61
 	github.com/go-i2p/logger v0.1.52
+	github.com/go-i2p/noise v1.1.1-0.20260327201800-8e41bb3d9f1e
 	github.com/go-i2p/su3 v0.1.52
 	github.com/samber/oops v1.21.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
+	go.step.sm/crypto v0.78.0
 	golang.org/x/crypto v0.50.0
 	golang.org/x/time v0.15.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -38,10 +40,9 @@ require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dchest/siphash v1.2.3 // indirect
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
-	github.com/fsnotify/fsnotify v1.9.0 // indirect
+	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/go-i2p/elgamal v0.0.2 // indirect
 	github.com/go-i2p/go-i2pcontrol v0.1.8 // indirect
-	github.com/go-i2p/noise v1.1.1-0.20260327201800-8e41bb3d9f1e // indirect
 	github.com/go-i2p/red25519 v0.0.0-20260302212615-1093a31f680d // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/huin/goupnp v1.3.0 // indirect
@@ -55,7 +56,7 @@ require (
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/oklog/ulid/v2 v2.1.1 // indirect
-	github.com/pelletier/go-toml/v2 v2.3.0 // indirect
+	github.com/pelletier/go-toml/v2 v2.3.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/sagikazarmark/locafero v0.12.0 // indirect
@@ -69,12 +70,11 @@ require (
 	github.com/ybbus/jsonrpc/v2 v2.1.7 // indirect
 	go.opentelemetry.io/otel v1.43.0 // indirect
 	go.opentelemetry.io/otel/trace v1.43.0 // indirect
-	go.step.sm/crypto v0.77.2 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/net v0.53.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
-	golang.org/x/sys v0.43.0 // indirect
-	golang.org/x/text v0.36.0 // indirect
+	golang.org/x/sys v0.44.0 // indirect
+	golang.org/x/text v0.37.0 // indirect
 )
 
 // Preserve these commented-out replace directives for local development.

@@ -53,7 +53,7 @@ func TestStoreLeaseSetEmptyData(t *testing.T)       { testStoreEmptyData(t, leas
 func TestStoreLeaseSetNilData(t *testing.T)         { testStoreNilData(t, leaseSetConfig()) }
 func TestGetLeaseSetNotFound(t *testing.T)          { testGetNotFound(t, leaseSetConfig()) }
 func TestGetLeaseSetBytesNotFound(t *testing.T)     { testGetBytesNotFound(t, leaseSetConfig()) }
-func TestLeaseSetThreadSafety(t *testing.T) { testLeaseSetThreadSafety(t, leaseSetConfig()) }
+func TestLeaseSetThreadSafety(t *testing.T)         { testLeaseSetThreadSafety(t, leaseSetConfig()) }
 
 func TestLeaseSetConcurrentStoreAndRetrieve(t *testing.T) {
 	testConcurrentStoreAndRetrieve(t, leaseSetConfig())
