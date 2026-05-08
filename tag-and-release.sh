@@ -62,6 +62,8 @@ collecthash() {
 
 LOGGER_TAG_HASH=$(collecthash logger) # 0
 echo "logger tag hash: $LOGGER_TAG_HASH" 1>&2
+ELGAMAL_TAG_HASH=$(collecthash elgamal) # 0
+echo "elgamal tag hash: $ELGAMAL_TAG_HASH" 1>&2
 SU3_TAG_HASH=$(collecthash su3) # 0
 echo "su3 tag hash: $SU3_TAG_HASH" 1>&2
 CRYPTO_TAG_HASH=$(collecthash crypto) # 1
@@ -93,6 +95,8 @@ update_our_packages() {
   go get -u ./...
   echo go get "github.com/go-i2p/logger@$LOGGER_TAG_HASH" 1>&2
   go get "github.com/go-i2p/logger@$LOGGER_TAG_HASH" >/dev/null 2>/dev/null || true
+  echo go get "github.com/go-i2p/elgamal@$ELGAMAL_TAG_HASH" 1>&2
+  go get "github.com/go-i2p/elgamal@$ELGAMAL_TAG_HASH" >/dev/null 2>/dev/null || true
   echo go get "github.com/go-i2p/su3@$SU3_TAG_HASH" 1>&2
   go get "github.com/go-i2p/su3@$SU3_TAG_HASH" >/dev/null 2>/dev/null || true
   echo go get "github.com/go-i2p/crypto@$CRYPTO_TAG_HASH" 1>&2
@@ -226,6 +230,7 @@ tagandrelease() {
 echo "Tagging and releasing version v$VERSION" 1>&2
 
 LOGGER_TAG_HASH=$(tagandrelease logger) # 0
+ELGAMAL_TAG_HASH=$(tagandrelease elgamal) # 2
 SU3_TAG_HASH=$(tagandrelease su3) # 1
 CRYPTO_TAG_HASH=$(tagandrelease crypto) # 3
 COMMON_TAG_HASH=$(tagandrelease common) # 4
