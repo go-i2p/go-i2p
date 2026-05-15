@@ -193,47 +193,75 @@ func extractTransportAddress(transport *NTCP2Transport) (string, string, error) 
 		return "", "", oops.Errorf("transport has no listening address")
 	}
 
-	// Handle *ntcp2.NTCP2Addr (wrapped), *net.TCPAddr (direct), and *nattraversal.NATAddr
-	var host, port string
+	return extractAddressComponents(addr)
+}
+
+// extractAddressComponents extracts host and port from various address types.
+// Supports *ntcp2.NTCP2Addr, *net.TCPAddr, and *nattraversal.NATAddr.
+func extractAddressComponents(addr net.Addr) (string, string, error) {
 	switch typedAddr := addr.(type) {
 	case *ntcp2noise.NTCP2Addr:
-		// Extract underlying address from NTCP2Addr wrapper
-		underlying := typedAddr.UnderlyingAddr()
-		var err error
-		host, port, err = extractHostPort(underlying)
-		if err != nil {
-			log.Errorf("NTCP2Addr underlying address extraction failed: %v", err)
-			return "", "", oops.Wrapf(err, "NTCP2Addr underlying address extraction failed")
-		}
+		return extractFromNTCP2Addr(typedAddr)
 	case *net.TCPAddr:
-		ip := typedAddr.IP
-		if ip == nil || ip.IsUnspecified() {
-			if ext := detectExternalIP(); ext != "" {
-				host = ext
-			} else {
-				host = ip.String()
-			}
-		} else {
-			host = ip.String()
-		}
-		port = fmt.Sprintf("%d", typedAddr.Port)
+		return extractFromTCPAddr(typedAddr)
 	case *nattraversal.NATAddr:
-		var err error
-		host, port, err = net.SplitHostPort(typedAddr.ExternalAddr())
-		if err != nil {
-			return "", "", oops.Wrapf(err, "failed to parse NATAddr external address %q", typedAddr.ExternalAddr())
-		}
-		if parsedIP := net.ParseIP(host); parsedIP != nil && parsedIP.IsUnspecified() {
-			if ext := detectExternalIP(); ext != "" {
-				host = ext
-			}
-		}
+		return extractFromNATAddr(typedAddr)
 	default:
 		log.Errorf("Expected *net.TCPAddr, *ntcp2.NTCP2Addr, or *nattraversal.NATAddr, got %T", addr)
 		return "", "", oops.Errorf("unsupported address type %T", addr)
 	}
+}
 
+// extractFromNTCP2Addr extracts host and port from an NTCP2Addr wrapper.
+func extractFromNTCP2Addr(typedAddr *ntcp2noise.NTCP2Addr) (string, string, error) {
+	underlying := typedAddr.UnderlyingAddr()
+	host, port, err := extractHostPort(underlying)
+	if err != nil {
+		log.Errorf("NTCP2Addr underlying address extraction failed: %v", err)
+		return "", "", oops.Wrapf(err, "NTCP2Addr underlying address extraction failed")
+	}
 	return host, port, nil
+}
+
+// extractFromTCPAddr extracts host and port from a TCPAddr, handling unspecified IPs.
+func extractFromTCPAddr(typedAddr *net.TCPAddr) (string, string, error) {
+	host := resolveHostIP(typedAddr.IP)
+	port := fmt.Sprintf("%d", typedAddr.Port)
+	return host, port, nil
+}
+
+// extractFromNATAddr extracts host and port from a NATAddr, using external address.
+func extractFromNATAddr(typedAddr *nattraversal.NATAddr) (string, string, error) {
+	host, port, err := net.SplitHostPort(typedAddr.ExternalAddr())
+	if err != nil {
+		return "", "", oops.Wrapf(err, "failed to parse NATAddr external address %q", typedAddr.ExternalAddr())
+	}
+	host = resolveUnspecifiedIP(host)
+	return host, port, nil
+}
+
+// resolveHostIP returns the IP string, or detects external IP if the IP is nil or unspecified.
+func resolveHostIP(ip net.IP) string {
+	if ip == nil || ip.IsUnspecified() {
+		if ext := detectExternalIP(); ext != "" {
+			return ext
+		}
+		if ip != nil {
+			return ip.String()
+		}
+		return ""
+	}
+	return ip.String()
+}
+
+// resolveUnspecifiedIP checks if a host string represents an unspecified IP and replaces it with detected external IP.
+func resolveUnspecifiedIP(host string) string {
+	if parsedIP := net.ParseIP(host); parsedIP != nil && parsedIP.IsUnspecified() {
+		if ext := detectExternalIP(); ext != "" {
+			return ext
+		}
+	}
+	return host
 }
 
 // extractHostPort extracts host and port from an address that may be *net.TCPAddr or *nattraversal.NATAddr.

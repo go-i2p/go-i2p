@@ -197,23 +197,43 @@ func (gr *GarlicMessageRouter) drainWorker() {
 // processDrainRequest drains the appropriate channel based on which is non-nil.
 // Returns false if the router context is cancelled, true otherwise.
 func (gr *GarlicMessageRouter) processDrainRequest(req drainRequest) bool {
+	// Identify which channel to drain
+	var drainCh <-chan struct{}
 	if req.leaseSetCh != nil {
-		select {
-		case <-req.leaseSetCh:
-			return true
-		case <-gr.ctx.Done():
-			return false
-		}
+		drainCh = convertLeaseSetChan(req.leaseSetCh)
+	} else if req.routerInfoCh != nil {
+		drainCh = convertRouterInfoChan(req.routerInfoCh)
+	} else {
+		return true // No channel to drain
 	}
-	if req.routerInfoCh != nil {
-		select {
-		case <-req.routerInfoCh:
-			return true
-		case <-gr.ctx.Done():
-			return false
-		}
+
+	// Drain the channel or return false if context cancelled
+	select {
+	case <-drainCh:
+		return true
+	case <-gr.ctx.Done():
+		return false
 	}
-	return true
+}
+
+// convertLeaseSetChan converts a LeaseSet channel to a struct{} channel for uniform handling.
+func convertLeaseSetChan(ch chan lease_set.LeaseSet) <-chan struct{} {
+	result := make(chan struct{}, 1)
+	go func() {
+		<-ch
+		close(result)
+	}()
+	return result
+}
+
+// convertRouterInfoChan converts a RouterInfo channel to a struct{} channel for uniform handling.
+func convertRouterInfoChan(ch chan router_info.RouterInfo) <-chan struct{} {
+	result := make(chan struct{}, 1)
+	go func() {
+		<-ch
+		close(result)
+	}()
+	return result
 }
 
 // ForwardToDestination implements GarlicCloveForwarder interface.

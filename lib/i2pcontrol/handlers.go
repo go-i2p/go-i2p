@@ -469,34 +469,85 @@ func (h *RouterManagerHandler) handleReseed(req, result map[string]interface{}) 
 // Set i2pcontrol.graceful_stop_delay to e.g. "11m" to approximate Java I2P behaviour.
 // The shutdown observes server context cancellation.
 func (h *RouterManagerHandler) handleShutdownGraceful(req, result map[string]interface{}) {
-	if _, ok := req["ShutdownGraceful"]; ok {
-		if h.RouterControl == nil {
-			log.WithFields(logger.Fields{"at": "handleShutdownGraceful"}).Warn("ShutdownGraceful requested but RouterControl is nil")
-			result["ShutdownGraceful"] = "error: router control not available"
-			return
-		}
-		h.wg.Add(1)
-		go func() {
-			defer h.wg.Done()
-			select {
-			case <-h.ctx.Done():
-				log.WithFields(logger.Fields{"at": "handleShutdownGraceful"}).Info("ShutdownGraceful cancelled before execution")
-				return
-			default:
-			}
-			log.WithFields(logger.Fields{"at": "handleShutdownGraceful"}).Info("ShutdownGraceful requested via I2PControl")
-			if delay := viper.GetDuration("i2pcontrol.graceful_stop_delay"); delay > 0 {
-				log.WithFields(logger.Fields{"delay": delay}).Info("ShutdownGraceful: waiting for participating tunnels to drain")
-				select {
-				case <-time.After(delay):
-				case <-h.ctx.Done():
-					log.WithFields(logger.Fields{"at": "handleShutdownGraceful"}).Info("ShutdownGraceful cancelled during drain delay")
-					return
-				}
-			}
-			h.RouterControl.Stop()
-		}()
-		result["ShutdownGraceful"] = nil
+	h.handleGracefulStop(req, result, "ShutdownGraceful")
+}
+
+// handleGracefulStop provides common logic for ShutdownGraceful and RestartGraceful operations.
+// It checks for the requested operation, validates RouterControl, waits for the configured drain delay,
+// and then initiates the router stop. All operations respect context cancellation.
+func (h *RouterManagerHandler) handleGracefulStop(req, result map[string]interface{}, operation string) {
+	if _, ok := req[operation]; !ok {
+		return
+	}
+
+	if !h.validateRouterControl(result, operation) {
+		return
+	}
+
+	h.wg.Add(1)
+	go func() {
+		defer h.wg.Done()
+		h.executeGracefulStop(operation)
+	}()
+	result[operation] = nil
+}
+
+// validateRouterControl checks if RouterControl is available and sets error result if not.
+// Returns true if validation passes, false otherwise.
+func (h *RouterManagerHandler) validateRouterControl(result map[string]interface{}, operation string) bool {
+	if h.RouterControl != nil {
+		return true
+	}
+	log.WithFields(logger.Fields{"at": fmt.Sprintf("handle%s", operation)}).Warn(fmt.Sprintf("%s requested but RouterControl is nil", operation))
+	result[operation] = "error: router control not available"
+	return false
+}
+
+// executeGracefulStop performs the actual graceful stop sequence:
+// 1. Check for context cancellation
+// 2. Wait for configured drain delay (if any)
+// 3. Call RouterControl.Stop()
+func (h *RouterManagerHandler) executeGracefulStop(operation string) {
+	if h.contextCancelled(operation, "before execution") {
+		return
+	}
+
+	log.WithFields(logger.Fields{"at": fmt.Sprintf("handle%s", operation)}).Info(fmt.Sprintf("%s requested via I2PControl", operation))
+
+	if !h.waitForDrainDelay(operation) {
+		return
+	}
+
+	h.RouterControl.Stop()
+}
+
+// contextCancelled checks if the handler context is cancelled and logs if so.
+// Returns true if context is cancelled, false otherwise.
+func (h *RouterManagerHandler) contextCancelled(operation, stage string) bool {
+	select {
+	case <-h.ctx.Done():
+		log.WithFields(logger.Fields{"at": fmt.Sprintf("handle%s", operation)}).Info(fmt.Sprintf("%s cancelled %s", operation, stage))
+		return true
+	default:
+		return false
+	}
+}
+
+// waitForDrainDelay waits for the configured graceful stop delay (if > 0).
+// Returns true if delay completed normally, false if context was cancelled.
+func (h *RouterManagerHandler) waitForDrainDelay(operation string) bool {
+	delay := viper.GetDuration("i2pcontrol.graceful_stop_delay")
+	if delay <= 0 {
+		return true
+	}
+
+	log.WithFields(logger.Fields{"delay": delay}).Info(fmt.Sprintf("%s: waiting for participating tunnels to drain", operation))
+	select {
+	case <-time.After(delay):
+		return true
+	case <-h.ctx.Done():
+		log.WithFields(logger.Fields{"at": fmt.Sprintf("handle%s", operation)}).Info(fmt.Sprintf("%s cancelled during drain delay", operation))
+		return false
 	}
 }
 
@@ -506,35 +557,7 @@ func (h *RouterManagerHandler) handleShutdownGraceful(req, result map[string]int
 // The external process supervisor is responsible for restarting the process.
 // The restart observes server context cancellation.
 func (h *RouterManagerHandler) handleRestartGraceful(req, result map[string]interface{}) {
-	if _, ok := req["RestartGraceful"]; ok {
-		if h.RouterControl == nil {
-			log.WithFields(logger.Fields{"at": "handleRestartGraceful"}).Warn("RestartGraceful requested but RouterControl is nil")
-			result["RestartGraceful"] = "error: router control not available"
-			return
-		}
-		h.wg.Add(1)
-		go func() {
-			defer h.wg.Done()
-			select {
-			case <-h.ctx.Done():
-				log.WithFields(logger.Fields{"at": "handleRestartGraceful"}).Info("RestartGraceful cancelled before execution")
-				return
-			default:
-			}
-			log.WithFields(logger.Fields{"at": "handleRestartGraceful"}).Info("RestartGraceful requested via I2PControl (stop only; supervisor must restart)")
-			if delay := viper.GetDuration("i2pcontrol.graceful_stop_delay"); delay > 0 {
-				log.WithFields(logger.Fields{"delay": delay}).Info("RestartGraceful: waiting for participating tunnels to drain")
-				select {
-				case <-time.After(delay):
-				case <-h.ctx.Done():
-					log.WithFields(logger.Fields{"at": "handleRestartGraceful"}).Info("RestartGraceful cancelled during drain delay")
-					return
-				}
-			}
-			h.RouterControl.Stop()
-		}()
-		result["RestartGraceful"] = nil
-	}
+	h.handleGracefulStop(req, result, "RestartGraceful")
 }
 
 // handleFindUpdates responds to the FindUpdates RouterManager operation.

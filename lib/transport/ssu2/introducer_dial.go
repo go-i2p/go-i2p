@@ -196,13 +196,27 @@ func (t *SSU2Transport) dialCharlieDirectly(charlieRI router_info.RouterInfo, ch
 	}
 	t.logger.WithField("charlie_addr", charlieAddr).Debug("dialing Charlie directly after relay")
 
-	// Give Charlie's hole-punch packets time to arrive so NAT state is open.
-	select {
-	case <-time.After(holePunchDelay):
-	case <-t.ctx.Done():
-		return nil, oops.Wrapf(t.ctx.Err(), "context canceled during hole-punch delay")
+	if err := t.waitForHolePunch(); err != nil {
+		return nil, err
 	}
 
+	return t.establishCharlieSession(charlieRI, charlieHash, charlieAddr)
+}
+
+// waitForHolePunch waits for Charlie's hole-punch packets to arrive.
+// Returns error if context is cancelled during the wait.
+func (t *SSU2Transport) waitForHolePunch() error {
+	select {
+	case <-time.After(holePunchDelay):
+		return nil
+	case <-t.ctx.Done():
+		return oops.Wrapf(t.ctx.Err(), "context canceled during hole-punch delay")
+	}
+}
+
+// establishCharlieSession establishes a connection to Charlie and registers the session.
+// Handles session limit checking and cleanup on failure.
+func (t *SSU2Transport) establishCharlieSession(charlieRI router_info.RouterInfo, charlieHash data.Hash, charlieAddr *net.UDPAddr) (transport.TransportSession, error) {
 	dialConfig, err := t.buildCharlieDialConfig(charlieRI, charlieHash)
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to build dial config for Charlie")
@@ -213,6 +227,12 @@ func (t *SSU2Transport) dialCharlieDirectly(charlieRI router_info.RouterInfo, ch
 		return nil, oops.Wrapf(err, "failed to dial Charlie at %v", charlieAddr)
 	}
 
+	return t.registerCharlieSession(conn, charlieHash)
+}
+
+// registerCharlieSession registers or reuses a session for Charlie, handling session limit checks.
+// Closes the connection and returns error if session limit is exceeded.
+func (t *SSU2Transport) registerCharlieSession(conn *ssu2noise.SSU2Conn, charlieHash data.Hash) (transport.TransportSession, error) {
 	if err := t.checkSessionLimit(); err != nil {
 		_ = conn.Close()
 		return nil, err
@@ -222,6 +242,7 @@ func (t *SSU2Transport) dialCharlieDirectly(charlieRI router_info.RouterInfo, ch
 	if err != nil {
 		return nil, err
 	}
+
 	if !newSlotUsed {
 		// session limit was pre-checked but slot ended up not used (reused existing)
 		t.unreserveSessionSlot()

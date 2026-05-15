@@ -340,33 +340,52 @@ func hasUsableIntroducer(introducers []*ssu2noise.RegisteredIntroducer) bool {
 // extractHostPort unwraps SSU2Addr and extracts host and port from the listener address.
 // Handles NATAddr (from go-nat-listener) to use the external address when available.
 func extractHostPort(addr net.Addr) (string, string, error) {
-	effectiveAddr := addr
-	if ssu2Addr, ok := addr.(*ssu2noise.SSU2Addr); ok {
-		effectiveAddr = ssu2Addr.UnderlyingAddr()
-	}
-	// If the underlying address is a NATAddr, use its external address explicitly.
+	effectiveAddr := unwrapSSU2Addr(addr)
+
 	if natAddr, ok := effectiveAddr.(*nattraversal.NATAddr); ok {
-		host, portStr, err := net.SplitHostPort(natAddr.ExternalAddr())
-		if err != nil {
-			return "", "", oops.Wrapf(err, "failed to parse NATAddr external address %q", natAddr.ExternalAddr())
-		}
-		if parsedIP := net.ParseIP(host); parsedIP != nil && parsedIP.IsUnspecified() {
-			if ext := detectExternalIP(); ext != "" {
-				host = ext
-			}
-		}
-		return host, portStr, nil
+		return extractNATAddrHostPort(natAddr)
 	}
-	host, portStr, err := net.SplitHostPort(effectiveAddr.String())
+
+	return extractStandardHostPort(effectiveAddr)
+}
+
+// unwrapSSU2Addr unwraps an SSU2Addr to get the underlying address.
+func unwrapSSU2Addr(addr net.Addr) net.Addr {
+	if ssu2Addr, ok := addr.(*ssu2noise.SSU2Addr); ok {
+		return ssu2Addr.UnderlyingAddr()
+	}
+	return addr
+}
+
+// extractNATAddrHostPort extracts host and port from a NATAddr's external address.
+func extractNATAddrHostPort(natAddr *nattraversal.NATAddr) (string, string, error) {
+	host, portStr, err := net.SplitHostPort(natAddr.ExternalAddr())
+	if err != nil {
+		return "", "", oops.Wrapf(err, "failed to parse NATAddr external address %q", natAddr.ExternalAddr())
+	}
+	host = replaceUnspecifiedWithExternal(host)
+	return host, portStr, nil
+}
+
+// extractStandardHostPort extracts host and port from a standard address using String().
+func extractStandardHostPort(addr net.Addr) (string, string, error) {
+	host, portStr, err := net.SplitHostPort(addr.String())
 	if err != nil {
 		return "", "", oops.Wrapf(err, "failed to parse listener address")
 	}
-	if parsedIP := net.ParseIP(host); parsedIP != nil && parsedIP.IsUnspecified() {
+	host = replaceUnspecifiedWithExternal(host)
+	return host, portStr, nil
+}
+
+// replaceUnspecifiedWithExternal replaces unspecified IP (0.0.0.0 or ::) with detected external IP.
+func replaceUnspecifiedWithExternal(host string) string {
+	parsedIP := net.ParseIP(host)
+	if parsedIP != nil && parsedIP.IsUnspecified() {
 		if ext := detectExternalIP(); ext != "" {
-			host = ext
+			return ext
 		}
 	}
-	return host, portStr, nil
+	return host
 }
 
 // detectExternalIP returns the best routable local IP address to advertise when

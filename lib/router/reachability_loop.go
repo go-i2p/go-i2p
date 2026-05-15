@@ -1,10 +1,12 @@
 package router
 
 import (
+	"fmt"
 	"sync/atomic"
 	"time"
 
 	"github.com/go-i2p/common/router_address"
+	"github.com/go-i2p/common/router_info"
 	ntcp2 "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
 	"github.com/go-i2p/logger"
 )
@@ -172,42 +174,77 @@ func (r *Router) refreshNTCP2LocalRouterInfo() {
 // Returns "" when no evidence is available.
 func (r *Router) collectBestExternalAddr() string {
 	// 1. SSU2 PeerTest / NAT-PMP is the highest-quality source.
-	ssu2Transport := r.getSSU2Transport()
-	if ssu2Transport != nil {
-		if addr := ssu2Transport.GetCachedExternalAddr(); addr != "" {
-			return addr
-		}
+	if addr := r.getSSU2ExternalAddr(); addr != "" {
+		return addr
 	}
 
 	// 2. Fall back to the NTCP2 address from the current RouterInfo.
 	//    This covers NTCP2-only deployments on static or NAT-forwarded IPs.
-	if r.routerInfoProv == nil {
+	return r.getNTCP2ExternalAddr()
+}
+
+// getSSU2ExternalAddr retrieves the cached external address from SSU2 transport.
+// Returns "" if SSU2 transport is not available or has no cached address.
+func (r *Router) getSSU2ExternalAddr() string {
+	ssu2Transport := r.getSSU2Transport()
+	if ssu2Transport == nil {
 		return ""
 	}
-	ri, err := r.routerInfoProv.GetRouterInfo()
+	return ssu2Transport.GetCachedExternalAddr()
+}
+
+// getNTCP2ExternalAddr extracts the first publicly routable NTCP2 address from the current RouterInfo.
+// Returns "" if no suitable address is found.
+func (r *Router) getNTCP2ExternalAddr() string {
+	ri, err := r.getRouterInfo()
 	if err != nil || ri == nil {
 		return ""
 	}
+
 	for _, addr := range ri.RouterAddresses() {
-		if addr == nil {
-			continue
+		if extAddr := r.extractPublicAddress(addr); extAddr != "" {
+			return extAddr
 		}
-		if !addr.CheckOption(router_address.HOST_OPTION_KEY) {
-			continue
-		}
-		hostStr := addr.HostString()
-		portStr := addr.PortString()
-		host, hErr := hostStr.Data()
-		port, pErr := portStr.Data()
-		if hErr != nil || pErr != nil || host == "" || port == "" {
-			continue
-		}
-		// Keep network-status reachability criteria consistent with
-		// RouterInfo capability publication.
-		if !isPubliclyRoutableHost(host) {
-			continue
-		}
-		return host + ":" + port
 	}
 	return ""
+}
+
+// getRouterInfo safely retrieves the current RouterInfo.
+// Returns nil and error if routerInfoProv is unavailable.
+func (r *Router) getRouterInfo() (*router_info.RouterInfo, error) {
+	if r.routerInfoProv == nil {
+		return nil, fmt.Errorf("routerInfoProv is nil")
+	}
+	return r.routerInfoProv.GetRouterInfo()
+}
+
+// extractPublicAddress extracts and validates a public host:port from a router address.
+// Returns "" if the address is nil, missing host/port options, or not publicly routable.
+func (r *Router) extractPublicAddress(addr *router_address.RouterAddress) string {
+	if addr == nil || !addr.CheckOption(router_address.HOST_OPTION_KEY) {
+		return ""
+	}
+
+	host, port, err := r.getHostAndPort(addr)
+	if err != nil || !isPubliclyRoutableHost(host) {
+		return ""
+	}
+
+	return host + ":" + port
+}
+
+// getHostAndPort extracts host and port strings from a router address.
+// Returns error if either host or port is missing or invalid.
+func (r *Router) getHostAndPort(addr *router_address.RouterAddress) (string, string, error) {
+	hostStr := addr.HostString()
+	portStr := addr.PortString()
+
+	host, hErr := hostStr.Data()
+	port, pErr := portStr.Data()
+
+	if hErr != nil || pErr != nil || host == "" || port == "" {
+		return "", "", fmt.Errorf("invalid host or port")
+	}
+
+	return host, port, nil
 }
