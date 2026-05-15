@@ -157,14 +157,50 @@ func shouldSkipPeer(ri router_info.RouterInfo, excludeMap map[common.Hash]bool, 
 		stats.skippedHashError++
 		return true
 	}
+
+	if shouldSkipExcluded(riHash, excludeMap, stats) {
+		return true
+	}
+
+	if shouldSkipNoAddresses(ri, stats) {
+		return true
+	}
+
+	if shouldSkipStale(riHash, tracker, stats) {
+		return true
+	}
+
+	if shouldSkipNoCaps(ri, riHash, stats) {
+		return true
+	}
+
+	if shouldSkipOldRouterInfo(ri, riHash, stats) {
+		return true
+	}
+
+	return false
+}
+
+// shouldSkipExcluded checks if the peer is in the exclude map.
+func shouldSkipExcluded(riHash common.Hash, excludeMap map[common.Hash]bool, stats *peerFilterStats) bool {
 	if excludeMap[riHash] {
 		stats.skippedExcluded++
 		return true
 	}
+	return false
+}
+
+// shouldSkipNoAddresses checks if the peer has no addresses.
+func shouldSkipNoAddresses(ri router_info.RouterInfo, stats *peerFilterStats) bool {
 	if len(ri.RouterAddresses()) == 0 {
 		stats.skippedNoAddresses++
 		return true
 	}
+	return false
+}
+
+// shouldSkipStale checks if the peer is marked as stale by the tracker.
+func shouldSkipStale(riHash common.Hash, tracker *PeerTracker, stats *peerFilterStats) bool {
 	if tracker.IsLikelyStale(riHash) {
 		log.WithFields(logger.Fields{
 			"peer_hash": fmt.Sprintf("%x", riHash[:8]),
@@ -173,6 +209,11 @@ func shouldSkipPeer(ri router_info.RouterInfo, excludeMap map[common.Hash]bool, 
 		stats.skippedStale++
 		return true
 	}
+	return false
+}
+
+// shouldSkipNoCaps checks if the peer lacks required capabilities for tunnel participation.
+func shouldSkipNoCaps(ri router_info.RouterInfo, riHash common.Hash, stats *peerFilterStats) bool {
 	// Tunnel hop participation requires the 'R' (reachable) capability and
 	// disqualifies routers advertising 'H' (hidden). Without this filter,
 	// 'U' (unreachable) and hidden peers are picked as middle/end hops, the
@@ -188,6 +229,11 @@ func shouldSkipPeer(ri router_info.RouterInfo, excludeMap map[common.Hash]bool, 
 		stats.skippedNoRCap++
 		return true
 	}
+	return false
+}
+
+// shouldSkipOldRouterInfo checks if the RouterInfo is too old.
+func shouldSkipOldRouterInfo(ri router_info.RouterInfo, riHash common.Hash, stats *peerFilterStats) bool {
 	// Reject RouterInfos that are too old. Peers may rotate their X25519
 	// encryption keys; if we encrypt STBM records with a stale key the
 	// remote peer cannot decrypt the record and silently drops the message.

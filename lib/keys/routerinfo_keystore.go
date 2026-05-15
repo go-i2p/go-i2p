@@ -512,26 +512,36 @@ func (ks *RouterInfoKeystore) logAndWrapError(err error, msg string) error {
 func (ks *RouterInfoKeystore) mergeOptions(opts []RouterInfoOptions) RouterInfoOptions {
 	var options RouterInfoOptions
 	for _, opt := range opts {
-		if opt.CongestionFlag != "" {
-			options.CongestionFlag = opt.CongestionFlag
-		}
-		if opt.Reachable {
-			options.Reachable = true
-		}
-		if opt.Floodfill {
-			options.Floodfill = true
-		}
-		if opt.NetID != "" {
-			options.NetID = opt.NetID
-		}
-		if opt.Version != "" {
-			options.Version = opt.Version
-		}
-		if opt.Hidden {
-			options.Hidden = true
-		}
+		ks.mergeStringFields(&options, opt)
+		ks.mergeBooleanFields(&options, opt)
 	}
 	return options
+}
+
+// mergeStringFields merges string-valued options fields.
+func (ks *RouterInfoKeystore) mergeStringFields(dest *RouterInfoOptions, src RouterInfoOptions) {
+	if src.CongestionFlag != "" {
+		dest.CongestionFlag = src.CongestionFlag
+	}
+	if src.NetID != "" {
+		dest.NetID = src.NetID
+	}
+	if src.Version != "" {
+		dest.Version = src.Version
+	}
+}
+
+// mergeBooleanFields merges boolean-valued options fields (true values override false).
+func (ks *RouterInfoKeystore) mergeBooleanFields(dest *RouterInfoOptions, src RouterInfoOptions) {
+	if src.Reachable {
+		dest.Reachable = true
+	}
+	if src.Floodfill {
+		dest.Floodfill = true
+	}
+	if src.Hidden {
+		dest.Hidden = true
+	}
 }
 
 // validateAndGetKeys retrieves and validates the signing keys from the keystore

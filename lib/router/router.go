@@ -133,24 +133,39 @@ func CreateRouter(cfg *config.RouterConfig) (*Router, error) {
 		logError("failed to create router from configuration", err)
 		return nil, err
 	}
-	log.WithField("at", "CreateRouter").Debug("step 2/6: initializing keystore")
 
-	if err := initializeRouterKeystore(r, cfg); err != nil {
+	if err := initializeRouterComponents(r, cfg); err != nil {
 		return nil, err
+	}
+
+	log.WithField("at", "CreateRouter").Debug("step 6/6: router created successfully")
+	return r, nil
+}
+
+// initializeRouterComponents initializes keystore, keys, RouterInfo, NetDB, and transports.
+func initializeRouterComponents(r *Router, cfg *config.RouterConfig) error {
+	log.WithField("at", "CreateRouter").Debug("step 2/6: initializing keystore")
+	if err := initializeRouterKeystore(r, cfg); err != nil {
+		return err
 	}
 
 	log.WithField("at", "CreateRouter").Debug("step 3/6: validating router keys")
 	if err := validateRouterKeys(r); err != nil {
-		return nil, err
+		return err
 	}
 
 	log.WithField("at", "CreateRouter").Debug("step 4/6: constructing RouterInfo (includes signing)")
 	ri, err := constructRouterInfo(r)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	log.WithField("at", "CreateRouter").Debug("step 5/6: initializing transports")
+	return initializeNetDBAndTransports(r, ri, cfg)
+}
+
+// initializeNetDBAndTransports initializes NetDB before transports (required order).
+func initializeNetDBAndTransports(r *Router, ri *router_info.RouterInfo, cfg *config.RouterConfig) error {
 	// NetDB MUST be initialized before transports so that NTCP2/SSU2 can wire
 	// their PeerConnNotifier into r.StdNetDB.PeerTracker. Without this, the
 	// peer-tracker only ever sees tunnel-build failures (recorded by Pool),
@@ -158,16 +173,16 @@ func CreateRouter(cfg *config.RouterConfig) (*Router, error) {
 	// peer is marked stale after a single tunnel-build failure.
 	if err := r.initializeNetDB(); err != nil {
 		logError("failed to initialize NetDB before transports", err)
-		return nil, err
+		return err
 	}
+
 	transports, err := initializeTransports(r, ri, cfg)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	r.TransportMuxer = transport.Mux(transports...)
-	log.WithField("at", "CreateRouter").Debug("step 6/6: router created successfully")
-	return r, nil
+	return nil
 }
 
 func validateCreateRouterConfig(cfg *config.RouterConfig) error {

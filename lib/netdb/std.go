@@ -784,37 +784,61 @@ func (db *StdNetDB) storeRouterInfoFromMessageInternal(key common.Hash, data []b
 }
 
 func (db *StdNetDB) admitRouterInfoIntroduction(key common.Hash, source *common.Hash) error {
-	db.riMutex.RLock()
-	_, exists := db.RouterInfos[key]
-	current := len(db.RouterInfos)
-	max := db.maxRouterInfos
-	db.riMutex.RUnlock()
+	exists, current, max := db.getRouterInfoCacheState(key)
 
 	if exists {
 		return nil
 	}
 
+	if err := db.checkCapacity(current, max); err != nil {
+		return err
+	}
+
+	return db.checkAdmissionLimits(key, source, current)
+}
+
+// getRouterInfoCacheState returns the cache state for admission checks.
+func (db *StdNetDB) getRouterInfoCacheState(key common.Hash) (exists bool, current int, max int) {
+	db.riMutex.RLock()
+	_, exists = db.RouterInfos[key]
+	current = len(db.RouterInfos)
+	max = db.maxRouterInfos
+	db.riMutex.RUnlock()
+	return
+}
+
+// checkCapacity checks if the RouterInfo cache has reached capacity.
+func (db *StdNetDB) checkCapacity(current, max int) error {
 	if max > 0 && current >= max {
 		return oops.Errorf("RouterInfo capacity reached (%d)", max)
 	}
+	return nil
+}
 
+// checkAdmissionLimits checks admission rate limits for the RouterInfo introduction.
+func (db *StdNetDB) checkAdmissionLimits(key common.Hash, source *common.Hash, current int) error {
 	if db.admission == nil {
 		return nil
 	}
 
 	if ok := db.admission.AllowIntroduction(source, key, current); !ok {
-		if source != nil {
-			log.WithFields(logger.Fields{
-				"source": source.String(),
-				"hash":   key.String(),
-			}).Warn("Rejecting RouterInfo introduction: source admission limit exceeded")
-		} else {
-			log.WithField("hash", key.String()).Warn("Rejecting RouterInfo introduction: source unavailable and under pressure")
-		}
+		db.logAdmissionRejection(key, source)
 		return oops.Errorf("RouterInfo introduction rate limited")
 	}
 
 	return nil
+}
+
+// logAdmissionRejection logs the rejection of a RouterInfo introduction.
+func (db *StdNetDB) logAdmissionRejection(key common.Hash, source *common.Hash) {
+	if source != nil {
+		log.WithFields(logger.Fields{
+			"source": source.String(),
+			"hash":   key.String(),
+		}).Warn("Rejecting RouterInfo introduction: source admission limit exceeded")
+	} else {
+		log.WithField("hash", key.String()).Warn("Rejecting RouterInfo introduction: source unavailable and under pressure")
+	}
 }
 
 // finalizeRouterInfoStorage tracks expiration and persists a cached RouterInfo to disk.

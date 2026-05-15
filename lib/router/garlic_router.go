@@ -304,22 +304,34 @@ func (gr *GarlicMessageRouter) awaitLeaseSetResult(destHash common.Hash, leaseSe
 // the NetDB sender goroutine from blocking on an abandoned channel.
 // Submits the channel to a bounded worker pool instead of spawning a new goroutine.
 func (gr *GarlicMessageRouter) drainLeaseSetChannel(ch chan lease_set.LeaseSet) {
+	if gr.tryQueueLeaseSetDrain(ch) {
+		return
+	}
+	gr.fallbackDrainLeaseSet(ch)
+}
+
+// tryQueueLeaseSetDrain attempts to queue a LeaseSet channel drain.
+// Returns true if successfully queued or shutdown, false if queue is full.
+func (gr *GarlicMessageRouter) tryQueueLeaseSetDrain(ch chan lease_set.LeaseSet) bool {
 	select {
 	case gr.drainRequests <- drainRequest{leaseSetCh: ch}:
-		// Successfully queued for draining
+		return true
 	case <-gr.ctx.Done():
-		// Router shutting down, abandon drain
+		return true
 	default:
-		// Drain queue full; spawn emergency goroutine
-		// This should be rare and indicates high lookup failure rate
-		log.WithField("at", "drainLeaseSetChannel").Warn("Drain queue full, using fallback")
-		go func() {
-			select {
-			case <-ch:
-			case <-gr.ctx.Done():
-			}
-		}()
+		return false
 	}
+}
+
+// fallbackDrainLeaseSet spawns an emergency goroutine to drain a LeaseSet channel.
+func (gr *GarlicMessageRouter) fallbackDrainLeaseSet(ch chan lease_set.LeaseSet) {
+	log.WithField("at", "drainLeaseSetChannel").Warn("Drain queue full, using fallback")
+	go func() {
+		select {
+		case <-ch:
+		case <-gr.ctx.Done():
+		}
+	}()
 }
 
 // validateAndExtractLeases validates a LeaseSet and extracts its leases.
@@ -554,22 +566,34 @@ func (gr *GarlicMessageRouter) handleRouterInfoChannelClosed(routerHash common.H
 // the NetDB sender goroutine from blocking on an abandoned channel.
 // Submits the channel to a bounded worker pool instead of spawning a new goroutine.
 func (gr *GarlicMessageRouter) drainRouterInfoChannel(ch chan router_info.RouterInfo) {
+	if gr.tryQueueRouterInfoDrain(ch) {
+		return
+	}
+	gr.fallbackDrainRouterInfo(ch)
+}
+
+// tryQueueRouterInfoDrain attempts to queue a RouterInfo channel drain.
+// Returns true if successfully queued or shutdown, false if queue is full.
+func (gr *GarlicMessageRouter) tryQueueRouterInfoDrain(ch chan router_info.RouterInfo) bool {
 	select {
 	case gr.drainRequests <- drainRequest{routerInfoCh: ch}:
-		// Successfully queued for draining
+		return true
 	case <-gr.ctx.Done():
-		// Router shutting down, abandon drain
+		return true
 	default:
-		// Drain queue full; spawn emergency goroutine
-		// This should be rare and indicates high lookup failure rate
-		log.WithField("at", "drainRouterInfoChannel").Warn("Drain queue full, using fallback")
-		go func() {
-			select {
-			case <-ch:
-			case <-gr.ctx.Done():
-			}
-		}()
+		return false
 	}
+}
+
+// fallbackDrainRouterInfo spawns an emergency goroutine to drain a RouterInfo channel.
+func (gr *GarlicMessageRouter) fallbackDrainRouterInfo(ch chan router_info.RouterInfo) {
+	log.WithField("at", "drainRouterInfoChannel").Warn("Drain queue full, using fallback")
+	go func() {
+		select {
+		case <-ch:
+		case <-gr.ctx.Done():
+		}
+	}()
 }
 
 // handleRouterInfoTimeout returns an error when a RouterInfo lookup exceeds the deadline.

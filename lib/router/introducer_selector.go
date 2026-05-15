@@ -101,44 +101,42 @@ func (r *Router) collectIntroducerCandidates(maxCount int) []router_info.RouterI
 		log.Debug("collectIntroducerCandidates: no netdb")
 		return nil
 	}
-	ourHash, ourHashErr := r.getOurRouterHash()
+
 	all := r.StdNetDB.GetAllRouterInfos()
+	ourHash, ourHashErr := r.getOurRouterHash()
 
 	log.WithFields(logger.Fields{
 		"at":                "collectIntroducerCandidates",
 		"total_routerinfos": len(all),
 	}).Debug("starting introducer candidate search")
 
+	out, stats := r.filterIntroducerCandidates(all, ourHash, ourHashErr, maxCount)
+
+	r.logIntroducerCandidateStats(stats)
+
+	return out
+}
+
+// introducerStats tracks statistics during introducer candidate filtering.
+type introducerStats struct {
+	checked int
+	noSSU2  int
+	noRCap  int
+	found   int
+}
+
+// filterIntroducerCandidates filters RouterInfos to find suitable introducer candidates.
+func (r *Router) filterIntroducerCandidates(all []router_info.RouterInfo, ourHash common.Hash, ourHashErr error, maxCount int) ([]router_info.RouterInfo, introducerStats) {
 	out := make([]router_info.RouterInfo, 0, maxCount)
-	checked := 0
-	noSSU2 := 0
-	noRCap := 0
+	stats := introducerStats{}
 
 	for i := range all {
 		ri := all[i]
-		checked++
+		stats.checked++
 
-		// Detailed filtering with counts
-		h, err := ri.IdentHash()
-		if err != nil {
+		if !r.isValidIntroducerCandidate(ri, ourHash, ourHashErr, &stats) {
 			continue
 		}
-		if ourHashErr == nil && h == ourHash {
-			continue
-		}
-		if !ssu2.HasDialableSSU2Address(&ri) {
-			noSSU2++
-			continue
-		}
-		if !capsContainsReachable(ri.RouterCapabilities()) {
-			noRCap++
-			continue
-		}
-
-		// BUG FIX: Removed the connected session requirement. Introducers can be
-		// contacted via NTCP2 or tunnels; an SSU2 session is not required.
-		// This allows firewalled routers to register introducers before having
-		// any SSU2 connectivity (Java I2P behavior).
 
 		out = append(out, ri)
 		if len(out) >= maxCount {
@@ -146,15 +144,45 @@ func (r *Router) collectIntroducerCandidates(maxCount int) []router_info.RouterI
 		}
 	}
 
+	stats.found = len(out)
+	return out, stats
+}
+
+// isValidIntroducerCandidate checks if a RouterInfo qualifies as an introducer candidate.
+func (r *Router) isValidIntroducerCandidate(ri router_info.RouterInfo, ourHash common.Hash, ourHashErr error, stats *introducerStats) bool {
+	h, err := ri.IdentHash()
+	if err != nil {
+		return false
+	}
+	if ourHashErr == nil && h == ourHash {
+		return false
+	}
+	if !ssu2.HasDialableSSU2Address(&ri) {
+		stats.noSSU2++
+		return false
+	}
+	if !capsContainsReachable(ri.RouterCapabilities()) {
+		stats.noRCap++
+		return false
+	}
+
+	// BUG FIX: Removed the connected session requirement. Introducers can be
+	// contacted via NTCP2 or tunnels; an SSU2 session is not required.
+	// This allows firewalled routers to register introducers before having
+	// any SSU2 connectivity (Java I2P behavior).
+
+	return true
+}
+
+// logIntroducerCandidateStats logs statistics about the introducer candidate search.
+func (r *Router) logIntroducerCandidateStats(stats introducerStats) {
 	log.WithFields(logger.Fields{
 		"at":                "collectIntroducerCandidates",
-		"checked":           checked,
-		"found":             len(out),
-		"rejected_no_ssu2":  noSSU2,
-		"rejected_no_r_cap": noRCap,
+		"checked":           stats.checked,
+		"found":             stats.found,
+		"rejected_no_ssu2":  stats.noSSU2,
+		"rejected_no_r_cap": stats.noRCap,
 	}).Info("introducer candidate search complete")
-
-	return out
 }
 
 // isIntroducerCandidate returns true when ri qualifies as one of our
@@ -202,8 +230,17 @@ func (r *Router) snapshotConnectedHashes() map[common.Hash]struct{} {
 // and removes any registered introducer not in the candidate set. Returns
 // true if the registered set changed (additions or removals occurred).
 func (r *Router) applyIntroducerCandidates(transport *ssu2.SSU2Transport, candidates []router_info.RouterInfo) bool {
+	wantAddrs, added := r.addNewIntroducers(transport, candidates)
+	removed := r.removeStaleIntroducers(transport, wantAddrs)
+	return added > 0 || removed > 0
+}
+
+// addNewIntroducers registers new introducers from candidates.
+// Returns a map of desired addresses and the count of newly added introducers.
+func (r *Router) addNewIntroducers(transport *ssu2.SSU2Transport, candidates []router_info.RouterInfo) (map[string]struct{}, int) {
 	wantAddrs := make(map[string]struct{}, len(candidates))
 	added := 0
+
 	for _, ri := range candidates {
 		intro, err := transport.IntroducerFromRouterInfo(ri)
 		if err != nil {
@@ -215,7 +252,15 @@ func (r *Router) applyIntroducerCandidates(transport *ssu2.SSU2Transport, candid
 			added++
 		}
 	}
+
+	return wantAddrs, added
+}
+
+// removeStaleIntroducers removes introducers not in the wantAddrs set.
+// Returns the count of removed introducers.
+func (r *Router) removeStaleIntroducers(transport *ssu2.SSU2Transport, wantAddrs map[string]struct{}) int {
 	removed := 0
+
 	for _, existing := range transport.GetIntroducers() {
 		if existing.Addr == nil {
 			continue
@@ -225,5 +270,6 @@ func (r *Router) applyIntroducerCandidates(transport *ssu2.SSU2Transport, candid
 			removed++
 		}
 	}
-	return added > 0 || removed > 0
+
+	return removed
 }

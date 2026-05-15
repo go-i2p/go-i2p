@@ -1060,25 +1060,38 @@ func (r *Router) launchInboundReadinessWatcher(inboundPool, outboundPool *tunnel
 		poll := time.NewTicker(500 * time.Millisecond)
 		defer poll.Stop()
 
-		for {
-			select {
-			case <-r.ctx.Done():
-				close(inboundReady)
+		r.runInboundReadinessLoop(inboundPool, outboundPool, inboundReady, deadline, poll)
+	}()
+}
+
+// runInboundReadinessLoop polls for inbound pool readiness with timeout handling.
+func (r *Router) runInboundReadinessLoop(inboundPool, outboundPool *tunnel.Pool, inboundReady chan struct{}, deadline *time.Timer, poll *time.Ticker) {
+	for {
+		select {
+		case <-r.ctx.Done():
+			close(inboundReady)
+			return
+		case <-deadline.C:
+			r.handleInboundReadinessTimeout(inboundPool, outboundPool, inboundReady)
+			return
+		case <-poll.C:
+			if r.checkInboundPoolReady(inboundPool, inboundReady) {
 				return
-			case <-deadline.C:
-				r.handleInboundReadinessTimeout(inboundPool, outboundPool, inboundReady)
-				return
-			case <-poll.C:
-				if inboundPool != nil && len(inboundPool.GetActiveTunnels()) > 0 {
-					log.WithFields(logger.Fields{
-						"at": "launchInboundReadinessWatcher",
-					}).Debug("inbound pool ready; releasing outbound pool startup gate")
-					close(inboundReady)
-					return
-				}
 			}
 		}
-	}()
+	}
+}
+
+// checkInboundPoolReady checks if the inbound pool has active tunnels.
+func (r *Router) checkInboundPoolReady(inboundPool *tunnel.Pool, inboundReady chan struct{}) bool {
+	if inboundPool != nil && len(inboundPool.GetActiveTunnels()) > 0 {
+		log.WithFields(logger.Fields{
+			"at": "launchInboundReadinessWatcher",
+		}).Debug("inbound pool ready; releasing outbound pool startup gate")
+		close(inboundReady)
+		return true
+	}
+	return false
 }
 
 // handleInboundReadinessTimeout handles the case when inbound pool doesn't
@@ -1121,27 +1134,45 @@ func (r *Router) waitForFallbackInbound(inboundPool *tunnel.Pool, inboundReady c
 	defer fallbackPoll.Stop()
 	defer fallbackDeadline.Stop()
 
+	r.runFallbackInboundLoop(inboundPool, inboundReady, fallbackDeadline, fallbackPoll)
+}
+
+// runFallbackInboundLoop polls for fallback inbound pool readiness with timeout.
+func (r *Router) runFallbackInboundLoop(inboundPool *tunnel.Pool, inboundReady chan struct{}, deadline *time.Timer, poll *time.Ticker) {
 	for {
 		select {
 		case <-r.ctx.Done():
 			close(inboundReady)
 			return
-		case <-fallbackDeadline.C:
-			log.WithFields(logger.Fields{
-				"at": "waitForFallbackInbound",
-			}).Warn("secondary fallback readiness timeout; releasing outbound gate")
-			close(inboundReady)
+		case <-deadline.C:
+			r.handleFallbackTimeout(inboundReady)
 			return
-		case <-fallbackPoll.C:
-			if inboundPool != nil && len(inboundPool.GetActiveTunnels()) > 0 {
-				log.WithFields(logger.Fields{
-					"at": "waitForFallbackInbound",
-				}).Debug("0-hop inbound ready after fallback; releasing outbound gate")
-				close(inboundReady)
+		case <-poll.C:
+			if r.checkFallbackInboundReady(inboundPool, inboundReady) {
 				return
 			}
 		}
 	}
+}
+
+// handleFallbackTimeout handles the secondary fallback readiness timeout.
+func (r *Router) handleFallbackTimeout(inboundReady chan struct{}) {
+	log.WithFields(logger.Fields{
+		"at": "waitForFallbackInbound",
+	}).Warn("secondary fallback readiness timeout; releasing outbound gate")
+	close(inboundReady)
+}
+
+// checkFallbackInboundReady checks if the fallback inbound pool has active tunnels.
+func (r *Router) checkFallbackInboundReady(inboundPool *tunnel.Pool, inboundReady chan struct{}) bool {
+	if inboundPool != nil && len(inboundPool.GetActiveTunnels()) > 0 {
+		log.WithFields(logger.Fields{
+			"at": "waitForFallbackInbound",
+		}).Debug("0-hop inbound ready after fallback; releasing outbound gate")
+		close(inboundReady)
+		return true
+	}
+	return false
 }
 
 // launchProactiveFallbackChecks starts goroutines that trigger auto-fallback

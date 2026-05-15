@@ -162,51 +162,89 @@ func registerRPCHandlers(ctx context.Context, wg *sync.WaitGroup, stats RouterSt
 	registry.Register("Echo", NewEchoHandler())
 	registry.Register("GetRate", NewGetRateHandler(stats))
 	registry.Register("RouterInfo", NewRouterInfoHandler(stats))
-
-	registry.Register("Authenticate", RPCHandlerFunc(func(ctx context.Context, params json.RawMessage) (interface{}, error) {
-		var req struct {
-			API      *int   `json:"API"`
-			Password string `json:"Password"`
-		}
-
-		if err := json.Unmarshal(params, &req); err != nil {
-			log.WithField("reason", err.Error()).Debug("i2pcontrol: Authenticate params unmarshal failed")
-			return nil, NewRPCError(ErrCodeInvalidParams, "malformed Authenticate parameters")
-		}
-
-		if req.API == nil {
-			return nil, NewRPCError(ErrCodeAPIVersionNotSpecified, "API version not specified")
-		}
-		if *req.API != 1 {
-			return nil, NewRPCError(ErrCodeAPIVersionNotSupported, fmt.Sprintf("API version %d is not supported", *req.API))
-		}
-
-		token, err := authManager.Authenticate(req.Password, cfg.TokenExpiration)
-		if err != nil {
-			if errors.Is(err, errTokenEntropyFailure) {
-				log.WithField("reason", err.Error()).Error("i2pcontrol: failed to generate authentication token")
-				return nil, NewRPCError(ErrCodeInternalError, "authentication temporarily unavailable")
-			}
-			return nil, NewRPCError(ErrCodeAuthFailed, err.Error())
-		}
-
-		resp := map[string]interface{}{
-			"API":   *req.API,
-			"Token": token,
-		}
-		if req.Password == defaultI2PControlPassword {
-			resp["Warning"] = "authenticated with the default password 'itoopie'; this is retained only for backward-compatibility and is not recommended for production"
-			logDefaultPasswordAuth()
-		}
-		return resp, nil
-	}))
-
+	registry.Register("Authenticate", newAuthenticateHandler(authManager, cfg))
 	registry.Register("RouterManager", NewRouterManagerHandler(ctx, wg, stats.GetRouterControl()))
 	registry.Register("NetworkSetting", NewNetworkSettingHandler(stats))
 	registry.Register("I2PControl", NewI2PControlHandler(authManager, cfg))
 	registry.Register("AdvancedSettings", NewAdvancedSettingsHandler())
 
 	return registry
+}
+
+// newAuthenticateHandler creates an RPC handler for the Authenticate method.
+func newAuthenticateHandler(authManager *AuthManager, cfg *config.I2PControlConfig) RPCHandlerFunc {
+	return func(ctx context.Context, params json.RawMessage) (interface{}, error) {
+		req, err := parseAuthenticateRequest(params)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := validateAuthenticateAPIVersion(req.API); err != nil {
+			return nil, err
+		}
+
+		token, err := performAuthentication(authManager, req.Password, cfg)
+		if err != nil {
+			return nil, err
+		}
+
+		return buildAuthenticateResponse(req.API, token, req.Password), nil
+	}
+}
+
+// parseAuthenticateRequest unmarshals the Authenticate RPC parameters.
+func parseAuthenticateRequest(params json.RawMessage) (*struct {
+	API      *int   `json:"API"`
+	Password string `json:"Password"`
+}, error) {
+	var req struct {
+		API      *int   `json:"API"`
+		Password string `json:"Password"`
+	}
+
+	if err := json.Unmarshal(params, &req); err != nil {
+		log.WithField("reason", err.Error()).Debug("i2pcontrol: Authenticate params unmarshal failed")
+		return nil, NewRPCError(ErrCodeInvalidParams, "malformed Authenticate parameters")
+	}
+
+	return &req, nil
+}
+
+// validateAuthenticateAPIVersion checks if the API version is supported.
+func validateAuthenticateAPIVersion(api *int) error {
+	if api == nil {
+		return NewRPCError(ErrCodeAPIVersionNotSpecified, "API version not specified")
+	}
+	if *api != 1 {
+		return NewRPCError(ErrCodeAPIVersionNotSupported, fmt.Sprintf("API version %d is not supported", *api))
+	}
+	return nil
+}
+
+// performAuthentication attempts to authenticate with the password and generate a token.
+func performAuthentication(authManager *AuthManager, password string, cfg *config.I2PControlConfig) (string, error) {
+	token, err := authManager.Authenticate(password, cfg.TokenExpiration)
+	if err != nil {
+		if errors.Is(err, errTokenEntropyFailure) {
+			log.WithField("reason", err.Error()).Error("i2pcontrol: failed to generate authentication token")
+			return "", NewRPCError(ErrCodeInternalError, "authentication temporarily unavailable")
+		}
+		return "", NewRPCError(ErrCodeAuthFailed, err.Error())
+	}
+	return token, nil
+}
+
+// buildAuthenticateResponse constructs the Authenticate RPC response.
+func buildAuthenticateResponse(api *int, token, password string) map[string]interface{} {
+	resp := map[string]interface{}{
+		"API":   *api,
+		"Token": token,
+	}
+	if password == defaultI2PControlPassword {
+		resp["Warning"] = "authenticated with the default password 'itoopie'; this is retained only for backward-compatibility and is not recommended for production"
+		logDefaultPasswordAuth()
+	}
+	return resp
 }
 
 // createHTTPServer creates and configures the HTTP server with timeouts and RPC handlers.
