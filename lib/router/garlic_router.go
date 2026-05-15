@@ -185,26 +185,35 @@ func (gr *GarlicMessageRouter) drainWorker() {
 	for {
 		select {
 		case req := <-gr.drainRequests:
-			// Drain the appropriate channel based on which is non-nil
-			if req.leaseSetCh != nil {
-				select {
-				case <-req.leaseSetCh:
-					// Channel drained
-				case <-gr.ctx.Done():
-					return
-				}
-			} else if req.routerInfoCh != nil {
-				select {
-				case <-req.routerInfoCh:
-					// Channel drained
-				case <-gr.ctx.Done():
-					return
-				}
+			if !gr.processDrainRequest(req) {
+				return
 			}
 		case <-gr.ctx.Done():
 			return
 		}
 	}
+}
+
+// processDrainRequest drains the appropriate channel based on which is non-nil.
+// Returns false if the router context is cancelled, true otherwise.
+func (gr *GarlicMessageRouter) processDrainRequest(req drainRequest) bool {
+	if req.leaseSetCh != nil {
+		select {
+		case <-req.leaseSetCh:
+			return true
+		case <-gr.ctx.Done():
+			return false
+		}
+	}
+	if req.routerInfoCh != nil {
+		select {
+		case <-req.routerInfoCh:
+			return true
+		case <-gr.ctx.Done():
+			return false
+		}
+	}
+	return true
 }
 
 // ForwardToDestination implements GarlicCloveForwarder interface.

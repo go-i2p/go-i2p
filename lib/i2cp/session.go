@@ -1229,7 +1229,9 @@ func (s *Session) encryptInnerLeaseSet(ls2 *lease_set2.LeaseSet2, cookie [32]byt
 	//   subcredential = SHA-256("subcredential" || credential || blindedPubKey)
 	subcredential := encrypted_leaseset.DeriveSubcredential(
 		destSigningPubKey.Bytes(),
+		uint16(s.destination.KeyCertificate.SigningPublicKeyType()),
 		blindedSigningPubKey.Bytes(),
+		uint16(s.blindedDestination.KeyCertificate.SigningPublicKeyType()),
 	)
 
 	// Published timestamp (seconds since epoch)

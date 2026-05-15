@@ -87,59 +87,18 @@ func EncryptShortBuildRequestRecordWithChain(record BuildRequestRecord, recipien
 	var noiseHash [32]byte
 
 	full := record.ShortBytes()
-	if len(full) != ShortBuildRecordSize {
-		return encrypted, chainingKey, noiseHash, oops.Errorf("invalid ShortBytes size: expected %d, got %d", ShortBuildRecordSize, len(full))
-	}
-
-	recipientPubKey, err := extractEncryptionPublicKey(recipientRouterInfo)
+	recipientPubKey, err := validateSTBMInputs(full, recipientRouterInfo)
 	if err != nil {
-		return encrypted, chainingKey, noiseHash, oops.Wrapf(err, "failed to extract encryption public key")
-	}
-	if len(recipientPubKey) != 32 {
-		return encrypted, chainingKey, noiseHash, oops.Errorf("invalid recipient pubkey length: %d", len(recipientPubKey))
+		return encrypted, chainingKey, noiseHash, err
 	}
 
-	ephemeralPub, ephemeralPriv, err := x25519.GenerateKey(rand.Reader)
+	ns, ephemeralPub, err := setupNoiseProtocolForSTBM(recipientPubKey)
 	if err != nil {
-		return encrypted, chainingKey, noiseHash, oops.Wrapf(err, "failed to generate ephemeral X25519 keypair")
+		return encrypted, chainingKey, noiseHash, err
 	}
-
-	ns := initSTBMNoiseN(recipientPubKey)
-	ns.MixHash(ephemeralPub)
-
-	sharedSecret, err := ephemeralPriv.SharedKey(x25519.PublicKey(recipientPubKey))
-	if err != nil {
-		return encrypted, chainingKey, noiseHash, oops.Wrapf(err, "X25519 key agreement failed")
-	}
-	ns.MixKey(sharedSecret)
 
 	cleartext := full[48 : 48+ShortBuildRecordCleartextLen]
-
-	// Diagnostic breadcrumb: log per-record ECIES inputs at Warn level so they
-	// appear at the default log level. Compare a working peer vs a failing peer
-	// to determine whether the enckey in our cache is stale.
-	{
-		peerHashHex := "(hash-error)"
-		if ph, hErr := recipientRouterInfo.IdentHash(); hErr == nil {
-			peerHashHex = fmt.Sprintf("%x", ph[:])
-		}
-		riPublished := "(nil)"
-		riAgeStr := "(nil)"
-		if pub := recipientRouterInfo.Published(); pub != nil {
-			pubTime := pub.Time()
-			riPublished = pubTime.UTC().Format(time.RFC3339)
-			riAgeStr = fmt.Sprintf("%.0fs", time.Since(pubTime).Seconds())
-		}
-		log.WithFields(logger.Fields{
-			"at":            "EncryptShortBuildRequestRecord",
-			"peer_hash":     peerHashHex,
-			"enckey_hex":    fmt.Sprintf("%x", recipientPubKey),
-			"ri_published":  riPublished,
-			"ri_age":        riAgeStr,
-			"record_flag":   fmt.Sprintf("0x%02x", record.Flag),
-			"cleartext_hex": fmt.Sprintf("%x", cleartext),
-		}).Warn("stbm_record_pre_encrypt")
-	}
+	logSTBMEncryptionDiagnostics(record, recipientRouterInfo, recipientPubKey, cleartext)
 
 	ct, err := ns.EncryptAndHash(nil, cleartext)
 	if err != nil {
@@ -150,10 +109,7 @@ func EncryptShortBuildRequestRecordWithChain(record BuildRequestRecord, recipien
 			len(ct), ShortBuildRecordCleartextLen+16)
 	}
 
-	copy(encrypted[0:16], full[0:16])
-	copy(encrypted[16:48], ephemeralPub)
-	copy(encrypted[48:218], ct)
-
+	assembleEncryptedSTBMRecord(&encrypted, full, ephemeralPub, ct)
 	copy(chainingKey[:], ns.ChainingKey())
 	copy(noiseHash[:], ns.HandshakeHash())
 
@@ -164,6 +120,73 @@ func EncryptShortBuildRequestRecordWithChain(record BuildRequestRecord, recipien
 	}).Debug("STBM build request record encrypted (Noise_N)")
 
 	return encrypted, chainingKey, noiseHash, nil
+}
+
+// validateSTBMInputs validates the record size and extracts the recipient's encryption key.
+func validateSTBMInputs(full []byte, recipientRouterInfo router_info.RouterInfo) ([]byte, error) {
+	if len(full) != ShortBuildRecordSize {
+		return nil, oops.Errorf("invalid ShortBytes size: expected %d, got %d", ShortBuildRecordSize, len(full))
+	}
+
+	recipientPubKey, err := extractEncryptionPublicKey(recipientRouterInfo)
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to extract encryption public key")
+	}
+	if len(recipientPubKey) != 32 {
+		return nil, oops.Errorf("invalid recipient pubkey length: %d", len(recipientPubKey))
+	}
+
+	return recipientPubKey, nil
+}
+
+// setupNoiseProtocolForSTBM initializes the Noise_N handshake and generates ephemeral keypair.
+func setupNoiseProtocolForSTBM(recipientPubKey []byte) (*noise.SymmetricState, []byte, error) {
+	ephemeralPub, ephemeralPriv, err := x25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return nil, nil, oops.Wrapf(err, "failed to generate ephemeral X25519 keypair")
+	}
+
+	ns := initSTBMNoiseN(recipientPubKey)
+	ns.MixHash(ephemeralPub)
+
+	sharedSecret, err := ephemeralPriv.SharedKey(x25519.PublicKey(recipientPubKey))
+	if err != nil {
+		return nil, nil, oops.Wrapf(err, "X25519 key agreement failed")
+	}
+	ns.MixKey(sharedSecret)
+
+	return ns, ephemeralPub, nil
+}
+
+// logSTBMEncryptionDiagnostics logs per-record ECIES inputs for debugging.
+func logSTBMEncryptionDiagnostics(record BuildRequestRecord, recipientRouterInfo router_info.RouterInfo, recipientPubKey, cleartext []byte) {
+	peerHashHex := "(hash-error)"
+	if ph, hErr := recipientRouterInfo.IdentHash(); hErr == nil {
+		peerHashHex = fmt.Sprintf("%x", ph[:])
+	}
+	riPublished := "(nil)"
+	riAgeStr := "(nil)"
+	if pub := recipientRouterInfo.Published(); pub != nil {
+		pubTime := pub.Time()
+		riPublished = pubTime.UTC().Format(time.RFC3339)
+		riAgeStr = fmt.Sprintf("%.0fs", time.Since(pubTime).Seconds())
+	}
+	log.WithFields(logger.Fields{
+		"at":            "EncryptShortBuildRequestRecord",
+		"peer_hash":     peerHashHex,
+		"enckey_hex":    fmt.Sprintf("%x", recipientPubKey),
+		"ri_published":  riPublished,
+		"ri_age":        riAgeStr,
+		"record_flag":   fmt.Sprintf("0x%02x", record.Flag),
+		"cleartext_hex": fmt.Sprintf("%x", cleartext),
+	}).Warn("stbm_record_pre_encrypt")
+}
+
+// assembleEncryptedSTBMRecord copies the encrypted data into the final record layout.
+func assembleEncryptedSTBMRecord(encrypted *[218]byte, full []byte, ephemeralPub []byte, ct []byte) {
+	copy(encrypted[0:16], full[0:16])
+	copy(encrypted[16:48], ephemeralPub)
+	copy(encrypted[48:218], ct)
 }
 
 // DeriveSTBMReplyKey derives the per-hop ChaCha20 reply key from a hop's

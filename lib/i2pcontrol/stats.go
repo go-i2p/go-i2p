@@ -477,63 +477,77 @@ func (rsp *routerStatsProvider) GetNetDBStats() NetDBStats {
 func (rsp *routerStatsProvider) GetNetworkConfig() NetworkConfig {
 	netConfig := NetworkConfig{}
 
-	// Report configured bandwidth limits from RouterConfig.
-	// Bandwidth limits are in KB/s for the I2PControl protocol.
+	rsp.populateBandwidthLimits(&netConfig)
+	rsp.populateNTCP2Config(&netConfig)
+	rsp.populateSSU2Config(&netConfig)
+
+	return netConfig
+}
+
+// populateBandwidthLimits sets bandwidth limit fields from router config (in KB/s).
+func (rsp *routerStatsProvider) populateBandwidthLimits(netConfig *NetworkConfig) {
 	cfg := rsp.router.GetConfig()
-	if cfg != nil {
-		if cfg.MaxBandwidthIn > 0 {
-			netConfig.BandwidthLimitIn = int(cfg.MaxBandwidthIn / 1024)
-		} else if cfg.MaxBandwidth > 0 {
-			netConfig.BandwidthLimitIn = int(cfg.MaxBandwidth / 1024)
-		}
-		if cfg.MaxBandwidthOut > 0 {
-			netConfig.BandwidthLimitOut = int(cfg.MaxBandwidthOut / 1024)
-		} else if cfg.MaxBandwidth > 0 {
-			netConfig.BandwidthLimitOut = int(cfg.MaxBandwidth / 1024)
-		}
-		netConfig.SharePercentage = cfg.SharePercentage
+	if cfg == nil {
+		return
 	}
 
-	// Populate NTCP2 address info.
+	if cfg.MaxBandwidthIn > 0 {
+		netConfig.BandwidthLimitIn = int(cfg.MaxBandwidthIn / 1024)
+	} else if cfg.MaxBandwidth > 0 {
+		netConfig.BandwidthLimitIn = int(cfg.MaxBandwidth / 1024)
+	}
+
+	if cfg.MaxBandwidthOut > 0 {
+		netConfig.BandwidthLimitOut = int(cfg.MaxBandwidthOut / 1024)
+	} else if cfg.MaxBandwidth > 0 {
+		netConfig.BandwidthLimitOut = int(cfg.MaxBandwidth / 1024)
+	}
+
+	netConfig.SharePercentage = cfg.SharePercentage
+}
+
+// populateNTCP2Config sets NTCP2 address, hostname, and port fields.
+func (rsp *routerStatsProvider) populateNTCP2Config(netConfig *NetworkConfig) {
 	addr := rsp.router.GetTransportAddr()
 	if addr == nil {
-		return netConfig
+		return
 	}
 
-	// Extract address string (format is typically "ip:port")
-	addrStr := ""
-	if netAddr, ok := addr.(interface{ String() string }); ok {
-		addrStr = netAddr.String()
-	}
-
+	addrStr := rsp.extractAddressString(addr)
 	if addrStr == "" {
-		return netConfig
+		return
 	}
 
 	netConfig.NTCP2Address = addrStr
-
-	// Parse hostname and port from address string
-	// Expected format: "127.0.0.1:12345" or "[::1]:12345" or "[2001:db8::1]:12345"
 	hostname, port := rsp.parseHostPort(addrStr)
 	netConfig.NTCP2Hostname = hostname
 	netConfig.NTCP2Port = port
+}
 
-	// Populate SSU2 address info.
+// populateSSU2Config sets SSU2 address, hostname, and port fields.
+func (rsp *routerStatsProvider) populateSSU2Config(netConfig *NetworkConfig) {
 	ssu2Addr := rsp.router.GetSSU2Addr()
-	if ssu2Addr != nil {
-		ssu2AddrStr := ""
-		if netAddr, ok := ssu2Addr.(interface{ String() string }); ok {
-			ssu2AddrStr = netAddr.String()
-		}
-		if ssu2AddrStr != "" {
-			netConfig.SSU2Address = ssu2AddrStr
-			ssu2Host, ssu2Port := rsp.parseHostPort(ssu2AddrStr)
-			netConfig.SSU2Hostname = ssu2Host
-			netConfig.SSU2Port = ssu2Port
-		}
+	if ssu2Addr == nil {
+		return
 	}
 
-	return netConfig
+	ssu2AddrStr := rsp.extractAddressString(ssu2Addr)
+	if ssu2AddrStr == "" {
+		return
+	}
+
+	netConfig.SSU2Address = ssu2AddrStr
+	ssu2Host, ssu2Port := rsp.parseHostPort(ssu2AddrStr)
+	netConfig.SSU2Hostname = ssu2Host
+	netConfig.SSU2Port = ssu2Port
+}
+
+// extractAddressString extracts the string representation from a network address.
+func (rsp *routerStatsProvider) extractAddressString(addr interface{}) string {
+	if netAddr, ok := addr.(interface{ String() string }); ok {
+		return netAddr.String()
+	}
+	return ""
 }
 
 // parseHostPort extracts hostname and port from an address string.
@@ -682,81 +696,97 @@ func (rsp *routerStatsProvider) maybeRecordSample() {
 func (rsp *routerStatsProvider) GetRateForPeriod(stat string, periodMs int64) float64 {
 	rsp.maybeRecordSample()
 
+	switch {
+	case stat == "bw.sendBps" || stat == "bw.receiveBps" || stat == "bw.combined":
+		return rsp.getBandwidthRate(stat, periodMs)
+	case stat == "tunnel.participatingTunnels":
+		return rsp.getParticipatingTunnelsRate(periodMs)
+	case rsp.isTunnelBuildStat(stat):
+		return rsp.getTunnelBuildRate(stat, periodMs)
+	case stat == "tcp.activePeers" || stat == "udp.activePeers":
+		return rsp.getTransportPeersCount(stat)
+	default:
+		log.WithField("stat", stat).Debug("i2pcontrol: GetRateForPeriod unknown stat name, returning 0")
+		return 0
+	}
+}
+
+// getBandwidthRate returns windowed average bandwidth (bytes/sec) or 0 until 2+ samples.
+func (rsp *routerStatsProvider) getBandwidthRate(stat string, periodMs int64) float64 {
 	switch stat {
-	// Bandwidth — windowed average. Return 0 until at least 2 samples have been
-	// collected so that callers (e.g. the hourly average TUI row) receive a neutral
-	// placeholder during the warm-up period rather than the instantaneous 15-second rate.
 	case "bw.sendBps":
 		if rsp.bwOutWindow.Len(periodMs) >= 2 {
 			return rsp.bwOutWindow.Average(periodMs)
 		}
-		return 0
 	case "bw.receiveBps":
 		if rsp.bwInWindow.Len(periodMs) >= 2 {
 			return rsp.bwInWindow.Average(periodMs)
 		}
-		return 0
 	case "bw.combined":
 		inLen := rsp.bwInWindow.Len(periodMs)
 		outLen := rsp.bwOutWindow.Len(periodMs)
 		if inLen >= 2 || outLen >= 2 {
 			return rsp.bwInWindow.Average(periodMs) + rsp.bwOutWindow.Average(periodMs)
 		}
+	}
+	return 0
+}
+
+// getParticipatingTunnelsRate returns windowed average or falls back to instantaneous count.
+func (rsp *routerStatsProvider) getParticipatingTunnelsRate(periodMs int64) float64 {
+	if avg := rsp.partWindow.Average(periodMs); avg > 0 {
+		return avg
+	}
+	ri := rsp.GetRouterInfo()
+	return float64(ri.ParticipatingTunnels)
+}
+
+// isTunnelBuildStat checks if the stat is a tunnel build metric.
+func (rsp *routerStatsProvider) isTunnelBuildStat(stat string) bool {
+	return stat == "tunnel.buildExploratorySuccess" ||
+		stat == "tunnel.buildExploratoryReject" ||
+		stat == "tunnel.buildExploratoryExpire" ||
+		stat == "tunnel.buildClientSuccess" ||
+		stat == "tunnel.buildClientReject" ||
+		stat == "tunnel.buildClientExpire" ||
+		stat == "tunnel.buildRequestTime"
+}
+
+// getTunnelBuildRate returns tunnel build event counts or average time within the window.
+func (rsp *routerStatsProvider) getTunnelBuildRate(stat string, periodMs int64) float64 {
+	tm := rsp.router.GetTunnelManager()
+	if tm == nil {
 		return 0
+	}
 
-	// Participating tunnels — windowed average, with fallback to instantaneous count
-	case "tunnel.participatingTunnels":
-		if avg := rsp.partWindow.Average(periodMs); avg > 0 {
-			return avg
-		}
-		ri := rsp.GetRouterInfo()
-		return float64(ri.ParticipatingTunnels)
-
-	// Tunnel build stats — event counts within the requested window
+	switch stat {
 	case "tunnel.buildExploratorySuccess":
-		if tm := rsp.router.GetTunnelManager(); tm != nil {
-			return tm.GetBuildSuccessCount(periodMs)
-		}
-		return 0
+		return tm.GetBuildSuccessCount(periodMs)
 	case "tunnel.buildExploratoryReject":
-		if tm := rsp.router.GetTunnelManager(); tm != nil {
-			return tm.GetBuildRejectCount(periodMs)
-		}
-		return 0
+		return tm.GetBuildRejectCount(periodMs)
 	case "tunnel.buildExploratoryExpire":
-		if tm := rsp.router.GetTunnelManager(); tm != nil {
-			return tm.GetBuildExpireCount(periodMs)
-		}
-		return 0
+		return tm.GetBuildExpireCount(periodMs)
 	case "tunnel.buildClientSuccess":
-		if tm := rsp.router.GetTunnelManager(); tm != nil {
-			return tm.GetClientBuildSuccessCount(periodMs)
-		}
-		return 0
+		return tm.GetClientBuildSuccessCount(periodMs)
 	case "tunnel.buildClientReject":
-		if tm := rsp.router.GetTunnelManager(); tm != nil {
-			return tm.GetClientBuildRejectCount(periodMs)
-		}
-		return 0
+		return tm.GetClientBuildRejectCount(periodMs)
 	case "tunnel.buildClientExpire":
-		if tm := rsp.router.GetTunnelManager(); tm != nil {
-			return tm.GetClientBuildExpireCount(periodMs)
-		}
-		return 0
+		return tm.GetClientBuildExpireCount(periodMs)
 	case "tunnel.buildRequestTime":
-		if tm := rsp.router.GetTunnelManager(); tm != nil {
-			return tm.GetBuildAvgTimeMs(periodMs)
-		}
+		return tm.GetBuildAvgTimeMs(periodMs)
+	default:
 		return 0
+	}
+}
 
-	// Transport session counts — instantaneous counts, not windowed averages
+// getTransportPeersCount returns instantaneous transport session counts.
+func (rsp *routerStatsProvider) getTransportPeersCount(stat string) float64 {
+	switch stat {
 	case "tcp.activePeers":
 		return float64(rsp.router.GetNTCP2SessionCount())
 	case "udp.activePeers":
 		return float64(rsp.router.GetSSU2SessionCount())
-
 	default:
-		log.WithField("stat", stat).Debug("i2pcontrol: GetRateForPeriod unknown stat name, returning 0")
 		return 0
 	}
 }

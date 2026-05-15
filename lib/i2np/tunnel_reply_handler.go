@@ -257,6 +257,24 @@ func (rp *ReplyProcessor) decryptReplyRecords(handler TunnelReplyHandler, pendin
 	records := handler.GetReplyRecords()
 	rawRecords := handler.GetRawReplyRecords()
 
+	if err := rp.validateRecordCounts(records, rawRecords, pending); err != nil {
+		return err
+	}
+
+	if len(rawRecords) == 0 {
+		return nil
+	}
+
+	isShortBuild := len(rawRecords[0]) == ShortBuildRecordSize
+	if !isShortBuild {
+		return rp.decryptVTBReplyRecords(records, rawRecords, pending)
+	}
+
+	return rp.decryptSTBMReplyRecords(records, rawRecords, pending)
+}
+
+// validateRecordCounts ensures record counts match between parsed, raw, and expected keys.
+func (rp *ReplyProcessor) validateRecordCounts(records []BuildResponseRecord, rawRecords [][]byte, pending *PendingBuildRequest) error {
 	if len(records) != len(pending.ReplyKeys) {
 		return oops.Errorf("record count mismatch: got %d records, expected %d",
 			len(records), len(pending.ReplyKeys))
@@ -267,77 +285,93 @@ func (rp *ReplyProcessor) decryptReplyRecords(handler TunnelReplyHandler, pendin
 			len(rawRecords), len(records))
 	}
 
-	// Determine format from the first record's size.
-	if len(rawRecords) == 0 {
-		return nil
-	}
+	return nil
+}
 
-	isShortBuild := len(rawRecords[0]) == ShortBuildRecordSize
-
-	if !isShortBuild {
-		// Standard VTB path: simple per-record AEAD or AES decrypt.
-		for i := range records {
-			decrypted, err := rp.decryptRecord(rawRecords[i], pending.ReplyKeys[i], pending.ReplyIVs[i])
-			if err != nil {
-				return oops.Wrapf(err, "failed to decrypt record %d", i)
-			}
-			decryptedRecord, err := ReadBuildResponseRecord(decrypted)
-			if err != nil {
-				return oops.Wrapf(err, "failed to parse decrypted record %d", i)
-			}
-			records[i] = decryptedRecord
+// decryptVTBReplyRecords handles standard VTB reply decryption (simple per-record AEAD or AES).
+func (rp *ReplyProcessor) decryptVTBReplyRecords(records []BuildResponseRecord, rawRecords [][]byte, pending *PendingBuildRequest) error {
+	for i := range records {
+		decrypted, err := rp.decryptRecord(rawRecords[i], pending.ReplyKeys[i], pending.ReplyIVs[i])
+		if err != nil {
+			return oops.Wrapf(err, "failed to decrypt record %d", i)
 		}
-		log.WithField("record_count", len(records)).Debug("Decrypted all VTB reply records")
-		return nil
-	}
-
-	// STBM reply decryption: i2pd-compatible 2-pass algorithm.
-	//
-	// After all N hops have processed the STBM and generated their reply:
-	//   record[i] = AEAD(hop_i_reply, key_i) XOR'd by all hops j > i
-	//
-	// Creator decrypts from LAST hop to FIRST:
-	//  1. For hop i (last→first): XOR-peel hop i's layer from all records j < i
-	//  2. AEAD-decrypt hop i's own record with replyKey[i], nonce[4]=i, AD=noiseHash[i]
-	//  3. Ret code is at cleartext[201] of the 202-byte plaintext
-	//
-	// Matches i2pd Tunnel::HandleTunnelBuildResponse() + ShortECIESTunnelHopConfig.
-	n := len(rawRecords)
-	work := make([][ShortBuildRecordSize]byte, n)
-	for i, raw := range rawRecords {
-		if len(raw) < ShortBuildRecordSize {
-			return oops.Errorf("STBM record %d too short: %d bytes", i, len(raw))
+		decryptedRecord, err := ReadBuildResponseRecord(decrypted)
+		if err != nil {
+			return oops.Wrapf(err, "failed to parse decrypted record %d", i)
 		}
-		copy(work[i][:], raw[:ShortBuildRecordSize])
+		records[i] = decryptedRecord
+	}
+	log.WithField("record_count", len(records)).Debug("Decrypted all VTB reply records")
+	return nil
+}
+
+// decryptSTBMReplyRecords handles STBM reply decryption using i2pd-compatible 2-pass algorithm.
+// After all N hops have processed the STBM and generated their reply:
+//
+//	record[i] = AEAD(hop_i_reply, key_i) XOR'd by all hops j > i
+//
+// Creator decrypts from LAST hop to FIRST by peeling XOR layers then AEAD-decrypting.
+func (rp *ReplyProcessor) decryptSTBMReplyRecords(records []BuildResponseRecord, rawRecords [][]byte, pending *PendingBuildRequest) error {
+	work, err := rp.prepareSTBMWorkBuffer(rawRecords)
+	if err != nil {
+		return err
 	}
 
+	n := len(work)
 	for i := n - 1; i >= 0; i-- {
 		var key [32]byte
 		copy(key[:], pending.ReplyKeys[i][:])
 
-		// Step 1: peel hop i's ChaCha20 layer from all records with index j < i.
-		for j := 0; j < i; j++ {
-			if err := chacha20XORRecord(&work[j], key, j); err != nil {
-				return oops.Wrapf(err, "ChaCha20 peel failed for hop %d record %d", i, j)
-			}
+		if err := rp.peelChaCha20Layers(work, key, i); err != nil {
+			return err
 		}
 
-		// Step 2: AEAD-decrypt hop i's own record.
-		var noiseHash [32]byte
-		if i < len(pending.NoiseHashes) {
-			noiseHash = pending.NoiseHashes[i]
-		}
-		cleartext, err := decryptSTBMReplySlot(work[i][:], key, noiseHash, i)
+		retCode, err := rp.decryptSTBMSlot(work[i][:], key, pending.NoiseHashes, i)
 		if err != nil {
-			return oops.Wrapf(err, "STBM AEAD decrypt failed for hop %d", i)
+			return err
 		}
 
-		// Step 3: ret code is at offset 201 of the 202-byte plaintext.
-		records[i] = BuildResponseRecord{Reply: cleartext[201]}
+		records[i] = BuildResponseRecord{Reply: retCode}
 	}
 
 	log.WithField("record_count", n).Debug("Decrypted all STBM reply records")
 	return nil
+}
+
+// prepareSTBMWorkBuffer copies raw records into a work buffer for in-place decryption.
+func (rp *ReplyProcessor) prepareSTBMWorkBuffer(rawRecords [][]byte) ([][ShortBuildRecordSize]byte, error) {
+	n := len(rawRecords)
+	work := make([][ShortBuildRecordSize]byte, n)
+	for i, raw := range rawRecords {
+		if len(raw) < ShortBuildRecordSize {
+			return nil, oops.Errorf("STBM record %d too short: %d bytes", i, len(raw))
+		}
+		copy(work[i][:], raw[:ShortBuildRecordSize])
+	}
+	return work, nil
+}
+
+// peelChaCha20Layers peels hop i's ChaCha20 layer from all records with index j < i.
+func (rp *ReplyProcessor) peelChaCha20Layers(work [][ShortBuildRecordSize]byte, key [32]byte, hopIndex int) error {
+	for j := 0; j < hopIndex; j++ {
+		if err := chacha20XORRecord(&work[j], key, j); err != nil {
+			return oops.Wrapf(err, "ChaCha20 peel failed for hop %d record %d", hopIndex, j)
+		}
+	}
+	return nil
+}
+
+// decryptSTBMSlot AEAD-decrypts hop i's own STBM reply record and extracts the ret code.
+func (rp *ReplyProcessor) decryptSTBMSlot(record []byte, key [32]byte, noiseHashes [][32]byte, hopIndex int) (byte, error) {
+	var noiseHash [32]byte
+	if hopIndex < len(noiseHashes) {
+		noiseHash = noiseHashes[hopIndex]
+	}
+	cleartext, err := decryptSTBMReplySlot(record, key, noiseHash, hopIndex)
+	if err != nil {
+		return 0, oops.Wrapf(err, "STBM AEAD decrypt failed for hop %d", hopIndex)
+	}
+	return cleartext[201], nil
 }
 
 // decryptSTBMReplySlot AEAD-decrypts a single 218-byte STBM reply record slot.

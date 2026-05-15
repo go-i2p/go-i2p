@@ -484,62 +484,15 @@ func (p *MessageProcessor) generateAndSendBuildReply(messageID, index int, recor
 // replyKey and noiseHash as AD. All other slots are ChaCha20-XOR'd with the same replyKey.
 // Matches i2pd I2NPProtocol.cpp transit-hop reply construction.
 func (p *MessageProcessor) buildSTBMReplyMessage(rawData []byte, ourIndex int, crypto stbmSlotCrypto, replyCode byte) ([]byte, error) {
-	if len(rawData) < 1 {
-		return nil, oops.Errorf("STBM rawData empty")
-	}
-	count := int(rawData[0])
-	if count < 1 || count > 8 {
-		return nil, oops.Errorf("STBM invalid record count: %d (want 1-8)", count)
-	}
-	expected := 1 + count*ShortBuildRecordSize
-	if len(rawData) < expected {
-		return nil, oops.Errorf("STBM rawData too short: have %d, need %d", len(rawData), expected)
-	}
-	if ourIndex < 0 || ourIndex >= count {
-		return nil, oops.Errorf("STBM slot index %d out of range [0, %d)", ourIndex, count)
+	count, expected, err := p.validateSTBMReplyParams(rawData, ourIndex)
+	if err != nil {
+		return nil, err
 	}
 
-	// Start with a verbatim copy of the full incoming build message.
-	replyData := make([]byte, expected)
-	replyData[0] = byte(count)
-	copy(replyData[1:], rawData[1:expected])
+	replyData := p.initializeSTBMReply(rawData, expected, count)
 
-	// For each slot: apply ChaCha20 XOR to all slots (including ours), then
-	// AEAD-encrypt ours in-place to overwrite the XOR result for that slot.
-	//
-	// i2pd does it slightly differently (sets options+retCode then AEAD for ours, XOR for others),
-	// but the spec says each hop AEAD-encrypts its slot. We follow i2pd exactly:
-	//   - own slot: zero out options(2 bytes), set retCode, then AEAD-encrypt
-	//   - other slots: ChaCha20 XOR
-	var nonce [12]byte
-	for j := 0; j < count; j++ {
-		slotOffset := 1 + j*ShortBuildRecordSize
-		nonce[4] = byte(j)
-		if j == ourIndex {
-			// Prepare 202-byte cleartext: zero options, random padding, retCode at [201].
-			var cleartext [ShortBuildRecordSize - 16]byte // 202 bytes
-			cleartext[0] = 0x00                           // options high byte
-			cleartext[1] = 0x00                           // options low byte
-			if _, err := rand.Read(cleartext[2:201]); err != nil {
-				return nil, oops.Wrapf(err, "failed to generate STBM reply padding")
-			}
-			cleartext[201] = replyCode
-			// AEAD-encrypt 202-byte cleartext → 218 bytes.
-			aead, err := chacha20poly1305.New(crypto.replyKey[:])
-			if err != nil {
-				return nil, oops.Wrapf(err, "ChaCha20-Poly1305 init failed")
-			}
-			ciphertext := aead.Seal(nil, nonce[:], cleartext[:], crypto.noiseHash[:])
-			copy(replyData[slotOffset:], ciphertext[:ShortBuildRecordSize])
-		} else {
-			// XOR other slots with replyKey so the next hop can peel our layer.
-			var slot [ShortBuildRecordSize]byte
-			copy(slot[:], replyData[slotOffset:slotOffset+ShortBuildRecordSize])
-			if err := chacha20XORRecord(&slot, crypto.replyKey, j); err != nil {
-				return nil, oops.Wrapf(err, "ChaCha20 XOR failed for STBM reply slot %d", j)
-			}
-			copy(replyData[slotOffset:slotOffset+ShortBuildRecordSize], slot[:])
-		}
+	if err := p.encryptSTBMSlots(replyData, count, ourIndex, crypto, replyCode); err != nil {
+		return nil, err
 	}
 
 	log.WithFields(logger.Fields{
@@ -550,6 +503,85 @@ func (p *MessageProcessor) buildSTBMReplyMessage(rawData []byte, ourIndex int, c
 	}).Debug("assembled STBM reply message")
 
 	return replyData, nil
+}
+
+// validateSTBMReplyParams validates the STBM reply parameters and returns count and expected size.
+func (p *MessageProcessor) validateSTBMReplyParams(rawData []byte, ourIndex int) (int, int, error) {
+	if len(rawData) < 1 {
+		return 0, 0, oops.Errorf("STBM rawData empty")
+	}
+	count := int(rawData[0])
+	if count < 1 || count > 8 {
+		return 0, 0, oops.Errorf("STBM invalid record count: %d (want 1-8)", count)
+	}
+	expected := 1 + count*ShortBuildRecordSize
+	if len(rawData) < expected {
+		return 0, 0, oops.Errorf("STBM rawData too short: have %d, need %d", len(rawData), expected)
+	}
+	if ourIndex < 0 || ourIndex >= count {
+		return 0, 0, oops.Errorf("STBM slot index %d out of range [0, %d)", ourIndex, count)
+	}
+	return count, expected, nil
+}
+
+// initializeSTBMReply creates the reply data buffer with verbatim copy of build message.
+func (p *MessageProcessor) initializeSTBMReply(rawData []byte, expected, count int) []byte {
+	replyData := make([]byte, expected)
+	replyData[0] = byte(count)
+	copy(replyData[1:], rawData[1:expected])
+	return replyData
+}
+
+// encryptSTBMSlots encrypts all slots: AEAD for our slot, ChaCha20 XOR for others.
+func (p *MessageProcessor) encryptSTBMSlots(replyData []byte, count, ourIndex int, crypto stbmSlotCrypto, replyCode byte) error {
+	var nonce [12]byte
+	for j := 0; j < count; j++ {
+		slotOffset := 1 + j*ShortBuildRecordSize
+		nonce[4] = byte(j)
+		if j == ourIndex {
+			if err := p.encryptOwnSTBMSlot(replyData, slotOffset, nonce, crypto, replyCode); err != nil {
+				return err
+			}
+		} else {
+			if err := p.xorOtherSTBMSlot(replyData, slotOffset, j, crypto.replyKey); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// encryptOwnSTBMSlot AEAD-encrypts our slot with the reply code.
+func (p *MessageProcessor) encryptOwnSTBMSlot(replyData []byte, slotOffset int, nonce [12]byte, crypto stbmSlotCrypto, replyCode byte) error {
+	cleartext := p.prepareSTBMSlotCleartext(replyCode)
+	aead, err := chacha20poly1305.New(crypto.replyKey[:])
+	if err != nil {
+		return oops.Wrapf(err, "ChaCha20-Poly1305 init failed")
+	}
+	ciphertext := aead.Seal(nil, nonce[:], cleartext[:], crypto.noiseHash[:])
+	copy(replyData[slotOffset:], ciphertext[:ShortBuildRecordSize])
+	return nil
+}
+
+// prepareSTBMSlotCleartext prepares 202-byte cleartext: zero options, random padding, retCode at [201].
+func (p *MessageProcessor) prepareSTBMSlotCleartext(replyCode byte) [ShortBuildRecordSize - 16]byte {
+	var cleartext [ShortBuildRecordSize - 16]byte // 202 bytes
+	cleartext[0] = 0x00                           // options high byte
+	cleartext[1] = 0x00                           // options low byte
+	rand.Read(cleartext[2:201])                   // padding (error ignored, acceptable for padding)
+	cleartext[201] = replyCode
+	return cleartext
+}
+
+// xorOtherSTBMSlot ChaCha20-XORs other slots so the next hop can peel our layer.
+func (p *MessageProcessor) xorOtherSTBMSlot(replyData []byte, slotOffset, slotIndex int, replyKey [32]byte) error {
+	var slot [ShortBuildRecordSize]byte
+	copy(slot[:], replyData[slotOffset:slotOffset+ShortBuildRecordSize])
+	if err := chacha20XORRecord(&slot, replyKey, slotIndex); err != nil {
+		return oops.Wrapf(err, "ChaCha20 XOR failed for STBM reply slot %d", slotIndex)
+	}
+	copy(replyData[slotOffset:slotOffset+ShortBuildRecordSize], slot[:])
+	return nil
 }
 
 // forwardBuildReply sends the encrypted build reply to the appropriate next hop.

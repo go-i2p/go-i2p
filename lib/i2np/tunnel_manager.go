@@ -263,46 +263,73 @@ func (tm *TunnelManager) BuildTunnel(req tunnel.BuildTunnelRequest) (*tunnel.Bui
 // 4. Sends the build request via appropriate transport
 // 5. Returns the tunnel ID, selected peer hashes, and any error
 func (tm *TunnelManager) BuildTunnelFromRequest(req tunnel.BuildTunnelRequest) (tunnel.TunnelID, []common.Hash, error) {
-	var zeroHash common.Hash
-	if req.OurIdentity == zeroHash {
-		return 0, nil, oops.Errorf("invalid build request: router identity is unset")
-	}
-	// ReplyGateway is only required for inbound tunnels; outbound builds use ReplyTunnelID instead.
-	if req.IsInbound && req.ReplyGateway == zeroHash {
-		return 0, nil, oops.Errorf("invalid build request: reply gateway is unset for inbound tunnel")
+	if err := tm.validateBuildRequest(req); err != nil {
+		return 0, nil, err
 	}
 
 	// Zero-hop inbound short-circuit: no remote hop, no build message,
-	// no pending-build tracking. Register the tunnel directly as Active so
-	// the inbound pool exposes it as a usable reply path immediately.
+	// no pending-build tracking. Register the tunnel directly as Active.
 	if req.HopCount == 0 && req.IsInbound {
 		return tm.buildZeroHopInbound(req)
 	}
 
-	// For outbound tunnels, the OBEP record must contain a non-zero
-	// ReplyTunnelID so that the remote endpoint knows which inbound tunnel
-	// to wrap the ShortTunnelBuildReply in (via TunnelGateway). Without
-	// this, i2pd sees NextTunnelId=0 and cannot route the reply back to us.
-	if !req.IsInbound && req.ReplyTunnelID == 0 {
-		if inbound := tm.inboundPool.SelectTunnel(); inbound != nil {
-			req.ReplyTunnelID = inbound.ID
-			log.WithFields(logger.Fields{
-				"at":              "BuildTunnelFromRequest",
-				"reply_tunnel_id": inbound.ID,
-			}).Debug("injected inbound tunnel ID into outbound build request for OBEP reply routing")
-		} else {
-			return 0, nil, oops.Errorf("outbound build requires active inbound tunnel for reply routing")
-		}
-	}
-
-	result, messageID, err := tm.createBuildRequestAndID(req)
-	if err != nil {
+	if err := tm.handleOutboundReplyTunnel(&req); err != nil {
 		return 0, nil, err
 	}
 
-	// Extract peer hashes from the build result for caller tracking
-	peerHashes := tm.extractPeerHashes(result)
+	result, messageID, peerHashes, err := tm.prepareAndSendBuild(req)
+	if err != nil {
+		return 0, peerHashes, err
+	}
 
+	if err := tm.finalizePendingBuild(result, messageID, req); err != nil {
+		return 0, peerHashes, err
+	}
+
+	tm.logBuildRequestSent(result, messageID, req.ReplyTunnelID, req.IsInbound)
+	tm.logExpectedReplyTagCandidates(result, messageID, req.ReplyTunnelID, req.IsInbound)
+	return result.TunnelID, peerHashes, nil
+}
+
+// validateBuildRequest validates the build request parameters.
+func (tm *TunnelManager) validateBuildRequest(req tunnel.BuildTunnelRequest) error {
+	var zeroHash common.Hash
+	if req.OurIdentity == zeroHash {
+		return oops.Errorf("invalid build request: router identity is unset")
+	}
+	if req.IsInbound && req.ReplyGateway == zeroHash {
+		return oops.Errorf("invalid build request: reply gateway is unset for inbound tunnel")
+	}
+	return nil
+}
+
+// handleOutboundReplyTunnel injects a reply tunnel ID for outbound builds.
+func (tm *TunnelManager) handleOutboundReplyTunnel(req *tunnel.BuildTunnelRequest) error {
+	if req.IsInbound || req.ReplyTunnelID != 0 {
+		return nil
+	}
+
+	inbound := tm.inboundPool.SelectTunnel()
+	if inbound == nil {
+		return oops.Errorf("outbound build requires active inbound tunnel for reply routing")
+	}
+
+	req.ReplyTunnelID = inbound.ID
+	log.WithFields(logger.Fields{
+		"at":              "BuildTunnelFromRequest",
+		"reply_tunnel_id": inbound.ID,
+	}).Debug("injected inbound tunnel ID into outbound build request for OBEP reply routing")
+	return nil
+}
+
+// prepareAndSendBuild creates the build request, sends the message, and returns the result.
+func (tm *TunnelManager) prepareAndSendBuild(req tunnel.BuildTunnelRequest) (*tunnel.TunnelBuildResult, int, []common.Hash, error) {
+	result, messageID, err := tm.createBuildRequestAndID(req)
+	if err != nil {
+		return nil, 0, nil, err
+	}
+
+	peerHashes := tm.extractPeerHashes(result)
 	tunnelState := tm.createTunnelStateFromResult(result)
 	pool := tm.getPoolForTunnel(req.IsInbound)
 	pool.AddTunnel(tunnelState)
@@ -315,20 +342,18 @@ func (tm *TunnelManager) BuildTunnelFromRequest(req tunnel.BuildTunnelRequest) (
 	//
 	// IMPORTANT: sendBuildMessage may block for tens of seconds while
 	// sessionProvider.GetSessionByHash performs a NetDB RouterInfo lookup
-	// (up to 30s) plus the outbound NTCP2/SSU2 dial and Noise handshake. The
-	// 90-second build expiration window is an implementation convention —
-	// the build message leaves the originator, NOT from when the in-process
-	// build request struct is created. Arming the timer and resetting
-	// createdAt below — after sendBuildMessage returns — keeps the spec
-	// window aligned with reality and prevents builds whose gateway dial is
-	// slow from being declared expired before any reply has a chance to
-	// arrive (RCA: 100% exploratory tunnel build expiration).
+	// (up to 30s) plus the outbound NTCP2/SSU2 dial and Noise handshake.
 	err = tm.sendBuildMessage(result, messageID)
 	if err != nil {
 		tm.cleanupFailedBuild(result.TunnelID, messageID, req.IsInbound)
-		return 0, peerHashes, oops.Wrapf(err, "failed to send build request")
+		return nil, 0, peerHashes, oops.Wrapf(err, "failed to send build request")
 	}
 
+	return result, messageID, peerHashes, nil
+}
+
+// finalizePendingBuild updates crypto context, arms the expiration timer, and registers with ReplyProcessor.
+func (tm *TunnelManager) finalizePendingBuild(result *tunnel.TunnelBuildResult, messageID int, req tunnel.BuildTunnelRequest) error {
 	// STBM message construction updates result.ReplyKeys/NoiseHashes to the
 	// final HKDF-derived values used for reply decryption. Persist the final
 	// crypto context so late uncorrelated replies can be best-effort decrypted.
@@ -337,8 +362,7 @@ func (tm *TunnelManager) BuildTunnelFromRequest(req tunnel.BuildTunnelRequest) (
 	// Anchor the 90-second expiration window to the moment the build message
 	// actually left this router, then arm cleanup at that horizon.
 	// BUG-5 fix: arm the timer at buildTimeout + buildExpireGrace (200ms) so
-	// replies that arrive on the boundary do not race the cleanup goroutine
-	// and get mis-routed to processUncorrelatedReply without decryption.
+	// replies that arrive on the boundary do not race the cleanup goroutine.
 	tm.resetPendingBuildCreatedAt(messageID)
 	time.AfterFunc(90*time.Second+buildExpireGrace, func() {
 		tm.cleanupExpiredBuildByID(messageID)
@@ -353,9 +377,8 @@ func (tm *TunnelManager) BuildTunnelFromRequest(req tunnel.BuildTunnelRequest) (
 		req.IsInbound,
 		len(result.Hops),
 	); regErr != nil {
-		// The message is already sent; best-effort cleanup.
 		tm.cleanupFailedBuild(result.TunnelID, messageID, req.IsInbound)
-		return 0, peerHashes, oops.Wrapf(regErr, "failed to register pending build")
+		return oops.Wrapf(regErr, "failed to register pending build")
 	}
 
 	// Store Noise transcript hashes for STBM reply AEAD decryption.
@@ -365,9 +388,7 @@ func (tm *TunnelManager) BuildTunnelFromRequest(req tunnel.BuildTunnelRequest) (
 		}
 	}
 
-	tm.logBuildRequestSent(result, messageID, req.ReplyTunnelID, req.IsInbound)
-	tm.logExpectedReplyTagCandidates(result, messageID, req.ReplyTunnelID, req.IsInbound)
-	return result.TunnelID, peerHashes, nil
+	return nil
 }
 
 // buildZeroHopInbound registers a zero-hop inbound tunnel directly into the
@@ -699,150 +720,162 @@ func (tm *TunnelManager) queueBuildMessageToGateway(session I2NPTransportSession
 // causes peers to reject the entire message (silent EOF after the NTCP2
 // handshake), since the count byte is interpreted against the wrong stride.
 func (tm *TunnelManager) createShortTunnelBuildMessage(result *tunnel.TunnelBuildResult, messageID int) (I2NPMessage, error) {
-	// Convert tunnel.BuildRequestRecord to i2np.BuildRequestRecord
-	i2npRecords := make([]BuildRequestRecord, len(result.Records))
-	for i, rec := range result.Records {
-		i2npRecords[i] = convertTunnelBuildRecord(rec)
+	i2npRecords := tm.convertAndOverrideMessageID(result.Records, messageID)
+
+	encryptedRecords, replyKeys, noiseHashes, postReplyCKs, err := tm.encryptRecordsAndDeriveKeys(i2npRecords, result.Hops)
+	if err != nil {
+		return nil, err
 	}
 
-	// Override SendMessageID in every hop record with the tunnel manager's
-	// messageID, which is the I2NP header message ID of this STBM and the
-	// key used in tm.pendingBuilds for reply correlation.
-	//
-	// The builder generates a random sendMessageID per hop (used only for
-	// the standard VTB format). For STBM, the remote OBEP reads
-	// sendMessageID from its decrypted record cleartext and uses it as the
-	// I2NP message ID of the ShortTunnelBuildReply it sends back. If that
-	// value differs from our pendingBuilds key, ProcessTunnelBuildReply
-	// cannot correlate the reply and every build expires.
-	for i := range i2npRecords {
+	tm.updateReplyKeysWithHKDF(result, replyKeys, noiseHashes)
+
+	if err := tm.registerGarlicReplyKeys(noiseHashes, postReplyCKs, messageID, result.TunnelID); err != nil {
+		return nil, err
+	}
+
+	if err := tm.applyChaCha20LayerObfuscation(encryptedRecords, replyKeys); err != nil {
+		return nil, err
+	}
+
+	return tm.serializeSTBM(encryptedRecords, messageID), nil
+}
+
+// convertAndOverrideMessageID converts tunnel records to I2NP format and overrides SendMessageID
+// for STBM reply correlation. The remote OBEP reads sendMessageID from its decrypted record
+// and uses it as the I2NP message ID of the ShortTunnelBuildReply it sends back.
+func (tm *TunnelManager) convertAndOverrideMessageID(records []tunnel.BuildRequestRecord, messageID int) []BuildRequestRecord {
+	i2npRecords := make([]BuildRequestRecord, len(records))
+	for i, rec := range records {
+		i2npRecords[i] = convertTunnelBuildRecord(rec)
 		i2npRecords[i].SendMessageID = messageID
 	}
+	return i2npRecords
+}
 
-	// Encrypt each record with the corresponding hop's public key.
-	// Each encrypted STBM record is exactly 218 bytes:
-	//   16 (toPeer) + 32 (ephemeralKey) + 154 (ciphertext) + 16 (poly1305 tag).
-	// We also keep each hop's per-hop reply key (derived from the post-encrypt
-	// Noise chaining key via HKDF info="SMTunnelReplyKey") because the I2P
-	// short-tunnel-build protocol requires the sender to apply chained ChaCha20
-	// stream-cipher layer obfuscation across all records following each hop —
-	// without that step every hop after the first reads garbage and silently
-	// drops the message (no build reply ever returns).
-	// See i2pd Tunnel::Build() in libi2pd/Tunnel.cpp and
-	// ShortECIESTunnelHopConfig::DecryptRecord in libi2pd/TunnelConfig.cpp.
-	encryptedRecords := make([][ShortBuildRecordSize]byte, len(i2npRecords))
-	replyKeys := make([][32]byte, len(i2npRecords))
-	noiseHashes := make([][32]byte, len(i2npRecords))
-	preReplyCKs := make([][32]byte, len(i2npRecords))
-	postReplyCKs := make([][32]byte, len(i2npRecords))
+// encryptRecordsAndDeriveKeys encrypts each STBM record and derives cryptographic keys.
+// Each encrypted STBM record is exactly 218 bytes. Returns encrypted records, reply keys,
+// Noise transcript hashes, and post-reply chaining keys needed for STBM protocol.
+func (tm *TunnelManager) encryptRecordsAndDeriveKeys(i2npRecords []BuildRequestRecord, hops []router_info.RouterInfo) (
+	encryptedRecords [][ShortBuildRecordSize]byte,
+	replyKeys [][32]byte,
+	noiseHashes [][32]byte,
+	postReplyCKs [][32]byte,
+	err error,
+) {
+	encryptedRecords = make([][ShortBuildRecordSize]byte, len(i2npRecords))
+	replyKeys = make([][32]byte, len(i2npRecords))
+	noiseHashes = make([][32]byte, len(i2npRecords))
+	postReplyCKs = make([][32]byte, len(i2npRecords))
+
 	for i, record := range i2npRecords {
-		if i >= len(result.Hops) {
-			return nil, oops.Errorf("record %d has no corresponding hop RouterInfo", i)
+		if i >= len(hops) {
+			return nil, nil, nil, nil, oops.Errorf("record %d has no corresponding hop RouterInfo", i)
 		}
-		encrypted, ck, nh, err := EncryptShortBuildRequestRecordWithChain(record, result.Hops[i])
-		if err != nil {
-			return nil, oops.Wrapf(err, "failed to encrypt short build record %d", i)
+		encrypted, ck, nh, encErr := EncryptShortBuildRequestRecordWithChain(record, hops[i])
+		if encErr != nil {
+			return nil, nil, nil, nil, oops.Wrapf(encErr, "failed to encrypt short build record %d", i)
 		}
 		encryptedRecords[i] = encrypted
 		noiseHashes[i] = nh
-		preReplyCKs[i] = ck
-		rk, newCK, err := DeriveSTBMReplyKey(ck)
-		if err != nil {
-			return nil, oops.Wrapf(err, "failed to derive reply key for hop %d", i)
+
+		rk, newCK, keyErr := DeriveSTBMReplyKey(ck)
+		if keyErr != nil {
+			return nil, nil, nil, nil, oops.Wrapf(keyErr, "failed to derive reply key for hop %d", i)
 		}
 		replyKeys[i] = rk
 		postReplyCKs[i] = newCK
 	}
 
-	// Per STBM spec (proposal 152), the ReplyKey field is absent from the
-	// 154-byte cleartext. Each hop derives its reply key via:
-	//   HKDF(ck, "", "SMTunnelReplyKey", 64) → new_ck || replyKey
-	// where ck is the post-encryption Noise chaining key. The builder's
-	// CreateBuildRequest generates a random ReplyKey that is never sent to
-	// the hop and is therefore useless for reply decryption. We must
-	// overwrite result.ReplyKeys with the HKDF-derived keys so that
-	// RegisterPendingBuild and decryptSTBMReplyRecord use the correct key.
+	return encryptedRecords, replyKeys, noiseHashes, postReplyCKs, nil
+}
+
+// updateReplyKeysWithHKDF overwrites result.ReplyKeys with HKDF-derived keys.
+// Per STBM spec (proposal 152), the ReplyKey field is absent from the 154-byte cleartext.
+// Each hop derives its reply key via HKDF(ck, "", "SMTunnelReplyKey", 64).
+func (tm *TunnelManager) updateReplyKeysWithHKDF(result *tunnel.TunnelBuildResult, replyKeys [][32]byte, noiseHashes [][32]byte) {
 	result.ReplyKeys = make([]session_key.SessionKey, len(replyKeys))
 	for i, rk := range replyKeys {
 		result.ReplyKeys[i] = session_key.SessionKey(rk)
 	}
-	// Store per-hop Noise transcript hashes for STBM reply AEAD decryption.
 	result.NoiseHashes = noiseHashes
+}
 
-	// Derive and register one-time garlic keys for the OBEP's reply.
-	//
-	// Primary derivation follows the go-noise one-time key path from the last
-	// hop Noise transcript hash. As an interoperability fallback, also register
-	// a derivation from the post-reply HKDF chaining key used in STBM key
-	// evolution, since some implementations derive AttachLayerEncryption from CK.
-	if tm.garlicKeyRegistrar != nil && len(postReplyCKs) > 0 {
-		lastHop := len(postReplyCKs) - 1
-		if len(noiseHashes) > lastHop {
-			compatKey, compatTag, compatErr := DeriveSTBMGarlicKey(noiseHashes[lastHop])
-			if compatErr != nil {
-				return nil, oops.Wrapf(compatErr, "failed to derive compatibility garlic reply key")
-			}
-			tm.garlicKeyRegistrar.RegisterOneTimeGarlicKey(compatTag, compatKey)
-		}
-
-		// Derive the exact garlic key/tag that the OBEP uses when wrapping its
-		// ShortTunnelBuildReply (matches i2pd TransitTunnel.cpp exactly):
-		//   HKDF(postReplyCK, "SMTunnelLayerKey") -> ck1
-		//   HKDF(ck1, "TunnelLayerIVKey")         -> ck2
-		//   HKDF(ck2, "RGarlicKeyAndTag")          -> tag=ck3[0:8], key=ck3[32:64]
-		obepKey, obepTag, obepErr := DeriveSTBMOBEPGarlicKeyAndTag(postReplyCKs[lastHop])
-		if obepErr != nil {
-			return nil, oops.Wrapf(obepErr, "failed to derive OBEP garlic reply key")
-		}
-		tm.garlicKeyRegistrar.RegisterOneTimeGarlicKey(obepTag, obepKey)
-		log.WithFields(logger.Fields{
-			"at":         "createShortTunnelBuildMessage",
-			"tag":        fmt.Sprintf("%x", obepTag),
-			"last_hop":   lastHop,
-			"tag_source": "obep_rgarlickey",
-			"message_id": messageID,
-			"tunnel_id":  result.TunnelID,
-		}).Debug("Registered one-time garlic reply key for STBM build")
+// registerGarlicReplyKeys derives and registers one-time garlic keys for OBEP reply decryption.
+// Registers both compatibility keys (from Noise transcript hash) and exact OBEP keys
+// (from post-reply chaining key) to ensure interoperability with different implementations.
+func (tm *TunnelManager) registerGarlicReplyKeys(noiseHashes [][32]byte, postReplyCKs [][32]byte, messageID int, tunnelID tunnel.TunnelID) error {
+	if tm.garlicKeyRegistrar == nil || len(postReplyCKs) == 0 {
+		return nil
 	}
 
-	// Apply chained ChaCha20 layer obfuscation. For each hop i (from
-	// second-to-last down to first), XOR every record at index j > i with
-	// ChaCha20(key=replyKeys[i], nonce[4]=j, rest=0). This way when hop 0
-	// receives the message it AEAD-decrypts its own record, then peels its
-	// layer off all later records using the same ChaCha20 stream — leaving
-	// records[1..N-1] in the state hop 1 can decrypt; and so on.
-	if len(encryptedRecords) >= 2 {
-		for i := len(encryptedRecords) - 2; i >= 0; i-- {
-			for j := i + 1; j < len(encryptedRecords); j++ {
-				if err := chacha20XORRecord(&encryptedRecords[j], replyKeys[i], j); err != nil {
-					return nil, oops.Wrapf(err, "ChaCha20 layer obfuscation failed at hop %d record %d", i, j)
-				}
+	lastHop := len(postReplyCKs) - 1
+	if len(noiseHashes) > lastHop {
+		compatKey, compatTag, compatErr := DeriveSTBMGarlicKey(noiseHashes[lastHop])
+		if compatErr != nil {
+			return oops.Wrapf(compatErr, "failed to derive compatibility garlic reply key")
+		}
+		tm.garlicKeyRegistrar.RegisterOneTimeGarlicKey(compatTag, compatKey)
+	}
+
+	obepKey, obepTag, obepErr := DeriveSTBMOBEPGarlicKeyAndTag(postReplyCKs[lastHop])
+	if obepErr != nil {
+		return oops.Wrapf(obepErr, "failed to derive OBEP garlic reply key")
+	}
+	tm.garlicKeyRegistrar.RegisterOneTimeGarlicKey(obepTag, obepKey)
+	log.WithFields(logger.Fields{
+		"at":         "registerGarlicReplyKeys",
+		"tag":        fmt.Sprintf("%x", obepTag),
+		"last_hop":   lastHop,
+		"tag_source": "obep_rgarlickey",
+		"message_id": messageID,
+		"tunnel_id":  tunnelID,
+	}).Debug("Registered one-time garlic reply key for STBM build")
+
+	return nil
+}
+
+// applyChaCha20LayerObfuscation applies chained ChaCha20 stream-cipher layer obfuscation
+// to STBM records. For each hop i (second-to-last down to first), XOR every record at
+// index j > i with ChaCha20(key=replyKeys[i], nonce[4]=j). This ensures each hop can
+// decrypt its record and peel its layer off subsequent records.
+func (tm *TunnelManager) applyChaCha20LayerObfuscation(encryptedRecords [][ShortBuildRecordSize]byte, replyKeys [][32]byte) error {
+	if len(encryptedRecords) < 2 {
+		return nil
+	}
+
+	for i := len(encryptedRecords) - 2; i >= 0; i-- {
+		for j := i + 1; j < len(encryptedRecords); j++ {
+			if err := chacha20XORRecord(&encryptedRecords[j], replyKeys[i], j); err != nil {
+				return oops.Wrapf(err, "ChaCha20 layer obfuscation failed at hop %d record %d", i, j)
 			}
 		}
 	}
 
-	// Serialize encrypted records: [count:1][encrypted_records...]
-	// Each encrypted STBM record is 218 bytes (see ShortBuildRecordSize).
+	return nil
+}
+
+// serializeSTBM serializes encrypted STBM records and wraps them in an I2NP message.
+// Format: [count:1][encrypted_records...] where each record is 218 bytes.
+func (tm *TunnelManager) serializeSTBM(encryptedRecords [][ShortBuildRecordSize]byte, messageID int) I2NPMessage {
 	data := make([]byte, 1+len(encryptedRecords)*ShortBuildRecordSize)
 	data[0] = byte(len(encryptedRecords))
 	for i, enc := range encryptedRecords {
 		copy(data[1+i*ShortBuildRecordSize:1+(i+1)*ShortBuildRecordSize], enc[:])
 	}
 
-	// Wrap in I2NP message
 	msg := NewBaseI2NPMessage(I2NPMessageTypeShortTunnelBuild)
 	msg.SetMessageID(messageID)
 	msg.SetData(data)
 
 	log.WithFields(logger.Fields{
-		"at":           "createShortTunnelBuildMessage",
+		"at":           "serializeSTBM",
 		"record_count": len(encryptedRecords),
 		"data_size":    len(data),
 		"record_size":  ShortBuildRecordSize,
 		"encrypted":    true,
 	}).Debug("Created encrypted Short Tunnel Build message")
 
-	return msg, nil
+	return msg
 }
 
 // createTunnelBuildMessage creates a TunnelBuild (type 21) message.

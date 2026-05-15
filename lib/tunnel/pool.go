@@ -644,56 +644,81 @@ func (p *Pool) cleanupExpiredTunnelsLocked() {
 	for id, tunnel := range p.tunnels {
 		age := now.Sub(tunnel.CreatedAt)
 
-		// Remove tunnels that exceeded lifetime
-		if tunnel.State == TunnelReady && age > p.config.TunnelLifetime {
+		if shouldExpireTunnel := p.checkTunnelExpiration(tunnel, age, id); shouldExpireTunnel {
 			expired = append(expired, id)
-			log.WithFields(logger.Fields{
-				"at":           "(Pool) cleanupExpiredTunnelsLocked",
-				"phase":        "tunnel_build",
-				"reason":       "tunnel exceeded lifetime",
-				"tunnel_id":    id,
-				"age":          age,
-				"max_lifetime": p.config.TunnelLifetime,
-			}).Debug("tunnel expired")
+			if p.isBuildTimeout(tunnel, age) {
+				buildTimeouts++
+			}
 		} else if tunnel.State == TunnelReady {
 			hasActiveTunnel = true
 		}
-
-		// Remove failed tunnels.
-		// If the failure is an inbound build that aged past the 90-second VTBRM
-		// deadline, count it toward the auto-fallback heuristic.  TunnelManager
-		// marks these TunnelFailed (via handleExpiredRequest) before the pool's
-		// cleanup loop runs, so the TunnelBuilding timeout path below never fires
-		// in practice; we detect them here instead.
-		if tunnel.State == TunnelFailed {
-			expired = append(expired, id)
-			if p.config.IsInbound && age >= tunnelBuildTimeout {
-				buildTimeouts++
-			}
-		}
-
-		// Remove in-flight builds that exceeded the 90-second VTBRM deadline.
-		// This path handles pools used without TunnelManager (e.g. unit tests).
-		if tunnel.State == TunnelBuilding && age > tunnelBuildTimeout {
-			expired = append(expired, id)
-			if p.config.IsInbound {
-				buildTimeouts++
-			}
-		}
 	}
 
+	p.removeTunnels(expired)
+	p.updateFallbackCounter(hasActiveTunnel, buildTimeouts)
+	p.logCleanup(expired)
+}
+
+// checkTunnelExpiration determines if a tunnel should be expired and logs the reason.
+func (p *Pool) checkTunnelExpiration(tunnel *TunnelState, age time.Duration, id TunnelID) bool {
+	// Remove tunnels that exceeded lifetime
+	if tunnel.State == TunnelReady && age > p.config.TunnelLifetime {
+		log.WithFields(logger.Fields{
+			"at":           "(Pool) cleanupExpiredTunnelsLocked",
+			"phase":        "tunnel_build",
+			"reason":       "tunnel exceeded lifetime",
+			"tunnel_id":    id,
+			"age":          age,
+			"max_lifetime": p.config.TunnelLifetime,
+		}).Debug("tunnel expired")
+		return true
+	}
+
+	// Remove failed tunnels
+	if tunnel.State == TunnelFailed {
+		return true
+	}
+
+	// Remove in-flight builds that exceeded the 90-second VTBRM deadline
+	if tunnel.State == TunnelBuilding && age > tunnelBuildTimeout {
+		return true
+	}
+
+	return false
+}
+
+// isBuildTimeout checks if this is an inbound build timeout for the auto-fallback heuristic.
+func (p *Pool) isBuildTimeout(tunnel *TunnelState, age time.Duration) bool {
+	if !p.config.IsInbound {
+		return false
+	}
+	if tunnel.State == TunnelFailed && age >= tunnelBuildTimeout {
+		return true
+	}
+	if tunnel.State == TunnelBuilding && age > tunnelBuildTimeout {
+		return true
+	}
+	return false
+}
+
+// removeTunnels deletes the specified tunnel IDs from the pool.
+func (p *Pool) removeTunnels(expired []TunnelID) {
 	for _, id := range expired {
 		delete(p.tunnels, id)
 	}
+}
 
-	// Update the in-flight expired counter for the auto-fallback heuristic.
-	// Reset when builds are succeeding (active tunnels present), increment otherwise.
+// updateFallbackCounter updates the in-flight expired counter for the auto-fallback heuristic.
+func (p *Pool) updateFallbackCounter(hasActiveTunnel bool, buildTimeouts int) {
 	if hasActiveTunnel {
 		p.inFlightExpiredCount = 0
 	} else if buildTimeouts > 0 {
 		p.inFlightExpiredCount += buildTimeouts
 	}
+}
 
+// logCleanup logs the cleanup operation if any tunnels were removed.
+func (p *Pool) logCleanup(expired []TunnelID) {
 	if len(expired) > 0 {
 		log.WithFields(logger.Fields{
 			"at":        "(Pool) cleanupExpiredAndFailedTunnels",

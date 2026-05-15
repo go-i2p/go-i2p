@@ -356,7 +356,9 @@ func (dr *DestinationResolver) decryptEncryptedLeaseSet(dest destination.Destina
 	}
 	subcredential := encrypted_leaseset.DeriveSubcredential(
 		origSigningKey.Bytes(),
+		uint16(dest.KeyCertificate.SigningPublicKeyType()),
 		els.BlindedPublicKey(),
+		els.SigType(),
 	)
 
 	innerLS2, err := els.DecryptInnerData(subcredential)
