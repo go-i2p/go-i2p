@@ -112,21 +112,34 @@ func validateNTCP2Support(routerInfo *router_info.RouterInfo, hashBytes []byte) 
 // findValidNTCP2Address iterates through router addresses to find and wrap a valid NTCP2 address.
 func findValidNTCP2Address(routerInfo router_info.RouterInfo, hashBytes []byte) (net.Addr, error) {
 	addresses := routerInfo.RouterAddresses()
+	logAddressSearch(hashBytes, len(addresses))
+
+	ipv6Fallback := searchForPreferredAddress(addresses, routerInfo, hashBytes)
+
+	if ipv6Fallback != nil {
+		logSuccessfulExtraction(ipv6Fallback, hashBytes)
+		return ipv6Fallback, nil
+	}
+
+	logNoValidAddressFound(hashBytes, len(addresses))
+	return nil, ErrInvalidRouterInfo
+}
+
+// logAddressSearch logs the start of NTCP2 address search.
+func logAddressSearch(hashBytes []byte, addressCount int) {
 	log.WithFields(map[string]interface{}{
 		"router_hash":   fmt.Sprintf("%x", hashBytes[:8]),
-		"address_count": len(addresses),
+		"address_count": addressCount,
 	}).Debug("Searching for valid NTCP2 address")
+}
 
-	// Two-pass: prefer IPv4 NTCP2 addresses; fall back to IPv6 only when
-	// IPv6 connectivity is available (AUDIT P4 + P1/RC-3).
+// searchForPreferredAddress performs a two-pass search: prefer IPv4 NTCP2 addresses;
+// fall back to IPv6 only when IPv4 is unavailable (AUDIT P4 + P1/RC-3).
+// Returns the preferred address (IPv4 immediately, or IPv6 fallback if no IPv4 found).
+func searchForPreferredAddress(addresses []*router_address.RouterAddress, routerInfo router_info.RouterInfo, hashBytes []byte) net.Addr {
 	var ipv6Fallback net.Addr
 	for i, addr := range addresses {
-		style := addr.TransportStyle()
-		styleStr, _ := style.Data()
-		log.WithFields(map[string]interface{}{
-			"index":           i,
-			"transport_style": styleStr,
-		}).Debug("Checking router address")
+		logAddressCheck(i, addr)
 
 		if !isNTCP2Transport(addr) {
 			continue
@@ -134,38 +147,50 @@ func findValidNTCP2Address(routerInfo router_info.RouterInfo, hashBytes []byte) 
 
 		ntcp2Addr, err := processNTCP2Address(addr, routerInfo)
 		if err != nil {
-			log.WithFields(map[string]interface{}{
-				"index": i,
-			}).WithError(err).Debug("Failed to process NTCP2 address, trying next")
+			logAddressProcessingFailure(i, err)
 			continue
 		}
 
 		if isIPv4RouterAddress(addr) {
 			// IPv4 – return immediately (preferred path).
 			logSuccessfulExtraction(ntcp2Addr, hashBytes)
-			return ntcp2Addr, nil
+			return ntcp2Addr
 		}
 		// IPv6 – keep as fallback, continue looking for IPv4.
 		if ipv6Fallback == nil {
 			ipv6Fallback = ntcp2Addr
 		}
 	}
+	return ipv6Fallback
+}
 
-	if ipv6Fallback != nil {
-		logSuccessfulExtraction(ipv6Fallback, hashBytes)
-		return ipv6Fallback, nil
-	}
+// logAddressCheck logs the transport style of the address being checked.
+func logAddressCheck(index int, addr *router_address.RouterAddress) {
+	style := addr.TransportStyle()
+	styleStr, _ := style.Data()
+	log.WithFields(map[string]interface{}{
+		"index":           index,
+		"transport_style": styleStr,
+	}).Debug("Checking router address")
+}
 
-	// Enhanced logging when no valid NTCP2 addresses found - helps diagnose Issue #1 scope
+// logAddressProcessingFailure logs when an NTCP2 address processing fails.
+func logAddressProcessingFailure(index int, err error) {
+	log.WithFields(map[string]interface{}{
+		"index": index,
+	}).WithError(err).Debug("Failed to process NTCP2 address, trying next")
+}
+
+// logNoValidAddressFound logs diagnostic information when no valid NTCP2 addresses are found.
+func logNoValidAddressFound(hashBytes []byte, addressCount int) {
 	log.WithFields(map[string]interface{}{
 		"at":              "findValidNTCP2Address",
 		"phase":           "address_extraction",
 		"operation":       "find_valid_address",
 		"router_hash":     fmt.Sprintf("%x", hashBytes[:8]),
-		"addresses_total": len(addresses),
-		"addresses_tried": len(addresses),
+		"addresses_total": addressCount,
+		"addresses_tried": addressCount,
 	}).Warn("No valid NTCP2 address found in RouterInfo after checking all addresses")
-	return nil, ErrInvalidRouterInfo
 }
 
 // processNTCP2Address resolves TCP address and wraps it with router hash.

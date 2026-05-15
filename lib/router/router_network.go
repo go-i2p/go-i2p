@@ -789,56 +789,81 @@ func (r *Router) createI2CPServer() (*i2cp.Server, error) {
 // configureI2CPServerInfrastructure sets up NetDB, auth, bandwidth, tunnels, and peer selection.
 func (r *Router) configureI2CPServerInfrastructure(server *i2cp.Server) {
 	server.SetNetDB(r.StdNetDB)
-
-	if routerHash, hashErr := r.getOurRouterHash(); hashErr != nil {
-		log.WithError(hashErr).Warn("I2CP server: unable to configure router hash for session tunnel pools")
-	} else {
-		server.SetRouterHash(routerHash)
-	}
-
-	if r.cfg.I2CP.Username != "" && r.cfg.I2CP.Password != "" {
-		auth, authErr := i2cp.NewPasswordAuthenticator(r.cfg.I2CP.Username, r.cfg.I2CP.Password)
-		if authErr == nil {
-			server.SetAuthenticator(auth)
-			log.WithFields(logger.Fields{"at": "configureI2CPServerInfrastructure"}).Info("I2CP server: authentication enabled")
-		}
-	}
-
+	r.configureI2CPRouterHash(server)
+	r.configureI2CPAuth(server)
 	server.SetBandwidthProvider(&routerBandwidthProvider{cfg: r.cfg})
+	r.configureI2CPTunnelBuilder(server)
+	r.configureI2CPPeerSelector(server)
+	r.configureI2CPHostnameResolver(server)
+	r.configureI2CPDestinationResolver(server)
+	r.wireI2CPMessageRouter(server)
+}
 
-	if r.tunnelManager != nil {
-		server.SetTunnelBuilder(r.tunnelManager)
-		log.WithFields(logger.Fields{"at": "configureI2CPServerInfrastructure"}).Debug("I2CP server: tunnel builder configured")
-	} else {
-		log.WithFields(logger.Fields{"at": "configureI2CPServerInfrastructure"}).Debug("I2CP server: tunnel manager not available for session pools")
+// configureI2CPRouterHash sets the router hash for I2CP session tunnel pools.
+func (r *Router) configureI2CPRouterHash(server *i2cp.Server) {
+	routerHash, err := r.getOurRouterHash()
+	if err != nil {
+		log.WithError(err).Warn("I2CP server: unable to configure router hash for session tunnel pools")
+		return
+	}
+	server.SetRouterHash(routerHash)
+}
+
+// configureI2CPAuth sets up password authentication if credentials are provided.
+func (r *Router) configureI2CPAuth(server *i2cp.Server) {
+	if r.cfg.I2CP.Username == "" || r.cfg.I2CP.Password == "" {
+		return
 	}
 
+	auth, err := i2cp.NewPasswordAuthenticator(r.cfg.I2CP.Username, r.cfg.I2CP.Password)
+	if err != nil {
+		return
+	}
+
+	server.SetAuthenticator(auth)
+	log.WithFields(logger.Fields{"at": "configureI2CPServerInfrastructure"}).Info("I2CP server: authentication enabled")
+}
+
+// configureI2CPTunnelBuilder sets up the tunnel builder if available.
+func (r *Router) configureI2CPTunnelBuilder(server *i2cp.Server) {
+	if r.tunnelManager == nil {
+		log.WithFields(logger.Fields{"at": "configureI2CPServerInfrastructure"}).Debug("I2CP server: tunnel manager not available for session pools")
+		return
+	}
+
+	server.SetTunnelBuilder(r.tunnelManager)
+	log.WithFields(logger.Fields{"at": "configureI2CPServerInfrastructure"}).Debug("I2CP server: tunnel builder configured")
+}
+
+// configureI2CPPeerSelector creates and sets the peer selector for I2CP sessions.
+func (r *Router) configureI2CPPeerSelector(server *i2cp.Server) {
 	peerSelector, err := tunnel.NewDefaultPeerSelector(r.StdNetDB)
 	if err != nil {
 		log.WithError(err).Warn("Failed to create peer selector for I2CP sessions")
-	} else {
-		server.SetPeerSelector(peerSelector)
-		log.WithFields(logger.Fields{"at": "configureI2CPServerInfrastructure"}).Debug("I2CP server: peer selector configured")
+		return
 	}
 
+	server.SetPeerSelector(peerSelector)
+	log.WithFields(logger.Fields{"at": "configureI2CPServerInfrastructure"}).Debug("I2CP server: peer selector configured")
+}
+
+// configureI2CPHostnameResolver creates and sets the hostname resolver for I2CP.
+func (r *Router) configureI2CPHostnameResolver(server *i2cp.Server) {
 	hostResolver, err := naming.NewHostsTxtResolver()
 	if err != nil {
 		log.WithError(err).Warn("Failed to create hostname resolver for I2CP")
-	} else {
-		server.SetHostnameResolver(hostResolver)
-		log.WithFields(logger.Fields{"at": "configureI2CPServerInfrastructure"}).Debug("I2CP server: hostname resolver configured")
+		return
 	}
 
-	// Wire destination resolver backed by the NetDB so outbound SendMessage
-	// calls can look up the recipient's X25519 public key for garlic encryption.
+	server.SetHostnameResolver(hostResolver)
+	log.WithFields(logger.Fields{"at": "configureI2CPServerInfrastructure"}).Debug("I2CP server: hostname resolver configured")
+}
+
+// configureI2CPDestinationResolver creates and sets the destination resolver for I2CP.
+func (r *Router) configureI2CPDestinationResolver(server *i2cp.Server) {
 	destResolver := netdb.NewDestinationResolver(r.StdNetDB)
 	server.SetDestinationResolver(destResolver)
 	log.WithFields(logger.Fields{"at": "configureI2CPServerInfrastructure"}).Debug("I2CP server: destination resolver configured")
-
-	// Wire message router for outbound I2CP message routing through garlic encryption
-	// and into the tunnel subsystem. The garlic session manager is created from the
-	// router's X25519 key and the transport send function routes via established sessions.
-	r.wireI2CPMessageRouter(server)
 }
 
 // wireI2CPMessageRouter creates and injects a MessageRouter into the I2CP server.

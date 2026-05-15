@@ -358,27 +358,49 @@ func buildRelayIntro(req *ssu2noise.RelayRequestBlock) *ssu2noise.RelayIntroBloc
 // If a dialViaIntroducer goroutine is waiting for this nonce it is notified;
 // otherwise the response is logged and discarded.
 func (t *SSU2Transport) handleRelayResponseBlock(block *ssu2noise.SSU2Block) error {
-	if t.relayManager == nil || block == nil {
+	if !t.isRelayResponseValid(block) {
 		return nil
 	}
+
+	resp, err := t.decodeAndLogRelayResponse(block)
+	if err != nil {
+		return nil
+	}
+
+	t.deliverRelayResponse(resp)
+	return nil
+}
+
+// isRelayResponseValid checks if relay response processing is possible.
+func (t *SSU2Transport) isRelayResponseValid(block *ssu2noise.SSU2Block) bool {
+	return t.relayManager != nil && block != nil
+}
+
+// decodeAndLogRelayResponse decodes the relay response block and logs it.
+func (t *SSU2Transport) decodeAndLogRelayResponse(block *ssu2noise.SSU2Block) (*ssu2noise.RelayResponseBlock, error) {
 	resp, err := ssu2noise.DecodeRelayResponse(block)
 	if err != nil {
 		t.logger.WithField("error", err).Warn("failed to decode RelayResponse")
-		return nil
+		return nil, err
 	}
 
 	t.logger.WithField("code", resp.Code).Debug("relay response received")
+	return resp, nil
+}
 
-	// Deliver to any waiting dialViaIntroducer call.
-	if ch, ok := t.pendingRelayResponses.Load(resp.Nonce); ok {
-		responseCh := ch.(chan *ssu2noise.RelayResponseBlock)
-		select {
-		case responseCh <- resp:
-		default:
-			// channel already has a value (duplicate delivery); ignore
-		}
+// deliverRelayResponse delivers the relay response to any waiting dialViaIntroducer call.
+func (t *SSU2Transport) deliverRelayResponse(resp *ssu2noise.RelayResponseBlock) {
+	ch, ok := t.pendingRelayResponses.Load(resp.Nonce)
+	if !ok {
+		return
 	}
-	return nil
+
+	responseCh := ch.(chan *ssu2noise.RelayResponseBlock)
+	select {
+	case responseCh <- resp:
+	default:
+		// channel already has a value (duplicate delivery); ignore
+	}
 }
 
 // handleRelayIntroBlock processes a RelayIntro (we are Charlie). It decodes
@@ -928,33 +950,50 @@ func (t *SSU2Transport) validateAndExtractPort() (int, bool) {
 func (t *SSU2Transport) runPortMappingRetryLoop(internalPort int) {
 	backoff := natRetryInitial
 	for {
-		select {
-		case <-t.ctx.Done():
+		if !t.waitForRetryDelay(backoff) {
 			return
-		case <-time.After(backoff):
 		}
 
-		mapper, err := t.createPortMapper()
-		if err != nil {
-			t.logAndIncreaseBackoff(&backoff, err, "", "NAT-PMP/UPnP port mapper unavailable; will retry")
-			continue
+		if t.attemptPortMapping(internalPort, &backoff) {
+			return
 		}
-
-		gwIP, _ := mapper.GetExternalIP()
-		t.logger.WithFields(map[string]interface{}{
-			"gateway": gwIP,
-			"port":    internalPort,
-		}).Debug("NAT-PMP retry: attempting port mapping")
-
-		_, err = mapper.MapPort("udp", internalPort, 1*time.Hour)
-		if err != nil {
-			t.logAndIncreaseBackoff(&backoff, err, gwIP, "NAT-PMP port mapping failed; will retry")
-			continue
-		}
-
-		t.logSuccessAndExit(mapper, internalPort)
-		return
 	}
+}
+
+// waitForRetryDelay waits for the backoff delay or context cancellation.
+// Returns false if context is done, true if delay completed.
+func (t *SSU2Transport) waitForRetryDelay(backoff time.Duration) bool {
+	select {
+	case <-t.ctx.Done():
+		return false
+	case <-time.After(backoff):
+		return true
+	}
+}
+
+// attemptPortMapping attempts to create a port mapper and map the port.
+// Returns true if successful (should exit loop), false if should retry.
+func (t *SSU2Transport) attemptPortMapping(internalPort int, backoff *time.Duration) bool {
+	mapper, err := t.createPortMapper()
+	if err != nil {
+		t.logAndIncreaseBackoff(backoff, err, "", "NAT-PMP/UPnP port mapper unavailable; will retry")
+		return false
+	}
+
+	gwIP, _ := mapper.GetExternalIP()
+	t.logger.WithFields(map[string]interface{}{
+		"gateway": gwIP,
+		"port":    internalPort,
+	}).Debug("NAT-PMP retry: attempting port mapping")
+
+	_, err = mapper.MapPort("udp", internalPort, 1*time.Hour)
+	if err != nil {
+		t.logAndIncreaseBackoff(backoff, err, gwIP, "NAT-PMP port mapping failed; will retry")
+		return false
+	}
+
+	t.logSuccessAndExit(mapper, internalPort)
+	return true
 }
 
 // createPortMapper creates a port mapper with timeout context.

@@ -73,48 +73,76 @@ func (r *Router) reachabilityLoop() {
 // runReachabilityCheck performs a single iteration of the reachability loop.
 // It is a separate method to keep the goroutine body readable.
 func (r *Router) runReachabilityCheck(lastPublished *atomic.Value, lastResignAt *time.Time) {
-	// Collect external address evidence from SSU2 transport.
 	ext := r.collectBestExternalAddr()
-
-	// Compare with what we last published.
 	prev, _ := lastPublished.Load().(string)
+
+	if !r.hasAddressChanged(ext, prev) {
+		return
+	}
+
+	if r.handleAddressLoss(ext, prev, lastPublished, lastResignAt) {
+		return
+	}
+
+	if r.shouldRateLimitRepublication(*lastResignAt) {
+		return
+	}
+
+	r.republishWithNewAddress(ext, prev, lastPublished, lastResignAt)
+}
+
+// hasAddressChanged checks if the external address has changed from the last published value.
+func (r *Router) hasAddressChanged(ext, prev string) bool {
 	if ext == prev {
 		if ext == "" {
 			log.WithField("at", "reachabilityLoop").Debug("no confirmed external address yet; skipping republication")
 		}
-		return // no change
+		return false
+	}
+	return true
+}
+
+// handleAddressLoss manages the case where the external address has been lost.
+// Returns true if the address was lost and has been handled.
+func (r *Router) handleAddressLoss(ext, prev string, lastPublished *atomic.Value, lastResignAt *time.Time) bool {
+	if ext != "" {
+		return false
 	}
 
-	// If we've lost our external address (ext == ""), we still need to
-	// republish the RouterInfo to remove the stale address and refresh
-	// the NTCP2 msg3 payload. Without this, remote peers will keep trying
-	// to connect back to the stale address when delivering tunnel build
-	// replies, causing all outbound tunnel builds to time out.
-	if ext == "" {
-		log.WithFields(logger.Fields{
-			"at":       "reachabilityLoop",
-			"prev_ext": prev,
-		}).Info("external address lost — republishing RouterInfo with caps-only addresses")
+	log.WithFields(logger.Fields{
+		"at":       "reachabilityLoop",
+		"prev_ext": prev,
+	}).Info("external address lost — republishing RouterInfo with caps-only addresses")
 
-		if r.publisher != nil {
-			r.publisher.PublishOurRouterInfo()
-		}
-		r.refreshNTCP2LocalRouterInfo()
-		lastPublished.Store(ext)
-		*lastResignAt = time.Now()
-		return
+	if r.publisher != nil {
+		r.publisher.PublishOurRouterInfo()
+	}
+	r.refreshNTCP2LocalRouterInfo()
+	lastPublished.Store(ext)
+	*lastResignAt = time.Now()
+	return true
+}
+
+// shouldRateLimitRepublication checks if republication should be rate-limited.
+// Returns true if we should skip this republication due to rate limiting.
+func (r *Router) shouldRateLimitRepublication(lastResignAt time.Time) bool {
+	if lastResignAt.IsZero() {
+		return false
 	}
 
-	// Rate-limit to avoid storming the floodfills.
 	now := time.Now()
-	if !lastResignAt.IsZero() && now.Sub(*lastResignAt) < reachabilityResignMinInterval {
+	if now.Sub(lastResignAt) < reachabilityResignMinInterval {
 		log.WithFields(logger.Fields{
 			"at":        "reachabilityLoop",
 			"wait_secs": reachabilityResignMinInterval.Seconds(),
 		}).Debug("RouterInfo republication rate-limited; will retry next tick")
-		return
+		return true
 	}
+	return false
+}
 
+// republishWithNewAddress publishes the RouterInfo with the new external address.
+func (r *Router) republishWithNewAddress(ext, prev string, lastPublished *atomic.Value, lastResignAt *time.Time) {
 	log.WithFields(logger.Fields{
 		"at":       "reachabilityLoop",
 		"prev_ext": prev,
@@ -133,7 +161,7 @@ func (r *Router) runReachabilityCheck(lastPublished *atomic.Value, lastResignAt 
 	r.refreshNTCP2LocalRouterInfo()
 
 	lastPublished.Store(ext)
-	*lastResignAt = now
+	*lastResignAt = time.Now()
 }
 
 // refreshNTCP2LocalRouterInfo asks the routerInfoProvider for a fresh

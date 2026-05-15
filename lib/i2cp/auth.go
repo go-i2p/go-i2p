@@ -216,33 +216,47 @@ func (s *Server) attemptAuthFromGetDate(conn net.Conn, msg *Message) {
 		return // No authentication configured — nothing to do
 	}
 
-	// Parse past the version string to find the options mapping
-	payload := msg.Payload
+	username, password := extractGetDateCredentials(msg.Payload)
+	if username == "" && password == "" {
+		return // No credentials provided
+	}
+
+	s.authenticateConnectionIfValid(conn, username, password)
+}
+
+// extractGetDateCredentials parses the GetDate payload and extracts credentials.
+func extractGetDateCredentials(payload []byte) (username, password string) {
+	optionsData := parseGetDatePayload(payload)
+	if optionsData == nil {
+		return "", ""
+	}
+
+	options := parseGetDateOptions(optionsData)
+	if options == nil {
+		return "", ""
+	}
+
+	return options["i2cp.username"], options["i2cp.password"]
+}
+
+// parseGetDatePayload parses past the version string to find the options mapping.
+func parseGetDatePayload(payload []byte) []byte {
 	if len(payload) < 2 {
-		return
+		return nil
 	}
 
 	// Skip version string: 2-byte length + string bytes
 	versionLen := int(binary.BigEndian.Uint16(payload[0:2]))
 	offset := 2 + versionLen
 	if offset >= len(payload) {
-		return // No options mapping after version string
+		return nil // No options mapping after version string
 	}
 
-	// Parse options as key=value pairs separated by semicolons
-	// The I2CP mapping format in GetDate options is a simple string mapping
-	options := parseGetDateOptions(payload[offset:])
-	if options == nil {
-		return
-	}
+	return payload[offset:]
+}
 
-	username := options["i2cp.username"]
-	password := options["i2cp.password"]
-
-	if username == "" && password == "" {
-		return // No credentials provided
-	}
-
+// authenticateConnectionIfValid attempts to authenticate the connection with the given credentials.
+func (s *Server) authenticateConnectionIfValid(conn net.Conn, username, password string) {
 	state := s.getOrCreateConnectionState(conn)
 	if s.authenticateConnection(state, username, password) {
 		log.WithFields(logger.Fields{

@@ -92,17 +92,48 @@ func NewSSU2Transport(identity router_info.RouterInfo, config *Config, keystore 
 	ctx, cancel := context.WithCancel(context.Background())
 	l := logger.WithField("component", "ssu2")
 
+	if err := prepareIdentityAndLog(identity, config.ListenerAddress, l); err != nil {
+		cancel()
+		return nil, err
+	}
+
+	ssu2Config, err := setupSSU2Config(identity, keystore, cancel)
+	if err != nil {
+		return nil, err
+	}
+	config.SSU2Config = ssu2Config
+
+	t := createSSU2TransportStruct(config, identity, keystore, ctx, cancel, l)
+
+	if err := setupUDPListener(t, config, ssu2Config); err != nil {
+		cancel()
+		return nil, err
+	}
+
+	if err := conditionallyInitKeyManagement(t, config, ssu2Config, cancel); err != nil {
+		return nil, err
+	}
+
+	l.WithField("address", t.Addr().String()).Info("SSU2 transport initialized")
+	return t, nil
+}
+
+// prepareIdentityAndLog extracts the identity hash and logs initialization.
+func prepareIdentityAndLog(identity router_info.RouterInfo, listenerAddress string, l *logger.Entry) error {
 	identHash, err := identity.IdentHash()
 	if err != nil {
-		cancel()
-		return nil, oops.Wrapf(err, "failed to get router identity hash")
+		return oops.Wrapf(err, "failed to get router identity hash")
 	}
 	identHashBytes := identHash.Bytes()
 	l.WithFields(map[string]interface{}{
 		"router_hash":      fmt.Sprintf("%x", identHashBytes[:8]),
-		"listener_address": config.ListenerAddress,
+		"listener_address": listenerAddress,
 	}).Info("Initializing SSU2 transport")
+	return nil
+}
 
+// setupSSU2Config creates the SSU2Config and initializes crypto keys.
+func setupSSU2Config(identity router_info.RouterInfo, keystore KeystoreProvider, cancel context.CancelFunc) (*ssu2noise.SSU2Config, error) {
 	ssu2Config, err := createSSU2Config(identity)
 	if err != nil {
 		cancel()
@@ -114,9 +145,12 @@ func NewSSU2Transport(identity router_info.RouterInfo, config *Config, keystore 
 		return nil, err
 	}
 
-	config.SSU2Config = ssu2Config
+	return ssu2Config, nil
+}
 
-	t := &SSU2Transport{
+// createSSU2TransportStruct creates the SSU2Transport struct with default values.
+func createSSU2TransportStruct(config *Config, identity router_info.RouterInfo, keystore KeystoreProvider, ctx context.Context, cancel context.CancelFunc, l *logger.Entry) *SSU2Transport {
+	return &SSU2Transport{
 		config:                config,
 		identity:              identity,
 		keystore:              keystore,
@@ -127,21 +161,18 @@ func NewSSU2Transport(identity router_info.RouterInfo, config *Config, keystore 
 		cancel:                cancel,
 		logger:                l,
 	}
+}
 
-	if err := setupUDPListener(t, config, ssu2Config); err != nil {
+// conditionallyInitKeyManagement initializes key management if WorkingDir is present.
+func conditionallyInitKeyManagement(t *SSU2Transport, config *Config, ssu2Config *ssu2noise.SSU2Config, cancel context.CancelFunc) error {
+	if config.WorkingDir == "" {
+		return nil
+	}
+	if err := initKeyManagement(t, ssu2Config); err != nil {
 		cancel()
-		return nil, err
+		return err
 	}
-
-	if config.WorkingDir != "" {
-		if err := initKeyManagement(t, ssu2Config); err != nil {
-			cancel()
-			return nil, err
-		}
-	}
-
-	l.WithField("address", t.Addr().String()).Info("SSU2 transport initialized")
-	return t, nil
+	return nil
 }
 
 // createSSU2Config creates an SSU2Config from the router identity.

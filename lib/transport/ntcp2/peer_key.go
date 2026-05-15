@@ -131,31 +131,55 @@ func ConfigureDialConfig(config *ntcp2.NTCP2Config, peerInfo router_info.RouterI
 // Should be called once at startup after the RouterInfo has been built and signed.
 // Returns a descriptive error (with both keys base64-encoded) if a mismatch is found.
 func VerifyStaticKeyConsistency(transport *NTCP2Transport, identity router_info.RouterInfo) error {
-	if transport.config == nil || transport.config.NTCP2Config == nil {
-		return oops.Errorf("transport config is not initialized")
-	}
-	privKeyBytes := transport.config.NTCP2Config.StaticKey
-	if len(privKeyBytes) != 32 {
-		return oops.Errorf("static key is not 32 bytes: got %d", len(privKeyBytes))
+	privKeyBytes, err := getValidatedPrivateKey(transport)
+	if err != nil {
+		return err
 	}
 
-	// Derive the public key from the live Noise static private key.
-	privKey, err := i2pcurve25519.NewCurve25519PrivateKey(privKeyBytes)
+	livePublicKey, err := deriveLivePublicKey(privKeyBytes)
 	if err != nil {
-		return oops.Wrapf(err, "failed to create Curve25519 private key from static key")
+		return err
 	}
-	pubKey, err := privKey.Public()
-	if err != nil {
-		return oops.Wrapf(err, "failed to derive public key from static private key")
-	}
-	livePublicKey := pubKey.Bytes()
 
-	// Extract the public key published in the RouterInfo NTCP2 "s=" option.
 	publishedPublicKey, err := ExtractPeerStaticKey(identity)
 	if err != nil {
 		return oops.Wrapf(err, "failed to extract static key from local RouterInfo")
 	}
 
+	return verifyKeyConsistency(livePublicKey, publishedPublicKey)
+}
+
+// getValidatedPrivateKey retrieves and validates the transport's static private key.
+func getValidatedPrivateKey(transport *NTCP2Transport) ([]byte, error) {
+	if transport.config == nil || transport.config.NTCP2Config == nil {
+		return nil, oops.Errorf("transport config is not initialized")
+	}
+
+	privKeyBytes := transport.config.NTCP2Config.StaticKey
+	if len(privKeyBytes) != 32 {
+		return nil, oops.Errorf("static key is not 32 bytes: got %d", len(privKeyBytes))
+	}
+
+	return privKeyBytes, nil
+}
+
+// deriveLivePublicKey derives the public key from the private key bytes.
+func deriveLivePublicKey(privKeyBytes []byte) ([]byte, error) {
+	privKey, err := i2pcurve25519.NewCurve25519PrivateKey(privKeyBytes)
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to create Curve25519 private key from static key")
+	}
+
+	pubKey, err := privKey.Public()
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to derive public key from static private key")
+	}
+
+	return pubKey.Bytes(), nil
+}
+
+// verifyKeyConsistency compares the live and published public keys.
+func verifyKeyConsistency(livePublicKey, publishedPublicKey []byte) error {
 	if !bytes.Equal(livePublicKey, publishedPublicKey) {
 		return oops.Errorf(
 			"NTCP2 static key mismatch: live Noise public key %s does not match published RouterInfo key %s — "+

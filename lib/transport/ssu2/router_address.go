@@ -129,29 +129,39 @@ func probeIPv6() bool {
 // two-pass strategy: IPv4 addresses are preferred; IPv6 is only returned when
 // the host has confirmed global-unicast IPv6 connectivity (AUDIT FIX-2 / RC-C).
 func ExtractSSU2Addr(routerInfo router_info.RouterInfo) (*net.UDPAddr, error) {
+	ipv6Fallback := searchForSSU2Address(routerInfo.RouterAddresses())
+	if ipv6Fallback != nil {
+		return ipv6Fallback, nil
+	}
+	return nil, ErrInvalidRouterInfo
+}
+
+// searchForSSU2Address searches router addresses for an SSU2 UDP address.
+// Prefers IPv4; returns IPv6 fallback if IPv6 connectivity is available.
+func searchForSSU2Address(addresses []*router_address.RouterAddress) *net.UDPAddr {
 	var ipv6Fallback *net.UDPAddr
-	for _, addr := range routerInfo.RouterAddresses() {
+	for _, addr := range addresses {
 		if !isSSU2Transport(addr) {
 			continue
 		}
+
 		udpAddr, err := resolveUDPAddress(addr)
 		if err != nil {
 			log.WithField("error", err.Error()).Debug("Failed to resolve SSU2 address, trying next")
 			continue
 		}
+
 		if udpAddr.IP.To4() != nil {
 			// IPv4 address — return immediately (preferred path).
-			return udpAddr, nil
+			return udpAddr
 		}
+
 		// IPv6 — only keep if the local host has IPv6 connectivity.
 		if ipv6Fallback == nil && probeIPv6() {
 			ipv6Fallback = udpAddr
 		}
 	}
-	if ipv6Fallback != nil {
-		return ipv6Fallback, nil
-	}
-	return nil, ErrInvalidRouterInfo
+	return ipv6Fallback
 }
 
 // ExtractSSU2IntroKey extracts the 32-byte introduction key from the "i" option
@@ -159,28 +169,50 @@ func ExtractSSU2Addr(routerInfo router_info.RouterInfo) (*net.UDPAddr, error) {
 // I2P-base64-encoded (same alphabet as static keys).
 // Returns an error if no SSU2 address carries a valid 32-byte intro key.
 func ExtractSSU2IntroKey(ri router_info.RouterInfo) ([]byte, error) {
-	for _, addr := range ri.RouterAddresses() {
+	introKey := findSSU2IntroKey(ri.RouterAddresses())
+	if introKey != nil {
+		return introKey, nil
+	}
+	return nil, oops.Errorf("no SSU2 address with a 32-byte intro key found in RouterInfo")
+}
+
+// findSSU2IntroKey searches router addresses for a valid 32-byte SSU2 introduction key.
+func findSSU2IntroKey(addresses []*router_address.RouterAddress) []byte {
+	for _, addr := range addresses {
 		if !isSSU2Transport(addr) {
 			continue
 		}
-		ivStr := addr.InitializationVectorString()
-		if ivStr == nil {
-			continue
+
+		introKey := extractAndDecodeIntroKey(addr)
+		if introKey != nil {
+			return introKey
 		}
-		encoded, err := ivStr.Data()
-		if err != nil {
-			continue
-		}
-		raw, err := i2pbase64.DecodeString(encoded)
-		if err != nil {
-			continue
-		}
-		if len(raw) != 32 {
-			continue
-		}
-		return raw, nil
 	}
-	return nil, oops.Errorf("no SSU2 address with a 32-byte intro key found in RouterInfo")
+	return nil
+}
+
+// extractAndDecodeIntroKey extracts and decodes the introduction key from a router address.
+func extractAndDecodeIntroKey(addr *router_address.RouterAddress) []byte {
+	ivStr := addr.InitializationVectorString()
+	if ivStr == nil {
+		return nil
+	}
+
+	encoded, err := ivStr.Data()
+	if err != nil {
+		return nil
+	}
+
+	raw, err := i2pbase64.DecodeString(encoded)
+	if err != nil {
+		return nil
+	}
+
+	if len(raw) != 32 {
+		return nil
+	}
+
+	return raw
 }
 
 // resolveUDPAddress extracts host and port from a RouterAddress and resolves to a UDP address.
@@ -226,37 +258,49 @@ func resolvePublishedHost(host string, transport *SSU2Transport) string {
 // ConvertToRouterAddress converts an SSU2Transport's listening address to a RouterAddress
 // suitable for publishing in RouterInfo.
 func ConvertToRouterAddress(transport *SSU2Transport) (*router_address.RouterAddress, error) {
-	if transport == nil {
-		return nil, oops.Errorf("transport cannot be nil")
-	}
-
-	addr := transport.Addr()
-	if addr == nil {
-		return nil, oops.Errorf("transport has no listener address")
-	}
-
-	host, portStr, err := extractHostPort(addr)
+	host, portStr, err := validateAndExtractAddress(transport)
 	if err != nil {
 		return nil, err
 	}
 
 	host = resolvePublishedHost(host, transport)
-
 	introducers := transport.GetIntroducers()
 	options := buildSSU2Options(host, portStr, transport, introducers)
+	cost := calculateSSU2AddressCost(options)
 
-	// Cost: 8 for published / introducer-reachable SSU2 address (host+port
-	// present, or caps=B with usable introducers); 15 for caps-only
-	// unpublished. These match i2pd's COST_SSU2_DIRECT and
-	// COST_SSU2_NON_PUBLISHED constants.
-	cost := uint8(15)
+	return createSSU2RouterAddress(cost, options)
+}
+
+// validateAndExtractAddress validates the transport and extracts host/port from its address.
+func validateAndExtractAddress(transport *SSU2Transport) (host, portStr string, err error) {
+	if transport == nil {
+		return "", "", oops.Errorf("transport cannot be nil")
+	}
+
+	addr := transport.Addr()
+	if addr == nil {
+		return "", "", oops.Errorf("transport has no listener address")
+	}
+
+	return extractHostPort(addr)
+}
+
+// calculateSSU2AddressCost determines the RouterAddress cost based on reachability.
+// Returns 8 for published/introducer-reachable addresses, 15 for caps-only unpublished.
+func calculateSSU2AddressCost(options map[string]string) uint8 {
 	if _, hasHost := options["host"]; hasHost {
-		cost = 8
-	} else if caps, hasCaps := options["caps"]; hasCaps && caps == "B" {
+		return 8
+	}
+	if caps, hasCaps := options["caps"]; hasCaps && caps == "B" {
 		// Introducer-reachable: peers can reach us via the listed
 		// introducers, so this is "directly reachable" in cost terms.
-		cost = 8
+		return 8
 	}
+	return 15
+}
+
+// createSSU2RouterAddress creates a RouterAddress with the given cost and options.
+func createSSU2RouterAddress(cost uint8, options map[string]string) (*router_address.RouterAddress, error) {
 	ra, err := router_address.NewRouterAddress(cost, time.Time{}, "SSU2", options)
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to create RouterAddress")
@@ -398,26 +442,50 @@ func detectExternalIP() string {
 		log.WithError(err).Warn("detectExternalIP: failed to enumerate interface addresses")
 		return ""
 	}
+	return findBestPublicIP(addrs)
+}
+
+// findBestPublicIP searches interface addresses for the best public IP.
+// Prefers public IPv4; falls back to any IP if no public IPv4 is found.
+func findBestPublicIP(addrs []net.Addr) string {
 	var fallback string
 	for _, addr := range addrs {
-		var ip net.IP
-		switch v := addr.(type) {
-		case *net.IPNet:
-			ip = v.IP
-		case *net.IPAddr:
-			ip = v.IP
-		}
-		if ip == nil || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+		ip := extractIP(addr)
+		if ip == nil || shouldSkipAddress(ip) {
 			continue
 		}
-		if ip4 := ip.To4(); ip4 != nil && ip.IsGlobalUnicast() {
-			return ip4.String()
+
+		if isPublicIPv4Address(ip) {
+			return ip.String()
 		}
+
 		if fallback == "" {
 			fallback = ip.String()
 		}
 	}
 	return fallback
+}
+
+// extractIP extracts net.IP from various address types.
+func extractIP(addr net.Addr) net.IP {
+	switch v := addr.(type) {
+	case *net.IPNet:
+		return v.IP
+	case *net.IPAddr:
+		return v.IP
+	}
+	return nil
+}
+
+// shouldSkipAddress returns true if the IP should be skipped (loopback, link-local, etc.).
+func shouldSkipAddress(ip net.IP) bool {
+	return ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast()
+}
+
+// isPublicIPv4Address returns true if the IP is a publicly routable IPv4 address.
+func isPublicIPv4Address(ip net.IP) bool {
+	ip4 := ip.To4()
+	return ip4 != nil && ip.IsGlobalUnicast()
 }
 
 // buildBaseSSU2Options creates the base options map for an SSU2 RouterAddress.

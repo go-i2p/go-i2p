@@ -108,38 +108,61 @@ func ConvertToRouterAddress(transport *NTCP2Transport) (*router_address.RouterAd
 		return nil, oops.Errorf("transport cannot be nil")
 	}
 
-	host, port, err := extractTransportAddress(transport)
+	host, port, options, err := prepareRouterAddressComponents(transport)
+	if err != nil {
+		return nil, err
+	}
+
+	routerAddress, err := createNTCP2RouterAddress(options)
+	if err != nil {
+		return nil, err
+	}
+
+	logConversionSuccess(host, port)
+	return routerAddress, nil
+}
+
+// prepareRouterAddressComponents extracts and prepares all components needed for router address creation.
+func prepareRouterAddressComponents(transport *NTCP2Transport) (host, port string, options map[string]string, err error) {
+	host, port, err = extractTransportAddress(transport)
 	if err != nil {
 		logAddressExtractionError(err)
-		return nil, err
+		return "", "", nil, err
 	}
 
 	staticKey, err := validateAndExtractStaticKey(transport)
 	if err != nil {
 		logStaticKeyError(err)
-		return nil, err
+		return "", "", nil, err
 	}
 
-	options, err := buildRouterAddressOptions(host, port, staticKey, transport.config.NTCP2Config)
+	options, err = buildRouterAddressOptions(host, port, staticKey, transport.config.NTCP2Config)
 	if err != nil {
 		logOptionsBuildError(err)
-		return nil, err
+		return "", "", nil, err
 	}
 
-	// Cost: 3 for published NTCP2 address, 14 for caps-only (unpublished).
-	// These match i2pd's COST_NTCP2_PUBLISHED and COST_NTCP2_NON_PUBLISHED constants.
-	cost := uint8(14)
-	if _, hasHost := options["host"]; hasHost {
-		cost = 3
-	}
+	return host, port, options, nil
+}
+
+// createNTCP2RouterAddress creates an NTCP2 RouterAddress with the appropriate cost.
+func createNTCP2RouterAddress(options map[string]string) (*router_address.RouterAddress, error) {
+	cost := calculateNTCP2AddressCost(options)
 	routerAddress, err := router_address.NewRouterAddress(cost, time.Time{}, router_address.NTCP2_TRANSPORT_STYLE, options)
 	if err != nil {
 		logRouterAddressCreationError(err)
 		return nil, oops.Wrapf(err, "failed to create RouterAddress")
 	}
-
-	logConversionSuccess(host, port)
 	return routerAddress, nil
+}
+
+// calculateNTCP2AddressCost determines the cost based on whether the address is published or caps-only.
+// Returns 3 for published addresses, 14 for caps-only (unpublished).
+func calculateNTCP2AddressCost(options map[string]string) uint8 {
+	if _, hasHost := options["host"]; hasHost {
+		return 3 // COST_NTCP2_PUBLISHED
+	}
+	return 14 // COST_NTCP2_NON_PUBLISHED
 }
 
 // detectExternalIP returns the best routable local IP address to advertise when
@@ -152,26 +175,50 @@ func detectExternalIP() string {
 		log.WithError(err).Warn("detectExternalIP: failed to enumerate interface addresses")
 		return ""
 	}
+	return findBestExternalIP(addrs)
+}
+
+// findBestExternalIP searches interface addresses for the best external IP.
+// Prefers public IPv4; falls back to any non-private IP if no public IPv4 is found.
+func findBestExternalIP(addrs []net.Addr) string {
 	var fallback string
 	for _, addr := range addrs {
-		var ip net.IP
-		switch v := addr.(type) {
-		case *net.IPNet:
-			ip = v.IP
-		case *net.IPAddr:
-			ip = v.IP
-		}
-		if ip == nil || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+		ip := extractIPFromAddr(addr)
+		if ip == nil || shouldSkipIP(ip) {
 			continue
 		}
-		if ip4 := ip.To4(); ip4 != nil && ip.IsGlobalUnicast() && !ip.IsPrivate() {
-			return ip4.String()
+
+		if isPublicIPv4(ip) {
+			return ip.String()
 		}
+
 		if fallback == "" && !ip.IsPrivate() {
 			fallback = ip.String()
 		}
 	}
 	return fallback
+}
+
+// extractIPFromAddr extracts net.IP from various address types.
+func extractIPFromAddr(addr net.Addr) net.IP {
+	switch v := addr.(type) {
+	case *net.IPNet:
+		return v.IP
+	case *net.IPAddr:
+		return v.IP
+	}
+	return nil
+}
+
+// shouldSkipIP returns true if the IP should be skipped (loopback, link-local, etc.).
+func shouldSkipIP(ip net.IP) bool {
+	return ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast()
+}
+
+// isPublicIPv4 returns true if the IP is a publicly routable IPv4 address.
+func isPublicIPv4(ip net.IP) bool {
+	ip4 := ip.To4()
+	return ip4 != nil && ip.IsGlobalUnicast() && !ip.IsPrivate()
 }
 
 // isPublicIP returns true if the IP string represents a publicly routable address
