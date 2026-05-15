@@ -290,44 +290,81 @@ func (p *Pool) RecordOutboundBuildTimeout() {
 // It is a no-op for client pools (hop count is application-specified), if the
 // hop-count is already at the fallback minimum, or if no callback was registered.
 func (p *Pool) checkAutoFallback() {
-	p.mutex.RLock()
-	fn := p.autoFallbackFn
-	hopCount := p.config.HopCount
-	isInbound := p.config.IsInbound
-	isClient := p.config.IsClientPool
-	p.mutex.RUnlock()
+	config := p.getAutoFallbackConfig()
 
-	if isClient {
-		return // client tunnel hop counts are application-specified; never reduce them
-	}
-
-	if fn == nil {
+	if p.shouldSkipAutoFallback(config) {
 		return
 	}
-	if !fn() {
-		return // public address present — no fallback needed
-	}
 
-	if isInbound {
-		if hopCount == 0 {
-			return // already at minimum
-		}
-		if err := p.SetHopCount(0); err == nil {
-			log.WithFields(logger.Fields{
-				"at":     "Pool.checkAutoFallback",
-				"reason": "consecutive inbound build timeouts with no public address",
-			}).Info("auto-fallback: switched inbound exploratory pool to zero-hop tunnels")
-		}
+	p.performAutoFallback(config)
+}
+
+// autoFallbackConfig holds the configuration needed for auto-fallback checks.
+type autoFallbackConfig struct {
+	fn        func() bool
+	hopCount  int
+	isInbound bool
+	isClient  bool
+}
+
+// getAutoFallbackConfig retrieves the configuration for auto-fallback checks.
+func (p *Pool) getAutoFallbackConfig() autoFallbackConfig {
+	p.mutex.RLock()
+	defer p.mutex.RUnlock()
+	return autoFallbackConfig{
+		fn:        p.autoFallbackFn,
+		hopCount:  p.config.HopCount,
+		isInbound: p.config.IsInbound,
+		isClient:  p.config.IsClientPool,
+	}
+}
+
+// shouldSkipAutoFallback determines if auto-fallback should be skipped.
+func (p *Pool) shouldSkipAutoFallback(config autoFallbackConfig) bool {
+	if config.isClient {
+		return true // client tunnel hop counts are application-specified; never reduce them
+	}
+	if config.fn == nil {
+		return true
+	}
+	if !config.fn() {
+		return true // public address present — no fallback needed
+	}
+	return false
+}
+
+// performAutoFallback reduces hop count for inbound or outbound pools when needed.
+func (p *Pool) performAutoFallback(config autoFallbackConfig) {
+	if config.isInbound {
+		p.fallbackInbound(config.hopCount)
 	} else {
-		if hopCount <= 1 {
-			return // already at minimum
-		}
-		if err := p.SetHopCount(1); err == nil {
-			log.WithFields(logger.Fields{
-				"at":     "Pool.checkAutoFallback",
-				"reason": "consecutive outbound build timeouts with no public address",
-			}).Info("auto-fallback: switched outbound exploratory pool to one-hop tunnels")
-		}
+		p.fallbackOutbound(config.hopCount)
+	}
+}
+
+// fallbackInbound reduces inbound pool to zero-hop tunnels if needed.
+func (p *Pool) fallbackInbound(hopCount int) {
+	if hopCount == 0 {
+		return // already at minimum
+	}
+	if err := p.SetHopCount(0); err == nil {
+		log.WithFields(logger.Fields{
+			"at":     "Pool.checkAutoFallback",
+			"reason": "consecutive inbound build timeouts with no public address",
+		}).Info("auto-fallback: switched inbound exploratory pool to zero-hop tunnels")
+	}
+}
+
+// fallbackOutbound reduces outbound pool to one-hop tunnels if needed.
+func (p *Pool) fallbackOutbound(hopCount int) {
+	if hopCount <= 1 {
+		return // already at minimum
+	}
+	if err := p.SetHopCount(1); err == nil {
+		log.WithFields(logger.Fields{
+			"at":     "Pool.checkAutoFallback",
+			"reason": "consecutive outbound build timeouts with no public address",
+		}).Info("auto-fallback: switched outbound exploratory pool to one-hop tunnels")
 	}
 }
 
@@ -533,24 +570,36 @@ func (p *Pool) StartMaintenance() error {
 func (p *Pool) maintenanceLoop() {
 	defer p.maintWg.Done()
 
-	// Check pool health every 30 seconds
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
+	if !p.waitForStartupGate() {
+		return // context cancelled before startup
+	}
 
-	// BUG-1: If a startup gate is set, wait for it (or context cancellation)
-	// before the first build attempt. This ensures the outbound pool does not
-	// dispatch builds with ReplyTunnelID=0 before the inbound pool is ready.
+	p.runMaintenanceTicker()
+}
+
+// waitForStartupGate waits for the startup gate signal or context cancellation.
+// Returns true if gate passed, false if context cancelled.
+func (p *Pool) waitForStartupGate() bool {
 	p.mutex.RLock()
 	gate := p.startupGate
 	p.mutex.RUnlock()
-	if gate != nil {
-		select {
-		case <-gate:
-			// Inbound pool signalled readiness; proceed with initial build.
-		case <-p.ctx.Done():
-			return
-		}
+
+	if gate == nil {
+		return true // no gate, proceed immediately
 	}
+
+	select {
+	case <-gate:
+		return true // gate signalled, proceed
+	case <-p.ctx.Done():
+		return false // context cancelled
+	}
+}
+
+// runMaintenanceTicker runs the maintenance loop with periodic checks.
+func (p *Pool) runMaintenanceTicker() {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
 
 	// Perform initial check immediately
 	p.maintainPool()
@@ -558,16 +607,21 @@ func (p *Pool) maintenanceLoop() {
 	for {
 		select {
 		case <-p.ctx.Done():
-			log.WithFields(logger.Fields{
-				"at":     "(Pool) maintenanceLoop",
-				"phase":  "tunnel_build",
-				"reason": "received shutdown signal",
-			}).Debug("pool maintenance loop stopped")
+			p.logMaintenanceShutdown()
 			return
 		case <-ticker.C:
 			p.maintainPool()
 		}
 	}
+}
+
+// logMaintenanceShutdown logs when the maintenance loop stops.
+func (p *Pool) logMaintenanceShutdown() {
+	log.WithFields(logger.Fields{
+		"at":     "(Pool) maintenanceLoop",
+		"phase":  "tunnel_build",
+		"reason": "received shutdown signal",
+	}).Debug("pool maintenance loop stopped")
 }
 
 // maintainPool checks pool health and builds tunnels if needed

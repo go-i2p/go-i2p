@@ -78,34 +78,58 @@ func (t *SSU2Transport) collectIntroducers(charlieRI router_info.RouterInfo) []I
 
 // tryOneIntroducer attempts relay through a single introducer entry.
 func (t *SSU2Transport) tryOneIntroducer(charlieRI router_info.RouterInfo, charlieHash data.Hash, intro IntroducerAddr) (transport.TransportSession, error) {
-	// Step 1: look up Bob's RouterInfo so we can dial him directly.
+	// Step 1 & 2: Get a session to Bob (the introducer).
+	bobSSU2Session, err := t.establishBobSession(intro)
+	if err != nil {
+		return nil, err
+	}
+
+	// Step 3 & 4: Send signed RelayRequest to Bob and wait for response.
+	nonce := rand.Uint32()
+	resp, err := t.sendRelayRequestAndWait(bobSSU2Session, intro, charlieHash, nonce)
+	if err != nil {
+		return nil, err
+	}
+
+	// Step 5: Use Charlie's RelayResponse to dial Charlie directly.
+	return t.dialCharlieDirectly(charlieRI, charlieHash, resp)
+}
+
+// establishBobSession looks up Bob's RouterInfo and establishes a session to Bob.
+func (t *SSU2Transport) establishBobSession(intro IntroducerAddr) (*SSU2Session, error) {
 	bobRI, err := t.config.RouterLookupFunc(intro.RouterHash)
 	if err != nil {
 		return nil, oops.Wrapf(err, "Bob (%x...) lookup failed", intro.RouterHash[:4])
 	}
 
-	// Step 2: get (or create) a session to Bob.
 	bobSession, err := t.GetSession(bobRI)
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to get session to Bob (%x...)", intro.RouterHash[:4])
 	}
+
 	bobSSU2Session, ok := bobSession.(*SSU2Session)
 	if !ok {
 		return nil, oops.Errorf("unexpected Bob session type %T", bobSession)
 	}
 
-	// Step 3: register a pending-response channel keyed by nonce.
-	nonce := rand.Uint32()
+	return bobSSU2Session, nil
+}
+
+// sendRelayRequestAndWait sends a RelayRequest to Bob and waits for Charlie's RelayResponse.
+func (t *SSU2Transport) sendRelayRequestAndWait(bobSSU2Session *SSU2Session, intro IntroducerAddr, charlieHash data.Hash, nonce uint32) (*ssu2noise.RelayResponseBlock, error) {
 	responseCh := make(chan *ssu2noise.RelayResponseBlock, 1)
 	t.pendingRelayResponses.Store(nonce, responseCh)
 	defer t.pendingRelayResponses.Delete(nonce)
 
-	// Step 4: send signed RelayRequest to Bob.
 	if err := t.sendRelayRequest(bobSSU2Session, intro, charlieHash, nonce); err != nil {
 		return nil, oops.Wrapf(err, "failed to send RelayRequest to Bob")
 	}
 
-	// Step 5: wait for Bob to forward Charlie's RelayResponse.
+	return t.waitForRelayResponse(responseCh)
+}
+
+// waitForRelayResponse waits for Charlie's RelayResponse or times out.
+func (t *SSU2Transport) waitForRelayResponse(responseCh chan *ssu2noise.RelayResponseBlock) (*ssu2noise.RelayResponseBlock, error) {
 	ctx, cancel := context.WithTimeout(t.ctx, relayRequestTimeout)
 	defer cancel()
 
@@ -114,7 +138,7 @@ func (t *SSU2Transport) tryOneIntroducer(charlieRI router_info.RouterInfo, charl
 		if !ok || resp == nil {
 			return nil, oops.Errorf("relay response channel closed unexpectedly")
 		}
-		return t.dialCharlieDirectly(charlieRI, charlieHash, resp)
+		return resp, nil
 	case <-ctx.Done():
 		return nil, oops.Errorf("relay request timed out after %v", relayRequestTimeout)
 	}

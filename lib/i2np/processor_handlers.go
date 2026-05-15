@@ -154,40 +154,70 @@ func (p *MessageProcessor) processDatabaseSearchReplyMessage(msg I2NPMessage) er
 // These messages wrap I2NP messages destined for delivery through a tunnel.
 // The gateway extracts the inner message and forwards it into the tunnel.
 func (p *MessageProcessor) processTunnelGatewayMessage(msg I2NPMessage) error {
-	// Type assert to *TunnelGateway — may fail if message arrived as BaseI2NPMessage
-	tgMsg, ok := msg.(*TunnelGateway)
-	if !ok {
-		// Fall back: unmarshal from raw payload (e.g. BaseI2NPMessage from NTCP2 parser)
-		carrier, ok2 := msg.(DataCarrier)
-		if !ok2 {
-			log.WithFields(logger.Fields{
-				"at":     "processTunnelGatewayMessage",
-				"reason": "type_assertion_failed",
-			}).Error("Message is not a TunnelGateway and has no data carrier")
-			return oops.Errorf("message is not a TunnelGateway")
-		}
-		// carrier.GetData() returns the raw I2NP payload (no header).
-		// Parse TunnelGateway wire format directly: 4-byte TunnelID + 2-byte Length + data.
-		payload := carrier.GetData()
-		if len(payload) < 6 {
-			return oops.Errorf("TunnelGateway payload too short: %d bytes", len(payload))
-		}
-		tgMsg = &TunnelGateway{}
-		tgMsg.TunnelID = tunnel.TunnelID(binary.BigEndian.Uint32(payload[0:4]))
-		tgMsg.Length = int(binary.BigEndian.Uint16(payload[4:6]))
-		if len(payload) < 6+tgMsg.Length {
-			return oops.Errorf("TunnelGateway payload truncated: expected %d bytes, got %d", 6+tgMsg.Length, len(payload))
-		}
-		tgMsg.Data = make([]byte, tgMsg.Length)
-		copy(tgMsg.Data, payload[6:6+tgMsg.Length])
+	tgMsg, err := p.extractTunnelGatewayMessage(msg)
+	if err != nil {
+		return err
 	}
 
+	p.logTunnelGatewayProcessing(tgMsg)
+
+	if err := p.validateTunnelGatewayPayload(tgMsg); err != nil {
+		return err
+	}
+
+	return p.forwardToTunnelGatewayHandler(tgMsg)
+}
+
+// extractTunnelGatewayMessage extracts a TunnelGateway from an I2NP message.
+func (p *MessageProcessor) extractTunnelGatewayMessage(msg I2NPMessage) (*TunnelGateway, error) {
+	tgMsg, ok := msg.(*TunnelGateway)
+	if ok {
+		return tgMsg, nil
+	}
+
+	// Fall back: unmarshal from raw payload
+	carrier, ok := msg.(DataCarrier)
+	if !ok {
+		log.WithFields(logger.Fields{
+			"at":     "processTunnelGatewayMessage",
+			"reason": "type_assertion_failed",
+		}).Error("Message is not a TunnelGateway and has no data carrier")
+		return nil, oops.Errorf("message is not a TunnelGateway")
+	}
+
+	return p.parseTunnelGatewayFromPayload(carrier.GetData())
+}
+
+// parseTunnelGatewayFromPayload parses a TunnelGateway from raw payload bytes.
+func (p *MessageProcessor) parseTunnelGatewayFromPayload(payload []byte) (*TunnelGateway, error) {
+	if len(payload) < 6 {
+		return nil, oops.Errorf("TunnelGateway payload too short: %d bytes", len(payload))
+	}
+
+	tgMsg := &TunnelGateway{}
+	tgMsg.TunnelID = tunnel.TunnelID(binary.BigEndian.Uint32(payload[0:4]))
+	tgMsg.Length = int(binary.BigEndian.Uint16(payload[4:6]))
+
+	if len(payload) < 6+tgMsg.Length {
+		return nil, oops.Errorf("TunnelGateway payload truncated: expected %d bytes, got %d", 6+tgMsg.Length, len(payload))
+	}
+
+	tgMsg.Data = make([]byte, tgMsg.Length)
+	copy(tgMsg.Data, payload[6:6+tgMsg.Length])
+	return tgMsg, nil
+}
+
+// logTunnelGatewayProcessing logs the processing of a TunnelGateway message.
+func (p *MessageProcessor) logTunnelGatewayProcessing(tgMsg *TunnelGateway) {
 	log.WithFields(logger.Fields{
 		"at":           "processTunnelGatewayMessage",
 		"tunnel_id":    tgMsg.TunnelID,
 		"payload_size": tgMsg.Length,
 	}).Debug("Processing TunnelGateway message")
+}
 
+// validateTunnelGatewayPayload validates that the TunnelGateway has a non-empty payload.
+func (p *MessageProcessor) validateTunnelGatewayPayload(tgMsg *TunnelGateway) error {
 	if tgMsg.Length == 0 || len(tgMsg.Data) == 0 {
 		log.WithFields(logger.Fields{
 			"at":        "processTunnelGatewayMessage",
@@ -196,28 +226,30 @@ func (p *MessageProcessor) processTunnelGatewayMessage(msg I2NPMessage) error {
 		}).Warn("TunnelGateway message has empty payload")
 		return oops.Errorf("TunnelGateway message has empty payload")
 	}
+	return nil
+}
 
-	// Delegate to the tunnel gateway handler if one is configured.
-	// The handler is responsible for looking up the tunnel, encrypting
-	// the payload with layered encryption, and forwarding to the next hop.
-	if p.tunnelGatewayHandler != nil {
-		if err := p.tunnelGatewayHandler.HandleGateway(tgMsg.TunnelID, tgMsg.Data); err != nil {
-			log.WithFields(logger.Fields{
-				"at":        "processTunnelGatewayMessage",
-				"tunnel_id": tgMsg.TunnelID,
-				"error":     err,
-			}).Error("Failed to handle TunnelGateway message")
-			return oops.Wrapf(err, "tunnel gateway handling failed")
-		}
-		return nil
+// forwardToTunnelGatewayHandler forwards the TunnelGateway message to the configured handler.
+func (p *MessageProcessor) forwardToTunnelGatewayHandler(tgMsg *TunnelGateway) error {
+	if p.tunnelGatewayHandler == nil {
+		log.WithFields(logger.Fields{
+			"at":        "processTunnelGatewayMessage",
+			"tunnel_id": tgMsg.TunnelID,
+			"reason":    "no tunnel gateway handler configured",
+		}).Warn("TunnelGateway message received but no handler configured")
+		return oops.Errorf("no tunnel gateway handler configured")
 	}
 
-	log.WithFields(logger.Fields{
-		"at":        "processTunnelGatewayMessage",
-		"tunnel_id": tgMsg.TunnelID,
-		"reason":    "no tunnel gateway handler configured",
-	}).Warn("TunnelGateway message received but no handler configured")
-	return oops.Errorf("no tunnel gateway handler configured")
+	if err := p.tunnelGatewayHandler.HandleGateway(tgMsg.TunnelID, tgMsg.Data); err != nil {
+		log.WithFields(logger.Fields{
+			"at":        "processTunnelGatewayMessage",
+			"tunnel_id": tgMsg.TunnelID,
+			"error":     err,
+		}).Error("Failed to handle TunnelGateway message")
+		return oops.Wrapf(err, "tunnel gateway handling failed")
+	}
+
+	return nil
 }
 
 // processDeliveryStatusMessage processes delivery status messages using StatusReporter interface.

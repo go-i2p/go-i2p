@@ -197,43 +197,36 @@ func (gr *GarlicMessageRouter) drainWorker() {
 // processDrainRequest drains the appropriate channel based on which is non-nil.
 // Returns false if the router context is cancelled, true otherwise.
 func (gr *GarlicMessageRouter) processDrainRequest(req drainRequest) bool {
-	// Identify which channel to drain
-	var drainCh <-chan struct{}
-	if req.leaseSetCh != nil {
-		drainCh = convertLeaseSetChan(req.leaseSetCh)
-	} else if req.routerInfoCh != nil {
-		drainCh = convertRouterInfoChan(req.routerInfoCh)
-	} else {
-		return true // No channel to drain
+	// Fast path: no channel to drain
+	if req.leaseSetCh == nil && req.routerInfoCh == nil {
+		return true
 	}
 
-	// Drain the channel or return false if context cancelled
+	// Drain whichever channel is non-nil, or return false on context cancellation
+	if req.leaseSetCh != nil {
+		return gr.drainLeaseSetChanWithContext(req.leaseSetCh)
+	}
+	return gr.drainRouterInfoChanWithContext(req.routerInfoCh)
+}
+
+// drainLeaseSetChanWithContext drains a LeaseSet channel or returns false if context is cancelled.
+func (gr *GarlicMessageRouter) drainLeaseSetChanWithContext(ch chan lease_set.LeaseSet) bool {
 	select {
-	case <-drainCh:
+	case <-ch:
 		return true
 	case <-gr.ctx.Done():
 		return false
 	}
 }
 
-// convertLeaseSetChan converts a LeaseSet channel to a struct{} channel for uniform handling.
-func convertLeaseSetChan(ch chan lease_set.LeaseSet) <-chan struct{} {
-	result := make(chan struct{}, 1)
-	go func() {
-		<-ch
-		close(result)
-	}()
-	return result
-}
-
-// convertRouterInfoChan converts a RouterInfo channel to a struct{} channel for uniform handling.
-func convertRouterInfoChan(ch chan router_info.RouterInfo) <-chan struct{} {
-	result := make(chan struct{}, 1)
-	go func() {
-		<-ch
-		close(result)
-	}()
-	return result
+// drainRouterInfoChanWithContext drains a RouterInfo channel or returns false if context is cancelled.
+func (gr *GarlicMessageRouter) drainRouterInfoChanWithContext(ch chan router_info.RouterInfo) bool {
+	select {
+	case <-ch:
+		return true
+	case <-gr.ctx.Done():
+		return false
+	}
 }
 
 // ForwardToDestination implements GarlicCloveForwarder interface.

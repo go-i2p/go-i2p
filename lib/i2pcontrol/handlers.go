@@ -92,48 +92,81 @@ func (h *GetRateHandler) Handle(ctx context.Context, params json.RawMessage) (in
 		return nil, NewRPCError(ErrCodeInvalidParams, "malformed GetRate parameters")
 	}
 
-	// Java I2P spec: {"Stat": "statName", "Period": ms} → {"Result": float64}
-	// go-i2pcontrol and the i2ptui TUI use this format. Without it the client
-	// does retpre["Result"].(float64) on a nil map value and panics.
+	// Check for Stat/Period style request
 	if statName, ok := req["Stat"]; ok {
-		var periodMs int64 = 60000 // default 60s
-		if raw, ok := req["Period"]; ok {
-			if v, ok := raw.(float64); ok {
-				periodMs = int64(v)
-			}
-		}
-		val := h.resolveStatName(statName, periodMs)
-		log.WithFields(map[string]interface{}{
-			"stat":   statName,
-			"period": periodMs,
-			"result": val,
-		}).Debug("i2pcontrol: GetRate Stat/Period style")
-		return map[string]interface{}{"Result": val}, nil
+		return h.handleStatPeriodStyle(req, statName)
 	}
 
-	// Legacy field-list style: {"i2p.router.net.bw.inbound.15s": null, ...}
-	// Only the two bandwidth keys are supported; unknown keys return an error (M-2).
+	// Legacy field-list style
+	return h.handleFieldListStyle(req)
+}
+
+// handleStatPeriodStyle processes Stat/Period style requests: {"Stat": "statName", "Period": ms}.
+func (h *GetRateHandler) handleStatPeriodStyle(req map[string]interface{}, statName interface{}) (interface{}, error) {
+	periodMs := h.extractPeriodMs(req)
+	val := h.resolveStatName(statName, periodMs)
+
+	log.WithFields(map[string]interface{}{
+		"stat":   statName,
+		"period": periodMs,
+		"result": val,
+	}).Debug("i2pcontrol: GetRate Stat/Period style")
+
+	return map[string]interface{}{"Result": val}, nil
+}
+
+// extractPeriodMs extracts the Period parameter or returns default 60s.
+func (h *GetRateHandler) extractPeriodMs(req map[string]interface{}) int64 {
+	const defaultPeriodMs = 60000 // 60s
+	raw, ok := req["Period"]
+	if !ok {
+		return defaultPeriodMs
+	}
+
+	v, ok := raw.(float64)
+	if !ok {
+		return defaultPeriodMs
+	}
+
+	return int64(v)
+}
+
+// handleFieldListStyle processes legacy field-list style: {"i2p.router.net.bw.inbound.15s": null, ...}.
+func (h *GetRateHandler) handleFieldListStyle(req map[string]interface{}) (interface{}, error) {
 	bwStats := h.stats.GetBandwidthStats()
 	result := make(map[string]interface{})
 
 	for key := range req {
-		switch key {
-		case "i2p.router.net.bw.inbound.15s":
-			result[key] = bwStats.InboundRate
-		case "i2p.router.net.bw.outbound.15s":
-			result[key] = bwStats.OutboundRate
-		default:
-			return nil, NewRPCError(ErrCodeInvalidParams, fmt.Sprintf("unsupported GetRate key: %s", key))
+		if err := h.addBandwidthField(key, bwStats, result); err != nil {
+			return nil, err
 		}
 	}
 
-	// Return all fields when none were explicitly requested.
+	// Return all fields when none were explicitly requested
 	if len(result) == 0 {
-		result["i2p.router.net.bw.inbound.15s"] = bwStats.InboundRate
-		result["i2p.router.net.bw.outbound.15s"] = bwStats.OutboundRate
+		h.addDefaultBandwidthFields(bwStats, result)
 	}
 
 	return result, nil
+}
+
+// addBandwidthField adds a single bandwidth field to the result map.
+func (h *GetRateHandler) addBandwidthField(key string, bwStats BandwidthStats, result map[string]interface{}) error {
+	switch key {
+	case "i2p.router.net.bw.inbound.15s":
+		result[key] = bwStats.InboundRate
+	case "i2p.router.net.bw.outbound.15s":
+		result[key] = bwStats.OutboundRate
+	default:
+		return NewRPCError(ErrCodeInvalidParams, fmt.Sprintf("unsupported GetRate key: %s", key))
+	}
+	return nil
+}
+
+// addDefaultBandwidthFields adds default inbound and outbound bandwidth fields.
+func (h *GetRateHandler) addDefaultBandwidthFields(bwStats BandwidthStats, result map[string]interface{}) {
+	result["i2p.router.net.bw.inbound.15s"] = bwStats.InboundRate
+	result["i2p.router.net.bw.outbound.15s"] = bwStats.OutboundRate
 }
 
 // resolveStatName maps a Java I2P stat name to a float64 value for the given
@@ -424,42 +457,71 @@ func (h *RouterManagerHandler) handleRestart(req, result map[string]interface{})
 // Reseed is bounded by a 2-minute timeout to prevent hung network operations
 // from blocking server shutdown.
 func (h *RouterManagerHandler) handleReseed(req, result map[string]interface{}) {
-	if _, ok := req["Reseed"]; ok {
-		if h.RouterControl == nil {
-			log.WithFields(logger.Fields{"at": "handleReseed"}).Warn("Reseed requested but RouterControl is nil")
-			result["Reseed"] = "error: router control not available"
-			return
-		}
-		h.wg.Add(1)
-		go func() {
-			defer h.wg.Done()
+	if _, ok := req["Reseed"]; !ok {
+		return
+	}
 
-			// Create a timeout context for the reseed operation
-			reseedCtx, cancel := context.WithTimeout(h.ctx, 2*time.Minute)
-			defer cancel()
+	if !h.validateRouterControlForReseed(result) {
+		return
+	}
 
-			log.WithFields(logger.Fields{"at": "handleReseed"}).Info("Reseed requested via I2PControl")
+	h.executeReseedAsync()
+	result["Reseed"] = nil
+}
 
-			// Run reseed in a separate goroutine and wait for completion or timeout
-			done := make(chan error, 1)
-			go func() {
-				done <- h.RouterControl.Reseed()
-			}()
+// validateRouterControlForReseed checks if RouterControl is available for reseed.
+func (h *RouterManagerHandler) validateRouterControlForReseed(result map[string]interface{}) bool {
+	if h.RouterControl != nil {
+		return true
+	}
+	log.WithFields(logger.Fields{"at": "handleReseed"}).Warn("Reseed requested but RouterControl is nil")
+	result["Reseed"] = "error: router control not available"
+	return false
+}
 
-			select {
-			case err := <-done:
-				if err != nil {
-					log.WithError(err).Error("Reseed via I2PControl failed")
-				}
-			case <-reseedCtx.Done():
-				if reseedCtx.Err() == context.DeadlineExceeded {
-					log.WithFields(logger.Fields{"at": "handleReseed"}).Warn("Reseed via I2PControl timed out after 2 minutes")
-				} else {
-					log.WithFields(logger.Fields{"at": "handleReseed"}).Info("Reseed via I2PControl cancelled")
-				}
-			}
-		}()
-		result["Reseed"] = nil
+// executeReseedAsync executes a reseed operation asynchronously with timeout.
+func (h *RouterManagerHandler) executeReseedAsync() {
+	h.wg.Add(1)
+	go func() {
+		defer h.wg.Done()
+
+		reseedCtx, cancel := context.WithTimeout(h.ctx, 2*time.Minute)
+		defer cancel()
+
+		log.WithFields(logger.Fields{"at": "handleReseed"}).Info("Reseed requested via I2PControl")
+
+		h.runReseedWithTimeout(reseedCtx)
+	}()
+}
+
+// runReseedWithTimeout runs the reseed operation with timeout handling.
+func (h *RouterManagerHandler) runReseedWithTimeout(reseedCtx context.Context) {
+	done := make(chan error, 1)
+	go func() {
+		done <- h.RouterControl.Reseed()
+	}()
+
+	select {
+	case err := <-done:
+		h.logReseedCompletion(err)
+	case <-reseedCtx.Done():
+		h.logReseedTimeout(reseedCtx)
+	}
+}
+
+// logReseedCompletion logs the result of a completed reseed operation.
+func (h *RouterManagerHandler) logReseedCompletion(err error) {
+	if err != nil {
+		log.WithError(err).Error("Reseed via I2PControl failed")
+	}
+}
+
+// logReseedTimeout logs reseed timeout or cancellation.
+func (h *RouterManagerHandler) logReseedTimeout(reseedCtx context.Context) {
+	if reseedCtx.Err() == context.DeadlineExceeded {
+		log.WithFields(logger.Fields{"at": "handleReseed"}).Warn("Reseed via I2PControl timed out after 2 minutes")
+	} else {
+		log.WithFields(logger.Fields{"at": "handleReseed"}).Info("Reseed via I2PControl cancelled")
 	}
 }
 
@@ -962,33 +1024,46 @@ func (h *I2PControlHandler) Handle(ctx context.Context, params json.RawMessage) 
 		return nil, err
 	}
 
-	// Handle port: null value = read current; non-null = write (restart required).
-	// M-1: null-value reads now return the current configured value instead of ErrCodeInvalidParams.
-	if val, ok := req["i2pcontrol.port"]; ok {
-		if val == nil {
-			result["i2pcontrol.port"] = viper.GetInt("i2pcontrol.port")
-		} else {
-			settingsSaved = true
-			result["RestartNeeded"] = true
-			result["i2pcontrol.port"] = val
-		}
-	}
-	// Handle address: null value = read current; non-null = write (restart required).
-	if val, ok := req["i2pcontrol.address"]; ok {
-		if val == nil {
-			result["i2pcontrol.address"] = viper.GetString("i2pcontrol.address")
-		} else {
-			settingsSaved = true
-			result["RestartNeeded"] = true
-			result["i2pcontrol.address"] = val
-		}
-	}
+	h.handlePortSetting(req, result, &settingsSaved)
+	h.handleAddressSetting(req, result, &settingsSaved)
 
 	if err := validateNotImplementedSettings(req); err != nil {
 		return nil, err
 	}
 
 	return buildResultWithSettingsSaved(result, settingsSaved)
+}
+
+// handlePortSetting processes i2pcontrol.port: null = read current, non-null = write (restart required).
+func (h *I2PControlHandler) handlePortSetting(req, result map[string]interface{}, settingsSaved *bool) {
+	val, ok := req["i2pcontrol.port"]
+	if !ok {
+		return
+	}
+
+	if val == nil {
+		result["i2pcontrol.port"] = viper.GetInt("i2pcontrol.port")
+	} else {
+		*settingsSaved = true
+		result["RestartNeeded"] = true
+		result["i2pcontrol.port"] = val
+	}
+}
+
+// handleAddressSetting processes i2pcontrol.address: null = read current, non-null = write (restart required).
+func (h *I2PControlHandler) handleAddressSetting(req, result map[string]interface{}, settingsSaved *bool) {
+	val, ok := req["i2pcontrol.address"]
+	if !ok {
+		return
+	}
+
+	if val == nil {
+		result["i2pcontrol.address"] = viper.GetString("i2pcontrol.address")
+	} else {
+		*settingsSaved = true
+		result["RestartNeeded"] = true
+		result["i2pcontrol.address"] = val
+	}
 }
 
 // handlePasswordChange processes password change requests from the I2PControl API.
@@ -1109,34 +1184,58 @@ func (h *AdvancedSettingsHandler) Handle(ctx context.Context, params json.RawMes
 		return nil, NewRPCError(ErrCodeInvalidParams, "malformed AdvancedSettings parameters")
 	}
 
-	result := make(map[string]interface{})
-
-	// Handle "Set" sub-object for writes: {"Set": {"key": value, ...}}
+	// Check if this is a write operation (has "Set" sub-object)
 	if setObj, ok := req["Set"]; ok {
-		if setMap, ok := setObj.(map[string]interface{}); ok {
-			for key, val := range setMap {
-				viperKey := advancedSettingViperKey(key)
-				viper.Set(viperKey, val)
-				result[key] = viper.Get(viperKey)
-			}
-			if len(setMap) > 0 {
-				if err := viper.WriteConfig(); err != nil {
-					log.WithField("error", err.Error()).Warn("AdvancedSettings: changes applied but config file write failed")
-				}
-			}
-		}
-		// NC-5: spec requires write responses to be wrapped in a "Set" key.
-		return map[string]interface{}{"Set": result}, nil
+		return h.handleSettingsWrite(setObj)
 	}
 
-	// Read: return current values for all requested keys (null means "read")
+	// Read operation: return current values for all requested keys
+	return h.handleSettingsRead(req), nil
+}
+
+// handleSettingsWrite processes a write operation for AdvancedSettings.
+func (h *AdvancedSettingsHandler) handleSettingsWrite(setObj interface{}) (interface{}, error) {
+	setMap, ok := setObj.(map[string]interface{})
+	if !ok {
+		return map[string]interface{}{"Set": make(map[string]interface{})}, nil
+	}
+
+	result := h.applySettingChanges(setMap)
+
+	if len(setMap) > 0 {
+		h.writeConfigFile()
+	}
+
+	// NC-5: spec requires write responses to be wrapped in a "Set" key.
+	return map[string]interface{}{"Set": result}, nil
+}
+
+// applySettingChanges applies all settings from the map and returns the results.
+func (h *AdvancedSettingsHandler) applySettingChanges(setMap map[string]interface{}) map[string]interface{} {
+	result := make(map[string]interface{})
+	for key, val := range setMap {
+		viperKey := advancedSettingViperKey(key)
+		viper.Set(viperKey, val)
+		result[key] = viper.Get(viperKey)
+	}
+	return result
+}
+
+// writeConfigFile writes the config file and logs any errors.
+func (h *AdvancedSettingsHandler) writeConfigFile() {
+	if err := viper.WriteConfig(); err != nil {
+		log.WithField("error", err.Error()).Warn("AdvancedSettings: changes applied but config file write failed")
+	}
+}
+
+// handleSettingsRead processes a read operation for AdvancedSettings.
+func (h *AdvancedSettingsHandler) handleSettingsRead(req map[string]interface{}) map[string]interface{} {
+	result := make(map[string]interface{})
 	for key := range req {
 		viperKey := advancedSettingViperKey(key)
 		result[key] = viper.Get(viperKey)
 	}
-
-	// If no keys requested, return nothing (spec does not define a default set)
-	return result, nil
+	return result
 }
 
 // advancedSettingViperKey maps an I2PControl dotted key to the corresponding

@@ -105,72 +105,90 @@ func (sm *GarlicSessionManager) EncryptGarlicMessage(
 //     Callers that need to send a New Session Reply must pass the dereferenced
 //     value to EncryptNewSessionReply.
 func (sm *GarlicSessionManager) DecryptGarlicMessage(encryptedGarlic []byte) ([]byte, [8]byte, *[32]byte, error) {
-	var incomingTag [8]byte
-	if len(encryptedGarlic) >= 8 {
-		copy(incomingTag[:], encryptedGarlic[:8])
-	}
+	incomingTag := sm.extractIncomingTag(encryptedGarlic)
+	oneTimeTagRegistered, oneTimeTagMapSizeBefore := sm.getOneTimeTagDiagnostics(incomingTag)
 
-	sm.oneTimeDiagMu.Lock()
-	_, oneTimeTagRegistered := sm.oneTimeDiag[incomingTag]
-	oneTimeTagMapSizeBefore := len(sm.oneTimeDiag)
-	sm.oneTimeDiagMu.Unlock()
-
-	if len(encryptedGarlic) >= 8 {
-		log.WithFields(logger.Fields{
-			"at":                           "DecryptGarlicMessage",
-			"incoming_tag":                 fmt.Sprintf("%x", incomingTag),
-			"one_time_tag_registered":      oneTimeTagRegistered,
-			"one_time_tag_map_size_before": oneTimeTagMapSizeBefore,
-			"encrypted_size":               len(encryptedGarlic),
-		}).Debug("Garlic decrypt diagnostics")
-	}
+	sm.logDecryptStart(incomingTag, oneTimeTagRegistered, oneTimeTagMapSizeBefore, len(encryptedGarlic))
 
 	payload, sessionTag, sessionHash, err := sm.inner.DecryptGarlicMessage(encryptedGarlic)
-	if err != nil {
-		sm.oneTimeDiagMu.Lock()
-		if oneTimeTagRegistered {
-			delete(sm.oneTimeDiag, incomingTag)
-		}
-		oneTimeTagMapSizeAfter := len(sm.oneTimeDiag)
-		sm.oneTimeDiagMu.Unlock()
 
-		if len(encryptedGarlic) >= 8 {
-			log.WithFields(logger.Fields{
-				"at":                          "DecryptGarlicMessage",
-				"incoming_tag":                fmt.Sprintf("%x", incomingTag),
-				"one_time_tag_registered":     oneTimeTagRegistered,
-				"one_time_tag_map_size_after": oneTimeTagMapSizeAfter,
-				"error":                       err,
-			}).Debug("Garlic decrypt failed")
-		}
+	oneTimeTagMapSizeAfter := sm.cleanupOneTimeTag(incomingTag, oneTimeTagRegistered)
+
+	if err != nil {
+		sm.logDecryptFailure(incomingTag, oneTimeTagRegistered, oneTimeTagMapSizeAfter, err)
 		return nil, [8]byte{}, nil, err
 	}
 
-	sm.oneTimeDiagMu.Lock()
-	if oneTimeTagRegistered {
-		delete(sm.oneTimeDiag, incomingTag)
-	}
-	oneTimeTagMapSizeAfter := len(sm.oneTimeDiag)
-	sm.oneTimeDiagMu.Unlock()
+	sm.logDecryptSuccess(incomingTag, oneTimeTagRegistered, oneTimeTagMapSizeAfter, sessionTag)
 
-	if len(encryptedGarlic) >= 8 {
-		log.WithFields(logger.Fields{
-			"at":                          "DecryptGarlicMessage",
-			"incoming_tag":                fmt.Sprintf("%x", incomingTag),
-			"one_time_tag_registered":     oneTimeTagRegistered,
-			"one_time_tag_map_size_after": oneTimeTagMapSizeAfter,
-			"session_tag":                 fmt.Sprintf("%x", sessionTag),
-		}).Debug("Garlic decrypt succeeded")
-	}
-
-	// Extract raw garlic bytes from the ratchet payload format.
-	// Parse the payload blocks and return the first GarlicClove block's data.
 	garlicData, err := extractGarlicFromPayload(payload)
 	if err != nil {
 		return nil, [8]byte{}, nil, oops.Wrapf(err, "failed to extract garlic from ratchet payload")
 	}
 
 	return garlicData, sessionTag, sessionHash, nil
+}
+
+// extractIncomingTag extracts the 8-byte session tag from the encrypted message.
+func (sm *GarlicSessionManager) extractIncomingTag(encryptedGarlic []byte) [8]byte {
+	var incomingTag [8]byte
+	if len(encryptedGarlic) >= 8 {
+		copy(incomingTag[:], encryptedGarlic[:8])
+	}
+	return incomingTag
+}
+
+// getOneTimeTagDiagnostics retrieves diagnostic information about a one-time tag.
+func (sm *GarlicSessionManager) getOneTimeTagDiagnostics(incomingTag [8]byte) (bool, int) {
+	sm.oneTimeDiagMu.Lock()
+	defer sm.oneTimeDiagMu.Unlock()
+	_, oneTimeTagRegistered := sm.oneTimeDiag[incomingTag]
+	return oneTimeTagRegistered, len(sm.oneTimeDiag)
+}
+
+// cleanupOneTimeTag removes a one-time tag if it was registered and returns the current map size.
+func (sm *GarlicSessionManager) cleanupOneTimeTag(incomingTag [8]byte, oneTimeTagRegistered bool) int {
+	sm.oneTimeDiagMu.Lock()
+	defer sm.oneTimeDiagMu.Unlock()
+	if oneTimeTagRegistered {
+		delete(sm.oneTimeDiag, incomingTag)
+	}
+	return len(sm.oneTimeDiag)
+}
+
+// logDecryptStart logs diagnostics at the start of decryption.
+func (sm *GarlicSessionManager) logDecryptStart(incomingTag [8]byte, oneTimeTagRegistered bool, mapSize, encryptedSize int) {
+	if encryptedSize >= 8 {
+		log.WithFields(logger.Fields{
+			"at":                           "DecryptGarlicMessage",
+			"incoming_tag":                 fmt.Sprintf("%x", incomingTag),
+			"one_time_tag_registered":      oneTimeTagRegistered,
+			"one_time_tag_map_size_before": mapSize,
+			"encrypted_size":               encryptedSize,
+		}).Debug("Garlic decrypt diagnostics")
+	}
+}
+
+// logDecryptFailure logs diagnostics when decryption fails.
+func (sm *GarlicSessionManager) logDecryptFailure(incomingTag [8]byte, oneTimeTagRegistered bool, mapSize int, err error) {
+	log.WithFields(logger.Fields{
+		"at":                          "DecryptGarlicMessage",
+		"incoming_tag":                fmt.Sprintf("%x", incomingTag),
+		"one_time_tag_registered":     oneTimeTagRegistered,
+		"one_time_tag_map_size_after": mapSize,
+		"error":                       err,
+	}).Debug("Garlic decrypt failed")
+}
+
+// logDecryptSuccess logs diagnostics when decryption succeeds.
+func (sm *GarlicSessionManager) logDecryptSuccess(incomingTag [8]byte, oneTimeTagRegistered bool, mapSize int, sessionTag [8]byte) {
+	log.WithFields(logger.Fields{
+		"at":                          "DecryptGarlicMessage",
+		"incoming_tag":                fmt.Sprintf("%x", incomingTag),
+		"one_time_tag_registered":     oneTimeTagRegistered,
+		"one_time_tag_map_size_after": mapSize,
+		"session_tag":                 fmt.Sprintf("%x", sessionTag),
+	}).Debug("Garlic decrypt succeeded")
 }
 
 // extractGarlicFromPayload parses a ratchet payload and returns the data from

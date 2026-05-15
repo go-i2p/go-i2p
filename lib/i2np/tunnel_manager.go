@@ -572,12 +572,28 @@ func (tm *TunnelManager) logBuildRequestSent(result *tunnel.TunnelBuildResult, m
 // outbound STBM builds so fresh logs can be correlated against incoming type-11
 // decrypt attempts on reply_tunnel_id.
 func (tm *TunnelManager) logExpectedReplyTagCandidates(result *tunnel.TunnelBuildResult, messageID int, replyTunnelID tunnel.TunnelID, isInbound bool) {
-	if isInbound || replyTunnelID == 0 || !result.UseShortBuild {
+	if !tm.shouldLogExpectedTags(isInbound, replyTunnelID, result.UseShortBuild) {
 		return
 	}
 
+	tags := tm.collectExpectedTags(result)
+	if len(tags) == 0 {
+		return
+	}
+
+	tm.logExpectedTags(messageID, result.TunnelID, replyTunnelID, tags)
+}
+
+// shouldLogExpectedTags checks if we should log expected tags for this build.
+func (tm *TunnelManager) shouldLogExpectedTags(isInbound bool, replyTunnelID tunnel.TunnelID, useShortBuild bool) bool {
+	return !isInbound && replyTunnelID != 0 && useShortBuild
+}
+
+// collectExpectedTags collects all expected reply tag candidates from the build result.
+func (tm *TunnelManager) collectExpectedTags(result *tunnel.TunnelBuildResult) []string {
 	tags := []string{}
 	seen := map[[8]byte]struct{}{}
+
 	appendTag := func(source string, tag [8]byte) {
 		if _, ok := seen[tag]; ok {
 			return
@@ -586,35 +602,51 @@ func (tm *TunnelManager) logExpectedReplyTagCandidates(result *tunnel.TunnelBuil
 		tags = append(tags, fmt.Sprintf("%s:%x", source, tag))
 	}
 
-	if len(result.NoiseHashes) > 0 {
-		lastHop := len(result.NoiseHashes) - 1
-		if key, tag, err := DeriveSTBMGarlicKey(result.NoiseHashes[lastHop]); err == nil {
-			_ = key
-			appendTag("noise_hash", tag)
-		}
-	}
+	tm.collectNoiseHashTags(result, appendTag)
+	tm.collectReplyKeyTags(result, appendTag)
 
-	if len(result.ReplyKeys) > 0 {
-		lastHop := len(result.ReplyKeys) - 1
-		var rawReplyKey [32]byte
-		copy(rawReplyKey[:], result.ReplyKeys[lastHop][:])
-		var rawTag [8]byte
-		copy(rawTag[:], rawReplyKey[24:32])
-		appendTag("raw_reply_key", rawTag)
-		if key, tag, err := DeriveSTBMGarlicKeyFromChainingKey(rawReplyKey); err == nil {
-			_ = key
-			appendTag("reply_key_attachlayer", tag)
-		}
-	}
+	return tags
+}
 
-	if len(tags) == 0 {
+// collectNoiseHashTags collects tags derived from noise hashes.
+func (tm *TunnelManager) collectNoiseHashTags(result *tunnel.TunnelBuildResult, appendTag func(string, [8]byte)) {
+	if len(result.NoiseHashes) == 0 {
 		return
 	}
 
+	lastHop := len(result.NoiseHashes) - 1
+	if key, tag, err := DeriveSTBMGarlicKey(result.NoiseHashes[lastHop]); err == nil {
+		_ = key
+		appendTag("noise_hash", tag)
+	}
+}
+
+// collectReplyKeyTags collects tags derived from reply keys.
+func (tm *TunnelManager) collectReplyKeyTags(result *tunnel.TunnelBuildResult, appendTag func(string, [8]byte)) {
+	if len(result.ReplyKeys) == 0 {
+		return
+	}
+
+	lastHop := len(result.ReplyKeys) - 1
+	var rawReplyKey [32]byte
+	copy(rawReplyKey[:], result.ReplyKeys[lastHop][:])
+
+	var rawTag [8]byte
+	copy(rawTag[:], rawReplyKey[24:32])
+	appendTag("raw_reply_key", rawTag)
+
+	if key, tag, err := DeriveSTBMGarlicKeyFromChainingKey(rawReplyKey); err == nil {
+		_ = key
+		appendTag("reply_key_attachlayer", tag)
+	}
+}
+
+// logExpectedTags logs the expected tag candidates.
+func (tm *TunnelManager) logExpectedTags(messageID int, tunnelID, replyTunnelID tunnel.TunnelID, tags []string) {
 	log.WithFields(logger.Fields{
 		"at":                 "BuildTunnelFromRequest",
 		"message_id":         messageID,
-		"tunnel_id":          result.TunnelID,
+		"tunnel_id":          tunnelID,
 		"reply_tunnel_id":    replyTunnelID,
 		"expected_tag_count": len(tags),
 		"expected_tags":      tags,
@@ -1269,30 +1301,17 @@ func (tm *TunnelManager) processUncorrelatedReply(handler TunnelReplyHandler, me
 	log.WithField("message_id", messageID).Warn("No pending build request found for reply - processing without correlation")
 
 	expired, foundExpired := tm.consumeExpiredBuildForLateReply(messageID)
-	if foundExpired && expired.req.useShortBuild {
-		if decryptErr := tm.tryDecryptLateShortBuildReply(handler, expired.req); decryptErr != nil {
-			RecordExploratoryReplyStage(ExploratoryReplyStageLateReplyShortSkipped)
-			log.WithFields(logger.Fields{
-				"message_id":       messageID,
-				"tunnel_id":        expired.req.tunnelID,
-				"is_client_tunnel": expired.req.isClientTunnel,
-				"error":            decryptErr,
-				"reason":           "late short-build reply missing/invalid decrypt context",
-			}).Warn("Ignoring late uncorrelated STBM reply for reclassification")
-			return nil
-		}
+
+	if tm.processLateShortBuildReply(messageID, &expired, foundExpired, handler) {
+		return nil // Late reply was skipped
 	}
 
 	err := handler.ProcessReply()
 	if foundExpired {
 		tm.reclassifyExpiredBuildFromLateReply(messageID, expired, err)
 	}
-	if err != nil {
-		if foundExpired {
-			// Late replies were already accounted/reclassified above.
-			return nil
-		}
-		// Preserve historical behavior for non-late uncorrelated replies.
+
+	if shouldPropagateError := err != nil && !foundExpired; shouldPropagateError {
 		return err
 	}
 
@@ -1300,12 +1319,37 @@ func (tm *TunnelManager) processUncorrelatedReply(handler TunnelReplyHandler, me
 		return nil
 	}
 
-	// Update tunnel states if possible (without decryption)
+	tm.updateTunnelStatesIfPossible(messageID, records)
+	return nil
+}
+
+// processLateShortBuildReply handles late short-build replies if applicable.
+// Returns true if the reply was skipped due to decryption failure.
+func (tm *TunnelManager) processLateShortBuildReply(messageID int, expired *expiredBuild, foundExpired bool, handler TunnelReplyHandler) bool {
+	if !foundExpired || !expired.req.useShortBuild {
+		return false
+	}
+
+	if decryptErr := tm.tryDecryptLateShortBuildReply(handler, expired.req); decryptErr != nil {
+		RecordExploratoryReplyStage(ExploratoryReplyStageLateReplyShortSkipped)
+		log.WithFields(logger.Fields{
+			"message_id":       messageID,
+			"tunnel_id":        expired.req.tunnelID,
+			"is_client_tunnel": expired.req.isClientTunnel,
+			"error":            decryptErr,
+			"reason":           "late short-build reply missing/invalid decrypt context",
+		}).Warn("Ignoring late uncorrelated STBM reply for reclassification")
+		return true
+	}
+
+	return false
+}
+
+// updateTunnelStatesIfPossible updates tunnel states if pools are available.
+func (tm *TunnelManager) updateTunnelStatesIfPossible(messageID int, records []BuildResponseRecord) {
 	if tm.inboundPool != nil || tm.outboundPool != nil {
 		tm.updateTunnelStatesFromReply(messageID, records, nil)
 	}
-
-	return nil
 }
 
 // tryDecryptLateShortBuildReply performs a best-effort STBM reply decrypt using

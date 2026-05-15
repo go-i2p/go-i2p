@@ -827,26 +827,55 @@ func (t *SSU2Transport) createIntroducerFromRouterInfo(ri router_info.RouterInfo
 // implements the D3 startup probe: 3 peers report our external address so
 // the majority-confirmation logic can confirm and republish it.
 func (t *SSU2Transport) maybeAutoInitiatePeerTest(remote net.Addr) {
-	const startupPeerTestMax = 3
-	if t.peerTestManager == nil {
+	if !t.shouldInitiatePeerTest() {
 		return
 	}
-	if atomic.AddInt32(&t.startupPeerTestCount, 1) > startupPeerTestMax {
-		atomic.AddInt32(&t.startupPeerTestCount, -1) // don't overflow
-		return
-	}
-	udpAddr, ok := remote.(*net.UDPAddr)
-	if !ok {
-		// Try SSU2Addr unwrapping.
-		if ssu2a, ok2 := remote.(*ssu2noise.SSU2Addr); ok2 {
-			if u := ssu2a.UnderlyingAddr(); u != nil {
-				udpAddr, _ = u.(*net.UDPAddr)
-			}
-		}
-	}
+
+	udpAddr := t.extractUDPAddr(remote)
 	if udpAddr == nil {
 		return
 	}
+
+	t.launchPeerTest(udpAddr)
+}
+
+// shouldInitiatePeerTest checks if we should initiate a peer test.
+func (t *SSU2Transport) shouldInitiatePeerTest() bool {
+	const startupPeerTestMax = 3
+	if t.peerTestManager == nil {
+		return false
+	}
+	if atomic.AddInt32(&t.startupPeerTestCount, 1) > startupPeerTestMax {
+		atomic.AddInt32(&t.startupPeerTestCount, -1) // don't overflow
+		return false
+	}
+	return true
+}
+
+// extractUDPAddr extracts a UDPAddr from a net.Addr, unwrapping SSU2Addr if needed.
+func (t *SSU2Transport) extractUDPAddr(remote net.Addr) *net.UDPAddr {
+	udpAddr, ok := remote.(*net.UDPAddr)
+	if ok {
+		return udpAddr
+	}
+
+	// Try SSU2Addr unwrapping.
+	ssu2a, ok := remote.(*ssu2noise.SSU2Addr)
+	if !ok {
+		return nil
+	}
+
+	underlying := ssu2a.UnderlyingAddr()
+	if underlying == nil {
+		return nil
+	}
+
+	udpAddr, _ = underlying.(*net.UDPAddr)
+	return udpAddr
+}
+
+// launchPeerTest launches a peer test in a goroutine.
+func (t *SSU2Transport) launchPeerTest(udpAddr *net.UDPAddr) {
 	go func() {
 		if _, err := t.peerTestManager.InitiatePeerTest(udpAddr); err != nil {
 			t.logger.WithField("error", err).Debug("startup PeerTest initiation failed (non-fatal)")

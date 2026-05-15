@@ -416,64 +416,81 @@ func (p *MessageProcessor) processSingleBuildRecord(messageID, index int, record
 // For VTB (isShortBuild=false) the original AEAD path is unchanged:
 //   - 528-byte cleartext → ChaCha20-Poly1305 AEAD → 544-byte ciphertext
 func (p *MessageProcessor) generateAndSendBuildReply(messageID, index int, record BuildRequestRecord, replyCode byte, rawData []byte, isShortBuild bool) error {
-	var encryptedReply []byte
-
-	if isShortBuild {
-		// STBM path: 218-byte ChaCha20-Poly1305 AEAD reply at our slot, ChaCha20 XOR for other slots.
-		// The derived reply key and noise hash are stored in stbmSlotCrypto by decryptShortRecord.
-		var crypto stbmSlotCrypto
-		if p.stbmSlotCrypto != nil {
-			crypto = p.stbmSlotCrypto[index]
-		}
-		var err error
-		encryptedReply, err = p.buildSTBMReplyMessage(rawData, index, crypto, replyCode)
-		if err != nil {
-			return oops.Wrapf(err, "failed to build STBM reply message")
-		}
-	} else {
-		// VTB path: 528-byte cleartext → ChaCha20-Poly1305 AEAD → 544 bytes.
-		var randomData [495]byte
-		if _, err := rand.Read(randomData[:]); err != nil {
-			return oops.Wrapf(err, "failed to generate random data for VTB reply")
-		}
-		responseRecord := CreateBuildResponseRecord(replyCode, randomData)
-
-		if p.buildRecordCrypto == nil {
-			log.WithFields(logger.Fields{
-				"at":           "generateAndSendBuildReply",
-				"message_id":   messageID,
-				"record_index": index,
-			}).Warn("build record crypto not initialized - cannot encrypt reply")
-			return oops.Errorf("build record crypto not initialized")
-		}
-
-		var err error
-		encryptedReply, err = p.buildRecordCrypto.EncryptReplyRecord(
-			responseRecord,
-			record.ReplyKey,
-			record.ReplyIV,
-		)
-		if err != nil {
-			return oops.Wrapf(err, "failed to encrypt VTB build response record")
-		}
+	encryptedReply, err := p.encryptBuildReply(index, record, replyCode, rawData, isShortBuild)
+	if err != nil {
+		return err
 	}
 
-	// Forward the encrypted reply to the reply tunnel / next router.
 	if err := p.forwardBuildReply(messageID, record, encryptedReply, isShortBuild); err != nil {
 		return oops.Wrapf(err, "failed to forward build reply")
 	}
 
+	p.logBuildReplySuccess(messageID, index, replyCode, int(record.NextTunnel), len(encryptedReply), isShortBuild)
+	return nil
+}
+
+// encryptBuildReply encrypts a build reply using the appropriate encryption path.
+func (p *MessageProcessor) encryptBuildReply(index int, record BuildRequestRecord, replyCode byte, rawData []byte, isShortBuild bool) ([]byte, error) {
+	if isShortBuild {
+		return p.encryptSTBMReply(index, replyCode, rawData)
+	}
+	return p.encryptVTBReply(index, record, replyCode)
+}
+
+// encryptSTBMReply encrypts a short tunnel build reply.
+func (p *MessageProcessor) encryptSTBMReply(index int, replyCode byte, rawData []byte) ([]byte, error) {
+	var crypto stbmSlotCrypto
+	if p.stbmSlotCrypto != nil {
+		crypto = p.stbmSlotCrypto[index]
+	}
+
+	encryptedReply, err := p.buildSTBMReplyMessage(rawData, index, crypto, replyCode)
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to build STBM reply message")
+	}
+	return encryptedReply, nil
+}
+
+// encryptVTBReply encrypts a variable tunnel build reply.
+func (p *MessageProcessor) encryptVTBReply(index int, record BuildRequestRecord, replyCode byte) ([]byte, error) {
+	var randomData [495]byte
+	if _, err := rand.Read(randomData[:]); err != nil {
+		return nil, oops.Wrapf(err, "failed to generate random data for VTB reply")
+	}
+
+	responseRecord := CreateBuildResponseRecord(replyCode, randomData)
+
+	if p.buildRecordCrypto == nil {
+		log.WithFields(logger.Fields{
+			"at":           "generateAndSendBuildReply",
+			"record_index": index,
+		}).Warn("build record crypto not initialized - cannot encrypt reply")
+		return nil, oops.Errorf("build record crypto not initialized")
+	}
+
+	encryptedReply, err := p.buildRecordCrypto.EncryptReplyRecord(
+		responseRecord,
+		record.ReplyKey,
+		record.ReplyIV,
+	)
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to encrypt VTB build response record")
+	}
+
+	return encryptedReply, nil
+}
+
+// logBuildReplySuccess logs successful build reply generation and sending.
+func (p *MessageProcessor) logBuildReplySuccess(messageID, index int, replyCode byte, nextTunnel, encryptedLen int, isShortBuild bool) {
 	log.WithFields(logger.Fields{
 		"at":             "generateAndSendBuildReply",
 		"message_id":     messageID,
 		"record_index":   index,
 		"reply_code":     replyCode,
-		"next_tunnel":    record.NextTunnel,
-		"encrypted_len":  len(encryptedReply),
+		"next_tunnel":    nextTunnel,
+		"encrypted_len":  encryptedLen,
 		"is_short_build": isShortBuild,
 	}).Debug("generated and sent build reply successfully")
-
-	return nil
 }
 
 // buildSTBMReplyMessage assembles the ShortTunnelBuildReply body (type 26):

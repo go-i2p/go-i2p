@@ -182,43 +182,79 @@ func VerifyStaticKeyConsistency(transport *NTCP2Transport, identity router_info.
 // Returns nil if a matching address is found, otherwise a structured error with
 // the derived key and every published key in base64 for easy comparison.
 func verifyLocalRouterInfoMatchesStaticKey(localRI router_info.RouterInfo, staticPriv []byte) error {
+	derivedPubKey, err := derivePublicKeyFromPrivate(staticPriv)
+	if err != nil {
+		return err
+	}
+
+	publishedKeys, ntcp2Count := extractPublishedNTCP2Keys(localRI)
+
+	if matchFound := checkForKeyMatch(derivedPubKey, publishedKeys); matchFound {
+		return nil
+	}
+
+	return buildKeyMismatchError(derivedPubKey, publishedKeys, ntcp2Count)
+}
+
+// derivePublicKeyFromPrivate derives the Curve25519 public key from a private key.
+func derivePublicKeyFromPrivate(staticPriv []byte) ([]byte, error) {
 	if len(staticPriv) != 32 {
-		return oops.Errorf("static key is %d bytes (want 32)", len(staticPriv))
+		return nil, oops.Errorf("static key is %d bytes (want 32)", len(staticPriv))
 	}
 
 	priv, err := i2pcurve25519.NewCurve25519PrivateKey(staticPriv)
 	if err != nil {
-		return oops.Wrapf(err, "failed to construct Curve25519 private key")
+		return nil, oops.Wrapf(err, "failed to construct Curve25519 private key")
 	}
+
 	pub, err := priv.Public()
 	if err != nil {
-		return oops.Wrapf(err, "failed to derive Curve25519 public key")
+		return nil, oops.Wrapf(err, "failed to derive Curve25519 public key")
 	}
-	derivedPubKey := pub.Bytes()
 
+	return pub.Bytes(), nil
+}
+
+// extractPublishedNTCP2Keys extracts all published NTCP2 static keys from RouterInfo.
+func extractPublishedNTCP2Keys(localRI router_info.RouterInfo) ([][]byte, int) {
 	var publishedKeys [][]byte
 	var ntcp2Count int
+
 	for _, addr := range localRI.RouterAddresses() {
 		styleStr, err := addr.TransportStyle().Data()
 		if err != nil || !strings.EqualFold(styleStr, "ntcp2") {
 			continue
 		}
 		ntcp2Count++
+
 		publishedStaticKey, err := addr.StaticKey()
 		if err != nil {
 			continue
 		}
 		publishedKeys = append(publishedKeys, publishedStaticKey[:])
-		if bytes.Equal(publishedStaticKey[:], derivedPubKey) {
-			return nil // match found
-		}
 	}
 
+	return publishedKeys, ntcp2Count
+}
+
+// checkForKeyMatch checks if the derived key matches any published key.
+func checkForKeyMatch(derivedPubKey []byte, publishedKeys [][]byte) bool {
+	for _, pubKey := range publishedKeys {
+		if bytes.Equal(pubKey, derivedPubKey) {
+			return true
+		}
+	}
+	return false
+}
+
+// buildKeyMismatchError constructs a detailed error for key mismatches.
+func buildKeyMismatchError(derivedPubKey []byte, publishedKeys [][]byte, ntcp2Count int) error {
 	pubB64 := base64.StdEncoding.EncodeToString(derivedPubKey)
 	var publishedB64 []string
 	for _, k := range publishedKeys {
 		publishedB64 = append(publishedB64, base64.StdEncoding.EncodeToString(k))
 	}
+
 	return oops.
 		Code("STATIC_KEY_RI_MISMATCH").
 		With("derived_public_key_b64", pubB64).
