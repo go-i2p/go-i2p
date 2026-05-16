@@ -1,6 +1,7 @@
 package i2pcontrol
 
 import (
+	"net"
 	"sync"
 	"time"
 
@@ -503,11 +504,11 @@ func (rsp *routerStatsProvider) populateSSU2Config(netConfig *NetworkConfig) {
 }
 
 // extractAddressString extracts the string representation from a network address.
-func (rsp *routerStatsProvider) extractAddressString(addr interface{}) string {
-	if netAddr, ok := addr.(interface{ String() string }); ok {
-		return netAddr.String()
+func (rsp *routerStatsProvider) extractAddressString(addr net.Addr) string {
+	if addr == nil {
+		return ""
 	}
-	return ""
+	return addr.String()
 }
 
 // parseHostPort extracts hostname and port from an address string.
@@ -786,8 +787,8 @@ type RealRouter struct {
 		GetSSU2SessionCount() int
 		Stop()
 		Reseed() error
-		GetTransportAddr() interface{}
-		GetSSU2Addr() interface{}
+		GetTransportAddr() net.Addr
+		GetSSU2Addr() net.Addr
 	}
 }
 
@@ -852,12 +853,12 @@ func (rr RealRouter) Reseed() error {
 }
 
 // GetTransportAddr returns the listening address of the first transport (implements RouterAccess)
-func (rr RealRouter) GetTransportAddr() interface{} {
+func (rr RealRouter) GetTransportAddr() net.Addr {
 	return rr.Router.GetTransportAddr()
 }
 
 // GetSSU2Addr returns the listening UDP address of the SSU2 transport (implements RouterAccess)
-func (rr RealRouter) GetSSU2Addr() interface{} {
+func (rr RealRouter) GetSSU2Addr() net.Addr {
 	return rr.Router.GetSSU2Addr()
 }
 

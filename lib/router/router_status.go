@@ -1,6 +1,8 @@
 package router
 
 import (
+	"net"
+
 	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
 	ssu2 "github.com/go-i2p/go-i2p/lib/transport/ssu2"
 )
@@ -46,7 +48,7 @@ func (r *Router) GetSSU2SessionCount() int {
 // GetTransportAddr returns the listening address of the first available transport.
 // This is used by I2PControl to expose NTCP2 port and address information.
 // Returns nil if no transports are available.
-func (r *Router) GetTransportAddr() interface{} {
+func (r *Router) GetTransportAddr() net.Addr {
 	// Capture locally to avoid TOCTOU race with concurrent shutdown.
 	muxer := r.transports
 	if muxer == nil {
@@ -64,7 +66,7 @@ func (r *Router) GetTransportAddr() interface{} {
 
 // GetSSU2Addr returns the listening UDP address of the SSU2 transport.
 // Returns nil if SSU2 is not available or not yet bound.
-func (r *Router) GetSSU2Addr() interface{} {
+func (r *Router) GetSSU2Addr() net.Addr {
 	muxer := r.transports
 	if muxer == nil {
 		return nil

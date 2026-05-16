@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -718,17 +719,17 @@ func (m *mockRouterAccessBandwidth) IsReseeding() bool               { return fa
 func (m *mockRouterAccessBandwidth) GetBandwidthRates() (inbound, outbound uint64) {
 	return m.inbound, m.outbound
 }
-func (m *mockRouterAccessBandwidth) GetActiveSessionCount() int    { return 0 }
-func (m *mockRouterAccessBandwidth) GetNTCP2SessionCount() int     { return 0 }
-func (m *mockRouterAccessBandwidth) GetSSU2SessionCount() int      { return 0 }
-func (m *mockRouterAccessBandwidth) GetTransportAddr() interface{} { return nil }
+func (m *mockRouterAccessBandwidth) GetActiveSessionCount() int { return 0 }
+func (m *mockRouterAccessBandwidth) GetNTCP2SessionCount() int  { return 0 }
+func (m *mockRouterAccessBandwidth) GetSSU2SessionCount() int   { return 0 }
+func (m *mockRouterAccessBandwidth) GetTransportAddr() net.Addr { return nil }
 func (m *mockRouterAccessBandwidth) GetBandwidthRates1s() (inbound, outbound uint64) {
 	return m.inbound / 2, m.outbound / 2
 }
-func (m *mockRouterAccessBandwidth) GetNetworkStatus() int    { return 0 }
-func (m *mockRouterAccessBandwidth) GetSSU2Addr() interface{} { return nil }
-func (m *mockRouterAccessBandwidth) Stop()                    {}
-func (m *mockRouterAccessBandwidth) Reseed() error            { return nil }
+func (m *mockRouterAccessBandwidth) GetNetworkStatus() int { return 0 }
+func (m *mockRouterAccessBandwidth) GetSSU2Addr() net.Addr { return nil }
+func (m *mockRouterAccessBandwidth) Stop()                 {}
+func (m *mockRouterAccessBandwidth) Reseed() error         { return nil }
 
 // TestBandwidthStatsZeroValues verifies zero bandwidth is handled correctly.
 func TestBandwidthStatsZeroValues(t *testing.T) {

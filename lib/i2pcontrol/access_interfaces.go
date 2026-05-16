@@ -1,6 +1,8 @@
 package i2pcontrol
 
 import (
+	"net"
+
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/i2np"
 )
@@ -53,11 +55,11 @@ type RouterInfoReader interface {
 
 	// GetTransportAddr returns the listening address of the first available transport.
 	// Returns nil if no transports are available.
-	GetTransportAddr() interface{}
+	GetTransportAddr() net.Addr
 
 	// GetSSU2Addr returns the listening UDP address of the SSU2 transport.
 	// Returns nil if SSU2 is not available.
-	GetSSU2Addr() interface{}
+	GetSSU2Addr() net.Addr
 
 	// IsRunning returns whether the router is currently operational.
 	IsRunning() bool

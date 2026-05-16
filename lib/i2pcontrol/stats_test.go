@@ -1,6 +1,7 @@
 package i2pcontrol
 
 import (
+	"net"
 	"testing"
 	"time"
 
@@ -88,13 +89,11 @@ func (m *mockRouterAccess) GetSSU2SessionCount() int {
 	return 0
 }
 
-func (m *mockRouterAccess) GetTransportAddr() interface{} {
-	// Return a mock TCP address for testing
-	type mockAddr struct{}
-	return &mockAddr{}
+func (m *mockRouterAccess) GetTransportAddr() net.Addr {
+	return nil
 }
 
-func (m *mockRouterAccess) GetSSU2Addr() interface{} {
+func (m *mockRouterAccess) GetSSU2Addr() net.Addr {
 	return nil
 }
 

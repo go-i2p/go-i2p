@@ -1,6 +1,7 @@
 package i2pcontrol
 
 import (
+	"net"
 	"testing"
 
 	common "github.com/go-i2p/common/data"
@@ -56,7 +57,7 @@ func (m *mockRouterAccessForPeerStats) GetSSU2SessionCount() int {
 	return 0
 }
 
-func (m *mockRouterAccessForPeerStats) GetTransportAddr() interface{} {
+func (m *mockRouterAccessForPeerStats) GetTransportAddr() net.Addr {
 	return nil
 }
 
@@ -68,7 +69,7 @@ func (m *mockRouterAccessForPeerStats) GetNetworkStatus() int {
 	return 0
 }
 
-func (m *mockRouterAccessForPeerStats) GetSSU2Addr() interface{} {
+func (m *mockRouterAccessForPeerStats) GetSSU2Addr() net.Addr {
 	return nil
 }
 
