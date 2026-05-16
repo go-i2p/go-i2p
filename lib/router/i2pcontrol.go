@@ -1,10 +1,19 @@
 package router
 
 import (
+	"net"
+
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/i2pcontrol"
 	"github.com/go-i2p/logger"
 )
+
+// I2PControlServer is the interface satisfied by *i2pcontrol.Server.
+type I2PControlServer interface {
+	Start() error
+	Stop()
+	Addr() net.Addr
+}
 
 // startI2PControlServer initializes and starts the I2PControl RPC server if enabled.
 // The server provides a JSON-RPC 2.0 interface for monitoring and managing the router.

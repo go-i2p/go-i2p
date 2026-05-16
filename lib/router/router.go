@@ -70,11 +70,7 @@ type Router struct {
 	participantManager *tunnel.Manager
 
 	// i2pcontrolServer provides RPC monitoring interface
-	i2pcontrolServer interface {
-		Start() error
-		Stop()
-		Addr() net.Addr
-	}
+	i2pcontrolServer I2PControlServer
 
 	// bandwidthTracker tracks bandwidth usage and calculates rolling averages
 	bandwidthTracker *BandwidthTracker

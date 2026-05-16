@@ -1,0 +1,185 @@
+package router
+
+import (
+	"github.com/samber/oops"
+
+	"github.com/go-i2p/logger"
+
+	"github.com/go-i2p/go-i2p/lib/netdb"
+	"github.com/go-i2p/go-i2p/lib/tunnel"
+)
+
+// logSubsystemStop logs a subsystem shutdown event with standard fields.
+// This reduces duplication across the various stopXxx methods.
+
+// stopPublisher shuts down the NetDB publisher if it is running.
+// The publisher periodically republishes our RouterInfo and LeaseSets to floodfill routers.
+func (r *Router) stopPublisher() {
+	if r.publisher != nil {
+		r.publisher.Stop()
+		r.publisher = nil
+		logSubsystemStop("(Router) stopPublisher", "NetDB publisher")
+	}
+}
+
+// stopExplorer shuts down the NetDB explorer if it is running.
+func (r *Router) stopExplorer() {
+	if r.explorer != nil {
+		r.explorer.Stop()
+		r.explorer = nil
+		log.WithFields(logger.Fields{"at": "stopExplorer"}).Debug("NetDB explorer stopped")
+	}
+}
+
+// stopFloodfillServer shuts down the floodfill server if it is running.
+func (r *Router) stopFloodfillServer() {
+	if r.floodfillServer != nil {
+		r.floodfillServer.Stop()
+		r.floodfillServer = nil
+		log.WithFields(logger.Fields{"at": "stopFloodfillServer"}).Debug("Floodfill server stopped")
+	}
+}
+
+// startFloodfillServer instantiates a FloodfillServer backed by the current NetDB
+// and transport muxer. Floodfill serving is disabled by default; set
+// netdb.floodfill_enabled in the config to enable it.
+func (r *Router) startFloodfillServer() {
+	if r.StdNetDB == nil || r.TransportMuxer == nil {
+		log.WithFields(logger.Fields{"at": "startFloodfillServer"}).Debug("Floodfill server deferred: NetDB or transport muxer not ready")
+		return
+	}
+	adapter := &floodfillTransportAdapter{muxer: r.TransportMuxer, db: r.StdNetDB}
+	cfg := netdb.DefaultFloodfillConfig()
+	if r.cfg != nil && r.cfg.NetDB != nil {
+		cfg.Enabled = r.cfg.NetDB.FloodfillEnabled
+	}
+	ourHash, err := r.getOurRouterHash()
+	if err == nil {
+		cfg.OurHash = ourHash
+	}
+	r.floodfillServer = netdb.NewFloodfillServer(r.StdNetDB, adapter, cfg)
+	log.WithField("enabled", cfg.Enabled).Debug("Floodfill server started")
+}
+
+// startExplorer instantiates and starts the NetDB explorer. The explorer
+// actively discovers new peers by performing iterative lookups for random keys,
+// improving peer diversity over time. It requires a running tunnel pool.
+func (r *Router) startExplorer() {
+	if r.StdNetDB == nil || r.tunnelManager == nil {
+		log.WithFields(logger.Fields{"at": "startExplorer"}).Debug("NetDB explorer deferred: NetDB or tunnel manager not ready")
+		return
+	}
+	tunnelPool := r.tunnelManager.GetOutboundPool()
+	if tunnelPool == nil {
+		log.WithFields(logger.Fields{"at": "startExplorer"}).Debug("NetDB explorer deferred: tunnel pool not available")
+		return
+	}
+
+	cfg := netdb.DefaultExplorerConfig()
+
+	ourHash, err := r.getOurRouterHash()
+	if err == nil {
+		cfg.OurHash = ourHash
+	}
+
+	r.explorer = netdb.NewExplorer(r.StdNetDB, tunnelPool, cfg)
+
+	if r.messageRouter != nil {
+		r.explorer.SetOurHash(ourHash)
+	}
+
+	if err := r.explorer.Start(); err != nil {
+		log.WithError(err).Warn("Failed to start NetDB explorer")
+		r.explorer = nil
+		return
+	}
+	log.WithFields(logger.Fields{"at": "startExplorer"}).Debug("NetDB explorer started")
+}
+
+// startPublisher creates and starts the NetDB publisher for periodic RouterInfo and LeaseSet
+// publishing to floodfill routers. The publisher requires NetDB, transport, and a tunnel pool.
+// If prerequisites are not met, a warning is logged and publishing is skipped.
+func (r *Router) startPublisher() {
+	tunnelPool, err := r.resolvePublisherDependencies()
+	if err != nil {
+		log.WithFields(logger.Fields{"at": "startPublisher"}).Warn(err.Error())
+		return
+	}
+
+	r.launchPublisher(tunnelPool)
+}
+
+// resolvePublisherDependencies verifies that NetDB, TransportMuxer, and a
+// tunnel pool are available. Returns the tunnel pool or an error describing
+// the missing prerequisite.
+func (r *Router) resolvePublisherDependencies() (*tunnel.Pool, error) {
+	if r.StdNetDB == nil {
+		return nil, oops.Errorf("Cannot start publisher: NetDB not initialized")
+	}
+	if r.TransportMuxer == nil {
+		return nil, oops.Errorf("Cannot start publisher: TransportMuxer not initialized")
+	}
+	var tunnelPool *tunnel.Pool
+	if r.tunnelManager != nil {
+		tunnelPool = r.tunnelManager.GetOutboundPool()
+	}
+	if tunnelPool == nil {
+		return nil, oops.Errorf("Cannot start publisher: tunnel pool not available")
+	}
+	return tunnelPool, nil
+}
+
+// launchPublisher constructs the publisher from adapters and starts it.
+// On failure the publisher field is left nil and a warning is logged.
+func (r *Router) launchPublisher(tunnelPool *tunnel.Pool) {
+	dbAdapter := &publisherNetDBAdapter{db: r.StdNetDB}
+	transportAdapter := &publisherTransportAdapter{muxer: r.TransportMuxer}
+
+	var riProvider netdb.RouterInfoProvider
+	if r.routerInfoProv != nil {
+		riProvider = r.routerInfoProv
+	}
+
+	publisherConfig := netdb.DefaultPublisherConfig()
+	r.publisher = netdb.NewPublisher(dbAdapter, tunnelPool, transportAdapter, riProvider, publisherConfig)
+
+	if err := r.publisher.Start(); err != nil {
+		log.WithError(err).WithFields(logger.Fields{
+			"at":     "(Router) startPublisher",
+			"phase":  "startup",
+			"reason": "publisher start failed",
+		}).Warn("Failed to start NetDB publisher, RouterInfo will not be republished")
+		r.publisher = nil
+		return
+	}
+
+	log.WithFields(logger.Fields{
+		"at":                   "(Router) startPublisher",
+		"phase":                "startup",
+		"reason":               "publisher started successfully",
+		"router_info_interval": publisherConfig.RouterInfoInterval,
+		"lease_set_interval":   publisherConfig.LeaseSetInterval,
+		"floodfill_count":      publisherConfig.FloodfillCount,
+		"has_ri_provider":      riProvider != nil,
+	}).Info("NetDB publisher started for periodic RouterInfo and LeaseSet publishing")
+}
+
+// initializeNetDB creates and configures the network database.
+// Idempotent: if r.StdNetDB has already been initialized (for example from
+// CreateRouter, where it is created early so that transports can wire their
+// PeerConnNotifier into r.StdNetDB.PeerTracker), this call is a no-op. This
+// matters because r.StdNetDB MUST exist before initializeTransports runs;
+// otherwise NTCP2/SSU2 transports silently skip SetPeerConnNotifier and
+// successful connections are never recorded in PeerTracker, causing every
+// known-good peer to be marked stale on its first tunnel-build failure.
+func (r *Router) initializeNetDB() error {
+	if r.StdNetDB != nil {
+		log.WithFields(logger.Fields{"at": "initializeNetDB"}).Debug("NetDB already initialized; skipping")
+		return nil
+	}
+	log.WithFields(logger.Fields{"at": "initializeNetDB"}).Debug("Initializing network database")
+	r.StdNetDB = netdb.NewStdNetDB(r.cfg.NetDB.Path)
+	r.StdNetDB.SetMaxRouterInfos(r.cfg.NetDB.MaxRouterInfos)
+	log.WithField("netdb_path", r.cfg.NetDB.Path).Debug("Created StdNetDB")
+	return nil
+}
