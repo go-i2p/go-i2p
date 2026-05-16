@@ -710,7 +710,7 @@ type mockRouterAccessBandwidth struct {
 func (m *mockRouterAccessBandwidth) GetNetDB() *netdb.StdNetDB {
 	return nil
 }
-func (m *mockRouterAccessBandwidth) GetTunnelManager() *i2np.TunnelManager { return nil }
+func (m *mockRouterAccessBandwidth) GetTunnelManager() i2np.TunnelOrchestrator { return nil }
 func (m *mockRouterAccessBandwidth) GetParticipantManager() *tunnelpkg.Manager {
 	return nil
 }

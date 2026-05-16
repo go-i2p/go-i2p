@@ -17,7 +17,7 @@ type RouterInfoReader interface {
 	GetNetDB() *netdb.StdNetDB
 
 	// GetTunnelManager returns the tunnel manager for tunnel statistics.
-	GetTunnelManager() *i2np.TunnelManager
+	GetTunnelManager() i2np.TunnelOrchestrator
 
 	// GetParticipantManager returns the participant manager for transit tunnel statistics.
 	GetParticipantManager() *tunnel.Manager

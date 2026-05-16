@@ -768,7 +768,7 @@ type RealRouter struct {
 	// Must be a pointer to avoid copying the router
 	Router interface {
 		GetNetDB() *netdb.StdNetDB
-		GetTunnelManager() *i2np.TunnelManager
+		GetTunnelManager() i2np.TunnelOrchestrator
 		GetParticipantManager() *tunnel.Manager
 		GetConfig() *config.RouterConfig
 		IsRunning() bool
@@ -792,7 +792,7 @@ func (rr RealRouter) GetNetDB() *netdb.StdNetDB {
 }
 
 // GetTunnelManager returns the tunnel manager (implements RouterAccess)
-func (rr RealRouter) GetTunnelManager() *i2np.TunnelManager {
+func (rr RealRouter) GetTunnelManager() i2np.TunnelOrchestrator {
 	return rr.Router.GetTunnelManager()
 }
 

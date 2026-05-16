@@ -22,7 +22,7 @@ type I2NPMessageDispatcher struct {
 	config    I2NPMessageDispatcherConfig
 	processor *MessageProcessor
 	dbManager *DatabaseManager
-	tunnelMgr *TunnelManager
+	tunnelMgr TunnelOrchestrator
 }
 
 // NewI2NPMessageDispatcher creates a new message router
@@ -67,25 +67,7 @@ func (mr *I2NPMessageDispatcher) SetOurRouterHash(hash common.Hash) {
 
 // SetPeerSelector sets the peer selector for the TunnelManager
 func (mr *I2NPMessageDispatcher) SetPeerSelector(selector tunnel.PeerSelector) {
-	mr.tunnelMgr.peerSelector = selector
-	// Recreate pools with new selector if they exist
-	if mr.tunnelMgr.inboundPool != nil || mr.tunnelMgr.outboundPool != nil {
-		// Stop existing pools
-		if mr.tunnelMgr.inboundPool != nil {
-			mr.tunnelMgr.inboundPool.Stop()
-		}
-		if mr.tunnelMgr.outboundPool != nil {
-			mr.tunnelMgr.outboundPool.Stop()
-		}
-		// Create new pools
-		inboundConfig := tunnel.DefaultPoolConfig()
-		inboundConfig.IsInbound = true
-		mr.tunnelMgr.inboundPool = tunnel.NewTunnelPoolWithConfig(selector, inboundConfig)
-
-		outboundConfig := tunnel.DefaultPoolConfig()
-		outboundConfig.IsInbound = false
-		mr.tunnelMgr.outboundPool = tunnel.NewTunnelPoolWithConfig(selector, outboundConfig)
-	}
+	mr.tunnelMgr.SetPeerSelector(selector)
 }
 
 // SetSessionProvider configures the session provider for message routing responses.
@@ -166,7 +148,7 @@ func (mr *I2NPMessageDispatcher) RouteTunnelMessage(msg interface{}) error {
 // This must be called from the router after r.tunnelManager is created so that
 // both the dispatcher and the router share the same pendingBuilds map, enabling
 // build-reply correlation (A3 fix).
-func (mr *I2NPMessageDispatcher) SetTunnelManager(tm *TunnelManager) {
+func (mr *I2NPMessageDispatcher) SetTunnelManager(tm TunnelOrchestrator) {
 	mr.tunnelMgr = tm
 }
 

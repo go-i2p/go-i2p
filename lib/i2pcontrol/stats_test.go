@@ -29,7 +29,7 @@ func (m *mockTunnelEncryptor) Type() tunnel.TunnelEncryptionType {
 // mockRouterAccess provides a simple mock for testing
 type mockRouterAccess struct {
 	netdb              *netdb.StdNetDB
-	tunnelManager      *i2np.TunnelManager
+	tunnelManager      i2np.TunnelOrchestrator
 	participantManager *tunnelpkg.Manager
 	cfg                *config.RouterConfig
 	running            bool
@@ -39,7 +39,7 @@ func (m *mockRouterAccess) GetNetDB() *netdb.StdNetDB {
 	return m.netdb
 }
 
-func (m *mockRouterAccess) GetTunnelManager() *i2np.TunnelManager {
+func (m *mockRouterAccess) GetTunnelManager() i2np.TunnelOrchestrator {
 	return m.tunnelManager
 }
 

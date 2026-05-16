@@ -186,6 +186,27 @@ func (tm *TunnelManager) SetSessionProvider(provider SessionProvider) {
 	tm.sessionProvider = provider
 }
 
+// SetPeerSelector replaces the peer selector and rebuilds the tunnel pools.
+// If pools are already active they are stopped before the new ones are created.
+func (tm *TunnelManager) SetPeerSelector(selector tunnel.PeerSelector) {
+	tm.peerSelector = selector
+	if tm.inboundPool != nil || tm.outboundPool != nil {
+		if tm.inboundPool != nil {
+			tm.inboundPool.Stop()
+		}
+		if tm.outboundPool != nil {
+			tm.outboundPool.Stop()
+		}
+		inboundConfig := tunnel.DefaultPoolConfig()
+		inboundConfig.IsInbound = true
+		tm.inboundPool = tunnel.NewTunnelPoolWithConfig(selector, inboundConfig)
+
+		outboundConfig := tunnel.DefaultPoolConfig()
+		outboundConfig.IsInbound = false
+		tm.outboundPool = tunnel.NewTunnelPoolWithConfig(selector, outboundConfig)
+	}
+}
+
 // SetOurRouterHash propagates our router's identity hash to both tunnel pools
 // so they can populate the ReplyGateway field in build requests. Without this,
 // the last hop in every tunnel build sends its reply to an all-zeros peer and

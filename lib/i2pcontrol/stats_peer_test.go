@@ -21,7 +21,7 @@ func (m *mockRouterAccessForPeerStats) GetNetDB() *netdb.StdNetDB {
 	return m.netdb
 }
 
-func (m *mockRouterAccessForPeerStats) GetTunnelManager() *i2np.TunnelManager {
+func (m *mockRouterAccessForPeerStats) GetTunnelManager() i2np.TunnelOrchestrator {
 	return nil
 }
 

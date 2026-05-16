@@ -64,7 +64,7 @@ type Router struct {
 	i2cpServer *i2cp.Server
 
 	// tunnelManager manages tunnel building and pool maintenance
-	tunnelManager *i2np.TunnelManager
+	tunnelManager i2np.TunnelOrchestrator
 
 	// participantManager tracks tunnels where this router acts as a transit hop
 	participantManager *tunnel.Manager
@@ -763,7 +763,7 @@ func (r *Router) Wait() {
 
 // GetTunnelManager returns the tunnel manager in a thread-safe manner.
 // Returns nil if the tunnel manager has not been initialized yet.
-func (r *Router) GetTunnelManager() *i2np.TunnelManager {
+func (r *Router) GetTunnelManager() i2np.TunnelOrchestrator {
 	r.runMux.RLock()
 	defer r.runMux.RUnlock()
 	return r.tunnelManager
