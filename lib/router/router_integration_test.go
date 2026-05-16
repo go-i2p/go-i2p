@@ -73,12 +73,12 @@ func TestSessionProviderWithNonExistentPeer(t *testing.T) {
 	// Create a router with proper NetDB initialization
 	router := &Router{
 		activeSessions: make(map[common.Hash]transport.TransportSession),
-		StdNetDB:       netdb.NewStdNetDB(tempDir),
+		netdb:       netdb.NewStdNetDB(tempDir),
 		running:        true,
 	}
 
 	// Ensure NetDB is initialized
-	err := router.StdNetDB.Ensure()
+	err := router.netdb.Ensure()
 	require.NoError(t, err, "NetDB initialization should succeed")
 
 	// Try to retrieve a non-existent session

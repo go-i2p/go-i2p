@@ -177,7 +177,7 @@ func (r *Router) refreshNTCP2LocalRouterInfo() {
 		log.WithError(err).Debug("could not refresh NTCP2 local RouterInfo")
 		return
 	}
-	muxer := r.TransportMuxer
+	muxer := r.transports
 	if muxer == nil {
 		return
 	}

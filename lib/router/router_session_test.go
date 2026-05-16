@@ -174,12 +174,12 @@ func TestGetSessionByHashWithNonExistentPeer(t *testing.T) {
 
 	router := &Router{
 		activeSessions: make(map[common.Hash]transport.TransportSession),
-		StdNetDB:       netdb.NewStdNetDB(tempDir),
+		netdb:       netdb.NewStdNetDB(tempDir),
 		running:        true, // Mark as running to allow session operations
 	}
 
 	// Ensure NetDB is initialized
-	err := router.StdNetDB.Ensure()
+	err := router.netdb.Ensure()
 	require.NoError(t, err, "NetDB initialization should succeed")
 
 	// Test with non-existent peer

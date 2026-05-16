@@ -7,7 +7,6 @@ import (
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/netdb"
-	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -17,7 +16,7 @@ type mockRouterAccessForPeerStats struct {
 	netdb *netdb.StdNetDB
 }
 
-func (m *mockRouterAccessForPeerStats) GetNetDB() *netdb.StdNetDB {
+func (m *mockRouterAccessForPeerStats) GetNetDB() NetDBStatsReader {
 	return m.netdb
 }
 
@@ -25,7 +24,7 @@ func (m *mockRouterAccessForPeerStats) GetTunnelManager() i2np.TunnelOrchestrato
 	return nil
 }
 
-func (m *mockRouterAccessForPeerStats) GetParticipantManager() *tunnel.Manager {
+func (m *mockRouterAccessForPeerStats) GetParticipantManager() ParticipantStatsReader {
 	return nil
 }
 

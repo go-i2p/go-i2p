@@ -44,11 +44,11 @@ func (r *Router) stopFloodfillServer() {
 // and transport muxer. Floodfill serving is disabled by default; set
 // netdb.floodfill_enabled in the config to enable it.
 func (r *Router) startFloodfillServer() {
-	if r.StdNetDB == nil || r.TransportMuxer == nil {
+	if r.netdb == nil || r.transports == nil {
 		log.WithFields(logger.Fields{"at": "startFloodfillServer"}).Debug("Floodfill server deferred: NetDB or transport muxer not ready")
 		return
 	}
-	adapter := &floodfillTransportAdapter{muxer: r.TransportMuxer, db: r.StdNetDB}
+	adapter := &floodfillTransportAdapter{muxer: r.transports, db: r.netdb}
 	cfg := netdb.DefaultFloodfillConfig()
 	if r.cfg != nil && r.cfg.NetDB != nil {
 		cfg.Enabled = r.cfg.NetDB.FloodfillEnabled
@@ -57,7 +57,7 @@ func (r *Router) startFloodfillServer() {
 	if err == nil {
 		cfg.OurHash = ourHash
 	}
-	r.floodfillServer = netdb.NewFloodfillServer(r.StdNetDB, adapter, cfg)
+	r.floodfillServer = netdb.NewFloodfillServer(r.netdb, adapter, cfg)
 	log.WithField("enabled", cfg.Enabled).Debug("Floodfill server started")
 }
 
@@ -65,7 +65,7 @@ func (r *Router) startFloodfillServer() {
 // actively discovers new peers by performing iterative lookups for random keys,
 // improving peer diversity over time. It requires a running tunnel pool.
 func (r *Router) startExplorer() {
-	if r.StdNetDB == nil || r.tunnelManager == nil {
+	if r.netdb == nil || r.tunnelManager == nil {
 		log.WithFields(logger.Fields{"at": "startExplorer"}).Debug("NetDB explorer deferred: NetDB or tunnel manager not ready")
 		return
 	}
@@ -82,7 +82,7 @@ func (r *Router) startExplorer() {
 		cfg.OurHash = ourHash
 	}
 
-	r.explorer = netdb.NewExplorer(r.StdNetDB, tunnelPool, cfg)
+	r.explorer = netdb.NewExplorer(r.netdb, tunnelPool, cfg)
 
 	if r.messageRouter != nil {
 		r.explorer.SetOurHash(ourHash)
@@ -113,10 +113,10 @@ func (r *Router) startPublisher() {
 // tunnel pool are available. Returns the tunnel pool or an error describing
 // the missing prerequisite.
 func (r *Router) resolvePublisherDependencies() (*tunnel.Pool, error) {
-	if r.StdNetDB == nil {
+	if r.netdb == nil {
 		return nil, oops.Errorf("Cannot start publisher: NetDB not initialized")
 	}
-	if r.TransportMuxer == nil {
+	if r.transports == nil {
 		return nil, oops.Errorf("Cannot start publisher: TransportMuxer not initialized")
 	}
 	var tunnelPool *tunnel.Pool
@@ -132,8 +132,8 @@ func (r *Router) resolvePublisherDependencies() (*tunnel.Pool, error) {
 // launchPublisher constructs the publisher from adapters and starts it.
 // On failure the publisher field is left nil and a warning is logged.
 func (r *Router) launchPublisher(tunnelPool *tunnel.Pool) {
-	dbAdapter := &publisherNetDBAdapter{db: r.StdNetDB}
-	transportAdapter := &publisherTransportAdapter{muxer: r.TransportMuxer}
+	dbAdapter := &publisherNetDBAdapter{db: r.netdb}
+	transportAdapter := &publisherTransportAdapter{muxer: r.transports}
 
 	var riProvider netdb.RouterInfoProvider
 	if r.routerInfoProv != nil {
@@ -165,21 +165,21 @@ func (r *Router) launchPublisher(tunnelPool *tunnel.Pool) {
 }
 
 // initializeNetDB creates and configures the network database.
-// Idempotent: if r.StdNetDB has already been initialized (for example from
+// Idempotent: if r.netdb has already been initialized (for example from
 // CreateRouter, where it is created early so that transports can wire their
-// PeerConnNotifier into r.StdNetDB.PeerTracker), this call is a no-op. This
-// matters because r.StdNetDB MUST exist before initializeTransports runs;
+// PeerConnNotifier into r.netdb.PeerTracker), this call is a no-op. This
+// matters because r.netdb MUST exist before initializeTransports runs;
 // otherwise NTCP2/SSU2 transports silently skip SetPeerConnNotifier and
 // successful connections are never recorded in PeerTracker, causing every
 // known-good peer to be marked stale on its first tunnel-build failure.
 func (r *Router) initializeNetDB() error {
-	if r.StdNetDB != nil {
+	if r.netdb != nil {
 		log.WithFields(logger.Fields{"at": "initializeNetDB"}).Debug("NetDB already initialized; skipping")
 		return nil
 	}
 	log.WithFields(logger.Fields{"at": "initializeNetDB"}).Debug("Initializing network database")
-	r.StdNetDB = netdb.NewStdNetDB(r.cfg.NetDB.Path)
-	r.StdNetDB.SetMaxRouterInfos(r.cfg.NetDB.MaxRouterInfos)
+	r.netdb = netdb.NewStdNetDB(r.cfg.NetDB.Path)
+	r.netdb.SetMaxRouterInfos(r.cfg.NetDB.MaxRouterInfos)
 	log.WithField("netdb_path", r.cfg.NetDB.Path).Debug("Created StdNetDB")
 	return nil
 }

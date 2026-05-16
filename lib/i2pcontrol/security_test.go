@@ -14,8 +14,6 @@ import (
 
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/i2np"
-	"github.com/go-i2p/go-i2p/lib/netdb"
-	tunnelpkg "github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -707,11 +705,11 @@ type mockRouterAccessBandwidth struct {
 	outbound uint64
 }
 
-func (m *mockRouterAccessBandwidth) GetNetDB() *netdb.StdNetDB {
+func (m *mockRouterAccessBandwidth) GetNetDB() NetDBStatsReader {
 	return nil
 }
 func (m *mockRouterAccessBandwidth) GetTunnelManager() i2np.TunnelOrchestrator { return nil }
-func (m *mockRouterAccessBandwidth) GetParticipantManager() *tunnelpkg.Manager {
+func (m *mockRouterAccessBandwidth) GetParticipantManager() ParticipantStatsReader {
 	return nil
 }
 func (m *mockRouterAccessBandwidth) GetConfig() *config.RouterConfig { return nil }

@@ -43,7 +43,7 @@ func (r *Router) startI2PControlServer() error {
 	}).Info("starting I2PControl server")
 
 	// Create statistics provider that wraps the router
-	stats := i2pcontrol.NewRouterStatsProvider(r, "0.1.0-go")
+	stats := i2pcontrol.NewRouterStatsProvider(i2pcontrol.RealRouter{Router: r}, "0.1.0-go")
 
 	// Initialize I2PControl server
 	server, err := i2pcontrol.NewServer(r.cfg.I2PControl, stats)

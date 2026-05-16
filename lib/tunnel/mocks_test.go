@@ -119,7 +119,7 @@ func (f *fakeDB) SelectPeers(count int, exclude []common.Hash) ([]router_info.Ro
 // adds it to the manager. Returns the participant for optional field tweaking
 // (e.g., setting createdAt or lastActivity). Consolidates the repeated
 // NewParticipant+AddParticipant+error-check boilerplate across cleanup tests.
-func addParticipantToManager(t *testing.T, m *Manager, id TunnelID) *Participant {
+func addParticipantToManager(t *testing.T, m *ParticipantManager, id TunnelID) *Participant {
 	t.Helper()
 	p, _ := NewParticipant(id, &mockTunnelEncryptor{})
 	if err := m.AddParticipant(p); err != nil {

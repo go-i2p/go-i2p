@@ -12,21 +12,21 @@ import (
 // ensureNetDBReady validates NetDB state and performs reseed if needed.
 // Returns an error if the router's StdNetDB is nil (e.g. during shutdown).
 func (r *Router) ensureNetDBReady() error {
-	if r.StdNetDB == nil {
+	if r.netdb == nil {
 		return oops.Errorf("StdNetDB is nil (router may be shutting down)")
 	}
-	if err := r.StdNetDB.Ensure(); err != nil {
+	if err := r.netdb.Ensure(); err != nil {
 		log.WithError(err).Error("Failed to ensure NetDB")
 		return err
 	}
 
-	if sz := r.StdNetDB.Size(); sz >= 0 {
+	if sz := r.netdb.Size(); sz >= 0 {
 		log.WithField("size", sz).Debug("NetDB Size: " + strconv.Itoa(sz))
 	} else {
 		log.WithFields(logger.Fields{"at": "ensureNetDBReady"}).Warn("Unable to determine NetDB size")
 	}
 
-	if r.StdNetDB.Size() < r.cfg.Bootstrap.LowPeerThreshold {
+	if r.netdb.Size() < r.cfg.Bootstrap.LowPeerThreshold {
 		return r.performReseed()
 	}
 	return nil
@@ -61,9 +61,9 @@ func (r *Router) logReseedStart() {
 		"at":             "(Router) performReseed",
 		"phase":          "bootstrap",
 		"reason":         "netdb below threshold, initiating bootstrap",
-		"current_size":   r.StdNetDB.Size(),
+		"current_size":   r.netdb.Size(),
 		"threshold":      r.cfg.Bootstrap.LowPeerThreshold,
-		"shortfall":      r.cfg.Bootstrap.LowPeerThreshold - r.StdNetDB.Size(),
+		"shortfall":      r.cfg.Bootstrap.LowPeerThreshold - r.netdb.Size(),
 		"bootstrap_type": r.cfg.Bootstrap.BootstrapType,
 	}).Warn("netDb below threshold, initiating bootstrap")
 }
@@ -148,12 +148,12 @@ func (r *Router) createFallbackBootstrapper() bootstrap.Bootstrap {
 // executeReseed performs the actual reseed operation using the provided bootstrapper.
 // It logs success or failure and returns any error encountered.
 func (r *Router) executeReseed(bootstrapper bootstrap.Bootstrap) error {
-	if err := r.StdNetDB.Reseed(bootstrapper, r.cfg.Bootstrap.LowPeerThreshold); err != nil {
+	if err := r.netdb.Reseed(bootstrapper, r.cfg.Bootstrap.LowPeerThreshold); err != nil {
 		log.WithError(err).WithFields(logger.Fields{
 			"at":           "(Router) executeReseed",
 			"phase":        "bootstrap",
 			"reason":       "bootstrap failed but continuing",
-			"current_size": r.StdNetDB.Size(),
+			"current_size": r.netdb.Size(),
 			"target":       r.cfg.Bootstrap.LowPeerThreshold,
 			"impact":       "router will operate with limited peer connectivity",
 		}).Warn("bootstrap failed, continuing with limited NetDB")
@@ -163,9 +163,9 @@ func (r *Router) executeReseed(bootstrapper bootstrap.Bootstrap) error {
 		"at":           "(Router) executeReseed",
 		"phase":        "bootstrap",
 		"reason":       "bootstrap completed successfully",
-		"netdb_size":   r.StdNetDB.Size(),
+		"netdb_size":   r.netdb.Size(),
 		"threshold":    r.cfg.Bootstrap.LowPeerThreshold,
-		"peers_gained": r.StdNetDB.Size() - (r.cfg.Bootstrap.LowPeerThreshold - 1),
+		"peers_gained": r.netdb.Size() - (r.cfg.Bootstrap.LowPeerThreshold - 1),
 	}).Info("bootstrap completed successfully")
 	return nil
 }

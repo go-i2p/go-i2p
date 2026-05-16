@@ -37,7 +37,7 @@ func (r *Router) startSSU2NATDetection() {
 // getSSU2Transport retrieves the SSU2 transport from the TransportMuxer.
 // Returns nil if SSU2 is not enabled or muxer is not set.
 func (r *Router) getSSU2Transport() *ssu2.SSU2Transport {
-	muxer := r.TransportMuxer
+	muxer := r.transports
 	if muxer == nil {
 		return nil
 	}
@@ -52,10 +52,10 @@ func (r *Router) getSSU2Transport() *ssu2.SSU2Transport {
 // collectSSU2Candidates gathers SSU2-capable RouterInfos for NAT detection.
 // Skips our own RouterInfo and routers without dialable SSU2 addresses.
 func (r *Router) collectSSU2Candidates() []router_info.RouterInfo {
-	if r.StdNetDB == nil {
+	if r.netdb == nil {
 		return nil
 	}
-	allRIs := r.StdNetDB.GetAllRouterInfos()
+	allRIs := r.netdb.GetAllRouterInfos()
 	ourHash, ourHashErr := r.getOurRouterHash()
 
 	var candidates []router_info.RouterInfo

@@ -31,11 +31,11 @@ import (
 // tunnel pools, and message routing for participating in the I2P network.
 type Router struct {
 	// keystore for router info
-	*keys.RouterInfoKeystore
+	keystore *keys.RouterInfoKeystore
 	// multi-transport manager
-	*transport.TransportMuxer
+	transports *transport.TransportMuxer
 	// netdb
-	*netdb.StdNetDB
+	netdb *netdb.StdNetDB
 	// message router for processing I2NP messages
 	messageRouter *i2np.I2NPMessageDispatcher
 	// garlic message router for handling non-LOCAL garlic clove forwarding
@@ -67,7 +67,7 @@ type Router struct {
 	tunnelManager i2np.TunnelOrchestrator
 
 	// participantManager tracks tunnels where this router acts as a transit hop
-	participantManager *tunnel.Manager
+	participantManager *tunnel.ParticipantManager
 
 	// i2pcontrolServer provides RPC monitoring interface
 	i2pcontrolServer I2PControlServer
@@ -163,7 +163,7 @@ func initializeRouterComponents(r *Router, cfg *config.RouterConfig) error {
 // initializeNetDBAndTransports initializes NetDB before transports (required order).
 func initializeNetDBAndTransports(r *Router, ri *router_info.RouterInfo, cfg *config.RouterConfig) error {
 	// NetDB MUST be initialized before transports so that NTCP2/SSU2 can wire
-	// their PeerConnNotifier into r.StdNetDB.PeerTracker. Without this, the
+	// their PeerConnNotifier into r.netdb.PeerTracker. Without this, the
 	// peer-tracker only ever sees tunnel-build failures (recorded by Pool),
 	// never transport-level dial attempts or successes, and every reachable
 	// peer is marked stale after a single tunnel-build failure.
@@ -177,7 +177,7 @@ func initializeNetDBAndTransports(r *Router, ri *router_info.RouterInfo, cfg *co
 		return err
 	}
 
-	r.TransportMuxer = transport.Mux(transports...)
+	r.transports = transport.Mux(transports...)
 	return nil
 }
 
@@ -256,7 +256,7 @@ func recomputeReachabilityCaps(r *Router, ri *router_info.RouterInfo, ntcp2Trans
 		return nil
 	}
 
-	rebuilt, err := r.RouterInfoKeystore.ConstructRouterInfo(addrs, keys.RouterInfoOptions{Reachable: wantReachable})
+	rebuilt, err := r.keystore.ConstructRouterInfo(addrs, keys.RouterInfoOptions{Reachable: wantReachable})
 	if err != nil {
 		return oops.Wrapf(err, "rebuilding RouterInfo with Reachable=%v", wantReachable)
 	}
@@ -311,13 +311,13 @@ func initializeRouterKeystore(r *Router, cfg *config.RouterConfig) error {
 	}
 	log.WithFields(logger.Fields{"at": "initializeRouterKeystore"}).Debug("RouterInfoKeystore stored successfully")
 
-	r.RouterInfoKeystore = keystore
+	r.keystore = keystore
 	return nil
 }
 
 // validateRouterKeys extracts and validates the router's public key
 func validateRouterKeys(r *Router) error {
-	pub, _, err := r.RouterInfoKeystore.GetKeys()
+	pub, _, err := r.keystore.GetKeys()
 	if err != nil {
 		log.WithError(err).Error("Failed to get keys from RouterInfoKeystore")
 		return err
@@ -343,7 +343,7 @@ func validateRouterKeys(r *Router) error {
 // no public endpoint or only private (RFC1918 / loopback) hosts.
 func constructRouterInfo(r *Router) (*router_info.RouterInfo, error) {
 	log.WithField("at", "constructRouterInfo").Debug("calling ConstructRouterInfo")
-	ri, err := r.RouterInfoKeystore.ConstructRouterInfo(nil, keys.RouterInfoOptions{Reachable: false})
+	ri, err := r.keystore.ConstructRouterInfo(nil, keys.RouterInfoOptions{Reachable: false})
 	if err != nil {
 		log.WithError(err).Error("Failed to construct RouterInfo")
 		return nil, err
@@ -431,17 +431,17 @@ func createNTCP2TransportInstance(r *Router, ri *router_info.RouterInfo, addr st
 	ntcp2Config.WorkingDir = r.cfg.WorkingDir
 
 	log.WithField("at", "buildNTCP2Transport").Debug("creating NTCP2 transport instance")
-	ntcp2Transport, err := ntcp.NewNTCP2Transport(*ri, ntcp2Config, r.RouterInfoKeystore)
+	ntcp2Transport, err := ntcp.NewNTCP2Transport(*ri, ntcp2Config, r.keystore)
 	if err != nil {
 		log.WithError(err).Error("Failed to create NTCP2 transport")
 		return nil, err
 	}
-	if r.StdNetDB != nil && r.StdNetDB.PeerTracker != nil {
-		ntcp2Transport.SetPeerConnNotifier(r.StdNetDB.PeerTracker)
+	if r.netdb != nil && r.netdb.PeerTracker != nil {
+		ntcp2Transport.SetPeerConnNotifier(r.netdb.PeerTracker)
 	}
-	if r.StdNetDB != nil {
-		ntcp2Transport.SetRouterInfoRefresher(r.StdNetDB)
-		ntcp2Transport.SetRouterInfoStorer(r.StdNetDB)
+	if r.netdb != nil {
+		ntcp2Transport.SetRouterInfoRefresher(r.netdb)
+		ntcp2Transport.SetRouterInfoStorer(r.netdb)
 	}
 	log.WithFields(logger.Fields{"at": "buildNTCP2Transport"}).Debug("NTCP2 transport created successfully")
 	return ntcp2Transport, nil
@@ -456,7 +456,7 @@ func publishNTCP2Address(r *Router, ri *router_info.RouterInfo, ntcp2Transport *
 		return err
 	}
 
-	if err := reSignAndVerifyRouterInfo(ri, r.RouterInfoKeystore); err != nil {
+	if err := reSignAndVerifyRouterInfo(ri, r.keystore); err != nil {
 		log.WithError(err).Error("Failed to re-sign RouterInfo after adding NTCP2 address")
 		return err
 	}
@@ -499,17 +499,17 @@ func createSSU2TransportInstance(r *Router, ri *router_info.RouterInfo, addr str
 	}
 	ssu2Config.WorkingDir = r.cfg.WorkingDir
 
-	ssu2Transport, err := ssu2.NewSSU2Transport(*ri, ssu2Config, r.RouterInfoKeystore)
+	ssu2Transport, err := ssu2.NewSSU2Transport(*ri, ssu2Config, r.keystore)
 	if err != nil {
 		log.WithError(err).Error("Failed to create SSU2 transport")
 		return nil, err
 	}
-	if r.StdNetDB != nil && r.StdNetDB.PeerTracker != nil {
-		ssu2Transport.SetPeerConnNotifier(r.StdNetDB.PeerTracker)
+	if r.netdb != nil && r.netdb.PeerTracker != nil {
+		ssu2Transport.SetPeerConnNotifier(r.netdb.PeerTracker)
 	}
 
 	ssu2Config.RouterLookupFunc = func(hash common.Hash) (router_info.RouterInfo, error) {
-		ch := r.StdNetDB.GetRouterInfo(hash)
+		ch := r.netdb.GetRouterInfo(hash)
 		ri, ok := <-ch
 		if !ok {
 			return router_info.RouterInfo{}, oops.Errorf("router %x not found in netdb", hash[:4])
@@ -530,7 +530,7 @@ func publishSSU2Address(r *Router, ri *router_info.RouterInfo, ssu2Transport *ss
 		return err
 	}
 
-	if err := reSignAndVerifyRouterInfo(ri, r.RouterInfoKeystore); err != nil {
+	if err := reSignAndVerifyRouterInfo(ri, r.keystore); err != nil {
 		log.WithError(err).Error("Failed to re-sign RouterInfo after adding SSU2 address")
 		return err
 	}
@@ -573,7 +573,7 @@ func (r *Router) getTotalBandwidth() (sent, received uint64) {
 	// Capture TransportMuxer locally to avoid TOCTOU race:
 	// the field could be set to nil by concurrent shutdown between
 	// the nil check and the method call.
-	muxer := r.TransportMuxer
+	muxer := r.transports
 	if muxer == nil {
 		return 0, 0
 	}
@@ -614,7 +614,7 @@ func (r *Router) GetActiveSessionCount() int {
 // GetNTCP2SessionCount returns the number of active NTCP2 (TCP) sessions.
 // Returns 0 if the NTCP2 transport is not available.
 func (r *Router) GetNTCP2SessionCount() int {
-	muxer := r.TransportMuxer
+	muxer := r.transports
 	if muxer == nil {
 		return 0
 	}
@@ -629,7 +629,7 @@ func (r *Router) GetNTCP2SessionCount() int {
 // GetSSU2SessionCount returns the number of active SSU2 (UDP) sessions.
 // Returns 0 if the SSU2 transport is not available.
 func (r *Router) GetSSU2SessionCount() int {
-	muxer := r.TransportMuxer
+	muxer := r.transports
 	if muxer == nil {
 		return 0
 	}
@@ -646,7 +646,7 @@ func (r *Router) GetSSU2SessionCount() int {
 // Returns nil if no transports are available.
 func (r *Router) GetTransportAddr() interface{} {
 	// Capture locally to avoid TOCTOU race with concurrent shutdown.
-	muxer := r.TransportMuxer
+	muxer := r.transports
 	if muxer == nil {
 		return nil
 	}
@@ -672,7 +672,7 @@ func (r *Router) GetBandwidthRates1s() (inbound, outbound uint64) {
 // GetSSU2Addr returns the listening UDP address of the SSU2 transport.
 // Returns nil if SSU2 is not available or not yet bound.
 func (r *Router) GetSSU2Addr() interface{} {
-	muxer := r.TransportMuxer
+	muxer := r.transports
 	if muxer == nil {
 		return nil
 	}
@@ -767,7 +767,7 @@ func (r *Router) GetTunnelManager() i2np.TunnelOrchestrator {
 
 // GetParticipantManager returns the participant manager for transit tunnel tracking.
 // Returns nil if not initialized.
-func (r *Router) GetParticipantManager() *tunnel.Manager {
+func (r *Router) GetParticipantManager() *tunnel.ParticipantManager {
 	r.runMux.RLock()
 	defer r.runMux.RUnlock()
 	return r.participantManager
@@ -791,7 +791,7 @@ func (r *Router) GetCongestionMonitor() CongestionStateProvider {
 
 // GetNetDB returns the router's underlying network database instance.
 func (r *Router) GetNetDB() *netdb.StdNetDB {
-	return r.StdNetDB
+	return r.netdb
 }
 
 // GetConfig returns the router configuration for I2PControl.

@@ -173,7 +173,7 @@ func (r *Router) shouldContinueMonitoring() bool {
 // acceptInboundConnection attempts to accept a new connection with timeout.
 // Returns nil if timeout occurs, connection fails, or TransportMuxer is nil (during shutdown).
 func (r *Router) acceptInboundConnection() net.Conn {
-	muxer := r.TransportMuxer
+	muxer := r.transports
 	if muxer == nil {
 		return nil
 	}

@@ -24,8 +24,8 @@ func (r *Router) initializeMessageRouter() {
 		EnableLogging:  true,
 	}
 	r.messageRouter = i2np.NewI2NPMessageDispatcher(messageConfig)
-	r.messageRouter.SetNetDB(r.StdNetDB)
-	r.messageRouter.SetPeerSelector(r.StdNetDB)
+	r.messageRouter.SetNetDB(r.netdb)
+	r.messageRouter.SetPeerSelector(r.netdb)
 	r.messageRouter.SetSessionProvider(r)
 
 	r.initializeTunnelManager()
@@ -122,7 +122,7 @@ func (r *Router) wireBuildRecordIdentity() {
 		log.WithError(err).Error("Failed to get router hash for build record identity — transit tunnel building will be degraded")
 		return
 	}
-	privKeyBytes := r.RouterInfoKeystore.GetEncryptionPrivateKey().Bytes()
+	privKeyBytes := r.keystore.GetEncryptionPrivateKey().Bytes()
 	buildCrypto := i2np.NewBuildRecordCrypto()
 	r.messageRouter.GetProcessor().SetOurRouterHash(routerHash)
 	r.messageRouter.GetProcessor().SetBuildRequestDecryptor(buildCrypto)
@@ -250,7 +250,7 @@ func (r *Router) startPoolMaintenance(tm *i2np.TunnelManager, inboundPool, outbo
 			continue
 		}
 		pool.SetTunnelBuilder(tm)
-		pool.SetPeerTracker(r.StdNetDB.PeerTracker)
+		pool.SetPeerTracker(r.netdb.PeerTracker)
 		if err := pool.StartMaintenance(); err != nil {
 			log.WithError(err).Error("Failed to start tunnel pool maintenance")
 		}
@@ -425,7 +425,7 @@ func (r *Router) launchOutboundFallbackCheck(pool *tunnel.Pool) {
 // The tunnel manager coordinates tunnel building, maintains tunnel pools, and handles tunnel lifecycle.
 func (r *Router) initializeTunnelManager() {
 	// Create tunnel manager with NetDB as peer selector
-	tm := i2np.NewTunnelManager(r.StdNetDB)
+	tm := i2np.NewTunnelManager(r.netdb)
 
 	// Set router as session provider for sending tunnel build messages
 	tm.SetSessionProvider(r)
@@ -471,7 +471,7 @@ func (r *Router) initializeTunnelManager() {
 		"at":            "initializeTunnelManager",
 		"inbound_pool":  inboundPool != nil,
 		"outbound_pool": outboundPool != nil,
-		"peer_tracker":  r.StdNetDB.PeerTracker != nil,
+		"peer_tracker":  r.netdb.PeerTracker != nil,
 	}).Debug("Tunnel pools configured and maintenance started")
 
 	log.WithFields(logger.Fields{
@@ -491,7 +491,7 @@ func (r *Router) initializeGarlicRouter() {
 	}
 
 	// Wrap StdNetDB with adapter to match GarlicNetDB interface
-	garlicNetDB := newNetDBAdapter(r.StdNetDB)
+	garlicNetDB := newNetDBAdapter(r.netdb)
 
 	// Get tunnel pool from tunnel manager if available, otherwise nil
 	var tunnelPool *tunnel.Pool
@@ -502,7 +502,7 @@ func (r *Router) initializeGarlicRouter() {
 	// Create garlic message router with router infrastructure
 	gr := NewGarlicMessageRouter(
 		garlicNetDB,      // NetDB for LeaseSet/RouterInfo lookups
-		r.TransportMuxer, // Transport for sending to peer routers
+		r.transports, // Transport for sending to peer routers
 		tunnelPool,       // Tunnel pool for DESTINATION and TUNNEL delivery
 		routerHash,       // Our identity for reflexive routing
 	)
@@ -519,8 +519,8 @@ func (r *Router) initializeGarlicRouter() {
 	log.WithFields(logger.Fields{
 		"our_hash":        fmt.Sprintf("%x", routerHash[:8]),
 		"tunnel_support":  tunnelPool != nil,
-		"transport_ready": r.TransportMuxer != nil,
-		"netdb_ready":     r.StdNetDB != nil,
+		"transport_ready": r.transports != nil,
+		"netdb_ready":     r.netdb != nil,
 	}).Debug("Garlic message router initialized for non-LOCAL clove forwarding")
 }
 
@@ -528,7 +528,7 @@ func (r *Router) initializeGarlicRouter() {
 // encryption private key and injects it into the MessageProcessor for decrypting
 // inbound garlic messages.
 func (r *Router) wireGarlicSessionManager() {
-	privKeyBytes := r.RouterInfoKeystore.GetEncryptionPrivateKey().Bytes()
+	privKeyBytes := r.keystore.GetEncryptionPrivateKey().Bytes()
 	var privKey [32]byte
 	copy(privKey[:], privKeyBytes)
 
@@ -548,7 +548,7 @@ func (r *Router) wireGarlicSessionManager() {
 // Returns an error if the hash cannot be computed.
 func (r *Router) getOurRouterHash() (common.Hash, error) {
 	log.WithField("at", "getOurRouterHash").Debug("constructing RouterInfo to derive identity hash")
-	ri, err := r.RouterInfoKeystore.ConstructRouterInfo(nil)
+	ri, err := r.keystore.ConstructRouterInfo(nil)
 	if err != nil {
 		return common.Hash{}, oops.Wrapf(err, "failed to construct RouterInfo")
 	}

@@ -124,7 +124,7 @@ func TestRouterCannotRestartAfterClose(t *testing.T) {
 	// Attempting to start would cause panics because critical components are missing.
 	// The key contract of Close() is that it finalizes the router so it cannot be reused.
 	// We verify this by checking that all critical components are nil.
-	assert.Nil(t, router.TransportMuxer, "TransportMuxer should be nil - prevents restart")
-	assert.Nil(t, router.StdNetDB, "StdNetDB should be nil - prevents restart")
-	assert.Nil(t, router.RouterInfoKeystore, "RouterInfoKeystore should be nil - prevents restart")
+	assert.Nil(t, router.transports, "TransportMuxer should be nil - prevents restart")
+	assert.Nil(t, router.netdb, "StdNetDB should be nil - prevents restart")
+	assert.Nil(t, router.keystore, "RouterInfoKeystore should be nil - prevents restart")
 }

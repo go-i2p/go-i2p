@@ -126,8 +126,8 @@ func TestRouterAccessInterface(t *testing.T) {
 		cfg: cfg,
 	}
 
-	// Verify Router implements RouterAccess
-	var _ i2pcontrol.RouterAccess = r
+	// Verify RealRouter wrapping Router implements RouterAccess
+	var _ i2pcontrol.RouterAccess = i2pcontrol.RealRouter{Router: r}
 
 	// Test GetConfig
 	if r.GetConfig() != cfg {

@@ -80,9 +80,9 @@ func newTestLeaseSetPublisher(t *testing.T) *LeaseSetPublisher {
 	t.Helper()
 	tempDir := t.TempDir()
 	router := &Router{
-		StdNetDB: netdb.NewStdNetDB(tempDir),
+		netdb: netdb.NewStdNetDB(tempDir),
 	}
-	require.NoError(t, router.StdNetDB.Ensure())
+	require.NoError(t, router.netdb.Ensure())
 	return NewLeaseSetPublisher(router)
 }
 
@@ -411,7 +411,7 @@ func TestLeaseSetPublisher_LocalStorage(t *testing.T) {
 
 	// Verify publisher is properly initialized
 	assert.NotNil(t, publisher, "Publisher should not be nil")
-	assert.NotNil(t, publisher.router.StdNetDB, "Publisher should have access to NetDB")
+	assert.NotNil(t, publisher.router.netdb, "Publisher should have access to NetDB")
 
 	// Verify the publish path rejects invalid data appropriately
 	var key common.Hash
@@ -600,11 +600,11 @@ func TestRouterAccessInterface_GetMethods(t *testing.T) {
 
 	router := &Router{
 		cfg:      cfg,
-		StdNetDB: netdb.NewStdNetDB(cfg.WorkingDir),
+		netdb: netdb.NewStdNetDB(cfg.WorkingDir),
 	}
 
 	// GetNetDB
-	assert.Equal(t, router.StdNetDB, router.GetNetDB(), "GetNetDB should return NetDB")
+	assert.Equal(t, router.netdb, router.GetNetDB(), "GetNetDB should return NetDB")
 
 	// GetConfig
 	assert.Equal(t, cfg, router.GetConfig(), "GetConfig should return config")

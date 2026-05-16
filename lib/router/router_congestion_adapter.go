@@ -76,7 +76,7 @@ func (r *Router) getMaxBandwidth() uint64 {
 
 // getConnectionCount returns the current number of active transport connections.
 func (r *Router) getConnectionCount() int {
-	muxer := r.TransportMuxer
+	muxer := r.transports
 	if muxer == nil {
 		return 0
 	}

@@ -79,7 +79,7 @@ func (p *LeaseSetPublisher) storeInLocalNetDB(key common.Hash, data []byte) erro
 	// This must match the type used in distributeToNetwork for consistency.
 	const leaseSet2DataType = 3
 
-	if err := p.router.StdNetDB.StoreLeaseSet(key, data, leaseSet2DataType); err != nil {
+	if err := p.router.netdb.StoreLeaseSet(key, data, leaseSet2DataType); err != nil {
 		log.WithFields(logger.Fields{
 			"at":    "router.LeaseSetPublisher.storeInLocalNetDB",
 			"key":   fmt.Sprintf("%x", key[:8]),
@@ -110,7 +110,7 @@ func (p *LeaseSetPublisher) distributeToNetwork(key common.Hash, data []byte) {
 	}).Debug("distributing_leaseset_to_network")
 
 	const floodfillCount = 3
-	floodfills, err := p.router.StdNetDB.SelectFloodfillRouters(key, floodfillCount)
+	floodfills, err := p.router.netdb.SelectFloodfillRouters(key, floodfillCount)
 	if err != nil {
 		log.WithFields(logger.Fields{
 			"at":    "router.LeaseSetPublisher.distributeToNetwork",

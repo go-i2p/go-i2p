@@ -60,10 +60,10 @@ func (r *Router) Start() error {
 // validateSubsystems checks that CreateRouter has fully initialized the router.
 // Must be called while runMux is held.
 func (r *Router) validateSubsystems() error {
-	if r.RouterInfoKeystore == nil {
+	if r.keystore == nil {
 		return oops.Errorf("router not fully initialized: keystore is nil (use CreateRouter, not FromConfig directly)")
 	}
-	if r.TransportMuxer == nil {
+	if r.transports == nil {
 		return oops.Errorf("router not fully initialized: transport muxer is nil (use CreateRouter, not FromConfig directly)")
 	}
 	return nil

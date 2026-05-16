@@ -10,7 +10,7 @@ import (
 
 // newManagerWithParticipants creates a Manager with the given limits and pre-adds
 // count participants. The manager is registered for cleanup via t.Cleanup.
-func newManagerWithParticipants(t *testing.T, maxTunnels, count int, limitsEnabled bool) *Manager {
+func newManagerWithParticipants(t *testing.T, maxTunnels, count int, limitsEnabled bool) *ParticipantManager {
 	t.Helper()
 	cfg := testTunnelConfig()
 	cfg.MaxParticipatingTunnels = maxTunnels
@@ -195,7 +195,7 @@ func TestParticipantCount(t *testing.T) {
 }
 
 // verifyCleanupResults asserts participant count and checks which IDs remain or were removed.
-func verifyCleanupResults(t *testing.T, m *Manager, expectedCount int, shouldRemain, shouldBeRemoved []TunnelID) {
+func verifyCleanupResults(t *testing.T, m *ParticipantManager, expectedCount int, shouldRemain, shouldBeRemoved []TunnelID) {
 	t.Helper()
 	if m.ParticipantCount() != expectedCount {
 		t.Errorf("Expected %d participants after cleanup, got %d", expectedCount, m.ParticipantCount())

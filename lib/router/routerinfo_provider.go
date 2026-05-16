@@ -43,7 +43,7 @@ type routerInfoProvider struct {
 func (p *routerInfoProvider) GetRouterInfo() (*router_info.RouterInfo, error) {
 	// Guard against nil keystore (can happen during shutdown)
 	p.router.keystoreMux.RLock()
-	ks := p.router.RouterInfoKeystore
+	ks := p.router.keystore
 	p.router.keystoreMux.RUnlock()
 
 	if ks == nil {
@@ -86,12 +86,12 @@ func (p *routerInfoProvider) GetRouterInfo() (*router_info.RouterInfo, error) {
 // transports in the router's TransportMuxer. Returns nil if the muxer is not
 // yet initialized (e.g. during early startup).
 func (p *routerInfoProvider) collectTransportAddresses() []*router_address.RouterAddress {
-	if p.router.TransportMuxer == nil {
+	if p.router.transports == nil {
 		return nil
 	}
 
 	var addresses []*router_address.RouterAddress
-	for _, t := range p.router.TransportMuxer.GetTransports() {
+	for _, t := range p.router.transports.GetTransports() {
 		if addr := p.convertTransportToAddress(t); addr != nil {
 			addresses = append(addresses, addr)
 		}

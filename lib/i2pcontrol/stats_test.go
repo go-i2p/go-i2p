@@ -30,12 +30,12 @@ func (m *mockTunnelEncryptor) Type() tunnel.TunnelEncryptionType {
 type mockRouterAccess struct {
 	netdb              *netdb.StdNetDB
 	tunnelManager      i2np.TunnelOrchestrator
-	participantManager *tunnelpkg.Manager
+	participantManager *tunnelpkg.ParticipantManager
 	cfg                *config.RouterConfig
 	running            bool
 }
 
-func (m *mockRouterAccess) GetNetDB() *netdb.StdNetDB {
+func (m *mockRouterAccess) GetNetDB() NetDBStatsReader {
 	return m.netdb
 }
 
@@ -43,7 +43,7 @@ func (m *mockRouterAccess) GetTunnelManager() i2np.TunnelOrchestrator {
 	return m.tunnelManager
 }
 
-func (m *mockRouterAccess) GetParticipantManager() *tunnelpkg.Manager {
+func (m *mockRouterAccess) GetParticipantManager() ParticipantStatsReader {
 	return m.participantManager
 }
 

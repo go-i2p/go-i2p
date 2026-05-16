@@ -31,7 +31,7 @@ func setupTestRouter(t *testing.T) *Router {
 	err = router.initializeNetDB()
 	require.NoError(t, err, "Failed to initialize NetDB")
 
-	err = router.StdNetDB.Ensure()
+	err = router.netdb.Ensure()
 	require.NoError(t, err, "Failed to ensure NetDB")
 
 	return router

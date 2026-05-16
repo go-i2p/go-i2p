@@ -37,7 +37,7 @@ const (
 	normalZoneFallback   = 0.70 // Fallback probability when normal range is zero
 )
 
-// Manager coordinates all tunnel operations including participant tracking.
+// ParticipantManager coordinates all tunnel operations including participant tracking.
 // It manages the lifecycle of tunnels where this router acts as an intermediate hop.
 //
 // Design decisions:
@@ -47,7 +47,7 @@ const (
 // - Simple map-based storage for O(1) lookup
 // - Configurable participation limits to protect against resource exhaustion
 // - Per-source rate limiting to prevent single-source flooding
-type Manager struct {
+type ParticipantManager struct {
 	// participants tracks tunnels where this router is an intermediate hop
 	participants map[TunnelID]*Participant
 	mu           sync.RWMutex
@@ -81,7 +81,7 @@ type Manager struct {
 // NewManager creates a new tunnel manager with default configuration.
 // Starts a background goroutine to clean up expired participants.
 // For custom limits, use NewManagerWithConfig instead.
-func NewManager() *Manager {
+func NewManager() *ParticipantManager {
 	return NewManagerWithConfig(config.Defaults().Tunnel)
 }
 
@@ -93,13 +93,13 @@ func NewManager() *Manager {
 //
 // The manager will start a background cleanup goroutine automatically.
 // If per-source rate limiting is enabled, a SourceLimiter will also be created.
-func NewManagerWithConfig(cfg config.TunnelDefaults) *Manager {
+func NewManagerWithConfig(cfg config.TunnelDefaults) *ParticipantManager {
 	maxParticipants := cfg.MaxParticipatingTunnels
 	if maxParticipants <= 0 {
 		maxParticipants = 15000 // Match config.TunnelDefaults default
 		log.WithField("default_max", maxParticipants).Info("MaxParticipatingTunnels was zero, using default")
 	}
-	m := &Manager{
+	m := &ParticipantManager{
 		participants:         make(map[TunnelID]*Participant),
 		maxParticipants:      maxParticipants,
 		limitsEnabled:        cfg.ParticipatingLimitsEnabled,
@@ -137,7 +137,7 @@ func NewManagerWithConfig(cfg config.TunnelDefaults) *Manager {
 // - p: the participant tunnel to track
 //
 // Returns an error if the participant is nil or already exists.
-func (m *Manager) AddParticipant(p *Participant) error {
+func (m *ParticipantManager) AddParticipant(p *Participant) error {
 	if p == nil {
 		log.WithFields(logger.Fields{
 			"at":     "Manager.AddParticipant",
@@ -177,7 +177,7 @@ func (m *Manager) AddParticipant(p *Participant) error {
 // This is called when a tunnel expires or is no longer needed.
 //
 // Returns true if the participant was found and removed, false otherwise.
-func (m *Manager) RemoveParticipant(tunnelID TunnelID) bool {
+func (m *ParticipantManager) RemoveParticipant(tunnelID TunnelID) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -204,7 +204,7 @@ func (m *Manager) RemoveParticipant(tunnelID TunnelID) bool {
 //
 // This is used when processing incoming TunnelData messages to find
 // the appropriate participant to handle decryption and forwarding.
-func (m *Manager) GetParticipant(tunnelID TunnelID) *Participant {
+func (m *ParticipantManager) GetParticipant(tunnelID TunnelID) *Participant {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -221,7 +221,7 @@ func (m *Manager) GetParticipant(tunnelID TunnelID) *Participant {
 
 // ParticipantCount returns the current number of participant tunnels.
 // This is useful for monitoring and statistics.
-func (m *Manager) ParticipantCount() int {
+func (m *ParticipantManager) ParticipantCount() int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -230,14 +230,14 @@ func (m *Manager) ParticipantCount() int {
 
 // MaxParticipants returns the maximum allowed number of participant tunnels.
 // This is the hard limit used for congestion monitoring (PROP_162).
-func (m *Manager) MaxParticipants() int {
+func (m *ParticipantManager) MaxParticipants() int {
 	return m.maxParticipants
 }
 
 // softLimit returns 50% of maxParticipants.
 // This is always derived, not independently configured.
 // Probabilistic rejection starts at the soft limit.
-func (m *Manager) softLimit() int {
+func (m *ParticipantManager) softLimit() int {
 	return m.maxParticipants / 2
 }
 
@@ -253,7 +253,7 @@ func (m *Manager) softLimit() int {
 // Returns:
 // - canAccept: true if the tunnel build request should be accepted
 // - reason: human-readable reason if rejected (empty string if accepted)
-func (m *Manager) CanAcceptParticipant() (bool, string) {
+func (m *ParticipantManager) CanAcceptParticipant() (bool, string) {
 	if !m.limitsEnabled {
 		return true, ""
 	}
@@ -275,7 +275,7 @@ func (m *Manager) CanAcceptParticipant() (bool, string) {
 
 // checkHardLimit verifies if we've reached the maximum participant count.
 // Returns (rejected, reason) where rejected is true if at hard limit.
-func (m *Manager) checkHardLimit(count int) (bool, string) {
+func (m *ParticipantManager) checkHardLimit(count int) (bool, string) {
 	if count < m.maxParticipants {
 		return false, ""
 	}
@@ -294,7 +294,7 @@ func (m *Manager) checkHardLimit(count int) (bool, string) {
 
 // checkSoftLimit applies probabilistic rejection based on current load.
 // Returns (rejected, reason) where rejected is true if probabilistically rejected.
-func (m *Manager) checkSoftLimit(count int) (bool, string) {
+func (m *ParticipantManager) checkSoftLimit(count int) (bool, string) {
 	softLimitValue := m.softLimit()
 	if count < softLimitValue {
 		return false, ""
@@ -321,7 +321,7 @@ func (m *Manager) checkSoftLimit(count int) (bool, string) {
 
 // calculateRejectProbability computes the rejection probability based on load.
 // Uses dynamic scaling with a critical zone for the last 100 tunnels.
-func (m *Manager) calculateRejectProbability(count, softLimitValue int) float64 {
+func (m *ParticipantManager) calculateRejectProbability(count, softLimitValue int) float64 {
 	criticalThreshold := m.maxParticipants - criticalZoneSize
 	if criticalThreshold < softLimitValue {
 		criticalThreshold = softLimitValue
@@ -334,7 +334,7 @@ func (m *Manager) calculateRejectProbability(count, softLimitValue int) float64 
 }
 
 // calculateCriticalZoneProbability returns rejection probability for critical zone (90% → 100%).
-func (m *Manager) calculateCriticalZoneProbability(count, criticalThreshold int) float64 {
+func (m *ParticipantManager) calculateCriticalZoneProbability(count, criticalThreshold int) float64 {
 	criticalRange := float64(m.maxParticipants - criticalThreshold)
 	if criticalRange > 0 {
 		criticalRatio := float64(count-criticalThreshold) / criticalRange
@@ -344,7 +344,7 @@ func (m *Manager) calculateCriticalZoneProbability(count, criticalThreshold int)
 }
 
 // calculateNormalZoneProbability returns rejection probability for soft limit zone (50% → 90%).
-func (m *Manager) calculateNormalZoneProbability(count, softLimitValue, criticalThreshold int) float64 {
+func (m *ParticipantManager) calculateNormalZoneProbability(count, softLimitValue, criticalThreshold int) float64 {
 	normalRange := float64(criticalThreshold - softLimitValue)
 	if normalRange > 0 {
 		normalRatio := float64(count-softLimitValue) / normalRange
@@ -355,19 +355,19 @@ func (m *Manager) calculateNormalZoneProbability(count, softLimitValue, critical
 
 // GetRejectStats returns the current rejection statistics.
 // Returns total rejections and recent rejections since last reset.
-func (m *Manager) GetRejectStats() (total, recent uint64) {
+func (m *ParticipantManager) GetRejectStats() (total, recent uint64) {
 	return atomic.LoadUint64(&m.rejectCountTotal), atomic.LoadUint64(&m.rejectCountRecent)
 }
 
 // ResetRecentRejectCount resets the recent rejection counter.
 // This is typically called periodically for monitoring purposes.
-func (m *Manager) ResetRecentRejectCount() {
+func (m *ParticipantManager) ResetRecentRejectCount() {
 	atomic.StoreUint64(&m.rejectCountRecent, 0)
 }
 
 // GetLimitConfig returns the current participation limit configuration.
 // Returns maxParticipants, softLimit, and whether limits are enabled.
-func (m *Manager) GetLimitConfig() (maxParticipants, softLimit int, limitsEnabled bool) {
+func (m *ParticipantManager) GetLimitConfig() (maxParticipants, softLimit int, limitsEnabled bool) {
 	return m.maxParticipants, m.softLimit(), m.limitsEnabled
 }
 
@@ -375,7 +375,7 @@ func (m *Manager) GetLimitConfig() (maxParticipants, softLimit int, limitsEnable
 // requests. When true, ProcessBuildRequest rejects every request before any
 // other limit check. Used by hidden-mode operation and by AcceptTunnels=false
 // to ensure the router never serves as a transit hop.
-func (m *Manager) SetRefuseAllTransit(refuse bool) {
+func (m *ParticipantManager) SetRefuseAllTransit(refuse bool) {
 	m.refuseAllTransit.Store(refuse)
 	log.WithFields(logger.Fields{
 		"at":     "Manager.SetRefuseAllTransit",
@@ -385,7 +385,7 @@ func (m *Manager) SetRefuseAllTransit(refuse bool) {
 
 // RefuseAllTransit reports whether the manager is currently rejecting all
 // incoming tunnel build requests.
-func (m *Manager) RefuseAllTransit() bool {
+func (m *ParticipantManager) RefuseAllTransit() bool {
 	return m.refuseAllTransit.Load()
 }
 
@@ -402,7 +402,7 @@ func (m *Manager) RefuseAllTransit() bool {
 //
 // Note: Per I2P specification, we use BuildReplyCodeBandwidth (30) for most
 // rejections to hide the specific rejection reason from peers.
-func (m *Manager) ProcessBuildRequest(sourceHash common.Hash) (accepted bool, rejectCode byte, reason string) {
+func (m *ParticipantManager) ProcessBuildRequest(sourceHash common.Hash) (accepted bool, rejectCode byte, reason string) {
 	// Check 0: hidden / no-transit mode — reject everything before consulting
 	// participation limits or rate limiters.
 	if m.refuseAllTransit.Load() {
@@ -462,7 +462,7 @@ func (m *Manager) ProcessBuildRequest(sourceHash common.Hash) (accepted bool, re
 //
 // The layerKey and ivKey are extracted from the BuildRequestRecord and used
 // to create the AES encryptor for tunnel layer decryption.
-func (m *Manager) RegisterParticipant(tunnelID TunnelID, sourceHash common.Hash, expiry time.Time, layerKey, ivKey session_key.SessionKey) error {
+func (m *ParticipantManager) RegisterParticipant(tunnelID TunnelID, sourceHash common.Hash, expiry time.Time, layerKey, ivKey session_key.SessionKey) error {
 	// Calculate lifetime from expiry
 	lifetime := time.Until(expiry)
 	if lifetime <= 0 {
@@ -511,7 +511,7 @@ func (m *Manager) RegisterParticipant(tunnelID TunnelID, sourceHash common.Hash,
 
 // GetSourceLimiterStats returns statistics about per-source rate limiting.
 // Returns nil if source limiting is not enabled.
-func (m *Manager) GetSourceLimiterStats() *SourceLimiterStats {
+func (m *ParticipantManager) GetSourceLimiterStats() *SourceLimiterStats {
 	if m.sourceLimiter == nil {
 		return nil
 	}
@@ -537,7 +537,7 @@ type TunnelLimitStats struct {
 }
 
 // GetLimitStats returns comprehensive statistics about all protection mechanisms.
-func (m *Manager) GetLimitStats() TunnelLimitStats {
+func (m *ParticipantManager) GetLimitStats() TunnelLimitStats {
 	current := m.ParticipantCount()
 	total, recent := m.GetRejectStats()
 	softLimit := m.softLimit()
@@ -567,7 +567,7 @@ func (m *Manager) GetLimitStats() TunnelLimitStats {
 // - Runs every 60 seconds (tunnels typically last 10 minutes)
 // - Logs statistics about cleaned up tunnels
 // - Gracefully stops when stopChan is closed
-func (m *Manager) cleanupLoop() {
+func (m *ParticipantManager) cleanupLoop() {
 	defer m.wg.Done()
 
 	ticker := time.NewTicker(60 * time.Second)
@@ -592,7 +592,7 @@ func (m *Manager) cleanupLoop() {
 // Tunnels are considered idle if no data has been processed within the idle timeout (2 minutes).
 // Dropping idle tunnels helps mitigate resource exhaustion attacks where attackers
 // request excessive tunnels but send no data through them.
-func (m *Manager) cleanupExpiredParticipants() {
+func (m *ParticipantManager) cleanupExpiredParticipants() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -602,7 +602,7 @@ func (m *Manager) cleanupExpiredParticipants() {
 }
 
 // categorizeParticipants separates participants into expired and idle lists.
-func (m *Manager) categorizeParticipants() (expired, idle []TunnelID) {
+func (m *ParticipantManager) categorizeParticipants() (expired, idle []TunnelID) {
 	now := time.Now()
 	for id, p := range m.participants {
 		if p.IsExpired(now) {
@@ -615,7 +615,7 @@ func (m *Manager) categorizeParticipants() (expired, idle []TunnelID) {
 }
 
 // removeParticipants deletes the specified tunnel IDs from the participants map.
-func (m *Manager) removeParticipants(expired, idle []TunnelID) {
+func (m *ParticipantManager) removeParticipants(expired, idle []TunnelID) {
 	for _, id := range expired {
 		delete(m.participants, id)
 	}
@@ -625,7 +625,7 @@ func (m *Manager) removeParticipants(expired, idle []TunnelID) {
 }
 
 // logCleanupResults logs information about cleaned up tunnels.
-func (m *Manager) logCleanupResults(expired, idle []TunnelID) {
+func (m *ParticipantManager) logCleanupResults(expired, idle []TunnelID) {
 	if len(expired) > 0 {
 		log.WithFields(logger.Fields{
 			"at":        "Manager.cleanupExpiredParticipants",
@@ -652,7 +652,7 @@ func (m *Manager) logCleanupResults(expired, idle []TunnelID) {
 // Also stops the source limiter if it was enabled.
 //
 // This should be called during router shutdown.
-func (m *Manager) Stop() {
+func (m *ParticipantManager) Stop() {
 	log.WithFields(logger.Fields{
 		"at":     "Manager.Stop",
 		"reason": "shutdown_requested",

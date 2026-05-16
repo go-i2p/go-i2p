@@ -31,12 +31,12 @@ func assertRouterRunning(t *testing.T, router *Router, expected bool, msg string
 // assertResourcesNilAfterClose asserts all router subsystem pointers are nil.
 func assertResourcesNilAfterClose(t *testing.T, router *Router) {
 	t.Helper()
-	assert.Nil(t, router.TransportMuxer, "TransportMuxer should be nil after Close()")
+	assert.Nil(t, router.transports, "TransportMuxer should be nil after Close()")
 	assert.Nil(t, router.messageRouter, "messageRouter should be nil after Close()")
 	assert.Nil(t, router.garlicRouter, "garlicRouter should be nil after Close()")
 	assert.Nil(t, router.tunnelManager, "tunnelManager should be nil after Close()")
-	assert.Nil(t, router.RouterInfoKeystore, "RouterInfoKeystore should be nil after Close()")
-	assert.Nil(t, router.StdNetDB, "StdNetDB should be nil after Close()")
+	assert.Nil(t, router.keystore, "RouterInfoKeystore should be nil after Close()")
+	assert.Nil(t, router.netdb, "StdNetDB should be nil after Close()")
 	assert.Nil(t, router.closeChnl, "closeChnl should be nil after Close()")
 }
 

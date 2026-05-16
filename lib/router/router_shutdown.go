@@ -128,8 +128,8 @@ func (r *Router) StopWithContext(ctx context.Context) error {
 
 // stopNetDB shuts down the network database if it exists and logs the result.
 func (r *Router) stopNetDB() {
-	if r.StdNetDB != nil {
-		r.StdNetDB.Stop()
+	if r.netdb != nil {
+		r.netdb.Stop()
 		logSubsystemStop("(Router) stopNetDB", "netDB")
 	}
 }
@@ -259,7 +259,7 @@ func (r *Router) ensureStopped() {
 // closeTransports closes the transport muxer and all underlying connections.
 // Returns the first error encountered during transport shutdown.
 func (r *Router) closeTransports() error {
-	if r.TransportMuxer == nil {
+	if r.transports == nil {
 		return nil
 	}
 
@@ -271,7 +271,7 @@ func (r *Router) closeTransports() error {
 	}).Debug("closing TransportMuxer")
 
 	var closeErr error
-	if err := r.TransportMuxer.Close(); err != nil {
+	if err := r.transports.Close(); err != nil {
 		log.WithError(err).WithFields(logger.Fields{
 			"at":     "(Router) Close",
 			"phase":  "finalization",
@@ -279,7 +279,7 @@ func (r *Router) closeTransports() error {
 		}).Warn("error closing transport muxer")
 		closeErr = err
 	}
-	r.TransportMuxer = nil
+	r.transports = nil
 	return closeErr
 }
 
@@ -329,7 +329,7 @@ func (r *Router) clearRoutingComponents() {
 	r.publisher = nil
 	r.explorer = nil
 	r.floodfillServer = nil
-	r.StdNetDB = nil
+	r.netdb = nil
 	r.runMux.Unlock()
 	log.WithFields(logger.Fields{
 		"at":     "(Router) Close",
@@ -339,7 +339,7 @@ func (r *Router) clearRoutingComponents() {
 	}).Debug("message router, garlic router, tunnel manager, publisher, and NetDB references cleared")
 
 	r.keystoreMux.Lock()
-	r.RouterInfoKeystore = nil
+	r.keystore = nil
 	r.keystoreMux.Unlock()
 	log.WithFields(logger.Fields{
 		"at":     "(Router) Close",

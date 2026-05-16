@@ -97,12 +97,12 @@ const introducerMaxCount = 3
 // problem. The introducer initiates RelayIntro containing a HolePunch that
 // allows the firewalled router to establish its first SSU2 session.
 func (r *Router) collectIntroducerCandidates(maxCount int) []router_info.RouterInfo {
-	if r.StdNetDB == nil {
+	if r.netdb == nil {
 		log.Debug("collectIntroducerCandidates: no netdb")
 		return nil
 	}
 
-	all := r.StdNetDB.GetAllRouterInfos()
+	all := r.netdb.GetAllRouterInfos()
 	ourHash, ourHashErr := r.getOurRouterHash()
 
 	log.WithFields(logger.Fields{

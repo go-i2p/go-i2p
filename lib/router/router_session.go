@@ -93,10 +93,10 @@ func (r *Router) retrieveRouterInfoWithTimeout(hash common.Hash) (*router_info.R
 
 // getRouterInfoChannel initiates a RouterInfo lookup and returns the result channel.
 func (r *Router) getRouterInfoChannel(hash common.Hash) (<-chan router_info.RouterInfo, error) {
-	if r.StdNetDB == nil {
+	if r.netdb == nil {
 		return nil, oops.Errorf("router NetDB not available")
 	}
-	routerInfoChan := r.StdNetDB.GetRouterInfo(hash)
+	routerInfoChan := r.netdb.GetRouterInfo(hash)
 	if routerInfoChan == nil {
 		return nil, oops.Errorf("no RouterInfo found for peer %x", hash[:8])
 	}
@@ -126,7 +126,7 @@ func (r *Router) establishOutboundSession(hash common.Hash, routerInfo *router_i
 		return nil, err
 	}
 
-	transportSession, err := r.TransportMuxer.GetSession(*routerInfo)
+	transportSession, err := r.transports.GetSession(*routerInfo)
 	if err != nil {
 		r.logSessionEstablishmentFailure(hash, routerInfo, err)
 		return nil, oops.Wrapf(err, "failed to establish outbound session")
@@ -137,7 +137,7 @@ func (r *Router) establishOutboundSession(hash common.Hash, routerInfo *router_i
 
 // validateTransportMuxer checks if the transport muxer is initialized.
 func (r *Router) validateTransportMuxer(hash common.Hash) error {
-	if r.TransportMuxer == nil {
+	if r.transports == nil {
 		log.WithFields(logger.Fields{
 			"at":        "Router.GetSessionByHash",
 			"phase":     "session_establishment",

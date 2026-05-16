@@ -11,7 +11,7 @@ import (
 
 // setupManagerWithParticipant creates a new Manager, adds a Participant with the
 // given tunnel ID, and registers cleanup. Used by manager_unit_test.go.
-func setupManagerWithParticipant(t *testing.T, tunnelID TunnelID) (*Manager, *Participant) {
+func setupManagerWithParticipant(t *testing.T, tunnelID TunnelID) (*ParticipantManager, *Participant) {
 	t.Helper()
 	m := NewManager()
 	t.Cleanup(m.Stop)

@@ -63,7 +63,7 @@ func (r *Router) createI2CPServer() (*i2cp.Server, error) {
 
 // configureI2CPServerInfrastructure sets up NetDB, auth, bandwidth, tunnels, and peer selection.
 func (r *Router) configureI2CPServerInfrastructure(server *i2cp.Server) {
-	server.SetNetDB(r.StdNetDB)
+	server.SetNetDB(r.netdb)
 	r.configureI2CPRouterHash(server)
 	r.configureI2CPAuth(server)
 	server.SetBandwidthProvider(&routerBandwidthProvider{cfg: r.cfg})
@@ -112,7 +112,7 @@ func (r *Router) configureI2CPTunnelBuilder(server *i2cp.Server) {
 
 // configureI2CPPeerSelector creates and sets the peer selector for I2CP sessions.
 func (r *Router) configureI2CPPeerSelector(server *i2cp.Server) {
-	peerSelector, err := tunnel.NewDefaultPeerSelector(r.StdNetDB)
+	peerSelector, err := tunnel.NewDefaultPeerSelector(r.netdb)
 	if err != nil {
 		log.WithError(err).Warn("Failed to create peer selector for I2CP sessions")
 		return
@@ -136,7 +136,7 @@ func (r *Router) configureI2CPHostnameResolver(server *i2cp.Server) {
 
 // configureI2CPDestinationResolver creates and sets the destination resolver for I2CP.
 func (r *Router) configureI2CPDestinationResolver(server *i2cp.Server) {
-	destResolver := netdb.NewDestinationResolver(r.StdNetDB)
+	destResolver := netdb.NewDestinationResolver(r.netdb)
 	server.SetDestinationResolver(destResolver)
 	log.WithFields(logger.Fields{"at": "configureI2CPServerInfrastructure"}).Debug("I2CP server: destination resolver configured")
 }
@@ -145,7 +145,7 @@ func (r *Router) configureI2CPDestinationResolver(server *i2cp.Server) {
 // The MessageRouter handles outbound message encryption via garlic sessions and
 // sends encrypted messages through the transport layer to tunnel gateways.
 func (r *Router) wireI2CPMessageRouter(server *i2cp.Server) {
-	privKeyBytes := r.RouterInfoKeystore.GetEncryptionPrivateKey().Bytes()
+	privKeyBytes := r.keystore.GetEncryptionPrivateKey().Bytes()
 	var privKey [32]byte
 	copy(privKey[:], privKeyBytes)
 

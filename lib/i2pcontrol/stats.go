@@ -237,27 +237,6 @@ type routerStatsProvider struct {
 	lastSampleAt time.Time
 }
 
-// RouterAccess defines the minimal interface needed to collect router statistics.
-// This allows the stats provider to work with the real Router or test mocks.
-//
-// Design rationale:
-//   - Minimal interface (only what we actually need)
-//   - Read-only operations (stats collection doesn't modify router)
-//   - Allows easy mocking for tests
-type RouterAccess interface {
-	// RouterInfoReader provides access to router configuration and components
-	RouterInfoReader
-
-	// BandwidthReader provides access to bandwidth statistics
-	BandwidthReader
-
-	// NetworkStatusReader provides access to network status and session counts
-	NetworkStatusReader
-
-	// RouterController provides access to router control operations
-	RouterController
-}
-
 // NewRouterStatsProvider creates a new statistics provider for the given router.
 // The router parameter must implement the RouterAccess interface (or be a *router.Router).
 //
@@ -341,26 +320,38 @@ func (rsp *routerStatsProvider) determineRouterStatus() string {
 // collectNetDBStats populates NetDB statistics in the provided RouterInfoStats.
 // Collects peer counts including known, active, fast, and high-capacity peers.
 func (rsp *routerStatsProvider) collectNetDBStats(stats *RouterInfoStats) {
-	netdb := rsp.router.GetNetDB()
-	if netdb == nil {
+	netdbReader := rsp.router.GetNetDB()
+	if netdbReader == nil {
 		return
 	}
 
-	stats.KnownPeers = netdb.GetRouterInfoCount()
-	stats.ActivePeersCount = netdb.GetActivePeerCount()
-	stats.FastPeersCount = netdb.GetFastPeerCount()
-	stats.HighCapacityPeersCount = netdb.GetHighCapacityPeerCount()
+	// Type-assert to check for nil pointer wrapped in interface
+	concreteNetDB, ok := netdbReader.(*netdb.StdNetDB)
+	if !ok || concreteNetDB == nil {
+		return
+	}
+
+	stats.KnownPeers = netdbReader.GetRouterInfoCount()
+	stats.ActivePeersCount = netdbReader.GetActivePeerCount()
+	stats.FastPeersCount = netdbReader.GetFastPeerCount()
+	stats.HighCapacityPeersCount = netdbReader.GetHighCapacityPeerCount()
 }
 
 // collectParticipatingTunnelStats populates participating tunnel count in the provided RouterInfoStats.
 // Collects the count of tunnels this router is participating in from the participant manager.
 func (rsp *routerStatsProvider) collectParticipatingTunnelStats(stats *RouterInfoStats) {
-	pm := rsp.router.GetParticipantManager()
-	if pm == nil {
+	pmReader := rsp.router.GetParticipantManager()
+	if pmReader == nil {
 		return
 	}
 
-	stats.ParticipatingTunnels = pm.ParticipantCount()
+	// Type-assert to check for nil pointer wrapped in interface
+	concretePM, ok := pmReader.(*tunnel.ParticipantManager)
+	if !ok || concretePM == nil {
+		return
+	}
+
+	stats.ParticipatingTunnels = pmReader.ParticipantCount()
 }
 
 // collectTunnelStats populates tunnel statistics in the provided RouterInfoStats.
@@ -417,16 +408,25 @@ func (rsp *routerStatsProvider) GetNetDBStats() NetDBStats {
 	stats := NetDBStats{}
 
 	// Collect NetDB statistics if available
-	if netdb := rsp.router.GetNetDB(); netdb != nil {
-		stats.RouterInfos = netdb.GetRouterInfoCount()
-		stats.LeaseSets = netdb.GetLeaseSetCount()
-		stats.Floodfill = netdb.IsFloodfill()
-		log.WithFields(map[string]interface{}{
-			"router_infos": stats.RouterInfos,
-			"lease_sets":   stats.LeaseSets,
-			"floodfill":    stats.Floodfill,
-		}).Debug("collected NetDB stats")
+	netdbReader := rsp.router.GetNetDB()
+	if netdbReader == nil {
+		return stats
 	}
+
+	// Type-assert to check for nil pointer wrapped in interface
+	concreteNetDB, ok := netdbReader.(*netdb.StdNetDB)
+	if !ok || concreteNetDB == nil {
+		return stats
+	}
+
+	stats.RouterInfos = netdbReader.GetRouterInfoCount()
+	stats.LeaseSets = netdbReader.GetLeaseSetCount()
+	stats.Floodfill = netdbReader.IsFloodfill()
+	log.WithFields(map[string]interface{}{
+		"router_infos": stats.RouterInfos,
+		"lease_sets":   stats.LeaseSets,
+		"floodfill":    stats.Floodfill,
+	}).Debug("collected NetDB stats")
 
 	return stats
 }
@@ -640,8 +640,13 @@ func (rsp *routerStatsProvider) maybeRecordSample() {
 	rsp.bwInWindow.Record(float64(inbound))
 	rsp.bwOutWindow.Record(float64(outbound))
 
-	if pm := rsp.router.GetParticipantManager(); pm != nil {
-		rsp.partWindow.Record(float64(pm.ParticipantCount()))
+	pmReader := rsp.router.GetParticipantManager()
+	if pmReader != nil {
+		// Type-assert to check for nil pointer wrapped in interface
+		concretePM, ok := pmReader.(*tunnel.ParticipantManager)
+		if ok && concretePM != nil {
+			rsp.partWindow.Record(float64(pmReader.ParticipantCount()))
+		}
 	}
 }
 
@@ -769,7 +774,7 @@ type RealRouter struct {
 	Router interface {
 		GetNetDB() *netdb.StdNetDB
 		GetTunnelManager() i2np.TunnelOrchestrator
-		GetParticipantManager() *tunnel.Manager
+		GetParticipantManager() *tunnel.ParticipantManager
 		GetConfig() *config.RouterConfig
 		IsRunning() bool
 		IsReseeding() bool
@@ -786,8 +791,8 @@ type RealRouter struct {
 	}
 }
 
-// GetNetDB returns the NetDB (implements RouterAccess)
-func (rr RealRouter) GetNetDB() *netdb.StdNetDB {
+// GetNetDB returns the NetDB stats reader (implements RouterInfoReader)
+func (rr RealRouter) GetNetDB() NetDBStatsReader {
 	return rr.Router.GetNetDB()
 }
 
@@ -796,8 +801,8 @@ func (rr RealRouter) GetTunnelManager() i2np.TunnelOrchestrator {
 	return rr.Router.GetTunnelManager()
 }
 
-// GetParticipantManager returns the participant manager (implements RouterAccess)
-func (rr RealRouter) GetParticipantManager() *tunnel.Manager {
+// GetParticipantManager returns the participant stats reader (implements RouterInfoReader)
+func (rr RealRouter) GetParticipantManager() ParticipantStatsReader {
 	return rr.Router.GetParticipantManager()
 }
 

@@ -64,6 +64,17 @@ func bind(v *viper.Viper, cmd *cobra.Command, viperKey, flagName string) error {
 	return nil
 }
 
+// bindPairs calls bind for each (viperKey, flagName) pair in pairs.
+// Returns the first binding error encountered, or nil.
+func bindPairs(cmd *cobra.Command, v *viper.Viper, pairs [][2]string) error {
+	for _, p := range pairs {
+		if err := bind(v, cmd, p[0], p[1]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // ── registration ─────────────────────────────────────────────────────────────
 
 func registerGlobalFlags(cmd *cobra.Command) {
@@ -324,7 +335,7 @@ func registerCongestionFlags(cmd *cobra.Command) {
 // ── binding ───────────────────────────────────────────────────────────────────
 
 func bindRouterFlags(cmd *cobra.Command, v *viper.Viper) error {
-	pairs := [][2]string{
+	return bindPairs(cmd, v, [][2]string{
 		{"base_dir", "base-dir"},
 		{"working_dir", "working-dir"},
 		{"router.max_bandwidth", "router.max-bandwidth"},
@@ -334,17 +345,11 @@ func bindRouterFlags(cmd *cobra.Command, v *viper.Viper) error {
 		{"router.info_refresh_interval", "router.info-refresh-interval"},
 		{"router.message_expiration_time", "router.message-expiration-time"},
 		{"router.max_concurrent_sessions", "router.max-concurrent-sessions"},
-	}
-	for _, p := range pairs {
-		if err := bind(v, cmd, p[0], p[1]); err != nil {
-			return err
-		}
-	}
-	return nil
+	})
 }
 
 func bindNetDBFlags(cmd *cobra.Command, v *viper.Viper) error {
-	pairs := [][2]string{
+	return bindPairs(cmd, v, [][2]string{
 		{"netdb.path", "netdb.path"},
 		{"netdb.max_router_infos", "netdb.max-router-infos"},
 		{"netdb.max_lease_sets", "netdb.max-lease-sets"},
@@ -352,17 +357,11 @@ func bindNetDBFlags(cmd *cobra.Command, v *viper.Viper) error {
 		{"netdb.lease_set_refresh_threshold", "netdb.lease-set-refresh-threshold"},
 		{"netdb.exploration_interval", "netdb.exploration-interval"},
 		{"netdb.floodfill_enabled", "netdb.floodfill-enabled"},
-	}
-	for _, p := range pairs {
-		if err := bind(v, cmd, p[0], p[1]); err != nil {
-			return err
-		}
-	}
-	return nil
+	})
 }
 
 func bindBootstrapFlags(cmd *cobra.Command, v *viper.Viper) error {
-	pairs := [][2]string{
+	return bindPairs(cmd, v, [][2]string{
 		{"bootstrap.low_peer_threshold", "bootstrap.low-peer-threshold"},
 		{"bootstrap.bootstrap_type", "bootstrap.type"},
 		{"bootstrap.reseed_file_path", "bootstrap.reseed-file"},
@@ -371,17 +370,11 @@ func bindBootstrapFlags(cmd *cobra.Command, v *viper.Viper) error {
 		{"bootstrap.reseed_retry_interval", "bootstrap.reseed-retry-interval"},
 		{"bootstrap.min_reseed_servers", "bootstrap.min-reseed-servers"},
 		{"bootstrap.reseed_strategy", "bootstrap.reseed-strategy"},
-	}
-	for _, p := range pairs {
-		if err := bind(v, cmd, p[0], p[1]); err != nil {
-			return err
-		}
-	}
-	return nil
+	})
 }
 
 func bindI2CPFlags(cmd *cobra.Command, v *viper.Viper) error {
-	pairs := [][2]string{
+	return bindPairs(cmd, v, [][2]string{
 		{"i2cp.enabled", "i2cp.enabled"},
 		{"i2cp.address", "i2cp.address"},
 		{"i2cp.network", "i2cp.network"},
@@ -392,17 +385,11 @@ func bindI2CPFlags(cmd *cobra.Command, v *viper.Viper) error {
 		{"i2cp.session_timeout", "i2cp.session-timeout"},
 		{"i2cp.read_timeout", "i2cp.read-timeout"},
 		{"i2cp.write_timeout", "i2cp.write-timeout"},
-	}
-	for _, p := range pairs {
-		if err := bind(v, cmd, p[0], p[1]); err != nil {
-			return err
-		}
-	}
-	return nil
+	})
 }
 
 func bindI2PControlFlags(cmd *cobra.Command, v *viper.Viper) error {
-	pairs := [][2]string{
+	return bindPairs(cmd, v, [][2]string{
 		{"i2pcontrol.enabled", "i2pcontrol.enabled"},
 		{"i2pcontrol.address", "i2pcontrol.address"},
 		{"i2pcontrol.password", "i2pcontrol.password"},
@@ -410,17 +397,11 @@ func bindI2PControlFlags(cmd *cobra.Command, v *viper.Viper) error {
 		{"i2pcontrol.cert_file", "i2pcontrol.cert-file"},
 		{"i2pcontrol.key_file", "i2pcontrol.key-file"},
 		{"i2pcontrol.token_expiration", "i2pcontrol.token-expiration"},
-	}
-	for _, p := range pairs {
-		if err := bind(v, cmd, p[0], p[1]); err != nil {
-			return err
-		}
-	}
-	return nil
+	})
 }
 
 func bindTransportFlags(cmd *cobra.Command, v *viper.Viper) error {
-	pairs := [][2]string{
+	return bindPairs(cmd, v, [][2]string{
 		{"transport.ntcp2_enabled", "transport.ntcp2-enabled"},
 		{"transport.ntcp2_port", "transport.ntcp2-port"},
 		{"transport.ntcp2_max_connections", "transport.ntcp2-max-connections"},
@@ -429,17 +410,11 @@ func bindTransportFlags(cmd *cobra.Command, v *viper.Viper) error {
 		{"transport.connection_timeout", "transport.connection-timeout"},
 		{"transport.idle_timeout", "transport.idle-timeout"},
 		{"transport.max_message_size", "transport.max-message-size"},
-	}
-	for _, p := range pairs {
-		if err := bind(v, cmd, p[0], p[1]); err != nil {
-			return err
-		}
-	}
-	return nil
+	})
 }
 
 func bindTunnelFlags(cmd *cobra.Command, v *viper.Viper) error {
-	pairs := [][2]string{
+	return bindPairs(cmd, v, [][2]string{
 		{"tunnel.min_pool_size", "tunnel.min-pool-size"},
 		{"tunnel.max_pool_size", "tunnel.max-pool-size"},
 		{"tunnel.length", "tunnel.length"},
@@ -456,33 +431,21 @@ func bindTunnelFlags(cmd *cobra.Command, v *viper.Viper) error {
 		{"tunnel.max_build_requests_per_minute", "tunnel.max-build-requests-per-minute"},
 		{"tunnel.build_request_burst_size", "tunnel.build-request-burst-size"},
 		{"tunnel.source_ban_duration", "tunnel.source-ban-duration"},
-	}
-	for _, p := range pairs {
-		if err := bind(v, cmd, p[0], p[1]); err != nil {
-			return err
-		}
-	}
-	return nil
+	})
 }
 
 func bindPerformanceFlags(cmd *cobra.Command, v *viper.Viper) error {
-	pairs := [][2]string{
+	return bindPairs(cmd, v, [][2]string{
 		{"performance.message_queue_size", "performance.message-queue-size"},
 		{"performance.worker_pool_size", "performance.worker-pool-size"},
 		{"performance.garlic_encryption_cache_size", "performance.garlic-encryption-cache-size"},
 		{"performance.fragment_cache_size", "performance.fragment-cache-size"},
 		{"performance.cleanup_interval", "performance.cleanup-interval"},
-	}
-	for _, p := range pairs {
-		if err := bind(v, cmd, p[0], p[1]); err != nil {
-			return err
-		}
-	}
-	return nil
+	})
 }
 
 func bindCongestionFlags(cmd *cobra.Command, v *viper.Viper) error {
-	pairs := [][2]string{
+	return bindPairs(cmd, v, [][2]string{
 		{"router.congestion.d_flag_threshold", "congestion.d-flag-threshold"},
 		{"router.congestion.e_flag_threshold", "congestion.e-flag-threshold"},
 		{"router.congestion.g_flag_threshold", "congestion.g-flag-threshold"},
@@ -494,11 +457,5 @@ func bindCongestionFlags(cmd *cobra.Command, v *viper.Viper) error {
 		{"router.congestion.d_flag_capacity_multiplier", "congestion.d-flag-capacity-multiplier"},
 		{"router.congestion.e_flag_capacity_multiplier", "congestion.e-flag-capacity-multiplier"},
 		{"router.congestion.stale_e_flag_capacity_multiplier", "congestion.stale-e-flag-capacity-multiplier"},
-	}
-	for _, p := range pairs {
-		if err := bind(v, cmd, p[0], p[1]); err != nil {
-			return err
-		}
-	}
-	return nil
+	})
 }

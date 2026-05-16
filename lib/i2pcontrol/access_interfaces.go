@@ -3,24 +3,53 @@ package i2pcontrol
 import (
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/i2np"
-	"github.com/go-i2p/go-i2p/lib/netdb"
-	"github.com/go-i2p/go-i2p/lib/tunnel"
 )
+
+// NetDBStatsReader provides read-only access to network database statistics.
+// This narrow interface decouples I2PControl stats collection from the full NetDB API.
+type NetDBStatsReader interface {
+	// GetRouterInfoCount returns the number of RouterInfo entries in the database.
+	GetRouterInfoCount() int
+
+	// GetActivePeerCount returns the number of active peers.
+	GetActivePeerCount() int
+
+	// GetFastPeerCount returns the number of fast-tier peers.
+	GetFastPeerCount() int
+
+	// GetHighCapacityPeerCount returns the number of high-capacity peers.
+	GetHighCapacityPeerCount() int
+
+	// GetLeaseSetCount returns the number of LeaseSets in the database.
+	GetLeaseSetCount() int
+
+	// IsFloodfill returns whether this router is a floodfill router.
+	IsFloodfill() bool
+}
+
+// ParticipantStatsReader provides read-only access to tunnel participant statistics.
+// This narrow interface decouples I2PControl stats collection from the full tunnel manager API.
+type ParticipantStatsReader interface {
+	// ParticipantCount returns the number of tunnels this router is currently participating in.
+	ParticipantCount() int
+}
 
 // RouterInfoReader provides access to router configuration and component information.
 // This interface is used by handlers that need router metadata, configuration, and subsystem access.
+// Decouples I2PControl from router internals by returning narrow, use-case-specific interfaces
+// rather than full subsystem types.
 type RouterInfoReader interface {
 	// GetConfig returns the router configuration.
 	GetConfig() *config.RouterConfig
 
-	// GetNetDB returns the network database.
-	GetNetDB() *netdb.StdNetDB
+	// GetNetDB returns a read-only network database stats interface.
+	GetNetDB() NetDBStatsReader
 
 	// GetTunnelManager returns the tunnel manager for tunnel statistics.
 	GetTunnelManager() i2np.TunnelOrchestrator
 
-	// GetParticipantManager returns the participant manager for transit tunnel statistics.
-	GetParticipantManager() *tunnel.Manager
+	// GetParticipantManager returns a read-only participant stats interface.
+	GetParticipantManager() ParticipantStatsReader
 
 	// GetTransportAddr returns the listening address of the first available transport.
 	// Returns nil if no transports are available.
@@ -71,4 +100,25 @@ type RouterController interface {
 
 	// Reseed triggers a manual NetDB reseed operation.
 	Reseed() error
+}
+
+// RouterAccess defines the minimal interface needed to collect router statistics.
+// This allows the stats provider to work with the real Router or test mocks.
+//
+// Design rationale:
+//   - Minimal interface (only what we actually need)
+//   - Read-only operations (stats collection doesn't modify router)
+//   - Allows easy mocking for tests
+type RouterAccess interface {
+	// RouterInfoReader provides access to router configuration and components
+	RouterInfoReader
+
+	// BandwidthReader provides access to bandwidth statistics
+	BandwidthReader
+
+	// NetworkStatusReader provides access to network status and session counts
+	NetworkStatusReader
+
+	// RouterController provides access to router control operations
+	RouterController
 }
