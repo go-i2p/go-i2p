@@ -37,7 +37,7 @@ type Router struct {
 	// netdb
 	*netdb.StdNetDB
 	// message router for processing I2NP messages
-	messageRouter *i2np.MessageDispatcher
+	messageRouter *i2np.I2NPMessageDispatcher
 	// garlic message router for handling non-LOCAL garlic clove forwarding
 	garlicRouter *GarlicMessageRouter
 	// router configuration

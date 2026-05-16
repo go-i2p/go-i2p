@@ -620,7 +620,7 @@ func TestE2E_OutboundMessageRouting(t *testing.T) {
 
 	// Verify sent message is a Garlic message
 	for _, msg := range sentMessages {
-		assert.Equal(t, i2np.MessageTypeGarlic, msg.Type())
+		assert.Equal(t, i2np.I2NPMessageTypeGarlic, msg.Type())
 	}
 }
 

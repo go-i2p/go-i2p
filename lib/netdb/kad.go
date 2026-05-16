@@ -627,10 +627,10 @@ func (kr *KademliaResolver) getPeerRouterInfo(peerHash common.Hash) *router_info
 // It parses either a DatabaseStore (success) or DatabaseSearchReply (not found, try these peers).
 func (kr *KademliaResolver) processLookupResponse(data []byte, msgType int, targetHash common.Hash) (*router_info.RouterInfo, error) {
 	switch msgType {
-	case i2np.MessageTypeDatabaseStore:
+	case i2np.I2NPMessageTypeDatabaseStore:
 		return kr.processDatabaseStoreResponse(data, targetHash)
 
-	case i2np.MessageTypeDatabaseSearchReply:
+	case i2np.I2NPMessageTypeDatabaseSearchReply:
 		return kr.processDatabaseSearchReplyResponse(data, targetHash)
 
 	default:

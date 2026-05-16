@@ -141,7 +141,7 @@ func newTestLogger(name string) *logger.Entry {
 // newTestI2NPMessage creates a valid I2NP DeliveryStatus message with the
 // given payload bytes. DeliveryStatus (type 10) is the simplest I2NP type.
 func newTestI2NPMessage(payload []byte) *i2np.BaseI2NPMessage {
-	msg := i2np.NewBaseI2NPMessage(i2np.MessageTypeDeliveryStatus)
+	msg := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeDeliveryStatus)
 	msg.SetData(payload)
 	return msg
 }

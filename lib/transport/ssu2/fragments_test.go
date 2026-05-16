@@ -10,7 +10,7 @@ import (
 )
 
 func TestFragmentI2NPMessage_NoFragmentation(t *testing.T) {
-	msg := i2np.NewBaseI2NPMessage(i2np.MessageTypeData)
+	msg := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeData)
 	msg.SetData([]byte("small payload"))
 	blocks, err := FragmentI2NPMessage(msg, maxSSU2PayloadIPv4)
 	require.NoError(t, err)
@@ -19,7 +19,7 @@ func TestFragmentI2NPMessage_NoFragmentation(t *testing.T) {
 }
 
 func TestFragmentI2NPMessage_RequiresFragmentation(t *testing.T) {
-	msg := i2np.NewBaseI2NPMessage(i2np.MessageTypeData)
+	msg := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeData)
 	largePayload := make([]byte, 2000)
 	for i := range largePayload {
 		largePayload[i] = byte(i % 256)

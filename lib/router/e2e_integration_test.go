@@ -455,7 +455,7 @@ func (env *e2eTestEnvironment) ExtractSentGarlicMessage(t *testing.T) i2np.Messa
 	}
 
 	msg := env.sentMessages[0]
-	assert.Equal(t, i2np.MessageTypeGarlic, msg.Type(), "Should be a garlic message")
+	assert.Equal(t, i2np.I2NPMessageTypeGarlic, msg.Type(), "Should be a garlic message")
 	return msg
 }
 
@@ -468,7 +468,7 @@ func (env *e2eTestEnvironment) ExtractAllSentGarlicMessages(t *testing.T) []i2np
 	copy(messages, env.sentMessages)
 
 	for _, msg := range messages {
-		assert.Equal(t, i2np.MessageTypeGarlic, msg.Type(), "All messages should be garlic")
+		assert.Equal(t, i2np.I2NPMessageTypeGarlic, msg.Type(), "All messages should be garlic")
 	}
 
 	return messages

@@ -812,7 +812,7 @@ func (r *Router) initializeNetDB() error {
 
 // initializeMessageRouter sets up message routing with NetDB integration
 func (r *Router) initializeMessageRouter() {
-	messageConfig := i2np.MessageDispatcherConfig{
+	messageConfig := i2np.I2NPMessageDispatcherConfig{
 		MaxRetries:     3,
 		DefaultTimeout: 30 * time.Second,
 		EnableLogging:  true,

@@ -38,7 +38,7 @@ func TestMessageRouterSessionProvider(t *testing.T) {
 	}
 
 	// Create a MessageRouter with configuration
-	messageConfig := i2np.MessageDispatcherConfig{
+	messageConfig := i2np.I2NPMessageDispatcherConfig{
 		MaxRetries:     3,
 		DefaultTimeout: 30 * time.Second,
 		EnableLogging:  true,
@@ -106,7 +106,7 @@ func TestInitializeMessageRouterWithSessionProvider(t *testing.T) {
 	}
 
 	// Initialize the MessageRouter (without NetDB for this unit test)
-	messageConfig := i2np.MessageDispatcherConfig{
+	messageConfig := i2np.I2NPMessageDispatcherConfig{
 		MaxRetries:     3,
 		DefaultTimeout: 30 * time.Second,
 		EnableLogging:  true,
@@ -192,7 +192,7 @@ func TestMessageRouterWithMockSessionProvider(t *testing.T) {
 	}
 
 	// Create a MessageRouter
-	messageConfig := i2np.MessageDispatcherConfig{
+	messageConfig := i2np.I2NPMessageDispatcherConfig{
 		MaxRetries:     3,
 		DefaultTimeout: 30 * time.Second,
 		EnableLogging:  false, // Disable logging for cleaner test output

@@ -20,7 +20,7 @@ func (f *failMarshalMsg) MarshalBinary() ([]byte, error) {
 }
 
 func TestFrameI2NPToBlock(t *testing.T) {
-	msg := i2np.NewBaseI2NPMessage(i2np.MessageTypeData)
+	msg := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeData)
 	msg.SetData([]byte("test payload"))
 	block, err := FrameI2NPToBlock(msg)
 	require.NoError(t, err)
@@ -29,7 +29,7 @@ func TestFrameI2NPToBlock(t *testing.T) {
 }
 
 func TestParseI2NPFromBlock(t *testing.T) {
-	msg := i2np.NewBaseI2NPMessage(i2np.MessageTypeData)
+	msg := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeData)
 	msg.SetData([]byte("test payload"))
 	block, err := FrameI2NPToBlock(msg)
 	require.NoError(t, err)
@@ -54,7 +54,7 @@ func TestParseI2NPFromBlock_EmptyData(t *testing.T) {
 }
 
 func TestFrameI2NPForSSU2Roundtrip(t *testing.T) {
-	msg := i2np.NewBaseI2NPMessage(i2np.MessageTypeDeliveryStatus)
+	msg := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeDeliveryStatus)
 	msg.SetData([]byte("delivery-data"))
 	data, err := FrameI2NPForSSU2(msg)
 	require.NoError(t, err)

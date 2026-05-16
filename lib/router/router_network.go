@@ -635,28 +635,28 @@ func safeMessageID(msg i2np.Message) (messageID int) {
 }
 
 // getRoutingComponents returns the message router and floodfill server under lock.
-func (r *Router) getRoutingComponents() (*i2np.MessageDispatcher, *netdb.FloodfillServer) {
+func (r *Router) getRoutingComponents() (*i2np.I2NPMessageDispatcher, *netdb.FloodfillServer) {
 	r.runMux.RLock()
 	defer r.runMux.RUnlock()
 	return r.messageRouter, r.floodfillServer
 }
 
 // dispatchByMessageType routes a message to the appropriate handler based on type.
-func (r *Router) dispatchByMessageType(msg i2np.Message, mr *i2np.MessageDispatcher, fs *netdb.FloodfillServer, fromPeer common.Hash) error {
+func (r *Router) dispatchByMessageType(msg i2np.Message, mr *i2np.I2NPMessageDispatcher, fs *netdb.FloodfillServer, fromPeer common.Hash) error {
 	switch msg.Type() {
-	case i2np.MessageTypeDatabaseStore:
+	case i2np.I2NPMessageTypeDatabaseStore:
 		return r.routeDatabaseStore(msg, mr, fromPeer)
-	case i2np.MessageTypeDatabaseLookup:
+	case i2np.I2NPMessageTypeDatabaseLookup:
 		return r.routeDatabaseLookup(msg, mr, fs)
-	case i2np.MessageTypeDatabaseSearchReply:
+	case i2np.I2NPMessageTypeDatabaseSearchReply:
 		return mr.RouteDatabaseMessage(msg)
-	case i2np.MessageTypeData, i2np.MessageTypeDeliveryStatus,
-		i2np.MessageTypeGarlic, i2np.MessageTypeTunnelData,
-		i2np.MessageTypeTunnelGateway:
+	case i2np.I2NPMessageTypeData, i2np.I2NPMessageTypeDeliveryStatus,
+		i2np.I2NPMessageTypeGarlic, i2np.I2NPMessageTypeTunnelData,
+		i2np.I2NPMessageTypeTunnelGateway:
 		return mr.RouteMessage(msg)
-	case i2np.MessageTypeTunnelBuild, i2np.MessageTypeTunnelBuildReply,
-		i2np.MessageTypeVariableTunnelBuild, i2np.MessageTypeVariableTunnelBuildReply,
-		i2np.MessageTypeShortTunnelBuild, i2np.MessageTypeShortTunnelBuildReply:
+	case i2np.I2NPMessageTypeTunnelBuild, i2np.I2NPMessageTypeTunnelBuildReply,
+		i2np.I2NPMessageTypeVariableTunnelBuild, i2np.I2NPMessageTypeVariableTunnelBuildReply,
+		i2np.I2NPMessageTypeShortTunnelBuild, i2np.I2NPMessageTypeShortTunnelBuildReply:
 		return mr.GetProcessor().ProcessMessage(msg)
 	default:
 		return oops.Errorf("unsupported message type: %d", msg.Type())
@@ -664,7 +664,7 @@ func (r *Router) dispatchByMessageType(msg i2np.Message, mr *i2np.MessageDispatc
 }
 
 // routeDatabaseStore handles DatabaseStore message routing.
-func (r *Router) routeDatabaseStore(msg i2np.Message, mr *i2np.MessageDispatcher, fromPeer common.Hash) error {
+func (r *Router) routeDatabaseStore(msg i2np.Message, mr *i2np.I2NPMessageDispatcher, fromPeer common.Hash) error {
 	dbStore, err := r.parseDatabaseStoreMessage(msg)
 	if err != nil {
 		return oops.Wrapf(err, "failed to parse DatabaseStore message")
@@ -673,7 +673,7 @@ func (r *Router) routeDatabaseStore(msg i2np.Message, mr *i2np.MessageDispatcher
 }
 
 // routeDatabaseLookup handles DatabaseLookup message routing with optional floodfill handling.
-func (r *Router) routeDatabaseLookup(msg i2np.Message, mr *i2np.MessageDispatcher, fs *netdb.FloodfillServer) error {
+func (r *Router) routeDatabaseLookup(msg i2np.Message, mr *i2np.I2NPMessageDispatcher, fs *netdb.FloodfillServer) error {
 	if fs != nil {
 		if lookup, err := r.parseDatabaseLookupMessage(msg); err == nil {
 			if err := fs.HandleDatabaseLookup(lookup); err != nil {

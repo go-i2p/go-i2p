@@ -185,7 +185,7 @@ func TestSendDatabaseStoreToFloodfill_RouterInfoFallsBackToDirectTransport(t *te
 
 	sentMessages := transport.GetSentMessages(floodfillHash)
 	require.Len(t, sentMessages, 1, "Expected direct DatabaseStore message to floodfill")
-	assert.Equal(t, i2np.MessageTypeDatabaseStore, sentMessages[0].Type(), "Expected direct DatabaseStore message type")
+	assert.Equal(t, i2np.I2NPMessageTypeDatabaseStore, sentMessages[0].Type(), "Expected direct DatabaseStore message type")
 }
 
 // TestSendDatabaseStoreToFloodfill_WithActiveTunnel tests successful tunnel selection and message transmission
@@ -211,7 +211,7 @@ func TestSendDatabaseStoreToFloodfill_WithActiveTunnel(t *testing.T) {
 
 	// Verify message is a TunnelGateway message
 	msg := sentMessages[0]
-	assert.Equal(t, i2np.MessageTypeTunnelGateway, msg.Type(), "Expected TunnelGateway message type")
+	assert.Equal(t, i2np.I2NPMessageTypeTunnelGateway, msg.Type(), "Expected TunnelGateway message type")
 }
 
 // TestSendDatabaseStoreToFloodfill_TunnelWithNoHops tests error handling for invalid tunnels
