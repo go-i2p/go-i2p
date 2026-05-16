@@ -1,0 +1,150 @@
+package embedded
+
+import (
+	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
+)
+
+func (e *StandardEmbeddedRouter) Start() error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if !e.configured {
+		return oops.Errorf("router must be configured before starting")
+	}
+
+	if e.running {
+		return oops.Errorf("router is already running")
+	}
+
+	if e.router == nil {
+		return oops.Errorf("router instance is nil - configuration may have failed")
+	}
+
+	log.WithFields(logger.Fields{
+		"at":     "StandardEmbeddedRouter.Start",
+		"phase":  "startup",
+		"reason": "starting router subsystems",
+	}).Info("starting embedded router")
+
+	// Start the router subsystems
+	if err := e.router.Start(); err != nil {
+		return oops.Wrapf(err, "router startup failed")
+	}
+	e.running = true
+	e.done = make(chan struct{})
+
+	log.WithFields(logger.Fields{
+		"at":     "StandardEmbeddedRouter.Start",
+		"phase":  "running",
+		"reason": "router subsystems started successfully",
+	}).Info("embedded router started successfully")
+
+	return nil
+}
+
+// Stop performs graceful shutdown of the router.
+// This method stops all router subsystems and waits for them to shut down cleanly.
+// The mutex is released before calling router.Stop() to prevent deadlock with
+// goroutines that call IsRunning() during shutdown.
+
+func (e *StandardEmbeddedRouter) Stop() error {
+	e.mu.Lock()
+
+	if !e.running {
+		e.mu.Unlock()
+		log.WithFields(logger.Fields{
+			"at":     "StandardEmbeddedRouter.Stop",
+			"phase":  "shutdown",
+			"reason": "router is not running",
+		}).Debug("stop called on non-running router")
+		return nil
+	}
+
+	if e.router == nil {
+		e.mu.Unlock()
+		return oops.Errorf("router instance is nil")
+	}
+
+	log.WithFields(logger.Fields{
+		"at":     "StandardEmbeddedRouter.Stop",
+		"phase":  "shutdown",
+		"reason": "initiating graceful shutdown",
+	}).Info("stopping embedded router")
+
+	// Capture the router and mark as not running before releasing the lock.
+	// This prevents new operations from starting while we shut down, and
+	// prevents deadlock with goroutines calling IsRunning() during router.Stop().
+	r := e.router
+	e.running = false
+	doneCh := e.done
+	e.mu.Unlock()
+
+	// Stop the router subsystems (potentially blocking) without holding the lock
+	r.Stop()
+
+	// Signal Wait() callers that the router has stopped.
+	if doneCh != nil {
+		close(doneCh)
+	}
+
+	log.WithFields(logger.Fields{
+		"at":     "StandardEmbeddedRouter.Stop",
+		"phase":  "shutdown",
+		"reason": "router stopped successfully",
+	}).Info("embedded router stopped")
+
+	return nil
+}
+
+// HardStop performs immediate termination without graceful cleanup.
+// Unlike Stop(), this does not wait for subsystems to shut down cleanly.
+// It calls StopWithContext() with a 5-second deadline, then marks the router stopped.
+// Use this only when Stop() fails or when immediate termination is required.
+
+func (e *StandardEmbeddedRouter) Wait() {
+	e.mu.RLock()
+	running := e.running
+	doneCh := e.done
+	e.mu.RUnlock()
+
+	if !running || doneCh == nil {
+		log.WithFields(logger.Fields{
+			"at":     "StandardEmbeddedRouter.Wait",
+			"phase":  "waiting",
+			"reason": "router is not running",
+		}).Debug("wait called on non-running router")
+		return
+	}
+
+	log.WithFields(logger.Fields{
+		"at":     "StandardEmbeddedRouter.Wait",
+		"phase":  "running",
+		"reason": "waiting for router shutdown",
+	}).Debug("waiting for embedded router to stop")
+
+	<-doneCh
+
+	log.WithFields(logger.Fields{
+		"at":     "StandardEmbeddedRouter.Wait",
+		"phase":  "shutdown",
+		"reason": "router wait completed",
+	}).Debug("embedded router wait completed")
+}
+
+// Close releases all resources associated with the router.
+// This should be called after Stop() to ensure proper cleanup.
+
+func (e *StandardEmbeddedRouter) IsRunning() bool {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.running
+}
+
+// IsConfigured returns true if the router has been configured.
+
+func (e *StandardEmbeddedRouter) IsConfigured() bool {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.configured
+}
