@@ -301,26 +301,7 @@ func (r *HostsTxtResolver) Resolve(address string) ([]byte, bool, error) {
 
 	// Handle .b32.i2p addresses
 	if strings.HasSuffix(address, ".b32.i2p") {
-		hashBytes, err := r.ResolveB32Address(address)
-		if err != nil {
-			return nil, false, err
-		}
-
-		// If we have a NetDB, perform the LeaseSet lookup
-		r.mu.RLock()
-		netdb := r.netdb
-		r.mu.RUnlock()
-
-		if netdb != nil {
-			dest, err := r.lookupDestinationFromNetDB(hashBytes, netdb)
-			if err != nil {
-				return nil, false, err
-			}
-			return dest, false, nil // Full destination resolved
-		}
-
-		// No NetDB configured - return hash and indicate lookup is needed
-		return hashBytes, true, nil
+		return r.resolveB32(address)
 	}
 
 	// Handle regular .i2p hostnames
@@ -329,6 +310,30 @@ func (r *HostsTxtResolver) Resolve(address string) ([]byte, bool, error) {
 		return nil, false, err
 	}
 	return dest, false, nil
+}
+
+// resolveB32 handles resolution of .b32.i2p addresses.
+func (r *HostsTxtResolver) resolveB32(address string) ([]byte, bool, error) {
+	hashBytes, err := r.ResolveB32Address(address)
+	if err != nil {
+		return nil, false, err
+	}
+
+	// If we have a NetDB, perform the LeaseSet lookup
+	r.mu.RLock()
+	netdb := r.netdb
+	r.mu.RUnlock()
+
+	if netdb == nil {
+		// No NetDB configured - return hash and indicate lookup is needed
+		return hashBytes, true, nil
+	}
+
+	dest, err := r.lookupDestinationFromNetDB(hashBytes, netdb)
+	if err != nil {
+		return nil, false, err
+	}
+	return dest, false, nil // Full destination resolved
 }
 
 // lookupDestinationFromNetDB performs a LeaseSet lookup and extracts the destination.

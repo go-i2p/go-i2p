@@ -311,6 +311,22 @@ func (rb *ReseedBootstrap) applyStrategy(results []ReseedResult) []router_info.R
 // unionStrategy returns all unique RouterInfos from any server.
 // This provides the largest possible peer set.
 func (rb *ReseedBootstrap) unionStrategy(results []ReseedResult) []router_info.RouterInfo {
+	seen := collectUniqueRouterInfos(results)
+	combined := buildCombinedList(seen)
+
+	log.WithFields(logger.Fields{
+		"at":             "(ReseedBootstrap) unionStrategy",
+		"phase":          "bootstrap",
+		"reason":         "union strategy applied",
+		"server_count":   len(results),
+		"unique_routers": len(combined),
+	}).Debug("union strategy completed")
+
+	return combined
+}
+
+// collectUniqueRouterInfos aggregates unique RouterInfos from all results.
+func collectUniqueRouterInfos(results []ReseedResult) map[string]router_info.RouterInfo {
 	seen := make(map[string]router_info.RouterInfo)
 
 	for _, r := range results {
@@ -325,19 +341,15 @@ func (rb *ReseedBootstrap) unionStrategy(results []ReseedResult) []router_info.R
 		}
 	}
 
+	return seen
+}
+
+// buildCombinedList converts a map of unique RouterInfos to a slice.
+func buildCombinedList(seen map[string]router_info.RouterInfo) []router_info.RouterInfo {
 	combined := make([]router_info.RouterInfo, 0, len(seen))
 	for _, ri := range seen {
 		combined = append(combined, ri)
 	}
-
-	log.WithFields(logger.Fields{
-		"at":             "(ReseedBootstrap) unionStrategy",
-		"phase":          "bootstrap",
-		"reason":         "union strategy applied",
-		"server_count":   len(results),
-		"unique_routers": len(combined),
-	}).Debug("union strategy completed")
-
 	return combined
 }
 

@@ -270,22 +270,35 @@ func copyBootstrapConfig(src *BootstrapConfig) *BootstrapConfig {
 	}
 	bootstrapCopy := *src
 
-	if src.ReseedServers != nil {
-		bootstrapCopy.ReseedServers = make([]*ReseedConfig, len(src.ReseedServers))
-		for i, server := range src.ReseedServers {
-			if server != nil {
-				serverCopy := *server
-				bootstrapCopy.ReseedServers[i] = &serverCopy
-			}
-		}
-	}
-
-	if src.LocalNetDBPaths != nil {
-		bootstrapCopy.LocalNetDBPaths = make([]string, len(src.LocalNetDBPaths))
-		copy(bootstrapCopy.LocalNetDBPaths, src.LocalNetDBPaths)
-	}
+	bootstrapCopy.ReseedServers = copyReseedServers(src.ReseedServers)
+	bootstrapCopy.LocalNetDBPaths = copyLocalNetDBPaths(src.LocalNetDBPaths)
 
 	return &bootstrapCopy
+}
+
+// copyReseedServers creates a deep copy of reseed server configurations.
+func copyReseedServers(src []*ReseedConfig) []*ReseedConfig {
+	if src == nil {
+		return nil
+	}
+	servers := make([]*ReseedConfig, len(src))
+	for i, server := range src {
+		if server != nil {
+			serverCopy := *server
+			servers[i] = &serverCopy
+		}
+	}
+	return servers
+}
+
+// copyLocalNetDBPaths creates a copy of local NetDB paths.
+func copyLocalNetDBPaths(src []string) []string {
+	if src == nil {
+		return nil
+	}
+	paths := make([]string, len(src))
+	copy(paths, src)
+	return paths
 }
 
 // SetRouterConfig atomically replaces the global router configuration with cfg.

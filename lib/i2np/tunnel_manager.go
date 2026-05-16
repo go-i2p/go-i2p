@@ -1140,15 +1140,41 @@ func (tm *TunnelManager) generateTunnelID() (tunnel.TunnelID, error) {
 // through the partially-built tunnel; each hop peels its layer and forwards
 // to the next. Sending directly to each hop would break tunnel anonymity.
 func (tm *TunnelManager) sendTunnelBuildRequests(records []BuildRequestRecord, peers []router_info.RouterInfo, tunnelID tunnel.TunnelID) error {
+	if err := tm.validateSendRequest(peers); err != nil {
+		return err
+	}
+
+	tm.logSendingBuildRequests(tunnelID, len(peers))
+
+	messageID := tm.registerPendingBuild(tunnelID, len(records))
+
+	msg, err := tm.createCombinedBuildMessage(records, peers, tunnelID)
+	if err != nil {
+		tm.removePendingBuildRequest(messageID)
+		return oops.Wrapf(err, "failed to create combined tunnel build message")
+	}
+
+	if err := tm.sendToFirstHop(peers[0], msg, messageID); err != nil {
+		return err
+	}
+
+	tm.logBuildRequestsCompleted(tunnelID)
+	return nil
+}
+
+// validateSendRequest validates that the tunnel manager and peers are ready.
+func (tm *TunnelManager) validateSendRequest(peers []router_info.RouterInfo) error {
 	if tm.sessionProvider == nil {
 		return oops.Errorf("no session provider available for sending tunnel build requests")
 	}
 	if len(peers) == 0 {
 		return oops.Errorf("no peers provided for tunnel build")
 	}
+	return nil
+}
 
-	tm.logSendingBuildRequests(tunnelID, len(peers))
-
+// registerPendingBuild registers a pending build request and schedules cleanup.
+func (tm *TunnelManager) registerPendingBuild(tunnelID tunnel.TunnelID, hopCount int) int {
 	// GAP-5 fix: For type-21 TunnelBuild, the reply message ID equals the
 	// tunnelID (not a random message ID).  Register a pendingBuilds entry
 	// keyed by int(tunnelID) so ProcessTunnelReply can correlate the reply.
@@ -1157,7 +1183,7 @@ func (tm *TunnelManager) sendTunnelBuildRequests(records []BuildRequestRecord, p
 	tm.pendingBuilds[messageID] = &buildRequest{
 		tunnelID:  tunnelID,
 		messageID: messageID,
-		hopCount:  len(records),
+		hopCount:  hopCount,
 		createdAt: time.Now(),
 		isInbound: false,
 	}
@@ -1165,17 +1191,12 @@ func (tm *TunnelManager) sendTunnelBuildRequests(records []BuildRequestRecord, p
 	time.AfterFunc(90*time.Second+buildExpireGrace, func() {
 		tm.cleanupExpiredBuildByID(messageID)
 	})
+	return messageID
+}
 
-	// Encrypt each record with the corresponding hop's public key and
-	// assemble all records into a single 8-slot TunnelBuild message.
-	msg, err := tm.createCombinedBuildMessage(records, peers, tunnelID)
-	if err != nil {
-		tm.removePendingBuildRequest(messageID)
-		return oops.Wrapf(err, "failed to create combined tunnel build message")
-	}
-
-	// Send only to the first hop (gateway) — it will forward onion-style.
-	firstPeerHash, err := peers[0].IdentHash()
+// sendToFirstHop sends the build message to the first hop (gateway).
+func (tm *TunnelManager) sendToFirstHop(firstPeer router_info.RouterInfo, msg *TunnelBuildMessage, messageID int) error {
+	firstPeerHash, err := firstPeer.IdentHash()
 	if err != nil {
 		tm.removePendingBuildRequest(messageID)
 		return oops.Wrapf(err, "failed to get first hop hash")
@@ -1189,8 +1210,6 @@ func (tm *TunnelManager) sendTunnelBuildRequests(records []BuildRequestRecord, p
 		tm.removePendingBuildRequest(messageID)
 		return oops.Wrapf(err, "failed to queue build message")
 	}
-
-	tm.logBuildRequestsCompleted(tunnelID)
 	return nil
 }
 
@@ -1818,34 +1837,54 @@ func (tm *TunnelManager) cleanupExpiredBuildByID(messageID int) {
 	// boundary still wins and the entry survives until the timer fires.
 	const buildTimeout = 90 * time.Second
 	if time.Since(req.createdAt) > buildTimeout+buildExpireGrace {
-		tm.rememberExpiredBuild(messageID, req)
-		delete(tm.pendingBuilds, messageID)
+		tm.processExpiredBuild(messageID, req)
+	}
+}
 
-		// Mark tunnel as failed and schedule async cleanup
-		pool := tm.getPoolForTunnel(req.isInbound)
-		if tunnelState, exists := pool.GetTunnel(req.tunnelID); exists {
-			tunnelState.State = tunnel.TunnelFailed
-			if req.isClientTunnel {
-				tm.clientBuildExpireWindow.recordEvent()
-			} else {
-				tm.buildExpireWindow.recordEvent()
-			}
-			if req.isInbound {
-				pool.RecordInboundBuildTimeout()
-			} else {
-				pool.RecordOutboundBuildTimeout()
-			}
-			tm.cleanupFailedTunnel(req.tunnelID, req.isInbound)
-		}
+// processExpiredBuild handles the expiration of a tunnel build request.
+func (tm *TunnelManager) processExpiredBuild(messageID int, req *buildRequest) {
+	tm.rememberExpiredBuild(messageID, req)
+	delete(tm.pendingBuilds, messageID)
 
-		log.WithFields(logger.Fields{
-			"message_id":       messageID,
-			"tunnel_id":        req.tunnelID,
-			"reply_tunnel_id":  req.replyTunnelID,
-			"is_inbound_build": req.isInbound,
-			"is_client_tunnel": req.isClientTunnel,
-			"elapsed":          time.Since(req.createdAt),
-		}).Debug("Cleaned up expired tunnel build via timeout")
+	tm.markTunnelAsFailed(req)
+
+	log.WithFields(logger.Fields{
+		"message_id":       messageID,
+		"tunnel_id":        req.tunnelID,
+		"reply_tunnel_id":  req.replyTunnelID,
+		"is_inbound_build": req.isInbound,
+		"is_client_tunnel": req.isClientTunnel,
+		"elapsed":          time.Since(req.createdAt),
+	}).Debug("Cleaned up expired tunnel build via timeout")
+}
+
+// markTunnelAsFailed marks a tunnel as failed and schedules cleanup.
+func (tm *TunnelManager) markTunnelAsFailed(req *buildRequest) {
+	pool := tm.getPoolForTunnel(req.isInbound)
+	tunnelState, exists := pool.GetTunnel(req.tunnelID)
+	if !exists {
+		return
+	}
+
+	tunnelState.State = tunnel.TunnelFailed
+
+	tm.recordBuildTimeoutMetrics(req)
+
+	if req.isInbound {
+		pool.RecordInboundBuildTimeout()
+	} else {
+		pool.RecordOutboundBuildTimeout()
+	}
+
+	tm.cleanupFailedTunnel(req.tunnelID, req.isInbound)
+}
+
+// recordBuildTimeoutMetrics records timeout events to the appropriate time window.
+func (tm *TunnelManager) recordBuildTimeoutMetrics(req *buildRequest) {
+	if req.isClientTunnel {
+		tm.clientBuildExpireWindow.recordEvent()
+	} else {
+		tm.buildExpireWindow.recordEvent()
 	}
 }
 

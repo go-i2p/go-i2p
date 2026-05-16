@@ -354,32 +354,47 @@ func (p *MessageProcessor) extractGarlicData(msg I2NPMessage) ([]byte, error) {
 		return nil, oops.Errorf("garlic message contains no data")
 	}
 
-	// Garlic (type 11) encrypted payload on the wire is length-prefixed:
-	//   [4-byte big-endian length][ciphertext bytes]
-	// DecryptGarlicMessage expects ciphertext to begin with the 8-byte session
-	// tag, so strip the prefix when it is present and consistent.
-	if len(encryptedData) >= 4 {
-		declaredLen := int(binary.BigEndian.Uint32(encryptedData[0:4]))
-		if declaredLen == len(encryptedData)-4 {
-			payload := encryptedData[4:]
-			tagHead := ""
-			if len(payload) >= 8 {
-				tagHead = fmt.Sprintf("%x", payload[:8])
-			} else {
-				tagHead = fmt.Sprintf("%x", payload)
-			}
-			log.WithFields(logger.Fields{
-				"msg_id":              msg.MessageID(),
-				"framed_size":         len(encryptedData),
-				"declared_size":       declaredLen,
-				"ciphertext_size":     len(payload),
-				"ciphertext_tag_head": tagHead,
-			}).Debug("Stripped Garlic length prefix before decryption")
-			return payload, nil
-		}
+	return stripGarlicLengthPrefixIfPresent(encryptedData, int(msg.MessageID()))
+}
+
+// stripGarlicLengthPrefixIfPresent removes the 4-byte length prefix from garlic ciphertext.
+// Garlic (type 11) encrypted payload on the wire is length-prefixed:
+//
+//	[4-byte big-endian length][ciphertext bytes]
+//
+// DecryptGarlicMessage expects ciphertext to begin with the 8-byte session tag,
+// so we strip the prefix when it is present and consistent.
+func stripGarlicLengthPrefixIfPresent(encryptedData []byte, messageID int) ([]byte, error) {
+	if len(encryptedData) < 4 {
+		return encryptedData, nil
 	}
 
-	return encryptedData, nil
+	declaredLen := int(binary.BigEndian.Uint32(encryptedData[0:4]))
+	if declaredLen != len(encryptedData)-4 {
+		return encryptedData, nil
+	}
+
+	payload := encryptedData[4:]
+	logGarlicPrefixStripped(messageID, len(encryptedData), declaredLen, len(payload), payload)
+	return payload, nil
+}
+
+// logGarlicPrefixStripped logs the removal of the length prefix.
+func logGarlicPrefixStripped(messageID, framedSize, declaredSize, ciphertextSize int, payload []byte) {
+	tagHead := ""
+	if len(payload) >= 8 {
+		tagHead = fmt.Sprintf("%x", payload[:8])
+	} else {
+		tagHead = fmt.Sprintf("%x", payload)
+	}
+
+	log.WithFields(logger.Fields{
+		"msg_id":              messageID,
+		"framed_size":         framedSize,
+		"declared_size":       declaredSize,
+		"ciphertext_size":     ciphertextSize,
+		"ciphertext_tag_head": tagHead,
+	}).Debug("Stripped Garlic length prefix before decryption")
 }
 
 func parseECIESGarlicClove(data []byte) (*Garlic, error) {

@@ -593,6 +593,19 @@ func (rp *ReplyProcessor) CleanupExpiredBuilds() int {
 
 	now := time.Now()
 	maxAge := rp.config.BuildTimeout + (rp.config.RetryBackoff * time.Duration(rp.config.MaxRetries+1))
+
+	expired := rp.collectExpiredBuilds(now, maxAge)
+	rp.removeExpiredBuilds(expired)
+
+	if len(expired) > 0 {
+		log.WithField("expired_count", len(expired)).Warn("Cleaned up expired tunnel builds")
+	}
+
+	return len(expired)
+}
+
+// collectExpiredBuilds identifies builds that have exceeded the maximum age.
+func (rp *ReplyProcessor) collectExpiredBuilds(now time.Time, maxAge time.Duration) []tunnel.TunnelID {
 	var expired []tunnel.TunnelID
 
 	for id, pending := range rp.pendingBuilds {
@@ -604,15 +617,14 @@ func (rp *ReplyProcessor) CleanupExpiredBuilds() int {
 		}
 	}
 
+	return expired
+}
+
+// removeExpiredBuilds deletes expired builds from the pending builds map.
+func (rp *ReplyProcessor) removeExpiredBuilds(expired []tunnel.TunnelID) {
 	for _, id := range expired {
 		delete(rp.pendingBuilds, id)
 	}
-
-	if len(expired) > 0 {
-		log.WithField("expired_count", len(expired)).Warn("Cleaned up expired tunnel builds")
-	}
-
-	return len(expired)
 }
 
 // GetPendingBuildCount returns the number of currently pending tunnel builds.

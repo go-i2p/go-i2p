@@ -473,29 +473,64 @@ func (t *SSU2Transport) sendRelayResponseToBob(bobSession *SSU2Session, intro *s
 	if err != nil {
 		return oops.Wrapf(err, "hole-punch: local address")
 	}
+
+	signingKey, token, err := t.prepareRelayResponseCredentials()
+	if err != nil {
+		return err
+	}
+
+	bobHash := extractBobRouterHash(bobSession)
+	timestamp := uint32(time.Now().Unix())
+
+	resp, err := t.buildSignedRelayResponse(signingKey, bobHash, intro, timestamp, charliePort, charlieIP, token)
+	if err != nil {
+		return err
+	}
+
+	return t.sendEncodedRelayResponse(bobSession, resp)
+}
+
+// prepareRelayResponseCredentials retrieves the signing key and generates a token.
+func (t *SSU2Transport) prepareRelayResponseCredentials() ([]byte, []byte, error) {
 	signingKey := t.keystore.GetSigningPrivateKey()
 	if signingKey == nil {
-		return oops.Errorf("hole-punch: signing key unavailable")
+		return nil, nil, oops.Errorf("hole-punch: signing key unavailable")
 	}
+
 	token := make([]byte, 8)
 	if _, err := cryptorand.Read(token); err != nil {
-		return oops.Wrapf(err, "hole-punch: token generation")
+		return nil, nil, oops.Wrapf(err, "hole-punch: token generation")
 	}
+
+	return signingKey.Bytes(), token, nil
+}
+
+// extractBobRouterHash extracts the router hash from Bob's session address.
+func extractBobRouterHash(bobSession *SSU2Session) data.Hash {
 	var bobHash data.Hash
 	if ssu2Addr, ok := bobSession.conn.RemoteAddr().(*ssu2noise.SSU2Addr); ok {
 		bobHash = ssu2Addr.RouterHash()
 	}
-	timestamp := uint32(time.Now().Unix())
-	ed25519Key := ed25519.PrivateKey(signingKey.Bytes())
+	return bobHash
+}
+
+// buildSignedRelayResponse creates and signs a RelayResponse block.
+func (t *SSU2Transport) buildSignedRelayResponse(signingKeyBytes []byte, bobHash data.Hash, intro *ssu2noise.RelayIntroBlock, timestamp uint32, charliePort uint16, charlieIP net.IP, token []byte) (*ssu2noise.RelayResponseBlock, error) {
+	ed25519Key := ed25519.PrivateKey(signingKeyBytes)
 	sig, err := ssu2noise.SignRelayResponse(ed25519Key, bobHash, intro.Nonce, timestamp, intro.Version, charliePort, charlieIP)
 	if err != nil {
-		return oops.Wrapf(err, "hole-punch: sign RelayResponse")
+		return nil, oops.Wrapf(err, "hole-punch: sign RelayResponse")
 	}
-	resp := &ssu2noise.RelayResponseBlock{
+
+	return &ssu2noise.RelayResponseBlock{
 		Code: 0, Nonce: intro.Nonce, Timestamp: timestamp,
 		Version: intro.Version, CharliePort: charliePort, CharlieIP: charlieIP,
 		Signature: sig, Token: token,
-	}
+	}, nil
+}
+
+// sendEncodedRelayResponse encodes and sends the RelayResponse to Bob.
+func (t *SSU2Transport) sendEncodedRelayResponse(bobSession *SSU2Session, resp *ssu2noise.RelayResponseBlock) error {
 	encoded, err := ssu2noise.EncodeRelayResponse(resp)
 	if err != nil {
 		return oops.Wrapf(err, "hole-punch: encode RelayResponse")

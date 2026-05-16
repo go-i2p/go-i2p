@@ -521,31 +521,33 @@ func (p *Publisher) selectAndValidateTunnel() (*tunnel.TunnelState, common.Hash,
 
 	var lastErr error
 	for attempt := 0; attempt < maxRetries; attempt++ {
-		selectedTunnel := p.pool.SelectTunnel()
-		if selectedTunnel == nil {
-			lastErr = oops.Errorf("no active outbound tunnels available")
-			if attempt < maxRetries-1 {
-				log.WithField("attempt", attempt+1).Debug("No outbound tunnels available, retrying after delay")
-				time.Sleep(retryDelay)
-				continue
-			}
-			break
+		selectedTunnel, gatewayHash, err := p.attemptTunnelSelection()
+		if err == nil {
+			return selectedTunnel, gatewayHash, nil
 		}
 
-		if len(selectedTunnel.Hops) == 0 {
-			lastErr = oops.Errorf("tunnel has no hops")
-			if attempt < maxRetries-1 {
-				log.WithField("attempt", attempt+1).Debug("Selected tunnel has no hops, retrying")
-				time.Sleep(retryDelay)
-				continue
-			}
-			break
+		lastErr = err
+		if attempt < maxRetries-1 {
+			log.WithField("attempt", attempt+1).Debug("Tunnel selection failed, retrying after delay")
+			time.Sleep(retryDelay)
 		}
-
-		gatewayHash := selectedTunnel.Hops[0]
-		return selectedTunnel, gatewayHash, nil
 	}
 	return nil, common.Hash{}, lastErr
+}
+
+// attemptTunnelSelection attempts to select a tunnel and validate it has hops.
+func (p *Publisher) attemptTunnelSelection() (*tunnel.TunnelState, common.Hash, error) {
+	selectedTunnel := p.pool.SelectTunnel()
+	if selectedTunnel == nil {
+		return nil, common.Hash{}, oops.Errorf("no active outbound tunnels available")
+	}
+
+	if len(selectedTunnel.Hops) == 0 {
+		return nil, common.Hash{}, oops.Errorf("tunnel has no hops")
+	}
+
+	gatewayHash := selectedTunnel.Hops[0]
+	return selectedTunnel, gatewayHash, nil
 }
 
 // createTunnelGatewayMessage creates a TunnelGateway message containing a DatabaseStore

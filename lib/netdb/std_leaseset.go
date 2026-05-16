@@ -367,19 +367,9 @@ func (db *StdNetDB) fetchLeaseSetBytes(
 	log.WithField("hash", hash).Debug("Getting " + typeName + " bytes")
 
 	// Check memory cache first
-	db.lsMutex.RLock()
-	if entry, ok := db.LeaseSets[hash]; ok {
-		if data, err := cacheCheck(entry); data != nil || err != nil {
-			db.lsMutex.RUnlock()
-			if err != nil {
-				log.WithError(err).Error("Failed to serialize cached " + typeName)
-				return nil, oops.Errorf("failed to serialize %s: %w", typeName, err)
-			}
-			log.WithFields(logger.Fields{"at": "GetLeaseSet", "type": typeName}).Debug("found in memory cache")
-			return data, nil
-		}
+	if data, err := db.checkCacheForLeaseSet(hash, typeName, cacheCheck); data != nil || err != nil {
+		return data, err
 	}
-	db.lsMutex.RUnlock()
 
 	// Load from file if not in memory
 	data, err := db.loadLeaseSetFromFile(hash)
@@ -394,6 +384,34 @@ func (db *StdNetDB) fetchLeaseSetBytes(
 		return nil, oops.Errorf("failed to parse %s: %w", typeName, err)
 	}
 
+	return data, nil
+}
+
+// checkCacheForLeaseSet checks the memory cache for a LeaseSet entry.
+func (db *StdNetDB) checkCacheForLeaseSet(
+	hash common.Hash,
+	typeName string,
+	cacheCheck func(Entry) ([]byte, error),
+) ([]byte, error) {
+	db.lsMutex.RLock()
+	defer db.lsMutex.RUnlock()
+
+	entry, ok := db.LeaseSets[hash]
+	if !ok {
+		return nil, nil
+	}
+
+	data, err := cacheCheck(entry)
+	if data == nil && err == nil {
+		return nil, nil
+	}
+
+	if err != nil {
+		log.WithError(err).Error("Failed to serialize cached " + typeName)
+		return nil, oops.Errorf("failed to serialize %s: %w", typeName, err)
+	}
+
+	log.WithFields(logger.Fields{"at": "GetLeaseSet", "type": typeName}).Debug("found in memory cache")
 	return data, nil
 }
 

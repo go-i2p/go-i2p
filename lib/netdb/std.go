@@ -751,24 +751,12 @@ func (db *StdNetDB) storeRouterInfoFromMessageInternal(key common.Hash, data []b
 		return err
 	}
 
-	// DatabaseStore RouterInfo payload is: [2-byte compressed length][gzip data]
-	// Must decompress before parsing per I2P spec.
-	decompressed, err := decompressRouterInfoPayload(data)
-	if err != nil {
-		log.WithError(err).Error("Failed to decompress RouterInfo from DatabaseStore")
-		return oops.Errorf("failed to decompress RouterInfo: %w", err)
-	}
-
-	ri, err := parseRouterInfoData(decompressed)
+	ri, err := db.decompressAndParseRouterInfo(data)
 	if err != nil {
 		return err
 	}
 
-	if err := verifyRouterInfoHash(key, ri); err != nil {
-		return err
-	}
-
-	if err := verifyRouterInfoSignature(ri); err != nil {
+	if err := db.validateRouterInfo(key, ri); err != nil {
 		return err
 	}
 
@@ -781,6 +769,28 @@ func (db *StdNetDB) storeRouterInfoFromMessageInternal(key common.Hash, data []b
 	}
 
 	return db.finalizeRouterInfoStorage(key, ri)
+}
+
+// decompressAndParseRouterInfo decompresses and parses RouterInfo payload.
+func (db *StdNetDB) decompressAndParseRouterInfo(data []byte) (router_info.RouterInfo, error) {
+	// DatabaseStore RouterInfo payload is: [2-byte compressed length][gzip data]
+	// Must decompress before parsing per I2P spec.
+	decompressed, err := decompressRouterInfoPayload(data)
+	if err != nil {
+		log.WithError(err).Error("Failed to decompress RouterInfo from DatabaseStore")
+		return router_info.RouterInfo{}, oops.Errorf("failed to decompress RouterInfo: %w", err)
+	}
+
+	return parseRouterInfoData(decompressed)
+}
+
+// validateRouterInfo verifies hash and signature of RouterInfo.
+func (db *StdNetDB) validateRouterInfo(key common.Hash, ri router_info.RouterInfo) error {
+	if err := verifyRouterInfoHash(key, ri); err != nil {
+		return err
+	}
+
+	return verifyRouterInfoSignature(ri)
 }
 
 func (db *StdNetDB) admitRouterInfoIntroduction(key common.Hash, source *common.Hash) error {

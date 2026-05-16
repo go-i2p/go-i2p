@@ -277,6 +277,22 @@ func (t *SSU2Transport) registerCharlieSession(conn *ssu2noise.SSU2Conn, charlie
 // buildCharlieDialConfig constructs a dialler SSU2Config for Charlie, using
 // Charlie's static key from his RouterInfo.
 func (t *SSU2Transport) buildCharlieDialConfig(charlieRI router_info.RouterInfo, charlieHash data.Hash) (*ssu2noise.SSU2Config, error) {
+	dialConfig, err := t.initializeCharlieDialConfig(charlieHash)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := t.configureRemoteKeys(dialConfig, charlieRI); err != nil {
+		return nil, err
+	}
+
+	t.configureIntroKeys(dialConfig, charlieRI)
+
+	return dialConfig, nil
+}
+
+// initializeCharlieDialConfig creates and initializes the base SSU2Config for dialing.
+func (t *SSU2Transport) initializeCharlieDialConfig(charlieHash data.Hash) (*ssu2noise.SSU2Config, error) {
 	t.identityMu.RLock()
 	ourHash, err := t.identity.IdentHash()
 	t.identityMu.RUnlock()
@@ -293,12 +309,21 @@ func (t *SSU2Transport) buildCharlieDialConfig(charlieRI router_info.RouterInfo,
 	}
 	dialConfig = dialConfig.WithRemoteRouterHash(charlieHash)
 
+	return dialConfig, nil
+}
+
+// configureRemoteKeys extracts and sets Charlie's static key in the dial config.
+func (t *SSU2Transport) configureRemoteKeys(dialConfig *ssu2noise.SSU2Config, charlieRI router_info.RouterInfo) error {
 	remoteStaticKey, err := extractRemoteStaticKey(charlieRI)
 	if err != nil {
-		return nil, oops.Wrapf(err, "no SSU2 static key in Charlie's RI")
+		return oops.Wrapf(err, "no SSU2 static key in Charlie's RI")
 	}
-	dialConfig = dialConfig.WithRemoteStaticKey(remoteStaticKey)
+	dialConfig.RemoteStaticKey = remoteStaticKey
+	return nil
+}
 
+// configureIntroKeys sets both local and remote introduction keys in the dial config.
+func (t *SSU2Transport) configureIntroKeys(dialConfig *ssu2noise.SSU2Config, charlieRI router_info.RouterInfo) error {
 	// Set our local intro key for header protection.
 	if ik := t.GetIntroKey(); len(ik) == 32 {
 		dialConfig.IntroKey = ik
@@ -307,9 +332,9 @@ func (t *SSU2Transport) buildCharlieDialConfig(charlieRI router_info.RouterInfo,
 	// Set Charlie's intro key for ChaCha header obfuscation.
 	charlieIK, err := ExtractSSU2IntroKey(charlieRI)
 	if err != nil {
-		return nil, oops.Wrapf(err, "no SSU2 intro key in Charlie's RI")
+		return oops.Wrapf(err, "no SSU2 intro key in Charlie's RI")
 	}
 	dialConfig.RemoteIntroKey = charlieIK
 
-	return dialConfig, nil
+	return nil
 }

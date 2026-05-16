@@ -462,21 +462,13 @@ func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if rpcErr := s.validateHTTPRequest(r); rpcErr != nil {
-		s.writeErrorResponse(w, nil, rpcErr)
-		return
-	}
-
-	body, rpcErr := s.readRequestBody(r)
+	req, rpcErr := s.parseAndValidateRequest(r)
 	if rpcErr != nil {
 		s.writeErrorResponse(w, nil, rpcErr)
 		return
 	}
-
-	req, err := ParseRequest(body)
-	if err != nil {
-		log.WithField("reason", err.Error()).Debug("i2pcontrol: malformed JSON-RPC request")
-		s.writeErrorResponse(w, nil, NewRPCError(ErrCodeParseError, "malformed JSON-RPC request"))
+	if req == nil {
+		// Validation error already written
 		return
 	}
 
@@ -485,6 +477,31 @@ func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.handleValidatedRequest(w, r, req)
+}
+
+// parseAndValidateRequest parses the request body and validates it.
+func (s *Server) parseAndValidateRequest(r *http.Request) (*Request, *RPCError) {
+	if rpcErr := s.validateHTTPRequest(r); rpcErr != nil {
+		return nil, rpcErr
+	}
+
+	body, rpcErr := s.readRequestBody(r)
+	if rpcErr != nil {
+		return nil, rpcErr
+	}
+
+	req, err := ParseRequest(body)
+	if err != nil {
+		log.WithField("reason", err.Error()).Debug("i2pcontrol: malformed JSON-RPC request")
+		return nil, NewRPCError(ErrCodeParseError, "malformed JSON-RPC request")
+	}
+
+	return req, nil
+}
+
+// handleValidatedRequest processes a validated request and writes the response.
+func (s *Server) handleValidatedRequest(w http.ResponseWriter, r *http.Request, req *Request) {
 	resp := s.registry.HandleParsedRequest(r.Context(), req)
 	// JSON-RPC 2.0 notifications (requests with no "id") require no response.
 	// HandleParsedRequest returns nil for notifications.

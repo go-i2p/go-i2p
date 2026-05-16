@@ -685,23 +685,28 @@ func (tmux *TransportMuxer) runAcceptWorker(t Transport, index int) {
 		if tmux.isShuttingDown(conn) {
 			return
 		}
-		if err != nil {
-			log.WithFields(logger.Fields{
-				"at":              "(TransportMuxer) acceptLoop",
-				"transport_index": index,
-				"error":           err.Error(),
-			}).Debug("accept error from transport")
-			if tmux.shouldStopAfterError() {
-				return
-			}
-			// Temporary error — brief back-off then retry
-			time.Sleep(50 * time.Millisecond)
-			continue
-		}
-		if !tmux.deliverAcceptResult(conn, index) {
+		if !tmux.processAcceptResult(conn, err, index) {
 			return
 		}
 	}
+}
+
+// processAcceptResult processes accept result and returns false if worker should stop.
+func (tmux *TransportMuxer) processAcceptResult(conn net.Conn, err error, index int) bool {
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":              "(TransportMuxer) acceptLoop",
+			"transport_index": index,
+			"error":           err.Error(),
+		}).Debug("accept error from transport")
+		if tmux.shouldStopAfterError() {
+			return false
+		}
+		// Temporary error — brief back-off then retry
+		time.Sleep(50 * time.Millisecond)
+		return true
+	}
+	return tmux.deliverAcceptResult(conn, index)
 }
 
 // isShuttingDown checks whether the muxer is shutting down and closes

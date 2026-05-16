@@ -92,24 +92,33 @@ func (p *routerInfoProvider) collectTransportAddresses() []*router_address.Route
 
 	var addresses []*router_address.RouterAddress
 	for _, t := range p.router.TransportMuxer.GetTransports() {
-		switch transport := t.(type) {
-		case *ntcp.NTCP2Transport:
-			addr, err := ntcp.ConvertToRouterAddress(transport)
-			if err != nil {
-				log.WithError(err).Warn("Failed to convert NTCP2 transport to RouterAddress")
-				continue
-			}
-			addresses = append(addresses, addr)
-		case *ssu2.SSU2Transport:
-			addr, err := ssu2.ConvertToRouterAddress(transport)
-			if err != nil {
-				log.WithError(err).Warn("Failed to convert SSU2 transport to RouterAddress")
-				continue
-			}
+		if addr := p.convertTransportToAddress(t); addr != nil {
 			addresses = append(addresses, addr)
 		}
 	}
 	return addresses
+}
+
+// convertTransportToAddress converts a transport to RouterAddress.
+func (p *routerInfoProvider) convertTransportToAddress(t any) *router_address.RouterAddress {
+	switch transport := t.(type) {
+	case *ntcp.NTCP2Transport:
+		addr, err := ntcp.ConvertToRouterAddress(transport)
+		if err != nil {
+			log.WithError(err).Warn("Failed to convert NTCP2 transport to RouterAddress")
+			return nil
+		}
+		return addr
+	case *ssu2.SSU2Transport:
+		addr, err := ssu2.ConvertToRouterAddress(transport)
+		if err != nil {
+			log.WithError(err).Warn("Failed to convert SSU2 transport to RouterAddress")
+			return nil
+		}
+		return addr
+	default:
+		return nil
+	}
 }
 
 // buildRouterInfoOptions constructs RouterInfoOptions with the current congestion flag.
