@@ -1638,7 +1638,7 @@ func TestGarlic_SessionTagDerivation_DifferentKeysProduceDifferentTags(t *testin
 
 // =============================================================================
 // Audit Item: Garlic — Clove format
-// Clove = DeliveryInstructions(var) + I2NPMessage(var) + CloveID(4) +
+// Clove = DeliveryInstructions(var) + Message(var) + CloveID(4) +
 // Expiration(8) + Certificate(3, always NULL)
 // =============================================================================
 
@@ -1654,7 +1654,7 @@ func TestGarlic_CloveFormat_SerializationLayout(t *testing.T) {
 
 	clove := GarlicClove{
 		DeliveryInstructions: NewLocalDeliveryInstructions(),
-		I2NPMessage:          innerMsg,
+		Message:          innerMsg,
 		CloveID:              0x00AABBCC,
 		Expiration:           time.UnixMilli(1704067200000),
 		Certificate:          *certificate.NewCertificate(),
@@ -2018,35 +2018,35 @@ func TestGarlic_DeliveryInstructions_GarlicRoundtripAllTypes(t *testing.T) {
 
 	tests := []struct {
 		name         string
-		addClove     func(b *GarlicBuilder, msg I2NPMessage) error
+		addClove     func(b *GarlicBuilder, msg Message) error
 		expectedFlag byte
 		checkHash    bool
 		checkTunnel  bool
 	}{
 		{
 			"LOCAL",
-			func(b *GarlicBuilder, msg I2NPMessage) error {
+			func(b *GarlicBuilder, msg Message) error {
 				return b.AddLocalDeliveryClove(msg, 1)
 			},
 			0x00, false, false,
 		},
 		{
 			"DESTINATION",
-			func(b *GarlicBuilder, msg I2NPMessage) error {
+			func(b *GarlicBuilder, msg Message) error {
 				return b.AddDestinationDeliveryClove(msg, 2, testHash)
 			},
 			0x20, true, false,
 		},
 		{
 			"ROUTER",
-			func(b *GarlicBuilder, msg I2NPMessage) error {
+			func(b *GarlicBuilder, msg Message) error {
 				return b.AddRouterDeliveryClove(msg, 3, testHash)
 			},
 			0x40, true, false,
 		},
 		{
 			"TUNNEL",
-			func(b *GarlicBuilder, msg I2NPMessage) error {
+			func(b *GarlicBuilder, msg Message) error {
 				return b.AddTunnelDeliveryClove(msg, 4, testHash, tid)
 			},
 			0x60, true, true,

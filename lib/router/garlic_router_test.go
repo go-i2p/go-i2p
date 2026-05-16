@@ -127,16 +127,16 @@ func (m *mockTransportMuxer) GetSession(ri router_info.RouterInfo) (*mockTranspo
 
 // Mock TransportSession for testing
 type mockTransportSession struct {
-	queuedMessages []i2np.I2NPMessage
+	queuedMessages []i2np.Message
 }
 
 func newMockTransportSession() *mockTransportSession {
 	return &mockTransportSession{
-		queuedMessages: make([]i2np.I2NPMessage, 0),
+		queuedMessages: make([]i2np.Message, 0),
 	}
 }
 
-func (m *mockTransportSession) QueueSendI2NP(msg i2np.I2NPMessage) error {
+func (m *mockTransportSession) QueueSendI2NP(msg i2np.Message) error {
 	m.queuedMessages = append(m.queuedMessages, msg)
 	return nil
 }
@@ -147,17 +147,17 @@ func (m *mockTransportSession) SendQueueSize() int {
 
 // Mock MessageProcessor for testing
 type mockMessageProcessor struct {
-	processedMessages []i2np.I2NPMessage
+	processedMessages []i2np.Message
 	shouldFail        bool
 }
 
 func newMockMessageProcessor() *mockMessageProcessor {
 	return &mockMessageProcessor{
-		processedMessages: make([]i2np.I2NPMessage, 0),
+		processedMessages: make([]i2np.Message, 0),
 	}
 }
 
-func (m *mockMessageProcessor) ProcessMessage(msg i2np.I2NPMessage) error {
+func (m *mockMessageProcessor) ProcessMessage(msg i2np.Message) error {
 	if m.shouldFail {
 		return errors.New("mock processor error")
 	}
@@ -200,7 +200,7 @@ func TestSetMessageProcessor(t *testing.T) {
 func TestForwardToDestination(t *testing.T) {
 	gr := createTestGarlicRouter()
 	defer gr.Stop()
-	msg := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeData)
+	msg := i2np.NewBaseI2NPMessage(i2np.MessageTypeData)
 	destHash := common.Hash{10, 20, 30, 40}
 
 	err := gr.ForwardToDestination(destHash, msg)
@@ -226,7 +226,7 @@ func TestForwardToRouter_Reflexive(t *testing.T) {
 	processor := i2np.NewMessageProcessor()
 	gr.SetMessageProcessor(processor)
 
-	msg := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeData)
+	msg := i2np.NewBaseI2NPMessage(i2np.MessageTypeData)
 	msg.SetMessageID(12345)
 
 	// Forward to ourselves (reflexive delivery)
@@ -250,7 +250,7 @@ func TestForwardToRouter_ReflexiveNoProcessor(t *testing.T) {
 	defer gr.Stop()
 	// Don't set processor
 
-	msg := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeData)
+	msg := i2np.NewBaseI2NPMessage(i2np.MessageTypeData)
 
 	err := gr.ForwardToRouter(gr.routerIdentity, msg)
 
@@ -269,7 +269,7 @@ func TestForwardToRouter_NotFound(t *testing.T) {
 	gr := createTestGarlicRouter()
 	defer gr.Stop()
 
-	msg := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeData)
+	msg := i2np.NewBaseI2NPMessage(i2np.MessageTypeData)
 	unknownHash := common.Hash{99, 88, 77, 66}
 
 	err := gr.ForwardToRouter(unknownHash, msg)
@@ -296,7 +296,7 @@ func TestForwardToRouter_Success(t *testing.T) {
 	// Add to netdb using the interface method
 	gr.netdb.StoreRouterInfo(peerRI)
 
-	msg := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeData)
+	msg := i2np.NewBaseI2NPMessage(i2np.MessageTypeData)
 	msg.SetMessageID(54321)
 
 	// Verify NetDB lookup succeeds
@@ -314,7 +314,7 @@ func TestForwardToRouter_Success(t *testing.T) {
 func TestForwardThroughTunnel(t *testing.T) {
 	gr := createTestGarlicRouter()
 	defer gr.Stop()
-	msg := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeData)
+	msg := i2np.NewBaseI2NPMessage(i2np.MessageTypeData)
 	gatewayHash := common.Hash{11, 22, 33, 44}
 	tunnelID := tunnel.TunnelID(12345)
 

@@ -574,11 +574,11 @@ func TestE2E_OutboundMessageRouting(t *testing.T) {
 	require.NoError(t, err)
 
 	// Track sent messages
-	sentMessages := make(map[string]i2np.I2NPMessage)
+	sentMessages := make(map[string]i2np.Message)
 	var sentMutex sync.Mutex
 
 	// Create transport send function
-	transportSend := func(peerHash data.Hash, msg i2np.I2NPMessage) error {
+	transportSend := func(peerHash data.Hash, msg i2np.Message) error {
 		sentMutex.Lock()
 		defer sentMutex.Unlock()
 		sentMessages[string(peerHash[:])] = msg
@@ -620,7 +620,7 @@ func TestE2E_OutboundMessageRouting(t *testing.T) {
 
 	// Verify sent message is a Garlic message
 	for _, msg := range sentMessages {
-		assert.Equal(t, i2np.I2NPMessageTypeGarlic, msg.Type())
+		assert.Equal(t, i2np.MessageTypeGarlic, msg.Type())
 	}
 }
 

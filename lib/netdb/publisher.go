@@ -30,7 +30,7 @@ type SessionProvider interface {
 type I2NPSender interface {
 	// QueueSendI2NP queues an I2NP message to be sent over the session.
 	// Returns an error if the session is closed or send queue is full.
-	QueueSendI2NP(msg i2np.I2NPMessage) error
+	QueueSendI2NP(msg i2np.Message) error
 }
 
 // RouterInfoProvider provides access to the local router's RouterInfo.
@@ -552,7 +552,7 @@ func (p *Publisher) attemptTunnelSelection() (*tunnel.TunnelState, common.Hash, 
 
 // createTunnelGatewayMessage creates a TunnelGateway message containing a DatabaseStore
 // message. This wraps the DatabaseStore for delivery through an outbound tunnel.
-func (p *Publisher) createTunnelGatewayMessage(hash common.Hash, data []byte, dataType byte, tunnelID tunnel.TunnelID) (i2np.I2NPMessage, error) {
+func (p *Publisher) createTunnelGatewayMessage(hash common.Hash, data []byte, dataType byte, tunnelID tunnel.TunnelID) (i2np.Message, error) {
 	// Create DatabaseStore I2NP message
 	dbStoreMsg, err := p.createDatabaseStoreMessage(hash, data, dataType)
 	if err != nil {
@@ -577,9 +577,9 @@ func (p *Publisher) createTunnelGatewayMessage(hash common.Hash, data []byte, da
 //   - DatabaseStoreTypeLeaseSet2 (3): For LeaseSet2 entries (standard as of 0.9.38+)
 //   - DatabaseStoreTypeEncryptedLeaseSet (5): For EncryptedLeaseSet entries (0.9.39+)
 //   - DatabaseStoreTypeMetaLeaseSet (7): For MetaLeaseSet entries (0.9.40+)
-func (p *Publisher) createDatabaseStoreMessage(hash common.Hash, data []byte, dataType byte) (i2np.I2NPMessage, error) {
+func (p *Publisher) createDatabaseStoreMessage(hash common.Hash, data []byte, dataType byte) (i2np.Message, error) {
 	dbStore := i2np.NewDatabaseStore(hash, data, dataType)
-	dbStoreMsg := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeDatabaseStore)
+	dbStoreMsg := i2np.NewBaseI2NPMessage(i2np.MessageTypeDatabaseStore)
 
 	dbStoreData, err := dbStore.MarshalBinary()
 	if err != nil {
@@ -593,7 +593,7 @@ func (p *Publisher) createDatabaseStoreMessage(hash common.Hash, data []byte, da
 // sendMessageThroughGateway sends an I2NP message to a gateway router via transport.
 // This retrieves the gateway RouterInfo, establishes a transport session, and queues
 // the message for transmission.
-func (p *Publisher) sendMessageThroughGateway(gatewayHash common.Hash, msg i2np.I2NPMessage) error {
+func (p *Publisher) sendMessageThroughGateway(gatewayHash common.Hash, msg i2np.Message) error {
 	// Get gateway router's RouterInfo from NetDB
 	gatewayRouterInfo, err := p.getGatewayRouterInfo(gatewayHash)
 	if err != nil {

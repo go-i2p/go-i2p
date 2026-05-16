@@ -112,7 +112,7 @@ func (v *ExpirationValidator) ValidateExpiration(expiration time.Time) error {
 
 // ValidateMessage checks if an I2NP message has expired.
 // Returns nil if valid, or an error if the message has expired.
-func (v *ExpirationValidator) ValidateMessage(msg I2NPMessage) error {
+func (v *ExpirationValidator) ValidateMessage(msg Message) error {
 	if !v.enabled {
 		return nil
 	}
@@ -133,7 +133,7 @@ func (v *ExpirationValidator) ValidateMessage(msg I2NPMessage) error {
 
 // CheckMessageExpiration is a convenience function that validates message expiration
 // using the default validator settings (5 minute tolerance).
-func CheckMessageExpiration(msg I2NPMessage) error {
+func CheckMessageExpiration(msg Message) error {
 	defaultValidatorMu.RLock()
 	v := defaultExpirationValidator
 	defaultValidatorMu.RUnlock()
@@ -142,7 +142,7 @@ func CheckMessageExpiration(msg I2NPMessage) error {
 
 // IsMessageExpired is a convenience function that checks if a message is expired
 // using the default validator settings (5 minute tolerance).
-func IsMessageExpired(msg I2NPMessage) bool {
+func IsMessageExpired(msg Message) bool {
 	defaultValidatorMu.RLock()
 	v := defaultExpirationValidator
 	defaultValidatorMu.RUnlock()

@@ -9,18 +9,18 @@ import (
 
 // FailingMockTransportSession is a mock TransportSession that returns errors from QueueSendI2NP.
 type FailingMockTransportSession struct {
-	sentMessages []I2NPMessage
+	sentMessages []Message
 	sendErr      error
 }
 
 func NewFailingMockTransportSession(err error) *FailingMockTransportSession {
 	return &FailingMockTransportSession{
-		sentMessages: make([]I2NPMessage, 0),
+		sentMessages: make([]Message, 0),
 		sendErr:      err,
 	}
 }
 
-func (m *FailingMockTransportSession) QueueSendI2NP(msg I2NPMessage) error {
+func (m *FailingMockTransportSession) QueueSendI2NP(msg Message) error {
 	return m.sendErr
 }
 

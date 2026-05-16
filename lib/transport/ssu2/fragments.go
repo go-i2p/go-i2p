@@ -31,7 +31,7 @@ const (
 // FragmentI2NPMessage splits a large I2NP message into SSU2 fragment blocks
 // when the serialized message exceeds the MTU. Returns a single-element slice
 // containing a type 3 (I2NPMessage) block when no fragmentation is needed.
-func FragmentI2NPMessage(msg i2np.I2NPMessage, maxPayload int) ([]*ssu2noise.SSU2Block, error) {
+func FragmentI2NPMessage(msg i2np.Message, maxPayload int) ([]*ssu2noise.SSU2Block, error) {
 	data, err := msg.MarshalBinary()
 	if err != nil {
 		log.WithError(err).Error("failed to marshal I2NP message for fragmentation")

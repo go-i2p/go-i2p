@@ -302,7 +302,7 @@ func TestProcessDeliveryStatusMessage_WithHandler(t *testing.T) {
 	timestamp := time.Now()
 	msg := NewDeliveryStatusReporter(12345, timestamp)
 
-	err := processor.processDeliveryStatusMessage(msg.(I2NPMessage))
+	err := processor.processDeliveryStatusMessage(msg.(Message))
 	assert.NoError(t, err)
 	assert.Equal(t, 12345, handler.receivedMsgID)
 	assert.WithinDuration(t, timestamp, handler.receivedTimestamp, time.Second)
@@ -315,7 +315,7 @@ func TestProcessDeliveryStatusMessage_WithoutHandler(t *testing.T) {
 	timestamp := time.Now()
 	msg := NewDeliveryStatusReporter(12345, timestamp)
 
-	err := processor.processDeliveryStatusMessage(msg.(I2NPMessage))
+	err := processor.processDeliveryStatusMessage(msg.(Message))
 	assert.NoError(t, err) // Should not error, just log a warning
 }
 
@@ -328,7 +328,7 @@ func TestProcessDeliveryStatusMessage_HandlerError(t *testing.T) {
 	timestamp := time.Now()
 	msg := NewDeliveryStatusReporter(12345, timestamp)
 
-	err := processor.processDeliveryStatusMessage(msg.(I2NPMessage))
+	err := processor.processDeliveryStatusMessage(msg.(Message))
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "status handler failed")
 }

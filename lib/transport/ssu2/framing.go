@@ -12,7 +12,7 @@ import (
 // FrameI2NPToBlock serializes an I2NP message into an SSU2 block type 3.
 // The message is serialized using its standard binary format and wrapped
 // in an SSU2Block with BlockTypeI2NPMessage.
-func FrameI2NPToBlock(msg i2np.I2NPMessage) (*ssu2noise.SSU2Block, error) {
+func FrameI2NPToBlock(msg i2np.Message) (*ssu2noise.SSU2Block, error) {
 	data, err := msg.MarshalBinary()
 	if err != nil {
 		log.WithError(err).Error("failed to marshal I2NP message for SSU2 block")
@@ -23,7 +23,7 @@ func FrameI2NPToBlock(msg i2np.I2NPMessage) (*ssu2noise.SSU2Block, error) {
 
 // ParseI2NPFromBlock deserializes an SSU2 block type 3 back to an I2NP message.
 // Returns an error if the block type is not BlockTypeI2NPMessage or parsing fails.
-func ParseI2NPFromBlock(block *ssu2noise.SSU2Block) (i2np.I2NPMessage, error) {
+func ParseI2NPFromBlock(block *ssu2noise.SSU2Block) (i2np.Message, error) {
 	if block.Type != ssu2noise.BlockTypeI2NPMessage {
 		log.WithFields(map[string]interface{}{
 			"expected_type": ssu2noise.BlockTypeI2NPMessage,
@@ -46,7 +46,7 @@ func ParseI2NPFromBlock(block *ssu2noise.SSU2Block) (i2np.I2NPMessage, error) {
 
 // FrameI2NPForSSU2 serializes an I2NP message to raw bytes suitable for
 // SSU2Conn.Write. This is the SSU2 equivalent of NTCP2's FrameI2NPMessage.
-func FrameI2NPForSSU2(msg i2np.I2NPMessage) ([]byte, error) {
+func FrameI2NPForSSU2(msg i2np.Message) ([]byte, error) {
 	data, err := msg.MarshalBinary()
 	if err != nil {
 		log.WithError(err).Error("failed to marshal I2NP message for SSU2")
@@ -57,7 +57,7 @@ func FrameI2NPForSSU2(msg i2np.I2NPMessage) ([]byte, error) {
 
 // ParseI2NPFromSSU2 parses raw bytes received from SSU2Conn.Read back to
 // an I2NP message. This is the SSU2 equivalent of NTCP2's UnframeI2NPMessage.
-func ParseI2NPFromSSU2(data []byte) (i2np.I2NPMessage, error) {
+func ParseI2NPFromSSU2(data []byte) (i2np.Message, error) {
 	if len(data) == 0 {
 		log.Error("empty data in ParseI2NPFromSSU2")
 		return nil, oops.Errorf("empty I2NP data")

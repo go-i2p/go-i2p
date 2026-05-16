@@ -183,10 +183,10 @@ var (
 	_ MessageSerializer = (*BaseI2NPMessage)(nil)
 	_ MessageIdentifier = (*BaseI2NPMessage)(nil)
 	_ MessageExpiration = (*BaseI2NPMessage)(nil)
-	_ I2NPMessage       = (*BaseI2NPMessage)(nil)
-	_ I2NPMessage       = (*DataMessage)(nil)
-	_ I2NPMessage       = (*DeliveryStatusMessage)(nil)
-	_ I2NPMessage       = (*TunnelDataMessage)(nil)
+	_ Message       = (*BaseI2NPMessage)(nil)
+	_ Message       = (*DataMessage)(nil)
+	_ Message       = (*DeliveryStatusMessage)(nil)
+	_ Message       = (*TunnelDataMessage)(nil)
 
 	// Specialized behavior interfaces
 	_ PayloadCarrier  = (*DataMessage)(nil)

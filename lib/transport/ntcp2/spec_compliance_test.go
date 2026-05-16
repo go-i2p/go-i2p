@@ -279,7 +279,7 @@ func TestDataPhase_BlockTypes(t *testing.T) {
 		name    string
 		msgType int
 	}{
-		{"Data message", i2np.I2NPMessageTypeData},
+		{"Data message", i2np.MessageTypeData},
 		// Additional I2NP message types handled by the framing layer
 	}
 

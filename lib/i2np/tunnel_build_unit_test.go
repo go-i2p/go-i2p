@@ -181,7 +181,7 @@ func TestTunnelBuildMessage_Interfaces(t *testing.T) {
 	records := createKnownValueBuildRequestRecords()
 	msg := newTunnelBuildMessage(records)
 
-	// Verify I2NPMessage interface
+	// Verify Message interface
 	assert.Equal(t, I2NPMessageTypeTunnelBuild, msg.Type())
 	assert.NotNil(t, msg.GetData())
 

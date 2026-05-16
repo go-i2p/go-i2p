@@ -33,7 +33,7 @@ const (
 
 // pendingMessage represents a message waiting for LeaseSet resolution.
 type pendingMessage struct {
-	msg      i2np.I2NPMessage // The message to send
+	msg      i2np.Message // The message to send
 	queuedAt time.Time        // When the message was queued
 	retryAt  time.Time        // When to retry the lookup
 	attempts int              // Number of lookup attempts
@@ -240,7 +240,7 @@ func (gr *GarlicMessageRouter) drainRouterInfoChanWithContext(ch chan router_inf
 //
 // Per I2P spec, destinations are identified by their 32-byte hash and are
 // reached by sending messages through one of their published inbound tunnels.
-func (gr *GarlicMessageRouter) ForwardToDestination(destHash common.Hash, msg i2np.I2NPMessage) error {
+func (gr *GarlicMessageRouter) ForwardToDestination(destHash common.Hash, msg i2np.Message) error {
 	log.WithFields(logger.Fields{
 		"dest_hash":    fmt.Sprintf("%x", destHash[:8]),
 		"message_type": msg.Type(),
@@ -362,7 +362,7 @@ func (gr *GarlicMessageRouter) validateAndExtractLeases(destHash common.Hash, le
 
 // routeMessageThroughLease selects the best lease from available leases and routes
 // the message through the corresponding tunnel gateway.
-func (gr *GarlicMessageRouter) routeMessageThroughLease(destHash common.Hash, leases []lease.Lease, msg i2np.I2NPMessage) error {
+func (gr *GarlicMessageRouter) routeMessageThroughLease(destHash common.Hash, leases []lease.Lease, msg i2np.Message) error {
 	selectedLease := gr.selectBestLease(leases)
 	if selectedLease == nil {
 		log.WithFields(logger.Fields{
@@ -427,7 +427,7 @@ func (gr *GarlicMessageRouter) selectBestLease(leases []lease.Lease) *lease.Leas
 //
 // Reflexive delivery occurs when a garlic message instructs us to send a clove
 // to ourselves - this is processed locally to avoid unnecessary network traffic.
-func (gr *GarlicMessageRouter) ForwardToRouter(routerHash common.Hash, msg i2np.I2NPMessage) error {
+func (gr *GarlicMessageRouter) ForwardToRouter(routerHash common.Hash, msg i2np.Message) error {
 	log.WithFields(logger.Fields{
 		"router_hash":  fmt.Sprintf("%x", routerHash[:8]),
 		"message_type": msg.Type(),
@@ -473,7 +473,7 @@ var errNotReflexive = errors.New("not reflexive")
 // Returns nil if the message was successfully processed reflexively.
 // Returns errNotReflexive if the delivery is not reflexive and should continue normal routing.
 // Returns other errors if reflexive processing failed.
-func (gr *GarlicMessageRouter) handleReflexiveDelivery(routerHash common.Hash, msg i2np.I2NPMessage) error {
+func (gr *GarlicMessageRouter) handleReflexiveDelivery(routerHash common.Hash, msg i2np.Message) error {
 	if !bytes.Equal(routerHash[:], gr.routerIdentity[:]) {
 		return errNotReflexive
 	}
@@ -622,7 +622,7 @@ func (gr *GarlicMessageRouter) validateRouterInfo(routerInfo router_info.RouterI
 
 // sendMessageToRouter establishes a transport session and queues the message for delivery.
 // Returns an error if session establishment fails.
-func (gr *GarlicMessageRouter) sendMessageToRouter(routerHash common.Hash, routerInfo router_info.RouterInfo, msg i2np.I2NPMessage) error {
+func (gr *GarlicMessageRouter) sendMessageToRouter(routerHash common.Hash, routerInfo router_info.RouterInfo, msg i2np.Message) error {
 	session, err := gr.transportMgr.GetSession(routerInfo)
 	if err != nil {
 		log.WithFields(logger.Fields{
@@ -658,7 +658,7 @@ func (gr *GarlicMessageRouter) sendMessageToRouter(routerHash common.Hash, route
 func (gr *GarlicMessageRouter) ForwardThroughTunnel(
 	gatewayHash common.Hash,
 	tunnelID tunnel.TunnelID,
-	msg i2np.I2NPMessage,
+	msg i2np.Message,
 ) error {
 	log.WithFields(logger.Fields{
 		"gateway_hash": fmt.Sprintf("%x", gatewayHash[:8]),
@@ -677,7 +677,7 @@ func (gr *GarlicMessageRouter) ForwardThroughTunnel(
 }
 
 // processReflexiveTunnelDelivery handles tunnel delivery when we are the gateway router.
-func (gr *GarlicMessageRouter) processReflexiveTunnelDelivery(tunnelID tunnel.TunnelID, msg i2np.I2NPMessage) error {
+func (gr *GarlicMessageRouter) processReflexiveTunnelDelivery(tunnelID tunnel.TunnelID, msg i2np.Message) error {
 	log.WithFields(logger.Fields{
 		"at":           "processReflexiveTunnelDelivery",
 		"tunnel_id":    tunnelID,
@@ -723,7 +723,7 @@ func (gr *GarlicMessageRouter) processReflexiveTunnelDelivery(tunnelID tunnel.Tu
 }
 
 // forwardToTunnelGateway creates TunnelGateway message and sends to remote gateway router.
-func (gr *GarlicMessageRouter) forwardToTunnelGateway(gatewayHash common.Hash, tunnelID tunnel.TunnelID, msg i2np.I2NPMessage) error {
+func (gr *GarlicMessageRouter) forwardToTunnelGateway(gatewayHash common.Hash, tunnelID tunnel.TunnelID, msg i2np.Message) error {
 	// Serialize the wrapped message for inclusion in TunnelGateway
 	msgBytes, err := msg.MarshalBinary()
 	if err != nil {
@@ -934,7 +934,7 @@ func (gr *GarlicMessageRouter) forwardPendingMessages(destHash, gatewayHash comm
 }
 
 // queuePendingMessage adds a message to the pending queue for later delivery.
-func (gr *GarlicMessageRouter) queuePendingMessage(destHash common.Hash, msg i2np.I2NPMessage) error {
+func (gr *GarlicMessageRouter) queuePendingMessage(destHash common.Hash, msg i2np.Message) error {
 	gr.pendingMutex.Lock()
 	defer gr.pendingMutex.Unlock()
 

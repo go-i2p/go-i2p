@@ -34,7 +34,7 @@ total size: 8*528 = 4224 bytes
 // TunnelBuild represents the raw 8 build request records
 type TunnelBuild [8]BuildRequestRecord
 
-// TunnelBuildMessage wraps TunnelBuild to implement I2NPMessage interface
+// TunnelBuildMessage wraps TunnelBuild to implement Message interface
 type TunnelBuildMessage struct {
 	*BaseI2NPMessage
 	Records   TunnelBuild
@@ -264,5 +264,5 @@ func (msg *TunnelBuildMessage) UnmarshalEncryptedBinary(data, privateKey []byte)
 var (
 	_ TunnelBuilder = (*TunnelBuild)(nil)
 	_ TunnelBuilder = (*TunnelBuildMessage)(nil)
-	_ I2NPMessage   = (*TunnelBuildMessage)(nil)
+	_ Message   = (*TunnelBuildMessage)(nil)
 )

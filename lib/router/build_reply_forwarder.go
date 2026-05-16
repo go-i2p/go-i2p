@@ -68,12 +68,12 @@ func (f *transportBuildReplyForwarder) ForwardBuildReplyThroughTunnel(gatewayHas
 }
 
 // createReplyMessage creates the appropriate I2NP message type for the build reply.
-func (f *transportBuildReplyForwarder) createReplyMessage(messageID int, encryptedRecords []byte, isShortBuild bool) i2np.I2NPMessage {
+func (f *transportBuildReplyForwarder) createReplyMessage(messageID int, encryptedRecords []byte, isShortBuild bool) i2np.Message {
 	var msgType int
 	if isShortBuild {
-		msgType = i2np.I2NPMessageTypeShortTunnelBuildReply
+		msgType = i2np.MessageTypeShortTunnelBuildReply
 	} else {
-		msgType = i2np.I2NPMessageTypeVariableTunnelBuildReply
+		msgType = i2np.MessageTypeVariableTunnelBuildReply
 	}
 	msg := i2np.NewBaseI2NPMessage(msgType)
 	msg.SetMessageID(messageID)

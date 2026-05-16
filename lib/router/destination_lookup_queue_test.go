@@ -81,7 +81,7 @@ func createTestLeaseSet() lease_set.LeaseSet {
 }
 
 // createTestMessage creates a simple test message
-func createTestMessage() i2np.I2NPMessage {
+func createTestMessage() i2np.Message {
 	return i2np.NewDataMessage([]byte("test payload"))
 }
 

@@ -20,26 +20,26 @@ import (
 // 3. Validate the request against resource limits using ParticipantManager
 // 4. Accept or reject based on available capacity and rate limits
 // 5. Generate and send appropriate build reply
-func (p *MessageProcessor) processShortTunnelBuildMessage(msg I2NPMessage) error {
+func (p *MessageProcessor) processShortTunnelBuildMessage(msg Message) error {
 	return p.processTunnelBuildRequest(msg, true)
 }
 
 // processVariableTunnelBuildMessage processes Variable Tunnel Build Messages (legacy format).
 // This handles incoming requests using the older VTB format for backward compatibility.
-func (p *MessageProcessor) processVariableTunnelBuildMessage(msg I2NPMessage) error {
+func (p *MessageProcessor) processVariableTunnelBuildMessage(msg Message) error {
 	return p.processTunnelBuildRequest(msg, false)
 }
 
 // processTunnelBuildMessage processes TunnelBuild (type 21) messages.
 // TunnelBuild has a fixed format: exactly 8 records × 528 bytes = 4224 bytes,
 // with NO count prefix byte (unlike VariableTunnelBuild type 23).
-func (p *MessageProcessor) processTunnelBuildMessage(msg I2NPMessage) error {
+func (p *MessageProcessor) processTunnelBuildMessage(msg Message) error {
 	return p.processFixedTunnelBuildRequest(msg)
 }
 
 // processFixedTunnelBuildRequest handles TunnelBuild (type 21) messages with
 // fixed 8-record format. Unlike VTB/STBM, type 21 has no count prefix byte.
-func (p *MessageProcessor) processFixedTunnelBuildRequest(msg I2NPMessage) error {
+func (p *MessageProcessor) processFixedTunnelBuildRequest(msg Message) error {
 	if err := p.validateParticipantManager(false, msg.Type()); err != nil {
 		return err
 	}
@@ -83,12 +83,12 @@ func (p *MessageProcessor) parseFixedTunnelBuildRecords(data []byte) ([]BuildReq
 
 // processTunnelBuildReplyMessage processes TunnelBuildReply (type 22) messages.
 // The reply contains 8 fixed BuildResponseRecords with NO count prefix byte.
-func (p *MessageProcessor) processTunnelBuildReplyMessage(msg I2NPMessage) error {
+func (p *MessageProcessor) processTunnelBuildReplyMessage(msg Message) error {
 	return p.processFixedBuildReply(msg)
 }
 
 // processFixedBuildReply handles TunnelBuildReply (type 22) with fixed 8-record format.
-func (p *MessageProcessor) processFixedBuildReply(msg I2NPMessage) error {
+func (p *MessageProcessor) processFixedBuildReply(msg Message) error {
 	if p.buildReplyProcessor == nil {
 		log.WithFields(logger.Fields{
 			"at":           "processFixedBuildReply",
@@ -132,7 +132,7 @@ func (p *MessageProcessor) processFixedBuildReply(msg I2NPMessage) error {
 }
 
 // extractBuildReplyData extracts the data payload from a build reply message.
-func extractBuildReplyData(msg I2NPMessage) ([]byte, error) {
+func extractBuildReplyData(msg Message) ([]byte, error) {
 	carrier, ok := msg.(DataCarrier)
 	if !ok {
 		return nil, oops.Errorf("tunnel build reply does not implement DataCarrier")
@@ -188,20 +188,20 @@ func parseFixedBuildRecords(data []byte, count, recordSize int) ([8]BuildRespons
 
 // processVariableTunnelBuildReplyMessage processes VariableTunnelBuildReply (type 24) messages.
 // The reply contains a variable number of BuildResponseRecords.
-func (p *MessageProcessor) processVariableTunnelBuildReplyMessage(msg I2NPMessage) error {
+func (p *MessageProcessor) processVariableTunnelBuildReplyMessage(msg Message) error {
 	return p.processBuildReplyCommon(msg, false)
 }
 
 // processShortTunnelBuildReplyMessage processes ShortTunnelBuildReply (type 26) messages.
 // Uses the newer short tunnel build format (v0.9.51+).
-func (p *MessageProcessor) processShortTunnelBuildReplyMessage(msg I2NPMessage) error {
+func (p *MessageProcessor) processShortTunnelBuildReplyMessage(msg Message) error {
 	return p.processBuildReplyCommon(msg, true)
 }
 
 // processBuildReplyCommon is the common handler for all tunnel build reply message types.
 // It extracts the response records from the raw message data, wraps them in the
 // appropriate TunnelReplyHandler, and delegates to the configured TunnelBuildReplyProcessor.
-func (p *MessageProcessor) processBuildReplyCommon(msg I2NPMessage, isShortBuild bool) error {
+func (p *MessageProcessor) processBuildReplyCommon(msg Message, isShortBuild bool) error {
 	if p.buildReplyProcessor == nil {
 		log.WithFields(logger.Fields{
 			"at":           "processBuildReplyCommon",
@@ -283,7 +283,7 @@ func (p *MessageProcessor) parseBuildResponseRecords(data []byte, isShortBuild b
 // Parameters:
 // - msg: The incoming I2NP tunnel build message
 // - isShortBuild: True for STBM format, false for VTB format
-func (p *MessageProcessor) processTunnelBuildRequest(msg I2NPMessage, isShortBuild bool) error {
+func (p *MessageProcessor) processTunnelBuildRequest(msg Message, isShortBuild bool) error {
 	if err := p.validateParticipantManager(isShortBuild, msg.Type()); err != nil {
 		return err
 	}
@@ -316,7 +316,7 @@ func (p *MessageProcessor) validateParticipantManager(isShortBuild bool, msgType
 }
 
 // extractBuildMessageData extracts raw data from the tunnel build message.
-func (p *MessageProcessor) extractBuildMessageData(msg I2NPMessage) ([]byte, error) {
+func (p *MessageProcessor) extractBuildMessageData(msg Message) ([]byte, error) {
 	carrier, ok := msg.(DataCarrier)
 	if !ok {
 		return nil, oops.Errorf("tunnel build message does not implement DataCarrier")

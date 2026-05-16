@@ -304,7 +304,7 @@ func (m *mockTunnelEncryptor) Type() tunnel.TunnelEncryptionType {
 }
 
 // createMockTunnelDataMessage creates a mock TunnelData I2NP message
-func createMockTunnelDataMessage(tunnelID tunnelpkg.TunnelID) i2np.I2NPMessage {
+func createMockTunnelDataMessage(tunnelID tunnelpkg.TunnelID) i2np.Message {
 	var data [1024]byte
 
 	// Fill with random encrypted data
@@ -316,7 +316,7 @@ func createMockTunnelDataMessage(tunnelID tunnelpkg.TunnelID) i2np.I2NPMessage {
 }
 
 // createMockDataMessage creates a mock Data I2NP message (not TunnelCarrier)
-func createMockDataMessage() i2np.I2NPMessage {
+func createMockDataMessage() i2np.Message {
 	payload := []byte("test payload data")
 	return i2np.NewDataMessage(payload)
 }

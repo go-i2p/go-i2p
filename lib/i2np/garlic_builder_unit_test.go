@@ -73,7 +73,7 @@ func TestAddTunnelDeliveryClove(t *testing.T) {
 func TestAddHashedDeliveryClove(t *testing.T) {
 	tests := []struct {
 		name         string
-		addClove     func(*GarlicBuilder, I2NPMessage, int, common.Hash) error
+		addClove     func(*GarlicBuilder, Message, int, common.Hash) error
 		cloveID      int
 		expectedFlag byte
 		flagLabel    string
@@ -199,7 +199,7 @@ func TestSerializeGarlicClove_NilInput(t *testing.T) {
 func TestSerializeGarlicClove_NilMessage(t *testing.T) {
 	clove := &GarlicClove{
 		DeliveryInstructions: NewLocalDeliveryInstructions(),
-		I2NPMessage:          nil,
+		Message:          nil,
 		CloveID:              1,
 		Expiration:           time.Now(),
 	}

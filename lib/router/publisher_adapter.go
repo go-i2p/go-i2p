@@ -125,7 +125,7 @@ type floodfillTransportAdapter struct {
 
 // SendI2NPMessage looks up the RouterInfo for routerHash in the local NetDB,
 // obtains (or creates) a transport session to that router, and queues msg.
-func (a *floodfillTransportAdapter) SendI2NPMessage(ctx context.Context, routerHash common.Hash, msg i2np.I2NPMessage) error {
+func (a *floodfillTransportAdapter) SendI2NPMessage(ctx context.Context, routerHash common.Hash, msg i2np.Message) error {
 	if a.muxer == nil || a.db == nil {
 		return oops.Errorf("floodfill transport not ready")
 	}

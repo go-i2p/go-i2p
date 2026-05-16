@@ -79,7 +79,7 @@ func NewGarlicBuilderWithDefaults() (*GarlicBuilder, error) {
 // cloveExpiration: When this clove expires (typically same as or before garlic message expiration)
 func (gb *GarlicBuilder) AddClove(
 	deliveryInstructions GarlicCloveDeliveryInstructions,
-	message I2NPMessage,
+	message Message,
 	cloveID int,
 	cloveExpiration time.Time,
 ) error {
@@ -108,7 +108,7 @@ func (gb *GarlicBuilder) AddClove(
 
 	clove := GarlicClove{
 		DeliveryInstructions: deliveryInstructions,
-		I2NPMessage:          message,
+		Message:          message,
 		CloveID:              cloveID,
 		Expiration:           cloveExpiration,
 		Certificate:          *certificate.NewCertificate(),
@@ -127,7 +127,7 @@ func (gb *GarlicBuilder) AddClove(
 //
 // message: The I2NP message to wrap
 // cloveID: Unique identifier for this clove
-func (gb *GarlicBuilder) AddLocalDeliveryClove(message I2NPMessage, cloveID int) error {
+func (gb *GarlicBuilder) AddLocalDeliveryClove(message Message, cloveID int) error {
 	instructions := GarlicCloveDeliveryInstructions{
 		Flag: 0x00, // Delivery type: LOCAL (bits 6-5 = 0x00)
 	}
@@ -143,7 +143,7 @@ func (gb *GarlicBuilder) AddLocalDeliveryClove(message I2NPMessage, cloveID int)
 // gatewayHash: SHA256 hash of the tunnel gateway router
 // tunnelID: Destination tunnel ID
 func (gb *GarlicBuilder) AddTunnelDeliveryClove(
-	message I2NPMessage,
+	message Message,
 	cloveID int,
 	gatewayHash common.Hash,
 	tunnelID tunnel.TunnelID,
@@ -164,7 +164,7 @@ func (gb *GarlicBuilder) AddTunnelDeliveryClove(
 // cloveID: Unique identifier for this clove
 // destinationHash: SHA256 hash of the destination
 func (gb *GarlicBuilder) AddDestinationDeliveryClove(
-	message I2NPMessage,
+	message Message,
 	cloveID int,
 	destinationHash common.Hash,
 ) error {
@@ -183,7 +183,7 @@ func (gb *GarlicBuilder) AddDestinationDeliveryClove(
 // cloveID: Unique identifier for this clove
 // routerHash: SHA256 hash of the destination router
 func (gb *GarlicBuilder) AddRouterDeliveryClove(
-	message I2NPMessage,
+	message Message,
 	cloveID int,
 	routerHash common.Hash,
 ) error {
@@ -371,10 +371,10 @@ func serializeGarlicClove(clove *GarlicClove) ([]byte, error) {
 	buf = append(buf, instructionsBytes...)
 
 	// Serialize I2NP message
-	if clove.I2NPMessage == nil {
+	if clove.Message == nil {
 		return nil, oops.Errorf("garlic clove contains nil I2NP message")
 	}
-	messageBytes, err := clove.I2NPMessage.MarshalBinary()
+	messageBytes, err := clove.Message.MarshalBinary()
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to serialize I2NP message")
 	}
@@ -740,7 +740,7 @@ func deserializeGarlicClove(data []byte, nestingDepth int) (*GarlicClove, int, e
 
 	return &GarlicClove{
 		DeliveryInstructions: *di,
-		I2NPMessage:          i2npMsg,
+		Message:          i2npMsg,
 		CloveID:              cloveID,
 		Expiration:           expiration,
 		Certificate:          cert,
@@ -749,8 +749,8 @@ func deserializeGarlicClove(data []byte, nestingDepth int) (*GarlicClove, int, e
 
 // parseEmbeddedI2NPMessage parses an I2NP message embedded within a garlic clove.
 // It reads the standard NTCP I2NP header (16 bytes) to determine the message type
-// and payload size, then creates a properly typed I2NPMessage carrying the payload.
-func parseEmbeddedI2NPMessage(data []byte, offset int) (I2NPMessage, int, error) {
+// and payload size, then creates a properly typed Message carrying the payload.
+func parseEmbeddedI2NPMessage(data []byte, offset int) (Message, int, error) {
 	messageLength, err := readI2NPMessageLength(data, offset)
 	if err != nil {
 		return nil, 0, err

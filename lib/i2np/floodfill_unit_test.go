@@ -147,7 +147,7 @@ func TestDatabaseManager_SendDatabaseSearchReply(t *testing.T) {
 
 	// Mock session provider
 	mockSession := &mockTransportSession{
-		messages: make([]I2NPMessage, 0),
+		messages: make([]Message, 0),
 	}
 	mockProvider := &mockSessionProvider{
 		sessions: map[common.Hash]*mockTransportSession{
@@ -232,7 +232,7 @@ func TestDatabaseManager_PerformLookup_NotFound_WithFloodfills(t *testing.T) {
 
 	// Mock session provider
 	mockSession := &mockTransportSession{
-		messages: make([]I2NPMessage, 0),
+		messages: make([]Message, 0),
 	}
 	mockProvider := &mockSessionProvider{
 		sessions: map[common.Hash]*mockTransportSession{
@@ -284,7 +284,7 @@ func TestDatabaseManager_PerformLookup_Found(t *testing.T) {
 
 	// Mock session provider
 	mockSession := &mockTransportSession{
-		messages: make([]I2NPMessage, 0),
+		messages: make([]Message, 0),
 	}
 	mockProvider := &mockSessionProvider{
 		sessions: map[common.Hash]*mockTransportSession{
@@ -317,10 +317,10 @@ func TestDatabaseManager_PerformLookup_Found(t *testing.T) {
 
 // Mock types for testing
 type mockTransportSession struct {
-	messages []I2NPMessage
+	messages []Message
 }
 
-func (m *mockTransportSession) QueueSendI2NP(msg I2NPMessage) error {
+func (m *mockTransportSession) QueueSendI2NP(msg Message) error {
 	m.messages = append(m.messages, msg)
 	return nil
 }

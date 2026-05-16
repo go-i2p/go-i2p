@@ -45,16 +45,16 @@ func (m *MockNetDBRetriever) AddRouterInfo(hash common.Hash, data []byte) {
 
 // MockTransportSession implements TransportSession for testing
 type MockTransportSession struct {
-	sentMessages []I2NPMessage
+	sentMessages []Message
 }
 
 func NewMockTransportSession() *MockTransportSession {
 	return &MockTransportSession{
-		sentMessages: make([]I2NPMessage, 0),
+		sentMessages: make([]Message, 0),
 	}
 }
 
-func (m *MockTransportSession) QueueSendI2NP(msg I2NPMessage) error {
+func (m *MockTransportSession) QueueSendI2NP(msg Message) error {
 	m.sentMessages = append(m.sentMessages, msg)
 	return nil
 }
@@ -63,7 +63,7 @@ func (m *MockTransportSession) SendQueueSize() int {
 	return len(m.sentMessages)
 }
 
-func (m *MockTransportSession) GetSentMessages() []I2NPMessage {
+func (m *MockTransportSession) GetSentMessages() []Message {
 	return m.sentMessages
 }
 

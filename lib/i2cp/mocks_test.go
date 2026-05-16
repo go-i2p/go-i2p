@@ -396,7 +396,7 @@ func (m *mockGarlicEncryptor) EncryptGarlicMessage(destinationHash common.Hash, 
 var _ GarlicMessageEncryptor = (*mockGarlicEncryptor)(nil)
 
 // setupMessageRouterTest sets up a message router test environment.
-func setupMessageRouterTest(t *testing.T) (*Session, GarlicMessageEncryptor, TransportSendFunc, map[string]i2np.I2NPMessage) {
+func setupMessageRouterTest(t *testing.T) (*Session, GarlicMessageEncryptor, TransportSendFunc, map[string]i2np.Message) {
 	t.Helper()
 
 	server, session, _, outboundPool, cleanup := setupTestEnvironment(t)
@@ -407,8 +407,8 @@ func setupMessageRouterTest(t *testing.T) (*Session, GarlicMessageEncryptor, Tra
 
 	garlicMock := newMockGarlicEncryptor()
 
-	sentMessages := make(map[string]i2np.I2NPMessage)
-	transportSend := func(peerHash common.Hash, msg i2np.I2NPMessage) error {
+	sentMessages := make(map[string]i2np.Message)
+	transportSend := func(peerHash common.Hash, msg i2np.Message) error {
 		key := string(peerHash[:])
 		sentMessages[key] = msg
 		return nil

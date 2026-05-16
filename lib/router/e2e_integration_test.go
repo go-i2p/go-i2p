@@ -281,7 +281,7 @@ type e2eTestEnvironment struct {
 	messageRouter         *i2cp.MessageRouter
 
 	// Track sent messages for validation
-	sentMessages []i2np.I2NPMessage
+	sentMessages []i2np.Message
 	sentMutex    sync.Mutex
 
 	// Cleanup function
@@ -291,7 +291,7 @@ type e2eTestEnvironment struct {
 // setupCompleteE2EEnvironment creates a fully configured end-to-end test environment
 func setupCompleteE2EEnvironment(t *testing.T) *e2eTestEnvironment {
 	env := &e2eTestEnvironment{
-		sentMessages: make([]i2np.I2NPMessage, 0),
+		sentMessages: make([]i2np.Message, 0),
 		cleanupFuncs: make([]func(), 0),
 	}
 
@@ -338,7 +338,7 @@ func setupCompleteE2EEnvironment(t *testing.T) *e2eTestEnvironment {
 	require.NoError(t, err)
 
 	// Create message router with transport send function that captures messages
-	transportSend := func(peerHash common.Hash, msg i2np.I2NPMessage) error {
+	transportSend := func(peerHash common.Hash, msg i2np.Message) error {
 		env.sentMutex.Lock()
 		defer env.sentMutex.Unlock()
 		env.sentMessages = append(env.sentMessages, msg)
@@ -446,7 +446,7 @@ func (env *e2eTestEnvironment) WaitForOutboundTransmission(t *testing.T, timeout
 }
 
 // ExtractSentGarlicMessage extracts the first sent garlic message
-func (env *e2eTestEnvironment) ExtractSentGarlicMessage(t *testing.T) i2np.I2NPMessage {
+func (env *e2eTestEnvironment) ExtractSentGarlicMessage(t *testing.T) i2np.Message {
 	env.sentMutex.Lock()
 	defer env.sentMutex.Unlock()
 
@@ -455,20 +455,20 @@ func (env *e2eTestEnvironment) ExtractSentGarlicMessage(t *testing.T) i2np.I2NPM
 	}
 
 	msg := env.sentMessages[0]
-	assert.Equal(t, i2np.I2NPMessageTypeGarlic, msg.Type(), "Should be a garlic message")
+	assert.Equal(t, i2np.MessageTypeGarlic, msg.Type(), "Should be a garlic message")
 	return msg
 }
 
 // ExtractAllSentGarlicMessages extracts all sent garlic messages
-func (env *e2eTestEnvironment) ExtractAllSentGarlicMessages(t *testing.T) []i2np.I2NPMessage {
+func (env *e2eTestEnvironment) ExtractAllSentGarlicMessages(t *testing.T) []i2np.Message {
 	env.sentMutex.Lock()
 	defer env.sentMutex.Unlock()
 
-	messages := make([]i2np.I2NPMessage, len(env.sentMessages))
+	messages := make([]i2np.Message, len(env.sentMessages))
 	copy(messages, env.sentMessages)
 
 	for _, msg := range messages {
-		assert.Equal(t, i2np.I2NPMessageTypeGarlic, msg.Type(), "All messages should be garlic")
+		assert.Equal(t, i2np.MessageTypeGarlic, msg.Type(), "All messages should be garlic")
 	}
 
 	return messages
@@ -477,7 +477,7 @@ func (env *e2eTestEnvironment) ExtractAllSentGarlicMessages(t *testing.T) []i2np
 // ProcessInboundMessage simulates inbound tunnel processing and delivery to I2CP session
 // In a real system, this would involve tunnel decryption and message routing
 // For testing, we directly queue the payload to simulate successful delivery
-func (env *e2eTestEnvironment) ProcessInboundMessage(garlicMsg i2np.I2NPMessage, expectedPayload []byte) error {
+func (env *e2eTestEnvironment) ProcessInboundMessage(garlicMsg i2np.Message, expectedPayload []byte) error {
 	// In production: garlic message would be decrypted, routed through inbound tunnel,
 	// and delivered to the destination session's message queue
 	// For testing: we simulate this by directly queueing the expected payload
@@ -564,7 +564,7 @@ func (env *e2eTestEnvironment) Cleanup() {
 // CompleteGarlicHandshake completes the NS→NSR handshake between sender and
 // receiver garlic session managers so that subsequent messages can use ES format.
 // Must be called after the first NS message has been sent and extracted.
-func (env *e2eTestEnvironment) CompleteGarlicHandshake(t *testing.T, nsMsg i2np.I2NPMessage) {
+func (env *e2eTestEnvironment) CompleteGarlicHandshake(t *testing.T, nsMsg i2np.Message) {
 	t.Helper()
 
 	// Extract the raw encrypted garlic data from the I2NP message wrapper

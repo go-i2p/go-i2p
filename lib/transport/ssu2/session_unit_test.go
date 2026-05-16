@@ -502,4 +502,4 @@ func TestHandleRetransmissions_RetransmitsExpired(t *testing.T) {
 }
 
 // Satisfy the compiler: ensure i2np import is used.
-var _ = i2np.I2NPMessageTypeDeliveryStatus
+var _ = i2np.MessageTypeDeliveryStatus

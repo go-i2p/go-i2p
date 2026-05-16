@@ -23,8 +23,8 @@ type NTCP2Session struct {
 	conn net.Conn // Will be *ntcp2.NTCP2Conn internally
 
 	// I2NP message queues
-	sendQueue chan i2np.I2NPMessage
-	recvChan  chan i2np.I2NPMessage
+	sendQueue chan i2np.Message
+	recvChan  chan i2np.Message
 
 	// Queue management
 	sendQueueSize int32 // atomic counter
@@ -93,8 +93,8 @@ func NewNTCP2SessionDeferred(conn net.Conn, ctx context.Context, logger *logger.
 
 	session := &NTCP2Session{
 		conn:           conn,
-		sendQueue:      make(chan i2np.I2NPMessage, 256), // Buffered channel for send queue
-		recvChan:       make(chan i2np.I2NPMessage, 256), // Buffered channel for receive messages
+		sendQueue:      make(chan i2np.Message, 256), // Buffered channel for send queue
+		recvChan:       make(chan i2np.Message, 256), // Buffered channel for receive messages
 		ctx:            sessionCtx,
 		cancel:         cancel,
 		logger:         sessionLogger,
@@ -123,7 +123,7 @@ func (s *NTCP2Session) StartWorkers() {
 
 // QueueSendI2NP queues an I2NP message to be sent over the session.
 // Returns an error if the session is closed or the send queue is full after a timeout.
-func (s *NTCP2Session) QueueSendI2NP(msg i2np.I2NPMessage) error {
+func (s *NTCP2Session) QueueSendI2NP(msg i2np.Message) error {
 	s.logger.WithFields(map[string]interface{}{
 		"message_type":       msg.Type(),
 		"current_queue_size": atomic.LoadInt32(&s.sendQueueSize),
@@ -169,7 +169,7 @@ func (s *NTCP2Session) GetBandwidthStats() (bytesSent, bytesReceived uint64) {
 }
 
 // ReadNextI2NP blocking reads the next fully received I2NP message from this session.
-func (s *NTCP2Session) ReadNextI2NP() (i2np.I2NPMessage, error) {
+func (s *NTCP2Session) ReadNextI2NP() (i2np.Message, error) {
 	select {
 	case msg := <-s.recvChan:
 		s.logger.WithField("message_type", msg.Type()).Debug("Read I2NP message from session")
@@ -373,7 +373,7 @@ func (s *NTCP2Session) discardRemainingMessages() {
 
 // processSendQueueMessage processes a single I2NP message from the send queue.
 // Returns false if an error occurred and the worker should stop, true otherwise.
-func (s *NTCP2Session) processSendQueueMessage(msg i2np.I2NPMessage) bool {
+func (s *NTCP2Session) processSendQueueMessage(msg i2np.Message) bool {
 	newSize := atomic.AddInt32(&s.sendQueueSize, -1)
 	s.logger.WithFields(map[string]interface{}{
 		"message_type":       msg.Type(),
@@ -390,7 +390,7 @@ func (s *NTCP2Session) processSendQueueMessage(msg i2np.I2NPMessage) bool {
 
 // frameMessage frames an I2NP message for transmission using NTCP2 block format.
 // Returns the framed data or sets an error and returns nil.
-func (s *NTCP2Session) frameMessage(msg i2np.I2NPMessage) ([]byte, error) {
+func (s *NTCP2Session) frameMessage(msg i2np.Message) ([]byte, error) {
 	framedData, err := FrameI2NPMessageAsBlock(msg)
 	if err != nil {
 		s.setError(WrapNTCP2Error(err, "framing message"))
@@ -463,7 +463,7 @@ func (s *NTCP2Session) processNextInboundMessageFromBlocks(unframer *BlockUnfram
 	return s.queueReceivedMessage(msg)
 }
 
-func (s *NTCP2Session) allowInboundMessage(msg i2np.I2NPMessage) bool {
+func (s *NTCP2Session) allowInboundMessage(msg i2np.Message) bool {
 	if s.inboundLimiter.Allow() {
 		return true
 	}
@@ -587,7 +587,7 @@ func (s *NTCP2Session) shouldStopReceiving() bool {
 }
 
 // readNextMessageFromBlocks reads the next I2NP message from the block unframer and tracks bytes received.
-func (s *NTCP2Session) readNextMessageFromBlocks(unframer *BlockUnframer) (i2np.I2NPMessage, error) {
+func (s *NTCP2Session) readNextMessageFromBlocks(unframer *BlockUnframer) (i2np.Message, error) {
 	msg, err := unframer.ReadNextMessage()
 	if err == nil {
 		// Track bytes received atomically
@@ -634,7 +634,7 @@ func isTimeoutOrReset(err error) bool {
 // Returns false if the session context is done, true if message was queued successfully.
 // Uses a non-blocking attempt first to avoid stalling the receive worker when the
 // channel is full, falling back to a short timeout before dropping the message.
-func (s *NTCP2Session) queueReceivedMessage(msg i2np.I2NPMessage) bool {
+func (s *NTCP2Session) queueReceivedMessage(msg i2np.Message) bool {
 	s.logger.WithField("message_type", msg.Type()).Debug("Received message, queueing to receive channel")
 
 	// Try non-blocking first
@@ -655,7 +655,7 @@ func (s *NTCP2Session) queueReceivedMessage(msg i2np.I2NPMessage) bool {
 // queueWithBackpressure waits briefly for space in the receive channel before dropping
 // the message to avoid stalling the receive worker. Returns true even on drop so
 // the receiveWorker continues processing subsequent messages.
-func (s *NTCP2Session) queueWithBackpressure(msg i2np.I2NPMessage) bool {
+func (s *NTCP2Session) queueWithBackpressure(msg i2np.Message) bool {
 	timer := time.NewTimer(500 * time.Millisecond)
 	defer timer.Stop()
 
@@ -674,7 +674,7 @@ func (s *NTCP2Session) queueWithBackpressure(msg i2np.I2NPMessage) bool {
 }
 
 // recordDroppedMessage increments the dropped message counter and logs the event.
-func (s *NTCP2Session) recordDroppedMessage(msg i2np.I2NPMessage) {
+func (s *NTCP2Session) recordDroppedMessage(msg i2np.Message) {
 	dropped := atomic.AddUint64(&s.droppedMessages, 1)
 	s.logger.WithFields(map[string]interface{}{
 		"message_type":  msg.Type(),

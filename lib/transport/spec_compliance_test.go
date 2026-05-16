@@ -130,27 +130,27 @@ func TestTransportSessionInterface_BidirectionalI2NP(t *testing.T) {
 }
 
 // TestTransportSessionInterface_QueueSendAcceptsI2NPMessage verifies that
-// QueueSendI2NP accepts an i2np.I2NPMessage parameter.
+// QueueSendI2NP accepts an i2np.Message parameter.
 func TestTransportSessionInterface_QueueSendAcceptsI2NPMessage(t *testing.T) {
 	sessionType := reflect.TypeOf((*TransportSession)(nil)).Elem()
 	m := requireInterfaceMethod(t, sessionType, "QueueSendI2NP", 1, 1)
 
 	// Verify the parameter type is the I2NP message interface
-	i2npMsgType := reflect.TypeOf((*i2np.I2NPMessage)(nil)).Elem()
+	i2npMsgType := reflect.TypeOf((*i2np.Message)(nil)).Elem()
 	assert.Equal(t, i2npMsgType, m.Type.In(0),
-		"QueueSendI2NP parameter must be i2np.I2NPMessage")
+		"QueueSendI2NP parameter must be i2np.Message")
 }
 
 // TestTransportSessionInterface_ReadNextI2NPReturnsI2NPMessage verifies that
-// ReadNextI2NP returns an i2np.I2NPMessage for inbound message delivery.
+// ReadNextI2NP returns an i2np.Message for inbound message delivery.
 func TestTransportSessionInterface_ReadNextI2NPReturnsI2NPMessage(t *testing.T) {
 	sessionType := reflect.TypeOf((*TransportSession)(nil)).Elem()
 	m := requireInterfaceMethod(t, sessionType, "ReadNextI2NP", 0, 2)
 
-	// First return: i2np.I2NPMessage
-	i2npMsgType := reflect.TypeOf((*i2np.I2NPMessage)(nil)).Elem()
+	// First return: i2np.Message
+	i2npMsgType := reflect.TypeOf((*i2np.Message)(nil)).Elem()
 	assert.Equal(t, i2npMsgType, m.Type.Out(0),
-		"ReadNextI2NP first return must be i2np.I2NPMessage")
+		"ReadNextI2NP first return must be i2np.Message")
 
 	// Second return: error
 	errorType := reflect.TypeOf((*error)(nil)).Elem()
@@ -162,11 +162,11 @@ func TestTransportSessionInterface_ReadNextI2NPReturnsI2NPMessage(t *testing.T) 
 // can perform bidirectional I2NP message exchange (send then receive).
 func TestTransportSessionInterface_MockRoundtrip(t *testing.T) {
 	session := &bidirectionalMockSession{
-		recvQueue: make(chan i2np.I2NPMessage, 10),
+		recvQueue: make(chan i2np.Message, 10),
 	}
 
 	// Create a test I2NP message
-	msg := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeData)
+	msg := i2np.NewBaseI2NPMessage(i2np.MessageTypeData)
 	msg.SetMessageID(42)
 	msg.SetData([]byte("test payload"))
 
@@ -484,12 +484,12 @@ func TestLegacyCrypto_NoNTCPv1References(t *testing.T) {
 // bidirectionalMockSession implements TransportSession with actual bidirectional
 // I2NP message passing for testing the interface contract.
 type bidirectionalMockSession struct {
-	sentMessages []i2np.I2NPMessage
-	recvQueue    chan i2np.I2NPMessage
+	sentMessages []i2np.Message
+	recvQueue    chan i2np.Message
 	mu           sync.Mutex
 }
 
-func (s *bidirectionalMockSession) QueueSendI2NP(msg i2np.I2NPMessage) error {
+func (s *bidirectionalMockSession) QueueSendI2NP(msg i2np.Message) error {
 	s.mu.Lock()
 	s.sentMessages = append(s.sentMessages, msg)
 	s.mu.Unlock()
@@ -508,7 +508,7 @@ func (s *bidirectionalMockSession) SendQueueSize() int {
 	return len(s.sentMessages)
 }
 
-func (s *bidirectionalMockSession) ReadNextI2NP() (i2np.I2NPMessage, error) {
+func (s *bidirectionalMockSession) ReadNextI2NP() (i2np.Message, error) {
 	msg, ok := <-s.recvQueue
 	if !ok {
 		return nil, errors.New("session closed")

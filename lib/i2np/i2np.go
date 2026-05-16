@@ -13,46 +13,46 @@ import (
 	"github.com/samber/oops"
 )
 
-// I2NPMessage interface represents any I2NP message that can be marshaled/unmarshaled
+// Message interface represents any I2NP message that can be marshaled/unmarshaled
 // This is the primary interface that combines all core message behaviors
-type I2NPMessage interface {
+type Message interface {
 	MessageSerializer
 	MessageIdentifier
 	MessageExpiration
 }
 
-// I2NPMessageFactory provides methods to create I2NP messages as interfaces
-type I2NPMessageFactory struct{}
+// MessageFactory provides methods to create I2NP messages as interfaces
+type MessageFactory struct{}
 
-// NewI2NPMessageFactory creates a new message factory
-func NewI2NPMessageFactory() *I2NPMessageFactory {
-	return &I2NPMessageFactory{}
+// NewMessageFactory creates a new message factory
+func NewMessageFactory() *MessageFactory {
+	return &MessageFactory{}
 }
 
 // CreateDataMessage creates a new data message
-func (f *I2NPMessageFactory) CreateDataMessage(payload []byte) I2NPMessage {
+func (f *MessageFactory) CreateDataMessage(payload []byte) Message {
 	return NewDataMessage(payload)
 }
 
 // CreateDeliveryStatusMessage creates a new delivery status message
-func (f *I2NPMessageFactory) CreateDeliveryStatusMessage(messageID int, timestamp time.Time) I2NPMessage {
+func (f *MessageFactory) CreateDeliveryStatusMessage(messageID int, timestamp time.Time) Message {
 	return NewDeliveryStatusMessage(messageID, timestamp)
 }
 
 // CreateTunnelDataMessage creates a new tunnel data message with the given tunnel ID and data.
-func (f *I2NPMessageFactory) CreateTunnelDataMessage(tunnelID tunnel.TunnelID, data [1024]byte) I2NPMessage {
+func (f *MessageFactory) CreateTunnelDataMessage(tunnelID tunnel.TunnelID, data [1024]byte) Message {
 	return NewTunnelDataMessage(tunnelID, data)
 }
 
 // CreateTunnelBuildMessage creates a new tunnel build message
-func (f *I2NPMessageFactory) CreateTunnelBuildMessage(records [8]BuildRequestRecord) I2NPMessage {
+func (f *MessageFactory) CreateTunnelBuildMessage(records [8]BuildRequestRecord) Message {
 	return &TunnelBuildMessage{
 		BaseI2NPMessage: NewBaseI2NPMessage(I2NPMessageTypeTunnelBuild),
 		Records:         TunnelBuild(records),
 	}
 }
 
-// BaseI2NPMessage provides a basic implementation of I2NPMessage
+// BaseI2NPMessage provides a basic implementation of Message
 type BaseI2NPMessage struct {
 	type_      int
 	messageID  int
@@ -98,8 +98,8 @@ func NewBaseI2NPMessage(msgType int) *BaseI2NPMessage {
 	}
 }
 
-// NewI2NPMessage creates a new base I2NP message and returns it as I2NPMessage interface
-func NewI2NPMessage(msgType int) I2NPMessage {
+// NewI2NPMessage creates a new base I2NP message and returns it as Message interface
+func NewI2NPMessage(msgType int) Message {
 	return NewBaseI2NPMessage(msgType)
 }
 

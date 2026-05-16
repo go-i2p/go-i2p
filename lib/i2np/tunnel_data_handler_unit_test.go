@@ -9,11 +9,11 @@ import (
 // mockTunnelDataHandler implements TunnelDataHandler for testing
 type mockTunnelDataHandler struct {
 	called    bool
-	msg       I2NPMessage
+	msg       Message
 	returnErr error
 }
 
-func (m *mockTunnelDataHandler) HandleTunnelData(msg I2NPMessage) error {
+func (m *mockTunnelDataHandler) HandleTunnelData(msg Message) error {
 	m.called = true
 	m.msg = msg
 	return m.returnErr

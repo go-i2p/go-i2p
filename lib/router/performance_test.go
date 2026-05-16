@@ -268,7 +268,7 @@ func setupPerformanceEnvironment(tb testing.TB) *performanceEnvironment {
 	require.NoError(tb, err)
 
 	// Create message router with no-op transport
-	noopTransport := func(peerHash common.Hash, msg i2np.I2NPMessage) error {
+	noopTransport := func(peerHash common.Hash, msg i2np.Message) error {
 		return nil
 	}
 

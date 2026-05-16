@@ -68,7 +68,7 @@ func (m *mockTransportManager) GetSession(routerInfo router_info.RouterInfo) (I2
 	return session, nil
 }
 
-func (m *mockTransportManager) GetSentMessages(hash common.Hash) []i2np.I2NPMessage {
+func (m *mockTransportManager) GetSentMessages(hash common.Hash) []i2np.Message {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -82,26 +82,26 @@ func (m *mockTransportManager) GetSentMessages(hash common.Hash) []i2np.I2NPMess
 // mockTransportSession implements TransportSession for testing
 type mockTransportSession struct {
 	mu           sync.Mutex
-	sentMessages []i2np.I2NPMessage
+	sentMessages []i2np.Message
 }
 
 func newMockTransportSession() *mockTransportSession {
 	return &mockTransportSession{
-		sentMessages: make([]i2np.I2NPMessage, 0),
+		sentMessages: make([]i2np.Message, 0),
 	}
 }
 
-func (m *mockTransportSession) QueueSendI2NP(msg i2np.I2NPMessage) error {
+func (m *mockTransportSession) QueueSendI2NP(msg i2np.Message) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.sentMessages = append(m.sentMessages, msg)
 	return nil
 }
 
-func (m *mockTransportSession) GetSentMessages() []i2np.I2NPMessage {
+func (m *mockTransportSession) GetSentMessages() []i2np.Message {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return append([]i2np.I2NPMessage{}, m.sentMessages...)
+	return append([]i2np.Message{}, m.sentMessages...)
 }
 
 // publisherTestEnv holds the common test fixtures for publisher tunnel tests.
@@ -185,7 +185,7 @@ func TestSendDatabaseStoreToFloodfill_RouterInfoFallsBackToDirectTransport(t *te
 
 	sentMessages := transport.GetSentMessages(floodfillHash)
 	require.Len(t, sentMessages, 1, "Expected direct DatabaseStore message to floodfill")
-	assert.Equal(t, i2np.I2NPMessageTypeDatabaseStore, sentMessages[0].Type(), "Expected direct DatabaseStore message type")
+	assert.Equal(t, i2np.MessageTypeDatabaseStore, sentMessages[0].Type(), "Expected direct DatabaseStore message type")
 }
 
 // TestSendDatabaseStoreToFloodfill_WithActiveTunnel tests successful tunnel selection and message transmission
@@ -211,7 +211,7 @@ func TestSendDatabaseStoreToFloodfill_WithActiveTunnel(t *testing.T) {
 
 	// Verify message is a TunnelGateway message
 	msg := sentMessages[0]
-	assert.Equal(t, i2np.I2NPMessageTypeTunnelGateway, msg.Type(), "Expected TunnelGateway message type")
+	assert.Equal(t, i2np.MessageTypeTunnelGateway, msg.Type(), "Expected TunnelGateway message type")
 }
 
 // TestSendDatabaseStoreToFloodfill_TunnelWithNoHops tests error handling for invalid tunnels

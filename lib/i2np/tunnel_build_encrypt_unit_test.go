@@ -208,7 +208,7 @@ func TestCreateShortTunnelBuildMessage_RegistersAttachLayerOneTimeGarlicKey(t *t
 func TestCreateBuildMessage_EncryptsRecords(t *testing.T) {
 	tests := []struct {
 		name         string
-		createMsg    func(*TunnelManager, *tunnel.TunnelBuildResult, int) (I2NPMessage, error)
+		createMsg    func(*TunnelManager, *tunnel.TunnelBuildResult, int) (Message, error)
 		expectedLen  int
 		recordOffset int
 		checkPrefix  bool
@@ -217,7 +217,7 @@ func TestCreateBuildMessage_EncryptsRecords(t *testing.T) {
 	}{
 		{
 			name: "TunnelBuild_Type21_Fixed8Records",
-			createMsg: func(tm *TunnelManager, r *tunnel.TunnelBuildResult, id int) (I2NPMessage, error) {
+			createMsg: func(tm *TunnelManager, r *tunnel.TunnelBuildResult, id int) (Message, error) {
 				return tm.createTunnelBuildMessage(r, id)
 			},
 			expectedLen:  8 * 528,
@@ -227,7 +227,7 @@ func TestCreateBuildMessage_EncryptsRecords(t *testing.T) {
 		},
 		{
 			name: "VariableTunnelBuild_Type23_CountPrefix",
-			createMsg: func(tm *TunnelManager, r *tunnel.TunnelBuildResult, id int) (I2NPMessage, error) {
+			createMsg: func(tm *TunnelManager, r *tunnel.TunnelBuildResult, id int) (Message, error) {
 				return tm.createVariableTunnelBuildMessage(r, id)
 			},
 			expectedLen:  1 + 1*528,

@@ -72,7 +72,7 @@ func TestSetDefaultExpirationValidatorNil(t *testing.T) {
 	assert.False(t, expired, "future message should not be expired")
 }
 
-// mockI2NPMessage is a minimal I2NPMessage implementation for testing
+// mockI2NPMessage is a minimal Message implementation for testing
 type mockI2NPMessage struct {
 	expiration time.Time
 }

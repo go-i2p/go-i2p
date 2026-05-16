@@ -52,7 +52,7 @@ func TestTunnelBuildMessage_Creation(t *testing.T) {
 	// Create TunnelBuild message
 	msg := newTunnelBuildMessage(records)
 
-	// Verify I2NPMessage interface compliance
+	// Verify Message interface compliance
 	assert.Equal(t, I2NPMessageTypeTunnelBuild, msg.Type())
 	assert.NotEqual(t, 0, msg.MessageID())             // Should have random message ID
 	assert.True(t, msg.Expiration().After(time.Now())) // Should have future expiration
@@ -183,8 +183,8 @@ func TestTunnelBuildMessage_InterfaceCompliance(t *testing.T) {
 	records := createTestBuildRequestRecords()
 	msg := newTunnelBuildMessage(records)
 
-	// Test I2NPMessage interface
-	var i2npMsg I2NPMessage = msg
+	// Test Message interface
+	var i2npMsg Message = msg
 	assert.NotNil(t, i2npMsg)
 
 	// Test TunnelBuilder interface
@@ -204,14 +204,14 @@ func TestTunnelBuildMessage_InterfaceCompliance(t *testing.T) {
 	assert.NotNil(t, expiration)
 }
 
-// TestI2NPMessageFactory_CreateTunnelBuildMessage tests factory method
-func TestI2NPMessageFactory_CreateTunnelBuildMessage(t *testing.T) {
-	factory := NewI2NPMessageFactory()
+// TestMessageFactory_CreateTunnelBuildMessage tests factory method
+func TestMessageFactory_CreateTunnelBuildMessage(t *testing.T) {
+	factory := NewMessageFactory()
 	records := createTestBuildRequestRecords()
 
 	msg := factory.CreateTunnelBuildMessage(records)
 
-	// Verify it returns I2NPMessage interface
+	// Verify it returns Message interface
 	assert.NotNil(t, msg)
 	assert.Equal(t, I2NPMessageTypeTunnelBuild, msg.Type())
 

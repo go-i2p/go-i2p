@@ -14,7 +14,7 @@ import (
 // (I2NP) block. The result can be combined with other blocks via SerializeBlocks.
 //
 // Spec reference: https://geti2p.net/spec/ntcp2#data-phase
-func FrameI2NPMessageAsBlock(msg i2np.I2NPMessage) ([]byte, error) {
+func FrameI2NPMessageAsBlock(msg i2np.Message) ([]byte, error) {
 	log.WithField("message_type", msg.Type()).Debug("Framing I2NP message as NTCP2 block")
 
 	// Use the short I2NP header format for NTCP2 blocks
@@ -50,7 +50,7 @@ func FrameI2NPMessageAsBlock(msg i2np.I2NPMessage) ([]byte, error) {
 }
 
 // UnframeI2NPMessage unframes I2NP messages from an NTCP2 data stream.
-func UnframeI2NPMessage(conn net.Conn) (i2np.I2NPMessage, error) {
+func UnframeI2NPMessage(conn net.Conn) (i2np.Message, error) {
 	// Read the next message from the connection
 	unframer := NewI2NPUnframer(conn)
 	return unframer.ReadNextMessage()
@@ -78,7 +78,7 @@ func (u *I2NPUnframer) BytesRead() int {
 }
 
 // ReadNextMessage reads the next length-prefixed I2NP message from the underlying connection and returns the parsed message.
-func (u *I2NPUnframer) ReadNextMessage() (i2np.I2NPMessage, error) {
+func (u *I2NPUnframer) ReadNextMessage() (i2np.Message, error) {
 	log.WithFields(logger.Fields{"at": "ReadNextMessage"}).Debug("Reading next framed message from connection")
 
 	// Reset byte counter for this read operation
@@ -143,7 +143,7 @@ type BlockUnframer struct {
 	bytesRead      int // Track bytes read in last operation
 	totalBytesRead int // Track cumulative bytes read
 	// bufferedMsgs holds I2NP messages extracted from multi-block frames
-	bufferedMsgs []i2np.I2NPMessage
+	bufferedMsgs []i2np.Message
 	// BlockCallback is called for non-I2NP blocks (DateTime, Options, etc.)
 	BlockCallback func(block Block)
 }
@@ -164,7 +164,7 @@ func (u *BlockUnframer) BytesRead() int {
 // ReadNextMessage reads and parses the next NTCP2 frame, returning the first
 // I2NP message found. Non-I2NP blocks are passed to BlockCallback if set.
 // Multiple I2NP messages in a single frame are buffered for subsequent calls.
-func (u *BlockUnframer) ReadNextMessage() (i2np.I2NPMessage, error) {
+func (u *BlockUnframer) ReadNextMessage() (i2np.Message, error) {
 	// Return buffered messages first
 	if len(u.bufferedMsgs) > 0 {
 		msg := u.bufferedMsgs[0]
@@ -205,7 +205,7 @@ func (u *BlockUnframer) ReadNextMessage() (i2np.I2NPMessage, error) {
 
 // processBlocks handles each block type, returning the first I2NP message found
 // and whether a termination block was received. Additional I2NP messages are buffered.
-func (u *BlockUnframer) processBlocks(blocks []Block) (firstMsg i2np.I2NPMessage, terminated bool) {
+func (u *BlockUnframer) processBlocks(blocks []Block) (firstMsg i2np.Message, terminated bool) {
 	for _, block := range blocks {
 		msg, term := u.processBlock(block)
 		if term {
@@ -224,7 +224,7 @@ func (u *BlockUnframer) processBlocks(blocks []Block) (firstMsg i2np.I2NPMessage
 
 // processBlock handles a single NTCP2 block by type.
 // Returns an I2NP message if this is an I2NP block, and terminated=true if termination.
-func (u *BlockUnframer) processBlock(block Block) (msg i2np.I2NPMessage, terminated bool) {
+func (u *BlockUnframer) processBlock(block Block) (msg i2np.Message, terminated bool) {
 	switch block.Type {
 	case BlockTypeI2NP:
 		parsedMsg, err := u.parseI2NPBlock(block.Data)
@@ -265,7 +265,7 @@ func (u *BlockUnframer) readFrame() ([]byte, error) {
 }
 
 // parseI2NPBlock parses an I2NP message from block data using short header format.
-func (u *BlockUnframer) parseI2NPBlock(data []byte) (i2np.I2NPMessage, error) {
+func (u *BlockUnframer) parseI2NPBlock(data []byte) (i2np.Message, error) {
 	if len(data) < i2np.ShortI2NPHeaderSize {
 		return nil, oops.Errorf("I2NP block data too short: %d bytes", len(data))
 	}

@@ -15,8 +15,8 @@ func TestNewMessageRouter(t *testing.T) {
 	garlicMgr := newMockGarlicEncryptor()
 
 	// Create transport send function
-	sentMessages := make(map[string]i2np.I2NPMessage)
-	transportSend := func(peerHash common.Hash, msg i2np.I2NPMessage) error {
+	sentMessages := make(map[string]i2np.Message)
+	transportSend := func(peerHash common.Hash, msg i2np.Message) error {
 		key := string(peerHash[:])
 		sentMessages[key] = msg
 		return nil
@@ -54,7 +54,7 @@ func TestRouteOutboundMessageSuccess(t *testing.T) {
 
 	// Verify sent message is a Garlic message
 	for _, msg := range sentMessages {
-		assert.Equal(t, i2np.I2NPMessageTypeGarlic, msg.Type())
+		assert.Equal(t, i2np.MessageTypeGarlic, msg.Type())
 	}
 }
 
@@ -82,8 +82,8 @@ func TestRouteOutboundMessageErrors(t *testing.T) {
 			session := tt.makeSession(t)
 			garlicMgr := newMockGarlicEncryptor()
 
-			sentMessages := make(map[string]i2np.I2NPMessage)
-			transportSend := func(peerHash common.Hash, msg i2np.I2NPMessage) error {
+			sentMessages := make(map[string]i2np.Message)
+			transportSend := func(peerHash common.Hash, msg i2np.Message) error {
 				sentMessages[string(peerHash[:])] = msg
 				return nil
 			}
@@ -109,8 +109,8 @@ func TestSendThroughTunnel(t *testing.T) {
 	// Setup with mock garlic encryptor
 	garlicMgr := newMockGarlicEncryptor()
 
-	sentMessages := make(map[string]i2np.I2NPMessage)
-	transportSend := func(peerHash common.Hash, msg i2np.I2NPMessage) error {
+	sentMessages := make(map[string]i2np.Message)
+	transportSend := func(peerHash common.Hash, msg i2np.Message) error {
 		sentMessages[string(peerHash[:])] = msg
 		return nil
 	}
@@ -139,7 +139,7 @@ func TestSendThroughTunnel(t *testing.T) {
 func TestSendThroughTunnelNoHops(t *testing.T) {
 	garlicMgr := newMockGarlicEncryptor()
 
-	transportSend := func(peerHash common.Hash, msg i2np.I2NPMessage) error {
+	transportSend := func(peerHash common.Hash, msg i2np.Message) error {
 		return nil
 	}
 
@@ -170,8 +170,8 @@ func TestRouteOutboundMessageZeroHopTunnelRejected(t *testing.T) {
 	// Create mock garlic encryptor and router
 	garlicMgr := newMockGarlicEncryptor()
 
-	sentMessages := make(map[string]i2np.I2NPMessage)
-	transportSend := func(peerHash common.Hash, msg i2np.I2NPMessage) error {
+	sentMessages := make(map[string]i2np.Message)
+	transportSend := func(peerHash common.Hash, msg i2np.Message) error {
 		sentMessages[string(peerHash[:])] = msg
 		return nil
 	}
@@ -211,7 +211,7 @@ func TestRouteOutboundMessageZeroHopTunnelRejected(t *testing.T) {
 func TestValidateAndSelectTunnelZeroHopRejection(t *testing.T) {
 	garlicMgr := newMockGarlicEncryptor()
 
-	transportSend := func(peerHash common.Hash, msg i2np.I2NPMessage) error {
+	transportSend := func(peerHash common.Hash, msg i2np.Message) error {
 		return nil
 	}
 

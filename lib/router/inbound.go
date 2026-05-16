@@ -165,7 +165,7 @@ func (h *InboundMessageHandler) UnregisterTunnel(tunnelID tunnel.TunnelID) {
 //
 // HandleTunnelData processes an inbound TunnelData I2NP message by validating,
 // looking up the owning session, decrypting, and delivering to the I2CP client.
-func (h *InboundMessageHandler) HandleTunnelData(msg i2np.I2NPMessage) error {
+func (h *InboundMessageHandler) HandleTunnelData(msg i2np.Message) error {
 	data, tunnelID, err := extractTunnelPayload(msg)
 	if err != nil {
 		return err
@@ -187,7 +187,7 @@ func (h *InboundMessageHandler) HandleTunnelData(msg i2np.I2NPMessage) error {
 
 // extractTunnelPayload validates the message type and data size, returning
 // the 1024-byte tunnel payload and the tunnel ID.
-func extractTunnelPayload(msg i2np.I2NPMessage) ([]byte, tunnel.TunnelID, error) {
+func extractTunnelPayload(msg i2np.Message) ([]byte, tunnel.TunnelID, error) {
 	tunnelCarrier, ok := msg.(i2np.TunnelCarrier)
 	if !ok {
 		log.WithFields(logger.Fields{

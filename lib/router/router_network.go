@@ -405,7 +405,7 @@ func (r *Router) handleNewConnection(conn net.Conn) {
 // i2npReader is a transport session that supports reading inbound I2NP messages.
 // Both NTCP2Session and SSU2Session implement this interface.
 type i2npReader interface {
-	ReadNextI2NP() (i2np.I2NPMessage, error)
+	ReadNextI2NP() (i2np.Message, error)
 }
 
 // AuthenticatedPeer defines the minimum identity guarantees required before
@@ -474,7 +474,7 @@ func (r *Router) processSessionMessageSafely(session i2npReader, peerHash common
 
 // readNextMessage reads the next I2NP message from the session.
 // Returns nil if an error occurs or the session is closed.
-func (r *Router) readNextMessage(session i2npReader, peerHash common.Hash) i2np.I2NPMessage {
+func (r *Router) readNextMessage(session i2npReader, peerHash common.Hash) i2np.Message {
 	msg, err := session.ReadNextI2NP()
 	if err != nil {
 		r.logReadError(err, peerHash)
@@ -486,7 +486,7 @@ func (r *Router) readNextMessage(session i2npReader, peerHash common.Hash) i2np.
 
 // logInboundI2NPIngress records transport-to-I2NP ingress metadata for every
 // inbound message so reply-path audits can verify where messages are lost.
-func (r *Router) logInboundI2NPIngress(msg i2np.I2NPMessage, peerHash common.Hash, session i2npReader) {
+func (r *Router) logInboundI2NPIngress(msg i2np.Message, peerHash common.Hash, session i2npReader) {
 	i2np.RecordExploratoryReplyStage(i2np.ExploratoryReplyStageInboundI2NPReceived)
 	log.WithFields(logger.Fields{
 		"at":           "readNextMessage",
@@ -497,7 +497,7 @@ func (r *Router) logInboundI2NPIngress(msg i2np.I2NPMessage, peerHash common.Has
 	}).Debug("Inbound I2NP ingress")
 }
 
-func estimateI2NPMessageSize(msg i2np.I2NPMessage) int {
+func estimateI2NPMessageSize(msg i2np.Message) int {
 	encoded, err := msg.MarshalBinary()
 	if err == nil {
 		return len(encoded)
@@ -567,7 +567,7 @@ func shouldLogReadWarn(peerHash string) bool {
 }
 
 // handleIncomingMessage routes the message and logs any routing errors.
-func (r *Router) handleIncomingMessage(msg i2np.I2NPMessage, peerHash common.Hash) {
+func (r *Router) handleIncomingMessage(msg i2np.Message, peerHash common.Hash) {
 	if err := r.routeMessage(msg, peerHash); err != nil {
 		log.WithError(err).WithFields(logger.Fields{
 			"message_type": msg.Type(),
@@ -581,7 +581,7 @@ func (r *Router) handleIncomingMessage(msg i2np.I2NPMessage, peerHash common.Has
 // This method serves as the main dispatch point for all incoming I2NP messages,
 // directing them to the correct processing subsystem (database, tunnel, or general).
 // Returns an error if the message type is unsupported or routing fails.
-func (r *Router) routeMessage(msg i2np.I2NPMessage, fromPeer common.Hash) (err error) {
+func (r *Router) routeMessage(msg i2np.Message, fromPeer common.Hash) (err error) {
 	messageType, messageID := safeMessageMetadata(msg)
 	defer func() {
 		if rec := recover(); rec != nil {
@@ -612,11 +612,11 @@ func (r *Router) routeMessage(msg i2np.I2NPMessage, fromPeer common.Hash) (err e
 	return r.dispatchByMessageType(msg, mr, fs, fromPeer)
 }
 
-func safeMessageMetadata(msg i2np.I2NPMessage) (messageType, messageID int) {
+func safeMessageMetadata(msg i2np.Message) (messageType, messageID int) {
 	return safeMessageType(msg), safeMessageID(msg)
 }
 
-func safeMessageType(msg i2np.I2NPMessage) (messageType int) {
+func safeMessageType(msg i2np.Message) (messageType int) {
 	defer func() {
 		if rec := recover(); rec != nil {
 			messageType = -1
@@ -625,7 +625,7 @@ func safeMessageType(msg i2np.I2NPMessage) (messageType int) {
 	return msg.Type()
 }
 
-func safeMessageID(msg i2np.I2NPMessage) (messageID int) {
+func safeMessageID(msg i2np.Message) (messageID int) {
 	defer func() {
 		if rec := recover(); rec != nil {
 			messageID = -1
@@ -635,28 +635,28 @@ func safeMessageID(msg i2np.I2NPMessage) (messageID int) {
 }
 
 // getRoutingComponents returns the message router and floodfill server under lock.
-func (r *Router) getRoutingComponents() (*i2np.I2NPMessageDispatcher, *netdb.FloodfillServer) {
+func (r *Router) getRoutingComponents() (*i2np.MessageDispatcher, *netdb.FloodfillServer) {
 	r.runMux.RLock()
 	defer r.runMux.RUnlock()
 	return r.messageRouter, r.floodfillServer
 }
 
 // dispatchByMessageType routes a message to the appropriate handler based on type.
-func (r *Router) dispatchByMessageType(msg i2np.I2NPMessage, mr *i2np.I2NPMessageDispatcher, fs *netdb.FloodfillServer, fromPeer common.Hash) error {
+func (r *Router) dispatchByMessageType(msg i2np.Message, mr *i2np.MessageDispatcher, fs *netdb.FloodfillServer, fromPeer common.Hash) error {
 	switch msg.Type() {
-	case i2np.I2NPMessageTypeDatabaseStore:
+	case i2np.MessageTypeDatabaseStore:
 		return r.routeDatabaseStore(msg, mr, fromPeer)
-	case i2np.I2NPMessageTypeDatabaseLookup:
+	case i2np.MessageTypeDatabaseLookup:
 		return r.routeDatabaseLookup(msg, mr, fs)
-	case i2np.I2NPMessageTypeDatabaseSearchReply:
+	case i2np.MessageTypeDatabaseSearchReply:
 		return mr.RouteDatabaseMessage(msg)
-	case i2np.I2NPMessageTypeData, i2np.I2NPMessageTypeDeliveryStatus,
-		i2np.I2NPMessageTypeGarlic, i2np.I2NPMessageTypeTunnelData,
-		i2np.I2NPMessageTypeTunnelGateway:
+	case i2np.MessageTypeData, i2np.MessageTypeDeliveryStatus,
+		i2np.MessageTypeGarlic, i2np.MessageTypeTunnelData,
+		i2np.MessageTypeTunnelGateway:
 		return mr.RouteMessage(msg)
-	case i2np.I2NPMessageTypeTunnelBuild, i2np.I2NPMessageTypeTunnelBuildReply,
-		i2np.I2NPMessageTypeVariableTunnelBuild, i2np.I2NPMessageTypeVariableTunnelBuildReply,
-		i2np.I2NPMessageTypeShortTunnelBuild, i2np.I2NPMessageTypeShortTunnelBuildReply:
+	case i2np.MessageTypeTunnelBuild, i2np.MessageTypeTunnelBuildReply,
+		i2np.MessageTypeVariableTunnelBuild, i2np.MessageTypeVariableTunnelBuildReply,
+		i2np.MessageTypeShortTunnelBuild, i2np.MessageTypeShortTunnelBuildReply:
 		return mr.GetProcessor().ProcessMessage(msg)
 	default:
 		return oops.Errorf("unsupported message type: %d", msg.Type())
@@ -664,7 +664,7 @@ func (r *Router) dispatchByMessageType(msg i2np.I2NPMessage, mr *i2np.I2NPMessag
 }
 
 // routeDatabaseStore handles DatabaseStore message routing.
-func (r *Router) routeDatabaseStore(msg i2np.I2NPMessage, mr *i2np.I2NPMessageDispatcher, fromPeer common.Hash) error {
+func (r *Router) routeDatabaseStore(msg i2np.Message, mr *i2np.MessageDispatcher, fromPeer common.Hash) error {
 	dbStore, err := r.parseDatabaseStoreMessage(msg)
 	if err != nil {
 		return oops.Wrapf(err, "failed to parse DatabaseStore message")
@@ -673,7 +673,7 @@ func (r *Router) routeDatabaseStore(msg i2np.I2NPMessage, mr *i2np.I2NPMessageDi
 }
 
 // routeDatabaseLookup handles DatabaseLookup message routing with optional floodfill handling.
-func (r *Router) routeDatabaseLookup(msg i2np.I2NPMessage, mr *i2np.I2NPMessageDispatcher, fs *netdb.FloodfillServer) error {
+func (r *Router) routeDatabaseLookup(msg i2np.Message, mr *i2np.MessageDispatcher, fs *netdb.FloodfillServer) error {
 	if fs != nil {
 		if lookup, err := r.parseDatabaseLookupMessage(msg); err == nil {
 			if err := fs.HandleDatabaseLookup(lookup); err != nil {
@@ -687,7 +687,7 @@ func (r *Router) routeDatabaseLookup(msg i2np.I2NPMessage, mr *i2np.I2NPMessageD
 // parseDatabaseStoreMessage extracts and parses DatabaseStore data from a BaseI2NPMessage.
 // This converts the raw I2NP message into a structured DatabaseStore that implements
 // the DatabaseWriter interface for NetDB storage.
-func (r *Router) parseDatabaseStoreMessage(msg i2np.I2NPMessage) (*i2np.DatabaseStore, error) {
+func (r *Router) parseDatabaseStoreMessage(msg i2np.Message) (*i2np.DatabaseStore, error) {
 	// Extract raw message data from BaseI2NPMessage
 	dataCarrier, ok := msg.(i2np.DataCarrier)
 	if !ok {
@@ -710,7 +710,7 @@ func (r *Router) parseDatabaseStoreMessage(msg i2np.I2NPMessage) (*i2np.Database
 }
 
 // parseDatabaseLookupMessage extracts and parses a DatabaseLookup from a BaseI2NPMessage.
-func (r *Router) parseDatabaseLookupMessage(msg i2np.I2NPMessage) (*i2np.DatabaseLookup, error) {
+func (r *Router) parseDatabaseLookupMessage(msg i2np.Message) (*i2np.DatabaseLookup, error) {
 	dataCarrier, ok := msg.(i2np.DataCarrier)
 	if !ok {
 		return nil, oops.Errorf("message does not implement DataCarrier interface")
@@ -880,7 +880,7 @@ func (r *Router) wireI2CPMessageRouter(server *i2cp.Server) {
 		return
 	}
 
-	transportSend := func(peerHash common.Hash, msg i2np.I2NPMessage) error {
+	transportSend := func(peerHash common.Hash, msg i2np.Message) error {
 		session, sErr := r.GetSessionByHash(peerHash)
 		if sErr != nil {
 			return oops.Wrapf(sErr, "no session for peer %x", peerHash[:8])

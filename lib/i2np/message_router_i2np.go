@@ -37,7 +37,7 @@ func NewI2NPMessageDispatcher(config I2NPMessageDispatcherConfig) *I2NPMessageDi
 
 // SetNetDB sets the NetDB store for database operations.
 // If the netdb implements FloodfillSelector, it will also be configured for floodfill functionality.
-func (mr *I2NPMessageDispatcher) SetNetDB(netdb I2NPNetDBStore) {
+func (mr *I2NPMessageDispatcher) SetNetDB(netdb NetDBStore) {
 	mr.dbManager = NewDatabaseManager(netdb)
 
 	// If NetDB also implements FloodfillSelector, enable floodfill functionality
@@ -104,7 +104,7 @@ func (mr *I2NPMessageDispatcher) SetSessionProvider(provider SessionProvider) {
 }
 
 // RouteMessage routes messages based on their interfaces
-func (mr *I2NPMessageDispatcher) RouteMessage(msg I2NPMessage) error {
+func (mr *I2NPMessageDispatcher) RouteMessage(msg Message) error {
 	// Log message if enabled
 	if mr.config.EnableLogging {
 		log.WithFields(logger.Fields{
@@ -153,7 +153,7 @@ func (mr *I2NPMessageDispatcher) RouteTunnelMessage(msg interface{}) error {
 	if handler, ok := msg.(TunnelReplyHandler); ok {
 		// Extract message ID from the message interface
 		var messageID int
-		if i2npMsg, ok := msg.(I2NPMessage); ok {
+		if i2npMsg, ok := msg.(Message); ok {
 			messageID = i2npMsg.MessageID()
 		}
 		return mr.tunnelMgr.ProcessTunnelReply(handler, messageID)

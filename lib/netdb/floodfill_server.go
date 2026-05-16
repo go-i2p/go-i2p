@@ -228,7 +228,7 @@ func (rl *FloodfillRateLimiter) Stop() {
 // FloodfillTransport defines the interface for sending I2NP messages back to lookup
 type FloodfillTransport interface {
 	// SendI2NPMessage sends an I2NP message to the router identified by routerHash.
-	SendI2NPMessage(ctx context.Context, routerHash common.Hash, msg i2np.I2NPMessage) error
+	SendI2NPMessage(ctx context.Context, routerHash common.Hash, msg i2np.Message) error
 }
 
 // FloodfillConfig holds configuration for the floodfill server.
@@ -579,7 +579,7 @@ func (fs *FloodfillServer) selectFloodPeers(key common.Hash) ([]router_info.Rout
 // skipping our own hash and stopping after floodCount successful sends.
 // The transport parameter is captured under lock by the caller to avoid a data race
 // with SetTransport or concurrent writes to fs.transport.
-func (fs *FloodfillServer) floodToSelectedPeers(floodfills []router_info.RouterInfo, store i2np.I2NPMessage, transport FloodfillTransport) int {
+func (fs *FloodfillServer) floodToSelectedPeers(floodfills []router_info.RouterInfo, store i2np.Message, transport FloodfillTransport) int {
 	flooded := 0
 	for _, ri := range floodfills {
 		if flooded >= fs.floodCount {

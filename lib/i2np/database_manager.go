@@ -16,11 +16,11 @@ import (
 
 // DatabaseManager coordinates database-related message processing and response generation.
 type DatabaseManager struct {
-	netdb             I2NPNetDBStore
+	netdb             NetDBStore
 	retriever         NetDBRetriever
 	floodfillSelector FloodfillSelector
 	sessionProvider   SessionProvider
-	factory           *I2NPMessageFactory
+	factory           *MessageFactory
 	ourRouterHash     common.Hash // Our router's identity hash for DatabaseSearchReply
 
 	// Rate limiting for DatabaseLookup messages
@@ -30,20 +30,20 @@ type DatabaseManager struct {
 	}
 }
 
-// I2NPNetDBStore defines the interface for storing network database entries.
+// NetDBStore defines the interface for storing network database entries.
 // Implementations must dispatch to the appropriate storage method based on dataType:
 //   - 0: RouterInfo
 //   - 1: LeaseSet
 //   - 3: LeaseSet2
 //   - 5: EncryptedLeaseSet
 //   - 7: MetaLeaseSet
-type I2NPNetDBStore interface {
+type NetDBStore interface {
 	Store(key common.Hash, data []byte, dataType byte) error
 }
 
-// I2NPNetDBStoreWithSource extends I2NPNetDBStore with source-peer context.
+// NetDBStoreWithSource extends NetDBStore with source-peer context.
 // Implementations can use this for fairness/rate controls on first-seen entries.
-type I2NPNetDBStoreWithSource interface {
+type NetDBStoreWithSource interface {
 	StoreFromPeer(key common.Hash, data []byte, dataType byte, source common.Hash) error
 }
 
@@ -60,7 +60,7 @@ type FloodfillSelector interface {
 
 // I2NPTransportSession defines the interface for sending I2NP messages back to requesters
 type I2NPTransportSession interface {
-	QueueSendI2NP(msg I2NPMessage) error
+	QueueSendI2NP(msg Message) error
 	SendQueueSize() int
 }
 
@@ -70,13 +70,13 @@ type SessionProvider interface {
 }
 
 // NewDatabaseManager creates a new database manager with NetDB integration
-func NewDatabaseManager(netdb I2NPNetDBStore) *DatabaseManager {
+func NewDatabaseManager(netdb NetDBStore) *DatabaseManager {
 	dm := &DatabaseManager{
 		netdb:             netdb,
 		retriever:         nil, // Will be set later via SetRetriever
 		floodfillSelector: nil, // Will be set later via SetFloodfillSelector
 		sessionProvider:   nil, // Will be set later via SetSessionProvider
-		factory:           NewI2NPMessageFactory(),
+		factory:           NewMessageFactory(),
 	}
 	dm.lookupLimiter.lookups = make(map[common.Hash]time.Time)
 	return dm
@@ -329,8 +329,8 @@ func (dm *DatabaseManager) sendResponse(response interface{}, to common.Hash) er
 		return oops.Wrapf(err, "failed to get session for %x", to[:8])
 	}
 
-	// Convert response to I2NPMessage interface
-	var msg I2NPMessage
+	// Convert response to Message interface
+	var msg Message
 	switch r := response.(type) {
 	case *DatabaseStore:
 		msg = dm.createDatabaseStoreMessage(r)
@@ -361,7 +361,7 @@ func (dm *DatabaseManager) sendResponse(response interface{}, to common.Hash) er
 // (full I2NP message) because this function creates its own BaseI2NPMessage
 // wrapper. This also avoids a panic when the store's embedded BaseI2NPMessage
 // is nil (e.g., from deserialized/corrupted data).
-func (dm *DatabaseManager) createDatabaseStoreMessage(store *DatabaseStore) I2NPMessage {
+func (dm *DatabaseManager) createDatabaseStoreMessage(store *DatabaseStore) Message {
 	msg := NewBaseI2NPMessage(I2NPMessageTypeDatabaseStore)
 	data, err := store.MarshalPayload()
 	if err != nil {
@@ -375,7 +375,7 @@ func (dm *DatabaseManager) createDatabaseStoreMessage(store *DatabaseStore) I2NP
 // createDatabaseSearchReplyMessage creates an I2NP message from DatabaseSearchReply.
 // Uses MarshalPayload (payload-only serialization) rather than MarshalBinary
 // to avoid a panic when the reply's embedded BaseI2NPMessage is nil.
-func (dm *DatabaseManager) createDatabaseSearchReplyMessage(reply *DatabaseSearchReply) I2NPMessage {
+func (dm *DatabaseManager) createDatabaseSearchReplyMessage(reply *DatabaseSearchReply) Message {
 	msg := NewBaseI2NPMessage(I2NPMessageTypeDatabaseSearchReply)
 	data, err := reply.MarshalPayload()
 	if err != nil {
@@ -441,7 +441,7 @@ func (dm *DatabaseManager) storeDataInternal(writer DatabaseWriter, source *comm
 
 	if dm.netdb != nil {
 		if source != nil {
-			if withSource, ok := dm.netdb.(I2NPNetDBStoreWithSource); ok {
+			if withSource, ok := dm.netdb.(NetDBStoreWithSource); ok {
 				return withSource.StoreFromPeer(key, data, dataType, *source)
 			}
 		}

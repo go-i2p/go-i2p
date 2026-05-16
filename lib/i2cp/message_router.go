@@ -45,7 +45,7 @@ type MessageRouter struct {
 // - msg: I2NP message to send
 //
 // Returns an error if the message cannot be sent.
-type TransportSendFunc func(peerHash common.Hash, msg i2np.I2NPMessage) error
+type TransportSendFunc func(peerHash common.Hash, msg i2np.Message) error
 
 // MessageStatusCallback is invoked to notify about message delivery status changes.
 // Implementations should handle the callback asynchronously to avoid blocking the router.
@@ -228,7 +228,7 @@ func (mr *MessageRouter) buildEncryptedGarlicMessage(
 	destinationHash common.Hash,
 	destinationPubKey [32]byte,
 	payload []byte,
-) (i2np.I2NPMessage, error) {
+) (i2np.Message, error) {
 	if mr.garlicSessions == nil {
 		return nil, oops.Errorf("garlic session manager not initialized for session %d", session.ID())
 	}
@@ -268,7 +268,7 @@ func (mr *MessageRouter) buildEncryptedGarlicMessage(
 func (mr *MessageRouter) buildPlaintextGarlicMessage(
 	session *Session,
 	destinationHash common.Hash,
-	dataMsg i2np.I2NPMessage,
+	dataMsg i2np.Message,
 ) ([]byte, error) {
 	garlicBuilder, err := i2np.NewGarlicBuilderWithDefaults()
 	if err != nil {
@@ -334,7 +334,7 @@ func (mr *MessageRouter) wrapInGarlicMessage(
 	session *Session,
 	destinationHash common.Hash,
 	encryptedGarlic []byte,
-) (i2np.I2NPMessage, error) {
+) (i2np.Message, error) {
 	garlicMsg, err := i2np.WrapInGarlicMessage(encryptedGarlic)
 	if err != nil {
 		log.WithFields(logger.Fields{
@@ -355,7 +355,7 @@ func (mr *MessageRouter) sendThroughGateway(
 	session *Session,
 	selectedTunnel *tunnel.TunnelState,
 	destinationHash common.Hash,
-	garlicMsg i2np.I2NPMessage,
+	garlicMsg i2np.Message,
 ) error {
 	if mr.transportSend == nil {
 		return oops.Errorf("transport send function not initialized for session %d", session.ID())
@@ -406,7 +406,7 @@ func (mr *MessageRouter) logSuccessfulRouting(
 // - msg: The I2NP message to send (already encrypted if needed)
 //
 // Returns an error if sending fails.
-func (mr *MessageRouter) SendThroughTunnel(tunnel *tunnel.TunnelState, msg i2np.I2NPMessage) error {
+func (mr *MessageRouter) SendThroughTunnel(tunnel *tunnel.TunnelState, msg i2np.Message) error {
 	if len(tunnel.Hops) == 0 {
 		log.WithFields(logger.Fields{
 			"at":       "i2cp.MessageRouter.SendThroughTunnel",

@@ -706,7 +706,7 @@ func (tm *TunnelManager) getGatewaySession(firstHop router_info.RouterInfo) (I2N
 // selectBuildMessage creates the appropriate build message based on UseShortBuild flag.
 // Each build record is encrypted with the corresponding hop's public encryption key
 // using ECIES-X25519-AEAD before being placed into the message.
-func (tm *TunnelManager) selectBuildMessage(result *tunnel.TunnelBuildResult, messageID int) (I2NPMessage, error) {
+func (tm *TunnelManager) selectBuildMessage(result *tunnel.TunnelBuildResult, messageID int) (Message, error) {
 	if result.UseShortBuild {
 		// Use Short Tunnel Build Message (modern)
 		return tm.createShortTunnelBuildMessage(result, messageID)
@@ -722,7 +722,7 @@ func (tm *TunnelManager) selectBuildMessage(result *tunnel.TunnelBuildResult, me
 // build would silently expire 90s later. Propagating the error lets
 // BuildTunnelFromRequest run cleanupFailedBuild immediately and free the
 // tunnel/pending-build slots.
-func (tm *TunnelManager) queueBuildMessageToGateway(session I2NPTransportSession, buildMsg I2NPMessage, messageID int, peerHash [32]byte, useShortBuild bool) error {
+func (tm *TunnelManager) queueBuildMessageToGateway(session I2NPTransportSession, buildMsg Message, messageID int, peerHash [32]byte, useShortBuild bool) error {
 	if err := session.QueueSendI2NP(buildMsg); err != nil {
 		log.WithError(err).WithFields(logger.Fields{
 			"message_id":   messageID,
@@ -751,7 +751,7 @@ func (tm *TunnelManager) queueBuildMessageToGateway(session I2NPTransportSession
 // are 218 bytes each on the wire. Using the long-format 528-byte records here
 // causes peers to reject the entire message (silent EOF after the NTCP2
 // handshake), since the count byte is interpreted against the wrong stride.
-func (tm *TunnelManager) createShortTunnelBuildMessage(result *tunnel.TunnelBuildResult, messageID int) (I2NPMessage, error) {
+func (tm *TunnelManager) createShortTunnelBuildMessage(result *tunnel.TunnelBuildResult, messageID int) (Message, error) {
 	i2npRecords := tm.convertAndOverrideMessageID(result.Records, messageID)
 
 	encryptedRecords, replyKeys, noiseHashes, postReplyCKs, err := tm.encryptRecordsAndDeriveKeys(i2npRecords, result.Hops)
@@ -888,7 +888,7 @@ func (tm *TunnelManager) applyChaCha20LayerObfuscation(encryptedRecords [][Short
 
 // serializeSTBM serializes encrypted STBM records and wraps them in an I2NP message.
 // Format: [count:1][encrypted_records...] where each record is 218 bytes.
-func (tm *TunnelManager) serializeSTBM(encryptedRecords [][ShortBuildRecordSize]byte, messageID int) I2NPMessage {
+func (tm *TunnelManager) serializeSTBM(encryptedRecords [][ShortBuildRecordSize]byte, messageID int) Message {
 	data := make([]byte, 1+len(encryptedRecords)*ShortBuildRecordSize)
 	data[0] = byte(len(encryptedRecords))
 	for i, enc := range encryptedRecords {
@@ -914,7 +914,7 @@ func (tm *TunnelManager) serializeSTBM(encryptedRecords [][ShortBuildRecordSize]
 // Type 21 has exactly 8 records at 528 bytes each with NO count prefix byte.
 // Each build record is encrypted with the corresponding hop's X25519 public key
 // using ECIES-X25519-AEAD encryption before being placed into the message.
-func (tm *TunnelManager) createTunnelBuildMessage(result *tunnel.TunnelBuildResult, messageID int) (I2NPMessage, error) {
+func (tm *TunnelManager) createTunnelBuildMessage(result *tunnel.TunnelBuildResult, messageID int) (Message, error) {
 	encryptedData, err := encryptBuildRecords(result)
 	if err != nil {
 		return nil, err
@@ -942,7 +942,7 @@ func (tm *TunnelManager) createTunnelBuildMessage(result *tunnel.TunnelBuildResu
 // createVariableTunnelBuildMessage creates a VariableTunnelBuild (type 23) message.
 // Type 23 has a 1-byte count prefix followed by N records at 528 bytes each.
 // This is the variable-length format that allows 1-8 records.
-func (tm *TunnelManager) createVariableTunnelBuildMessage(result *tunnel.TunnelBuildResult, messageID int) (I2NPMessage, error) {
+func (tm *TunnelManager) createVariableTunnelBuildMessage(result *tunnel.TunnelBuildResult, messageID int) (Message, error) {
 	encryptedData, err := encryptBuildRecords(result)
 	if err != nil {
 		return nil, err

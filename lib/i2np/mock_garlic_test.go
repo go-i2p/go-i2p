@@ -143,19 +143,19 @@ type mockCloveForwarder struct {
 // Compile-time check: mockCloveForwarder must satisfy GarlicCloveForwarder.
 var _ GarlicCloveForwarder = (*mockCloveForwarder)(nil)
 
-func (m *mockCloveForwarder) ForwardToDestination(destHash common.Hash, msg I2NPMessage) error {
+func (m *mockCloveForwarder) ForwardToDestination(destHash common.Hash, msg Message) error {
 	m.destCalls++
 	m.destHash = destHash
 	return m.destErr
 }
 
-func (m *mockCloveForwarder) ForwardToRouter(routerHash common.Hash, msg I2NPMessage) error {
+func (m *mockCloveForwarder) ForwardToRouter(routerHash common.Hash, msg Message) error {
 	m.routerCalls++
 	m.routerHash = routerHash
 	return m.routerErr
 }
 
-func (m *mockCloveForwarder) ForwardThroughTunnel(gatewayHash common.Hash, tunnelID tunnel.TunnelID, msg I2NPMessage) error {
+func (m *mockCloveForwarder) ForwardThroughTunnel(gatewayHash common.Hash, tunnelID tunnel.TunnelID, msg Message) error {
 	m.tunnelCalls++
 	m.gatewayHash = gatewayHash
 	m.tunnelID = tunnelID

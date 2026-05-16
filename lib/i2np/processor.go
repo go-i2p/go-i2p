@@ -18,15 +18,15 @@ import (
 type GarlicCloveForwarder interface {
 	// ForwardToDestination forwards a message to a destination hash (delivery type 0x01).
 	// The forwarder should lookup the destination's LeaseSet and route through a tunnel.
-	ForwardToDestination(destHash common.Hash, msg I2NPMessage) error
+	ForwardToDestination(destHash common.Hash, msg Message) error
 
 	// ForwardToRouter forwards a message directly to a router hash (delivery type 0x02).
 	// The forwarder should send the message via the transport layer.
-	ForwardToRouter(routerHash common.Hash, msg I2NPMessage) error
+	ForwardToRouter(routerHash common.Hash, msg Message) error
 
 	// ForwardThroughTunnel forwards a message through a tunnel to a gateway (delivery type 0x03).
 	// The forwarder should wrap the message in a TunnelGateway envelope and send to the gateway.
-	ForwardThroughTunnel(gatewayHash common.Hash, tunnelID tunnel.TunnelID, msg I2NPMessage) error
+	ForwardThroughTunnel(gatewayHash common.Hash, tunnelID tunnel.TunnelID, msg Message) error
 }
 
 // ParticipantManager defines the interface for processing incoming tunnel build requests.
@@ -100,7 +100,7 @@ type TunnelGatewayHandler interface {
 type TunnelDataHandler interface {
 	// HandleTunnelData processes an incoming TunnelData message by looking up the
 	// tunnel endpoint, decrypting the payload, and delivering it to the owning session.
-	HandleTunnelData(msg I2NPMessage) error
+	HandleTunnelData(msg Message) error
 }
 
 // SearchReplyHandler defines the interface for delivering DatabaseSearchReply
@@ -184,7 +184,7 @@ type stbmSlotCrypto struct {
 // pluggable subsystem interfaces.
 type MessageProcessor struct {
 	mu                    sync.RWMutex
-	factory               *I2NPMessageFactory
+	factory               *MessageFactory
 	garlicSessions        GarlicMessageDecryptor    // Interface for garlic message decryption
 	cloveForwarder        GarlicCloveForwarder      // Optional delegate for non-LOCAL garlic clove delivery
 	dbManager             *DatabaseManager          // Optional database manager for DatabaseLookup messages
@@ -210,7 +210,7 @@ func NewMessageProcessor() *MessageProcessor {
 	log.WithField("at", "NewMessageProcessor").Debug("Creating new message processor")
 	crypto := NewBuildRecordCrypto()
 	return &MessageProcessor{
-		factory:               NewI2NPMessageFactory(),
+		factory:               NewMessageFactory(),
 		expirationValidator:   NewExpirationValidator(),
 		buildRecordCrypto:     crypto,
 		buildRequestDecryptor: crypto,
@@ -401,7 +401,7 @@ func (p *MessageProcessor) EnableExpirationCheck() {
 // when processing garlic messages with LOCAL delivery cloves, which
 // recursively call ProcessMessage (RLock is not re-entrant when a
 // concurrent writer is waiting).
-func (p *MessageProcessor) ProcessMessage(msg I2NPMessage) error {
+func (p *MessageProcessor) ProcessMessage(msg Message) error {
 	// Snapshot the expiration validator under the read lock, then release.
 	// The process* methods read handler fields that are only mutated by
 	// Set* methods during initialization, so they are safe to access
@@ -430,7 +430,7 @@ func (p *MessageProcessor) ProcessMessage(msg I2NPMessage) error {
 // processMessageDispatch routes a message to the appropriate handler.
 // It must be called without p.mu held to allow safe re-entrant calls
 // from garlic LOCAL delivery (handleLocalDelivery → ProcessMessage).
-func (p *MessageProcessor) processMessageDispatch(msg I2NPMessage) error {
+func (p *MessageProcessor) processMessageDispatch(msg Message) error {
 	switch msg.Type() {
 	case I2NPMessageTypeData:
 		return p.processDataMessage(msg)

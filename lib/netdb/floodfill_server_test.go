@@ -19,10 +19,10 @@ type mockFloodfillTransport struct {
 
 type sentMessage struct {
 	to  common.Hash
-	msg i2np.I2NPMessage
+	msg i2np.Message
 }
 
-func (m *mockFloodfillTransport) SendI2NPMessage(_ context.Context, routerHash common.Hash, msg i2np.I2NPMessage) error {
+func (m *mockFloodfillTransport) SendI2NPMessage(_ context.Context, routerHash common.Hash, msg i2np.Message) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.messages = append(m.messages, sentMessage{to: routerHash, msg: msg})

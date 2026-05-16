@@ -26,7 +26,7 @@ import (
 func TestRouteMessageWithoutNetDB(t *testing.T) {
 	// Create a minimal router with message router but no NetDB
 	router := &Router{
-		messageRouter: i2np.NewI2NPMessageDispatcher(i2np.I2NPMessageDispatcherConfig{
+		messageRouter: i2np.NewI2NPMessageDispatcher(i2np.MessageDispatcherConfig{
 			MaxRetries:     3,
 			DefaultTimeout: 30,
 			EnableLogging:  false,
@@ -38,23 +38,23 @@ func TestRouteMessageWithoutNetDB(t *testing.T) {
 
 	testCases := []struct {
 		name      string
-		createMsg func() i2np.I2NPMessage
+		createMsg func() i2np.Message
 	}{
 		{
 			name: "Data message routes without panic",
-			createMsg: func() i2np.I2NPMessage {
+			createMsg: func() i2np.Message {
 				return i2np.NewDataMessage([]byte("test payload"))
 			},
 		},
 		{
 			name: "DeliveryStatus message routes without panic",
-			createMsg: func() i2np.I2NPMessage {
+			createMsg: func() i2np.Message {
 				return i2np.NewDeliveryStatusMessage(12345, time.Now())
 			},
 		},
 		{
 			name: "TunnelData message routes without panic",
-			createMsg: func() i2np.I2NPMessage {
+			createMsg: func() i2np.Message {
 				var data [1024]byte
 				copy(data[:], "tunnel data")
 				return i2np.NewTunnelDataMessage(tunnel.TunnelID(1), data)
@@ -84,7 +84,7 @@ func TestRouteMessageWithoutNetDB(t *testing.T) {
 func TestRouteMessageSwitchStatement(t *testing.T) {
 	// Create minimal router
 	router := &Router{
-		messageRouter: i2np.NewI2NPMessageDispatcher(i2np.I2NPMessageDispatcherConfig{
+		messageRouter: i2np.NewI2NPMessageDispatcher(i2np.MessageDispatcherConfig{
 			MaxRetries:     3,
 			DefaultTimeout: 30,
 			EnableLogging:  false,
@@ -95,9 +95,9 @@ func TestRouteMessageSwitchStatement(t *testing.T) {
 
 	// Test that database message types are recognized by the switch statement
 	databaseTypes := []byte{
-		i2np.I2NPMessageTypeDatabaseStore,
-		i2np.I2NPMessageTypeDatabaseLookup,
-		i2np.I2NPMessageTypeDatabaseSearchReply,
+		i2np.MessageTypeDatabaseStore,
+		i2np.MessageTypeDatabaseLookup,
+		i2np.MessageTypeDatabaseSearchReply,
 	}
 
 	for _, msgType := range databaseTypes {
@@ -108,9 +108,9 @@ func TestRouteMessageSwitchStatement(t *testing.T) {
 
 	// Test general message types
 	generalTypes := []byte{
-		i2np.I2NPMessageTypeData,
-		i2np.I2NPMessageTypeDeliveryStatus,
-		i2np.I2NPMessageTypeTunnelData,
+		i2np.MessageTypeData,
+		i2np.MessageTypeDeliveryStatus,
+		i2np.MessageTypeTunnelData,
 	}
 
 	for _, msgType := range generalTypes {
@@ -119,10 +119,10 @@ func TestRouteMessageSwitchStatement(t *testing.T) {
 
 	// Test tunnel message types
 	tunnelTypes := []byte{
-		i2np.I2NPMessageTypeTunnelBuild,
-		i2np.I2NPMessageTypeTunnelBuildReply,
-		i2np.I2NPMessageTypeVariableTunnelBuild,
-		i2np.I2NPMessageTypeVariableTunnelBuildReply,
+		i2np.MessageTypeTunnelBuild,
+		i2np.MessageTypeTunnelBuildReply,
+		i2np.MessageTypeVariableTunnelBuild,
+		i2np.MessageTypeVariableTunnelBuildReply,
 	}
 
 	for _, msgType := range tunnelTypes {
@@ -143,7 +143,7 @@ type panicOnceReader struct {
 	calls int
 }
 
-func (r *panicOnceReader) ReadNextI2NP() (i2np.I2NPMessage, error) {
+func (r *panicOnceReader) ReadNextI2NP() (i2np.Message, error) {
 	r.calls++
 	if r.calls == 1 {
 		panic("panic from ReadNextI2NP")
@@ -181,7 +181,7 @@ func TestProcessSessionMessagesRecoversFromReadPanic(t *testing.T) {
 
 func TestRouteMessageRecoversFromMessagePanic(t *testing.T) {
 	router := &Router{
-		messageRouter: i2np.NewI2NPMessageDispatcher(i2np.I2NPMessageDispatcherConfig{
+		messageRouter: i2np.NewI2NPMessageDispatcher(i2np.MessageDispatcherConfig{
 			MaxRetries:     3,
 			DefaultTimeout: 30,
 			EnableLogging:  false,
@@ -189,7 +189,7 @@ func TestRouteMessageRecoversFromMessagePanic(t *testing.T) {
 	}
 
 	peerHash := common.Hash{}
-	msg := &panicTypeMessage{BaseI2NPMessage: i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeData)}
+	msg := &panicTypeMessage{BaseI2NPMessage: i2np.NewBaseI2NPMessage(i2np.MessageTypeData)}
 
 	var err error
 	assert.NotPanics(t, func() {
@@ -323,7 +323,7 @@ func (m *mockNetConn) SetWriteDeadline(t time.Time) error {
 // instead of being rejected with "unsupported message type".
 func TestRouteMessageGarlicAndTunnelGateway(t *testing.T) {
 	router := &Router{
-		messageRouter: i2np.NewI2NPMessageDispatcher(i2np.I2NPMessageDispatcherConfig{
+		messageRouter: i2np.NewI2NPMessageDispatcher(i2np.MessageDispatcherConfig{
 			MaxRetries:     3,
 			DefaultTimeout: 30,
 			EnableLogging:  false,
@@ -335,7 +335,7 @@ func TestRouteMessageGarlicAndTunnelGateway(t *testing.T) {
 
 	t.Run("Garlic message is not rejected as unsupported", func(t *testing.T) {
 		// Create a base message with type GARLIC (11)
-		msg := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeGarlic)
+		msg := i2np.NewBaseI2NPMessage(i2np.MessageTypeGarlic)
 		msg.SetData([]byte("encrypted garlic payload"))
 
 		err := router.routeMessage(msg, peerHash)
@@ -365,7 +365,7 @@ func TestRouteMessageGarlicAndTunnelGateway(t *testing.T) {
 // falls through to the "unsupported message type" default case.
 func TestRouteMessageAllSupportedTypes(t *testing.T) {
 	router := &Router{
-		messageRouter: i2np.NewI2NPMessageDispatcher(i2np.I2NPMessageDispatcherConfig{
+		messageRouter: i2np.NewI2NPMessageDispatcher(i2np.MessageDispatcherConfig{
 			MaxRetries:     3,
 			DefaultTimeout: 30,
 			EnableLogging:  false,
@@ -379,18 +379,18 @@ func TestRouteMessageAllSupportedTypes(t *testing.T) {
 		name    string
 		msgType int
 	}{
-		{"DatabaseStore", i2np.I2NPMessageTypeDatabaseStore},
-		{"DatabaseLookup", i2np.I2NPMessageTypeDatabaseLookup},
-		{"DatabaseSearchReply", i2np.I2NPMessageTypeDatabaseSearchReply},
-		{"DeliveryStatus", i2np.I2NPMessageTypeDeliveryStatus},
-		{"Garlic", i2np.I2NPMessageTypeGarlic},
-		{"TunnelData", i2np.I2NPMessageTypeTunnelData},
-		{"TunnelGateway", i2np.I2NPMessageTypeTunnelGateway},
-		{"Data", i2np.I2NPMessageTypeData},
-		{"TunnelBuild", i2np.I2NPMessageTypeTunnelBuild},
-		{"TunnelBuildReply", i2np.I2NPMessageTypeTunnelBuildReply},
-		{"VariableTunnelBuild", i2np.I2NPMessageTypeVariableTunnelBuild},
-		{"VariableTunnelBuildReply", i2np.I2NPMessageTypeVariableTunnelBuildReply},
+		{"DatabaseStore", i2np.MessageTypeDatabaseStore},
+		{"DatabaseLookup", i2np.MessageTypeDatabaseLookup},
+		{"DatabaseSearchReply", i2np.MessageTypeDatabaseSearchReply},
+		{"DeliveryStatus", i2np.MessageTypeDeliveryStatus},
+		{"Garlic", i2np.MessageTypeGarlic},
+		{"TunnelData", i2np.MessageTypeTunnelData},
+		{"TunnelGateway", i2np.MessageTypeTunnelGateway},
+		{"Data", i2np.MessageTypeData},
+		{"TunnelBuild", i2np.MessageTypeTunnelBuild},
+		{"TunnelBuildReply", i2np.MessageTypeTunnelBuildReply},
+		{"VariableTunnelBuild", i2np.MessageTypeVariableTunnelBuild},
+		{"VariableTunnelBuildReply", i2np.MessageTypeVariableTunnelBuildReply},
 	}
 
 	for _, tc := range supportedTypes {
@@ -412,7 +412,7 @@ func TestRouteMessageAllSupportedTypes(t *testing.T) {
 // message types are still properly rejected.
 func TestRouteMessageUnsupportedTypeStillRejected(t *testing.T) {
 	router := &Router{
-		messageRouter: i2np.NewI2NPMessageDispatcher(i2np.I2NPMessageDispatcherConfig{
+		messageRouter: i2np.NewI2NPMessageDispatcher(i2np.MessageDispatcherConfig{
 			MaxRetries:     3,
 			DefaultTimeout: 30,
 			EnableLogging:  false,

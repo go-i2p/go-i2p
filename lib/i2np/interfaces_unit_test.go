@@ -22,10 +22,10 @@ func TestInterfaceSatisfaction(t *testing.T) {
 	// Test that our types satisfy their interfaces
 
 	// Test message interfaces
-	var _ I2NPMessage = (*BaseI2NPMessage)(nil)
-	var _ I2NPMessage = (*DataMessage)(nil)
-	var _ I2NPMessage = (*DeliveryStatusMessage)(nil)
-	var _ I2NPMessage = (*TunnelDataMessage)(nil)
+	var _ Message = (*BaseI2NPMessage)(nil)
+	var _ Message = (*DataMessage)(nil)
+	var _ Message = (*DeliveryStatusMessage)(nil)
+	var _ Message = (*TunnelDataMessage)(nil)
 
 	// Test specialized interfaces
 	var _ PayloadCarrier = (*DataMessage)(nil)
@@ -41,7 +41,7 @@ func TestInterfaceSatisfaction(t *testing.T) {
 }
 
 func TestMessageFactory(t *testing.T) {
-	factory := NewI2NPMessageFactory()
+	factory := NewMessageFactory()
 
 	// Test data message creation
 	payload := []byte("test data")
@@ -192,8 +192,8 @@ func TestInterfaceComposition(t *testing.T) {
 	// Test that a message can implement multiple interfaces
 	dataMsg := NewDataMessage([]byte("composition test"))
 
-	// Should implement I2NPMessage (base interface)
-	assert.Implements(t, (*I2NPMessage)(nil), dataMsg)
+	// Should implement Message (base interface)
+	assert.Implements(t, (*Message)(nil), dataMsg)
 
 	// Should implement MessageSerializer
 	assert.Implements(t, (*MessageSerializer)(nil), dataMsg)

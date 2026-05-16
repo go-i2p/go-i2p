@@ -51,16 +51,16 @@ type RouterInfoStorer interface {
 type TransportSession interface {
 	// queue an i2np message to be sent over the session
 	// returns an error if the session is closed or the send queue is full
-	QueueSendI2NP(msg i2np.I2NPMessage) error
+	QueueSendI2NP(msg i2np.Message) error
 	// return how many i2np messages are not completely sent yet
 	SendQueueSize() int
 	// blocking read the next fully recv'd i2np message from this session
-	ReadNextI2NP() (i2np.I2NPMessage, error)
+	ReadNextI2NP() (i2np.Message, error)
 	// close the session cleanly
 	// returns any errors that happen while closing the session
 	Close() error
 	// create a handshake message for the session
-	// CreateHandshakeMessage() (i2np.I2NPMessage, error)
+	// CreateHandshakeMessage() (i2np.Message, error)
 }
 
 // Transport defines the interface for an I2P transport layer capable of accepting connections,

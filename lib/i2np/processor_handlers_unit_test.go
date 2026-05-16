@@ -35,17 +35,17 @@ func TestParseECIESGarlicClove_LocalShortTunnelBuildReply(t *testing.T) {
 	if clove.DeliveryInstructions.Flag != 0x00 {
 		t.Fatalf("expected LOCAL delivery flag 0x00, got 0x%02x", clove.DeliveryInstructions.Flag)
 	}
-	if clove.I2NPMessage.Type() != I2NPMessageTypeShortTunnelBuildReply {
-		t.Fatalf("expected wrapped type %d, got %d", I2NPMessageTypeShortTunnelBuildReply, clove.I2NPMessage.Type())
+	if clove.Message.Type() != I2NPMessageTypeShortTunnelBuildReply {
+		t.Fatalf("expected wrapped type %d, got %d", I2NPMessageTypeShortTunnelBuildReply, clove.Message.Type())
 	}
-	if clove.I2NPMessage.MessageID() != int(messageID) {
-		t.Fatalf("expected message ID %d, got %d", messageID, clove.I2NPMessage.MessageID())
+	if clove.Message.MessageID() != int(messageID) {
+		t.Fatalf("expected message ID %d, got %d", messageID, clove.Message.MessageID())
 	}
-	if !clove.I2NPMessage.Expiration().Equal(expiry) {
-		t.Fatalf("expected expiration %v, got %v", expiry, clove.I2NPMessage.Expiration())
+	if !clove.Message.Expiration().Equal(expiry) {
+		t.Fatalf("expected expiration %v, got %v", expiry, clove.Message.Expiration())
 	}
 
-	carrier, ok := clove.I2NPMessage.(DataCarrier)
+	carrier, ok := clove.Message.(DataCarrier)
 	if !ok {
 		t.Fatal("parsed I2NP message does not implement DataCarrier")
 	}

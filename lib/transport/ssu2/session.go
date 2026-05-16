@@ -43,8 +43,8 @@ type pendingI2NP struct {
 type SSU2Session struct {
 	conn *ssu2noise.SSU2Conn
 
-	sendQueue     chan i2np.I2NPMessage
-	recvChan      chan i2np.I2NPMessage
+	sendQueue     chan i2np.Message
+	recvChan      chan i2np.Message
 	sendQueueSize int32
 
 	bytesSent       uint64
@@ -101,8 +101,8 @@ func NewSSU2SessionDeferred(conn *ssu2noise.SSU2Conn, ctx context.Context, logge
 	rtt := ssu2noise.NewRTTEstimator()
 	s := &SSU2Session{
 		conn:           conn,
-		sendQueue:      make(chan i2np.I2NPMessage, 256),
-		recvChan:       make(chan i2np.I2NPMessage, 256),
+		sendQueue:      make(chan i2np.Message, 256),
+		recvChan:       make(chan i2np.Message, 256),
 		rttEstimator:   rtt,
 		congestionCtrl: ssu2noise.NewCongestionController(rtt),
 		pendingMsgs:    make(map[uint64]*pendingI2NP),
@@ -198,7 +198,7 @@ func (s *SSU2Session) StartWorkers() {
 }
 
 // QueueSendI2NP queues an I2NP message to be sent over the session.
-func (s *SSU2Session) QueueSendI2NP(msg i2np.I2NPMessage) error {
+func (s *SSU2Session) QueueSendI2NP(msg i2np.Message) error {
 	atomic.AddInt32(&s.sendQueueSize, 1)
 
 	timer := time.NewTimer(500 * time.Millisecond)
@@ -222,7 +222,7 @@ func (s *SSU2Session) SendQueueSize() int {
 }
 
 // ReadNextI2NP blocking reads the next fully received I2NP message.
-func (s *SSU2Session) ReadNextI2NP() (i2np.I2NPMessage, error) {
+func (s *SSU2Session) ReadNextI2NP() (i2np.Message, error) {
 	select {
 	case msg := <-s.recvChan:
 		return msg, nil
@@ -347,7 +347,7 @@ func (s *SSU2Session) processSendWorkerEvents(ticker *time.Ticker) bool {
 
 // handleQueuedMessage processes a message from the send queue.
 // Returns true if the worker should exit due to an error.
-func (s *SSU2Session) handleQueuedMessage(msg i2np.I2NPMessage) bool {
+func (s *SSU2Session) handleQueuedMessage(msg i2np.Message) bool {
 	atomic.AddInt32(&s.sendQueueSize, -1)
 	if err := s.sendWithCongestionControl(msg); err != nil {
 		s.logger.WithError(err).Error("Failed to send message")
@@ -371,7 +371,7 @@ func (s *SSU2Session) checkRetransmissions() bool {
 // sendWithCongestionControl serializes msg as an SSU2 short-header I2NP
 // message, fragments it into correctly-formatted SSU2 blocks, waits for
 // congestion-window room, then writes the blocks to the conn.
-func (s *SSU2Session) sendWithCongestionControl(msg i2np.I2NPMessage) error {
+func (s *SSU2Session) sendWithCongestionControl(msg i2np.Message) error {
 	data, err := marshalI2NPShort(msg)
 	if err != nil {
 		return err
@@ -388,7 +388,7 @@ func (s *SSU2Session) sendWithCongestionControl(msg i2np.I2NPMessage) error {
 
 // marshalI2NPShort converts an I2NP message to the 9-byte SSU2 short header
 // format: Type(1) + MessageID(4) + ShortExpiration(4) + Body.
-func marshalI2NPShort(msg i2np.I2NPMessage) ([]byte, error) {
+func marshalI2NPShort(msg i2np.Message) ([]byte, error) {
 	var body []byte
 	if dc, ok := msg.(i2np.DataCarrier); ok {
 		body = dc.GetData()
@@ -763,7 +763,7 @@ func (s *SSU2Session) dispatchReceived(frame []byte) error {
 	return s.deliverMessage(msg)
 }
 
-func (s *SSU2Session) checkInboundRateLimit(msg i2np.I2NPMessage) error {
+func (s *SSU2Session) checkInboundRateLimit(msg i2np.Message) error {
 	if s.inboundLimiter.Allow() {
 		return nil
 	}
@@ -785,7 +785,7 @@ func (s *SSU2Session) updateRTTEstimate(recvAt time.Time) {
 }
 
 // deliverMessage sends the message to the receive channel with timeout handling.
-func (s *SSU2Session) deliverMessage(msg i2np.I2NPMessage) error {
+func (s *SSU2Session) deliverMessage(msg i2np.Message) error {
 	timer := time.NewTimer(100 * time.Millisecond)
 	defer timer.Stop()
 	select {

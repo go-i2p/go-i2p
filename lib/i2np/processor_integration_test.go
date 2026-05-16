@@ -30,7 +30,7 @@ func TestProcessMessage_NoDeadlockOnGarlicLocalDelivery(t *testing.T) {
 		DeliveryInstructions: GarlicCloveDeliveryInstructions{
 			Flag: 0x00, // LOCAL delivery: (Flag >> 5) & 0x03 == 0x00
 		},
-		I2NPMessage: innerMsg,
+		Message: innerMsg,
 		CloveID:     1,
 		Expiration:  time.Now().Add(5 * time.Minute),
 	}
@@ -148,7 +148,7 @@ func TestProcessMessage_ReentrantLocalDelivery(t *testing.T) {
 		DeliveryInstructions: GarlicCloveDeliveryInstructions{
 			Flag: 0x00, // LOCAL delivery
 		},
-		I2NPMessage: innerMsg,
+		Message: innerMsg,
 		CloveID:     42,
 		Expiration:  time.Now().Add(5 * time.Minute),
 	}
@@ -182,7 +182,7 @@ func TestProcessGarlicCloves_LocalDeliveryFailure(t *testing.T) {
 	innerMsg := NewBaseI2NPMessage(123)
 	clove := GarlicClove{
 		DeliveryInstructions: GarlicCloveDeliveryInstructions{Flag: 0x00},
-		I2NPMessage:          innerMsg,
+		Message:          innerMsg,
 		CloveID:              9,
 		Expiration:           time.Now().Add(5 * time.Minute),
 	}
@@ -200,7 +200,7 @@ func TestProcessGarlicCloves_NilInnerMessage(t *testing.T) {
 
 	clove := GarlicClove{
 		DeliveryInstructions: GarlicCloveDeliveryInstructions{Flag: 0x00},
-		I2NPMessage:          nil,
+		Message:          nil,
 		CloveID:              10,
 		Expiration:           time.Now().Add(5 * time.Minute),
 	}

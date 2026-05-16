@@ -19,7 +19,7 @@ func makeClove(flag byte, hash common.Hash, tunnelID tunnel.TunnelID) GarlicClov
 			Hash:     hash,
 			TunnelID: tunnelID,
 		},
-		I2NPMessage: inner,
+		Message: inner,
 		CloveID:     42,
 		Expiration:  time.Now().Add(5 * time.Minute),
 	}

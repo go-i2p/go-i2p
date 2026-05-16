@@ -12,7 +12,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 )
 
-func (p *MessageProcessor) processDataMessage(msg I2NPMessage) error {
+func (p *MessageProcessor) processDataMessage(msg Message) error {
 	payloadCarrier, ok := msg.(PayloadCarrier)
 	if !ok {
 		return oops.Errorf("message does not implement PayloadCarrier interface")
@@ -35,7 +35,7 @@ func (p *MessageProcessor) processDataMessage(msg I2NPMessage) error {
 
 // processDatabaseStoreMessage processes DatabaseStore messages received from floodfills or peers.
 // DatabaseStore messages contain RouterInfo or LeaseSet data that should be stored in our NetDB.
-func (p *MessageProcessor) processDatabaseStoreMessage(msg I2NPMessage) error {
+func (p *MessageProcessor) processDatabaseStoreMessage(msg Message) error {
 	if p.dbManager == nil {
 		log.WithFields(logger.Fields{
 			"at":     "processDatabaseStoreMessage",
@@ -109,7 +109,7 @@ func (p *MessageProcessor) sendDatabaseStoreAck(dbStore *DatabaseStore) {
 // processDatabaseSearchReplyMessage processes DatabaseSearchReply messages from peers.
 // These messages contain peer hash suggestions when a lookup fails to find the exact key.
 // The suggested peers are delivered to the search reply handler for iterative lookup follow-up.
-func (p *MessageProcessor) processDatabaseSearchReplyMessage(msg I2NPMessage) error {
+func (p *MessageProcessor) processDatabaseSearchReplyMessage(msg Message) error {
 	// Type assert to *DatabaseSearchReply
 	searchReply, ok := msg.(*DatabaseSearchReply)
 	if !ok {
@@ -153,7 +153,7 @@ func (p *MessageProcessor) processDatabaseSearchReplyMessage(msg I2NPMessage) er
 // processTunnelGatewayMessage processes TunnelGateway messages.
 // These messages wrap I2NP messages destined for delivery through a tunnel.
 // The gateway extracts the inner message and forwards it into the tunnel.
-func (p *MessageProcessor) processTunnelGatewayMessage(msg I2NPMessage) error {
+func (p *MessageProcessor) processTunnelGatewayMessage(msg Message) error {
 	tgMsg, err := p.extractTunnelGatewayMessage(msg)
 	if err != nil {
 		return err
@@ -169,7 +169,7 @@ func (p *MessageProcessor) processTunnelGatewayMessage(msg I2NPMessage) error {
 }
 
 // extractTunnelGatewayMessage extracts a TunnelGateway from an I2NP message.
-func (p *MessageProcessor) extractTunnelGatewayMessage(msg I2NPMessage) (*TunnelGateway, error) {
+func (p *MessageProcessor) extractTunnelGatewayMessage(msg Message) (*TunnelGateway, error) {
 	tgMsg, ok := msg.(*TunnelGateway)
 	if ok {
 		return tgMsg, nil
@@ -255,7 +255,7 @@ func (p *MessageProcessor) forwardToTunnelGatewayHandler(tgMsg *TunnelGateway) e
 // processDeliveryStatusMessage processes delivery status messages using StatusReporter interface.
 // If a DeliveryStatusHandler is configured, the status is forwarded to confirm delivery.
 // Otherwise, the status is logged and discarded.
-func (p *MessageProcessor) processDeliveryStatusMessage(msg I2NPMessage) error {
+func (p *MessageProcessor) processDeliveryStatusMessage(msg Message) error {
 	statusReporter, ok := msg.(StatusReporter)
 	if !ok {
 		return oops.Errorf("message does not implement StatusReporter interface")
@@ -281,7 +281,7 @@ func (p *MessageProcessor) processDeliveryStatusMessage(msg I2NPMessage) error {
 }
 
 // processDatabaseLookupMessage processes database lookup messages using DatabaseReader interface
-func (p *MessageProcessor) processDatabaseLookupMessage(msg I2NPMessage) error {
+func (p *MessageProcessor) processDatabaseLookupMessage(msg Message) error {
 	if p.dbManager == nil {
 		return oops.Errorf("database manager not configured")
 	}
@@ -311,7 +311,7 @@ func (p *MessageProcessor) processDatabaseLookupMessage(msg I2NPMessage) error {
 //
 // Note: This processor handles LOCAL delivery only. Other delivery types require
 // router context and would be implemented at the router layer.
-func (p *MessageProcessor) processGarlicMessage(msg I2NPMessage) error {
+func (p *MessageProcessor) processGarlicMessage(msg Message) error {
 	if err := p.validateGarlicSession(); err != nil {
 		return err
 	}
@@ -343,7 +343,7 @@ func (p *MessageProcessor) validateGarlicSession() error {
 }
 
 // extractGarlicData extracts encrypted data from the garlic message.
-func (p *MessageProcessor) extractGarlicData(msg I2NPMessage) ([]byte, error) {
+func (p *MessageProcessor) extractGarlicData(msg Message) ([]byte, error) {
 	carrier, ok := msg.(DataCarrier)
 	if !ok {
 		return nil, oops.Errorf("garlic message does not implement DataCarrier")
@@ -422,7 +422,7 @@ func parseECIESGarlicClove(data []byte) (*Garlic, error) {
 
 	clove := GarlicClove{
 		DeliveryInstructions: *deliveryInstructions,
-		I2NPMessage:          baseMsg,
+		Message:          baseMsg,
 	}
 
 	return &Garlic{
@@ -474,7 +474,7 @@ func (p *MessageProcessor) parseAndLogGarlic(msgID int, decryptedData []byte, se
 		"clove_count":   len(garlic.Cloves),
 		"session_tag":   fmt.Sprintf("%x", sessionTag[:]),
 		"delivery_flag": garlic.Cloves[0].DeliveryInstructions.Flag,
-		"wrapped_type":  garlic.Cloves[0].I2NPMessage.Type(),
+		"wrapped_type":  garlic.Cloves[0].Message.Type(),
 	}).Debug("Processing decrypted ECIES garlic clove")
 
 	return garlic, nil
@@ -494,7 +494,7 @@ func (p *MessageProcessor) processGarlicCloves(cloves []GarlicClove) error {
 func (p *MessageProcessor) processSingleClove(index int, clove GarlicClove) error {
 	deliveryType := (clove.DeliveryInstructions.Flag >> 5) & 0x03
 
-	if clove.I2NPMessage == nil {
+	if clove.Message == nil {
 		log.WithField("clove_index", index).Warn("Garlic clove contains nil I2NP message")
 		return oops.Errorf("garlic clove %d contains nil I2NP message", index)
 	}
@@ -503,7 +503,7 @@ func (p *MessageProcessor) processSingleClove(index int, clove GarlicClove) erro
 		"clove_index":   index,
 		"clove_id":      clove.CloveID,
 		"delivery_type": deliveryType,
-		"wrapped_type":  clove.I2NPMessage.Type(),
+		"wrapped_type":  clove.Message.Type(),
 	}).Debug("Processing garlic clove")
 
 	return p.routeCloveByType(index, deliveryType, clove)
@@ -543,7 +543,7 @@ func (p *MessageProcessor) handleLocalDelivery(index int, clove GarlicClove) err
 		return oops.Errorf("garlic nesting depth exceeded for clove %d", index)
 	}
 
-	if err := p.ProcessMessage(clove.I2NPMessage); err != nil {
+	if err := p.ProcessMessage(clove.Message); err != nil {
 		log.WithFields(logger.Fields{
 			"clove_index": index,
 			"error":       err,
@@ -566,7 +566,7 @@ func (p *MessageProcessor) handleDestinationDelivery(index int, clove GarlicClov
 
 	err := p.cloveForwarder.ForwardToDestination(
 		clove.DeliveryInstructions.Hash,
-		clove.I2NPMessage,
+		clove.Message,
 	)
 	if err != nil {
 		log.WithFields(logger.Fields{
@@ -595,7 +595,7 @@ func (p *MessageProcessor) handleRouterDelivery(index int, clove GarlicClove) {
 
 	err := p.cloveForwarder.ForwardToRouter(
 		clove.DeliveryInstructions.Hash,
-		clove.I2NPMessage,
+		clove.Message,
 	)
 	if err != nil {
 		log.WithFields(logger.Fields{
@@ -626,7 +626,7 @@ func (p *MessageProcessor) handleTunnelDelivery(index int, clove GarlicClove) {
 	err := p.cloveForwarder.ForwardThroughTunnel(
 		clove.DeliveryInstructions.Hash,
 		clove.DeliveryInstructions.TunnelID,
-		clove.I2NPMessage,
+		clove.Message,
 	)
 	if err != nil {
 		log.WithFields(logger.Fields{
@@ -648,7 +648,7 @@ func (p *MessageProcessor) handleTunnelDelivery(index int, clove GarlicClove) {
 // processTunnelDataMessage processes tunnel data messages using TunnelCarrier interface.
 // If a TunnelDataHandler is configured, the message is delegated for endpoint decryption
 // and delivery to the owning I2CP session. Otherwise the message is validated and logged.
-func (p *MessageProcessor) processTunnelDataMessage(msg I2NPMessage) error {
+func (p *MessageProcessor) processTunnelDataMessage(msg Message) error {
 	if _, ok := msg.(TunnelCarrier); !ok {
 		return oops.Errorf("message does not implement TunnelCarrier interface")
 	}

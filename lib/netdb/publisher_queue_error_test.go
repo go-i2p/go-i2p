@@ -19,7 +19,7 @@ type failingTransportSession struct {
 	sendErr error
 }
 
-func (s *failingTransportSession) QueueSendI2NP(msg i2np.I2NPMessage) error {
+func (s *failingTransportSession) QueueSendI2NP(msg i2np.Message) error {
 	return s.sendErr
 }
 
@@ -34,14 +34,14 @@ func (m *failingTransportManager) GetSession(routerInfo router_info.RouterInfo) 
 
 // setupGatewayTest creates a mock NetDB with a valid gateway RouterInfo and returns
 // the db, gateway hash, and a test I2NP message. Reduces boilerplate in gateway tests.
-func setupGatewayTest(t *testing.T) (*mockNetDB, common.Hash, i2np.I2NPMessage) {
+func setupGatewayTest(t *testing.T) (*mockNetDB, common.Hash, i2np.Message) {
 	t.Helper()
 	db := newMockNetDB()
 	gatewayRI := createValidRouterInfo(t)
 	gatewayHash, err := gatewayRI.IdentHash()
 	require.NoError(t, err)
 	db.StoreRouterInfo(gatewayRI)
-	msg := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeDatabaseStore)
+	msg := i2np.NewBaseI2NPMessage(i2np.MessageTypeDatabaseStore)
 	msg.SetData([]byte("test data"))
 	return db, gatewayHash, msg
 }

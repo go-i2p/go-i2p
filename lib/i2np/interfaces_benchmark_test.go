@@ -24,7 +24,7 @@ func BenchmarkInterfaceCall(b *testing.B) {
 }
 
 func BenchmarkTypeAssertion(b *testing.B) {
-	var msg I2NPMessage = NewDataMessage([]byte("benchmark test"))
+	var msg Message = NewDataMessage([]byte("benchmark test"))
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
