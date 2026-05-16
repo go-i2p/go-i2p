@@ -1,32 +1,25 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"io/fs"
 	"net"
 	"os"
-	"sync"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/embedded"
-	"github.com/go-i2p/go-i2p/lib/netdb/reseed"
 	tuipkg "github.com/go-i2p/go-i2p/lib/tui"
-	"github.com/go-i2p/go-i2p/lib/util"
 	"github.com/go-i2p/go-i2p/lib/util/signals"
 	"github.com/go-i2p/i2ptui"
 	"github.com/go-i2p/logger"
-	"github.com/samber/oops"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 )
 
 var (
-	embeddedRouter   *embedded.StandardEmbeddedRouter
-	embeddedRouterMu sync.Mutex
-	log              = logger.GetGoI2PLogger()
+	log = logger.GetGoI2PLogger()
 )
 
 // RootCmd is the top-level cobra command for the go-i2p router, handling CLI argument parsing and router startup.
@@ -39,14 +32,9 @@ var RootCmd = &cobra.Command{
 }
 
 func init() {
-	// Register the certificate provider with the reseed package to break the import cycle.
-	// This allows reseed to access embedded certificates without importing embedded directly.
-	reseed.SetCertificateProvider(func() (fs.FS, error) {
-		return embedded.GetReseedCertificates()
-	})
-	reseed.SetSSLCertificateProvider(func() (fs.FS, error) {
-		return embedded.GetSSLCertificates()
-	})
+	// Certificate provider registration moved to lib/embedded/certificates.go init()
+	// This ensures the embedded package automatically registers providers on import,
+	// making it truly embeddable without requiring main's init() to run.
 
 	cobra.OnInitialize(config.InitConfigOrExit)
 	registerGlobalFlags()
@@ -614,90 +602,12 @@ func debugPrintConfig() {
 	log.Debugf("Current configuration:\\n%s", string(yamlData))
 }
 
-// testNetworkConnectivity performs basic network connectivity checks at startup
-// PRIORITY 3: Validate that the router has external network access
-func testNetworkConnectivity() error {
-	log.WithFields(logger.Fields{
-		"at":     "testNetworkConnectivity",
-		"phase":  "startup",
-		"reason": "validating external network access",
-	}).Info("running network connectivity pre-check")
-
-	if err := testDNSResolution(); err != nil {
-		return err
-	}
-
-	if err := testTCPConnectivity(); err != nil {
-		return err
-	}
-
-	log.WithFields(logger.Fields{
-		"at":     "testNetworkConnectivity",
-		"phase":  "startup",
-		"result": "success",
-	}).Info("Network connectivity pre-check passed - external access confirmed")
-
-	return nil
-}
-
-// testDNSResolution verifies DNS resolution works for reseed hosts.
-func testDNSResolution() error {
-	log.Debug("Testing DNS resolution...")
-	testHosts := []string{
-		"reseed.i2pgit.org",
-	}
-
-	for _, host := range testHosts {
-		addrs, err := net.LookupHost(host)
-		if err != nil {
-			log.WithFields(logger.Fields{
-				"host":  host,
-				"error": err.Error(),
-			}).Warn("DNS lookup failed for reseed host")
-			continue
-		}
-		log.WithFields(logger.Fields{
-			"host":       host,
-			"resolved":   len(addrs),
-			"first_addr": addrs[0],
-		}).Debug("DNS resolution successful")
-		log.Infof("DNS resolution successful: %s -> %s", host, addrs[0])
-		return nil
-	}
-
-	return fmt.Errorf("DNS resolution failed for all test hosts - check network/DNS configuration")
-}
-
-// testTCPConnectivity verifies TCP connectivity to reseed servers.
-func testTCPConnectivity() error {
-	log.Debug("Testing TCP connectivity to reseed server...")
-	tcpTestHosts := []string{
-		"reseed.i2pgit.org:443",
-	}
-
-	for _, hostPort := range tcpTestHosts {
-		log.Infof("Testing TCP connection to %s...", hostPort)
-		conn, err := net.DialTimeout("tcp", hostPort, 5*time.Second)
-		if err != nil {
-			log.WithFields(logger.Fields{
-				"target": hostPort,
-				"error":  err.Error(),
-			}).Warn("TCP connectivity test failed")
-			log.Warnf("TCP connectivity test failed to %s: %v", hostPort, err)
-			continue
-		}
-		conn.Close()
-		log.WithFields(logger.Fields{
-			"target": hostPort,
-		}).Debug("TCP connectivity test successful")
-		log.Infof("TCP connectivity test successful to %s", hostPort)
-		return nil
-	}
-
-	return fmt.Errorf("TCP connectivity failed to all test hosts - check firewall/network configuration")
-}
+// Note: testNetworkConnectivity functions moved to lib/bootstrap/preflight.go
+// They are now called from lib/embedded/lifecycle.go as part of the Run() method.
 
 // logConfigurationSource logs whether configuration was loaded from file or using defaults.
+// Note: This functionality is now part of lib/embedded/lifecycle.go's Run() method.
+// Kept here for reference but no longer used in main runRouter.
 func logConfigurationSource() {
 	if viper.ConfigFileUsed() == "" {
 		log.WithFields(logger.Fields{
@@ -718,205 +628,41 @@ func logConfigurationSource() {
 	}
 }
 
-// manageRouterLifecycle handles the full router lifecycle: creation, startup, execution, and shutdown.
-// manageRouterLifecycle handles the complete router lifecycle from creation to shutdown.
-func manageRouterLifecycle() error {
-	if err := createAndConfigureRouter(); err != nil {
-		return err
-	}
+// Lifecycle management functions moved to lib/embedded/lifecycle.go
+// The complete router lifecycle is now managed through StandardEmbeddedRouter.Run()
 
-	if err := startAndRunRouter(); err != nil {
-		return err
-	}
-
-	return closeRouter()
-}
-
-// createAndConfigureRouter creates and configures the embedded router instance.
-func createAndConfigureRouter() error {
-	embeddedRouterMu.Lock()
-	defer embeddedRouterMu.Unlock()
-
-	routerCfg := config.GetRouterConfig()
-
-	log.WithField("at", "createAndConfigureRouter").Debug("calling NewStandardEmbeddedRouter")
-	var err error
-	embeddedRouter, err = embedded.NewStandardEmbeddedRouter(routerCfg)
-	if err != nil {
-		return oops.Errorf("failed to create embedded router: %w", err)
-	}
-	log.WithField("at", "createAndConfigureRouter").Debug("NewStandardEmbeddedRouter returned")
-
-	// Note: NewStandardEmbeddedRouter already calls Configure() internally.
-	// The second Configure() call below is a documented no-op for the
-	// constructor + Configure pattern.
-	log.WithField("at", "createAndConfigureRouter").Debug("calling Configure (expected no-op)")
-	if err := embeddedRouter.Configure(routerCfg); err != nil {
-		return oops.Errorf("failed to configure router: %w", err)
-	}
-	log.WithField("at", "createAndConfigureRouter").Debug("router creation and configuration complete")
-	return nil
-}
-
-// registerSignalHandlers sets up reload and interrupt handlers for the router.
-func registerSignalHandlers() {
-	signals.RegisterReloadHandler(func() {
-		if err := viper.ReadInConfig(); err != nil {
-			log.Errorf("failed to reload config: %s", err)
-			return
-		}
-		config.SetRouterConfig(config.NewRouterConfigFromViper())
-	})
-
-	signals.RegisterInterruptHandler(func() {
-		embeddedRouterMu.Lock()
-		defer embeddedRouterMu.Unlock()
-		if embeddedRouter != nil && embeddedRouter.IsRunning() {
-			log.WithFields(logger.Fields{
-				"at":     "runRouter",
-				"phase":  "shutdown",
-				"reason": "interrupt signal received",
-			}).Info("stopping embedded router")
-			if err := embeddedRouter.Stop(); err != nil {
-				log.WithError(err).Error("error during graceful stop, forcing hard stop")
-				embeddedRouter.HardStop()
-			}
-		}
-	})
-}
-
-// startAndRunRouter starts the router and waits for it to complete.
-func startAndRunRouter() error {
-	log.WithFields(logger.Fields{
-		"at":     "runRouter",
-		"phase":  "startup",
-		"step":   5,
-		"reason": "starting router subsystems",
-	}).Info("starting embedded router")
-
-	embeddedRouterMu.Lock()
-	r := embeddedRouter
-	embeddedRouterMu.Unlock()
-
-	if r == nil {
-		return oops.Errorf("router not initialized")
-	}
-
-	if err := r.Start(); err != nil {
-		return oops.Errorf("failed to start router: %w", err)
-	}
-
-	log.WithFields(logger.Fields{
-		"at":     "runRouter",
-		"phase":  "running",
-		"reason": "router running, waiting for shutdown",
-	}).Info("embedded router started, entering main loop")
-
-	r.Wait()
-	return nil
-}
-
-// closeRouter performs final cleanup and closes the embedded router.
-func closeRouter() error {
-	log.WithFields(logger.Fields{
-		"at":     "runRouter",
-		"phase":  "shutdown",
-		"reason": "router shutdown complete, cleaning up",
-	}).Info("closing embedded router")
-
-	embeddedRouterMu.Lock()
-	r := embeddedRouter
-	embeddedRouterMu.Unlock()
-
-	if r == nil {
-		return nil
-	}
-
-	// Always close all registered resources, even if r.Close() fails
-	defer util.CloseAll()
-
-	if err := r.Close(); err != nil {
-		return oops.Errorf("failed to close router: %w", err)
-	}
-
-	return nil
-}
-
+// runRouter creates the embedded router and executes its lifecycle through Run().
+// This is the main entry point for the router when no subcommand is specified.
+//
+// runRouter is now a thin wrapper that delegates to lib/embedded.Run(),
+// which handles all lifecycle management, signal handling, and preflight checks.
 func runRouter() {
-	registerSignalHandlers()
+	ctx := context.Background()
+
+	// Start signal handling in a goroutine
 	go signals.Handle()
 
-	logStartupConfiguration()
-	logConfigurationSource()
-	logNetDBPath()
-	runNetworkPreChecks()
-	launchRouterLifecycle()
-}
-
-// logStartupConfiguration logs that the router configuration is being parsed.
-func logStartupConfiguration() {
-	log.WithFields(logger.Fields{
-		"at":          "runRouter",
-		"phase":       "startup",
-		"step":        1,
-		"reason":      "parsing router configuration",
-		"config_file": viper.ConfigFileUsed(),
-		"config_used": viper.ConfigFileUsed() != "",
-	}).Info("parsing i2p router configuration")
-}
-
-// logNetDBPath logs the configured NetDB path.
-func logNetDBPath() {
+	// Create the router with current configuration
 	routerCfg := config.GetRouterConfig()
-	log.WithFields(logger.Fields{
-		"at":         "runRouter",
-		"phase":      "startup",
-		"step":       2,
-		"reason":     "netdb path configured",
-		"netdb_path": routerCfg.NetDB.Path,
-		"source":     "configuration",
-	}).Info("using netDb path: " + routerCfg.NetDB.Path)
-}
-
-// runNetworkPreChecks tests network connectivity and logs a warning on failure.
-func runNetworkPreChecks() {
-	log.WithFields(logger.Fields{
-		"at":     "runRouter",
-		"phase":  "startup",
-		"step":   3,
-		"reason": "testing network connectivity",
-	}).Debug("running network pre-checks")
-
-	if err := testNetworkConnectivity(); err != nil {
-		log.WithFields(logger.Fields{
-			"at":     "runRouter",
-			"phase":  "startup",
-			"step":   3,
-			"error":  err.Error(),
-			"reason": "network connectivity check failed",
-		}).Warn("Network connectivity test failed - router may not be able to connect to peers")
-	}
-}
-
-// launchRouterLifecycle starts the router lifecycle, exiting the process on failure.
-func launchRouterLifecycle() {
-	log.WithFields(logger.Fields{
-		"at":     "runRouter",
-		"phase":  "startup",
-		"step":   4,
-		"reason": "initiating router creation",
-	}).Debug("starting up i2p router")
-
-	if err := manageRouterLifecycle(); err != nil {
-		routerCfg := config.GetRouterConfig()
+	router, err := embedded.NewStandardEmbeddedRouter(routerCfg)
+	if err != nil {
 		log.WithError(err).WithFields(logger.Fields{
-			"at":         "runRouter",
-			"phase":      "startup",
-			"reason":     "router creation failed",
-			"error_type": fmt.Sprintf("%T", err),
-			"config":     routerCfg != nil,
-			"suggestion": "check configuration values and system resources",
+			"phase":       "initialization",
+			"reason":      "failed to create embedded router",
+			"suggestion":  "check configuration values and system resources",
+			"config_file": viper.ConfigFileUsed(),
 		}).Errorf("failed to create i2p router: %s", err)
+		os.Exit(1)
+	}
+
+	// Run the router lifecycle (blocks until shutdown)
+	if err := router.Run(ctx); err != nil {
+		log.WithError(err).WithFields(logger.Fields{
+			"phase":      "runtime",
+			"reason":     "router exited with error",
+			"error_type": fmt.Sprintf("%T", err),
+			"suggestion": "check logs for more details",
+		}).Errorf("i2p router error: %s", err)
 		os.Exit(1)
 	}
 }

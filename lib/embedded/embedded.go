@@ -46,14 +46,20 @@ type EmbeddedRouter interface {
 
 	// IsConfigured reports whether Configure has been called successfully.
 	IsConfigured() bool
+
+	// Run executes the full router lifecycle from configuration to shutdown.
+	// It handles signal registration, network preflight checks, router creation,
+	// startup, and graceful shutdown. This is the recommended entry point for
+	// embedding the router in other applications.
+	Run(ctx context.Context) error
 }
 
 // StandardEmbeddedRouter is the standard implementation of EmbeddedRouter.
-// It wraps a router.Router instance and manages its lifecycle with proper
+// It wraps a router.Lifecycle instance and manages its lifecycle with proper
 // thread-safety and error handling.
 type StandardEmbeddedRouter struct {
-	// router is the underlying I2P router instance
-	router *router.Router
+	// router is the underlying I2P router instance (interface for testability)
+	router router.Lifecycle
 
 	// cfg stores the router configuration
 	cfg *config.RouterConfig
@@ -102,6 +108,39 @@ func NewStandardEmbeddedRouter(cfg *config.RouterConfig) (*StandardEmbeddedRoute
 	}
 
 	return e, nil
+}
+
+// NewStandardEmbeddedRouterWith creates a new embedded router instance with
+// an injected router.Lifecycle implementation. This constructor is primarily
+// useful for testing, where a stub or mock router can be provided instead of
+// the production router.Router.
+//
+// The provided router must be already started or will be started by the caller.
+// This constructor skips the auto-configuration step that NewStandardEmbeddedRouter
+// performs, allowing full control over router setup.
+//
+// Returns error if the router parameter is nil.
+func NewStandardEmbeddedRouterWith(r router.Lifecycle, cfg *config.RouterConfig) (*StandardEmbeddedRouter, error) {
+	if r == nil {
+		return nil, oops.Errorf("router.Lifecycle cannot be nil")
+	}
+
+	if cfg == nil {
+		return nil, oops.Errorf("configuration cannot be nil")
+	}
+
+	log.WithFields(logger.Fields{
+		"at":     "NewStandardEmbeddedRouterWith",
+		"phase":  "initialization",
+		"reason": "creating embedded router instance with injected lifecycle",
+	}).Debug("creating standard embedded router with injected router")
+
+	return &StandardEmbeddedRouter{
+		router:     r,
+		cfg:        cfg,
+		configured: true, // Assume injected router is already configured
+		running:    false,
+	}, nil
 }
 
 // Configure initializes the router with the provided configuration.
@@ -290,7 +329,7 @@ func (e *StandardEmbeddedRouter) HardStop() {
 
 // prepareHardStop validates the router state and marks it as not running
 // under the mutex. Returns the router instance, or nil if stop is not needed.
-func (e *StandardEmbeddedRouter) prepareHardStop() *router.Router {
+func (e *StandardEmbeddedRouter) prepareHardStop() router.Lifecycle {
 	e.mu.Lock()
 
 	if !e.running {
@@ -334,7 +373,7 @@ func (e *StandardEmbeddedRouter) prepareHardStop() *router.Router {
 
 // forceCloseRouter calls Close() on the router to release resources after
 // a timed-out StopWithContext call.
-func (e *StandardEmbeddedRouter) forceCloseRouter(r *router.Router) {
+func (e *StandardEmbeddedRouter) forceCloseRouter(r router.Lifecycle) {
 	if err := r.Close(); err != nil {
 		log.WithFields(logger.Fields{
 			"at":    "StandardEmbeddedRouter.HardStop",
