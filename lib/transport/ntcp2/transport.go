@@ -1323,33 +1323,7 @@ func (t *NTCP2Transport) resolveExistingSession(existing interface{}, routerHash
 	// Slow path: Accept() stored a raw net.Conn. Promote it to a full
 	// NTCP2Session so the caller gets a usable session object.
 	if rawConn, ok := existing.(net.Conn); ok {
-		// Use deferred session creation to avoid starting workers before
-		// we've confirmed this goroutine wins the CAS race. Workers on
-		// a losing session would share the same conn, causing errors.
-		promoted := NewNTCP2SessionDeferred(rawConn, t.ctx, t.logger)
-		// NOTE: Do NOT set the cleanup callback before CAS. If this
-		// goroutine loses the race, calling promoted.Close() would
-		// trigger removeSession and delete the *winner's* map entry.
-		if t.sessions.CompareAndSwap(routerHash, existing, promoted) {
-			promoted.SetCleanupCallback(func() {
-				t.removeSession(routerHash)
-			})
-			promoted.StartWorkers()
-			routerHashBytes := routerHash.Bytes()
-			t.logger.WithFields(map[string]interface{}{
-				"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
-			}).Info("Promoted inbound net.Conn to NTCP2Session in setupSession")
-			return promoted
-		}
-		// Another goroutine won the promotion race — discard ours and
-		// return whatever is in the map now. No cleanup callback was
-		// set and no workers were started, so Close() is lightweight.
-		_ = promoted.Close()
-		if winner, exists := t.sessions.Load(routerHash); exists {
-			if winnerSession, ok := winner.(*NTCP2Session); ok {
-				return winnerSession
-			}
-		}
+		return t.promoteRawConnToSession(rawConn, routerHash, existing)
 	}
 
 	// Should not reach here in practice. Log an error and return a
@@ -1379,6 +1353,38 @@ func (t *NTCP2Transport) checkSessionLimit() error {
 		}
 		// CAS failed — another goroutine changed the count, retry
 	}
+}
+
+// promoteRawConnToSession promotes a raw net.Conn to NTCP2Session with CAS protection.
+func (t *NTCP2Transport) promoteRawConnToSession(rawConn net.Conn, routerHash data.Hash, existing interface{}) *NTCP2Session {
+	// Use deferred session creation to avoid starting workers before
+	// we've confirmed this goroutine wins the CAS race. Workers on
+	// a losing session would share the same conn, causing errors.
+	promoted := NewNTCP2SessionDeferred(rawConn, t.ctx, t.logger)
+	// NOTE: Do NOT set the cleanup callback before CAS. If this
+	// goroutine loses the race, calling promoted.Close() would
+	// trigger removeSession and delete the *winner's* map entry.
+	if t.sessions.CompareAndSwap(routerHash, existing, promoted) {
+		promoted.SetCleanupCallback(func() {
+			t.removeSession(routerHash)
+		})
+		promoted.StartWorkers()
+		routerHashBytes := routerHash.Bytes()
+		t.logger.WithFields(map[string]interface{}{
+			"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
+		}).Info("Promoted inbound net.Conn to NTCP2Session in setupSession")
+		return promoted
+	}
+	// Another goroutine won the promotion race — discard ours and
+	// return whatever is in the map now. No cleanup callback was
+	// set and no workers were started, so Close() is lightweight.
+	_ = promoted.Close()
+	if winner, exists := t.sessions.Load(routerHash); exists {
+		if winnerSession, ok := winner.(*NTCP2Session); ok {
+			return winnerSession
+		}
+	}
+	return nil
 }
 
 // unreserveSessionSlot releases a session slot reserved by checkSessionLimit

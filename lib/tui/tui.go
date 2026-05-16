@@ -69,17 +69,8 @@ func (m WrapperModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 	case tea.KeyMsg:
-		if m.showPassword {
-			// Any key dismisses the password panel
-			if msg.String() == "esc" || msg.String() == "p" || msg.String() == "enter" {
-				m.showPassword = false
-				return m, nil
-			}
-			return m, nil
-		}
-		if msg.String() == "p" {
-			m.showPassword = true
-			return m, nil
+		if handled, model, cmd := m.handleKeyPress(msg); handled {
+			return model, cmd
 		}
 	}
 
@@ -88,6 +79,23 @@ func (m WrapperModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.inner = model
 	}
 	return m, cmd
+}
+
+// handleKeyPress handles keyboard input and returns (handled, model, cmd).
+func (m WrapperModel) handleKeyPress(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
+	if m.showPassword {
+		// Any key dismisses the password panel
+		if msg.String() == "esc" || msg.String() == "p" || msg.String() == "enter" {
+			m.showPassword = false
+			return true, m, nil
+		}
+		return true, m, nil
+	}
+	if msg.String() == "p" {
+		m.showPassword = true
+		return true, m, nil
+	}
+	return false, m, nil
 }
 
 // View implements tea.Model.

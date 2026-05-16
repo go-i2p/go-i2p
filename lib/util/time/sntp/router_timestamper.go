@@ -416,23 +416,30 @@ func (rt *RouterTimestamper) selectRandomServerExcluding(servers []string, prefe
 func filterByAddressFamily(servers []string, wantIPv6 bool) []string {
 	var result []string
 	for _, server := range servers {
-		addrs, err := net.LookupHost(server)
-		if err != nil {
-			continue
-		}
-		for _, addr := range addrs {
-			ip := net.ParseIP(addr)
-			if ip == nil {
-				continue
-			}
-			isIPv6 := ip.To4() == nil
-			if isIPv6 == wantIPv6 {
-				result = append(result, server)
-				break
-			}
+		if matchesAddressFamily(server, wantIPv6) {
+			result = append(result, server)
 		}
 	}
 	return result
+}
+
+// matchesAddressFamily checks if a server resolves to the requested address family.
+func matchesAddressFamily(server string, wantIPv6 bool) bool {
+	addrs, err := net.LookupHost(server)
+	if err != nil {
+		return false
+	}
+	for _, addr := range addrs {
+		ip := net.ParseIP(addr)
+		if ip == nil {
+			continue
+		}
+		isIPv6 := ip.To4() == nil
+		if isIPv6 == wantIPv6 {
+			return true
+		}
+	}
+	return false
 }
 
 // checkSyncStatus marks the timestamper as well-synced if the offset is small.

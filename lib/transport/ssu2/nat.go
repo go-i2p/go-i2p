@@ -92,13 +92,8 @@ func (t *SSU2Transport) handlePeerTestBlock(block *ssu2noise.SSU2Block, session 
 // callback is invoked so the new address can be published to the netdb.
 func (t *SSU2Transport) handlePeerTestAsAlice(ptBlock *ssu2noise.PeerTestBlock) error {
 	nonce := ptBlock.Nonce
-	var externalAddr *net.UDPAddr
-	if len(ptBlock.AliceIP) > 0 {
-		externalAddr = &net.UDPAddr{
-			IP:   net.IP(ptBlock.AliceIP),
-			Port: int(ptBlock.AlicePort),
-		}
-	}
+	externalAddr := extractAliceAddress(ptBlock)
+
 	result := &ssu2noise.TestResult{
 		ExternalAddr: externalAddr,
 		Reachable:    externalAddr != nil,
@@ -106,22 +101,44 @@ func (t *SSU2Transport) handlePeerTestAsAlice(ptBlock *ssu2noise.PeerTestBlock) 
 	if completeErr := t.peerTestManager.CompleteTest(nonce, result); completeErr != nil {
 		t.logger.Debug("PeerTest complete (non-initiator path)")
 	}
-	// Record observation for majority-confirmation logic (D3).
-	if externalAddr != nil && t.natStateCache != nil {
-		confirmed := t.natStateCache.recordObservation(externalAddr.String())
-		if confirmed != "" && confirmed != t.natStateCache.getExternal() {
-			t.reachMetrics.peerTestConfirmed.Add(1)
-			t.logger.WithField("external_addr", confirmed).
-				Info("PeerTest: external address confirmed by multiple observations")
-			t.natStateCache.set(ssu2noise.NATCone, confirmed)
-			t.saveNATState()
-			if fn, ok := t.peerTestRepublish.Load().(func()); ok && fn != nil {
-				t.reachMetrics.publishedAddrChanged.Add(1)
-				go fn()
-			}
-		}
-	}
+
+	t.processExternalAddressConfirmation(externalAddr)
 	return nil
+}
+
+// extractAliceAddress extracts Alice's UDP address from PeerTest block.
+func extractAliceAddress(ptBlock *ssu2noise.PeerTestBlock) *net.UDPAddr {
+	if len(ptBlock.AliceIP) == 0 {
+		return nil
+	}
+	return &net.UDPAddr{
+		IP:   net.IP(ptBlock.AliceIP),
+		Port: int(ptBlock.AlicePort),
+	}
+}
+
+// processExternalAddressConfirmation records and confirms external address via majority logic.
+func (t *SSU2Transport) processExternalAddressConfirmation(externalAddr *net.UDPAddr) {
+	// Record observation for majority-confirmation logic (D3).
+	if externalAddr == nil || t.natStateCache == nil {
+		return
+	}
+
+	confirmed := t.natStateCache.recordObservation(externalAddr.String())
+	if confirmed == "" || confirmed == t.natStateCache.getExternal() {
+		return
+	}
+
+	t.reachMetrics.peerTestConfirmed.Add(1)
+	t.logger.WithField("external_addr", confirmed).
+		Info("PeerTest: external address confirmed by multiple observations")
+	t.natStateCache.set(ssu2noise.NATCone, confirmed)
+	t.saveNATState()
+
+	if fn, ok := t.peerTestRepublish.Load().(func()); ok && fn != nil {
+		t.reachMetrics.publishedAddrChanged.Add(1)
+		go fn()
+	}
 }
 
 // parsePeerTestAliceAddr extracts Alice's UDP address from a PeerTest block.

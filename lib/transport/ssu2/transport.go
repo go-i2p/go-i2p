@@ -484,6 +484,12 @@ func (t *SSU2Transport) findExistingSession(routerHash data.Hash) (transport.Tra
 	if !exists {
 		return nil, false
 	}
+
+	return t.resolveSessionFromMap(existing, routerHash)
+}
+
+// resolveSessionFromMap resolves session from map entry (either live session or connection to promote).
+func (t *SSU2Transport) resolveSessionFromMap(existing interface{}, routerHash data.Hash) (transport.TransportSession, bool) {
 	if session, ok := existing.(*SSU2Session); ok {
 		if session.ctx.Err() != nil {
 			if _, loaded := t.sessions.LoadAndDelete(routerHash); loaded {
