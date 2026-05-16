@@ -1,0 +1,105 @@
+package router
+
+import (
+	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
+	ssu2 "github.com/go-i2p/go-i2p/lib/transport/ssu2"
+)
+
+// GetActiveSessionCount returns the number of active transport sessions.
+// Thread-safe access to the activeSessions map.
+func (r *Router) GetActiveSessionCount() int {
+	r.sessionMutex.RLock()
+	defer r.sessionMutex.RUnlock()
+	return len(r.activeSessions)
+}
+
+// GetNTCP2SessionCount returns the number of active NTCP2 (TCP) sessions.
+// Returns 0 if the NTCP2 transport is not available.
+func (r *Router) GetNTCP2SessionCount() int {
+	muxer := r.transports
+	if muxer == nil {
+		return 0
+	}
+	for _, t := range muxer.GetTransports() {
+		if ntcp2Transport, ok := t.(*ntcp.NTCP2Transport); ok {
+			return ntcp2Transport.GetSessionCount()
+		}
+	}
+	return 0
+}
+
+// GetSSU2SessionCount returns the number of active SSU2 (UDP) sessions.
+// Returns 0 if the SSU2 transport is not available.
+func (r *Router) GetSSU2SessionCount() int {
+	muxer := r.transports
+	if muxer == nil {
+		return 0
+	}
+	for _, t := range muxer.GetTransports() {
+		if ssu2Transport, ok := t.(*ssu2.SSU2Transport); ok {
+			return ssu2Transport.GetSessionCount()
+		}
+	}
+	return 0
+}
+
+// GetTransportAddr returns the listening address of the first available transport.
+// This is used by I2PControl to expose NTCP2 port and address information.
+// Returns nil if no transports are available.
+func (r *Router) GetTransportAddr() interface{} {
+	// Capture locally to avoid TOCTOU race with concurrent shutdown.
+	muxer := r.transports
+	if muxer == nil {
+		return nil
+	}
+
+	transports := muxer.GetTransports()
+	if len(transports) == 0 {
+		return nil
+	}
+
+	// Return the address of the first transport (typically NTCP2)
+	return transports[0].Addr()
+}
+
+// GetSSU2Addr returns the listening UDP address of the SSU2 transport.
+// Returns nil if SSU2 is not available or not yet bound.
+func (r *Router) GetSSU2Addr() interface{} {
+	muxer := r.transports
+	if muxer == nil {
+		return nil
+	}
+	for _, t := range muxer.GetTransports() {
+		if _, ok := t.(*ssu2.SSU2Transport); ok {
+			return t.Addr()
+		}
+	}
+	return nil
+}
+
+// GetNetworkStatus returns the I2PControl network status code.
+// Status codes:
+//
+//	0  = OK          (running, reachable confirmed external address)
+//	1  = TESTING     (not yet connected to any peers)
+//	2  = FIREWALLED  (running, has peers, but no confirmed external address)
+//	3  = HIDDEN      (router is in hidden mode by configuration)
+//	8  = ERROR_I2CP  (router not running)
+func (r *Router) GetNetworkStatus() int {
+	if !r.IsRunning() {
+		return 8 // ERROR_I2CP
+	}
+	// Hidden mode is a configuration posture that must be reported regardless
+	// of transient peer-count or reseeding state; check it first.
+	if r.cfg != nil && r.cfg.Hidden {
+		return 3 // HIDDEN
+	}
+	if r.IsReseeding() || r.GetActiveSessionCount() == 0 {
+		return 1 // TESTING — no active peers yet
+	}
+	// Firewalled: has peers but no confirmed external address.
+	if r.collectBestExternalAddr() == "" {
+		return 2 // FIREWALLED
+	}
+	return 0 // OK
+}

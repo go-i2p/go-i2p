@@ -7,6 +7,7 @@ import (
 	"github.com/samber/oops"
 
 	"github.com/go-i2p/crypto/tunnel"
+	"github.com/go-i2p/go-i2p/lib/tunnel/buildrecord"
 )
 
 /*
@@ -119,7 +120,8 @@ total size: 1028 Bytes
 */
 
 // TunnelID represents a 4-byte tunnel identifier used to route messages through I2P tunnels.
-type TunnelID uint32
+// It is an alias for buildrecord.TunnelID to share the type with lib/i2np without import cycles.
+type TunnelID = buildrecord.TunnelID
 
 // EncryptedTunnelMessage represents an encrypted I2P tunnel message consisting of a TunnelID, IV, and encrypted data.
 type EncryptedTunnelMessage tunnel.TunnelData

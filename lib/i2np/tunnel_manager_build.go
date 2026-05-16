@@ -559,7 +559,7 @@ func (tm *TunnelManager) createShortTunnelBuildMessage(result *tunnel.TunnelBuil
 func (tm *TunnelManager) convertAndOverrideMessageID(records []tunnel.BuildRequestRecord, messageID int) []BuildRequestRecord {
 	i2npRecords := make([]BuildRequestRecord, len(records))
 	for i, rec := range records {
-		i2npRecords[i] = convertTunnelBuildRecord(rec)
+		i2npRecords[i] = rec
 		i2npRecords[i].SendMessageID = messageID
 	}
 	return i2npRecords
@@ -745,31 +745,12 @@ func (tm *TunnelManager) createVariableTunnelBuildMessage(result *tunnel.TunnelB
 	return msg, nil
 }
 
-// convertTunnelBuildRecord converts a tunnel.BuildRequestRecord to an i2np.BuildRequestRecord.
-// This avoids duplicating the field-by-field copy in multiple functions.
-func convertTunnelBuildRecord(rec tunnel.BuildRequestRecord) BuildRequestRecord {
-	return BuildRequestRecord{
-		ReceiveTunnel: rec.ReceiveTunnel,
-		OurIdent:      rec.OurIdent,
-		NextTunnel:    rec.NextTunnel,
-		NextIdent:     rec.NextIdent,
-		LayerKey:      rec.LayerKey,
-		IVKey:         rec.IVKey,
-		ReplyKey:      rec.ReplyKey,
-		ReplyIV:       rec.ReplyIV,
-		Flag:          rec.Flag,
-		RequestTime:   rec.RequestTime,
-		SendMessageID: rec.SendMessageID,
-		Padding:       rec.Padding,
-	}
-}
-
 // encryptBuildRecords encrypts each build request record with its corresponding
 // hop's X25519 public key using ECIES-X25519-AEAD encryption.
 func encryptBuildRecords(result *tunnel.TunnelBuildResult) ([8][528]byte, error) {
 	var encryptedData [8][528]byte
 	for i := 0; i < 8 && i < len(result.Records); i++ {
-		i2npRecord := convertTunnelBuildRecord(result.Records[i])
+		i2npRecord := result.Records[i]
 
 		if i >= len(result.Hops) {
 			return encryptedData, oops.Errorf("record %d has no corresponding hop RouterInfo", i)

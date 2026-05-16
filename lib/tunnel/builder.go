@@ -64,24 +64,6 @@ type BuildTunnelRequest struct {
 	RequireDirectConnectivity bool          // Only select peers with direct NTCP2 connectivity (set true in production)
 }
 
-// BuildRequestRecord contains all the data for a single tunnel hop build request.
-// This is the cleartext version before encryption. It maps to the I2NP
-// BuildRequestRecord structure but is defined here to avoid import cycles.
-type BuildRequestRecord struct {
-	ReceiveTunnel TunnelID
-	OurIdent      common.Hash
-	NextTunnel    TunnelID
-	NextIdent     common.Hash
-	LayerKey      session_key.SessionKey
-	IVKey         session_key.SessionKey
-	ReplyKey      session_key.SessionKey
-	ReplyIV       [16]byte
-	Flag          int
-	RequestTime   time.Time
-	SendMessageID int
-	Padding       [29]byte
-}
-
 // TunnelBuildResult contains the result of building a tunnel request.
 type TunnelBuildResult struct {
 	TunnelID      TunnelID                 // The generated tunnel ID

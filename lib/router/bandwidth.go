@@ -1,9 +1,14 @@
 package router
 
 import (
+	"math"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/go-i2p/go-i2p/lib/config"
+	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
+	ssu2 "github.com/go-i2p/go-i2p/lib/transport/ssu2"
 )
 
 // BandwidthSample represents a single bandwidth measurement at a point in time.
@@ -220,4 +225,68 @@ func (bt *BandwidthTracker) GetRate1s() (inbound, outbound uint64) {
 // GetRate15s returns the 15-second inbound and outbound bandwidth rates in bytes per second.
 func (bt *BandwidthTracker) GetRate15s() (inbound, outbound uint64) {
 	return bt.inboundRate15s.Load(), bt.outboundRate15s.Load()
+}
+
+// getTotalBandwidth returns the total bytes sent and received from all transports.
+// This method is used by the bandwidth tracker to sample bandwidth usage.
+func (r *Router) getTotalBandwidth() (sent, received uint64) {
+	// Capture TransportMuxer locally to avoid TOCTOU race:
+	// the field could be set to nil by concurrent shutdown between
+	// the nil check and the method call.
+	muxer := r.transports
+	if muxer == nil {
+		return 0, 0
+	}
+
+	// Get all transports from the muxer
+	for _, t := range muxer.GetTransports() {
+		switch tr := t.(type) {
+		case *ntcp.NTCP2Transport:
+			s, rcv := tr.GetTotalBandwidth()
+			sent += s
+			received += rcv
+		case *ssu2.SSU2Transport:
+			s, rcv := tr.GetTotalBandwidth()
+			sent += s
+			received += rcv
+		}
+	}
+	return sent, received
+}
+
+// GetBandwidthRates returns the current 15-second inbound and outbound bandwidth rates.
+// Returns rates in bytes per second.
+func (r *Router) GetBandwidthRates() (inbound, outbound uint64) {
+	if r.bandwidthTracker == nil {
+		return 0, 0
+	}
+	return r.bandwidthTracker.GetRates()
+}
+
+// GetBandwidthRates1s returns the most recent 1-second inbound and outbound bandwidth rates.
+// Returns rates in bytes per second.
+func (r *Router) GetBandwidthRates1s() (inbound, outbound uint64) {
+	if r.bandwidthTracker == nil {
+		return 0, 0
+	}
+	return r.bandwidthTracker.GetRate1s()
+}
+
+// routerBandwidthProvider adapts the router config to the I2CP bandwidth
+// limits interface so the I2CP server returns the real configured limit
+// instead of a hardcoded value.
+type routerBandwidthProvider struct {
+	cfg *config.RouterConfig
+}
+
+// GetBandwidthLimits returns the router's configured MaxBandwidth for both
+// inbound and outbound directions. If MaxBandwidth is 0 (unlimited) or
+// exceeds uint32 range, it clamps to math.MaxUint32.
+func (bp *routerBandwidthProvider) GetBandwidthLimits() (inbound, outbound uint32) {
+	bw := bp.cfg.MaxBandwidth
+	if bw == 0 || bw > uint64(math.MaxUint32) {
+		return math.MaxUint32, math.MaxUint32 // unlimited
+	}
+	limit := uint32(bw)
+	return limit, limit
 }

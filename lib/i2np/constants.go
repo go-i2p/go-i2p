@@ -1,6 +1,10 @@
 package i2np
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/go-i2p/go-i2p/lib/tunnel/buildrecord"
+)
 
 // I2NP Message Type Constants
 // Moved from: header.go
@@ -41,14 +45,14 @@ var (
 // Standard cleartext (before encryption) is 222 bytes.
 // Short cleartext (ECIES short) is 154 bytes (218 - 16 toPeer - 32 ephKey - 16 MAC).
 const (
-	StandardBuildRecordSize          = 528 // Encrypted on-wire size for standard/variable tunnel build records
-	ShortBuildRecordSize             = 218 // Encrypted on-wire size for short tunnel build records (ECIES)
-	StandardBuildRecordCleartextLen  = 222 // Cleartext length for standard ElGamal build request records
-	ElGamalBuildRecordCleartextLen   = 222 // Cleartext length for ElGamal build request records (same as StandardBuildRecordCleartextLen)
-	ECIESLongBuildRecordCleartextLen = 464 // Cleartext length for ECIES-X25519 long-form build request records
-	ShortBuildRecordCleartextLen     = 154 // Cleartext length for short ECIES build request records (218 - 64)
-	ShortRecordHeaderSize            = 64  // toPeer(16) + ephemeralKey(32) + MAC(16)
-	DefaultExpirationSeconds         = 480 // Default tunnel expiration: 8 minutes
+	StandardBuildRecordSize          = 528                                  // Encrypted on-wire size for standard/variable tunnel build records
+	ShortBuildRecordSize             = buildrecord.ShortRecordSize          // 218
+	StandardBuildRecordCleartextLen  = buildrecord.StandardCleartextLen     // 222
+	ElGamalBuildRecordCleartextLen   = buildrecord.StandardCleartextLen     // 222
+	ECIESLongBuildRecordCleartextLen = 464                                  // Cleartext length for ECIES-X25519 long-form build request records
+	ShortBuildRecordCleartextLen     = buildrecord.ShortCleartextLen        // 154
+	ShortRecordHeaderSize            = 64                                   // toPeer(16) + ephemeralKey(32) + MAC(16)
+	DefaultExpirationSeconds         = buildrecord.DefaultExpirationSeconds // 480
 )
 
 // DefaultExpirationTolerance is the default expiration tolerance for clock skew (5 minutes into the past).
