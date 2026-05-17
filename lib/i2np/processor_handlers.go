@@ -9,7 +9,7 @@ import (
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 
-	"github.com/go-i2p/go-i2p/lib/tunnel"
+	"github.com/go-i2p/go-i2p/lib/tunnel/buildrecord"
 )
 
 func (p *MessageProcessor) processDataMessage(msg Message) error {
@@ -99,7 +99,7 @@ func (p *MessageProcessor) sendDatabaseStoreAck(dbStore *DatabaseStore) {
 		log.WithFields(logger.Fields{"at": "sendDatabaseStoreAck"}).Debug("cannot send DatabaseStore ack: no clove forwarder")
 		return
 	}
-	tunnelID := tunnel.TunnelID(binary.BigEndian.Uint32(dbStore.ReplyTunnelID[:]))
+	tunnelID := buildrecord.TunnelID(binary.BigEndian.Uint32(dbStore.ReplyTunnelID[:]))
 	ack := NewDeliveryStatusMessage(int(token), time.Now())
 	if err := p.cloveForwarder.ForwardThroughTunnel(dbStore.ReplyGateway, tunnelID, ack); err != nil {
 		log.WithField("error", err).Debug("failed to send DatabaseStore ack")
@@ -195,7 +195,7 @@ func (p *MessageProcessor) parseTunnelGatewayFromPayload(payload []byte) (*Tunne
 	}
 
 	tgMsg := &TunnelGateway{}
-	tgMsg.TunnelID = tunnel.TunnelID(binary.BigEndian.Uint32(payload[0:4]))
+	tgMsg.TunnelID = buildrecord.TunnelID(binary.BigEndian.Uint32(payload[0:4]))
 	tgMsg.Length = int(binary.BigEndian.Uint16(payload[4:6]))
 
 	if len(payload) < 6+tgMsg.Length {
@@ -422,7 +422,7 @@ func parseECIESGarlicClove(data []byte) (*Garlic, error) {
 
 	clove := GarlicClove{
 		DeliveryInstructions: *deliveryInstructions,
-		Message:          baseMsg,
+		Message:              baseMsg,
 	}
 
 	return &Garlic{

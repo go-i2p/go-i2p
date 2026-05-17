@@ -8,7 +8,7 @@ import (
 
 	datalib "github.com/go-i2p/common/data"
 	"github.com/go-i2p/crypto/rand"
-	"github.com/go-i2p/go-i2p/lib/tunnel"
+	"github.com/go-i2p/go-i2p/lib/tunnel/buildrecord"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
@@ -40,7 +40,7 @@ func (f *MessageFactory) CreateDeliveryStatusMessage(messageID int, timestamp ti
 }
 
 // CreateTunnelDataMessage creates a new tunnel data message with the given tunnel ID and data.
-func (f *MessageFactory) CreateTunnelDataMessage(tunnelID tunnel.TunnelID, data [1024]byte) Message {
+func (f *MessageFactory) CreateTunnelDataMessage(tunnelID buildrecord.TunnelID, data [1024]byte) Message {
 	return NewTunnelDataMessage(tunnelID, data)
 }
 

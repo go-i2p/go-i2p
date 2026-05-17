@@ -3,7 +3,7 @@ package i2np
 import (
 	"encoding/binary"
 
-	"github.com/go-i2p/go-i2p/lib/tunnel"
+	"github.com/go-i2p/go-i2p/lib/tunnel/buildrecord"
 	"github.com/samber/oops"
 )
 
@@ -14,12 +14,12 @@ import (
 // https://geti2p.net/spec/i2np#tunneldata
 type TunnelDataMessage struct {
 	*BaseI2NPMessage
-	TunnelID tunnel.TunnelID // 4-byte tunnel identifier
-	Data     [1024]byte      // Fixed size encrypted tunnel data
+	TunnelID buildrecord.TunnelID // 4-byte tunnel identifier
+	Data     [1024]byte           // Fixed size encrypted tunnel data
 }
 
 // NewTunnelDataMessage creates a new TunnelData message with the given tunnel ID and data.
-func NewTunnelDataMessage(tunnelID tunnel.TunnelID, data [1024]byte) *TunnelDataMessage {
+func NewTunnelDataMessage(tunnelID buildrecord.TunnelID, data [1024]byte) *TunnelDataMessage {
 	msg := &TunnelDataMessage{
 		BaseI2NPMessage: NewBaseI2NPMessage(I2NPMessageTypeTunnelData),
 		TunnelID:        tunnelID,
@@ -35,7 +35,7 @@ func NewTunnelDataMessage(tunnelID tunnel.TunnelID, data [1024]byte) *TunnelData
 }
 
 // NewTunnelCarrier creates a new TunnelData message and returns it as TunnelCarrier interface.
-func NewTunnelCarrier(tunnelID tunnel.TunnelID, data [1024]byte) TunnelCarrier {
+func NewTunnelCarrier(tunnelID buildrecord.TunnelID, data [1024]byte) TunnelCarrier {
 	return NewTunnelDataMessage(tunnelID, data)
 }
 
@@ -58,7 +58,7 @@ func (t *TunnelDataMessage) UnmarshalBinary(data []byte) error {
 		return oops.Errorf("tunnel data message payload wrong size: expected 1028 bytes, got %d", len(messageData))
 	}
 
-	t.TunnelID = tunnel.TunnelID(binary.BigEndian.Uint32(messageData[0:4]))
+	t.TunnelID = buildrecord.TunnelID(binary.BigEndian.Uint32(messageData[0:4]))
 	copy(t.Data[:], messageData[4:1028])
 	return nil
 }
@@ -69,7 +69,7 @@ func (t *TunnelDataMessage) GetTunnelData() []byte {
 }
 
 // GetTunnelID returns the tunnel identifier for this message.
-func (t *TunnelDataMessage) GetTunnelID() tunnel.TunnelID {
+func (t *TunnelDataMessage) GetTunnelID() buildrecord.TunnelID {
 	return t.TunnelID
 }
 

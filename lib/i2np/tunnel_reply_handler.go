@@ -6,7 +6,7 @@ import (
 
 	"github.com/go-i2p/common/session_key"
 	aescbc "github.com/go-i2p/crypto/aes"
-	"github.com/go-i2p/go-i2p/lib/tunnel"
+	"github.com/go-i2p/go-i2p/lib/tunnel/buildrecord"
 	"github.com/go-i2p/go-noise/ratchet"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
@@ -45,7 +45,7 @@ func DefaultReplyProcessorConfig() ReplyProcessorConfig {
 
 // PendingBuildRequest tracks an in-progress tunnel build request.
 type PendingBuildRequest struct {
-	TunnelID     tunnel.TunnelID
+	TunnelID     buildrecord.TunnelID
 	RequestedAt  time.Time
 	ReplyKeys    []session_key.SessionKey // ECIES-X25519-AEAD keys for decrypting each hop's reply
 	ReplyIVs     [][16]byte               // Nonces/IVs for AEAD decryption
@@ -63,7 +63,7 @@ type ReplyProcessor struct {
 	config ReplyProcessorConfig
 
 	// pendingBuilds tracks all in-progress tunnel builds keyed by tunnel ID.
-	pendingBuilds map[tunnel.TunnelID]*PendingBuildRequest
+	pendingBuilds map[buildrecord.TunnelID]*PendingBuildRequest
 	mutex         sync.RWMutex
 
 	// stopped indicates the processor has been shut down.
@@ -79,21 +79,21 @@ type ReplyProcessor struct {
 	tunnelManager *TunnelManager
 
 	// retryCallback is invoked when a build fails and should be retried.
-	retryCallback func(tunnelID tunnel.TunnelID, isInbound bool, hopCount int) error
+	retryCallback func(tunnelID buildrecord.TunnelID, isInbound bool, hopCount int) error
 }
 
 // NewReplyProcessor creates a new reply processor with the given configuration.
 func NewReplyProcessor(config ReplyProcessorConfig, tm *TunnelManager) *ReplyProcessor {
 	return &ReplyProcessor{
 		config:        config,
-		pendingBuilds: make(map[tunnel.TunnelID]*PendingBuildRequest),
+		pendingBuilds: make(map[buildrecord.TunnelID]*PendingBuildRequest),
 		tunnelManager: tm,
 	}
 }
 
 // SetRetryCallback sets the callback function for retrying failed builds.
 // The callback receives the tunnel ID, tunnel direction, and hop count.
-func (rp *ReplyProcessor) SetRetryCallback(callback func(tunnel.TunnelID, bool, int) error) {
+func (rp *ReplyProcessor) SetRetryCallback(callback func(buildrecord.TunnelID, bool, int) error) {
 	rp.retryCallback = callback
 }
 
@@ -107,7 +107,7 @@ func (rp *ReplyProcessor) SetRetryCallback(callback func(tunnel.TunnelID, bool, 
 //   - isInbound: Tunnel direction (true=inbound, false=outbound)
 //   - hopCount: Number of hops in the tunnel
 func (rp *ReplyProcessor) RegisterPendingBuild(
-	tunnelID tunnel.TunnelID,
+	tunnelID buildrecord.TunnelID,
 	replyKeys []session_key.SessionKey,
 	replyIVs [][16]byte,
 	isInbound bool,
@@ -153,7 +153,7 @@ func (rp *ReplyProcessor) RegisterPendingBuild(
 // in-progress STBM build. These are the m_H values (Noise handshake hash after
 // EncryptAndHash) needed as AEAD associated data when decrypting each hop's
 // ShortTunnelBuildReply record. Must be called immediately after RegisterPendingBuild.
-func (rp *ReplyProcessor) SetPendingBuildNoiseHashes(tunnelID tunnel.TunnelID, noiseHashes [][32]byte) error {
+func (rp *ReplyProcessor) SetPendingBuildNoiseHashes(tunnelID buildrecord.TunnelID, noiseHashes [][32]byte) error {
 	rp.mutex.Lock()
 	defer rp.mutex.Unlock()
 
@@ -174,7 +174,7 @@ func (rp *ReplyProcessor) SetPendingBuildNoiseHashes(tunnelID tunnel.TunnelID, n
 //   - *ShortTunnelBuildReply (1-8 hops, modern STBM format)
 //
 // Returns nil on successful build, error otherwise.
-func (rp *ReplyProcessor) ProcessBuildReply(handler TunnelReplyHandler, tunnelID tunnel.TunnelID) error {
+func (rp *ReplyProcessor) ProcessBuildReply(handler TunnelReplyHandler, tunnelID buildrecord.TunnelID) error {
 	pending, err := rp.retrieveAndRemovePendingBuild(tunnelID)
 	if err != nil {
 		return err
@@ -193,7 +193,7 @@ func (rp *ReplyProcessor) ProcessBuildReply(handler TunnelReplyHandler, tunnelID
 	return rp.handleBuildSuccess(tunnelID, pending)
 }
 
-func (rp *ReplyProcessor) retrieveAndRemovePendingBuild(tunnelID tunnel.TunnelID) (*PendingBuildRequest, error) {
+func (rp *ReplyProcessor) retrieveAndRemovePendingBuild(tunnelID buildrecord.TunnelID) (*PendingBuildRequest, error) {
 	rp.mutex.Lock()
 	defer rp.mutex.Unlock()
 
@@ -211,14 +211,14 @@ func (rp *ReplyProcessor) retrieveAndRemovePendingBuild(tunnelID tunnel.TunnelID
 	return pending, nil
 }
 
-func (rp *ReplyProcessor) logReplyProcessing(tunnelID tunnel.TunnelID, pending *PendingBuildRequest) {
+func (rp *ReplyProcessor) logReplyProcessing(tunnelID buildrecord.TunnelID, pending *PendingBuildRequest) {
 	log.WithFields(logger.Fields{
 		"tunnel_id":  tunnelID,
 		"latency_ms": time.Since(pending.RequestedAt).Milliseconds(),
 	}).Debug("Processing tunnel build reply")
 }
 
-func (rp *ReplyProcessor) decryptReplyIfEnabled(handler TunnelReplyHandler, tunnelID tunnel.TunnelID, pending *PendingBuildRequest) error {
+func (rp *ReplyProcessor) decryptReplyIfEnabled(handler TunnelReplyHandler, tunnelID buildrecord.TunnelID, pending *PendingBuildRequest) error {
 	if !rp.config.EnableDecryption {
 		return nil
 	}
@@ -233,7 +233,7 @@ func (rp *ReplyProcessor) decryptReplyIfEnabled(handler TunnelReplyHandler, tunn
 	return nil
 }
 
-func (rp *ReplyProcessor) processReplyWithHandler(handler TunnelReplyHandler, tunnelID tunnel.TunnelID, pending *PendingBuildRequest) error {
+func (rp *ReplyProcessor) processReplyWithHandler(handler TunnelReplyHandler, tunnelID buildrecord.TunnelID, pending *PendingBuildRequest) error {
 	if err := handler.ProcessReply(); err != nil {
 		log.WithFields(logger.Fields{
 			"tunnel_id": tunnelID,
@@ -463,7 +463,7 @@ func (rp *ReplyProcessor) decryptRecord(
 }
 
 // handleBuildSuccess handles successful tunnel build completion.
-func (rp *ReplyProcessor) handleBuildSuccess(tunnelID tunnel.TunnelID, pending *PendingBuildRequest) error {
+func (rp *ReplyProcessor) handleBuildSuccess(tunnelID buildrecord.TunnelID, pending *PendingBuildRequest) error {
 	log.WithFields(logger.Fields{
 		"tunnel_id":   tunnelID,
 		"is_inbound":  pending.IsInbound,
@@ -481,7 +481,7 @@ func (rp *ReplyProcessor) handleBuildSuccess(tunnelID tunnel.TunnelID, pending *
 
 // handleBuildFailure handles failed tunnel builds with retry logic.
 func (rp *ReplyProcessor) handleBuildFailure(
-	tunnelID tunnel.TunnelID,
+	tunnelID buildrecord.TunnelID,
 	pending *PendingBuildRequest,
 	buildErr error,
 ) error {
@@ -510,7 +510,7 @@ func (rp *ReplyProcessor) handleBuildFailure(
 }
 
 // retryBuild attempts to retry a failed tunnel build with exponential backoff.
-func (rp *ReplyProcessor) retryBuild(tunnelID tunnel.TunnelID, pending *PendingBuildRequest) error {
+func (rp *ReplyProcessor) retryBuild(tunnelID buildrecord.TunnelID, pending *PendingBuildRequest) error {
 	if rp.retryCallback == nil {
 		log.WithFields(logger.Fields{"at": "retryBuild"}).Warn("No retry callback configured, cannot retry tunnel build")
 		return oops.Errorf("retry not available")
@@ -558,7 +558,7 @@ func (rp *ReplyProcessor) retryBuild(tunnelID tunnel.TunnelID, pending *PendingB
 }
 
 // handleBuildTimeout handles tunnel build timeout events.
-func (rp *ReplyProcessor) handleBuildTimeout(tunnelID tunnel.TunnelID) {
+func (rp *ReplyProcessor) handleBuildTimeout(tunnelID buildrecord.TunnelID) {
 	rp.mutex.Lock()
 	pending, exists := rp.pendingBuilds[tunnelID]
 	if !exists {
@@ -605,8 +605,8 @@ func (rp *ReplyProcessor) CleanupExpiredBuilds() int {
 }
 
 // collectExpiredBuilds identifies builds that have exceeded the maximum age.
-func (rp *ReplyProcessor) collectExpiredBuilds(now time.Time, maxAge time.Duration) []tunnel.TunnelID {
-	var expired []tunnel.TunnelID
+func (rp *ReplyProcessor) collectExpiredBuilds(now time.Time, maxAge time.Duration) []buildrecord.TunnelID {
+	var expired []buildrecord.TunnelID
 
 	for id, pending := range rp.pendingBuilds {
 		if now.Sub(pending.RequestedAt) > maxAge {
@@ -621,7 +621,7 @@ func (rp *ReplyProcessor) collectExpiredBuilds(now time.Time, maxAge time.Durati
 }
 
 // removeExpiredBuilds deletes expired builds from the pending builds map.
-func (rp *ReplyProcessor) removeExpiredBuilds(expired []tunnel.TunnelID) {
+func (rp *ReplyProcessor) removeExpiredBuilds(expired []buildrecord.TunnelID) {
 	for _, id := range expired {
 		delete(rp.pendingBuilds, id)
 	}
@@ -636,7 +636,7 @@ func (rp *ReplyProcessor) GetPendingBuildCount() int {
 
 // GetPendingBuildInfo returns information about a specific pending build.
 // Returns nil if the build is not found.
-func (rp *ReplyProcessor) GetPendingBuildInfo(tunnelID tunnel.TunnelID) *PendingBuildRequest {
+func (rp *ReplyProcessor) GetPendingBuildInfo(tunnelID buildrecord.TunnelID) *PendingBuildRequest {
 	rp.mutex.RLock()
 	defer rp.mutex.RUnlock()
 	return rp.pendingBuilds[tunnelID]

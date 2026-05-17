@@ -6,7 +6,8 @@ import (
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/session_key"
-	"github.com/go-i2p/go-i2p/lib/tunnel"
+	"github.com/go-i2p/go-i2p/lib/tunnel/build"
+	"github.com/go-i2p/go-i2p/lib/tunnel/buildrecord"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
@@ -26,7 +27,7 @@ type GarlicCloveForwarder interface {
 
 	// ForwardThroughTunnel forwards a message through a tunnel to a gateway (delivery type 0x03).
 	// The forwarder should wrap the message in a TunnelGateway envelope and send to the gateway.
-	ForwardThroughTunnel(gatewayHash common.Hash, tunnelID tunnel.TunnelID, msg Message) error
+	ForwardThroughTunnel(gatewayHash common.Hash, tunnelID buildrecord.TunnelID, msg Message) error
 }
 
 // ParticipantManager defines the interface for processing incoming tunnel build requests.
@@ -55,7 +56,7 @@ type ParticipantManager interface {
 	// - expiry: When the tunnel participation expires
 	// - layerKey: The layer encryption key from the build request record
 	// - ivKey: The IV key from the build request record
-	RegisterParticipant(tunnelID tunnel.TunnelID, sourceHash common.Hash, expiry time.Time, layerKey, ivKey session_key.SessionKey) error
+	RegisterParticipant(tunnelID buildrecord.TunnelID, sourceHash common.Hash, expiry time.Time, layerKey, ivKey session_key.SessionKey) error
 }
 
 // BuildReplyForwarder defines the interface for forwarding tunnel build replies.
@@ -81,7 +82,7 @@ type BuildReplyForwarder interface {
 	// - messageID: The I2NP message ID for the reply
 	// - encryptedRecords: The complete encrypted build reply records
 	// - isShortBuild: Whether this is a Short Tunnel Build Message (STBM) format
-	ForwardBuildReplyThroughTunnel(gatewayHash common.Hash, tunnelID tunnel.TunnelID, messageID int, encryptedRecords []byte, isShortBuild bool) error
+	ForwardBuildReplyThroughTunnel(gatewayHash common.Hash, tunnelID buildrecord.TunnelID, messageID int, encryptedRecords []byte, isShortBuild bool) error
 }
 
 // TunnelGatewayHandler defines the interface for handling TunnelGateway messages.
@@ -91,7 +92,7 @@ type BuildReplyForwarder interface {
 type TunnelGatewayHandler interface {
 	// HandleGateway processes an incoming TunnelGateway message by looking up the tunnel,
 	// encrypting the payload, and forwarding it to the next hop.
-	HandleGateway(tunnelID tunnel.TunnelID, payload []byte) error
+	HandleGateway(tunnelID buildrecord.TunnelID, payload []byte) error
 }
 
 // TunnelDataHandler defines the interface for handling incoming TunnelData messages.
@@ -128,14 +129,8 @@ type DeliveryStatusHandler interface {
 	HandleDeliveryStatus(msgID int, timestamp time.Time) error
 }
 
-// TunnelBuildReplyProcessor defines the interface for processing tunnel build reply messages.
-// When a tunnel build reply (types 22, 24, 26) arrives, the processor correlates it with
-// the original build request and updates tunnel state accordingly.
-type TunnelBuildReplyProcessor interface {
-	// ProcessTunnelBuildReply handles a parsed tunnel build reply.
-	// handler provides the reply records, messageID correlates with the original request.
-	ProcessTunnelBuildReply(handler TunnelReplyHandler, messageID int) error
-}
+// TunnelBuildReplyProcessor defines the interface for processing tunnel build reply messages - re-exported from lib/tunnel/build
+type TunnelBuildReplyProcessor = build.TunnelBuildReplyProcessor
 
 // GarlicMessageDecryptor provides garlic message decryption for the processor.
 // This interface is satisfied by both GarlicSessionManager (the concrete adapter)
@@ -146,13 +141,8 @@ type GarlicMessageDecryptor interface {
 	DecryptGarlicMessage(encrypted []byte) (plaintext []byte, sessionTag [8]byte, sessionHash *[32]byte, err error)
 }
 
-// GarlicKeyRegistrar allows callers to register one-time symmetric garlic keys
-// derived from STBM Noise transcript hashes. Implemented by *GarlicSessionManager.
-type GarlicKeyRegistrar interface {
-	// RegisterOneTimeGarlicKey stores a single-use garlic key for a pending
-	// ShortTunnelBuildReply. tag is garlicKeyMaterial[24:32], key is [0:32].
-	RegisterOneTimeGarlicKey(tag [8]byte, key [32]byte)
-}
+// GarlicKeyRegistrar allows callers to register one-time symmetric garlic keys - re-exported from lib/tunnel/build
+type GarlicKeyRegistrar = build.GarlicKeyRegistrar
 
 // ReplyRecordEncryptor encrypts tunnel build reply records.
 // This interface is satisfied by both BuildRecordCrypto (the concrete adapter)

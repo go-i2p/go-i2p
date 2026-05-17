@@ -1,4 +1,4 @@
-package i2np
+package buildrecord
 
 import (
 	"testing"
@@ -6,6 +6,18 @@ import (
 	common "github.com/go-i2p/common/data"
 	"github.com/stretchr/testify/assert"
 )
+
+// buildResponseRecordTestData creates common test data for build response record tests:
+// a 32-byte hash (with hash[31] set to hashEndByte), 495-byte random data, and their concatenation.
+func buildResponseRecordTestData(hashEndByte byte) (hash, randomData, data []byte) {
+	hash = make([]byte, 32)
+	hash[31] = hashEndByte
+	randomData = make([]byte, 495)
+	randomData[493] = 0x33
+	randomData[494] = 0x74
+	data = append(hash, randomData...)
+	return hash, randomData, data
+}
 
 func TestReadBuildResponseRecordHashTooLittleData(t *testing.T) {
 	assert := assert.New(t)

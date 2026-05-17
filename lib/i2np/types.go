@@ -6,7 +6,8 @@ import (
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/session_key"
 	"github.com/go-i2p/common/session_tag"
-	"github.com/go-i2p/go-i2p/lib/tunnel"
+	"github.com/go-i2p/go-i2p/lib/tunnel/build"
+	"github.com/go-i2p/go-i2p/lib/tunnel/buildrecord"
 )
 
 // I2NP Header Types
@@ -73,7 +74,7 @@ type PayloadCarrier interface {
 // Per I2P spec (tunnel-message.rst), TunnelData messages contain TunnelID(4) + IV(16) + EncryptedData(1008) = 1028 bytes.
 type TunnelCarrier interface {
 	GetTunnelData() []byte
-	GetTunnelID() tunnel.TunnelID
+	GetTunnelID() buildrecord.TunnelID
 }
 
 // BuildRecordReader represents types that can parse build request records
@@ -100,21 +101,11 @@ type DatabaseWriter interface {
 	GetStoreType() byte
 }
 
-// TunnelBuilder represents types that can build tunnels
-type TunnelBuilder interface {
-	GetBuildRecords() []BuildRequestRecord
-	GetRecordCount() int
-}
+// TunnelBuilder represents types that can build tunnels - re-exported from lib/tunnel/build
+type TunnelBuilder = build.TunnelBuilder
 
-// TunnelReplyHandler represents types that handle tunnel build replies
-type TunnelReplyHandler interface {
-	GetReplyRecords() []BuildResponseRecord
-	// GetRawReplyRecords returns the raw encrypted record bytes before parsing.
-	// This is needed for decryption: re-serializing parsed records corrupts
-	// the original ciphertext. Returns nil if raw records were not preserved.
-	GetRawReplyRecords() [][]byte
-	ProcessReply() error
-}
+// TunnelReplyHandler represents types that handle tunnel build replies - re-exported from lib/tunnel/build
+type TunnelReplyHandler = build.TunnelReplyHandler
 
 // replyStepProcessor defines the internal operations for processing tunnel
 // build replies. Used by processReplySteps to eliminate duplication across
@@ -155,8 +146,8 @@ type SessionTagProvider interface {
 
 // TunnelIdentifier represents types that identify tunnel endpoints
 type TunnelIdentifier interface {
-	GetReceiveTunnel() tunnel.TunnelID
-	GetNextTunnel() tunnel.TunnelID
+	GetReceiveTunnel() buildrecord.TunnelID
+	GetNextTunnel() buildrecord.TunnelID
 }
 
 // HashProvider represents types that provide hash identification
@@ -183,10 +174,10 @@ var (
 	_ MessageSerializer = (*BaseI2NPMessage)(nil)
 	_ MessageIdentifier = (*BaseI2NPMessage)(nil)
 	_ MessageExpiration = (*BaseI2NPMessage)(nil)
-	_ Message       = (*BaseI2NPMessage)(nil)
-	_ Message       = (*DataMessage)(nil)
-	_ Message       = (*DeliveryStatusMessage)(nil)
-	_ Message       = (*TunnelDataMessage)(nil)
+	_ Message           = (*BaseI2NPMessage)(nil)
+	_ Message           = (*DataMessage)(nil)
+	_ Message           = (*DeliveryStatusMessage)(nil)
+	_ Message           = (*TunnelDataMessage)(nil)
 
 	// Specialized behavior interfaces
 	_ PayloadCarrier  = (*DataMessage)(nil)

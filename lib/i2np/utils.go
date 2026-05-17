@@ -5,7 +5,7 @@ import (
 	"time"
 
 	common "github.com/go-i2p/common/data"
-	"github.com/go-i2p/go-i2p/lib/tunnel"
+	"github.com/go-i2p/go-i2p/lib/tunnel/buildrecord"
 	"github.com/go-i2p/logger"
 )
 
@@ -295,7 +295,7 @@ func ReadI2NPNTCPData(data []byte, size int) ([]byte, error) {
 // Moved from: processor.go
 
 // CreateTunnelRecord creates a build request record with interface methods
-func CreateTunnelRecord(receiveTunnel, nextTunnel tunnel.TunnelID,
+func CreateTunnelRecord(receiveTunnel, nextTunnel buildrecord.TunnelID,
 	ourIdent, nextIdent common.Hash,
 ) TunnelIdentifier {
 	return &BuildRequestRecord{

@@ -3,7 +3,7 @@ package i2np
 import (
 	"encoding/binary"
 
-	"github.com/go-i2p/go-i2p/lib/tunnel"
+	"github.com/go-i2p/go-i2p/lib/tunnel/buildrecord"
 )
 
 /*
@@ -39,8 +39,8 @@ data ::
 type TunnelData [1028]byte
 
 // TunnelID extracts the 4-byte tunnel identifier from the TunnelData.
-func (td *TunnelData) TunnelID() tunnel.TunnelID {
-	return tunnel.TunnelID(binary.BigEndian.Uint32(td[0:4]))
+func (td *TunnelData) TunnelID() buildrecord.TunnelID {
+	return buildrecord.TunnelID(binary.BigEndian.Uint32(td[0:4]))
 }
 
 // Data returns the 1024-byte encrypted tunnel data payload (without the tunnel ID prefix).
@@ -51,7 +51,7 @@ func (td *TunnelData) Data() [1024]byte {
 }
 
 // SetTunnelID sets the 4-byte tunnel identifier in the TunnelData.
-func (td *TunnelData) SetTunnelID(id tunnel.TunnelID) {
+func (td *TunnelData) SetTunnelID(id buildrecord.TunnelID) {
 	binary.BigEndian.PutUint32(td[0:4], uint32(id))
 }
 

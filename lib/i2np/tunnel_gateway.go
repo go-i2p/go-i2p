@@ -3,7 +3,7 @@ package i2np
 import (
 	"encoding/binary"
 
-	"github.com/go-i2p/go-i2p/lib/tunnel"
+	"github.com/go-i2p/go-i2p/lib/tunnel/buildrecord"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
@@ -33,13 +33,13 @@ data ::
 // TunnelGateway represents an I2NP TunnelGateway message used to wrap and deliver data through a tunnel gateway.
 type TunnelGateway struct {
 	*BaseI2NPMessage
-	TunnelID tunnel.TunnelID
+	TunnelID buildrecord.TunnelID
 	Length   int
 	Data     []byte
 }
 
 // NewTunnelGatewayMessage creates a new TunnelGateway message
-func NewTunnelGatewayMessage(tunnelID tunnel.TunnelID, payload []byte) *TunnelGateway {
+func NewTunnelGatewayMessage(tunnelID buildrecord.TunnelID, payload []byte) *TunnelGateway {
 	log.WithFields(logger.Fields{
 		"at":          "NewTunnelGatewayMessage",
 		"tunnel_id":   tunnelID,
@@ -86,7 +86,7 @@ func (t *TunnelGateway) UnmarshalBinary(data []byte) error {
 		return oops.Errorf("tunnel gateway message payload too short: %d bytes", len(messageData))
 	}
 
-	t.TunnelID = tunnel.TunnelID(binary.BigEndian.Uint32(messageData[0:4]))
+	t.TunnelID = buildrecord.TunnelID(binary.BigEndian.Uint32(messageData[0:4]))
 	t.Length = int(binary.BigEndian.Uint16(messageData[4:6]))
 
 	if len(messageData) < 6+t.Length {

@@ -3,7 +3,7 @@ package i2np
 import (
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/session_key"
-	"github.com/go-i2p/go-i2p/lib/tunnel"
+	"github.com/go-i2p/go-i2p/lib/tunnel/buildrecord"
 )
 
 /*
@@ -77,6 +77,6 @@ type GarlicCloveDeliveryInstructions struct {
 	Flag       byte
 	SessionKey session_key.SessionKey
 	Hash       common.Hash
-	TunnelID   tunnel.TunnelID
+	TunnelID   buildrecord.TunnelID
 	Delay      int
 }

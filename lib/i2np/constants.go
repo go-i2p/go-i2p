@@ -30,8 +30,8 @@ const (
 // Moved from: header.go, build_request_record.go, build_response_record.go, database_lookup.go
 var (
 	ErrI2NPNotEnoughData                = errors.New("not enough i2np header data")
-	ErrBuildRequestRecordNotEnoughData  = errors.New("not enough i2np build request record data")
-	ErrBuildResponseRecordNotEnoughData = errors.New("not enough i2np build response record data")
+	ErrBuildRequestRecordNotEnoughData  = buildrecord.ErrNotEnoughData
+	ErrBuildResponseRecordNotEnoughData = buildrecord.ErrBuildResponseRecordNotEnoughData
 	ErrDatabaseLookupNotEnoughData      = errors.New("not enough i2np database lookup data")
 	ErrDatabaseSearchReplyNotEnoughData = errors.New("not enough i2np database search reply data")
 	ErrDatabaseLookupInvalidSize        = errors.New("database lookup excluded peers size exceeds protocol limit")

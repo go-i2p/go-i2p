@@ -3,6 +3,7 @@ package i2np
 import (
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
+	"github.com/go-i2p/go-i2p/lib/tunnel/buildrecord"
 )
 
 // TunnelBuildCoordinator is the narrow interface needed by I2NPMessageDispatcher.
@@ -20,7 +21,7 @@ type TunnelBuildCoordinator interface {
 
 	// Build operations — structurally satisfies tunnel.BuilderInterface
 	BuildTunnel(req tunnel.BuildTunnelRequest) (*tunnel.BuildTunnelResult, error)
-	BuildTunnelFromRequest(req tunnel.BuildTunnelRequest) (tunnel.TunnelID, []common.Hash, error)
+	BuildTunnelFromRequest(req tunnel.BuildTunnelRequest) (buildrecord.TunnelID, []common.Hash, error)
 	BuildTunnelWithBuilder(builder TunnelBuilder) error
 
 	// Reply processing — structurally satisfies TunnelBuildReplyProcessor

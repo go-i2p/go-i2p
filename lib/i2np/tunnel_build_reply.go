@@ -157,9 +157,9 @@ func (t *TunnelBuildReply) processHopResponse(hopIndex int, record BuildResponse
 	}
 }
 
-// validateResponseRecord delegates to the shared validateBuildResponseRecord helper.
+// validateResponseRecord delegates to the shared ValidateBuildResponseRecord helper.
 func (t *TunnelBuildReply) validateResponseRecord(record BuildResponseRecord) error {
-	return validateBuildResponseRecord(record)
+	return ValidateBuildResponseRecord(record)
 }
 
 // Compile-time interface satisfaction check

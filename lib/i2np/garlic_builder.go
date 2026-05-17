@@ -11,7 +11,7 @@ import (
 	"github.com/go-i2p/common/certificate"
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/session_key"
-	"github.com/go-i2p/go-i2p/lib/tunnel"
+	"github.com/go-i2p/go-i2p/lib/tunnel/buildrecord"
 	"github.com/samber/oops"
 )
 
@@ -108,7 +108,7 @@ func (gb *GarlicBuilder) AddClove(
 
 	clove := GarlicClove{
 		DeliveryInstructions: deliveryInstructions,
-		Message:          message,
+		Message:              message,
 		CloveID:              cloveID,
 		Expiration:           cloveExpiration,
 		Certificate:          *certificate.NewCertificate(),
@@ -146,7 +146,7 @@ func (gb *GarlicBuilder) AddTunnelDeliveryClove(
 	message Message,
 	cloveID int,
 	gatewayHash common.Hash,
-	tunnelID tunnel.TunnelID,
+	tunnelID buildrecord.TunnelID,
 ) error {
 	instructions := GarlicCloveDeliveryInstructions{
 		Flag:     0x60, // Delivery type: TUNNEL (bits 6-5 = 0x11 = 0x60)
@@ -500,7 +500,7 @@ func NewLocalDeliveryInstructions() GarlicCloveDeliveryInstructions {
 // NewTunnelDeliveryInstructions creates delivery instructions for tunnel delivery.
 // gatewayHash: SHA256 hash of the tunnel gateway router
 // tunnelID: Destination tunnel ID
-func NewTunnelDeliveryInstructions(gatewayHash common.Hash, tunnelID tunnel.TunnelID) GarlicCloveDeliveryInstructions {
+func NewTunnelDeliveryInstructions(gatewayHash common.Hash, tunnelID buildrecord.TunnelID) GarlicCloveDeliveryInstructions {
 	return GarlicCloveDeliveryInstructions{
 		Flag:     0x60, // TUNNEL delivery (bits 6-5 = 0x11 = 0x60)
 		Hash:     gatewayHash,
@@ -740,7 +740,7 @@ func deserializeGarlicClove(data []byte, nestingDepth int) (*GarlicClove, int, e
 
 	return &GarlicClove{
 		DeliveryInstructions: *di,
-		Message:          i2npMsg,
+		Message:              i2npMsg,
 		CloveID:              cloveID,
 		Expiration:           expiration,
 		Certificate:          cert,
@@ -914,7 +914,7 @@ func parseTunnelData(di *GarlicCloveDeliveryInstructions, data []byte) (int, err
 		return 0, oops.Errorf("insufficient data for TUNNEL hash and ID")
 	}
 	di.Hash = hash
-	di.TunnelID = tunnel.TunnelID(binary.BigEndian.Uint32(remainder[:4]))
+	di.TunnelID = buildrecord.TunnelID(binary.BigEndian.Uint32(remainder[:4]))
 	return 36, nil
 }
 
