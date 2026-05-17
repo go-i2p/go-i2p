@@ -5,29 +5,18 @@ import (
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 )
 
-// TunnelOrchestrator defines the interface for the tunnel build coordinator.
-// It captures the full public surface of TunnelManager consumed from outside
-// lib/i2np, providing the extension seam needed to inject alternative
-// implementations (e.g. a deterministic test builder or a future variant
-// that decouples build orchestration from the I2NP wire-format layer).
-//
-// TunnelOrchestrator structurally satisfies:
-//   - tunnel.BuilderInterface    (BuildTunnel — used by i2cp.Server.SetTunnelBuilder)
-//   - TunnelBuildReplyProcessor  (ProcessTunnelBuildReply — used by MessageProcessor)
-type TunnelOrchestrator interface {
-	// Pool access
-	GetPool() *tunnel.Pool
-	GetInboundPool() *tunnel.Pool
-	GetOutboundPool() *tunnel.Pool
-
-	// Lifecycle
-	Stop()
-
-	// Configuration
+// TunnelBuildCoordinator is the narrow interface needed by I2NPMessageDispatcher.
+// It covers dependency injection, build emission, and reply processing — the
+// operations that belong to the message-routing layer.
+type TunnelBuildCoordinator interface {
+	// Configuration — dependency injection points
 	SetOurRouterHash(hash common.Hash)
 	SetGarlicKeyRegistrar(r GarlicKeyRegistrar)
 	SetSessionProvider(provider SessionProvider)
 	SetPeerSelector(selector tunnel.PeerSelector)
+
+	// Lifecycle
+	Stop()
 
 	// Build operations — structurally satisfies tunnel.BuilderInterface
 	BuildTunnel(req tunnel.BuildTunnelRequest) (*tunnel.BuildTunnelResult, error)
@@ -37,8 +26,18 @@ type TunnelOrchestrator interface {
 	// Reply processing — structurally satisfies TunnelBuildReplyProcessor
 	ProcessTunnelBuildReply(handler TunnelReplyHandler, messageID int) error
 	ProcessTunnelReply(handler TunnelReplyHandler, messageID int) error
+}
 
-	// Metrics
+// TunnelStatsReader is the narrow interface needed by I2PControl and router status reporters.
+// It covers pool access and build-metrics reads — the operations that belong to the
+// observability layer. Any substitute only needs to implement these 10 methods.
+type TunnelStatsReader interface {
+	// Pool access
+	GetPool() *tunnel.Pool
+	GetInboundPool() *tunnel.Pool
+	GetOutboundPool() *tunnel.Pool
+
+	// Build metrics
 	GetBuildSuccessCount(windowMs int64) float64
 	GetBuildRejectCount(windowMs int64) float64
 	GetBuildExpireCount(windowMs int64) float64
@@ -46,6 +45,19 @@ type TunnelOrchestrator interface {
 	GetClientBuildSuccessCount(windowMs int64) float64
 	GetClientBuildRejectCount(windowMs int64) float64
 	GetClientBuildExpireCount(windowMs int64) float64
+}
+
+// TunnelOrchestrator defines the full interface for the tunnel build coordinator.
+// It composes TunnelBuildCoordinator and TunnelStatsReader into a single seam for
+// callers that need the complete surface (e.g. router wiring). Consumers that only
+// need a subset should depend on TunnelBuildCoordinator or TunnelStatsReader directly.
+//
+// TunnelOrchestrator structurally satisfies:
+//   - tunnel.BuilderInterface    (BuildTunnel — used by i2cp.Server.SetTunnelBuilder)
+//   - TunnelBuildReplyProcessor  (ProcessTunnelBuildReply — used by MessageProcessor)
+type TunnelOrchestrator interface {
+	TunnelBuildCoordinator
+	TunnelStatsReader
 }
 
 // Compile-time assertion: *TunnelManager must fully implement TunnelOrchestrator.

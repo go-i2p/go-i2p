@@ -47,8 +47,9 @@ type RouterInfoReader interface {
 	// GetNetDB returns a read-only network database stats interface.
 	GetNetDB() NetDBStatsReader
 
-	// GetTunnelManager returns the tunnel manager for tunnel statistics.
-	GetTunnelManager() i2np.TunnelOrchestrator
+	// GetTunnelManager returns a read-only tunnel stats interface.
+	// Callers that need build operations should use i2np.TunnelBuildCoordinator directly.
+	GetTunnelManager() i2np.TunnelStatsReader
 
 	// GetParticipantManager returns a read-only participant stats interface.
 	GetParticipantManager() ParticipantStatsReader

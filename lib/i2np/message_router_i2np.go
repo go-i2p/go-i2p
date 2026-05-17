@@ -22,7 +22,7 @@ type I2NPMessageDispatcher struct {
 	config    I2NPMessageDispatcherConfig
 	processor *MessageProcessor
 	dbManager *DatabaseManager
-	tunnelMgr TunnelOrchestrator
+	tunnelMgr TunnelBuildCoordinator
 }
 
 // NewI2NPMessageDispatcher creates a new message router
@@ -148,7 +148,11 @@ func (mr *I2NPMessageDispatcher) RouteTunnelMessage(msg interface{}) error {
 // This must be called from the router after r.tunnelManager is created so that
 // both the dispatcher and the router share the same pendingBuilds map, enabling
 // build-reply correlation (A3 fix).
-func (mr *I2NPMessageDispatcher) SetTunnelManager(tm TunnelOrchestrator) {
+//
+// The parameter type is TunnelBuildCoordinator rather than TunnelOrchestrator because
+// I2NPMessageDispatcher only needs the build and reply-processing surface; stats
+// access is handled by I2PControl through TunnelStatsReader.
+func (mr *I2NPMessageDispatcher) SetTunnelManager(tm TunnelBuildCoordinator) {
 	mr.tunnelMgr = tm
 }
 

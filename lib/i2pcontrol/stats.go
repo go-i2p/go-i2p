@@ -757,6 +757,30 @@ func (rsp *routerStatsProvider) getTransportPeersCount(stat string) float64 {
 	}
 }
 
+// RouterBackend is the concrete router contract that RealRouter wraps.
+// It uses the real implementation types (*netdb.StdNetDB, *tunnel.ParticipantManager)
+// that *router.Router provides, which RealRouter adapts to the RouterAccess interface.
+// This named interface replaces the anonymous inline contract previously embedded
+// in RealRouter so there is a single named definition to evolve and document.
+type RouterBackend interface {
+	GetNetDB() *netdb.StdNetDB
+	GetTunnelManager() i2np.TunnelOrchestrator
+	GetParticipantManager() *tunnel.ParticipantManager
+	GetConfig() *config.RouterConfig
+	IsRunning() bool
+	IsReseeding() bool
+	GetBandwidthRates() (inbound, outbound uint64)
+	GetBandwidthRates1s() (inbound, outbound uint64)
+	GetNetworkStatus() int
+	GetActiveSessionCount() int
+	GetNTCP2SessionCount() int
+	GetSSU2SessionCount() int
+	Stop()
+	Reseed() error
+	GetTransportAddr() net.Addr
+	GetSSU2Addr() net.Addr
+}
+
 // RealRouter is an adapter that makes *router.Router implement RouterAccess.
 // This bridges the gap between the stats provider's minimal interface
 // and the actual Router implementation.
@@ -770,26 +794,9 @@ func (rsp *routerStatsProvider) getTransportPeersCount(stat string) float64 {
 //	    "0.1.0-go",
 //	)
 type RealRouter struct {
-	// Router is the actual router instance
-	// Must be a pointer to avoid copying the router
-	Router interface {
-		GetNetDB() *netdb.StdNetDB
-		GetTunnelManager() i2np.TunnelOrchestrator
-		GetParticipantManager() *tunnel.ParticipantManager
-		GetConfig() *config.RouterConfig
-		IsRunning() bool
-		IsReseeding() bool
-		GetBandwidthRates() (inbound, outbound uint64)
-		GetBandwidthRates1s() (inbound, outbound uint64)
-		GetNetworkStatus() int
-		GetActiveSessionCount() int
-		GetNTCP2SessionCount() int
-		GetSSU2SessionCount() int
-		Stop()
-		Reseed() error
-		GetTransportAddr() net.Addr
-		GetSSU2Addr() net.Addr
-	}
+	// Router is the actual router instance.
+	// Must be a pointer to avoid copying the router.
+	Router RouterBackend
 }
 
 // GetNetDB returns the NetDB stats reader (implements RouterInfoReader)
@@ -797,8 +804,8 @@ func (rr RealRouter) GetNetDB() NetDBStatsReader {
 	return rr.Router.GetNetDB()
 }
 
-// GetTunnelManager returns the tunnel manager (implements RouterAccess)
-func (rr RealRouter) GetTunnelManager() i2np.TunnelOrchestrator {
+// GetTunnelManager returns the tunnel stats reader (implements RouterInfoReader)
+func (rr RealRouter) GetTunnelManager() i2np.TunnelStatsReader {
 	return rr.Router.GetTunnelManager()
 }
 
