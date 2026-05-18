@@ -394,3 +394,66 @@ func convertToI2NPRecord(rec tunnel.BuildRequestRecord) BuildRequestRecord {
 		Padding:       rec.Padding,
 	}
 }
+
+// Test helper methods for backward compatibility with existing tests.
+// These wrap the new serialized methods and parse results back to Message objects.
+
+func (tm *TunnelManager) createShortTunnelBuildMessage(result *tunnel.TunnelBuildResult, messageID int) (Message, error) {
+	if tm.messageFactory == nil {
+		tm.messageFactory = NewBuildMessageFactory()
+	}
+	data, err := tm.createSerializedShortTunnelBuildMessage(result, messageID)
+	if err != nil {
+		return nil, err
+	}
+	// Parse the serialized message back into a Message object
+	msg := &BaseI2NPMessage{}
+	if err := msg.UnmarshalBinary(data); err != nil {
+		return nil, err
+	}
+	return msg, nil
+}
+
+func (tm *TunnelManager) createTunnelBuildMessage(result *tunnel.TunnelBuildResult, messageID int) (Message, error) {
+	if tm.messageFactory == nil {
+		tm.messageFactory = NewBuildMessageFactory()
+	}
+	data, err := tm.createSerializedTunnelBuildMessage(result, messageID)
+	if err != nil {
+		return nil, err
+	}
+	// Parse the serialized message back into a Message object
+	msg := &BaseI2NPMessage{}
+	if err := msg.UnmarshalBinary(data); err != nil {
+		return nil, err
+	}
+	return msg, nil
+}
+
+func (tm *TunnelManager) selectBuildMessage(result *tunnel.TunnelBuildResult, messageID int) (Message, error) {
+	if result.UseShortBuild {
+		return tm.createShortTunnelBuildMessage(result, messageID)
+	}
+	return tm.createTunnelBuildMessage(result, messageID)
+}
+
+func (tm *TunnelManager) createVariableTunnelBuildMessage(result *tunnel.TunnelBuildResult, messageID int) (Message, error) {
+	if tm.messageFactory == nil {
+		tm.messageFactory = NewBuildMessageFactory()
+	}
+	encryptedData, err := encryptBuildRecords(result)
+	if err != nil {
+		return nil, err
+	}
+	records := make([][]byte, len(result.Records))
+	for i := range result.Records {
+		records[i] = encryptedData[i][:]
+	}
+	data := tm.messageFactory.CreateVariableTunnelBuildMessage(records, messageID)
+	// Parse the serialized message back into a Message object
+	msg := &BaseI2NPMessage{}
+	if err := msg.UnmarshalBinary(data); err != nil {
+		return nil, err
+	}
+	return msg, nil
+}

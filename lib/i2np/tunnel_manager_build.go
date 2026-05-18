@@ -436,8 +436,11 @@ func (tm *TunnelManager) logExpectedTags(messageID int, tunnelID, replyTunnelID 
 
 // sendBuildMessage sends a tunnel build message (STBM or VTB) based on the result.
 func (tm *TunnelManager) sendBuildMessage(result *tunnel.TunnelBuildResult, messageID int) error {
-	if tm.sessionProvider == nil {
+	if tm.buildSessionProv == nil {
 		return oops.Errorf("no session provider available")
+	}
+	if tm.messageFactory == nil {
+		return oops.Errorf("no message factory available")
 	}
 
 	firstHop, err := validateTunnelBuild(result)
@@ -445,19 +448,35 @@ func (tm *TunnelManager) sendBuildMessage(result *tunnel.TunnelBuildResult, mess
 		return err
 	}
 
-	session, peerHash, err := tm.getGatewaySession(firstHop)
+	peerHash, err := firstHop.IdentHash()
 	if err != nil {
-		return err
+		return oops.Wrapf(err, "failed to get first hop identity")
 	}
 
-	buildMsg, err := tm.selectBuildMessage(result, messageID)
+	session, err := tm.buildSessionProv.GetSessionByHash(peerHash)
+	if err != nil {
+		return oops.Wrapf(err, "failed to get session for gateway %x", peerHash[:8])
+	}
+
+	serialized, err := tm.createSerializedBuildMessage(result, messageID)
 	if err != nil {
 		return oops.Wrapf(err, "failed to create build message")
 	}
-	if err := tm.queueBuildMessageToGateway(session, buildMsg, messageID, peerHash, result.UseShortBuild); err != nil {
-		return err
+
+	if err := session.Send(serialized); err != nil {
+		log.WithError(err).WithFields(logger.Fields{
+			"message_id":   messageID,
+			"gateway_hash": fmt.Sprintf("%x", peerHash[:8]),
+			"use_stbm":     result.UseShortBuild,
+		}).Warn("Failed to send tunnel build message")
+		return oops.Wrapf(err, "failed to send tunnel build message to gateway %x", peerHash[:8])
 	}
 
+	log.WithFields(logger.Fields{
+		"message_id":   messageID,
+		"gateway_hash": fmt.Sprintf("%x", peerHash[:8]),
+		"use_stbm":     result.UseShortBuild,
+	}).Debug("Sent tunnel build message")
 	return nil
 }
 
@@ -469,61 +488,15 @@ func validateTunnelBuild(result *tunnel.TunnelBuildResult) (router_info.RouterIn
 	return result.Hops[0], nil
 }
 
-// getGatewaySession retrieves the transport session for the gateway router.
-func (tm *TunnelManager) getGatewaySession(firstHop router_info.RouterInfo) (I2NPTransportSession, [32]byte, error) {
-	peerHash, err := firstHop.IdentHash()
-	if err != nil {
-		return nil, [32]byte{}, oops.Wrapf(err, "failed to get first hop identity")
-	}
-
-	session, err := tm.sessionProvider.GetSessionByHash(peerHash)
-	if err != nil {
-		return nil, [32]byte{}, oops.Wrapf(err, "failed to get session for gateway %x", peerHash[:8])
-	}
-
-	return session, peerHash, nil
-}
-
-// selectBuildMessage creates the appropriate build message based on UseShortBuild flag.
-// Each build record is encrypted with the corresponding hop's public encryption key
-// using ECIES-X25519-AEAD before being placed into the message.
-func (tm *TunnelManager) selectBuildMessage(result *tunnel.TunnelBuildResult, messageID int) (Message, error) {
+// createSerializedBuildMessage creates and serializes the appropriate build message.
+func (tm *TunnelManager) createSerializedBuildMessage(result *tunnel.TunnelBuildResult, messageID int) ([]byte, error) {
 	if result.UseShortBuild {
-		// Use Short Tunnel Build Message (modern)
-		return tm.createShortTunnelBuildMessage(result, messageID)
+		return tm.createSerializedShortTunnelBuildMessage(result, messageID)
 	}
-	// Use TunnelBuild (type 21): fixed 8 records, no count prefix
-	return tm.createTunnelBuildMessage(result, messageID)
+	return tm.createSerializedTunnelBuildMessage(result, messageID)
 }
 
-// queueBuildMessageToGateway queues the build message for sending to the gateway.
-// Returns an error when QueueSendI2NP fails (e.g. session was closed by the
-// peer between getGatewaySession and now): without this, the caller would
-// register a pending build entry whose message never actually leaves and the
-// build would silently expire 90s later. Propagating the error lets
-// BuildTunnelFromRequest run cleanupFailedBuild immediately and free the
-// tunnel/pending-build slots.
-func (tm *TunnelManager) queueBuildMessageToGateway(session I2NPTransportSession, buildMsg Message, messageID int, peerHash [32]byte, useShortBuild bool) error {
-	if err := session.QueueSendI2NP(buildMsg); err != nil {
-		log.WithError(err).WithFields(logger.Fields{
-			"message_id":   messageID,
-			"gateway_hash": fmt.Sprintf("%x", peerHash[:8]),
-			"message_type": buildMsg.Type(),
-			"use_stbm":     useShortBuild,
-		}).Warn("Failed to queue tunnel build message")
-		return oops.Wrapf(err, "failed to queue tunnel build message to gateway %x", peerHash[:8])
-	}
-
-	log.WithFields(logger.Fields{
-		"message_id":   messageID,
-		"gateway_hash": fmt.Sprintf("%x", peerHash[:8]),
-		"message_type": buildMsg.Type(),
-		"use_stbm":     useShortBuild,
-	}).Debug("Queued tunnel build message")
-	return nil
-}
-
-// createShortTunnelBuildMessage creates a Short Tunnel Build Message (STBM).
+// createSerializedShortTunnelBuildMessage creates a Short Tunnel Build Message (STBM).
 // Each build record is encrypted with the corresponding hop's X25519 public key
 // using the STBM-format ECIES-X25519-AEAD encryption (zero nonce, ephemeral key
 // as AD) before being placed into the message.
@@ -532,7 +505,7 @@ func (tm *TunnelManager) queueBuildMessageToGateway(session I2NPTransportSession
 // are 218 bytes each on the wire. Using the long-format 528-byte records here
 // causes peers to reject the entire message (silent EOF after the NTCP2
 // handshake), since the count byte is interpreted against the wrong stride.
-func (tm *TunnelManager) createShortTunnelBuildMessage(result *tunnel.TunnelBuildResult, messageID int) (Message, error) {
+func (tm *TunnelManager) createSerializedShortTunnelBuildMessage(result *tunnel.TunnelBuildResult, messageID int) ([]byte, error) {
 	i2npRecords := tm.convertAndOverrideMessageID(result.Records, messageID)
 
 	encryptedRecords, replyKeys, noiseHashes, postReplyCKs, err := tm.encryptRecordsAndDeriveKeys(i2npRecords, result.Hops)
@@ -550,7 +523,13 @@ func (tm *TunnelManager) createShortTunnelBuildMessage(result *tunnel.TunnelBuil
 		return nil, err
 	}
 
-	return tm.serializeSTBM(encryptedRecords, messageID), nil
+	// Convert [][218]byte to [][]byte for factory
+	records := make([][]byte, len(encryptedRecords))
+	for i := range encryptedRecords {
+		records[i] = encryptedRecords[i][:]
+	}
+
+	return tm.messageFactory.CreateShortTunnelBuildMessage(records, messageID), nil
 }
 
 // convertAndOverrideMessageID converts tunnel records to I2NP format and overrides SendMessageID
@@ -667,82 +646,23 @@ func (tm *TunnelManager) applyChaCha20LayerObfuscation(encryptedRecords [][Short
 	return nil
 }
 
-// serializeSTBM serializes encrypted STBM records and wraps them in an I2NP message.
-// Format: [count:1][encrypted_records...] where each record is 218 bytes.
-func (tm *TunnelManager) serializeSTBM(encryptedRecords [][ShortBuildRecordSize]byte, messageID int) Message {
-	data := make([]byte, 1+len(encryptedRecords)*ShortBuildRecordSize)
-	data[0] = byte(len(encryptedRecords))
-	for i, enc := range encryptedRecords {
-		copy(data[1+i*ShortBuildRecordSize:1+(i+1)*ShortBuildRecordSize], enc[:])
-	}
-
-	msg := NewBaseI2NPMessage(I2NPMessageTypeShortTunnelBuild)
-	msg.SetMessageID(messageID)
-	msg.SetData(data)
-
-	log.WithFields(logger.Fields{
-		"at":           "serializeSTBM",
-		"record_count": len(encryptedRecords),
-		"data_size":    len(data),
-		"record_size":  ShortBuildRecordSize,
-		"encrypted":    true,
-	}).Debug("Created encrypted Short Tunnel Build message")
-
-	return msg
-}
-
-// createTunnelBuildMessage creates a TunnelBuild (type 21) message.
+// createSerializedTunnelBuildMessage creates a TunnelBuild (type 21) message.
 // Type 21 has exactly 8 records at 528 bytes each with NO count prefix byte.
 // Each build record is encrypted with the corresponding hop's X25519 public key
 // using ECIES-X25519-AEAD encryption before being placed into the message.
-func (tm *TunnelManager) createTunnelBuildMessage(result *tunnel.TunnelBuildResult, messageID int) (Message, error) {
+func (tm *TunnelManager) createSerializedTunnelBuildMessage(result *tunnel.TunnelBuildResult, messageID int) ([]byte, error) {
 	encryptedData, err := encryptBuildRecords(result)
 	if err != nil {
 		return nil, err
 	}
 
-	data, err := serializeBuildRecords(encryptedData, len(result.Records))
-	if err != nil {
-		return nil, err
+	// Convert [8][528]byte to [][]byte for factory
+	records := make([][]byte, 8)
+	for i := range encryptedData {
+		records[i] = encryptedData[i][:]
 	}
 
-	msg := NewBaseI2NPMessage(I2NPMessageTypeTunnelBuild)
-	msg.SetMessageID(messageID)
-	msg.SetData(data)
-
-	log.WithFields(logger.Fields{
-		"at":           "createTunnelBuildMessage",
-		"record_count": len(result.Records),
-		"data_size":    len(data),
-		"encrypted":    true,
-	}).Debug("Created encrypted TunnelBuild (type 21) message")
-
-	return msg, nil
-}
-
-// createVariableTunnelBuildMessage creates a VariableTunnelBuild (type 23) message.
-// Type 23 has a 1-byte count prefix followed by N records at 528 bytes each.
-// This is the variable-length format that allows 1-8 records.
-func (tm *TunnelManager) createVariableTunnelBuildMessage(result *tunnel.TunnelBuildResult, messageID int) (Message, error) {
-	encryptedData, err := encryptBuildRecords(result)
-	if err != nil {
-		return nil, err
-	}
-
-	data := serializeVariableBuildRecords(encryptedData, len(result.Records))
-
-	msg := NewBaseI2NPMessage(I2NPMessageTypeVariableTunnelBuild)
-	msg.SetMessageID(messageID)
-	msg.SetData(data)
-
-	log.WithFields(logger.Fields{
-		"at":           "createVariableTunnelBuildMessage",
-		"record_count": len(result.Records),
-		"data_size":    len(data),
-		"encrypted":    true,
-	}).Debug("Created encrypted VariableTunnelBuild (type 23) message")
-
-	return msg, nil
+	return tm.messageFactory.CreateTunnelBuildMessage(records, messageID), nil
 }
 
 // encryptBuildRecords encrypts each build request record with its corresponding

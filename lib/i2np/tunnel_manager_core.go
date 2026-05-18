@@ -103,6 +103,7 @@ func NewTunnelManager(peerSelector tunnel.PeerSelector) *TunnelManager {
 		clientBuildSuccessWindow: newBuildEventWindow(buildWindowMaxAge),
 		clientBuildRejectWindow:  newBuildEventWindow(buildWindowMaxAge),
 		clientBuildExpireWindow:  newBuildEventWindow(buildWindowMaxAge),
+		messageFactory:           NewBuildMessageFactory(),
 	}
 
 	// Initialize ReplyProcessor with default config for reply decryption
