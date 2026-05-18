@@ -5,6 +5,9 @@
 package build
 
 import (
+	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/common/router_info"
+	"github.com/go-i2p/common/session_key"
 	"github.com/go-i2p/go-i2p/lib/tunnel/buildrecord"
 )
 
@@ -61,4 +64,58 @@ type BuildMessageFactory interface {
 	// encryptedRecords must contain exactly 8 records of 528 bytes each, messageID is the I2NP message ID.
 	// Returns the serialized message bytes ready for transmission.
 	CreateTunnelBuildMessage(encryptedRecords [][]byte, messageID int) []byte
+}
+
+// BuildRecordEncryptor handles encryption of tunnel build request records.
+// This interface decouples tunnel coordination from I2NP cryptographic operations.
+type BuildRecordEncryptor interface {
+	// EncryptShortBuildRequestRecordWithChain encrypts a Short (ECIES) build request record
+	// for the specified hop, returning the encrypted record (218 bytes), chaining key,
+	// Noise transcript hash, and any error.
+	EncryptShortBuildRequestRecordWithChain(
+		record buildrecord.BuildRequestRecord,
+		hop router_info.RouterInfo,
+	) (encrypted [218]byte, chainKey [32]byte, noiseHash [32]byte, err error)
+
+	// EncryptBuildRequestRecord encrypts a legacy ElGamal build request record (528 bytes).
+	EncryptBuildRequestRecord(
+		record buildrecord.BuildRequestRecord,
+		hop router_info.RouterInfo,
+	) ([528]byte, error)
+}
+
+// TunnelReplyProcessor processes tunnel build replies and manages reply decryption.
+// This interface decouples reply handling from the TunnelManager implementation.
+type TunnelReplyProcessor interface {
+	// RegisterPendingBuild registers a pending tunnel build for reply correlation.
+	RegisterPendingBuild(
+		tunnelID buildrecord.TunnelID,
+		replyKeys []session_key.SessionKey,
+		replyIVs [][16]byte,
+		isInbound bool,
+		hopCount int,
+	) error
+
+	// SetPendingBuildNoiseHashes stores Noise transcript hashes for STBM reply AEAD decryption.
+	SetPendingBuildNoiseHashes(tunnelID buildrecord.TunnelID, noiseHashes [][32]byte) error
+
+	// ProcessBuildReply processes an incoming tunnel build reply message.
+	ProcessBuildReply(handler TunnelReplyHandler, tunnelID buildrecord.TunnelID) error
+}
+
+// LegacySessionProvider provides access to transport sessions for legacy TunnelBuild messages.
+// Modern code should use BuildSessionProvider instead.
+type LegacySessionProvider interface {
+	// GetSessionByHash retrieves a transport session for sending legacy I2NP messages.
+	GetSessionByHash(hash common.Hash) (LegacyTransportSession, error)
+}
+
+// LegacyTransportSession represents a transport session that can queue legacy I2NP messages.
+type LegacyTransportSession interface {
+	// QueueSendI2NP queues a legacy I2NP message for transmission.
+	// The message parameter must be a concrete I2NP message type.
+	QueueSendI2NP(msg interface{}) error
+
+	// SendQueueSize returns the current send queue depth.
+	SendQueueSize() int
 }

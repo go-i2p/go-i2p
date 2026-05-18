@@ -2,7 +2,11 @@ package i2np
 
 import (
 	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/common/router_info"
+	"github.com/go-i2p/common/session_key"
 	"github.com/go-i2p/go-i2p/lib/tunnel/build"
+	"github.com/go-i2p/go-i2p/lib/tunnel/buildrecord"
+	"github.com/samber/oops"
 )
 
 // buildMessageFactory implements build.BuildMessageFactory for creating
@@ -129,4 +133,97 @@ func (p *buildSessionProvider) GetSessionByHash(hash common.Hash) (build.BuildSe
 		return nil, err
 	}
 	return newBuildSessionAdapter(session), nil
+}
+
+// buildRecordEncryptor implements build.BuildRecordEncryptor.
+type buildRecordEncryptor struct{}
+
+// NewBuildRecordEncryptor creates a new encryptor for tunnel build records.
+func NewBuildRecordEncryptor() build.BuildRecordEncryptor {
+	return &buildRecordEncryptor{}
+}
+
+// EncryptShortBuildRequestRecordWithChain encrypts a Short (ECIES) build request record.
+func (e *buildRecordEncryptor) EncryptShortBuildRequestRecordWithChain(
+	record buildrecord.BuildRequestRecord,
+	hop router_info.RouterInfo,
+) ([218]byte, [32]byte, [32]byte, error) {
+	return EncryptShortBuildRequestRecordWithChain(record, hop)
+}
+
+// EncryptBuildRequestRecord encrypts a legacy ElGamal build request record.
+func (e *buildRecordEncryptor) EncryptBuildRequestRecord(
+	record buildrecord.BuildRequestRecord,
+	hop router_info.RouterInfo,
+) ([528]byte, error) {
+	return EncryptBuildRequestRecord(record, hop)
+}
+
+// replyProcessorAdapter adapts *ReplyProcessor to build.TunnelReplyProcessor interface.
+type replyProcessorAdapter struct {
+	replyProcessor *ReplyProcessor
+}
+
+// NewReplyProcessorAdapter wraps a ReplyProcessor to implement build.TunnelReplyProcessor.
+func NewReplyProcessorAdapter(rp *ReplyProcessor) build.TunnelReplyProcessor {
+	return &replyProcessorAdapter{replyProcessor: rp}
+}
+
+// RegisterPendingBuild implements build.TunnelReplyProcessor.
+func (a *replyProcessorAdapter) RegisterPendingBuild(
+	tunnelID buildrecord.TunnelID,
+	replyKeys []session_key.SessionKey,
+	replyIVs [][16]byte,
+	isInbound bool,
+	hopCount int,
+) error {
+	return a.replyProcessor.RegisterPendingBuild(tunnelID, replyKeys, replyIVs, isInbound, hopCount)
+}
+
+// SetPendingBuildNoiseHashes implements build.TunnelReplyProcessor.
+func (a *replyProcessorAdapter) SetPendingBuildNoiseHashes(tunnelID buildrecord.TunnelID, noiseHashes [][32]byte) error {
+	return a.replyProcessor.SetPendingBuildNoiseHashes(tunnelID, noiseHashes)
+}
+
+// ProcessBuildReply implements build.TunnelReplyProcessor.
+func (a *replyProcessorAdapter) ProcessBuildReply(handler build.TunnelReplyHandler, tunnelID buildrecord.TunnelID) error {
+	return a.replyProcessor.ProcessBuildReply(handler, tunnelID)
+}
+
+// legacySessionProviderAdapter adapts SessionProvider to build.LegacySessionProvider.
+type legacySessionProviderAdapter struct {
+	sessionProvider SessionProvider
+}
+
+// NewLegacySessionProvider wraps a SessionProvider as build.LegacySessionProvider.
+func NewLegacySessionProvider(sp SessionProvider) build.LegacySessionProvider {
+	return &legacySessionProviderAdapter{sessionProvider: sp}
+}
+
+// GetSessionByHash implements build.LegacySessionProvider.
+func (a *legacySessionProviderAdapter) GetSessionByHash(hash common.Hash) (build.LegacyTransportSession, error) {
+	session, err := a.sessionProvider.GetSessionByHash(hash)
+	if err != nil {
+		return nil, err
+	}
+	return &legacyTransportSessionAdapter{session: session}, nil
+}
+
+// legacyTransportSessionAdapter adapts I2NPTransportSession to build.LegacyTransportSession.
+type legacyTransportSessionAdapter struct {
+	session I2NPTransportSession
+}
+
+// QueueSendI2NP implements build.LegacyTransportSession.
+func (a *legacyTransportSessionAdapter) QueueSendI2NP(msg interface{}) error {
+	i2npMsg, ok := msg.(Message)
+	if !ok {
+		return oops.Errorf("message is not an I2NP Message type")
+	}
+	return a.session.QueueSendI2NP(i2npMsg)
+}
+
+// SendQueueSize implements build.LegacyTransportSession.
+func (a *legacyTransportSessionAdapter) SendQueueSize() int {
+	return a.session.SendQueueSize()
 }
