@@ -7,6 +7,7 @@ import (
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/session_key"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
+	"github.com/go-i2p/go-i2p/lib/tunnel/build"
 	"github.com/go-i2p/logger"
 )
 
@@ -42,18 +43,20 @@ type expiredBuild struct {
 
 // TunnelManager coordinates tunnel building and management
 type TunnelManager struct {
-	inboundPool     *tunnel.Pool
-	outboundPool    *tunnel.Pool
-	sessionProvider SessionProvider
-	peerSelector    tunnel.PeerSelector
-	pendingBuilds   map[int]*buildRequest // Track pending builds by message ID
-	expiredBuilds   map[int]expiredBuild  // Recently expired builds retained for late-reply accounting
-	buildMutex      sync.RWMutex          // Protect pending builds map
-	cleanupTicker   *time.Ticker          // Periodic cleanup of expired requests
-	cleanupStop     chan struct{}         // Signal to stop cleanup goroutine
-	cleanupOnce     sync.Once             // Ensures cleanup goroutine starts at most once
-	stopOnce        sync.Once             // Ensures Stop() is idempotent (no double-close panic)
-	replyProcessor  *ReplyProcessor       // Handles reply decryption and processing
+	inboundPool      *tunnel.Pool
+	outboundPool     *tunnel.Pool
+	sessionProvider  SessionProvider
+	buildSessionProv build.BuildSessionProvider // Adapter for lib/tunnel/build
+	messageFactory   build.BuildMessageFactory  // Creates serialized I2NP tunnel build messages
+	peerSelector     tunnel.PeerSelector
+	pendingBuilds    map[int]*buildRequest // Track pending builds by message ID
+	expiredBuilds    map[int]expiredBuild  // Recently expired builds retained for late-reply accounting
+	buildMutex       sync.RWMutex          // Protect pending builds map
+	cleanupTicker    *time.Ticker          // Periodic cleanup of expired requests
+	cleanupStop      chan struct{}         // Signal to stop cleanup goroutine
+	cleanupOnce      sync.Once             // Ensures cleanup goroutine starts at most once
+	stopOnce         sync.Once             // Ensures Stop() is idempotent (no double-close panic)
+	replyProcessor   *ReplyProcessor       // Handles reply decryption and processing
 	// garlicKeyRegistrar receives one-time garlic keys derived from STBM Noise
 	// transcript hashes so that incoming ShortTunnelBuildReply garlic messages
 	// can be decrypted. Set via SetGarlicKeyRegistrar after construction.
@@ -178,6 +181,14 @@ func (tm *TunnelManager) Stop() {
 // SetSessionProvider sets the session provider for sending tunnel build messages
 func (tm *TunnelManager) SetSessionProvider(provider SessionProvider) {
 	tm.sessionProvider = provider
+	// Also set up the adapted build.SessionProvider
+	tm.buildSessionProv = NewBuildSessionProvider(provider)
+}
+
+// SetMessageFactory sets the factory for creating serialized I2NP tunnel build messages.
+// Must be called before tunnel building begins.
+func (tm *TunnelManager) SetMessageFactory(factory build.BuildMessageFactory) {
+	tm.messageFactory = factory
 }
 
 // SetPeerSelector replaces the peer selector and rebuilds the tunnel pools.

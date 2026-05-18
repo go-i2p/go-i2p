@@ -42,3 +42,23 @@ type GarlicKeyRegistrar interface {
 	// ShortTunnelBuildReply. tag is garlicKeyMaterial[24:32], key is [0:32].
 	RegisterOneTimeGarlicKey(tag [8]byte, key [32]byte)
 }
+
+// BuildMessageFactory creates serialized I2NP tunnel build messages.
+// This interface decouples tunnel coordination from I2NP message types,
+// allowing lib/tunnel/build to construct messages without importing lib/i2np.
+type BuildMessageFactory interface {
+	// CreateShortTunnelBuildMessage creates a serialized Short Tunnel Build message (type 25).
+	// encryptedRecords contains 218-byte encrypted STBM records, messageID is the I2NP message ID.
+	// Returns the serialized message bytes ready for transmission.
+	CreateShortTunnelBuildMessage(encryptedRecords [][]byte, messageID int) []byte
+
+	// CreateVariableTunnelBuildMessage creates a serialized Variable Tunnel Build message (type 23).
+	// encryptedRecords contains 528-byte encrypted VTB records, messageID is the I2NP message ID.
+	// Returns the serialized message bytes ready for transmission.
+	CreateVariableTunnelBuildMessage(encryptedRecords [][]byte, messageID int) []byte
+
+	// CreateTunnelBuildMessage creates a serialized Tunnel Build message (type 21).
+	// encryptedRecords must contain exactly 8 records of 528 bytes each, messageID is the I2NP message ID.
+	// Returns the serialized message bytes ready for transmission.
+	CreateTunnelBuildMessage(encryptedRecords [][]byte, messageID int) []byte
+}
