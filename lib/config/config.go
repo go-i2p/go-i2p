@@ -4,7 +4,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/go-i2p/go-i2p/lib/util"
+	"github.com/go-i2p/go-i2p/lib/util/home"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 	"github.com/spf13/viper"
@@ -624,5 +624,5 @@ func handleConfigFile() error {
 
 // BuildI2PDirPath returns the absolute path to the go-i2p data directory under the user's home directory.
 func BuildI2PDirPath() string {
-	return filepath.Join(util.UserHome(), GoI2PBaseDir)
+	return filepath.Join(home.UserHome(), GoI2PBaseDir)
 }

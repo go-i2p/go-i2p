@@ -5,7 +5,7 @@ import (
 
 	"github.com/go-i2p/go-i2p/lib/bootstrap"
 	"github.com/go-i2p/go-i2p/lib/config"
-	"github.com/go-i2p/go-i2p/lib/util"
+	"github.com/go-i2p/go-i2p/lib/util/closeables"
 	"github.com/go-i2p/go-i2p/lib/util/signals"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
@@ -86,7 +86,7 @@ func (e *StandardEmbeddedRouter) Run(ctx context.Context) error {
 	}).Info("closing embedded router")
 
 	// Always close all registered resources, even if e.Close() fails
-	defer util.CloseAll()
+	defer closeables.CloseAll()
 
 	if err := e.Close(); err != nil {
 		return oops.Wrapf(err, "failed to close router")

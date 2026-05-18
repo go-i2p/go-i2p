@@ -1,4 +1,4 @@
-package util
+package home
 
 import (
 	"os"

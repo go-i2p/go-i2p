@@ -1,4 +1,4 @@
-package util
+package panicf
 
 import "github.com/go-i2p/logger"
 
