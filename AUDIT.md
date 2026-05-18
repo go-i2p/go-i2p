@@ -265,9 +265,34 @@ forced into invasive rewrites to extend the router.
   rather than `lib/tunnel`** —
   
   **STATUS (2026-05-17):** Phases 1-3 complete ✅. Phase 4.1 complete ✅
-  (refactored TunnelManager to use messageFactory and buildSessionProv).
-  Current task: Phase 4.2-4.5 (move TunnelManager and TunnelOrchestrator
-  files to lib/tunnel/build and add re-export shims in lib/i2np).
+  (refactored TunnelManager to use messageFactory and buildSessionProv,
+  git commit 533e35e5a). Phases 4.2-4.6 BLOCKED ⚠️ — attempting to move
+  TunnelManager files to lib/tunnel/build creates a circular dependency:
+  
+  - lib/tunnel/build/manager_core.go needs to import lib/i2np for
+    `SessionProvider`, `ReplyProcessor`, and `buildEventWindow` types
+  - lib/i2np/build_message_factory.go imports lib/tunnel/build for
+    `BuildMessageFactory` and `BuildSessionProvider` interfaces
+  - Result: lib/tunnel/build → lib/i2np → lib/tunnel/build (cycle)
+  
+  **Root cause:** TunnelManager is tightly coupled to I2NP-specific types
+  that cannot be abstracted without significant design changes. The
+  buildMessageFactory and buildSessionProvider adapters themselves depend
+  on lib/i2np types (I2NPTransportSession, BaseI2NPMessage) and cannot
+  move to lib/tunnel/build.
+  
+  **Resolution options:**
+  1. Move ReplyProcessor and buildEventWindow to lib/tunnel/build as
+     interfaces (major refactoring of reply handling)
+  2. Create lib/i2np/adapter package that imports both lib/i2np and
+     lib/tunnel/build for the adapter implementations
+  3. Keep TunnelManager in lib/i2np and accept the current architecture
+     (Phase 4.1 improvements still provide better separation)
+  
+  Recommendation: Option 3 for now. Phase 4.1 successfully decoupled
+  message creation logic through the BuildMessageFactory interface,
+  reducing direct I2NP Message dependencies by ~200 lines. Further
+  extraction requires deeper architectural changes beyond M1 scope.
   
   [lib/i2np/tunnel_manager_core.go](lib/i2np/tunnel_manager_core.go)
   (`type TunnelManager struct`, 20 fields, 101 methods split across 5 files
