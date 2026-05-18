@@ -7,9 +7,9 @@ import (
 
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/config/cliflags"
-	configcmd "github.com/go-i2p/go-i2p/lib/config/cmd"
+	"github.com/go-i2p/go-i2p/lib/config/configcmd"
 	"github.com/go-i2p/go-i2p/lib/embedded"
-	tuicmd "github.com/go-i2p/go-i2p/lib/tui/cmd"
+	"github.com/go-i2p/go-i2p/lib/tui/tuicmd"
 	"github.com/go-i2p/go-i2p/lib/util/signals"
 	"github.com/go-i2p/logger"
 	"github.com/spf13/cobra"
