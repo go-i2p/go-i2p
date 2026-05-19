@@ -1,6 +1,7 @@
 package ssu2
 
 import (
+	"github.com/go-i2p/common/data"
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
 	"github.com/go-i2p/logger"
 )
@@ -50,6 +51,21 @@ type BlockCallbackConfig struct {
 
 	// OnPathResponse is called when a PathResponse block (type 19) is received.
 	OnPathResponse func(data []byte) error
+
+	// VerifyRelayRequest is called to verify RelayRequest signature before processing.
+	// Returns true if valid, false if invalid/missing. Non-nil error indicates a
+	// verification failure (bad signature); nil with false return allows graceful skip.
+	VerifyRelayRequest func(block *ssu2noise.RelayRequestBlock, senderHash data.Hash) (bool, error)
+
+	// VerifyRelayResponse is called to verify RelayResponse signature before processing.
+	// Returns true if valid, false if invalid/missing. Non-nil error indicates a
+	// verification failure (bad signature); nil with false return allows graceful skip.
+	VerifyRelayResponse func(block *ssu2noise.RelayResponseBlock, senderHash data.Hash) (bool, error)
+
+	// VerifyPeerTest is called to verify PeerTest signature before processing.
+	// Returns true if valid, false if invalid/missing. Non-nil error indicates a
+	// verification failure (bad signature); nil with false return allows graceful skip.
+	VerifyPeerTest func(block *ssu2noise.PeerTestBlock, senderHash data.Hash) (bool, error)
 }
 
 // ToDataHandlerCallbacks converts BlockCallbackConfig into go-noise/ssu2
