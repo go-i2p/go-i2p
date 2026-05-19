@@ -217,6 +217,7 @@ func (r *Router) handleNewConnection(conn net.Conn) {
 			return
 		}
 		session := ssu2.NewSSU2Session(ssu2Conn, r.ctx, sessionLog)
+		r.attachInboundSSU2TransportCallbacks(session)
 		session.SetCleanupCallback(func() { r.removeSession(peerHash) })
 		r.addSession(peerHash, session)
 		r.wg.Add(1)
@@ -229,6 +230,20 @@ func (r *Router) handleNewConnection(conn net.Conn) {
 	default:
 		sessionLogger.WithField("addr_type", fmt.Sprintf("%T", conn.RemoteAddr())).Error("Unrecognised inbound connection address type, dropping")
 		conn.Close()
+	}
+}
+
+// attachInboundSSU2TransportCallbacks wires transport-level callbacks into an
+// inbound SSU2 session when an SSU2 transport is active in the muxer.
+func (r *Router) attachInboundSSU2TransportCallbacks(session *ssu2.SSU2Session) {
+	if r == nil || r.transports == nil || session == nil {
+		return
+	}
+	for _, tr := range r.transports.GetTransports() {
+		if ssu2Tr, ok := tr.(*ssu2.SSU2Transport); ok {
+			ssu2Tr.AttachTransportCallbacks(session)
+			return
+		}
 	}
 }
 

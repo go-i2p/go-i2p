@@ -395,6 +395,16 @@ func (t *SSU2Transport) SetPeerConnNotifier(n transport.PeerConnNotifier) {
 	t.peerConnNotifier.Store(n)
 }
 
+// AttachTransportCallbacks wires transport-level NAT/relay callbacks into the
+// provided session so inbound sessions created outside transport internals can
+// use the same callback path as transport-managed sessions.
+func (t *SSU2Transport) AttachTransportCallbacks(session *SSU2Session) {
+	if t == nil || session == nil {
+		return
+	}
+	session.SetTransportCallbacks(t.buildTransportCallbacks(session))
+}
+
 // getPeerConnNotifier returns the current PeerConnNotifier, or nil if none is set.
 func (t *SSU2Transport) getPeerConnNotifier() transport.PeerConnNotifier {
 	if v := t.peerConnNotifier.Load(); v != nil {

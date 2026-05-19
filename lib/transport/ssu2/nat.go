@@ -6,6 +6,7 @@ import (
 	cryptorand "crypto/rand"
 	"net"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -336,9 +337,8 @@ func (t *SSU2Transport) handleRelayRequestBlock(block *ssu2noise.SSU2Block, sess
 // forwardRelayIntro looks up the relay tag target (Charlie), builds a
 // RelayIntro block, and writes it to Charlie's session.
 // Rejects when no relay tag is registered for the requested tag value or when
-// there is no active session to Charlie.
-// Note: caps=B check on Charlie requires netdb RouterInfo lookup; relay tag
-// registration serves as a local proxy for introducer capability.
+// there is no active session to Charlie. Enforces introducer capability
+// validation (caps=B) via RouterLookupFunc before forwarding.
 func (t *SSU2Transport) forwardRelayIntro(req *ssu2noise.RelayRequestBlock) error {
 	tag := t.relayManager.GetRelayTag(req.RelayTag)
 	if tag == nil {
@@ -350,12 +350,41 @@ func (t *SSU2Transport) forwardRelayIntro(req *ssu2noise.RelayRequestBlock) erro
 		t.logger.WithField("charlie_addr", tag.ForAddr).Warn("RelayRequest rejected: no active session to Charlie")
 		return nil
 	}
+	if !t.hasIntroducerCapability(session) {
+		t.logger.WithFields(map[string]interface{}{
+			"relay_tag":    req.RelayTag,
+			"charlie_addr": tag.ForAddr,
+		}).Warn("RelayRequest rejected: Charlie lacks introducer capability caps=B")
+		return nil
+	}
 	intro := buildRelayIntro(req)
 	encoded, err := ssu2noise.EncodeRelayIntro(intro)
 	if err != nil {
 		return err
 	}
 	return session.WriteBlocks([]*ssu2noise.SSU2Block{encoded})
+}
+
+// hasIntroducerCapability returns true when session's remote peer advertises
+// introducer capability (caps=B) in its RouterInfo.
+func (t *SSU2Transport) hasIntroducerCapability(session *SSU2Session) bool {
+	if t == nil || t.config == nil || t.config.RouterLookupFunc == nil || session == nil || session.conn == nil {
+		return false
+	}
+	addr, ok := session.conn.RemoteAddr().(*ssu2noise.SSU2Addr)
+	if !ok {
+		return false
+	}
+	rh := data.Hash(addr.RouterHash())
+	ri, err := t.config.RouterLookupFunc(rh)
+	if err != nil {
+		t.logger.WithFields(map[string]interface{}{
+			"router_hash": rh.String(),
+			"error":       err,
+		}).Warn("RelayRequest rejected: failed RouterInfo lookup for Charlie")
+		return false
+	}
+	return strings.Contains(ri.RouterCapabilities(), "B")
 }
 
 // buildRelayIntro constructs a RelayIntroBlock from a RelayRequest.
