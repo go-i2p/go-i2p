@@ -351,7 +351,7 @@ func validateHostData(addr *router_address.RouterAddress) (string, error) {
 			"transport": "ntcp2",
 			"reason":    "host key missing - normal for introducer-based/firewalled routers",
 			"error":     err.Error(),
-			"note":      "requires introducer support (not yet implemented)",
+			"note":      "introducer-only address; reachability depends on introducer availability",
 			"impact":    "none - will be skipped during peer selection",
 		}).Debug("NTCP2 address is introducer-only (no direct connectivity)")
 		return "", oops.Wrapf(err, "NTCP2 address cannot retrieve host (introducer-based)")

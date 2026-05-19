@@ -770,7 +770,7 @@ func buildHostReplyMessage(sessionID uint16, replyPayload *HostReplyPayload) (*M
 //
 // Lookup types:
 // - Type 0 (hash): Query NetDB for destination by hash
-// - Type 1 (hostname): Requires naming service integration (not yet implemented)
+// - Type 1 (hostname): Resolved via the configured HostnameResolver
 //
 // For hash lookups, the destination is retrieved from the LeaseSet stored in NetDB.
 func (s *Server) handleHostLookup(_ net.Conn, msg *Message) (*Message, error) {

@@ -307,7 +307,7 @@ func (p *MessageProcessor) processDatabaseLookupMessage(msg Message) error {
 // 3. Parse decrypted data into Garlic structure with cloves
 // 4. For each clove, route based on delivery type:
 //   - LOCAL (0x00): Process wrapped message locally via ProcessMessage()
-//   - DESTINATION/ROUTER/TUNNEL: Require router-level forwarding (not implemented here)
+//   - DESTINATION/ROUTER/TUNNEL: forwarded by lib/router/garlic_router.go
 //
 // Note: This processor handles LOCAL delivery only. Other delivery types require
 // router context and would be implemented at the router layer.

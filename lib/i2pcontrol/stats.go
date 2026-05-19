@@ -104,8 +104,8 @@ type RouterInfoStats struct {
 	// Status is the router status string (e.g., "OK", "TESTING", "ERROR")
 	Status string
 
-	// ActivePeers is the number of currently active transport connections
-	// Currently returns 0 as session tracking is not yet exposed
+	// ActivePeers is the currently active transport session count,
+	// sourced from Router.GetActiveSessionCount()
 	ActivePeers int
 
 	// KnownPeers is the number of RouterInfos in the NetDB
