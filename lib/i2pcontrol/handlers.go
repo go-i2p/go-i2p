@@ -1027,7 +1027,7 @@ func (h *I2PControlHandler) Handle(ctx context.Context, params json.RawMessage) 
 	h.handlePortSetting(req, result, &settingsSaved)
 	h.handleAddressSetting(req, result, &settingsSaved)
 
-	if err := validateNotImplementedSettings(req); err != nil {
+	if err := persistRestartRequiredSettings(req); err != nil {
 		return nil, err
 	}
 
@@ -1112,14 +1112,14 @@ func handlePasswordChange(authManager interface{ ChangePassword(string) int }, c
 	return nil
 }
 
-// validateNotImplementedSettings checks for settings that are not yet implemented.
+// persistRestartRequiredSettings persists settings whose effect requires a router restart.
 // Port and address changes are persisted but require a server restart to take effect.
-func validateNotImplementedSettings(req map[string]interface{}) error {
+func persistRestartRequiredSettings(req map[string]interface{}) error {
 	if val, ok := req["i2pcontrol.port"]; ok && val != nil {
 		viper.Set("i2pcontrol.port", val)
 		if err := viper.WriteConfig(); err != nil {
 			log.WithFields(map[string]interface{}{
-				"at":    "validateNotImplementedSettings",
+				"at":    "persistRestartRequiredSettings",
 				"error": err.Error(),
 			}).Warn("i2pcontrol.port changed in memory but failed to persist")
 		}
@@ -1130,7 +1130,7 @@ func validateNotImplementedSettings(req map[string]interface{}) error {
 		viper.Set("i2pcontrol.address", val)
 		if err := viper.WriteConfig(); err != nil {
 			log.WithFields(map[string]interface{}{
-				"at":    "validateNotImplementedSettings",
+				"at":    "persistRestartRequiredSettings",
 				"error": err.Error(),
 			}).Warn("i2pcontrol.address changed in memory but failed to persist")
 		}
