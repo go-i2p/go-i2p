@@ -90,7 +90,7 @@ func DefaultBlockCallbacks() *BlockCallbackConfig {
 			log.WithField("reason", reason).Info("Received SSU2 termination block")
 		},
 		OnRouterInfo: func(_ []byte) error {
-			log.WithFields(logger.Fields{"at": "DefaultBlockCallbacks"}).Debug("Received RouterInfo block (not yet wired to NetDB)")
+			log.WithFields(logger.Fields{"at": "DefaultBlockCallbacks"}).Debug("Received RouterInfo block (using default handler - production wiring via buildTransportCallbacks)")
 			return nil
 		},
 		OnDateTime: func(timestamp uint32) error {

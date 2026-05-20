@@ -91,3 +91,23 @@ func TestDefaultBlockCallbacks_InvokeCallbacks(t *testing.T) {
 	now := uint32(0) // epoch is far in the past but the logger path is exercised
 	_ = config.OnDateTime(now)
 }
+
+// TestRouterInfoCallback_WiredToNetDB verifies that OnRouterInfo callback
+// is invoked when configured, enabling NetDB storage integration.
+func TestRouterInfoCallback_WiredToNetDB(t *testing.T) {
+	var storedData []byte
+	config := &BlockCallbackConfig{
+		OnRouterInfo: func(data []byte) error {
+			storedData = data
+			return nil
+		},
+	}
+
+	callbacks := config.ToDataHandlerCallbacks()
+	require.NotNil(t, callbacks.OnRouterInfo)
+
+	testData := []byte("test-router-info-data")
+	err := callbacks.OnRouterInfo(testData)
+	assert.NoError(t, err)
+	assert.Equal(t, testData, storedData, "RouterInfo data should be passed to callback")
+}

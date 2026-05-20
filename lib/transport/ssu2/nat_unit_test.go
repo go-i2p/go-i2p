@@ -345,3 +345,59 @@ func TestNATRetryBackoff_DoublesCorrectly(t *testing.T) {
 		}
 	}
 }
+
+// TestHandleRouterInfoBlock_NoStoreFunc verifies that handleRouterInfoBlock
+// gracefully handles the case when RouterStoreFunc is not configured (test/default behavior).
+func TestHandleRouterInfoBlock_NoStoreFunc(t *testing.T) {
+	tr := makeMinimalTransport()
+	err := tr.handleRouterInfoBlock([]byte("test-data"))
+	assert.NoError(t, err, "Should not error when RouterStoreFunc is nil")
+}
+
+// TestHandleRouterInfoBlock_WithStoreFunc verifies that handleRouterInfoBlock
+// calls the configured RouterStoreFunc with the provided data.
+func TestHandleRouterInfoBlock_WithStoreFunc(t *testing.T) {
+	tr := makeMinimalTransport()
+
+	var capturedData []byte
+	tr.config.RouterStoreFunc = func(data []byte) error {
+		capturedData = data
+		return nil
+	}
+
+	testData := []byte("router-info-payload")
+	err := tr.handleRouterInfoBlock(testData)
+	assert.NoError(t, err)
+	assert.Equal(t, testData, capturedData, "RouterStoreFunc should receive the block data")
+}
+
+// TestHandleRouterInfoBlock_StoreFuncError verifies that handleRouterInfoBlock
+// returns an error when RouterStoreFunc fails.
+func TestHandleRouterInfoBlock_StoreFuncError(t *testing.T) {
+	tr := makeMinimalTransport()
+
+	tr.config.RouterStoreFunc = func(data []byte) error {
+		return assert.AnError
+	}
+
+	err := tr.handleRouterInfoBlock([]byte("test-data"))
+	assert.Error(t, err, "Should return error when RouterStoreFunc fails")
+}
+
+// TestBuildTransportCallbacks_IncludesRouterInfo verifies that buildTransportCallbacks
+// includes the OnRouterInfo callback.
+func TestBuildTransportCallbacks_IncludesRouterInfo(t *testing.T) {
+	tr := makeMinimalTransport()
+	var storeCalled bool
+	tr.config.RouterStoreFunc = func(data []byte) error {
+		storeCalled = true
+		return nil
+	}
+
+	cbs := tr.buildTransportCallbacks(nil)
+	require.NotNil(t, cbs.OnRouterInfo, "OnRouterInfo callback should be set")
+
+	err := cbs.OnRouterInfo([]byte("test"))
+	assert.NoError(t, err)
+	assert.True(t, storeCalled, "OnRouterInfo should call handleRouterInfoBlock")
+}

@@ -57,6 +57,24 @@ func createSSU2TransportInstance(r *Router, ri *router_info.RouterInfo, addr str
 		return ri, nil
 	}
 
+	ssu2Config.RouterStoreFunc = func(data []byte) error {
+		// Parse RouterInfo from block data
+		ri, _, err := router_info.ReadRouterInfo(data)
+		if err != nil {
+			return oops.Wrapf(err, "failed to parse RouterInfo from SSU2 block")
+		}
+		// Compute identity hash
+		hash, err := ri.IdentHash()
+		if err != nil {
+			return oops.Wrapf(err, "failed to compute identity hash from RouterInfo")
+		}
+		// Store in NetDB (delegates to StoreRouterInfoFromMessage with signature verification)
+		if err := r.netdb.Store(hash, data, 0); err != nil {
+			return oops.Wrapf(err, "failed to store RouterInfo in NetDB")
+		}
+		return nil
+	}
+
 	log.WithFields(logger.Fields{"at": "buildSSU2Transport"}).Debug("SSU2 transport created successfully")
 	return ssu2Transport, nil
 }

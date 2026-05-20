@@ -49,6 +49,9 @@ func initNATManagers(t *SSU2Transport) {
 // clock validation).
 func (t *SSU2Transport) buildTransportCallbacks(session *SSU2Session) *BlockCallbackConfig {
 	return &BlockCallbackConfig{
+		OnRouterInfo: func(data []byte) error {
+			return t.handleRouterInfoBlock(data)
+		},
 		OnPeerTest: func(block *ssu2noise.SSU2Block) error {
 			return t.handlePeerTestBlock(block, session)
 		},
@@ -71,6 +74,22 @@ func (t *SSU2Transport) buildTransportCallbacks(session *SSU2Session) *BlockCall
 			return t.verifyPeerTestSignature(block, senderHash)
 		},
 	}
+}
+
+// handleRouterInfoBlock processes RouterInfo block data received from a peer.
+// If RouterStoreFunc is configured, it delegates storage to NetDB; otherwise
+// it logs and skips processing (test/default behavior).
+func (t *SSU2Transport) handleRouterInfoBlock(data []byte) error {
+	if t.config.RouterStoreFunc == nil {
+		t.logger.Debug("Received RouterInfo block but RouterStoreFunc not configured (using default callbacks)")
+		return nil
+	}
+	if err := t.config.RouterStoreFunc(data); err != nil {
+		t.logger.WithError(err).Warn("Failed to store RouterInfo from SSU2 block")
+		return oops.Wrapf(err, "failed to store RouterInfo")
+	}
+	t.logger.Debug("Successfully stored RouterInfo from SSU2 block")
+	return nil
 }
 
 // verifyRelayRequestSignature verifies the Ed25519 signature on a RelayRequest

@@ -36,6 +36,11 @@ type Config struct {
 	// to get a direct dialable address before sending the RelayRequest.
 	RouterLookupFunc func(hash data.Hash) (router_info.RouterInfo, error)
 
+	// RouterStoreFunc stores RouterInfo data received via SSU2 blocks.
+	// Called when a peer sends a RouterInfo block (type 2) during a session.
+	// The function should parse, verify, and persist the RouterInfo to NetDB.
+	RouterStoreFunc func(data []byte) error
+
 	*ssu2noise.SSU2Config
 }
 
