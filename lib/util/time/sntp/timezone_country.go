@@ -5,6 +5,7 @@ import (
 	"embed"
 	"io"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -109,7 +110,11 @@ func detectIANATimezone() string {
 }
 
 // detectTimezoneFromEtcTimezone reads /etc/timezone (Debian, Ubuntu).
+// Only attempted on Linux and Darwin where the file may exist.
 func detectTimezoneFromEtcTimezone() string {
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		return ""
+	}
 	data, err := os.ReadFile("/etc/timezone")
 	if err != nil {
 		return ""
@@ -118,7 +123,11 @@ func detectTimezoneFromEtcTimezone() string {
 }
 
 // detectTimezoneFromLocaltime reads /etc/localtime symlink (Linux, macOS).
+// Only attempted on Linux and Darwin where the file may exist.
 func detectTimezoneFromLocaltime() string {
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		return ""
+	}
 	target, err := os.Readlink("/etc/localtime")
 	if err != nil {
 		return ""

@@ -53,7 +53,15 @@ func (r *Router) logHealthMetrics() {
 
 // countOpenFDs returns the number of open file descriptors for the current
 // process on Linux (via /proc/self/fd). Returns -1 on non-Linux platforms.
+//
+// Note: This function provides degraded observability on non-Linux systems.
+// The -1 sentinel indicates that FD counting is not available on the current platform.
+// For production monitoring on macOS/BSD, consider alternative approaches such as
+// ulimit inspection via shell subprocess or platform-specific system calls.
 func countOpenFDs() int {
+	if runtime.GOOS != "linux" {
+		return -1
+	}
 	entries, err := os.ReadDir(filepath.Join("/proc", "self", "fd"))
 	if err != nil {
 		return -1
