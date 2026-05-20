@@ -19,6 +19,62 @@ jobs:
           GO: go
           CGO_ENABLED: 0
 
+  cross-platform-build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          # Linux targets (cross-compiled from ubuntu-latest)
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+          - os: ubuntu-latest
+            goos: linux
+            goarch: arm64
+          - os: ubuntu-latest
+            goos: linux
+            goarch: 386
+          # Windows targets
+          - os: ubuntu-latest
+            goos: windows
+            goarch: amd64
+          - os: ubuntu-latest
+            goos: windows
+            goarch: arm64
+          - os: ubuntu-latest
+            goos: windows
+            goarch: 386
+          # macOS targets (cross-compiled from ubuntu-latest)
+          - os: ubuntu-latest
+            goos: darwin
+            goarch: amd64
+          - os: ubuntu-latest
+            goos: darwin
+            goarch: arm64
+          # BSD targets (cross-compiled from ubuntu-latest)
+          - os: ubuntu-latest
+            goos: freebsd
+            goarch: amd64
+          - os: ubuntu-latest
+            goos: openbsd
+            goarch: amd64
+          - os: ubuntu-latest
+            goos: netbsd
+            goarch: amd64
+          # Android (cross-compiled from ubuntu-latest)
+          - os: ubuntu-latest
+            goos: android
+            goarch: arm64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v4
+        with:
+          go-version: '1.26'
+      - name: Build for ${{ matrix.goos }}/${{ matrix.goarch }}
+        run: CGO_ENABLED=0 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build ./...
+        env:
+          CGO_ENABLED: 0
+
   test:
     runs-on: ubuntu-latest
 
