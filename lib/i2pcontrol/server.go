@@ -515,6 +515,7 @@ func (s *Server) handleValidatedRequest(w http.ResponseWriter, r *http.Request, 
 // setCORSHeaders configures Cross-Origin Resource Sharing headers for JSON-RPC requests.
 // Access-Control-Allow-Origin is restricted to the server's own address and scheme,
 // preventing cross-site request exposure from arbitrary origins.
+// Also sets security headers (X-Content-Type-Options, Strict-Transport-Security).
 func (s *Server) setCORSHeaders(w http.ResponseWriter) {
 	scheme := "http"
 	if s.config.UseHTTPS {
@@ -525,6 +526,12 @@ func (s *Server) setCORSHeaders(w http.ResponseWriter) {
 	w.Header().Set("Access-Control-Allow-Origin", origin)
 	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+	// Security headers (see AUDIT.md LOW finding)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	if s.config.UseHTTPS {
+		w.Header().Set("Strict-Transport-Security", "max-age=31536000")
+	}
 }
 
 // validateHTTPRequest checks that the HTTP method is POST and Content-Type is application/json.

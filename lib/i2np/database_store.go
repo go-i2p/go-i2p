@@ -23,10 +23,17 @@ const (
 )
 
 // Size limits for DatabaseStore data payloads
+// Centralized here per AUDIT.md LOW finding to ensure consistent limits across packages.
 const (
-	// MaxRouterInfoSize is the maximum size for a RouterInfo (gzip-compressed)
-	// Real RouterInfos are typically 2-6KB; 64KB provides large safety margin
+	// MaxRouterInfoSize is the maximum size for a RouterInfo in gzip-compressed form
+	// (wire format, on-disk format). Real compressed RouterInfos are typically 2-6KB;
+	// 64KB provides large safety margin.
 	MaxRouterInfoSize = 65536 // 64KB
+
+	// MaxDecompressedRouterInfoSize is the maximum size for a RouterInfo after
+	// decompression. Per I2P spec, RouterInfos are typically <4KB decompressed;
+	// 8KB provides a safe upper bound to prevent gzip-bomb DoS.
+	MaxDecompressedRouterInfoSize = 8192 // 8KB
 
 	// MaxLeaseSetSize is the maximum size for any LeaseSet type
 	// LeaseSets are typically <2KB; 32KB provides large safety margin

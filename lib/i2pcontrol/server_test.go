@@ -421,3 +421,92 @@ func TestMethodNotFound(t *testing.T) {
 		t.Errorf("Expected ErrCodeMethodNotFound, got %d", resp.Error.Code)
 	}
 }
+
+// TestSecurityHeaders verifies that security headers are set correctly
+// (see AUDIT.md LOW finding).
+func TestSecurityHeaders(t *testing.T) {
+	stats := &mockServerStatsProvider{}
+
+	t.Run("http_includes_nosniff", func(t *testing.T) {
+		port, err := getFreePort()
+		if err != nil {
+			t.Fatalf("Failed to get free port: %v", err)
+		}
+		cfg := testConfig(port)
+		cfg.UseHTTPS = false
+
+		server, err := NewServer(cfg, stats)
+		if err != nil {
+			t.Fatalf("NewServer failed: %v", err)
+		}
+		if err := server.Start(); err != nil {
+			t.Fatalf("Start failed: %v", err)
+		}
+		defer server.Stop()
+		time.Sleep(100 * time.Millisecond)
+
+		url := fmt.Sprintf("http://%s/jsonrpc", cfg.Address)
+		resp, err := http.Post(url, "application/json", bytes.NewReader([]byte(`{}`)))
+		if err != nil {
+			t.Fatalf("Request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		// X-Content-Type-Options should always be set
+		if got := resp.Header.Get("X-Content-Type-Options"); got != "nosniff" {
+			t.Errorf("Expected X-Content-Type-Options: nosniff, got %q", got)
+		}
+
+		// Strict-Transport-Security should NOT be set for HTTP
+		if got := resp.Header.Get("Strict-Transport-Security"); got != "" {
+			t.Errorf("Expected no Strict-Transport-Security for HTTP, got %q", got)
+		}
+	})
+
+	t.Run("https_includes_hsts", func(t *testing.T) {
+		port, err := getFreePort()
+		if err != nil {
+			t.Fatalf("Failed to get free port: %v", err)
+		}
+		cfg := testConfig(port)
+		cfg.UseHTTPS = true
+
+		// For this test, we only check that the server would set the header
+		// We can't actually test HTTPS without certificates, but we can verify
+		// the header-setting logic by inspecting a mock response writer
+		server, err := NewServer(cfg, stats)
+		if err != nil {
+			t.Fatalf("NewServer failed: %v", err)
+		}
+
+		// Use a mock ResponseWriter to capture headers
+		mockW := &mockResponseWriter{header: make(http.Header)}
+		server.setCORSHeaders(mockW)
+
+		// X-Content-Type-Options should be set
+		if got := mockW.header.Get("X-Content-Type-Options"); got != "nosniff" {
+			t.Errorf("Expected X-Content-Type-Options: nosniff, got %q", got)
+		}
+
+		// Strict-Transport-Security should be set for HTTPS
+		if got := mockW.header.Get("Strict-Transport-Security"); got != "max-age=31536000" {
+			t.Errorf("Expected Strict-Transport-Security: max-age=31536000, got %q", got)
+		}
+	})
+}
+
+// mockResponseWriter is a minimal http.ResponseWriter for testing header setting
+type mockResponseWriter struct {
+	header http.Header
+}
+
+func (m *mockResponseWriter) Header() http.Header {
+	return m.header
+}
+
+func (m *mockResponseWriter) Write([]byte) (int, error) {
+	return 0, nil
+}
+
+func (m *mockResponseWriter) WriteHeader(statusCode int) {
+}

@@ -562,18 +562,15 @@ func (s *NTCP2Session) handleRouterInfoBlock(data []byte) {
 	}
 }
 
-// maxRouterInfoSize is the maximum allowed size for decompressed RouterInfo data.
-// Per I2P spec, RouterInfos are typically <4KB; 8KB provides a safe upper bound.
-const maxRouterInfoSize = 8192
-
 // decompressGzip decompresses gzip-compressed data with a size limit to prevent gzip bomb DoS.
+// Uses the centralized MaxDecompressedRouterInfoSize limit from lib/i2np.
 func decompressGzip(data []byte) ([]byte, error) {
 	r, err := gzip.NewReader(bytes.NewReader(data))
 	if err != nil {
 		return nil, oops.Wrapf(err, "gzip reader")
 	}
 	defer func() { _ = r.Close() }()
-	return io.ReadAll(io.LimitReader(r, maxRouterInfoSize))
+	return io.ReadAll(io.LimitReader(r, i2np.MaxDecompressedRouterInfoSize))
 }
 
 // shouldStopReceiving checks if the session context is done and receiving should stop.

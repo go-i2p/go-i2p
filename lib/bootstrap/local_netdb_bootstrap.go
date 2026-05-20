@@ -15,6 +15,7 @@ import (
 
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/config"
+	"github.com/go-i2p/go-i2p/lib/i2np"
 )
 
 // LocalNetDBBootstrap implements the Bootstrap interface by reading RouterInfos
@@ -338,6 +339,7 @@ func (lb *LocalNetDBBootstrap) readRouterInfoFromFile(filePath string) (router_i
 
 // readRouterInfoBytes opens and reads a RouterInfo file, limiting the read size
 // to 64 KB to prevent OOM from maliciously large files.
+// Uses the centralized MaxRouterInfoSize limit from lib/i2np.
 func readRouterInfoBytes(filePath string) ([]byte, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -345,8 +347,7 @@ func readRouterInfoBytes(filePath string) ([]byte, error) {
 	}
 	defer file.Close()
 
-	const maxRouterInfoSize = 64 * 1024
-	data, err := io.ReadAll(io.LimitReader(file, maxRouterInfoSize))
+	data, err := io.ReadAll(io.LimitReader(file, i2np.MaxRouterInfoSize))
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to read file")
 	}
