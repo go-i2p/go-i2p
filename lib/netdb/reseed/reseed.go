@@ -235,6 +235,14 @@ func (r *Reseed) performReseedRequest(uri string) (*http.Response, error) {
 // createReseedHTTPClient creates an HTTP client configured for reseed operations.
 // The TLS configuration uses the system certificate pool merged with embedded
 // reseed certificates, so connections to reseed servers with non-standard CAs succeed.
+//
+// Note: The 30-second request timeout is appropriate for desktop/server deployments.
+// On mobile platforms (Android, iOS), OS background suspension may interrupt requests
+// before completion, causing reseed to fail silently. Mobile support would require:
+// 1. Reducing the per-request timeout to 10 seconds
+// 2. Accepting a context.Context representing the application lifecycle
+// 3. Implementing automatic resumption logic when the app returns to foreground
+// This is a future enhancement, not currently implemented.
 func createReseedHTTPClient(dialContext func(ctx context.Context, network, addr string) (net.Conn, error)) (*http.Client, error) {
 	rootCAs, err := buildReseedCertPool()
 	if err != nil {

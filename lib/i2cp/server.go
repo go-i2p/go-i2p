@@ -209,6 +209,11 @@ func NewServer(config *ServerConfig) (*Server, error) {
 
 // createAndSecureListener opens the network listener and, for Unix sockets,
 // applies restrictive file permissions. Returns an error if either step fails.
+//
+// Note: On Windows, os.Chmod(path, 0o600) does not enforce POSIX-style
+// permission bits; NTFS uses ACLs instead. Unix sockets on Windows (supported
+// since Windows 10 1809) will be created with default inherited ACLs from the
+// parent directory, which may not provide equivalent protection to POSIX 0o600.
 func (s *Server) createAndSecureListener() (net.Listener, error) {
 	listener, err := net.Listen(s.config.Network, s.config.ListenAddr)
 	if err != nil {

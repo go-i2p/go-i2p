@@ -329,9 +329,14 @@ func (s *Server) startHTTPSServer() error {
 		"protocol": "HTTPS",
 	}).Info("Starting I2PControl server")
 
+	// Note: net.Listen("tcp", addr) may attempt IPv6 resolution first if addr
+	// is a hostname like "localhost". On systems with IPv6 disabled, this can
+	// result in a confusing "bind: cannot assign requested address" error.
+	// If you encounter this, specify an explicit IP literal instead:
+	// e.g., "127.0.0.1:7650" for IPv4-only or "::1:7650" for IPv6-only.
 	listener, err := net.Listen("tcp", s.config.Address)
 	if err != nil {
-		return oops.Wrapf(err, "failed to create listener")
+		return oops.Wrapf(err, "failed to create listener on %s", s.config.Address)
 	}
 
 	s.mu.Lock()
@@ -354,9 +359,14 @@ func (s *Server) startPlainHTTPServer() error {
 		"protocol": "HTTP",
 	}).Info("Starting I2PControl server")
 
+	// Note: net.Listen("tcp", addr) may attempt IPv6 resolution first if addr
+	// is a hostname like "localhost". On systems with IPv6 disabled, this can
+	// result in a confusing "bind: cannot assign requested address" error.
+	// If you encounter this, specify an explicit IP literal instead:
+	// e.g., "127.0.0.1:7650" for IPv4-only or "::1:7650" for IPv6-only.
 	listener, err := net.Listen("tcp", s.config.Address)
 	if err != nil {
-		return oops.Wrapf(err, "failed to create listener")
+		return oops.Wrapf(err, "failed to create listener on %s", s.config.Address)
 	}
 
 	s.mu.Lock()

@@ -218,6 +218,11 @@ func buildTransportInstance(config *Config, identity router_info.RouterInfo, key
 // bindOSAssignedPort discovers a free port via a temporary OS-assigned binding, then
 // re-binds through NAT traversal (UPnP/NAT-PMP with fallback) on that port so that
 // the resulting listener carries a real external address rather than the unspecified "::" host.
+//
+// Note: On iOS, app sandbox restrictions prevent net.Listen on arbitrary ports
+// without the com.apple.developer.networking.multipath entitlement or a
+// NEPacketTunnelProvider extension. Attempting to listen will fail with EACCES.
+// Pure go-i2p in-app deployment is not supported on iOS App Store builds.
 func bindOSAssignedPort(config *Config) (net.Listener, error) {
 	// Step 1: ask the OS for any available port.
 	temp, err := net.Listen("tcp", config.ListenerAddress)

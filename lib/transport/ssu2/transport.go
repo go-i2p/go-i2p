@@ -241,6 +241,11 @@ func createUDPConn(config *Config, iport int) (net.PacketConn, error) {
 // listenWithOSPort discovers a free UDP port via a temporary OS-assigned binding,
 // then re-binds through NAT traversal (UPnP/NAT-PMP with fallback) on that port
 // so the resulting connection carries a real external address.
+//
+// Note: On iOS, app sandbox restrictions prevent net.ListenPacket and net.ListenUDP
+// on arbitrary ports without the com.apple.developer.networking.multipath entitlement
+// or a NEPacketTunnelProvider extension. Attempting to listen will fail with EACCES.
+// Pure go-i2p in-app deployment is not supported on iOS App Store builds.
 func listenWithOSPort(config *Config) (net.PacketConn, error) {
 	// Step 1: ask the OS for any available UDP port.
 	udpAddr, err := net.ResolveUDPAddr("udp", config.ListenerAddress)
