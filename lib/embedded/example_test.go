@@ -5,7 +5,6 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"syscall"
 	"testing"
 	"time"
 
@@ -79,7 +78,7 @@ func Example_withSignalHandling() {
 
 	// Set up signal handling for graceful shutdown
 	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(sigChan, os.Interrupt)
 
 	go func() {
 		sig := <-sigChan

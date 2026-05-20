@@ -391,6 +391,8 @@ func getDefaultNetDBSearchPaths() []string {
 		return getDarwinNetDBPaths(homeDir)
 	case "windows":
 		return getWindowsNetDBPaths(homeDir)
+	case "freebsd", "openbsd", "netbsd":
+		return getBSDNetDBPaths(homeDir)
 	default:
 		return getGenericNetDBPaths(homeDir)
 	}
@@ -444,6 +446,19 @@ func getWindowsNetDBPaths(homeDir string) []string {
 		filepath.Join(homeDir, "i2p/netDb"),
 		// i2pd default locations on Windows
 		filepath.Join(appData, "i2pd/netDb"),
+	}
+}
+
+// getBSDNetDBPaths returns netDb search paths for BSD systems (FreeBSD, OpenBSD, NetBSD).
+func getBSDNetDBPaths(homeDir string) []string {
+	return []string{
+		// BSD default package locations
+		"/usr/local/etc/i2p/netDb",
+		"/usr/local/etc/i2pd/netDb",
+		"/var/db/i2p/netDb",
+		// User home directory fallbacks
+		filepath.Join(homeDir, ".i2p/netDb"),
+		filepath.Join(homeDir, ".i2pd/netDb"),
 	}
 }
 
