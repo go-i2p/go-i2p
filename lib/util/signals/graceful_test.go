@@ -221,14 +221,12 @@ func TestPreShutdownConcurrentRegistration(t *testing.T) {
 	numGoroutines := 50
 	var callCount int64
 
-	for i := 0; i < numGoroutines; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range numGoroutines {
+		wg.Go(func() {
 			RegisterPreShutdownHandler(func() {
 				atomic.AddInt64(&callCount, 1)
 			})
-		}()
+		})
 	}
 	wg.Wait()
 

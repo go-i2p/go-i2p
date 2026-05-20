@@ -90,10 +90,7 @@ func handlePreShutdown() bool {
 		return true
 	}
 
-	perHandler := timeout / time.Duration(len(snapshot))
-	if perHandler < minPerHandlerTimeout {
-		perHandler = minPerHandlerTimeout
-	}
+	perHandler := max(timeout/time.Duration(len(snapshot)), minPerHandlerTimeout)
 
 	allCompleted := true
 	for _, h := range snapshot {

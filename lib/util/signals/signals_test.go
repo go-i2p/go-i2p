@@ -123,7 +123,7 @@ func TestMultipleHandlers(t *testing.T) {
 			callCount := 0
 			var mu sync.Mutex
 
-			for i := 0; i < 5; i++ {
+			for range 5 {
 				tt.register(func() {
 					mu.Lock()
 					callCount++
@@ -229,7 +229,7 @@ func TestConcurrentRegistration(t *testing.T) {
 	var wg sync.WaitGroup
 	numGoroutines := 50
 
-	for i := 0; i < numGoroutines; i++ {
+	for range numGoroutines {
 		wg.Add(2)
 		go func() {
 			defer wg.Done()

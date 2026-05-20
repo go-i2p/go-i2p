@@ -16,7 +16,7 @@ func assertHandlersCalledInOrder(t *testing.T, registerFn func(func()), handleFn
 	var mu sync.Mutex
 	order := make([]int, 0, 3)
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		idx := i
 		registerFn(func() {
 			mu.Lock()
@@ -33,7 +33,7 @@ func assertHandlersCalledInOrder(t *testing.T, registerFn func(func()), handleFn
 	if len(order) != 3 {
 		t.Fatalf("expected 3 handlers called, got %d", len(order))
 	}
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if order[i] != i {
 			t.Errorf("expected handler %d at position %d, got %d", i, i, order[i])
 		}
