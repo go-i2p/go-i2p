@@ -584,7 +584,7 @@ func (tm *TunnelManager) encryptRecordsAndDeriveKeys(i2npRecords []BuildRequestR
 // updateReplyKeysWithHKDF overwrites result.ReplyKeys with HKDF-derived keys.
 // Per STBM spec (proposal 152), the ReplyKey field is absent from the 154-byte cleartext.
 // Each hop derives its reply key via HKDF(ck, "", "SMTunnelReplyKey", 64).
-func (tm *TunnelManager) updateReplyKeysWithHKDF(result *tunnel.TunnelBuildResult, replyKeys [][32]byte, noiseHashes [][32]byte) {
+func (tm *TunnelManager) updateReplyKeysWithHKDF(result *tunnel.TunnelBuildResult, replyKeys, noiseHashes [][32]byte) {
 	result.ReplyKeys = make([]session_key.SessionKey, len(replyKeys))
 	for i, rk := range replyKeys {
 		result.ReplyKeys[i] = session_key.SessionKey(rk)
@@ -595,7 +595,7 @@ func (tm *TunnelManager) updateReplyKeysWithHKDF(result *tunnel.TunnelBuildResul
 // registerGarlicReplyKeys derives and registers one-time garlic keys for OBEP reply decryption.
 // Registers both compatibility keys (from Noise transcript hash) and exact OBEP keys
 // (from post-reply chaining key) to ensure interoperability with different implementations.
-func (tm *TunnelManager) registerGarlicReplyKeys(noiseHashes [][32]byte, postReplyCKs [][32]byte, messageID int, tunnelID tunnel.TunnelID) error {
+func (tm *TunnelManager) registerGarlicReplyKeys(noiseHashes, postReplyCKs [][32]byte, messageID int, tunnelID tunnel.TunnelID) error {
 	if tm.garlicKeyRegistrar == nil || len(postReplyCKs) == 0 {
 		return nil
 	}

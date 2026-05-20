@@ -808,13 +808,13 @@ func (db *StdNetDB) admitRouterInfoIntroduction(key common.Hash, source *common.
 }
 
 // getRouterInfoCacheState returns the cache state for admission checks.
-func (db *StdNetDB) getRouterInfoCacheState(key common.Hash) (exists bool, current int, max int) {
+func (db *StdNetDB) getRouterInfoCacheState(key common.Hash) (exists bool, current, max int) {
 	db.riMutex.RLock()
 	_, exists = db.RouterInfos[key]
 	current = len(db.RouterInfos)
 	max = db.maxRouterInfos
 	db.riMutex.RUnlock()
-	return
+	return exists, current, max
 }
 
 // checkCapacity checks if the RouterInfo cache has reached capacity.

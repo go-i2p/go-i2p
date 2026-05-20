@@ -73,7 +73,7 @@ func TestSessionProviderWithNonExistentPeer(t *testing.T) {
 	// Create a router with proper NetDB initialization
 	router := &Router{
 		activeSessions: make(map[common.Hash]transport.TransportSession),
-		netdb:       netdb.NewStdNetDB(tempDir),
+		netdb:          netdb.NewStdNetDB(tempDir),
 		running:        true,
 	}
 

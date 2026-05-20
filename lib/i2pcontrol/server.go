@@ -196,7 +196,8 @@ func newAuthenticateHandler(authManager *AuthManager, cfg *config.I2PControlConf
 func parseAuthenticateRequest(params json.RawMessage) (*struct {
 	API      *int   `json:"API"`
 	Password string `json:"Password"`
-}, error) {
+}, error,
+) {
 	var req struct {
 		API      *int   `json:"API"`
 		Password string `json:"Password"`

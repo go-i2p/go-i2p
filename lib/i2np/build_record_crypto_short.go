@@ -183,7 +183,7 @@ func logSTBMEncryptionDiagnostics(record BuildRequestRecord, recipientRouterInfo
 }
 
 // assembleEncryptedSTBMRecord copies the encrypted data into the final record layout.
-func assembleEncryptedSTBMRecord(encrypted *[218]byte, full []byte, ephemeralPub []byte, ct []byte) {
+func assembleEncryptedSTBMRecord(encrypted *[218]byte, full, ephemeralPub, ct []byte) {
 	copy(encrypted[0:16], full[0:16])
 	copy(encrypted[16:48], ephemeralPub)
 	copy(encrypted[48:218], ct)

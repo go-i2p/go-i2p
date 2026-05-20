@@ -501,10 +501,10 @@ func (r *Router) initializeGarlicRouter() {
 
 	// Create garlic message router with router infrastructure
 	gr := NewGarlicMessageRouter(
-		garlicNetDB,      // NetDB for LeaseSet/RouterInfo lookups
+		garlicNetDB,  // NetDB for LeaseSet/RouterInfo lookups
 		r.transports, // Transport for sending to peer routers
-		tunnelPool,       // Tunnel pool for DESTINATION and TUNNEL delivery
-		routerHash,       // Our identity for reflexive routing
+		tunnelPool,   // Tunnel pool for DESTINATION and TUNNEL delivery
+		routerHash,   // Our identity for reflexive routing
 	)
 
 	// Set bidirectional references for LOCAL delivery recursion

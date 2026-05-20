@@ -75,7 +75,7 @@ type BuildRecordEncryptor interface {
 	EncryptShortBuildRequestRecordWithChain(
 		record buildrecord.BuildRequestRecord,
 		hop router_info.RouterInfo,
-	) (encrypted [218]byte, chainKey [32]byte, noiseHash [32]byte, err error)
+	) (encrypted [218]byte, chainKey, noiseHash [32]byte, err error)
 
 	// EncryptBuildRequestRecord encrypts a legacy ElGamal build request record (528 bytes).
 	EncryptBuildRequestRecord(

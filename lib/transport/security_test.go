@@ -131,7 +131,7 @@ func (m *mockTransportWithOrder) Name() string {
 type mockSession struct{}
 
 func (m *mockSession) QueueSendI2NP(msg i2np.Message) error { return nil }
-func (m *mockSession) SendQueueSize() int                       { return 0 }
+func (m *mockSession) SendQueueSize() int                   { return 0 }
 func (m *mockSession) ReadNextI2NP() (i2np.Message, error) {
 	return nil, nil
 }

@@ -1654,7 +1654,7 @@ func TestGarlic_CloveFormat_SerializationLayout(t *testing.T) {
 
 	clove := GarlicClove{
 		DeliveryInstructions: NewLocalDeliveryInstructions(),
-		Message:          innerMsg,
+		Message:              innerMsg,
 		CloveID:              0x00AABBCC,
 		Expiration:           time.UnixMilli(1704067200000),
 		Certificate:          *certificate.NewCertificate(),

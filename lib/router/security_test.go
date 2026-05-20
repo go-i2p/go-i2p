@@ -599,7 +599,7 @@ func TestRouterAccessInterface_GetMethods(t *testing.T) {
 	cfg := newTestConfig(t)
 
 	router := &Router{
-		cfg:      cfg,
+		cfg:   cfg,
 		netdb: netdb.NewStdNetDB(cfg.WorkingDir),
 	}
 

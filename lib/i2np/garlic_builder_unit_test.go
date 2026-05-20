@@ -199,7 +199,7 @@ func TestSerializeGarlicClove_NilInput(t *testing.T) {
 func TestSerializeGarlicClove_NilMessage(t *testing.T) {
 	clove := &GarlicClove{
 		DeliveryInstructions: NewLocalDeliveryInstructions(),
-		Message:          nil,
+		Message:              nil,
 		CloveID:              1,
 		Expiration:           time.Now(),
 	}

@@ -264,5 +264,5 @@ func (msg *TunnelBuildMessage) UnmarshalEncryptedBinary(data, privateKey []byte)
 var (
 	_ TunnelBuilder = (*TunnelBuild)(nil)
 	_ TunnelBuilder = (*TunnelBuildMessage)(nil)
-	_ Message   = (*TunnelBuildMessage)(nil)
+	_ Message       = (*TunnelBuildMessage)(nil)
 )

@@ -34,9 +34,9 @@ const (
 // pendingMessage represents a message waiting for LeaseSet resolution.
 type pendingMessage struct {
 	msg      i2np.Message // The message to send
-	queuedAt time.Time        // When the message was queued
-	retryAt  time.Time        // When to retry the lookup
-	attempts int              // Number of lookup attempts
+	queuedAt time.Time    // When the message was queued
+	retryAt  time.Time    // When to retry the lookup
+	attempts int          // Number of lookup attempts
 }
 
 // GarlicNetDB defines the NetDB interface needed for garlic message routing.

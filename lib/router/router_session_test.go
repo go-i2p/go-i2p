@@ -174,7 +174,7 @@ func TestGetSessionByHashWithNonExistentPeer(t *testing.T) {
 
 	router := &Router{
 		activeSessions: make(map[common.Hash]transport.TransportSession),
-		netdb:       netdb.NewStdNetDB(tempDir),
+		netdb:          netdb.NewStdNetDB(tempDir),
 		running:        true, // Mark as running to allow session operations
 	}
 

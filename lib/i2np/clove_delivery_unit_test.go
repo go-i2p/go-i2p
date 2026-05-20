@@ -19,9 +19,9 @@ func makeClove(flag byte, hash common.Hash, tunnelID tunnel.TunnelID) GarlicClov
 			Hash:     hash,
 			TunnelID: tunnelID,
 		},
-		Message: inner,
-		CloveID:     42,
-		Expiration:  time.Now().Add(5 * time.Minute),
+		Message:    inner,
+		CloveID:    42,
+		Expiration: time.Now().Add(5 * time.Minute),
 	}
 }
 

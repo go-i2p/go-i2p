@@ -1375,7 +1375,7 @@ func (t *SSU2Transport) createPortMapper() (nattraversal.PortMapper, error) {
 }
 
 // logAndIncreaseBackoff logs the failure and increases backoff using exponential growth.
-func (t *SSU2Transport) logAndIncreaseBackoff(backoff *time.Duration, err error, gwIP string, message string) {
+func (t *SSU2Transport) logAndIncreaseBackoff(backoff *time.Duration, err error, gwIP, message string) {
 	t.reachMetrics.natMappingFailure.Add(1)
 	fields := map[string]interface{}{
 		"error":   err,
