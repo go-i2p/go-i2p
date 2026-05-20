@@ -5,10 +5,24 @@ import (
 	"encoding/binary"
 	"net"
 	"strings"
+	"unicode"
 
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
+
+// sanitizeForLog removes control characters from user-controlled strings
+// to prevent log injection attacks. Specifically, newlines and other
+// control characters are replaced with spaces to prevent attackers from
+// injecting fake log entries.
+func sanitizeForLog(s string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return ' '
+		}
+		return r
+	}, s)
+}
 
 type connectionAuthenticator interface {
 	AuthenticateConnection(conn net.Conn, username, password string) bool
@@ -49,12 +63,12 @@ func (a *PasswordAuthenticator) Authenticate(username, password string) bool {
 	passwordMatch := subtle.ConstantTimeCompare([]byte(a.password), []byte(password)) == 1
 
 	if usernameMatch && passwordMatch {
-		log.WithField("username", username).Debug("i2cp_authentication_success")
+		log.WithField("username", sanitizeForLog(username)).Debug("i2cp_authentication_success")
 		return true
 	}
 
 	log.WithFields(logger.Fields{
-		"username": username,
+		"username": sanitizeForLog(username),
 		"reason":   "invalid_credentials",
 	}).Warn("i2cp_authentication_failure")
 	return false

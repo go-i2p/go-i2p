@@ -31,6 +31,11 @@ import (
 //	}
 type EchoHandler struct{}
 
+// MaxEchoPayloadSize limits the size of echoed values to prevent amplification DoS.
+// Echo is for testing connectivity, not for bulk data transfer; 4KB is more than
+// sufficient for legitimate test payloads while preventing large reflection loops.
+const MaxEchoPayloadSize = 4096
+
 // NewEchoHandler creates a new Echo handler.
 func NewEchoHandler() *EchoHandler {
 	return &EchoHandler{}
@@ -47,6 +52,15 @@ func (h *EchoHandler) Handle(ctx context.Context, params json.RawMessage) (inter
 	if err := json.Unmarshal(params, &req); err != nil {
 		log.WithField("reason", err.Error()).Debug("i2pcontrol: Echo params unmarshal failed")
 		return nil, NewRPCError(ErrCodeInvalidParams, "malformed Echo parameters")
+	}
+
+	// Enforce size limit on the echo value to prevent amplification DoS
+	echoJSON, err := json.Marshal(req.Echo)
+	if err != nil {
+		return nil, NewRPCError(ErrCodeInternalError, "failed to serialize Echo value")
+	}
+	if len(echoJSON) > MaxEchoPayloadSize {
+		return nil, NewRPCError(ErrCodeInvalidParams, fmt.Sprintf("Echo payload exceeds %d bytes", MaxEchoPayloadSize))
 	}
 
 	return map[string]interface{}{

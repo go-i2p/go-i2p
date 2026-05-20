@@ -643,6 +643,14 @@ func (r *Reseed) createExtractionDir() (string, error) {
 		log.WithError(err).Error("Failed to create temporary directory for reseed extraction")
 		return "", oops.Errorf("failed to create temp directory: %w", err)
 	}
+
+	// Explicitly enforce owner-only permissions (0700) to prevent local users
+	// from reading metadata about reseed timing and RouterInfo arrival order.
+	if err := os.Chmod(tempDir, 0o700); err != nil {
+		os.RemoveAll(tempDir)
+		return "", oops.Errorf("failed to set temp directory permissions: %w", err)
+	}
+
 	return tempDir, nil
 }
 
