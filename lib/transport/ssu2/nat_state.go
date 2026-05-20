@@ -2,6 +2,7 @@ package ssu2
 
 import (
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"sync"
@@ -169,14 +170,22 @@ func (t *SSU2Transport) saveNATState() {
 
 // loadNATState reads the persisted NAT state from disk and populates the
 // cache if the stored result is still within TTL. Returns true if a valid
-// state was loaded.
+// state was loaded. File read is limited to maxNATStateSize to prevent OOM.
 func (t *SSU2Transport) loadNATState() bool {
 	if t.config == nil || t.config.WorkingDir == "" || t.natStateCache == nil {
 		return false
 	}
 	path := filepath.Join(t.config.WorkingDir, natStateFilename)
-	raw, err := os.ReadFile(path)
+	file, err := os.Open(path)
 	if err != nil {
+		return false
+	}
+	defer file.Close()
+
+	const maxNATStateSize = 64 * 1024
+	raw, err := io.ReadAll(io.LimitReader(file, maxNATStateSize))
+	if err != nil {
+		t.logger.WithField("error", err).Debug("failed to read NAT state file")
 		return false
 	}
 	var state persistedNATState

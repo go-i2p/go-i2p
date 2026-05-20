@@ -87,13 +87,15 @@ func lookupCountryByTimezone(tzName string) string {
 // fails. This function does not make network calls.
 //
 // Detection order:
-//  1. TZ environment variable (explicit user override)
-//  2. /etc/timezone file (Debian/Ubuntu)
-//  3. /etc/localtime symlink target (most Linux, macOS)
-//  4. Go stdlib time.Now().Location() (cross-platform fallback, works on Windows)
+//  1. /etc/timezone file (Debian/Ubuntu)
+//  2. /etc/localtime symlink target (most Linux, macOS)
+//  3. Go stdlib time.Now().Location() (cross-platform fallback, works on Windows)
+//
+// Note: TZ environment variable is intentionally not consulted to prevent
+// external processes from influencing NTP peer geography selection, which
+// could weaken anonymity properties. See AUDIT.md LOW finding.
 func detectIANATimezone() string {
 	strategies := []func() string{
-		detectTimezoneFromEnv,
 		detectTimezoneFromEtcTimezone,
 		detectTimezoneFromLocaltime,
 		detectTimezoneFromGoStdlib,
@@ -104,16 +106,6 @@ func detectIANATimezone() string {
 		}
 	}
 	return ""
-}
-
-// detectTimezoneFromEnv checks the TZ environment variable.
-func detectTimezoneFromEnv() string {
-	tz := os.Getenv("TZ")
-	if tz == "" {
-		return ""
-	}
-	tz = strings.TrimPrefix(tz, ":")
-	return extractIANAName(tz)
 }
 
 // detectTimezoneFromEtcTimezone reads /etc/timezone (Debian, Ubuntu).

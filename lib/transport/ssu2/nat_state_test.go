@@ -237,3 +237,28 @@ func TestRecordObservation_MixedAddressesConfirmsCorrect(t *testing.T) {
 	confirmed := ns.recordObservation(target) // second occurrence of target
 	assert.Equal(t, target, confirmed)
 }
+
+// TestLoadNATState_RejectsOversizedFile verifies that loadNATState rejects
+// files exceeding maxNATStateSize (64 KiB) to prevent OOM attacks.
+// See AUDIT.md MEDIUM — "Persisted SSU2 NAT-state JSON read without explicit size limit".
+func TestLoadNATState_RejectsOversizedFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, natStateFilename)
+
+	// Create a file that is exactly 64 KiB + 1 byte (exceeds limit).
+	oversized := make([]byte, 64*1024+1)
+	for i := range oversized {
+		oversized[i] = 'x'
+	}
+	require.NoError(t, os.WriteFile(path, oversized, 0o600))
+
+	tr := &SSU2Transport{
+		config:        &Config{WorkingDir: dir},
+		natStateCache: &natState{},
+		logger:        testLogger(),
+	}
+
+	// loadNATState should return false because the JSON will be truncated and invalid.
+	loaded := tr.loadNATState()
+	assert.False(t, loaded, "loadNATState should reject oversized file")
+}

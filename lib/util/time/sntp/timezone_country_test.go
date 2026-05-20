@@ -1,6 +1,7 @@
 package sntp
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"sync"
@@ -154,37 +155,6 @@ func TestDetectIANATimezone(t *testing.T) {
 	}
 }
 
-func TestDetectIANATimezone_TZEnvVar(t *testing.T) {
-	// Save and restore TZ
-	origTZ := os.Getenv("TZ")
-	defer os.Setenv("TZ", origTZ)
-
-	tests := []struct {
-		name string
-		tz   string
-		want string
-	}{
-		{
-			name: "bare IANA name",
-			tz:   "Europe/Paris",
-			want: "Europe/Paris",
-		},
-		{
-			name: "colon-prefixed path",
-			tz:   ":/usr/share/zoneinfo/Asia/Seoul",
-			want: "Asia/Seoul",
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			os.Setenv("TZ", tc.tz)
-			got := detectIANATimezone()
-			assert.Equal(t, tc.want, got)
-		})
-	}
-}
-
 func TestGetLocalCountryCode(t *testing.T) {
 	// This is an integration test — it verifies the full chain works on
 	// the current system. The result depends on the system timezone.
@@ -209,25 +179,39 @@ func TestGetLocalCountryCode_WithKnownTZ(t *testing.T) {
 }
 
 func TestSetupPriorityServers_WithCountryCode(t *testing.T) {
-	// Force a known timezone and verify that setupPriorityServers
-	// actually populates priority servers
-	origTZ := os.Getenv("TZ")
-	defer os.Setenv("TZ", origTZ)
-
-	os.Setenv("TZ", "Europe/Berlin")
+	// Verify that setupPriorityServers correctly populates priority servers
+	// based on the system's actual timezone. Since TZ env var is no longer
+	// consulted (see AUDIT.md LOW finding), we work with the real system timezone.
 
 	rt := NewRouterTimestamper(&DefaultNTPClient{})
 	rt.setupPriorityServers()
 
-	require.NotNil(t, rt.priorityServers, "priority servers should be set for de")
-	require.GreaterOrEqual(t, len(rt.priorityServers), 1, "should have at least country-level servers")
+	// Detect the actual country code from the system timezone
+	detectedCountry := getLocalCountryCode()
 
-	// First priority group should be country-specific NTP servers
-	assert.Contains(t, rt.priorityServers[0][0], ".de.pool.ntp.org")
+	if detectedCountry != "" && detectedCountry != "a1" && detectedCountry != "a2" {
+		// We have a valid country code, so priority servers should be populated
+		require.NotNil(t, rt.priorityServers, "priority servers should be set when country is detected")
+		require.GreaterOrEqual(t, len(rt.priorityServers), 1, "should have at least country-level servers")
 
-	// Second priority group should be zone-level (europe) NTP servers
-	if len(rt.priorityServers) >= 2 {
-		assert.Contains(t, rt.priorityServers[1][0], ".europe.pool.ntp.org")
+		// First priority group should contain country-specific NTP servers
+		expectedCountrySuffix := fmt.Sprintf(".%s.pool.ntp.org", detectedCountry)
+		assert.Contains(t, rt.priorityServers[0][0], expectedCountrySuffix,
+			"first priority group should contain country-specific NTP servers")
+
+		// If we have a second priority group, it should be zone-level servers
+		if len(rt.priorityServers) >= 2 {
+			// Zone is determined from country, we just verify it exists and has pool.ntp.org format
+			assert.Contains(t, rt.priorityServers[1][0], ".pool.ntp.org",
+				"second priority group should contain zone-level NTP servers")
+		}
+
+		t.Logf("Detected country code: %s", detectedCountry)
+		t.Logf("Priority servers: %v", rt.priorityServers)
+	} else {
+		// No valid country detected - priority servers should be nil
+		assert.Nil(t, rt.priorityServers, "priority servers should be nil when no country is detected")
+		t.Logf("No valid country code detected, priority servers correctly set to nil")
 	}
 }
 
