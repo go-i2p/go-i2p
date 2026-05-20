@@ -1,6 +1,6 @@
 module github.com/go-i2p/go-i2p
 
-go 1.26.1
+go 1.26.3
 
 require (
 	github.com/beevik/ntp v1.5.0

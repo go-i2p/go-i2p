@@ -806,13 +806,13 @@ func validateI2PControlSecurity(i2pcontrol I2PControlDefaults) error {
 		strings.HasPrefix(i2pcontrol.Address, "127.0.0.1:") ||
 		strings.HasPrefix(i2pcontrol.Address, "[::1]:")
 
-	// Hard reject: non-localhost + default password + HTTP
-	if !isLocalhost && !i2pcontrol.UseHTTPS && i2pcontrol.Password == "itoopie" {
+	// Hard reject: non-localhost + default password (regardless of HTTPS)
+	if !isLocalhost && i2pcontrol.Password == "itoopie" {
 		log.WithFields(logger.Fields{
 			"at":     "validateI2PControlConfig",
 			"reason": "insecure_remote_access",
-		}).Error("I2PControl refuses to start with default password over HTTP on non-localhost")
-		return newValidationError("I2PControl cannot use default password 'itoopie' over HTTP on non-localhost address " + i2pcontrol.Address + "; change the password or enable HTTPS")
+		}).Error("I2PControl refuses to start with default password on non-localhost")
+		return newValidationError("I2PControl cannot use default password 'itoopie' on non-localhost address " + i2pcontrol.Address + "; change the password")
 	}
 
 	// Warn: non-localhost + HTTP (even with custom password, tokens travel in cleartext)
