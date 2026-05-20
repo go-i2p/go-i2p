@@ -132,7 +132,7 @@ func TestCompositeBootstrap_FallbackToLocalNetDb(t *testing.T) {
 	cfg := &config.BootstrapConfig{
 		LowPeerThreshold: testLowPeerThreshold,
 		ReseedServers:    []*config.ReseedConfig{},
-		LocalNetDBPaths:  []string{"/tmp/non-existent-for-test"},
+		LocalNetDBPaths:  []string{"/nonexistent/non-existent-for-test"},
 	}
 
 	cb := NewCompositeBootstrap(cfg)

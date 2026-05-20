@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/go-i2p/go-i2p/lib/config"
@@ -51,10 +52,16 @@ func TestBootstrapTypeConfiguration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Use t.TempDir() for file-based tests to ensure cross-platform compatibility
+			reseedFilePath := tt.reseedFilePath
+			if tt.bootstrapType == "file" && reseedFilePath != "" {
+				// Create a temporary file path for the file bootstrap test
+				reseedFilePath = filepath.Join(t.TempDir(), "test.su3")
+			}
 			cfg := &config.BootstrapConfig{
 				LowPeerThreshold: testLowPeerThreshold,
 				BootstrapType:    tt.bootstrapType,
-				ReseedFilePath:   tt.reseedFilePath,
+				ReseedFilePath:   reseedFilePath,
 				ReseedServers: []*config.ReseedConfig{
 					{
 						URL:            testReseedServerURL,

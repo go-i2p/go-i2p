@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 
 	"github.com/go-i2p/go-i2p/lib/config"
@@ -20,10 +21,11 @@ func TestNewFileBootstrap(t *testing.T) {
 // TestFileBootstrapExclusive verifies that when type is "file",
 // only file bootstrap is used (no fallback).
 func TestFileBootstrapExclusive(t *testing.T) {
+	reseedFilePath := filepath.Join(t.TempDir(), "test-reseed.su3")
 	cfg := &config.BootstrapConfig{
 		LowPeerThreshold: testLowPeerThreshold,
 		BootstrapType:    "file",
-		ReseedFilePath:   "/tmp/test-reseed.su3",
+		ReseedFilePath:   reseedFilePath,
 	}
 
 	// This would be used in the router

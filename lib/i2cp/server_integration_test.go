@@ -335,7 +335,7 @@ func TestE2E_SessionLifecycleWithTunnels(t *testing.T) {
 // TestE2E_MultipleSessionsConcurrent tests multiple concurrent sessions
 func TestE2E_MultipleSessionsConcurrent(t *testing.T) {
 	config := &ServerConfig{
-		ListenAddr:  "localhost:17661",
+		ListenAddr:  "127.0.0.1:17661",
 		Network:     "tcp",
 		MaxSessions: 10,
 	}
@@ -359,7 +359,7 @@ func TestE2E_MultipleSessionsConcurrent(t *testing.T) {
 	conns := make([]net.Conn, numSessions)
 
 	for i := 0; i < numSessions; i++ {
-		conn, err := net.Dial("tcp", "localhost:17661")
+		conn, err := net.Dial("tcp", "127.0.0.1:17661")
 		require.NoError(t, err)
 		defer conn.Close()
 		conns[i] = conn
