@@ -99,7 +99,7 @@ func TestBuildTransportCallbacks_ReturnsCallbacks(t *testing.T) {
 
 // TestBuildTransportCallbacks_DelegatesHandler verifies that the callback
 // produced by buildTransportCallbacks actually delegates to the handler (no
-// panic, returns nil for relay paths).
+// panic). RelayRequest now requires a session for signature verification.
 func TestBuildTransportCallbacks_DelegatesHandler(t *testing.T) {
 	tr, cleanup := makeTestTransportWithListener(t)
 	defer cleanup()
@@ -107,7 +107,8 @@ func TestBuildTransportCallbacks_DelegatesHandler(t *testing.T) {
 	cbs := tr.buildTransportCallbacks(nil)
 
 	block := &ssu2noise.SSU2Block{}
-	assert.NoError(t, cbs.OnRelayRequest(block))
+	// OnRelayRequest requires a session for signature verification, so it returns error
+	assert.Error(t, cbs.OnRelayRequest(block), "should error when session is nil")
 	assert.NoError(t, cbs.OnRelayResponse(block))
 	assert.NoError(t, cbs.OnRelayIntro(block))
 }
@@ -168,24 +169,21 @@ func TestRemoteUDPAddr_NilConn(t *testing.T) {
 	assert.Nil(t, s.RemoteUDPAddr())
 }
 
-// TestHandlePeerTestAsBob_AddrMismatch verifies that Bob drops a PeerTest
-// request when the declared AliceIP does not match the session's observed
-// remote address.
+// TestHandlePeerTestAsBob_AddrMismatch verifies that Bob rejects a PeerTest
+// request when no session is provided (signature verification unavailable).
 func TestHandlePeerTestAsBob_AddrMismatch(t *testing.T) {
 	tr, cleanup := makeTestTransportWithListener(t)
 	defer cleanup()
 
-	// Build a minimal session with conn=nil (no match possible → skips check).
 	ptBlock := &ssu2noise.PeerTestBlock{
 		MessageCode: ssu2noise.PeerTestRequest,
 		Nonce:       77,
 		AliceIP:     net.ParseIP("10.0.0.1").To4(),
 		AlicePort:   8000,
 	}
-	// With nil session, the address check is skipped — the only failure path is
-	// missing Charlie which returns nil.
+	// With nil session, signature verification fails (fail-closed).
 	err := tr.handlePeerTestAsBob(ptBlock, nil)
-	assert.NoError(t, err)
+	assert.Error(t, err, "should reject when session is nil (cannot verify signature)")
 }
 
 // TestHandlePeerTestAsBob_SessionRateLimit verifies that per-session rate
@@ -209,9 +207,11 @@ func TestHandlePeerTestAsBob_SessionRateLimit(t *testing.T) {
 		AliceIP:     net.ParseIP("127.0.0.1").To4(),
 		AlicePort:   7000,
 	}
-	// The rate limiter should drop this request silently.
+	// The rate limiter should drop this request silently (no error).
+	// However, if rate limit passes, signature verification would fail (no conn/sender hash).
+	// Since rate limit is checked first, this should return nil.
 	err := tr.handlePeerTestAsBob(ptBlock, session)
-	assert.NoError(t, err) // drops silently, no error
+	assert.NoError(t, err, "should drop silently due to rate limit (before signature verification)")
 }
 
 // TestHandlePeerTestAsBob_GlobalRateLimit verifies that the global rate limit
@@ -234,7 +234,7 @@ func TestHandlePeerTestAsBob_GlobalRateLimit(t *testing.T) {
 		AlicePort:   6000,
 	}
 	err := tr.handlePeerTestAsBob(ptBlock, session)
-	assert.NoError(t, err) // drops silently due to global limit
+	assert.NoError(t, err, "should drop silently due to global rate limit (before signature verification)")
 }
 
 // TestHandleRelayRequestBlock_SessionRateLimit verifies that per-session rate
@@ -255,15 +255,15 @@ func TestHandleRelayRequestBlock_SessionRateLimit(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-// TestHandleRelayRequestBlock_NilSession verifies that a nil session bypasses
-// the rate limit (compatible with internal callers that have no session).
+// TestHandleRelayRequestBlock_NilSession verifies that a nil session is rejected
+// (signature verification unavailable, fail-closed).
 func TestHandleRelayRequestBlock_NilSession(t *testing.T) {
 	tr, cleanup := makeTestTransportWithListener(t)
 	defer cleanup()
 
-	// nil session: rate limit is skipped, decode fails on empty block → no error.
+	// nil session: signature verification should fail (fail-closed).
 	err := tr.handleRelayRequestBlock(&ssu2noise.SSU2Block{}, nil)
-	assert.NoError(t, err)
+	assert.Error(t, err, "should reject when session is nil (cannot verify signature)")
 }
 
 // TestForwardRelayIntro_UnknownTag verifies that forwardRelayIntro rejects a

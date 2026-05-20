@@ -94,11 +94,11 @@ func (t *SSU2Transport) handleRouterInfoBlock(data []byte) error {
 
 // verifyRelayRequestSignature verifies the Ed25519 signature on a RelayRequest
 // block using the sender's signing public key retrieved from NetDB via RouterLookupFunc.
-// Returns (true, nil) if signature is valid, (false, nil) if RouterLookupFunc
-// is unavailable (graceful skip), and (false, error) on verification failure.
+// Returns (true, nil) if signature is valid, and (false, error) on verification failure
+// or when RouterLookupFunc is unavailable (fail-closed).
 func (t *SSU2Transport) verifyRelayRequestSignature(block *ssu2noise.RelayRequestBlock, senderHash data.Hash) (bool, error) {
 	if t.config.RouterLookupFunc == nil {
-		return false, nil // No NetDB access; gracefully skip verification
+		return false, oops.Errorf("signature verification unavailable: RouterLookupFunc not configured")
 	}
 	ri, err := t.config.RouterLookupFunc(senderHash)
 	if err != nil {
@@ -112,7 +112,7 @@ func (t *SSU2Transport) verifyRelayRequestSignature(block *ssu2noise.RelayReques
 
 	// Look up Charlie's hash from the relay tag
 	if t.relayManager == nil {
-		return false, nil // No relay manager; gracefully skip
+		return false, oops.Errorf("signature verification unavailable: relay manager not configured")
 	}
 	relayTag := t.relayManager.GetRelayTag(block.RelayTag)
 	if relayTag == nil {
@@ -160,11 +160,11 @@ func (t *SSU2Transport) verifyRelayRequestSignature(block *ssu2noise.RelayReques
 
 // verifyRelayResponseSignature verifies the Ed25519 signature on a RelayResponse
 // block using the sender's signing public key retrieved from NetDB.
-// Returns (true, nil) if signature is valid, (false, nil) if RouterLookupFunc
-// is unavailable, and (false, error) on verification failure.
+// Returns (true, nil) if signature is valid, and (false, error) on verification failure
+// or when RouterLookupFunc is unavailable (fail-closed).
 func (t *SSU2Transport) verifyRelayResponseSignature(block *ssu2noise.RelayResponseBlock, senderHash data.Hash) (bool, error) {
 	if t.config.RouterLookupFunc == nil {
-		return false, nil
+		return false, oops.Errorf("signature verification unavailable: RouterLookupFunc not configured")
 	}
 	ri, err := t.config.RouterLookupFunc(senderHash)
 	if err != nil {
@@ -199,11 +199,11 @@ func (t *SSU2Transport) verifyRelayResponseSignature(block *ssu2noise.RelayRespo
 
 // verifyPeerTestSignature verifies the Ed25519 signature on a PeerTest block
 // using the sender's signing public key retrieved from NetDB.
-// Returns (true, nil) if signature is valid, (false, nil) if RouterLookupFunc
-// is unavailable, and (false, error) on verification failure.
+// Returns (true, nil) if signature is valid, and (false, error) on verification failure
+// or when RouterLookupFunc is unavailable (fail-closed).
 func (t *SSU2Transport) verifyPeerTestSignature(block *ssu2noise.PeerTestBlock, senderHash data.Hash) (bool, error) {
 	if t.config.RouterLookupFunc == nil {
-		return false, nil
+		return false, oops.Errorf("signature verification unavailable: RouterLookupFunc not configured")
 	}
 	ri, err := t.config.RouterLookupFunc(senderHash)
 	if err != nil {
@@ -414,9 +414,9 @@ func (t *SSU2Transport) checkBobRateLimits(session *SSU2Session) bool {
 
 // handlePeerTestAsBob processes a PeerTest request where we act as Bob (relay).
 // It validates that Alice's declared address matches the session's observed
-// remote address to prevent source-address spoofing, verifies the signature
-// using Alice's Ed25519 signing key from NetDB, enforces per-session and
-// global rate limits, then forwards a PeerTestRelay to Charlie.
+// remote address to prevent source-address spoofing, enforces per-session and
+// global rate limits, verifies the signature using Alice's Ed25519 signing key
+// from NetDB, then forwards a PeerTestRelay to Charlie.
 func (t *SSU2Transport) handlePeerTestAsBob(ptBlock *ssu2noise.PeerTestBlock, session *SSU2Session) error {
 	aliceAddr := parsePeerTestAliceAddr(ptBlock)
 	if aliceAddr == nil {
@@ -427,27 +427,36 @@ func (t *SSU2Transport) handlePeerTestAsBob(ptBlock *ssu2noise.PeerTestBlock, se
 		return nil
 	}
 
-	// Verify signature if session provides sender hash and RouterLookupFunc is available
-	if session != nil {
-		senderHash := extractSenderHash(session)
-		if senderHash != (data.Hash{}) {
-			valid, verifyErr := t.verifyPeerTestSignature(ptBlock, senderHash)
-			if verifyErr != nil {
-				t.logger.WithFields(map[string]interface{}{
-					"sender_hash": senderHash[:4],
-					"nonce":       ptBlock.Nonce,
-					"error":       verifyErr,
-				}).Warn("PeerTest signature verification failed, rejecting")
-				return verifyErr
-			}
-			if !valid {
-				t.logger.WithFields(map[string]interface{}{
-					"sender_hash": senderHash[:4],
-					"nonce":       ptBlock.Nonce,
-				}).Warn("PeerTest signature invalid, rejecting")
-				return oops.Errorf("invalid PeerTest signature")
-			}
-		}
+	// Check rate limits BEFORE expensive signature verification (DoS prevention)
+	if !t.checkBobRateLimits(session) {
+		return nil
+	}
+
+	// Verify signature (fail-closed: reject if session or senderHash unavailable)
+	if session == nil {
+		t.logger.Warn("PeerTest Bob: no session provided, cannot verify signature, rejecting")
+		return oops.Errorf("signature verification failed: no session")
+	}
+	senderHash := extractSenderHash(session)
+	if senderHash == (data.Hash{}) {
+		t.logger.Warn("PeerTest Bob: cannot extract sender hash, rejecting")
+		return oops.Errorf("signature verification failed: no sender hash")
+	}
+	valid, verifyErr := t.verifyPeerTestSignature(ptBlock, senderHash)
+	if verifyErr != nil {
+		t.logger.WithFields(map[string]interface{}{
+			"sender_hash": senderHash[:4],
+			"nonce":       ptBlock.Nonce,
+			"error":       verifyErr,
+		}).Warn("PeerTest signature verification failed, rejecting")
+		return verifyErr
+	}
+	if !valid {
+		t.logger.WithFields(map[string]interface{}{
+			"sender_hash": senderHash[:4],
+			"nonce":       ptBlock.Nonce,
+		}).Warn("PeerTest signature invalid, rejecting")
+		return oops.Errorf("invalid PeerTest signature")
 	}
 
 	if !t.checkBobRateLimits(session) {
@@ -568,8 +577,13 @@ func (t *SSU2Transport) handleRelayRequestBlock(block *ssu2noise.SSU2Block, sess
 	if t.relayManager == nil || block == nil {
 		return nil
 	}
+	// Verify session is available (required for signature verification, fail-closed)
+	if session == nil {
+		t.logger.Warn("RelayRequest: no session provided, cannot verify signature, rejecting")
+		return oops.Errorf("signature verification failed: no session")
+	}
 	// Rate-limit per Alice session using the same token bucket as PeerTest.
-	if session != nil && !session.peerTestLimiter.Allow() {
+	if !session.peerTestLimiter.Allow() {
 		t.logger.Debug("RelayRequest: per-session rate limit exceeded, dropping")
 		return nil
 	}
@@ -579,27 +593,27 @@ func (t *SSU2Transport) handleRelayRequestBlock(block *ssu2noise.SSU2Block, sess
 		return nil
 	}
 
-	// Verify signature if session provides sender hash and RouterLookupFunc is available
-	if session != nil {
-		senderHash := extractSenderHash(session)
-		if senderHash != (data.Hash{}) {
-			valid, verifyErr := t.verifyRelayRequestSignature(req, senderHash)
-			if verifyErr != nil {
-				t.logger.WithFields(map[string]interface{}{
-					"sender_hash": senderHash[:4],
-					"nonce":       req.Nonce,
-					"error":       verifyErr,
-				}).Warn("RelayRequest signature verification failed, rejecting")
-				return verifyErr
-			}
-			if !valid {
-				t.logger.WithFields(map[string]interface{}{
-					"sender_hash": senderHash[:4],
-					"nonce":       req.Nonce,
-				}).Warn("RelayRequest signature invalid, rejecting")
-				return oops.Errorf("invalid RelayRequest signature")
-			}
-		}
+	// Verify signature (fail-closed: reject if senderHash unavailable)
+	senderHash := extractSenderHash(session)
+	if senderHash == (data.Hash{}) {
+		t.logger.Warn("RelayRequest: cannot extract sender hash, rejecting")
+		return oops.Errorf("signature verification failed: no sender hash")
+	}
+	valid, verifyErr := t.verifyRelayRequestSignature(req, senderHash)
+	if verifyErr != nil {
+		t.logger.WithFields(map[string]interface{}{
+			"sender_hash": senderHash[:4],
+			"nonce":       req.Nonce,
+			"error":       verifyErr,
+		}).Warn("RelayRequest signature verification failed, rejecting")
+		return verifyErr
+	}
+	if !valid {
+		t.logger.WithFields(map[string]interface{}{
+			"sender_hash": senderHash[:4],
+			"nonce":       req.Nonce,
+		}).Warn("RelayRequest signature invalid, rejecting")
+		return oops.Errorf("invalid RelayRequest signature")
 	}
 
 	return t.forwardRelayIntro(req)

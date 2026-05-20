@@ -166,6 +166,7 @@ func isPermittedUnauthenticatedBindHost(host, listenAddr string) error {
 // corresponding chmod in Start()).
 func (s *Server) enforceBindPolicy() error {
 	if s.isAuthenticationRequired() {
+		s.warnIfCleartextAuthOnNetwork()
 		return nil
 	}
 	if s.config.Network != "tcp" {
@@ -177,6 +178,36 @@ func (s *Server) enforceBindPolicy() error {
 		return nil
 	}
 	return isPermittedUnauthenticatedBindHost(host, s.config.ListenAddr)
+}
+
+// warnIfCleartextAuthOnNetwork emits a warning when the server is configured
+// to bind to a non-loopback TCP address with authentication enabled. I2CP
+// sends credentials in cleartext as part of the GetDate message, which exposes
+// them to network eavesdroppers on untrusted networks.
+func (s *Server) warnIfCleartextAuthOnNetwork() {
+	if s.config.Network != "tcp" {
+		return
+	}
+	host, _, err := net.SplitHostPort(s.config.ListenAddr)
+	if err != nil {
+		return
+	}
+	if host == "" {
+		// Wildcard bind with auth enabled
+		log.WithFields(logger.Fields{
+			"at":      "enforceBindPolicy",
+			"address": s.config.ListenAddr,
+		}).Warn("i2cp_security_warning: I2CP authentication credentials will transit in CLEARTEXT over the network. Wildcard bind with password authentication is NOT SECURE on untrusted networks. Use localhost bind or deploy TLS reverse proxy.")
+		return
+	}
+	ip := net.ParseIP(host)
+	if ip != nil && !ip.IsLoopback() {
+		// Non-loopback IP with auth enabled
+		log.WithFields(logger.Fields{
+			"at":      "enforceBindPolicy",
+			"address": s.config.ListenAddr,
+		}).Warn("i2cp_security_warning: I2CP authentication credentials will transit in CLEARTEXT over the network. Non-loopback bind with password authentication is NOT SECURE on untrusted networks. Use localhost bind or deploy TLS reverse proxy.")
+	}
 }
 
 // requiresAuthentication returns true if the given message type requires

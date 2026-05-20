@@ -12,7 +12,7 @@ import (
 )
 
 // TestVerifyRelayRequestSignature_MissingRouterLookupFunc verifies that
-// verification gracefully skips when RouterLookupFunc is unavailable.
+// verification fails closed (returns error) when RouterLookupFunc is unavailable.
 func TestVerifyRelayRequestSignature_MissingRouterLookupFunc(t *testing.T) {
 	tr := makeMinimalTransport()
 	tr.config.RouterLookupFunc = nil
@@ -30,7 +30,7 @@ func TestVerifyRelayRequestSignature_MissingRouterLookupFunc(t *testing.T) {
 	senderHash := data.Hash{}
 	valid, err := tr.verifyRelayRequestSignature(block, senderHash)
 
-	assert.NoError(t, err, "should not error when RouterLookupFunc is nil")
+	assert.Error(t, err, "should error when RouterLookupFunc is nil (fail-closed)")
 	assert.False(t, valid, "should return false when RouterLookupFunc is nil")
 }
 
@@ -60,7 +60,7 @@ func TestVerifyRelayRequestSignature_RouterInfoLookupFails(t *testing.T) {
 }
 
 // TestVerifyPeerTestSignature_MissingRouterLookupFunc verifies that
-// verification gracefully skips when RouterLookupFunc is unavailable.
+// verification fails closed (returns error) when RouterLookupFunc is unavailable.
 func TestVerifyPeerTestSignature_MissingRouterLookupFunc(t *testing.T) {
 	tr := makeMinimalTransport()
 	tr.config.RouterLookupFunc = nil
@@ -78,7 +78,7 @@ func TestVerifyPeerTestSignature_MissingRouterLookupFunc(t *testing.T) {
 	senderHash := data.Hash{}
 	valid, err := tr.verifyPeerTestSignature(block, senderHash)
 
-	assert.NoError(t, err, "should not error when RouterLookupFunc is nil")
+	assert.Error(t, err, "should error when RouterLookupFunc is nil (fail-closed)")
 	assert.False(t, valid, "should return false when RouterLookupFunc is nil")
 }
 
@@ -108,7 +108,7 @@ func TestVerifyPeerTestSignature_RouterInfoLookupFails(t *testing.T) {
 }
 
 // TestVerifyRelayResponseSignature_MissingRouterLookupFunc verifies that
-// verification gracefully skips when RouterLookupFunc is unavailable.
+// verification fails closed (returns error) when RouterLookupFunc is unavailable.
 func TestVerifyRelayResponseSignature_MissingRouterLookupFunc(t *testing.T) {
 	tr := makeMinimalTransport()
 	tr.config.RouterLookupFunc = nil
@@ -125,7 +125,7 @@ func TestVerifyRelayResponseSignature_MissingRouterLookupFunc(t *testing.T) {
 	senderHash := data.Hash{}
 	valid, err := tr.verifyRelayResponseSignature(block, senderHash)
 
-	assert.NoError(t, err, "should not error when RouterLookupFunc is nil")
+	assert.Error(t, err, "should error when RouterLookupFunc is nil (fail-closed)")
 	assert.False(t, valid, "should return false when RouterLookupFunc is nil")
 }
 
