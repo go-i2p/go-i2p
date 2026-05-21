@@ -76,8 +76,25 @@ func (e *StandardEmbeddedRouter) Run(ctx context.Context) error {
 		return oops.Wrapf(err, "failed to start router")
 	}
 
+	// Bridge context cancellation into the shutdown path so callers that
+	// pass a cancellable context (e.g. signal.NotifyContext) can drive
+	// shutdown without relying on the package-level signal handler.
+	ctxDone := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			log.WithFields(logger.Fields{
+				"phase":  "shutdown",
+				"reason": "context cancelled",
+			}).Info("context cancelled, initiating router shutdown")
+			e.handleInterruptSignal()
+		case <-ctxDone:
+		}
+	}()
+
 	// Wait for the router to stop (blocks until signal or Stop() is called)
 	e.Wait()
+	close(ctxDone)
 
 	// Perform final cleanup
 	log.WithFields(logger.Fields{

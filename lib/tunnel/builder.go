@@ -240,7 +240,11 @@ func (tb *TunnelBuilder) BuildTunnel(req BuildTunnelRequest) (*BuildTunnelResult
 		}, err
 	}
 
-	// Extract peer hashes from RouterInfo objects
+	// Extract peer hashes from RouterInfo objects. The returned PeerHashes
+	// slice must be 1:1 aligned with buildResult.Hops so that callers can
+	// correlate failed hops with peers to exclude on retry. Failing the
+	// whole build on a single missing hash is preferable to silently
+	// shrinking the slice and re-selecting the same broken peer.
 	peerHashes := make([]common.Hash, 0, len(buildResult.Hops))
 	for i, hop := range buildResult.Hops {
 		hash, hashErr := hop.IdentHash()
@@ -249,8 +253,8 @@ func (tb *TunnelBuilder) BuildTunnel(req BuildTunnelRequest) (*BuildTunnelResult
 				"at":        "(TunnelBuilder) BuildTunnel",
 				"phase":     "tunnel_build",
 				"hop_index": i,
-			}).Warn("failed to get hop identity hash, skipping")
-			continue
+			}).Error("failed to get hop identity hash")
+			return nil, oops.Errorf("hop %d ident hash: %w", i, hashErr)
 		}
 		peerHashes = append(peerHashes, hash)
 	}

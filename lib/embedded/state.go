@@ -102,6 +102,15 @@ func (e *StandardEmbeddedRouter) Stop() error {
 // It calls StopWithContext() with a 5-second deadline, then marks the router stopped.
 // Use this only when Stop() fails or when immediate termination is required.
 
+// Wait blocks until the router is stopped via Stop()/HardStop()/StopWithContext().
+//
+// Precondition: Wait must be called *after* Start() has returned successfully.
+// If Wait is called before Start() — or after Stop() has already completed —
+// it returns immediately because there is no live shutdown channel to await.
+// Callers that race Wait against Start (e.g. spawning `go r.Wait()` in one
+// goroutine while another goroutine calls Start) must synchronize themselves;
+// this method does not block until Start populates the internal done channel.
+// See AUDIT.md M-5.
 func (e *StandardEmbeddedRouter) Wait() {
 	e.mu.RLock()
 	running := e.running

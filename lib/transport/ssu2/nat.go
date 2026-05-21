@@ -71,7 +71,10 @@ func (t *SSU2Transport) buildTransportCallbacks(session *SSU2Session) *BlockCall
 			return t.verifyRelayResponseSignature(block, senderHash)
 		},
 		VerifyPeerTest: func(block *ssu2noise.PeerTestBlock, senderHash data.Hash) (bool, error) {
-			return t.verifyPeerTestSignature(block, senderHash)
+			if err := t.verifyPeerTestSignature(block, senderHash); err != nil {
+				return false, err
+			}
+			return true, nil
 		},
 	}
 }
@@ -199,11 +202,14 @@ func (t *SSU2Transport) verifyRelayResponseSignature(block *ssu2noise.RelayRespo
 
 // verifyPeerTestSignature verifies the Ed25519 signature on a PeerTest block
 // using the sender's signing public key retrieved from NetDB.
-// Returns (true, nil) if signature is valid, and (false, error) on verification failure
-// or when RouterLookupFunc is unavailable (fail-closed).
-func (t *SSU2Transport) verifyPeerTestSignature(block *ssu2noise.PeerTestBlock, senderHash data.Hash) (bool, error) {
+// Returns nil when the signature is valid; a non-nil error indicates either a
+// verification failure (bad signature) or that verification could not be
+// performed (fail-closed). The previous (bool, error) form was redundant —
+// every invalid path also returned an error — and risked future callers
+// misreading a (false, nil) tuple as success. See AUDIT.md M-4.
+func (t *SSU2Transport) verifyPeerTestSignature(block *ssu2noise.PeerTestBlock, senderHash data.Hash) error {
 	if t.config.RouterLookupFunc == nil {
-		return false, oops.Errorf("signature verification unavailable: RouterLookupFunc not configured")
+		return oops.Errorf("signature verification unavailable: RouterLookupFunc not configured")
 	}
 	// Resolve Alice's hash up-front and fail-closed for codes 3/4 before any
 	// NetDB lookup. PeerTest signed-data inclusion of Alice's hash depends on
@@ -222,7 +228,7 @@ func (t *SSU2Transport) verifyPeerTestSignature(block *ssu2noise.PeerTestBlock, 
 	switch block.MessageCode {
 	case ssu2noise.PeerTestResponse, ssu2noise.PeerTestResult:
 		if block.RouterHash == nil {
-			return false, oops.Errorf("PeerTest message code %d requires Alice's hash but block.RouterHash is nil", block.MessageCode)
+			return oops.Errorf("PeerTest message code %d requires Alice's hash but block.RouterHash is nil", block.MessageCode)
 		}
 		hash := *block.RouterHash
 		aliceHash = &hash
@@ -230,11 +236,11 @@ func (t *SSU2Transport) verifyPeerTestSignature(block *ssu2noise.PeerTestBlock, 
 	ri, err := t.config.RouterLookupFunc(senderHash)
 	if err != nil {
 		t.logger.WithField("sender_hash", senderHash[:4]).Warn("PeerTest: failed to lookup sender RouterInfo for signature verification")
-		return false, oops.Wrapf(err, "netdb lookup failed for sender %x", senderHash[:4])
+		return oops.Wrapf(err, "netdb lookup failed for sender %x", senderHash[:4])
 	}
 	pubKey, err := extractEd25519PublicKey(ri)
 	if err != nil {
-		return false, oops.Wrapf(err, "failed to extract Ed25519 public key from sender RouterInfo")
+		return oops.Wrapf(err, "failed to extract Ed25519 public key from sender RouterInfo")
 	}
 	bobHash := t.getOurIdentityHash()
 	valid, verifyErr := ssu2noise.VerifyPeerTestSignature(
@@ -250,13 +256,13 @@ func (t *SSU2Transport) verifyPeerTestSignature(block *ssu2noise.PeerTestBlock, 
 	)
 	if verifyErr != nil {
 		t.logger.WithField("sender_hash", senderHash[:4]).Warn("PeerTest signature verification failed")
-		return false, oops.Wrapf(verifyErr, "signature verification failed")
+		return oops.Wrapf(verifyErr, "signature verification failed")
 	}
 	if !valid {
 		t.logger.WithField("sender_hash", senderHash[:4]).Warn("PeerTest signature invalid")
-		return false, oops.Errorf("invalid PeerTest signature from %x", senderHash[:4])
+		return oops.Errorf("invalid PeerTest signature from %x", senderHash[:4])
 	}
-	return true, nil
+	return nil
 }
 
 // extractEd25519PublicKey extracts the Ed25519 signing public key from a RouterInfo.
@@ -454,21 +460,13 @@ func (t *SSU2Transport) handlePeerTestAsBob(ptBlock *ssu2noise.PeerTestBlock, se
 		t.logger.Warn("PeerTest Bob: cannot extract sender hash, rejecting")
 		return oops.Errorf("signature verification failed: no sender hash")
 	}
-	valid, verifyErr := t.verifyPeerTestSignature(ptBlock, senderHash)
-	if verifyErr != nil {
+	if verifyErr := t.verifyPeerTestSignature(ptBlock, senderHash); verifyErr != nil {
 		t.logger.WithFields(map[string]interface{}{
 			"sender_hash": senderHash[:4],
 			"nonce":       ptBlock.Nonce,
 			"error":       verifyErr,
 		}).Warn("PeerTest signature verification failed, rejecting")
 		return verifyErr
-	}
-	if !valid {
-		t.logger.WithFields(map[string]interface{}{
-			"sender_hash": senderHash[:4],
-			"nonce":       ptBlock.Nonce,
-		}).Warn("PeerTest signature invalid, rejecting")
-		return oops.Errorf("invalid PeerTest signature")
 	}
 
 	if !t.checkBobRateLimits(session) {

@@ -226,6 +226,11 @@ func (r *Reseed) performReseedRequest(uri string) (*http.Response, error) {
 	}
 
 	if err := validateReseedResponse(response, uri); err != nil {
+		// Drain and close the body so the underlying TCP connection can be
+		// reused by the http transport pool. Without this, repeated reseed
+		// failures (e.g. 403/503) leak one buffered body + connection per
+		// failed attempt.
+		_ = response.Body.Close()
 		return nil, err
 	}
 

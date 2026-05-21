@@ -76,10 +76,9 @@ func TestVerifyPeerTestSignature_MissingRouterLookupFunc(t *testing.T) {
 	}
 
 	senderHash := data.Hash{}
-	valid, err := tr.verifyPeerTestSignature(block, senderHash)
+	err := tr.verifyPeerTestSignature(block, senderHash)
 
 	assert.Error(t, err, "should error when RouterLookupFunc is nil (fail-closed)")
-	assert.False(t, valid, "should return false when RouterLookupFunc is nil")
 }
 
 // TestVerifyPeerTestSignature_RouterInfoLookupFails verifies that
@@ -101,10 +100,9 @@ func TestVerifyPeerTestSignature_RouterInfoLookupFails(t *testing.T) {
 	}
 
 	senderHash := data.Hash{}
-	valid, err := tr.verifyPeerTestSignature(block, senderHash)
+	err := tr.verifyPeerTestSignature(block, senderHash)
 
 	assert.Error(t, err, "should error when NetDB lookup fails")
-	assert.False(t, valid, "should return false when NetDB lookup fails")
 }
 
 // TestVerifyRelayResponseSignature_MissingRouterLookupFunc verifies that
@@ -184,10 +182,9 @@ func TestVerifyPeerTestSignature_Code3_NilRouterHashFailsClosed(t *testing.T) {
 	}
 
 	senderHash := data.Hash{}
-	valid, err := tr.verifyPeerTestSignature(block, senderHash)
+	err := tr.verifyPeerTestSignature(block, senderHash)
 
 	assert.Error(t, err, "code 3 with nil RouterHash must fail closed")
-	assert.False(t, valid, "code 3 with nil RouterHash must not validate")
 }
 
 // TestVerifyPeerTestSignature_Code4_NilRouterHashFailsClosed verifies that for
@@ -213,10 +210,9 @@ func TestVerifyPeerTestSignature_Code4_NilRouterHashFailsClosed(t *testing.T) {
 	}
 
 	senderHash := data.Hash{}
-	valid, err := tr.verifyPeerTestSignature(block, senderHash)
+	err := tr.verifyPeerTestSignature(block, senderHash)
 
 	assert.Error(t, err, "code 4 with nil RouterHash must fail closed")
-	assert.False(t, valid, "code 4 with nil RouterHash must not validate")
 }
 
 // TestVerifyPeerTestSignature_Code4_UsesBlockRouterHashNotSenderHash verifies
@@ -258,10 +254,9 @@ func TestVerifyPeerTestSignature_Code4_UsesBlockRouterHashNotSenderHash(t *testi
 		Signature:   make([]byte, ed25519.SignatureSize),
 	}
 
-	valid, err := tr.verifyPeerTestSignature(block, senderHash)
+	err := tr.verifyPeerTestSignature(block, senderHash)
 
 	assert.Error(t, err, "lookup error should propagate")
-	assert.False(t, valid)
 	assert.Equal(t, senderHash, lookupCalledWith, "NetDB lookup must use senderHash to fetch Bob's signing key")
 	assert.NotEqual(t, aliceHash, lookupCalledWith, "lookup must not use Alice's hash for the signing-key fetch")
 }

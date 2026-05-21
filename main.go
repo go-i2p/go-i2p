@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/config/cliflags"
@@ -41,7 +43,11 @@ func init() {
 // runRouter is the thin main-entry-point that delegates the full router
 // lifecycle to lib/embedded. It blocks until shutdown completes.
 func runRouter() {
-	ctx := context.Background()
+	// Wire SIGINT/SIGTERM to a cancellable context so that subsystems
+	// awaiting ctx.Done() inside router.Run can react to shutdown signals
+	// instead of blocking indefinitely on context.Background().
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
 
 	go signals.Handle()
 
