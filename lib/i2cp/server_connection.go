@@ -634,19 +634,23 @@ func extractHostLookupRequestID(payload []byte) uint32 {
 // handleNewSessionTracking tracks new session connections and starts message delivery.
 func (s *Server) handleNewSessionTracking(msg *Message, sessionPtr **Session, conn net.Conn) {
 	if *sessionPtr != nil && msg.Type == MessageTypeCreateSession {
+		// Capture the session value to avoid data race with handleDestroySession
+		// which can nil out *sessionPtr from another connection's goroutine.
+		session := *sessionPtr
+
 		s.mu.Lock()
-		s.sessionConns[(*sessionPtr).ID()] = conn
-		s.connWriteMu[(*sessionPtr).ID()] = &sync.Mutex{}
+		s.sessionConns[session.ID()] = conn
+		s.connWriteMu[session.ID()] = &sync.Mutex{}
 		s.mu.Unlock()
 
 		s.wg.Add(1)
-		go s.deliverMessagesToClient(*sessionPtr, conn)
+		go s.deliverMessagesToClient(session, conn)
 
 		// Start tunnel monitoring to send RequestVariableLeaseSet when ready
 		s.wg.Add(1)
 		go func() {
 			defer s.wg.Done()
-			s.monitorTunnelsAndRequestLeaseSet(*sessionPtr, conn)
+			s.monitorTunnelsAndRequestLeaseSet(session, conn)
 		}()
 	}
 }
