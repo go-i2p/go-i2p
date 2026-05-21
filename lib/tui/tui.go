@@ -39,6 +39,7 @@ type WrapperModel struct {
 	password           string
 	address            string
 	showPassword       bool
+	revealPassword     bool
 	width, height      int
 	reachabilityStatus ReachabilityState
 }
@@ -84,9 +85,13 @@ func (m WrapperModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // handleKeyPress handles keyboard input and returns (handled, model, cmd).
 func (m WrapperModel) handleKeyPress(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
 	if m.showPassword {
-		// Any key dismisses the password panel
-		if msg.String() == "esc" || msg.String() == "p" || msg.String() == "enter" {
+		switch msg.String() {
+		case "esc", "p", "enter":
 			m.showPassword = false
+			m.revealPassword = false
+			return true, m, nil
+		case "r":
+			m.revealPassword = !m.revealPassword
 			return true, m, nil
 		}
 		return true, m, nil
@@ -154,12 +159,25 @@ func (m WrapperModel) renderPasswordPanel() string {
 	b.WriteString(panelTitle.Render("I2PControl Credentials"))
 	b.WriteString("\n\n")
 	fmt.Fprintf(&b, "  %s %s\n", panelLabel.Render("Address: "), panelValue.Render(m.address))
-	fmt.Fprintf(&b, "  %s %s\n", panelLabel.Render("Password:"), panelValue.Render(m.password))
+	displayed := maskPassword(m.password)
+	if m.revealPassword {
+		displayed = m.password
+	}
+	fmt.Fprintf(&b, "  %s %s\n", panelLabel.Render("Password:"), panelValue.Render(displayed))
 	b.WriteString("\n")
 	b.WriteString("  Use these credentials to connect other I2P\n")
 	b.WriteString("  applications to this router's I2PControl API.\n\n")
-	b.WriteString("  Press [p] or [Esc] to dismiss")
+	b.WriteString("  Press [r] to toggle reveal, [p] or [Esc] to dismiss")
 
 	content := b.String()
 	return panelBorder.Render(content)
+}
+
+// maskPassword returns a bullet-only rendering of pw matching its length so
+// terminal scrollback / recordings do not capture the plaintext credential.
+func maskPassword(pw string) string {
+	if pw == "" {
+		return ""
+	}
+	return strings.Repeat("\u2022", len(pw))
 }

@@ -394,6 +394,22 @@ func (b *BuildRequestRecord) ShortBytes() []byte {
 }
 
 // ReadShortBuildRequestRecord parses the 154-byte STBM cleartext payload.
+//
+// The Short Tunnel Build Message (STBM) cleartext is intentionally smaller
+// than the long-form record. Only the following fields of the returned
+// BuildRequestRecord are populated:
+//   - ReceiveTunnel
+//   - NextTunnel
+//   - NextIdent
+//   - Flag
+//   - RequestTime
+//   - SendMessageID
+//
+// All other fields (OurIdent, LayerKey, IVKey, ReplyKey, ReplyIV, ReplyTunnel,
+// ReplyIdent, Padding) are left at their zero values because the short format
+// does not carry them; per-hop session keys are derived elsewhere via the
+// ECIES handshake. Callers MUST NOT read those fields from a record produced
+// by this function.
 func ReadShortBuildRequestRecord(data []byte) (BuildRequestRecord, error) {
 	if len(data) < ShortCleartextLen {
 		return BuildRequestRecord{}, ErrNotEnoughData
