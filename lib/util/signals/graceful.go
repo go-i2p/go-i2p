@@ -103,6 +103,16 @@ func handlePreShutdown() bool {
 
 // runHandlerWithTimeout executes a single handler in a goroutine with the
 // given timeout. Returns true if the handler completed, false if it timed out.
+//
+// Note: Go cannot pre-empt arbitrary user code, so a handler that does not
+// return on its own continues running in the background goroutine after this
+// function returns false; the caller is released but the goroutine survives
+// until h() finally returns. The done channel is buffered (cap 1) so the
+// goroutine never blocks when it does eventually finish, but a handler that
+// loops forever leaks one goroutine for the lifetime of the process. Handlers
+// SHOULD honour timeouts internally (e.g., via a context); the per-handler
+// timeout enforced here is a defensive ceiling on the shutdown sequence, not
+// a hard kill.
 func runHandlerWithTimeout(h Handler, timeout time.Duration) bool {
 	done := make(chan bool, 1)
 	go func() {

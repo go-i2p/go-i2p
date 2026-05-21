@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"net"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-i2p/crypto/rand"
@@ -115,17 +116,28 @@ func (t *SSU2Transport) establishBobSession(intro IntroducerAddr) (*SSU2Session,
 	return bobSSU2Session, nil
 }
 
+// pendingRelayResponse wraps a relay-response channel with a consumed flag
+// so that a delivery attempt arriving after the waiter has timed out is
+// silently dropped instead of buffered indefinitely.
+type pendingRelayResponse struct {
+	ch       chan *ssu2noise.RelayResponseBlock
+	consumed atomic.Bool
+}
+
 // sendRelayRequestAndWait sends a RelayRequest to Bob and waits for Charlie's RelayResponse.
 func (t *SSU2Transport) sendRelayRequestAndWait(bobSSU2Session *SSU2Session, intro IntroducerAddr, charlieHash data.Hash, nonce uint32) (*ssu2noise.RelayResponseBlock, error) {
-	responseCh := make(chan *ssu2noise.RelayResponseBlock, 1)
-	t.pendingRelayResponses.Store(nonce, responseCh)
-	defer t.pendingRelayResponses.Delete(nonce)
+	pending := &pendingRelayResponse{ch: make(chan *ssu2noise.RelayResponseBlock, 1)}
+	t.pendingRelayResponses.Store(nonce, pending)
+	defer func() {
+		pending.consumed.Store(true)
+		t.pendingRelayResponses.Delete(nonce)
+	}()
 
 	if err := t.sendRelayRequest(bobSSU2Session, intro, charlieHash, nonce); err != nil {
 		return nil, oops.Wrapf(err, "failed to send RelayRequest to Bob")
 	}
 
-	return t.waitForRelayResponse(responseCh)
+	return t.waitForRelayResponse(pending.ch)
 }
 
 // waitForRelayResponse waits for Charlie's RelayResponse or times out.

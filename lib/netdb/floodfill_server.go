@@ -69,6 +69,7 @@ type FloodfillRateLimiter struct {
 	globalRejected   uint64
 
 	stopChan chan struct{}
+	stopOnce sync.Once
 	wg       sync.WaitGroup
 }
 
@@ -219,9 +220,12 @@ func (rl *FloodfillRateLimiter) LastSeen(peer common.Hash) (time.Time, bool) {
 	return seenAt, ok
 }
 
-// Stop shuts down the rate limiter's cleanup goroutine.
+// Stop shuts down the rate limiter's cleanup goroutine. It is safe to call
+// concurrently and more than once; only the first call closes the stop channel.
 func (rl *FloodfillRateLimiter) Stop() {
-	close(rl.stopChan)
+	rl.stopOnce.Do(func() {
+		close(rl.stopChan)
+	})
 	rl.wg.Wait()
 }
 

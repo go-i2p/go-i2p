@@ -731,14 +731,17 @@ func (t *SSU2Transport) decodeAndLogRelayResponse(block *ssu2noise.SSU2Block) (*
 
 // deliverRelayResponse delivers the relay response to any waiting dialViaIntroducer call.
 func (t *SSU2Transport) deliverRelayResponse(resp *ssu2noise.RelayResponseBlock) {
-	ch, ok := t.pendingRelayResponses.Load(resp.Nonce)
+	v, ok := t.pendingRelayResponses.Load(resp.Nonce)
 	if !ok {
 		return
 	}
 
-	responseCh := ch.(chan *ssu2noise.RelayResponseBlock)
+	pending, ok := v.(*pendingRelayResponse)
+	if !ok || pending.consumed.Load() {
+		return
+	}
 	select {
-	case responseCh <- resp:
+	case pending.ch <- resp:
 	default:
 		// channel already has a value (duplicate delivery); ignore
 	}

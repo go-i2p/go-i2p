@@ -1,6 +1,7 @@
 package filecheck
 
 import (
+	"errors"
 	"os"
 	"time"
 )
@@ -40,11 +41,25 @@ func CheckFileAge(fpath string, maxAge int) bool {
 	}
 	info, err := os.Stat(fpath)
 	if err != nil {
-		log.WithFields(map[string]interface{}{
-			"at":   "CheckFileAge",
-			"path": fpath,
-		}).Debug("File does not exist for age check")
-		// file does not exist, return false
+		switch {
+		case errors.Is(err, os.ErrNotExist):
+			log.WithFields(map[string]interface{}{
+				"at":   "CheckFileAge",
+				"path": fpath,
+			}).Debug("File does not exist for age check")
+		case errors.Is(err, os.ErrPermission):
+			log.WithFields(map[string]interface{}{
+				"at":    "CheckFileAge",
+				"path":  fpath,
+				"error": err.Error(),
+			}).Warn("Permission denied reading file for age check")
+		default:
+			log.WithFields(map[string]interface{}{
+				"at":    "CheckFileAge",
+				"path":  fpath,
+				"error": err.Error(),
+			}).Warn("Failed to stat file for age check")
+		}
 		return false
 	}
 	xMinAgo := time.Now().Add(time.Duration(-maxAge) * time.Minute)

@@ -144,7 +144,7 @@ func detectTimezoneFromGoStdlib() string {
 	name := time.Now().Location().String()
 	// "Local" means Go couldn't determine the timezone name.
 	// "UTC" is valid but doesn't help with geographic NTP selection.
-	if name == "Local" || name == "" {
+	if name == "Local" || name == "UTC" || name == "" {
 		return ""
 	}
 	// Validate it looks like an IANA name (contains "/").

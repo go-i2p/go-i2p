@@ -1323,21 +1323,28 @@ func (s *Session) Stop() {
 		// Wait for maintenance goroutine to exit
 		s.maintWg.Wait()
 
-		// Drain incoming message queue
+		// Drain incoming message queue. Bound the drain by the channel
+		// capacity so a producer racing with Stop (which observed
+		// s.active == true before we cleared it) cannot make this loop
+		// run indefinitely. Note: discarded is a best-effort count; a
+		// late producer may still enqueue a message that is collected
+		// by GC rather than this drain.
 		discarded := 0
-		for {
+		drainBudget := cap(s.incomingMessages)
+	drain:
+		for i := 0; i <= drainBudget; i++ {
 			select {
 			case <-s.incomingMessages:
 				discarded++
 			default:
-				log.WithFields(logger.Fields{
-					"at":                "i2cp.Session.Stop",
-					"sessionID":         s.id,
-					"queuedMessages":    queuedMessages,
-					"discardedMessages": discarded,
-				}).Info("session_stopped")
-				return
+				break drain
 			}
 		}
+		log.WithFields(logger.Fields{
+			"at":                "i2cp.Session.Stop",
+			"sessionID":         s.id,
+			"queuedMessages":    queuedMessages,
+			"discardedMessages": discarded,
+		}).Info("session_stopped")
 	})
 }

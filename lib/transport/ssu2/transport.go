@@ -42,7 +42,9 @@ type SSU2Transport struct {
 
 	// pendingRelayResponses holds channels waiting for a RelayResponse keyed by nonce.
 	// Used by dialViaIntroducer to synchronise with the protocol callback.
-	pendingRelayResponses sync.Map // map[uint32]chan *ssu2noise.RelayResponseBlock
+	// Values are *pendingRelayResponse; a consumed flag prevents a late delivery
+	// from being written to a channel whose reader has already given up.
+	pendingRelayResponses sync.Map // map[uint32]*pendingRelayResponse
 
 	// NAT state cache with TTL.
 	natStateCache *natState

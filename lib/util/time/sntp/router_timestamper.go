@@ -406,6 +406,9 @@ func (rt *RouterTimestamper) selectRandomServerExcluding(servers []string, prefe
 		ipv6 := filterByAddressFamily(candidates, true)
 		if len(ipv6) > 0 {
 			candidates = ipv6
+		} else {
+			log.WithField("candidate_count", len(candidates)).Debug(
+				"preferIPv6 requested but no IPv6-reachable NTP servers; falling back to IPv4 candidates")
 		}
 	}
 	return candidates[rand.Intn(len(candidates))]
