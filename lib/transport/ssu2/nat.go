@@ -205,6 +205,28 @@ func (t *SSU2Transport) verifyPeerTestSignature(block *ssu2noise.PeerTestBlock, 
 	if t.config.RouterLookupFunc == nil {
 		return false, oops.Errorf("signature verification unavailable: RouterLookupFunc not configured")
 	}
+	// Resolve Alice's hash up-front and fail-closed for codes 3/4 before any
+	// NetDB lookup. PeerTest signed-data inclusion of Alice's hash depends on
+	// the message code:
+	//   - Messages 1 (Alice→Bob) and 2 (Bob→Charlie): aliceHash MUST be nil.
+	//   - Messages 3 (Charlie→Bob) and 4 (Bob→Alice): aliceHash MUST be Alice's
+	//     32-byte router hash. Per the SSU2 PeerTest block layout, message 4
+	//     carries it explicitly in the optional RouterHash field; message 3
+	//     does not carry it on the wire and the verifier must obtain it from
+	//     external context (not currently plumbed through to this callback).
+	// We fail-closed for codes 3/4 when Alice's hash cannot be determined,
+	// rather than silently substituting senderHash (which would either reject
+	// legitimate signatures or accept signatures attributable to the sender as
+	// proof of Alice's claim — see AUDIT.md H-1).
+	var aliceHash *data.Hash
+	switch block.MessageCode {
+	case ssu2noise.PeerTestResponse, ssu2noise.PeerTestResult:
+		if block.RouterHash == nil {
+			return false, oops.Errorf("PeerTest message code %d requires Alice's hash but block.RouterHash is nil", block.MessageCode)
+		}
+		hash := *block.RouterHash
+		aliceHash = &hash
+	}
 	ri, err := t.config.RouterLookupFunc(senderHash)
 	if err != nil {
 		t.logger.WithField("sender_hash", senderHash[:4]).Warn("PeerTest: failed to lookup sender RouterInfo for signature verification")
@@ -215,16 +237,6 @@ func (t *SSU2Transport) verifyPeerTestSignature(block *ssu2noise.PeerTestBlock, 
 		return false, oops.Wrapf(err, "failed to extract Ed25519 public key from sender RouterInfo")
 	}
 	bobHash := t.getOurIdentityHash()
-	// For PeerTest messages 1/2, aliceHash is nil; for 3/4, it must be provided.
-	// We need to determine which case this is based on the message code.
-	var aliceHash *data.Hash
-	if block.MessageCode == ssu2noise.PeerTestProbe || block.MessageCode == ssu2noise.PeerTestResult {
-		// Messages 3/4: need Alice's hash from the block's signing context
-		// For now, we extract it from the session context (if available)
-		// This is a simplification; production code may need more context.
-		hash := senderHash // Placeholder; actual implementation may differ
-		aliceHash = &hash
-	}
 	valid, verifyErr := ssu2noise.VerifyPeerTestSignature(
 		pubKey,
 		block.Signature,
