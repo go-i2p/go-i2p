@@ -83,8 +83,8 @@ func ExtractPeerIV(routerInfo router_info.RouterInfo) ([]byte, error) {
 	return nil, oops.Errorf("no valid NTCP2 IV found in RouterInfo")
 }
 
-// ConfigureDialConfig sets the peer's static key and obfuscation IV on an
-// NTCP2Config for outbound connections. This is required for the Noise XK
+// ConfigureDialConfig sets the peer's static key and obfuscation IV on a
+// Config for outbound connections. This is required for the Noise XK
 // handshake pattern where the initiator must know the responder's static key.
 //
 // Spec reference: https://geti2p.net/spec/ntcp2 — Noise XK pattern requires

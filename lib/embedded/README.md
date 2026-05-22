@@ -169,6 +169,12 @@ type EmbeddedRouter interface {
 
 	// IsConfigured reports whether Configure has been called successfully.
 	IsConfigured() bool
+
+	// Run executes the full router lifecycle from configuration to shutdown.
+	// It handles signal registration, network preflight checks, router creation,
+	// startup, and graceful shutdown. This is the recommended entry point for
+	// embedding the router in other applications.
+	Run(ctx context.Context) error
 }
 ```
 
@@ -184,7 +190,7 @@ type StandardEmbeddedRouter struct {
 ```
 
 StandardEmbeddedRouter is the standard implementation of EmbeddedRouter. It
-wraps a router.Router instance and manages its lifecycle with proper
+wraps a router.Lifecycle instance and manages its lifecycle with proper
 thread-safety and error handling.
 
 #### func  NewStandardEmbeddedRouter
@@ -192,12 +198,26 @@ thread-safety and error handling.
 ```go
 func NewStandardEmbeddedRouter(cfg *config.RouterConfig) (*StandardEmbeddedRouter, error)
 ```
-NewStandardEmbeddedRouter creates a new embedded router instance. The router is
-automatically configured with the provided config. Call Start() to begin router
-operations.
+NewStandardEmbeddedRouter creates a new StandardEmbeddedRouter with the given
+configuration. The router is automatically configured during construction;
+callers do not need to call Configure separately. Returns an error if cfg is nil
+or configuration fails.
 
-Returns error if the configuration is nil or invalid, or if router creation
-fails.
+#### func  NewStandardEmbeddedRouterWith
+
+```go
+func NewStandardEmbeddedRouterWith(r router.Lifecycle, cfg *config.RouterConfig) (*StandardEmbeddedRouter, error)
+```
+NewStandardEmbeddedRouterWith creates a new embedded router instance with an
+injected router.Lifecycle implementation. This constructor is primarily useful
+for testing, where a stub or mock router can be provided instead of the
+production router.Router.
+
+The provided router must be already started or will be started by the caller.
+This constructor skips the auto-configuration step that
+NewStandardEmbeddedRouter performs, allowing full control over router setup.
+
+Returns error if the router parameter is nil.
 
 #### func (*StandardEmbeddedRouter) Close
 
@@ -205,73 +225,87 @@ fails.
 func (e *StandardEmbeddedRouter) Close() error
 ```
 Close releases all resources associated with the router. This should be called
-after Stop() to ensure proper cleanup.
+after Stop to ensure proper cleanup. Returns an error if the router is still
+running.
 
 #### func (*StandardEmbeddedRouter) Configure
 
 ```go
 func (e *StandardEmbeddedRouter) Configure(cfg *config.RouterConfig) error
 ```
-Configure initializes the router with the provided configuration. This method
-creates the underlying router instance but does not start it.
-
-Note: NewStandardEmbeddedRouter already calls Configure() internally. Callers
-using the constructor do NOT need to call Configure() again. Calling Configure()
-on an already-configured router returns nil (no-op) to prevent errors from the
-documented constructor + Configure pattern.
+Configure applies the given configuration to the router. It is a no-op if the
+router is already configured. Returns an error if the router is currently
+running or if cfg is nil.
 
 #### func (*StandardEmbeddedRouter) HardStop
 
 ```go
 func (e *StandardEmbeddedRouter) HardStop()
 ```
-HardStop performs immediate termination without graceful cleanup. Unlike Stop(),
-this does not wait for subsystems to shut down cleanly. It calls
-StopWithContext() with a 5-second deadline, then marks the router stopped. Use
-this only when Stop() fails or when immediate termination is required.
+HardStop performs immediate termination without graceful cleanup. Unlike Stop,
+this does not wait for subsystems to shut down cleanly. It calls StopWithContext
+with a 5-second deadline, then marks the router stopped. Use this only when Stop
+fails or when immediate termination is required.
 
 #### func (*StandardEmbeddedRouter) IsConfigured
 
 ```go
 func (e *StandardEmbeddedRouter) IsConfigured() bool
 ```
-IsConfigured returns true if the router has been configured.
 
 #### func (*StandardEmbeddedRouter) IsRunning
 
 ```go
 func (e *StandardEmbeddedRouter) IsRunning() bool
 ```
-IsRunning returns true if the router is currently running.
+IsRunning returns true if the router has been started and has not yet been
+stopped.
+
+#### func (*StandardEmbeddedRouter) Run
+
+```go
+func (e *StandardEmbeddedRouter) Run(ctx context.Context) error
+```
+Run executes the full router lifecycle from configuration to shutdown. It
+handles signal registration, network preflight checks, router creation, startup,
+and graceful shutdown.
+
+Run is the recommended entry point for embedding the router in other
+applications. It abstracts the entire lifecycle management that was previously
+scattered across main.go functions.
+
+The context allows callers to participate in cancellation, though the router
+will continue running until it receives a SIGINT/SIGTERM signal or Stop() is
+called.
 
 #### func (*StandardEmbeddedRouter) Start
 
 ```go
 func (e *StandardEmbeddedRouter) Start() error
 ```
-Start begins router operations. The router must be configured before calling
-Start(). This method starts all router subsystems and blocks until the router is
-fully started.
+Start starts the embedded router and all of its subsystems. The router must be
+configured before calling Start. Returns an error if the router is already
+running, not configured, or the underlying router fails to start.
 
 #### func (*StandardEmbeddedRouter) Stop
 
 ```go
 func (e *StandardEmbeddedRouter) Stop() error
 ```
-Stop performs graceful shutdown of the router. This method stops all router
-subsystems and waits for them to shut down cleanly. The mutex is released before
-calling router.Stop() to prevent deadlock with goroutines that call IsRunning()
-during shutdown.
 
 #### func (*StandardEmbeddedRouter) Wait
 
 ```go
 func (e *StandardEmbeddedRouter) Wait()
 ```
-Wait blocks until the router shuts down. This method can be called after Start()
-to keep the router running until Stop() is called. It uses a done channel to
-avoid TOCTOU races where Stop()+Close() could nil the router pointer between
-releasing the read lock and calling router.Wait().
+Wait blocks until the router is stopped via Stop()/HardStop()/StopWithContext().
+
+Precondition: Wait must be called *after* Start() has returned successfully. If
+Wait is called before Start() — or after Stop() has already completed — it
+returns immediately because there is no live shutdown channel to await. Callers
+that race Wait against Start (e.g. spawning `go r.Wait()` in one goroutine while
+another goroutine calls Start) must synchronize themselves; this method does not
+block until Start populates the internal done channel. See AUDIT.md M-5.
 
 
 

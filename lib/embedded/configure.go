@@ -9,6 +9,9 @@ import (
 	"github.com/samber/oops"
 )
 
+// Configure applies the given configuration to the router.
+// It is a no-op if the router is already configured. Returns an error if
+// the router is currently running or if cfg is nil.
 func (e *StandardEmbeddedRouter) Configure(cfg *config.RouterConfig) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()

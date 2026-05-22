@@ -108,6 +108,8 @@ const (
 	drainRequestBuffer = 1000
 )
 
+// GarlicMessageRouter routes outbound garlic-encrypted messages to remote I2P destinations.
+// It resolves LeaseSets via the NetDB and delivers encrypted messages through the tunnel pool.
 type GarlicMessageRouter struct {
 	// Router infrastructure dependencies
 	netdb          GarlicNetDB               // NetDB with LeaseSet support

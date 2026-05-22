@@ -7,6 +7,9 @@ import (
 	"github.com/samber/oops"
 )
 
+// NewStandardEmbeddedRouter creates a new StandardEmbeddedRouter with the given configuration.
+// The router is automatically configured during construction; callers do not need to call
+// Configure separately. Returns an error if cfg is nil or configuration fails.
 func NewStandardEmbeddedRouter(cfg *config.RouterConfig) (*StandardEmbeddedRouter, error) {
 	if cfg == nil {
 		return nil, oops.Errorf("configuration cannot be nil")

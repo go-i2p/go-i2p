@@ -5,6 +5,9 @@ import (
 	"github.com/samber/oops"
 )
 
+// Start starts the embedded router and all of its subsystems.
+// The router must be configured before calling Start. Returns an error if the
+// router is already running, not configured, or the underlying router fails to start.
 func (e *StandardEmbeddedRouter) Start() error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -97,11 +100,6 @@ func (e *StandardEmbeddedRouter) Stop() error {
 	return nil
 }
 
-// HardStop performs immediate termination without graceful cleanup.
-// Unlike Stop(), this does not wait for subsystems to shut down cleanly.
-// It calls StopWithContext() with a 5-second deadline, then marks the router stopped.
-// Use this only when Stop() fails or when immediate termination is required.
-
 // Wait blocks until the router is stopped via Stop()/HardStop()/StopWithContext().
 //
 // Precondition: Wait must be called *after* Start() has returned successfully.
@@ -141,9 +139,7 @@ func (e *StandardEmbeddedRouter) Wait() {
 	}).Debug("embedded router wait completed")
 }
 
-// Close releases all resources associated with the router.
-// This should be called after Stop() to ensure proper cleanup.
-
+// IsRunning returns true if the router has been started and has not yet been stopped.
 func (e *StandardEmbeddedRouter) IsRunning() bool {
 	e.mu.RLock()
 	defer e.mu.RUnlock()

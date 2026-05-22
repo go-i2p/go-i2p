@@ -277,20 +277,9 @@ type GarlicMessageRouter struct {
 }
 ```
 
-GarlicMessageRouter provides router-level garlic message forwarding. It bridges
-the gap between message processing (lib/i2np) and router infrastructure (NetDB,
-transport, tunnels) to enable delivery of garlic cloves to destinations,
-routers, and tunnels beyond LOCAL processing.
-
-This component implements the GarlicCloveForwarder interface and is designed to
-be injected into the MessageProcessor via SetCloveForwarder().
-
-Architecture:
-
-    - Receives forwarding requests from MessageProcessor
-    - Accesses NetDB for destination/router lookups
-    - Uses transport layer for direct router-to-router messaging
-    - Uses tunnel pools for destination and tunnel delivery
+GarlicMessageRouter routes outbound garlic-encrypted messages to remote I2P
+destinations. It resolves LeaseSets via the NetDB and delivers encrypted
+messages through the tunnel pool.
 
 #### func  NewGarlicMessageRouter
 
@@ -316,7 +305,7 @@ dependencies. All parameters are required for full functionality:
 func (gr *GarlicMessageRouter) ForwardThroughTunnel(
 	gatewayHash common.Hash,
 	tunnelID tunnel.TunnelID,
-	msg i2np.I2NPMessage,
+	msg i2np.Message,
 ) error
 ```
 ForwardThroughTunnel implements GarlicCloveForwarder interface. Forwards a
@@ -336,7 +325,7 @@ messages into the tunnel's encryption layers.
 #### func (*GarlicMessageRouter) ForwardToDestination
 
 ```go
-func (gr *GarlicMessageRouter) ForwardToDestination(destHash common.Hash, msg i2np.I2NPMessage) error
+func (gr *GarlicMessageRouter) ForwardToDestination(destHash common.Hash, msg i2np.Message) error
 ```
 ForwardToDestination implements GarlicCloveForwarder interface. Forwards a
 message to a destination hash (delivery type 0x01).
@@ -354,7 +343,7 @@ by sending messages through one of their published inbound tunnels.
 #### func (*GarlicMessageRouter) ForwardToRouter
 
 ```go
-func (gr *GarlicMessageRouter) ForwardToRouter(routerHash common.Hash, msg i2np.I2NPMessage) error
+func (gr *GarlicMessageRouter) ForwardToRouter(routerHash common.Hash, msg i2np.Message) error
 ```
 ForwardToRouter implements GarlicCloveForwarder interface. Forwards a message
 directly to a router hash (delivery type 0x02).
@@ -401,6 +390,18 @@ type GarlicNetDB interface {
 GarlicNetDB defines the NetDB interface needed for garlic message routing. This
 matches the actual StdNetDB implementation which returns channels for async
 lookups.
+
+#### type I2PControlServer
+
+```go
+type I2PControlServer interface {
+	Start() error
+	Stop()
+	Addr() net.Addr
+}
+```
+
+I2PControlServer is the interface satisfied by *i2pcontrol.Server.
 
 #### type InboundMessageHandler
 
@@ -461,7 +462,7 @@ GetTunnelSession returns the session ID for a given tunnel ID, if registered
 #### func (*InboundMessageHandler) HandleTunnelData
 
 ```go
-func (h *InboundMessageHandler) HandleTunnelData(msg i2np.I2NPMessage) error
+func (h *InboundMessageHandler) HandleTunnelData(msg i2np.Message) error
 ```
 HandleTunnelData processes an incoming TunnelData message. This is the main
 entry point for inbound message delivery.
@@ -571,16 +572,47 @@ This is the preferred shutdown method: it prevents indefinite hangs when a
 network call to a floodfill router is stuck (e.g., unreachable peer, network
 partition). Typical timeout: 30 seconds.
 
+#### type Lifecycle
+
+```go
+type Lifecycle interface {
+	// Start begins router operations, starting all subsystems (networking,
+	// tunnels, netdb, etc.). Returns error if router fails to start or if
+	// called on an already-running router.
+	Start() error
+
+	// Stop performs graceful shutdown of the router, allowing in-flight
+	// operations to complete. Does not return an error.
+	Stop()
+
+	// StopWithContext performs graceful shutdown like Stop, but respects the
+	// provided context for cancellation. If the context is cancelled before
+	// all goroutines finish, returns the context error.
+	// This allows hard stop to bound the time spent waiting for graceful shutdown.
+	StopWithContext(ctx context.Context) error
+
+	// Wait blocks until the router has stopped.
+	Wait()
+
+	// Close releases all resources held by the router. The router must be
+	// stopped before Close is called.
+	Close() error
+}
+```
+
+Lifecycle defines the minimal interface for a router instance needed by the
+embedded façade. This allows StandardEmbeddedRouter to depend on an interface
+rather than a concrete *Router type, enabling testability and alternative
+implementations.
+
+Lifecycle encompasses the router's lifecycle management methods: startup,
+graceful shutdown, hard shutdown with timeout, waiting for completion, and
+resource cleanup.
+
 #### type Router
 
 ```go
 type Router struct {
-	// keystore for router info
-	*keys.RouterInfoKeystore
-	// multi-transport manager
-	*transport.TransportMuxer
-	// netdb
-	*netdb.StdNetDB
 }
 ```
 
@@ -707,7 +739,7 @@ GetNetworkStatus returns the I2PControl network status code. Status codes:
 #### func (*Router) GetParticipantManager
 
 ```go
-func (r *Router) GetParticipantManager() *tunnel.Manager
+func (r *Router) GetParticipantManager() *tunnel.ParticipantManager
 ```
 GetParticipantManager returns the participant manager for transit tunnel
 tracking. Returns nil if not initialized.
@@ -715,7 +747,7 @@ tracking. Returns nil if not initialized.
 #### func (*Router) GetSSU2Addr
 
 ```go
-func (r *Router) GetSSU2Addr() interface{}
+func (r *Router) GetSSU2Addr() net.Addr
 ```
 GetSSU2Addr returns the listening UDP address of the SSU2 transport. Returns nil
 if SSU2 is not available or not yet bound.
@@ -742,7 +774,7 @@ establish an outbound connection.
 #### func (*Router) GetTransportAddr
 
 ```go
-func (r *Router) GetTransportAddr() interface{}
+func (r *Router) GetTransportAddr() net.Addr
 ```
 GetTransportAddr returns the listening address of the first available transport.
 This is used by I2PControl to expose NTCP2 port and address information. Returns
@@ -751,7 +783,7 @@ nil if no transports are available.
 #### func (*Router) GetTunnelManager
 
 ```go
-func (r *Router) GetTunnelManager() *i2np.TunnelManager
+func (r *Router) GetTunnelManager() i2np.TunnelOrchestrator
 ```
 GetTunnelManager returns the tunnel manager in a thread-safe manner. Returns nil
 if the tunnel manager has not been initialized yet.

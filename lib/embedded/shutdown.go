@@ -9,6 +9,10 @@ import (
 	"github.com/samber/oops"
 )
 
+// HardStop performs immediate termination without graceful cleanup.
+// Unlike Stop, this does not wait for subsystems to shut down cleanly.
+// It calls StopWithContext with a 5-second deadline, then marks the router stopped.
+// Use this only when Stop fails or when immediate termination is required.
 func (e *StandardEmbeddedRouter) HardStop() {
 	router := e.prepareHardStop()
 	if router == nil {
@@ -93,11 +97,9 @@ func (e *StandardEmbeddedRouter) forceCloseRouter(r router.Lifecycle) {
 	}
 }
 
-// Wait blocks until the router shuts down.
-// This method can be called after Start() to keep the router running until Stop() is called.
-// It uses a done channel to avoid TOCTOU races where Stop()+Close() could nil the
-// router pointer between releasing the read lock and calling router.Wait().
-
+// Close releases all resources associated with the router.
+// This should be called after Stop to ensure proper cleanup. Returns an error
+// if the router is still running.
 func (e *StandardEmbeddedRouter) Close() error {
 	e.mu.Lock()
 	defer e.mu.Unlock()

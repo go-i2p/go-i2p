@@ -198,11 +198,11 @@ session start time.
 #### func  ConfigureDialConfig
 
 ```go
-func ConfigureDialConfig(config *ntcp2.NTCP2Config, peerInfo router_info.RouterInfo) error
+func ConfigureDialConfig(config *ntcp2.Config, peerInfo router_info.RouterInfo) error
 ```
-ConfigureDialConfig sets the peer's static key and obfuscation IV on an
-NTCP2Config for outbound connections. This is required for the Noise XK
-handshake pattern where the initiator must know the responder's static key.
+ConfigureDialConfig sets the peer's static key and obfuscation IV on a Config
+for outbound connections. This is required for the Noise XK handshake pattern
+where the initiator must know the responder's static key.
 
 Spec reference: https://geti2p.net/spec/ntcp2 — Noise XK pattern requires the
 initiator to pre-know the responder's static public key.
@@ -264,7 +264,7 @@ Returns the 32-byte static key or an error if:
 #### func  FrameI2NPMessageAsBlock
 
 ```go
-func FrameI2NPMessageAsBlock(msg i2np.I2NPMessage) ([]byte, error)
+func FrameI2NPMessageAsBlock(msg i2np.Message) ([]byte, error)
 ```
 FrameI2NPMessageAsBlock frames an I2NP message using NTCP2 block format. The
 message is serialized with a 9-byte short header and wrapped in a type-3 (I2NP)
@@ -370,7 +370,7 @@ code received from a peer. The descriptions match i2pd's definitions.
 #### func  UnframeI2NPMessage
 
 ```go
-func UnframeI2NPMessage(conn net.Conn) (i2np.I2NPMessage, error)
+func UnframeI2NPMessage(conn net.Conn) (i2np.Message, error)
 ```
 UnframeI2NPMessage unframes I2NP messages from an NTCP2 data stream.
 
@@ -409,9 +409,9 @@ found.
 #### func  WrapNTCP2Addr
 
 ```go
-func WrapNTCP2Addr(addr net.Addr, routerHash data.Hash) (*ntcp2.NTCP2Addr, error)
+func WrapNTCP2Addr(addr net.Addr, routerHash data.Hash) (*ntcp2.Addr, error)
 ```
-WrapNTCP2Addr converts a net.Addr to NTCP2Addr.
+WrapNTCP2Addr converts a net.Addr to ntcp2.Addr.
 
 #### func  WrapNTCP2Error
 
@@ -521,7 +521,7 @@ BytesRead returns the number of bytes read during the last ReadNextMessage call.
 #### func (*BlockUnframer) ReadNextMessage
 
 ```go
-func (u *BlockUnframer) ReadNextMessage() (i2np.I2NPMessage, error)
+func (u *BlockUnframer) ReadNextMessage() (i2np.Message, error)
 ```
 ReadNextMessage reads and parses the next NTCP2 frame, returning the first I2NP
 message found. Non-I2NP blocks are passed to BlockCallback if set. Multiple I2NP
@@ -557,7 +557,7 @@ type Config struct {
 	ListenerAddress string // Address to listen on, e.g., ":42069"
 	WorkingDir      string // Working directory for persistent storage (e.g., ~/.go-i2p/config)
 	MaxSessions     int    // Maximum number of concurrent sessions (0 = use DefaultMaxSessions)
-	*ntcp2.NTCP2Config
+	*ntcp2.Config
 }
 ```
 
@@ -642,7 +642,7 @@ Useful for monitoring and diagnostics.
 #### func (*DefaultHandler) SendTermination
 
 ```go
-func (h *DefaultHandler) SendTermination(conn *gonoise.NTCP2Conn, reason byte) error
+func (h *DefaultHandler) SendTermination(conn *gonoise.Conn, reason byte) error
 ```
 SendTermination constructs and sends an encrypted termination block through the
 NTCP2 connection's Noise cipher. The block is written via conn.Write, which
@@ -683,7 +683,7 @@ BytesRead returns the number of bytes read during the last ReadNextMessage call
 #### func (*I2NPUnframer) ReadNextMessage
 
 ```go
-func (u *I2NPUnframer) ReadNextMessage() (i2np.I2NPMessage, error)
+func (u *I2NPUnframer) ReadNextMessage() (i2np.Message, error)
 ```
 ReadNextMessage reads the next length-prefixed I2NP message from the underlying
 connection and returns the parsed message.
@@ -731,7 +731,7 @@ type NTCP2Handler interface {
 	//
 	// For AEAD failure reasons (reason 4), this must NOT be called because
 	// the cipher state may be corrupted. Use OnHandshakeError instead.
-	SendTermination(conn *gonoise.NTCP2Conn, reason byte) error
+	SendTermination(conn *gonoise.Conn, reason byte) error
 }
 ```
 
@@ -831,7 +831,7 @@ the total number of successful rekeys performed.
 #### func (*NTCP2Session) QueueSendI2NP
 
 ```go
-func (s *NTCP2Session) QueueSendI2NP(msg i2np.I2NPMessage) error
+func (s *NTCP2Session) QueueSendI2NP(msg i2np.Message) error
 ```
 QueueSendI2NP queues an I2NP message to be sent over the session. Returns an
 error if the session is closed or the send queue is full after a timeout.
@@ -839,7 +839,7 @@ error if the session is closed or the send queue is full after a timeout.
 #### func (*NTCP2Session) ReadNextI2NP
 
 ```go
-func (s *NTCP2Session) ReadNextI2NP() (i2np.I2NPMessage, error)
+func (s *NTCP2Session) ReadNextI2NP() (i2np.Message, error)
 ```
 ReadNextI2NP blocking reads the next fully received I2NP message from this
 session.

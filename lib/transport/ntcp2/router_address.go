@@ -356,7 +356,7 @@ func extractNATAddrHostPort(addr *nattraversal.NATAddr) (string, string, error) 
 // validateAndExtractStaticKey validates the NTCP2 configuration and extracts the base64-encoded
 // static PUBLIC key for publication in RouterAddress.
 //
-// IMPORTANT: The NTCP2Config.StaticKey contains the X25519 PRIVATE key (used internally
+// IMPORTANT: The Config.StaticKey contains the X25519 PRIVATE key (used internally
 // by the Noise handshake). The NTCP2 spec requires publishing the corresponding PUBLIC
 // key as the 's=' parameter. This function derives the public key via X25519 scalar
 // base multiplication before encoding.
