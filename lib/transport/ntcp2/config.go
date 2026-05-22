@@ -14,7 +14,7 @@ type Config struct {
 	ListenerAddress string // Address to listen on, e.g., ":42069"
 	WorkingDir      string // Working directory for persistent storage (e.g., ~/.go-i2p/config)
 	MaxSessions     int    // Maximum number of concurrent sessions (0 = use DefaultMaxSessions)
-	*ntcp2.NTCP2Config
+	*ntcp2.Config
 }
 
 // GetMaxSessions returns the effective maximum session limit.
@@ -37,7 +37,7 @@ func NewConfig(listenerAddress string) (*Config, error) {
 	return &Config{
 		ListenerAddress: listenerAddress,
 		WorkingDir:      "",  // Must be set before use
-		NTCP2Config:     nil, // Will be set when identity is provided
+		Config:          nil, // Will be set when identity is provided
 	}, nil
 }
 

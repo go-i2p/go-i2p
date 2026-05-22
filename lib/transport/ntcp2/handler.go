@@ -42,7 +42,7 @@ type NTCP2Handler interface {
 	//
 	// For AEAD failure reasons (reason 4), this must NOT be called because
 	// the cipher state may be corrupted. Use OnHandshakeError instead.
-	SendTermination(conn *gonoise.NTCP2Conn, reason byte) error
+	SendTermination(conn *gonoise.Conn, reason byte) error
 }
 
 // DefaultHandler implements NTCP2Handler using the existing functions in this
@@ -95,7 +95,7 @@ func (h *DefaultHandler) ValidateTimestamp(peerTime uint32) error {
 // SendTermination constructs and sends an encrypted termination block through
 // the NTCP2 connection's Noise cipher. The block is written via conn.Write,
 // which applies AEAD encryption and SipHash length obfuscation.
-func (h *DefaultHandler) SendTermination(conn *gonoise.NTCP2Conn, reason byte) error {
+func (h *DefaultHandler) SendTermination(conn *gonoise.Conn, reason byte) error {
 	log.WithField("reason", reason).Debug("sending NTCP2 termination block")
 	block := BuildTerminationBlock(reason)
 	_, err := conn.Write(block)

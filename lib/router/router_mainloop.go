@@ -194,7 +194,7 @@ func (r *Router) handleNewConnection(conn net.Conn) {
 	sessionLogger := logger.WithField("remote_addr", conn.RemoteAddr().String())
 
 	switch addr := conn.RemoteAddr().(type) {
-	case *ntcp2.NTCP2Addr:
+	case *ntcp2.Addr:
 		peerHash := common.Hash(addr.RouterHash())
 		sessionLog := logger.WithField("peer_hash", fmt.Sprintf("%x", peerHash[:8]))
 		session := ntcp.NewNTCP2Session(conn, r.ctx, sessionLog)

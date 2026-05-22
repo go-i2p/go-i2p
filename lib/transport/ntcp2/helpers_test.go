@@ -24,7 +24,7 @@ func newTestRouterHash(offset byte) data.Hash {
 // newTestNTCP2Config creates a test NTCP2Config with a standard 32-byte router
 // hash (sequential bytes starting at 0). Use newTestRouterHash directly when
 // the test needs a non-default hash or must inspect the hash value.
-func newTestNTCP2Config(t *testing.T, isInitiator bool) *ntcp2.NTCP2Config {
+func newTestNTCP2Config(t *testing.T, isInitiator bool) *ntcp2.Config {
 	t.Helper()
 	routerHash := newTestRouterHash(0)
 	config, err := ntcp2.NewNTCP2Config(routerHash, isInitiator)

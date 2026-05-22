@@ -43,7 +43,7 @@ func createTestTransport(t *testing.T, listenAddr string) *NTCP2Transport {
 	// Create test config
 	config := &Config{
 		ListenerAddress: listenAddr,
-		NTCP2Config:     ntcp2Config,
+		Config:          ntcp2Config,
 	}
 
 	// Create TCP listener
@@ -114,7 +114,7 @@ func TestConvertToRouterAddress_WithObfuscationIV(t *testing.T) {
 	for i := range iv {
 		iv[i] = byte(i + 100)
 	}
-	transport.config.NTCP2Config.ObfuscationIV = iv
+	transport.config.Config.ObfuscationIV = iv
 
 	routerAddr, err := ConvertToRouterAddress(transport)
 	require.NoError(t, err)
@@ -162,7 +162,7 @@ func TestConvertToRouterAddress_InvalidStaticKey(t *testing.T) {
 	transport := createTestTransport(t, "127.0.0.1:0")
 
 	// Corrupt the static key to wrong length
-	transport.config.NTCP2Config.StaticKey = make([]byte, 16) // Wrong length
+	transport.config.Config.StaticKey = make([]byte, 16) // Wrong length
 
 	assertConvertToRouterAddressError(t, transport, "invalid static key length")
 }
@@ -172,7 +172,7 @@ func TestConvertToRouterAddress_InvalidIV(t *testing.T) {
 	transport := createTestTransport(t, "127.0.0.1:0")
 
 	// Corrupt the IV to wrong length
-	transport.config.NTCP2Config.ObfuscationIV = make([]byte, 8) // Wrong length (should be 16)
+	transport.config.Config.ObfuscationIV = make([]byte, 8) // Wrong length (should be 16)
 
 	assertConvertToRouterAddressError(t, transport, "invalid IV length")
 }
@@ -259,7 +259,7 @@ func BenchmarkConvertToRouterAddress(b *testing.B) {
 		listener: listener,
 		config: &Config{
 			ListenerAddress: "127.0.0.1:0",
-			NTCP2Config:     ntcp2Config,
+			Config:          ntcp2Config,
 		},
 	}
 

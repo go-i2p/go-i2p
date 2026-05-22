@@ -136,7 +136,7 @@ func prepareRouterAddressComponents(transport *NTCP2Transport) (host, port strin
 		return "", "", nil, err
 	}
 
-	options, err = buildRouterAddressOptions(host, port, staticKey, transport.config.NTCP2Config)
+	options, err = buildRouterAddressOptions(host, port, staticKey, transport.config.Config)
 	if err != nil {
 		logOptionsBuildError(err)
 		return "", "", nil, err
@@ -244,23 +244,23 @@ func extractTransportAddress(transport *NTCP2Transport) (string, string, error) 
 }
 
 // extractAddressComponents extracts host and port from various address types.
-// Supports *ntcp2.NTCP2Addr, *net.TCPAddr, and *nattraversal.NATAddr.
+// Supports *ntcp2.Addr, *net.TCPAddr, and *nattraversal.NATAddr.
 func extractAddressComponents(addr net.Addr) (string, string, error) {
 	switch typedAddr := addr.(type) {
-	case *ntcp2noise.NTCP2Addr:
+	case *ntcp2noise.Addr:
 		return extractFromNTCP2Addr(typedAddr)
 	case *net.TCPAddr:
 		return extractFromTCPAddr(typedAddr)
 	case *nattraversal.NATAddr:
 		return extractFromNATAddr(typedAddr)
 	default:
-		log.Errorf("Expected *net.TCPAddr, *ntcp2.NTCP2Addr, or *nattraversal.NATAddr, got %T", addr)
+		log.Errorf("Expected *net.TCPAddr, *ntcp2.Addr, or *nattraversal.NATAddr, got %T", addr)
 		return "", "", oops.Errorf("unsupported address type %T", addr)
 	}
 }
 
 // extractFromNTCP2Addr extracts host and port from an NTCP2Addr wrapper.
-func extractFromNTCP2Addr(typedAddr *ntcp2noise.NTCP2Addr) (string, string, error) {
+func extractFromNTCP2Addr(typedAddr *ntcp2noise.Addr) (string, string, error) {
 	underlying := typedAddr.UnderlyingAddr()
 	host, port, err := extractHostPort(underlying)
 	if err != nil {
@@ -363,12 +363,12 @@ func extractNATAddrHostPort(addr *nattraversal.NATAddr) (string, string, error) 
 //
 // Returns the base64-encoded static public key string and any validation error encountered.
 func validateAndExtractStaticKey(transport *NTCP2Transport) (string, error) {
-	if transport.config == nil || transport.config.NTCP2Config == nil {
+	if transport.config == nil || transport.config.Config == nil {
 		log.WithFields(logger.Fields{"at": "validateAndExtractStaticKey"}).Error("Transport NTCP2 configuration is not initialized")
 		return "", oops.Errorf("transport NTCP2 configuration is not initialized")
 	}
 
-	ntcp2Config := transport.config.NTCP2Config
+	ntcp2Config := transport.config.Config
 
 	if len(ntcp2Config.StaticKey) != 32 {
 		log.WithField("length", len(ntcp2Config.StaticKey)).Error("Invalid static key length")
@@ -401,7 +401,7 @@ func validateAndExtractStaticKey(transport *NTCP2Transport) (string, error) {
 // - IV 'i': 16 bytes binary (big-endian), 24 bytes I2P base64-encoded
 //
 // Returns the options map and an error if validation fails.
-func buildRouterAddressOptions(host, port, staticKey string, ntcp2Config *ntcp2noise.NTCP2Config) (map[string]string, error) {
+func buildRouterAddressOptions(host, port, staticKey string, ntcp2Config *ntcp2noise.Config) (map[string]string, error) {
 	// Validate IV length (required per spec: 16 bytes binary -> 24 bytes Base64)
 	if len(ntcp2Config.ObfuscationIV) != 16 {
 		return nil, oops.Errorf("invalid IV length: expected 16 bytes, got %d", len(ntcp2Config.ObfuscationIV))

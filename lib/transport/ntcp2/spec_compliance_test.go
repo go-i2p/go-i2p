@@ -214,7 +214,7 @@ func TestNoiseXKHandshake_Timestamp(t *testing.T) {
 func TestNoiseXKHandshake_Version(t *testing.T) {
 	// The buildRouterAddressOptions function must set v=2
 	staticKey := "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
-	ntcp2Config := &ntcp2.NTCP2Config{
+	ntcp2Config := &ntcp2.Config{
 		ObfuscationIV: make([]byte, 16),
 	}
 
@@ -462,10 +462,10 @@ func TestRekey_RekeyStateTracking(t *testing.T) {
 // Spec reference: ntcp2.rst Section "Rekey"
 func TestRekey_NTCPConnImplementsRekeyer(t *testing.T) {
 	// Verify NTCP2Conn from go-noise has a Rekey() method via reflection
-	connType := reflect.TypeOf((*ntcp2.NTCP2Conn)(nil))
+	connType := reflect.TypeOf((*ntcp2.Conn)(nil))
 	rekeyMethod, found := connType.MethodByName("Rekey")
 	assert.True(t, found,
-		"ntcp2.NTCP2Conn must have a Rekey() method (implements Rekeyer interface)")
+		"ntcp2.Conn must have a Rekey() method (implements Rekeyer interface)")
 
 	if found {
 		// Verify method signature: func() error

@@ -89,7 +89,7 @@ func ExtractPeerIV(routerInfo router_info.RouterInfo) ([]byte, error) {
 //
 // Spec reference: https://geti2p.net/spec/ntcp2 — Noise XK pattern requires
 // the initiator to pre-know the responder's static public key.
-func ConfigureDialConfig(config *ntcp2.NTCP2Config, peerInfo router_info.RouterInfo) error {
+func ConfigureDialConfig(config *ntcp2.Config, peerInfo router_info.RouterInfo) error {
 	// Extract and set the peer's static key as the *remote* static key.
 	// The Noise XK pre-message is "← s": the initiator must know the
 	// responder's static public key before the handshake begins.
@@ -151,11 +151,11 @@ func VerifyStaticKeyConsistency(transport *NTCP2Transport, identity router_info.
 
 // getValidatedPrivateKey retrieves and validates the transport's static private key.
 func getValidatedPrivateKey(transport *NTCP2Transport) ([]byte, error) {
-	if transport.config == nil || transport.config.NTCP2Config == nil {
+	if transport.config == nil || transport.config.Config == nil {
 		return nil, oops.Errorf("transport config is not initialized")
 	}
 
-	privKeyBytes := transport.config.NTCP2Config.StaticKey
+	privKeyBytes := transport.config.Config.StaticKey
 	if len(privKeyBytes) != 32 {
 		return nil, oops.Errorf("static key is not 32 bytes: got %d", len(privKeyBytes))
 	}
