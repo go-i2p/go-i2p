@@ -72,17 +72,21 @@ COMMON_TAG_HASH=$(collecthash common) # 2
 echo "common tag hash: $COMMON_TAG_HASH" 1>&2
 NOISE_TAG_HASH=$(collecthash noise) # 3
 echo "noise tag hash: $NOISE_TAG_HASH" 1>&2
-GO_NOISE_TAG_HASH=$(collecthash go-noise) # 4
+PATH_TAG_HASH=$(collecthash noise) # 4
+echo "path tag hash: $PATH_TAG_HASH" 1>&2
+POOL_TAG_HASH=$(collecthash noise) # 5
+echo "pool tag hash: $POOL_TAG_HASH" 1>&2
+GO_NOISE_TAG_HASH=$(collecthash go-noise) # 6
 echo "go-noise tag hash: $GO_NOISE_TAG_HASH" 1>&2
-GO_I2P_TAG_HASH=$(collecthash go-i2p) # 5
+GO_I2P_TAG_HASH=$(collecthash go-i2p) # 7
 echo "go-i2p tag hash: $GO_I2P_TAG_HASH" 1>&2
-GO_I2CP_TAG_HASH=$(collecthash go-i2cp) # 6
+GO_I2CP_TAG_HASH=$(collecthash go-i2cp) # 8
 echo "go-i2cp tag hash: $GO_I2CP_TAG_HASH" 1>&2
-GO_DATAGRAMS_TAG_HASH=$(collecthash go-datagrams) # 7
+GO_DATAGRAMS_TAG_HASH=$(collecthash go-datagrams) # 8
 echo "go-datagrams tag hash: $GO_DATAGRAMS_TAG_HASH" 1>&2
-GO_STREAMING_TAG_HASH=$(collecthash go-streaming) # 8
+GO_STREAMING_TAG_HASH=$(collecthash go-streaming) # 9
 echo "go-streaming tag hash: $GO_STREAMING_TAG_HASH" 1>&2
-GO_SAM_BRIDGE_TAG_HASH=$(collecthash go-sam-bridge) # 9
+GO_SAM_BRIDGE_TAG_HASH=$(collecthash go-sam-bridge) # 10
 echo "go-sam-bridge tag hash: $GO_SAM_BRIDGE_TAG_HASH" 1>&2
 
 echo "Collected tag hashes. Proceeding to tag version v$VERSION" 1>&2
@@ -103,6 +107,12 @@ update_our_packages() {
   go get "github.com/go-i2p/crypto@$CRYPTO_TAG_HASH" >/dev/null 2>/dev/null || true
   echo go get "github.com/go-i2p/common@$COMMON_TAG_HASH" 1>&2
   go get "github.com/go-i2p/common@$COMMON_TAG_HASH" >/dev/null 2>/dev/null || true
+
+  echo go get "github.com/go-i2p/path@$PATH_TAG_HASH" 1>&2
+  go get "github.com/go-i2p/path@$PATH_TAG_HASH" >/dev/null 2>/dev/null || true
+  echo go get "github.com/go-i2p/pool@$POOL_TAG_HASH" 1>&2
+  go get "github.com/go-i2p/pool@$POOL_TAG_HASH" >/dev/null 2>/dev/null || true
+
   echo go get "github.com/go-i2p/noise@$NOISE_TAG_HASH" 1>&2
   go get "github.com/go-i2p/noise@$NOISE_TAG_HASH" >/dev/null 2>/dev/null || true
   echo go get "github.com/go-i2p/go-noise@$GO_NOISE_TAG_HASH" 1>&2
@@ -140,6 +150,12 @@ correct_our_tags() {
   go get "github.com/go-i2p/common@$VERSION" >/dev/null 2>/dev/null || true
   echo go get "github.com/go-i2p/noise@$VERSION" 1>&2
   go get "github.com/go-i2p/noise@$VERSION" >/dev/null 2>/dev/null || true
+
+  echo go get "github.com/go-i2p/pool@$VERSION" 1>&2
+  go get "github.com/go-i2p/pool@$VERSION" >/dev/null 2>/dev/null || true
+    echo go get "github.com/go-i2p/path@$VERSION" 1>&2
+  go get "github.com/go-i2p/path@$VERSION" >/dev/null 2>/dev/null || true
+
   echo go get "github.com/go-i2p/go-noise@$VERSION" 1>&2
   go get "github.com/go-i2p/go-noise@$VERSION" >/dev/null 2>/dev/null || true
   echo go get "github.com/go-i2p/go-i2p@$VERSION" 1>&2
@@ -238,6 +254,8 @@ if [ "$LIBS" = "true" ]; then
   echo "LIBS is true, skipping noise, go-noise, go-i2p, go-i2cp, go-datagrams, go-streaming, and go-sam-bridge" 1>&2
   exit 0
 fi
+NOISE_TAG_HASH=$(tagandrelease pool) # 5
+NOISE_TAG_HASH=$(tagandrelease path) # 5
 NOISE_TAG_HASH=$(tagandrelease noise) # 5
 GO_NOISE_TAG_HASH=$(tagandrelease go-noise) # 6
 GO_I2P_TAG_HASH=$(tagandrelease go-i2p) # 7
