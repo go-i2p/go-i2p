@@ -91,47 +91,48 @@ echo "go-sam-bridge tag hash: $GO_SAM_BRIDGE_TAG_HASH" 1>&2
 
 echo "Collected tag hashes. Proceeding to tag version v$VERSION" 1>&2
 
+update_by_tag_hash() {
+  echo "updating $1 to tag hash $2" 1>&2
+  go get "github.com/go-i2p/$1@$2" >/dev/null 2>/dev/null
+  go mod tidy -v 1>&2
+  go build -v ./... 1>&2
+  gofumpt -w -s -extra .
+}
+
 # go get all our packages at the new version
 # use go mod tidy to clean up unused deps
 update_our_packages() {
   echo "Updating the packages" 1>&2
   go-check-updates -u
   go get -u ./...
-  echo go get "github.com/go-i2p/logger@$LOGGER_TAG_HASH" 1>&2
-  go get "github.com/go-i2p/logger@$LOGGER_TAG_HASH" >/dev/null 2>/dev/null || true
-  echo go get "github.com/go-i2p/elgamal@$ELGAMAL_TAG_HASH" 1>&2
-  go get "github.com/go-i2p/elgamal@$ELGAMAL_TAG_HASH" >/dev/null 2>/dev/null || true
-  echo go get "github.com/go-i2p/su3@$SU3_TAG_HASH" 1>&2
-  go get "github.com/go-i2p/su3@$SU3_TAG_HASH" >/dev/null 2>/dev/null || true
-  echo go get "github.com/go-i2p/crypto@$CRYPTO_TAG_HASH" 1>&2
-  go get "github.com/go-i2p/crypto@$CRYPTO_TAG_HASH" >/dev/null 2>/dev/null || true
-  echo go get "github.com/go-i2p/common@$COMMON_TAG_HASH" 1>&2
-  go get "github.com/go-i2p/common@$COMMON_TAG_HASH" >/dev/null 2>/dev/null || true
-
-  echo go get "github.com/go-i2p/path@$PATH_TAG_HASH" 1>&2
-  go get "github.com/go-i2p/path@$PATH_TAG_HASH" >/dev/null 2>/dev/null || true
-  echo go get "github.com/go-i2p/pool@$POOL_TAG_HASH" 1>&2
-  go get "github.com/go-i2p/pool@$POOL_TAG_HASH" >/dev/null 2>/dev/null || true
-
-  echo go get "github.com/go-i2p/noise@$NOISE_TAG_HASH" 1>&2
-  go get "github.com/go-i2p/noise@$NOISE_TAG_HASH" >/dev/null 2>/dev/null || true
-  echo go get "github.com/go-i2p/go-noise@$GO_NOISE_TAG_HASH" 1>&2
-  go get "github.com/go-i2p/go-noise@$GO_NOISE_TAG_HASH" >/dev/null 2>/dev/null || true
-  echo go get "github.com/go-i2p/go-i2p@$GO_I2P_TAG_HASH" 1>&2
-  go get "github.com/go-i2p/go-i2p@$GO_I2P_TAG_HASH" >/dev/null 2>/dev/null || true
-  echo go get "github.com/go-i2p/go-i2cp@$GO_I2CP_TAG_HASH" 1>&2
-  go get "github.com/go-i2p/go-i2cp@$GO_I2CP_TAG_HASH" >/dev/null 2>/dev/null || true
-  echo go get "github.com/go-i2p/go-datagrams@$GO_DATAGRAMS_TAG_HASH" 1>&2
-  go get "github.com/go-i2p/go-datagrams@$GO_DATAGRAMS_TAG_HASH" >/dev/null 2>/dev/null || true
-  echo go get "github.com/go-i2p/go-streaming@$GO_STREAMING_TAG_HASH" 1>&2
-  go get "github.com/go-i2p/go-streaming@$GO_STREAMING_TAG_HASH" >/dev/null 2>/dev/null || true
-  echo go get "github.com/go-i2p/go-sam-bridge@$GO_SAM_BRIDGE_TAG_HASH" 1>&2
-  go get "github.com/go-i2p/go-sam-bridge@$GO_SAM_BRIDGE_TAG_HASH" >/dev/null 2>/dev/null || true
+  update_by_tag_hash logger $LOGGER_TAG_HASH
+  update_by_tag_hash elgamal $ELGAMAL_TAG_HASH
+  update_by_tag_hash su3 $SU3_TAG_HASH
+  update_by_tag_hash crypto $CRYPTO_TAG_HASH
+  update_by_tag_hash common $COMMON_TAG_HASH
+  update_by_tag_hash noise $NOISE_TAG_HASH
+  update_by_tag_hash path $PATH_TAG_HASH
+  update_by_tag_hash pool $POOL_TAG_HASH
+  update_by_tag_hash noise $NOISE_TAG_HASH
+  update_by_tag_hash go-noise $GO_NOISE_TAG_HASH
+  update_by_tag_hash go-i2p $GO_I2P_TAG_HASH
+  update_by_tag_hash go-i2cp $GO_I2CP_TAG_HASH
+  update_by_tag_hash go-datagrams $GO_DATAGRAMS_TAG_HASH
+  update_by_tag_hash go-streaming $GO_STREAMING_TAG_HASH
+  update_by_tag_hash go-sam-bridge $GO_SAM_BRIDGE_TAG_HASH
   go mod tidy -v 1>&2
   go build -v ./... 1>&2
   gofumpt -w -s -extra .
-  echo "Updated our packages to v$VERSION" 1>&2
+  echo "Updated our packages to upcoming v$VERSION by specific hashes" 1>&2
   /usr/bin/git commit -am "Update dependencies to v$VERSION"
+}
+
+update_by_version() {
+  echo "updating $1 to version $2" 1>&2
+  go get "github.com/go-i2p/$1@$2" >/dev/null 2>/dev/null
+  go mod tidy -v 1>&2
+  go build -v ./... 1>&2
+  gofumpt -w -s -extra .
 }
 
 # go get all our packages at the new version
@@ -140,34 +141,21 @@ correct_our_tags() {
   echo "Updating the packages" 1>&2
   go-check-updates -u
   go get -u ./...
-  echo go get "github.com/go-i2p/logger@$VERSION" 1>&2
-  go get "github.com/go-i2p/logger@$VERSION" >/dev/null 2>/dev/null || true
-  echo go get "github.com/go-i2p/su3@$VERSION" 1>&2
-  go get "github.com/go-i2p/su3@$VERSION" >/dev/null 2>/dev/null || true
-  echo go get "github.com/go-i2p/crypto@$VERSION" 1>&2
-  go get "github.com/go-i2p/crypto@$VERSION" >/dev/null 2>/dev/null || true
-  echo go get "github.com/go-i2p/common@$VERSION" 1>&2
-  go get "github.com/go-i2p/common@$VERSION" >/dev/null 2>/dev/null || true
-  echo go get "github.com/go-i2p/noise@$VERSION" 1>&2
-  go get "github.com/go-i2p/noise@$VERSION" >/dev/null 2>/dev/null || true
-
-  echo go get "github.com/go-i2p/pool@$VERSION" 1>&2
-  go get "github.com/go-i2p/pool@$VERSION" >/dev/null 2>/dev/null || true
-    echo go get "github.com/go-i2p/path@$VERSION" 1>&2
-  go get "github.com/go-i2p/path@$VERSION" >/dev/null 2>/dev/null || true
-
-  echo go get "github.com/go-i2p/go-noise@$VERSION" 1>&2
-  go get "github.com/go-i2p/go-noise@$VERSION" >/dev/null 2>/dev/null || true
-  echo go get "github.com/go-i2p/go-i2p@$VERSION" 1>&2
-  go get "github.com/go-i2p/go-i2p@$VERSION" >/dev/null 2>/dev/null || true
-  echo go get "github.com/go-i2p/go-i2cp@$VERSION" 1>&2
-  go get "github.com/go-i2p/go-i2cp@$VERSION" >/dev/null 2>/dev/null || true
-  echo go get "github.com/go-i2p/go-datagrams@$VERSION" 1>&2
-  go get "github.com/go-i2p/go-datagrams@$VERSION" >/dev/null 2>/dev/null || true
-  echo go get "github.com/go-i2p/go-streaming@$VERSION" 1>&2
-  go get "github.com/go-i2p/go-streaming@$VERSION" >/dev/null 2>/dev/null || true
-  echo go get "github.com/go-i2p/go-sam-bridge@$VERSION" 1>&2
-  go get "github.com/go-i2p/go-sam-bridge@$VERSION" >/dev/null 2>/dev/null || true
+  update_by_version logger "v$VERSION"
+  update_by_version elgamal "v$VERSION"
+  update_by_version su3 "v$VERSION"
+  update_by_version crypto "v$VERSION"
+  update_by_version common "v$VERSION"
+  update_by_version noise "v$VERSION"
+  update_by_version path "v$VERSION"
+  update_by_version pool "v$VERSION"
+  update_by_version noise "v$VERSION"
+  update_by_version go-noise "v$VERSION"
+  update_by_version go-i2p "v$VERSION"
+  update_by_version go-i2cp "v$VERSION"
+  update_by_version go-datagrams "v$VERSION"
+  update_by_version go-streaming "v$VERSION"
+  update_by_version go-sam-bridge "v$VERSION"
   go mod tidy -v 1>&2
   go build -v ./... 1>&2
   gofumpt -w -s -extra .
