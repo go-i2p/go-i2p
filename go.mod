@@ -9,7 +9,7 @@ require (
 	github.com/go-i2p/common v0.1.55
 	github.com/go-i2p/crypto v0.1.55
 	github.com/go-i2p/go-nat-listener v0.0.0-20260402222111-bfda0025cb1b
-	github.com/go-i2p/go-noise v0.1.55
+	github.com/go-i2p/go-noise v0.1.56-0.20260524091220-606a73fa9996
 	github.com/go-i2p/go-unzip v0.0.0-20260417162122-21146ed7aca8
 	github.com/go-i2p/i2ptui v0.0.0-20260501200659-b54dc6831b61
 	github.com/go-i2p/logger v0.1.55
@@ -43,6 +43,8 @@ require (
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/go-i2p/elgamal v0.1.55 // indirect
 	github.com/go-i2p/go-i2pcontrol v0.1.8 // indirect
+	github.com/go-i2p/path v0.0.0-20260524090922-541ac8d0307c // indirect
+	github.com/go-i2p/pool v0.0.0-20260524090918-318e509454da // indirect
 	github.com/go-i2p/red25519 v0.0.0-20260302212615-1093a31f680d // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/huin/goupnp v1.3.0 // indirect
@@ -91,7 +93,7 @@ require (
 // Group 2: noise, go-noise
 //replace github.com/go-i2p/noise => ../noise
 
-//replace github.com/go-i2p/go-noise => ../go-noise
+replace github.com/go-i2p/go-noise => ../go-noise
 
 // Group 3: logger, su3
 //replace github.com/go-i2p/logger => ../logger

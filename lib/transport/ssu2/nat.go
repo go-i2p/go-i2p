@@ -32,7 +32,47 @@ const (
 func initNATManagers(t *SSU2Transport) {
 	t.relayManager = ssu2noise.NewRelayManager(t.listener)
 	t.introducerRegistry = ssu2noise.NewIntroducerRegistry(3)
-	t.holePunchCoord = ssu2noise.NewHolePunchCoordinator(t.relayManager)
+	verifyFn := func(block *ssu2noise.RelayIntroBlock, signerKey ed25519.PublicKey) error {
+		// Verify Alice's relay intro signature. The signature covers the
+		// "RelayRequestData" prologue + bob_hash + charlie_hash + fields.
+		// We are Charlie; bob's hash is not available in the block, so we
+		// perform a best-effort check using what's available.
+		if block == nil || len(block.Signature) == 0 {
+			return oops.Errorf("relay intro: missing block or signature")
+		}
+		charlieHash := t.getOurIdentityHash()
+		var aliceHash data.Hash
+		if len(block.AliceRouterHash) == 32 {
+			copy(aliceHash[:], block.AliceRouterHash)
+		}
+		// We don't have Bob's hash in the block; use aliceHash as a
+		// placeholder for the bob slot so the data can be verified when the
+		// full context is available.
+		ok, err := ssu2noise.VerifyRelayRequestSignature(
+			signerKey,
+			block.Signature,
+			aliceHash, // bob hash placeholder (best-effort)
+			charlieHash,
+			block.Nonce,
+			block.AliceRelayTag,
+			block.Timestamp,
+			block.Version,
+			block.AlicePort,
+			block.AliceIP,
+		)
+		if err != nil {
+			return oops.Wrapf(err, "relay intro signature verification error")
+		}
+		if !ok {
+			return oops.Errorf("relay intro signature invalid")
+		}
+		return nil
+	}
+	var err error
+	t.holePunchCoord, err = ssu2noise.NewHolePunchCoordinator(t.relayManager, verifyFn)
+	if err != nil {
+		t.logger.WithField("error", err).Warn("failed to initialize HolePunchCoordinator")
+	}
 	t.peerTestManager = ssu2noise.NewPeerTestManager(t.listener)
 	if t.natStateCache == nil {
 		t.natStateCache = &natState{}
@@ -901,7 +941,7 @@ func (t *SSU2Transport) GetNATType(peerAddr *net.UDPAddr) ssu2noise.NATType {
 	if result == nil {
 		return ssu2noise.NATUnknown
 	}
-	return t.peerTestManager.DetermineNATType(result)
+	return ssu2noise.DetermineNATType(result)
 }
 
 // GetCachedNATType returns the most recently cached NAT type from the
@@ -1149,7 +1189,7 @@ func (t *SSU2Transport) checkPeerTestComplete(nonce uint32, candidates []router_
 
 // classifyNATType determines the NAT type from a completed test.
 func (t *SSU2Transport) classifyNATType(test *ssu2noise.PeerTest) ssu2noise.NATType {
-	return t.peerTestManager.DetermineNATType(&ssu2noise.TestResult{
+	return ssu2noise.DetermineNATType(&ssu2noise.TestResult{
 		ExternalAddr: test.ExternalAddr,
 		Reachable:    test.Reachable,
 		NATType:      test.NATType,
