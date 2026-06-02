@@ -9,7 +9,7 @@ require (
 	github.com/go-i2p/common v0.1.55
 	github.com/go-i2p/crypto v0.1.55
 	github.com/go-i2p/go-nat-listener v0.0.0-20260402222111-bfda0025cb1b
-	github.com/go-i2p/go-noise v0.1.56-0.20260524091220-606a73fa9996
+	github.com/go-i2p/go-noise v0.1.56-0.20260601234720-e972a89ebced
 	github.com/go-i2p/go-unzip v0.0.0-20260417162122-21146ed7aca8
 	github.com/go-i2p/i2ptui v0.0.0-20260501200659-b54dc6831b61
 	github.com/go-i2p/logger v0.1.55
