@@ -9,11 +9,14 @@ package router
 import (
 	"context"
 	"crypto/rand"
+	"fmt"
 	"net"
 	"testing"
 	"time"
 
+	i2pbase64 "github.com/go-i2p/common/base64"
 	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/go-i2p/lib/testutil"
 	"github.com/go-i2p/go-i2p/lib/transport"
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
 	"github.com/stretchr/testify/assert"
@@ -55,6 +58,40 @@ func ssu2IntegGenRouterHash(t testing.TB) common.Hash {
 	return h
 }
 
+// ssu2IntegBuildSSU2RouterInfo constructs a signed RouterInfo with a single SSU2
+// RouterAddress containing the "s" parameter derived from staticKey.
+func ssu2IntegBuildSSU2RouterInfo(t testing.TB, staticKey []byte, ip string, port int) []byte {
+	t.Helper()
+
+	// Derive the public static key
+	staticPub, err := curve25519.X25519(staticKey, curve25519.Basepoint)
+	require.NoError(t, err, "failed to derive public key")
+
+	// Build SSU2 options with static key
+	introKey := make([]byte, 32)
+	_, err = rand.Read(introKey)
+	require.NoError(t, err, "failed to generate intro key")
+
+	options := map[string]string{
+		"host": ip,
+		"port": fmt.Sprintf("%d", port),
+		"v":    "2",
+		"s":    i2pbase64.EncodeToString(staticPub),
+		"i":    i2pbase64.EncodeToString(introKey),
+	}
+
+	ri := testutil.CreateSignedTestRouterInfo(t, nil, &testutil.RouterAddressConfig{
+		Transport: "SSU2",
+		Cost:      5,
+		Options:   options,
+	})
+
+	riBytes, err := ri.Bytes()
+	require.NoError(t, err, "failed to serialize RouterInfo")
+
+	return riBytes
+}
+
 // ssu2IntegLoopbackPair creates a handshaked (server, client) SSU2Conn pair
 // over loopback UDP.  The caller must close both connections.
 func ssu2IntegLoopbackPair(t testing.TB, ctx context.Context) (server, client *ssu2noise.SSU2Conn) {
@@ -92,12 +129,17 @@ func ssu2IntegLoopbackPair(t testing.TB, ctx context.Context) (server, client *s
 	require.NoError(t, err)
 	var serverPubHash common.Hash
 	copy(serverPubHash[:], serverPub)
+
+	// Build client RouterInfo with SSU2 address containing static key.
+	clientRouterInfo := ssu2IntegBuildSSU2RouterInfo(t, clientPriv, clientAddr.IP.String(), clientAddr.Port)
+
 	clientCfg = clientCfg.
 		WithStaticKey(clientPriv).
 		WithConnectionID(clientConnID).
 		WithDestroyTimeout(100 * time.Millisecond).
 		WithRemoteRouterHash(serverPubHash).
-		WithRemoteStaticKey(serverPub)
+		WithRemoteStaticKey(serverPub).
+		WithLocalRouterInfo(clientRouterInfo)
 
 	serverConn, err := ssu2noise.NewSSU2Conn(serverPC, clientAddr, serverCfg, false, serverPriv, nil)
 	require.NoError(t, err)

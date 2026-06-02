@@ -20,7 +20,7 @@ func NewBuildMessageFactory() build.BuildMessageFactory {
 }
 
 // CreateShortTunnelBuildMessage creates a serialized Short Tunnel Build message (type 25).
-func (f *buildMessageFactory) CreateShortTunnelBuildMessage(encryptedRecords [][]byte, messageID int) []byte {
+func (f *buildMessageFactory) CreateShortTunnelBuildMessage(encryptedRecords [][]byte, messageID int) ([]byte, error) {
 	// Calculate total size: 1 byte for count + all encrypted records
 	totalSize := 1
 	for _, rec := range encryptedRecords {
@@ -41,12 +41,15 @@ func (f *buildMessageFactory) CreateShortTunnelBuildMessage(encryptedRecords [][
 	msg.SetMessageID(messageID)
 	msg.SetData(data)
 
-	serialized, _ := msg.MarshalBinary()
-	return serialized
+	serialized, err := msg.MarshalBinary()
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to marshal Short Tunnel Build message (type 25, msgID %d)", messageID)
+	}
+	return serialized, nil
 }
 
 // CreateVariableTunnelBuildMessage creates a serialized Variable Tunnel Build message (type 23).
-func (f *buildMessageFactory) CreateVariableTunnelBuildMessage(encryptedRecords [][]byte, messageID int) []byte {
+func (f *buildMessageFactory) CreateVariableTunnelBuildMessage(encryptedRecords [][]byte, messageID int) ([]byte, error) {
 	// Calculate total size: 1 byte for count + all encrypted records
 	totalSize := 1
 	for _, rec := range encryptedRecords {
@@ -67,13 +70,16 @@ func (f *buildMessageFactory) CreateVariableTunnelBuildMessage(encryptedRecords 
 	msg.SetMessageID(messageID)
 	msg.SetData(data)
 
-	serialized, _ := msg.MarshalBinary()
-	return serialized
+	serialized, err := msg.MarshalBinary()
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to marshal Variable Tunnel Build message (type 23, msgID %d)", messageID)
+	}
+	return serialized, nil
 }
 
 // CreateTunnelBuildMessage creates a serialized Tunnel Build message (type 21).
 // Must have exactly 8 records of 528 bytes each, with NO count prefix byte.
-func (f *buildMessageFactory) CreateTunnelBuildMessage(encryptedRecords [][]byte, messageID int) []byte {
+func (f *buildMessageFactory) CreateTunnelBuildMessage(encryptedRecords [][]byte, messageID int) ([]byte, error) {
 	// Type 21 has exactly 8 records at 528 bytes each with NO count prefix
 	const expectedRecordSize = 528
 	totalSize := len(encryptedRecords) * expectedRecordSize
@@ -91,8 +97,11 @@ func (f *buildMessageFactory) CreateTunnelBuildMessage(encryptedRecords [][]byte
 	msg.SetMessageID(messageID)
 	msg.SetData(data)
 
-	serialized, _ := msg.MarshalBinary()
-	return serialized
+	serialized, err := msg.MarshalBinary()
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to marshal Tunnel Build message (type 21, msgID %d)", messageID)
+	}
+	return serialized, nil
 }
 
 // buildSessionAdapter adapts I2NPTransportSession to build.BuildSession interface.

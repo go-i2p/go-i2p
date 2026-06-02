@@ -449,7 +449,10 @@ func (tm *TunnelManager) createVariableTunnelBuildMessage(result *tunnel.TunnelB
 	for i := range result.Records {
 		records[i] = encryptedData[i][:]
 	}
-	data := tm.messageFactory.CreateVariableTunnelBuildMessage(records, messageID)
+	data, err := tm.messageFactory.CreateVariableTunnelBuildMessage(records, messageID)
+	if err != nil {
+		return nil, err
+	}
 	// Parse the serialized message back into a Message object
 	msg := &BaseI2NPMessage{}
 	if err := msg.UnmarshalBinary(data); err != nil {

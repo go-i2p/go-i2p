@@ -529,7 +529,11 @@ func (tm *TunnelManager) createSerializedShortTunnelBuildMessage(result *tunnel.
 		records[i] = encryptedRecords[i][:]
 	}
 
-	return tm.messageFactory.CreateShortTunnelBuildMessage(records, messageID), nil
+	serialized, err := tm.messageFactory.CreateShortTunnelBuildMessage(records, messageID)
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to create Short Tunnel Build message")
+	}
+	return serialized, nil
 }
 
 // convertAndOverrideMessageID converts tunnel records to I2NP format and overrides SendMessageID
@@ -662,7 +666,11 @@ func (tm *TunnelManager) createSerializedTunnelBuildMessage(result *tunnel.Tunne
 		records[i] = encryptedData[i][:]
 	}
 
-	return tm.messageFactory.CreateTunnelBuildMessage(records, messageID), nil
+	serialized, err := tm.messageFactory.CreateTunnelBuildMessage(records, messageID)
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to create Tunnel Build message")
+	}
+	return serialized, nil
 }
 
 // encryptBuildRecords encrypts each build request record with its corresponding

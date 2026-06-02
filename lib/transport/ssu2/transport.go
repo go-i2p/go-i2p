@@ -276,7 +276,13 @@ func listenWithOSPort(config *Config) (net.PacketConn, error) {
 // fallback to a plain UDP listener is transparent to callers.
 func listenWithNATTraversal(config *Config, iport int) (net.PacketConn, error) {
 	host, _, _ := net.SplitHostPort(config.ListenerAddress)
-	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+	// Treat empty host (":0") as loopback to avoid NAT traversal in tests and
+	// when no explicit bind address is configured. NAT traversal is only needed
+	// when binding to a specific non-loopback interface.
+	if host == "" || (net.ParseIP(host) != nil && net.ParseIP(host).IsLoopback()) {
+		if host == "" {
+			host = "127.0.0.1"
+		}
 		conn, err := net.ListenPacket("udp", fmt.Sprintf("%s:%d", host, iport))
 		if err != nil {
 			return nil, oops.Wrapf(err, "failed to create UDP listener")

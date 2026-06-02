@@ -16,12 +16,15 @@ package ssu2
 import (
 	"context"
 	"crypto/rand"
+	"fmt"
 	"net"
 	"testing"
 	"time"
 
+	i2pbase64 "github.com/go-i2p/common/base64"
 	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/i2np"
+	"github.com/go-i2p/go-i2p/lib/testutil"
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
 	"github.com/go-i2p/logger"
 	"github.com/stretchr/testify/assert"
@@ -63,6 +66,45 @@ func genRouterHash(t testing.TB) data.Hash {
 	_, err := rand.Read(h[:])
 	require.NoError(t, err)
 	return h
+}
+
+// buildSSU2RouterInfoForTest creates a RouterInfo with an SSU2 address that
+// includes the static key parameter (s=), matching the production code's
+// addStaticKeyOption behavior. This is required for go-noise's
+// verifyPeerRouterInfoStaticKey check during handshake.
+func buildSSU2RouterInfoForTest(t testing.TB, staticPrivKey []byte, addr string, port int) []byte {
+	t.Helper()
+
+	// Derive the public static key from the private key (mirroring addStaticKeyOption)
+	pub, err := curve25519.X25519(staticPrivKey, curve25519.Basepoint)
+	require.NoError(t, err, "failed to derive public key")
+
+	// Build SSU2 options with the static key, intro key, host, and port
+	introKey := make([]byte, 32)
+	_, err = rand.Read(introKey)
+	require.NoError(t, err, "failed to generate intro key")
+
+	ssu2Options := map[string]string{
+		"host": addr,
+		"port": fmt.Sprintf("%d", port),
+		"v":    "2",
+		"s":    i2pbase64.EncodeToString(pub),
+		"i":    i2pbase64.EncodeToString(introKey),
+	}
+
+	// Use testutil to create a RouterInfo with an SSU2 address
+	addrCfg := &testutil.RouterAddressConfig{
+		Cost:       3,
+		Expiration: time.Now().Add(24 * time.Hour),
+		Transport:  "SSU2",
+		Options:    ssu2Options,
+	}
+
+	ri := testutil.CreateSignedTestRouterInfo(t, nil, addrCfg)
+	riBytes, err := ri.Bytes()
+	require.NoError(t, err, "failed to serialize RouterInfo")
+
+	return riBytes
 }
 
 // loopbackPair creates a server and client SSU2Conn connected over loopback
@@ -109,7 +151,17 @@ func loopbackPair(t testing.TB, ctx context.Context) (serverConn, clientConn *ss
 	require.NoError(t, err)
 	var serverPubHash data.Hash
 	copy(serverPubHash[:], serverPub)
-	clientCfg = clientCfg.WithStaticKey(clientPriv).WithConnectionID(clientConnID).WithDestroyTimeout(100 * time.Millisecond).WithRemoteRouterHash(serverPubHash).WithRemoteStaticKey(serverPub)
+
+	// Build client RouterInfo with SSU2 address containing static key.
+	// This satisfies go-noise's verifyPeerRouterInfoStaticKey check.
+	clientRouterInfo := buildSSU2RouterInfoForTest(t, clientPriv, clientAddr.IP.String(), clientAddr.Port)
+
+	clientCfg = clientCfg.WithStaticKey(clientPriv).
+		WithConnectionID(clientConnID).
+		WithDestroyTimeout(100 * time.Millisecond).
+		WithRemoteRouterHash(serverPubHash).
+		WithRemoteStaticKey(serverPub).
+		WithLocalRouterInfo(clientRouterInfo)
 
 	// Build both connections (no handshake yet).
 	serverConn, err = ssu2noise.NewSSU2Conn(serverPC, clientAddr, serverCfg, false, serverPriv, nil)
