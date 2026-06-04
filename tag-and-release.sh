@@ -44,7 +44,7 @@ comment_out_replaces() {
 
 push() {
   /usr/bin/git push origin main || /usr/bin/git push origin trunk || /usr/bin/git push origin master
-  /usr/bin/git push --tags
+  /usr/bin/git push --tags --force
 }
 
 # descend into the go-i2p namespace and collect checkin hashes
