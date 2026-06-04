@@ -221,7 +221,7 @@ tagandrelease() {
   echo "$1 v$VERSION tag hash: $TAG_HASH" 1>&2
   echo "$TAG_HASH"
   push > /dev/null 2>/dev/null
-  correct_our_tags
+  correct_our_tags 1>&2
   if [ -f RELEASE_NOTES.md ]; then
     github_release release \
       --user go-i2p \
