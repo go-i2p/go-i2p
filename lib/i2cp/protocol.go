@@ -227,15 +227,20 @@ func (m *Message) UnmarshalBinary(data []byte) error {
 	// Parse payload length (4 bytes, big endian)
 	payloadLen := binary.BigEndian.Uint32(data[0:4])
 
+	// Validate payload size before allocating to prevent unbounded allocation
+	if payloadLen > MaxPayloadSize {
+		return oops.Errorf("i2cp message payload too large: %d bytes (max %d bytes per I2CP spec)", payloadLen, MaxPayloadSize)
+	}
+
 	// Parse type (1 byte)
 	m.Type = data[4]
 
 	// Session ID is NOT in wire format - it must be set by the caller from context
 	m.SessionID = 0
 
-	// Validate total length
-	expectedTotal := 5 + payloadLen
-	if uint32(len(data)) < expectedTotal {
+	// Validate total length using 64-bit arithmetic to avoid uint32 wraparound
+	expectedTotal := uint64(payloadLen) + 5
+	if uint64(len(data)) < expectedTotal {
 		return oops.Errorf("i2cp message truncated: expected %d bytes, got %d", expectedTotal, len(data))
 	}
 

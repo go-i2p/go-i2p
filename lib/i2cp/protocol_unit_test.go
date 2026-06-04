@@ -113,8 +113,13 @@ func TestMessageUnmarshalErrors(t *testing.T) {
 		},
 		{
 			name:    "Truncated payload",
-			data:    []byte{0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x10}, // Claims 16 bytes payload but none provided
+			data:    []byte{0x00, 0x00, 0x00, 0x10, 0x01}, // Claims 16 bytes payload but none provided
 			wantErr: "truncated",
+		},
+		{
+			name:    "Payload length too large",
+			data:    []byte{0xFF, 0xFF, 0xFF, 0xFF, 0x01}, // payloadLen wraps if added in uint32
+			wantErr: "too large",
 		},
 	}
 
