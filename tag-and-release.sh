@@ -178,13 +178,13 @@ tagandrelease() {
   echo "Updating our packages for $1" 1>&2
   update_our_packages
   if [ $DRY_RUN = true ]; then
-    echo "Dry run: skipping git tag and release for $1"
+    echo "Dry run: skipping git tag and release for $1" 1>&2
     if [ "$CHECKIN_DRY_RUN" = true ]; then
-      echo "Dry run: skipping git add and commit for $1"
+      echo "Dry run: skipping git add and commit for $1" 1>&2
     else
-      /usr/bin/git add -v .
+      /usr/bin/git add -v . 1>&2
       /usr/bin/git commit -am "library sync for v$VERSION" 1>&2
-      push
+      push 1>&2
     fi
     return
   fi
@@ -220,7 +220,7 @@ tagandrelease() {
   TAG_HASH=$(git rev-parse "v$VERSION")
   echo "$1 v$VERSION tag hash: $TAG_HASH" 1>&2
   echo "$TAG_HASH"
-  push > /dev/null 2>/dev/null
+  push 1>&2
   correct_our_tags 1>&2
   if [ -f RELEASE_NOTES.md ]; then
     github_release release \
