@@ -217,7 +217,7 @@ tagandrelease() {
     git commit -m "Update RELEASE_NOTES.md for v$VERSION" 1>&2
   fi
   git tag -sa "v$VERSION" -m "$1 v$VERSION" 1>&2
-  TAG_HASH=$(git rev-parse "v$VERSION")
+  TAG_HASH=$(/usr/bin/git rev-parse "v$VERSION")
   echo "$1 v$VERSION tag hash: $TAG_HASH" 1>&2
   echo "$TAG_HASH"
   push 1>&2
