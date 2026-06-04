@@ -6,15 +6,15 @@ require (
 	github.com/beevik/ntp v1.5.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
-	github.com/go-i2p/common v0.1.55
-	github.com/go-i2p/crypto v0.1.55
+	github.com/go-i2p/common v0.1.56
+	github.com/go-i2p/crypto v0.1.56
 	github.com/go-i2p/go-nat-listener v0.0.0-20260402222111-bfda0025cb1b
-	github.com/go-i2p/go-noise v0.1.56-0.20260601234720-e972a89ebced
+	github.com/go-i2p/go-noise v0.1.56
 	github.com/go-i2p/go-unzip v0.0.0-20260417162122-21146ed7aca8
 	github.com/go-i2p/i2ptui v0.0.0-20260501200659-b54dc6831b61
-	github.com/go-i2p/logger v0.1.55
+	github.com/go-i2p/logger v0.1.56
 	github.com/go-i2p/noise v1.1.1-0.20260327201800-8e41bb3d9f1e
-	github.com/go-i2p/su3 v0.1.55
+	github.com/go-i2p/su3 v0.1.56
 	github.com/samber/oops v1.22.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
@@ -41,10 +41,10 @@ require (
 	github.com/dchest/siphash v1.2.3 // indirect
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
-	github.com/go-i2p/elgamal v0.1.55 // indirect
+	github.com/go-i2p/elgamal v0.1.56 // indirect
 	github.com/go-i2p/go-i2pcontrol v0.1.8 // indirect
-	github.com/go-i2p/path v0.0.0-20260524090922-541ac8d0307c // indirect
-	github.com/go-i2p/pool v0.0.0-20260524090918-318e509454da // indirect
+	github.com/go-i2p/path v0.1.56 // indirect
+	github.com/go-i2p/pool v0.1.56 // indirect
 	github.com/go-i2p/red25519 v0.0.0-20260302212615-1093a31f680d // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/huin/goupnp v1.3.0 // indirect
