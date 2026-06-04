@@ -186,6 +186,9 @@ tagandrelease() {
       /usr/bin/git commit -am "library sync for v$VERSION" 1>&2
       push 1>&2
     fi
+    TAG_HASH=$(/usr/bin/git rev-parse "HEAD")
+    echo "$1 v$VERSION tag hash: $TAG_HASH" 1>&2
+    echo "$TAG_HASH"
     return
   fi
   # if release nodes is less than 6 lines long, delete it and create a placeholder
