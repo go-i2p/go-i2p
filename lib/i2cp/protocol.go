@@ -220,16 +220,9 @@ func (m *Message) MarshalBinary() ([]byte, error) {
 // UnmarshalBinary deserializes an I2CP message from wire format
 // Per I2CP spec: wire format is length(4) + type(1) + payload
 func (m *Message) UnmarshalBinary(data []byte) error {
-	if len(data) < 5 {
-		return oops.Errorf("i2cp message too short: need at least 5 bytes for header, got %d", len(data))
-	}
-
-	// Parse payload length (4 bytes, big endian)
-	payloadLen := binary.BigEndian.Uint32(data[0:4])
-
-	// Validate payload size before allocating to prevent unbounded allocation
-	if payloadLen > MaxPayloadSize {
-		return oops.Errorf("i2cp message payload too large: %d bytes (max %d bytes per I2CP spec)", payloadLen, MaxPayloadSize)
+	payloadLen, err := validateUnmarshalHeader(data)
+	if err != nil {
+		return err
 	}
 
 	// Parse type (1 byte)
@@ -237,12 +230,6 @@ func (m *Message) UnmarshalBinary(data []byte) error {
 
 	// Session ID is NOT in wire format - it must be set by the caller from context
 	m.SessionID = 0
-
-	// Validate total length using 64-bit arithmetic to avoid uint32 wraparound
-	expectedTotal := uint64(payloadLen) + 5
-	if uint64(len(data)) < expectedTotal {
-		return oops.Errorf("i2cp message truncated: expected %d bytes, got %d", expectedTotal, len(data))
-	}
 
 	// Extract payload
 	if payloadLen > 0 {
@@ -253,6 +240,28 @@ func (m *Message) UnmarshalBinary(data []byte) error {
 	}
 
 	return nil
+}
+
+// validateUnmarshalHeader validates the fixed I2CP header of data and returns the
+// declared payload length. It guards against short buffers, oversized payloads
+// (unbounded allocation), and truncated buffers, using 64-bit arithmetic to avoid
+// uint32 wraparound on the total-length check.
+func validateUnmarshalHeader(data []byte) (uint32, error) {
+	if len(data) < 5 {
+		return 0, oops.Errorf("i2cp message too short: need at least 5 bytes for header, got %d", len(data))
+	}
+
+	payloadLen := binary.BigEndian.Uint32(data[0:4])
+	if payloadLen > MaxPayloadSize {
+		return 0, oops.Errorf("i2cp message payload too large: %d bytes (max %d bytes per I2CP spec)", payloadLen, MaxPayloadSize)
+	}
+
+	expectedTotal := uint64(payloadLen) + 5
+	if uint64(len(data)) < expectedTotal {
+		return 0, oops.Errorf("i2cp message truncated: expected %d bytes, got %d", expectedTotal, len(data))
+	}
+
+	return payloadLen, nil
 }
 
 // ReadMessage reads a complete I2CP message from a reader.
