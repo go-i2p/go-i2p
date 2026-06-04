@@ -32,11 +32,11 @@ github_release() {
 comment_out_replaces() {
   echo "Commenting out replace directives in go.mod and running go mod tidy" 1>&2
   sed -i.bak '/^replace /s/^/\/\//g' go.mod
-  git add -v .
+  git add -v . 1>&2
   if [ "$CHECKIN_DRY_RUN" = true ]; then
-    echo "Dry run: skipping git commit for commented out replace directives"
+    echo "Dry run: skipping git commit for commented out replace directives" 1>&2
   else
-    /usr/bin/git commit -am "Comment out replace directives"
+    /usr/bin/git commit -am "Comment out replace directives" 1>&2
   fi
   #go mod tidy
   rm go.mod.bak
@@ -97,15 +97,15 @@ update_by_tag_hash() {
   go get "github.com/go-i2p/$1@$2" >/dev/null 2>/dev/null
   go mod tidy -v 1>&2
   go build -v ./... 1>&2
-  gofumpt -w -s -extra .
+  gofumpt -w -s -extra . 1>&2
 }
 
 # go get all our packages at the new version
 # use go mod tidy to clean up unused deps
 update_our_packages() {
   echo "Updating the packages" 1>&2
-  go-check-updates -u
-  go get -u ./...
+  go-check-updates -u 1>&2
+  go get -u ./... 1>&2
   update_by_tag_hash logger $LOGGER_TAG_HASH
   update_by_tag_hash elgamal $ELGAMAL_TAG_HASH
   update_by_tag_hash su3 $SU3_TAG_HASH
@@ -123,9 +123,9 @@ update_our_packages() {
   update_by_tag_hash go-sam-bridge $GO_SAM_BRIDGE_TAG_HASH
   go mod tidy -v 1>&2
   go build -v ./... 1>&2
-  gofumpt -w -s -extra .
+  gofumpt -w -s -extra . 1>&2
   echo "Updated our packages to upcoming v$VERSION by specific hashes" 1>&2
-  /usr/bin/git commit -am "Update dependencies to v$VERSION"
+  /usr/bin/git commit -am "Update dependencies to v$VERSION" 1>&2
 }
 
 update_by_version() {
@@ -133,15 +133,15 @@ update_by_version() {
   go get "github.com/go-i2p/$1@$2" >/dev/null 2>/dev/null
   go mod tidy -v 1>&2
   go build -v ./... 1>&2
-  gofumpt -w -s -extra .
+  gofumpt -w -s -extra . 1>&2
 }
 
 # go get all our packages at the new version
 # use go mod tidy to clean up unused deps
 correct_our_tags() {
   echo "Updating the packages" 1>&2
-  go-check-updates -u
-  go get -u ./...
+  go-check-updates -u 1>&2
+  go get -u ./... 1>&2
   update_by_version logger "v$VERSION"
   update_by_version elgamal "v$VERSION"
   update_by_version su3 "v$VERSION"
@@ -159,9 +159,9 @@ correct_our_tags() {
   update_by_version go-sam-bridge "v$VERSION"
   go mod tidy -v 1>&2
   go build -v ./... 1>&2
-  gofumpt -w -s -extra .
+  gofumpt -w -s -extra . 1>&2
   echo "Updated our packages to v$VERSION" 1>&2
-  /usr/bin/git commit -am "Update dependencies to v$VERSION"
+  /usr/bin/git commit -am "Update dependencies to v$VERSION" 1>&2
 }
 
 cleanup() {
@@ -234,6 +234,10 @@ tagandrelease() {
 
 echo "Tagging and releasing version v$VERSION" 1>&2
 
+#echo "tag and release output test"
+#tagandrelease logger
+#echo "tag and release output test complete"
+#exit
 LOGGER_TAG_HASH=$(tagandrelease logger) # 0
 ELGAMAL_TAG_HASH=$(tagandrelease elgamal) # 2
 SU3_TAG_HASH=$(tagandrelease su3) # 1
