@@ -44,7 +44,7 @@ comment_out_replaces() {
 
 push() {
   /usr/bin/git push origin main || /usr/bin/git push origin trunk || /usr/bin/git push origin master
-  /usr/bin/git push --tags --force --all
+  /usr/bin/git push --tags --force
   /usr/bin/git push origin v$VERSION --force
 }
 
@@ -53,11 +53,11 @@ cd ../
 GOI2P_DIR=$(pwd)
 
 collecthash() {
-  cd "$1" && #push
+  cd "$1" && echo "Collecting tag hash for $1" 1>&2
   TAG_HASH=$(/usr/bin/git rev-parse HEAD)
   REMOTE=$(/usr/bin/git remote -v)
   cd "$GOI2P_DIR"
-  #echo "$1 tag hash: $TAG_HASH Remote: $REMOTE" 1>&2
+  echo "$1 tag hash: $TAG_HASH Remote: $REMOTE" 1>&2
   echo "$TAG_HASH"
 }
 
@@ -73,9 +73,9 @@ COMMON_TAG_HASH=$(collecthash common) # 2
 echo "common tag hash: $COMMON_TAG_HASH" 1>&2
 NOISE_TAG_HASH=$(collecthash noise) # 3
 echo "noise tag hash: $NOISE_TAG_HASH" 1>&2
-PATH_TAG_HASH=$(collecthash noise) # 4
+PATH_TAG_HASH=$(collecthash path) # 4
 echo "path tag hash: $PATH_TAG_HASH" 1>&2
-POOL_TAG_HASH=$(collecthash noise) # 5
+POOL_TAG_HASH=$(collecthash pool) # 5
 echo "pool tag hash: $POOL_TAG_HASH" 1>&2
 GO_NOISE_TAG_HASH=$(collecthash go-noise) # 6
 echo "go-noise tag hash: $GO_NOISE_TAG_HASH" 1>&2
