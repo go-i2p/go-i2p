@@ -61,11 +61,18 @@ func (r *Router) wireParticipantManager() {
 	log.WithFields(logger.Fields{"at": "initializeMessageRouter"}).Debug("Participant manager and build reply forwarder wired into message processor")
 }
 
-// wireTunnelDataHandler wires the inbound message handler as the TunnelData handler.
+// wireTunnelDataHandler wires the inbound message handler as the TunnelData handler
+// and wires the participant manager and session provider for transit tunnel forwarding.
 func (r *Router) wireTunnelDataHandler() {
 	if r.inboundHandler != nil {
 		r.messageRouter.GetProcessor().SetTunnelDataHandler(r.inboundHandler)
-		log.WithFields(logger.Fields{"at": "initializeMessageRouter"}).Debug("InboundMessageHandler wired as TunnelData handler on message processor")
+		// Wire the participant manager for transit tunnel handling
+		if r.participantManager != nil {
+			r.inboundHandler.SetParticipantManager(r.participantManager)
+		}
+		// Wire the session provider for forwarding transit tunnel messages
+		r.inboundHandler.SetSessionProvider(r)
+		log.WithFields(logger.Fields{"at": "initializeMessageRouter"}).Debug("InboundMessageHandler wired as TunnelData handler with participant manager and session provider for transit forwarding")
 	}
 }
 
