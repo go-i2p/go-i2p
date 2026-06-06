@@ -1,7 +1,6 @@
 package tunnel
 
 import (
-	"encoding/binary"
 	"errors"
 	"sync/atomic"
 	"time"
@@ -218,9 +217,11 @@ func (p *Participant) Process(encryptedData []byte) (nextHopID TunnelID, decrypt
 		return 0, nil, ErrInvalidParticipantData
 	}
 
-	// Extract next hop tunnel ID from decrypted header
-	// After decryption, bytes 0-3 contain the tunnel ID for the next hop
-	nextHopID = TunnelID(binary.BigEndian.Uint32(decrypted[:4]))
+	// Use the next hop tunnel ID from the build record, not from decrypted payload.
+	// Per I2P Tunnel Message spec, a transit hop forwards using the next tunnel ID
+	// it learned in its build record. The first 4 bytes of the decrypted payload
+	// are part of the transformed IV/data region, not a tunnel ID.
+	nextHopID = p.nextHopTunnel
 
 	log.WithFields(map[string]interface{}{
 		"tunnel_id":   p.tunnelID,

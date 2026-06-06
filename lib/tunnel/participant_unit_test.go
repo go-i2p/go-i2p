@@ -509,3 +509,72 @@ func TestMultiHopTunnelRoundTrip(t *testing.T) {
 		})
 	}
 }
+
+// TestParticipantUsesNextHopFromBuildRecord verifies that Process returns the
+// nextHopTunnel from the build record (not from decrypted payload bytes).
+// This test validates the fix for audit finding C2.
+func TestParticipantUsesNextHopFromBuildRecord(t *testing.T) {
+	// Create a participant with a specific nextHopTunnel
+	const tunnelID = TunnelID(1000)
+	const expectedNextHop = TunnelID(2000)
+
+	layerKey := generateRandomKey()
+	ivKey := generateRandomKey()
+	aesEncryptor, err := tunnel.NewAESEncryptor(layerKey, ivKey)
+	if err != nil {
+		t.Fatalf("failed to create AES encryptor: %v", err)
+	}
+
+	// Create participant with nextHopTunnel set to expectedNextHop
+	participant := &Participant{
+		tunnelID:      tunnelID,
+		createdAt:     time.Now(),
+		decryption:    aesEncryptor,
+		nextHopTunnel: expectedNextHop, // This is what should be returned
+	}
+	participant.lastActivity.Store(time.Now().UnixNano())
+	participant.lifetime.Store(int64(10 * time.Minute))
+	participant.idleTimeout.Store(int64(2 * time.Minute))
+
+	// Create a 1008-byte payload with a DIFFERENT tunnel ID in bytes 0-3
+	// (to prove we're not reading from decrypted bytes)
+	const decoyNextHop = TunnelID(9999) // Different from expectedNextHop
+	payload := make([]byte, 1008)
+	binary.BigEndian.PutUint32(payload[:4], uint32(decoyNextHop))
+	for i := 4; i < len(payload); i++ {
+		payload[i] = byte(i % 256)
+	}
+
+	// Encrypt the payload to create a 1028-byte tunnel message
+	encryptedMsg, err := aesEncryptor.Encrypt(payload)
+	if err != nil {
+		t.Fatalf("failed to encrypt: %v", err)
+	}
+
+	if len(encryptedMsg) != 1028 {
+		t.Fatalf("expected encrypted message length 1028, got %d", len(encryptedMsg))
+	}
+
+	// Process the message
+	nextHopID, decrypted, err := participant.Process(encryptedMsg)
+	if err != nil {
+		t.Fatalf("Process failed: %v", err)
+	}
+
+	// CRITICAL: Verify that nextHopID equals the build record's nextHopTunnel,
+	// NOT the decoyNextHop embedded in the decrypted payload bytes
+	if nextHopID != expectedNextHop {
+		t.Errorf("nextHopID should come from build record: expected %d, got %d", expectedNextHop, nextHopID)
+	}
+
+	// The decrypted payload should still contain the decoyNextHop in bytes 0-3
+	// (proving we didn't read nextHopID from there)
+	if len(decrypted) >= 4 {
+		decryptedTunnelID := TunnelID(binary.BigEndian.Uint32(decrypted[:4]))
+		if decryptedTunnelID != decoyNextHop {
+			t.Errorf("decrypted payload bytes 0-3 should contain decoy: expected %d, got %d", decoyNextHop, decryptedTunnelID)
+		}
+	}
+
+	t.Logf("SUCCESS: Process returned nextHopID=%d from build record (ignored decoy=%d in payload)", nextHopID, decoyNextHop)
+}

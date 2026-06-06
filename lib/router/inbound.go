@@ -372,9 +372,15 @@ func (h *InboundMessageHandler) handleTransitTunnelData(tunnelID tunnel.TunnelID
 		return oops.Errorf("participant tunnel is nil for tunnel %d", tunnelID)
 	}
 
+	// Participant.Process expects exactly 1028 bytes: 4-byte tunnel ID + 1024-byte data.
+	// Reconstruct the wire-format message by prepending the tunnel ID.
+	fullMsg := make([]byte, 1028)
+	binary.BigEndian.PutUint32(fullMsg[0:4], uint32(tunnelID))
+	copy(fullMsg[4:], data)
+
 	// Decrypt one layer of encryption
 	// Participant.Process returns: (nextHopID, decryptedData, error)
-	nextHopID, decrypted, err := participant.Process(data)
+	nextHopID, decrypted, err := participant.Process(fullMsg)
 	if err != nil {
 		log.WithFields(logger.Fields{
 			"at":        "handleTransitTunnelData",
