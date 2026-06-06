@@ -217,7 +217,7 @@ func (m *mockParticipantManager) ProcessBuildRequest(sourceHash common.Hash) (ac
 	return false, m.rejectCode, m.rejectReason
 }
 
-func (m *mockParticipantManager) RegisterParticipant(tunnelID tunnel.TunnelID, sourceHash common.Hash, expiry time.Time, layerKey, ivKey session_key.SessionKey) error {
+func (m *mockParticipantManager) RegisterParticipant(tunnelID tunnel.TunnelID, sourceHash common.Hash, expiry time.Time, layerKey, ivKey session_key.SessionKey, nextHopIdent common.Hash, nextHopTunnel tunnel.TunnelID) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.registeredCount++

@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/crypto/tunnel"
 	"github.com/go-i2p/logger"
 )
@@ -23,6 +24,7 @@ import (
 // - Tracks creation time and expiration (tunnels typically last 10 minutes)
 // - Tracks last activity to detect idle tunnels (protection against resource exhaustion attacks)
 // - Thread-safe: lastActivity uses atomic operations with 5-second granularity
+// - Stores next hop routing info (router identity and tunnel ID) for forwarding
 type Participant struct {
 	// tunnelID is this participant's tunnel ID (not used for processing,
 	// but kept for logging and debugging)
@@ -48,6 +50,13 @@ type Participant struct {
 	// Default is 2 minutes to mitigate attackers requesting excessive tunnels
 	// Uses atomic operations for thread-safe access
 	idleTimeout atomic.Int64
+
+	// nextHopIdent is the router identity (hash) of the next hop for routing
+	// May be nil if forwarding to an endpoint (tunnel ID 0)
+	nextHopIdent common.Hash
+
+	// nextHopTunnel is the tunnel ID at the next hop for routing (0 = direct to router)
+	nextHopTunnel TunnelID
 }
 
 var (
@@ -107,6 +116,37 @@ func NewParticipant(tunnelID TunnelID, decryption tunnel.TunnelEncryptor) (*Part
 		"idle_timeout": DefaultIdleTimeout,
 	}).Debug("created tunnel participant")
 	return p, nil
+}
+
+// NewParticipantWithNextHop creates a new tunnel participant with next hop routing information.
+// This is used during tunnel build when we accept a transit tunnel and need to store
+// where to forward decrypted messages to.
+//
+// Parameters:
+// - tunnelID: the tunnel ID for this participant hop
+// - decryption: the tunnel decryption object for removing one encryption layer
+// - nextHopIdent: the router hash of the next hop (may be empty if endpoint)
+// - nextHopTunnel: the tunnel ID at the next hop (0 if direct to router)
+//
+// Returns an error if decryption is nil.
+func NewParticipantWithNextHop(tunnelID TunnelID, decryption tunnel.TunnelEncryptor, nextHopIdent common.Hash, nextHopTunnel TunnelID) (*Participant, error) {
+	p, err := NewParticipant(tunnelID, decryption)
+	if err != nil {
+		return nil, err
+	}
+	p.nextHopIdent = nextHopIdent
+	p.nextHopTunnel = nextHopTunnel
+	return p, nil
+}
+
+// NextHopIdent returns the router identity of the next hop for routing.
+func (p *Participant) NextHopIdent() common.Hash {
+	return p.nextHopIdent
+}
+
+// NextHopTunnel returns the tunnel ID at the next hop for routing.
+func (p *Participant) NextHopTunnel() TunnelID {
+	return p.nextHopTunnel
 }
 
 // Process handles an incoming encrypted tunnel message.

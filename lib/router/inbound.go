@@ -15,11 +15,13 @@ import (
 // InboundMessageHandler processes inbound tunnel messages and delivers them to I2CP sessions.
 // This component bridges tunnel endpoints with I2CP client sessions, enabling end-to-end
 // message delivery from the I2P network to local applications.
+// It also handles forwarding of transit tunnel data (when this router is an intermediate hop).
 //
 // Design:
 // - Maps tunnel IDs to I2CP sessions for message routing
 // - Uses tunnel endpoints to decrypt incoming TunnelData messages
 // - Delivers decrypted I2NP messages to appropriate I2CP session queues
+// - Forwards transit tunnel messages through the participant manager
 // - Thread-safe for concurrent message processing
 type InboundMessageHandler struct {
 	mu sync.RWMutex
@@ -29,6 +31,12 @@ type InboundMessageHandler struct {
 
 	// I2CP session manager for looking up sessions
 	sessionManager *i2cp.SessionManager
+
+	// Participant manager for transit tunnel relaying
+	participantManager *tunnel.ParticipantManager
+
+	// Session provider for forwarding transit tunnel messages
+	sessionProvider i2np.SessionProvider
 }
 
 // inboundTunnelEntry tracks the session and endpoint for an inbound tunnel
@@ -47,6 +55,20 @@ func NewInboundMessageHandler(sessionManager *i2cp.SessionManager) *InboundMessa
 		tunnelSessions: make(map[tunnel.TunnelID]*inboundTunnelEntry),
 		sessionManager: sessionManager,
 	}
+}
+
+// SetParticipantManager wires the participant manager for transit tunnel forwarding.
+func (h *InboundMessageHandler) SetParticipantManager(pm *tunnel.ParticipantManager) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.participantManager = pm
+}
+
+// SetSessionProvider wires the session provider for forwarding transit tunnel messages.
+func (h *InboundMessageHandler) SetSessionProvider(sp i2np.SessionProvider) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.sessionProvider = sp
 }
 
 // RegisterTunnel registers an inbound tunnel for a specific I2CP session.
@@ -150,9 +172,9 @@ func (h *InboundMessageHandler) UnregisterTunnel(tunnelID tunnel.TunnelID) {
 //
 // Process:
 // 1. Extract tunnel ID from the TunnelCarrier interface
-// 2. Find the corresponding session and endpoint
-// 3. Decrypt the tunnel message using the endpoint
-// 4. Deliver the decrypted I2NP message to the session
+// 2. Check if this is a transit tunnel (participant) or inbound endpoint
+// 3a. For transit: decrypt one layer and forward to next hop
+// 3b. For inbound: decrypt and deliver to I2CP session
 //
 // Parameters:
 // - msg: the I2NP TunnelData message to process
@@ -177,6 +199,12 @@ func (h *InboundMessageHandler) HandleTunnelData(msg i2np.Message) error {
 		"data_size": len(data),
 	}).Debug("Processing tunnel data message")
 
+	// Check if this is a transit (participant) tunnel
+	if participant := h.getParticipant(tunnelID); participant != nil {
+		return h.handleTransitTunnelData(tunnelID, data, participant)
+	}
+
+	// Otherwise, handle as inbound endpoint tunnel
 	entry, ok := h.lookupTunnelEntry(tunnelID)
 	if !ok {
 		return nil
@@ -313,4 +341,108 @@ func (h *InboundMessageHandler) GetTunnelSession(tunnelID tunnel.TunnelID) (uint
 	}
 
 	return entry.sessionID, true
+}
+
+// getParticipant retrieves a participant tunnel by tunnel ID.
+// Returns nil if no participant is registered for this tunnel ID.
+func (h *InboundMessageHandler) getParticipant(tunnelID tunnel.TunnelID) *tunnel.Participant {
+	if h.participantManager == nil {
+		return nil
+	}
+	return h.participantManager.GetParticipant(tunnelID)
+}
+
+// handleTransitTunnelData processes a transit tunnel message by decrypting one layer
+// and forwarding to the next hop.
+//
+// Parameters:
+// - tunnelID: the tunnel ID for this transit tunnel
+// - data: the 1024-byte encrypted tunnel data
+// - participant: the participant tunnel that will decrypt one layer
+//
+// Returns an error if processing fails.
+func (h *InboundMessageHandler) handleTransitTunnelData(tunnelID tunnel.TunnelID, data []byte, participant *tunnel.Participant) error {
+	if participant == nil {
+		log.WithFields(logger.Fields{
+			"at":        "handleTransitTunnelData",
+			"tunnel_id": tunnelID,
+			"reason":    "nil_participant",
+		}).Error("participant tunnel is nil")
+		return oops.Errorf("participant tunnel is nil for tunnel %d", tunnelID)
+	}
+
+	// Decrypt one layer of encryption
+	// Participant.Process returns: (nextHopID, decryptedData, error)
+	nextHopID, decrypted, err := participant.Process(data)
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":        "handleTransitTunnelData",
+			"tunnel_id": tunnelID,
+			"error":     err,
+		}).Debug("Failed to decrypt participant tunnel data")
+		return oops.Wrapf(err, "failed to decrypt transit tunnel data")
+	}
+
+	// Forward to the next hop
+	if err := h.forwardToNextHop(nextHopID, decrypted); err != nil {
+		log.WithFields(logger.Fields{
+			"at":        "handleTransitTunnelData",
+			"tunnel_id": tunnelID,
+			"error":     err,
+		}).Error("Failed to forward decrypted transit data")
+		return oops.Wrapf(err, "failed to forward transit tunnel data")
+	}
+
+	log.WithFields(logger.Fields{
+		"at":          "handleTransitTunnelData",
+		"tunnel_id":   tunnelID,
+		"next_hop_id": nextHopID,
+	}).Debug("Successfully forwarded transit tunnel data")
+
+	return nil
+}
+
+// forwardToNextHop sends a decrypted tunnel message to the next hop.
+// The message is already decrypted and contains the next hop tunnel ID in the header.
+//
+// Parameters:
+// - nextHopID: the tunnel ID at the next hop
+// - decryptedData: the decrypted tunnel message (1028 bytes with next hop tunnel ID in header)
+//
+// Returns an error if forwarding fails.
+//
+// NOTE: This is a minimal implementation that currently logs the forward intent.
+// Full integration with the transport layer will be added in a future phase
+// to actually route the message to the next hop router.
+func (h *InboundMessageHandler) forwardToNextHop(nextHopID tunnel.TunnelID, decryptedData []byte) error {
+	if nextHopID == 0 {
+		// Tunnel ID 0 means deliver to the router (endpoint), not transit
+		log.WithFields(logger.Fields{
+			"at":     "forwardToNextHop",
+			"reason": "tunnel_endpoint_reached",
+		}).Debug("transit tunnel reached endpoint (tunnel ID 0)")
+		// This case would be handled differently - delivering to the endpoint
+		// For now, log it since we're in the transit path
+		return oops.Errorf("tunnel endpoint (ID 0) reached in transit forwarding - delivery required")
+	}
+
+	// Validate decrypted data size
+	if len(decryptedData) != 1028 {
+		return oops.Errorf("invalid decrypted data size: expected 1028 bytes, got %d", len(decryptedData))
+	}
+
+	log.WithFields(logger.Fields{
+		"at":          "forwardToNextHop",
+		"next_hop_id": nextHopID,
+		"data_size":   len(decryptedData),
+		"status":      "forwarding_queued",
+	}).Debug("Transit tunnel data ready for forwarding (transport integration pending)")
+
+	// TODO: Implement actual transport forwarding
+	// 1. Look up route to next hop router
+	// 2. Get/create transport session
+	// 3. Wrap in TunnelData message with nextHopID
+	// 4. Queue for transmission
+
+	return nil
 }

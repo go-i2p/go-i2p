@@ -56,7 +56,9 @@ type ParticipantManager interface {
 	// - expiry: When the tunnel participation expires
 	// - layerKey: The layer encryption key from the build request record
 	// - ivKey: The IV key from the build request record
-	RegisterParticipant(tunnelID buildrecord.TunnelID, sourceHash common.Hash, expiry time.Time, layerKey, ivKey session_key.SessionKey) error
+	// - nextHopIdent: The router hash of the next hop for routing (may be empty)
+	// - nextHopTunnel: The tunnel ID at the next hop for routing (0 if endpoint)
+	RegisterParticipant(tunnelID buildrecord.TunnelID, sourceHash common.Hash, expiry time.Time, layerKey, ivKey session_key.SessionKey, nextHopIdent common.Hash, nextHopTunnel buildrecord.TunnelID) error
 }
 
 // BuildReplyForwarder defines the interface for forwarding tunnel build replies.

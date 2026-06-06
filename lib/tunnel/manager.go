@@ -457,12 +457,12 @@ func (m *ParticipantManager) ProcessBuildRequest(sourceHash common.Hash) (accept
 // - tunnelID: The tunnel ID for the participating tunnel
 // - sourceHash: The router hash of the requester (used for tracking)
 // - expiry: When the tunnel participation expires
+// - layerKey, ivKey: Keys for tunnel layer decryption
+// - nextHopIdent: Router hash of the next hop for routing (may be empty)
+// - nextHopTunnel: Tunnel ID at the next hop for routing (0 = direct to router)
 //
 // Returns an error if registration fails.
-//
-// The layerKey and ivKey are extracted from the BuildRequestRecord and used
-// to create the AES encryptor for tunnel layer decryption.
-func (m *ParticipantManager) RegisterParticipant(tunnelID TunnelID, sourceHash common.Hash, expiry time.Time, layerKey, ivKey session_key.SessionKey) error {
+func (m *ParticipantManager) RegisterParticipant(tunnelID TunnelID, sourceHash common.Hash, expiry time.Time, layerKey, ivKey session_key.SessionKey, nextHopIdent common.Hash, nextHopTunnel TunnelID) error {
 	// Calculate lifetime from expiry
 	lifetime := time.Until(expiry)
 	if lifetime <= 0 {
@@ -480,12 +480,14 @@ func (m *ParticipantManager) RegisterParticipant(tunnelID TunnelID, sourceHash c
 		return oops.Errorf("failed to create tunnel decryption: %w", err)
 	}
 
-	// Create the participant with proper decryption
+	// Create the participant with proper decryption and next hop routing info
 	now := time.Now()
 	participant := &Participant{
-		tunnelID:   tunnelID,
-		createdAt:  now,
-		decryption: decryption,
+		tunnelID:      tunnelID,
+		createdAt:     now,
+		decryption:    decryption,
+		nextHopIdent:  nextHopIdent,
+		nextHopTunnel: nextHopTunnel,
 	}
 	// Initialize atomic fields
 	participant.lifetime.Store(int64(lifetime))
@@ -499,11 +501,13 @@ func (m *ParticipantManager) RegisterParticipant(tunnelID TunnelID, sourceHash c
 	}
 
 	log.WithFields(logger.Fields{
-		"at":          "Manager.RegisterParticipant",
-		"phase":       "tunnel_build",
-		"tunnel_id":   tunnelID,
-		"source_hash": fmt.Sprintf("%x", sourceHash[:8]),
-		"lifetime":    lifetime,
+		"at":              "Manager.RegisterParticipant",
+		"phase":           "tunnel_build",
+		"tunnel_id":       tunnelID,
+		"source_hash":     fmt.Sprintf("%x", sourceHash[:8]),
+		"next_hop_ident":  fmt.Sprintf("%x", nextHopIdent[:8]),
+		"next_hop_tunnel": nextHopTunnel,
+		"lifetime":        lifetime,
 	}).Info("registered participating tunnel")
 
 	return nil
