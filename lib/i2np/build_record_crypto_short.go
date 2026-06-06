@@ -222,38 +222,6 @@ func hkdf64(ck [32]byte, info string) ([64]byte, error) {
 	return out, err
 }
 
-// DeriveSTBMGarlicKey is deprecated. The correct derivation is DeriveSTBMOBEPGarlicKeyAndTag.
-// This function derived from the Noise transcript hash, which does not match the i2pd
-// implementation. Retained for API compatibility only.
-//
-// Deprecated: Use DeriveSTBMOBEPGarlicKeyAndTag. Will be removed in v0.2.0.
-func DeriveSTBMGarlicKey(noiseHash [32]byte) ([32]byte, [8]byte, error) {
-	var garlicKey [32]byte
-	var tag [8]byte
-	r := hkdf.New(sha256.New, []byte{}, noiseHash[:], []byte("AttachLayerEncryption"))
-	if _, err := io.ReadFull(r, garlicKey[:]); err != nil {
-		return garlicKey, tag, oops.Wrapf(err, "HKDF for AttachLayerEncryption failed")
-	}
-	copy(tag[:], garlicKey[24:32])
-	return garlicKey, tag, nil
-}
-
-// DeriveSTBMGarlicKeyFromChainingKey is deprecated. The correct derivation is
-// DeriveSTBMOBEPGarlicKeyAndTag which uses a 3-step HKDF chain, not a single-step
-// "AttachLayerEncryption" derivation.
-//
-// Deprecated: Use DeriveSTBMOBEPGarlicKeyAndTag. Will be removed in v0.2.0.
-func DeriveSTBMGarlicKeyFromChainingKey(chainingKey [32]byte) ([32]byte, [8]byte, error) {
-	var garlicKey [32]byte
-	var tag [8]byte
-	r := hkdf.New(sha256.New, []byte{}, chainingKey[:], []byte("AttachLayerEncryption"))
-	if _, err := io.ReadFull(r, garlicKey[:]); err != nil {
-		return garlicKey, tag, oops.Wrapf(err, "HKDF for AttachLayerEncryption (chaining key) failed")
-	}
-	copy(tag[:], garlicKey[24:32])
-	return garlicKey, tag, nil
-}
-
 // DeriveSTBMOBEPGarlicKeyAndTag derives the one-time garlic key and tag that
 // the OBEP uses to wrap its ShortTunnelBuildReply, matching i2pd exactly.
 //

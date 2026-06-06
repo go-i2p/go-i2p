@@ -68,7 +68,6 @@ func (tm *TunnelManager) BuildTunnelFromRequest(req tunnel.BuildTunnelRequest) (
 	}
 
 	tm.logBuildRequestSent(result, messageID, req.ReplyTunnelID, req.IsInbound)
-	tm.logExpectedReplyTagCandidates(result, messageID, req.ReplyTunnelID, req.IsInbound)
 	return result.TunnelID, peerHashes, nil
 }
 
@@ -347,91 +346,6 @@ func (tm *TunnelManager) logBuildRequestSent(result *tunnel.TunnelBuildResult, m
 		"is_inbound_build": isInbound,
 		"reply_tunnel_id":  replyTunnelID,
 	}).Info("Tunnel build request sent")
-}
-
-// logExpectedReplyTagCandidates logs expected one-time garlic tag candidates for
-// outbound STBM builds so fresh logs can be correlated against incoming type-11
-// decrypt attempts on reply_tunnel_id.
-func (tm *TunnelManager) logExpectedReplyTagCandidates(result *tunnel.TunnelBuildResult, messageID int, replyTunnelID tunnel.TunnelID, isInbound bool) {
-	if !tm.shouldLogExpectedTags(isInbound, replyTunnelID, result.UseShortBuild) {
-		return
-	}
-
-	tags := tm.collectExpectedTags(result)
-	if len(tags) == 0 {
-		return
-	}
-
-	tm.logExpectedTags(messageID, result.TunnelID, replyTunnelID, tags)
-}
-
-// shouldLogExpectedTags checks if we should log expected tags for this build.
-func (tm *TunnelManager) shouldLogExpectedTags(isInbound bool, replyTunnelID tunnel.TunnelID, useShortBuild bool) bool {
-	return !isInbound && replyTunnelID != 0 && useShortBuild
-}
-
-// collectExpectedTags collects all expected reply tag candidates from the build result.
-func (tm *TunnelManager) collectExpectedTags(result *tunnel.TunnelBuildResult) []string {
-	tags := []string{}
-	seen := map[[8]byte]struct{}{}
-
-	appendTag := func(source string, tag [8]byte) {
-		if _, ok := seen[tag]; ok {
-			return
-		}
-		seen[tag] = struct{}{}
-		tags = append(tags, fmt.Sprintf("%s:%x", source, tag))
-	}
-
-	tm.collectNoiseHashTags(result, appendTag)
-	tm.collectReplyKeyTags(result, appendTag)
-
-	return tags
-}
-
-// collectNoiseHashTags collects tags derived from noise hashes.
-func (tm *TunnelManager) collectNoiseHashTags(result *tunnel.TunnelBuildResult, appendTag func(string, [8]byte)) {
-	if len(result.NoiseHashes) == 0 {
-		return
-	}
-
-	lastHop := len(result.NoiseHashes) - 1
-	if key, tag, err := DeriveSTBMGarlicKey(result.NoiseHashes[lastHop]); err == nil {
-		_ = key
-		appendTag("noise_hash", tag)
-	}
-}
-
-// collectReplyKeyTags collects tags derived from reply keys.
-func (tm *TunnelManager) collectReplyKeyTags(result *tunnel.TunnelBuildResult, appendTag func(string, [8]byte)) {
-	if len(result.ReplyKeys) == 0 {
-		return
-	}
-
-	lastHop := len(result.ReplyKeys) - 1
-	var rawReplyKey [32]byte
-	copy(rawReplyKey[:], result.ReplyKeys[lastHop][:])
-
-	var rawTag [8]byte
-	copy(rawTag[:], rawReplyKey[24:32])
-	appendTag("raw_reply_key", rawTag)
-
-	if key, tag, err := DeriveSTBMGarlicKeyFromChainingKey(rawReplyKey); err == nil {
-		_ = key
-		appendTag("reply_key_attachlayer", tag)
-	}
-}
-
-// logExpectedTags logs the expected tag candidates.
-func (tm *TunnelManager) logExpectedTags(messageID int, tunnelID, replyTunnelID tunnel.TunnelID, tags []string) {
-	log.WithFields(logger.Fields{
-		"at":                 "BuildTunnelFromRequest",
-		"message_id":         messageID,
-		"tunnel_id":          tunnelID,
-		"reply_tunnel_id":    replyTunnelID,
-		"expected_tag_count": len(tags),
-		"expected_tags":      tags,
-	}).Debug("Computed expected one-time garlic tag candidates for outbound STBM build")
 }
 
 // sendBuildMessage sends a tunnel build message (STBM or VTB) based on the result.
