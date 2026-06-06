@@ -1,6 +1,7 @@
 package router
 
 import (
+	"bytes"
 	"encoding/binary"
 	"sync"
 
@@ -384,7 +385,7 @@ func (h *InboundMessageHandler) handleTransitTunnelData(tunnelID tunnel.TunnelID
 	}
 
 	// Forward to the next hop
-	if err := h.forwardToNextHop(nextHopID, decrypted); err != nil {
+	if err := h.forwardToNextHop(participant, nextHopID, decrypted); err != nil {
 		log.WithFields(logger.Fields{
 			"at":        "handleTransitTunnelData",
 			"tunnel_id": tunnelID,
@@ -406,43 +407,67 @@ func (h *InboundMessageHandler) handleTransitTunnelData(tunnelID tunnel.TunnelID
 // The message is already decrypted and contains the next hop tunnel ID in the header.
 //
 // Parameters:
+// - participant: the participant tunnel that knows about the next hop
 // - nextHopID: the tunnel ID at the next hop
 // - decryptedData: the decrypted tunnel message (1028 bytes with next hop tunnel ID in header)
 //
 // Returns an error if forwarding fails.
-//
-// NOTE: This is a minimal implementation that currently logs the forward intent.
-// Full integration with the transport layer will be added in a future phase
-// to actually route the message to the next hop router.
-func (h *InboundMessageHandler) forwardToNextHop(nextHopID tunnel.TunnelID, decryptedData []byte) error {
-	if nextHopID == 0 {
-		// Tunnel ID 0 means deliver to the router (endpoint), not transit
-		log.WithFields(logger.Fields{
-			"at":     "forwardToNextHop",
-			"reason": "tunnel_endpoint_reached",
-		}).Debug("transit tunnel reached endpoint (tunnel ID 0)")
-		// This case would be handled differently - delivering to the endpoint
-		// For now, log it since we're in the transit path
-		return oops.Errorf("tunnel endpoint (ID 0) reached in transit forwarding - delivery required")
-	}
-
+func (h *InboundMessageHandler) forwardToNextHop(participant *tunnel.Participant, nextHopID tunnel.TunnelID, decryptedData []byte) error {
 	// Validate decrypted data size
 	if len(decryptedData) != 1028 {
 		return oops.Errorf("invalid decrypted data size: expected 1028 bytes, got %d", len(decryptedData))
 	}
 
+	// If nextHopID is 0, this reaches the local endpoint (not a transit case)
+	// This should not happen in transit forwarding path
+	if nextHopID == 0 {
+		return oops.Errorf("tunnel endpoint (ID 0) reached in transit forwarding - should not occur")
+	}
+
+	// Verify session provider is available
+	if h.sessionProvider == nil {
+		return oops.Errorf("session provider not wired for transit tunnel forwarding")
+	}
+
+	// Get the next hop router identity
+	nextHopIdent := participant.NextHopIdent()
+	// Check if the identity is empty (zero hash)
+	emptyHash := [32]byte{}
+	if bytes.Equal(nextHopIdent[:], emptyHash[:]) {
+		return oops.Errorf("next hop identity is empty in participant tunnel")
+	}
+
+	// Create TunnelData message for forwarding
+	// Build the 1024-byte payload from the decrypted data
+	payload := [1024]byte{}
+	copy(payload[:], decryptedData[4:1028])
+	tunnelDataMsg := i2np.NewTunnelDataMessage(nextHopID, payload)
+
+	// Get session to the next hop router
+	session, err := h.sessionProvider.GetSessionByHash(nextHopIdent)
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":          "forwardToNextHop",
+			"next_hop_id": nextHopID,
+			"error":       err,
+		}).Debug("Failed to get session for transit forwarding (peer may be unavailable)")
+		return oops.Wrapf(err, "failed to get session for transit tunnel forwarding with ID %d", nextHopID)
+	}
+
+	// Queue the message for transmission
+	if err := session.QueueSendI2NP(tunnelDataMsg); err != nil {
+		log.WithFields(logger.Fields{
+			"at":          "forwardToNextHop",
+			"next_hop_id": nextHopID,
+			"error":       err,
+		}).Error("Failed to queue transit tunnel data for sending")
+		return oops.Wrapf(err, "failed to queue transit tunnel data for sending")
+	}
+
 	log.WithFields(logger.Fields{
 		"at":          "forwardToNextHop",
 		"next_hop_id": nextHopID,
-		"data_size":   len(decryptedData),
-		"status":      "forwarding_queued",
-	}).Debug("Transit tunnel data ready for forwarding (transport integration pending)")
-
-	// TODO: Implement actual transport forwarding
-	// 1. Look up route to next hop router
-	// 2. Get/create transport session
-	// 3. Wrap in TunnelData message with nextHopID
-	// 4. Queue for transmission
+	}).Debug("Successfully queued transit tunnel data for forwarding")
 
 	return nil
 }
