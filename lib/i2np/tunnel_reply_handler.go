@@ -351,9 +351,13 @@ func (rp *ReplyProcessor) prepareSTBMWorkBuffer(rawRecords [][]byte) ([][ShortBu
 	return work, nil
 }
 
-// peelChaCha20Layers peels hop i's ChaCha20 layer from all records with index j < i.
+// peelChaCha20Layers peels hop i's ChaCha20 layer from all records except the hop's own record.
+// This mirrors the relay behavior: relay XORs all j != ourIndex, so initiator must peel all j != hopIndex.
 func (rp *ReplyProcessor) peelChaCha20Layers(work [][ShortBuildRecordSize]byte, key [32]byte, hopIndex int) error {
-	for j := 0; j < hopIndex; j++ {
+	for j := 0; j < len(work); j++ {
+		if j == hopIndex {
+			continue // Skip hop i's own record (AEAD-decrypted separately)
+		}
 		if err := chacha20XORRecord(&work[j], key, j); err != nil {
 			return oops.Wrapf(err, "ChaCha20 peel failed for hop %d record %d", hopIndex, j)
 		}
