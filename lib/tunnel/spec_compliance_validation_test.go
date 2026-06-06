@@ -1563,6 +1563,8 @@ func TestCryptoAudit_ManagerUsesAESForParticipants(t *testing.T) {
 		common.Hash{0x01},
 		time.Now().Add(10*time.Minute),
 		layerKey, ivKey,
+		common.Hash{0x02}, // nextHopIdent
+		TunnelID(2),       // nextHopTunnel
 	)
 	require.NoError(t, err)
 	assert.Equal(t, 1, m.ParticipantCount())
@@ -1653,6 +1655,8 @@ func TestLegacyCrypto_ManagerRegistersWithAES(t *testing.T) {
 		common.Hash{},
 		time.Now().Add(10*time.Minute),
 		layerKey, ivKey,
+		common.Hash{0x03}, // nextHopIdent
+		TunnelID(101),     // nextHopTunnel
 	)
 	assert.NoError(t, err, "RegisterParticipant must work with AES keys (legacy crypto path)")
 }
