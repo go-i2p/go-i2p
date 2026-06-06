@@ -102,6 +102,22 @@ func TestSTBMChaCha20LayerObfuscation_MultiHopRoundTrip(t *testing.T) {
 			// Peel ChaCha20 layers from last hop down to first
 			for i := tt.hopCount - 1; i >= 0; i-- {
 				// Initiator peels hop i's layer from all slots j != i
+				for j := 0; j < tt.hopCount; j++ {
+					if j != i {
+						// Peel: undo the XOR that hop i applied to slot j
+						err := chacha20XORRecord(&work[j], replyKeys[i], j)
+						require.NoError(t, err, "failed to peel hop %d layer from slot %d", i, j)
+					}
+				}
+
+				// After peeling, decrypt slot i to verify correctness and extract ret code
+				cleartext, err := decryptAEADReplySlot(t, work[i][:], replyKeys[i], noiseHashes[i], i)
+				require.NoError(t, err, "failed to AEAD-decrypt slot %d after peeling", i)
+				require.GreaterOrEqual(t, len(cleartext), 202, "cleartext too short: got %d, need 202", len(cleartext))
+
+				// Extract and verify the ret code (last byte of cleartext)
+				recoveredRetCode := cleartext[201]
+				require.Equal(t, expectedRetCodes[i], recoveredRetCode, "hop %d ret code mismatch: expected %#x, got %#x", i, expectedRetCodes[i], recoveredRetCode)
 			}
 
 			t.Logf("✓ %d-hop STBM ChaCha20 layer obfuscation round-trip: all ret codes recovered correctly", tt.hopCount)

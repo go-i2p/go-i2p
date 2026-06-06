@@ -753,6 +753,8 @@ func (p *MessageProcessor) tryParseAndAppendRecord(records *[]BuildRequestRecord
 // tryParseShortRecord handles STBM 218-byte encrypted records (ECIES).
 // When an identity and decryptor are configured it attempts ECIES decryption;
 // otherwise it falls back to cleartext parsing (test/introspection mode).
+// CRITICAL: If the record is destined for us but decryption fails, we must not
+// fall back to cleartext parsing, as that could allow forged build records.
 func (p *MessageProcessor) tryParseShortRecord(records *[]BuildRequestRecord, recordData []byte, index int) {
 	if p.isRecordForUs(recordData) && p.buildRequestDecryptor != nil && len(p.ourPrivateKey) > 0 {
 		record, err := p.decryptShortRecord(recordData, index)
@@ -760,8 +762,13 @@ func (p *MessageProcessor) tryParseShortRecord(records *[]BuildRequestRecord, re
 			*records = append(*records, record)
 			return
 		}
-		log.WithError(err).WithField("record_index", index).Warn("STBM ECIES decryption failed, falling back to cleartext parse")
+		// Record is destined for us but decryption failed; fail-closed by not
+		// appending. Do not parse as cleartext to prevent forged participant registration.
+		log.WithError(err).WithField("record_index", index).Warn("STBM ECIES decryption failed; rejecting record destined for us")
+		return
 	}
+	// Record is not destined for us, or no decryptor is configured (test mode).
+	// Parse as cleartext for forward/introspection.
 	record, err := ReadBuildRequestRecord(recordData)
 	if err != nil {
 		log.WithError(err).WithField("record_index", index).Warn("failed to parse STBM build request record")
@@ -792,8 +799,8 @@ func (p *MessageProcessor) decryptShortRecord(recordData []byte, index int) (Bui
 }
 
 // tryParseStandardRecord handles VTB 528-byte records. It checks the toPeer
-// prefix, attempts ECIES decryption when a decryptor is available, and falls
-// back to cleartext parsing otherwise.
+// prefix, attempts ECIES decryption when a decryptor is available, and fails
+// closed on decryption failure to prevent forged build records.
 func (p *MessageProcessor) tryParseStandardRecord(records *[]BuildRequestRecord, recordData []byte, index int) {
 	if p.isRecordForUs(recordData) && p.buildRequestDecryptor != nil && len(p.ourPrivateKey) > 0 {
 		record, err := p.decryptStandardRecord(recordData, index)
@@ -801,9 +808,13 @@ func (p *MessageProcessor) tryParseStandardRecord(records *[]BuildRequestRecord,
 			*records = append(*records, record)
 			return
 		}
-		log.WithError(err).WithField("record_index", index).Warn("ECIES decryption failed, falling back to cleartext parse")
+		// Record is destined for us but decryption failed; fail-closed by not
+		// appending. Do not parse as cleartext to prevent forged participant registration.
+		log.WithError(err).WithField("record_index", index).Warn("ECIES decryption failed; rejecting record destined for us")
+		return
 	}
-
+	// Record is not destined for us, or no decryptor is configured (test mode).
+	// Parse as cleartext for forward/introspection.
 	record, err := ReadBuildRequestRecord(recordData)
 	if err != nil {
 		log.WithError(err).WithField("record_index", index).Warn("failed to parse VTB build request record")

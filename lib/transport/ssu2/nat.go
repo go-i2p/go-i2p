@@ -1317,7 +1317,17 @@ func (t *SSU2Transport) extractUDPAddr(remote net.Addr) *net.UDPAddr {
 
 // launchPeerTest launches a peer test in a goroutine.
 func (t *SSU2Transport) launchPeerTest(udpAddr *net.UDPAddr) {
+	t.wg.Add(1)
 	go func() {
+		defer t.wg.Done()
+
+		// Check for shutdown before initiating to avoid starting work that will be discarded
+		select {
+		case <-t.ctx.Done():
+			return
+		default:
+		}
+
 		if _, err := t.peerTestManager.InitiatePeerTest(udpAddr); err != nil {
 			t.logger.WithField("error", err).Debug("startup PeerTest initiation failed (non-fatal)")
 		}
