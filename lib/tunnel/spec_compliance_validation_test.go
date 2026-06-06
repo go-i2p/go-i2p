@@ -1089,17 +1089,19 @@ func TestTunnelRoles_GatewaySupportsAllDeliveryTypes(t *testing.T) {
 }
 
 func TestTunnelRoles_ParticipantDecryptsOneLayerAndForwards(t *testing.T) {
-	// Participant decrypts one layer, extracts next hop tunnel ID, forwards all 1028 bytes
+	// Participant decrypts one layer, extracts next hop tunnel ID from build record, forwards all 1028 bytes
 	enc := &specMockEncryptor{}
-	p, err := NewParticipant(TunnelID(42), enc)
+	var nextHopIdent common.Hash // empty for testing
+	expectedNextHop := TunnelID(99)
+	p, err := NewParticipantWithNextHop(TunnelID(42), enc, nextHopIdent, expectedNextHop)
 	require.NoError(t, err)
 
 	msg := make([]byte, 1028)
-	binary.BigEndian.PutUint32(msg[0:4], 99) // next hop ID
+	binary.BigEndian.PutUint32(msg[0:4], 99) // payload contains same value (but not used per C2 fix)
 
 	nextHop, decrypted, err := p.Process(msg)
 	require.NoError(t, err)
-	assert.Equal(t, TunnelID(99), nextHop, "participant must extract next hop ID from bytes [0:4]")
+	assert.Equal(t, expectedNextHop, nextHop, "participant must extract next hop ID from build record")
 	assert.Equal(t, 1028, len(decrypted), "participant must return full 1028 bytes")
 }
 

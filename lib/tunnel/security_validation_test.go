@@ -182,11 +182,12 @@ func TestTunnelCrypto_EncryptionFailureHandling(t *testing.T) {
 func TestParticipant_HopProcessingCorrectness(t *testing.T) {
 	t.Run("extracts_next_hop_id", func(t *testing.T) {
 		dec := &mockSecurityEncryptor{}
-		p, _ := NewParticipant(12345, dec)
+		expectedNextHop := TunnelID(0xDEADBEEF)
+		var nextHopIdent common.Hash // empty for testing
+		p, _ := NewParticipantWithNextHop(12345, dec, nextHopIdent, expectedNextHop)
 
 		// Create tunnel data with known next hop ID
 		tunnelData := make([]byte, 1028)
-		expectedNextHop := TunnelID(0xDEADBEEF)
 		binary.BigEndian.PutUint32(tunnelData[:4], uint32(expectedNextHop))
 
 		nextHop, decrypted, err := p.Process(tunnelData)

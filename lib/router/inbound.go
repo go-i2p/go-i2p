@@ -437,7 +437,10 @@ func (h *InboundMessageHandler) forwardToNextHop(participant *tunnel.Participant
 
 	// Get the next hop router identity
 	nextHopIdent := participant.NextHopIdent()
-	// Check if the identity is empty (zero hash)
+	// Check if the identity is empty (zero hash).
+	// NOTE: bytes.Equal is safe here because we're comparing a public router hash
+	// against a zero value, not secret/auth material. Constant-time comparison
+	// is not required for this use case.
 	emptyHash := [32]byte{}
 	if bytes.Equal(nextHopIdent[:], emptyHash[:]) {
 		return oops.Errorf("next hop identity is empty in participant tunnel")

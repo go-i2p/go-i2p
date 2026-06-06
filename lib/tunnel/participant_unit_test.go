@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/crypto/rand"
 	"github.com/go-i2p/crypto/tunnel"
 )
@@ -22,6 +23,7 @@ func generateRandomKey() tunnel.TunnelKey {
 
 // createTestParticipant creates a Participant with a real AES encryptor for testing.
 // Returns both the participant and the encryptor so callers can encrypt test payloads.
+// The participant is created with nextHopTunnel set to 2000 for consistent test expectations.
 func createTestParticipant(tb testing.TB, tunnelID TunnelID) (*Participant, *tunnel.AESEncryptor) {
 	tb.Helper()
 	layerKey := generateRandomKey()
@@ -30,7 +32,9 @@ func createTestParticipant(tb testing.TB, tunnelID TunnelID) (*Participant, *tun
 	if err != nil {
 		tb.Fatalf("failed to create AES encryptor: %v", err)
 	}
-	p, err := NewParticipant(tunnelID, aesEncryptor)
+	var nextHopIdent common.Hash    // empty hash for testing
+	nextHopTunnel := TunnelID(2000) // default next hop for tests
+	p, err := NewParticipantWithNextHop(tunnelID, aesEncryptor, nextHopIdent, nextHopTunnel)
 	if err != nil {
 		tb.Fatalf("failed to create participant: %v", err)
 	}
@@ -161,8 +165,9 @@ func TestParticipantProcess(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create participant with AES encryption
-			p, err := NewParticipant(tt.tunnelID, aesEncryptor)
+			// Create participant with AES encryption and next hop routing info
+			var nextHopIdent common.Hash // empty hash for testing
+			p, err := NewParticipantWithNextHop(tt.tunnelID, aesEncryptor, nextHopIdent, tt.nextHopID)
 			if err != nil {
 				t.Fatalf("failed to create participant: %v", err)
 			}
