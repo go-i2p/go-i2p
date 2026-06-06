@@ -83,3 +83,49 @@ func TestProcessInstructionLoop_ValidFragment(t *testing.T) {
 		t.Fatal("processInstructionLoop did not return within 2s")
 	}
 }
+
+// TestFollowOnFragmentsCapsAtMaxConcurrentAssemblies verifies that the follow-on
+// fragment path (getOrCreateAssembler) enforces the maxConcurrentAssemblies cap,
+// preventing unbounded assembler creation when the first fragment is missing.
+// Regression test for M-1: "follow-on fragment path bypasses maxConcurrentAssemblies cap".
+func TestFollowOnFragmentsCapsAtMaxConcurrentAssemblies(t *testing.T) {
+	ep := &Endpoint{
+		handler:         func(msgBytes []byte) error { return nil },
+		fragments:       make(map[uint32]*fragmentAssembler),
+		fragmentTimeout: 60 * time.Second,
+	}
+
+	// Simulate attacker sending follow-on fragments with distinct message IDs.
+	// Each triggers getOrCreateAssembler, which should cap at maxConcurrentAssemblies.
+	// Send maxConcurrentAssemblies+100 distinct follow-on fragment message IDs.
+	testCount := maxConcurrentAssemblies + 100
+
+	for msgID := uint32(0); msgID < uint32(testCount); msgID++ {
+		// Call getOrCreateAssembler without first fragment (simulates follow-on arrival).
+		// Must hold fragmentsMutex as required by the function.
+		ep.fragmentsMutex.Lock()
+		asm := ep.getOrCreateAssembler(msgID)
+		ep.fragmentsMutex.Unlock()
+
+		assert.NotNil(t, asm, "getOrCreateAssembler should create assembler")
+
+		// Key invariant: len(e.fragments) must never exceed maxConcurrentAssemblies.
+		ep.fragmentsMutex.Lock()
+		currentCount := len(ep.fragments)
+		ep.fragmentsMutex.Unlock()
+
+		if currentCount > maxConcurrentAssemblies {
+			t.Fatalf("follow-on fragments bypassed cap: len(fragments)=%d > maxConcurrentAssemblies=%d at msgID=%d",
+				currentCount, maxConcurrentAssemblies, msgID)
+		}
+	}
+
+	// Verify cap was enforced (should be exactly at cap, not exceeding).
+	ep.fragmentsMutex.Lock()
+	finalCount := len(ep.fragments)
+	ep.fragmentsMutex.Unlock()
+
+	assert.LessOrEqual(t, finalCount, maxConcurrentAssemblies,
+		"final fragment count should not exceed cap even after %d attempts", testCount)
+	assert.Greater(t, finalCount, 0, "at least some fragments should be retained")
+}

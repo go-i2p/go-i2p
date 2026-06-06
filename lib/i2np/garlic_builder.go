@@ -15,6 +15,21 @@ import (
 	"github.com/samber/oops"
 )
 
+const (
+	// MaxGarlicCloves is the maximum number of cloves in a garlic message.
+	// This limit prevents memory exhaustion from excessively large clove lists.
+	MaxGarlicCloves = 64
+
+	// MaxGarlicNestingDepth is the maximum depth of nested garlic messages.
+	// Used by both parse-time (DeserializeGarlic) and process-time (handleLocalDelivery)
+	// depth guards to prevent stack overflow and recursion bombs.
+	MaxGarlicNestingDepth = 3
+
+	// MinGarlicSize is the minimum valid garlic message size in bytes.
+	// Garlic = num(1) + cert(3) + msgID(4) + expiration(8)
+	MinGarlicSize = 1 + 3 + 4 + 8
+)
+
 // GarlicBuilder provides methods to construct encrypted garlic messages.
 // Garlic messages wrap I2NP messages with delivery instructions and encryption,
 // enabling end-to-end encrypted communication through I2P tunnels.
@@ -541,12 +556,6 @@ func DeserializeGarlic(data []byte, nestingDepth int) (*Garlic, error) {
 		"data_size":     len(data),
 		"nesting_depth": nestingDepth,
 	}).Debug("Deserializing garlic message")
-
-	const (
-		MaxGarlicCloves       = 64            // Practical limit for clove count
-		MaxGarlicNestingDepth = 3             // Prevent infinite recursion
-		MinGarlicSize         = 1 + 3 + 4 + 8 // num(1) + cert(3) + msgID(4) + exp(8)
-	)
 
 	// Validate garlic structure
 	if err := validateGarlicStructure(data, nestingDepth, MinGarlicSize, MaxGarlicNestingDepth); err != nil {

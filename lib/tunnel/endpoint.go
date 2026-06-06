@@ -482,27 +482,37 @@ const maxConcurrentAssemblies = 5000
 func (e *Endpoint) ensureAssemblerExists(msgID uint32, deliveryType byte) *fragmentAssembler {
 	assembler, exists := e.fragments[msgID]
 	if !exists {
-		// Enforce cap on concurrent assemblies to prevent memory exhaustion
-		if len(e.fragments) >= maxConcurrentAssemblies {
-			log.WithFields(map[string]interface{}{
-				"at":    "Endpoint.ensureAssemblerExists",
-				"msgID": msgID,
-				"count": len(e.fragments),
-				"max":   maxConcurrentAssemblies,
-			}).Warn("fragment assembly limit reached, evicting oldest")
-			e.evictOldestFragment()
-		}
-		assembler = &fragmentAssembler{
-			fragments:    make(map[int][]byte),
-			deliveryType: deliveryType,
-			totalCount:   0,
-			receivedMask: 0,
-			createdAt:    time.Now(),
-		}
-		e.fragments[msgID] = assembler
+		// Use the cap-enforced creation helper to prevent bypass.
+		assembler = e.createAssemblerWithCapEnforcement(msgID, deliveryType)
 	} else {
 		assembler.deliveryType = deliveryType
 	}
+	return assembler
+}
+
+// createAssemblerWithCapEnforcement creates a new fragmentAssembler, enforcing
+// the concurrent assemblies cap to prevent memory exhaustion DoS.
+// If the cap is reached, it evicts the oldest incomplete assembly first.
+func (e *Endpoint) createAssemblerWithCapEnforcement(msgID uint32, deliveryType byte) *fragmentAssembler {
+	// Enforce cap on concurrent assemblies to prevent memory exhaustion
+	if len(e.fragments) >= maxConcurrentAssemblies {
+		log.WithFields(map[string]interface{}{
+			"at":    "createAssemblerWithCapEnforcement",
+			"msgID": msgID,
+			"count": len(e.fragments),
+			"max":   maxConcurrentAssemblies,
+		}).Warn("fragment assembly limit reached, evicting oldest")
+		e.evictOldestFragment()
+	}
+
+	assembler := &fragmentAssembler{
+		fragments:    make(map[int][]byte),
+		deliveryType: deliveryType,
+		totalCount:   0,
+		receivedMask: 0,
+		createdAt:    time.Now(),
+	}
+	e.fragments[msgID] = assembler
 	return assembler
 }
 
@@ -617,18 +627,15 @@ func (e *Endpoint) extractFollowOnFragmentInfo(di *DeliveryInstructions) (uint32
 
 // getOrCreateAssembler retrieves existing assembler or creates a new one for the message ID.
 // Note: Caller must hold fragmentsMutex.
+// Uses the same cap-enforced creation logic as ensureAssemblerExists to prevent
+// bypassing the maxConcurrentAssemblies limit on follow-on fragment paths.
 func (e *Endpoint) getOrCreateAssembler(msgID uint32) *fragmentAssembler {
 	assembler, exists := e.fragments[msgID]
 	if !exists {
 		log.WithField("message_id", msgID).Warn("Received follow-on fragment without first fragment")
-		assembler = &fragmentAssembler{
-			fragments:    make(map[int][]byte),
-			deliveryType: DTLocal,
-			totalCount:   0,
-			receivedMask: 0,
-			createdAt:    time.Now(),
-		}
-		e.fragments[msgID] = assembler
+		// Use cap-enforced creation (sets deliveryType to DTLocal for follow-on path).
+		// This ensures the bound cannot be bypassed when first fragment is missing.
+		assembler = e.createAssemblerWithCapEnforcement(msgID, DTLocal)
 	}
 	return assembler
 }

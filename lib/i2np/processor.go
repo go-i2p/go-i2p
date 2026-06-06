@@ -191,7 +191,6 @@ type MessageProcessor struct {
 	buildRequestDecryptor BuildRequestDecryptor     // Optional decryptor for inbound build request records
 	ourRouterHash         common.Hash               // Our router identity hash for filtering build records
 	ourPrivateKey         []byte                    // Our router's static X25519 private key for build record decryption
-	garlicRecursionDepth  int32                     // Atomic counter for garlic nesting depth
 	stbmSlotCrypto        map[int]stbmSlotCrypto    // Per-slot STBM crypto state (valid during one message processing call)
 }
 

@@ -202,16 +202,16 @@ func TestRouteCloveByType_AllDeliveryTypes(t *testing.T) {
 
 	// LOCAL (0x00) — handled internally, no forwarder call expected.
 	localClove := makeClove(0x00, common.Hash{}, 0)
-	p.routeCloveByType(0, 0x00, localClove) // may log "no handler" but must not call fwd
+	p.routeCloveByType(0, 0x00, localClove, 0) // may log "no handler" but must not call fwd
 
 	// DESTINATION (0x01)
-	p.routeCloveByType(1, 0x01, makeClove(0x20, common.Hash{1}, 0))
+	p.routeCloveByType(1, 0x01, makeClove(0x20, common.Hash{1}, 0), 0)
 
 	// ROUTER (0x02)
-	p.routeCloveByType(2, 0x02, makeClove(0x40, common.Hash{2}, 0))
+	p.routeCloveByType(2, 0x02, makeClove(0x40, common.Hash{2}, 0), 0)
 
 	// TUNNEL (0x03)
-	p.routeCloveByType(3, 0x03, makeClove(0x60, common.Hash{3}, 1))
+	p.routeCloveByType(3, 0x03, makeClove(0x60, common.Hash{3}, 1), 0)
 
 	if fwd.destCalls != 1 {
 		t.Errorf("DESTINATION: expected 1 ForwardToDestination call, got %d", fwd.destCalls)

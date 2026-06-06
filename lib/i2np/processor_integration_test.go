@@ -69,7 +69,7 @@ func TestProcessMessage_NoDeadlockOnGarlicLocalDelivery(t *testing.T) {
 	// We run this in a goroutine with a timeout to detect deadlocks.
 	result := make(chan error, 1)
 	go func() {
-		processor.processGarlicCloves([]GarlicClove{clove})
+		processor.processGarlicCloves([]GarlicClove{clove}, 0)
 		result <- nil
 	}()
 
@@ -160,7 +160,7 @@ func TestProcessMessage_ReentrantLocalDelivery(t *testing.T) {
 	// panic or deadlock, the fix is working.
 	result := make(chan struct{}, 1)
 	go func() {
-		processor.processGarlicCloves([]GarlicClove{clove})
+		processor.processGarlicCloves([]GarlicClove{clove}, 0)
 		result <- struct{}{}
 	}()
 
@@ -187,7 +187,7 @@ func TestProcessGarlicCloves_LocalDeliveryFailure(t *testing.T) {
 		Expiration:           time.Now().Add(5 * time.Minute),
 	}
 
-	err := processor.processGarlicCloves([]GarlicClove{clove})
+	err := processor.processGarlicCloves([]GarlicClove{clove}, 0)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to process LOCAL clove")
 }
@@ -205,7 +205,7 @@ func TestProcessGarlicCloves_NilInnerMessage(t *testing.T) {
 		Expiration:           time.Now().Add(5 * time.Minute),
 	}
 
-	err := processor.processGarlicCloves([]GarlicClove{clove})
+	err := processor.processGarlicCloves([]GarlicClove{clove}, 0)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "nil I2NP message")
 }

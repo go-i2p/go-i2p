@@ -422,8 +422,9 @@ func parseMessageHeader(header []byte) (msgType uint8, sessionID uint16, payload
 	msgType = header[4]
 	sessionID = 0 // Session ID is NOT in the header
 
-	// i2psnark compatibility: Debug log all message headers to identify patterns
-	// Log at debug level for normal messages, but include size category for analysis
+	// i2psnark compatibility: Log message type and category at debug level.
+	// Excludes exact payloadLen and header hex to avoid traffic-correlation fingerprints
+	// in debug logs. See anonymity-safe-logging policy.
 	sizeCategory := "small"
 	if payloadLen > DefaultPayloadSize && payloadLen <= 65535 {
 		sizeCategory = "medium"
@@ -438,9 +439,7 @@ func parseMessageHeader(header []byte) (msgType uint8, sessionID uint16, payload
 		"msgType":      MessageTypeName(msgType),
 		"msgTypeID":    msgType,
 		"sessionID":    sessionID,
-		"payloadLen":   payloadLen,
 		"sizeCategory": sizeCategory,
-		"headerHex":    fmt.Sprintf("%x", header),
 	}).Debug("parsed_message_header")
 
 	return msgType, sessionID, payloadLen

@@ -3,7 +3,6 @@ package i2np
 import (
 	"encoding/binary"
 	"fmt"
-	"sync/atomic"
 	"time"
 
 	"github.com/go-i2p/logger"
@@ -331,7 +330,7 @@ func (p *MessageProcessor) processGarlicMessage(msg Message) error {
 		return err
 	}
 
-	return p.processGarlicCloves(garlic.Cloves)
+	return p.processGarlicCloves(garlic.Cloves, 0)
 }
 
 // validateGarlicSession verifies that the garlic session manager is configured.
@@ -481,9 +480,10 @@ func (p *MessageProcessor) parseAndLogGarlic(msgID int, decryptedData []byte, se
 }
 
 // processGarlicCloves processes each clove in the garlic message.
-func (p *MessageProcessor) processGarlicCloves(cloves []GarlicClove) error {
+// depth tracks the current nesting level of garlic LOCAL delivery cloves.
+func (p *MessageProcessor) processGarlicCloves(cloves []GarlicClove, depth int) error {
 	for i, clove := range cloves {
-		if err := p.processSingleClove(i, clove); err != nil {
+		if err := p.processSingleClove(i, clove, depth); err != nil {
 			return err
 		}
 	}
@@ -491,7 +491,8 @@ func (p *MessageProcessor) processGarlicCloves(cloves []GarlicClove) error {
 }
 
 // processSingleClove processes a single garlic clove based on its delivery type.
-func (p *MessageProcessor) processSingleClove(index int, clove GarlicClove) error {
+// depth tracks the current nesting level of garlic LOCAL delivery cloves.
+func (p *MessageProcessor) processSingleClove(index int, clove GarlicClove, depth int) error {
 	deliveryType := (clove.DeliveryInstructions.Flag >> 5) & 0x03
 
 	if clove.Message == nil {
@@ -506,14 +507,15 @@ func (p *MessageProcessor) processSingleClove(index int, clove GarlicClove) erro
 		"wrapped_type":  clove.Message.Type(),
 	}).Debug("Processing garlic clove")
 
-	return p.routeCloveByType(index, deliveryType, clove)
+	return p.routeCloveByType(index, deliveryType, clove, depth)
 }
 
 // routeCloveByType routes a clove to its destination based on delivery type.
-func (p *MessageProcessor) routeCloveByType(index int, deliveryType byte, clove GarlicClove) error {
+// depth tracks the current nesting level of garlic LOCAL delivery cloves.
+func (p *MessageProcessor) routeCloveByType(index int, deliveryType byte, clove GarlicClove, depth int) error {
 	switch deliveryType {
 	case 0x00:
-		return p.handleLocalDelivery(index, clove)
+		return p.handleLocalDelivery(index, clove, depth)
 	case 0x01:
 		p.handleDestinationDelivery(index, clove)
 		return nil
@@ -528,19 +530,20 @@ func (p *MessageProcessor) routeCloveByType(index int, deliveryType byte, clove 
 }
 
 // handleLocalDelivery processes a LOCAL delivery clove.
-// Guards against infinite recursion from nested garlic messages by tracking depth.
-func (p *MessageProcessor) handleLocalDelivery(index int, clove GarlicClove) error {
-	const maxGarlicNestingDepth = 4
-	depth := atomic.AddInt32(&p.garlicRecursionDepth, 1)
-	defer atomic.AddInt32(&p.garlicRecursionDepth, -1)
+// Guards against infinite recursion from nested garlic messages by tracking depth
+// as a per-call-stack parameter, not a global counter.
+// depth is the current nesting level; it is incremented for each nested LOCAL clove.
+func (p *MessageProcessor) handleLocalDelivery(index int, clove GarlicClove, depth int) error {
+	// Use the same depth limit as the parse-time guard for consistency
+	nextDepth := depth + 1
 
-	if depth > maxGarlicNestingDepth {
+	if nextDepth > MaxGarlicNestingDepth {
 		log.WithFields(logger.Fields{
 			"clove_index":   index,
-			"nesting_depth": depth,
-			"max_depth":     maxGarlicNestingDepth,
+			"nesting_depth": nextDepth,
+			"max_depth":     MaxGarlicNestingDepth,
 		}).Error("Garlic nesting depth exceeded, dropping clove to prevent recursion bomb")
-		return oops.Errorf("garlic nesting depth exceeded for clove %d", index)
+		return oops.Errorf("garlic nesting depth exceeded for clove %d at depth %d", index, nextDepth)
 	}
 
 	if err := p.ProcessMessage(clove.Message); err != nil {
