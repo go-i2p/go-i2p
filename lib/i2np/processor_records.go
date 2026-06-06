@@ -647,7 +647,7 @@ func (p *MessageProcessor) handleAcceptedBuildRecord(messageID, index int, recor
 		"message_id":     messageID,
 		"record_index":   index,
 		"receive_tunnel": record.ReceiveTunnel,
-		"source_hash":    fmt.Sprintf("%x", record.OurIdent[:8]),
+		"target_hash":    fmt.Sprintf("%x", record.OurIdent[:8]),
 	}).Info("accepting tunnel build request")
 
 	expiry := time.Now().Add(10 * time.Minute) // Tunnel lifetime per I2P spec

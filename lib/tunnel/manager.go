@@ -41,12 +41,14 @@ const (
 // It manages the lifecycle of tunnels where this router acts as an intermediate hop.
 //
 // Design decisions:
-// - Separate tracking for participants (where we relay) vs owned tunnels (where we originate)
-// - Automatic cleanup of expired participant tunnels
-// - Thread-safe concurrent access
-// - Simple map-based storage for O(1) lookup
-// - Configurable participation limits to protect against resource exhaustion
-// - Per-source rate limiting to prevent single-source flooding
+//   - Separate tracking for participants (where we relay) vs owned tunnels (where we originate)
+//   - Automatic cleanup of expired participant tunnels
+//   - Thread-safe concurrent access
+//   - Simple map-based storage for O(1) lookup
+//   - Configurable participation limits to protect against resource exhaustion
+//   - Global rate limiting to protect against tunnel build flooding
+//   - Note: Rate limiting is global (target-based), not per-source, because the tunnel
+//     build protocol does not carry the initiating router's identity at intermediate hops
 type ParticipantManager struct {
 	// participants tracks tunnels where this router is an intermediate hop
 	participants map[TunnelID]*Participant
@@ -56,9 +58,9 @@ type ParticipantManager struct {
 	maxParticipants int  // Hard limit on participating tunnels
 	limitsEnabled   bool // Whether limits are enforced
 
-	// Per-source rate limiting
-	sourceLimiter        *SourceLimiter // Rate limiter for per-source limiting
-	sourceLimiterEnabled bool           // Whether per-source limiting is enabled
+	// Global tunnel-build rate limiting
+	sourceLimiter        *SourceLimiter // Rate limiter (global, target-based)
+	sourceLimiterEnabled bool           // Whether rate limiting is enabled
 
 	// refuseAllTransit, when non-zero, causes ProcessBuildRequest to reject
 	// every incoming tunnel build request. Used by hidden-mode (and any
@@ -92,7 +94,7 @@ func NewManager() *ParticipantManager {
 // - cfg: TunnelDefaults containing limit configuration
 //
 // The manager will start a background cleanup goroutine automatically.
-// If per-source rate limiting is enabled, a SourceLimiter will also be created.
+// If rate limiting is enabled, a SourceLimiter will also be created.
 func NewManagerWithConfig(cfg config.TunnelDefaults) *ParticipantManager {
 	maxParticipants := cfg.MaxParticipatingTunnels
 	if maxParticipants <= 0 {
@@ -107,7 +109,7 @@ func NewManagerWithConfig(cfg config.TunnelDefaults) *ParticipantManager {
 		stopChan:             make(chan struct{}),
 	}
 
-	// Initialize per-source rate limiter if enabled
+	// Initialize rate limiter if enabled
 	if cfg.PerSourceRateLimitEnabled {
 		m.sourceLimiter = NewSourceLimiterWithConfig(cfg)
 	}
@@ -402,14 +404,14 @@ func (m *ParticipantManager) RefuseAllTransit() bool {
 //
 // Note: Per I2P specification, we use BuildReplyCodeBandwidth (30) for most
 // rejections to hide the specific rejection reason from peers.
-func (m *ParticipantManager) ProcessBuildRequest(sourceHash common.Hash) (accepted bool, rejectCode byte, reason string) {
+func (m *ParticipantManager) ProcessBuildRequest(targetHash common.Hash) (accepted bool, rejectCode byte, reason string) {
 	// Check 0: hidden / no-transit mode — reject everything before consulting
 	// participation limits or rate limiters.
 	if m.refuseAllTransit.Load() {
 		log.WithFields(logger.Fields{
 			"at":     "Manager.ProcessBuildRequest",
 			"phase":  "tunnel_build",
-			"source": truncateHash(sourceHash),
+			"target": truncateHash(targetHash),
 			"reason": "transit_refused_hidden_or_no_transit_mode",
 			"action": "reject_build_request",
 		}).Debug("rejecting tunnel build request: router is configured to refuse all transit")
@@ -421,7 +423,7 @@ func (m *ParticipantManager) ProcessBuildRequest(sourceHash common.Hash) (accept
 		log.WithFields(logger.Fields{
 			"at":                "Manager.ProcessBuildRequest",
 			"phase":             "tunnel_build",
-			"source":            truncateHash(sourceHash),
+			"target":            truncateHash(targetHash),
 			"reason":            limitReason,
 			"action":            "reject_build_request",
 			"participant_count": m.ParticipantCount(),
@@ -431,13 +433,15 @@ func (m *ParticipantManager) ProcessBuildRequest(sourceHash common.Hash) (accept
 		return false, BuildReplyCodeBandwidth, limitReason
 	}
 
-	// Check 2: Per-source rate limiting (if enabled)
+	// Check 2: Global rate limiting (if enabled)
+	// Note: This is not per-source limiting; it applies globally to all tunnel build requests.
+	// The tunnel build protocol does not carry the initiator identity at intermediate hops.
 	if m.sourceLimiter != nil && m.sourceLimiterEnabled {
-		if allowed, rateReason := m.sourceLimiter.AllowRequest(sourceHash); !allowed {
+		if allowed, rateReason := m.sourceLimiter.AllowRequest(targetHash); !allowed {
 			log.WithFields(logger.Fields{
 				"at":     "Manager.ProcessBuildRequest",
 				"phase":  "tunnel_build",
-				"source": truncateHash(sourceHash),
+				"target": truncateHash(targetHash),
 				"reason": rateReason,
 				"action": "reject_build_request",
 			}).Warn("rejecting tunnel build request due to rate limit")

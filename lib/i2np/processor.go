@@ -38,27 +38,32 @@ type ParticipantManager interface {
 	// Returns whether the request should be accepted, the rejection code if not,
 	// and a human-readable reason for logging.
 	//
+	// Note: The identifier passed is the target router (the router receiving this
+	// tunnel build request), not the original source. Rate limiting is enforced
+	// as a global limit, not per-source, because the actual tunnel initiator
+	// identity is not available at intermediate hops in the I2P protocol.
+	//
 	// Parameters:
-	// - sourceHash: The router hash of the requester (from BuildRequestRecord.OurIdent)
+	// - targetHash: The router hash of the target (from BuildRequestRecord.OurIdent)
 	//
 	// Returns:
 	// - accepted: Whether the request should be accepted
 	// - rejectCode: I2P-compliant rejection code if not accepted (0 if accepted)
 	// - reason: Human-readable reason for logging (empty if accepted)
-	ProcessBuildRequest(sourceHash common.Hash) (accepted bool, rejectCode byte, reason string)
+	ProcessBuildRequest(targetHash common.Hash) (accepted bool, rejectCode byte, reason string)
 
 	// RegisterParticipant registers a new participating tunnel after acceptance.
 	// This should be called after ProcessBuildRequest returns accepted=true.
 	//
 	// Parameters:
 	// - tunnelID: The tunnel ID for the participating tunnel
-	// - sourceHash: The router hash of the requester
+	// - targetHash: The router hash of the target (our identity from the build request record)
 	// - expiry: When the tunnel participation expires
 	// - layerKey: The layer encryption key from the build request record
 	// - ivKey: The IV key from the build request record
 	// - nextHopIdent: The router hash of the next hop for routing (may be empty)
 	// - nextHopTunnel: The tunnel ID at the next hop for routing (0 if endpoint)
-	RegisterParticipant(tunnelID buildrecord.TunnelID, sourceHash common.Hash, expiry time.Time, layerKey, ivKey session_key.SessionKey, nextHopIdent common.Hash, nextHopTunnel buildrecord.TunnelID) error
+	RegisterParticipant(tunnelID buildrecord.TunnelID, targetHash common.Hash, expiry time.Time, layerKey, ivKey session_key.SessionKey, nextHopIdent common.Hash, nextHopTunnel buildrecord.TunnelID) error
 }
 
 // BuildReplyForwarder defines the interface for forwarding tunnel build replies.
