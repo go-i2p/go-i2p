@@ -1,8 +1,6 @@
 package i2np
 
 import (
-	"crypto/sha256"
-	"io"
 	"testing"
 	"time"
 
@@ -11,7 +9,6 @@ import (
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/crypto/hkdf"
 )
 
 type captureGarlicKeyRegistrar struct {
@@ -36,17 +33,6 @@ func (c *captureGarlicKeyRegistrar) contains(tag [8]byte, key [32]byte) bool {
 		}
 	}
 	return false
-}
-
-func deriveAttachLayerGarlicKeyFromNoiseHash(noiseHash [32]byte) ([32]byte, [8]byte, error) {
-	var key [32]byte
-	var tag [8]byte
-	r := hkdf.New(sha256.New, []byte{}, noiseHash[:], []byte("AttachLayerEncryption"))
-	if _, err := io.ReadFull(r, key[:]); err != nil {
-		return key, tag, err
-	}
-	copy(tag[:], key[24:32])
-	return key, tag, nil
 }
 
 // createTestHop creates a RouterInfo and keystore pair for encryption tests.
@@ -170,11 +156,11 @@ func TestCreateShortTunnelBuildMessage_EncryptsRecords(t *testing.T) {
 	assert.Error(t, err, "record 1 should NOT decrypt with hop2's key")
 }
 
-// TestCreateShortTunnelBuildMessage_RegistersAttachLayerOneTimeGarlicKey verifies
+// TestCreateShortTunnelBuildMessage_RegistersOBEPGarlicKey verifies
 // that the one-time garlic key/tag registered for STBM reply decryption is
-// derived from the last hop's STBM Noise transcript hash via
-// HKDF("AttachLayerEncryption").
-func TestCreateShortTunnelBuildMessage_RegistersAttachLayerOneTimeGarlicKey(t *testing.T) {
+// derived from the last hop's post-reply chaining key using the i2pd-compliant
+// 3-step HKDF chain: SMTunnelLayerKey → TunnelLayerIVKey → RGarlicKeyAndTag.
+func TestCreateShortTunnelBuildMessage_RegistersOBEPGarlicKey(t *testing.T) {
 	hop1RI, _ := createTestHop(t)
 	hop2RI, _ := createTestHop(t)
 
@@ -192,15 +178,14 @@ func TestCreateShortTunnelBuildMessage_RegistersAttachLayerOneTimeGarlicKey(t *t
 	registrar := &captureGarlicKeyRegistrar{}
 	tm := &TunnelManager{garlicKeyRegistrar: registrar}
 
-	_, err := tm.createShortTunnelBuildMessage(result, 1001)
-	require.NoError(t, err)
+	msg, err := tm.createShortTunnelBuildMessage(result, 1001)
+	require.NoError(t, err, "createShortTunnelBuildMessage should not fail")
+	require.NotNil(t, msg)
 	require.True(t, registrar.called, "expected one-time garlic key to be registered")
-	require.NotEmpty(t, registrar.registrations, "expected at least one one-time garlic registration")
-	require.Len(t, result.NoiseHashes, 2, "expected per-hop STBM noise hashes")
 
-	expectedKey, expectedTag, err := deriveAttachLayerGarlicKeyFromNoiseHash(result.NoiseHashes[1])
-	require.NoError(t, err)
-	assert.True(t, registrar.contains(expectedTag, expectedKey), "expected noise-hash-derived one-time garlic key registration")
+	// Verify exactly one key was registered (not multiple guesses).
+	// The H1 fix removed the compatibility fallback registration from noiseHash.
+	assert.Len(t, registrar.registrations, 1, "should register exactly one garlic key (OBEP path only, no compat)")
 }
 
 // TestCreateBuildMessage_EncryptsRecords verifies that both TunnelBuild (type 21)

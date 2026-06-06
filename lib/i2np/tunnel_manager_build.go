@@ -596,23 +596,15 @@ func (tm *TunnelManager) updateReplyKeysWithHKDF(result *tunnel.TunnelBuildResul
 	result.NoiseHashes = noiseHashes
 }
 
-// registerGarlicReplyKeys derives and registers one-time garlic keys for OBEP reply decryption.
-// Registers both compatibility keys (from Noise transcript hash) and exact OBEP keys
-// (from post-reply chaining key) to ensure interoperability with different implementations.
+// registerGarlicReplyKeys derives and registers the one-time garlic key for OBEP reply decryption.
+// Uses the spec-compliant i2pd derivation path: SMTunnelLayerKey → TunnelLayerIVKey → RGarlicKeyAndTag.
+// This matches TransitTunnel.cpp::HandleShortTransitTunnelBuildMsg.
 func (tm *TunnelManager) registerGarlicReplyKeys(noiseHashes, postReplyCKs [][32]byte, messageID int, tunnelID tunnel.TunnelID) error {
 	if tm.garlicKeyRegistrar == nil || len(postReplyCKs) == 0 {
 		return nil
 	}
 
 	lastHop := len(postReplyCKs) - 1
-	if len(noiseHashes) > lastHop {
-		compatKey, compatTag, compatErr := DeriveSTBMGarlicKey(noiseHashes[lastHop])
-		if compatErr != nil {
-			return oops.Wrapf(compatErr, "failed to derive compatibility garlic reply key")
-		}
-		tm.garlicKeyRegistrar.RegisterOneTimeGarlicKey(compatTag, compatKey)
-	}
-
 	obepKey, obepTag, obepErr := DeriveSTBMOBEPGarlicKeyAndTag(postReplyCKs[lastHop])
 	if obepErr != nil {
 		return oops.Wrapf(obepErr, "failed to derive OBEP garlic reply key")

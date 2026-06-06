@@ -222,16 +222,11 @@ func hkdf64(ck [32]byte, info string) ([64]byte, error) {
 	return out, err
 }
 
-// DeriveSTBMGarlicKey derives the one-time symmetric garlic key used by the
-// OBEP to wrap a ShortTunnelBuildReply in a garlic message (type 11).
+// DeriveSTBMGarlicKey is deprecated. The correct derivation is DeriveSTBMOBEPGarlicKeyAndTag.
+// This function derived from the Noise transcript hash, which does not match the i2pd
+// implementation. Retained for API compatibility only.
 //
-// The key material is derived from the STBM Noise transcript hash using:
-//
-//	HKDF(noiseHash, "", "AttachLayerEncryption") -> 32 bytes
-//
-// Slicing follows the one-time garlic decryptor contract in go-noise:
-//   - key = keyMaterial[0:32]
-//   - tag = keyMaterial[24:32]
+// Deprecated: Use DeriveSTBMOBEPGarlicKeyAndTag. Will be removed in v0.2.0.
 func DeriveSTBMGarlicKey(noiseHash [32]byte) ([32]byte, [8]byte, error) {
 	var garlicKey [32]byte
 	var tag [8]byte
@@ -243,13 +238,11 @@ func DeriveSTBMGarlicKey(noiseHash [32]byte) ([32]byte, [8]byte, error) {
 	return garlicKey, tag, nil
 }
 
-// DeriveSTBMGarlicKeyFromChainingKey derives the one-time symmetric garlic
-// key/tag from the post-reply HKDF chaining key as a compatibility fallback.
+// DeriveSTBMGarlicKeyFromChainingKey is deprecated. The correct derivation is
+// DeriveSTBMOBEPGarlicKeyAndTag which uses a 3-step HKDF chain, not a single-step
+// "AttachLayerEncryption" derivation.
 //
-// Some implementations derive the attach-layer key from the Noise transcript
-// hash, while others derive it from the evolving HKDF chaining key used for
-// SMTunnelReplyKey and subsequent per-hop keys. Registering both derivations
-// allows inbound decrypt to match either sender behavior.
+// Deprecated: Use DeriveSTBMOBEPGarlicKeyAndTag. Will be removed in v0.2.0.
 func DeriveSTBMGarlicKeyFromChainingKey(chainingKey [32]byte) ([32]byte, [8]byte, error) {
 	var garlicKey [32]byte
 	var tag [8]byte
