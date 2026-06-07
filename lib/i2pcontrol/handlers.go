@@ -260,7 +260,7 @@ func (h *RouterInfoHandler) buildAvailableFields() map[string]interface{} {
 	}
 
 	// Add local router identity hash (non-standard I2PControl extension for i2ptui)
-	// Returns the base32-encoded router hash for self-identification
+	// Returns the base64-encoded router hash for self-identification
 	if localHash, err := h.stats.GetLocalRouterIdentityHash(); err == nil {
 		fields["i2p.router.net.local"] = localHash
 	} else {

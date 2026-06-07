@@ -107,7 +107,8 @@ func (m *mockRouterAccess) Reseed() error {
 }
 
 func (m *mockRouterAccess) GetLocalRouterIdentityHash() (string, error) {
-	return "test-router-identity-hash", nil
+	// Return a base64-encoded test hash (32 bytes encoded in base64)
+	return "dGVzdC1yb3V0ZXItaWRlbnRpdHktaGFzaA==", nil
 }
 
 // TestNewRouterStatsProvider tests stats provider creation

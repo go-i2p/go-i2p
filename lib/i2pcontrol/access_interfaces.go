@@ -69,8 +69,8 @@ type RouterInfoReader interface {
 	IsReseeding() bool
 
 	// GetLocalRouterIdentityHash returns the identity hash of this router for self-identification.
-	// Returns the SHA-256 hash of this router's RouterIdentity, or an error if the hash
-	// cannot be computed. This is used for I2PControl extensions like i2p.router.net.local.
+	// Returns the SHA-256 hash of this router's RouterIdentity as base64-encoded string (standard I2P format),
+	// or an error if the hash cannot be computed. This is used for I2PControl extensions like i2p.router.net.local.
 	GetLocalRouterIdentityHash() (string, error)
 }
 

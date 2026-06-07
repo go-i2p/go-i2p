@@ -182,7 +182,8 @@ func (m *mockStatsForAuth) GetRouterControl() interface {
 }
 
 func (m *mockStatsForAuth) GetLocalRouterIdentityHash() (string, error) {
-	return "test-router-hash", nil
+	// Return a base64-encoded test hash
+	return "dGVzdC1yb3V0ZXItaGFzaA==", nil
 }
 
 type mockStopCtrl struct{}

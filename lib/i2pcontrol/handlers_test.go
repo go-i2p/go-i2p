@@ -224,8 +224,8 @@ func TestRouterInfoHandler_LocalRouterIdentityHash(t *testing.T) {
 	localHash, ok := resultMap["i2p.router.net.local"].(string)
 	assert.True(t, ok, "i2p.router.net.local should be a string, got %T", resultMap["i2p.router.net.local"])
 
-	// The mock returns "test-router-identity-hash" so verify it matches
-	assert.Equal(t, "test-router-identity-hash", localHash)
+	// The mock returns a base64-encoded test hash
+	assert.Equal(t, "dGVzdC1yb3V0ZXItaWRlbnRpdHktaGFzaA==", localHash)
 }
 
 func TestRouterInfoHandler_LocalRouterIdentityHashInAllFields(t *testing.T) {
