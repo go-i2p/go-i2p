@@ -203,7 +203,7 @@ func assembleEncryptedSTBMRecord(encrypted *[218]byte, full, ephemeralPub, ct []
 // the HKDF chain (e.g. for layer/IV/garlic key derivation).
 func DeriveSTBMReplyKey(chainingKey [32]byte) ([32]byte, [32]byte, error) {
 	var replyKey, newCK [32]byte
-	r := hkdf.New(sha256.New, []byte{}, chainingKey[:], []byte("SMTunnelReplyKey"))
+	r := hkdf.New(sha256.New, chainingKey[:], []byte{}, []byte("SMTunnelReplyKey"))
 	var out [64]byte
 	if _, err := io.ReadFull(r, out[:]); err != nil {
 		return replyKey, newCK, oops.Wrapf(err, "HKDF for SMTunnelReplyKey failed")
@@ -217,7 +217,7 @@ func DeriveSTBMReplyKey(chainingKey [32]byte) ([32]byte, [32]byte, error) {
 // output is 64 bytes, [0:32]=new chaining key, [32:64]=derived key.
 func hkdf64(ck [32]byte, info string) ([64]byte, error) {
 	var out [64]byte
-	r := hkdf.New(sha256.New, []byte{}, ck[:], []byte(info))
+	r := hkdf.New(sha256.New, ck[:], []byte{}, []byte(info))
 	_, err := io.ReadFull(r, out[:])
 	return out, err
 }
