@@ -76,8 +76,8 @@ type RouterStatsProvider interface {
 	//   tunnel.buildRequestTime                         — average build duration in milliseconds
 	GetRateForPeriod(stat string, periodMs int64) float64
 
-	// GetLocalRouterIdentityHash returns the base32-encoded identity hash of this router.
-	// Used by I2PControl extensions for self-identification (e.g., i2p.router.net.local).
+	// GetLocalRouterIdentityHash returns the base64-encoded identity hash of this router.
+	// Used by I2PControl extensions for self-identification (e.g., i2p.router.hash).
 	// Returns an error if the hash cannot be computed.
 	GetLocalRouterIdentityHash() (string, error)
 }
@@ -762,8 +762,8 @@ func (rsp *routerStatsProvider) getTransportPeersCount(stat string) float64 {
 	}
 }
 
-// GetLocalRouterIdentityHash returns the base32-encoded identity hash of this router.
-// Used by I2PControl extensions for self-identification (e.g., i2p.router.net.local).
+// GetLocalRouterIdentityHash returns the base64-encoded identity hash of this router.
+// Used by I2PControl extensions for self-identification (e.g., i2p.router.hash).
 func (rsp *routerStatsProvider) GetLocalRouterIdentityHash() (string, error) {
 	return rsp.router.GetLocalRouterIdentityHash()
 }

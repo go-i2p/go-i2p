@@ -467,7 +467,7 @@ func (r *Router) Reseed() error {
 }
 
 // GetLocalRouterIdentityHash returns the identity hash of this router as a base64-encoded string.
-// This is used by I2PControl extensions for self-identification (e.g., i2p.router.net.local).
+// This is used by I2PControl extensions for self-identification (e.g., i2p.router.hash).
 func (r *Router) GetLocalRouterIdentityHash() (string, error) {
 	hash, err := r.getOurRouterHash()
 	if err != nil {

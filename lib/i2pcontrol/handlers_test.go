@@ -215,14 +215,14 @@ func TestRouterInfoHandler_BandwidthFields(t *testing.T) {
 
 func TestRouterInfoHandler_LocalRouterIdentityHash(t *testing.T) {
 	handler := NewRouterInfoHandler(newStatsHandler(true, "0.1.0"))
-	resultMap := invokeHandler(t, handler, `{"i2p.router.net.local": null}`)
+	resultMap := invokeHandler(t, handler, `{"i2p.router.hash": null}`)
 
 	// Check that the local router identity hash field is present
-	assert.Contains(t, resultMap, "i2p.router.net.local")
+	assert.Contains(t, resultMap, "i2p.router.hash")
 
-	// Check that the field value is a string (should be base32-encoded hash)
-	localHash, ok := resultMap["i2p.router.net.local"].(string)
-	assert.True(t, ok, "i2p.router.net.local should be a string, got %T", resultMap["i2p.router.net.local"])
+	// Check that the field value is a string (should be base64-encoded hash)
+	localHash, ok := resultMap["i2p.router.hash"].(string)
+	assert.True(t, ok, "i2p.router.hash should be a string, got %T", resultMap["i2p.router.hash"])
 
 	// The mock returns a base64-encoded test hash
 	assert.Equal(t, "dGVzdC1yb3V0ZXItaWRlbnRpdHktaGFzaA==", localHash)
@@ -234,8 +234,8 @@ func TestRouterInfoHandler_LocalRouterIdentityHashInAllFields(t *testing.T) {
 
 	// The local router identity hash is NOT a default field, so it should not appear
 	// when no specific fields are requested
-	_, hasLocalHash := resultMap["i2p.router.net.local"]
-	assert.False(t, hasLocalHash, "i2p.router.net.local should only appear when specifically requested")
+	_, hasLocalHash := resultMap["i2p.router.hash"]
+	assert.False(t, hasLocalHash, "i2p.router.hash should only appear when specifically requested")
 }
 
 // Test RouterManager Handler
