@@ -477,7 +477,6 @@ func TestHandleTunnelData_TransitTunnelForwarding(t *testing.T) {
 
 	// Handle the message - this should route through forwarding logic, not drop it
 	err = handler.HandleTunnelData(msg)
-
 	// The error handling here is lenient: we just want to verify the transit path
 	// is exercised, not that it succeeds end-to-end (which would require full crypto setup)
 	if err != nil {
@@ -602,7 +601,6 @@ func TestHandleTunnelDataTransitFullIntegration(t *testing.T) {
 
 	// Process the transit tunnel message
 	err = handler.HandleTunnelData(msg)
-
 	// The handler should succeed (or fail gracefully)
 	// We're primarily testing that the size contract and nextHopID logic are correct
 	if err != nil {
