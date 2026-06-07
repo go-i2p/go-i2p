@@ -181,6 +181,10 @@ func (m *mockStatsForAuth) GetRouterControl() interface {
 	return &mockStopCtrl{}
 }
 
+func (m *mockStatsForAuth) GetLocalRouterIdentityHash() (string, error) {
+	return "test-router-hash", nil
+}
+
 type mockStopCtrl struct{}
 
 func (m *mockStopCtrl) Stop()         {}
@@ -730,6 +734,9 @@ func (m *mockRouterAccessBandwidth) GetNetworkStatus() int { return 0 }
 func (m *mockRouterAccessBandwidth) GetSSU2Addr() net.Addr { return nil }
 func (m *mockRouterAccessBandwidth) Stop()                 {}
 func (m *mockRouterAccessBandwidth) Reseed() error         { return nil }
+func (m *mockRouterAccessBandwidth) GetLocalRouterIdentityHash() (string, error) {
+	return "test-router-hash", nil
+}
 
 // TestBandwidthStatsZeroValues verifies zero bandwidth is handled correctly.
 func TestBandwidthStatsZeroValues(t *testing.T) {

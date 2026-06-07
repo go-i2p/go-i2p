@@ -464,3 +464,14 @@ func (r *Router) Reseed() error {
 	}).Info("Manual reseed triggered")
 	return r.performReseed()
 }
+
+// GetLocalRouterIdentityHash returns the identity hash of this router as a hex string.
+// This is used by I2PControl extensions for self-identification (e.g., i2p.router.net.local).
+func (r *Router) GetLocalRouterIdentityHash() (string, error) {
+	hash, err := r.getOurRouterHash()
+	if err != nil {
+		return "", err
+	}
+	// Return as base32 (I2P standard format) without padding for display
+	return base32.EncodeToStringNoPadding(hash[:]), nil
+}

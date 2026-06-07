@@ -75,6 +75,11 @@ type RouterStatsProvider interface {
 	//   tunnel.buildClientExpire                        — count of timed-out client builds
 	//   tunnel.buildRequestTime                         — average build duration in milliseconds
 	GetRateForPeriod(stat string, periodMs int64) float64
+
+	// GetLocalRouterIdentityHash returns the base32-encoded identity hash of this router.
+	// Used by I2PControl extensions for self-identification (e.g., i2p.router.net.local).
+	// Returns an error if the hash cannot be computed.
+	GetLocalRouterIdentityHash() (string, error)
 }
 
 // BandwidthStats contains bandwidth usage statistics.
@@ -757,6 +762,12 @@ func (rsp *routerStatsProvider) getTransportPeersCount(stat string) float64 {
 	}
 }
 
+// GetLocalRouterIdentityHash returns the base32-encoded identity hash of this router.
+// Used by I2PControl extensions for self-identification (e.g., i2p.router.net.local).
+func (rsp *routerStatsProvider) GetLocalRouterIdentityHash() (string, error) {
+	return rsp.router.GetLocalRouterIdentityHash()
+}
+
 // RouterBackend is the concrete router contract that RealRouter wraps.
 // It uses the real implementation types (*netdb.StdNetDB, *tunnel.ParticipantManager)
 // that *router.Router provides, which RealRouter adapts to the RouterAccess interface.
@@ -779,6 +790,7 @@ type RouterBackend interface {
 	Reseed() error
 	GetTransportAddr() net.Addr
 	GetSSU2Addr() net.Addr
+	GetLocalRouterIdentityHash() (string, error)
 }
 
 // RealRouter is an adapter that makes *router.Router implement RouterAccess.
@@ -877,6 +889,11 @@ func (rr RealRouter) GetBandwidthRates1s() (inbound, outbound uint64) {
 // GetNetworkStatus returns the I2PControl network status code (implements RouterAccess)
 func (rr RealRouter) GetNetworkStatus() int {
 	return rr.Router.GetNetworkStatus()
+}
+
+// GetLocalRouterIdentityHash returns the local router identity hash (implements RouterAccess)
+func (rr RealRouter) GetLocalRouterIdentityHash() (string, error) {
+	return rr.Router.GetLocalRouterIdentityHash()
 }
 
 // Compile-time interface satisfaction check

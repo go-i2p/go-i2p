@@ -240,7 +240,7 @@ func (h *RouterInfoHandler) buildAvailableFields() map[string]interface{} {
 	routerStats := h.stats.GetRouterInfo()
 	bandwidthStats := h.stats.GetBandwidthStats()
 
-	return map[string]interface{}{
+	fields := map[string]interface{}{
 		"i2p.router.uptime":                    routerStats.Uptime,
 		"i2p.router.version":                   routerStats.Version,
 		"i2p.router.status":                    routerStats.Status,
@@ -258,6 +258,16 @@ func (h *RouterInfoHandler) buildAvailableFields() map[string]interface{} {
 		"i2p.router.net.bw.outbound.1s":        bandwidthStats.OutboundRate1s,
 		"i2p.router.net.bw.outbound.15s":       bandwidthStats.OutboundRate,
 	}
+
+	// Add local router identity hash (non-standard I2PControl extension for i2ptui)
+	// Returns the base32-encoded router hash for self-identification
+	if localHash, err := h.stats.GetLocalRouterIdentityHash(); err == nil {
+		fields["i2p.router.net.local"] = localHash
+	} else {
+		log.WithField("reason", err.Error()).Debug("i2pcontrol: failed to get local router identity hash")
+	}
+
+	return fields
 }
 
 // selectRequestedOrDefaultFields returns the requested fields from available fields,

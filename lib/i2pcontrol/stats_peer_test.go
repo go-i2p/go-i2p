@@ -81,6 +81,10 @@ func (m *mockRouterAccessForPeerStats) Reseed() error {
 	return nil
 }
 
+func (m *mockRouterAccessForPeerStats) GetLocalRouterIdentityHash() (string, error) {
+	return "test-router-identity-hash", nil
+}
+
 // Helper to create test hash
 func testHash(suffix byte) common.Hash {
 	var hash common.Hash

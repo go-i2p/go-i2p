@@ -67,6 +67,11 @@ type RouterInfoReader interface {
 
 	// IsReseeding returns whether the router is currently performing a NetDB reseed operation.
 	IsReseeding() bool
+
+	// GetLocalRouterIdentityHash returns the identity hash of this router for self-identification.
+	// Returns the SHA-256 hash of this router's RouterIdentity, or an error if the hash
+	// cannot be computed. This is used for I2PControl extensions like i2p.router.net.local.
+	GetLocalRouterIdentityHash() (string, error)
 }
 
 // BandwidthReader provides access to current bandwidth statistics.

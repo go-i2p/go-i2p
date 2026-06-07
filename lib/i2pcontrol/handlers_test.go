@@ -213,6 +213,31 @@ func TestRouterInfoHandler_BandwidthFields(t *testing.T) {
 	assert.Equal(t, 512.0, resultMap["i2p.router.net.bw.outbound.1s"])
 }
 
+func TestRouterInfoHandler_LocalRouterIdentityHash(t *testing.T) {
+	handler := NewRouterInfoHandler(newStatsHandler(true, "0.1.0"))
+	resultMap := invokeHandler(t, handler, `{"i2p.router.net.local": null}`)
+
+	// Check that the local router identity hash field is present
+	assert.Contains(t, resultMap, "i2p.router.net.local")
+
+	// Check that the field value is a string (should be base32-encoded hash)
+	localHash, ok := resultMap["i2p.router.net.local"].(string)
+	assert.True(t, ok, "i2p.router.net.local should be a string, got %T", resultMap["i2p.router.net.local"])
+
+	// The mock returns "test-router-identity-hash" so verify it matches
+	assert.Equal(t, "test-router-identity-hash", localHash)
+}
+
+func TestRouterInfoHandler_LocalRouterIdentityHashInAllFields(t *testing.T) {
+	handler := NewRouterInfoHandler(newStatsHandler(true, "0.1.0"))
+	resultMap := invokeHandler(t, handler, `{}`)
+
+	// The local router identity hash is NOT a default field, so it should not appear
+	// when no specific fields are requested
+	_, hasLocalHash := resultMap["i2p.router.net.local"]
+	assert.False(t, hasLocalHash, "i2p.router.net.local should only appear when specifically requested")
+}
+
 // Test RouterManager Handler
 
 type mockRouterControl struct {

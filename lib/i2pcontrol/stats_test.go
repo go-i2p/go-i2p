@@ -106,6 +106,10 @@ func (m *mockRouterAccess) Reseed() error {
 	return nil
 }
 
+func (m *mockRouterAccess) GetLocalRouterIdentityHash() (string, error) {
+	return "test-router-identity-hash", nil
+}
+
 // TestNewRouterStatsProvider tests stats provider creation
 func TestNewRouterStatsProvider(t *testing.T) {
 	router := &mockRouterAccess{running: true}
