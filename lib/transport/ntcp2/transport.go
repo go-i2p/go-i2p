@@ -322,10 +322,13 @@ func setupNetworkListener(transport *NTCP2Transport, config *Config, ntcp2Config
 //
 // Spec reference: https://geti2p.net/spec/ntcp2#probing-resistance
 func (t *NTCP2Transport) Accept() (net.Conn, error) {
+	t.identityMu.RLock()
 	if t.listener == nil {
+		t.identityMu.RUnlock()
 		t.logger.Error("Accept called but listener is nil")
 		return nil, ErrSessionClosed
 	}
+	t.identityMu.RUnlock()
 
 	t.startInboundAcceptRunner()
 
@@ -352,10 +355,16 @@ func (t *NTCP2Transport) startInboundAcceptRunner() {
 		t.wg.Add(1)
 		go t.runInboundAcceptLoop()
 		// Ensure listener.Accept() unblocks when the transport is cancelled.
+		// Track this goroutine in wg to ensure proper shutdown ordering.
+		t.wg.Add(1)
 		go func() {
+			defer t.wg.Done()
 			<-t.ctx.Done()
-			if t.listener != nil {
-				t.listener.Close()
+			t.identityMu.RLock()
+			listener := t.listener
+			t.identityMu.RUnlock()
+			if listener != nil {
+				listener.Close()
 			}
 		}()
 	})
@@ -377,7 +386,15 @@ func (t *NTCP2Transport) runInboundAcceptLoop() {
 // acceptNextConnection accepts and processes one incoming connection.
 // Returns false if the accept loop should terminate.
 func (t *NTCP2Transport) acceptNextConnection() bool {
-	rawConn, err := t.listener.Accept()
+	t.identityMu.RLock()
+	listener := t.listener
+	t.identityMu.RUnlock()
+	if listener == nil {
+		t.logger.Debug("Listener is nil during accept; terminating accept loop")
+		return false
+	}
+
+	rawConn, err := listener.Accept()
 
 	if t.shouldShutdown(rawConn) {
 		return false
@@ -432,11 +449,20 @@ func (t *NTCP2Transport) inboundHandshakeWorker(conn net.Conn) {
 		return
 	}
 
-	tracked := t.trackInboundConnection(conn)
+	tracked, isFresh := t.trackInboundConnection(conn)
+	if !isFresh {
+		// Duplicate detected: already closed and unreserved, nothing more to do.
+		return
+	}
+
 	select {
 	case t.pendingConns <- tracked:
+		// Successfully enqueued for Accept() to consume.
 	case <-t.ctx.Done():
+		// Transport shutting down while connection was waiting.
 		tracked.Close()
+		// Note: We only unreserve if this was a fresh insert that didn't make
+		// it to the pending queue. Duplicates were already unreserved in trackInboundConnection.
 		t.unreserveSessionSlot()
 	}
 }
@@ -565,11 +591,20 @@ func (t *NTCP2Transport) writeTerminationBlockBestEffort(rawConn net.Conn, term 
 }
 
 // trackInboundConnection registers the accepted connection for session counting
-// and wraps it to ensure cleanup on close.
-func (t *NTCP2Transport) trackInboundConnection(conn net.Conn) net.Conn {
+// and wraps it to ensure cleanup on close. Returns (wrappedConn, isFresh) where
+// isFresh=true if this was a new insertion, or isFresh=false if a duplicate was detected.
+// On duplicate detection, the duplicate is closed and the reserved slot is unreserved.
+func (t *NTCP2Transport) trackInboundConnection(conn net.Conn) (net.Conn, bool) {
 	peerHash := t.extractPeerHash(conn)
 	if _, loaded := t.sessions.LoadOrStore(peerHash, conn); loaded {
+		// Duplicate detected: unreserve the slot and close this connection.
 		t.unreserveSessionSlot()
+		conn.Close()
+		t.logger.WithFields(map[string]interface{}{
+			"remote_addr": conn.RemoteAddr().String(),
+			"peer_hash":   fmt.Sprintf("%x", peerHash[:8]),
+		}).Debug("Duplicate inbound connection detected and closed; reservation unreserved")
+		return conn, false // Mark as duplicate
 	}
 
 	wrappedConn := &trackedConn{
@@ -584,7 +619,7 @@ func (t *NTCP2Transport) trackInboundConnection(conn net.Conn) net.Conn {
 		"peer_hash":     fmt.Sprintf("%x", peerHash[:8]),
 		"session_count": t.GetSessionCount(),
 	}).Info("Accepted and tracked incoming NTCP2 connection")
-	return wrappedConn
+	return wrappedConn, true // Mark as fresh
 }
 
 // extractPeerHash extracts the peer's router hash from an accepted connection.
@@ -770,7 +805,7 @@ func (t *NTCP2Transport) createNTCP2ConfigFromIdentity(ident router_info.RouterI
 }
 
 // recreateListenerIfNeeded recreates the network listener with new identity if one exists.
-// Holds identityMu to protect concurrent access to t.listener.
+// Holds identityMu to protect concurrent access to t.listener throughout the entire operation.
 func (t *NTCP2Transport) recreateListenerIfNeeded(ntcp2Config *ntcp2.Config) error {
 	t.identityMu.Lock()
 	if t.listener == nil {
@@ -779,27 +814,29 @@ func (t *NTCP2Transport) recreateListenerIfNeeded(ntcp2Config *ntcp2.Config) err
 	}
 
 	t.logger.Info("Recreating listener with new identity")
-	t.closeExistingListenerLocked()
+	oldListener := t.listener
+	t.listener = nil // Atomically mark as unavailable before closing
 	t.identityMu.Unlock()
 
-	listener, err := t.createNewListenerWithConfig(ntcp2Config)
+	// Close the old listener outside the lock to avoid blocking other operations
+	if err := oldListener.Close(); err != nil {
+		t.logger.WithError(err).Warn("Error closing existing listener during identity update")
+	}
+
+	// Create new listener outside the lock
+	newListener, err := t.createNewListenerWithConfig(ntcp2Config)
 	if err != nil {
+		// On failure, listener remains nil until next successful SetIdentity call
+		t.logger.WithError(err).Error("Failed to create new listener during identity update")
 		return err
 	}
 
+	// Install new listener under lock
 	t.identityMu.Lock()
-	t.listener = listener
-	t.logger.WithField("address", t.listener.Addr().String()).Info("Listener recreated successfully")
+	t.listener = newListener
+	t.logger.WithField("address", newListener.Addr().String()).Info("Listener recreated successfully")
 	t.identityMu.Unlock()
 	return nil
-}
-
-// closeExistingListenerLocked closes the current listener and logs any errors.
-// Must be called with identityMu held.
-func (t *NTCP2Transport) closeExistingListenerLocked() {
-	if err := t.listener.Close(); err != nil {
-		t.logger.WithError(err).Warn("Error closing existing listener during identity update")
-	}
 }
 
 // createNewListenerWithConfig creates a new TCP and NTCP2 listener with the provided configuration.
@@ -1516,6 +1553,17 @@ func (t *NTCP2Transport) closeAllActiveSessions() {
 		return true
 	})
 
+	// Final reconciliation: clear any remaining stale sessions and normalize count
+	var staleCount int
+	t.sessions.Range(func(key, value interface{}) bool {
+		staleCount++
+		_, _ = t.sessions.LoadAndDelete(key)
+		return true
+	})
+	if staleCount > 0 {
+		t.logger.WithField("stale_sessions", staleCount).Warn("Found stale sessions after close")
+	}
+	atomic.StoreInt32(&t.sessionCount, 0)
 	t.logger.WithField("session_count", sessionCount).Info("Closed all sessions")
 }
 

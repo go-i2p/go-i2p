@@ -336,13 +336,30 @@ func (t *SSU2Transport) Accept() (net.Conn, error) {
 		return nil, err
 	}
 
-	return t.trackInboundConnection(conn), nil
+	tracked, isFresh := t.trackInboundConnection(conn)
+	if !isFresh {
+		// Duplicate detected: trackInboundConnection closed and unreserved it.
+		// Return a clean error to the caller.
+		return nil, ErrDuplicateSession
+	}
+	return tracked, nil
 }
 
-func (t *SSU2Transport) trackInboundConnection(conn net.Conn) net.Conn {
+// trackInboundConnection registers the accepted connection for session counting
+// and wraps it to ensure cleanup on close. Returns (wrappedConn, isFresh) where
+// isFresh=true if this was a new insertion, or isFresh=false if a duplicate was detected.
+// On duplicate detection, the duplicate is closed and the reserved slot is unreserved.
+func (t *SSU2Transport) trackInboundConnection(conn net.Conn) (net.Conn, bool) {
 	peerHash := t.extractPeerHash(conn)
 	if _, loaded := t.sessions.LoadOrStore(peerHash, conn); loaded {
+		// Duplicate detected: unreserve the slot and close this connection.
 		t.unreserveSessionSlot()
+		conn.Close()
+		t.logger.WithFields(map[string]interface{}{
+			"remote_addr": conn.RemoteAddr().String(),
+			"peer_hash":   fmt.Sprintf("%x", peerHash[:8]),
+		}).Debug("Duplicate inbound SSU2 connection detected and closed; reservation unreserved")
+		return conn, false // Mark as duplicate
 	}
 	// Auto-initiate a PeerTest against the first 3 peers that connect (D3).
 	if ssu2Conn, ok := conn.(*ssu2noise.SSU2Conn); ok {
@@ -353,7 +370,7 @@ func (t *SSU2Transport) trackInboundConnection(conn net.Conn) net.Conn {
 		onClose: func() {
 			t.removeSession(peerHash)
 		},
-	}
+	}, true // Mark as fresh
 }
 
 func (t *SSU2Transport) extractPeerHash(conn net.Conn) data.Hash {
@@ -755,6 +772,21 @@ func (t *SSU2Transport) Close() error {
 
 		t.wg.Wait()
 		t.handler.Close()
+
+		// Reconcile sessionCount after shutdown to ensure it reflects actual session state.
+		// Clear any stale sessions from the map and reset count to 0 to ensure
+		// transport can be cleanly restarted if needed. This corrects for any
+		// cleanup callbacks that didn't fire or incomplete close paths.
+		var staleCount int
+		t.sessions.Range(func(key, value interface{}) bool {
+			staleCount++
+			_, _ = t.sessions.LoadAndDelete(key)
+			return true
+		})
+		if staleCount > 0 {
+			t.logger.WithField("stale_sessions", staleCount).Warn("Cleanup after Close found stale sessions")
+		}
+		atomic.StoreInt32(&t.sessionCount, 0)
 
 		t.logger.Info("SSU2 transport closed")
 		t.closeErr = listenerErr

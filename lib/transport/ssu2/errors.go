@@ -8,6 +8,7 @@ var (
 	// ErrSSU2NotSupported indicates that a peer/router does not advertise SSU2 support.
 	ErrSSU2NotSupported       = oops.New("router does not support SSU2")
 	ErrSessionClosed          = oops.New("SSU2 session is closed")
+	ErrDuplicateSession       = oops.New("SSU2 duplicate session from same peer")
 	ErrHandshakeFailed        = oops.New("SSU2 handshake failed")
 	ErrInvalidRouterInfo      = oops.New("invalid router info for SSU2")
 	ErrConnectionPoolFull     = oops.New("SSU2 connection pool full")

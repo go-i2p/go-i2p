@@ -215,8 +215,9 @@ func TestTrackInboundConnection_Wraps(t *testing.T) {
 	// Reserve a session slot first (trackInboundConnection reuses LoadOrStore).
 	require.NoError(t, tr.checkSessionLimit())
 
-	tracked := tr.trackInboundConnection(serverConn)
+	tracked, isFresh := tr.trackInboundConnection(serverConn)
 	require.NotNil(t, tracked)
+	require.True(t, isFresh, "first insertion should be fresh")
 
 	// Close the tracked connection; this should invoke the cleanup handler.
 	_ = tracked.Close()
