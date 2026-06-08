@@ -267,7 +267,7 @@ func listenWithOSPort(config *Config) (net.PacketConn, error) {
 			return sockoptErr
 		},
 	}
-	
+
 	udpAddr, err := net.ResolveUDPAddr("udp", config.ListenerAddress)
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to resolve UDP address")
@@ -277,21 +277,16 @@ func listenWithOSPort(config *Config) (net.PacketConn, error) {
 		return nil, oops.Wrapf(err, "failed to probe UDP port")
 	}
 	assignedPort := temp.LocalAddr().(*net.UDPAddr).Port
+	if closeErr := temp.Close(); closeErr != nil {
+		log.WithError(closeErr).Warn("failed to close probe UDP listener")
+	}
 
 	// Step 2: re-bind on the discovered port with NAT traversal so the connection
 	// address carries the external IP instead of the unspecified "::" host.
-	// Keep the temp listener open until we successfully rebind to avoid TOCTOU race:
-	// if we close temp first, another process could grab the port between close and rebind.
+	// SO_REUSEADDR on the final listener allows immediate rebind even if the
+	// port is in TIME_WAIT state from the probe listener close.
 	log.WithField("port", assignedPort).Info("probed OS-assigned UDP port; attempting NAT traversal")
-	finalConn, err := listenWithNATTraversal(config, assignedPort)
-
-	// Close the temporary listener only after successfully rebinding.
-	// This closes the TOCTOU window where another process could claim the port.
-	if closeErr := temp.Close(); closeErr != nil {
-		log.WithError(closeErr).Warn("failed to close probe UDP listener after NAT traversal rebind")
-	}
-
-	return finalConn, err
+	return listenWithNATTraversal(config, assignedPort)
 }
 
 // listenWithNATTraversal creates a UDP listener with NAT port mapping.

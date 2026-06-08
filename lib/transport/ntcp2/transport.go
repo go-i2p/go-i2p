@@ -224,9 +224,9 @@ func buildTransportInstance(config *Config, identity router_info.RouterInfo, key
 // NEPacketTunnelProvider extension. Attempting to listen will fail with EACCES.
 // Pure go-i2p in-app deployment is not supported on iOS App Store builds.
 func bindOSAssignedPort(config *Config) (net.Listener, error) {
-	// Step 1: ask the OS for any available port, with SO_REUSEADDR to allow
-	// rebinding immediately after. This reduces the TOCTOU window where another
-	// process could claim the port between close and rebind.
+	// Step 1: ask the OS for any available port.
+	// Use SO_REUSEADDR so the port is immediately available for reuse even if
+	// in TIME_WAIT state, reducing the TOCTOU race window.
 	listenCfg := net.ListenConfig{
 		Control: func(network, address string, c syscall.RawConn) error {
 			var sockoptErr error
@@ -241,27 +241,22 @@ func bindOSAssignedPort(config *Config) (net.Listener, error) {
 			return sockoptErr
 		},
 	}
-	
+
 	temp, err := listenCfg.Listen(context.Background(), "tcp", config.ListenerAddress)
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to probe available port")
 	}
 	assignedPort := temp.Addr().(*net.TCPAddr).Port
+	if closeErr := temp.Close(); closeErr != nil {
+		log.WithError(closeErr).Warn("failed to close probe listener")
+	}
 
 	// Step 2: re-bind on the discovered port with NAT traversal so the listener
 	// address carries the external IP instead of the unspecified "::" host.
-	// Keep the temp listener open until we successfully rebind to avoid TOCTOU race:
-	// if we close temp first, another process could grab the port between close and rebind.
+	// SO_REUSEADDR on the final listener allows immediate rebind even if the
+	// port is in TIME_WAIT state from the probe listener close.
 	log.WithField("port", assignedPort).Info("probed OS-assigned port; attempting NAT traversal")
-	finalListener, err := bindWithNATTraversal(config, assignedPort)
-
-	// Close the temporary listener only after successfully rebinding.
-	// This closes the TOCTOU window where another process could claim the port.
-	if closeErr := temp.Close(); closeErr != nil {
-		log.WithError(closeErr).Warn("failed to close probe listener after NAT traversal rebind")
-	}
-
-	return finalListener, err
+	return bindWithNATTraversal(config, assignedPort)
 }
 
 // bindWithNATTraversal creates a TCP listener on the specified port, attempting
