@@ -1054,13 +1054,29 @@ func (t *SSU2Transport) findSessionByAddr(addr *net.UDPAddr) *SSU2Session {
 
 // findSessionByHash looks up a session by the peer's identity hash.
 // Returns nil if no session exists for the given hash.
+// Handles both raw connections (promoting them if needed) and full sessions (MEDIUM 3.5).
 func (t *SSU2Transport) findSessionByHash(hash data.Hash) *SSU2Session {
 	val, ok := t.sessions.Load(hash)
 	if !ok {
 		return nil
 	}
-	s, _ := val.(*SSU2Session)
-	return s
+
+	// Already a full session
+	if s, ok := val.(*SSU2Session); ok {
+		return s
+	}
+
+	// Raw connection that needs promotion
+	if conn, ok := val.(net.Conn); ok {
+		if promoted, success := t.promoteInboundConnection(conn, val, hash); success {
+			if session, ok := promoted.(*SSU2Session); ok {
+				return session
+			}
+		}
+		return nil
+	}
+
+	return nil
 }
 
 // RemoteUDPAddr returns the remote UDP address of the session's underlying
