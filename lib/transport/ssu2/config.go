@@ -22,6 +22,30 @@ const DefaultKeepaliveInterval = 15 * time.Second
 // before the session is torn down.
 const DefaultMaxRetransmissions = 3
 
+// DefaultHolePunchDelay is the time Alice waits for Charlie's hole-punch packets
+// to arrive before sending the SessionRequest directly during introducer-based
+// relay connections.
+//
+// Rationale: In the 6-step SSU2 relay flow, after Alice receives Bob's RelayResponse
+// (step 4), Charlie sends a HolePunch to Alice (step 5) to create NAT state, then
+// Alice sends a direct SessionRequest to Charlie (step 6). The delay gives Charlie's
+// hole-punch a chance to arrive and open NAT bindings before Alice's direct packet,
+// improving connection success rates.
+//
+// The 150ms default assumes:
+//   - Typical relay RTT (Alice ↔ Bob ↔ Charlie) is 100-200ms
+//   - Charlie processes RelayIntro and sends HolePunch within 50ms
+//   - Network jitter is <50ms
+//
+// Operators may tune this value based on observed network conditions:
+//   - Lower values (50-100ms) work for low-latency networks but risk premature sends
+//   - Higher values (200-300ms) help high-latency/jitter cases but increase dial time
+//
+// T-3 note: Future enhancement could derive this from observed RTT to Bob/Charlie
+// where available. Built-in retransmission at the SSU2 message layer makes a
+// too-early send recoverable.
+const DefaultHolePunchDelay = 150 * time.Millisecond
+
 // Config holds SSU2 transport configuration, extending the go-noise SSU2Config
 // with transport-layer settings needed by the go-i2p router.
 type Config struct {
@@ -30,6 +54,7 @@ type Config struct {
 	MaxSessions        int           // Maximum concurrent sessions (0 = DefaultMaxSessions)
 	KeepaliveInterval  time.Duration // How often keepalive packets are sent (0 = DefaultKeepaliveInterval)
 	MaxRetransmissions int           // I2NP retransmission attempts before teardown (0 = DefaultMaxRetransmissions)
+	HolePunchDelay     time.Duration // Delay before sending SessionRequest after RelayResponse (0 = default 150ms)
 
 	// RouterLookupFunc looks up a RouterInfo by identity hash.
 	// Required for SSU2 via introducers: Alice looks up Bob (the introducer)
@@ -73,6 +98,17 @@ func (c *Config) GetMaxRetransmissions() int {
 		return DefaultMaxRetransmissions
 	}
 	return c.MaxRetransmissions
+}
+
+// GetHolePunchDelay returns the effective hole-punch delay.
+// This delay allows Charlie's hole-punch packets to arrive and open NAT bindings
+// before Alice sends the direct SessionRequest during introducer-based relay.
+// See DefaultHolePunchDelay for tuning guidance.
+func (c *Config) GetHolePunchDelay() time.Duration {
+	if c.HolePunchDelay <= 0 {
+		return DefaultHolePunchDelay
+	}
+	return c.HolePunchDelay
 }
 
 // NewConfig creates a new SSU2 Config with the given listener address.

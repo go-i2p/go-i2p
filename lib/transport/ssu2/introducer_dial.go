@@ -27,10 +27,6 @@ const (
 	// prevents sequential 10s waits from blocking the dial path for 30s+
 	// when multiple slow introducers are present (T-2 remediation).
 	introducerPhaseTimeout = 15 * time.Second
-
-	// holePunchDelay gives Charlie's hole-punch packets a chance to arrive
-	// before Alice sends the SessionRequest directly.
-	holePunchDelay = 150 * time.Millisecond
 )
 
 // dialViaIntroducer establishes a session to Charlie by routing through one of
@@ -382,9 +378,15 @@ func (t *SSU2Transport) dialCharlieDirectly(charlieRI router_info.RouterInfo, ch
 
 // waitForHolePunch waits for Charlie's hole-punch packets to arrive.
 // Returns error if context is cancelled during the wait.
+//
+// T-3 fix: Uses the configurable HolePunchDelay from config. The delay allows
+// Charlie's hole-punch packets to create NAT state before Alice sends the direct
+// SessionRequest. Built-in SSU2 message retransmission makes a too-early send
+// recoverable if the delay is insufficient for the network conditions.
 func (t *SSU2Transport) waitForHolePunch() error {
+	delay := t.config.GetHolePunchDelay()
 	select {
-	case <-time.After(holePunchDelay):
+	case <-time.After(delay):
 		return nil
 	case <-t.ctx.Done():
 		return oops.Wrapf(t.ctx.Err(), "context canceled during hole-punch delay")
