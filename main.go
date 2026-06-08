@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/go-i2p/go-i2p/lib/cli"
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/config/cliflags"
 	"github.com/go-i2p/go-i2p/lib/config/configcmd"
@@ -77,6 +78,7 @@ func runRouter() {
 func main() {
 	RootCmd.AddCommand(configcmd.New())
 	RootCmd.AddCommand(tuicmd.New())
+	cli.RegisterI2PControlCommand(RootCmd)
 	if err := RootCmd.Execute(); err != nil {
 		log.Error(err)
 		configcmd.DebugPrintConfig()
