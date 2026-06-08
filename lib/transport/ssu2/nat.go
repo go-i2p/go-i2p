@@ -1482,17 +1482,47 @@ func (t *SSU2Transport) tryRegisterIntroducer(ri router_info.RouterInfo) bool {
 		// Failure during creation — tag was not allocated yet, so no cleanup needed.
 		return false
 	}
-	// Registration may fail even though creation succeeded. In that case,
-	// intro.RelayTag is allocated but abandoned (HIGH 2.4 resource leak).
-	// TODO(HIGH 2.4): Add mechanism to release abandoned relay tags.
+	// Registration may fail even though creation succeeded. Track abandoned tags
+	// for monitoring and future cleanup when a release API becomes available.
 	err = t.RegisterIntroducer(intro)
 	if err != nil {
-		t.logger.WithError(err).WithField("introducer_hash",
-			i2pbase64.EncodeToString(intro.RouterHash)).
-			Warn("Introducer registration failed; relay tag may leak")
+		t.trackAbandonedRelayTag(intro.RelayTag, intro.Addr, err.Error())
+		t.logger.WithError(err).WithFields(map[string]interface{}{
+			"introducer_hash": fmt.Sprintf("%x", intro.RouterHash[:8]),
+			"relay_tag":       intro.RelayTag,
+		}).Warn("Introducer registration failed; relay tag tracked for future cleanup")
 		return false
 	}
 	return true
+}
+
+// trackAbandonedRelayTag records a relay tag that was allocated but not successfully
+// registered. Provides monitoring and prepares for future cleanup when a release
+// API becomes available in the RelayManager.
+func (t *SSU2Transport) trackAbandonedRelayTag(tag uint32, addr *net.UDPAddr, reason string) {
+	t.abandonedRelayTagsMu.Lock()
+	defer t.abandonedRelayTagsMu.Unlock()
+
+	t.abandonedRelayTags = append(t.abandonedRelayTags, abandonedRelayTag{
+		tag:         tag,
+		addr:        addr,
+		allocatedAt: time.Now(),
+		reason:      reason,
+	})
+
+	// Log a warning if we're accumulating many abandoned tags
+	if len(t.abandonedRelayTags) > 10 {
+		t.logger.WithField("count", len(t.abandonedRelayTags)).
+			Warn("Accumulating abandoned relay tags; may indicate registration instability")
+	}
+}
+
+// GetAbandonedRelayTagCount returns the number of tracked abandoned relay tags.
+// Exported for monitoring and diagnostics.
+func (t *SSU2Transport) GetAbandonedRelayTagCount() int {
+	t.abandonedRelayTagsMu.Lock()
+	defer t.abandonedRelayTagsMu.Unlock()
+	return len(t.abandonedRelayTags)
 }
 
 // createIntroducerFromRouterInfo extracts SSU2 address and identity, allocates a relay tag,

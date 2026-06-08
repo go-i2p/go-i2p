@@ -23,6 +23,15 @@ import (
 	"golang.org/x/time/rate"
 )
 
+// abandonedRelayTag tracks a relay tag that was allocated but not successfully
+// registered, for monitoring and future cleanup.
+type abandonedRelayTag struct {
+	tag         uint32
+	addr        *net.UDPAddr
+	allocatedAt time.Time
+	reason      string // why registration failed
+}
+
 // SSU2Transport implements transport.Transport for SSU2 connections.
 type SSU2Transport struct {
 	listener *ssu2noise.SSU2Listener
@@ -65,6 +74,11 @@ type SSU2Transport struct {
 	// peerConnNotifier receives connection outcome feedback (optional).
 	// Set via SetPeerConnNotifier after construction. Uses atomic.Value for safe concurrent access.
 	peerConnNotifier atomic.Value // stores transport.PeerConnNotifier
+
+	// abandonedRelayTags tracks relay tags allocated but not successfully registered.
+	// Used for monitoring and future cleanup when a release API becomes available.
+	abandonedRelayTagsMu sync.Mutex
+	abandonedRelayTags   []abandonedRelayTag
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -596,7 +610,9 @@ func (t *SSU2Transport) SetIdentity(ident router_info.RouterInfo) error {
 		t.relayManager.Stop()
 	}
 
+	// Snapshot the current listener address under lock before recreating the listener
 	t.identityMu.Lock()
+	currentAddr := t.config.ListenerAddress
 	oldListener := t.listener
 	t.listener = nil
 	t.identityMu.Unlock()
@@ -609,8 +625,8 @@ func (t *SSU2Transport) SetIdentity(ident router_info.RouterInfo) error {
 
 	// Create new listener with the new identity/config if one existed before.
 	if oldListener != nil {
-		// Extract port from the current config's listener address to maintain the same listening port.
-		_, portStr, err := net.SplitHostPort(t.config.ListenerAddress)
+		// Extract port from the snapshotted listener address to maintain the same listening port.
+		_, portStr, err := net.SplitHostPort(currentAddr)
 		if err != nil {
 			t.logger.WithError(err).Error("Failed to extract port from SSU2 listener address")
 			return err
@@ -622,11 +638,14 @@ func (t *SSU2Transport) SetIdentity(ident router_info.RouterInfo) error {
 		}
 
 		// Create new UDP connection using NAT traversal with the same port.
+		// listenWithNATTraversal may write to t.config.ListenerAddress internally,
+		// so we'll capture the new bound address from the connection.
 		udpConn, err := listenWithNATTraversal(t.config, port)
 		if err != nil {
 			t.logger.WithError(err).Error("Failed to rebind UDP address during identity update")
 			return err
 		}
+		newAddr := udpConn.LocalAddr().String()
 
 		listener, err := ssu2noise.NewSSU2Listener(udpConn, ssu2Config)
 		if err != nil {
@@ -641,8 +660,10 @@ func (t *SSU2Transport) SetIdentity(ident router_info.RouterInfo) error {
 			return WrapSSU2Error(err, "starting recreated SSU2 listener")
 		}
 
+		// Update listener and address under lock
 		t.identityMu.Lock()
 		t.listener = listener
+		t.config.ListenerAddress = newAddr
 		t.identityMu.Unlock()
 
 		// BUG FIX HIGH SM-1: Re-initialize NAT managers with the new listener.

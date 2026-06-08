@@ -299,15 +299,20 @@ func (t *SSU2Transport) registerCharlieSession(conn *ssu2noise.SSU2Conn, charlie
 		return nil, err
 	}
 
+	// Use deferred cleanup - only unreserve if slotUsed is false
+	slotUsed := false
+	defer func() {
+		if !slotUsed {
+			t.unreserveSessionSlot()
+		}
+	}()
+
 	session, newSlotUsed, err := t.registerOrReuseSession(conn, charlieHash)
 	if err != nil {
 		return nil, err
 	}
 
-	if !newSlotUsed {
-		// session limit was pre-checked but slot ended up not used (reused existing)
-		t.unreserveSessionSlot()
-	}
+	slotUsed = newSlotUsed
 	return session, nil
 }
 

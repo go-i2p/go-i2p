@@ -560,9 +560,9 @@ func (t *NTCP2Transport) inboundHandshakeWorker(conn net.Conn) {
 	case t.pendingConns <- tracked:
 		// Successfully enqueued for Accept() to consume.
 	case <-sendCtx.Done():
-		// Queue send timed out: close the connection and unreserve the slot.
-		// This prevents resource exhaustion when the accept consumer is slow
-		// or not reading from the queue.
+		// Queue send timed out: close the connection.
+		// The tracked conn's onClose callback will call removeSession which
+		// decrements the session count, so we don't call unreserveSessionSlot here.
 		t.logger.WithFields(map[string]interface{}{
 			"remote_addr":   conn.RemoteAddr().String(),
 			"queue_timeout": queueTimeout,
@@ -570,11 +570,10 @@ func (t *NTCP2Transport) inboundHandshakeWorker(conn net.Conn) {
 			"pending_conns": len(t.pendingConns),
 		}).Warn("Inbound connection dropped: pending queue send timeout (accept consumer too slow?)")
 		tracked.Close()
-		t.unreserveSessionSlot()
 	case <-t.ctx.Done():
-		// Transport shutting down while connection was waiting.
+		// Transport shutting down: close the connection.
+		// The tracked conn's onClose callback handles session cleanup.
 		tracked.Close()
-		t.unreserveSessionSlot()
 	}
 }
 
@@ -934,6 +933,8 @@ func (t *NTCP2Transport) recreateListenerIfNeeded(ntcp2Config *ntcp2.Config) err
 		return nil
 	}
 
+	// Snapshot the current listener address under lock before creating the new listener
+	currentAddr := t.config.ListenerAddress
 	t.logger.Info("Recreating listener with new identity")
 	oldListener := t.listener
 	t.listener = nil // Atomically mark as unavailable before closing
@@ -944,43 +945,47 @@ func (t *NTCP2Transport) recreateListenerIfNeeded(ntcp2Config *ntcp2.Config) err
 		t.logger.WithError(err).Warn("Error closing existing listener during identity update")
 	}
 
-	// Create new listener outside the lock
-	newListener, err := t.createNewListenerWithConfig(ntcp2Config)
+	// Create new listener outside the lock using the snapshotted address
+	newListener, newAddr, err := t.createNewListenerWithConfig(ntcp2Config, currentAddr)
 	if err != nil {
 		// On failure, listener remains nil until next successful SetIdentity call
 		t.logger.WithError(err).Error("Failed to create new listener during identity update")
 		return err
 	}
 
-	// Install new listener under lock
+	// Install new listener and update address under lock
 	t.identityMu.Lock()
 	t.listener = newListener
-	t.logger.WithField("address", newListener.Addr().String()).Info("Listener recreated successfully")
+	t.config.ListenerAddress = newAddr
+	t.logger.WithField("address", newAddr).Info("Listener recreated successfully")
 	t.identityMu.Unlock()
 	return nil
 }
 
 // createNewListenerWithConfig creates a new TCP and NTCP2 listener with the provided configuration.
-// Uses NAT traversal to preserve external address visibility established at startup.
-func (t *NTCP2Transport) createNewListenerWithConfig(ntcp2Config *ntcp2.Config) (net.Listener, error) {
+// Takes the listener address as a parameter to avoid reading shared state outside the identity lock.
+// Returns the new listener and the new bound address (which may differ after NAT traversal).
+func (t *NTCP2Transport) createNewListenerWithConfig(ntcp2Config *ntcp2.Config, listenerAddress string) (net.Listener, string, error) {
 	// Extract port from the current listener address to maintain the same listening port.
-	_, portStr, err := net.SplitHostPort(t.config.ListenerAddress)
+	_, portStr, err := net.SplitHostPort(listenerAddress)
 	if err != nil {
 		t.logger.WithError(err).Error("Failed to extract port from listener address for recreation")
-		return nil, WrapNTCP2Error(err, "parsing listener port")
+		return nil, "", WrapNTCP2Error(err, "parsing listener port")
 	}
 	iport, err := strconv.Atoi(portStr)
 	if err != nil {
 		t.logger.WithError(err).Error("Failed to convert port to integer")
-		return nil, WrapNTCP2Error(err, "parsing listener port")
+		return nil, "", WrapNTCP2Error(err, "parsing listener port")
 	}
 
 	// Use NAT traversal to rebind with the same port, preserving external address mapping.
 	// This ensures the recreated listener maintains NAT-mapped address semantics.
+	// bindWithNATTraversal may update t.config.ListenerAddress internally, but we'll
+	// capture and return the final bound address to update config under lock.
 	tcpListener, err := bindWithNATTraversal(t.config, iport)
 	if err != nil {
 		t.logger.WithError(err).Error("Failed to rebind listener with NAT traversal")
-		return nil, WrapNTCP2Error(err, "rebinding listener")
+		return nil, "", WrapNTCP2Error(err, "rebinding listener")
 	}
 
 	listener, err := ntcp2.NewNTCP2Listener(tcpListener, ntcp2Config)
@@ -990,10 +995,11 @@ func (t *NTCP2Transport) createNewListenerWithConfig(ntcp2Config *ntcp2.Config) 
 			t.logger.WithError(closeErr).Warn("Failed to close TCP listener after NTCP2 listener creation failure")
 		}
 		t.logger.WithError(err).Error("Failed to create new NTCP2 listener")
-		return nil, WrapNTCP2Error(err, "creating new listener")
+		return nil, "", WrapNTCP2Error(err, "creating new listener")
 	}
 
-	return listener, nil
+	// Return the actual bound address from the listener
+	return listener, listener.Addr().String(), nil
 }
 
 // GetSession obtains a transport session with a router given its RouterInfo.
