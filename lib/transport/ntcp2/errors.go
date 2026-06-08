@@ -14,6 +14,7 @@ var (
 	ErrFramingError           = oops.New("I2NP message framing error")
 	ErrInvalidListenerAddress = oops.New("invalid listener address for NTCP2")
 	ErrInvalidConfig          = oops.New("invalid NTCP2 configuration")
+	ErrUnexpectedConnType     = oops.New("accepted connection is not *ntcp2.Conn")
 )
 
 // WrapNTCP2Error wraps an error with NTCP2 operation context.
