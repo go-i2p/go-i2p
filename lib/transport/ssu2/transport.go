@@ -109,11 +109,14 @@ func NewSSU2Transport(identity router_info.RouterInfo, config *Config, keystore 
 	t := createSSU2TransportStruct(config, identity, keystore, ctx, cancel, l)
 
 	if err := setupUDPListener(t, config, ssu2Config); err != nil {
+		t.handler.Close()
 		cancel()
 		return nil, err
 	}
 
 	if err := conditionallyInitKeyManagement(t, config, ssu2Config, cancel); err != nil {
+		t.handler.Close()
+		cancel()
 		return nil, err
 	}
 
@@ -359,7 +362,12 @@ func startSSU2Listener(t *SSU2Transport, udpConn net.PacketConn, ssu2Config *ssu
 
 // Accept accepts an incoming SSU2 connection.
 func (t *SSU2Transport) Accept() (net.Conn, error) {
-	if t.listener == nil {
+	// BUG FIX MEDIUM 1.7: Protect listener access with identityMu to prevent races
+	// with SetIdentity() and Close(). Matches pattern in Addr() and NTCP2.Accept().
+	t.identityMu.RLock()
+	listener := t.listener
+	t.identityMu.RUnlock()
+	if listener == nil {
 		return nil, ErrSessionClosed
 	}
 
@@ -367,7 +375,7 @@ func (t *SSU2Transport) Accept() (net.Conn, error) {
 		return nil, err
 	}
 
-	conn, err := t.listener.Accept()
+	conn, err := listener.Accept()
 	if err != nil {
 		t.unreserveSessionSlot()
 		return nil, err
@@ -859,8 +867,13 @@ func (t *SSU2Transport) Close() error {
 		}
 
 		var listenerErr error
-		if t.listener != nil {
-			listenerErr = t.listener.Close()
+		// BUG FIX MEDIUM 1.7: Protect listener access with identityMu lock to prevent
+		// races with SetIdentity() and Accept().
+		t.identityMu.RLock()
+		listener := t.listener
+		t.identityMu.RUnlock()
+		if listener != nil {
+			listenerErr = listener.Close()
 		}
 
 		t.sessions.Range(func(key, value interface{}) bool {
