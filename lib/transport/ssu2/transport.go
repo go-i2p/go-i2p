@@ -84,6 +84,15 @@ type SSU2Transport struct {
 	// observations confirm a new external address. Set after construction.
 	peerTestRepublish atomic.Value // stores func()
 
+	// Peer test retry state (T-1 fix): tracks consecutive failures and timing
+	// for exponential backoff retry of NAT detection. Protected by peerTestRetryMu.
+	peerTestRetryMu     sync.Mutex
+	peerTestRetryCount  int
+	peerTestLastAttempt time.Time
+	peerTestCandidates  []router_info.RouterInfo
+	peerTestRepublishFn func()
+	peerTestRetryTimer  *time.Timer
+
 	// closeOnce ensures Close() is idempotent.
 	closeOnce sync.Once
 	closeErr  error
@@ -990,6 +999,14 @@ func (t *SSU2Transport) Close() error {
 		if t.keyRotationManager != nil {
 			t.keyRotationManager.Stop()
 		}
+
+		// Clean up peer test retry timer (T-1 fix)
+		t.peerTestRetryMu.Lock()
+		if t.peerTestRetryTimer != nil {
+			t.peerTestRetryTimer.Stop()
+			t.peerTestRetryTimer = nil
+		}
+		t.peerTestRetryMu.Unlock()
 
 		var listenerErr error
 		// BUG FIX MEDIUM 1.7: Protect listener access with identityMu lock to prevent

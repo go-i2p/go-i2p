@@ -382,6 +382,18 @@ func (t *SSU2Transport) handlePeerTestAsAlice(ptBlock *ssu2noise.PeerTestBlock) 
 	nonce := ptBlock.Nonce
 	externalAddr := extractAliceAddress(ptBlock)
 
+	// BUG FIX HIGH RD-1: Verify the PeerTest nonce belongs to a test this node
+	// initiated before recording the observation. An attacker can send unsolicited
+	// PeerTest replies with arbitrary nonces to poison the address-confirmation cache.
+	// Fail-closed: if the nonce is unknown, ignore the observation entirely.
+	if t.peerTestManager != nil {
+		test := t.peerTestManager.GetTest(nonce)
+		if test == nil {
+			t.logger.WithField("nonce", nonce).Warn("PeerTest: ignoring observation with unknown nonce (potential injection attack)")
+			return nil
+		}
+	}
+
 	result := &ssu2noise.TestResult{
 		ExternalAddr: externalAddr,
 		Reachable:    externalAddr != nil,
@@ -886,6 +898,16 @@ func (t *SSU2Transport) initiateHolePunch(intro *ssu2noise.RelayIntroBlock, bobS
 		return nil
 	}
 
+	// BUG FIX HIGH E-1: Verify the RelayIntro signature with the CORRECT Bob hash.
+	// The initial verification in initNATManagers used Alice's hash as a placeholder
+	// because Bob's hash wasn't available in that closure. Now that we have Bob's
+	// session, perform proper signature verification with the real Bob hash and
+	// Alice's signing key from NetDB.
+	if err := t.verifyRelayIntroSignature(intro, bobSession); err != nil {
+		t.logger.WithField("error", err).Warn("hole-punch: RelayIntro signature verification failed")
+		return err
+	}
+
 	// BUG FIX HIGH E-2: Only send hole-punch/RelayResponse when InitiateHolePunch succeeds.
 	// This prevents reflection attacks where an attacker triggers emissions to arbitrary IPs.
 	_, err := t.holePunchCoord.InitiateHolePunch(aliceAddr, bobAddr, intro.AliceRelayTag)
@@ -900,6 +922,71 @@ func (t *SSU2Transport) initiateHolePunch(intro *ssu2noise.RelayIntroBlock, bobS
 		return err
 	}
 	t.logger.WithField("alice_addr", aliceAddr).Debug("hole-punch initiated towards Alice")
+	return nil
+}
+
+// verifyRelayIntroSignature performs proper signature verification on a RelayIntro
+// block using Alice's Ed25519 public key (from NetDB) and the correct Bob hash
+// (from bobSession). This is the fail-closed verification that replaces the
+// placeholder-based verification done in the init-time closure.
+func (t *SSU2Transport) verifyRelayIntroSignature(intro *ssu2noise.RelayIntroBlock, bobSession *SSU2Session) error {
+	if intro == nil || len(intro.Signature) == 0 {
+		return oops.Errorf("relay intro: missing block or signature")
+	}
+
+	// Extract Alice's router hash from the intro block
+	var aliceHash data.Hash
+	if len(intro.AliceRouterHash) == 32 {
+		copy(aliceHash[:], intro.AliceRouterHash)
+	} else {
+		return oops.Errorf("relay intro: AliceRouterHash missing or wrong size")
+	}
+
+	// Look up Alice's RouterInfo from NetDB to get her Ed25519 signing key
+	if t.config.RouterLookupFunc == nil {
+		return oops.Errorf("signature verification unavailable: RouterLookupFunc not configured")
+	}
+	aliceRI, err := t.config.RouterLookupFunc(aliceHash)
+	if err != nil {
+		t.logger.WithField("alice_hash", aliceHash[:4]).Warn("RelayIntro: failed to lookup Alice's RouterInfo for signature verification")
+		return oops.Wrapf(err, "netdb lookup failed for Alice %x", aliceHash[:4])
+	}
+	alicePubKey, err := extractEd25519PublicKey(aliceRI)
+	if err != nil {
+		return oops.Wrapf(err, "failed to extract Ed25519 public key from Alice's RouterInfo")
+	}
+
+	// Extract Bob's router hash from the session
+	bobHash := t.extractPeerHash(bobSession.conn)
+
+	// Get our (Charlie's) identity hash
+	charlieHash := t.getOurIdentityHash()
+
+	// Verify the signature with correct hashes
+	ok, err := ssu2noise.VerifyRelayRequestSignature(
+		alicePubKey,
+		intro.Signature,
+		bobHash, // NOW using the real Bob hash, not Alice's hash as placeholder
+		charlieHash,
+		intro.Nonce,
+		intro.AliceRelayTag,
+		intro.Timestamp,
+		intro.Version,
+		intro.AlicePort,
+		intro.AliceIP,
+	)
+	if err != nil {
+		return oops.Wrapf(err, "relay intro signature verification error")
+	}
+	if !ok {
+		return oops.Errorf("relay intro signature invalid")
+	}
+
+	t.logger.WithFields(map[string]interface{}{
+		"alice_hash": fmt.Sprintf("%x", aliceHash[:4]),
+		"bob_hash":   fmt.Sprintf("%x", bobHash[:4]),
+	}).Debug("RelayIntro signature verified successfully with correct Bob hash")
+
 	return nil
 }
 
@@ -1233,15 +1320,88 @@ func (t *SSU2Transport) pollPeerTestOnce(timer *time.Timer, poll *time.Ticker, n
 }
 
 // handlePeerTestTimeout handles the case where peer test timed out.
-// Rather than immediately registering introducers (which creates persistent
-// FIREWALLED classification even for transient network issues), we log the
-// timeout and skip introducer registration on first occurrence. This prevents
-// false firewalled classification from temporary network impairments.
-// TODO(HIGH 6.3): Implement retry counter or exponential backoff before
-// falling back to introducers. Only after multiple failed peer tests should
-// the node classify itself as firewalled.
+// Implements retry logic with exponential backoff (T-1 fix): after N consecutive
+// failures (default 3), the node classifies itself as firewalled and registers
+// introducers. This prevents false firewalled classification from transient
+// network issues while ensuring eventual fallback for genuinely firewalled nodes.
 func (t *SSU2Transport) handlePeerTestTimeout(candidates []router_info.RouterInfo, republish func()) {
-	t.logger.WithField("timeout_seconds", 60).Warn("NAT detection: peer test timed out; not registering introducers on first timeout to avoid false FIREWALLED classification from transient network issues")
+	const maxRetries = 3
+	const initialBackoff = 60 * time.Second
+
+	t.peerTestRetryMu.Lock()
+	t.peerTestRetryCount++
+	retryCount := t.peerTestRetryCount
+	t.peerTestLastAttempt = time.Now()
+
+	// Store candidates and republish for retry attempts
+	t.peerTestCandidates = candidates
+	t.peerTestRepublishFn = republish
+	t.peerTestRetryMu.Unlock()
+
+	if retryCount <= maxRetries {
+		// Calculate exponential backoff: 60s, 120s, 240s, ...
+		backoff := initialBackoff * time.Duration(1<<uint(retryCount-1))
+		t.logger.WithFields(map[string]interface{}{
+			"timeout_seconds": 60,
+			"retry_count":     retryCount,
+			"next_retry_in":   backoff.String(),
+		}).Warn("NAT detection: peer test timed out; scheduling retry to avoid false FIREWALLED classification")
+
+		// Schedule retry after backoff
+		t.scheduleNATDetectionRetry(backoff)
+	} else {
+		// After maxRetries consecutive failures, classify as firewalled
+		t.logger.WithFields(map[string]interface{}{
+			"timeout_seconds":   60,
+			"consecutive_fails": retryCount,
+			"classification":    "FIREWALLED",
+		}).Warn("NAT detection: peer test failed after maximum retries; classifying as FIREWALLED and registering introducers")
+
+		// Register introducers for firewalled nodes
+		t.registerIntroducers(candidates, republish)
+
+		// Reset retry counter after successful fallback
+		t.peerTestRetryMu.Lock()
+		t.peerTestRetryCount = 0
+		t.peerTestRetryMu.Unlock()
+	}
+}
+
+// scheduleNATDetectionRetry schedules a retry of NAT detection after the specified backoff delay.
+// The retry is tracked in the transport WaitGroup and cancellable via context.
+func (t *SSU2Transport) scheduleNATDetectionRetry(backoff time.Duration) {
+	t.peerTestRetryMu.Lock()
+	// Cancel any existing retry timer to avoid multiple concurrent retries
+	if t.peerTestRetryTimer != nil {
+		t.peerTestRetryTimer.Stop()
+	}
+
+	t.peerTestRetryTimer = time.AfterFunc(backoff, func() {
+		// Check if transport is still running
+		select {
+		case <-t.ctx.Done():
+			return
+		default:
+		}
+
+		// Retrieve stored candidates and republish function
+		t.peerTestRetryMu.Lock()
+		candidates := t.peerTestCandidates
+		republish := t.peerTestRepublishFn
+		t.peerTestRetryMu.Unlock()
+
+		if len(candidates) >= 2 {
+			t.logger.Info("NAT detection: retry timer fired; re-running peer test")
+			t.wg.Add(1)
+			go func() {
+				defer t.wg.Done()
+				t.runNATDetection(candidates, republish)
+			}()
+		} else {
+			t.logger.Warn("NAT detection: retry scheduled but no candidates available")
+		}
+	})
+	t.peerTestRetryMu.Unlock()
 }
 
 // checkPeerTestComplete checks if the peer test is complete and processes the result.
@@ -1253,6 +1413,15 @@ func (t *SSU2Transport) checkPeerTestComplete(nonce uint32, candidates []router_
 	}
 	natType := t.classifyNATType(test)
 	t.logger.WithField("nat_type", natType.String()).Info("NAT detection: peer test complete")
+
+	// Reset retry counter on successful peer test completion (T-1 fix)
+	t.peerTestRetryMu.Lock()
+	t.peerTestRetryCount = 0
+	if t.peerTestRetryTimer != nil {
+		t.peerTestRetryTimer.Stop()
+		t.peerTestRetryTimer = nil
+	}
+	t.peerTestRetryMu.Unlock()
 
 	// Cache result with TTL and persist to disk.
 	var extStr string
