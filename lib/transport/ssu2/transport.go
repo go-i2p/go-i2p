@@ -695,13 +695,20 @@ func (t *SSU2Transport) promoteInboundConnection(conn net.Conn, original interfa
 	promoted := NewSSU2SessionDeferred(ssu2Conn, t.ctx, t.logger)
 	promoted.maxRetransmit = t.config.GetMaxRetransmissions()
 	promoted.SetTransportCallbacks(t.buildTransportCallbacks(promoted))
+
+	// Start workers BEFORE making session visible in map (MEDIUM 3.4).
+	// This ensures no other goroutine sees a session without running workers.
+	promoted.StartWorkers()
+
 	if t.sessions.CompareAndSwap(routerHash, original, promoted) {
+		// Workers are already running; set cleanup callback for when this session closes.
 		promoted.SetCleanupCallback(func() {
 			t.removeSession(routerHash)
 		})
-		promoted.StartWorkers()
 		return promoted, true
 	}
+
+	// CompareAndSwap failed; close the session (workers will exit cleanly).
 	_ = promoted.Close()
 	if winner, exists := t.sessions.Load(routerHash); exists {
 		if winnerSession, ok := winner.(*SSU2Session); ok {
@@ -855,8 +862,13 @@ func (t *SSU2Transport) registerOrReuseSession(conn *ssu2noise.SSU2Conn, routerH
 	session.maxRetransmit = t.config.GetMaxRetransmissions()
 	session.SetTransportCallbacks(t.buildTransportCallbacks(session))
 
+	// Start workers BEFORE putting session in map (MEDIUM 3.4).
+	// This ensures no other goroutine sees a session without running workers.
+	session.StartWorkers()
+
 	existing, loaded := t.sessions.LoadOrStore(routerHash, session)
 	if loaded {
+		// Session already exists; close our new session (workers will exit cleanly).
 		_ = session.Close()
 		if existingSession, ok := existing.(*SSU2Session); ok {
 			return existingSession, false, nil // Reusing existing, slot not used
@@ -872,7 +884,7 @@ func (t *SSU2Transport) registerOrReuseSession(conn *ssu2noise.SSU2Conn, routerH
 		return nil, false, oops.Errorf("unexpected session map entry type")
 	}
 
-	session.StartWorkers()
+	// Workers are already running; set cleanup callback for when this session closes.
 	session.SetCleanupCallback(func() {
 		t.removeSession(routerHash)
 	})
