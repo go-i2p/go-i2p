@@ -470,8 +470,20 @@ func (t *NTCP2Transport) acceptNextConnection() bool {
 	}
 
 	if err != nil {
-		t.logger.WithError(err).Warn("Listener Accept() error; closing accept loop")
-		return false
+		// MEDIUM 5.1: Distinguish transient from permanent accept errors.
+		// Only exit the loop on permanent errors (shutdown signaled or listener gone).
+		// For transient errors (EMFILE, etc.), log and continue accepting.
+		select {
+		case <-t.ctx.Done():
+			// Shutdown signaled; exit loop and log at debug level
+			t.logger.WithError(err).Debug("Accept error during shutdown; closing accept loop")
+			return false
+		default:
+			// Transient error: log as info, sleep briefly to avoid tight loop, and continue
+			t.logger.WithError(err).Info("Transient accept error; will retry")
+			time.Sleep(10 * time.Millisecond)
+			return true
+		}
 	}
 
 	if !t.canAcceptNewSession(rawConn) {
@@ -614,9 +626,11 @@ func (t *NTCP2Transport) extractAndStorePeerRouterInfo(ntcp2Conn *ntcp2.Conn, co
 
 	peerRI, _, parseErr := router_info.ReadRouterInfo(riBytes)
 	if parseErr != nil {
+		// MEDIUM 5.2: RouterInfo parse failure should be a hard session-establishment error,
+		// not a warning that allows degraded routing. Abort handshake on parse failure.
 		t.logger.WithError(parseErr).WithField("remote_addr", conn.RemoteAddr().String()).
-			Warn("Inbound NTCP2: failed to parse peer RouterInfo from msg3; proceeding with degraded routing")
-		return nil
+			Warn("Inbound NTCP2: failed to parse peer RouterInfo from msg3; aborting handshake")
+		return oops.Errorf("RouterInfo parse failed: %w", parseErr)
 	}
 
 	t.updateRemoteAddressWithIdentHash(ntcp2Conn, peerRI)
@@ -642,6 +656,8 @@ func (t *NTCP2Transport) storeRouterInfoInNetDB(peerRI router_info.RouterInfo, c
 	if storer == nil {
 		return
 	}
+	// Note: StoreRouterInfo is a void function; the NetDB API does not expose storage errors.
+	// Use StoreRouterInfoFromMessage for error reporting where needed.
 	storer.StoreRouterInfo(peerRI)
 	t.logger.WithField("remote_addr", conn.RemoteAddr().String()).
 		Debug("Inbound NTCP2: stored peer RouterInfo in NetDB")

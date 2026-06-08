@@ -396,7 +396,10 @@ func startSSU2Listener(t *SSU2Transport, udpConn net.PacketConn, ssu2Config *ssu
 	}
 
 	t.listener = listener
-	initNATManagers(t)
+	if err := initNATManagers(t); err != nil {
+		t.logger.WithError(err).Warn("NAT manager initialization failed; NAT features may be degraded")
+		// Don't fail transport startup, but log the failure so operators are aware
+	}
 	return nil
 }
 

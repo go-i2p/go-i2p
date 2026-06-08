@@ -30,7 +30,8 @@ const (
 // initNATManagers allocates and wires the PeerTestManager, RelayManager,
 // IntroducerRegistry, and HolePunchCoordinator on a freshly started transport.
 // Must be called after t.listener is initialised.
-func initNATManagers(t *SSU2Transport) {
+// Returns an error if HolePunchCoordinator initialization fails.
+func initNATManagers(t *SSU2Transport) error {
 	t.relayManager = ssu2noise.NewRelayManager(t.listener)
 	t.introducerRegistry = ssu2noise.NewIntroducerRegistry(3)
 	verifyFn := func(block *ssu2noise.RelayIntroBlock, signerKey ed25519.PublicKey) error {
@@ -72,7 +73,10 @@ func initNATManagers(t *SSU2Transport) {
 	var err error
 	t.holePunchCoord, err = ssu2noise.NewHolePunchCoordinator(t.relayManager, verifyFn)
 	if err != nil {
-		t.logger.WithField("error", err).Warn("failed to initialize HolePunchCoordinator")
+		// MEDIUM 5.5: HolePunchCoordinator initialization failure should be reported,
+		// not silently downgraded to a warning. Return the error so the caller can decide
+		// whether to fail the transport or degrade gracefully.
+		return oops.Wrapf(err, "failed to initialize HolePunchCoordinator")
 	}
 	t.peerTestManager = ssu2noise.NewPeerTestManager(t.listener)
 	if t.natStateCache == nil {
@@ -81,6 +85,7 @@ func initNATManagers(t *SSU2Transport) {
 	t.loadNATState()
 	t.startNATCleanup()
 	t.startNATPortMapRetry()
+	return nil
 }
 
 // buildTransportCallbacks returns a BlockCallbackConfig whose handlers delegate
@@ -544,9 +549,11 @@ func (t *SSU2Transport) handlePeerTestAsBob(ptBlock *ssu2noise.PeerTestBlock, se
 		return verifyErr
 	}
 
-	if !t.checkBobRateLimits(session) {
-		return nil
-	}
+	// MEDIUM 5.7: Removed redundant rate-limit check here. Rate limiting is enforced
+	// BEFORE signature verification (above) to prevent DoS from expensive sig checks.
+	// Checking again after verification is redundant and confuses error reporting.
+	// The first check at line ~529 is sufficient.
+
 	charlieAddr := t.resolveCharlieAddr(ptBlock)
 	if charlieAddr == nil {
 		t.logger.Debug("PeerTest Bob: cannot resolve Charlie address, ignoring")
