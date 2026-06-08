@@ -442,7 +442,8 @@ func (t *NTCP2Transport) canAcceptNewSession(rawConn net.Conn) bool {
 // inboundHandshakeWorker performs the full NTCP2 inbound handshake for a
 // single raw TCP connection. On success the tracked connection is sent on
 // pendingConns for consumption by Accept(). On failure the connection and
-// the reserved session slot are cleaned up.
+// the reserved session slot are cleaned up. Times out if the queue is full
+// to prevent indefinite blocking and slot reservation exhaustion.
 func (t *NTCP2Transport) inboundHandshakeWorker(conn net.Conn) {
 	if err := t.performInboundHandshake(conn); err != nil {
 		// performInboundHandshake already closes conn and unreserves the slot.
@@ -455,14 +456,31 @@ func (t *NTCP2Transport) inboundHandshakeWorker(conn net.Conn) {
 		return
 	}
 
+	// Use a timeout to send to the pending queue to avoid indefinitely blocking
+	// and holding a reserved slot when the queue is full or Accept() is slow.
+	// If the send times out, close the connection and unreserve.
+	const queueTimeout = 5 * time.Second
+	sendCtx, cancel := context.WithTimeout(context.Background(), queueTimeout)
+	defer cancel()
+
 	select {
 	case t.pendingConns <- tracked:
 		// Successfully enqueued for Accept() to consume.
+	case <-sendCtx.Done():
+		// Queue send timed out: close the connection and unreserve the slot.
+		// This prevents resource exhaustion when the accept consumer is slow
+		// or not reading from the queue.
+		t.logger.WithFields(map[string]interface{}{
+			"remote_addr":     conn.RemoteAddr().String(),
+			"queue_timeout":   queueTimeout,
+			"session_count":   t.GetSessionCount(),
+			"pending_conns":   len(t.pendingConns),
+		}).Warn("Inbound connection dropped: pending queue send timeout (accept consumer too slow?)")
+		tracked.Close()
+		t.unreserveSessionSlot()
 	case <-t.ctx.Done():
 		// Transport shutting down while connection was waiting.
 		tracked.Close()
-		// Note: We only unreserve if this was a fresh insert that didn't make
-		// it to the pending queue. Duplicates were already unreserved in trackInboundConnection.
 		t.unreserveSessionSlot()
 	}
 }
