@@ -128,8 +128,17 @@ func (t *SSU2Transport) buildTransportCallbacks(session *SSU2Session) *BlockCall
 // handleRouterInfoBlock processes RouterInfo block data received from a peer.
 // If RouterStoreFunc is configured, it delegates storage to NetDB; otherwise
 // it logs and skips processing (test/default behavior).
+//
+// E-4 fix: Emits a warn-level log (once per transport lifetime) when RouterInfo
+// blocks arrive but RouterStoreFunc is nil, to catch misconfiguration in production.
 func (t *SSU2Transport) handleRouterInfoBlock(data []byte) error {
 	if t.config.RouterStoreFunc == nil {
+		// Warn once if RouterInfo blocks are received but no store function is configured.
+		// This indicates misconfiguration: RouterStoreFunc must be wired for production
+		// to allow reply routing. Tests can ignore this safely.
+		t.routerStoreWarnOnce.Do(func() {
+			t.logger.Warn("Received RouterInfo block but RouterStoreFunc not configured; reply routing may fail (RouterStoreFunc must be set for production)")
+		})
 		t.logger.Debug("Received RouterInfo block but RouterStoreFunc not configured (using default callbacks)")
 		return nil
 	}

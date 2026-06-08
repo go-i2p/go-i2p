@@ -122,6 +122,11 @@ type SSU2Transport struct {
 
 	// reachMetrics tracks reachability-related events for monitoring.
 	reachMetrics reachabilityMetrics
+
+	// E-4 fix: warnOnce for RouterStoreFunc misconfiguration warning.
+	// Ensures warn is emitted only once per transport lifetime when RouterInfo
+	// blocks arrive but RouterStoreFunc is nil in non-test builds.
+	routerStoreWarnOnce sync.Once
 }
 
 // KeystoreProvider provides access to the router's cryptographic keys.

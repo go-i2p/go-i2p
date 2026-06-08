@@ -39,6 +39,12 @@ type Config struct {
 	// RouterStoreFunc stores RouterInfo data received via SSU2 blocks.
 	// Called when a peer sends a RouterInfo block (type 2) during a session.
 	// The function should parse, verify, and persist the RouterInfo to NetDB.
+	//
+	// E-4 documentation: RouterStoreFunc MUST be wired for production deployments.
+	// When nil, inbound RouterInfo blocks are discarded with a warn-level log
+	// (emitted once per transport lifetime), which breaks reply routing for tunnel
+	// builds. Tests can safely leave this nil. Production routers must provide a
+	// NetDB storage callback or tunnel build replies may fail silently.
 	RouterStoreFunc func(data []byte) error
 
 	*ssu2noise.SSU2Config

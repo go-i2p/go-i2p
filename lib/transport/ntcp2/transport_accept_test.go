@@ -391,3 +391,34 @@ func TestAccept_ConcurrentAcceptAndClose(t *testing.T) {
 	assert.Equal(t, 0, transport.GetSessionCount(),
 		"all sessions should be cleaned up after concurrent close")
 }
+
+// TestPerformInboundHandshake_RejectsNonNTCP2Conn verifies that
+// performInboundHandshake returns an error (and cleans up) when the
+// connection is not an *ntcp2.Conn, rather than silently succeeding.
+// This prevents accidentally admitting un-handshaked peers (SM-3).
+func TestPerformInboundHandshake_RejectsNonNTCP2Conn(t *testing.T) {
+	transport := newNilListenerTestTransport(t, 10)
+
+	// Reserve a slot as the accept loop would
+	atomic.AddInt32(&transport.sessionCount, 1)
+	assert.Equal(t, 1, transport.GetSessionCount(), "slot should be reserved")
+
+	// Feed a mock connection that is not an *ntcp2.Conn
+	mockConn := newAcceptMockConn("10.0.0.1:5001")
+
+	// performInboundHandshake should reject it and clean up
+	err := transport.performInboundHandshake(mockConn)
+	require.Error(t, err, "performInboundHandshake should return an error for non-*ntcp2.Conn")
+	assert.Contains(t, err.Error(), "not *ntcp2.Conn",
+		"error message should indicate the type mismatch")
+
+	// The slot should be unreserved (cleaned up)
+	assert.Equal(t, 0, transport.GetSessionCount(),
+		"session slot should be unreserved after rejection")
+
+	// The connection should be closed
+	mockConn.closeMu.Lock()
+	closed := mockConn.closed
+	mockConn.closeMu.Unlock()
+	assert.True(t, closed, "non-NTCP2 connection should be closed on rejection")
+}

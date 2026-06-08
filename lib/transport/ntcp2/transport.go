@@ -598,8 +598,11 @@ func (t *NTCP2Transport) inboundHandshakeWorker(conn net.Conn) {
 func (t *NTCP2Transport) performInboundHandshake(conn net.Conn) error {
 	ntcp2Conn, ok := conn.(*ntcp2.Conn)
 	if !ok {
-		t.logger.Warn("Accepted connection is not *ntcp2.Conn, skipping manual handshake")
-		return nil
+		t.logger.WithField("conn_type", fmt.Sprintf("%T", conn)).
+			Error("Accepted connection is not *ntcp2.Conn; rejecting")
+		_ = conn.Close()
+		t.unreserveSessionSlot()
+		return oops.Errorf("accepted connection is not *ntcp2.Conn (got %T)", conn)
 	}
 
 	if err := t.executeHandshake(ntcp2Conn); err != nil {
