@@ -527,7 +527,7 @@ func TestConnectionManagement_SessionLimitEnforcement(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	config, err := NewConfig(":0")
+	config, err := NewConfig("127.0.0.1:0")
 	require.NoError(t, err)
 	config.MaxSessions = 2
 

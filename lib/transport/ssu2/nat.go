@@ -636,16 +636,15 @@ func (t *SSU2Transport) sendProbeToAlice(ptBlock *ssu2noise.PeerTestBlock, alice
 	if err != nil {
 		return oops.Wrapf(err, "PeerTest Charlie: encode probe block")
 	}
-	session := relaySession
-	if session == nil || session.conn == nil {
-		// Fall back to any active session if relay session is unavailable.
-		session = t.anyActiveSession()
-		if session == nil || session.conn == nil {
-			t.logger.Debug("PeerTest Charlie: no active session to send probe")
-			return nil
-		}
+	// Require relaySession to maintain protocol-correlated probe traffic (6.2).
+	// Sending a probe from an arbitrary peer's session skews external address
+	// observations and confuses NAT behavior detection. Fail-closed if relaySession
+	// is unavailable to prevent misattribution of traffic source.
+	if relaySession == nil || relaySession.conn == nil {
+		t.logger.Debug("PeerTest Charlie: relay session unavailable, cannot send probe (probe requires protocol-correlated path)")
+		return nil
 	}
-	return session.conn.SendToAddress(encoded, aliceAddr)
+	return relaySession.conn.SendToAddress(encoded, aliceAddr)
 }
 
 // anyActiveSession returns the first active SSU2Session, or nil if none exist.
@@ -879,21 +878,19 @@ func (t *SSU2Transport) initiateHolePunch(intro *ssu2noise.RelayIntroBlock, bobS
 // Prefers to send from bobSession if provided, to maintain protocol-correlated
 // hole-punch traffic rather than from an arbitrary session.
 func (t *SSU2Transport) sendHolePunchToAlice(intro *ssu2noise.RelayIntroBlock, aliceAddr *net.UDPAddr, bobSession *SSU2Session) {
-	session := bobSession
-	if session == nil || session.conn == nil {
-		// Fall back to any active session if Bob's session is unavailable.
-		session = t.anyActiveSession()
-		if session == nil || session.conn == nil {
-			t.logger.Debug("hole-punch: no active session available to send from")
-			return
-		}
+	// Require bobSession to maintain protocol-correlated hole-punch traffic (6.2).
+	// Using an arbitrary peer's session for hole-punch confuses NAT path tracking.
+	// Fail-closed if Bob's session is unavailable.
+	if bobSession == nil || bobSession.conn == nil {
+		t.logger.Debug("hole-punch: Bob session unavailable, cannot send hole-punch (requires protocol-correlated path)")
+		return
 	}
 	encoded, err := ssu2noise.EncodeRelayIntro(intro)
 	if err != nil {
 		t.logger.WithField("error", err).Debug("hole-punch: encode block failed")
 		return
 	}
-	if err := session.conn.SendToAddress(encoded, aliceAddr); err != nil {
+	if err := bobSession.conn.SendToAddress(encoded, aliceAddr); err != nil {
 		t.logger.WithField("error", err).Debug("hole-punch: send to Alice failed")
 	}
 }

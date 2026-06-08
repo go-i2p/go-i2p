@@ -283,6 +283,9 @@ func bindOSAssignedPort(config *Config) (net.Listener, error) {
 				"attempt": attempt + 1,
 				"error":   err,
 			}).Warn("TOCTOU race: probed port claimed by another process; retrying")
+			// Wait 50ms between retries to give TIME_WAIT entries a chance to expire
+			// and reduce contention with other processes competing for ports (7.1).
+			time.Sleep(50 * time.Millisecond)
 		}
 	}
 
@@ -297,13 +300,13 @@ func bindOSAssignedPort(config *Config) (net.Listener, error) {
 // fallback to a plain TCP listener is transparent to callers.
 func bindWithNATTraversal(config *Config, port int) (net.Listener, error) {
 	host, _, _ := net.SplitHostPort(config.ListenerAddress)
-	// Treat empty host (":0") as loopback to avoid NAT traversal in tests and
-	// when no explicit bind address is configured. NAT traversal is only needed
-	// when binding to a specific non-loopback interface.
-	if host == "" || (net.ParseIP(host) != nil && net.ParseIP(host).IsLoopback()) {
-		if host == "" {
-			host = "127.0.0.1"
-		}
+	// Only attempt NAT traversal for non-loopback addresses.
+	// Loopback addresses (127.x.x.x, ::1) bypass NAT traversal entirely because
+	// they are unreachable from the internet. Empty host ("") indicates wildcard
+	// binding and requires NAT traversal to make the listener reachable.
+	isLoopback := host != "" && net.ParseIP(host) != nil && net.ParseIP(host).IsLoopback()
+
+	if isLoopback {
 		// Use SO_REUSEADDR to allow rebinding immediately after probing port 0.
 		listenCfg := net.ListenConfig{
 			Control: func(network, address string, c syscall.RawConn) error {

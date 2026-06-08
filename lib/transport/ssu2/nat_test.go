@@ -58,7 +58,7 @@ func makeTestTransportWithListener(t testing.TB) (*SSU2Transport, func()) {
 		logger:   log.WithField("test", "nat"),
 		ctx:      ctx,
 		cancel:   cancel,
-		config:   &Config{ListenerAddress: ":0", MaxSessions: 4},
+		config:   &Config{ListenerAddress: "127.0.0.1:0", MaxSessions: 4},
 		handler:  NewDefaultHandler(),
 	}
 	initNATManagers(tr)

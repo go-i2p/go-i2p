@@ -18,7 +18,7 @@ import (
 func makeMinimalTransport() *SSU2Transport {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &SSU2Transport{
-		config:        &Config{ListenerAddress: ":0", MaxSessions: 4},
+		config:        &Config{ListenerAddress: "127.0.0.1:0", MaxSessions: 4},
 		handler:       NewDefaultHandler(),
 		natStateCache: &natState{},
 		ctx:           ctx,

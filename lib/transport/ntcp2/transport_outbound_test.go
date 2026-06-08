@@ -23,7 +23,7 @@ func TestGetSessionOutbound(t *testing.T) {
 
 		// Create a dummy RouterInfo for transport creation
 		// This will be replaced with proper mocking in future iterations
-		config, err := NewConfig(":0")
+		config, err := NewConfig("127.0.0.1:0")
 		require.NoError(t, err)
 
 		// For now, we can't easily create a valid RouterInfo in tests
