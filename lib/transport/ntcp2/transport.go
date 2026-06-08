@@ -471,10 +471,10 @@ func (t *NTCP2Transport) inboundHandshakeWorker(conn net.Conn) {
 		// This prevents resource exhaustion when the accept consumer is slow
 		// or not reading from the queue.
 		t.logger.WithFields(map[string]interface{}{
-			"remote_addr":     conn.RemoteAddr().String(),
-			"queue_timeout":   queueTimeout,
-			"session_count":   t.GetSessionCount(),
-			"pending_conns":   len(t.pendingConns),
+			"remote_addr":   conn.RemoteAddr().String(),
+			"queue_timeout": queueTimeout,
+			"session_count": t.GetSessionCount(),
+			"pending_conns": len(t.pendingConns),
 		}).Warn("Inbound connection dropped: pending queue send timeout (accept consumer too slow?)")
 		tracked.Close()
 		t.unreserveSessionSlot()
