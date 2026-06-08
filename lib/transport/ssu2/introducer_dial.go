@@ -43,6 +43,11 @@ const (
 //  4. Bob   → Alice:   RelayResponse  (Code=0 ⇒ accepted, contains Charlie addr)
 //  5. Charlie → Alice: HolePunch      (optional NAT punch-through)
 //  6. Alice → Charlie: SessionRequest (direct UDP)
+//
+// T-2 fix: Introducers are tried concurrently with an overall phase deadline,
+// taking the first successful result and canceling remaining attempts. This
+// prevents sequential 10s waits from blocking the dial path for 30s+ when
+// multiple slow introducers are present.
 func (t *SSU2Transport) dialViaIntroducer(charlieRI router_info.RouterInfo, charlieHash data.Hash) (transport.TransportSession, error) {
 	if t.config.RouterLookupFunc == nil {
 		return nil, oops.Errorf("RouterLookupFunc not configured: cannot dial via introducer")
@@ -53,15 +58,46 @@ func (t *SSU2Transport) dialViaIntroducer(charlieRI router_info.RouterInfo, char
 		return nil, oops.Errorf("no valid introducers found for router %x", charlieHash[:4])
 	}
 
-	for _, intro := range introducers {
-		session, err := t.tryOneIntroducer(charlieRI, charlieHash, intro)
-		if err != nil {
-			t.logger.WithField("error", err).Debug("introducer attempt failed, trying next")
-			continue
-		}
-		return session, nil
+	// T-2 fix: Apply an overall deadline to the entire introducer phase.
+	ctx, cancel := context.WithTimeout(t.ctx, introducerPhaseTimeout)
+	defer cancel()
+
+	// Try all introducers concurrently with bounded fan-out.
+	type result struct {
+		session transport.TransportSession
+		err     error
 	}
-	return nil, oops.Errorf("all %d introducer(s) failed for router %x", len(introducers), charlieHash[:4])
+	resultCh := make(chan result, len(introducers))
+
+	// Launch concurrent attempts for each introducer.
+	for _, intro := range introducers {
+		intro := intro // capture loop variable
+		go func() {
+			session, err := t.tryOneIntroducerWithContext(ctx, charlieRI, charlieHash, intro)
+			resultCh <- result{session: session, err: err}
+		}()
+	}
+
+	// Collect results, taking the first success or the last error.
+	var lastErr error
+	for i := 0; i < len(introducers); i++ {
+		select {
+		case res := <-resultCh:
+			if res.err == nil {
+				// Success: cancel remaining attempts and return the session.
+				cancel()
+				return res.session, nil
+			}
+			t.logger.WithField("error", res.err).Debug("introducer attempt failed")
+			lastErr = res.err
+		case <-ctx.Done():
+			// Overall deadline exceeded.
+			return nil, oops.Errorf("introducer phase timed out after %v: %w", introducerPhaseTimeout, ctx.Err())
+		}
+	}
+
+	// All introducers failed.
+	return nil, oops.Wrapf(lastErr, "all %d introducer(s) failed for router %x", len(introducers), charlieHash[:4])
 }
 
 // collectIntroducers gathers all distinct IntroducerAddr entries from all SSU2
@@ -84,22 +120,61 @@ func (t *SSU2Transport) collectIntroducers(charlieRI router_info.RouterInfo) []I
 }
 
 // tryOneIntroducer attempts relay through a single introducer entry.
-func (t *SSU2Transport) tryOneIntroducer(charlieRI router_info.RouterInfo, charlieHash data.Hash, intro IntroducerAddr) (transport.TransportSession, error) {
+// tryOneIntroducerWithContext attempts relay through a single introducer entry
+// with a parent context for cancellation. This is the context-aware version
+// used by concurrent introducer attempts (T-2 fix).
+func (t *SSU2Transport) tryOneIntroducerWithContext(ctx context.Context, charlieRI router_info.RouterInfo, charlieHash data.Hash, intro IntroducerAddr) (transport.TransportSession, error) {
+	// Check if context is already canceled before starting.
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
 	// Step 1 & 2: Get a session to Bob (the introducer).
-	bobSSU2Session, err := t.establishBobSession(intro)
+	bobSSU2Session, err := t.establishBobSessionWithContext(ctx, intro)
 	if err != nil {
 		return nil, err
 	}
 
 	// Step 3 & 4: Send signed RelayRequest to Bob and wait for response.
 	nonce := rand.Uint32()
-	resp, err := t.sendRelayRequestAndWait(bobSSU2Session, intro, charlieHash, nonce)
+	resp, err := t.sendRelayRequestAndWaitWithContext(ctx, bobSSU2Session, intro, charlieHash, nonce)
 	if err != nil {
 		return nil, err
 	}
 
 	// Step 5: Use Charlie's RelayResponse to dial Charlie directly.
 	return t.dialCharlieDirectly(charlieRI, charlieHash, resp)
+}
+
+// tryOneIntroducer attempts relay through a single introducer entry.
+// Kept for backward compatibility; wraps tryOneIntroducerWithContext with t.ctx.
+func (t *SSU2Transport) tryOneIntroducer(charlieRI router_info.RouterInfo, charlieHash data.Hash, intro IntroducerAddr) (transport.TransportSession, error) {
+	return t.tryOneIntroducerWithContext(t.ctx, charlieRI, charlieHash, intro)
+}
+
+// establishBobSessionWithContext looks up Bob's RouterInfo and establishes a session to Bob,
+// honoring the parent context for cancellation.
+func (t *SSU2Transport) establishBobSessionWithContext(ctx context.Context, intro IntroducerAddr) (*SSU2Session, error) {
+	bobRI, err := t.config.RouterLookupFunc(intro.RouterHash)
+	if err != nil {
+		return nil, oops.Wrapf(err, "Bob (%x...) lookup failed", intro.RouterHash[:4])
+	}
+
+	// Note: GetSession doesn't support context yet, but if the parent context
+	// is canceled, the concurrent attempt will be abandoned anyway.
+	bobSession, err := t.GetSession(bobRI)
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to get session to Bob (%x...)", intro.RouterHash[:4])
+	}
+
+	bobSSU2Session, ok := bobSession.(*SSU2Session)
+	if !ok {
+		return nil, oops.Errorf("unexpected Bob session type %T", bobSession)
+	}
+
+	return bobSSU2Session, nil
 }
 
 // establishBobSession looks up Bob's RouterInfo and establishes a session to Bob.
@@ -130,6 +205,23 @@ type pendingRelayResponse struct {
 	consumed atomic.Bool
 }
 
+// sendRelayRequestAndWaitWithContext sends a RelayRequest to Bob and waits for Charlie's RelayResponse,
+// honoring the parent context for cancellation (T-2 fix).
+func (t *SSU2Transport) sendRelayRequestAndWaitWithContext(ctx context.Context, bobSSU2Session *SSU2Session, intro IntroducerAddr, charlieHash data.Hash, nonce uint32) (*ssu2noise.RelayResponseBlock, error) {
+	pending := &pendingRelayResponse{ch: make(chan *ssu2noise.RelayResponseBlock, 1)}
+	t.pendingRelayResponses.Store(nonce, pending)
+	defer func() {
+		pending.consumed.Store(true)
+		t.pendingRelayResponses.Delete(nonce)
+	}()
+
+	if err := t.sendRelayRequest(bobSSU2Session, intro, charlieHash, nonce); err != nil {
+		return nil, oops.Wrapf(err, "failed to send RelayRequest to Bob")
+	}
+
+	return t.waitForRelayResponseWithContext(ctx, pending.ch)
+}
+
 // sendRelayRequestAndWait sends a RelayRequest to Bob and waits for Charlie's RelayResponse.
 func (t *SSU2Transport) sendRelayRequestAndWait(bobSSU2Session *SSU2Session, intro IntroducerAddr, charlieHash data.Hash, nonce uint32) (*ssu2noise.RelayResponseBlock, error) {
 	pending := &pendingRelayResponse{ch: make(chan *ssu2noise.RelayResponseBlock, 1)}
@@ -144,6 +236,24 @@ func (t *SSU2Transport) sendRelayRequestAndWait(bobSSU2Session *SSU2Session, int
 	}
 
 	return t.waitForRelayResponse(pending.ch)
+}
+
+// waitForRelayResponseWithContext waits for Charlie's RelayResponse or times out,
+// honoring the parent context for early cancellation (T-2 fix).
+func (t *SSU2Transport) waitForRelayResponseWithContext(ctx context.Context, responseCh chan *ssu2noise.RelayResponseBlock) (*ssu2noise.RelayResponseBlock, error) {
+	// Use the shorter of the parent context and the per-request timeout.
+	ctx, cancel := context.WithTimeout(ctx, relayRequestTimeout)
+	defer cancel()
+
+	select {
+	case resp, ok := <-responseCh:
+		if !ok || resp == nil {
+			return nil, oops.Errorf("relay response channel closed unexpectedly")
+		}
+		return resp, nil
+	case <-ctx.Done():
+		return nil, oops.Errorf("relay request timed out or canceled: %w", ctx.Err())
+	}
 }
 
 // waitForRelayResponse waits for Charlie's RelayResponse or times out.

@@ -2,6 +2,7 @@ package ssu2
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"net"
@@ -509,14 +510,25 @@ func (t *SSU2Transport) extractPeerHash(conn net.Conn) data.Hash {
 			return peerHash
 		}
 	}
+
+	// SA-3 fix: Fallback for connections without a router hash.
+	// Hash the full address with SHA-256 to avoid truncation collisions when
+	// address strings exceed 32 bytes (long IPv6 addresses with zones).
+	// Set a consistent marker byte to separate address-derived keys from real
+	// router hashes, preventing collisions if a router hash happens to match
+	// an address-derived key.
+	//
+	// Strip the ephemeral port so reconnections from the same host produce
+	// the same hash, avoiding duplicate session tracking entries.
 	addrStr := conn.RemoteAddr().String()
 	if host, _, err := net.SplitHostPort(addrStr); err == nil {
 		addrStr = host
 	}
-	copy(peerHash[:], []byte(addrStr))
-	if len([]byte(addrStr)) < 32 {
-		peerHash[31] = 0xFE // marker for address-derived SSU2 hash
-	}
+	hash := sha256.Sum256([]byte(addrStr))
+	copy(peerHash[:], hash[:])
+	// Set marker byte to distinguish address-derived hashes from real router hashes
+	peerHash[0] = 0xFE // distinct from NTCP2 (0xFF) for debugging
+
 	return peerHash
 }
 

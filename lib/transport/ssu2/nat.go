@@ -866,6 +866,21 @@ func (t *SSU2Transport) handleRelayIntroBlock(block *ssu2noise.SSU2Block, bobSes
 		t.logger.WithField("error", err).Warn("failed to decode RelayIntro")
 		return nil
 	}
+
+	// E-3 fix: Rate-limit per Bob session using the same token bucket as PeerTest/RelayRequest.
+	// This prevents a malicious Bob from flooding RelayIntro messages, which trigger expensive
+	// Ed25519 signing operations in sendRelayResponseToBob.
+	if bobSession != nil && !bobSession.peerTestLimiter.Allow() {
+		t.logger.Debug("RelayIntro: per-session rate limit exceeded, dropping")
+		return nil
+	}
+
+	// E-3 fix: Apply global rate limiting to prevent coordinated flooding from multiple sessions.
+	if t.peerTestGlobalLimiter != nil && !t.peerTestGlobalLimiter.Allow() {
+		t.logger.Debug("RelayIntro: global rate limit exceeded, dropping")
+		return nil
+	}
+
 	return t.initiateHolePunch(intro, bobSession)
 }
 

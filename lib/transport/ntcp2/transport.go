@@ -2,6 +2,7 @@ package ntcp2
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -767,22 +768,23 @@ func (t *NTCP2Transport) extractPeerHash(conn net.Conn) data.Hash {
 		}
 	}
 
-	// Fallback: generate a unique key from the remote address.
-	// After PropagatePeerStaticKey() in performInboundHandshake, NTCP2
-	// connections should have a real router hash. This fallback handles
-	// non-NTCP2 connections or edge cases where the hash is unavailable.
+	// SA-3 fix: Fallback for connections without a router hash.
+	// Hash the full address with SHA-256 to avoid truncation collisions when
+	// address strings exceed 32 bytes (long IPv6 addresses with zones).
+	// Set a consistent marker byte to separate address-derived keys from real
+	// router hashes, preventing collisions if a router hash happens to match
+	// an address-derived key.
+	//
 	// Strip the ephemeral port so reconnections from the same host produce
 	// the same hash, avoiding duplicate session tracking entries.
 	addrStr := conn.RemoteAddr().String()
 	if host, _, err := net.SplitHostPort(addrStr); err == nil {
 		addrStr = host
 	}
-	addrBytes := []byte(addrStr)
-	copy(peerHash[:], addrBytes)
-	// Set a marker byte to distinguish address-derived hashes
-	if len(addrBytes) < 32 {
-		peerHash[31] = 0xFF // marker for address-derived hash
-	}
+	hash := sha256.Sum256([]byte(addrStr))
+	copy(peerHash[:], hash[:])
+	// Set marker byte to distinguish address-derived hashes from real router hashes
+	peerHash[0] = 0xFF
 
 	return peerHash
 }
