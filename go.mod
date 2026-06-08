@@ -42,7 +42,8 @@ require (
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/go-i2p/elgamal v0.1.5999 // indirect
-	github.com/go-i2p/go-i2pcontrol v0.1.8 // indirect
+	github.com/go-i2p/go-i2pcontrol v0.1.9-0.20260607233455-950087a3858f // indirect
+	github.com/go-i2p/i2p-control v0.0.0-20260608000308-d8ed861a259c // indirect
 	github.com/go-i2p/path v0.1.5999 // indirect
 	github.com/go-i2p/pool v0.1.599 // indirect
 	github.com/go-i2p/red25519 v0.0.0-20260302212615-1093a31f680d // indirect
