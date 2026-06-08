@@ -32,6 +32,14 @@ type abandonedRelayTag struct {
 	reason      string // why registration failed
 }
 
+// acceptedConn is a marker type wrapping a raw connection that has been
+// delivered via Accept(). It prevents the connection from being promoted
+// to a session (which would create dual ownership), since the Accept()
+// consumer now owns the socket lifecycle.
+type acceptedConn struct {
+	net.Conn
+}
+
 // SSU2Transport implements transport.Transport for SSU2 connections.
 type SSU2Transport struct {
 	listener *ssu2noise.SSU2Listener
@@ -453,6 +461,13 @@ func (t *SSU2Transport) Accept() (net.Conn, error) {
 		// Return a clean error to the caller.
 		return nil, ErrDuplicateSession
 	}
+
+	// Mark the connection as accepted to prevent dual-ownership via promotion (R-3).
+	// The Accept() consumer now owns this connection's lifecycle; promoteInboundConnection
+	// will skip acceptedConn entries.
+	peerHash := t.extractPeerHash(tracked)
+	t.sessions.Store(peerHash, acceptedConn{Conn: tracked})
+
 	return tracked, nil
 }
 
@@ -756,6 +771,9 @@ func (t *SSU2Transport) promoteInboundConnection(conn net.Conn, original interfa
 	}
 
 	// CompareAndSwap failed; close the session (workers will exit cleanly).
+	// Detach the shared conn first so the loser doesn't close the winner's
+	// socket. Workers will exit when Close() cancels the session context (SM-2 fix).
+	promoted.DetachConn()
 	_ = promoted.Close()
 	if winner, exists := t.sessions.Load(routerHash); exists {
 		if winnerSession, ok := winner.(*SSU2Session); ok {
@@ -1042,6 +1060,8 @@ func (t *SSU2Transport) Close() error {
 		t.sessions.Range(func(key, value interface{}) bool {
 			if session, ok := value.(*SSU2Session); ok {
 				_ = session.Close()
+			} else if accepted, ok := value.(acceptedConn); ok {
+				_ = accepted.Close()
 			} else if conn, ok := value.(net.Conn); ok {
 				_ = conn.Close()
 			}
@@ -1175,6 +1195,12 @@ func (t *SSU2Transport) findSessionByHash(hash data.Hash) *SSU2Session {
 	// Already a full session
 	if s, ok := val.(*SSU2Session); ok {
 		return s
+	}
+
+	// Skip connections already delivered to Accept() (R-3 fix).
+	// The Accept() consumer owns the socket; promotion would create dual ownership.
+	if _, ok := val.(acceptedConn); ok {
+		return nil
 	}
 
 	// Raw connection that needs promotion

@@ -20,7 +20,8 @@ import (
 // NTCP2Session represents an active NTCP2 connection session with a remote peer, managing message queues, bandwidth tracking, and rekeying state.
 type NTCP2Session struct {
 	// Underlying connection (uses net.Conn interface per guidelines)
-	conn net.Conn // Will be *ntcp2.NTCP2Conn internally
+	conn   net.Conn   // Will be *ntcp2.NTCP2Conn internally
+	connMu sync.Mutex // protects conn field (SM-2 fix)
 
 	// I2NP message queues
 	sendQueue chan i2np.Message
@@ -222,8 +223,11 @@ func (s *NTCP2Session) CloseWithReason(reason byte) error {
 		// reason is an AEAD failure (cipher state may be corrupted).
 		if IsAEADFailureReason(reason) {
 			s.logger.Debug("AEAD failure reason — skipping termination block, applying probing resistance")
-			if s.conn != nil {
-				raw := extractRawConn(s.conn)
+			s.connMu.Lock()
+			conn := s.conn
+			s.connMu.Unlock()
+			if conn != nil {
+				raw := extractRawConn(conn)
 				applyProbingResistance(raw)
 			}
 		} else {
@@ -231,8 +235,11 @@ func (s *NTCP2Session) CloseWithReason(reason byte) error {
 		}
 
 		s.cancel()
-		if s.conn != nil {
-			err = s.conn.Close()
+		s.connMu.Lock()
+		conn := s.conn
+		s.connMu.Unlock()
+		if conn != nil {
+			err = conn.Close()
 			if err != nil {
 				s.logger.WithError(err).Warn("Error closing connection")
 			}
@@ -247,6 +254,17 @@ func (s *NTCP2Session) CloseWithReason(reason byte) error {
 	return err
 }
 
+// DetachConn clears the session's reference to the underlying connection,
+// preventing Close() from closing the socket. This is used when a session
+// loses a promotion race — the winner owns the socket, so the loser must
+// not close it. Workers will still stop cleanly when Close() cancels the
+// session context (SM-2 fix).
+func (s *NTCP2Session) DetachConn() {
+	s.connMu.Lock()
+	s.conn = nil
+	s.connMu.Unlock()
+}
+
 // sendEncryptedTermination sends an encrypted termination block through the
 // NTCP2 connection's Noise cipher state. The block is encrypted and framed
 // by conn.Write, which applies AEAD encryption and SipHash length obfuscation,
@@ -255,7 +273,10 @@ func (s *NTCP2Session) CloseWithReason(reason byte) error {
 // This is a best-effort operation: errors are logged but do not prevent the
 // session from closing.
 func (s *NTCP2Session) sendEncryptedTermination(reason byte) {
-	if s.conn == nil {
+	s.connMu.Lock()
+	conn := s.conn
+	s.connMu.Unlock()
+	if conn == nil {
 		return
 	}
 
@@ -265,7 +286,7 @@ func (s *NTCP2Session) sendEncryptedTermination(reason byte) {
 		"block_size": len(block),
 	}).Debug("Sending encrypted termination block")
 
-	if _, writeErr := s.conn.Write(block); writeErr != nil {
+	if _, writeErr := conn.Write(block); writeErr != nil {
 		s.logger.WithError(writeErr).Debug("Failed to send encrypted termination block (best-effort)")
 	} else {
 		s.logger.Debug("Encrypted termination block sent successfully")
@@ -402,7 +423,14 @@ func (s *NTCP2Session) frameMessage(msg i2np.Message) ([]byte, error) {
 // writeFramedData writes framed data to the connection.
 // Returns false if an error occurred, true if write succeeded.
 func (s *NTCP2Session) writeFramedData(framedData []byte) bool {
-	bytesWritten, err := s.conn.Write(framedData)
+	// Check if conn has been detached (SM-2 fix: losing promotion race).
+	s.connMu.Lock()
+	conn := s.conn
+	s.connMu.Unlock()
+	if conn == nil {
+		return false
+	}
+	bytesWritten, err := conn.Write(framedData)
 	if err != nil {
 		s.logger.WithError(err).WithField("bytes_written", bytesWritten).Error("Failed to write message to connection")
 		s.setError(WrapNTCP2Error(err, "writing message"))
@@ -445,7 +473,15 @@ func (s *NTCP2Session) receiveWorker() {
 // processNextInboundMessageFromBlocks sets a read deadline, reads the next message, and queues it.
 // Returns false if the receive loop should exit due to a fatal error or queuing failure.
 func (s *NTCP2Session) processNextInboundMessageFromBlocks(unframer *BlockUnframer) bool {
-	if err := s.conn.SetReadDeadline(time.Now().Add(ntcp2ReadDeadline)); err != nil {
+	// Check if conn has been detached (SM-2 fix: losing promotion race).
+	// This prevents nil dereference when DetachConn() is called before workers exit.
+	s.connMu.Lock()
+	conn := s.conn
+	s.connMu.Unlock()
+	if conn == nil {
+		return false
+	}
+	if err := conn.SetReadDeadline(time.Now().Add(ntcp2ReadDeadline)); err != nil {
 		s.logger.WithError(err).Error("Failed to set read deadline")
 		s.setError(WrapNTCP2Error(err, "setting read deadline"))
 		return false
@@ -487,7 +523,10 @@ func (s *NTCP2Session) handleReadResult(err error) bool {
 
 // createBlockUnframer creates and returns a new block-based unframer for this session's connection.
 func (s *NTCP2Session) createBlockUnframer() *BlockUnframer {
-	unframer := NewBlockUnframer(s.conn)
+	s.connMu.Lock()
+	conn := s.conn
+	s.connMu.Unlock()
+	unframer := NewBlockUnframer(conn)
 	// Set optional callback for non-I2NP blocks (DateTime, Options, etc.)
 	unframer.BlockCallback = s.handleNonI2NPBlock
 	return unframer
@@ -688,7 +727,10 @@ func (s *NTCP2Session) checkRekey(totalMessages uint64) {
 			"total_messages": totalMessages,
 			"threshold":      RekeyThreshold,
 		}).Info("Rekey threshold reached, attempting session rekey")
-		if attemptRekey(s.conn, s.rekeyState) {
+		s.connMu.Lock()
+		conn := s.conn
+		s.connMu.Unlock()
+		if attemptRekey(conn, s.rekeyState) {
 			s.logger.WithField("rekey_count", s.rekeyState.getRekeyCount()).Info("Session rekeyed successfully")
 		} else {
 			s.logger.Debug("Session rekeying not available (connection does not implement Rekeyer)")

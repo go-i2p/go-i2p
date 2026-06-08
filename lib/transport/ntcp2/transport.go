@@ -24,6 +24,14 @@ import (
 	nattraversal "github.com/go-i2p/go-nat-listener"
 )
 
+// acceptedConn is a marker type wrapping a raw connection that has been
+// delivered via Accept(). It prevents the connection from being promoted
+// to a session (which would create dual ownership), since the Accept()
+// consumer now owns the socket lifecycle.
+type acceptedConn struct {
+	net.Conn
+}
+
 // NTCP2Transport implements the I2P NTCP2 transport protocol, managing listener setup, session lifecycle, and peer connections.
 type NTCP2Transport struct {
 	// Network listener (uses net.Listener interface per guidelines)
@@ -559,6 +567,11 @@ func (t *NTCP2Transport) inboundHandshakeWorker(conn net.Conn) {
 	select {
 	case t.pendingConns <- tracked:
 		// Successfully enqueued for Accept() to consume.
+		// Mark the connection as accepted to prevent dual-ownership via promotion (R-3).
+		// The Accept() consumer now owns this connection's lifecycle; promoteRawConnToSession
+		// will skip acceptedConn entries.
+		peerHash := t.extractPeerHash(tracked)
+		t.sessions.Store(peerHash, acceptedConn{Conn: tracked})
 	case <-sendCtx.Done():
 		// Queue send timed out: close the connection.
 		// The tracked conn's onClose callback will call removeSession which
@@ -1518,6 +1531,12 @@ func (t *NTCP2Transport) resolveExistingSession(existing interface{}, routerHash
 		return ntcp2Session
 	}
 
+	// Skip connections already delivered to Accept() (R-3 fix).
+	// The Accept() consumer owns the socket; promotion would create dual ownership.
+	if _, ok := existing.(acceptedConn); ok {
+		return nil
+	}
+
 	// Slow path: Accept() stored a raw net.Conn. Promote it to a full
 	// NTCP2Session so the caller gets a usable session object.
 	if rawConn, ok := existing.(net.Conn); ok {
@@ -1578,7 +1597,10 @@ func (t *NTCP2Transport) promoteRawConnToSession(rawConn net.Conn, routerHash da
 		return promoted
 	}
 	// Another goroutine won the promotion race — discard ours.
-	// Workers will exit cleanly due to context.Done().
+	// Detach the shared conn before closing so the loser doesn't close
+	// the winner's socket. Workers will exit cleanly when Close() cancels
+	// the session context (SM-2 fix).
+	promoted.DetachConn()
 	_ = promoted.Close()
 	if winner, exists := t.sessions.Load(routerHash); exists {
 		if winnerSession, ok := winner.(*NTCP2Session); ok {
@@ -1745,6 +1767,12 @@ func (t *NTCP2Transport) closeIndividualSession(key, value interface{}) {
 		if err := v.Close(); err != nil && hashOk {
 			routerHashBytes := routerHash.Bytes()
 			t.logger.WithError(err).WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Warn("Error closing session")
+		}
+	case acceptedConn:
+		// Connection delivered to Accept() consumer (R-3 fix).
+		if err := v.Close(); err != nil && hashOk {
+			routerHashBytes := routerHash.Bytes()
+			t.logger.WithError(err).WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Warn("Error closing accepted connection")
 		}
 	case net.Conn:
 		// Raw net.Conn stored by Accept() but never promoted to *NTCP2Session.

@@ -41,7 +41,8 @@ type pendingI2NP struct {
 
 // SSU2Session implements transport.TransportSession over an SSU2 connection.
 type SSU2Session struct {
-	conn *ssu2noise.SSU2Conn
+	conn   *ssu2noise.SSU2Conn
+	connMu sync.Mutex // protects conn field (SM-2 fix)
 
 	sendQueue     chan i2np.Message
 	recvChan      chan i2np.Message
@@ -121,7 +122,12 @@ func NewSSU2SessionDeferred(conn *ssu2noise.SSU2Conn, ctx context.Context, logge
 // DataHandler into the SSU2Session. Called once during session construction,
 // before StartWorkers(), so callbacks are active from the first data packet.
 func (s *SSU2Session) wireDataHandlerCallbacks() {
-	s.conn.SetDataHandlerCallbacks(s.buildMergedCallbacks(nil))
+	s.connMu.Lock()
+	conn := s.conn
+	s.connMu.Unlock()
+	if conn != nil {
+		conn.SetDataHandlerCallbacks(s.buildMergedCallbacks(nil))
+	}
 }
 
 // buildMergedCallbacks constructs a DataHandlerCallbacks that combines
@@ -161,7 +167,12 @@ func (s *SSU2Session) SetTransportCallbacks(cfg *BlockCallbackConfig) {
 	if cfg == nil {
 		return
 	}
-	s.conn.SetDataHandlerCallbacks(s.buildMergedCallbacks(cfg))
+	s.connMu.Lock()
+	conn := s.conn
+	s.connMu.Unlock()
+	if conn != nil {
+		conn.SetDataHandlerCallbacks(s.buildMergedCallbacks(cfg))
+	}
 }
 
 // mergeBlockCallbacks copies non-nil callbacks from cfg into cbs,
@@ -246,8 +257,11 @@ func (s *SSU2Session) CloseWithReason(reason ssu2noise.TerminationReason) error 
 	s.closeOnce.Do(func() {
 		s.logger.WithField("reason", reason.String()).Info("Closing SSU2 session")
 		s.drainSendQueue()
-		if s.conn != nil {
-			err = s.conn.CloseWithReason(reason, nil)
+		s.connMu.Lock()
+		conn := s.conn
+		s.connMu.Unlock()
+		if conn != nil {
+			err = conn.CloseWithReason(reason, nil)
 		}
 		s.cancel()
 		s.wg.Wait()
@@ -255,6 +269,17 @@ func (s *SSU2Session) CloseWithReason(reason ssu2noise.TerminationReason) error 
 		s.logger.Info("SSU2 session closed")
 	})
 	return err
+}
+
+// DetachConn clears the session's reference to the underlying connection,
+// preventing Close() from closing the socket. This is used when a session
+// loses a promotion race — the winner owns the socket, so the loser must
+// not close it. Workers will still stop cleanly when Close() cancels the
+// session context (SM-2 fix).
+func (s *SSU2Session) DetachConn() {
+	s.connMu.Lock()
+	s.conn = nil
+	s.connMu.Unlock()
 }
 
 // SetCleanupCallback sets a callback invoked when the session closes.
@@ -291,7 +316,14 @@ func (s *SSU2Session) DroppedMessages() uint64 {
 // bypassing the I2NP send queue. Used for protocol-level blocks such as PeerTest
 // and Relay that must not be fragmented or queued alongside I2NP traffic.
 func (s *SSU2Session) WriteBlocks(blocks []*ssu2noise.SSU2Block) error {
-	return s.conn.WriteBlocks(blocks)
+	// Check if conn has been detached (SM-2 fix: losing promotion race).
+	s.connMu.Lock()
+	conn := s.conn
+	s.connMu.Unlock()
+	if conn == nil {
+		return ErrSessionClosed
+	}
+	return conn.WriteBlocks(blocks)
 }
 
 func (s *SSU2Session) drainSendQueue() {
@@ -533,8 +565,15 @@ func (s *SSU2Session) sendTrackedBlocks(data []byte, blocks []*ssu2noise.SSU2Blo
 	if s.ctx.Err() != nil {
 		return ErrSessionClosed
 	}
+	// Check if conn has been detached (SM-2 fix: losing promotion race).
+	s.connMu.Lock()
+	conn := s.conn
+	s.connMu.Unlock()
+	if conn == nil {
+		return ErrSessionClosed
+	}
 	seq := s.trackPendingBlocks(data, blocks)
-	if err := s.conn.WriteBlocks(blocks); err != nil {
+	if err := conn.WriteBlocks(blocks); err != nil {
 		s.removePending(seq)
 		s.congestionCtrl.OnPacketLoss()
 		return err
@@ -662,15 +701,22 @@ func (s *SSU2Session) processRetransmission(p *pendingI2NP, now time.Time) retra
 	if p.attempts >= s.maxRetransmit {
 		return retransmitMaxExceeded
 	}
+	// Check if conn has been detached (SM-2 fix: losing promotion race).
+	s.connMu.Lock()
+	conn := s.conn
+	s.connMu.Unlock()
+	if conn == nil {
+		return retransmitDelete
+	}
 	var err error
 	var n int
 	if len(p.blocks) > 0 {
-		err = s.conn.WriteBlocks(p.blocks)
+		err = conn.WriteBlocks(p.blocks)
 		if err == nil {
 			n = len(p.data)
 		}
 	} else {
-		n, err = s.conn.Write(p.data)
+		n, err = conn.Write(p.data)
 	}
 	if err != nil {
 		return retransmitDelete
@@ -835,11 +881,18 @@ func (s *SSU2Session) isContextCanceled() bool {
 // Returns the number of bytes read and an action indicating how to proceed.
 // On success, action is -1 (proceed to dispatch). On error, action is receiveRetry or receiveFatal.
 func (s *SSU2Session) readFrame(buf []byte) (int, receiveAction) {
-	if err := s.conn.SetReadDeadline(time.Now().Add(ssu2ReadDeadline)); err != nil {
+	// Check if conn has been detached (SM-2 fix: losing promotion race).
+	s.connMu.Lock()
+	conn := s.conn
+	s.connMu.Unlock()
+	if conn == nil {
+		return 0, receiveFatal
+	}
+	if err := conn.SetReadDeadline(time.Now().Add(ssu2ReadDeadline)); err != nil {
 		s.logger.WithError(err).Error("Failed to set read deadline")
 		return 0, receiveFatal
 	}
-	n, err := s.conn.Read(buf)
+	n, err := conn.Read(buf)
 	if err != nil {
 		return 0, s.handleReadError(err)
 	}

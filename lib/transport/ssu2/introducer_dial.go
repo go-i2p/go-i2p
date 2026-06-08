@@ -22,6 +22,12 @@ const (
 	// RelayResponse after sending a RelayRequest.
 	relayRequestTimeout = 10 * time.Second
 
+	// introducerPhaseTimeout is the total time Alice waits for the entire
+	// introducer phase (all concurrent attempts) before giving up. This
+	// prevents sequential 10s waits from blocking the dial path for 30s+
+	// when multiple slow introducers are present (T-2 remediation).
+	introducerPhaseTimeout = 15 * time.Second
+
 	// holePunchDelay gives Charlie's hole-punch packets a chance to arrive
 	// before Alice sends the SessionRequest directly.
 	holePunchDelay = 150 * time.Millisecond
