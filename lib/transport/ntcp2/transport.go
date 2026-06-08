@@ -222,41 +222,70 @@ func buildTransportInstance(config *Config, identity router_info.RouterInfo, key
 // Note: On iOS, app sandbox restrictions prevent net.Listen on arbitrary ports
 // without the com.apple.developer.networking.multipath entitlement or a
 // NEPacketTunnelProvider extension. Attempting to listen will fail with EACCES.
-// Pure go-i2p in-app deployment is not supported on iOS App Store builds.
+// bindOSAssignedPort probes for an available OS-assigned port, closes the probe
+// socket, and rebinds that port. To handle the TOCTOU race where another process
+// may claim the port between probe and rebind, this function retries up to
+// maxPortProbeRetries times. Each retry probes a new port and attempts rebind.
 func bindOSAssignedPort(config *Config) (net.Listener, error) {
-	// Step 1: ask the OS for any available port.
-	// Use SO_REUSEADDR so the port is immediately available for reuse even if
-	// in TIME_WAIT state, reducing the TOCTOU race window.
-	listenCfg := net.ListenConfig{
-		Control: func(network, address string, c syscall.RawConn) error {
-			var sockoptErr error
-			err := c.Control(func(fd uintptr) {
-				if sockoptErr = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1); sockoptErr != nil {
-					log.WithError(sockoptErr).Warn("Failed to set SO_REUSEADDR on probe listener")
+	const maxPortProbeRetries = 3
+	var lastErr error
+
+	for attempt := 0; attempt < maxPortProbeRetries; attempt++ {
+		// Step 1: ask the OS for any available port.
+		// Use SO_REUSEADDR so the port is immediately available for reuse even if
+		// in TIME_WAIT state, reducing the TOCTOU race window.
+		listenCfg := net.ListenConfig{
+			Control: func(network, address string, c syscall.RawConn) error {
+				var sockoptErr error
+				err := c.Control(func(fd uintptr) {
+					if sockoptErr = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1); sockoptErr != nil {
+						log.WithError(sockoptErr).Warn("Failed to set SO_REUSEADDR on probe listener")
+					}
+				})
+				if err != nil {
+					return err
 				}
-			})
-			if err != nil {
-				return err
-			}
-			return sockoptErr
-		},
+				return sockoptErr
+			},
+		}
+
+		temp, err := listenCfg.Listen(context.Background(), "tcp", config.ListenerAddress)
+		if err != nil {
+			return nil, oops.Wrapf(err, "failed to probe available port")
+		}
+		assignedPort := temp.Addr().(*net.TCPAddr).Port
+		if closeErr := temp.Close(); closeErr != nil {
+			log.WithError(closeErr).Warn("failed to close probe listener")
+		}
+
+		// Step 2: re-bind on the discovered port with NAT traversal so the listener
+		// address carries the external IP instead of the unspecified "::" host.
+		// SO_REUSEADDR on the final listener allows immediate rebind even if the
+		// port is in TIME_WAIT state from the probe listener close.
+		if attempt == 0 {
+			log.WithField("port", assignedPort).Info("probed OS-assigned port; attempting NAT traversal")
+		}
+		listener, err := bindWithNATTraversal(config, assignedPort)
+		if err == nil {
+			return listener, nil
+		}
+
+		// If rebind failed, check if it was due to "address already in use" (TOCTOU race).
+		// If so, retry. Otherwise, return the error immediately.
+		lastErr = err
+		if !strings.Contains(err.Error(), "address already in use") && !strings.Contains(err.Error(), "Address already in use") {
+			return nil, err
+		}
+		if attempt < maxPortProbeRetries-1 {
+			log.WithFields(map[string]interface{}{
+				"port":    assignedPort,
+				"attempt": attempt + 1,
+				"error":   err,
+			}).Warn("TOCTOU race: probed port claimed by another process; retrying")
+		}
 	}
 
-	temp, err := listenCfg.Listen(context.Background(), "tcp", config.ListenerAddress)
-	if err != nil {
-		return nil, oops.Wrapf(err, "failed to probe available port")
-	}
-	assignedPort := temp.Addr().(*net.TCPAddr).Port
-	if closeErr := temp.Close(); closeErr != nil {
-		log.WithError(closeErr).Warn("failed to close probe listener")
-	}
-
-	// Step 2: re-bind on the discovered port with NAT traversal so the listener
-	// address carries the external IP instead of the unspecified "::" host.
-	// SO_REUSEADDR on the final listener allows immediate rebind even if the
-	// port is in TIME_WAIT state from the probe listener close.
-	log.WithField("port", assignedPort).Info("probed OS-assigned port; attempting NAT traversal")
-	return bindWithNATTraversal(config, assignedPort)
+	return nil, oops.Wrapf(lastErr, "failed to bind port after %d probe attempts due to TOCTOU race", maxPortProbeRetries)
 }
 
 // bindWithNATTraversal creates a TCP listener on the specified port, attempting

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	cryptorand "crypto/rand"
+	"fmt"
 	"net"
 	"strconv"
 	"strings"
@@ -361,7 +362,7 @@ func (t *SSU2Transport) handlePeerTestBlock(block *ssu2noise.SSU2Block, session 
 	case ssu2noise.PeerTestRequest:
 		return t.handlePeerTestAsBob(ptBlock, session)
 	case ssu2noise.PeerTestRelay:
-		return t.handlePeerTestAsCharlie(ptBlock)
+		return t.handlePeerTestAsCharlie(ptBlock, session)
 	default:
 		return t.handlePeerTestAsAlice(ptBlock)
 	}
@@ -399,10 +400,44 @@ func extractAliceAddress(ptBlock *ssu2noise.PeerTestBlock) *net.UDPAddr {
 	}
 }
 
+// isValidExternalAddress validates that an IP address is suitable for publishing
+// as the router's external address. Rejects private IPs, loopback, multicast,
+// unspecified addresses, and other reserved ranges that should never be exposed.
+func isValidExternalAddress(ip net.IP) bool {
+	if ip == nil {
+		return false
+	}
+	// Reject reserved, private, loopback, multicast, and link-local ranges.
+	if ip.IsLoopback() || ip.IsPrivate() || ip.IsMulticast() ||
+		ip.IsLinkLocalUnicast() || ip.IsUnspecified() {
+		return false
+	}
+	// Reject loopback and reserved ranges.
+	if ip.IsInterfaceLocalMulticast() || ip.IsLinkLocalMulticast() {
+		return false
+	}
+	return true
+}
+
 // processExternalAddressConfirmation records and confirms external address via majority logic.
 func (t *SSU2Transport) processExternalAddressConfirmation(externalAddr *net.UDPAddr) {
 	// Record observation for majority-confirmation logic (D3).
 	if externalAddr == nil || t.natStateCache == nil {
+		return
+	}
+
+	// Validate the address before recording it as an observation. Reject any
+	// private, reserved, or otherwise unsuitable IP ranges to prevent peers
+	// from poisoning NAT detection with spoofed addresses.
+	if !isValidExternalAddress(externalAddr.IP) {
+		t.logger.WithFields(map[string]interface{}{
+			"ip": externalAddr.IP.String(),
+			"ip_type": fmt.Sprintf("loopback=%v private=%v multicast=%v unspec=%v",
+				externalAddr.IP.IsLoopback(),
+				externalAddr.IP.IsPrivate(),
+				externalAddr.IP.IsMulticast(),
+				externalAddr.IP.IsUnspecified()),
+		}).Warn("Rejecting invalid external address from PeerTest observation")
 		return
 	}
 
@@ -564,7 +599,9 @@ func (t *SSU2Transport) forwardPeerTestToCharlie(ptBlock *ssu2noise.PeerTestBloc
 
 // handlePeerTestAsCharlie processes a PeerTestRelay where we act as Charlie
 // (responder). We record the test and send a direct probe to Alice.
-func (t *SSU2Transport) handlePeerTestAsCharlie(ptBlock *ssu2noise.PeerTestBlock) error {
+// relaySession is the session from which the PeerTestRelay was received;
+// it is preferred for sending the probe to maintain protocol-correlated paths.
+func (t *SSU2Transport) handlePeerTestAsCharlie(ptBlock *ssu2noise.PeerTestBlock, relaySession *SSU2Session) error {
 	var aliceAddr *net.UDPAddr
 	if len(ptBlock.AliceIP) > 0 {
 		aliceAddr = &net.UDPAddr{
@@ -580,13 +617,15 @@ func (t *SSU2Transport) handlePeerTestAsCharlie(ptBlock *ssu2noise.PeerTestBlock
 		t.logger.WithField("error", err).Debug("PeerTest Charlie: failed to create responder test")
 		return nil
 	}
-	return t.sendProbeToAlice(ptBlock, aliceAddr)
+	return t.sendProbeToAlice(ptBlock, aliceAddr, relaySession)
 }
 
 // sendProbeToAlice sends a PeerTestProbe directly to Alice so she can observe
 // connectivity from a third party (Charlie). Uses an existing session's
 // underlying connection to send to Alice's address.
-func (t *SSU2Transport) sendProbeToAlice(ptBlock *ssu2noise.PeerTestBlock, aliceAddr *net.UDPAddr) error {
+// Prefers to send from relaySession (if provided) to maintain protocol-correlated
+// probe traffic rather than from an arbitrary session.
+func (t *SSU2Transport) sendProbeToAlice(ptBlock *ssu2noise.PeerTestBlock, aliceAddr *net.UDPAddr, relaySession *SSU2Session) error {
 	probeBlock := &ssu2noise.PeerTestBlock{
 		MessageCode: ssu2noise.PeerTestProbe,
 		Nonce:       ptBlock.Nonce,
@@ -597,10 +636,14 @@ func (t *SSU2Transport) sendProbeToAlice(ptBlock *ssu2noise.PeerTestBlock, alice
 	if err != nil {
 		return oops.Wrapf(err, "PeerTest Charlie: encode probe block")
 	}
-	session := t.anyActiveSession()
+	session := relaySession
 	if session == nil || session.conn == nil {
-		t.logger.Debug("PeerTest Charlie: no active session to send probe")
-		return nil
+		// Fall back to any active session if relay session is unavailable.
+		session = t.anyActiveSession()
+		if session == nil || session.conn == nil {
+			t.logger.Debug("PeerTest Charlie: no active session to send probe")
+			return nil
+		}
 	}
 	return session.conn.SendToAddress(encoded, aliceAddr)
 }
@@ -821,7 +864,7 @@ func (t *SSU2Transport) initiateHolePunch(intro *ssu2noise.RelayIntroBlock, bobS
 			t.logger.WithField("error", err).Debug("hole-punch coordinator registration failed (non-fatal)")
 		}
 	}
-	t.sendHolePunchToAlice(intro, aliceAddr)
+	t.sendHolePunchToAlice(intro, aliceAddr, bobSession)
 	if err := t.sendRelayResponseToBob(bobSession, intro); err != nil {
 		t.logger.WithField("error", err).Warn("failed to send RelayResponse to Bob")
 		return err
@@ -833,11 +876,17 @@ func (t *SSU2Transport) initiateHolePunch(intro *ssu2noise.RelayIntroBlock, bobS
 // sendHolePunchToAlice sends a best-effort HolePunch UDP datagram to Alice.
 // Uses the same wire format as RelayIntro (block type 9; the receiver ignores
 // the type byte for UDP hole-punch purposes). Non-fatal on failure.
-func (t *SSU2Transport) sendHolePunchToAlice(intro *ssu2noise.RelayIntroBlock, aliceAddr *net.UDPAddr) {
-	session := t.anyActiveSession()
+// Prefers to send from bobSession if provided, to maintain protocol-correlated
+// hole-punch traffic rather than from an arbitrary session.
+func (t *SSU2Transport) sendHolePunchToAlice(intro *ssu2noise.RelayIntroBlock, aliceAddr *net.UDPAddr, bobSession *SSU2Session) {
+	session := bobSession
 	if session == nil || session.conn == nil {
-		t.logger.Debug("hole-punch: no active session available to send from")
-		return
+		// Fall back to any active session if Bob's session is unavailable.
+		session = t.anyActiveSession()
+		if session == nil || session.conn == nil {
+			t.logger.Debug("hole-punch: no active session available to send from")
+			return
+		}
 	}
 	encoded, err := ssu2noise.EncodeRelayIntro(intro)
 	if err != nil {

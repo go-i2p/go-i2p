@@ -139,7 +139,7 @@ func TestHandlePeerTestAsCharlie_NoAliceAddr(t *testing.T) {
 		Nonce:       42,
 		Version:     2,
 	}
-	err := tr.handlePeerTestAsCharlie(ptBlock)
+	err := tr.handlePeerTestAsCharlie(ptBlock, nil)
 	assert.NoError(t, err)
 }
 
