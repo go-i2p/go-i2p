@@ -275,7 +275,10 @@ func TestCRITICAL_1_1_SessionCountConsistency(t *testing.T) {
 func TestCRITICAL_R1_SetIdentityDoesNotKillAcceptLoop(t *testing.T) {
 	// This test verifies the accept loop behavior when listener becomes temporarily nil.
 	// We simulate the scenario by manually setting listener to nil while transport is running.
-	transport, _ := newAcceptTestSetup(t, "10.0.0.1:5001", 10)
+	conn := newAcceptMockConn("10.0.0.1:5001")
+	listener := newMockListener(conn)
+	transport := newTestTransport(listener, 10)
+	defer transport.cancel()
 
 	// Accept should work initially.
 	accepted, err := transport.Accept()

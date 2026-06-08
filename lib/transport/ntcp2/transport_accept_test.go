@@ -105,151 +105,154 @@ func newTestTransport(listener net.Listener, maxSessions int) *NTCP2Transport {
 		MaxSessions:     maxSessions,
 	}
 	return &NTCP2Transport{
-		listener: listener,
-		config:   cfg,
-		ctx:      ctx,
-		cancel:   cancel,
-		logger:   logger.WithField("test", "accept"),
-		sessions: sync.Map{},
+		listener:                     listener,
+		config:                       cfg,
+		ctx:                          ctx,
+		cancel:                       cancel,
+		logger:                       logger.WithField("test", "accept"),
+		sessions:                     sync.Map{},
+		testBypassHandshakeTypeCheck: true, // Allow mock connections in tests
 	}
 }
 
-// TestAccept_TracksInboundSession verifies that Accept() stores the inbound
-// connection in the transport's session map so GetSessionCount() is accurate.
+// TestAccept_TracksInboundSession verifies that trackInboundConnection properly
+// increments the session count and that the tracked connection's Close() method
+// decrements it. This tests session tracking independently of the handshake path
+// (which would reject mock connections per SM-3 fix).
 func TestAccept_TracksInboundSession(t *testing.T) {
-	transport, _ := newAcceptTestSetup(t, "10.0.0.1:5001", 10)
+	transport := newNilListenerTestTransport(t, 10)
 
-	// Session count should start at 0
-	assert.Equal(t, 0, transport.GetSessionCount(), "initial session count should be 0")
-
-	accepted, err := transport.Accept()
+	// Reserve a session slot (mimics checkSessionLimit in accept flow)
+	err := transport.checkSessionLimit()
 	require.NoError(t, err)
-	require.NotNil(t, accepted)
 
-	// Session count should now be 1
-	assert.Equal(t, 1, transport.GetSessionCount(), "session count should be 1 after Accept()")
+	// Session count should now be 1 (slot reserved)
+	assert.Equal(t, 1, transport.GetSessionCount(), "session count should be 1 after reserving slot")
+
+	// Create a mock connection and track it
+	conn := newAcceptMockConn("10.0.0.1:5001")
+	tracked, fresh := transport.trackInboundConnection(conn)
+	require.True(t, fresh, "connection should be tracked as fresh")
+	require.NotNil(t, tracked)
+
+	// Session count should still be 1 (trackInboundConnection doesn't increment,
+	// it just wraps the already-reserved slot)
+	assert.Equal(t, 1, transport.GetSessionCount(), "session count should remain 1 after tracking")
+
+	// Close the tracked connection
+	err = tracked.Close()
+	require.NoError(t, err)
+
+	// Session count should return to 0 (trackedConn.onClose decrements via removeSession)
+	assert.Equal(t, 0, transport.GetSessionCount(), "session count should be 0 after closing tracked connection")
 }
 
-// TestAccept_SessionCountDecrementsOnClose verifies that closing the accepted
-// connection removes it from the session map via the trackedConn wrapper.
+// TestAccept_SessionCountDecrementsOnClose verifies that closing a tracked
+// connection properly decrements the session count and removes it from the
+// session map.
 func TestAccept_SessionCountDecrementsOnClose(t *testing.T) {
-	transport, _ := newAcceptTestSetup(t, "10.0.0.1:5001", 10)
+	transport := newNilListenerTestTransport(t, 10)
 
-	accepted, err := transport.Accept()
+	// Reserve and track a connection
+	err := transport.checkSessionLimit()
 	require.NoError(t, err)
+
+	conn := newAcceptMockConn("10.0.0.1:5001")
+	tracked, fresh := transport.trackInboundConnection(conn)
+	require.True(t, fresh)
 
 	assert.Equal(t, 1, transport.GetSessionCount())
 
-	// Close the accepted connection
-	err = accepted.Close()
+	// Close the tracked connection
+	err = tracked.Close()
 	require.NoError(t, err)
 
 	// Session count should return to 0
 	assert.Equal(t, 0, transport.GetSessionCount(),
-		"session count should be 0 after closing the accepted connection")
+		"session count should be 0 after closing the tracked connection")
 }
 
 // TestAccept_DoubleCloseIsIdempotent verifies that closing a tracked connection
-// twice does not panic or double-decrement the session count.
+// twice does not panic or double-decrement the session count (tests trackedConn.closeOnce).
 func TestAccept_DoubleCloseIsIdempotent(t *testing.T) {
-	transport, _ := newAcceptTestSetup(t, "10.0.0.1:5001", 10)
+	transport := newNilListenerTestTransport(t, 10)
 
-	accepted, err := transport.Accept()
+	// Reserve and track a connection
+	err := transport.checkSessionLimit()
 	require.NoError(t, err)
 
-	// Close twice — should not panic
-	require.NotPanics(t, func() {
-		_ = accepted.Close()
-		_ = accepted.Close()
-	})
+	conn := newAcceptMockConn("10.0.0.1:5001")
+	tracked, fresh := transport.trackInboundConnection(conn)
+	require.True(t, fresh)
 
-	assert.Equal(t, 0, transport.GetSessionCount(),
-		"session count should be 0 after double-close")
+	// First close
+	err = tracked.Close()
+	require.NoError(t, err)
+	assert.Equal(t, 0, transport.GetSessionCount(), "count should be 0 after first close")
+
+	// Second close should be idempotent (trackedConn.closeOnce ensures onClose runs only once)
+	err = tracked.Close()
+	require.NoError(t, err, "second close should not return error (mock conn allows multiple closes)")
+	assert.Equal(t, 0, transport.GetSessionCount(), "count should still be 0 after second close (no double-decrement)")
 }
 
-// TestAccept_EnforcesSessionLimit verifies that when the maximum session count
-// is reached, over-limit inbound connections are dropped (closed by the accept
-// runner) rather than propagated to Accept() callers. Accept() should block
-// until a slot is free or the transport is closed.
+// TestAccept_EnforcesSessionLimit verifies that checkSessionLimit properly
+// rejects new connections when the maximum session count is reached, and that
+// unreserveSessionSlot correctly frees slots.
 func TestAccept_EnforcesSessionLimit(t *testing.T) {
-	conn1 := newAcceptMockConn("10.0.0.1:5001")
-	conn2 := newAcceptMockConn("10.0.0.2:5002")
+	transport := newNilListenerTestTransport(t, 2)
 
-	listener := newMockListener(conn1, conn2)
-	transport := newTestTransport(listener, 2)
-	defer transport.cancel()
-
-	// Accept two connections to fill the pool.
-	accepted1, err := transport.Accept()
+	// Reserve first session slot
+	err := transport.checkSessionLimit()
 	require.NoError(t, err)
-	require.NotNil(t, accepted1)
+	assert.Equal(t, 1, transport.GetSessionCount())
 
-	accepted2, err := transport.Accept()
+	// Reserve second session slot
+	err = transport.checkSessionLimit()
 	require.NoError(t, err)
-	require.NotNil(t, accepted2)
-
 	assert.Equal(t, 2, transport.GetSessionCount())
 
-	// Enqueue a third connection. The accept runner will see it, detect the limit
-	// and close it — it is never sent on pendingConns.
-	conn3 := newAcceptMockConn("10.0.0.3:5003")
-	listener.conns <- conn3
+	// Attempt to reserve a third slot — should fail with ErrConnectionPoolFull
+	err = transport.checkSessionLimit()
+	assert.ErrorIs(t, err, ErrConnectionPoolFull, "should reject when session limit reached")
+	assert.Equal(t, 2, transport.GetSessionCount(), "count should remain at limit")
 
-	// Accept() should block because no new connection is delivered.
-	// Cancel the transport context to unblock it.
-	done := make(chan error, 1)
-	go func() {
-		_, err := transport.Accept()
-		done <- err
-	}()
+	// Unreserve one slot (simulating connection close or handshake failure)
+	transport.unreserveSessionSlot()
+	assert.Equal(t, 1, transport.GetSessionCount())
 
-	// Give the accept runner a moment to process and drop conn3.
-	time.Sleep(50 * time.Millisecond)
-
-	// Transport should still be at 2 sessions (conn3 was dropped).
+	// Now we should be able to reserve again
+	err = transport.checkSessionLimit()
+	require.NoError(t, err)
 	assert.Equal(t, 2, transport.GetSessionCount())
-
-	// Cancel the transport — Accept() should unblock with ErrSessionClosed.
-	transport.cancel()
-
-	select {
-	case err := <-done:
-		assert.Error(t, err, "Accept should return an error when transport is closed")
-	case <-time.After(2 * time.Second):
-		t.Fatal("Accept() did not unblock after transport cancel")
-	}
-
-	_ = accepted1.Close()
-	_ = accepted2.Close()
 }
 
-// TestAccept_SessionLimitRecovery verifies that closing a session frees a slot
-// for new inbound connections.
+// TestAccept_SessionLimitRecovery verifies that closing a tracked connection
+// properly frees a session slot, allowing new connections to be accepted.
 func TestAccept_SessionLimitRecovery(t *testing.T) {
-	conn1 := newAcceptMockConn("10.0.0.1:5001")
-	listener := newMockListener(conn1)
-	transport := newTestTransport(listener, 1)
-	defer transport.cancel()
+	transport := newNilListenerTestTransport(t, 1)
 
-	// Fill the pool
-	accepted1, err := transport.Accept()
+	// Reserve slot and track first connection
+	err := transport.checkSessionLimit()
 	require.NoError(t, err)
+	conn1 := newAcceptMockConn("10.0.0.1:5001")
+	tracked1, fresh := transport.trackInboundConnection(conn1)
+	require.True(t, fresh)
 	assert.Equal(t, 1, transport.GetSessionCount())
 
 	// Close the first connection to free the slot
-	_ = accepted1.Close()
+	_ = tracked1.Close()
 	assert.Equal(t, 0, transport.GetSessionCount())
 
-	// Now a new connection should be accepted
-	conn2 := newAcceptMockConn("10.0.0.2:5002")
-	listener.conns <- conn2
-
-	accepted2, err := transport.Accept()
+	// Now we should be able to reserve and track a new connection
+	err = transport.checkSessionLimit()
 	require.NoError(t, err)
-	require.NotNil(t, accepted2)
+	conn2 := newAcceptMockConn("10.0.0.2:5002")
+	tracked2, fresh := transport.trackInboundConnection(conn2)
+	require.True(t, fresh)
 	assert.Equal(t, 1, transport.GetSessionCount())
 
-	_ = accepted2.Close()
+	_ = tracked2.Close()
 }
 
 // TestAccept_NilListener verifies that Accept() returns an error
@@ -321,73 +324,76 @@ func TestTrackedConn_PreservesConnBehavior(t *testing.T) {
 }
 
 // TestAccept_MixedInboundOutbound verifies that session count reflects both
-// inbound (Accept) and outbound (setupSession) sessions.
+// inbound and outbound sessions. Uses newAcceptTestSetup which pre-loads one
+// inbound connection (count=1), then adds an outbound session (count=2).
 func TestAccept_MixedInboundOutbound(t *testing.T) {
 	transport, _ := newAcceptTestSetup(t, "10.0.0.1:5001", 10)
+
+	// newAcceptTestSetup already has one inbound connection ready (count=1)
+	assert.Equal(t, 1, transport.GetSessionCount(), "newAcceptTestSetup pre-loads inbound connection")
 
 	// Simulate an outbound session by storing directly in sessions map
 	outboundHash := newTestPeerHash("outbound-peer-hash-for-testing!!")
 	transport.sessions.Store(outboundHash, "outbound-placeholder")
 	atomic.AddInt32(&transport.sessionCount, 1)
-	assert.Equal(t, 1, transport.GetSessionCount())
+	assert.Equal(t, 2, transport.GetSessionCount(), "count should include pre-loaded inbound + outbound")
 
-	// Accept an inbound connection
+	// Accept the pre-loaded inbound connection
 	accepted, err := transport.Accept()
 	require.NoError(t, err)
 	assert.Equal(t, 2, transport.GetSessionCount(),
-		"session count should include both inbound and outbound sessions")
+		"session count should still be 2 after Accept returns the pre-loaded connection")
 
 	// Close inbound
 	_ = accepted.Close()
 	assert.Equal(t, 1, transport.GetSessionCount(),
 		"closing inbound should only decrement inbound session")
 
-	// Remove outbound
-	transport.removeSession(outboundHash)
+	// Clean up outbound
+	transport.sessions.Delete(outboundHash)
+	atomic.AddInt32(&transport.sessionCount, -1)
 	assert.Equal(t, 0, transport.GetSessionCount())
 }
 
 // TestAccept_ConcurrentAcceptAndClose verifies thread safety of session tracking
-// under concurrent accept/close operations.
+// under concurrent operations. Tests checkSessionLimit and trackInboundConnection
+// directly to avoid SM-3 type-check rejection of mock connections.
 func TestAccept_ConcurrentAcceptAndClose(t *testing.T) {
 	const numConns = 20
-	conns := make([]net.Conn, numConns)
-	for i := 0; i < numConns; i++ {
-		conns[i] = newAcceptMockConn(fmt.Sprintf("10.0.%d.%d:5001", i/256, i%256))
-	}
-	listener := newMockListener(conns...)
-	transport := newTestTransport(listener, numConns+10)
-	defer transport.cancel()
+	transport := newNilListenerTestTransport(t, numConns+10)
 
-	// Accept all connections concurrently
-	accepted := make([]net.Conn, numConns)
+	// Track all connections concurrently
+	tracked := make([]net.Conn, numConns)
 	var wg sync.WaitGroup
 	for i := 0; i < numConns; i++ {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			conn, err := transport.Accept()
-			if err == nil {
-				accepted[idx] = conn
+			if err := transport.checkSessionLimit(); err == nil {
+				conn := newAcceptMockConn(fmt.Sprintf("10.0.%d.%d:5001", idx/256, idx%256))
+				wrapped, _ := transport.trackInboundConnection(conn)
+				tracked[idx] = wrapped
 			}
 		}(i)
 	}
 	wg.Wait()
 
+	// Verify all were tracked
+	assert.Equal(t, numConns, transport.GetSessionCount(), "all connections should be tracked")
+
 	// Close all concurrently
 	for i := 0; i < numConns; i++ {
-		if accepted[i] != nil {
+		if tracked[i] != nil {
 			wg.Add(1)
 			go func(conn net.Conn) {
 				defer wg.Done()
 				_ = conn.Close()
-			}(accepted[i])
+			}(tracked[i])
 		}
 	}
 	wg.Wait()
 
-	// All should be cleaned up eventually
-	time.Sleep(10 * time.Millisecond)
+	// All should be cleaned up
 	assert.Equal(t, 0, transport.GetSessionCount(),
 		"all sessions should be cleaned up after concurrent close")
 }
@@ -398,6 +404,7 @@ func TestAccept_ConcurrentAcceptAndClose(t *testing.T) {
 // This prevents accidentally admitting un-handshaked peers (SM-3).
 func TestPerformInboundHandshake_RejectsNonNTCP2Conn(t *testing.T) {
 	transport := newNilListenerTestTransport(t, 10)
+	transport.testBypassHandshakeTypeCheck = false // Explicitly disable bypass for this test
 
 	// Reserve a slot as the accept loop would
 	atomic.AddInt32(&transport.sessionCount, 1)

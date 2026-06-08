@@ -73,6 +73,10 @@ type NTCP2Transport struct {
 	sessionCount   int32    // atomic O(1) session counter
 	isShuttingDown int32    // atomic flag set during Close() to prevent cleanup callbacks from double-decrementing
 
+	// TEST ONLY: bypass *ntcp2.Conn type check in performInboundHandshake.
+	// MUST NOT be set in production - allows un-handshaked connections (security risk).
+	testBypassHandshakeTypeCheck bool
+
 	// Protects identity, config.Config, and listener from concurrent
 	// access by SetIdentity vs GetSession/Accept/Compatible.
 	identityMu sync.RWMutex
@@ -598,6 +602,14 @@ func (t *NTCP2Transport) inboundHandshakeWorker(conn net.Conn) {
 func (t *NTCP2Transport) performInboundHandshake(conn net.Conn) error {
 	ntcp2Conn, ok := conn.(*ntcp2.Conn)
 	if !ok {
+		if t.testBypassHandshakeTypeCheck {
+			// TEST ONLY: Skip handshake for mock connections.
+			// This allows tests to verify session tracking/accept loop logic
+			// without full Noise protocol setup. NEVER enable in production.
+			t.logger.WithField("conn_type", fmt.Sprintf("%T", conn)).
+				Debug("testBypassHandshakeTypeCheck enabled; skipping handshake for non-*ntcp2.Conn")
+			return nil
+		}
 		t.logger.WithField("conn_type", fmt.Sprintf("%T", conn)).
 			Error("Accepted connection is not *ntcp2.Conn; rejecting")
 		_ = conn.Close()

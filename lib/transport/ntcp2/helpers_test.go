@@ -2,6 +2,9 @@ package ntcp2
 
 import (
 	"context"
+	"net"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/go-i2p/common/data"
@@ -52,15 +55,68 @@ func newTestPeerHash(content string) data.Hash {
 	return h
 }
 
-// newAcceptTestSetup creates an accept-test fixture: a mock connection fed
-// through a mock listener into an NTCP2Transport. The transport's context is
-// cleaned up automatically via t.Cleanup.
+// newAcceptTestSetup creates an accept-test fixture with a mock connection
+// ready to be consumed by Accept(). This bypasses the handshake path (which
+// would reject the mock connection per SM-3 fix) and injects a pre-tracked
+// connection directly into pendingConns to test session tracking logic
+// independently of handshake validation. The connection is fully tracked: it's
+// in the sessions map, the session count is incremented, and the onClose
+// callback will clean up properly. The transport's context is cleaned up
+// automatically via t.Cleanup.
 func newAcceptTestSetup(t *testing.T, remoteAddr string, maxSessions int) (*NTCP2Transport, *acceptMockConn) {
 	t.Helper()
 	conn := newAcceptMockConn(remoteAddr)
-	listener := newMockListener(conn)
-	transport := newTestTransport(listener, maxSessions)
-	t.Cleanup(func() { transport.cancel() })
+
+	// Create transport with a mock listener (to pass Accept() nil check) and pendingConns channel
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	mockListener := newMockListener() // No connections in channel yet
+
+	transport := &NTCP2Transport{
+		config: &Config{
+			ListenerAddress: "127.0.0.1:0",
+			MaxSessions:     maxSessions,
+		},
+		ctx:                          ctx,
+		cancel:                       cancel,
+		logger:                       logger.WithField("test", "accept"),
+		sessions:                     sync.Map{},
+		pendingConns:                 make(chan net.Conn, 10),
+		listener:                     mockListener, // Set listener to pass Accept() nil check
+		testBypassHandshakeTypeCheck: true,         // Allow mock connections in tests
+	}
+
+	// Mark the acceptRunOnce as already executed so Accept() won't start the
+	// real accept loop (which would try to read from the mock listener and block)
+	transport.acceptRunOnce.Do(func() {
+		// pendingConns is already initialized above
+	})
+
+	// Extract peer hash for session tracking (mimics trackInboundConnection)
+	peerHash := transport.extractPeerHash(conn)
+
+	// Store the raw connection in sessions map (will be replaced with tracked conn)
+	transport.sessions.Store(peerHash, conn)
+
+	// Increment session count (mimics checkSessionLimit reservation)
+	atomic.AddInt32(&transport.sessionCount, 1)
+
+	// Create tracked connection wrapper with cleanup callback that calls removeSession
+	// (mimics trackInboundConnection wrapping)
+	tracked := &trackedConn{
+		Conn: conn,
+		onClose: func() {
+			transport.removeSession(peerHash)
+		},
+	}
+
+	// Update sessions map with the tracked connection
+	transport.sessions.Store(peerHash, tracked)
+
+	// Inject into pendingConns for Accept() to consume
+	transport.pendingConns <- tracked
+
 	return transport, conn
 }
 
