@@ -259,14 +259,21 @@ func listenWithOSPort(config *Config) (net.PacketConn, error) {
 		return nil, oops.Wrapf(err, "failed to probe UDP port")
 	}
 	assignedPort := temp.LocalAddr().(*net.UDPAddr).Port
-	if closeErr := temp.Close(); closeErr != nil {
-		log.WithError(closeErr).Warn("failed to close probe UDP listener")
-	}
 
 	// Step 2: re-bind on the discovered port with NAT traversal so the connection
 	// address carries the external IP instead of the unspecified "::" host.
+	// Keep the temp listener open until we successfully rebind to avoid TOCTOU race:
+	// if we close temp first, another process could grab the port between close and rebind.
 	log.WithField("port", assignedPort).Info("probed OS-assigned UDP port; attempting NAT traversal")
-	return listenWithNATTraversal(config, assignedPort)
+	finalConn, err := listenWithNATTraversal(config, assignedPort)
+
+	// Close the temporary listener only after successfully rebinding.
+	// This closes the TOCTOU window where another process could claim the port.
+	if closeErr := temp.Close(); closeErr != nil {
+		log.WithError(closeErr).Warn("failed to close probe UDP listener after NAT traversal rebind")
+	}
+
+	return finalConn, err
 }
 
 // listenWithNATTraversal creates a UDP listener with NAT port mapping.
@@ -505,7 +512,20 @@ func (t *SSU2Transport) SetIdentity(ident router_info.RouterInfo) error {
 
 	// Create new listener with the new identity/config if one existed before.
 	if oldListener != nil {
-		udpConn, err := t.listenOnUDPAddr(t.config.ListenerAddress)
+		// Extract port from the current config's listener address to maintain the same listening port.
+		_, portStr, err := net.SplitHostPort(t.config.ListenerAddress)
+		if err != nil {
+			t.logger.WithError(err).Error("Failed to extract port from SSU2 listener address")
+			return err
+		}
+		port, err := strconv.Atoi(portStr)
+		if err != nil {
+			t.logger.WithError(err).Error("Failed to parse port from SSU2 listener address")
+			return err
+		}
+
+		// Create new UDP connection using NAT traversal with the same port.
+		udpConn, err := listenWithNATTraversal(t.config, port)
 		if err != nil {
 			t.logger.WithError(err).Error("Failed to rebind UDP address during identity update")
 			return err

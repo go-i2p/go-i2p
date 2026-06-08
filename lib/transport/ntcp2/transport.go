@@ -230,14 +230,21 @@ func bindOSAssignedPort(config *Config) (net.Listener, error) {
 		return nil, oops.Wrapf(err, "failed to probe available port")
 	}
 	assignedPort := temp.Addr().(*net.TCPAddr).Port
-	if closeErr := temp.Close(); closeErr != nil {
-		log.WithError(closeErr).Warn("failed to close probe listener")
-	}
 
 	// Step 2: re-bind on the discovered port with NAT traversal so the listener
 	// address carries the external IP instead of the unspecified "::" host.
+	// Keep the temp listener open until we successfully rebind to avoid TOCTOU race:
+	// if we close temp first, another process could grab the port between close and rebind.
 	log.WithField("port", assignedPort).Info("probed OS-assigned port; attempting NAT traversal")
-	return bindWithNATTraversal(config, assignedPort)
+	finalListener, err := bindWithNATTraversal(config, assignedPort)
+
+	// Close the temporary listener only after successfully rebinding.
+	// This closes the TOCTOU window where another process could claim the port.
+	if closeErr := temp.Close(); closeErr != nil {
+		log.WithError(closeErr).Warn("failed to close probe listener after NAT traversal rebind")
+	}
+
+	return finalListener, err
 }
 
 // bindWithNATTraversal creates a TCP listener on the specified port, attempting
@@ -255,7 +262,24 @@ func bindWithNATTraversal(config *Config, port int) (net.Listener, error) {
 		if host == "" {
 			host = "127.0.0.1"
 		}
-		l, err := net.Listen("tcp", fmt.Sprintf("%s:%d", host, port))
+		// Use SO_REUSEADDR to allow rebinding immediately after probing port 0.
+		listenCfg := net.ListenConfig{
+			Control: func(network, address string, c syscall.RawConn) error {
+				var sockoptErr error
+				err := c.Control(func(fd uintptr) {
+					// SO_REUSEADDR allows rebinding to a port in TIME_WAIT state,
+					// reducing the TOCTOU race window in bindOSAssignedPort().
+					if sockoptErr = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1); sockoptErr != nil {
+						log.WithError(sockoptErr).Warn("Failed to set SO_REUSEADDR on listening socket")
+					}
+				})
+				if err != nil {
+					return err
+				}
+				return sockoptErr
+			},
+		}
+		l, err := listenCfg.Listen(context.Background(), "tcp", fmt.Sprintf("%s:%d", host, port))
 		if err != nil {
 			return nil, oops.Wrapf(err, "failed to create TCP listener")
 		}
@@ -862,10 +886,25 @@ func (t *NTCP2Transport) recreateListenerIfNeeded(ntcp2Config *ntcp2.Config) err
 }
 
 // createNewListenerWithConfig creates a new TCP and NTCP2 listener with the provided configuration.
+// Uses NAT traversal to preserve external address visibility established at startup.
 func (t *NTCP2Transport) createNewListenerWithConfig(ntcp2Config *ntcp2.Config) (net.Listener, error) {
-	tcpListener, err := net.Listen("tcp", t.config.ListenerAddress)
+	// Extract port from the current listener address to maintain the same listening port.
+	_, portStr, err := net.SplitHostPort(t.config.ListenerAddress)
 	if err != nil {
-		t.logger.WithError(err).Error("Failed to rebind listener")
+		t.logger.WithError(err).Error("Failed to extract port from listener address for recreation")
+		return nil, WrapNTCP2Error(err, "parsing listener port")
+	}
+	iport, err := strconv.Atoi(portStr)
+	if err != nil {
+		t.logger.WithError(err).Error("Failed to convert port to integer")
+		return nil, WrapNTCP2Error(err, "parsing listener port")
+	}
+
+	// Use NAT traversal to rebind with the same port, preserving external address mapping.
+	// This ensures the recreated listener maintains NAT-mapped address semantics.
+	tcpListener, err := bindWithNATTraversal(t.config, iport)
+	if err != nil {
+		t.logger.WithError(err).Error("Failed to rebind listener with NAT traversal")
 		return nil, WrapNTCP2Error(err, "rebinding listener")
 	}
 

@@ -1152,10 +1152,15 @@ func (t *SSU2Transport) pollPeerTestOnce(timer *time.Timer, poll *time.Ticker, n
 }
 
 // handlePeerTestTimeout handles the case where peer test timed out.
+// Rather than immediately registering introducers (which creates persistent
+// FIREWALLED classification even for transient network issues), we log the
+// timeout and skip introducer registration on first occurrence. This prevents
+// false firewalled classification from temporary network impairments.
+// TODO(HIGH 6.3): Implement retry counter or exponential backoff before
+// falling back to introducers. Only after multiple failed peer tests should
+// the node classify itself as firewalled.
 func (t *SSU2Transport) handlePeerTestTimeout(candidates []router_info.RouterInfo, republish func()) {
-	t.logger.Debug("NAT detection: timed out waiting for peer test result")
-	// Register candidates as introducers as a best-effort fallback
-	t.registerIntroducers(candidates, republish)
+	t.logger.WithField("timeout_seconds", 60).Warn("NAT detection: peer test timed out; not registering introducers on first timeout to avoid false FIREWALLED classification from transient network issues")
 }
 
 // checkPeerTestComplete checks if the peer test is complete and processes the result.
