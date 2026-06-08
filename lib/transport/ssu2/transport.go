@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -247,49 +248,78 @@ func createUDPConn(config *Config, iport int) (net.PacketConn, error) {
 // listenWithOSPort discovers a free UDP port via a temporary OS-assigned binding,
 // then re-binds through NAT traversal (UPnP/NAT-PMP with fallback) on that port
 // so the resulting connection carries a real external address.
+// To handle the TOCTOU race where another process may claim the port between
+// probe and rebind, this function retries up to maxPortProbeRetries times.
+// Each retry probes a new port and attempts rebind.
 //
 // Note: On iOS, app sandbox restrictions prevent net.ListenPacket and net.ListenUDP
 // on arbitrary ports without the com.apple.developer.networking.multipath entitlement
 // or a NEPacketTunnelProvider extension. Attempting to listen will fail with EACCES.
 // Pure go-i2p in-app deployment is not supported on iOS App Store builds.
 func listenWithOSPort(config *Config) (net.PacketConn, error) {
-	// Step 1: ask the OS for any available UDP port, with SO_REUSEADDR to allow
-	// rebinding immediately after. This reduces the TOCTOU window where another
-	// process could claim the port between close and rebind.
-	listenCfg := net.ListenConfig{
-		Control: func(network, address string, c syscall.RawConn) error {
-			var sockoptErr error
-			err := c.Control(func(fd uintptr) {
-				if sockoptErr = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1); sockoptErr != nil {
-					log.WithError(sockoptErr).Warn("Failed to set SO_REUSEADDR on probe UDP listener")
+	const maxPortProbeRetries = 3
+	var lastErr error
+
+	for attempt := 0; attempt < maxPortProbeRetries; attempt++ {
+		// Step 1: ask the OS for any available UDP port, with SO_REUSEADDR to allow
+		// rebinding immediately after. This reduces the TOCTOU window where another
+		// process could claim the port between close and rebind.
+		listenCfg := net.ListenConfig{
+			Control: func(network, address string, c syscall.RawConn) error {
+				var sockoptErr error
+				err := c.Control(func(fd uintptr) {
+					if sockoptErr = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1); sockoptErr != nil {
+						log.WithError(sockoptErr).Warn("Failed to set SO_REUSEADDR on probe UDP listener")
+					}
+				})
+				if err != nil {
+					return err
 				}
-			})
-			if err != nil {
-				return err
-			}
-			return sockoptErr
-		},
+				return sockoptErr
+			},
+		}
+
+		udpAddr, err := net.ResolveUDPAddr("udp", config.ListenerAddress)
+		if err != nil {
+			return nil, oops.Wrapf(err, "failed to resolve UDP address")
+		}
+		temp, err := listenCfg.ListenPacket(context.Background(), "udp", udpAddr.String())
+		if err != nil {
+			return nil, oops.Wrapf(err, "failed to probe UDP port")
+		}
+		assignedPort := temp.LocalAddr().(*net.UDPAddr).Port
+		if closeErr := temp.Close(); closeErr != nil {
+			log.WithError(closeErr).Warn("failed to close probe UDP listener")
+		}
+
+		// Step 2: re-bind on the discovered port with NAT traversal so the connection
+		// address carries the external IP instead of the unspecified "::" host.
+		// SO_REUSEADDR on the final listener allows immediate rebind even if the
+		// port is in TIME_WAIT state from the probe listener close.
+		if attempt == 0 {
+			log.WithField("port", assignedPort).Info("probed OS-assigned UDP port; attempting NAT traversal")
+		}
+		conn, err := listenWithNATTraversal(config, assignedPort)
+		if err == nil {
+			return conn, nil
+		}
+
+		// If rebind failed, check if it was due to "address already in use" (TOCTOU race).
+		// If so, retry. Otherwise, return the error immediately.
+		lastErr = err
+		if !strings.Contains(err.Error(), "address already in use") && !strings.Contains(err.Error(), "Address already in use") {
+			return nil, err
+		}
+		if attempt < maxPortProbeRetries-1 {
+			log.WithFields(map[string]interface{}{
+				"port":    assignedPort,
+				"attempt": attempt + 1,
+				"error":   err,
+			}).Warn("TOCTOU race: probed UDP port claimed by another process; retrying")
+		}
 	}
 
-	udpAddr, err := net.ResolveUDPAddr("udp", config.ListenerAddress)
-	if err != nil {
-		return nil, oops.Wrapf(err, "failed to resolve UDP address")
-	}
-	temp, err := listenCfg.ListenPacket(context.Background(), "udp", udpAddr.String())
-	if err != nil {
-		return nil, oops.Wrapf(err, "failed to probe UDP port")
-	}
-	assignedPort := temp.LocalAddr().(*net.UDPAddr).Port
-	if closeErr := temp.Close(); closeErr != nil {
-		log.WithError(closeErr).Warn("failed to close probe UDP listener")
-	}
-
-	// Step 2: re-bind on the discovered port with NAT traversal so the connection
-	// address carries the external IP instead of the unspecified "::" host.
-	// SO_REUSEADDR on the final listener allows immediate rebind even if the
-	// port is in TIME_WAIT state from the probe listener close.
-	log.WithField("port", assignedPort).Info("probed OS-assigned UDP port; attempting NAT traversal")
-	return listenWithNATTraversal(config, assignedPort)
+	return nil, oops.Wrapf(lastErr, "failed to bind UDP port after %d probe attempts due to TOCTOU race", maxPortProbeRetries)
 }
 
 // listenWithNATTraversal creates a UDP listener with NAT port mapping.

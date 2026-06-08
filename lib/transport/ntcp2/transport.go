@@ -60,8 +60,9 @@ type NTCP2Transport struct {
 	acceptRunOnce sync.Once
 
 	// Session management
-	sessions     sync.Map // map[string]*NTCP2Session (keyed by router hash)
-	sessionCount int32    // atomic O(1) session counter
+	sessions       sync.Map // map[string]*NTCP2Session (keyed by router hash)
+	sessionCount   int32    // atomic O(1) session counter
+	isShuttingDown int32    // atomic flag set during Close() to prevent cleanup callbacks from double-decrementing
 
 	// Protects identity, config.Config, and listener from concurrent
 	// access by SetIdentity vs GetSession/Accept/Compatible.
@@ -1574,6 +1575,13 @@ func (t *NTCP2Transport) Compatible(routerInfo router_info.RouterInfo) bool {
 // removeSession removes a session from the session map (called by session cleanup callback)
 func (t *NTCP2Transport) removeSession(routerHash data.Hash) {
 	routerHashBytes := routerHash.Bytes()
+	// During shutdown, cleanup callbacks from session.Close() should not attempt
+	// to remove from the map or decrement the count; closeAllActiveSessions() will
+	// handle that to avoid double-decrement.
+	if atomic.LoadInt32(&t.isShuttingDown) != 0 {
+		t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Debug("Skipping removeSession during shutdown")
+		return
+	}
 	if _, loaded := t.sessions.LoadAndDelete(routerHash); loaded {
 		atomic.AddInt32(&t.sessionCount, -1)
 	}
@@ -1641,14 +1649,21 @@ func (t *NTCP2Transport) closeNetworkListener() error {
 }
 
 // closeAllActiveSessions iterates through all sessions and closes them.
-// Logs the total number of sessions closed.
+// Logs the total number of sessions closed. Sets a shutdown flag to prevent
+// cleanup callbacks from double-decrementing the session count.
 func (t *NTCP2Transport) closeAllActiveSessions() {
+	// Set shutdown flag to prevent cleanup callbacks from removing entries
+	// or decrementing the count; we'll handle all accounting here.
+	atomic.StoreInt32(&t.isShuttingDown, 1)
+
 	t.logger.Debug("Closing all active sessions")
 	sessionCount := 0
 
 	t.sessions.Range(func(key, value interface{}) bool {
 		sessionCount++
 		t.closeIndividualSession(key, value)
+		// After closeIndividualSession (which may trigger callbacks that skip
+		// removal due to isShuttingDown flag), delete the entry and decrement.
 		if _, loaded := t.sessions.LoadAndDelete(key); loaded {
 			atomic.AddInt32(&t.sessionCount, -1)
 		}
