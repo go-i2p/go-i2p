@@ -812,6 +812,8 @@ func (t *SSU2Transport) decodeAndLogRelayResponse(block *ssu2noise.SSU2Block) (*
 }
 
 // deliverRelayResponse delivers the relay response to any waiting dialViaIntroducer call.
+// After delivery, marks the entry as consumed to prevent duplicate deliveries from
+// writing to the channel after the waiter has moved on (MEDIUM 2.6 cleanup).
 func (t *SSU2Transport) deliverRelayResponse(resp *ssu2noise.RelayResponseBlock) {
 	v, ok := t.pendingRelayResponses.Load(resp.Nonce)
 	if !ok {
@@ -824,6 +826,9 @@ func (t *SSU2Transport) deliverRelayResponse(resp *ssu2noise.RelayResponseBlock)
 	}
 	select {
 	case pending.ch <- resp:
+		// Successfully delivered; mark as consumed to prevent late duplicate
+		// deliveries from overwriting the channel after waiter timeout.
+		pending.consumed.Store(true)
 	default:
 		// channel already has a value (duplicate delivery); ignore
 	}
@@ -1480,11 +1485,17 @@ func (t *SSU2Transport) attemptPortMapping(internalPort int, backoff *time.Durat
 		"port":    internalPort,
 	}).Debug("NAT-PMP retry: attempting port mapping")
 
-	_, err = mapper.MapPort("udp", internalPort, 1*time.Hour)
+	externalPort, err := mapper.MapPort("udp", internalPort, 1*time.Hour)
 	if err != nil {
 		t.logAndIncreaseBackoff(backoff, err, gwIP, "NAT-PMP port mapping failed; will retry")
 		return false
 	}
+
+	// Store mapper and external port for cleanup on transport shutdown (MEDIUM 2.5)
+	t.portMapperMu.Lock()
+	t.activePortMapper = mapper
+	t.activeExternalPort = externalPort
+	t.portMapperMu.Unlock()
 
 	t.logSuccessAndExit(mapper, internalPort)
 	return true

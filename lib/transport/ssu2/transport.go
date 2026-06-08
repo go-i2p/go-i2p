@@ -51,6 +51,13 @@ type SSU2Transport struct {
 	// NAT state cache with TTL.
 	natStateCache *natState
 
+	// Port mapper lifecycle management (MEDIUM 2.5): when port mapping succeeds,
+	// we store the mapper and external port so we can properly clean up the
+	// mapping during transport Close(). Protected by portMapperMu.
+	portMapperMu       sync.Mutex
+	activePortMapper   nattraversal.PortMapper
+	activeExternalPort int
+
 	// Key management.
 	persistentConfig   *PersistentConfig
 	keyRotationManager *ssu2noise.KeyRotationManager
@@ -935,6 +942,22 @@ func (t *SSU2Transport) Close() error {
 			t.logger.WithField("stale_sessions", staleCount).Warn("Cleanup after Close found stale sessions")
 		}
 		atomic.StoreInt32(&t.sessionCount, 0)
+
+		// Clean up port mapper if one was successfully created (MEDIUM 2.5)
+		t.portMapperMu.Lock()
+		if t.activePortMapper != nil && t.activeExternalPort > 0 {
+			if err := t.activePortMapper.UnmapPort("udp", t.activeExternalPort); err != nil {
+				t.logger.WithFields(map[string]interface{}{
+					"external_port": t.activeExternalPort,
+					"error":         err,
+				}).Warn("Failed to unmap port during transport Close (non-fatal)")
+			} else {
+				t.logger.WithField("external_port", t.activeExternalPort).Debug("Port mapping cleaned up on transport close")
+			}
+			t.activePortMapper = nil
+			t.activeExternalPort = 0
+		}
+		t.portMapperMu.Unlock()
 
 		t.logger.Info("SSU2 transport closed")
 		t.closeErr = listenerErr
