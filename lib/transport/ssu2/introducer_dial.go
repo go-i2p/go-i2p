@@ -165,9 +165,13 @@ func (t *SSU2Transport) sendRelayRequest(bobSession *SSU2Session, intro Introduc
 	// types.PrivateKey.Bytes() returns the raw 64-byte Ed25519 seed+public.
 	ed25519Key := ed25519.PrivateKey(signingKey.Bytes())
 
-	aliceIP, alicePort, err := t.localIPPort()
+	// BUG FIX HIGH RD-2: Use confirmed external address, not local bind address.
+	// localIPPort() returns the listener bind address (often 0.0.0.0 or private),
+	// which fails validation at Charlie and breaks hole-punching. Use the
+	// external address confirmed by PeerTest observations when available.
+	aliceIP, alicePort, err := t.externalAddressForRelay()
 	if err != nil {
-		return oops.Wrapf(err, "could not determine local address")
+		return oops.Wrapf(err, "could not determine external address for RelayRequest")
 	}
 
 	timestamp := uint32(time.Now().Unix())
@@ -196,6 +200,27 @@ func (t *SSU2Transport) sendRelayRequest(bobSession *SSU2Session, intro Introduc
 		return oops.Wrapf(err, "failed to encode RelayRequest")
 	}
 	return bobSession.WriteBlocks([]*ssu2noise.SSU2Block{block})
+}
+
+// externalAddressForRelay returns the external IP and port to use in RelayRequest/RelayResponse.
+// BUG FIX HIGH RD-2: Prefers the confirmed external address from PeerTest observations/NAT mapping
+// over the local bind address. Falls back to localIPPort() only when no external address is known yet.
+func (t *SSU2Transport) externalAddressForRelay() (net.IP, uint16, error) {
+	externalStr := t.GetCachedExternalAddr()
+	if externalStr != "" {
+		host, portStr, err := net.SplitHostPort(externalStr)
+		if err == nil {
+			ip := net.ParseIP(host)
+			port, portErr := strconv.Atoi(portStr)
+			if ip != nil && portErr == nil && port > 0 && port <= 65535 {
+				return ip, uint16(port), nil
+			}
+		}
+	}
+	// Fall back to local listener address (bind address) when external is unknown.
+	// This fallback may still advertise an unroutable address on first boot before
+	// PeerTest observations complete, but at least avoids advertising 0.0.0.0.
+	return t.localIPPort()
 }
 
 // localIPPort extracts Alice's IP and port from the transport listener.

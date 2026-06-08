@@ -580,6 +580,13 @@ func (t *SSU2Transport) SetIdentity(ident router_info.RouterInfo) error {
 	// Without rebinding, the listener presents the old static key to peers while
 	// the transport claims a new identity, violating protocol coherence.
 	// Close old listener and create new one with updated config.
+
+	// BUG FIX HIGH SM-1: Stop NAT managers before swapping the listener.
+	// NAT managers hold references to the old listener and must be re-initialized.
+	if t.relayManager != nil {
+		t.relayManager.Stop()
+	}
+
 	t.identityMu.Lock()
 	oldListener := t.listener
 	t.listener = nil
@@ -628,6 +635,13 @@ func (t *SSU2Transport) SetIdentity(ident router_info.RouterInfo) error {
 		t.identityMu.Lock()
 		t.listener = listener
 		t.identityMu.Unlock()
+
+		// BUG FIX HIGH SM-1: Re-initialize NAT managers with the new listener.
+		// NAT managers must be bound to the new listener, not the old one.
+		if err := initNATManagers(t); err != nil {
+			t.logger.WithError(err).Error("Failed to reinitialize NAT managers after identity update")
+			return err
+		}
 	}
 
 	// Only update identity/config after listener rebind succeeds.
@@ -876,6 +890,13 @@ func (t *SSU2Transport) registerOrReuseSession(conn *ssu2noise.SSU2Conn, routerH
 		if existingSession, ok := existing.(*SSU2Session); ok {
 			return existingSession, false, nil // Reusing existing, slot not used
 		}
+		// Found a raw net.Conn (from Accept) — promote it to SSU2Session.
+		if rawConn, ok := existing.(net.Conn); ok {
+			promoted := t.promoteRawConnToSession(rawConn, routerHash, existing)
+			if promoted != nil {
+				return promoted, false, nil // Promoted, slot not used (already reserved by Accept)
+			}
+		}
 		// Unexpected map entry type — delete the corrupt entry and return error.
 		// This prevents future connection attempts from reusing a corrupted state.
 		// The connection already closed, so we cannot recover it.
@@ -892,6 +913,55 @@ func (t *SSU2Transport) registerOrReuseSession(conn *ssu2noise.SSU2Conn, routerH
 		t.removeSession(routerHash)
 	})
 	return session, true, nil // New session, slot is used
+}
+
+// promoteRawConnToSession promotes a raw net.Conn (from Accept) to SSU2Session
+// with CAS protection. Mirrors NTCP2 promotion logic to handle simultaneous
+// inbound/outbound connections to the same peer.
+func (t *SSU2Transport) promoteRawConnToSession(rawConn net.Conn, routerHash data.Hash, existing interface{}) *SSU2Session {
+	// Type-assert to *ssu2noise.SSU2Conn.
+	ssu2Conn, ok := rawConn.(*ssu2noise.SSU2Conn)
+	if !ok {
+		// Not an SSU2Conn — cannot promote.
+		t.logger.WithFields(map[string]interface{}{
+			"router_hash": fmt.Sprintf("%x", routerHash[:8]),
+			"conn_type":   fmt.Sprintf("%T", rawConn),
+		}).Error("promoteRawConnToSession: cannot promote non-SSU2Conn")
+		return nil
+	}
+
+	// Create a new SSU2Session from the raw conn.
+	promoted := NewSSU2SessionDeferred(ssu2Conn, t.ctx, t.logger)
+	promoted.maxRetransmit = t.config.GetMaxRetransmissions()
+	promoted.SetTransportCallbacks(t.buildTransportCallbacks(promoted))
+
+	// Start workers BEFORE CompareAndSwap to ensure no other goroutine
+	// sees a session without running workers.
+	promoted.StartWorkers()
+
+	// NOTE: Do NOT set the cleanup callback before CAS. If this
+	// goroutine loses the race, calling promoted.Close() would
+	// trigger removeSession and delete the *winner's* map entry.
+	if t.sessions.CompareAndSwap(routerHash, existing, promoted) {
+		promoted.SetCleanupCallback(func() {
+			t.removeSession(routerHash)
+		})
+		routerHashBytes := routerHash.Bytes()
+		t.logger.WithFields(map[string]interface{}{
+			"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
+		}).Info("Promoted inbound net.Conn to SSU2Session in registerOrReuseSession")
+		return promoted
+	}
+
+	// Another goroutine won the promotion race — discard ours.
+	// Workers will exit cleanly due to context.Done().
+	_ = promoted.Close()
+	if winner, exists := t.sessions.Load(routerHash); exists {
+		if winnerSession, ok := winner.(*SSU2Session); ok {
+			return winnerSession
+		}
+	}
+	return nil
 }
 
 // Compatible returns true if we can reach this router over SSU2 — either by

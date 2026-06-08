@@ -181,11 +181,16 @@ func TestRecordObservation_ConfirmsAfterThreshold(t *testing.T) {
 	ns := &natState{}
 	addr := "1.2.3.4:4567"
 
+	// BUG FIX HIGH RD-1: threshold raised from 2 to 3; adjust test to match.
 	// First observation — below threshold, no confirmation yet.
 	confirmed := ns.recordObservation(addr)
 	assert.Equal(t, "", confirmed, "should not confirm on first observation")
 
-	// Second observation of the same address — meets threshold (2).
+	// Second observation — still below threshold (need 3).
+	confirmed = ns.recordObservation(addr)
+	assert.Equal(t, "", confirmed, "should not confirm on second observation (threshold=3)")
+
+	// Third observation of the same address — meets threshold (3).
 	confirmed = ns.recordObservation(addr)
 	assert.Equal(t, addr, confirmed, "should confirm after peerTestConfirmThreshold observations")
 }
@@ -231,10 +236,12 @@ func TestRecordObservation_MixedAddressesConfirmsCorrect(t *testing.T) {
 	target := "1.2.3.4:4567"
 	noise := "9.9.9.9:9999"
 
+	// BUG FIX HIGH RD-1: threshold raised from 2 to 3; adjust test to match.
 	ns.recordObservation(noise)
 	ns.recordObservation(target)
+	ns.recordObservation(target) // second occurrence of target
 
-	confirmed := ns.recordObservation(target) // second occurrence of target
+	confirmed := ns.recordObservation(target) // third occurrence of target — meets threshold
 	assert.Equal(t, target, confirmed)
 }
 

@@ -28,7 +28,9 @@ const (
 
 	// peerTestConfirmThreshold is the minimum number of matching observations
 	// required to confirm an external address.
-	peerTestConfirmThreshold = 2
+	// BUG FIX HIGH RD-1: Raised from 2 to 3 to reduce address-poisoning risk.
+	// 2 matching reports from an attacker connecting early are no longer sufficient.
+	peerTestConfirmThreshold = 3
 )
 
 // externalAddrObservation records a single PeerTest-observed external address.

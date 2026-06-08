@@ -865,16 +865,35 @@ func (t *SSU2Transport) initiateHolePunch(intro *ssu2noise.RelayIntroBlock, bobS
 		IP:   net.IP(intro.AliceIP),
 		Port: int(intro.AlicePort),
 	}
+
+	// BUG FIX HIGH E-2: Validate Alice's IP to prevent reflection attacks.
+	// Reject private, loopback, multicast, and other invalid addresses.
+	if !isValidExternalAddress(aliceAddr.IP) {
+		t.logger.WithFields(map[string]interface{}{
+			"alice_ip":   aliceAddr.IP.String(),
+			"alice_port": aliceAddr.Port,
+		}).Warn("hole-punch: rejected RelayIntro with invalid Alice IP (potential reflection attack)")
+		return oops.Errorf("invalid Alice IP address: %s", aliceAddr.IP)
+	}
+
 	if bobSession == nil {
 		t.logger.Debug("hole-punch: no Bob session provided, skipping")
 		return nil
 	}
 	bobAddr := bobSession.RemoteUDPAddr()
-	if bobAddr != nil {
-		if _, err := t.holePunchCoord.InitiateHolePunch(aliceAddr, bobAddr, intro.AliceRelayTag); err != nil {
-			t.logger.WithField("error", err).Debug("hole-punch coordinator registration failed (non-fatal)")
-		}
+	if bobAddr == nil {
+		t.logger.Debug("hole-punch: Bob session has no remote address, skipping")
+		return nil
 	}
+
+	// BUG FIX HIGH E-2: Only send hole-punch/RelayResponse when InitiateHolePunch succeeds.
+	// This prevents reflection attacks where an attacker triggers emissions to arbitrary IPs.
+	_, err := t.holePunchCoord.InitiateHolePunch(aliceAddr, bobAddr, intro.AliceRelayTag)
+	if err != nil {
+		t.logger.WithField("error", err).Warn("hole-punch coordinator registration failed; not sending hole-punch/RelayResponse")
+		return err
+	}
+
 	t.sendHolePunchToAlice(intro, aliceAddr, bobSession)
 	if err := t.sendRelayResponseToBob(bobSession, intro); err != nil {
 		t.logger.WithField("error", err).Warn("failed to send RelayResponse to Bob")
@@ -911,9 +930,13 @@ func (t *SSU2Transport) sendHolePunchToAlice(intro *ssu2noise.RelayIntroBlock, a
 // that Bob can forward it to Alice. Alice uses Charlie's IP/Port and token to
 // send the SSU2 SessionRequest directly to us.
 func (t *SSU2Transport) sendRelayResponseToBob(bobSession *SSU2Session, intro *ssu2noise.RelayIntroBlock) error {
-	charlieIP, charliePort, err := t.localIPPort()
+	// BUG FIX HIGH RD-2: Use confirmed external address, not local bind address.
+	// localIPPort() returns the listener bind address (often 0.0.0.0 or private),
+	// which breaks hole-punching when Charlie advertises an unreachable address.
+	// Use the external address confirmed by PeerTest observations when available.
+	charlieIP, charliePort, err := t.externalAddressForRelay()
 	if err != nil {
-		return oops.Wrapf(err, "hole-punch: local address")
+		return oops.Wrapf(err, "hole-punch: external address")
 	}
 
 	signingKey, token, err := t.prepareRelayResponseCredentials()
