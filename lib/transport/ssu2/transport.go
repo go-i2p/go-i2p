@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/go-i2p/common/data"
@@ -249,12 +250,29 @@ func createUDPConn(config *Config, iport int) (net.PacketConn, error) {
 // or a NEPacketTunnelProvider extension. Attempting to listen will fail with EACCES.
 // Pure go-i2p in-app deployment is not supported on iOS App Store builds.
 func listenWithOSPort(config *Config) (net.PacketConn, error) {
-	// Step 1: ask the OS for any available UDP port.
+	// Step 1: ask the OS for any available UDP port, with SO_REUSEADDR to allow
+	// rebinding immediately after. This reduces the TOCTOU window where another
+	// process could claim the port between close and rebind.
+	listenCfg := net.ListenConfig{
+		Control: func(network, address string, c syscall.RawConn) error {
+			var sockoptErr error
+			err := c.Control(func(fd uintptr) {
+				if sockoptErr = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1); sockoptErr != nil {
+					log.WithError(sockoptErr).Warn("Failed to set SO_REUSEADDR on probe UDP listener")
+				}
+			})
+			if err != nil {
+				return err
+			}
+			return sockoptErr
+		},
+	}
+	
 	udpAddr, err := net.ResolveUDPAddr("udp", config.ListenerAddress)
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to resolve UDP address")
 	}
-	temp, err := net.ListenUDP("udp", udpAddr)
+	temp, err := listenCfg.ListenPacket(context.Background(), "udp", udpAddr.String())
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to probe UDP port")
 	}
@@ -290,7 +308,24 @@ func listenWithNATTraversal(config *Config, iport int) (net.PacketConn, error) {
 		if host == "" {
 			host = "127.0.0.1"
 		}
-		conn, err := net.ListenPacket("udp", fmt.Sprintf("%s:%d", host, iport))
+		// Use SO_REUSEADDR to allow rebinding immediately after probing port 0.
+		listenCfg := net.ListenConfig{
+			Control: func(network, address string, c syscall.RawConn) error {
+				var sockoptErr error
+				err := c.Control(func(fd uintptr) {
+					// SO_REUSEADDR allows rebinding to a port in TIME_WAIT state,
+					// reducing the TOCTOU race window in listenWithOSPort().
+					if sockoptErr = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1); sockoptErr != nil {
+						log.WithError(sockoptErr).Warn("Failed to set SO_REUSEADDR on listening socket")
+					}
+				})
+				if err != nil {
+					return err
+				}
+				return sockoptErr
+			},
+		}
+		conn, err := listenCfg.ListenPacket(context.Background(), "udp", fmt.Sprintf("%s:%d", host, iport))
 		if err != nil {
 			return nil, oops.Wrapf(err, "failed to create UDP listener")
 		}

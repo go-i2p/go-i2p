@@ -224,8 +224,25 @@ func buildTransportInstance(config *Config, identity router_info.RouterInfo, key
 // NEPacketTunnelProvider extension. Attempting to listen will fail with EACCES.
 // Pure go-i2p in-app deployment is not supported on iOS App Store builds.
 func bindOSAssignedPort(config *Config) (net.Listener, error) {
-	// Step 1: ask the OS for any available port.
-	temp, err := net.Listen("tcp", config.ListenerAddress)
+	// Step 1: ask the OS for any available port, with SO_REUSEADDR to allow
+	// rebinding immediately after. This reduces the TOCTOU window where another
+	// process could claim the port between close and rebind.
+	listenCfg := net.ListenConfig{
+		Control: func(network, address string, c syscall.RawConn) error {
+			var sockoptErr error
+			err := c.Control(func(fd uintptr) {
+				if sockoptErr = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1); sockoptErr != nil {
+					log.WithError(sockoptErr).Warn("Failed to set SO_REUSEADDR on probe listener")
+				}
+			})
+			if err != nil {
+				return err
+			}
+			return sockoptErr
+		},
+	}
+	
+	temp, err := listenCfg.Listen(context.Background(), "tcp", config.ListenerAddress)
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to probe available port")
 	}
