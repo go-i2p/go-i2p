@@ -784,14 +784,18 @@ func (t *NTCP2Transport) SetIdentity(ident router_info.RouterInfo) error {
 		return oops.Wrapf(err, "failed to reinitialize crypto keys after identity update")
 	}
 
+	// BUG FIX HIGH 3.2: Recreate listener BEFORE updating identity/config to avoid
+	// half-transitioned state if listener rebind fails. Test listener rebind success
+	// while holding identity steady, then apply both changes atomically.
+	if err := t.recreateListenerIfNeeded(ntcp2Config); err != nil {
+		return err
+	}
+
+	// Only update identity/config after listener rebind succeeds.
 	t.identityMu.Lock()
 	t.identity = ident
 	t.config.Config = ntcp2Config
 	t.identityMu.Unlock()
-
-	if err := t.recreateListenerIfNeeded(ntcp2Config); err != nil {
-		return err
-	}
 
 	t.logger.Info("Identity updated successfully")
 	return nil

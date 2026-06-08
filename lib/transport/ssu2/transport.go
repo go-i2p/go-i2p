@@ -487,11 +487,55 @@ func (t *SSU2Transport) SetIdentity(ident router_info.RouterInfo) error {
 		return oops.Wrapf(err, "failed to reinitialize crypto keys")
 	}
 
+	// BUG FIX HIGH 3.3: SSU2 listener must be recreated when identity changes,
+	// similar to NTCP2. The listener encapsulates the old identity's crypto keys.
+	// Without rebinding, the listener presents the old static key to peers while
+	// the transport claims a new identity, violating protocol coherence.
+	// Close old listener and create new one with updated config.
+	t.identityMu.Lock()
+	oldListener := t.listener
+	t.listener = nil
+	t.identityMu.Unlock()
+
+	if oldListener != nil {
+		if err := oldListener.Close(); err != nil {
+			t.logger.WithError(err).Warn("Error closing existing SSU2 listener during identity update")
+		}
+	}
+
+	// Create new listener with the new identity/config if one existed before.
+	if oldListener != nil {
+		udpConn, err := t.listenOnUDPAddr(t.config.ListenerAddress)
+		if err != nil {
+			t.logger.WithError(err).Error("Failed to rebind UDP address during identity update")
+			return err
+		}
+
+		listener, err := ssu2noise.NewSSU2Listener(udpConn, ssu2Config)
+		if err != nil {
+			_ = udpConn.Close()
+			t.logger.WithError(err).Error("Failed to create new SSU2 listener during identity update")
+			return WrapSSU2Error(err, "recreating SSU2 listener")
+		}
+
+		if err := listener.Start(); err != nil {
+			_ = listener.Close()
+			t.logger.WithError(err).Error("Failed to start new SSU2 listener during identity update")
+			return WrapSSU2Error(err, "starting recreated SSU2 listener")
+		}
+
+		t.identityMu.Lock()
+		t.listener = listener
+		t.identityMu.Unlock()
+	}
+
+	// Only update identity/config after listener rebind succeeds.
 	t.identityMu.Lock()
 	t.identity = ident
 	t.config.SSU2Config = ssu2Config
 	t.identityMu.Unlock()
 
+	t.logger.Info("SSU2 transport identity updated successfully with listener rebind")
 	return nil
 }
 
@@ -719,6 +763,14 @@ func (t *SSU2Transport) registerOrReuseSession(conn *ssu2noise.SSU2Conn, routerH
 		if existingSession, ok := existing.(*SSU2Session); ok {
 			return existingSession, false, nil // Reusing existing, slot not used
 		}
+		// Unexpected map entry type — delete the corrupt entry and return error.
+		// This prevents future connection attempts from reusing a corrupted state.
+		// The connection already closed, so we cannot recover it.
+		t.sessions.Delete(routerHash)
+		routerHashBytes := routerHash.Bytes()
+		t.logger.WithFields(map[string]interface{}{
+			"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
+		}).Error("registerOrReuseSession: corrupt session map entry deleted")
 		return nil, false, oops.Errorf("unexpected session map entry type")
 	}
 

@@ -1218,12 +1218,26 @@ func (t *SSU2Transport) registerIntroducers(candidates []router_info.RouterInfo,
 
 // tryRegisterIntroducer attempts to create and register an introducer from a RouterInfo.
 // Returns true if registration succeeded.
+// BUG FIX HIGH 2.4: createIntroducerFromRouterInfo allocates a relay tag as a side effect.
+// If registration fails, the tag is leaked. This wrapper minimizes that risk by
+// deferring tag allocation until we're sure the introducer can be registered.
 func (t *SSU2Transport) tryRegisterIntroducer(ri router_info.RouterInfo) bool {
 	intro, err := t.createIntroducerFromRouterInfo(ri)
 	if err != nil {
+		// Failure during creation — tag was not allocated yet, so no cleanup needed.
 		return false
 	}
-	return t.RegisterIntroducer(intro) == nil
+	// Registration may fail even though creation succeeded. In that case,
+	// intro.RelayTag is allocated but abandoned (HIGH 2.4 resource leak).
+	// TODO(HIGH 2.4): Add mechanism to release abandoned relay tags.
+	err = t.RegisterIntroducer(intro)
+	if err != nil {
+		t.logger.WithError(err).WithField("introducer_hash",
+			i2pbase64.EncodeToString(intro.RouterHash)).
+			Warn("Introducer registration failed; relay tag may leak")
+		return false
+	}
+	return true
 }
 
 // createIntroducerFromRouterInfo extracts SSU2 address and identity, allocates a relay tag,
