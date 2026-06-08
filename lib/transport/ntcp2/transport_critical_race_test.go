@@ -258,3 +258,64 @@ func TestCRITICAL_1_1_SessionCountConsistency(t *testing.T) {
 	// But it should not exceed the initial allocation.
 	assert.LessOrEqual(t, finalCount, expectedCount, "session count should not exceed initial count %d", expectedCount)
 }
+
+// TestCRITICAL_R1_SetIdentityDoesNotKillAcceptLoop is a regression test for
+// R-1 (CRITICAL): SetIdentity permanently kills the NTCP2 accept loop.
+//
+// Bug: recreateListenerIfNeeded sets t.listener = nil temporarily during swap.
+// If acceptNextConnection observes nil, it returns false, terminating the loop.
+// Since the loop is guarded by acceptRunOnce, it never restarts.
+//
+// Fix: acceptNextConnection distinguishes "listener nil during swap" from
+// "listener nil during shutdown". It waits/retries when nil but transport
+// is still running, only terminating on actual shutdown.
+//
+// This test verifies that the accept loop remains operational after the
+// listener is temporarily nil during a SetIdentity operation.
+func TestCRITICAL_R1_SetIdentityDoesNotKillAcceptLoop(t *testing.T) {
+	// This test verifies the accept loop behavior when listener becomes temporarily nil.
+	// We simulate the scenario by manually setting listener to nil while transport is running.
+	transport, _ := newAcceptTestSetup(t, "10.0.0.1:5001", 10)
+
+	// Accept should work initially.
+	accepted, err := transport.Accept()
+	require.NoError(t, err)
+	require.NotNil(t, accepted)
+	assert.Equal(t, 1, transport.GetSessionCount())
+
+	// Close the accepted connection to free the slot.
+	accepted.Close()
+	assert.Equal(t, 0, transport.GetSessionCount())
+
+	// Simulate SetIdentity behavior: temporarily set listener to nil.
+	// The accept loop should NOT terminate, but rather wait/retry.
+	transport.identityMu.Lock()
+	oldListener := transport.listener
+	transport.listener = nil
+	transport.identityMu.Unlock()
+
+	// Give the accept loop time to observe the nil listener.
+	// With the fix, it should wait/retry, not terminate.
+	time.Sleep(100 * time.Millisecond)
+
+	// Restore the listener (simulating the end of SetIdentity swap).
+	transport.identityMu.Lock()
+	transport.listener = oldListener
+	transport.identityMu.Unlock()
+
+	// Enqueue another connection. The accept loop should still be running
+	// and should be able to accept this new connection.
+	newConn := newAcceptMockConn("10.0.0.2:5002")
+	select {
+	case transport.listener.(*mockListener).conns <- newConn:
+		// Successfully enqueued.
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("Failed to enqueue connection")
+	}
+
+	// Accept should still work (proving the loop didn't terminate).
+	accepted2, err := transport.Accept()
+	require.NoError(t, err, "Accept should work after listener swap")
+	require.NotNil(t, accepted2, "Accepted connection should not be nil")
+	assert.Equal(t, 1, transport.GetSessionCount())
+}

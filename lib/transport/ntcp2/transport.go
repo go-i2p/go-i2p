@@ -458,9 +458,21 @@ func (t *NTCP2Transport) acceptNextConnection() bool {
 	t.identityMu.RLock()
 	listener := t.listener
 	t.identityMu.RUnlock()
+
+	// Distinguish "listener nil during swap" from "listener nil during shutdown".
+	// If the transport is still running but listener is nil, wait and retry
+	// (SetIdentity is likely swapping the listener). Only terminate on shutdown.
 	if listener == nil {
-		t.logger.Debug("Listener is nil during accept; terminating accept loop")
-		return false
+		select {
+		case <-t.ctx.Done():
+			// Shutdown signaled; exit loop.
+			t.logger.Debug("Listener is nil and transport shutting down; terminating accept loop")
+			return false
+		case <-time.After(50 * time.Millisecond):
+			// Listener temporarily nil (likely during SetIdentity swap); retry.
+			t.logger.Debug("Listener is nil but transport running; waiting for listener swap to complete")
+			return true
+		}
 	}
 
 	rawConn, err := listener.Accept()
@@ -630,6 +642,8 @@ func (t *NTCP2Transport) extractAndStorePeerRouterInfo(ntcp2Conn *ntcp2.Conn, co
 		// not a warning that allows degraded routing. Abort handshake on parse failure.
 		t.logger.WithError(parseErr).WithField("remote_addr", conn.RemoteAddr().String()).
 			Warn("Inbound NTCP2: failed to parse peer RouterInfo from msg3; aborting handshake")
+		_ = ntcp2Conn.Close()
+		t.unreserveSessionSlot()
 		return oops.Errorf("RouterInfo parse failed: %w", parseErr)
 	}
 
