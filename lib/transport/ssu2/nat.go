@@ -1302,7 +1302,16 @@ func (t *SSU2Transport) StartNATDetection(candidates []router_info.RouterInfo, r
 }
 
 // runNATDetection carries out the NAT detection sequence inside a goroutine.
+// T-1 fix: Uses single-flight pattern (natDetectionRunning flag) to prevent
+// concurrent detection runs from overwriting shared retry state.
 func (t *SSU2Transport) runNATDetection(candidates []router_info.RouterInfo, republish func()) {
+	// T-1 fix: Single-flight check — if detection already running, skip this call.
+	if !t.natDetectionRunning.CompareAndSwap(false, true) {
+		t.logger.Info("NAT detection already in progress; skipping concurrent run")
+		return
+	}
+	defer t.natDetectionRunning.Store(false)
+
 	// Extract peer addresses and establish session
 	session, nonce, err := t.initiatePeerTest(candidates)
 	if err != nil {
@@ -1421,11 +1430,32 @@ func (t *SSU2Transport) handlePeerTestTimeout(candidates []router_info.RouterInf
 	t.peerTestRetryMu.Unlock()
 
 	if retryCount <= maxRetries {
-		// Calculate exponential backoff: 60s, 120s, 240s, ...
-		backoff := initialBackoff * time.Duration(1<<uint(retryCount-1))
+		// T-2 fix: Calculate exponential backoff with jitter to prevent thundering herd.
+		// Base: 60s, 120s, 240s; jitter adds ±25% randomization using crypto/rand for safety.
+		baseBackoff := initialBackoff * time.Duration(1<<uint(retryCount-1))
+		var backoff time.Duration
+
+		// Generate cryptographically secure random jitter (±25% of base backoff)
+		var randBytes [8]byte
+		if _, err := cryptorand.Read(randBytes[:]); err != nil {
+			t.logger.WithError(err).Warn("Failed to generate jitter; using base backoff")
+			backoff = baseBackoff
+		} else {
+			// Convert random bytes to float64 in [0, 1) range
+			randUint64 := uint64(randBytes[0]) | uint64(randBytes[1])<<8 | uint64(randBytes[2])<<16 |
+				uint64(randBytes[3])<<24 | uint64(randBytes[4])<<32 | uint64(randBytes[5])<<40 |
+				uint64(randBytes[6])<<48 | uint64(randBytes[7])<<56
+			randFloat := float64(randUint64) / float64(^uint64(0))
+
+			// Apply jitter: ±25% → range [0.75, 1.25] * baseBackoff
+			jitterFactor := 0.75 + (randFloat * 0.5) // 0.75 + [0, 0.5) = [0.75, 1.25)
+			backoff = time.Duration(float64(baseBackoff) * jitterFactor)
+		}
+
 		t.logger.WithFields(map[string]interface{}{
 			"timeout_seconds": 60,
 			"retry_count":     retryCount,
+			"base_backoff":    baseBackoff.String(),
 			"next_retry_in":   backoff.String(),
 		}).Warn("NAT detection: peer test timed out; scheduling retry to avoid false FIREWALLED classification")
 

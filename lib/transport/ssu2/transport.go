@@ -138,6 +138,11 @@ type SSU2Transport struct {
 	// observations confirm a new external address. Set after construction.
 	peerTestRepublish atomic.Value // stores func()
 
+	// T-1 fix: Single-flight guard prevents concurrent NAT detection runs.
+	// Multiple interleaved StartNATDetection calls would overwrite retry state;
+	// this flag ensures only one detection sequence runs at a time.
+	natDetectionRunning atomic.Bool
+
 	// Peer test retry state (T-1 fix): tracks consecutive failures and timing
 	// for exponential backoff retry of NAT detection. Protected by peerTestRetryMu.
 	peerTestRetryMu     sync.Mutex
@@ -730,18 +735,14 @@ func (t *SSU2Transport) SetIdentity(ident router_info.RouterInfo) error {
 	// L-1 fix item 3: Call stopNATManagers() before initNATManagers().
 	stopNATManagers(t)
 
-	// Snapshot the current listener address under lock before recreating the listener
-	t.identityMu.Lock()
+	// S-2 + S-3 fix: Snapshot old state (listener, address, identity, config) for rollback.
+	// Keep old listener active during new listener creation for atomic swap.
+	t.identityMu.RLock()
 	currentAddr := t.config.ListenerAddress
 	oldListener := t.listener
-	t.listener = nil
-	t.identityMu.Unlock()
-
-	if oldListener != nil {
-		if err := oldListener.Close(); err != nil {
-			t.logger.WithError(err).Warn("Error closing existing SSU2 listener during identity update")
-		}
-	}
+	oldIdentity := t.identity
+	oldSSU2Config := t.config.SSU2Config
+	t.identityMu.RUnlock()
 
 	// Create new listener with the new identity/config if one existed before.
 	if oldListener != nil {
@@ -779,36 +780,44 @@ func (t *SSU2Transport) SetIdentity(ident router_info.RouterInfo) error {
 			return WrapSSU2Error(err, "starting recreated SSU2 listener")
 		}
 
-		// S-2 fix: Install new listener under lock. From this point, Accept() uses new listener.
-		// Save old listener for cleanup. If NAT/key init fails below, restore old listener.
+		// S-2 + S-3 fix: Install new listener AND update identity/config under lock.
+		// From this point, Accept() uses new listener and NAT init sees new identity.
+		// If NAT/key init fails below, rollback restores ALL old state atomically.
 		t.identityMu.Lock()
 		t.listener = listener
 		t.config.ListenerAddress = newAddr
+		t.identity = ident
+		t.config.SSU2Config = ssu2Config
 		t.identityMu.Unlock()
 
 		// BUG FIX HIGH SM-1: Re-initialize NAT managers with the new listener.
 		// NAT managers must be bound to the new listener, not the old one.
-		// S-2 fix: On failure, close new listener and restore old listener to prevent nil state.
+		// S-3 fix: NAT managers now see new identity (t.identity updated above).
+		// S-2 fix: On failure, close new listener and restore ALL old state.
 		if err := initNATManagers(t); err != nil {
 			t.logger.WithError(err).Error("Failed to reinitialize NAT managers after identity update")
-			// Restore old listener so Accept() doesn't fail
+			// Rollback ALL state: listener, address, identity, config
 			t.identityMu.Lock()
 			_ = t.listener.Close() // Close failed new listener
 			t.listener = oldListener
 			t.config.ListenerAddress = currentAddr
+			t.identity = oldIdentity
+			t.config.SSU2Config = oldSSU2Config
 			t.identityMu.Unlock()
 			return err
 		}
 
 		// L-1 item 4: Re-initialize keyRotationManager with the new identity's keys.
-		// S-2 fix: On failure, close new listener and restore old listener.
+		// S-2 fix: On failure, close new listener and restore ALL old state.
 		if err := initKeyManagement(t, ssu2Config); err != nil {
 			t.logger.WithError(err).Error("Failed to reinitialize key rotation manager after identity update")
-			// Restore old listener so Accept() doesn't fail
+			// Rollback ALL state: listener, address, identity, config
 			t.identityMu.Lock()
 			_ = t.listener.Close() // Close failed new listener
 			t.listener = oldListener
 			t.config.ListenerAddress = currentAddr
+			t.identity = oldIdentity
+			t.config.SSU2Config = oldSSU2Config
 			t.identityMu.Unlock()
 			return err
 		}
@@ -820,12 +829,8 @@ func (t *SSU2Transport) SetIdentity(ident router_info.RouterInfo) error {
 		}
 	}
 
-	// Only update identity/config after listener rebind succeeds.
-	t.identityMu.Lock()
-	t.identity = ident
-	t.config.SSU2Config = ssu2Config
-	t.identityMu.Unlock()
-
+	// S-3 fix: Identity/config already updated above (before NAT init) so NAT managers
+	// see new identity during initialization. No further updates needed here.
 	t.logger.Info("SSU2 transport identity updated successfully with listener rebind")
 	return nil
 }
