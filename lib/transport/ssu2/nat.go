@@ -31,7 +31,14 @@ const (
 // IntroducerRegistry, and HolePunchCoordinator on a freshly started transport.
 // Must be called after t.listener is initialised.
 // Returns an error if HolePunchCoordinator initialization fails.
+// L-1: Creates a per-generation context for NAT goroutines so they can be cancelled
+// on SetIdentity without affecting the transport-level context.
 func initNATManagers(t *SSU2Transport) error {
+	// Create per-generation context for NAT goroutines (L-1 fix item 2).
+	t.natCtxMu.Lock()
+	t.natCtx, t.natCancel = context.WithCancel(t.ctx)
+	t.natCtxMu.Unlock()
+
 	t.relayManager = ssu2noise.NewRelayManager(t.listener)
 	t.introducerRegistry = ssu2noise.NewIntroducerRegistry(3)
 	verifyFn := func(block *ssu2noise.RelayIntroBlock, signerKey ed25519.PublicKey) error {
@@ -86,6 +93,35 @@ func initNATManagers(t *SSU2Transport) error {
 	t.startNATCleanup()
 	t.startNATPortMapRetry()
 	return nil
+}
+
+// stopNATManagers stops all NAT managers and cancels the per-generation NAT context
+// to signal NAT goroutines (cleanup, port mapping) to exit. L-1 fix item 1.
+// Must be called before initNATManagers in SetIdentity.
+func stopNATManagers(t *SSU2Transport) {
+	// Cancel the per-generation NAT context to stop NAT goroutines (L-1 item 2).
+	t.natCtxMu.Lock()
+	if t.natCancel != nil {
+		t.natCancel()
+		t.natCancel = nil
+		t.natCtx = nil
+	}
+	t.natCtxMu.Unlock()
+
+	// Stop all managers explicitly (L-1 item 4).
+	if t.relayManager != nil {
+		t.relayManager.Stop()
+	}
+	if t.peerTestManager != nil {
+		t.peerTestManager.Stop()
+	}
+	if t.holePunchCoord != nil {
+		t.holePunchCoord.Stop()
+	}
+	if t.keyRotationManager != nil {
+		t.keyRotationManager.Stop()
+	}
+	// introducerRegistry has no Stop method; just replace it.
 }
 
 // buildTransportCallbacks returns a BlockCallbackConfig whose handlers delegate
@@ -1692,7 +1728,11 @@ func (t *SSU2Transport) startNATPortMapRetry() {
 	t.wg.Add(1)
 	go func() {
 		defer t.wg.Done()
-		t.runPortMappingRetryLoop(internalPort)
+		// L-1: Capture per-generation NAT context.
+		t.natCtxMu.Lock()
+		natCtx := t.natCtx
+		t.natCtxMu.Unlock()
+		t.runPortMappingRetryLoop(natCtx, internalPort)
 	}()
 }
 
@@ -1718,10 +1758,10 @@ func (t *SSU2Transport) validateAndExtractPort() (int, bool) {
 }
 
 // runPortMappingRetryLoop performs the actual port mapping retry loop with exponential backoff.
-func (t *SSU2Transport) runPortMappingRetryLoop(internalPort int) {
+func (t *SSU2Transport) runPortMappingRetryLoop(natCtx context.Context, internalPort int) {
 	backoff := natRetryInitial
 	for {
-		if !t.waitForRetryDelay(backoff) {
+		if !t.waitForRetryDelay(natCtx, backoff) {
 			return
 		}
 
@@ -1733,9 +1773,9 @@ func (t *SSU2Transport) runPortMappingRetryLoop(internalPort int) {
 
 // waitForRetryDelay waits for the backoff delay or context cancellation.
 // Returns false if context is done, true if delay completed.
-func (t *SSU2Transport) waitForRetryDelay(backoff time.Duration) bool {
+func (t *SSU2Transport) waitForRetryDelay(natCtx context.Context, backoff time.Duration) bool {
 	select {
-	case <-t.ctx.Done():
+	case <-natCtx.Done():
 		return false
 	case <-time.After(backoff):
 		return true

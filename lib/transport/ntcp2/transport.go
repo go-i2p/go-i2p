@@ -33,6 +33,20 @@ type acceptedConn struct {
 	net.Conn
 }
 
+// Session Map Ownership Invariant (X-3 fix):
+// Each peerHash in the sessions map has EXACTLY ONE owner at any given time:
+//   - rawConn (net.Conn): owned by trackInboundConnection, transferable to Accept or promotion
+//   - acceptedConn: owned by the Accept() consumer; MUST NOT be promoted (dual-ownership)
+//   - *NTCP2Session: owned by the session lifecycle; cleanup via removeSession
+//
+// State transitions use CompareAndSwap to prevent race conditions:
+//   - rawConn → acceptedConn: CAS in inboundHandshakeWorker (after successful queue send)
+//   - rawConn → *NTCP2Session: CAS in promoteInboundConnection (via GetSession)
+//
+// If inbound Accept CAS fails, a concurrent GetSession has already promoted the connection;
+// do not deliver to Accept (ownership already transferred to the session).
+// If promotion CAS fails, another goroutine won the race; close the duplicate session.
+//
 // NTCP2Transport implements the I2P NTCP2 transport protocol, managing listener setup, session lifecycle, and peer connections.
 type NTCP2Transport struct {
 	// Network listener (uses net.Listener interface per guidelines)
@@ -69,9 +83,20 @@ type NTCP2Transport struct {
 	acceptRunOnce sync.Once
 
 	// Session management
+	// sessions map[string]<value> where value can be:
+	//  - net.Conn (raw inbound connection after trackInboundConnection, before Accept or promotion)
+	//  - acceptedConn (wrapper marking ownership transferred to Accept() consumer - MUST NOT promote)
+	//  - *NTCP2Session (fully established session)
+	// State transitions (all use CompareAndSwap to prevent races):
+	//  - net.Conn → acceptedConn (inboundHandshakeWorker after successful pendingConns send)
+	//  - net.Conn → *NTCP2Session (promotion via GetSession or setupSession)
+	// See "Session Map Ownership Invariant" comment above for details.
 	sessions       sync.Map // map[string]*NTCP2Session (keyed by router hash)
 	sessionCount   int32    // atomic O(1) session counter
 	isShuttingDown int32    // atomic flag set during Close() to prevent cleanup callbacks from double-decrementing
+
+	// Metrics for critical bugs (X-1)
+	acceptedConnPromotionAttempts int32 // atomic counter for bug detection: how many times promoteInboundConnection refused an acceptedConn
 
 	// TEST ONLY: bypass *ntcp2.Conn type check in performInboundHandshake.
 	// MUST NOT be set in production - allows un-handshaked connections (security risk).
@@ -1112,30 +1137,93 @@ func (t *NTCP2Transport) GetSession(routerInfo router_info.RouterInfo) (transpor
 	return t.createOutboundSession(routerInfo, routerHash)
 }
 
+// sessionMapEntryKind describes the type of entry found in the sessions map.
+type sessionMapEntryKind int
+
+const (
+	// entryIsSession indicates the entry is already a *NTCP2Session.
+	entryIsSession sessionMapEntryKind = iota
+	// entryIsRawConn indicates the entry is a raw net.Conn that needs promotion.
+	entryIsRawConn
+	// entryIsAcceptedConn indicates the entry is an acceptedConn owned by Accept().
+	entryIsAcceptedConn
+	// entryIsUnexpected indicates the entry has an unrecognized type.
+	entryIsUnexpected
+)
+
+// sessionMapEntryResolution describes the result of resolving a session map entry.
+// This factored helper ensures all lookup paths apply the same guards (X-1 fix).
+type sessionMapEntryResolution struct {
+	kind    sessionMapEntryKind
+	session *NTCP2Session // non-nil when kind == entryIsSession
+	rawConn net.Conn      // non-nil when kind == entryIsRawConn
+}
+
+// resolveSessionMapEntry examines a session map entry and returns a resolution
+// indicating whether it's already a session, needs promotion, should be skipped
+// (acceptedConn), or is an unexpected type. This helper centralizes the type
+// guards that prevent dual socket ownership (X-1) and accounting corruption (A-1).
+func (t *NTCP2Transport) resolveSessionMapEntry(existing interface{}) sessionMapEntryResolution {
+	// Fast path: already a full session.
+	if ntcp2Session, ok := existing.(*NTCP2Session); ok {
+		return sessionMapEntryResolution{
+			kind:    entryIsSession,
+			session: ntcp2Session,
+		}
+	}
+
+	// Skip connections already delivered to Accept() (X-1 fix).
+	// The Accept() consumer owns the socket; promotion would create dual ownership.
+	if _, ok := existing.(acceptedConn); ok {
+		return sessionMapEntryResolution{kind: entryIsAcceptedConn}
+	}
+
+	// Raw connection needs promotion.
+	if rawConn, ok := existing.(net.Conn); ok {
+		return sessionMapEntryResolution{
+			kind:    entryIsRawConn,
+			rawConn: rawConn,
+		}
+	}
+
+	// Unexpected type — should never happen in correct code.
+	return sessionMapEntryResolution{kind: entryIsUnexpected}
+}
+
 func (t *NTCP2Transport) findExistingSession(routerHash data.Hash) (transport.TransportSession, bool) {
-	session, exists := t.sessions.Load(routerHash)
+	existing, exists := t.sessions.Load(routerHash)
 	if !exists {
 		t.logNoSessionFound(routerHash)
 		return nil, false
 	}
 
-	if ntcp2Session, ok := session.(*NTCP2Session); ok {
-		return t.validateExistingSession(ntcp2Session, routerHash)
-	}
+	// Use centralized resolver to ensure consistent type guards across all lookup paths (X-1 fix).
+	resolution := t.resolveSessionMapEntry(existing)
 
-	// Skip connections already delivered to Accept() (X-1 fix).
-	// The Accept() consumer owns the socket; promotion would create dual ownership.
-	if _, ok := session.(acceptedConn); ok {
+	switch resolution.kind {
+	case entryIsSession:
+		return t.validateExistingSession(resolution.session, routerHash)
+
+	case entryIsRawConn:
+		return t.promoteInboundConnection(resolution.rawConn, existing, routerHash)
+
+	case entryIsAcceptedConn:
+		// Skip — socket is owned by Accept() consumer.
+		t.logNoSessionFound(routerHash)
+		return nil, false
+
+	case entryIsUnexpected:
+		// Log unexpected type and return not-found.
+		t.logger.WithField("entry_type", fmt.Sprintf("%T", existing)).
+			Error("findExistingSession: unexpected session map entry type")
+		t.logNoSessionFound(routerHash)
+		return nil, false
+
+	default:
+		// Unreachable — all enum values handled.
 		t.logNoSessionFound(routerHash)
 		return nil, false
 	}
-
-	if conn, ok := session.(net.Conn); ok {
-		return t.promoteInboundConnection(conn, session, routerHash)
-	}
-
-	t.logNoSessionFound(routerHash)
-	return nil, false
 }
 
 // validateExistingSession checks whether an existing NTCP2 session is still
@@ -1169,6 +1257,7 @@ func (t *NTCP2Transport) promoteInboundConnection(conn net.Conn, original interf
 	// This should never happen if findExistingSession is correct, but
 	// defense-in-depth prevents dual socket ownership.
 	if _, ok := original.(acceptedConn); ok {
+		atomic.AddInt32(&t.acceptedConnPromotionAttempts, 1)
 		routerHashBytes := routerHash.Bytes()
 		t.logger.WithFields(map[string]interface{}{
 			"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
@@ -1622,27 +1711,30 @@ func (t *NTCP2Transport) setupSession(conn *ntcp2.Conn, routerHash data.Hash) *N
 // setupSession stores *NTCP2Session values; this method handles both types
 // to prevent a type assertion panic when the two race.
 func (t *NTCP2Transport) resolveExistingSession(existing interface{}, routerHash data.Hash) *NTCP2Session {
-	// Fast path: already an NTCP2Session.
-	if ntcp2Session, ok := existing.(*NTCP2Session); ok {
-		return ntcp2Session
-	}
+	// Use centralized resolver to ensure consistent type guards across all lookup paths (X-1 fix).
+	resolution := t.resolveSessionMapEntry(existing)
 
-	// Skip connections already delivered to Accept() (R-3 fix).
-	// The Accept() consumer owns the socket; promotion would create dual ownership.
-	if _, ok := existing.(acceptedConn); ok {
+	switch resolution.kind {
+	case entryIsSession:
+		return resolution.session
+
+	case entryIsRawConn:
+		return t.promoteRawConnToSession(resolution.rawConn, routerHash, existing)
+
+	case entryIsAcceptedConn:
+		// Skip — socket is owned by Accept() consumer.
+		return nil
+
+	case entryIsUnexpected:
+		// Should not reach here in practice. Log an error and return nil.
+		t.logger.WithField("entry_type", fmt.Sprintf("%T", existing)).
+			Error("resolveExistingSession: unexpected session map entry type — returning nil")
+		return nil
+
+	default:
+		// Unreachable — all enum values handled.
 		return nil
 	}
-
-	// Slow path: Accept() stored a raw net.Conn. Promote it to a full
-	// NTCP2Session so the caller gets a usable session object.
-	if rawConn, ok := existing.(net.Conn); ok {
-		return t.promoteRawConnToSession(rawConn, routerHash, existing)
-	}
-
-	// Should not reach here in practice. Log an error and return a
-	// descriptive error via a nil session — callers must check for nil.
-	t.logger.Error("resolveExistingSession: unexpected session map entry type — returning nil")
-	return nil
 }
 
 // checkSessionLimit returns ErrConnectionPoolFull if the maximum number of
@@ -1901,6 +1993,15 @@ func (t *NTCP2Transport) handleCloseCompletion(listenerErr error) error {
 
 	t.logger.Info("NTCP2 transport closed successfully")
 	return nil
+}
+
+// AcceptedConnPromotionAttempts returns the number of times promoteInboundConnection
+// refused to promote an acceptedConn (X-1 bug detection metric).
+// This counter should remain at 0 in a correct implementation. A non-zero value
+// indicates findExistingSession bypassed the acceptedConn guard and attempted
+// dual socket ownership.
+func (t *NTCP2Transport) AcceptedConnPromotionAttempts() int32 {
+	return atomic.LoadInt32(&t.acceptedConnPromotionAttempts)
 }
 
 // Name returns the name of this transport.

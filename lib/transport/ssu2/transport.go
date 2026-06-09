@@ -41,6 +41,20 @@ type acceptedConn struct {
 	net.Conn
 }
 
+// Session Map Ownership Invariant (X-3 fix):
+// Each peerHash (RouterHash) in the sessions map has EXACTLY ONE owner at any given time:
+//   - net.Conn (raw or *ssu2noise.SSU2Conn): owned by trackInboundConnection, transferable to Accept or promotion
+//   - acceptedConn: owned by the Accept() consumer; MUST NOT be promoted (dual-ownership)
+//   - *SSU2Session: owned by the session lifecycle; cleanup via removeSession
+//
+// State transitions use CompareAndSwap to prevent race conditions:
+//   - rawConn → acceptedConn: CAS in inboundHandshakeWorker (after successful queue send)
+//   - rawConn → *SSU2Session: CAS in promoteInboundConnection (via GetSession) or registerOrReuseSession
+//
+// If inbound Accept CAS fails, a concurrent GetSession/dial has already promoted the connection;
+// do not deliver to Accept (ownership already transferred to the session).
+// If promotion CAS fails, another goroutine won the race; close the duplicate session.
+//
 // SSU2Transport implements transport.Transport for SSU2 connections.
 type SSU2Transport struct {
 	listener *ssu2noise.SSU2Listener
@@ -49,6 +63,15 @@ type SSU2Transport struct {
 	keystore KeystoreProvider
 	handler  *DefaultHandler
 
+	// Session management
+	// sessions map[RouterHash]<value> where value can be:
+	//  - net.Conn (raw inbound connection after trackInboundConnection, before Accept or promotion)
+	//  - acceptedConn (wrapper marking ownership transferred to Accept() consumer - MUST NOT promote)
+	//  - *SSU2Session (fully established session)
+	// State transitions (all use CompareAndSwap to prevent races):
+	//  - net.Conn → acceptedConn (inboundHandshakeWorker after successful pendingConns send)
+	//  - net.Conn → *SSU2Session (promotion via GetSession/registerOrReuseSession)
+	// See "Session Map Ownership Invariant" comment above for details.
 	sessions       sync.Map
 	sessionCount   int32
 	isShuttingDown int32 // atomic flag set during Close() to prevent cleanup callbacks from double-decrementing
@@ -93,6 +116,13 @@ type SSU2Transport struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
+
+	// NAT manager lifecycle: per-generation context for NAT goroutines and managers.
+	// L-1: Cancelled and replaced on each SetIdentity to stop old NAT goroutines
+	// before starting new ones.
+	natCtxMu  sync.Mutex
+	natCtx    context.Context
+	natCancel context.CancelFunc
 
 	logger *logger.Entry
 
@@ -679,11 +709,10 @@ func (t *SSU2Transport) SetIdentity(ident router_info.RouterInfo) error {
 	// the transport claims a new identity, violating protocol coherence.
 	// Close old listener and create new one with updated config.
 
-	// BUG FIX HIGH SM-1: Stop NAT managers before swapping the listener.
+	// BUG FIX HIGH SM-1 / L-1: Stop NAT managers and goroutines before swapping the listener.
 	// NAT managers hold references to the old listener and must be re-initialized.
-	if t.relayManager != nil {
-		t.relayManager.Stop()
-	}
+	// L-1 fix item 3: Call stopNATManagers() before initNATManagers().
+	stopNATManagers(t)
 
 	// Snapshot the current listener address under lock before recreating the listener
 	t.identityMu.Lock()
@@ -745,6 +774,12 @@ func (t *SSU2Transport) SetIdentity(ident router_info.RouterInfo) error {
 		// NAT managers must be bound to the new listener, not the old one.
 		if err := initNATManagers(t); err != nil {
 			t.logger.WithError(err).Error("Failed to reinitialize NAT managers after identity update")
+			return err
+		}
+
+		// L-1 item 4: Re-initialize keyRotationManager with the new identity's keys.
+		if err := initKeyManagement(t, ssu2Config); err != nil {
+			t.logger.WithError(err).Error("Failed to reinitialize key rotation manager after identity update")
 			return err
 		}
 	}

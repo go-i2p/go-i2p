@@ -322,3 +322,189 @@ func TestCRITICAL_R1_SetIdentityDoesNotKillAcceptLoop(t *testing.T) {
 	require.NotNil(t, accepted2, "Accepted connection should not be nil")
 	assert.Equal(t, 1, transport.GetSessionCount())
 }
+
+// TestX1_DualSocketOwnership_AcceptedConnNotPromoted is a regression test for X-1:
+// "Inconsistent acceptedConn guarding → dual socket ownership (NTCP2)".
+//
+// This test verifies that:
+//  1. After Accept() stores an acceptedConn wrapper and delivers it to a consumer,
+//  2. A concurrent GetSession() call to the same peer hash does NOT promote the acceptedConn.
+//  3. GetSession() correctly returns (nil, not-found) instead of attempting promotion.
+//
+// Without the X-1 fix, GetSession() would match the acceptedConn's embedded net.Conn
+// and attempt to promote it, creating dual socket ownership (concurrent reads/writes
+// on the same socket → wire corruption, AEAD/frame desync, anonymity-relevant garbage).
+//
+// This test must pass with `go test -race`.
+func TestX1_DualSocketOwnership_AcceptedConnNotPromoted(t *testing.T) {
+	transport := newNilListenerTestTransport(t, 100)
+	defer transport.Close()
+
+	peerHash := newTestPeerHash("x1-dual-owner-prevention-!!")
+	rawConn := newAcceptMockConn("192.168.1.200:5200")
+
+	// Simulate the state after Accept() has wrapped the connection and delivered it:
+	// The sessions map contains an acceptedConn wrapper (not a raw net.Conn or *NTCP2Session).
+	acceptedWrapper := acceptedConn{Conn: rawConn}
+	transport.sessions.Store(peerHash, acceptedWrapper)
+	atomic.AddInt32(&transport.sessionCount, 1)
+
+	// At this point, the Accept() consumer owns the socket. Concurrent GetSession()
+	// calls should NOT attempt to promote this acceptedConn.
+
+	// Simulate multiple concurrent GetSession() attempts to the same peer.
+	const concurrentAttempts = 10
+	var wg sync.WaitGroup
+	promotionAttempts := int32(0)
+	foundResults := make([]bool, concurrentAttempts)
+
+	wg.Add(concurrentAttempts)
+	for i := 0; i < concurrentAttempts; i++ {
+		i := i
+		go func() {
+			defer wg.Done()
+			// findExistingSession is the primary GetSession lookup path.
+			session, found := transport.findExistingSession(peerHash)
+			foundResults[i] = found
+			if found && session != nil {
+				atomic.AddInt32(&promotionAttempts, 1)
+			}
+		}()
+	}
+	wg.Wait()
+
+	// Verify that NO promotion occurred — all GetSession attempts should have
+	// returned (nil, false) because acceptedConn is skipped by the guard.
+	assert.Equal(t, int32(0), atomic.LoadInt32(&promotionAttempts),
+		"GetSession should not promote acceptedConn (X-1 fix)")
+
+	for i, found := range foundResults {
+		assert.False(t, found, "GetSession attempt %d should return false (not found) for acceptedConn", i)
+	}
+
+	// Verify the map entry remains an acceptedConn (not promoted to *NTCP2Session).
+	entry, exists := transport.sessions.Load(peerHash)
+	require.True(t, exists, "acceptedConn entry should still exist")
+	_, isAcceptedConn := entry.(acceptedConn)
+	assert.True(t, isAcceptedConn, "map entry should remain acceptedConn, got %T", entry)
+
+	// Verify session count is still 1 (no accounting corruption).
+	assert.Equal(t, int32(1), atomic.LoadInt32(&transport.sessionCount),
+		"session count should remain 1 (no double-counting from promotion attempts)")
+
+	// Verify the metric counter remains at 0 (no promotion attempts were made
+	// because findExistingSession correctly skips acceptedConn).
+	// If this counter is non-zero, it means the defensive check in
+	// promoteInboundConnection was reached, indicating findExistingSession failed.
+	assert.Equal(t, int32(0), transport.AcceptedConnPromotionAttempts(),
+		"Metric should be 0 because findExistingSession skips acceptedConn before calling promoteInboundConnection")
+}
+
+// TestX1_DefenseInDepth_MetricIncrementsOnAcceptedConnPromotion tests the
+// defense-in-depth metric in promoteInboundConnection. This test simulates
+// a hypothetical bug where findExistingSession's guard fails and an acceptedConn
+// reaches promoteInboundConnection. The defensive check should refuse the promotion
+// and increment the metric.
+func TestX1_DefenseInDepth_MetricIncrementsOnAcceptedConnPromotion(t *testing.T) {
+	transport := newNilListenerTestTransport(t, 100)
+	defer transport.Close()
+
+	peerHash := newTestPeerHash("x1-defense-metric-test-!!")
+	rawConn := newAcceptMockConn("192.168.1.201:5201")
+	acceptedWrapper := acceptedConn{Conn: rawConn}
+
+	// Verify initial metric state is 0.
+	assert.Equal(t, int32(0), transport.AcceptedConnPromotionAttempts(),
+		"Metric should start at 0")
+
+	// Directly call promoteInboundConnection with an acceptedConn.
+	// This simulates a bug where findExistingSession failed to skip acceptedConn.
+	// The defensive check should refuse the promotion and increment the metric.
+	session, promoted := transport.promoteInboundConnection(rawConn, acceptedWrapper, peerHash)
+	assert.Nil(t, session, "promoteInboundConnection should refuse acceptedConn and return nil")
+	assert.False(t, promoted, "promoteInboundConnection should return false for acceptedConn")
+
+	// Verify the metric was incremented to 1.
+	assert.Equal(t, int32(1), transport.AcceptedConnPromotionAttempts(),
+		"Metric should increment to 1 after refusing acceptedConn promotion")
+
+	// Call again to verify the metric increments multiple times.
+	session2, promoted2 := transport.promoteInboundConnection(rawConn, acceptedWrapper, peerHash)
+	assert.Nil(t, session2, "Second call should also refuse acceptedConn")
+	assert.False(t, promoted2, "Second call should return false")
+
+	assert.Equal(t, int32(2), transport.AcceptedConnPromotionAttempts(),
+		"Metric should increment to 2 after second refusal")
+}
+
+// TestX3_AcceptStoreVsPromotionCAS is a regression test for X-3:
+// "Unconditional Store clobbers a concurrent promotion (both transports)".
+//
+// This test verifies that:
+//  1. After trackInboundConnection stores a rawConn in the session map,
+//  2. Concurrent CAS operations (Accept → acceptedConn, GetSession → promotion) are serialized correctly.
+//  3. Only ONE owner wins: either Accept gets the socket, or promotion creates a session.
+//  4. The loser detects CAS failure and reconciles ownership (no dual ownership, no leaks).
+//
+// Without the X-3 fix (unconditional Store instead of CAS), the Accept path would
+// clobber a promoted session, orphaning it while a caller uses it, leading to
+// dual ownership when the session's cleanup callback later deletes the acceptedConn.
+//
+// This test must pass with `go test -race`.
+func TestX3_AcceptStoreVsPromotionCAS(t *testing.T) {
+	transport := newNilListenerTestTransport(t, 100)
+	defer transport.Close()
+
+	const concurrentRaces = 50
+	var wg sync.WaitGroup
+	wg.Add(concurrentRaces * 2) // Accept CAS + Promotion CAS per race
+
+	for i := 0; i < concurrentRaces; i++ {
+		i := i
+		peerHash := newTestPeerHash(fmt.Sprintf("x3-race-%d", i))
+		rawConn := newAcceptMockConn(fmt.Sprintf("192.168.1.%d:5400", 100+i))
+
+		// Simulate trackInboundConnection storing the rawConn.
+		transport.sessions.Store(peerHash, rawConn)
+		atomic.AddInt32(&transport.sessionCount, 1)
+
+		// Race 1: Accept path tries to CAS rawConn → acceptedConn.
+		go func() {
+			defer wg.Done()
+			acceptedWrapper := acceptedConn{Conn: rawConn}
+			casSucceeded := transport.sessions.CompareAndSwap(peerHash, rawConn, acceptedWrapper)
+			if !casSucceeded {
+				// Promotion won; Accept should not deliver this connection.
+				// In real code, this would trigger the "Inbound connection promoted concurrently" path.
+			}
+		}()
+
+		// Race 2: GetSession path tries to promote rawConn → *NTCP2Session.
+		go func() {
+			defer wg.Done()
+			_, _ = transport.promoteInboundConnection(rawConn, rawConn, peerHash)
+			// promoteInboundConnection internally does CAS; if it fails, the promoted
+			// session is closed and the winner is used.
+		}()
+	}
+
+	wg.Wait()
+
+	// Verify session map integrity: each peerHash should have exactly one owner
+	// (either acceptedConn or *NTCP2Session, never both, never lost).
+	transport.sessions.Range(func(key, value interface{}) bool {
+		_, isAcceptedConn := value.(acceptedConn)
+		_, isSession := value.(*NTCP2Session)
+		assert.True(t, isAcceptedConn || isSession,
+			"Map entry must be either acceptedConn or *NTCP2Session, got %T", value)
+		return true
+	})
+
+	// Verify sessionCount consistency: initial count + winners should equal final count.
+	// Each race had 1 initial Store; winners kept their entries; losers didn't leak.
+	finalCount := atomic.LoadInt32(&transport.sessionCount)
+	assert.Greater(t, finalCount, int32(0),
+		"sessionCount should be positive (some entries remain)")
+	assert.LessOrEqual(t, finalCount, int32(concurrentRaces),
+		"sessionCount should not exceed initial slots (no double-counting)")
+}

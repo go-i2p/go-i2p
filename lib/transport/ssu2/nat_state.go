@@ -132,9 +132,12 @@ func (t *SSU2Transport) startNATCleanup() {
 		defer t.wg.Done()
 		ticker := time.NewTicker(natCleanupInterval)
 		defer ticker.Stop()
+		t.natCtxMu.Lock()
+		natCtx := t.natCtx
+		t.natCtxMu.Unlock()
 		for {
 			select {
-			case <-t.ctx.Done():
+			case <-natCtx.Done():
 				return
 			case <-ticker.C:
 				if t.peerTestManager != nil {
