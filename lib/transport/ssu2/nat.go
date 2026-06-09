@@ -987,6 +987,11 @@ func (t *SSU2Transport) initiateHolePunch(intro *ssu2noise.RelayIntroBlock, bobS
 
 	// BUG FIX HIGH E-2: Only send hole-punch/RelayResponse when InitiateHolePunch succeeds.
 	// This prevents reflection attacks where an attacker triggers emissions to arbitrary IPs.
+	// E-2 fix (defense-in-depth): Guard against nil holePunchCoord (NAT-degraded mode).
+	if t.holePunchCoord == nil {
+		t.logger.Warn("hole-punch: coordinator unavailable (NAT-degraded mode); cannot complete hole-punch")
+		return oops.Errorf("NAT managers not initialized")
+	}
 	_, err := t.holePunchCoord.InitiateHolePunch(aliceAddr, bobAddr, intro.AliceRelayTag)
 	if err != nil {
 		t.logger.WithField("error", err).Warn("hole-punch coordinator registration failed; not sending hole-punch/RelayResponse")

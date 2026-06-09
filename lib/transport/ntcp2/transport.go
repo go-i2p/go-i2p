@@ -98,6 +98,11 @@ type NTCP2Transport struct {
 	// Metrics for critical bugs (X-1)
 	acceptedConnPromotionAttempts int32 // atomic counter for bug detection: how many times promoteInboundConnection refused an acceptedConn
 
+	// E-3 fix: Track RouterInfo store failures for observability and alerting.
+	// Incremented when storeRouterInfoInNetDB fails (NetDB unavailable, parse errors, storage I/O failures).
+	// High count indicates NetDB problems that break OBEP reply routing.
+	routerInfoStoreFailures int32 // atomic counter
+
 	// TEST ONLY: bypass *ntcp2.Conn type check in performInboundHandshake.
 	// MUST NOT be set in production - allows un-handshaked connections (security risk).
 	testBypassHandshakeTypeCheck bool
@@ -748,10 +753,16 @@ func (t *NTCP2Transport) extractAndStorePeerRouterInfo(ntcp2Conn *ntcp2.Conn, co
 
 	t.updateRemoteAddressWithIdentHash(ntcp2Conn, peerRI)
 	if err := t.storeRouterInfoInNetDB(peerRI, conn); err != nil {
+		// E-3 fix: Increment observable metric on store failure for monitoring.
+		atomic.AddInt32(&t.routerInfoStoreFailures, 1)
 		// E-5: Storage failures are now observable; log at Warn (not Error, because the
 		// handshake succeeded and the session can still be used for message routing).
-		t.logger.WithError(err).WithField("remote_addr", conn.RemoteAddr().String()).
-			Warn("Inbound NTCP2: handshake succeeded but failed to persist peer RouterInfo in NetDB")
+		// E-3: Enhanced log with guidance for operators.
+		t.logger.WithError(err).WithFields(map[string]interface{}{
+			"remote_addr":          conn.RemoteAddr().String(),
+			"total_store_failures": atomic.LoadInt32(&t.routerInfoStoreFailures),
+			"impact":               "OBEP reply routing may fail for this peer",
+		}).Warn("Inbound NTCP2: handshake succeeded but failed to persist peer RouterInfo in NetDB")
 	}
 	return nil
 }
@@ -1862,6 +1873,14 @@ func (t *NTCP2Transport) removeSession(routerHash data.Hash) {
 // Uses an atomic counter for O(1) performance instead of iterating the session map.
 func (t *NTCP2Transport) GetSessionCount() int {
 	return int(atomic.LoadInt32(&t.sessionCount))
+}
+
+// GetRouterInfoStoreFailures returns the total count of RouterInfo storage failures
+// since transport startup. Incremented each time storeRouterInfoInNetDB fails.
+// E-3 fix: Exposes NetDB health for monitoring and alerting. High count indicates
+// NetDB unavailability or I/O errors that break OBEP reply routing.
+func (t *NTCP2Transport) GetRouterInfoStoreFailures() int {
+	return int(atomic.LoadInt32(&t.routerInfoStoreFailures))
 }
 
 // GetTotalBandwidth returns the total bytes sent and received across all active sessions.

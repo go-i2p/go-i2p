@@ -143,6 +143,11 @@ type SSU2Transport struct {
 	// this flag ensures only one detection sequence runs at a time.
 	natDetectionRunning atomic.Bool
 
+	// E-2 fix: Track NAT manager initialization health. Set to true when initNATManagers
+	// succeeds, false when it fails. Allows health checks and metrics to expose NAT-degraded mode.
+	// When false, NAT traversal features (hole-punching, peer tests, relay) are unavailable.
+	natManagersHealthy atomic.Bool
+
 	// Peer test retry state (T-1 fix): tracks consecutive failures and timing
 	// for exponential backoff retry of NAT detection. Protected by peerTestRetryMu.
 	peerTestRetryMu     sync.Mutex
@@ -504,8 +509,13 @@ func startSSU2Listener(t *SSU2Transport, udpConn net.PacketConn, ssu2Config *ssu
 
 	t.listener = listener
 	if err := initNATManagers(t); err != nil {
-		t.logger.WithError(err).Warn("NAT manager initialization failed; NAT features may be degraded")
-		// Don't fail transport startup, but log the failure so operators are aware
+		// E-2 fix: Set health status to false when NAT init fails.
+		t.natManagersHealthy.Store(false)
+		t.logger.WithError(err).Warn("NAT manager initialization failed; NAT features degraded (hole-punching, peer tests, relay unavailable)")
+		// Don't fail transport startup, but log the failure and mark degraded mode
+	} else {
+		// E-2 fix: Set health status to true on successful NAT init.
+		t.natManagersHealthy.Store(true)
 	}
 	return nil
 }
@@ -794,7 +804,9 @@ func (t *SSU2Transport) SetIdentity(ident router_info.RouterInfo) error {
 		// NAT managers must be bound to the new listener, not the old one.
 		// S-3 fix: NAT managers now see new identity (t.identity updated above).
 		// S-2 fix: On failure, close new listener and restore ALL old state.
+		// E-2 fix: Track NAT manager health status.
 		if err := initNATManagers(t); err != nil {
+			t.natManagersHealthy.Store(false) // E-2 fix: Mark NAT degraded
 			t.logger.WithError(err).Error("Failed to reinitialize NAT managers after identity update")
 			// Rollback ALL state: listener, address, identity, config
 			t.identityMu.Lock()
@@ -806,6 +818,7 @@ func (t *SSU2Transport) SetIdentity(ident router_info.RouterInfo) error {
 			t.identityMu.Unlock()
 			return err
 		}
+		t.natManagersHealthy.Store(true) // E-2 fix: Mark NAT healthy on success
 
 		// L-1 item 4: Re-initialize keyRotationManager with the new identity's keys.
 		// S-2 fix: On failure, close new listener and restore ALL old state.
@@ -1185,6 +1198,14 @@ func (t *SSU2Transport) Compatible(routerInfo router_info.RouterInfo) bool {
 		return true
 	}
 	return false
+}
+
+// NATManagersHealthy returns true if NAT managers (hole-punching, peer tests, relay)
+// initialized successfully. When false, the transport is in NAT-degraded mode: basic
+// connections work, but NAT traversal features are unavailable.
+// E-2 fix: Explicit health status visibility for monitoring and metrics.
+func (t *SSU2Transport) NATManagersHealthy() bool {
+	return t.natManagersHealthy.Load()
 }
 
 // Close closes the transport cleanly.
