@@ -546,13 +546,16 @@ func (t *NTCP2Transport) inboundHandshakeWorker(conn net.Conn) {
 		// don't deliver it to Accept (ownership already transferred).
 		originalConn := tracked.(*trackedConn).Conn
 		if !t.sessions.CompareAndSwap(peerHash, originalConn, acceptedConn{Conn: tracked}) {
-			// Promotion race: concurrent GetSession won. Close the tracked wrapper
-			// and unreserve the slot since we're not delivering to Accept.
+			// Promotion race: concurrent GetSession already promoted this to a session.
+			// The promoted session now owns the underlying conn and the reserved slot.
+			// Do NOT call tracked.Close() here - it would:
+			//   1. Close the conn now owned by the promoted session (interferes with it)
+			//   2. Fire onClose callback which removes the promoted session from map
+			// The trackedConn wrapper is safely GC'd. (trackedConn cleanup race fix)
 			t.logger.WithFields(map[string]interface{}{
 				"remote_addr": conn.RemoteAddr().String(),
 				"peer_hash":   fmt.Sprintf("%x", peerHash[:8]),
 			}).Debug("Inbound connection promoted concurrently; not delivering to Accept")
-			tracked.Close()
 			return
 		}
 	case <-sendCtx.Done():
@@ -1211,8 +1214,6 @@ func (t *NTCP2Transport) promoteInboundConnection(conn net.Conn, original interf
 	// Another goroutine won the promotion race — close our duplicate.
 	// Workers will exit cleanly due to context.Done().
 	_ = promoted.Close()
-	// Release the session slot reserved by Accept's checkSessionLimit (CRITICAL-2.1 fix).
-	t.unreserveSessionSlot()
 	if winner, exists := t.sessions.Load(routerHash); exists {
 		if winnerSession, ok := winner.(*NTCP2Session); ok {
 			return winnerSession, true

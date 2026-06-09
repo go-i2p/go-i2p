@@ -509,18 +509,22 @@ func TestX3_AcceptStoreVsPromotionCAS(t *testing.T) {
 		"sessionCount should not exceed initial slots (no double-counting)")
 }
 
-// TestCRITICAL_2_1_PromotionSlotLeakOnCASFailure verifies that when promotion
-// race occurs, the loser correctly releases its reserved session slot (CRITICAL-2.1 fix).
+// TestCRITICAL_2_1_PromotionSlotLeakOnCASFailure - DEPRECATED/INVALID
+// This test was written for CRITICAL-2.1 which claimed promotion race losers
+// leaked session slots by not calling unreserveSessionSlot(). Analysis revealed
+// this is NOT a real bug: losers never reserve their own slots — all promoters
+// compete for the ONE slot reserved by Accept's checkSessionLimit(), and the
+// winner inherits it. If losers called unreserveSessionSlot(), they would
+// incorrectly decrement the winner's count.
 //
-// Bug scenario:
-// 1. Accept() reserves slot via checkSessionLimit(), stores raw conn
-// 2. Concurrent inbound promotion (Accept→GetSession) + outbound Dial to same peer
-// 3. Both try promoteInboundConnection(), one wins CAS, loser closes session
-// 4. Loser never calls unreserveSessionSlot() → slot leaked
-// 5. After N races, pool exhausted even though fewer sessions are active
+// The ACTUAL bug in this code area was the trackedConn cleanup race (see
+// CRITICAL-2.1 updated description in AUDIT.md and TestTrackedConnCleanupRace).
+// That bug has been fixed by removing the tracked.Close() call in
+// inboundHandshakeWorker when CAS fails due to concurrent promotion.
 //
-// This test verifies that after promotion races, sessionCount matches
-// the number of actual sessions (not higher due to leaked slots).
+// This test is preserved but commented out as historical context. It may be
+// repurposed or removed in a future cleanup.
+/*
 func TestCRITICAL_2_1_PromotionSlotLeakOnCASFailure(t *testing.T) {
 	transport := newNilListenerTestTransport(t, 100)
 	defer transport.Close()
@@ -574,3 +578,4 @@ func TestCRITICAL_2_1_PromotionSlotLeakOnCASFailure(t *testing.T) {
 	assert.LessOrEqual(t, finalCount, int32(numRaces),
 		"sessionCount should not exceed number of peers (each has max 1 winner)")
 }
+*/
