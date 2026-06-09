@@ -2,6 +2,7 @@ package ntcp2
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"errors"
 	"fmt"
@@ -270,8 +271,9 @@ func buildTransportInstance(config *Config, identity router_info.RouterInfo, key
 // socket, and rebinds that port. To handle the TOCTOU race where another process
 // may claim the port between probe and rebind, this function retries up to
 // maxPortProbeRetries times. Each retry probes a new port and attempts rebind.
+// P-1 partial mitigation: Increased retries to 5, added jitter, clear error message.
 func bindOSAssignedPort(config *Config) (net.Listener, error) {
-	const maxPortProbeRetries = 3
+	const maxPortProbeRetries = 5 // P-1: increased from 3 to 5
 	var lastErr error
 
 	for attempt := 0; attempt < maxPortProbeRetries; attempt++ {
@@ -327,13 +329,24 @@ func bindOSAssignedPort(config *Config) (net.Listener, error) {
 				"attempt": attempt + 1,
 				"error":   err,
 			}).Warn("TOCTOU race: probed port claimed by another process; retrying")
-			// Wait 50ms between retries to give TIME_WAIT entries a chance to expire
-			// and reduce contention with other processes competing for ports (7.1).
-			time.Sleep(50 * time.Millisecond)
+			// P-1: Wait with jitter between retries to reduce contention.
+			// Base 50ms + ±25% jitter = [37.5ms, 62.5ms]
+			baseDelay := 50 * time.Millisecond
+			jitterBytes := make([]byte, 2)
+			if _, randErr := rand.Read(jitterBytes); randErr == nil {
+				// Convert 2 random bytes to float64 in [0, 1)
+				randVal := float64(uint16(jitterBytes[0])<<8|uint16(jitterBytes[1])) / 65536.0
+				jitterFactor := 0.75 + (randVal * 0.5) // [0.75, 1.25]
+				baseDelay = time.Duration(float64(baseDelay) * jitterFactor)
+			} else {
+				log.WithError(randErr).Warn("Failed to generate jitter; using base delay")
+			}
+			time.Sleep(baseDelay)
 		}
 	}
 
-	return nil, oops.Wrapf(lastErr, "failed to bind port after %d probe attempts due to TOCTOU race", maxPortProbeRetries)
+	// P-1: Clear error message when all retries exhausted
+	return nil, oops.Wrapf(lastErr, "failed to bind OS-assigned port after %d attempts (TOCTOU race: another process keeps claiming probed ports)", maxPortProbeRetries)
 }
 
 // isLoopbackAddress returns true if host is empty, a loopback IP, or resolves

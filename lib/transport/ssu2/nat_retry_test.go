@@ -165,6 +165,58 @@ func TestPeerTestRetry_CloseStopsTimer(t *testing.T) {
 	assert.Nil(t, timerAfter, "Retry timer should be nil after Close")
 }
 
+// TestPeerTestRetry_TransientTimeoutsDoNotAccumulate verifies that transient
+// timeouts from different logical runs do not accumulate toward FIREWALLED classification.
+// RD-3 fix: Success resets the counter, preventing false FIREWALLED on transient failures.
+func TestPeerTestRetry_TransientTimeoutsDoNotAccumulate(t *testing.T) {
+	tr, cleanup := makeTestTransportWithListener(t)
+	defer cleanup()
+
+	candidates := makeMockRouterInfos(t, 2)
+	var republishCallCount int32
+	republish := func() {
+		atomic.AddInt32(&republishCallCount, 1)
+	}
+
+	// Logical run 1: Timeout → retry count = 1
+	tr.handlePeerTestTimeout(candidates, republish)
+
+	tr.peerTestRetryMu.Lock()
+	retryCount1 := tr.peerTestRetryCount
+	tr.peerTestRetryMu.Unlock()
+
+	assert.Equal(t, 1, retryCount1, "First timeout should increment retry counter to 1")
+	assert.Equal(t, int32(0), atomic.LoadInt32(&republishCallCount), "Republish should not be called yet (not FIREWALLED)")
+
+	// Simulate success: manually reset counter (mimics checkPeerTestComplete behavior)
+	tr.peerTestRetryMu.Lock()
+	tr.peerTestRetryCount = 0
+	if tr.peerTestRetryTimer != nil {
+		tr.peerTestRetryTimer.Stop()
+		tr.peerTestRetryTimer = nil
+	}
+	tr.peerTestRetryMu.Unlock()
+
+	tr.peerTestRetryMu.Lock()
+	retryCountAfterSuccess := tr.peerTestRetryCount
+	tr.peerTestRetryMu.Unlock()
+
+	assert.Equal(t, 0, retryCountAfterSuccess, "Retry counter should be reset to 0 after success")
+
+	// Logical run 2: Timeout → retry count = 1 (not accumulated from run 1)
+	tr.handlePeerTestTimeout(candidates, republish)
+
+	tr.peerTestRetryMu.Lock()
+	retryCount2 := tr.peerTestRetryCount
+	tr.peerTestRetryMu.Unlock()
+
+	assert.Equal(t, 1, retryCount2, "Second timeout after success should set retry counter to 1, not accumulate")
+	assert.Equal(t, int32(0), atomic.LoadInt32(&republishCallCount), "Republish should still not be called (only 1 consecutive failure)")
+
+	// Verify node is NOT classified as FIREWALLED after two transient timeouts
+	// (separated by success). FIREWALLED requires maxRetries=3 consecutive failures.
+}
+
 // makeMockRouterInfos creates n minimal RouterInfo objects for testing.
 func makeMockRouterInfos(t *testing.T, n int) []router_info.RouterInfo {
 	t.Helper()

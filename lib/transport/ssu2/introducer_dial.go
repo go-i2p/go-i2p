@@ -317,6 +317,8 @@ func (t *SSU2Transport) sendRelayRequest(bobSession *SSU2Session, intro Introduc
 // externalAddressForRelay returns the external IP and port to use in RelayRequest/RelayResponse.
 // BUG FIX HIGH RD-2: Prefers the confirmed external address from PeerTest observations/NAT mapping
 // over the local bind address. Falls back to localIPPort() only when no external address is known yet.
+// RD-2 fix: Validates fallback address with isValidExternalAddress - refuses to emit relay/hole-punch
+// material with wildcard/private IPs that will be rejected by Charlie.
 func (t *SSU2Transport) externalAddressForRelay() (net.IP, uint16, error) {
 	externalStr := t.GetCachedExternalAddr()
 	if externalStr != "" {
@@ -329,10 +331,19 @@ func (t *SSU2Transport) externalAddressForRelay() (net.IP, uint16, error) {
 			}
 		}
 	}
-	// Fall back to local listener address (bind address) when external is unknown.
-	// This fallback may still advertise an unroutable address on first boot before
-	// PeerTest observations complete, but at least avoids advertising 0.0.0.0.
-	return t.localIPPort()
+	// RD-2 fix: Fall back to local listener address (bind address) when external is unknown,
+	// but validate before use. Refuse to emit unroutable addresses in relay blocks - Charlie
+	// will reject them and hole-punching will fail silently.
+	ip, port, err := t.localIPPort()
+	if err != nil {
+		return nil, 0, err
+	}
+	// RD-2 fix: Validate fallback before signing into relay material.
+	if !isValidExternalAddress(ip) {
+		return nil, 0, oops.New("external address not yet confirmed and bind address is not routable " +
+			"(wildcard/private/loopback); defer relay operations until PeerTest completes")
+	}
+	return ip, port, nil
 }
 
 // localIPPort extracts Alice's IP and port from the transport listener.
