@@ -457,16 +457,23 @@ func (t *SSU2Transport) handlePeerTestAsAlice(ptBlock *ssu2noise.PeerTestBlock) 
 	nonce := ptBlock.Nonce
 	externalAddr := extractAliceAddress(ptBlock)
 
+	// CRITICAL-6.1: Fail-closed if manager unavailable. Without this check,
+	// an attacker can send unsolicited PeerTest replies when manager is nil
+	// (e.g., after initialization failure) and bypass nonce verification,
+	// poisoning the external address cache with arbitrary IPs.
+	if t.peerTestManager == nil {
+		t.logger.Warn("PeerTest observation rejected: manager unavailable")
+		return nil
+	}
+
 	// BUG FIX HIGH RD-1: Verify the PeerTest nonce belongs to a test this node
 	// initiated before recording the observation. An attacker can send unsolicited
 	// PeerTest replies with arbitrary nonces to poison the address-confirmation cache.
 	// Fail-closed: if the nonce is unknown, ignore the observation entirely.
-	if t.peerTestManager != nil {
-		test := t.peerTestManager.GetTest(nonce)
-		if test == nil {
-			t.logger.WithField("nonce", nonce).Warn("PeerTest: ignoring observation with unknown nonce (potential injection attack)")
-			return nil
-		}
+	test := t.peerTestManager.GetTest(nonce)
+	if test == nil {
+		t.logger.WithField("nonce", nonce).Warn("PeerTest: ignoring observation with unknown nonce (potential injection attack)")
+		return nil
 	}
 
 	result := &ssu2noise.TestResult{

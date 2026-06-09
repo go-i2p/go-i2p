@@ -815,6 +815,16 @@ func (t *SSU2Transport) promoteInboundConnection(conn net.Conn, original interfa
 	// visible in the map, and we start its workers immediately after CAS.
 
 	if t.sessions.CompareAndSwap(routerHash, original, promoted) {
+		// Pre-flight check: verify session is in map before starting workers (CRITICAL-3.1)
+		routerHashBytes := routerHash.Bytes()
+		if mapValue, exists := t.sessions.Load(routerHash); !exists {
+			t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).
+				Error("CRITICAL-3.1 violation: CAS succeeded but session missing from map before StartWorkers")
+		} else if mapSession, ok := mapValue.(*SSU2Session); !ok || mapSession != promoted {
+			t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).
+				Error("CRITICAL-3.1 violation: CAS succeeded but wrong session in map before StartWorkers")
+		}
+
 		// Start workers NOW that we've won the promotion race
 		promoted.StartWorkers()
 
@@ -1023,6 +1033,16 @@ func (t *SSU2Transport) registerOrReuseSession(conn *ssu2noise.SSU2Conn, routerH
 	}
 
 	// We won the store — start workers NOW
+	// Pre-flight check: verify session is in map before starting workers (CRITICAL-3.1)
+	routerHashBytes := routerHash.Bytes()
+	if mapValue, exists := t.sessions.Load(routerHash); !exists {
+		t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).
+			Error("CRITICAL-3.1 violation: LoadOrStore succeeded but session missing from map before StartWorkers")
+	} else if mapSession, ok := mapValue.(*SSU2Session); !ok || mapSession != session {
+		t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).
+			Error("CRITICAL-3.1 violation: LoadOrStore succeeded but wrong session in map before StartWorkers")
+	}
+
 	session.StartWorkers()
 
 	// Set cleanup callback for when this session closes.
@@ -1052,18 +1072,33 @@ func (t *SSU2Transport) promoteRawConnToSession(rawConn net.Conn, routerHash dat
 	promoted.maxRetransmit = t.config.GetMaxRetransmissions()
 	promoted.SetTransportCallbacks(t.buildTransportCallbacks(promoted))
 
-	// Start workers BEFORE CompareAndSwap to ensure no other goroutine
-	// sees a session without running workers.
-	promoted.StartWorkers()
+	// CRITICAL-3.1 FIX: Start workers AFTER CAS succeeds, not before.
+	// Starting workers before CAS means losers have running workers that may
+	// interfere with the winner's connection (frame corruption, data races).
+	// The old comment claimed this "ensures no other goroutine sees a session
+	// without running workers," but that's a non-issue: only the winner is
+	// visible in the map, and we start its workers immediately after CAS.
 
 	// NOTE: Do NOT set the cleanup callback before CAS. If this
 	// goroutine loses the race, calling promoted.Close() would
 	// trigger removeSession and delete the *winner's* map entry.
 	if t.sessions.CompareAndSwap(routerHash, existing, promoted) {
+		// Pre-flight check: verify session is in map before starting workers (CRITICAL-3.1)
+		routerHashBytes := routerHash.Bytes()
+		if mapValue, exists := t.sessions.Load(routerHash); !exists {
+			t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).
+				Error("CRITICAL-3.1 violation: CAS succeeded but session missing from map before StartWorkers")
+		} else if mapSession, ok := mapValue.(*SSU2Session); !ok || mapSession != promoted {
+			t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).
+				Error("CRITICAL-3.1 violation: CAS succeeded but wrong session in map before StartWorkers")
+		}
+
+		// Start workers NOW that we've won the promotion race
+		promoted.StartWorkers()
+
 		promoted.SetCleanupCallback(func() {
 			t.removeSession(routerHash)
 		})
-		routerHashBytes := routerHash.Bytes()
 		t.logger.WithFields(map[string]interface{}{
 			"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
 		}).Info("Promoted inbound net.Conn to SSU2Session in registerOrReuseSession")

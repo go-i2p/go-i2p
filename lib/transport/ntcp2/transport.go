@@ -434,6 +434,13 @@ func (t *NTCP2Transport) runInboundAcceptLoop() {
 // acceptNextConnection accepts and processes one incoming connection.
 // Returns false if the accept loop should terminate.
 func (t *NTCP2Transport) acceptNextConnection() bool {
+	// CRITICAL-1.1 NOTE: We read the listener pointer under RLock but do NOT hold
+	// the lock across Accept() — that would cause deadlock (Accept blocks indefinitely,
+	// preventing SetIdentity from acquiring write lock). Instead, we accept potential
+	// "use of closed network connection" errors if SetIdentity swaps the listener
+	// between our read and Accept() call. Such errors are caught by the error handler
+	// below and cause a retry with the new listener. This is safe: the connection
+	// from a swapped-out listener is never processed with mismatched crypto config.
 	t.identityMu.RLock()
 	listener := t.listener
 	t.identityMu.RUnlock()
@@ -454,6 +461,12 @@ func (t *NTCP2Transport) acceptNextConnection() bool {
 		}
 	}
 
+	// CRITICAL-1.1: Accept() is called without holding any lock. If SetIdentity
+	// swaps the listener concurrently, Accept() may return "use of closed network
+	// connection" error (handled below) or may succeed on the old listener (the
+	// connection is then closed and session count remains balanced). We do NOT
+	// hold RLock across Accept() because that would deadlock with SetIdentity's
+	// Lock() acquisition.
 	rawConn, err := listener.Accept()
 
 	if t.shouldShutdown(rawConn) {
@@ -464,6 +477,8 @@ func (t *NTCP2Transport) acceptNextConnection() bool {
 		// MEDIUM 5.1: Distinguish transient from permanent accept errors.
 		// Only exit the loop on permanent errors (shutdown signaled or listener gone).
 		// For transient errors (EMFILE, etc.), log and continue accepting.
+		// CRITICAL-1.1: "use of closed network connection" from a SetIdentity listener
+		// swap is treated as transient — we retry and pick up the new listener.
 		select {
 		case <-t.ctx.Done():
 			// Shutdown signaled; exit loop and log at debug level
@@ -1201,6 +1216,16 @@ func (t *NTCP2Transport) promoteInboundConnection(conn net.Conn, original interf
 	// visible in the map, and we start its workers immediately after CAS.
 
 	if t.sessions.CompareAndSwap(routerHash, original, promoted) {
+		// Pre-flight check: verify session is in map before starting workers (CRITICAL-3.1)
+		routerHashBytes := routerHash.Bytes()
+		if mapValue, exists := t.sessions.Load(routerHash); !exists {
+			t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).
+				Error("CRITICAL-3.1 violation: CAS succeeded but session missing from map before StartWorkers")
+		} else if mapSession, ok := mapValue.(*NTCP2Session); !ok || mapSession != promoted {
+			t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).
+				Error("CRITICAL-3.1 violation: CAS succeeded but wrong session in map before StartWorkers")
+		}
+
 		// Start workers NOW that we've won the promotion race
 		promoted.StartWorkers()
 
@@ -1211,7 +1236,6 @@ func (t *NTCP2Transport) promoteInboundConnection(conn net.Conn, original interf
 		promoted.SetCleanupCallback(func() {
 			t.removeSession(routerHash)
 		})
-		routerHashBytes := routerHash.Bytes()
 		t.logger.WithFields(map[string]interface{}{
 			"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
 		}).Info("Promoted inbound net.Conn to NTCP2Session")
@@ -1633,6 +1657,16 @@ func (t *NTCP2Transport) setupSession(conn *ntcp2.Conn, routerHash data.Hash) *N
 	}
 
 	// We won the store — start workers NOW
+	// Pre-flight check: verify session is in map before starting workers (CRITICAL-3.1)
+	routerHashBytes := routerHash.Bytes()
+	if mapValue, exists := t.sessions.Load(routerHash); !exists {
+		t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).
+			Error("CRITICAL-3.1 violation: LoadOrStore succeeded but session missing from map before StartWorkers")
+	} else if mapSession, ok := mapValue.(*NTCP2Session); !ok || mapSession != session {
+		t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).
+			Error("CRITICAL-3.1 violation: LoadOrStore succeeded but wrong session in map before StartWorkers")
+	}
+
 	session.StartWorkers()
 
 	// Wire up the cleanup callback.
@@ -1664,7 +1698,8 @@ func (t *NTCP2Transport) resolveExistingSession(existing interface{}, routerHash
 
 	case entryIsUnexpected:
 		// Should not reach here in practice. Log an error and return nil.
-		t.logger.WithField("entry_type", fmt.Sprintf("%T", existing)).
+		// CRITICAL-5.1: Log full value (not just type) for debugging corrupt map entries
+		t.logger.WithField("entry_value", fmt.Sprintf("%#v", existing)).
 			Error("resolveExistingSession: unexpected session map entry type — returning nil")
 		return nil
 
@@ -1704,18 +1739,33 @@ func (t *NTCP2Transport) promoteRawConnToSession(rawConn net.Conn, routerHash da
 	// a losing session would share the same conn, causing errors.
 	promoted := NewNTCP2SessionDeferred(rawConn, t.ctx, t.logger)
 
-	// Start workers BEFORE CompareAndSwap (MEDIUM 3.4).
-	// This ensures no other goroutine sees a session without running workers.
-	promoted.StartWorkers()
+	// CRITICAL-3.1 FIX: Start workers AFTER CAS succeeds, not before.
+	// Starting workers before CAS means losers have running workers that may
+	// interfere with the winner's connection (frame corruption, data races).
+	// The old comment claimed this "ensures no other goroutine sees a session
+	// without running workers," but that's a non-issue: only the winner is
+	// visible in the map, and we start its workers immediately after CAS.
 
 	// NOTE: Do NOT set the cleanup callback before CAS. If this
 	// goroutine loses the race, calling promoted.Close() would
 	// trigger removeSession and delete the *winner's* map entry.
 	if t.sessions.CompareAndSwap(routerHash, existing, promoted) {
+		// Pre-flight check: verify session is in map before starting workers (CRITICAL-3.1)
+		routerHashBytes := routerHash.Bytes()
+		if mapValue, exists := t.sessions.Load(routerHash); !exists {
+			t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).
+				Error("CRITICAL-3.1 violation: CAS succeeded but session missing from map before StartWorkers")
+		} else if mapSession, ok := mapValue.(*NTCP2Session); !ok || mapSession != promoted {
+			t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).
+				Error("CRITICAL-3.1 violation: CAS succeeded but wrong session in map before StartWorkers")
+		}
+
+		// Start workers NOW that we've won the promotion race
+		promoted.StartWorkers()
+
 		promoted.SetCleanupCallback(func() {
 			t.removeSession(routerHash)
 		})
-		routerHashBytes := routerHash.Bytes()
 		t.logger.WithFields(map[string]interface{}{
 			"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
 		}).Info("Promoted inbound net.Conn to NTCP2Session in setupSession")
@@ -1871,12 +1921,12 @@ func (t *NTCP2Transport) closeAllActiveSessions() {
 	t.sessions.Range(func(key, value interface{}) bool {
 		sessionCount++
 		t.closeIndividualSession(key, value)
-		// A-4 fix: After closeIndividualSession triggers cleanup callbacks,
-		// the entry should already be deleted by removeSession. This LoadAndDelete
-		// is a safety net and should return loaded=false in the normal case.
-		if _, loaded := t.sessions.LoadAndDelete(key); loaded {
-			atomic.AddInt32(&t.sessionCount, -1)
-		}
+		// CRITICAL-8.1 FIX: Do NOT LoadAndDelete here. The cleanup callback
+		// will delete the entry and decrement sessionCount. If we LoadAndDelete
+		// here, we decrement immediately, and when the cleanup callback runs
+		// (possibly delayed by GC/scheduler), it decrements again, causing
+		// sessionCount to go negative. The reconciliation loop below will catch
+		// any truly stale sessions (those without cleanup callbacks).
 		return true
 	})
 
