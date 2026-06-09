@@ -1,13 +1,9 @@
 package ssu2
 
 import (
-	"context"
 	"testing"
-	"time"
 
-	"github.com/go-i2p/logger"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // P-1: Test that localhost hostname is correctly identified as loopback
