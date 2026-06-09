@@ -1,6 +1,6 @@
 package ssu2
 
-//transport_critical_race_test.go covers critical race tests for SSU2Transport,
+// transport_critical_race_test.go covers critical race tests for SSU2Transport,
 // specifically X-2 (acceptedConn promotion accounting) and related session map
 // integrity under concurrent GetSession/Accept.
 

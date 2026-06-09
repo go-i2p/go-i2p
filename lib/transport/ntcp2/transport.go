@@ -118,6 +118,9 @@ type NTCP2Transport struct {
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 
+	// Port mapping lifecycle manager for UPnP/NAT-PMP (Phase 4 integration)
+	portMapperManager *nat.PortMapperManager
+
 	// Logging
 	logger *logger.Entry
 
@@ -338,6 +341,20 @@ func setupNetworkListener(transport *NTCP2Transport, config *Config, ntcp2Config
 		return err
 	}
 	config.ListenerAddress = boundAddr
+
+	// Phase 4: Initialize port mapper for TCP port mapping on non-loopback addresses
+	host, portStr, _ := net.SplitHostPort(boundAddr)
+	if !nat.IsLoopbackAddress(host) {
+		port, _ := strconv.Atoi(portStr)
+		cfg := &nat.PortMapperConfig{
+			Network:      "tcp",
+			InternalPort: port,
+			Context:      transport.ctx,
+		}
+		transport.portMapperManager = nat.NewPortMapperManager(cfg)
+		transport.logger.WithField("internal_port", port).Debug("Started TCP port mapper")
+	}
+
 	return attachNTCP2Listener(transport, tcpListener, ntcp2Config)
 }
 
@@ -1807,6 +1824,13 @@ func (t *NTCP2Transport) cancelTransportContext() {
 // closeNetworkListener closes the network listener if present.
 // Returns any error encountered during closure.
 func (t *NTCP2Transport) closeNetworkListener() error {
+	// Phase 4: Stop port mapper before closing listener
+	if t.portMapperManager != nil {
+		if err := t.portMapperManager.Stop(); err != nil {
+			t.logger.WithError(err).Warn("Failed to stop port mapper during close")
+		}
+	}
+
 	if t.listener == nil {
 		return nil
 	}
