@@ -1193,11 +1193,17 @@ func (t *NTCP2Transport) promoteInboundConnection(conn net.Conn, original interf
 
 	promoted := NewNTCP2SessionDeferred(conn, t.ctx, t.logger)
 
-	// Start workers BEFORE CompareAndSwap (MEDIUM 3.4).
-	// This ensures no other goroutine sees a session without running workers.
-	promoted.StartWorkers()
+	// CRITICAL-3.1 FIX: Start workers AFTER CAS succeeds, not before.
+	// Starting workers before CAS means losers have running workers that may
+	// interfere with the winner's connection (frame corruption, data races).
+	// The old comment claimed this "ensures no other goroutine sees a session
+	// without running workers," but that's a non-issue: only the winner is
+	// visible in the map, and we start its workers immediately after CAS.
 
 	if t.sessions.CompareAndSwap(routerHash, original, promoted) {
+		// Start workers NOW that we've won the promotion race
+		promoted.StartWorkers()
+
 		// Set cleanup callback AFTER the CAS succeeds, so only the winning
 		// session's cleanup can affect the session map. If set before CAS,
 		// the losing session's Close() would invoke removeSession() and
@@ -1597,15 +1603,18 @@ func (t *NTCP2Transport) setupSession(conn *ntcp2.Conn, routerHash data.Hash) *N
 	// that may be immediately discarded if an existing session wins the race.
 	session := NewNTCP2SessionDeferred(conn, t.ctx, t.logger)
 
-	// Start workers BEFORE LoadOrStore (MEDIUM 3.4).
-	// This ensures no other goroutine sees a session without running workers.
-	session.StartWorkers()
+	// CRITICAL-3.1 FIX: Start workers AFTER LoadOrStore succeeds, not before.
+	// Starting workers before LoadOrStore means losers have running workers that
+	// may interfere with the winner's connection (frame corruption, data races).
+	// The old comment claimed this "ensures no other goroutine sees a session
+	// without running workers," but that's a non-issue: only the winner is
+	// visible in the map, and we start its workers immediately after LoadOrStore.
 
 	existing, loaded := t.sessions.LoadOrStore(routerHash, session)
 	if loaded {
 		// A session already exists for this peer. Close the newly created
-		// session (workers will exit cleanly due to context.Done()) and
-		// return the existing one. Release the reserved session slot.
+		// session (workers haven't started yet, so clean shutdown is simple)
+		// and return the existing one. Release the reserved session slot.
 		_ = session.Close()
 		t.unreserveSessionSlot()
 		resolved := t.resolveExistingSession(existing, routerHash)
@@ -1623,7 +1632,9 @@ func (t *NTCP2Transport) setupSession(conn *ntcp2.Conn, routerHash data.Hash) *N
 		return resolved
 	}
 
-	// We won the store — workers are already running.
+	// We won the store — start workers NOW
+	session.StartWorkers()
+
 	// Wire up the cleanup callback.
 	// The session slot was already reserved by checkSessionLimit.
 	session.SetCleanupCallback(func() {

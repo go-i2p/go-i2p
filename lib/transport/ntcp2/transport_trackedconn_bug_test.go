@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-i2p/common/data"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -128,4 +129,163 @@ func TestTrackedConnCleanupRace(t *testing.T) {
 
 	assert.Equal(t, promotedCount, sessionsInMap,
 		"All promoted sessions should remain in map (not removed by trackedConn cleanup)")
+}
+
+// TestConcurrentAcceptAndGetSessionIntegration is an integration test that verifies
+// the trackedConn cleanup race doesn't occur when Accept and GetSession run concurrently.
+//
+// CRITICAL-2.1 remediation checklist item:
+// "Add integration test: concurrent Accept + GetSession, verify all promoted sessions remain in map"
+//
+// This test simulates realistic concurrent access where:
+// 1. Accept loop stores raw connections in the session map
+// 2. GetSession is called concurrently to promote those connections to full sessions
+// 3. Concurrent promotion attempts may race
+//
+// Expected: All promoted sessions remain in the map after both flows complete.
+// Bug symptom: Promoted sessions incorrectly removed by trackedConn cleanup callback.
+func TestConcurrentAcceptAndGetSessionIntegration(t *testing.T) {
+	transport := newNilListenerTestTransport(t, 100)
+	defer transport.Close()
+
+	const numPeers = 20
+	var wg sync.WaitGroup
+
+	// Create test peers with unique hashes and connections
+	type testPeer struct {
+		hash data.Hash
+		conn net.Conn
+	}
+	peers := make([]testPeer, numPeers)
+	for i := 0; i < numPeers; i++ {
+		peers[i] = testPeer{
+			hash: newTestPeerHash(fmt.Sprintf("concurrent-integration-%d", i)),
+			conn: newAcceptMockConn(fmt.Sprintf("10.0.1.%d:5000", i)),
+		}
+	}
+
+	// Phase 1: Simulate Accept flow storing raw connections
+	// (This simulates trackInboundConnection storing the raw conn)
+	for _, peer := range peers {
+		// Reserve slot and store raw connection
+		require.NoError(t, transport.checkSessionLimit())
+		transport.sessions.Store(peer.hash, peer.conn)
+	}
+
+	// Phase 2: Concurrent promotion attempts
+	// Simulate both Accept flow (via trackInboundConnection CAS to acceptedConn)
+	// and GetSession flow (promoting to *NTCP2Session) racing
+	promotedSessions := make([]*NTCP2Session, numPeers)
+
+	for i := range peers {
+		wg.Add(2)
+		peerIdx := i // Capture for goroutines
+
+		// Goroutine 1: Simulate GetSession attempting to promote to *NTCP2Session
+		// Start this slightly before Accept to ensure some actually get promoted
+		go func() {
+			defer wg.Done()
+			peer := peers[peerIdx]
+
+			// Delay varies to create realistic race conditions
+			time.Sleep(time.Duration(peerIdx%3) * time.Millisecond)
+
+			// Load whatever is in the map
+			val, exists := transport.sessions.Load(peer.hash)
+			if !exists {
+				return
+			}
+
+			// If it's a raw conn, promote it to *NTCP2Session
+			if rawConn, ok := val.(net.Conn); ok {
+				session, promoted := transport.promoteInboundConnection(rawConn, val, peer.hash)
+				if promoted && session != nil {
+					if ntcpSession, ok := session.(*NTCP2Session); ok {
+						promotedSessions[peerIdx] = ntcpSession
+					}
+				}
+			}
+		}()
+
+		// Goroutine 2: Simulate Accept flow attempting to wrap in acceptedConn
+		// (This is what inboundHandshakeWorker does after handshake completes)
+		go func() {
+			defer wg.Done()
+			peer := peers[peerIdx]
+
+			// Delay slightly more to give GetSession a chance to promote
+			time.Sleep(time.Duration(2+peerIdx%4) * time.Millisecond)
+
+			// Create tracked connection with cleanup callback
+			tracked := &trackedConn{
+				Conn: peer.conn,
+				onClose: func() {
+					transport.removeSession(peer.hash)
+				},
+			}
+
+			// Try to CAS from raw conn to acceptedConn
+			originalConn := tracked.Conn
+			acceptedConnWrapper := acceptedConn{Conn: tracked}
+
+			if !transport.sessions.CompareAndSwap(peer.hash, originalConn, acceptedConnWrapper) {
+				// CAS failed - someone else (GetSession) promoted it
+				// CRITICAL FIX: Do NOT call tracked.Close() here!
+				// The bug was calling tracked.Close() which would fire onClose
+				// and remove the promoted session from the map.
+			}
+		}()
+	}
+
+	wg.Wait()
+
+	// Give any async cleanup a chance to run
+	time.Sleep(100 * time.Millisecond)
+
+	// Count sessions in map
+	sessionsInMap := 0
+	transport.sessions.Range(func(key, value interface{}) bool {
+		if _, ok := value.(*NTCP2Session); ok {
+			sessionsInMap++
+		}
+		return true
+	})
+
+	// Count how many were successfully promoted
+	promotedCount := 0
+	for _, session := range promotedSessions {
+		if session != nil {
+			promotedCount++
+		}
+	}
+
+	t.Logf("Successfully promoted: %d sessions", promotedCount)
+	t.Logf("Sessions remaining in map: %d", sessionsInMap)
+	t.Logf("Session count: %d", atomic.LoadInt32(&transport.sessionCount))
+
+	// The key invariant: All promoted sessions must still be in the map
+	// (not removed by incorrect trackedConn cleanup)
+	for i, session := range promotedSessions {
+		if session == nil {
+			continue
+		}
+
+		peer := peers[i]
+		val, exists := transport.sessions.Load(peer.hash)
+		assert.True(t, exists, "Promoted session %d must exist in map", i)
+		if exists {
+			mapSession, isSession := val.(*NTCP2Session)
+			assert.True(t, isSession, "Promoted entry %d must be *NTCP2Session type", i)
+			assert.Equal(t, session, mapSession, "Session %d pointer must match", i)
+		}
+	}
+
+	// All promoted sessions should still be in the map
+	assert.Equal(t, promotedCount, sessionsInMap,
+		"All promoted sessions should remain in map (not removed by trackedConn cleanup)")
+
+	// Verify session count accounting matches actual sessions
+	// (may be higher if some acceptedConn wrappers still exist)
+	assert.GreaterOrEqual(t, int(atomic.LoadInt32(&transport.sessionCount)), sessionsInMap,
+		"sessionCount should be at least as large as sessions in map")
 }

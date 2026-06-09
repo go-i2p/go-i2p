@@ -444,13 +444,19 @@ func (t *SSU2Transport) Accept() (net.Conn, error) {
 	// don't deliver it to Accept (ownership already transferred).
 	originalConn := tracked.(*trackedConn).Conn
 	if !t.sessions.CompareAndSwap(peerHash, originalConn, acceptedConn{Conn: tracked}) {
-		// Promotion race: concurrent GetSession won. Close the tracked wrapper
-		// and unreserve the slot since we're not delivering to Accept.
+		// Promotion race: concurrent GetSession won.
+		// CRITICAL-2.1 FIX: Do NOT call tracked.Close() here!
+		// The promoted session owns the connection now. Calling tracked.Close()
+		// would fire onClose → removeSession, incorrectly deleting the promoted
+		// session from the map while it's still alive.
+		// Let the trackedConn wrapper be GC'd harmlessly.
 		t.logger.WithFields(map[string]interface{}{
 			"remote_addr": conn.RemoteAddr().String(),
 			"peer_hash":   fmt.Sprintf("%x", peerHash[:8]),
 		}).Debug("Inbound SSU2 connection promoted concurrently; not delivering to Accept")
-		tracked.Close()
+		// Note: We DO NOT unreserve the slot here because the promoted session
+		// is still using it. The session's cleanup callback will handle unreserving
+		// when the session eventually closes.
 		return nil, ErrDuplicateSession
 	}
 
@@ -801,12 +807,18 @@ func (t *SSU2Transport) promoteInboundConnection(conn net.Conn, original interfa
 	promoted.maxRetransmit = t.config.GetMaxRetransmissions()
 	promoted.SetTransportCallbacks(t.buildTransportCallbacks(promoted))
 
-	// Start workers BEFORE making session visible in map (MEDIUM 3.4).
-	// This ensures no other goroutine sees a session without running workers.
-	promoted.StartWorkers()
+	// CRITICAL-3.1 FIX: Start workers AFTER CAS succeeds, not before.
+	// Starting workers before CAS means losers have running workers that may
+	// interfere with the winner's connection (frame corruption, data races).
+	// The old comment claimed this "ensures no other goroutine sees a session
+	// without running workers," but that's a non-issue: only the winner is
+	// visible in the map, and we start its workers immediately after CAS.
 
 	if t.sessions.CompareAndSwap(routerHash, original, promoted) {
-		// Workers are already running; set cleanup callback for when this session closes.
+		// Start workers NOW that we've won the promotion race
+		promoted.StartWorkers()
+
+		// Set cleanup callback for when this session closes.
 		promoted.SetCleanupCallback(func() {
 			t.removeSession(routerHash)
 		})
@@ -970,13 +982,16 @@ func (t *SSU2Transport) registerOrReuseSession(conn *ssu2noise.SSU2Conn, routerH
 	session.maxRetransmit = t.config.GetMaxRetransmissions()
 	session.SetTransportCallbacks(t.buildTransportCallbacks(session))
 
-	// Start workers BEFORE putting session in map (MEDIUM 3.4).
-	// This ensures no other goroutine sees a session without running workers.
-	session.StartWorkers()
+	// CRITICAL-3.1 FIX: Start workers AFTER LoadOrStore succeeds, not before.
+	// Starting workers before LoadOrStore means losers have running workers that
+	// may interfere with the winner's connection (frame corruption, data races).
+	// The old comment claimed this "ensures no other goroutine sees a session
+	// without running workers," but that's a non-issue: only the winner is
+	// visible in the map, and we start its workers immediately after LoadOrStore.
 
 	existing, loaded := t.sessions.LoadOrStore(routerHash, session)
 	if loaded {
-		// Session already exists; close our new session (workers will exit cleanly).
+		// Session already exists; close our new session (workers haven't started, clean shutdown).
 		_ = session.Close()
 		if existingSession, ok := existing.(*SSU2Session); ok {
 			return existingSession, false, nil // Reusing existing, slot not used
@@ -1007,7 +1022,10 @@ func (t *SSU2Transport) registerOrReuseSession(conn *ssu2noise.SSU2Conn, routerH
 		return nil, false, oops.Errorf("unexpected session map entry type")
 	}
 
-	// Workers are already running; set cleanup callback for when this session closes.
+	// We won the store — start workers NOW
+	session.StartWorkers()
+
+	// Set cleanup callback for when this session closes.
 	session.SetCleanupCallback(func() {
 		t.removeSession(routerHash)
 	})
