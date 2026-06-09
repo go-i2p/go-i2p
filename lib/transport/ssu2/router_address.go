@@ -382,7 +382,7 @@ func hasUsableIntroducer(introducers []*ssu2noise.RegisteredIntroducer) bool {
 }
 
 // extractHostPort unwraps SSU2Addr and extracts host and port from the listener address.
-// Handles NATAddr (from go-nat-listener) to use the external address when available.
+// Handles NATAddr (via lib/nat) to use the external address when available.
 func extractHostPort(addr net.Addr) (string, string, error) {
 	effectiveAddr := unwrapSSU2Addr(addr)
 
