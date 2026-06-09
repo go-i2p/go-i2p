@@ -328,11 +328,11 @@ func setupUDPListener(t *SSU2Transport, config *Config, ssu2Config *ssu2noise.SS
 // Returns the connection and the bound address. Caller must update config.ListenerAddress.
 func createUDPConn(config *Config, iport int) (net.PacketConn, string, error) {
 	if iport == 0 {
-		conn, err := listenWithOSPort(config)
+		conn, boundAddr, err := listenWithOSPort(config)
 		if err != nil {
 			return nil, "", err
 		}
-		return conn, conn.LocalAddr().String(), nil
+		return conn, boundAddr, nil
 	}
 	return listenWithNATTraversal(config, iport)
 }
@@ -344,12 +344,13 @@ func createUDPConn(config *Config, iport int) (net.PacketConn, string, error) {
 // probe and rebind, this function retries up to maxPortProbeRetries times.
 // Each retry probes a new port and attempts rebind.
 // P-1 partial mitigation: Increased retries to 5, added jitter, clear error message.
+// P-2 fix: Returns bound address instead of relying on caller extraction.
 //
 // Note: On iOS, app sandbox restrictions prevent net.ListenPacket and net.ListenUDP
 // on arbitrary ports without the com.apple.developer.networking.multipath entitlement
 // or a NEPacketTunnelProvider extension. Attempting to listen will fail with EACCES.
 // Pure go-i2p in-app deployment is not supported on iOS App Store builds.
-func listenWithOSPort(config *Config) (net.PacketConn, error) {
+func listenWithOSPort(config *Config) (net.PacketConn, string, error) {
 	const maxPortProbeRetries = 5 // P-1: increased from 3 to 5
 	var lastErr error
 
@@ -374,11 +375,11 @@ func listenWithOSPort(config *Config) (net.PacketConn, error) {
 
 		udpAddr, err := net.ResolveUDPAddr("udp", config.ListenerAddress)
 		if err != nil {
-			return nil, oops.Wrapf(err, "failed to resolve UDP address")
+			return nil, "", oops.Wrapf(err, "failed to resolve UDP address")
 		}
 		temp, err := listenCfg.ListenPacket(context.Background(), "udp", udpAddr.String())
 		if err != nil {
-			return nil, oops.Wrapf(err, "failed to probe UDP port")
+			return nil, "", oops.Wrapf(err, "failed to probe UDP port")
 		}
 		assignedPort := temp.LocalAddr().(*net.UDPAddr).Port
 		if closeErr := temp.Close(); closeErr != nil {
@@ -392,16 +393,16 @@ func listenWithOSPort(config *Config) (net.PacketConn, error) {
 		if attempt == 0 {
 			log.WithField("port", assignedPort).Info("probed OS-assigned UDP port; attempting NAT traversal")
 		}
-		conn, _, err := listenWithNATTraversal(config, assignedPort)
+		conn, boundAddr, err := listenWithNATTraversal(config, assignedPort)
 		if err == nil {
-			return conn, nil
+			return conn, boundAddr, nil
 		}
 
 		// If rebind failed, check if it was due to "address already in use" (TOCTOU race).
 		// If so, retry. Otherwise, return the error immediately.
 		lastErr = err
 		if !strings.Contains(err.Error(), "address already in use") && !strings.Contains(err.Error(), "Address already in use") {
-			return nil, err
+			return nil, "", err
 		}
 		if attempt < maxPortProbeRetries-1 {
 			log.WithFields(map[string]interface{}{
@@ -426,7 +427,7 @@ func listenWithOSPort(config *Config) (net.PacketConn, error) {
 	}
 
 	// P-1: Clear error message when all retries exhausted
-	return nil, oops.Wrapf(lastErr, "failed to bind OS-assigned UDP port after %d attempts (TOCTOU race: another process keeps claiming probed ports)", maxPortProbeRetries)
+	return nil, "", oops.Wrapf(lastErr, "failed to bind OS-assigned UDP port after %d attempts (TOCTOU race: another process keeps claiming probed ports)", maxPortProbeRetries)
 }
 
 // isLoopbackAddress returns true if host is empty, a loopback IP, or resolves
@@ -1281,6 +1282,9 @@ func (t *SSU2Transport) Close() error {
 		})
 		if staleCount > 0 {
 			t.logger.WithField("stale_sessions", staleCount).Warn("Cleanup after Close found stale sessions")
+			// A-3 fix: Track how often reconciliation finds drift for monitoring.
+			// This should always be zero when accounting is correct (X-2/X-3 fixes).
+			t.reachMetrics.staleSessionsReconciled.Add(1)
 		}
 		atomic.StoreInt32(&t.sessionCount, 0)
 

@@ -104,6 +104,9 @@ type NTCP2Transport struct {
 	// High count indicates NetDB problems that break OBEP reply routing.
 	routerInfoStoreFailures int32 // atomic counter
 
+	// A-3 fix: Transport lifecycle and accounting metrics
+	metrics transportMetrics
+
 	// TEST ONLY: bypass *ntcp2.Conn type check in performInboundHandshake.
 	// MUST NOT be set in production - allows un-handshaked connections (security risk).
 	testBypassHandshakeTypeCheck bool
@@ -272,7 +275,8 @@ func buildTransportInstance(config *Config, identity router_info.RouterInfo, key
 // may claim the port between probe and rebind, this function retries up to
 // maxPortProbeRetries times. Each retry probes a new port and attempts rebind.
 // P-1 partial mitigation: Increased retries to 5, added jitter, clear error message.
-func bindOSAssignedPort(config *Config) (net.Listener, error) {
+// P-2 fix: Returns bound address instead of mutating config.ListenerAddress.
+func bindOSAssignedPort(config *Config) (net.Listener, string, error) {
 	const maxPortProbeRetries = 5 // P-1: increased from 3 to 5
 	var lastErr error
 
@@ -297,7 +301,7 @@ func bindOSAssignedPort(config *Config) (net.Listener, error) {
 
 		temp, err := listenCfg.Listen(context.Background(), "tcp", config.ListenerAddress)
 		if err != nil {
-			return nil, oops.Wrapf(err, "failed to probe available port")
+			return nil, "", oops.Wrapf(err, "failed to probe available port")
 		}
 		assignedPort := temp.Addr().(*net.TCPAddr).Port
 		if closeErr := temp.Close(); closeErr != nil {
@@ -313,15 +317,14 @@ func bindOSAssignedPort(config *Config) (net.Listener, error) {
 		}
 		listener, boundAddr, err := bindWithNATTraversal(config, assignedPort)
 		if err == nil {
-			config.ListenerAddress = boundAddr
-			return listener, nil
+			return listener, boundAddr, nil
 		}
 
 		// If rebind failed, check if it was due to "address already in use" (TOCTOU race).
 		// If so, retry. Otherwise, return the error immediately.
 		lastErr = err
 		if !strings.Contains(err.Error(), "address already in use") && !strings.Contains(err.Error(), "Address already in use") {
-			return nil, err
+			return nil, "", err
 		}
 		if attempt < maxPortProbeRetries-1 {
 			log.WithFields(map[string]interface{}{
@@ -346,7 +349,7 @@ func bindOSAssignedPort(config *Config) (net.Listener, error) {
 	}
 
 	// P-1: Clear error message when all retries exhausted
-	return nil, oops.Wrapf(lastErr, "failed to bind OS-assigned port after %d attempts (TOCTOU race: another process keeps claiming probed ports)", maxPortProbeRetries)
+	return nil, "", oops.Wrapf(lastErr, "failed to bind OS-assigned port after %d attempts (TOCTOU race: another process keeps claiming probed ports)", maxPortProbeRetries)
 }
 
 // isLoopbackAddress returns true if host is empty, a loopback IP, or resolves
@@ -455,10 +458,7 @@ func setupNetworkListener(transport *NTCP2Transport, config *Config, ntcp2Config
 	var tcpListener net.Listener
 	var boundAddr string
 	if iport == 0 {
-		tcpListener, err = bindOSAssignedPort(config)
-		if err == nil {
-			boundAddr = tcpListener.Addr().String()
-		}
+		tcpListener, boundAddr, err = bindOSAssignedPort(config)
 	} else {
 		tcpListener, boundAddr, err = bindWithNATTraversal(config, iport)
 	}
@@ -1981,6 +1981,9 @@ func (t *NTCP2Transport) closeAllActiveSessions() {
 	})
 	if staleCount > 0 {
 		t.logger.WithField("stale_sessions", staleCount).Warn("Found stale sessions after close")
+		// A-3 fix: Track how often reconciliation finds drift for monitoring.
+		// This should always be zero when accounting is correct (X-2/X-3 fixes).
+		t.metrics.staleSessionsReconciled.Add(1)
 	}
 	atomic.StoreInt32(&t.sessionCount, 0)
 	t.logger.WithField("session_count", sessionCount).Info("Closed all sessions")
