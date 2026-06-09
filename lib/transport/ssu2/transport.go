@@ -75,7 +75,7 @@ type SSU2Transport struct {
 	// See "Session Map Ownership Invariant" comment above for details.
 	sessions       sync.Map
 	sessionCount   int32
-	isShuttingDown int32 // atomic flag set during Close() to prevent cleanup callbacks from double-decrementing
+	isShuttingDown int32 // atomic flag set during Close() for visibility (A-4: no longer used for accounting gating)
 
 	identityMu sync.RWMutex
 
@@ -1270,14 +1270,15 @@ func (t *SSU2Transport) Close() error {
 		t.wg.Wait()
 		t.handler.Close()
 
-		// Reconcile sessionCount after shutdown to ensure it reflects actual session state.
-		// Clear any stale sessions from the map and reset count to 0 to ensure
-		// transport can be cleanly restarted if needed. This corrects for any
-		// cleanup callbacks that didn't fire or incomplete close paths.
+		// A-4 fix: Reconcile by decrementing truly-stale sessions (those whose
+		// cleanup callbacks didn't fire). With removeSession no longer gated by
+		// isShuttingDown, this should find zero stale sessions in the normal case.
 		var staleCount int
 		t.sessions.Range(func(key, value interface{}) bool {
-			staleCount++
-			_, _ = t.sessions.LoadAndDelete(key)
+			if _, loaded := t.sessions.LoadAndDelete(key); loaded {
+				staleCount++
+				atomic.AddInt32(&t.sessionCount, -1)
+			}
 			return true
 		})
 		if staleCount > 0 {
@@ -1286,7 +1287,14 @@ func (t *SSU2Transport) Close() error {
 			// This should always be zero when accounting is correct (X-2/X-3 fixes).
 			t.reachMetrics.staleSessionsReconciled.Add(1)
 		}
-		atomic.StoreInt32(&t.sessionCount, 0)
+		// A-4 fix: Verify sessionCount is now 0 (all sessions properly decremented).
+		// Non-zero indicates accounting bug (sessions without cleanup callbacks).
+		finalCount := atomic.LoadInt32(&t.sessionCount)
+		if finalCount != 0 {
+			t.logger.WithField("final_count", finalCount).Error("sessionCount non-zero after reconciliation")
+			// Force-reset as safety net, but this indicates a bug
+			atomic.StoreInt32(&t.sessionCount, 0)
+		}
 
 		// Clean up port mapper if one was successfully created (MEDIUM 2.5)
 		t.portMapperMu.Lock()
@@ -1370,11 +1378,10 @@ func (t *SSU2Transport) unreserveSessionSlot() {
 // removeSession removes a session from the session map (called by session cleanup callback).
 // SA-2 fix: During shutdown, cleanup callbacks skip removeSession to avoid double-decrement.
 func (t *SSU2Transport) removeSession(routerHash data.Hash) {
-	shutdownFlag := atomic.LoadInt32(&t.isShuttingDown)
-	if shutdownFlag != 0 {
-		// Close() will handle cleanup; skip to prevent double-decrement
-		return
-	}
+	// A-4 fix: No longer gate on isShuttingDown. Let cleanup callbacks
+	// always decrement properly, even during shutdown. Close() reconciliation
+	// will only decrement truly-stale sessions (those that weren't cleaned up).
+	// This makes shutdown accounting deterministic.
 	if _, loaded := t.sessions.LoadAndDelete(routerHash); loaded {
 		atomic.AddInt32(&t.sessionCount, -1)
 	}

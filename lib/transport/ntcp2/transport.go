@@ -94,7 +94,7 @@ type NTCP2Transport struct {
 	// See "Session Map Ownership Invariant" comment above for details.
 	sessions       sync.Map // map[string]*NTCP2Session (keyed by router hash)
 	sessionCount   int32    // atomic O(1) session counter
-	isShuttingDown int32    // atomic flag set during Close() to prevent cleanup callbacks from double-decrementing
+	isShuttingDown int32    // atomic flag set during Close() for visibility (A-4: no longer used for accounting gating)
 
 	// Metrics for critical bugs (X-1)
 	acceptedConnPromotionAttempts int32 // atomic counter for bug detection: how many times promoteInboundConnection refused an acceptedConn
@@ -1869,13 +1869,10 @@ func (t *NTCP2Transport) Compatible(routerInfo router_info.RouterInfo) bool {
 // removeSession removes a session from the session map (called by session cleanup callback)
 func (t *NTCP2Transport) removeSession(routerHash data.Hash) {
 	routerHashBytes := routerHash.Bytes()
-	// During shutdown, cleanup callbacks from session.Close() should not attempt
-	// to remove from the map or decrement the count; closeAllActiveSessions() will
-	// handle that to avoid double-decrement.
-	if atomic.LoadInt32(&t.isShuttingDown) != 0 {
-		t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Debug("Skipping removeSession during shutdown")
-		return
-	}
+	// A-4 fix: No longer gate on isShuttingDown. Let cleanup callbacks
+	// always decrement properly, even during shutdown. Close() reconciliation
+	// will only decrement truly-stale sessions (those that weren't cleaned up).
+	// This makes shutdown accounting deterministic.
 	if _, loaded := t.sessions.LoadAndDelete(routerHash); loaded {
 		atomic.AddInt32(&t.sessionCount, -1)
 	}
@@ -1951,11 +1948,11 @@ func (t *NTCP2Transport) closeNetworkListener() error {
 }
 
 // closeAllActiveSessions iterates through all sessions and closes them.
-// Logs the total number of sessions closed. Sets a shutdown flag to prevent
-// cleanup callbacks from double-decrementing the session count.
+// Logs the total number of sessions closed. A-4 fix: cleanup callbacks now
+// run properly during shutdown, so sessions should be removed by their callbacks
+// rather than by this explicit cleanup (reconciliation should find zero stale).
 func (t *NTCP2Transport) closeAllActiveSessions() {
-	// Set shutdown flag to prevent cleanup callbacks from removing entries
-	// or decrementing the count; we'll handle all accounting here.
+	// Set shutdown flag for visibility
 	atomic.StoreInt32(&t.isShuttingDown, 1)
 
 	t.logger.Debug("Closing all active sessions")
@@ -1964,19 +1961,24 @@ func (t *NTCP2Transport) closeAllActiveSessions() {
 	t.sessions.Range(func(key, value interface{}) bool {
 		sessionCount++
 		t.closeIndividualSession(key, value)
-		// After closeIndividualSession (which may trigger callbacks that skip
-		// removal due to isShuttingDown flag), delete the entry and decrement.
+		// A-4 fix: After closeIndividualSession triggers cleanup callbacks,
+		// the entry should already be deleted by removeSession. This LoadAndDelete
+		// is a safety net and should return loaded=false in the normal case.
 		if _, loaded := t.sessions.LoadAndDelete(key); loaded {
 			atomic.AddInt32(&t.sessionCount, -1)
 		}
 		return true
 	})
 
-	// Final reconciliation: clear any remaining stale sessions and normalize count
+	// A-4 fix: Reconcile by decrementing truly-stale sessions (those whose
+	// cleanup callbacks didn't fire). With removeSession no longer gated,
+	// this should find zero stale sessions in the normal case.
 	var staleCount int
 	t.sessions.Range(func(key, value interface{}) bool {
-		staleCount++
-		_, _ = t.sessions.LoadAndDelete(key)
+		if _, loaded := t.sessions.LoadAndDelete(key); loaded {
+			staleCount++
+			atomic.AddInt32(&t.sessionCount, -1)
+		}
 		return true
 	})
 	if staleCount > 0 {
@@ -1985,7 +1987,14 @@ func (t *NTCP2Transport) closeAllActiveSessions() {
 		// This should always be zero when accounting is correct (X-2/X-3 fixes).
 		t.metrics.staleSessionsReconciled.Add(1)
 	}
-	atomic.StoreInt32(&t.sessionCount, 0)
+	// A-4 fix: Verify sessionCount is now 0 (all sessions properly decremented).
+	// Non-zero indicates accounting bug (sessions without cleanup callbacks).
+	finalCount := atomic.LoadInt32(&t.sessionCount)
+	if finalCount != 0 {
+		t.logger.WithField("final_count", finalCount).Error("sessionCount non-zero after reconciliation")
+		// Force-reset as safety net, but this indicates a bug
+		atomic.StoreInt32(&t.sessionCount, 0)
+	}
 	t.logger.WithField("session_count", sessionCount).Info("Closed all sessions")
 }
 
