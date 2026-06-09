@@ -56,10 +56,11 @@ func createTestTransport(t *testing.T, listenAddr string) *NTCP2Transport {
 
 	transport := &NTCP2Transport{
 		listener: listener,
-		config:   config,
 		ctx:      ctx,
 		cancel:   cancel,
 	}
+	// HIGH-1.3 fix: Initialize atomic.Pointer[Config] after struct creation
+	transport.config.Store(config)
 
 	return transport
 }
@@ -114,7 +115,11 @@ func TestConvertToRouterAddress_WithObfuscationIV(t *testing.T) {
 	for i := range iv {
 		iv[i] = byte(i + 100)
 	}
-	transport.config.Config.ObfuscationIV = iv
+	// HIGH-1.3 fix: Use atomic Load/Store to modify config (make a copy before modifying)
+	oldCfg := transport.config.Load()
+	newCfg := *oldCfg
+	newCfg.Config.ObfuscationIV = iv
+	transport.config.Store(&newCfg)
 
 	routerAddr, err := ConvertToRouterAddress(transport)
 	require.NoError(t, err)
@@ -137,8 +142,9 @@ func TestConvertToRouterAddress_NilTransport(t *testing.T) {
 func TestConvertToRouterAddress_NoListener(t *testing.T) {
 	transport := &NTCP2Transport{
 		listener: nil,
-		config:   &Config{},
 	}
+	// HIGH-1.3 fix: Initialize atomic.Pointer[Config] after struct creation
+	transport.config.Store(&Config{})
 
 	assertConvertToRouterAddressError(t, transport, "no listening address")
 }
@@ -151,7 +157,7 @@ func TestConvertToRouterAddress_NoConfig(t *testing.T) {
 
 	transport := &NTCP2Transport{
 		listener: listener,
-		config:   nil,
+		// HIGH-1.3: config is atomic.Pointer[Config], zero value is nil (uninitialized)
 	}
 
 	assertConvertToRouterAddressError(t, transport, "configuration is not initialized")
@@ -162,7 +168,11 @@ func TestConvertToRouterAddress_InvalidStaticKey(t *testing.T) {
 	transport := createTestTransport(t, "127.0.0.1:0")
 
 	// Corrupt the static key to wrong length
-	transport.config.Config.StaticKey = make([]byte, 16) // Wrong length
+	// HIGH-1.3 fix: Use atomic Load/Store to modify config (make a copy before modifying)
+	oldCfg := transport.config.Load()
+	newCfg := *oldCfg
+	newCfg.Config.StaticKey = make([]byte, 16) // Wrong length
+	transport.config.Store(&newCfg)
 
 	assertConvertToRouterAddressError(t, transport, "invalid static key length")
 }
@@ -172,7 +182,11 @@ func TestConvertToRouterAddress_InvalidIV(t *testing.T) {
 	transport := createTestTransport(t, "127.0.0.1:0")
 
 	// Corrupt the IV to wrong length
-	transport.config.Config.ObfuscationIV = make([]byte, 8) // Wrong length (should be 16)
+	// HIGH-1.3 fix: Use atomic Load/Store to modify config (make a copy before modifying)
+	oldCfg := transport.config.Load()
+	newCfg := *oldCfg
+	newCfg.Config.ObfuscationIV = make([]byte, 8) // Wrong length (should be 16)
+	transport.config.Store(&newCfg)
 
 	assertConvertToRouterAddressError(t, transport, "invalid IV length")
 }
@@ -257,11 +271,12 @@ func BenchmarkConvertToRouterAddress(b *testing.B) {
 
 	transport := &NTCP2Transport{
 		listener: listener,
-		config: &Config{
-			ListenerAddress: "127.0.0.1:0",
-			Config:          ntcp2Config,
-		},
 	}
+	// HIGH-1.3 fix: Initialize atomic.Pointer[Config] after struct creation
+	transport.config.Store(&Config{
+		ListenerAddress: "127.0.0.1:0",
+		Config:          ntcp2Config,
+	})
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

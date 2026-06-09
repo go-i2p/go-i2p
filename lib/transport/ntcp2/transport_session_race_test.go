@@ -307,7 +307,11 @@ func TestCreateNewListenerWithConfig_ErrorPathStructure(t *testing.T) {
 	// Calling with a valid address but nil config should fail at
 	// NewNTCP2Listener, and the fix ensures tcpListener is closed.
 	listenerAddr := fmt.Sprintf("127.0.0.1:0")
-	transport.config.ListenerAddress = listenerAddr
+	// HIGH-1.3 fix: Use atomic Load/Store to modify config (make a copy before modifying)
+	oldCfg := transport.config.Load()
+	newCfg := *oldCfg
+	newCfg.ListenerAddress = listenerAddr
+	transport.config.Store(&newCfg)
 	_, _, err := transport.createNewListenerWithConfig(nil, listenerAddr)
 	// We expect an error because ntcp2Config is nil.
 	assert.Error(t, err, "should fail with nil NTCP2 config")

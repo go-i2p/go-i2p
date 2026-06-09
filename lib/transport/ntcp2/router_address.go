@@ -135,7 +135,9 @@ func prepareRouterAddressComponents(transport *NTCP2Transport) (host, port strin
 		return "", "", nil, err
 	}
 
-	options, err = buildRouterAddressOptions(host, port, staticKey, transport.config.Config)
+	// HIGH-1.3 fix: Load config atomically
+	cfg := transport.config.Load()
+	options, err = buildRouterAddressOptions(host, port, staticKey, cfg.Config)
 	if err != nil {
 		logOptionsBuildError(err)
 		return "", "", nil, err
@@ -362,12 +364,14 @@ func extractNATAddrHostPort(addr *nat.NATAddr) (string, string, error) {
 //
 // Returns the base64-encoded static public key string and any validation error encountered.
 func validateAndExtractStaticKey(transport *NTCP2Transport) (string, error) {
-	if transport.config == nil || transport.config.Config == nil {
+	// HIGH-1.3 fix: Load config atomically
+	cfg := transport.config.Load()
+	if cfg == nil || cfg.Config == nil {
 		log.WithFields(logger.Fields{"at": "validateAndExtractStaticKey"}).Error("Transport NTCP2 configuration is not initialized")
 		return "", oops.Errorf("transport NTCP2 configuration is not initialized")
 	}
 
-	ntcp2Config := transport.config.Config
+	ntcp2Config := cfg.Config
 
 	if len(ntcp2Config.StaticKey) != 32 {
 		log.WithField("length", len(ntcp2Config.StaticKey)).Error("Invalid static key length")

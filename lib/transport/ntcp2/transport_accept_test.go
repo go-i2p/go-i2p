@@ -104,15 +104,17 @@ func newTestTransport(listener net.Listener, maxSessions int) *NTCP2Transport {
 		ListenerAddress: "127.0.0.1:0",
 		MaxSessions:     maxSessions,
 	}
-	return &NTCP2Transport{
+	transport := &NTCP2Transport{
 		listener:                     listener,
-		config:                       cfg,
 		ctx:                          ctx,
 		cancel:                       cancel,
 		logger:                       logger.WithField("test", "accept"),
 		sessions:                     sync.Map{},
 		testBypassHandshakeTypeCheck: true, // Allow mock connections in tests
 	}
+	// HIGH-1.3 fix: Initialize atomic.Pointer[Config] after struct creation
+	transport.config.Store(cfg)
+	return transport
 }
 
 // TestAccept_TracksInboundSession verifies that trackInboundConnection properly
@@ -413,8 +415,12 @@ func TestPerformInboundHandshake_RejectsNonNTCP2Conn(t *testing.T) {
 	// Feed a mock connection that is not an *ntcp2.Conn
 	mockConn := newAcceptMockConn("10.0.0.1:5001")
 
+	// HIGH-2.2: Create handshake context for test
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	// performInboundHandshake should reject it and clean up
-	err := transport.performInboundHandshake(mockConn)
+	err := transport.performInboundHandshake(mockConn, ctx)
 	require.Error(t, err, "performInboundHandshake should return an error for non-*ntcp2.Conn")
 	assert.Contains(t, err.Error(), "not *ntcp2.Conn",
 		"error message should indicate the type mismatch")

@@ -532,11 +532,12 @@ func TestConnectionManagement_SessionLimitEnforcement(t *testing.T) {
 	config.MaxSessions = 2
 
 	transport := &NTCP2Transport{
-		config: config,
 		ctx:    ctx,
 		cancel: cancel,
 		logger: logger.WithField("test", "session_limit"),
 	}
+	// HIGH-1.3 fix: Initialize atomic.Pointer[Config] after struct creation
+	transport.config.Store(config)
 
 	// First two reservations should succeed
 	err = transport.checkSessionLimit()
@@ -790,11 +791,12 @@ func TestTransportName(t *testing.T) {
 	defer cancel()
 
 	transport := &NTCP2Transport{
-		config: &Config{},
 		ctx:    ctx,
 		cancel: cancel,
 		logger: logger.WithField("test", "name"),
 	}
+	// HIGH-1.3 fix: Initialize atomic.Pointer[Config] after struct creation
+	transport.config.Store(&Config{})
 
 	assert.Equal(t, "NTCP2", transport.Name(),
 		"Transport name must be 'NTCP2'")

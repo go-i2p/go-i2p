@@ -74,10 +74,6 @@ func newAcceptTestSetup(t *testing.T, remoteAddr string, maxSessions int) (*NTCP
 	mockListener := newMockListener() // No connections in channel yet
 
 	transport := &NTCP2Transport{
-		config: &Config{
-			ListenerAddress: "127.0.0.1:0",
-			MaxSessions:     maxSessions,
-		},
 		ctx:                          ctx,
 		cancel:                       cancel,
 		logger:                       logger.WithField("test", "accept"),
@@ -86,6 +82,12 @@ func newAcceptTestSetup(t *testing.T, remoteAddr string, maxSessions int) (*NTCP
 		listener:                     mockListener, // Set listener to pass Accept() nil check
 		testBypassHandshakeTypeCheck: true,         // Allow mock connections in tests
 	}
+
+	// HIGH-1.3 fix: Initialize atomic.Pointer[Config] after struct creation
+	transport.config.Store(&Config{
+		ListenerAddress: "127.0.0.1:0",
+		MaxSessions:     maxSessions,
+	})
 
 	// Mark the acceptRunOnce as already executed so Accept() won't start the
 	// real accept loop (which would try to read from the mock listener and block)

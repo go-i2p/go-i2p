@@ -151,11 +151,13 @@ func VerifyStaticKeyConsistency(transport *NTCP2Transport, identity router_info.
 
 // getValidatedPrivateKey retrieves and validates the transport's static private key.
 func getValidatedPrivateKey(transport *NTCP2Transport) ([]byte, error) {
-	if transport.config == nil || transport.config.Config == nil {
+	// HIGH-1.3 fix: Load config atomically
+	cfg := transport.config.Load()
+	if cfg == nil || cfg.Config == nil {
 		return nil, oops.Errorf("transport config is not initialized")
 	}
 
-	privKeyBytes := transport.config.Config.StaticKey
+	privKeyBytes := cfg.Config.StaticKey
 	if len(privKeyBytes) != 32 {
 		return nil, oops.Errorf("static key is not 32 bytes: got %d", len(privKeyBytes))
 	}

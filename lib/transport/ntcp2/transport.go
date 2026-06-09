@@ -51,8 +51,8 @@ type NTCP2Transport struct {
 	// Network listener (uses net.Listener interface per guidelines)
 	listener net.Listener // Will be *ntcp2.Listener internally
 
-	// Configuration
-	config   *Config
+	// Configuration (HIGH-1.3 fix: use atomic.Pointer for thread-safe config swaps)
+	config   atomic.Pointer[Config]
 	identity router_info.RouterInfo
 
 	// Keystore for crypto key initialization (needed by SetIdentity)
@@ -257,8 +257,7 @@ func loadOrGenerateObfuscationIV(ntcp2Config *ntcp2.Config, workingDir string, c
 
 // buildTransportInstance constructs the NTCP2Transport struct with initialized fields.
 func buildTransportInstance(config *Config, identity router_info.RouterInfo, keystore KeystoreProvider, ctx context.Context, cancel context.CancelFunc, logger *logger.Entry) *NTCP2Transport {
-	return &NTCP2Transport{
-		config:   config,
+	transport := &NTCP2Transport{
 		identity: identity,
 		keystore: keystore,
 		handler:  NewDefaultHandler(),
@@ -268,6 +267,9 @@ func buildTransportInstance(config *Config, identity router_info.RouterInfo, key
 		wg:       sync.WaitGroup{},
 		sessions: sync.Map{},
 	}
+	// HIGH-1.3 fix: Initialize atomic.Pointer[Config] with Store
+	transport.config.Store(config)
+	return transport
 }
 
 // setupNetworkListener creates and attaches the TCP and NTCP2 listeners to the transport.
@@ -523,9 +525,10 @@ func (t *NTCP2Transport) shouldShutdown(rawConn net.Conn) bool {
 // canAcceptNewSession checks if we can accept a new session without exceeding limits.
 func (t *NTCP2Transport) canAcceptNewSession(rawConn net.Conn) bool {
 	if err := t.checkSessionLimit(); err != nil {
+		cfg := t.config.Load()
 		t.logger.WithFields(map[string]interface{}{
 			"session_count": t.GetSessionCount(),
-			"max_sessions":  t.config.GetMaxSessions(),
+			"max_sessions":  cfg.GetMaxSessions(),
 		}).Warn("Session limit reached — dropping inbound TCP connection")
 		rawConn.Close()
 		return false
@@ -538,8 +541,16 @@ func (t *NTCP2Transport) canAcceptNewSession(rawConn net.Conn) bool {
 // pendingConns for consumption by Accept(). On failure the connection and
 // the reserved session slot are cleaned up. Times out if the queue is full
 // to prevent indefinite blocking and slot reservation exhaustion.
+// HIGH-2.2 fix: Use handshake context with timeout to prevent goroutine leaks on slow handshakes
 func (t *NTCP2Transport) inboundHandshakeWorker(conn net.Conn) {
-	if err := t.performInboundHandshake(conn); err != nil {
+	// HIGH-2.2: Create context with timeout for handshake to prevent goroutine leaks
+	// if handshake blocks indefinitely. This ensures even slow/unresponsive peers
+	// don't cause goroutines to accumulate.
+	const handshakeTimeout = 30 * time.Second
+	handshakeCtx, cancel := context.WithTimeout(context.Background(), handshakeTimeout)
+	defer cancel()
+
+	if err := t.performInboundHandshake(conn, handshakeCtx); err != nil {
 		// performInboundHandshake already closes conn and unreserves the slot.
 		return
 	}
@@ -599,10 +610,11 @@ func (t *NTCP2Transport) inboundHandshakeWorker(conn net.Conn) {
 }
 
 // performInboundHandshake performs the Noise XK handshake on an accepted connection.
+// HIGH-2.2 fix: Accepts handshakeCtx with timeout to prevent goroutine leaks on slow handshakes.
 // On failure, applies probing resistance and releases the reserved session slot.
 // On success, propagates the peer's static key, extracts and stores the peer's
 // RouterInfo from message 3, and wires the AEAD-error termination callback.
-func (t *NTCP2Transport) performInboundHandshake(conn net.Conn) error {
+func (t *NTCP2Transport) performInboundHandshake(conn net.Conn, handshakeCtx context.Context) error {
 	ntcp2Conn, ok := conn.(*ntcp2.Conn)
 	if !ok {
 		if t.testBypassHandshakeTypeCheck {
@@ -620,7 +632,8 @@ func (t *NTCP2Transport) performInboundHandshake(conn net.Conn) error {
 		return oops.Errorf("accepted connection is not *ntcp2.Conn (got %T)", conn)
 	}
 
-	if err := t.executeHandshake(ntcp2Conn); err != nil {
+	// HIGH-2.2: Use handshakeCtx (with timeout) for the handshake, not t.ctx
+	if err := t.executeHandshake(ntcp2Conn, handshakeCtx); err != nil {
 		return err
 	}
 
@@ -635,8 +648,9 @@ func (t *NTCP2Transport) performInboundHandshake(conn net.Conn) error {
 }
 
 // executeHandshake performs the Noise XK handshake with probing resistance on failure.
-func (t *NTCP2Transport) executeHandshake(ntcp2Conn *ntcp2.Conn) error {
-	if err := ntcp2Conn.UnderlyingConn().Handshake(t.ctx); err != nil {
+// HIGH-2.2 fix: Uses handshakeCtx (with timeout) to prevent goroutine leaks on slow/stuck handshakes.
+func (t *NTCP2Transport) executeHandshake(ntcp2Conn *ntcp2.Conn, handshakeCtx context.Context) error {
+	if err := ntcp2Conn.UnderlyingConn().Handshake(handshakeCtx); err != nil {
 		raw := extractRawConn(ntcp2Conn.UnderlyingConn())
 		t.logger.WithError(err).Debug("Inbound handshake failed, applying probing resistance")
 		applyProbingResistance(raw)
@@ -871,8 +885,11 @@ func (t *NTCP2Transport) Addr() net.Addr {
 func (t *NTCP2Transport) UpdateLocalRouterInfo(ri router_info.RouterInfo) {
 	t.identityMu.Lock()
 	t.identity = ri
-	staticKey := t.config.Config.StaticKey
 	t.identityMu.Unlock()
+
+	// HIGH-1.3 fix: Load config atomically
+	cfg := t.config.Load()
+	staticKey := cfg.Config.StaticKey
 
 	if err := verifyLocalRouterInfoMatchesStaticKey(ri, staticKey); err != nil {
 		t.logger.WithError(err).Error(
@@ -936,7 +953,8 @@ func (t *NTCP2Transport) SetIdentity(ident router_info.RouterInfo) error {
 		return err
 	}
 
-	if err := initializeCryptoKeys(ntcp2Config, ident, t.keystore, t.config.WorkingDir, nil); err != nil {
+	cfg := t.config.Load()
+	if err := initializeCryptoKeys(ntcp2Config, ident, t.keystore, cfg.WorkingDir, nil); err != nil {
 		return oops.Wrapf(err, "failed to reinitialize crypto keys after identity update")
 	}
 
@@ -950,7 +968,11 @@ func (t *NTCP2Transport) SetIdentity(ident router_info.RouterInfo) error {
 	// Only update identity/config after listener rebind succeeds.
 	t.identityMu.Lock()
 	t.identity = ident
-	t.config.Config = ntcp2Config
+	// HIGH-1.3 fix: Load current config, make a copy, update the copy, and atomically store it
+	oldCfg := t.config.Load()
+	newCfg := *oldCfg // Shallow copy the Config struct
+	newCfg.Config = ntcp2Config
+	t.config.Store(&newCfg) // Atomic store of new config
 	t.identityMu.Unlock()
 
 	t.logger.Info("Identity updated successfully")
@@ -994,7 +1016,8 @@ func (t *NTCP2Transport) recreateListenerIfNeeded(ntcp2Config *ntcp2.Config) err
 	// S-2 fix: Snapshot old listener but keep it active during new listener creation.
 	// Only swap and close old listener after new one succeeds. Prevents infinite
 	// retry loop in acceptNextConnection if new listener creation fails.
-	currentAddr := t.config.ListenerAddress
+	cfg := t.config.Load()
+	currentAddr := cfg.ListenerAddress
 	oldListener := t.listener
 	t.identityMu.Unlock()
 
@@ -1013,7 +1036,11 @@ func (t *NTCP2Transport) recreateListenerIfNeeded(ntcp2Config *ntcp2.Config) err
 	// This atomic swap ensures t.listener is never nil on error path.
 	t.identityMu.Lock()
 	t.listener = newListener
-	t.config.ListenerAddress = newAddr
+	// HIGH-1.3 fix: Load current config, make a copy, update the copy, and atomically store it
+	oldCfg := t.config.Load()
+	newCfg := *oldCfg
+	newCfg.ListenerAddress = newAddr
+	t.config.Store(&newCfg) // HIGH-1.3 fix: atomic store
 	t.identityMu.Unlock()
 
 	// Close the old listener outside the lock after successful swap
@@ -1045,7 +1072,9 @@ func (t *NTCP2Transport) createNewListenerWithConfig(ntcp2Config *ntcp2.Config, 
 	// This ensures the recreated listener maintains NAT-mapped address semantics.
 	// R-2 fix: bindWithNATTraversal now returns the bound address; we capture and return it
 	// for the caller to update config under lock.
-	tcpListener, boundAddr, err := bindWithNATTraversal(t.config, iport)
+	// HIGH-1.3 fix: Load config atomically before passing to bindWithNATTraversal
+	cfg := t.config.Load()
+	tcpListener, boundAddr, err := bindWithNATTraversal(cfg, iport)
 	if err != nil {
 		t.logger.WithError(err).Error("Failed to rebind listener with NAT traversal")
 		return nil, "", WrapNTCP2Error(err, "rebinding listener")
@@ -1304,10 +1333,11 @@ func (t *NTCP2Transport) createOutboundSession(routerInfo router_info.RouterInfo
 
 	// Enforce connection pool limit before dialing (reserves a session slot atomically)
 	if err := t.checkSessionLimit(); err != nil {
+		cfg := t.config.Load()
 		t.logger.WithFields(map[string]interface{}{
 			"router_hash":   fmt.Sprintf("%x", routerHashBytes[:8]),
 			"session_count": t.GetSessionCount(),
-			"max_sessions":  t.config.GetMaxSessions(),
+			"max_sessions":  cfg.GetMaxSessions(),
 		}).Warn("Connection pool full, rejecting outbound session")
 		return nil, err
 	}
@@ -1601,9 +1631,8 @@ func (t *NTCP2Transport) createNTCP2Config(routerInfo router_info.RouterInfo) (*
 		return nil, oops.Wrapf(err, "failed to get remote router hash")
 	}
 
-	t.identityMu.RLock()
-	ourStaticKey := t.config.Config.StaticKey
-	t.identityMu.RUnlock()
+	cfg := t.config.Load()
+	ourStaticKey := cfg.Config.StaticKey
 
 	config, err := ntcp2.NewNTCP2Config(remoteHash, true)
 	if err != nil {
@@ -1629,8 +1658,11 @@ func (t *NTCP2Transport) createNTCP2Config(routerInfo router_info.RouterInfo) (*
 func (t *NTCP2Transport) attachLocalRouterInfo(config *ntcp2.Config) error {
 	t.identityMu.RLock()
 	localRI := t.identity
-	ourStaticKey := t.config.Config.StaticKey
 	t.identityMu.RUnlock()
+
+	// HIGH-1.3 fix: Load config atomically
+	cfg := t.config.Load()
+	ourStaticKey := cfg.Config.StaticKey
 
 	// Per-dial sanity check: mirror i2pd's GetNTCP2AddressWithStaticKey.
 	// i2pd silently terminates with zero data-phase bytes if the static key
@@ -1757,7 +1789,8 @@ func (t *NTCP2Transport) resolveExistingSession(existing interface{}, routerHash
 // reserve a session slot, preventing TOCTOU races under concurrent access.
 // If the caller does not actually use the slot, they must call unreserveSessionSlot.
 func (t *NTCP2Transport) checkSessionLimit() error {
-	maxSessions := t.config.GetMaxSessions()
+	cfg := t.config.Load()
+	maxSessions := cfg.GetMaxSessions()
 	for {
 		current := atomic.LoadInt32(&t.sessionCount)
 		if int(current) >= maxSessions {
