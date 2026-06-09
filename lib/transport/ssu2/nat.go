@@ -1604,16 +1604,25 @@ func (t *SSU2Transport) maybeAutoInitiatePeerTest(remote net.Addr) {
 }
 
 // shouldInitiatePeerTest checks if we should initiate a peer test.
+// SA-1 fix: Use CAS loop to atomically increment only when below the cap,
+// preventing the race where concurrent goroutines could all read "<= 3" and
+// proceed, allowing more than startupPeerTestMax tests.
 func (t *SSU2Transport) shouldInitiatePeerTest() bool {
 	const startupPeerTestMax = 3
 	if t.peerTestManager == nil {
 		return false
 	}
-	if atomic.AddInt32(&t.startupPeerTestCount, 1) > startupPeerTestMax {
-		atomic.AddInt32(&t.startupPeerTestCount, -1) // don't overflow
-		return false
+	// Atomic CAS loop: only increment if we're below the cap.
+	for {
+		current := atomic.LoadInt32(&t.startupPeerTestCount)
+		if current >= startupPeerTestMax {
+			return false
+		}
+		if atomic.CompareAndSwapInt32(&t.startupPeerTestCount, current, current+1) {
+			return true
+		}
+		// CAS failed (another goroutine incremented); retry.
 	}
-	return true
 }
 
 // extractUDPAddr extracts a UDPAddr from a net.Addr, unwrapping SSU2Addr if needed.

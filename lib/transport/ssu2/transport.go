@@ -49,8 +49,9 @@ type SSU2Transport struct {
 	keystore KeystoreProvider
 	handler  *DefaultHandler
 
-	sessions     sync.Map
-	sessionCount int32
+	sessions       sync.Map
+	sessionCount   int32
+	isShuttingDown int32 // atomic flag set during Close() to prevent cleanup callbacks from double-decrementing
 
 	identityMu sync.RWMutex
 
@@ -1076,6 +1077,8 @@ func (t *SSU2Transport) Compatible(routerInfo router_info.RouterInfo) bool {
 func (t *SSU2Transport) Close() error {
 	t.closeOnce.Do(func() {
 		t.logger.Info("Closing SSU2 transport")
+		// SA-2 fix: Set shutdown flag to prevent cleanup callbacks from decrementing during shutdown
+		atomic.StoreInt32(&t.isShuttingDown, 1)
 		t.cancel()
 
 		if t.relayManager != nil {
@@ -1203,7 +1206,14 @@ func (t *SSU2Transport) unreserveSessionSlot() {
 	}
 }
 
+// removeSession removes a session from the session map (called by session cleanup callback).
+// SA-2 fix: During shutdown, cleanup callbacks skip removeSession to avoid double-decrement.
 func (t *SSU2Transport) removeSession(routerHash data.Hash) {
+	shutdownFlag := atomic.LoadInt32(&t.isShuttingDown)
+	if shutdownFlag != 0 {
+		// Close() will handle cleanup; skip to prevent double-decrement
+		return
+	}
 	if _, loaded := t.sessions.LoadAndDelete(routerHash); loaded {
 		atomic.AddInt32(&t.sessionCount, -1)
 	}
