@@ -127,14 +127,21 @@ func (ns *natState) recordObservation(addr string) string {
 // on the PeerTestManager and invalidates the cached NAT state when stale.
 // The goroutine exits when the transport context is cancelled.
 func (t *SSU2Transport) startNATCleanup() {
+	t.natCtxMu.Lock()
+	natCtx := t.natCtx
+	t.natCtxMu.Unlock()
+
+	// BUG FIX: If natCtx is nil (race with stopNATManagers), don't start the goroutine.
+	// This can happen during rapid SetIdentity calls in tests.
+	if natCtx == nil {
+		return
+	}
+
 	t.wg.Add(1)
 	go func() {
 		defer t.wg.Done()
 		ticker := time.NewTicker(natCleanupInterval)
 		defer ticker.Stop()
-		t.natCtxMu.Lock()
-		natCtx := t.natCtx
-		t.natCtxMu.Unlock()
 		for {
 			select {
 			case <-natCtx.Done():

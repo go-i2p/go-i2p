@@ -255,12 +255,12 @@ func TestProbeAndBindWithNATTraversal_TOCTOU(t *testing.T) {
 	// claimed by another process between probe and rebind. We simulate this by
 	// having a goroutine aggressively claim ports that get probed.
 	//
-	// Due to the inherent race condition and system-dependent behavior, we 
+	// Due to the inherent race condition and system-dependent behavior, we
 	// cannot guarantee a TOCTOU hit, but we can verify the function eventually
 	// succeeds even under contention.
 
 	cfg := DefaultBindConfig("tcp", "127.0.0.1:0")
-	cfg.MaxRetries = 10 // Increase retries to ensure success under contention
+	cfg.MaxRetries = 10                        // Increase retries to ensure success under contention
 	cfg.RetryBaseDelay = 10 * time.Millisecond // Faster retries for test
 
 	result, err := ProbeAndBindWithNATTraversal(cfg)
@@ -276,7 +276,7 @@ func TestProbeAndBindWithNATTraversal_TOCTOU(t *testing.T) {
 func TestProbeAndBindWithNATTraversal_RetryExhaustion(t *testing.T) {
 	// This test ensures that a clear error message is returned when all retries fail.
 	// We simulate this by using an invalid ListenerAddress that will fail consistently.
-	
+
 	cfg := DefaultBindConfig("tcp", "999.999.999.999:0")
 	cfg.MaxRetries = 2
 	cfg.RetryBaseDelay = 1 * time.Millisecond
@@ -301,4 +301,174 @@ func TestProbeAndBindWithNATTraversal_Wildcard(t *testing.T) {
 	assert.NotEmpty(t, result.BoundAddress, "BoundAddress should be set")
 
 	t.Logf("Wildcard probed and bound to %s", result.BoundAddress)
+}
+
+// TestProbeAndBindWithNATTraversal_InvalidNetwork tests invalid network type
+func TestProbeAndBindWithNATTraversal_InvalidNetwork(t *testing.T) {
+	cfg := DefaultBindConfig("sctp", ":0")
+	_, err := ProbeAndBindWithNATTraversal(cfg)
+	require.Error(t, err, "Should fail for unsupported network type")
+	assert.Contains(t, err.Error(), "unsupported network type", "Error should mention unsupported network type")
+}
+
+// TestBindWithNATTraversal_IPv6Loopback tests IPv6 loopback binding
+func TestBindWithNATTraversal_IPv6Loopback(t *testing.T) {
+	cfg := DefaultBindConfig("tcp", "[::1]:0")
+	result, err := BindWithNATTraversal(cfg)
+	require.NoError(t, err, "Should bind to IPv6 loopback")
+	require.NotNil(t, result)
+	defer result.Listener.Close()
+
+	assert.NotNil(t, result.Listener, "TCP Listener should be set")
+	assert.Contains(t, result.BoundAddress, "::1", "BoundAddress should contain IPv6 loopback")
+}
+
+// TestBindWithNATTraversal_RequestedPortLoopback tests binding with RequestedPort on loopback
+func TestBindWithNATTraversal_RequestedPortLoopback(t *testing.T) {
+	cfg := DefaultBindConfig("tcp", "127.0.0.1:0")
+	cfg.RequestedPort = 0 // Let OS assign
+	result, err := BindWithNATTraversal(cfg)
+	require.NoError(t, err)
+	defer result.Listener.Close()
+
+	assert.NotNil(t, result.Listener, "TCP Listener should be set")
+	t.Logf("Bound to loopback with OS-assigned port: %s", result.BoundAddress)
+}
+
+// TestProbeAndBindWithNATTraversal_UDPWildcard tests UDP wildcard binding
+func TestProbeAndBindWithNATTraversal_UDPWildcard(t *testing.T) {
+	cfg := DefaultBindConfig("udp", ":0")
+	result, err := ProbeAndBindWithNATTraversal(cfg)
+	require.NoError(t, err, "ProbeAndBindWithNATTraversal should succeed for UDP wildcard")
+	require.NotNil(t, result)
+	defer result.PacketConn.Close()
+
+	assert.NotNil(t, result.PacketConn, "UDP PacketConn should be set")
+	assert.NotEmpty(t, result.BoundAddress, "BoundAddress should be set")
+
+	t.Logf("UDP wildcard probed and bound to %s", result.BoundAddress)
+}
+
+// TestBindWithNATTraversal_InvalidAddress tests binding with an invalid address
+func TestBindWithNATTraversal_InvalidAddress(t *testing.T) {
+	cfg := DefaultBindConfig("tcp", "not-a-valid-address")
+	_, err := BindWithNATTraversal(cfg)
+	require.Error(t, err, "Should fail with invalid address format")
+	assert.Contains(t, err.Error(), "invalid listener address", "Error should mention invalid listener address")
+}
+
+// TestApplyJitter_NoFailure tests jitter application under normal conditions
+func TestApplyJitter_NoFailure(t *testing.T) {
+	const baseDelay = 50 * time.Millisecond
+
+	jittered := applyJitter(baseDelay)
+	assert.GreaterOrEqual(t, jittered, 37*time.Millisecond, "Should be >= 75% of base")
+	assert.LessOrEqual(t, jittered, 63*time.Millisecond, "Should be <= 125% of base")
+}
+
+// TestDefaultBindConfig_Values tests default values
+func TestDefaultBindConfig_Values(t *testing.T) {
+	cfg := DefaultBindConfig("tcp", ":9002")
+	assert.Equal(t, "tcp", cfg.Network)
+	assert.Equal(t, ":9002", cfg.ListenerAddress)
+	assert.Equal(t, 3*time.Second, cfg.NATTimeout)
+	assert.Equal(t, 5, cfg.MaxRetries)
+	assert.Equal(t, 50*time.Millisecond, cfg.RetryBaseDelay)
+	assert.Equal(t, 0, cfg.RequestedPort, "RequestedPort should default to 0")
+}
+
+// TestProbeAndBindWithNATTraversal_IPv6 tests IPv6 probing
+func TestProbeAndBindWithNATTraversal_IPv6(t *testing.T) {
+	cfg := DefaultBindConfig("tcp", "[::1]:0")
+	result, err := ProbeAndBindWithNATTraversal(cfg)
+	require.NoError(t, err, "Should succeed for IPv6 loopback")
+	require.NotNil(t, result)
+	defer result.Listener.Close()
+
+	assert.NotNil(t, result.Listener, "Should have bound a listener")
+	assert.Contains(t, result.BoundAddress, "::1", "BoundAddress should contain IPv6 loopback")
+}
+
+// TestBindWithNATTraversal_UDPRequestedPort tests UDP binding with RequestedPort
+func TestBindWithNATTraversal_UDPRequestedPort(t *testing.T) {
+	cfg := DefaultBindConfig("udp", "127.0.0.1:0")
+	cfg.RequestedPort = 0 // Let OS assign
+	result, err := BindWithNATTraversal(cfg)
+	require.NoError(t, err)
+	defer result.PacketConn.Close()
+
+	assert.NotNil(t, result.PacketConn, "UDP PacketConn should be set")
+	t.Logf("UDP bound to loopback with OS-assigned port: %s", result.BoundAddress)
+}
+
+// TestProbeAndBindWithNATTraversal_ConcurrentCalls tests concurrent binding
+func TestProbeAndBindWithNATTraversal_ConcurrentCalls(t *testing.T) {
+	const numGoroutines = 5
+	results := make(chan *BindResult, numGoroutines)
+	errors := make(chan error, numGoroutines)
+
+	for i := 0; i < numGoroutines; i++ {
+		go func() {
+			cfg := DefaultBindConfig("tcp", "127.0.0.1:0")
+			result, err := ProbeAndBindWithNATTraversal(cfg)
+			if err != nil {
+				errors <- err
+			} else {
+				results <- result
+			}
+		}()
+	}
+
+	// Collect results
+	var boundResults []*BindResult
+	for i := 0; i < numGoroutines; i++ {
+		select {
+		case result := <-results:
+			boundResults = append(boundResults, result)
+		case err := <-errors:
+			t.Fatalf("Concurrent probe failed: %v", err)
+		case <-time.After(10 * time.Second):
+			t.Fatal("Timeout waiting for concurrent probes")
+		}
+	}
+
+	// Clean up all listeners
+	for _, result := range boundResults {
+		result.Listener.Close()
+	}
+
+	// Verify all got unique ports
+	ports := make(map[int]bool)
+	for _, result := range boundResults {
+		addr := result.Listener.Addr().(*net.TCPAddr)
+		if ports[addr.Port] {
+			t.Errorf("Duplicate port %d assigned", addr.Port)
+		}
+		ports[addr.Port] = true
+	}
+
+	assert.Equal(t, numGoroutines, len(ports), "Should have unique ports for all goroutines")
+	t.Logf("Concurrent probes succeeded with unique ports: %v", ports)
+}
+
+// TestIsLoopbackAddress_AllLoopbackRange tests that all 127.x.x.x addresses are loopback
+func TestIsLoopbackAddress_AllLoopbackRange(t *testing.T) {
+	tests := []struct {
+		ip       string
+		expected bool
+	}{
+		{"127.0.0.1", true},
+		{"127.0.0.255", true},
+		{"127.255.255.255", true},
+		{"127.1.2.3", true},
+		{"128.0.0.1", false},
+		{"126.255.255.255", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.ip, func(t *testing.T) {
+			result := IsLoopbackAddress(tt.ip)
+			assert.Equal(t, tt.expected, result, "IsLoopbackAddress(%q) = %v, want %v", tt.ip, result, tt.expected)
+		})
+	}
 }
