@@ -603,10 +603,22 @@ func (t *NTCP2Transport) inboundHandshakeWorker(conn net.Conn) {
 	case t.pendingConns <- tracked:
 		// Successfully enqueued for Accept() to consume.
 		// Mark the connection as accepted to prevent dual-ownership via promotion (R-3).
-		// The Accept() consumer now owns this connection's lifecycle; promoteRawConnToSession
-		// will skip acceptedConn entries.
+		// Use CompareAndSwap instead of Store to avoid clobbering a concurrent promotion (X-3).
 		peerHash := t.extractPeerHash(tracked)
-		t.sessions.Store(peerHash, acceptedConn{Conn: tracked})
+		// The original value should be the underlying raw conn (before wrapping in trackedConn).
+		// If CAS fails, a concurrent GetSession already promoted this to a session, so we
+		// don't deliver it to Accept (ownership already transferred).
+		originalConn := tracked.(*trackedConn).Conn
+		if !t.sessions.CompareAndSwap(peerHash, originalConn, acceptedConn{Conn: tracked}) {
+			// Promotion race: concurrent GetSession won. Close the tracked wrapper
+			// and unreserve the slot since we're not delivering to Accept.
+			t.logger.WithFields(map[string]interface{}{
+				"remote_addr": conn.RemoteAddr().String(),
+				"peer_hash":   fmt.Sprintf("%x", peerHash[:8]),
+			}).Debug("Inbound connection promoted concurrently; not delivering to Accept")
+			tracked.Close()
+			return
+		}
 	case <-sendCtx.Done():
 		// Queue send timed out: close the connection.
 		// The tracked conn's onClose callback will call removeSession which
@@ -1111,6 +1123,13 @@ func (t *NTCP2Transport) findExistingSession(routerHash data.Hash) (transport.Tr
 		return t.validateExistingSession(ntcp2Session, routerHash)
 	}
 
+	// Skip connections already delivered to Accept() (X-1 fix).
+	// The Accept() consumer owns the socket; promotion would create dual ownership.
+	if _, ok := session.(acceptedConn); ok {
+		t.logNoSessionFound(routerHash)
+		return nil, false
+	}
+
 	if conn, ok := session.(net.Conn); ok {
 		return t.promoteInboundConnection(conn, session, routerHash)
 	}
@@ -1146,6 +1165,17 @@ func (t *NTCP2Transport) validateExistingSession(s *NTCP2Session, routerHash dat
 // Uses NewNTCP2SessionDeferred to avoid starting workers before CAS succeeds,
 // matching the pattern in resolveExistingSession.
 func (t *NTCP2Transport) promoteInboundConnection(conn net.Conn, original interface{}, routerHash data.Hash) (transport.TransportSession, bool) {
+	// Defensive check: refuse to promote an acceptedConn (X-1 fix).
+	// This should never happen if findExistingSession is correct, but
+	// defense-in-depth prevents dual socket ownership.
+	if _, ok := original.(acceptedConn); ok {
+		routerHashBytes := routerHash.Bytes()
+		t.logger.WithFields(map[string]interface{}{
+			"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
+		}).Error("Refusing to promote acceptedConn (already delivered to Accept)")
+		return nil, false
+	}
+
 	promoted := NewNTCP2SessionDeferred(conn, t.ctx, t.logger)
 
 	// Start workers BEFORE CompareAndSwap (MEDIUM 3.4).

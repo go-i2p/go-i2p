@@ -3,6 +3,7 @@ package ssu2
 import (
 	"context"
 	"encoding/binary"
+	"net"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -42,7 +43,7 @@ type pendingI2NP struct {
 // SSU2Session implements transport.TransportSession over an SSU2 connection.
 type SSU2Session struct {
 	conn   *ssu2noise.SSU2Conn
-	connMu sync.Mutex // protects conn field (SM-2 fix)
+	connMu sync.RWMutex // protects conn field (R-1 fix: upgraded to RWMutex for read-heavy access)
 
 	sendQueue     chan i2np.Message
 	recvChan      chan i2np.Message
@@ -280,6 +281,25 @@ func (s *SSU2Session) DetachConn() {
 	s.connMu.Lock()
 	s.conn = nil
 	s.connMu.Unlock()
+}
+
+// Conn returns the session's underlying connection, or nil if detached (R-1 fix).
+// Caller must not retain the pointer across context switches.
+func (s *SSU2Session) Conn() *ssu2noise.SSU2Conn {
+	s.connMu.RLock()
+	defer s.connMu.RUnlock()
+	return s.conn
+}
+
+// RemoteAddr returns the remote address of the session's underlying connection,
+// or nil if the connection is detached (R-1 fix).
+func (s *SSU2Session) RemoteAddr() net.Addr {
+	s.connMu.RLock()
+	defer s.connMu.RUnlock()
+	if s.conn == nil {
+		return nil
+	}
+	return s.conn.RemoteAddr()
 }
 
 // SetCleanupCallback sets a callback invoked when the session closes.

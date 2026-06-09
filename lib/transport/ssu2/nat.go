@@ -350,11 +350,15 @@ func (t *SSU2Transport) getOurIdentityHash() data.Hash {
 // extractSenderHash extracts the router hash from an SSU2Session's remote address.
 // Returns a zero hash if extraction fails or the session is nil.
 func extractSenderHash(session *SSU2Session) data.Hash {
-	if session == nil || session.conn == nil {
+	if session == nil {
 		return data.Hash{}
 	}
-	remoteAddr := session.conn.RemoteAddr()
-	if ssu2Addr, ok := remoteAddr.(*ssu2noise.SSU2Addr); ok {
+	// Use locked accessor to avoid race with DetachConn (R-1 fix).
+	remoteAddr := session.RemoteAddr()
+	if remoteAddr == nil {
+		return data.Hash{}
+	}
+	if ssu2Addr, ok := remoteAddr.(*ssu2noise.SSU2Addr); ok && ssu2Addr != nil {
 		return ssu2Addr.RouterHash()
 	}
 	return data.Hash{}
@@ -668,11 +672,12 @@ func (t *SSU2Transport) sendProbeToAlice(ptBlock *ssu2noise.PeerTestBlock, alice
 	// Sending a probe from an arbitrary peer's session skews external address
 	// observations and confuses NAT behavior detection. Fail-closed if relaySession
 	// is unavailable to prevent misattribution of traffic source.
-	if relaySession == nil || relaySession.conn == nil {
+	conn := relaySession.Conn()
+	if relaySession == nil || conn == nil {
 		t.logger.Debug("PeerTest Charlie: relay session unavailable, cannot send probe (probe requires protocol-correlated path)")
 		return nil
 	}
-	return relaySession.conn.SendToAddress(encoded, aliceAddr)
+	return conn.SendToAddress(encoded, aliceAddr)
 }
 
 // anyActiveSession returns the first active SSU2Session, or nil if none exist.
@@ -680,7 +685,7 @@ func (t *SSU2Transport) anyActiveSession() *SSU2Session {
 	var found *SSU2Session
 	t.sessions.Range(func(_, value interface{}) bool {
 		s, ok := value.(*SSU2Session)
-		if ok && s.conn != nil {
+		if ok && s.Conn() != nil {
 			found = s
 			return false
 		}
@@ -1084,7 +1089,12 @@ func (t *SSU2Transport) prepareRelayResponseCredentials() ([]byte, []byte, error
 // extractBobRouterHash extracts the router hash from Bob's session address.
 func extractBobRouterHash(bobSession *SSU2Session) data.Hash {
 	var bobHash data.Hash
-	if ssu2Addr, ok := bobSession.conn.RemoteAddr().(*ssu2noise.SSU2Addr); ok {
+	// Use locked accessor to avoid race with DetachConn (R-1 fix).
+	remoteAddr := bobSession.RemoteAddr()
+	if remoteAddr == nil {
+		return bobHash
+	}
+	if ssu2Addr, ok := remoteAddr.(*ssu2noise.SSU2Addr); ok && ssu2Addr != nil {
 		bobHash = ssu2Addr.RouterHash()
 	}
 	return bobHash

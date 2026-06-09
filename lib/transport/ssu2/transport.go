@@ -500,10 +500,22 @@ func (t *SSU2Transport) Accept() (net.Conn, error) {
 	}
 
 	// Mark the connection as accepted to prevent dual-ownership via promotion (R-3).
-	// The Accept() consumer now owns this connection's lifecycle; promoteInboundConnection
-	// will skip acceptedConn entries.
+	// Use CompareAndSwap instead of Store to avoid clobbering a concurrent promotion (X-3).
 	peerHash := t.extractPeerHash(tracked)
-	t.sessions.Store(peerHash, acceptedConn{Conn: tracked})
+	// The original value should be the underlying raw conn (before wrapping in trackedConn).
+	// If CAS fails, a concurrent GetSession already promoted this to a session, so we
+	// don't deliver it to Accept (ownership already transferred).
+	originalConn := tracked.(*trackedConn).Conn
+	if !t.sessions.CompareAndSwap(peerHash, originalConn, acceptedConn{Conn: tracked}) {
+		// Promotion race: concurrent GetSession won. Close the tracked wrapper
+		// and unreserve the slot since we're not delivering to Accept.
+		t.logger.WithFields(map[string]interface{}{
+			"remote_addr": conn.RemoteAddr().String(),
+			"peer_hash":   fmt.Sprintf("%x", peerHash[:8]),
+		}).Debug("Inbound SSU2 connection promoted concurrently; not delivering to Accept")
+		tracked.Close()
+		return nil, ErrDuplicateSession
+	}
 
 	return tracked, nil
 }
@@ -791,6 +803,13 @@ func (t *SSU2Transport) resolveSessionFromMap(existing interface{}, routerHash d
 		}
 		return session, true
 	}
+
+	// Skip connections already delivered to Accept() (X-2 fix).
+	// The Accept() consumer owns the socket; promotion would create dual ownership.
+	if _, ok := existing.(acceptedConn); ok {
+		return nil, false
+	}
+
 	if conn, ok := existing.(net.Conn); ok {
 		return t.promoteInboundConnection(conn, existing, routerHash)
 	}
@@ -798,6 +817,17 @@ func (t *SSU2Transport) resolveSessionFromMap(existing interface{}, routerHash d
 }
 
 func (t *SSU2Transport) promoteInboundConnection(conn net.Conn, original interface{}, routerHash data.Hash) (transport.TransportSession, bool) {
+	// Defensive check: refuse to promote an acceptedConn (X-2 fix).
+	// This should never happen if resolveSessionFromMap is correct, but
+	// defense-in-depth prevents dual socket ownership.
+	if _, ok := original.(acceptedConn); ok {
+		routerHashBytes := routerHash.Bytes()
+		t.logger.WithFields(map[string]interface{}{
+			"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
+		}).Error("Refusing to promote acceptedConn (already delivered to Accept)")
+		return nil, false
+	}
+
 	ssu2Conn, ok := conn.(*ssu2noise.SSU2Conn)
 	if !ok {
 		return nil, false
@@ -986,6 +1016,12 @@ func (t *SSU2Transport) registerOrReuseSession(conn *ssu2noise.SSU2Conn, routerH
 		if existingSession, ok := existing.(*SSU2Session); ok {
 			return existingSession, false, nil // Reusing existing, slot not used
 		}
+		// Skip connections already delivered to Accept() (X-2 fix).
+		// The Accept() consumer owns the socket; treat as concurrent connection attempt.
+		if _, ok := existing.(acceptedConn); ok {
+			// Close the newly dialed session since we can't reuse the accepted conn.
+			return nil, false, oops.Errorf("peer has accepted connection (owned by Accept consumer)")
+		}
 		// Found a raw net.Conn (from Accept) — promote it to SSU2Session.
 		if rawConn, ok := existing.(net.Conn); ok {
 			promoted := t.promoteRawConnToSession(rawConn, routerHash, existing)
@@ -997,6 +1033,8 @@ func (t *SSU2Transport) registerOrReuseSession(conn *ssu2noise.SSU2Conn, routerH
 		// This prevents future connection attempts from reusing a corrupted state.
 		// The connection already closed, so we cannot recover it.
 		t.sessions.Delete(routerHash)
+		// IMPORTANT: Decrement the counter since we're deleting a tracked entry (X-2 fix).
+		atomic.AddInt32(&t.sessionCount, -1)
 		routerHashBytes := routerHash.Bytes()
 		t.logger.WithFields(map[string]interface{}{
 			"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
@@ -1225,13 +1263,16 @@ func (t *SSU2Transport) findSessionByAddr(addr *net.UDPAddr) *SSU2Session {
 	if addr == nil {
 		return nil
 	}
+	addrString := addr.String()
 	var found *SSU2Session
 	t.sessions.Range(func(_, value interface{}) bool {
 		s, ok := value.(*SSU2Session)
-		if !ok || s.conn == nil {
+		if !ok {
 			return true
 		}
-		if s.conn.RemoteAddr().String() == addr.String() {
+		// Use locked accessor to avoid race with DetachConn (R-1 fix).
+		remoteAddr := s.RemoteAddr()
+		if remoteAddr != nil && remoteAddr.String() == addrString {
 			found = s
 			return false
 		}
@@ -1276,8 +1317,9 @@ func (t *SSU2Transport) findSessionByHash(hash data.Hash) *SSU2Session {
 // RemoteUDPAddr returns the remote UDP address of the session's underlying
 // SSU2 connection.
 func (s *SSU2Session) RemoteUDPAddr() *net.UDPAddr {
-	if s.conn == nil {
+	conn := s.Conn()
+	if conn == nil {
 		return nil
 	}
-	return s.conn.GetRemoteAddr()
+	return conn.GetRemoteAddr()
 }
