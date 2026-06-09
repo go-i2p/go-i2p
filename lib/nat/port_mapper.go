@@ -98,11 +98,101 @@ func NewPortMapperManager(cfg *PortMapperConfig) *PortMapperManager {
 		cancel: cancel,
 	}
 
-	// Start retry loop in background (no-op for now, will implement in Step 2.1)
-	// pmm.wg.Add(1)
-	// go pmm.retryLoop()
+	// Start retry loop in background
+	pmm.wg.Add(1)
+	go pmm.retryLoop()
 
 	return pmm
+}
+
+// retryLoop performs port mapping retry with exponential backoff.
+// Exits when context is cancelled or mapping succeeds.
+func (pmm *PortMapperManager) retryLoop() {
+	defer pmm.wg.Done()
+
+	backoff := pmm.backoffCfg.Initial
+
+	for {
+		// Wait for backoff delay or context cancellation
+		if !WaitWithContext(pmm.ctx, backoff) {
+			// Context cancelled, exit
+			return
+		}
+
+		// Attempt port mapping
+		if pmm.attemptMapping() {
+			// Mapping succeeded, exit retry loop
+			return
+		}
+
+		// Mapping failed, increase backoff
+		backoff = pmm.backoffCfg.CalculateNextBackoff(backoff)
+	}
+}
+
+// attemptMapping attempts to create a port mapper and map the port.
+// Returns true if successful, false if should retry.
+func (pmm *PortMapperManager) attemptMapping() bool {
+	// Create port mapper
+	mapper, err := pmm.createMapper()
+	if err != nil {
+		log.WithFields(map[string]interface{}{
+			"network": pmm.network,
+			"port":    pmm.internalPort,
+			"error":   err,
+		}).Debug("NAT port mapper unavailable; will retry")
+		return false
+	}
+
+	gwIP, _ := mapper.GetExternalIP()
+	log.WithFields(map[string]interface{}{
+		"gateway": gwIP,
+		"network": pmm.network,
+		"port":    pmm.internalPort,
+	}).Debug("NAT port mapping: attempting to map port")
+
+	// Attempt to map the port
+	externalPort, err := mapper.MapPort(pmm.network, pmm.internalPort, pmm.leaseDur)
+	if err != nil {
+		log.WithFields(map[string]interface{}{
+			"gateway": gwIP,
+			"network": pmm.network,
+			"port":    pmm.internalPort,
+			"error":   err,
+		}).Debug("NAT port mapping failed; will retry")
+		return false
+	}
+
+	// Success! Store the mapper and external port
+	pmm.mu.Lock()
+	pmm.mapper = mapper
+	pmm.extPort = externalPort
+	if extIP, err := mapper.GetExternalIP(); err == nil {
+		pmm.extIP = extIP
+	}
+	pmm.mu.Unlock()
+
+	log.WithFields(map[string]interface{}{
+		"external_ip":   pmm.extIP,
+		"external_port": externalPort,
+		"internal_port": pmm.internalPort,
+		"network":       pmm.network,
+	}).Info("NAT port mapping succeeded")
+
+	return true
+}
+
+// createMapper creates a port mapper with timeout context.
+func (pmm *PortMapperManager) createMapper() (nattraversal.PortMapper, error) {
+	mapCtx, mapCancel := context.WithTimeout(pmm.ctx, 5*time.Second)
+	defer mapCancel()
+
+	mapper, err := nattraversal.NewPortMapperContext(mapCtx)
+	if err != nil {
+		return nil, err
+	}
+
+	return mapper, nil
 }
 
 // GetExternalPort returns the currently mapped external port.

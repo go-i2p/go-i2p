@@ -16,7 +16,6 @@ import (
 	"github.com/go-i2p/crypto/types"
 	"github.com/go-i2p/go-i2p/lib/nat"
 	"github.com/go-i2p/go-i2p/lib/transport"
-	nattraversal "github.com/go-i2p/go-nat-listener"
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
@@ -92,12 +91,9 @@ type SSU2Transport struct {
 	// NAT state cache with TTL.
 	natStateCache *natState
 
-	// Port mapper lifecycle management (MEDIUM 2.5): when port mapping succeeds,
-	// we store the mapper and external port so we can properly clean up the
-	// mapping during transport Close(). Protected by portMapperMu.
-	portMapperMu       sync.Mutex
-	activePortMapper   nattraversal.PortMapper
-	activeExternalPort int
+	// Port mapper lifecycle management: handles UPnP/NAT-PMP port mapping with
+	// automatic retry and cleanup. Managed by lib/nat.PortMapperManager.
+	portMapperManager *nat.PortMapperManager
 
 	// Key management.
 	persistentConfig   *PersistentConfig
@@ -1162,21 +1158,12 @@ func (t *SSU2Transport) Close() error {
 			atomic.StoreInt32(&t.sessionCount, 0)
 		}
 
-		// Clean up port mapper if one was successfully created (MEDIUM 2.5)
-		t.portMapperMu.Lock()
-		if t.activePortMapper != nil && t.activeExternalPort > 0 {
-			if err := t.activePortMapper.UnmapPort("udp", t.activeExternalPort); err != nil {
-				t.logger.WithFields(map[string]interface{}{
-					"external_port": t.activeExternalPort,
-					"error":         err,
-				}).Warn("Failed to unmap port during transport Close (non-fatal)")
-			} else {
-				t.logger.WithField("external_port", t.activeExternalPort).Debug("Port mapping cleaned up on transport close")
+		// Clean up port mapper using lib/nat manager
+		if t.portMapperManager != nil {
+			if err := t.portMapperManager.Stop(); err != nil {
+				t.logger.WithError(err).Warn("Failed to stop port mapper during close")
 			}
-			t.activePortMapper = nil
-			t.activeExternalPort = 0
 		}
-		t.portMapperMu.Unlock()
 
 		t.logger.Info("SSU2 transport closed")
 		t.closeErr = listenerErr

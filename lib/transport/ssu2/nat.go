@@ -14,7 +14,7 @@ import (
 	i2pbase64 "github.com/go-i2p/common/base64"
 	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
-	nattraversal "github.com/go-i2p/go-nat-listener"
+	"github.com/go-i2p/go-i2p/lib/nat"
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
 	"github.com/samber/oops"
 )
@@ -103,7 +103,17 @@ func initNATManagers(t *SSU2Transport) error {
 	}
 	t.loadNATState()
 	t.startNATCleanup()
-	t.startNATPortMapRetry()
+
+	// Start port mapper with retry logic (extracted to lib/nat).
+	if port, valid := t.validateAndExtractPort(); valid {
+		cfg := &nat.PortMapperConfig{
+			Network:      "udp",
+			InternalPort: port,
+			Context:      t.natCtx,
+		}
+		t.portMapperManager = nat.NewPortMapperManager(cfg)
+	}
+
 	return nil
 }
 
@@ -132,6 +142,10 @@ func stopNATManagers(t *SSU2Transport) {
 	}
 	if t.keyRotationManager != nil {
 		t.keyRotationManager.Stop()
+	}
+	if t.portMapperManager != nil {
+		_ = t.portMapperManager.Stop()
+		t.portMapperManager = nil
 	}
 	// introducerRegistry has no Stop method; just replace it.
 }
@@ -1781,30 +1795,6 @@ func (t *SSU2Transport) launchPeerTest(udpAddr *net.UDPAddr) {
 	}()
 }
 
-// startNATPortMapRetry launches a background goroutine that periodically
-// re-attempts UPnP/NAT-PMP port mapping using exponential back-off
-// (initial 30 s, doubling each failure, capped at 30 min). On success the
-// external address is logged at INFO level and the goroutine exits. Each
-// failed attempt is logged at DEBUG level together with the gateway address
-// to allow diagnostic correlation. The goroutine exits when t.ctx is
-// cancelled (i.e., when the transport is closed).
-func (t *SSU2Transport) startNATPortMapRetry() {
-	internalPort, valid := t.validateAndExtractPort()
-	if !valid {
-		return
-	}
-
-	t.wg.Add(1)
-	go func() {
-		defer t.wg.Done()
-		// L-1: Capture per-generation NAT context.
-		t.natCtxMu.Lock()
-		natCtx := t.natCtx
-		t.natCtxMu.Unlock()
-		t.runPortMappingRetryLoop(natCtx, internalPort)
-	}()
-}
-
 // validateAndExtractPort validates the listener address and extracts the internal port.
 // Returns the port number and true if valid, or 0 and false if validation fails.
 // R-2 fix: Reads t.config.ListenerAddress under identityMu to avoid race with SetIdentity.
@@ -1829,107 +1819,4 @@ func (t *SSU2Transport) validateAndExtractPort() (int, bool) {
 		return 0, false
 	}
 	return internalPort, true
-}
-
-// runPortMappingRetryLoop performs the actual port mapping retry loop with exponential backoff.
-func (t *SSU2Transport) runPortMappingRetryLoop(natCtx context.Context, internalPort int) {
-	backoff := natRetryInitial
-	for {
-		if !t.waitForRetryDelay(natCtx, backoff) {
-			return
-		}
-
-		if t.attemptPortMapping(internalPort, &backoff) {
-			return
-		}
-	}
-}
-
-// waitForRetryDelay waits for the backoff delay or context cancellation.
-// Returns false if context is done, true if delay completed.
-func (t *SSU2Transport) waitForRetryDelay(natCtx context.Context, backoff time.Duration) bool {
-	select {
-	case <-natCtx.Done():
-		return false
-	case <-time.After(backoff):
-		return true
-	}
-}
-
-// attemptPortMapping attempts to create a port mapper and map the port.
-// Returns true if successful (should exit loop), false if should retry.
-func (t *SSU2Transport) attemptPortMapping(internalPort int, backoff *time.Duration) bool {
-	mapper, err := t.createPortMapper()
-	if err != nil {
-		t.logAndIncreaseBackoff(backoff, err, "", "NAT-PMP/UPnP port mapper unavailable; will retry")
-		return false
-	}
-
-	gwIP, _ := mapper.GetExternalIP()
-	t.logger.WithFields(map[string]interface{}{
-		"gateway": gwIP,
-		"port":    internalPort,
-	}).Debug("NAT-PMP retry: attempting port mapping")
-
-	externalPort, err := mapper.MapPort("udp", internalPort, 1*time.Hour)
-	if err != nil {
-		t.logAndIncreaseBackoff(backoff, err, gwIP, "NAT-PMP port mapping failed; will retry")
-		return false
-	}
-
-	// Store mapper and external port for cleanup on transport shutdown (MEDIUM 2.5)
-	t.portMapperMu.Lock()
-	t.activePortMapper = mapper
-	t.activeExternalPort = externalPort
-	t.portMapperMu.Unlock()
-
-	t.logSuccessAndExit(mapper, internalPort)
-	return true
-}
-
-// createPortMapper creates a port mapper with timeout context.
-func (t *SSU2Transport) createPortMapper() (nattraversal.PortMapper, error) {
-	mapCtx, mapCancel := context.WithTimeout(t.ctx, 5*time.Second)
-	defer mapCancel()
-	mapper, err := nattraversal.NewPortMapperContext(mapCtx)
-	if err != nil {
-		t.reachMetrics.natMappingFailure.Add(1)
-		return nil, err
-	}
-	return mapper, nil
-}
-
-// logAndIncreaseBackoff logs the failure and increases backoff using exponential growth.
-func (t *SSU2Transport) logAndIncreaseBackoff(backoff *time.Duration, err error, gwIP, message string) {
-	t.reachMetrics.natMappingFailure.Add(1)
-	fields := map[string]interface{}{
-		"error":   err,
-		"backoff": backoff.String(),
-	}
-	if gwIP != "" {
-		fields["gateway"] = gwIP
-	}
-	t.logger.WithFields(fields).Debug(message)
-	*backoff = increaseBackoff(*backoff)
-}
-
-// increaseBackoff doubles the backoff duration, capped at natRetryMax.
-func increaseBackoff(current time.Duration) time.Duration {
-	if current < natRetryMax {
-		current *= 2
-		if current > natRetryMax {
-			return natRetryMax
-		}
-	}
-	return current
-}
-
-// logSuccessAndExit logs successful port mapping and increments success metrics.
-func (t *SSU2Transport) logSuccessAndExit(mapper nattraversal.PortMapper, internalPort int) {
-	t.reachMetrics.natMappingSuccess.Add(1)
-	extIP, _ := mapper.GetExternalIP()
-	t.logger.WithFields(map[string]interface{}{
-		"external_ip":   extIP,
-		"internal_port": internalPort,
-	}).Info("NAT-PMP/UPnP port mapping succeeded")
 }
