@@ -49,6 +49,14 @@ type natState struct {
 	// observations accumulates external-address reports from PeerTest
 	// replies to allow majority confirmation.
 	observations []externalAddrObservation
+
+	// CRITICAL RD-1 FIX: Track which nonces have already been processed.
+	// Each nonce issued by this node should result in exactly ONE observation
+	// being recorded. Multiple observations from the same nonce violate the spec
+	// and enable address-poisoning attacks (attacker sends multiple replies with
+	// same nonce but different addresses to skew majority voting).
+	// completedNonces: map[nonce] → true when an observation has been recorded.
+	completedNonces map[uint32]bool
 }
 
 // persistedNATState is the on-disk JSON representation of NAT state.
@@ -93,9 +101,23 @@ func (ns *natState) getExternal() string {
 // observations older than peerTestObservationWindow before appending.
 // Returns the confirmed address string if peerTestConfirmThreshold or more
 // observations agree on the same address within the window; otherwise empty.
-func (ns *natState) recordObservation(addr string) string {
+// CRITICAL RD-1 FIX: Rejects duplicate observations from the same nonce.
+// Each PeerTest nonce should only contribute one observation.
+func (ns *natState) recordObservation(addr string, nonce uint32) string {
 	ns.mu.Lock()
 	defer ns.mu.Unlock()
+
+	// Initialize completedNonces map lazily
+	if ns.completedNonces == nil {
+		ns.completedNonces = make(map[uint32]bool)
+	}
+
+	// CRITICAL RD-1: Reject if we've already recorded an observation for this nonce.
+	// Prevents attacker from sending multiple PeerTest replies with the same nonce
+	// but different addresses to poison the majority voting.
+	if ns.completedNonces[nonce] {
+		return ""
+	}
 
 	now := time.Now()
 	cutoff := now.Add(-peerTestObservationWindow)
@@ -109,6 +131,9 @@ func (ns *natState) recordObservation(addr string) string {
 	}
 	live = append(live, externalAddrObservation{addr: addr, at: now})
 	ns.observations = live
+
+	// Mark this nonce as completed
+	ns.completedNonces[nonce] = true
 
 	// Count occurrences per address.
 	counts := make(map[string]int, len(live))

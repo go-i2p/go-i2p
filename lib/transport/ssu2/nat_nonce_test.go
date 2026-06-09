@@ -63,44 +63,43 @@ func TestPeerTestObservation_UnknownNonce(t *testing.T) {
 
 // TestPeerTestObservation_ValidNonce verifies that observations with legitimate
 // nonces (from tests this node initiated) ARE recorded and can confirm an address.
+// With the CRITICAL RD-1 fix, each nonce produces exactly one observation.
 func TestPeerTestObservation_ValidNonce(t *testing.T) {
 	tr, cleanup := makeTestTransportWithListener(t)
 	defer cleanup()
 
 	require.NotNil(t, tr.peerTestManager)
 
-	// Initiate a legitimate peer test to get a valid nonce
-	bobAddr := &net.UDPAddr{IP: net.ParseIP("198.51.100.1"), Port: 19001} // TEST-NET-2
-	legitimateNonce, err := tr.InitiateNATDetection(bobAddr)
-	require.NoError(t, err)
-	require.NotZero(t, legitimateNonce)
-
-	// Verify the nonce is registered
-	test := tr.peerTestManager.GetTest(legitimateNonce)
-	require.NotNil(t, test, "legitimate nonce should be registered")
-
 	// Get the manager under lock (HIGH-1.2 fix)
 	tr.natManagerMu.RLock()
 	mgr := tr.peerTestManager
 	tr.natManagerMu.RUnlock()
 
-	// Send peer test replies with the legitimate nonce and a consistent external address
 	observedIP := net.ParseIP("192.0.2.99") // TEST-NET-1
 	observedPort := uint16(54321)
-	block := &ssu2noise.PeerTestBlock{
-		MessageCode: ssu2noise.PeerTestReply,
-		Nonce:       legitimateNonce,
-		AliceIP:     observedIP.To4(),
-		AlicePort:   observedPort,
-		Version:     2,
+
+	// Initiate peerTestConfirmThreshold PeerTests with different nonces
+	// (simulate multiple independent observations from different peers)
+	nonces := make([]uint32, peerTestConfirmThreshold)
+	for i := 0; i < peerTestConfirmThreshold; i++ {
+		// Each PeerTest gets a unique nonce
+		bobAddr := &net.UDPAddr{IP: net.ParseIP("198.51.100.1"), Port: 19001}
+		nonce, err := tr.InitiateNATDetection(bobAddr)
+		require.NoError(t, err)
+		nonces[i] = nonce
 	}
 
-	// Send peerTestConfirmThreshold observations with the legitimate nonce
-	// to trigger address confirmation
-	for i := 0; i < peerTestConfirmThreshold; i++ {
+	// Send one observation for each nonce with the same external address
+	for _, nonce := range nonces {
+		block := &ssu2noise.PeerTestBlock{
+			MessageCode: ssu2noise.PeerTestReply,
+			Nonce:       nonce,
+			AliceIP:     observedIP.To4(),
+			AlicePort:   observedPort,
+			Version:     2,
+		}
 		err := tr.handlePeerTestAsAlice(block, mgr)
 		assert.NoError(t, err)
-		// Small delay to ensure observations have distinct timestamps
 		time.Sleep(1 * time.Millisecond)
 	}
 
@@ -112,16 +111,12 @@ func TestPeerTestObservation_ValidNonce(t *testing.T) {
 
 // TestPeerTestObservation_MixedNonces verifies that observations with unknown
 // nonces do not interfere with legitimate observations using valid nonces.
+// With the CRITICAL RD-1 fix, only observations from valid nonces are recorded.
 func TestPeerTestObservation_MixedNonces(t *testing.T) {
 	tr, cleanup := makeTestTransportWithListener(t)
 	defer cleanup()
 
 	require.NotNil(t, tr.peerTestManager)
-
-	// Initiate a legitimate peer test
-	bobAddr := &net.UDPAddr{IP: net.ParseIP("198.51.100.2"), Port: 19002}
-	legitimateNonce, err := tr.InitiateNATDetection(bobAddr)
-	require.NoError(t, err)
 
 	// Get the manager under lock (HIGH-1.2 fix)
 	tr.natManagerMu.RLock()
@@ -130,6 +125,15 @@ func TestPeerTestObservation_MixedNonces(t *testing.T) {
 
 	legitimateIP := net.ParseIP("192.0.2.100")
 	attackerIP := net.ParseIP("203.0.113.50")
+
+	// Initiate peerTestConfirmThreshold legitimate PeerTests with different nonces
+	legitimateNonces := make([]uint32, peerTestConfirmThreshold)
+	for i := 0; i < peerTestConfirmThreshold; i++ {
+		bobAddr := &net.UDPAddr{IP: net.ParseIP("198.51.100.2"), Port: 19002}
+		nonce, err := tr.InitiateNATDetection(bobAddr)
+		require.NoError(t, err)
+		legitimateNonces[i] = nonce
+	}
 
 	// Interleave legitimate and attacker observations
 	for i := 0; i < peerTestConfirmThreshold; i++ {
@@ -143,10 +147,10 @@ func TestPeerTestObservation_MixedNonces(t *testing.T) {
 		}
 		_ = tr.handlePeerTestAsAlice(attackerBlock, mgr)
 
-		// Legitimate observation (known nonce)
+		// Legitimate observation (known nonce, each with a different nonce)
 		legitimateBlock := &ssu2noise.PeerTestBlock{
 			MessageCode: ssu2noise.PeerTestReply,
-			Nonce:       legitimateNonce,
+			Nonce:       legitimateNonces[i],
 			AliceIP:     legitimateIP.To4(),
 			AlicePort:   55555,
 			Version:     2,

@@ -255,10 +255,16 @@ func (t *SSU2Transport) verifyRelayRequestSignature(block *ssu2noise.RelayReques
 	}
 
 	// Look up Charlie's hash from the relay tag
-	if t.relayManager == nil {
+	// RC-3 fix: Acquire read lock to safely read relayManager.
+	// SetIdentity can modify this pointer, so we must hold the lock for consistency.
+	t.natManagerMu.RLock()
+	relayMgr := t.relayManager
+	t.natManagerMu.RUnlock()
+
+	if relayMgr == nil {
 		return false, oops.Errorf("signature verification unavailable: relay manager not configured")
 	}
-	relayTag := t.relayManager.GetRelayTag(block.RelayTag)
+	relayTag := relayMgr.GetRelayTag(block.RelayTag)
 	if relayTag == nil {
 		t.logger.WithField("relay_tag", block.RelayTag).Warn("RelayRequest: unknown relay tag, cannot verify signature")
 		return false, oops.Errorf("unknown relay tag %d", block.RelayTag)
@@ -514,7 +520,7 @@ func (t *SSU2Transport) handlePeerTestAsAlice(ptBlock *ssu2noise.PeerTestBlock, 
 		t.logger.Debug("PeerTest complete (non-initiator path)")
 	}
 
-	t.processExternalAddressConfirmation(externalAddr)
+	t.processExternalAddressConfirmation(externalAddr, nonce)
 	return nil
 }
 
@@ -549,7 +555,7 @@ func isValidExternalAddress(ip net.IP) bool {
 }
 
 // processExternalAddressConfirmation records and confirms external address via majority logic.
-func (t *SSU2Transport) processExternalAddressConfirmation(externalAddr *net.UDPAddr) {
+func (t *SSU2Transport) processExternalAddressConfirmation(externalAddr *net.UDPAddr, nonce uint32) {
 	// Record observation for majority-confirmation logic (D3).
 	if externalAddr == nil || t.natStateCache == nil {
 		return
@@ -570,7 +576,7 @@ func (t *SSU2Transport) processExternalAddressConfirmation(externalAddr *net.UDP
 		return
 	}
 
-	confirmed := t.natStateCache.recordObservation(externalAddr.String())
+	confirmed := t.natStateCache.recordObservation(externalAddr.String(), nonce)
 	if confirmed == "" || confirmed == t.natStateCache.getExternal() {
 		return
 	}

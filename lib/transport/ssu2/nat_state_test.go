@@ -183,15 +183,18 @@ func TestRecordObservation_ConfirmsAfterThreshold(t *testing.T) {
 
 	// BUG FIX HIGH RD-1: threshold raised from 2 to 3; adjust test to match.
 	// First observation — below threshold, no confirmation yet.
-	confirmed := ns.recordObservation(addr)
+	// Use different nonces to simulate observations from different PeerTests
+	confirmed := ns.recordObservation(addr, uint32(1))
 	assert.Equal(t, "", confirmed, "should not confirm on first observation")
 
 	// Second observation — still below threshold (need 3).
-	confirmed = ns.recordObservation(addr)
+	// Use a different nonce to avoid duplicate rejection
+	confirmed = ns.recordObservation(addr, uint32(2))
 	assert.Equal(t, "", confirmed, "should not confirm on second observation (threshold=3)")
 
 	// Third observation of the same address — meets threshold (3).
-	confirmed = ns.recordObservation(addr)
+	// Use a different nonce
+	confirmed = ns.recordObservation(addr, uint32(3))
 	assert.Equal(t, addr, confirmed, "should confirm after peerTestConfirmThreshold observations")
 }
 
@@ -201,10 +204,10 @@ func TestRecordObservation_ConfirmsAfterThreshold(t *testing.T) {
 func TestRecordObservation_DifferentAddressesNotConfirmed(t *testing.T) {
 	ns := &natState{}
 
-	confirmed := ns.recordObservation("1.2.3.4:4567")
+	confirmed := ns.recordObservation("1.2.3.4:4567", uint32(1))
 	assert.Equal(t, "", confirmed)
 
-	confirmed = ns.recordObservation("5.6.7.8:4567")
+	confirmed = ns.recordObservation("5.6.7.8:4567", uint32(2))
 	assert.Equal(t, "", confirmed, "different addresses should not trigger confirmation")
 }
 
@@ -217,6 +220,7 @@ func TestRecordObservation_StaleObservationsPruned(t *testing.T) {
 
 	// Inject a stale observation directly.
 	ns.mu.Lock()
+	ns.completedNonces = make(map[uint32]bool)
 	ns.observations = append(ns.observations, externalAddrObservation{
 		addr: addr,
 		at:   time.Now().Add(-peerTestObservationWindow - time.Second),
@@ -224,7 +228,7 @@ func TestRecordObservation_StaleObservationsPruned(t *testing.T) {
 	ns.mu.Unlock()
 
 	// This fresh observation is the first non-stale one, so no confirmation.
-	confirmed := ns.recordObservation(addr)
+	confirmed := ns.recordObservation(addr, uint32(1))
 	assert.Equal(t, "", confirmed, "stale observation must not count towards threshold")
 }
 
@@ -237,12 +241,57 @@ func TestRecordObservation_MixedAddressesConfirmsCorrect(t *testing.T) {
 	noise := "9.9.9.9:9999"
 
 	// BUG FIX HIGH RD-1: threshold raised from 2 to 3; adjust test to match.
-	ns.recordObservation(noise)
-	ns.recordObservation(target)
-	ns.recordObservation(target) // second occurrence of target
+	ns.recordObservation(noise, uint32(1))
+	ns.recordObservation(target, uint32(2))
+	ns.recordObservation(target, uint32(3)) // second occurrence of target from different nonce
 
-	confirmed := ns.recordObservation(target) // third occurrence of target — meets threshold
+	confirmed := ns.recordObservation(target, uint32(4)) // third occurrence of target from different nonce — meets threshold
 	assert.Equal(t, target, confirmed)
+}
+
+// TestRecordObservation_DuplicateNonceRejected verifies that recordObservation
+// rejects duplicate observations from the same nonce (CRITICAL RD-1 fix).
+// This prevents address-poisoning attacks where an attacker sends multiple
+// PeerTest replies with the same nonce but different addresses to skew
+// majority voting and hijack external address confirmation.
+func TestRecordObservation_DuplicateNonceRejected(t *testing.T) {
+	ns := &natState{}
+	dupNonce := uint32(100)
+	addr1 := "1.2.3.4:4567"
+	addr2 := "5.6.7.8:4567"
+	addr3 := "9.9.9.9:4567"
+
+	// First observation with nonce 100 — recorded
+	confirmed := ns.recordObservation(addr1, dupNonce)
+	assert.Equal(t, "", confirmed, "first observation should not trigger confirmation")
+
+	// Second observation with SAME nonce 100 but different address — rejected
+	// This is the attack: attacker tries to inject a different address under the same nonce
+	confirmed = ns.recordObservation(addr2, dupNonce)
+	assert.Equal(t, "", confirmed, "duplicate nonce should be rejected, no additional observation recorded")
+
+	// Third observation with SAME nonce 100 but yet another address — also rejected
+	confirmed = ns.recordObservation(addr3, dupNonce)
+	assert.Equal(t, "", confirmed, "duplicate nonce should be rejected again")
+
+	// Now add two more observations from different nonces for the original address
+	// to verify that only addr1 (the first recorded) gets confirmed
+	confirmed = ns.recordObservation(addr1, uint32(101))
+	assert.Equal(t, "", confirmed, "need threshold observations")
+
+	confirmed = ns.recordObservation(addr1, uint32(102))
+	assert.Equal(t, addr1, confirmed, "addr1 should confirm (3 nonces: 100, 101, 102)")
+
+	// Verify addr2 and addr3 never got added to observations despite multiple attempts
+	ns.mu.RLock()
+	defer ns.mu.RUnlock()
+	if len(ns.observations) != 3 {
+		t.Logf("FAIL: expected 3 observations, got %d", len(ns.observations))
+		for i, obs := range ns.observations {
+			t.Logf("  [%d] addr=%s", i, obs.addr)
+		}
+		t.Fatal("duplicate nonce attack: unwanted observations were recorded")
+	}
 }
 
 // TestLoadNATState_RejectsOversizedFile verifies that loadNATState rejects

@@ -1246,7 +1246,8 @@ func (t *NTCP2Transport) validateExistingSession(s *NTCP2Session, routerHash dat
 			"reason":      s.ctx.Err().Error(),
 		}).Info("Evicting stale NTCP2 session")
 		if _, loaded := t.sessions.LoadAndDelete(routerHash); loaded {
-			atomic.AddInt32(&t.sessionCount, -1)
+			// RC-4 FIX: Use safe decrement with runtime assertions
+			t.decrementSessionCountSafe()
 		}
 		return nil, false
 	}
@@ -1905,7 +1906,8 @@ func (t *NTCP2Transport) removeSession(routerHash data.Hash) {
 	// will only decrement truly-stale sessions (those that weren't cleaned up).
 	// This makes shutdown accounting deterministic.
 	if _, loaded := t.sessions.LoadAndDelete(routerHash); loaded {
-		atomic.AddInt32(&t.sessionCount, -1)
+		// RC-4 FIX: Use safe decrement with runtime assertions to catch double-decrements
+		t.decrementSessionCountSafe()
 	}
 	t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Info("Removed session from transport session map")
 }
@@ -1914,6 +1916,27 @@ func (t *NTCP2Transport) removeSession(routerHash data.Hash) {
 // Uses an atomic counter for O(1) performance instead of iterating the session map.
 func (t *NTCP2Transport) GetSessionCount() int {
 	return int(atomic.LoadInt32(&t.sessionCount))
+}
+
+// decrementSessionCountSafe performs a safe atomic decrement with runtime assertions.
+// RC-4 FIX: Catch double-decrements and other accounting errors at runtime.
+// If the counter would go negative, logs error and force-resets to 0 (safety net).
+// Returns true if decrement succeeded, false if it would have gone negative.
+func (t *NTCP2Transport) decrementSessionCountSafe() bool {
+	for {
+		current := atomic.LoadInt32(&t.sessionCount)
+		if current <= 0 {
+			t.logger.WithField("current_count", current).
+				Error("CRITICAL: sessionCount would go negative on decrement (accounting bug detected)")
+			// Force-reset as safety net to prevent persistent negative state
+			atomic.StoreInt32(&t.sessionCount, 0)
+			return false
+		}
+		if atomic.CompareAndSwapInt32(&t.sessionCount, current, current-1) {
+			return true
+		}
+		// CAS failed, retry (another goroutine won the race)
+	}
 }
 
 // GetRouterInfoStoreFailures returns the total count of RouterInfo storage failures
@@ -2015,7 +2038,8 @@ func (t *NTCP2Transport) closeAllActiveSessions() {
 	t.sessions.Range(func(key, value interface{}) bool {
 		if _, loaded := t.sessions.LoadAndDelete(key); loaded {
 			staleCount++
-			atomic.AddInt32(&t.sessionCount, -1)
+			// RC-4 FIX: Use safe decrement with runtime assertions
+			t.decrementSessionCountSafe()
 		}
 		return true
 	})
