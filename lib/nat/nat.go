@@ -11,6 +11,11 @@ import (
 	"github.com/samber/oops"
 )
 
+// NATAddr is a re-export of nattraversal.NATAddr for architectural consistency.
+// This allows transport packages to use nat.NATAddr without directly importing
+// the go-nat-listener package, centralizing all NAT-related types.
+type NATAddr = nattraversal.NATAddr
+
 // BindConfig contains all parameters for NAT-aware binding.
 type BindConfig struct {
 	// Network type ("tcp", "udp", "tcp4", "udp6", etc.)

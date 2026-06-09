@@ -6,13 +6,12 @@ import (
 	"time"
 
 	i2pbase64 "github.com/go-i2p/common/base64"
-	"github.com/samber/oops"
-
 	"github.com/go-i2p/common/router_address"
 	i2pcurve25519 "github.com/go-i2p/crypto/curve25519"
-	nattraversal "github.com/go-i2p/go-nat-listener"
+	"github.com/go-i2p/go-i2p/lib/nat"
 	ntcp2noise "github.com/go-i2p/go-noise/ntcp2"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // logConversionStart logs the start of transport to RouterAddress conversion.
@@ -244,17 +243,17 @@ func extractTransportAddress(transport *NTCP2Transport) (string, string, error) 
 }
 
 // extractAddressComponents extracts host and port from various address types.
-// Supports *ntcp2.Addr, *net.TCPAddr, and *nattraversal.NATAddr.
+// Supports *ntcp2.Addr, *net.TCPAddr, and *nat.NATAddr.
 func extractAddressComponents(addr net.Addr) (string, string, error) {
 	switch typedAddr := addr.(type) {
 	case *ntcp2noise.Addr:
 		return extractFromNTCP2Addr(typedAddr)
 	case *net.TCPAddr:
 		return extractFromTCPAddr(typedAddr)
-	case *nattraversal.NATAddr:
+	case *nat.NATAddr:
 		return extractFromNATAddr(typedAddr)
 	default:
-		log.Errorf("Expected *net.TCPAddr, *ntcp2.Addr, or *nattraversal.NATAddr, got %T", addr)
+		log.Errorf("Expected *net.TCPAddr, *ntcp2.Addr, or *nat.NATAddr, got %T", addr)
 		return "", "", oops.Errorf("unsupported address type %T", addr)
 	}
 }
@@ -278,7 +277,7 @@ func extractFromTCPAddr(typedAddr *net.TCPAddr) (string, string, error) {
 }
 
 // extractFromNATAddr extracts host and port from a NATAddr, using external address.
-func extractFromNATAddr(typedAddr *nattraversal.NATAddr) (string, string, error) {
+func extractFromNATAddr(typedAddr *nat.NATAddr) (string, string, error) {
 	host, port, err := net.SplitHostPort(typedAddr.ExternalAddr())
 	if err != nil {
 		return "", "", oops.Wrapf(err, "failed to parse NATAddr external address %q", typedAddr.ExternalAddr())
@@ -311,12 +310,12 @@ func resolveUnspecifiedIP(host string) string {
 	return host
 }
 
-// extractHostPort extracts host and port from an address that may be *net.TCPAddr or *nattraversal.NATAddr.
+// extractHostPort extracts host and port from an address that may be *net.TCPAddr or *nat.NATAddr.
 func extractHostPort(addr net.Addr) (string, string, error) {
 	switch a := addr.(type) {
 	case *net.TCPAddr:
 		return extractTCPAddrHostPort(a)
-	case *nattraversal.NATAddr:
+	case *nat.NATAddr:
 		return extractNATAddrHostPort(a)
 	default:
 		return "", "", oops.Errorf("unsupported underlying address type %T", addr)
@@ -338,7 +337,7 @@ func extractTCPAddrHostPort(addr *net.TCPAddr) (string, string, error) {
 }
 
 // extractNATAddrHostPort extracts host and port from a NATAddr, using external IP fallback if needed.
-func extractNATAddrHostPort(addr *nattraversal.NATAddr) (string, string, error) {
+func extractNATAddrHostPort(addr *nat.NATAddr) (string, string, error) {
 	host, port, err := net.SplitHostPort(addr.ExternalAddr())
 	if err != nil {
 		return "", "", oops.Wrapf(err, "failed to parse NATAddr external address %q", addr.ExternalAddr())

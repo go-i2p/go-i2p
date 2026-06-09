@@ -12,7 +12,7 @@ import (
 	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_address"
 	"github.com/go-i2p/common/router_info"
-	nattraversal "github.com/go-i2p/go-nat-listener"
+	"github.com/go-i2p/go-i2p/lib/nat"
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
 	"github.com/samber/oops"
 	"golang.org/x/crypto/curve25519"
@@ -386,7 +386,7 @@ func hasUsableIntroducer(introducers []*ssu2noise.RegisteredIntroducer) bool {
 func extractHostPort(addr net.Addr) (string, string, error) {
 	effectiveAddr := unwrapSSU2Addr(addr)
 
-	if natAddr, ok := effectiveAddr.(*nattraversal.NATAddr); ok {
+	if natAddr, ok := effectiveAddr.(*nat.NATAddr); ok {
 		return extractNATAddrHostPort(natAddr)
 	}
 
@@ -402,7 +402,7 @@ func unwrapSSU2Addr(addr net.Addr) net.Addr {
 }
 
 // extractNATAddrHostPort extracts host and port from a NATAddr's external address.
-func extractNATAddrHostPort(natAddr *nattraversal.NATAddr) (string, string, error) {
+func extractNATAddrHostPort(natAddr *nat.NATAddr) (string, string, error) {
 	host, portStr, err := net.SplitHostPort(natAddr.ExternalAddr())
 	if err != nil {
 		return "", "", oops.Wrapf(err, "failed to parse NATAddr external address %q", natAddr.ExternalAddr())
