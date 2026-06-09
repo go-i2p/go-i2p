@@ -369,6 +369,32 @@ func listenWithOSPort(config *Config) (net.PacketConn, error) {
 	return nil, oops.Wrapf(lastErr, "failed to bind UDP port after %d probe attempts due to TOCTOU race", maxPortProbeRetries)
 }
 
+// isLoopbackAddress returns true if host is empty, a loopback IP, or resolves
+// entirely to loopback addresses. P-1 fix: catches "localhost" and other hostnames.
+func isLoopbackAddress(host string) bool {
+	if host == "" {
+		// Empty host means wildcard binding (not loopback)
+		return false
+	}
+	// Try parsing as IP first (fast path)
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback()
+	}
+	// Not a literal IP — resolve the hostname
+	ips, err := net.LookupIP(host)
+	if err != nil || len(ips) == 0 {
+		// Resolution failed or empty — assume non-loopback (fail open for reachability)
+		return false
+	}
+	// Return true only if *all* resolved IPs are loopback
+	for _, ip := range ips {
+		if !ip.IsLoopback() {
+			return false
+		}
+	}
+	return true
+}
+
 // listenWithNATTraversal creates a UDP listener with NAT port mapping.
 // Loopback addresses (127.x.x.x, ::1) bypass NAT traversal entirely because
 // they are unreachable from the internet. For all other addresses a 3-second
@@ -380,7 +406,11 @@ func listenWithNATTraversal(config *Config, iport int) (net.PacketConn, error) {
 	// Loopback addresses (127.x.x.x, ::1) bypass NAT traversal entirely because
 	// they are unreachable from the internet. Empty host ("") indicates wildcard
 	// binding and requires NAT traversal to make the listener reachable.
-	isLoopback := host != "" && net.ParseIP(host) != nil && net.ParseIP(host).IsLoopback()
+	//
+	// P-1 fix: Resolve hostnames (e.g., "localhost") before loopback check.
+	// net.ParseIP("localhost") returns nil, so the original check would treat
+	// localhost as a public address and waste 3s attempting UPnP/NAT-PMP.
+	isLoopback := isLoopbackAddress(host)
 
 	if isLoopback {
 		// Use SO_REUSEADDR to allow rebinding immediately after probing port 0.

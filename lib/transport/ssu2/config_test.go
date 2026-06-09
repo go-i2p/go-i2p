@@ -121,3 +121,26 @@ func TestConfig_GetMaxRetransmissions_Zero(t *testing.T) {
 		t.Errorf("expected default %d for zero, got %d", DefaultMaxRetransmissions, got)
 	}
 }
+
+func TestConfig_GetHolePunchDelay_Default(t *testing.T) {
+	cfg, _ := NewConfig(":9002")
+	if got := cfg.GetHolePunchDelay(); got != DefaultHolePunchDelay {
+		t.Errorf("expected %v, got %v", DefaultHolePunchDelay, got)
+	}
+}
+
+func TestConfig_GetHolePunchDelay_Custom(t *testing.T) {
+	cfg, _ := NewConfig(":9002")
+	cfg.HolePunchDelay = 200 * time.Millisecond
+	if got := cfg.GetHolePunchDelay(); got != 200*time.Millisecond {
+		t.Errorf("expected 200ms, got %v", got)
+	}
+}
+
+func TestConfig_GetHolePunchDelay_Zero(t *testing.T) {
+	cfg, _ := NewConfig(":9002")
+	cfg.HolePunchDelay = 0
+	if got := cfg.GetHolePunchDelay(); got != DefaultHolePunchDelay {
+		t.Errorf("expected default %v for zero, got %v", DefaultHolePunchDelay, got)
+	}
+}

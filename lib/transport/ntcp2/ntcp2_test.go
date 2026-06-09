@@ -174,3 +174,107 @@ type mockKeystore struct{}
 func (m *mockKeystore) GetEncryptionPrivateKey() types.PrivateEncryptionKey {
 	return nil
 }
+
+// E-5: Test that NetDB storage failures are observable (not silently ignored)
+func TestStoreRouterInfoInNetDB_ErrorObservability(t *testing.T) {
+	tests := []struct {
+		name          string
+		storer        interface{}
+		expectError   bool
+		expectLogWarn bool
+	}{
+		{
+			name:          "nil storer returns no error",
+			storer:        nil,
+			expectError:   false,
+			expectLogWarn: false,
+		},
+		{
+			name:          "error-returning storer surfaces error",
+			storer:        &mockStorerWithErrors{shouldFail: true},
+			expectError:   true,
+			expectLogWarn: false,
+		},
+		{
+			name:          "error-returning storer succeeds",
+			storer:        &mockStorerWithErrors{shouldFail: false},
+			expectError:   false,
+			expectLogWarn: false,
+		},
+		{
+			name:          "void storer never returns error",
+			storer:        &mockVoidStorer{},
+			expectError:   false,
+			expectLogWarn: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			config := &Config{
+				ListenerAddress: "127.0.0.1:0",
+			}
+
+			logger := logger.WithField("test", tt.name)
+			var identity router_info.RouterInfo // nil interface value
+			transport := buildTransportInstance(config, identity, &mockKeystore{}, ctx, cancel, logger)
+
+			// Inject the mock storer using SetRouterInfoStorer
+			if tt.storer != nil {
+				if s, ok := tt.storer.(interface {
+					StoreRouterInfo(ri router_info.RouterInfo)
+				}); ok {
+					transport.SetRouterInfoStorer(s)
+				}
+			}
+
+			// Create a minimal RouterInfo for testing
+			mockRI := createMockRouterInfo(t)
+			mockConn := &mockConn{data: []byte{}}
+
+			// Call storeRouterInfoInNetDB and check if error is returned
+			err := transport.storeRouterInfoInNetDB(mockRI, mockConn)
+
+			if tt.expectError {
+				assert.Error(t, err, "Expected storage error to be observable")
+			} else {
+				assert.NoError(t, err, "Expected no error")
+			}
+		})
+	}
+}
+
+// mockStorerWithErrors implements RouterInfoStorerWithErrors for E-5 testing
+type mockStorerWithErrors struct {
+	shouldFail bool
+}
+
+func (m *mockStorerWithErrors) StoreRouterInfo(ri router_info.RouterInfo) {
+	// Void method - never returns error
+}
+
+func (m *mockStorerWithErrors) StoreRouterInfoWithError(ri router_info.RouterInfo) error {
+	if m.shouldFail {
+		return assert.AnError
+	}
+	return nil
+}
+
+// mockVoidStorer implements only the void StoreRouterInfo method
+type mockVoidStorer struct{}
+
+func (m *mockVoidStorer) StoreRouterInfo(ri router_info.RouterInfo) {
+	// Void method - storage happens silently
+}
+
+// createMockRouterInfo creates a minimal RouterInfo for testing
+func createMockRouterInfo(t *testing.T) router_info.RouterInfo {
+	t.Helper()
+	// Return a nil interface value for simplicity - the test focuses on error propagation,
+	// not RouterInfo parsing
+	var ri router_info.RouterInfo
+	return ri
+}

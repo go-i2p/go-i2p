@@ -892,6 +892,25 @@ func (db *StdNetDB) StoreRouterInfo(ri router_info.RouterInfo) {
 	}
 }
 
+// StoreRouterInfoWithError stores a RouterInfo and returns any error encountered during
+// hash computation, serialization, or storage. This method satisfies the
+// RouterInfoStorerWithErrors interface, allowing transport layers to observe and
+// log storage failures (E-5 remediation).
+func (db *StdNetDB) StoreRouterInfoWithError(ri router_info.RouterInfo) error {
+	hash, err := ri.IdentHash()
+	if err != nil {
+		return oops.Errorf("cannot compute identity hash: %w", err)
+	}
+	data, err := ri.Bytes()
+	if err != nil {
+		return oops.Errorf("cannot serialize RouterInfo: %w", err)
+	}
+	if err := db.StoreRouterInfoFromMessage(hash, data, 0); err != nil {
+		return oops.Errorf("failed to store RouterInfo in NetDB (hash=%s): %w", hash.String(), err)
+	}
+	return nil
+}
+
 // Ensure ensures that the network database exists and loads existing RouterInfos.
 func (db *StdNetDB) Ensure() (err error) {
 	if !db.Exists() {

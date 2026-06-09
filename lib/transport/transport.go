@@ -47,6 +47,17 @@ type RouterInfoStorer interface {
 	StoreRouterInfo(ri router_info.RouterInfo)
 }
 
+// RouterInfoStorerWithErrors is an optional extension to RouterInfoStorer that
+// exposes storage errors for observability and metrics. Transport layers should
+// type-assert to this interface and, if available, use StoreRouterInfoWithError
+// to log failures and surface metrics (E-5 remediation).
+type RouterInfoStorerWithErrors interface {
+	RouterInfoStorer
+	// StoreRouterInfoWithError stores a RouterInfo and returns an error if storage fails.
+	// Implementations should verify signatures, check expiry, and persist atomically.
+	StoreRouterInfoWithError(ri router_info.RouterInfo) error
+}
+
 // TransportSession is a session between 2 routers for transmitting i2np messages securely.
 type TransportSession interface {
 	// queue an i2np message to be sent over the session
