@@ -2,21 +2,19 @@ package ssu2
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/sha256"
 	"errors"
 	"fmt"
 	"net"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/crypto/types"
+	"github.com/go-i2p/go-i2p/lib/nat"
 	"github.com/go-i2p/go-i2p/lib/transport"
 	nattraversal "github.com/go-i2p/go-nat-listener"
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
@@ -351,109 +349,12 @@ func createUDPConn(config *Config, iport int) (net.PacketConn, string, error) {
 // or a NEPacketTunnelProvider extension. Attempting to listen will fail with EACCES.
 // Pure go-i2p in-app deployment is not supported on iOS App Store builds.
 func listenWithOSPort(config *Config) (net.PacketConn, string, error) {
-	const maxPortProbeRetries = 5 // P-1: increased from 3 to 5
-	var lastErr error
-
-	for attempt := 0; attempt < maxPortProbeRetries; attempt++ {
-		// Step 1: ask the OS for any available UDP port, with SO_REUSEADDR to allow
-		// rebinding immediately after. This reduces the TOCTOU window where another
-		// process could claim the port between close and rebind.
-		listenCfg := net.ListenConfig{
-			Control: func(network, address string, c syscall.RawConn) error {
-				var sockoptErr error
-				err := c.Control(func(fd uintptr) {
-					if sockoptErr = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1); sockoptErr != nil {
-						log.WithError(sockoptErr).Warn("Failed to set SO_REUSEADDR on probe UDP listener")
-					}
-				})
-				if err != nil {
-					return err
-				}
-				return sockoptErr
-			},
-		}
-
-		udpAddr, err := net.ResolveUDPAddr("udp", config.ListenerAddress)
-		if err != nil {
-			return nil, "", oops.Wrapf(err, "failed to resolve UDP address")
-		}
-		temp, err := listenCfg.ListenPacket(context.Background(), "udp", udpAddr.String())
-		if err != nil {
-			return nil, "", oops.Wrapf(err, "failed to probe UDP port")
-		}
-		assignedPort := temp.LocalAddr().(*net.UDPAddr).Port
-		if closeErr := temp.Close(); closeErr != nil {
-			log.WithError(closeErr).Warn("failed to close probe UDP listener")
-		}
-
-		// Step 2: re-bind on the discovered port with NAT traversal so the connection
-		// address carries the external IP instead of the unspecified "::" host.
-		// SO_REUSEADDR on the final listener allows immediate rebind even if the
-		// port is in TIME_WAIT state from the probe listener close.
-		if attempt == 0 {
-			log.WithField("port", assignedPort).Info("probed OS-assigned UDP port; attempting NAT traversal")
-		}
-		conn, boundAddr, err := listenWithNATTraversal(config, assignedPort)
-		if err == nil {
-			return conn, boundAddr, nil
-		}
-
-		// If rebind failed, check if it was due to "address already in use" (TOCTOU race).
-		// If so, retry. Otherwise, return the error immediately.
-		lastErr = err
-		if !strings.Contains(err.Error(), "address already in use") && !strings.Contains(err.Error(), "Address already in use") {
-			return nil, "", err
-		}
-		if attempt < maxPortProbeRetries-1 {
-			log.WithFields(map[string]interface{}{
-				"port":    assignedPort,
-				"attempt": attempt + 1,
-				"error":   err,
-			}).Warn("TOCTOU race: probed UDP port claimed by another process; retrying")
-			// P-1: Wait with jitter between retries to reduce contention.
-			// Base 50ms + ±25% jitter = [37.5ms, 62.5ms]
-			baseDelay := 50 * time.Millisecond
-			jitterBytes := make([]byte, 2)
-			if _, randErr := rand.Read(jitterBytes); randErr == nil {
-				// Convert 2 random bytes to float64 in [0, 1)
-				randVal := float64(uint16(jitterBytes[0])<<8|uint16(jitterBytes[1])) / 65536.0
-				jitterFactor := 0.75 + (randVal * 0.5) // [0.75, 1.25]
-				baseDelay = time.Duration(float64(baseDelay) * jitterFactor)
-			} else {
-				log.WithError(randErr).Warn("Failed to generate jitter; using base delay")
-			}
-			time.Sleep(baseDelay)
-		}
+	cfg := nat.DefaultBindConfig("udp", config.ListenerAddress)
+	result, err := nat.ProbeAndBindWithNATTraversal(cfg)
+	if err != nil {
+		return nil, "", err
 	}
-
-	// P-1: Clear error message when all retries exhausted
-	return nil, "", oops.Wrapf(lastErr, "failed to bind OS-assigned UDP port after %d attempts (TOCTOU race: another process keeps claiming probed ports)", maxPortProbeRetries)
-}
-
-// isLoopbackAddress returns true if host is empty, a loopback IP, or resolves
-// entirely to loopback addresses. P-1 fix: catches "localhost" and other hostnames.
-func isLoopbackAddress(host string) bool {
-	if host == "" {
-		// Empty host means wildcard binding (not loopback)
-		return false
-	}
-	// Try parsing as IP first (fast path)
-	if ip := net.ParseIP(host); ip != nil {
-		return ip.IsLoopback()
-	}
-	// Not a literal IP — resolve the hostname
-	ips, err := net.LookupIP(host)
-	if err != nil || len(ips) == 0 {
-		// Resolution failed or empty — assume non-loopback (fail open for reachability)
-		return false
-	}
-	// Return true only if *all* resolved IPs are loopback
-	for _, ip := range ips {
-		if !ip.IsLoopback() {
-			return false
-		}
-	}
-	return true
+	return result.PacketConn, result.BoundAddress, nil
 }
 
 // listenWithNATTraversal creates a UDP listener with NAT port mapping.
@@ -464,48 +365,13 @@ func isLoopbackAddress(host string) bool {
 // timeout keeps startup fast in environments without UPnP/NAT-PMP; the
 // fallback to a plain UDP listener is transparent to callers.
 func listenWithNATTraversal(config *Config, iport int) (net.PacketConn, string, error) {
-	host, _, _ := net.SplitHostPort(config.ListenerAddress)
-	// Only attempt NAT traversal for non-loopback addresses.
-	// Loopback addresses (127.x.x.x, ::1) bypass NAT traversal entirely because
-	// they are unreachable from the internet. Empty host ("") indicates wildcard
-	// binding and requires NAT traversal to make the listener reachable.
-	//
-	// P-1 fix: Resolve hostnames (e.g., "localhost") before loopback check.
-	// net.ParseIP("localhost") returns nil, so the original check would treat
-	// localhost as a public address and waste 3s attempting UPnP/NAT-PMP.
-	isLoopback := isLoopbackAddress(host)
-
-	if isLoopback {
-		// Use SO_REUSEADDR to allow rebinding immediately after probing port 0.
-		listenCfg := net.ListenConfig{
-			Control: func(network, address string, c syscall.RawConn) error {
-				var sockoptErr error
-				err := c.Control(func(fd uintptr) {
-					// SO_REUSEADDR allows rebinding to a port in TIME_WAIT state,
-					// reducing the TOCTOU race window in listenWithOSPort().
-					if sockoptErr = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1); sockoptErr != nil {
-						log.WithError(sockoptErr).Warn("Failed to set SO_REUSEADDR on listening socket")
-					}
-				})
-				if err != nil {
-					return err
-				}
-				return sockoptErr
-			},
-		}
-		conn, err := listenCfg.ListenPacket(context.Background(), "udp", fmt.Sprintf("%s:%d", host, iport))
-		if err != nil {
-			return nil, "", oops.Wrapf(err, "failed to create UDP listener")
-		}
-		return conn, conn.LocalAddr().String(), nil
-	}
-	natCtx, natCancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer natCancel()
-	natPL, err := nattraversal.ListenPacketWithFallbackContext(natCtx, iport)
+	cfg := nat.DefaultBindConfig("udp", config.ListenerAddress)
+	cfg.RequestedPort = iport
+	result, err := nat.BindWithNATTraversal(cfg)
 	if err != nil {
-		return nil, "", oops.Wrapf(err, "failed to create UDP listener")
+		return nil, "", err
 	}
-	return natPL.PacketConn(), natPL.Addr().String(), nil
+	return result.PacketConn, result.BoundAddress, nil
 }
 
 // startSSU2Listener creates and starts the SSU2 protocol listener over a UDP connection.

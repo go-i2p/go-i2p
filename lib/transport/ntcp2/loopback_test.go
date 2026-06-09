@@ -3,6 +3,7 @@ package ntcp2
 import (
 	"testing"
 
+	"github.com/go-i2p/go-i2p/lib/nat"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -53,7 +54,7 @@ func TestLocalhostSkipsNATTraversal(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := isLoopbackAddress(tt.host)
+			result := nat.IsLoopbackAddress(tt.host)
 			if tt.expectLoop {
 				assert.True(t, result, "Expected %s to be detected as loopback", tt.host)
 			} else {
@@ -82,9 +83,9 @@ func TestMixedResolutionNotLoopback(t *testing.T) {
 	// via isLoopbackAddress's loop — if any IP is non-loopback, it returns false.
 
 	// Simulate what would happen with a hostname that resolves to [127.0.0.1, 192.168.1.1]
-	// (The real lookup is inside isLoopbackAddress; we can only test the helper directly.)
+	// (The real lookup is inside nat.IsLoopbackAddress; we can only test the helper directly.)
 	mixedHost := "test-mixed-hostname.invalid"
-	result := isLoopbackAddress(mixedHost)
+	result := nat.IsLoopbackAddress(mixedHost)
 	// Since the hostname doesn't actually resolve, the function fails open (non-loopback)
 	assert.False(t, result, "Expected unresolved hostname to fail open as non-loopback")
 }

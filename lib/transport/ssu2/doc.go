@@ -30,4 +30,20 @@
 //	transport:
 //	  ssu2_enabled: true
 //	  ssu2_port: 9002  // Random port when 0
+//
+// # Implementation Notes
+//
+// ## NAT Traversal
+//
+// As of 2026-06, NAT traversal logic (UPnP/NAT-PMP, loopback detection,
+// SO_REUSEADDR socket options, and TOCTOU retry handling) has been extracted
+// to the shared lib/nat package. The listenWithOSPort and listenWithNATTraversal
+// functions in this package are now thin wrappers around nat.ProbeAndBindWithNATTraversal
+// and nat.BindWithNATTraversal respectively.
+//
+// Future enhancements to NAT handling should be implemented in lib/nat, not here.
+// This ensures consistent behavior across all transports (NTCP2, SSU2, and any
+// future transport implementations).
+//
+// See lib/nat/doc.go for details on the NAT traversal implementation.
 package ssu2
