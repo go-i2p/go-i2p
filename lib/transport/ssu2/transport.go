@@ -757,8 +757,9 @@ func (t *SSU2Transport) SetIdentity(ident router_info.RouterInfo) error {
 			return err
 		}
 
-		// Create new UDP connection using NAT traversal with the same port.
-		// R-2 fix: listenWithNATTraversal now returns the bound address separately.
+		// S-2 fix: Create new UDP connection and listener outside the lock.
+		// On any failure, return error immediately without touching t.listener.
+		// This keeps old listener active so Accept() continues working.
 		udpConn, newAddr, err := listenWithNATTraversal(t.config, port)
 		if err != nil {
 			t.logger.WithError(err).Error("Failed to rebind UDP address during identity update")
@@ -778,7 +779,8 @@ func (t *SSU2Transport) SetIdentity(ident router_info.RouterInfo) error {
 			return WrapSSU2Error(err, "starting recreated SSU2 listener")
 		}
 
-		// Update listener and address under lock
+		// S-2 fix: Install new listener under lock. From this point, Accept() uses new listener.
+		// Save old listener for cleanup. If NAT/key init fails below, restore old listener.
 		t.identityMu.Lock()
 		t.listener = listener
 		t.config.ListenerAddress = newAddr
@@ -786,15 +788,35 @@ func (t *SSU2Transport) SetIdentity(ident router_info.RouterInfo) error {
 
 		// BUG FIX HIGH SM-1: Re-initialize NAT managers with the new listener.
 		// NAT managers must be bound to the new listener, not the old one.
+		// S-2 fix: On failure, close new listener and restore old listener to prevent nil state.
 		if err := initNATManagers(t); err != nil {
 			t.logger.WithError(err).Error("Failed to reinitialize NAT managers after identity update")
+			// Restore old listener so Accept() doesn't fail
+			t.identityMu.Lock()
+			_ = t.listener.Close() // Close failed new listener
+			t.listener = oldListener
+			t.config.ListenerAddress = currentAddr
+			t.identityMu.Unlock()
 			return err
 		}
 
 		// L-1 item 4: Re-initialize keyRotationManager with the new identity's keys.
+		// S-2 fix: On failure, close new listener and restore old listener.
 		if err := initKeyManagement(t, ssu2Config); err != nil {
 			t.logger.WithError(err).Error("Failed to reinitialize key rotation manager after identity update")
+			// Restore old listener so Accept() doesn't fail
+			t.identityMu.Lock()
+			_ = t.listener.Close() // Close failed new listener
+			t.listener = oldListener
+			t.config.ListenerAddress = currentAddr
+			t.identityMu.Unlock()
 			return err
+		}
+
+		// S-2 fix: Only close old listener after all initialization succeeds.
+		// This ensures atomic swap: old listener stays active until new one fully ready.
+		if err := oldListener.Close(); err != nil {
+			t.logger.WithError(err).Warn("Error closing old SSU2 listener after successful recreation")
 		}
 	}
 

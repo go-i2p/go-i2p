@@ -1053,32 +1053,37 @@ func (t *NTCP2Transport) recreateListenerIfNeeded(ntcp2Config *ntcp2.Config) err
 		return nil
 	}
 
-	// Snapshot the current listener address under lock before creating the new listener
+	// S-2 fix: Snapshot old listener but keep it active during new listener creation.
+	// Only swap and close old listener after new one succeeds. Prevents infinite
+	// retry loop in acceptNextConnection if new listener creation fails.
 	currentAddr := t.config.ListenerAddress
-	t.logger.Info("Recreating listener with new identity")
 	oldListener := t.listener
-	t.listener = nil // Atomically mark as unavailable before closing
 	t.identityMu.Unlock()
 
-	// Close the old listener outside the lock to avoid blocking other operations
-	if err := oldListener.Close(); err != nil {
-		t.logger.WithError(err).Warn("Error closing existing listener during identity update")
-	}
+	t.logger.Info("Recreating listener with new identity")
 
 	// Create new listener outside the lock using the snapshotted address
 	newListener, newAddr, err := t.createNewListenerWithConfig(ntcp2Config, currentAddr)
 	if err != nil {
-		// On failure, listener remains nil until next successful SetIdentity call
-		t.logger.WithError(err).Error("Failed to create new listener during identity update")
+		// S-2 fix: On failure, old listener remains active (not set to nil).
+		// Accept loop continues serving on old listener instead of retrying forever on nil.
+		t.logger.WithError(err).Error("Failed to create new listener during identity update; keeping old listener active")
 		return err
 	}
 
-	// Install new listener and update address under lock
+	// S-2 fix: Install new listener and close old listener ONLY after new one succeeds.
+	// This atomic swap ensures t.listener is never nil on error path.
 	t.identityMu.Lock()
 	t.listener = newListener
 	t.config.ListenerAddress = newAddr
-	t.logger.WithField("address", newAddr).Info("Listener recreated successfully")
 	t.identityMu.Unlock()
+
+	// Close the old listener outside the lock after successful swap
+	if err := oldListener.Close(); err != nil {
+		t.logger.WithError(err).Warn("Error closing old listener after successful recreation")
+	}
+
+	t.logger.WithField("address", newAddr).Info("Listener recreated successfully")
 	return nil
 }
 
