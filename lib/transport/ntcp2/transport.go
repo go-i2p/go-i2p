@@ -1211,6 +1211,8 @@ func (t *NTCP2Transport) promoteInboundConnection(conn net.Conn, original interf
 	// Another goroutine won the promotion race — close our duplicate.
 	// Workers will exit cleanly due to context.Done().
 	_ = promoted.Close()
+	// Release the session slot reserved by Accept's checkSessionLimit (CRITICAL-2.1 fix).
+	t.unreserveSessionSlot()
 	if winner, exists := t.sessions.Load(routerHash); exists {
 		if winnerSession, ok := winner.(*NTCP2Session); ok {
 			return winnerSession, true

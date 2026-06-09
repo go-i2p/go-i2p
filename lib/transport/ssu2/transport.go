@@ -818,6 +818,8 @@ func (t *SSU2Transport) promoteInboundConnection(conn net.Conn, original interfa
 	// socket. Workers will exit when Close() cancels the session context (SM-2 fix).
 	promoted.DetachConn()
 	_ = promoted.Close()
+	// Release the session slot reserved by Accept's checkSessionLimit (CRITICAL-2.1 fix).
+	t.unreserveSessionSlot()
 	if winner, exists := t.sessions.Load(routerHash); exists {
 		if winnerSession, ok := winner.(*SSU2Session); ok {
 			return winnerSession, true

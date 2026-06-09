@@ -508,3 +508,69 @@ func TestX3_AcceptStoreVsPromotionCAS(t *testing.T) {
 	assert.LessOrEqual(t, finalCount, int32(concurrentRaces),
 		"sessionCount should not exceed initial slots (no double-counting)")
 }
+
+// TestCRITICAL_2_1_PromotionSlotLeakOnCASFailure verifies that when promotion
+// race occurs, the loser correctly releases its reserved session slot (CRITICAL-2.1 fix).
+//
+// Bug scenario:
+// 1. Accept() reserves slot via checkSessionLimit(), stores raw conn
+// 2. Concurrent inbound promotion (Accept→GetSession) + outbound Dial to same peer
+// 3. Both try promoteInboundConnection(), one wins CAS, loser closes session
+// 4. Loser never calls unreserveSessionSlot() → slot leaked
+// 5. After N races, pool exhausted even though fewer sessions are active
+//
+// This test verifies that after promotion races, sessionCount matches
+// the number of actual sessions (not higher due to leaked slots).
+func TestCRITICAL_2_1_PromotionSlotLeakOnCASFailure(t *testing.T) {
+	transport := newNilListenerTestTransport(t, 100)
+	defer transport.Close()
+
+	const numRaces = 10
+	peerHashes := make([]data.Hash, numRaces)
+
+	// Simulate concurrent inbound Accept + outbound Dial promotion races.
+	for i := 0; i < numRaces; i++ {
+		peerHash := newTestPeerHash(fmt.Sprintf("critical-2-1-promotion-leak-test-%d!", i))
+		peerHashes[i] = peerHash
+		rawConn := newAcceptMockConn(fmt.Sprintf("192.168.1.%d:52%02d", 100+i, i))
+
+		// Simulate Accept(): reserve slot and store raw conn.
+		require.NoError(t, transport.checkSessionLimit())
+		transport.sessions.Store(peerHash, rawConn)
+
+		// Launch concurrent promotions (simulating inbound Accept→GetSession + outbound Dial).
+		var wg sync.WaitGroup
+		const concurrentPromoters = 5
+		wg.Add(concurrentPromoters)
+		for j := 0; j < concurrentPromoters; j++ {
+			go func() {
+				defer wg.Done()
+				val, _ := transport.sessions.Load(peerHash)
+				if val != nil {
+					if rawC, ok := val.(net.Conn); ok {
+						_, _ = transport.promoteInboundConnection(rawC, val, peerHash)
+					}
+				}
+			}()
+		}
+		wg.Wait()
+	}
+
+	// Count actual sessions in map.
+	actualSessions := 0
+	transport.sessions.Range(func(key, value interface{}) bool {
+		if _, ok := value.(*NTCP2Session); ok {
+			actualSessions++
+		}
+		return true
+	})
+
+	// sessionCount should equal number of promoted sessions (not numRaces × concurrentPromoters).
+	finalCount := atomic.LoadInt32(&transport.sessionCount)
+	assert.Equal(t, actualSessions, int(finalCount),
+		"sessionCount should equal actual sessions in map (no leaked slots from CAS losers)")
+
+	// Verify sessionCount is reasonable: at most numRaces winners (one per peer).
+	assert.LessOrEqual(t, finalCount, int32(numRaces),
+		"sessionCount should not exceed number of peers (each has max 1 winner)")
+}
