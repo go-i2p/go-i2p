@@ -119,12 +119,17 @@ func TestHandlePeerTestAsBob_NoAliceAddr(t *testing.T) {
 	tr, cleanup := makeTestTransportWithListener(t)
 	defer cleanup()
 
+	// Get the manager under lock (HIGH-1.2 fix)
+	tr.natManagerMu.RLock()
+	mgr := tr.peerTestManager
+	tr.natManagerMu.RUnlock()
+
 	ptBlock := &ssu2noise.PeerTestBlock{
 		MessageCode: ssu2noise.PeerTestRequest,
 		Nonce:       42,
 		Version:     2,
 	}
-	err := tr.handlePeerTestAsBob(ptBlock, nil)
+	err := tr.handlePeerTestAsBob(ptBlock, nil, mgr)
 	assert.NoError(t, err)
 }
 
@@ -134,12 +139,17 @@ func TestHandlePeerTestAsCharlie_NoAliceAddr(t *testing.T) {
 	tr, cleanup := makeTestTransportWithListener(t)
 	defer cleanup()
 
+	// Get the manager under lock (HIGH-1.2 fix)
+	tr.natManagerMu.RLock()
+	mgr := tr.peerTestManager
+	tr.natManagerMu.RUnlock()
+
 	ptBlock := &ssu2noise.PeerTestBlock{
 		MessageCode: ssu2noise.PeerTestRelay,
 		Nonce:       42,
 		Version:     2,
 	}
-	err := tr.handlePeerTestAsCharlie(ptBlock, nil)
+	err := tr.handlePeerTestAsCharlie(ptBlock, nil, mgr)
 	assert.NoError(t, err)
 }
 
@@ -175,6 +185,11 @@ func TestHandlePeerTestAsBob_AddrMismatch(t *testing.T) {
 	tr, cleanup := makeTestTransportWithListener(t)
 	defer cleanup()
 
+	// Get the manager under lock (HIGH-1.2 fix)
+	tr.natManagerMu.RLock()
+	mgr := tr.peerTestManager
+	tr.natManagerMu.RUnlock()
+
 	ptBlock := &ssu2noise.PeerTestBlock{
 		MessageCode: ssu2noise.PeerTestRequest,
 		Nonce:       77,
@@ -182,7 +197,7 @@ func TestHandlePeerTestAsBob_AddrMismatch(t *testing.T) {
 		AlicePort:   8000,
 	}
 	// With nil session, signature verification fails (fail-closed).
-	err := tr.handlePeerTestAsBob(ptBlock, nil)
+	err := tr.handlePeerTestAsBob(ptBlock, nil, mgr)
 	assert.Error(t, err, "should reject when session is nil (cannot verify signature)")
 }
 
@@ -191,6 +206,11 @@ func TestHandlePeerTestAsBob_AddrMismatch(t *testing.T) {
 func TestHandlePeerTestAsBob_SessionRateLimit(t *testing.T) {
 	tr, cleanup := makeTestTransportWithListener(t)
 	defer cleanup()
+
+	// Get the manager under lock (HIGH-1.2 fix)
+	tr.natManagerMu.RLock()
+	mgr := tr.peerTestManager
+	tr.natManagerMu.RUnlock()
 
 	// Create a session with an exhausted rate limiter (burst=3, reserve all).
 	limiter := rate.NewLimiter(rate.Limit(1), 3)
@@ -210,7 +230,7 @@ func TestHandlePeerTestAsBob_SessionRateLimit(t *testing.T) {
 	// The rate limiter should drop this request silently (no error).
 	// However, if rate limit passes, signature verification would fail (no conn/sender hash).
 	// Since rate limit is checked first, this should return nil.
-	err := tr.handlePeerTestAsBob(ptBlock, session)
+	err := tr.handlePeerTestAsBob(ptBlock, session, mgr)
 	assert.NoError(t, err, "should drop silently due to rate limit (before signature verification)")
 }
 
@@ -219,6 +239,11 @@ func TestHandlePeerTestAsBob_SessionRateLimit(t *testing.T) {
 func TestHandlePeerTestAsBob_GlobalRateLimit(t *testing.T) {
 	tr, cleanup := makeTestTransportWithListener(t)
 	defer cleanup()
+
+	// Get the manager under lock (HIGH-1.2 fix)
+	tr.natManagerMu.RLock()
+	mgr := tr.peerTestManager
+	tr.natManagerMu.RUnlock()
 
 	// Exhaust the global limiter.
 	tr.peerTestGlobalLimiter = rate.NewLimiter(rate.Limit(1), 0)
@@ -233,7 +258,7 @@ func TestHandlePeerTestAsBob_GlobalRateLimit(t *testing.T) {
 		AliceIP:     net.ParseIP("127.0.0.1").To4(),
 		AlicePort:   6000,
 	}
-	err := tr.handlePeerTestAsBob(ptBlock, session)
+	err := tr.handlePeerTestAsBob(ptBlock, session, mgr)
 	assert.NoError(t, err, "should drop silently due to global rate limit (before signature verification)")
 }
 
@@ -272,8 +297,13 @@ func TestForwardRelayIntro_UnknownTag(t *testing.T) {
 	tr, cleanup := makeTestTransportWithListener(t)
 	defer cleanup()
 
+	// Get the manager under lock (HIGH-1.2 fix)
+	tr.natManagerMu.RLock()
+	mgr := tr.relayManager
+	tr.natManagerMu.RUnlock()
+
 	req := &ssu2noise.RelayRequestBlock{RelayTag: 0xdeadbeef}
-	err := tr.forwardRelayIntro(req)
+	err := tr.forwardRelayIntro(req, mgr)
 	assert.NoError(t, err) // rejected silently, no error propagated
 }
 

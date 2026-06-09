@@ -37,8 +37,13 @@ func TestPeerTestObservation_UnknownNonce(t *testing.T) {
 		Version:     2,
 	}
 
+	// Get the manager under lock (HIGH-1.2 fix)
+	tr.natManagerMu.RLock()
+	mgr := tr.peerTestManager
+	tr.natManagerMu.RUnlock()
+
 	// Call handlePeerTestAsAlice with the attacker's block
-	err := tr.handlePeerTestAsAlice(attackerBlock)
+	err := tr.handlePeerTestAsAlice(attackerBlock, mgr)
 	assert.NoError(t, err, "handlePeerTestAsAlice should not error on unknown nonce")
 
 	// Verify the observation was NOT recorded in the nat state cache
@@ -50,7 +55,7 @@ func TestPeerTestObservation_UnknownNonce(t *testing.T) {
 	// same bogus nonce and matching IPs, they should not accumulate toward
 	// confirmation threshold.
 	for i := 0; i < peerTestConfirmThreshold+1; i++ {
-		_ = tr.handlePeerTestAsAlice(attackerBlock)
+		_ = tr.handlePeerTestAsAlice(attackerBlock, mgr)
 	}
 	final := tr.natStateCache.getExternal()
 	assert.Empty(t, final, "repeated attacker observations should not confirm address")
@@ -74,6 +79,11 @@ func TestPeerTestObservation_ValidNonce(t *testing.T) {
 	test := tr.peerTestManager.GetTest(legitimateNonce)
 	require.NotNil(t, test, "legitimate nonce should be registered")
 
+	// Get the manager under lock (HIGH-1.2 fix)
+	tr.natManagerMu.RLock()
+	mgr := tr.peerTestManager
+	tr.natManagerMu.RUnlock()
+
 	// Send peer test replies with the legitimate nonce and a consistent external address
 	observedIP := net.ParseIP("192.0.2.99") // TEST-NET-1
 	observedPort := uint16(54321)
@@ -88,7 +98,7 @@ func TestPeerTestObservation_ValidNonce(t *testing.T) {
 	// Send peerTestConfirmThreshold observations with the legitimate nonce
 	// to trigger address confirmation
 	for i := 0; i < peerTestConfirmThreshold; i++ {
-		err := tr.handlePeerTestAsAlice(block)
+		err := tr.handlePeerTestAsAlice(block, mgr)
 		assert.NoError(t, err)
 		// Small delay to ensure observations have distinct timestamps
 		time.Sleep(1 * time.Millisecond)
@@ -113,6 +123,11 @@ func TestPeerTestObservation_MixedNonces(t *testing.T) {
 	legitimateNonce, err := tr.InitiateNATDetection(bobAddr)
 	require.NoError(t, err)
 
+	// Get the manager under lock (HIGH-1.2 fix)
+	tr.natManagerMu.RLock()
+	mgr := tr.peerTestManager
+	tr.natManagerMu.RUnlock()
+
 	legitimateIP := net.ParseIP("192.0.2.100")
 	attackerIP := net.ParseIP("203.0.113.50")
 
@@ -126,7 +141,7 @@ func TestPeerTestObservation_MixedNonces(t *testing.T) {
 			AlicePort:   9999,
 			Version:     2,
 		}
-		_ = tr.handlePeerTestAsAlice(attackerBlock)
+		_ = tr.handlePeerTestAsAlice(attackerBlock, mgr)
 
 		// Legitimate observation (known nonce)
 		legitimateBlock := &ssu2noise.PeerTestBlock{
@@ -136,7 +151,7 @@ func TestPeerTestObservation_MixedNonces(t *testing.T) {
 			AlicePort:   55555,
 			Version:     2,
 		}
-		err := tr.handlePeerTestAsAlice(legitimateBlock)
+		err := tr.handlePeerTestAsAlice(legitimateBlock, mgr)
 		assert.NoError(t, err)
 		time.Sleep(1 * time.Millisecond)
 	}
