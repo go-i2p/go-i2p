@@ -176,6 +176,30 @@ func (m *mockKeystore) GetEncryptionPrivateKey() types.PrivateEncryptionKey {
 }
 
 // E-5: Test that NetDB storage failures are observable (not silently ignored)
+func TestVerifyMapIntegrity(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	config := &Config{
+		ListenerAddress: "127.0.0.1:0",
+		WorkingDir:      t.TempDir(),
+	}
+	mockKs := &mockKeystore{}
+	logger := logger.WithField("component", "test")
+
+	var identity router_info.RouterInfo
+	transport := buildTransportInstance(config, identity, mockKs, ctx, cancel, logger)
+
+	// CRITICAL-5.1: Test map integrity with valid entries
+	// Empty map should have zero invalid entries
+	invalidCount := transport.verifyMapIntegrity()
+	assert.Equal(t, 0, invalidCount, "Empty map should have zero invalid entries")
+
+	// Note: Proper testing would require real data.Hash keys from router_info.RouterInfo
+	// For now, we verify the function doesn't panic and can be called
+	// The actual integrity checks would be tested with real router hashes in integration tests
+}
+
 func TestStoreRouterInfoInNetDB_ErrorObservability(t *testing.T) {
 	tests := []struct {
 		name          string

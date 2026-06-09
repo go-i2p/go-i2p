@@ -34,8 +34,8 @@ const (
 // L-1: Creates a per-generation context for NAT goroutines so they can be cancelled
 // on SetIdentity without affecting the transport-level context.
 // R-4 partial fix: Reads t.listener under identityMu to avoid TOCTOU with SetIdentity.
-// Note: Manager pointer fields themselves are not fully synchronized; readers assume
-// managers are stable after initialization. Full fix requires dedicated manager mutex.
+// HIGH-1.2 fix: Writes all manager pointers under natManagerMu to prevent concurrent
+// callback reads from seeing nil or partially-initialized managers.
 func initNATManagers(t *SSU2Transport) error {
 	// Create per-generation context for NAT goroutines (L-1 fix item 2).
 	t.natCtxMu.Lock()
@@ -51,8 +51,11 @@ func initNATManagers(t *SSU2Transport) error {
 		return oops.New("cannot initialize NAT managers: listener is nil")
 	}
 
-	t.relayManager = ssu2noise.NewRelayManager(listener)
-	t.introducerRegistry = ssu2noise.NewIntroducerRegistry(3)
+	// HIGH-1.2 fix: Build all managers first, THEN install them under the write lock
+	// as a batch. This minimizes the critical section and prevents callbacks from seeing
+	// partially initialized state.
+	relayMgr := ssu2noise.NewRelayManager(listener)
+	introducerReg := ssu2noise.NewIntroducerRegistry(3)
 	verifyFn := func(block *ssu2noise.RelayIntroBlock, signerKey ed25519.PublicKey) error {
 		// Verify Alice's relay intro signature. The signature covers the
 		// "RelayRequestData" prologue + bob_hash + charlie_hash + fields.
@@ -90,19 +93,28 @@ func initNATManagers(t *SSU2Transport) error {
 		return nil
 	}
 	var err error
-	t.holePunchCoord, err = ssu2noise.NewHolePunchCoordinator(t.relayManager, verifyFn)
+	holePunch, err := ssu2noise.NewHolePunchCoordinator(relayMgr, verifyFn)
 	if err != nil {
 		// MEDIUM 5.5: HolePunchCoordinator initialization failure should be reported,
 		// not silently downgraded to a warning. Return the error so the caller can decide
 		// whether to fail the transport or degrade gracefully.
 		return oops.Wrapf(err, "failed to initialize HolePunchCoordinator")
 	}
-	t.peerTestManager = ssu2noise.NewPeerTestManager(listener)
+	peerTestMgr := ssu2noise.NewPeerTestManager(listener)
 	if t.natStateCache == nil {
 		t.natStateCache = &natState{}
 	}
 	t.loadNATState()
 	t.startNATCleanup()
+
+	// HIGH-1.2 fix: Now install all managers under the write lock.
+	// This prevents callbacks from starting to read managers until all are fully initialized.
+	t.natManagerMu.Lock()
+	defer t.natManagerMu.Unlock()
+	t.relayManager = relayMgr
+	t.introducerRegistry = introducerReg
+	t.holePunchCoord = holePunch
+	t.peerTestManager = peerTestMgr
 
 	// Start port mapper with retry logic (extracted to lib/nat).
 	if port, valid := t.validateAndExtractPort(); valid {
@@ -120,6 +132,7 @@ func initNATManagers(t *SSU2Transport) error {
 // stopNATManagers stops all NAT managers and cancels the per-generation NAT context
 // to signal NAT goroutines (cleanup, port mapping) to exit. L-1 fix item 1.
 // Must be called before initNATManagers in SetIdentity.
+// HIGH-1.2 fix: Acquire write lock to protect manager pointer writes from concurrent reads in callbacks.
 func stopNATManagers(t *SSU2Transport) {
 	// Cancel the per-generation NAT context to stop NAT goroutines (L-1 item 2).
 	t.natCtxMu.Lock()
@@ -130,24 +143,35 @@ func stopNATManagers(t *SSU2Transport) {
 	}
 	t.natCtxMu.Unlock()
 
+	// HIGH-1.2 fix: Stop all managers under write lock to prevent callbacks from reading
+	// half-cleared state. Callbacks acquire read lock and nil-check; if they start before
+	// this lock is acquired, they see consistent manager state.
+	t.natManagerMu.Lock()
+	defer t.natManagerMu.Unlock()
+
 	// Stop all managers explicitly (L-1 item 4).
 	if t.relayManager != nil {
 		t.relayManager.Stop()
+		t.relayManager = nil
 	}
 	if t.peerTestManager != nil {
 		t.peerTestManager.Stop()
+		t.peerTestManager = nil
 	}
 	if t.holePunchCoord != nil {
 		t.holePunchCoord.Stop()
+		t.holePunchCoord = nil
 	}
 	if t.keyRotationManager != nil {
 		t.keyRotationManager.Stop()
+		t.keyRotationManager = nil
 	}
 	if t.portMapperManager != nil {
 		_ = t.portMapperManager.Stop()
 		t.portMapperManager = nil
 	}
 	// introducerRegistry has no Stop method; just replace it.
+	t.introducerRegistry = nil
 }
 
 // buildTransportCallbacks returns a BlockCallbackConfig whose handlers delegate
@@ -430,7 +454,13 @@ func extractSenderHash(session *SSU2Session) data.Hash {
 // message code to support Alice (initiator), Bob (relay), and Charlie
 // (responder) roles in the SSU2 peer test protocol.
 func (t *SSU2Transport) handlePeerTestBlock(block *ssu2noise.SSU2Block, session *SSU2Session) error {
-	if t.peerTestManager == nil {
+	// HIGH-1.2 fix: Acquire read lock to safely read peerTestManager.
+	// SetIdentity can modify this pointer, so we must hold the lock for consistency.
+	t.natManagerMu.RLock()
+	mgr := t.peerTestManager
+	t.natManagerMu.RUnlock()
+
+	if mgr == nil {
 		return nil
 	}
 	ptBlock, err := ssu2noise.DecodePeerTestBlock(block)
@@ -440,11 +470,11 @@ func (t *SSU2Transport) handlePeerTestBlock(block *ssu2noise.SSU2Block, session 
 	}
 	switch ptBlock.MessageCode {
 	case ssu2noise.PeerTestRequest:
-		return t.handlePeerTestAsBob(ptBlock, session)
+		return t.handlePeerTestAsBob(ptBlock, session, mgr)
 	case ssu2noise.PeerTestRelay:
-		return t.handlePeerTestAsCharlie(ptBlock, session)
+		return t.handlePeerTestAsCharlie(ptBlock, session, mgr)
 	default:
-		return t.handlePeerTestAsAlice(ptBlock)
+		return t.handlePeerTestAsAlice(ptBlock, mgr)
 	}
 }
 
@@ -453,7 +483,7 @@ func (t *SSU2Transport) handlePeerTestBlock(block *ssu2noise.SSU2Block, session 
 // and completes the pending test. If 2+ PeerTest observations agree on the
 // same external address within peerTestObservationWindow, the republish
 // callback is invoked so the new address can be published to the netdb.
-func (t *SSU2Transport) handlePeerTestAsAlice(ptBlock *ssu2noise.PeerTestBlock) error {
+func (t *SSU2Transport) handlePeerTestAsAlice(ptBlock *ssu2noise.PeerTestBlock, mgr *ssu2noise.PeerTestManager) error {
 	nonce := ptBlock.Nonce
 	externalAddr := extractAliceAddress(ptBlock)
 
@@ -461,7 +491,7 @@ func (t *SSU2Transport) handlePeerTestAsAlice(ptBlock *ssu2noise.PeerTestBlock) 
 	// an attacker can send unsolicited PeerTest replies when manager is nil
 	// (e.g., after initialization failure) and bypass nonce verification,
 	// poisoning the external address cache with arbitrary IPs.
-	if t.peerTestManager == nil {
+	if mgr == nil {
 		t.logger.Warn("PeerTest observation rejected: manager unavailable")
 		return nil
 	}
@@ -470,7 +500,7 @@ func (t *SSU2Transport) handlePeerTestAsAlice(ptBlock *ssu2noise.PeerTestBlock) 
 	// initiated before recording the observation. An attacker can send unsolicited
 	// PeerTest replies with arbitrary nonces to poison the address-confirmation cache.
 	// Fail-closed: if the nonce is unknown, ignore the observation entirely.
-	test := t.peerTestManager.GetTest(nonce)
+	test := mgr.GetTest(nonce)
 	if test == nil {
 		t.logger.WithField("nonce", nonce).Warn("PeerTest: ignoring observation with unknown nonce (potential injection attack)")
 		return nil
@@ -480,7 +510,7 @@ func (t *SSU2Transport) handlePeerTestAsAlice(ptBlock *ssu2noise.PeerTestBlock) 
 		ExternalAddr: externalAddr,
 		Reachable:    externalAddr != nil,
 	}
-	if completeErr := t.peerTestManager.CompleteTest(nonce, result); completeErr != nil {
+	if completeErr := mgr.CompleteTest(nonce, result); completeErr != nil {
 		t.logger.Debug("PeerTest complete (non-initiator path)")
 	}
 
@@ -609,7 +639,7 @@ func (t *SSU2Transport) checkBobRateLimits(session *SSU2Session) bool {
 // remote address to prevent source-address spoofing, enforces per-session and
 // global rate limits, verifies the signature using Alice's Ed25519 signing key
 // from NetDB, then forwards a PeerTestRelay to Charlie.
-func (t *SSU2Transport) handlePeerTestAsBob(ptBlock *ssu2noise.PeerTestBlock, session *SSU2Session) error {
+func (t *SSU2Transport) handlePeerTestAsBob(ptBlock *ssu2noise.PeerTestBlock, session *SSU2Session, mgr *ssu2noise.PeerTestManager) error {
 	aliceAddr := parsePeerTestAliceAddr(ptBlock)
 	if aliceAddr == nil {
 		t.logger.Debug("PeerTest Bob: missing Alice address, ignoring")
@@ -653,9 +683,12 @@ func (t *SSU2Transport) handlePeerTestAsBob(ptBlock *ssu2noise.PeerTestBlock, se
 		t.logger.Debug("PeerTest Bob: cannot resolve Charlie address, ignoring")
 		return nil
 	}
-	if _, err := t.peerTestManager.CreateRelayTest(ptBlock.Nonce, aliceAddr, charlieAddr); err != nil {
-		t.logger.WithField("error", err).Debug("PeerTest Bob: failed to create relay test")
-		return nil
+	// HIGH-1.2 fix: mgr is already locked and safe to use
+	if mgr != nil {
+		if _, err := mgr.CreateRelayTest(ptBlock.Nonce, aliceAddr, charlieAddr); err != nil {
+			t.logger.WithField("error", err).Debug("PeerTest Bob: failed to create relay test")
+			return nil
+		}
 	}
 	return t.forwardPeerTestToCharlie(ptBlock, charlieAddr)
 }
@@ -702,7 +735,7 @@ func (t *SSU2Transport) forwardPeerTestToCharlie(ptBlock *ssu2noise.PeerTestBloc
 // (responder). We record the test and send a direct probe to Alice.
 // relaySession is the session from which the PeerTestRelay was received;
 // it is preferred for sending the probe to maintain protocol-correlated paths.
-func (t *SSU2Transport) handlePeerTestAsCharlie(ptBlock *ssu2noise.PeerTestBlock, relaySession *SSU2Session) error {
+func (t *SSU2Transport) handlePeerTestAsCharlie(ptBlock *ssu2noise.PeerTestBlock, relaySession *SSU2Session, mgr *ssu2noise.PeerTestManager) error {
 	var aliceAddr *net.UDPAddr
 	if len(ptBlock.AliceIP) > 0 {
 		aliceAddr = &net.UDPAddr{
@@ -714,9 +747,12 @@ func (t *SSU2Transport) handlePeerTestAsCharlie(ptBlock *ssu2noise.PeerTestBlock
 		t.logger.Debug("PeerTest Charlie: missing Alice address, ignoring")
 		return nil
 	}
-	if err := t.peerTestManager.CreateResponderTest(ptBlock.Nonce, aliceAddr, nil); err != nil {
-		t.logger.WithField("error", err).Debug("PeerTest Charlie: failed to create responder test")
-		return nil
+	// HIGH-1.2 fix: mgr is already locked and safe to use
+	if mgr != nil {
+		if err := mgr.CreateResponderTest(ptBlock.Nonce, aliceAddr, nil); err != nil {
+			t.logger.WithField("error", err).Debug("PeerTest Charlie: failed to create responder test")
+			return nil
+		}
 	}
 	return t.sendProbeToAlice(ptBlock, aliceAddr, relaySession)
 }
@@ -768,7 +804,13 @@ func (t *SSU2Transport) anyActiveSession() *SSU2Session {
 // the signature using Alice's Ed25519 signing key from NetDB, and forwards a
 // RelayIntro to Charlie via the session associated with the relay tag.
 func (t *SSU2Transport) handleRelayRequestBlock(block *ssu2noise.SSU2Block, session *SSU2Session) error {
-	if t.relayManager == nil || block == nil {
+	// HIGH-1.2 fix: Acquire read lock to safely read relayManager.
+	// SetIdentity can modify this pointer, so we must hold the lock for consistency.
+	t.natManagerMu.RLock()
+	mgr := t.relayManager
+	t.natManagerMu.RUnlock()
+
+	if mgr == nil || block == nil {
 		return nil
 	}
 	// Verify session is available (required for signature verification, fail-closed)
@@ -810,7 +852,7 @@ func (t *SSU2Transport) handleRelayRequestBlock(block *ssu2noise.SSU2Block, sess
 		return oops.Errorf("invalid RelayRequest signature")
 	}
 
-	return t.forwardRelayIntro(req)
+	return t.forwardRelayIntro(req, mgr)
 }
 
 // forwardRelayIntro looks up the relay tag target (Charlie), builds a
@@ -818,8 +860,12 @@ func (t *SSU2Transport) handleRelayRequestBlock(block *ssu2noise.SSU2Block, sess
 // Rejects when no relay tag is registered for the requested tag value or when
 // there is no active session to Charlie. Enforces introducer capability
 // validation (caps=B) via RouterLookupFunc before forwarding.
-func (t *SSU2Transport) forwardRelayIntro(req *ssu2noise.RelayRequestBlock) error {
-	tag := t.relayManager.GetRelayTag(req.RelayTag)
+func (t *SSU2Transport) forwardRelayIntro(req *ssu2noise.RelayRequestBlock, mgr *ssu2noise.RelayManager) error {
+	// HIGH-1.2 fix: mgr is already locked and safe to use
+	if mgr == nil {
+		return nil
+	}
+	tag := mgr.GetRelayTag(req.RelayTag)
 	if tag == nil {
 		t.logger.WithField("relay_tag", req.RelayTag).Warn("RelayRequest rejected: unknown or expired relay tag")
 		return nil
@@ -898,7 +944,11 @@ func (t *SSU2Transport) handleRelayResponseBlock(block *ssu2noise.SSU2Block) err
 
 // isRelayResponseValid checks if relay response processing is possible.
 func (t *SSU2Transport) isRelayResponseValid(block *ssu2noise.SSU2Block) bool {
-	return t.relayManager != nil && block != nil
+	// HIGH-1.2 fix: Acquire read lock to safely read relayManager.
+	t.natManagerMu.RLock()
+	mgr := t.relayManager
+	t.natManagerMu.RUnlock()
+	return mgr != nil && block != nil
 }
 
 // decodeAndLogRelayResponse decodes the relay response block and logs it.
@@ -941,7 +991,12 @@ func (t *SSU2Transport) deliverRelayResponse(resp *ssu2noise.RelayResponseBlock)
 // Bob so Bob can forward it to Alice. bobSession is the session from which
 // the RelayIntro arrived.
 func (t *SSU2Transport) handleRelayIntroBlock(block *ssu2noise.SSU2Block, bobSession *SSU2Session) error {
-	if t.holePunchCoord == nil || block == nil {
+	// HIGH-1.2 fix: Acquire read lock to safely read holePunchCoord.
+	t.natManagerMu.RLock()
+	coord := t.holePunchCoord
+	t.natManagerMu.RUnlock()
+
+	if coord == nil || block == nil {
 		return nil
 	}
 	intro, err := ssu2noise.DecodeRelayIntro(block)
@@ -964,13 +1019,13 @@ func (t *SSU2Transport) handleRelayIntroBlock(block *ssu2noise.SSU2Block, bobSes
 		return nil
 	}
 
-	return t.initiateHolePunch(intro, bobSession)
+	return t.initiateHolePunch(intro, bobSession, coord)
 }
 
 // initiateHolePunch starts a hole-punch towards Alice based on a RelayIntro,
 // sends a HolePunch datagram to Alice, and sends a RelayResponse to Bob.
 // bobSession carries Bob's session (from which the RelayIntro arrived).
-func (t *SSU2Transport) initiateHolePunch(intro *ssu2noise.RelayIntroBlock, bobSession *SSU2Session) error {
+func (t *SSU2Transport) initiateHolePunch(intro *ssu2noise.RelayIntroBlock, bobSession *SSU2Session, coord *ssu2noise.HolePunchCoordinator) error {
 	aliceAddr := &net.UDPAddr{
 		IP:   net.IP(intro.AliceIP),
 		Port: int(intro.AlicePort),
@@ -1009,11 +1064,12 @@ func (t *SSU2Transport) initiateHolePunch(intro *ssu2noise.RelayIntroBlock, bobS
 	// BUG FIX HIGH E-2: Only send hole-punch/RelayResponse when InitiateHolePunch succeeds.
 	// This prevents reflection attacks where an attacker triggers emissions to arbitrary IPs.
 	// E-2 fix (defense-in-depth): Guard against nil holePunchCoord (NAT-degraded mode).
-	if t.holePunchCoord == nil {
+	// HIGH-1.2 fix: coord is already locked and safe to use
+	if coord == nil {
 		t.logger.Warn("hole-punch: coordinator unavailable (NAT-degraded mode); cannot complete hole-punch")
 		return oops.Errorf("NAT managers not initialized")
 	}
-	_, err := t.holePunchCoord.InitiateHolePunch(aliceAddr, bobAddr, intro.AliceRelayTag)
+	_, err := coord.InitiateHolePunch(aliceAddr, bobAddr, intro.AliceRelayTag)
 	if err != nil {
 		t.logger.WithField("error", err).Warn("hole-punch coordinator registration failed; not sending hole-punch/RelayResponse")
 		return err

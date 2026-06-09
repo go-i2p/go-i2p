@@ -76,6 +76,11 @@ type SSU2Transport struct {
 
 	identityMu sync.RWMutex
 
+	// HIGH-1.2 fix: Dedicated lock for NAT manager pointers to prevent races
+	// between SetIdentity (stopNATManagers/initNATManagers) and callbacks.
+	// Protects: peerTestManager, relayManager, introducerRegistry, holePunchCoord, keyRotationManager
+	natManagerMu sync.RWMutex
+
 	// NAT traversal managers (initialised after listener starts).
 	peerTestManager    *ssu2noise.PeerTestManager
 	relayManager       *ssu2noise.RelayManager
@@ -825,13 +830,16 @@ func (t *SSU2Transport) promoteInboundConnection(conn net.Conn, original interfa
 				Error("CRITICAL-3.1 violation: CAS succeeded but wrong session in map before StartWorkers")
 		}
 
-		// Start workers NOW that we've won the promotion race
-		promoted.StartWorkers()
-
-		// Set cleanup callback for when this session closes.
+		// Set cleanup callback BEFORE starting workers (HIGH-8.2 fix).
+		// If we set it after StartWorkers(), a concurrent Close() can orphan the
+		// session in the map because the callback isn't installed yet.
 		promoted.SetCleanupCallback(func() {
 			t.removeSession(routerHash)
 		})
+
+		// Start workers NOW that we've won the promotion race
+		promoted.StartWorkers()
+
 		return promoted, true
 	}
 
@@ -1043,12 +1051,15 @@ func (t *SSU2Transport) registerOrReuseSession(conn *ssu2noise.SSU2Conn, routerH
 			Error("CRITICAL-3.1 violation: LoadOrStore succeeded but wrong session in map before StartWorkers")
 	}
 
-	session.StartWorkers()
-
-	// Set cleanup callback for when this session closes.
+	// Set cleanup callback BEFORE starting workers (HIGH-8.2 fix).
+	// If a Close() happens between StartWorkers and SetCleanupCallback, the
+	// session would be orphaned in the map because cleanup is not installed yet.
 	session.SetCleanupCallback(func() {
 		t.removeSession(routerHash)
 	})
+
+	session.StartWorkers()
+
 	return session, true, nil // New session, slot is used
 }
 
