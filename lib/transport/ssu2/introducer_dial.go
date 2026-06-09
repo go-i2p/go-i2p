@@ -336,8 +336,17 @@ func (t *SSU2Transport) externalAddressForRelay() (net.IP, uint16, error) {
 }
 
 // localIPPort extracts Alice's IP and port from the transport listener.
+// R-3 fix: Read t.listener under identityMu to avoid race with SetIdentity.
 func (t *SSU2Transport) localIPPort() (net.IP, uint16, error) {
-	addr := t.listener.Addr()
+	t.identityMu.RLock()
+	listener := t.listener
+	t.identityMu.RUnlock()
+
+	if listener == nil {
+		return nil, 0, oops.New("listener is nil (identity not yet initialized or failed rebind)")
+	}
+
+	addr := listener.Addr()
 	s := addr.String()
 	if ssu2Addr, ok := addr.(*ssu2noise.SSU2Addr); ok {
 		s = ssu2Addr.UnderlyingAddr().String()

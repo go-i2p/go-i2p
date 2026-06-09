@@ -304,8 +304,9 @@ func bindOSAssignedPort(config *Config) (net.Listener, error) {
 		if attempt == 0 {
 			log.WithField("port", assignedPort).Info("probed OS-assigned port; attempting NAT traversal")
 		}
-		listener, err := bindWithNATTraversal(config, assignedPort)
+		listener, boundAddr, err := bindWithNATTraversal(config, assignedPort)
 		if err == nil {
+			config.ListenerAddress = boundAddr
 			return listener, nil
 		}
 
@@ -358,11 +359,13 @@ func isLoopbackAddress(host string) bool {
 
 // bindWithNATTraversal creates a TCP listener on the specified port, attempting
 // NAT traversal (UPnP/NAT-PMP) with a 3-second timeout context.
+// Returns the listener and the bound address. Callers are responsible for updating
+// config.ListenerAddress under appropriate locking.
 // Loopback addresses (127.x.x.x, ::1) bypass NAT traversal entirely because
 // they are unreachable from the internet. For all other addresses a 3-second
 // timeout keeps startup fast in environments without UPnP/NAT-PMP; the
 // fallback to a plain TCP listener is transparent to callers.
-func bindWithNATTraversal(config *Config, port int) (net.Listener, error) {
+func bindWithNATTraversal(config *Config, port int) (net.Listener, string, error) {
 	host, _, _ := net.SplitHostPort(config.ListenerAddress)
 	// Only attempt NAT traversal for non-loopback addresses.
 	// Loopback addresses (127.x.x.x, ::1) bypass NAT traversal entirely because
@@ -394,21 +397,17 @@ func bindWithNATTraversal(config *Config, port int) (net.Listener, error) {
 		}
 		l, err := listenCfg.Listen(context.Background(), "tcp", fmt.Sprintf("%s:%d", host, port))
 		if err != nil {
-			return nil, oops.Wrapf(err, "failed to create TCP listener")
+			return nil, "", oops.Wrapf(err, "failed to create TCP listener")
 		}
-		config.ListenerAddress = l.Addr().String()
-		return l, nil
+		return l, l.Addr().String(), nil
 	}
 	natCtx, natCancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer natCancel()
 	l, err := nattraversal.ListenWithFallbackContext(natCtx, port)
 	if err != nil {
-		return nil, oops.Wrapf(err, "failed to create TCP listener")
+		return nil, "", oops.Wrapf(err, "failed to create TCP listener")
 	}
-	if boundAddr := l.Addr().String(); boundAddr != config.ListenerAddress {
-		config.ListenerAddress = boundAddr
-	}
-	return l, nil
+	return l, l.Addr().String(), nil
 }
 
 // attachNTCP2Listener wraps tcpListener in an NTCP2 listener and stores it on
@@ -436,14 +435,19 @@ func setupNetworkListener(transport *NTCP2Transport, config *Config, ntcp2Config
 	}
 
 	var tcpListener net.Listener
+	var boundAddr string
 	if iport == 0 {
 		tcpListener, err = bindOSAssignedPort(config)
+		if err == nil {
+			boundAddr = tcpListener.Addr().String()
+		}
 	} else {
-		tcpListener, err = bindWithNATTraversal(config, iport)
+		tcpListener, boundAddr, err = bindWithNATTraversal(config, iport)
 	}
 	if err != nil {
 		return err
 	}
+	config.ListenerAddress = boundAddr
 	return attachNTCP2Listener(transport, tcpListener, ntcp2Config)
 }
 
@@ -1096,9 +1100,9 @@ func (t *NTCP2Transport) createNewListenerWithConfig(ntcp2Config *ntcp2.Config, 
 
 	// Use NAT traversal to rebind with the same port, preserving external address mapping.
 	// This ensures the recreated listener maintains NAT-mapped address semantics.
-	// bindWithNATTraversal may update t.config.ListenerAddress internally, but we'll
-	// capture and return the final bound address to update config under lock.
-	tcpListener, err := bindWithNATTraversal(t.config, iport)
+	// R-2 fix: bindWithNATTraversal now returns the bound address; we capture and return it
+	// for the caller to update config under lock.
+	tcpListener, boundAddr, err := bindWithNATTraversal(t.config, iport)
 	if err != nil {
 		t.logger.WithError(err).Error("Failed to rebind listener with NAT traversal")
 		return nil, "", WrapNTCP2Error(err, "rebinding listener")
@@ -1114,8 +1118,9 @@ func (t *NTCP2Transport) createNewListenerWithConfig(ntcp2Config *ntcp2.Config, 
 		return nil, "", WrapNTCP2Error(err, "creating new listener")
 	}
 
-	// Return the actual bound address from the listener
-	return listener, listener.Addr().String(), nil
+	// Return the actual bound address from bindWithNATTraversal (not from listener.Addr(),
+	// which may differ if NAT mapping occurred).
+	return listener, boundAddr, nil
 }
 
 // GetSession obtains a transport session with a router given its RouterInfo.

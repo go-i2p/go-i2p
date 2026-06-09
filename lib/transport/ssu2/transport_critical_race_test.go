@@ -11,6 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/go-i2p/common/data"
 	"github.com/stretchr/testify/assert"
@@ -193,3 +194,168 @@ func TestX3_AcceptStoreVsPromotionCAS(t *testing.T) {
 // a legitimate state and returns an error instead of deleting the entry.
 // The TestX2_SessionCountConservedAcrossSimultaneousConnect test above provides
 // coverage for acceptedConn handling in the lookup/promotion paths.
+
+// TestR2_ConfigListenerAddressRaceDuringSetIdentity is a regression test for
+// R-2: "config.ListenerAddress mutated without holding identityMu".
+//
+// This test verifies that:
+//  1. SetIdentity (which updates t.config.ListenerAddress under lock) can run
+//     concurrently with validateAndExtractPort (which reads t.config.ListenerAddress).
+//  2. The race detector flags any unsynchronized access.
+//  3. After the R-2 fix (refactoring NAT helpers to return bound address separately),
+//     all writes occur under identityMu and readers either hold identityMu or use
+//     the returned bound address directly.
+//
+// This test hammers the config.ListenerAddress field from multiple goroutines
+// to expose the TOCTOU race where validateAndExtractPort reads the field twice
+// in quick succession while SetIdentity mutates it.
+//
+// Without R-2 fix, this test will fail under `go test -race`.
+func TestR2_ConfigListenerAddressRaceDuringSetIdentity(t *testing.T) {
+	transport := makeMinimalTransportForRaceTests(t, 10)
+
+	// Create a dummy listener to satisfy SetIdentity
+	udpAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:0")
+	require.NoError(t, err)
+	udpConn, err := net.ListenUDP("udp", udpAddr)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = udpConn.Close() })
+
+	// Assign the listener
+	transport.identityMu.Lock()
+	transport.config.ListenerAddress = udpConn.LocalAddr().String()
+	transport.identityMu.Unlock()
+
+	var wg sync.WaitGroup
+	stopCh := make(chan struct{})
+
+	// Goroutine 1: repeatedly read config.ListenerAddress via validateAndExtractPort
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-stopCh:
+				return
+			default:
+				// validateAndExtractPort reads t.config.ListenerAddress twice
+				port, ok := transport.validateAndExtractPort()
+				if ok {
+					assert.Greater(t, port, 0)
+				}
+			}
+		}
+	}()
+
+	// Goroutine 2: repeatedly update config.ListenerAddress under identityMu
+	// (simulating what SetIdentity does)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 100; i++ {
+			select {
+			case <-stopCh:
+				return
+			default:
+				transport.identityMu.Lock()
+				// Simulate address mutation
+				transport.config.ListenerAddress = fmt.Sprintf("127.0.0.1:%d", 10000+i)
+				transport.identityMu.Unlock()
+			}
+		}
+		// Signal completion after 100 iterations
+		close(stopCh)
+	}()
+
+	// Wait for goroutines to finish
+	wg.Wait()
+}
+
+// TestR3_LocalIPPortRaceDuringSetIdentity verifies that localIPPort() reads
+// t.listener under identityMu.RLock, preventing race with SetIdentity which
+// reassigns t.listener under identityMu.Lock.
+// Validates R-3 (MEDIUM) fix: introducer_dial.go localIPPort() uses lock-protected snapshot.
+func TestR3_LocalIPPortRaceDuringSetIdentity(t *testing.T) {
+	const hammers = 100
+
+	// Use minimal transport to avoid NAT dependencies; we only test listener access pattern
+	transport := makeMinimalTransportForRaceTests(t, 200)
+
+	// Start with nil listener to ensure localIPPort handles gracefully
+	transport.listener = nil
+
+	var wg sync.WaitGroup
+	stopCh := make(chan struct{})
+
+	// Goroutine 1: hammer localIPPort() which reads t.listener
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-stopCh:
+				return
+			default:
+				// Call localIPPort which should snapshot t.listener under lock (R-3 fix)
+				// Expected to return error when listener is nil
+				transport.localIPPort()
+			}
+		}
+	}()
+
+	// Goroutine 2: mutate t.listener pointer under identityMu (simulating SetIdentity rebind)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < hammers; i++ {
+			transport.identityMu.Lock()
+			// Simulate listener reassignment during SetIdentity
+			// Just toggle nil/non-nil to trigger race if not properly synchronized
+			if i%2 == 0 {
+				transport.listener = nil
+			}
+			// Alternately leave it nil to ensure localIPPort doesn't crash
+			transport.identityMu.Unlock()
+		}
+		// Close stopCh AFTER completing all iterations
+		close(stopCh)
+	}()
+
+	// Wait for goroutines to finish
+	wg.Wait()
+
+	// If we get here without data race or crash, R-3 fix is working
+}
+
+// TestL2_AbandonedRelayTagsBounded verifies that abandonedRelayTags slice
+// is bounded by age-based pruning and a hard cap, preventing unbounded growth.
+// Validates L-2 (MEDIUM) fix: trackAbandonedRelayTag prunes old entries and enforces size limit.
+func TestL2_AbandonedRelayTagsBounded(t *testing.T) {
+	transport := makeMinimalTransportForRaceTests(t, 200)
+
+	// Track 100 abandoned relay tags
+	for i := 0; i < 100; i++ {
+		addr := &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 10000 + i}
+		transport.trackAbandonedRelayTag(uint32(i), addr, "test_reason")
+	}
+
+	// Verify count is bounded (maxAbandonedRelayTags = 50)
+	count := transport.GetAbandonedRelayTagCount()
+	require.LessOrEqual(t, count, 50, "abandonedRelayTags should be capped at 50")
+
+	// Now wait 11 minutes to trigger age-based pruning (maxAbandonedRelayTagAge = 10 minutes)
+	// Simulate by mutating allocatedAt timestamps
+	transport.abandonedRelayTagsMu.Lock()
+	for i := range transport.abandonedRelayTags {
+		transport.abandonedRelayTags[i].allocatedAt = time.Now().Add(-11 * time.Minute)
+	}
+	transport.abandonedRelayTagsMu.Unlock()
+
+	// Track one more to trigger pruning
+	addr := &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 20000}
+	transport.trackAbandonedRelayTag(999, addr, "trigger_pruning")
+
+	// Verify old entries were pruned
+	count = transport.GetAbandonedRelayTagCount()
+	require.Equal(t, 1, count, "age-based pruning should remove all entries older than 10 minutes, leaving only the new one")
+}

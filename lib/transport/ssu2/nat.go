@@ -33,13 +33,25 @@ const (
 // Returns an error if HolePunchCoordinator initialization fails.
 // L-1: Creates a per-generation context for NAT goroutines so they can be cancelled
 // on SetIdentity without affecting the transport-level context.
+// R-4 partial fix: Reads t.listener under identityMu to avoid TOCTOU with SetIdentity.
+// Note: Manager pointer fields themselves are not fully synchronized; readers assume
+// managers are stable after initialization. Full fix requires dedicated manager mutex.
 func initNATManagers(t *SSU2Transport) error {
 	// Create per-generation context for NAT goroutines (L-1 fix item 2).
 	t.natCtxMu.Lock()
 	t.natCtx, t.natCancel = context.WithCancel(t.ctx)
 	t.natCtxMu.Unlock()
 
-	t.relayManager = ssu2noise.NewRelayManager(t.listener)
+	// R-4: Snapshot t.listener under lock to avoid race with SetIdentity.
+	t.identityMu.RLock()
+	listener := t.listener
+	t.identityMu.RUnlock()
+
+	if listener == nil {
+		return oops.New("cannot initialize NAT managers: listener is nil")
+	}
+
+	t.relayManager = ssu2noise.NewRelayManager(listener)
 	t.introducerRegistry = ssu2noise.NewIntroducerRegistry(3)
 	verifyFn := func(block *ssu2noise.RelayIntroBlock, signerKey ed25519.PublicKey) error {
 		// Verify Alice's relay intro signature. The signature covers the
@@ -85,7 +97,7 @@ func initNATManagers(t *SSU2Transport) error {
 		// whether to fail the transport or degrade gracefully.
 		return oops.Wrapf(err, "failed to initialize HolePunchCoordinator")
 	}
-	t.peerTestManager = ssu2noise.NewPeerTestManager(t.listener)
+	t.peerTestManager = ssu2noise.NewPeerTestManager(listener)
 	if t.natStateCache == nil {
 		t.natStateCache = &natState{}
 	}
@@ -1569,18 +1581,40 @@ func (t *SSU2Transport) tryRegisterIntroducer(ri router_info.RouterInfo) bool {
 // trackAbandonedRelayTag records a relay tag that was allocated but not successfully
 // registered. Provides monitoring and prepares for future cleanup when a release
 // API becomes available in the RelayManager.
+// L-2 fix: Bound the slice to maxAbandonedRelayTags and prune entries older than maxAbandonedRelayTagAge.
 func (t *SSU2Transport) trackAbandonedRelayTag(tag uint32, addr *net.UDPAddr, reason string) {
 	t.abandonedRelayTagsMu.Lock()
 	defer t.abandonedRelayTagsMu.Unlock()
 
+	const maxAbandonedRelayTags = 50                 // Hard cap on slice size
+	const maxAbandonedRelayTagAge = 10 * time.Minute // Prune entries older than this
+
+	// Prune expired entries before adding
+	now := time.Now()
+	pruned := t.abandonedRelayTags[:0]
+	for i := range t.abandonedRelayTags {
+		if now.Sub(t.abandonedRelayTags[i].allocatedAt) < maxAbandonedRelayTagAge {
+			pruned = append(pruned, t.abandonedRelayTags[i])
+		}
+	}
+	t.abandonedRelayTags = pruned
+
+	// Append new entry
 	t.abandonedRelayTags = append(t.abandonedRelayTags, abandonedRelayTag{
 		tag:         tag,
 		addr:        addr,
-		allocatedAt: time.Now(),
+		allocatedAt: now,
 		reason:      reason,
 	})
 
-	// Log a warning if we're accumulating many abandoned tags
+	// If still over cap after pruning, evict oldest entries (ring-buffer style)
+	if len(t.abandonedRelayTags) > maxAbandonedRelayTags {
+		evictCount := len(t.abandonedRelayTags) - maxAbandonedRelayTags
+		t.abandonedRelayTags = t.abandonedRelayTags[evictCount:]
+		t.logger.WithField("evicted", evictCount).Warn("Evicted oldest abandoned relay tags to enforce cap")
+	}
+
+	// Log a warning if we're accumulating many abandoned tags (even after pruning)
 	if len(t.abandonedRelayTags) > 10 {
 		t.logger.WithField("count", len(t.abandonedRelayTags)).
 			Warn("Accumulating abandoned relay tags; may indicate registration instability")
@@ -1738,11 +1772,16 @@ func (t *SSU2Transport) startNATPortMapRetry() {
 
 // validateAndExtractPort validates the listener address and extracts the internal port.
 // Returns the port number and true if valid, or 0 and false if validation fails.
+// R-2 fix: Reads t.config.ListenerAddress under identityMu to avoid race with SetIdentity.
 func (t *SSU2Transport) validateAndExtractPort() (int, bool) {
 	if t.config == nil {
 		return 0, false
 	}
-	_, portStr, err := net.SplitHostPort(t.config.ListenerAddress)
+	t.identityMu.RLock()
+	listenerAddr := t.config.ListenerAddress
+	t.identityMu.RUnlock()
+
+	_, portStr, err := net.SplitHostPort(listenerAddr)
 	if err != nil {
 		return 0, false
 	}
@@ -1750,7 +1789,7 @@ func (t *SSU2Transport) validateAndExtractPort() (int, bool) {
 	if err != nil || internalPort <= 0 {
 		return 0, false
 	}
-	host, _, _ := net.SplitHostPort(t.config.ListenerAddress)
+	host, _, _ := net.SplitHostPort(listenerAddr)
 	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
 		return 0, false
 	}

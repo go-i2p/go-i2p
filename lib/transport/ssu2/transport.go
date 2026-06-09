@@ -304,18 +304,24 @@ func setupUDPListener(t *SSU2Transport, config *Config, ssu2Config *ssu2noise.SS
 		return oops.Wrapf(err, "failed to convert port to integer")
 	}
 
-	udpConn, err := createUDPConn(config, iport)
+	udpConn, boundAddr, err := createUDPConn(config, iport)
 	if err != nil {
 		return err
 	}
+	config.ListenerAddress = boundAddr
 
 	return startSSU2Listener(t, udpConn, ssu2Config)
 }
 
 // createUDPConn creates a UDP packet connection, using OS-assigned port or NAT traversal.
-func createUDPConn(config *Config, iport int) (net.PacketConn, error) {
+// Returns the connection and the bound address. Caller must update config.ListenerAddress.
+func createUDPConn(config *Config, iport int) (net.PacketConn, string, error) {
 	if iport == 0 {
-		return listenWithOSPort(config)
+		conn, err := listenWithOSPort(config)
+		if err != nil {
+			return nil, "", err
+		}
+		return conn, conn.LocalAddr().String(), nil
 	}
 	return listenWithNATTraversal(config, iport)
 }
@@ -374,7 +380,7 @@ func listenWithOSPort(config *Config) (net.PacketConn, error) {
 		if attempt == 0 {
 			log.WithField("port", assignedPort).Info("probed OS-assigned UDP port; attempting NAT traversal")
 		}
-		conn, err := listenWithNATTraversal(config, assignedPort)
+		conn, _, err := listenWithNATTraversal(config, assignedPort)
 		if err == nil {
 			return conn, nil
 		}
@@ -427,11 +433,13 @@ func isLoopbackAddress(host string) bool {
 }
 
 // listenWithNATTraversal creates a UDP listener with NAT port mapping.
+// Returns the packet connection and the bound address. Callers are responsible
+// for updating config.ListenerAddress under appropriate locking.
 // Loopback addresses (127.x.x.x, ::1) bypass NAT traversal entirely because
 // they are unreachable from the internet. For all other addresses a 3-second
 // timeout keeps startup fast in environments without UPnP/NAT-PMP; the
 // fallback to a plain UDP listener is transparent to callers.
-func listenWithNATTraversal(config *Config, iport int) (net.PacketConn, error) {
+func listenWithNATTraversal(config *Config, iport int) (net.PacketConn, string, error) {
 	host, _, _ := net.SplitHostPort(config.ListenerAddress)
 	// Only attempt NAT traversal for non-loopback addresses.
 	// Loopback addresses (127.x.x.x, ::1) bypass NAT traversal entirely because
@@ -463,21 +471,17 @@ func listenWithNATTraversal(config *Config, iport int) (net.PacketConn, error) {
 		}
 		conn, err := listenCfg.ListenPacket(context.Background(), "udp", fmt.Sprintf("%s:%d", host, iport))
 		if err != nil {
-			return nil, oops.Wrapf(err, "failed to create UDP listener")
+			return nil, "", oops.Wrapf(err, "failed to create UDP listener")
 		}
-		config.ListenerAddress = conn.LocalAddr().String()
-		return conn, nil
+		return conn, conn.LocalAddr().String(), nil
 	}
 	natCtx, natCancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer natCancel()
 	natPL, err := nattraversal.ListenPacketWithFallbackContext(natCtx, iport)
 	if err != nil {
-		return nil, oops.Wrapf(err, "failed to create UDP listener")
+		return nil, "", oops.Wrapf(err, "failed to create UDP listener")
 	}
-	if boundAddr := natPL.Addr().String(); boundAddr != config.ListenerAddress {
-		config.ListenerAddress = boundAddr
-	}
-	return natPL.PacketConn(), nil
+	return natPL.PacketConn(), natPL.Addr().String(), nil
 }
 
 // startSSU2Listener creates and starts the SSU2 protocol listener over a UDP connection.
@@ -512,13 +516,25 @@ func (t *SSU2Transport) Accept() (net.Conn, error) {
 		return nil, ErrSessionClosed
 	}
 
-	if err := t.checkSessionLimit(); err != nil {
+	// L-3 fix part 1: Fast-path reject if pool already full (non-reserving check)
+	// This provides immediate rejection for tests/callers checking capacity
+	// without blocking on Accept() when we know we can't serve the connection.
+	if t.isSessionLimitReached() {
+		return nil, ErrConnectionPoolFull
+	}
+
+	// L-3 fix part 2: Accept connection BEFORE reserving slot (don't hold reservation while blocking)
+	conn, err := listener.Accept()
+	if err != nil {
 		return nil, err
 	}
 
-	conn, err := listener.Accept()
-	if err != nil {
-		t.unreserveSessionSlot()
+	// L-3 fix part 3: Now reserve slot after we have actual connection
+	// Handles race where pool filled while blocking on Accept()
+	if err := t.checkSessionLimit(); err != nil {
+		// Close the accepted connection since we can't serve it
+		// No unreserve needed: checkSessionLimit failed before reserving slot
+		conn.Close()
 		return nil, err
 	}
 
@@ -742,14 +758,12 @@ func (t *SSU2Transport) SetIdentity(ident router_info.RouterInfo) error {
 		}
 
 		// Create new UDP connection using NAT traversal with the same port.
-		// listenWithNATTraversal may write to t.config.ListenerAddress internally,
-		// so we'll capture the new bound address from the connection.
-		udpConn, err := listenWithNATTraversal(t.config, port)
+		// R-2 fix: listenWithNATTraversal now returns the bound address separately.
+		udpConn, newAddr, err := listenWithNATTraversal(t.config, port)
 		if err != nil {
 			t.logger.WithError(err).Error("Failed to rebind UDP address during identity update")
 			return err
 		}
-		newAddr := udpConn.LocalAddr().String()
 
 		listener, err := ssu2noise.NewSSU2Listener(udpConn, ssu2Config)
 		if err != nil {
@@ -1252,6 +1266,15 @@ func (t *SSU2Transport) GetTotalBandwidth() (totalBytesSent, totalBytesReceived 
 		return true
 	})
 	return totalBytesSent, totalBytesReceived
+}
+
+// isSessionLimitReached returns true if the session pool is at or above capacity.
+// This is a non-reserving check used for fail-fast rejection in Accept().
+// Use checkSessionLimit() when you need to atomically reserve a slot.
+func (t *SSU2Transport) isSessionLimitReached() bool {
+	current := atomic.LoadInt32(&t.sessionCount)
+	maxSessions := t.config.GetMaxSessions()
+	return int(current) >= maxSessions
 }
 
 func (t *SSU2Transport) checkSessionLimit() error {
