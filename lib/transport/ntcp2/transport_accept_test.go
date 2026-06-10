@@ -408,9 +408,9 @@ func TestPerformInboundHandshake_RejectsNonNTCP2Conn(t *testing.T) {
 	transport := newNilListenerTestTransport(t, 10)
 	transport.testBypassHandshakeTypeCheck = false // Explicitly disable bypass for this test
 
-	// Reserve a slot as the accept loop would
-	atomic.AddInt32(&transport.sessionCount, 1)
-	assert.Equal(t, 1, transport.GetSessionCount(), "slot should be reserved")
+	// L-1/T-1: No slot is reserved before handshake anymore.
+	// Verify sessionCount starts at 0.
+	assert.Equal(t, 0, transport.GetSessionCount(), "slot should NOT be reserved before handshake")
 
 	// Feed a mock connection that is not an *ntcp2.Conn
 	mockConn := newAcceptMockConn("10.0.0.1:5001")
@@ -425,9 +425,9 @@ func TestPerformInboundHandshake_RejectsNonNTCP2Conn(t *testing.T) {
 	assert.Contains(t, err.Error(), "not *ntcp2.Conn",
 		"error message should indicate the type mismatch")
 
-	// The slot should be unreserved (cleaned up)
+	// L-1/T-1: The slot was never reserved, so sessionCount should still be 0.
 	assert.Equal(t, 0, transport.GetSessionCount(),
-		"session slot should be unreserved after rejection")
+		"session slot should remain 0 after rejection (no slot was reserved)")
 
 	// The connection should be closed
 	mockConn.closeMu.Lock()

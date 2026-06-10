@@ -12,7 +12,7 @@ import (
 // SA-1: Test that shouldInitiatePeerTest correctly caps at startupPeerTestMax
 // under concurrent load, preventing the check-then-decrement race.
 func TestShouldInitiatePeerTest_ConcurrentCap(t *testing.T) {
-	const startupPeerTestMax = 3
+	const startupPeerTestMax = 5 // T-2/RD-1: raised from 3 to 5
 	const concurrentAttempts = 50
 
 	// Use a non-nil pointer of the real PeerTestManager type.
@@ -50,23 +50,23 @@ func TestShouldInitiatePeerTest_ConcurrentCap(t *testing.T) {
 
 // SA-1: Test that shouldInitiatePeerTest respects the cap when called sequentially.
 func TestShouldInitiatePeerTest_SequentialCap(t *testing.T) {
-	const startupPeerTestMax = 3
+	const startupPeerTestMax = 5 // T-2/RD-1: raised from 3 to 5
 
 	transport := &SSU2Transport{
 		peerTestManager: &ssu2noise.PeerTestManager{},
 	}
 
-	// First 3 calls should succeed
+	// First 5 calls should succeed (T-2/RD-1: raised from 3 to 5)
 	for i := 1; i <= startupPeerTestMax; i++ {
 		result := transport.shouldInitiatePeerTest()
 		assert.True(t, result, "Expected attempt %d to succeed", i)
 	}
 
-	// 4th call should fail
+	// 6th call should fail (T-2/RD-1: raised from 4th to 6th)
 	result := transport.shouldInitiatePeerTest()
-	assert.False(t, result, "Expected 4th attempt to fail (cap reached)")
+	assert.False(t, result, "Expected %dth attempt to fail (cap reached)", startupPeerTestMax+1)
 
-	// Counter should be exactly 3
+	// Counter should be exactly 5 (T-2/RD-1: raised from 3 to 5)
 	finalCount := atomic.LoadInt32(&transport.startupPeerTestCount)
 	assert.Equal(t, int32(startupPeerTestMax), finalCount)
 }

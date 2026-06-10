@@ -123,11 +123,12 @@ func TestInitKeyManagement_Integration(t *testing.T) {
 	require.NoError(t, err)
 	ssu2Config = ssu2Config.WithStaticKey(staticKey)
 
+	cfg := &Config{WorkingDir: dir}
 	trans := &SSU2Transport{
 		listener: listener,
-		config:   &Config{WorkingDir: dir},
 		logger:   log.WithField("test", "key_management"),
 	}
+	trans.config.Store(cfg)
 
 	err = initKeyManagement(trans, ssu2Config)
 	require.NoError(t, err)

@@ -46,7 +46,9 @@ const (
 // multiple slow introducers are present.
 // EH-3 fix: Check NAT health before attempting introducer dial.
 func (t *SSU2Transport) dialViaIntroducer(charlieRI router_info.RouterInfo, charlieHash data.Hash) (transport.TransportSession, error) {
-	if t.config.RouterLookupFunc == nil {
+	// R-2 fix: Atomic config snapshot
+	cfg := t.config.Load()
+	if cfg.RouterLookupFunc == nil {
 		return nil, oops.Errorf("RouterLookupFunc not configured: cannot dial via introducer")
 	}
 
@@ -163,7 +165,9 @@ func (t *SSU2Transport) tryOneIntroducer(charlieRI router_info.RouterInfo, charl
 // establishBobSessionWithContext looks up Bob's RouterInfo and establishes a session to Bob,
 // honoring the parent context for cancellation.
 func (t *SSU2Transport) establishBobSessionWithContext(ctx context.Context, intro IntroducerAddr) (*SSU2Session, error) {
-	bobRI, err := t.config.RouterLookupFunc(intro.RouterHash)
+	// R-2 fix: Atomic config snapshot
+	cfg := t.config.Load()
+	bobRI, err := cfg.RouterLookupFunc(intro.RouterHash)
 	if err != nil {
 		return nil, oops.Wrapf(err, "Bob (%x...) lookup failed", intro.RouterHash[:4])
 	}
@@ -185,7 +189,9 @@ func (t *SSU2Transport) establishBobSessionWithContext(ctx context.Context, intr
 
 // establishBobSession looks up Bob's RouterInfo and establishes a session to Bob.
 func (t *SSU2Transport) establishBobSession(intro IntroducerAddr) (*SSU2Session, error) {
-	bobRI, err := t.config.RouterLookupFunc(intro.RouterHash)
+	// R-2 fix: Atomic config snapshot
+	cfg := t.config.Load()
+	bobRI, err := cfg.RouterLookupFunc(intro.RouterHash)
 	if err != nil {
 		return nil, oops.Wrapf(err, "Bob (%x...) lookup failed", intro.RouterHash[:4])
 	}
@@ -414,7 +420,9 @@ func (t *SSU2Transport) dialCharlieDirectly(charlieRI router_info.RouterInfo, ch
 // SessionRequest. Built-in SSU2 message retransmission makes a too-early send
 // recoverable if the delay is insufficient for the network conditions.
 func (t *SSU2Transport) waitForHolePunch() error {
-	delay := t.config.GetHolePunchDelay()
+	// R-2 fix: Atomic config snapshot
+	cfg := t.config.Load()
+	delay := cfg.GetHolePunchDelay()
 	select {
 	case <-time.After(delay):
 		return nil

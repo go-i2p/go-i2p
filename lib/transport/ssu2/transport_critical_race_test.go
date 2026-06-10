@@ -46,14 +46,16 @@ func makeMinimalTransportForRaceTests(t *testing.T, maxSessions int) *SSU2Transp
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	return &SSU2Transport{
-		config:        &Config{ListenerAddress: "127.0.0.1:0", MaxSessions: maxSessions},
+	cfg := &Config{ListenerAddress: "127.0.0.1:0", MaxSessions: maxSessions}
+	tr := &SSU2Transport{
 		handler:       NewDefaultHandler(),
 		natStateCache: &natState{},
 		ctx:           ctx,
 		cancel:        cancel,
 		logger:        log.WithField("test", "critical_race"),
 	}
+	tr.config.Store(cfg)
+	return tr
 }
 
 // TestX2_SessionCountConservedAcrossSimultaneousConnect is a regression test
@@ -223,7 +225,9 @@ func TestR2_ConfigListenerAddressRaceDuringSetIdentity(t *testing.T) {
 
 	// Assign the listener
 	transport.identityMu.Lock()
-	transport.config.ListenerAddress = udpConn.LocalAddr().String()
+	cfg := transport.config.Load()
+	cfg.ListenerAddress = udpConn.LocalAddr().String()
+	transport.config.Store(cfg)
 	transport.identityMu.Unlock()
 
 	var wg sync.WaitGroup
@@ -259,7 +263,9 @@ func TestR2_ConfigListenerAddressRaceDuringSetIdentity(t *testing.T) {
 			default:
 				transport.identityMu.Lock()
 				// Simulate address mutation
-				transport.config.ListenerAddress = fmt.Sprintf("127.0.0.1:%d", 10000+i)
+				cfg := transport.config.Load()
+				cfg.ListenerAddress = fmt.Sprintf("127.0.0.1:%d", 10000+i)
+				transport.config.Store(cfg)
 				transport.identityMu.Unlock()
 			}
 		}

@@ -15,7 +15,9 @@ import (
 // verification fails closed (returns error) when RouterLookupFunc is unavailable.
 func TestVerifyRelayRequestSignature_MissingRouterLookupFunc(t *testing.T) {
 	tr := makeMinimalTransport()
-	tr.config.RouterLookupFunc = nil
+	cfg := tr.config.Load()
+	cfg.RouterLookupFunc = nil
+	tr.config.Store(cfg)
 
 	block := &ssu2noise.RelayRequestBlock{
 		Nonce:     12345,
@@ -38,9 +40,11 @@ func TestVerifyRelayRequestSignature_MissingRouterLookupFunc(t *testing.T) {
 // verification fails closed when NetDB lookup fails.
 func TestVerifyRelayRequestSignature_RouterInfoLookupFails(t *testing.T) {
 	tr := makeMinimalTransport()
-	tr.config.RouterLookupFunc = func(hash data.Hash) (router_info.RouterInfo, error) {
+	cfg := tr.config.Load()
+	cfg.RouterLookupFunc = func(hash data.Hash) (router_info.RouterInfo, error) {
 		return router_info.RouterInfo{}, assert.AnError
 	}
+	tr.config.Store(cfg)
 
 	block := &ssu2noise.RelayRequestBlock{
 		Nonce:     12345,
@@ -63,7 +67,9 @@ func TestVerifyRelayRequestSignature_RouterInfoLookupFails(t *testing.T) {
 // verification fails closed (returns error) when RouterLookupFunc is unavailable.
 func TestVerifyPeerTestSignature_MissingRouterLookupFunc(t *testing.T) {
 	tr := makeMinimalTransport()
-	tr.config.RouterLookupFunc = nil
+	cfg := tr.config.Load()
+	cfg.RouterLookupFunc = nil
+	tr.config.Store(cfg)
 
 	block := &ssu2noise.PeerTestBlock{
 		MessageCode: ssu2noise.PeerTestRequest,
@@ -85,9 +91,11 @@ func TestVerifyPeerTestSignature_MissingRouterLookupFunc(t *testing.T) {
 // verification fails closed when NetDB lookup fails.
 func TestVerifyPeerTestSignature_RouterInfoLookupFails(t *testing.T) {
 	tr := makeMinimalTransport()
-	tr.config.RouterLookupFunc = func(hash data.Hash) (router_info.RouterInfo, error) {
+	cfg := tr.config.Load()
+	cfg.RouterLookupFunc = func(hash data.Hash) (router_info.RouterInfo, error) {
 		return router_info.RouterInfo{}, assert.AnError
 	}
+	tr.config.Store(cfg)
 
 	block := &ssu2noise.PeerTestBlock{
 		MessageCode: ssu2noise.PeerTestRequest,
@@ -109,7 +117,9 @@ func TestVerifyPeerTestSignature_RouterInfoLookupFails(t *testing.T) {
 // verification fails closed (returns error) when RouterLookupFunc is unavailable.
 func TestVerifyRelayResponseSignature_MissingRouterLookupFunc(t *testing.T) {
 	tr := makeMinimalTransport()
-	tr.config.RouterLookupFunc = nil
+	cfg := tr.config.Load()
+	cfg.RouterLookupFunc = nil
+	tr.config.Store(cfg)
 
 	block := &ssu2noise.RelayResponseBlock{
 		Nonce:       12345,
@@ -131,9 +141,11 @@ func TestVerifyRelayResponseSignature_MissingRouterLookupFunc(t *testing.T) {
 // verification fails closed when NetDB lookup fails.
 func TestVerifyRelayResponseSignature_RouterInfoLookupFails(t *testing.T) {
 	tr := makeMinimalTransport()
-	tr.config.RouterLookupFunc = func(hash data.Hash) (router_info.RouterInfo, error) {
+	cfg := tr.config.Load()
+	cfg.RouterLookupFunc = func(hash data.Hash) (router_info.RouterInfo, error) {
 		return router_info.RouterInfo{}, assert.AnError
 	}
+	tr.config.Store(cfg)
 
 	block := &ssu2noise.RelayResponseBlock{
 		Nonce:       12345,
@@ -165,10 +177,12 @@ func TestVerifyPeerTestSignature_Code3_NilRouterHashFailsClosed(t *testing.T) {
 	tr := makeMinimalTransport()
 	// Provide a RouterLookupFunc that would succeed if reached; the test must
 	// fail before lookup because RouterHash is nil.
-	tr.config.RouterLookupFunc = func(hash data.Hash) (router_info.RouterInfo, error) {
+	cfg := tr.config.Load()
+	cfg.RouterLookupFunc = func(hash data.Hash) (router_info.RouterInfo, error) {
 		t.Fatalf("RouterLookupFunc must not be called when RouterHash is nil for code 3")
 		return router_info.RouterInfo{}, nil
 	}
+	tr.config.Store(cfg)
 
 	block := &ssu2noise.PeerTestBlock{
 		MessageCode: ssu2noise.PeerTestResponse,
@@ -193,10 +207,12 @@ func TestVerifyPeerTestSignature_Code3_NilRouterHashFailsClosed(t *testing.T) {
 // silently substituting the sender's hash. Regression for AUDIT.md H-1.
 func TestVerifyPeerTestSignature_Code4_NilRouterHashFailsClosed(t *testing.T) {
 	tr := makeMinimalTransport()
-	tr.config.RouterLookupFunc = func(hash data.Hash) (router_info.RouterInfo, error) {
+	cfg := tr.config.Load()
+	cfg.RouterLookupFunc = func(hash data.Hash) (router_info.RouterInfo, error) {
 		t.Fatalf("RouterLookupFunc must not be called when RouterHash is nil for code 4")
 		return router_info.RouterInfo{}, nil
 	}
+	tr.config.Store(cfg)
 
 	block := &ssu2noise.PeerTestBlock{
 		MessageCode: ssu2noise.PeerTestResult,
@@ -226,13 +242,15 @@ func TestVerifyPeerTestSignature_Code4_NilRouterHashFailsClosed(t *testing.T) {
 func TestVerifyPeerTestSignature_Code4_UsesBlockRouterHashNotSenderHash(t *testing.T) {
 	tr := makeMinimalTransport()
 	lookupCalledWith := data.Hash{}
-	tr.config.RouterLookupFunc = func(hash data.Hash) (router_info.RouterInfo, error) {
+	cfg := tr.config.Load()
+	cfg.RouterLookupFunc = func(hash data.Hash) (router_info.RouterInfo, error) {
 		lookupCalledWith = hash
 		// Return error so verification stops at the lookup boundary; the test
 		// only needs to confirm we reached lookup with senderHash and did not
 		// reject upfront.
 		return router_info.RouterInfo{}, assert.AnError
 	}
+	tr.config.Store(cfg)
 
 	aliceHash := data.Hash{}
 	for i := range aliceHash {

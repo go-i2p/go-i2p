@@ -218,7 +218,9 @@ func (t *SSU2Transport) buildTransportCallbacks(session *SSU2Session) *BlockCall
 // E-4 fix: Emits a warn-level log (once per transport lifetime) when RouterInfo
 // blocks arrive but RouterStoreFunc is nil, to catch misconfiguration in production.
 func (t *SSU2Transport) handleRouterInfoBlock(data []byte) error {
-	if t.config.RouterStoreFunc == nil {
+	// R-2 fix: Atomic config snapshot
+	cfg := t.config.Load()
+	if cfg.RouterStoreFunc == nil {
 		// Warn once if RouterInfo blocks are received but no store function is configured.
 		// This indicates misconfiguration: RouterStoreFunc must be wired for production
 		// to allow reply routing. Tests can ignore this safely.
@@ -228,7 +230,7 @@ func (t *SSU2Transport) handleRouterInfoBlock(data []byte) error {
 		t.logger.Debug("Received RouterInfo block but RouterStoreFunc not configured (using default callbacks)")
 		return nil
 	}
-	if err := t.config.RouterStoreFunc(data); err != nil {
+	if err := cfg.RouterStoreFunc(data); err != nil {
 		t.logger.WithError(err).Warn("Failed to store RouterInfo from SSU2 block")
 		return oops.Wrapf(err, "failed to store RouterInfo")
 	}
@@ -241,10 +243,12 @@ func (t *SSU2Transport) handleRouterInfoBlock(data []byte) error {
 // Returns (true, nil) if signature is valid, and (false, error) on verification failure
 // or when RouterLookupFunc is unavailable (fail-closed).
 func (t *SSU2Transport) verifyRelayRequestSignature(block *ssu2noise.RelayRequestBlock, senderHash data.Hash) (bool, error) {
-	if t.config.RouterLookupFunc == nil {
+	// R-2 fix: Atomic config snapshot
+	cfg := t.config.Load()
+	if cfg.RouterLookupFunc == nil {
 		return false, oops.Errorf("signature verification unavailable: RouterLookupFunc not configured")
 	}
-	ri, err := t.config.RouterLookupFunc(senderHash)
+	ri, err := cfg.RouterLookupFunc(senderHash)
 	if err != nil {
 		t.logger.WithField("sender_hash", senderHash[:4]).Warn("RelayRequest: failed to lookup sender RouterInfo for signature verification")
 		return false, oops.Wrapf(err, "netdb lookup failed for sender %x", senderHash[:4])
@@ -313,10 +317,12 @@ func (t *SSU2Transport) verifyRelayRequestSignature(block *ssu2noise.RelayReques
 // Returns (true, nil) if signature is valid, and (false, error) on verification failure
 // or when RouterLookupFunc is unavailable (fail-closed).
 func (t *SSU2Transport) verifyRelayResponseSignature(block *ssu2noise.RelayResponseBlock, senderHash data.Hash) (bool, error) {
-	if t.config.RouterLookupFunc == nil {
+	// R-2 fix: Atomic config snapshot
+	cfg := t.config.Load()
+	if cfg.RouterLookupFunc == nil {
 		return false, oops.Errorf("signature verification unavailable: RouterLookupFunc not configured")
 	}
-	ri, err := t.config.RouterLookupFunc(senderHash)
+	ri, err := cfg.RouterLookupFunc(senderHash)
 	if err != nil {
 		t.logger.WithField("sender_hash", senderHash[:4]).Warn("RelayResponse: failed to lookup sender RouterInfo for signature verification")
 		return false, oops.Wrapf(err, "netdb lookup failed for sender %x", senderHash[:4])
@@ -355,7 +361,9 @@ func (t *SSU2Transport) verifyRelayResponseSignature(block *ssu2noise.RelayRespo
 // every invalid path also returned an error — and risked future callers
 // misreading a (false, nil) tuple as success. See AUDIT.md M-4.
 func (t *SSU2Transport) verifyPeerTestSignature(block *ssu2noise.PeerTestBlock, senderHash data.Hash) error {
-	if t.config.RouterLookupFunc == nil {
+	// R-2 fix: Atomic config snapshot
+	cfg := t.config.Load()
+	if cfg.RouterLookupFunc == nil {
 		return oops.Errorf("signature verification unavailable: RouterLookupFunc not configured")
 	}
 	// Resolve Alice's hash up-front and fail-closed for codes 3/4 before any
@@ -380,7 +388,7 @@ func (t *SSU2Transport) verifyPeerTestSignature(block *ssu2noise.PeerTestBlock, 
 		hash := *block.RouterHash
 		aliceHash = &hash
 	}
-	ri, err := t.config.RouterLookupFunc(senderHash)
+	ri, err := cfg.RouterLookupFunc(senderHash)
 	if err != nil {
 		t.logger.WithField("sender_hash", senderHash[:4]).Warn("PeerTest: failed to lookup sender RouterInfo for signature verification")
 		return oops.Wrapf(err, "netdb lookup failed for sender %x", senderHash[:4])
@@ -486,7 +494,7 @@ func (t *SSU2Transport) handlePeerTestBlock(block *ssu2noise.SSU2Block, session 
 
 // handlePeerTestAsAlice processes a PeerTest response/probe/result directed at
 // the test initiator (Alice). It reconstructs the observed external address
-// and completes the pending test. If 2+ PeerTest observations agree on the
+// and completes the pending test. If 3+ PeerTest observations agree on the
 // same external address within peerTestObservationWindow, the republish
 // callback is invoked so the new address can be published to the netdb.
 func (t *SSU2Transport) handlePeerTestAsAlice(ptBlock *ssu2noise.PeerTestBlock, mgr *ssu2noise.PeerTestManager) error {
@@ -899,7 +907,9 @@ func (t *SSU2Transport) forwardRelayIntro(req *ssu2noise.RelayRequestBlock, mgr 
 // hasIntroducerCapability returns true when session's remote peer advertises
 // introducer capability (caps=B) in its RouterInfo.
 func (t *SSU2Transport) hasIntroducerCapability(session *SSU2Session) bool {
-	if t == nil || t.config == nil || t.config.RouterLookupFunc == nil || session == nil || session.conn == nil {
+	// R-2 fix: Atomic config snapshot
+	cfg := t.config.Load()
+	if t == nil || cfg == nil || cfg.RouterLookupFunc == nil || session == nil || session.conn == nil {
 		return false
 	}
 	addr, ok := session.conn.RemoteAddr().(*ssu2noise.SSU2Addr)
@@ -907,7 +917,7 @@ func (t *SSU2Transport) hasIntroducerCapability(session *SSU2Session) bool {
 		return false
 	}
 	rh := data.Hash(addr.RouterHash())
-	ri, err := t.config.RouterLookupFunc(rh)
+	ri, err := cfg.RouterLookupFunc(rh)
 	if err != nil {
 		t.logger.WithFields(map[string]interface{}{
 			"router_hash": rh.String(),
@@ -1108,10 +1118,12 @@ func (t *SSU2Transport) verifyRelayIntroSignature(intro *ssu2noise.RelayIntroBlo
 	}
 
 	// Look up Alice's RouterInfo from NetDB to get her Ed25519 signing key
-	if t.config.RouterLookupFunc == nil {
+	// R-2 fix: Atomic config snapshot
+	cfg := t.config.Load()
+	if cfg.RouterLookupFunc == nil {
 		return oops.Errorf("signature verification unavailable: RouterLookupFunc not configured")
 	}
-	aliceRI, err := t.config.RouterLookupFunc(aliceHash)
+	aliceRI, err := cfg.RouterLookupFunc(aliceHash)
 	if err != nil {
 		t.logger.WithField("alice_hash", aliceHash[:4]).Warn("RelayIntro: failed to lookup Alice's RouterInfo for signature verification")
 		return oops.Wrapf(err, "netdb lookup failed for Alice %x", aliceHash[:4])
@@ -1786,8 +1798,9 @@ func (t *SSU2Transport) createIntroducerFromRouterInfo(ri router_info.RouterInfo
 
 // maybeAutoInitiatePeerTest fires a best-effort PeerTest towards a newly
 // connected peer for the first startupPeerTestMax connections. This
-// implements the D3 startup probe: 3 peers report our external address so
-// the majority-confirmation logic can confirm and republish it.
+// implements the D3 startup probe: 5 peers (raised from 3) report our
+// external address with margin for failures, so majority-confirmation
+// logic (threshold 3) can reliably confirm and republish it.
 func (t *SSU2Transport) maybeAutoInitiatePeerTest(remote net.Addr) {
 	if !t.shouldInitiatePeerTest() {
 		return
@@ -1806,7 +1819,12 @@ func (t *SSU2Transport) maybeAutoInitiatePeerTest(remote net.Addr) {
 // preventing the race where concurrent goroutines could all read "<= 3" and
 // proceed, allowing more than startupPeerTestMax tests.
 func (t *SSU2Transport) shouldInitiatePeerTest() bool {
-	const startupPeerTestMax = 3
+	// T-2/RD-1 FIX: Raised from 3 to 5 to provide margin for failures/timeouts.
+	// peerTestConfirmThreshold requires 3 matching observations, so budget must
+	// exceed threshold to account for lost/non-responding peers or per-observer
+	// port variance on Restricted/Symmetric NAT. With 5 tests, confirmation is
+	// achievable even if 2 tests fail/timeout.
+	const startupPeerTestMax = 5
 	if t.peerTestManager == nil {
 		return false
 	}
@@ -1868,11 +1886,13 @@ func (t *SSU2Transport) launchPeerTest(udpAddr *net.UDPAddr) {
 // Returns the port number and true if valid, or 0 and false if validation fails.
 // R-2 fix: Reads t.config.ListenerAddress under identityMu to avoid race with SetIdentity.
 func (t *SSU2Transport) validateAndExtractPort() (int, bool) {
-	if t.config == nil {
+	// R-2 fix: Atomic config snapshot
+	cfg := t.config.Load()
+	if cfg == nil {
 		return 0, false
 	}
 	t.identityMu.RLock()
-	listenerAddr := t.config.ListenerAddress
+	listenerAddr := cfg.ListenerAddress
 	t.identityMu.RUnlock()
 
 	_, portStr, err := net.SplitHostPort(listenerAddr)

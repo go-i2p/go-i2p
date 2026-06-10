@@ -390,10 +390,12 @@ func TestHandleRouterInfoBlock_WithStoreFunc(t *testing.T) {
 	tr := makeMinimalTransport()
 
 	var capturedData []byte
-	tr.config.RouterStoreFunc = func(data []byte) error {
+	cfg := tr.config.Load()
+	cfg.RouterStoreFunc = func(data []byte) error {
 		capturedData = data
 		return nil
 	}
+	tr.config.Store(cfg)
 
 	testData := []byte("router-info-payload")
 	err := tr.handleRouterInfoBlock(testData)
@@ -406,9 +408,11 @@ func TestHandleRouterInfoBlock_WithStoreFunc(t *testing.T) {
 func TestHandleRouterInfoBlock_StoreFuncError(t *testing.T) {
 	tr := makeMinimalTransport()
 
-	tr.config.RouterStoreFunc = func(data []byte) error {
+	cfg := tr.config.Load()
+	cfg.RouterStoreFunc = func(data []byte) error {
 		return assert.AnError
 	}
+	tr.config.Store(cfg)
 
 	err := tr.handleRouterInfoBlock([]byte("test-data"))
 	assert.Error(t, err, "Should return error when RouterStoreFunc fails")
@@ -419,10 +423,12 @@ func TestHandleRouterInfoBlock_StoreFuncError(t *testing.T) {
 func TestBuildTransportCallbacks_IncludesRouterInfo(t *testing.T) {
 	tr := makeMinimalTransport()
 	var storeCalled bool
-	tr.config.RouterStoreFunc = func(data []byte) error {
+	cfg := tr.config.Load()
+	cfg.RouterStoreFunc = func(data []byte) error {
 		storeCalled = true
 		return nil
 	}
+	tr.config.Store(cfg)
 
 	cbs := tr.buildTransportCallbacks(nil)
 	require.NotNil(t, cbs.OnRouterInfo, "OnRouterInfo callback should be set")

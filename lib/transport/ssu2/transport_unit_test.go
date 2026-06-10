@@ -17,14 +17,16 @@ import (
 // for non-network methods (Name, Addr, GetSessionCount, etc.).
 func makeMinimalTransport() *SSU2Transport {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &SSU2Transport{
-		config:        &Config{ListenerAddress: "127.0.0.1:0", MaxSessions: 4},
+	cfg := &Config{ListenerAddress: "127.0.0.1:0", MaxSessions: 4}
+	tr := &SSU2Transport{
 		handler:       NewDefaultHandler(),
 		natStateCache: &natState{},
 		ctx:           ctx,
 		cancel:        cancel,
 		logger:        log.WithField("test", "transport_unit"),
 	}
+	tr.config.Store(cfg)
+	return tr
 }
 
 // TestTransport_Name verifies the transport returns the correct protocol name.

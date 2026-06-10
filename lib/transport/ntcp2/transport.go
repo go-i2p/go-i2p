@@ -527,17 +527,12 @@ func (t *NTCP2Transport) shouldShutdown(rawConn net.Conn) bool {
 	}
 }
 
-// canAcceptNewSession checks if we can accept a new session without exceeding limits.
+// canAcceptNewSession performs pre-acceptance checks on the raw connection.
+// L-1/T-1 FIX: Session limit is now checked AFTER handshake completes, not before.
+// This prevents attackers from holding reserved slots during the 30s handshake window.
 func (t *NTCP2Transport) canAcceptNewSession(rawConn net.Conn) bool {
-	if err := t.checkSessionLimit(); err != nil {
-		cfg := t.config.Load()
-		t.logger.WithFields(map[string]interface{}{
-			"session_count": t.GetSessionCount(),
-			"max_sessions":  cfg.GetMaxSessions(),
-		}).Warn("Session limit reached — dropping inbound TCP connection")
-		rawConn.Close()
-		return false
-	}
+	// L-1/T-1: No limit check here. Handshakes run without reserving slots.
+	// The limit is enforced after successful handshake in inboundHandshakeWorker.
 	return true
 }
 
@@ -559,7 +554,22 @@ func (t *NTCP2Transport) inboundHandshakeWorker(conn net.Conn) {
 	defer cancel()
 
 	if err := t.performInboundHandshake(conn, handshakeCtx); err != nil {
-		// performInboundHandshake already closes conn and unreserves the slot.
+		// L-1/T-1 FIX: Handshake failed. No slot was reserved, so just return.
+		// performInboundHandshake already closes conn; no unreserve needed.
+		return
+	}
+
+	// L-1/T-1 FIX: Handshake succeeded. NOW check session limit and reserve a slot.
+	// This prevents attackers from holding reserved slots during the 30s handshake.
+	// If we're at capacity, close the connection and return (no slot to unreserve).
+	if err := t.checkSessionLimit(); err != nil {
+		cfg := t.config.Load()
+		t.logger.WithFields(map[string]interface{}{
+			"session_count": t.GetSessionCount(),
+			"max_sessions":  cfg.GetMaxSessions(),
+			"remote_addr":   conn.RemoteAddr().String(),
+		}).Warn("Session limit reached after successful handshake; dropping connection")
+		conn.Close()
 		return
 	}
 
@@ -590,33 +600,37 @@ func (t *NTCP2Transport) inboundHandshakeWorker(conn net.Conn) {
 		old = t.metrics.maxPendingConnsQueueDepth.Load()
 	}
 
+	// R-1/S-1 FIX: Perform ownership CAS BEFORE sending to pendingConns.
+	// This prevents dual ownership when Accept() and GetSession race on the same peer.
+	// The CAS atomically marks the connection as "accepted" — only if this succeeds
+	// do we deliver to Accept(). If a concurrent GetSession promotion wins the CAS,
+	// we return early without delivering, avoiding the dual-ownership bug.
+	peerHash := t.extractPeerHash(tracked)
+	originalConn := tracked.(*trackedConn).Conn
+	if !t.sessions.CompareAndSwap(peerHash, originalConn, acceptedConn{Conn: tracked}) {
+		// R-1/S-1 FIX: Promotion race detected. A concurrent GetSession already promoted
+		// this connection to a full session and won the CAS. The promoted session now owns
+		// the underlying socket and reserved slot. Do NOT send to pendingConns (violates
+		// single-ownership invariant), and do NOT call tracked.Close() (would interfere
+		// with the live promoted session). The trackedConn wrapper is harmlessly GC'd.
+		t.logger.WithFields(map[string]interface{}{
+			"remote_addr": conn.RemoteAddr().String(),
+			"peer_hash":   fmt.Sprintf("%x", peerHash[:8]),
+		}).Debug("Inbound connection promoted concurrently before Accept delivery; not sending to pendingConns")
+		return
+	}
+
+	// R-1/S-1 FIX: CAS succeeded — we now own the connection via acceptedConn.
+	// Attempt to deliver to Accept(). If the send fails (timeout or shutdown),
+	// we must undo the ownership transition by closing, which fires the onClose
+	// callback that removes the acceptedConn entry and decrements sessionCount.
 	select {
 	case t.pendingConns <- tracked:
-		// Successfully enqueued for Accept() to consume.
-		// Mark the connection as accepted to prevent dual-ownership via promotion (R-3).
-		// Use CompareAndSwap instead of Store to avoid clobbering a concurrent promotion (X-3).
-		peerHash := t.extractPeerHash(tracked)
-		// The original value should be the underlying raw conn (before wrapping in trackedConn).
-		// If CAS fails, a concurrent GetSession already promoted this to a session, so we
-		// don't deliver it to Accept (ownership already transferred).
-		originalConn := tracked.(*trackedConn).Conn
-		if !t.sessions.CompareAndSwap(peerHash, originalConn, acceptedConn{Conn: tracked}) {
-			// Promotion race: concurrent GetSession already promoted this to a session.
-			// The promoted session now owns the underlying conn and the reserved slot.
-			// Do NOT call tracked.Close() here - it would:
-			//   1. Close the conn now owned by the promoted session (interferes with it)
-			//   2. Fire onClose callback which removes the promoted session from map
-			// The trackedConn wrapper is safely GC'd. (trackedConn cleanup race fix)
-			t.logger.WithFields(map[string]interface{}{
-				"remote_addr": conn.RemoteAddr().String(),
-				"peer_hash":   fmt.Sprintf("%x", peerHash[:8]),
-			}).Debug("Inbound connection promoted concurrently; not delivering to Accept")
-			return
-		}
+		// R-1/S-1 FIX: Successfully delivered to Accept(). The acceptedConn entry
+		// remains in the map until Accept() consumes it and promotes or the connection closes.
 	case <-sendCtx.Done():
-		// Queue send timed out: close the connection.
-		// The tracked conn's onClose callback will call removeSession which
-		// decrements the session count, so we don't call unreserveSessionSlot here.
+		// R-1/S-1 FIX: Queue send timed out. Undo the CAS by closing the connection.
+		// The onClose callback will remove the acceptedConn entry and decrement sessionCount.
 		// TE-2 fix: Track timeout occurrences for monitoring
 		t.metrics.queueSendTimeouts.Add(1)
 		t.logger.WithFields(map[string]interface{}{
@@ -628,8 +642,8 @@ func (t *NTCP2Transport) inboundHandshakeWorker(conn net.Conn) {
 		}).Warn("Inbound connection dropped: pending queue send timeout (accept consumer too slow?)")
 		tracked.Close()
 	case <-t.ctx.Done():
-		// Transport shutting down: close the connection.
-		// The tracked conn's onClose callback handles session cleanup.
+		// R-1/S-1 FIX: Transport shutting down. Undo the CAS by closing the connection.
+		// The onClose callback will remove the acceptedConn entry and decrement sessionCount.
 		tracked.Close()
 	}
 }
@@ -653,7 +667,7 @@ func (t *NTCP2Transport) performInboundHandshake(conn net.Conn, handshakeCtx con
 		t.logger.WithField("conn_type", fmt.Sprintf("%T", conn)).
 			Error("Accepted connection is not *ntcp2.Conn; rejecting")
 		_ = conn.Close()
-		t.unreserveSessionSlot()
+		// L-1/T-1 FIX: No slot was reserved before handshake, so no unreserve needed.
 		return oops.Errorf("accepted connection is not *ntcp2.Conn (got %T)", conn)
 	}
 
@@ -680,7 +694,7 @@ func (t *NTCP2Transport) executeHandshake(ntcp2Conn *ntcp2.Conn, handshakeCtx co
 		t.logger.WithError(err).Debug("Inbound handshake failed, applying probing resistance")
 		applyProbingResistance(raw)
 		_ = ntcp2Conn.Close()
-		t.unreserveSessionSlot()
+		// L-1/T-1 FIX: No slot was reserved before handshake, so no unreserve needed.
 		return WrapNTCP2Error(err, "inbound handshake (probing resistance applied)")
 	}
 	ntcp2Conn.PropagatePeerStaticKey()
@@ -702,7 +716,7 @@ func (t *NTCP2Transport) extractAndStorePeerRouterInfo(ntcp2Conn *ntcp2.Conn, co
 		t.logger.WithField("remote_addr", conn.RemoteAddr().String()).
 			Warn("Inbound NTCP2: no RouterInfo block in msg3 — protocol violation; closing")
 		_ = ntcp2Conn.Close()
-		t.unreserveSessionSlot()
+		// L-1/T-1 FIX: No slot was reserved before handshake, so no unreserve needed.
 		return oops.Errorf("inbound NTCP2: missing RouterInfo block in msg3")
 	}
 
@@ -722,7 +736,7 @@ func (t *NTCP2Transport) extractAndStorePeerRouterInfo(ntcp2Conn *ntcp2.Conn, co
 			"ri_bytes_prefix":      fmt.Sprintf("%x", riBytes[:min(16, len(riBytes))]),
 		}).Warn("Inbound NTCP2: failed to parse peer RouterInfo from msg3; aborting handshake")
 		_ = ntcp2Conn.Close()
-		t.unreserveSessionSlot()
+		// L-1/T-1 FIX: No slot was reserved before handshake, so no unreserve needed.
 		return oops.Errorf("RouterInfo parse failed: %w", parseErr)
 	}
 

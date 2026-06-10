@@ -66,13 +66,14 @@ func TestSM2_ConcurrentPromotions_Single_Winner(t *testing.T) {
 	// - Concurrent reserves + promotions should not double-reserve slots
 	// - All losers should cleanly free their reserved slots
 
+	cfg := &Config{
+		MaxSessions: 50,
+	}
 	transport := &SSU2Transport{
-		config: &Config{
-			MaxSessions: 50,
-		},
 		sessionCount: 0,
 		logger:       testLogger_SM2(),
 	}
+	transport.config.Store(cfg)
 
 	// Simulate concurrent reserve attempts (these would be from concurrent dials)
 	const numRaces = 20
@@ -147,13 +148,14 @@ func TestSM2_Promotion_LoadOrStore_CAS_Atomicity(t *testing.T) {
 func TestSM2_Stress_AggressivePromotionRaces(t *testing.T) {
 	t.Parallel()
 
+	cfg := &Config{
+		MaxSessions: 10,
+	}
 	transport := &SSU2Transport{
-		config: &Config{
-			MaxSessions: 10,
-		},
 		sessionCount: 0,
 		logger:       testLogger_RC2(),
 	}
+	transport.config.Store(cfg)
 
 	// Simulate aggressive concurrent promotion attempts
 	const numWorkers = 100
@@ -212,14 +214,15 @@ func TestSM2_Context_Cancellation_Cleanup(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	cfg := &Config{
+		MaxSessions: 50,
+	}
 	transport := &SSU2Transport{
-		config: &Config{
-			MaxSessions: 50,
-		},
 		sessionCount: 0,
 		ctx:          ctx,
 		logger:       testLogger_SM2(),
 	}
+	transport.config.Store(cfg)
 
 	// Reserve some slots
 	for i := 0; i < 10; i++ {

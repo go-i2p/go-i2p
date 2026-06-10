@@ -511,8 +511,10 @@ func addIntroKeyOption(options map[string]string, transport *SSU2Transport) {
 // requires publishing the corresponding PUBLIC key as the 's=' parameter.
 // This mirrors the NTCP2 pattern in ntcp2/router_address.go.
 func addStaticKeyOption(options map[string]string, transport *SSU2Transport) {
-	if transport.config != nil && transport.config.SSU2Config != nil && len(transport.config.SSU2Config.StaticKey) == 32 {
-		pub, err := curve25519.X25519(transport.config.SSU2Config.StaticKey, curve25519.Basepoint)
+	// R-2 fix: Atomic config snapshot
+	cfg := transport.config.Load()
+	if cfg != nil && cfg.SSU2Config != nil && len(cfg.SSU2Config.StaticKey) == 32 {
+		pub, err := curve25519.X25519(cfg.SSU2Config.StaticKey, curve25519.Basepoint)
 		if err != nil {
 			return
 		}

@@ -130,7 +130,9 @@ func (pc *PersistentConfig) generateAndStoreKey(path string, keySize int, name s
 // and obfuscation IV, wires them into ssu2Config, and starts the
 // KeyRotationManager for the transport.
 func initKeyManagement(t *SSU2Transport, ssu2Config *ssu2noise.SSU2Config) error {
-	pc := NewPersistentConfig(t.config.WorkingDir)
+	// R-2 fix: Atomic config snapshot
+	cfg := t.config.Load()
+	pc := NewPersistentConfig(cfg.WorkingDir)
 	t.persistentConfig = pc
 
 	introKey, err := pc.LoadOrGenerateIntroKey()

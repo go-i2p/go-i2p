@@ -44,11 +44,12 @@ func TestNatState_GetEmpty(t *testing.T) {
 
 func TestSaveAndLoadNATState(t *testing.T) {
 	dir := t.TempDir()
+	cfg := &Config{WorkingDir: dir}
 	tr := &SSU2Transport{
-		config:        &Config{WorkingDir: dir},
 		natStateCache: &natState{},
 		logger:        testLogger(),
 	}
+	tr.config.Store(cfg)
 
 	// Set and save.
 	tr.natStateCache.set(ssu2noise.NATRestricted, "5.6.7.8:1234")
@@ -60,11 +61,12 @@ func TestSaveAndLoadNATState(t *testing.T) {
 	require.NoError(t, err)
 
 	// Load into a fresh transport.
+	cfg2 := &Config{WorkingDir: dir}
 	tr2 := &SSU2Transport{
-		config:        &Config{WorkingDir: dir},
 		natStateCache: &natState{},
 		logger:        testLogger(),
 	}
+	tr2.config.Store(cfg2)
 	loaded := tr2.loadNATState()
 	assert.True(t, loaded)
 
@@ -75,11 +77,12 @@ func TestSaveAndLoadNATState(t *testing.T) {
 
 func TestLoadNATState_Expired(t *testing.T) {
 	dir := t.TempDir()
+	cfg := &Config{WorkingDir: dir}
 	tr := &SSU2Transport{
-		config:        &Config{WorkingDir: dir},
 		natStateCache: &natState{},
 		logger:        testLogger(),
 	}
+	tr.config.Store(cfg)
 
 	// Set, backdate, and save.
 	tr.natStateCache.set(ssu2noise.NATCone, "1.1.1.1:80")
@@ -89,38 +92,42 @@ func TestLoadNATState_Expired(t *testing.T) {
 	tr.saveNATState()
 
 	// Loading should reject the stale data.
+	cfg2 := &Config{WorkingDir: dir}
 	tr2 := &SSU2Transport{
-		config:        &Config{WorkingDir: dir},
 		natStateCache: &natState{},
 		logger:        testLogger(),
 	}
+	tr2.config.Store(cfg2)
 	assert.False(t, tr2.loadNATState())
 }
 
 func TestLoadNATState_NoWorkingDir(t *testing.T) {
+	cfg := &Config{WorkingDir: ""}
 	tr := &SSU2Transport{
-		config:        &Config{WorkingDir: ""},
 		natStateCache: &natState{},
 		logger:        testLogger(),
 	}
+	tr.config.Store(cfg)
 	assert.False(t, tr.loadNATState())
 }
 
 func TestLoadNATState_MissingFile(t *testing.T) {
+	cfg := &Config{WorkingDir: t.TempDir()}
 	tr := &SSU2Transport{
-		config:        &Config{WorkingDir: t.TempDir()},
 		natStateCache: &natState{},
 		logger:        testLogger(),
 	}
+	tr.config.Store(cfg)
 	assert.False(t, tr.loadNATState())
 }
 
 func TestSaveNATState_NoWorkingDir(t *testing.T) {
+	cfg := &Config{WorkingDir: ""}
 	tr := &SSU2Transport{
-		config:        &Config{WorkingDir: ""},
 		natStateCache: &natState{},
 		logger:        testLogger(),
 	}
+	tr.config.Store(cfg)
 	// Should be a no-op, not panic.
 	tr.saveNATState()
 }
@@ -130,11 +137,12 @@ func TestLoadNATState_InvalidJSON(t *testing.T) {
 	path := filepath.Join(dir, natStateFilename)
 	require.NoError(t, os.WriteFile(path, []byte("{invalid json"), 0o600))
 
+	cfg := &Config{WorkingDir: dir}
 	tr := &SSU2Transport{
-		config:        &Config{WorkingDir: dir},
 		natStateCache: &natState{},
 		logger:        testLogger(),
 	}
+	tr.config.Store(cfg)
 	assert.False(t, tr.loadNATState())
 }
 
@@ -308,11 +316,12 @@ func TestLoadNATState_RejectsOversizedFile(t *testing.T) {
 	}
 	require.NoError(t, os.WriteFile(path, oversized, 0o600))
 
+	cfg := &Config{WorkingDir: dir}
 	tr := &SSU2Transport{
-		config:        &Config{WorkingDir: dir},
 		natStateCache: &natState{},
 		logger:        testLogger(),
 	}
+	tr.config.Store(cfg)
 
 	// loadNATState should return false because the JSON will be truncated and invalid.
 	loaded := tr.loadNATState()

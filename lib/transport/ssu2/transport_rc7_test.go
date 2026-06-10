@@ -52,7 +52,9 @@ func TestRC7_DualDialSamePeer(t *testing.T) {
 // (slots reserved) - (slots unreserved) = (active sessions)
 func TestRC7_sessionCountInvariant(t *testing.T) {
 	tr := makeMinimalTransport()
-	tr.config.MaxSessions = 100 // Increase limit for this test
+	cfg := tr.config.Load()
+	cfg.MaxSessions = 100 // Increase limit for this test
+	tr.config.Store(cfg)
 	defer tr.Close()
 
 	initialCount := tr.GetSessionCount()

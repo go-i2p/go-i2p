@@ -301,7 +301,7 @@ func TestAccept_SessionLimitFull(t *testing.T) {
 	tr, cleanup := makeTestTransportWithListener(t)
 	defer cleanup()
 
-	maxSessions := tr.config.GetMaxSessions()
+	maxSessions := tr.config.Load().GetMaxSessions()
 	for i := 0; i < maxSessions; i++ {
 		require.NoError(t, tr.checkSessionLimit())
 	}

@@ -193,7 +193,9 @@ func (t *SSU2Transport) startNATCleanup() {
 // saveNATState persists the current NAT state to disk. No-op if WorkingDir is
 // empty (ephemeral mode).
 func (t *SSU2Transport) saveNATState() {
-	if t.config == nil || t.config.WorkingDir == "" || t.natStateCache == nil {
+	// R-2 fix: Atomic config snapshot
+	cfg := t.config.Load()
+	if cfg == nil || cfg.WorkingDir == "" || t.natStateCache == nil {
 		return
 	}
 	t.natStateCache.mu.RLock()
@@ -209,7 +211,7 @@ func (t *SSU2Transport) saveNATState() {
 		t.logger.WithField("error", err).Warn("failed to marshal NAT state")
 		return
 	}
-	path := filepath.Join(t.config.WorkingDir, natStateFilename)
+	path := filepath.Join(cfg.WorkingDir, natStateFilename)
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		t.logger.WithField("error", err).Warn("failed to persist NAT state")
 	}
@@ -219,10 +221,12 @@ func (t *SSU2Transport) saveNATState() {
 // cache if the stored result is still within TTL. Returns true if a valid
 // state was loaded. File read is limited to maxNATStateSize to prevent OOM.
 func (t *SSU2Transport) loadNATState() bool {
-	if t.config == nil || t.config.WorkingDir == "" || t.natStateCache == nil {
+	// R-2 fix: Atomic config snapshot
+	cfg := t.config.Load()
+	if cfg == nil || cfg.WorkingDir == "" || t.natStateCache == nil {
 		return false
 	}
-	path := filepath.Join(t.config.WorkingDir, natStateFilename)
+	path := filepath.Join(cfg.WorkingDir, natStateFilename)
 	file, err := os.Open(path)
 	if err != nil {
 		return false

@@ -51,14 +51,16 @@ func newTestTransportForTrackedConnTest(t *testing.T, maxSessions int) *SSU2Tran
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	return &SSU2Transport{
-		config:        &Config{ListenerAddress: "127.0.0.1:0", MaxSessions: maxSessions},
+	cfg := &Config{ListenerAddress: "127.0.0.1:0", MaxSessions: maxSessions}
+	tr := &SSU2Transport{
 		handler:       NewDefaultHandler(),
 		natStateCache: &natState{},
 		ctx:           ctx,
 		cancel:        cancel,
 		logger:        log.WithField("test", "trackedconn_bug"),
 	}
+	tr.config.Store(cfg)
+	return tr
 }
 
 // newTestPeerHashForTracked creates a unique test peer hash.

@@ -15,13 +15,14 @@ import (
 func TestRC2_CASLoopBounded_CheckSessionLimit(t *testing.T) {
 	t.Parallel()
 
+	cfg := &Config{
+		MaxSessions: 10,
+	}
 	transport := &SSU2Transport{
-		config: &Config{
-			MaxSessions: 10,
-		},
 		sessionCount: 0,
 		logger:       testLogger_RC2(),
 	}
+	transport.config.Store(cfg)
 
 	// Concurrent goroutines all trying to reserve slots
 	const numGoroutines = 50
@@ -63,13 +64,14 @@ func TestRC2_CASLoopBounded_CheckSessionLimit(t *testing.T) {
 func TestRC2_CASLoopRetryLimit(t *testing.T) {
 	t.Parallel()
 
+	cfg := &Config{
+		MaxSessions: 5,
+	}
 	transport := &SSU2Transport{
-		config: &Config{
-			MaxSessions: 5,
-		},
 		sessionCount: 0,
 		logger:       testLogger_RC2(),
 	}
+	transport.config.Store(cfg)
 
 	// Create extreme contention: many goroutines competing
 	const numGoroutines = 200
@@ -143,13 +145,14 @@ func TestRC2_UnreserveSessionSlot_Bounded(t *testing.T) {
 func TestRC2_CASLoopConsistency(t *testing.T) {
 	t.Parallel()
 
+	cfg := &Config{
+		MaxSessions: 50,
+	}
 	transport := &SSU2Transport{
-		config: &Config{
-			MaxSessions: 50,
-		},
 		sessionCount: 0,
 		logger:       testLogger_RC2(),
 	}
+	transport.config.Store(cfg)
 
 	// Phase 1: Reserve 40 slots concurrently
 	const reserveCount = 40
@@ -198,13 +201,14 @@ func TestRC2_CASLoopConsistency(t *testing.T) {
 func TestRC2_HighContentionNoStarvation(t *testing.T) {
 	t.Parallel()
 
+	cfg := &Config{
+		MaxSessions: 20,
+	}
 	transport := &SSU2Transport{
-		config: &Config{
-			MaxSessions: 20,
-		},
 		sessionCount: 0,
 		logger:       testLogger_RC2(),
 	}
+	transport.config.Store(cfg)
 
 	// Stress test: many goroutines cycling through reserve/unreserve
 	const numWorkers = 100

@@ -96,7 +96,9 @@ func TestRC7Comprehensive_SlotReleaseOnlyIfNotUsed(t *testing.T) {
 // Checklist item: "Test scenario: rapid dials to same peer with GetSession returning existing"
 func TestRC7Comprehensive_RapidDialsToSamePeer(t *testing.T) {
 	tr := makeMinimalTransport()
-	tr.config.MaxSessions = 50 // Set a known limit for this test
+	cfg := tr.config.Load()
+	cfg.MaxSessions = 50 // Set a known limit for this test
+	tr.config.Store(cfg)
 	defer tr.Close()
 
 	initial := tr.GetSessionCount()
@@ -173,7 +175,9 @@ func TestRC7Comprehensive_MixedDialScenarios(t *testing.T) {
 // Checklist item: "Add invariant: (incremented slots) - (released slots) = (active sessions)"
 func TestRC7Comprehensive_InvariantHolds(t *testing.T) {
 	tr := makeMinimalTransport()
-	tr.config.MaxSessions = 100 // Set higher limit for this test
+	cfg := tr.config.Load()
+	cfg.MaxSessions = 100 // Set higher limit for this test
+	tr.config.Store(cfg)
 	defer tr.Close()
 
 	initial := tr.GetSessionCount()
@@ -248,7 +252,9 @@ func TestRC7Comprehensive_RegisterOrReuseBehavior(t *testing.T) {
 // TestRC7Comprehensive_ConcurrentCheckAndUnreserve simulates realistic workload.
 func TestRC7Comprehensive_ConcurrentCheckAndUnreserve(t *testing.T) {
 	tr := makeMinimalTransport()
-	tr.config.MaxSessions = 100 // Increase limit for stress test
+	cfg := tr.config.Load()
+	cfg.MaxSessions = 100 // Increase limit for stress test
+	tr.config.Store(cfg)
 	defer tr.Close()
 
 	initial := tr.GetSessionCount()
@@ -287,7 +293,9 @@ func TestRC7Comprehensive_ConcurrentCheckAndUnreserve(t *testing.T) {
 // TestRC7Comprehensive_BoundedRetries verifies RC-2 fix prevents unbounded retries.
 func TestRC7Comprehensive_BoundedRetries(t *testing.T) {
 	tr := makeMinimalTransport()
-	tr.config.MaxSessions = 1 // Very low limit to trigger contention
+	cfg := tr.config.Load()
+	cfg.MaxSessions = 1 // Very low limit to trigger contention
+	tr.config.Store(cfg)
 	defer tr.Close()
 
 	// Fill the single slot

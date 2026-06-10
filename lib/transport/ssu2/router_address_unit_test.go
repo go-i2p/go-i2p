@@ -162,13 +162,15 @@ func TestConvertToRouterAddress_WithStaticKey(t *testing.T) {
 
 	// Access the SSU2Config directly (it may be nil on a minimal test
 	// transport).  If nil, skip.
-	if tr.config.SSU2Config == nil {
+	cfg := tr.config.Load()
+	if cfg.SSU2Config == nil {
 		t.Skip("config.SSU2Config is nil, skipping static key test")
 	}
-	tr.config.SSU2Config.StaticKey = make([]byte, 32)
-	for i := range tr.config.SSU2Config.StaticKey {
-		tr.config.SSU2Config.StaticKey[i] = byte(i)
+	cfg.SSU2Config.StaticKey = make([]byte, 32)
+	for i := range cfg.SSU2Config.StaticKey {
+		cfg.SSU2Config.StaticKey[i] = byte(i)
 	}
+	tr.config.Store(cfg)
 
 	ra, err := ConvertToRouterAddress(tr)
 	require.NoError(t, err)

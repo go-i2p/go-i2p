@@ -56,7 +56,8 @@ type acceptedConn struct {
 // SSU2Transport implements transport.Transport for SSU2 connections.
 type SSU2Transport struct {
 	listener *ssu2noise.SSU2Listener
-	config   *Config
+	// R-2 fix: use atomic.Pointer for thread-safe config swaps (mirrors NTCP2 HIGH-1.3 pattern)
+	config   atomic.Pointer[Config]
 	identity router_info.RouterInfo
 	keystore KeystoreProvider
 	handler  *DefaultHandler
@@ -242,8 +243,7 @@ func setupSSU2Config(identity router_info.RouterInfo, keystore KeystoreProvider,
 
 // createSSU2TransportStruct creates the SSU2Transport struct with default values.
 func createSSU2TransportStruct(config *Config, identity router_info.RouterInfo, keystore KeystoreProvider, ctx context.Context, cancel context.CancelFunc, l *logger.Entry) *SSU2Transport {
-	return &SSU2Transport{
-		config:                config,
+	t := &SSU2Transport{
 		identity:              identity,
 		keystore:              keystore,
 		handler:               NewDefaultHandler(),
@@ -253,6 +253,9 @@ func createSSU2TransportStruct(config *Config, identity router_info.RouterInfo, 
 		cancel:                cancel,
 		logger:                l,
 	}
+	// R-2 fix: Initialize atomic.Pointer[Config] with Store (mirrors NTCP2 HIGH-1.3)
+	t.config.Store(config)
+	return t
 }
 
 // conditionallyInitKeyManagement initializes key management if WorkingDir is present.
@@ -635,10 +638,11 @@ func (t *SSU2Transport) SetIdentity(ident router_info.RouterInfo) error {
 	// S-2 + S-3 fix: Snapshot old state (listener, address, identity, config) for rollback.
 	// Keep old listener active during new listener creation for atomic swap.
 	t.identityMu.RLock()
-	currentAddr := t.config.ListenerAddress
+	oldCfg := t.config.Load() // R-2 fix: Load config snapshot atomically
+	currentAddr := oldCfg.ListenerAddress
 	oldListener := t.listener
 	oldIdentity := t.identity
-	oldSSU2Config := t.config.SSU2Config
+	_ = oldCfg.SSU2Config // referenced for completeness but not currently used
 	t.identityMu.RUnlock()
 
 	// Create new listener with the new identity/config if one existed before.
@@ -658,7 +662,8 @@ func (t *SSU2Transport) SetIdentity(ident router_info.RouterInfo) error {
 		// S-2 fix: Create new UDP connection and listener outside the lock.
 		// On any failure, return error immediately without touching t.listener.
 		// This keeps old listener active so Accept() continues working.
-		udpConn, newAddr, err := listenWithNATTraversal(t.config, port)
+		// R-2 fix: Use snapshotted oldCfg instead of direct t.config access
+		udpConn, newAddr, err := listenWithNATTraversal(oldCfg, port)
 		if err != nil {
 			t.logger.WithError(err).Error("Failed to rebind UDP address during identity update")
 			return err
@@ -680,11 +685,15 @@ func (t *SSU2Transport) SetIdentity(ident router_info.RouterInfo) error {
 		// S-2 + S-3 fix: Install new listener AND update identity/config under lock.
 		// From this point, Accept() uses new listener and NAT init sees new identity.
 		// If NAT/key init fails below, rollback restores ALL old state atomically.
+		// R-2 fix: Copy-on-write config update (mirrors NTCP2 HIGH-1.3 pattern)
+		newCfg := *oldCfg // Shallow copy
+		newCfg.ListenerAddress = newAddr
+		newCfg.SSU2Config = ssu2Config
+		
 		t.identityMu.Lock()
 		t.listener = listener
-		t.config.ListenerAddress = newAddr
+		t.config.Store(&newCfg) // R-2 fix: Atomic config store
 		t.identity = ident
-		t.config.SSU2Config = ssu2Config
 		t.identityMu.Unlock()
 
 		// BUG FIX HIGH SM-1: Re-initialize NAT managers with the new listener.
@@ -696,12 +705,12 @@ func (t *SSU2Transport) SetIdentity(ident router_info.RouterInfo) error {
 			t.natManagersHealthy.Store(false) // E-2 fix: Mark NAT degraded
 			t.logger.WithError(err).Error("Failed to reinitialize NAT managers after identity update")
 			// Rollback ALL state: listener, address, identity, config
+			// R-2 fix: Restore oldCfg atomically
 			t.identityMu.Lock()
 			_ = t.listener.Close() // Close failed new listener
 			t.listener = oldListener
-			t.config.ListenerAddress = currentAddr
+			t.config.Store(oldCfg) // R-2 fix: Atomic config restore
 			t.identity = oldIdentity
-			t.config.SSU2Config = oldSSU2Config
 			t.identityMu.Unlock()
 			return err
 		}
@@ -712,12 +721,12 @@ func (t *SSU2Transport) SetIdentity(ident router_info.RouterInfo) error {
 		if err := initKeyManagement(t, ssu2Config); err != nil {
 			t.logger.WithError(err).Error("Failed to reinitialize key rotation manager after identity update")
 			// Rollback ALL state: listener, address, identity, config
+			// R-2 fix: Restore oldCfg atomically
 			t.identityMu.Lock()
 			_ = t.listener.Close() // Close failed new listener
 			t.listener = oldListener
-			t.config.ListenerAddress = currentAddr
+			t.config.Store(oldCfg) // R-2 fix: Atomic config restore
 			t.identity = oldIdentity
-			t.config.SSU2Config = oldSSU2Config
 			t.identityMu.Unlock()
 			return err
 		}
@@ -752,7 +761,9 @@ func (t *SSU2Transport) GetSession(routerInfo router_info.RouterInfo) (transport
 		return t.createOutboundSession(routerInfo, routerHash)
 	}
 
-	if t.config.RouterLookupFunc != nil && HasIntroducerOnlySSU2Address(&routerInfo) {
+	// R-2 fix: Atomic config snapshot
+	cfg := t.config.Load()
+	if cfg.RouterLookupFunc != nil && HasIntroducerOnlySSU2Address(&routerInfo) {
 		return t.dialViaIntroducer(routerInfo, routerHash)
 	}
 
@@ -808,8 +819,10 @@ func (t *SSU2Transport) promoteInboundConnection(conn net.Conn, original interfa
 	if !ok {
 		return nil, false
 	}
+	// R-2 fix: Atomic config snapshot
+	cfg := t.config.Load()
 	promoted := NewSSU2SessionDeferred(ssu2Conn, t.ctx, t.logger)
-	promoted.maxRetransmit = t.config.GetMaxRetransmissions()
+	promoted.maxRetransmit = cfg.GetMaxRetransmissions()
 	promoted.SetTransportCallbacks(t.buildTransportCallbacks(promoted))
 
 	// CRITICAL-3.1 FIX: Start workers AFTER CAS succeeds, not before.
@@ -996,8 +1009,10 @@ func extractRemoteStaticKey(routerInfo router_info.RouterInfo) ([]byte, error) {
 // registerOrReuseSession creates a new session or returns an existing one for the router hash.
 // Returns the session, a boolean indicating if a new slot is used, and any error.
 func (t *SSU2Transport) registerOrReuseSession(conn *ssu2noise.SSU2Conn, routerHash data.Hash) (*SSU2Session, bool, error) {
+	// R-2 fix: Atomic config snapshot
+	cfg := t.config.Load()
 	session := NewSSU2SessionDeferred(conn, t.ctx, t.logger)
-	session.maxRetransmit = t.config.GetMaxRetransmissions()
+	session.maxRetransmit = cfg.GetMaxRetransmissions()
 	session.SetTransportCallbacks(t.buildTransportCallbacks(session))
 
 	// CRITICAL-3.1 FIX: Start workers AFTER LoadOrStore succeeds, not before.
@@ -1078,9 +1093,11 @@ func (t *SSU2Transport) promoteRawConnToSession(rawConn net.Conn, routerHash dat
 		return nil
 	}
 
+	// R-2 fix: Atomic config snapshot
+	cfg := t.config.Load()
 	// Create a new SSU2Session from the raw conn.
 	promoted := NewSSU2SessionDeferred(ssu2Conn, t.ctx, t.logger)
-	promoted.maxRetransmit = t.config.GetMaxRetransmissions()
+	promoted.maxRetransmit = cfg.GetMaxRetransmissions()
 	promoted.SetTransportCallbacks(t.buildTransportCallbacks(promoted))
 
 	// CRITICAL-3.1 FIX: Start workers AFTER CAS succeeds, not before.
@@ -1137,7 +1154,9 @@ func (t *SSU2Transport) Compatible(routerInfo router_info.RouterInfo) bool {
 	if HasDialableSSU2Address(&routerInfo) {
 		return true
 	}
-	if t.config.RouterLookupFunc != nil && HasIntroducerOnlySSU2Address(&routerInfo) {
+	// R-2 fix: Atomic config snapshot
+	cfg := t.config.Load()
+	if cfg.RouterLookupFunc != nil && HasIntroducerOnlySSU2Address(&routerInfo) {
 		return true
 	}
 	return false
@@ -1255,8 +1274,10 @@ func (t *SSU2Transport) GetTotalBandwidth() (totalBytesSent, totalBytesReceived 
 // This is a non-reserving check used for fail-fast rejection in Accept().
 // Use checkSessionLimit() when you need to atomically reserve a slot.
 func (t *SSU2Transport) isSessionLimitReached() bool {
+	// R-2 fix: Atomic config snapshot
+	cfg := t.config.Load()
 	current := atomic.LoadInt32(&t.sessionCount)
-	maxSessions := t.config.GetMaxSessions()
+	maxSessions := cfg.GetMaxSessions()
 	return int(current) >= maxSessions
 }
 
@@ -1268,7 +1289,9 @@ func (t *SSU2Transport) checkSessionLimit() error {
 	// 2. Applies exponential backoff (1ns → 1µs → 100µs) to yield CPU
 	// 3. Falls back to error after max retries (connection pool full message)
 	// This prevents the false "pool full" error while still limiting spins.
-	maxSessions := t.config.GetMaxSessions()
+	// R-2 fix: Atomic config snapshot
+	cfg := t.config.Load()
+	maxSessions := cfg.GetMaxSessions()
 
 	const maxRetries = 100
 	for attempt := 0; attempt < maxRetries; attempt++ {
