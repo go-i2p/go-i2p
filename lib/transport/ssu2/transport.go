@@ -1159,13 +1159,10 @@ func (t *SSU2Transport) Close() error {
 		atomic.StoreInt32(&t.isShuttingDown, 1)
 		t.cancel()
 
-		if t.relayManager != nil {
-			t.relayManager.Stop()
-		}
-
-		if t.keyRotationManager != nil {
-			t.keyRotationManager.Stop()
-		}
+		// L-1 FIX: Call stopNATManagers() to properly coordinate NAT shutdown with context
+		// cancellation, manager locks, and retry goroutine cleanup. This must happen before
+		// manually closing any other managers to prevent races.
+		stopNATManagers(t)
 
 		// Clean up peer test retry timer (T-1 fix)
 		t.peerTestRetryMu.Lock()
@@ -1223,13 +1220,6 @@ func (t *SSU2Transport) Close() error {
 			t.logger.WithField("final_count", finalCount).Error("sessionCount non-zero after reconciliation")
 			// Force-reset as safety net, but this indicates a bug
 			atomic.StoreInt32(&t.sessionCount, 0)
-		}
-
-		// Clean up port mapper using lib/nat manager
-		if t.portMapperManager != nil {
-			if err := t.portMapperManager.Stop(); err != nil {
-				t.logger.WithError(err).Warn("Failed to stop port mapper during close")
-			}
 		}
 
 		t.logger.Info("SSU2 transport closed")

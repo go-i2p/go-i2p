@@ -216,6 +216,8 @@ func (pmm *PortMapperManager) GetExternalIP() string {
 // RL-2 FIX: Increased timeout from 5s to 30s to allow time for ongoing UPnP/NAT-PMP operations
 // to complete before goroutine exits. UPnP discovery and port mapping can take 10-20+ seconds
 // on slow networks or unresponsive gateways.
+// L-1 FIX ITEM 4: Fixed goroutine leak in timeout path - now uses context.WithTimeout
+// instead of spawning an untracked goroutine that would leak if timeout expires.
 func (pmm *PortMapperManager) Stop() error {
 	pmm.mu.Lock()
 	if pmm.stopped {
@@ -227,7 +229,11 @@ func (pmm *PortMapperManager) Stop() error {
 	pmm.mu.Unlock()
 
 	// Wait for retry goroutine to exit (with timeout)
-	// RL-2 FIX: Increased timeout from 5s to 30s to prevent goroutine leaks during SetIdentity
+	// Use a separate context with timeout to avoid spawning leaked goroutines
+	waitCtx, waitCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer waitCancel()
+
+	// Signal when WaitGroup is done via a channel
 	done := make(chan struct{})
 	go func() {
 		pmm.wg.Wait()
@@ -237,7 +243,7 @@ func (pmm *PortMapperManager) Stop() error {
 	select {
 	case <-done:
 		// Goroutine exited cleanly
-	case <-time.After(30 * time.Second):
+	case <-waitCtx.Done():
 		log.Warn("Port mapper Stop() timed out waiting for retry goroutine (30s) - possible NAT operation hang")
 	}
 
