@@ -2164,6 +2164,30 @@ func (t *NTCP2Transport) AcceptedConnPromotionAttempts() int32 {
 	return atomic.LoadInt32(&t.acceptedConnPromotionAttempts)
 }
 
+// ValidateSessionCountingInvariant checks that sessionCount matches the number
+// of entries in the sessions map (A-1 fix for SA-2). This invariant must hold:
+// sessionCount == number of (net.Conn + acceptedConn + *NTCP2Session) entries
+// Returns the mismatch count (0 = healthy, >0 = accounting bug detected).
+// SA-2 FIX: Added explicit invariant validation to detect session counting leaks.
+func (t *NTCP2Transport) ValidateSessionCountingInvariant() int {
+	count := atomic.LoadInt32(&t.sessionCount)
+	mapEntries := 0
+	t.sessions.Range(func(key, value interface{}) bool {
+		mapEntries++
+		return true
+	})
+
+	mismatch := int(count) - mapEntries
+	if mismatch != 0 {
+		t.logger.WithFields(map[string]interface{}{
+			"session_count": int(count),
+			"map_entries":   mapEntries,
+			"mismatch":      mismatch,
+		}).Error("SA-2: Session counting invariant violated (acceptedConn reservation mismatch)")
+	}
+	return mismatch
+}
+
 // Name returns the name of this transport.
 func (t *NTCP2Transport) Name() string {
 	return "NTCP2"
