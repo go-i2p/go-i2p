@@ -33,6 +33,9 @@ type StdNetDB struct {
 	maxRouterInfos int
 	admission      *routerInfoAdmissionController
 
+	maxLeaseSets int
+	lsAdmission  *leaseSetAdmissionController
+
 	// Expiration tracking for LeaseSets
 	leaseSetExpiry map[common.Hash]time.Time // maps hash to expiration time
 
@@ -70,6 +73,7 @@ func NewStdNetDB(db string) *StdNetDB {
 		LeaseSets:         make(map[common.Hash]Entry),
 		lsMutex:           sync.RWMutex{},
 		maxRouterInfos:    config.DefaultNetDBConfig.MaxRouterInfos,
+		maxLeaseSets:      config.DefaultNetDBConfig.MaxLeaseSets,
 		leaseSetExpiry:    make(map[common.Hash]time.Time),
 		routerInfoExpiry:  make(map[common.Hash]time.Time),
 		expiryMutex:       sync.RWMutex{},
@@ -79,6 +83,7 @@ func NewStdNetDB(db string) *StdNetDB {
 		cancel:            cancel,
 	}
 	ndb.admission = newRouterInfoAdmissionController(ndb.maxRouterInfos)
+	ndb.lsAdmission = newLeaseSetAdmissionController(ndb.maxLeaseSets)
 	ndb.StartExpirationCleaner()
 	return ndb
 }
@@ -849,6 +854,80 @@ func (db *StdNetDB) logAdmissionRejection(key common.Hash, source *common.Hash) 
 	} else {
 		log.WithField("hash", key.String()).Warn("Rejecting RouterInfo introduction: source unavailable and under pressure")
 	}
+}
+
+// getLeaseSetCacheState returns the cache state for admission checks.
+func (db *StdNetDB) getLeaseSetCacheState(key common.Hash) (exists bool, current, max int) {
+	db.lsMutex.RLock()
+	_, exists = db.LeaseSets[key]
+	current = len(db.LeaseSets)
+	max = db.maxLeaseSets
+	db.lsMutex.RUnlock()
+	return exists, current, max
+}
+
+// checkLeaseSetCapacity checks if the LeaseSet cache has reached capacity.
+func (db *StdNetDB) checkLeaseSetCapacity(current, max int) error {
+	if max > 0 && current >= max {
+		return oops.Errorf("LeaseSet capacity reached (%d)", max)
+	}
+	return nil
+}
+
+// checkLeaseSetAdmissionLimits checks admission rate limits for the LeaseSet introduction.
+func (db *StdNetDB) checkLeaseSetAdmissionLimits(key common.Hash, source *common.Hash, current int) error {
+	if db.lsAdmission == nil {
+		return nil
+	}
+
+	if ok := db.lsAdmission.AllowIntroduction(source, key, current); !ok {
+		db.logLeaseSetAdmissionRejection(key, source)
+		return oops.Errorf("LeaseSet introduction rate limited")
+	}
+
+	return nil
+}
+
+// logLeaseSetAdmissionRejection logs the rejection of a LeaseSet introduction.
+func (db *StdNetDB) logLeaseSetAdmissionRejection(key common.Hash, source *common.Hash) {
+	if source != nil {
+		log.WithFields(logger.Fields{
+			"source": source.String(),
+			"hash":   key.String(),
+		}).Warn("Rejecting LeaseSet introduction: source admission limit exceeded")
+	} else {
+		log.WithField("hash", key.String()).Warn("Rejecting LeaseSet introduction: source unavailable and under pressure")
+	}
+}
+
+// evictSoonestExpiringLeaseSet removes the LeaseSet with the earliest expiration time
+// from the cache under lock. Returns the evicted hash if successful, or zero hash if
+// no eviction was possible.
+func (db *StdNetDB) evictSoonestExpiringLeaseSet() common.Hash {
+	db.expiryMutex.RLock()
+	var oldestHash common.Hash
+	var oldestTime time.Time
+	for hash, expTime := range db.leaseSetExpiry {
+		if oldestTime.IsZero() || expTime.Before(oldestTime) {
+			oldestHash = hash
+			oldestTime = expTime
+		}
+	}
+	db.expiryMutex.RUnlock()
+
+	if !oldestTime.IsZero() {
+		db.lsMutex.Lock()
+		delete(db.LeaseSets, oldestHash)
+		db.lsMutex.Unlock()
+
+		db.expiryMutex.Lock()
+		delete(db.leaseSetExpiry, oldestHash)
+		db.expiryMutex.Unlock()
+
+		log.WithField("hash", oldestHash).Debug("Evicted soonest-expiring LeaseSet to make room for new entry")
+	}
+
+	return oldestHash
 }
 
 // finalizeRouterInfoStorage tracks expiration and persists a cached RouterInfo to disk.

@@ -143,17 +143,18 @@ func verifyLeaseSetHash(key common.Hash, ls lease_set.LeaseSet) error {
 	return verifyHashMatch(key, destBytes, "LeaseSet")
 }
 
-// addLeaseSetToCache adds a LeaseSet entry to the in-memory cache if it doesn't exist.
 // addLeaseSetToCache adds a LeaseSet entry to the in-memory cache.
 // If an entry already exists, it is replaced only if the new LeaseSet
 // has newer lease expirations. Returns true if the entry was added or updated.
 // Also tracks the expiration time for automatic cleanup.
+// Enforces capacity limits and per-source admission control to prevent
+// unbounded memory growth and remote memory-DoS attacks.
 func (db *StdNetDB) addLeaseSetToCache(key common.Hash, ls lease_set.LeaseSet) bool {
 	db.lsMutex.Lock()
 	defer db.lsMutex.Unlock()
 
 	if existing, exists := db.LeaseSets[key]; exists {
-		// Compare by newest expiration — a LeaseSet with later expirations is newer.
+		// Existing LeaseSet: compare by newest expiration — a LeaseSet with later expirations is newer.
 		if existing.LeaseSet != nil {
 			existExp, err1 := existing.LeaseSet.NewestExpiration()
 			newExp, err2 := ls.NewestExpiration()
@@ -163,6 +164,32 @@ func (db *StdNetDB) addLeaseSetToCache(key common.Hash, ls lease_set.LeaseSet) b
 			}
 		}
 		log.WithField("hash", key).Debug("Replacing stale LeaseSet with newer version")
+		db.LeaseSets[key] = Entry{
+			LeaseSet: &ls,
+		}
+		db.trackLeaseSetExpiration(key, ls)
+		return true
+	}
+
+	// New LeaseSet: check admission limits
+	currentCount := len(db.LeaseSets)
+	maxCapacity := db.maxLeaseSets
+
+	// Temporarily unlock to call admission check (non-blocking, has its own lock)
+	db.lsMutex.Unlock()
+	err := db.checkLeaseSetAdmissionLimits(key, nil, currentCount)
+	db.lsMutex.Lock()
+
+	if err != nil {
+		log.WithField("hash", key).Debug("LeaseSet introduction rejected by admission control")
+		return false
+	}
+
+	// Check capacity and evict if needed
+	if maxCapacity > 0 && len(db.LeaseSets) >= maxCapacity {
+		db.lsMutex.Unlock()
+		db.evictSoonestExpiringLeaseSet()
+		db.lsMutex.Lock()
 	}
 
 	db.LeaseSets[key] = Entry{
