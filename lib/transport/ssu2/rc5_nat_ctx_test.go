@@ -53,6 +53,7 @@ func TestRC5_NatCtx_Nil_Check_Safety(t *testing.T) {
 	// that might be set to nil concurrently
 	var mu sync.Mutex
 	var ctx context.Context
+	var cancel context.CancelFunc
 
 	checkCount := atomic.Int32{}
 	nilCount := atomic.Int32{}
@@ -61,8 +62,10 @@ func TestRC5_NatCtx_Nil_Check_Safety(t *testing.T) {
 
 	// Create initial context
 	mu.Lock()
-	ctx, _ = context.WithCancel(context.Background())
+	ctx, cancel = context.WithCancel(context.Background())
 	mu.Unlock()
+	// L-4 FIX: Ensure cancel is called for cleanup
+	defer cancel()
 
 	const workers = 100
 
@@ -137,6 +140,8 @@ func TestRC5_Rapid_SetIdentity_NatCtx_Isolation(t *testing.T) {
 	mu.Lock()
 	ctx, cancel = context.WithCancel(context.Background())
 	mu.Unlock()
+	// L-4 FIX: Ensure final cancel is called for cleanup (multiple assignments happen in loop)
+	defer cancel()
 
 	const swaps = 50
 	const workers = 20
@@ -341,6 +346,7 @@ func TestRC5_NatCtx_Nil_Write_Safe(t *testing.T) {
 
 	var mu sync.Mutex
 	var ctx context.Context
+	var cancel context.CancelFunc
 
 	const readers = 50
 	const writers = 5
@@ -385,7 +391,11 @@ func TestRC5_NatCtx_Nil_Write_Safe(t *testing.T) {
 
 			for i := 0; i < iterations; i++ {
 				mu.Lock()
-				ctx, _ = context.WithCancel(context.Background())
+				// L-4 FIX: Cancel previous context before creating new one
+				if cancel != nil {
+					cancel()
+				}
+				ctx, cancel = context.WithCancel(context.Background())
 				mu.Unlock()
 				time.Sleep(time.Microsecond)
 
@@ -397,6 +407,11 @@ func TestRC5_NatCtx_Nil_Write_Safe(t *testing.T) {
 	}
 
 	wg.Wait()
+
+	// L-4 FIX: Ensure final cancel is cleaned up
+	if cancel != nil {
+		cancel()
+	}
 
 	// Verify no crashes occurred
 	crashes := crashCount.Load()

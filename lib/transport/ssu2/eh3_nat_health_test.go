@@ -58,7 +58,8 @@ func TestEH3_TransportStillWorksWhenNATDegraded(t *testing.T) {
 	// The transport should still be operational (listener may or may not exist
 	// depending on test setup, but the key is no panic occurs)
 	assert.NotNil(t, tr, "Transport should still exist when NAT degraded")
-	assert.NotNil(t, tr.config, "Config should still exist when NAT degraded")
+	// L-4 FIX: Load atomic.Pointer to avoid noCopy violation in assert
+	assert.NotNil(t, tr.config.Load(), "Config should still exist when NAT degraded")
 
 	t.Logf("EH-3 NAT Degraded: ✓ Transport still operational when NAT degraded")
 }

@@ -1,7 +1,9 @@
 package tunnel
 
 import (
+	"crypto/subtle"
 	"errors"
+	"math/bits"
 	"sync"
 	"time"
 
@@ -235,15 +237,14 @@ func (e *Endpoint) validateChecksum(decrypted []byte) error {
 	hash := types.SHA256(checksumData)
 	actualChecksum := hash[:4]
 
-	// Compare checksums
-	for i := 0; i < 4; i++ {
-		if expectedChecksum[i] != actualChecksum[i] {
-			log.WithFields(map[string]interface{}{
-				"expected": expectedChecksum,
-				"actual":   actualChecksum,
-			}).Error("Checksum mismatch")
-			return ErrChecksumMismatch
-		}
+	// L-1 FIX: Use constant-time comparison for policy uniformity (checksum is not
+	// secret-keyed, but we compare all integrity tags constant-time by policy)
+	if subtle.ConstantTimeCompare(expectedChecksum, actualChecksum) != 1 {
+		log.WithFields(map[string]interface{}{
+			"expected": expectedChecksum,
+			"actual":   actualChecksum,
+		}).Error("Checksum mismatch")
+		return ErrChecksumMismatch
 	}
 
 	return nil
@@ -549,21 +550,51 @@ func (e *Endpoint) createAssemblerWithCapEnforcement(msgID uint32, deliveryType 
 	return assembler
 }
 
-// evictOldestFragment removes the oldest incomplete fragment assembly
-// to make room for a new one when the cap is reached.
+// evictOldestFragment removes a fragment assembly to make room for a new one.
+// L-5 FIX: Weighted eviction policy prioritizes by completeness:
+// 1. Incomplete assemblies (missing fragments) evict first
+// 2. Among incomplete ones, prefer lowest completeness percentage
+// 3. Among equal completeness, use oldest-first
+// 4. If all are complete, fall back to oldest-first
+// This prevents deliberate floods from killing nearly-complete legitimate messages.
 func (e *Endpoint) evictOldestFragment() {
-	var oldestID uint32
-	var oldestTime time.Time
-	first := true
+	var candidateID uint32
+	var candidateTime time.Time
+	var candidateCompleteness float32
+	candidateFound := false
+
 	for id, asm := range e.fragments {
-		if first || asm.createdAt.Before(oldestTime) {
-			oldestID = id
-			oldestTime = asm.createdAt
-			first = false
+		// Calculate completeness percentage
+		var completeness float32
+		if asm.totalCount == 0 {
+			// No last fragment seen yet - 0% complete
+			completeness = 0
+		} else {
+			// Count received fragments from bitmask
+			expectedMask := (uint64(1) << asm.totalCount) - 1
+			if asm.receivedMask == expectedMask {
+				// All fragments received - 100% complete
+				completeness = 100
+			} else {
+				// Partial - count set bits in receivedMask up to totalCount
+				received := bits.OnesCount64(asm.receivedMask & expectedMask)
+				completeness = float32(received) / float32(asm.totalCount) * 100
+			}
+		}
+
+		// Selection logic (lower completeness = higher priority for eviction):
+		if !candidateFound ||
+			completeness < candidateCompleteness ||
+			(completeness == candidateCompleteness && asm.createdAt.Before(candidateTime)) {
+			candidateID = id
+			candidateTime = asm.createdAt
+			candidateCompleteness = completeness
+			candidateFound = true
 		}
 	}
-	if !first {
-		delete(e.fragments, oldestID)
+
+	if candidateFound {
+		delete(e.fragments, candidateID)
 	}
 }
 

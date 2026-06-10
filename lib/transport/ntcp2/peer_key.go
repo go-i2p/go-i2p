@@ -1,7 +1,7 @@
 package ntcp2
 
 import (
-	"bytes"
+	"crypto/subtle"
 	"encoding/base64"
 	"strings"
 
@@ -182,7 +182,8 @@ func deriveLivePublicKey(privKeyBytes []byte) ([]byte, error) {
 
 // verifyKeyConsistency compares the live and published public keys.
 func verifyKeyConsistency(livePublicKey, publishedPublicKey []byte) error {
-	if !bytes.Equal(livePublicKey, publishedPublicKey) {
+	// L-3 FIX: Use constant-time comparison for public keys (policy uniformity for all key comparisons)
+	if subtle.ConstantTimeCompare(livePublicKey, publishedPublicKey) != 1 {
 		return oops.Errorf(
 			"NTCP2 static key mismatch: live Noise public key %s does not match published RouterInfo key %s — "+
 				"every peer will reject our handshake; check that the encryption key in RouterInfoKeystore matches "+
@@ -266,7 +267,8 @@ func extractPublishedNTCP2Keys(localRI router_info.RouterInfo) ([][]byte, int) {
 // checkForKeyMatch checks if the derived key matches any published key.
 func checkForKeyMatch(derivedPubKey []byte, publishedKeys [][]byte) bool {
 	for _, pubKey := range publishedKeys {
-		if bytes.Equal(pubKey, derivedPubKey) {
+		// L-3 FIX: Use constant-time comparison for public keys (policy uniformity for all key comparisons)
+		if subtle.ConstantTimeCompare(pubKey, derivedPubKey) == 1 {
 			return true
 		}
 	}

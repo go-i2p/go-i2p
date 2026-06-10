@@ -89,8 +89,10 @@ func generateRandomMessageID() (int, error) {
 	if _, err := rand.Read(msgIDBytes); err != nil {
 		return 0, oops.Errorf("i2np: crypto/rand failed: %w", err)
 	}
+	// L-2 FIX: Documents secondary identifier space masking pattern (see M-2 for primary CSPRNG failure).
 	// Mask to 31 bits to guarantee positive int on 32-bit platforms.
 	// On 32-bit systems, int(uint32(x)) with the high bit set wraps to negative.
+	// This reduces the effective ID space but is necessary for Go int compatibility.
 	return int(binary.BigEndian.Uint32(msgIDBytes) & 0x7FFFFFFF), nil
 }
 
