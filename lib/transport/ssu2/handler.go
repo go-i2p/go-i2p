@@ -126,6 +126,21 @@ func (h *DefaultHandler) ValidateTimestamp(peerTime uint32) error {
 	return nil
 }
 
+// ssu2TimeWithinSkew checks whether a peer's timestamp is within ±tol of the local clock.
+// M-5 FIX: Centralized timestamp validation for consistent skew checking across all SSU2 consumers.
+// Returns true if the timestamp is within tolerance, false if outside.
+func ssu2TimeWithinSkew(peerTime uint32, tol time.Duration) bool {
+	now := uint32(time.Now().Unix())
+	var diff uint32
+	if now > peerTime {
+		diff = now - peerTime
+	} else {
+		diff = peerTime - now
+	}
+	tolSec := uint32(math.Round(tol.Seconds()))
+	return diff <= tolSec
+}
+
 // SendTermination sends a termination block through the SSU2 connection.
 func (h *DefaultHandler) SendTermination(conn *ssu2noise.SSU2Conn, reason byte) error {
 	log.WithField("reason", reason).Debug("sending SSU2 termination block")

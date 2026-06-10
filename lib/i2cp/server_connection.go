@@ -160,7 +160,7 @@ func (s *Server) handleAcceptError(err error) bool {
 // shouldRejectConnection checks if a connection should be rejected due to
 // connection or session limits. Tracks active TCP connections separately from
 // sessions to prevent resource exhaustion from unauthenticated connections.
-// Closes the connection if rejected.
+// M-8 FIX: Returns true if rejected (handled by caller), false if accepted.
 func (s *Server) shouldRejectConnection(conn net.Conn) bool {
 	connCount := s.activeConnCount.Load()
 	sessionCount := s.manager.SessionCount()
@@ -178,6 +178,8 @@ func (s *Server) shouldRejectConnection(conn net.Conn) bool {
 			"sessionCount": sessionCount,
 			"remoteAddr":   conn.RemoteAddr().String(),
 		}).Warn("max_connections_reached_rejecting")
+		// M-8 FIX: Send Disconnect message before closing
+		s.sendDisconnectMessage(conn, "connection_limit_reached")
 		conn.Close()
 		return true
 	}
@@ -188,11 +190,54 @@ func (s *Server) shouldRejectConnection(conn net.Conn) bool {
 			"maxSessions":  maxSessions,
 			"remoteAddr":   conn.RemoteAddr().String(),
 		}).Warn("max_sessions_reached_rejecting_connection")
+		// M-8 FIX: Send Disconnect message before closing (protocol compliance)
+		s.sendDisconnectMessage(conn, "session_limit_reached")
 		conn.Close()
 		return true
 	}
 	s.activeConnCount.Add(1)
 	return false
+}
+
+// M-8 FIX: sendDisconnectMessage sends an I2CP Disconnect message to the client
+// before closing the connection. This provides proper protocol-level error signaling.
+func (s *Server) sendDisconnectMessage(conn net.Conn, reason string) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.WithFields(logger.Fields{
+				"at":     "i2cp.Server.sendDisconnectMessage",
+				"panic":  r,
+				"reason": reason,
+			}).Debug("panic_while_sending_disconnect")
+		}
+	}()
+
+	// M-8 FIX: Create and send Disconnect message with proper error reason
+	// I2CP Disconnect message: command byte (30) + reason string length/content
+	// Format: 1 byte command (30) + 2 byte length + reason string
+	disconnectCmd := byte(30) // I2CP Disconnect command
+	reasonBytes := []byte(reason)
+
+	// M-8 FIX: Build message: command + length (2-byte big-endian) + reason
+	msg := make([]byte, 1+2+len(reasonBytes))
+	msg[0] = disconnectCmd
+	msg[1] = byte((len(reasonBytes) >> 8) & 0xFF)
+	msg[2] = byte(len(reasonBytes) & 0xFF)
+	copy(msg[3:], reasonBytes)
+
+	// M-8 FIX: Send with short timeout (don't block indefinitely)
+	if err := conn.SetWriteDeadline(time.Now().Add(500 * time.Millisecond)); err != nil {
+		return // Can't set deadline, give up
+	}
+	defer conn.SetWriteDeadline(time.Time{}) // Clear deadline
+
+	if _, err := conn.Write(msg); err != nil {
+		log.WithFields(logger.Fields{
+			"at":     "i2cp.Server.sendDisconnectMessage",
+			"reason": reason,
+			"error":  err,
+		}).Debug("failed_to_send_disconnect_message")
+	}
 }
 
 // handleConnection processes a single client connection
@@ -688,15 +733,30 @@ func (s *Server) sendResponse(conn net.Conn, response *Message, sessionPtr **Ses
 	return nil
 }
 
+// M-9 FIX: Minimum write deadline to prevent indefinite blocking while holding mutex
+// If WriteTimeout is 0 or too short, enforce this minimum to prevent DoS
+// where a stalled client blocks the delivery goroutine holding the write mutex
+const minimumWriteTimeout = 5 * time.Minute
+
 // applyWriteDeadline sets the connection write deadline if a timeout is configured.
+// M-9 FIX: Enforces a minimum write deadline even if WriteTimeout is 0 to prevent
+// a stalled client from indefinitely blocking while holding the per-connection write mutex.
 func (s *Server) applyWriteDeadline(conn net.Conn) {
-	if s.config.WriteTimeout > 0 {
-		if err := conn.SetWriteDeadline(time.Now().Add(s.config.WriteTimeout)); err != nil {
-			log.WithFields(logger.Fields{
-				"at":    "i2cp.Server.sendResponse",
-				"error": err.Error(),
-			}).Warn("failed_to_set_write_deadline")
-		}
+	timeout := s.config.WriteTimeout
+
+	// M-9 FIX: Enforce minimum write timeout to prevent indefinite blocking
+	// If WriteTimeout is 0 (disabled) or shorter than minimum, use minimum deadline.
+	// This prevents a stalled TCP client (zero window) from indefinitely blocking
+	// the delivery goroutine while holding the session write mutex.
+	if timeout <= 0 || timeout < minimumWriteTimeout {
+		timeout = minimumWriteTimeout
+	}
+
+	if err := conn.SetWriteDeadline(time.Now().Add(timeout)); err != nil {
+		log.WithFields(logger.Fields{
+			"at":    "i2cp.Server.sendResponse",
+			"error": err.Error(),
+		}).Warn("failed_to_set_write_deadline")
 	}
 }
 

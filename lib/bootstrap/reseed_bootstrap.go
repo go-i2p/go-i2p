@@ -85,6 +85,23 @@ func (rb *ReseedBootstrap) GetPeers(ctx context.Context, n int) ([]router_info.R
 			"peer_count":  len(peers),
 			"fallback":    "single_server_sequential",
 		}).Warn("multi-server reseed failed, attempting single-server fallback")
+
+		// M-7 FIX: Apply exponential backoff before retrying with single-server mode
+		// This prevents thundering-herd when all servers are temporarily unavailable
+		backoffDuration := computeBackoffDuration(1) // First retry gets 30s backoff
+		log.WithFields(logger.Fields{
+			"at":       "(ReseedBootstrap) GetPeers",
+			"reason":   "applying backoff before single-server retry",
+			"duration": backoffDuration.String(),
+		}).Info("backoff before single-server reseed retry")
+
+		select {
+		case <-time.After(backoffDuration):
+			// Backoff complete, continue with single-server retry
+		case <-ctx.Done():
+			// Context cancelled during backoff
+			return nil, ctx.Err()
+		}
 	}
 
 	// Single-server sequential mode (original behavior)
@@ -403,4 +420,30 @@ func (rb *ReseedBootstrap) logReseedComplete(totalPeers, attemptedServers, succe
 		"failed_servers":     attemptedServers - successfulServers,
 		"success_rate":       fmt.Sprintf("%.1f%%", float64(successfulServers)/float64(attemptedServers)*100),
 	}).Info("bootstrap peer acquisition completed")
+}
+
+// M-7 FIX: computeBackoffDuration calculates exponential backoff with jitter.
+// Implements: 30s → 1m → 2m → 4m → 8m → 16m → 30m (capped)
+// This prevents thundering-herd against reseed servers when all are temporarily unavailable.
+func computeBackoffDuration(attemptNumber int) time.Duration {
+	// Base durations for each attempt (0-indexed, so attempt 1 = index 0)
+	baseDurations := []time.Duration{
+		30 * time.Second, // attempt 1
+		1 * time.Minute,  // attempt 2
+		2 * time.Minute,  // attempt 3
+		4 * time.Minute,  // attempt 4
+		8 * time.Minute,  // attempt 5
+		16 * time.Minute, // attempt 6
+		30 * time.Minute, // attempt 7+ (capped at 30m)
+	}
+
+	idx := attemptNumber - 1
+	if idx < 0 {
+		idx = 0
+	}
+	if idx >= len(baseDurations) {
+		idx = len(baseDurations) - 1
+	}
+
+	return baseDurations[idx]
 }

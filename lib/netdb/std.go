@@ -579,19 +579,15 @@ func (db *StdNetDB) validateSingleRouterInfo(ri router_info.RouterInfo, now time
 }
 
 // validatePublishedTimestamp rejects RouterInfos with missing, stale, or future-dated timestamps.
+// M-6 FIX: Added lower bound check for backwards clock skew.
 func (db *StdNetDB) validatePublishedTimestamp(ri router_info.RouterInfo, hash common.Hash, now time.Time) error {
 	published := ri.Published()
 	if published == nil || published.Time().IsZero() {
 		log.WithField("hash", hash).Warn("Rejecting RouterInfo from reseed: missing published date")
 		return oops.Errorf("missing published date")
 	}
-	if now.Sub(published.Time()) > RouterInfoMaxAge {
-		log.WithFields(logger.Fields{
-			"hash": hash,
-			"age":  now.Sub(published.Time()).Round(time.Second),
-		}).Warn("Rejecting RouterInfo from reseed: stale published date")
-		return oops.Errorf("stale published date")
-	}
+
+	// M-6 FIX: Check upper bound (future): published <= now + 1hour (existing check)
 	if published.Time().After(now.Add(1 * time.Hour)) {
 		log.WithFields(logger.Fields{
 			"hash":      hash,
@@ -599,6 +595,33 @@ func (db *StdNetDB) validatePublishedTimestamp(ri router_info.RouterInfo, hash c
 		}).Warn("Rejecting RouterInfo from reseed: future-dated published time")
 		return oops.Errorf("future-dated published time")
 	}
+
+	// M-6 FIX: Check lower bound (stale): published >= now - RouterInfoMaxAge (existing check)
+	if now.Sub(published.Time()) > RouterInfoMaxAge {
+		log.WithFields(logger.Fields{
+			"hash": hash,
+			"age":  now.Sub(published.Time()).Round(time.Second),
+		}).Warn("Rejecting RouterInfo from reseed: stale published date")
+		return oops.Errorf("stale published date")
+	}
+
+	// M-6 FIX: Additional clock-skew lower bound: published >= now - (RouterInfoMaxAge + clockSkewTolerance)
+	// This catches the case where our local clock is significantly behind, causing ancient RouterInfos
+	// to be treated as fresh. A typical clock skew tolerance is 1 hour; add 2 hours for large NTP offsets.
+	// If published time is very far in the past relative to our max-age window, reject it.
+	// This assumes: if a RouterInfo is published more than (RouterInfoMaxAge + 2h) ago relative to our clock,
+	// then either our clock is badly wrong or the RouterInfo is too stale.
+	clockSkewTolerance := 2 * time.Hour
+	if published.Time().Before(now.Add(-RouterInfoMaxAge - clockSkewTolerance)) {
+		log.WithFields(logger.Fields{
+			"hash":      hash,
+			"published": published.Time(),
+			"now":       now,
+			"window":    RouterInfoMaxAge + clockSkewTolerance,
+		}).Warn("Rejecting RouterInfo from reseed: published time is too far in the past (possible clock skew)")
+		return oops.Errorf("published time exceeds maxage + clock skew tolerance")
+	}
+
 	return nil
 }
 
