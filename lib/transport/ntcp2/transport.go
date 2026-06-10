@@ -548,11 +548,14 @@ func (t *NTCP2Transport) canAcceptNewSession(rawConn net.Conn) bool {
 // to prevent indefinite blocking and slot reservation exhaustion.
 // HIGH-2.2 fix: Use handshake context with timeout to prevent goroutine leaks on slow handshakes
 func (t *NTCP2Transport) inboundHandshakeWorker(conn net.Conn) {
-	// HIGH-2.2: Create context with timeout for handshake to prevent goroutine leaks
-	// if handshake blocks indefinitely. This ensures even slow/unresponsive peers
-	// don't cause goroutines to accumulate.
+	// TE-1 fix: Create context with timeout for handshake, using t.ctx as parent
+	// so that transport shutdown deadline is also honored. This prevents handshakes
+	// from continuing beyond the transport context deadline, which ensures:
+	// 1. Transport can shut down cleanly without waiting for 30s handshakes
+	// 2. Respects min(transport deadline, 30s handshake timeout)
+	// 3. Propagates transport shutdown to in-flight handshakes
 	const handshakeTimeout = 30 * time.Second
-	handshakeCtx, cancel := context.WithTimeout(context.Background(), handshakeTimeout)
+	handshakeCtx, cancel := context.WithTimeout(t.ctx, handshakeTimeout)
 	defer cancel()
 
 	if err := t.performInboundHandshake(conn, handshakeCtx); err != nil {
@@ -2134,9 +2137,47 @@ func (t *NTCP2Transport) closeIndividualSession(key, value interface{}) {
 }
 
 // waitForBackgroundOperations blocks until all background goroutines complete.
+// After this, pendingConns channel can be safely closed since no more senders will
+// attempt to use it (accept loop has already returned).
 func (t *NTCP2Transport) waitForBackgroundOperations() {
 	t.logger.Debug("Waiting for background operations to complete")
 	t.wg.Wait()
+
+	// RL-3 fix: Drain any remaining connections from pendingConns queue
+	// and close them to release session slots and trigger cleanup callbacks.
+	// This ensures no connections are left abandoned when the transport closes.
+	if t.pendingConns != nil {
+		// Non-blocking drain: close any connections in the queue
+		drainedCount := 0
+		for {
+			select {
+			case conn := <-t.pendingConns:
+				// Close this pending connection to release its session slot
+				// and trigger the cleanup callback (which decrements sessionCount)
+				if conn != nil {
+					conn.Close()
+					drainedCount++
+				}
+			default:
+				// Queue is empty, stop draining
+				goto endDrain
+			}
+		}
+	endDrain:
+		if drainedCount > 0 {
+			t.logger.WithField("drained_connections", drainedCount).
+				Debug("Drained pending connections during close")
+		}
+	}
+
+	// RC-6 fix: Close pendingConns channel after all goroutines complete and drained.
+	// This ensures:
+	// 1. No new senders (accept loop has stopped)
+	// 2. Any receivers blocked on pendingConns will wake up with ok=false
+	// 3. Prevents panic from send-on-closed-channel
+	if t.pendingConns != nil {
+		close(t.pendingConns)
+	}
 }
 
 // handleCloseCompletion processes the final close status and returns appropriate error.
