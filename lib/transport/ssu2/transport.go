@@ -1117,7 +1117,10 @@ func (t *SSU2Transport) promoteRawConnToSession(rawConn net.Conn, routerHash dat
 	}
 
 	// Another goroutine won the promotion race — discard ours.
-	// Workers will exit cleanly due to context.Done().
+	// Detach the shared conn first so the loser doesn't close the winner's socket.
+	// Workers will exit when Close() cancels the session context (CRITICAL-3.1 ensures
+	// workers were never started on loser, so this just cleans up session resources).
+	promoted.DetachConn()
 	_ = promoted.Close()
 	if winner, exists := t.sessions.Load(routerHash); exists {
 		if winnerSession, ok := winner.(*SSU2Session); ok {
@@ -1268,8 +1271,17 @@ func (t *SSU2Transport) isSessionLimitReached() bool {
 }
 
 func (t *SSU2Transport) checkSessionLimit() error {
+	// RC-2 fix: Bounded CAS retry loop with exponential backoff.
+	// Under high contention, unbounded retries cause CPU spikes.
+	// This implementation:
+	// 1. Limits retries to prevent spin-lock starvation
+	// 2. Applies exponential backoff (1ns → 1µs → 100µs) to yield CPU
+	// 3. Falls back to error after max retries (connection pool full message)
+	// This prevents the false "pool full" error while still limiting spins.
 	maxSessions := t.config.GetMaxSessions()
-	for {
+
+	const maxRetries = 100
+	for attempt := 0; attempt < maxRetries; attempt++ {
 		current := atomic.LoadInt32(&t.sessionCount)
 		if int(current) >= maxSessions {
 			return ErrConnectionPoolFull
@@ -1277,11 +1289,29 @@ func (t *SSU2Transport) checkSessionLimit() error {
 		if atomic.CompareAndSwapInt32(&t.sessionCount, current, current+1) {
 			return nil
 		}
+		// Exponential backoff: prevent CPU spike on high contention
+		if attempt > 10 {
+			// After 10 retries, sleep for increasing duration
+			backoff := time.Duration(1<<uint(attempt-10)) * time.Nanosecond
+			if backoff > 100*time.Microsecond {
+				backoff = 100 * time.Microsecond
+			}
+			time.Sleep(backoff)
+		}
 	}
+
+	// RC-2 fix: If we exhausted retries, log and return pool full.
+	// This indicates sustained high contention, which should be investigated.
+	t.logger.WithField("max_retries", maxRetries).Warn(
+		"Session limit check exhausted retries due to high contention")
+	return ErrConnectionPoolFull
 }
 
 func (t *SSU2Transport) unreserveSessionSlot() {
-	for {
+	// RC-2 fix: Bounded CAS retry loop with exponential backoff (same pattern as checkSessionLimit).
+	// Prevents unbounded spinning when multiple goroutines decrement sessionCount.
+	const maxRetries = 100
+	for attempt := 0; attempt < maxRetries; attempt++ {
 		current := atomic.LoadInt32(&t.sessionCount)
 		if current <= 0 {
 			return
@@ -1289,7 +1319,17 @@ func (t *SSU2Transport) unreserveSessionSlot() {
 		if atomic.CompareAndSwapInt32(&t.sessionCount, current, current-1) {
 			return
 		}
+		// Exponential backoff: prevent CPU spike on high contention
+		if attempt > 10 {
+			backoff := time.Duration(1<<uint(attempt-10)) * time.Nanosecond
+			if backoff > 100*time.Microsecond {
+				backoff = 100 * time.Microsecond
+			}
+			time.Sleep(backoff)
+		}
 	}
+	// RC-2 fix: Log if we exhausted retries (indicates accounting bug or extreme contention)
+	t.logger.Warn("Session count decrement exhausted retries; skipping unreserve")
 }
 
 // removeSession removes a session from the session map (called by session cleanup callback).

@@ -576,6 +576,20 @@ func (t *NTCP2Transport) inboundHandshakeWorker(conn net.Conn) {
 	sendCtx, cancel := context.WithTimeout(context.Background(), queueTimeout)
 	defer cancel()
 
+	// TE-2 fix: Track queue depth for capacity planning
+	queueLen := len(t.pendingConns)
+	if uint64(queueLen) == 64 {
+		// Queue is full, increment metric
+		t.metrics.pendingConnsQueueFullEvents.Add(1)
+	}
+	// Update max observed depth
+	for old := t.metrics.maxPendingConnsQueueDepth.Load(); uint64(queueLen) > old; {
+		if t.metrics.maxPendingConnsQueueDepth.CompareAndSwap(old, uint64(queueLen)) {
+			break
+		}
+		old = t.metrics.maxPendingConnsQueueDepth.Load()
+	}
+
 	select {
 	case t.pendingConns <- tracked:
 		// Successfully enqueued for Accept() to consume.
@@ -603,11 +617,14 @@ func (t *NTCP2Transport) inboundHandshakeWorker(conn net.Conn) {
 		// Queue send timed out: close the connection.
 		// The tracked conn's onClose callback will call removeSession which
 		// decrements the session count, so we don't call unreserveSessionSlot here.
+		// TE-2 fix: Track timeout occurrences for monitoring
+		t.metrics.queueSendTimeouts.Add(1)
 		t.logger.WithFields(map[string]interface{}{
-			"remote_addr":   conn.RemoteAddr().String(),
-			"queue_timeout": queueTimeout,
-			"session_count": t.GetSessionCount(),
-			"pending_conns": len(t.pendingConns),
+			"remote_addr":               conn.RemoteAddr().String(),
+			"queue_timeout":             queueTimeout,
+			"session_count":             t.GetSessionCount(),
+			"pending_conns_queue_depth": queueLen,
+			"total_queue_timeouts":      t.metrics.queueSendTimeouts.Load(),
 		}).Warn("Inbound connection dropped: pending queue send timeout (accept consumer too slow?)")
 		tracked.Close()
 	case <-t.ctx.Done():
