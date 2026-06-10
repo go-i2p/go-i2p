@@ -881,7 +881,10 @@ func (tc *trackedConn) Close() error {
 	return err
 }
 
-// Addr returns the network address the transport is bound to.
+// Addr returns the network address the transport is bound to (plain IP:port).
+// This returns the unwrapped TCP address for consistency with config.ListenerAddress.
+// If callers need the wrapped NTCP2 address with router hash metadata, they should
+// use ExtractNTCP2Addr on the transport's identity instead.
 func (t *NTCP2Transport) Addr() net.Addr {
 	t.identityMu.RLock()
 	l := t.listener
@@ -889,7 +892,26 @@ func (t *NTCP2Transport) Addr() net.Addr {
 	if l == nil {
 		return nil
 	}
-	return l.Addr()
+
+	// Get the listener's address (may be wrapped ntcp2.Addr with router hash)
+	addr := l.Addr()
+	if addr == nil {
+		return nil
+	}
+
+	// Extract the underlying TCP address if it's wrapped
+	// PB-2 fix: Return plain TCP address for consistency with config.ListenerAddress
+	switch typedAddr := addr.(type) {
+	case *ntcp2.Addr:
+		// Unwrap the NTCP2-wrapped address to get the plain TCP address
+		return typedAddr.UnderlyingAddr()
+	case *net.TCPAddr:
+		// Already a plain TCP address
+		return typedAddr
+	default:
+		// Unknown address type, return as-is
+		return addr
+	}
 }
 
 // UpdateLocalRouterInfo replaces the stored local RouterInfo with a re-signed
