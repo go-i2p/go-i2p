@@ -162,6 +162,36 @@ func (s *Server) GetSessionManager() *SessionManager {
 	return s.manager
 }
 
+// isLoopbackAddr checks if the given address is a loopback address.
+// L-6 FIX: Helper to detect non-loopback I2CP deployments for config warning.
+// Returns true for Unix sockets (always local), "localhost", "127.0.0.1", "::1", etc.
+func isLoopbackAddr(addr string, network string) bool {
+	// Unix sockets are always local
+	if network == "unix" {
+		return true
+	}
+
+	// Parse TCP address
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		// Handle addr without port (e.g., "localhost" instead of "localhost:7654")
+		host = addr
+	}
+
+	// Check common loopback names
+	if host == "localhost" || host == "127.0.0.1" || host == "::1" || host == "" {
+		return true
+	}
+
+	// Check if parsed IP is loopback
+	ip := net.ParseIP(host)
+	if ip != nil && ip.IsLoopback() {
+		return true
+	}
+
+	return false
+}
+
 // NewServer creates a new I2CP server
 func NewServer(config *ServerConfig) (*Server, error) {
 	if config == nil {
@@ -174,6 +204,19 @@ func NewServer(config *ServerConfig) (*Server, error) {
 		"listenAddr":  config.ListenAddr,
 		"maxSessions": config.MaxSessions,
 	}).Info("creating_i2cp_server")
+
+	// L-6 FIX: Warn if I2CP is bound to a non-loopback address
+	// Message IDs are sequential (1,2,3...) and predictable; this is acceptable
+	// for local interface (default), but should be flagged for non-loopback deployment.
+	if !isLoopbackAddr(config.ListenAddr, config.Network) {
+		log.WithFields(logger.Fields{
+			"at":       "i2cp.NewServer",
+			"network":  config.Network,
+			"address":  config.ListenAddr,
+			"severity": "INFO",
+			"note":     "I2CP message delivery IDs are sequential and predictable; safe only for local clients",
+		}).Warn("i2cp_listening_on_non_loopback_address")
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 
