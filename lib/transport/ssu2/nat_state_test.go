@@ -220,7 +220,7 @@ func TestRecordObservation_StaleObservationsPruned(t *testing.T) {
 
 	// Inject a stale observation directly.
 	ns.mu.Lock()
-	ns.completedNonces = make(map[uint32]bool)
+	ns.completedNonces = make(map[uint32]time.Time)
 	ns.observations = append(ns.observations, externalAddrObservation{
 		addr: addr,
 		at:   time.Now().Add(-peerTestObservationWindow - time.Second),

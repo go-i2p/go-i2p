@@ -55,8 +55,9 @@ type natState struct {
 	// being recorded. Multiple observations from the same nonce violate the spec
 	// and enable address-poisoning attacks (attacker sends multiple replies with
 	// same nonce but different addresses to skew majority voting).
-	// completedNonces: map[nonce] → true when an observation has been recorded.
-	completedNonces map[uint32]bool
+	// completedNonces: map[nonce] → timestamp when observation was recorded.
+	// RD-2 FIX: Prune nonces older than peerTestObservationWindow to prevent memory leak.
+	completedNonces map[uint32]time.Time
 }
 
 // persistedNATState is the on-disk JSON representation of NAT state.
@@ -103,24 +104,33 @@ func (ns *natState) getExternal() string {
 // observations agree on the same address within the window; otherwise empty.
 // CRITICAL RD-1 FIX: Rejects duplicate observations from the same nonce.
 // Each PeerTest nonce should only contribute one observation.
+// RD-2 FIX: Prunes nonces older than peerTestObservationWindow to prevent memory leak.
 func (ns *natState) recordObservation(addr string, nonce uint32) string {
 	ns.mu.Lock()
 	defer ns.mu.Unlock()
 
 	// Initialize completedNonces map lazily
 	if ns.completedNonces == nil {
-		ns.completedNonces = make(map[uint32]bool)
+		ns.completedNonces = make(map[uint32]time.Time)
+	}
+
+	now := time.Now()
+	cutoff := now.Add(-peerTestObservationWindow)
+
+	// RD-2 FIX: Prune nonces older than peerTestObservationWindow to prevent memory leak.
+	// This ensures completedNonces doesn't grow unbounded in long-running routers.
+	for nonce, recordedAt := range ns.completedNonces {
+		if recordedAt.Before(cutoff) {
+			delete(ns.completedNonces, nonce)
+		}
 	}
 
 	// CRITICAL RD-1: Reject if we've already recorded an observation for this nonce.
 	// Prevents attacker from sending multiple PeerTest replies with the same nonce
 	// but different addresses to poison the majority voting.
-	if ns.completedNonces[nonce] {
+	if _, found := ns.completedNonces[nonce]; found {
 		return ""
 	}
-
-	now := time.Now()
-	cutoff := now.Add(-peerTestObservationWindow)
 
 	// Prune stale observations.
 	live := ns.observations[:0]
@@ -132,8 +142,8 @@ func (ns *natState) recordObservation(addr string, nonce uint32) string {
 	live = append(live, externalAddrObservation{addr: addr, at: now})
 	ns.observations = live
 
-	// Mark this nonce as completed
-	ns.completedNonces[nonce] = true
+	// Mark this nonce as completed with timestamp for TTL-based pruning
+	ns.completedNonces[nonce] = now
 
 	// Count occurrences per address.
 	counts := make(map[string]int, len(live))
