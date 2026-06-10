@@ -1325,6 +1325,9 @@ func TestDeliveryStatus_Format_Timestamp8BytesI2PDate(t *testing.T) {
 // TestDeliveryStatus_Format_Roundtrip verifies the DeliveryStatus survives
 // a full I2NP message marshal→unmarshal cycle, preserving MsgID and Timestamp.
 func TestDeliveryStatus_Format_Roundtrip(t *testing.T) {
+	// M-4 FIX: Clear replay cache to avoid interference from other tests
+	clearDeliveryStatusReplayCacheForTesting()
+
 	msgID := 0xDEADBEEF
 	ts := time.Unix(1704067200, 0) // 2024-01-01 00:00:00 UTC
 

@@ -33,6 +33,15 @@ var (
 	deliveryStatusReplayCacheMutex = sync.Mutex{}
 )
 
+// clearDeliveryStatusReplayCacheForTesting clears the replay cache.
+// This is intended ONLY for testing purposes to avoid cache pollution between test cases.
+// Production code should never call this.
+func clearDeliveryStatusReplayCacheForTesting() {
+	deliveryStatusReplayCacheMutex.Lock()
+	defer deliveryStatusReplayCacheMutex.Unlock()
+	deliveryStatusReplayCache = make(map[[32]byte]time.Time)
+}
+
 // M-4 FIX: Time skew tolerance for timestamp validation (±1 hour per I2P spec)
 // This matches the expiration window used in I2NP messages generally
 const deliveryStatusTimestampSkew = 1 * time.Hour

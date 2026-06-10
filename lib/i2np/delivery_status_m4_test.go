@@ -42,7 +42,7 @@ func TestM4_ExpiredDeliveryStatusAcceptedWithWarning(t *testing.T) {
 }
 
 // TestM4_FarFutureDeliveryStatusRejected validates that far-future DeliveryStatus
-// messages (beyond clock skew tolerance) are rejected.
+// messages (beyond clock skew tolerance of ±1 hour) are rejected.
 //
 // M-4 FIX: Prevents accepting messages from peers with badly skewed clocks.
 func TestM4_FarFutureDeliveryStatusRejected(t *testing.T) {
@@ -51,7 +51,7 @@ func TestM4_FarFutureDeliveryStatusRejected(t *testing.T) {
 	deliveryStatusReplayCache = make(map[[32]byte]time.Time)
 	deliveryStatusReplayCacheMutex.Unlock()
 
-	// Create a message with a far-future timestamp (beyond clock skew)
+	// Create a message with a far-future timestamp (beyond clock skew of ±1 hour)
 	msgID := 54321
 	futureTime := time.Now().Add(deliveryStatusTimestampSkew + 1*time.Minute)
 
@@ -65,7 +65,7 @@ func TestM4_FarFutureDeliveryStatusRejected(t *testing.T) {
 	}
 	err = msg2.UnmarshalBinary(data)
 
-	// M-4 FIX: Should reject the far-future message
+	// M-4 FIX: Should reject the far-future message (indicates hostile or misconfigured peer)
 	assert.Error(t, err, "far-future message should be rejected")
 	assert.Contains(t, err.Error(), "future", "error should mention future/skew")
 }

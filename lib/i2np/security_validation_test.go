@@ -115,6 +115,9 @@ func TestDataMessage_BoundsChecking(t *testing.T) {
 
 // TestDeliveryStatusMessage_BoundsChecking verifies bounds checking in DeliveryStatusMessage
 func TestDeliveryStatusMessage_BoundsChecking(t *testing.T) {
+	// M-4 FIX: Clear replay cache to avoid cache pollution between test sub-cases
+	clearDeliveryStatusReplayCacheForTesting()
+
 	tests := []struct {
 		name        string
 		payloadSize int
@@ -129,6 +132,9 @@ func TestDeliveryStatusMessage_BoundsChecking(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// M-4 FIX: Clear cache before each sub-test to avoid replayed msgID=0 rejections
+			clearDeliveryStatusReplayCacheForTesting()
+
 			payload := make([]byte, tt.payloadSize)
 			data := createValidI2NPMessage(I2NPMessageTypeDeliveryStatus, payload)
 
