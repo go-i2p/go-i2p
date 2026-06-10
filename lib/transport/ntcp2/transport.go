@@ -97,8 +97,13 @@ type NTCP2Transport struct {
 	// Metrics for critical bugs (X-1)
 	acceptedConnPromotionAttempts int32 // atomic counter for bug detection: how many times promoteInboundConnection refused an acceptedConn
 
+	// EH-1 fix: Track RouterInfo parse failures for observability.
+	// Incremented when ReadRouterInfo fails on inbound msg3 (malformed, signature invalid, etc).
+	// High count indicates peer misconfiguration or attack attempt.
+	routerInfoParseFailures int32 // atomic counter
+
 	// E-3 fix: Track RouterInfo store failures for observability and alerting.
-	// Incremented when storeRouterInfoInNetDB fails (NetDB unavailable, parse errors, storage I/O failures).
+	// Incremented when storeRouterInfoInNetDB fails (NetDB unavailable, storage I/O failures).
 	// High count indicates NetDB problems that break OBEP reply routing.
 	routerInfoStoreFailures int32 // atomic counter
 
@@ -683,10 +688,19 @@ func (t *NTCP2Transport) extractAndStorePeerRouterInfo(ntcp2Conn *ntcp2.Conn, co
 
 	peerRI, _, parseErr := router_info.ReadRouterInfo(riBytes)
 	if parseErr != nil {
+		// EH-1 fix: Track parse failures separately for operator observability.
+		// This allows alerting on RouterInfo quality issues without conflating
+		// with NetDB storage failures.
+		atomic.AddInt32(&t.routerInfoParseFailures, 1)
+
 		// MEDIUM 5.2: RouterInfo parse failure should be a hard session-establishment error,
 		// not a warning that allows degraded routing. Abort handshake on parse failure.
-		t.logger.WithError(parseErr).WithField("remote_addr", conn.RemoteAddr().String()).
-			Warn("Inbound NTCP2: failed to parse peer RouterInfo from msg3; aborting handshake")
+		t.logger.WithError(parseErr).WithFields(map[string]interface{}{
+			"remote_addr":          conn.RemoteAddr().String(),
+			"total_parse_failures": atomic.LoadInt32(&t.routerInfoParseFailures),
+			"ri_bytes_len":         len(riBytes),
+			"ri_bytes_prefix":      fmt.Sprintf("%x", riBytes[:min(16, len(riBytes))]),
+		}).Warn("Inbound NTCP2: failed to parse peer RouterInfo from msg3; aborting handshake")
 		_ = ntcp2Conn.Close()
 		t.unreserveSessionSlot()
 		return oops.Errorf("RouterInfo parse failed: %w", parseErr)
@@ -1937,6 +1951,14 @@ func (t *NTCP2Transport) decrementSessionCountSafe() bool {
 		}
 		// CAS failed, retry (another goroutine won the race)
 	}
+}
+
+// GetRouterInfoParseFailures returns the total count of RouterInfo parse failures
+// since transport startup. Incremented each time ReadRouterInfo fails on inbound msg3.
+// EH-1 fix: Exposes peer RouterInfo quality for monitoring and alerting. High count
+// indicates peer misconfiguration, network corruption, or attack attempts.
+func (t *NTCP2Transport) GetRouterInfoParseFailures() int {
+	return int(atomic.LoadInt32(&t.routerInfoParseFailures))
 }
 
 // GetRouterInfoStoreFailures returns the total count of RouterInfo storage failures
