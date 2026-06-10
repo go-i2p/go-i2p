@@ -44,9 +44,19 @@ const (
 // taking the first successful result and canceling remaining attempts. This
 // prevents sequential 10s waits from blocking the dial path for 30s+ when
 // multiple slow introducers are present.
+// EH-3 fix: Check NAT health before attempting introducer dial.
 func (t *SSU2Transport) dialViaIntroducer(charlieRI router_info.RouterInfo, charlieHash data.Hash) (transport.TransportSession, error) {
 	if t.config.RouterLookupFunc == nil {
 		return nil, oops.Errorf("RouterLookupFunc not configured: cannot dial via introducer")
+	}
+
+	// EH-3 fix: Check NAT managers health before attempting relay/introducer dial.
+	// Introducer-based connections require NAT managers (relay manager for RelayRequest,
+	// hole punch coordinator for optional NAT punch-through). If NAT init failed,
+	// relay will be unavailable and the dial will fail with confusing errors;
+	// fail fast with a clear error instead.
+	if !t.NATManagersHealthy() {
+		return nil, oops.Errorf("NAT managers degraded: cannot dial via introducer (try direct addresses only)")
 	}
 
 	introducers := t.collectIntroducers(charlieRI)
