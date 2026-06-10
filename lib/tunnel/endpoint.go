@@ -72,13 +72,14 @@ type Endpoint struct {
 // - Supports up to 63 follow-on fragments (6-bit fragment number in spec)
 // - Tracks creation time for expiration-based cleanup
 type fragmentAssembler struct {
-	fragments    map[int][]byte // fragment number -> fragment data
-	deliveryType byte           // Delivery type from first fragment
-	tunnelID     uint32         // Destination tunnel ID (DTTunnel only)
-	hash         [32]byte       // Gateway or router hash (DTTunnel, DTRouter)
-	totalCount   int            // Expected number of fragments (0 until last fragment seen)
-	receivedMask uint64         // Bitmap of received fragments (supports up to 64 fragments)
-	createdAt    time.Time      // Timestamp when first fragment was received
+	fragments             map[int][]byte // fragment number -> fragment data
+	deliveryType          byte           // Delivery type from first fragment
+	firstFragmentReceived bool           // M-1 FIX: Track if first fragment (index 0) was recorded
+	tunnelID              uint32         // Destination tunnel ID (DTTunnel only)
+	hash                  [32]byte       // Gateway or router hash (DTTunnel, DTRouter)
+	totalCount            int            // Expected number of fragments (0 until last fragment seen)
+	receivedMask          uint64         // Bitmap of received fragments (supports up to 64 fragments)
+	createdAt             time.Time      // Timestamp when first fragment was received
 }
 
 var (
@@ -453,10 +454,16 @@ func (e *Endpoint) deliverViaForwarder(deliveryType byte, tunnelID uint32, hash 
 }
 
 // storeFirstFragmentWithDI stores the first fragment with routing info from delivery instructions.
+// M-1 FIX: Returns error if a conflicting first fragment was already recorded.
 func (e *Endpoint) storeFirstFragmentWithDI(msgID uint32, deliveryType byte, di *DeliveryInstructions, fragmentData []byte) error {
 	e.fragmentsMutex.Lock()
 
-	assembler := e.ensureAssemblerExists(msgID, deliveryType)
+	assembler, err := e.ensureAssemblerExists(msgID, deliveryType)
+	if err != nil {
+		e.fragmentsMutex.Unlock()
+		return err // M-1 FIX: Reject conflicting delivery type
+	}
+
 	// Store routing info from DI for later delivery
 	if deliveryType == DTTunnel {
 		assembler.tunnelID = di.tunnelID
@@ -473,21 +480,47 @@ func (e *Endpoint) storeFirstFragmentWithDI(msgID uint32, deliveryType byte, di 
 }
 
 // ensureAssemblerExists retrieves existing assembler or creates a new one for the message ID.
-// Updates delivery type on existing assemblers to ensure correct routing.
+// M-1 FIX: Enforces delivery type consistency - rejects conflicting first fragments.
+// If a first fragment was already recorded, the delivery type cannot be changed.
+// This prevents a compromised gateway from altering delivery routing mid-reassembly.
 // Note: Caller must hold fragmentsMutex.
 // maxConcurrentAssemblies limits the number of in-progress fragment
 // assemblies to prevent memory exhaustion from fragment-flood attacks.
 const maxConcurrentAssemblies = 5000
 
-func (e *Endpoint) ensureAssemblerExists(msgID uint32, deliveryType byte) *fragmentAssembler {
+func (e *Endpoint) ensureAssemblerExists(msgID uint32, deliveryType byte) (*fragmentAssembler, error) {
 	assembler, exists := e.fragments[msgID]
 	if !exists {
 		// Use the cap-enforced creation helper to prevent bypass.
 		assembler = e.createAssemblerWithCapEnforcement(msgID, deliveryType)
-	} else {
+		return assembler, nil
+	}
+
+	// M-1 FIX: If first fragment was already recorded, reject any duplicate.
+	// Reject both conflicting delivery types and duplicate first fragments to prevent routing manipulation.
+	if assembler.firstFragmentReceived {
+		// Log the type of violation for debugging
+		violationType := "different delivery type"
+		if assembler.deliveryType == deliveryType {
+			violationType = "duplicate first fragment"
+		}
+		log.WithFields(map[string]interface{}{
+			"message_id":             msgID,
+			"original_delivery_type": assembler.deliveryType,
+			"received_delivery_type": deliveryType,
+			"violation_type":         violationType,
+		}).Warn("Rejected duplicate/conflicting first fragment (M-1 fix)")
+		return nil, oops.Errorf("duplicate or conflicting first fragment for message ID %d: original=%d, received=%d",
+			msgID, assembler.deliveryType, deliveryType)
+	}
+
+	// If first fragment hasn't been recorded yet (orphan follow-ons exist),
+	// update delivery type to the correct value from this first fragment.
+	if !assembler.firstFragmentReceived {
 		assembler.deliveryType = deliveryType
 	}
-	return assembler
+
+	return assembler, nil
 }
 
 // createAssemblerWithCapEnforcement creates a new fragmentAssembler, enforcing
@@ -536,9 +569,11 @@ func (e *Endpoint) evictOldestFragment() {
 
 // recordFirstFragmentData stores the first fragment (index 0) in the assembler.
 // Sets the corresponding bit in the received mask for tracking.
+// M-1 FIX: Sets firstFragmentReceived flag to enforce delivery type consistency.
 func (e *Endpoint) recordFirstFragmentData(assembler *fragmentAssembler, fragmentData []byte, msgID uint32) {
 	assembler.fragments[0] = fragmentData
 	assembler.receivedMask |= 1
+	assembler.firstFragmentReceived = true // M-1 FIX: Mark that first fragment was recorded
 
 	log.WithFields(map[string]interface{}{
 		"message_id": msgID,

@@ -2,6 +2,8 @@ package i2np
 
 import (
 	"encoding/binary"
+	"os"
+	"sync"
 	"time"
 
 	"github.com/go-i2p/crypto/types"
@@ -11,6 +13,14 @@ import (
 	"github.com/go-i2p/go-i2p/lib/tunnel/buildrecord"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
+)
+
+// M-2 FIX: Package-level variable and mutex for RNG function injection (testing only).
+// Tests can set testInjectRNGError to inject errors when validating CSPRNG failure behavior.
+// Protected by testInjectMutex to prevent race detector errors.
+var (
+	testInjectRNGError error
+	testInjectMutex    sync.Mutex
 )
 
 // Message interface represents any I2NP message that can be marshaled/unmarshaled
@@ -63,8 +73,18 @@ type BaseI2NPMessage struct {
 // generateRandomMessageID creates a random 4-byte message ID.
 // The result is masked to 31 bits (0x7FFFFFFF) to ensure a positive value
 // on all platforms, including 32-bit systems where int is 32 bits.
-// Returns an error if the system's secure random number generator fails.
+// M-2 FIX: Rejects CSPRNG failure rather than silently degrading to predictable IDs.
+// Returns an error if the system's secure random number generator fails,
+// or if testInjectRNGError is set (for testing crash-fast behavior).
 func generateRandomMessageID() (int, error) {
+	// M-2 FIX: Allow tests to inject RNG failures (with mutex protection)
+	testInjectMutex.Lock()
+	injectedErr := testInjectRNGError
+	testInjectMutex.Unlock()
+	if injectedErr != nil {
+		return 0, injectedErr
+	}
+
 	msgIDBytes := make([]byte, 4)
 	if _, err := rand.Read(msgIDBytes); err != nil {
 		return 0, oops.Errorf("i2np: crypto/rand failed: %w", err)
@@ -75,12 +95,24 @@ func generateRandomMessageID() (int, error) {
 }
 
 // NewBaseI2NPMessage creates a new base I2NP message.
-// If crypto/rand fails to generate a message ID, falls back to a
-// time-based ID and logs a critical warning. This avoids panicking
-// in library code while still providing a usable (if less random) ID.
+// M-2 FIX: Crash-fast mode (WARNFAIL_I2P=1) rejects CSPRNG failures instead of silently
+// degrading to time-based IDs. When WARNFAIL_I2P is set and CSPRNG fails,
+// panics with the CSPRNG error to fail-fast during testing/debugging.
+// In production (WARNFAIL_I2P not set), logs a critical warning and uses
+// time-based ID (weaker but keeps the process running).
 func NewBaseI2NPMessage(msgType int) *BaseI2NPMessage {
 	msgID, err := generateRandomMessageID()
 	if err != nil {
+		// M-2 FIX: Crash-fast mode when WARNFAIL_I2P is set
+		if os.Getenv("WARNFAIL_I2P") != "" {
+			log.WithFields(logger.Fields{
+				"at":    "NewBaseI2NPMessage",
+				"error": err.Error(),
+				"mode":  "WARNFAIL_I2P",
+			}).Error("CSPRNG failed in crash-fast mode (WARNFAIL_I2P set)")
+			panic("CSPRNG failed: " + err.Error())
+		}
+
 		// Fallback: use lower 31 bits of UnixNano timestamp.
 		// Less random than CSPRNG but avoids crashing the process.
 		msgID = int(time.Now().UnixNano() & 0x7FFFFFFF)

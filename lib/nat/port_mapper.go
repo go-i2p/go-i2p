@@ -23,13 +23,14 @@ type PortMapperManager struct {
 	backoffCfg *BackoffConfig
 
 	// State
-	ctx     context.Context    // Parent context for lifecycle management
-	cancel  context.CancelFunc // Cancel function for internal context
-	wg      sync.WaitGroup     // WaitGroup for goroutine lifecycle
-	mapper  nattraversal.PortMapper
-	extPort int    // Currently mapped external port (0 if no mapping active)
-	extIP   string // External IP address from mapper
-	stopped bool   // Prevent duplicate Stop() calls
+	parentCtx context.Context    // H-2 FIX: Store parent context for deadline derivation in Stop()
+	ctx       context.Context    // Internal context derived from parentCtx
+	cancel    context.CancelFunc // Cancel function for internal context
+	wg        sync.WaitGroup     // WaitGroup for goroutine lifecycle
+	mapper    nattraversal.PortMapper
+	extPort   int    // Currently mapped external port (0 if no mapping active)
+	extIP     string // External IP address from mapper
+	stopped   bool   // Prevent duplicate Stop() calls
 }
 
 // PortMapperConfig configures a PortMapperManager.
@@ -94,8 +95,9 @@ func NewPortMapperManager(cfg *PortMapperConfig) *PortMapperManager {
 			Max:     cfg.MaxBackoff,
 			Factor:  cfg.BackoffFactor,
 		},
-		ctx:    ctx,
-		cancel: cancel,
+		parentCtx: cfg.Context, // H-2 FIX: Store parent context for Stop() deadline
+		ctx:       ctx,
+		cancel:    cancel,
 	}
 
 	// Start retry loop in background
@@ -218,6 +220,10 @@ func (pmm *PortMapperManager) GetExternalIP() string {
 // on slow networks or unresponsive gateways.
 // L-1 FIX ITEM 4: Fixed goroutine leak in timeout path - now uses context.WithTimeout
 // instead of spawning an untracked goroutine that would leak if timeout expires.
+// H-2 FIX: Use parent context for timeout derivation instead of context.Background()
+// to respect caller's deadline and enable proper shutdown coordination. This ensures
+// Stop() respects transport shutdown deadlines and enables immediate cancellation
+// when the parent context is already done.
 func (pmm *PortMapperManager) Stop() error {
 	pmm.mu.Lock()
 	if pmm.stopped {
@@ -229,8 +235,11 @@ func (pmm *PortMapperManager) Stop() error {
 	pmm.mu.Unlock()
 
 	// Wait for retry goroutine to exit (with timeout)
-	// Use a separate context with timeout to avoid spawning leaked goroutines
-	waitCtx, waitCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// Use parent context with timeout to enable proper shutdown coordination with caller.
+	// If parent context is already cancelled, this will timeout immediately.
+	// If parent context has a shorter deadline than 30s, that deadline will be used.
+	// H-2 FIX: Derive timeout deadline from parent context, not from context.Background().
+	waitCtx, waitCancel := context.WithTimeout(pmm.parentCtx, 30*time.Second)
 	defer waitCancel()
 
 	// Signal when WaitGroup is done via a channel

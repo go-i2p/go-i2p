@@ -676,3 +676,121 @@ func TestNonLocalDelivery(t *testing.T) {
 		assert.Nil(t, receivedMsg)
 	})
 }
+
+// TestM1_ConflictingFirstFragmentRejected tests that conflicting first fragments are rejected.
+// M-1 FIX: Prevents a compromised gateway from altering delivery routing mid-reassembly by
+// sending multiple first fragments with different delivery types.
+func TestM1_ConflictingFirstFragmentRejected(t *testing.T) {
+	t.Parallel()
+
+	var receivedMsg []byte
+	mockHandler := func(msgBytes []byte) error {
+		receivedMsg = msgBytes
+		return nil
+	}
+
+	mockEncryptor := &tunnel.AESEncryptor{}
+
+	ep, err := NewEndpoint(TunnelID(1), mockEncryptor, mockHandler)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name           string
+		firstDT        byte // delivery type of first fragment
+		conflictingDT  byte // delivery type of conflicting second "first" fragment
+		expectRejected bool
+	}{
+		{
+			name:           "DTLocal then DTRouter conflict",
+			firstDT:        DTLocal,
+			conflictingDT:  DTRouter,
+			expectRejected: true,
+		},
+		{
+			name:           "DTRouter then DTTunnel conflict",
+			firstDT:        DTRouter,
+			conflictingDT:  DTTunnel,
+			expectRejected: true,
+		},
+		{
+			name:           "DTTunnel then DTLocal conflict",
+			firstDT:        DTTunnel,
+			conflictingDT:  DTLocal,
+			expectRejected: true,
+		},
+		{
+			name:           "Same delivery type duplicate still rejected",
+			firstDT:        DTLocal,
+			conflictingDT:  DTLocal,
+			expectRejected: true, // Per spec: first fragment should only appear once
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			receivedMsg = nil
+			msgID := uint32(100 + uint32(len(tt.name)))
+
+			// Send first fragment with initial delivery type
+			di1 := &DeliveryInstructions{
+				fragmentType: FirstFragment,
+				deliveryType: tt.firstDT,
+				fragmented:   true,
+				messageID:    msgID,
+				fragmentSize: 5,
+			}
+			if tt.firstDT == DTRouter {
+				di1.hash = [32]byte{1}
+			} else if tt.firstDT == DTTunnel {
+				di1.tunnelID = 999
+				di1.hash = [32]byte{2}
+			}
+
+			err := ep.processFirstFragment(di1, []byte("First"))
+			require.NoError(t, err, "first fragment should succeed")
+
+			// Send conflicting second "first" fragment with same or different delivery type
+			di2 := &DeliveryInstructions{
+				fragmentType: FirstFragment,
+				deliveryType: tt.conflictingDT,
+				fragmented:   true,
+				messageID:    msgID,
+				fragmentSize: 5,
+			}
+			if tt.conflictingDT == DTRouter {
+				di2.hash = [32]byte{10}
+			} else if tt.conflictingDT == DTTunnel {
+				di2.tunnelID = 888
+				di2.hash = [32]byte{20}
+			}
+
+			err = ep.processFirstFragment(di2, []byte("Conflicting"))
+			if tt.expectRejected {
+				assert.Error(t, err, "should reject duplicate/conflicting first fragment")
+				assert.Contains(t, err.Error(), "duplicate or conflicting", "error should mention duplicate or conflict")
+			} else {
+				assert.NoError(t, err, "should allow same delivery type")
+			}
+
+			// Verify message was not delivered yet (incomplete reassembly)
+			assert.Nil(t, receivedMsg, "message should not be delivered (incomplete)")
+
+			// Send follow-on fragment to complete reassembly
+			di3 := &DeliveryInstructions{
+				fragmentType:   FollowOnFragment,
+				fragmentNumber: 1,
+				lastFragment:   true,
+				messageID:      msgID,
+				fragmentSize:   5,
+			}
+			err = ep.processFollowOnFragment(di3, []byte("Chunk"))
+			require.NoError(t, err, "follow-on fragment should succeed")
+
+			// For DTLocal, message should be delivered if no conflict occurred
+			if tt.firstDT == DTLocal && !tt.expectRejected {
+				assert.NotNil(t, receivedMsg, "DTLocal should deliver message")
+				assert.Equal(t, []byte("FirstChunk"), receivedMsg, "message should contain concatenated fragments")
+			}
+		})
+	}
+}

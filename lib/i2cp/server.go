@@ -641,14 +641,16 @@ func (s *Server) prepareMessagePayload(
 
 // sendMessageToClient sends a message to the client connection.
 // Uses per-connection write mutex to prevent concurrent write corruption.
+// M-3 FIX: Holds RLock across mutex acquisition to prevent TOCTOU during
+// session destruction/recreation with 16-bit ID reuse.
 func (s *Server) sendMessageToClient(conn net.Conn, sessionID uint16, msg *Message) bool {
 	s.mu.RLock()
 	writeMu := s.connWriteMu[sessionID]
-	s.mu.RUnlock()
-
 	if writeMu != nil {
 		writeMu.Lock()
 	}
+	s.mu.RUnlock() // Release RLock after acquiring write mutex (M-3 FIX)
+
 	err := WriteMessage(conn, msg)
 	if writeMu != nil {
 		writeMu.Unlock()
