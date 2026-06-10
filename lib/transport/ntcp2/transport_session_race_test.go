@@ -312,7 +312,7 @@ func TestCreateNewListenerWithConfig_ErrorPathStructure(t *testing.T) {
 	newCfg := *oldCfg
 	newCfg.ListenerAddress = listenerAddr
 	transport.config.Store(&newCfg)
-	_, _, err := transport.createNewListenerWithConfig(nil, listenerAddr)
+	_, _, _, err := transport.createNewListenerWithConfig(nil, listenerAddr)
 	// We expect an error because ntcp2Config is nil.
 	assert.Error(t, err, "should fail with nil NTCP2 config")
 }

@@ -1058,15 +1058,17 @@ func (t *NTCP2Transport) recreateListenerIfNeeded(ntcp2Config *ntcp2.Config) err
 	cfg := t.config.Load()
 	currentAddr := cfg.ListenerAddress
 	oldListener := t.listener
+	oldPortMapper := t.portMapperManager
 	t.identityMu.Unlock()
 
 	t.logger.Info("Recreating listener with new identity")
 
 	// Create new listener outside the lock using the snapshotted address
-	newListener, newAddr, err := t.createNewListenerWithConfig(ntcp2Config, currentAddr)
+	newListener, newAddr, newPortMapper, err := t.createNewListenerWithConfig(ntcp2Config, currentAddr)
 	if err != nil {
 		// S-2 fix: On failure, old listener remains active (not set to nil).
 		// Accept loop continues serving on old listener instead of retrying forever on nil.
+		// RL-2 fix: Also keep old port mapper active on failure
 		t.logger.WithError(err).Error("Failed to create new listener during identity update; keeping old listener active")
 		return err
 	}
@@ -1075,6 +1077,7 @@ func (t *NTCP2Transport) recreateListenerIfNeeded(ntcp2Config *ntcp2.Config) err
 	// This atomic swap ensures t.listener is never nil on error path.
 	t.identityMu.Lock()
 	t.listener = newListener
+	t.portMapperManager = newPortMapper
 	// HIGH-1.3 fix: Load current config, make a copy, update the copy, and atomically store it
 	oldCfg := t.config.Load()
 	newCfg := *oldCfg
@@ -1082,7 +1085,14 @@ func (t *NTCP2Transport) recreateListenerIfNeeded(ntcp2Config *ntcp2.Config) err
 	t.config.Store(&newCfg) // HIGH-1.3 fix: atomic store
 	t.identityMu.Unlock()
 
-	// Close the old listener outside the lock after successful swap
+	// Close the old listener and port mapper outside the lock after successful swap
+	// RL-2 fix: Stop old port mapper to prevent port reservation leak
+	if oldPortMapper != nil {
+		if err := oldPortMapper.Stop(); err != nil {
+			t.logger.WithError(err).Warn("Error stopping old port mapper after successful listener recreation")
+		}
+	}
+
 	if err := oldListener.Close(); err != nil {
 		t.logger.WithError(err).Warn("Error closing old listener after successful recreation")
 	}
@@ -1093,18 +1103,19 @@ func (t *NTCP2Transport) recreateListenerIfNeeded(ntcp2Config *ntcp2.Config) err
 
 // createNewListenerWithConfig creates a new TCP and NTCP2 listener with the provided configuration.
 // Takes the listener address as a parameter to avoid reading shared state outside the identity lock.
-// Returns the new listener and the new bound address (which may differ after NAT traversal).
-func (t *NTCP2Transport) createNewListenerWithConfig(ntcp2Config *ntcp2.Config, listenerAddress string) (net.Listener, string, error) {
+// Returns the new listener, the new bound address, and the port mapper (may be nil).
+// Caller is responsible for stopping the old port mapper before installing the new one.
+func (t *NTCP2Transport) createNewListenerWithConfig(ntcp2Config *ntcp2.Config, listenerAddress string) (net.Listener, string, *nat.PortMapperManager, error) {
 	// Extract port from the current listener address to maintain the same listening port.
 	_, portStr, err := net.SplitHostPort(listenerAddress)
 	if err != nil {
 		t.logger.WithError(err).Error("Failed to extract port from listener address for recreation")
-		return nil, "", WrapNTCP2Error(err, "parsing listener port")
+		return nil, "", nil, WrapNTCP2Error(err, "parsing listener port")
 	}
 	iport, err := strconv.Atoi(portStr)
 	if err != nil {
 		t.logger.WithError(err).Error("Failed to convert port to integer")
-		return nil, "", WrapNTCP2Error(err, "parsing listener port")
+		return nil, "", nil, WrapNTCP2Error(err, "parsing listener port")
 	}
 
 	// Use NAT traversal to rebind with the same port, preserving external address mapping.
@@ -1116,7 +1127,7 @@ func (t *NTCP2Transport) createNewListenerWithConfig(ntcp2Config *ntcp2.Config, 
 	tcpListener, boundAddr, err := bindWithNATTraversal(cfg, iport)
 	if err != nil {
 		t.logger.WithError(err).Error("Failed to rebind listener with NAT traversal")
-		return nil, "", WrapNTCP2Error(err, "rebinding listener")
+		return nil, "", nil, WrapNTCP2Error(err, "rebinding listener")
 	}
 
 	listener, err := ntcp2.NewNTCP2Listener(tcpListener, ntcp2Config)
@@ -1126,12 +1137,25 @@ func (t *NTCP2Transport) createNewListenerWithConfig(ntcp2Config *ntcp2.Config, 
 			t.logger.WithError(closeErr).Warn("Failed to close TCP listener after NTCP2 listener creation failure")
 		}
 		t.logger.WithError(err).Error("Failed to create new NTCP2 listener")
-		return nil, "", WrapNTCP2Error(err, "creating new listener")
+		return nil, "", nil, WrapNTCP2Error(err, "creating new listener")
 	}
 
-	// Return the actual bound address from bindWithNATTraversal (not from listener.Addr(),
-	// which may differ if NAT mapping occurred).
-	return listener, boundAddr, nil
+	// RL-2 fix: Create new port mapper for the recreated listener. Old port mapper will be
+	// stopped by the caller (recreateListenerIfNeeded) to prevent port reservation leaks.
+	var portMapper *nat.PortMapperManager
+	host, portStr, _ := net.SplitHostPort(boundAddr)
+	if !nat.IsLoopbackAddress(host) {
+		port, _ := strconv.Atoi(portStr)
+		portMapCfg := &nat.PortMapperConfig{
+			Network:      "tcp",
+			InternalPort: port,
+			Context:      t.ctx,
+		}
+		portMapper = nat.NewPortMapperManager(portMapCfg)
+		t.logger.WithField("internal_port", port).Debug("Started TCP port mapper for new listener")
+	}
+
+	return listener, boundAddr, portMapper, nil
 }
 
 // GetSession obtains a transport session with a router given its RouterInfo.
