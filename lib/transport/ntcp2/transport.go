@@ -815,19 +815,26 @@ func (t *NTCP2Transport) writeTerminationBlockBestEffort(rawConn net.Conn, term 
 // and wraps it to ensure cleanup on close. Returns (wrappedConn, isFresh) where
 // isFresh=true if this was a new insertion, or isFresh=false if a duplicate was detected.
 // On duplicate detection, the duplicate is closed and the reserved slot is unreserved.
+// A-1 fix: Ensure cleanup callback is registered before connection can be closed.
 func (t *NTCP2Transport) trackInboundConnection(conn net.Conn) (net.Conn, bool) {
 	peerHash := t.extractPeerHash(conn)
+
 	if _, loaded := t.sessions.LoadOrStore(peerHash, conn); loaded {
-		// Duplicate detected: unreserve the slot and close this connection.
+		// Duplicate detected: the peerHash is already in the sessions map,
+		// meaning another connection from this peer is already being processed.
+		// Unreserve the slot and return the raw connection (not wrapped, since it's not in the map).
+		// Callers should close this connection directly.
 		t.unreserveSessionSlot()
-		conn.Close()
 		t.logger.WithFields(map[string]interface{}{
 			"remote_addr": conn.RemoteAddr().String(),
 			"peer_hash":   fmt.Sprintf("%x", peerHash[:8]),
-		}).Debug("Duplicate inbound connection detected and closed; reservation unreserved")
-		return conn, false // Mark as duplicate
+		}).Debug("Duplicate inbound connection detected; reservation unreserved")
+		return conn, false // Mark as duplicate, return raw connection
 	}
 
+	// Now create the wrapped connection with cleanup callback.
+	// This ensures the callback is registered before anything can close the connection,
+	// and it's only registered on connections that are actually in the map.
 	wrappedConn := &trackedConn{
 		Conn: conn,
 		onClose: func() {
@@ -1458,9 +1465,13 @@ func (t *NTCP2Transport) handleDialFailure(routerHash data.Hash, routerHashBytes
 }
 
 // finalizeOutboundSession sets up the session object and records success metrics.
+// E-4 fix: Ensure unreserveSessionSlot is called on all failure paths.
 func (t *NTCP2Transport) finalizeOutboundSession(conn *ntcp2.Conn, routerHash data.Hash, routerHashBytes [32]byte, dialStart time.Time) (transport.TransportSession, error) {
 	session := t.setupSession(conn, routerHash)
 	if session == nil {
+		// setupSession failed (corrupt session map entry or other issues).
+		// We must unreserve the slot since we're not creating a session.
+		t.unreserveSessionSlot()
 		return nil, oops.Errorf("failed to set up session for %x: corrupt session map entry, connection closed", routerHashBytes[:8])
 	}
 	if n := t.getPeerConnNotifier(); n != nil {
@@ -1574,9 +1585,15 @@ func (t *NTCP2Transport) performNTCP2Handshake(ntcp2Addr net.Addr, tcpAddrString
 	}
 
 	// Phase 2: Perform the NTCP2 wire-format handshake (no framing, 16-byte options block).
+	// T-2 fix: Use a child context with timeout to prevent indefinite blocking
+	// during Close(). This ensures that if the transport context is cancelled,
+	// the handshake respects the min(transport deadline, 30s handshake timeout).
 	handshakeStart := time.Now()
-	ctx := t.ctx
-	if err := conn.Handshake(ctx); err != nil {
+	const handshakeTimeout = 30 * time.Second
+	handshakeCtx, cancel := context.WithTimeout(t.ctx, handshakeTimeout)
+	defer cancel()
+
+	if err := conn.Handshake(handshakeCtx); err != nil {
 		handshakeDuration := time.Since(handshakeStart)
 		t.logHandshakeFailure(tcpAddrString, peerHashBytes, err, handshakeDuration)
 
@@ -1890,7 +1907,22 @@ func (t *NTCP2Transport) checkSessionLimit() error {
 }
 
 // promoteRawConnToSession promotes a raw net.Conn to NTCP2Session with CAS protection.
+// Includes a defensive check to refuse promotion of acceptedConn (S-1 fix).
 func (t *NTCP2Transport) promoteRawConnToSession(rawConn net.Conn, routerHash data.Hash, existing interface{}) *NTCP2Session {
+	// Defensive check: refuse to promote an acceptedConn (S-1 fix).
+	// The entry must still be a rawConn at this point. If it has been changed to
+	// acceptedConn by another goroutine, we must not attempt promotion as that would
+	// violate the ownership invariant (Accept() consumer owns the socket).
+	// This race window exists between resolveSessionMapEntry's type check and this call.
+	if _, ok := existing.(acceptedConn); ok {
+		atomic.AddInt32(&t.acceptedConnPromotionAttempts, 1)
+		routerHashBytes := routerHash.Bytes()
+		t.logger.WithFields(map[string]interface{}{
+			"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
+		}).Error("Refusing to promote acceptedConn in promoteRawConnToSession (already delivered to Accept)")
+		return nil
+	}
+
 	// Use deferred session creation to avoid starting workers before
 	// we've confirmed this goroutine wins the CAS race. Workers on
 	// a losing session would share the same conn, causing errors.
@@ -1930,14 +1962,30 @@ func (t *NTCP2Transport) promoteRawConnToSession(rawConn net.Conn, routerHash da
 		}).Info("Promoted inbound net.Conn to NTCP2Session in setupSession")
 		return promoted
 	}
-	// Another goroutine won the promotion race — discard ours.
+	// CAS failed. Another goroutine won the promotion race. Handle R-1 race:
+	// If the winner is an acceptedConn, it means the Accept() path won and
+	// the connection is now owned by Accept. If it's a *NTCP2Session, another
+	// promotion goroutine won. In either case, discard our promoted session.
 	// Detach the shared conn before closing so the loser doesn't close
 	// the winner's socket. Workers will exit cleanly when Close() cancels
 	// the session context (SM-2 fix).
 	promoted.DetachConn()
 	_ = promoted.Close()
+
 	if winner, exists := t.sessions.Load(routerHash); exists {
-		if winnerSession, ok := winner.(*NTCP2Session); ok {
+		if _, isAcceptedConn := winner.(acceptedConn); isAcceptedConn {
+			// R-1 race detected: Accept() won against us. The connection is now owned by
+			// Accept() and will be delivered to the listener. We don't increment the counter
+			// here because we already incremented it at line 1910 (or didn't, if existing
+			// was still rawConn at that point). This observation confirms the race occurred.
+			routerHashBytes := routerHash.Bytes()
+			t.logger.WithFields(map[string]interface{}{
+				"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
+				"winner":      "acceptedConn",
+			}).Debug("R-1: Promotion lost to Accept() — connection now owned by Accept")
+			return nil
+		} else if winnerSession, ok := winner.(*NTCP2Session); ok {
+			// Another promotion goroutine won the race. Return its session.
 			return winnerSession
 		}
 	}
