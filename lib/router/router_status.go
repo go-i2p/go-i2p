@@ -24,7 +24,7 @@ func (r *Router) GetNTCP2SessionCount() int {
 	}
 	for _, t := range muxer.GetTransports() {
 		if ntcp2Transport, ok := t.(*ntcp.NTCP2Transport); ok {
-			return ntcp2Transport.GetSessionCount()
+			return int(ntcp2Transport.GetSessionCount())
 		}
 	}
 	return 0
@@ -39,7 +39,7 @@ func (r *Router) GetSSU2SessionCount() int {
 	}
 	for _, t := range muxer.GetTransports() {
 		if ssu2Transport, ok := t.(*ssu2.SSU2Transport); ok {
-			return ssu2Transport.GetSessionCount()
+			return int(ssu2Transport.GetSessionCount())
 		}
 	}
 	return 0

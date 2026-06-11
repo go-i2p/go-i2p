@@ -84,7 +84,7 @@ func (r *Router) getConnectionCount() int {
 	count := 0
 	for _, t := range muxer.GetTransports() {
 		if ntcp2Transport, ok := t.(*ntcp.NTCP2Transport); ok {
-			count += ntcp2Transport.GetSessionCount()
+			count += int(ntcp2Transport.GetSessionCount())
 		}
 	}
 	return count
