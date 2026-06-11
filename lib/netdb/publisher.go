@@ -11,6 +11,7 @@ import (
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
@@ -307,7 +308,7 @@ func (p *Publisher) publishLeaseSetEntry(lsEntry LeaseSetEntry) error {
 // to the closest floodfill routers.
 // Note: This method publishes original LeaseSets (type 1), not LeaseSet2.
 func (p *Publisher) PublishLeaseSet(hash common.Hash, ls lease_set.LeaseSet) error {
-	log.WithField("hash", fmt.Sprintf("%x", hash[:8])).Debug("Publishing LeaseSet")
+	log.WithField("hash", logutil.HashPrefixPlain(hash)).Debug("Publishing LeaseSet")
 
 	// Validate LeaseSet before attempting serialization
 	if err := ls.Validate(); err != nil {
@@ -335,7 +336,7 @@ func (p *Publisher) PublishRouterInfo(ri router_info.RouterInfo) error {
 	if err != nil {
 		return oops.Errorf("failed to get router hash: %w", err)
 	}
-	log.WithField("hash", fmt.Sprintf("%x", hash[:8])).Debug("Publishing RouterInfo")
+	log.WithField("hash", logutil.HashPrefixPlain(hash)).Debug("Publishing RouterInfo")
 
 	// Select closest floodfill routers
 	floodfills, err := p.selectFloodfillsForPublishing(hash)
@@ -365,7 +366,7 @@ func (p *Publisher) selectFloodfillsForPublishing(hash common.Hash) ([]router_in
 	}
 
 	log.WithFields(logger.Fields{
-		"hash":       fmt.Sprintf("%x", hash[:8]),
+		"hash":       logutil.HashPrefixPlain(hash),
 		"floodfills": len(floodfills),
 	}).Debug("Selected floodfill routers for publishing")
 
@@ -404,7 +405,7 @@ func (p *Publisher) sendDatabaseStoreMessages(hash common.Hash, data []byte, dat
 			errMsgs = append(errMsgs, e.Error())
 		}
 		log.WithFields(logger.Fields{
-			"hash":         fmt.Sprintf("%x", hash[:8]),
+			"hash":         logutil.HashPrefixPlain(hash),
 			"errors":       len(errors),
 			"total":        len(floodfills),
 			"error_detail": errMsgs,
@@ -413,7 +414,7 @@ func (p *Publisher) sendDatabaseStoreMessages(hash common.Hash, data []byte, dat
 	}
 
 	log.WithFields(logger.Fields{
-		"hash":       fmt.Sprintf("%x", hash[:8]),
+		"hash":       logutil.HashPrefixPlain(hash),
 		"floodfills": len(floodfills),
 	}).Debug("Successfully published to all floodfills")
 
@@ -428,7 +429,7 @@ func (p *Publisher) sendDatabaseStoreToFloodfill(hash common.Hash, data []byte, 
 	selectedTunnel, gatewayHash, err := p.selectAndValidateTunnel()
 	if err != nil {
 		if dataType == i2np.DatabaseStoreTypeRouterInfo {
-			log.WithError(err).WithField("hash", fmt.Sprintf("%x", hash[:8])).Info("No outbound tunnel available; falling back to direct RouterInfo publication")
+			log.WithError(err).WithField("hash", logutil.HashPrefixPlain(hash)).Info("No outbound tunnel available; falling back to direct RouterInfo publication")
 			return p.sendDatabaseStoreDirect(hash, data, dataType, floodfill)
 		}
 		return err
@@ -441,8 +442,8 @@ func (p *Publisher) sendDatabaseStoreToFloodfill(hash common.Hash, data []byte, 
 	}
 
 	log.WithFields(logger.Fields{
-		"data_hash":      fmt.Sprintf("%x", hash[:8]),
-		"floodfill_hash": fmt.Sprintf("%x", ffHash[:8]),
+		"data_hash":      logutil.HashPrefixPlain(hash),
+		"floodfill_hash": logutil.HashPrefixPlain(ffHash),
 		"tunnel_id":      selectedTunnel.ID,
 	}).Trace("Sending DatabaseStore message to floodfill through tunnel")
 
@@ -454,8 +455,8 @@ func (p *Publisher) sendDatabaseStoreToFloodfill(hash common.Hash, data []byte, 
 
 	log.WithFields(logger.Fields{
 		"tunnel_id":        selectedTunnel.ID,
-		"gateway_hash":     fmt.Sprintf("%x", gatewayHash[:8]),
-		"floodfill_hash":   fmt.Sprintf("%x", ffHash[:8]),
+		"gateway_hash":     logutil.HashPrefixPlain(gatewayHash),
+		"floodfill_hash":   logutil.HashPrefixPlain(ffHash),
 		"gateway_msg_type": tunnelGateway.Type(),
 	}).Debug("Sending DatabaseStore through tunnel gateway")
 
@@ -465,10 +466,10 @@ func (p *Publisher) sendDatabaseStoreToFloodfill(hash common.Hash, data []byte, 
 	}
 
 	log.WithFields(logger.Fields{
-		"data_hash":      fmt.Sprintf("%x", hash[:8]),
-		"floodfill_hash": fmt.Sprintf("%x", ffHash[:8]),
+		"data_hash":      logutil.HashPrefixPlain(hash),
+		"floodfill_hash": logutil.HashPrefixPlain(ffHash),
 		"tunnel_id":      selectedTunnel.ID,
-		"gateway_hash":   fmt.Sprintf("%x", gatewayHash[:8]),
+		"gateway_hash":   logutil.HashPrefixPlain(gatewayHash),
 	}).Debug("DatabaseStore sent to tunnel gateway for transmission")
 
 	return nil
@@ -489,8 +490,8 @@ func (p *Publisher) sendDatabaseStoreDirect(hash common.Hash, data []byte, dataT
 	}
 
 	log.WithFields(logger.Fields{
-		"data_hash":      fmt.Sprintf("%x", hash[:8]),
-		"floodfill_hash": fmt.Sprintf("%x", ffHash[:8]),
+		"data_hash":      logutil.HashPrefixPlain(hash),
+		"floodfill_hash": logutil.HashPrefixPlain(ffHash),
 		"msg_type":       msg.Type(),
 	}).Debug("Sending DatabaseStore directly to floodfill")
 

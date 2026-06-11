@@ -2,13 +2,13 @@ package router
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/i2np"
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
@@ -45,7 +45,7 @@ func NewLeaseSetPublisher(r *Router) *LeaseSetPublisher {
 func (p *LeaseSetPublisher) PublishLeaseSet(key common.Hash, leaseSetData []byte) error {
 	log.WithFields(logger.Fields{
 		"at":   "router.LeaseSetPublisher.PublishLeaseSet",
-		"key":  fmt.Sprintf("%x", key[:8]),
+		"key":  logutil.HashPrefixPlain(key),
 		"size": len(leaseSetData),
 	}).Debug("publishing_leaseset")
 
@@ -66,7 +66,7 @@ func (p *LeaseSetPublisher) PublishLeaseSet(key common.Hash, leaseSetData []byte
 
 	log.WithFields(logger.Fields{
 		"at":  "router.LeaseSetPublisher.PublishLeaseSet",
-		"key": fmt.Sprintf("%x", key[:8]),
+		"key": logutil.HashPrefixPlain(key),
 	}).Info("leaseset_published")
 
 	return nil
@@ -82,7 +82,7 @@ func (p *LeaseSetPublisher) storeInLocalNetDB(key common.Hash, data []byte) erro
 	if err := p.router.netdb.StoreLeaseSet(key, data, leaseSet2DataType); err != nil {
 		log.WithFields(logger.Fields{
 			"at":    "router.LeaseSetPublisher.storeInLocalNetDB",
-			"key":   fmt.Sprintf("%x", key[:8]),
+			"key":   logutil.HashPrefixPlain(key),
 			"error": err,
 		}).Error("netdb_store_failed")
 		return err
@@ -90,7 +90,7 @@ func (p *LeaseSetPublisher) storeInLocalNetDB(key common.Hash, data []byte) erro
 
 	log.WithFields(logger.Fields{
 		"at":  "router.LeaseSetPublisher.storeInLocalNetDB",
-		"key": fmt.Sprintf("%x", key[:8]),
+		"key": logutil.HashPrefixPlain(key),
 	}).Debug("leaseset_stored_in_netdb")
 
 	return nil
@@ -106,7 +106,7 @@ func (p *LeaseSetPublisher) storeInLocalNetDB(key common.Hash, data []byte) erro
 func (p *LeaseSetPublisher) distributeToNetwork(key common.Hash, data []byte) {
 	log.WithFields(logger.Fields{
 		"at":  "router.LeaseSetPublisher.distributeToNetwork",
-		"key": fmt.Sprintf("%x", key[:8]),
+		"key": logutil.HashPrefixPlain(key),
 	}).Debug("distributing_leaseset_to_network")
 
 	const floodfillCount = 3
@@ -114,7 +114,7 @@ func (p *LeaseSetPublisher) distributeToNetwork(key common.Hash, data []byte) {
 	if err != nil {
 		log.WithFields(logger.Fields{
 			"at":    "router.LeaseSetPublisher.distributeToNetwork",
-			"key":   fmt.Sprintf("%x", key[:8]),
+			"key":   logutil.HashPrefixPlain(key),
 			"error": err,
 		}).Warn("failed_to_select_floodfill_routers")
 		return
@@ -126,7 +126,7 @@ func (p *LeaseSetPublisher) distributeToNetwork(key common.Hash, data []byte) {
 
 	log.WithFields(logger.Fields{
 		"at":                "router.LeaseSetPublisher.distributeToNetwork",
-		"key":               fmt.Sprintf("%x", key[:8]),
+		"key":               logutil.HashPrefixPlain(key),
 		"floodfills_sent":   len(floodfills),
 		"floodfills_target": floodfillCount,
 	}).Info("leaseset_distribution_completed")
@@ -139,22 +139,22 @@ func (p *LeaseSetPublisher) sendToFloodfills(key common.Hash, floodfills []route
 		if err != nil {
 			log.WithFields(logger.Fields{
 				"at":  "router.LeaseSetPublisher.distributeToNetwork",
-				"key": fmt.Sprintf("%x", key[:8]),
+				"key": logutil.HashPrefixPlain(key),
 			}).Warn("failed_to_get_floodfill_hash")
 			continue
 		}
 		if err := p.sendToFloodfill(ffHash, dbStore); err != nil {
 			log.WithFields(logger.Fields{
 				"at":        "router.LeaseSetPublisher.distributeToNetwork",
-				"key":       fmt.Sprintf("%x", key[:8]),
-				"floodfill": fmt.Sprintf("%x", ffHash[:8]),
+				"key":       logutil.HashPrefixPlain(key),
+				"floodfill": logutil.HashPrefixPlain(ffHash),
 			}).Warn("failed_to_send_to_floodfill")
 			continue
 		}
 		log.WithFields(logger.Fields{
 			"at":        "router.LeaseSetPublisher.distributeToNetwork",
-			"key":       fmt.Sprintf("%x", key[:8]),
-			"floodfill": fmt.Sprintf("%x", ffHash[:8]),
+			"key":       logutil.HashPrefixPlain(key),
+			"floodfill": logutil.HashPrefixPlain(ffHash),
 		}).Debug("leaseset_sent_to_floodfill")
 	}
 }

@@ -3,7 +3,6 @@ package i2cp
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net"
 	"os"
 	"sync"
@@ -14,6 +13,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/naming"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 	"golang.org/x/time/rate"
@@ -396,7 +396,7 @@ func (s *Server) SetRouterHash(hash common.Hash) {
 
 	log.WithFields(logger.Fields{
 		"at":          "i2cp.Server.SetRouterHash",
-		"router_hash": fmt.Sprintf("%x", hash[:8]),
+		"router_hash": logutil.HashPrefixPlain(hash),
 	}).Debug("router hash configured for I2CP session tunnel pools")
 }
 
@@ -439,7 +439,7 @@ var ErrNoDestinationResolver = errors.New("no destination resolver configured: c
 // Returns ErrNoDestinationResolver if no resolver has been set via SetDestinationResolver.
 func (s *Server) resolveDestinationKey(destHash common.Hash) ([32]byte, error) {
 	if s.destinationResolver == nil {
-		log.WithField("destination", fmt.Sprintf("%x", destHash[:8])).
+		log.WithField("destination", logutil.HashPrefixPlain(destHash)).
 			Error("no_destination_resolver_configured")
 		return [32]byte{}, ErrNoDestinationResolver
 	}
@@ -449,7 +449,7 @@ func (s *Server) resolveDestinationKey(destHash common.Hash) ([32]byte, error) {
 		return [32]byte{}, oops.Errorf("failed to resolve destination: %w", err)
 	}
 
-	log.WithField("destination", fmt.Sprintf("%x", destHash[:8])).
+	log.WithField("destination", logutil.HashPrefixPlain(destHash)).
 		Debug("resolved_destination_public_key")
 	return pubKey, nil
 }

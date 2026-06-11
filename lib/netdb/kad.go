@@ -331,7 +331,7 @@ func (kr *KademliaResolver) processLookupRound(ctx context.Context, target commo
 		log.WithFields(logger.Fields{
 			"at":   "iterativeLookup",
 			"hop":  hop,
-			"hash": fmt.Sprintf("%x", target[:8]),
+			"hash": logutil.HashPrefixPlain(target),
 		}).Debug("No more unqueried peers, lookup exhausted")
 		return nil, true
 	}
@@ -415,7 +415,7 @@ func (kr *KademliaResolver) queryBatchParallel(ctx context.Context, peers []comm
 				result.suggestions = searchReplyErr.Suggestions
 				log.WithFields(logger.Fields{
 					"at":          "queryBatchParallel",
-					"peer":        fmt.Sprintf("%x", p[:8]),
+					"peer":        logutil.HashPrefixPlain(p),
 					"suggestions": len(searchReplyErr.Suggestions),
 				}).Debug("Peer returned suggestions for iterative follow-up")
 			}
@@ -442,7 +442,7 @@ func (kr *KademliaResolver) collectLookupResult(resultChan chan *router_info.Rou
 		kr.NetworkDatabase.StoreRouterInfo(*result)
 		hashStr := "unknown"
 		if ih, err := result.IdentHash(); err == nil {
-			hashStr = fmt.Sprintf("%x", ih[:8])
+			hashStr = logutil.HashPrefixPlain(ih)
 		}
 		log.WithFields(logger.Fields{
 			"at":   "collectLookupResult",
@@ -545,8 +545,8 @@ func (kr *KademliaResolver) selectClosestPeers(peers []peerDistance, target comm
 func (kr *KademliaResolver) queryPeer(ctx context.Context, peer, target common.Hash) (*router_info.RouterInfo, error) {
 	log.WithFields(logger.Fields{
 		"at":     "queryPeer",
-		"peer":   fmt.Sprintf("%x", peer[:8]),
-		"target": fmt.Sprintf("%x", target[:8]),
+		"peer":   logutil.HashPrefixPlain(peer),
+		"target": logutil.HashPrefixPlain(target),
 	}).Debug("Querying peer for RouterInfo")
 
 	// Snapshot transport and ourHash under read lock to avoid races
@@ -560,8 +560,8 @@ func (kr *KademliaResolver) queryPeer(ctx context.Context, peer, target common.H
 	if transport == nil {
 		log.WithFields(logger.Fields{
 			"at":     "queryPeer",
-			"peer":   fmt.Sprintf("%x", peer[:8]),
-			"target": fmt.Sprintf("%x", target[:8]),
+			"peer":   logutil.HashPrefixPlain(peer),
+			"target": logutil.HashPrefixPlain(target),
 			"reason": "no_transport",
 		}).Debug("Transport not configured, using local-only lookup")
 		return nil, oops.Errorf("transport not configured for remote lookups")
@@ -588,8 +588,8 @@ func (kr *KademliaResolver) queryPeer(ctx context.Context, peer, target common.H
 	if err != nil {
 		log.WithError(err).WithFields(logger.Fields{
 			"at":     "queryPeer",
-			"peer":   fmt.Sprintf("%x", peer[:8]),
-			"target": fmt.Sprintf("%x", target[:8]),
+			"peer":   logutil.HashPrefixPlain(peer),
+			"target": logutil.HashPrefixPlain(target),
 		}).Debug("DatabaseLookup failed")
 		return nil, oops.Errorf("lookup failed: %w", err)
 	}
@@ -660,7 +660,7 @@ func (kr *KademliaResolver) processDatabaseStoreResponse(data []byte, targetHash
 
 	log.WithFields(logger.Fields{
 		"at":     "processDatabaseStoreResponse",
-		"target": fmt.Sprintf("%x", targetHash[:8]),
+		"target": logutil.HashPrefixPlain(targetHash),
 	}).Debug("Successfully received RouterInfo from peer")
 
 	return &ri, nil
@@ -677,7 +677,7 @@ func parseDatabaseStore(data []byte, targetHash common.Hash) (*i2np.DatabaseStor
 	if dbStore.Key != targetHash {
 		log.WithFields(logger.Fields{
 			"at":       "processDatabaseStoreResponse",
-			"expected": fmt.Sprintf("%x", targetHash[:8]),
+			"expected": logutil.HashPrefixPlain(targetHash),
 			"got":      fmt.Sprintf("%x", dbStore.Key[:8]),
 		}).Warn("DatabaseStore key mismatch")
 		return nil, oops.Errorf("key mismatch in response")
@@ -742,7 +742,7 @@ func (kr *KademliaResolver) processDatabaseSearchReplyResponse(data []byte, targ
 	if len(searchReply.PeerHashes) > 0 {
 		log.WithFields(logger.Fields{
 			"at":          "processDatabaseSearchReplyResponse",
-			"target":      fmt.Sprintf("%x", targetHash[:8]),
+			"target":      logutil.HashPrefixPlain(targetHash),
 			"from":        fmt.Sprintf("%x", searchReply.From[:8]),
 			"suggestions": len(searchReply.PeerHashes),
 		}).Debug("Peer returned suggestions for iterative lookup")

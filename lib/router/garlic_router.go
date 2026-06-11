@@ -16,6 +16,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/netdb"
 	"github.com/go-i2p/go-i2p/lib/transport"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
@@ -71,7 +72,7 @@ func (a *netDBAdapter) StoreRouterInfo(ri router_info.RouterInfo) {
 		return
 	}
 	if err := a.StdNetDB.StoreRouterInfoFromMessage(hash, data, 0); err != nil {
-		log.WithError(err).WithField("hash", fmt.Sprintf("%x", hash[:8])).Warn("Failed to store RouterInfo received via garlic")
+		log.WithError(err).WithField("hash", logutil.HashPrefixPlain(hash)).Warn("Failed to store RouterInfo received via garlic")
 	}
 }
 
@@ -244,7 +245,7 @@ func (gr *GarlicMessageRouter) drainRouterInfoChanWithContext(ch chan router_inf
 // reached by sending messages through one of their published inbound tunnels.
 func (gr *GarlicMessageRouter) ForwardToDestination(destHash common.Hash, msg i2np.Message) error {
 	log.WithFields(logger.Fields{
-		"dest_hash":    fmt.Sprintf("%x", destHash[:8]),
+		"dest_hash":    logutil.HashPrefixPlain(destHash),
 		"message_type": msg.Type(),
 		"message_id":   msg.MessageID(),
 	}).Debug("Forwarding garlic clove to destination")
@@ -272,7 +273,7 @@ func (gr *GarlicMessageRouter) ForwardToDestination(destHash common.Hash, msg i2
 func (gr *GarlicMessageRouter) lookupLeaseSetWithTimeout(destHash common.Hash) (lease_set.LeaseSet, bool) {
 	leaseSetChan := gr.netdb.GetLeaseSet(destHash)
 	if leaseSetChan == nil {
-		log.WithField("dest_hash", fmt.Sprintf("%x", destHash[:8])).
+		log.WithField("dest_hash", logutil.HashPrefixPlain(destHash)).
 			Debug("LeaseSet not found, queueing message for async lookup")
 		return lease_set.LeaseSet{}, true
 	}
@@ -289,14 +290,14 @@ func (gr *GarlicMessageRouter) awaitLeaseSetResult(destHash common.Hash, leaseSe
 	select {
 	case ls, ok := <-leaseSetChan:
 		if !ok {
-			log.WithField("dest_hash", fmt.Sprintf("%x", destHash[:8])).
+			log.WithField("dest_hash", logutil.HashPrefixPlain(destHash)).
 				Debug("LeaseSet channel closed, queueing message for async lookup")
 			return lease_set.LeaseSet{}, true
 		}
 		return ls, false
 	case <-timer.C:
 		gr.drainLeaseSetChannel(leaseSetChan)
-		log.WithField("dest_hash", fmt.Sprintf("%x", destHash[:8])).
+		log.WithField("dest_hash", logutil.HashPrefixPlain(destHash)).
 			Debug("Timeout waiting for LeaseSet, queueing message for async lookup")
 		return lease_set.LeaseSet{}, true
 	}
@@ -342,7 +343,7 @@ func (gr *GarlicMessageRouter) validateAndExtractLeases(destHash common.Hash, le
 	if !leaseSet.IsValid() {
 		log.WithFields(logger.Fields{
 			"at":        "validateAndExtractLeases",
-			"dest_hash": fmt.Sprintf("%x", destHash[:8]),
+			"dest_hash": logutil.HashPrefixPlain(destHash),
 			"reason":    "invalid LeaseSet",
 		}).Error("LeaseSet validation failed")
 		return nil, oops.Errorf("destination %x has invalid LeaseSet", destHash[:8])
@@ -353,7 +354,7 @@ func (gr *GarlicMessageRouter) validateAndExtractLeases(destHash common.Hash, le
 	if len(leases) == 0 {
 		log.WithFields(logger.Fields{
 			"at":        "validateAndExtractLeases",
-			"dest_hash": fmt.Sprintf("%x", destHash[:8]),
+			"dest_hash": logutil.HashPrefixPlain(destHash),
 			"reason":    "no valid leases",
 		}).Error("LeaseSet has no valid leases")
 		return nil, oops.Errorf("destination %x has no valid leases", destHash[:8])
@@ -369,7 +370,7 @@ func (gr *GarlicMessageRouter) routeMessageThroughLease(destHash common.Hash, le
 	if selectedLease == nil {
 		log.WithFields(logger.Fields{
 			"at":        "routeMessageThroughLease",
-			"dest_hash": fmt.Sprintf("%x", destHash[:8]),
+			"dest_hash": logutil.HashPrefixPlain(destHash),
 			"reason":    "no valid lease available",
 		}).Error("Failed to select lease")
 		return oops.Errorf("no valid lease available for destination %x", destHash[:8])
@@ -379,8 +380,8 @@ func (gr *GarlicMessageRouter) routeMessageThroughLease(destHash common.Hash, le
 	tunnelID := tunnel.TunnelID(selectedLease.TunnelID())
 
 	log.WithFields(logger.Fields{
-		"dest_hash":    fmt.Sprintf("%x", destHash[:8]),
-		"gateway_hash": fmt.Sprintf("%x", gatewayHash[:8]),
+		"dest_hash":    logutil.HashPrefixPlain(destHash),
+		"gateway_hash": logutil.HashPrefixPlain(gatewayHash),
 		"tunnel_id":    tunnelID,
 	}).Debug("Selected lease for DESTINATION delivery, routing through tunnel")
 
@@ -431,7 +432,7 @@ func (gr *GarlicMessageRouter) selectBestLease(leases []lease.Lease) *lease.Leas
 // to ourselves - this is processed locally to avoid unnecessary network traffic.
 func (gr *GarlicMessageRouter) ForwardToRouter(routerHash common.Hash, msg i2np.Message) error {
 	log.WithFields(logger.Fields{
-		"router_hash":  fmt.Sprintf("%x", routerHash[:8]),
+		"router_hash":  logutil.HashPrefixPlain(routerHash),
 		"message_type": msg.Type(),
 		"message_id":   msg.MessageID(),
 	}).Debug("Forwarding garlic clove to router")
@@ -460,7 +461,7 @@ func (gr *GarlicMessageRouter) ForwardToRouter(routerHash common.Hash, msg i2np.
 	}
 
 	log.WithFields(logger.Fields{
-		"router_hash":  fmt.Sprintf("%x", routerHash[:8]),
+		"router_hash":  logutil.HashPrefixPlain(routerHash),
 		"message_type": msg.Type(),
 		"message_id":   msg.MessageID(),
 	}).Debug("Successfully queued message to router")
@@ -514,7 +515,7 @@ func (gr *GarlicMessageRouter) lookupRouterInfo(routerHash common.Hash) (router_
 
 	log.WithFields(logger.Fields{
 		"at":          "lookupRouterInfo",
-		"router_hash": fmt.Sprintf("%x", routerHash[:8]),
+		"router_hash": logutil.HashPrefixPlain(routerHash),
 	}).Debug("RouterInfo lookup successful")
 	return routerInfo, nil
 }
@@ -526,7 +527,7 @@ func (gr *GarlicMessageRouter) checkNetDBForRouter(routerHash common.Hash) (chan
 	if routerInfoChan == nil {
 		log.WithFields(logger.Fields{
 			"at":          "lookupRouterInfo",
-			"router_hash": fmt.Sprintf("%x", routerHash[:8]),
+			"router_hash": logutil.HashPrefixPlain(routerHash),
 			"reason":      "not found in NetDB",
 		}).Error("RouterInfo lookup failed")
 		return nil, oops.Errorf("router %x not found in NetDB", routerHash[:8])
@@ -558,7 +559,7 @@ func (gr *GarlicMessageRouter) waitForRouterInfo(routerInfoChan chan router_info
 func (gr *GarlicMessageRouter) handleRouterInfoChannelClosed(routerHash common.Hash) (router_info.RouterInfo, error) {
 	log.WithFields(logger.Fields{
 		"at":          "lookupRouterInfo",
-		"router_hash": fmt.Sprintf("%x", routerHash[:8]),
+		"router_hash": logutil.HashPrefixPlain(routerHash),
 		"reason":      "channel closed",
 	}).Error("RouterInfo channel closed")
 	return router_info.RouterInfo{}, oops.Errorf("router %x RouterInfo channel closed", routerHash[:8])
@@ -602,7 +603,7 @@ func (gr *GarlicMessageRouter) fallbackDrainRouterInfo(ch chan router_info.Route
 func (gr *GarlicMessageRouter) handleRouterInfoTimeout(routerHash common.Hash) (router_info.RouterInfo, error) {
 	log.WithFields(logger.Fields{
 		"at":          "lookupRouterInfo",
-		"router_hash": fmt.Sprintf("%x", routerHash[:8]),
+		"router_hash": logutil.HashPrefixPlain(routerHash),
 		"reason":      "timeout",
 	}).Error("RouterInfo lookup timed out")
 	return router_info.RouterInfo{}, oops.Errorf("timeout waiting for router %x RouterInfo", routerHash[:8])
@@ -614,7 +615,7 @@ func (gr *GarlicMessageRouter) validateRouterInfo(routerInfo router_info.RouterI
 	if !routerInfo.IsValid() {
 		log.WithFields(logger.Fields{
 			"at":          "lookupRouterInfo",
-			"router_hash": fmt.Sprintf("%x", routerHash[:8]),
+			"router_hash": logutil.HashPrefixPlain(routerHash),
 			"reason":      "invalid RouterInfo",
 		}).Error("RouterInfo validation failed")
 		return oops.Errorf("router %x has invalid RouterInfo", routerHash[:8])
@@ -629,7 +630,7 @@ func (gr *GarlicMessageRouter) sendMessageToRouter(routerHash common.Hash, route
 	if err != nil {
 		log.WithFields(logger.Fields{
 			"at":          "sendMessageToRouter",
-			"router_hash": fmt.Sprintf("%x", routerHash[:8]),
+			"router_hash": logutil.HashPrefixPlain(routerHash),
 		}).WithError(err).Error("Failed to get transport session")
 		return oops.Wrapf(err, "failed to get session for router %x", routerHash[:8])
 	}
@@ -639,7 +640,7 @@ func (gr *GarlicMessageRouter) sendMessageToRouter(routerHash common.Hash, route
 	}
 	log.WithFields(logger.Fields{
 		"at":           "sendMessageToRouter",
-		"router_hash":  fmt.Sprintf("%x", routerHash[:8]),
+		"router_hash":  logutil.HashPrefixPlain(routerHash),
 		"message_type": msg.Type(),
 	}).Debug("Queued message to router session")
 	return nil
@@ -663,7 +664,7 @@ func (gr *GarlicMessageRouter) ForwardThroughTunnel(
 	msg i2np.Message,
 ) error {
 	log.WithFields(logger.Fields{
-		"gateway_hash": fmt.Sprintf("%x", gatewayHash[:8]),
+		"gateway_hash": logutil.HashPrefixPlain(gatewayHash),
 		"tunnel_id":    tunnelID,
 		"message_type": msg.Type(),
 		"message_id":   msg.MessageID(),
@@ -731,7 +732,7 @@ func (gr *GarlicMessageRouter) forwardToTunnelGateway(gatewayHash common.Hash, t
 	if err != nil {
 		log.WithFields(logger.Fields{
 			"at":           "forwardToTunnelGateway",
-			"gateway_hash": fmt.Sprintf("%x", gatewayHash[:8]),
+			"gateway_hash": logutil.HashPrefixPlain(gatewayHash),
 			"tunnel_id":    tunnelID,
 		}).WithError(err).Error("Failed to marshal message for tunnel")
 		return oops.Wrapf(err, "failed to marshal wrapped message for tunnel")
@@ -741,7 +742,7 @@ func (gr *GarlicMessageRouter) forwardToTunnelGateway(gatewayHash common.Hash, t
 	tunnelGatewayMsg := i2np.NewTunnelGatewayMessage(tunnelID, msgBytes)
 
 	log.WithFields(logger.Fields{
-		"gateway_hash": fmt.Sprintf("%x", gatewayHash[:8]),
+		"gateway_hash": logutil.HashPrefixPlain(gatewayHash),
 		"tunnel_id":    tunnelID,
 		"wrapped_size": len(msgBytes),
 	}).Debug("Created TunnelGateway message, forwarding to gateway router")
@@ -876,7 +877,7 @@ func (gr *GarlicMessageRouter) cleanupExpiredMessages(destHash common.Hash, mess
 			validMessages = append(validMessages, pm)
 		} else {
 			log.WithFields(logger.Fields{
-				"dest_hash": fmt.Sprintf("%x", destHash[:8]),
+				"dest_hash": logutil.HashPrefixPlain(destHash),
 				"msg_type":  pm.msg.Type(),
 				"queued_at": pm.queuedAt,
 			}).Warn("Discarding expired pending message")
@@ -896,7 +897,7 @@ func (gr *GarlicMessageRouter) extractValidLease(destHash common.Hash, leaseSet 
 	leases := leaseSet.Leases()
 
 	if len(leases) == 0 {
-		log.WithField("dest_hash", fmt.Sprintf("%x", destHash[:8])).
+		log.WithField("dest_hash", logutil.HashPrefixPlain(destHash)).
 			Warn("LeaseSet has no valid leases")
 		return common.Hash{}, 0, oops.Errorf("no valid leases")
 	}
@@ -904,7 +905,7 @@ func (gr *GarlicMessageRouter) extractValidLease(destHash common.Hash, leaseSet 
 	// Select best lease
 	selectedLease := gr.selectBestLease(leases)
 	if selectedLease == nil {
-		log.WithField("dest_hash", fmt.Sprintf("%x", destHash[:8])).
+		log.WithField("dest_hash", logutil.HashPrefixPlain(destHash)).
 			Warn("No valid lease available")
 		return common.Hash{}, 0, oops.Errorf("no valid lease available")
 	}
@@ -922,13 +923,13 @@ func (gr *GarlicMessageRouter) forwardPendingMessages(destHash, gatewayHash comm
 		err := gr.ForwardThroughTunnel(gatewayHash, tunnelID, pm.msg)
 		if err != nil {
 			log.WithFields(logger.Fields{
-				"dest_hash": fmt.Sprintf("%x", destHash[:8]),
+				"dest_hash": logutil.HashPrefixPlain(destHash),
 				"msg_type":  pm.msg.Type(),
 				"error":     err,
 			}).Error("Failed to forward pending message")
 		} else {
 			log.WithFields(logger.Fields{
-				"dest_hash": fmt.Sprintf("%x", destHash[:8]),
+				"dest_hash": logutil.HashPrefixPlain(destHash),
 				"msg_type":  pm.msg.Type(),
 			}).Debug("Successfully forwarded pending message")
 		}
@@ -948,7 +949,7 @@ func (gr *GarlicMessageRouter) queuePendingMessage(destHash common.Hash, msg i2n
 	if totalPending >= maxGlobalPendingMessages {
 		log.WithFields(logger.Fields{
 			"at":            "queuePendingMessage",
-			"dest_hash":     fmt.Sprintf("%x", destHash[:8]),
+			"dest_hash":     logutil.HashPrefixPlain(destHash),
 			"total_pending": totalPending,
 			"max_global":    maxGlobalPendingMessages,
 		}).Error("Global pending message limit reached")
@@ -959,7 +960,7 @@ func (gr *GarlicMessageRouter) queuePendingMessage(destHash common.Hash, msg i2n
 	if existing, ok := gr.pendingMsgs[destHash]; ok && len(existing) >= maxPendingMessages {
 		log.WithFields(logger.Fields{
 			"at":            "queuePendingMessage",
-			"dest_hash":     fmt.Sprintf("%x", destHash[:8]),
+			"dest_hash":     logutil.HashPrefixPlain(destHash),
 			"pending_count": len(existing),
 			"max_pending":   maxPendingMessages,
 		}).Error("Too many pending messages for destination")
@@ -977,7 +978,7 @@ func (gr *GarlicMessageRouter) queuePendingMessage(destHash common.Hash, msg i2n
 	gr.pendingMsgs[destHash] = append(gr.pendingMsgs[destHash], pm)
 
 	log.WithFields(logger.Fields{
-		"dest_hash":     fmt.Sprintf("%x", destHash[:8]),
+		"dest_hash":     logutil.HashPrefixPlain(destHash),
 		"message_type":  msg.Type(),
 		"pending_count": len(gr.pendingMsgs[destHash]),
 	}).Debug("Queued message for pending LeaseSet lookup")

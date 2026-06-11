@@ -14,6 +14,7 @@ import (
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/bootstrap"
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 )
 
 // maxRouterInfoAge is the maximum age of a RouterInfo before it is considered
@@ -203,7 +204,7 @@ func shouldSkipNoAddresses(ri router_info.RouterInfo, stats *peerFilterStats) bo
 func shouldSkipStale(riHash common.Hash, tracker *PeerTracker, stats *peerFilterStats) bool {
 	if tracker.IsLikelyStale(riHash) {
 		log.WithFields(logger.Fields{
-			"peer_hash": fmt.Sprintf("%x", riHash[:8]),
+			"peer_hash": logutil.HashPrefixPlain(riHash),
 			"reason":    "peer_marked_stale_by_tracker",
 		}).Debug("Skipping stale peer")
 		stats.skippedStale++
@@ -222,7 +223,7 @@ func shouldSkipNoCaps(ri router_info.RouterInfo, riHash common.Hash, stats *peer
 	// tunnel build expiration).
 	if !capsAllowsTunnelParticipation(ri.RouterCapabilities()) {
 		log.WithFields(logger.Fields{
-			"peer_hash": fmt.Sprintf("%x", riHash[:8]),
+			"peer_hash": logutil.HashPrefixPlain(riHash),
 			"caps":      ri.RouterCapabilities(),
 			"reason":    "caps_lacks_R_or_advertises_H",
 		}).Debug("Skipping peer ineligible to participate in tunnels")
@@ -241,7 +242,7 @@ func shouldSkipOldRouterInfo(ri router_info.RouterInfo, riHash common.Hash, stat
 		age := time.Since(published.Time())
 		if age > maxRouterInfoAge {
 			log.WithFields(logger.Fields{
-				"peer_hash": fmt.Sprintf("%x", riHash[:8]),
+				"peer_hash": logutil.HashPrefixPlain(riHash),
 				"ri_age_s":  int(age.Seconds()),
 				"reason":    "router_info_too_old",
 			}).Debug("Skipping peer with stale RouterInfo")
@@ -366,7 +367,7 @@ func (db *StdNetDB) SelectPeers(count int, exclude []common.Hash) ([]router_info
 //   - Error if no floodfill routers are available in NetDB
 func (db *StdNetDB) SelectFloodfillRouters(targetHash common.Hash, count int) ([]router_info.RouterInfo, error) {
 	log.WithFields(logger.Fields{
-		"target_hash": fmt.Sprintf("%x", targetHash[:8]),
+		"target_hash": logutil.HashPrefixPlain(targetHash),
 		"count":       count,
 	}).Debug("Selecting closest floodfill routers")
 
@@ -404,7 +405,7 @@ func (db *StdNetDB) filterFloodfillRouters(routers []router_info.RouterInfo) []r
 		}
 		if db.PeerTracker != nil {
 			if riHash, err := ri.IdentHash(); err == nil && db.PeerTracker.IsLikelyStale(riHash) {
-				log.WithField("peer_hash", fmt.Sprintf("%x", riHash[:8])).
+				log.WithField("peer_hash", logutil.HashPrefixPlain(riHash)).
 					Debug("Skipping stale floodfill router")
 				continue
 			}

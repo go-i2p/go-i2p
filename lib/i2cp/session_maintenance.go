@@ -1,12 +1,12 @@
 package i2cp
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/destination"
 	"github.com/go-i2p/common/lease_set2"
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
@@ -300,7 +300,7 @@ func (s *Session) publishToPublisher(publisher LeaseSetPublisher, destHash data.
 	log.WithFields(logger.Fields{
 		"at":          "i2cp.Session.publishLeaseSetToNetwork",
 		"sessionID":   s.ID(),
-		"destHash":    fmt.Sprintf("%x", destHash[:8]),
+		"destHash":    logutil.HashPrefixPlain(destHash),
 		"isEncrypted": useEncrypted,
 	}).Debug("leaseset_published_to_network")
 

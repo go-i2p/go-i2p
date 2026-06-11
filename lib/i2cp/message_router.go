@@ -7,6 +7,7 @@ import (
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
@@ -136,7 +137,7 @@ func (mr *MessageRouter) logRoutingStart(session *Session, messageID uint32, des
 		"at":           "i2cp.MessageRouter.RouteOutboundMessage",
 		"sessionID":    session.ID(),
 		"messageID":    messageID,
-		"destination":  fmt.Sprintf("%x", destinationHash[:8]),
+		"destination":  logutil.HashPrefixPlain(destinationHash),
 		"payloadSize":  len(payload),
 		"expirationMs": expirationMs,
 	}).Info("routing_outbound_message")
@@ -179,7 +180,7 @@ func (mr *MessageRouter) validateAndSelectTunnel(session *Session, destinationHa
 		log.WithFields(logger.Fields{
 			"at":          "i2cp.MessageRouter.validateAndSelectTunnel",
 			"sessionID":   session.ID(),
-			"destination": fmt.Sprintf("%x", destinationHash[:8]),
+			"destination": logutil.HashPrefixPlain(destinationHash),
 		}).Error("no_outbound_pool")
 		return nil, oops.Errorf("outbound tunnel pool required for session %d", session.ID())
 	}
@@ -189,7 +190,7 @@ func (mr *MessageRouter) validateAndSelectTunnel(session *Session, destinationHa
 		log.WithFields(logger.Fields{
 			"at":          "i2cp.MessageRouter.validateAndSelectTunnel",
 			"sessionID":   session.ID(),
-			"destination": fmt.Sprintf("%x", destinationHash[:8]),
+			"destination": logutil.HashPrefixPlain(destinationHash),
 		}).Error("no_active_tunnels")
 		return nil, oops.Errorf("insufficient active outbound tunnels for session %d", session.ID())
 	}
@@ -199,7 +200,7 @@ func (mr *MessageRouter) validateAndSelectTunnel(session *Session, destinationHa
 			"at":          "i2cp.MessageRouter.validateAndSelectTunnel",
 			"sessionID":   session.ID(),
 			"tunnelID":    selectedTunnel.ID,
-			"destination": fmt.Sprintf("%x", destinationHash[:8]),
+			"destination": logutil.HashPrefixPlain(destinationHash),
 		}).Error("zero_hop_tunnel_rejected")
 		// Zero-hop tunnels are rejected for I2CP client traffic because:
 		// 1. Sending directly to a destination hash bypasses I2P's anonymity model,
@@ -216,7 +217,7 @@ func (mr *MessageRouter) validateAndSelectTunnel(session *Session, destinationHa
 		"tunnelID":    selectedTunnel.ID,
 		"hopCount":    len(selectedTunnel.Hops),
 		"tunnelState": selectedTunnel.State,
-		"destination": fmt.Sprintf("%x", destinationHash[:8]),
+		"destination": logutil.HashPrefixPlain(destinationHash),
 	}).Debug("tunnel_selected_for_routing")
 
 	return selectedTunnel, nil
@@ -236,7 +237,7 @@ func (mr *MessageRouter) buildEncryptedGarlicMessage(
 	log.WithFields(logger.Fields{
 		"at":          "i2cp.MessageRouter.buildEncryptedGarlicMessage",
 		"sessionID":   session.ID(),
-		"destination": fmt.Sprintf("%x", destinationHash[:8]),
+		"destination": logutil.HashPrefixPlain(destinationHash),
 		"payloadSize": len(payload),
 	}).Debug("building_garlic_message")
 
@@ -255,7 +256,7 @@ func (mr *MessageRouter) buildEncryptedGarlicMessage(
 	log.WithFields(logger.Fields{
 		"at":                 "i2cp.MessageRouter.buildEncryptedGarlicMessage",
 		"sessionID":          session.ID(),
-		"destination":        fmt.Sprintf("%x", destinationHash[:8]),
+		"destination":        logutil.HashPrefixPlain(destinationHash),
 		"plaintextSize":      len(plaintextGarlic),
 		"encryptedSize":      len(encryptedGarlic),
 		"encryptionOverhead": len(encryptedGarlic) - len(plaintextGarlic),
@@ -276,7 +277,7 @@ func (mr *MessageRouter) buildPlaintextGarlicMessage(
 			"at":          "i2cp.MessageRouter.buildPlaintextGarlicMessage",
 			"sessionID":   session.ID(),
 			"error":       err,
-			"destination": fmt.Sprintf("%x", destinationHash[:8]),
+			"destination": logutil.HashPrefixPlain(destinationHash),
 		}).Error("failed_to_create_garlic_builder")
 		return nil, oops.Errorf("failed to create garlic builder: %w", err)
 	}
@@ -286,7 +287,7 @@ func (mr *MessageRouter) buildPlaintextGarlicMessage(
 			"at":          "i2cp.MessageRouter.buildPlaintextGarlicMessage",
 			"sessionID":   session.ID(),
 			"error":       err,
-			"destination": fmt.Sprintf("%x", destinationHash[:8]),
+			"destination": logutil.HashPrefixPlain(destinationHash),
 		}).Error("failed_to_add_garlic_clove")
 		return nil, oops.Errorf("failed to add garlic clove: %w", err)
 	}
@@ -297,7 +298,7 @@ func (mr *MessageRouter) buildPlaintextGarlicMessage(
 			"at":          "i2cp.MessageRouter.buildPlaintextGarlicMessage",
 			"sessionID":   session.ID(),
 			"error":       err,
-			"destination": fmt.Sprintf("%x", destinationHash[:8]),
+			"destination": logutil.HashPrefixPlain(destinationHash),
 		}).Error("failed_to_build_garlic")
 		return nil, oops.Errorf("failed to build garlic message: %w", err)
 	}
@@ -322,7 +323,7 @@ func (mr *MessageRouter) encryptGarlicMessage(
 			"at":          "i2cp.MessageRouter.encryptGarlicMessage",
 			"sessionID":   session.ID(),
 			"error":       err,
-			"destination": fmt.Sprintf("%x", destinationHash[:8]),
+			"destination": logutil.HashPrefixPlain(destinationHash),
 		}).Error("failed_to_encrypt_garlic")
 		return nil, oops.Errorf("failed to encrypt garlic message: %w", err)
 	}
@@ -341,7 +342,7 @@ func (mr *MessageRouter) wrapInGarlicMessage(
 			"at":          "i2cp.MessageRouter.wrapInGarlicMessage",
 			"sessionID":   session.ID(),
 			"error":       err,
-			"destination": fmt.Sprintf("%x", destinationHash[:8]),
+			"destination": logutil.HashPrefixPlain(destinationHash),
 		}).Error("failed_to_wrap_garlic")
 		return nil, oops.Errorf("failed to wrap garlic message: %w", err)
 	}
@@ -370,8 +371,8 @@ func (mr *MessageRouter) sendThroughGateway(
 			"at":          "i2cp.MessageRouter.sendThroughGateway",
 			"sessionID":   session.ID(),
 			"tunnelID":    selectedTunnel.ID,
-			"gateway":     fmt.Sprintf("%x", gatewayHash[:8]),
-			"destination": fmt.Sprintf("%x", destinationHash[:8]),
+			"gateway":     logutil.HashPrefixPlain(gatewayHash),
+			"destination": logutil.HashPrefixPlain(destinationHash),
 			"error":       err,
 		}).Error("failed_to_send_to_gateway")
 		return oops.Errorf("failed to send message to gateway: %w", err)
@@ -393,7 +394,7 @@ func (mr *MessageRouter) logSuccessfulRouting(
 		"sessionID":   session.ID(),
 		"tunnelID":    selectedTunnel.ID,
 		"gateway":     gatewayStr,
-		"destination": fmt.Sprintf("%x", destinationHash[:8]),
+		"destination": logutil.HashPrefixPlain(destinationHash),
 		"payloadSize": payloadSize,
 	}).Info("message_routed_successfully")
 }
@@ -419,7 +420,7 @@ func (mr *MessageRouter) SendThroughTunnel(tunnel *tunnel.TunnelState, msg i2np.
 	log.WithFields(logger.Fields{
 		"at":       "i2cp.MessageRouter.SendThroughTunnel",
 		"tunnelID": tunnel.ID,
-		"gateway":  fmt.Sprintf("%x", gatewayHash[:8]),
+		"gateway":  logutil.HashPrefixPlain(gatewayHash),
 		"hopCount": len(tunnel.Hops),
 	}).Debug("sending_message_through_tunnel")
 
@@ -428,7 +429,7 @@ func (mr *MessageRouter) SendThroughTunnel(tunnel *tunnel.TunnelState, msg i2np.
 		log.WithFields(logger.Fields{
 			"at":       "i2cp.MessageRouter.SendThroughTunnel",
 			"tunnelID": tunnel.ID,
-			"gateway":  fmt.Sprintf("%x", gatewayHash[:8]),
+			"gateway":  logutil.HashPrefixPlain(gatewayHash),
 			"error":    err.Error(),
 		}).Error("failed_to_send_through_tunnel")
 	}

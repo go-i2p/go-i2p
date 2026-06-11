@@ -8,6 +8,7 @@ import (
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/destination"
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
@@ -841,7 +842,7 @@ func (s *Server) queryLeaseSetFromNetDB(destHash common.Hash, requestID uint32) 
 		log.WithFields(logger.Fields{
 			"at":        "i2cp.Server.lookupDestinationByHash",
 			"requestID": requestID,
-			"destHash":  fmt.Sprintf("%x", destHash[:8]),
+			"destHash":  logutil.HashPrefixPlain(destHash),
 			"error":     err.Error(),
 		}).Debug("leaseset_not_found_in_netdb")
 		return nil, &HostReplyPayload{
@@ -856,7 +857,7 @@ func (s *Server) queryLeaseSetFromNetDB(destHash common.Hash, requestID uint32) 
 		log.WithFields(logger.Fields{
 			"at":        "i2cp.Server.lookupDestinationByHash",
 			"requestID": requestID,
-			"destHash":  fmt.Sprintf("%x", destHash[:8]),
+			"destHash":  logutil.HashPrefixPlain(destHash),
 			"error":     err.Error(),
 		}).Error("failed_to_extract_destination")
 		return nil, &HostReplyPayload{
@@ -895,7 +896,7 @@ func (s *Server) lookupDestinationByHash(lookupMsg *HostLookupPayload) *HostRepl
 	log.WithFields(logger.Fields{
 		"at":           "i2cp.Server.lookupDestinationByHash",
 		"requestID":    lookupMsg.RequestID,
-		"destHash":     fmt.Sprintf("%x", destHash[:8]),
+		"destHash":     logutil.HashPrefixPlain(destHash),
 		"destByteSize": len(destination),
 	}).Info("destination_found")
 
@@ -1119,7 +1120,7 @@ func (s *Server) parseSendMessagePayload(msg *Message, session *Session) (*SendM
 			"maxAllowed":      maxSafePayloadSize,
 			"maxPayloadSize":  MaxPayloadSize,
 			"overhead":        512,
-			"destinationHash": fmt.Sprintf("%x", sendMsg.Destination[:8]),
+			"destinationHash": logutil.HashPrefixPlain(sendMsg.Destination),
 		}).Error("send_message_payload_too_large")
 		return nil, oops.Errorf("message payload too large: %d bytes (max %d bytes to allow for encryption overhead)",
 			len(sendMsg.Payload), maxSafePayloadSize)
@@ -1153,7 +1154,7 @@ func (s *Server) acceptAndRouteMessage(
 	fields := logger.Fields{
 		"sessionID":   session.ID(),
 		"messageID":   messageID,
-		"destination": fmt.Sprintf("%x", destination[:8]),
+		"destination": logutil.HashPrefixPlain(destination),
 		"payloadSize": payloadSize,
 	}
 	for k, v := range extraFields {
@@ -1248,7 +1249,7 @@ func (s *Server) parseSendMessageExpiresPayload(msg *Message, session *Session) 
 			"payloadSize":     len(sendMsg.Payload),
 			"maxAllowed":      maxSafePayloadSize,
 			"maxPayloadSize":  MaxPayloadSize,
-			"destinationHash": fmt.Sprintf("%x", sendMsg.Destination[:8]),
+			"destinationHash": logutil.HashPrefixPlain(sendMsg.Destination),
 		}).Error("send_message_expires_payload_too_large")
 		return nil, oops.Errorf("message payload too large: %d bytes (max %d bytes to allow for encryption overhead)",
 			len(sendMsg.Payload), maxSafePayloadSize)
@@ -1264,7 +1265,7 @@ func (s *Server) routeMessageExpiresWithStatus(session *Session, messageID uint3
 		"at":          "i2cp.Server.routeMessageExpiresWithStatus",
 		"sessionID":   session.ID(),
 		"messageID":   messageID,
-		"destination": fmt.Sprintf("%x", sendMsg.Destination[:8]),
+		"destination": logutil.HashPrefixPlain(sendMsg.Destination),
 		"payloadSize": len(sendMsg.Payload),
 		"expiration":  sendMsg.Expiration,
 		"nonce":       sendMsg.Nonce,
@@ -1290,7 +1291,7 @@ func (s *Server) routeMessageWithStatus(session *Session, messageID uint32, send
 		"at":          "i2cp.Server.routeMessageWithStatus",
 		"sessionID":   session.ID(),
 		"messageID":   messageID,
-		"destination": fmt.Sprintf("%x", sendMsg.Destination[:8]),
+		"destination": logutil.HashPrefixPlain(sendMsg.Destination),
 		"payloadSize": len(sendMsg.Payload),
 	}).Debug("routing_message_async")
 
@@ -1308,7 +1309,7 @@ func (s *Server) routeMessageWithStatus(session *Session, messageID uint32, send
 			"at":          "i2cp.Server.routeMessageWithStatus",
 			"sessionID":   session.ID(),
 			"messageID":   messageID,
-			"destination": fmt.Sprintf("%x", sendMsg.Destination[:8]),
+			"destination": logutil.HashPrefixPlain(sendMsg.Destination),
 		}).Warn("no_message_router_message_queued")
 		statusCallback(messageID, MessageStatusFailure, uint32(len(sendMsg.Payload)), 0)
 		return
@@ -1336,7 +1337,7 @@ func logDestinationResolutionFailure(caller string, sessionID uint16, messageID 
 		"at":          "i2cp.Server." + caller,
 		"sessionID":   sessionID,
 		"messageID":   messageID,
-		"destination": fmt.Sprintf("%x", destination[:8]),
+		"destination": logutil.HashPrefixPlain(destination),
 		"error":       err.Error(),
 	}).Error("failed_to_resolve_destination_key")
 }
@@ -1350,7 +1351,7 @@ func (s *Server) dispatchToMessageRouter(caller string, session *Session, messag
 			"at":          "i2cp.Server." + caller,
 			"sessionID":   session.ID(),
 			"messageID":   messageID,
-			"destination": fmt.Sprintf("%x", destination[:8]),
+			"destination": logutil.HashPrefixPlain(destination),
 		}).Warn("no_message_router_configured")
 		return
 	}
@@ -1369,7 +1370,7 @@ func (s *Server) dispatchToMessageRouter(caller string, session *Session, messag
 			"at":          "i2cp.Server." + caller,
 			"sessionID":   session.ID(),
 			"messageID":   messageID,
-			"destination": fmt.Sprintf("%x", destination[:8]),
+			"destination": logutil.HashPrefixPlain(destination),
 			"error":       err.Error(),
 		}).Error("failed_to_route_message")
 	}

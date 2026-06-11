@@ -2,10 +2,10 @@ package i2cp
 
 import (
 	"encoding/binary"
-	"fmt"
 	"math"
 
 	"github.com/go-i2p/common/data"
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
@@ -64,7 +64,7 @@ func ParseSendMessagePayload(rawData []byte) (*SendMessagePayload, error) {
 
 	log.WithFields(logger.Fields{
 		"at":          "i2cp.ParseSendMessagePayload",
-		"destination": fmt.Sprintf("%x", smp.Destination[:8]),
+		"destination": logutil.HashPrefixPlain(smp.Destination),
 		"payloadSize": len(smp.Payload),
 	}).Debug("parsed_send_message_payload")
 
@@ -88,7 +88,7 @@ func (smp *SendMessagePayload) MarshalBinary() ([]byte, error) {
 
 	log.WithFields(logger.Fields{
 		"at":          "i2cp.SendMessagePayload.MarshalBinary",
-		"destination": fmt.Sprintf("%x", smp.Destination[:8]),
+		"destination": logutil.HashPrefixPlain(smp.Destination),
 		"payloadSize": len(smp.Payload),
 		"totalSize":   totalSize,
 	}).Debug("marshaled_send_message_payload")
@@ -277,7 +277,7 @@ func ParseSendMessageExpiresPayload(rawData []byte) (*SendMessageExpiresPayload,
 
 	log.WithFields(logger.Fields{
 		"at":          "i2cp.ParseSendMessageExpiresPayload",
-		"destination": fmt.Sprintf("%x", smp.Destination[:8]),
+		"destination": logutil.HashPrefixPlain(smp.Destination),
 		"payloadSize": payloadLen,
 		"nonce":       smp.Nonce,
 		"flags":       smp.Flags,
@@ -320,7 +320,7 @@ func (smp *SendMessageExpiresPayload) MarshalBinary() ([]byte, error) {
 
 	log.WithFields(logger.Fields{
 		"at":          "i2cp.SendMessageExpiresPayload.MarshalBinary",
-		"destination": fmt.Sprintf("%x", smp.Destination[:8]),
+		"destination": logutil.HashPrefixPlain(smp.Destination),
 		"payloadSize": len(smp.Payload),
 		"nonce":       smp.Nonce,
 		"flags":       smp.Flags,
