@@ -85,7 +85,7 @@ func (ec *entryCache) getCapacity() int {
 
 // setCapacity updates the max capacity.
 func (ec *entryCache) setCapacity(max int) {
-	if max < 10 {
+	if max <= 0 {
 		return
 	}
 	ec.mu.Lock()
@@ -150,6 +150,8 @@ func (ec *entryCache) checkAdmissionLimits(key common.Hash, source *common.Hash,
 // Evicts even non-expired entries to enforce capacity limits.
 // Returns the evicted key if successful, or zero key if nothing was evicted.
 func (ec *entryCache) evictSoonestExpiring() common.Hash {
+	// Take read lock to scan the expiry map safely
+	ec.mu.RLock()
 	var soonestKey common.Hash
 	var soonestTime time.Time
 
@@ -160,22 +162,24 @@ func (ec *entryCache) evictSoonestExpiring() common.Hash {
 			soonestTime = expiry
 		}
 	}
+	ec.mu.RUnlock()
 
 	// If nothing found with an expiry time, can't evict
 	if soonestTime.IsZero() {
 		return common.Hash{}
 	}
 
-	// Remove the entry (lock must be held by caller or acquired here)
+	// Now acquire write lock to delete
 	ec.mu.Lock()
+	defer ec.mu.Unlock()
+
+	// Double-check the entry still exists before deleting
+	if _, exists := ec.entries[soonestKey]; !exists {
+		return common.Hash{}
+	}
+
 	delete(ec.entries, soonestKey)
-	ec.mu.Unlock()
 	delete(ec.expiry, soonestKey)
 
 	return soonestKey
-}
-
-// len returns the number of entries (same as count).
-func (ec *entryCache) len() int {
-	return ec.count()
 }

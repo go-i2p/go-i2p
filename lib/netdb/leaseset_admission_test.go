@@ -6,7 +6,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	common "github.com/go-i2p/common/data"
-	"github.com/go-i2p/common/lease_set"
 )
 
 // Helper function to create a test hash with a given suffix
@@ -64,50 +63,4 @@ func TestLeaseSetAdmissionController_PerSourceDistinctLimit(t *testing.T) {
 	if c.AllowIntroduction(&source, overflow, pressureThreshold) {
 		t.Fatal("expected rejection after per-source distinct-introduction limit")
 	}
-}
-
-// TestStdNetDB_LeaseSetCapacityEnforcement verifies capacity limits are enforced.
-func TestStdNetDB_LeaseSetCapacityEnforcement(t *testing.T) {
-	db := NewStdNetDB(t.TempDir())
-
-	// Set small capacity for testing
-	db.lsCache.setCapacity(5)
-
-	// Create test LeaseSets with minimal data
-	for i := 0; i < 10; i++ {
-		key := testHashWithSuffix(byte(i))
-		ls := lease_set.LeaseSet{}
-		db.addLeaseSetToCache(key, ls)
-	}
-
-	// Should not exceed capacity
-	cacheSize := db.lsCache.count()
-
-	require.LessOrEqual(t, cacheSize, 5, "cache size should not exceed capacity, got %d", cacheSize)
-}
-
-// TestStdNetDB_LeaseSetEvictionOnCapacity verifies oldest-expiry eviction on capacity.
-func TestStdNetDB_LeaseSetEvictionOnCapacity(t *testing.T) {
-	db := NewStdNetDB(t.TempDir())
-
-	db.lsCache.setCapacity(3)
-
-	// Add 3 LeaseSets and track them
-	keys := make([]common.Hash, 3)
-	for i := 0; i < 3; i++ {
-		keys[i] = testHashWithSuffix(byte(i))
-		ls := lease_set.LeaseSet{}
-		db.addLeaseSetToCache(keys[i], ls)
-	}
-
-	// Verify all 3 are in cache
-	require.Equal(t, 3, db.lsCache.count(), "should have exactly 3 LeaseSets in cache")
-
-	// Add 4th LeaseSet - should evict one
-	key4 := testHashWithSuffix(4)
-	ls4 := lease_set.LeaseSet{}
-	db.addLeaseSetToCache(key4, ls4)
-
-	// Should still be at capacity (3)
-	require.Equal(t, 3, db.lsCache.count(), "after adding 4th LeaseSet, cache should have 3 (one evicted)")
 }

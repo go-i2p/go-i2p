@@ -164,11 +164,11 @@ func (db *StdNetDB) addLeaseSetToCache(key common.Hash, ls lease_set.LeaseSet) b
 			}
 		}
 		log.WithField("hash", key).Debug("Replacing stale LeaseSet with newer version")
+		// Lock is already held, use locked variant
+		db.trackLeaseSetExpirationLocked(key, ls, true)
 		db.lsCache.entries[key] = Entry{
 			LeaseSet: &ls,
 		}
-		// Lock is already held, use locked variant
-		db.trackLeaseSetExpirationLocked(key, ls, true)
 		return true
 	}
 
@@ -193,12 +193,13 @@ func (db *StdNetDB) addLeaseSetToCache(key common.Hash, ls lease_set.LeaseSet) b
 		db.lsCache.mu.Lock()
 	}
 
+	// Track expiration time for cleanup FIRST (lock is held)
+	// This ensures the entry has an expiry time before it's visible in the cache
+	db.trackLeaseSetExpirationLocked(key, ls, true)
+
 	db.lsCache.entries[key] = Entry{
 		LeaseSet: &ls,
 	}
-
-	// Track expiration time for cleanup (lock is held)
-	db.trackLeaseSetExpirationLocked(key, ls, true)
 
 	return true
 }
