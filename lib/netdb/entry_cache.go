@@ -100,6 +100,12 @@ func (ec *entryCache) setCapacity(max int) {
 func (ec *entryCache) setExpiry(key common.Hash, expiry time.Time) {
 	ec.mu.Lock()
 	defer ec.mu.Unlock()
+	ec._setExpiryLocked(key, expiry)
+}
+
+// _setExpiryLocked records the expiration time without acquiring the lock.
+// Must be called while the lock is already held.
+func (ec *entryCache) _setExpiryLocked(key common.Hash, expiry time.Time) {
 	ec.expiry[key] = expiry
 }
 
@@ -141,12 +147,13 @@ func (ec *entryCache) checkAdmissionLimits(key common.Hash, source *common.Hash,
 }
 
 // evictSoonestExpiring removes the entry with the earliest expiration time.
+// Evicts even non-expired entries to enforce capacity limits.
 // Returns the evicted key if successful, or zero key if nothing was evicted.
 func (ec *entryCache) evictSoonestExpiring() common.Hash {
 	var soonestKey common.Hash
 	var soonestTime time.Time
 
-	// Find the earliest expiration
+	// Find the earliest expiration (even if in the future)
 	for key, expiry := range ec.expiry {
 		if soonestTime.IsZero() || expiry.Before(soonestTime) {
 			soonestKey = key
@@ -154,12 +161,12 @@ func (ec *entryCache) evictSoonestExpiring() common.Hash {
 		}
 	}
 
-	// If nothing found or it's in the future, return zero key
-	if soonestTime.IsZero() || soonestTime.After(time.Now()) {
+	// If nothing found with an expiry time, can't evict
+	if soonestTime.IsZero() {
 		return common.Hash{}
 	}
 
-	// Remove the entry
+	// Remove the entry (lock must be held by caller or acquired here)
 	ec.mu.Lock()
 	delete(ec.entries, soonestKey)
 	ec.mu.Unlock()

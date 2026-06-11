@@ -167,7 +167,8 @@ func (db *StdNetDB) addLeaseSetToCache(key common.Hash, ls lease_set.LeaseSet) b
 		db.lsCache.entries[key] = Entry{
 			LeaseSet: &ls,
 		}
-		db.trackLeaseSetExpiration(key, ls)
+		// Lock is already held, use locked variant
+		db.trackLeaseSetExpirationLocked(key, ls, true)
 		return true
 	}
 
@@ -196,8 +197,8 @@ func (db *StdNetDB) addLeaseSetToCache(key common.Hash, ls lease_set.LeaseSet) b
 		LeaseSet: &ls,
 	}
 
-	// Track expiration time for cleanup
-	db.trackLeaseSetExpiration(key, ls)
+	// Track expiration time for cleanup (lock is held)
+	db.trackLeaseSetExpirationLocked(key, ls, true)
 
 	return true
 }
@@ -999,18 +1000,34 @@ func (db *StdNetDB) isLeaseSetExpired(hash common.Hash) bool {
 
 // trackLeaseSetExpiration extracts the expiration time from a LeaseSet and records it.
 // Uses the NewestExpiration() method to find the latest expiration time among all leases.
+// If lockHeld is true, assumes the caller already holds db.lsCache.mu lock and uses the unlocked variant.
 func (db *StdNetDB) trackLeaseSetExpiration(key common.Hash, ls lease_set.LeaseSet) {
+	db.trackLeaseSetExpirationLocked(key, ls, false)
+}
+
+// trackLeaseSetExpirationLocked extracts the expiration time from a LeaseSet and records it.
+// If lockHeld is true, uses the unlocked setExpiry variant (assumes caller holds the lock).
+func (db *StdNetDB) trackLeaseSetExpirationLocked(key common.Hash, ls lease_set.LeaseSet, lockHeld bool) {
 	// Get the newest expiration time from all leases in the LeaseSet
 	expiration, err := ls.NewestExpiration()
 	if err != nil {
 		log.WithError(err).WithField("hash", key).Warn("Failed to get LeaseSet expiration, using default 10 minutes")
 		// Default to 10 minutes from now if we can't determine expiration
-		db.lsCache.setExpiry(key, time.Now().Add(10*time.Minute))
+		expiryTime := time.Now().Add(10 * time.Minute)
+		if lockHeld {
+			db.lsCache._setExpiryLocked(key, expiryTime)
+		} else {
+			db.lsCache.setExpiry(key, expiryTime)
+		}
 		return
 	}
 
 	expiryTime := expiration.Time()
-	db.lsCache.setExpiry(key, expiryTime)
+	if lockHeld {
+		db.lsCache._setExpiryLocked(key, expiryTime)
+	} else {
+		db.lsCache.setExpiry(key, expiryTime)
+	}
 
 	log.WithFields(logger.Fields{
 		"hash":       fmt.Sprintf("%x", key[:8]),
