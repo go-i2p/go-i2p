@@ -2,152 +2,96 @@ package ssu2
 
 import (
 	"sync"
-	"sync/atomic"
 	"testing"
-	"time"
 
+	"github.com/go-i2p/common/data"
+	"github.com/go-i2p/go-i2p/lib/transport"
+	"github.com/go-i2p/logger"
 	"github.com/stretchr/testify/assert"
 )
 
-// SA-2: Test that Close() prevents cleanup callbacks from double-decrementing sessionCount.
-func TestClose_PreventDoubleDecrement(t *testing.T) {
-	transport := &SSU2Transport{
-		sessionCount: 3, // simulate 3 active sessions
-	}
+// SA-2: Test that SessionRegistry.SetShutdown() marks shutdown state correctly.
+func TestSessionRegistry_SetShutdown(t *testing.T) {
+	registry := transport.NewSessionRegistry(logger.WithField("test", "shutdown"))
 
-	// Simulate cleanup callbacks firing during Close()
-	var wg sync.WaitGroup
-	const numCallbacks = 5
+	// Initially not shutting down
+	assert.False(t, registry.IsShuttingDown())
 
-	// Set the shutdown flag
-	atomic.StoreInt32(&transport.isShuttingDown, 1)
-
-	// Launch multiple goroutines simulating cleanup callbacks
-	for i := 0; i < numCallbacks; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			// This should be a no-op because isShuttingDown is set
-			transport.removeSession([32]byte{byte(i)})
-		}()
-	}
-
-	wg.Wait()
-
-	// Assert sessionCount remains 3 (not decremented by cleanup callbacks)
-	finalCount := atomic.LoadInt32(&transport.sessionCount)
-	assert.Equal(t, int32(3), finalCount, "Expected sessionCount to remain 3 during shutdown")
+	// Set shutdown
+	registry.SetShutdown()
+	assert.True(t, registry.IsShuttingDown())
 }
 
-// SA-2: Test that removeSession normally decrements sessionCount when not shutting down.
-func TestRemoveSession_NormalOperation(t *testing.T) {
-	transport := &SSU2Transport{
-		sessionCount: 5,
-	}
-	// Simulate a session in the map
-	hash := [32]byte{1, 2, 3}
-	transport.sessions.Store(hash, &SSU2Session{})
+// SA-2: Test that DecrementCountSafe handles concurrent decrements correctly.
+func TestSessionRegistry_DecrementCountSafe(t *testing.T) {
+	registry := transport.NewSessionRegistry(logger.WithField("test", "decrement"))
 
-	// Inline the removeSession logic to test it directly
-	shutdownFlag := atomic.LoadInt32(&transport.isShuttingDown)
-	t.Logf("isShuttingDown=%d", shutdownFlag)
-	if shutdownFlag == 0 {
-		if _, loaded := transport.sessions.LoadAndDelete(hash); loaded {
-			t.Logf("LoadAndDelete succeeded, decrementing")
-			atomic.AddInt32(&transport.sessionCount, -1)
-		} else {
-			t.Logf("LoadAndDelete failed - session not found")
-		}
-	} else {
-		t.Logf("Skipped due to shutdown flag")
-	}
+	// Manually set count to 5 for testing
+	registry.CheckLimitAndIncrement(100) // +1 = 1
+	registry.CheckLimitAndIncrement(100) // +1 = 2
+	registry.CheckLimitAndIncrement(100) // +1 = 3
+	registry.CheckLimitAndIncrement(100) // +1 = 4
+	registry.CheckLimitAndIncrement(100) // +1 = 5
 
-	// Assert sessionCount decremented
-	finalCount := atomic.LoadInt32(&transport.sessionCount)
-	assert.Equal(t, int32(4), finalCount, "Expected sessionCount to decrement from 5 to 4")
+	assert.Equal(t, int32(5), registry.Count())
 
-	// Assert session removed from map
-	_, found := transport.sessions.Load(hash)
-	assert.False(t, found, "Expected session to be removed from map")
+	// Decrement once
+	registry.DecrementCountSafe()
+	assert.Equal(t, int32(4), registry.Count())
+
+	// Decrement again
+	registry.DecrementCountSafe()
+	assert.Equal(t, int32(3), registry.Count())
 }
 
-// SA-2: Test that concurrent removeSession calls during shutdown do not decrement.
-func TestRemoveSession_ConcurrentShutdown(t *testing.T) {
-	transport := &SSU2Transport{
-		sessionCount: 10,
-	}
+// SA-2: Test that concurrent Remove calls update count correctly.
+func TestSessionRegistry_ConcurrentRemove(t *testing.T) {
+	registry := transport.NewSessionRegistry(logger.WithField("test", "concurrent_remove"))
 
-	// Populate sessions map
+	// Set up 10 sessions with count
+	hashes := make([]data.Hash, 10)
 	for i := 0; i < 10; i++ {
-		hash := [32]byte{byte(i)}
-		transport.sessions.Store(hash, &SSU2Session{})
+		h := data.Hash{byte(i)}
+		hashes[i] = h
+		registry.StoreWithCount(h, &struct{}{})
 	}
 
-	// Set shutdown flag
-	atomic.StoreInt32(&transport.isShuttingDown, 1)
+	assert.Equal(t, int32(10), registry.Count())
 
-	// Launch many concurrent removeSession calls
+	// Concurrently remove all sessions
 	var wg sync.WaitGroup
-	for i := 0; i < 20; i++ {
+	for i := 0; i < 10; i++ {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			hash := [32]byte{byte(idx % 10)}
-			transport.removeSession(hash)
+			registry.Remove(hashes[idx])
 		}(i)
 	}
 
 	wg.Wait()
 
-	// Assert sessionCount unchanged (all calls skipped due to isShuttingDown)
-	finalCount := atomic.LoadInt32(&transport.sessionCount)
-	assert.Equal(t, int32(10), finalCount, "Expected sessionCount to remain 10 during shutdown")
+	// All should be removed
+	assert.Equal(t, int32(0), registry.Count())
+
+	// Verify none are in map
+	count := 0
+	registry.Range(func(_, _ interface{}) bool {
+		count++
+		return true
+	})
+	assert.Equal(t, 0, count, "Expected no sessions in map")
 }
 
-// SA-2: Race detector test for Close() concurrent with GetSession.
-func TestClose_ConcurrentWithGetSession(t *testing.T) {
-	transport := &SSU2Transport{
-		sessionCount: 5,
-	}
+// SA-2: Test Remove protection against negative count.
+func TestSessionRegistry_DecrementNeverNegative(t *testing.T) {
+	registry := transport.NewSessionRegistry(logger.WithField("test", "decrement_never_negative"))
 
-	// Populate sessions map
-	for i := 0; i < 5; i++ {
-		hash := [32]byte{byte(i)}
-		transport.sessions.Store(hash, &SSU2Session{})
-	}
+	// Try to decrement when count is 0 - should not go negative
+	registry.DecrementCountSafe()
+	assert.Equal(t, int32(0), registry.Count())
 
-	// Launch concurrent GetSession calls
-	var wg sync.WaitGroup
-	for i := 0; i < 10; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			// Read sessionCount
-			_ = atomic.LoadInt32(&transport.sessionCount)
-			// Iterate sessions
-			transport.sessions.Range(func(key, value interface{}) bool {
-				return true
-			})
-		}()
-	}
-
-	// Concurrently set shutdown flag and close
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		time.Sleep(5 * time.Millisecond) // Let readers start
-		atomic.StoreInt32(&transport.isShuttingDown, 1)
-		// Simulate cleanup
-		transport.sessions.Range(func(key, value interface{}) bool {
-			transport.sessions.Delete(key)
-			return true
-		})
-		atomic.StoreInt32(&transport.sessionCount, 0)
-	}()
-
-	wg.Wait()
-
-	// Assert final state is consistent (shutdown complete)
-	assert.Equal(t, int32(1), atomic.LoadInt32(&transport.isShuttingDown))
-	assert.Equal(t, int32(0), atomic.LoadInt32(&transport.sessionCount))
+	// Try multiple times - should stay at 0
+	registry.DecrementCountSafe()
+	registry.DecrementCountSafe()
+	assert.Equal(t, int32(0), registry.Count())
 }

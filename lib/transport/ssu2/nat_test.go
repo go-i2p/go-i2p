@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/go-i2p/common/data"
+	"github.com/go-i2p/go-i2p/lib/transport"
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -55,11 +56,12 @@ func makeTestTransportWithListener(t testing.TB) (*SSU2Transport, func()) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cfg := &Config{ListenerAddress: "127.0.0.1:0", MaxSessions: 4}
 	tr := &SSU2Transport{
-		listener: l,
-		logger:   log.WithField("test", "nat"),
-		ctx:      ctx,
-		cancel:   cancel,
-		handler:  NewDefaultHandler(),
+		listener:        l,
+		logger:          log.WithField("test", "nat"),
+		ctx:             ctx,
+		cancel:          cancel,
+		handler:         NewDefaultHandler(),
+		sessionRegistry: transport.NewSessionRegistry(log.WithField("test", "registry")),
 	}
 	tr.config.Store(cfg)
 	initNATManagers(tr)

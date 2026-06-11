@@ -802,7 +802,7 @@ func (t *SSU2Transport) sendProbeToAlice(ptBlock *ssu2noise.PeerTestBlock, alice
 // anyActiveSession returns the first active SSU2Session, or nil if none exist.
 func (t *SSU2Transport) anyActiveSession() *SSU2Session {
 	var found *SSU2Session
-	t.sessions.Range(func(_, value interface{}) bool {
+	t.sessionRegistry.Range(func(_, value interface{}) bool {
 		s, ok := value.(*SSU2Session)
 		if ok && s.Conn() != nil {
 			found = s

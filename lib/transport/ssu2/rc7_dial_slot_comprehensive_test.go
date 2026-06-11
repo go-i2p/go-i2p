@@ -217,7 +217,7 @@ func TestRC7Comprehensive_InvariantHolds(t *testing.T) {
 
 		// Verify invariant
 		final := tr.GetSessionCount()
-		expected := initial + tc.expectedDelta
+		expected := initial + int32(tc.expectedDelta)
 		assert.Equal(t, expected, final, "%s: expected %d, got %d", tc.name, expected, final)
 
 		t.Logf("RC-7 Invariant: ✓ %s: %d + %d - %d = %d", tc.name, initial, tc.increments, tc.decrements, final)
@@ -284,8 +284,8 @@ func TestRC7Comprehensive_ConcurrentCheckAndUnreserve(t *testing.T) {
 		numWorkers, opsPerWorker, initial, final, final-initial)
 
 	// Final count should be non-negative and <= initial + something reasonable
-	assert.GreaterOrEqual(t, final, 0, "sessionCount should never go negative")
-	assert.LessOrEqual(t, final, initial+numWorkers*opsPerWorker, "sessionCount should be bounded")
+	assert.GreaterOrEqual(t, final, int32(0), "sessionCount should never go negative")
+	assert.LessOrEqual(t, final, initial+int32(numWorkers*opsPerWorker), "sessionCount should be bounded")
 
 	t.Logf("RC-7 Concurrent Stress: ✓ Accounting stable under concurrent load")
 }

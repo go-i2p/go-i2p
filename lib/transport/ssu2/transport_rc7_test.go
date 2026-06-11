@@ -58,7 +58,7 @@ func TestRC7_sessionCountInvariant(t *testing.T) {
 	defer tr.Close()
 
 	initialCount := tr.GetSessionCount()
-	assert.GreaterOrEqual(t, initialCount, 0, "sessionCount should never be negative")
+	assert.GreaterOrEqual(t, initialCount, int32(0), "sessionCount should never be negative")
 
 	// Test: reserve 5, unreserve 3 → expect initialCount + 2
 	for i := 0; i < 5; i++ {
@@ -66,13 +66,13 @@ func TestRC7_sessionCountInvariant(t *testing.T) {
 		require.NoError(t, err, "checkSessionLimit should succeed")
 	}
 	countAfterReserve := tr.GetSessionCount()
-	assert.Equal(t, initialCount+5, countAfterReserve)
+	assert.Equal(t, initialCount+int32(5), countAfterReserve)
 
 	for i := 0; i < 3; i++ {
 		tr.unreserveSessionSlot()
 	}
 	countAfterUnreserve := tr.GetSessionCount()
-	assert.Equal(t, initialCount+2, countAfterUnreserve)
+	assert.Equal(t, initialCount+int32(2), countAfterUnreserve)
 	t.Logf("RC-7: ✓ Slot accounting invariant holds: %d + 5 - 3 = %d", initialCount, countAfterUnreserve)
 }
 
@@ -91,6 +91,6 @@ func TestRC7_UnderflowProtection(t *testing.T) {
 	t.Logf("RC-7: Underflow test: attempted %d unreserves, final count=%d", attemptedUnreserves, finalCount)
 
 	// Count should never go below 0
-	assert.GreaterOrEqual(t, finalCount, 0, "sessionCount should never go negative (underflow protection)")
+	assert.GreaterOrEqual(t, finalCount, int32(0), "sessionCount should never go negative (underflow protection)")
 	t.Logf("RC-7: ✓ Underflow protection working: count=%d >= 0", finalCount)
 }

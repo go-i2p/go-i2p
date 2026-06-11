@@ -62,18 +62,9 @@ type SSU2Transport struct {
 	keystore KeystoreProvider
 	handler  *DefaultHandler
 
-	// Session management
-	// sessions map[RouterHash]<value> where value can be:
-	//  - net.Conn (raw inbound connection after trackInboundConnection, before Accept or promotion)
-	//  - acceptedConn (wrapper marking ownership transferred to Accept() consumer - MUST NOT promote)
-	//  - *SSU2Session (fully established session)
-	// State transitions (all use CompareAndSwap to prevent races):
-	//  - net.Conn → acceptedConn (inboundHandshakeWorker after successful pendingConns send)
-	//  - net.Conn → *SSU2Session (promotion via GetSession/registerOrReuseSession)
-	// See "Session Map Ownership Invariant" comment above for details.
-	sessions       sync.Map
-	sessionCount   int32
-	isShuttingDown int32 // atomic flag set during Close() for visibility (A-4: no longer used for accounting gating)
+	// Session management via shared SessionRegistry (H2 fix: unified NTCP2/SSU2 implementation).
+	// See "Session Map Ownership Invariant" comment above for details on state transitions.
+	sessionRegistry *transport.SessionRegistry
 
 	identityMu sync.RWMutex
 
@@ -247,6 +238,7 @@ func createSSU2TransportStruct(config *Config, identity router_info.RouterInfo, 
 		identity:              identity,
 		keystore:              keystore,
 		handler:               NewDefaultHandler(),
+		sessionRegistry:       transport.NewSessionRegistry(l),
 		natStateCache:         &natState{},
 		peerTestGlobalLimiter: rate.NewLimiter(100, 200),
 		ctx:                   ctx,
@@ -445,13 +437,13 @@ func (t *SSU2Transport) Accept() (net.Conn, error) {
 	}
 
 	// Mark the connection as accepted to prevent dual-ownership via promotion (R-3).
-	// Use CompareAndSwap instead of Store to avoid clobbering a concurrent promotion (X-3).
+	// Use MarkAccepted to handle CAS atomically and avoid clobbering a concurrent promotion (X-3).
 	peerHash := t.extractPeerHash(tracked)
 	// The original value should be the underlying raw conn (before wrapping in trackedConn).
-	// If CAS fails, a concurrent GetSession already promoted this to a session, so we
+	// If MarkAccepted fails, a concurrent GetSession already promoted this to a session, so we
 	// don't deliver it to Accept (ownership already transferred).
 	originalConn := tracked.(*trackedConn).Conn
-	if !t.sessions.CompareAndSwap(peerHash, originalConn, acceptedConn{Conn: tracked}) {
+	if !t.sessionRegistry.MarkAccepted(peerHash, originalConn) {
 		// Promotion race: concurrent GetSession won.
 		// CRITICAL-2.1 FIX: Do NOT call tracked.Close() here!
 		// The promoted session owns the connection now. Calling tracked.Close()
@@ -477,9 +469,9 @@ func (t *SSU2Transport) Accept() (net.Conn, error) {
 // On duplicate detection, the duplicate is closed and the reserved slot is unreserved.
 func (t *SSU2Transport) trackInboundConnection(conn net.Conn) (net.Conn, bool) {
 	peerHash := t.extractPeerHash(conn)
-	if _, loaded := t.sessions.LoadOrStore(peerHash, conn); loaded {
+	if !t.sessionRegistry.TrackInboundConnection(conn, peerHash) {
 		// Duplicate detected: unreserve the slot and close this connection.
-		t.unreserveSessionSlot()
+		t.sessionRegistry.DecrementCountSafe()
 		conn.Close()
 		t.logger.WithFields(map[string]interface{}{
 			"remote_addr": conn.RemoteAddr().String(),
@@ -494,7 +486,7 @@ func (t *SSU2Transport) trackInboundConnection(conn net.Conn) (net.Conn, bool) {
 	return &trackedConn{
 		Conn: conn,
 		onClose: func() {
-			t.removeSession(peerHash)
+			t.sessionRegistry.Remove(peerHash)
 		},
 	}, true // Mark as fresh
 }
@@ -771,7 +763,7 @@ func (t *SSU2Transport) GetSession(routerInfo router_info.RouterInfo) (transport
 }
 
 func (t *SSU2Transport) findExistingSession(routerHash data.Hash) (transport.TransportSession, bool) {
-	existing, exists := t.sessions.Load(routerHash)
+	existing, exists := t.sessionRegistry.Load(routerHash)
 	if !exists {
 		return nil, false
 	}
@@ -783,9 +775,7 @@ func (t *SSU2Transport) findExistingSession(routerHash data.Hash) (transport.Tra
 func (t *SSU2Transport) resolveSessionFromMap(existing interface{}, routerHash data.Hash) (transport.TransportSession, bool) {
 	if session, ok := existing.(*SSU2Session); ok {
 		if session.GetContext().Err() != nil {
-			if _, loaded := t.sessions.LoadAndDelete(routerHash); loaded {
-				atomic.AddInt32(&t.sessionCount, -1)
-			}
+			t.sessionRegistry.Remove(routerHash)
 			return nil, false
 		}
 		return session, true
@@ -832,36 +822,47 @@ func (t *SSU2Transport) promoteInboundConnection(conn net.Conn, original interfa
 	// without running workers," but that's a non-issue: only the winner is
 	// visible in the map, and we start its workers immediately after CAS.
 
-	if t.sessions.CompareAndSwap(routerHash, original, promoted) {
-		// Pre-flight check: verify session is in map before starting workers (CRITICAL-3.1)
-		routerHashBytes := routerHash.Bytes()
-		if mapValue, exists := t.sessions.Load(routerHash); !exists {
-			t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).
-				Error("CRITICAL-3.1 violation: CAS succeeded but session missing from map before StartWorkers")
-		} else if mapSession, ok := mapValue.(*SSU2Session); !ok || mapSession != promoted {
-			t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).
-				Error("CRITICAL-3.1 violation: CAS succeeded but wrong session in map before StartWorkers")
-		}
+	routerHashBytes := routerHash.Bytes()
 
-		// Set cleanup callback BEFORE starting workers (HIGH-8.2 fix).
-		// If we set it after StartWorkers(), a concurrent Close() can orphan the
-		// session in the map because the callback isn't installed yet.
-		promoted.SetCleanupCallback(func() {
-			t.removeSession(routerHash)
-		})
-
-		// Start workers NOW that we've won the promotion race
-		promoted.StartWorkers()
-
-		return promoted, true
+	// Use SessionRegistry.Promote to handle CAS, callback setup, and worker startup atomically
+	promoteOpts := transport.PromoteOptions{
+		PreflightCheck: func() error {
+			// Pre-flight check: verify session is in map before starting workers (CRITICAL-3.1)
+			if mapValue, exists := t.sessionRegistry.Load(routerHash); !exists {
+				t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).
+					Error("CRITICAL-3.1 violation: CAS succeeded but session missing from map before StartWorkers")
+				return fmt.Errorf("session not in map")
+			} else if mapSession, ok := mapValue.(*SSU2Session); !ok || mapSession != promoted {
+				t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).
+					Error("CRITICAL-3.1 violation: CAS succeeded but wrong session in map before StartWorkers")
+				return fmt.Errorf("wrong session in map")
+			}
+			return nil
+		},
+		SetCallback: func(callback func()) {
+			promoted.SetCleanupCallback(callback)
+		},
+		StartWorkers: func() {
+			promoted.StartWorkers()
+			t.logger.WithFields(map[string]interface{}{
+				"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
+			}).Info("Promoted inbound net.Conn to SSU2Session")
+		},
 	}
 
-	// CompareAndSwap failed; close the session (workers will exit cleanly).
-	// Detach the shared conn first so the loser doesn't close the winner's
-	// socket. Workers will exit when Close() cancels the session context (SM-2 fix).
+	result, ok := t.sessionRegistry.Promote(routerHash, original, promoted, promoteOpts)
+	if ok {
+		// Successfully promoted (session was already in map, just replaced the value)
+		return result.(*SSU2Session), true
+	}
+
+	// Promotion CAS failed. Another goroutine won the promotion race — close our duplicate.
+	// Workers will exit cleanly due to context.Done().
 	promoted.DetachConn()
 	_ = promoted.Close()
-	if winner, exists := t.sessions.Load(routerHash); exists {
+
+	// Return the winner if it exists
+	if winner, exists := t.sessionRegistry.Load(routerHash); exists {
 		if winnerSession, ok := winner.(*SSU2Session); ok {
 			return winnerSession, true
 		}
@@ -1022,10 +1023,11 @@ func (t *SSU2Transport) registerOrReuseSession(conn *ssu2noise.SSU2Conn, routerH
 	// without running workers," but that's a non-issue: only the winner is
 	// visible in the map, and we start its workers immediately after LoadOrStore.
 
-	existing, loaded := t.sessions.LoadOrStore(routerHash, session)
+	existing, loaded := t.sessionRegistry.LoadOrStore(routerHash, session)
 	if loaded {
 		// Session already exists; close our new session (workers haven't started, clean shutdown).
 		_ = session.Close()
+		t.unreserveSessionSlot()
 		if existingSession, ok := existing.(*SSU2Session); ok {
 			return existingSession, false, nil // Reusing existing, slot not used
 		}
@@ -1045,9 +1047,7 @@ func (t *SSU2Transport) registerOrReuseSession(conn *ssu2noise.SSU2Conn, routerH
 		// Unexpected map entry type — delete the corrupt entry and return error.
 		// This prevents future connection attempts from reusing a corrupted state.
 		// The connection already closed, so we cannot recover it.
-		t.sessions.Delete(routerHash)
-		// IMPORTANT: Decrement the counter since we're deleting a tracked entry (X-2 fix).
-		atomic.AddInt32(&t.sessionCount, -1)
+		t.sessionRegistry.Delete(routerHash)
 		routerHashBytes := routerHash.Bytes()
 		t.logger.WithFields(map[string]interface{}{
 			"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
@@ -1058,7 +1058,7 @@ func (t *SSU2Transport) registerOrReuseSession(conn *ssu2noise.SSU2Conn, routerH
 	// We won the store — start workers NOW
 	// Pre-flight check: verify session is in map before starting workers (CRITICAL-3.1)
 	routerHashBytes := routerHash.Bytes()
-	if mapValue, exists := t.sessions.Load(routerHash); !exists {
+	if mapValue, exists := t.sessionRegistry.Load(routerHash); !exists {
 		t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).
 			Error("CRITICAL-3.1 violation: LoadOrStore succeeded but session missing from map before StartWorkers")
 	} else if mapSession, ok := mapValue.(*SSU2Session); !ok || mapSession != session {
@@ -1079,8 +1079,8 @@ func (t *SSU2Transport) registerOrReuseSession(conn *ssu2noise.SSU2Conn, routerH
 }
 
 // promoteRawConnToSession promotes a raw net.Conn (from Accept) to SSU2Session
-// with CAS protection. Mirrors NTCP2 promotion logic to handle simultaneous
-// inbound/outbound connections to the same peer.
+// with registry-managed promotion logic. Mirrors NTCP2 promotion logic to handle
+// simultaneous inbound/outbound connections to the same peer.
 func (t *SSU2Transport) promoteRawConnToSession(rawConn net.Conn, routerHash data.Hash, existing interface{}) *SSU2Session {
 	// Type-assert to *ssu2noise.SSU2Conn.
 	ssu2Conn, ok := rawConn.(*ssu2noise.SSU2Conn)
@@ -1107,30 +1107,38 @@ func (t *SSU2Transport) promoteRawConnToSession(rawConn net.Conn, routerHash dat
 	// without running workers," but that's a non-issue: only the winner is
 	// visible in the map, and we start its workers immediately after CAS.
 
-	// NOTE: Do NOT set the cleanup callback before CAS. If this
-	// goroutine loses the race, calling promoted.Close() would
-	// trigger removeSession and delete the *winner's* map entry.
-	if t.sessions.CompareAndSwap(routerHash, existing, promoted) {
-		// Pre-flight check: verify session is in map before starting workers (CRITICAL-3.1)
-		routerHashBytes := routerHash.Bytes()
-		if mapValue, exists := t.sessions.Load(routerHash); !exists {
-			t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).
-				Error("CRITICAL-3.1 violation: CAS succeeded but session missing from map before StartWorkers")
-		} else if mapSession, ok := mapValue.(*SSU2Session); !ok || mapSession != promoted {
-			t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).
-				Error("CRITICAL-3.1 violation: CAS succeeded but wrong session in map before StartWorkers")
-		}
+	routerHashBytes := routerHash.Bytes()
 
-		// Start workers NOW that we've won the promotion race
-		promoted.StartWorkers()
+	// Use SessionRegistry.Promote to handle CAS, callback setup, and worker startup atomically
+	promoteOpts := transport.PromoteOptions{
+		PreflightCheck: func() error {
+			// Pre-flight check: verify session is in map before starting workers (CRITICAL-3.1)
+			if mapValue, exists := t.sessionRegistry.Load(routerHash); !exists {
+				t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).
+					Error("CRITICAL-3.1 violation: CAS succeeded but session missing from map before StartWorkers")
+				return fmt.Errorf("session not in map")
+			} else if mapSession, ok := mapValue.(*SSU2Session); !ok || mapSession != promoted {
+				t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).
+					Error("CRITICAL-3.1 violation: CAS succeeded but wrong session in map before StartWorkers")
+				return fmt.Errorf("wrong session in map")
+			}
+			return nil
+		},
+		SetCallback: func(callback func()) {
+			promoted.SetCleanupCallback(callback)
+		},
+		StartWorkers: func() {
+			promoted.StartWorkers()
+			t.logger.WithFields(map[string]interface{}{
+				"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
+			}).Info("Promoted inbound net.Conn to SSU2Session in registerOrReuseSession")
+		},
+	}
 
-		promoted.SetCleanupCallback(func() {
-			t.removeSession(routerHash)
-		})
-		t.logger.WithFields(map[string]interface{}{
-			"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
-		}).Info("Promoted inbound net.Conn to SSU2Session in registerOrReuseSession")
-		return promoted
+	result, ok := t.sessionRegistry.Promote(routerHash, existing, promoted, promoteOpts)
+	if ok {
+		// Successfully promoted (session was already in map, just replaced the value)
+		return result.(*SSU2Session)
 	}
 
 	// Another goroutine won the promotion race — discard ours.
@@ -1139,7 +1147,7 @@ func (t *SSU2Transport) promoteRawConnToSession(rawConn net.Conn, routerHash dat
 	// workers were never started on loser, so this just cleans up session resources).
 	promoted.DetachConn()
 	_ = promoted.Close()
-	if winner, exists := t.sessions.Load(routerHash); exists {
+	if winner, exists := t.sessionRegistry.Load(routerHash); exists {
 		if winnerSession, ok := winner.(*SSU2Session); ok {
 			return winnerSession
 		}
@@ -1174,8 +1182,8 @@ func (t *SSU2Transport) NATManagersHealthy() bool {
 func (t *SSU2Transport) Close() error {
 	t.closeOnce.Do(func() {
 		t.logger.Info("Closing SSU2 transport")
-		// SA-2 fix: Set shutdown flag to prevent cleanup callbacks from decrementing during shutdown
-		atomic.StoreInt32(&t.isShuttingDown, 1)
+		// SA-2 fix: Set shutdown flag for visibility (no longer used for accounting gating)
+		t.sessionRegistry.SetShutdown()
 		t.cancel()
 
 		// L-1 FIX: Call stopNATManagers() to properly coordinate NAT shutdown with context
@@ -1201,7 +1209,7 @@ func (t *SSU2Transport) Close() error {
 			listenerErr = listener.Close()
 		}
 
-		t.sessions.Range(func(key, value interface{}) bool {
+		t.sessionRegistry.Range(func(key, value interface{}) bool {
 			if session, ok := value.(*SSU2Session); ok {
 				_ = session.Close()
 			} else if accepted, ok := value.(acceptedConn); ok {
@@ -1219,11 +1227,9 @@ func (t *SSU2Transport) Close() error {
 		// cleanup callbacks didn't fire). With removeSession no longer gated by
 		// isShuttingDown, this should find zero stale sessions in the normal case.
 		var staleCount int
-		t.sessions.Range(func(key, value interface{}) bool {
-			if _, loaded := t.sessions.LoadAndDelete(key); loaded {
-				staleCount++
-				atomic.AddInt32(&t.sessionCount, -1)
-			}
+		t.sessionRegistry.RangeWithHash(func(hash data.Hash, value interface{}) bool {
+			t.sessionRegistry.Remove(hash)
+			staleCount++
 			return true
 		})
 		if staleCount > 0 {
@@ -1234,11 +1240,9 @@ func (t *SSU2Transport) Close() error {
 		}
 		// A-4 fix: Verify sessionCount is now 0 (all sessions properly decremented).
 		// Non-zero indicates accounting bug (sessions without cleanup callbacks).
-		finalCount := atomic.LoadInt32(&t.sessionCount)
+		finalCount := t.sessionRegistry.Count()
 		if finalCount != 0 {
 			t.logger.WithField("final_count", finalCount).Error("sessionCount non-zero after reconciliation")
-			// Force-reset as safety net, but this indicates a bug
-			atomic.StoreInt32(&t.sessionCount, 0)
 		}
 
 		t.logger.Info("SSU2 transport closed")
@@ -1253,13 +1257,13 @@ func (t *SSU2Transport) Name() string {
 }
 
 // GetSessionCount returns the number of active sessions.
-func (t *SSU2Transport) GetSessionCount() int {
-	return int(atomic.LoadInt32(&t.sessionCount))
+func (t *SSU2Transport) GetSessionCount() int32 {
+	return t.sessionRegistry.Count()
 }
 
 // GetTotalBandwidth returns the total bytes sent and received across all active sessions.
 func (t *SSU2Transport) GetTotalBandwidth() (totalBytesSent, totalBytesReceived uint64) {
-	t.sessions.Range(func(_, value interface{}) bool {
+	t.sessionRegistry.Range(func(_, value interface{}) bool {
 		if session, ok := value.(*SSU2Session); ok {
 			sent, received := session.GetBandwidthStats()
 			totalBytesSent += sent
@@ -1276,73 +1280,24 @@ func (t *SSU2Transport) GetTotalBandwidth() (totalBytesSent, totalBytesReceived 
 func (t *SSU2Transport) isSessionLimitReached() bool {
 	// R-2 fix: Atomic config snapshot
 	cfg := t.config.Load()
-	current := atomic.LoadInt32(&t.sessionCount)
+	current := t.sessionRegistry.Count()
 	maxSessions := cfg.GetMaxSessions()
 	return int(current) >= maxSessions
 }
 
 func (t *SSU2Transport) checkSessionLimit() error {
-	// RC-2 fix: Bounded CAS retry loop with exponential backoff.
-	// Under high contention, unbounded retries cause CPU spikes.
-	// This implementation:
-	// 1. Limits retries to prevent spin-lock starvation
-	// 2. Applies exponential backoff (1ns → 1µs → 100µs) to yield CPU
-	// 3. Falls back to error after max retries (connection pool full message)
-	// This prevents the false "pool full" error while still limiting spins.
 	// R-2 fix: Atomic config snapshot
 	cfg := t.config.Load()
 	maxSessions := cfg.GetMaxSessions()
 
-	const maxRetries = 100
-	for attempt := 0; attempt < maxRetries; attempt++ {
-		current := atomic.LoadInt32(&t.sessionCount)
-		if int(current) >= maxSessions {
-			return ErrConnectionPoolFull
-		}
-		if atomic.CompareAndSwapInt32(&t.sessionCount, current, current+1) {
-			return nil
-		}
-		// Exponential backoff: prevent CPU spike on high contention
-		if attempt > 10 {
-			// After 10 retries, sleep for increasing duration
-			backoff := time.Duration(1<<uint(attempt-10)) * time.Nanosecond
-			if backoff > 100*time.Microsecond {
-				backoff = 100 * time.Microsecond
-			}
-			time.Sleep(backoff)
-		}
+	if t.sessionRegistry.CheckLimitAndIncrement(maxSessions) {
+		return nil
 	}
-
-	// RC-2 fix: If we exhausted retries, log and return pool full.
-	// This indicates sustained high contention, which should be investigated.
-	t.logger.WithField("max_retries", maxRetries).Warn(
-		"Session limit check exhausted retries due to high contention")
 	return ErrConnectionPoolFull
 }
 
 func (t *SSU2Transport) unreserveSessionSlot() {
-	// RC-2 fix: Bounded CAS retry loop with exponential backoff (same pattern as checkSessionLimit).
-	// Prevents unbounded spinning when multiple goroutines decrement sessionCount.
-	const maxRetries = 100
-	for attempt := 0; attempt < maxRetries; attempt++ {
-		current := atomic.LoadInt32(&t.sessionCount)
-		if current <= 0 {
-			return
-		}
-		if atomic.CompareAndSwapInt32(&t.sessionCount, current, current-1) {
-			return
-		}
-		// Exponential backoff: prevent CPU spike on high contention
-		if attempt > 10 {
-			backoff := time.Duration(1<<uint(attempt-10)) * time.Nanosecond
-			if backoff > 100*time.Microsecond {
-				backoff = 100 * time.Microsecond
-			}
-			time.Sleep(backoff)
-		}
-	}
-	// RC-2 fix: Log if we exhausted retries (indicates accounting bug or extreme contention)
-	t.logger.Warn("Session count decrement exhausted retries; skipping unreserve")
+	t.sessionRegistry.DecrementCountSafe()
 }
 
 // removeSession removes a session from the session map (called by session cleanup callback).
@@ -1352,9 +1307,7 @@ func (t *SSU2Transport) removeSession(routerHash data.Hash) {
 	// always decrement properly, even during shutdown. Close() reconciliation
 	// will only decrement truly-stale sessions (those that weren't cleaned up).
 	// This makes shutdown accounting deterministic.
-	if _, loaded := t.sessions.LoadAndDelete(routerHash); loaded {
-		atomic.AddInt32(&t.sessionCount, -1)
-	}
+	t.sessionRegistry.Remove(routerHash)
 }
 
 // findSessionByAddr iterates all active sessions and returns the first
@@ -1365,7 +1318,7 @@ func (t *SSU2Transport) findSessionByAddr(addr *net.UDPAddr) *SSU2Session {
 	}
 	addrString := addr.String()
 	var found *SSU2Session
-	t.sessions.Range(func(_, value interface{}) bool {
+	t.sessionRegistry.Range(func(_, value interface{}) bool {
 		s, ok := value.(*SSU2Session)
 		if !ok {
 			return true
@@ -1385,7 +1338,7 @@ func (t *SSU2Transport) findSessionByAddr(addr *net.UDPAddr) *SSU2Session {
 // Returns nil if no session exists for the given hash.
 // Handles both raw connections (promoting them if needed) and full sessions (MEDIUM 3.5).
 func (t *SSU2Transport) findSessionByHash(hash data.Hash) *SSU2Session {
-	val, ok := t.sessions.Load(hash)
+	val, ok := t.sessionRegistry.Load(hash)
 	if !ok {
 		return nil
 	}
