@@ -324,3 +324,124 @@ func CreateDatabaseEntry(key common.Hash, data []byte, dataType byte) DatabaseWr
 		StoreType:       dataType,
 	}
 }
+
+// ByteReader provides a cursor-style interface for sequential byte reading,
+// similar to bytes.Reader in the Go standard library. Each read operation
+// advances the offset, eliminating the need for callers to track positions
+// manually. This prevents off-by-one errors and simplifies parsing logic.
+//
+// Error handling follows Go's io.Reader pattern: on error, the reader is not
+// advanced, allowing callers to inspect the failed position.
+type ByteReader struct {
+	data   []byte
+	offset int
+}
+
+// NewByteReader creates a new ByteReader positioned at offset 0.
+func NewByteReader(data []byte) *ByteReader {
+	return &ByteReader{
+		data:   data,
+		offset: 0,
+	}
+}
+
+// Offset returns the current read position.
+func (br *ByteReader) Offset() int {
+	return br.offset
+}
+
+// Remaining returns the number of bytes left to read.
+func (br *ByteReader) Remaining() int {
+	if br.offset > len(br.data) {
+		return 0
+	}
+	return len(br.data) - br.offset
+}
+
+// ReadByte reads a single byte and advances the offset. Returns ErrI2NPNotEnoughData
+// if there are no bytes remaining.
+func (br *ByteReader) ReadByte() (byte, error) {
+	if br.offset >= len(br.data) {
+		return 0, ErrI2NPNotEnoughData
+	}
+	b := br.data[br.offset]
+	br.offset++
+	return b, nil
+}
+
+// ReadInt reads a 4-byte big-endian integer and advances the offset.
+// Returns ErrI2NPNotEnoughData if fewer than 4 bytes remain.
+func (br *ByteReader) ReadInt() (int, error) {
+	if br.offset+4 > len(br.data) {
+		return 0, ErrI2NPNotEnoughData
+	}
+	v := binary.BigEndian.Uint32(br.data[br.offset : br.offset+4])
+	br.offset += 4
+	return int(v), nil
+}
+
+// ReadInt64 reads an 8-byte big-endian integer and advances the offset.
+// Returns ErrI2NPNotEnoughData if fewer than 8 bytes remain.
+func (br *ByteReader) ReadInt64() (int64, error) {
+	if br.offset+8 > len(br.data) {
+		return 0, ErrI2NPNotEnoughData
+	}
+	v := binary.BigEndian.Uint64(br.data[br.offset : br.offset+8])
+	br.offset += 8
+	return int64(v), nil
+}
+
+// ReadDate reads an 8-byte I2P Date (millisecond timestamp) and advances
+// the offset. Returns ErrI2NPNotEnoughData if fewer than 8 bytes remain.
+func (br *ByteReader) ReadDate() (common.Date, error) {
+	data, err := br.ReadBytes(8)
+	if err != nil {
+		return common.Date{}, err
+	}
+	date, _, err := common.ReadDate(data)
+	return date, err
+}
+
+// ReadBytes reads n bytes and advances the offset. Returns ErrI2NPNotEnoughData
+// if fewer than n bytes remain. The returned slice is a view into the
+// underlying data; modifications affect the original buffer.
+func (br *ByteReader) ReadBytes(n int) ([]byte, error) {
+	if n < 0 {
+		return nil, ErrI2NPNotEnoughData
+	}
+	if br.offset+n > len(br.data) {
+		return nil, ErrI2NPNotEnoughData
+	}
+	result := br.data[br.offset : br.offset+n]
+	br.offset += n
+	return result, nil
+}
+
+// ReadHash reads a 32-byte router hash and advances the offset.
+// Returns ErrI2NPNotEnoughData if fewer than 32 bytes remain.
+func (br *ByteReader) ReadHash() (common.Hash, error) {
+	data, err := br.ReadBytes(32)
+	if err != nil {
+		return common.Hash{}, err
+	}
+	var h common.Hash
+	copy(h[:], data)
+	return h, nil
+}
+
+// Peek returns the next n bytes without advancing the offset.
+// Returns ErrI2NPNotEnoughData if fewer than n bytes remain.
+func (br *ByteReader) Peek(n int) ([]byte, error) {
+	if n < 0 {
+		return nil, ErrI2NPNotEnoughData
+	}
+	if br.offset+n > len(br.data) {
+		return nil, ErrI2NPNotEnoughData
+	}
+	return br.data[br.offset : br.offset+n], nil
+}
+
+// Reset resets the reader to the beginning.
+func (br *ByteReader) Reset() {
+	br.offset = 0
+}
