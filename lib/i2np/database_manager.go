@@ -12,6 +12,7 @@ import (
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 )
 
 // DatabaseManager coordinates database-related message processing and response generation.
@@ -107,7 +108,7 @@ func (dm *DatabaseManager) PerformLookup(reader DatabaseReader) error {
 	// Check rate limit before processing
 	from := reader.GetFrom()
 	if !dm.rateLimitLookup(from) {
-		log.WithField("from", fmt.Sprintf("%x", from[:8])).Warn("DatabaseLookup rate limited")
+		log.WithField("from", logutil.HashPrefixPlain(from)).Warn("DatabaseLookup rate limited")
 		return oops.Errorf("lookup rate limit exceeded")
 	}
 
@@ -158,8 +159,8 @@ func (dm *DatabaseManager) logLookupRequest(reader DatabaseReader) {
 	key := reader.GetKey()
 	from := reader.GetFrom()
 	log.WithFields(logger.Fields{
-		"key":   fmt.Sprintf("%x", key[:8]),
-		"from":  fmt.Sprintf("%x", from[:8]),
+		"key":   logutil.HashPrefixPlain(key),
+		"from":  logutil.HashPrefixPlain(from),
 		"flags": reader.GetFlags(),
 	}).Debug("Performing database lookup")
 }
@@ -311,8 +312,8 @@ func (dm *DatabaseManager) isEmptyHash(hash common.Hash) bool {
 // logDatabaseSearchReply logs details about the DatabaseSearchReply being sent.
 func (dm *DatabaseManager) logDatabaseSearchReply(key, to common.Hash, peerCount int) {
 	log.WithFields(logger.Fields{
-		"target_key":      fmt.Sprintf("%x", key[:8]),
-		"destination":     fmt.Sprintf("%x", to[:8]),
+		"target_key":      logutil.HashPrefixPlain(key),
+		"destination":     logutil.HashPrefixPlain(to),
 		"suggested_peers": peerCount,
 		"our_router_hash": fmt.Sprintf("%x", dm.ourRouterHash[:8]),
 	}).Debug("Sending DatabaseSearchReply with floodfill peer suggestions")
@@ -351,7 +352,7 @@ func (dm *DatabaseManager) sendResponse(response interface{}, to common.Hash) er
 	}
 	log.WithFields(logger.Fields{
 		"message_type": msg.Type(),
-		"destination":  fmt.Sprintf("%x", to[:8]),
+		"destination":  logutil.HashPrefixPlain(to),
 	}).Debug("Queued response message")
 	return nil
 }
@@ -436,7 +437,7 @@ func (dm *DatabaseManager) storeDataInternal(writer DatabaseWriter, source *comm
 	log.WithFields(logger.Fields{
 		"data_size": len(data),
 		"data_type": dataType,
-		"key":       fmt.Sprintf("%x", key[:8]),
+		"key":       logutil.HashPrefixPlain(key),
 	}).Debug("Storing data in NetDB")
 
 	if dm.netdb != nil {

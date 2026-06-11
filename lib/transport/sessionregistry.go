@@ -1,11 +1,11 @@
 package transport
 
 import (
-	"fmt"
 	"sync"
 	"sync/atomic"
 
 	"github.com/go-i2p/common/data"
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/go-i2p/logger"
 )
 
@@ -110,7 +110,7 @@ type PromoteOptions struct {
 func (sr *SessionRegistry) Promote(peerHash data.Hash, original interface{}, newSession interface{}, opts PromoteOptions) (interface{}, bool) {
 	// Defense-in-depth: refuse to promote an acceptedConn (dual-ownership protection)
 	if _, ok := original.(*acceptedConn); ok {
-		sr.logger.WithField("peer_hash", fmt.Sprintf("%x", peerHash[:8])).
+		sr.logger.WithField("peer_hash", logutil.HashPrefixPlain(peerHash)).
 			Error("Refusing to promote acceptedConn (already delivered to Accept)")
 		return nil, false
 	}
@@ -124,7 +124,7 @@ func (sr *SessionRegistry) Promote(peerHash data.Hash, original interface{}, new
 	// CAS succeeded! We own the session now. Run the setup callbacks.
 	if opts.PreflightCheck != nil {
 		if err := opts.PreflightCheck(); err != nil {
-			sr.logger.WithField("peer_hash", fmt.Sprintf("%x", peerHash[:8])).
+			sr.logger.WithField("peer_hash", logutil.HashPrefixPlain(peerHash)).
 				WithError(err).Error("Preflight check failed after CAS")
 		}
 	}

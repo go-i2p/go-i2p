@@ -12,6 +12,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 )
 
 // BuildTunnel implements tunnel.BuilderInterface for automatic pool maintenance.
@@ -380,7 +381,7 @@ func (tm *TunnelManager) sendBuildMessage(result *tunnel.TunnelBuildResult, mess
 	if err := session.Send(serialized); err != nil {
 		log.WithError(err).WithFields(logger.Fields{
 			"message_id":   messageID,
-			"gateway_hash": fmt.Sprintf("%x", peerHash[:8]),
+			"gateway_hash": logutil.HashPrefixPlain(peerHash),
 			"use_stbm":     result.UseShortBuild,
 		}).Warn("Failed to send tunnel build message")
 		return oops.Wrapf(err, "failed to send tunnel build message to gateway %x", peerHash[:8])
@@ -388,7 +389,7 @@ func (tm *TunnelManager) sendBuildMessage(result *tunnel.TunnelBuildResult, mess
 
 	log.WithFields(logger.Fields{
 		"message_id":   messageID,
-		"gateway_hash": fmt.Sprintf("%x", peerHash[:8]),
+		"gateway_hash": logutil.HashPrefixPlain(peerHash),
 		"use_stbm":     result.UseShortBuild,
 	}).Debug("Sent tunnel build message")
 	return nil
@@ -853,7 +854,7 @@ func (tm *TunnelManager) getSessionForPeer(peerHash common.Hash) (I2NPTransportS
 	session, err := tm.sessionProvider.GetSessionByHash(peerHash)
 	if err != nil {
 		log.WithFields(logger.Fields{
-			"peer_hash": fmt.Sprintf("%x", peerHash[:8]),
+			"peer_hash": logutil.HashPrefixPlain(peerHash),
 			"error":     err,
 		}).Warn("Failed to get session for peer")
 		return nil, err

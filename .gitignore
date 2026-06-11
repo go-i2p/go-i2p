@@ -15,3 +15,5 @@ err
 *.test
 .padding
 *.disabled
+*.bak
+*.backup
