@@ -21,11 +21,9 @@ func TestGetLeaseSet_NilLeaseSetField(t *testing.T) {
 	copy(hash[:], []byte("test-hash-for-ls2-entry-32bytes!"))
 
 	// Store a LeaseSet2 entry under the hash (no classic LeaseSet).
-	db.lsMutex.Lock()
-	db.LeaseSets[hash] = Entry{
+	db.lsCache.put(hash, Entry{
 		LeaseSet2: &lease_set2.LeaseSet2{},
-	}
-	db.lsMutex.Unlock()
+	})
 
 	// GetLeaseSet must NOT panic. It should return a closed channel (no classic LeaseSet).
 	chnl := db.GetLeaseSet(hash)

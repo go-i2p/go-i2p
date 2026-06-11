@@ -17,9 +17,7 @@ func TestTrackRouterInfoExpiration(t *testing.T) {
 
 	db.trackRouterInfoExpiration(testHash, publishedTime)
 
-	db.expiryMutex.RLock()
-	expiryTime, exists := db.routerInfoExpiry[testHash]
-	db.expiryMutex.RUnlock()
+	expiryTime, exists := db.riCache.getExpiry(testHash)
 
 	assert.True(t, exists, "expiry should be tracked")
 	expectedExpiry := publishedTime.Add(RouterInfoMaxAge)
@@ -53,12 +51,10 @@ func TestCleanExpiredRouterInfos_RemovesExpired(t *testing.T) {
 	db.cleanExpiredRouterInfos()
 
 	// Verify expired entries were removed
-	db.riMutex.RLock()
 	for _, hash := range expiredHashes {
-		_, exists := db.RouterInfos[hash]
+		_, exists := db.riCache.get(hash)
 		assert.False(t, exists, "expired RouterInfo should have been removed")
 	}
-	db.riMutex.RUnlock()
 
 	assert.Equal(t, initialSize-3, db.Size(), "size should decrease by 3")
 }
@@ -131,13 +127,12 @@ func TestGetRouterInfoExpirationStats(t *testing.T) {
 		hash := common.Hash{}
 		hash[0] = byte(i)
 
-		db.expiryMutex.Lock()
+		db.riCache.put(hash, Entry{})
 		if i < 2 {
-			db.routerInfoExpiry[hash] = time.Now().Add(-1 * time.Hour) // expired
+			db.riCache.setExpiry(hash, time.Now().Add(-1*time.Hour)) // expired
 		} else {
-			db.routerInfoExpiry[hash] = time.Now().Add(time.Duration(i) * time.Hour) // future
+			db.riCache.setExpiry(hash, time.Now().Add(time.Duration(i)*time.Hour)) // future
 		}
-		db.expiryMutex.Unlock()
 	}
 
 	total, expired, nextExpiry := db.GetRouterInfoExpirationStats()
@@ -179,6 +174,6 @@ func TestNewStdNetDB_InitializesRouterInfoExpiry(t *testing.T) {
 	tmpDir := t.TempDir()
 	db := NewStdNetDB(tmpDir)
 
-	assert.NotNil(t, db.routerInfoExpiry, "routerInfoExpiry map should be initialized")
-	assert.Equal(t, 0, len(db.routerInfoExpiry), "routerInfoExpiry should start empty")
+	assert.NotNil(t, db.riCache, "riCache should be initialized")
+	assert.Equal(t, 0, db.riCache.count(), "riCache should start empty")
 }

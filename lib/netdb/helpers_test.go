@@ -65,34 +65,23 @@ func addRouterInfoEntries(db *StdNetDB, count int) {
 		h[0] = byte(i >> 8)
 		h[1] = byte(i & 0xFF)
 		ri := router_info.RouterInfo{}
-		db.riMutex.Lock()
-		db.RouterInfos[h] = Entry{RouterInfo: &ri}
-		db.riMutex.Unlock()
+		db.riCache.put(h, Entry{RouterInfo: &ri})
 	}
 }
 
 // addLeaseSetWithExpiry inserts an empty LeaseSet entry and its expiration
 // tracking into db. offset is relative to time.Now() (negative = already expired).
 func addLeaseSetWithExpiry(db *StdNetDB, hash common.Hash, offset time.Duration) {
-	db.lsMutex.Lock()
-	db.LeaseSets[hash] = Entry{}
-	db.lsMutex.Unlock()
+	db.lsCache.put(hash, Entry{})
 
-	db.expiryMutex.Lock()
-	db.leaseSetExpiry[hash] = time.Now().Add(offset)
-	db.expiryMutex.Unlock()
+	db.lsCache.setExpiry(hash, time.Now().Add(offset))
 }
 
 // addRouterInfoWithExpiry inserts an empty RouterInfo entry and its expiration
 // tracking into db. offset is relative to time.Now().
 func addRouterInfoWithExpiry(db *StdNetDB, hash common.Hash, offset time.Duration) {
-	db.riMutex.Lock()
-	db.RouterInfos[hash] = Entry{}
-	db.riMutex.Unlock()
-
-	db.expiryMutex.Lock()
-	db.routerInfoExpiry[hash] = time.Now().Add(offset)
-	db.expiryMutex.Unlock()
+	db.riCache.put(hash, Entry{})
+	db.riCache.setExpiry(hash, time.Now().Add(offset))
 }
 
 // ---------------------------------------------------------------------------
@@ -114,13 +103,8 @@ func assertSizeAfterPopulate(t *testing.T, expectedCount int, populate func(*Std
 // the LeaseSets map and the expiry tracking map.
 func assertLeaseSetPresence(t *testing.T, db *StdNetDB, hash common.Hash, shouldExist bool, label string) {
 	t.Helper()
-	db.lsMutex.Lock()
-	_, inCache := db.LeaseSets[hash]
-	db.lsMutex.Unlock()
-
-	db.expiryMutex.RLock()
-	_, inExpiry := db.leaseSetExpiry[hash]
-	db.expiryMutex.RUnlock()
+	_, inCache := db.lsCache.get(hash)
+	_, inExpiry := db.lsCache.getExpiry(hash)
 
 	if shouldExist {
 		assert.True(t, inCache, "%s should be in LeaseSet cache", label)
@@ -274,9 +258,7 @@ func assertLeaseSetCleanupResult(t *testing.T, db *StdNetDB, expiredHash, validH
 	t.Helper()
 	assertLeaseSetPresence(t, db, expiredHash, false, "Expired")
 	assertLeaseSetPresence(t, db, validHash, true, "Valid")
-	db.lsMutex.Lock()
-	count := len(db.LeaseSets)
-	db.lsMutex.Unlock()
+	count := db.lsCache.count()
 	assert.Equal(t, expectedCount, count)
 }
 

@@ -16,9 +16,7 @@ func addTestEntries(db *StdNetDB, count int) {
 		var h common.Hash
 		h[0] = byte(i)
 		ri := router_info.RouterInfo{}
-		db.riMutex.Lock()
-		db.RouterInfos[h] = Entry{RouterInfo: &ri}
-		db.riMutex.Unlock()
+		db.riCache.put(h, Entry{RouterInfo: &ri})
 	}
 }
 
@@ -41,9 +39,7 @@ func TestStdNetDB_Size_SingleEntry(t *testing.T) {
 	testHash[0] = 0x01
 
 	ri := router_info.RouterInfo{}
-	db.riMutex.Lock()
-	db.RouterInfos[testHash] = Entry{RouterInfo: &ri}
-	db.riMutex.Unlock()
+	db.riCache.put(testHash, Entry{RouterInfo: &ri})
 
 	size := db.Size()
 	assert.Equal(t, 1, size, "Database with one entry should have size 1")
@@ -64,27 +60,21 @@ func TestStdNetDB_Size_AfterRemoval(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		hashes[i][0] = byte(i)
 		ri := router_info.RouterInfo{}
-		db.riMutex.Lock()
-		db.RouterInfos[hashes[i]] = Entry{RouterInfo: &ri}
-		db.riMutex.Unlock()
+		db.riCache.put(hashes[i], Entry{RouterInfo: &ri})
 	}
 
 	// Verify initial size
 	assert.Equal(t, 3, db.Size(), "Should have 3 entries")
 
 	// Remove one entry
-	db.riMutex.Lock()
-	delete(db.RouterInfos, hashes[0])
-	db.riMutex.Unlock()
+	db.riCache.delete(hashes[0])
 
 	// Verify size decreased
 	assert.Equal(t, 2, db.Size(), "Should have 2 entries after removal")
 
 	// Remove all entries
-	db.riMutex.Lock()
-	delete(db.RouterInfos, hashes[1])
-	delete(db.RouterInfos, hashes[2])
-	db.riMutex.Unlock()
+	db.riCache.delete(hashes[1])
+	db.riCache.delete(hashes[2])
 
 	// Verify size is 0
 	assert.Equal(t, 0, db.Size(), "Should have 0 entries after removing all")
@@ -135,9 +125,7 @@ func TestStdNetDB_Size_ConcurrentReadWrite(t *testing.T) {
 			var testHash common.Hash
 			testHash[0] = byte(index)
 			ri := router_info.RouterInfo{}
-			db.riMutex.Lock()
-			db.RouterInfos[testHash] = Entry{RouterInfo: &ri}
-			db.riMutex.Unlock()
+			db.riCache.put(testHash, Entry{RouterInfo: &ri})
 		}(i)
 	}
 
@@ -173,17 +161,13 @@ func TestStdNetDB_Size_DuplicateHash(t *testing.T) {
 
 	// Add same hash twice
 	ri1 := router_info.RouterInfo{}
-	db.riMutex.Lock()
-	db.RouterInfos[testHash] = Entry{RouterInfo: &ri1}
-	db.riMutex.Unlock()
+	db.riCache.put(testHash, Entry{RouterInfo: &ri1})
 
 	assert.Equal(t, 1, db.Size(), "Should have 1 entry")
 
 	// Add again with same hash (should replace, not add)
 	ri2 := router_info.RouterInfo{}
-	db.riMutex.Lock()
-	db.RouterInfos[testHash] = Entry{RouterInfo: &ri2}
-	db.riMutex.Unlock()
+	db.riCache.put(testHash, Entry{RouterInfo: &ri2})
 
 	assert.Equal(t, 1, db.Size(), "Duplicate hash should not increase size")
 }
@@ -210,9 +194,7 @@ func TestStdNetDB_Size_ThreadSafety(t *testing.T) {
 			testHash[0] = byte(index >> 8)
 			testHash[1] = byte(index & 0xFF)
 			ri := router_info.RouterInfo{}
-			db.riMutex.Lock()
-			db.RouterInfos[testHash] = Entry{RouterInfo: &ri}
-			db.riMutex.Unlock()
+			db.riCache.put(testHash, Entry{RouterInfo: &ri})
 		}(i)
 
 		// Reader goroutine

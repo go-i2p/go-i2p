@@ -118,13 +118,18 @@ func TestExpirationLogic_Stats(t *testing.T) {
 	now := time.Now()
 
 	// Add mix of expired and valid entries
-	db.expiryMutex.Lock()
-	db.leaseSetExpiry[common.Hash{0x01}] = now.Add(-5 * time.Minute) // Expired
-	db.leaseSetExpiry[common.Hash{0x02}] = now.Add(-2 * time.Minute) // Expired
-	db.leaseSetExpiry[common.Hash{0x03}] = now.Add(10 * time.Minute) // Valid - earliest
-	db.leaseSetExpiry[common.Hash{0x04}] = now.Add(30 * time.Minute) // Valid
-	db.leaseSetExpiry[common.Hash{0x05}] = now.Add(60 * time.Minute) // Valid
-	db.expiryMutex.Unlock()
+	h1, h2, h3, h4, h5 := common.Hash{0x01}, common.Hash{0x02}, common.Hash{0x03}, common.Hash{0x04}, common.Hash{0x05}
+	db.lsCache.put(h1, Entry{})
+	db.lsCache.put(h2, Entry{})
+	db.lsCache.put(h3, Entry{})
+	db.lsCache.put(h4, Entry{})
+	db.lsCache.put(h5, Entry{})
+
+	db.lsCache.setExpiry(h1, now.Add(-5*time.Minute)) // Expired
+	db.lsCache.setExpiry(h2, now.Add(-2*time.Minute)) // Expired
+	db.lsCache.setExpiry(h3, now.Add(10*time.Minute)) // Valid - earliest
+	db.lsCache.setExpiry(h4, now.Add(30*time.Minute)) // Valid
+	db.lsCache.setExpiry(h5, now.Add(60*time.Minute)) // Valid
 
 	total, expired, nextExpiry := db.GetLeaseSetExpirationStats()
 
@@ -270,9 +275,8 @@ func TestConcurrentAccess_ExpiryMutex(t *testing.T) {
 	runConcurrentWg(t, 10, 100, func(id, iter int) {
 		_, _, _ = db.GetLeaseSetExpirationStats()
 		hash := common.Hash{byte(id), byte(iter)}
-		db.expiryMutex.Lock()
-		db.leaseSetExpiry[hash] = time.Now().Add(time.Duration(iter) * time.Minute)
-		db.expiryMutex.Unlock()
+		db.lsCache.put(hash, Entry{})
+		db.lsCache.setExpiry(hash, time.Now().Add(time.Duration(iter)*time.Minute))
 	})
 }
 
@@ -286,17 +290,13 @@ func TestConcurrentAccess_CleanupDuringAccess(t *testing.T) {
 	// Pre-populate with entries
 	for i := 0; i < 100; i++ {
 		hash := common.Hash{byte(i)}
-		db.lsMutex.Lock()
-		db.LeaseSets[hash] = Entry{}
-		db.lsMutex.Unlock()
+		db.lsCache.put(hash, Entry{})
 
-		db.expiryMutex.Lock()
 		if i%2 == 0 {
-			db.leaseSetExpiry[hash] = time.Now().Add(-1 * time.Minute) // Expired
+			db.lsCache.setExpiry(hash, time.Now().Add(-1*time.Minute)) // Expired
 		} else {
-			db.leaseSetExpiry[hash] = time.Now().Add(1 * time.Hour) // Valid
+			db.lsCache.setExpiry(hash, time.Now().Add(1*time.Hour)) // Valid
 		}
-		db.expiryMutex.Unlock()
 	}
 
 	var wg sync.WaitGroup

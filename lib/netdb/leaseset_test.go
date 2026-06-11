@@ -88,9 +88,7 @@ func TestGetLeaseSetCount(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		hash := common.Hash{}
 		hash[0] = byte(i)
-		db.lsMutex.Lock()
-		db.LeaseSets[hash] = Entry{}
-		db.lsMutex.Unlock()
+		db.lsCache.put(hash, Entry{})
 	}
 
 	assert.Equal(t, 5, db.GetLeaseSetCount(), "Should count all cached LeaseSets")

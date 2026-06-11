@@ -38,11 +38,9 @@ func TestGetAllLeaseSets_WithEntries(t *testing.T) {
 	ls2 := lease_set.LeaseSet{}
 	ls3 := lease_set.LeaseSet{}
 
-	db.lsMutex.Lock()
-	db.LeaseSets[hash1] = Entry{LeaseSet: &ls1}
-	db.LeaseSets[hash2] = Entry{LeaseSet: &ls2}
-	db.LeaseSets[hash3] = Entry{LeaseSet: &ls3}
-	db.lsMutex.Unlock()
+	db.lsCache.put(hash1, Entry{LeaseSet: &ls1})
+	db.lsCache.put(hash2, Entry{LeaseSet: &ls2})
+	db.lsCache.put(hash3, Entry{LeaseSet: &ls3})
 
 	// Get all LeaseSets
 	leaseSets := db.GetAllLeaseSets()
@@ -71,9 +69,7 @@ func TestGetAllLeaseSets_Concurrent(t *testing.T) {
 	hash := common.Hash{0x01, 0x02, 0x03}
 	ls := lease_set.LeaseSet{}
 
-	db.lsMutex.Lock()
-	db.LeaseSets[hash] = Entry{LeaseSet: &ls}
-	db.lsMutex.Unlock()
+	db.lsCache.put(hash, Entry{LeaseSet: &ls})
 
 	// Concurrent reads should not panic or race
 	done := make(chan bool, 10)
@@ -103,10 +99,7 @@ func TestGetAllLeaseSets_CountMatch(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		hash := common.Hash{byte(i), byte(i + 1), byte(i + 2)}
 		ls := lease_set.LeaseSet{}
-
-		db.lsMutex.Lock()
-		db.LeaseSets[hash] = Entry{LeaseSet: &ls}
-		db.lsMutex.Unlock()
+		db.lsCache.put(hash, Entry{LeaseSet: &ls})
 	}
 
 	// Count should match
@@ -125,13 +118,11 @@ func BenchmarkGetAllLeaseSets(b *testing.B) {
 	}
 
 	// Pre-populate with 100 LeaseSets
-	db.lsMutex.Lock()
 	for i := 0; i < 100; i++ {
 		hash := common.Hash{byte(i), byte(i >> 8), byte(i >> 16)}
 		ls := lease_set.LeaseSet{}
-		db.LeaseSets[hash] = Entry{LeaseSet: &ls}
+		db.lsCache.put(hash, Entry{LeaseSet: &ls})
 	}
-	db.lsMutex.Unlock()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

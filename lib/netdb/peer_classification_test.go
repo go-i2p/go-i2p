@@ -30,11 +30,9 @@ func setupPeerClassificationDB(t *testing.T, suffix1, suffix2, suffix3 byte) (*S
 	hash2 := testPeerHash(suffix2)
 	hash3 := testPeerHash(suffix3)
 
-	db.riMutex.Lock()
-	db.RouterInfos[hash1] = Entry{}
-	db.RouterInfos[hash2] = Entry{}
-	db.RouterInfos[hash3] = Entry{}
-	db.riMutex.Unlock()
+	db.riCache.put(hash1, Entry{})
+	db.riCache.put(hash2, Entry{})
+	db.riCache.put(hash3, Entry{})
 
 	return db, hash1, hash2, hash3
 }
@@ -116,12 +114,10 @@ func TestGetHighCapacityPeerCount(t *testing.T) {
 	hash4 := testPeerHash(70)
 
 	// Add hashes to RouterInfos map
-	db.riMutex.Lock()
-	db.RouterInfos[hash1] = Entry{}
-	db.RouterInfos[hash2] = Entry{}
-	db.RouterInfos[hash3] = Entry{}
-	db.RouterInfos[hash4] = Entry{}
-	db.riMutex.Unlock()
+	db.riCache.put(hash1, Entry{})
+	db.riCache.put(hash2, Entry{})
+	db.riCache.put(hash3, Entry{})
+	db.riCache.put(hash4, Entry{})
 
 	// Record peer 1 as high capacity (high success rate, low latency, enough attempts)
 	for i := 0; i < 10; i++ {
@@ -196,9 +192,7 @@ func TestMultiplePeerClassifications(t *testing.T) {
 	hash := testPeerHash(100)
 
 	// Add hash to RouterInfos map
-	db.riMutex.Lock()
-	db.RouterInfos[hash] = Entry{}
-	db.riMutex.Unlock()
+	db.riCache.put(hash, Entry{})
 
 	// Record excellent performance
 	for i := 0; i < 10; i++ {

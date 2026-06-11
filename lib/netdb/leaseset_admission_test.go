@@ -71,7 +71,7 @@ func TestStdNetDB_LeaseSetCapacityEnforcement(t *testing.T) {
 	db := NewStdNetDB(t.TempDir())
 
 	// Set small capacity for testing
-	db.maxLeaseSets = 5
+	db.lsCache.setCapacity(5)
 
 	// Create test LeaseSets with minimal data
 	for i := 0; i < 10; i++ {
@@ -81,9 +81,7 @@ func TestStdNetDB_LeaseSetCapacityEnforcement(t *testing.T) {
 	}
 
 	// Should not exceed capacity
-	db.lsMutex.RLock()
-	cacheSize := len(db.LeaseSets)
-	db.lsMutex.RUnlock()
+	cacheSize := db.lsCache.count()
 
 	require.LessOrEqual(t, cacheSize, 5, "cache size should not exceed capacity, got %d", cacheSize)
 }
@@ -92,7 +90,7 @@ func TestStdNetDB_LeaseSetCapacityEnforcement(t *testing.T) {
 func TestStdNetDB_LeaseSetEvictionOnCapacity(t *testing.T) {
 	db := NewStdNetDB(t.TempDir())
 
-	db.maxLeaseSets = 3
+	db.lsCache.setCapacity(3)
 
 	// Add 3 LeaseSets and track them
 	keys := make([]common.Hash, 3)
@@ -103,9 +101,7 @@ func TestStdNetDB_LeaseSetEvictionOnCapacity(t *testing.T) {
 	}
 
 	// Verify all 3 are in cache
-	db.lsMutex.RLock()
-	require.Equal(t, 3, len(db.LeaseSets), "should have exactly 3 LeaseSets in cache")
-	db.lsMutex.RUnlock()
+	require.Equal(t, 3, db.lsCache.count(), "should have exactly 3 LeaseSets in cache")
 
 	// Add 4th LeaseSet - should evict one
 	key4 := testHashWithSuffix(4)
@@ -113,7 +109,5 @@ func TestStdNetDB_LeaseSetEvictionOnCapacity(t *testing.T) {
 	db.addLeaseSetToCache(key4, ls4)
 
 	// Should still be at capacity (3)
-	db.lsMutex.RLock()
-	require.Equal(t, 3, len(db.LeaseSets), "after adding 4th LeaseSet, cache should have 3 (one evicted)")
-	db.lsMutex.RUnlock()
+	require.Equal(t, 3, db.lsCache.count(), "after adding 4th LeaseSet, cache should have 3 (one evicted)")
 }

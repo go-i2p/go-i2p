@@ -98,17 +98,23 @@ func (ec *entryCache) setCapacity(max int) {
 
 // setExpiry records the expiration time for an entry.
 func (ec *entryCache) setExpiry(key common.Hash, expiry time.Time) {
+	ec.mu.Lock()
+	defer ec.mu.Unlock()
 	ec.expiry[key] = expiry
 }
 
 // getExpiry retrieves the expiration time for an entry.
 func (ec *entryCache) getExpiry(key common.Hash) (time.Time, bool) {
+	ec.mu.RLock()
+	defer ec.mu.RUnlock()
 	expiry, exists := ec.expiry[key]
 	return expiry, exists
 }
 
 // deleteExpiry removes an expiration entry.
 func (ec *entryCache) deleteExpiry(key common.Hash) {
+	ec.mu.Lock()
+	defer ec.mu.Unlock()
 	delete(ec.expiry, key)
 }
 
