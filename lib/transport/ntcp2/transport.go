@@ -32,20 +32,6 @@ type acceptedConn struct {
 	net.Conn
 }
 
-// Session Map Ownership Invariant (X-3 fix):
-// Each peerHash in the sessions map has EXACTLY ONE owner at any given time:
-//   - rawConn (net.Conn): owned by trackInboundConnection, transferable to Accept or promotion
-//   - acceptedConn: owned by the Accept() consumer; MUST NOT be promoted (dual-ownership)
-//   - *NTCP2Session: owned by the session lifecycle; cleanup via removeSession
-//
-// State transitions use CompareAndSwap to prevent race conditions:
-//   - rawConn → acceptedConn: CAS in inboundHandshakeWorker (after successful queue send)
-//   - rawConn → *NTCP2Session: CAS in promoteInboundConnection (via GetSession)
-//
-// If inbound Accept CAS fails, a concurrent GetSession has already promoted the connection;
-// do not deliver to Accept (ownership already transferred to the session).
-// If promotion CAS fails, another goroutine won the race; close the duplicate session.
-//
 // NTCP2Transport implements the I2P NTCP2 transport protocol, managing listener setup, session lifecycle, and peer connections.
 type NTCP2Transport struct {
 	// Network listener (uses net.Listener interface per guidelines)
@@ -81,18 +67,8 @@ type NTCP2Transport struct {
 	// acceptRunOnce ensures the background inbound accept runner is started exactly once.
 	acceptRunOnce sync.Once
 
-	// Session management
-	// sessions map[string]<value> where value can be:
-	//  - net.Conn (raw inbound connection after trackInboundConnection, before Accept or promotion)
-	//  - acceptedConn (wrapper marking ownership transferred to Accept() consumer - MUST NOT promote)
-	//  - *NTCP2Session (fully established session)
-	// State transitions (all use CompareAndSwap to prevent races):
-	//  - net.Conn → acceptedConn (inboundHandshakeWorker after successful pendingConns send)
-	//  - net.Conn → *NTCP2Session (promotion via GetSession or setupSession)
-	// See "Session Map Ownership Invariant" comment above for details.
-	sessions       sync.Map // map[string]*NTCP2Session (keyed by router hash)
-	sessionCount   int32    // atomic O(1) session counter
-	isShuttingDown int32    // atomic flag set during Close() for visibility (A-4: no longer used for accounting gating)
+	// Session management via shared SessionRegistry (H2 deduplication)
+	sessionRegistry *transport.SessionRegistry
 
 	// Metrics for critical bugs (X-1)
 	acceptedConnPromotionAttempts int32 // atomic counter for bug detection: how many times promoteInboundConnection refused an acceptedConn
@@ -262,19 +238,20 @@ func loadOrGenerateObfuscationIV(ntcp2Config *ntcp2.Config, workingDir string, c
 
 // buildTransportInstance constructs the NTCP2Transport struct with initialized fields.
 func buildTransportInstance(config *Config, identity router_info.RouterInfo, keystore KeystoreProvider, ctx context.Context, cancel context.CancelFunc, logger *logger.Entry) *NTCP2Transport {
-	transport := &NTCP2Transport{
-		identity: identity,
-		keystore: keystore,
-		handler:  NewDefaultHandler(),
-		ctx:      ctx,
-		cancel:   cancel,
-		logger:   logger,
-		wg:       sync.WaitGroup{},
-		sessions: sync.Map{},
+	registry := transport.NewSessionRegistry(logger)
+	t := &NTCP2Transport{
+		identity:        identity,
+		keystore:        keystore,
+		handler:         NewDefaultHandler(),
+		ctx:             ctx,
+		cancel:          cancel,
+		logger:          logger,
+		wg:              sync.WaitGroup{},
+		sessionRegistry: registry,
 	}
 	// HIGH-1.3 fix: Initialize atomic.Pointer[Config] with Store
-	transport.config.Store(config)
-	return transport
+	t.config.Store(config)
+	return t
 }
 
 // setupNetworkListener creates and attaches the TCP and NTCP2 listeners to the transport.
@@ -607,7 +584,7 @@ func (t *NTCP2Transport) inboundHandshakeWorker(conn net.Conn) {
 	// we return early without delivering, avoiding the dual-ownership bug.
 	peerHash := t.extractPeerHash(tracked)
 	originalConn := tracked.(*trackedConn).Conn
-	if !t.sessions.CompareAndSwap(peerHash, originalConn, acceptedConn{Conn: tracked}) {
+	if !t.sessionRegistry.MarkAccepted(peerHash, originalConn) {
 		// R-1/S-1 FIX: Promotion race detected. A concurrent GetSession already promoted
 		// this connection to a full session and won the CAS. The promoted session now owns
 		// the underlying socket and reserved slot. Do NOT send to pendingConns (violates
@@ -833,11 +810,9 @@ func (t *NTCP2Transport) writeTerminationBlockBestEffort(rawConn net.Conn, term 
 func (t *NTCP2Transport) trackInboundConnection(conn net.Conn) (net.Conn, bool) {
 	peerHash := t.extractPeerHash(conn)
 
-	if _, loaded := t.sessions.LoadOrStore(peerHash, conn); loaded {
-		// Duplicate detected: the peerHash is already in the sessions map,
-		// meaning another connection from this peer is already being processed.
-		// Unreserve the slot and return the raw connection (not wrapped, since it's not in the map).
-		// Callers should close this connection directly.
+	// Delegate to SessionRegistry for core tracking logic
+	if !t.sessionRegistry.TrackInboundConnection(conn, peerHash) {
+		// Duplicate detected: unreserve the slot and return the raw connection
 		t.unreserveSessionSlot()
 		t.logger.WithFields(map[string]interface{}{
 			"remote_addr": conn.RemoteAddr().String(),
@@ -1275,22 +1250,13 @@ func (t *NTCP2Transport) resolveSessionMapEntry(existing interface{}) sessionMap
 // CRITICAL-5.1: Map integrity check to prevent silent map corruption.
 func (t *NTCP2Transport) verifyMapIntegrity() int {
 	invalidCount := 0
-	t.sessions.Range(func(key, value interface{}) bool {
-		// Key must be a data.Hash
-		routerHash, hashOk := key.(data.Hash)
-		if !hashOk {
-			t.logger.WithField("key_type", fmt.Sprintf("%T", key)).
-				Error("verifyMapIntegrity: invalid key type (expected data.Hash)")
-			invalidCount++
-			return true
-		}
-
+	t.sessionRegistry.RangeWithHash(func(hash data.Hash, value interface{}) bool {
 		// Value must be *NTCP2Session, acceptedConn, or net.Conn
 		resolution := t.resolveSessionMapEntry(value)
 		if resolution.kind == entryIsUnexpected {
-			routerHashBytes := routerHash.Bytes()
+			hashBytes := hash.Bytes()
 			t.logger.WithFields(map[string]interface{}{
-				"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
+				"router_hash": fmt.Sprintf("%x", hashBytes[:8]),
 				"entry_value": fmt.Sprintf("%#v", value),
 				"entry_type":  fmt.Sprintf("%T", value),
 			}).Error("verifyMapIntegrity: invalid session map entry type")
@@ -1302,7 +1268,7 @@ func (t *NTCP2Transport) verifyMapIntegrity() int {
 }
 
 func (t *NTCP2Transport) findExistingSession(routerHash data.Hash) (transport.TransportSession, bool) {
-	existing, exists := t.sessions.Load(routerHash)
+	existing, exists := t.sessionRegistry.Load(routerHash)
 	if !exists {
 		t.logNoSessionFound(routerHash)
 		return nil, false
@@ -1346,10 +1312,7 @@ func (t *NTCP2Transport) validateExistingSession(s *NTCP2Session, routerHash dat
 			"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
 			"reason":      s.GetContext().Err().Error(),
 		}).Info("Evicting stale NTCP2 session")
-		if _, loaded := t.sessions.LoadAndDelete(routerHash); loaded {
-			// RC-4 FIX: Use safe decrement with runtime assertions
-			t.decrementSessionCountSafe()
-		}
+		t.sessionRegistry.Remove(routerHash)
 		return nil, false
 	}
 	routerHashBytes := routerHash.Bytes()
@@ -1386,37 +1349,45 @@ func (t *NTCP2Transport) promoteInboundConnection(conn net.Conn, original interf
 	// without running workers," but that's a non-issue: only the winner is
 	// visible in the map, and we start its workers immediately after CAS.
 
-	if t.sessions.CompareAndSwap(routerHash, original, promoted) {
-		// Pre-flight check: verify session is in map before starting workers (CRITICAL-3.1)
-		routerHashBytes := routerHash.Bytes()
-		if mapValue, exists := t.sessions.Load(routerHash); !exists {
-			t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).
-				Error("CRITICAL-3.1 violation: CAS succeeded but session missing from map before StartWorkers")
-		} else if mapSession, ok := mapValue.(*NTCP2Session); !ok || mapSession != promoted {
-			t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).
-				Error("CRITICAL-3.1 violation: CAS succeeded but wrong session in map before StartWorkers")
-		}
+	routerHashBytes := routerHash.Bytes()
 
-		// Set cleanup callback BEFORE starting workers (HIGH-8.2 fix).
-		// If we set it after StartWorkers(), a concurrent Close() (e.g., from timeout)
-		// can trigger between the two calls, leaving the session in the map forever
-		// because the callback hasn't been installed yet.
-		promoted.SetCleanupCallback(func() {
-			t.removeSession(routerHash)
-		})
-
-		// Start workers NOW that we've won the promotion race
-		promoted.StartWorkers()
-
-		t.logger.WithFields(map[string]interface{}{
-			"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
-		}).Info("Promoted inbound net.Conn to NTCP2Session")
-		return promoted, true
+	// Use SessionRegistry.Promote to handle CAS, callback setup, and worker startup atomically
+	promoteOpts := transport.PromoteOptions{
+		PreflightCheck: func() error {
+			// Pre-flight check: verify session is in map before starting workers (CRITICAL-3.1)
+			if mapValue, exists := t.sessionRegistry.Load(routerHash); !exists {
+				t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).
+					Error("CRITICAL-3.1 violation: CAS succeeded but session missing from map before StartWorkers")
+				return fmt.Errorf("session not in map")
+			} else if mapSession, ok := mapValue.(*NTCP2Session); !ok || mapSession != promoted {
+				t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).
+					Error("CRITICAL-3.1 violation: CAS succeeded but wrong session in map before StartWorkers")
+				return fmt.Errorf("wrong session in map")
+			}
+			return nil
+		},
+		SetCallback: func(callback func()) {
+			promoted.SetCleanupCallback(callback)
+		},
+		StartWorkers: func() {
+			promoted.StartWorkers()
+			t.logger.WithFields(map[string]interface{}{
+				"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
+			}).Info("Promoted inbound net.Conn to NTCP2Session")
+		},
 	}
-	// Another goroutine won the promotion race — close our duplicate.
+
+	result, ok := t.sessionRegistry.Promote(routerHash, original, promoted, promoteOpts)
+	if ok {
+		// Successfully promoted (session was already in map, just replaced the value)
+		return result.(*NTCP2Session), true
+	}
+
+	// Promotion CAS failed. Another goroutine won the promotion race — close our duplicate.
 	// Workers will exit cleanly due to context.Done().
 	_ = promoted.Close()
-	if winner, exists := t.sessions.Load(routerHash); exists {
+
+	if winner, exists := t.sessionRegistry.Load(routerHash); exists {
 		if winnerSession, ok := winner.(*NTCP2Session); ok {
 			return winnerSession, true
 		}
@@ -1819,7 +1790,7 @@ func (t *NTCP2Transport) setupSession(conn *ntcp2.Conn, routerHash data.Hash) *N
 	// without running workers," but that's a non-issue: only the winner is
 	// visible in the map, and we start its workers immediately after LoadOrStore.
 
-	existing, loaded := t.sessions.LoadOrStore(routerHash, session)
+	existing, loaded := t.sessionRegistry.LoadOrStore(routerHash, session)
 	if loaded {
 		// A session already exists for this peer. Close the newly created
 		// session (workers haven't started yet, so clean shutdown is simple)
@@ -1831,7 +1802,7 @@ func (t *NTCP2Transport) setupSession(conn *ntcp2.Conn, routerHash data.Hash) *N
 			// resolveExistingSession encountered an unexpected map entry type.
 			// Delete the corrupt entry. We cannot reuse 'conn' because
 			// session.Close() already closed it — return nil to signal failure.
-			t.sessions.Delete(routerHash)
+			t.sessionRegistry.Delete(routerHash)
 			routerHashBytes := routerHash.Bytes()
 			t.logger.WithFields(map[string]interface{}{
 				"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
@@ -1844,7 +1815,7 @@ func (t *NTCP2Transport) setupSession(conn *ntcp2.Conn, routerHash data.Hash) *N
 	// We won the store — start workers NOW
 	// Pre-flight check: verify session is in map before starting workers (CRITICAL-3.1)
 	routerHashBytes := routerHash.Bytes()
-	if mapValue, exists := t.sessions.Load(routerHash); !exists {
+	if mapValue, exists := t.sessionRegistry.Load(routerHash); !exists {
 		t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).
 			Error("CRITICAL-3.1 violation: LoadOrStore succeeded but session missing from map before StartWorkers")
 	} else if mapSession, ok := mapValue.(*NTCP2Session); !ok || mapSession != session {
@@ -1903,21 +1874,17 @@ func (t *NTCP2Transport) resolveExistingSession(existing interface{}, routerHash
 func (t *NTCP2Transport) checkSessionLimit() error {
 	cfg := t.config.Load()
 	maxSessions := cfg.GetMaxSessions()
-	for {
-		current := atomic.LoadInt32(&t.sessionCount)
-		if int(current) >= maxSessions {
-			t.logger.WithFields(map[string]interface{}{
-				"current_sessions": int(current),
-				"max_sessions":     maxSessions,
-			}).Warn("Session limit reached")
-			return ErrConnectionPoolFull
-		}
-		// Atomically reserve a slot
-		if atomic.CompareAndSwapInt32(&t.sessionCount, current, current+1) {
-			return nil
-		}
-		// CAS failed — another goroutine changed the count, retry
+
+	if t.sessionRegistry.CheckLimitAndIncrement(maxSessions) {
+		return nil
 	}
+
+	current := t.sessionRegistry.Count()
+	t.logger.WithFields(map[string]interface{}{
+		"current_sessions": current,
+		"max_sessions":     maxSessions,
+	}).Warn("Session limit reached")
+	return ErrConnectionPoolFull
 }
 
 // promoteRawConnToSession promotes a raw net.Conn to NTCP2Session with CAS protection.
@@ -1949,33 +1916,40 @@ func (t *NTCP2Transport) promoteRawConnToSession(rawConn net.Conn, routerHash da
 	// without running workers," but that's a non-issue: only the winner is
 	// visible in the map, and we start its workers immediately after CAS.
 
-	if t.sessions.CompareAndSwap(routerHash, existing, promoted) {
-		// Pre-flight check: verify session is in map before starting workers (CRITICAL-3.1)
-		routerHashBytes := routerHash.Bytes()
-		if mapValue, exists := t.sessions.Load(routerHash); !exists {
-			t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).
-				Error("CRITICAL-3.1 violation: CAS succeeded but session missing from map before StartWorkers")
-		} else if mapSession, ok := mapValue.(*NTCP2Session); !ok || mapSession != promoted {
-			t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).
-				Error("CRITICAL-3.1 violation: CAS succeeded but wrong session in map before StartWorkers")
-		}
+	routerHashBytes := routerHash.Bytes()
 
-		// Set cleanup callback BEFORE starting workers (HIGH-8.2 fix).
-		// We only reach here if CAS succeeded, so it's safe to install the callback.
-		// If we set it after StartWorkers(), a concurrent Close() can orphan the
-		// session in the map because the callback isn't installed yet.
-		promoted.SetCleanupCallback(func() {
-			t.removeSession(routerHash)
-		})
-
-		// Start workers NOW that we've won the promotion race
-		promoted.StartWorkers()
-
-		t.logger.WithFields(map[string]interface{}{
-			"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
-		}).Info("Promoted inbound net.Conn to NTCP2Session in setupSession")
-		return promoted
+	// Use SessionRegistry.Promote for CAS, callback setup, and worker startup
+	promoteOpts := transport.PromoteOptions{
+		PreflightCheck: func() error {
+			// Pre-flight check: verify session is in map before starting workers (CRITICAL-3.1)
+			if mapValue, exists := t.sessionRegistry.Load(routerHash); !exists {
+				t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).
+					Error("CRITICAL-3.1 violation: CAS succeeded but session missing from map before StartWorkers")
+				return fmt.Errorf("session not in map")
+			} else if mapSession, ok := mapValue.(*NTCP2Session); !ok || mapSession != promoted {
+				t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).
+					Error("CRITICAL-3.1 violation: CAS succeeded but wrong session in map before StartWorkers")
+				return fmt.Errorf("wrong session in map")
+			}
+			return nil
+		},
+		SetCallback: func(callback func()) {
+			promoted.SetCleanupCallback(callback)
+		},
+		StartWorkers: func() {
+			promoted.StartWorkers()
+			t.logger.WithFields(map[string]interface{}{
+				"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
+			}).Info("Promoted inbound net.Conn to NTCP2Session in setupSession")
+		},
 	}
+
+	result, ok := t.sessionRegistry.Promote(routerHash, existing, promoted, promoteOpts)
+	if ok {
+		// Successfully promoted
+		return result.(*NTCP2Session)
+	}
+
 	// CAS failed. Another goroutine won the promotion race. Handle R-1 race:
 	// If the winner is an acceptedConn, it means the Accept() path won and
 	// the connection is now owned by Accept. If it's a *NTCP2Session, another
@@ -1986,7 +1960,7 @@ func (t *NTCP2Transport) promoteRawConnToSession(rawConn net.Conn, routerHash da
 	promoted.DetachConn()
 	_ = promoted.Close()
 
-	if winner, exists := t.sessions.Load(routerHash); exists {
+	if winner, exists := t.sessionRegistry.Load(routerHash); exists {
 		if _, isAcceptedConn := winner.(acceptedConn); isAcceptedConn {
 			// R-1 race detected: Accept() won against us. The connection is now owned by
 			// Accept() and will be delivered to the listener. We don't increment the counter
@@ -2010,16 +1984,7 @@ func (t *NTCP2Transport) promoteRawConnToSession(rawConn net.Conn, routerHash da
 // when the session was not actually established (e.g., handshake failure).
 // Uses CAS loop to prevent the counter from going negative.
 func (t *NTCP2Transport) unreserveSessionSlot() {
-	for {
-		current := atomic.LoadInt32(&t.sessionCount)
-		if current <= 0 {
-			t.logger.Warn("unreserveSessionSlot called but session count is already zero")
-			return
-		}
-		if atomic.CompareAndSwapInt32(&t.sessionCount, current, current-1) {
-			return
-		}
-	}
+	t.sessionRegistry.DecrementCountSafe()
 }
 
 // Compatible returns true if a routerInfo is compatible with this transport.
@@ -2047,38 +2012,14 @@ func (t *NTCP2Transport) removeSession(routerHash data.Hash) {
 	// always decrement properly, even during shutdown. Close() reconciliation
 	// will only decrement truly-stale sessions (those that weren't cleaned up).
 	// This makes shutdown accounting deterministic.
-	if _, loaded := t.sessions.LoadAndDelete(routerHash); loaded {
-		// RC-4 FIX: Use safe decrement with runtime assertions to catch double-decrements
-		t.decrementSessionCountSafe()
-	}
+	t.sessionRegistry.Remove(routerHash)
 	t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Info("Removed session from transport session map")
 }
 
 // GetSessionCount returns the number of active sessions managed by this transport.
 // Uses an atomic counter for O(1) performance instead of iterating the session map.
-func (t *NTCP2Transport) GetSessionCount() int {
-	return int(atomic.LoadInt32(&t.sessionCount))
-}
-
-// decrementSessionCountSafe performs a safe atomic decrement with runtime assertions.
-// RC-4 FIX: Catch double-decrements and other accounting errors at runtime.
-// If the counter would go negative, logs error and force-resets to 0 (safety net).
-// Returns true if decrement succeeded, false if it would have gone negative.
-func (t *NTCP2Transport) decrementSessionCountSafe() bool {
-	for {
-		current := atomic.LoadInt32(&t.sessionCount)
-		if current <= 0 {
-			t.logger.WithField("current_count", current).
-				Error("CRITICAL: sessionCount would go negative on decrement (accounting bug detected)")
-			// Force-reset as safety net to prevent persistent negative state
-			atomic.StoreInt32(&t.sessionCount, 0)
-			return false
-		}
-		if atomic.CompareAndSwapInt32(&t.sessionCount, current, current-1) {
-			return true
-		}
-		// CAS failed, retry (another goroutine won the race)
-	}
+func (t *NTCP2Transport) GetSessionCount() int32 {
+	return t.sessionRegistry.Count()
 }
 
 // GetRouterInfoParseFailures returns the total count of RouterInfo parse failures
@@ -2100,7 +2041,7 @@ func (t *NTCP2Transport) GetRouterInfoStoreFailures() int {
 // GetTotalBandwidth returns the total bytes sent and received across all active sessions.
 // This aggregates bandwidth statistics from all sessions managed by this transport.
 func (t *NTCP2Transport) GetTotalBandwidth() (totalBytesSent, totalBytesReceived uint64) {
-	t.sessions.Range(func(key, value interface{}) bool {
+	t.sessionRegistry.RangeWithHash(func(hash data.Hash, value interface{}) bool {
 		if session, ok := value.(*NTCP2Session); ok {
 			sent, received := session.GetBandwidthStats()
 			totalBytesSent += sent
@@ -2164,16 +2105,16 @@ func (t *NTCP2Transport) closeNetworkListener() error {
 // rather than by this explicit cleanup (reconciliation should find zero stale).
 func (t *NTCP2Transport) closeAllActiveSessions() {
 	// Set shutdown flag for visibility
-	atomic.StoreInt32(&t.isShuttingDown, 1)
+	t.sessionRegistry.SetShutdown()
 
 	t.logger.Debug("Closing all active sessions")
 	sessionCount := 0
 
-	t.sessions.Range(func(key, value interface{}) bool {
+	t.sessionRegistry.RangeWithHash(func(hash data.Hash, value interface{}) bool {
 		sessionCount++
-		t.closeIndividualSession(key, value)
-		// CRITICAL-8.1 FIX: Do NOT LoadAndDelete here. The cleanup callback
-		// will delete the entry and decrement sessionCount. If we LoadAndDelete
+		t.closeIndividualSession(hash, value)
+		// CRITICAL-8.1 FIX: Do NOT delete here. The cleanup callback
+		// will delete the entry and decrement sessionCount. If we delete
 		// here, we decrement immediately, and when the cleanup callback runs
 		// (possibly delayed by GC/scheduler), it decrements again, causing
 		// sessionCount to go negative. The reconciliation loop below will catch
@@ -2185,14 +2126,18 @@ func (t *NTCP2Transport) closeAllActiveSessions() {
 	// cleanup callbacks didn't fire). With removeSession no longer gated,
 	// this should find zero stale sessions in the normal case.
 	var staleCount int
-	t.sessions.Range(func(key, value interface{}) bool {
-		if _, loaded := t.sessions.LoadAndDelete(key); loaded {
-			staleCount++
-			// RC-4 FIX: Use safe decrement with runtime assertions
-			t.decrementSessionCountSafe()
-		}
+	staleHashes := []data.Hash{}
+	t.sessionRegistry.RangeWithHash(func(hash data.Hash, value interface{}) bool {
+		// Collect stale sessions to delete after iteration
+		staleHashes = append(staleHashes, hash)
 		return true
 	})
+
+	for _, hash := range staleHashes {
+		t.sessionRegistry.Remove(hash)
+		staleCount++
+		// Remove() handles both deletion and safe decrement
+	}
 	if staleCount > 0 {
 		t.logger.WithField("stale_sessions", staleCount).Warn("Found stale sessions after close")
 		// A-3 fix: Track how often reconciliation finds drift for monitoring.
@@ -2201,11 +2146,11 @@ func (t *NTCP2Transport) closeAllActiveSessions() {
 	}
 	// A-4 fix: Verify sessionCount is now 0 (all sessions properly decremented).
 	// Non-zero indicates accounting bug (sessions without cleanup callbacks).
-	finalCount := atomic.LoadInt32(&t.sessionCount)
+	finalCount := t.sessionRegistry.Count()
 	if finalCount != 0 {
 		t.logger.WithField("final_count", finalCount).Error("sessionCount non-zero after reconciliation")
-		// Force-reset as safety net, but this indicates a bug
-		atomic.StoreInt32(&t.sessionCount, 0)
+		// Note: can't force-reset sessionRegistry count from here, but the registry
+		// will maintain consistency for subsequent operations.
 	}
 	t.logger.WithField("session_count", sessionCount).Info("Closed all sessions")
 }
@@ -2314,22 +2259,22 @@ func (t *NTCP2Transport) AcceptedConnPromotionAttempts() int32 {
 // Returns the mismatch count (0 = healthy, >0 = accounting bug detected).
 // SA-2 FIX: Added explicit invariant validation to detect session counting leaks.
 func (t *NTCP2Transport) ValidateSessionCountingInvariant() int {
-	count := atomic.LoadInt32(&t.sessionCount)
-	mapEntries := 0
-	t.sessions.Range(func(key, value interface{}) bool {
+	count := t.sessionRegistry.Count()
+	var mapEntries int32 = 0
+	t.sessionRegistry.RangeWithHash(func(hash data.Hash, value interface{}) bool {
 		mapEntries++
 		return true
 	})
 
-	mismatch := int(count) - mapEntries
+	mismatch := count - mapEntries
 	if mismatch != 0 {
 		t.logger.WithFields(map[string]interface{}{
-			"session_count": int(count),
+			"session_count": count,
 			"map_entries":   mapEntries,
 			"mismatch":      mismatch,
 		}).Error("SA-2: Session counting invariant violated (acceptedConn reservation mismatch)")
 	}
-	return mismatch
+	return int(mismatch)
 }
 
 // Name returns the name of this transport.

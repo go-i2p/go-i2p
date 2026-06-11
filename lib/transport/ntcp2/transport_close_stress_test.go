@@ -50,8 +50,7 @@ func TestCloseWithHighConnectionChurn(t *testing.T) {
 			})
 
 			// Store and close after a brief moment to simulate real lifecycle
-			transport.sessions.Store(peerHash, session)
-			atomic.AddInt32(&transport.sessionCount, 1)
+			transport.sessionRegistry.LoadOrStore(peerHash, session)
 
 			// Simulate work and cleanup
 			_ = session.Close()
@@ -71,11 +70,11 @@ func TestCloseWithHighConnectionChurn(t *testing.T) {
 
 	// Verify final state
 	finalCount := transport.GetSessionCount()
-	assert.Equal(t, 0, finalCount, "sessionCount should be 0 after all sessions closed")
+	assert.Equal(t, int32(0), finalCount, "sessionCount should be 0 after all sessions closed")
 
 	// Verify no stale sessions remain in map
 	staleSessions := 0
-	transport.sessions.Range(func(key, value interface{}) bool {
+	transport.sessionRegistry.Range(func(key, value interface{}) bool {
 		staleSessions++
 		return true
 	})
@@ -136,7 +135,7 @@ func TestConcurrentCreationAndClosureIntegration(t *testing.T) {
 	require.NoError(t, err)
 
 	postCloseCount := transport.GetSessionCount()
-	assert.Equal(t, 0, postCloseCount, "sessionCount should be 0 after transport.Close()")
+	assert.Equal(t, int32(0), postCloseCount, "sessionCount should be 0 after transport.Close()")
 }
 
 // TestDecrementSessionCountSafe_DoesNotGoNegative verifies the safe decrement
@@ -146,22 +145,20 @@ func TestDecrementSessionCountSafe_DoesNotGoNegative(t *testing.T) {
 	transport := newNilListenerTestTransport(t, 100)
 
 	// Manually test safe decrement behavior
-	assert.Equal(t, 0, transport.GetSessionCount())
+	assert.Equal(t, int32(0), transport.GetSessionCount())
 
 	// Attempt to decrement from 0 (should fail and force-reset)
-	result := transport.decrementSessionCountSafe()
-	assert.False(t, result, "decrement should return false when count is 0")
+	transport.sessionRegistry.DecrementCountSafe()
 
 	// Verify it stayed at 0 (force-reset, not negative)
-	assert.Equal(t, 0, transport.GetSessionCount())
+	assert.Equal(t, int32(0), transport.GetSessionCount())
 
 	// Now properly increment, then decrement
-	atomic.AddInt32(&transport.sessionCount, 1)
-	assert.Equal(t, 1, transport.GetSessionCount())
+	transport.sessionRegistry.IncrementCount()
+	assert.Equal(t, int32(1), transport.GetSessionCount())
 
-	result = transport.decrementSessionCountSafe()
-	assert.True(t, result, "decrement should return true with count > 0")
-	assert.Equal(t, 0, transport.GetSessionCount())
+	transport.sessionRegistry.DecrementCountSafe()
+	assert.Equal(t, int32(0), transport.GetSessionCount())
 }
 
 // TestSessionCountReconciliation verifies the reconciliation loop in closeAllActiveSessions
@@ -176,16 +173,15 @@ func TestSessionCountReconciliation(t *testing.T) {
 	session := NewNTCP2Session(conn, transport.ctx, transport.logger)
 
 	// Store in map but DON'T set cleanup callback
-	transport.sessions.Store(peerHash, session)
-	atomic.AddInt32(&transport.sessionCount, 1)
+	transport.sessionRegistry.LoadOrStore(peerHash, session)
 
-	assert.Equal(t, 1, transport.GetSessionCount())
+	assert.Equal(t, int32(1), transport.GetSessionCount())
 
 	// Close all sessions - reconciliation loop should find and decrement this stale entry
 	transport.closeAllActiveSessions()
 
 	finalCount := transport.GetSessionCount()
-	assert.Equal(t, 0, finalCount, "reconciliation should decrement the stale session")
+	assert.Equal(t, int32(0), finalCount, "reconciliation should decrement the stale session")
 
 	// Close transport
 	err := transport.Close()

@@ -52,7 +52,7 @@ func TestConcurrentSetupSessionNoWorkersBeforeCAS(t *testing.T) {
 
 			// Simulate setupSession: create session, LoadOrStore, check if we won
 			session := NewNTCP2SessionDeferred(mockConn, transport.ctx, logger.WithField("test", "racer"))
-			existing, loaded := transport.sessions.LoadOrStore(targetPeerHash, session)
+			existing, loaded := transport.sessionRegistry.LoadOrStore(targetPeerHash, session)
 
 			if !loaded {
 				// We won! Start workers NOW (after successful LoadOrStore)
@@ -92,7 +92,7 @@ func TestConcurrentSetupSessionNoWorkersBeforeCAS(t *testing.T) {
 	winnerCountMu.Unlock()
 
 	// Verify the winner is in the map and is an *NTCP2Session
-	entry, ok := transport.sessions.Load(targetPeerHash)
+	entry, ok := transport.sessionRegistry.Load(targetPeerHash)
 	require.True(t, ok, "winner session should be in map")
 	winnerSession, ok := entry.(*NTCP2Session)
 	require.True(t, ok, "map entry should be *NTCP2Session")
@@ -111,7 +111,7 @@ func TestConcurrentSetupSessionNoWorkersBeforeCAS(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// Verify session removed from map
-	_, stillExists := transport.sessions.Load(targetPeerHash)
+	_, stillExists := transport.sessionRegistry.Load(targetPeerHash)
 	require.False(t, stillExists, "session should be removed after close")
 }
 
@@ -132,7 +132,7 @@ func TestConcurrentPromoteInboundNoWorkersBeforeCAS(t *testing.T) {
 
 	// Pre-populate map with a raw conn (simulate trackInboundConnection storing it)
 	rawConn := newAcceptMockConn("raw-conn")
-	transport.sessions.Store(targetPeerHash, rawConn)
+	transport.sessionRegistry.StoreWithCount(targetPeerHash, rawConn)
 
 	// Track winner count
 	var winnerCount int32
@@ -148,7 +148,7 @@ func TestConcurrentPromoteInboundNoWorkersBeforeCAS(t *testing.T) {
 			defer wg.Done()
 
 			// Each racer tries to promote: load original, CAS to promoted
-			original, ok := transport.sessions.Load(targetPeerHash)
+			original, ok := transport.sessionRegistry.Load(targetPeerHash)
 			if !ok {
 				// Someone already deleted the entry
 				return
@@ -164,7 +164,7 @@ func TestConcurrentPromoteInboundNoWorkersBeforeCAS(t *testing.T) {
 			promoted := NewNTCP2SessionDeferred(conn, transport.ctx, logger.WithField("test", "promoter"))
 
 			// Try CAS (this is the race point)
-			if transport.sessions.CompareAndSwap(targetPeerHash, original, promoted) {
+			if transport.sessionRegistry.CompareAndSwap(targetPeerHash, original, promoted) {
 				// Winner! Start workers NOW
 				promoted.StartWorkers()
 				promoted.SetCleanupCallback(func() {
@@ -189,7 +189,7 @@ func TestConcurrentPromoteInboundNoWorkersBeforeCAS(t *testing.T) {
 	winnerCountMu.Unlock()
 
 	// Verify winner is in map
-	entry, ok := transport.sessions.Load(targetPeerHash)
+	entry, ok := transport.sessionRegistry.Load(targetPeerHash)
 	require.True(t, ok, "promoted session should be in map")
 	_, isSession := entry.(*NTCP2Session)
 	require.True(t, isSession, "map entry should be *NTCP2Session after promotion")

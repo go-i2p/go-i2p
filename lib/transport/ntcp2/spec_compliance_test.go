@@ -531,9 +531,10 @@ func TestConnectionManagement_SessionLimitEnforcement(t *testing.T) {
 	config.MaxSessions = 2
 
 	transport := &NTCP2Transport{
-		ctx:    ctx,
-		cancel: cancel,
-		logger: logger.WithField("test", "session_limit"),
+		ctx:             ctx,
+		cancel:          cancel,
+		logger:          logger.WithField("test", "session_limit"),
+		sessionRegistry: transport.NewSessionRegistry(logger.WithField("test", "session_limit")),
 	}
 	// HIGH-1.3 fix: Initialize atomic.Pointer[Config] after struct creation
 	transport.config.Store(config)

@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"net"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
+	transportpkg "github.com/go-i2p/go-i2p/lib/transport"
 	"github.com/go-i2p/logger"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -109,7 +109,7 @@ func newTestTransport(listener net.Listener, maxSessions int) *NTCP2Transport {
 		ctx:                          ctx,
 		cancel:                       cancel,
 		logger:                       logger.WithField("test", "accept"),
-		sessions:                     sync.Map{},
+		sessionRegistry:              transportpkg.NewSessionRegistry(logger.WithField("test", "accept")),
 		testBypassHandshakeTypeCheck: true, // Allow mock connections in tests
 	}
 	// HIGH-1.3 fix: Initialize atomic.Pointer[Config] after struct creation
@@ -129,7 +129,7 @@ func TestAccept_TracksInboundSession(t *testing.T) {
 	require.NoError(t, err)
 
 	// Session count should now be 1 (slot reserved)
-	assert.Equal(t, 1, transport.GetSessionCount(), "session count should be 1 after reserving slot")
+	assert.Equal(t, int32(1), transport.GetSessionCount(), "session count should be 1 after reserving slot")
 
 	// Create a mock connection and track it
 	conn := newAcceptMockConn("10.0.0.1:5001")
@@ -139,14 +139,14 @@ func TestAccept_TracksInboundSession(t *testing.T) {
 
 	// Session count should still be 1 (trackInboundConnection doesn't increment,
 	// it just wraps the already-reserved slot)
-	assert.Equal(t, 1, transport.GetSessionCount(), "session count should remain 1 after tracking")
+	assert.Equal(t, int32(1), transport.GetSessionCount(), "session count should remain 1 after tracking")
 
 	// Close the tracked connection
 	err = tracked.Close()
 	require.NoError(t, err)
 
 	// Session count should return to 0 (trackedConn.onClose decrements via removeSession)
-	assert.Equal(t, 0, transport.GetSessionCount(), "session count should be 0 after closing tracked connection")
+	assert.Equal(t, int32(0), transport.GetSessionCount(), "session count should be 0 after closing tracked connection")
 }
 
 // TestAccept_SessionCountDecrementsOnClose verifies that closing a tracked
@@ -163,14 +163,14 @@ func TestAccept_SessionCountDecrementsOnClose(t *testing.T) {
 	tracked, fresh := transport.trackInboundConnection(conn)
 	require.True(t, fresh)
 
-	assert.Equal(t, 1, transport.GetSessionCount())
+	assert.Equal(t, int32(1), transport.GetSessionCount())
 
 	// Close the tracked connection
 	err = tracked.Close()
 	require.NoError(t, err)
 
 	// Session count should return to 0
-	assert.Equal(t, 0, transport.GetSessionCount(),
+	assert.Equal(t, int32(0), transport.GetSessionCount(),
 		"session count should be 0 after closing the tracked connection")
 }
 
@@ -190,12 +190,12 @@ func TestAccept_DoubleCloseIsIdempotent(t *testing.T) {
 	// First close
 	err = tracked.Close()
 	require.NoError(t, err)
-	assert.Equal(t, 0, transport.GetSessionCount(), "count should be 0 after first close")
+	assert.Equal(t, int32(0), transport.GetSessionCount(), "count should be 0 after first close")
 
 	// Second close should be idempotent (trackedConn.closeOnce ensures onClose runs only once)
 	err = tracked.Close()
 	require.NoError(t, err, "second close should not return error (mock conn allows multiple closes)")
-	assert.Equal(t, 0, transport.GetSessionCount(), "count should still be 0 after second close (no double-decrement)")
+	assert.Equal(t, int32(0), transport.GetSessionCount(), "count should still be 0 after second close (no double-decrement)")
 }
 
 // TestAccept_EnforcesSessionLimit verifies that checkSessionLimit properly
@@ -207,26 +207,26 @@ func TestAccept_EnforcesSessionLimit(t *testing.T) {
 	// Reserve first session slot
 	err := transport.checkSessionLimit()
 	require.NoError(t, err)
-	assert.Equal(t, 1, transport.GetSessionCount())
+	assert.Equal(t, int32(1), transport.GetSessionCount())
 
 	// Reserve second session slot
 	err = transport.checkSessionLimit()
 	require.NoError(t, err)
-	assert.Equal(t, 2, transport.GetSessionCount())
+	assert.Equal(t, int32(2), transport.GetSessionCount())
 
 	// Attempt to reserve a third slot — should fail with ErrConnectionPoolFull
 	err = transport.checkSessionLimit()
 	assert.ErrorIs(t, err, ErrConnectionPoolFull, "should reject when session limit reached")
-	assert.Equal(t, 2, transport.GetSessionCount(), "count should remain at limit")
+	assert.Equal(t, int32(2), transport.GetSessionCount(), "count should remain at limit")
 
 	// Unreserve one slot (simulating connection close or handshake failure)
 	transport.unreserveSessionSlot()
-	assert.Equal(t, 1, transport.GetSessionCount())
+	assert.Equal(t, int32(1), transport.GetSessionCount())
 
 	// Now we should be able to reserve again
 	err = transport.checkSessionLimit()
 	require.NoError(t, err)
-	assert.Equal(t, 2, transport.GetSessionCount())
+	assert.Equal(t, int32(2), transport.GetSessionCount())
 }
 
 // TestAccept_SessionLimitRecovery verifies that closing a tracked connection
@@ -240,11 +240,11 @@ func TestAccept_SessionLimitRecovery(t *testing.T) {
 	conn1 := newAcceptMockConn("10.0.0.1:5001")
 	tracked1, fresh := transport.trackInboundConnection(conn1)
 	require.True(t, fresh)
-	assert.Equal(t, 1, transport.GetSessionCount())
+	assert.Equal(t, int32(1), transport.GetSessionCount())
 
 	// Close the first connection to free the slot
 	_ = tracked1.Close()
-	assert.Equal(t, 0, transport.GetSessionCount())
+	assert.Equal(t, int32(0), transport.GetSessionCount())
 
 	// Now we should be able to reserve and track a new connection
 	err = transport.checkSessionLimit()
@@ -252,7 +252,7 @@ func TestAccept_SessionLimitRecovery(t *testing.T) {
 	conn2 := newAcceptMockConn("10.0.0.2:5002")
 	tracked2, fresh := transport.trackInboundConnection(conn2)
 	require.True(t, fresh)
-	assert.Equal(t, 1, transport.GetSessionCount())
+	assert.Equal(t, int32(1), transport.GetSessionCount())
 
 	_ = tracked2.Close()
 }
@@ -332,29 +332,27 @@ func TestAccept_MixedInboundOutbound(t *testing.T) {
 	transport, _ := newAcceptTestSetup(t, "10.0.0.1:5001", 10)
 
 	// newAcceptTestSetup already has one inbound connection ready (count=1)
-	assert.Equal(t, 1, transport.GetSessionCount(), "newAcceptTestSetup pre-loads inbound connection")
+	assert.Equal(t, int32(1), transport.GetSessionCount(), "newAcceptTestSetup pre-loads inbound connection")
 
 	// Simulate an outbound session by storing directly in sessions map
 	outboundHash := newTestPeerHash("outbound-peer-hash-for-testing!!")
-	transport.sessions.Store(outboundHash, "outbound-placeholder")
-	atomic.AddInt32(&transport.sessionCount, 1)
-	assert.Equal(t, 2, transport.GetSessionCount(), "count should include pre-loaded inbound + outbound")
+	transport.sessionRegistry.LoadOrStore(outboundHash, "outbound-placeholder")
+	assert.Equal(t, int32(2), transport.GetSessionCount(), "count should include pre-loaded inbound + outbound")
 
 	// Accept the pre-loaded inbound connection
 	accepted, err := transport.Accept()
 	require.NoError(t, err)
-	assert.Equal(t, 2, transport.GetSessionCount(),
+	assert.Equal(t, int32(2), transport.GetSessionCount(),
 		"session count should still be 2 after Accept returns the pre-loaded connection")
 
 	// Close inbound
 	_ = accepted.Close()
-	assert.Equal(t, 1, transport.GetSessionCount(),
+	assert.Equal(t, int32(1), transport.GetSessionCount(),
 		"closing inbound should only decrement inbound session")
 
 	// Clean up outbound
-	transport.sessions.Delete(outboundHash)
-	atomic.AddInt32(&transport.sessionCount, -1)
-	assert.Equal(t, 0, transport.GetSessionCount())
+	transport.sessionRegistry.Remove(outboundHash)
+	assert.Equal(t, int32(0), transport.GetSessionCount())
 }
 
 // TestAccept_ConcurrentAcceptAndClose verifies thread safety of session tracking
@@ -381,7 +379,7 @@ func TestAccept_ConcurrentAcceptAndClose(t *testing.T) {
 	wg.Wait()
 
 	// Verify all were tracked
-	assert.Equal(t, numConns, transport.GetSessionCount(), "all connections should be tracked")
+	assert.Equal(t, int32(numConns), transport.GetSessionCount(), "all connections should be tracked")
 
 	// Close all concurrently
 	for i := 0; i < numConns; i++ {
@@ -396,7 +394,7 @@ func TestAccept_ConcurrentAcceptAndClose(t *testing.T) {
 	wg.Wait()
 
 	// All should be cleaned up
-	assert.Equal(t, 0, transport.GetSessionCount(),
+	assert.Equal(t, int32(0), transport.GetSessionCount(),
 		"all sessions should be cleaned up after concurrent close")
 }
 
@@ -410,7 +408,7 @@ func TestPerformInboundHandshake_RejectsNonNTCP2Conn(t *testing.T) {
 
 	// L-1/T-1: No slot is reserved before handshake anymore.
 	// Verify sessionCount starts at 0.
-	assert.Equal(t, 0, transport.GetSessionCount(), "slot should NOT be reserved before handshake")
+	assert.Equal(t, int32(0), transport.GetSessionCount(), "slot should NOT be reserved before handshake")
 
 	// Feed a mock connection that is not an *ntcp2.Conn
 	mockConn := newAcceptMockConn("10.0.0.1:5001")
@@ -426,7 +424,7 @@ func TestPerformInboundHandshake_RejectsNonNTCP2Conn(t *testing.T) {
 		"error message should indicate the type mismatch")
 
 	// L-1/T-1: The slot was never reserved, so sessionCount should still be 0.
-	assert.Equal(t, 0, transport.GetSessionCount(),
+	assert.Equal(t, int32(0), transport.GetSessionCount(),
 		"session slot should remain 0 after rejection (no slot was reserved)")
 
 	// The connection should be closed

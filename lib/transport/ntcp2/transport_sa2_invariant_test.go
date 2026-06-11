@@ -22,7 +22,7 @@ func TestSA2_InvariantInitial(t *testing.T) {
 	count := transport.GetSessionCount()
 	mismatch := transport.ValidateSessionCountingInvariant()
 
-	require.Equal(t, 0, count, "Should start with zero sessions")
+	require.Equal(t, int32(0), count, "Should start with zero sessions")
 	require.Equal(t, 0, mismatch, "SA-2 invariant should hold at startup")
 }
 

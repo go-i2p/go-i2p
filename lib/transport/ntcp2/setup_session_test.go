@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	transportpkg "github.com/go-i2p/go-i2p/lib/transport"
 	"github.com/go-i2p/logger"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -52,9 +53,10 @@ func newMinimalTransport() (*NTCP2Transport, context.CancelFunc) {
 	ctx, cancel := context.WithCancel(context.Background())
 	log := logger.WithField("component", "ntcp2_test")
 	return &NTCP2Transport{
-		ctx:    ctx,
-		cancel: cancel,
-		logger: log,
+		ctx:             ctx,
+		cancel:          cancel,
+		logger:          log,
+		sessionRegistry: transportpkg.NewSessionRegistry(log),
 	}, cancel
 }
 
@@ -75,17 +77,16 @@ func TestSetupSession_DuplicateSession(t *testing.T) {
 	session1.SetCleanupCallback(func() {
 		transport.removeSession(routerHash)
 	})
-	_, loaded := transport.sessions.LoadOrStore(routerHash, session1)
+	_, loaded := transport.sessionRegistry.LoadOrStore(routerHash, session1)
 	require.False(t, loaded, "first store should succeed")
-	atomic.AddInt32(&transport.sessionCount, 1)
 
-	assert.Equal(t, 1, transport.GetSessionCount(), "should have 1 session")
+	assert.Equal(t, int32(1), transport.GetSessionCount(), "should have 1 session")
 
 	// --- Second session: simulate a duplicate store (the bug scenario) ---
 	conn2 := newMockSetupConn()
 	session2 := NewNTCP2Session(conn2, transport.ctx, transport.logger)
 
-	existing, loaded2 := transport.sessions.LoadOrStore(routerHash, session2)
+	existing, loaded2 := transport.sessionRegistry.LoadOrStore(routerHash, session2)
 	require.True(t, loaded2, "second store should find existing session")
 
 	// The fix: close the duplicate session and return the existing one.
@@ -103,7 +104,7 @@ func TestSetupSession_DuplicateSession(t *testing.T) {
 	assert.False(t, conn1.isClosed(), "original session's connection should still be open")
 
 	// 4. Session count is still 1 (no leak).
-	assert.Equal(t, 1, transport.GetSessionCount(), "session count should remain 1")
+	assert.Equal(t, int32(1), transport.GetSessionCount(), "session count should remain 1")
 
 	// Clean up: close session1 so goroutines don't leak.
 	session1.Close()
@@ -129,7 +130,7 @@ func TestSetupSession_ConcurrentDuplicate(t *testing.T) {
 			conns[idx] = conn
 			session := NewNTCP2Session(conn, transport.ctx, transport.logger)
 
-			existing, loaded := transport.sessions.LoadOrStore(routerHash, session)
+			existing, loaded := transport.sessionRegistry.LoadOrStore(routerHash, session)
 			if loaded {
 				// Duplicate — close the new session, return existing.
 				session.Close()
@@ -139,7 +140,6 @@ func TestSetupSession_ConcurrentDuplicate(t *testing.T) {
 				session.SetCleanupCallback(func() {
 					transport.removeSession(routerHash)
 				})
-				atomic.AddInt32(&transport.sessionCount, 1)
 				sessions[idx] = session
 			}
 		}(i)
@@ -154,7 +154,7 @@ func TestSetupSession_ConcurrentDuplicate(t *testing.T) {
 	}
 
 	// Exactly 1 session should be active.
-	assert.Equal(t, 1, transport.GetSessionCount(),
+	assert.Equal(t, int32(1), transport.GetSessionCount(),
 		"exactly one session should be counted")
 
 	// Exactly numGoroutines-1 connections should be closed (duplicates),
@@ -184,8 +184,7 @@ func TestSetupSession_NoCleanupCallbackOnDuplicate(t *testing.T) {
 	session1.SetCleanupCallback(func() {
 		transport.removeSession(routerHash)
 	})
-	transport.sessions.LoadOrStore(routerHash, session1)
-	atomic.AddInt32(&transport.sessionCount, 1)
+	transport.sessionRegistry.LoadOrStore(routerHash, session1)
 
 	// Create a duplicate session and close it (simulating the fix).
 	conn2 := newMockSetupConn()
@@ -193,13 +192,13 @@ func TestSetupSession_NoCleanupCallbackOnDuplicate(t *testing.T) {
 	// Deliberately do NOT set cleanup callback on session2 (this is part of the fix).
 	session2.Close()
 
-	// The existing session should still be in the map.
-	val, ok := transport.sessions.Load(routerHash)
+	// The existing session should still in the map.
+	val, ok := transport.sessionRegistry.Load(routerHash)
 	require.True(t, ok, "existing session should still be in the map after duplicate is closed")
 	assert.Same(t, session1, val.(*NTCP2Session))
 
 	// Session count should remain 1.
-	assert.Equal(t, 1, transport.GetSessionCount())
+	assert.Equal(t, int32(1), transport.GetSessionCount())
 
 	// Clean up.
 	session1.Close()
@@ -213,8 +212,7 @@ func TestFindExistingSession_PromotesInboundConn(t *testing.T) {
 
 	// Simulate Accept: store a raw net.Conn in the sessions map.
 	conn := newMockSetupConn()
-	transport.sessions.Store(routerHash, net.Conn(conn))
-	atomic.AddInt32(&transport.sessionCount, 1)
+	transport.sessionRegistry.LoadOrStore(routerHash, net.Conn(conn))
 
 	// findExistingSession should detect the net.Conn and promote it to *NTCP2Session.
 	session, found := transport.findExistingSession(routerHash)
@@ -222,13 +220,13 @@ func TestFindExistingSession_PromotesInboundConn(t *testing.T) {
 	require.NotNil(t, session, "promoted session should not be nil")
 
 	// The map entry should now be an *NTCP2Session.
-	val, ok := transport.sessions.Load(routerHash)
+	val, ok := transport.sessionRegistry.Load(routerHash)
 	require.True(t, ok)
 	ntcp2Session, ok := val.(*NTCP2Session)
 	require.True(t, ok, "map entry should now be *NTCP2Session, not net.Conn")
 
 	// The session count should remain 1.
-	assert.Equal(t, 1, transport.GetSessionCount())
+	assert.Equal(t, int32(1), transport.GetSessionCount())
 
 	// Clean up the promoted session.
 	ntcp2Session.Close()

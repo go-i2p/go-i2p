@@ -3,11 +3,10 @@ package ntcp2
 import (
 	"context"
 	"net"
-	"sync"
-	"sync/atomic"
 	"testing"
 
 	"github.com/go-i2p/common/data"
+	transportpkg "github.com/go-i2p/go-i2p/lib/transport"
 	"github.com/go-i2p/go-noise/ntcp2"
 	"github.com/go-i2p/logger"
 	"github.com/stretchr/testify/assert"
@@ -77,7 +76,7 @@ func newAcceptTestSetup(t *testing.T, remoteAddr string, maxSessions int) (*NTCP
 		ctx:                          ctx,
 		cancel:                       cancel,
 		logger:                       logger.WithField("test", "accept"),
-		sessions:                     sync.Map{},
+		sessionRegistry:              transportpkg.NewSessionRegistry(logger.WithField("test", "accept")),
 		pendingConns:                 make(chan net.Conn, 10),
 		listener:                     mockListener, // Set listener to pass Accept() nil check
 		testBypassHandshakeTypeCheck: true,         // Allow mock connections in tests
@@ -99,10 +98,8 @@ func newAcceptTestSetup(t *testing.T, remoteAddr string, maxSessions int) (*NTCP
 	peerHash := transport.extractPeerHash(conn)
 
 	// Store the raw connection in sessions map (will be replaced with tracked conn)
-	transport.sessions.Store(peerHash, conn)
-
-	// Increment session count (mimics checkSessionLimit reservation)
-	atomic.AddInt32(&transport.sessionCount, 1)
+	// StoreWithCount() stores and auto-increments session count for fresh entries
+	transport.sessionRegistry.StoreWithCount(peerHash, conn)
 
 	// Create tracked connection wrapper with cleanup callback that calls removeSession
 	// (mimics trackInboundConnection wrapping)
@@ -114,7 +111,7 @@ func newAcceptTestSetup(t *testing.T, remoteAddr string, maxSessions int) (*NTCP
 	}
 
 	// Update sessions map with the tracked connection
-	transport.sessions.Store(peerHash, tracked)
+	transport.sessionRegistry.LoadOrStore(peerHash, tracked)
 
 	// Inject into pendingConns for Accept() to consume
 	transport.pendingConns <- tracked

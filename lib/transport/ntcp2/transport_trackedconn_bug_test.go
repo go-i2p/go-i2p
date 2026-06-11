@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -39,7 +38,7 @@ func TestTrackedConnCleanupRace(t *testing.T) {
 
 		// Simulate Accept flow: reserve slot and store raw conn
 		require.NoError(t, transport.checkSessionLimit())
-		transport.sessions.Store(peerHash, rawConn)
+		transport.sessionRegistry.StoreWithCount(peerHash, rawConn)
 
 		var wg sync.WaitGroup
 		wg.Add(2)
@@ -50,7 +49,7 @@ func TestTrackedConnCleanupRace(t *testing.T) {
 			// Small delay to let trackInboundConnection store first (simulate race window)
 			time.Sleep(1 * time.Millisecond)
 
-			val, _ := transport.sessions.Load(peerHash)
+			val, _ := transport.sessionRegistry.Load(peerHash)
 			if rawC, ok := val.(net.Conn); ok {
 				session, ok := transport.promoteInboundConnection(rawC, val, peerHash)
 				if ok && session != nil {
@@ -76,7 +75,7 @@ func TestTrackedConnCleanupRace(t *testing.T) {
 			// Simulate the CAS in inboundHandshakeWorker (line 549)
 			// Try to replace raw conn with acceptedConn
 			originalConn := trackedConn.Conn
-			if !transport.sessions.CompareAndSwap(peerHash, originalConn, acceptedConn{Conn: trackedConn}) {
+			if !transport.sessionRegistry.CompareAndSwap(peerHash, originalConn, acceptedConn{Conn: trackedConn}) {
 				// CAS failed - promotion happened
 				// BUG: This calls onClose which removes the promoted session!
 				trackedConn.Close()
@@ -91,7 +90,7 @@ func TestTrackedConnCleanupRace(t *testing.T) {
 
 	// Count sessions remaining in map
 	sessionsInMap := 0
-	transport.sessions.Range(func(key, value interface{}) bool {
+	transport.sessionRegistry.Range(func(key, value interface{}) bool {
 		if _, ok := value.(*NTCP2Session); ok {
 			sessionsInMap++
 		}
@@ -109,7 +108,7 @@ func TestTrackedConnCleanupRace(t *testing.T) {
 			promotedCount, sessionsInMap, 100.0*float64(promotedCount-sessionsInMap)/float64(promotedCount))
 	}
 
-	finalCount := atomic.LoadInt32(&transport.sessionCount)
+	finalCount := transport.GetSessionCount()
 	t.Logf("Final sessionCount: %d", finalCount)
 
 	// Verify promoted sessions are still accessible
@@ -119,7 +118,7 @@ func TestTrackedConnCleanupRace(t *testing.T) {
 		}
 		// Check if session still in map (should be)
 		routerHash := newTestPeerHash(fmt.Sprintf("trackedconn-cleanup-race-%d", i))
-		val, exists := transport.sessions.Load(routerHash)
+		val, exists := transport.sessionRegistry.Load(routerHash)
 		if !exists {
 			t.Errorf("Promoted session %d missing from map!", i)
 		} else if sessVal, ok := val.(*NTCP2Session); !ok || sessVal != session {
@@ -169,7 +168,7 @@ func TestConcurrentAcceptAndGetSessionIntegration(t *testing.T) {
 	for _, peer := range peers {
 		// Reserve slot and store raw connection
 		require.NoError(t, transport.checkSessionLimit())
-		transport.sessions.Store(peer.hash, peer.conn)
+		transport.sessionRegistry.StoreWithCount(peer.hash, peer.conn)
 	}
 
 	// Phase 2: Concurrent promotion attempts
@@ -191,7 +190,7 @@ func TestConcurrentAcceptAndGetSessionIntegration(t *testing.T) {
 			time.Sleep(time.Duration(peerIdx%3) * time.Millisecond)
 
 			// Load whatever is in the map
-			val, exists := transport.sessions.Load(peer.hash)
+			val, exists := transport.sessionRegistry.Load(peer.hash)
 			if !exists {
 				return
 			}
@@ -228,7 +227,7 @@ func TestConcurrentAcceptAndGetSessionIntegration(t *testing.T) {
 			originalConn := tracked.Conn
 			acceptedConnWrapper := acceptedConn{Conn: tracked}
 
-			if !transport.sessions.CompareAndSwap(peer.hash, originalConn, acceptedConnWrapper) {
+			if !transport.sessionRegistry.CompareAndSwap(peer.hash, originalConn, acceptedConnWrapper) {
 				// CAS failed - someone else (GetSession) promoted it
 				// CRITICAL FIX: Do NOT call tracked.Close() here!
 				// The bug was calling tracked.Close() which would fire onClose
@@ -244,7 +243,7 @@ func TestConcurrentAcceptAndGetSessionIntegration(t *testing.T) {
 
 	// Count sessions in map
 	sessionsInMap := 0
-	transport.sessions.Range(func(key, value interface{}) bool {
+	transport.sessionRegistry.Range(func(key, value interface{}) bool {
 		if _, ok := value.(*NTCP2Session); ok {
 			sessionsInMap++
 		}
@@ -261,7 +260,7 @@ func TestConcurrentAcceptAndGetSessionIntegration(t *testing.T) {
 
 	t.Logf("Successfully promoted: %d sessions", promotedCount)
 	t.Logf("Sessions remaining in map: %d", sessionsInMap)
-	t.Logf("Session count: %d", atomic.LoadInt32(&transport.sessionCount))
+	t.Logf("Session count: %d", transport.GetSessionCount())
 
 	// The key invariant: All promoted sessions must still be in the map
 	// (not removed by incorrect trackedConn cleanup)
@@ -271,7 +270,7 @@ func TestConcurrentAcceptAndGetSessionIntegration(t *testing.T) {
 		}
 
 		peer := peers[i]
-		val, exists := transport.sessions.Load(peer.hash)
+		val, exists := transport.sessionRegistry.Load(peer.hash)
 		assert.True(t, exists, "Promoted session %d must exist in map", i)
 		if exists {
 			mapSession, isSession := val.(*NTCP2Session)
@@ -286,6 +285,6 @@ func TestConcurrentAcceptAndGetSessionIntegration(t *testing.T) {
 
 	// Verify session count accounting matches actual sessions
 	// (may be higher if some acceptedConn wrappers still exist)
-	assert.GreaterOrEqual(t, int(atomic.LoadInt32(&transport.sessionCount)), sessionsInMap,
+	assert.GreaterOrEqual(t, int(transport.GetSessionCount()), sessionsInMap,
 		"sessionCount should be at least as large as sessions in map")
 }

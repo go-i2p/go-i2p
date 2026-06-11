@@ -3,7 +3,6 @@ package ntcp2
 import (
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -20,8 +19,9 @@ func TestSetupSession_HandlesNetConnFromAccept(t *testing.T) {
 	// Simulate Accept() having stored a raw net.Conn in the session map.
 	peerHash := newTestPeerHash("test-peer-hash-for-race-test!")
 	rawConn := newAcceptMockConn("192.168.1.1:5001")
-	transport.sessions.Store(peerHash, rawConn)
-	atomic.AddInt32(&transport.sessionCount, 1)
+	transport.sessionRegistry.StoreWithCount(peerHash, rawConn)
+	// Skipped: sessionCount management moved to sessionRegistry
+	// atomic.AddInt32(&transport.sessionCount, 1)
 
 	// Create a mock outbound conn to pass to setupSession.
 	outboundConn := newAcceptMockConn("192.168.1.1:5001")
@@ -38,7 +38,7 @@ func TestSetupSession_HandlesNetConnFromAccept(t *testing.T) {
 	})
 
 	// Verify the session was promoted in the map.
-	entry, exists := transport.sessions.Load(peerHash)
+	entry, exists := transport.sessionRegistry.Load(peerHash)
 	require.True(t, exists)
 	_, isSession := entry.(*NTCP2Session)
 	assert.True(t, isSession, "map entry should now be *NTCP2Session after promotion")
@@ -72,13 +72,13 @@ func TestResolveExistingSession_RawNetConn(t *testing.T) {
 	peerHash := newTestPeerHash("test-peer-hash-raw-conn-promo")
 
 	rawConn := newAcceptMockConn("192.168.1.3:5003")
-	transport.sessions.Store(peerHash, rawConn)
+	transport.sessionRegistry.StoreWithCount(peerHash, rawConn)
 
 	result := transport.resolveExistingSession(rawConn, peerHash)
 	require.NotNil(t, result, "should promote raw net.Conn to *NTCP2Session")
 
 	// Verify the map now contains *NTCP2Session.
-	entry, exists := transport.sessions.Load(peerHash)
+	entry, exists := transport.sessionRegistry.Load(peerHash)
 	require.True(t, exists)
 	_, isSession := entry.(*NTCP2Session)
 	assert.True(t, isSession)
@@ -94,7 +94,7 @@ func TestResolveExistingSession_ConcurrentPromotion(t *testing.T) {
 	peerHash := newTestPeerHash("test-peer-hash-concurrent-prm")
 
 	rawConn := newAcceptMockConn("192.168.1.4:5004")
-	transport.sessions.Store(peerHash, rawConn)
+	transport.sessionRegistry.StoreWithCount(peerHash, rawConn)
 
 	// Simulate the realistic race: multiple goroutines each call
 	// resolveExistingSession, but only with the value they see from
@@ -111,7 +111,7 @@ func TestResolveExistingSession_ConcurrentPromotion(t *testing.T) {
 			i := i
 			go func() {
 				defer wg.Done()
-				val, _ := transport.sessions.Load(peerHash)
+				val, _ := transport.sessionRegistry.Load(peerHash)
 				if val == nil {
 					return
 				}
@@ -136,7 +136,7 @@ func TestResolveExistingSession_ConcurrentPromotion(t *testing.T) {
 
 	// The map entry should still exist (workers are deferred until CAS
 	// wins, so no background goroutine can close the winning session).
-	entry, exists := transport.sessions.Load(peerHash)
+	entry, exists := transport.sessionRegistry.Load(peerHash)
 	require.True(t, exists, "session map entry should exist after concurrent promotion")
 	_, isSession := entry.(*NTCP2Session)
 	assert.True(t, isSession, "map entry should be *NTCP2Session after promotion")
@@ -151,23 +151,25 @@ func TestCloseAllActiveSessions_ClosesNetConnEntries(t *testing.T) {
 	// Store a raw net.Conn (as Accept() would).
 	connHash := newTestPeerHash("test-raw-conn-shutdown-close!")
 	rawConn := newAcceptMockConn("192.168.1.5:5005")
-	transport.sessions.Store(connHash, rawConn)
-	atomic.AddInt32(&transport.sessionCount, 1)
+	transport.sessionRegistry.StoreWithCount(connHash, rawConn)
+	// Skipped: sessionCount management moved to sessionRegistry
+	// atomic.AddInt32(&transport.sessionCount, 1)
 
 	// Store an *NTCP2Session.
 	sessionHash := newTestPeerHash("test-session-shutdown-close!!")
 	sessionConn := newAcceptMockConn("192.168.1.6:5006")
 	session := NewNTCP2Session(sessionConn, transport.ctx, transport.logger)
-	transport.sessions.Store(sessionHash, session)
-	atomic.AddInt32(&transport.sessionCount, 1)
+	transport.sessionRegistry.StoreWithCount(sessionHash, session)
+	// Skipped: sessionCount management moved to sessionRegistry
+	// atomic.AddInt32(&transport.sessionCount, 1)
 
-	assert.Equal(t, 2, transport.GetSessionCount())
+	assert.Equal(t, int32(2), transport.GetSessionCount())
 
 	// Close all sessions.
 	transport.closeAllActiveSessions()
 
 	// Both entries should be removed.
-	assert.Equal(t, 0, transport.GetSessionCount())
+	assert.Equal(t, int32(0), transport.GetSessionCount())
 
 	// Raw conn should have been closed.
 	rawConn.closeMu.Lock()
@@ -227,7 +229,7 @@ func TestResolveExistingSession_UnexpectedType(t *testing.T) {
 	peerHash := newTestPeerHash("test-peer-hash-unexpected-typ")
 
 	// Store something that is neither *NTCP2Session nor net.Conn.
-	transport.sessions.Store(peerHash, "unexpected-type")
+	transport.sessionRegistry.StoreWithCount(peerHash, "unexpected-type")
 
 	result := transport.resolveExistingSession("unexpected-type", peerHash)
 	assert.Nil(t, result, "should return nil for unexpected types")
@@ -241,7 +243,8 @@ func TestSetupSession_NewSessionPath(t *testing.T) {
 	peerHash := newTestPeerHash("test-new-session-store-path!!")
 
 	// Reserve a session slot as createOutboundSession would.
-	atomic.AddInt32(&transport.sessionCount, 1)
+	// Skipped: sessionCount management moved to sessionRegistry
+	// atomic.AddInt32(&transport.sessionCount, 1)
 
 	mockConn := newAcceptMockConn("192.168.1.9:5009")
 
@@ -253,9 +256,9 @@ func TestSetupSession_NewSessionPath(t *testing.T) {
 	session.SetCleanupCallback(func() {
 		transport.removeSession(peerHash)
 	})
-	transport.sessions.Store(peerHash, session)
+	transport.sessionRegistry.StoreWithCount(peerHash, session)
 
-	entry, exists := transport.sessions.Load(peerHash)
+	entry, exists := transport.sessionRegistry.Load(peerHash)
 	require.True(t, exists)
 	_, isSession := entry.(*NTCP2Session)
 	assert.True(t, isSession)
@@ -283,7 +286,7 @@ func TestAccept_ThenFindExistingSession_Promotion(t *testing.T) {
 	assert.NotNil(t, session, "should return a promoted session")
 
 	// Verify the map entry is now *NTCP2Session.
-	entry, exists := transport.sessions.Load(peerHash)
+	entry, exists := transport.sessionRegistry.Load(peerHash)
 	require.True(t, exists)
 	_, isSession := entry.(*NTCP2Session)
 	assert.True(t, isSession, "map entry should be *NTCP2Session after promotion")

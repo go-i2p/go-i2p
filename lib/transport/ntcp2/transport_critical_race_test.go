@@ -36,9 +36,9 @@ func TestCRITICAL_1_1_PromotionRace(t *testing.T) {
 	rawConn := newAcceptMockConn("192.168.1.100:5100")
 
 	// Simulate Accept() storing a raw net.Conn (as would happen with inbound connections).
-	transport.sessions.Store(peerHash, rawConn)
-	atomic.AddInt32(&transport.sessionCount, 1)
-	initialCount := atomic.LoadInt32(&transport.sessionCount)
+	// Store() auto-increments session count for fresh entries
+	transport.sessionRegistry.StoreWithCount(peerHash, rawConn)
+	initialCount := transport.GetSessionCount()
 	assert.Equal(t, int32(1), initialCount, "session count should be 1 after storing raw conn")
 
 	// Concurrent promoters that will race each other.
@@ -60,13 +60,13 @@ func TestCRITICAL_1_1_PromotionRace(t *testing.T) {
 				var session *NTCP2Session
 				if i%2 == 0 {
 					// Path 1: resolveExistingSession (used by setupSession)
-					val, _ := transport.sessions.Load(peerHash)
+					val, _ := transport.sessionRegistry.Load(peerHash)
 					if val != nil {
 						session = transport.resolveExistingSession(val, peerHash)
 					}
 				} else {
 					// Path 2: promoteInboundConnection direct (used by findExistingSession)
-					val, _ := transport.sessions.Load(peerHash)
+					val, _ := transport.sessionRegistry.Load(peerHash)
 					if val != nil {
 						if rawC, ok := val.(net.Conn); ok {
 							// Simulate what findExistingSession does for raw conns.
@@ -98,7 +98,7 @@ func TestCRITICAL_1_1_PromotionRace(t *testing.T) {
 	}
 
 	// Verify the map entry is a valid NTCP2Session.
-	entry, exists := transport.sessions.Load(peerHash)
+	entry, exists := transport.sessionRegistry.Load(peerHash)
 	require.True(t, exists, "peer entry should still exist in map")
 	finalSession, isSession := entry.(*NTCP2Session)
 	require.True(t, isSession, "map entry should be *NTCP2Session, got %T", entry)
@@ -114,7 +114,7 @@ func TestCRITICAL_1_1_PromotionRace(t *testing.T) {
 	time.Sleep(50 * time.Millisecond) // Brief delay to let cleanup goroutines run.
 
 	// Verify the session was removed from the map during cleanup.
-	entry, exists = transport.sessions.Load(peerHash)
+	entry, exists = transport.sessionRegistry.Load(peerHash)
 	require.False(t, exists, "session entry should be removed from map after Close()")
 }
 
@@ -128,7 +128,7 @@ func TestCRITICAL_1_1_PromotionRace_DirectCAS(t *testing.T) {
 	rawConn := newAcceptMockConn("192.168.1.101:5101")
 
 	// Store the raw connection as Accept() would.
-	transport.sessions.Store(peerHash, rawConn)
+	transport.sessionRegistry.StoreWithCount(peerHash, rawConn)
 
 	// Simulate two concurrent promoters, each creating their own promoted session.
 	promotedA := NewNTCP2SessionDeferred(rawConn, transport.ctx, transport.logger)
@@ -144,7 +144,7 @@ func TestCRITICAL_1_1_PromotionRace_DirectCAS(t *testing.T) {
 
 	go func() {
 		// Promoter A
-		if transport.sessions.CompareAndSwap(peerHash, rawConn, promotedA) {
+		if transport.sessionRegistry.CompareAndSwap(peerHash, rawConn, promotedA) {
 			promotedA.SetCleanupCallback(func() {
 				atomic.AddInt32(&cleanupA, 1)
 			})
@@ -160,7 +160,7 @@ func TestCRITICAL_1_1_PromotionRace_DirectCAS(t *testing.T) {
 		// Small delay to let A go first in most cases (but race still possible).
 		time.Sleep(1 * time.Millisecond)
 		// Promoter B
-		if transport.sessions.CompareAndSwap(peerHash, rawConn, promotedB) {
+		if transport.sessionRegistry.CompareAndSwap(peerHash, rawConn, promotedB) {
 			promotedB.SetCleanupCallback(func() {
 				atomic.AddInt32(&cleanupB, 1)
 			})
@@ -179,7 +179,7 @@ func TestCRITICAL_1_1_PromotionRace_DirectCAS(t *testing.T) {
 	assert.NotEqual(t, aWon, bWon, "exactly one promoter should win the CAS race")
 
 	// Verify the map contains a promoted session.
-	entry, exists := transport.sessions.Load(peerHash)
+	entry, exists := transport.sessionRegistry.Load(peerHash)
 	require.True(t, exists)
 	_, isSession := entry.(*NTCP2Session)
 	assert.True(t, isSession, "map entry should be *NTCP2Session after CAS race")
@@ -215,12 +215,13 @@ func TestCRITICAL_1_1_SessionCountConsistency(t *testing.T) {
 		peerHashes[i] = peerHash
 
 		rawConn := newAcceptMockConn(fmt.Sprintf("192.168.1.%d:51%02d", 100+i, i))
-		transport.sessions.Store(peerHash, rawConn)
-		atomic.AddInt32(&transport.sessionCount, 1)
+		transport.sessionRegistry.StoreWithCount(peerHash, rawConn)
+		// Skipped: sessionCount management moved to sessionRegistry
+		// atomic.AddInt32(&transport.sessionCount, 1)
 	}
 
 	expectedCount := int32(numPeers)
-	assert.Equal(t, expectedCount, atomic.LoadInt32(&transport.sessionCount))
+	assert.Equal(t, expectedCount, transport.GetSessionCount())
 
 	// Launch concurrent operations that promote these sessions.
 	var wg sync.WaitGroup
@@ -232,7 +233,7 @@ func TestCRITICAL_1_1_SessionCountConsistency(t *testing.T) {
 			peerIdx := i % numPeers
 			peerHash := peerHashes[peerIdx]
 
-			val, _ := transport.sessions.Load(peerHash)
+			val, _ := transport.sessionRegistry.Load(peerHash)
 			if val != nil {
 				if rawC, ok := val.(net.Conn); ok {
 					_, _ = transport.promoteInboundConnection(rawC, val, peerHash)
@@ -246,9 +247,9 @@ func TestCRITICAL_1_1_SessionCountConsistency(t *testing.T) {
 
 	// After all concurrent operations, session count should match map size
 	// (allowing for the possibility of some being actual NTCP2Session objects now).
-	finalCount := atomic.LoadInt32(&transport.sessionCount)
+	finalCount := transport.GetSessionCount()
 	mapSize := 0
-	transport.sessions.Range(func(key, val interface{}) bool {
+	transport.sessionRegistry.Range(func(key, val interface{}) bool {
 		mapSize++
 		return true
 	})
@@ -284,11 +285,11 @@ func TestCRITICAL_R1_SetIdentityDoesNotKillAcceptLoop(t *testing.T) {
 	accepted, err := transport.Accept()
 	require.NoError(t, err)
 	require.NotNil(t, accepted)
-	assert.Equal(t, 1, transport.GetSessionCount())
+	assert.Equal(t, int32(1), transport.GetSessionCount())
 
 	// Close the accepted connection to free the slot.
 	accepted.Close()
-	assert.Equal(t, 0, transport.GetSessionCount())
+	assert.Equal(t, int32(0), transport.GetSessionCount())
 
 	// Simulate SetIdentity behavior: temporarily set listener to nil.
 	// The accept loop should NOT terminate, but rather wait/retry.
@@ -320,7 +321,7 @@ func TestCRITICAL_R1_SetIdentityDoesNotKillAcceptLoop(t *testing.T) {
 	accepted2, err := transport.Accept()
 	require.NoError(t, err, "Accept should work after listener swap")
 	require.NotNil(t, accepted2, "Accepted connection should not be nil")
-	assert.Equal(t, 1, transport.GetSessionCount())
+	assert.Equal(t, int32(1), transport.GetSessionCount())
 }
 
 // TestX1_DualSocketOwnership_AcceptedConnNotPromoted is a regression test for X-1:
@@ -346,8 +347,9 @@ func TestX1_DualSocketOwnership_AcceptedConnNotPromoted(t *testing.T) {
 	// Simulate the state after Accept() has wrapped the connection and delivered it:
 	// The sessions map contains an acceptedConn wrapper (not a raw net.Conn or *NTCP2Session).
 	acceptedWrapper := acceptedConn{Conn: rawConn}
-	transport.sessions.Store(peerHash, acceptedWrapper)
-	atomic.AddInt32(&transport.sessionCount, 1)
+	transport.sessionRegistry.StoreWithCount(peerHash, acceptedWrapper)
+	// Skipped: sessionCount management moved to sessionRegistry
+	// atomic.AddInt32(&transport.sessionCount, 1)
 
 	// At this point, the Accept() consumer owns the socket. Concurrent GetSession()
 	// calls should NOT attempt to promote this acceptedConn.
@@ -383,13 +385,13 @@ func TestX1_DualSocketOwnership_AcceptedConnNotPromoted(t *testing.T) {
 	}
 
 	// Verify the map entry remains an acceptedConn (not promoted to *NTCP2Session).
-	entry, exists := transport.sessions.Load(peerHash)
+	entry, exists := transport.sessionRegistry.Load(peerHash)
 	require.True(t, exists, "acceptedConn entry should still exist")
 	_, isAcceptedConn := entry.(acceptedConn)
 	assert.True(t, isAcceptedConn, "map entry should remain acceptedConn, got %T", entry)
 
 	// Verify session count is still 1 (no accounting corruption).
-	assert.Equal(t, int32(1), atomic.LoadInt32(&transport.sessionCount),
+	assert.Equal(t, int32(1), transport.GetSessionCount(),
 		"session count should remain 1 (no double-counting from promotion attempts)")
 
 	// Verify the metric counter remains at 0 (no promotion attempts were made
@@ -465,14 +467,15 @@ func TestX3_AcceptStoreVsPromotionCAS(t *testing.T) {
 		rawConn := newAcceptMockConn(fmt.Sprintf("192.168.1.%d:5400", 100+i))
 
 		// Simulate trackInboundConnection storing the rawConn.
-		transport.sessions.Store(peerHash, rawConn)
-		atomic.AddInt32(&transport.sessionCount, 1)
+		transport.sessionRegistry.StoreWithCount(peerHash, rawConn)
+		// Skipped: sessionCount management moved to sessionRegistry
+		// atomic.AddInt32(&transport.sessionCount, 1)
 
 		// Race 1: Accept path tries to CAS rawConn → acceptedConn.
 		go func() {
 			defer wg.Done()
 			acceptedWrapper := acceptedConn{Conn: rawConn}
-			casSucceeded := transport.sessions.CompareAndSwap(peerHash, rawConn, acceptedWrapper)
+			casSucceeded := transport.sessionRegistry.CompareAndSwap(peerHash, rawConn, acceptedWrapper)
 			if !casSucceeded {
 				// Promotion won; Accept should not deliver this connection.
 				// In real code, this would trigger the "Inbound connection promoted concurrently" path.
@@ -492,7 +495,7 @@ func TestX3_AcceptStoreVsPromotionCAS(t *testing.T) {
 
 	// Verify session map integrity: each peerHash should have exactly one owner
 	// (either acceptedConn or *NTCP2Session, never both, never lost).
-	transport.sessions.Range(func(key, value interface{}) bool {
+	transport.sessionRegistry.Range(func(key, value interface{}) bool {
 		_, isAcceptedConn := value.(acceptedConn)
 		_, isSession := value.(*NTCP2Session)
 		assert.True(t, isAcceptedConn || isSession,
@@ -502,7 +505,7 @@ func TestX3_AcceptStoreVsPromotionCAS(t *testing.T) {
 
 	// Verify sessionCount consistency: initial count + winners should equal final count.
 	// Each race had 1 initial Store; winners kept their entries; losers didn't leak.
-	finalCount := atomic.LoadInt32(&transport.sessionCount)
+	finalCount := transport.GetSessionCount()
 	assert.Greater(t, finalCount, int32(0),
 		"sessionCount should be positive (some entries remain)")
 	assert.LessOrEqual(t, finalCount, int32(concurrentRaces),
@@ -540,7 +543,7 @@ func TestCRITICAL_2_1_PromotionSlotLeakOnCASFailure(t *testing.T) {
 
 		// Simulate Accept(): reserve slot and store raw conn.
 		require.NoError(t, transport.checkSessionLimit())
-		transport.sessions.Store(peerHash, rawConn)
+		transport.sessionRegistry.StoreWithCount(peerHash, rawConn)
 
 		// Launch concurrent promotions (simulating inbound Accept→GetSession + outbound Dial).
 		var wg sync.WaitGroup
@@ -549,7 +552,7 @@ func TestCRITICAL_2_1_PromotionSlotLeakOnCASFailure(t *testing.T) {
 		for j := 0; j < concurrentPromoters; j++ {
 			go func() {
 				defer wg.Done()
-				val, _ := transport.sessions.Load(peerHash)
+				val, _ := transport.sessionRegistry.Load(peerHash)
 				if val != nil {
 					if rawC, ok := val.(net.Conn); ok {
 						_, _ = transport.promoteInboundConnection(rawC, val, peerHash)
@@ -562,7 +565,7 @@ func TestCRITICAL_2_1_PromotionSlotLeakOnCASFailure(t *testing.T) {
 
 	// Count actual sessions in map.
 	actualSessions := 0
-	transport.sessions.Range(func(key, value interface{}) bool {
+	transport.sessionRegistry.Range(func(key, value interface{}) bool {
 		if _, ok := value.(*NTCP2Session); ok {
 			actualSessions++
 		}
@@ -570,7 +573,7 @@ func TestCRITICAL_2_1_PromotionSlotLeakOnCASFailure(t *testing.T) {
 	})
 
 	// sessionCount should equal number of promoted sessions (not numRaces × concurrentPromoters).
-	finalCount := atomic.LoadInt32(&transport.sessionCount)
+	finalCount := transport.GetSessionCount()
 	assert.Equal(t, actualSessions, int(finalCount),
 		"sessionCount should equal actual sessions in map (no leaked slots from CAS losers)")
 

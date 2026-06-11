@@ -31,8 +31,7 @@ func TestSetCleanupCallback_CalledSynchronouslyOnClose(t *testing.T) {
 	session.StartWorkers()
 
 	// Store in transport map to simulate real usage
-	transport.sessions.Store(peerHash, session)
-	atomic.AddInt32(&transport.sessionCount, 1)
+	transport.sessionRegistry.LoadOrStore(peerHash, session)
 
 	// Close the session
 	err := session.Close()
@@ -63,8 +62,7 @@ func TestSetCleanupCallback_FiresExactlyOnce(t *testing.T) {
 	})
 	session.StartWorkers()
 
-	transport.sessions.Store(peerHash, session)
-	atomic.AddInt32(&transport.sessionCount, 1)
+	transport.sessionRegistry.LoadOrStore(peerHash, session)
 
 	// Attempt concurrent Close() calls
 	var wg sync.WaitGroup
@@ -99,8 +97,7 @@ func TestPromoteInboundConnection_CallbackFiresBeforeMapRemoval(t *testing.T) {
 	require.True(t, fresh)
 
 	// Store in map as accepted connection
-	transport.sessions.Store(peerHash, tracked)
-	atomic.AddInt32(&transport.sessionCount, 1)
+	transport.sessionRegistry.LoadOrStore(peerHash, tracked)
 
 	// Create and promote a session
 	session := NewNTCP2Session(tracked, transport.ctx, transport.logger)
@@ -110,14 +107,12 @@ func TestPromoteInboundConnection_CallbackFiresBeforeMapRemoval(t *testing.T) {
 	session.SetCleanupCallback(func() {
 		callbackExecuted.Store(true)
 		// Actually remove from map and decrement count like removeSession does
-		if _, loaded := transport.sessions.LoadAndDelete(peerHash); loaded {
-			transport.decrementSessionCountSafe()
-		}
+		transport.sessionRegistry.Remove(peerHash)
 	})
 	session.StartWorkers()
 
 	// Replace in map with promoted session
-	transport.sessions.Store(peerHash, session)
+	transport.sessionRegistry.LoadOrStore(peerHash, session)
 
 	// Close the session
 	err := session.Close()
@@ -126,11 +121,11 @@ func TestPromoteInboundConnection_CallbackFiresBeforeMapRemoval(t *testing.T) {
 	// Verify callback executed and session was removed from map
 	assert.True(t, callbackExecuted.Load(), "callback should execute on session close")
 
-	_, exists := transport.sessions.Load(peerHash)
+	_, exists := transport.sessionRegistry.Load(peerHash)
 	assert.False(t, exists, "session should be removed from map after callback")
 
 	// Verify sessionCount was decremented
-	assert.Equal(t, 0, transport.GetSessionCount())
+	assert.Equal(t, int32(0), transport.GetSessionCount())
 
 	// Close transport
 	err = transport.Close()
@@ -157,8 +152,9 @@ func TestCloseAllActiveSessions_AllCallbacksFire(t *testing.T) {
 		})
 		session.StartWorkers()
 
-		transport.sessions.Store(peerHash, session)
-		atomic.AddInt32(&transport.sessionCount, 1)
+		transport.sessionRegistry.StoreWithCount(peerHash, session)
+		// Skipped: sessionCount management moved to sessionRegistry
+		// atomic.AddInt32(&transport.sessionCount, 1)
 	}
 
 	assert.Equal(t, numSessions, int(transport.GetSessionCount()))
@@ -172,11 +168,11 @@ func TestCloseAllActiveSessions_AllCallbacksFire(t *testing.T) {
 		"all cleanup callbacks should fire during closeAllActiveSessions()")
 
 	// Verify sessionCount is 0 after close
-	assert.Equal(t, 0, transport.GetSessionCount(), "sessionCount should be 0 after closeAllActiveSessions()")
+	assert.Equal(t, int32(0), transport.GetSessionCount(), "sessionCount should be 0 after closeAllActiveSessions()")
 
 	// Verify no stale sessions remain
 	staleSessions := 0
-	transport.sessions.Range(func(key, value interface{}) bool {
+	transport.sessionRegistry.Range(func(key, value interface{}) bool {
 		staleSessions++
 		return true
 	})
