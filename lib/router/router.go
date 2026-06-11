@@ -281,12 +281,7 @@ func initializeRouterKeystore(r *Router, cfg *config.RouterConfig) error {
 
 	keystore, err := keys.NewRouterInfoKeystore(cfg.WorkingDir, "localRouter")
 	if err != nil {
-		log.WithError(err).WithFields(logger.Fields{
-			"at":          "(Router) initializeRouterKeystore",
-			"phase":       "startup",
-			"reason":      "keystore creation failed",
-			"working_dir": cfg.WorkingDir,
-		}).Error("failed to create RouterInfoKeystore")
+		logError("failed to create RouterInfoKeystore", err)
 		return err
 	}
 	log.WithFields(logger.Fields{
@@ -297,11 +292,7 @@ func initializeRouterKeystore(r *Router, cfg *config.RouterConfig) error {
 	}).Debug("routerInfoKeystore created successfully")
 
 	if err = keystore.StoreKeys(); err != nil {
-		log.WithError(err).WithFields(logger.Fields{
-			"at":     "(Router) initializeRouterKeystore",
-			"phase":  "startup",
-			"reason": "keystore persistence failed",
-		}).Error("failed to store RouterInfoKeystore")
+		logError("failed to store RouterInfoKeystore", err)
 		return err
 	}
 	log.WithFields(logger.Fields{"at": "initializeRouterKeystore"}).Debug("RouterInfoKeystore stored successfully")
@@ -314,7 +305,7 @@ func initializeRouterKeystore(r *Router, cfg *config.RouterConfig) error {
 func validateRouterKeys(r *Router) error {
 	pub, _, err := r.keystore.GetKeys()
 	if err != nil {
-		log.WithError(err).Error("Failed to get keys from RouterInfoKeystore")
+		logError("failed to get keys from RouterInfoKeystore", err)
 		return err
 	}
 
@@ -340,7 +331,7 @@ func constructRouterInfo(r *Router) (*router_info.RouterInfo, error) {
 	log.WithField("at", "constructRouterInfo").Debug("calling ConstructRouterInfo")
 	ri, err := r.keystore.ConstructRouterInfo(nil, keys.RouterInfoOptions{Reachable: false})
 	if err != nil {
-		log.WithError(err).Error("Failed to construct RouterInfo")
+		logError("failed to construct RouterInfo", err)
 		return nil, err
 	}
 
