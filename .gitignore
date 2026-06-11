@@ -16,4 +16,4 @@ err
 .padding
 *.disabled
 *.bak
-*.backup
+*.backup*

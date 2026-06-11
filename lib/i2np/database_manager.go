@@ -3,16 +3,15 @@ package i2np
 import (
 	"bytes"
 	"compress/gzip"
-	"fmt"
 	"io"
 	"sync"
 	"time"
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
-	"github.com/go-i2p/go-i2p/lib/util/logutil"
 )
 
 // DatabaseManager coordinates database-related message processing and response generation.
@@ -315,7 +314,7 @@ func (dm *DatabaseManager) logDatabaseSearchReply(key, to common.Hash, peerCount
 		"target_key":      logutil.HashPrefixPlain(key),
 		"destination":     logutil.HashPrefixPlain(to),
 		"suggested_peers": peerCount,
-		"our_router_hash": fmt.Sprintf("%x", dm.ourRouterHash[:8]),
+		"our_router_hash": logutil.HashPrefixPlain(dm.ourRouterHash),
 	}).Debug("Sending DatabaseSearchReply with floodfill peer suggestions")
 }
 

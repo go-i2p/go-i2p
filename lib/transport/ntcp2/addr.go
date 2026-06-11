@@ -1,7 +1,6 @@
 package ntcp2
 
 import (
-	"fmt"
 	"net"
 	"strings"
 	"sync"
@@ -9,6 +8,7 @@ import (
 	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_address"
 	"github.com/go-i2p/common/router_info"
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/go-i2p/go-noise/ntcp2"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
@@ -100,10 +100,10 @@ func getRouterHashBytes(routerInfo router_info.RouterInfo) ([]byte, error) {
 
 // validateNTCP2Support checks if the RouterInfo supports NTCP2 transport.
 func validateNTCP2Support(routerInfo *router_info.RouterInfo, hashBytes []byte) error {
-	log.WithField("router_hash", fmt.Sprintf("%x", hashBytes[:8])).Debug("Extracting NTCP2 address from RouterInfo")
+	log.WithField("router_hash", logutil.BytePrefix(hashBytes)).Debug("Extracting NTCP2 address from RouterInfo")
 
 	if !SupportsNTCP2(routerInfo) {
-		log.WithField("router_hash", fmt.Sprintf("%x", hashBytes[:8])).Warn("RouterInfo does not support NTCP2")
+		log.WithField("router_hash", logutil.BytePrefix(hashBytes)).Warn("RouterInfo does not support NTCP2")
 		return ErrNTCP2NotSupported
 	}
 	return nil
@@ -128,7 +128,7 @@ func findValidNTCP2Address(routerInfo router_info.RouterInfo, hashBytes []byte) 
 // logAddressSearch logs the start of NTCP2 address search.
 func logAddressSearch(hashBytes []byte, addressCount int) {
 	log.WithFields(map[string]interface{}{
-		"router_hash":   fmt.Sprintf("%x", hashBytes[:8]),
+		"router_hash":   logutil.BytePrefix(hashBytes),
 		"address_count": addressCount,
 	}).Debug("Searching for valid NTCP2 address")
 }
@@ -187,7 +187,7 @@ func logNoValidAddressFound(hashBytes []byte, addressCount int) {
 		"at":              "findValidNTCP2Address",
 		"phase":           "address_extraction",
 		"operation":       "find_valid_address",
-		"router_hash":     fmt.Sprintf("%x", hashBytes[:8]),
+		"router_hash":     logutil.BytePrefix(hashBytes),
 		"addresses_total": addressCount,
 		"addresses_tried": addressCount,
 	}).Warn("No valid NTCP2 address found in RouterInfo after checking all addresses")
@@ -208,7 +208,7 @@ func processNTCP2Address(addr *router_address.RouterAddress, routerInfo router_i
 			"phase":         "address_resolution",
 			"operation":     "resolve_tcp",
 			"error":         err.Error(),
-			"router_hash":   fmt.Sprintf("%x", hashBytes[:8]),
+			"router_hash":   logutil.HashPrefixPlain(hashBytes),
 			"address_count": len(routerInfo.RouterAddresses()),
 		}).Warn("Failed to resolve TCP address from NTCP2 router address")
 		return nil, oops.Wrapf(err, "failed to resolve TCP address")
@@ -236,7 +236,7 @@ func processNTCP2Address(addr *router_address.RouterAddress, routerInfo router_i
 // logSuccessfulExtraction logs the successful NTCP2 address extraction.
 func logSuccessfulExtraction(addr net.Addr, hashBytes []byte) {
 	log.WithFields(map[string]interface{}{
-		"router_hash": fmt.Sprintf("%x", hashBytes[:8]),
+		"router_hash": logutil.BytePrefix(hashBytes),
 		"tcp_addr":    addr.String(),
 	}).Info("Successfully extracted NTCP2 address")
 }

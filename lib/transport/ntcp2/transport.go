@@ -128,7 +128,7 @@ func NewNTCP2Transport(identity router_info.RouterInfo, config *Config, keystore
 	}
 	identHashBytes := identHash.Bytes()
 	logger.WithFields(map[string]interface{}{
-		"router_hash":      fmt.Sprintf("%x", identHashBytes[:8]),
+		"router_hash":      logutil.HashPrefixPlain(identHashBytes),
 		"listener_address": config.ListenerAddress,
 	}).Info("Initializing NTCP2 transport")
 
@@ -593,7 +593,7 @@ func (t *NTCP2Transport) inboundHandshakeWorker(conn net.Conn) {
 		// with the live promoted session). The trackedConn wrapper is harmlessly GC'd.
 		t.logger.WithFields(map[string]interface{}{
 			"remote_addr": conn.RemoteAddr().String(),
-			"peer_hash":   fmt.Sprintf("%x", peerHash[:8]),
+			"peer_hash":   logutil.HashPrefixPlain(peerHash),
 		}).Debug("Inbound connection promoted concurrently before Accept delivery; not sending to pendingConns")
 		return
 	}
@@ -817,7 +817,7 @@ func (t *NTCP2Transport) trackInboundConnection(conn net.Conn) (net.Conn, bool) 
 		t.unreserveSessionSlot()
 		t.logger.WithFields(map[string]interface{}{
 			"remote_addr": conn.RemoteAddr().String(),
-			"peer_hash":   fmt.Sprintf("%x", peerHash[:8]),
+			"peer_hash":   logutil.HashPrefixPlain(peerHash),
 		}).Debug("Duplicate inbound connection detected; reservation unreserved")
 		return conn, false // Mark as duplicate, return raw connection
 	}
@@ -834,7 +834,7 @@ func (t *NTCP2Transport) trackInboundConnection(conn net.Conn) (net.Conn, bool) 
 
 	t.logger.WithFields(map[string]interface{}{
 		"remote_addr":   conn.RemoteAddr().String(),
-		"peer_hash":     fmt.Sprintf("%x", peerHash[:8]),
+		"peer_hash":     logutil.HashPrefixPlain(peerHash),
 		"session_count": t.GetSessionCount(),
 	}).Info("Accepted and tracked incoming NTCP2 connection")
 	return wrappedConn, true // Mark as fresh
@@ -1039,7 +1039,7 @@ func (t *NTCP2Transport) logIdentityUpdate(ident router_info.RouterInfo) error {
 		return oops.Wrapf(err, "failed to get router identity hash")
 	}
 	identHashBytes := identHash.Bytes()
-	t.logger.WithField("router_hash", fmt.Sprintf("%x", identHashBytes[:8])).Info("Updating NTCP2 transport identity")
+	t.logger.WithField("router_hash", logutil.HashPrefixPlain(identHashBytes)).Info("Updating NTCP2 transport identity")
 	return nil
 }
 
@@ -1180,7 +1180,7 @@ func (t *NTCP2Transport) GetSession(routerInfo router_info.RouterInfo) (transpor
 	}
 	routerHashBytes := routerHash.Bytes()
 	t.logger.WithFields(map[string]interface{}{
-		"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
+		"router_hash": logutil.HashPrefixPlain(routerHashBytes),
 		"operation":   "get_session",
 	}).Debug("Getting NTCP2 session")
 
@@ -1257,7 +1257,7 @@ func (t *NTCP2Transport) verifyMapIntegrity() int {
 		if resolution.kind == entryIsUnexpected {
 			hashBytes := hash.Bytes()
 			t.logger.WithFields(map[string]interface{}{
-				"router_hash": fmt.Sprintf("%x", hashBytes[:8]),
+				"router_hash": logutil.HashPrefixPlain(hashBytes),
 				"entry_value": fmt.Sprintf("%#v", value),
 				"entry_type":  fmt.Sprintf("%T", value),
 			}).Error("verifyMapIntegrity: invalid session map entry type")
@@ -1310,7 +1310,7 @@ func (t *NTCP2Transport) validateExistingSession(s *NTCP2Session, routerHash dat
 	if s.GetContext().Err() != nil {
 		routerHashBytes := routerHash.Bytes()
 		t.logger.WithFields(map[string]interface{}{
-			"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
+			"router_hash": logutil.HashPrefixPlain(routerHashBytes),
 			"reason":      s.GetContext().Err().Error(),
 		}).Info("Evicting stale NTCP2 session")
 		t.sessionRegistry.Remove(routerHash)
@@ -1318,7 +1318,7 @@ func (t *NTCP2Transport) validateExistingSession(s *NTCP2Session, routerHash dat
 	}
 	routerHashBytes := routerHash.Bytes()
 	t.logger.WithFields(map[string]interface{}{
-		"router_hash":     fmt.Sprintf("%x", routerHashBytes[:8]),
+		"router_hash":     logutil.HashPrefixPlain(routerHashBytes),
 		"send_queue_size": s.SendQueueSize(),
 	}).Info("Reusing existing NTCP2 session")
 	return s, true
@@ -1336,7 +1336,7 @@ func (t *NTCP2Transport) promoteInboundConnection(conn net.Conn, original interf
 		atomic.AddInt32(&t.acceptedConnPromotionAttempts, 1)
 		routerHashBytes := routerHash.Bytes()
 		t.logger.WithFields(map[string]interface{}{
-			"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
+			"router_hash": logutil.HashPrefixPlain(routerHashBytes),
 		}).Error("Refusing to promote acceptedConn (already delivered to Accept)")
 		return nil, false
 	}
@@ -1357,11 +1357,11 @@ func (t *NTCP2Transport) promoteInboundConnection(conn net.Conn, original interf
 		PreflightCheck: func() error {
 			// Pre-flight check: verify session is in map before starting workers (CRITICAL-3.1)
 			if mapValue, exists := t.sessionRegistry.Load(routerHash); !exists {
-				t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).
+				t.logger.WithField("router_hash", logutil.HashPrefixPlain(routerHashBytes)).
 					Error("CRITICAL-3.1 violation: CAS succeeded but session missing from map before StartWorkers")
 				return fmt.Errorf("session not in map")
 			} else if mapSession, ok := mapValue.(*NTCP2Session); !ok || mapSession != promoted {
-				t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).
+				t.logger.WithField("router_hash", logutil.HashPrefixPlain(routerHashBytes)).
 					Error("CRITICAL-3.1 violation: CAS succeeded but wrong session in map before StartWorkers")
 				return fmt.Errorf("wrong session in map")
 			}
@@ -1373,7 +1373,7 @@ func (t *NTCP2Transport) promoteInboundConnection(conn net.Conn, original interf
 		StartWorkers: func() {
 			promoted.StartWorkers()
 			t.logger.WithFields(map[string]interface{}{
-				"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
+				"router_hash": logutil.HashPrefixPlain(routerHashBytes),
 			}).Info("Promoted inbound net.Conn to NTCP2Session")
 		},
 	}
@@ -1399,7 +1399,7 @@ func (t *NTCP2Transport) promoteInboundConnection(conn net.Conn, original interf
 // logNoSessionFound logs that no existing session was found for the given hash.
 func (t *NTCP2Transport) logNoSessionFound(routerHash data.Hash) {
 	routerHashBytes := routerHash.Bytes()
-	t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Debug("No existing session found")
+	t.logger.WithField("router_hash", logutil.HashPrefixPlain(routerHashBytes)).Debug("No existing session found")
 }
 
 func (t *NTCP2Transport) createOutboundSession(routerInfo router_info.RouterInfo, routerHash data.Hash) (transport.TransportSession, error) {
@@ -1409,14 +1409,14 @@ func (t *NTCP2Transport) createOutboundSession(routerInfo router_info.RouterInfo
 	if err := t.checkSessionLimit(); err != nil {
 		cfg := t.config.Load()
 		t.logger.WithFields(map[string]interface{}{
-			"router_hash":   fmt.Sprintf("%x", routerHashBytes[:8]),
+			"router_hash":   logutil.HashPrefixPlain(routerHashBytes),
 			"session_count": t.GetSessionCount(),
 			"max_sessions":  cfg.GetMaxSessions(),
 		}).Warn("Connection pool full, rejecting outbound session")
 		return nil, err
 	}
 
-	t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Info("Creating new outbound NTCP2 session")
+	t.logger.WithField("router_hash", logutil.HashPrefixPlain(routerHashBytes)).Info("Creating new outbound NTCP2 session")
 
 	if n := t.getPeerConnNotifier(); n != nil {
 		n.RecordAttempt(routerHash)
@@ -1434,7 +1434,7 @@ func (t *NTCP2Transport) createOutboundSession(routerInfo router_info.RouterInfo
 // handleDialFailure releases the reserved session slot and records dial failure metrics.
 func (t *NTCP2Transport) handleDialFailure(routerHash data.Hash, routerHashBytes [32]byte, err error) {
 	t.unreserveSessionSlot()
-	t.logger.WithError(err).WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Debug("Failed to dial NTCP2 connection")
+	t.logger.WithError(err).WithField("router_hash", logutil.HashPrefixPlain(routerHashBytes)).Debug("Failed to dial NTCP2 connection")
 	if n := t.getPeerConnNotifier(); n != nil {
 		if errors.Is(err, ErrInvalidRouterInfo) {
 			n.RecordPermanentFailure(routerHash, "no_reachable_ntcp2_address")
@@ -1464,7 +1464,7 @@ func (t *NTCP2Transport) finalizeOutboundSession(conn *ntcp2.Conn, routerHash da
 		n.RecordSuccess(routerHash, time.Since(dialStart).Milliseconds())
 	}
 	t.logger.WithFields(map[string]interface{}{
-		"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
+		"router_hash": logutil.HashPrefixPlain(routerHashBytes),
 		"remote_addr": conn.RemoteAddr().String(),
 	}).Info("Successfully created outbound NTCP2 session")
 	return session, nil
@@ -1594,7 +1594,7 @@ func (t *NTCP2Transport) performNTCP2Handshake(ntcp2Addr net.Addr, tcpAddrString
 
 	t.logger.WithFields(map[string]interface{}{
 		"remote_addr":       tcpAddrString,
-		"peer_hash":         fmt.Sprintf("%x", peerHashBytes[:8]),
+		"peer_hash":         logutil.BytePrefix(peerHashBytes),
 		"total_duration_ms": time.Since(tcpDialStart).Milliseconds(),
 	}).Info("NTCP2 connection established")
 	return conn, nil
@@ -1620,7 +1620,7 @@ func (t *NTCP2Transport) logHandshakeFailure(tcpAddrString string, peerHashBytes
 
 	fields := map[string]interface{}{
 		"remote_addr":    tcpAddrString,
-		"peer_hash":      fmt.Sprintf("%x", peerHashBytes[:8]),
+		"peer_hash":      logutil.BytePrefix(peerHashBytes),
 		"peer_hash_full": fmt.Sprintf("%x", peerHashBytes),
 		"error_type":     errorType,
 		"error_message":  err.Error(),
@@ -1806,7 +1806,7 @@ func (t *NTCP2Transport) setupSession(conn *ntcp2.Conn, routerHash data.Hash) *N
 			t.sessionRegistry.Delete(routerHash)
 			routerHashBytes := routerHash.Bytes()
 			t.logger.WithFields(map[string]interface{}{
-				"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
+				"router_hash": logutil.HashPrefixPlain(routerHashBytes),
 			}).Error("setupSession: corrupt session map entry deleted, connection already closed — caller must re-dial")
 			return nil
 		}
@@ -1817,10 +1817,10 @@ func (t *NTCP2Transport) setupSession(conn *ntcp2.Conn, routerHash data.Hash) *N
 	// Pre-flight check: verify session is in map before starting workers (CRITICAL-3.1)
 	routerHashBytes := routerHash.Bytes()
 	if mapValue, exists := t.sessionRegistry.Load(routerHash); !exists {
-		t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).
+		t.logger.WithField("router_hash", logutil.HashPrefixPlain(routerHashBytes)).
 			Error("CRITICAL-3.1 violation: LoadOrStore succeeded but session missing from map before StartWorkers")
 	} else if mapSession, ok := mapValue.(*NTCP2Session); !ok || mapSession != session {
-		t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).
+		t.logger.WithField("router_hash", logutil.HashPrefixPlain(routerHashBytes)).
 			Error("CRITICAL-3.1 violation: LoadOrStore succeeded but wrong session in map before StartWorkers")
 	}
 
@@ -1900,7 +1900,7 @@ func (t *NTCP2Transport) promoteRawConnToSession(rawConn net.Conn, routerHash da
 		atomic.AddInt32(&t.acceptedConnPromotionAttempts, 1)
 		routerHashBytes := routerHash.Bytes()
 		t.logger.WithFields(map[string]interface{}{
-			"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
+			"router_hash": logutil.HashPrefixPlain(routerHashBytes),
 		}).Error("Refusing to promote acceptedConn in promoteRawConnToSession (already delivered to Accept)")
 		return nil
 	}
@@ -1924,11 +1924,11 @@ func (t *NTCP2Transport) promoteRawConnToSession(rawConn net.Conn, routerHash da
 		PreflightCheck: func() error {
 			// Pre-flight check: verify session is in map before starting workers (CRITICAL-3.1)
 			if mapValue, exists := t.sessionRegistry.Load(routerHash); !exists {
-				t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).
+				t.logger.WithField("router_hash", logutil.HashPrefixPlain(routerHashBytes)).
 					Error("CRITICAL-3.1 violation: CAS succeeded but session missing from map before StartWorkers")
 				return fmt.Errorf("session not in map")
 			} else if mapSession, ok := mapValue.(*NTCP2Session); !ok || mapSession != promoted {
-				t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).
+				t.logger.WithField("router_hash", logutil.HashPrefixPlain(routerHashBytes)).
 					Error("CRITICAL-3.1 violation: CAS succeeded but wrong session in map before StartWorkers")
 				return fmt.Errorf("wrong session in map")
 			}
@@ -1940,7 +1940,7 @@ func (t *NTCP2Transport) promoteRawConnToSession(rawConn net.Conn, routerHash da
 		StartWorkers: func() {
 			promoted.StartWorkers()
 			t.logger.WithFields(map[string]interface{}{
-				"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
+				"router_hash": logutil.HashPrefixPlain(routerHashBytes),
 			}).Info("Promoted inbound net.Conn to NTCP2Session in setupSession")
 		},
 	}
@@ -1969,7 +1969,7 @@ func (t *NTCP2Transport) promoteRawConnToSession(rawConn net.Conn, routerHash da
 			// was still rawConn at that point). This observation confirms the race occurred.
 			routerHashBytes := routerHash.Bytes()
 			t.logger.WithFields(map[string]interface{}{
-				"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
+				"router_hash": logutil.HashPrefixPlain(routerHashBytes),
 				"winner":      "acceptedConn",
 			}).Debug("R-1: Promotion lost to Accept() — connection now owned by Accept")
 			return nil
@@ -2000,7 +2000,7 @@ func (t *NTCP2Transport) Compatible(routerInfo router_info.RouterInfo) bool {
 	}
 	routerHashBytes := routerHash.Bytes()
 	t.logger.WithFields(map[string]interface{}{
-		"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
+		"router_hash": logutil.HashPrefixPlain(routerHashBytes),
 		"dialable":    dialable,
 	}).Debug("Checking NTCP2 compatibility")
 	return dialable
@@ -2014,7 +2014,7 @@ func (t *NTCP2Transport) removeSession(routerHash data.Hash) {
 	// will only decrement truly-stale sessions (those that weren't cleaned up).
 	// This makes shutdown accounting deterministic.
 	t.sessionRegistry.Remove(routerHash)
-	t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Info("Removed session from transport session map")
+	t.logger.WithField("router_hash", logutil.HashPrefixPlain(routerHashBytes)).Info("Removed session from transport session map")
 }
 
 // GetSessionCount returns the number of active sessions managed by this transport.
@@ -2166,19 +2166,19 @@ func (t *NTCP2Transport) closeIndividualSession(key, value interface{}) {
 	case *NTCP2Session:
 		if err := v.Close(); err != nil && hashOk {
 			routerHashBytes := routerHash.Bytes()
-			t.logger.WithError(err).WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Warn("Error closing session")
+			t.logger.WithError(err).WithField("router_hash", logutil.HashPrefixPlain(routerHashBytes)).Warn("Error closing session")
 		}
 	case acceptedConn:
 		// Connection delivered to Accept() consumer (R-3 fix).
 		if err := v.Close(); err != nil && hashOk {
 			routerHashBytes := routerHash.Bytes()
-			t.logger.WithError(err).WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Warn("Error closing accepted connection")
+			t.logger.WithError(err).WithField("router_hash", logutil.HashPrefixPlain(routerHashBytes)).Warn("Error closing accepted connection")
 		}
 	case net.Conn:
 		// Raw net.Conn stored by Accept() but never promoted to *NTCP2Session.
 		if err := v.Close(); err != nil && hashOk {
 			routerHashBytes := routerHash.Bytes()
-			t.logger.WithError(err).WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Warn("Error closing raw inbound connection")
+			t.logger.WithError(err).WithField("router_hash", logutil.HashPrefixPlain(routerHashBytes)).Warn("Error closing raw inbound connection")
 		}
 	default:
 		t.logger.Warn("Unexpected session map entry type during shutdown")
