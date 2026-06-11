@@ -47,14 +47,14 @@ func (db *StdNetDB) GetAllRouterInfos() (ri []router_info.RouterInfo) {
 		"at":     "StdNetDB.GetAllRouterInfos",
 		"reason": "bulk_retrieval",
 	}).Debug("getting all RouterInfos")
-	db.riMutex.RLock()
-	ri = make([]router_info.RouterInfo, 0, len(db.RouterInfos))
-	for _, e := range db.RouterInfos {
+	db.riCache.mu.RLock()
+	ri = make([]router_info.RouterInfo, 0, len(db.riCache.entries))
+	for _, e := range db.riCache.entries {
 		if e.RouterInfo != nil {
 			ri = append(ri, *e.RouterInfo)
 		}
 	}
-	db.riMutex.RUnlock()
+	db.riCache.mu.RUnlock()
 	return ri
 }
 

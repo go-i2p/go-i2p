@@ -227,6 +227,14 @@ type IncomingMessage struct {
 
 // NewSession creates a new I2CP session with its own isolated in-memory NetDB.
 // The destination parameter can be nil, in which case a new destination will be generated.
+// SessionKeys holds the private keys and optional padding for an I2CP session.
+// This replaces the type-unsafe variadic interface{} approach in NewSession.
+type SessionKeys struct {
+	Signing         types.SigningPrivateKey    // Signing private key
+	Encryption      types.PrivateEncryptionKey // Encryption private key
+	IdentityPadding []byte                     // Optional identity padding
+}
+
 // The signingPrivKey and encryptionPrivKey parameters allow clients to provide their own
 // key material for persistent identity across sessions. When both private keys are provided,
 // the destination is reconstructed from them (honoring the client's identity per I2CP spec).
@@ -248,6 +256,49 @@ func NewSession(id uint16, dest *destination.Destination, config *SessionConfig,
 	}).Info("creating_i2cp_session")
 
 	sigPriv, encPriv, identityPadding := extractPrivateKeys(privKeys)
+	return newSessionInternal(id, dest, config, sigPriv, encPriv, identityPadding)
+}
+
+// NewSessionWithKeys creates an I2CP session with typed key material.
+// This is the preferred constructor that ensures type safety for key parameters.
+//
+// Parameters:
+//   - id: The I2CP session ID
+//   - dest: The destination for this session (optional; if nil, generated from keys)
+//   - config: Session configuration (optional; defaults applied if nil)
+//   - keys: Typed session key material
+//
+// Returns:
+//   - *Session: The created session, or an error if initialization fails
+func NewSessionWithKeys(id uint16, dest *destination.Destination, config *SessionConfig, keys *SessionKeys) (*Session, error) {
+	config = ensureValidConfig(config)
+
+	var sigPriv types.SigningPrivateKey
+	var encPriv types.PrivateEncryptionKey
+	var identityPadding []byte
+
+	if keys != nil {
+		sigPriv = keys.Signing
+		encPriv = keys.Encryption
+		identityPadding = keys.IdentityPadding
+	}
+
+	log.WithFields(logger.Fields{
+		"at":                   "i2cp.NewSessionWithKeys",
+		"sessionID":            id,
+		"hasDestination":       dest != nil,
+		"hasPrivateKeys":       sigPriv != nil && encPriv != nil,
+		"inboundTunnelLength":  config.InboundTunnelLength,
+		"outboundTunnelLength": config.OutboundTunnelLength,
+		"inboundTunnelCount":   config.InboundTunnelCount,
+		"outboundTunnelCount":  config.OutboundTunnelCount,
+	}).Info("creating_i2cp_session_with_keys")
+
+	return newSessionInternal(id, dest, config, sigPriv, encPriv, identityPadding)
+}
+
+// newSessionInternal is the internal implementation shared by both NewSession and NewSessionWithKeys.
+func newSessionInternal(id uint16, dest *destination.Destination, config *SessionConfig, sigPriv types.SigningPrivateKey, encPriv types.PrivateEncryptionKey, identityPadding []byte) (*Session, error) {
 
 	keyStore, dest, err := prepareDestinationAndKeys(dest, sigPriv, encPriv, identityPadding)
 	if err != nil {

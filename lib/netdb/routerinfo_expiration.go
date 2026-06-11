@@ -30,10 +30,7 @@ const MinRouterInfoCount = 25
 // the RouterInfo's published date plus RouterInfoMaxAge.
 func (db *StdNetDB) trackRouterInfoExpiration(key common.Hash, publishedTime time.Time) {
 	expiryTime := publishedTime.Add(RouterInfoMaxAge)
-
-	db.expiryMutex.Lock()
-	db.routerInfoExpiry[key] = expiryTime
-	db.expiryMutex.Unlock()
+	db.riCache.setExpiry(key, expiryTime)
 
 	log.WithFields(logger.Fields{
 		"hash":       fmt.Sprintf("%x", key[:8]),
@@ -60,9 +57,7 @@ func (db *StdNetDB) cleanExpiredRouterInfos() {
 	removed := db.removeRouterInfoBatch(expired, removeCount)
 
 	if removed > 0 {
-		db.riMutex.RLock()
-		remaining := len(db.RouterInfos)
-		db.riMutex.RUnlock()
+		remaining := db.riCache.count()
 		log.WithFields(logger.Fields{
 			"removed":        removed,
 			"total_expired":  len(expired),
@@ -74,14 +69,14 @@ func (db *StdNetDB) cleanExpiredRouterInfos() {
 // findExpiredRouterInfoHashes returns the hashes of all RouterInfos whose expiry time has passed.
 func (db *StdNetDB) findExpiredRouterInfoHashes() []common.Hash {
 	now := time.Now()
-	db.expiryMutex.RLock()
+	db.riCache.mu.RLock()
 	expired := make([]common.Hash, 0)
-	for hash, expiryTime := range db.routerInfoExpiry {
+	for hash, expiryTime := range db.riCache.expiry {
 		if now.After(expiryTime) {
 			expired = append(expired, hash)
 		}
 	}
-	db.expiryMutex.RUnlock()
+	db.riCache.mu.RUnlock()
 	return expired
 }
 
@@ -89,9 +84,7 @@ func (db *StdNetDB) findExpiredRouterInfoHashes() []common.Hash {
 // while keeping at least MinRouterInfoCount entries in the database.
 // Returns 0 if no entries should be removed.
 func (db *StdNetDB) calculateRemovableCount(expiredCount int) int {
-	db.riMutex.RLock()
-	currentCount := len(db.RouterInfos)
-	db.riMutex.RUnlock()
+	currentCount := db.riCache.count()
 
 	maxRemovable := currentCount - MinRouterInfoCount
 	if maxRemovable <= 0 {
@@ -129,14 +122,10 @@ func (db *StdNetDB) removeRouterInfoBatch(expired []common.Hash, limit int) int 
 // could find the entry in the data map but find it missing from the expiry map.
 func (db *StdNetDB) removeExpiredRouterInfo(hash common.Hash) {
 	// Remove from memory cache first so readers stop finding it
-	db.riMutex.Lock()
-	delete(db.RouterInfos, hash)
-	db.riMutex.Unlock()
+	db.riCache.delete(hash)
 
 	// Remove from expiry tracking
-	db.expiryMutex.Lock()
-	delete(db.routerInfoExpiry, hash)
-	db.expiryMutex.Unlock()
+	db.riCache.deleteExpiry(hash)
 
 	// Remove from filesystem (orphaned files self-heal on restart)
 	db.removeRouterInfoFromDisk(hash)
@@ -180,7 +169,7 @@ func computeExpirationStats(expiryMap map[common.Hash]time.Time) (total, expired
 // GetRouterInfoExpirationStats returns statistics about RouterInfo expiration tracking.
 // Returns total tracked count, expired count, and time until next expiration.
 func (db *StdNetDB) GetRouterInfoExpirationStats() (total, expired int, nextExpiry time.Duration) {
-	db.expiryMutex.RLock()
-	defer db.expiryMutex.RUnlock()
-	return computeExpirationStats(db.routerInfoExpiry)
+	db.riCache.mu.RLock()
+	defer db.riCache.mu.RUnlock()
+	return computeExpirationStats(db.riCache.expiry)
 }

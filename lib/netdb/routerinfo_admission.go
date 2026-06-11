@@ -24,11 +24,6 @@ type routerInfoAdmissionController struct {
 	pressurePct int
 }
 
-type sourceAdmissionWindow struct {
-	lastSeen      time.Time
-	introductions map[common.Hash]time.Time
-}
-
 func newRouterInfoAdmissionController(capacity int) *routerInfoAdmissionController {
 	return &routerInfoAdmissionController{
 		capacity:    capacity,

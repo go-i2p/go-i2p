@@ -150,10 +150,10 @@ func verifyLeaseSetHash(key common.Hash, ls lease_set.LeaseSet) error {
 // Enforces capacity limits and per-source admission control to prevent
 // unbounded memory growth and remote memory-DoS attacks.
 func (db *StdNetDB) addLeaseSetToCache(key common.Hash, ls lease_set.LeaseSet) bool {
-	db.lsMutex.Lock()
-	defer db.lsMutex.Unlock()
+	db.lsCache.mu.Lock()
+	defer db.lsCache.mu.Unlock()
 
-	if existing, exists := db.LeaseSets[key]; exists {
+	if existing, exists := db.lsCache.entries[key]; exists {
 		// Existing LeaseSet: compare by newest expiration — a LeaseSet with later expirations is newer.
 		if existing.LeaseSet != nil {
 			existExp, err1 := existing.LeaseSet.NewestExpiration()
@@ -164,7 +164,7 @@ func (db *StdNetDB) addLeaseSetToCache(key common.Hash, ls lease_set.LeaseSet) b
 			}
 		}
 		log.WithField("hash", key).Debug("Replacing stale LeaseSet with newer version")
-		db.LeaseSets[key] = Entry{
+		db.lsCache.entries[key] = Entry{
 			LeaseSet: &ls,
 		}
 		db.trackLeaseSetExpiration(key, ls)
@@ -172,13 +172,13 @@ func (db *StdNetDB) addLeaseSetToCache(key common.Hash, ls lease_set.LeaseSet) b
 	}
 
 	// New LeaseSet: check admission limits
-	currentCount := len(db.LeaseSets)
-	maxCapacity := db.maxLeaseSets
+	currentCount := len(db.lsCache.entries)
+	maxCapacity := db.lsCache.capacity
 
 	// Temporarily unlock to call admission check (non-blocking, has its own lock)
-	db.lsMutex.Unlock()
+	db.lsCache.mu.Unlock()
 	err := db.checkLeaseSetAdmissionLimits(key, nil, currentCount)
-	db.lsMutex.Lock()
+	db.lsCache.mu.Lock()
 
 	if err != nil {
 		log.WithField("hash", key).Debug("LeaseSet introduction rejected by admission control")
@@ -186,13 +186,13 @@ func (db *StdNetDB) addLeaseSetToCache(key common.Hash, ls lease_set.LeaseSet) b
 	}
 
 	// Check capacity and evict if needed
-	if maxCapacity > 0 && len(db.LeaseSets) >= maxCapacity {
-		db.lsMutex.Unlock()
+	if maxCapacity > 0 && len(db.lsCache.entries) >= maxCapacity {
+		db.lsCache.mu.Unlock()
 		db.evictSoonestExpiringLeaseSet()
-		db.lsMutex.Lock()
+		db.lsCache.mu.Lock()
 	}
 
-	db.LeaseSets[key] = Entry{
+	db.lsCache.entries[key] = Entry{
 		LeaseSet: &ls,
 	}
 
@@ -262,9 +262,7 @@ func (db *StdNetDB) GetLeaseSet(hash common.Hash) (chnl chan lease_set.LeaseSet)
 // getLeaseSetFromCache attempts to retrieve a LeaseSet from the memory cache.
 // Returns nil if not in cache, indicating caller should try disk.
 func (db *StdNetDB) getLeaseSetFromCache(hash common.Hash) chan lease_set.LeaseSet {
-	db.lsMutex.RLock()
-	entry, ok := db.LeaseSets[hash]
-	db.lsMutex.RUnlock()
+	entry, ok := db.lsCache.get(hash)
 
 	if !ok {
 		return nil // Not in cache, try disk
@@ -297,9 +295,7 @@ func (db *StdNetDB) loadLeaseSetFromDisk(hash common.Hash) chan lease_set.LeaseS
 		return emptyLeaseSetChannel()
 	}
 
-	db.lsMutex.Lock()
-	db.LeaseSets[hash] = Entry{LeaseSet: entry.LeaseSet}
-	db.lsMutex.Unlock()
+	db.lsCache.put(hash, Entry{LeaseSet: entry.LeaseSet})
 
 	return leaseSetChannel(*entry.LeaseSet)
 }
@@ -371,12 +367,10 @@ func (db *StdNetDB) parseAndCacheLeaseSet(hash common.Hash, data []byte) (lease_
 	}
 
 	// Always store/replace the cached entry so stale data is updated
-	db.lsMutex.Lock()
 	log.WithFields(logger.Fields{"at": "parseAndCacheLeaseSet"}).Debug("Storing LeaseSet in memory cache")
-	db.LeaseSets[hash] = Entry{
+	db.lsCache.put(hash, Entry{
 		LeaseSet: &ls,
-	}
-	db.lsMutex.Unlock()
+	})
 
 	return ls, nil
 }
@@ -420,10 +414,10 @@ func (db *StdNetDB) checkCacheForLeaseSet(
 	typeName string,
 	cacheCheck func(Entry) ([]byte, error),
 ) ([]byte, error) {
-	db.lsMutex.RLock()
-	defer db.lsMutex.RUnlock()
+	db.lsCache.mu.RLock()
+	defer db.lsCache.mu.RUnlock()
 
-	entry, ok := db.LeaseSets[hash]
+	entry, ok := db.lsCache.entries[hash]
 	if !ok {
 		return nil, nil
 	}
@@ -461,9 +455,7 @@ func (db *StdNetDB) GetLeaseSetBytes(hash common.Hash) ([]byte, error) {
 
 // GetLeaseSetCount returns the total number of LeaseSet entries in memory cache.
 func (db *StdNetDB) GetLeaseSetCount() int {
-	db.lsMutex.RLock()
-	defer db.lsMutex.RUnlock()
-	return len(db.LeaseSets)
+	return db.lsCache.count()
 }
 
 // verifiableLeaseSet is satisfied by any lease set variant that supports
@@ -569,10 +561,10 @@ func verifyLeaseSet2Hash(key common.Hash, ls2 lease_set2.LeaseSet2) error {
 // existing entry only when isNewer returns true for the current occupant.
 // trackExpiry is called after a successful store. Returns true if stored.
 func (db *StdNetDB) addLeaseSetEntryToCache(key common.Hash, entry Entry, isNewer func(Entry) bool, trackExpiry func(), typeName string) bool {
-	db.lsMutex.Lock()
-	defer db.lsMutex.Unlock()
+	db.lsCache.mu.Lock()
+	defer db.lsCache.mu.Unlock()
 
-	if existing, exists := db.LeaseSets[key]; exists {
+	if existing, exists := db.lsCache.entries[key]; exists {
 		if !isNewer(existing) {
 			log.WithField("hash", key).Debug(typeName + " already exists with same or newer timestamp, skipping")
 			return false
@@ -580,7 +572,7 @@ func (db *StdNetDB) addLeaseSetEntryToCache(key common.Hash, entry Entry, isNewe
 		log.WithField("hash", key).Debug("Replacing stale " + typeName + " with newer version")
 	}
 
-	db.LeaseSets[key] = entry
+	db.lsCache.entries[key] = entry
 	trackExpiry()
 
 	return true
@@ -611,9 +603,9 @@ func (db *StdNetDB) GetLeaseSet2(hash common.Hash) (chnl chan lease_set2.LeaseSe
 	log.WithField("hash", hash).Debug("Getting LeaseSet2")
 
 	// Check memory cache first
-	db.lsMutex.RLock()
-	if ls, ok := db.LeaseSets[hash]; ok && ls.LeaseSet2 != nil {
-		db.lsMutex.RUnlock()
+	db.lsCache.mu.RLock()
+	if ls, ok := db.lsCache.entries[hash]; ok && ls.LeaseSet2 != nil {
+		db.lsCache.mu.RUnlock()
 		if db.isLeaseSetExpired(hash) {
 			log.WithField("hash", hash).Debug("LeaseSet2 expired, not serving from cache")
 			emptyChnl := make(chan lease_set2.LeaseSet2)
@@ -626,7 +618,6 @@ func (db *StdNetDB) GetLeaseSet2(hash common.Hash) (chnl chan lease_set2.LeaseSe
 		close(chnl)
 		return chnl
 	}
-	db.lsMutex.RUnlock()
 
 	// Load from file
 	data, err := db.loadLeaseSetFromFile(hash)
@@ -657,10 +648,10 @@ func (db *StdNetDB) GetLeaseSet2(hash common.Hash) (chnl chan lease_set2.LeaseSe
 // returns true for the current occupant. Returns true if the entry was stored.
 // Caller must NOT hold lsMutex.
 func (db *StdNetDB) cacheLeaseSetEntryIfNewer(hash common.Hash, entry Entry, isNewer func(Entry) bool, typeName string) bool {
-	db.lsMutex.Lock()
-	if existing, ok := db.LeaseSets[hash]; ok {
+	db.lsCache.mu.Lock()
+	if existing, ok := db.lsCache.entries[hash]; ok {
 		if !isNewer(existing) {
-			db.lsMutex.Unlock()
+			db.lsCache.mu.Unlock()
 			log.WithFields(logger.Fields{"at": "cacheLeaseSetEntryIfNewer"}).Debug("Skipping " + typeName + " update — cached version is same or newer")
 			return false
 		}
@@ -668,8 +659,8 @@ func (db *StdNetDB) cacheLeaseSetEntryIfNewer(hash common.Hash, entry Entry, isN
 	} else {
 		log.WithFields(logger.Fields{"at": "cacheLeaseSetEntryIfNewer"}).Debug("Adding " + typeName + " to memory cache")
 	}
-	db.LeaseSets[hash] = entry
-	db.lsMutex.Unlock()
+	db.lsCache.entries[hash] = entry
+	db.lsCache.mu.Unlock()
 	return true
 }
 
@@ -776,9 +767,9 @@ func (db *StdNetDB) GetEncryptedLeaseSet(hash common.Hash) (chnl chan encrypted_
 	log.WithField("hash", hash).Debug("Getting EncryptedLeaseSet")
 
 	// Check memory cache first
-	db.lsMutex.RLock()
-	if ls, ok := db.LeaseSets[hash]; ok && ls.EncryptedLeaseSet != nil {
-		db.lsMutex.RUnlock()
+	db.lsCache.mu.RLock()
+	if ls, ok := db.lsCache.entries[hash]; ok && ls.EncryptedLeaseSet != nil {
+		db.lsCache.mu.RUnlock()
 		if db.isLeaseSetExpired(hash) {
 			log.WithField("hash", hash).Debug("EncryptedLeaseSet expired, not serving from cache")
 			emptyChnl := make(chan encrypted_leaseset.EncryptedLeaseSet)
@@ -791,7 +782,6 @@ func (db *StdNetDB) GetEncryptedLeaseSet(hash common.Hash) (chnl chan encrypted_
 		close(chnl)
 		return chnl
 	}
-	db.lsMutex.RUnlock()
 
 	// Load from file
 	data, err := db.loadLeaseSetFromFile(hash)
@@ -922,9 +912,9 @@ func (db *StdNetDB) GetMetaLeaseSet(hash common.Hash) (chnl chan meta_leaseset.M
 	log.WithField("hash", hash).Debug("Getting MetaLeaseSet")
 
 	// Check memory cache first
-	db.lsMutex.RLock()
-	if ls, ok := db.LeaseSets[hash]; ok && ls.MetaLeaseSet != nil {
-		db.lsMutex.RUnlock()
+	db.lsCache.mu.RLock()
+	if ls, ok := db.lsCache.entries[hash]; ok && ls.MetaLeaseSet != nil {
+		db.lsCache.mu.RUnlock()
 		if db.isLeaseSetExpired(hash) {
 			log.WithField("hash", hash).Debug("MetaLeaseSet expired, not serving from cache")
 			emptyChnl := make(chan meta_leaseset.MetaLeaseSet)
@@ -937,7 +927,6 @@ func (db *StdNetDB) GetMetaLeaseSet(hash common.Hash) (chnl chan meta_leaseset.M
 		close(chnl)
 		return chnl
 	}
-	db.lsMutex.RUnlock()
 
 	// Load from file
 	data, err := db.loadLeaseSetFromFile(hash)
@@ -1005,13 +994,7 @@ func (db *StdNetDB) GetMetaLeaseSetBytes(hash common.Hash) ([]byte, error) {
 // according to the tracked expiration time. Returns true if expired, false
 // if not expired or no expiration is tracked.
 func (db *StdNetDB) isLeaseSetExpired(hash common.Hash) bool {
-	db.expiryMutex.RLock()
-	expiry, ok := db.leaseSetExpiry[hash]
-	db.expiryMutex.RUnlock()
-	if !ok {
-		return false // no expiry tracked, assume valid
-	}
-	return time.Now().After(expiry)
+	return db.lsCache.isExpired(hash, time.Now())
 }
 
 // trackLeaseSetExpiration extracts the expiration time from a LeaseSet and records it.
@@ -1022,16 +1005,12 @@ func (db *StdNetDB) trackLeaseSetExpiration(key common.Hash, ls lease_set.LeaseS
 	if err != nil {
 		log.WithError(err).WithField("hash", key).Warn("Failed to get LeaseSet expiration, using default 10 minutes")
 		// Default to 10 minutes from now if we can't determine expiration
-		db.expiryMutex.Lock()
-		db.leaseSetExpiry[key] = time.Now().Add(10 * time.Minute)
-		db.expiryMutex.Unlock()
+		db.lsCache.setExpiry(key, time.Now().Add(10*time.Minute))
 		return
 	}
 
 	expiryTime := expiration.Time()
-	db.expiryMutex.Lock()
-	db.leaseSetExpiry[key] = expiryTime
-	db.expiryMutex.Unlock()
+	db.lsCache.setExpiry(key, expiryTime)
 
 	log.WithFields(logger.Fields{
 		"hash":       fmt.Sprintf("%x", key[:8]),
@@ -1044,9 +1023,7 @@ func (db *StdNetDB) trackLeaseSetExpiration(key common.Hash, ls lease_set.LeaseS
 // Uses the ExpirationTime() method to get the expiration timestamp.
 func (db *StdNetDB) trackLeaseSet2Expiration(key common.Hash, ls2 lease_set2.LeaseSet2) {
 	expiryTime := ls2.ExpirationTime()
-	db.expiryMutex.Lock()
-	db.leaseSetExpiry[key] = expiryTime
-	db.expiryMutex.Unlock()
+	db.lsCache.setExpiry(key, expiryTime)
 
 	log.WithFields(logger.Fields{
 		"hash":       fmt.Sprintf("%x", key[:8]),
@@ -1059,9 +1036,7 @@ func (db *StdNetDB) trackLeaseSet2Expiration(key common.Hash, ls2 lease_set2.Lea
 // Uses the ExpirationTime() method to get the expiration timestamp.
 func (db *StdNetDB) trackEncryptedLeaseSetExpiration(key common.Hash, els encrypted_leaseset.EncryptedLeaseSet) {
 	expiryTime := els.ExpirationTime()
-	db.expiryMutex.Lock()
-	db.leaseSetExpiry[key] = expiryTime
-	db.expiryMutex.Unlock()
+	db.lsCache.setExpiry(key, expiryTime)
 
 	log.WithFields(logger.Fields{
 		"hash":       fmt.Sprintf("%x", key[:8]),
@@ -1074,9 +1049,7 @@ func (db *StdNetDB) trackEncryptedLeaseSetExpiration(key common.Hash, els encryp
 // Uses the ExpirationTime() method to get the expiration timestamp.
 func (db *StdNetDB) trackMetaLeaseSetExpiration(key common.Hash, mls meta_leaseset.MetaLeaseSet) {
 	expiryTime := mls.ExpirationTime()
-	db.expiryMutex.Lock()
-	db.leaseSetExpiry[key] = expiryTime
-	db.expiryMutex.Unlock()
+	db.lsCache.setExpiry(key, expiryTime)
 
 	log.WithFields(logger.Fields{
 		"hash":       fmt.Sprintf("%x", key[:8]),
@@ -1161,14 +1134,14 @@ func (db *StdNetDB) cleanExpiredLeaseSets() {
 	now := time.Now()
 
 	// Find all expired LeaseSets
-	db.expiryMutex.RLock()
+	db.lsCache.mu.RLock()
 	expired := make([]common.Hash, 0)
-	for hash, expiryTime := range db.leaseSetExpiry {
+	for hash, expiryTime := range db.lsCache.expiry {
 		if now.After(expiryTime) {
 			expired = append(expired, hash)
 		}
 	}
-	db.expiryMutex.RUnlock()
+	db.lsCache.mu.RUnlock()
 
 	if len(expired) == 0 {
 		return
@@ -1191,14 +1164,9 @@ func (db *StdNetDB) cleanExpiredLeaseSets() {
 // between the two deletions, creating an orphaned entry.
 // Lock ordering: lsMutex before expiryMutex to prevent deadlocks.
 func (db *StdNetDB) removeExpiredLeaseSet(hash common.Hash) {
-	// Acquire both locks atomically to prevent orphaned entries.
-	// Lock ordering: lsMutex → expiryMutex (must be consistent everywhere).
-	db.lsMutex.Lock()
-	db.expiryMutex.Lock()
-	delete(db.LeaseSets, hash)
-	delete(db.leaseSetExpiry, hash)
-	db.expiryMutex.Unlock()
-	db.lsMutex.Unlock()
+	// Remove from cache (already holds necessary locks internally)
+	db.lsCache.delete(hash)
+	db.lsCache.deleteExpiry(hash)
 
 	// Remove from filesystem (orphaned files self-heal on restart)
 	db.removeLeaseSetFromDisk(hash)
@@ -1219,9 +1187,9 @@ func (db *StdNetDB) removeLeaseSetFromDisk(hash common.Hash) {
 // GetLeaseSetExpirationStats returns statistics about LeaseSet expiration tracking.
 // Returns total count, expired count, and time until next expiration.
 func (db *StdNetDB) GetLeaseSetExpirationStats() (total, expired int, nextExpiry time.Duration) {
-	db.expiryMutex.RLock()
-	defer db.expiryMutex.RUnlock()
-	return computeExpirationStats(db.leaseSetExpiry)
+	db.lsCache.mu.RLock()
+	defer db.lsCache.mu.RUnlock()
+	return computeExpirationStats(db.lsCache.expiry)
 }
 
 // GetAllLeaseSets returns all LeaseSets currently stored in the database.
@@ -1231,14 +1199,14 @@ func (db *StdNetDB) GetLeaseSetExpirationStats() (total, expired int, nextExpiry
 func (db *StdNetDB) GetAllLeaseSets() []LeaseSetEntry {
 	log.WithFields(logger.Fields{"at": "GetAllLeaseSets"}).Debug("Getting all LeaseSets from database")
 
-	db.lsMutex.RLock()
-	defer db.lsMutex.RUnlock()
+	db.lsCache.mu.RLock()
+	defer db.lsCache.mu.RUnlock()
 
 	// Pre-allocate slice with capacity to avoid reallocation
-	result := make([]LeaseSetEntry, 0, len(db.LeaseSets))
+	result := make([]LeaseSetEntry, 0, len(db.lsCache.entries))
 
 	// Iterate through all cached LeaseSets
-	for hash, entry := range db.LeaseSets {
+	for hash, entry := range db.lsCache.entries {
 		result = append(result, LeaseSetEntry{
 			Hash:  hash,
 			Entry: entry,

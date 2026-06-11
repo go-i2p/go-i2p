@@ -24,25 +24,11 @@ import (
 
 // StdNetDB is the standard network database implementation using local filesystem skiplist.
 type StdNetDB struct {
-	DB          string
-	RouterInfos map[common.Hash]Entry
-	riMutex     sync.RWMutex // mutex for RouterInfos (RWMutex for read-heavy operations)
-	LeaseSets   map[common.Hash]Entry
-	lsMutex     sync.RWMutex // mutex for LeaseSets (RWMutex for read-heavy operations)
+	DB string
 
-	maxRouterInfos int
-	admission      *routerInfoAdmissionController
-
-	maxLeaseSets int
-	lsAdmission  *leaseSetAdmissionController
-
-	// Expiration tracking for LeaseSets
-	leaseSetExpiry map[common.Hash]time.Time // maps hash to expiration time
-
-	// Expiration tracking for RouterInfos (based on published date + RouterInfoMaxAge)
-	routerInfoExpiry map[common.Hash]time.Time // maps hash to expiration time
-
-	expiryMutex sync.RWMutex // mutex for expiry tracking (shared for both LeaseSets and RouterInfos)
+	// Generic entry caches for RouterInfos and LeaseSets
+	riCache *entryCache
+	lsCache *entryCache
 
 	PeerTracker *PeerTracker // tracks connection success/failure for peers
 
@@ -55,6 +41,9 @@ type StdNetDB struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
 	cleanupWg sync.WaitGroup
+
+	// expiryMutex protects expiry tracking across both caches
+	expiryMutex sync.RWMutex
 }
 
 // NewStdNetDB creates and returns a new StdNetDB rooted at the given directory path,
@@ -66,24 +55,32 @@ func NewStdNetDB(db string) *StdNetDB {
 		"db_path": db,
 	}).Debug("creating new StdNetDB")
 	ctx, cancel := context.WithCancel(context.Background())
+
+	// Create admission configs for RouterInfos and LeaseSets
+	riAdmissionConfig := admissionConfig{
+		window:      routerInfoAdmissionWindow,
+		perSource:   routerInfoPerSourceIntroduced,
+		trackedMax:  routerInfoTrackedSourcesMax,
+		pressurePct: routerInfoPressureThresholdPct,
+	}
+
+	lsAdmissionConfig := admissionConfig{
+		window:      leaseSetAdmissionWindow,
+		perSource:   leaseSetPerSourceIntroduced,
+		trackedMax:  leaseSetTrackedSourcesMax,
+		pressurePct: leaseSetPressureThresholdPct,
+	}
+
 	ndb := &StdNetDB{
 		DB:                db,
-		RouterInfos:       make(map[common.Hash]Entry),
-		riMutex:           sync.RWMutex{},
-		LeaseSets:         make(map[common.Hash]Entry),
-		lsMutex:           sync.RWMutex{},
-		maxRouterInfos:    config.DefaultNetDBConfig.MaxRouterInfos,
-		maxLeaseSets:      config.DefaultNetDBConfig.MaxLeaseSets,
-		leaseSetExpiry:    make(map[common.Hash]time.Time),
-		routerInfoExpiry:  make(map[common.Hash]time.Time),
-		expiryMutex:       sync.RWMutex{},
+		riCache:           newEntryCache(config.DefaultNetDBConfig.MaxRouterInfos, riAdmissionConfig),
+		lsCache:           newEntryCache(config.DefaultNetDBConfig.MaxLeaseSets, lsAdmissionConfig),
 		PeerTracker:       NewPeerTracker(),
 		riRefreshCooldown: newTimeBucketedCooldown(riRefreshCooldownDuration),
 		ctx:               ctx,
 		cancel:            cancel,
 	}
-	ndb.admission = newRouterInfoAdmissionController(ndb.maxRouterInfos)
-	ndb.lsAdmission = newLeaseSetAdmissionController(ndb.maxLeaseSets)
+
 	ndb.StartExpirationCleaner()
 	return ndb
 }
@@ -91,22 +88,36 @@ func NewStdNetDB(db string) *StdNetDB {
 // SetMaxRouterInfos updates the RouterInfo capacity used for admission control.
 // Values below 10 are ignored to preserve minimum validated configuration limits.
 func (db *StdNetDB) SetMaxRouterInfos(max int) {
-	if max < 10 {
-		return
-	}
-	db.riMutex.Lock()
-	db.maxRouterInfos = max
-	db.riMutex.Unlock()
-	if db.admission != nil {
-		db.admission.SetCapacity(max)
-	}
+	db.riCache.setCapacity(max)
 }
 
 // GetMaxRouterInfos returns the current RouterInfo capacity.
 func (db *StdNetDB) GetMaxRouterInfos() int {
-	db.riMutex.RLock()
-	defer db.riMutex.RUnlock()
-	return db.maxRouterInfos
+	return db.riCache.getCapacity()
+}
+
+// RouterInfos is a backward-compatible accessor that returns a snapshot of the RouterInfos map.
+// This method exists for API compatibility; new code should use the riCache directly if possible.
+func (db *StdNetDB) GetRouterInfos() map[common.Hash]Entry {
+	db.riCache.mu.RLock()
+	defer db.riCache.mu.RUnlock()
+	snapshot := make(map[common.Hash]Entry, len(db.riCache.entries))
+	for k, v := range db.riCache.entries {
+		snapshot[k] = v
+	}
+	return snapshot
+}
+
+// LeaseSets is a backward-compatible accessor that returns a snapshot of the LeaseSets map.
+// This method exists for API compatibility; new code should use the lsCache directly if possible.
+func (db *StdNetDB) GetLeaseSets() map[common.Hash]Entry {
+	db.lsCache.mu.RLock()
+	defer db.lsCache.mu.RUnlock()
+	snapshot := make(map[common.Hash]Entry, len(db.lsCache.entries))
+	for k, v := range db.lsCache.entries {
+		snapshot[k] = v
+	}
+	return snapshot
 }
 
 // GetRouterInfo returns a channel that yields the RouterInfo for the given hash,
@@ -119,20 +130,17 @@ func (db *StdNetDB) GetRouterInfo(hash common.Hash) (chnl chan router_info.Route
 	}).Debug("getting RouterInfo")
 
 	// Check memory cache first
-	db.riMutex.RLock()
-	if ri, ok := db.RouterInfos[hash]; ok && ri.RouterInfo != nil {
-		db.riMutex.RUnlock()
+	if entry, ok := db.riCache.get(hash); ok && entry.RouterInfo != nil {
 		log.WithFields(logger.Fields{
 			"at":     "(StdNetDB) GetRouterInfo",
 			"reason": "cache hit",
 			"hash":   fmt.Sprintf("%x...", hash[:8]),
 		}).Debug("routerInfo found in memory cache")
 		chnl = make(chan router_info.RouterInfo, 1)
-		chnl <- *ri.RouterInfo
+		chnl <- *entry.RouterInfo
 		close(chnl)
 		return chnl
 	}
-	db.riMutex.RUnlock()
 
 	// Load from file
 	data, err := db.loadRouterInfoFromFile(hash)
@@ -198,14 +206,12 @@ func (db *StdNetDB) parseAndCacheRouterInfo(hash common.Hash, data []byte) (rout
 	}
 
 	// Add to cache, or replace if newer
-	db.riMutex.Lock()
-	if existing, ok := db.RouterInfos[hash]; ok {
+	if entry, ok := db.riCache.get(hash); ok {
 		// Compare timestamps: only replace if the new entry is strictly newer
-		if existing.RouterInfo != nil {
-			existPub := existing.RouterInfo.Published()
+		if entry.RouterInfo != nil {
+			existPub := entry.RouterInfo.Published()
 			newPub := ri.Published()
 			if existPub != nil && newPub != nil && !newPub.Time().After(existPub.Time()) {
-				db.riMutex.Unlock()
 				log.WithFields(logger.Fields{
 					"at":     "StdNetDB.parseAndCacheRouterInfo",
 					"reason": "existing_entry_same_or_newer",
@@ -223,10 +229,9 @@ func (db *StdNetDB) parseAndCacheRouterInfo(hash common.Hash, data []byte) (rout
 			"reason": "new_entry",
 		}).Debug("adding RouterInfo to memory cache")
 	}
-	db.RouterInfos[hash] = Entry{
+	db.riCache.put(hash, Entry{
 		RouterInfo: &ri,
-	}
-	db.riMutex.Unlock()
+	})
 
 	return ri, nil
 }
@@ -247,9 +252,7 @@ func (db *StdNetDB) Path() string {
 // Size returns the count of RouterInfos currently stored in the network database.
 // This is a direct in-memory count and does not require filesystem access.
 func (db *StdNetDB) Size() (routers int) {
-	db.riMutex.RLock()
-	routers = len(db.RouterInfos)
-	db.riMutex.RUnlock()
+	routers = db.riCache.count()
 
 	log.WithField("count", routers).Debug("NetDB size calculated from in-memory RouterInfos")
 	return routers
@@ -423,14 +426,14 @@ func (db *StdNetDB) Save() error {
 // saveAllRouterInfos copies RouterInfo entries under a read lock, then persists each to disk.
 // Returns a slice of errors from any failed saves.
 func (db *StdNetDB) saveAllRouterInfos() []error {
-	db.riMutex.RLock()
-	entriesToSave := make([]Entry, 0, len(db.RouterInfos))
-	for _, entry := range db.RouterInfos {
+	db.riCache.mu.RLock()
+	entriesToSave := make([]Entry, 0, len(db.riCache.entries))
+	for _, entry := range db.riCache.entries {
 		if entry.RouterInfo != nil {
 			entriesToSave = append(entriesToSave, entry)
 		}
 	}
-	db.riMutex.RUnlock()
+	db.riCache.mu.RUnlock()
 
 	var errs []error
 	for _, entry := range entriesToSave {
@@ -450,12 +453,12 @@ func (db *StdNetDB) saveAllLeaseSets() []error {
 		entry Entry
 	}
 
-	db.lsMutex.RLock()
-	lsEntries := make([]lsEntry, 0, len(db.LeaseSets))
-	for h, entry := range db.LeaseSets {
+	db.lsCache.mu.RLock()
+	lsEntries := make([]lsEntry, 0, len(db.lsCache.entries))
+	for h, entry := range db.lsCache.entries {
 		lsEntries = append(lsEntries, lsEntry{hash: h, entry: entry})
 	}
-	db.lsMutex.RUnlock()
+	db.lsCache.mu.RUnlock()
 
 	var errs []error
 	for _, ls := range lsEntries {
@@ -629,18 +632,17 @@ func (db *StdNetDB) validatePublishedTimestamp(ri router_info.RouterInfo, hash c
 // Only inserts entries not already present. Returns the count of newly added entries.
 func (db *StdNetDB) insertVerifiedRouterInfos(verified []verifiedRouterEntry) int {
 	count := 0
-	db.riMutex.Lock()
 	for _, entry := range verified {
-		if _, exists := db.RouterInfos[entry.hash]; !exists {
-			log.WithField("hash", entry.hash).Debug("Adding new RouterInfo from reseed")
-			ri := entry.ri
-			db.RouterInfos[entry.hash] = Entry{
-				RouterInfo: &ri,
-			}
-			count++
+		if entry, _ := db.riCache.get(entry.hash); entry.RouterInfo != nil {
+			continue // Entry already exists
 		}
+		log.WithField("hash", entry.hash).Debug("Adding new RouterInfo from reseed")
+		ri := entry.ri
+		db.riCache.put(entry.hash, Entry{
+			RouterInfo: &ri,
+		})
+		count++
 	}
-	db.riMutex.Unlock()
 	return count
 }
 
@@ -693,10 +695,7 @@ func verifyRouterInfoHash(key common.Hash, ri router_info.RouterInfo) error {
 // has a more recent Published timestamp. Returns true if the entry was
 // added or updated.
 func (db *StdNetDB) addRouterInfoToCache(key common.Hash, ri router_info.RouterInfo) bool {
-	db.riMutex.Lock()
-	defer db.riMutex.Unlock()
-
-	if existing, exists := db.RouterInfos[key]; exists {
+	if existing, exists := db.riCache.get(key); exists {
 		// Replace only if the new entry is newer.
 		if existing.RouterInfo != nil {
 			existPub := existing.RouterInfo.Published()
@@ -709,9 +708,9 @@ func (db *StdNetDB) addRouterInfoToCache(key common.Hash, ri router_info.RouterI
 		log.WithField("hash", key).Debug("Replacing stale RouterInfo with newer version")
 	}
 
-	db.RouterInfos[key] = Entry{
+	db.riCache.put(key, Entry{
 		RouterInfo: &ri,
-	}
+	})
 	return true
 }
 
@@ -724,9 +723,7 @@ func (db *StdNetDB) persistRouterInfoToFilesystem(key common.Hash, ri router_inf
 
 	if err := db.SaveEntry(entry); err != nil {
 		log.WithError(err).Error("Failed to save RouterInfo to filesystem")
-		db.riMutex.Lock()
-		delete(db.RouterInfos, key)
-		db.riMutex.Unlock()
+		db.riCache.delete(key)
 		return oops.Errorf("failed to save RouterInfo to filesystem: %w", err)
 	}
 	return nil
@@ -837,11 +834,9 @@ func (db *StdNetDB) admitRouterInfoIntroduction(key common.Hash, source *common.
 
 // getRouterInfoCacheState returns the cache state for admission checks.
 func (db *StdNetDB) getRouterInfoCacheState(key common.Hash) (exists bool, current, max int) {
-	db.riMutex.RLock()
-	_, exists = db.RouterInfos[key]
-	current = len(db.RouterInfos)
-	max = db.maxRouterInfos
-	db.riMutex.RUnlock()
+	current = db.riCache.count()
+	max = db.riCache.getCapacity()
+	_, exists = db.riCache.get(key)
 	return exists, current, max
 }
 
@@ -855,11 +850,7 @@ func (db *StdNetDB) checkCapacity(current, max int) error {
 
 // checkAdmissionLimits checks admission rate limits for the RouterInfo introduction.
 func (db *StdNetDB) checkAdmissionLimits(key common.Hash, source *common.Hash, current int) error {
-	if db.admission == nil {
-		return nil
-	}
-
-	if ok := db.admission.AllowIntroduction(source, key, current); !ok {
+	if !db.riCache.checkAdmissionLimits(key, source, current) {
 		db.logAdmissionRejection(key, source)
 		return oops.Errorf("RouterInfo introduction rate limited")
 	}
@@ -881,11 +872,9 @@ func (db *StdNetDB) logAdmissionRejection(key common.Hash, source *common.Hash) 
 
 // getLeaseSetCacheState returns the cache state for admission checks.
 func (db *StdNetDB) getLeaseSetCacheState(key common.Hash) (exists bool, current, max int) {
-	db.lsMutex.RLock()
-	_, exists = db.LeaseSets[key]
-	current = len(db.LeaseSets)
-	max = db.maxLeaseSets
-	db.lsMutex.RUnlock()
+	current = db.lsCache.count()
+	max = db.lsCache.getCapacity()
+	_, exists = db.lsCache.get(key)
 	return exists, current, max
 }
 
@@ -899,11 +888,7 @@ func (db *StdNetDB) checkLeaseSetCapacity(current, max int) error {
 
 // checkLeaseSetAdmissionLimits checks admission rate limits for the LeaseSet introduction.
 func (db *StdNetDB) checkLeaseSetAdmissionLimits(key common.Hash, source *common.Hash, current int) error {
-	if db.lsAdmission == nil {
-		return nil
-	}
-
-	if ok := db.lsAdmission.AllowIntroduction(source, key, current); !ok {
+	if !db.lsCache.checkAdmissionLimits(key, source, current) {
 		db.logLeaseSetAdmissionRejection(key, source)
 		return oops.Errorf("LeaseSet introduction rate limited")
 	}
@@ -927,30 +912,7 @@ func (db *StdNetDB) logLeaseSetAdmissionRejection(key common.Hash, source *commo
 // from the cache under lock. Returns the evicted hash if successful, or zero hash if
 // no eviction was possible.
 func (db *StdNetDB) evictSoonestExpiringLeaseSet() common.Hash {
-	db.expiryMutex.RLock()
-	var oldestHash common.Hash
-	var oldestTime time.Time
-	for hash, expTime := range db.leaseSetExpiry {
-		if oldestTime.IsZero() || expTime.Before(oldestTime) {
-			oldestHash = hash
-			oldestTime = expTime
-		}
-	}
-	db.expiryMutex.RUnlock()
-
-	if !oldestTime.IsZero() {
-		db.lsMutex.Lock()
-		delete(db.LeaseSets, oldestHash)
-		db.lsMutex.Unlock()
-
-		db.expiryMutex.Lock()
-		delete(db.leaseSetExpiry, oldestHash)
-		db.expiryMutex.Unlock()
-
-		log.WithField("hash", oldestHash).Debug("Evicted soonest-expiring LeaseSet to make room for new entry")
-	}
-
-	return oldestHash
+	return db.lsCache.evictSoonestExpiring()
 }
 
 // finalizeRouterInfoStorage tracks expiration and persists a cached RouterInfo to disk.
@@ -1151,9 +1113,7 @@ func (db *StdNetDB) extractHashFromFilename(filename string) (common.Hash, error
 
 // isRouterInfoAlreadyLoaded checks if a RouterInfo with the given hash is already in memory.
 func (db *StdNetDB) isRouterInfoAlreadyLoaded(hash common.Hash) bool {
-	db.riMutex.RLock()
-	_, exists := db.RouterInfos[hash]
-	db.riMutex.RUnlock()
+	_, exists := db.riCache.get(hash)
 	return exists
 }
 
@@ -1203,11 +1163,9 @@ func (db *StdNetDB) computeRouterInfoHash(ri *router_info.RouterInfo, filePath s
 
 // storeRouterInfo adds a RouterInfo to the in-memory cache.
 func (db *StdNetDB) storeRouterInfo(hash common.Hash, ri *router_info.RouterInfo) {
-	db.riMutex.Lock()
-	db.RouterInfos[hash] = Entry{
+	db.riCache.put(hash, Entry{
 		RouterInfo: ri,
-	}
-	db.riMutex.Unlock()
+	})
 }
 
 // leaseSetLoadCounts tracks the running totals during LeaseSet loading.
@@ -1274,10 +1232,7 @@ func (db *StdNetDB) processLeaseSetFile(dirPath string, dirEntry os.DirEntry, co
 		return
 	}
 
-	db.lsMutex.RLock()
-	_, exists := db.LeaseSets[hash]
-	db.lsMutex.RUnlock()
-	if exists {
+	if _, exists := db.lsCache.get(hash); exists {
 		return
 	}
 
@@ -1347,9 +1302,7 @@ func (db *StdNetDB) isLeaseSetEntryExpired(entry *Entry) bool {
 
 // cacheLeaseSetEntry adds a loaded LeaseSet entry to the in-memory cache and tracks its expiration.
 func (db *StdNetDB) cacheLeaseSetEntry(hash common.Hash, entry *Entry) {
-	db.lsMutex.Lock()
-	db.LeaseSets[hash] = *entry
-	db.lsMutex.Unlock()
+	db.lsCache.put(hash, *entry)
 
 	// Track expiration for cleanup
 	if entry.LeaseSet != nil {
@@ -1417,9 +1370,7 @@ func (db *StdNetDB) GetRouterInfoBytes(hash common.Hash) ([]byte, error) {
 	log.WithField("hash", hash).Debug("Getting RouterInfo bytes")
 
 	// Check memory cache first
-	db.riMutex.RLock()
-	if ri, ok := db.RouterInfos[hash]; ok && ri.RouterInfo != nil {
-		db.riMutex.RUnlock()
+	if ri, ok := db.riCache.get(hash); ok && ri.RouterInfo != nil {
 		log.WithFields(logger.Fields{"at": "GetRouterInfoBytes"}).Debug("RouterInfo found in memory cache")
 
 		// Serialize the RouterInfo to bytes
@@ -1430,7 +1381,6 @@ func (db *StdNetDB) GetRouterInfoBytes(hash common.Hash) ([]byte, error) {
 		}
 		return data, nil
 	}
-	db.riMutex.RUnlock()
 
 	// Load from file if not in memory
 	data, err := db.loadRouterInfoFromFile(hash)
@@ -1474,10 +1424,10 @@ func (db *StdNetDB) GetActivePeerCount() int {
 	count := 0
 
 	// Iterate through all tracked peers and count those with recent successful connections
-	db.riMutex.RLock()
-	defer db.riMutex.RUnlock()
+	db.riCache.mu.RLock()
+	defer db.riCache.mu.RUnlock()
 
-	for hash := range db.RouterInfos {
+	for hash := range db.riCache.entries {
 		stats := db.PeerTracker.GetStats(hash)
 		if stats != nil && !stats.LastSuccess.IsZero() && stats.LastSuccess.After(hourAgo) {
 			count++
@@ -1508,10 +1458,10 @@ func (db *StdNetDB) GetFastPeerCount() int {
 	const minAttempts = 3
 	count := 0
 
-	db.riMutex.RLock()
-	defer db.riMutex.RUnlock()
+	db.riCache.mu.RLock()
+	defer db.riCache.mu.RUnlock()
 
-	for hash := range db.RouterInfos {
+	for hash := range db.riCache.entries {
 		stats := db.PeerTracker.GetStats(hash)
 		if stats != nil &&
 			stats.TotalAttempts >= minAttempts &&
@@ -1549,10 +1499,10 @@ func (db *StdNetDB) GetHighCapacityPeerCount() int {
 	const minAttempts = 5
 	count := 0
 
-	db.riMutex.RLock()
-	defer db.riMutex.RUnlock()
+	db.riCache.mu.RLock()
+	defer db.riCache.mu.RUnlock()
 
-	for hash := range db.RouterInfos {
+	for hash := range db.riCache.entries {
 		stats := db.PeerTracker.GetStats(hash)
 		if stats == nil || stats.TotalAttempts < minAttempts {
 			continue
@@ -1605,10 +1555,8 @@ func (db *StdNetDB) RequestRouterInfoRefresh(hash common.Hash) {
 	}
 	db.riRefreshCooldown.Store(hash, now)
 
-	db.riMutex.Lock()
-	_, existed := db.RouterInfos[hash]
-	delete(db.RouterInfos, hash)
-	db.riMutex.Unlock()
+	_, existed := db.riCache.get(hash)
+	db.riCache.delete(hash)
 
 	if existed {
 		log.WithFields(logger.Fields{

@@ -54,14 +54,10 @@ func TestExpirationTracking(t *testing.T) {
 	expiryTime := time.Now().Add(5 * time.Minute)
 
 	// Manually add expiry entry (simulating what trackLeaseSet* would do)
-	db.expiryMutex.Lock()
-	db.leaseSetExpiry[hash] = expiryTime
-	db.expiryMutex.Unlock()
+	db.lsCache.setExpiry(hash, expiryTime)
 
 	// Verify expiration was recorded
-	db.expiryMutex.RLock()
-	trackedTime, exists := db.leaseSetExpiry[hash]
-	db.expiryMutex.RUnlock()
+	trackedTime, exists := db.lsCache.getExpiry(hash)
 
 	assert.True(t, exists, "Expiration should be tracked")
 	assert.Equal(t, expiryTime, trackedTime)
@@ -80,9 +76,7 @@ func TestCleanExpiredLeaseSets(t *testing.T) {
 	addLeaseSetWithExpiry(db, validHash, 5*time.Minute)
 
 	// Verify both are in cache initially
-	db.lsMutex.Lock()
-	initialCount := len(db.LeaseSets)
-	db.lsMutex.Unlock()
+	initialCount := db.lsCache.count()
 	assert.Equal(t, 2, initialCount)
 
 	// Run cleanup
@@ -146,20 +140,16 @@ func TestGetLeaseSetExpirationStats(t *testing.T) {
 	// Add 2 expired LeaseSets
 	expiredHash1 := common.Hash{0x50}
 	expiredHash2 := common.Hash{0x51}
-	db.expiryMutex.Lock()
-	db.leaseSetExpiry[expiredHash1] = now.Add(-5 * time.Minute)
-	db.leaseSetExpiry[expiredHash2] = now.Add(-2 * time.Minute)
-	db.expiryMutex.Unlock()
+	db.lsCache.setExpiry(expiredHash1, now.Add(-5*time.Minute))
+	db.lsCache.setExpiry(expiredHash2, now.Add(-2*time.Minute))
 
 	// Add 3 valid LeaseSets with different expiry times
 	validHash1 := common.Hash{0x60}
 	validHash2 := common.Hash{0x61}
 	validHash3 := common.Hash{0x62}
-	db.expiryMutex.Lock()
-	db.leaseSetExpiry[validHash1] = now.Add(2 * time.Minute) // Earliest valid
-	db.leaseSetExpiry[validHash2] = now.Add(5 * time.Minute)
-	db.leaseSetExpiry[validHash3] = now.Add(10 * time.Minute)
-	db.expiryMutex.Unlock()
+	db.lsCache.setExpiry(validHash1, now.Add(2*time.Minute)) // Earliest valid
+	db.lsCache.setExpiry(validHash2, now.Add(5*time.Minute))
+	db.lsCache.setExpiry(validHash3, now.Add(10*time.Minute))
 
 	// Get statistics
 	total, expired, nextExpiry := db.GetLeaseSetExpirationStats()
@@ -190,15 +180,13 @@ func TestCleanExpiredLeaseSetsNoExpired(t *testing.T) {
 	validHash := common.Hash{0x70}
 	addLeaseSetWithExpiry(db, validHash, 10*time.Minute)
 
-	initialCount := len(db.LeaseSets)
+	initialCount := db.lsCache.count()
 
 	// Run cleanup
 	db.cleanExpiredLeaseSets()
 
 	// Verify nothing was removed
-	db.lsMutex.Lock()
-	finalCount := len(db.LeaseSets)
-	db.lsMutex.Unlock()
+	finalCount := db.lsCache.count()
 
 	assert.Equal(t, initialCount, finalCount, "No LeaseSets should be removed")
 }
@@ -276,9 +264,7 @@ func TestCleanupWithManyExpired(t *testing.T) {
 	elapsed := time.Since(start)
 
 	// Verify correct number remaining
-	db.lsMutex.Lock()
-	count := len(db.LeaseSets)
-	db.lsMutex.Unlock()
+	count := db.lsCache.count()
 
 	assert.Equal(t, numValid, count, "Should have only valid LeaseSets remaining")
 	assert.Less(t, elapsed, 100*time.Millisecond, "Cleanup should be fast")
@@ -310,9 +296,7 @@ func TestCleanerRunsPeriodically(t *testing.T) {
 	db.cleanExpiredLeaseSets()
 
 	// LeaseSet should still exist (not yet expired)
-	db.lsMutex.Lock()
-	_, exists := db.LeaseSets[expHash]
-	db.lsMutex.Unlock()
+	_, exists := db.lsCache.get(expHash)
 	assert.True(t, exists, "LeaseSet should still exist")
 
 	// Wait for expiration
@@ -322,9 +306,7 @@ func TestCleanerRunsPeriodically(t *testing.T) {
 	db.cleanExpiredLeaseSets()
 
 	// LeaseSet should now be removed
-	db.lsMutex.Lock()
-	_, exists = db.LeaseSets[expHash]
-	db.lsMutex.Unlock()
+	_, exists = db.lsCache.get(expHash)
 	assert.False(t, exists, "Expired LeaseSet should be removed")
 }
 
