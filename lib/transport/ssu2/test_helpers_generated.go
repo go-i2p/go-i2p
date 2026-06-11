@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/transport"
+	testhelpers "github.com/go-i2p/go-i2p/lib/transport/internal/testhelpers"
 )
 
 // makeMinimalTransport creates an SSU2Transport with only the fields required
@@ -28,11 +29,10 @@ func makeMinimalTransport() *SSU2Transport {
 	return tr
 }
 
-// newTestPeerHashSSU2 creates a test peer hash from a string seed.
+// newTestPeerHashSSU2 creates a test peer hash from a string seed. This
+// delegates to the consolidated testhelpers.NewTestPeerHash function.
 func newTestPeerHashSSU2(seed string) data.Hash {
-	var h data.Hash
-	copy(h[:], []byte(seed))
-	return h
+	return testhelpers.NewTestPeerHash(seed)
 }
 
 // makeMinimalTransportForRaceTests creates an SSU2Transport for testing

@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-i2p/common/data"
 	transportpkg "github.com/go-i2p/go-i2p/lib/transport"
+	testhelpers "github.com/go-i2p/go-i2p/lib/transport/internal/testhelpers"
 	"github.com/go-i2p/go-noise/ntcp2"
 	"github.com/go-i2p/logger"
 	"github.com/stretchr/testify/assert"
@@ -14,13 +15,10 @@ import (
 )
 
 // newTestRouterHash creates a 32-byte test router hash with each byte set to
-// its index plus the given offset.
+// its index plus the given offset. This delegates to the consolidated
+// testhelpers.NewTestRouterHash function.
 func newTestRouterHash(offset byte) data.Hash {
-	var h data.Hash
-	for i := range h {
-		h[i] = byte(i) + offset
-	}
-	return h
+	return testhelpers.NewTestRouterHash(offset)
 }
 
 // newTestNTCP2Config creates a test NTCP2Config with a standard 32-byte router
@@ -47,11 +45,10 @@ func newTestSession(t *testing.T) *NTCP2Session {
 	return session
 }
 
-// newTestPeerHash creates a data.Hash from the given string content.
+// newTestPeerHash creates a data.Hash from the given string content. This
+// delegates to the consolidated testhelpers.NewTestPeerHash function.
 func newTestPeerHash(content string) data.Hash {
-	var h data.Hash
-	copy(h[:], []byte(content))
-	return h
+	return testhelpers.NewTestPeerHash(content)
 }
 
 // newAcceptTestSetup creates an accept-test fixture with a mock connection
