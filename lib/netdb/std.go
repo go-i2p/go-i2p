@@ -121,6 +121,13 @@ func (db *StdNetDB) GetLeaseSets() map[common.Hash]Entry {
 	return snapshot
 }
 
+// TestInsertRouterInfo inserts a RouterInfo entry directly into the in-memory cache.
+// This method is intended for use in tests only to populate test data.
+// WARNING: This bypasses normal validation and should never be used in production code.
+func (db *StdNetDB) TestInsertRouterInfo(hash common.Hash, entry Entry) {
+	db.riCache.put(hash, entry)
+}
+
 // GetRouterInfo returns a channel that yields the RouterInfo for the given hash,
 // checking the in-memory cache first and falling back to disk.
 func (db *StdNetDB) GetRouterInfo(hash common.Hash) (chnl chan router_info.RouterInfo) {

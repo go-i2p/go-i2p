@@ -120,9 +120,9 @@ func TestGetRouterInfo_PeerClassification(t *testing.T) {
 	hash3 := testHash(3) // Will be slow/inactive
 
 	// Add peers to NetDB
-	db.RouterInfos[hash1] = netdb.Entry{}
-	db.RouterInfos[hash2] = netdb.Entry{}
-	db.RouterInfos[hash3] = netdb.Entry{}
+	db.TestInsertRouterInfo(hash1, netdb.Entry{})
+	db.TestInsertRouterInfo(hash2, netdb.Entry{})
+	db.TestInsertRouterInfo(hash3, netdb.Entry{})
 
 	// Record peer 1 as active and fast (low latency)
 	for i := 0; i < 5; i++ {
@@ -202,7 +202,7 @@ func TestGetRouterInfo_PeerStats_VariedQuality(t *testing.T) {
 	// Add 10 peers with different characteristics
 	for i := byte(0); i < 10; i++ {
 		hash := testHash(i)
-		db.RouterInfos[hash] = netdb.Entry{}
+		db.TestInsertRouterInfo(hash, netdb.Entry{})
 
 		switch i {
 		case 0, 1, 2: // Active and fast peers
