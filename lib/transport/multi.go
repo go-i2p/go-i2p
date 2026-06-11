@@ -13,6 +13,8 @@ import (
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
+
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 )
 
 // DefaultMaxConnections is the default maximum number of concurrent connections
@@ -127,7 +129,7 @@ func (tmux *TransportMuxer) SetIdentity(ident router_info.RouterInfo) (err error
 	log.WithFields(logger.Fields{
 		"at":              "(TransportMuxer) SetIdentity",
 		"reason":          "configure_all_transports",
-		"identity_hash":   fmt.Sprintf("%x...", identHash[:8]),
+		"identity_hash":   logutil.HashPrefix(identHash),
 		"transport_count": len(tmux.trans),
 	}).Debug("setting identity for all transports")
 	for i, t := range tmux.trans {
@@ -445,7 +447,7 @@ func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s Tra
 		log.WithFields(logger.Fields{
 			"at":        "(TransportMuxer) GetSession",
 			"reason":    "peer_cooldown",
-			"peer_hash": fmt.Sprintf("%x...", peerHash[:8]),
+			"peer_hash": logutil.HashPrefix(peerHash),
 			"cooldown":  peerCooldown.String(),
 		}).Debug("skipping peer still in cooldown")
 		return nil, ErrNoTransportAvailable
@@ -454,7 +456,7 @@ func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s Tra
 	log.WithFields(logger.Fields{
 		"at":             "(TransportMuxer) GetSession",
 		"reason":         "attempting_peer_connection",
-		"peer_hash":      fmt.Sprintf("%x...", peerHash[:8]),
+		"peer_hash":      logutil.HashPrefix(peerHash),
 		"num_transports": len(tmux.trans),
 	}).Debug("attempting to get session")
 
@@ -495,7 +497,7 @@ func (tmux *TransportMuxer) Compatible(routerInfo router_info.RouterInfo) bool {
 	log.WithFields(logger.Fields{
 		"at":        "(TransportMuxer) Compatible",
 		"reason":    "checking_compatibility",
-		"peer_hash": fmt.Sprintf("%x...", peerHash[:8]),
+		"peer_hash": logutil.HashPrefix(peerHash),
 	}).Debug("checking transport compatibility")
 	for i, t := range tmux.trans {
 		if t.Compatible(routerInfo) {

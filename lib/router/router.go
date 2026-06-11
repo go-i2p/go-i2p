@@ -117,7 +117,7 @@ func CreateRouter(cfg *config.RouterConfig) (*Router, error) {
 		return nil, err
 	}
 
-	log.WithField("at", "CreateRouter").Debug("step 1/6: creating router from config")
+	log.WithField("at", "CreateRouter").Debug("startup phase: creating router from config")
 
 	r, err := FromConfig(cfg)
 	if err != nil {
@@ -129,29 +129,29 @@ func CreateRouter(cfg *config.RouterConfig) (*Router, error) {
 		return nil, err
 	}
 
-	log.WithField("at", "CreateRouter").Debug("step 6/6: router created successfully")
+	log.WithField("at", "CreateRouter").Debug("startup phase: router created successfully")
 	return r, nil
 }
 
 // initializeRouterComponents initializes keystore, keys, RouterInfo, NetDB, and transports.
 func initializeRouterComponents(r *Router, cfg *config.RouterConfig) error {
-	log.WithField("at", "CreateRouter").Debug("step 2/6: initializing keystore")
+	log.WithField("at", "CreateRouter").Debug("startup phase: initializing keystore")
 	if err := initializeRouterKeystore(r, cfg); err != nil {
 		return err
 	}
 
-	log.WithField("at", "CreateRouter").Debug("step 3/6: validating router keys")
+	log.WithField("at", "CreateRouter").Debug("startup phase: validating router keys")
 	if err := validateRouterKeys(r); err != nil {
 		return err
 	}
 
-	log.WithField("at", "CreateRouter").Debug("step 4/6: constructing RouterInfo (includes signing)")
+	log.WithField("at", "CreateRouter").Debug("startup phase: constructing RouterInfo (includes signing)")
 	ri, err := constructRouterInfo(r)
 	if err != nil {
 		return err
 	}
 
-	log.WithField("at", "CreateRouter").Debug("step 5/6: initializing transports")
+	log.WithField("at", "CreateRouter").Debug("startup phase: initializing transports")
 	return initializeNetDBAndTransports(r, ri, cfg)
 }
 

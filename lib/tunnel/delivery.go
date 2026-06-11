@@ -238,6 +238,16 @@ func parseFirstFragmentFlags(di *DeliveryInstructions, flag byte) {
 	di.hasExtOptions = (flag & 0x04) == 0x04 // bit 2
 }
 
+// need checks if the buffer has enough space starting at offset for n bytes.
+// If not, returns an error describing the required field.
+// This is a helper to avoid repeating bounds checks across the delivery parsing functions.
+func need(data []byte, offset, n int, what string) error {
+	if len(data) < offset+n {
+		return oops.Errorf("insufficient data for %s", what)
+	}
+	return nil
+}
+
 // readTunnelID reads the tunnel ID field if present in the delivery instructions.
 // Returns the updated offset and any error encountered.
 func readTunnelID(data []byte, offset int, di *DeliveryInstructions) (int, error) {
@@ -245,8 +255,8 @@ func readTunnelID(data []byte, offset int, di *DeliveryInstructions) (int, error
 		return offset, nil
 	}
 
-	if len(data) < offset+4 {
-		return offset, oops.Errorf("insufficient data for tunnel ID")
+	if err := need(data, offset, 4, "tunnel ID"); err != nil {
+		return offset, err
 	}
 
 	di.tunnelID = binary.BigEndian.Uint32(data[offset : offset+4])
@@ -275,8 +285,8 @@ func readDelayIfPresent(data []byte, offset int, di *DeliveryInstructions) (int,
 		return offset, nil
 	}
 
-	if len(data) < offset+1 {
-		return offset, oops.Errorf("insufficient data for delay")
+	if err := need(data, offset, 1, "delay"); err != nil {
+		return offset, err
 	}
 
 	di.delay = DelayFactor(data[offset])
@@ -290,8 +300,8 @@ func readMessageIDIfFragmented(data []byte, offset int, di *DeliveryInstructions
 		return offset, nil
 	}
 
-	if len(data) < offset+4 {
-		return offset, oops.Errorf("insufficient data for message ID")
+	if err := need(data, offset, 4, "message ID"); err != nil {
+		return offset, err
 	}
 
 	di.messageID = binary.BigEndian.Uint32(data[offset : offset+4])
@@ -305,15 +315,15 @@ func readExtendedOptions(data []byte, offset int, di *DeliveryInstructions) (int
 		return offset, nil
 	}
 
-	if len(data) < offset+1 {
-		return offset, oops.Errorf("insufficient data for extended options length")
+	if err := need(data, offset, 1, "extended options length"); err != nil {
+		return offset, err
 	}
 
 	extLen := int(data[offset])
 	offset++
 
-	if len(data) < offset+extLen {
-		return offset, oops.Errorf("insufficient data for extended options")
+	if err := need(data, offset, extLen, "extended options"); err != nil {
+		return offset, err
 	}
 
 	di.extendedOpts = make([]byte, extLen)
@@ -324,8 +334,8 @@ func readExtendedOptions(data []byte, offset int, di *DeliveryInstructions) (int
 // readFragmentSize reads the fragment size field from the delivery instructions.
 // Returns the updated offset and any error encountered.
 func readFragmentSize(data []byte, offset int, di *DeliveryInstructions) (int, error) {
-	if len(data) < offset+2 {
-		return offset, oops.Errorf("insufficient data for fragment size")
+	if err := need(data, offset, 2, "fragment size"); err != nil {
+		return offset, err
 	}
 
 	di.fragmentSize = binary.BigEndian.Uint16(data[offset : offset+2])

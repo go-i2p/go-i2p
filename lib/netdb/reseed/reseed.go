@@ -54,11 +54,7 @@ func (r *Reseed) SingleReseed(uri string) ([]router_info.RouterInfo, error) {
 		return nil, err
 	}
 
-	if err := r.validateSU3FileType(su3file); err != nil {
-		return nil, err
-	}
-
-	content, err := r.extractSU3Content(su3file)
+	content, err := r.validateAndExtractSU3(su3file)
 	if err != nil {
 		return nil, err
 	}
@@ -81,47 +77,19 @@ func (r *Reseed) ProcessLocalSU3File(filePath string) ([]router_info.RouterInfo,
 // If limit <= 0, all RouterInfos are parsed (same as ProcessLocalSU3File).
 // This prevents loading excessive RouterInfos into memory when only a small number is needed.
 func (r *Reseed) ProcessLocalSU3FileWithLimit(filePath string, limit int) ([]router_info.RouterInfo, error) {
-	log.WithFields(logger.Fields{
-		"file_path": filePath,
-		"limit":     limit,
-	}).Info("Processing local SU3 file")
-
-	// Read the SU3 file from disk
-	data, err := r.readSU3FileFromDisk(filePath)
-	if err != nil {
-		return nil, err
+	unwrap := func(data []byte) ([]byte, error) {
+		return r.parseSU3File(data)
 	}
-
-	// Parse and extract SU3 content
-	content, err := r.parseSU3File(data)
-	if err != nil {
-		return nil, err
-	}
-
-	// Process the reseed zip content with limit
-	routerInfos, err := r.processReseedZipWithLimit(content, limit)
-	if err != nil {
-		return nil, err
-	}
-
-	r.logSU3ProcessingSuccess(filePath, len(routerInfos))
-	return routerInfos, nil
+	return r.processLocalFileWithLimit(filePath, "SU3", unwrap, limit)
 }
 
-// readSU3FileFromDisk reads a SU3 file from the filesystem.
-func (r *Reseed) readSU3FileFromDisk(filePath string) ([]byte, error) {
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		log.WithError(err).WithField("file_path", filePath).Error("Failed to read SU3 file")
-		return nil, oops.Errorf("failed to read SU3 file: %w", err)
+// validateAndExtractSU3 validates the SU3 file type and extracts its content.
+// This helper is used by both SingleReseed and parseSU3File to avoid duplication.
+func (r *Reseed) validateAndExtractSU3(su3file *su3.SU3) ([]byte, error) {
+	if err := r.validateSU3FileType(su3file); err != nil {
+		return nil, err
 	}
-
-	log.WithFields(logger.Fields{
-		"file_path":  filePath,
-		"size_bytes": len(data),
-	}).Debug("Read SU3 file from disk")
-
-	return data, nil
+	return r.extractSU3Content(su3file)
 }
 
 // parseSU3File parses SU3 data and extracts the content.
@@ -130,20 +98,7 @@ func (r *Reseed) parseSU3File(data []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	if err := r.validateSU3FileType(su3file); err != nil {
-		return nil, err
-	}
-
-	return r.extractSU3Content(su3file)
-}
-
-// logSU3ProcessingSuccess logs successful SU3 file processing.
-func (r *Reseed) logSU3ProcessingSuccess(filePath string, count int) {
-	log.WithFields(logger.Fields{
-		"file_path":         filePath,
-		"router_info_count": count,
-	}).Info("Successfully processed local SU3 file")
+	return r.validateAndExtractSU3(su3file)
 }
 
 // ProcessLocalZipFile reads and processes a local zip reseed file
@@ -155,25 +110,46 @@ func (r *Reseed) ProcessLocalZipFile(filePath string) ([]router_info.RouterInfo,
 // If limit <= 0, all RouterInfos are parsed (same as ProcessLocalZipFile).
 // This prevents loading excessive RouterInfos into memory when only a small number is needed.
 func (r *Reseed) ProcessLocalZipFileWithLimit(filePath string, limit int) ([]router_info.RouterInfo, error) {
+	unwrap := func(data []byte) ([]byte, error) {
+		return data, nil // zip data needs no unwrapping
+	}
+	return r.processLocalFileWithLimit(filePath, "zip", unwrap, limit)
+}
+
+// processLocalFileWithLimit is a shared helper for reading and processing local reseed files.
+// fileType is for logging purposes (e.g., "SU3" or "zip").
+// unwrap is a callback that transforms raw file data into zip content
+// (e.g., parsing and extracting SU3 files, or identity for raw zip files).
+// This eliminates duplication between ProcessLocalSU3FileWithLimit and ProcessLocalZipFileWithLimit.
+func (r *Reseed) processLocalFileWithLimit(filePath string, fileType string, unwrap func([]byte) ([]byte, error), limit int) ([]router_info.RouterInfo, error) {
 	log.WithFields(logger.Fields{
 		"file_path": filePath,
+		"file_type": fileType,
 		"limit":     limit,
-	}).Info("Processing local zip file")
+	}).Info("Processing local reseed file")
 
-	// Read the zip file from disk
+	// Read the file from disk
 	data, err := os.ReadFile(filePath)
 	if err != nil {
-		log.WithError(err).WithField("file_path", filePath).Error("Failed to read zip file")
-		return nil, oops.Errorf("failed to read zip file: %w", err)
+		log.WithError(err).WithFields(logger.Fields{
+			"file_path": filePath,
+		}).Error("Failed to read reseed file")
+		return nil, oops.Errorf("failed to read %s file: %w", fileType, err)
 	}
 
 	log.WithFields(logger.Fields{
 		"file_path":  filePath,
 		"size_bytes": len(data),
-	}).Debug("Read zip file from disk")
+	}).Debug("Read reseed file from disk")
 
-	// Process the zip file with limit
-	routerInfos, err := r.processReseedZipWithLimit(data, limit)
+	// Transform file data (parse SU3, or pass-through for zip)
+	content, err := unwrap(data)
+	if err != nil {
+		return nil, err
+	}
+
+	// Process the reseed zip content with limit
+	routerInfos, err := r.processReseedZipWithLimit(content, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -181,7 +157,7 @@ func (r *Reseed) ProcessLocalZipFileWithLimit(filePath string, limit int) ([]rou
 	log.WithFields(logger.Fields{
 		"file_path":         filePath,
 		"router_info_count": len(routerInfos),
-	}).Info("Successfully processed local zip file")
+	}).Info("Successfully processed local reseed file")
 
 	return routerInfos, nil
 }

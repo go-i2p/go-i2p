@@ -20,6 +20,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/bootstrap"
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/netdb/reseed"
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 )
 
 // StdNetDB is the standard network database implementation using local filesystem skiplist.
@@ -126,7 +127,7 @@ func (db *StdNetDB) GetRouterInfo(hash common.Hash) (chnl chan router_info.Route
 	log.WithFields(logger.Fields{
 		"at":     "(StdNetDB) GetRouterInfo",
 		"reason": "looking up router info",
-		"hash":   fmt.Sprintf("%x...", hash[:8]),
+		"hash":   logutil.HashPrefix(hash),
 	}).Debug("getting RouterInfo")
 
 	// Check memory cache first
@@ -134,7 +135,7 @@ func (db *StdNetDB) GetRouterInfo(hash common.Hash) (chnl chan router_info.Route
 		log.WithFields(logger.Fields{
 			"at":     "(StdNetDB) GetRouterInfo",
 			"reason": "cache hit",
-			"hash":   fmt.Sprintf("%x...", hash[:8]),
+			"hash":   logutil.HashPrefix(hash),
 		}).Debug("routerInfo found in memory cache")
 		chnl = make(chan router_info.RouterInfo, 1)
 		chnl <- *entry.RouterInfo
@@ -148,7 +149,7 @@ func (db *StdNetDB) GetRouterInfo(hash common.Hash) (chnl chan router_info.Route
 		log.WithError(err).WithFields(logger.Fields{
 			"at":     "(StdNetDB) GetRouterInfo",
 			"reason": "file load failed",
-			"hash":   fmt.Sprintf("%x...", hash[:8]),
+			"hash":   logutil.HashPrefix(hash),
 		}).Error("failed to load RouterInfo from file")
 		// Return a closed empty channel instead of nil so that callers
 		// doing <-chnl receive the zero value immediately rather than
@@ -164,7 +165,7 @@ func (db *StdNetDB) GetRouterInfo(hash common.Hash) (chnl chan router_info.Route
 		log.WithError(err).WithFields(logger.Fields{
 			"at":     "(StdNetDB) GetRouterInfo",
 			"reason": "parse failed",
-			"hash":   fmt.Sprintf("%x...", hash[:8]),
+			"hash":   logutil.HashPrefix(hash),
 		}).Error("failed to parse RouterInfo")
 		close(chnl)
 		return chnl
@@ -1244,7 +1245,7 @@ func (db *StdNetDB) processLeaseSetFile(dirPath string, dirEntry os.DirEntry, co
 	}
 
 	if db.isLeaseSetEntryExpired(entry) {
-		log.WithField("hash", fmt.Sprintf("%x", hash[:8])).Debug("Removing expired LeaseSet file")
+		log.WithField("hash", logutil.HashPrefixPlain(hash)).Debug("Removing expired LeaseSet file")
 		os.Remove(filePath)
 		counts.expired++
 		return
@@ -1547,7 +1548,7 @@ func (db *StdNetDB) RequestRouterInfoRefresh(hash common.Hash) {
 	if prev, loaded := db.riRefreshCooldown.Load(hash); loaded {
 		if prevTime, ok := prev.(time.Time); ok && now.Sub(prevTime) < riRefreshCooldownDuration {
 			log.WithFields(logger.Fields{
-				"peer_hash": fmt.Sprintf("%x", hash[:8]),
+				"peer_hash": logutil.HashPrefixPlain(hash),
 				"next_in":   riRefreshCooldownDuration - now.Sub(prevTime),
 			}).Debug("RouterInfo refresh skipped: cooldown in effect")
 			return
@@ -1561,7 +1562,7 @@ func (db *StdNetDB) RequestRouterInfoRefresh(hash common.Hash) {
 	if existed {
 		log.WithFields(logger.Fields{
 			"at":        "StdNetDB.RequestRouterInfoRefresh",
-			"peer_hash": fmt.Sprintf("%x", hash[:8]),
+			"peer_hash": logutil.HashPrefixPlain(hash),
 			"reason":    "stale RouterInfo evicted after handshake EOF",
 		}).Info("Evicted stale RouterInfo from cache; will be refreshed on next reseed")
 	}

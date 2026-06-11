@@ -196,6 +196,47 @@ func (dtm DecryptedTunnelMessage) deliveryInstructionData() []byte {
 	return []byte{}
 }
 
+// parseNextFragment parses the next delivery instruction and its corresponding message fragment from data.
+// Returns the parsed DeliveryInstructionsWithFragment, remaining unparsed data, and any error.
+// This helper centralizes error handling for the three validation checks in the parsing loop.
+func parseNextFragment(data []byte) (pair DeliveryInstructionsWithFragment, remainder []byte, err error) {
+	instructions, remainder, err := readDeliveryInstructions(data)
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":  "(parseNextFragment)",
+			"err": err.Error(),
+		}).Error("error reading delivery instructions")
+		return pair, nil, err
+	}
+
+	fragmentSize, err := instructions.FragmentSize()
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":  "(parseNextFragment)",
+			"err": err.Error(),
+		}).Error("error getting delivery instructions fragment size")
+		return pair, nil, err
+	}
+
+	// Validate fragmentSize doesn't exceed remaining data to prevent index out of bounds
+	if int(fragmentSize) > len(remainder) {
+		log.WithFields(logger.Fields{
+			"at":            "(parseNextFragment)",
+			"fragmentSize":  fragmentSize,
+			"remainder_len": len(remainder),
+		}).Error("fragment size exceeds remaining data")
+		return pair, nil, oops.Errorf("fragment size %d exceeds remaining data %d", fragmentSize, len(remainder))
+	}
+
+	fragmentData := remainder[:fragmentSize]
+	pair = DeliveryInstructionsWithFragment{
+		DeliveryInstructions: instructions,
+		MessageFragment:      fragmentData,
+	}
+
+	return pair, remainder[fragmentSize:], nil
+}
+
 // DeliveryInstructionsWithFragments returns a slice of DeliveryInstructionWithFragment structures, which all of the Delivery Instructions
 // in the tunnel message and their corresponding MessageFragment structures.
 // Also returns an error if any delivery instructions could not be fully parsed;
@@ -205,44 +246,13 @@ func (dtm DecryptedTunnelMessage) DeliveryInstructionsWithFragments() ([]Deliver
 	data := dtm.deliveryInstructionData()
 	var parseErr error
 	for {
-		instructions, remainder, err := readDeliveryInstructions(data)
+		pair, remainder, err := parseNextFragment(data)
 		if err != nil {
-			log.WithFields(logger.Fields{
-				"at":  "(DecryptedTunnelMessage) DeliveryInstructionsWithFragments",
-				"err": err.Error(),
-			}).Error("error reading delivery instructions")
 			parseErr = err
 			break
 		}
 
-		fragmentSize, err := instructions.FragmentSize()
-		if err != nil {
-			log.WithFields(logger.Fields{
-				"at":  "(DecryptedTunnelMessage) DeliveryInstructionsWithFragments",
-				"err": err.Error(),
-			}).Error("error getting delivery instructions fragment size")
-			parseErr = err
-			break
-		}
-
-		// Validate fragmentSize doesn't exceed remaining data to prevent index out of bounds
-		if int(fragmentSize) > len(remainder) {
-			log.WithFields(logger.Fields{
-				"at":            "(DecryptedTunnelMessage) DeliveryInstructionsWithFragments",
-				"fragmentSize":  fragmentSize,
-				"remainder_len": len(remainder),
-			}).Error("fragment size exceeds remaining data")
-			parseErr = oops.Errorf("fragment size %d exceeds remaining data %d", fragmentSize, len(remainder))
-			break
-		}
-
-		fragmentData := remainder[:fragmentSize]
-		pair := DeliveryInstructionsWithFragment{
-			DeliveryInstructions: instructions,
-			MessageFragment:      fragmentData,
-		}
-
-		data = remainder[fragmentSize:]
+		data = remainder
 		set = append(set, pair)
 	}
 	return set, parseErr

@@ -14,6 +14,18 @@ import (
 	"github.com/spf13/viper"
 )
 
+// decodeParams unmarshals JSON parameters into the target value, logging and returning
+// an RPC error if unmarshaling fails. This eliminates boilerplate across all RPC handlers.
+// The method parameter is used in logging ("method params unmarshal failed") and in the
+// error message ("malformed method parameters").
+func decodeParams(method string, params json.RawMessage, v interface{}) error {
+	if err := json.Unmarshal(params, v); err != nil {
+		log.WithField("reason", err.Error()).Debug("i2pcontrol: " + method + " params unmarshal failed")
+		return NewRPCError(ErrCodeInvalidParams, "malformed "+method+" parameters")
+	}
+	return nil
+}
+
 // EchoHandler implements the Echo RPC method.
 // Simply returns whatever value is sent in the "Echo" parameter.
 // This is useful for testing RPC connectivity.
@@ -49,9 +61,8 @@ func (h *EchoHandler) Handle(ctx context.Context, params json.RawMessage) (inter
 		Echo interface{} `json:"Echo"`
 	}
 
-	if err := json.Unmarshal(params, &req); err != nil {
-		log.WithField("reason", err.Error()).Debug("i2pcontrol: Echo params unmarshal failed")
-		return nil, NewRPCError(ErrCodeInvalidParams, "malformed Echo parameters")
+	if err := decodeParams("Echo", params, &req); err != nil {
+		return nil, err
 	}
 
 	// Enforce size limit on the echo value to prevent amplification DoS
@@ -101,9 +112,8 @@ func NewGetRateHandler(stats RouterStatsProvider) *GetRateHandler {
 // Detects Stat/Period format first; falls back to legacy field-list format.
 func (h *GetRateHandler) Handle(ctx context.Context, params json.RawMessage) (interface{}, error) {
 	var req map[string]interface{}
-	if err := json.Unmarshal(params, &req); err != nil {
-		log.WithField("reason", err.Error()).Debug("i2pcontrol: GetRate params unmarshal failed")
-		return nil, NewRPCError(ErrCodeInvalidParams, "malformed GetRate parameters")
+	if err := decodeParams("GetRate", params, &req); err != nil {
+		return nil, err
 	}
 
 	// Check for Stat/Period style request
@@ -297,9 +307,8 @@ func selectRequestedOrDefaultFields(req, availableFields map[string]interface{})
 // Handle processes an I2PControl RouterInfo RPC request, returning the requested or default router information fields.
 func (h *RouterInfoHandler) Handle(ctx context.Context, params json.RawMessage) (interface{}, error) {
 	var req map[string]interface{}
-	if err := json.Unmarshal(params, &req); err != nil {
-		log.WithField("reason", err.Error()).Debug("i2pcontrol: RouterInfo params unmarshal failed")
-		return nil, NewRPCError(ErrCodeInvalidParams, "malformed RouterInfo parameters")
+	if err := decodeParams("RouterInfo", params, &req); err != nil {
+		return nil, err
 	}
 
 	availableFields := h.buildAvailableFields()
@@ -402,8 +411,8 @@ func NewRouterManagerHandler(ctx context.Context, wg *sync.WaitGroup, control in
 // Executes requested control operations.
 func (h *RouterManagerHandler) Handle(ctx context.Context, params json.RawMessage) (interface{}, error) {
 	var req map[string]interface{}
-	if err := json.Unmarshal(params, &req); err != nil {
-		return nil, NewRPCErrorWithData(ErrCodeInvalidParams, "invalid RouterManager parameters", err.Error())
+	if err := decodeParams("RouterManager", params, &req); err != nil {
+		return nil, err
 	}
 
 	result := make(map[string]interface{})
@@ -696,8 +705,8 @@ func NewNetworkSettingHandler(stats RouterStatsProvider) *NetworkSettingHandler 
 // Returns network settings from the router configuration, or an error if parsing fails.
 func (h *NetworkSettingHandler) Handle(ctx context.Context, params json.RawMessage) (interface{}, error) {
 	var req map[string]interface{}
-	if err := json.Unmarshal(params, &req); err != nil {
-		return nil, NewRPCErrorWithData(ErrCodeInvalidParams, "invalid NetworkSetting parameters", err.Error())
+	if err := decodeParams("NetworkSetting", params, &req); err != nil {
+		return nil, err
 	}
 
 	netConfig := h.stats.GetNetworkConfig()
@@ -1204,8 +1213,8 @@ func NewAdvancedSettingsHandler() *AdvancedSettingsHandler {
 // Reads or writes arbitrary Viper config keys.
 func (h *AdvancedSettingsHandler) Handle(ctx context.Context, params json.RawMessage) (interface{}, error) {
 	var req map[string]interface{}
-	if err := json.Unmarshal(params, &req); err != nil {
-		return nil, NewRPCError(ErrCodeInvalidParams, "malformed AdvancedSettings parameters")
+	if err := decodeParams("AdvancedSettings", params, &req); err != nil {
+		return nil, err
 	}
 
 	// Check if this is a write operation (has "Set" sub-object)
