@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-i2p/go-i2p/lib/i2np"
+	"github.com/go-i2p/go-i2p/lib/transport"
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
@@ -42,18 +43,12 @@ type pendingI2NP struct {
 
 // SSU2Session implements transport.TransportSession over an SSU2 connection.
 type SSU2Session struct {
+	*transport.SessionCore
+
 	conn   *ssu2noise.SSU2Conn
 	connMu sync.RWMutex // protects conn field (R-1 fix: upgraded to RWMutex for read-heavy access)
 
-	sendQueue     chan i2np.Message
-	recvChan      chan i2np.Message
-	sendQueueSize int32
-
-	bytesSent       uint64
-	bytesReceived   uint64
-	droppedMessages uint64
-
-	// Phase 5: Reliability & congestion control
+	// Phase 5: Reliability & congestion control (SSU2-specific fields)
 	rttEstimator   *ssu2noise.RTTEstimator
 	congestionCtrl *ssu2noise.CongestionController
 	pendingMsgsMu  sync.Mutex
@@ -65,21 +60,6 @@ type SSU2Session struct {
 	// peerTestLimiter enforces a per-session cap on PeerTest (Bob-role) relays.
 	// Burst of 3 with a sustained rate of 1/s (I2P spec allows infrequent tests).
 	peerTestLimiter *rate.Limiter
-
-	// inboundLimiter enforces a per-session I2NP inbound rate limit: 256 msg/s
-	// sustained, burst 512. Protects against message-flood DoS from a single peer.
-	inboundLimiter *rate.Limiter
-
-	ctx       context.Context
-	cancel    context.CancelFunc
-	closeOnce sync.Once
-	wg        sync.WaitGroup
-
-	callbackMu      sync.Mutex
-	cleanupCallback func()
-	cleanupOnce     sync.Once
-
-	logger *logger.Entry
 }
 
 // NewSSU2Session creates a new SSU2 session and starts background workers.
@@ -92,8 +72,6 @@ func NewSSU2Session(conn *ssu2noise.SSU2Conn, ctx context.Context, logger *logge
 // NewSSU2SessionDeferred creates a new SSU2 session without starting workers.
 // Call StartWorkers() after confirming the session will be used.
 func NewSSU2SessionDeferred(conn *ssu2noise.SSU2Conn, ctx context.Context, logger *logger.Entry) *SSU2Session {
-	sessionCtx, cancel := context.WithCancel(ctx)
-
 	sessionLogger := logger.WithFields(map[string]interface{}{
 		"component":   "ssu2_session",
 		"remote_addr": conn.RemoteAddr().String(),
@@ -102,19 +80,14 @@ func NewSSU2SessionDeferred(conn *ssu2noise.SSU2Conn, ctx context.Context, logge
 
 	rtt := ssu2noise.NewRTTEstimator()
 	s := &SSU2Session{
+		SessionCore:    transport.NewSessionCore(ctx, sessionLogger),
 		conn:           conn,
-		sendQueue:      make(chan i2np.Message, 256),
-		recvChan:       make(chan i2np.Message, 256),
 		rttEstimator:   rtt,
 		congestionCtrl: ssu2noise.NewCongestionController(rtt),
 		pendingMsgs:    make(map[uint64]*pendingI2NP),
 		maxRetransmit:  DefaultMaxRetransmissions,
-		ctx:            sessionCtx,
-		cancel:         cancel,
-		logger:         sessionLogger,
 	}
 	s.peerTestLimiter = rate.NewLimiter(rate.Limit(1), 3)
-	s.inboundLimiter = rate.NewLimiter(256, 512)
 	s.wireDataHandlerCallbacks()
 	return s
 }
@@ -137,8 +110,8 @@ func (s *SSU2Session) wireDataHandlerCallbacks() {
 func (s *SSU2Session) buildMergedCallbacks(extra *BlockCallbackConfig) ssu2noise.DataHandlerCallbacks {
 	cbs := ssu2noise.DataHandlerCallbacks{
 		OnTermination: func(_ uint64, reason uint8, _ []byte) {
-			s.logger.WithField("termination_reason", reason).Warn("SSU2 session terminated by peer")
-			s.cancel()
+			s.Logger().WithField("termination_reason", reason).Warn("SSU2 session terminated by peer")
+			s.CancelFunc()()
 		},
 		OnDateTime: func(timestamp uint32) error {
 			now := time.Now().Unix()
@@ -147,8 +120,8 @@ func (s *SSU2Session) buildMergedCallbacks(extra *BlockCallbackConfig) ssu2noise
 				delta = -delta
 			}
 			if delta > 60 {
-				s.logger.WithField("skew_seconds", delta).Warn("SSU2 clock skew out of tolerance, closing session")
-				s.cancel()
+				s.Logger().WithField("skew_seconds", delta).Warn("SSU2 clock skew out of tolerance, closing session")
+				s.CancelFunc()()
 				return oops.Errorf("clock skew %ds exceeds 60s tolerance", delta)
 			}
 			return nil
@@ -203,44 +176,10 @@ func setIfNotNil[T interface{}](dest *T, src T) {
 
 // StartWorkers launches the background send and receive goroutines.
 func (s *SSU2Session) StartWorkers() {
-	s.wg.Add(2)
+	s.WaitGroup().Add(2)
 	go s.sendWorker()
 	go s.receiveWorker()
-	s.logger.Info("SSU2 session workers started")
-}
-
-// QueueSendI2NP queues an I2NP message to be sent over the session.
-func (s *SSU2Session) QueueSendI2NP(msg i2np.Message) error {
-	atomic.AddInt32(&s.sendQueueSize, 1)
-
-	timer := time.NewTimer(500 * time.Millisecond)
-	defer timer.Stop()
-
-	select {
-	case s.sendQueue <- msg:
-		return nil
-	case <-s.ctx.Done():
-		atomic.AddInt32(&s.sendQueueSize, -1)
-		return oops.Errorf("session closed, message dropped (type=%d)", msg.Type())
-	case <-timer.C:
-		atomic.AddInt32(&s.sendQueueSize, -1)
-		return oops.Errorf("send queue full, message dropped (type=%d)", msg.Type())
-	}
-}
-
-// SendQueueSize returns how many I2NP messages are not completely sent yet.
-func (s *SSU2Session) SendQueueSize() int {
-	return int(atomic.LoadInt32(&s.sendQueueSize))
-}
-
-// ReadNextI2NP blocking reads the next fully received I2NP message.
-func (s *SSU2Session) ReadNextI2NP() (i2np.Message, error) {
-	select {
-	case msg := <-s.recvChan:
-		return msg, nil
-	case <-s.ctx.Done():
-		return nil, ErrSessionClosed
-	}
+	s.Logger().Info("SSU2 session workers started")
 }
 
 // sendQueueDrainTimeout is the maximum time to wait for queued messages.
@@ -255,8 +194,8 @@ func (s *SSU2Session) Close() error {
 // A termination block is sent to the remote peer before closing the connection.
 func (s *SSU2Session) CloseWithReason(reason ssu2noise.TerminationReason) error {
 	var err error
-	s.closeOnce.Do(func() {
-		s.logger.WithField("reason", reason.String()).Info("Closing SSU2 session")
+	s.CloseOnce().Do(func() {
+		s.Logger().WithField("reason", reason.String()).Info("Closing SSU2 session")
 		s.drainSendQueue()
 		s.connMu.Lock()
 		conn := s.conn
@@ -264,10 +203,10 @@ func (s *SSU2Session) CloseWithReason(reason ssu2noise.TerminationReason) error 
 		if conn != nil {
 			err = conn.CloseWithReason(reason, nil)
 		}
-		s.cancel()
-		s.wg.Wait()
-		s.callCleanupCallback()
-		s.logger.Info("SSU2 session closed")
+		s.CancelFunc()()
+		s.WaitGroup().Wait()
+		s.CallCleanupCallback()
+		s.Logger().Info("SSU2 session closed")
 	})
 	return err
 }
@@ -302,36 +241,6 @@ func (s *SSU2Session) RemoteAddr() net.Addr {
 	return s.conn.RemoteAddr()
 }
 
-// SetCleanupCallback sets a callback invoked when the session closes.
-func (s *SSU2Session) SetCleanupCallback(callback func()) {
-	s.callbackMu.Lock()
-	s.cleanupCallback = callback
-	s.callbackMu.Unlock()
-}
-
-func (s *SSU2Session) callCleanupCallback() {
-	s.cleanupOnce.Do(func() {
-		s.callbackMu.Lock()
-		cb := s.cleanupCallback
-		s.callbackMu.Unlock()
-		if cb != nil {
-			cb()
-		}
-	})
-}
-
-// GetBandwidthStats returns total bytes sent and received by this session.
-func (s *SSU2Session) GetBandwidthStats() (bytesSent, bytesReceived uint64) {
-	return atomic.LoadUint64(&s.bytesSent), atomic.LoadUint64(&s.bytesReceived)
-}
-
-// DroppedMessages returns the number of received messages that were dropped
-// due to the receive channel being full (backpressure). A non-zero value
-// indicates the consumer is not keeping up with inbound message rate.
-func (s *SSU2Session) DroppedMessages() uint64 {
-	return atomic.LoadUint64(&s.droppedMessages)
-}
-
 // WriteBlocks writes raw SSU2 blocks directly to the underlying connection,
 // bypassing the I2NP send queue. Used for protocol-level blocks such as PeerTest
 // and Relay that must not be fragmented or queued alongside I2NP traffic.
@@ -347,7 +256,7 @@ func (s *SSU2Session) WriteBlocks(blocks []*ssu2noise.SSU2Block) error {
 }
 
 func (s *SSU2Session) drainSendQueue() {
-	if atomic.LoadInt32(&s.sendQueueSize) == 0 {
+	if s.SendQueueSize() == 0 {
 		return
 	}
 
@@ -367,12 +276,12 @@ func (s *SSU2Session) waitForQueueDrain(deadline *time.Timer, ticker *time.Ticke
 	case <-deadline.C:
 		return false
 	case <-ticker.C:
-		return atomic.LoadInt32(&s.sendQueueSize) > 0
+		return s.SendQueueSize() > 0
 	}
 }
 
 func (s *SSU2Session) sendWorker() {
-	defer s.wg.Done()
+	defer s.WaitGroup().Done()
 	ticker := time.NewTicker(retransmitTickInterval)
 	defer ticker.Stop()
 
@@ -387,11 +296,11 @@ func (s *SSU2Session) sendWorker() {
 // Returns true if the worker should exit.
 func (s *SSU2Session) processSendWorkerEvents(ticker *time.Ticker) bool {
 	select {
-	case msg := <-s.sendQueue:
+	case msg := <-s.SendQueue():
 		return s.handleQueuedMessage(msg)
 	case <-ticker.C:
 		return s.checkRetransmissions()
-	case <-s.ctx.Done():
+	case <-s.GetContext().Done():
 		s.discardRemainingMessages()
 		return true
 	}
@@ -400,9 +309,9 @@ func (s *SSU2Session) processSendWorkerEvents(ticker *time.Ticker) bool {
 // handleQueuedMessage processes a message from the send queue.
 // Returns true if the worker should exit due to an error.
 func (s *SSU2Session) handleQueuedMessage(msg i2np.Message) bool {
-	atomic.AddInt32(&s.sendQueueSize, -1)
+	s.AddToSendQueueSize(-1)
 	if err := s.sendWithCongestionControl(msg); err != nil {
-		s.logger.WithError(err).Error("Failed to send message")
+		s.Logger().WithError(err).Error("Failed to send message")
 		s.discardRemainingMessages()
 		return true
 	}
@@ -413,8 +322,8 @@ func (s *SSU2Session) handleQueuedMessage(msg i2np.Message) bool {
 // Returns true if the worker should exit due to max retransmissions.
 func (s *SSU2Session) checkRetransmissions() bool {
 	if s.handleRetransmissions() {
-		s.logger.Warn("Max retransmissions exceeded, closing session")
-		s.cancel()
+		s.Logger().Warn("Max retransmissions exceeded, closing session")
+		s.CancelFunc()()
 		return true
 	}
 	return false
@@ -571,7 +480,7 @@ func (s *SSU2Session) waitForCongestionWindow(size int) error {
 	defer timer.Stop()
 	for !s.congestionCtrl.CanSend(size) {
 		select {
-		case <-s.ctx.Done():
+		case <-s.GetContext().Done():
 			return ErrSessionClosed
 		case <-timer.C:
 			timer.Reset(ccPollInterval)
@@ -582,7 +491,7 @@ func (s *SSU2Session) waitForCongestionWindow(size int) error {
 
 // sendTrackedBlocks writes blocks to the connection and tracks for retransmission.
 func (s *SSU2Session) sendTrackedBlocks(data []byte, blocks []*ssu2noise.SSU2Block) error {
-	if s.ctx.Err() != nil {
+	if s.GetContext().Err() != nil {
 		return ErrSessionClosed
 	}
 	// Check if conn has been detached (SM-2 fix: losing promotion race).
@@ -605,7 +514,7 @@ func (s *SSU2Session) sendTrackedBlocks(data []byte, blocks []*ssu2noise.SSU2Blo
 // updateSendStats updates bandwidth and congestion control stats after a successful send.
 func (s *SSU2Session) updateSendStats(n int) {
 	atomic.StoreInt64(&s.lastSendNano, time.Now().UnixNano())
-	atomic.AddUint64(&s.bytesSent, uint64(n))
+	s.AddToBytesSent(uint64(n))
 	s.congestionCtrl.OnPacketSent(n)
 }
 
@@ -741,7 +650,7 @@ func (s *SSU2Session) processRetransmission(p *pendingI2NP, now time.Time) retra
 	if err != nil {
 		return retransmitDelete
 	}
-	atomic.AddUint64(&s.bytesSent, uint64(n))
+	s.AddToBytesSent(uint64(n))
 	p.attempts++
 	backoff := s.rttEstimator.GetRTO() * (1 << uint(p.attempts))
 	if backoff > maxRetransmitBackoff {
@@ -772,8 +681,8 @@ func (s *SSU2Session) ackPendingBeforeTime(t time.Time) {
 func (s *SSU2Session) discardRemainingMessages() {
 	for {
 		select {
-		case <-s.sendQueue:
-			atomic.AddInt32(&s.sendQueueSize, -1)
+		case <-s.SendQueue():
+			s.AddToSendQueueSize(-1)
 		default:
 			return
 		}
@@ -813,14 +722,14 @@ func classifyReceiveError(err error) receiveAction {
 // conn.Read(), whether the original message was fragmented or not.
 func (s *SSU2Session) dispatchReceived(frame []byte) error {
 	recvAt := time.Now()
-	atomic.AddUint64(&s.bytesReceived, uint64(len(frame)))
+	s.AddToBytesReceived(uint64(len(frame)))
 
 	s.updateRTTEstimate(recvAt)
 	s.ackPendingBeforeTime(recvAt)
 
 	msg := i2np.NewBaseI2NPMessage(0)
 	if err := msg.UnmarshalShortI2NP(frame); err != nil {
-		s.logger.WithError(err).Debug("Failed to parse I2NP message")
+		s.Logger().WithError(err).Debug("Failed to parse I2NP message")
 		return nil // non-fatal: skip malformed frame
 	}
 	if err := s.checkInboundRateLimit(msg); err != nil {
@@ -830,10 +739,10 @@ func (s *SSU2Session) dispatchReceived(frame []byte) error {
 }
 
 func (s *SSU2Session) checkInboundRateLimit(msg i2np.Message) error {
-	if s.inboundLimiter.Allow() {
+	if s.InboundLimiter().Allow() {
 		return nil
 	}
-	s.logger.WithField("message_type", msg.Type()).Warn("Inbound I2NP rate limit exceeded, closing session")
+	s.Logger().WithField("message_type", msg.Type()).Warn("Inbound I2NP rate limit exceeded, closing session")
 	go func() { _ = s.Close() }()
 	return oops.Errorf("inbound I2NP rate limit exceeded")
 }
@@ -855,19 +764,19 @@ func (s *SSU2Session) deliverMessage(msg i2np.Message) error {
 	timer := time.NewTimer(100 * time.Millisecond)
 	defer timer.Stop()
 	select {
-	case s.recvChan <- msg:
+	case s.RecvChan() <- msg:
 		return nil
-	case <-s.ctx.Done():
-		return s.ctx.Err()
+	case <-s.GetContext().Done():
+		return s.GetContext().Err()
 	case <-timer.C:
-		atomic.AddUint64(&s.droppedMessages, 1)
-		s.logger.Warn("Receive channel full, dropping message")
+		s.RecordDroppedMessage()
+		s.Logger().Warn("Receive channel full, dropping message")
 		return nil
 	}
 }
 
 func (s *SSU2Session) receiveWorker() {
-	defer s.wg.Done()
+	defer s.WaitGroup().Done()
 	buf := make([]byte, maxI2NPMessageSize)
 
 	for {
@@ -890,7 +799,7 @@ func (s *SSU2Session) receiveWorker() {
 // isContextCanceled checks if the session context has been canceled.
 func (s *SSU2Session) isContextCanceled() bool {
 	select {
-	case <-s.ctx.Done():
+	case <-s.GetContext().Done():
 		return true
 	default:
 		return false
@@ -909,7 +818,7 @@ func (s *SSU2Session) readFrame(buf []byte) (int, receiveAction) {
 		return 0, receiveFatal
 	}
 	if err := conn.SetReadDeadline(time.Now().Add(ssu2ReadDeadline)); err != nil {
-		s.logger.WithError(err).Error("Failed to set read deadline")
+		s.Logger().WithError(err).Error("Failed to set read deadline")
 		return 0, receiveFatal
 	}
 	n, err := conn.Read(buf)
@@ -923,7 +832,7 @@ func (s *SSU2Session) readFrame(buf []byte) (int, receiveAction) {
 func (s *SSU2Session) handleReadError(err error) receiveAction {
 	action := classifyReceiveError(err)
 	if action == receiveFatal {
-		s.logger.WithError(err).Debug("Read error on SSU2 session")
+		s.Logger().WithError(err).Debug("Read error on SSU2 session")
 	}
 	return action
 }

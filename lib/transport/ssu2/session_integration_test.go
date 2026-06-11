@@ -351,5 +351,5 @@ func TestSessionIntegration_CloseTerminatesSession(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// Server session context should have been cancelled via OnTermination callback.
-	assert.Error(t, serverSess.ctx.Err(), "server session context should be cancelled after peer termination")
+	assert.Error(t, serverSess.GetContext().Err(), "server session context should be cancelled after peer termination")
 }

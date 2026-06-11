@@ -1,12 +1,15 @@
 package ntcp2
 
 import (
+	"context"
 	"net"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/go-i2p/go-i2p/lib/transport"
+	"github.com/go-i2p/logger"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -31,11 +34,14 @@ func (m *mockCallbackConn) SetReadDeadline(t time.Time) error  { return nil }
 func (m *mockCallbackConn) SetWriteDeadline(t time.Time) error { return nil }
 
 // TestSetCleanupCallback_NoRace verifies that SetCleanupCallback and
-// callCleanupCallback can be called concurrently without a data race.
+// CallCleanupCallback can be called concurrently without a data race.
 // Run with -race to detect.
 func TestSetCleanupCallback_NoRace(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	session := &NTCP2Session{
-		cleanupOnce: sync.Once{},
+		SessionCore: transport.NewSessionCore(ctx, logger.WithField("test", "callback")),
 	}
 
 	var callCount int32
@@ -59,9 +65,9 @@ func TestSetCleanupCallback_NoRace(t *testing.T) {
 	}()
 	go func() {
 		defer wg.Done()
-		// callCleanupCallback can only fire once (cleanupOnce), but we still
+		// CallCleanupCallback can only fire once (cleanupOnce), but we still
 		// exercise the read path concurrently with the write path above.
-		session.callCleanupCallback()
+		session.CallCleanupCallback()
 	}()
 	wg.Wait()
 
@@ -73,8 +79,11 @@ func TestSetCleanupCallback_NoRace(t *testing.T) {
 // TestSetCleanupCallback_CalledOnClose verifies that the callback is invoked
 // when the session is closed.
 func TestSetCleanupCallback_CalledOnClose(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	session := &NTCP2Session{
-		cleanupOnce: sync.Once{},
+		SessionCore: transport.NewSessionCore(ctx, logger.WithField("test", "callback")),
 	}
 
 	var called int32
@@ -82,17 +91,20 @@ func TestSetCleanupCallback_CalledOnClose(t *testing.T) {
 		atomic.StoreInt32(&called, 1)
 	})
 
-	session.callCleanupCallback()
+	session.CallCleanupCallback()
 	assert.Equal(t, int32(1), atomic.LoadInt32(&called))
 }
 
 // TestSetCleanupCallback_NilSafe verifies no panic when no callback is set.
 func TestSetCleanupCallback_NilSafe(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	session := &NTCP2Session{
-		cleanupOnce: sync.Once{},
+		SessionCore: transport.NewSessionCore(ctx, logger.WithField("test", "callback")),
 	}
 
 	assert.NotPanics(t, func() {
-		session.callCleanupCallback()
+		session.CallCleanupCallback()
 	})
 }

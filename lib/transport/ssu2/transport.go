@@ -689,7 +689,7 @@ func (t *SSU2Transport) SetIdentity(ident router_info.RouterInfo) error {
 		newCfg := *oldCfg // Shallow copy
 		newCfg.ListenerAddress = newAddr
 		newCfg.SSU2Config = ssu2Config
-		
+
 		t.identityMu.Lock()
 		t.listener = listener
 		t.config.Store(&newCfg) // R-2 fix: Atomic config store
@@ -782,7 +782,7 @@ func (t *SSU2Transport) findExistingSession(routerHash data.Hash) (transport.Tra
 // resolveSessionFromMap resolves session from map entry (either live session or connection to promote).
 func (t *SSU2Transport) resolveSessionFromMap(existing interface{}, routerHash data.Hash) (transport.TransportSession, bool) {
 	if session, ok := existing.(*SSU2Session); ok {
-		if session.ctx.Err() != nil {
+		if session.GetContext().Err() != nil {
 			if _, loaded := t.sessions.LoadAndDelete(routerHash); loaded {
 				atomic.AddInt32(&t.sessionCount, -1)
 			}

@@ -1340,11 +1340,11 @@ func (t *NTCP2Transport) findExistingSession(routerHash data.Hash) (transport.Tr
 // validateExistingSession checks whether an existing NTCP2 session is still
 // alive. If stale, it evicts the session and returns false.
 func (t *NTCP2Transport) validateExistingSession(s *NTCP2Session, routerHash data.Hash) (transport.TransportSession, bool) {
-	if s.ctx.Err() != nil {
+	if s.GetContext().Err() != nil {
 		routerHashBytes := routerHash.Bytes()
 		t.logger.WithFields(map[string]interface{}{
 			"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
-			"reason":      s.ctx.Err().Error(),
+			"reason":      s.GetContext().Err().Error(),
 		}).Info("Evicting stale NTCP2 session")
 		if _, loaded := t.sessions.LoadAndDelete(routerHash); loaded {
 			// RC-4 FIX: Use safe decrement with runtime assertions

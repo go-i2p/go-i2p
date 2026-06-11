@@ -246,10 +246,10 @@ func TestQueueSendI2NP_ClosedSession(t *testing.T) {
 	// concurrent goroutine is draining the queue when the test fills it below.
 	server.Close()
 
-	// Fill the 256-slot send queue so the sendQueue<-msg case is always blocked.
+	// Fill the 256-slot send queue so the SendQueue()<-msg case is always blocked.
 	fill := newTestI2NPMessage([]byte("fill"))
 	for i := 0; i < 256; i++ {
-		server.sendQueue <- fill
+		server.SendQueue() <- fill
 	}
 
 	msg := newTestI2NPMessage([]byte("should fail"))

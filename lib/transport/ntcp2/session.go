@@ -8,35 +8,23 @@ import (
 	"io"
 	"net"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/go-i2p/go-i2p/lib/i2np"
+	"github.com/go-i2p/go-i2p/lib/transport"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
-	"golang.org/x/time/rate"
 )
 
 // NTCP2Session represents an active NTCP2 connection session with a remote peer, managing message queues, bandwidth tracking, and rekeying state.
 type NTCP2Session struct {
+	// Shared session core fields: queues, bandwidth tracking, lifecycle, and callbacks.
+	// This embeds *SessionCore, so callers can call QueueSendI2NP, ReadNextI2NP, etc. directly.
+	*transport.SessionCore
+
 	// Underlying connection (uses net.Conn interface per guidelines)
 	conn   net.Conn   // Will be *ntcp2.NTCP2Conn internally
 	connMu sync.Mutex // protects conn field (SM-2 fix)
-
-	// I2NP message queues
-	sendQueue chan i2np.Message
-	recvChan  chan i2np.Message
-
-	// Queue management
-	sendQueueSize int32 // atomic counter
-
-	// Bandwidth tracking (atomic counters for thread-safe access)
-	// These track cumulative bytes since session start
-	bytesSent     uint64 // atomic: total bytes sent over this session
-	bytesReceived uint64 // atomic: total bytes received over this session
-
-	// Backpressure tracking — counts messages dropped due to full receive channel
-	droppedMessages uint64 // atomic: total messages dropped due to backpressure
 
 	// Rekeying state — tracks message counts for periodic rekeying
 	rekeyState *rekeyState
@@ -45,29 +33,9 @@ type NTCP2Session struct {
 	lastError error
 	errorOnce sync.Once
 
-	// Lifecycle management
-	ctx       context.Context
-	cancel    context.CancelFunc
-	closeOnce sync.Once
-
-	// Background workers
-	wg sync.WaitGroup
-
-	// Cleanup callback (called when session closes)
-	callbackMu      sync.Mutex // protects cleanupCallback field
-	cleanupCallback func()
-	cleanupOnce     sync.Once
-
 	// RouterInfo callback (called when a RouterInfo block is received from peer)
 	routerInfoMu       sync.Mutex
 	routerInfoCallback func([]byte)
-
-	// Per-session I2NP inbound rate limiter: 256 msg/s sustained, burst 512.
-	// Protects against message-flood DoS from a single peer.
-	inboundLimiter *rate.Limiter
-
-	// Logging
-	logger *logger.Entry
 }
 
 // NewNTCP2Session creates a new NTCP2 session and immediately starts background
@@ -84,8 +52,6 @@ func NewNTCP2Session(conn net.Conn, ctx context.Context, logger *logger.Entry) *
 // after winning a LoadOrStore race). This prevents spawning goroutines for sessions
 // that will be immediately discarded.
 func NewNTCP2SessionDeferred(conn net.Conn, ctx context.Context, logger *logger.Entry) *NTCP2Session {
-	sessionCtx, cancel := context.WithCancel(ctx)
-
 	sessionLogger := logger.WithFields(map[string]interface{}{
 		"component":   "ntcp2_session",
 		"remote_addr": conn.RemoteAddr().String(),
@@ -93,19 +59,11 @@ func NewNTCP2SessionDeferred(conn net.Conn, ctx context.Context, logger *logger.
 	sessionLogger.Info("Creating new NTCP2 session")
 
 	session := &NTCP2Session{
-		conn:           conn,
-		sendQueue:      make(chan i2np.Message, 256), // Buffered channel for send queue
-		recvChan:       make(chan i2np.Message, 256), // Buffered channel for receive messages
-		ctx:            sessionCtx,
-		cancel:         cancel,
-		logger:         sessionLogger,
-		rekeyState:     newRekeyState(),
-		sendQueueSize:  0,
-		lastError:      nil,
-		errorOnce:      sync.Once{},
-		closeOnce:      sync.Once{},
-		wg:             sync.WaitGroup{},
-		inboundLimiter: rate.NewLimiter(256, 512),
+		SessionCore: transport.NewSessionCore(ctx, sessionLogger),
+		conn:        conn,
+		rekeyState:  newRekeyState(),
+		lastError:   nil,
+		errorOnce:   sync.Once{},
 	}
 
 	sessionLogger.Info("NTCP2 session created (deferred workers)")
@@ -115,68 +73,21 @@ func NewNTCP2SessionDeferred(conn net.Conn, ctx context.Context, logger *logger.
 // StartWorkers launches the background send and receive goroutines.
 // Must be called exactly once after the session is confirmed as the active session.
 func (s *NTCP2Session) StartWorkers() {
-	s.logger.Debug("Starting send and receive workers")
-	s.wg.Add(2)
+	s.Logger().Debug("Starting send and receive workers")
+	s.WaitGroup().Add(2)
 	go s.sendWorker()
 	go s.receiveWorker()
-	s.logger.Info("NTCP2 session workers started")
-}
-
-// QueueSendI2NP queues an I2NP message to be sent over the session.
-// Returns an error if the session is closed or the send queue is full after a timeout.
-func (s *NTCP2Session) QueueSendI2NP(msg i2np.Message) error {
-	s.logger.WithFields(map[string]interface{}{
-		"message_type":       msg.Type(),
-		"current_queue_size": atomic.LoadInt32(&s.sendQueueSize),
-	}).Debug("Queueing I2NP message for send")
-
-	// Increment queue size before channel send so SendQueueSize() always
-	// reflects messages that are in-flight or queued. Decrement on failure.
-	atomic.AddInt32(&s.sendQueueSize, 1)
-
-	timer := time.NewTimer(500 * time.Millisecond)
-	defer timer.Stop()
-
-	select {
-	case s.sendQueue <- msg:
-		s.logger.WithField("queue_size", atomic.LoadInt32(&s.sendQueueSize)).Debug("Message queued successfully")
-		return nil
-	case <-s.ctx.Done():
-		atomic.AddInt32(&s.sendQueueSize, -1)
-		s.logger.WithField("message_type", msg.Type()).Warn("Cannot queue message - session is closed")
-		return oops.Errorf("session closed, message dropped (type=%d)", msg.Type())
-	case <-timer.C:
-		atomic.AddInt32(&s.sendQueueSize, -1)
-		s.logger.WithFields(map[string]interface{}{
-			"message_type":       msg.Type(),
-			"current_queue_size": atomic.LoadInt32(&s.sendQueueSize),
-		}).Warn("Send queue full after timeout, dropping message")
-		return oops.Errorf("send queue full, message dropped (type=%d)", msg.Type())
-	}
-}
-
-// SendQueueSize returns how many I2NP messages are not completely sent yet.
-func (s *NTCP2Session) SendQueueSize() int {
-	return int(atomic.LoadInt32(&s.sendQueueSize))
-}
-
-// GetBandwidthStats returns the total bytes sent and received by this session.
-// Each counter is read atomically, but the pair is not a consistent snapshot:
-// a concurrent send/receive between the two loads may cause slight skew.
-// This is acceptable for monitoring and rate estimation; use a mutex-guarded
-// snapshot if exact point-in-time consistency is ever required.
-func (s *NTCP2Session) GetBandwidthStats() (bytesSent, bytesReceived uint64) {
-	return atomic.LoadUint64(&s.bytesSent), atomic.LoadUint64(&s.bytesReceived)
+	s.Logger().Info("NTCP2 session workers started")
 }
 
 // ReadNextI2NP blocking reads the next fully received I2NP message from this session.
+// If a critical error occurred during receive processing, it is returned instead
+// of waiting for more messages.
 func (s *NTCP2Session) ReadNextI2NP() (i2np.Message, error) {
 	select {
-	case msg := <-s.recvChan:
-		s.logger.WithField("message_type", msg.Type()).Debug("Read I2NP message from session")
+	case msg := <-s.RecvChan():
 		return msg, nil
-	case <-s.ctx.Done():
-		s.logger.Debug("ReadNextI2NP returning due to session close")
+	case <-s.GetContext().Done():
 		if s.lastError != nil {
 			return nil, s.lastError
 		}
@@ -211,8 +122,8 @@ func (s *NTCP2Session) Close() error {
 // Spec reference: https://geti2p.net/spec/ntcp2#termination
 func (s *NTCP2Session) CloseWithReason(reason byte) error {
 	var err error
-	s.closeOnce.Do(func() {
-		s.logger.WithField("reason", TerminationReasonString(reason)).Info("Closing NTCP2 session")
+	s.CloseOnce().Do(func() {
+		s.Logger().WithField("reason", TerminationReasonString(reason)).Info("Closing NTCP2 session")
 
 		// Wait for send queue to drain before canceling context.
 		// The sendWorker is still running at this point, so queued messages
@@ -222,7 +133,7 @@ func (s *NTCP2Session) CloseWithReason(reason byte) error {
 		// Send encrypted termination block before closing, unless the
 		// reason is an AEAD failure (cipher state may be corrupted).
 		if IsAEADFailureReason(reason) {
-			s.logger.Debug("AEAD failure reason — skipping termination block, applying probing resistance")
+			s.Logger().Debug("AEAD failure reason — skipping termination block, applying probing resistance")
 			s.connMu.Lock()
 			conn := s.conn
 			s.connMu.Unlock()
@@ -234,22 +145,22 @@ func (s *NTCP2Session) CloseWithReason(reason byte) error {
 			s.sendEncryptedTermination(reason)
 		}
 
-		s.cancel()
+		s.CancelFunc()()
 		s.connMu.Lock()
 		conn := s.conn
 		s.connMu.Unlock()
 		if conn != nil {
 			err = conn.Close()
 			if err != nil {
-				s.logger.WithError(err).Warn("Error closing connection")
+				s.Logger().WithError(err).Warn("Error closing connection")
 			}
 		}
-		s.logger.Debug("Waiting for session workers to complete")
-		s.wg.Wait()
+		s.Logger().Debug("Waiting for session workers to complete")
+		s.WaitGroup().Wait()
 
 		// Call cleanup callback to remove session from transport map
-		s.callCleanupCallback()
-		s.logger.Info("NTCP2 session closed successfully")
+		s.CallCleanupCallback()
+		s.Logger().Info("NTCP2 session closed successfully")
 	})
 	return err
 }
@@ -281,15 +192,15 @@ func (s *NTCP2Session) sendEncryptedTermination(reason byte) {
 	}
 
 	block := BuildTerminationBlock(reason)
-	s.logger.WithFields(map[string]interface{}{
+	s.Logger().WithFields(map[string]interface{}{
 		"reason":     TerminationReasonString(reason),
 		"block_size": len(block),
 	}).Debug("Sending encrypted termination block")
 
 	if _, writeErr := conn.Write(block); writeErr != nil {
-		s.logger.WithError(writeErr).Debug("Failed to send encrypted termination block (best-effort)")
+		s.Logger().WithError(writeErr).Debug("Failed to send encrypted termination block (best-effort)")
 	} else {
-		s.logger.Debug("Encrypted termination block sent successfully")
+		s.Logger().Debug("Encrypted termination block sent successfully")
 	}
 }
 
@@ -297,12 +208,12 @@ func (s *NTCP2Session) sendEncryptedTermination(reason byte) {
 // This is called before canceling the session context so the sendWorker can
 // still process queued messages.
 func (s *NTCP2Session) drainSendQueue() {
-	queueSize := atomic.LoadInt32(&s.sendQueueSize)
+	queueSize := s.SendQueueSize()
 	if queueSize == 0 {
 		return
 	}
 
-	s.logger.WithField("queue_size", queueSize).Debug("Draining send queue before close")
+	s.Logger().WithField("queue_size", queueSize).Debug("Draining send queue before close")
 
 	deadline := time.NewTimer(sendQueueDrainTimeout)
 	defer deadline.Stop()
@@ -325,53 +236,32 @@ func (s *NTCP2Session) processDrainTick(deadline *time.Timer, ticker *time.Ticke
 		s.handleDrainTimeout()
 		return true
 	case <-ticker.C:
-		return atomic.LoadInt32(&s.sendQueueSize) == 0
+		return s.SendQueueSize() == 0
 	}
 }
 
 // handleDrainTimeout logs a warning if messages remain after timeout.
 func (s *NTCP2Session) handleDrainTimeout() {
-	remaining := atomic.LoadInt32(&s.sendQueueSize)
+	remaining := s.SendQueueSize()
 	if remaining > 0 {
-		s.logger.WithField("remaining", remaining).Warn("Send queue drain timeout, dropping remaining messages")
+		s.Logger().WithField("remaining", remaining).Warn("Send queue drain timeout, dropping remaining messages")
 	}
-}
-
-// SetCleanupCallback sets a callback function that will be called when the session closes.
-// Thread-safe: protected by callbackMu to prevent data race with callCleanupCallback.
-func (s *NTCP2Session) SetCleanupCallback(callback func()) {
-	s.callbackMu.Lock()
-	s.cleanupCallback = callback
-	s.callbackMu.Unlock()
-}
-
-// callCleanupCallback calls the cleanup callback (once) if it's set.
-// Thread-safe: reads cleanupCallback under callbackMu.
-func (s *NTCP2Session) callCleanupCallback() {
-	s.cleanupOnce.Do(func() {
-		s.callbackMu.Lock()
-		cb := s.cleanupCallback
-		s.callbackMu.Unlock()
-		if cb != nil {
-			cb()
-		}
-	})
 }
 
 // sendWorker handles sending I2NP messages over the NTCP2 connection.
 func (s *NTCP2Session) sendWorker() {
-	defer s.wg.Done()
-	s.logger.Debug("Send worker started")
-	defer s.logger.Debug("Send worker stopped")
+	defer s.WaitGroup().Done()
+	s.Logger().Debug("Send worker started")
+	defer s.Logger().Debug("Send worker stopped")
 
 	for {
 		select {
-		case msg := <-s.sendQueue:
+		case msg := <-s.SendQueue():
 			if !s.processSendQueueMessage(msg) {
 				s.discardRemainingMessages()
 				return
 			}
-		case <-s.ctx.Done():
+		case <-s.GetContext().Done():
 			s.discardRemainingMessages()
 			return
 		}
@@ -384,8 +274,8 @@ func (s *NTCP2Session) sendWorker() {
 func (s *NTCP2Session) discardRemainingMessages() {
 	for {
 		select {
-		case <-s.sendQueue:
-			atomic.AddInt32(&s.sendQueueSize, -1)
+		case <-s.SendQueue():
+			s.AddToSendQueueSize(-1)
 		default:
 			return
 		}
@@ -395,8 +285,8 @@ func (s *NTCP2Session) discardRemainingMessages() {
 // processSendQueueMessage processes a single I2NP message from the send queue.
 // Returns false if an error occurred and the worker should stop, true otherwise.
 func (s *NTCP2Session) processSendQueueMessage(msg i2np.Message) bool {
-	newSize := atomic.AddInt32(&s.sendQueueSize, -1)
-	s.logger.WithFields(map[string]interface{}{
+	newSize := s.AddToSendQueueSize(-1)
+	s.Logger().WithFields(map[string]interface{}{
 		"message_type":       msg.Type(),
 		"remaining_in_queue": newSize,
 	}).Debug("Processing message from send queue")
@@ -432,13 +322,13 @@ func (s *NTCP2Session) writeFramedData(framedData []byte) bool {
 	}
 	bytesWritten, err := conn.Write(framedData)
 	if err != nil {
-		s.logger.WithError(err).WithField("bytes_written", bytesWritten).Error("Failed to write message to connection")
+		s.Logger().WithError(err).WithField("bytes_written", bytesWritten).Error("Failed to write message to connection")
 		s.setError(WrapNTCP2Error(err, "writing message"))
 		return false
 	}
 	// Track outbound bandwidth
-	atomic.AddUint64(&s.bytesSent, uint64(bytesWritten))
-	s.logger.WithField("bytes_written", bytesWritten).Debug("Message written successfully")
+	s.AddToBytesSent(uint64(bytesWritten))
+	s.Logger().WithField("bytes_written", bytesWritten).Debug("Message written successfully")
 
 	// Track message count for rekeying
 	s.checkRekey(s.rekeyState.recordSent())
@@ -453,9 +343,9 @@ const ntcp2ReadDeadline = 5 * time.Minute
 
 // receiveWorker handles receiving I2NP messages from the NTCP2 connection.
 func (s *NTCP2Session) receiveWorker() {
-	defer s.wg.Done()
-	s.logger.Debug("Receive worker started")
-	defer s.logger.Debug("Receive worker stopped")
+	defer s.WaitGroup().Done()
+	s.Logger().Debug("Receive worker started")
+	defer s.Logger().Debug("Receive worker stopped")
 
 	unframer := s.createBlockUnframer()
 
@@ -482,7 +372,7 @@ func (s *NTCP2Session) processNextInboundMessageFromBlocks(unframer *BlockUnfram
 		return false
 	}
 	if err := conn.SetReadDeadline(time.Now().Add(ntcp2ReadDeadline)); err != nil {
-		s.logger.WithError(err).Error("Failed to set read deadline")
+		s.Logger().WithError(err).Error("Failed to set read deadline")
 		s.setError(WrapNTCP2Error(err, "setting read deadline"))
 		return false
 	}
@@ -500,10 +390,10 @@ func (s *NTCP2Session) processNextInboundMessageFromBlocks(unframer *BlockUnfram
 }
 
 func (s *NTCP2Session) allowInboundMessage(msg i2np.Message) bool {
-	if s.inboundLimiter.Allow() {
+	if s.InboundLimiter().Allow() {
 		return true
 	}
-	s.logger.WithField("message_type", msg.Type()).Warn("Inbound I2NP rate limit exceeded, closing session")
+	s.Logger().WithField("message_type", msg.Type()).Warn("Inbound I2NP rate limit exceeded, closing session")
 	s.setError(oops.Errorf("inbound I2NP rate limit exceeded"))
 	go func() { _ = s.Close() }()
 	return false
@@ -514,7 +404,7 @@ func (s *NTCP2Session) allowInboundMessage(msg i2np.Message) bool {
 func (s *NTCP2Session) handleReadResult(err error) bool {
 	var netErr net.Error
 	if errors.As(err, &netErr) && netErr.Timeout() {
-		s.logger.Debug("Read deadline expired, checking session state")
+		s.Logger().Debug("Read deadline expired, checking session state")
 		return true
 	}
 	s.handleReceiveError(err)
@@ -537,10 +427,10 @@ func (s *NTCP2Session) handleNonI2NPBlock(block Block) {
 	switch block.Type {
 	case BlockTypeDateTime:
 		if ts, err := ParseDateTimeBlock(block.Data); err == nil {
-			s.logger.WithField("peer_time", ts).Debug("Received DateTime block from peer")
+			s.Logger().WithField("peer_time", ts).Debug("Received DateTime block from peer")
 		}
 	case BlockTypeOptions:
-		s.logger.Debug("Received Options block from peer")
+		s.Logger().Debug("Received Options block from peer")
 	case BlockTypePadding:
 		// Padding is ignored per spec
 	case BlockTypeRouterInfo:
@@ -550,7 +440,7 @@ func (s *NTCP2Session) handleNonI2NPBlock(block Block) {
 		if len(block.Data) >= terminationBlockPayloadSize {
 			reason = block.Data[terminationBlockPayloadSize-1]
 		}
-		s.logger.WithFields(map[string]interface{}{
+		s.Logger().WithFields(map[string]interface{}{
 			"at":          "(NTCP2Session) handleNonI2NPBlock",
 			"reason_code": reason,
 			"reason":      TerminationReasonString(reason),
@@ -559,7 +449,7 @@ func (s *NTCP2Session) handleNonI2NPBlock(block Block) {
 		// and this callback runs inside the receive worker goroutine.
 		go func() { _ = s.Close() }()
 	default:
-		s.logger.WithField("block_type", block.Type).Debug("Received unknown block type")
+		s.Logger().WithField("block_type", block.Type).Debug("Received unknown block type")
 	}
 }
 
@@ -575,7 +465,7 @@ func (s *NTCP2Session) SetRouterInfoCallback(cb func([]byte)) {
 // and passes the raw RouterInfo bytes to the registered callback.
 func (s *NTCP2Session) handleRouterInfoBlock(data []byte) {
 	if len(data) < 2 {
-		s.logger.Warn("RouterInfo block too short")
+		s.Logger().Warn("RouterInfo block too short")
 		return
 	}
 	flag := data[0]
@@ -584,7 +474,7 @@ func (s *NTCP2Session) handleRouterInfoBlock(data []byte) {
 	if flag&0x01 != 0 {
 		decompressed, err := decompressGzip(riData)
 		if err != nil {
-			s.logger.WithError(err).Warn("Failed to decompress RouterInfo block")
+			s.Logger().WithError(err).Warn("Failed to decompress RouterInfo block")
 			return
 		}
 		riData = decompressed
@@ -597,7 +487,7 @@ func (s *NTCP2Session) handleRouterInfoBlock(data []byte) {
 	if cb != nil {
 		cb(riData)
 	} else {
-		s.logger.Debug("Received RouterInfo block but no callback registered")
+		s.Logger().Debug("Received RouterInfo block but no callback registered")
 	}
 }
 
@@ -615,7 +505,7 @@ func decompressGzip(data []byte) ([]byte, error) {
 // shouldStopReceiving checks if the session context is done and receiving should stop.
 func (s *NTCP2Session) shouldStopReceiving() bool {
 	select {
-	case <-s.ctx.Done():
+	case <-s.GetContext().Done():
 		return true
 	default:
 		return false
@@ -628,8 +518,8 @@ func (s *NTCP2Session) readNextMessageFromBlocks(unframer *BlockUnframer) (i2np.
 	if err == nil {
 		// Track bytes received atomically
 		bytesRead := unframer.BytesRead()
-		atomic.AddUint64(&s.bytesReceived, uint64(bytesRead))
-		s.logger.WithField("bytes_read", bytesRead).Debug("Message read successfully")
+		s.AddToBytesReceived(uint64(bytesRead))
+		s.Logger().WithField("bytes_read", bytesRead).Debug("Message read successfully")
 	}
 	return msg, err
 }
@@ -640,13 +530,13 @@ func (s *NTCP2Session) readNextMessageFromBlocks(unframer *BlockUnframer) (i2np.
 func (s *NTCP2Session) handleReceiveError(err error) {
 	switch {
 	case errors.Is(err, io.EOF):
-		s.logger.WithError(err).Warn("Connection closed by remote peer (EOF)")
+		s.Logger().WithError(err).Warn("Connection closed by remote peer (EOF)")
 	case errors.Is(err, net.ErrClosed):
-		s.logger.WithError(err).Warn("Read on closed connection")
+		s.Logger().WithError(err).Warn("Read on closed connection")
 	case isTimeoutOrReset(err):
-		s.logger.WithError(err).Warn("Connection lost (timeout or reset)")
+		s.Logger().WithError(err).Warn("Connection lost (timeout or reset)")
 	default:
-		s.logger.WithError(err).Error("Failed to read message from connection")
+		s.Logger().WithError(err).Error("Failed to read message from connection")
 	}
 	s.setError(WrapNTCP2Error(err, "reading message"))
 }
@@ -671,16 +561,16 @@ func isTimeoutOrReset(err error) bool {
 // Uses a non-blocking attempt first to avoid stalling the receive worker when the
 // channel is full, falling back to a short timeout before dropping the message.
 func (s *NTCP2Session) queueReceivedMessage(msg i2np.Message) bool {
-	s.logger.WithField("message_type", msg.Type()).Debug("Received message, queueing to receive channel")
+	s.Logger().WithField("message_type", msg.Type()).Debug("Received message, queueing to receive channel")
 
 	// Try non-blocking first
 	select {
-	case s.recvChan <- msg:
-		s.logger.Debug("Message queued to receive channel successfully")
+	case s.RecvChan() <- msg:
+		s.Logger().Debug("Message queued to receive channel successfully")
 		s.checkRekey(s.rekeyState.recordReceived())
 		return true
-	case <-s.ctx.Done():
-		s.logger.Warn("Cannot queue received message - session is closed")
+	case <-s.GetContext().Done():
+		s.Logger().Warn("Cannot queue received message - session is closed")
 		return false
 	default:
 	}
@@ -696,26 +586,27 @@ func (s *NTCP2Session) queueWithBackpressure(msg i2np.Message) bool {
 	defer timer.Stop()
 
 	select {
-	case s.recvChan <- msg:
-		s.logger.Debug("Message queued to receive channel successfully (after backpressure)")
+	case s.RecvChan() <- msg:
+		s.Logger().Debug("Message queued to receive channel successfully (after backpressure)")
 		s.checkRekey(s.rekeyState.recordReceived())
 		return true
-	case <-s.ctx.Done():
-		s.logger.Warn("Cannot queue received message - session is closed")
+	case <-s.GetContext().Done():
+		s.Logger().Warn("Cannot queue received message - session is closed")
 		return false
 	case <-timer.C:
-		s.recordDroppedMessage(msg)
+		s.recordAndLogDroppedMessage(msg)
 		return true // Continue receiving — don't kill the worker for backpressure
 	}
 }
 
-// recordDroppedMessage increments the dropped message counter and logs the event.
-func (s *NTCP2Session) recordDroppedMessage(msg i2np.Message) {
-	dropped := atomic.AddUint64(&s.droppedMessages, 1)
-	s.logger.WithFields(map[string]interface{}{
+// recordAndLogDroppedMessage increments the dropped message counter and logs the event.
+func (s *NTCP2Session) recordAndLogDroppedMessage(msg i2np.Message) {
+	s.RecordDroppedMessage()
+	dropped := s.DroppedMessages()
+	s.Logger().WithFields(map[string]interface{}{
 		"message_type":  msg.Type(),
 		"total_dropped": dropped,
-		"recv_chan_cap": cap(s.recvChan),
+		"recv_chan_cap": cap(s.RecvChan()),
 	}).Warn("Dropping received message - receive channel full (backpressure)")
 }
 
@@ -723,7 +614,7 @@ func (s *NTCP2Session) recordDroppedMessage(msg i2np.Message) {
 // If the threshold is reached, attempts to rekey the underlying connection.
 func (s *NTCP2Session) checkRekey(totalMessages uint64) {
 	if totalMessages >= RekeyThreshold {
-		s.logger.WithFields(map[string]interface{}{
+		s.Logger().WithFields(map[string]interface{}{
 			"total_messages": totalMessages,
 			"threshold":      RekeyThreshold,
 		}).Info("Rekey threshold reached, attempting session rekey")
@@ -731,9 +622,9 @@ func (s *NTCP2Session) checkRekey(totalMessages uint64) {
 		conn := s.conn
 		s.connMu.Unlock()
 		if attemptRekey(conn, s.rekeyState) {
-			s.logger.WithField("rekey_count", s.rekeyState.getRekeyCount()).Info("Session rekeyed successfully")
+			s.Logger().WithField("rekey_count", s.rekeyState.getRekeyCount()).Info("Session rekeyed successfully")
 		} else {
-			s.logger.Debug("Session rekeying not available (connection does not implement Rekeyer)")
+			s.Logger().Debug("Session rekeying not available (connection does not implement Rekeyer)")
 		}
 	}
 }
@@ -743,13 +634,6 @@ func (s *NTCP2Session) checkRekey(totalMessages uint64) {
 // rekeyCount is the total number of successful rekeys performed.
 func (s *NTCP2Session) GetRekeyStats() (messagesSinceRekey, rekeyCount uint64) {
 	return s.rekeyState.totalMessages(), s.rekeyState.getRekeyCount()
-}
-
-// DroppedMessages returns the number of received messages that were dropped
-// due to the receive channel being full (backpressure). A non-zero value
-// indicates the consumer is not keeping up with inbound message rate.
-func (s *NTCP2Session) DroppedMessages() uint64 {
-	return atomic.LoadUint64(&s.droppedMessages)
 }
 
 // setError sets the last error (once) and cancels the session context.
@@ -764,12 +648,12 @@ func (s *NTCP2Session) setError(err error) {
 		// the error log with non-actionable entries.
 		switch {
 		case errors.Is(err, io.EOF):
-			s.logger.WithError(err).Warn("Session closed by remote peer")
+			s.Logger().WithError(err).Warn("Session closed by remote peer")
 		case isTimeoutOrReset(err):
-			s.logger.WithError(err).Warn("Session closed due to timeout or reset")
+			s.Logger().WithError(err).Warn("Session closed due to timeout or reset")
 		default:
-			s.logger.WithError(err).Error("Session error")
+			s.Logger().WithError(err).Error("Session error")
 		}
-		s.cancel()
+		s.CancelFunc()()
 	})
 }

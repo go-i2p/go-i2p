@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
-	"sync/atomic"
 	"testing"
 
 	cryptoTypes "github.com/go-i2p/crypto/types"
@@ -356,7 +355,7 @@ func TestDataPhase_TerminationBlock(t *testing.T) {
 	assert.NoError(t, err, "Session close (triggering termination) must not error")
 
 	// Verify session is fully closed (context canceled)
-	assert.Error(t, session.ctx.Err(), "Session context must be canceled after Close()")
+	assert.Error(t, session.GetContext().Err(), "Session context must be canceled after Close()")
 }
 
 // TestDataPhase_MaxFrameSize verifies the maximum I2NP message size constraint.
@@ -832,9 +831,9 @@ func TestSessionCompliance_BandwidthTracking(t *testing.T) {
 	assert.Equal(t, uint64(0), sent, "Initial bytesSent must be zero")
 	assert.Equal(t, uint64(0), received, "Initial bytesReceived must be zero")
 
-	// Simulate bandwidth tracking via atomic operations
-	atomic.AddUint64(&session.bytesSent, 1024)
-	atomic.AddUint64(&session.bytesReceived, 2048)
+	// Simulate bandwidth tracking via SessionCore methods
+	session.AddToBytesSent(1024)
+	session.AddToBytesReceived(2048)
 
 	sent, received = session.GetBandwidthStats()
 	assert.Equal(t, uint64(1024), sent, "Tracked bytesSent must be accurate")
