@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/go-i2p/common/router_info"
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/go-i2p/logger"
 	"github.com/go-i2p/noise"
 	"github.com/samber/oops"
@@ -162,7 +163,7 @@ func setupNoiseProtocolForSTBM(recipientPubKey []byte) (*noise.SymmetricState, [
 func logSTBMEncryptionDiagnostics(record BuildRequestRecord, recipientRouterInfo router_info.RouterInfo, recipientPubKey, cleartext []byte) {
 	peerHashHex := "(hash-error)"
 	if ph, hErr := recipientRouterInfo.IdentHash(); hErr == nil {
-		peerHashHex = fmt.Sprintf("%x", ph[:])
+		peerHashHex = logutil.HashPrefixPlain(ph)
 	}
 	riPublished := "(nil)"
 	riAgeStr := "(nil)"
@@ -174,11 +175,11 @@ func logSTBMEncryptionDiagnostics(record BuildRequestRecord, recipientRouterInfo
 	log.WithFields(logger.Fields{
 		"at":            "EncryptShortBuildRequestRecord",
 		"peer_hash":     peerHashHex,
-		"enckey_hex":    fmt.Sprintf("%x", recipientPubKey),
+		"enckey_hex":    logutil.BytePrefix(recipientPubKey),
 		"ri_published":  riPublished,
 		"ri_age":        riAgeStr,
 		"record_flag":   fmt.Sprintf("0x%02x", record.Flag),
-		"cleartext_hex": fmt.Sprintf("%x", cleartext),
+		"cleartext_hex": logutil.BytePrefix(cleartext),
 	}).Warn("stbm_record_pre_encrypt")
 }
 

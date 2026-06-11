@@ -1,9 +1,8 @@
 package i2np
 
 import (
-	"fmt"
-
 	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
@@ -344,7 +343,7 @@ func (d *DatabaseStore) UnmarshalBinary(data []byte) error {
 		"at":        "UnmarshalBinary",
 		"data_type": d.StoreType,
 		"data_size": len(d.Data),
-		"key":       fmt.Sprintf("%x", d.Key[:8]),
+		"key":       logutil.HashPrefixPlain(d.Key),
 		"has_reply": d.ReplyToken != ([4]byte{}),
 	}).Debug("DatabaseStore unmarshaled successfully")
 

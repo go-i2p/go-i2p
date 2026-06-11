@@ -9,6 +9,7 @@ import (
 	"github.com/go-i2p/common/router_address"
 	"github.com/go-i2p/common/router_identity"
 	"github.com/go-i2p/common/router_info"
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
@@ -508,9 +509,9 @@ func GetRouterHashString(ri router_info.RouterInfo) string {
 	}
 	hashBytes := hash[:]
 	if len(hashBytes) < 8 {
-		return fmt.Sprintf("%x", hashBytes)
+		return logutil.BytePrefix(hashBytes)
 	}
-	return fmt.Sprintf("%x", hashBytes[:8]) // First 8 bytes for brevity
+	return logutil.HashPrefixPlain(hash) // First 8 bytes for brevity
 }
 
 // VerifyRouterInfoSignature cryptographically verifies that a RouterInfo's signature
