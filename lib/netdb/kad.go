@@ -13,6 +13,7 @@ import (
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
@@ -117,7 +118,7 @@ func (kr *KademliaResolver) Lookup(h common.Hash, timeout time.Duration) (*route
 	log.WithFields(logger.Fields{
 		"at":      "(KademliaResolver) Lookup",
 		"reason":  "starting kademlia lookup",
-		"hash":    fmt.Sprintf("%x...", h[:8]),
+		"hash":    logutil.HashPrefix(h),
 		"timeout": timeout,
 	}).Debug("starting Kademlia lookup")
 
@@ -160,7 +161,7 @@ func (kr *KademliaResolver) attemptLocalLookup(h common.Hash) *router_info.Route
 	log.WithFields(logger.Fields{
 		"at":     "(KademliaResolver) attemptLocalLookup",
 		"reason": "local cache hit",
-		"hash":   fmt.Sprintf("%x...", h[:8]),
+		"hash":   logutil.HashPrefix(h),
 	}).Debug("routerInfo found locally")
 	return &ri
 }
@@ -175,7 +176,7 @@ func (kr *KademliaResolver) receiveRouterInfo(h common.Hash) (router_info.Router
 		log.WithFields(logger.Fields{
 			"at":     "(KademliaResolver) attemptLocalLookup",
 			"reason": "channel closed without result",
-			"hash":   fmt.Sprintf("%x...", h[:8]),
+			"hash":   logutil.HashPrefix(h),
 		}).Debug("channel closed, no RouterInfo available")
 	}
 	return ri, ok
@@ -190,7 +191,7 @@ func (kr *KademliaResolver) isRouterInfoUsable(ri router_info.RouterInfo, h comm
 		log.WithError(err).WithFields(logger.Fields{
 			"at":     "(KademliaResolver) attemptLocalLookup",
 			"reason": "failed to extract router hash",
-			"hash":   fmt.Sprintf("%x...", h[:8]),
+			"hash":   logutil.HashPrefix(h),
 		}).Debug("failed to get router hash from local lookup")
 		return false
 	}
@@ -211,7 +212,7 @@ func (kr *KademliaResolver) isRouterInfoStale(ri router_info.RouterInfo, h commo
 			log.WithFields(logger.Fields{
 				"at":     "(KademliaResolver) attemptLocalLookup",
 				"reason": "stale RouterInfo",
-				"hash":   fmt.Sprintf("%x...", h[:8]),
+				"hash":   logutil.HashPrefix(h),
 				"age":    age.Round(time.Second),
 			}).Debug("local RouterInfo is stale, will attempt remote lookup")
 			return true
@@ -247,7 +248,7 @@ const (
 func (kr *KademliaResolver) performRemoteLookup(ctx context.Context, h common.Hash, timeout time.Duration, resultChan chan *router_info.RouterInfo, errChan chan error) {
 	log.WithFields(logger.Fields{
 		"at":       "performRemoteLookup",
-		"hash":     fmt.Sprintf("%x", h[:8]),
+		"hash":     logutil.HashPrefixPlain(h),
 		"timeout":  timeout,
 		"max_hops": MaxIterativeLookupHops,
 	}).Debug("Starting iterative Kademlia lookup")

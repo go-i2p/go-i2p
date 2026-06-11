@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"embed"
 	"encoding/base32"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,6 +13,7 @@ import (
 	"github.com/go-i2p/common/base64"
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/lease_set"
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
@@ -364,7 +364,7 @@ func (r *HostsTxtResolver) lookupDestinationFromNetDB(hashBytes []byte, netdb Le
 
 	log.WithFields(logger.Fields{
 		"at":   "naming.lookupDestinationFromNetDB",
-		"hash": fmt.Sprintf("%x...", hashBytes[:8]),
+		"hash": logutil.BytePrefix(hashBytes),
 	}).Debug("resolved b32 address from NetDB")
 
 	return destBytes, nil

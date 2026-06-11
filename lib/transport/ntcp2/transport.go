@@ -19,6 +19,7 @@ import (
 	"github.com/go-i2p/crypto/types"
 	"github.com/go-i2p/go-i2p/lib/nat"
 	"github.com/go-i2p/go-i2p/lib/transport"
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/go-i2p/go-noise/ntcp2"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
@@ -1529,9 +1530,9 @@ func (t *NTCP2Transport) getPeerHashBytes(routerInfo router_info.RouterInfo) []b
 func (t *NTCP2Transport) logTCPConnectionAttempt(tcpAddrString string, peerHashBytes []byte) {
 	t.logger.WithFields(map[string]interface{}{
 		"remote_addr": tcpAddrString,
-		"peer_hash":   fmt.Sprintf("%x", peerHashBytes[:8]),
+		"peer_hash":   logutil.BytePrefix(peerHashBytes),
 	}).Debug("Attempting raw TCP connection before noise handshake")
-	t.logger.Infof("Attempting TCP connection to peer at %s (hash: %x...)", tcpAddrString, peerHashBytes[:8])
+	t.logger.Infof("Attempting TCP connection to peer at %s (hash: %s)", tcpAddrString, logutil.BytePrefix(peerHashBytes))
 }
 
 // performNTCP2Handshake performs the NTCP2 handshake after successful TCP connection.

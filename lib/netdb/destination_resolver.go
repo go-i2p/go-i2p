@@ -11,6 +11,7 @@ import (
 	"github.com/go-i2p/common/lease_set"
 	"github.com/go-i2p/common/lease_set2"
 	"github.com/go-i2p/common/meta_leaseset"
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
@@ -65,7 +66,7 @@ func (dr *DestinationResolver) ResolveDestination(destHash common.Hash) ([32]byt
 	log.WithFields(logger.Fields{
 		"at":               "DestinationResolver.ResolveDestination",
 		"reason":           "lookup_requested",
-		"destination_hash": fmt.Sprintf("%x...", destHash[:8]),
+		"destination_hash": logutil.HashPrefix(destHash),
 	}).Debug("resolving destination")
 
 	// Try LeaseSet2 first (modern default since I2P 0.9.38)
@@ -328,7 +329,7 @@ func (dr *DestinationResolver) deriveBlindedLookupHash(dest destination.Destinat
 
 	log.WithFields(logger.Fields{
 		"at":          "ResolveEncryptedDestination",
-		"lookup_hash": fmt.Sprintf("%x...", lookupHash[:8]),
+		"lookup_hash": logutil.HashPrefix(lookupHash),
 	}).Debug("looking up EncryptedLeaseSet")
 
 	return lookupHash, nil
@@ -398,7 +399,7 @@ func (dr *DestinationResolver) resolveMetaDestinationWithDepth(destHash common.H
 	log.WithFields(logger.Fields{
 		"at":               "DestinationResolver.ResolveMetaDestination",
 		"reason":           "meta_lookup_requested",
-		"destination_hash": fmt.Sprintf("%x...", destHash[:8]),
+		"destination_hash": logutil.HashPrefix(destHash),
 		"depth":            depth,
 	}).Debug("resolving MetaLeaseSet destination")
 
@@ -455,7 +456,7 @@ func (dr *DestinationResolver) resolveFirstValidEntry(entries []meta_leaseset.Me
 		}
 		log.WithFields(logger.Fields{
 			"at":         "ResolveMetaDestination",
-			"entry_hash": fmt.Sprintf("%x...", entryHash[:8]),
+			"entry_hash": logutil.HashPrefix(entryHash),
 			"entry_type": entry.Type(),
 			"error":      err.Error(),
 		}).Debug("MetaLeaseSet entry resolution failed, trying next")
