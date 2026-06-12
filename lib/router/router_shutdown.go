@@ -2,7 +2,6 @@ package router
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	common "github.com/go-i2p/common/data"

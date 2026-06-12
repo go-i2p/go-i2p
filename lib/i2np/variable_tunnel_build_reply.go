@@ -18,6 +18,12 @@ Same format as VariableTunnelBuildMessage, with BuildResponseRecords.
 */
 
 // VariableTunnelBuildReply represents an I2NP VariableTunnelBuildReply message containing a variable number of build response records.
+//
+// NOTE (0.2.0 consolidation opportunity):
+// This type shares GetReplyRecords() and GetRawReplyRecords() accessors with
+// TunnelBuildReply, differing only in backing storage ([8]array vs []slice).
+// See tunnel_build.go for the full context on consolidating fixed/variable accessors
+// into a generic recordSet[T] type.
 type VariableTunnelBuildReply struct {
 	Count                int
 	BuildResponseRecords []BuildResponseRecord

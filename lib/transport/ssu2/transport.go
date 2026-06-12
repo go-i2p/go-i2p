@@ -820,7 +820,6 @@ func (t *SSU2Transport) promoteInboundConnection(conn net.Conn, original interfa
 	// without running workers," but that's a non-issue: only the winner is
 	// visible in the map, and we start its workers immediately after CAS.
 
-
 	// Use SessionRegistry.Promote to handle CAS, callback setup, and worker startup atomically
 	promoteOpts := transport.PromoteOptions{
 		PreflightCheck: func() error {
@@ -1101,7 +1100,6 @@ func (t *SSU2Transport) promoteRawConnToSession(rawConn net.Conn, routerHash dat
 	// The old comment claimed this "ensures no other goroutine sees a session
 	// without running workers," but that's a non-issue: only the winner is
 	// visible in the map, and we start its workers immediately after CAS.
-
 
 	// Use SessionRegistry.Promote to handle CAS, callback setup, and worker startup atomically
 	promoteOpts := transport.PromoteOptions{

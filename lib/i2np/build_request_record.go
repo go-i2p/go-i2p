@@ -157,7 +157,10 @@ type (
 type BuildRequestRecord = buildrecord.BuildRequestRecord
 
 // ReadBuildRequestRecord parses a BuildRequestRecord from the provided byte slice.
-// It delegates to buildrecord.ReadBuildRequestRecord.
+// It delegates to buildrecord.ReadBuildRequestRecord and translates any error to
+// ErrBuildRequestRecordNotEnoughData. The original buildrecord error is discarded
+// to provide a uniform I2NP error type for all parsing failures (I2NP spec does not
+// distinguish between different parse failure modes in this context).
 func ReadBuildRequestRecord(data []byte) (BuildRequestRecord, error) {
 	rec, err := buildrecord.ReadBuildRequestRecord(data)
 	if err != nil {
@@ -167,7 +170,9 @@ func ReadBuildRequestRecord(data []byte) (BuildRequestRecord, error) {
 }
 
 // ReadShortBuildRequestRecord parses the 154-byte STBM cleartext payload into a BuildRequestRecord.
-// It delegates to buildrecord.ReadShortBuildRequestRecord.
+// It delegates to buildrecord.ReadShortBuildRequestRecord and translates any error to
+// ErrBuildRequestRecordNotEnoughData. The original buildrecord error is discarded
+// (see ReadBuildRequestRecord for rationale).
 func ReadShortBuildRequestRecord(data []byte) (BuildRequestRecord, error) {
 	rec, err := buildrecord.ReadShortBuildRequestRecord(data)
 	if err != nil {

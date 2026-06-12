@@ -34,6 +34,16 @@ total size: 8*528 = 4224 bytes
 // TunnelBuild represents the raw 8 build request records
 type TunnelBuild [8]BuildRequestRecord
 
+// NOTE (0.2.0 consolidation opportunity):
+// TunnelBuild (fixed [8] array) and VariableTunnelBuild (variable-length slice)
+// both implement GetBuildRecords() and GetRecordCount() with identical semantics.
+// Similarly, TunnelBuildReply and VariableTunnelBuildReply share GetReplyRecords()
+// and GetRawReplyRecords(). For improved type safety and code reuse, consider
+// introducing a generic recordSet[T] type or interface in 0.2.0 that abstracts
+// the backing storage (fixed vs variable), allowing shared logic for both fixed
+// and variable-length tunnel messages. This would eliminate ~30 lines of accessor
+// duplication and enable better compile-time guarantees.
+
 // TunnelBuildMessage wraps TunnelBuild to implement Message interface
 type TunnelBuildMessage struct {
 	*BaseI2NPMessage

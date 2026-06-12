@@ -24,6 +24,12 @@ const (
 )
 
 // TunnelBuildReply represents an I2NP TunnelBuildReply message containing exactly 8 build response records indicating the success or failure of a tunnel build request.
+//
+// NOTE (0.2.0 consolidation opportunity):
+// This type shares GetReplyRecords() and GetRawReplyRecords() accessors with
+// VariableTunnelBuildReply, differing only in backing storage ([8]array vs []slice).
+// See tunnel_build.go for the full context on consolidating fixed/variable accessors
+// into a generic recordSet[T] type.
 type TunnelBuildReply struct {
 	Records       [8]BuildResponseRecord
 	RawRecordData [][]byte // Original encrypted bytes before parsing

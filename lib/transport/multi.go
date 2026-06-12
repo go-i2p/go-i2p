@@ -102,25 +102,23 @@ func MuxWithLimit(maxConnections int, t ...Transport) (tmux *TransportMuxer) {
 
 // ReleaseSession decrements the active session counter.
 // This should be called when a session is closed to free up capacity.
-// Uses CompareAndSwap loop to prevent TOCTOU race when concurrent
-// ReleaseSession calls would both see a negative value.
+// If the counter would go below zero (indicating a bookkeeping bug with more
+// releases than reservations), it is clamped at zero and logged as a warning.
 func (tmux *TransportMuxer) ReleaseSession() {
-	for {
-		current := atomic.LoadInt32(&tmux.activeSessionCount)
-		if current <= 0 {
-			// Already at zero or somehow negative; clamp to zero
-			atomic.CompareAndSwapInt32(&tmux.activeSessionCount, current, 0)
-			break
-		}
-		if atomic.CompareAndSwapInt32(&tmux.activeSessionCount, current, current-1) {
-			break
-		}
-		// CAS failed, another goroutine modified it; retry
+	newCount := atomic.AddInt32(&tmux.activeSessionCount, -1)
+	if newCount < 0 {
+		// Underflow: more releases than reservations; indicates a bug in session tracking.
+		// Clamp to zero and log a warning.
+		atomic.StoreInt32(&tmux.activeSessionCount, 0)
+		log.WithFields(logger.Fields{
+			"at": "(TransportMuxer) ReleaseSession",
+		}).Warn("session counter underflow; releases exceed reservations (clamped to 0)")
+	} else {
+		log.WithFields(logger.Fields{
+			"at":              "(TransportMuxer) ReleaseSession",
+			"active_sessions": newCount,
+		}).Debug("session released")
 	}
-	log.WithFields(logger.Fields{
-		"at":              "(TransportMuxer) ReleaseSession",
-		"active_sessions": atomic.LoadInt32(&tmux.activeSessionCount),
-	}).Debug("session released")
 }
 
 // SetIdentity sets the identity for every transport.

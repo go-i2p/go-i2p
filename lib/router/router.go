@@ -24,6 +24,22 @@ import (
 
 // Router is the core I2P router implementation that manages transports, the network database,
 // tunnel pools, and message routing for participating in the I2P network.
+// Router is the core I2P router implementation.
+//
+// Lock Ordering (CRITICAL: must be respected to prevent deadlocks):
+// When acquiring multiple mutexes, always acquire in this order:
+//  1. runMux      (protects running flag and router lifecycle state)
+//  2. sessionMutex (protects activeSessions map for transport message routing)
+//  3. reseedMutex (protects isReseeding flag)
+//  4. keystoreMux (protects RouterInfoKeystore access)
+//
+// Example: If acquiring both runMux and sessionMutex, acquire runMux first.
+// Never acquire in reverse order or skip levels, as this creates deadlock risk.
+// Currently, sessionMutex and keystoreMux are rarely acquired together in
+// practice; document any new cross-mutex code paths with inline comments.
+//
+// Future (0.2.0): Consider grouping into sub-structs (routerNetdb, routerClients,
+// routerTelemetry) to reduce god-object size and clarify ownership boundaries.
 type Router struct {
 	// keystore for router info
 	keystore *keys.RouterInfoKeystore
@@ -41,7 +57,7 @@ type Router struct {
 	closeChnl chan bool
 	// wg tracks goroutine completion for clean shutdown
 	wg sync.WaitGroup
-	// running flag and mutex for thread-safe access
+	// running flag and mutex for thread-safe access (Lock 1: acquired first in any multi-lock sequence)
 	running bool
 	runMux  sync.RWMutex
 
@@ -52,7 +68,7 @@ type Router struct {
 
 	// Session tracking for transport message routing (NTCP2 and SSU2)
 	activeSessions map[common.Hash]transport.TransportSession
-	// sessionMutex protects concurrent access to activeSessions map
+	// sessionMutex protects concurrent access to activeSessions map (Lock 2: acquired after runMux if needed)
 	sessionMutex sync.RWMutex
 
 	// I2CP server for client applications
@@ -98,10 +114,10 @@ type Router struct {
 
 	// isReseeding tracks whether the router is currently performing a reseed operation
 	isReseeding bool
-	// reseedMutex protects concurrent access to isReseeding flag
+	// reseedMutex protects concurrent access to isReseeding flag (Lock 3: acquired after sessionMutex if needed)
 	reseedMutex sync.RWMutex
 
-	// keystoreMux protects concurrent access to RouterInfoKeystore
+	// keystoreMux protects concurrent access to RouterInfoKeystore (Lock 4: acquired last in any multi-lock sequence)
 	keystoreMux sync.RWMutex
 
 	// startupErr receives any error from the mainloop goroutine during

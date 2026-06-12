@@ -23,6 +23,12 @@ total size: 1+$num*528
 */
 
 // VariableTunnelBuild represents an I2NP VariableTunnelBuild message containing a variable number of build request records for tunnel construction.
+//
+// NOTE (0.2.0 consolidation opportunity):
+// This type shares GetBuildRecords() and GetRecordCount() accessors with TunnelBuild,
+// differing only in backing storage ([8]array vs []slice). Consider introducing a
+// generic recordSet[T] type or interface to eliminate this duplication. See
+// tunnel_build.go for full context.
 type VariableTunnelBuild struct {
 	Count               int
 	BuildRequestRecords []BuildRequestRecord
