@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"fmt"
 	"io"
 	"sync"
 	"sync/atomic"
@@ -361,8 +360,8 @@ func (fs *FloodfillServer) HandleDatabaseLookup(lookup *i2np.DatabaseLookup) err
 
 	log.WithFields(logger.Fields{
 		"at":   "HandleDatabaseLookup",
-		"key":  fmt.Sprintf("%x", key[:8]),
-		"from": fmt.Sprintf("%x", from[:8]),
+		"key":  logutil.HashPrefix(key),
+		"from": logutil.HashPrefix(from),
 	}).Debug("Processing incoming DatabaseLookup")
 
 	// Determine what type of lookup this is
@@ -486,8 +485,8 @@ func (fs *FloodfillServer) sendDatabaseStore(
 
 	log.WithFields(logger.Fields{
 		"at":        "sendDatabaseStore",
-		"key":       fmt.Sprintf("%x", key[:8]),
-		"to":        fmt.Sprintf("%x", to[:8]),
+		"key":       logutil.HashPrefix(key),
+		"to":        logutil.HashPrefix(to),
 		"data_type": dataType,
 		"data_size": len(data),
 	}).Debug("Sending DatabaseStore response")
@@ -512,8 +511,8 @@ func (fs *FloodfillServer) sendDatabaseSearchReply(
 
 	log.WithFields(logger.Fields{
 		"at":         "sendDatabaseSearchReply",
-		"key":        fmt.Sprintf("%x", key[:8]),
-		"to":         fmt.Sprintf("%x", to[:8]),
+		"key":        logutil.HashPrefix(key),
+		"to":         logutil.HashPrefix(to),
 		"peer_count": len(peerHashes),
 	}).Debug("Sending DatabaseSearchReply response")
 
@@ -570,7 +569,7 @@ func (fs *FloodfillServer) FloodDatabaseStore(key common.Hash, data []byte, data
 
 	log.WithFields(logger.Fields{
 		"at":      "FloodDatabaseStore",
-		"key":     fmt.Sprintf("%x", key[:8]),
+		"key":     logutil.HashPrefix(key),
 		"flooded": flooded,
 	}).Debug("Flooded DatabaseStore to peers")
 }
@@ -600,7 +599,7 @@ func (fs *FloodfillServer) floodToSelectedPeers(floodfills []router_info.RouterI
 		if err := transport.SendI2NPMessage(fs.ctx, hash, store); err != nil {
 			log.WithFields(logger.Fields{
 				"at":   "FloodDatabaseStore",
-				"peer": fmt.Sprintf("%x", hash[:8]),
+				"peer": logutil.BytePrefix(hash[:]),
 			}).WithError(err).Debug("Failed to flood to peer")
 			continue
 		}

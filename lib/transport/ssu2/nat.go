@@ -15,6 +15,7 @@ import (
 	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/nat"
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
 	"github.com/samber/oops"
 )
@@ -1700,7 +1701,7 @@ func (t *SSU2Transport) tryRegisterIntroducer(ri router_info.RouterInfo) bool {
 	if err != nil {
 		t.trackAbandonedRelayTag(intro.RelayTag, intro.Addr, err.Error())
 		t.logger.WithError(err).WithFields(map[string]interface{}{
-			"introducer_hash": fmt.Sprintf("%x", intro.RouterHash[:8]),
+			"introducer_hash": logutil.BytePrefix(intro.RouterHash[:]),
 			"relay_tag":       intro.RelayTag,
 		}).Warn("Introducer registration failed; relay tag tracked for future cleanup")
 		return false

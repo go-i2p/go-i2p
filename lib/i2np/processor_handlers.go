@@ -381,12 +381,7 @@ func stripGarlicLengthPrefixIfPresent(encryptedData []byte, messageID int) ([]by
 
 // logGarlicPrefixStripped logs the removal of the length prefix.
 func logGarlicPrefixStripped(messageID, framedSize, declaredSize, ciphertextSize int, payload []byte) {
-	tagHead := ""
-	if len(payload) >= 8 {
-		tagHead = fmt.Sprintf("%x", payload[:8])
-	} else {
-		tagHead = fmt.Sprintf("%x", payload)
-	}
+	tagHead := logutil.BytePrefix(payload)
 
 	log.WithFields(logger.Fields{
 		"msg_id":              messageID,
@@ -436,10 +431,7 @@ func parseECIESGarlicClove(data []byte) (*Garlic, error) {
 // decryptGarlicData decrypts the garlic message using the session manager.
 func (p *MessageProcessor) decryptGarlicData(msgID int, encryptedData []byte) ([]byte, [8]byte, error) {
 	RecordExploratoryReplyStage(ExploratoryReplyStageGarlicDecryptAttempt)
-	incomingTag := ""
-	if len(encryptedData) >= 8 {
-		incomingTag = fmt.Sprintf("%x", encryptedData[:8])
-	}
+	incomingTag := logutil.BytePrefix(encryptedData)
 
 	log.WithFields(logger.Fields{
 		"msg_id":         msgID,

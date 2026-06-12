@@ -1,7 +1,6 @@
 package netdb
 
 import (
-	"fmt"
 	"time"
 
 	common "github.com/go-i2p/common/data"
@@ -85,7 +84,7 @@ func (dr *DestinationResolver) ResolveDestination(destHash common.Hash) ([32]byt
 	if lsChan == nil {
 		log.WithFields(logger.Fields{
 			"at":               "ResolveDestination",
-			"destination_hash": fmt.Sprintf("%x", destHash[:8]),
+			"destination_hash": logutil.HashPrefix(destHash),
 			"reason":           "not found in netdb",
 		}).Error("Destination lookup failed")
 		return [32]byte{}, oops.Errorf("destination %x not found in netdb", destHash[:8])
@@ -96,7 +95,7 @@ func (dr *DestinationResolver) ResolveDestination(destHash common.Hash) ([32]byt
 	if !ok {
 		log.WithFields(logger.Fields{
 			"at":               "ResolveDestination",
-			"destination_hash": fmt.Sprintf("%x", destHash[:8]),
+			"destination_hash": logutil.HashPrefix(destHash),
 			"reason":           "channel closed",
 		}).Error("Failed to retrieve LeaseSet")
 		return [32]byte{}, oops.Errorf("failed to retrieve LeaseSet for destination %x", destHash[:8])
@@ -195,7 +194,7 @@ func (dr *DestinationResolver) findX25519KeyInLeaseSet2(ls2 lease_set2.LeaseSet2
 
 	log.WithFields(logger.Fields{
 		"at":               "findX25519KeyInLeaseSet2",
-		"destination_hash": fmt.Sprintf("%x", destHash[:8]),
+		"destination_hash": logutil.HashPrefix(destHash),
 		"reason":           "no X25519 encryption key found",
 	}).Error("Encryption key not found in LeaseSet2")
 	return [32]byte{}, oops.Errorf("x25519 encryption key not found in lease set")

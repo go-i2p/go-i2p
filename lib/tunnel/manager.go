@@ -1,7 +1,6 @@
 package tunnel
 
 import (
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -11,6 +10,7 @@ import (
 	"github.com/go-i2p/crypto/rand"
 	"github.com/go-i2p/crypto/tunnel"
 	"github.com/go-i2p/go-i2p/lib/config"
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
@@ -508,8 +508,8 @@ func (m *ParticipantManager) RegisterParticipant(tunnelID TunnelID, sourceHash c
 		"at":              "Manager.RegisterParticipant",
 		"phase":           "tunnel_build",
 		"tunnel_id":       tunnelID,
-		"source_hash":     fmt.Sprintf("%x", sourceHash[:8]),
-		"next_hop_ident":  fmt.Sprintf("%x", nextHopIdent[:8]),
+		"source_hash":     logutil.HashPrefix(sourceHash),
+		"next_hop_ident":  logutil.HashPrefix(nextHopIdent),
 		"next_hop_tunnel": nextHopTunnel,
 		"lifetime":        lifetime,
 	}).Info("registered participating tunnel")

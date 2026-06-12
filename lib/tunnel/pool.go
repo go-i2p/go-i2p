@@ -11,6 +11,7 @@ import (
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
@@ -951,7 +952,7 @@ func (p *Pool) MarkPeerFailed(peerHash common.Hash) {
 	log.WithFields(logger.Fields{
 		"at":        "Pool.MarkPeerFailed",
 		"phase":     "tunnel_build",
-		"peer_hash": fmt.Sprintf("%x", peerHash[:8]),
+		"peer_hash": logutil.HashPrefix(peerHash),
 		"reason":    "peer connection failed, marking for cooldown",
 		"impact":    "peer will be excluded from tunnel building temporarily",
 		"tracked":   tracker != nil,

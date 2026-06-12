@@ -1,7 +1,6 @@
 package i2cp
 
 import (
-	"fmt"
 	"time"
 
 	common "github.com/go-i2p/common/data"
@@ -388,7 +387,7 @@ func (mr *MessageRouter) logSuccessfulRouting(
 	destinationHash common.Hash,
 	payloadSize int,
 ) {
-	gatewayStr := fmt.Sprintf("%x", selectedTunnel.Hops[0][:8])
+	gatewayStr := logutil.BytePrefix(selectedTunnel.Hops[0][:])
 	log.WithFields(logger.Fields{
 		"at":          "i2cp.MessageRouter.RouteOutboundMessage",
 		"sessionID":   session.ID(),

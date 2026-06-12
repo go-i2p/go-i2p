@@ -1,7 +1,6 @@
 package netdb
 
 import (
-	"fmt"
 	"os"
 	"time"
 
@@ -34,7 +33,7 @@ func (db *StdNetDB) trackRouterInfoExpiration(key common.Hash, publishedTime tim
 	db.riCache.setExpiry(key, expiryTime)
 
 	log.WithFields(logger.Fields{
-		"hash":       fmt.Sprintf("%x", key[:8]),
+		"hash":       logutil.HashPrefix(key),
 		"published":  publishedTime.Format(time.RFC3339),
 		"expiration": expiryTime.Format(time.RFC3339),
 		"ttl":        time.Until(expiryTime).Round(time.Second),

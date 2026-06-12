@@ -1,7 +1,6 @@
 package router
 
 import (
-	"fmt"
 	"time"
 
 	common "github.com/go-i2p/common/data"
@@ -143,7 +142,7 @@ func (r *Router) validateTransportMuxer(hash common.Hash) error {
 			"at":        "Router.GetSessionByHash",
 			"phase":     "session_establishment",
 			"operation": "outbound_connection",
-			"peer_hash": fmt.Sprintf("%x", hash[:8]),
+			"peer_hash": logutil.HashPrefix(hash),
 			"reason":    "transport_not_initialized",
 		}).Error("TransportMuxer not initialized")
 		return oops.Errorf("transport not initialized for peer %x", hash[:8])
@@ -204,7 +203,7 @@ func (r *Router) logSessionEstablishmentFailure(hash common.Hash, routerInfo *ro
 		"at":            "Router.GetSessionByHash",
 		"phase":         "session_establishment",
 		"operation":     "outbound_connection",
-		"peer_hash":     fmt.Sprintf("%x", hash[:8]),
+		"peer_hash":     logutil.HashPrefix(hash),
 		"error":         err.Error(),
 		"address_count": len(routerInfo.RouterAddresses()),
 		"has_ntcp2":     hasNTCP2Address(*routerInfo),
@@ -217,7 +216,7 @@ func (r *Router) logRouterInfoTimeout(hash common.Hash) {
 		"at":        "Router.GetSessionByHash",
 		"phase":     "session_establishment",
 		"operation": "netdb_lookup",
-		"peer_hash": fmt.Sprintf("%x", hash[:8]),
+		"peer_hash": logutil.HashPrefix(hash),
 		"timeout":   "30s",
 	}).Error("Timeout waiting for RouterInfo from NetDB")
 }

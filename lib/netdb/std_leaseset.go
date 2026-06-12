@@ -1032,7 +1032,7 @@ func (db *StdNetDB) trackLeaseSetExpirationLocked(key common.Hash, ls lease_set.
 	}
 
 	log.WithFields(logger.Fields{
-		"hash":       fmt.Sprintf("%x", key[:8]),
+		"hash":       logutil.HashPrefix(key),
 		"expiration": expiryTime,
 		"ttl":        time.Until(expiryTime).Round(time.Second),
 	}).Debug("Tracked LeaseSet expiration")
@@ -1045,7 +1045,7 @@ func (db *StdNetDB) trackLeaseSet2Expiration(key common.Hash, ls2 lease_set2.Lea
 	db.lsCache.setExpiry(key, expiryTime)
 
 	log.WithFields(logger.Fields{
-		"hash":       fmt.Sprintf("%x", key[:8]),
+		"hash":       logutil.HashPrefix(key),
 		"expiration": expiryTime,
 		"ttl":        time.Until(expiryTime).Round(time.Second),
 	}).Debug("Tracked LeaseSet2 expiration")
@@ -1058,7 +1058,7 @@ func (db *StdNetDB) trackEncryptedLeaseSetExpiration(key common.Hash, els encryp
 	db.lsCache.setExpiry(key, expiryTime)
 
 	log.WithFields(logger.Fields{
-		"hash":       fmt.Sprintf("%x", key[:8]),
+		"hash":       logutil.HashPrefix(key),
 		"expiration": expiryTime,
 		"ttl":        time.Until(expiryTime).Round(time.Second),
 	}).Debug("Tracked EncryptedLeaseSet expiration")
@@ -1071,7 +1071,7 @@ func (db *StdNetDB) trackMetaLeaseSetExpiration(key common.Hash, mls meta_leases
 	db.lsCache.setExpiry(key, expiryTime)
 
 	log.WithFields(logger.Fields{
-		"hash":       fmt.Sprintf("%x", key[:8]),
+		"hash":       logutil.HashPrefix(key),
 		"expiration": expiryTime,
 		"ttl":        time.Until(expiryTime).Round(time.Second),
 	}).Debug("Tracked MetaLeaseSet expiration")
