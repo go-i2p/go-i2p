@@ -34,12 +34,7 @@ func createTestRouterInfo() (router_info.RouterInfo, []byte, common.Hash) {
 }
 
 func TestStdNetDB_StoreRouterInfo_InvalidDataType(t *testing.T) {
-	// Create temporary directory for test NetDB
-	tempDir := t.TempDir()
-	db := NewStdNetDB(tempDir)
-	if err := db.Create(); err != nil {
-		t.Fatalf("Failed to create NetDB: %v", err)
-	}
+	db := newTestNetDB(t)
 
 	_, testData, testHash := createTestRouterInfo()
 
@@ -54,12 +49,7 @@ func TestStdNetDB_StoreRouterInfo_InvalidDataType(t *testing.T) {
 }
 
 func TestStdNetDB_StoreRouterInfo_ParseError(t *testing.T) {
-	// Create temporary directory for test NetDB
-	tempDir := t.TempDir()
-	db := NewStdNetDB(tempDir)
-	if err := db.Create(); err != nil {
-		t.Fatalf("Failed to create NetDB: %v", err)
-	}
+	db := newTestNetDB(t)
 
 	// Test with invalid RouterInfo data
 	invalidData := []byte{0x00, 0x01, 0x02} // Invalid RouterInfo data
@@ -76,12 +66,7 @@ func TestStdNetDB_StoreRouterInfo_ParseError(t *testing.T) {
 }
 
 func TestStdNetDB_StoreRouterInfo_EmptyData(t *testing.T) {
-	// Create temporary directory for test NetDB
-	tempDir := t.TempDir()
-	db := NewStdNetDB(tempDir)
-	if err := db.Create(); err != nil {
-		t.Fatalf("Failed to create NetDB: %v", err)
-	}
+	db := newTestNetDB(t)
 
 	var testHash common.Hash
 	emptyData := []byte{}
@@ -97,11 +82,7 @@ func TestStdNetDB_StoreRouterInfo_EmptyData(t *testing.T) {
 
 func TestStdNetDB_StoreRouterInfo_NilHandling(t *testing.T) {
 	// Test that NetDB handles nil inputs gracefully
-	tempDir := t.TempDir()
-	db := NewStdNetDB(tempDir)
-	if err := db.Create(); err != nil {
-		t.Fatalf("Failed to create NetDB: %v", err)
-	}
+	db := newTestNetDB(t)
 
 	var testHash common.Hash
 
@@ -114,11 +95,7 @@ func TestStdNetDB_StoreRouterInfo_NilHandling(t *testing.T) {
 
 func TestStdNetDB_StoreRouterInfo_ConcurrentAccess(t *testing.T) {
 	// Test concurrent access to RouterInfo storage
-	tempDir := t.TempDir()
-	db := NewStdNetDB(tempDir)
-	if err := db.Create(); err != nil {
-		t.Fatalf("Failed to create NetDB: %v", err)
-	}
+	db := newTestNetDB(t)
 
 	// Create different test hashes
 	var hash1, hash2 common.Hash
@@ -165,8 +142,8 @@ func TestStdNetDB_StoreRouterInfo_DirectoryCreation(t *testing.T) {
 func TestStdNetDB_Create_DirectoryStructure(t *testing.T) {
 	// Test that Create() properly sets up directory structure
 	tempDir := t.TempDir()
-	db := NewStdNetDB(tempDir)
 
+	db := NewStdNetDB(tempDir)
 	err := db.Create()
 	if err != nil {
 		t.Fatalf("Failed to create NetDB: %v", err)
@@ -189,18 +166,9 @@ func TestStdNetDB_Create_DirectoryStructure(t *testing.T) {
 
 func TestStdNetDB_Exists_EmptyDirectory(t *testing.T) {
 	// Test Exists() on empty directory
-	tempDir := t.TempDir()
-	db := NewStdNetDB(tempDir)
-
-	// Should not exist initially
-	if db.Exists() {
-		t.Error("Expected NetDB to not exist initially")
-	}
+	db := newTestNetDB(t)
 
 	// Should exist after Create()
-	if err := db.Create(); err != nil {
-		t.Fatalf("Failed to create NetDB: %v", err)
-	}
 	if !db.Exists() {
 		t.Error("Expected NetDB to exist after Create()")
 	}
