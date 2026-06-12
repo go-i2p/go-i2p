@@ -1,6 +1,7 @@
 package ntcp2
 
 import (
+	cryptorand "crypto/rand"
 	"encoding/binary"
 	"fmt"
 	"time"
@@ -153,10 +154,19 @@ func NewI2NPBlock(i2npData []byte) Block {
 	return Block{Type: BlockTypeI2NP, Data: i2npData}
 }
 
-// NewPaddingBlock creates a Padding block (type 254) with the specified number
-// of zero bytes. The receiver ignores the content.
+// NewPaddingBlock creates a Padding block (type 254) filled with cryptographically
+// random bytes. The NTCP2 spec requires random padding; zero padding is
+// distinguishable from Java I2P's output and fingerprintable (M-3 / G-9 fix).
+// If the CSPRNG fails (should never happen in practice), the padding falls back
+// to a zero-filled slice rather than panicking.
 func NewPaddingBlock(size int) Block {
-	return Block{Type: BlockTypePadding, Data: make([]byte, size)}
+	data := make([]byte, size)
+	if _, err := cryptorand.Read(data); err != nil {
+		// CSPRNG failure is catastrophic on any real system; log and fall back
+		// to zeros rather than panicking. Callers should not reach this path.
+		log.WithError(err).Error("NewPaddingBlock: CSPRNG failed, padding will be zero-filled")
+	}
+	return Block{Type: BlockTypePadding, Data: data}
 }
 
 // NewRouterInfoBlock creates a RouterInfo block (type 2) with a flag byte

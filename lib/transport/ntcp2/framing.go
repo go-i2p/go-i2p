@@ -49,14 +49,29 @@ func FrameI2NPMessageAsBlock(msg i2np.Message) ([]byte, error) {
 	return payload, nil
 }
 
-// UnframeI2NPMessage unframes I2NP messages from an NTCP2 data stream.
+// UnframeI2NPMessage unframes I2NP messages from an internal test/pipe stream.
+//
+// M-4 WARNING: This function reads a NON-STANDARD 4-byte big-endian length
+// prefix. It is NOT compliant with the NTCP2 spec, which uses a 2-byte
+// SipHash-obfuscated length field handled by the NTCP2Conn.Read layer.
+// Do NOT call this function on a real NTCP2 connection — use BlockUnframer
+// (which parses spec-compliant NTCP2 block frames) instead.
+// This function is retained for internal benchmark/test helpers that
+// use pre-decoded I2NP wire format over net.Pipe.
 func UnframeI2NPMessage(conn net.Conn) (i2np.Message, error) {
 	// Read the next message from the connection
 	unframer := NewI2NPUnframer(conn)
 	return unframer.ReadNextMessage()
 }
 
-// I2NPUnframer provides stream-based unframing for continuous reading.
+// I2NPUnframer provides stream-based unframing for test/pipe use only.
+//
+// M-4 WARNING: I2NPUnframer reads a NON-STANDARD 4-byte big-endian length
+// prefix that does NOT appear in the NTCP2 specification. Real NTCP2
+// connections use a 2-byte SipHash-obfuscated length field, handled
+// transparently by NTCP2Conn.Read. Use BlockUnframer for spec-compliant
+// NTCP2 data-phase parsing. I2NPUnframer exists only to support tests
+// and benchmarks that write raw I2NP frames over a net.Pipe.
 type I2NPUnframer struct {
 	conn           net.Conn
 	bytesRead      int // Track bytes read in last operation

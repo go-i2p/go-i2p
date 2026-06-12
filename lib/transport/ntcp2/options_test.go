@@ -11,7 +11,8 @@ func TestDefaultOptions(t *testing.T) {
 	opts := DefaultOptions()
 	assert.Equal(t, uint8(0), opts.Version)
 	assert.Equal(t, float64(0), opts.PaddingMin)
-	assert.Equal(t, float64(0), opts.PaddingMax)
+	// M-3 FIX: PaddingMax must be non-zero to avoid zero-padding fingerprinting.
+	assert.Greater(t, opts.PaddingMax, float64(0), "DefaultOptions PaddingMax must be > 0 (M-3 fix)")
 	assert.Equal(t, uint16(0), opts.DummyMin)
 	assert.Equal(t, uint16(0), opts.DummyMax)
 	assert.Equal(t, uint16(0), opts.DelayMin)

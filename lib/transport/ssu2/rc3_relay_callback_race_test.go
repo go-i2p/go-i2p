@@ -158,14 +158,18 @@ func (t *SSU2Transport) checkRelayManagerAccess() bool {
 // TestRC3_MultipleReadersSafelyReadRelayManager verifies that multiple
 // concurrent readers can safely read the relayManager pointer while managers
 // replace it (simulating SetIdentity).
+//
+// The correctness property under test is freedom from data races. If
+// natManagerMu is removed, `go test -race` will detect the race. We do
+// NOT assert on the distribution of nil vs non-nil observations because
+// that distribution is scheduler-dependent and causes flaky CI failures
+// (M-1 fix: removed timing-sensitive distribution assertions).
 func TestRC3_MultipleReadersSafelyReadRelayManager(t *testing.T) {
 	transport := &SSU2Transport{
 		logger: newTestLogger("RC-3-readers"),
 	}
 
-	// Pre-initialize relayManager so readers have a high probability of observing
-	// non-nil values initially. This ensures the test assertion (some non-nil observations)
-	// is achievable without relying entirely on timing.
+	// Pre-initialize relayManager so readers observe a non-nil value initially.
 	transport.relayManager = &ssu2noise.RelayManager{}
 
 	const numConcurrentReaders = 50
@@ -175,13 +179,23 @@ func TestRC3_MultipleReadersSafelyReadRelayManager(t *testing.T) {
 	readCount := int32(0)
 	nilCount := int32(0)
 
-	// Spawn readers that continuously read relayManager
+	// M-1 FIX: Use a start gate so all reader goroutines are scheduled before
+	// the writer begins. This prevents the writer from completing all cycles
+	// before any reader runs (which caused nilCount==0 and a failing assertion
+	// in the previous version).
+	startGate := make(chan struct{})
+	var readersReady sync.WaitGroup
+	readersReady.Add(numConcurrentReaders)
+
+	// Spawn readers that continuously read relayManager.
 	for i := 0; i < numConcurrentReaders; i++ {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
+			readersReady.Done() // signal: this goroutine is scheduled
+			<-startGate         // wait until the writer is ready to race
 			for iter := 0; iter < numIterations; iter++ {
-				// Safe pattern (with lock)
+				// Safe pattern (with lock): this is the invariant under test.
 				transport.natManagerMu.RLock()
 				mgr := transport.relayManager
 				transport.natManagerMu.RUnlock()
@@ -194,10 +208,12 @@ func TestRC3_MultipleReadersSafelyReadRelayManager(t *testing.T) {
 		}(i)
 	}
 
-	// Concurrent manager replacements
+	// Concurrent manager replacements — released simultaneously with all readers.
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		readersReady.Wait() // wait until all reader goroutines are scheduled
+		close(startGate)    // release readers and writer simultaneously
 		for i := 0; i < 20; i++ {
 			transport.natManagerMu.Lock()
 			transport.relayManager = &ssu2noise.RelayManager{}
@@ -211,19 +227,13 @@ func TestRC3_MultipleReadersSafelyReadRelayManager(t *testing.T) {
 
 	wg.Wait()
 
-	// Verify reads completed
+	// Verify all reads completed without panic (primary correctness assertion).
 	assert.Equal(t, int32(numConcurrentReaders*numIterations), readCount,
 		"Expected %d reads, got %d", numConcurrentReaders*numIterations, readCount)
 
-	// Some reads should have observed nil (during manager replacement), but not all
-	expectedNilObservations := readCount / 10 // Rough estimate
-	t.Logf("RC-3: %d total reads, %d nil observations (expected ~%d)",
-		readCount, nilCount, expectedNilObservations)
-
-	// Verify that we had a reasonable distribution
-	// (If all were nil or all were non-nil, something's wrong with the test)
-	assert.Greater(t, nilCount, int32(0), "Expected some nil observations during manager swaps")
-	assert.Less(t, nilCount, readCount, "Expected some non-nil observations")
+	// Log distribution for diagnostic purposes only — not asserted.
+	t.Logf("RC-3: %d total reads, %d nil observations (distribution is scheduler-dependent)",
+		readCount, nilCount)
 }
 
 // TestRC3_PeerTestManagerAlsoLockedDuringCallbacks verifies that

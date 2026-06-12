@@ -145,10 +145,16 @@ func TestNewPaddingBlock(t *testing.T) {
 	block := NewPaddingBlock(64)
 	assert.Equal(t, BlockTypePadding, block.Type)
 	assert.Len(t, block.Data, 64)
-	// All zeros
+	// M-3 / G-9 FIX: Padding bytes must be random, not all-zeros.
+	// With 64 bytes from crypto/rand the probability of all-zeros is negligible.
+	allZero := true
 	for _, b := range block.Data {
-		assert.Equal(t, byte(0), b)
+		if b != 0 {
+			allZero = false
+			break
+		}
 	}
+	assert.False(t, allZero, "Expected random padding bytes, got all zeros")
 }
 
 func TestNewRouterInfoBlock(t *testing.T) {

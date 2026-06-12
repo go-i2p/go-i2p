@@ -58,39 +58,28 @@ func initNATManagers(t *SSU2Transport) error {
 	relayMgr := ssu2noise.NewRelayManager(listener)
 	introducerReg := ssu2noise.NewIntroducerRegistry(3)
 	verifyFn := func(block *ssu2noise.RelayIntroBlock, signerKey ed25519.PublicKey) error {
-		// Verify Alice's relay intro signature. The signature covers the
-		// "RelayRequestData" prologue + bob_hash + charlie_hash + fields.
-		// We are Charlie; bob's hash is not available in the block, so we
-		// perform a best-effort check using what's available.
+		// H-5 FIX: Relay intro signature verification requires three hashes:
+		// aliceHash (from the block), bobHash (the forwarding router), and
+		// charlieHash (us). The RelayIntroBlock only carries Alice's hash;
+		// Bob's hash is the transport-layer identity of the peer that sent
+		// the RelayIntro and is NOT available in this callback's arguments.
+		//
+		// Previously the code substituted aliceHash for bobHash, which caused
+		// VerifyRelayRequestSignature to always fail for legitimate relay
+		// intros (since alice ≠ bob in practice) while potentially passing
+		// for crafted messages where an adversary sets alice == bob.
+		//
+		// The SSU2 session with Bob is already authenticated via the Noise
+		// handshake, so the RelayIntro arrived over an authenticated channel.
+		// We skip crypto re-verification here and rely on that session-layer
+		// authentication rather than verifying with provably wrong data.
+		//
+		// TODO: plumb the sender's router hash into this callback (requires
+		// ssu2noise.HolePunchCoordinator API change) to enable full verification.
 		if block == nil || len(block.Signature) == 0 {
 			return oops.Errorf("relay intro: missing block or signature")
 		}
-		charlieHash := t.getOurIdentityHash()
-		var aliceHash data.Hash
-		if len(block.AliceRouterHash) == 32 {
-			copy(aliceHash[:], block.AliceRouterHash)
-		}
-		// We don't have Bob's hash in the block; use aliceHash as a
-		// placeholder for the bob slot so the data can be verified when the
-		// full context is available.
-		ok, err := ssu2noise.VerifyRelayRequestSignature(
-			signerKey,
-			block.Signature,
-			aliceHash, // bob hash placeholder (best-effort)
-			charlieHash,
-			block.Nonce,
-			block.AliceRelayTag,
-			block.Timestamp,
-			block.Version,
-			block.AlicePort,
-			block.AliceIP,
-		)
-		if err != nil {
-			return oops.Wrapf(err, "relay intro signature verification error")
-		}
-		if !ok {
-			return oops.Errorf("relay intro signature invalid")
-		}
+		log.Warn("relay intro: bobHash unavailable in verifyFn — relay intro signature verification skipped; session-layer (Noise handshake) authentication applies")
 		return nil
 	}
 	var err error
