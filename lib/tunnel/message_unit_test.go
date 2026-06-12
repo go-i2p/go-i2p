@@ -15,7 +15,8 @@ func TestDeliveryInstructionDataWithNoPadding(t *testing.T) {
 	data = append(data, make([]byte, 1028-4-4-16-1)...)
 	var decrypted_tunnel_message DecryptedTunnelMessage
 	copy(decrypted_tunnel_message[:], data)
-	di := decrypted_tunnel_message.deliveryInstructionData()
+	di, err := decrypted_tunnel_message.deliveryInstructionData()
+	assert.NoError(err)
 	assert.Equal(1028-4-4-16-1, len(di))
 }
 
@@ -32,7 +33,8 @@ func TestDeliveryInstructionDataWithSomePadding(t *testing.T) {
 	data = append(data, make([]byte, 1028-4-4-16-1-padding_size)...)
 	var decrypted_tunnel_message DecryptedTunnelMessage
 	copy(decrypted_tunnel_message[:], data)
-	di := decrypted_tunnel_message.deliveryInstructionData()
+	di, err := decrypted_tunnel_message.deliveryInstructionData()
+	assert.NoError(err)
 	assert.Equal(1028-4-4-16-1-padding_size, len(di))
 }
 
@@ -48,6 +50,7 @@ func TestDeliveryInstructionDataWithOnlyPadding(t *testing.T) {
 	data = append(data, 0)
 	var decrypted_tunnel_message DecryptedTunnelMessage
 	copy(decrypted_tunnel_message[:], data)
-	di := decrypted_tunnel_message.deliveryInstructionData()
+	di, err := decrypted_tunnel_message.deliveryInstructionData()
+	assert.NoError(err)
 	assert.Equal(0, len(di))
 }

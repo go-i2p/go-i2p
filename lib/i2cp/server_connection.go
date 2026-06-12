@@ -338,6 +338,21 @@ func (s *Server) cleanupConnectionState(conn net.Conn) {
 // Per I2CP specification, this must be the first byte sent by the client.
 // Returns true if the protocol byte is valid, false otherwise.
 func (s *Server) readProtocolByte(conn net.Conn) bool {
+	// H-NEW-1 FIX: apply the configured read timeout before the first read so
+	// that clients which connect but never send data cannot hold goroutines
+	// (and session slots) indefinitely.  The deadline is cleared immediately
+	// after the read so it does not interfere with the per-message deadlines
+	// applied later in readClientMessage.
+	if s.config.ReadTimeout > 0 {
+		if err := conn.SetReadDeadline(time.Now().Add(s.config.ReadTimeout)); err != nil {
+			log.WithFields(logger.Fields{
+				"at":    "i2cp.Server.readProtocolByte",
+				"error": err.Error(),
+			}).Warn("failed_to_set_protocol_byte_read_deadline")
+		}
+		defer conn.SetReadDeadline(time.Time{}) // clear so runConnectionLoop starts fresh
+	}
+
 	protocolByte := make([]byte, 1)
 	if _, err := io.ReadFull(conn, protocolByte); err != nil {
 		log.WithFields(logger.Fields{
@@ -533,7 +548,7 @@ func (s *Server) checkConnectionRateLimit(conn net.Conn) bool {
 	elapsed := now.Sub(state.lastMessageTime)
 
 	// Reset counters every second
-	s.resetCountersIfNeeded(state, elapsed)
+	s.resetCountersIfNeeded(state, now)
 
 	// Check all rate limits
 	return s.isWithinRateLimits(state, elapsed, maxMessagesPerSecond, maxBytesPerSecond, minMessageInterval)
@@ -561,11 +576,19 @@ func (s *Server) getOrCreateConnectionState(conn net.Conn) *connectionState {
 	return state
 }
 
-// resetCountersIfNeeded resets rate limit counters after one second.
-func (s *Server) resetCountersIfNeeded(state *connectionState, elapsed time.Duration) {
-	if elapsed >= time.Second {
+// resetCountersIfNeeded resets rate limit counters after one calendar second.
+//
+// L-NEW-4 FIX: Previously the reset was gated on time since last message,
+// which means a burst sent within one second was never reset as long as
+// messages kept arriving, allowing an attacker to bypass the per-second
+// message and byte-count limits by sustaining a steady stream. Now the
+// counters are reset once per wall-clock second regardless of inter-message
+// spacing.
+func (s *Server) resetCountersIfNeeded(state *connectionState, now time.Time) {
+	if now.Sub(state.lastResetTime) >= time.Second {
 		state.messageCount = 0
 		state.bytesRead = 0
+		state.lastResetTime = now
 	}
 }
 

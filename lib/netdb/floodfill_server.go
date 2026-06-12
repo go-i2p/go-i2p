@@ -53,12 +53,20 @@ type FloodfillServer struct {
 	cancel context.CancelFunc
 }
 
+// maxPeersDefault is the upper bound on the number of distinct peers tracked
+// simultaneously by FloodfillRateLimiter. This prevents unbounded memory
+// growth in the presence of many distinct or spoofed source identities.
+// The default (10_000) is large enough for a healthy floodfill mesh but
+// bounded against a Sybil-style map-exhaustion attack.
+const maxPeersDefault = 10_000
+
 // FloodfillRateLimiter provides per-peer rate limiting for floodfill operations.
 // Uses a token-bucket algorithm with automatic cleanup of stale entries.
 type FloodfillRateLimiter struct {
 	mu         sync.Mutex
 	peers      map[common.Hash]*peerLimit
 	lastSeen   map[common.Hash]time.Time
+	maxPeers   int     // M-NEW-2: upper bound on tracked peers (anti-DoS)
 	maxBurst   int     // max tokens (requests) per peer
 	refillRate float64 // tokens added per second
 
@@ -93,6 +101,7 @@ func NewFloodfillRateLimiterWithGlobal(maxPerMinute, burstSize, globalPerMinute,
 	rl := &FloodfillRateLimiter{
 		peers:      make(map[common.Hash]*peerLimit),
 		lastSeen:   make(map[common.Hash]time.Time),
+		maxPeers:   maxPeersDefault,
 		maxBurst:   burstSize,
 		refillRate: float64(maxPerMinute) / 60.0,
 
@@ -151,6 +160,14 @@ func (rl *FloodfillRateLimiter) allowGlobal(now time.Time) bool {
 func (rl *FloodfillRateLimiter) allowPeer(peer common.Hash, now time.Time) bool {
 	pl, exists := rl.peers[peer]
 	if !exists {
+		// M-NEW-2 FIX: reject the new peer if we are already at capacity.
+		// This prevents a Sybil attacker from exhausting the server's memory by
+		// sending requests from an unbounded number of distinct identities.
+		// The existing stale-entry cleanup (removeStalePeers every 5 min) will
+		// naturally free capacity for legitimate callers.
+		if len(rl.peers) >= rl.maxPeers {
+			return false
+		}
 		rl.peers[peer] = &peerLimit{
 			tokens:     float64(rl.maxBurst) - 1,
 			lastUpdate: now,

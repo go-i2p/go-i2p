@@ -616,7 +616,11 @@ func (r *Reseed) extractZipFile(zipPath string) (string, []string, error) {
 		return "", nil, err
 	}
 
-	fullPaths := buildFullPaths(tempDir, files)
+	fullPaths, err := buildFullPaths(tempDir, files)
+	if err != nil {
+		os.RemoveAll(tempDir)
+		return "", nil, err
+	}
 
 	log.WithFields(logger.Fields{
 		"file_count": len(fullPaths),
@@ -696,13 +700,32 @@ const maxReseedEntries = 250
 // while remaining small enough to prevent zip-bomb entries.
 const maxPerEntrySize int64 = 1024 * 1024
 
-// maxDecompressedSize is the maximum total decompressed output size (200 MB).
-const maxDecompressedSize int64 = 200 * 1024 * 1024
+// maxDecompressedSize is the maximum total decompressed output size (50 MB).
+// Legitimate reseed bundles are typically well under 1 MB uncompressed
+// (a few hundred RouterInfos at ~2 KB each). 50 MB leaves generous headroom
+// while preventing zip-bomb attacks from exhausting disk on constrained hosts.
+const maxDecompressedSize int64 = 50 * 1024 * 1024
+
+// reseedSafePath joins base and name and verifies the result is still under base.
+// H-NEW-3 FIX: zip archive entries can contain "../" path components; filepath.Join
+// cleans those, so an entry like "../evil" resolves outside the temp directory.
+// This function returns an error if the resolved path escapes base.
+func reseedSafePath(base, name string) (string, error) {
+	joined := filepath.Join(base, name)
+	rel, err := filepath.Rel(base, joined)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return "", oops.Errorf("reseed archive entry %q path traversal detected (escapes extraction directory)", name)
+	}
+	return joined, nil
+}
 
 // validatePerEntrySize checks that no extracted file exceeds the per-entry size limit.
 func (r *Reseed) validatePerEntrySize(tempDir string, files []string) error {
 	for _, filename := range files {
-		fullPath := filepath.Join(tempDir, filename)
+		fullPath, err := reseedSafePath(tempDir, filename)
+		if err != nil {
+			return err
+		}
 		info, err := os.Stat(fullPath)
 		if err != nil {
 			continue
@@ -718,7 +741,10 @@ func (r *Reseed) validatePerEntrySize(tempDir string, files []string) error {
 func (r *Reseed) validateDecompressedSize(tempDir string, files []string) error {
 	var totalSize int64
 	for _, filename := range files {
-		fullPath := filepath.Join(tempDir, filename)
+		fullPath, err := reseedSafePath(tempDir, filename)
+		if err != nil {
+			return err
+		}
 		info, err := os.Stat(fullPath)
 		if err != nil {
 			continue
@@ -732,12 +758,18 @@ func (r *Reseed) validateDecompressedSize(tempDir string, files []string) error 
 }
 
 // buildFullPaths prepends the directory path to each filename.
-func buildFullPaths(tempDir string, files []string) []string {
-	fullPaths := make([]string, len(files))
-	for i, filename := range files {
-		fullPaths[i] = filepath.Join(tempDir, filename)
+// H-NEW-3 FIX: each filename is validated against the base directory via
+// reseedSafePath to prevent path traversal from malicious archive entries.
+func buildFullPaths(tempDir string, files []string) ([]string, error) {
+	fullPaths := make([]string, 0, len(files))
+	for _, filename := range files {
+		full, err := reseedSafePath(tempDir, filename)
+		if err != nil {
+			return nil, err
+		}
+		fullPaths = append(fullPaths, full)
 	}
-	return fullPaths
+	return fullPaths, nil
 }
 
 // parseRouterInfoFilesWithLimit reads and parses router info files from the extracted files with a limit.

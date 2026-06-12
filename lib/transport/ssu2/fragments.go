@@ -88,7 +88,10 @@ func createFirstFragment(data []byte, messageID, totalSize uint32, maxPayload in
 		firstDataSize = len(data)
 	}
 	isLast := firstDataSize == len(data)
-	block := buildFirstFragment(messageID, totalSize, data[:firstDataSize], isLast)
+	block, err := buildFirstFragment(messageID, totalSize, data[:firstDataSize], isLast)
+	if err != nil {
+		return nil, 0, err
+	}
 	return block, firstDataSize, nil
 }
 
@@ -133,7 +136,12 @@ func createFollowOnFragments(data []byte, messageID uint32, maxPayload int) ([]*
 // buildFirstFragment creates a BlockTypeFirstFragment (type 4) block.
 // SSU2 spec format: MessageID(4) + FragInfo(1) + TotalSize uint16(2) + Data
 // FragInfo = (0 << 1) | isLast  (fragment number 0, isLast flag in bit 0).
-func buildFirstFragment(messageID, totalSize uint32, data []byte, isLast bool) *ssu2noise.SSU2Block {
+func buildFirstFragment(messageID, totalSize uint32, data []byte, isLast bool) (*ssu2noise.SSU2Block, error) {
+	// H-NEW-2 FIX: the TotalSize field is only 2 bytes (uint16). Reject messages
+	// whose total size exceeds 65535 bytes before silently truncating.
+	if totalSize > 65535 {
+		return nil, oops.Errorf("message total size %d exceeds maximum uint16 SSU2 first-fragment field (65535 bytes)", totalSize)
+	}
 	payload := make([]byte, 7+len(data))
 	binary.BigEndian.PutUint32(payload[0:4], messageID)
 	isLastBit := uint8(0)
@@ -143,7 +151,7 @@ func buildFirstFragment(messageID, totalSize uint32, data []byte, isLast bool) *
 	payload[4] = isLastBit // fragNum=0 for first fragment; isLast in bit 0
 	binary.BigEndian.PutUint16(payload[5:7], uint16(totalSize))
 	copy(payload[7:], data)
-	return ssu2noise.NewSSU2Block(ssu2noise.BlockTypeFirstFragment, payload)
+	return ssu2noise.NewSSU2Block(ssu2noise.BlockTypeFirstFragment, payload), nil
 }
 
 // buildFollowOnFragment creates a BlockTypeFollowOnFragment (type 5) block.

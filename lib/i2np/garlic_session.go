@@ -262,6 +262,16 @@ func (sm *GarlicSessionManager) ProcessIncomingDHRatchet(sessionTag [8]byte, new
 // tag is garlicKeyMaterial[24:32], key is garlicKeyMaterial[0:32].
 func (sm *GarlicSessionManager) RegisterOneTimeGarlicKey(tag [8]byte, key [32]byte) {
 	sm.oneTimeDiagMu.Lock()
+	// M-NEW-1 FIX: Cap the diagnostic map to prevent unbounded growth from
+	// failed/dropped tunnel builds whose tags are never consumed.
+	// When at capacity, evict an arbitrary existing entry before inserting.
+	const maxOneTimeDiagEntries = 10_000
+	if len(sm.oneTimeDiag) >= maxOneTimeDiagEntries {
+		for oldest := range sm.oneTimeDiag {
+			delete(sm.oneTimeDiag, oldest)
+			break
+		}
+	}
 	sm.oneTimeDiag[tag] = struct{}{}
 	oneTimeTagMapSize := len(sm.oneTimeDiag)
 	sm.oneTimeDiagMu.Unlock()

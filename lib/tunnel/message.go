@@ -182,18 +182,22 @@ func (dtm DecryptedTunnelMessage) Checksum() []byte {
 
 // Returns the contents of a decrypted tunnel message that contain the data for the
 // DeliveryInstructions.
-func (dtm DecryptedTunnelMessage) deliveryInstructionData() []byte {
+//
+// M-NEW-3 FIX: Returns an explicit error when no zero-byte padding separator is
+// found. Callers must handle the error; continuing with an empty slice masked the
+// root cause of malformed or truncated tunnel messages.
+func (dtm DecryptedTunnelMessage) deliveryInstructionData() ([]byte, error) {
 	log.WithFields(logger.Fields{"at": "deliveryInstructionData"}).Debug("Retrieving delivery instruction data from DecryptedTunnelMessage")
 	dataArea := dtm[4+4+16:]
 	for i := 0; i < len(dataArea); i++ {
 		if dataArea[i] == 0x00 {
 			deliveryData := dataArea[i+1:]
 			log.WithField("delivery_data_length", len(deliveryData)).Debug("Retrieved delivery instruction data")
-			return deliveryData
+			return deliveryData, nil
 		}
 	}
 	log.WithFields(logger.Fields{"at": "deliveryInstructionData"}).Warn("No delivery instruction data found in DecryptedTunnelMessage")
-	return []byte{}
+	return nil, oops.Errorf("tunnel: no zero-byte padding separator found in decrypted tunnel message")
 }
 
 // parseNextFragment parses the next delivery instruction and its corresponding message fragment from data.
@@ -243,7 +247,10 @@ func parseNextFragment(data []byte) (pair DeliveryInstructionsWithFragment, rema
 // in that case the returned slice contains any successfully parsed entries.
 func (dtm DecryptedTunnelMessage) DeliveryInstructionsWithFragments() ([]DeliveryInstructionsWithFragment, error) {
 	set := make([]DeliveryInstructionsWithFragment, 0)
-	data := dtm.deliveryInstructionData()
+	data, err := dtm.deliveryInstructionData()
+	if err != nil {
+		return set, err
+	}
 	var parseErr error
 	for {
 		pair, remainder, err := parseNextFragment(data)

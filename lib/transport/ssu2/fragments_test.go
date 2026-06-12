@@ -50,7 +50,8 @@ func TestFragmentData_Roundtrip(t *testing.T) {
 
 func TestBuildFirstFragment(t *testing.T) {
 	data := []byte("hello")
-	block := buildFirstFragment(42, 100, data, false)
+	block, err := buildFirstFragment(42, 100, data, false)
+	require.NoError(t, err)
 	assert.Equal(t, ssu2noise.BlockTypeFirstFragment, block.Type)
 	assert.Len(t, block.Data, 7+len(data))
 }

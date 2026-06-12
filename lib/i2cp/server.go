@@ -79,6 +79,7 @@ func DefaultServerConfig() *ServerConfig {
 type connectionState struct {
 	conn              net.Conn
 	lastMessageTime   time.Time
+	lastResetTime     time.Time // L-NEW-4: tracks when counters were last zeroed (wall-clock epoch)
 	messageCount      int
 	bytesRead         uint64
 	hostLookupLimiter *rate.Limiter

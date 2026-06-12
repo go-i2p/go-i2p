@@ -87,8 +87,11 @@ type NTCP2Transport struct {
 	// A-3 fix: Transport lifecycle and accounting metrics
 	metrics transportMetrics
 
-	// TEST ONLY: bypass *ntcp2.Conn type check in performInboundHandshake.
-	// MUST NOT be set in production - allows un-handshaked connections (security risk).
+	// M-NEW-5: testBypassHandshakeTypeCheck is a test-only escape hatch that allows
+	// mock net.Conn implementations to skip the *ntcp2.Conn type assertion in
+	// performInboundHandshake. It must NEVER be set on a transport created via
+	// NewNTCP2Transport. Production code reaches this field via isHandshakeBypassEnabled(),
+	// which panics if the field is set and a real listener is bound.
 	testBypassHandshakeTypeCheck bool
 
 	// Protects identity, config.Config, and listener from concurrent
@@ -634,7 +637,7 @@ func (t *NTCP2Transport) inboundHandshakeWorker(conn net.Conn) {
 func (t *NTCP2Transport) performInboundHandshake(conn net.Conn, handshakeCtx context.Context) error {
 	ntcp2Conn, ok := conn.(*ntcp2.Conn)
 	if !ok {
-		if t.testBypassHandshakeTypeCheck {
+		if t.isHandshakeBypassEnabled() {
 			// TEST ONLY: Skip handshake for mock connections.
 			// This allows tests to verify session tracking/accept loop logic
 			// without full Noise protocol setup. NEVER enable in production.

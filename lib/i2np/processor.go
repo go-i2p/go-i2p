@@ -188,6 +188,7 @@ type MessageProcessor struct {
 	cloveForwarder        GarlicCloveForwarder      // Optional delegate for non-LOCAL garlic clove delivery
 	dbManager             *DatabaseManager          // Optional database manager for DatabaseLookup messages
 	expirationValidator   *ExpirationValidator      // Validator for checking message expiration
+	replayCache           *messageReplayCache       // H-NEW-4: bounded replay cache keyed by message ID
 	participantManager    ParticipantManager        // Optional participant manager for tunnel build requests
 	buildReplyForwarder   BuildReplyForwarder       // Optional forwarder for tunnel build replies
 	buildRecordCrypto     ReplyRecordEncryptor      // Interface for encrypting build response records
@@ -207,9 +208,11 @@ type MessageProcessor struct {
 func NewMessageProcessor() *MessageProcessor {
 	log.WithField("at", "NewMessageProcessor").Debug("Creating new message processor")
 	crypto := NewBuildRecordCrypto()
+	ev := NewExpirationValidator()
 	return &MessageProcessor{
 		factory:               NewMessageFactory(),
-		expirationValidator:   NewExpirationValidator(),
+		expirationValidator:   ev,
+		replayCache:           newMessageReplayCache(10_000, time.Duration(ev.toleranceSeconds)*time.Second),
 		buildRecordCrypto:     crypto,
 		buildRequestDecryptor: crypto,
 	}
@@ -418,6 +421,23 @@ func (p *MessageProcessor) ProcessMessage(msg Message) error {
 		if err := ev.ValidateMessage(msg); err != nil {
 			return err
 		}
+	}
+
+	// H-NEW-4 FIX: replay-cache check. Drop messages whose ID was already
+	// processed within the validity window; mark new IDs before dispatching.
+	// This prevents DatabaseStore reply-token amplification, build-reply state
+	// corruption, and spurious delivery-status callbacks from replayed messages.
+	if p.replayCache != nil {
+		id := msg.MessageID()
+		if p.replayCache.Seen(id) {
+			log.WithFields(logger.Fields{
+				"at":           "ProcessMessage",
+				"message_type": msg.Type(),
+				"message_id":   id,
+			}).Debug("dropping replayed I2NP message")
+			return nil
+		}
+		p.replayCache.Mark(id)
 	}
 
 	// Dispatch without holding the lock so that garlic LOCAL delivery
