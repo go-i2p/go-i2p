@@ -12,6 +12,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/transport"
 	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
 	ssu2 "github.com/go-i2p/go-i2p/lib/transport/ssu2"
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	ntcp2 "github.com/go-i2p/go-noise/ntcp2"
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
 	"github.com/samber/oops"
@@ -196,7 +197,7 @@ func (r *Router) handleNewConnection(conn net.Conn) {
 	switch addr := conn.RemoteAddr().(type) {
 	case *ntcp2.Addr:
 		peerHash := common.Hash(addr.RouterHash())
-		sessionLog := logger.WithField("peer_hash", fmt.Sprintf("%x", peerHash[:8]))
+		sessionLog := logger.WithField("peer_hash", logutil.HashPrefix(peerHash))
 		session := ntcp.NewNTCP2Session(conn, r.ctx, sessionLog)
 		session.SetCleanupCallback(func() { r.removeSession(peerHash) })
 		r.addSession(peerHash, session)
@@ -209,7 +210,7 @@ func (r *Router) handleNewConnection(conn net.Conn) {
 
 	case *ssu2noise.SSU2Addr:
 		peerHash := common.Hash(addr.RouterHash())
-		sessionLog := logger.WithField("peer_hash", fmt.Sprintf("%x", peerHash[:8]))
+		sessionLog := logger.WithField("peer_hash", logutil.HashPrefix(peerHash))
 		ssu2Conn, ok := conn.(*ssu2noise.SSU2Conn)
 		if !ok {
 			sessionLog.WithField("conn_type", fmt.Sprintf("%T", conn)).Error("Inbound SSU2 connection is not *ssu2noise.SSU2Conn, dropping")

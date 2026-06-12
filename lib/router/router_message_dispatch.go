@@ -16,6 +16,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/netdb"
 	"github.com/go-i2p/go-i2p/lib/transport"
 	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/samber/oops"
 
 	"github.com/go-i2p/logger"
@@ -35,7 +36,7 @@ func (r *Router) processSessionMessages(session i2npReader, peer AuthenticatedPe
 	}
 
 	peerHash := peer.PeerHash()
-	defer log.WithField("peer_hash", fmt.Sprintf("%x", peerHash[:8])).Debug("Session message processor stopped")
+	defer log.WithField("peer_hash", logutil.HashPrefix(peerHash)).Debug("Session message processor stopped")
 
 	for r.shouldContinueMonitoring() {
 		if !r.processSessionMessageSafely(session, peerHash) {
@@ -51,7 +52,7 @@ func (r *Router) processSessionMessageSafely(session i2npReader, peerHash common
 	defer func() {
 		if rec := recover(); rec != nil {
 			log.WithFields(logger.Fields{
-				"peer_hash": fmt.Sprintf("%x", peerHash[:8]),
+				"peer_hash": logutil.HashPrefix(peerHash),
 				"panic":     fmt.Sprintf("%v", rec),
 			}).Error("Recovered from panic in I2NP dispatch; dropping session")
 			keepProcessing = false
@@ -86,7 +87,7 @@ func (r *Router) logInboundI2NPIngress(msg i2np.Message, peerHash common.Hash, s
 		"at":           "readNextMessage",
 		"message_type": msg.Type(),
 		"message_size": estimateI2NPMessageSize(msg),
-		"source_peer":  fmt.Sprintf("%x", peerHash[:8]),
+		"source_peer":  logutil.HashPrefix(peerHash),
 		"session_id":   fmt.Sprintf("%T:%p", session, session),
 	}).Debug("Inbound I2NP ingress")
 }
@@ -106,7 +107,7 @@ func estimateI2NPMessageSize(msg i2np.Message) int {
 
 // logReadError logs the appropriate error message based on error type.
 func (r *Router) logReadError(err error, peerHash common.Hash) {
-	peerHashStr := fmt.Sprintf("%x", peerHash[:8])
+	peerHashStr := logutil.HashPrefix(peerHash)
 
 	if isBenignReadError(err) {
 		log.WithField("peer_hash", peerHashStr).Debug("Session closed normally")
@@ -166,7 +167,7 @@ func (r *Router) handleIncomingMessage(msg i2np.Message, peerHash common.Hash) {
 		log.WithError(err).WithFields(logger.Fields{
 			"message_type": msg.Type(),
 			"message_id":   msg.MessageID(),
-			"peer_hash":    fmt.Sprintf("%x", peerHash[:8]),
+			"peer_hash":    logutil.HashPrefix(peerHash),
 		}).Error("Failed to route I2NP message")
 	}
 }
@@ -185,7 +186,7 @@ func (r *Router) routeMessage(msg i2np.Message, fromPeer common.Hash) (err error
 			log.WithError(err).WithFields(logger.Fields{
 				"message_type": messageType,
 				"message_id":   messageID,
-				"from_peer":    fmt.Sprintf("%x", fromPeer[:8]),
+				"from_peer":    logutil.HashPrefix(fromPeer),
 				"panic":        fmt.Sprintf("%v", rec),
 				"stack":        string(buf[:n]),
 			}).Error("Recovered from panic in routeMessage")
@@ -195,7 +196,7 @@ func (r *Router) routeMessage(msg i2np.Message, fromPeer common.Hash) (err error
 	log.WithFields(logger.Fields{
 		"message_type": messageType,
 		"message_id":   messageID,
-		"from_peer":    fmt.Sprintf("%x", fromPeer[:8]),
+		"from_peer":    logutil.HashPrefix(fromPeer),
 	}).Debug("Routing I2NP message")
 
 	mr, fs := r.getRoutingComponents()
@@ -327,10 +328,10 @@ func (r *Router) addSession(peerHash common.Hash, session transport.TransportSes
 	defer r.sessionMutex.Unlock()
 
 	if r.activeSessions == nil {
-		log.WithField("peer_hash", fmt.Sprintf("%x", peerHash[:8])).Warn("Cannot add session: router is shutting down")
+		log.WithField("peer_hash", logutil.HashPrefix(peerHash)).Warn("Cannot add session: router is shutting down")
 		return
 	}
 
 	r.activeSessions[peerHash] = session
-	log.WithField("peer_hash", fmt.Sprintf("%x", peerHash[:8])).Debug("Added active session")
+	log.WithField("peer_hash", logutil.HashPrefix(peerHash)).Debug("Added active session")
 }

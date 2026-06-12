@@ -5,6 +5,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/go-i2p/logger"
 
 	common "github.com/go-i2p/common/data"
@@ -130,7 +131,7 @@ func (db *StdNetDB) removeExpiredRouterInfo(hash common.Hash) {
 	// Remove from filesystem (orphaned files self-heal on restart)
 	db.removeRouterInfoFromDisk(hash)
 
-	log.WithField("hash", fmt.Sprintf("%x", hash[:8])).Debug("Removed expired RouterInfo")
+	log.WithField("hash", logutil.HashPrefix(hash)).Debug("Removed expired RouterInfo")
 }
 
 // removeRouterInfoFromDisk deletes the RouterInfo file from the filesystem.

@@ -10,6 +10,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/transport"
 	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
 	ssu2 "github.com/go-i2p/go-i2p/lib/transport/ssu2"
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/samber/oops"
 
 	"github.com/go-i2p/logger"
@@ -27,7 +28,7 @@ func (r *Router) removeSession(peerHash common.Hash) {
 	defer r.sessionMutex.Unlock()
 
 	delete(r.activeSessions, peerHash)
-	log.WithField("peer_hash", fmt.Sprintf("%x", peerHash[:8])).Debug("Removed session")
+	log.WithField("peer_hash", logutil.HashPrefix(peerHash)).Debug("Removed session")
 }
 
 // getSessionByHash retrieves a session for a specific peer.
@@ -66,7 +67,7 @@ func (r *Router) GetSessionByHash(hash common.Hash) (i2np.I2NPTransportSession, 
 	}
 
 	// No existing session - try to establish outbound connection
-	log.WithField("peer_hash", fmt.Sprintf("%x", hash[:8])).Debug("No active session, attempting outbound connection")
+	log.WithField("peer_hash", logutil.HashPrefix(hash)).Debug("No active session, attempting outbound connection")
 
 	routerInfo, err := r.retrieveRouterInfoWithTimeout(hash)
 	if err != nil {
@@ -179,7 +180,7 @@ func (r *Router) registerNewSession(hash common.Hash, transportSession i2np.I2NP
 			defer r.wg.Done()
 			r.processSessionMessages(s, staticAuthenticatedPeer{hash: hash, handshakeComplete: true})
 		}()
-		log.WithField("peer_hash", fmt.Sprintf("%x", hash[:8])).Info("Established and registered new outbound NTCP2 session")
+		log.WithField("peer_hash", logutil.HashPrefix(hash)).Info("Established and registered new outbound NTCP2 session")
 	case *ssu2.SSU2Session:
 		s.SetCleanupCallback(func() { r.removeSession(hash) })
 		r.addSession(hash, s)
@@ -188,9 +189,9 @@ func (r *Router) registerNewSession(hash common.Hash, transportSession i2np.I2NP
 			defer r.wg.Done()
 			r.processSessionMessages(s, staticAuthenticatedPeer{hash: hash, handshakeComplete: true})
 		}()
-		log.WithField("peer_hash", fmt.Sprintf("%x", hash[:8])).Info("Established and registered new outbound SSU2 session")
+		log.WithField("peer_hash", logutil.HashPrefix(hash)).Info("Established and registered new outbound SSU2 session")
 	default:
-		log.WithField("peer_hash", fmt.Sprintf("%x", hash[:8])).Warn("Unknown transport session type, cannot start reader goroutine")
+		log.WithField("peer_hash", logutil.HashPrefix(hash)).Warn("Unknown transport session type, cannot start reader goroutine")
 	}
 }
 

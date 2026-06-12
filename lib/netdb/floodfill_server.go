@@ -13,6 +13,7 @@ import (
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/i2np"
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
@@ -341,7 +342,7 @@ func (fs *FloodfillServer) HandleDatabaseLookup(lookup *i2np.DatabaseLookup) err
 
 	// Rate limit per source peer
 	if fs.lookupLimiter != nil && !fs.lookupLimiter.Allow(lookup.From) {
-		log.WithField("from", fmt.Sprintf("%x", lookup.From[:8])).
+		log.WithField("from", logutil.HashPrefix(lookup.From)).
 			Warn("Rate limiting DatabaseLookup from peer")
 		return oops.Errorf("rate limited")
 	}

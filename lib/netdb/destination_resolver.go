@@ -216,7 +216,7 @@ func (dr *DestinationResolver) extractValidX25519Key(encKey lease_set2.Encryptio
 	var pubKey [32]byte
 	copy(pubKey[:], encKey.KeyData)
 
-	log.WithField("destination_hash", fmt.Sprintf("%x", destHash[:8])).
+	log.WithField("destination_hash", logutil.HashPrefix(destHash)).
 		Debug("Extracted X25519 key from LeaseSet2")
 	return pubKey, nil
 }

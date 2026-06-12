@@ -2,7 +2,6 @@ package netdb
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -252,7 +251,7 @@ func (p *Publisher) publishAllLeaseSets() {
 	// Publish each LeaseSet to floodfill routers
 	for _, lsEntry := range leaseSets {
 		if err := p.publishLeaseSetEntry(lsEntry); err != nil {
-			log.WithError(err).WithField("hash", fmt.Sprintf("%x", lsEntry.Hash[:8])).Warn("Failed to publish LeaseSet")
+			log.WithError(err).WithField("hash", logutil.HashPrefix(lsEntry.Hash)).Warn("Failed to publish LeaseSet")
 		}
 	}
 

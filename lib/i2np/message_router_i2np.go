@@ -1,12 +1,12 @@
 package i2np
 
 import (
-	"fmt"
 	"time"
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/go-i2p/logger"
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/samber/oops"
 )
 
@@ -62,7 +62,7 @@ func (mr *I2NPMessageDispatcher) SetNetDB(netdb NetDBStore) {
 func (mr *I2NPMessageDispatcher) SetOurRouterHash(hash common.Hash) {
 	mr.dbManager.SetOurRouterHash(hash)
 	mr.processor.SetOurRouterHash(hash)
-	log.WithField("router_hash", fmt.Sprintf("%x", hash[:8])).Debug("Configured router identity for floodfill responses")
+	log.WithField("router_hash", logutil.HashPrefix(hash)).Debug("Configured router identity for floodfill responses")
 }
 
 // SetPeerSelector sets the peer selector for the TunnelManager

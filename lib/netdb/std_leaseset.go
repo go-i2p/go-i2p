@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 
@@ -1189,7 +1190,7 @@ func (db *StdNetDB) removeExpiredLeaseSet(hash common.Hash) {
 	// Remove from filesystem (orphaned files self-heal on restart)
 	db.removeLeaseSetFromDisk(hash)
 
-	log.WithField("hash", fmt.Sprintf("%x", hash[:8])).Debug("Removed expired LeaseSet")
+	log.WithField("hash", logutil.HashPrefix(hash)).Debug("Removed expired LeaseSet")
 }
 
 // removeLeaseSetFromDisk deletes the LeaseSet file from the filesystem.
