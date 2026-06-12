@@ -120,11 +120,12 @@ func TestNewSessionDecryption(t *testing.T) {
 	ciphertext, err := EncryptGarlicWithBuilder(senderSM, builder, destHash, receiverPubKey)
 	require.NoError(t, err)
 
-	decryptedPlaintext, sessionTag, _, err := receiverSM.DecryptGarlicMessage(ciphertext)
+	decryptedAll, sessionTag, _, err := receiverSM.DecryptGarlicMessage(ciphertext)
 	require.NoError(t, err)
+	require.NotEmpty(t, decryptedAll, "decrypt must return at least one clove")
 
 	assert.Equal(t, [8]byte{}, sessionTag, "expected empty session tag for new session")
-	assert.Equal(t, originalPlaintext, decryptedPlaintext, "decrypted plaintext should match original")
+	assert.Equal(t, originalPlaintext, decryptedAll[0], "decrypted plaintext should match original")
 }
 
 // TestExistingSessionEncryptDecrypt tests encrypt/decrypt round-trip via existing session.
@@ -141,11 +142,12 @@ func TestExistingSessionEncryptDecrypt(t *testing.T) {
 	ct2, err := EncryptGarlicWithBuilder(senderSM, builder2, destHash, receiverPubKey)
 	require.NoError(t, err, "second encrypt")
 
-	dec2, tag2, _, err := receiverSM.DecryptGarlicMessage(ct2)
+	dec2All, tag2, _, err := receiverSM.DecryptGarlicMessage(ct2)
 	require.NoError(t, err, "second decrypt")
+	require.NotEmpty(t, dec2All, "decrypt must return at least one clove")
 
 	assert.NotEqual(t, [8]byte{}, tag2, "expected non-empty session tag for existing session")
-	assert.True(t, bytes.Equal(dec2, original2), "decrypted plaintext should match for existing session")
+	assert.True(t, bytes.Equal(dec2All[0], original2), "decrypted plaintext should match for existing session")
 }
 
 // TestMultipleDestinations tests encrypting for different destinations.

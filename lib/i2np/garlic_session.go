@@ -99,12 +99,14 @@ func (sm *GarlicSessionManager) EncryptGarlicMessage(
 // Handles both New Session and Existing Session message types.
 //
 // Returns:
-//   - plaintext: the decrypted garlic payload
+//   - cloves: all GarlicClove payloads from the ratchet payload. A spec-compliant
+//     payload may contain more than one GarlicClove block; all are returned so that
+//     every clove's delivery instructions are executed rather than silently dropped.
 //   - sessionTag: the 8-byte tag used to identify the session (zero for NS and NSR)
 //   - sessionHash: SHA-256(initiatorStaticPub) for New Session messages; nil otherwise.
 //     Callers that need to send a New Session Reply must pass the dereferenced
 //     value to EncryptNewSessionReply.
-func (sm *GarlicSessionManager) DecryptGarlicMessage(encryptedGarlic []byte) ([]byte, [8]byte, *[32]byte, error) {
+func (sm *GarlicSessionManager) DecryptGarlicMessage(encryptedGarlic []byte) ([][]byte, [8]byte, *[32]byte, error) {
 	incomingTag := sm.extractIncomingTag(encryptedGarlic)
 	oneTimeTagRegistered, oneTimeTagMapSizeBefore := sm.getOneTimeTagDiagnostics(incomingTag)
 
@@ -192,8 +194,11 @@ func (sm *GarlicSessionManager) logDecryptSuccess(incomingTag [8]byte, oneTimeTa
 }
 
 // extractGarlicFromPayload parses a ratchet payload and returns the data from
-// the first GarlicClove block. Returns an error if no GarlicClove block is found.
-func extractGarlicFromPayload(payload []byte) ([]byte, error) {
+// all GarlicClove blocks. A spec-compliant ECIES-X25519-AEAD-Ratchet payload may
+// contain more than one GarlicClove block; returning only the first would silently
+// drop the remaining cloves' delivery instructions.
+// Returns an error if no GarlicClove block is found.
+func extractGarlicFromPayload(payload []byte) ([][]byte, error) {
 	log.WithFields(logger.Fields{
 		"at":          "extractGarlicFromPayload",
 		"payload_len": len(payload),
@@ -210,6 +215,7 @@ func extractGarlicFromPayload(payload []byte) ([]byte, error) {
 		"block_count": len(blocks),
 	}).Debug("Parsed ratchet payload blocks")
 
+	var cloves [][]byte
 	for i, block := range blocks {
 		log.WithFields(logger.Fields{
 			"at":         "extractGarlicFromPayload",
@@ -222,14 +228,24 @@ func extractGarlicFromPayload(payload []byte) ([]byte, error) {
 		if block.Type == noiseratchet.BlockGarlicClove {
 			log.WithFields(logger.Fields{
 				"at":        "extractGarlicFromPayload",
+				"clove_idx": len(cloves),
 				"data_len":  len(block.Data),
 				"data_head": fmt.Sprintf("%x", block.Data[:min(len(block.Data), 32)]),
 			}).Debug("Found GarlicClove block")
-			return block.Data, nil
+			cloves = append(cloves, block.Data)
 		}
 	}
 
-	return nil, oops.Errorf("ratchet payload contains no GarlicClove block")
+	if len(cloves) == 0 {
+		return nil, oops.Errorf("ratchet payload contains no GarlicClove block")
+	}
+
+	log.WithFields(logger.Fields{
+		"at":          "extractGarlicFromPayload",
+		"clove_count": len(cloves),
+	}).Debug("Extracted GarlicClove blocks from ratchet payload")
+
+	return cloves, nil
 }
 
 // ProcessIncomingDHRatchet processes a DH ratchet key received from a peer.

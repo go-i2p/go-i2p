@@ -18,13 +18,14 @@ var (
 // Allows configuring return values per-call or via callback functions.
 type mockGarlicDecryptor struct {
 	// decryptFunc is called when DecryptGarlicMessage is invoked. If nil,
-	// the mock returns decryptPlaintext/decryptTag/decryptErr.
-	decryptFunc func(encrypted []byte) ([]byte, [8]byte, *[32]byte, error)
+	// the mock returns decryptPlaintexts/decryptTag/decryptErr.
+	decryptFunc func(encrypted []byte) ([][]byte, [8]byte, *[32]byte, error)
 
 	// Default return values when decryptFunc is nil.
-	decryptPlaintext []byte
-	decryptTag       [8]byte
-	decryptErr       error
+	// Each element is the payload of one GarlicClove block.
+	decryptPlaintexts [][]byte
+	decryptTag        [8]byte
+	decryptErr        error
 
 	// callCount tracks how many times DecryptGarlicMessage was called.
 	callCount int
@@ -33,17 +34,17 @@ type mockGarlicDecryptor struct {
 }
 
 // DecryptGarlicMessage implements GarlicMessageDecryptor.
-func (m *mockGarlicDecryptor) DecryptGarlicMessage(encrypted []byte) ([]byte, [8]byte, *[32]byte, error) {
+func (m *mockGarlicDecryptor) DecryptGarlicMessage(encrypted []byte) ([][]byte, [8]byte, *[32]byte, error) {
 	m.callCount++
 	m.lastEncrypted = encrypted
 	if m.decryptFunc != nil {
 		return m.decryptFunc(encrypted)
 	}
-	return m.decryptPlaintext, m.decryptTag, nil, m.decryptErr
+	return m.decryptPlaintexts, m.decryptTag, nil, m.decryptErr
 }
 
 // newMockGarlicDecryptor creates a mock decryptor with default success behavior.
-// The returned plaintext is empty by default; callers should set decryptPlaintext
+// The returned plaintext is empty by default; callers should set decryptPlaintexts
 // or decryptFunc for meaningful responses.
 func newMockGarlicDecryptor() *mockGarlicDecryptor {
 	return &mockGarlicDecryptor{}
@@ -56,11 +57,12 @@ func newMockGarlicDecryptorWithError(err error) *mockGarlicDecryptor {
 	}
 }
 
-// newMockGarlicDecryptorWithPlaintext creates a mock that returns the given plaintext.
+// newMockGarlicDecryptorWithPlaintext creates a mock that returns the given plaintext
+// wrapped as a single GarlicClove payload.
 func newMockGarlicDecryptorWithPlaintext(plaintext []byte, tag [8]byte) *mockGarlicDecryptor {
 	return &mockGarlicDecryptor{
-		decryptPlaintext: plaintext,
-		decryptTag:       tag,
+		decryptPlaintexts: [][]byte{plaintext},
+		decryptTag:        tag,
 	}
 }
 
@@ -110,11 +112,11 @@ func newMockReplyEncryptorWithError(err error) *mockReplyEncryptor {
 // without exercising real crypto.
 func mockGarlicDecryptorRoundTrip() *mockGarlicDecryptor {
 	return &mockGarlicDecryptor{
-		decryptFunc: func(encrypted []byte) ([]byte, [8]byte, *[32]byte, error) {
+		decryptFunc: func(encrypted []byte) ([][]byte, [8]byte, *[32]byte, error) {
 			if len(encrypted) == 0 {
 				return nil, [8]byte{}, nil, fmt.Errorf("empty encrypted data")
 			}
-			return encrypted, [8]byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}, nil, nil
+			return [][]byte{encrypted}, [8]byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}, nil, nil
 		},
 	}
 }

@@ -304,10 +304,13 @@ func (p *MessageProcessor) processDatabaseLookupMessage(msg Message) error {
 // Process:
 // 1. Extract encrypted garlic data from the message
 // 2. Decrypt using GarlicSessionManager (handles ECIES-X25519-AEAD-Ratchet)
-// 3. Parse decrypted data into Garlic structure with cloves
+// 3. Parse each decrypted clove payload into a Garlic structure
 // 4. For each clove, route based on delivery type:
 //   - LOCAL (0x00): Process wrapped message locally via ProcessMessage()
 //   - DESTINATION/ROUTER/TUNNEL: forwarded by lib/router/garlic_router.go
+//
+// A spec-compliant ratchet payload may contain more than one GarlicClove block;
+// all cloves are processed so no delivery instructions are silently dropped.
 //
 // Note: This processor handles LOCAL delivery only. Other delivery types require
 // router context and would be implemented at the router layer.
@@ -321,17 +324,21 @@ func (p *MessageProcessor) processGarlicMessage(msg Message) error {
 		return err
 	}
 
-	decryptedData, sessionTag, err := p.decryptGarlicData(msg.MessageID(), encryptedData)
+	decryptedCloves, sessionTag, err := p.decryptGarlicData(msg.MessageID(), encryptedData)
 	if err != nil {
 		return err
 	}
 
-	garlic, err := p.parseAndLogGarlic(msg.MessageID(), decryptedData, sessionTag)
-	if err != nil {
-		return err
+	var allCloves []GarlicClove
+	for _, cloveData := range decryptedCloves {
+		garlic, err := p.parseAndLogGarlic(msg.MessageID(), cloveData, sessionTag)
+		if err != nil {
+			return err
+		}
+		allCloves = append(allCloves, garlic.Cloves...)
 	}
 
-	return p.processGarlicCloves(garlic.Cloves, 0)
+	return p.processGarlicCloves(allCloves, 0)
 }
 
 // validateGarlicSession verifies that the garlic session manager is configured.
@@ -429,7 +436,9 @@ func parseECIESGarlicClove(data []byte) (*Garlic, error) {
 }
 
 // decryptGarlicData decrypts the garlic message using the session manager.
-func (p *MessageProcessor) decryptGarlicData(msgID int, encryptedData []byte) ([]byte, [8]byte, error) {
+// Returns all GarlicClove payloads found in the ratchet payload so that callers
+// can process every clove rather than only the first.
+func (p *MessageProcessor) decryptGarlicData(msgID int, encryptedData []byte) ([][]byte, [8]byte, error) {
 	RecordExploratoryReplyStage(ExploratoryReplyStageGarlicDecryptAttempt)
 	incomingTag := logutil.BytePrefix(encryptedData)
 
@@ -439,19 +448,19 @@ func (p *MessageProcessor) decryptGarlicData(msgID int, encryptedData []byte) ([
 		"incoming_tag":   incomingTag,
 	}).Debug("Decrypting garlic message")
 
-	decryptedData, sessionTag, _, err := p.garlicSessions.DecryptGarlicMessage(encryptedData)
+	decryptedCloves, sessionTag, _, err := p.garlicSessions.DecryptGarlicMessage(encryptedData)
 	if err != nil {
 		return nil, [8]byte{}, oops.Wrapf(err, "failed to decrypt garlic message")
 	}
 	RecordExploratoryReplyStage(ExploratoryReplyStageGarlicDecryptSuccess)
 
 	log.WithFields(logger.Fields{
-		"msg_id":         msgID,
-		"decrypted_size": len(decryptedData),
-		"session_tag":    fmt.Sprintf("%x", sessionTag[:]),
+		"msg_id":      msgID,
+		"clove_count": len(decryptedCloves),
+		"session_tag": fmt.Sprintf("%x", sessionTag[:]),
 	}).Debug("Garlic message decrypted successfully")
 
-	return decryptedData, sessionTag, nil
+	return decryptedCloves, sessionTag, nil
 }
 
 // parseAndLogGarlic parses the decrypted ECIES clove payload and logs the result.

@@ -66,7 +66,22 @@ func (r *RateLimitedAuthenticator) Authenticate(username, password string) bool 
 
 // AuthenticateConnection enforces lockouts independently for each remote
 // address so one failing client cannot deny service to unrelated clients.
+// When conn is nil (local / in-process callers without a TCP peer), the
+// rate-limit check is bypassed entirely: there is no remote address to track,
+// so funnelling all nil-conn calls into a shared "unknown" bucket would let a
+// single local caller exhaust the quota and lock out every other local caller
+// for five minutes — a trivial DoS via shared state.
 func (r *RateLimitedAuthenticator) AuthenticateConnection(conn net.Conn, username, password string) bool {
+	// Bypass per-IP rate limiting for callers that have no TCP connection.
+	// Callers without a conn are inherently local/trusted and there is no
+	// meaningful remote identity to throttle.
+	if conn == nil {
+		if r.delegate == nil {
+			return false
+		}
+		return r.delegate.Authenticate(username, password)
+	}
+
 	remoteAddr := remoteAddrKey(conn)
 
 	r.mu.Lock()

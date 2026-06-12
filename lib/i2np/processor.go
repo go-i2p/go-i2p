@@ -144,8 +144,10 @@ type TunnelBuildReplyProcessor = build.TunnelBuildReplyProcessor
 // and test mocks.
 type GarlicMessageDecryptor interface {
 	// DecryptGarlicMessage decrypts an encrypted garlic message.
-	// Returns plaintext, session tag, session hash (non-nil for New Session), and error.
-	DecryptGarlicMessage(encrypted []byte) (plaintext []byte, sessionTag [8]byte, sessionHash *[32]byte, err error)
+	// Returns all GarlicClove payloads found in the ratchet payload (a spec-compliant
+	// payload may contain more than one GarlicClove block), session tag, session hash
+	// (non-nil for New Session), and error.
+	DecryptGarlicMessage(encrypted []byte) (cloves [][]byte, sessionTag [8]byte, sessionHash *[32]byte, err error)
 }
 
 // GarlicKeyRegistrar allows callers to register one-time symmetric garlic keys - re-exported from lib/tunnel/build

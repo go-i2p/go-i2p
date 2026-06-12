@@ -8,6 +8,7 @@ import (
 
 	common "github.com/go-i2p/common/data"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // mockNetDBStore implements NetDBStore interface for testing
@@ -532,9 +533,10 @@ func TestDecryptGarlicData_WithMock(t *testing.T) {
 	processor.SetGarlicSessionManager(mock)
 
 	// Call decryptGarlicData
-	plaintext, tag, err := processor.decryptGarlicData(42, []byte("encrypted-data"))
+	plaintexts, tag, err := processor.decryptGarlicData(42, []byte("encrypted-data"))
 	assert.NoError(t, err)
-	assert.Equal(t, expectedPlaintext, plaintext)
+	require.Len(t, plaintexts, 1, "mock returns one clove")
+	assert.Equal(t, expectedPlaintext, plaintexts[0])
 	assert.Equal(t, expectedTag, tag)
 
 	// Verify mock was called

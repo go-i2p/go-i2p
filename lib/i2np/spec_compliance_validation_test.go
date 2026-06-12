@@ -1574,9 +1574,10 @@ func TestGarlic_ECIES_ChaCha20Poly1305Used(t *testing.T) {
 	assert.True(t, len(encrypted) > 16, "encrypted message must contain auth tag")
 
 	// Verify decryption works (proves correct AEAD was used)
-	decrypted, _, _, err := destSM.DecryptGarlicMessage(encrypted)
+	decryptedAll, _, _, err := destSM.DecryptGarlicMessage(encrypted)
 	require.NoError(t, err)
-	assert.Equal(t, plaintext, decrypted,
+	require.NotEmpty(t, decryptedAll, "decrypt must return at least one clove")
+	assert.Equal(t, plaintext, decryptedAll[0],
 		"ChaCha20-Poly1305 decrypt must recover original plaintext")
 
 	// Corrupt a single byte — should fail authentication
@@ -2390,15 +2391,16 @@ func TestGarlic_SessionLifecycle_InboundNewSessionCreatesRatchetState(t *testing
 		"receiver should have no sessions before decryption")
 
 	// Decrypt the New Session message.
-	decrypted, sessionTag, _, err := receiverSM.DecryptGarlicMessage(ciphertext)
+	decryptedAll, sessionTag, _, err := receiverSM.DecryptGarlicMessage(ciphertext)
 	require.NoError(t, err)
+	require.NotEmpty(t, decryptedAll, "decrypt must return at least one clove")
 
 	// Session tag should be empty for New Session.
 	assert.Equal(t, [8]byte{}, sessionTag,
 		"session tag must be empty for New Session decryption")
 
 	// Plaintext must match.
-	assert.Equal(t, plaintext, decrypted, "decrypted plaintext must match original")
+	assert.Equal(t, plaintext, decryptedAll[0], "decrypted plaintext must match original")
 
 	// Receiver should now have 1 session (inbound ratchet state created).
 	assert.Equal(t, 1, receiverSM.GetSessionCount(),
@@ -2499,10 +2501,11 @@ func TestGarlic_AssociatedData_NewSessionDecryptionUsesNilAD(t *testing.T) {
 	require.NoError(t, err)
 
 	// Decrypt (New Session — uses nil AD internally).
-	decrypted, tag, _, err := receiverSM.DecryptGarlicMessage(ciphertext)
+	decryptedAll, tag, _, err := receiverSM.DecryptGarlicMessage(ciphertext)
 	require.NoError(t, err)
+	require.NotEmpty(t, decryptedAll, "decrypt must return at least one clove")
 	assert.Equal(t, [8]byte{}, tag, "New Session decryption returns empty session tag")
-	assert.Equal(t, plaintext, decrypted, "New Session nil-AD roundtrip must preserve plaintext")
+	assert.Equal(t, plaintext, decryptedAll[0], "New Session nil-AD roundtrip must preserve plaintext")
 }
 
 // ============================================================================

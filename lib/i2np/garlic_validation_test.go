@@ -106,13 +106,14 @@ func TestECIESKeyExchange_Correctness(t *testing.T) {
 	ciphertext, builder := buildAndEncryptGarlic(t, f.senderSM, "crypto test payload", 1, f.destHash, f.receiverPub)
 
 	// Decrypt
-	plaintext, _, _, err := f.receiverSM.DecryptGarlicMessage(ciphertext)
+	plaintextAll, _, _, err := f.receiverSM.DecryptGarlicMessage(ciphertext)
 	require.NoError(t, err, "Decryption should succeed")
+	require.NotEmpty(t, plaintextAll, "decrypt must return at least one clove")
 
 	// Verify original plaintext can be recovered
 	originalPlaintext, err := builder.BuildAndSerialize()
 	require.NoError(t, err)
-	assert.Equal(t, originalPlaintext, plaintext, "Decrypted plaintext should match original")
+	assert.Equal(t, originalPlaintext, plaintextAll[0], "Decrypted plaintext should match original")
 }
 
 // TestECIESKeyExchange_NonceUniqueness verifies that each encryption produces
@@ -166,13 +167,14 @@ func TestRatchetState_ForwardSecrecy(t *testing.T) {
 	ciphertext1, builder1 := buildAndEncryptGarlic(t, f.senderSM, "message 1", 1, f.destHash, f.receiverPub)
 
 	// Decrypt first message
-	plaintext1, tag1, _, err := f.receiverSM.DecryptGarlicMessage(ciphertext1)
+	plaintext1All, tag1, _, err := f.receiverSM.DecryptGarlicMessage(ciphertext1)
 	require.NoError(t, err)
+	require.NotEmpty(t, plaintext1All, "decrypt must return at least one clove")
 	assert.Equal(t, [8]byte{}, tag1, "First message should have empty session tag (New Session)")
 
 	original1, err := builder1.BuildAndSerialize()
 	require.NoError(t, err)
-	assert.Equal(t, original1, plaintext1)
+	assert.Equal(t, original1, plaintext1All[0])
 
 	// Second message should use existing session
 	assert.Equal(t, 1, f.senderSM.GetSessionCount(), "Sender should have 1 session")

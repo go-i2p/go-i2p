@@ -40,10 +40,12 @@ func (c *stubConn) SetWriteDeadline(_ time.Time) error { return nil }
 func TestRateLimitedAuthenticator_LocksOutAfterThreshold(t *testing.T) {
 	stub := &stubAuthenticator{accept: false}
 	limiter := NewRateLimitedAuthenticator(stub)
+	// Use a real conn so per-IP rate limiting applies.
+	conn := &stubConn{remote: stubAddr("127.0.0.1:9000")}
 
 	// The first maxI2CPFailedAttempts calls must reach the delegate.
 	for i := 0; i < maxI2CPFailedAttempts; i++ {
-		if limiter.Authenticate("user", "bad") {
+		if limiter.AuthenticateConnection(conn, "user", "bad") {
 			t.Fatalf("attempt %d unexpectedly succeeded", i+1)
 		}
 	}
@@ -53,7 +55,7 @@ func TestRateLimitedAuthenticator_LocksOutAfterThreshold(t *testing.T) {
 
 	// The next attempt must be refused WITHOUT touching the delegate.
 	callsBefore := stub.calls
-	if limiter.Authenticate("user", "bad") {
+	if limiter.AuthenticateConnection(conn, "user", "bad") {
 		t.Fatalf("call after lockout unexpectedly succeeded")
 	}
 	if stub.calls != callsBefore {
@@ -62,7 +64,7 @@ func TestRateLimitedAuthenticator_LocksOutAfterThreshold(t *testing.T) {
 
 	// Even valid credentials are refused while locked out.
 	stub.accept = true
-	if limiter.Authenticate("user", "good") {
+	if limiter.AuthenticateConnection(conn, "user", "good") {
 		t.Fatalf("valid credentials accepted during lockout")
 	}
 	if stub.calls != callsBefore {
@@ -73,15 +75,17 @@ func TestRateLimitedAuthenticator_LocksOutAfterThreshold(t *testing.T) {
 func TestRateLimitedAuthenticator_SuccessResetsCounter(t *testing.T) {
 	stub := &stubAuthenticator{accept: false}
 	limiter := NewRateLimitedAuthenticator(stub)
+	// Use a real conn so per-IP rate limiting applies.
+	conn := &stubConn{remote: stubAddr("127.0.0.1:9001")}
 
 	// Accumulate failures below the threshold.
 	for i := 0; i < maxI2CPFailedAttempts-1; i++ {
-		limiter.Authenticate("user", "bad")
+		limiter.AuthenticateConnection(conn, "user", "bad")
 	}
 
 	// One success clears the counter.
 	stub.accept = true
-	if !limiter.Authenticate("user", "good") {
+	if !limiter.AuthenticateConnection(conn, "user", "good") {
 		t.Fatalf("valid credentials rejected before lockout")
 	}
 
@@ -89,12 +93,12 @@ func TestRateLimitedAuthenticator_SuccessResetsCounter(t *testing.T) {
 	// trigger a lockout — confirming the counter was cleared.
 	stub.accept = false
 	for i := 0; i < maxI2CPFailedAttempts-1; i++ {
-		if limiter.Authenticate("user", "bad") {
+		if limiter.AuthenticateConnection(conn, "user", "bad") {
 			t.Fatalf("attempt %d unexpectedly succeeded", i+1)
 		}
 	}
 	limiter.mu.Lock()
-	locked := !limiter.entries["unknown"].lockoutUntil.IsZero()
+	locked := !limiter.entries["127.0.0.1:9001"].lockoutUntil.IsZero()
 	limiter.mu.Unlock()
 	if locked {
 		t.Fatalf("lockout armed prematurely after counter reset")
@@ -121,6 +125,35 @@ func TestRateLimitedAuthenticator_IsolatesLockoutsPerRemote(t *testing.T) {
 
 	if limiter.AuthenticateConnection(connA, "user", "good") {
 		t.Fatal("locked out remote unexpectedly authenticated")
+	}
+}
+
+// TestRateLimitedAuthenticator_NilConnBypassesRateLimit verifies that callers
+// without a TCP connection (conn == nil) bypass per-IP rate limiting entirely.
+// If nil-conn calls shared a single "unknown" bucket, a single local caller
+// accumulating 10 failures would lock out every other in-process caller for
+// five minutes — a shared-state DoS.
+func TestRateLimitedAuthenticator_NilConnBypassesRateLimit(t *testing.T) {
+	stub := &stubAuthenticator{accept: false}
+	limiter := NewRateLimitedAuthenticator(stub)
+
+	// Saturate the rate-limit on a real conn to ensure it is armed.
+	conn := &stubConn{remote: stubAddr("127.0.0.1:9002")}
+	for i := 0; i < maxI2CPFailedAttempts; i++ {
+		limiter.AuthenticateConnection(conn, "user", "bad")
+	}
+
+	// nil-conn calls MUST reach the delegate regardless of any per-IP lockout.
+	callsBefore := stub.calls
+	limiter.Authenticate("user", "bad") // nil conn — should bypass rate limit
+	if stub.calls == callsBefore {
+		t.Fatal("nil-conn call should reach the delegate, not be blocked by per-IP lockout")
+	}
+
+	// nil-conn with valid credentials must succeed.
+	stub.accept = true
+	if !limiter.Authenticate("user", "good") {
+		t.Fatal("nil-conn with valid credentials should succeed")
 	}
 }
 

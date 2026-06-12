@@ -270,9 +270,10 @@ func assertGarlicNewSessionRoundtrip(t *testing.T, sender, receiver *GarlicSessi
 	t.Helper()
 	encrypted, err := sender.EncryptGarlicMessage(destHash, receiver.GetPublicKey(), plaintext)
 	require.NoError(t, err)
-	decrypted, sessionTag, _, err := receiver.DecryptGarlicMessage(encrypted)
+	decryptedAll, sessionTag, _, err := receiver.DecryptGarlicMessage(encrypted)
 	require.NoError(t, err)
-	assert.Equal(t, plaintext, decrypted, "decrypted plaintext must match original")
+	require.NotEmpty(t, decryptedAll, "decrypt must return at least one clove")
+	assert.Equal(t, plaintext, decryptedAll[0], "decrypted plaintext must match original")
 	assert.Equal(t, [8]byte{}, sessionTag, "New Session decryption must return empty session tag")
 	return encrypted
 }
