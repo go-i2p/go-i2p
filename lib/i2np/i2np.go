@@ -2,7 +2,6 @@ package i2np
 
 import (
 	"encoding/binary"
-	"os"
 	"sync"
 	"time"
 
@@ -11,7 +10,6 @@ import (
 	datalib "github.com/go-i2p/common/data"
 	"github.com/go-i2p/crypto/rand"
 	"github.com/go-i2p/go-i2p/lib/tunnel/buildrecord"
-	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
 
@@ -97,32 +95,13 @@ func generateRandomMessageID() (int, error) {
 }
 
 // NewBaseI2NPMessage creates a new base I2NP message.
-// M-2 FIX: Crash-fast mode (WARNFAIL_I2P=1) rejects CSPRNG failures instead of silently
-// degrading to time-based IDs. When WARNFAIL_I2P is set and CSPRNG fails,
-// panics with the CSPRNG error to fail-fast during testing/debugging.
-// In production (WARNFAIL_I2P not set), logs a critical warning and uses
-// time-based ID (weaker but keeps the process running).
+// Panics if the system CSPRNG is unavailable. An I2P router cannot safely
+// generate message IDs without a cryptographically secure source of randomness;
+// proceeding with predictable IDs would silently leak anonymity.
 func NewBaseI2NPMessage(msgType int) *BaseI2NPMessage {
 	msgID, err := generateRandomMessageID()
 	if err != nil {
-		// M-2 FIX: Crash-fast mode when WARNFAIL_I2P is set
-		if os.Getenv("WARNFAIL_I2P") != "" {
-			log.WithFields(logger.Fields{
-				"at":    "NewBaseI2NPMessage",
-				"error": err.Error(),
-				"mode":  "WARNFAIL_I2P",
-			}).Error("CSPRNG failed in crash-fast mode (WARNFAIL_I2P set)")
-			panic("CSPRNG failed: " + err.Error())
-		}
-
-		// Fallback: use lower 31 bits of UnixNano timestamp.
-		// Less random than CSPRNG but avoids crashing the process.
-		msgID = int(time.Now().UnixNano() & 0x7FFFFFFF)
-		log.WithFields(logger.Fields{
-			"at":          "NewBaseI2NPMessage",
-			"error":       err.Error(),
-			"fallback_id": msgID,
-		}).Error("CSPRNG failed, using time-based message ID fallback — system entropy may be exhausted")
+		panic("i2np: crypto/rand unavailable — cannot safely generate message IDs: " + err.Error())
 	}
 	return &BaseI2NPMessage{
 		type_:      msgType,

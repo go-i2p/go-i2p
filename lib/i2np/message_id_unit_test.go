@@ -2,7 +2,6 @@ package i2np
 
 import (
 	"encoding/binary"
-	"os"
 	"testing"
 
 	"github.com/samber/oops"
@@ -204,81 +203,36 @@ func TestNewBaseI2NPMessage_NoPanic(t *testing.T) {
 	<-done
 }
 
-// TestM2_CSPRNGFailureRejectsOrCrashes tests that CSPRNG failure is handled securely.
-// M-2 FIX: When CSPRNG fails, either crash-fast (WARNFAIL_I2P mode) or use degraded fallback.
-// This test validates that the fallback behavior doesn't silently degrade to predictable IDs
-// without proper detection.
-// NOTE: NOT parallel due to global testInjectRNGError and environment variable modifications.
+// TestM2_CSPRNGFailureAlwaysPanics tests that CSPRNG failure always causes a panic.
+// There is no fallback to time-based IDs; proceeding without a secure RNG would
+// silently leak anonymity by making message IDs predictable.
+// NOTE: NOT parallel due to global testInjectRNGError modifications.
 func TestM2_CSPRNGFailureRejectsOrCrashes(t *testing.T) {
-	// Inject RNG error for this test
 	defer func() {
 		testInjectMutex.Lock()
-		testInjectRNGError = nil // Clean up
+		testInjectRNGError = nil
 		testInjectMutex.Unlock()
 	}()
 
-	tests := []struct {
-		name           string
-		warnFailSet    bool
-		expectPanic    bool
-		expectFallback bool
-	}{
-		{
-			name:           "CSPRNG failure with WARNFAIL_I2P=1 panics",
-			warnFailSet:    true,
-			expectPanic:    true,
-			expectFallback: false,
-		},
-		{
-			name:           "CSPRNG failure without WARNFAIL_I2P uses fallback",
-			warnFailSet:    false,
-			expectPanic:    false,
-			expectFallback: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Set the injected error
+	t.Run("CSPRNG failure always panics", func(t *testing.T) {
+		testInjectMutex.Lock()
+		testInjectRNGError = oops.Errorf("injected CSPRNG failure for M-2 test")
+		testInjectMutex.Unlock()
+		defer func() {
 			testInjectMutex.Lock()
-			testInjectRNGError = oops.Errorf("injected CSPRNG failure for M-2 test")
+			testInjectRNGError = nil
 			testInjectMutex.Unlock()
-			defer func() {
-				testInjectMutex.Lock()
-				testInjectRNGError = nil
-				testInjectMutex.Unlock()
-			}()
+		}()
 
-			if tt.expectPanic {
-				// When WARNFAIL_I2P is set, the function should log Fatal and panic
-				// Save and restore WARNFAIL_I2P
-				oldWarnFail := os.Getenv("WARNFAIL_I2P")
-				os.Setenv("WARNFAIL_I2P", "1")
-				defer os.Setenv("WARNFAIL_I2P", oldWarnFail)
-
-				defer func() {
-					if r := recover(); r == nil {
-						t.Error("expected NewBaseI2NPMessage to panic with WARNFAIL_I2P set")
-					}
-					// Panic happened as expected, test passes
-				}()
-				NewBaseI2NPMessage(I2NPMessageTypeData)
-				// If we reach here, the panic didn't happen
-				t.Error("NewBaseI2NPMessage did not panic despite WARNFAIL_I2P being set")
-			} else if tt.expectFallback {
-				// Without WARNFAIL_I2P, should use time-based fallback
-				// Save and restore WARNFAIL_I2P
-				oldWarnFail := os.Getenv("WARNFAIL_I2P")
-				os.Setenv("WARNFAIL_I2P", "")
-				defer os.Setenv("WARNFAIL_I2P", oldWarnFail)
-
-				msg := NewBaseI2NPMessage(I2NPMessageTypeData)
-				require.NotNil(t, msg, "message should be created with fallback ID")
-				assert.Greater(t, msg.MessageID(), 0, "fallback ID should be positive")
-				assert.LessOrEqual(t, msg.MessageID(), 0x7FFFFFFF, "fallback ID should fit in 31 bits")
+		defer func() {
+			if r := recover(); r == nil {
+				t.Error("expected NewBaseI2NPMessage to panic when CSPRNG fails")
 			}
-		})
-	}
+			// Panic happened as expected, test passes
+		}()
+		NewBaseI2NPMessage(I2NPMessageTypeData)
+		t.Error("NewBaseI2NPMessage did not panic despite CSPRNG failure")
+	})
 }
 
 // TestM2_NormalCSPRNGStillWorks verifies that normal CSPRNG operation is unaffected.

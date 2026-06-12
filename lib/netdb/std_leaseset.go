@@ -562,8 +562,11 @@ func verifyLeaseSet2Hash(key common.Hash, ls2 lease_set2.LeaseSet2) error {
 
 // addLeaseSetEntryToCache stores an entry in the LeaseSet cache, replacing an
 // existing entry only when isNewer returns true for the current occupant.
-// trackExpiry is called after a successful store. Returns true if stored.
-func (db *StdNetDB) addLeaseSetEntryToCache(key common.Hash, entry Entry, isNewer func(Entry) bool, trackExpiry func(), typeName string) bool {
+// trackExpiryLocked is called after a successful store while db.lsCache.mu is
+// still held; it MUST use _setExpiryLocked rather than setExpiry to avoid a
+// self-deadlock (setExpiry would attempt to re-acquire the same write lock).
+// Returns true if stored.
+func (db *StdNetDB) addLeaseSetEntryToCache(key common.Hash, entry Entry, isNewer func(Entry) bool, trackExpiryLocked func(), typeName string) bool {
 	db.lsCache.mu.Lock()
 	defer db.lsCache.mu.Unlock()
 
@@ -576,7 +579,7 @@ func (db *StdNetDB) addLeaseSetEntryToCache(key common.Hash, entry Entry, isNewe
 	}
 
 	db.lsCache.entries[key] = entry
-	trackExpiry()
+	trackExpiryLocked()
 
 	return true
 }
@@ -586,12 +589,13 @@ func (db *StdNetDB) addLeaseSetEntryToCache(key common.Hash, entry Entry, isNewe
 // has a more recent Published timestamp. Returns true if the entry was
 // added or updated.
 func (db *StdNetDB) addLeaseSet2ToCache(key common.Hash, ls2 lease_set2.LeaseSet2) bool {
+	expiryTime := ls2.ExpirationTime()
 	return db.addLeaseSetEntryToCache(key, Entry{LeaseSet2: &ls2}, func(existing Entry) bool {
 		if existing.LeaseSet2 == nil {
 			return true
 		}
 		return ls2.PublishedTime().After(existing.LeaseSet2.PublishedTime())
-	}, func() { db.trackLeaseSet2Expiration(key, ls2) }, "LeaseSet2")
+	}, func() { db.lsCache._setExpiryLocked(key, expiryTime) }, "LeaseSet2")
 }
 
 // persistLeaseSet2ToFilesystem saves a LeaseSet2 entry to the filesystem.
@@ -750,12 +754,13 @@ func verifyEncryptedLeaseSetHash(key common.Hash, els encrypted_leaseset.Encrypt
 // If an entry already exists, it is replaced only if the new EncryptedLeaseSet
 // has a more recent Published timestamp. Returns true if the entry was added or updated.
 func (db *StdNetDB) addEncryptedLeaseSetToCache(key common.Hash, els encrypted_leaseset.EncryptedLeaseSet) bool {
+	expiryTime := els.ExpirationTime()
 	return db.addLeaseSetEntryToCache(key, Entry{EncryptedLeaseSet: &els}, func(existing Entry) bool {
 		if existing.EncryptedLeaseSet == nil {
 			return true
 		}
 		return els.PublishedTime().After(existing.EncryptedLeaseSet.PublishedTime())
-	}, func() { db.trackEncryptedLeaseSetExpiration(key, els) }, "EncryptedLeaseSet")
+	}, func() { db.lsCache._setExpiryLocked(key, expiryTime) }, "EncryptedLeaseSet")
 }
 
 // persistEncryptedLeaseSetToFilesystem saves an EncryptedLeaseSet entry to the filesystem.
@@ -895,12 +900,13 @@ func verifyMetaLeaseSetHash(key common.Hash, mls meta_leaseset.MetaLeaseSet) err
 // If an entry already exists, it is replaced only if the new MetaLeaseSet
 // has a more recent Published timestamp. Returns true if the entry was added or updated.
 func (db *StdNetDB) addMetaLeaseSetToCache(key common.Hash, mls meta_leaseset.MetaLeaseSet) bool {
+	expiryTime := mls.ExpirationTime()
 	return db.addLeaseSetEntryToCache(key, Entry{MetaLeaseSet: &mls}, func(existing Entry) bool {
 		if existing.MetaLeaseSet == nil {
 			return true
 		}
 		return mls.PublishedTime().After(existing.MetaLeaseSet.PublishedTime())
-	}, func() { db.trackMetaLeaseSetExpiration(key, mls) }, "MetaLeaseSet")
+	}, func() { db.lsCache._setExpiryLocked(key, expiryTime) }, "MetaLeaseSet")
 }
 
 // persistMetaLeaseSetToFilesystem saves a MetaLeaseSet entry to the filesystem.
