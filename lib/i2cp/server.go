@@ -165,7 +165,7 @@ func (s *Server) GetSessionManager() *SessionManager {
 // isLoopbackAddr checks if the given address is a loopback address.
 // L-6 FIX: Helper to detect non-loopback I2CP deployments for config warning.
 // Returns true for Unix sockets (always local), "localhost", "127.0.0.1", "::1", etc.
-func isLoopbackAddr(addr string, network string) bool {
+func isLoopbackAddr(addr, network string) bool {
 	// Unix sockets are always local
 	if network == "unix" {
 		return true

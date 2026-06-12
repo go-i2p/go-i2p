@@ -107,7 +107,7 @@ type PromoteOptions struct {
 //
 // On promotion failure (race lost):
 //   - The caller is responsible for closing the session and connection
-func (sr *SessionRegistry) Promote(peerHash data.Hash, original interface{}, newSession interface{}, opts PromoteOptions) (interface{}, bool) {
+func (sr *SessionRegistry) Promote(peerHash data.Hash, original, newSession interface{}, opts PromoteOptions) (interface{}, bool) {
 	// Defense-in-depth: refuse to promote an acceptedConn (dual-ownership protection)
 	if _, ok := original.(*acceptedConn); ok {
 		sr.logger.WithField("peer_hash", logutil.HashPrefixPlain(peerHash)).

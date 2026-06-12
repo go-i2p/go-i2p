@@ -10,9 +10,9 @@ import (
 	"github.com/go-i2p/common/session_key"
 	"github.com/go-i2p/crypto/rand"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
-	"github.com/go-i2p/go-i2p/lib/util/logutil"
 )
 
 // BuildTunnel implements tunnel.BuilderInterface for automatic pool maintenance.

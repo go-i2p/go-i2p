@@ -5,8 +5,8 @@ import (
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
-	"github.com/go-i2p/logger"
 	"github.com/go-i2p/go-i2p/lib/util/logutil"
+	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
 

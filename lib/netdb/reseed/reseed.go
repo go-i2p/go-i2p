@@ -121,7 +121,7 @@ func (r *Reseed) ProcessLocalZipFileWithLimit(filePath string, limit int) ([]rou
 // unwrap is a callback that transforms raw file data into zip content
 // (e.g., parsing and extracting SU3 files, or identity for raw zip files).
 // This eliminates duplication between ProcessLocalSU3FileWithLimit and ProcessLocalZipFileWithLimit.
-func (r *Reseed) processLocalFileWithLimit(filePath string, fileType string, unwrap func([]byte) ([]byte, error), limit int) ([]router_info.RouterInfo, error) {
+func (r *Reseed) processLocalFileWithLimit(filePath, fileType string, unwrap func([]byte) ([]byte, error), limit int) ([]router_info.RouterInfo, error) {
 	log.WithFields(logger.Fields{
 		"file_path": filePath,
 		"file_type": fileType,

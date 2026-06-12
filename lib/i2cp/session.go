@@ -299,7 +299,6 @@ func NewSessionWithKeys(id uint16, dest *destination.Destination, config *Sessio
 
 // newSessionInternal is the internal implementation shared by both NewSession and NewSessionWithKeys.
 func newSessionInternal(id uint16, dest *destination.Destination, config *SessionConfig, sigPriv types.SigningPrivateKey, encPriv types.PrivateEncryptionKey, identityPadding []byte) (*Session, error) {
-
 	keyStore, dest, err := prepareDestinationAndKeys(dest, sigPriv, encPriv, identityPadding)
 	if err != nil {
 		log.WithFields(logger.Fields{
