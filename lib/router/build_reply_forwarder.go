@@ -1,11 +1,10 @@
 package router
 
 import (
-	"fmt"
-
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
@@ -32,7 +31,7 @@ func (f *transportBuildReplyForwarder) ForwardBuildReplyToRouter(routerHash comm
 
 	log.WithFields(logger.Fields{
 		"at":         "ForwardBuildReplyToRouter",
-		"peer":       fmt.Sprintf("%x", routerHash[:8]),
+		"peer":       logutil.HashPrefix(routerHash),
 		"message_id": messageID,
 		"short":      isShortBuild,
 	}).Debug("forwarded build reply to router")
@@ -59,7 +58,7 @@ func (f *transportBuildReplyForwarder) ForwardBuildReplyThroughTunnel(gatewayHas
 
 	log.WithFields(logger.Fields{
 		"at":         "ForwardBuildReplyThroughTunnel",
-		"gateway":    fmt.Sprintf("%x", gatewayHash[:8]),
+		"gateway":    logutil.HashPrefix(gatewayHash),
 		"tunnel_id":  tunnelID,
 		"message_id": messageID,
 		"short":      isShortBuild,

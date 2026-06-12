@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 
@@ -59,7 +60,7 @@ func (p *MessageProcessor) processDatabaseStoreMessage(msg Message) error {
 
 	log.WithFields(logger.Fields{
 		"at":         "processDatabaseStoreMessage",
-		"key":        fmt.Sprintf("%x", key[:8]),
+		"key":        logutil.HashPrefix(key),
 		"store_type": storeType,
 		"data_size":  len(data),
 	}).Debug("Processing DatabaseStore message")
@@ -69,14 +70,14 @@ func (p *MessageProcessor) processDatabaseStoreMessage(msg Message) error {
 		log.WithFields(logger.Fields{
 			"at":     "processDatabaseStoreMessage",
 			"reason": "store_failed",
-			"key":    fmt.Sprintf("%x", key[:8]),
+			"key":    logutil.HashPrefix(key),
 		}).WithError(err).Error("Failed to store data in NetDB")
 		return oops.Wrapf(err, "failed to store in NetDB")
 	}
 
 	log.WithFields(logger.Fields{
 		"at":         "processDatabaseStoreMessage",
-		"key":        fmt.Sprintf("%x", key[:8]),
+		"key":        logutil.HashPrefix(key),
 		"store_type": storeType,
 	}).Debug("Successfully stored data in NetDB")
 
@@ -121,8 +122,8 @@ func (p *MessageProcessor) processDatabaseSearchReplyMessage(msg Message) error 
 
 	log.WithFields(logger.Fields{
 		"at":          "processDatabaseSearchReplyMessage",
-		"key":         fmt.Sprintf("%x", searchReply.Key[:8]),
-		"from":        fmt.Sprintf("%x", searchReply.From[:8]),
+		"key":         logutil.HashPrefix(searchReply.Key),
+		"from":        logutil.HashPrefix(searchReply.From),
 		"peer_count":  searchReply.Count,
 		"peer_hashes": len(searchReply.PeerHashes),
 	}).Debug("Processing DatabaseSearchReply message")
@@ -132,7 +133,7 @@ func (p *MessageProcessor) processDatabaseSearchReplyMessage(msg Message) error 
 		p.searchReplyHandler.HandleSearchReply(searchReply.Key, searchReply.PeerHashes)
 		log.WithFields(logger.Fields{
 			"at":          "processDatabaseSearchReplyMessage",
-			"key":         fmt.Sprintf("%x", searchReply.Key[:8]),
+			"key":         logutil.HashPrefix(searchReply.Key),
 			"suggestions": len(searchReply.PeerHashes),
 		}).Debug("Delivered search reply suggestions to handler")
 	} else {
@@ -141,7 +142,7 @@ func (p *MessageProcessor) processDatabaseSearchReplyMessage(msg Message) error 
 			log.WithFields(logger.Fields{
 				"at":        "processDatabaseSearchReplyMessage",
 				"peer_idx":  i,
-				"peer_hash": fmt.Sprintf("%x", peerHash[:8]),
+				"peer_hash": logutil.HashPrefix(peerHash),
 			}).Debug("Suggested peer from search reply (no handler configured)")
 		}
 	}
@@ -289,8 +290,8 @@ func (p *MessageProcessor) processDatabaseLookupMessage(msg Message) error {
 		key := reader.GetKey()
 		from := reader.GetFrom()
 		log.WithFields(logger.Fields{
-			"key":  fmt.Sprintf("%x", key[:8]),
-			"from": fmt.Sprintf("%x", from[:8]),
+			"key":  logutil.HashPrefix(key),
+			"from": logutil.HashPrefix(from),
 		}).Debug("Processing database lookup")
 		return p.dbManager.PerformLookup(reader)
 	}
@@ -455,7 +456,7 @@ func (p *MessageProcessor) decryptGarlicData(msgID int, encryptedData []byte) ([
 	log.WithFields(logger.Fields{
 		"msg_id":         msgID,
 		"decrypted_size": len(decryptedData),
-		"session_tag":    fmt.Sprintf("%x", sessionTag[:8]),
+		"session_tag":    fmt.Sprintf("%x", sessionTag[:]),
 	}).Debug("Garlic message decrypted successfully")
 
 	return decryptedData, sessionTag, nil
@@ -562,7 +563,7 @@ func (p *MessageProcessor) handleDestinationDelivery(index int, clove GarlicClov
 	if p.cloveForwarder == nil {
 		log.WithFields(logger.Fields{
 			"clove_index": index,
-			"dest_hash":   fmt.Sprintf("%x", clove.DeliveryInstructions.Hash[:8]),
+			"dest_hash":   logutil.HashPrefix(clove.DeliveryInstructions.Hash),
 		}).Warn("DESTINATION delivery requires clove forwarder")
 		return
 	}
@@ -574,7 +575,7 @@ func (p *MessageProcessor) handleDestinationDelivery(index int, clove GarlicClov
 	if err != nil {
 		log.WithFields(logger.Fields{
 			"clove_index": index,
-			"dest_hash":   fmt.Sprintf("%x", clove.DeliveryInstructions.Hash[:8]),
+			"dest_hash":   logutil.HashPrefix(clove.DeliveryInstructions.Hash),
 			"error":       err,
 		}).Error("Failed to forward clove to destination")
 		return
@@ -582,7 +583,7 @@ func (p *MessageProcessor) handleDestinationDelivery(index int, clove GarlicClov
 
 	log.WithFields(logger.Fields{
 		"clove_index": index,
-		"dest_hash":   fmt.Sprintf("%x", clove.DeliveryInstructions.Hash[:8]),
+		"dest_hash":   logutil.HashPrefix(clove.DeliveryInstructions.Hash),
 	}).Debug("Successfully forwarded clove to destination")
 }
 
@@ -591,7 +592,7 @@ func (p *MessageProcessor) handleRouterDelivery(index int, clove GarlicClove) {
 	if p.cloveForwarder == nil {
 		log.WithFields(logger.Fields{
 			"clove_index": index,
-			"router_hash": fmt.Sprintf("%x", clove.DeliveryInstructions.Hash[:8]),
+			"router_hash": logutil.HashPrefix(clove.DeliveryInstructions.Hash),
 		}).Warn("ROUTER delivery requires clove forwarder")
 		return
 	}
@@ -603,7 +604,7 @@ func (p *MessageProcessor) handleRouterDelivery(index int, clove GarlicClove) {
 	if err != nil {
 		log.WithFields(logger.Fields{
 			"clove_index": index,
-			"router_hash": fmt.Sprintf("%x", clove.DeliveryInstructions.Hash[:8]),
+			"router_hash": logutil.HashPrefix(clove.DeliveryInstructions.Hash),
 			"error":       err,
 		}).Error("Failed to forward clove to router")
 		return
@@ -611,7 +612,7 @@ func (p *MessageProcessor) handleRouterDelivery(index int, clove GarlicClove) {
 
 	log.WithFields(logger.Fields{
 		"clove_index": index,
-		"router_hash": fmt.Sprintf("%x", clove.DeliveryInstructions.Hash[:8]),
+		"router_hash": logutil.HashPrefix(clove.DeliveryInstructions.Hash),
 	}).Debug("Successfully forwarded clove to router")
 }
 
@@ -620,7 +621,7 @@ func (p *MessageProcessor) handleTunnelDelivery(index int, clove GarlicClove) {
 	if p.cloveForwarder == nil {
 		log.WithFields(logger.Fields{
 			"clove_index":  index,
-			"gateway_hash": fmt.Sprintf("%x", clove.DeliveryInstructions.Hash[:8]),
+			"gateway_hash": logutil.HashPrefix(clove.DeliveryInstructions.Hash),
 			"tunnel_id":    clove.DeliveryInstructions.TunnelID,
 		}).Warn("TUNNEL delivery requires clove forwarder")
 		return
@@ -634,7 +635,7 @@ func (p *MessageProcessor) handleTunnelDelivery(index int, clove GarlicClove) {
 	if err != nil {
 		log.WithFields(logger.Fields{
 			"clove_index":  index,
-			"gateway_hash": fmt.Sprintf("%x", clove.DeliveryInstructions.Hash[:8]),
+			"gateway_hash": logutil.HashPrefix(clove.DeliveryInstructions.Hash),
 			"tunnel_id":    clove.DeliveryInstructions.TunnelID,
 			"error":        err,
 		}).Error("Failed to forward clove through tunnel")
@@ -643,7 +644,7 @@ func (p *MessageProcessor) handleTunnelDelivery(index int, clove GarlicClove) {
 
 	log.WithFields(logger.Fields{
 		"clove_index":  index,
-		"gateway_hash": fmt.Sprintf("%x", clove.DeliveryInstructions.Hash[:8]),
+		"gateway_hash": logutil.HashPrefix(clove.DeliveryInstructions.Hash),
 		"tunnel_id":    clove.DeliveryInstructions.TunnelID,
 	}).Debug("Successfully forwarded clove through tunnel")
 }

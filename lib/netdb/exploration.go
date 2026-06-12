@@ -2,11 +2,11 @@ package netdb
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
 	"github.com/go-i2p/crypto/rand"
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/samber/oops"
 
 	common "github.com/go-i2p/common/data"
@@ -292,7 +292,7 @@ func (e *Explorer) performExplorationRound() {
 func (e *Explorer) performExploratoryLookup(index int, lookupHash common.Hash) error {
 	log.WithFields(logger.Fields{
 		"index": index,
-		"hash":  fmt.Sprintf("%x", lookupHash[:8]),
+		"hash":  logutil.HashPrefix(lookupHash),
 	}).Debug("Performing exploratory lookup")
 
 	// Reuse a cached transport-capable resolver so lookups can reach the network.

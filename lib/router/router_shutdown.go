@@ -7,6 +7,7 @@ import (
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/transport"
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 
 	"github.com/go-i2p/logger"
 )
@@ -300,7 +301,7 @@ func (r *Router) clearActiveSessions() {
 			log.WithFields(logger.Fields{
 				"at":        "(Router) clearActiveSessions",
 				"phase":     "finalization",
-				"peer_hash": fmt.Sprintf("%x", hash[:8]),
+				"peer_hash": logutil.HashPrefix(hash),
 				"error":     err.Error(),
 			}).Warn("failed to close transport session during shutdown")
 		}

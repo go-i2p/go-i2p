@@ -16,6 +16,7 @@ import (
 	"github.com/go-i2p/crypto/types"
 	"github.com/go-i2p/go-i2p/lib/nat"
 	"github.com/go-i2p/go-i2p/lib/transport"
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
@@ -208,9 +209,8 @@ func prepareIdentityAndLog(identity router_info.RouterInfo, listenerAddress stri
 	if err != nil {
 		return oops.Wrapf(err, "failed to get router identity hash")
 	}
-	identHashBytes := identHash.Bytes()
 	l.WithFields(map[string]interface{}{
-		"router_hash":      fmt.Sprintf("%x", identHashBytes[:8]),
+		"router_hash":      logutil.HashPrefix(identHash),
 		"listener_address": listenerAddress,
 	}).Info("Initializing SSU2 transport")
 	return nil
@@ -452,7 +452,7 @@ func (t *SSU2Transport) Accept() (net.Conn, error) {
 		// Let the trackedConn wrapper be GC'd harmlessly.
 		t.logger.WithFields(map[string]interface{}{
 			"remote_addr": conn.RemoteAddr().String(),
-			"peer_hash":   fmt.Sprintf("%x", peerHash[:8]),
+			"peer_hash":   logutil.HashPrefix(peerHash),
 		}).Debug("Inbound SSU2 connection promoted concurrently; not delivering to Accept")
 		// Note: We DO NOT unreserve the slot here because the promoted session
 		// is still using it. The session's cleanup callback will handle unreserving
@@ -475,7 +475,7 @@ func (t *SSU2Transport) trackInboundConnection(conn net.Conn) (net.Conn, bool) {
 		conn.Close()
 		t.logger.WithFields(map[string]interface{}{
 			"remote_addr": conn.RemoteAddr().String(),
-			"peer_hash":   fmt.Sprintf("%x", peerHash[:8]),
+			"peer_hash":   logutil.HashPrefix(peerHash),
 		}).Debug("Duplicate inbound SSU2 connection detected and closed; reservation unreserved")
 		return conn, false // Mark as duplicate
 	}
@@ -604,8 +604,7 @@ func (t *SSU2Transport) SetIdentity(ident router_info.RouterInfo) error {
 	if err != nil {
 		return oops.Wrapf(err, "failed to get router identity hash")
 	}
-	identHashBytes := identHash.Bytes()
-	t.logger.WithField("router_hash", fmt.Sprintf("%x", identHashBytes[:8])).Info("Updating SSU2 transport identity")
+	t.logger.WithField("router_hash", logutil.HashPrefix(identHash)).Info("Updating SSU2 transport identity")
 
 	ssu2Config, err := createSSU2Config(ident)
 	if err != nil {
@@ -798,9 +797,8 @@ func (t *SSU2Transport) promoteInboundConnection(conn net.Conn, original interfa
 	// This should never happen if resolveSessionFromMap is correct, but
 	// defense-in-depth prevents dual socket ownership.
 	if _, ok := original.(acceptedConn); ok {
-		routerHashBytes := routerHash.Bytes()
 		t.logger.WithFields(map[string]interface{}{
-			"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
+			"router_hash": logutil.HashPrefix(routerHash),
 		}).Error("Refusing to promote acceptedConn (already delivered to Accept)")
 		return nil, false
 	}
@@ -822,18 +820,17 @@ func (t *SSU2Transport) promoteInboundConnection(conn net.Conn, original interfa
 	// without running workers," but that's a non-issue: only the winner is
 	// visible in the map, and we start its workers immediately after CAS.
 
-	routerHashBytes := routerHash.Bytes()
 
 	// Use SessionRegistry.Promote to handle CAS, callback setup, and worker startup atomically
 	promoteOpts := transport.PromoteOptions{
 		PreflightCheck: func() error {
 			// Pre-flight check: verify session is in map before starting workers (CRITICAL-3.1)
 			if mapValue, exists := t.sessionRegistry.Load(routerHash); !exists {
-				t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).
+				t.logger.WithField("router_hash", logutil.HashPrefix(routerHash)).
 					Error("CRITICAL-3.1 violation: CAS succeeded but session missing from map before StartWorkers")
 				return fmt.Errorf("session not in map")
 			} else if mapSession, ok := mapValue.(*SSU2Session); !ok || mapSession != promoted {
-				t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).
+				t.logger.WithField("router_hash", logutil.HashPrefix(routerHash)).
 					Error("CRITICAL-3.1 violation: CAS succeeded but wrong session in map before StartWorkers")
 				return fmt.Errorf("wrong session in map")
 			}
@@ -845,7 +842,7 @@ func (t *SSU2Transport) promoteInboundConnection(conn net.Conn, original interfa
 		StartWorkers: func() {
 			promoted.StartWorkers()
 			t.logger.WithFields(map[string]interface{}{
-				"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
+				"router_hash": logutil.HashPrefix(routerHash),
 			}).Info("Promoted inbound net.Conn to SSU2Session")
 		},
 	}
@@ -896,7 +893,7 @@ func (t *SSU2Transport) createOutboundSession(routerInfo router_info.RouterInfo,
 	if err != nil {
 		t.recordPeerFailure(routerHash, err)
 		t.logger.WithFields(map[string]interface{}{
-			"router_hash": fmt.Sprintf("%x", routerHash[:8]),
+			"router_hash": logutil.HashPrefix(routerHash),
 			"error":       err.Error(),
 		}).Warn("SSU2 outbound dial failed")
 		return nil, WrapSSU2Error(err, "dialing SSU2 connection")
@@ -1048,21 +1045,19 @@ func (t *SSU2Transport) registerOrReuseSession(conn *ssu2noise.SSU2Conn, routerH
 		// This prevents future connection attempts from reusing a corrupted state.
 		// The connection already closed, so we cannot recover it.
 		t.sessionRegistry.Delete(routerHash)
-		routerHashBytes := routerHash.Bytes()
 		t.logger.WithFields(map[string]interface{}{
-			"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
+			"router_hash": logutil.HashPrefix(routerHash),
 		}).Error("registerOrReuseSession: corrupt session map entry deleted")
 		return nil, false, oops.Errorf("unexpected session map entry type")
 	}
 
 	// We won the store — start workers NOW
 	// Pre-flight check: verify session is in map before starting workers (CRITICAL-3.1)
-	routerHashBytes := routerHash.Bytes()
 	if mapValue, exists := t.sessionRegistry.Load(routerHash); !exists {
-		t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).
+		t.logger.WithField("router_hash", logutil.HashPrefix(routerHash)).
 			Error("CRITICAL-3.1 violation: LoadOrStore succeeded but session missing from map before StartWorkers")
 	} else if mapSession, ok := mapValue.(*SSU2Session); !ok || mapSession != session {
-		t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).
+		t.logger.WithField("router_hash", logutil.HashPrefix(routerHash)).
 			Error("CRITICAL-3.1 violation: LoadOrStore succeeded but wrong session in map before StartWorkers")
 	}
 
@@ -1087,7 +1082,7 @@ func (t *SSU2Transport) promoteRawConnToSession(rawConn net.Conn, routerHash dat
 	if !ok {
 		// Not an SSU2Conn — cannot promote.
 		t.logger.WithFields(map[string]interface{}{
-			"router_hash": fmt.Sprintf("%x", routerHash[:8]),
+			"router_hash": logutil.HashPrefix(routerHash),
 			"conn_type":   fmt.Sprintf("%T", rawConn),
 		}).Error("promoteRawConnToSession: cannot promote non-SSU2Conn")
 		return nil
@@ -1107,18 +1102,17 @@ func (t *SSU2Transport) promoteRawConnToSession(rawConn net.Conn, routerHash dat
 	// without running workers," but that's a non-issue: only the winner is
 	// visible in the map, and we start its workers immediately after CAS.
 
-	routerHashBytes := routerHash.Bytes()
 
 	// Use SessionRegistry.Promote to handle CAS, callback setup, and worker startup atomically
 	promoteOpts := transport.PromoteOptions{
 		PreflightCheck: func() error {
 			// Pre-flight check: verify session is in map before starting workers (CRITICAL-3.1)
 			if mapValue, exists := t.sessionRegistry.Load(routerHash); !exists {
-				t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).
+				t.logger.WithField("router_hash", logutil.HashPrefix(routerHash)).
 					Error("CRITICAL-3.1 violation: CAS succeeded but session missing from map before StartWorkers")
 				return fmt.Errorf("session not in map")
 			} else if mapSession, ok := mapValue.(*SSU2Session); !ok || mapSession != promoted {
-				t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).
+				t.logger.WithField("router_hash", logutil.HashPrefix(routerHash)).
 					Error("CRITICAL-3.1 violation: CAS succeeded but wrong session in map before StartWorkers")
 				return fmt.Errorf("wrong session in map")
 			}
@@ -1130,7 +1124,7 @@ func (t *SSU2Transport) promoteRawConnToSession(rawConn net.Conn, routerHash dat
 		StartWorkers: func() {
 			promoted.StartWorkers()
 			t.logger.WithFields(map[string]interface{}{
-				"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
+				"router_hash": logutil.HashPrefix(routerHash),
 			}).Info("Promoted inbound net.Conn to SSU2Session in registerOrReuseSession")
 		},
 	}

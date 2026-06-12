@@ -1,16 +1,15 @@
 package router
 
 import (
-	"fmt"
 	"time"
 
 	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/go-i2p/lib/i2np"
+	"github.com/go-i2p/go-i2p/lib/tunnel"
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/samber/oops"
 
 	"github.com/go-i2p/logger"
-
-	"github.com/go-i2p/go-i2p/lib/i2np"
-	"github.com/go-i2p/go-i2p/lib/tunnel"
 )
 
 // logSubsystemStop logs a subsystem shutdown event with standard fields.
@@ -524,7 +523,7 @@ func (r *Router) initializeGarlicRouter() {
 	r.runMux.Unlock()
 
 	log.WithFields(logger.Fields{
-		"our_hash":        fmt.Sprintf("%x", routerHash[:8]),
+		"our_hash":        logutil.HashPrefix(routerHash),
 		"tunnel_support":  tunnelPool != nil,
 		"transport_ready": r.transports != nil,
 		"netdb_ready":     r.netdb != nil,

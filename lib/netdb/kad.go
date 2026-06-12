@@ -678,7 +678,7 @@ func parseDatabaseStore(data []byte, targetHash common.Hash) (*i2np.DatabaseStor
 		log.WithFields(logger.Fields{
 			"at":       "processDatabaseStoreResponse",
 			"expected": logutil.HashPrefixPlain(targetHash),
-			"got":      fmt.Sprintf("%x", dbStore.Key[:8]),
+			"got":      logutil.HashPrefix(dbStore.Key),
 		}).Warn("DatabaseStore key mismatch")
 		return nil, oops.Errorf("key mismatch in response")
 	}
@@ -743,7 +743,7 @@ func (kr *KademliaResolver) processDatabaseSearchReplyResponse(data []byte, targ
 		log.WithFields(logger.Fields{
 			"at":          "processDatabaseSearchReplyResponse",
 			"target":      logutil.HashPrefixPlain(targetHash),
-			"from":        fmt.Sprintf("%x", searchReply.From[:8]),
+			"from":        logutil.HashPrefix(searchReply.From),
 			"suggestions": len(searchReply.PeerHashes),
 		}).Debug("Peer returned suggestions for iterative lookup")
 	}

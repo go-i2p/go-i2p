@@ -1,9 +1,8 @@
 package i2np
 
 import (
-	"fmt"
-
 	"github.com/go-i2p/crypto/types"
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/samber/oops"
 
 	"github.com/go-i2p/logger"
@@ -169,8 +168,8 @@ func (s *ShortTunnelBuildReply) verifyRecordIntegrity(hopIndex int, record Build
 		log.WithFields(logger.Fields{
 			"at":            "ShortTunnelBuildReply.verifyRecordIntegrity",
 			"hop_index":     hopIndex,
-			"provided_hash": fmt.Sprintf("%x", record.Hash[:8]),
-			"computed_hash": fmt.Sprintf("%x", computedHash[:8]),
+			"provided_hash": logutil.HashPrefix(record.Hash),
+			"computed_hash": logutil.HashPrefix(computedHash),
 		}).Warn("Record hash mismatch - integrity check failed")
 		return oops.Errorf("record %d hash mismatch: provided %x, computed %x", hopIndex, record.Hash[:8], computedHash[:8])
 	}

@@ -6,6 +6,7 @@ import (
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/crypto/rand"
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 	"golang.org/x/crypto/chacha20poly1305"
@@ -364,7 +365,7 @@ func (p *MessageProcessor) processAllBuildRecords(messageID int, records []Build
 				"at":           "processAllBuildRecords",
 				"message_id":   messageID,
 				"record_index": i,
-				"record_ident": fmt.Sprintf("%x", record.OurIdent[:8]),
+				"record_ident": logutil.HashPrefix(record.OurIdent),
 			}).Debug("Skipping build record not destined for us")
 			continue
 		}
@@ -609,7 +610,7 @@ func (p *MessageProcessor) forwardBuildReply(messageID int, record BuildRequestR
 		log.WithFields(logger.Fields{
 			"at":          "forwardBuildReply",
 			"message_id":  messageID,
-			"next_ident":  fmt.Sprintf("%x", record.NextIdent[:8]),
+			"next_ident":  logutil.HashPrefix(record.NextIdent),
 			"next_tunnel": record.NextTunnel,
 		}).Warn("build reply forwarder not configured - reply not sent")
 		return nil // Not an error - forwarder is optional
@@ -647,7 +648,7 @@ func (p *MessageProcessor) handleAcceptedBuildRecord(messageID, index int, recor
 		"message_id":     messageID,
 		"record_index":   index,
 		"receive_tunnel": record.ReceiveTunnel,
-		"target_hash":    fmt.Sprintf("%x", record.OurIdent[:8]),
+		"target_hash":    logutil.HashPrefix(record.OurIdent),
 	}).Info("accepting tunnel build request")
 
 	expiry := time.Now().Add(10 * time.Minute) // Tunnel lifetime per I2P spec

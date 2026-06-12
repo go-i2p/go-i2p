@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 	"time"
 
@@ -809,7 +808,7 @@ func (gr *GarlicMessageRouter) retryPendingLookups() {
 	// Phase 2: Forward messages outside the lock (may block on network I/O)
 	for _, fw := range work {
 		log.WithFields(logger.Fields{
-			"dest_hash":     fmt.Sprintf("%x", fw.destHash[:8]),
+			"dest_hash":     logutil.HashPrefix(fw.destHash),
 			"message_count": len(fw.messages),
 		}).Info("LeaseSet found, processing pending messages")
 		gr.forwardPendingMessages(fw.destHash, fw.gatewayHash, fw.tunnelID, fw.messages)
