@@ -232,16 +232,16 @@ func TestSendWithDeliveryMsgIDIncrement(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, uint32(0), gw.msgIDSeq, "Non-fragmented send should not increment msgIDSeq")
 
-	// A fragmented send should increment msgIDSeq
+	// A fragmented send should produce a non-zero message ID (now generated via crypto/rand,
+	// not a sequential counter, so we only verify the send succeeds without error).
 	largeMsg := make([]byte, 1050)
 	_, err = gw.SendWithDelivery(largeMsg, LocalDelivery())
 	require.NoError(t, err)
-	assert.Equal(t, uint32(1), gw.msgIDSeq, "First fragmented send should set msgIDSeq to 1")
+	// msgIDSeq is no longer a monotonic counter; message IDs come from crypto/rand.
 
-	// Second fragmented send
+	// Second fragmented send should also succeed.
 	_, err = gw.SendWithDelivery(largeMsg, LocalDelivery())
 	require.NoError(t, err)
-	assert.Equal(t, uint32(2), gw.msgIDSeq)
 }
 
 // TestCreateDeliveryInstructionsForConfig tests delivery instructions generation.

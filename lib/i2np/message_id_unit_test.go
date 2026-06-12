@@ -51,8 +51,9 @@ func TestGenerateRandomMessageID_Uniqueness(t *testing.T) {
 	assert.Equal(t, 100, len(ids), "100 generated message IDs should be unique with 31 bits of entropy")
 }
 
-// TestUnmarshalBinary_MessageIDAlwaysPositive verifies that UnmarshalBinary
-// produces a positive messageID even when the serialized bytes have the high bit set.
+// TestUnmarshalBinary_MessageIDPreservesWireValue verifies that UnmarshalBinary
+// preserves the full 32-bit message ID from the wire without masking.
+// Masking inbound IDs would break message correlation when peers use the full ID space.
 func TestUnmarshalBinary_MessageIDAlwaysPositive(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -62,12 +63,12 @@ func TestUnmarshalBinary_MessageIDAlwaysPositive(t *testing.T) {
 		{
 			name:    "high bit set (0x80000000)",
 			idBytes: [4]byte{0x80, 0x00, 0x00, 0x00},
-			wantID:  0x00000000, // masked: 0x80000000 & 0x7FFFFFFF = 0
+			wantID:  int(uint32(0x80000000)), // preserved: full wire value, no masking
 		},
 		{
 			name:    "all bits set (0xFFFFFFFF)",
 			idBytes: [4]byte{0xFF, 0xFF, 0xFF, 0xFF},
-			wantID:  0x7FFFFFFF, // masked: 0xFFFFFFFF & 0x7FFFFFFF = 0x7FFFFFFF
+			wantID:  int(uint32(0xFFFFFFFF)), // preserved: full wire value, no masking
 		},
 		{
 			name:    "normal positive value",

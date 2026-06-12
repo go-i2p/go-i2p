@@ -198,9 +198,9 @@ func (m *BaseI2NPMessage) UnmarshalShortI2NP(data []byte) error {
 	// Type (1 byte)
 	m.type_ = int(data[0])
 
-	// Message ID (4 bytes, big-endian)
-	// Mask to 31 bits to guarantee positive int on 32-bit platforms
-	m.messageID = int(binary.BigEndian.Uint32(data[1:5])) & 0x7FFFFFFF
+	// Message ID (4 bytes, big-endian); preserve all 32 bits from the wire — masking
+	// inbound IDs truncates half the peer ID space and breaks message correlation.
+	m.messageID = int(binary.BigEndian.Uint32(data[1:5]))
 
 	// Short Expiration (4 bytes, big-endian, seconds since epoch)
 	expSecs := binary.BigEndian.Uint32(data[5:9])
@@ -272,8 +272,8 @@ func (m *BaseI2NPMessage) UnmarshalBinary(data []byte) error {
 
 	// Parse header
 	m.type_ = int(data[0])
-	// Mask to 31 bits to guarantee positive int on 32-bit platforms
-	m.messageID = (int(data[1])<<24 | int(data[2])<<16 | int(data[3])<<8 | int(data[4])) & 0x7FFFFFFF
+	// Preserve all 32 bits from the wire; masking inbound IDs breaks message correlation.
+	m.messageID = int(data[1])<<24 | int(data[2])<<16 | int(data[3])<<8 | int(data[4])
 
 	// Parse expiration
 	var expDate datalib.Date

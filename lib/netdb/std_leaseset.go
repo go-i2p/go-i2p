@@ -173,25 +173,31 @@ func (db *StdNetDB) addLeaseSetToCache(key common.Hash, ls lease_set.LeaseSet) b
 		return true
 	}
 
-	// New LeaseSet: check admission limits
+	// New LeaseSet: check admission limits and capacity without releasing the lock.
+	// Releasing and re-acquiring the lock here would allow concurrent writers to
+	// invalidate the count and capacity snapshot (TOCTOU), potentially bypassing
+	// capacity limits.
 	currentCount := len(db.lsCache.entries)
-	maxCapacity := db.lsCache.capacity
 
-	// Temporarily unlock to call admission check (non-blocking, has its own lock)
-	db.lsCache.mu.Unlock()
 	err := db.checkLeaseSetAdmissionLimits(key, nil, currentCount)
-	db.lsCache.mu.Lock()
-
 	if err != nil {
 		log.WithField("hash", key).Debug("LeaseSet introduction rejected by admission control")
 		return false
 	}
 
-	// Check capacity and evict if needed
+	// Check capacity and evict if needed. evictSoonestExpiringLeaseSet acquires
+	// db.lsCache.mu internally, so release our lock first, evict, then re-acquire
+	// and re-read the count to confirm we still have room.
+	maxCapacity := db.lsCache.capacity
 	if maxCapacity > 0 && len(db.lsCache.entries) >= maxCapacity {
 		db.lsCache.mu.Unlock()
 		db.evictSoonestExpiringLeaseSet()
 		db.lsCache.mu.Lock()
+		// After eviction, verify we have room; another writer may have filled it.
+		if len(db.lsCache.entries) >= maxCapacity {
+			log.WithField("hash", key).Debug("LeaseSet dropped: cache still at capacity after eviction")
+			return false
+		}
 	}
 
 	// Track expiration time for cleanup FIRST (lock is held)

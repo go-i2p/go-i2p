@@ -161,46 +161,50 @@ func (u *BlockUnframer) BytesRead() int {
 	return u.bytesRead
 }
 
-// ReadNextMessage reads and parses the next NTCP2 frame, returning the first
-// I2NP message found. Non-I2NP blocks are passed to BlockCallback if set.
+// ReadNextMessage reads and parses NTCP2 frames until an I2NP message is found
+// or the connection is closed. Non-I2NP blocks are passed to BlockCallback.
 // Multiple I2NP messages in a single frame are buffered for subsequent calls.
+//
+// Uses an iterative loop rather than recursion so that a peer sending an
+// unbounded stream of non-I2NP (e.g. padding-only) frames cannot cause a
+// goroutine stack overflow.
 func (u *BlockUnframer) ReadNextMessage() (i2np.Message, error) {
-	// Return buffered messages first
-	if len(u.bufferedMsgs) > 0 {
-		msg := u.bufferedMsgs[0]
-		u.bufferedMsgs = u.bufferedMsgs[1:]
-		return msg, nil
+	for {
+		// Return buffered messages first
+		if len(u.bufferedMsgs) > 0 {
+			msg := u.bufferedMsgs[0]
+			u.bufferedMsgs = u.bufferedMsgs[1:]
+			return msg, nil
+		}
+
+		u.bytesRead = 0
+
+		// Read frame data from the connection.
+		// NTCP2Conn.Read() handles SipHash length deobfuscation and AEAD
+		// decryption, returning the decrypted payload containing blocks.
+		payload, err := u.readFrame()
+		if err != nil {
+			return nil, err
+		}
+
+		// Parse blocks from the decrypted payload
+		blocks, err := ParseBlocks(payload)
+		if err != nil {
+			log.WithError(err).Error("Failed to parse NTCP2 blocks")
+			return nil, oops.Wrapf(err, "failed to parse NTCP2 blocks")
+		}
+
+		// Process blocks, extracting I2NP messages
+		firstMsg, terminated := u.processBlocks(blocks)
+		if terminated {
+			return nil, io.EOF
+		}
+
+		if firstMsg != nil {
+			return firstMsg, nil
+		}
+		// No I2NP message in this frame — loop to read the next frame
 	}
-
-	u.bytesRead = 0
-
-	// Read frame data from the connection
-	// The NTCP2Conn.Read() handles SipHash length deobfuscation and AEAD decryption,
-	// returning the decrypted payload which contains concatenated blocks.
-	payload, err := u.readFrame()
-	if err != nil {
-		return nil, err
-	}
-
-	// Parse blocks from the decrypted payload
-	blocks, err := ParseBlocks(payload)
-	if err != nil {
-		log.WithError(err).Error("Failed to parse NTCP2 blocks")
-		return nil, oops.Wrapf(err, "failed to parse NTCP2 blocks")
-	}
-
-	// Process blocks, extracting I2NP messages
-	firstMsg, terminated := u.processBlocks(blocks)
-	if terminated {
-		return nil, io.EOF
-	}
-
-	if firstMsg == nil {
-		// No I2NP message in this frame, read another
-		return u.ReadNextMessage()
-	}
-
-	return firstMsg, nil
 }
 
 // processBlocks handles each block type, returning the first I2NP message found

@@ -1,10 +1,10 @@
 package tunnel
 
 import (
+	cryptorand "crypto/rand"
 	"encoding/binary"
 	"errors"
 	"sync"
-	"sync/atomic"
 
 	"github.com/go-i2p/crypto/types"
 	"github.com/samber/oops"
@@ -237,7 +237,11 @@ func (g *Gateway) SendWithDelivery(msgBytes []byte, dc DeliveryConfig) ([][]byte
 
 // sendFragmented splits a message into fragments and sends each as a separate tunnel message.
 func (g *Gateway) sendFragmented(msgBytes []byte, dc DeliveryConfig) ([][]byte, error) {
-	msgID := atomic.AddUint32(&g.msgIDSeq, 1)
+	var msgIDBytes [4]byte
+	if _, randErr := cryptorand.Read(msgIDBytes[:]); randErr != nil {
+		panic("tunnel/gateway: crypto/rand unavailable: " + randErr.Error())
+	}
+	msgID := binary.BigEndian.Uint32(msgIDBytes[:])
 
 	firstPayloadMax, followPayloadMax, err := g.calculateFragmentSizes(dc)
 	if err != nil {
