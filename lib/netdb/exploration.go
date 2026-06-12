@@ -325,11 +325,19 @@ func (e *Explorer) performExploratoryLookup(index int, lookupHash common.Hash) e
 	return nil
 }
 
-// generateRandomKeys creates multiple random hashes for exploration
+// generateRandomKeys creates multiple cryptographically random hashes for exploration.
+// If rand.Read fails for a particular key, that slot is skipped so that the returned
+// slice never contains zero-filled (predictable) hashes — predictable exploration
+// targets can enable traffic correlation attacks against the local router.
 func (e *Explorer) generateRandomKeys(count int) []common.Hash {
-	keys := make([]common.Hash, count)
+	keys := make([]common.Hash, 0, count)
 	for i := 0; i < count; i++ {
-		_, _ = rand.Read(keys[i][:])
+		var h common.Hash
+		if _, err := rand.Read(h[:]); err != nil {
+			log.WithError(err).Warn("generateRandomKeys: crypto/rand failed; skipping slot to avoid zero-filled exploration key")
+			continue
+		}
+		keys = append(keys, h)
 	}
 	return keys
 }

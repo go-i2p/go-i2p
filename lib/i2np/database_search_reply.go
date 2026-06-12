@@ -158,6 +158,13 @@ func readPeerHashes(remainder []byte, count int) ([]common.Hash, []byte, error) 
 	return hashes, remainder, nil
 }
 
+// maxDatabaseSearchReplySuggestions is the I2P spec maximum number of peer
+// hashes in a single DatabaseSearchReply (section 3.3, num field: 0–255 per
+// wire format but the spec caps it at 16 in practice to bound Kademlia fan-out).
+// Replies claiming more than 16 suggestions are rejected to prevent a malicious
+// peer from injecting an oversized suggestion set into the iterative lookup.
+const maxDatabaseSearchReplySuggestions = 16
+
 // UnmarshalBinary deserializes the DatabaseSearchReply message from binary data.
 func (d *DatabaseSearchReply) UnmarshalBinary(data []byte) error {
 	// Minimum size: key(32) + count(1) + from(32) = 65 bytes
@@ -177,6 +184,19 @@ func (d *DatabaseSearchReply) UnmarshalBinary(data []byte) error {
 	// Count (1 byte)
 	d.Count = int(remainder[0])
 	remainder = remainder[1:]
+
+	// Spec guard: reject replies with more suggestions than the I2P spec allows.
+	// The wire format allows 0–255 but spec-compliant routers send at most 16.
+	// Accepting larger counts gives a malicious peer undue influence over the
+	// local router's iterative lookup fan-out.
+	if d.Count > maxDatabaseSearchReplySuggestions {
+		log.WithFields(logger.Fields{
+			"at":            "DatabaseSearchReply.UnmarshalBinary",
+			"count":         d.Count,
+			"max_allowed":   maxDatabaseSearchReplySuggestions,
+		}).Warn("DatabaseSearchReply count exceeds spec maximum; rejecting message")
+		return ErrDatabaseSearchReplyNotEnoughData
+	}
 
 	// Validate total length
 	if len(data) < 32+1+(d.Count*32)+32 {

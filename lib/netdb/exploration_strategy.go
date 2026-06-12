@@ -341,10 +341,15 @@ func (s *AdaptiveStrategy) randomizeLowerBits(key *common.Hash, bucketIdx int) e
 	return nil
 }
 
-// randomBit returns a random boolean value
+// randomBit returns a random boolean value.
+// Falls back to false on CSPRNG failure and logs a warning; a deterministic
+// false is safer than silently using a biased or predictable bit.
 func randomBit() bool {
 	var b [1]byte
-	_, _ = rand.Read(b[:])
+	if _, err := rand.Read(b[:]); err != nil {
+		log.WithError(err).Warn("randomBit: crypto/rand failed; returning false")
+		return false
+	}
 	return (b[0] & 1) == 1
 }
 
