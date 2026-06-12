@@ -405,7 +405,7 @@ func (db *StdNetDB) SaveEntry(e *Entry) (err error) {
 		}()
 		err = e.Serialize(f)
 		if err == nil {
-			log.WithFields(logger.Fields{"at": "SaveEntry"}).Debug("Successfully saved NetDB entry")
+			logAt("SaveEntry").Debug("Successfully saved NetDB entry")
 		} else {
 			log.WithError(err).Error("Failed to write NetDB entry")
 		}
@@ -423,7 +423,7 @@ func (db *StdNetDB) SaveEntry(e *Entry) (err error) {
 
 // Save persists all in-memory RouterInfo and LeaseSet entries to disk.
 func (db *StdNetDB) Save() error {
-	log.WithFields(logger.Fields{"at": "Save"}).Debug("Saving all NetDB entries")
+	logAt("Save").Debug("Saving all NetDB entries")
 
 	riErrs := db.saveAllRouterInfos()
 	lsErrs := db.saveAllLeaseSets()
@@ -519,10 +519,10 @@ func (db *StdNetDB) Reseed(b bootstrap.Bootstrap, minRouters int) (err error) {
 func (db *StdNetDB) isReseedRequired(minRouters int) bool {
 	log.WithField("min_routers", minRouters).Debug("Checking if reseed is necessary")
 	if db.Size() > minRouters {
-		log.WithFields(logger.Fields{"at": "isReseedRequired"}).Debug("Reseed not necessary")
+		logAt("isReseedRequired").Debug("Reseed not necessary")
 		return false
 	}
-	log.WithFields(logger.Fields{"at": "isReseedRequired"}).Warn("NetDB size below minimum, reseed required")
+	logAt("isReseedRequired").Warn("NetDB size below minimum, reseed required")
 	return true
 }
 
