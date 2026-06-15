@@ -128,49 +128,13 @@ func (v *VariableTunnelBuildReply) determineBuildResult(successCount, recordCoun
 // processHopResponse processes a single hop's response record for variable tunnels.
 // Returns (success, error) where success indicates if the hop accepted the tunnel.
 func (v *VariableTunnelBuildReply) processHopResponse(hopIndex int, record BuildResponseRecord) (bool, error) {
-	log.WithFields(logger.Fields{
-		"hop_index":  hopIndex,
-		"reply_code": record.Reply,
-	}).Debug("Processing variable tunnel hop response")
-
 	// Validate response record (basic integrity check)
 	if err := v.validateResponseRecord(record); err != nil {
 		return false, oops.Wrapf(err, "hop %d: invalid response record", hopIndex)
 	}
 
-	// Process reply code (same logic as TunnelBuildReply)
-	switch record.Reply {
-	case TunnelBuildReplySuccess:
-		log.WithField("hop_index", hopIndex).Debug("Variable tunnel hop accepted build request")
-		return true, nil
-
-	case TunnelBuildReplyReject:
-		log.WithField("hop_index", hopIndex).Warn("Variable tunnel hop rejected build request")
-		return false, oops.Errorf("hop %d: rejected request", hopIndex)
-
-	case TunnelBuildReplyOverload:
-		log.WithField("hop_index", hopIndex).Warn("Variable tunnel hop is overloaded")
-		return false, oops.Errorf("hop %d: router overloaded", hopIndex)
-
-	case TunnelBuildReplyBandwidth:
-		log.WithField("hop_index", hopIndex).Warn("Variable tunnel hop has insufficient bandwidth")
-		return false, oops.Errorf("hop %d: insufficient bandwidth", hopIndex)
-
-	case TunnelBuildReplyInvalid:
-		log.WithField("hop_index", hopIndex).Warn("Variable tunnel hop received invalid request data")
-		return false, oops.Errorf("hop %d: invalid request data", hopIndex)
-
-	case TunnelBuildReplyExpired:
-		log.WithField("hop_index", hopIndex).Warn("Variable tunnel hop request has expired")
-		return false, oops.Errorf("hop %d: request expired", hopIndex)
-
-	default:
-		log.WithFields(logger.Fields{
-			"hop_index":  hopIndex,
-			"reply_code": record.Reply,
-		}).Warn("Variable tunnel hop returned unknown reply code")
-		return false, oops.Errorf("hop %d: unknown reply code %d", hopIndex, record.Reply)
-	}
+	// Process reply code using shared helper with "Variable tunnel " prefix for logs
+	return processHopReplyCode(hopIndex, record.Reply, "Variable tunnel ")
 }
 
 // validateResponseRecord delegates to the shared ValidateBuildResponseRecord helper.

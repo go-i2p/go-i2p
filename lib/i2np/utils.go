@@ -7,6 +7,7 @@ import (
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/tunnel/buildrecord"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // I2NP Header Reading Utilities
@@ -444,4 +445,47 @@ func (br *ByteReader) Peek(n int) ([]byte, error) {
 // Reset resets the reader to the beginning.
 func (br *ByteReader) Reset() {
 	br.offset = 0
+}
+
+// processHopReplyCode handles the reply code from a single hop in a tunnel build reply.
+// It returns (success, error) where success indicates if the hop accepted the tunnel.
+// The logPrefix is prepended to log messages for context (e.g., "Variable tunnel " or "").
+func processHopReplyCode(hopIndex int, replyCode byte, logPrefix string) (bool, error) {
+	log.WithFields(logger.Fields{
+		"hop_index":  hopIndex,
+		"reply_code": replyCode,
+	}).Debug(logPrefix + "Processing hop response")
+
+	switch replyCode {
+	case TunnelBuildReplySuccess:
+		log.WithField("hop_index", hopIndex).Debug(logPrefix + "Hop accepted tunnel build request")
+		return true, nil
+
+	case TunnelBuildReplyReject:
+		log.WithField("hop_index", hopIndex).Warn(logPrefix + "Hop rejected tunnel build request")
+		return false, oops.Errorf("hop %d: rejected request", hopIndex)
+
+	case TunnelBuildReplyOverload:
+		log.WithField("hop_index", hopIndex).Warn(logPrefix + "Hop is overloaded")
+		return false, oops.Errorf("hop %d: router overloaded", hopIndex)
+
+	case TunnelBuildReplyBandwidth:
+		log.WithField("hop_index", hopIndex).Warn(logPrefix + "Hop has insufficient bandwidth")
+		return false, oops.Errorf("hop %d: insufficient bandwidth", hopIndex)
+
+	case TunnelBuildReplyInvalid:
+		log.WithField("hop_index", hopIndex).Warn(logPrefix + "Hop received invalid request data")
+		return false, oops.Errorf("hop %d: invalid request data", hopIndex)
+
+	case TunnelBuildReplyExpired:
+		log.WithField("hop_index", hopIndex).Warn(logPrefix + "Hop request has expired")
+		return false, oops.Errorf("hop %d: request expired", hopIndex)
+
+	default:
+		log.WithFields(logger.Fields{
+			"hop_index":  hopIndex,
+			"reply_code": replyCode,
+		}).Warn(logPrefix + "Hop returned unknown reply code")
+		return false, oops.Errorf("hop %d: unknown reply code %d", hopIndex, replyCode)
+	}
 }

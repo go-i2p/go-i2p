@@ -7,6 +7,19 @@ import (
 	common "github.com/go-i2p/common/data"
 )
 
+// Admission control constants for RouterInfo and LeaseSet caches.
+const (
+	routerInfoAdmissionWindow      = time.Hour
+	routerInfoPerSourceIntroduced  = 256
+	routerInfoTrackedSourcesMax    = 2048
+	routerInfoPressureThresholdPct = 80
+
+	leaseSetAdmissionWindow      = time.Hour
+	leaseSetPerSourceIntroduced  = 256
+	leaseSetTrackedSourcesMax    = 2048
+	leaseSetPressureThresholdPct = 80
+)
+
 // admissionConfig holds the configuration constants for an admission controller.
 type admissionConfig struct {
 	window      time.Duration

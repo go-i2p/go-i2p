@@ -48,24 +48,31 @@ func (t *TunnelBuildReply) GetRawReplyRecords() [][]byte {
 // ProcessReply processes the tunnel build reply by analyzing each response record.
 // It validates response integrity, determines tunnel build success/failure,
 // and returns detailed results for each hop.
+// Implements replyStepProcessor interface for unified reply processing.
 func (t *TunnelBuildReply) ProcessReply() error {
-	t.logProcessingStart()
-
-	successCount, firstError := t.processAllHopResponses()
-
-	t.logProcessingComplete(successCount)
-
-	return t.determineTunnelBuildResult(successCount, firstError)
+	return processReplySteps(t, t.GetReplyRecords())
 }
 
-// logProcessingStart logs the start of tunnel build reply processing.
-func (t *TunnelBuildReply) logProcessingStart() {
-	log.WithField("record_count", len(t.Records)).Debug("Processing TunnelBuildReply")
+// logReplyStart logs the start of tunnel build reply processing.
+// Implements replyStepProcessor interface.
+func (t *TunnelBuildReply) logReplyStart(recordCount int) {
+	log.WithField("record_count", recordCount).Debug("Processing TunnelBuildReply")
 }
 
-// processAllHopResponses processes each hop's response record.
+// validateRecordCount validates that the record count is exactly 8 for fixed tunnels.
+// Implements replyStepProcessor interface.
+func (t *TunnelBuildReply) validateRecordCount(recordCount int) error {
+	if recordCount != 8 {
+		log.WithField("record_count", recordCount).Warn("TunnelBuildReply has unexpected record count (expected 8)")
+		return oops.Errorf("tunnel build failed: expected 8 records but got %d", recordCount)
+	}
+	return nil
+}
+
+// processAllHops processes each hop's response record.
+// Implements replyStepProcessor interface.
 // Returns the success count and the first error encountered (if any).
-func (t *TunnelBuildReply) processAllHopResponses() (int, error) {
+func (t *TunnelBuildReply) processAllHops() (int, error) {
 	successCount := 0
 	var firstError error
 
@@ -91,20 +98,22 @@ func (t *TunnelBuildReply) processAllHopResponses() (int, error) {
 	return successCount, firstError
 }
 
-// logProcessingComplete logs the completion of tunnel build reply processing.
-func (t *TunnelBuildReply) logProcessingComplete(successCount int) {
+// logReplyCompletion logs the completion of tunnel build reply processing.
+// Implements replyStepProcessor interface.
+func (t *TunnelBuildReply) logReplyCompletion(successCount, recordCount int) {
 	log.WithFields(logger.Fields{
 		"success_count": successCount,
-		"total_hops":    len(t.Records),
-		"success_rate":  float64(successCount) / float64(len(t.Records)),
+		"total_hops":    recordCount,
+		"success_rate":  float64(successCount) / float64(recordCount),
 	}).Info("TunnelBuildReply processing completed")
 }
 
-// determineTunnelBuildResult determines the final result based on success count.
+// determineBuildResult determines the final result based on success count.
+// Implements replyStepProcessor interface.
 // Returns nil if all hops accepted, otherwise returns an appropriate error.
-func (t *TunnelBuildReply) determineTunnelBuildResult(successCount int, firstError error) error {
-	if successCount == len(t.Records) {
-		log.WithFields(logger.Fields{"at": "determineTunnelBuildResult"}).Debug("Tunnel build successful - all hops accepted")
+func (t *TunnelBuildReply) determineBuildResult(successCount, recordCount int, firstError error) error {
+	if successCount == recordCount {
+		log.WithFields(logger.Fields{"at": "determineBuildResult"}).Debug("Tunnel build successful - all hops accepted")
 		return nil
 	}
 
@@ -112,55 +121,19 @@ func (t *TunnelBuildReply) determineTunnelBuildResult(successCount int, firstErr
 		return oops.Wrapf(firstError, "tunnel build failed")
 	}
 
-	return oops.Errorf("tunnel build failed: only %d of %d hops accepted", successCount, len(t.Records))
+	return oops.Errorf("tunnel build failed: only %d of %d hops accepted", successCount, recordCount)
 }
 
 // processHopResponse processes a single hop's response record.
 // Returns (success, error) where success indicates if the hop accepted the tunnel.
 func (t *TunnelBuildReply) processHopResponse(hopIndex int, record BuildResponseRecord) (bool, error) {
-	log.WithFields(logger.Fields{
-		"hop_index":  hopIndex,
-		"reply_code": record.Reply,
-	}).Debug("Processing hop response")
-
 	// Validate response record (basic integrity check)
 	if err := t.validateResponseRecord(record); err != nil {
 		return false, oops.Wrapf(err, "hop %d: invalid response record", hopIndex)
 	}
 
-	// Process reply code
-	switch record.Reply {
-	case TunnelBuildReplySuccess:
-		log.WithField("hop_index", hopIndex).Debug("Hop accepted tunnel build request")
-		return true, nil
-
-	case TunnelBuildReplyReject:
-		log.WithField("hop_index", hopIndex).Warn("Hop rejected tunnel build request")
-		return false, oops.Errorf("hop %d: rejected request", hopIndex)
-
-	case TunnelBuildReplyOverload:
-		log.WithField("hop_index", hopIndex).Warn("Hop is overloaded")
-		return false, oops.Errorf("hop %d: router overloaded", hopIndex)
-
-	case TunnelBuildReplyBandwidth:
-		log.WithField("hop_index", hopIndex).Warn("Hop has insufficient bandwidth")
-		return false, oops.Errorf("hop %d: insufficient bandwidth", hopIndex)
-
-	case TunnelBuildReplyInvalid:
-		log.WithField("hop_index", hopIndex).Warn("Hop received invalid request data")
-		return false, oops.Errorf("hop %d: invalid request data", hopIndex)
-
-	case TunnelBuildReplyExpired:
-		log.WithField("hop_index", hopIndex).Warn("Hop request has expired")
-		return false, oops.Errorf("hop %d: request expired", hopIndex)
-
-	default:
-		log.WithFields(logger.Fields{
-			"hop_index":  hopIndex,
-			"reply_code": record.Reply,
-		}).Warn("Hop returned unknown reply code")
-		return false, oops.Errorf("hop %d: unknown reply code %d", hopIndex, record.Reply)
-	}
+	// Process reply code using shared helper
+	return processHopReplyCode(hopIndex, record.Reply, "")
 }
 
 // validateResponseRecord delegates to the shared ValidateBuildResponseRecord helper.

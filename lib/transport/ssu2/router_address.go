@@ -5,7 +5,6 @@ import (
 	"net"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	i2pbase64 "github.com/go-i2p/common/base64"
@@ -13,6 +12,7 @@ import (
 	"github.com/go-i2p/common/router_address"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/nat"
+	"github.com/go-i2p/go-i2p/lib/transport"
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
 	"github.com/samber/oops"
 	"golang.org/x/crypto/curve25519"
@@ -74,54 +74,10 @@ func HasDialableSSU2Address(routerInfo *router_info.RouterInfo) bool {
 	return false
 }
 
-// ssu2IPv6Once / ssu2HasIPv6Support cache the one-time IPv6 connectivity probe
-// result for the ssu2 package (mirrors ntcp2.probeIPv6, AUDIT FIX-2 / RC-C).
-var (
-	ssu2IPv6Once       sync.Once
-	ssu2HasIPv6Support bool
-)
-
-// probeIPv6 returns true if the host has at least one non-loopback, globally
-// unicast IPv6 interface. The result is cached after the first call.
-// hasGlobalUnicastIPv6OnIface returns true if the given network interface has
-// at least one globally reachable IPv6 address.
-func hasGlobalUnicastIPv6OnIface(iface net.Interface) bool {
-	addrs, err := iface.Addrs()
-	if err != nil {
-		return false
-	}
-	for _, a := range addrs {
-		var ip net.IP
-		switch v := a.(type) {
-		case *net.IPNet:
-			ip = v.IP
-		case *net.IPAddr:
-			ip = v.IP
-		}
-		if ip != nil && ip.To4() == nil && ip.IsGlobalUnicast() {
-			return true
-		}
-	}
-	return false
-}
-
+// Redirect to shared transport.ProbeIPv6 (consolidation H-5; mirrors ntcp2.probeIPv6)
+// probeIPv6 wraps the shared transport.ProbeIPv6 for backward compatibility within ssu2 package.
 func probeIPv6() bool {
-	ssu2IPv6Once.Do(func() {
-		ifaces, err := net.Interfaces()
-		if err != nil {
-			return
-		}
-		for _, iface := range ifaces {
-			if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
-				continue
-			}
-			if hasGlobalUnicastIPv6OnIface(iface) {
-				ssu2HasIPv6Support = true
-				return
-			}
-		}
-	})
-	return ssu2HasIPv6Support
+	return transport.ProbeIPv6()
 }
 
 // ExtractSSU2Addr extracts the SSU2 network address from a RouterInfo structure.
