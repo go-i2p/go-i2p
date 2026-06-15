@@ -24,12 +24,12 @@ type registeredHandler struct {
 }
 
 var (
-	mu           sync.RWMutex
-	reloaders    []registeredHandler
-	interrupters []registeredHandler
+	mu                  sync.RWMutex
+	reloaders           []registeredHandler
+	interrupters        []registeredHandler
 	preShutdownHandlers []registeredHandler
-	nextID       HandlerID
-	stopOnce     sync.Once
+	nextID              HandlerID
+	stopOnce            sync.Once
 )
 
 // registerHandler appends a handler to the given slice and returns its unique ID.

@@ -5,13 +5,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-i2p/go-i2p/lib/transport"
 	"github.com/stretchr/testify/require"
 )
 
-// TestM5_SSU2TimeWithinSkew_Boundary
+// TestM5_IsTimestampWithinTolerance_Boundary
 // M-5 FIX: Centralized timestamp validation.
-// Verifies ssu2TimeWithinSkew enforces symmetric ±tolerance bounds consistently.
-func TestM5_SSU2TimeWithinSkew_Boundary(t *testing.T) {
+// Verifies transport.IsTimestampWithinTolerance enforces symmetric ±tolerance bounds consistently.
+func TestM5_IsTimestampWithinTolerance_Boundary(t *testing.T) {
 	t.Parallel()
 
 	tol := 60 * time.Second
@@ -71,18 +72,18 @@ func TestM5_SSU2TimeWithinSkew_Boundary(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			peerTime := uint32(int32(now) + tc.offsetSec)
-			result := ssu2TimeWithinSkew(peerTime, tc.tolerance)
+			result := transport.IsTimestampWithinTolerance(peerTime, tc.tolerance)
 			require.Equal(t, tc.expect, result,
-				"ssu2TimeWithinSkew(%d, %v) = %v, expected %v",
+				"transport.IsTimestampWithinTolerance(%d, %v) = %v, expected %v",
 				peerTime, tc.tolerance, result, tc.expect)
 		})
 	}
 }
 
-// TestM5_SSU2TimeWithinSkew_DifferentTolerances
-// Verify ssu2TimeWithinSkew respects custom tolerance values (not hardcoded to 60s).
+// TestM5_IsTimestampWithinTolerance_DifferentTolerances
+// Verify transport.IsTimestampWithinTolerance respects custom tolerance values (not hardcoded to 60s).
 // M-5 goal: single helper applied at every consumer with configurable skew window.
-func TestM5_SSU2TimeWithinSkew_DifferentTolerances(t *testing.T) {
+func TestM5_IsTimestampWithinTolerance_DifferentTolerances(t *testing.T) {
 	t.Parallel()
 
 	now := uint32(time.Now().Unix())
@@ -117,9 +118,9 @@ func TestM5_SSU2TimeWithinSkew_DifferentTolerances(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := ssu2TimeWithinSkew(testTimestamp, tc.tolerance)
+			result := transport.IsTimestampWithinTolerance(testTimestamp, tc.tolerance)
 			require.Equal(t, tc.expect, result,
-				"ssu2TimeWithinSkew(%d, %v) = %v, expected %v",
+				"transport.IsTimestampWithinTolerance(%d, %v) = %v, expected %v",
 				testTimestamp, tc.tolerance, result, tc.expect)
 		})
 	}
@@ -183,7 +184,7 @@ func TestM5_ValidateTimestamp_UsesConsistentSkew(t *testing.T) {
 
 // TestM5_RaceDetectorValidatesTimestampAccess
 // Concurrent timestamp validation calls should have no data races.
-// M-5: Ensures ssu2TimeWithinSkew is thread-safe (reads wall clock only).
+// M-5: Ensures transport.IsTimestampWithinTolerance is thread-safe (reads wall clock only).
 func TestM5_RaceDetectorValidatesTimestampAccess(t *testing.T) {
 	t.Parallel()
 
@@ -196,7 +197,7 @@ func TestM5_RaceDetectorValidatesTimestampAccess(t *testing.T) {
 			defer func() { done <- struct{}{} }()
 			for j := 0; j < 100; j++ {
 				testTime := now + uint32(id*100+j)
-				_ = ssu2TimeWithinSkew(testTime, 60*time.Second)
+				_ = transport.IsTimestampWithinTolerance(testTime, 60*time.Second)
 			}
 		}(i)
 	}

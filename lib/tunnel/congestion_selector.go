@@ -290,12 +290,6 @@ func (s *DefaultCongestionAwarePeerSelector) logSelectionSummary(requested, sele
 	}).Debug("peer selection summary")
 }
 
-// hashSetToSlice is a local alias for HashSetToSlice (for backward compatibility).
-// New code should use HashSetToSlice directly.
-func hashSetToSlice(set map[common.Hash]struct{}) []common.Hash {
-	return HashSetToSlice(set)
-}
-
 // Compile-time interface check
 var _ CongestionAwarePeerSelector = (*DefaultCongestionAwarePeerSelector)(nil)
 

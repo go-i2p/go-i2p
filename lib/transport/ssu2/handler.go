@@ -2,10 +2,10 @@ package ssu2
 
 import (
 	"math"
-	"sync"
 	"time"
 
 	"github.com/go-i2p/go-i2p/lib/transport"
+	gonoise "github.com/go-i2p/go-noise/ntcp2"
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
 )
 
@@ -29,77 +29,34 @@ type SSU2Handler interface {
 }
 
 // DefaultHandler implements SSU2Handler with replay detection and clock skew
-// validation suitable for production use. A background goroutine periodically
-// evicts stale entries from the replay cache to prevent unbounded memory growth.
+// validation suitable for production use. The replay cache is managed by go-noise,
+// which periodically evicts stale entries to prevent unbounded memory growth.
 // Call Close() when the handler is no longer needed to stop the cleanup goroutine.
 type DefaultHandler struct {
-	mu      sync.Mutex
-	seen    map[[32]byte]time.Time
-	maxSkew time.Duration
-	done    chan struct{}
+	replayCache *gonoise.ReplayCache
+	maxSkew     time.Duration
 }
-
-// replayTTL is the time-to-live for replay cache entries (2× clock skew tolerance).
-// Set to 60 s (2 × 30 s tolerance) to match the narrowed clock skew window.
-const replayTTL = 60 * time.Second
-
-// replayCleanupInterval is how often the background goroutine sweeps stale entries.
-const replayCleanupInterval = 5 * time.Minute
 
 // NewDefaultHandler creates a new DefaultHandler with ±30 second clock skew tolerance
 // (shared with NTCP2 transport). We use ±30 s (narrower than the go-noise default of 60 s)
 // to narrow the post-restart replay window; see AUDIT.md.
-// A background goroutine evicts replay cache entries older than 60 seconds every
-// 5 minutes. Call Close() to stop it.
+// The replay cache is managed by go-noise, which periodically evicts stale entries.
+// Call Close() to clean up resources when the handler is no longer needed.
 func NewDefaultHandler() *DefaultHandler {
 	log.Debug("creating SSU2 default handler")
-	h := &DefaultHandler{
-		seen:    make(map[[32]byte]time.Time),
-		maxSkew: transport.ClockSkewTolerance,
-		done:    make(chan struct{}),
-	}
-	go h.cleanupLoop()
-	return h
-}
-
-// cleanupLoop periodically removes stale entries from the replay cache.
-func (h *DefaultHandler) cleanupLoop() {
-	ticker := time.NewTicker(replayCleanupInterval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-h.done:
-			return
-		case <-ticker.C:
-			h.evictStale()
-		}
-	}
-}
-
-// evictStale removes replay cache entries older than replayTTL.
-func (h *DefaultHandler) evictStale() {
-	cutoff := time.Now().Add(-replayTTL)
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	for k, ts := range h.seen {
-		if ts.Before(cutoff) {
-			delete(h.seen, k)
-		}
+	return &DefaultHandler{
+		replayCache: gonoise.NewReplayCache(),
+		maxSkew:     transport.ClockSkewTolerance,
 	}
 }
 
 // CheckReplay checks whether an ephemeral key has been seen before.
 // Returns true if the key is a duplicate (replay attack).
 func (h *DefaultHandler) CheckReplay(ephemeralKey [32]byte) bool {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	if _, exists := h.seen[ephemeralKey]; exists {
+	if h.replayCache.CheckAndAdd(ephemeralKey) {
 		log.Warn("SSU2 replay attack detected: duplicate ephemeral key")
 		return true
 	}
-
-	h.seen[ephemeralKey] = time.Now()
 	return false
 }
 
@@ -130,13 +87,6 @@ func (h *DefaultHandler) ValidateTimestamp(peerTime uint32) error {
 	return nil
 }
 
-// ssu2TimeWithinSkew checks whether a peer's timestamp is within ±tol of the local clock.
-// M-5 FIX: Uses shared transport validation logic for consistent timestamp checking.
-// Returns true if the timestamp is within tolerance, false if outside.
-func ssu2TimeWithinSkew(peerTime uint32, tol time.Duration) bool {
-	return transport.IsTimestampWithinTolerance(peerTime, tol)
-}
-
 // SendTermination sends a termination block through the SSU2 connection.
 func (h *DefaultHandler) SendTermination(conn *ssu2noise.SSU2Conn, reason byte) error {
 	log.WithField("reason", reason).Debug("sending SSU2 termination block")
@@ -163,23 +113,19 @@ func buildTerminationBlock(reason byte) []byte {
 	return block
 }
 
-// Close stops the background cleanup goroutine and resets the replay cache.
+// Close releases resources held by the handler (stops replay cache cleanup).
 func (h *DefaultHandler) Close() {
 	log.Debug("closing SSU2 handler replay cache")
-	select {
-	case <-h.done:
-		// already closed
-	default:
-		close(h.done)
+	if h.replayCache != nil {
+		h.replayCache.Close()
 	}
-	h.mu.Lock()
-	h.seen = make(map[[32]byte]time.Time)
-	h.mu.Unlock()
 }
 
 // ReplayCacheSize returns the current number of entries in the replay cache.
+// Useful for monitoring and diagnostics.
 func (h *DefaultHandler) ReplayCacheSize() int {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	return len(h.seen)
+	if h.replayCache == nil {
+		return 0
+	}
+	return h.replayCache.Size()
 }

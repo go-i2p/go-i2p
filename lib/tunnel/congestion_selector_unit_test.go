@@ -254,7 +254,7 @@ func TestSelectionMetrics_Tracking(t *testing.T) {
 func TestHashSetToSlice(t *testing.T) {
 	t.Run("empty_set", func(t *testing.T) {
 		set := make(map[common.Hash]struct{})
-		slice := hashSetToSlice(set)
+		slice := HashSetToSlice(set)
 		assert.Len(t, slice, 0)
 	})
 
@@ -268,7 +268,7 @@ func TestHashSetToSlice(t *testing.T) {
 		set[h1] = struct{}{}
 		set[h2] = struct{}{}
 
-		slice := hashSetToSlice(set)
+		slice := HashSetToSlice(set)
 		assert.Len(t, slice, 2)
 	})
 }

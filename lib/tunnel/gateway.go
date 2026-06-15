@@ -529,22 +529,19 @@ func replaceZeroPaddingBytes(paddingBytes []byte) {
 }
 
 // generateNonZeroByte returns a cryptographically random byte in the range [1, 255].
-// Falls back to 0x01 if random generation fails or after maxAttempts iterations.
+// Falls back to 0x01 if random generation fails.
 // L-2 FIX: Documents secondary identifier fallback pattern (see M-2 for primary CSPRNG failure handling).
-// This is LOW severity (entropy degradation on already-catastrophic RNG failure or birthday-scale traffic).
+// This is LOW severity (entropy degradation on already-catastrophic RNG failure).
 // Unified with M-2 crash-fast pattern via WARNFAIL_I2P environment variable in main I2NP message ID generation.
 func generateNonZeroByte() byte {
-	const maxAttempts = 256
 	var b [1]byte
-	for i := 0; i < maxAttempts; i++ {
-		if _, err := rand.Read(b[:]); err != nil {
-			return 1
-		}
-		if b[0] != 0 {
-			return b[0]
-		}
+	if _, err := rand.Read(b[:]); err != nil {
+		return 1
 	}
-	return 1 // Fallback after exhausting attempts (statistically impossible)
+	if b[0] == 0 {
+		b[0] = 1
+	}
+	return b[0]
 }
 
 // writePayload writes the zero separator, delivery instructions, and message to the buffer.

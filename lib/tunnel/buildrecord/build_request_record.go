@@ -75,15 +75,15 @@ func ReadBuildRequestRecord(data []byte) (BuildRequestRecord, error) {
 	return record, nil
 }
 
-// fieldParser pairs a field name with a closure that reads and assigns a single
+// recordFieldParser pairs a field name with a closure that reads and assigns a single
 // BuildRequestRecord field from raw data.
-type fieldParser struct {
+type recordFieldParser struct {
 	name  string
 	parse func([]byte, *BuildRequestRecord) error
 }
 
-// applyFieldParsers runs each parser in order, logging and returning on the first error.
-func applyFieldParsers(data []byte, record *BuildRequestRecord, parsers []fieldParser) error {
+// applyRecordFieldParsers runs each parser in order, logging and returning on the first error.
+func applyRecordFieldParsers(data []byte, record *BuildRequestRecord, parsers []recordFieldParser) error {
 	for _, p := range parsers {
 		if err := p.parse(data, record); err != nil {
 			log.WithError(err).WithField("field", p.name).Error("failed to read field")
@@ -94,7 +94,7 @@ func applyFieldParsers(data []byte, record *BuildRequestRecord, parsers []fieldP
 }
 
 func parseTunnelIdentifiers(data []byte, record *BuildRequestRecord) error {
-	return applyFieldParsers(data, record, []fieldParser{
+	return applyRecordFieldParsers(data, record, []recordFieldParser{
 		{"ReceiveTunnel", func(d []byte, r *BuildRequestRecord) error {
 			v, err := readReceiveTunnel(d)
 			r.ReceiveTunnel = v
@@ -119,7 +119,7 @@ func parseTunnelIdentifiers(data []byte, record *BuildRequestRecord) error {
 }
 
 func parseSessionKeys(data []byte, record *BuildRequestRecord) error {
-	return applyFieldParsers(data, record, []fieldParser{
+	return applyRecordFieldParsers(data, record, []recordFieldParser{
 		{"LayerKey", func(d []byte, r *BuildRequestRecord) error {
 			v, err := readLayerKey(d)
 			r.LayerKey = v
@@ -144,7 +144,7 @@ func parseSessionKeys(data []byte, record *BuildRequestRecord) error {
 }
 
 func parseMetadata(data []byte, record *BuildRequestRecord) error {
-	return applyFieldParsers(data, record, []fieldParser{
+	return applyRecordFieldParsers(data, record, []recordFieldParser{
 		{"Flag", func(d []byte, r *BuildRequestRecord) error {
 			v, err := readFlag(d)
 			r.Flag = v
