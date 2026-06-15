@@ -1,6 +1,7 @@
 package keys
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"os"
@@ -261,16 +262,9 @@ func detectFormatVersion(data []byte) (version, offset int, err error) {
 }
 
 // matchesMagic checks if data starts with the given magic bytes.
+// M-28: Refactored to use bytes.HasPrefix for idiomatic byte comparison.
 func matchesMagic(data, magic []byte) bool {
-	if len(data) < len(magic) {
-		return false
-	}
-	for i, b := range magic {
-		if data[i] != b {
-			return false
-		}
-	}
-	return true
+	return bytes.HasPrefix(data, magic)
 }
 
 // readPrivateKeyFields reads the signing and encryption private key fields

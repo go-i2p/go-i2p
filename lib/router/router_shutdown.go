@@ -2,7 +2,6 @@ package router
 
 import (
 	"context"
-	"time"
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/transport"
@@ -173,16 +172,6 @@ func (r *Router) stopParticipantManager() {
 }
 
 func (r *Router) stopI2CPServer() {
-	// Wait for any in-flight LeaseSet distribution goroutines to complete
-	// before stopping the I2CP server, as they may access transport sessions.
-	// Use a 30-second timeout to prevent indefinite hangs during network partitions.
-	if r.leaseSetPublisher != nil {
-		if err := r.leaseSetPublisher.WaitWithTimeout(30 * time.Second); err != nil {
-			log.WithError(err).Warn("LeaseSet publisher goroutines did not drain within timeout")
-		} else {
-			log.WithFields(logger.Fields{"at": "stopI2CPServer"}).Debug("LeaseSet publisher goroutines drained")
-		}
-	}
 	if r.i2cpServer != nil {
 		if err := r.i2cpServer.Stop(); err != nil {
 			log.WithError(err).Error("Failed to stop I2CP server")

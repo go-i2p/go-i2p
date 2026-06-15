@@ -302,11 +302,10 @@ func (p *Publisher) publishLeaseSetEntry(lsEntry LeaseSetEntry) error {
 	return p.sendDatabaseStoreMessages(lsEntry.Hash, lsBytes, storeType, floodfills)
 }
 
-// PublishLeaseSet publishes a specific LeaseSet (original type) to floodfill routers.
-// This is the main publishing logic that sends DatabaseStore messages
-// to the closest floodfill routers.
+// publishLeaseSetObject is an internal method that publishes a typed LeaseSet object.
+// This is used internally by publishAllLeaseSets to publish LeaseSets retrieved from the database.
 // Note: This method publishes original LeaseSets (type 1), not LeaseSet2.
-func (p *Publisher) PublishLeaseSet(hash common.Hash, ls lease_set.LeaseSet) error {
+func (p *Publisher) publishLeaseSetObject(hash common.Hash, ls lease_set.LeaseSet) error {
 	log.WithField("hash", logutil.HashPrefixPlain(hash)).Debug("Publishing LeaseSet")
 
 	// Validate LeaseSet before attempting serialization
@@ -327,6 +326,38 @@ func (p *Publisher) PublishLeaseSet(hash common.Hash, ls lease_set.LeaseSet) err
 		return oops.Errorf("failed to serialize LeaseSet: %w", err)
 	}
 	return p.sendDatabaseStoreMessages(hash, lsBytes, i2np.DatabaseStoreTypeLeaseSet, floodfills)
+}
+
+// PublishLeaseSet publishes raw LeaseSet bytes to floodfill routers.
+// This method satisfies the i2cp.LeaseSetPublisher interface and is used
+// for publishing I2CP client LeaseSets (which are LeaseSet2) via the tunnel-anonymous path.
+// The provided bytes are assumed to be a serialized LeaseSet2 (dataType=3).
+//
+// H-2 Consolidation: This method enables complete migration to tunnel-anonymous publishing
+// for all LeaseSets, eliminating the separate router.LeaseSetPublisher direct-session approach.
+//
+// Parameters:
+//   - hash: The destination hash (SHA256 of the destination)
+//   - leaseSetData: Raw serialized LeaseSet2 bytes
+//
+// Returns an error if publishing to floodfill routers fails.
+func (p *Publisher) PublishLeaseSet(hash common.Hash, leaseSetData []byte) error {
+	log.WithField("hash", logutil.HashPrefixPlain(hash)).Debug("Publishing LeaseSet via PublishLeaseSet")
+
+	// Validate input
+	if len(leaseSetData) == 0 {
+		return oops.Errorf("cannot publish empty LeaseSet bytes")
+	}
+
+	// Select closest floodfill routers
+	floodfills, err := p.selectFloodfillsForPublishing(hash)
+	if err != nil {
+		return oops.Errorf("failed to select floodfills: %w", err)
+	}
+
+	// Assume LeaseSet2 (dataType=3) for I2CP published content
+	// This ensures consistent tunnel-anonymous publishing via the I2P network
+	return p.sendDatabaseStoreMessages(hash, leaseSetData, i2np.DatabaseStoreTypeLeaseSet2, floodfills)
 }
 
 // PublishRouterInfo publishes a specific RouterInfo to floodfill routers
@@ -681,6 +712,6 @@ type PublisherStats struct {
 var _ interface {
 	Start() error
 	Stop()
-	PublishLeaseSet(hash common.Hash, ls lease_set.LeaseSet) error
+	PublishLeaseSet(hash common.Hash, leaseSetData []byte) error
 	PublishRouterInfo(ri router_info.RouterInfo) error
 } = (*Publisher)(nil)

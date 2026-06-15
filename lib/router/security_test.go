@@ -75,17 +75,6 @@ func requireStopsWithin(t *testing.T, fn func(), timeout time.Duration) {
 	}
 }
 
-// newTestLeaseSetPublisher creates a Router with a StdNetDB and returns a publisher.
-func newTestLeaseSetPublisher(t *testing.T) *LeaseSetPublisher {
-	t.Helper()
-	tempDir := t.TempDir()
-	router := &Router{
-		netdb: netdb.NewStdNetDB(tempDir),
-	}
-	require.NoError(t, router.netdb.Ensure())
-	return NewLeaseSetPublisher(router)
-}
-
 // makeHash returns a Hash filled with the given byte.
 func makeHash(fill byte) common.Hash {
 	var h common.Hash
@@ -401,43 +390,6 @@ func TestGarlicRouter_MaxPendingMessages(t *testing.T) {
 // LeaseSet Publishing Tests
 // Verify automatic refresh before expiry
 // =============================================================================
-
-// TestLeaseSetPublisher_LocalStorage verifies LeaseSet storage behavior
-// Note: Creating valid LeaseSets requires complex setup with proper keys and signatures.
-// This test verifies the storage path exists and validates inputs, while the actual
-// integration with valid LeaseSets is covered in I2CP integration tests.
-func TestLeaseSetPublisher_LocalStorage(t *testing.T) {
-	publisher := newTestLeaseSetPublisher(t)
-
-	// Verify publisher is properly initialized
-	assert.NotNil(t, publisher, "Publisher should not be nil")
-	assert.NotNil(t, publisher.router.netdb, "Publisher should have access to NetDB")
-
-	// Verify the publish path rejects invalid data appropriately
-	var key common.Hash
-	copy(key[:], bytes.Repeat([]byte{0x11}, 32))
-	invalidData := bytes.Repeat([]byte{0x22}, 128)
-
-	// Invalid LeaseSet data should be rejected during validation
-	err := publisher.PublishLeaseSet(key, invalidData)
-	assert.Error(t, err, "Invalid LeaseSet data should be rejected")
-	assert.Contains(t, err.Error(), "NetDB", "Error should come from NetDB validation")
-}
-
-// TestLeaseSetPublisher_InvalidData verifies handling of invalid LeaseSet data
-func TestLeaseSetPublisher_InvalidData(t *testing.T) {
-	publisher := newTestLeaseSetPublisher(t)
-
-	key := makeHash(0x11)
-
-	// Empty data
-	err := publisher.PublishLeaseSet(key, []byte{})
-	assert.Error(t, err, "Should reject empty LeaseSet data")
-
-	// Nil data
-	err = publisher.PublishLeaseSet(key, nil)
-	assert.Error(t, err, "Should reject nil LeaseSet data")
-}
 
 // =============================================================================
 // RouterInfo Provider Tests

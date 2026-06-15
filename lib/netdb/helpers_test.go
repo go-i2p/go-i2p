@@ -121,7 +121,7 @@ func assertPublishLeaseSetInvalid(t *testing.T, publisher *Publisher) {
 	t.Helper()
 	ls := lease_set.LeaseSet{}
 	hash := common.Hash{1, 2, 3, 4}
-	err := publisher.PublishLeaseSet(hash, ls)
+	err := publisher.publishLeaseSetObject(hash, ls)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid LeaseSet")
 }
@@ -384,7 +384,7 @@ func assertPublishEmptyLeaseSetFails(t *testing.T) {
 	ls := lease_set.LeaseSet{}
 	hash := common.Hash{1, 2, 3, 4}
 
-	err := publisher.PublishLeaseSet(hash, ls)
+	err := publisher.publishLeaseSetObject(hash, ls)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid LeaseSet")
 }

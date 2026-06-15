@@ -5,7 +5,6 @@ import (
 	"time"
 
 	common "github.com/go-i2p/common/data"
-	"github.com/go-i2p/common/lease_set"
 	"github.com/go-i2p/common/router_info"
 	"github.com/stretchr/testify/assert"
 )
@@ -155,7 +154,7 @@ func TestPublisherInterfaceCompliance(t *testing.T) {
 	var _ interface {
 		Start() error
 		Stop()
-		PublishLeaseSet(hash common.Hash, ls lease_set.LeaseSet) error
+		PublishLeaseSet(hash common.Hash, leaseSetData []byte) error
 		PublishRouterInfo(ri router_info.RouterInfo) error
 		GetStats() PublisherStats
 	} = publisher

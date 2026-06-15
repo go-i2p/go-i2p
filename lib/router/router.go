@@ -99,7 +99,8 @@ type Router struct {
 	// routerInfoProv provides the local RouterInfo to the NetDB publisher
 	routerInfoProv *routerInfoProvider
 
-	// publisher publishes our RouterInfo and LeaseSets to floodfill routers
+	// publisher publishes our RouterInfo and LeaseSets to floodfill routers (tunnel-anonymous)
+	// H-2: Now used for both router and I2CP client LeaseSets via PublishLeaseSetBytes() method
 	publisher *netdb.Publisher
 
 	// explorer actively discovers new NetDB peers via random-key XOR lookups
@@ -108,9 +109,6 @@ type Router struct {
 	// floodfillServer handles incoming DatabaseLookup requests when this router
 	// is configured as a floodfill router
 	floodfillServer *netdb.FloodfillServer
-
-	// leaseSetPublisher handles LeaseSet publication to local NetDB and network
-	leaseSetPublisher *LeaseSetPublisher
 
 	// isReseeding tracks whether the router is currently performing a reseed operation
 	isReseeding bool

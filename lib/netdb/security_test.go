@@ -678,7 +678,7 @@ func TestPublisher_PublishLeaseSetValidation(t *testing.T) {
 	hash := common.Hash{1, 2, 3, 4}
 	emptyLS := lease_set.LeaseSet{} // Empty LeaseSet
 
-	err := publisher.PublishLeaseSet(hash, emptyLS)
+	err := publisher.publishLeaseSetObject(hash, emptyLS)
 	assert.Error(t, err, "Empty LeaseSet should fail validation")
 	assert.Contains(t, err.Error(), "invalid LeaseSet", "Error should indicate validation failure")
 }

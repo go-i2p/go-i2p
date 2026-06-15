@@ -289,20 +289,15 @@ func (s *Server) logClientConnected(conn net.Conn) {
 // Uses delete-from-map as a coordination mechanism with cleanupIdleSessions:
 // only the path that successfully removes the session from the map proceeds
 // with DestroySession, preventing double-cleanup races.
+// M-22: Now delegates to claimSessionCleanup for consistent lock-delete-check pattern.
 func (s *Server) cleanupSessionConnection(sessionPtr **Session) {
 	if *sessionPtr != nil {
 		session := *sessionPtr
 		sessionID := session.ID()
 
-		// Attempt to claim ownership of cleanup by removing from map.
+		// Attempt to claim ownership of cleanup using shared helper.
 		// If the key is already gone, cleanupIdleSessions already handled it.
-		s.mu.Lock()
-		_, owned := s.sessionConns[sessionID]
-		delete(s.sessionConns, sessionID)
-		delete(s.connWriteMu, sessionID)
-		s.mu.Unlock()
-
-		if !owned {
+		if !s.claimSessionCleanup(sessionID) {
 			log.WithFields(logger.Fields{
 				"at":        "i2cp.Server.cleanupSessionConnection",
 				"sessionID": sessionID,
