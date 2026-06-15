@@ -395,6 +395,7 @@ func (ks *RouterInfoKeystore) KeyID() string {
 
 // tryGenerateKeyIDFromPrivateKey attempts to generate a KeyID from the private key.
 // Returns the keyID and a boolean indicating whether a fallback is needed.
+// Uses shared deriveKeyIDFromPublicKey helper (M-31 consolidation).
 func (ks *RouterInfoKeystore) tryGenerateKeyIDFromPrivateKey() (keyID string, needsFallback bool) {
 	// Handle nil privateKey case
 	if ks.privateKey == nil {
@@ -408,11 +409,8 @@ func (ks *RouterInfoKeystore) tryGenerateKeyIDFromPrivateKey() (keyID string, ne
 		return "", true
 	}
 
-	// Generate KeyID from public key bytes
-	if len(public.Bytes()) > 10 {
-		return hex.EncodeToString(public.Bytes()[:10]), false
-	}
-	return hex.EncodeToString(public.Bytes()), false
+	// Use shared helper to generate KeyID from public key
+	return deriveKeyIDFromPublicKey(public), false
 }
 
 // generateFallbackKeyID creates a deterministic fallback KeyID when private key is unavailable.

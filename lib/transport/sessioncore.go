@@ -292,3 +292,17 @@ func (sc *SessionCore) DrainSendQueue(timeout time.Duration) bool {
 		}
 	}
 }
+
+// DiscardRemaining non-blockingly drains and discards all messages left in the send queue.
+// This ensures sendQueueSize reaches zero so subsequent queue checks don't hang.
+// Used during session cleanup to ensure worker goroutines can exit cleanly.
+func (sc *SessionCore) DiscardRemaining() {
+	for {
+		select {
+		case <-sc.SendQueue():
+			sc.AddToSendQueueSize(-1)
+		default:
+			return
+		}
+	}
+}

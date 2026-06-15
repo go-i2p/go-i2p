@@ -27,6 +27,7 @@ var (
 	mu           sync.RWMutex
 	reloaders    []registeredHandler
 	interrupters []registeredHandler
+	preShutdownHandlers []registeredHandler
 	nextID       HandlerID
 	stopOnce     sync.Once
 )

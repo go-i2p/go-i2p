@@ -82,6 +82,79 @@ type BindResult struct {
 //   - BindResult with bound listener/connection and local/external address
 //   - Error if bind fails
 //
+// bindLoopback creates a listener on a loopback address without NAT traversal.
+// M-32 Consolidation: Extracted from BindWithNATTraversal to reduce nesting depth.
+func bindLoopback(cfg *BindConfig, host string) (*BindResult, error) {
+	listenCfg := net.ListenConfig{
+		Control: createReuseAddrControl("loopback listener"),
+	}
+
+	// Reconstruct the bind address, adding brackets for IPv6 addresses
+	bindAddr := cfg.ListenerAddress
+	if cfg.RequestedPort != 0 {
+		// If RequestedPort is set, use it instead of the port from ListenerAddress
+		if strings.Contains(host, ":") {
+			// IPv6 address - add brackets
+			bindAddr = fmt.Sprintf("[%s]:%d", host, cfg.RequestedPort)
+		} else {
+			bindAddr = fmt.Sprintf("%s:%d", host, cfg.RequestedPort)
+		}
+	}
+
+	isTCP := strings.HasPrefix(strings.ToLower(cfg.Network), "tcp")
+
+	if isTCP {
+		listener, err := listenCfg.Listen(context.Background(), cfg.Network, bindAddr)
+		if err != nil {
+			return nil, oops.Wrapf(err, "failed to create TCP listener on %s", bindAddr)
+		}
+		return &BindResult{
+			Listener:     listener,
+			BoundAddress: listener.Addr().String(),
+		}, nil
+	}
+
+	// UDP
+	conn, err := listenCfg.ListenPacket(context.Background(), cfg.Network, bindAddr)
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to create UDP listener on %s", bindAddr)
+	}
+	return &BindResult{
+		PacketConn:   conn,
+		BoundAddress: conn.LocalAddr().String(),
+	}, nil
+}
+
+// bindWithNAT creates a listener with NAT traversal for non-loopback addresses.
+// M-32 Consolidation: Extracted from BindWithNATTraversal to reduce nesting depth.
+func bindWithNAT(cfg *BindConfig) (*BindResult, error) {
+	natCtx, natCancel := context.WithTimeout(context.Background(), cfg.NATTimeout)
+	defer natCancel()
+
+	isTCP := strings.HasPrefix(strings.ToLower(cfg.Network), "tcp")
+
+	if isTCP {
+		listener, err := nattraversal.ListenWithFallbackContext(natCtx, cfg.RequestedPort)
+		if err != nil {
+			return nil, oops.Wrapf(err, "failed to create TCP listener with NAT traversal")
+		}
+		return &BindResult{
+			Listener:     listener,
+			BoundAddress: listener.Addr().String(),
+		}, nil
+	}
+
+	// UDP
+	natPL, err := nattraversal.ListenPacketWithFallbackContext(natCtx, cfg.RequestedPort)
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to create UDP listener with NAT traversal")
+	}
+	return &BindResult{
+		PacketConn:   natPL.PacketConn(),
+		BoundAddress: natPL.Addr().String(),
+	}, nil
+}
+
 // Thread-safe: Multiple goroutines may call concurrently.
 func BindWithNATTraversal(cfg *BindConfig) (*BindResult, error) {
 	// Parse host from ListenerAddress
@@ -104,67 +177,11 @@ func BindWithNATTraversal(cfg *BindConfig) (*BindResult, error) {
 
 	// Check if address is loopback
 	if IsLoopbackAddress(host) {
-		// Loopback — bind without NAT traversal
-		listenCfg := net.ListenConfig{
-			Control: createReuseAddrControl("loopback listener"),
-		}
-
-		// Reconstruct the bind address, adding brackets for IPv6 addresses
-		bindAddr := cfg.ListenerAddress
-		if cfg.RequestedPort != 0 {
-			// If RequestedPort is set, use it instead of the port from ListenerAddress
-			if strings.Contains(host, ":") {
-				// IPv6 address - add brackets
-				bindAddr = fmt.Sprintf("[%s]:%d", host, cfg.RequestedPort)
-			} else {
-				bindAddr = fmt.Sprintf("%s:%d", host, cfg.RequestedPort)
-			}
-		}
-
-		if isTCP {
-			listener, err := listenCfg.Listen(context.Background(), cfg.Network, bindAddr)
-			if err != nil {
-				return nil, oops.Wrapf(err, "failed to create TCP listener on %s", bindAddr)
-			}
-			return &BindResult{
-				Listener:     listener,
-				BoundAddress: listener.Addr().String(),
-			}, nil
-		} else {
-			conn, err := listenCfg.ListenPacket(context.Background(), cfg.Network, bindAddr)
-			if err != nil {
-				return nil, oops.Wrapf(err, "failed to create UDP listener on %s", bindAddr)
-			}
-			return &BindResult{
-				PacketConn:   conn,
-				BoundAddress: conn.LocalAddr().String(),
-			}, nil
-		}
+		return bindLoopback(cfg, host)
 	}
 
 	// Non-loopback — attempt NAT traversal with timeout
-	natCtx, natCancel := context.WithTimeout(context.Background(), cfg.NATTimeout)
-	defer natCancel()
-
-	if isTCP {
-		listener, err := nattraversal.ListenWithFallbackContext(natCtx, cfg.RequestedPort)
-		if err != nil {
-			return nil, oops.Wrapf(err, "failed to create TCP listener with NAT traversal")
-		}
-		return &BindResult{
-			Listener:     listener,
-			BoundAddress: listener.Addr().String(),
-		}, nil
-	} else {
-		natPL, err := nattraversal.ListenPacketWithFallbackContext(natCtx, cfg.RequestedPort)
-		if err != nil {
-			return nil, oops.Wrapf(err, "failed to create UDP listener with NAT traversal")
-		}
-		return &BindResult{
-			PacketConn:   natPL.PacketConn(),
-			BoundAddress: natPL.Addr().String(),
-		}, nil
-	}
+	return bindWithNAT(cfg)
 }
 
 // extractHostFromListenerAddress parses and returns the host from ListenerAddress.
@@ -194,6 +211,29 @@ func constructProbeAddress(host string) string {
 	return fmt.Sprintf("%s:0", host)
 }
 
+// extractAndCloseProbeListener extracts the port from a listener and closes it.
+// Handles error logging and works with both TCP and UDP addresses.
+// M-29 Consolidation: Shared helper for both TCP and UDP probe port extraction.
+func extractAndCloseProbeListener(listener net.Listener, packetConn net.PacketConn, network string) (int, error) {
+	var port int
+	var closeErr error
+
+	if listener != nil {
+		// TCP listener
+		port = listener.Addr().(*net.TCPAddr).Port
+		closeErr = listener.Close()
+	} else {
+		// UDP packet conn
+		port = packetConn.LocalAddr().(*net.UDPAddr).Port
+		closeErr = packetConn.Close()
+	}
+
+	if closeErr != nil {
+		log.WithError(closeErr).Warnf("failed to close probe %s listener", network)
+	}
+	return port, nil
+}
+
 // probePort discovers an OS-assigned free port for the given network type.
 // Returns the assigned port or error if probe fails.
 // Reduces complexity: isolates TCP/UDP branching logic. Cyclomatic: 2.
@@ -217,11 +257,7 @@ func probePort(cfg *BindConfig) (int, error) {
 		if err != nil {
 			return 0, oops.Wrapf(err, "failed to probe available port")
 		}
-		port := temp.Addr().(*net.TCPAddr).Port
-		if closeErr := temp.Close(); closeErr != nil {
-			log.WithError(closeErr).Warn("failed to close probe TCP listener")
-		}
-		return port, nil
+		return extractAndCloseProbeListener(temp, nil, cfg.Network)
 	}
 
 	// UDP
@@ -229,11 +265,7 @@ func probePort(cfg *BindConfig) (int, error) {
 	if err != nil {
 		return 0, oops.Wrapf(err, "failed to probe available UDP port")
 	}
-	port := temp.LocalAddr().(*net.UDPAddr).Port
-	if closeErr := temp.Close(); closeErr != nil {
-		log.WithError(closeErr).Warn("failed to close probe UDP listener")
-	}
-	return port, nil
+	return extractAndCloseProbeListener(nil, temp, cfg.Network)
 }
 
 // isTOCTOURace checks if an error is due to a TOCTOU race (address already in use).

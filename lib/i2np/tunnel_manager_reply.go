@@ -446,16 +446,16 @@ func safeRatio(numerator, denominator uint64) float64 {
 // exploratory reply processing. It runs on the 30-second cleanup ticker.
 func (tm *TunnelManager) logExploratoryReplyFunnelSummary() {
 	counters := SnapshotExploratoryReplyStages()
-	inbound := counters[ExploratoryReplyStageInboundI2NPReceived]
-	parsed := counters[ExploratoryReplyStageTunnelGatewayParsed]
-	decryptAttempt := counters[ExploratoryReplyStageGarlicDecryptAttempt]
-	decryptSuccess := counters[ExploratoryReplyStageGarlicDecryptSuccess]
-	dispatched := counters[ExploratoryReplyStageShortReplyDispatched]
-	correlated := counters[ExploratoryReplyStageShortReplyCorrelated]
-	uncorrelated := counters[ExploratoryReplyStageShortReplyUncorrelated]
-	lateReclassedSuccess := counters[ExploratoryReplyStageLateReplyReclassedOK]
-	lateReclassedReject := counters[ExploratoryReplyStageLateReplyReclassedFail]
-	lateShortSkipped := counters[ExploratoryReplyStageLateReplyShortSkipped]
+	inbound := counters["inbound_i2np_received"]
+	parsed := counters["tunnel_gateway_inner_parsed"]
+	decryptAttempt := counters["garlic_decrypt_attempted"]
+	decryptSuccess := counters["garlic_decrypt_succeeded"]
+	dispatched := counters["short_build_reply_dispatched"]
+	correlated := counters["short_build_reply_correlated"]
+	uncorrelated := counters["short_build_reply_uncorrelated"]
+	lateReclassedSuccess := counters["late_reply_reclassified_success"]
+	lateReclassedReject := counters["late_reply_reclassified_reject"]
+	lateShortSkipped := counters["late_reply_short_build_skipped"]
 
 	log.WithFields(logger.Fields{
 		"interval_sec":                     30,

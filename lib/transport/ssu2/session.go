@@ -673,14 +673,7 @@ func (s *SSU2Session) ackPendingBeforeTime(t time.Time) {
 }
 
 func (s *SSU2Session) discardRemainingMessages() {
-	for {
-		select {
-		case <-s.SendQueue():
-			s.AddToSendQueueSize(-1)
-		default:
-			return
-		}
-	}
+	s.SessionCore.DiscardRemaining()
 }
 
 // ssu2ReadDeadline is the maximum time to wait for a message before checking session state.

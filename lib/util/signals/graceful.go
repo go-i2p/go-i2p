@@ -3,7 +3,6 @@ package signals
 import (
 	"fmt"
 	"os"
-	"sync"
 	"time"
 )
 
@@ -16,10 +15,13 @@ const defaultGracefulTimeout = 30 * time.Second
 const minPerHandlerTimeout = 1 * time.Second
 
 var (
-	preShutdownMu       sync.RWMutex
-	preShutdownHandlers []registeredHandler
-	gracefulTimeout     = defaultGracefulTimeout
+	gracefulTimeout time.Duration
 )
+
+// init sets the default graceful timeout
+func init() {
+	gracefulTimeout = defaultGracefulTimeout
+}
 
 // RegisterPreShutdownHandler registers a handler that runs BEFORE the interrupt
 // handlers during graceful shutdown. This is the appropriate place to register
@@ -35,42 +37,25 @@ var (
 //
 // Returns a HandlerID that can be passed to DeregisterPreShutdownHandler.
 // Nil handlers are silently ignored and return -1.
-// Lock ordering fixed for H-12: acquire mu first (global ID counter), then preShutdownMu.
+// M-27 Consolidation: Uses shared registerHandler pattern from signals.go.
 func RegisterPreShutdownHandler(f Handler) HandlerID {
-	if f == nil {
-		return -1
+	id := registerHandler(f, &preShutdownHandlers)
+	if id >= 0 {
+		log.WithField("handler_id", id).Debug("registered pre-shutdown handler")
 	}
-	// Acquire mu first for ID generation (consistent lock order)
-	mu.Lock()
-	id := nextID
-	nextID++
-	mu.Unlock()
-
-	// Then acquire preShutdownMu for handlers slice
-	preShutdownMu.Lock()
-	defer preShutdownMu.Unlock()
-	preShutdownHandlers = append(preShutdownHandlers, registeredHandler{id: id, fn: f})
-	log.WithField("handler_id", id).Debug("registered pre-shutdown handler")
 	return id
 }
 
 // DeregisterPreShutdownHandler removes a previously registered pre-shutdown handler by ID.
 func DeregisterPreShutdownHandler(id HandlerID) {
-	preShutdownMu.Lock()
-	defer preShutdownMu.Unlock()
-	for i, h := range preShutdownHandlers {
-		if h.id == id {
-			preShutdownHandlers = append(preShutdownHandlers[:i], preShutdownHandlers[i+1:]...)
-			return
-		}
-	}
+	deregisterHandler(id, &preShutdownHandlers)
 }
 
 // SetGracefulTimeout configures the maximum time to wait for pre-shutdown
 // handlers to complete. If zero or negative, defaults to 30 seconds.
 func SetGracefulTimeout(timeout time.Duration) {
-	preShutdownMu.Lock()
-	defer preShutdownMu.Unlock()
+	mu.Lock()
+	defer mu.Unlock()
 	if timeout <= 0 {
 		gracefulTimeout = defaultGracefulTimeout
 	} else {
@@ -84,11 +69,11 @@ func SetGracefulTimeout(timeout time.Duration) {
 // execution moves to the next handler instead of blocking the entire chain.
 // Returns true if all handlers completed within their timeouts, false otherwise.
 func handlePreShutdown() bool {
-	preShutdownMu.RLock()
+	mu.RLock()
 	snapshot := make([]registeredHandler, len(preShutdownHandlers))
 	copy(snapshot, preShutdownHandlers)
 	timeout := gracefulTimeout
-	preShutdownMu.RUnlock()
+	mu.RUnlock()
 
 	if len(snapshot) == 0 {
 		return true

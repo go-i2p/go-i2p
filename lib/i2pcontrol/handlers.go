@@ -436,54 +436,56 @@ func (h *RouterManagerHandler) Handle(ctx context.Context, params json.RawMessag
 // not that shutdown completed. The client connection may be closed before Stop() finishes.
 // The shutdown observes server context cancellation.
 func (h *RouterManagerHandler) handleShutdown(req, result map[string]interface{}) {
-	if _, ok := req["Shutdown"]; ok {
-		if h.RouterControl == nil {
-			log.WithFields(logger.Fields{"at": "handleShutdown"}).Warn("Shutdown requested but RouterControl is nil")
-			result["Shutdown"] = "error: router control not available"
-			return
-		}
-		h.wg.Add(1)
-		go func() {
-			defer h.wg.Done()
-			select {
-			case <-h.ctx.Done():
-				log.WithFields(logger.Fields{"at": "handleShutdown"}).Info("Shutdown cancelled before execution")
-				return
-			default:
-			}
-			log.WithFields(logger.Fields{"at": "handleShutdown"}).Info("Shutdown requested via I2PControl")
-			h.RouterControl.Stop()
-			log.WithFields(logger.Fields{"at": "handleShutdown"}).Info("Router shutdown completed via I2PControl")
-		}()
-		result["Shutdown"] = nil
-	}
+	h.handleStopOperation(
+		req,
+		result,
+		"Shutdown",
+		"Shutdown requested via I2PControl",
+		"Router shutdown completed via I2PControl",
+	)
 }
 
 // handleRestart performs a graceful shutdown for supervisor-managed restart if requested.
 // Like handleShutdown, the response confirms the request was accepted, not completion.
 // The restart observes server context cancellation.
 func (h *RouterManagerHandler) handleRestart(req, result map[string]interface{}) {
-	if _, ok := req["Restart"]; ok {
-		if h.RouterControl == nil {
-			log.WithFields(logger.Fields{"at": "handleRestart"}).Warn("Restart requested but RouterControl is nil")
-			result["Restart"] = "error: router control not available"
-			return
-		}
-		h.wg.Add(1)
-		go func() {
-			defer h.wg.Done()
-			select {
-			case <-h.ctx.Done():
-				log.WithFields(logger.Fields{"at": "handleRestart"}).Info("Restart cancelled before execution")
-				return
-			default:
-			}
-			log.WithFields(logger.Fields{"at": "handleRestart"}).Info("Restart requested via I2PControl (performing shutdown for supervisor restart)")
-			h.RouterControl.Stop()
-			log.WithFields(logger.Fields{"at": "handleRestart"}).Info("Router restart/stop completed via I2PControl")
-		}()
-		result["Restart"] = nil
+	h.handleStopOperation(
+		req,
+		result,
+		"Restart",
+		"Restart requested via I2PControl (performing shutdown for supervisor restart)",
+		"Router restart/stop completed via I2PControl",
+	)
+}
+
+// handleStopOperation is a generic handler for shutdown and restart operations.
+// Both Shutdown and Restart call RouterControl.Stop() with different logging.
+// M-30 Consolidation: Merged handleShutdown and handleRestart into single operation.
+func (h *RouterManagerHandler) handleStopOperation(req, result map[string]interface{}, opKey, startMsg, completeMsg string) {
+	if _, ok := req[opKey]; !ok {
+		return
 	}
+
+	if h.RouterControl == nil {
+		log.WithFields(logger.Fields{"at": opKey}).Warnf("%s requested but RouterControl is nil", opKey)
+		result[opKey] = "error: router control not available"
+		return
+	}
+
+	h.wg.Add(1)
+	go func() {
+		defer h.wg.Done()
+		select {
+		case <-h.ctx.Done():
+			log.WithFields(logger.Fields{"at": opKey}).Infof("%s cancelled before execution", opKey)
+			return
+		default:
+		}
+		log.WithFields(logger.Fields{"at": opKey}).Info(startMsg)
+		h.RouterControl.Stop()
+		log.WithFields(logger.Fields{"at": opKey}).Info(completeMsg)
+	}()
+	result[opKey] = nil
 }
 
 // handleReseed triggers a manual NetDB reseed operation if requested.

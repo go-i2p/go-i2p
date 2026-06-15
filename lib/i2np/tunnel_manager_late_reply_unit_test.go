@@ -60,7 +60,7 @@ func TestProcessUncorrelatedReply_LateVTBReclassifiesExpireToReject(t *testing.T
 func TestProcessUncorrelatedReply_LateShortBuildSkipped(t *testing.T) {
 	tm := NewTunnelManager(&SimpleMockPeerSelector{})
 	windowMs := int64((10 * time.Minute).Milliseconds())
-	before := SnapshotExploratoryReplyStages()[ExploratoryReplyStageLateReplyShortSkipped]
+	before := SnapshotExploratoryReplyStages()["late_reply_short_build_skipped"]
 
 	// Simulate previously-accounted expiration for a short build.
 	tm.buildExpireWindow.recordEvent()
@@ -77,13 +77,13 @@ func TestProcessUncorrelatedReply_LateShortBuildSkipped(t *testing.T) {
 
 	// Expiration remains unchanged for skipped late STBM classification.
 	assert.Equal(t, float64(1), tm.GetBuildExpireCount(windowMs))
-	assert.Equal(t, before+1, SnapshotExploratoryReplyStages()[ExploratoryReplyStageLateReplyShortSkipped])
+	assert.Equal(t, before+1, SnapshotExploratoryReplyStages()["late_reply_short_build_skipped"])
 }
 
 func TestProcessUncorrelatedReply_LateShortBuildBestEffortDecryptReclassifies(t *testing.T) {
 	tm := NewTunnelManager(&SimpleMockPeerSelector{})
 	windowMs := int64((10 * time.Minute).Milliseconds())
-	before := SnapshotExploratoryReplyStages()[ExploratoryReplyStageLateReplyReclassedOK]
+	before := SnapshotExploratoryReplyStages()["late_reply_reclassified_success"]
 
 	var key [32]byte
 	for i := range key {
@@ -123,7 +123,7 @@ func TestProcessUncorrelatedReply_LateShortBuildBestEffortDecryptReclassifies(t 
 
 	assert.Equal(t, float64(0), tm.GetBuildExpireCount(windowMs))
 	assert.Equal(t, float64(1), tm.GetBuildSuccessCount(windowMs))
-	assert.Equal(t, before+1, SnapshotExploratoryReplyStages()[ExploratoryReplyStageLateReplyReclassedOK])
+	assert.Equal(t, before+1, SnapshotExploratoryReplyStages()["late_reply_reclassified_success"])
 }
 
 func makeEncryptedSTBMReplySlotForTest(t *testing.T, key, noiseHash [32]byte, index int, reply byte) []byte {

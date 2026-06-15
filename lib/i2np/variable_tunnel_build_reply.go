@@ -57,17 +57,9 @@ func (v *VariableTunnelBuildReply) logReplyStart(recordCount int) {
 
 // validateRecordCount validates that Count field matches actual record count.
 // Returns an error if count mismatch or no records present.
+// L-4 Consolidation: Delegates to shared ValidateRecordCount helper.
 func (v *VariableTunnelBuildReply) validateRecordCount(recordCount int) error {
-	if v.Count != recordCount {
-		return oops.Errorf("count mismatch: Count field is %d but have %d records", v.Count, recordCount)
-	}
-
-	if recordCount == 0 {
-		log.WithFields(logger.Fields{"at": "validateRecordCount"}).Warn("VariableTunnelBuildReply has no response records")
-		return oops.Errorf("tunnel build failed: no response records")
-	}
-
-	return nil
+	return ValidateRecordCount(v.Count, recordCount, "VariableTunnelBuildReply")
 }
 
 // processAllHops processes each hop response and counts successes.
@@ -112,17 +104,9 @@ func (v *VariableTunnelBuildReply) logReplyCompletion(successCount, recordCount 
 
 // determineBuildResult determines the final result based on success count.
 // Returns nil if all hops accepted, otherwise returns an appropriate error.
+// L-1 Consolidation: Delegates to shared DetermineBuildResult helper.
 func (v *VariableTunnelBuildReply) determineBuildResult(successCount, recordCount int, firstError error) error {
-	if successCount == recordCount {
-		log.WithFields(logger.Fields{"at": "determineBuildResult"}).Debug("Variable tunnel build successful - all hops accepted")
-		return nil
-	}
-
-	if firstError != nil {
-		return oops.Wrapf(firstError, "variable tunnel build failed")
-	}
-
-	return oops.Errorf("variable tunnel build failed: only %d of %d hops accepted", successCount, recordCount)
+	return DetermineBuildResult(successCount, recordCount, firstError, "variable tunnel")
 }
 
 // processHopResponse processes a single hop's response record for variable tunnels.

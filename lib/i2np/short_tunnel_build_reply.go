@@ -71,17 +71,9 @@ func (s *ShortTunnelBuildReply) logReplyStart(recordCount int) {
 
 // validateRecordCount validates that Count field matches actual record count.
 // Returns an error if count mismatch or no records present.
+// L-4 Consolidation: Delegates to shared ValidateRecordCount helper.
 func (s *ShortTunnelBuildReply) validateRecordCount(recordCount int) error {
-	if s.Count != recordCount {
-		return oops.Errorf("count mismatch: Count field is %d but have %d records", s.Count, recordCount)
-	}
-
-	if recordCount == 0 {
-		log.WithFields(logger.Fields{"at": "validateRecordCount"}).Warn("ShortTunnelBuildReply has no response records")
-		return oops.Errorf("tunnel build failed: no response records")
-	}
-
-	return nil
+	return ValidateRecordCount(s.Count, recordCount, "ShortTunnelBuildReply")
 }
 
 // processAllHops processes each hop response and counts successes.

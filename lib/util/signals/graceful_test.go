@@ -17,16 +17,16 @@ func resetPreShutdownHandlers(t *testing.T, restoreTimeout bool) {
 		originalTimeout = gracefulTimeout
 	}
 	t.Cleanup(func() {
-		preShutdownMu.Lock()
+		mu.Lock()
 		preShutdownHandlers = originalHandlers
 		if restoreTimeout {
 			gracefulTimeout = originalTimeout
 		}
-		preShutdownMu.Unlock()
+		mu.Unlock()
 	})
-	preShutdownMu.Lock()
+	mu.Lock()
 	preShutdownHandlers = nil
-	preShutdownMu.Unlock()
+	mu.Unlock()
 }
 
 // =============================================================================
@@ -42,9 +42,9 @@ func TestRegisterPreShutdownHandler(t *testing.T) {
 		called = true
 	})
 
-	preShutdownMu.RLock()
+	mu.RLock()
 	count := len(preShutdownHandlers)
-	preShutdownMu.RUnlock()
+	mu.RUnlock()
 
 	if count != 1 {
 		t.Errorf("expected 1 pre-shutdown handler registered, got %d", count)
@@ -63,9 +63,9 @@ func TestRegisterPreShutdownHandler_Nil(t *testing.T) {
 
 	RegisterPreShutdownHandler(nil)
 
-	preShutdownMu.RLock()
+	mu.RLock()
 	count := len(preShutdownHandlers)
-	preShutdownMu.RUnlock()
+	mu.RUnlock()
 
 	if count != 0 {
 		t.Errorf("nil handler should not be registered, got %d handlers", count)
@@ -153,7 +153,7 @@ func TestDeregisterPreShutdownHandler(t *testing.T) {
 		RegisterPreShutdownHandler,
 		DeregisterPreShutdownHandler,
 		func() { handlePreShutdown() },
-		func() int { preShutdownMu.RLock(); defer preShutdownMu.RUnlock(); return len(preShutdownHandlers) },
+		func() int { mu.RLock(); defer mu.RUnlock(); return len(preShutdownHandlers) },
 	)
 }
 
@@ -191,16 +191,16 @@ func TestSetGracefulTimeout(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			originalTimeout := gracefulTimeout
 			t.Cleanup(func() {
-				preShutdownMu.Lock()
+				mu.Lock()
 				gracefulTimeout = originalTimeout
-				preShutdownMu.Unlock()
+				mu.Unlock()
 			})
 
 			SetGracefulTimeout(tc.input)
 
-			preShutdownMu.RLock()
+			mu.RLock()
 			timeout := gracefulTimeout
-			preShutdownMu.RUnlock()
+			mu.RUnlock()
 
 			if timeout != tc.expected {
 				t.Errorf("expected %s timeout, got %s", tc.expected, timeout)
@@ -230,9 +230,9 @@ func TestPreShutdownConcurrentRegistration(t *testing.T) {
 	}
 	wg.Wait()
 
-	preShutdownMu.RLock()
+	mu.RLock()
 	count := len(preShutdownHandlers)
-	preShutdownMu.RUnlock()
+	mu.RUnlock()
 
 	if count != numGoroutines {
 		t.Errorf("expected %d handlers, got %d", numGoroutines, count)

@@ -240,17 +240,9 @@ func (s *NTCP2Session) sendWorker() {
 }
 
 // discardRemainingMessages drains and discards any messages left in the send queue
-// after the worker decides to stop. This ensures sendQueueSize reaches zero so
-// drainSendQueue does not spin waiting for a defunct worker.
+// after the worker decides to stop. This delegates to the SessionCore shared implementation.
 func (s *NTCP2Session) discardRemainingMessages() {
-	for {
-		select {
-		case <-s.SendQueue():
-			s.AddToSendQueueSize(-1)
-		default:
-			return
-		}
-	}
+	s.SessionCore.DiscardRemaining()
 }
 
 // processSendQueueMessage processes a single I2NP message from the send queue.

@@ -23,35 +23,11 @@ var nowFunc = time.Now
 //
 // This implements the I2P spec requirement: "Router MUST reject RouterInfo with
 // published timestamp >60 minutes in the future or past."
+//
+// M-26 Consolidation: This now delegates to ValidateTimestampWithSkew with
+// the MaxClockSkew constant, eliminating duplicate validation logic.
 func ValidateTimestamp(published time.Time) error {
-	if published.IsZero() {
-		return oops.Errorf("clock skew: published timestamp is zero")
-	}
-
-	now := nowFunc()
-	skew := now.Sub(published)
-
-	if skew > MaxClockSkew {
-		log.WithFields(map[string]interface{}{
-			"published": published.UTC().Format(time.RFC3339),
-			"now":       now.UTC().Format(time.RFC3339),
-			"skew":      skew.String(),
-			"max":       MaxClockSkew.String(),
-		}).Warn("Rejecting RouterInfo: published timestamp too far in the past")
-		return oops.Errorf("clock skew: timestamp is %s in the past (max %s)", skew, MaxClockSkew)
-	}
-
-	if skew < -MaxClockSkew {
-		log.WithFields(map[string]interface{}{
-			"published": published.UTC().Format(time.RFC3339),
-			"now":       now.UTC().Format(time.RFC3339),
-			"skew":      (-skew).String(),
-			"max":       MaxClockSkew.String(),
-		}).Warn("Rejecting RouterInfo: published timestamp too far in the future")
-		return oops.Errorf("clock skew: timestamp is %s in the future (max %s)", -skew, MaxClockSkew)
-	}
-
-	return nil
+	return ValidateTimestampWithSkew(published, MaxClockSkew)
 }
 
 // IsTimestampValid is a convenience wrapper around ValidateTimestamp that returns

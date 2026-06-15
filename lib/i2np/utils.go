@@ -156,43 +156,44 @@ func ReadI2NPSSUHeader(data []byte) (I2NPSSUHeader, error) {
 }
 
 // ReadI2NPType reads the I2NP message type from data
+// L-2 Consolidation: Unified logging logic into single computed log call
 func ReadI2NPType(data []byte) (int, error) {
 	if len(data) < 1 {
 		return 0, ErrI2NPNotEnoughData
 	}
 
 	messageType := common.Integer([]byte{data[0]})
+	typeValue := messageType.Int()
+
+	// Compute log level and message based on message type
+	logLevel := "debug"
+	logMessage := "parsed_i2np_type"
 
 	// Types 4-9 and 12-17 are currently unassigned in the I2NP spec.
 	// Log at Debug level instead of Warn to avoid spurious warnings for
 	// types that may be assigned in future spec revisions.
-	if (messageType.Int() >= 4 && messageType.Int() <= 9) ||
-		(messageType.Int() >= 12 && messageType.Int() <= 17) {
-		log.WithFields(logger.Fields{
-			"at":   "i2np.ReadI2NPType",
-			"type": messageType,
-		}).Debug("unassigned_i2np_type")
+	if (typeValue >= 4 && typeValue <= 9) || (typeValue >= 12 && typeValue <= 17) {
+		logMessage = "unassigned_i2np_type"
+	} else if typeValue >= 224 && typeValue <= 254 {
+		logLevel = "warn"
+		logMessage = "experimental_i2np_type"
+	} else if typeValue == 255 {
+		logLevel = "warn"
+		logMessage = "reserved_i2np_type"
 	}
 
-	if messageType.Int() >= 224 && messageType.Int() <= 254 {
-		log.WithFields(logger.Fields{
-			"at":   "i2np.ReadI2NPType",
-			"type": messageType,
-		}).Warn("experimental_i2np_type")
-	}
-
-	if messageType.Int() == 255 {
-		log.WithFields(logger.Fields{
-			"at":   "i2np.ReadI2NPType",
-			"type": messageType,
-		}).Warn("reserved_i2np_type")
-	}
-
-	log.WithFields(logger.Fields{
+	// Single log call with computed level and message
+	fields := logger.Fields{
 		"at":   "i2np.ReadI2NPType",
 		"type": messageType,
-	}).Debug("parsed_i2np_type")
-	return messageType.Int(), nil
+	}
+	if logLevel == "warn" {
+		log.WithFields(fields).Warn(logMessage)
+	} else {
+		log.WithFields(fields).Debug(logMessage)
+	}
+
+	return typeValue, nil
 }
 
 // ReadI2NPNTCPMessageID reads the message ID from NTCP data
@@ -488,4 +489,39 @@ func processHopReplyCode(hopIndex int, replyCode byte, logPrefix string) (bool, 
 		}).Warn(logPrefix + "Hop returned unknown reply code")
 		return false, oops.Errorf("hop %d: unknown reply code %d", hopIndex, replyCode)
 	}
+}
+
+// DetermineBuildResult evaluates tunnel build outcome based on success counts and first encountered error.
+// L-1 Consolidation: Shared by tunnel_build_reply.go and variable_tunnel_build_reply.go.
+// tunnelType should be lowercase (e.g., "tunnel", "variable tunnel") for error messages.
+func DetermineBuildResult(successCount, recordCount int, firstError error, tunnelType string) error {
+	if successCount == recordCount {
+		log.WithFields(logger.Fields{
+			"at":   "DetermineBuildResult",
+			"type": tunnelType,
+		}).Debug(tunnelType + " build successful - all hops accepted")
+		return nil
+	}
+
+	if firstError != nil {
+		return oops.Wrapf(firstError, "%s build failed", tunnelType)
+	}
+
+	return oops.Errorf("%s build failed: only %d of %d hops accepted", tunnelType, successCount, recordCount)
+}
+
+// ValidateRecordCount validates that Count field matches actual record count.
+// L-4 Consolidation: Shared by variable_tunnel_build_reply.go and short_tunnel_build_reply.go.
+// tunnelTypeName is used in log messages (e.g., "VariableTunnelBuildReply", "ShortTunnelBuildReply")
+func ValidateRecordCount(countField, recordCount int, tunnelTypeName string) error {
+	if countField != recordCount {
+		return oops.Errorf("count mismatch: Count field is %d but have %d records", countField, recordCount)
+	}
+
+	if recordCount == 0 {
+		log.WithFields(logger.Fields{"at": "ValidateRecordCount"}).Warn(tunnelTypeName + " has no response records")
+		return oops.Errorf("tunnel build failed: no response records")
+	}
+
+	return nil
 }

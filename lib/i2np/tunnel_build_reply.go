@@ -111,17 +111,9 @@ func (t *TunnelBuildReply) logReplyCompletion(successCount, recordCount int) {
 // determineBuildResult determines the final result based on success count.
 // Implements replyStepProcessor interface.
 // Returns nil if all hops accepted, otherwise returns an appropriate error.
+// L-1 Consolidation: Delegates to shared DetermineBuildResult helper.
 func (t *TunnelBuildReply) determineBuildResult(successCount, recordCount int, firstError error) error {
-	if successCount == recordCount {
-		log.WithFields(logger.Fields{"at": "determineBuildResult"}).Debug("Tunnel build successful - all hops accepted")
-		return nil
-	}
-
-	if firstError != nil {
-		return oops.Wrapf(firstError, "tunnel build failed")
-	}
-
-	return oops.Errorf("tunnel build failed: only %d of %d hops accepted", successCount, recordCount)
+	return DetermineBuildResult(successCount, recordCount, firstError, "tunnel")
 }
 
 // processHopResponse processes a single hop's response record.

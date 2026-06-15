@@ -12,6 +12,20 @@ import (
 	"github.com/samber/oops"
 )
 
+// deriveKeyIDFromPublicKey generates a hex-encoded KeyID from a public key.
+// Takes the first 10 bytes of the public key and encodes them as hex.
+// This is a shared helper used by multiple keystores to ensure consistent KeyID derivation.
+//
+// M-31 Consolidation: This helper eliminates duplicate logic between computeKeyID
+// and tryGenerateKeyIDFromPrivateKey.
+func deriveKeyIDFromPublicKey(publicKey types.PublicKey) string {
+	keyBytes := publicKey.Bytes()
+	if len(keyBytes) > 10 {
+		keyBytes = keyBytes[:10]
+	}
+	return hex.EncodeToString(keyBytes)
+}
+
 // KeyStore is an interface for storing and retrieving keys
 type KeyStore interface {
 	KeyID() string
@@ -77,13 +91,8 @@ func (ks *KeyStoreImpl) computeKeyID() string {
 			log.WithField("fallback_id", fallbackID).Debug("Generated fallback KeyID")
 			return fallbackID
 		}
-		// Use hex encoding to create a filesystem-safe identifier
-		// Raw binary bytes can contain null bytes, path separators, or other unsafe characters
-		keyBytes := public.Bytes()
-		if len(keyBytes) > 10 {
-			keyBytes = keyBytes[:10]
-		}
-		hexID := hex.EncodeToString(keyBytes)
+		// Use shared helper to derive KeyID from public key
+		hexID := deriveKeyIDFromPublicKey(public)
 		log.WithField("key_id", hexID).Debug("Generated hex-encoded KeyID from public key")
 		return hexID
 	}
