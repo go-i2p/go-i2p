@@ -137,27 +137,22 @@ func (s *ShortTunnelBuildReply) processHopResponse(hopIndex int, record BuildRes
 }
 
 // verifyRecordIntegrity verifies the SHA-256 hash of a build response record.
-// Hash verification is skipped for STBM reply records: the ChaCha20-decrypted
-// 218-byte slot contains only a 1-byte reply code plus padding — there is no
-// embedded hash field, so BuildResponseRecord.Hash is left at the zero value.
+// For live STBM replies: the ChaCha20-decrypted 218-byte slot has only a 1-byte
+// reply code plus padding — no hash field, so record.Hash stays zero. This method
+// early-returns for those records.
+// For test/non-STBM cases with non-zero hashes, verifies integrity is maintained.
 func (s *ShortTunnelBuildReply) verifyRecordIntegrity(hopIndex int, record BuildResponseRecord) error {
-	// STBM reply records are decrypted from a 218-byte ChaCha20 stream slot.
-	// The resulting BuildResponseRecord has only the Reply field set; Hash and
-	// RandomData are zero. Skip integrity verification for these records.
+	// STBM reply records have zero hash; skip verification for these.
 	var zeroHash [32]byte
 	if record.Hash == zeroHash {
 		log.WithFields(logger.Fields{
 			"at":        "ShortTunnelBuildReply.verifyRecordIntegrity",
 			"hop_index": hopIndex,
-		}).Debug("STBM reply record: skipping hash check (no hash in STBM cleartext)")
+		}).Debug("STBM reply record: skipping hash check (not present in STBM cleartext)")
 		return nil
 	}
 
-	// BuildResponseRecord has: Hash (32 bytes), RandomData (495 bytes), Reply (1 byte)
-	// Total: 528 bytes
-	// The Hash field should match the SHA-256 of RandomData + Reply
-
-	// Compute hash of RandomData + Reply
+	// If record has a non-zero hash, verify it covers RandomData + Reply
 	dataToHash := make([]byte, 496)
 	copy(dataToHash[:495], record.RandomData[:])
 	dataToHash[495] = record.Reply

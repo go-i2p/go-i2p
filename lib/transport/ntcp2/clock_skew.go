@@ -5,19 +5,20 @@ import (
 	"math"
 	"time"
 
+	"github.com/go-i2p/go-i2p/lib/transport"
 	gonoise "github.com/go-i2p/go-noise/ntcp2"
 )
 
-// ClockSkewTolerance is the maximum allowed difference between local and
-// peer timestamps. Per the NTCP2 spec, connections with a clock skew
-// exceeding this value should be terminated with reason code 6.
+// ClockSkewTolerance is re-exported from the shared transport package.
+// Per the NTCP2 spec, connections with a clock skew exceeding this value
+// should be terminated with reason code 6.
 //
 // We intentionally use 30 s (half the go-noise default of 60 s) to narrow the
 // post-restart replay window: a captured handshake msg1 is only replayable for
 // up to 30 s rather than 60 s after a router restart that flushes the in-memory
 // replay cache. This is a security trade-off; operators with loose NTP discipline
 // should consider tightening NTP synchronisation rather than widening this value.
-const ClockSkewTolerance = 30 * time.Second
+const ClockSkewTolerance = transport.ClockSkewTolerance
 
 // _ ensures the upstream constant is still importable to catch future changes.
 var _ = gonoise.ClockSkewTolerance
@@ -66,7 +67,7 @@ func ValidateTimestamp(peerTime uint32) error {
 }
 
 func measureSkew(peerTime, localTime uint32) (int64, time.Duration) {
-	skewSeconds := int64(peerTime) - int64(localTime)
+	skewSeconds := transport.CalculateTimestampSkew(peerTime, localTime)
 	return skewSeconds, time.Duration(skewSeconds) * time.Second
 }
 
@@ -78,9 +79,6 @@ func isClockSkewWithinTolerance(skewSeconds int64) bool {
 // and the local time. Positive skew means the peer's clock is ahead of ours.
 // This can be used for diagnostic logging without enforcing the tolerance.
 func MeasureClockSkew(peerTime uint32) time.Duration {
-	if peerTime == 0 {
-		return 0
-	}
-	localTime := uint32(time.Now().Unix())
-	return time.Duration(int64(peerTime)-int64(localTime)) * time.Second
+	skewSeconds := transport.MeasureTimestampSkewAgainstNow(peerTime)
+	return time.Duration(skewSeconds) * time.Second
 }

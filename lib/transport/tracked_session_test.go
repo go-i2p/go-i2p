@@ -47,10 +47,9 @@ func TestTrackedConn_AutoDecrement(t *testing.T) {
 	tmux := &TransportMuxer{}
 	atomic.StoreInt32(&tmux.activeSessionCount, 5)
 
-	tc := &trackedConn{
-		Conn: &mockConn{},
-		mux:  tmux,
-	}
+	tc := NewTrackedConn(&mockConn{}, func() {
+		tmux.ReleaseSession()
+	})
 
 	err := tc.Close()
 	assert.NoError(t, err)
@@ -64,10 +63,9 @@ func TestTrackedConn_DoubleClose(t *testing.T) {
 	tmux := &TransportMuxer{}
 	atomic.StoreInt32(&tmux.activeSessionCount, 5)
 
-	tc := &trackedConn{
-		Conn: &mockConn{},
-		mux:  tmux,
-	}
+	tc := NewTrackedConn(&mockConn{}, func() {
+		tmux.ReleaseSession()
+	})
 
 	tc.Close()
 	tc.Close()

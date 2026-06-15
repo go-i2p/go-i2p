@@ -19,8 +19,10 @@ func NewBuildMessageFactory() build.BuildMessageFactory {
 	return &buildMessageFactory{}
 }
 
-// CreateShortTunnelBuildMessage creates a serialized Short Tunnel Build message (type 25).
-func (f *buildMessageFactory) CreateShortTunnelBuildMessage(encryptedRecords [][]byte, messageID int) ([]byte, error) {
+// createVariableBuildMessage is a generic helper for creating variable-record tunnel build messages.
+// It computes total message size, marshals records, and creates an I2NP message of the given type.
+// Consolidation for M-1: eliminates duplication between CreateShortTunnelBuildMessage and CreateVariableTunnelBuildMessage.
+func (f *buildMessageFactory) createVariableBuildMessage(msgType int, typeName string, encryptedRecords [][]byte, messageID int) ([]byte, error) {
 	// Calculate total size: 1 byte for count + all encrypted records
 	totalSize := 1
 	for _, rec := range encryptedRecords {
@@ -37,44 +39,27 @@ func (f *buildMessageFactory) CreateShortTunnelBuildMessage(encryptedRecords [][
 		offset += len(rec)
 	}
 
-	msg := NewBaseI2NPMessage(I2NPMessageTypeShortTunnelBuild)
+	msg := NewBaseI2NPMessage(msgType)
 	msg.SetMessageID(messageID)
 	msg.SetData(data)
 
 	serialized, err := msg.MarshalBinary()
 	if err != nil {
-		return nil, oops.Wrapf(err, "failed to marshal Short Tunnel Build message (type 25, msgID %d)", messageID)
+		return nil, oops.Wrapf(err, "failed to marshal %s message (msgID %d)", typeName, messageID)
 	}
 	return serialized, nil
 }
 
+// CreateShortTunnelBuildMessage creates a serialized Short Tunnel Build message (type 25).
+// Refactored for M-1: now delegates to createVariableBuildMessage.
+func (f *buildMessageFactory) CreateShortTunnelBuildMessage(encryptedRecords [][]byte, messageID int) ([]byte, error) {
+	return f.createVariableBuildMessage(I2NPMessageTypeShortTunnelBuild, "Short Tunnel Build (type 25)", encryptedRecords, messageID)
+}
+
 // CreateVariableTunnelBuildMessage creates a serialized Variable Tunnel Build message (type 23).
+// Refactored for M-1: now delegates to createVariableBuildMessage.
 func (f *buildMessageFactory) CreateVariableTunnelBuildMessage(encryptedRecords [][]byte, messageID int) ([]byte, error) {
-	// Calculate total size: 1 byte for count + all encrypted records
-	totalSize := 1
-	for _, rec := range encryptedRecords {
-		totalSize += len(rec)
-	}
-
-	data := make([]byte, totalSize)
-	data[0] = byte(len(encryptedRecords))
-
-	// Copy encrypted records into the message
-	offset := 1
-	for _, rec := range encryptedRecords {
-		copy(data[offset:], rec)
-		offset += len(rec)
-	}
-
-	msg := NewBaseI2NPMessage(I2NPMessageTypeVariableTunnelBuild)
-	msg.SetMessageID(messageID)
-	msg.SetData(data)
-
-	serialized, err := msg.MarshalBinary()
-	if err != nil {
-		return nil, oops.Wrapf(err, "failed to marshal Variable Tunnel Build message (type 23, msgID %d)", messageID)
-	}
-	return serialized, nil
+	return f.createVariableBuildMessage(I2NPMessageTypeVariableTunnelBuild, "Variable Tunnel Build (type 23)", encryptedRecords, messageID)
 }
 
 // CreateTunnelBuildMessage creates a serialized Tunnel Build message (type 21).

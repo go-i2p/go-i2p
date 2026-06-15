@@ -538,7 +538,7 @@ func (tmux *TransportMuxer) handleAcceptChannelResult(res acceptResult, ok bool)
 		"transport_index": res.transportIndex,
 		"active_sessions": atomic.LoadInt32(&tmux.activeSessionCount),
 	}).Debug("accept succeeded")
-	return &trackedConn{Conn: res.conn, mux: tmux}, nil
+	return NewTrackedConn(res.conn, tmux.ReleaseSession), nil
 }
 
 // Addr returns the address of the first transport's listener.
@@ -614,7 +614,7 @@ func (tmux *TransportMuxer) handleAcceptResult(res acceptResult, ok bool) (net.C
 		"transport_index": res.transportIndex,
 		"active_sessions": atomic.LoadInt32(&tmux.activeSessionCount),
 	}).Debug("accept succeeded")
-	return &trackedConn{Conn: res.conn, mux: tmux}, nil
+	return NewTrackedConn(res.conn, tmux.ReleaseSession), nil
 }
 
 // validateTransports checks that at least one transport is configured.
@@ -787,21 +787,4 @@ func (ts *trackedSession) Close() error {
 		ts.mux.ReleaseSession()
 	}
 	return ts.TransportSession.Close()
-}
-
-// trackedConn wraps a net.Conn to auto-decrement the active session
-// counter when Close() is called.
-type trackedConn struct {
-	net.Conn
-	mux      *TransportMuxer
-	released int32 // atomic
-}
-
-// Close closes the underlying connection and decrements the active session
-// counter exactly once.
-func (tc *trackedConn) Close() error {
-	if atomic.CompareAndSwapInt32(&tc.released, 0, 1) {
-		tc.mux.ReleaseSession()
-	}
-	return tc.Conn.Close()
 }

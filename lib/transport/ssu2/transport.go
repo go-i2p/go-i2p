@@ -2,7 +2,6 @@ package ssu2
 
 import (
 	"context"
-	"crypto/sha256"
 	"errors"
 	"fmt"
 	"net"
@@ -439,17 +438,17 @@ func (t *SSU2Transport) Accept() (net.Conn, error) {
 	// Mark the connection as accepted to prevent dual-ownership via promotion (R-3).
 	// Use MarkAccepted to handle CAS atomically and avoid clobbering a concurrent promotion (X-3).
 	peerHash := t.extractPeerHash(tracked)
-	// The original value should be the underlying raw conn (before wrapping in trackedConn).
+	// The original value should be the underlying raw conn (before wrapping in transport.TrackedConn).
 	// If MarkAccepted fails, a concurrent GetSession already promoted this to a session, so we
 	// don't deliver it to Accept (ownership already transferred).
-	originalConn := tracked.(*trackedConn).Conn
+	originalConn := tracked.(*transport.TrackedConn).Conn
 	if !t.sessionRegistry.MarkAccepted(peerHash, originalConn) {
 		// Promotion race: concurrent GetSession won.
 		// CRITICAL-2.1 FIX: Do NOT call tracked.Close() here!
 		// The promoted session owns the connection now. Calling tracked.Close()
 		// would fire onClose → removeSession, incorrectly deleting the promoted
 		// session from the map while it's still alive.
-		// Let the trackedConn wrapper be GC'd harmlessly.
+		// Let the TrackedConn wrapper be GC'd harmlessly.
 		t.logger.WithFields(map[string]interface{}{
 			"remote_addr": conn.RemoteAddr().String(),
 			"peer_hash":   logutil.HashPrefix(peerHash),
@@ -483,58 +482,18 @@ func (t *SSU2Transport) trackInboundConnection(conn net.Conn) (net.Conn, bool) {
 	if ssu2Conn, ok := conn.(*ssu2noise.SSU2Conn); ok {
 		t.maybeAutoInitiatePeerTest(ssu2Conn.RemoteAddr())
 	}
-	return &trackedConn{
-		Conn: conn,
-		onClose: func() {
-			t.sessionRegistry.Remove(peerHash)
-		},
-	}, true // Mark as fresh
+	return transport.NewTrackedConn(conn, func() {
+		t.sessionRegistry.Remove(peerHash)
+	}), true // Mark as fresh
 }
 
 func (t *SSU2Transport) extractPeerHash(conn net.Conn) data.Hash {
-	var peerHash data.Hash
-	if ssu2Addr, ok := conn.RemoteAddr().(*ssu2noise.SSU2Addr); ok {
-		hashBytes := ssu2Addr.RouterHash()
-		peerHash = hashBytes
-		var zeroHash data.Hash
-		if peerHash != zeroHash {
-			return peerHash
+	return transport.DeriveConnectionHash(conn, func() (data.Hash, bool) {
+		if ssu2Addr, ok := conn.RemoteAddr().(*ssu2noise.SSU2Addr); ok {
+			return ssu2Addr.RouterHash(), true
 		}
-	}
-
-	// SA-3 fix: Fallback for connections without a router hash.
-	// Hash the full address with SHA-256 to avoid truncation collisions when
-	// address strings exceed 32 bytes (long IPv6 addresses with zones).
-	// Set a consistent marker byte to separate address-derived keys from real
-	// router hashes, preventing collisions if a router hash happens to match
-	// an address-derived key.
-	//
-	// Strip the ephemeral port so reconnections from the same host produce
-	// the same hash, avoiding duplicate session tracking entries.
-	addrStr := conn.RemoteAddr().String()
-	if host, _, err := net.SplitHostPort(addrStr); err == nil {
-		addrStr = host
-	}
-	hash := sha256.Sum256([]byte(addrStr))
-	copy(peerHash[:], hash[:])
-	// Set marker byte to distinguish address-derived hashes from real router hashes
-	peerHash[0] = 0xFE // distinct from NTCP2 (0xFF) for debugging
-
-	return peerHash
-}
-
-// trackedConn wraps a net.Conn to execute a cleanup function when closed.
-type trackedConn struct {
-	net.Conn
-	onClose   func()
-	closeOnce sync.Once
-}
-
-// Close closes the underlying connection and runs the close callback once.
-func (tc *trackedConn) Close() error {
-	err := tc.Conn.Close()
-	tc.closeOnce.Do(tc.onClose)
-	return err
+		return data.Hash{}, false
+	}, 0xFE) // SSU2 marker byte
 }
 
 // Addr returns the network address the transport is bound to.

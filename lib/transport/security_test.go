@@ -147,7 +147,7 @@ func TestMuxerAccept(t *testing.T) {
 
 	conn, err := muxer.Accept()
 	require.NoError(t, err)
-	tc, ok := conn.(*trackedConn)
+	tc, ok := conn.(*TrackedConn)
 	if ok {
 		assert.Equal(t, expectedConn, tc.Conn)
 	} else {
@@ -308,7 +308,7 @@ func TestErrorHandlingGracefulDegradation(t *testing.T) {
 	conn, err := muxer.AcceptWithTimeout(100 * time.Millisecond)
 	assert.NoError(t, err, "Should succeed with second transport when first fails")
 	assert.NotNil(t, conn, "Should return connection from second transport")
-	if tc, ok := conn.(*trackedConn); ok {
+	if tc, ok := conn.(*TrackedConn); ok {
 		assert.Equal(t, successConn, tc.Conn, "Should return the successful transport's connection")
 	} else {
 		assert.Equal(t, successConn, conn, "Should return the successful transport's connection")

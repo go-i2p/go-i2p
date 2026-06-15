@@ -95,13 +95,8 @@ func (s *NTCP2Session) ReadNextI2NP() (i2np.Message, error) {
 	}
 }
 
-// sendQueueDrainTimeout is the maximum time to wait for queued messages to be
-// sent before forcefully closing the session. This prevents message loss during
-// graceful shutdown while avoiding indefinite hangs.
-const sendQueueDrainTimeout = 2 * time.Second
-
 // Close closes the session cleanly.
-// It first waits briefly for the send queue to drain (up to sendQueueDrainTimeout)
+// It first waits briefly for the send queue to drain
 // before sending an encrypted termination block (reason 0 = normal close) and
 // closing the connection. This gives queued messages a chance to be transmitted
 // rather than being silently dropped.
@@ -204,7 +199,7 @@ func (s *NTCP2Session) sendEncryptedTermination(reason byte) {
 	}
 }
 
-// drainSendQueue waits for the send queue to empty or the drain timeout to expire.
+// drainSendQueue waits for the send queue to empty before close.
 // This is called before canceling the session context so the sendWorker can
 // still process queued messages.
 func (s *NTCP2Session) drainSendQueue() {
@@ -215,36 +210,12 @@ func (s *NTCP2Session) drainSendQueue() {
 
 	s.Logger().WithField("queue_size", queueSize).Debug("Draining send queue before close")
 
-	deadline := time.NewTimer(sendQueueDrainTimeout)
-	defer deadline.Stop()
-
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
-
-	for {
-		if s.processDrainTick(deadline, ticker) {
-			return
+	drained := s.SessionCore.DrainSendQueue(transport.DefaultSendQueueDrainTimeout)
+	if !drained {
+		remaining := s.SendQueueSize()
+		if remaining > 0 {
+			s.Logger().WithField("remaining", remaining).Warn("Send queue drain timeout, dropping remaining messages")
 		}
-	}
-}
-
-// processDrainTick handles one iteration of the drain loop.
-// Returns true if draining is complete (either queue emptied or timeout).
-func (s *NTCP2Session) processDrainTick(deadline *time.Timer, ticker *time.Ticker) bool {
-	select {
-	case <-deadline.C:
-		s.handleDrainTimeout()
-		return true
-	case <-ticker.C:
-		return s.SendQueueSize() == 0
-	}
-}
-
-// handleDrainTimeout logs a warning if messages remain after timeout.
-func (s *NTCP2Session) handleDrainTimeout() {
-	remaining := s.SendQueueSize()
-	if remaining > 0 {
-		s.Logger().WithField("remaining", remaining).Warn("Send queue drain timeout, dropping remaining messages")
 	}
 }
 

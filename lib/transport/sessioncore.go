@@ -12,6 +12,10 @@ import (
 	"golang.org/x/time/rate"
 )
 
+// DefaultSendQueueDrainTimeout is the maximum time to wait for queued messages
+// to be sent before the session is closed. Used by DrainSendQueue.
+const DefaultSendQueueDrainTimeout = 2 * time.Second
+
 // SessionCore contains the shared I2NP message queue, bandwidth tracking,
 // and lifecycle management fields used by both NTCP2Session and SSU2Session.
 // This struct is embedded (not composed) by transport sessions to enable
@@ -252,4 +256,33 @@ func (sc *SessionCore) CloseOnce() *sync.Once {
 // Calling it cancels the session context, signaling all workers to stop.
 func (sc *SessionCore) CancelFunc() context.CancelFunc {
 	return sc.cancel
+}
+
+// DrainSendQueue waits for the send queue to empty, up to the given timeout.
+// Returns true if the queue drained successfully, false if the timeout expired.
+//
+// Used during session close to gracefully wait for in-flight messages to be
+// sent before terminating the connection. Callers should not hold locks while
+// calling this method.
+func (sc *SessionCore) DrainSendQueue(timeout time.Duration) bool {
+	if sc.SendQueueSize() == 0 {
+		return true
+	}
+
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-deadline.C:
+			return false
+		case <-ticker.C:
+			if sc.SendQueueSize() == 0 {
+				return true
+			}
+		}
+	}
 }

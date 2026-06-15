@@ -35,16 +35,20 @@ var (
 //
 // Returns a HandlerID that can be passed to DeregisterPreShutdownHandler.
 // Nil handlers are silently ignored and return -1.
+// Lock ordering fixed for H-12: acquire mu first (global ID counter), then preShutdownMu.
 func RegisterPreShutdownHandler(f Handler) HandlerID {
 	if f == nil {
 		return -1
 	}
-	preShutdownMu.Lock()
-	defer preShutdownMu.Unlock()
+	// Acquire mu first for ID generation (consistent lock order)
 	mu.Lock()
 	id := nextID
 	nextID++
 	mu.Unlock()
+
+	// Then acquire preShutdownMu for handlers slice
+	preShutdownMu.Lock()
+	defer preShutdownMu.Unlock()
 	preShutdownHandlers = append(preShutdownHandlers, registeredHandler{id: id, fn: f})
 	log.WithField("handler_id", id).Debug("registered pre-shutdown handler")
 	return id

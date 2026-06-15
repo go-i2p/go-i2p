@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-i2p/go-i2p/lib/transport"
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
 )
 
@@ -45,15 +46,16 @@ const replayTTL = 60 * time.Second
 // replayCleanupInterval is how often the background goroutine sweeps stale entries.
 const replayCleanupInterval = 5 * time.Minute
 
-// NewDefaultHandler creates a new DefaultHandler with ±60 second clock skew tolerance.
-// We use ±30 s to narrow the post-restart replay window; see AUDIT.md.
+// NewDefaultHandler creates a new DefaultHandler with ±30 second clock skew tolerance
+// (shared with NTCP2 transport). We use ±30 s (narrower than the go-noise default of 60 s)
+// to narrow the post-restart replay window; see AUDIT.md.
 // A background goroutine evicts replay cache entries older than 60 seconds every
 // 5 minutes. Call Close() to stop it.
 func NewDefaultHandler() *DefaultHandler {
 	log.Debug("creating SSU2 default handler")
 	h := &DefaultHandler{
 		seen:    make(map[[32]byte]time.Time),
-		maxSkew: 30 * time.Second,
+		maxSkew: transport.ClockSkewTolerance,
 		done:    make(chan struct{}),
 	}
 	go h.cleanupLoop()
@@ -101,21 +103,23 @@ func (h *DefaultHandler) CheckReplay(ephemeralKey [32]byte) bool {
 	return false
 }
 
-// ValidateTimestamp checks whether a peer's timestamp is within ±60 seconds
-// of the local clock.
+// ValidateTimestamp checks whether a peer's timestamp is within the configured
+// clock skew tolerance of the local clock. Returns nil if valid, or a wrapped
+// SSU2Error if the clock skew is excessive.
 func (h *DefaultHandler) ValidateTimestamp(peerTime uint32) error {
-	now := uint32(time.Now().Unix())
-	var diff uint32
-	if now > peerTime {
-		diff = now - peerTime
-	} else {
-		diff = peerTime - now
+	if peerTime == 0 {
+		// Timestamp not provided — skip validation.
+		return nil
 	}
-	if diff > uint32(math.Round(h.maxSkew.Seconds())) {
+
+	now := uint32(time.Now().Unix())
+	skewSeconds := transport.CalculateTimestampSkew(peerTime, now)
+
+	if !transport.IsTimestampWithinTolerance(peerTime, h.maxSkew) {
 		log.WithFields(map[string]interface{}{
 			"peer_time":    peerTime,
 			"local_time":   now,
-			"diff_seconds": diff,
+			"diff_seconds": math.Abs(float64(skewSeconds)),
 			"max_skew":     h.maxSkew.Seconds(),
 		}).Warn("SSU2 peer clock skew exceeds tolerance")
 		return WrapSSU2Error(
@@ -127,18 +131,10 @@ func (h *DefaultHandler) ValidateTimestamp(peerTime uint32) error {
 }
 
 // ssu2TimeWithinSkew checks whether a peer's timestamp is within ±tol of the local clock.
-// M-5 FIX: Centralized timestamp validation for consistent skew checking across all SSU2 consumers.
+// M-5 FIX: Uses shared transport validation logic for consistent timestamp checking.
 // Returns true if the timestamp is within tolerance, false if outside.
 func ssu2TimeWithinSkew(peerTime uint32, tol time.Duration) bool {
-	now := uint32(time.Now().Unix())
-	var diff uint32
-	if now > peerTime {
-		diff = now - peerTime
-	} else {
-		diff = peerTime - now
-	}
-	tolSec := uint32(math.Round(tol.Seconds()))
-	return diff <= tolSec
+	return transport.IsTimestampWithinTolerance(peerTime, tol)
 }
 
 // SendTermination sends a termination block through the SSU2 connection.

@@ -2,7 +2,6 @@ package ntcp2
 
 import (
 	"context"
-	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -847,37 +846,12 @@ func (t *NTCP2Transport) trackInboundConnection(conn net.Conn) (net.Conn, bool) 
 // Returns a hash derived from the NTCP2Addr if available, or a hash derived
 // from the remote address as a fallback key for session map tracking.
 func (t *NTCP2Transport) extractPeerHash(conn net.Conn) data.Hash {
-	var peerHash data.Hash
-
-	if ntcpAddr, ok := conn.RemoteAddr().(*ntcp2.Addr); ok {
-		hashBytes := ntcpAddr.RouterHash()
-		peerHash = hashBytes
-		// If the hash is non-zero, use it directly
-		var zeroHash data.Hash
-		if peerHash != zeroHash {
-			return peerHash
+	return transport.DeriveConnectionHash(conn, func() (data.Hash, bool) {
+		if ntcpAddr, ok := conn.RemoteAddr().(*ntcp2.Addr); ok {
+			return ntcpAddr.RouterHash(), true
 		}
-	}
-
-	// SA-3 fix: Fallback for connections without a router hash.
-	// Hash the full address with SHA-256 to avoid truncation collisions when
-	// address strings exceed 32 bytes (long IPv6 addresses with zones).
-	// Set a consistent marker byte to separate address-derived keys from real
-	// router hashes, preventing collisions if a router hash happens to match
-	// an address-derived key.
-	//
-	// Strip the ephemeral port so reconnections from the same host produce
-	// the same hash, avoiding duplicate session tracking entries.
-	addrStr := conn.RemoteAddr().String()
-	if host, _, err := net.SplitHostPort(addrStr); err == nil {
-		addrStr = host
-	}
-	hash := sha256.Sum256([]byte(addrStr))
-	copy(peerHash[:], hash[:])
-	// Set marker byte to distinguish address-derived hashes from real router hashes
-	peerHash[0] = 0xFF
-
-	return peerHash
+		return data.Hash{}, false
+	}, 0xFF) // NTCP2 marker byte
 }
 
 // trackedConn wraps a net.Conn to execute a cleanup function when closed.

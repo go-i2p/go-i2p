@@ -3,7 +3,6 @@ package tunnel
 
 import (
 	"sync"
-	"time"
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
@@ -45,9 +44,8 @@ type DefaultCongestionAwarePeerSelector struct {
 	underlying       NetDBSelector
 	congestionInfo   CongestionInfoProvider
 	cfg              config.CongestionDefaults
-	maxRetries       int           // Max retries when G-flagged peers need replacing
-	retryDelay       time.Duration // Delay between retries (for testing)
-	metricsMu        sync.Mutex    // Protects selectionMetrics
+	maxRetries       int        // Max retries when G-flagged peers need replacing
+	metricsMu        sync.Mutex // Protects selectionMetrics
 	selectionMetrics *SelectionMetrics
 }
 
@@ -75,13 +73,6 @@ func WithMaxRetries(n int) CongestionAwareSelectorOption {
 	}
 }
 
-// WithRetryDelay sets the delay between retries (useful for testing).
-func WithRetryDelay(d time.Duration) CongestionAwareSelectorOption {
-	return func(s *DefaultCongestionAwarePeerSelector) {
-		s.retryDelay = d
-	}
-}
-
 // NewCongestionAwarePeerSelector creates a new congestion-aware peer selector.
 // The underlying selector provides base peer selection, and congestionInfo
 // provides congestion flags for filtering decisions.
@@ -103,7 +94,6 @@ func NewCongestionAwarePeerSelector(
 		congestionInfo:   congestionInfo,
 		cfg:              cfg,
 		maxRetries:       3,
-		retryDelay:       0,
 		selectionMetrics: &SelectionMetrics{},
 	}
 
@@ -125,6 +115,7 @@ func NewCongestionAwarePeerSelector(
 
 // SelectPeersWithCongestionAwareness selects peers with congestion awareness.
 // It excludes G-flagged peers and may request additional peers to replace them.
+// Consolidation for H-9: delegates to retryingSelect helper.
 func (s *DefaultCongestionAwarePeerSelector) SelectPeersWithCongestionAwareness(
 	count int,
 	exclude []common.Hash,
@@ -136,10 +127,31 @@ func (s *DefaultCongestionAwarePeerSelector) SelectPeersWithCongestionAwareness(
 	s.metricsMu.Lock()
 	s.selectionMetrics.TotalSelections++
 	s.metricsMu.Unlock()
-	allExcluded := s.initExclusionSet(exclude)
 
-	selectedPeers, retries, err := s.selectWithRetries(count, allExcluded)
+	// Create evaluator that filters G-flagged peers
+	evaluator := func(ri router_info.RouterInfo, hash common.Hash) bool {
+		if s.ShouldExcludePeer(ri) {
+			s.metricsMu.Lock()
+			s.selectionMetrics.GFlagExclusions++
+			s.metricsMu.Unlock()
+			s.logPeerExclusion(hash, "G flag - rejecting all tunnels")
+			return false
+		}
+		s.recordDeratingMetrics(hash)
+		return true
+	}
+
+	cfg := retryingSelectConfig{
+		underlying: s.underlying,
+		maxRetries: s.maxRetries,
+		name:       "congestion-aware",
+	}
+
+	selectedPeers, retries, err := retryingSelect(cfg, count, exclude, evaluator)
 	if err != nil {
+		s.metricsMu.Lock()
+		s.selectionMetrics.SelectionFailures++
+		s.metricsMu.Unlock()
 		return nil, err
 	}
 
@@ -148,93 +160,6 @@ func (s *DefaultCongestionAwarePeerSelector) SelectPeersWithCongestionAwareness(
 	s.logSelectionSummary(count, len(selectedPeers), retries)
 
 	return selectedPeers, nil
-}
-
-// initExclusionSet creates a hash set from the initial exclude list.
-func (s *DefaultCongestionAwarePeerSelector) initExclusionSet(exclude []common.Hash) map[common.Hash]struct{} {
-	allExcluded := make(map[common.Hash]struct{}, len(exclude))
-	for _, h := range exclude {
-		allExcluded[h] = struct{}{}
-	}
-	return allExcluded
-}
-
-// selectWithRetries performs the retry loop to find non-G-flagged peers.
-func (s *DefaultCongestionAwarePeerSelector) selectWithRetries(
-	count int,
-	allExcluded map[common.Hash]struct{},
-) ([]router_info.RouterInfo, int, error) {
-	var selectedPeers []router_info.RouterInfo
-	retries := 0
-
-	for len(selectedPeers) < count && retries <= s.maxRetries {
-		candidates, err := s.fetchCandidates(count-len(selectedPeers), allExcluded)
-		if err != nil {
-			s.metricsMu.Lock()
-			s.selectionMetrics.SelectionFailures++
-			s.metricsMu.Unlock()
-			return nil, retries, oops.Errorf("underlying selector error: %w", err)
-		}
-		if len(candidates) == 0 {
-			break
-		}
-
-		selectedPeers = s.filterAndCollectPeers(candidates, selectedPeers, count, allExcluded)
-		s.applyRetryDelay(retries)
-		retries++
-	}
-
-	return selectedPeers, retries, nil
-}
-
-// fetchCandidates retrieves candidate peers from the underlying selector.
-func (s *DefaultCongestionAwarePeerSelector) fetchCandidates(
-	needed int,
-	allExcluded map[common.Hash]struct{},
-) ([]router_info.RouterInfo, error) {
-	requestCount := needed + (needed / 2) + 1
-	excludeList := hashSetToSlice(allExcluded)
-	return s.underlying.SelectPeers(requestCount, excludeList)
-}
-
-// filterAndCollectPeers filters G-flagged peers and collects valid ones.
-func (s *DefaultCongestionAwarePeerSelector) filterAndCollectPeers(
-	candidates []router_info.RouterInfo,
-	selectedPeers []router_info.RouterInfo,
-	count int,
-	allExcluded map[common.Hash]struct{},
-) []router_info.RouterInfo {
-	for _, ri := range candidates {
-		if len(selectedPeers) >= count {
-			break
-		}
-
-		hash, err := ri.IdentHash()
-		if err != nil {
-			continue
-		}
-
-		allExcluded[hash] = struct{}{}
-
-		if s.ShouldExcludePeer(ri) {
-			s.metricsMu.Lock()
-			s.selectionMetrics.GFlagExclusions++
-			s.metricsMu.Unlock()
-			s.logPeerExclusion(hash, "G flag - rejecting all tunnels")
-			continue
-		}
-
-		s.recordDeratingMetrics(hash)
-		selectedPeers = append(selectedPeers, ri)
-	}
-	return selectedPeers
-}
-
-// applyRetryDelay applies configured delay between retries.
-func (s *DefaultCongestionAwarePeerSelector) applyRetryDelay(retries int) {
-	if retries > 0 && s.retryDelay > 0 {
-		time.Sleep(s.retryDelay)
-	}
 }
 
 // updateRetryMetrics updates the retry-related metrics.

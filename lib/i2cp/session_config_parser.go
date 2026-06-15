@@ -242,44 +242,14 @@ func mappingToGoMap(mapping data.Mapping) map[string]string {
 
 // applyTunnelLengthOptions applies tunnel length configuration options.
 // Keys: inbound.length, outbound.length
+// Valid range: 0-7 (number of hops)
 func applyTunnelLengthOptions(config *SessionConfig, options map[string]string) {
-	if val, exists := options["inbound.length"]; exists {
-		if length, err := strconv.Atoi(val); err == nil && length >= 0 && length <= 7 {
-			log.WithFields(logger.Fields{
-				"at":     "i2cp.applyTunnelLengthOptions",
-				"option": "inbound.length",
-				"value":  length,
-			}).Debug("applied_tunnel_length_option")
-			config.InboundTunnelLength = length
-			markExplicitlySet(config, "InboundTunnelLength")
-		} else {
-			log.WithFields(logger.Fields{
-				"at":     "i2cp.applyTunnelLengthOptions",
-				"option": "inbound.length",
-				"value":  val,
-				"error":  err,
-			}).Warn("invalid_inbound_length_option_using_default")
-		}
-	}
-
-	if val, exists := options["outbound.length"]; exists {
-		if length, err := strconv.Atoi(val); err == nil && length >= 0 && length <= 7 {
-			log.WithFields(logger.Fields{
-				"at":     "i2cp.applyTunnelLengthOptions",
-				"option": "outbound.length",
-				"value":  length,
-			}).Debug("applied_tunnel_length_option")
-			config.OutboundTunnelLength = length
-			markExplicitlySet(config, "OutboundTunnelLength")
-		} else {
-			log.WithFields(logger.Fields{
-				"at":     "i2cp.applyTunnelLengthOptions",
-				"option": "outbound.length",
-				"value":  val,
-				"error":  err,
-			}).Warn("invalid_outbound_length_option_using_default")
-		}
-	}
+	applyIntOption(config, options, "inbound.length",
+		func(val int) { config.InboundTunnelLength = val },
+		0, 7, "InboundTunnelLength")
+	applyIntOption(config, options, "outbound.length",
+		func(val int) { config.OutboundTunnelLength = val },
+		0, 7, "OutboundTunnelLength")
 }
 
 // markExplicitlySet records that a field was explicitly set during parsing.
@@ -288,6 +258,34 @@ func markExplicitlySet(config *SessionConfig, field string) {
 		config.ExplicitlySetFields = make(map[string]bool)
 	}
 	config.ExplicitlySetFields[field] = true
+}
+
+// applyIntOption is a generic helper for parsing and applying integer options.
+// Parses the value from options[key], validates it's within [min, max], then calls setter(value).
+// Logs debug on success, warn on failure. Consolidation for H-7.
+func applyIntOption(config *SessionConfig, options map[string]string, key string, setter func(int), min, max int, fieldName string) {
+	val, exists := options[key]
+	if !exists {
+		return
+	}
+
+	intVal, err := strconv.Atoi(val)
+	if err == nil && intVal >= min && intVal <= max {
+		log.WithFields(logger.Fields{
+			"at":     "i2cp.applyIntOption",
+			"option": key,
+			"value":  intVal,
+		}).Debug("applied_" + fieldName)
+		setter(intVal)
+		markExplicitlySet(config, fieldName)
+	} else {
+		log.WithFields(logger.Fields{
+			"at":     "i2cp.applyIntOption",
+			"option": key,
+			"value":  val,
+			"error":  err,
+		}).Warnf("invalid_%s_option_using_default", fieldName)
+	}
 }
 
 // applyTunnelQuantityOptions applies tunnel quantity configuration options.
@@ -300,82 +298,36 @@ func applyTunnelQuantityOptions(config *SessionConfig, options map[string]string
 
 // applyQuantityOption parses and applies a single tunnel quantity option if present.
 // The value must be a valid integer in the range [1, 16].
+// Consolidation for H-7.
 func applyQuantityOption(config *SessionConfig, options map[string]string, key string, target *int) {
-	val, exists := options[key]
-	if !exists {
-		return
-	}
-	quantity, err := strconv.Atoi(val)
-	if err == nil && quantity >= 1 && quantity <= 16 {
-		log.WithFields(logger.Fields{
-			"at":     "i2cp.applyTunnelQuantityOptions",
-			"option": key,
-			"value":  quantity,
-		}).Debug("applied_tunnel_quantity_option")
-		*target = quantity
-	} else {
-		log.WithFields(logger.Fields{
-			"at":     "i2cp.applyTunnelQuantityOptions",
-			"option": key,
-			"value":  val,
-			"error":  err,
-		}).Warn("invalid_tunnel_quantity_option_using_default")
-	}
+	applyIntOption(config, options, key,
+		func(val int) { *target = val },
+		1, 16, key)
 }
 
 // applyBackupQuantities parses and applies backup quantity options.
 // These values are consumed by the tunnel pool manager in server_tunnels.go.
+// Valid range: 0-16. Consolidation for H-7.
 func applyBackupQuantities(config *SessionConfig, options map[string]string) {
-	if val, exists := options["inbound.backupQuantity"]; exists {
-		if quantity, err := strconv.Atoi(val); err == nil && quantity >= 0 && quantity <= 16 {
-			config.InboundBackupQuantity = quantity
-			markExplicitlySet(config, "InboundBackupQuantity")
-			log.WithFields(logger.Fields{
-				"at":     "i2cp.applyTunnelQuantityOptions",
-				"option": "inbound.backupQuantity",
-				"value":  quantity,
-			}).Debug("applied_inbound_backup_quantity")
-		}
-	}
-	if val, exists := options["outbound.backupQuantity"]; exists {
-		if quantity, err := strconv.Atoi(val); err == nil && quantity >= 0 && quantity <= 16 {
-			config.OutboundBackupQuantity = quantity
-			markExplicitlySet(config, "OutboundBackupQuantity")
-			log.WithFields(logger.Fields{
-				"at":     "i2cp.applyTunnelQuantityOptions",
-				"option": "outbound.backupQuantity",
-				"value":  quantity,
-			}).Debug("applied_outbound_backup_quantity")
-		}
-	}
+	applyIntOption(config, options, "inbound.backupQuantity",
+		func(val int) { config.InboundBackupQuantity = val },
+		0, 16, "InboundBackupQuantity")
+	applyIntOption(config, options, "outbound.backupQuantity",
+		func(val int) { config.OutboundBackupQuantity = val },
+		0, 16, "OutboundBackupQuantity")
 }
 
 // applyTunnelLifetimeOptions applies tunnel length variance configuration options.
 // Keys: inbound.lengthVariance, outbound.lengthVariance
 // Valid range: -7 to +7 (0 = no variance, negative = decrease only, positive = +/- range)
+// Consolidation for H-7.
 func applyTunnelLifetimeOptions(config *SessionConfig, options map[string]string) {
-	if val, exists := options["inbound.lengthVariance"]; exists {
-		if variance, err := strconv.Atoi(val); err == nil && variance >= -7 && variance <= 7 {
-			config.InboundLengthVariance = variance
-			markExplicitlySet(config, "InboundLengthVariance")
-			log.WithFields(logger.Fields{
-				"at":     "i2cp.applyTunnelLifetimeOptions",
-				"option": "inbound.lengthVariance",
-				"value":  variance,
-			}).Debug("applied_inbound_length_variance")
-		}
-	}
-	if val, exists := options["outbound.lengthVariance"]; exists {
-		if variance, err := strconv.Atoi(val); err == nil && variance >= -7 && variance <= 7 {
-			config.OutboundLengthVariance = variance
-			markExplicitlySet(config, "OutboundLengthVariance")
-			log.WithFields(logger.Fields{
-				"at":     "i2cp.applyTunnelLifetimeOptions",
-				"option": "outbound.lengthVariance",
-				"value":  variance,
-			}).Debug("applied_outbound_length_variance")
-		}
-	}
+	applyIntOption(config, options, "inbound.lengthVariance",
+		func(val int) { config.InboundLengthVariance = val },
+		-7, 7, "InboundLengthVariance")
+	applyIntOption(config, options, "outbound.lengthVariance",
+		func(val int) { config.OutboundLengthVariance = val },
+		-7, 7, "OutboundLengthVariance")
 }
 
 // applyMessageOptions applies message-related configuration options.

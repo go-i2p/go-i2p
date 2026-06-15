@@ -182,9 +182,6 @@ func (s *SSU2Session) StartWorkers() {
 	s.Logger().Info("SSU2 session workers started")
 }
 
-// sendQueueDrainTimeout is the maximum time to wait for queued messages.
-const sendQueueDrainTimeout = 2 * time.Second
-
 // Close closes the session cleanly with a normal-close termination reason.
 func (s *SSU2Session) Close() error {
 	return s.CloseWithReason(ssu2noise.TerminationNormalClose)
@@ -256,28 +253,7 @@ func (s *SSU2Session) WriteBlocks(blocks []*ssu2noise.SSU2Block) error {
 }
 
 func (s *SSU2Session) drainSendQueue() {
-	if s.SendQueueSize() == 0 {
-		return
-	}
-
-	deadline := time.NewTimer(sendQueueDrainTimeout)
-	defer deadline.Stop()
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
-
-	for s.waitForQueueDrain(deadline, ticker) {
-	}
-}
-
-// waitForQueueDrain waits for a drain tick and returns true to continue waiting,
-// false when done (either queue empty or deadline expired).
-func (s *SSU2Session) waitForQueueDrain(deadline *time.Timer, ticker *time.Ticker) bool {
-	select {
-	case <-deadline.C:
-		return false
-	case <-ticker.C:
-		return s.SendQueueSize() > 0
-	}
+	s.SessionCore.DrainSendQueue(transport.DefaultSendQueueDrainTimeout)
 }
 
 func (s *SSU2Session) sendWorker() {

@@ -488,8 +488,8 @@ func TestConnectionManagement_InactivityTimeout(t *testing.T) {
 	assert.Equal(t, 5*60, int(ntcp2ReadDeadline.Seconds()),
 		"Read deadline must be 5 minutes (inactivity timeout)")
 
-	// The sendQueueDrainTimeout controls graceful shutdown timing
-	assert.Equal(t, 2, int(sendQueueDrainTimeout.Seconds()),
+	// The DefaultSendQueueDrainTimeout controls graceful shutdown timing
+	assert.Equal(t, 2, int(transport.DefaultSendQueueDrainTimeout.Seconds()),
 		"Send queue drain timeout must be 2 seconds for graceful shutdown")
 }
 

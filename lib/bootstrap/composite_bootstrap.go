@@ -155,9 +155,9 @@ func tryFileBootstrap(fb *FileBootstrap, ctx context.Context, n int) ([]router_i
 		"reason": "attempting file bootstrap from local reseed file",
 		"limit":  n,
 	}).Info("attempting file bootstrap from local reseed file")
-	peers, err := fb.GetPeers(ctx, n)
+	peers, err := tryBootstrapSource(fb, ctx, n, "file")
 
-	if err == nil && len(peers) > 0 {
+	if err == nil {
 		log.WithFields(logger.Fields{
 			"at":           "(CompositeBootstrap) tryFileBootstrap",
 			"phase":        "bootstrap",
@@ -171,10 +171,7 @@ func tryFileBootstrap(fb *FileBootstrap, ctx context.Context, n int) ([]router_i
 
 	logFileBootstrapFailure(err)
 	// Preserve actual error details for debugging
-	if err != nil {
-		return nil, oops.Wrapf(err, "file bootstrap failed")
-	}
-	return nil, oops.Errorf("file bootstrap returned no peers")
+	return nil, err
 }
 
 // tryReseedBootstrap attempts to obtain peers from remote reseed servers.
@@ -186,9 +183,9 @@ func tryReseedBootstrap(rb *ReseedBootstrap, ctx context.Context, n int) ([]rout
 		"reason": "attempting reseed bootstrap from remote servers",
 		"limit":  n,
 	}).Info("attempting reseed bootstrap")
-	peers, err := rb.GetPeers(ctx, n)
+	peers, err := tryBootstrapSource(rb, ctx, n, "reseed")
 
-	if err == nil && len(peers) > 0 {
+	if err == nil {
 		log.WithFields(logger.Fields{
 			"at":           "(CompositeBootstrap) tryReseedBootstrap",
 			"phase":        "bootstrap",
@@ -202,10 +199,7 @@ func tryReseedBootstrap(rb *ReseedBootstrap, ctx context.Context, n int) ([]rout
 
 	logReseedFailure(err)
 	// Preserve actual error details for debugging
-	if err != nil {
-		return nil, oops.Wrapf(err, "reseed bootstrap failed")
-	}
-	return nil, oops.Errorf("reseed bootstrap returned no peers")
+	return nil, err
 }
 
 // tryLocalNetDBBootstrap attempts to obtain peers from local netDb directories.
@@ -217,7 +211,7 @@ func tryLocalNetDBBootstrap(lb *LocalNetDBBootstrap, ctx context.Context, n int)
 		"reason": "attempting local netdb bootstrap fallback",
 		"limit":  n,
 	}).Info("attempting local netDb bootstrap")
-	peers, err := lb.GetPeers(ctx, n)
+	peers, err := tryBootstrapSource(lb, ctx, n, "local netDb")
 	if err != nil {
 		log.WithError(err).WithFields(logger.Fields{
 			"at":     "(CompositeBootstrap) tryLocalNetDBBootstrap",
@@ -226,11 +220,7 @@ func tryLocalNetDBBootstrap(lb *LocalNetDBBootstrap, ctx context.Context, n int)
 			"reason": "local netdb bootstrap failed",
 		}).Error("local netDb bootstrap failed")
 		// Preserve error details with consistent wrapping
-		return nil, oops.Wrapf(err, "local netDb bootstrap failed")
-	}
-
-	if len(peers) == 0 {
-		return nil, oops.Errorf("local netDb bootstrap returned no peers")
+		return nil, err
 	}
 
 	log.WithFields(logger.Fields{
