@@ -31,14 +31,6 @@ type abandonedRelayTag struct {
 	reason      string // why registration failed
 }
 
-// acceptedConn is a marker type wrapping a raw connection that has been
-// delivered via Accept(). It prevents the connection from being promoted
-// to a session (which would create dual ownership), since the Accept()
-// consumer now owns the socket lifecycle.
-type acceptedConn struct {
-	net.Conn
-}
-
 // Session Map Ownership Invariant (X-3 fix):
 // Each peerHash (RouterHash) in the sessions map has EXACTLY ONE owner at any given time:
 //   - net.Conn (raw or *ssu2noise.SSU2Conn): owned by trackInboundConnection, transferable to Accept or promotion
@@ -327,7 +319,13 @@ func createUDPConn(config *Config, iport int) (net.PacketConn, string, error) {
 		}
 		return conn, boundAddr, nil
 	}
-	return listenWithNATTraversal(config, iport)
+	cfg := nat.DefaultBindConfig("udp", config.ListenerAddress)
+	cfg.RequestedPort = iport
+	result, err := nat.BindWithNATTraversal(cfg)
+	if err != nil {
+		return nil, "", err
+	}
+	return result.PacketConn, result.BoundAddress, nil
 }
 
 // listenWithOSPort discovers a free UDP port via a temporary OS-assigned binding,
@@ -346,23 +344,6 @@ func createUDPConn(config *Config, iport int) (net.PacketConn, string, error) {
 func listenWithOSPort(config *Config) (net.PacketConn, string, error) {
 	cfg := nat.DefaultBindConfig("udp", config.ListenerAddress)
 	result, err := nat.ProbeAndBindWithNATTraversal(cfg)
-	if err != nil {
-		return nil, "", err
-	}
-	return result.PacketConn, result.BoundAddress, nil
-}
-
-// listenWithNATTraversal creates a UDP listener with NAT port mapping.
-// Returns the packet connection and the bound address. Callers are responsible
-// for updating config.ListenerAddress under appropriate locking.
-// Loopback addresses (127.x.x.x, ::1) bypass NAT traversal entirely because
-// they are unreachable from the internet. For all other addresses a 3-second
-// timeout keeps startup fast in environments without UPnP/NAT-PMP; the
-// fallback to a plain UDP listener is transparent to callers.
-func listenWithNATTraversal(config *Config, iport int) (net.PacketConn, string, error) {
-	cfg := nat.DefaultBindConfig("udp", config.ListenerAddress)
-	cfg.RequestedPort = iport
-	result, err := nat.BindWithNATTraversal(cfg)
 	if err != nil {
 		return nil, "", err
 	}
@@ -613,11 +594,15 @@ func (t *SSU2Transport) SetIdentity(ident router_info.RouterInfo) error {
 		// On any failure, return error immediately without touching t.listener.
 		// This keeps old listener active so Accept() continues working.
 		// R-2 fix: Use snapshotted oldCfg instead of direct t.config access
-		udpConn, newAddr, err := listenWithNATTraversal(oldCfg, port)
+		natCfg := nat.DefaultBindConfig("udp", oldCfg.ListenerAddress)
+		natCfg.RequestedPort = port
+		result, err := nat.BindWithNATTraversal(natCfg)
 		if err != nil {
 			t.logger.WithError(err).Error("Failed to rebind UDP address during identity update")
 			return err
 		}
+		udpConn := result.PacketConn
+		newAddr := result.BoundAddress
 
 		listener, err := ssu2noise.NewSSU2Listener(udpConn, ssu2Config)
 		if err != nil {
@@ -741,7 +726,7 @@ func (t *SSU2Transport) resolveSessionFromMap(existing interface{}, routerHash d
 
 	// Skip connections already delivered to Accept() (X-2 fix).
 	// The Accept() consumer owns the socket; promotion would create dual ownership.
-	if _, ok := existing.(acceptedConn); ok {
+	if _, ok := existing.(transport.AcceptedConn); ok {
 		return nil, false
 	}
 
@@ -755,7 +740,7 @@ func (t *SSU2Transport) promoteInboundConnection(conn net.Conn, original interfa
 	// Defensive check: refuse to promote an acceptedConn (X-2 fix).
 	// This should never happen if resolveSessionFromMap is correct, but
 	// defense-in-depth prevents dual socket ownership.
-	if _, ok := original.(acceptedConn); ok {
+	if _, ok := original.(transport.AcceptedConn); ok {
 		t.logger.WithFields(map[string]interface{}{
 			"router_hash": logutil.HashPrefix(routerHash),
 		}).Error("Refusing to promote acceptedConn (already delivered to Accept)")
@@ -988,7 +973,7 @@ func (t *SSU2Transport) registerOrReuseSession(conn *ssu2noise.SSU2Conn, routerH
 		}
 		// Skip connections already delivered to Accept() (X-2 fix).
 		// The Accept() consumer owns the socket; treat as concurrent connection attempt.
-		if _, ok := existing.(acceptedConn); ok {
+		if _, ok := existing.(transport.AcceptedConn); ok {
 			// Close the newly dialed session since we can't reuse the accepted conn.
 			return nil, false, oops.Errorf("peer has accepted connection (owned by Accept consumer)")
 		}
@@ -1163,8 +1148,10 @@ func (t *SSU2Transport) Close() error {
 		t.sessionRegistry.Range(func(key, value interface{}) bool {
 			if session, ok := value.(*SSU2Session); ok {
 				_ = session.Close()
-			} else if accepted, ok := value.(acceptedConn); ok {
-				_ = accepted.Close()
+			} else if accepted, ok := value.(transport.AcceptedConn); ok {
+				if closer, ok := accepted.Value.(interface{ Close() error }); ok {
+					_ = closer.Close()
+				}
 			} else if conn, ok := value.(net.Conn); ok {
 				_ = conn.Close()
 			}
@@ -1301,7 +1288,7 @@ func (t *SSU2Transport) findSessionByHash(hash data.Hash) *SSU2Session {
 
 	// Skip connections already delivered to Accept() (R-3 fix).
 	// The Accept() consumer owns the socket; promotion would create dual ownership.
-	if _, ok := val.(acceptedConn); ok {
+	if _, ok := val.(transport.AcceptedConn); ok {
 		return nil
 	}
 

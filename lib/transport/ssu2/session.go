@@ -111,7 +111,7 @@ func (s *SSU2Session) buildMergedCallbacks(extra *BlockCallbackConfig) ssu2noise
 	cbs := ssu2noise.DataHandlerCallbacks{
 		OnTermination: func(_ uint64, reason uint8, _ []byte) {
 			s.Logger().WithField("termination_reason", reason).Warn("SSU2 session terminated by peer")
-			s.CancelFunc()()
+			s.Cancel()
 		},
 		OnDateTime: func(timestamp uint32) error {
 			now := time.Now().Unix()
@@ -121,7 +121,7 @@ func (s *SSU2Session) buildMergedCallbacks(extra *BlockCallbackConfig) ssu2noise
 			}
 			if delta > 60 {
 				s.Logger().WithField("skew_seconds", delta).Warn("SSU2 clock skew out of tolerance, closing session")
-				s.CancelFunc()()
+				s.Cancel()
 				return oops.Errorf("clock skew %ds exceeds 60s tolerance", delta)
 			}
 			return nil
@@ -152,25 +152,43 @@ func (s *SSU2Session) SetTransportCallbacks(cfg *BlockCallbackConfig) {
 // mergeBlockCallbacks copies non-nil callbacks from cfg into cbs,
 // leaving any already-set fields (e.g. OnTermination) untouched.
 func mergeBlockCallbacks(cbs *ssu2noise.DataHandlerCallbacks, cfg *BlockCallbackConfig) {
-	// Use type-safe callback setters to reduce cyclomatic complexity
-	setIfNotNil(&cbs.OnRouterInfo, cfg.OnRouterInfo)
-	setIfNotNil(&cbs.OnACK, cfg.OnACK)
-	setIfNotNil(&cbs.OnDateTime, cfg.OnDateTime)
-	setIfNotNil(&cbs.OnPeerTest, cfg.OnPeerTest)
-	setIfNotNil(&cbs.OnRelayRequest, cfg.OnRelayRequest)
-	setIfNotNil(&cbs.OnRelayResponse, cfg.OnRelayResponse)
-	setIfNotNil(&cbs.OnRelayIntro, cfg.OnRelayIntro)
-	setIfNotNil(&cbs.OnNewToken, cfg.OnNewToken)
-	setIfNotNil(&cbs.OnAddress, cfg.OnAddress)
-	setIfNotNil(&cbs.OnOptions, cfg.OnOptions)
-	setIfNotNil(&cbs.OnPathChallenge, cfg.OnPathChallenge)
-	setIfNotNil(&cbs.OnPathResponse, cfg.OnPathResponse)
-}
-
-// setIfNotNil is a type-parameterized helper that sets *dest = src if src != nil.
-func setIfNotNil[T interface{}](dest *T, src T) {
-	if interface{}(src) != nil {
-		*dest = src
+	// Explicit nil checks for each callback field avoid generic type issues
+	// with function types and interface{} nil checks.
+	if cfg.OnRouterInfo != nil {
+		cbs.OnRouterInfo = cfg.OnRouterInfo
+	}
+	if cfg.OnACK != nil {
+		cbs.OnACK = cfg.OnACK
+	}
+	if cfg.OnDateTime != nil {
+		cbs.OnDateTime = cfg.OnDateTime
+	}
+	if cfg.OnPeerTest != nil {
+		cbs.OnPeerTest = cfg.OnPeerTest
+	}
+	if cfg.OnRelayRequest != nil {
+		cbs.OnRelayRequest = cfg.OnRelayRequest
+	}
+	if cfg.OnRelayResponse != nil {
+		cbs.OnRelayResponse = cfg.OnRelayResponse
+	}
+	if cfg.OnRelayIntro != nil {
+		cbs.OnRelayIntro = cfg.OnRelayIntro
+	}
+	if cfg.OnNewToken != nil {
+		cbs.OnNewToken = cfg.OnNewToken
+	}
+	if cfg.OnAddress != nil {
+		cbs.OnAddress = cfg.OnAddress
+	}
+	if cfg.OnOptions != nil {
+		cbs.OnOptions = cfg.OnOptions
+	}
+	if cfg.OnPathChallenge != nil {
+		cbs.OnPathChallenge = cfg.OnPathChallenge
+	}
+	if cfg.OnPathResponse != nil {
+		cbs.OnPathResponse = cfg.OnPathResponse
 	}
 }
 
@@ -200,7 +218,7 @@ func (s *SSU2Session) CloseWithReason(reason ssu2noise.TerminationReason) error 
 		if conn != nil {
 			err = conn.CloseWithReason(reason, nil)
 		}
-		s.CancelFunc()()
+		s.Cancel()
 		s.WaitGroup().Wait()
 		s.CallCleanupCallback()
 		s.Logger().Info("SSU2 session closed")
@@ -299,7 +317,7 @@ func (s *SSU2Session) handleQueuedMessage(msg i2np.Message) bool {
 func (s *SSU2Session) checkRetransmissions() bool {
 	if s.handleRetransmissions() {
 		s.Logger().Warn("Max retransmissions exceeded, closing session")
-		s.CancelFunc()()
+		s.Cancel()
 		return true
 	}
 	return false

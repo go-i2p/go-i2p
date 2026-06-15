@@ -24,14 +24,6 @@ import (
 	"github.com/samber/oops"
 )
 
-// acceptedConn is a marker type wrapping a raw connection that has been
-// delivered via Accept(). It prevents the connection from being promoted
-// to a session (which would create dual ownership), since the Accept()
-// consumer now owns the socket lifecycle.
-type acceptedConn struct {
-	net.Conn
-}
-
 // NTCP2Transport implements the I2P NTCP2 transport protocol, managing listener setup, session lifecycle, and peer connections.
 type NTCP2Transport struct {
 	// Network listener (uses net.Listener interface per guidelines)
@@ -282,23 +274,6 @@ func bindOSAssignedPort(config *Config) (net.Listener, string, error) {
 
 // isLoopbackAddress returns true if host is empty, a loopback IP, or resolves
 // entirely to loopback addresses. P-1 fix: catches "localhost" and other hostnames.
-// bindWithNATTraversal creates a TCP listener on the specified port, attempting
-// NAT traversal (UPnP/NAT-PMP) with a 3-second timeout context.
-// Returns the listener and the bound address. Callers are responsible for updating
-// config.ListenerAddress under appropriate locking.
-// Loopback addresses (127.x.x.x, ::1) bypass NAT traversal entirely because
-// they are unreachable from the internet. For all other addresses a 3-second
-// timeout keeps startup fast in environments without UPnP/NAT-PMP; the
-// fallback to a plain TCP listener is transparent to callers.
-func bindWithNATTraversal(config *Config, port int) (net.Listener, string, error) {
-	cfg := nat.DefaultBindConfig("tcp", config.ListenerAddress)
-	cfg.RequestedPort = port
-	result, err := nat.BindWithNATTraversal(cfg)
-	if err != nil {
-		return nil, "", err
-	}
-	return result.Listener, result.BoundAddress, nil
-}
 
 // attachNTCP2Listener wraps tcpListener in an NTCP2 listener and stores it on
 // the transport. Closes tcpListener on NTCP2 setup failure.
@@ -329,7 +304,13 @@ func setupNetworkListener(transport *NTCP2Transport, config *Config, ntcp2Config
 	if iport == 0 {
 		tcpListener, boundAddr, err = bindOSAssignedPort(config)
 	} else {
-		tcpListener, boundAddr, err = bindWithNATTraversal(config, iport)
+		cfg := nat.DefaultBindConfig("tcp", config.ListenerAddress)
+		cfg.RequestedPort = iport
+		result, err := nat.BindWithNATTraversal(cfg)
+		if err == nil {
+			tcpListener = result.Listener
+			boundAddr = result.BoundAddress
+		}
 	}
 	if err != nil {
 		return err
@@ -1111,15 +1092,19 @@ func (t *NTCP2Transport) createNewListenerWithConfig(ntcp2Config *ntcp2.Config, 
 
 	// Use NAT traversal to rebind with the same port, preserving external address mapping.
 	// This ensures the recreated listener maintains NAT-mapped address semantics.
-	// R-2 fix: bindWithNATTraversal now returns the bound address; we capture and return it
+	// R-2 fix: Inline nat.BindWithNATTraversal call with port parameter
 	// for the caller to update config under lock.
-	// HIGH-1.3 fix: Load config atomically before passing to bindWithNATTraversal
+	// HIGH-1.3 fix: Load config atomically before inlining BindWithNATTraversal
 	cfg := t.config.Load()
-	tcpListener, boundAddr, err := bindWithNATTraversal(cfg, iport)
+	natCfg := nat.DefaultBindConfig("tcp", cfg.ListenerAddress)
+	natCfg.RequestedPort = iport
+	result, err := nat.BindWithNATTraversal(natCfg)
 	if err != nil {
 		t.logger.WithError(err).Error("Failed to rebind listener with NAT traversal")
 		return nil, "", nil, WrapNTCP2Error(err, "rebinding listener")
 	}
+	tcpListener := result.Listener
+	boundAddr := result.BoundAddress
 
 	listener, err := ntcp2.NewNTCP2Listener(tcpListener, ntcp2Config)
 	if err != nil {
@@ -1205,7 +1190,7 @@ func (t *NTCP2Transport) resolveSessionMapEntry(existing interface{}) sessionMap
 
 	// Skip connections already delivered to Accept() (X-1 fix).
 	// The Accept() consumer owns the socket; promotion would create dual ownership.
-	if _, ok := existing.(acceptedConn); ok {
+	if _, ok := existing.(transport.AcceptedConn); ok {
 		return sessionMapEntryResolution{kind: entryIsAcceptedConn}
 	}
 
@@ -1309,7 +1294,7 @@ func (t *NTCP2Transport) promoteInboundConnection(conn net.Conn, original interf
 	// Defensive check: refuse to promote an acceptedConn (X-1 fix).
 	// This should never happen if findExistingSession is correct, but
 	// defense-in-depth prevents dual socket ownership.
-	if _, ok := original.(acceptedConn); ok {
+	if _, ok := original.(transport.AcceptedConn); ok {
 		atomic.AddInt32(&t.acceptedConnPromotionAttempts, 1)
 		routerHashBytes := routerHash.Bytes()
 		t.logger.WithFields(map[string]interface{}{
@@ -1870,10 +1855,10 @@ func (t *NTCP2Transport) checkSessionLimit() error {
 func (t *NTCP2Transport) promoteRawConnToSession(rawConn net.Conn, routerHash data.Hash, existing interface{}) *NTCP2Session {
 	// Defensive check: refuse to promote an acceptedConn (S-1 fix).
 	// The entry must still be a rawConn at this point. If it has been changed to
-	// acceptedConn by another goroutine, we must not attempt promotion as that would
+	// AcceptedConn by another goroutine, we must not attempt promotion as that would
 	// violate the ownership invariant (Accept() consumer owns the socket).
 	// This race window exists between resolveSessionMapEntry's type check and this call.
-	if _, ok := existing.(acceptedConn); ok {
+	if _, ok := existing.(transport.AcceptedConn); ok {
 		atomic.AddInt32(&t.acceptedConnPromotionAttempts, 1)
 		routerHashBytes := routerHash.Bytes()
 		t.logger.WithFields(map[string]interface{}{
@@ -1939,7 +1924,7 @@ func (t *NTCP2Transport) promoteRawConnToSession(rawConn net.Conn, routerHash da
 	_ = promoted.Close()
 
 	if winner, exists := t.sessionRegistry.Load(routerHash); exists {
-		if _, isAcceptedConn := winner.(acceptedConn); isAcceptedConn {
+		if _, isAcceptedConn := winner.(transport.AcceptedConn); isAcceptedConn {
 			// R-1 race detected: Accept() won against us. The connection is now owned by
 			// Accept() and will be delivered to the listener. We don't increment the counter
 			// here because we already incremented it at line 1910 (or didn't, if existing
@@ -2145,11 +2130,13 @@ func (t *NTCP2Transport) closeIndividualSession(key, value interface{}) {
 			routerHashBytes := routerHash.Bytes()
 			t.logger.WithError(err).WithField("router_hash", logutil.HashPrefixPlain(routerHashBytes)).Warn("Error closing session")
 		}
-	case acceptedConn:
+	case transport.AcceptedConn:
 		// Connection delivered to Accept() consumer (R-3 fix).
-		if err := v.Close(); err != nil && hashOk {
-			routerHashBytes := routerHash.Bytes()
-			t.logger.WithError(err).WithField("router_hash", logutil.HashPrefixPlain(routerHashBytes)).Warn("Error closing accepted connection")
+		if closer, ok := v.Value.(interface{ Close() error }); ok {
+			if err := closer.Close(); err != nil && hashOk {
+				routerHashBytes := routerHash.Bytes()
+				t.logger.WithError(err).WithField("router_hash", logutil.HashPrefixPlain(routerHashBytes)).Warn("Error closing accepted connection")
+			}
 		}
 	case net.Conn:
 		// Raw net.Conn stored by Accept() but never promoted to *NTCP2Session.

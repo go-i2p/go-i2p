@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-i2p/common/data"
+	transportpkg "github.com/go-i2p/go-i2p/lib/transport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -346,7 +347,7 @@ func TestX1_DualSocketOwnership_AcceptedConnNotPromoted(t *testing.T) {
 
 	// Simulate the state after Accept() has wrapped the connection and delivered it:
 	// The sessions map contains an acceptedConn wrapper (not a raw net.Conn or *NTCP2Session).
-	acceptedWrapper := acceptedConn{Conn: rawConn}
+	acceptedWrapper := transportpkg.AcceptedConn{Value: rawConn}
 	transport.sessionRegistry.StoreWithCount(peerHash, acceptedWrapper)
 	// Skipped: sessionCount management moved to sessionRegistry
 	// atomic.AddInt32(&transport.sessionCount, 1)
@@ -387,7 +388,7 @@ func TestX1_DualSocketOwnership_AcceptedConnNotPromoted(t *testing.T) {
 	// Verify the map entry remains an acceptedConn (not promoted to *NTCP2Session).
 	entry, exists := transport.sessionRegistry.Load(peerHash)
 	require.True(t, exists, "acceptedConn entry should still exist")
-	_, isAcceptedConn := entry.(acceptedConn)
+	_, isAcceptedConn := entry.(transportpkg.AcceptedConn)
 	assert.True(t, isAcceptedConn, "map entry should remain acceptedConn, got %T", entry)
 
 	// Verify session count is still 1 (no accounting corruption).
@@ -413,7 +414,7 @@ func TestX1_DefenseInDepth_MetricIncrementsOnAcceptedConnPromotion(t *testing.T)
 
 	peerHash := newTestPeerHash("x1-defense-metric-test-!!")
 	rawConn := newAcceptMockConn("192.168.1.201:5201")
-	acceptedWrapper := acceptedConn{Conn: rawConn}
+	acceptedWrapper := transportpkg.AcceptedConn{Value: rawConn}
 
 	// Verify initial metric state is 0.
 	assert.Equal(t, int32(0), transport.AcceptedConnPromotionAttempts(),
@@ -474,7 +475,7 @@ func TestX3_AcceptStoreVsPromotionCAS(t *testing.T) {
 		// Race 1: Accept path tries to CAS rawConn → acceptedConn.
 		go func() {
 			defer wg.Done()
-			acceptedWrapper := acceptedConn{Conn: rawConn}
+			acceptedWrapper := transportpkg.AcceptedConn{Value: rawConn}
 			casSucceeded := transport.sessionRegistry.CompareAndSwap(peerHash, rawConn, acceptedWrapper)
 			if !casSucceeded {
 				// Promotion won; Accept should not deliver this connection.
@@ -496,7 +497,7 @@ func TestX3_AcceptStoreVsPromotionCAS(t *testing.T) {
 	// Verify session map integrity: each peerHash should have exactly one owner
 	// (either acceptedConn or *NTCP2Session, never both, never lost).
 	transport.sessionRegistry.Range(func(key, value interface{}) bool {
-		_, isAcceptedConn := value.(acceptedConn)
+		_, isAcceptedConn := value.(transportpkg.AcceptedConn)
 		_, isSession := value.(*NTCP2Session)
 		assert.True(t, isAcceptedConn || isSession,
 			"Map entry must be either acceptedConn or *NTCP2Session, got %T", value)

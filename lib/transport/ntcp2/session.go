@@ -140,7 +140,7 @@ func (s *NTCP2Session) CloseWithReason(reason byte) error {
 			s.sendEncryptedTermination(reason)
 		}
 
-		s.CancelFunc()()
+		s.Cancel()
 		s.connMu.Lock()
 		conn := s.conn
 		s.connMu.Unlock()
@@ -625,6 +625,6 @@ func (s *NTCP2Session) setError(err error) {
 		default:
 			s.Logger().WithError(err).Error("Session error")
 		}
-		s.CancelFunc()()
+		s.Cancel()
 	})
 }

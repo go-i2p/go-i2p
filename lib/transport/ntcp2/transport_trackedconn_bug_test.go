@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/go-i2p/common/data"
+	transportpkg "github.com/go-i2p/go-i2p/lib/transport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -75,7 +76,7 @@ func TestTrackedConnCleanupRace(t *testing.T) {
 			// Simulate the CAS in inboundHandshakeWorker (line 549)
 			// Try to replace raw conn with acceptedConn
 			originalConn := trackedConn.Conn
-			if !transport.sessionRegistry.CompareAndSwap(peerHash, originalConn, acceptedConn{Conn: trackedConn}) {
+			if !transport.sessionRegistry.CompareAndSwap(peerHash, originalConn, transportpkg.AcceptedConn{Value: trackedConn}) {
 				// CAS failed - promotion happened
 				// BUG: This calls onClose which removes the promoted session!
 				trackedConn.Close()
@@ -225,7 +226,7 @@ func TestConcurrentAcceptAndGetSessionIntegration(t *testing.T) {
 
 			// Try to CAS from raw conn to acceptedConn
 			originalConn := tracked.Conn
-			acceptedConnWrapper := acceptedConn{Conn: tracked}
+			acceptedConnWrapper := transportpkg.AcceptedConn{Value: tracked}
 
 			if !transport.sessionRegistry.CompareAndSwap(peer.hash, originalConn, acceptedConnWrapper) {
 				// CAS failed - someone else (GetSession) promoted it

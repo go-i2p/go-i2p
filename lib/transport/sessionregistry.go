@@ -9,14 +9,6 @@ import (
 	"github.com/go-i2p/logger"
 )
 
-// acceptedConn is a marker type wrapping a raw connection that has been
-// delivered via Accept(). It prevents the connection from being promoted
-// to a session (which would create dual ownership), since the Accept()
-// consumer now owns the socket lifecycle.
-type acceptedConn struct {
-	Value interface{}
-}
-
 // SessionRegistry manages the ownership invariant for transport session maps,
 // eliminating duplication between NTCP2Transport and SSU2Transport.
 //
@@ -78,7 +70,7 @@ func (sr *SessionRegistry) TrackInboundConnection(conn interface{}, peerHash dat
 // Returns true if the mark succeeded, false if the connection was already promoted
 // or removed (in which case no accept should be delivered).
 func (sr *SessionRegistry) MarkAccepted(peerHash data.Hash, original interface{}) bool {
-	marker := &acceptedConn{Value: original}
+	marker := &AcceptedConn{Value: original}
 	return sr.sessions.CompareAndSwap(peerHash, original, marker)
 }
 
@@ -108,8 +100,8 @@ type PromoteOptions struct {
 // On promotion failure (race lost):
 //   - The caller is responsible for closing the session and connection
 func (sr *SessionRegistry) Promote(peerHash data.Hash, original, newSession interface{}, opts PromoteOptions) (interface{}, bool) {
-	// Defense-in-depth: refuse to promote an acceptedConn (dual-ownership protection)
-	if _, ok := original.(*acceptedConn); ok {
+	// Defense-in-depth: refuse to promote an AcceptedConn (dual-ownership protection)
+	if _, ok := original.(*AcceptedConn); ok {
 		sr.logger.WithField("peer_hash", logutil.HashPrefixPlain(peerHash)).
 			Error("Refusing to promote acceptedConn (already delivered to Accept)")
 		return nil, false
@@ -215,8 +207,8 @@ func (sr *SessionRegistry) IsShuttingDown() bool {
 func (sr *SessionRegistry) GetSessions() []interface{} {
 	var sessions []interface{}
 	sr.sessions.Range(func(_, value interface{}) bool {
-		// Skip acceptedConn markers (those are owned by Accept consumers)
-		if _, ok := value.(*acceptedConn); !ok {
+		// Skip AcceptedConn markers (those are owned by Accept consumers)
+		if _, ok := value.(*AcceptedConn); !ok {
 			sessions = append(sessions, value)
 		}
 		return true

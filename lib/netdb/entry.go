@@ -34,6 +34,19 @@ const (
 	FileTypeMetaLeaseSet      = 7
 )
 
+// bytesSerializable is the interface for types that can serialize to bytes.
+// All entry types (RouterInfo, LeaseSet, LeaseSet2, EncryptedLeaseSet, MetaLeaseSet) implement this.
+type bytesSerializable interface {
+	Bytes() ([]byte, error)
+}
+
+// entryTypeSpec holds metadata for each entry type in the dispatch table.
+type entryTypeSpec struct {
+	name     string                         // Human-readable name for logging
+	typeCode byte                           // File format type code (e.g., FileTypeRouterInfo)
+	getter   func(*Entry) bytesSerializable // Extracts the field from Entry
+}
+
 // Entry is a netdb entry that wraps a router info, lease set, lease set2, encrypted lease set, or meta lease set
 // and provides serialization.
 type Entry struct {
@@ -44,141 +57,48 @@ type Entry struct {
 	*meta_leaseset.MetaLeaseSet
 }
 
-// Serialize writes the Entry to the provided writer.
+// Serialize writes the Entry to the provided writer using a dispatch table approach.
 func (e *Entry) Serialize(w io.Writer) error {
 	log.WithField("at", "Entry.Serialize").Debug("Writing netdb entry")
 
-	if e.RouterInfo != nil {
-		log.WithField("type", "RouterInfo").Debug("Writing RouterInfo entry")
-		return e.writeRouterInfo(w)
+	// Dispatch table: check each field type in order
+	specs := []entryTypeSpec{
+		{"RouterInfo", FileTypeRouterInfo, func(entry *Entry) bytesSerializable { return entry.RouterInfo }},
+		{"LeaseSet", FileTypeLeaseSet, func(entry *Entry) bytesSerializable { return entry.LeaseSet }},
+		{"LeaseSet2", FileTypeLeaseSet2, func(entry *Entry) bytesSerializable { return entry.LeaseSet2 }},
+		{"EncryptedLeaseSet", FileTypeEncryptedLeaseSet, func(entry *Entry) bytesSerializable { return entry.EncryptedLeaseSet }},
+		{"MetaLeaseSet", FileTypeMetaLeaseSet, func(entry *Entry) bytesSerializable { return entry.MetaLeaseSet }},
 	}
 
-	if e.LeaseSet != nil {
-		log.WithField("type", "LeaseSet").Debug("Writing LeaseSet entry")
-		return e.writeLeaseSet(w)
-	}
-
-	if e.LeaseSet2 != nil {
-		log.WithField("type", "LeaseSet2").Debug("Writing LeaseSet2 entry")
-		return e.writeLeaseSet2(w)
-	}
-
-	if e.EncryptedLeaseSet != nil {
-		log.WithField("type", "EncryptedLeaseSet").Debug("Writing EncryptedLeaseSet entry")
-		return e.writeEncryptedLeaseSet(w)
-	}
-
-	if e.MetaLeaseSet != nil {
-		log.WithField("type", "MetaLeaseSet").Debug("Writing MetaLeaseSet entry")
-		return e.writeMetaLeaseSet(w)
+	for _, spec := range specs {
+		field := spec.getter(e)
+		if field != nil {
+			log.WithField("type", spec.name).Debug("Writing entry")
+			return e.serializeAndWrite(w, spec)
+		}
 	}
 
 	log.WithField("at", "Entry.Serialize").Error("Entry contains no valid data")
 	return oops.Errorf("entry contains no valid data (RouterInfo, LeaseSet, LeaseSet2, EncryptedLeaseSet, or MetaLeaseSet)")
 }
 
-// writeRouterInfo writes a RouterInfo entry to the writer.
-func (e *Entry) writeRouterInfo(w io.Writer) error {
-	data, err := e.serializeRouterInfo()
+// serializeAndWrite is the 3-step serialization pattern: serialize field → validate → write to output.
+// Handles the common pattern used by all 5 entry types (RouterInfo, LeaseSet, LeaseSet2, EncryptedLeaseSet, MetaLeaseSet).
+func (e *Entry) serializeAndWrite(w io.Writer, spec entryTypeSpec) error {
+	// Step 1: Serialize the field to bytes
+	field := spec.getter(e)
+	data, err := field.Bytes()
 	if err != nil {
-		return err
+		return oops.Errorf("failed to serialize %s: %w", spec.name, err)
 	}
 
-	return e.writeEntryData(w, FileTypeRouterInfo, data)
-}
-
-// writeLeaseSet writes a LeaseSet entry to the writer.
-func (e *Entry) writeLeaseSet(w io.Writer) error {
-	data, err := e.serializeLeaseSet()
-	if err != nil {
-		return err
+	// Step 2: Validate (special case: RouterInfo cannot be empty)
+	if spec.name == "RouterInfo" && len(data) == 0 {
+		return oops.Errorf("router info data empty")
 	}
 
-	return e.writeEntryData(w, FileTypeLeaseSet, data)
-}
-
-// writeLeaseSet2 writes a LeaseSet2 entry to the writer.
-func (e *Entry) writeLeaseSet2(w io.Writer) error {
-	data, err := e.serializeLeaseSet2()
-	if err != nil {
-		return err
-	}
-
-	return e.writeEntryData(w, FileTypeLeaseSet2, data)
-}
-
-// writeEncryptedLeaseSet writes an EncryptedLeaseSet entry to the writer.
-func (e *Entry) writeEncryptedLeaseSet(w io.Writer) error {
-	data, err := e.serializeEncryptedLeaseSet()
-	if err != nil {
-		return err
-	}
-
-	return e.writeEntryData(w, FileTypeEncryptedLeaseSet, data)
-}
-
-// writeMetaLeaseSet writes a MetaLeaseSet entry to the writer.
-func (e *Entry) writeMetaLeaseSet(w io.Writer) error {
-	data, err := e.serializeMetaLeaseSet()
-	if err != nil {
-		return err
-	}
-
-	return e.writeEntryData(w, FileTypeMetaLeaseSet, data)
-}
-
-// serializeRouterInfo serializes the RouterInfo and validates the result.
-func (e *Entry) serializeRouterInfo() ([]byte, error) {
-	data, err := e.RouterInfo.Bytes()
-	if err != nil {
-		return nil, oops.Errorf("failed to serialize RouterInfo: %w", err)
-	}
-
-	if len(data) == 0 {
-		return nil, oops.Errorf("router info data empty")
-	}
-
-	return data, nil
-}
-
-// serializeLeaseSet serializes the LeaseSet and validates the result.
-func (e *Entry) serializeLeaseSet() ([]byte, error) {
-	data, err := e.LeaseSet.Bytes()
-	if err != nil {
-		return nil, oops.Errorf("failed to serialize LeaseSet: %w", err)
-	}
-
-	return data, nil
-}
-
-// serializeLeaseSet2 serializes the LeaseSet2 and validates the result.
-func (e *Entry) serializeLeaseSet2() ([]byte, error) {
-	data, err := e.LeaseSet2.Bytes()
-	if err != nil {
-		return nil, oops.Errorf("failed to serialize LeaseSet2: %w", err)
-	}
-
-	return data, nil
-}
-
-// serializeEncryptedLeaseSet serializes the EncryptedLeaseSet and validates the result.
-func (e *Entry) serializeEncryptedLeaseSet() ([]byte, error) {
-	data, err := e.EncryptedLeaseSet.Bytes()
-	if err != nil {
-		return nil, oops.Errorf("failed to serialize EncryptedLeaseSet: %w", err)
-	}
-
-	return data, nil
-}
-
-// serializeMetaLeaseSet serializes the MetaLeaseSet and validates the result.
-func (e *Entry) serializeMetaLeaseSet() ([]byte, error) {
-	data, err := e.MetaLeaseSet.Bytes()
-	if err != nil {
-		return nil, oops.Errorf("failed to serialize MetaLeaseSet: %w", err)
-	}
-
-	return data, nil
+	// Step 3: Write to output with type indicator and length prefix
+	return e.writeEntryData(w, spec.typeCode, data)
 }
 
 // writeEntryData writes entry data with type indicator and length prefix.

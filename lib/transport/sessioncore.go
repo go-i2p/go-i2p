@@ -12,6 +12,18 @@ import (
 	"golang.org/x/time/rate"
 )
 
+// AcceptedConn is a marker type wrapping a connection that has been delivered to Accept().
+// It prevents promotion to a session (avoiding dual ownership). This type is used by
+// SessionRegistry and transport implementations (NTCP2, SSU2) during the session lifecycle.
+// The marker serves only for type identification; the actual connection data is stored
+// in the Value field or accessed via any embedded type.
+//
+// This type is shared across the transport package and its subpackages (ntcp2, ssu2)
+// to eliminate type confusion from multiple independent definitions of the same concept.
+type AcceptedConn struct {
+	Value interface{}
+}
+
 // DefaultSendQueueDrainTimeout is the maximum time to wait for queued messages
 // to be sent before the session is closed. Used by DrainSendQueue.
 const DefaultSendQueueDrainTimeout = 2 * time.Second
@@ -250,12 +262,6 @@ func (sc *SessionCore) RecvChan() chan i2np.Message {
 // Used by transport sessions' Close() implementations.
 func (sc *SessionCore) CloseOnce() *sync.Once {
 	return &sc.closeOnce
-}
-
-// CancelFunc returns the cancel function for the session context.
-// Calling it cancels the session context, signaling all workers to stop.
-func (sc *SessionCore) CancelFunc() context.CancelFunc {
-	return sc.cancel
 }
 
 // DrainSendQueue waits for the send queue to empty, up to the given timeout.
