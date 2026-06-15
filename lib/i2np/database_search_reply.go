@@ -191,9 +191,9 @@ func (d *DatabaseSearchReply) UnmarshalBinary(data []byte) error {
 	// local router's iterative lookup fan-out.
 	if d.Count > maxDatabaseSearchReplySuggestions {
 		log.WithFields(logger.Fields{
-			"at":            "DatabaseSearchReply.UnmarshalBinary",
-			"count":         d.Count,
-			"max_allowed":   maxDatabaseSearchReplySuggestions,
+			"at":          "DatabaseSearchReply.UnmarshalBinary",
+			"count":       d.Count,
+			"max_allowed": maxDatabaseSearchReplySuggestions,
 		}).Warn("DatabaseSearchReply count exceeds spec maximum; rejecting message")
 		return ErrDatabaseSearchReplyNotEnoughData
 	}

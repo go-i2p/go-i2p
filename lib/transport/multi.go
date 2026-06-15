@@ -70,7 +70,8 @@ type TransportMuxer struct {
 
 // Mux combines a set of transports together.
 func Mux(t ...Transport) (tmux *TransportMuxer) {
-	logAt("Mux").WithFields(logger.Fields{"reason":          "initialization",
+	logAt("Mux").WithFields(logger.Fields{
+		"reason":          "initialization",
 		"transport_count": len(t),
 	}).Debug("creating new TransportMuxer")
 	tmux = &TransportMuxer{
@@ -80,7 +81,8 @@ func Mux(t ...Transport) (tmux *TransportMuxer) {
 	tmux.trans = append(tmux.trans, t...)
 	tmux.acceptWg.Add(1)
 	go tmux.failedPeersCleanupLoop()
-	logAt("Mux").WithFields(logger.Fields{"reason": "created_successfully",
+	logAt("Mux").WithFields(logger.Fields{
+		"reason": "created_successfully",
 	}).Debug("TransportMuxer created")
 	return tmux
 }
@@ -89,7 +91,8 @@ func Mux(t ...Transport) (tmux *TransportMuxer) {
 func MuxWithLimit(maxConnections int, t ...Transport) (tmux *TransportMuxer) {
 	tmux = Mux(t...)
 	tmux.MaxConnections = maxConnections
-	logAt("MuxWithLimit").WithFields(logger.Fields{"max_connections": maxConnections,
+	logAt("MuxWithLimit").WithFields(logger.Fields{
+		"max_connections": maxConnections,
 	}).Debug("TransportMuxer created with connection limit")
 	return tmux
 }
@@ -106,7 +109,8 @@ func (tmux *TransportMuxer) ReleaseSession() {
 		atomic.StoreInt32(&tmux.activeSessionCount, 0)
 		logAt("(TransportMuxer) ReleaseSession").WithFields(logger.Fields{}).Warn("session counter underflow; releases exceed reservations (clamped to 0)")
 	} else {
-		logAt("(TransportMuxer) ReleaseSession").WithFields(logger.Fields{"active_sessions": newCount,
+		logAt("(TransportMuxer) ReleaseSession").WithFields(logger.Fields{
+			"active_sessions": newCount,
 		}).Debug("session released")
 	}
 }
@@ -114,25 +118,29 @@ func (tmux *TransportMuxer) ReleaseSession() {
 // SetIdentity sets the identity for every transport.
 func (tmux *TransportMuxer) SetIdentity(ident router_info.RouterInfo) (err error) {
 	identHash, _ := ident.IdentHash()
-	logAt("(TransportMuxer) SetIdentity").WithFields(logger.Fields{"reason":          "configure_all_transports",
+	logAt("(TransportMuxer) SetIdentity").WithFields(logger.Fields{
+		"reason":          "configure_all_transports",
 		"identity_hash":   logutil.HashPrefix(identHash),
 		"transport_count": len(tmux.trans),
 	}).Debug("setting identity for all transports")
 	for i, t := range tmux.trans {
 		err = t.SetIdentity(ident)
 		if err != nil {
-			logAt("(TransportMuxer) SetIdentity").WithFields(logger.Fields{"reason":          "transport_rejected_identity",
+			logAt("(TransportMuxer) SetIdentity").WithFields(logger.Fields{
+				"reason":          "transport_rejected_identity",
 				"transport_index": i,
 				"error":           err.Error(),
 			}).Error("failed to set identity for transport")
 			// an error happened let's return and complain
 			return err
 		}
-		logAt("(TransportMuxer) SetIdentity").WithFields(logger.Fields{"reason":          "transport_configured",
+		logAt("(TransportMuxer) SetIdentity").WithFields(logger.Fields{
+			"reason":          "transport_configured",
 			"transport_index": i,
 		}).Debug("identity set for transport")
 	}
-	logAt("(TransportMuxer) SetIdentity").WithFields(logger.Fields{"reason": "all_transports_configured",
+	logAt("(TransportMuxer) SetIdentity").WithFields(logger.Fields{
+		"reason": "all_transports_configured",
 	}).Debug("identity set for all transports")
 	return err
 }
@@ -140,7 +148,8 @@ func (tmux *TransportMuxer) SetIdentity(ident router_info.RouterInfo) (err error
 // Close closes every transport that this transport muxer has.
 func (tmux *TransportMuxer) Close() (err error) {
 	tmux.closeOnce.Do(func() {
-		logAt("(TransportMuxer) Close").WithFields(logger.Fields{"reason":          "shutdown_requested",
+		logAt("(TransportMuxer) Close").WithFields(logger.Fields{
+			"reason":          "shutdown_requested",
 			"transport_count": len(tmux.trans),
 		}).Debug("closing all transports")
 
@@ -150,7 +159,8 @@ func (tmux *TransportMuxer) Close() (err error) {
 
 		tmux.waitForAcceptGoroutines()
 
-		logAt("(TransportMuxer) Close").WithFields(logger.Fields{"reason": "all_transports_closed",
+		logAt("(TransportMuxer) Close").WithFields(logger.Fields{
+			"reason": "all_transports_closed",
 		}).Debug("all transports closed")
 		tmux.closeErr = errors.Join(errs...)
 	})
@@ -175,12 +185,14 @@ func (tmux *TransportMuxer) closeAllTransports() []error {
 	for i, t := range tmux.trans {
 		if closeErr := t.Close(); closeErr != nil {
 			errs = append(errs, closeErr)
-			logAt("(TransportMuxer) Close").WithFields(logger.Fields{"reason":          "transport_close_failed",
+			logAt("(TransportMuxer) Close").WithFields(logger.Fields{
+				"reason":          "transport_close_failed",
 				"transport_index": i,
 				"error":           closeErr.Error(),
 			}).Warn("error closing transport")
 		} else {
-			logAt("(TransportMuxer) Close").WithFields(logger.Fields{"reason":          "transport_closed",
+			logAt("(TransportMuxer) Close").WithFields(logger.Fields{
+				"reason":          "transport_closed",
 				"transport_index": i,
 			}).Debug("transport closed successfully")
 		}
@@ -198,17 +210,20 @@ func (tmux *TransportMuxer) waitForAcceptGoroutines() {
 	}()
 	select {
 	case <-acceptExited:
-		logAt("(TransportMuxer) Close").WithFields(logger.Fields{"reason": "accept_goroutines_exited",
+		logAt("(TransportMuxer) Close").WithFields(logger.Fields{
+			"reason": "accept_goroutines_exited",
 		}).Debug("all accept goroutines exited cleanly")
 	case <-time.After(3 * time.Second):
-		logAt("(TransportMuxer) Close").WithFields(logger.Fields{"reason": "accept_goroutines_timeout",
+		logAt("(TransportMuxer) Close").WithFields(logger.Fields{
+			"reason": "accept_goroutines_timeout",
 		}).Warn("timed out waiting for accept goroutines to exit")
 	}
 }
 
 // Name returns the name of this transport combined with the names of all the ones that we mux.
 func (tmux *TransportMuxer) Name() string {
-	logAt("(TransportMuxer) Name").WithFields(logger.Fields{"reason": "generating_composite_name",
+	logAt("(TransportMuxer) Name").WithFields(logger.Fields{
+		"reason": "generating_composite_name",
 	}).Debug("generating muxed transport name")
 
 	if len(tmux.trans) == 0 {
@@ -230,7 +245,8 @@ func (tmux *TransportMuxer) Name() string {
 	}
 	name := sb.String()
 
-	logAt("(TransportMuxer) Name").WithFields(logger.Fields{"reason": "name_generated",
+	logAt("(TransportMuxer) Name").WithFields(logger.Fields{
+		"reason": "name_generated",
 		"name":   name,
 	}).Debug("muxed transport name generated")
 	return name
@@ -240,13 +256,15 @@ func (tmux *TransportMuxer) Name() string {
 // Returns the session and nil if successful, or nil and an error if it fails.
 func (tmux *TransportMuxer) tryGetSessionFromTransport(t Transport, routerInfo router_info.RouterInfo, index int) (TransportSession, error) {
 	peerHash, _ := routerInfo.IdentHash()
-	logAt("(TransportMuxer) GetSession").WithFields(logger.Fields{"reason":          "compatible_transport_found",
+	logAt("(TransportMuxer) GetSession").WithFields(logger.Fields{
+		"reason":          "compatible_transport_found",
 		"transport_index": index,
 	}).Debug("found compatible transport, attempting session")
 
 	s, err := t.GetSession(routerInfo)
 	if err != nil {
-		logAt("(TransportMuxer) GetSession").WithFields(logger.Fields{"phase":           "session_establishment",
+		logAt("(TransportMuxer) GetSession").WithFields(logger.Fields{
+			"phase":           "session_establishment",
 			"reason":          "session_creation_failed",
 			"transport_name":  t.Name(),
 			"transport_index": index,
@@ -258,7 +276,8 @@ func (tmux *TransportMuxer) tryGetSessionFromTransport(t Transport, routerInfo r
 		return nil, err
 	}
 
-	logAt("(TransportMuxer) GetSession").WithFields(logger.Fields{"reason":          "session_established",
+	logAt("(TransportMuxer) GetSession").WithFields(logger.Fields{
+		"reason":          "session_established",
 		"transport_index": index,
 	}).Debug("successfully got session from transport")
 	return s, nil
@@ -282,7 +301,8 @@ func (tmux *TransportMuxer) logNoTransportError(routerInfo router_info.RouterInf
 	peerHash, _ := routerInfo.IdentHash()
 	addressTypes := collectAddressTypes(routerInfo)
 
-	logAt("(TransportMuxer) GetSession").WithFields(logger.Fields{"phase":          "session_establishment",
+	logAt("(TransportMuxer) GetSession").WithFields(logger.Fields{
+		"phase":          "session_establishment",
 		"reason":         "no_compatible_transport",
 		"peer_hash":      fmt.Sprintf("%x", peerHash[:]),
 		"num_transports": len(tmux.trans),
@@ -301,7 +321,8 @@ func (tmux *TransportMuxer) logAllTransportsFailed(routerInfo router_info.Router
 
 	tmux.recordPeerFailure(peerHash)
 
-	logAt("(TransportMuxer) GetSession").WithFields(logger.Fields{"phase":          "session_establishment",
+	logAt("(TransportMuxer) GetSession").WithFields(logger.Fields{
+		"phase":          "session_establishment",
 		"reason":         "all_transports_failed",
 		"peer_hash":      fmt.Sprintf("%x", peerHash[:]),
 		"num_transports": len(tmux.trans),
@@ -398,14 +419,16 @@ func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s Tra
 
 	// Skip peers that recently failed all transports (cooldown window).
 	if tmux.isPeerCoolingDown(peerHash) {
-		logAt("(TransportMuxer) GetSession").WithFields(logger.Fields{"reason":    "peer_cooldown",
+		logAt("(TransportMuxer) GetSession").WithFields(logger.Fields{
+			"reason":    "peer_cooldown",
 			"peer_hash": logutil.HashPrefix(peerHash),
 			"cooldown":  peerCooldown.String(),
 		}).Debug("skipping peer still in cooldown")
 		return nil, ErrNoTransportAvailable
 	}
 
-	logAt("(TransportMuxer) GetSession").WithFields(logger.Fields{"reason":         "attempting_peer_connection",
+	logAt("(TransportMuxer) GetSession").WithFields(logger.Fields{
+		"reason":         "attempting_peer_connection",
 		"peer_hash":      logutil.HashPrefix(peerHash),
 		"num_transports": len(tmux.trans),
 	}).Debug("attempting to get session")
@@ -444,18 +467,21 @@ func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s Tra
 // Compatible returns true if there is a transport that we mux that is compatible with this router info.
 func (tmux *TransportMuxer) Compatible(routerInfo router_info.RouterInfo) bool {
 	peerHash, _ := routerInfo.IdentHash()
-	logAt("(TransportMuxer) Compatible").WithFields(logger.Fields{"reason":    "checking_compatibility",
+	logAt("(TransportMuxer) Compatible").WithFields(logger.Fields{
+		"reason":    "checking_compatibility",
 		"peer_hash": logutil.HashPrefix(peerHash),
 	}).Debug("checking transport compatibility")
 	for i, t := range tmux.trans {
 		if t.Compatible(routerInfo) {
-			logAt("(TransportMuxer) Compatible").WithFields(logger.Fields{"reason":          "compatible_transport_found",
+			logAt("(TransportMuxer) Compatible").WithFields(logger.Fields{
+				"reason":          "compatible_transport_found",
 				"transport_index": i,
 			}).Debug("found compatible transport")
 			return true
 		}
 	}
-	logAt("(TransportMuxer) Compatible").WithFields(logger.Fields{"reason": "no_compatible_transport",
+	logAt("(TransportMuxer) Compatible").WithFields(logger.Fields{
+		"reason": "no_compatible_transport",
 	}).Debug("no compatible transport found")
 	return false
 }
@@ -467,7 +493,8 @@ func (tmux *TransportMuxer) Compatible(routerInfo router_info.RouterInfo) bool {
 // Returns nil and ErrNoTransportAvailable if no transports are configured.
 // Returns nil and ErrConnectionPoolFull if the connection limit has been reached.
 func (tmux *TransportMuxer) Accept() (net.Conn, error) {
-	logAt("(TransportMuxer) Accept").WithFields(logger.Fields{"reason":          "awaiting_connection",
+	logAt("(TransportMuxer) Accept").WithFields(logger.Fields{
+		"reason":          "awaiting_connection",
 		"transport_count": len(tmux.trans),
 	}).Debug("accepting connection from all transports")
 
@@ -506,7 +533,8 @@ func (tmux *TransportMuxer) handleAcceptChannelResult(res acceptResult, ok bool)
 		atomic.AddInt32(&tmux.activeSessionCount, -1)
 		return nil, res.err
 	}
-	logAt("(TransportMuxer) Accept").WithFields(logger.Fields{"reason":          "connection_accepted",
+	logAt("(TransportMuxer) Accept").WithFields(logger.Fields{
+		"reason":          "connection_accepted",
 		"transport_index": res.transportIndex,
 		"active_sessions": atomic.LoadInt32(&tmux.activeSessionCount),
 	}).Debug("accept succeeded")
@@ -530,7 +558,8 @@ func (tmux *TransportMuxer) Addr() net.Addr {
 // Returns nil and context.DeadlineExceeded if the timeout expires.
 // Returns nil and any other error from the underlying transport Accept().
 func (tmux *TransportMuxer) AcceptWithTimeout(timeout time.Duration) (net.Conn, error) {
-	logAt("(TransportMuxer) AcceptWithTimeout").WithFields(logger.Fields{"reason":          "awaiting_connection",
+	logAt("(TransportMuxer) AcceptWithTimeout").WithFields(logger.Fields{
+		"reason":          "awaiting_connection",
 		"timeout_ms":      timeout.Milliseconds(),
 		"transport_count": len(tmux.trans),
 	}).Debug("accepting connection with timeout from all transports")
@@ -559,7 +588,8 @@ func (tmux *TransportMuxer) waitForConnection(timeout time.Duration) (net.Conn, 
 		return tmux.handleAcceptResult(res, ok)
 	case <-timer.C:
 		atomic.AddInt32(&tmux.activeSessionCount, -1)
-		logAt("(TransportMuxer) AcceptWithTimeout").WithFields(logger.Fields{"reason": "timeout_exceeded",
+		logAt("(TransportMuxer) AcceptWithTimeout").WithFields(logger.Fields{
+			"reason": "timeout_exceeded",
 		}).Debug("accept timed out")
 		return nil, context.DeadlineExceeded
 	case <-tmux.acceptDone:
@@ -579,7 +609,8 @@ func (tmux *TransportMuxer) handleAcceptResult(res acceptResult, ok bool) (net.C
 		atomic.AddInt32(&tmux.activeSessionCount, -1)
 		return nil, res.err
 	}
-	logAt("(TransportMuxer) AcceptWithTimeout").WithFields(logger.Fields{"reason":          "connection_accepted",
+	logAt("(TransportMuxer) AcceptWithTimeout").WithFields(logger.Fields{
+		"reason":          "connection_accepted",
 		"transport_index": res.transportIndex,
 		"active_sessions": atomic.LoadInt32(&tmux.activeSessionCount),
 	}).Debug("accept succeeded")
@@ -630,7 +661,8 @@ func (tmux *TransportMuxer) runAcceptWorker(t Transport, index int) {
 // processAcceptResult processes accept result and returns false if worker should stop.
 func (tmux *TransportMuxer) processAcceptResult(conn net.Conn, err error, index int) bool {
 	if err != nil {
-		logAt("(TransportMuxer) acceptLoop").WithFields(logger.Fields{"transport_index": index,
+		logAt("(TransportMuxer) acceptLoop").WithFields(logger.Fields{
+			"transport_index": index,
 			"error":           err.Error(),
 		}).Debug("accept error from transport")
 		if tmux.shouldStopAfterError() {
@@ -709,7 +741,8 @@ func (tmux *TransportMuxer) checkConnectionLimit() error {
 	for {
 		current := atomic.LoadInt32(&tmux.activeSessionCount)
 		if current >= max {
-			logAt("(TransportMuxer) checkConnectionLimit").WithFields(logger.Fields{"reason":          "connection_pool_full",
+			logAt("(TransportMuxer) checkConnectionLimit").WithFields(logger.Fields{
+				"reason":          "connection_pool_full",
 				"active_sessions": int(current),
 				"max_connections": int(max),
 			}).Warn("connection pool limit reached")

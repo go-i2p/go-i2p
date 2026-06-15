@@ -275,7 +275,8 @@ func recomputeReachabilityCaps(r *Router, ri *router_info.RouterInfo, ntcp2Trans
 	if ntcp2Transport != nil {
 		ntcp2Transport.UpdateLocalRouterInfo(*ri)
 	}
-	logAt("recomputeReachabilityCaps").WithFields(logger.Fields{"old_caps":      string(currentCaps),
+	logAt("recomputeReachabilityCaps").WithFields(logger.Fields{
+		"old_caps":      string(currentCaps),
 		"new_caps":      string(ri.RouterCapabilities()),
 		"want_reach":    wantReachable,
 		"address_count": ri.RouterAddressCount(),
@@ -285,7 +286,8 @@ func recomputeReachabilityCaps(r *Router, ri *router_info.RouterInfo, ntcp2Trans
 
 // initializeRouterKeystore creates and stores the router keystore
 func initializeRouterKeystore(r *Router, cfg *config.RouterConfig) error {
-	logAt("(Router) initializeRouterKeystore").WithFields(logger.Fields{"phase":       "startup",
+	logAt("(Router) initializeRouterKeystore").WithFields(logger.Fields{
+		"phase":       "startup",
 		"step":        3,
 		"reason":      "initializing router keystore",
 		"working_dir": cfg.WorkingDir,
@@ -296,7 +298,8 @@ func initializeRouterKeystore(r *Router, cfg *config.RouterConfig) error {
 		logError("failed to create RouterInfoKeystore", err)
 		return err
 	}
-	logAt("(Router) initializeRouterKeystore").WithFields(logger.Fields{"phase":  "startup",
+	logAt("(Router) initializeRouterKeystore").WithFields(logger.Fields{
+		"phase":  "startup",
 		"step":   3,
 		"reason": "keystore created successfully",
 	}).Debug("routerInfoKeystore created successfully")
@@ -345,7 +348,8 @@ func constructRouterInfo(r *Router) (*router_info.RouterInfo, error) {
 		return nil, err
 	}
 
-	logAt("constructRouterInfo").WithFields(logger.Fields{"caps": ri.RouterCapabilities(),
+	logAt("constructRouterInfo").WithFields(logger.Fields{
+		"caps": ri.RouterCapabilities(),
 	}).Debug("RouterInfo constructed successfully")
 	return ri, nil
 }
@@ -362,7 +366,8 @@ func FromConfig(c *config.RouterConfig) (r *Router, err error) {
 	if c == nil {
 		return nil, oops.Errorf("router config cannot be nil")
 	}
-	logAt("(Router) FromConfig").WithFields(logger.Fields{"phase":       "startup",
+	logAt("(Router) FromConfig").WithFields(logger.Fields{
+		"phase":       "startup",
 		"step":        1,
 		"reason":      "constructing router from config",
 		"base_dir":    c.BaseDir,
@@ -371,7 +376,8 @@ func FromConfig(c *config.RouterConfig) (r *Router, err error) {
 	r = new(Router)
 	r.cfg = c
 	r.closeChnl = make(chan bool)
-	logAt("(Router) FromConfig").WithFields(logger.Fields{"phase":  "startup",
+	logAt("(Router) FromConfig").WithFields(logger.Fields{
+		"phase":  "startup",
 		"reason": "router struct initialized",
 	}).Debug("router created successfully from configuration")
 	return r, err
@@ -379,11 +385,13 @@ func FromConfig(c *config.RouterConfig) (r *Router, err error) {
 
 // Wait blocks until router is fully stopped
 func (r *Router) Wait() {
-	logAt("(Router) Wait").WithFields(logger.Fields{"phase":  "running",
+	logAt("(Router) Wait").WithFields(logger.Fields{
+		"phase":  "running",
 		"reason": "waiting for router shutdown",
 	}).Debug("waiting for router to stop")
 	r.wg.Wait()
-	logAt("(Router) Wait").WithFields(logger.Fields{"phase":  "shutdown",
+	logAt("(Router) Wait").WithFields(logger.Fields{
+		"phase":  "shutdown",
 		"reason": "all router goroutines completed",
 	}).Debug("router has stopped")
 }
@@ -450,7 +458,8 @@ func (r *Router) IsReseeding() bool {
 // This can be called via I2PControl to manually repopulate the network database.
 // It runs in the current goroutine and returns any error encountered.
 func (r *Router) Reseed() error {
-	logAt("(Router) Reseed").WithFields(logger.Fields{"reason": "explicit reseed requested",
+	logAt("(Router) Reseed").WithFields(logger.Fields{
+		"reason": "explicit reseed requested",
 	}).Info("Manual reseed triggered")
 	return r.performReseed()
 }
