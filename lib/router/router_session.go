@@ -150,6 +150,33 @@ func (r *Router) validateTransportMuxer(hash common.Hash) error {
 	return nil
 }
 
+// sessionRegisterer is the interface that session types must implement to be registered.
+// It allows registerTypedSession to work with any concrete session type (NTCP2Session, SSU2Session).
+type sessionRegisterer interface {
+	transport.TransportSession
+	i2npReader
+	SetCleanupCallback(func())
+}
+
+// registerTypedSession is a generic helper for registering transport sessions (NTCP2, SSU2).
+// It consolidates the common 5-step registration pattern across all session types:
+// 1. Set cleanup callback to remove session on close
+// 2. Add session to router's session registry
+// 3. Increment waitgroup to track reader goroutine lifetime
+// 4. Start reader goroutine to process inbound I2NP messages
+// 5. Log successful registration with transport type name
+// This avoids duplication of identical code across NTCP2Session and SSU2Session cases.
+func (r *Router) registerTypedSession(hash common.Hash, session sessionRegisterer, transportName string) {
+	session.SetCleanupCallback(func() { r.removeSession(hash) })
+	r.addSession(hash, session)
+	r.wg.Add(1)
+	go func() {
+		defer r.wg.Done()
+		r.processSessionMessages(session, staticAuthenticatedPeer{hash: hash, handshakeComplete: true})
+	}()
+	log.WithField("peer_hash", logutil.HashPrefix(hash)).Infof("Established and registered new outbound %s session", transportName)
+}
+
 // registerNewSession stores a newly established session and starts a reader
 // goroutine so that inbound I2NP messages on outbound sessions are processed.
 // Without the reader goroutine, messages (e.g. tunnel build replies) pile up in
@@ -172,23 +199,9 @@ func (r *Router) registerNewSession(hash common.Hash, transportSession i2np.I2NP
 
 	switch s := transportSession.(type) {
 	case *ntcp.NTCP2Session:
-		s.SetCleanupCallback(func() { r.removeSession(hash) })
-		r.addSession(hash, s)
-		r.wg.Add(1)
-		go func() {
-			defer r.wg.Done()
-			r.processSessionMessages(s, staticAuthenticatedPeer{hash: hash, handshakeComplete: true})
-		}()
-		log.WithField("peer_hash", logutil.HashPrefix(hash)).Info("Established and registered new outbound NTCP2 session")
+		r.registerTypedSession(hash, s, "NTCP2")
 	case *ssu2.SSU2Session:
-		s.SetCleanupCallback(func() { r.removeSession(hash) })
-		r.addSession(hash, s)
-		r.wg.Add(1)
-		go func() {
-			defer r.wg.Done()
-			r.processSessionMessages(s, staticAuthenticatedPeer{hash: hash, handshakeComplete: true})
-		}()
-		log.WithField("peer_hash", logutil.HashPrefix(hash)).Info("Established and registered new outbound SSU2 session")
+		r.registerTypedSession(hash, s, "SSU2")
 	default:
 		log.WithField("peer_hash", logutil.HashPrefix(hash)).Warn("Unknown transport session type, cannot start reader goroutine")
 	}

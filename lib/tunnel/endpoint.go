@@ -263,28 +263,12 @@ func findZeroSeparator(decrypted []byte) (int, error) {
 
 // processDeliveryInstructions parses delivery instructions and extracts messages.
 func (e *Endpoint) processDeliveryInstructions(decrypted []byte) error {
-	dataStart, err := e.findDataStart(decrypted)
+	dataStart, err := findZeroSeparator(decrypted)
 	if err != nil {
 		return err
 	}
 
 	return e.processInstructionLoop(decrypted[dataStart:])
-}
-
-// findDataStart locates the zero byte separator in tunnel message.
-// It searches for the zero byte that separates padding from delivery instructions.
-// Returns the position immediately after the zero byte, or an error if not found.
-func (e *Endpoint) findDataStart(decrypted []byte) (int, error) {
-	for i := 24; i < len(decrypted); i++ {
-		if decrypted[i] == 0x00 {
-			return i + 1, nil
-		}
-	}
-	log.WithFields(logger.Fields{
-		"at":     "(Endpoint) extractFragments",
-		"reason": "malformed_message_no_separator",
-	}).Error("no zero byte separator found in tunnel message")
-	return -1, ErrInvalidTunnelData
 }
 
 // processInstructionLoop iterates through all delivery instructions in the data.
@@ -658,7 +642,16 @@ func (e *Endpoint) processFollowOnFragment(di *DeliveryInstructions, fragmentDat
 		e.markLastFragment(msgID, fragmentNum, assembler)
 	}
 
-	result := e.attemptReassembly(msgID, fragmentNum, isLast, assembler)
+	result := e.checkFragmentCompletion(msgID, assembler)
+
+	// Log debug info if reassembly wasn't triggered (still waiting for fragments)
+	if result == nil {
+		log.WithFields(map[string]interface{}{
+			"message_id":   msgID,
+			"fragment_num": fragmentNum,
+			"is_last":      isLast,
+		}).Debug("Stored follow-on fragment, waiting for more")
+	}
 
 	e.fragmentsMutex.Unlock()
 
@@ -738,26 +731,6 @@ func (e *Endpoint) markLastFragment(msgID uint32, fragmentNum int, assembler *fr
 		"total_count":  assembler.totalCount,
 		"fragment_num": fragmentNum,
 	}).Debug("Received last fragment")
-}
-
-// attemptReassembly checks if all fragments are received and triggers reassembly if complete.
-// Returns a reassembled result (may be nil if not yet complete).
-// Note: Caller must hold fragmentsMutex.
-func (e *Endpoint) attemptReassembly(msgID uint32, fragmentNum int, isLast bool, assembler *fragmentAssembler) *reassembledResult {
-	if assembler.totalCount > 0 {
-		expectedMask := (uint64(1) << assembler.totalCount) - 1
-		if assembler.receivedMask == expectedMask {
-			return e.reassembleFragments(msgID, assembler)
-		}
-	}
-
-	log.WithFields(map[string]interface{}{
-		"message_id":   msgID,
-		"fragment_num": fragmentNum,
-		"is_last":      isLast,
-	}).Debug("Stored follow-on fragment, waiting for more")
-
-	return nil
 }
 
 // reassembleFragments combines all fragments into a complete message and removes

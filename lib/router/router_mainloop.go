@@ -87,6 +87,10 @@ func (r *Router) mainloop() {
 	log.WithField("at", "mainloop").Debug("starting health monitor")
 	r.startHealthMonitor()
 
+	// Start read warn limiter cleanup for unbounded map prevention
+	log.WithField("at", "mainloop").Debug("starting read warn limiter cleanup")
+	r.startReadWarnLimiterCleanup()
+
 	// Start session monitors for inbound message processing
 	log.WithField("at", "mainloop").Debug("starting session monitors")
 	r.startSessionMonitors()

@@ -33,27 +33,10 @@ func (a *publisherNetDBAdapter) GetAllRouterInfos() []router_info.RouterInfo {
 // StoreRouterInfo adapts StdNetDB's signature to match NetworkDatabase interface.
 // It serializes the RouterInfo, computes its identity hash, and stores it.
 func (a *publisherNetDBAdapter) StoreRouterInfo(ri router_info.RouterInfo) {
-	hash, err := ri.IdentHash()
-	if err != nil {
+	if err := storeRouterInfoViaSerialization(a.db, ri); err != nil {
 		log.WithError(err).WithFields(logger.Fields{
-			"at":     "publisherNetDBAdapter.StoreRouterInfo",
-			"reason": "failed to compute identity hash",
-		}).Warn("cannot store RouterInfo without identity hash")
-		return
-	}
-	data, err := ri.Bytes()
-	if err != nil {
-		log.WithError(err).WithFields(logger.Fields{
-			"at":     "publisherNetDBAdapter.StoreRouterInfo",
-			"reason": "failed to serialize RouterInfo",
+			"at": "publisherNetDBAdapter.StoreRouterInfo",
 		}).Warn("cannot store RouterInfo")
-		return
-	}
-	if err := a.db.StoreRouterInfoFromMessage(hash, data, 0); err != nil {
-		log.WithError(err).WithFields(logger.Fields{
-			"at":   "publisherNetDBAdapter.StoreRouterInfo",
-			"hash": hash.String(),
-		}).Warn("failed to store RouterInfo in NetDB")
 	}
 }
 

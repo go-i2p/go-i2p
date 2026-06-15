@@ -60,18 +60,8 @@ type netDBAdapter struct {
 // It serializes the RouterInfo and stores it in the underlying NetDB, allowing the router
 // to learn about new peers via garlic messages (e.g., DatabaseStore cloves).
 func (a *netDBAdapter) StoreRouterInfo(ri router_info.RouterInfo) {
-	hash, err := ri.IdentHash()
-	if err != nil {
-		log.WithError(err).Warn("Failed to get identity hash from RouterInfo received via garlic, discarding")
-		return
-	}
-	data, err := ri.Bytes()
-	if err != nil {
-		log.WithError(err).Warn("Failed to serialize RouterInfo received via garlic, discarding")
-		return
-	}
-	if err := a.StdNetDB.StoreRouterInfoFromMessage(hash, data, 0); err != nil {
-		log.WithError(err).WithField("hash", logutil.HashPrefixPlain(hash)).Warn("Failed to store RouterInfo received via garlic")
+	if err := storeRouterInfoViaSerialization(a.StdNetDB, ri); err != nil {
+		log.WithError(err).Warn("Failed to store RouterInfo received via garlic")
 	}
 }
 

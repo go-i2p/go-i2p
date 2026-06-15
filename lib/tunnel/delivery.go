@@ -453,59 +453,50 @@ func (di *DeliveryInstructions) appendFragmentSize(result []byte) []byte {
 
 // Type returns if the DeliveryInstructions are of type FirstFragment or FollowOnFragment.
 func (di *DeliveryInstructions) Type() (int, error) {
-	logAt("Type").Debug("Determining DeliveryInstructions type")
 	if err := di.guardNil("Type"); err != nil {
 		return 0, err
 	}
-	log.WithField("fragment_type", di.fragmentType).Debug("DeliveryInstructions type retrieved")
 	return di.fragmentType, nil
 }
 
 // FragmentNumber reads the integer stored in the 6-1 bits of a FollowOnFragment's flag, indicating
 // the fragment number.
 func (di *DeliveryInstructions) FragmentNumber() (int, error) {
-	logAt("FragmentNumber").Debug("Getting FragmentNumber")
 	if err := di.guardNil("FragmentNumber"); err != nil {
 		return 0, err
 	}
 	if err := di.guardFragmentType(FollowOnFragment, "FragmentNumber", "Fragment Number only exists on FollowOnFragment Delivery Instructions"); err != nil {
 		return 0, err
 	}
-	log.WithField("fragment_number", di.fragmentNumber).Debug("FragmentNumber retrieved")
 	return di.fragmentNumber, nil
 }
 
 // LastFollowOnFragment reads the value of the 0 bit of a FollowOnFragment, which is set to 1 to indicate the
 // last fragment.
 func (di *DeliveryInstructions) LastFollowOnFragment() (bool, error) {
-	logAt("LastFollowOnFragment").Debug("Checking if this is the LastFollowOnFragment")
 	if err := di.guardNil("LastFollowOnFragment"); err != nil {
 		return false, err
 	}
 	if err := di.guardFragmentType(FollowOnFragment, "LastFollowOnFragment", "Last Fragment only exists for FollowOnFragment Delivery Instructions"); err != nil {
 		return false, err
 	}
-	log.WithField("is_last", di.lastFragment).Debug("LastFollowOnFragment status determined")
 	return di.lastFragment, nil
 }
 
 // DeliveryType returns the delivery type for these DeliveryInstructions, can be of type
 // DTLocal, DTTunnel, DTRouter, or DTUnused.
 func (di *DeliveryInstructions) DeliveryType() (byte, error) {
-	logAt("DeliveryType").Debug("Getting DeliveryType")
 	if err := di.guardNil("DeliveryType"); err != nil {
 		return 0, err
 	}
 	if err := di.guardFragmentType(FirstFragment, "DeliveryType", "DeliveryType only exists for FirstFragment Delivery Instructions"); err != nil {
 		return 0, err
 	}
-	log.WithField("delivery_type", di.deliveryType).Debug("DeliveryType retrieved")
 	return di.deliveryType, nil
 }
 
 // HasDelay checks if the delay bit is set. This feature is unimplemented in the Java router.
 func (di *DeliveryInstructions) HasDelay() (bool, error) {
-	logAt("HasDelay").Debug("Checking if DeliveryInstructions has delay")
 	if err := di.guardNil("HasDelay"); err != nil {
 		return false, err
 	}
@@ -515,27 +506,23 @@ func (di *DeliveryInstructions) HasDelay() (bool, error) {
 	if di.hasDelay {
 		logAt("(DeliveryInstructions) HasDelay").WithFields(logger.Fields{"info": "this feature is unimplemented in the Java router"}).Warn("DeliveryInstructions found with delay bit set")
 	}
-	log.WithField("has_delay", di.hasDelay).Debug("HasDelay status determined")
 	return di.hasDelay, nil
 }
 
 // Fragmented returns true if the Delivery Instructions are fragmented or false
 // if the following data contains the entire message
 func (di *DeliveryInstructions) Fragmented() (bool, error) {
-	logAt("Fragmented").Debug("Checking if DeliveryInstructions is fragmented")
 	if err := di.guardNil("Fragmented"); err != nil {
 		return false, err
 	}
 	if err := di.guardFragmentType(FirstFragment, "Fragmented", "Fragmented only exists for FirstFragment Delivery Instructions"); err != nil {
 		return false, err
 	}
-	log.WithField("fragmented", di.fragmented).Debug("Fragmented status determined")
 	return di.fragmented, nil
 }
 
 // HasExtendedOptions checks if the extended options bit is set. This feature is unimplemented in the Java router.
 func (di *DeliveryInstructions) HasExtendedOptions() (bool, error) {
-	logAt("HasExtendedOptions").Debug("Checking if DeliveryInstructions has extended options")
 	if err := di.guardNil("HasExtendedOptions"); err != nil {
 		return false, err
 	}
@@ -545,42 +532,34 @@ func (di *DeliveryInstructions) HasExtendedOptions() (bool, error) {
 	if di.hasExtOptions {
 		logAt("(DeliveryInstructions) ExtendedOptions").WithFields(logger.Fields{"info": "this feature is unimplemented in the Java router"}).Warn("DeliveryInstructions found with extended_options bit set")
 	}
-	log.WithField("has_extended_options", di.hasExtOptions).Debug("HasExtendedOptions status determined")
 	return di.hasExtOptions, nil
 }
 
 // HasTunnelID checks if the DeliveryInstructions is of type DTTunnel.
 func (di *DeliveryInstructions) HasTunnelID() (bool, error) {
-	logAt("HasTunnelID").Debug("Checking if DeliveryInstructions has TunnelID")
 	if err := di.guardNil("HasTunnelID"); err != nil {
 		return false, err
 	}
 	if err := di.guardFragmentType(FirstFragment, "HasTunnelID", "HasTunnelID only exists for FirstFragment Delivery Instructions"); err != nil {
 		return false, err
 	}
-	hasTunnelID := di.deliveryType == DTTunnel
-	log.WithField("has_tunnel_id", hasTunnelID).Debug("HasTunnelID status determined")
-	return hasTunnelID, nil
+	return di.deliveryType == DTTunnel, nil
 }
 
 // HasHash returns true if the DeliveryInstructions contain a hash field, which is present for DTTunnel and DTRouter delivery types.
 func (di *DeliveryInstructions) HasHash() (bool, error) {
-	logAt("HasHash").Debug("Checking if DeliveryInstructions has Hash")
 	if err := di.guardNil("HasHash"); err != nil {
 		return false, err
 	}
 	if err := di.guardFragmentType(FirstFragment, "HasHash", "HasHash only exists for FirstFragment Delivery Instructions"); err != nil {
 		return false, err
 	}
-	hasHash := di.deliveryType == DTTunnel || di.deliveryType == DTRouter
-	log.WithField("has_hash", hasHash).Debug("HasHash status determined")
-	return hasHash, nil
+	return di.deliveryType == DTTunnel || di.deliveryType == DTRouter, nil
 }
 
 // TunnelID returns the tunnel ID in this DeliveryInstructions or 0 and an error if the
 // DeliveryInstructions are not of type DTTunnel.
 func (di *DeliveryInstructions) TunnelID() (tunnelID uint32, err error) {
-	logAt("TunnelID").Debug("Getting TunnelID")
 	if err := di.guardNil("TunnelID"); err != nil {
 		return 0, err
 	}
@@ -591,7 +570,6 @@ func (di *DeliveryInstructions) TunnelID() (tunnelID uint32, err error) {
 		logAt("TunnelID").Error("DeliveryInstructions are not of type DTTunnel")
 		return 0, oops.Errorf("DeliveryInstructions are not of type DTTunnel")
 	}
-	log.WithField("tunnelID", di.tunnelID).Debug("TunnelID retrieved")
 	return di.tunnelID, nil
 }
 
@@ -600,7 +578,6 @@ func (di *DeliveryInstructions) TunnelID() (tunnelID uint32, err error) {
 //	If the type is DTTunnel, hash is the SHA256 of the gateway router, if
 //	the type is DTRouter it is the SHA256 of the router.
 func (di *DeliveryInstructions) Hash() (hash common.Hash, err error) {
-	logAt("Hash").Debug("Getting Hash")
 	if err := di.guardNil("Hash"); err != nil {
 		return common.Hash{}, err
 	}
@@ -611,13 +588,11 @@ func (di *DeliveryInstructions) Hash() (hash common.Hash, err error) {
 		logAt("Hash").Error("No Hash on DeliveryInstructions not of type DTTunnel or DTRouter")
 		return common.Hash{}, oops.Errorf("No Hash on DeliveryInstructions not of type DTTunnel or DTRouter")
 	}
-	log.WithField("hash", di.hash).Debug("Hash retrieved")
 	return di.hash, nil
 }
 
 // Delay returns the delay factor for these DeliveryInstructions, or an error if the instructions are not a FirstFragment or have no delay set.
 func (di *DeliveryInstructions) Delay() (delayFactor DelayFactor, err error) {
-	logAt("Delay").Debug("Getting Delay")
 	if err := di.guardNil("Delay"); err != nil {
 		return 0, err
 	}
@@ -630,14 +605,12 @@ func (di *DeliveryInstructions) Delay() (delayFactor DelayFactor, err error) {
 	if di.deliveryType != DTTunnel && di.deliveryType != DTRouter {
 		logAt("(DeliveryInstructions) Delay").WithFields(logger.Fields{}).Warn("Delay not present on DeliveryInstructions not of type DTTunnel or DTRouter")
 	}
-	log.WithField("delayFactor", di.delay).Debug("Delay factor retrieved")
 	return di.delay, nil
 }
 
 // MessageID returns the I2NP Message ID or 0 and an error if the data is not available for this
 // DeliveryInstructions.
 func (di *DeliveryInstructions) MessageID() (msgid uint32, err error) {
-	logAt("MessageID").Debug("Getting MessageID")
 	if err := di.guardNil("MessageID"); err != nil {
 		return 0, err
 	}
@@ -646,14 +619,12 @@ func (di *DeliveryInstructions) MessageID() (msgid uint32, err error) {
 		logAt("MessageID").Error("No Message ID for non-fragmented FirstFragment Delivery Instructions")
 		return 0, oops.Errorf("No Message ID for non-fragmented FirstFragment Delivery Instructions")
 	}
-	log.WithField("message_id", di.messageID).Debug("MessageID retrieved")
 	return di.messageID, nil
 }
 
 // ExtendedOptions returns the Extended Options data if present, or an error if not present. Extended Options is unimplemented
 // in the Java router and the presence of extended options will generate a warning.
 func (di *DeliveryInstructions) ExtendedOptions() (data []byte, err error) {
-	logAt("ExtendedOptions").Debug("Getting ExtendedOptions")
 	if err := di.guardNil("ExtendedOptions"); err != nil {
 		return nil, err
 	}
@@ -664,17 +635,14 @@ func (di *DeliveryInstructions) ExtendedOptions() (data []byte, err error) {
 		logAt("ExtendedOptions").Error("DeliveryInstruction does not have the ExtendedOptions flag set")
 		return nil, oops.Errorf("DeliveryInstruction does not have the ExtendedOptions flag set")
 	}
-	log.WithField("extended_options_length", len(di.extendedOpts)).Debug("Extended Options retrieved")
 	return di.extendedOpts, nil
 }
 
 // FragmentSize returns the size of the associated I2NP fragment and an error if the data is unavailable.
 func (di *DeliveryInstructions) FragmentSize() (fragSize uint16, err error) {
-	logAt("FragmentSize").Debug("Getting FragmentSize")
 	if err := di.guardNil("FragmentSize"); err != nil {
 		return 0, err
 	}
-	log.WithField("fragment_size", di.fragmentSize).Debug("FragmentSize retrieved")
 	return di.fragmentSize, nil
 }
 

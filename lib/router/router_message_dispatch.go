@@ -143,9 +143,11 @@ func isFramingOrLengthViolation(err error) bool {
 }
 
 var (
-	readWarnLimiterMu   sync.Mutex
-	readWarnLastByPeer  = make(map[string]time.Time)
-	readWarnMinInterval = 5 * time.Second
+	readWarnLimiterMu       sync.Mutex
+	readWarnLastByPeer      = make(map[string]time.Time)
+	readWarnMinInterval     = 5 * time.Second
+	readWarnCleanupInterval = 1 * time.Minute  // How often to cleanup stale entries
+	readWarnMaxAge          = 10 * time.Minute // Remove entries not updated for this duration
 )
 
 func shouldLogReadWarn(peerHash string) bool {
@@ -159,6 +161,54 @@ func shouldLogReadWarn(peerHash string) bool {
 	}
 	readWarnLastByPeer[peerHash] = now
 	return true
+}
+
+// cleanupReadWarnLastByPeer removes stale entries from readWarnLastByPeer map.
+// This prevents unbounded memory growth by evicting entries that haven't been
+// updated for readWarnMaxAge. Called periodically by startReadWarnLimiterCleanup.
+// Thread-safe for concurrent access via readWarnLimiterMu.
+func cleanupReadWarnLastByPeer() {
+	readWarnLimiterMu.Lock()
+	defer readWarnLimiterMu.Unlock()
+
+	now := time.Now()
+	evicted := 0
+	for peerHash, lastWarn := range readWarnLastByPeer {
+		if now.Sub(lastWarn) > readWarnMaxAge {
+			delete(readWarnLastByPeer, peerHash)
+			evicted++
+		}
+	}
+
+	if evicted > 0 {
+		log.WithFields(logger.Fields{
+			"at":      "cleanupReadWarnLastByPeer",
+			"evicted": evicted,
+			"mapSize": len(readWarnLastByPeer),
+		}).Debug("Read warn limiter map cleanup")
+	}
+}
+
+// startReadWarnLimiterCleanup launches a background goroutine that periodically
+// removes stale entries from the readWarnLastByPeer map to prevent unbounded growth.
+// Entries not updated for readWarnMaxAge are evicted on each cleanup cycle.
+// Called from mainloop to ensure proper lifecycle management and shutdown.
+func (r *Router) startReadWarnLimiterCleanup() {
+	r.wg.Add(1)
+	go func() {
+		defer r.wg.Done()
+		ticker := time.NewTicker(readWarnCleanupInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-r.ctx.Done():
+				return
+			case <-ticker.C:
+				cleanupReadWarnLastByPeer()
+			}
+		}
+	}()
+	log.WithField("at", "startReadWarnLimiterCleanup").Debug("read warn limiter cleanup started")
 }
 
 // handleIncomingMessage routes the message and logs any routing errors.
