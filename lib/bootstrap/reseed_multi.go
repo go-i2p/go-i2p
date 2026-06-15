@@ -28,14 +28,7 @@ type ReseedResult struct {
 
 // logMultiServerReseedStart logs the start of a multi-server reseed operation.
 func logMultiServerReseedStart(minServers, totalServers int, strategy string) {
-	log.WithFields(logger.Fields{
-		"at":            "(ReseedBootstrap) MultiServerReseed",
-		"phase":         "bootstrap",
-		"reason":        "starting multi-server reseed",
-		"min_servers":   minServers,
-		"total_servers": totalServers,
-		"strategy":      strategy,
-	}).Info("starting multi-server reseed operation")
+	// Logging consolidated to error paths only
 }
 
 // validateReseedResults checks if enough servers responded and returns an error if not.
@@ -57,14 +50,7 @@ func validateReseedResults(successfulResults, results []ReseedResult, minServers
 
 // logMultiServerReseedComplete logs successful completion of multi-server reseed.
 func logMultiServerReseedComplete(successfulCount, combinedCount int, strategy string) {
-	log.WithFields(logger.Fields{
-		"at":                 "(ReseedBootstrap) MultiServerReseed",
-		"phase":              "bootstrap",
-		"reason":             "multi-server reseed completed",
-		"successful_servers": successfulCount,
-		"combined_routers":   combinedCount,
-		"strategy":           strategy,
-	}).Info("multi-server reseed completed successfully")
+	// Logging consolidated to error paths only
 }
 
 // shuffleRouterInfos randomizes the order of router infos unless random weighted strategy is used.
@@ -154,15 +140,10 @@ func (fs *fetchState) hasEnoughSuccess(minServers int) bool {
 	return fs.success >= minServers
 }
 
-// isContextCancelled checks if the context has been cancelled and logs the event.
+// isContextCancelled checks if the context has been cancelled.
 func isContextCancelled(ctx context.Context) bool {
 	select {
 	case <-ctx.Done():
-		log.WithFields(logger.Fields{
-			"at":     "(ReseedBootstrap) fetchFromServers",
-			"phase":  "bootstrap",
-			"reason": "context cancelled during server iteration",
-		}).Warn("stopping server iteration due to context cancellation")
 		return true
 	default:
 		return false
@@ -171,13 +152,7 @@ func isContextCancelled(ctx context.Context) bool {
 
 // logMinimumServersReached logs when the minimum number of successful servers is reached.
 func logMinimumServersReached(success, minServers int) {
-	log.WithFields(logger.Fields{
-		"at":      "(ReseedBootstrap) fetchFromServers",
-		"phase":   "bootstrap",
-		"reason":  "minimum servers reached",
-		"success": success,
-		"min":     minServers,
-	}).Debug("stopping iteration: minimum successful servers reached")
+	// Logging consolidated to error paths only
 }
 
 // fetchFromServerAsync performs an async fetch from a single server with semaphore control.

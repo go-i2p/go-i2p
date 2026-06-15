@@ -2,7 +2,6 @@ package bootstrap
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -10,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 
 	"github.com/go-i2p/common/router_info"
@@ -34,14 +32,6 @@ func NewLocalNetDBBootstrap(cfg *config.BootstrapConfig) *LocalNetDBBootstrap {
 		searchPaths = append(cfg.LocalNetDBPaths, searchPaths...)
 	}
 
-	log.WithFields(logger.Fields{
-		"at":                "(LocalNetDBBootstrap) NewLocalNetDBBootstrap",
-		"phase":             "bootstrap",
-		"step":              1,
-		"reason":            "initializing local netdb bootstrap",
-		"search_path_count": len(searchPaths),
-		"search_paths":      searchPaths,
-	}).Info("initializing local netDb bootstrap")
 	return &LocalNetDBBootstrap{
 		searchPaths: searchPaths,
 	}
@@ -49,7 +39,6 @@ func NewLocalNetDBBootstrap(cfg *config.BootstrapConfig) *LocalNetDBBootstrap {
 
 // NewLocalNetDBBootstrapWithPaths creates a new local netDb bootstrap with custom paths
 func NewLocalNetDBBootstrapWithPaths(paths []string) *LocalNetDBBootstrap {
-	log.WithField("custom_paths", paths).Info("Initializing local netDb bootstrap with custom paths")
 	return &LocalNetDBBootstrap{
 		searchPaths: paths,
 	}
@@ -57,29 +46,11 @@ func NewLocalNetDBBootstrapWithPaths(paths []string) *LocalNetDBBootstrap {
 
 // GetPeers implements the Bootstrap interface by reading RouterInfos from local netDb
 func (lb *LocalNetDBBootstrap) GetPeers(ctx context.Context, n int) ([]router_info.RouterInfo, error) {
-	log.WithFields(logger.Fields{
-		"at":              "(LocalNetDBBootstrap) GetPeers",
-		"phase":           "bootstrap",
-		"step":            "start",
-		"reason":          "searching for existing I2P netdb directories",
-		"requested_peers": n,
-		"search_paths":    len(lb.searchPaths),
-	}).Info("starting local netDb bootstrap")
-
 	// Find the first available netDb directory
 	netDBPath, err := lb.findNetDBDirectory()
 	if err != nil {
 		return nil, oops.Wrapf(err, "no local netDb found")
 	}
-
-	log.WithFields(logger.Fields{
-		"at":       "(LocalNetDBBootstrap) GetPeers",
-		"phase":    "bootstrap",
-		"step":     "directory_found",
-		"reason":   "found valid netdb directory",
-		"path":     netDBPath,
-		"searched": len(lb.searchPaths),
-	}).Info("found local netDb directory")
 
 	// Read RouterInfos from the directory
 	routerInfos, err := lb.readRouterInfosFromDirectory(ctx, netDBPath, n)
@@ -87,62 +58,21 @@ func (lb *LocalNetDBBootstrap) GetPeers(ctx context.Context, n int) ([]router_in
 		return nil, oops.Wrapf(err, "failed to read RouterInfos from local netDb")
 	}
 
-	log.WithFields(logger.Fields{
-		"at":           "(LocalNetDBBootstrap) GetPeers",
-		"phase":        "bootstrap",
-		"step":         "complete",
-		"reason":       "successfully loaded routers from local netdb",
-		"router_count": len(routerInfos),
-		"requested":    n,
-		"netdb_path":   netDBPath,
-	}).Info("successfully loaded RouterInfos from local netDb")
 	return routerInfos, nil
 }
 
 // findNetDBDirectory searches for an existing netDb directory
 func (lb *LocalNetDBBootstrap) findNetDBDirectory() (string, error) {
-	log.WithFields(logger.Fields{
-		"at":         "(LocalNetDBBootstrap) findNetDBDirectory",
-		"phase":      "bootstrap",
-		"reason":     "searching for existing netdb directory",
-		"path_count": len(lb.searchPaths),
-	}).Debug("searching for netdb directory")
-
-	for i, path := range lb.searchPaths {
+	for _, path := range lb.searchPaths {
 		expanded := expandPath(path)
-
-		log.WithFields(logger.Fields{
-			"at":     "(LocalNetDBBootstrap) findNetDBDirectory",
-			"phase":  "bootstrap",
-			"reason": "checking search path",
-			"index":  i + 1,
-			"total":  len(lb.searchPaths),
-			"path":   expanded,
-		}).Debug("checking netdb search path")
 
 		// Check if this is a valid netDb directory
 		if lb.isValidNetDBDirectory(expanded) {
-			log.WithFields(logger.Fields{
-				"at":      "(LocalNetDBBootstrap) findNetDBDirectory",
-				"phase":   "bootstrap",
-				"reason":  "found valid netdb directory",
-				"path":    expanded,
-				"checked": i + 1,
-			}).Debug("found valid netDb directory")
 			return expanded, nil
 		}
 	}
 
-	log.WithFields(logger.Fields{
-		"at":         "(LocalNetDBBootstrap) findNetDBDirectory",
-		"phase":      "bootstrap",
-		"reason":     "no valid netdb directory found",
-		"searched":   len(lb.searchPaths),
-		"paths":      lb.searchPaths,
-		"os":         runtime.GOOS,
-		"impact":     "local netDb bootstrap will fail",
-		"suggestion": "install Java I2P or i2pd to populate local netDb",
-	}).Warn("no valid netdb directory found in search paths")
+	log.WithField("searched", len(lb.searchPaths)).Warn("no valid netdb directory found in search paths")
 	return "", oops.Errorf("no valid netDb directory found in search paths: %v", lb.searchPaths)
 }
 
@@ -241,14 +171,7 @@ func (lb *LocalNetDBBootstrap) createWalkFunction(ctx context.Context, routerInf
 
 // logReadFailure logs a failed RouterInfo file read during bootstrap walking.
 func (lb *LocalNetDBBootstrap) logReadFailure(filePath string, err error) {
-	log.WithError(err).WithFields(logger.Fields{
-		"at":         "(LocalNetDBBootstrap) createWalkFunction",
-		"phase":      "bootstrap",
-		"reason":     "failed to read RouterInfo file",
-		"file":       filePath,
-		"error_type": fmt.Sprintf("%T", err),
-		"action":     "skipping",
-	}).Debug("failed to read RouterInfo file, skipping")
+	log.WithError(err).Debug("failed to read RouterInfo file, skipping")
 }
 
 // validateRouterInfoForBootstrap checks connectivity, structural integrity, and
@@ -256,34 +179,15 @@ func (lb *LocalNetDBBootstrap) logReadFailure(filePath string, err error) {
 // Returns nil on success or an error describing the first failed check.
 func validateRouterInfoForBootstrap(ri router_info.RouterInfo, filePath string) error {
 	if !HasDirectConnectivity(ri) {
-		log.WithFields(logger.Fields{
-			"at":     "(LocalNetDBBootstrap) createWalkFunction",
-			"phase":  "pre-filter",
-			"reason": "no direct NTCP2 connectivity",
-			"file":   filePath,
-		}).Debug("skipping RouterInfo without direct NTCP2 connectivity")
 		return oops.Errorf("no direct connectivity")
 	}
 
 	if err := ValidateRouterInfo(ri); err != nil {
-		log.WithFields(logger.Fields{
-			"at":     "(LocalNetDBBootstrap) createWalkFunction",
-			"phase":  "validation",
-			"reason": "invalid RouterInfo",
-			"file":   filePath,
-			"error":  err.Error(),
-		}).Debug("skipping invalid RouterInfo from local netDb")
 		return err
 	}
 
 	if err := VerifyRouterInfoSignature(ri); err != nil {
-		log.WithFields(logger.Fields{
-			"at":     "(LocalNetDBBootstrap) createWalkFunction",
-			"phase":  "validation",
-			"reason": "signature verification failed",
-			"file":   filePath,
-			"error":  err.Error(),
-		}).Warn("rejecting RouterInfo with invalid signature from local netDb")
+		log.WithError(err).Warn("rejecting RouterInfo with invalid signature from local netDb")
 		return err
 	}
 
@@ -402,11 +306,7 @@ func getDefaultNetDBSearchPaths() []string {
 func getHomeDir() string {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		log.WithError(err).WithFields(logger.Fields{
-			"at":     "getHomeDir",
-			"phase":  "bootstrap",
-			"reason": "failed to determine user home directory",
-		}).Warn("failed to get user home directory")
+		log.WithError(err).Warn("failed to get user home directory")
 		return ""
 	}
 	return homeDir
@@ -466,14 +366,7 @@ func getBSDNetDBPaths(homeDir string) []string {
 func getWindowsAppData(homeDir string) string {
 	appData := os.Getenv("APPDATA")
 	if appData == "" {
-		log.WithFields(logger.Fields{
-			"at":            "getWindowsAppData",
-			"phase":         "bootstrap",
-			"reason":        "appdata_env_missing",
-			"os":            "windows",
-			"fallback_path": filepath.Join(homeDir, "AppData", "Roaming"),
-			"impact":        "using default Windows AppData location",
-		}).Warn("APPDATA environment variable not set, using default path")
+		log.Warn("APPDATA environment variable not set, using default path")
 		return filepath.Join(homeDir, "AppData", "Roaming")
 	}
 	return appData

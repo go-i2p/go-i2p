@@ -168,21 +168,17 @@ func validateDirectPort(addr *router_address.RouterAddress) bool {
 	return err == nil && port != ""
 }
 
-// HasDirectNTCP2Connectivity checks if a RouterInfo has at least one NTCP2 address
-// with direct connectivity (host and port keys present, not introducer-only).
-// This pre-filtering function prevents ERROR logs from the common package when
-// attempting to extract host keys from introducer-only addresses.
-//
-// CRITICAL FIX #1: Pre-filter bootstrap peers before validation to prevent
-// "RouterAddress missing required host key" errors for introducer-only addresses.
-func HasDirectNTCP2Connectivity(ri router_info.RouterInfo) bool {
+// hasDirectConnectivityForTransport checks if a RouterInfo has at least one address
+// that matches the given transport filter and has direct connectivity (host and port present).
+// The filter function should return true if the address has an acceptable transport type.
+func hasDirectConnectivityForTransport(ri router_info.RouterInfo, filter func(*router_address.RouterAddress) bool) bool {
 	addresses := ri.RouterAddresses()
 	if len(addresses) == 0 {
 		return false
 	}
 
 	for _, addr := range addresses {
-		if !extractNTCP2Transport(addr) {
+		if !filter(addr) {
 			continue
 		}
 
@@ -198,6 +194,17 @@ func HasDirectNTCP2Connectivity(ri router_info.RouterInfo) bool {
 	}
 
 	return false
+}
+
+// HasDirectNTCP2Connectivity checks if a RouterInfo has at least one NTCP2 address
+// with direct connectivity (host and port keys present, not introducer-only).
+// This pre-filtering function prevents ERROR logs from the common package when
+// attempting to extract host keys from introducer-only addresses.
+//
+// CRITICAL FIX #1: Pre-filter bootstrap peers before validation to prevent
+// "RouterAddress missing required host key" errors for introducer-only addresses.
+func HasDirectNTCP2Connectivity(ri router_info.RouterInfo) bool {
+	return hasDirectConnectivityForTransport(ri, extractNTCP2Transport)
 }
 
 // HasSSU2IntroducerConnectivity checks if a RouterInfo has at least one SSU2 address
@@ -224,30 +231,9 @@ func HasSSU2IntroducerConnectivity(ri router_info.RouterInfo) bool {
 // This is a broader check than HasDirectNTCP2Connectivity that also accepts
 // SSU2-only routers, which are valid directly connectable peers.
 func HasDirectConnectivity(ri router_info.RouterInfo) bool {
-	addresses := ri.RouterAddresses()
-	if len(addresses) == 0 {
-		return false
-	}
-
-	for _, addr := range addresses {
-		isNTCP2 := extractNTCP2Transport(addr)
-		isSSU2 := extractSSU2Transport(addr)
-		if !isNTCP2 && !isSSU2 {
-			continue
-		}
-
-		if !validateDirectHost(addr) {
-			continue
-		}
-
-		if !validateDirectPort(addr) {
-			continue
-		}
-
-		return true
-	}
-
-	return false
+	return hasDirectConnectivityForTransport(ri, func(addr *router_address.RouterAddress) bool {
+		return extractNTCP2Transport(addr) || extractSSU2Transport(addr)
+	})
 }
 
 // ValidateRouterInfo performs comprehensive validation on a RouterInfo
