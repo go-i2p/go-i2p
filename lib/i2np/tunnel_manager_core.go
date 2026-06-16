@@ -62,6 +62,12 @@ type TunnelManager struct {
 	// can be decrypted. Set via SetGarlicKeyRegistrar after construction.
 	garlicKeyRegistrar GarlicKeyRegistrar
 
+	// inboundHandler is called after a successful inbound tunnel build to register
+	// the tunnel as a control-plane (exploratory) endpoint so that TunnelData
+	// messages delivered via TUNNEL delivery mode are not silently dropped.
+	// Set via SetInboundHandler after construction.
+	inboundHandler InboundHandlerRegistrar
+
 	// Build event windows for period-aware statistics (retained for 2 hours).
 	// These track tunnel build outcomes so GetRate("tunnel.buildExploratorySuccess", period)
 	// can return the count of successful builds within the requested time window.
@@ -156,6 +162,13 @@ func (tm *TunnelManager) ensureCleanupStarted() {
 // Must be called before the first tunnel build is initiated.
 func (tm *TunnelManager) SetGarlicKeyRegistrar(r GarlicKeyRegistrar) {
 	tm.garlicKeyRegistrar = r
+}
+
+// SetInboundHandler wires the InboundHandlerRegistrar so that newly-active
+// inbound tunnels are registered as control-plane (exploratory) endpoints.
+// Must be called before tunnel builds begin.
+func (tm *TunnelManager) SetInboundHandler(h InboundHandlerRegistrar) {
+	tm.inboundHandler = h
 }
 
 // Stop gracefully stops the tunnel manager and cleans up resources.

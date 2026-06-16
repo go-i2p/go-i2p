@@ -59,6 +59,9 @@ type TunnelStatsReader interface {
 type TunnelOrchestrator interface {
 	TunnelBuildCoordinator
 	TunnelStatsReader
+	// SetInboundHandler wires the InboundHandlerRegistrar so that newly-active
+	// inbound tunnels are registered as control-plane endpoints (C-1 fix).
+	SetInboundHandler(h InboundHandlerRegistrar)
 }
 
 // Compile-time assertion: *TunnelManager must fully implement TunnelOrchestrator.

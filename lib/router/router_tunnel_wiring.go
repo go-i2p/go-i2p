@@ -44,6 +44,11 @@ func (r *Router) initializeMessageRouter() {
 func (r *Router) wireDispatcherTunnelManager() {
 	r.messageRouter.SetTunnelManager(r.tunnelManager)
 	r.messageRouter.GetProcessor().SetBuildReplyProcessor(r.tunnelManager)
+	// C-1 fix: wire the inbound handler into the tunnel manager so that newly-active
+	// inbound tunnels are registered as control-plane endpoints immediately on success.
+	if r.inboundHandler != nil {
+		r.tunnelManager.SetInboundHandler(r.inboundHandler)
+	}
 	log.WithFields(logger.Fields{"at": "initializeMessageRouter"}).Debug("Dispatcher tunnel manager unified with router tunnel manager")
 }
 
@@ -71,6 +76,9 @@ func (r *Router) wireTunnelDataHandler() {
 		}
 		// Wire the session provider for forwarding transit tunnel messages
 		r.inboundHandler.SetSessionProvider(r)
+		// C-1 fix: give inboundHandler access to the MessageProcessor so that
+		// decrypted messages from exploratory tunnels are dispatched as I2NP.
+		r.inboundHandler.SetProcessor(r.messageRouter.GetProcessor())
 		log.WithFields(logger.Fields{"at": "initializeMessageRouter"}).Debug("InboundMessageHandler wired as TunnelData handler with participant manager and session provider for transit forwarding")
 	}
 }

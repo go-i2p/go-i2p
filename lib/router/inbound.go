@@ -38,6 +38,20 @@ type InboundMessageHandler struct {
 
 	// Session provider for forwarding transit tunnel messages
 	sessionProvider i2np.SessionProvider
+
+	// processor is the I2NP message processor used for control-plane (exploratory)
+	// tunnel message delivery. Set via SetProcessor after construction.
+	processor *i2np.MessageProcessor
+}
+
+// SetProcessor wires the I2NP message processor into this handler so that
+// decrypted messages from exploratory/reply inbound tunnels (registered via
+// RegisterExploratoryTunnel) can be re-dispatched as I2NP messages rather
+// than routed to an I2CP session.
+func (h *InboundMessageHandler) SetProcessor(p *i2np.MessageProcessor) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.processor = p
 }
 
 // inboundTunnelEntry tracks the session and endpoint for an inbound tunnel
@@ -322,6 +336,90 @@ func (h *InboundMessageHandler) createMessageHandler(sessionID uint16) tunnel.Me
 
 		return nil
 	}
+}
+
+// passthroughTunnelEncryptor is a no-op TunnelEncryptor used for exploratory /
+// reply inbound tunnels where build replies are delivered directly to our router
+// by the OBEP (NextIdent = our hash) without passing through the tunnel's
+// intermediate hop encryption layers.
+type passthroughTunnelEncryptor struct{}
+
+func (p *passthroughTunnelEncryptor) Encrypt(data []byte) ([]byte, error) {
+	return data, nil
+}
+
+func (p *passthroughTunnelEncryptor) Decrypt(data []byte) ([]byte, error) {
+	return data, nil
+}
+
+func (p *passthroughTunnelEncryptor) Type() cryptotunnel.TunnelEncryptionType {
+	// AES(0) is the passthrough identity type — no real encryption is applied.
+	return cryptotunnel.TunnelEncryptionAES
+}
+
+// createControlPlaneHandler returns a MessageHandler that deserialises the
+// decrypted tunnel payload as an I2NP message and dispatches it through the
+// router's MessageProcessor.  This mirrors what tunnelGatewayDispatcher does
+// for TunnelGateway messages, but for TunnelData arriving at an exploratory /
+// reply inbound endpoint.
+func (h *InboundMessageHandler) createControlPlaneHandler() tunnel.MessageHandler {
+	return func(msgBytes []byte) error {
+		h.mu.RLock()
+		proc := h.processor
+		h.mu.RUnlock()
+
+		if proc == nil {
+			log.WithFields(logger.Fields{
+				"at":     "createControlPlaneHandler",
+				"reason": "processor not wired",
+			}).Warn("control-plane message received but MessageProcessor is nil — dropping")
+			return oops.Errorf("MessageProcessor not wired into InboundMessageHandler")
+		}
+
+		// Try full I2NP header first, then fall back to short (9-byte) header.
+		inner := &i2np.BaseI2NPMessage{}
+		if err := inner.UnmarshalBinary(msgBytes); err != nil {
+			if err2 := inner.UnmarshalShortI2NP(msgBytes); err2 != nil {
+				log.WithFields(logger.Fields{
+					"at":        "createControlPlaneHandler",
+					"reason":    "i2np parse failed",
+					"msg_len":   len(msgBytes),
+					"full_err":  err.Error(),
+					"short_err": err2.Error(),
+				}).Warn("failed to parse I2NP message from control-plane tunnel payload")
+				return oops.Errorf("parse I2NP from control-plane payload: %v", err2)
+			}
+		}
+
+		return proc.ProcessMessage(inner)
+	}
+}
+
+// RegisterExploratoryTunnel registers an inbound control-plane tunnel so that
+// TunnelData messages delivered to it (e.g. build replies forwarded in TUNNEL
+// delivery mode by a remote OBEP) are decrypted and dispatched through the
+// MessageProcessor rather than silently dropped.
+//
+// A passthrough (identity) TunnelEncryptor is used because the remote OBEP
+// sends TunnelData directly to our router (NextIdent = our hash) without
+// layering the encryption of T1's intermediate hops.
+func (h *InboundMessageHandler) RegisterExploratoryTunnel(tunnelID tunnel.TunnelID) error {
+	endpoint, err := tunnel.NewEndpoint(tunnelID, &passthroughTunnelEncryptor{}, h.createControlPlaneHandler())
+	if err != nil {
+		return oops.Wrapf(err, "create exploratory endpoint for tunnel %d", tunnelID)
+	}
+
+	if err := h.RegisterTunnel(tunnelID, 0, endpoint); err != nil {
+		endpoint.Stop()
+		return oops.Wrapf(err, "register exploratory tunnel %d", tunnelID)
+	}
+
+	log.WithFields(logger.Fields{
+		"at":        "RegisterExploratoryTunnel",
+		"tunnel_id": tunnelID,
+	}).Debug("registered inbound exploratory tunnel endpoint")
+
+	return nil
 }
 
 // GetTunnelCount returns the number of registered inbound tunnels

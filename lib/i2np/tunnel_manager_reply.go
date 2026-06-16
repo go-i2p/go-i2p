@@ -371,6 +371,19 @@ func (tm *TunnelManager) handleSuccessfulBuild(matchingTunnel *tunnel.TunnelStat
 		"build_time_ms":    buildTimeMs,
 		"is_client_tunnel": known && req.isClientTunnel,
 	}).Info("Tunnel build completed successfully")
+
+	// C-1 fix: register inbound exploratory tunnels as control-plane endpoints so
+	// that TunnelData messages addressed to this tunnel ID (build replies forwarded
+	// in TUNNEL delivery mode by a remote OBEP) reach ProcessMessage instead of
+	// being silently dropped by lookupTunnelEntry.
+	if matchingTunnel.IsInbound && tm.inboundHandler != nil {
+		if err := tm.inboundHandler.RegisterExploratoryTunnel(matchingTunnel.ID); err != nil {
+			log.WithError(err).WithFields(logger.Fields{
+				"at":        "handleSuccessfulBuild",
+				"tunnel_id": matchingTunnel.ID,
+			}).Warn("failed to register inbound tunnel as exploratory endpoint")
+		}
+	}
 }
 
 // handleFailedBuild processes a failed tunnel build and schedules cleanup.
