@@ -73,6 +73,10 @@ type StandardEmbeddedRouter struct {
 	// instead of capturing and using the router pointer, avoiding TOCTOU races
 	// where Stop()+Close() could nil the pointer between RUnlock and router.Wait().
 	done chan struct{}
+
+	// H7 FIX: doneOnce ensures the done channel is only closed once,
+	// preventing panic from double-close if Stop() and HardStop() race.
+	doneOnce sync.Once
 }
 
 // NewStandardEmbeddedRouter creates a new embedded router instance.

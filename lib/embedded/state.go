@@ -86,10 +86,13 @@ func (e *StandardEmbeddedRouter) Stop() error {
 	// Stop the router subsystems (potentially blocking) without holding the lock
 	r.Stop()
 
-	// Signal Wait() callers that the router has stopped.
-	if doneCh != nil {
-		close(doneCh)
-	}
+	// H7 FIX: Signal Wait() callers that the router has stopped.
+	// Use sync.Once to prevent panic if Stop() and HardStop() race.
+	e.doneOnce.Do(func() {
+		if doneCh != nil {
+			close(doneCh)
+		}
+	})
 
 	log.WithFields(logger.Fields{
 		"at":     "StandardEmbeddedRouter.Stop",

@@ -787,7 +787,13 @@ func (s *SSU2Session) receiveWorker() {
 		if action == receiveRetry {
 			continue
 		}
-		if err := s.dispatchReceived(buf[:n]); err != nil {
+		// H8 FIX: Copy the buffer slice before dispatching to prevent silent data
+		// corruption if UnmarshalShortI2NP retains a reference to the slice.
+		// The next readFrame call will overwrite the original buffer, so we must
+		// pass a copy to dispatchReceived.
+		frameCopy := make([]byte, n)
+		copy(frameCopy, buf[:n])
+		if err := s.dispatchReceived(frameCopy); err != nil {
 			return
 		}
 	}

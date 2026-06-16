@@ -1,6 +1,8 @@
 package router
 
 import (
+	"time"
+
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_address"
 	"github.com/go-i2p/common/router_info"
@@ -8,6 +10,10 @@ import (
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
+
+// routerLookupTimeout is the maximum time to wait for a router lookup during tunnel build.
+// This prevents goroutine leaks if the lookup channel never returns.
+const routerLookupTimeout = 10 * time.Second
 
 // buildSSU2Transport creates the SSU2 transport, publishes its address to ri, and returns it.
 func buildSSU2Transport(r *Router, ri *router_info.RouterInfo) (*ssu2.SSU2Transport, error) {
@@ -50,9 +56,15 @@ func createSSU2TransportInstance(r *Router, ri *router_info.RouterInfo, addr str
 
 	ssu2Config.RouterLookupFunc = func(hash common.Hash) (router_info.RouterInfo, error) {
 		ch := r.netdb.GetRouterInfo(hash)
-		ri, ok := <-ch
-		if !ok {
-			return router_info.RouterInfo{}, oops.Errorf("router %x not found in netdb", hash[:4])
+		var ri router_info.RouterInfo
+		var ok bool
+		select {
+		case ri, ok = <-ch:
+			if !ok {
+				return router_info.RouterInfo{}, oops.Errorf("router %x not found in netdb", hash[:4])
+			}
+		case <-time.After(routerLookupTimeout):
+			return router_info.RouterInfo{}, oops.Errorf("router %x lookup timeout after %v", hash[:4], routerLookupTimeout)
 		}
 		return ri, nil
 	}

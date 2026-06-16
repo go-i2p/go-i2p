@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/go-i2p/common/base64"
 	common "github.com/go-i2p/common/data"
@@ -28,6 +29,10 @@ type LeaseSetLookup interface {
 
 //go:embed hosts.txt
 var defaultHostsFS embed.FS
+
+// leaseSetLookupTimeout is the maximum time to wait for a NetDB LeaseSet lookup.
+// This prevents goroutine leaks if the NetDB lookup channel never returns.
+const leaseSetLookupTimeout = 10 * time.Second
 
 // HostsTxtResolver resolves .i2p hostnames using an in-memory map
 // loaded from a hosts.txt file. The default embedded hosts.txt is
@@ -346,9 +351,16 @@ func (r *HostsTxtResolver) lookupDestinationFromNetDB(hashBytes []byte, netdb Le
 		return nil, oops.Errorf("b32 address %x not found in NetDB", hashBytes[:8])
 	}
 
-	ls, ok := <-lsChan
-	if !ok {
-		return nil, oops.Errorf("b32 address %x not found in NetDB", hashBytes[:8])
+	// Use select with timeout to prevent goroutine leak if lookup never returns
+	var ls lease_set.LeaseSet
+	var ok bool
+	select {
+	case ls, ok = <-lsChan:
+		if !ok {
+			return nil, oops.Errorf("b32 address %x not found in NetDB", hashBytes[:8])
+		}
+	case <-time.After(leaseSetLookupTimeout):
+		return nil, oops.Errorf("b32 address %x lookup timeout after %v", hashBytes[:8], leaseSetLookupTimeout)
 	}
 
 	// Extract the destination from the LeaseSet
