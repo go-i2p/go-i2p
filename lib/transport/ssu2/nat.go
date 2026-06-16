@@ -188,6 +188,11 @@ func (t *SSU2Transport) buildTransportCallbacks(session *SSU2Session) *BlockCall
 			}
 			return true, nil
 		},
+		// H2 fix: Full Ed25519 signature verification for RelayIntro blocks
+		// Verifies that the RelayIntro was signed by Alice and covers the correct peers
+		VerifyRelayIntroSignature: func(block *ssu2noise.RelayIntroBlock) error {
+			return t.verifyRelayIntroSignature(block, session)
+		},
 	}
 }
 
@@ -1114,7 +1119,7 @@ func (t *SSU2Transport) verifyRelayIntroSignature(intro *ssu2noise.RelayIntroBlo
 	}
 
 	// Extract Bob's router hash from the session
-	bobHash := t.extractPeerHash(bobSession.conn)
+	bobHash := extractBobRouterHash(bobSession)
 
 	// Get our (Charlie's) identity hash
 	charlieHash := t.getOurIdentityHash()

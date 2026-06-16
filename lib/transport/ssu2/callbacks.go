@@ -66,6 +66,11 @@ type BlockCallbackConfig struct {
 	// Returns true if valid, false if invalid/missing. Non-nil error indicates a
 	// verification failure (bad signature); nil with false return allows graceful skip.
 	VerifyPeerTest func(block *ssu2noise.PeerTestBlock, senderHash data.Hash) (bool, error)
+
+	// H2 fix: VerifyRelayIntroSignature is called to verify RelayIntro signature before processing.
+	// Returns error if signature verification fails or is unavailable (fail-closed).
+	// nil return indicates signature is valid; non-nil indicates verification failure.
+	VerifyRelayIntroSignature func(block *ssu2noise.RelayIntroBlock) error
 }
 
 // ToDataHandlerCallbacks converts BlockCallbackConfig into go-noise/ssu2
