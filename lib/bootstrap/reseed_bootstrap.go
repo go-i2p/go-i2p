@@ -167,7 +167,7 @@ func (rb *ReseedBootstrap) processReseedServer(ctx context.Context, server *conf
 		return err
 	}
 
-	serverRIs, err := rb.attemptReseedFromServer(server, state.attemptedServers)
+	serverRIs, err := rb.attemptReseedFromServer(ctx, server, state.attemptedServers)
 	if err != nil {
 		state.lastErr = err
 		state.serverErrors = append(state.serverErrors, err.Error())
@@ -294,13 +294,21 @@ func warnInsufficientRouters(server *config.ReseedConfig, validCount int) {
 	}
 }
 
-// attemptReseedFromServer attempts to reseed from a single server.
-func (rb *ReseedBootstrap) attemptReseedFromServer(server *config.ReseedConfig, attemptNumber int) ([]router_info.RouterInfo, error) {
+// attemptReseedFromServer attempts to reseed from a single server with timeout.
+// Uses a 30-second timeout for the HTTP request to prevent hanging on unresponsive servers.
+const reseedRequestTimeout = 30 * time.Second
+
+func (rb *ReseedBootstrap) attemptReseedFromServer(ctx context.Context, server *config.ReseedConfig, attemptNumber int) ([]router_info.RouterInfo, error) {
 	startTime := time.Now()
 	rb.logReseedAttemptStart(server, attemptNumber)
 
+	// Create a derived context with timeout for this reseed request
+	// This prevents hanging indefinitely on unresponsive reseed servers
+	reseedCtx, cancel := context.WithTimeout(ctx, reseedRequestTimeout)
+	defer cancel()
+
 	reseeder := reseed.NewReseed()
-	serverRIs, err := reseeder.SingleReseed(server.URL)
+	serverRIs, err := reseeder.SingleReseedWithContext(reseedCtx, server.URL)
 	elapsed := time.Since(startTime)
 
 	if err != nil {

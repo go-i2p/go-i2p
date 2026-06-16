@@ -41,9 +41,15 @@ type Reseed struct {
 
 // SingleReseed fetches and parses an SU3 reseed bundle from the given URI, returning the extracted RouterInfos.
 func (r *Reseed) SingleReseed(uri string) ([]router_info.RouterInfo, error) {
+	return r.SingleReseedWithContext(context.Background(), uri)
+}
+
+// SingleReseedWithContext fetches and parses an SU3 reseed bundle from the given URI with the provided context,
+// returning the extracted RouterInfos. The context can be used to set timeouts and cancellation.
+func (r *Reseed) SingleReseedWithContext(ctx context.Context, uri string) ([]router_info.RouterInfo, error) {
 	log.WithField("uri", uri).Debug("Starting single reseed operation")
 
-	response, err := r.performReseedRequest(uri)
+	response, err := r.performReseedRequestWithContext(ctx, uri)
 	if err != nil {
 		return nil, err
 	}
@@ -167,6 +173,14 @@ func (r *Reseed) processLocalFileWithLimit(filePath, fileType string, unwrap fun
 // SECURITY: Only HTTPS URLs are accepted. Plain HTTP would expose the reseed
 // request to network observers, enabling traffic analysis and MITM attacks.
 func (r *Reseed) performReseedRequest(uri string) (*http.Response, error) {
+	return r.performReseedRequestWithContext(context.Background(), uri)
+}
+
+// performReseedRequestWithContext creates and executes an HTTP request to the reseed server with the provided context.
+// If the URL does not already include the standard SU3 path, it is appended automatically.
+// SECURITY: Only HTTPS URLs are accepted. Plain HTTP would expose the reseed
+// request to network observers, enabling traffic analysis and MITM attacks.
+func (r *Reseed) performReseedRequestWithContext(ctx context.Context, uri string) (*http.Response, error) {
 	log.WithField("uri", uri).Info("Initiating reseed HTTP request")
 
 	// Validate that we have an HTTP client (should be initialized in NewReseed)
@@ -195,6 +209,8 @@ func (r *Reseed) performReseedRequest(uri string) (*http.Response, error) {
 	URL = ensureReseedPath(URL)
 
 	request := buildReseedHTTPRequest(URL)
+	// Apply the provided context to the request for timeout/cancellation support
+	request = *request.WithContext(ctx)
 	response, err := client.Do(&request)
 	if err != nil {
 		log.WithError(err).WithField("uri", uri).Error("Failed to perform HTTP request")
