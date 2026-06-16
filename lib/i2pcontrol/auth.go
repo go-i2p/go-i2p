@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
-	"fmt"
 	"sync"
 	"time"
 
@@ -137,10 +136,11 @@ func (am *AuthManager) Authenticate(password string, expiration time.Duration) (
 	am.lockoutUntil = time.Time{}
 	am.rateLimitMu.Unlock()
 
-	// Generate token from current timestamp
-	// Using time ensures each token is unique even for rapid requests
-	timestamp := time.Now().UnixNano()
-	token, err := am.generateToken(timestamp)
+	// LOW-2 FIX: Use only a crypto/rand nonce for token uniqueness; the
+	// timestamp was redundant (the nonce already ensures uniqueness) and
+	// using UnixNano() as HMAC input adds no security benefit while
+	// implying a relationship to wall time that could be abused.
+	token, err := am.generateToken()
 	if err != nil {
 		return "", oops.Wrapf(err, "failed to generate authentication token")
 	}
@@ -281,26 +281,22 @@ func (am *AuthManager) tokenKey(token string) [32]byte {
 	return sha256.Sum256([]byte(token))
 }
 
-// generateToken creates a cryptographic token from a timestamp and random nonce.
+// generateToken creates a cryptographic token from a random nonce.
 // Uses HMAC-SHA256 with the server's secret key to ensure tokens
-// cannot be forged without knowing the secret. The random nonce
-// prevents token prediction even if the timestamp is known.
-//
-// Parameters:
-//   - timestamp: Unix nanosecond timestamp for uniqueness
+// cannot be forged without knowing the secret.  A 32-byte random nonce
+// provides uniqueness — no timestamp input is needed or used (LOW-2 audit fix).
 //
 // Returns:
 //   - string: Base64-encoded HMAC signature
-func (am *AuthManager) generateToken(timestamp int64) (string, error) {
-	// Include a random nonce alongside the timestamp so that tokens
-	// are not predictable even if an attacker knows the timestamp.
-	nonce := make([]byte, 16)
+func (am *AuthManager) generateToken() (string, error) {
+	// 32-byte nonce provides 256 bits of entropy — collision-resistant and
+	// unpredictable, with no dependency on wall-clock time.
+	nonce := make([]byte, 32)
 	if _, err := am.randRead(nonce); err != nil {
 		return "", oops.Wrapf(errTokenEntropyFailure, "crypto/rand.Read failed: %v", err)
 	}
 
 	h := hmac.New(sha256.New, am.secret)
-	h.Write([]byte(fmt.Sprintf("%d", timestamp)))
 	h.Write(nonce)
 	signature := h.Sum(nil)
 

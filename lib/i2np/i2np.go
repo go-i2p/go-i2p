@@ -68,9 +68,10 @@ type BaseI2NPMessage struct {
 	data       []byte
 }
 
-// generateRandomMessageID creates a random 4-byte message ID.
-// The result is masked to 31 bits (0x7FFFFFFF) to ensure a positive value
-// on all platforms, including 32-bit systems where int is 32 bits.
+// generateRandomMessageID creates a random 4-byte (32-bit) message ID.
+// Uses the full 32-bit unsigned range [0, 0xFFFFFFFF] to match the space
+// of received message IDs (LOW-1 audit fix: removed 0x7FFFFFFF mask that
+// had halved the outbound ID space).
 // M-2 FIX: Rejects CSPRNG failure rather than silently degrading to predictable IDs.
 // Returns an error if the system's secure random number generator fails,
 // or if testInjectRNGError is set (for testing crash-fast behavior).
@@ -87,11 +88,14 @@ func generateRandomMessageID() (int, error) {
 	if _, err := rand.Read(msgIDBytes); err != nil {
 		return 0, oops.Errorf("i2np: crypto/rand failed: %w", err)
 	}
-	// L-2 FIX: Documents secondary identifier space masking pattern (see M-2 for primary CSPRNG failure).
-	// Mask to 31 bits to guarantee positive int on 32-bit platforms.
-	// On 32-bit systems, int(uint32(x)) with the high bit set wraps to negative.
-	// This reduces the effective ID space but is necessary for Go int compatibility.
-	return int(binary.BigEndian.Uint32(msgIDBytes) & 0x7FFFFFFF), nil
+	// LOW-1 FIX: Use the full 32-bit space for generated IDs to match the
+	// 32-bit space of received IDs (read via binary.BigEndian.Uint32 on
+	// incoming frames).  On 64-bit platforms (the only supported target)
+	// int is 64-bit, so uint32 values with the high bit set are stored as
+	// large positive ints — no sign overflow.  The previous 0x7FFFFFFF mask
+	// halved the usable ID space and was only needed on 32-bit, which is not
+	// a supported platform.
+	return int(binary.BigEndian.Uint32(msgIDBytes)), nil
 }
 
 // NewBaseI2NPMessage creates a new base I2NP message.

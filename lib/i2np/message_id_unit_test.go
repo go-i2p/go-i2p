@@ -10,21 +10,20 @@ import (
 )
 
 // TestGenerateRandomMessageID_AlwaysPositive verifies that generateRandomMessageID
-// always returns a non-negative value. This is critical for 32-bit platforms where
-// int(uint32(x)) with the high bit set wraps to a negative number.
+// always returns a non-negative value and uses the full 32-bit ID space.
 func TestGenerateRandomMessageID_AlwaysPositive(t *testing.T) {
 	// Generate many IDs and verify all are positive
 	for i := 0; i < 1000; i++ {
 		id, err := generateRandomMessageID()
 		require.NoError(t, err, "generateRandomMessageID should not error (iteration %d)", i)
 		assert.GreaterOrEqual(t, id, 0, "message ID must be non-negative (iteration %d)", i)
-		// Also verify it fits in 31 bits
-		assert.LessOrEqual(t, id, 0x7FFFFFFF, "message ID must fit in 31 bits (iteration %d)", i)
+		// IDs may be in [0, 0xFFFFFFFF]; on 64-bit platforms they fit in int
+		assert.LessOrEqual(t, id, int(^uint32(0)), "message ID must fit in 32 bits (iteration %d)", i)
 	}
 }
 
 // TestGenerateRandomMessageID_NeverZero verifies that generateRandomMessageID
-// does not silently return 0. With 31 bits of randomness, the probability of
+// does not silently return 0. With 32 bits of randomness, the probability of
 // a legitimate 0 is 1 in 2^31 (~2 billion), so getting 0 in 100 attempts
 // strongly suggests a fallback-to-0 bug rather than genuine randomness.
 func TestGenerateRandomMessageID_NeverZero(t *testing.T) {
@@ -47,8 +46,8 @@ func TestGenerateRandomMessageID_Uniqueness(t *testing.T) {
 		require.NoError(t, err, "generateRandomMessageID should not error (iteration %d)", i)
 		ids[id] = true
 	}
-	// With 31 bits of randomness, 100 IDs should all be unique
-	assert.Equal(t, 100, len(ids), "100 generated message IDs should be unique with 31 bits of entropy")
+	// With 32 bits of randomness, 100 IDs should all be unique
+	assert.Equal(t, 100, len(ids), "100 generated message IDs should be unique with 32 bits of entropy")
 }
 
 // TestUnmarshalBinary_MessageIDPreservesWireValue verifies that UnmarshalBinary
@@ -126,7 +125,7 @@ func TestMarshalUnmarshalBinary_RoundTrip(t *testing.T) {
 }
 
 // TestMarshalBinary_HighBitMessageID verifies that MarshalBinary correctly
-// serializes a messageID as 4 bytes, even with the full 31-bit range.
+// serializes a messageID as 4 bytes, including with the high bit set.
 func TestMarshalBinary_HighBitMessageID(t *testing.T) {
 	msg := NewBaseI2NPMessage(I2NPMessageTypeData)
 	msg.SetMessageID(0x7FFFFFFF) // maximum 31-bit value
@@ -144,6 +143,17 @@ func TestMarshalBinary_HighBitMessageID(t *testing.T) {
 	err = restored.UnmarshalBinary(data)
 	require.NoError(t, err)
 	assert.Equal(t, 0x7FFFFFFF, restored.MessageID())
+
+	// LOW-1 FIX: also verify that 32-bit IDs (high bit set) round-trip correctly
+	msg.SetMessageID(int(uint32(0x80000001)))
+	data, err = msg.MarshalBinary()
+	require.NoError(t, err)
+	serializedID = binary.BigEndian.Uint32(data[1:5])
+	assert.Equal(t, uint32(0x80000001), serializedID, "32-bit ID with high bit set should serialize correctly")
+	restored = &BaseI2NPMessage{}
+	err = restored.UnmarshalBinary(data)
+	require.NoError(t, err)
+	assert.Equal(t, int(uint32(0x80000001)), restored.MessageID())
 }
 
 // TestNewBaseI2NPMessage_MessageIDPositive verifies that newly created messages
@@ -162,7 +172,7 @@ func TestGenerateRandomMessageID_ReturnsError(t *testing.T) {
 	id, err := generateRandomMessageID()
 	require.NoError(t, err, "generateRandomMessageID should succeed under normal conditions")
 	assert.GreaterOrEqual(t, id, 0, "returned ID should be non-negative")
-	assert.LessOrEqual(t, id, 0x7FFFFFFF, "returned ID should fit in 31 bits")
+	assert.LessOrEqual(t, id, int(^uint32(0)), "returned ID should fit in 32 bits")
 }
 
 // TestGenerateRandomMessageID_NoPanic verifies that generateRandomMessageID
@@ -256,8 +266,8 @@ func TestM2_NormalCSPRNGStillWorks(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		msg := NewBaseI2NPMessage(I2NPMessageTypeData)
 		require.NotNil(t, msg, "message creation should succeed")
-		assert.Greater(t, msg.MessageID(), 0, "message ID should be positive")
-		assert.LessOrEqual(t, msg.MessageID(), 0x7FFFFFFF, "message ID should fit in 31 bits")
+		assert.GreaterOrEqual(t, msg.MessageID(), 0, "message ID should be non-negative")
+		assert.LessOrEqual(t, msg.MessageID(), int(^uint32(0)), "message ID should fit in 32 bits")
 
 		// Check for duplicates (statistically unlikely with true RNG)
 		assert.False(t, ids[msg.MessageID()], "message IDs should be unique")

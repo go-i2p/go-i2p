@@ -646,8 +646,8 @@ func (tm *TunnelManager) generateMessageID() (int, error) {
 	if _, err := rand.Read(buf[:]); err != nil {
 		return 0, oops.Wrapf(err, "failed to generate random message ID")
 	}
-	// Use only 31 bits to ensure positive int on all platforms
-	return int(binary.BigEndian.Uint32(buf[:]) & 0x7FFFFFFF), nil
+	// LOW-1 FIX: Use the full 32-bit ID space (removed 0x7FFFFFFF mask)
+	return int(binary.BigEndian.Uint32(buf[:])), nil
 }
 
 // BuildTunnelWithBuilder builds a tunnel using the i2np.TunnelBuilder message interface.

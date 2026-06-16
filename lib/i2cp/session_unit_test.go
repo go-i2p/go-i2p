@@ -2226,3 +2226,76 @@ func TestLeaseSetPublishing_PublisherIntegration(t *testing.T) {
 		t.Error("LeaseSet bytes should not be empty")
 	}
 }
+
+// TestDestroySession_ConcurrentGetAndDestroy is the LOW-3 audit regression test.
+// It verifies:
+//  1. Once DestroySession succeeds, GetSession returns false for that ID.
+//  2. Session.Stop() is idempotent — calling it a second time after DestroySession
+//     has already called it must not panic or deadlock.
+//  3. Under concurrent hammering, the session map never hands out a session that
+//     has already been removed.
+func TestDestroySession_ConcurrentGetAndDestroy(t *testing.T) {
+	t.Parallel()
+
+	const goroutines = 20
+	const iterations = 50
+
+	for iter := 0; iter < iterations; iter++ {
+		sm := NewSessionManager()
+		session, err := sm.CreateSession(nil, nil)
+		require.NoError(t, err)
+		sessionID := session.ID()
+
+		// destroyDone is closed exactly once after DestroySession succeeds.
+		destroyDone := make(chan struct{})
+		var destroyOnce sync.Once
+
+		var wg sync.WaitGroup
+		// Half the goroutines call GetSession, half call DestroySession.
+		for g := 0; g < goroutines; g++ {
+			wg.Add(1)
+			if g%2 == 0 {
+				// Reader: GetSession must never return a valid session after
+				// destroyDone is closed (i.e. after the map entry is removed).
+				go func() {
+					defer wg.Done()
+					for {
+						select {
+						case <-destroyDone:
+							// After destroy, GetSession must return false.
+							_, ok := sm.GetSession(sessionID)
+							if ok {
+								t.Errorf("GetSession returned true after DestroySession completed")
+							}
+							return
+						default:
+							sm.GetSession(sessionID) // result may be either; just must not panic
+						}
+					}
+				}()
+			} else {
+				// Writer: try to destroy; only one succeeds.
+				go func() {
+					defer wg.Done()
+					err := sm.DestroySession(sessionID)
+					if err == nil {
+						// We are the one successful destroyer.
+						destroyOnce.Do(func() { close(destroyDone) })
+					}
+				}()
+			}
+		}
+
+		wg.Wait()
+
+		// Stop() must be idempotent — calling it again must not panic.
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("session.Stop() panicked on second call: %v", r)
+				}
+			}()
+			session.Stop()
+		}()
+	}
+}
