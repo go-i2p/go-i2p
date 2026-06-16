@@ -712,7 +712,13 @@ func (s *SSU2Session) dispatchReceived(frame []byte) error {
 	s.AddToBytesReceived(uint64(len(frame)))
 
 	s.updateRTTEstimate(recvAt)
-	s.ackPendingBeforeTime(recvAt)
+	// H1 FIX: Disabled implicit ACK. The previous logic removed ALL pending messages
+	// sent before the receive timestamp, which is incorrect. SSU2 requires explicit
+	// ACK blocks to confirm delivery. Without proper ACK block parsing, the implicit
+	// ACK was causing message loss. This is disabled until proper explicit ACK handling
+	// is implemented.
+	// TODO: Implement explicit ACK block parsing and only remove acknowledged messages.
+	// s.ackPendingBeforeTime(recvAt)
 
 	msg := i2np.NewBaseI2NPMessage(0)
 	if err := msg.UnmarshalShortI2NP(frame); err != nil {

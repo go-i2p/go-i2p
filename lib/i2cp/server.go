@@ -401,6 +401,19 @@ func (s *Server) SetRouterHash(hash common.Hash) {
 	}).Debug("router hash configured for I2CP session tunnel pools")
 }
 
+// SetLeaseSetPublisher configures the LeaseSet publisher for distributing
+// client LeaseSets to the network. This should be called after the publisher
+// is started to enable I2CP sessions to publish their LeaseSets.
+func (s *Server) SetLeaseSetPublisher(publisher LeaseSetPublisher) {
+	s.mu.Lock()
+	s.leaseSetPublisher = publisher
+	s.mu.Unlock()
+
+	log.WithFields(logger.Fields{
+		"at": "i2cp.Server.SetLeaseSetPublisher",
+	}).Debug("LeaseSet publisher configured for I2CP sessions")
+}
+
 func (s *Server) backfillSessionTunnelPools(builder tunnel.BuilderInterface, selector tunnel.PeerSelector) {
 	if builder == nil || selector == nil {
 		return

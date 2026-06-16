@@ -49,7 +49,7 @@ func (r *Router) createI2CPServer() (*i2cp.Server, error) {
 		ReadTimeout:       r.cfg.I2CP.ReadTimeout,
 		WriteTimeout:      r.cfg.I2CP.WriteTimeout,
 		SessionTimeout:    r.cfg.I2CP.SessionTimeout,
-		LeaseSetPublisher: r.publisher, // H-2: Use netdb.Publisher for all LeaseSet publications (tunnel-anonymous)
+		LeaseSetPublisher: nil, // C1 FIX: Will be set later via SetLeaseSetPublisher after publisher is started
 	}
 
 	server, err := i2cp.NewServer(serverConfig)

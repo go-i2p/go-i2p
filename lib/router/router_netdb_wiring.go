@@ -162,6 +162,12 @@ func (r *Router) launchPublisher(tunnelPool *tunnel.Pool) {
 		"floodfill_count":      publisherConfig.FloodfillCount,
 		"has_ri_provider":      riProvider != nil,
 	}).Info("NetDB publisher started for periodic RouterInfo and LeaseSet publishing")
+
+	// C1 FIX: Wire the publisher to the I2CP server if it's running.
+	// This allows I2CP sessions to publish their LeaseSets after router startup.
+	if r.i2cpServer != nil {
+		r.i2cpServer.SetLeaseSetPublisher(r.publisher)
+	}
 }
 
 // initializeNetDB creates and configures the network database.

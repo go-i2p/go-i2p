@@ -180,7 +180,7 @@ func logSTBMEncryptionDiagnostics(record BuildRequestRecord, recipientRouterInfo
 		"ri_age":        riAgeStr,
 		"record_flag":   fmt.Sprintf("0x%02x", record.Flag),
 		"cleartext_hex": logutil.BytePrefix(cleartext),
-	}).Warn("stbm_record_pre_encrypt")
+	}).Debug("stbm_record_pre_encrypt") // C2 FIX: Changed from Warn() to Debug() to protect anonymity
 }
 
 // assembleEncryptedSTBMRecord copies the encrypted data into the final record layout.
