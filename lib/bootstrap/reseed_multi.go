@@ -53,12 +53,17 @@ func logMultiServerReseedComplete(successfulCount, combinedCount int, strategy s
 	// Logging consolidated to error paths only
 }
 
+// newShuffleRng creates a new random source for shuffling operations.
+func newShuffleRng() *rand.Rand {
+	return rand.New(rand.NewSource(time.Now().UnixNano()))
+}
+
 // shuffleRouterInfos randomizes the order of router infos unless random weighted strategy is used.
 func (rb *ReseedBootstrap) shuffleRouterInfos(combined []router_info.RouterInfo) {
 	if rb.config.ReseedStrategy == config.ReseedStrategyRandom {
 		return
 	}
-	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	rng := newShuffleRng()
 	rng.Shuffle(len(combined), func(i, j int) {
 		combined[i], combined[j] = combined[j], combined[i]
 	})
@@ -100,7 +105,7 @@ func (rb *ReseedBootstrap) shuffleServers() []*config.ReseedConfig {
 	servers := make([]*config.ReseedConfig, len(rb.config.ReseedServers))
 	copy(servers, rb.config.ReseedServers)
 
-	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	rng := newShuffleRng()
 	rng.Shuffle(len(servers), func(i, j int) {
 		servers[i], servers[j] = servers[j], servers[i]
 	})
@@ -411,7 +416,7 @@ func buildWeightedList(ric *routerInfoCounts) []router_info.RouterInfo {
 
 // shuffleRouterInfos shuffles the given slice in place using a random source.
 func shuffleRouterInfos(infos []router_info.RouterInfo) {
-	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	rng := newShuffleRng()
 	rng.Shuffle(len(infos), func(i, j int) {
 		infos[i], infos[j] = infos[j], infos[i]
 	})

@@ -300,14 +300,7 @@ func (ks *RouterInfoKeystore) StoreKeys() error {
 
 // ensureKeyDirectory creates the key directory if it doesn't exist.
 func (ks *RouterInfoKeystore) ensureKeyDirectory() error {
-	if _, err := os.Stat(ks.dir); os.IsNotExist(err) {
-		log.WithField("dir", ks.dir).Debug("Creating directory for keys")
-		if err := os.MkdirAll(ks.dir, 0o700); err != nil {
-			log.WithError(err).WithField("at", "StoreKeys").Error("Failed to create directory")
-			return err
-		}
-	}
-	return nil
+	return ensureDirectoryExists(ks.dir)
 }
 
 // resolveKeyName determines the filename prefix for key files.
