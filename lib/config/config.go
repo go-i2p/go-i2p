@@ -39,7 +39,11 @@ func InitConfig() error {
 	}
 
 	// Update global router config from viper settings
-	SetRouterConfig(NewRouterConfigFromViper())
+	cfg, err := NewRouterConfigFromViper()
+	if err != nil {
+		return oops.Wrapf(err, "invalid configuration: %v", err)
+	}
+	SetRouterConfig(cfg)
 
 	// Validate the actual merged configuration (defaults + config file + flags),
 	// not just the hardcoded defaults. This catches invalid user-provided values
@@ -236,12 +240,18 @@ func setCongestionDefaults(defaults ConfigDefaults) {
 
 // NewRouterConfigFromViper creates a new RouterConfig from current viper settings.
 // This is the preferred way to get config instead of using the global RouterConfigProperties.
-func NewRouterConfigFromViper() *RouterConfig {
+// Returns an error if the configuration is invalid (e.g., custom reseed servers fail to parse).
+func NewRouterConfigFromViper() (*RouterConfig, error) {
+	bootstrap, err := buildBootstrapConfig("NewRouterConfigFromViper")
+	if err != nil {
+		return nil, err
+	}
+
 	return &RouterConfig{
 		BaseDir:              viper.GetString("base_dir"),
 		WorkingDir:           viper.GetString("working_dir"),
 		NetDB:                buildNetDBConfig(),
-		Bootstrap:            buildBootstrapConfig("NewRouterConfigFromViper"),
+		Bootstrap:            bootstrap,
 		I2CP:                 buildI2CPConfig(),
 		I2PControl:           buildI2PControlConfig(),
 		MaxBandwidth:         viper.GetUint64("router.max_bandwidth"),
@@ -256,7 +266,7 @@ func NewRouterConfigFromViper() *RouterConfig {
 		Transport:            buildTransportConfig(),
 		Performance:          buildPerformanceConfig(),
 		Congestion:           buildCongestionConfig(),
-	}
+	}, nil
 }
 
 // CurrentConfig builds a ConfigDefaults from the current viper settings (which
@@ -352,8 +362,13 @@ func buildNetDBConfig() *NetDBConfig {
 
 // buildBootstrapConfig creates a BootstrapConfig from current viper settings.
 // The caller parameter identifies the calling function for log context.
-func buildBootstrapConfig(caller string) *BootstrapConfig {
-	reseedServers := parseReseedServers(caller)
+// Returns an error if custom reseed servers are configured but fail to parse,
+// preventing silent fallback to public servers (anonymity leak).
+func buildBootstrapConfig(caller string) (*BootstrapConfig, error) {
+	reseedServers, err := parseReseedServers(caller)
+	if err != nil {
+		return nil, err
+	}
 	localNetDBPaths := parseLocalNetDBPaths(caller)
 
 	return &BootstrapConfig{
@@ -364,7 +379,7 @@ func buildBootstrapConfig(caller string) *BootstrapConfig {
 		LocalNetDBPaths:  localNetDBPaths,
 		MinReseedServers: viper.GetInt("bootstrap.min_reseed_servers"),
 		ReseedStrategy:   viper.GetString("bootstrap.reseed_strategy"),
-	}
+	}, nil
 }
 
 // buildI2CPConfig creates an I2CPConfig from current viper settings.
@@ -462,20 +477,35 @@ func buildCongestionConfig() *CongestionDefaults {
 	}
 }
 
-// parseReseedServers reads reseed server configuration from viper, falling back
-// to known servers on parse error.
-func parseReseedServers(caller string) []*ReseedConfig {
+// parseReseedServers reads reseed server configuration from viper, returning an error
+// if the key exists but fails to parse (indicating a config error), and falling back
+// to known servers only when the key is not explicitly configured.
+//
+// This prevents silent anonymity leaks: a user who configured private reseed servers
+// but makes a YAML typo will get an error instead of unknowingly contacting public servers.
+func parseReseedServers(caller string) ([]*ReseedConfig, error) {
 	var reseedServers []*ReseedConfig
-	if err := viper.UnmarshalKey("bootstrap.reseed_servers", &reseedServers); err != nil {
-		log.WithFields(logger.Fields{
-			"at":     caller,
-			"reason": "reseed_servers_parse_error",
-			"phase":  "startup",
-			"error":  err.Error(),
-		}).Warn("error parsing reseed servers, falling back to known servers")
-		reseedServers = KnownReseedServers
+
+	// Check if the reseed_servers key is explicitly configured
+	reseedServersConfig := viper.Get("bootstrap.reseed_servers")
+
+	if reseedServersConfig != nil {
+		// Key is explicitly configured; if UnmarshalKey fails, it's a configuration error
+		if err := viper.UnmarshalKey("bootstrap.reseed_servers", &reseedServers); err != nil {
+			return nil, oops.Errorf("invalid bootstrap.reseed_servers configuration: %v", err)
+		}
+		return reseedServers, nil
 	}
-	return reseedServers
+
+	// Key not configured; fall back to known servers
+	log.WithFields(logger.Fields{
+		"at":     caller,
+		"reason": "using_known_reseed_servers",
+		"phase":  "startup",
+		"count":  len(KnownReseedServers),
+	}).Info("no custom reseed servers configured, using known servers")
+
+	return KnownReseedServers, nil
 }
 
 // parseLocalNetDBPaths reads local netdb paths from viper, returning an empty

@@ -137,7 +137,8 @@ func TestBuildI2CPConfigViperOverrides(t *testing.T) {
 func TestNewRouterConfigFromViperI2CPFields(t *testing.T) {
 	defaults := configTestSetup(t)
 
-	cfg := NewRouterConfigFromViper()
+	cfg, err := NewRouterConfigFromViper()
+	require.NoError(t, err, "NewRouterConfigFromViper failed")
 
 	assert.Equal(t, defaults.I2CP.SessionTimeout, cfg.I2CP.SessionTimeout, "I2CP.SessionTimeout")
 	assert.Equal(t, defaults.I2CP.MessageQueueSize, cfg.I2CP.MessageQueueSize, "I2CP.MessageQueueSize")
@@ -151,7 +152,8 @@ func TestNewRouterConfigFromViperI2CPFields(t *testing.T) {
 func TestNewRouterConfigFromViperSubsystemFields(t *testing.T) {
 	defaults := configTestSetup(t)
 
-	cfg := NewRouterConfigFromViper()
+	cfg, err := NewRouterConfigFromViper()
+	require.NoError(t, err, "NewRouterConfigFromViper failed")
 
 	requireSubsystemConfigsNotNil(t, cfg)
 	assert.Equal(t, defaults.Tunnel.TunnelLength, cfg.Tunnel.TunnelLength, "Tunnel.TunnelLength")
@@ -173,27 +175,31 @@ func TestUpdateRouterConfigSubsystemFields(t *testing.T) {
 	viper.Set("performance.worker_pool_size", 16)
 	viper.Set("router.congestion.d_flag_threshold", 0.80)
 
-	SetRouterConfig(NewRouterConfigFromViper())
+	cfg, err := NewRouterConfigFromViper()
+	require.NoError(t, err, "NewRouterConfigFromViper failed")
+	SetRouterConfig(cfg)
 
-	cfg := GetRouterConfig()
-	requireSubsystemConfigsNotNil(t, cfg)
-	assert.Equal(t, 2, cfg.Tunnel.TunnelLength, "Tunnel.TunnelLength")
-	assert.Equal(t, 300, cfg.Transport.NTCP2MaxConnections, "Transport.NTCP2MaxConnections")
-	assert.Equal(t, 16, cfg.Performance.WorkerPoolSize, "Performance.WorkerPoolSize")
-	assert.Equal(t, 0.80, cfg.Congestion.DFlagThreshold, "Congestion.DFlagThreshold")
+	actualCfg := GetRouterConfig()
+	requireSubsystemConfigsNotNil(t, actualCfg)
+	assert.Equal(t, 2, actualCfg.Tunnel.TunnelLength, "Tunnel.TunnelLength")
+	assert.Equal(t, 300, actualCfg.Transport.NTCP2MaxConnections, "Transport.NTCP2MaxConnections")
+	assert.Equal(t, 16, actualCfg.Performance.WorkerPoolSize, "Performance.WorkerPoolSize")
+	assert.Equal(t, 0.80, actualCfg.Congestion.DFlagThreshold, "Congestion.DFlagThreshold")
 }
 
 // TestGetRouterConfigDeepCopySubsystems verifies deep copy includes subsystem configs.
 func TestGetRouterConfigDeepCopySubsystems(t *testing.T) {
 	configTestSetup(t)
-	SetRouterConfig(NewRouterConfigFromViper())
+	cfg, err := NewRouterConfigFromViper()
+	require.NoError(t, err, "NewRouterConfigFromViper failed")
+	SetRouterConfig(cfg)
 
-	cfg := GetRouterConfig()
-	require.NotNil(t, cfg.Tunnel, "Tunnel config is nil")
+	actualCfg := GetRouterConfig()
+	require.NotNil(t, actualCfg.Tunnel, "Tunnel config is nil")
 
 	// Modify the copy
-	cfg.Tunnel.TunnelLength = 99
-	cfg.Transport.NTCP2MaxConnections = 99
+	actualCfg.Tunnel.TunnelLength = 99
+	actualCfg.Transport.NTCP2MaxConnections = 99
 
 	// Verify original is unchanged
 	original := GetRouterConfig()
@@ -210,10 +216,12 @@ func TestUpdateRouterConfig_IncludesAllFields(t *testing.T) {
 	viper.Set("router.max_connections", 500)
 	viper.Set("router.accept_tunnels", false)
 
-	SetRouterConfig(NewRouterConfigFromViper())
+	cfg, err := NewRouterConfigFromViper()
+	require.NoError(t, err, "NewRouterConfigFromViper failed")
+	SetRouterConfig(cfg)
 
-	cfg := GetRouterConfig()
-	assert.Equal(t, uint64(2048000), cfg.MaxBandwidth, "MaxBandwidth")
-	assert.Equal(t, 500, cfg.MaxConnections, "MaxConnections")
-	assert.Equal(t, false, cfg.AcceptTunnels, "AcceptTunnels")
+	actualCfg := GetRouterConfig()
+	assert.Equal(t, uint64(2048000), actualCfg.MaxBandwidth, "MaxBandwidth")
+	assert.Equal(t, 500, actualCfg.MaxConnections, "MaxConnections")
+	assert.Equal(t, false, actualCfg.AcceptTunnels, "AcceptTunnels")
 }

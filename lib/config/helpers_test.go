@@ -35,7 +35,9 @@ func assertDirectoryCreatedWithPerm(t *testing.T, path string, wantPerm ...os.Fi
 func initConfigAndNewFromViper(t *testing.T) *RouterConfig {
 	t.Helper()
 	require.NoError(t, InitConfig(), "InitConfig failed")
-	return NewRouterConfigFromViper()
+	cfg, err := NewRouterConfigFromViper()
+	require.NoError(t, err, "NewRouterConfigFromViper failed")
+	return cfg
 }
 
 // initConfigAndUpdate calls InitConfig and applies viper settings to router config,
@@ -43,5 +45,7 @@ func initConfigAndNewFromViper(t *testing.T) *RouterConfig {
 func initConfigAndUpdate(t *testing.T) {
 	t.Helper()
 	require.NoError(t, InitConfig(), "InitConfig failed")
-	SetRouterConfig(NewRouterConfigFromViper())
+	cfg, err := NewRouterConfigFromViper()
+	require.NoError(t, err, "NewRouterConfigFromViper failed")
+	SetRouterConfig(cfg)
 }

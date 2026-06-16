@@ -119,7 +119,11 @@ func (e *StandardEmbeddedRouter) handleReloadSignal() {
 		return
 	}
 
-	newCfg := config.NewRouterConfigFromViper()
+	newCfg, err := config.NewRouterConfigFromViper()
+	if err != nil {
+		log.WithError(err).Error("invalid configuration after reload: cannot apply configuration")
+		return
+	}
 	config.SetRouterConfig(newCfg)
 
 	log.WithFields(logger.Fields{
