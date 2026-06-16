@@ -134,14 +134,19 @@ func verifyHashMatch(key common.Hash, destBytes []byte, typeName string) error {
 	return nil
 }
 
-// verifyLeaseSetHash validates that the provided key matches the LeaseSet destination hash.
-func verifyLeaseSetHash(key common.Hash, ls lease_set.LeaseSet) error {
-	dest := ls.Destination()
+// verifyDestinationHashBytes is a generic helper that consolidates the pattern of
+// getting bytes from a Bytes() provider and verifying the hash.
+func verifyDestinationHashBytes[T interface{ Bytes() ([]byte, error) }](key common.Hash, dest T, typeName string) error {
 	destBytes, err := dest.Bytes()
 	if err != nil {
 		return oops.Errorf("failed to get destination bytes: %w", err)
 	}
-	return verifyHashMatch(key, destBytes, "LeaseSet")
+	return verifyHashMatch(key, destBytes, typeName)
+}
+
+// verifyLeaseSetHash validates that the provided key matches the LeaseSet destination hash.
+func verifyLeaseSetHash(key common.Hash, ls lease_set.LeaseSet) error {
+	return verifyDestinationHashBytes(key, ls.Destination(), "LeaseSet")
 }
 
 // addLeaseSetToCache adds a LeaseSet entry to the in-memory cache.
@@ -251,6 +256,51 @@ func emptyLeaseSetChannel() chan lease_set.LeaseSet {
 func leaseSetChannel(ls lease_set.LeaseSet) chan lease_set.LeaseSet {
 	ch := make(chan lease_set.LeaseSet, 1)
 	ch <- ls
+	close(ch)
+	return ch
+}
+
+// emptyLeaseSet2Channel returns a closed empty channel indicating LeaseSet2 not found.
+func emptyLeaseSet2Channel() chan lease_set2.LeaseSet2 {
+	ch := make(chan lease_set2.LeaseSet2)
+	close(ch)
+	return ch
+}
+
+// leaseSet2Channel returns a channel containing the given LeaseSet2.
+func leaseSet2Channel(ls2 lease_set2.LeaseSet2) chan lease_set2.LeaseSet2 {
+	ch := make(chan lease_set2.LeaseSet2, 1)
+	ch <- ls2
+	close(ch)
+	return ch
+}
+
+// emptyEncryptedLeaseSetChannel returns a closed empty channel indicating EncryptedLeaseSet not found.
+func emptyEncryptedLeaseSetChannel() chan encrypted_leaseset.EncryptedLeaseSet {
+	ch := make(chan encrypted_leaseset.EncryptedLeaseSet)
+	close(ch)
+	return ch
+}
+
+// encryptedLeaseSetChannel returns a channel containing the given EncryptedLeaseSet.
+func encryptedLeaseSetChannel(els encrypted_leaseset.EncryptedLeaseSet) chan encrypted_leaseset.EncryptedLeaseSet {
+	ch := make(chan encrypted_leaseset.EncryptedLeaseSet, 1)
+	ch <- els
+	close(ch)
+	return ch
+}
+
+// emptyMetaLeaseSetChannel returns a closed empty channel indicating MetaLeaseSet not found.
+func emptyMetaLeaseSetChannel() chan meta_leaseset.MetaLeaseSet {
+	ch := make(chan meta_leaseset.MetaLeaseSet)
+	close(ch)
+	return ch
+}
+
+// metaLeaseSetChannel returns a channel containing the given MetaLeaseSet.
+func metaLeaseSetChannel(mls meta_leaseset.MetaLeaseSet) chan meta_leaseset.MetaLeaseSet {
+	ch := make(chan meta_leaseset.MetaLeaseSet, 1)
+	ch <- mls
 	close(ch)
 	return ch
 }
@@ -558,12 +608,7 @@ func parseLeaseSet2Data(data []byte) (lease_set2.LeaseSet2, error) {
 
 // verifyLeaseSet2Hash validates that the provided key matches the LeaseSet2 destination hash.
 func verifyLeaseSet2Hash(key common.Hash, ls2 lease_set2.LeaseSet2) error {
-	dest := ls2.Destination()
-	destBytes, err := dest.Bytes()
-	if err != nil {
-		return oops.Errorf("failed to get destination bytes: %w", err)
-	}
-	return verifyHashMatch(key, destBytes, "LeaseSet2")
+	return verifyDestinationHashBytes(key, ls2.Destination(), "LeaseSet2")
 }
 
 // addLeaseSetEntryToCache stores an entry in the LeaseSet cache, replacing an
@@ -621,40 +666,26 @@ func (db *StdNetDB) GetLeaseSet2(hash common.Hash) (chnl chan lease_set2.LeaseSe
 		db.lsCache.mu.RUnlock()
 		if db.isLeaseSetExpired(hash) {
 			log.WithField("hash", hash).Debug("LeaseSet2 expired, not serving from cache")
-			emptyChnl := make(chan lease_set2.LeaseSet2)
-			close(emptyChnl)
-			return emptyChnl
+			return emptyLeaseSet2Channel()
 		}
 		log.WithFields(logger.Fields{"at": "GetLeaseSet2"}).Debug("LeaseSet2 found in memory cache")
-		chnl = make(chan lease_set2.LeaseSet2, 1)
-		chnl <- *ls.LeaseSet2
-		close(chnl)
-		return chnl
+		return leaseSet2Channel(*ls.LeaseSet2)
 	}
 
 	// Load from file
 	data, err := db.loadLeaseSetFromFile(hash)
 	if err != nil {
 		log.WithError(err).Error("Failed to load LeaseSet2 from file")
-		// Return a closed empty channel so callers doing <-chnl
-		// receive the zero value immediately rather than blocking
-		// forever on a nil channel.
-		emptyChnl := make(chan lease_set2.LeaseSet2)
-		close(emptyChnl)
-		return emptyChnl
+		return emptyLeaseSet2Channel()
 	}
 
-	chnl = make(chan lease_set2.LeaseSet2, 1)
 	ls2, err := db.parseAndCacheLeaseSet2(hash, data)
 	if err != nil {
 		log.WithError(err).Error("Failed to parse LeaseSet2")
-		close(chnl)
-		return chnl
+		return emptyLeaseSet2Channel()
 	}
 
-	chnl <- ls2
-	close(chnl)
-	return chnl
+	return leaseSet2Channel(ls2)
 }
 
 // cacheLeaseSetEntryIfNewer conditionally stores entry under hash when isNewer
@@ -894,12 +925,7 @@ func parseMetaLeaseSetData(data []byte) (meta_leaseset.MetaLeaseSet, error) {
 
 // verifyMetaLeaseSetHash validates that the provided key matches the MetaLeaseSet destination hash.
 func verifyMetaLeaseSetHash(key common.Hash, mls meta_leaseset.MetaLeaseSet) error {
-	dest := mls.Destination()
-	destBytes, err := dest.Bytes()
-	if err != nil {
-		return oops.Errorf("failed to get destination bytes: %w", err)
-	}
-	return verifyHashMatch(key, destBytes, "MetaLeaseSet")
+	return verifyDestinationHashBytes(key, mls.Destination(), "MetaLeaseSet")
 }
 
 // addMetaLeaseSetToCache adds a MetaLeaseSet entry to the in-memory cache.

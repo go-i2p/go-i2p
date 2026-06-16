@@ -287,27 +287,14 @@ func derivePublicKeys(signingPrivKey types.SigningPrivateKey, encryptionPrivKey 
 	return sigPubKey, receivingPubKey, nil
 }
 
-// buildDestinationFromPublicKeys constructs a Destination from public keys by creating
-// the key certificate, computing padding, and assembling the KeysAndCert structure.
+// buildDestinationFromPublicKeys constructs a Destination from public keys by generating
+// padding and delegating to buildDestinationFromPublicKeysWithPadding.
 func buildDestinationFromPublicKeys(encryptionPubKey types.ReceivingPublicKey, signingPubKey types.SigningPublicKey) (*destination.Destination, error) {
-	keyCert, err := createKeyCertificate()
-	if err != nil {
-		return nil, oops.Wrapf(err, "failed to create key certificate")
-	}
-
 	padding, err := calculateKeyPadding()
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to calculate key padding")
 	}
-
-	keysAndCert, err := assembleKeysAndCert(keyCert, encryptionPubKey, padding, signingPubKey)
-	if err != nil {
-		return nil, oops.Wrapf(err, "failed to assemble keys and cert")
-	}
-
-	return &destination.Destination{
-		KeysAndCert: keysAndCert,
-	}, nil
+	return buildDestinationFromPublicKeysWithPadding(encryptionPubKey, signingPubKey, padding)
 }
 
 // buildDestinationFromPublicKeysWithPadding constructs a Destination using the

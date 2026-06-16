@@ -616,23 +616,6 @@ func (db *StdNetDB) validatePublishedTimestamp(ri router_info.RouterInfo, hash c
 		return oops.Errorf("stale published date")
 	}
 
-	// M-6 FIX: Additional clock-skew lower bound: published >= now - (RouterInfoMaxAge + clockSkewTolerance)
-	// This catches the case where our local clock is significantly behind, causing ancient RouterInfos
-	// to be treated as fresh. A typical clock skew tolerance is 1 hour; add 2 hours for large NTP offsets.
-	// If published time is very far in the past relative to our max-age window, reject it.
-	// This assumes: if a RouterInfo is published more than (RouterInfoMaxAge + 2h) ago relative to our clock,
-	// then either our clock is badly wrong or the RouterInfo is too stale.
-	clockSkewTolerance := 2 * time.Hour
-	if published.Time().Before(now.Add(-RouterInfoMaxAge - clockSkewTolerance)) {
-		log.WithFields(logger.Fields{
-			"hash":      hash,
-			"published": published.Time(),
-			"now":       now,
-			"window":    RouterInfoMaxAge + clockSkewTolerance,
-		}).Warn("Rejecting RouterInfo from reseed: published time is too far in the past (possible clock skew)")
-		return oops.Errorf("published time exceeds maxage + clock skew tolerance")
-	}
-
 	return nil
 }
 

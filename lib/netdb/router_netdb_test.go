@@ -131,7 +131,7 @@ func TestRouterNetDB_IsolationFromClient(t *testing.T) {
 	// This is enforced at compile time by the type system
 	// We're just verifying the object exists and has expected type
 	assert.IsType(t, &RouterNetDB{}, routerDB)
-	assert.NotNil(t, routerDB.db) // Has access to underlying StdNetDB
+	assert.NotNil(t, routerDB.StdNetDB) // Has access to underlying StdNetDB
 }
 
 // TestRouterNetDB_LeaseSetOperations tests LeaseSet storage and retrieval for direct router operations.

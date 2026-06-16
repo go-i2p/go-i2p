@@ -675,22 +675,12 @@ func (s *Session) handleQueueFull() error {
 	return oops.Errorf("incoming message queue full for session %d", s.id)
 }
 
-// QueueIncomingMessageWithID queues a message for delivery to the client with a message ID.
-// This is a higher-level method that wraps the payload in a MessagePayloadPayload structure
-// before queuing it for delivery. The message ID can be used for tracking and correlation.
-// Returns an error if the session is not active, rate limited, or the queue is full.
+// QueueIncomingMessageWithID queues a message for delivery to the client.
+// Note: The messageID parameter is currently unused and may be implemented in future versions
+// for message tracking and correlation. Currently delegates to QueueIncomingMessage.
 func (s *Session) QueueIncomingMessageWithID(messageID uint32, payload []byte) error {
-	if err := s.checkSessionActive(); err != nil {
-		return err
-	}
-
-	if err := s.checkRateLimit(); err != nil {
-		return err
-	}
-
-	s.updateActivity()
-	msg := s.createIncomingMessage(payload)
-	return s.enqueueMessageWithMonitoring(msg)
+	_ = messageID // unused parameter; may be used in future versions
+	return s.QueueIncomingMessage(payload)
 }
 
 // ReceiveMessage blocks until a message is available or the session is stopped

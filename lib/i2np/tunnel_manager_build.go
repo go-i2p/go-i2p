@@ -229,19 +229,13 @@ func (tm *TunnelManager) createBuildRequestAndID(req tunnel.BuildTunnelRequest) 
 	return result, messageID, nil
 }
 
-// extractPeerHashes extracts identity hashes from the selected peers in a build result.
-// Returns the hashes of all peers that were selected for the tunnel build,
-// enabling callers to track which peers participated in failed builds.
-func (tm *TunnelManager) extractPeerHashes(result *tunnel.TunnelBuildResult) []common.Hash {
-	if result == nil || len(result.Hops) == 0 {
-		return nil
-	}
-
-	hashes := make([]common.Hash, 0, len(result.Hops))
-	for i, peer := range result.Hops {
+// extractHashesSkipErrors extracts peer hashes, skipping any that fail.
+func extractHashesSkipErrors(peers []router_info.RouterInfo) []common.Hash {
+	hashes := make([]common.Hash, 0, len(peers))
+	for i, peer := range peers {
 		hash, err := peer.IdentHash()
 		if err != nil {
-			log.WithError(err).WithField("hop_index", i).Warn("Failed to extract peer hash from build result")
+			log.WithError(err).WithField("hop_index", i).Warn("Failed to extract peer hash")
 			continue
 		}
 		hashes = append(hashes, hash)
@@ -249,27 +243,41 @@ func (tm *TunnelManager) extractPeerHashes(result *tunnel.TunnelBuildResult) []c
 	return hashes
 }
 
+// extractHashesWithZero extracts peer hashes, using zero hash for any that fail.
+func extractHashesWithZero(peers []router_info.RouterInfo) []common.Hash {
+	hashes := make([]common.Hash, len(peers))
+	for i, peer := range peers {
+		hash, err := peer.IdentHash()
+		if err != nil {
+			log.WithError(err).WithField("hop_index", i).Warn("Failed to extract peer hash, using zero hash")
+			hashes[i] = common.Hash{}
+		} else {
+			hashes[i] = hash
+		}
+	}
+	return hashes
+}
+
+// extractPeerHashes extracts identity hashes from the selected peers in a build result.
+// Returns the hashes of all peers that were selected for the tunnel build,
+// enabling callers to track which peers participated in failed builds.
+func (tm *TunnelManager) extractPeerHashes(result *tunnel.TunnelBuildResult) []common.Hash {
+	if result == nil || len(result.Hops) == 0 {
+		return nil
+	}
+	return extractHashesSkipErrors(result.Hops)
+}
+
 // createTunnelStateFromResult creates tunnel state tracking from build result
 func (tm *TunnelManager) createTunnelStateFromResult(result *tunnel.TunnelBuildResult) *tunnel.TunnelState {
 	tunnelState := &tunnel.TunnelState{
 		ID:        result.TunnelID,
-		Hops:      make([]common.Hash, len(result.Hops)),
+		Hops:      extractHashesWithZero(result.Hops),
 		State:     tunnel.TunnelBuilding,
 		CreatedAt: time.Now(),
 		Responses: make([]tunnel.BuildResponse, 0, len(result.Hops)),
 		IsInbound: result.IsInbound,
 	}
-
-	for i, peer := range result.Hops {
-		hash, err := peer.IdentHash()
-		if err != nil {
-			log.WithError(err).WithField("hop_index", i).Warn("Failed to get peer hash for tunnel state, using zero hash")
-			tunnelState.Hops[i] = common.Hash{}
-		} else {
-			tunnelState.Hops[i] = hash
-		}
-	}
-
 	return tunnelState
 }
 
@@ -711,15 +719,7 @@ func (tm *TunnelManager) createTunnelState(tunnelID tunnel.TunnelID, count int, 
 
 // populateTunnelHops fills the tunnel state hops with peer identity hashes.
 func populateTunnelHops(tunnelState *tunnel.TunnelState, peers []router_info.RouterInfo) {
-	for i, peer := range peers {
-		hash, err := peer.IdentHash()
-		if err != nil {
-			log.WithError(err).WithField("hop_index", i).Warn("Failed to get peer hash, using zero hash")
-			tunnelState.Hops[i] = common.Hash{}
-		} else {
-			tunnelState.Hops[i] = hash
-		}
-	}
+	tunnelState.Hops = extractHashesWithZero(peers)
 }
 
 // generateTunnelID generates a unique tunnel ID using cryptographically secure random.
