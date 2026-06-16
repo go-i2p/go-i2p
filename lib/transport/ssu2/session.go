@@ -126,6 +126,18 @@ func (s *SSU2Session) buildMergedCallbacks(extra *BlockCallbackConfig) ssu2noise
 			}
 			return nil
 		},
+		// OnACK: when the peer sends an explicit ACK block it means they are
+		// receiving our packets. Use this as a heuristic to retire I2NP
+		// messages that were sent more than 2×RTO before the ACK arrived;
+		// those messages have had ample time to be delivered and ACKed at
+		// the SSU2 packet layer (which the go-noise conn handles internally).
+		// This prevents pendingMsgs from accumulating unbounded while full
+		// per-packet ACK correlation (mapping SSU2 PN → I2NP seq) is pending.
+		OnACK: func(_ *ssu2noise.SSU2Block) error {
+			cutoff := time.Now().Add(-2 * s.rttEstimator.GetRTO())
+			s.ackPendingBeforeTime(cutoff)
+			return nil
+		},
 	}
 	if extra != nil {
 		mergeBlockCallbacks(&cbs, extra)
@@ -215,6 +227,12 @@ func (s *SSU2Session) CloseWithReason(reason ssu2noise.TerminationReason) error 
 	var err error
 	s.CloseOnce().Do(func() {
 		s.Logger().WithField("reason", reason.String()).Info("Closing SSU2 session")
+		// Reset pendingMsgs to free resources held by the retransmission tracker.
+		// Any unconfirmed messages are dropped at this point since the session
+		// is being torn down regardless (MEDIUM-1 fix).
+		s.pendingMsgsMu.Lock()
+		s.pendingMsgs = make(map[uint64]*pendingI2NP)
+		s.pendingMsgsMu.Unlock()
 		s.drainSendQueue()
 		s.connMu.Lock()
 		conn := s.conn
@@ -574,19 +592,16 @@ func (s *SSU2Session) collectExpiredPendingMessages(now time.Time) ([]retransmit
 }
 
 // processRetransmitCandidates iterates candidates and returns sequence numbers
-// to delete and whether the session should be closed due to max retransmit
-// exceeded.
+// to delete. shouldClose is always false: max-retransmit no longer triggers
+// session teardown (see processRetransmission for rationale).
 func (s *SSU2Session) processRetransmitCandidates(candidates []retransmitCandidate, now time.Time) (toDelete []uint64, shouldClose bool) {
 	for _, c := range candidates {
 		action := s.processRetransmission(c.pending, now)
-		if action == retransmitDelete || action == retransmitMaxExceeded {
+		if action == retransmitDelete {
 			toDelete = append(toDelete, c.seq)
-			if action == retransmitMaxExceeded {
-				shouldClose = true
-			}
 		}
 	}
-	return toDelete, shouldClose
+	return toDelete, false
 }
 
 // deleteExpiredMessages removes completed retransmit entries from pendingMsgs
@@ -617,16 +632,22 @@ func (s *SSU2Session) handleRetransmissions() (shouldClose bool) {
 type retransmitAction int
 
 const (
-	retransmitOK          retransmitAction = iota // successfully retransmitted
-	retransmitDelete                              // should delete due to error
-	retransmitMaxExceeded                         // max retransmissions exceeded
+	retransmitOK     retransmitAction = iota // successfully retransmitted
+	retransmitDelete                         // should delete due to error or max attempts
 )
 
 // processRetransmission handles a single pending message that has exceeded its deadline.
 // Called without holding pendingMsgsMu to avoid blocking other goroutines during network I/O.
 func (s *SSU2Session) processRetransmission(p *pendingI2NP, now time.Time) retransmitAction {
 	if p.attempts >= s.maxRetransmit {
-		return retransmitMaxExceeded
+		// Drop the unconfirmed entry rather than tearing down the session.
+		// SSU2 packet-level reliability is handled by the go-noise conn's own
+		// retransmission loop; tearing down on I2NP-level max-retransmit
+		// with no ACK correlation was causing every session to self-close
+		// after the first message aged out (HIGH audit finding).
+		s.Logger().WithField("attempts", p.attempts).Warn(
+			"I2NP message exceeded max retransmissions; dropping (delivery unconfirmed, SSU2 ACK not correlated)")
+		return retransmitDelete
 	}
 	// Check if conn has been detached (SM-2 fix: losing promotion race).
 	s.connMu.Lock()

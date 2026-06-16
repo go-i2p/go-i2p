@@ -440,7 +440,9 @@ func TestHandleRetransmissions_NotExpired(t *testing.T) {
 }
 
 // TestHandleRetransmissions_MaxAttemptsExceeded verifies that a message
-// exceeding maxRetransmit is removed and shouldClose is true.
+// exceeding maxRetransmit is removed but does NOT signal session close.
+// Tearing down the session on unconfirmed delivery caused every session to
+// self-close after the first aged-out I2NP message (HIGH audit finding fix).
 func TestHandleRetransmissions_MaxAttemptsExceeded(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping loopback test in short mode")
@@ -462,7 +464,7 @@ func TestHandleRetransmissions_MaxAttemptsExceeded(t *testing.T) {
 	server.pendingMsgsMu.Unlock()
 
 	shouldClose := server.handleRetransmissions()
-	assert.True(t, shouldClose, "exceeded retransmit limit should signal close")
+	assert.False(t, shouldClose, "exceeding retransmit limit must NOT close the session (HIGH audit fix)")
 
 	server.pendingMsgsMu.Lock()
 	_, ok := server.pendingMsgs[42]
