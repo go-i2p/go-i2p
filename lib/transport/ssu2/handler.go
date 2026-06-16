@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/go-i2p/go-i2p/lib/transport"
-	gonoise "github.com/go-i2p/go-noise/ntcp2"
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
 )
 
@@ -29,35 +28,25 @@ type SSU2Handler interface {
 }
 
 // DefaultHandler implements SSU2Handler with replay detection and clock skew
-// validation suitable for production use. The replay cache is managed by go-noise,
-// which periodically evicts stale entries to prevent unbounded memory growth.
-// Call Close() when the handler is no longer needed to stop the cleanup goroutine.
+// validation suitable for production use. The replay cache is managed by the
+// embedded BaseHandler. Call Close() when the handler is no longer needed to stop
+// the cleanup goroutine.
 type DefaultHandler struct {
-	replayCache *gonoise.ReplayCache
-	maxSkew     time.Duration
+	*transport.BaseHandler
+	maxSkew time.Duration
 }
 
 // NewDefaultHandler creates a new DefaultHandler with ±30 second clock skew tolerance
 // (shared with NTCP2 transport). We use ±30 s (narrower than the go-noise default of 60 s)
 // to narrow the post-restart replay window; see AUDIT.md.
-// The replay cache is managed by go-noise, which periodically evicts stale entries.
+// The replay cache is managed by the embedded BaseHandler.
 // Call Close() to clean up resources when the handler is no longer needed.
 func NewDefaultHandler() *DefaultHandler {
 	log.Debug("creating SSU2 default handler")
 	return &DefaultHandler{
-		replayCache: gonoise.NewReplayCache(),
+		BaseHandler: transport.NewBaseHandler(),
 		maxSkew:     transport.ClockSkewTolerance,
 	}
-}
-
-// CheckReplay checks whether an ephemeral key has been seen before.
-// Returns true if the key is a duplicate (replay attack).
-func (h *DefaultHandler) CheckReplay(ephemeralKey [32]byte) bool {
-	if h.replayCache.CheckAndAdd(ephemeralKey) {
-		log.Warn("SSU2 replay attack detected: duplicate ephemeral key")
-		return true
-	}
-	return false
 }
 
 // ValidateTimestamp checks whether a peer's timestamp is within the configured
@@ -111,21 +100,4 @@ func buildTerminationBlock(reason byte) []byte {
 	// Padding (4 bytes) - zeroed
 	block[11] = reason
 	return block
-}
-
-// Close releases resources held by the handler (stops replay cache cleanup).
-func (h *DefaultHandler) Close() {
-	log.Debug("closing SSU2 handler replay cache")
-	if h.replayCache != nil {
-		h.replayCache.Close()
-	}
-}
-
-// ReplayCacheSize returns the current number of entries in the replay cache.
-// Useful for monitoring and diagnostics.
-func (h *DefaultHandler) ReplayCacheSize() int {
-	if h.replayCache == nil {
-		return 0
-	}
-	return h.replayCache.Size()
 }

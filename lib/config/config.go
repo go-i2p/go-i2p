@@ -270,10 +270,10 @@ func CurrentConfig() ConfigDefaults {
 		Bootstrap:   currentBootstrapConfig(),
 		I2CP:        currentI2CPConfig(),
 		I2PControl:  currentI2PControlConfig(),
-		Tunnel:      currentTunnelConfig(),
-		Transport:   currentTransportConfig(),
-		Performance: currentPerformanceConfig(),
-		Congestion:  currentCongestionConfig(),
+		Tunnel:      *buildTunnelConfig(),
+		Transport:   *buildTransportConfig(),
+		Performance: *buildPerformanceConfig(),
+		Congestion:  *buildCongestionConfig(),
 	}
 }
 
@@ -334,66 +334,6 @@ func currentI2PControlConfig() I2PControlDefaults {
 		TokenExpiration:           viper.GetDuration("i2pcontrol.token_expiration"),
 		StrictAuth:                viper.GetBool("i2pcontrol.strict_auth"),
 		AllowPlaintextNonLoopback: viper.GetBool("i2pcontrol.allow_plaintext_non_loopback"),
-	}
-}
-
-func currentTunnelConfig() TunnelDefaults {
-	return TunnelDefaults{
-		MinPoolSize:                viper.GetInt("tunnel.min_pool_size"),
-		MaxPoolSize:                viper.GetInt("tunnel.max_pool_size"),
-		TunnelLength:               viper.GetInt("tunnel.length"),
-		TunnelLifetime:             viper.GetDuration("tunnel.lifetime"),
-		TunnelTestInterval:         viper.GetDuration("tunnel.test_interval"),
-		TunnelTestTimeout:          viper.GetDuration("tunnel.test_timeout"),
-		BuildTimeout:               viper.GetDuration("tunnel.build_timeout"),
-		BuildRetries:               viper.GetInt("tunnel.build_retries"),
-		ReplaceBeforeExpiration:    viper.GetDuration("tunnel.replace_before_expiration"),
-		MaintenanceInterval:        viper.GetDuration("tunnel.maintenance_interval"),
-		MaxParticipatingTunnels:    viper.GetInt("tunnel.max_participating_tunnels"),
-		ParticipatingLimitsEnabled: viper.GetBool("tunnel.participating_limits_enabled"),
-		PerSourceRateLimitEnabled:  viper.GetBool("tunnel.per_source_rate_limit_enabled"),
-		MaxBuildRequestsPerMinute:  viper.GetInt("tunnel.max_build_requests_per_minute"),
-		BuildRequestBurstSize:      viper.GetInt("tunnel.build_request_burst_size"),
-		SourceBanDuration:          viper.GetDuration("tunnel.source_ban_duration"),
-	}
-}
-
-func currentTransportConfig() TransportDefaults {
-	return TransportDefaults{
-		NTCP2Enabled:        viper.GetBool("transport.ntcp2_enabled"),
-		NTCP2Port:           viper.GetInt("transport.ntcp2_port"),
-		NTCP2MaxConnections: viper.GetInt("transport.ntcp2_max_connections"),
-		SSU2Enabled:         viper.GetBool("transport.ssu2_enabled"),
-		SSU2Port:            viper.GetInt("transport.ssu2_port"),
-		ConnectionTimeout:   viper.GetDuration("transport.connection_timeout"),
-		IdleTimeout:         viper.GetDuration("transport.idle_timeout"),
-		MaxMessageSize:      viper.GetInt("transport.max_message_size"),
-	}
-}
-
-func currentPerformanceConfig() PerformanceDefaults {
-	return PerformanceDefaults{
-		MessageQueueSize:          viper.GetInt("performance.message_queue_size"),
-		WorkerPoolSize:            viper.GetInt("performance.worker_pool_size"),
-		GarlicEncryptionCacheSize: viper.GetInt("performance.garlic_encryption_cache_size"),
-		FragmentCacheSize:         viper.GetInt("performance.fragment_cache_size"),
-		CleanupInterval:           viper.GetDuration("performance.cleanup_interval"),
-	}
-}
-
-func currentCongestionConfig() CongestionDefaults {
-	return CongestionDefaults{
-		DFlagThreshold:               viper.GetFloat64("router.congestion.d_flag_threshold"),
-		EFlagThreshold:               viper.GetFloat64("router.congestion.e_flag_threshold"),
-		GFlagThreshold:               viper.GetFloat64("router.congestion.g_flag_threshold"),
-		ClearDFlagThreshold:          viper.GetFloat64("router.congestion.clear_d_flag_threshold"),
-		ClearEFlagThreshold:          viper.GetFloat64("router.congestion.clear_e_flag_threshold"),
-		ClearGFlagThreshold:          viper.GetFloat64("router.congestion.clear_g_flag_threshold"),
-		AveragingWindow:              viper.GetDuration("router.congestion.averaging_window"),
-		EFlagAgeThreshold:            viper.GetDuration("router.congestion.e_flag_age_threshold"),
-		DFlagCapacityMultiplier:      viper.GetFloat64("router.congestion.d_flag_capacity_multiplier"),
-		EFlagCapacityMultiplier:      viper.GetFloat64("router.congestion.e_flag_capacity_multiplier"),
-		StaleEFlagCapacityMultiplier: viper.GetFloat64("router.congestion.stale_e_flag_capacity_multiplier"),
 	}
 }
 

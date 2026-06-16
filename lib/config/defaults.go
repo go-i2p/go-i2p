@@ -2,6 +2,7 @@ package config
 
 import (
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -569,30 +570,12 @@ func validateNetDBPath(path string) error {
 
 // validateNetDBMaxRouterInfos validates the max router infos setting.
 func validateNetDBMaxRouterInfos(maxRouterInfos int) error {
-	if maxRouterInfos >= 10 {
-		return nil
-	}
-	log.WithFields(logger.Fields{
-		"at":               "validateNetDBConfig",
-		"reason":           "max_router_infos_too_low",
-		"max_router_infos": maxRouterInfos,
-		"minimum_required": 10,
-	}).Error("invalid NetDB configuration")
-	return newValidationError("NetDB.MaxRouterInfos must be at least 10")
+	return validateMinInt("max_router_infos", "NetDBConfig", maxRouterInfos, 10)
 }
 
 // validateNetDBMaxLeaseSets validates the max lease sets setting.
 func validateNetDBMaxLeaseSets(maxLeaseSets int) error {
-	if maxLeaseSets >= 1 {
-		return nil
-	}
-	log.WithFields(logger.Fields{
-		"at":               "validateNetDBConfig",
-		"reason":           "max_lease_sets_too_low",
-		"max_lease_sets":   maxLeaseSets,
-		"minimum_required": 1,
-	}).Error("invalid NetDB configuration")
-	return newValidationError("NetDB.MaxLeaseSets must be at least 1")
+	return validateMinInt("max_lease_sets", "NetDBConfig", maxLeaseSets, 1)
 }
 
 // runValidation runs a sequence of validator functions with logging bookends.
@@ -648,30 +631,12 @@ func logValidationSuccess(at, message string) {
 
 // validateLowPeerThreshold validates the LowPeerThreshold setting.
 func validateLowPeerThreshold(threshold int) error {
-	if threshold < 1 {
-		log.WithFields(logger.Fields{
-			"at":                 "validateBootstrapConfig",
-			"reason":             "low_peer_threshold_too_low",
-			"low_peer_threshold": threshold,
-			"minimum_required":   1,
-		}).Error("invalid bootstrap configuration")
-		return newValidationError("Bootstrap.LowPeerThreshold must be at least 1")
-	}
-	return nil
+	return validateMinInt("low_peer_threshold", "BootstrapConfig", threshold, 1)
 }
 
 // validateMinimumReseedPeers validates the MinimumReseedPeers setting.
 func validateMinimumReseedPeers(peers int) error {
-	if peers < 1 {
-		log.WithFields(logger.Fields{
-			"at":                   "validateBootstrapConfig",
-			"reason":               "minimum_reseed_peers_too_low",
-			"minimum_reseed_peers": peers,
-			"minimum_required":     1,
-		}).Error("invalid bootstrap configuration")
-		return newValidationError("Bootstrap.MinimumReseedPeers must be at least 1")
-	}
-	return nil
+	return validateMinInt("minimum_reseed_peers", "BootstrapConfig", peers, 1)
 }
 
 // validateBootstrapType validates the BootstrapType setting.
@@ -730,16 +695,7 @@ func validateI2CPMaxSessions(maxSessions int) error {
 
 // validateI2CPMessageQueueSize validates the message queue size setting.
 func validateI2CPMessageQueueSize(msgQueueSize int) error {
-	if msgQueueSize >= 1 {
-		return nil
-	}
-	log.WithFields(logger.Fields{
-		"at":                 "validateI2CPConfig",
-		"reason":             "message_queue_size_too_low",
-		"message_queue_size": msgQueueSize,
-		"minimum_required":   1,
-	}).Error("invalid I2CP configuration")
-	return newValidationError("I2CP.MessageQueueSize must be at least 1")
+	return validateMinInt("message_queue_size", "I2CPConfig", msgQueueSize, 1)
 }
 
 // validateI2CPNetworkType validates the network type setting.
@@ -1239,6 +1195,22 @@ type validationError struct {
 
 func newValidationError(message string) error {
 	return &validationError{message: message}
+}
+
+// validateMinInt is a helper that validates an integer field is at least a minimum value.
+// It logs a standardized error and returns a validation error if the constraint is violated.
+func validateMinInt(fieldName, section string, value, minimum int) error {
+	if value >= minimum {
+		return nil
+	}
+	reason := fieldName + "_too_low"
+	log.WithFields(logger.Fields{
+		"at":               "validate" + section,
+		"reason":           reason,
+		fieldName:          value,
+		"minimum_required": minimum,
+	}).Error("invalid " + section + " configuration")
+	return newValidationError(section + "." + fieldName + " must be at least " + strconv.Itoa(minimum))
 }
 
 // Error returns the validation error message prefixed with a standard validation failure label.

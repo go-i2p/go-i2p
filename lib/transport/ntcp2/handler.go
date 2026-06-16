@@ -3,6 +3,7 @@ package ntcp2
 import (
 	"net"
 
+	"github.com/go-i2p/go-i2p/lib/transport"
 	gonoise "github.com/go-i2p/go-noise/ntcp2"
 )
 
@@ -47,8 +48,9 @@ type NTCP2Handler interface {
 
 // DefaultHandler implements NTCP2Handler using the existing functions in this
 // package. It is wired into the NTCP2Transport at construction time.
+// The replay cache is managed by the embedded BaseHandler.
 type DefaultHandler struct {
-	replayCache *gonoise.ReplayCache
+	*transport.BaseHandler
 }
 
 // NewDefaultHandler creates a new DefaultHandler with a fresh replay cache.
@@ -57,7 +59,7 @@ type DefaultHandler struct {
 func NewDefaultHandler() *DefaultHandler {
 	log.Debug("creating NTCP2 default handler")
 	return &DefaultHandler{
-		replayCache: gonoise.NewReplayCache(),
+		BaseHandler: transport.NewBaseHandler(),
 	}
 }
 
@@ -67,16 +69,6 @@ func NewDefaultHandler() *DefaultHandler {
 func (h *DefaultHandler) OnHandshakeError(rawConn net.Conn, err error) {
 	log.WithError(err).Debug("NTCP2 handshake error, applying probing resistance")
 	applyProbingResistance(rawConn)
-}
-
-// CheckReplay checks whether an ephemeral key has been seen before using the
-// shared replay cache. Returns true if the key is a duplicate (replay attack).
-func (h *DefaultHandler) CheckReplay(ephemeralKey [32]byte) bool {
-	if h.replayCache.CheckAndAdd(ephemeralKey) {
-		log.Warn("NTCP2 replay attack detected: duplicate ephemeral key")
-		return true
-	}
-	return false
 }
 
 // ValidateTimestamp checks whether a peer's timestamp is within ±60 seconds
@@ -103,21 +95,4 @@ func (h *DefaultHandler) SendTermination(conn *gonoise.Conn, reason byte) error 
 		log.WithError(err).WithField("reason", reason).Warn("failed to send NTCP2 termination block")
 	}
 	return err
-}
-
-// Close releases resources held by the handler (stops replay cache cleanup).
-func (h *DefaultHandler) Close() {
-	log.Debug("closing NTCP2 handler")
-	if h.replayCache != nil {
-		h.replayCache.Close()
-	}
-}
-
-// ReplayCacheSize returns the current number of entries in the replay cache.
-// Useful for monitoring and diagnostics.
-func (h *DefaultHandler) ReplayCacheSize() int {
-	if h.replayCache == nil {
-		return 0
-	}
-	return h.replayCache.Size()
 }

@@ -222,58 +222,52 @@ func NewMessageProcessor() *MessageProcessor {
 // This must be called before processing garlic messages, otherwise they will fail with an error.
 // Accepts any implementation of GarlicMessageDecryptor, including *GarlicSessionManager and test mocks.
 func (p *MessageProcessor) SetGarlicSessionManager(garlicMgr GarlicMessageDecryptor) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	log.WithField("at", "SetGarlicSessionManager").Debug("Setting garlic session manager")
-	p.garlicSessions = garlicMgr
+	p.setField("SetGarlicSessionManager", func() {
+		p.garlicSessions = garlicMgr
+	})
 }
 
 // SetBuildRecordCrypto sets the build record crypto handler for encrypting build response records.
 // Accepts any implementation of ReplyRecordEncryptor, including *BuildRecordCrypto and test mocks.
 func (p *MessageProcessor) SetBuildRecordCrypto(crypto ReplyRecordEncryptor) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	log.WithField("at", "SetBuildRecordCrypto").Debug("Setting build record crypto")
-	p.buildRecordCrypto = crypto
+	p.setField("SetBuildRecordCrypto", func() {
+		p.buildRecordCrypto = crypto
+	})
 }
 
 // SetCloveForwarder sets the garlic clove forwarder for handling non-LOCAL delivery types.
 // This is optional - if not set, only LOCAL delivery (0x00) will be processed.
 // The forwarder enables DESTINATION (0x01), ROUTER (0x02), and TUNNEL (0x03) deliveries.
 func (p *MessageProcessor) SetCloveForwarder(forwarder GarlicCloveForwarder) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	log.WithField("at", "SetCloveForwarder").Debug("Setting garlic clove forwarder")
-	p.cloveForwarder = forwarder
+	p.setField("SetCloveForwarder", func() {
+		p.cloveForwarder = forwarder
+	})
 }
 
 // SetDatabaseManager sets the database manager for processing DatabaseLookup messages.
 // This must be called before processing DatabaseLookup messages, otherwise they will fail with an error.
 func (p *MessageProcessor) SetDatabaseManager(dbMgr *DatabaseManager) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	log.WithField("at", "SetDatabaseManager").Debug("Setting database manager")
-	p.dbManager = dbMgr
+	p.setField("SetDatabaseManager", func() {
+		p.dbManager = dbMgr
+	})
 }
 
 // SetParticipantManager sets the participant manager for processing incoming tunnel build requests.
 // This enables the router to participate in tunnels built by other routers.
 // If not set, tunnel build requests will be rejected with an error.
 func (p *MessageProcessor) SetParticipantManager(pm ParticipantManager) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	log.WithField("at", "SetParticipantManager").Debug("Setting participant manager")
-	p.participantManager = pm
+	p.setField("SetParticipantManager", func() {
+		p.participantManager = pm
+	})
 }
 
 // SetBuildReplyForwarder sets the forwarder for sending tunnel build replies to the next hop.
 // This enables the router to participate in tunnel building by forwarding replies.
 // If not set, build requests will be processed but replies will not be sent (logged only).
 func (p *MessageProcessor) SetBuildReplyForwarder(forwarder BuildReplyForwarder) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	log.WithField("at", "SetBuildReplyForwarder").Debug("Setting build reply forwarder")
-	p.buildReplyForwarder = forwarder
+	p.setField("SetBuildReplyForwarder", func() {
+		p.buildReplyForwarder = forwarder
+	})
 }
 
 // SetTunnelGatewayHandler sets the handler for processing TunnelGateway messages.
@@ -281,10 +275,9 @@ func (p *MessageProcessor) SetBuildReplyForwarder(forwarder BuildReplyForwarder)
 // tunnel lookup, encryption, and forwarding. If not set, TunnelGateway messages
 // will be validated but not forwarded.
 func (p *MessageProcessor) SetTunnelGatewayHandler(handler TunnelGatewayHandler) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	log.WithField("at", "SetTunnelGatewayHandler").Debug("Setting tunnel gateway handler")
-	p.tunnelGatewayHandler = handler
+	p.setField("SetTunnelGatewayHandler", func() {
+		p.tunnelGatewayHandler = handler
+	})
 }
 
 // SetTunnelDataHandler sets the handler for processing inbound TunnelData messages.
@@ -292,40 +285,36 @@ func (p *MessageProcessor) SetTunnelGatewayHandler(handler TunnelGatewayHandler)
 // tunnel endpoint decryption and I2CP session delivery. If not set, TunnelData
 // messages will be validated but not delivered to any session.
 func (p *MessageProcessor) SetTunnelDataHandler(handler TunnelDataHandler) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	log.WithField("at", "SetTunnelDataHandler").Debug("Setting tunnel data handler")
-	p.tunnelDataHandler = handler
+	p.setField("SetTunnelDataHandler", func() {
+		p.tunnelDataHandler = handler
+	})
 }
 
 // SetSearchReplyHandler sets the handler for delivering DatabaseSearchReply suggestions
 // to pending iterative Kademlia lookups. When set, peer suggestions from search replies
 // are forwarded to this handler for follow-up queries.
 func (p *MessageProcessor) SetSearchReplyHandler(handler SearchReplyHandler) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	log.WithField("at", "SetSearchReplyHandler").Debug("Setting search reply handler")
-	p.searchReplyHandler = handler
+	p.setField("SetSearchReplyHandler", func() {
+		p.searchReplyHandler = handler
+	})
 }
 
 // SetDataMessageHandler sets the handler for processing incoming Data message payloads.
 // When set, Data message payloads are forwarded to this handler for delivery to the
 // appropriate I2CP session. If not set, Data messages are logged but discarded.
 func (p *MessageProcessor) SetDataMessageHandler(handler DataMessageHandler) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	log.WithField("at", "SetDataMessageHandler").Debug("Setting data message handler")
-	p.dataMessageHandler = handler
+	p.setField("SetDataMessageHandler", func() {
+		p.dataMessageHandler = handler
+	})
 }
 
 // SetDeliveryStatusHandler sets the handler for processing delivery status confirmations.
 // When set, delivery status notifications are forwarded to this handler to confirm
 // message delivery. If not set, DeliveryStatus messages are logged but discarded.
 func (p *MessageProcessor) SetDeliveryStatusHandler(handler DeliveryStatusHandler) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	log.WithField("at", "SetDeliveryStatusHandler").Debug("Setting delivery status handler")
-	p.deliveryStatusHandler = handler
+	p.setField("SetDeliveryStatusHandler", func() {
+		p.deliveryStatusHandler = handler
+	})
 }
 
 // SetBuildReplyProcessor sets the processor for handling incoming tunnel build reply messages.
@@ -333,39 +322,35 @@ func (p *MessageProcessor) SetDeliveryStatusHandler(handler DeliveryStatusHandle
 // which correlates them with pending build requests and updates tunnel state.
 // If not set, tunnel build replies are logged and discarded.
 func (p *MessageProcessor) SetBuildReplyProcessor(processor TunnelBuildReplyProcessor) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	log.WithField("at", "SetBuildReplyProcessor").Debug("Setting tunnel build reply processor")
-	p.buildReplyProcessor = processor
+	p.setField("SetBuildReplyProcessor", func() {
+		p.buildReplyProcessor = processor
+	})
 }
 
 // SetOurRouterHash sets our router's identity hash so that processAllBuildRecords
 // can skip records not destined for this router.
 func (p *MessageProcessor) SetOurRouterHash(hash common.Hash) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	log.WithField("at", "SetOurRouterHash").Debug("Setting our router hash for build record filtering")
-	p.ourRouterHash = hash
+	p.setField("SetOurRouterHash", func() {
+		p.ourRouterHash = hash
+	})
 }
 
 // SetBuildRequestDecryptor sets the decryptor used to decrypt inbound build request
 // records that are destined for this router. If not set, encrypted records will be
 // attempted as cleartext (testing mode only).
 func (p *MessageProcessor) SetBuildRequestDecryptor(dec BuildRequestDecryptor) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	log.WithField("at", "SetBuildRequestDecryptor").Debug("Setting build request decryptor")
-	p.buildRequestDecryptor = dec
+	p.setField("SetBuildRequestDecryptor", func() {
+		p.buildRequestDecryptor = dec
+	})
 }
 
 // SetOurPrivateKey sets the router's static X25519 private key used for
 // decrypting inbound build request records.
 func (p *MessageProcessor) SetOurPrivateKey(key []byte) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	log.WithField("at", "SetOurPrivateKey").Debug("Setting our private key for build record decryption")
-	p.ourPrivateKey = make([]byte, len(key))
-	copy(p.ourPrivateKey, key)
+	p.setField("SetOurPrivateKey", func() {
+		p.ourPrivateKey = make([]byte, len(key))
+		copy(p.ourPrivateKey, key)
+	})
 }
 
 // SetExpirationValidator sets a custom expiration validator for message processing.
@@ -391,6 +376,15 @@ func (p *MessageProcessor) EnableExpirationCheck() {
 	if p.expirationValidator != nil {
 		p.expirationValidator.Enable()
 	}
+}
+
+// setField is a helper that acquires the lock, logs the operation, calls assignFn,
+// and releases the lock. All 15 Set* methods use this pattern.
+func (p *MessageProcessor) setField(methodName string, assignFn func()) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	log.WithField("at", methodName).Debug("Setting field via " + methodName)
+	assignFn()
 }
 
 // ProcessMessage processes any I2NP message using interfaces.
