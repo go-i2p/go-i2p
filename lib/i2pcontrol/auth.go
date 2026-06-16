@@ -27,10 +27,10 @@ import (
 // Rate limiting: After maxFailedAttempts consecutive failures, authentication
 // is locked out for failedAttemptLockout duration to prevent brute-force attacks.
 type AuthManager struct {
-	password string               // Configured password for authentication
-	tokens   map[string]time.Time // Active tokens with expiration times
-	mu       sync.RWMutex         // Protects tokens map
-	secret   []byte               // HMAC secret key for token generation
+	password string                 // Configured password for authentication
+	tokens   map[[32]byte]time.Time // Active tokens with expiration times; key = SHA-256(token)
+	mu       sync.RWMutex           // Protects tokens map
+	secret   []byte                 // HMAC secret key for token generation
 	randRead func([]byte) (int, error)
 
 	// Rate limiting fields
@@ -71,7 +71,7 @@ func NewAuthManager(password string) (*AuthManager, error) {
 
 	return &AuthManager{
 		password: password,
-		tokens:   make(map[string]time.Time),
+		tokens:   make(map[[32]byte]time.Time),
 		secret:   secret,
 		randRead: rand.Read,
 	}, nil
@@ -145,9 +145,11 @@ func (am *AuthManager) Authenticate(password string, expiration time.Duration) (
 		return "", oops.Wrapf(err, "failed to generate authentication token")
 	}
 
-	// Store token with expiration time
+	// Store token with expiration time; key = SHA-256(token) for hardened
+	// token comparison (MEDIUM-4 audit fix: prevents timing oracle on the
+	// raw token string comparison in map lookups).
 	am.mu.Lock()
-	am.tokens[token] = time.Now().Add(expiration)
+	am.tokens[am.tokenKey(token)] = time.Now().Add(expiration)
 	am.mu.Unlock()
 
 	log.WithField("at", "AuthManager.Authenticate").
@@ -165,8 +167,9 @@ func (am *AuthManager) Authenticate(password string, expiration time.Duration) (
 // Returns:
 //   - bool: true if token is valid and not expired, false otherwise
 func (am *AuthManager) ValidateToken(token string) bool {
+	key := am.tokenKey(token)
 	am.mu.RLock()
-	expiration, exists := am.tokens[token]
+	expiration, exists := am.tokens[key]
 	am.mu.RUnlock()
 
 	if !exists {
@@ -177,7 +180,7 @@ func (am *AuthManager) ValidateToken(token string) bool {
 	if time.Now().After(expiration) {
 		// Remove expired token
 		am.mu.Lock()
-		delete(am.tokens, token)
+		delete(am.tokens, key)
 		am.mu.Unlock()
 
 		log.WithField("at", "AuthManager.ValidateToken").
@@ -195,7 +198,7 @@ func (am *AuthManager) ValidateToken(token string) bool {
 //   - token: The token to revoke
 func (am *AuthManager) RevokeToken(token string) {
 	am.mu.Lock()
-	delete(am.tokens, token)
+	delete(am.tokens, am.tokenKey(token))
 	am.mu.Unlock()
 
 	log.WithField("at", "AuthManager.RevokeToken").
@@ -260,7 +263,7 @@ func (am *AuthManager) ChangePassword(newPassword string) int {
 
 	// Count and revoke all existing tokens
 	revokedCount := len(am.tokens)
-	am.tokens = make(map[string]time.Time)
+	am.tokens = make(map[[32]byte]time.Time)
 
 	log.WithFields(map[string]interface{}{
 		"at":      "AuthManager.ChangePassword",
@@ -268,6 +271,14 @@ func (am *AuthManager) ChangePassword(newPassword string) int {
 	}).Info("password changed, all tokens revoked")
 
 	return revokedCount
+}
+
+// tokenKey computes a SHA-256 hash of the raw token string.
+// Tokens are stored and compared by hash rather than by the raw string to
+// harden against timing-based side channels on the raw-string equality
+// check inside Go's map lookup (MEDIUM-4 audit fix).
+func (am *AuthManager) tokenKey(token string) [32]byte {
+	return sha256.Sum256([]byte(token))
 }
 
 // generateToken creates a cryptographic token from a timestamp and random nonce.

@@ -1,6 +1,7 @@
 package i2np
 
 import (
+	"container/list"
 	"crypto/sha256"
 	"encoding/binary"
 	"sync"
@@ -18,28 +19,36 @@ const (
 	deliveryStatusReplayCacheTTL      = 1 * time.Hour
 )
 
-// deliveryStatusReplayCacheEntry tracks a seen DeliveryStatus message
-type deliveryStatusReplayCacheEntry struct {
-	key       [32]byte  // SHA-256(messageID || timestamp)
-	timestamp time.Time // When this entry was added
+// dsReplayCacheEntry is stored in the FIFO list and the lookup map.
+type dsReplayCacheEntry struct {
+	key     [32]byte  // SHA-256(messageID || timestamp)
+	addedAt time.Time // insertion time, used for TTL expiry
 }
 
-// deliveryStatusReplayCache prevents replay of DeliveryStatus messages
-// Key insight: DeliveryStatus messages are delivery confirmations that should
-// not be replayed. Caching the hash of (messageID, timestamp) prevents
-// identical replays from being processed multiple times.
-var (
-	deliveryStatusReplayCache      = make(map[[32]byte]time.Time)
-	deliveryStatusReplayCacheMutex = sync.Mutex{}
-)
+// dsReplayCache holds a mutex-protected FIFO for O(1) eviction and a map for
+// O(1) lookup. The list maintains insertion order so the oldest entry is always
+// at the front (MEDIUM-2 audit fix: was O(n) scan on every insertion).
+type dsReplayCache struct {
+	mu   sync.Mutex
+	m    map[[32]byte]*list.Element // key → list element
+	fifo *list.List                 // *dsReplayCacheEntry ordered oldest→newest
+}
+
+// deliveryStatusReplayCacheGlobal is the package-level singleton.
+var deliveryStatusReplayCacheGlobal = &dsReplayCache{
+	m:    make(map[[32]byte]*list.Element),
+	fifo: list.New(),
+}
 
 // clearDeliveryStatusReplayCacheForTesting clears the replay cache.
 // This is intended ONLY for testing purposes to avoid cache pollution between test cases.
 // Production code should never call this.
 func clearDeliveryStatusReplayCacheForTesting() {
-	deliveryStatusReplayCacheMutex.Lock()
-	defer deliveryStatusReplayCacheMutex.Unlock()
-	deliveryStatusReplayCache = make(map[[32]byte]time.Time)
+	c := deliveryStatusReplayCacheGlobal
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.m = make(map[[32]byte]*list.Element)
+	c.fifo.Init()
 }
 
 // M-4 FIX: Time skew tolerance for timestamp validation (±1 hour per I2P spec)
@@ -48,7 +57,7 @@ const deliveryStatusTimestampSkew = 1 * time.Hour
 
 // validateDeliveryStatusNotReplayed checks if a DeliveryStatus message has been seen before.
 // Returns nil if the message is new, or an error if it's a replay.
-// M-4 FIX: Centralized replay gate for DeliveryStatus messages.
+// M-4 / MEDIUM-2 FIX: O(1) insertion and eviction via FIFO list + map.
 func validateDeliveryStatusNotReplayed(messageID int, timestamp time.Time) error {
 	// Build cache key: SHA-256(messageID || timestamp)
 	h := sha256.New()
@@ -61,38 +70,43 @@ func validateDeliveryStatusNotReplayed(messageID int, timestamp time.Time) error
 	var cacheKey [32]byte
 	copy(cacheKey[:], h.Sum(nil))
 
-	deliveryStatusReplayCacheMutex.Lock()
-	defer deliveryStatusReplayCacheMutex.Unlock()
+	c := deliveryStatusReplayCacheGlobal
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
-	// Clean up expired entries
 	now := time.Now()
-	for key, addedAt := range deliveryStatusReplayCache {
-		if now.Sub(addedAt) > deliveryStatusReplayCacheTTL {
-			delete(deliveryStatusReplayCache, key)
+
+	// Evict expired entries from the front of the FIFO list in O(k) where k
+	// is the number of expired entries — amortized O(1) per call.
+	for c.fifo.Len() > 0 {
+		front := c.fifo.Front()
+		entry := front.Value.(*dsReplayCacheEntry)
+		if now.Sub(entry.addedAt) <= deliveryStatusReplayCacheTTL {
+			break
 		}
+		c.fifo.Remove(front)
+		delete(c.m, entry.key)
 	}
 
-	// Check if we've seen this message before
-	if _, seen := deliveryStatusReplayCache[cacheKey]; seen {
+	// Check if we've seen this message before (O(1) map lookup).
+	if _, seen := c.m[cacheKey]; seen {
 		return oops.Errorf("DeliveryStatus message replayed (msgID=%d, ts=%d)", messageID, timestamp.UnixMilli())
 	}
 
-	// Check cache capacity and evict oldest if needed (simple FIFO, not LRU for simplicity)
-	if len(deliveryStatusReplayCache) >= deliveryStatusReplayCacheCapacity {
-		// Find and delete the oldest entry
-		var oldestKey [32]byte
-		var oldestTime time.Time = now
-		for key, addedAt := range deliveryStatusReplayCache {
-			if addedAt.Before(oldestTime) {
-				oldestTime = addedAt
-				oldestKey = key
-			}
+	// Evict oldest entry if at capacity (O(1) FIFO pop from front).
+	if len(c.m) >= deliveryStatusReplayCacheCapacity {
+		front := c.fifo.Front()
+		if front != nil {
+			entry := front.Value.(*dsReplayCacheEntry)
+			c.fifo.Remove(front)
+			delete(c.m, entry.key)
 		}
-		delete(deliveryStatusReplayCache, oldestKey)
 	}
 
-	// Add this message to the cache
-	deliveryStatusReplayCache[cacheKey] = now
+	// Insert new entry at the back of the FIFO list (O(1)).
+	entry := &dsReplayCacheEntry{key: cacheKey, addedAt: now}
+	elem := c.fifo.PushBack(entry)
+	c.m[cacheKey] = elem
 
 	return nil
 }

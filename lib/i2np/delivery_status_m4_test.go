@@ -15,10 +15,7 @@ import (
 // M-4 FIX: While very old messages are accepted for compatibility, they're
 // logged as warnings to alert operators of unusual patterns.
 func TestM4_ExpiredDeliveryStatusAcceptedWithWarning(t *testing.T) {
-	// Clear the replay cache before the test
-	deliveryStatusReplayCacheMutex.Lock()
-	deliveryStatusReplayCache = make(map[[32]byte]time.Time)
-	deliveryStatusReplayCacheMutex.Unlock()
+	clearDeliveryStatusReplayCacheForTesting()
 
 	// Create a message with a timestamp from the past (older than 24 hours)
 	// but still within the ±1 hour skew tolerance
@@ -46,10 +43,7 @@ func TestM4_ExpiredDeliveryStatusAcceptedWithWarning(t *testing.T) {
 //
 // M-4 FIX: Prevents accepting messages from peers with badly skewed clocks.
 func TestM4_FarFutureDeliveryStatusRejected(t *testing.T) {
-	// Clear the replay cache
-	deliveryStatusReplayCacheMutex.Lock()
-	deliveryStatusReplayCache = make(map[[32]byte]time.Time)
-	deliveryStatusReplayCacheMutex.Unlock()
+	clearDeliveryStatusReplayCacheForTesting()
 
 	// Create a message with a far-future timestamp (beyond clock skew of ±1 hour)
 	msgID := 54321
@@ -76,10 +70,7 @@ func TestM4_FarFutureDeliveryStatusRejected(t *testing.T) {
 // M-4 FIX: Prevents replay of delivery confirmations, which could confuse
 // the sender about which message was actually delivered.
 func TestM4_ReplayedDeliveryStatusRejected(t *testing.T) {
-	// Clear the replay cache
-	deliveryStatusReplayCacheMutex.Lock()
-	deliveryStatusReplayCache = make(map[[32]byte]time.Time)
-	deliveryStatusReplayCacheMutex.Unlock()
+	clearDeliveryStatusReplayCacheForTesting()
 
 	// Create a message with a valid timestamp
 	msgID := 99999
@@ -108,10 +99,7 @@ func TestM4_ReplayedDeliveryStatusRejected(t *testing.T) {
 // TestM4_ValidDeliveryStatusAccepted validates that valid (non-expired,
 // non-replayed) DeliveryStatus messages are accepted.
 func TestM4_ValidDeliveryStatusAccepted(t *testing.T) {
-	// Clear the replay cache
-	deliveryStatusReplayCacheMutex.Lock()
-	deliveryStatusReplayCache = make(map[[32]byte]time.Time)
-	deliveryStatusReplayCacheMutex.Unlock()
+	clearDeliveryStatusReplayCacheForTesting()
 
 	// Create a message with a current timestamp
 	msgID := 77777
@@ -133,10 +121,7 @@ func TestM4_ValidDeliveryStatusAccepted(t *testing.T) {
 // TestM4_ReplayCacheCapacityBounded validates that the replay cache doesn't
 // grow unbounded. When cap is exceeded, oldest entries are evicted.
 func TestM4_ReplayCacheCapacityBounded(t *testing.T) {
-	// Clear the replay cache
-	deliveryStatusReplayCacheMutex.Lock()
-	deliveryStatusReplayCache = make(map[[32]byte]time.Time)
-	deliveryStatusReplayCacheMutex.Unlock()
+	clearDeliveryStatusReplayCacheForTesting()
 
 	// Add messages up to (and beyond) the capacity
 	baseTime := time.Now()
@@ -157,9 +142,10 @@ func TestM4_ReplayCacheCapacityBounded(t *testing.T) {
 	}
 
 	// Cache should not exceed capacity (allow some margin for cleanup timing)
-	deliveryStatusReplayCacheMutex.Lock()
-	cacheSize := len(deliveryStatusReplayCache)
-	deliveryStatusReplayCacheMutex.Unlock()
+	c := deliveryStatusReplayCacheGlobal
+	c.mu.Lock()
+	cacheSize := len(c.m)
+	c.mu.Unlock()
 
 	assert.LessOrEqual(t, cacheSize, deliveryStatusReplayCacheCapacity,
 		"cache size should be bounded")
@@ -168,25 +154,23 @@ func TestM4_ReplayCacheCapacityBounded(t *testing.T) {
 
 // TestM4_ReplayCacheExpiresOldEntries validates that replay cache entries
 // older than TTL are cleaned up during cache operations.
+// MEDIUM-2 FIX: Verifies O(1) FIFO expiry path.
 func TestM4_ReplayCacheExpiresOldEntries(t *testing.T) {
-	// Clear the replay cache
-	deliveryStatusReplayCacheMutex.Lock()
-	deliveryStatusReplayCache = make(map[[32]byte]time.Time)
-	deliveryStatusReplayCacheMutex.Unlock()
+	clearDeliveryStatusReplayCacheForTesting()
 
-	// Add some old entries manually (simulate aged cache)
+	// Seed the cache with old entries using the new FIFO struct.
 	oldTime := time.Now().Add(-(deliveryStatusReplayCacheTTL + 1*time.Minute))
-
-	// Manually seed the cache with old entries
-	deliveryStatusReplayCacheMutex.Lock()
+	c := deliveryStatusReplayCacheGlobal
+	c.mu.Lock()
 	for i := 0; i < 5; i++ {
-		key := [32]byte{byte(i)}
-		deliveryStatusReplayCache[key] = oldTime
+		entry := &dsReplayCacheEntry{key: [32]byte{byte(i)}, addedAt: oldTime}
+		elem := c.fifo.PushBack(entry)
+		c.m[entry.key] = elem
 	}
-	initialSize := len(deliveryStatusReplayCache)
-	deliveryStatusReplayCacheMutex.Unlock()
+	initialSize := len(c.m)
+	c.mu.Unlock()
 
-	// Add a new valid message, which will trigger cleanup
+	// Add a new valid message — this triggers the front-of-list TTL eviction.
 	validTime := time.Now()
 	msg := NewDeliveryStatusMessage(50000, validTime)
 	data, err := msg.MarshalBinary()
@@ -199,9 +183,9 @@ func TestM4_ReplayCacheExpiresOldEntries(t *testing.T) {
 	require.NoError(t, err, "new message should be accepted")
 
 	// Check that old entries were cleaned up
-	deliveryStatusReplayCacheMutex.Lock()
-	finalSize := len(deliveryStatusReplayCache)
-	deliveryStatusReplayCacheMutex.Unlock()
+	c.mu.Lock()
+	finalSize := len(c.m)
+	c.mu.Unlock()
 
 	// Should have removed old entries and added the new one
 	assert.Less(t, finalSize, initialSize, "old entries should be expired and removed")
@@ -213,10 +197,7 @@ func TestM4_ReplayCacheExpiresOldEntries(t *testing.T) {
 //
 // Run with: go test -race -run TestM4_RaceDetectorValidatesReplayCache
 func TestM4_RaceDetectorValidatesReplayCache(t *testing.T) {
-	// Clear the replay cache
-	deliveryStatusReplayCacheMutex.Lock()
-	deliveryStatusReplayCache = make(map[[32]byte]time.Time)
-	deliveryStatusReplayCacheMutex.Unlock()
+	clearDeliveryStatusReplayCacheForTesting()
 
 	const numGoroutines = 50
 	const messagesPerGoroutine = 20
@@ -252,9 +233,10 @@ func TestM4_RaceDetectorValidatesReplayCache(t *testing.T) {
 	wg.Wait()
 
 	// Verify cache is not corrupted and has expected size
-	deliveryStatusReplayCacheMutex.Lock()
-	cacheSize := len(deliveryStatusReplayCache)
-	deliveryStatusReplayCacheMutex.Unlock()
+	c := deliveryStatusReplayCacheGlobal
+	c.mu.Lock()
+	cacheSize := len(c.m)
+	c.mu.Unlock()
 
 	assert.Greater(t, cacheSize, 0, "cache should have entries after concurrent operations")
 	assert.LessOrEqual(t, cacheSize, deliveryStatusReplayCacheCapacity, "cache should be bounded")

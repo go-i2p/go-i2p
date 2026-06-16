@@ -494,7 +494,7 @@ func (e *Endpoint) ensureAssemblerExists(msgID uint32, deliveryType byte) (*frag
 			"original_delivery_type": assembler.deliveryType,
 			"received_delivery_type": deliveryType,
 			"violation_type":         violationType,
-		}).Warn("Rejected duplicate/conflicting first fragment (M-1 fix)")
+		}).Debug("Rejected duplicate/conflicting first fragment (M-1 fix)")
 		return nil, oops.Errorf("duplicate or conflicting first fragment for message ID %d: original=%d, received=%d",
 			msgID, assembler.deliveryType, deliveryType)
 	}
@@ -519,7 +519,7 @@ func (e *Endpoint) createAssemblerWithCapEnforcement(msgID uint32, deliveryType 
 			"msgID": msgID,
 			"count": len(e.fragments),
 			"max":   maxConcurrentAssemblies,
-		}).Warn("fragment assembly limit reached, evicting oldest")
+		}).Debug("fragment assembly limit reached, evicting oldest")
 		e.evictOldestFragment()
 	}
 
@@ -879,6 +879,6 @@ func (e *Endpoint) removeStaleFragments() {
 			"tunnel_id": e.tunnelID,
 			"removed":   removedCount,
 			"remaining": len(e.fragments),
-		}).Info("Cleaned up stale fragments")
+		}).Debug("Cleaned up stale fragments")
 	}
 }
