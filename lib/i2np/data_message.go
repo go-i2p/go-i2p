@@ -7,6 +7,10 @@ import (
 	"github.com/samber/oops"
 )
 
+// MaxI2NPMessageSize is the maximum size for an I2NP message payload.
+// Per I2P specification, messages are typically limited to 32 KB.
+const MaxI2NPMessageSize = 32 * 1024 // 32 KB
+
 // DataMessage represents an I2NP Data message
 // Moved from: messages.go
 type DataMessage struct {
@@ -72,7 +76,19 @@ func (d *DataMessage) UnmarshalBinary(data []byte) error {
 		return oops.Errorf("data message payload too short: %d bytes", len(messageData))
 	}
 
-	d.PayloadLength = int(binary.BigEndian.Uint32(messageData[0:4]))
+	// Read payload length as uint32 to prevent overflow on 32-bit platforms
+	payloadLengthRaw := binary.BigEndian.Uint32(messageData[0:4])
+	if payloadLengthRaw > MaxI2NPMessageSize {
+		log.WithFields(logger.Fields{
+			"at":           "DataMessage.UnmarshalBinary",
+			"payload_size": payloadLengthRaw,
+			"max_allowed":  MaxI2NPMessageSize,
+			"reason":       "payload size exceeds maximum",
+		}).Error("Data message payload exceeds maximum size")
+		return oops.Errorf("data message payload size %d exceeds maximum %d", payloadLengthRaw, MaxI2NPMessageSize)
+	}
+
+	d.PayloadLength = int(payloadLengthRaw)
 	if len(messageData) < 4+d.PayloadLength {
 		log.WithFields(logger.Fields{
 			"at":       "DataMessage.UnmarshalBinary",
