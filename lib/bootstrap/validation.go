@@ -583,3 +583,26 @@ func verifySignatureBytes(fullBytes []byte, expectedSigSize int, identity *route
 
 	return nil
 }
+
+// filterValidRouterInfos is a shared helper that validates all RouterInfos and returns only valid ones.
+// It collects and logs statistics about the validation process.
+// Parameters:
+//   - routerInfos: slice of RouterInfos to validate
+//   - caller: caller identification string (e.g., "(ReseedBootstrap) validateAndFilterRouterInfos")
+//   - source: source identification string (e.g., server URL or file type)
+//   - logSource: source string for logging summary (e.g., "reseed_bootstrap" or "file_bootstrap_routerinfo")
+func filterValidRouterInfos(routerInfos []router_info.RouterInfo, caller, source, logSource string) []router_info.RouterInfo {
+	stats := NewValidationStats()
+	validRouterInfos := make([]router_info.RouterInfo, 0, len(routerInfos))
+
+	for _, ri := range routerInfos {
+		if classifyRouterInfo(ri, stats, caller, source) {
+			validRouterInfos = append(validRouterInfos, ri)
+		}
+	}
+
+	stats.LogSummary(logSource)
+	logInvalidRouterInfos(stats, caller, source)
+
+	return validRouterInfos
+}

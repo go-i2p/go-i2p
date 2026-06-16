@@ -2,9 +2,6 @@ package netdb
 
 import (
 	common "github.com/go-i2p/common/data"
-	"github.com/go-i2p/common/lease_set"
-	"github.com/go-i2p/common/router_info"
-	"github.com/go-i2p/go-i2p/lib/bootstrap"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
@@ -18,32 +15,23 @@ import (
 // - Routers also need LeaseSet storage/retrieval for direct operations (floodfill, detached lookups, etc.)
 // - Prevents accidental mixing of router-wide and client-specific operations
 // - Enables future optimizations specific to router use cases
+//
+// RouterNetDB embeds *StdNetDB to inherit all non-overridden methods,
+// only overriding Store and StoreFromPeer to add custom dispatch logic.
 type RouterNetDB struct {
-	db *StdNetDB
+	*StdNetDB
 }
 
 // NewRouterNetDB creates a new router-focused network database view.
-// It wraps an existing StdNetDB and exposes only RouterInfo-related operations.
+// It wraps an existing StdNetDB and exposes all database operations.
 func NewRouterNetDB(db *StdNetDB) *RouterNetDB {
 	log.WithFields(logger.Fields{
 		"at":     "NewRouterNetDB",
 		"reason": "initialization",
 	}).Debug("creating new RouterNetDB")
 	return &RouterNetDB{
-		db: db,
+		StdNetDB: db,
 	}
-}
-
-// GetRouterInfo retrieves a RouterInfo by its hash.
-// Returns a channel that yields the RouterInfo if found, nil if not found.
-func (r *RouterNetDB) GetRouterInfo(hash common.Hash) chan router_info.RouterInfo {
-	return r.db.GetRouterInfo(hash)
-}
-
-// GetAllRouterInfos retrieves all RouterInfo entries from the database.
-// Returns a slice of RouterInfo entries ordered by hash.
-func (r *RouterNetDB) GetAllRouterInfos() []router_info.RouterInfo {
-	return r.db.GetAllRouterInfos()
 }
 
 // Store stores a network database entry, dispatching to the appropriate handler
@@ -56,15 +44,15 @@ func (r *RouterNetDB) GetAllRouterInfos() []router_info.RouterInfo {
 func (r *RouterNetDB) Store(key common.Hash, data []byte, dataType byte) error {
 	switch dataType {
 	case 0:
-		return r.db.StoreRouterInfoFromMessage(key, data, dataType)
+		return r.StdNetDB.StoreRouterInfoFromMessage(key, data, dataType)
 	case 1:
-		return r.db.StoreLeaseSet(key, data, dataType)
+		return r.StdNetDB.StoreLeaseSet(key, data, dataType)
 	case 3:
-		return r.db.StoreLeaseSet2(key, data, dataType)
+		return r.StdNetDB.StoreLeaseSet2(key, data, dataType)
 	case 5:
-		return r.db.StoreEncryptedLeaseSet(key, data, dataType)
+		return r.StdNetDB.StoreEncryptedLeaseSet(key, data, dataType)
 	case 7:
-		return r.db.StoreMetaLeaseSet(key, data, dataType)
+		return r.StdNetDB.StoreMetaLeaseSet(key, data, dataType)
 	default:
 		return oops.Errorf("unknown database store type: %d", dataType)
 	}
@@ -75,133 +63,8 @@ func (r *RouterNetDB) Store(key common.Hash, data []byte, dataType byte) error {
 func (r *RouterNetDB) StoreFromPeer(key common.Hash, data []byte, dataType byte, source common.Hash) error {
 	switch dataType {
 	case 0:
-		return r.db.StoreRouterInfoFromMessageWithSource(key, data, dataType, source)
+		return r.StdNetDB.StoreRouterInfoFromMessageWithSource(key, data, dataType, source)
 	default:
 		return r.Store(key, data, dataType)
 	}
-}
-
-// StoreRouterInfoFromMessage stores a RouterInfo entry in the database from an I2NP DatabaseStore message.
-// key is the router identity hash, data is the serialized RouterInfo,
-// and dataType should be 0 for RouterInfo.
-func (r *RouterNetDB) StoreRouterInfoFromMessage(key common.Hash, data []byte, dataType byte) error {
-	return r.db.StoreRouterInfoFromMessage(key, data, dataType)
-}
-
-// StoreRouterInfoFromMessageWithSource stores a RouterInfo from I2NP DatabaseStore
-// and records the source peer for admission fairness.
-func (r *RouterNetDB) StoreRouterInfoFromMessageWithSource(key common.Hash, data []byte, dataType byte, source common.Hash) error {
-	return r.db.StoreRouterInfoFromMessageWithSource(key, data, dataType, source)
-}
-
-// StoreRouterInfo stores a RouterInfo locally, satisfying the NetworkDatabase interface.
-// It delegates to the underlying StdNetDB.StoreRouterInfo.
-func (r *RouterNetDB) StoreRouterInfo(ri router_info.RouterInfo) {
-	r.db.StoreRouterInfo(ri)
-}
-
-// GetRouterInfoBytes retrieves raw RouterInfo data by its hash.
-// Returns the serialized RouterInfo bytes and any error encountered.
-func (r *RouterNetDB) GetRouterInfoBytes(hash common.Hash) ([]byte, error) {
-	return r.db.GetRouterInfoBytes(hash)
-}
-
-// GetRouterInfoCount returns the number of RouterInfo entries currently stored.
-func (r *RouterNetDB) GetRouterInfoCount() int {
-	return r.db.GetRouterInfoCount()
-}
-
-// SelectPeers selects peer RouterInfos for tunnel building based on various criteria.
-// Returns a slice of RouterInfo entries suitable for tunnel construction.
-func (r *RouterNetDB) SelectPeers(count int, exclude []common.Hash) ([]router_info.RouterInfo, error) {
-	return r.db.SelectPeers(count, exclude)
-}
-
-// SelectFloodfillRouters selects the closest floodfill routers to a target hash.
-// Used for LeaseSet and RouterInfo distribution via the DHT.
-func (r *RouterNetDB) SelectFloodfillRouters(targetHash common.Hash, count int) ([]router_info.RouterInfo, error) {
-	return r.db.SelectFloodfillRouters(targetHash, count)
-}
-
-// Reseed attempts to populate the database with RouterInfo entries using a bootstrap instance.
-// It continues until minRouters number of entries are obtained.
-func (r *RouterNetDB) Reseed(b bootstrap.Bootstrap, minRouters int) error {
-	return r.db.Reseed(b, minRouters)
-}
-
-// Size returns the number of RouterInfo entries in the database.
-func (r *RouterNetDB) Size() int {
-	return r.db.Size()
-}
-
-// RecalculateSize recalculates the cached size of the network database.
-func (r *RouterNetDB) RecalculateSize() error {
-	return r.db.RecalculateSize()
-}
-
-// Ensure verifies that the underlying database resources exist.
-// This should be called during initialization.
-func (r *RouterNetDB) Ensure() error {
-	return r.db.Ensure()
-}
-
-// Path returns the filesystem path where the database is stored.
-func (r *RouterNetDB) Path() string {
-	return r.db.Path()
-}
-
-// ======================================================================
-// LeaseSet Operations (for Direct Router Database Operations)
-// These handle LeaseSets for floodfill, detached lookups, and direct stores
-// ======================================================================
-
-// GetLeaseSet retrieves a LeaseSet by its hash for direct router operations.
-// Returns a channel that yields the LeaseSet if found, nil if not found or expired.
-func (r *RouterNetDB) GetLeaseSet(hash common.Hash) chan lease_set.LeaseSet {
-	return r.db.GetLeaseSet(hash)
-}
-
-// GetLeaseSetBytes retrieves raw LeaseSet data by its hash for direct router operations.
-// Returns the serialized LeaseSet bytes and any error encountered.
-func (r *RouterNetDB) GetLeaseSetBytes(hash common.Hash) ([]byte, error) {
-	return r.db.GetLeaseSetBytes(hash)
-}
-
-// GetLeaseSet2Bytes retrieves raw LeaseSet2 data by its hash for direct router operations.
-// Returns the serialized LeaseSet2 bytes and any error encountered.
-func (r *RouterNetDB) GetLeaseSet2Bytes(hash common.Hash) ([]byte, error) {
-	return r.db.GetLeaseSet2Bytes(hash)
-}
-
-// StoreLeaseSet stores a LeaseSet in the database from direct router operations.
-// key is the destination hash, data is the serialized LeaseSet,
-// and dataType indicates the LeaseSet type (1 for standard LeaseSet).
-func (r *RouterNetDB) StoreLeaseSet(key common.Hash, data []byte, dataType byte) error {
-	return r.db.StoreLeaseSet(key, data, dataType)
-}
-
-// StoreLeaseSet2 stores a LeaseSet2 in the database from direct router operations.
-// key is the destination hash, data is the serialized LeaseSet2,
-// and dataType should be 3 for LeaseSet2.
-func (r *RouterNetDB) StoreLeaseSet2(key common.Hash, data []byte, dataType byte) error {
-	return r.db.StoreLeaseSet2(key, data, dataType)
-}
-
-// StoreEncryptedLeaseSet stores an EncryptedLeaseSet in the database from direct router operations.
-// key is the blinded destination hash, data is the serialized EncryptedLeaseSet,
-// and dataType should be 5 for EncryptedLeaseSet.
-func (r *RouterNetDB) StoreEncryptedLeaseSet(key common.Hash, data []byte, dataType byte) error {
-	return r.db.StoreEncryptedLeaseSet(key, data, dataType)
-}
-
-// StoreMetaLeaseSet stores a MetaLeaseSet in the database from direct router operations.
-// key is the destination hash, data is the serialized MetaLeaseSet,
-// and dataType should be 7 for MetaLeaseSet.
-func (r *RouterNetDB) StoreMetaLeaseSet(key common.Hash, data []byte, dataType byte) error {
-	return r.db.StoreMetaLeaseSet(key, data, dataType)
-}
-
-// GetLeaseSetCount returns the number of LeaseSets currently stored.
-func (r *RouterNetDB) GetLeaseSetCount() int {
-	return r.db.GetLeaseSetCount()
 }

@@ -316,20 +316,7 @@ func (fb *FileBootstrap) finalizeRouterInfos(routerInfos []router_info.RouterInf
 }
 
 // validateAndFilterRouterInfos validates all RouterInfos and returns only valid ones.
-// It also collects and logs statistics about the validation process.
+// It delegates to the shared filterValidRouterInfos function.
 func (fb *FileBootstrap) validateAndFilterRouterInfos(routerInfos []router_info.RouterInfo, fileType string) []router_info.RouterInfo {
-	const caller = "(FileBootstrap) validateAndFilterRouterInfos"
-	stats := NewValidationStats()
-	validRouterInfos := make([]router_info.RouterInfo, 0, len(routerInfos))
-
-	for _, ri := range routerInfos {
-		if classifyRouterInfo(ri, stats, caller, fileType) {
-			validRouterInfos = append(validRouterInfos, ri)
-		}
-	}
-
-	stats.LogSummary(fmt.Sprintf("file_bootstrap_%s", fileType))
-	logInvalidRouterInfos(stats, caller, fileType)
-
-	return validRouterInfos
+	return filterValidRouterInfos(routerInfos, "(FileBootstrap) validateAndFilterRouterInfos", fileType, fmt.Sprintf("file_bootstrap_%s", fileType))
 }
