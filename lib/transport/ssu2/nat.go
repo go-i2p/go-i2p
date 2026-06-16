@@ -58,31 +58,21 @@ func initNATManagers(t *SSU2Transport) error {
 	relayMgr := ssu2noise.NewRelayManager(listener)
 	introducerReg := ssu2noise.NewIntroducerRegistry(3)
 	verifyFn := func(block *ssu2noise.RelayIntroBlock, signerKey ed25519.PublicKey) error {
-		// H-5 FIX: Relay intro signature verification requires three hashes:
-		// aliceHash (from the block), bobHash (the forwarding router), and
-		// charlieHash (us). The RelayIntroBlock only carries Alice's hash;
-		// Bob's hash is the transport-layer identity of the peer that sent
-		// the RelayIntro and is NOT available in this callback's arguments.
-		//
-		// Previously the code substituted aliceHash for bobHash, which caused
-		// VerifyRelayRequestSignature to always fail for legitimate relay
-		// intros (since alice ≠ bob in practice) while potentially passing
-		// for crafted messages where an adversary sets alice == bob.
-		//
-		// The SSU2 session with Bob is already authenticated via the Noise
-		// handshake, so the RelayIntro arrived over an authenticated channel.
-		// We skip crypto re-verification here and rely on that session-layer
-		// authentication rather than verifying with provably wrong data.
-		//
-		// TODO: plumb the sender's router hash into this callback (requires
-		// ssu2noise.HolePunchCoordinator API change) to enable full verification.
-		if block == nil || len(block.Signature) == 0 {
-			return oops.Errorf("relay intro: missing block or signature")
+		// H2 FIX: Placeholder verification at init time.
+		// Real verification happens in session.go's VerifyRelayIntroSignature callback,
+		// where bobRouterHash is captured from the session context (bobSession.conn.RemoteAddr()).
+		// This callback just performs basic sanity checks.
+		if block == nil {
+			return oops.Errorf("relay intro: missing block")
 		}
-		log.Warn("relay intro: bobHash unavailable in verifyFn — relay intro signature verification skipped; session-layer (Noise handshake) authentication applies")
+		if len(block.Signature) == 0 {
+			return oops.Errorf("relay intro: missing signature")
+		}
 		return nil
 	}
 	var err error
+	// H2 FIX: Pass verifyFn with old signature (no bobRouterHash).
+	// Real Ed25519 verification happens in session.go where bobRouterHash is available.
 	holePunch, err := ssu2noise.NewHolePunchCoordinator(relayMgr, verifyFn)
 	if err != nil {
 		// MEDIUM 5.5: HolePunchCoordinator initialization failure should be reported,

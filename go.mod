@@ -26,6 +26,10 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
+replace github.com/go-i2p/path => ../path
+
+replace github.com/go-i2p/go-noise => ../go-noise
+
 require (
 	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
