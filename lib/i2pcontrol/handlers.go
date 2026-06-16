@@ -843,17 +843,23 @@ func (h *NetworkSettingHandler) applySettingChange(setting string, value interfa
 }
 
 // normalizeSettingValue validates the type and range of a setting value before
-// validatePortSetting coerces value to an integer and validates it as a valid
-// TCP/UDP port number in the range [1, 65535].
-func validatePortSetting(setting string, value interface{}) (interface{}, error) {
-	port, err := coerceInt(value)
+// coerceAndValidateInt coerces value to an integer and validates it is within [min, max].
+// Returns the validated integer or an error with the given setting name for context.
+func coerceAndValidateInt(setting string, value interface{}, min, max int) (interface{}, error) {
+	v, err := coerceInt(value)
 	if err != nil {
 		return nil, oops.Errorf("%s must be an integer: %w", setting, err)
 	}
-	if port < 1 || port > 65535 {
-		return nil, oops.Errorf("%s must be in [1,65535], got %d", setting, port)
+	if v < min || v > max {
+		return nil, oops.Errorf("%s must be in [%d,%d], got %d", setting, min, max, v)
 	}
-	return port, nil
+	return v, nil
+}
+
+// validatePortSetting coerces value to an integer and validates it as a valid
+// TCP/UDP port number in the range [1, 65535].
+func validatePortSetting(setting string, value interface{}) (interface{}, error) {
+	return coerceAndValidateInt(setting, value, 1, 65535)
 }
 
 // validateHostnameSetting checks that value is a string containing a valid
@@ -871,26 +877,12 @@ func validateHostnameSetting(setting string, value interface{}) (interface{}, er
 
 // validateBandwidthSetting coerces value to a non-negative integer bandwidth.
 func validateBandwidthSetting(setting string, value interface{}) (interface{}, error) {
-	bw, err := coerceInt(value)
-	if err != nil {
-		return nil, oops.Errorf("%s must be a non-negative integer: %w", setting, err)
-	}
-	if bw < 0 {
-		return nil, oops.Errorf("%s must be non-negative, got %d", setting, bw)
-	}
-	return bw, nil
+	return coerceAndValidateInt(setting, value, 0, 2147483647) // max int32
 }
 
 // validateSharePercentage validates the bandwidth share percentage (0–100).
 func validateSharePercentage(setting string, value interface{}) (interface{}, error) {
-	v, err := coerceInt(value)
-	if err != nil {
-		return nil, oops.Errorf("%s must be an integer: %w", setting, err)
-	}
-	if v < 0 || v > 100 {
-		return nil, oops.Errorf("%s must be in [0,100], got %d", setting, v)
-	}
-	return v, nil
+	return coerceAndValidateInt(setting, value, 0, 100)
 }
 
 // validateBoolSetting coerces value to a boolean.

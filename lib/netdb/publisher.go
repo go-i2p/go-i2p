@@ -157,44 +157,36 @@ func (p *Publisher) Stop() {
 	log.WithFields(logger.Fields{"at": "Stop"}).Info("Database publisher stopped")
 }
 
-// routerInfoPublishingLoop periodically publishes our RouterInfo
-func (p *Publisher) routerInfoPublishingLoop() {
-	defer p.wg.Done()
-
-	ticker := time.NewTicker(p.routerInfoInterval)
+// periodicLoop runs a periodic action at the specified interval until context is cancelled.
+// It calls the action immediately on start, then again after each tick.
+// The caller should call wg.Done() to signal completion (via defer in the goroutine).
+func (p *Publisher) periodicLoop(interval time.Duration, action func()) {
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
-	// Publish immediately on start
-	p.publishOurRouterInfo()
+	// Execute action immediately on start
+	action()
 
 	for {
 		select {
 		case <-p.ctx.Done():
 			return
 		case <-ticker.C:
-			p.publishOurRouterInfo()
+			action()
 		}
 	}
+}
+
+// routerInfoPublishingLoop periodically publishes our RouterInfo
+func (p *Publisher) routerInfoPublishingLoop() {
+	defer p.wg.Done()
+	p.periodicLoop(p.routerInfoInterval, p.publishOurRouterInfo)
 }
 
 // leaseSetPublishingLoop periodically publishes all LeaseSets
 func (p *Publisher) leaseSetPublishingLoop() {
 	defer p.wg.Done()
-
-	ticker := time.NewTicker(p.leaseSetInterval)
-	defer ticker.Stop()
-
-	// Publish immediately on start
-	p.publishAllLeaseSets()
-
-	for {
-		select {
-		case <-p.ctx.Done():
-			return
-		case <-ticker.C:
-			p.publishAllLeaseSets()
-		}
-	}
+	p.periodicLoop(p.leaseSetInterval, p.publishAllLeaseSets)
 }
 
 // publishOurRouterInfo publishes our local RouterInfo to floodfill routers.

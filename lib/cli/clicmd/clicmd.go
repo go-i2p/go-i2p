@@ -2,7 +2,7 @@ package clicmd
 
 import (
 	"fmt"
-	"strings"
+	"net"
 
 	"github.com/go-i2p/i2p-control/lib"
 	"github.com/go-i2p/logger"
@@ -67,14 +67,15 @@ func executeI2PControl(cmd *cobra.Command, args []string) error {
 
 		if hostVal == "" || portVal == "" {
 			if address != "" {
-				// Parse address from config (format: "host:port")
-				parts := strings.Split(address, ":")
-				if len(parts) == 2 {
+				// Parse address from config (format: "host:port" or "[::1]:port" for IPv6)
+				// Use net.SplitHostPort to properly handle both IPv4 and IPv6 addresses
+				host, port, err := net.SplitHostPort(address)
+				if err == nil {
 					if hostVal == "" {
-						hostVal = parts[0]
+						hostVal = host
 					}
 					if portVal == "" {
-						portVal = parts[1]
+						portVal = port
 					}
 				}
 			}

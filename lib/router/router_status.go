@@ -3,9 +3,25 @@ package router
 import (
 	"net"
 
+	"github.com/go-i2p/go-i2p/lib/transport"
 	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
 	ssu2 "github.com/go-i2p/go-i2p/lib/transport/ssu2"
 )
+
+// findTransport returns the first transport of the specified type, or nil if not found.
+// This consolidates the common pattern: get muxer, nil check, iterate transports, type-assert.
+func (r *Router) findTransport(typeCheck func(transport.Transport) bool) transport.Transport {
+	muxer := r.transports
+	if muxer == nil {
+		return nil
+	}
+	for _, t := range muxer.GetTransports() {
+		if typeCheck(t) {
+			return t
+		}
+	}
+	return nil
+}
 
 // GetActiveSessionCount returns the number of active transport sessions.
 // Thread-safe access to the activeSessions map.
@@ -18,14 +34,12 @@ func (r *Router) GetActiveSessionCount() int {
 // GetNTCP2SessionCount returns the number of active NTCP2 (TCP) sessions.
 // Returns 0 if the NTCP2 transport is not available.
 func (r *Router) GetNTCP2SessionCount() int {
-	muxer := r.transports
-	if muxer == nil {
-		return 0
-	}
-	for _, t := range muxer.GetTransports() {
-		if ntcp2Transport, ok := t.(*ntcp.NTCP2Transport); ok {
-			return int(ntcp2Transport.GetSessionCount())
-		}
+	t := r.findTransport(func(t transport.Transport) bool {
+		_, ok := t.(*ntcp.NTCP2Transport)
+		return ok
+	})
+	if nt, ok := t.(*ntcp.NTCP2Transport); ok {
+		return int(nt.GetSessionCount())
 	}
 	return 0
 }
@@ -33,14 +47,12 @@ func (r *Router) GetNTCP2SessionCount() int {
 // GetSSU2SessionCount returns the number of active SSU2 (UDP) sessions.
 // Returns 0 if the SSU2 transport is not available.
 func (r *Router) GetSSU2SessionCount() int {
-	muxer := r.transports
-	if muxer == nil {
-		return 0
-	}
-	for _, t := range muxer.GetTransports() {
-		if ssu2Transport, ok := t.(*ssu2.SSU2Transport); ok {
-			return int(ssu2Transport.GetSessionCount())
-		}
+	t := r.findTransport(func(t transport.Transport) bool {
+		_, ok := t.(*ssu2.SSU2Transport)
+		return ok
+	})
+	if st, ok := t.(*ssu2.SSU2Transport); ok {
+		return int(st.GetSessionCount())
 	}
 	return 0
 }
@@ -67,14 +79,12 @@ func (r *Router) GetTransportAddr() net.Addr {
 // GetSSU2Addr returns the listening UDP address of the SSU2 transport.
 // Returns nil if SSU2 is not available or not yet bound.
 func (r *Router) GetSSU2Addr() net.Addr {
-	muxer := r.transports
-	if muxer == nil {
-		return nil
-	}
-	for _, t := range muxer.GetTransports() {
-		if _, ok := t.(*ssu2.SSU2Transport); ok {
-			return t.Addr()
-		}
+	t := r.findTransport(func(t transport.Transport) bool {
+		_, ok := t.(*ssu2.SSU2Transport)
+		return ok
+	})
+	if t != nil {
+		return t.Addr()
 	}
 	return nil
 }

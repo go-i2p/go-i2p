@@ -271,26 +271,33 @@ func (rt *RouterTimestamper) calculateSleepDuration(lastFailed bool) time.Durati
 	return sleepTime
 }
 
-// notifySyncFailure notifies ExtendedUpdateListener implementations of a sync failure.
-func (rt *RouterTimestamper) notifySyncFailure(consecutiveFails int) {
+// forEachListener acquires the mutex, calls the provided function for each listener,
+// then releases the mutex. This consolidates the lock/iterate/unlock pattern
+// used by multiple notification methods.
+func (rt *RouterTimestamper) forEachListener(fn func(UpdateListener)) {
 	rt.mutex.Lock()
 	defer rt.mutex.Unlock()
 	for _, listener := range rt.listeners {
+		fn(listener)
+	}
+}
+
+// notifySyncFailure notifies ExtendedUpdateListener implementations of a sync failure.
+func (rt *RouterTimestamper) notifySyncFailure(consecutiveFails int) {
+	rt.forEachListener(func(listener UpdateListener) {
 		if ext, ok := listener.(ExtendedUpdateListener); ok {
 			ext.OnSyncFailure(consecutiveFails)
 		}
-	}
+	})
 }
 
 // notifySyncLost notifies ExtendedUpdateListener implementations that sync was lost.
 func (rt *RouterTimestamper) notifySyncLost() {
-	rt.mutex.Lock()
-	defer rt.mutex.Unlock()
-	for _, listener := range rt.listeners {
+	rt.forEachListener(func(listener UpdateListener) {
 		if ext, ok := listener.(ExtendedUpdateListener); ok {
 			ext.OnSyncLost()
 		}
-	}
+	})
 }
 
 // waitWithCancellation waits for the specified duration or until cancellation is requested.
@@ -501,32 +508,31 @@ func (rt *RouterTimestamper) setSyncedStatus(synced bool) {
 // to prevent clock bias accumulation in the I2P network.
 func (rt *RouterTimestamper) stampTime(now time.Time, stratum uint8) {
 	rt.mutex.Lock()
-	defer rt.mutex.Unlock()
-
 	// Round to nearest second per NTCP2 spec for RouterInfo timestamps
 	roundedNow := now.Round(time.Second)
-
 	// Store the time offset for GetCurrentTime
 	rt.timeOffset = time.Until(roundedNow)
+	rt.mutex.Unlock()
 
-	for _, listener := range rt.listeners {
+	rt.forEachListener(func(listener UpdateListener) {
 		listener.SetNow(roundedNow, stratum)
-	}
+	})
 }
 
 // notifyListenersOnSuccess notifies ExtendedUpdateListener implementations
 // that synchronization succeeded.
 func (rt *RouterTimestamper) notifyListenersOnSuccess() {
 	rt.mutex.Lock()
-	defer rt.mutex.Unlock()
-	if !rt.initialized {
+	initialized := rt.initialized
+	rt.mutex.Unlock()
+	if !initialized {
 		return
 	}
-	for _, listener := range rt.listeners {
+	rt.forEachListener(func(listener UpdateListener) {
 		if ext, ok := listener.(ExtendedUpdateListener); ok {
 			ext.OnInitialized()
 		}
-	}
+	})
 }
 
 // updateConfig refreshes RouterTimestamper configuration with current settings.

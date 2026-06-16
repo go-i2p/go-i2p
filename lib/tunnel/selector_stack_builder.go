@@ -1,6 +1,8 @@
 package tunnel
 
-import "github.com/samber/oops"
+import (
+	"github.com/samber/oops"
+)
 
 // PeerSelectorStack provides a fluent builder for composing peer selectors.
 type PeerSelectorStack struct {
@@ -29,64 +31,44 @@ func FromNetDB(db NetDBSelector) *PeerSelectorStack {
 	return &PeerSelectorStack{selector: adapter}
 }
 
-// WithFilter adds a filtering layer to the stack.
-func (s *PeerSelectorStack) WithFilter(filters ...PeerFilter) *PeerSelectorStack {
+// addSelector is a generic builder helper that creates a new selector layer,
+// handles errors, and updates the stack with the result.
+// Returns the updated stack (with error set if fn fails).
+func (s *PeerSelectorStack) addSelector(name string, fn func(PeerSelector) (PeerSelector, error)) *PeerSelectorStack {
 	if s.err != nil {
 		return s
 	}
 
-	filtered, err := NewFilteringPeerSelector(
-		s.selector,
-		WithFilters(filters...),
-	)
+	newSel, err := fn(s.selector)
 	if err != nil {
-		log.WithError(err).Error("WithFilter: failed to create filtering peer selector")
+		log.WithError(err).Errorf("addSelector: failed to create %s peer selector", name)
 		s.err = err
 		return s
 	}
 
-	s.selector = filtered
+	s.selector = newSel
 	return s
+}
+
+// WithFilter adds a filtering layer to the stack.
+func (s *PeerSelectorStack) WithFilter(filters ...PeerFilter) *PeerSelectorStack {
+	return s.addSelector("filtering", func(sel PeerSelector) (PeerSelector, error) {
+		return NewFilteringPeerSelector(sel, WithFilters(filters...))
+	})
 }
 
 // WithScoring adds a scoring layer to the stack.
 func (s *PeerSelectorStack) WithScoring(scorers ...PeerScorer) *PeerSelectorStack {
-	if s.err != nil {
-		return s
-	}
-
-	scoring, err := NewScoringPeerSelector(
-		s.selector,
-		WithScorers(scorers...),
-	)
-	if err != nil {
-		log.WithError(err).Error("WithScoring: failed to create scoring peer selector")
-		s.err = err
-		return s
-	}
-
-	s.selector = scoring
-	return s
+	return s.addSelector("scoring", func(sel PeerSelector) (PeerSelector, error) {
+		return NewScoringPeerSelector(sel, WithScorers(scorers...))
+	})
 }
 
 // WithThreshold adds scoring with a minimum threshold.
 func (s *PeerSelectorStack) WithThreshold(threshold float64, scorers ...PeerScorer) *PeerSelectorStack {
-	if s.err != nil {
-		return s
-	}
-
-	scoring, err := NewScoringPeerSelector(
-		s.selector,
-		WithScorers(scorers...),
-		WithScoreThreshold(threshold),
-	)
-	if err != nil {
-		s.err = err
-		return s
-	}
-
-	s.selector = scoring
-	return s
+	return s.addSelector("threshold scoring", func(sel PeerSelector) (PeerSelector, error) {
+		return NewScoringPeerSelector(sel, WithScorers(scorers...), WithScoreThreshold(threshold))
+	})
 }
 
 // Build returns the final composed selector, or an error if any step failed.

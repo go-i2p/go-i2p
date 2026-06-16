@@ -220,57 +220,88 @@ func (e *Entry) clearFields() {
 	e.MetaLeaseSet = nil
 }
 
-// processRouterInfoData processes RouterInfo data and sets the entry.
-func (e *Entry) processRouterInfoData(data []byte) error {
-	ri, _, err := router_info.ReadRouterInfo(data)
+// processAndAssign is a generic helper for parsing entry data and assigning to the entry.
+// It centralizes error handling, field clearing, and assignment for all entry types.
+// The parser function should return the parsed data and error.
+// The assigner function should assign the parsed data to the appropriate entry field.
+func (e *Entry) processAndAssign(typeName string, data []byte,
+	parser func([]byte) (interface{}, error),
+	assigner func(interface{})) error {
+	val, err := parser(data)
 	if err != nil {
-		return oops.Errorf("failed to parse RouterInfo: %w", err)
+		return oops.Errorf("failed to parse %s: %w", typeName, err)
 	}
 	e.clearFields()
-	e.RouterInfo = &ri
+	assigner(val)
 	return nil
+}
+
+// processRouterInfoData processes RouterInfo data and sets the entry.
+func (e *Entry) processRouterInfoData(data []byte) error {
+	return e.processAndAssign("RouterInfo", data,
+		func(data []byte) (interface{}, error) {
+			ri, _, err := router_info.ReadRouterInfo(data)
+			return ri, err
+		},
+		func(val interface{}) {
+			if ri, ok := val.(router_info.RouterInfo); ok {
+				e.RouterInfo = &ri
+			}
+		})
 }
 
 // processLeaseSetData processes LeaseSet data and sets the entry.
 func (e *Entry) processLeaseSetData(data []byte) error {
-	ls, err := lease_set.ReadLeaseSet(data)
-	if err != nil {
-		return oops.Errorf("failed to parse LeaseSet: %w", err)
-	}
-	e.clearFields()
-	e.LeaseSet = &ls
-	return nil
+	return e.processAndAssign("LeaseSet", data,
+		func(data []byte) (interface{}, error) {
+			ls, err := lease_set.ReadLeaseSet(data)
+			return ls, err
+		},
+		func(val interface{}) {
+			if ls, ok := val.(lease_set.LeaseSet); ok {
+				e.LeaseSet = &ls
+			}
+		})
 }
 
 // processLeaseSet2Data processes LeaseSet2 data and sets the entry.
 func (e *Entry) processLeaseSet2Data(data []byte) error {
-	ls2, _, err := lease_set2.ReadLeaseSet2(data)
-	if err != nil {
-		return oops.Errorf("failed to parse LeaseSet2: %w", err)
-	}
-	e.clearFields()
-	e.LeaseSet2 = &ls2
-	return nil
+	return e.processAndAssign("LeaseSet2", data,
+		func(data []byte) (interface{}, error) {
+			ls2, _, err := lease_set2.ReadLeaseSet2(data)
+			return ls2, err
+		},
+		func(val interface{}) {
+			if ls2, ok := val.(lease_set2.LeaseSet2); ok {
+				e.LeaseSet2 = &ls2
+			}
+		})
 }
 
 // processEncryptedLeaseSetData processes EncryptedLeaseSet data and sets the entry.
 func (e *Entry) processEncryptedLeaseSetData(data []byte) error {
-	els, _, err := encrypted_leaseset.ReadEncryptedLeaseSet(data)
-	if err != nil {
-		return oops.Errorf("failed to parse EncryptedLeaseSet: %w", err)
-	}
-	e.clearFields()
-	e.EncryptedLeaseSet = &els
-	return nil
+	return e.processAndAssign("EncryptedLeaseSet", data,
+		func(data []byte) (interface{}, error) {
+			els, _, err := encrypted_leaseset.ReadEncryptedLeaseSet(data)
+			return els, err
+		},
+		func(val interface{}) {
+			if els, ok := val.(encrypted_leaseset.EncryptedLeaseSet); ok {
+				e.EncryptedLeaseSet = &els
+			}
+		})
 }
 
 // processMetaLeaseSetData processes MetaLeaseSet data and sets the entry.
 func (e *Entry) processMetaLeaseSetData(data []byte) error {
-	mls, _, err := meta_leaseset.ReadMetaLeaseSet(data)
-	if err != nil {
-		return oops.Errorf("failed to parse MetaLeaseSet: %w", err)
-	}
-	e.clearFields()
-	e.MetaLeaseSet = &mls
-	return nil
+	return e.processAndAssign("MetaLeaseSet", data,
+		func(data []byte) (interface{}, error) {
+			mls, _, err := meta_leaseset.ReadMetaLeaseSet(data)
+			return mls, err
+		},
+		func(val interface{}) {
+			if mls, ok := val.(meta_leaseset.MetaLeaseSet); ok {
+				e.MetaLeaseSet = &mls
+			}
+		})
 }
