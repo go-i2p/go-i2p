@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/go-i2p/common/base32"
 	common "github.com/go-i2p/common/data"
@@ -471,4 +472,29 @@ func (r *Router) GetLocalRouterIdentityHash() (string, error) {
 	}
 	// Return as base64 (standard encoding used by Java I2P)
 	return base64.StdEncoding.EncodeToString(hash[:]), nil
+}
+
+// startPeriodicTask launches a background goroutine that periodically executes fn
+// on a ticker interval. The goroutine exits when r.ctx is cancelled (Router Stop()).
+// This helper consolidates the common pattern: wg.Add/wg.Done, select on ctx.Done/ticker.C
+func (r *Router) startPeriodicTask(name string, interval time.Duration, fn func()) {
+	r.wg.Add(1)
+	go func() {
+		defer r.wg.Done()
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-r.ctx.Done():
+				return
+			case <-ticker.C:
+				fn()
+			}
+		}
+	}()
+	log.WithFields(logger.Fields{
+		"at":       "startPeriodicTask",
+		"task":     name,
+		"interval": interval,
+	}).Debug("periodic task started")
 }

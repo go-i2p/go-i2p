@@ -16,21 +16,9 @@ const defaultHealthCheckInterval = 60 * time.Second
 // descriptors on Linux). This provides runtime visibility into potential
 // slow resource leaks for a long-running router process.
 func (r *Router) startHealthMonitor() {
-	r.wg.Add(1)
-	go func() {
-		defer r.wg.Done()
-		ticker := time.NewTicker(defaultHealthCheckInterval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-r.ctx.Done():
-				return
-			case <-ticker.C:
-				r.logHealthMetrics()
-			}
-		}
-	}()
-	log.WithField("at", "startHealthMonitor").Debug("health monitor started")
+	r.startPeriodicTask("startHealthMonitor", defaultHealthCheckInterval, func() {
+		r.logHealthMetrics()
+	})
 }
 
 // logHealthMetrics collects and logs current resource usage.

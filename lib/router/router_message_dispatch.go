@@ -194,21 +194,9 @@ func cleanupReadWarnLastByPeer() {
 // Entries not updated for readWarnMaxAge are evicted on each cleanup cycle.
 // Called from mainloop to ensure proper lifecycle management and shutdown.
 func (r *Router) startReadWarnLimiterCleanup() {
-	r.wg.Add(1)
-	go func() {
-		defer r.wg.Done()
-		ticker := time.NewTicker(readWarnCleanupInterval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-r.ctx.Done():
-				return
-			case <-ticker.C:
-				cleanupReadWarnLastByPeer()
-			}
-		}
-	}()
-	log.WithField("at", "startReadWarnLimiterCleanup").Debug("read warn limiter cleanup started")
+	r.startPeriodicTask("startReadWarnLimiterCleanup", readWarnCleanupInterval, func() {
+		cleanupReadWarnLastByPeer()
+	})
 }
 
 // handleIncomingMessage routes the message and logs any routing errors.

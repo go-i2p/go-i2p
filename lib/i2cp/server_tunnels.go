@@ -70,39 +70,68 @@ func (s *Server) getTunnelInfrastructure() (tunnel.BuilderInterface, tunnel.Peer
 	return builder, selector, nil
 }
 
-// createInboundPool creates and starts the inbound tunnel pool.
-func (s *Server) createInboundPool(session *Session, config *SessionConfig, builder tunnel.BuilderInterface, selector tunnel.PeerSelector) (*tunnel.Pool, error) {
-	backup := backupQuantityOrDefault(config.InboundBackupQuantity)
-	poolConfig := buildPoolConfig(config.InboundTunnelCount, backup, config.InboundTunnelLength, config.InboundLengthVariance, true)
+// createPool creates and configures a tunnel pool for the session.
+// For inbound pools (isInbound=true), the created pool is used as the reply provider.
+// For outbound pools (isInbound=false), replyPool should be the inbound pool.
+func (s *Server) createPool(session *Session, config *SessionConfig, builder tunnel.BuilderInterface, selector tunnel.PeerSelector, replyPool *tunnel.Pool, isInbound bool) (*tunnel.Pool, error) {
+	var backup int
+	var count, length, variance int
 
+	if isInbound {
+		backup = backupQuantityOrDefault(config.InboundBackupQuantity)
+		count = config.InboundTunnelCount
+		length = config.InboundTunnelLength
+		variance = config.InboundLengthVariance
+	} else {
+		backup = backupQuantityOrDefault(config.OutboundBackupQuantity)
+		count = config.OutboundTunnelCount
+		length = config.OutboundTunnelLength
+		variance = config.OutboundLengthVariance
+	}
+
+	poolConfig := buildPoolConfig(count, backup, length, variance, isInbound)
 	pool := tunnel.NewTunnelPoolWithConfig(selector, poolConfig)
 	pool.SetTunnelBuilder(builder)
 	s.applySessionPoolRoutingConfig(pool)
-	pool.SetReplyTunnelProvider(makeReplyTunnelProvider(pool))
-	session.SetInboundPool(pool)
 
-	if err := pool.StartMaintenance(); err != nil {
-		return nil, oops.Errorf("failed to start inbound tunnel pool maintenance: %w", err)
+	// Set reply tunnel provider based on pool type
+	if isInbound {
+		pool.SetReplyTunnelProvider(makeReplyTunnelProvider(pool))
+	} else {
+		pool.SetReplyTunnelProvider(makeReplyTunnelProvider(replyPool))
 	}
+
+	// Set pool on session
+	if isInbound {
+		session.SetInboundPool(pool)
+	} else {
+		session.SetOutboundPool(pool)
+	}
+
+	// Start maintenance
+	if err := pool.StartMaintenance(); err != nil {
+		if !isInbound && replyPool != nil {
+			replyPool.Stop()
+		}
+		direction := "inbound"
+		if !isInbound {
+			direction = "outbound"
+		}
+		return pool, oops.Errorf("failed to start %s tunnel pool maintenance: %w", direction, err)
+	}
+
 	return pool, nil
+}
+
+// createInboundPool creates and starts the inbound tunnel pool.
+func (s *Server) createInboundPool(session *Session, config *SessionConfig, builder tunnel.BuilderInterface, selector tunnel.PeerSelector) (*tunnel.Pool, error) {
+	return s.createPool(session, config, builder, selector, nil, true)
 }
 
 // createOutboundPool creates and starts the outbound tunnel pool.
 func (s *Server) createOutboundPool(session *Session, config *SessionConfig, builder tunnel.BuilderInterface, selector tunnel.PeerSelector, inboundPool *tunnel.Pool) error {
-	backup := backupQuantityOrDefault(config.OutboundBackupQuantity)
-	poolConfig := buildPoolConfig(config.OutboundTunnelCount, backup, config.OutboundTunnelLength, config.OutboundLengthVariance, false)
-
-	pool := tunnel.NewTunnelPoolWithConfig(selector, poolConfig)
-	pool.SetTunnelBuilder(builder)
-	s.applySessionPoolRoutingConfig(pool)
-	pool.SetReplyTunnelProvider(makeReplyTunnelProvider(inboundPool))
-	session.SetOutboundPool(pool)
-
-	if err := pool.StartMaintenance(); err != nil {
-		inboundPool.Stop()
-		return oops.Errorf("failed to start outbound tunnel pool maintenance: %w", err)
-	}
-	return nil
+	_, err := s.createPool(session, config, builder, selector, inboundPool, false)
+	return err
 }
 
 // buildPoolConfig constructs a tunnel pool configuration with standard timeouts.
