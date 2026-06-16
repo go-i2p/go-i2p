@@ -692,11 +692,7 @@ func (s *Server) handleHostnameLookup(lookupMsg *HostLookupPayload) *HostReplyPa
 			"requestID": lookupMsg.RequestID,
 			"query":     lookupMsg.Query,
 		}).Debug("hostname_lookup_not_implemented")
-		return &HostReplyPayload{
-			RequestID:   lookupMsg.RequestID,
-			ResultCode:  HostReplyError,
-			Destination: nil,
-		}
+		return newErrorReply(lookupMsg.RequestID, HostReplyError)
 	}
 
 	destBytes, err := s.hostnameResolver.ResolveHostname(lookupMsg.Query)
@@ -707,11 +703,7 @@ func (s *Server) handleHostnameLookup(lookupMsg *HostLookupPayload) *HostReplyPa
 			"hostname":  lookupMsg.Query,
 			"error":     err.Error(),
 		}).Debug("hostname_lookup_failed")
-		return &HostReplyPayload{
-			RequestID:   lookupMsg.RequestID,
-			ResultCode:  HostReplyNotFound,
-			Destination: nil,
-		}
+		return newErrorReply(lookupMsg.RequestID, HostReplyNotFound)
 	}
 
 	log.WithFields(logger.Fields{
@@ -734,11 +726,7 @@ func handleUnknownLookupType(lookupMsg *HostLookupPayload) *HostReplyPayload {
 		"requestID":  lookupMsg.RequestID,
 		"lookupType": lookupMsg.LookupType,
 	}).Warn("unknown_lookup_type")
-	return &HostReplyPayload{
-		RequestID:   lookupMsg.RequestID,
-		ResultCode:  HostReplyError,
-		Destination: nil,
-	}
+	return newErrorReply(lookupMsg.RequestID, HostReplyError)
 }
 
 // buildHostReplyMessage constructs the host reply message from payload.

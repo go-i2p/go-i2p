@@ -311,8 +311,8 @@ func collectUniqueRouterInfos(results []ReseedResult) map[string]router_info.Rou
 
 	for _, r := range results {
 		for _, ri := range r.RouterInfos {
-			hash := routerInfoHash(ri)
-			if hash == "" {
+			hash, ok := validRouterInfoHash(ri)
+			if !ok {
 				continue // skip RouterInfos with broken identity hashes
 			}
 			if _, exists := seen[hash]; !exists {
@@ -387,8 +387,8 @@ func aggregateRouterInfos(results []ReseedResult) *routerInfoCounts {
 	for _, r := range results {
 		seen := make(map[string]bool)
 		for _, ri := range r.RouterInfos {
-			hash := routerInfoHash(ri)
-			if hash == "" {
+			hash, ok := validRouterInfoHash(ri)
+			if !ok {
 				continue // skip RouterInfos with broken identity hashes
 			}
 			if !seen[hash] {
@@ -427,8 +427,8 @@ func deduplicateRouterInfos(infos []router_info.RouterInfo) []router_info.Router
 	seen := make(map[string]bool)
 	var result []router_info.RouterInfo
 	for _, ri := range infos {
-		hash := routerInfoHash(ri)
-		if hash == "" {
+		hash, ok := validRouterInfoHash(ri)
+		if !ok {
 			continue // skip RouterInfos with broken identity hashes
 		}
 		if !seen[hash] {
@@ -480,6 +480,16 @@ func routerInfoHash(ri router_info.RouterInfo) string {
 		return ""
 	}
 	return hex.EncodeToString(hash[:])
+}
+
+// validRouterInfoHash returns the hash for a RouterInfo if valid, or an empty string
+// indicating the RouterInfo should be skipped. The boolean result indicates validity.
+func validRouterInfoHash(ri router_info.RouterInfo) (string, bool) {
+	hash := routerInfoHash(ri)
+	if hash == "" {
+		return "", false
+	}
+	return hash, true
 }
 
 // filterSuccessful returns only successful ReseedResults (no error and has RouterInfos).

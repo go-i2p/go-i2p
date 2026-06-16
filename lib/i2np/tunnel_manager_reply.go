@@ -175,19 +175,19 @@ func (tm *TunnelManager) reclassifyExpiredBuildFromLateReply(messageID int, expi
 		tm.clientBuildExpireWindow.recordValue(-1)
 		if replyErr == nil {
 			RecordExploratoryReplyStage(ExploratoryReplyStageLateReplyReclassedOK)
-			tm.clientBuildSuccessWindow.recordEvent()
+			tm.recordBuildSuccess(true)
 		} else {
 			RecordExploratoryReplyStage(ExploratoryReplyStageLateReplyReclassedFail)
-			tm.clientBuildRejectWindow.recordEvent()
+			tm.recordBuildReject(true)
 		}
 	} else {
 		tm.buildExpireWindow.recordValue(-1)
 		if replyErr == nil {
 			RecordExploratoryReplyStage(ExploratoryReplyStageLateReplyReclassedOK)
-			tm.buildSuccessWindow.recordEvent()
+			tm.recordBuildSuccess(false)
 		} else {
 			RecordExploratoryReplyStage(ExploratoryReplyStageLateReplyReclassedFail)
-			tm.buildRejectWindow.recordEvent()
+			tm.recordBuildReject(false)
 		}
 	}
 
@@ -228,6 +228,36 @@ func (tm *TunnelManager) removePendingBuildRequest(messageID int) {
 	delete(tm.pendingBuilds, messageID)
 }
 
+// recordBuildSuccess records a successful tunnel build in the appropriate window
+// (client or exploratory) based on the tunnel type.
+func (tm *TunnelManager) recordBuildSuccess(isClientTunnel bool) {
+	if isClientTunnel {
+		tm.clientBuildSuccessWindow.recordEvent()
+	} else {
+		tm.buildSuccessWindow.recordEvent()
+	}
+}
+
+// recordBuildReject records a rejected tunnel build in the appropriate window
+// (client or exploratory) based on the tunnel type.
+func (tm *TunnelManager) recordBuildReject(isClientTunnel bool) {
+	if isClientTunnel {
+		tm.clientBuildRejectWindow.recordEvent()
+	} else {
+		tm.buildRejectWindow.recordEvent()
+	}
+}
+
+// recordBuildExpire records an expired tunnel build in the appropriate window
+// (client or exploratory) based on the tunnel type.
+func (tm *TunnelManager) recordBuildExpire(isClientTunnel bool) {
+	if isClientTunnel {
+		tm.clientBuildExpireWindow.recordEvent()
+	} else {
+		tm.buildExpireWindow.recordEvent()
+	}
+}
+
 // updateTunnelStatesFromReply updates tunnel states in the pool based on build reply results.
 // Uses message ID to find the matching tunnel via the pending build request.
 func (tm *TunnelManager) updateTunnelStatesFromReply(messageID int, records []BuildResponseRecord, replyErr error) {
@@ -257,11 +287,7 @@ func (tm *TunnelManager) accountCorrelatedReplyWithoutTunnelState(req *buildRequ
 	}
 
 	if replyErr == nil {
-		if req.isClientTunnel {
-			tm.clientBuildSuccessWindow.recordEvent()
-		} else {
-			tm.buildSuccessWindow.recordEvent()
-		}
+		tm.recordBuildSuccess(req.isClientTunnel)
 		buildTimeMs := float64(time.Since(req.createdAt).Milliseconds())
 		tm.buildTimeWindow.recordDuration(buildTimeMs)
 		log.WithFields(logger.Fields{
@@ -273,11 +299,7 @@ func (tm *TunnelManager) accountCorrelatedReplyWithoutTunnelState(req *buildRequ
 		return
 	}
 
-	if req.isClientTunnel {
-		tm.clientBuildRejectWindow.recordEvent()
-	} else {
-		tm.buildRejectWindow.recordEvent()
-	}
+	tm.recordBuildReject(req.isClientTunnel)
 	log.WithFields(logger.Fields{
 		"tunnel_id":        req.tunnelID,
 		"message_id":       messageID,
@@ -340,11 +362,7 @@ func (tm *TunnelManager) handleSuccessfulBuild(matchingTunnel *tunnel.TunnelStat
 	tm.buildMutex.RLock()
 	req, known := tm.pendingBuilds[messageID]
 	tm.buildMutex.RUnlock()
-	if known && req.isClientTunnel {
-		tm.clientBuildSuccessWindow.recordEvent()
-	} else {
-		tm.buildSuccessWindow.recordEvent()
-	}
+	tm.recordBuildSuccess(known && req.isClientTunnel)
 	tm.buildTimeWindow.recordDuration(buildTimeMs)
 
 	log.WithFields(logger.Fields{
@@ -364,11 +382,7 @@ func (tm *TunnelManager) handleFailedBuild(matchingTunnel *tunnel.TunnelState, m
 	tm.buildMutex.RLock()
 	req, known := tm.pendingBuilds[messageID]
 	tm.buildMutex.RUnlock()
-	if known && req.isClientTunnel {
-		tm.clientBuildRejectWindow.recordEvent()
-	} else {
-		tm.buildRejectWindow.recordEvent()
-	}
+	tm.recordBuildReject(known && req.isClientTunnel)
 
 	log.WithFields(logger.Fields{
 		"tunnel_id":        matchingTunnel.ID,
@@ -518,11 +532,7 @@ func (tm *TunnelManager) handleExpiredRequest(req *buildRequest, msgID int, now 
 	}
 
 	tunnelState.State = tunnel.TunnelFailed
-	if req.isClientTunnel {
-		tm.clientBuildExpireWindow.recordEvent()
-	} else {
-		tm.buildExpireWindow.recordEvent()
-	}
+	tm.recordBuildExpire(req.isClientTunnel)
 	if req.isInbound {
 		pool.RecordInboundBuildTimeout()
 	} else {
@@ -619,9 +629,5 @@ func (tm *TunnelManager) markTunnelAsFailed(req *buildRequest) {
 
 // recordBuildTimeoutMetrics records timeout events to the appropriate time window.
 func (tm *TunnelManager) recordBuildTimeoutMetrics(req *buildRequest) {
-	if req.isClientTunnel {
-		tm.clientBuildExpireWindow.recordEvent()
-	} else {
-		tm.buildExpireWindow.recordEvent()
-	}
+	tm.recordBuildExpire(req.isClientTunnel)
 }
