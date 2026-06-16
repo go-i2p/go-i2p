@@ -314,7 +314,8 @@ func (p *MessageProcessor) processDatabaseLookupMessage(msg Message) error {
 //
 // Note: This processor handles LOCAL delivery only. Other delivery types require
 // router context and would be implemented at the router layer.
-func (p *MessageProcessor) processGarlicMessage(msg Message) error {
+// H6 FIX: depth parameter threads garlic nesting level through process pipeline.
+func (p *MessageProcessor) processGarlicMessage(msg Message, depth int) error {
 	if err := p.validateGarlicSession(); err != nil {
 		return err
 	}
@@ -338,7 +339,7 @@ func (p *MessageProcessor) processGarlicMessage(msg Message) error {
 		allCloves = append(allCloves, garlic.Cloves...)
 	}
 
-	return p.processGarlicCloves(allCloves, 0)
+	return p.processGarlicCloves(allCloves, depth)
 }
 
 // validateGarlicSession verifies that the garlic session manager is configured.
@@ -548,7 +549,9 @@ func (p *MessageProcessor) handleLocalDelivery(index int, clove GarlicClove, dep
 		return oops.Errorf("garlic nesting depth exceeded for clove %d at depth %d", index, nextDepth)
 	}
 
-	if err := p.ProcessMessage(clove.Message); err != nil {
+	// H6 FIX: Pass nextDepth to processMessageWithDepth so nested garlic messages
+	// continue tracking the nesting depth and can't bypass the recursion limit.
+	if err := p.processMessageWithDepth(clove.Message, nextDepth); err != nil {
 		log.WithFields(logger.Fields{
 			"clove_index": index,
 			"error":       err,

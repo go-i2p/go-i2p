@@ -460,7 +460,7 @@ func TestProcessMessageDispatch_ShortReply_EncryptedSlots(t *testing.T) {
 	data[0] = 1
 	msg.SetData(data)
 
-	err := processor.processMessageDispatch(msg)
+	err := processor.processMessageDispatch(msg, 0)
 	assert.NoError(t, err)
 	assert.True(t, proc.called)
 	assert.Equal(t, 777, proc.messageID)
@@ -480,7 +480,7 @@ func TestProcessMessageDispatch_TunnelBuildReply(t *testing.T) {
 	} {
 		msg := NewBaseI2NPMessage(msgType)
 		// Even with no data, it should not return "unknown message type"
-		err := processor.processMessageDispatch(msg)
+		err := processor.processMessageDispatch(msg, 0)
 		if err != nil {
 			assert.NotContains(t, err.Error(), "unknown message type",
 				"message type %d should not be unknown", msgType)

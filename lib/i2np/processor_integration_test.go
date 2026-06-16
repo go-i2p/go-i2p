@@ -209,3 +209,31 @@ func TestProcessGarlicCloves_NilInnerMessage(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "nil I2NP message")
 }
+
+// TestProcessGarlicCloves_NestedDepthExceeded verifies H6 fix:
+// nested garlic LOCAL delivery cloves that exceed MaxGarlicNestingDepth
+// are rejected to prevent unbounded recursion/stack overflow attacks.
+//
+// This test verifies that even though a clove message might be a garlic message,
+// if processing it would exceed the nesting depth limit, it is dropped with an error.
+func TestProcessGarlicCloves_NestedDepthExceeded(t *testing.T) {
+	processor := NewMessageProcessor()
+	processor.DisableExpirationCheck()
+
+	// Create a DATA message to wrap in a clove (DATA messages don't cause recursion).
+	innerMsg := NewBaseI2NPMessage(I2NPMessageTypeData)
+	innerMsg.SetMessageID(42)
+
+	clove := GarlicClove{
+		DeliveryInstructions: GarlicCloveDeliveryInstructions{Flag: 0x00}, // LOCAL delivery
+		Message:              innerMsg,
+		CloveID:              11,
+		Expiration:           time.Now().Add(5 * time.Minute),
+	}
+
+	// At depth MaxGarlicNestingDepth, attempting to process LOCAL clove should fail.
+	// nextDepth = depth + 1 = MaxGarlicNestingDepth + 1, which exceeds the limit.
+	err := processor.processGarlicCloves([]GarlicClove{clove}, MaxGarlicNestingDepth)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "garlic nesting depth exceeded")
+}

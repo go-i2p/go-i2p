@@ -449,8 +449,9 @@ func (p *MessageProcessor) processMessageWithDepth(msg Message, depth int) error
 
 // processMessageDispatch routes a message to the appropriate handler.
 // It must be called without p.mu held to allow safe re-entrant calls
-// from garlic LOCAL delivery (handleLocalDelivery → ProcessMessage).
-func (p *MessageProcessor) processMessageDispatch(msg Message) error {
+// from garlic LOCAL delivery (handleLocalDelivery → processMessageWithDepth).
+// depth tracks the current garlic nesting level and is threaded to garlic handlers.
+func (p *MessageProcessor) processMessageDispatch(msg Message, depth int) error {
 	switch msg.Type() {
 	case I2NPMessageTypeData:
 		return p.processDataMessage(msg)
@@ -463,7 +464,7 @@ func (p *MessageProcessor) processMessageDispatch(msg Message) error {
 	case I2NPMessageTypeDatabaseSearchReply:
 		return p.processDatabaseSearchReplyMessage(msg)
 	case I2NPMessageTypeGarlic:
-		return p.processGarlicMessage(msg)
+		return p.processGarlicMessage(msg, depth)
 	case I2NPMessageTypeTunnelData:
 		return p.processTunnelDataMessage(msg)
 	case I2NPMessageTypeTunnelGateway:
