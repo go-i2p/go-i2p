@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"encoding/binary"
 	"io"
 	"sync"
 	"sync/atomic"
@@ -12,6 +13,7 @@ import (
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/i2np"
+	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
@@ -387,11 +389,23 @@ func (fs *FloodfillServer) HandleDatabaseLookup(lookup *i2np.DatabaseLookup) err
 	// Attempt to find the data locally
 	data, dataType, err := fs.lookupData(key, lookupType)
 	if err == nil && len(data) > 0 {
-		// Found locally — respond with DatabaseStore
+		// Found locally — check delivery preference from lookup flags
+		// deliveryFlag (bit 0): 0 = send directly, 1 = send through tunnel
+		deliveryFlag := lookup.Flags & 0x01
+		if deliveryFlag == 1 {
+			// Send response through tunnel as requested
+			return fs.sendDatabaseStoreThroughTunnel(key, data, dataType, lookup.ReplyTunnelID, from, transport)
+		}
+		// Send response directly (deliveryFlag == 0)
 		return fs.sendDatabaseStore(key, data, dataType, from, transport)
 	}
 
 	// Not found — respond with DatabaseSearchReply containing closest floodfills
+	// Also check delivery preference for search replies
+	deliveryFlag := lookup.Flags & 0x01
+	if deliveryFlag == 1 {
+		return fs.sendDatabaseSearchReplyThroughTunnel(key, lookup.ReplyTunnelID, from, transport)
+	}
 	return fs.sendDatabaseSearchReply(key, from, transport)
 }
 
@@ -511,6 +525,58 @@ func (fs *FloodfillServer) sendDatabaseStore(
 	return transport.SendI2NPMessage(fs.ctx, to, store)
 }
 
+// sendDatabaseStoreThroughTunnel sends a DatabaseStore response through a tunnel.
+// This is used when the DatabaseLookup request specifies that the response should
+// be sent through a tunnel (deliveryFlag=1 in the request flags).
+//
+// Per I2P specification, when the requester specifies a reply tunnel via the
+// deliveryFlag, the response is wrapped in a TunnelGateway message and sent to
+// the gateway router, which then encrypts and forwards through the tunnel.
+func (fs *FloodfillServer) sendDatabaseStoreThroughTunnel(
+	key common.Hash,
+	data []byte,
+	dataType byte,
+	replyTunnelID [4]byte,
+	gatewayHash common.Hash,
+	transport FloodfillTransport,
+) error {
+	if transport == nil {
+		return oops.Errorf("no transport available to send DatabaseStore response through tunnel")
+	}
+
+	// Create the DatabaseStore response
+	store := i2np.NewDatabaseStore(key, data, dataType)
+
+	// Serialize the DatabaseStore for wrapping in TunnelGateway
+	storeBytes, err := store.MarshalBinary()
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":        "sendDatabaseStoreThroughTunnel",
+			"key":       logutil.HashPrefix(key),
+			"gateway":   logutil.HashPrefix(gatewayHash),
+			"tunnel_id": binary.BigEndian.Uint32(replyTunnelID[:]),
+		}).WithError(err).Error("Failed to marshal DatabaseStore for tunnel delivery")
+		return oops.Wrapf(err, "failed to marshal DatabaseStore for tunnel delivery")
+	}
+
+	// Convert replyTunnelID bytes to tunnel.TunnelID
+	tunnelID := tunnel.TunnelID(binary.BigEndian.Uint32(replyTunnelID[:]))
+
+	// Wrap in TunnelGateway message for tunnel transmission
+	tunnelGatewayMsg := i2np.NewTunnelGatewayMessage(tunnelID, storeBytes)
+
+	log.WithFields(logger.Fields{
+		"at":        "sendDatabaseStoreThroughTunnel",
+		"key":       logutil.HashPrefix(key),
+		"gateway":   logutil.HashPrefix(gatewayHash),
+		"tunnel_id": tunnelID,
+		"data_type": dataType,
+		"data_size": len(data),
+	}).Debug("Sending DatabaseStore response through tunnel")
+
+	return transport.SendI2NPMessage(fs.ctx, gatewayHash, tunnelGatewayMsg)
+}
+
 // sendDatabaseSearchReply constructs and sends a DatabaseSearchReply with peer suggestions.
 func (fs *FloodfillServer) sendDatabaseSearchReply(
 	key common.Hash,
@@ -534,6 +600,56 @@ func (fs *FloodfillServer) sendDatabaseSearchReply(
 	}).Debug("Sending DatabaseSearchReply response")
 
 	return transport.SendI2NPMessage(fs.ctx, to, reply)
+}
+
+// sendDatabaseSearchReplyThroughTunnel sends a DatabaseSearchReply through a tunnel.
+// This is used when the DatabaseLookup request specifies that the response should
+// be sent through a tunnel (deliveryFlag=1 in the request flags).
+//
+// Per I2P specification, when the requester specifies a reply tunnel, the search
+// reply is wrapped in a TunnelGateway message and sent to the gateway router.
+func (fs *FloodfillServer) sendDatabaseSearchReplyThroughTunnel(
+	key common.Hash,
+	replyTunnelID [4]byte,
+	gatewayHash common.Hash,
+	transport FloodfillTransport,
+) error {
+	if transport == nil {
+		return oops.Errorf("no transport available to send DatabaseSearchReply through tunnel")
+	}
+
+	// Select closest floodfill routers to suggest
+	peerHashes := fs.selectClosestFloodfills(key)
+
+	reply := i2np.NewDatabaseSearchReply(key, fs.ourHash, peerHashes)
+
+	// Serialize the DatabaseSearchReply for wrapping in TunnelGateway
+	replyBytes, err := reply.MarshalBinary()
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":        "sendDatabaseSearchReplyThroughTunnel",
+			"key":       logutil.HashPrefix(key),
+			"gateway":   logutil.HashPrefix(gatewayHash),
+			"tunnel_id": binary.BigEndian.Uint32(replyTunnelID[:]),
+		}).WithError(err).Error("Failed to marshal DatabaseSearchReply for tunnel delivery")
+		return oops.Wrapf(err, "failed to marshal DatabaseSearchReply for tunnel delivery")
+	}
+
+	// Convert replyTunnelID bytes to tunnel.TunnelID
+	tunnelID := tunnel.TunnelID(binary.BigEndian.Uint32(replyTunnelID[:]))
+
+	// Wrap in TunnelGateway message for tunnel transmission
+	tunnelGatewayMsg := i2np.NewTunnelGatewayMessage(tunnelID, replyBytes)
+
+	log.WithFields(logger.Fields{
+		"at":         "sendDatabaseSearchReplyThroughTunnel",
+		"key":        logutil.HashPrefix(key),
+		"gateway":    logutil.HashPrefix(gatewayHash),
+		"tunnel_id":  tunnelID,
+		"peer_count": len(peerHashes),
+	}).Debug("Sending DatabaseSearchReply through tunnel")
+
+	return transport.SendI2NPMessage(fs.ctx, gatewayHash, tunnelGatewayMsg)
 }
 
 // selectClosestFloodfills selects the closest floodfill routers to the target key.
