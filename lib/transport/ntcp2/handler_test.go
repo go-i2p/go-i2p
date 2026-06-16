@@ -33,8 +33,10 @@ func TestDefaultHandler_ValidateTimestamp(t *testing.T) {
 	h := NewDefaultHandler()
 	defer h.Close()
 
-	// Zero should be valid (not provided)
-	assert.NoError(t, h.ValidateTimestamp(0))
+	// H3 FIX: Zero is now treated as invalid (per I2P spec, timestamps are required)
+	// Previously zero was accepted as "not provided", but this enables replay attacks.
+	err := h.ValidateTimestamp(0)
+	assert.Error(t, err)
 }
 
 func TestDefaultHandler_ReplayCacheSize(t *testing.T) {

@@ -38,8 +38,11 @@ func TestValidateTimestamp_FarBehind(t *testing.T) {
 }
 
 func TestValidateTimestamp_Zero(t *testing.T) {
-	// Zero means "not provided" — should be accepted
-	assert.NoError(t, ValidateTimestamp(0))
+	// H3 FIX: Zero is now treated as invalid (per I2P spec, timestamps are required)
+	// Previously zero was accepted as "not provided", but this enables replay attacks.
+	err := ValidateTimestamp(0)
+	assert.Error(t, err)
+	assert.IsType(t, &ClockSkewError{}, err)
 }
 
 func TestValidateTimestamp_BoundaryValues(t *testing.T) {

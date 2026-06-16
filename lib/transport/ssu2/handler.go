@@ -53,9 +53,14 @@ func NewDefaultHandler() *DefaultHandler {
 // clock skew tolerance of the local clock. Returns nil if valid, or a wrapped
 // SSU2Error if the clock skew is excessive.
 func (h *DefaultHandler) ValidateTimestamp(peerTime uint32) error {
+	// H3 FIX: Reject peerTime=0. The I2P spec requires timestamps in handshake messages.
+	// Treating zero as "not provided" creates a replay vulnerability.
 	if peerTime == 0 {
-		// Timestamp not provided — skip validation.
-		return nil
+		log.Warn("SSU2 handshake rejected: peerTime is zero (required by spec)")
+		return WrapSSU2Error(
+			ErrHandshakeFailed,
+			"peerTime is zero (required by I2P spec)",
+		)
 	}
 
 	now := uint32(time.Now().Unix())

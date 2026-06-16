@@ -85,7 +85,12 @@ func NewGarlicElGamal(bytes []byte) (*GarlicElGamal, error) {
 
 	length := binary.BigEndian.Uint32(bytes[0:4])
 
-	if len(bytes) < int(4+length) {
+	// H4 FIX: Check for integer overflow before addition.
+	// When length is 0xFFFFFFFC or higher, 4+length overflows uint32 to 0.
+	// The check `len(bytes) < int(4+length)` would then pass with small len(bytes)
+	// and allow the subsequent `bytes[4:4+length]` slice operation to panic with
+	// out-of-bounds access. Use uint64 to prevent overflow.
+	if uint64(len(bytes)) < 4+uint64(length) {
 		log.WithFields(logger.Fields{
 			"at":        "NewGarlicElGamal",
 			"length":    length,
