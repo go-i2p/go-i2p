@@ -397,6 +397,13 @@ func (p *MessageProcessor) setField(methodName string, assignFn func()) {
 // recursively call ProcessMessage (RLock is not re-entrant when a
 // concurrent writer is waiting).
 func (p *MessageProcessor) ProcessMessage(msg Message) error {
+	return p.processMessageWithDepth(msg, 0)
+}
+
+// processMessageWithDepth is the internal variant that threads garlic nesting depth
+// through the process pipeline to prevent H6 recursion bombs.
+// depth tracks the current garlic LOCAL delivery nesting level (0 = outermost).
+func (p *MessageProcessor) processMessageWithDepth(msg Message, depth int) error {
 	// Snapshot the expiration validator under the read lock, then release.
 	// The process* methods read handler fields that are only mutated by
 	// Set* methods during initialization, so they are safe to access
@@ -408,6 +415,7 @@ func (p *MessageProcessor) ProcessMessage(msg Message) error {
 	log.WithFields(logger.Fields{
 		"at":           "ProcessMessage",
 		"message_type": msg.Type(),
+		"garlic_depth": depth,
 	}).Debug("Processing I2NP message")
 
 	// Validate message expiration before processing
@@ -436,7 +444,7 @@ func (p *MessageProcessor) ProcessMessage(msg Message) error {
 
 	// Dispatch without holding the lock so that garlic LOCAL delivery
 	// cloves can safely re-enter ProcessMessage.
-	return p.processMessageDispatch(msg)
+	return p.processMessageDispatch(msg, depth)
 }
 
 // processMessageDispatch routes a message to the appropriate handler.

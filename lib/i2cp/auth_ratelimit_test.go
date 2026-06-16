@@ -98,7 +98,7 @@ func TestRateLimitedAuthenticator_SuccessResetsCounter(t *testing.T) {
 		}
 	}
 	limiter.mu.Lock()
-	locked := !limiter.entries["127.0.0.1:9001"].lockoutUntil.IsZero()
+	locked := !limiter.entries["127.0.0.1"].lockoutUntil.IsZero()
 	limiter.mu.Unlock()
 	if locked {
 		t.Fatalf("lockout armed prematurely after counter reset")
@@ -109,8 +109,9 @@ func TestRateLimitedAuthenticator_IsolatesLockoutsPerRemote(t *testing.T) {
 	stub := &stubAuthenticator{accept: false}
 	limiter := NewRateLimitedAuthenticator(stub)
 
-	connA := &stubConn{remote: stubAddr("127.0.0.1:10001")}
-	connB := &stubConn{remote: stubAddr("127.0.0.1:10002")}
+	// Two connections from different IPs should have isolated rate-limit counters.
+	connA := &stubConn{remote: stubAddr("192.168.1.1:10001")}
+	connB := &stubConn{remote: stubAddr("192.168.1.2:10002")}
 
 	for i := 0; i < maxI2CPFailedAttempts; i++ {
 		if limiter.AuthenticateConnection(connA, "user", "bad") {
@@ -120,11 +121,45 @@ func TestRateLimitedAuthenticator_IsolatesLockoutsPerRemote(t *testing.T) {
 
 	stub.accept = true
 	if !limiter.AuthenticateConnection(connB, "user", "good") {
-		t.Fatal("valid credentials from a different remote should not be locked out")
+		t.Fatal("valid credentials from a different remote IP should not be locked out")
 	}
 
 	if limiter.AuthenticateConnection(connA, "user", "good") {
 		t.Fatal("locked out remote unexpectedly authenticated")
+	}
+}
+
+// TestRateLimitedAuthenticator_SharesRateLimitPerIP verifies the security fix:
+// multiple connections from the same IP address (but different ephemeral ports)
+// share a single rate-limit counter. This prevents an attacker from bypassing
+// rate limits by opening N new connections, each with a fresh port and quota.
+func TestRateLimitedAuthenticator_SharesRateLimitPerIP(t *testing.T) {
+	stub := &stubAuthenticator{accept: false}
+	limiter := NewRateLimitedAuthenticator(stub)
+
+	// Two connections from the same IP but different ports should share rate limit.
+	connA := &stubConn{remote: stubAddr("203.0.113.10:11001")}
+	connB := &stubConn{remote: stubAddr("203.0.113.10:11002")}
+
+	// Fail maxI2CPFailedAttempts-1 times on connA.
+	for i := 0; i < maxI2CPFailedAttempts-1; i++ {
+		limiter.AuthenticateConnection(connA, "user", "bad")
+	}
+
+	// One more failure on connB (same IP, different port) should trigger lockout.
+	if limiter.AuthenticateConnection(connB, "user", "bad") {
+		t.Fatal("unexpected success on final attempt")
+	}
+
+	// ConnA should now be locked out (lockout armed).
+	stub.accept = true
+	if limiter.AuthenticateConnection(connA, "user", "good") {
+		t.Fatal("connA should be locked out due to shared IP-based rate limit")
+	}
+
+	// ConnB should also be locked out (same shared rate limit).
+	if limiter.AuthenticateConnection(connB, "user", "good") {
+		t.Fatal("connB should be locked out due to shared IP-based rate limit")
 	}
 }
 

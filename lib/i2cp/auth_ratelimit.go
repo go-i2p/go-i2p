@@ -179,5 +179,16 @@ func remoteAddrKey(conn net.Conn) string {
 	if conn == nil || conn.RemoteAddr() == nil {
 		return "unknown"
 	}
-	return conn.RemoteAddr().String()
+	// Extract only the IP address (without ephemeral port) so that multiple
+	// connections from the same IP share the same rate-limit counter.
+	// This prevents an attacker from bypassing rate limits by opening N connections,
+	// each with a fresh port and fresh rate-limit quota.
+	remoteAddr := conn.RemoteAddr().String()
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		// If SplitHostPort fails, fall back to the full address.
+		// This can happen for Unix domain sockets or other non-TCP addresses.
+		return remoteAddr
+	}
+	return host
 }
