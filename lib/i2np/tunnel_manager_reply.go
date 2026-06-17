@@ -372,18 +372,10 @@ func (tm *TunnelManager) handleSuccessfulBuild(matchingTunnel *tunnel.TunnelStat
 		"is_client_tunnel": known && req.isClientTunnel,
 	}).Info("Tunnel build completed successfully")
 
-	// C-1 fix: register inbound exploratory tunnels as control-plane endpoints so
-	// that TunnelData messages addressed to this tunnel ID (build replies forwarded
-	// in TUNNEL delivery mode by a remote OBEP) reach ProcessMessage instead of
-	// being silently dropped by lookupTunnelEntry.
-	if matchingTunnel.IsInbound && tm.inboundHandler != nil {
-		if err := tm.inboundHandler.RegisterExploratoryTunnel(matchingTunnel.ID); err != nil {
-			log.WithError(err).WithFields(logger.Fields{
-				"at":        "handleSuccessfulBuild",
-				"tunnel_id": matchingTunnel.ID,
-			}).Warn("failed to register inbound tunnel as exploratory endpoint")
-		}
-	}
+	// NOTE: Inbound exploratory tunnels are now registered as control-plane
+	// endpoints in finalizePendingBuild (W-1 fix), not here. This eliminates
+	// the cold-start ordering gap where build replies could arrive before
+	// the endpoint was registered.
 }
 
 // handleFailedBuild processes a failed tunnel build and schedules cleanup.
@@ -403,6 +395,13 @@ func (tm *TunnelManager) handleFailedBuild(matchingTunnel *tunnel.TunnelState, m
 		"error":            replyErr,
 		"is_client_tunnel": known && req.isClientTunnel,
 	}).Warn("Tunnel build failed")
+
+	// W-1 fix: Unregister inbound exploratory tunnels that failed to complete
+	// their build, so they don't receive messages intended for tunnels that
+	// might reuse the same tunnel ID.
+	if matchingTunnel.IsInbound && !(known && req.isClientTunnel) && tm.inboundHandler != nil {
+		tm.inboundHandler.UnregisterTunnel(matchingTunnel.ID)
+	}
 
 	tm.cleanupFailedTunnel(matchingTunnel.ID, matchingTunnel.IsInbound)
 }
@@ -561,6 +560,12 @@ func (tm *TunnelManager) handleExpiredRequest(req *buildRequest, msgID int, now 
 	}).Warn("Tunnel build timed out")
 
 	tm.rememberExpiredBuild(msgID, req)
+
+	// W-1 fix: Unregister inbound exploratory tunnels that have timed out,
+	// so they don't receive messages if the tunnel ID is reused.
+	if req.isInbound && !req.isClientTunnel && tm.inboundHandler != nil {
+		tm.inboundHandler.UnregisterTunnel(req.tunnelID)
+	}
 
 	tm.cleanupFailedTunnel(req.tunnelID, req.isInbound)
 }

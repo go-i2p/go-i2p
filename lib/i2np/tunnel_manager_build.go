@@ -169,6 +169,21 @@ func (tm *TunnelManager) finalizePendingBuild(result *tunnel.TunnelBuildResult, 
 		}
 	}
 
+	// W-1 fix: Register inbound exploratory tunnels as control-plane endpoints
+	// at build-finalization time (after ReplyProcessor registration) so that
+	// TunnelData messages addressed to this tunnel ID (build replies forwarded
+	// by the remote OBEP) are found and processed rather than silently dropped.
+	// This fixes the cold-start ordering gap where the build reply arrives
+	// before the endpoint is registered.
+	if req.IsInbound && !req.IsClientTunnel && tm.inboundHandler != nil {
+		if err := tm.inboundHandler.RegisterExploratoryTunnel(result.TunnelID); err != nil {
+			log.WithError(err).WithFields(logger.Fields{
+				"at":        "finalizePendingBuild",
+				"tunnel_id": result.TunnelID,
+			}).Warn("failed to register inbound exploratory tunnel endpoint")
+		}
+	}
+
 	return nil
 }
 
@@ -203,6 +218,18 @@ func (tm *TunnelManager) buildZeroHopInbound(req tunnel.BuildTunnelRequest) (tun
 		"is_client_tunnel": req.IsClientTunnel,
 		"reason":           "zero-hop inbound tunnel registered as active without build message",
 	}).Info("Zero-hop inbound tunnel built")
+
+	// W-1 fix: Also register exploratory zero-hop inbound tunnels as
+	// control-plane endpoints so they can receive messages via TunnelData.
+	if !req.IsClientTunnel && tm.inboundHandler != nil {
+		if err := tm.inboundHandler.RegisterExploratoryTunnel(result.TunnelID); err != nil {
+			log.WithError(err).WithFields(logger.Fields{
+				"at":        "buildZeroHopInbound",
+				"tunnel_id": result.TunnelID,
+			}).Warn("failed to register zero-hop exploratory tunnel endpoint")
+		}
+	}
+
 	return result.TunnelID, nil, nil
 }
 
