@@ -408,6 +408,13 @@ func (r *Router) launchProactiveFallbackChecks(inboundPool, outboundPool *tunnel
 }
 
 // launchInboundFallbackCheck starts a goroutine to trigger inbound fallback after timeout.
+//
+// After a full build-timeout window (plus a small grace) has elapsed with zero
+// active tunnels, the current hop configuration has demonstrably failed to build
+// any tunnel. That is stronger, direct evidence of unreachability than the
+// address-form heuristic used by TriggerAutoFallbackCheck, so we force the
+// fallback unconditionally and immediately run a maintenance cycle to build the
+// reduced-hop (zero-hop inbound) tunnel without waiting for the next ticker.
 func (r *Router) launchInboundFallbackCheck(pool *tunnel.Pool) {
 	go func() {
 		select {
@@ -415,13 +422,19 @@ func (r *Router) launchInboundFallbackCheck(pool *tunnel.Pool) {
 			return
 		case <-time.After(tunnel.BuildTimeout + 5*time.Second):
 			if len(pool.GetActiveTunnels()) == 0 {
-				pool.TriggerAutoFallbackCheck()
+				pool.ForceAutoFallback()
+				pool.RunMaintenanceNow()
 			}
 		}
 	}()
 }
 
 // launchOutboundFallbackCheck starts a goroutine to trigger outbound fallback after timeout.
+//
+// See launchInboundFallbackCheck: zero active tunnels after the build-timeout
+// window is direct evidence the current outbound hop configuration cannot
+// complete, so the fallback to one-hop is forced regardless of the address-form
+// reachability heuristic.
 func (r *Router) launchOutboundFallbackCheck(pool *tunnel.Pool) {
 	go func() {
 		select {
@@ -429,7 +442,8 @@ func (r *Router) launchOutboundFallbackCheck(pool *tunnel.Pool) {
 			return
 		case <-time.After(tunnel.BuildTimeout + 5*time.Second):
 			if len(pool.GetActiveTunnels()) == 0 {
-				pool.TriggerAutoFallbackCheck()
+				pool.ForceAutoFallback()
+				pool.RunMaintenanceNow()
 			}
 		}
 	}()

@@ -102,3 +102,27 @@ func (p *Pool) fallbackOutbound(hopCount int) {
 func (p *Pool) TriggerAutoFallbackCheck() {
 	p.checkAutoFallback()
 }
+
+// ForceAutoFallback performs the hop-count reduction unconditionally, bypassing
+// the reachability callback consulted by checkAutoFallback / TriggerAutoFallbackCheck.
+//
+// It is intended solely for the router's proactive startup fallback path, which
+// only fires after a full build-timeout window has elapsed with zero active
+// tunnels. That condition is direct empirical evidence that the current hop
+// configuration cannot establish tunnels, which makes the address-form
+// reachability heuristic (e.g. "RouterInfo advertises a public address")
+// unreliable: a firewalled router whose port-mapping failed still advertises a
+// public-form address yet can never receive multi-hop build replies. In that
+// state the fallback must proceed regardless of the heuristic.
+//
+// The client-pool guard and the already-at-minimum guards (inside
+// fallbackInbound / fallbackOutbound) are still respected, so this never reduces
+// application-specified client hop counts and never drops below the protocol
+// minimum for the pool direction.
+func (p *Pool) ForceAutoFallback() {
+	config := p.getAutoFallbackConfig()
+	if config.isClient {
+		return // client tunnel hop counts are application-specified; never reduce them
+	}
+	p.performAutoFallback(config)
+}

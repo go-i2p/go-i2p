@@ -145,6 +145,15 @@ func (tm *TunnelManager) finalizePendingBuild(result *tunnel.TunnelBuildResult, 
 	// BUG-5 fix: arm the timer at buildTimeout + buildExpireGrace (200ms) so
 	// replies that arrive on the boundary do not race the cleanup goroutine.
 	tm.resetPendingBuildCreatedAt(messageID)
+	// Mirror the same re-anchoring onto the pool's TunnelState. The pool runs an
+	// independent build-expiry clock (tunnelBuildTimeout) keyed off CreatedAt,
+	// which was stamped when the tunnel was registered — before the slow
+	// sendBuildMessage step above. Without this, the pre-send delay is subtracted
+	// from the reply window and the pool can expire the tunnel while its build
+	// reply is still legitimately in flight.
+	if pool := tm.getPoolForTunnel(req.IsInbound); pool != nil {
+		pool.ReanchorBuildStart(result.TunnelID)
+	}
 	time.AfterFunc(90*time.Second+buildExpireGrace, func() {
 		tm.cleanupExpiredBuildByID(messageID)
 	})

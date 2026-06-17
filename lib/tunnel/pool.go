@@ -383,6 +383,27 @@ func (p *Pool) AddTunnel(tunnel *TunnelState) {
 	}).Debug("added tunnel to pool")
 }
 
+// ReanchorBuildStart resets the CreatedAt timestamp of a still-building tunnel
+// to the current time. It is called once the build message has actually been
+// sent on the wire, because the pool's build-expiry clock (tunnelBuildTimeout)
+// otherwise starts when the TunnelState is first registered — before the
+// potentially slow sendBuildMessage step (NetDB lookup plus transport
+// handshake, up to tens of seconds). Without re-anchoring, that pre-send delay
+// is silently subtracted from the 90-second reply window, prematurely expiring
+// tunnels whose build replies are still legitimately in flight.
+//
+// It is a no-op if the tunnel is unknown or no longer in the building state, so
+// it can never resurrect or extend the lifetime of an established tunnel.
+func (p *Pool) ReanchorBuildStart(id TunnelID) {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	tunnel, exists := p.tunnels[id]
+	if !exists || tunnel.State != TunnelBuilding {
+		return
+	}
+	tunnel.CreatedAt = time.Now()
+}
+
 // RemoveTunnel removes a tunnel from the pool
 func (p *Pool) RemoveTunnel(id TunnelID) {
 	p.mutex.Lock()
