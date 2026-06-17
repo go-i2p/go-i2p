@@ -283,6 +283,10 @@ func (tm *TunnelManager) buildZeroHopInbound(req tunnel.BuildTunnelRequest) (tun
 	// fail with "no active reply tunnels" while inbound tunnels are being created.
 	if tm.outboundPool != nil {
 		tm.outboundPool.RunMaintenanceNow()
+		// CRITICAL-3 fix: Reset exponential backoff so maintenance attempts proceed immediately
+		// instead of waiting for the backoff delay to expire. When reply tunnels become available,
+		// previous failures should not block new attempts.
+		tm.outboundPool.ResetBuildFailures()
 	}
 
 	// W-1 fix: Also register exploratory zero-hop inbound tunnels as

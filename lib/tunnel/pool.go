@@ -336,6 +336,17 @@ func (p *Pool) RunMaintenanceNow() {
 	p.maintainPool()
 }
 
+// ResetBuildFailures clears the exponential backoff counter. This should be called
+// when new tunnel resources become available (e.g., reply tunnels) so that builds
+// can retry immediately instead of waiting for the backoff delay to expire.
+func (p *Pool) ResetBuildFailures() {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	
+	p.buildFailures = 0
+	p.lastBuildTime = time.Time{}
+}
+
 // SetHopCount overrides the configured per-tunnel hop count for this pool.
 // HopCount=0 is only permitted on inbound pools, where it requests a
 // zero-hop inbound tunnel (we are simultaneously gateway and endpoint).
