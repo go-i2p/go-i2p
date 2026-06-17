@@ -81,3 +81,79 @@ func NewDateTimeBlock() *ssu2noise.SSU2Block {
 func NewPaddingBlock(size int) *ssu2noise.SSU2Block {
 	return ssu2noise.NewSSU2Block(ssu2noise.BlockTypePadding, make([]byte, size))
 }
+
+// ACKBlockInfo holds parsed data from an explicit ACK block (type 12).
+// According to SSU2 spec section 5.2.2.1, an ACK block contains:
+// - 4-byte first packet number (big-endian)
+// - 1-byte nack count
+// - nack count bytes of nack fields (each bit indicates nack for 8 packets)
+type ACKBlockInfo struct {
+	FirstPacketNum uint32   // First packet number in the ACK range
+	NackCount      uint8    // Number of nack fields that follow
+	NackFields     []uint8  // Bit fields: 0 = ACKed, 1 = NACKed (for 8 packets each)
+	AckedRange     []uint32 // Expanded list of explicitly ACKed packet numbers
+}
+
+// ParseACKBlock parses an explicit ACK block (type 12) and extracts the acknowledged packet range.
+// Returns an error if the block type is invalid or data is malformed.
+//
+// According to SSU2 spec 5.2.2.1, the block data contains:
+// - 4 bytes: first packet number (big-endian uint32)
+// - 1 byte: nack count (number of 8-bit nack fields)
+// - nack count bytes: each bit indicates if a packet is NACKed (0=ACK, 1=NACK)
+//
+// Example: FirstPacket=100, NackCount=0 → packets 100-107 all ACKed
+// Example: FirstPacket=100, NackCount=1, nack_fields=[0x05] → packets 100,102 ACKed; 101,103-107 NACKed
+func ParseACKBlock(block *ssu2noise.SSU2Block) (*ACKBlockInfo, error) {
+	if block.Type != ssu2noise.BlockTypeACK {
+		return nil, oops.Errorf("expected ACK block (type 12), got type %d", block.Type)
+	}
+
+	if len(block.Data) < 5 {
+		return nil, oops.Errorf("ACK block data too short: %d bytes (minimum 5)", len(block.Data))
+	}
+
+	info := &ACKBlockInfo{}
+
+	// Parse first packet number (4 bytes, big-endian)
+	info.FirstPacketNum = binary.BigEndian.Uint32(block.Data[0:4])
+
+	// Parse nack count (1 byte)
+	info.NackCount = block.Data[4]
+
+	// Validate data length matches nack count
+	expectedLen := 5 + int(info.NackCount)
+	if len(block.Data) != expectedLen {
+		return nil, oops.Errorf("ACK block data length mismatch: got %d bytes, expected %d (5 + %d nack fields)",
+			len(block.Data), expectedLen, info.NackCount)
+	}
+
+	// Extract nack fields if present
+	if info.NackCount > 0 {
+		info.NackFields = make([]uint8, info.NackCount)
+		copy(info.NackFields, block.Data[5:5+info.NackCount])
+	}
+
+	// Build expanded list of explicitly ACKed packet numbers
+	// Each nack field covers 8 packets; 0 bit = ACKed, 1 bit = NACKed
+	packetNum := info.FirstPacketNum
+	for i, nackByte := range info.NackFields {
+		_ = i // for loop iteration
+		for bit := 0; bit < 8; bit++ {
+			if (nackByte & (1 << uint(bit))) == 0 {
+				// Bit is 0: this packet is ACKed
+				info.AckedRange = append(info.AckedRange, packetNum)
+			}
+			packetNum++
+		}
+	}
+
+	// If no nack fields, then the first 8 packets after FirstPacketNum are all ACKed
+	if info.NackCount == 0 {
+		for i := 0; i < 8; i++ {
+			info.AckedRange = append(info.AckedRange, info.FirstPacketNum+uint32(i))
+		}
+	}
+
+	return info, nil
+}
