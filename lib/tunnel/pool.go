@@ -342,9 +342,16 @@ func (p *Pool) RunMaintenanceNow() {
 func (p *Pool) ResetBuildFailures() {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
-	
+
+	oldFailures := p.buildFailures
+
 	p.buildFailures = 0
 	p.lastBuildTime = time.Time{}
+
+	log.WithFields(logger.Fields{
+		"at":                "Pool.ResetBuildFailures",
+		"previous_failures": oldFailures,
+	}).Info("Reset exponential backoff counter for reply tunnel availability")
 }
 
 // SetHopCount overrides the configured per-tunnel hop count for this pool.
