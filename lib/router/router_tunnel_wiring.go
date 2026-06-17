@@ -1,6 +1,7 @@
 package router
 
 import (
+	"fmt"
 	"time"
 
 	common "github.com/go-i2p/common/data"
@@ -166,11 +167,33 @@ func (r *Router) configureRouterHashOnPools(inboundPool, outboundPool *tunnel.Po
 	if err != nil {
 		return err
 	}
+	
+	// CRITICAL: Verify hash is valid before setting
+	if len(routerHash) == 0 {
+		return oops.Errorf("router hash is empty after computation")
+	}
+	
+	// Log the hash being set (first 16 chars in hex for debugging)
+	hashHex := routerHash.String()
+	if len(hashHex) > 16 {
+		hashHex = hashHex[:16]
+	}
+	
 	if outboundPool != nil {
 		outboundPool.SetRouterHash(routerHash)
+		log.WithFields(logger.Fields{
+			"at": "configureRouterHashOnPools",
+			"pool": "outbound",
+			"router_hash": hashHex,
+		}).Info("Router hash set on outbound pool")
 	}
 	if inboundPool != nil {
 		inboundPool.SetRouterHash(routerHash)
+		log.WithFields(logger.Fields{
+			"at": "configureRouterHashOnPools",
+			"pool": "inbound",
+			"router_hash": hashHex,
+		}).Info("Router hash set on inbound pool")
 	}
 	return nil
 }
@@ -559,12 +582,29 @@ func (r *Router) wireGarlicSessionManager() {
 	privKeyBytes := r.keystore.GetEncryptionPrivateKey().Bytes()
 	var privKey [32]byte
 	copy(privKey[:], privKeyBytes)
+	
+	// DIAGNOSTIC: Log what private key is being used for garlic decryption
+	privKeyHex := fmt.Sprintf("%x", privKey[:8])
+	log.WithFields(logger.Fields{
+		"at":                      "wireGarlicSessionManager",
+		"encryption_privkey_hex":  privKeyHex,
+	}).Info("Creating garlic session manager with encryption private key")
 
 	garlicMgr, err := i2np.NewGarlicSessionManager(privKey)
 	if err != nil {
 		log.WithError(err).Error("Failed to create garlic session manager — inbound garlic decryption will fail")
 		return
 	}
+	
+	// DIAGNOSTIC: Verify the public key that will be used for decryption
+	pubKey := garlicMgr.GetPublicKey()
+	pubKeyHex := fmt.Sprintf("%x", pubKey[:8])
+	log.WithFields(logger.Fields{
+		"at":                    "wireGarlicSessionManager",
+		"garlic_pubkey_hex":     pubKeyHex,
+		"full_pubkey_hex":       fmt.Sprintf("%x", pubKey[:]),
+	}).Info("Garlic session manager created - this is the key peers must use to encrypt to us")
+	
 	r.messageRouter.GetProcessor().SetGarlicSessionManager(garlicMgr)
 	if r.tunnelManager != nil {
 		r.tunnelManager.SetGarlicKeyRegistrar(garlicMgr)
@@ -586,6 +626,12 @@ func (r *Router) getOurRouterHash() (common.Hash, error) {
 	if err != nil {
 		return common.Hash{}, oops.Wrapf(err, "failed to get IdentHash")
 	}
+	
+	// DIAGNOSTIC: Log the RouterInfo hash to compare with garlic session manager key
+	log.WithFields(logger.Fields{
+		"at":              "getOurRouterHash",
+		"router_info_hash": hash.String()[:16],
+	}).Info("Router identity hash computed - peers will look us up with this hash")
 
 	log.WithField("at", "getOurRouterHash").Debug("identity hash computed successfully")
 	return hash, nil

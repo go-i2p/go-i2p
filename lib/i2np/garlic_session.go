@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -161,25 +162,39 @@ func (sm *GarlicSessionManager) cleanupOneTimeTag(incomingTag [8]byte, oneTimeTa
 // logDecryptStart logs diagnostics at the start of decryption.
 func (sm *GarlicSessionManager) logDecryptStart(incomingTag [8]byte, oneTimeTagRegistered bool, mapSize, encryptedSize int) {
 	if encryptedSize >= 8 {
+		ourPubKey := sm.GetPublicKey()
+		ourPubKeyHex := fmt.Sprintf("%x", ourPubKey[:8])
+		
 		log.WithFields(logger.Fields{
 			"at":                           "DecryptGarlicMessage",
 			"incoming_tag":                 fmt.Sprintf("%x", incomingTag),
 			"one_time_tag_registered":      oneTimeTagRegistered,
 			"one_time_tag_map_size_before": mapSize,
 			"encrypted_size":               encryptedSize,
-		}).Debug("Garlic decrypt diagnostics")
+			"our_public_key":               ourPubKeyHex,
+			"session_count":                sm.GetSessionCount(),
+		}).Debug("Garlic decrypt starting - checking key compatibility")
 	}
 }
 
 // logDecryptFailure logs diagnostics when decryption fails.
 func (sm *GarlicSessionManager) logDecryptFailure(incomingTag [8]byte, oneTimeTagRegistered bool, mapSize int, err error) {
+	ourPubKey := sm.GetPublicKey()
+	ourPubKeyHex := fmt.Sprintf("%x", ourPubKey[:8])
+	
+	errStr := fmt.Sprintf("%v", err)
+	isNoiseError := strings.Contains(errStr, "chacha20poly1305") || strings.Contains(errStr, "Noise IK")
+	
 	log.WithFields(logger.Fields{
 		"at":                          "DecryptGarlicMessage",
 		"incoming_tag":                fmt.Sprintf("%x", incomingTag),
 		"one_time_tag_registered":     oneTimeTagRegistered,
 		"one_time_tag_map_size_after": mapSize,
+		"our_public_key":              ourPubKeyHex,
+		"session_count":               sm.GetSessionCount(),
 		"error":                       err,
-	}).Debug("Garlic decrypt failed")
+		"is_crypto_error":             isNoiseError,
+	}).Warn("Garlic decrypt failed - possible key mismatch or RouterInfo issue")
 }
 
 // logDecryptSuccess logs diagnostics when decryption succeeds.

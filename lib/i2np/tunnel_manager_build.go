@@ -69,7 +69,7 @@ func (tm *TunnelManager) BuildTunnelFromRequest(req tunnel.BuildTunnelRequest) (
 		return 0, peerHashes, err
 	}
 
-	tm.logBuildRequestSent(result, messageID, req.ReplyTunnelID, req.IsInbound)
+	tm.logBuildRequestSent(result, messageID, req)
 	return result.TunnelID, peerHashes, nil
 }
 
@@ -450,14 +450,16 @@ func (tm *TunnelManager) cleanupFailedBuild(tunnelID tunnel.TunnelID, messageID 
 }
 
 // logBuildRequestSent logs successful tunnel build request submission
-func (tm *TunnelManager) logBuildRequestSent(result *tunnel.TunnelBuildResult, messageID int, replyTunnelID tunnel.TunnelID, isInbound bool) {
+func (tm *TunnelManager) logBuildRequestSent(result *tunnel.TunnelBuildResult, messageID int, req tunnel.BuildTunnelRequest) {
 	log.WithFields(logger.Fields{
 		"tunnel_id":        result.TunnelID,
 		"message_id":       messageID,
 		"hop_count":        len(result.Hops),
 		"use_stbm":         result.UseShortBuild,
-		"is_inbound_build": isInbound,
-		"reply_tunnel_id":  replyTunnelID,
+		"is_inbound_build": req.IsInbound,
+		"reply_tunnel_id":  req.ReplyTunnelID,
+		"our_identity":     req.OurIdentity.String()[:16],
+		"reply_gateway":    req.ReplyGateway.String()[:16],
 	}).Info("Tunnel build request sent")
 }
 

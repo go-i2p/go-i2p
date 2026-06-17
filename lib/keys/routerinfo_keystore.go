@@ -2,6 +2,7 @@ package keys
 
 import (
 	"encoding/hex"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -575,6 +576,9 @@ func (ks *RouterInfoKeystore) buildRouterIdentity(publicKey types.PublicKey, cer
 	if !ok {
 		return nil, oops.Errorf("public key does not implement SigningPublicKey (got %T)", publicKey)
 	}
+	
+	// DIAGNOSTIC: Verify encryption keys match
+	ks.verifyEncryptionKeyConsistency()
 
 	routerIdentity, err := router_identity.NewRouterIdentity(
 		ks.encryptionPubKey,
@@ -586,6 +590,60 @@ func (ks *RouterInfoKeystore) buildRouterIdentity(publicKey types.PublicKey, cer
 		return nil, oops.Errorf("failed to create router identity: %w", err)
 	}
 	return routerIdentity, nil
+}
+
+// verifyEncryptionKeyConsistency checks that the stored encryption public key matches
+// the key that would be derived from the stored private key. If they don't match,
+// logs an error and indicates a potential keystore corruption issue.
+func (ks *RouterInfoKeystore) verifyEncryptionKeyConsistency() {
+	if ks.encryptionPrivKey == nil || ks.encryptionPubKey == nil {
+		log.WithField("at", "verifyEncryptionKeyConsistency").Warn("Encryption keys are nil")
+		return
+	}
+	
+	// Derive public key from the private key
+	derivedPubKey, err := ks.encryptionPrivKey.Public()
+	if err != nil {
+		log.WithError(err).WithField("at", "verifyEncryptionKeyConsistency").Error("Failed to derive public key from private key")
+		return
+	}
+	
+	// Compare byte representations
+	storedKeyBytes := ks.encryptionPubKey.Bytes()
+	derivedKeyBytes := derivedPubKey.Bytes()
+	
+	// Log first 8 bytes of each for diagnosis
+	storedHex := fmt.Sprintf("%x", storedKeyBytes[:8])
+	derivedHex := fmt.Sprintf("%x", derivedKeyBytes[:8])
+	
+	if len(storedKeyBytes) != len(derivedKeyBytes) || !bytesEqual(storedKeyBytes, derivedKeyBytes) {
+		log.WithFields(logger.Fields{
+			"at":           "verifyEncryptionKeyConsistency",
+			"stored_key":   storedHex,
+			"derived_key":  derivedHex,
+			"mismatch":     "YES - CRITICAL BUG",
+		}).Error("ENCRYPTION KEY MISMATCH: Stored public key does not match key derived from private key")
+		return
+	}
+	
+	log.WithFields(logger.Fields{
+		"at":          "verifyEncryptionKeyConsistency",
+		"encryption_key_hex": storedHex,
+		"status":      "MATCH - keys are consistent",
+	}).Info("Encryption key verification passed")
+}
+
+// bytesEqual compares two byte slices for equality
+func bytesEqual(a, b []byte) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // generateIdentityPaddingFromSizes returns stable padding bytes for RouterIdentity structure.

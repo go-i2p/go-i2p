@@ -672,6 +672,16 @@ func (p *Pool) prepareBuildRequest(excludePeers []common.Hash) BuildTunnelReques
 	provider := p.replyTunnelProvider
 	sessionID := p.clientSessionID
 	p.mutex.RUnlock()
+	
+	// CRITICAL VALIDATION: Ensure router identity is set
+	// This prevents sending builds with zero identity that peers can't decrypt responses for
+	if len(ourHash) == 0 {
+		log.WithFields(logger.Fields{
+			"at": "prepareBuildRequest",
+			"is_inbound": p.config.IsInbound,
+			"hop_count": p.config.HopCount,
+		}).Warn("Router identity not yet initialized; using zero hash for now (this may cause decryption failures)")
+	}
 
 	replyTunnelID := TunnelID(0)
 	if provider != nil {

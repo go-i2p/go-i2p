@@ -207,6 +207,16 @@ func (p *Publisher) publishOurRouterInfo() {
 		log.WithError(err).Warn("Failed to get local RouterInfo for publishing")
 		return
 	}
+	
+	// DIAGNOSTIC: Log our RouterInfo identity
+	riHash, err := ri.IdentHash()
+	if err == nil {
+		log.WithFields(logger.Fields{
+			"at":            "publishOurRouterInfo",
+			"router_identity_prefix": riHash.String()[:16],
+			"router_identity_full":   riHash.String(),
+		}).Info("RouterInfo details before publishing")
+	}
 
 	// Validate RouterInfo before publishing
 	if !ri.IsValid() {
@@ -224,7 +234,10 @@ func (p *Publisher) publishOurRouterInfo() {
 		return
 	}
 
-	log.WithFields(logger.Fields{"at": "publishOurRouterInfo"}).Debug("Successfully published our RouterInfo to floodfill routers")
+	log.WithFields(logger.Fields{
+		"at":                  "publishOurRouterInfo",
+		"router_identity":     riHash.String()[:16],
+	}).Info("Successfully published our RouterInfo to floodfill routers")
 }
 
 // publishAllLeaseSets publishes all LeaseSets in the database
@@ -358,12 +371,30 @@ func (p *Publisher) PublishRouterInfo(ri router_info.RouterInfo) error {
 	if err != nil {
 		return oops.Errorf("failed to get router hash: %w", err)
 	}
-	log.WithField("hash", logutil.HashPrefixPlain(hash)).Debug("Publishing RouterInfo")
+	log.WithFields(logger.Fields{
+		"at":                  "PublishRouterInfo",
+		"hash":                logutil.HashPrefixPlain(hash),
+		"full_hash":           hash.String(),
+	}).Info("Publishing RouterInfo to floodfills")
 
 	// Select closest floodfill routers
 	floodfills, err := p.selectFloodfillsForPublishing(hash)
 	if err != nil {
 		return oops.Errorf("failed to select floodfills: %w", err)
+	}
+
+	// DIAGNOSTIC: Log which floodfills we're publishing to
+	if len(floodfills) > 0 {
+		ffHashes := make([]string, 0, len(floodfills))
+		for _, ff := range floodfills {
+			ffHash, _ := ff.IdentHash()
+			ffHashes = append(ffHashes, ffHash.String()[:16])
+		}
+		log.WithFields(logger.Fields{
+			"at":               "PublishRouterInfo",
+			"floodfill_count":  len(floodfills),
+			"floodfill_hashes": ffHashes,
+		}).Info("Selected floodfill routers for publication")
 	}
 
 	// Send DatabaseStore message to each selected floodfill.
@@ -372,10 +403,25 @@ func (p *Publisher) PublishRouterInfo(ri router_info.RouterInfo) error {
 	if err != nil {
 		return oops.Errorf("failed to serialize RouterInfo: %w", err)
 	}
+	
+	log.WithFields(logger.Fields{
+		"at":                "PublishRouterInfo",
+		"router_info_bytes": len(riBytes),
+		"hash":              hash.String()[:16],
+	}).Debug("RouterInfo serialized for distribution")
+	
 	compressed, err := gzipCompress(riBytes)
 	if err != nil {
 		return oops.Errorf("failed to gzip-compress RouterInfo: %w", err)
 	}
+	
+	log.WithFields(logger.Fields{
+		"at":                "PublishRouterInfo",
+		"uncompressed_size": len(riBytes),
+		"compressed_size":   len(compressed),
+		"hash":              hash.String()[:16],
+	}).Debug("RouterInfo compressed for transmission")
+	
 	return p.sendDatabaseStoreMessages(hash, compressed, i2np.DatabaseStoreTypeRouterInfo, floodfills)
 }
 
