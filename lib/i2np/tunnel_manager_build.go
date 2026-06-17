@@ -3,6 +3,7 @@ package i2np
 import (
 	"encoding/binary"
 	"fmt"
+	"strings"
 	"time"
 
 	common "github.com/go-i2p/common/data"
@@ -138,6 +139,10 @@ func (tm *TunnelManager) prepareAndSendBuild(req tunnel.BuildTunnelRequest) (*tu
 	// Registration at this point (before finalizePendingBuild) ensures the reply
 	// can be received. Client tunnels are registered in finalizePendingBuild with
 	// session context to route messages directly to the I2CP session.
+	//
+	// If registration fails here, finalizePendingBuild will attempt registration
+	// again as a fallback (e.g., if the registration service was not yet ready).
+	// Duplicate registrations are caught and silently ignored as expected failures.
 	if req.IsInbound && !req.IsClientTunnel && tm.inboundHandler != nil {
 		if err := tm.inboundHandler.RegisterExploratoryTunnel(result.TunnelID); err != nil {
 			log.WithError(err).WithFields(logger.Fields{
@@ -196,24 +201,44 @@ func (tm *TunnelManager) finalizePendingBuild(result *tunnel.TunnelBuildResult, 
 		}
 	}
 
-	// CRITICAL-1 fix: Register client tunnels (I2CP session-owned inbound
-	// tunnels) at build-finalization time (after ReplyProcessor registration)
-	// so that inbound messages delivered via TunnelData are routed to the
-	// owning I2CP session instead of being silently dropped.
-	// This fixes the cold-start ordering gap where the inbound message arrives
-	// before the endpoint is registered.
-	//
-	// NOTE: Exploratory tunnels are already registered in prepareAndSendBuild()
-	// (W-1 fix), so we skip re-registration here to avoid duplicate-registration
-	// errors. Only client tunnels need registration here.
-	if req.IsInbound && req.IsClientTunnel && tm.inboundHandler != nil {
-		// Client tunnel: register with session context for I2CP message delivery
-		if err := tm.inboundHandler.RegisterClientTunnel(result.TunnelID, req.ClientSessionID); err != nil {
-			log.WithError(err).WithFields(logger.Fields{
-				"at":         "finalizePendingBuild",
-				"tunnel_id":  result.TunnelID,
-				"session_id": req.ClientSessionID,
-			}).Warn("failed to register inbound client tunnel endpoint for session")
+	// Register inbound tunnels:
+	// - Exploratory: W-1 fix registers early in prepareAndSendBuild to catch
+	//   replies immediately. finalizePendingBuild re-attempts as fallback if
+	//   early registration failed (e.g., if registration service was not yet ready).
+	//   Duplicate registrations are silently ignored (caught as "already registered").
+	// - Client: CRITICAL-1 fix registers here with session context for I2CP delivery,
+	//   ensuring inbound messages route to the owning session instead of being dropped.
+	if req.IsInbound && tm.inboundHandler != nil {
+		if req.IsClientTunnel {
+			// Client tunnel: register with session context for I2CP message delivery
+			if err := tm.inboundHandler.RegisterClientTunnel(result.TunnelID, req.ClientSessionID); err != nil {
+				log.WithError(err).WithFields(logger.Fields{
+					"at":         "finalizePendingBuild",
+					"tunnel_id":  result.TunnelID,
+					"session_id": req.ClientSessionID,
+				}).Warn("failed to register inbound client tunnel endpoint for session")
+			}
+		} else {
+			// Exploratory tunnel: fallback registration (primary registration was in prepareAndSendBuild).
+			// If already registered, this silently fails with "tunnel already registered" —
+			// that's OK and expected if the early registration succeeded.
+			if err := tm.inboundHandler.RegisterExploratoryTunnel(result.TunnelID); err != nil {
+				// Log at Debug level for expected "already registered" errors,
+				// Warn level for unexpected errors
+				errorMsg := err.Error()
+				if !strings.Contains(errorMsg, "already registered") {
+					log.WithError(err).WithFields(logger.Fields{
+						"at":        "finalizePendingBuild",
+						"tunnel_id": result.TunnelID,
+					}).Warn("failed to register inbound exploratory tunnel endpoint")
+				} else {
+					log.WithFields(logger.Fields{
+						"at":        "finalizePendingBuild",
+						"tunnel_id": result.TunnelID,
+						"reason":    "already registered (expected if early registration succeeded)",
+					}).Debug("exploratory tunnel registration skipped (expected)")
+				}
+			}
 		}
 	}
 
