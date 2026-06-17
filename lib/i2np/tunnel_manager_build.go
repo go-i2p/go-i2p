@@ -277,6 +277,14 @@ func (tm *TunnelManager) buildZeroHopInbound(req tunnel.BuildTunnelRequest) (tun
 		"reason":           "zero-hop inbound tunnel registered as active without build message",
 	}).Info("Zero-hop inbound tunnel built")
 
+	// CRITICAL-2 fix: After creating a zero-hop inbound tunnel (which can serve as a reply tunnel),
+	// immediately trigger outbound tunnel maintenance so that outbound tunnels can be built
+	// using this new reply tunnel. This breaks the bootstrap deadlock where outbound builds
+	// fail with "no active reply tunnels" while inbound tunnels are being created.
+	if tm.outboundPool != nil {
+		tm.outboundPool.RunMaintenanceNow()
+	}
+
 	// W-1 fix: Also register exploratory zero-hop inbound tunnels as
 	// control-plane endpoints so they can receive messages via TunnelData.
 	if !req.IsClientTunnel && tm.inboundHandler != nil {
