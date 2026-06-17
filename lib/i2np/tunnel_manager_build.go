@@ -130,6 +130,24 @@ func (tm *TunnelManager) prepareAndSendBuild(req tunnel.BuildTunnelRequest) (*tu
 		return nil, 0, peerHashes, oops.Wrapf(err, "failed to send build request")
 	}
 
+	// W-1 fix: Register inbound exploratory tunnel endpoint at build-request time
+	// so that the build reply (which arrives immediately after send) can be routed
+	// to ProcessTunnelReply rather than dropped. On cold start (no pre-existing
+	// reply tunnel), the build reply addresses the new tunnel ID; if that tunnel
+	// is not registered, the reply is silently dropped and the build expires.
+	// Registration at this point (before finalizePendingBuild) ensures the reply
+	// can be received. Client tunnels are registered in finalizePendingBuild with
+	// session context to route messages directly to the I2CP session.
+	if req.IsInbound && !req.IsClientTunnel && tm.inboundHandler != nil {
+		if err := tm.inboundHandler.RegisterExploratoryTunnel(result.TunnelID); err != nil {
+			log.WithError(err).WithFields(logger.Fields{
+				"at":        "prepareAndSendBuild",
+				"tunnel_id": result.TunnelID,
+			}).Warn("failed to register inbound exploratory tunnel endpoint")
+			// Continue anyway; finalizePendingBuild will attempt registration again
+		}
+	}
+
 	return result, messageID, peerHashes, nil
 }
 
@@ -396,6 +414,12 @@ func (tm *TunnelManager) cleanupFailedBuild(tunnelID tunnel.TunnelID, messageID 
 	tm.buildMutex.Lock()
 	delete(tm.pendingBuilds, messageID)
 	tm.buildMutex.Unlock()
+
+	// W-1 fix: unregister inbound exploratory endpoints on send failure so that
+	// a later-reused tunnel ID doesn't receive stale messages for this failed build
+	if isInbound && tm.inboundHandler != nil {
+		tm.inboundHandler.UnregisterTunnel(tunnelID)
+	}
 }
 
 // logBuildRequestSent logs successful tunnel build request submission

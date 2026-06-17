@@ -550,6 +550,13 @@ func (tm *TunnelManager) handleExpiredRequest(req *buildRequest, msgID int, now 
 	} else {
 		pool.RecordOutboundBuildTimeout()
 	}
+
+	// W-1 fix: Unregister inbound exploratory tunnels that expired, so they don't
+	// receive messages intended for tunnels that might reuse the same tunnel ID.
+	if req.isInbound && !req.isClientTunnel && tm.inboundHandler != nil {
+		tm.inboundHandler.UnregisterTunnel(req.tunnelID)
+	}
+
 	log.WithFields(logger.Fields{
 		"message_id":       msgID,
 		"tunnel_id":        req.tunnelID,
@@ -613,6 +620,12 @@ func (tm *TunnelManager) processExpiredBuild(messageID int, req *buildRequest) {
 	delete(tm.pendingBuilds, messageID)
 
 	tm.markTunnelAsFailed(req)
+
+	// W-1 fix: unregister inbound exploratory endpoints on build expiry so that
+	// the tunnel ID can be safely reused without receiving stale messages
+	if req.isInbound && tm.inboundHandler != nil {
+		tm.inboundHandler.UnregisterTunnel(req.tunnelID)
+	}
 
 	log.WithFields(logger.Fields{
 		"message_id":       messageID,
