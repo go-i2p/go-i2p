@@ -196,34 +196,24 @@ func (tm *TunnelManager) finalizePendingBuild(result *tunnel.TunnelBuildResult, 
 		}
 	}
 
-	// W-1 fix: Register inbound exploratory tunnels as control-plane endpoints
-	// at build-finalization time (after ReplyProcessor registration) so that
-	// TunnelData messages addressed to this tunnel ID (build replies forwarded
-	// by the remote OBEP) are found and processed rather than silently dropped.
-	// This fixes the cold-start ordering gap where the build reply arrives
+	// CRITICAL-1 fix: Register client tunnels (I2CP session-owned inbound
+	// tunnels) at build-finalization time (after ReplyProcessor registration)
+	// so that inbound messages delivered via TunnelData are routed to the
+	// owning I2CP session instead of being silently dropped.
+	// This fixes the cold-start ordering gap where the inbound message arrives
 	// before the endpoint is registered.
 	//
-	// CRITICAL-1 fix: Also register client tunnels (I2CP session-owned inbound
-	// tunnels) so that inbound messages delivered via TunnelData are routed to
-	// the owning I2CP session instead of being silently dropped.
-	if req.IsInbound && tm.inboundHandler != nil {
-		if req.IsClientTunnel {
-			// Client tunnel: register with session context for I2CP message delivery
-			if err := tm.inboundHandler.RegisterClientTunnel(result.TunnelID, req.ClientSessionID); err != nil {
-				log.WithError(err).WithFields(logger.Fields{
-					"at":         "finalizePendingBuild",
-					"tunnel_id":  result.TunnelID,
-					"session_id": req.ClientSessionID,
-				}).Warn("failed to register inbound client tunnel endpoint for session")
-			}
-		} else {
-			// Exploratory tunnel: register as control-plane endpoint for router messages
-			if err := tm.inboundHandler.RegisterExploratoryTunnel(result.TunnelID); err != nil {
-				log.WithError(err).WithFields(logger.Fields{
-					"at":        "finalizePendingBuild",
-					"tunnel_id": result.TunnelID,
-				}).Warn("failed to register inbound exploratory tunnel endpoint")
-			}
+	// NOTE: Exploratory tunnels are already registered in prepareAndSendBuild()
+	// (W-1 fix), so we skip re-registration here to avoid duplicate-registration
+	// errors. Only client tunnels need registration here.
+	if req.IsInbound && req.IsClientTunnel && tm.inboundHandler != nil {
+		// Client tunnel: register with session context for I2CP message delivery
+		if err := tm.inboundHandler.RegisterClientTunnel(result.TunnelID, req.ClientSessionID); err != nil {
+			log.WithError(err).WithFields(logger.Fields{
+				"at":         "finalizePendingBuild",
+				"tunnel_id":  result.TunnelID,
+				"session_id": req.ClientSessionID,
+			}).Warn("failed to register inbound client tunnel endpoint for session")
 		}
 	}
 
