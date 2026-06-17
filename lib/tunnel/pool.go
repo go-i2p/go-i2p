@@ -126,6 +126,7 @@ type Pool struct {
 	peerSelector         PeerSelector
 	tunnelBuilder        BuilderInterface
 	config               PoolConfig
+	clientSessionID      uint16        // Session ID for I2CP client pools; 0 for exploratory pools
 	selectionIndex       atomic.Uint32 // Lock-free round-robin counter
 	lastBuildTime        time.Time     // Track last build attempt for backoff
 	buildFailures        int           // Consecutive build failures
@@ -218,6 +219,21 @@ func (p *Pool) SetPeerTracker(tracker PeerTracker) {
 		"at":     "Pool.SetPeerTracker",
 		"reason": "enabling peer reputation tracking",
 	}).Debug("peer tracker configured for pool")
+}
+
+// SetClientSessionID sets the I2CP session ID for this pool.
+// Must be called for client pools (IsClientPool=true in config) so that
+// tunnel endpoint registration can identify which session owns the tunnel.
+func (p *Pool) SetClientSessionID(sessionID uint16) {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	p.clientSessionID = sessionID
+	log.WithFields(logger.Fields{
+		"at":         "Pool.SetClientSessionID",
+		"session_id": sessionID,
+		"is_inbound": p.config.IsInbound,
+		"is_client":  p.config.IsClientPool,
+	}).Debug("client session ID configured for pool")
 }
 
 // SetTunnelBuilder sets the tunnel builder for this pool.
@@ -636,6 +652,7 @@ func (p *Pool) prepareBuildRequest(excludePeers []common.Hash) BuildTunnelReques
 	p.mutex.RLock()
 	ourHash := p.routerHash
 	provider := p.replyTunnelProvider
+	sessionID := p.clientSessionID
 	p.mutex.RUnlock()
 
 	replyTunnelID := TunnelID(0)
@@ -649,6 +666,7 @@ func (p *Pool) prepareBuildRequest(excludePeers []common.Hash) BuildTunnelReques
 		HopCount:                  p.config.HopCount,
 		IsInbound:                 p.config.IsInbound,
 		IsClientTunnel:            p.config.IsClientPool,
+		ClientSessionID:           sessionID,
 		UseShortBuild:             true, // Use modern STBM by default
 		ExcludePeers:              progressiveExclude,
 		RequireDirectConnectivity: true,          // FIX: Only select directly-contactable peers

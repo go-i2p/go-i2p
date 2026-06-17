@@ -114,7 +114,7 @@ func (tm *TunnelManager) prepareAndSendBuild(req tunnel.BuildTunnelRequest) (*tu
 	tunnelState := tm.createTunnelStateFromResult(result)
 	pool := tm.getPoolForTunnel(req.IsInbound)
 	pool.AddTunnel(tunnelState)
-	tm.trackPendingBuild(result, messageID, req.IsClientTunnel, req.ReplyTunnelID)
+	tm.trackPendingBuild(result, messageID, req)
 
 	// Send the build message first. For STBM, createShortTunnelBuildMessage
 	// overwrites result.ReplyKeys with the HKDF-derived keys that the remote
@@ -184,12 +184,28 @@ func (tm *TunnelManager) finalizePendingBuild(result *tunnel.TunnelBuildResult, 
 	// by the remote OBEP) are found and processed rather than silently dropped.
 	// This fixes the cold-start ordering gap where the build reply arrives
 	// before the endpoint is registered.
-	if req.IsInbound && !req.IsClientTunnel && tm.inboundHandler != nil {
-		if err := tm.inboundHandler.RegisterExploratoryTunnel(result.TunnelID); err != nil {
-			log.WithError(err).WithFields(logger.Fields{
-				"at":        "finalizePendingBuild",
-				"tunnel_id": result.TunnelID,
-			}).Warn("failed to register inbound exploratory tunnel endpoint")
+	//
+	// CRITICAL-1 fix: Also register client tunnels (I2CP session-owned inbound
+	// tunnels) so that inbound messages delivered via TunnelData are routed to
+	// the owning I2CP session instead of being silently dropped.
+	if req.IsInbound && tm.inboundHandler != nil {
+		if req.IsClientTunnel {
+			// Client tunnel: register with session context for I2CP message delivery
+			if err := tm.inboundHandler.RegisterClientTunnel(result.TunnelID, req.ClientSessionID); err != nil {
+				log.WithError(err).WithFields(logger.Fields{
+					"at":         "finalizePendingBuild",
+					"tunnel_id":  result.TunnelID,
+					"session_id": req.ClientSessionID,
+				}).Warn("failed to register inbound client tunnel endpoint for session")
+			}
+		} else {
+			// Exploratory tunnel: register as control-plane endpoint for router messages
+			if err := tm.inboundHandler.RegisterExploratoryTunnel(result.TunnelID); err != nil {
+				log.WithError(err).WithFields(logger.Fields{
+					"at":        "finalizePendingBuild",
+					"tunnel_id": result.TunnelID,
+				}).Warn("failed to register inbound exploratory tunnel endpoint")
+			}
 		}
 	}
 
@@ -318,8 +334,8 @@ func (tm *TunnelManager) createTunnelStateFromResult(result *tunnel.TunnelBuildR
 }
 
 // trackPendingBuild records the pending build request for reply correlation.
-// isClientTunnel indicates whether the build originated from an I2CP client session pool.
-func (tm *TunnelManager) trackPendingBuild(result *tunnel.TunnelBuildResult, messageID int, isClientTunnel bool, replyTunnelID tunnel.TunnelID) {
+// req is the original BuildTunnelRequest that initiated the build.
+func (tm *TunnelManager) trackPendingBuild(result *tunnel.TunnelBuildResult, messageID int, req tunnel.BuildTunnelRequest) {
 	// Lazily start the cleanup goroutine on the first build request
 	tm.ensureCleanupStarted()
 
@@ -327,18 +343,19 @@ func (tm *TunnelManager) trackPendingBuild(result *tunnel.TunnelBuildResult, mes
 	defer tm.buildMutex.Unlock()
 
 	tm.pendingBuilds[messageID] = &buildRequest{
-		tunnelID:       result.TunnelID,
-		messageID:      messageID,
-		replyTunnelID:  replyTunnelID,
-		hopCount:       len(result.Hops),
-		replyKeys:      result.ReplyKeys,
-		replyIVs:       result.ReplyIVs,
-		noiseHashes:    result.NoiseHashes,
-		createdAt:      time.Now(),
-		retryCount:     0,
-		useShortBuild:  result.UseShortBuild,
-		isInbound:      result.IsInbound,
-		isClientTunnel: isClientTunnel,
+		tunnelID:        result.TunnelID,
+		messageID:       messageID,
+		replyTunnelID:   req.ReplyTunnelID,
+		hopCount:        len(result.Hops),
+		replyKeys:       result.ReplyKeys,
+		replyIVs:        result.ReplyIVs,
+		noiseHashes:     result.NoiseHashes,
+		createdAt:       time.Now(),
+		retryCount:      0,
+		useShortBuild:   result.UseShortBuild,
+		isInbound:       result.IsInbound,
+		isClientTunnel:  req.IsClientTunnel,
+		clientSessionID: req.ClientSessionID,
 	}
 }
 

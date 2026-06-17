@@ -19,18 +19,19 @@ const buildExpireGrace = 200 * time.Millisecond
 // buildRequest tracks a pending tunnel build request for correlation with replies.
 // This enables matching build replies to the original request and managing timeouts.
 type buildRequest struct {
-	tunnelID       tunnel.TunnelID          // Unique tunnel ID for this request
-	messageID      int                      // I2NP message ID for correlation
-	replyTunnelID  tunnel.TunnelID          // Reply tunnel ID selected for outbound build replies
-	hopCount       int                      // Number of hops in the tunnel
-	replyKeys      []session_key.SessionKey // Reply decryption keys for each hop
-	replyIVs       [][16]byte               // Reply IVs for each hop
-	noiseHashes    [][32]byte               // STBM per-hop Noise transcript hashes for reply AEAD decryption
-	createdAt      time.Time                // When the request was created
-	retryCount     int                      // Number of retry attempts
-	useShortBuild  bool                     // True if using STBM, false for legacy VTB
-	isInbound      bool                     // True if this is an inbound tunnel
-	isClientTunnel bool                     // True if this tunnel belongs to an I2CP client session
+	tunnelID        tunnel.TunnelID          // Unique tunnel ID for this request
+	messageID       int                      // I2NP message ID for correlation
+	replyTunnelID   tunnel.TunnelID          // Reply tunnel ID selected for outbound build replies
+	hopCount        int                      // Number of hops in the tunnel
+	replyKeys       []session_key.SessionKey // Reply decryption keys for each hop
+	replyIVs        [][16]byte               // Reply IVs for each hop
+	noiseHashes     [][32]byte               // STBM per-hop Noise transcript hashes for reply AEAD decryption
+	createdAt       time.Time                // When the request was created
+	retryCount      int                      // Number of retry attempts
+	useShortBuild   bool                     // True if using STBM, false for legacy VTB
+	isInbound       bool                     // True if this is an inbound tunnel
+	isClientTunnel  bool                     // True if this tunnel belongs to an I2CP client session
+	clientSessionID uint16                   // Session ID if isClientTunnel=true; 0 otherwise
 }
 
 // expiredBuild tracks a recently expired build request for late-reply accounting.

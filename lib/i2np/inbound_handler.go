@@ -17,5 +17,9 @@ import "github.com/go-i2p/go-i2p/lib/tunnel"
 // reused without receiving stale messages.
 type InboundHandlerRegistrar interface {
 	RegisterExploratoryTunnel(tunnelID tunnel.TunnelID) error
+	// RegisterClientTunnel registers an inbound client tunnel endpoint for message delivery to an I2CP session.
+	// sessionID identifies the owning I2CP session.
+	// The inbound handler implementation is responsible for creating the endpoint with proper session context.
+	RegisterClientTunnel(tunnelID tunnel.TunnelID, sessionID uint16) error
 	UnregisterTunnel(tunnelID tunnel.TunnelID)
 }

@@ -56,6 +56,7 @@ type BuildTunnelRequest struct {
 	HopCount                  int           // Number of hops in the tunnel (1-8)
 	IsInbound                 bool          // True for inbound tunnel, false for outbound
 	IsClientTunnel            bool          // True for I2CP session-scoped client pools (vs exploratory router pools)
+	ClientSessionID           uint16        // Session ID if IsClientTunnel=true; 0 otherwise (for endpoint registration)
 	OurIdentity               common.Hash   // Our router identity hash
 	ExcludePeers              []common.Hash // Peers to exclude from selection
 	ReplyTunnelID             TunnelID      // Tunnel ID for receiving build replies (0 for outbound)

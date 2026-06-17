@@ -92,6 +92,8 @@ func (s *Server) createPool(session *Session, config *SessionConfig, builder tun
 	poolConfig := buildPoolConfig(count, backup, length, variance, isInbound)
 	pool := tunnel.NewTunnelPoolWithConfig(selector, poolConfig)
 	pool.SetTunnelBuilder(builder)
+	// Set the client session ID so that tunnel endpoint registration can identify the owning session
+	pool.SetClientSessionID(session.ID())
 	s.applySessionPoolRoutingConfig(pool)
 
 	// Set reply tunnel provider based on pool type

@@ -422,6 +422,67 @@ func (h *InboundMessageHandler) RegisterExploratoryTunnel(tunnelID tunnel.Tunnel
 	return nil
 }
 
+// RegisterClientTunnel registers an inbound client tunnel endpoint for message delivery to an I2CP session.
+// The endpoint is created with a message handler that queues decrypted messages to the owning I2CP session.
+// A passthrough (identity) TunnelEncryptor is used because the inbound gateway sends TunnelData
+// directly to our router without layering the encryption of intermediate hops.
+//
+// Parameters:
+// - tunnelID: the ID of the inbound tunnel
+// - sessionID: the I2CP session ID that owns this tunnel
+//
+// Returns an error if the tunnel cannot be registered or if the session is not found.
+func (h *InboundMessageHandler) RegisterClientTunnel(tunnelID tunnel.TunnelID, sessionID uint16) error {
+	// Get the I2CP session for message delivery
+	session, exists := h.sessionManager.GetSession(sessionID)
+	if !exists {
+		log.WithFields(logger.Fields{
+			"at":         "RegisterClientTunnel",
+			"tunnel_id":  tunnelID,
+			"session_id": sessionID,
+			"reason":     "session not found",
+		}).Error("Failed to register client tunnel: session not found")
+		return oops.Errorf("session %d not found for client tunnel %d", sessionID, tunnelID)
+	}
+
+	// Create a message handler that delivers to the I2CP session
+	messageHandler := tunnel.MessageHandler(func(payload []byte) error {
+		return session.QueueIncomingMessage(payload)
+	})
+
+	// Create the endpoint with passthrough decryption (inbound gateways don't layer encryption)
+	endpoint, err := tunnel.NewEndpoint(tunnelID, &passthroughTunnelEncryptor{}, messageHandler)
+	if err != nil {
+		log.WithError(err).WithFields(logger.Fields{
+			"at":         "RegisterClientTunnel",
+			"tunnel_id":  tunnelID,
+			"session_id": sessionID,
+			"reason":     "endpoint creation failed",
+		}).Error("Failed to create client tunnel endpoint")
+		return oops.Wrapf(err, "failed to create endpoint for client tunnel %d", tunnelID)
+	}
+
+	// Register the tunnel
+	if err := h.RegisterTunnel(tunnelID, sessionID, endpoint); err != nil {
+		endpoint.Stop()
+		log.WithError(err).WithFields(logger.Fields{
+			"at":         "RegisterClientTunnel",
+			"tunnel_id":  tunnelID,
+			"session_id": sessionID,
+			"reason":     "tunnel registration failed",
+		}).Error("Failed to register client tunnel")
+		return oops.Wrapf(err, "register client tunnel %d for session %d", tunnelID, sessionID)
+	}
+
+	log.WithFields(logger.Fields{
+		"at":         "RegisterClientTunnel",
+		"tunnel_id":  tunnelID,
+		"session_id": sessionID,
+	}).Debug("Registered inbound client tunnel endpoint with I2CP message delivery")
+
+	return nil
+}
+
 // GetTunnelCount returns the number of registered inbound tunnels
 func (h *InboundMessageHandler) GetTunnelCount() int {
 	h.mu.RLock()
