@@ -82,6 +82,19 @@ func (r *Router) startExplorer() {
 		cfg.OurHash = ourHash
 	}
 
+	// Build the production lookup transport so the explorer can issue real
+	// network DatabaseLookups. The client sends direct (non-tunnelled) lookups
+	// over transport sessions and correlates replies by target key. The SAME
+	// instance is registered as the processor's reply deliverer so inbound
+	// DatabaseStore / DatabaseSearchReply messages wake the blocked lookups.
+	if r.transports != nil && r.messageRouter != nil {
+		lookupClient := netdb.NewDatabaseLookupClient(&publisherTransportAdapter{muxer: r.transports})
+		cfg.Transport = lookupClient
+		r.messageRouter.GetProcessor().SetLookupReplyDeliverer(lookupClient)
+	} else {
+		log.WithFields(logger.Fields{"at": "startExplorer"}).Warn("NetDB explorer starting without transport: transport or message router not ready, lookups will be local-only")
+	}
+
 	r.explorer = netdb.NewExplorer(r.netdb, tunnelPool, cfg)
 
 	if r.messageRouter != nil {

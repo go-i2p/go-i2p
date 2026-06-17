@@ -119,6 +119,19 @@ type SearchReplyHandler interface {
 	HandleSearchReply(key common.Hash, peerHashes []common.Hash)
 }
 
+// LookupReplyDeliverer correlates inbound DatabaseStore / DatabaseSearchReply
+// messages with outstanding direct DatabaseLookup requests. It is implemented
+// by the NetDB lookup client, which blocks a SendDatabaseLookup call until the
+// matching reply is delivered here. Correlation is by the looked-up KEY, since
+// I2P DatabaseLookup replies carry the key rather than the request's message ID.
+type LookupReplyDeliverer interface {
+	// DeliverLookupReply hands a reply body to a pending lookup keyed by the
+	// target hash. msgType is the I2NP type (DatabaseStore or
+	// DatabaseSearchReply) and data is the serialized message body. Returns true
+	// if a pending lookup consumed the reply.
+	DeliverLookupReply(key common.Hash, msgType int, data []byte) bool
+}
+
 // DataMessageHandler defines the interface for handling incoming Data messages.
 // Data messages carry end-to-end payloads that need to be delivered to I2CP sessions.
 type DataMessageHandler interface {
@@ -195,6 +208,7 @@ type MessageProcessor struct {
 	tunnelGatewayHandler  TunnelGatewayHandler      // Optional handler for tunnel gateway messages
 	tunnelDataHandler     TunnelDataHandler         // Optional handler for inbound tunnel data messages
 	searchReplyHandler    SearchReplyHandler        // Optional handler for DatabaseSearchReply suggestions
+	lookupReplyDeliverer  LookupReplyDeliverer      // Optional deliverer correlating DB replies to direct lookups
 	dataMessageHandler    DataMessageHandler        // Optional handler for Data message payloads
 	deliveryStatusHandler DeliveryStatusHandler     // Optional handler for delivery status confirmations
 	buildReplyProcessor   TunnelBuildReplyProcessor // Optional processor for tunnel build reply messages
@@ -296,6 +310,17 @@ func (p *MessageProcessor) SetTunnelDataHandler(handler TunnelDataHandler) {
 func (p *MessageProcessor) SetSearchReplyHandler(handler SearchReplyHandler) {
 	p.setField("SetSearchReplyHandler", func() {
 		p.searchReplyHandler = handler
+	})
+}
+
+// SetLookupReplyDeliverer sets the deliverer that correlates inbound
+// DatabaseStore / DatabaseSearchReply messages with outstanding direct
+// DatabaseLookup requests. When set, those replies are forwarded to the
+// deliverer so a blocked SendDatabaseLookup can return. If not set, replies are
+// only processed for their side effects (NetDB store / suggestion logging).
+func (p *MessageProcessor) SetLookupReplyDeliverer(deliverer LookupReplyDeliverer) {
+	p.setField("SetLookupReplyDeliverer", func() {
+		p.lookupReplyDeliverer = deliverer
 	})
 }
 

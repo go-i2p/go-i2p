@@ -80,6 +80,14 @@ require (
 	golang.org/x/text v0.38.0 // indirect
 )
 
+// Active local-development replace directives. These point go-noise (NTCP2/SSU2
+// Noise handshake) and path at the in-tree working copies so transport fixes
+// landed locally are actually built. Removing them silently downgrades to the
+// last published pseudo-version and reverts those fixes, which breaks transport.
+replace github.com/go-i2p/go-noise => ../go-noise
+
+replace github.com/go-i2p/path => ../path
+
 // Preserve these commented-out replace directives for local development.
 // This makes it easier to test changes across multiple modules without needing to
 // publish intermediate versions.

@@ -48,8 +48,6 @@ github.com/go-i2p/go-i2pcontrol v0.1.9-0.20260607233455-950087a3858f h1:FJJXgN8/
 github.com/go-i2p/go-i2pcontrol v0.1.9-0.20260607233455-950087a3858f/go.mod h1:+jmWmXsfpg9fVmNmaLFCykYyxkYphdrLRD54UwNw2Qs=
 github.com/go-i2p/go-nat-listener v0.0.0-20260402222111-bfda0025cb1b h1:KzL/bql7UATLCsfk+kgam19kWuEe34/ia3A1uE0CFE0=
 github.com/go-i2p/go-nat-listener v0.0.0-20260402222111-bfda0025cb1b/go.mod h1:hd95uOrwhTa2coFcJkBlGwGgOpjVNVYkAXxRvwIJRsE=
-github.com/go-i2p/go-noise v0.1.60000-0.20260612013208-808b7529e803 h1:woXZrGfAy7E+n44jUPWyS9r0/AFpI94uvrZhJcIxJeo=
-github.com/go-i2p/go-noise v0.1.60000-0.20260612013208-808b7529e803/go.mod h1:YoAxtphkAb8sNdRbV24SgC5f0UItb1W6fUpG68rNy5E=
 github.com/go-i2p/go-unzip v0.0.0-20260417162122-21146ed7aca8 h1:efCudZqf5/F4Mj/WYLqKveOwTPW81vVrn8Z0K7GFkTM=
 github.com/go-i2p/go-unzip v0.0.0-20260417162122-21146ed7aca8/go.mod h1:Jy8JMJDZNzy6u4s1FGNeVvDAsuBJn24nxyNLS0QmYpM=
 github.com/go-i2p/i2p-control v0.0.0-20260608000308-d8ed861a259c h1:Euk+tCxpdF9h9L7A5/KsXm/o8cOzNiVNU3PbQ2ieYwE=
@@ -60,8 +58,6 @@ github.com/go-i2p/logger v0.1.60000-0.20260612012503-bec4044a2b0d h1:AJWfD1WSsIM
 github.com/go-i2p/logger v0.1.60000-0.20260612012503-bec4044a2b0d/go.mod h1:ygRTQPZmHNNfwEf+vPtJwJs/EjIW7al5OOo+hEY6KS0=
 github.com/go-i2p/noise v1.1.1-0.20260612013029-6d1ef3427561 h1:ygcYOpsJO6hvWjEzv4e4lPHvUqQ7d38syI4ar2cMWLU=
 github.com/go-i2p/noise v1.1.1-0.20260612013029-6d1ef3427561/go.mod h1:/79lUu1iKd1yW+zqLI7QjY2MUpsGkGStKM7XVDxPeEc=
-github.com/go-i2p/path v0.1.60000-0.20260612012938-437d7ee74b3a h1:kcv5gaDDMr8VkK5Ei0G39v4faW9RquJt6iMY68b4zNQ=
-github.com/go-i2p/path v0.1.60000-0.20260612012938-437d7ee74b3a/go.mod h1:4hrhWHVAEN7tmk+aPczx2vlj4o0t7OrnNfTYnGAHxXc=
 github.com/go-i2p/pool v0.1.59999 h1:jWTzOypfVFvhcUPhrkzOq0i2rMtz8A1QJjzv9f8YIEg=
 github.com/go-i2p/pool v0.1.59999/go.mod h1:O1i9HtW0zSaoHAzVLmDTEvHYD9VzLnvfBDd/aKk2N7Y=
 github.com/go-i2p/red25519 v0.0.0-20260302212615-1093a31f680d h1:a7DHsr9SOEjybZVtH3e0kJpXy40mZb1V+dGm9tptOl8=
