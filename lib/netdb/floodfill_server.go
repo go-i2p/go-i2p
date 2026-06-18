@@ -471,15 +471,18 @@ func (fs *FloodfillServer) lookupRouterInfo(key common.Hash) ([]byte, byte, erro
 
 // lookupLeaseSet looks up a LeaseSet by hash.
 // Checks all LeaseSet variants: LeaseSet2, EncryptedLeaseSet, MetaLeaseSet,
-// and original LeaseSet. Excludes own-created session LeaseSets (privacy safeguard).
+// and original LeaseSet.
+//
+// PRIVACY NOTE: We serve all LeaseSets uniformly to avoid creating an oracle.
+// Observers cannot infer whether a FloodFill "owns" a LeaseSet by observing
+// differences in lookup behavior. This is required by I2P protocol for privacy.
+//
+// Future optimization: Only serve LeaseSets that we would have self-selected
+// as a FloodFill when publishing them. This requires storing which FloodFills
+// were chosen during publication and comparing with our own position in the
+// DHT. This avoids serving LeaseSets that were published to us by others but
+// we would never have received in normal operation.
 func (fs *FloodfillServer) lookupLeaseSet(key common.Hash) ([]byte, byte, error) {
-	// Privacy safeguard: Don't serve our own session-created LeaseSets to external lookups.
-	// These are stored locally for inbound tunnel discovery but should not be revealed
-	// to peers who haven't explicitly received them from us.
-	if fs.db.IsOwnLeaseSet(key) {
-		return nil, 0, oops.Errorf("LeaseSet not found for %x (own session LeaseSet)", key[:8])
-	}
-
 	// Try LeaseSet2 first (most common modern format)
 	data, err := fs.db.GetLeaseSet2Bytes(key)
 	if err == nil && len(data) > 0 {

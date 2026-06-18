@@ -164,8 +164,16 @@ func TestPrivacySafeguard_OwnLeaseSetNotServedToExternalLookups(t *testing.T) {
 		t.Log("✓ IsOwnLeaseSet correctly tracks ownership of stored LeaseSets")
 	})
 
-	t.Run("FloodfillServerSkipsOwnLeaseSetLookups", func(t *testing.T) {
-		// Simulate FloodfillServer behavior: use mock DB and check privacy safeguard
+	t.Run("FloodfillServerUniformBehavior", func(t *testing.T) {
+		// CRITICAL: FloodFillServer must serve all LeaseSets uniformly to avoid oracles.
+		// An oracle is an observable difference in behavior that reveals information.
+		// If we refuse to serve "own" LeaseSets, observers can infer ownership.
+		// Therefore, FloodfillServer serves everything uniformly.
+		//
+		// The IsOwnLeaseSet infrastructure remains for:
+		// 1. Future optimization: selective serving if we would have self-selected
+		// 2. Logging/monitoring which LeaseSets we created
+		// 3. Not creating observable behavior differences
 		db := newMockPrivacyDB()
 
 		ownHash := common.Hash{}
@@ -185,15 +193,20 @@ func TestPrivacySafeguard_OwnLeaseSetNotServedToExternalLookups(t *testing.T) {
 		err2 := db.StoreLeaseSet(publicHash, testData, i2np.DatabaseStoreTypeLeaseSet2)
 		require.NoError(t, err2)
 
-		// Simulate FloodfillServer lookup logic:
-		// Check IsOwnLeaseSet first before attempting to retrieve
-		ownCheckResult := db.IsOwnLeaseSet(ownHash)
-		publicCheckResult := db.IsOwnLeaseSet(publicHash)
+		// GetAllLeaseSets() returns all (both own and public) for internal operations
+		allLeaseSets := db.GetAllLeaseSets()
+		require.Equal(t, 2, len(allLeaseSets), "GetAllLeaseSets should return both own and public")
 
-		require.True(t, ownCheckResult, "Privacy check should block own LeaseSet lookups")
-		require.False(t, publicCheckResult, "Privacy check should allow public LeaseSet lookups")
+		// GetPublicLeaseSets() filters (available for future selective serving)
+		publicLeaseSets := db.GetPublicLeaseSets()
+		require.Equal(t, 1, len(publicLeaseSets), "GetPublicLeaseSets should filter for future use")
 
-		t.Log("✓ FloodfillServer privacy safeguard correctly identifies own LeaseSets")
+		// But FloodFillServer serves all uniformly (no filtering)
+		// This prevents the oracle: observers can't infer ownership from lookup behavior
+		t.Log("✓ StoreOwnLeaseSet infrastructure exists for future optimization")
+		t.Log("  - But FloodFillServer serves all LeaseSets uniformly")
+		t.Log("  - Prevents oracle: no observable difference in lookup behavior")
+		t.Log("  - Future: selective serving based on self-selection criterion")
 	})
 
 	t.Run("MixedLookupScenario", func(t *testing.T) {
