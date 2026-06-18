@@ -204,7 +204,11 @@ func assembleEncryptedSTBMRecord(encrypted *[218]byte, full, ephemeralPub, ct []
 // the HKDF chain (e.g. for layer/IV/garlic key derivation).
 func DeriveSTBMReplyKey(chainingKey [32]byte) ([32]byte, [32]byte, error) {
 	var replyKey, newCK [32]byte
-	r := hkdf.New(sha256.New, chainingKey[:], []byte{}, []byte("SMTunnelReplyKey"))
+	// I2P HKDF convention: ck is the HMAC key (salt), IKM is empty.
+	// i2pd: HKDF(salt=ck, ikm="", info) → PRK = HMAC-SHA256(key=ck, data="")
+	// Go hkdf.New(hash, secret=IKM, salt, info) → PRK = HMAC-SHA256(key=salt, data=IKM)
+	// So: salt=ck[:], secret=[]byte{} (not the reverse)
+	r := hkdf.New(sha256.New, []byte{}, chainingKey[:], []byte("SMTunnelReplyKey"))
 	var out [64]byte
 	if _, err := io.ReadFull(r, out[:]); err != nil {
 		return replyKey, newCK, oops.Wrapf(err, "HKDF for SMTunnelReplyKey failed")
@@ -216,9 +220,14 @@ func DeriveSTBMReplyKey(chainingKey [32]byte) ([32]byte, [32]byte, error) {
 
 // hkdf64 performs one HKDF-SHA256 step matching i2pd's HKDF(salt, nil, 0, info, out, 64):
 // output is 64 bytes, [0:32]=new chaining key, [32:64]=derived key.
+//
+// I2P HKDF convention: ck is the HMAC key (salt), IKM is empty.
+// i2pd: HKDF(salt=ck, ikm="", info) → PRK = HMAC-SHA256(key=ck, data="")
+// Go hkdf.New(hash, secret=IKM, salt, info) → PRK = HMAC-SHA256(key=salt, data=IKM)
+// Correct call: salt=ck[:], secret=[]byte{} (empty IKM)
 func hkdf64(ck [32]byte, info string) ([64]byte, error) {
 	var out [64]byte
-	r := hkdf.New(sha256.New, ck[:], []byte{}, []byte(info))
+	r := hkdf.New(sha256.New, []byte{}, ck[:], []byte(info))
 	_, err := io.ReadFull(r, out[:])
 	return out, err
 }
