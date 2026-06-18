@@ -15,9 +15,9 @@ var log = logger.GetGoI2PLogger()
 // I2PControlCmd represents the i2pcontrol command
 var I2PControlCmd = &cobra.Command{
 	Use:     "i2pcontrol [method] [args...]",
-	Short:   "Execute I2PControl JSON-RPC method",
-	Long:    "Execute a JSON-RPC method on the I2PControl interface of a running go-i2p router.",
-	Example: "go-i2p i2pcontrol echo\ngo-i2p i2pcontrol router.info\ngo-i2p i2pcontrol bw.sendBps 300000",
+	Short:   "Execute an i2p-control command against the embedded I2PControl interface",
+	Long:    "Execute an i2p-control command (echo, ident, stat, netstat, tunstat, ratestat, reseedstat, restart, shutdown, update) on a running go-i2p router.",
+	Example: "go-i2p i2pcontrol ident\ngo-i2p i2pcontrol stat\ngo-i2p i2pcontrol ratestat bw.sendBps 300000",
 	Args:    cobra.MinimumNArgs(1),
 	RunE:    executeI2PControl,
 }
@@ -49,11 +49,6 @@ func executeI2PControl(cmd *cobra.Command, args []string) error {
 	// Extract method from first argument
 	method := args[0]
 	methodArgs := args[1:]
-
-	// If no method args provided, use defaults (for echo, etc.)
-	if len(methodArgs) == 0 {
-		methodArgs = []string{"bw.sendBps", "300000"}
-	}
 
 	// Get configuration from Viper with sensible defaults
 	hostVal := host
