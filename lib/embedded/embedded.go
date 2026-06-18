@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/go-i2p/go-i2p/lib/config"
+	"github.com/go-i2p/go-i2p/lib/netdb"
 	"github.com/go-i2p/go-i2p/lib/router"
 )
 
@@ -59,6 +60,10 @@ type StandardEmbeddedRouter struct {
 
 	// cfg stores the router configuration
 	cfg *config.RouterConfig
+
+	// CRITICAL-6 FIX: publisher reference to force RouterInfo republish at startup
+	// This ensures peer caches are flushed of old RouterInfo when router restarts
+	publisher *netdb.Publisher
 
 	// mu protects concurrent access to router state
 	mu sync.RWMutex

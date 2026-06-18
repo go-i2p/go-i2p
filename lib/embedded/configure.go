@@ -55,6 +55,9 @@ func (e *StandardEmbeddedRouter) Configure(cfg *config.RouterConfig) error {
 
 	e.router = routerInstance
 	e.cfg = cfg
+	// CRITICAL-6 FIX: Capture publisher reference for startup republish
+	// routerInstance is *router.Router, so we can access publisher directly
+	e.publisher = routerInstance.GetPublisher()
 	e.configured = true
 
 	log.WithFields(logger.Fields{

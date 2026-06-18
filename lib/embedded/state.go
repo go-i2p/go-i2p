@@ -37,6 +37,26 @@ func (e *StandardEmbeddedRouter) Start() error {
 	e.running = true
 	e.done = make(chan struct{})
 
+	// CRITICAL-6 FIX: Force immediate RouterInfo republish at startup
+	// This flushes peer caches of old cached RouterInfo with different keys.
+	// Normally DHT updates are slow (cache expiry), but this ensures immediate
+	// propagation so peers start using new X25519 encryption key immediately.
+	// This is critical for garlic message decryption to succeed quickly after startup.
+	if e.publisher != nil {
+		if err := e.publisher.ForceRouterInfoRepublish(); err != nil {
+			log.WithFields(logger.Fields{
+				"at":     "StandardEmbeddedRouter.Start",
+				"reason": "force republish failed",
+				"error":  err,
+			}).Warn("failed to force RouterInfo republish at startup (non-fatal)")
+		} else {
+			log.WithFields(logger.Fields{
+				"at":     "StandardEmbeddedRouter.Start",
+				"reason": "RouterInfo republished immediately to floodfills",
+			}).Info("forced immediate RouterInfo republish at startup")
+		}
+	}
+
 	log.WithFields(logger.Fields{
 		"at":     "StandardEmbeddedRouter.Start",
 		"phase":  "running",

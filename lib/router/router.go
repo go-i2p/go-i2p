@@ -474,6 +474,13 @@ func (r *Router) GetLocalRouterIdentityHash() (string, error) {
 	return base64.StdEncoding.EncodeToString(hash[:]), nil
 }
 
+// GetPublisher returns the NetDB publisher instance used by this router.
+// This is used to access router-specific publishing operations like ForceRouterInfoRepublish().
+// CRITICAL-6 FIX: Allows embedded router to trigger immediate RouterInfo republish at startup.
+func (r *Router) GetPublisher() *netdb.Publisher {
+	return r.publisher
+}
+
 // startPeriodicTask launches a background goroutine that periodically executes fn
 // on a ticker interval. The goroutine exits when r.ctx is cancelled (Router Stop()).
 // This helper consolidates the common pattern: wg.Add/wg.Done, select on ctx.Done/ticker.C
