@@ -390,6 +390,70 @@ func TestRemovePending_NonExistentEntry(t *testing.T) {
 	server.removePending(9999)
 }
 
+// newTrackingOnlySession constructs a minimal session instance for exercising
+// pending-message packet-number bookkeeping without loopback networking.
+func newTrackingOnlySession() *SSU2Session {
+	rtt := ssu2noise.NewRTTEstimator()
+	return &SSU2Session{
+		rttEstimator:    rtt,
+		congestionCtrl:  ssu2noise.NewCongestionController(rtt),
+		pendingMsgs:     make(map[uint64]*pendingI2NP),
+		packetToPending: make(map[uint32]uint64),
+	}
+}
+
+// TestAssignPendingPacketNumbers_Deduplicates verifies duplicate packet
+// numbers do not create duplicate reverse mappings.
+func TestAssignPendingPacketNumbers_Deduplicates(t *testing.T) {
+	s := newTrackingOnlySession()
+	seq := s.trackPendingBlocks([]byte("payload"), nil)
+
+	s.assignPendingPacketNumbers(seq, []uint32{10, 11, 10})
+
+	s.pendingMsgsMu.Lock()
+	p := s.pendingMsgs[seq]
+	_, has10 := p.packetNums[10]
+	_, has11 := p.packetNums[11]
+	reverse10 := s.packetToPending[10]
+	reverse11 := s.packetToPending[11]
+	mappingCount := len(s.packetToPending)
+	s.pendingMsgsMu.Unlock()
+
+	assert.True(t, has10)
+	assert.True(t, has11)
+	assert.Equal(t, seq, reverse10)
+	assert.Equal(t, seq, reverse11)
+	assert.Equal(t, 2, mappingCount)
+}
+
+// TestAckPendingByPackets_RetiresOnlyMatchedSequence verifies explicit ACK
+// packet numbers retire only the correlated pending message.
+func TestAckPendingByPackets_RetiresOnlyMatchedSequence(t *testing.T) {
+	s := newTrackingOnlySession()
+	seqA := s.trackPendingBlocks([]byte("aaa"), nil)
+	seqB := s.trackPendingBlocks([]byte("bbbb"), nil)
+
+	s.assignPendingPacketNumbers(seqA, []uint32{100, 101})
+	s.assignPendingPacketNumbers(seqB, []uint32{200})
+
+	s.ackPendingByPackets([]uint32{101})
+
+	s.pendingMsgsMu.Lock()
+	_, hasA := s.pendingMsgs[seqA]
+	_, hasB := s.pendingMsgs[seqB]
+	_, pn100Exists := s.packetToPending[100]
+	_, pn101Exists := s.packetToPending[101]
+	owner200, pn200Exists := s.packetToPending[200]
+	s.pendingMsgsMu.Unlock()
+
+	assert.False(t, hasA, "sequence with ACKed packet should be retired")
+	assert.True(t, hasB, "unacked sequence should remain pending")
+	assert.False(t, pn100Exists, "all packet mappings for retired sequence should be removed")
+	assert.False(t, pn101Exists, "acked packet mapping should be removed")
+	assert.True(t, pn200Exists, "unrelated packet mapping should remain")
+	assert.Equal(t, seqB, owner200)
+}
+
 // ---------------------------------------------------------------------------
 // handleRetransmissions
 // ---------------------------------------------------------------------------

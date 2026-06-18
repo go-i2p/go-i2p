@@ -34,11 +34,14 @@ const maxRTTSample = 30 * time.Second
 // pendingI2NP tracks an I2NP message that has been written to the conn but
 // has not yet been confirmed delivered (used for session-level retransmission).
 type pendingI2NP struct {
-	data     []byte
-	blocks   []*ssu2noise.SSU2Block
-	sentAt   time.Time
-	deadline time.Time // sentAt + rto; extended on each retransmit with back-off
-	attempts int
+	data   []byte
+	blocks []*ssu2noise.SSU2Block
+	// packetNums tracks all SSU2 packet numbers currently associated with this
+	// pending message (initial send and any retransmits).
+	packetNums map[uint32]struct{}
+	sentAt     time.Time
+	deadline   time.Time // sentAt + rto; extended on each retransmit with back-off
+	attempts   int
 }
 
 // SSU2Session implements transport.TransportSession over an SSU2 connection.
@@ -49,13 +52,14 @@ type SSU2Session struct {
 	connMu sync.RWMutex // protects conn field (R-1 fix: upgraded to RWMutex for read-heavy access)
 
 	// Phase 5: Reliability & congestion control (SSU2-specific fields)
-	rttEstimator   *ssu2noise.RTTEstimator
-	congestionCtrl *ssu2noise.CongestionController
-	pendingMsgsMu  sync.Mutex
-	pendingMsgs    map[uint64]*pendingI2NP
-	pendingSeqNext uint64 // incremented atomically
-	maxRetransmit  int
-	lastSendNano   int64 // atomic unix-nano of most recent Write call
+	rttEstimator    *ssu2noise.RTTEstimator
+	congestionCtrl  *ssu2noise.CongestionController
+	pendingMsgsMu   sync.Mutex
+	pendingMsgs     map[uint64]*pendingI2NP
+	packetToPending map[uint32]uint64 // SSU2 packet number -> pending sequence
+	pendingSeqNext  uint64            // incremented atomically
+	maxRetransmit   int
+	lastSendNano    int64 // atomic unix-nano of most recent Write call
 
 	// peerTestLimiter enforces a per-session cap on PeerTest (Bob-role) relays.
 	// Burst of 3 with a sustained rate of 1/s (I2P spec allows infrequent tests).
@@ -80,12 +84,13 @@ func NewSSU2SessionDeferred(conn *ssu2noise.SSU2Conn, ctx context.Context, logge
 
 	rtt := ssu2noise.NewRTTEstimator()
 	s := &SSU2Session{
-		SessionCore:    transport.NewSessionCore(ctx, sessionLogger),
-		conn:           conn,
-		rttEstimator:   rtt,
-		congestionCtrl: ssu2noise.NewCongestionController(rtt),
-		pendingMsgs:    make(map[uint64]*pendingI2NP),
-		maxRetransmit:  DefaultMaxRetransmissions,
+		SessionCore:     transport.NewSessionCore(ctx, sessionLogger),
+		conn:            conn,
+		rttEstimator:    rtt,
+		congestionCtrl:  ssu2noise.NewCongestionController(rtt),
+		pendingMsgs:     make(map[uint64]*pendingI2NP),
+		packetToPending: make(map[uint32]uint64),
+		maxRetransmit:   DefaultMaxRetransmissions,
 	}
 	s.peerTestLimiter = rate.NewLimiter(rate.Limit(1), 3)
 	s.wireDataHandlerCallbacks()
@@ -126,39 +131,16 @@ func (s *SSU2Session) buildMergedCallbacks(extra *BlockCallbackConfig) ssu2noise
 			}
 			return nil
 		},
-		// OnACK: when the peer sends an explicit ACK block, parse it to extract the
-		// acknowledged packet range per SSU2 spec §5.2.2.1. The block contains a
-		// first-packet-number and nack bitmap indicating which packets were received.
-		//
-		// While full per-packet correlation (SSU2 PN → I2NP seq) remains pending,
-		// we use the parsed ACK data as evidence of peer responsiveness and apply a
-		// time-based heuristic to retire pending I2NP messages that have had ample
-		// time to be delivered and SSU2-layer-ACKed.
-		//
-		// TODO: Implement full per-packet tracking to retire exactly the ACKed I2NP
-		// messages instead of using a time heuristic. This requires tracking which
-		// SSU2 packets carry which I2NP message segments.
+		// OnACK: when the peer sends an explicit ACK block, parse it and retire only
+		// pending messages that have a correlated packet number in the ACKed range.
 		OnACK: func(block *ssu2noise.SSU2Block) error {
 			// Parse the explicit ACK block per spec
 			ackInfo, err := ParseACKBlock(block)
 			if err != nil {
 				s.Logger().WithError(err).Warn("failed to parse ACK block")
-				// Non-fatal: still use time-based heuristic even if parsing fails
-				ackInfo = nil
-			} else {
-				s.Logger().WithFields(logger.Fields{
-					"at":                 "OnACK",
-					"first_packet_num":   ackInfo.FirstPacketNum,
-					"nack_count":         ackInfo.NackCount,
-					"acked_packet_count": len(ackInfo.AckedRange),
-					"first_few_acked":    ackInfo.AckedRange, // All acked packets for now
-				}).Debug("explicit ACK block parsed successfully")
+				return nil
 			}
-
-			// Apply time-based heuristic to retire old pending messages
-			// (using the ACK as evidence peer is responsive and receiving packets)
-			cutoff := time.Now().Add(-2 * s.rttEstimator.GetRTO())
-			s.ackPendingBeforeTime(cutoff)
+			s.ackPendingByPackets(ackInfo.AckedRange)
 			return nil
 		},
 	}
@@ -255,6 +237,7 @@ func (s *SSU2Session) CloseWithReason(reason ssu2noise.TerminationReason) error 
 		// is being torn down regardless (MEDIUM-1 fix).
 		s.pendingMsgsMu.Lock()
 		s.pendingMsgs = make(map[uint64]*pendingI2NP)
+		s.packetToPending = make(map[uint32]uint64)
 		s.pendingMsgsMu.Unlock()
 		s.drainSendQueue()
 		s.connMu.Lock()
@@ -541,8 +524,14 @@ func (s *SSU2Session) sendTrackedBlocks(data []byte, blocks []*ssu2noise.SSU2Blo
 		return ErrSessionClosed
 	}
 	seq := s.trackPendingBlocks(data, blocks)
-	if err := conn.WriteBlocks(blocks); err != nil {
-		s.removePending(seq)
+	packetNums, err := conn.WriteBlocksWithNumbers(blocks)
+	if len(packetNums) > 0 {
+		s.assignPendingPacketNumbers(seq, packetNums)
+	}
+	if err != nil {
+		if len(packetNums) == 0 {
+			s.removePending(seq)
+		}
 		s.congestionCtrl.OnPacketLoss()
 		return err
 	}
@@ -571,19 +560,54 @@ func (s *SSU2Session) trackPendingBlocks(data []byte, blocks []*ssu2noise.SSU2Bl
 	now := time.Now()
 	s.pendingMsgsMu.Lock()
 	s.pendingMsgs[seq] = &pendingI2NP{
-		data:     data,
-		blocks:   blocks,
-		sentAt:   now,
-		deadline: now.Add(rto),
+		data:       data,
+		blocks:     blocks,
+		packetNums: make(map[uint32]struct{}),
+		sentAt:     now,
+		deadline:   now.Add(rto),
 	}
 	s.pendingMsgsMu.Unlock()
 	return seq
 }
 
+// assignPendingPacketNumbers associates SSU2 packet numbers with a pending
+// message sequence for deterministic ACK correlation.
+func (s *SSU2Session) assignPendingPacketNumbers(seq uint64, packetNums []uint32) {
+	if len(packetNums) == 0 {
+		return
+	}
+	s.pendingMsgsMu.Lock()
+	defer s.pendingMsgsMu.Unlock()
+	p, ok := s.pendingMsgs[seq]
+	if !ok {
+		return
+	}
+	for _, pn := range packetNums {
+		if _, exists := p.packetNums[pn]; exists {
+			continue
+		}
+		p.packetNums[pn] = struct{}{}
+		s.packetToPending[pn] = seq
+	}
+}
+
+// removePendingLocked removes a pending message and clears all reverse packet
+// mappings. Caller must hold pendingMsgsMu.
+func (s *SSU2Session) removePendingLocked(seq uint64) {
+	p, exists := s.pendingMsgs[seq]
+	if !exists {
+		return
+	}
+	delete(s.pendingMsgs, seq)
+	for pn := range p.packetNums {
+		delete(s.packetToPending, pn)
+	}
+}
+
 // removePending deletes a pending message from the map.
 func (s *SSU2Session) removePending(seq uint64) {
 	s.pendingMsgsMu.Lock()
-	delete(s.pendingMsgs, seq)
+	s.removePendingLocked(seq)
 	s.pendingMsgsMu.Unlock()
 }
 
@@ -619,7 +643,7 @@ func (s *SSU2Session) collectExpiredPendingMessages(now time.Time) ([]retransmit
 // session teardown (see processRetransmission for rationale).
 func (s *SSU2Session) processRetransmitCandidates(candidates []retransmitCandidate, now time.Time) (toDelete []uint64, shouldClose bool) {
 	for _, c := range candidates {
-		action := s.processRetransmission(c.pending, now)
+		action := s.processRetransmission(c.seq, c.pending, now)
 		if action == retransmitDelete {
 			toDelete = append(toDelete, c.seq)
 		}
@@ -635,7 +659,7 @@ func (s *SSU2Session) deleteExpiredMessages(toDelete []uint64) {
 	}
 	s.pendingMsgsMu.Lock()
 	for _, seq := range toDelete {
-		delete(s.pendingMsgs, seq)
+		s.removePendingLocked(seq)
 	}
 	s.pendingMsgsMu.Unlock()
 }
@@ -661,7 +685,7 @@ const (
 
 // processRetransmission handles a single pending message that has exceeded its deadline.
 // Called without holding pendingMsgsMu to avoid blocking other goroutines during network I/O.
-func (s *SSU2Session) processRetransmission(p *pendingI2NP, now time.Time) retransmitAction {
+func (s *SSU2Session) processRetransmission(seq uint64, p *pendingI2NP, now time.Time) retransmitAction {
 	if p.attempts >= s.maxRetransmit {
 		// Drop the unconfirmed entry rather than tearing down the session.
 		// SSU2 packet-level reliability is handled by the go-noise conn's own
@@ -682,7 +706,11 @@ func (s *SSU2Session) processRetransmission(p *pendingI2NP, now time.Time) retra
 	var err error
 	var n int
 	if len(p.blocks) > 0 {
-		err = conn.WriteBlocks(p.blocks)
+		packetNums, writeErr := conn.WriteBlocksWithNumbers(p.blocks)
+		if len(packetNums) > 0 {
+			s.assignPendingPacketNumbers(seq, packetNums)
+		}
+		err = writeErr
 		if err == nil {
 			n = len(p.data)
 		}
@@ -702,17 +730,29 @@ func (s *SSU2Session) processRetransmission(p *pendingI2NP, now time.Time) retra
 	return retransmitOK
 }
 
-// ackPendingBeforeTime removes pending messages sent before t and credits the
-// congestion window for the freed bytes.  Called by receiveWorker to model
-// peer-responsiveness as a delivery confirmation.
-func (s *SSU2Session) ackPendingBeforeTime(t time.Time) {
+// ackPendingByPackets retires pending messages that have at least one ACKed
+// SSU2 packet number and credits congestion control once per retired message.
+func (s *SSU2Session) ackPendingByPackets(packetNums []uint32) {
+	if len(packetNums) == 0 {
+		return
+	}
+	seqs := make(map[uint64]struct{}, len(packetNums))
 	var ackedBytes int
 	s.pendingMsgsMu.Lock()
-	for seq, p := range s.pendingMsgs {
-		if p.sentAt.Before(t) {
-			ackedBytes += len(p.data)
-			delete(s.pendingMsgs, seq)
+	for _, pn := range packetNums {
+		seq, ok := s.packetToPending[pn]
+		if !ok {
+			continue
 		}
+		seqs[seq] = struct{}{}
+	}
+	for seq := range seqs {
+		p, exists := s.pendingMsgs[seq]
+		if !exists {
+			continue
+		}
+		ackedBytes += len(p.data)
+		s.removePendingLocked(seq)
 	}
 	s.pendingMsgsMu.Unlock()
 	if ackedBytes > 0 {
@@ -760,13 +800,8 @@ func (s *SSU2Session) dispatchReceived(frame []byte) error {
 	s.AddToBytesReceived(uint64(len(frame)))
 
 	s.updateRTTEstimate(recvAt)
-	// H1 FIX: Disabled implicit ACK. The previous logic removed ALL pending messages
-	// sent before the receive timestamp, which is incorrect. SSU2 requires explicit
-	// ACK blocks to confirm delivery. Without proper ACK block parsing, the implicit
-	// ACK was causing message loss. This is disabled until proper explicit ACK handling
-	// is implemented.
-	// TODO: Implement explicit ACK block parsing and only remove acknowledged messages.
-	// s.ackPendingBeforeTime(recvAt)
+	// Pending-message retirement is handled only by explicit ACK processing in
+	// OnACK using packet-number correlation.
 
 	msg := i2np.NewBaseI2NPMessage(0)
 	if err := msg.UnmarshalShortI2NP(frame); err != nil {
