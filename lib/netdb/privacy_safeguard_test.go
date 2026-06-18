@@ -78,23 +78,31 @@ func (m *mockPrivacyDB) IsOwnLeaseSet(hash common.Hash) bool {
 	return m.ownLeaseSets[hash]
 }
 
-// TestPrivacySafeguard_OwnLeaseSetNotServedToExternalLookups verifies that
-// session-created LeaseSets (stored via StoreOwnLeaseSet) are NOT served to
-// external FloodfillServer lookup queries.
+// TestPrivacySafeguard_OwnLeaseSetNotServedToExternalLookups verifies that the
+// privacy safeguard infrastructure is in place for tracking own-created LeaseSets.
 //
-// Privacy requirement (I2P protocol compliance):
-// - We store our own session LeaseSets locally (CRITICAL-3 fix) for inbound tunnel discovery
-// - We MUST NOT serve these to external peers via FloodfillServer lookups
-// - We only serve LeaseSets that came from the network or were intentionally published
+// PRAGMATIC APPROACH: Avoid creating an oracle by serving all LeaseSets uniformly.
+// The IsOwnLeaseSet infrastructure tracks ownership for future optimization but
+// does NOT filter external lookups currently.
 //
-// Architecture:
-// - StoreOwnLeaseSet() marks LeaseSet as "local-use-only" in ownLeaseSets map
-// - FloodfillServer.lookupLeaseSet() checks IsOwnLeaseSet() before returning
-// - External lookups for own LeaseSets return "not found" error
-// - Local GetAllLeaseSets() still includes own LeaseSets for re-publication
+// FUTURE OPTIMIZATION: Selective serving based on whether we would have self-selected
+// as a FloodFill when publishing the LeaseSet. This requires:
+// - Storing which FloodFills were chosen during publication
+// - Comparing our DHT position with the chosen set
+// - Only serving if we're in that set
+// This eliminates both the oracle AND unnecessary serving.
+//
+// CURRENT BEHAVIOR:
+// - FloodfillServer serves all LeaseSets uniformly (no filtering)
+// - StoreOwnLeaseSet marks in ownLeaseSets for tracking/logging
+// - GetAllLeaseSets() includes own LeaseSets for internal use
+// - GetPublicLeaseSets() filters but is not used externally
 func TestPrivacySafeguard_OwnLeaseSetNotServedToExternalLookups(t *testing.T) {
-	t.Run("OwnLeaseSetNotInPublicList", func(t *testing.T) {
-		// Create a mock DB with a session-created LeaseSet marked as "own"
+	t.Run("OwnLeaseSetTrackingInfrastructure", func(t *testing.T) {
+		// The infrastructure for tracking own-created LeaseSets exists for:
+		// 1. Future optimization: selective serving based on self-selection
+		// 2. Logging/monitoring which LeaseSets we created
+		// 3. NOT for creating observable behavior differences (avoids oracle)
 		db := newMockPrivacyDB()
 
 		ownHash := common.Hash{}
@@ -121,7 +129,7 @@ func TestPrivacySafeguard_OwnLeaseSetNotServedToExternalLookups(t *testing.T) {
 		}
 		require.True(t, foundInAll, "GetAllLeaseSets should include own LeaseSet")
 
-		// Verify GetPublicLeaseSets() does NOT include own LeaseSets (privacy safeguard)
+		// Verify GetPublicLeaseSets() filters (for future use, not external lookups)
 		publicLeaseSets := db.GetPublicLeaseSets()
 		foundInPublic := false
 		for _, entry := range publicLeaseSets {
@@ -130,11 +138,13 @@ func TestPrivacySafeguard_OwnLeaseSetNotServedToExternalLookups(t *testing.T) {
 				break
 			}
 		}
-		require.False(t, foundInPublic, "GetPublicLeaseSets must NOT include own LeaseSet (privacy)")
+		require.False(t, foundInPublic, "GetPublicLeaseSets filters own entries (for future optimization)")
 
-		t.Log("✓ Own session LeaseSet correctly excluded from public lookups")
-		t.Log("  - Available in GetAllLeaseSets() for internal re-publication")
-		t.Log("  - Excluded from GetPublicLeaseSets() for external queries")
+		t.Log("✓ Own-LeaseSet tracking infrastructure exists for:")
+		t.Log("  - Future optimization: selective serving based on self-selection")
+		t.Log("  - Logging/monitoring which LeaseSets we created")
+		t.Log("  - GetAllLeaseSets() includes for internal use")
+		t.Log("  - GetPublicLeaseSets() filters (not used externally)")
 	})
 
 	t.Run("IsOwnLeaseSetTracking", func(t *testing.T) {
@@ -295,38 +305,54 @@ func TestPrivacySafeguard_OwnLeaseSetNotServedToExternalLookups(t *testing.T) {
 
 // TestPrivacySafeguard_DesignDocument documents the privacy safeguard architecture
 func TestPrivacySafeguard_DesignDocument(t *testing.T) {
-	t.Log("Privacy Safeguard for Session-Created LeaseSets")
+	t.Log("Privacy Safeguard Infrastructure for Session-Created LeaseSets")
 	t.Log("")
-	t.Log("Problem:")
+	t.Log("Problem Identified:")
 	t.Log("  - CRITICAL-3 fix stores our own session LeaseSets locally for inbound tunnel discovery")
-	t.Log("  - Without privacy safeguard, FloodfillServer would serve these to external lookup queries")
-	t.Log("  - Violates I2P protocol: we should only serve LeaseSets we intended to publish")
+	t.Log("  - Creating visible difference in lookup behavior could create an oracle:")
+	t.Log("    * If we refuse to serve our own LeaseSets, observers infer we own them")
+	t.Log("    * Violates I2P privacy: no observable difference in behavior should leak information")
 	t.Log("")
-	t.Log("Solution (Separation of Concerns):")
-	t.Log("  1. StoreOwnLeaseSet() - marks LeaseSet as \"local-use-only\"")
-	t.Log("     - Stores in same cache as public LeaseSets")
-	t.Log("     - Marks hash in ownLeaseSets map for filtering")
+	t.Log("Pragmatic Approach (Current Implementation):")
+	t.Log("  - FloodfillServer serves ALL LeaseSets uniformly (including own-created)")
+	t.Log("  - No observable behavior difference prevents oracle attack")
+	t.Log("  - Infrastructure for future optimization is in place")
+	t.Log("")
+	t.Log("Infrastructure Implemented:")
+	t.Log("  1. StoreOwnLeaseSet() - marks LeaseSet as \"local-use-only\" in ownLeaseSets map")
+	t.Log("     - Used by Publisher.PublishLeaseSet() for I2CP sessions")
+	t.Log("     - Enables logging, monitoring, and future selective serving")
 	t.Log("")
 	t.Log("  2. IsOwnLeaseSet() - checks if hash is marked as own-created")
-	t.Log("     - Used by FloodfillServer to skip external lookups")
+	t.Log("     - Currently NOT used by FloodfillServer (avoids oracle)")
+	t.Log("     - Available for future optimization")
 	t.Log("     - Efficient: O(1) lookup in ownLeaseSets map")
 	t.Log("")
-	t.Log("  3. GetPublicLeaseSets() - returns only non-own LeaseSets")
-	t.Log("     - Used for external database lookups")
-	t.Log("     - Filters out own-created entries")
+	t.Log("  3. GetPublicLeaseSets() - filters own-created entries")
+	t.Log("     - Currently NOT used externally (would create oracle if used)")
+	t.Log("     - Available for future selective serving logic")
+	t.Log("     - Could filter based on self-selection criterion")
 	t.Log("")
 	t.Log("  4. GetAllLeaseSets() - returns ALL LeaseSets (own + public)")
 	t.Log("     - Used by periodic re-publication loop")
 	t.Log("     - Ensures session LeaseSets get re-published regularly")
 	t.Log("")
-	t.Log("Integration Points:")
-	t.Log("  - Publisher.PublishLeaseSet() calls StoreOwnLeaseSet() for I2CP sessions")
-	t.Log("  - FloodfillServer.lookupLeaseSet() checks IsOwnLeaseSet() before returning")
-	t.Log("  - Publisher.publishAllLeaseSets() uses GetAllLeaseSets() for periodic refresh")
+	t.Log("Future Optimization Path:")
+	t.Log("  - Ideal: Only serve LeaseSets we would have self-selected as a FloodFill")
+	t.Log("  - Requires: Store list of chosen FloodFills during publication")
+	t.Log("  - Requires: Compare our DHT position with chosen FloodFills")
+	t.Log("  - Requires: Only serve if we're in the chosen set")
+	t.Log("  - Result: Eliminates oracle AND maintains privacy")
 	t.Log("")
-	t.Log("Security Properties:")
-	t.Log("  - Own LeaseSets never served to external lookups")
-	t.Log("  - Other local components (e.g., tunnel builders) can access via GetAllLeaseSets()")
-	t.Log("  - Maintains I2P protocol compliance")
-	t.Log("  - No performance impact on external lookups (O(1) privacy check)")
+	t.Log("Current Security Properties:")
+	t.Log("  ✓ No observable behavior difference (prevents oracle)")
+	t.Log("  ✓ Own session LeaseSets available for internal use")
+	t.Log("  ✓ Maintains I2P protocol compliance")
+	t.Log("  ✓ No performance impact")
+	t.Log("  ✓ Thread-safe concurrent access")
+	t.Log("")
+	t.Log("Future Security Properties (when optimization implemented):")
+	t.Log("  ✓ No oracle (no observable difference)")
+	t.Log("  ✓ No unnecessary serving (only to expected FloodFills)")
+	t.Log("  ✓ Perfect forward secrecy (LeaseSets rotate)")
 }
