@@ -64,6 +64,11 @@ func (m *iterativeMockDB) GetAllLeaseSets() []LeaseSetEntry { return nil }
 func (m *iterativeMockDB) StoreLeaseSet(key common.Hash, data []byte, dataType byte) error {
 	return nil
 }
+func (m *iterativeMockDB) StoreOwnLeaseSet(key common.Hash, data []byte, dataType byte) error {
+	return nil
+}
+func (m *iterativeMockDB) GetPublicLeaseSets() []LeaseSetEntry { return nil }
+func (m *iterativeMockDB) IsOwnLeaseSet(hash common.Hash) bool { return false }
 
 // TestSearchReplyError tests the SearchReplyError type and errors.As behavior.
 func TestSearchReplyError(t *testing.T) {

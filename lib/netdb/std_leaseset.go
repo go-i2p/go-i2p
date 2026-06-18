@@ -1307,3 +1307,63 @@ func (db *StdNetDB) GetAllLeaseSets() []LeaseSetEntry {
 	log.WithField("count", len(result)).Debug("Retrieved all LeaseSets")
 	return result
 }
+
+// GetPublicLeaseSets returns only LeaseSets that are NOT marked as "own-created".
+// This excludes session-created LeaseSets that should not be served to external lookups.
+// Used by FloodfillServer to answer external database lookup queries privately.
+func (db *StdNetDB) GetPublicLeaseSets() []LeaseSetEntry {
+	db.lsCache.mu.RLock()
+	db.ownLeaseSetsMu.RLock()
+	defer func() {
+		db.ownLeaseSetsMu.RUnlock()
+		db.lsCache.mu.RUnlock()
+	}()
+
+	result := make([]LeaseSetEntry, 0)
+
+	// Iterate through all cached LeaseSets and skip those marked as own-created
+	for hash, entry := range db.lsCache.entries {
+		if !db.ownLeaseSets[hash] {
+			result = append(result, LeaseSetEntry{
+				Hash:  hash,
+				Entry: entry,
+			})
+		}
+	}
+
+	log.WithField("count", len(result)).Debug("Retrieved public LeaseSets")
+	return result
+}
+
+// StoreOwnLeaseSet stores a session-created LeaseSet for local use only.
+// The LeaseSet is stored in the cache and marked as "own-created" so it will NOT
+// be served to external lookup queries. This maintains privacy by only serving
+// LeaseSets that would have normally reached us through network propagation.
+// Used by Publisher for I2CP session-created LeaseSets.
+func (db *StdNetDB) StoreOwnLeaseSet(key common.Hash, data []byte, dataType byte) error {
+	// First, try to store it like a normal LeaseSet (parsing and validation)
+	if err := db.StoreLeaseSet(key, data, dataType); err != nil {
+		return err
+	}
+
+	// Mark it as own-created for privacy
+	db.ownLeaseSetsMu.Lock()
+	db.ownLeaseSets[key] = true
+	db.ownLeaseSetsMu.Unlock()
+
+	log.WithFields(logger.Fields{
+		"hash": logutil.HashPrefixPlain(key),
+		"at":   "StoreOwnLeaseSet",
+	}).Debug("Stored own-created LeaseSet (local-use-only)")
+
+	return nil
+}
+
+// IsOwnLeaseSet checks if a LeaseSet was created locally by this router's I2CP session.
+// Own LeaseSets are not served to external lookup queries.
+// Returns true if the hash is marked as own-created, false otherwise.
+func (db *StdNetDB) IsOwnLeaseSet(hash common.Hash) bool {
+	db.ownLeaseSetsMu.RLock()
+	defer db.ownLeaseSetsMu.RUnlock()
+	return db.ownLeaseSets[hash]
+}

@@ -374,14 +374,16 @@ func (p *Publisher) PublishLeaseSet(hash common.Hash, leaseSetData []byte) error
 		return oops.Errorf("cannot publish empty LeaseSet bytes")
 	}
 
-	// CRITICAL-3 FIX: Store LeaseSet in local NetDB before publishing to network.
-	// This ensures:
+	// CRITICAL-3 FIX: Store LeaseSet in local NetDB for internal use only.
+	// Uses StoreOwnLeaseSet to mark as "local-use-only" so it won't be served
+	// to external lookup queries, maintaining privacy. This ensures:
 	// 1. Local router can find its own inbound tunnel entrance points
 	// 2. Periodic re-publication loop includes session-created LeaseSets
 	// 3. Other local components can query LeaseSets via NetDB
+	// 4. Privacy: external lookups don't leak our session LeaseSets
 	// Without this store, session-created LeaseSets are invisible locally and inbound
 	// tunnels are unreachable - external routers know about them but THIS router doesn't.
-	if err := p.db.StoreLeaseSet(hash, leaseSetData, i2np.DatabaseStoreTypeLeaseSet2); err != nil {
+	if err := p.db.StoreOwnLeaseSet(hash, leaseSetData, i2np.DatabaseStoreTypeLeaseSet2); err != nil {
 		log.WithField("hash", logutil.HashPrefixPlain(hash)).Warn("Failed to store LeaseSet in local NetDB during publication")
 		// Log the error but continue with network publication (best-effort pattern)
 	}

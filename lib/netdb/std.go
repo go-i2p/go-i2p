@@ -31,6 +31,12 @@ type StdNetDB struct {
 	riCache *entryCache
 	lsCache *entryCache
 
+	// ownLeaseSets tracks hashes of LeaseSets created locally by I2CP sessions.
+	// These are stored for local re-publication but NOT served to external lookups.
+	// Protected by ownLeaseSetsMu.
+	ownLeaseSets   map[common.Hash]bool
+	ownLeaseSetsMu sync.RWMutex
+
 	PeerTracker *PeerTracker // tracks connection success/failure for peers
 
 	// riRefreshCooldown stores the time of the last RequestRouterInfoRefresh
@@ -76,6 +82,7 @@ func NewStdNetDB(db string) *StdNetDB {
 		DB:                db,
 		riCache:           newEntryCache(config.DefaultNetDBConfig.MaxRouterInfos, riAdmissionConfig),
 		lsCache:           newEntryCache(config.DefaultNetDBConfig.MaxLeaseSets, lsAdmissionConfig),
+		ownLeaseSets:      make(map[common.Hash]bool),
 		PeerTracker:       NewPeerTracker(),
 		riRefreshCooldown: newTimeBucketedCooldown(riRefreshCooldownDuration),
 		ctx:               ctx,

@@ -87,3 +87,21 @@ func (c *ClientNetDB) Ensure() error {
 func (c *ClientNetDB) Path() string {
 	return c.db.Path()
 }
+
+// StoreOwnLeaseSet stores a session-created LeaseSet for local use only.
+// Delegates to the underlying StdNetDB.
+func (c *ClientNetDB) StoreOwnLeaseSet(key common.Hash, data []byte, dataType byte) error {
+	return c.db.StoreOwnLeaseSet(key, data, dataType)
+}
+
+// GetPublicLeaseSets returns only externally-published LeaseSets that can be served
+// to external database lookup queries. Delegates to the underlying StdNetDB.
+func (c *ClientNetDB) GetPublicLeaseSets() []LeaseSetEntry {
+	return c.db.GetPublicLeaseSets()
+}
+
+// IsOwnLeaseSet checks if a LeaseSet was created locally by this router's I2CP session.
+// Delegates to the underlying StdNetDB.
+func (c *ClientNetDB) IsOwnLeaseSet(hash common.Hash) bool {
+	return c.db.IsOwnLeaseSet(hash)
+}

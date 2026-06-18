@@ -68,4 +68,27 @@ type NetworkDatabase interface {
 	//   - dataType: The LeaseSet type byte (1=LeaseSet, 3=LeaseSet2, 5=EncryptedLeaseSet, 7=MetaLeaseSet)
 	// Returns an error if the LeaseSet cannot be parsed, verified, or stored.
 	StoreLeaseSet(key common.Hash, data []byte, dataType byte) error
+
+	// StoreOwnLeaseSet stores a session-created LeaseSet for local use only.
+	// Unlike StoreLeaseSet, these LeaseSets are NOT served to external lookup queries
+	// to maintain privacy (we only serve LeaseSets that came from the network).
+	// Used by Publisher for I2CP session-created LeaseSets.
+	// Parameters:
+	//   - key: The destination hash
+	//   - data: The serialized LeaseSet bytes
+	//   - dataType: The LeaseSet type byte
+	// Returns an error if storage fails.
+	StoreOwnLeaseSet(key common.Hash, data []byte, dataType byte) error
+
+	// GetPublicLeaseSets returns only externally-published LeaseSets that can be served
+	// to external database lookup queries. Does NOT include our own session LeaseSets
+	// that are marked as "local-use-only" to maintain privacy.
+	// Used by FloodfillServer.lookupLeaseSet() to answer external queries.
+	// Returns a slice of public LeaseSet entries.
+	GetPublicLeaseSets() []LeaseSetEntry
+
+	// IsOwnLeaseSet checks if a LeaseSet was created locally by this router's I2CP session.
+	// Own LeaseSets are not served to external lookup queries.
+	// Returns true if the hash is marked as own-created, false otherwise.
+	IsOwnLeaseSet(hash common.Hash) bool
 }

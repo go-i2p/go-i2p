@@ -21,6 +21,7 @@ type mockNetDB struct {
 	leaseSet2s         map[common.Hash][]byte
 	encryptedLeaseSets map[common.Hash][]byte
 	metaLeaseSets      map[common.Hash][]byte
+	ownLeaseSets       map[common.Hash]bool
 	routerInfos        map[common.Hash]router_info.RouterInfo
 }
 
@@ -30,6 +31,7 @@ func newMockNetDB() *mockNetDB {
 		leaseSet2s:         make(map[common.Hash][]byte),
 		encryptedLeaseSets: make(map[common.Hash][]byte),
 		metaLeaseSets:      make(map[common.Hash][]byte),
+		ownLeaseSets:       make(map[common.Hash]bool),
 		routerInfos:        make(map[common.Hash]router_info.RouterInfo),
 	}
 }
@@ -161,6 +163,27 @@ func (m *mockNetDB) StoreLeaseSet(hash common.Hash, data []byte, dataType byte) 
 
 func (m *mockNetDB) StoreLeaseSet2(hash common.Hash, data []byte) {
 	m.leaseSet2s[hash] = data
+}
+
+func (m *mockNetDB) StoreOwnLeaseSet(key common.Hash, data []byte, dataType byte) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.leaseSets[key] = data
+	m.ownLeaseSets[key] = true
+	return nil
+}
+
+func (m *mockNetDB) GetPublicLeaseSets() []LeaseSetEntry {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	// Not used in destination_resolver tests, return empty
+	return []LeaseSetEntry{}
+}
+
+func (m *mockNetDB) IsOwnLeaseSet(hash common.Hash) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.ownLeaseSets[hash]
 }
 
 // TestNewDestinationResolver verifies resolver creation

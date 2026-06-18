@@ -90,6 +90,18 @@ func (m *mockNetworkDatabase) StoreLeaseSet(key common.Hash, data []byte, dataTy
 	return nil
 }
 
+func (m *mockNetworkDatabase) StoreOwnLeaseSet(key common.Hash, data []byte, dataType byte) error {
+	return nil
+}
+
+func (m *mockNetworkDatabase) GetPublicLeaseSets() []LeaseSetEntry {
+	return nil
+}
+
+func (m *mockNetworkDatabase) IsOwnLeaseSet(hash common.Hash) bool {
+	return false
+}
+
 // TestLookupResponseHandler tests the response handler correlation mechanism
 func TestLookupResponseHandler(t *testing.T) {
 	handler := NewLookupResponseHandler()

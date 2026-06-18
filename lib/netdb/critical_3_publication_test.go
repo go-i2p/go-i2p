@@ -17,13 +17,15 @@ import (
 // behavior without enforcing strict LeaseSet2 parsing validation.
 // This allows tests to focus on the storage mechanism rather than parsing.
 type mockNetDBForCRITICAL3 struct {
-	mu        sync.RWMutex
-	leaseSets map[common.Hash]LeaseSetEntry
+	mu           sync.RWMutex
+	leaseSets    map[common.Hash]LeaseSetEntry
+	ownLeaseSets map[common.Hash]bool
 }
 
 func newMockNetDBForCRITICAL3() *mockNetDBForCRITICAL3 {
 	return &mockNetDBForCRITICAL3{
-		leaseSets: make(map[common.Hash]LeaseSetEntry),
+		leaseSets:    make(map[common.Hash]LeaseSetEntry),
+		ownLeaseSets: make(map[common.Hash]bool),
 	}
 }
 
@@ -93,6 +95,39 @@ func (m *mockNetDBForCRITICAL3) StoreLeaseSet(key common.Hash, data []byte, data
 	}
 	m.leaseSets[key] = entry
 	return nil
+}
+
+func (m *mockNetDBForCRITICAL3) StoreOwnLeaseSet(key common.Hash, data []byte, dataType byte) error {
+	// First store as regular LeaseSet
+	if err := m.StoreLeaseSet(key, data, dataType); err != nil {
+		return err
+	}
+
+	// Mark as own-created
+	m.mu.Lock()
+	m.ownLeaseSets[key] = true
+	m.mu.Unlock()
+
+	return nil
+}
+
+func (m *mockNetDBForCRITICAL3) GetPublicLeaseSets() []LeaseSetEntry {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	result := make([]LeaseSetEntry, 0)
+	for hash, entry := range m.leaseSets {
+		if !m.ownLeaseSets[hash] {
+			result = append(result, entry)
+		}
+	}
+	return result
+}
+
+func (m *mockNetDBForCRITICAL3) IsOwnLeaseSet(hash common.Hash) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.ownLeaseSets[hash]
 }
 
 // TestCRITICAL_3_LeaseSetStoredInLocalNetDBOnPublication verifies that when
