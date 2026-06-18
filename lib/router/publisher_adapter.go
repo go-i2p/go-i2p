@@ -75,6 +75,28 @@ func (a *publisherNetDBAdapter) GetAllLeaseSets() []netdb.LeaseSetEntry {
 	return a.db.GetAllLeaseSets()
 }
 
+// GetPublicLeaseSets returns only externally-published LeaseSets that can be served
+// to other I2P clients from the underlying NetDB.
+func (a *publisherNetDBAdapter) GetPublicLeaseSets() []netdb.LeaseSetEntry {
+	return a.db.GetPublicLeaseSets()
+}
+
+// IsOwnLeaseSet checks if a LeaseSet was created locally by this router's I2CP session
+// from the underlying NetDB.
+func (a *publisherNetDBAdapter) IsOwnLeaseSet(hash common.Hash) bool {
+	return a.db.IsOwnLeaseSet(hash)
+}
+
+// StoreLeaseSet stores a LeaseSet entry from the network in the underlying NetDB.
+func (a *publisherNetDBAdapter) StoreLeaseSet(key common.Hash, data []byte, dataType byte) error {
+	return a.db.StoreLeaseSet(key, data, dataType)
+}
+
+// StoreOwnLeaseSet stores a session-created LeaseSet for local use only in the underlying NetDB.
+func (a *publisherNetDBAdapter) StoreOwnLeaseSet(key common.Hash, data []byte, dataType byte) error {
+	return a.db.StoreOwnLeaseSet(key, data, dataType)
+}
+
 // Compile-time interface check
 var _ netdb.NetworkDatabase = (*publisherNetDBAdapter)(nil)
 
