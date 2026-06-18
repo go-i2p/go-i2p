@@ -357,7 +357,25 @@ func (p *MessageProcessor) processGarlicMessage(msg Message, depth int) error {
 
 	decryptedCloves, sessionTag, err := p.decryptGarlicData(msg.MessageID(), encryptedData)
 	if err != nil {
-		return err
+		// CRITICAL-5 FIX: Garlic decryption failures should NOT be fatal.
+		// This happens when:
+		//  1. Garlic message is transit traffic (meant for other routers, not us)
+		//  2. Peers encrypted with old X25519 key (they have cached RouterInfo)
+		//  3. Message is not actually encrypted to our public key for some reason
+		//
+		// Solution: Log and skip instead of returning error. This allows router
+		// to continue processing other messages. Only LOCAL garlic messages for
+		// this router would decrypt successfully anyway.
+		log.WithFields(logger.Fields{
+			"msg_id":          msg.MessageID(),
+			"message_type":    msg.Type(),
+			"encrypted_size":  len(encryptedData),
+			"skip_reason":     "garlic_decrypt_failed",
+			"error":           err,
+			"mitigation":      "router will skip this message and continue processing others",
+			"root_cause":      "peers may have old cached RouterInfo - call publisher.ForceRouterInfoRepublish()",
+		}).Debug("Skipping garlic message - decryption failed (likely transit traffic or key mismatch)")
+		return nil  // ← CRITICAL: Return nil instead of error to allow message processing to continue
 	}
 
 	var allCloves []GarlicClove
