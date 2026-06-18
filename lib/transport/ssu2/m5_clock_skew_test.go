@@ -67,10 +67,12 @@ func TestM5_IsTimestampWithinTolerance_Boundary(t *testing.T) {
 		},
 	}
 
-	now := uint32(time.Now().Unix())
-
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// Capture time just before calculating peerTime to minimize clock skew between
+			// test and function implementation. The function calls time.Now().Unix() internally,
+			// so we must account for potential 1-second boundary effects.
+			now := uint32(time.Now().Unix())
 			peerTime := uint32(int32(now) + tc.offsetSec)
 			result := transport.IsTimestampWithinTolerance(peerTime, tc.tolerance)
 			require.Equal(t, tc.expect, result,
