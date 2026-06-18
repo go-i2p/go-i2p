@@ -1378,6 +1378,8 @@ func (s *Server) sendStatusToClient(session *Session, statusMsg *Message) {
 		return
 	}
 
+	s.applyWriteDeadline(conn)
+
 	writeMu.Lock()
 	_, err = conn.Write(data)
 	writeMu.Unlock()

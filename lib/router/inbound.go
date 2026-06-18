@@ -433,9 +433,9 @@ func (h *InboundMessageHandler) RegisterExploratoryTunnel(tunnelID tunnel.Tunnel
 //
 // Returns an error if the tunnel cannot be registered or if the session is not found.
 func (h *InboundMessageHandler) RegisterClientTunnel(tunnelID tunnel.TunnelID, sessionID uint16) error {
-	// Get the I2CP session for message delivery
-	session, exists := h.sessionManager.GetSession(sessionID)
-	if !exists {
+	// Keep explicit session existence validation so tunnel builds fail fast when
+	// the owning session has already been removed.
+	if _, exists := h.sessionManager.GetSession(sessionID); !exists {
 		log.WithFields(logger.Fields{
 			"at":         "RegisterClientTunnel",
 			"tunnel_id":  tunnelID,
@@ -445,31 +445,12 @@ func (h *InboundMessageHandler) RegisterClientTunnel(tunnelID tunnel.TunnelID, s
 		return oops.Errorf("session %d not found for client tunnel %d", sessionID, tunnelID)
 	}
 
-	// Create a message handler that delivers to the I2CP session
-	messageHandler := tunnel.MessageHandler(func(payload []byte) error {
-		return session.QueueIncomingMessage(payload)
-	})
-
-	// Create the endpoint with passthrough decryption (inbound gateways don't layer encryption)
-	endpoint, err := tunnel.NewEndpoint(tunnelID, &passthroughTunnelEncryptor{}, messageHandler)
-	if err != nil {
+	if _, err := h.CreateEndpointForSession(tunnelID, sessionID, &passthroughTunnelEncryptor{}); err != nil {
 		log.WithError(err).WithFields(logger.Fields{
 			"at":         "RegisterClientTunnel",
 			"tunnel_id":  tunnelID,
 			"session_id": sessionID,
-			"reason":     "endpoint creation failed",
-		}).Error("Failed to create client tunnel endpoint")
-		return oops.Wrapf(err, "failed to create endpoint for client tunnel %d", tunnelID)
-	}
-
-	// Register the tunnel
-	if err := h.RegisterTunnel(tunnelID, sessionID, endpoint); err != nil {
-		endpoint.Stop()
-		log.WithError(err).WithFields(logger.Fields{
-			"at":         "RegisterClientTunnel",
-			"tunnel_id":  tunnelID,
-			"session_id": sessionID,
-			"reason":     "tunnel registration failed",
+			"reason":     "create endpoint for session failed",
 		}).Error("Failed to register client tunnel")
 		return oops.Wrapf(err, "register client tunnel %d for session %d", tunnelID, sessionID)
 	}
