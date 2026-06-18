@@ -633,6 +633,28 @@ func (ks *RouterInfoKeystore) verifyEncryptionKeyConsistency() {
 	}).Info("Encryption key verification passed")
 }
 
+// logEncryptionKeyLoaded logs encryption key loading/generation events with version tracking.
+func (ks *RouterInfoKeystore) logEncryptionKeyLoaded(privKeyBytes []byte, isExisting bool) {
+	privKeyHex := fmt.Sprintf("%x", privKeyBytes[:8])
+	pubKeyHex := fmt.Sprintf("%x", ks.encryptionPubKey.Bytes()[:8])
+	fullPubKeyHex := fmt.Sprintf("%x", ks.encryptionPubKey.Bytes())
+	
+	action := "generated"
+	if isExisting {
+		action = "loaded from disk"
+	}
+	
+	log.WithFields(logger.Fields{
+		"at":                     "loadOrGenerateEncryptionKey",
+		"action":                 action,
+		"enc_privkey_first8":     privKeyHex,
+		"enc_pubkey_first8":      pubKeyHex,
+		"enc_pubkey_full":        fullPubKeyHex,
+		"timestamp":              time.Now().UTC().Format(time.RFC3339),
+		"migration_hint":         "this X25519 key will be embedded in RouterInfo - must be consistent for peers to decrypt our messages",
+	}).Info("X25519 encryption key tracking")
+}
+
 // bytesEqual compares two byte slices for equality
 func bytesEqual(a, b []byte) bool {
 	if len(a) != len(b) {

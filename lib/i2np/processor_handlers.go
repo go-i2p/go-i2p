@@ -339,6 +339,12 @@ func (p *MessageProcessor) processDatabaseLookupMessage(msg Message) error {
 // Note: This processor handles LOCAL delivery only. Other delivery types require
 // router context and would be implemented at the router layer.
 // H6 FIX: depth parameter threads garlic nesting level through process pipeline.
+//
+// TROUBLESHOOTING: If garlic_decrypt_succeeded=0 (100% failures):
+//  1. Peers have cached OLD RouterInfo with different X25519 encryption key
+//  2. Call publisher.ForceRouterInfoRepublish() to push current key to floodfill
+//  3. Monitor garlic_decrypt_succeeded counter - should increase as peers get new RouterInfo
+//  4. Process exploratory replies via tunnel_manager_reply.go metrics tracking
 func (p *MessageProcessor) processGarlicMessage(msg Message, depth int) error {
 	if err := p.validateGarlicSession(); err != nil {
 		return err

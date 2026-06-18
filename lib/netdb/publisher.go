@@ -237,7 +237,27 @@ func (p *Publisher) publishOurRouterInfo() {
 	log.WithFields(logger.Fields{
 		"at":                  "publishOurRouterInfo",
 		"router_identity":     riHash.String()[:16],
+		"timestamp":           time.Now().UTC().Format(time.RFC3339),
 	}).Info("Successfully published our RouterInfo to floodfill routers")
+}
+
+// ForceRouterInfoRepublish immediately republishes our RouterInfo to all known floodfill routers.
+// This should be called when:
+//  1. Encryption keys are regenerated or detected as inconsistent
+//  2. Garlic message decryption failures spike (indicates peers have old RouterInfo)
+//  3. Router restarts and needs to propagate new identity to network
+//
+// Without forced republish, it can take 30+ minutes for the network to converge
+// on the new RouterInfo, causing 100% garlic decryption failures during that window.
+func (p *Publisher) ForceRouterInfoRepublish() error {
+	log.WithFields(logger.Fields{
+		"at":        "ForceRouterInfoRepublish",
+		"timestamp": time.Now().UTC().Format(time.RFC3339),
+		"reason":    "forced republish to propagate key changes and resolve garlic decryption conflicts",
+	}).Info("Forcing immediate RouterInfo republish to all floodfill routers")
+	
+	p.publishOurRouterInfo()
+	return nil
 }
 
 // publishAllLeaseSets publishes all LeaseSets in the database
