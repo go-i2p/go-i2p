@@ -1,6 +1,7 @@
 package embedded
 
 import (
+	"github.com/go-i2p/go-i2p/lib/router"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
@@ -36,6 +37,13 @@ func (e *StandardEmbeddedRouter) Start() error {
 	}
 	e.running = true
 	e.done = make(chan struct{})
+
+	// CRITICAL-6 FIX: Capture publisher AFTER router starts (when it's initialized)
+	// Publisher is initialized during router.Start() in launchPublisher()
+	// We must capture it here, not during Configure()
+	if r, ok := e.router.(*router.Router); ok {
+		e.publisher = r.GetPublisher()
+	}
 
 	// CRITICAL-6 FIX: Force immediate RouterInfo republish at startup
 	// This flushes peer caches of old cached RouterInfo with different keys.
