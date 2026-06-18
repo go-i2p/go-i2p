@@ -60,4 +60,12 @@ type NetworkDatabase interface {
 	// Returns a slice containing all LeaseSet entries (LeaseSet, LeaseSet2, EncryptedLeaseSet, MetaLeaseSet).
 	// This is used for publishing all LeaseSets to floodfill routers.
 	GetAllLeaseSets() []LeaseSetEntry
+
+	// StoreLeaseSet stores a LeaseSet entry in the database from I2NP DatabaseStore message.
+	// Parameters:
+	//   - key: The destination hash (SHA256 of the destination)
+	//   - data: The serialized LeaseSet bytes
+	//   - dataType: The LeaseSet type byte (1=LeaseSet, 3=LeaseSet2, 5=EncryptedLeaseSet, 7=MetaLeaseSet)
+	// Returns an error if the LeaseSet cannot be parsed, verified, or stored.
+	StoreLeaseSet(key common.Hash, data []byte, dataType byte) error
 }

@@ -207,12 +207,12 @@ func (p *Publisher) publishOurRouterInfo() {
 		log.WithError(err).Warn("Failed to get local RouterInfo for publishing")
 		return
 	}
-	
+
 	// DIAGNOSTIC: Log our RouterInfo identity
 	riHash, err := ri.IdentHash()
 	if err == nil {
 		log.WithFields(logger.Fields{
-			"at":            "publishOurRouterInfo",
+			"at":                     "publishOurRouterInfo",
 			"router_identity_prefix": riHash.String()[:16],
 			"router_identity_full":   riHash.String(),
 		}).Info("RouterInfo details before publishing")
@@ -235,9 +235,9 @@ func (p *Publisher) publishOurRouterInfo() {
 	}
 
 	log.WithFields(logger.Fields{
-		"at":                  "publishOurRouterInfo",
-		"router_identity":     riHash.String()[:16],
-		"timestamp":           time.Now().UTC().Format(time.RFC3339),
+		"at":              "publishOurRouterInfo",
+		"router_identity": riHash.String()[:16],
+		"timestamp":       time.Now().UTC().Format(time.RFC3339),
 	}).Info("Successfully published our RouterInfo to floodfill routers")
 }
 
@@ -255,7 +255,7 @@ func (p *Publisher) ForceRouterInfoRepublish() error {
 		"timestamp": time.Now().UTC().Format(time.RFC3339),
 		"reason":    "forced republish to propagate key changes and resolve garlic decryption conflicts",
 	}).Info("Forcing immediate RouterInfo republish to all floodfill routers")
-	
+
 	p.publishOurRouterInfo()
 	return nil
 }
@@ -374,6 +374,18 @@ func (p *Publisher) PublishLeaseSet(hash common.Hash, leaseSetData []byte) error
 		return oops.Errorf("cannot publish empty LeaseSet bytes")
 	}
 
+	// CRITICAL-3 FIX: Store LeaseSet in local NetDB before publishing to network.
+	// This ensures:
+	// 1. Local router can find its own inbound tunnel entrance points
+	// 2. Periodic re-publication loop includes session-created LeaseSets
+	// 3. Other local components can query LeaseSets via NetDB
+	// Without this store, session-created LeaseSets are invisible locally and inbound
+	// tunnels are unreachable - external routers know about them but THIS router doesn't.
+	if err := p.db.StoreLeaseSet(hash, leaseSetData, i2np.DatabaseStoreTypeLeaseSet2); err != nil {
+		log.WithField("hash", logutil.HashPrefixPlain(hash)).Warn("Failed to store LeaseSet in local NetDB during publication")
+		// Log the error but continue with network publication (best-effort pattern)
+	}
+
 	// Select closest floodfill routers
 	floodfills, err := p.selectFloodfillsForPublishing(hash)
 	if err != nil {
@@ -392,9 +404,9 @@ func (p *Publisher) PublishRouterInfo(ri router_info.RouterInfo) error {
 		return oops.Errorf("failed to get router hash: %w", err)
 	}
 	log.WithFields(logger.Fields{
-		"at":                  "PublishRouterInfo",
-		"hash":                logutil.HashPrefixPlain(hash),
-		"full_hash":           hash.String(),
+		"at":        "PublishRouterInfo",
+		"hash":      logutil.HashPrefixPlain(hash),
+		"full_hash": hash.String(),
 	}).Info("Publishing RouterInfo to floodfills")
 
 	// Select closest floodfill routers
@@ -423,25 +435,25 @@ func (p *Publisher) PublishRouterInfo(ri router_info.RouterInfo) error {
 	if err != nil {
 		return oops.Errorf("failed to serialize RouterInfo: %w", err)
 	}
-	
+
 	log.WithFields(logger.Fields{
 		"at":                "PublishRouterInfo",
 		"router_info_bytes": len(riBytes),
 		"hash":              hash.String()[:16],
 	}).Debug("RouterInfo serialized for distribution")
-	
+
 	compressed, err := gzipCompress(riBytes)
 	if err != nil {
 		return oops.Errorf("failed to gzip-compress RouterInfo: %w", err)
 	}
-	
+
 	log.WithFields(logger.Fields{
 		"at":                "PublishRouterInfo",
 		"uncompressed_size": len(riBytes),
 		"compressed_size":   len(compressed),
 		"hash":              hash.String()[:16],
 	}).Debug("RouterInfo compressed for transmission")
-	
+
 	return p.sendDatabaseStoreMessages(hash, compressed, i2np.DatabaseStoreTypeRouterInfo, floodfills)
 }
 

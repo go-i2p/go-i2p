@@ -61,6 +61,9 @@ func (m *iterativeMockDB) SelectFloodfillRouters(_ common.Hash, _ int) ([]router
 
 func (m *iterativeMockDB) GetLeaseSetCount() int            { return 0 }
 func (m *iterativeMockDB) GetAllLeaseSets() []LeaseSetEntry { return nil }
+func (m *iterativeMockDB) StoreLeaseSet(key common.Hash, data []byte, dataType byte) error {
+	return nil
+}
 
 // TestSearchReplyError tests the SearchReplyError type and errors.As behavior.
 func TestSearchReplyError(t *testing.T) {

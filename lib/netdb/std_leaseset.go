@@ -711,10 +711,21 @@ func (db *StdNetDB) cacheLeaseSetEntryIfNewer(hash common.Hash, entry Entry, isN
 // parseAndCacheLeaseSet2 parses LeaseSet2 data and adds it to the memory cache.
 // If a cached entry already exists, the new entry replaces it only if it has a
 // newer published timestamp, preventing stale data from persisting.
+//
+// CRITICAL-2 FIX: Added cryptographic signature verification before caching.
+// LeaseSet2 must be verified against its signature to prevent attacks where
+// persisted files are corrupted to inject malicious data.
 func (db *StdNetDB) parseAndCacheLeaseSet2(hash common.Hash, data []byte) (lease_set2.LeaseSet2, error) {
 	ls2, _, err := lease_set2.ReadLeaseSet2(data)
 	if err != nil {
 		return lease_set2.LeaseSet2{}, oops.Errorf("failed to parse LeaseSet2: %w", err)
+	}
+
+	// CRITICAL-2 FIX: Verify signature before accepting into cache
+	// This is fail-closed: any signature verification failure is rejected completely
+	if err := ls2.Verify(); err != nil {
+		log.WithError(err).WithField("hash", hash).Warn("LeaseSet2 signature verification failed during retrieval")
+		return lease_set2.LeaseSet2{}, oops.Errorf("LeaseSet2 signature verification failed: %w", err)
 	}
 
 	db.cacheLeaseSetEntryIfNewer(hash, Entry{LeaseSet2: &ls2}, func(existing Entry) bool {
@@ -856,10 +867,22 @@ func (db *StdNetDB) GetEncryptedLeaseSet(hash common.Hash) (chnl chan encrypted_
 // parseAndCacheEncryptedLeaseSet parses EncryptedLeaseSet data and adds it to the memory cache.
 // If a cached entry already exists, the new entry replaces it only if it has a
 // newer published timestamp, preventing stale data from persisting.
+//
+// CRITICAL-2 FIX: Added cryptographic signature verification before caching.
+// EncryptedLeaseSet blinded public key must be verified against the provided signature.
+// This prevents attacks where persisted EncryptedLeaseSet files are corrupted to inject
+// malicious blinded keys that would then be loaded without verification during retrieval.
 func (db *StdNetDB) parseAndCacheEncryptedLeaseSet(hash common.Hash, data []byte) (encrypted_leaseset.EncryptedLeaseSet, error) {
 	els, _, err := encrypted_leaseset.ReadEncryptedLeaseSet(data)
 	if err != nil {
 		return encrypted_leaseset.EncryptedLeaseSet{}, oops.Errorf("failed to parse EncryptedLeaseSet: %w", err)
+	}
+
+	// CRITICAL-2 FIX: Verify signature before accepting into cache
+	// This is fail-closed: any signature verification failure is rejected completely
+	if err := els.Verify(); err != nil {
+		log.WithError(err).WithField("hash", hash).Warn("EncryptedLeaseSet signature verification failed during retrieval")
+		return encrypted_leaseset.EncryptedLeaseSet{}, oops.Errorf("EncryptedLeaseSet signature verification failed: %w", err)
 	}
 
 	db.cacheLeaseSetEntryIfNewer(hash, Entry{EncryptedLeaseSet: &els}, func(existing Entry) bool {
@@ -997,10 +1020,21 @@ func (db *StdNetDB) GetMetaLeaseSet(hash common.Hash) (chnl chan meta_leaseset.M
 // parseAndCacheMetaLeaseSet parses MetaLeaseSet data and adds it to the memory cache.
 // If a cached entry already exists, the new entry replaces it only if it has a
 // newer published timestamp, preventing stale data from persisting.
+//
+// CRITICAL-2 FIX: Added cryptographic signature verification before caching.
+// MetaLeaseSet must be verified against its signature to prevent attacks where
+// persisted files are corrupted to inject malicious data.
 func (db *StdNetDB) parseAndCacheMetaLeaseSet(hash common.Hash, data []byte) (meta_leaseset.MetaLeaseSet, error) {
 	mls, _, err := meta_leaseset.ReadMetaLeaseSet(data)
 	if err != nil {
 		return meta_leaseset.MetaLeaseSet{}, oops.Errorf("failed to parse MetaLeaseSet: %w", err)
+	}
+
+	// CRITICAL-2 FIX: Verify signature before accepting into cache
+	// This is fail-closed: any signature verification failure is rejected completely
+	if err := mls.Verify(); err != nil {
+		log.WithError(err).WithField("hash", hash).Warn("MetaLeaseSet signature verification failed during retrieval")
+		return meta_leaseset.MetaLeaseSet{}, oops.Errorf("MetaLeaseSet signature verification failed: %w", err)
 	}
 
 	db.cacheLeaseSetEntryIfNewer(hash, Entry{MetaLeaseSet: &mls}, func(existing Entry) bool {

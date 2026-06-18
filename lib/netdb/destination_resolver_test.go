@@ -10,6 +10,7 @@ import (
 	"github.com/go-i2p/common/lease_set"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/bootstrap"
+	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -153,8 +154,9 @@ func (m *mockNetDB) GetMetaLeaseSetBytes(hash common.Hash) ([]byte, error) {
 	return data, nil
 }
 
-func (m *mockNetDB) StoreLeaseSet(hash common.Hash, data []byte) {
+func (m *mockNetDB) StoreLeaseSet(hash common.Hash, data []byte, dataType byte) error {
 	m.leaseSets[hash] = data
+	return nil
 }
 
 func (m *mockNetDB) StoreLeaseSet2(hash common.Hash, data []byte) {
@@ -186,7 +188,7 @@ func TestResolveDestination_InvalidLeaseSet(t *testing.T) {
 
 	// Store invalid LeaseSet data
 	invalidData := []byte{0x01, 0x02, 0x03}
-	netdb.StoreLeaseSet(destHash, invalidData)
+	netdb.StoreLeaseSet(destHash, invalidData, i2np.DatabaseStoreTypeLeaseSet2)
 
 	// Attempt to resolve - should fail due to invalid data
 	_, err := resolver.ResolveDestination(destHash)
@@ -208,7 +210,7 @@ func TestExtractKeyFromLeaseSet2_NotLeaseSet2(t *testing.T) {
 
 	// Store data that is not a valid LeaseSet2 structure
 	notLS2Data := []byte{0x01, 0x02, 0x03, 0x04}
-	netdb.StoreLeaseSet(destHash, notLS2Data)
+	netdb.StoreLeaseSet(destHash, notLS2Data, i2np.DatabaseStoreTypeLeaseSet2)
 
 	// Should fail because data cannot be parsed as LeaseSet2
 	_, err := resolver.extractKeyFromLeaseSet2(destHash)
@@ -221,7 +223,7 @@ func TestExtractKeyFromLeaseSet2_EmptyData(t *testing.T) {
 	resolver, netdb, destHash := newTestResolverWithHash(t)
 
 	// Store empty data
-	netdb.StoreLeaseSet(destHash, []byte{})
+	netdb.StoreLeaseSet(destHash, []byte{}, i2np.DatabaseStoreTypeLeaseSet2)
 
 	// Should fail due to empty data
 	_, err := resolver.extractKeyFromLeaseSet2(destHash)
@@ -324,7 +326,7 @@ func TestExtractKeyFromLeaseSet2_ShortData(t *testing.T) {
 	resolver, netdb, destHash := newTestResolverWithHash(t)
 
 	// Store short data - passes format validation but fails parsing
-	netdb.StoreLeaseSet(destHash, []byte{0x03, 0x04, 0x05})
+	netdb.StoreLeaseSet(destHash, []byte{0x03, 0x04, 0x05}, i2np.DatabaseStoreTypeLeaseSet2)
 
 	_, err := resolver.extractKeyFromLeaseSet2(destHash)
 	assert.Error(t, err)
@@ -384,7 +386,7 @@ func TestResolveDestination_FallsBackToClassicAfterLeaseSet2Miss(t *testing.T) {
 
 	// Store data only in classic LeaseSet bucket (not LeaseSet2)
 	invalidData := []byte{0x01, 0x02, 0x03}
-	netdb.StoreLeaseSet(destHash, invalidData)
+	netdb.StoreLeaseSet(destHash, invalidData, i2np.DatabaseStoreTypeLeaseSet2)
 
 	// Should attempt LeaseSet2Direct (miss) → LeaseSet2 via classic bytes (fail parse)
 	// → classic LeaseSet (fail parse) → error
