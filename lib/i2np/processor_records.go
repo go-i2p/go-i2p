@@ -22,13 +22,13 @@ import (
 // 4. Accept or reject based on available capacity and rate limits
 // 5. Generate and send appropriate build reply
 func (p *MessageProcessor) processShortTunnelBuildMessage(msg Message) error {
-	return p.processTunnelBuildRequest(msg, true)
+	return newBuildRequestProcessor(p, msg, true).process()
 }
 
 // processVariableTunnelBuildMessage processes Variable Tunnel Build Messages (legacy format).
 // This handles incoming requests using the older VTB format for backward compatibility.
 func (p *MessageProcessor) processVariableTunnelBuildMessage(msg Message) error {
-	return p.processTunnelBuildRequest(msg, false)
+	return newBuildRequestProcessor(p, msg, false).process()
 }
 
 // processTunnelBuildMessage processes TunnelBuild (type 21) messages.
@@ -41,22 +41,7 @@ func (p *MessageProcessor) processTunnelBuildMessage(msg Message) error {
 // processFixedTunnelBuildRequest handles TunnelBuild (type 21) messages with
 // fixed 8-record format. Unlike VTB/STBM, type 21 has no count prefix byte.
 func (p *MessageProcessor) processFixedTunnelBuildRequest(msg Message) error {
-	if err := p.validateParticipantManager(false, msg.Type()); err != nil {
-		return err
-	}
-
-	data, err := p.extractBuildMessageData(msg)
-	if err != nil {
-		return err
-	}
-
-	records, err := p.parseFixedTunnelBuildRecords(data)
-	if err != nil {
-		return oops.Wrapf(err, "failed to parse fixed tunnel build records")
-	}
-
-	p.logParsedBuildRequest(msg.MessageID(), len(records), false)
-	return p.processAllBuildRecords(msg.MessageID(), records, data, false)
+	return newFixedBuildRequestProcessor(p, msg).process()
 }
 
 // parseFixedTunnelBuildRecords parses TunnelBuild (type 21) records.
@@ -285,22 +270,60 @@ func (p *MessageProcessor) parseBuildResponseRecords(data []byte, isShortBuild b
 // - msg: The incoming I2NP tunnel build message
 // - isShortBuild: True for STBM format, false for VTB format
 func (p *MessageProcessor) processTunnelBuildRequest(msg Message, isShortBuild bool) error {
-	if err := p.validateParticipantManager(isShortBuild, msg.Type()); err != nil {
+	return newBuildRequestProcessor(p, msg, isShortBuild).process()
+}
+
+// buildRequestProcessor centralizes the common extract → validate → parse → log → dispatch flow.
+type buildRequestProcessor struct {
+	processor *MessageProcessor
+	msg       Message
+	isShort   bool
+	parse     func([]byte) ([]BuildRequestRecord, error)
+}
+
+func newBuildRequestProcessor(p *MessageProcessor, msg Message, isShortBuild bool) buildRequestProcessor {
+	return buildRequestProcessor{
+		processor: p,
+		msg:       msg,
+		isShort:   isShortBuild,
+		parse: func(data []byte) ([]BuildRequestRecord, error) {
+			return p.parseTunnelBuildRecords(data, isShortBuild)
+		},
+	}
+}
+
+func newFixedBuildRequestProcessor(p *MessageProcessor, msg Message) buildRequestProcessor {
+	return buildRequestProcessor{
+		processor: p,
+		msg:       msg,
+		isShort:   false,
+		parse: func(data []byte) ([]BuildRequestRecord, error) {
+			records, err := p.parseFixedTunnelBuildRecords(data)
+			if err != nil {
+				return nil, oops.Wrapf(err, "failed to parse fixed tunnel build records")
+			}
+			return records, nil
+		},
+	}
+}
+
+func (b buildRequestProcessor) process() error {
+	if err := b.processor.validateParticipantManager(b.isShort, b.msg.Type()); err != nil {
 		return err
 	}
 
-	data, err := p.extractBuildMessageData(msg)
+	data, err := b.processor.extractBuildMessageData(b.msg)
 	if err != nil {
 		return err
 	}
 
-	records, err := p.parseTunnelBuildRecords(data, isShortBuild)
+	records, err := b.parse(data)
 	if err != nil {
 		return oops.Wrapf(err, "failed to parse tunnel build records")
 	}
 
-	p.logParsedBuildRequest(msg.MessageID(), len(records), isShortBuild)
-	return p.processAllBuildRecords(msg.MessageID(), records, data, isShortBuild)
+	b.processor.logParsedBuildRequest(b.msg.MessageID(), len(records), b.isShort)
+	return b.processor.processAllBuildRecords(b.msg.MessageID(), records, data, b.isShort)
 }
 
 // validateParticipantManager checks if the participant manager is configured.
