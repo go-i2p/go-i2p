@@ -202,11 +202,8 @@ func ReadDatabaseLookup(data []byte) (DatabaseLookup, error) {
 	log.WithFields(logger.Fields{"at": "ReadDatabaseLookup"}).Debug("Reading DatabaseLookup")
 	databaseLookup := DatabaseLookup{}
 
-	if err := parseBasicFields(&databaseLookup, data); err != nil {
-		return databaseLookup, err
-	}
-
-	if err := parseVariableFields(&databaseLookup, data); err != nil {
+	endOffset, err := parseLookupCoreFields(&databaseLookup, data)
+	if err != nil {
 		return databaseLookup, err
 	}
 
@@ -215,7 +212,7 @@ func ReadDatabaseLookup(data []byte) (DatabaseLookup, error) {
 	// Parsing them unconditionally on unencrypted lookups would read past
 	// the excluded peers into garbage data.
 	if databaseLookup.hasEncryption() || (databaseLookup.Flags&DatabaseLookupFlagECIES) != 0 {
-		if err := parseEncryptionFields(&databaseLookup, data); err != nil {
+		if err := parseEncryptionFields(&databaseLookup, data, endOffset); err != nil {
 			return databaseLookup, err
 		}
 	}
@@ -245,9 +242,9 @@ func applyLookupParsers(offset int, data []byte, dl *DatabaseLookup, parsers []l
 	return offset, nil
 }
 
-// parseBasicFields extracts the fixed-size basic fields from the database lookup data.
-func parseBasicFields(databaseLookup *DatabaseLookup, data []byte) error {
-	_, err := applyLookupParsers(0, data, databaseLookup, []lookupFieldParser{
+// parseLookupCoreFields extracts the fixed-size and variable-size fields from the database lookup data.
+func parseLookupCoreFields(databaseLookup *DatabaseLookup, data []byte) (int, error) {
+	return applyLookupParsers(0, data, databaseLookup, []lookupFieldParser{
 		{"Key", func(_ int, d []byte, dl *DatabaseLookup) (int, error) {
 			l, v, err := readDatabaseLookupKey(d)
 			dl.Key = v
@@ -268,19 +265,6 @@ func parseBasicFields(databaseLookup *DatabaseLookup, data []byte) error {
 			dl.ReplyTunnelID = v
 			return l, err
 		}},
-	})
-	return err
-}
-
-// parseVariableFields extracts the variable-size fields including excluded peers.
-func parseVariableFields(databaseLookup *DatabaseLookup, data []byte) error {
-	// Calculate length offset after basic fields
-	length := 32 + 32 + 1 // Key + From + Flags
-	if databaseLookup.Flags&1 == 1 {
-		length += 4 // ReplyTunnelID
-	}
-
-	_, err := applyLookupParsers(length, data, databaseLookup, []lookupFieldParser{
 		{"Size", func(off int, d []byte, dl *DatabaseLookup) (int, error) {
 			l, v, err := readDatabaseLookupSize(off, d)
 			dl.Size = v
@@ -292,14 +276,11 @@ func parseVariableFields(databaseLookup *DatabaseLookup, data []byte) error {
 			return l, err
 		}},
 	})
-	return err
 }
 
 // parseEncryptionFields extracts the encryption-related fields from the database lookup data.
-func parseEncryptionFields(databaseLookup *DatabaseLookup, data []byte) error {
-	length := computeEncryptionFieldOffset(databaseLookup)
-
-	endOffset, err := applyLookupParsers(length, data, databaseLookup, []lookupFieldParser{
+func parseEncryptionFields(databaseLookup *DatabaseLookup, data []byte, offset int) error {
+	endOffset, err := applyLookupParsers(offset, data, databaseLookup, []lookupFieldParser{
 		{"ReplyKey", func(off int, d []byte, dl *DatabaseLookup) (int, error) {
 			l, v, err := readDatabaseLookupReplyKey(off, d)
 			dl.ReplyKey = v
@@ -316,16 +297,6 @@ func parseEncryptionFields(databaseLookup *DatabaseLookup, data []byte) error {
 	}
 
 	return readReplyTagsByType(databaseLookup, endOffset, data, databaseLookup.Tags)
-}
-
-// computeEncryptionFieldOffset calculates the byte offset where encryption fields begin,
-// accounting for the fixed header, excluded peers, and optional reply tunnel ID.
-func computeEncryptionFieldOffset(databaseLookup *DatabaseLookup) int {
-	length := 32 + 32 + 1 + 2 + (databaseLookup.Size * 32) // Key + From + Flags + Size + ExcludedPeers
-	if databaseLookup.Flags&1 == 1 {
-		length += 4 // ReplyTunnelID
-	}
-	return length
 }
 
 // readReplyTagsByType reads either ECIES or legacy reply tags based on the encryption flag.
