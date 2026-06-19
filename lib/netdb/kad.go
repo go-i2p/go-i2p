@@ -271,45 +271,74 @@ type iterativeQueryResult struct {
 	err         error
 }
 
+// LookupState tracks the queried and unqueried peers for an iterative lookup.
+type LookupState struct {
+	queried   map[common.Hash]bool
+	unqueried map[common.Hash]bool
+}
+
+func newLookupState() *LookupState {
+	return &LookupState{
+		queried:   make(map[common.Hash]bool),
+		unqueried: make(map[common.Hash]bool),
+	}
+}
+
+func (s *LookupState) addUnqueried(peer common.Hash) {
+	s.unqueried[peer] = true
+}
+
+func (s *LookupState) markQueried(peer common.Hash) {
+	s.queried[peer] = true
+	delete(s.unqueried, peer)
+}
+
+func (s *LookupState) hasBeenQueried(peer common.Hash) bool {
+	return s.queried[peer]
+}
+
+func (s *LookupState) hasPendingPeers() bool {
+	return len(s.unqueried) > 0
+}
+
 // iterativeLookup performs an iterative Kademlia lookup following peer suggestions.
 // It maintains sets of queried and unqueried peers, querying the closest unqueried
 // peers each round and adding suggestions from DatabaseSearchReply responses.
 func (kr *KademliaResolver) iterativeLookup(ctx context.Context, target common.Hash) (*router_info.RouterInfo, error) {
-	queried, unqueried, err := kr.initializeLookupState(target)
+	state, err := kr.initializeLookupState(target)
 	if err != nil {
 		return nil, err
 	}
 
-	return kr.executeLookupRounds(ctx, target, queried, unqueried)
+	return kr.executeLookupRounds(ctx, target, state)
 }
 
 // initializeLookupState prepares the initial state for an iterative lookup by finding
 // the closest known peers to the target hash.
-func (kr *KademliaResolver) initializeLookupState(target common.Hash) (queried, unqueried map[common.Hash]bool, err error) {
-	queried = make(map[common.Hash]bool)
-	unqueried = make(map[common.Hash]bool)
+func (kr *KademliaResolver) initializeLookupState(target common.Hash) (*LookupState, error) {
+	state := newLookupState()
 
 	closestPeers := kr.findClosestPeers(target)
 	if len(closestPeers) == 0 {
-		return nil, nil, oops.Errorf("insufficient peers available for lookup")
+		return nil, oops.Errorf("insufficient peers available for lookup")
 	}
 
 	for _, p := range closestPeers {
-		unqueried[p] = true
+		state.addUnqueried(p)
 	}
 
-	return queried, unqueried, nil
+	return state, nil
 }
 
 // executeLookupRounds performs iterative Kademlia lookup rounds until a RouterInfo is found,
 // the search is exhausted, or the maximum hop count is reached.
-func (kr *KademliaResolver) executeLookupRounds(ctx context.Context, target common.Hash, queried, unqueried map[common.Hash]bool) (*router_info.RouterInfo, error) {
+func (kr *KademliaResolver) executeLookupRounds(ctx context.Context, target common.Hash, state *LookupState) (*router_info.RouterInfo, error) {
 	for hop := 0; hop < MaxIterativeLookupHops; hop++ {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
 
-		ri, exhausted := kr.processLookupRound(ctx, target, queried, unqueried, hop)
+		ri, exhausted := kr.processLookupRound(ctx, target, state, hop)
 		if ri != nil {
 			return ri, nil
 		}
@@ -325,8 +354,8 @@ func (kr *KademliaResolver) executeLookupRounds(ctx context.Context, target comm
 // It selects the closest unqueried peers, queries them in parallel, and merges
 // suggestions into the unqueried set. Returns a non-nil RouterInfo if found,
 // or true for exhausted if no unqueried peers remain.
-func (kr *KademliaResolver) processLookupRound(ctx context.Context, target common.Hash, queried, unqueried map[common.Hash]bool, hop int) (ri *router_info.RouterInfo, exhausted bool) {
-	batch := kr.selectClosestUnqueried(target, unqueried, MaxConcurrentQueries)
+func (kr *KademliaResolver) processLookupRound(ctx context.Context, target common.Hash, state *LookupState, hop int) (ri *router_info.RouterInfo, exhausted bool) {
+	batch := kr.selectClosestUnqueried(target, state.unqueried, MaxConcurrentQueries)
 	if len(batch) == 0 {
 		log.WithFields(logger.Fields{
 			"at":   "iterativeLookup",
@@ -340,34 +369,33 @@ func (kr *KademliaResolver) processLookupRound(ctx context.Context, target commo
 		"at":         "iterativeLookup",
 		"hop":        hop,
 		"batch_size": len(batch),
-		"unqueried":  len(unqueried),
-		"queried":    len(queried),
+		"unqueried":  len(state.unqueried),
+		"queried":    len(state.queried),
 	}).Debug("Starting iterative lookup round")
 
 	results := kr.queryBatchParallel(ctx, batch, target)
-	kr.markBatchQueried(batch, queried, unqueried)
+	kr.markBatchQueried(batch, state)
 
-	return kr.mergeQueryResults(results, queried, unqueried)
+	return kr.mergeQueryResults(results, state)
 }
 
 // markBatchQueried moves all peers in the batch from the unqueried set to the queried set.
-func (kr *KademliaResolver) markBatchQueried(batch []common.Hash, queried, unqueried map[common.Hash]bool) {
+func (kr *KademliaResolver) markBatchQueried(batch []common.Hash, state *LookupState) {
 	for _, p := range batch {
-		queried[p] = true
-		delete(unqueried, p)
+		state.markQueried(p)
 	}
 }
 
 // mergeQueryResults processes query results, returning a RouterInfo if found or merging
 // new peer suggestions into the unqueried set for subsequent rounds.
-func (kr *KademliaResolver) mergeQueryResults(results []iterativeQueryResult, queried, unqueried map[common.Hash]bool) (*router_info.RouterInfo, bool) {
+func (kr *KademliaResolver) mergeQueryResults(results []iterativeQueryResult, state *LookupState) (*router_info.RouterInfo, bool) {
 	for _, result := range results {
 		if result.ri != nil {
 			return result.ri, false
 		}
 		for _, suggestion := range result.suggestions {
-			if !queried[suggestion] && !unqueried[suggestion] {
-				unqueried[suggestion] = true
+			if !state.hasBeenQueried(suggestion) && !state.unqueried[suggestion] {
+				state.addUnqueried(suggestion)
 			}
 		}
 	}
