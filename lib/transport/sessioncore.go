@@ -211,22 +211,30 @@ func (sc *SessionCore) DroppedMessages() uint64 {
 	return atomic.LoadUint64(&sc.droppedMessages)
 }
 
+func addUint64Atomic(counter *uint64, delta uint64) uint64 {
+	return atomic.AddUint64(counter, delta)
+}
+
+func addInt32Atomic(counter *int32, delta int32) int32 {
+	return atomic.AddInt32(counter, delta)
+}
+
 // AddToBytesSent adds delta to the cumulative bytes-sent counter (atomic).
 // Called by transport writers after successful frame transmission.
 func (sc *SessionCore) AddToBytesSent(delta uint64) {
-	atomic.AddUint64(&sc.bytesSent, delta)
+	addUint64Atomic(&sc.bytesSent, delta)
 }
 
 // AddToBytesReceived adds delta to the cumulative bytes-received counter (atomic).
 // Called by transport readers after successful frame reception.
 func (sc *SessionCore) AddToBytesReceived(delta uint64) {
-	atomic.AddUint64(&sc.bytesReceived, delta)
+	addUint64Atomic(&sc.bytesReceived, delta)
 }
 
 // AddToSendQueueSize adds delta to the send queue size (atomic).
 // delta is typically -1 (dequeued) or +1 (enqueued). Returns new size.
 func (sc *SessionCore) AddToSendQueueSize(delta int32) int32 {
-	return atomic.AddInt32(&sc.sendQueueSize, delta)
+	return addInt32Atomic(&sc.sendQueueSize, delta)
 }
 
 // GetContext returns the session's context. Used by transport workers to

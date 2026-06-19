@@ -73,29 +73,7 @@ func (t *TunnelBuildReply) validateRecordCount(recordCount int) error {
 // Implements replyStepProcessor interface.
 // Returns the success count and the first error encountered (if any).
 func (t *TunnelBuildReply) processAllHops() (int, error) {
-	successCount := 0
-	var firstError error
-
-	for i, record := range t.Records {
-		success, err := t.processHopResponse(i, record)
-		if err != nil {
-			log.WithFields(logger.Fields{
-				"hop_index": i,
-				"error":     err,
-			}).Warn("Failed to process hop response")
-
-			if firstError == nil {
-				firstError = err
-			}
-			continue
-		}
-
-		if success {
-			successCount++
-		}
-	}
-
-	return successCount, firstError
+	return processAllRecordsAsHops(t.Records[:], t.processHopResponse)
 }
 
 // logReplyCompletion logs the completion of tunnel build reply processing.
