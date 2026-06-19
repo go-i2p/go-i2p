@@ -192,16 +192,19 @@ func (pt *PeerTracker) IsLikelyStale(hash common.Hash) bool {
 		return false // No data - assume peer is fine
 	}
 
-	if pt.hasExcessiveConsecutiveFailures(stats, hash) {
-		return true
+	// Define the checks to perform on the peer.
+	// All checks have the same signature: func(*PeerStats, common.Hash) bool
+	checks := []func(*PeerStats, common.Hash) bool{
+		pt.hasExcessiveConsecutiveFailures,
+		pt.hasLowSuccessRate,
+		pt.hasRecentFailuresWithoutSuccess,
 	}
 
-	if pt.hasLowSuccessRate(stats, hash) {
-		return true
-	}
-
-	if pt.hasRecentFailuresWithoutSuccess(stats, hash) {
-		return true
+	// Run each check; if any returns true, the peer is stale.
+	for _, check := range checks {
+		if check(stats, hash) {
+			return true
+		}
 	}
 
 	return false

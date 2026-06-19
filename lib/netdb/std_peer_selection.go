@@ -416,51 +416,64 @@ func (db *StdNetDB) isFloodfillRouter(ri router_info.RouterInfo) bool {
 	return IsFloodfillRouter(ri)
 }
 
-// routerDistance represents a router with its calculated XOR distance from target.
-type routerDistance struct {
-	routerInfo router_info.RouterInfo
-	distance   []byte // XOR distance as byte array for comparison
-}
-
 // selectClosestByXORDistance selects up to 'count' routers closest to targetHash
 // using XOR distance metric (Kademlia).
 func (db *StdNetDB) selectClosestByXORDistance(routers []router_info.RouterInfo, targetHash common.Hash, count int) []router_info.RouterInfo {
-	// Calculate distances for all routers
-	distances := make([]routerDistance, 0, len(routers))
+	// Build a list filtering out routers with hash extraction errors.
+	// The generic helper will calculate distances and select the closest.
+	var validRouters []router_info.RouterInfo
 	for _, ri := range routers {
-		riHash, err := ri.IdentHash()
+		_, err := ri.IdentHash()
 		if err != nil {
 			log.WithError(err).Warn("Failed to get router hash for XOR distance calculation, skipping")
 			continue
 		}
-		distance := CalculateXORDistance(targetHash, riHash)
-		distances = append(distances, routerDistance{
-			routerInfo: ri,
-			distance:   distance,
-		})
+		validRouters = append(validRouters, ri)
 	}
 
-	// Sort by XOR distance (ascending)
+	result := selectClosestByDistance(validRouters, func(ri router_info.RouterInfo) common.Hash {
+		hash, _ := ri.IdentHash()
+		return hash
+	}, targetHash, count)
+
+	log.WithFields(logger.Fields{
+		"requested": count,
+		"available": len(validRouters),
+		"selected":  len(result),
+	}).Debug("Selected closest floodfill routers by XOR distance")
+
+	return result
+}
+
+// selectClosestByDistance is a generic helper that selects up to 'count' items
+// closest to target hash by XOR distance. Items are sorted and returned in order.
+// The getHash function extracts a Hash from each item for distance calculation.
+func selectClosestByDistance[T any](items []T, getHash func(T) common.Hash, target common.Hash, count int) []T {
+	type distancedItem struct {
+		item     T
+		distance []byte
+	}
+
+	distances := make([]distancedItem, 0, len(items))
+	for _, item := range items {
+		hash := getHash(item)
+		distance := CalculateXORDistance(target, hash)
+		distances = append(distances, distancedItem{item: item, distance: distance})
+	}
+
 	sort.Slice(distances, func(i, j int) bool {
 		return CompareXORDistances(distances[i].distance, distances[j].distance)
 	})
 
-	// Take up to count closest routers
 	resultCount := count
 	if len(distances) < count {
 		resultCount = len(distances)
 	}
 
-	result := make([]router_info.RouterInfo, resultCount)
+	result := make([]T, resultCount)
 	for i := 0; i < resultCount; i++ {
-		result[i] = distances[i].routerInfo
+		result[i] = distances[i].item
 	}
-
-	log.WithFields(logger.Fields{
-		"requested": count,
-		"available": len(distances),
-		"selected":  resultCount,
-	}).Debug("Selected closest floodfill routers by XOR distance")
 
 	return result
 }

@@ -145,18 +145,10 @@ func (rl *FloodfillRateLimiter) Allow(peer common.Hash) bool {
 
 func (rl *FloodfillRateLimiter) allowGlobal(now time.Time) bool {
 	elapsed := now.Sub(rl.globalLastUpdate).Seconds()
-	rl.globalTokens += elapsed * rl.globalRefillRate
-	if rl.globalTokens > float64(rl.globalMaxBurst) {
-		rl.globalTokens = float64(rl.globalMaxBurst)
-	}
+	newTokens, allowed := tokenBucketAllow(elapsed, rl.globalTokens, rl.globalRefillRate, float64(rl.globalMaxBurst))
+	rl.globalTokens = newTokens
 	rl.globalLastUpdate = now
-
-	if rl.globalTokens >= 1.0 {
-		rl.globalTokens -= 1.0
-		return true
-	}
-
-	return false
+	return allowed
 }
 
 func (rl *FloodfillRateLimiter) allowPeer(peer common.Hash, now time.Time) bool {
@@ -180,19 +172,27 @@ func (rl *FloodfillRateLimiter) allowPeer(peer common.Hash, now time.Time) bool 
 
 	// Refill tokens based on elapsed time
 	elapsed := now.Sub(pl.lastUpdate).Seconds()
-	pl.tokens += elapsed * rl.refillRate
-	if pl.tokens > float64(rl.maxBurst) {
-		pl.tokens = float64(rl.maxBurst)
-	}
+	newTokens, allowed := tokenBucketAllow(elapsed, pl.tokens, rl.refillRate, float64(rl.maxBurst))
+	pl.tokens = newTokens
 	pl.lastUpdate = now
-
-	if pl.tokens >= 1.0 {
-		pl.tokens -= 1.0
-		rl.lastSeen[peer] = now
-		return true
-	}
 	rl.lastSeen[peer] = now
-	return false
+	return allowed
+}
+
+// tokenBucketAllow refills tokens based on elapsed time and determines if
+// an operation should be allowed. Returns the new token count and whether
+// the operation is allowed (token count >= 1.0).
+func tokenBucketAllow(elapsed, currentTokens, refillRate, maxBurst float64) (float64, bool) {
+	currentTokens += elapsed * refillRate
+	if currentTokens > maxBurst {
+		currentTokens = maxBurst
+	}
+
+	if currentTokens >= 1.0 {
+		currentTokens -= 1.0
+		return currentTokens, true
+	}
+	return currentTokens, false
 }
 
 // GlobalRejectedCount returns how many requests were rejected by the global bucket.

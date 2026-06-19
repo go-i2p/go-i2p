@@ -404,25 +404,14 @@ func (kr *KademliaResolver) mergeQueryResults(results []iterativeQueryResult, st
 
 // selectClosestUnqueried picks the closest unqueried peers by XOR distance to the target.
 func (kr *KademliaResolver) selectClosestUnqueried(target common.Hash, unqueried map[common.Hash]bool, count int) []common.Hash {
-	peers := make([]peerDistance, 0, len(unqueried))
+	// Convert map keys to slice for the generic helper.
+	var peers []common.Hash
 	for h := range unqueried {
-		dist := CalculateXORDistance(target, h)
-		peers = append(peers, peerDistance{hash: h, distance: dist})
+		peers = append(peers, h)
 	}
 
-	sort.Slice(peers, func(i, j int) bool {
-		return CompareXORDistances(peers[i].distance, peers[j].distance)
-	})
-
-	if count > len(peers) {
-		count = len(peers)
-	}
-
-	result := make([]common.Hash, count)
-	for i := 0; i < count; i++ {
-		result[i] = peers[i].hash
-	}
-	return result
+	// Use the generic helper; Hash items have identity getHash function.
+	return selectClosestByDistance(peers, func(h common.Hash) common.Hash { return h }, target, count)
 }
 
 // queryBatchParallel queries multiple peers concurrently and collects their results.
