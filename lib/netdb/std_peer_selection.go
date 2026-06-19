@@ -159,24 +159,18 @@ func shouldSkipPeer(ri router_info.RouterInfo, excludeMap map[common.Hash]bool, 
 		return true
 	}
 
-	if shouldSkipExcluded(riHash, excludeMap, stats) {
-		return true
+	skipChecks := []func() bool{
+		func() bool { return shouldSkipExcluded(riHash, excludeMap, stats) },
+		func() bool { return shouldSkipNoAddresses(ri, stats) },
+		func() bool { return shouldSkipStale(riHash, tracker, stats) },
+		func() bool { return shouldSkipNoCaps(ri, riHash, stats) },
+		func() bool { return shouldSkipOldRouterInfo(ri, riHash, stats) },
 	}
 
-	if shouldSkipNoAddresses(ri, stats) {
-		return true
-	}
-
-	if shouldSkipStale(riHash, tracker, stats) {
-		return true
-	}
-
-	if shouldSkipNoCaps(ri, riHash, stats) {
-		return true
-	}
-
-	if shouldSkipOldRouterInfo(ri, riHash, stats) {
-		return true
+	for _, shouldSkip := range skipChecks {
+		if shouldSkip() {
+			return true
+		}
 	}
 
 	return false
