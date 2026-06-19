@@ -260,6 +260,27 @@ func valueChannel[T any](value T) chan T {
 	return ch
 }
 
+type leaseSetVariantGetter[T any] struct {
+	typeName    string
+	cacheLookup func(common.Hash) (T, bool)
+	load        func(common.Hash) (T, error)
+}
+
+func getLeaseSetVariant[T any](hash common.Hash, getter leaseSetVariantGetter[T]) chan T {
+	log.WithField("hash", hash).Debug("Getting " + getter.typeName)
+
+	if value, ok := getter.cacheLookup(hash); ok {
+		return valueChannel(value)
+	}
+
+	value, err := getter.load(hash)
+	if err != nil {
+		return emptyChannel[T]()
+	}
+
+	return valueChannel(value)
+}
+
 // emptyLeaseSetChannel returns a closed empty channel indicating LeaseSet not found.
 func emptyLeaseSetChannel() chan lease_set.LeaseSet {
 	return emptyChannel[lease_set.LeaseSet]()
@@ -653,34 +674,41 @@ func (db *StdNetDB) persistLeaseSet2ToFilesystem(key common.Hash, ls2 lease_set2
 // Returns a channel that yields the LeaseSet2 or nil if not found.
 // Checks memory cache first, then loads from filesystem if necessary.
 func (db *StdNetDB) GetLeaseSet2(hash common.Hash) (chnl chan lease_set2.LeaseSet2) {
-	log.WithField("hash", hash).Debug("Getting LeaseSet2")
+	return getLeaseSetVariant(hash, leaseSetVariantGetter[lease_set2.LeaseSet2]{
+		typeName: "LeaseSet2",
+		cacheLookup: func(hash common.Hash) (lease_set2.LeaseSet2, bool) {
+			db.lsCache.mu.RLock()
+			defer db.lsCache.mu.RUnlock()
 
-	// Check memory cache first
-	db.lsCache.mu.RLock()
-	if ls, ok := db.lsCache.entries[hash]; ok && ls.LeaseSet2 != nil {
-		db.lsCache.mu.RUnlock()
-		if db.isLeaseSetExpired(hash) {
-			log.WithField("hash", hash).Debug("LeaseSet2 expired, not serving from cache")
-			return emptyLeaseSet2Channel()
-		}
-		log.WithFields(logger.Fields{"at": "GetLeaseSet2"}).Debug("LeaseSet2 found in memory cache")
-		return leaseSet2Channel(*ls.LeaseSet2)
-	}
+			entry, ok := db.lsCache.entries[hash]
+			if !ok || entry.LeaseSet2 == nil {
+				return lease_set2.LeaseSet2{}, false
+			}
 
-	// Load from file
-	data, err := db.loadLeaseSetFromFile(hash)
-	if err != nil {
-		log.WithError(err).Error("Failed to load LeaseSet2 from file")
-		return emptyLeaseSet2Channel()
-	}
+			if db.isLeaseSetExpired(hash) {
+				log.WithField("hash", hash).Debug("LeaseSet2 expired, not serving from cache")
+				return lease_set2.LeaseSet2{}, false
+			}
 
-	ls2, err := db.parseAndCacheLeaseSet2(hash, data)
-	if err != nil {
-		log.WithError(err).Error("Failed to parse LeaseSet2")
-		return emptyLeaseSet2Channel()
-	}
+			log.WithFields(logger.Fields{"at": "GetLeaseSet2"}).Debug("LeaseSet2 found in memory cache")
+			return *entry.LeaseSet2, true
+		},
+		load: func(hash common.Hash) (lease_set2.LeaseSet2, error) {
+			data, err := db.loadLeaseSetFromFile(hash)
+			if err != nil {
+				log.WithError(err).Error("Failed to load LeaseSet2 from file")
+				return lease_set2.LeaseSet2{}, err
+			}
 
-	return leaseSet2Channel(ls2)
+			ls2, err := db.parseAndCacheLeaseSet2(hash, data)
+			if err != nil {
+				log.WithError(err).Error("Failed to parse LeaseSet2")
+				return lease_set2.LeaseSet2{}, err
+			}
+
+			return ls2, nil
+		},
+	})
 }
 
 // cacheLeaseSetEntryIfNewer conditionally stores entry under hash when isNewer
@@ -829,48 +857,41 @@ func (db *StdNetDB) persistEncryptedLeaseSetToFilesystem(key common.Hash, els en
 // Returns a channel that yields the EncryptedLeaseSet or nil if not found.
 // Checks memory cache first, then loads from filesystem if necessary.
 func (db *StdNetDB) GetEncryptedLeaseSet(hash common.Hash) (chnl chan encrypted_leaseset.EncryptedLeaseSet) {
-	log.WithField("hash", hash).Debug("Getting EncryptedLeaseSet")
+	return getLeaseSetVariant(hash, leaseSetVariantGetter[encrypted_leaseset.EncryptedLeaseSet]{
+		typeName: "EncryptedLeaseSet",
+		cacheLookup: func(hash common.Hash) (encrypted_leaseset.EncryptedLeaseSet, bool) {
+			db.lsCache.mu.RLock()
+			defer db.lsCache.mu.RUnlock()
 
-	// Check memory cache first
-	db.lsCache.mu.RLock()
-	if ls, ok := db.lsCache.entries[hash]; ok && ls.EncryptedLeaseSet != nil {
-		db.lsCache.mu.RUnlock()
-		if db.isLeaseSetExpired(hash) {
-			log.WithField("hash", hash).Debug("EncryptedLeaseSet expired, not serving from cache")
-			emptyChnl := make(chan encrypted_leaseset.EncryptedLeaseSet)
-			close(emptyChnl)
-			return emptyChnl
-		}
-		log.WithFields(logger.Fields{"at": "GetEncryptedLeaseSet"}).Debug("EncryptedLeaseSet found in memory cache")
-		chnl = make(chan encrypted_leaseset.EncryptedLeaseSet, 1)
-		chnl <- *ls.EncryptedLeaseSet
-		close(chnl)
-		return chnl
-	}
+			entry, ok := db.lsCache.entries[hash]
+			if !ok || entry.EncryptedLeaseSet == nil {
+				return encrypted_leaseset.EncryptedLeaseSet{}, false
+			}
 
-	// Load from file
-	data, err := db.loadLeaseSetFromFile(hash)
-	if err != nil {
-		log.WithError(err).Error("Failed to load EncryptedLeaseSet from file")
-		// Return a closed empty channel so callers doing <-chnl
-		// receive the zero value immediately rather than blocking
-		// forever on a nil channel.
-		emptyChnl := make(chan encrypted_leaseset.EncryptedLeaseSet)
-		close(emptyChnl)
-		return emptyChnl
-	}
+			if db.isLeaseSetExpired(hash) {
+				log.WithField("hash", hash).Debug("EncryptedLeaseSet expired, not serving from cache")
+				return encrypted_leaseset.EncryptedLeaseSet{}, false
+			}
 
-	chnl = make(chan encrypted_leaseset.EncryptedLeaseSet, 1)
-	els, err := db.parseAndCacheEncryptedLeaseSet(hash, data)
-	if err != nil {
-		log.WithError(err).Error("Failed to parse EncryptedLeaseSet")
-		close(chnl)
-		return chnl
-	}
+			log.WithFields(logger.Fields{"at": "GetEncryptedLeaseSet"}).Debug("EncryptedLeaseSet found in memory cache")
+			return *entry.EncryptedLeaseSet, true
+		},
+		load: func(hash common.Hash) (encrypted_leaseset.EncryptedLeaseSet, error) {
+			data, err := db.loadLeaseSetFromFile(hash)
+			if err != nil {
+				log.WithError(err).Error("Failed to load EncryptedLeaseSet from file")
+				return encrypted_leaseset.EncryptedLeaseSet{}, err
+			}
 
-	chnl <- els
-	close(chnl)
-	return chnl
+			els, err := db.parseAndCacheEncryptedLeaseSet(hash, data)
+			if err != nil {
+				log.WithError(err).Error("Failed to parse EncryptedLeaseSet")
+				return encrypted_leaseset.EncryptedLeaseSet{}, err
+			}
+
+			return els, nil
+		},
+	})
 }
 
 // parseAndCacheEncryptedLeaseSet parses EncryptedLeaseSet data and adds it to the memory cache.
@@ -986,48 +1007,41 @@ func (db *StdNetDB) persistMetaLeaseSetToFilesystem(key common.Hash, mls meta_le
 // Returns a channel that yields the MetaLeaseSet or nil if not found.
 // Checks memory cache first, then loads from filesystem if necessary.
 func (db *StdNetDB) GetMetaLeaseSet(hash common.Hash) (chnl chan meta_leaseset.MetaLeaseSet) {
-	log.WithField("hash", hash).Debug("Getting MetaLeaseSet")
+	return getLeaseSetVariant(hash, leaseSetVariantGetter[meta_leaseset.MetaLeaseSet]{
+		typeName: "MetaLeaseSet",
+		cacheLookup: func(hash common.Hash) (meta_leaseset.MetaLeaseSet, bool) {
+			db.lsCache.mu.RLock()
+			defer db.lsCache.mu.RUnlock()
 
-	// Check memory cache first
-	db.lsCache.mu.RLock()
-	if ls, ok := db.lsCache.entries[hash]; ok && ls.MetaLeaseSet != nil {
-		db.lsCache.mu.RUnlock()
-		if db.isLeaseSetExpired(hash) {
-			log.WithField("hash", hash).Debug("MetaLeaseSet expired, not serving from cache")
-			emptyChnl := make(chan meta_leaseset.MetaLeaseSet)
-			close(emptyChnl)
-			return emptyChnl
-		}
-		log.WithFields(logger.Fields{"at": "GetMetaLeaseSet"}).Debug("MetaLeaseSet found in memory cache")
-		chnl = make(chan meta_leaseset.MetaLeaseSet, 1)
-		chnl <- *ls.MetaLeaseSet
-		close(chnl)
-		return chnl
-	}
+			entry, ok := db.lsCache.entries[hash]
+			if !ok || entry.MetaLeaseSet == nil {
+				return meta_leaseset.MetaLeaseSet{}, false
+			}
 
-	// Load from file
-	data, err := db.loadLeaseSetFromFile(hash)
-	if err != nil {
-		log.WithError(err).Error("Failed to load MetaLeaseSet from file")
-		// Return a closed empty channel so callers doing <-chnl
-		// receive the zero value immediately rather than blocking
-		// forever on a nil channel.
-		emptyChnl := make(chan meta_leaseset.MetaLeaseSet)
-		close(emptyChnl)
-		return emptyChnl
-	}
+			if db.isLeaseSetExpired(hash) {
+				log.WithField("hash", hash).Debug("MetaLeaseSet expired, not serving from cache")
+				return meta_leaseset.MetaLeaseSet{}, false
+			}
 
-	chnl = make(chan meta_leaseset.MetaLeaseSet, 1)
-	mls, err := db.parseAndCacheMetaLeaseSet(hash, data)
-	if err != nil {
-		log.WithError(err).Error("Failed to parse MetaLeaseSet")
-		close(chnl)
-		return chnl
-	}
+			log.WithFields(logger.Fields{"at": "GetMetaLeaseSet"}).Debug("MetaLeaseSet found in memory cache")
+			return *entry.MetaLeaseSet, true
+		},
+		load: func(hash common.Hash) (meta_leaseset.MetaLeaseSet, error) {
+			data, err := db.loadLeaseSetFromFile(hash)
+			if err != nil {
+				log.WithError(err).Error("Failed to load MetaLeaseSet from file")
+				return meta_leaseset.MetaLeaseSet{}, err
+			}
 
-	chnl <- mls
-	close(chnl)
-	return chnl
+			mls, err := db.parseAndCacheMetaLeaseSet(hash, data)
+			if err != nil {
+				log.WithError(err).Error("Failed to parse MetaLeaseSet")
+				return meta_leaseset.MetaLeaseSet{}, err
+			}
+
+			return mls, nil
+		},
+	})
 }
 
 // parseAndCacheMetaLeaseSet parses MetaLeaseSet data and adds it to the memory cache.

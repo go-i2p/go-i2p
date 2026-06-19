@@ -593,23 +593,7 @@ func (fs *FloodfillServer) sendDatabaseSearchReply(
 	to common.Hash,
 	transport FloodfillTransport,
 ) error {
-	if transport == nil {
-		return oops.Errorf("no transport available to send DatabaseSearchReply")
-	}
-
-	// Select closest floodfill routers to suggest
-	peerHashes := fs.selectClosestFloodfills(key)
-
-	reply := i2np.NewDatabaseSearchReply(key, fs.ourHash, peerHashes)
-
-	log.WithFields(logger.Fields{
-		"at":         "sendDatabaseSearchReply",
-		"key":        logutil.HashPrefix(key),
-		"to":         logutil.HashPrefix(to),
-		"peer_count": len(peerHashes),
-	}).Debug("Sending DatabaseSearchReply response")
-
-	return transport.SendI2NPMessage(fs.ctx, to, reply)
+	return fs.sendDatabaseSearchReplyMessage(key, to, transport, nil, nil)
 }
 
 // sendDatabaseSearchReplyThroughTunnel sends a DatabaseSearchReply through a tunnel.
@@ -624,42 +608,60 @@ func (fs *FloodfillServer) sendDatabaseSearchReplyThroughTunnel(
 	gatewayHash common.Hash,
 	transport FloodfillTransport,
 ) error {
+	return fs.sendDatabaseSearchReplyMessage(key, gatewayHash, transport, &replyTunnelID, &gatewayHash)
+}
+
+// sendDatabaseSearchReplyMessage sends a DatabaseSearchReply directly or through a tunnel.
+func (fs *FloodfillServer) sendDatabaseSearchReplyMessage(
+	key common.Hash,
+	to common.Hash,
+	transport FloodfillTransport,
+	replyTunnelID *[4]byte,
+	gatewayHash *common.Hash,
+) error {
 	if transport == nil {
+		if replyTunnelID == nil {
+			return oops.Errorf("no transport available to send DatabaseSearchReply")
+		}
 		return oops.Errorf("no transport available to send DatabaseSearchReply through tunnel")
 	}
 
-	// Select closest floodfill routers to suggest
 	peerHashes := fs.selectClosestFloodfills(key)
-
 	reply := i2np.NewDatabaseSearchReply(key, fs.ourHash, peerHashes)
 
-	// Serialize the DatabaseSearchReply for wrapping in TunnelGateway
+	if replyTunnelID == nil {
+		log.WithFields(logger.Fields{
+			"at":         "sendDatabaseSearchReply",
+			"key":        logutil.HashPrefix(key),
+			"to":         logutil.HashPrefix(to),
+			"peer_count": len(peerHashes),
+		}).Debug("Sending DatabaseSearchReply response")
+		return transport.SendI2NPMessage(fs.ctx, to, reply)
+	}
+
 	replyBytes, err := reply.MarshalBinary()
 	if err != nil {
 		log.WithFields(logger.Fields{
 			"at":        "sendDatabaseSearchReplyThroughTunnel",
 			"key":       logutil.HashPrefix(key),
-			"gateway":   logutil.HashPrefix(gatewayHash),
+			"gateway":   logutil.HashPrefix(*gatewayHash),
 			"tunnel_id": binary.BigEndian.Uint32(replyTunnelID[:]),
 		}).WithError(err).Error("Failed to marshal DatabaseSearchReply for tunnel delivery")
 		return oops.Wrapf(err, "failed to marshal DatabaseSearchReply for tunnel delivery")
 	}
 
-	// Convert replyTunnelID bytes to tunnel.TunnelID
 	tunnelID := tunnel.TunnelID(binary.BigEndian.Uint32(replyTunnelID[:]))
-
-	// Wrap in TunnelGateway message for tunnel transmission
 	tunnelGatewayMsg := i2np.NewTunnelGatewayMessage(tunnelID, replyBytes)
 
 	log.WithFields(logger.Fields{
 		"at":         "sendDatabaseSearchReplyThroughTunnel",
 		"key":        logutil.HashPrefix(key),
-		"gateway":    logutil.HashPrefix(gatewayHash),
+		"gateway":    logutil.HashPrefix(*gatewayHash),
 		"tunnel_id":  tunnelID,
 		"peer_count": len(peerHashes),
 	}).Debug("Sending DatabaseSearchReply through tunnel")
 
-	return transport.SendI2NPMessage(fs.ctx, gatewayHash, tunnelGatewayMsg)
+	return transport.SendI2NPMessage(fs.ctx, *gatewayHash, tunnelGatewayMsg)
 }
 
 // selectClosestFloodfills selects the closest floodfill routers to the target key.
