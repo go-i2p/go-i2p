@@ -79,30 +79,7 @@ func (s *ShortTunnelBuildReply) validateRecordCount(recordCount int) error {
 // processAllHops processes each hop response and counts successes.
 // Returns the success count and the first error encountered (if any).
 func (s *ShortTunnelBuildReply) processAllHops() (int, error) {
-	successCount := 0
-	var firstError error
-
-	for i, record := range s.BuildResponseRecords {
-		success, err := s.processHopResponse(i, record)
-		if err != nil {
-			log.WithFields(logger.Fields{
-				"at":        "ShortTunnelBuildReply.processAllHops",
-				"hop_index": i,
-				"error":     err,
-			}).Warn("Failed to process hop response")
-
-			if firstError == nil {
-				firstError = err
-			}
-			continue
-		}
-
-		if success {
-			successCount++
-		}
-	}
-
-	return successCount, firstError
+	return processAllRecordsAsHops(s.BuildResponseRecords, s.processHopResponse)
 }
 
 // processHopResponse processes a single hop's build response.

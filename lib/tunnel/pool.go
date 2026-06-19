@@ -265,17 +265,7 @@ func (p *Pool) SetAutoFallbackCheck(fn func() bool) {
 // No-op for client pools: client tunnel hop counts are application-specified
 // and must never be reduced by the auto-fallback mechanism.
 func (p *Pool) RecordInboundBuildTimeout() {
-	if !p.config.IsInbound || p.config.IsClientPool {
-		return
-	}
-	p.mutex.Lock()
-	p.inFlightExpiredCount++
-	count := p.inFlightExpiredCount
-	p.mutex.Unlock()
-
-	if count >= autoFallbackThreshold {
-		p.checkAutoFallback()
-	}
+	p.recordBuildTimeout(true)
 }
 
 // RecordOutboundBuildTimeout is called by TunnelManager whenever an outbound
@@ -285,7 +275,16 @@ func (p *Pool) RecordInboundBuildTimeout() {
 // No-op for client pools: client tunnel hop counts are application-specified
 // and must never be reduced by the auto-fallback mechanism.
 func (p *Pool) RecordOutboundBuildTimeout() {
-	if p.config.IsInbound || p.config.IsClientPool {
+	p.recordBuildTimeout(false)
+}
+
+// checkAutoFallback switches this pool to reduced-hop tunnels when the
+
+// recordBuildTimeout is the shared implementation of RecordInboundBuildTimeout
+// and RecordOutboundBuildTimeout.  It is a no-op when the pool direction or
+// client-pool flag do not match expectIsInbound.
+func (p *Pool) recordBuildTimeout(expectIsInbound bool) {
+	if p.config.IsInbound != expectIsInbound || p.config.IsClientPool {
 		return
 	}
 	p.mutex.Lock()
@@ -298,7 +297,6 @@ func (p *Pool) RecordOutboundBuildTimeout() {
 	}
 }
 
-// checkAutoFallback switches this pool to reduced-hop tunnels when the
 // registered callback confirms no public address is available.
 //   - Inbound pool: falls back to 0-hop (we are our own IBGW/IBEP).
 //   - Outbound pool: falls back to 1-hop (the single OBEP we dialled can reply
@@ -672,14 +670,14 @@ func (p *Pool) prepareBuildRequest(excludePeers []common.Hash) BuildTunnelReques
 	provider := p.replyTunnelProvider
 	sessionID := p.clientSessionID
 	p.mutex.RUnlock()
-	
+
 	// CRITICAL VALIDATION: Ensure router identity is set
 	// This prevents sending builds with zero identity that peers can't decrypt responses for
 	if len(ourHash) == 0 {
 		log.WithFields(logger.Fields{
-			"at": "prepareBuildRequest",
+			"at":         "prepareBuildRequest",
 			"is_inbound": p.config.IsInbound,
-			"hop_count": p.config.HopCount,
+			"hop_count":  p.config.HopCount,
 		}).Warn("Router identity not yet initialized; using zero hash for now (this may cause decryption failures)")
 	}
 

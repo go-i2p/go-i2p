@@ -2769,8 +2769,10 @@ func TestVariableTunnelBuild_RecordCount_1to8(t *testing.T) {
 	for count := 1; count <= 8; count++ {
 		records := make([]BuildRequestRecord, count)
 		vtb := VariableTunnelBuild{
-			Count:               count,
-			BuildRequestRecords: records,
+			sliceRecordSet: sliceRecordSet{
+				Count:               count,
+				BuildRequestRecords: records,
+			},
 		}
 		assert.Equal(t, count, vtb.Count,
 			"VariableTunnelBuild must support Count=%d", count)

@@ -23,25 +23,8 @@ total size: 1+$num*528
 */
 
 // VariableTunnelBuild represents an I2NP VariableTunnelBuild message containing a variable number of build request records for tunnel construction.
-//
-// NOTE (0.2.0 consolidation opportunity):
-// This type shares GetBuildRecords() and GetRecordCount() accessors with TunnelBuild,
-// differing only in backing storage ([8]array vs []slice). Consider introducing a
-// generic recordSet[T] type or interface to eliminate this duplication. See
-// tunnel_build.go for full context.
 type VariableTunnelBuild struct {
-	Count               int
-	BuildRequestRecords []BuildRequestRecord
-}
-
-// GetBuildRecords returns the build request records
-func (v *VariableTunnelBuild) GetBuildRecords() []BuildRequestRecord {
-	return v.BuildRequestRecords
-}
-
-// GetRecordCount returns the number of build records
-func (v *VariableTunnelBuild) GetRecordCount() int {
-	return v.Count
+	sliceRecordSet
 }
 
 // NewVariableTunnelBuilder creates a new VariableTunnelBuild and returns it as TunnelBuilder interface
@@ -52,8 +35,10 @@ func NewVariableTunnelBuilder(records []BuildRequestRecord) TunnelBuilder {
 	}).Debug("Creating VariableTunnelBuild")
 
 	return &VariableTunnelBuild{
-		Count:               len(records),
-		BuildRequestRecords: records,
+		sliceRecordSet: sliceRecordSet{
+			Count:               len(records),
+			BuildRequestRecords: records,
+		},
 	}
 }
 

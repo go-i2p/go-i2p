@@ -29,18 +29,7 @@ The modern I2P network uses ECIES primarily, with ElGamal/AES for backward compa
 
 // ShortTunnelBuild represents an I2NP ShortTunnelBuild message, a modern compact format for tunnel build requests introduced in I2P 0.9.51.
 type ShortTunnelBuild struct {
-	Count               int
-	BuildRequestRecords []BuildRequestRecord
-}
-
-// GetBuildRecords returns the build request records
-func (s *ShortTunnelBuild) GetBuildRecords() []BuildRequestRecord {
-	return s.BuildRequestRecords
-}
-
-// GetRecordCount returns the number of build records
-func (s *ShortTunnelBuild) GetRecordCount() int {
-	return s.Count
+	sliceRecordSet
 }
 
 // NewShortTunnelBuilder creates a new ShortTunnelBuild and returns it as TunnelBuilder interface.
@@ -52,8 +41,10 @@ func NewShortTunnelBuilder(records []BuildRequestRecord) TunnelBuilder {
 	}).Debug("Creating ShortTunnelBuild")
 
 	return &ShortTunnelBuild{
-		Count:               len(records),
-		BuildRequestRecords: records,
+		sliceRecordSet: sliceRecordSet{
+			Count:               len(records),
+			BuildRequestRecords: records,
+		},
 	}
 }
 

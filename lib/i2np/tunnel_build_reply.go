@@ -97,13 +97,7 @@ func (t *TunnelBuildReply) determineBuildResult(successCount, recordCount int, f
 // processHopResponse processes a single hop's response record.
 // Returns (success, error) where success indicates if the hop accepted the tunnel.
 func (t *TunnelBuildReply) processHopResponse(hopIndex int, record BuildResponseRecord) (bool, error) {
-	// Validate response record (basic integrity check)
-	if err := t.validateResponseRecord(record); err != nil {
-		return false, oops.Wrapf(err, "hop %d: invalid response record", hopIndex)
-	}
-
-	// Process reply code using shared helper
-	return processHopReplyCode(hopIndex, record.Reply, "")
+	return processValidatedHopResponseRecord(hopIndex, record, "")
 }
 
 // validateResponseRecord delegates to the shared ValidateBuildResponseRecord helper.

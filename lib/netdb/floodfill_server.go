@@ -518,21 +518,7 @@ func (fs *FloodfillServer) sendDatabaseStore(
 	to common.Hash,
 	transport FloodfillTransport,
 ) error {
-	if transport == nil {
-		return oops.Errorf("no transport available to send DatabaseStore response")
-	}
-
-	store := i2np.NewDatabaseStore(key, data, dataType)
-
-	log.WithFields(logger.Fields{
-		"at":        "sendDatabaseStore",
-		"key":       logutil.HashPrefix(key),
-		"to":        logutil.HashPrefix(to),
-		"data_type": dataType,
-		"data_size": len(data),
-	}).Debug("Sending DatabaseStore response")
-
-	return transport.SendI2NPMessage(fs.ctx, to, store)
+	return fs.sendDatabaseStoreMessage(key, data, dataType, to, transport, nil, nil)
 }
 
 // sendDatabaseStoreThroughTunnel sends a DatabaseStore response through a tunnel.
@@ -550,41 +536,63 @@ func (fs *FloodfillServer) sendDatabaseStoreThroughTunnel(
 	gatewayHash common.Hash,
 	transport FloodfillTransport,
 ) error {
+	return fs.sendDatabaseStoreMessage(key, data, dataType, gatewayHash, transport, &replyTunnelID, &gatewayHash)
+}
+
+// sendDatabaseStoreMessage handles both direct and tunnel-wrapped DatabaseStore delivery.
+func (fs *FloodfillServer) sendDatabaseStoreMessage(
+	key common.Hash,
+	data []byte,
+	dataType byte,
+	to common.Hash,
+	transport FloodfillTransport,
+	replyTunnelID *[4]byte,
+	gatewayHash *common.Hash,
+) error {
 	if transport == nil {
+		if replyTunnelID == nil {
+			return oops.Errorf("no transport available to send DatabaseStore response")
+		}
 		return oops.Errorf("no transport available to send DatabaseStore response through tunnel")
 	}
 
-	// Create the DatabaseStore response
 	store := i2np.NewDatabaseStore(key, data, dataType)
 
-	// Serialize the DatabaseStore for wrapping in TunnelGateway
+	if replyTunnelID == nil {
+		log.WithFields(logger.Fields{
+			"at":        "sendDatabaseStore",
+			"key":       logutil.HashPrefix(key),
+			"to":        logutil.HashPrefix(to),
+			"data_type": dataType,
+			"data_size": len(data),
+		}).Debug("Sending DatabaseStore response")
+		return transport.SendI2NPMessage(fs.ctx, to, store)
+	}
+
 	storeBytes, err := store.MarshalBinary()
 	if err != nil {
 		log.WithFields(logger.Fields{
 			"at":        "sendDatabaseStoreThroughTunnel",
 			"key":       logutil.HashPrefix(key),
-			"gateway":   logutil.HashPrefix(gatewayHash),
+			"gateway":   logutil.HashPrefix(*gatewayHash),
 			"tunnel_id": binary.BigEndian.Uint32(replyTunnelID[:]),
 		}).WithError(err).Error("Failed to marshal DatabaseStore for tunnel delivery")
 		return oops.Wrapf(err, "failed to marshal DatabaseStore for tunnel delivery")
 	}
 
-	// Convert replyTunnelID bytes to tunnel.TunnelID
 	tunnelID := tunnel.TunnelID(binary.BigEndian.Uint32(replyTunnelID[:]))
-
-	// Wrap in TunnelGateway message for tunnel transmission
 	tunnelGatewayMsg := i2np.NewTunnelGatewayMessage(tunnelID, storeBytes)
 
 	log.WithFields(logger.Fields{
 		"at":        "sendDatabaseStoreThroughTunnel",
 		"key":       logutil.HashPrefix(key),
-		"gateway":   logutil.HashPrefix(gatewayHash),
+		"gateway":   logutil.HashPrefix(*gatewayHash),
 		"tunnel_id": tunnelID,
 		"data_type": dataType,
 		"data_size": len(data),
 	}).Debug("Sending DatabaseStore response through tunnel")
 
-	return transport.SendI2NPMessage(fs.ctx, gatewayHash, tunnelGatewayMsg)
+	return transport.SendI2NPMessage(fs.ctx, *gatewayHash, tunnelGatewayMsg)
 }
 
 // sendDatabaseSearchReply constructs and sends a DatabaseSearchReply with peer suggestions.

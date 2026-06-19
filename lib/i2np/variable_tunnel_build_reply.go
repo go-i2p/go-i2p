@@ -2,7 +2,6 @@ package i2np
 
 import (
 	"github.com/go-i2p/logger"
-	"github.com/samber/oops"
 )
 
 /*
@@ -90,13 +89,7 @@ func (v *VariableTunnelBuildReply) determineBuildResult(successCount, recordCoun
 // processHopResponse processes a single hop's response record for variable tunnels.
 // Returns (success, error) where success indicates if the hop accepted the tunnel.
 func (v *VariableTunnelBuildReply) processHopResponse(hopIndex int, record BuildResponseRecord) (bool, error) {
-	// Validate response record (basic integrity check)
-	if err := v.validateResponseRecord(record); err != nil {
-		return false, oops.Wrapf(err, "hop %d: invalid response record", hopIndex)
-	}
-
-	// Process reply code using shared helper with "Variable tunnel " prefix for logs
-	return processHopReplyCode(hopIndex, record.Reply, "Variable tunnel ")
+	return processValidatedHopResponseRecord(hopIndex, record, "Variable tunnel ")
 }
 
 // validateResponseRecord delegates to the shared ValidateBuildResponseRecord helper.

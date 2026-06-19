@@ -731,31 +731,71 @@ func (db *StdNetDB) cacheLeaseSetEntryIfNewer(hash common.Hash, entry Entry, isN
 	return true
 }
 
-// parseAndCacheLeaseSet2 parses LeaseSet2 data and adds it to the memory cache.
-// If a cached entry already exists, the new entry replaces it only if it has a
-// newer published timestamp, preventing stale data from persisting.
+// verifiablePublished is satisfied by the pointer-receiver types of all
+// LeaseSet2/EncryptedLeaseSet/MetaLeaseSet variants. It captures the common
+// operations used by parseAndCacheLeaseSetVariant.
+type verifiablePublished interface {
+	Verify() error
+	PublishedTime() time.Time
+}
+
+// parseAndCacheLeaseSetVariant is the shared parse → verify → cache pipeline
+// for all three LS2 variant types (LeaseSet2, EncryptedLeaseSet, MetaLeaseSet).
 //
-// CRITICAL-2 FIX: Added cryptographic signature verification before caching.
-// LeaseSet2 must be verified against its signature to prevent attacks where
-// persisted files are corrupted to inject malicious data.
-func (db *StdNetDB) parseAndCacheLeaseSet2(hash common.Hash, data []byte) (lease_set2.LeaseSet2, error) {
-	ls2, _, err := lease_set2.ReadLeaseSet2(data)
+// Parameters:
+//   - db, hash, data: standard database/key/raw-bytes inputs.
+//   - typeName: human-readable name for log messages.
+//   - parse: calls the type-specific Read* function; returns a pointer to T.
+//   - makeEntry: wraps the parsed *T into a cache Entry.
+//   - isNewerThan: compares the new value to the existing cache occupant.
+func parseAndCacheLeaseSetVariant[T any, PT interface {
+	*T
+	verifiablePublished
+}](
+	db *StdNetDB,
+	hash common.Hash,
+	data []byte,
+	typeName string,
+	parse func([]byte) (T, error),
+	makeEntry func(*T) Entry,
+	isNewerThan func(existing Entry, newVal *T) bool,
+) (T, error) {
+	raw, err := parse(data)
 	if err != nil {
-		return lease_set2.LeaseSet2{}, oops.Errorf("failed to parse LeaseSet2: %w", err)
+		var zero T
+		return zero, oops.Errorf("failed to parse %s: %w", typeName, err)
 	}
 
-	// CRITICAL-2 FIX: Verify signature before accepting into cache
-	// This is fail-closed: any signature verification failure is rejected completely
-	if err := ls2.Verify(); err != nil {
-		log.WithError(err).WithField("hash", hash).Warn("LeaseSet2 signature verification failed during retrieval")
-		return lease_set2.LeaseSet2{}, oops.Errorf("LeaseSet2 signature verification failed: %w", err)
+	ptr := PT(&raw)
+	if err := ptr.Verify(); err != nil {
+		log.WithError(err).WithField("hash", hash).Warnf("%s signature verification failed during retrieval", typeName)
+		var zero T
+		return zero, oops.Errorf("%s signature verification failed: %w", typeName, err)
 	}
 
-	db.cacheLeaseSetEntryIfNewer(hash, Entry{LeaseSet2: &ls2}, func(existing Entry) bool {
-		return existing.LeaseSet2 == nil || ls2.PublishedTime().After(existing.LeaseSet2.PublishedTime())
-	}, "LeaseSet2")
+	db.cacheLeaseSetEntryIfNewer(hash, makeEntry(ptr), func(existing Entry) bool {
+		return isNewerThan(existing, ptr)
+	}, typeName)
 
-	return ls2, nil
+	return raw, nil
+}
+
+// parseAndCacheLeaseSet2 parses LeaseSet2 data and adds it to the memory cache.
+// Signature verification is enforced before caching (fail-closed).
+func (db *StdNetDB) parseAndCacheLeaseSet2(hash common.Hash, data []byte) (lease_set2.LeaseSet2, error) {
+	return parseAndCacheLeaseSetVariant[
+		lease_set2.LeaseSet2, *lease_set2.LeaseSet2,
+	](
+		db, hash, data, "LeaseSet2",
+		func(d []byte) (lease_set2.LeaseSet2, error) {
+			ls2, _, err := lease_set2.ReadLeaseSet2(d)
+			return ls2, err
+		},
+		func(p *lease_set2.LeaseSet2) Entry { return Entry{LeaseSet2: p} },
+		func(existing Entry, n *lease_set2.LeaseSet2) bool {
+			return existing.LeaseSet2 == nil || n.PublishedTime().After(existing.LeaseSet2.PublishedTime())
+		},
+	)
 }
 
 // GetLeaseSet2Bytes retrieves LeaseSet2 data as bytes from the database.
@@ -898,28 +938,22 @@ func (db *StdNetDB) GetEncryptedLeaseSet(hash common.Hash) (chnl chan encrypted_
 // If a cached entry already exists, the new entry replaces it only if it has a
 // newer published timestamp, preventing stale data from persisting.
 //
-// CRITICAL-2 FIX: Added cryptographic signature verification before caching.
-// EncryptedLeaseSet blinded public key must be verified against the provided signature.
-// This prevents attacks where persisted EncryptedLeaseSet files are corrupted to inject
-// malicious blinded keys that would then be loaded without verification during retrieval.
+// parseAndCacheEncryptedLeaseSet parses EncryptedLeaseSet data and adds it to
+// the memory cache.  Signature verification is enforced before caching (fail-closed).
 func (db *StdNetDB) parseAndCacheEncryptedLeaseSet(hash common.Hash, data []byte) (encrypted_leaseset.EncryptedLeaseSet, error) {
-	els, _, err := encrypted_leaseset.ReadEncryptedLeaseSet(data)
-	if err != nil {
-		return encrypted_leaseset.EncryptedLeaseSet{}, oops.Errorf("failed to parse EncryptedLeaseSet: %w", err)
-	}
-
-	// CRITICAL-2 FIX: Verify signature before accepting into cache
-	// This is fail-closed: any signature verification failure is rejected completely
-	if err := els.Verify(); err != nil {
-		log.WithError(err).WithField("hash", hash).Warn("EncryptedLeaseSet signature verification failed during retrieval")
-		return encrypted_leaseset.EncryptedLeaseSet{}, oops.Errorf("EncryptedLeaseSet signature verification failed: %w", err)
-	}
-
-	db.cacheLeaseSetEntryIfNewer(hash, Entry{EncryptedLeaseSet: &els}, func(existing Entry) bool {
-		return existing.EncryptedLeaseSet == nil || els.PublishedTime().After(existing.EncryptedLeaseSet.PublishedTime())
-	}, "EncryptedLeaseSet")
-
-	return els, nil
+	return parseAndCacheLeaseSetVariant[
+		encrypted_leaseset.EncryptedLeaseSet, *encrypted_leaseset.EncryptedLeaseSet,
+	](
+		db, hash, data, "EncryptedLeaseSet",
+		func(d []byte) (encrypted_leaseset.EncryptedLeaseSet, error) {
+			els, _, err := encrypted_leaseset.ReadEncryptedLeaseSet(d)
+			return els, err
+		},
+		func(p *encrypted_leaseset.EncryptedLeaseSet) Entry { return Entry{EncryptedLeaseSet: p} },
+		func(existing Entry, n *encrypted_leaseset.EncryptedLeaseSet) bool {
+			return existing.EncryptedLeaseSet == nil || n.PublishedTime().After(existing.EncryptedLeaseSet.PublishedTime())
+		},
+	)
 }
 
 // GetEncryptedLeaseSetBytes retrieves EncryptedLeaseSet data as bytes from the database.
@@ -1048,27 +1082,22 @@ func (db *StdNetDB) GetMetaLeaseSet(hash common.Hash) (chnl chan meta_leaseset.M
 // If a cached entry already exists, the new entry replaces it only if it has a
 // newer published timestamp, preventing stale data from persisting.
 //
-// CRITICAL-2 FIX: Added cryptographic signature verification before caching.
-// MetaLeaseSet must be verified against its signature to prevent attacks where
-// persisted files are corrupted to inject malicious data.
+// parseAndCacheMetaLeaseSet parses MetaLeaseSet data and adds it to the memory
+// cache.  Signature verification is enforced before caching (fail-closed).
 func (db *StdNetDB) parseAndCacheMetaLeaseSet(hash common.Hash, data []byte) (meta_leaseset.MetaLeaseSet, error) {
-	mls, _, err := meta_leaseset.ReadMetaLeaseSet(data)
-	if err != nil {
-		return meta_leaseset.MetaLeaseSet{}, oops.Errorf("failed to parse MetaLeaseSet: %w", err)
-	}
-
-	// CRITICAL-2 FIX: Verify signature before accepting into cache
-	// This is fail-closed: any signature verification failure is rejected completely
-	if err := mls.Verify(); err != nil {
-		log.WithError(err).WithField("hash", hash).Warn("MetaLeaseSet signature verification failed during retrieval")
-		return meta_leaseset.MetaLeaseSet{}, oops.Errorf("MetaLeaseSet signature verification failed: %w", err)
-	}
-
-	db.cacheLeaseSetEntryIfNewer(hash, Entry{MetaLeaseSet: &mls}, func(existing Entry) bool {
-		return existing.MetaLeaseSet == nil || mls.PublishedTime().After(existing.MetaLeaseSet.PublishedTime())
-	}, "MetaLeaseSet")
-
-	return mls, nil
+	return parseAndCacheLeaseSetVariant[
+		meta_leaseset.MetaLeaseSet, *meta_leaseset.MetaLeaseSet,
+	](
+		db, hash, data, "MetaLeaseSet",
+		func(d []byte) (meta_leaseset.MetaLeaseSet, error) {
+			mls, _, err := meta_leaseset.ReadMetaLeaseSet(d)
+			return mls, err
+		},
+		func(p *meta_leaseset.MetaLeaseSet) Entry { return Entry{MetaLeaseSet: p} },
+		func(existing Entry, n *meta_leaseset.MetaLeaseSet) bool {
+			return existing.MetaLeaseSet == nil || n.PublishedTime().After(existing.MetaLeaseSet.PublishedTime())
+		},
+	)
 }
 
 // GetMetaLeaseSetBytes retrieves MetaLeaseSet data as bytes from the database.
