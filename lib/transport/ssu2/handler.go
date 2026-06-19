@@ -35,9 +35,8 @@ type DefaultHandler struct {
 	maxSkew time.Duration
 }
 
-// NewDefaultHandler creates a new DefaultHandler with ±30 second clock skew tolerance
-// (shared with NTCP2 transport). We use ±30 s (narrower than the go-noise default of 60 s)
-// to narrow the post-restart replay window; see AUDIT.md.
+// NewDefaultHandler creates a new DefaultHandler with the shared transport
+// clock skew tolerance (currently ±60 seconds, matching NTCP2).
 // The replay cache is managed by the embedded BaseHandler.
 // Call Close() to clean up resources when the handler is no longer needed.
 func NewDefaultHandler() *DefaultHandler {

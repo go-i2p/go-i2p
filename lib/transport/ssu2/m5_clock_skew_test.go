@@ -138,6 +138,8 @@ func TestM5_ValidateTimestamp_UsesConsistentSkew(t *testing.T) {
 	defer h.Close()
 
 	now := uint32(time.Now().Unix())
+	within := int32(transport.ClockSkewTolerance.Seconds()) - 1
+	beyond := int32(transport.ClockSkewTolerance.Seconds()) + 1
 
 	testCases := []struct {
 		name      string
@@ -150,23 +152,23 @@ func TestM5_ValidateTimestamp_UsesConsistentSkew(t *testing.T) {
 			expectErr: false,
 		},
 		{
-			name:      "+29 seconds (within 30s tolerance)",
-			offsetSec: 29,
+			name:      "positive skew within tolerance",
+			offsetSec: within,
 			expectErr: false,
 		},
 		{
-			name:      "-29 seconds (within 30s tolerance)",
-			offsetSec: -29,
+			name:      "negative skew within tolerance",
+			offsetSec: -within,
 			expectErr: false,
 		},
 		{
-			name:      "+31 seconds (outside 30s tolerance)",
-			offsetSec: 31,
+			name:      "positive skew outside tolerance",
+			offsetSec: beyond,
 			expectErr: true,
 		},
 		{
-			name:      "-31 seconds (outside 30s tolerance)",
-			offsetSec: -31,
+			name:      "negative skew outside tolerance",
+			offsetSec: -beyond,
 			expectErr: true,
 		},
 	}
