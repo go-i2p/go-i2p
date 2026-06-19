@@ -388,9 +388,7 @@ func (tmux *TransportMuxer) findCompatibleSession(routerInfo router_info.RouterI
 	return nil, false, false, nil
 }
 
-// GetSession returns nil and ErrNoTransportAvailable if we failed to get a session,
-// or nil and ErrConnectionPoolFull if the connection limit has been reached.
-func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s TransportSession, err error) {
+func (tmux *TransportMuxer) beginSessionAttempt(routerInfo router_info.RouterInfo) error {
 	peerHash, _ := routerInfo.IdentHash()
 
 	// Skip peers that recently failed all transports (cooldown window).
@@ -400,7 +398,7 @@ func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s Tra
 			"peer_hash": logutil.HashPrefix(peerHash),
 			"cooldown":  peerCooldown.String(),
 		}).Debug("skipping peer still in cooldown")
-		return nil, ErrNoTransportAvailable
+		return ErrNoTransportAvailable
 	}
 
 	logAt("(TransportMuxer) GetSession").WithFields(logger.Fields{
@@ -409,8 +407,22 @@ func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s Tra
 		"num_transports": len(tmux.trans),
 	}).Debug("attempting to get session")
 
-	// Enforce connection pool limit (atomically reserves a slot)
-	if err := tmux.checkConnectionLimit(); err != nil {
+	return tmux.checkConnectionLimit()
+}
+
+func (tmux *TransportMuxer) handleSessionFailure(routerInfo router_info.RouterInfo, compatibleFound bool) error {
+	if compatibleFound {
+		tmux.logAllTransportsFailed(routerInfo)
+	} else {
+		tmux.logNoTransportError(routerInfo)
+	}
+	return ErrNoTransportAvailable
+}
+
+// GetSession returns nil and ErrNoTransportAvailable if we failed to get a session,
+// or nil and ErrConnectionPoolFull if the connection limit has been reached.
+func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s TransportSession, err error) {
+	if err := tmux.beginSessionAttempt(routerInfo); err != nil {
 		return nil, err
 	}
 
@@ -430,14 +442,8 @@ func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s Tra
 		return &trackedSession{TransportSession: session, mux: tmux}, nil
 	}
 
-	// No session established — slot will be released by defer
-	if compatibleFound {
-		tmux.logAllTransportsFailed(routerInfo)
-	} else {
-		tmux.logNoTransportError(routerInfo)
-	}
-	err = ErrNoTransportAvailable
-	return s, err
+	// No session established — slot will be released by defer.
+	return nil, tmux.handleSessionFailure(routerInfo, compatibleFound)
 }
 
 // Compatible returns true if there is a transport that we mux that is compatible with this router info.
@@ -480,29 +486,11 @@ func (tmux *TransportMuxer) Accept() (net.Conn, error) {
 func (tmux *TransportMuxer) waitForAcceptedConnection() (net.Conn, error) {
 	select {
 	case res, ok := <-tmux.acceptChan:
-		return tmux.handleAcceptChannelResult(res, ok)
+		return tmux.handleAcceptResultCommon(res, ok, "Accept")
 	case <-tmux.acceptDone:
 		atomic.AddInt32(&tmux.activeSessionCount, -1)
 		return nil, oops.Errorf("transport muxer closed")
 	}
-}
-
-// handleAcceptChannelResult processes a result received from the accept channel.
-func (tmux *TransportMuxer) handleAcceptChannelResult(res acceptResult, ok bool) (net.Conn, error) {
-	if !ok {
-		atomic.AddInt32(&tmux.activeSessionCount, -1)
-		return nil, oops.Errorf("transport muxer closed")
-	}
-	if res.err != nil {
-		atomic.AddInt32(&tmux.activeSessionCount, -1)
-		return nil, res.err
-	}
-	logAt("(TransportMuxer) Accept").WithFields(logger.Fields{
-		"reason":          "connection_accepted",
-		"transport_index": res.transportIndex,
-		"active_sessions": atomic.LoadInt32(&tmux.activeSessionCount),
-	}).Debug("accept succeeded")
-	return NewTrackedConn(res.conn, tmux.ReleaseSession), nil
 }
 
 // Addr returns the address of the first transport's listener.
@@ -549,7 +537,7 @@ func (tmux *TransportMuxer) waitForConnection(timeout time.Duration) (net.Conn, 
 
 	select {
 	case res, ok := <-tmux.acceptChan:
-		return tmux.handleAcceptResult(res, ok)
+		return tmux.handleAcceptResultCommon(res, ok, "AcceptWithTimeout")
 	case <-timer.C:
 		atomic.AddInt32(&tmux.activeSessionCount, -1)
 		logAt("(TransportMuxer) AcceptWithTimeout").WithFields(logger.Fields{
@@ -562,9 +550,8 @@ func (tmux *TransportMuxer) waitForConnection(timeout time.Duration) (net.Conn, 
 	}
 }
 
-// handleAcceptResult processes the result from the accept channel, returning
-// a tracked connection on success or decrementing the session count on failure.
-func (tmux *TransportMuxer) handleAcceptResult(res acceptResult, ok bool) (net.Conn, error) {
+// handleAcceptResultCommon processes a result from the accept channel.
+func (tmux *TransportMuxer) handleAcceptResultCommon(res acceptResult, ok bool, methodName string) (net.Conn, error) {
 	if !ok {
 		atomic.AddInt32(&tmux.activeSessionCount, -1)
 		return nil, oops.Errorf("transport muxer closed")
@@ -573,7 +560,7 @@ func (tmux *TransportMuxer) handleAcceptResult(res acceptResult, ok bool) (net.C
 		atomic.AddInt32(&tmux.activeSessionCount, -1)
 		return nil, res.err
 	}
-	logAt("(TransportMuxer) AcceptWithTimeout").WithFields(logger.Fields{
+	logAt("(TransportMuxer) " + methodName).WithFields(logger.Fields{
 		"reason":          "connection_accepted",
 		"transport_index": res.transportIndex,
 		"active_sessions": atomic.LoadInt32(&tmux.activeSessionCount),
