@@ -88,16 +88,27 @@ func (c *admissionController) AllowIntroduction(source *common.Hash, key common.
 	window.lastSeen = now
 	c.pruneWindow(window, now)
 
-	if _, exists := window.introductions[key]; exists {
+	if c.isKeyReintroduction(window, key) {
 		window.introductions[key] = now
 		return true
 	}
-	if len(window.introductions) >= c.config.perSource {
+	if c.isWindowFull(window) {
 		return false
 	}
 
 	window.introductions[key] = now
 	return true
+}
+
+// isKeyReintroduction reports whether the source has already introduced the key.
+func (c *admissionController) isKeyReintroduction(window *sourceAdmissionWindow, key common.Hash) bool {
+	_, exists := window.introductions[key]
+	return exists
+}
+
+// isWindowFull reports whether the source has reached its introduction limit.
+func (c *admissionController) isWindowFull(window *sourceAdmissionWindow) bool {
+	return len(window.introductions) >= c.config.perSource
 }
 
 // underPressure returns true if the cache is above the pressure threshold.
