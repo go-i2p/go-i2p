@@ -9,7 +9,7 @@ import (
 // peer timestamps for both NTCP2 and SSU2 protocols.
 // Per the I2P specs, connections with clock skew exceeding this value
 // should be terminated.
-const ClockSkewTolerance = 30 * time.Second
+const ClockSkewTolerance = 60 * time.Second
 
 // CalculateTimestampSkew returns the observed clock skew (in seconds) between
 // a peer's timestamp and the local time. Positive skew means the peer's clock
