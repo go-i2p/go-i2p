@@ -72,6 +72,11 @@ type Publisher struct {
 	floodfillCount     int           // how many floodfills to publish to
 }
 
+type publisherLoopSpec struct {
+	interval time.Duration
+	action   func()
+}
+
 // PublisherConfig holds configuration for database publishing
 type PublisherConfig struct {
 	// RouterInfoInterval is how often to republish our RouterInfo (default: 30 minutes)
@@ -138,13 +143,10 @@ func (p *Publisher) Start() error {
 		"floodfill_count":      p.floodfillCount,
 	}).Info("Starting database publisher")
 
-	// Start RouterInfo publishing loop
-	p.wg.Add(1)
-	go p.routerInfoPublishingLoop()
-
-	// Start LeaseSet publishing loop
-	p.wg.Add(1)
-	go p.leaseSetPublishingLoop()
+	for _, loop := range p.publisherLoopSpecs() {
+		p.wg.Add(1)
+		go p.runPublisherLoop(loop)
+	}
 
 	return nil
 }
@@ -177,16 +179,16 @@ func (p *Publisher) periodicLoop(interval time.Duration, action func()) {
 	}
 }
 
-// routerInfoPublishingLoop periodically publishes our RouterInfo
-func (p *Publisher) routerInfoPublishingLoop() {
-	defer p.wg.Done()
-	p.periodicLoop(p.routerInfoInterval, p.publishOurRouterInfo)
+func (p *Publisher) publisherLoopSpecs() []publisherLoopSpec {
+	return []publisherLoopSpec{
+		{interval: p.routerInfoInterval, action: p.publishOurRouterInfo},
+		{interval: p.leaseSetInterval, action: p.publishAllLeaseSets},
+	}
 }
 
-// leaseSetPublishingLoop periodically publishes all LeaseSets
-func (p *Publisher) leaseSetPublishingLoop() {
+func (p *Publisher) runPublisherLoop(loop publisherLoopSpec) {
 	defer p.wg.Done()
-	p.periodicLoop(p.leaseSetInterval, p.publishAllLeaseSets)
+	p.periodicLoop(loop.interval, loop.action)
 }
 
 // publishOurRouterInfo publishes our local RouterInfo to floodfill routers.
