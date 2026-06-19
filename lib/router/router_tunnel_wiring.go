@@ -167,31 +167,31 @@ func (r *Router) configureRouterHashOnPools(inboundPool, outboundPool *tunnel.Po
 	if err != nil {
 		return err
 	}
-	
+
 	// CRITICAL: Verify hash is valid before setting
 	if len(routerHash) == 0 {
 		return oops.Errorf("router hash is empty after computation")
 	}
-	
+
 	// Log the hash being set (first 16 chars in hex for debugging)
 	hashHex := routerHash.String()
 	if len(hashHex) > 16 {
 		hashHex = hashHex[:16]
 	}
-	
+
 	if outboundPool != nil {
 		outboundPool.SetRouterHash(routerHash)
 		log.WithFields(logger.Fields{
-			"at": "configureRouterHashOnPools",
-			"pool": "outbound",
+			"at":          "configureRouterHashOnPools",
+			"pool":        "outbound",
 			"router_hash": hashHex,
 		}).Info("Router hash set on outbound pool")
 	}
 	if inboundPool != nil {
 		inboundPool.SetRouterHash(routerHash)
 		log.WithFields(logger.Fields{
-			"at": "configureRouterHashOnPools",
-			"pool": "inbound",
+			"at":          "configureRouterHashOnPools",
+			"pool":        "inbound",
 			"router_hash": hashHex,
 		}).Info("Router hash set on inbound pool")
 	}
@@ -297,7 +297,9 @@ func (r *Router) startPoolMaintenance(tm *i2np.TunnelManager, inboundPool, outbo
 // launchInboundReadinessWatcher launches a goroutine that monitors inbound pool
 // readiness and closes the gate channel when ready or on timeout.
 func (r *Router) launchInboundReadinessWatcher(inboundPool, outboundPool *tunnel.Pool, inboundReady chan struct{}) {
+	r.wg.Add(1)
 	go func() {
+		defer r.wg.Done()
 		deadline := time.NewTimer(2 * tunnel.BuildTimeout)
 		defer deadline.Stop()
 		poll := time.NewTicker(500 * time.Millisecond)
@@ -439,7 +441,9 @@ func (r *Router) launchProactiveFallbackChecks(inboundPool, outboundPool *tunnel
 // fallback unconditionally and immediately run a maintenance cycle to build the
 // reduced-hop (zero-hop inbound) tunnel without waiting for the next ticker.
 func (r *Router) launchInboundFallbackCheck(pool *tunnel.Pool) {
+	r.wg.Add(1)
 	go func() {
+		defer r.wg.Done()
 		select {
 		case <-r.ctx.Done():
 			return
@@ -459,7 +463,9 @@ func (r *Router) launchInboundFallbackCheck(pool *tunnel.Pool) {
 // complete, so the fallback to one-hop is forced regardless of the address-form
 // reachability heuristic.
 func (r *Router) launchOutboundFallbackCheck(pool *tunnel.Pool) {
+	r.wg.Add(1)
 	go func() {
+		defer r.wg.Done()
 		select {
 		case <-r.ctx.Done():
 			return
@@ -582,12 +588,12 @@ func (r *Router) wireGarlicSessionManager() {
 	privKeyBytes := r.keystore.GetEncryptionPrivateKey().Bytes()
 	var privKey [32]byte
 	copy(privKey[:], privKeyBytes)
-	
+
 	// DIAGNOSTIC: Log what private key is being used for garlic decryption
 	privKeyHex := fmt.Sprintf("%x", privKey[:8])
 	log.WithFields(logger.Fields{
-		"at":                      "wireGarlicSessionManager",
-		"encryption_privkey_hex":  privKeyHex,
+		"at":                     "wireGarlicSessionManager",
+		"encryption_privkey_hex": privKeyHex,
 	}).Info("Creating garlic session manager with encryption private key")
 
 	garlicMgr, err := i2np.NewGarlicSessionManager(privKey)
@@ -595,16 +601,16 @@ func (r *Router) wireGarlicSessionManager() {
 		log.WithError(err).Error("Failed to create garlic session manager — inbound garlic decryption will fail")
 		return
 	}
-	
+
 	// DIAGNOSTIC: Verify the public key that will be used for decryption
 	pubKey := garlicMgr.GetPublicKey()
 	pubKeyHex := fmt.Sprintf("%x", pubKey[:8])
 	log.WithFields(logger.Fields{
-		"at":                    "wireGarlicSessionManager",
-		"garlic_pubkey_hex":     pubKeyHex,
-		"full_pubkey_hex":       fmt.Sprintf("%x", pubKey[:]),
+		"at":                "wireGarlicSessionManager",
+		"garlic_pubkey_hex": pubKeyHex,
+		"full_pubkey_hex":   fmt.Sprintf("%x", pubKey[:]),
 	}).Info("Garlic session manager created - this is the key peers must use to encrypt to us")
-	
+
 	r.messageRouter.GetProcessor().SetGarlicSessionManager(garlicMgr)
 	if r.tunnelManager != nil {
 		r.tunnelManager.SetGarlicKeyRegistrar(garlicMgr)
@@ -626,10 +632,10 @@ func (r *Router) getOurRouterHash() (common.Hash, error) {
 	if err != nil {
 		return common.Hash{}, oops.Wrapf(err, "failed to get IdentHash")
 	}
-	
+
 	// DIAGNOSTIC: Log the RouterInfo hash to compare with garlic session manager key
 	log.WithFields(logger.Fields{
-		"at":              "getOurRouterHash",
+		"at":               "getOurRouterHash",
 		"router_info_hash": hash.String()[:16],
 	}).Info("Router identity hash computed - peers will look us up with this hash")
 

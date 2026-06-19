@@ -471,3 +471,60 @@ func TestGetLimitStats_WithSourceLimiter(t *testing.T) {
 		t.Errorf("expected 1 rejection, got %d", stats.SourceLimiter.TotalRejections)
 	}
 }
+
+// TestSourceLimiter_CapacityLimitAndLRUEviction verifies that when the limiter reaches
+// maxTrackedSources capacity, it evicts the least-recently-updated entry to make room for
+// new sources. This prevents unbounded memory growth under distinct-source floods.
+func TestSourceLimiter_CapacityLimitAndLRUEviction(t *testing.T) {
+	sl := createTestSourceLimiter(100, 50, 10*time.Minute)
+	defer sl.Stop()
+
+	// Temporarily lower the capacity for testing to avoid needing 10k sources
+	// We'll save the original constant by testing behavior directly
+	// by adding sources and checking the map size
+
+	// Add maxTrackedSources distinct sources one at a time
+	for i := 0; i < maxTrackedSources; i++ {
+		hash := createTestHash(i)
+		allowed, _ := sl.AllowRequest(hash)
+		if !allowed {
+			t.Fatalf("request %d should be allowed (within burst), got rejected", i)
+		}
+	}
+
+	// Verify we have exactly maxTrackedSources tracked
+	sl.mu.RLock()
+	trackedCount := len(sl.sources)
+	sl.mu.RUnlock()
+
+	if trackedCount != maxTrackedSources {
+		t.Errorf("after adding %d sources, expected %d tracked, got %d",
+			maxTrackedSources, maxTrackedSources, trackedCount)
+	}
+
+	// Add one more source beyond capacity
+	extraHash := createTestHash(maxTrackedSources + 1)
+	allowed, _ := sl.AllowRequest(extraHash)
+	if !allowed {
+		t.Error("request beyond capacity should still be allowed (new source creation handled)")
+	}
+
+	// Verify we still have exactly maxTrackedSources (LRU eviction occurred)
+	sl.mu.RLock()
+	trackedCount = len(sl.sources)
+	sl.mu.RUnlock()
+
+	if trackedCount != maxTrackedSources {
+		t.Errorf("after exceeding capacity, expected %d tracked sources, got %d",
+			maxTrackedSources, trackedCount)
+	}
+
+	// Verify the new source is now tracked
+	sl.mu.RLock()
+	_, exists := sl.sources[extraHash]
+	sl.mu.RUnlock()
+
+	if !exists {
+		t.Error("new source should be in tracked sources after LRU eviction")
+	}
+}

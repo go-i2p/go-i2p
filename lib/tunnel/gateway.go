@@ -239,7 +239,9 @@ func (g *Gateway) SendWithDelivery(msgBytes []byte, dc DeliveryConfig) ([][]byte
 func (g *Gateway) sendFragmented(msgBytes []byte, dc DeliveryConfig) ([][]byte, error) {
 	var msgIDBytes [4]byte
 	if _, randErr := cryptorand.Read(msgIDBytes[:]); randErr != nil {
-		panic("tunnel/gateway: crypto/rand unavailable: " + randErr.Error())
+		// Return error instead of panicking; crypto/rand failure is OS entropy issue,
+		// not attacker-influenced. The caller already checks errors from sendFragmented.
+		return nil, oops.Errorf("tunnel/gateway: crypto/rand unavailable: %w", randErr)
 	}
 	msgID := binary.BigEndian.Uint32(msgIDBytes[:])
 

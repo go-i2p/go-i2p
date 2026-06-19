@@ -9,6 +9,12 @@ import (
 	"github.com/go-i2p/logger"
 )
 
+// Maximum number of distinct sources tracked before LRU eviction applies.
+// Matching the admission_controller's cap to maintain consistency across
+// rate-limiting components. Set conservatively to allow ~10k active sources
+// without memory exhaustion, even under sustained distinct-identity floods.
+const maxTrackedSources = 10000
+
 // SourceLimiter tracks tunnel build request rates per source router.
 // It uses a token bucket algorithm with per-source tracking and automatic cleanup
 // to protect against single-source tunnel flooding attacks.
@@ -122,9 +128,16 @@ func (sl *SourceLimiter) AllowRequest(sourceHash common.Hash) (bool, string) {
 }
 
 // getOrCreateSourceState retrieves existing source state or creates a new one.
+// If the tracked sources pool is at or exceeds maxTrackedSources, evicts the
+// least-recently-updated entry before adding the new source.
 func (sl *SourceLimiter) getOrCreateSourceState(sourceHash common.Hash, now time.Time) *sourceState {
 	state, exists := sl.sources[sourceHash]
 	if !exists {
+		// At capacity: evict the LRU (least-recently-updated) entry before adding new one
+		if len(sl.sources) >= maxTrackedSources {
+			sl.evictLRUSource(now)
+		}
+
 		state = &sourceState{
 			tokens:     float64(sl.burstSize),
 			lastUpdate: now,
@@ -132,6 +145,33 @@ func (sl *SourceLimiter) getOrCreateSourceState(sourceHash common.Hash, now time
 		sl.sources[sourceHash] = state
 	}
 	return state
+}
+
+// evictLRUSource finds and removes the source with the oldest lastUpdate time.
+// Called when the sources map reaches capacity to make room for new entries.
+func (sl *SourceLimiter) evictLRUSource(now time.Time) {
+	var lruHash common.Hash
+	var lruTime time.Time = now.Add(1 * time.Hour) // Initialize to far future
+
+	// Find the entry with the oldest lastUpdate time
+	for hash, state := range sl.sources {
+		if state.lastUpdate.Before(lruTime) {
+			lruHash = hash
+			lruTime = state.lastUpdate
+		}
+	}
+
+	// Evict the LRU entry
+	delete(sl.sources, lruHash)
+	log.WithFields(logger.Fields{
+		"at":              "SourceLimiter.evictLRUSource",
+		"phase":           "tunnel_build",
+		"reason":          "capacity_limit_exceeded",
+		"evicted_source":  truncateHash(lruHash),
+		"tracked_count":   len(sl.sources),
+		"max_tracked":     maxTrackedSources,
+		"lru_last_update": lruTime.Format(time.RFC3339),
+	}).Debug("evicting least-recently-updated source due to capacity limit")
 }
 
 // isSourceBanned checks if the source is currently banned and logs the rejection.

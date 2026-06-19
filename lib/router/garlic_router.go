@@ -318,7 +318,9 @@ func (gr *GarlicMessageRouter) tryQueueLeaseSetDrain(ch chan lease_set.LeaseSet)
 // fallbackDrainLeaseSet spawns an emergency goroutine to drain a LeaseSet channel.
 func (gr *GarlicMessageRouter) fallbackDrainLeaseSet(ch chan lease_set.LeaseSet) {
 	log.WithField("at", "drainLeaseSetChannel").Warn("Drain queue full, using fallback")
+	gr.wg.Add(1)
 	go func() {
+		defer gr.wg.Done()
 		select {
 		case <-ch:
 		case <-gr.ctx.Done():
@@ -580,7 +582,9 @@ func (gr *GarlicMessageRouter) tryQueueRouterInfoDrain(ch chan router_info.Route
 // fallbackDrainRouterInfo spawns an emergency goroutine to drain a RouterInfo channel.
 func (gr *GarlicMessageRouter) fallbackDrainRouterInfo(ch chan router_info.RouterInfo) {
 	log.WithField("at", "drainRouterInfoChannel").Warn("Drain queue full, using fallback")
+	gr.wg.Add(1)
 	go func() {
+		defer gr.wg.Done()
 		select {
 		case <-ch:
 		case <-gr.ctx.Done():
@@ -625,7 +629,12 @@ func (gr *GarlicMessageRouter) sendMessageToRouter(routerHash common.Hash, route
 	}
 
 	if err := session.QueueSendI2NP(msg); err != nil {
-		log.WithError(err).Warn("failed to queue I2NP message to session")
+		log.WithFields(logger.Fields{
+			"at":           "sendMessageToRouter",
+			"router_hash":  logutil.HashPrefixPlain(routerHash),
+			"message_type": msg.Type(),
+		}).WithError(err).Warn("failed to queue I2NP message to session")
+		return oops.Wrapf(err, "failed to queue message to session for router %x", routerHash[:8])
 	}
 	log.WithFields(logger.Fields{
 		"at":           "sendMessageToRouter",

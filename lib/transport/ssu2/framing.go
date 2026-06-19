@@ -144,7 +144,17 @@ func ParseACKBlock(block *ssu2noise.SSU2Block) (*ACKBlockInfo, error) {
 				// Bit is 0: this packet is ACKed
 				info.AckedRange = append(info.AckedRange, packetNum)
 			}
+			// Check for uint32 wraparound before incrementing
+			if packetNum == 0xFFFFFFFF {
+				// Stop processing if we've reached the maximum packet number
+				break
+			}
 			packetNum++
+		}
+		// Break outer loop if we hit wraparound
+		if packetNum == 0xFFFFFFFF && len(info.NackFields) > i+1 {
+			// NackFields remain but packet number has wrapped; stop to avoid wrapping into low numbers
+			break
 		}
 	}
 

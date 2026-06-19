@@ -1,6 +1,7 @@
 package sntp
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"strings"
@@ -436,7 +437,10 @@ func filterByAddressFamily(servers []string, wantIPv6 bool) []string {
 
 // matchesAddressFamily checks if a server resolves to the requested address family.
 func matchesAddressFamily(server string, wantIPv6 bool) bool {
-	addrs, err := net.LookupHost(server)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	resolver := &net.Resolver{}
+	addrs, err := resolver.LookupHost(ctx, server)
+	cancel()
 	if err != nil {
 		return false
 	}

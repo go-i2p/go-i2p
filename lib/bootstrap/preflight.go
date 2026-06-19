@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"time"
@@ -47,7 +48,10 @@ func TestDNSResolution() error {
 	}
 
 	for _, host := range testHosts {
-		addrs, err := net.LookupHost(host)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		resolver := &net.Resolver{}
+		addrs, err := resolver.LookupHost(ctx, host)
+		cancel()
 		if err != nil {
 			log.WithFields(logger.Fields{
 				"host":  host,

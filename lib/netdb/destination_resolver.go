@@ -350,6 +350,9 @@ func (dr *DestinationResolver) fetchEncryptedLeaseSet(lookupHash common.Hash) (*
 
 // decryptEncryptedLeaseSet decrypts the inner LeaseSet2 from an EncryptedLeaseSet.
 func (dr *DestinationResolver) decryptEncryptedLeaseSet(dest destination.Destination, els *encrypted_leaseset.EncryptedLeaseSet) (*lease_set2.LeaseSet2, error) {
+	if dest.KeyCertificate == nil {
+		return nil, oops.Errorf("encrypted leaseset: destination missing key certificate")
+	}
 	origSigningKey, err := dest.SigningPublicKey()
 	if err != nil {
 		return nil, oops.Errorf("failed to get original signing key: %w", err)

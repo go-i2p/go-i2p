@@ -98,3 +98,35 @@ func TestFrameI2NPForSSU2_MarshalError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "marshal error")
 }
+
+// TestParseACKBlock_WraparoundCheck verifies that ParseACKBlock correctly handles
+// the case where FirstPacketNum is near the uint32 maximum and expanding the packet
+// range would cause integer wraparound. This is a security-relevant test: a malicious
+// peer sending FirstPacketNum=0xFFFFFFF8 with NackCount>0 should not wrap into low
+// packet numbers.
+func TestParseACKBlock_WraparoundCheck(t *testing.T) {
+	// Create an ACK block with FirstPacketNum near maximum
+	// 0xFFFFFFF8 = 4294967288; with NackCount=1, we'd normally expand to 4294967296 (wraps to 0)
+	data := make([]byte, 6) // 4 bytes (FirstPacketNum) + 1 byte (NackCount) + 1 byte (nack field)
+	firstPacketNum := uint32(0xFFFFFFF8)
+	data[0] = byte(firstPacketNum >> 24)
+	data[1] = byte(firstPacketNum >> 16)
+	data[2] = byte(firstPacketNum >> 8)
+	data[3] = byte(firstPacketNum)
+	data[4] = 1    // NackCount = 1 (one nack field)
+	data[5] = 0x00 // Nack field: 0x00 means all 8 packets are ACKed
+
+	block := ssu2noise.NewSSU2Block(ssu2noise.BlockTypeACK, data)
+	info, err := ParseACKBlock(block)
+	require.NoError(t, err)
+
+	// Verify the AckedRange does NOT wrap past 0xFFFFFFFF
+	// Should contain [0xFFFFFFF8, 0xFFFFFFF9, ..., 0xFFFFFFFF], but NOT 0x00000000, 0x00000001, etc.
+	assert.Greater(t, len(info.AckedRange), 0, "should have at least one ACKed packet")
+	for _, pkt := range info.AckedRange {
+		assert.GreaterOrEqual(t, pkt, firstPacketNum, "ACKed packet should not wrap past maximum")
+	}
+	// With FirstPacketNum=0xFFFFFFF8 and NackCount=1 with all bits 0, we expect 8 packets ACKed
+	// but stopping before wraparound, so we should get 8 packets: [0xFFFFFFF8...0xFFFFFFFF]
+	assert.Len(t, info.AckedRange, 8, "should ACK exactly 8 packets up to 0xFFFFFFFF")
+}
