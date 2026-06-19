@@ -221,82 +221,66 @@ func ReadDatabaseLookup(data []byte) (DatabaseLookup, error) {
 	return databaseLookup, nil
 }
 
-// lookupFieldParser pairs a field name with a closure that reads and assigns
-// a single DatabaseLookup field, returning the updated byte offset.
-type lookupFieldParser struct {
-	name  string
-	parse func(int, []byte, *DatabaseLookup) (int, error)
-}
-
-// applyLookupParsers runs each parser in sequence, threading the byte offset
-// through successive calls and logging the first error encountered.
-func applyLookupParsers(offset int, data []byte, dl *DatabaseLookup, parsers []lookupFieldParser) (int, error) {
-	for _, p := range parsers {
-		var err error
-		offset, err = p.parse(offset, data, dl)
-		if err != nil {
-			log.WithError(err).WithField("field", p.name).Error("failed to read field")
-			return offset, err
-		}
-	}
-	return offset, nil
-}
-
 // parseLookupCoreFields extracts the fixed-size and variable-size fields from the database lookup data.
 func parseLookupCoreFields(databaseLookup *DatabaseLookup, data []byte) (int, error) {
-	return applyLookupParsers(0, data, databaseLookup, []lookupFieldParser{
-		{"Key", func(_ int, d []byte, dl *DatabaseLookup) (int, error) {
-			l, v, err := readDatabaseLookupKey(d)
-			dl.Key = v
-			return l, err
-		}},
-		{"From", func(off int, d []byte, dl *DatabaseLookup) (int, error) {
-			l, v, err := readDatabaseLookupFrom(off, d)
-			dl.From = v
-			return l, err
-		}},
-		{"Flags", func(off int, d []byte, dl *DatabaseLookup) (int, error) {
-			l, v, err := readDatabaseLookupFlags(off, d)
-			dl.Flags = v
-			return l, err
-		}},
-		{"ReplyTunnelID", func(off int, d []byte, dl *DatabaseLookup) (int, error) {
-			l, v, err := readDatabaseLookupReplyTunnelID(dl.Flags, off, d)
-			dl.ReplyTunnelID = v
-			return l, err
-		}},
-		{"Size", func(off int, d []byte, dl *DatabaseLookup) (int, error) {
-			l, v, err := readDatabaseLookupSize(off, d)
-			dl.Size = v
-			return l, err
-		}},
-		{"ExcludedPeers", func(off int, d []byte, dl *DatabaseLookup) (int, error) {
-			l, v, err := readDatabaseLookupExcludedPeers(off, d, dl.Size)
-			dl.ExcludedPeers = v
-			return l, err
-		}},
-	})
+	offset := 0
+
+	var err error
+	offset, databaseLookup.Key, err = readDatabaseLookupKey(data)
+	if err != nil {
+		log.WithError(err).WithField("field", "Key").Error("failed to read field")
+		return offset, err
+	}
+
+	offset, databaseLookup.From, err = readDatabaseLookupFrom(offset, data)
+	if err != nil {
+		log.WithError(err).WithField("field", "From").Error("failed to read field")
+		return offset, err
+	}
+
+	offset, databaseLookup.Flags, err = readDatabaseLookupFlags(offset, data)
+	if err != nil {
+		log.WithError(err).WithField("field", "Flags").Error("failed to read field")
+		return offset, err
+	}
+
+	offset, databaseLookup.ReplyTunnelID, err = readDatabaseLookupReplyTunnelID(databaseLookup.Flags, offset, data)
+	if err != nil {
+		log.WithError(err).WithField("field", "ReplyTunnelID").Error("failed to read field")
+		return offset, err
+	}
+
+	offset, databaseLookup.Size, err = readDatabaseLookupSize(offset, data)
+	if err != nil {
+		log.WithError(err).WithField("field", "Size").Error("failed to read field")
+		return offset, err
+	}
+
+	offset, databaseLookup.ExcludedPeers, err = readDatabaseLookupExcludedPeers(offset, data, databaseLookup.Size)
+	if err != nil {
+		log.WithError(err).WithField("field", "ExcludedPeers").Error("failed to read field")
+		return offset, err
+	}
+
+	return offset, nil
 }
 
 // parseEncryptionFields extracts the encryption-related fields from the database lookup data.
 func parseEncryptionFields(databaseLookup *DatabaseLookup, data []byte, offset int) error {
-	endOffset, err := applyLookupParsers(offset, data, databaseLookup, []lookupFieldParser{
-		{"ReplyKey", func(off int, d []byte, dl *DatabaseLookup) (int, error) {
-			l, v, err := readDatabaseLookupReplyKey(off, d)
-			dl.ReplyKey = v
-			return l, err
-		}},
-		{"Tags", func(off int, d []byte, dl *DatabaseLookup) (int, error) {
-			l, v, err := readDatabaseLookupTags(off, d)
-			dl.Tags = v
-			return l, err
-		}},
-	})
+	var err error
+	offset, databaseLookup.ReplyKey, err = readDatabaseLookupReplyKey(offset, data)
 	if err != nil {
+		log.WithError(err).WithField("field", "ReplyKey").Error("failed to read field")
 		return err
 	}
 
-	return readReplyTagsByType(databaseLookup, endOffset, data, databaseLookup.Tags)
+	offset, databaseLookup.Tags, err = readDatabaseLookupTags(offset, data)
+	if err != nil {
+		log.WithError(err).WithField("field", "Tags").Error("failed to read field")
+		return err
+	}
+
+	return readReplyTagsByType(databaseLookup, offset, data, databaseLookup.Tags)
 }
 
 // readReplyTagsByType reads either ECIES or legacy reply tags based on the encryption flag.

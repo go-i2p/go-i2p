@@ -245,64 +245,59 @@ func (db *StdNetDB) persistLeaseSetToFilesystem(key common.Hash, ls lease_set.Le
 	return db.persistLeaseSetEntryToFile(key, &Entry{LeaseSet: &ls}, "LeaseSet")
 }
 
-// emptyLeaseSetChannel returns a closed empty channel indicating LeaseSet not found.
-func emptyLeaseSetChannel() chan lease_set.LeaseSet {
-	ch := make(chan lease_set.LeaseSet)
+// emptyChannel returns a closed empty channel for the provided type.
+func emptyChannel[T any]() chan T {
+	ch := make(chan T)
 	close(ch)
 	return ch
+}
+
+// valueChannel returns a closed channel containing a single value for the provided type.
+func valueChannel[T any](value T) chan T {
+	ch := make(chan T, 1)
+	ch <- value
+	close(ch)
+	return ch
+}
+
+// emptyLeaseSetChannel returns a closed empty channel indicating LeaseSet not found.
+func emptyLeaseSetChannel() chan lease_set.LeaseSet {
+	return emptyChannel[lease_set.LeaseSet]()
 }
 
 // leaseSetChannel returns a channel containing the given LeaseSet.
 func leaseSetChannel(ls lease_set.LeaseSet) chan lease_set.LeaseSet {
-	ch := make(chan lease_set.LeaseSet, 1)
-	ch <- ls
-	close(ch)
-	return ch
+	return valueChannel(ls)
 }
 
 // emptyLeaseSet2Channel returns a closed empty channel indicating LeaseSet2 not found.
 func emptyLeaseSet2Channel() chan lease_set2.LeaseSet2 {
-	ch := make(chan lease_set2.LeaseSet2)
-	close(ch)
-	return ch
+	return emptyChannel[lease_set2.LeaseSet2]()
 }
 
 // leaseSet2Channel returns a channel containing the given LeaseSet2.
 func leaseSet2Channel(ls2 lease_set2.LeaseSet2) chan lease_set2.LeaseSet2 {
-	ch := make(chan lease_set2.LeaseSet2, 1)
-	ch <- ls2
-	close(ch)
-	return ch
+	return valueChannel(ls2)
 }
 
 // emptyEncryptedLeaseSetChannel returns a closed empty channel indicating EncryptedLeaseSet not found.
 func emptyEncryptedLeaseSetChannel() chan encrypted_leaseset.EncryptedLeaseSet {
-	ch := make(chan encrypted_leaseset.EncryptedLeaseSet)
-	close(ch)
-	return ch
+	return emptyChannel[encrypted_leaseset.EncryptedLeaseSet]()
 }
 
 // encryptedLeaseSetChannel returns a channel containing the given EncryptedLeaseSet.
 func encryptedLeaseSetChannel(els encrypted_leaseset.EncryptedLeaseSet) chan encrypted_leaseset.EncryptedLeaseSet {
-	ch := make(chan encrypted_leaseset.EncryptedLeaseSet, 1)
-	ch <- els
-	close(ch)
-	return ch
+	return valueChannel(els)
 }
 
 // emptyMetaLeaseSetChannel returns a closed empty channel indicating MetaLeaseSet not found.
 func emptyMetaLeaseSetChannel() chan meta_leaseset.MetaLeaseSet {
-	ch := make(chan meta_leaseset.MetaLeaseSet)
-	close(ch)
-	return ch
+	return emptyChannel[meta_leaseset.MetaLeaseSet]()
 }
 
 // metaLeaseSetChannel returns a channel containing the given MetaLeaseSet.
 func metaLeaseSetChannel(mls meta_leaseset.MetaLeaseSet) chan meta_leaseset.MetaLeaseSet {
-	ch := make(chan meta_leaseset.MetaLeaseSet, 1)
-	ch <- mls
-	close(ch)
-	return ch
+	return valueChannel(mls)
 }
 
 // GetLeaseSet retrieves a LeaseSet from the database by its hash.
@@ -737,19 +732,33 @@ func (db *StdNetDB) parseAndCacheLeaseSet2(hash common.Hash, data []byte) (lease
 
 // GetLeaseSet2Bytes retrieves LeaseSet2 data as bytes from the database.
 func (db *StdNetDB) GetLeaseSet2Bytes(hash common.Hash) ([]byte, error) {
-	return db.fetchLeaseSetBytes(
-		hash, "LeaseSet2",
-		func(e Entry) ([]byte, error) {
+	return db.getLeaseSetBytesWithHandlers(hash, db.leaseSet2BytesHandlers())
+}
+
+type leaseSetBytesHandlers struct {
+	typeName      string
+	cacheCheck    func(Entry) ([]byte, error)
+	parseAndCache func(common.Hash, []byte) error
+}
+
+func (db *StdNetDB) getLeaseSetBytesWithHandlers(hash common.Hash, handlers leaseSetBytesHandlers) ([]byte, error) {
+	return db.fetchLeaseSetBytes(hash, handlers.typeName, handlers.cacheCheck, handlers.parseAndCache)
+}
+
+func (db *StdNetDB) leaseSet2BytesHandlers() leaseSetBytesHandlers {
+	return leaseSetBytesHandlers{
+		typeName: "LeaseSet2",
+		cacheCheck: func(e Entry) ([]byte, error) {
 			if e.LeaseSet2 == nil {
 				return nil, nil
 			}
 			return e.LeaseSet2.Bytes()
 		},
-		func(h common.Hash, d []byte) error {
+		parseAndCache: func(h common.Hash, d []byte) error {
 			_, err := db.parseAndCacheLeaseSet2(h, d)
 			return err
 		},
-	)
+	}
 }
 
 // ======================================================================
@@ -894,19 +903,23 @@ func (db *StdNetDB) parseAndCacheEncryptedLeaseSet(hash common.Hash, data []byte
 
 // GetEncryptedLeaseSetBytes retrieves EncryptedLeaseSet data as bytes from the database.
 func (db *StdNetDB) GetEncryptedLeaseSetBytes(hash common.Hash) ([]byte, error) {
-	return db.fetchLeaseSetBytes(
-		hash, "EncryptedLeaseSet",
-		func(e Entry) ([]byte, error) {
+	return db.getLeaseSetBytesWithHandlers(hash, db.encryptedLeaseSetBytesHandlers())
+}
+
+func (db *StdNetDB) encryptedLeaseSetBytesHandlers() leaseSetBytesHandlers {
+	return leaseSetBytesHandlers{
+		typeName: "EncryptedLeaseSet",
+		cacheCheck: func(e Entry) ([]byte, error) {
 			if e.EncryptedLeaseSet == nil {
 				return nil, nil
 			}
 			return e.EncryptedLeaseSet.Bytes()
 		},
-		func(h common.Hash, d []byte) error {
+		parseAndCache: func(h common.Hash, d []byte) error {
 			_, err := db.parseAndCacheEncryptedLeaseSet(h, d)
 			return err
 		},
-	)
+	}
 }
 
 // ======================================================================
@@ -1046,19 +1059,23 @@ func (db *StdNetDB) parseAndCacheMetaLeaseSet(hash common.Hash, data []byte) (me
 
 // GetMetaLeaseSetBytes retrieves MetaLeaseSet data as bytes from the database.
 func (db *StdNetDB) GetMetaLeaseSetBytes(hash common.Hash) ([]byte, error) {
-	return db.fetchLeaseSetBytes(
-		hash, "MetaLeaseSet",
-		func(e Entry) ([]byte, error) {
+	return db.getLeaseSetBytesWithHandlers(hash, db.metaLeaseSetBytesHandlers())
+}
+
+func (db *StdNetDB) metaLeaseSetBytesHandlers() leaseSetBytesHandlers {
+	return leaseSetBytesHandlers{
+		typeName: "MetaLeaseSet",
+		cacheCheck: func(e Entry) ([]byte, error) {
 			if e.MetaLeaseSet == nil {
 				return nil, nil
 			}
 			return e.MetaLeaseSet.Bytes()
 		},
-		func(h common.Hash, d []byte) error {
+		parseAndCache: func(h common.Hash, d []byte) error {
 			_, err := db.parseAndCacheMetaLeaseSet(h, d)
 			return err
 		},
-	)
+	}
 }
 
 // ======================================================================

@@ -171,18 +171,27 @@ func ReadI2NPType(data []byte) (int, error) {
 		"at":   "i2np.ReadI2NPType",
 		"type": messageType,
 	}
-	if logLevel == "warn" {
+	switch logLevel {
+	case i2npLogLevelWarn:
 		log.WithFields(fields).Warn(logMessage)
-	} else {
+	default:
 		log.WithFields(fields).Debug(logMessage)
 	}
 
 	return typeValue, nil
 }
 
+// i2npLogLevel is a tiny enum for the logging branch used by ReadI2NPType.
+type i2npLogLevel int
+
+const (
+	i2npLogLevelDebug i2npLogLevel = iota
+	i2npLogLevelWarn
+)
+
 // getI2NPTypeLogLevel returns the log level and message for a parsed I2NP type.
-func getI2NPTypeLogLevel(typeValue int) (string, string) {
-	logLevel := "debug"
+func getI2NPTypeLogLevel(typeValue int) (i2npLogLevel, string) {
+	logLevel := i2npLogLevelDebug
 	logMessage := "parsed_i2np_type"
 
 	// Types 4-9 and 12-17 are currently unassigned in the I2NP spec.
@@ -191,10 +200,10 @@ func getI2NPTypeLogLevel(typeValue int) (string, string) {
 	if (typeValue >= 4 && typeValue <= 9) || (typeValue >= 12 && typeValue <= 17) {
 		logMessage = "unassigned_i2np_type"
 	} else if typeValue >= 224 && typeValue <= 254 {
-		logLevel = "warn"
+		logLevel = i2npLogLevelWarn
 		logMessage = "experimental_i2np_type"
 	} else if typeValue == 255 {
-		logLevel = "warn"
+		logLevel = i2npLogLevelWarn
 		logMessage = "reserved_i2np_type"
 	}
 
