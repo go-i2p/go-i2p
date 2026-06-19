@@ -1,10 +1,14 @@
 package netdb
 
 import (
+	"net"
 	"testing"
 
+	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
+	"github.com/go-i2p/go-i2p/lib/testutil"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // mockRouterInfo creates a minimal RouterInfo for testing peer selection.
@@ -139,4 +143,90 @@ func TestSelectRandomPeers_LargeScale(t *testing.T) {
 	// Select 999 out of 1000 - this was catastrophically slow with rejection sampling
 	selected := db.selectRandomPeers(available, 999)
 	assert.Len(t, selected, 999, "should select 999 out of 1000 peers")
+}
+
+func TestSelectRandomPeers_PrefersIPv4SubnetDiversity(t *testing.T) {
+	db := NewStdNetDB(t.TempDir())
+	available := []router_info.RouterInfo{
+		mustCreatePeerSelectionRouterInfo(t, "10.1.1.1", ""),
+		mustCreatePeerSelectionRouterInfo(t, "10.1.2.2", ""),
+		mustCreatePeerSelectionRouterInfo(t, "10.2.1.1", ""),
+		mustCreatePeerSelectionRouterInfo(t, "10.3.1.1", ""),
+	}
+
+	selected := db.selectRandomPeers(available, 3)
+	require.Len(t, selected, 3)
+	assert.Len(t, uniqueIPv4Prefixes(t, selected), 3, "should avoid selecting two peers from the same /16 when diverse peers exist")
+}
+
+func TestSelectRandomPeers_PrefersFamilyDiversity(t *testing.T) {
+	db := NewStdNetDB(t.TempDir())
+	available := []router_info.RouterInfo{
+		mustCreatePeerSelectionRouterInfo(t, "10.10.1.1", "alpha"),
+		mustCreatePeerSelectionRouterInfo(t, "10.11.1.1", "alpha"),
+		mustCreatePeerSelectionRouterInfo(t, "10.12.1.1", "beta"),
+	}
+
+	selected := db.selectRandomPeers(available, 2)
+	require.Len(t, selected, 2)
+	assert.Len(t, uniqueFamilies(t, selected), 2, "should avoid selecting two peers from the same family when alternatives exist")
+}
+
+func TestSelectRandomPeers_FallsBackWhenDiversityPoolExhausted(t *testing.T) {
+	db := NewStdNetDB(t.TempDir())
+	available := []router_info.RouterInfo{
+		mustCreatePeerSelectionRouterInfo(t, "10.1.1.1", "alpha"),
+		mustCreatePeerSelectionRouterInfo(t, "10.1.2.2", "alpha"),
+		mustCreatePeerSelectionRouterInfo(t, "10.1.3.3", "alpha"),
+	}
+
+	selected := db.selectRandomPeers(available, 3)
+	require.Len(t, selected, 3)
+}
+
+func mustCreatePeerSelectionRouterInfo(t *testing.T, host, family string) router_info.RouterInfo {
+	t.Helper()
+	addrCfg := testutil.DefaultRouterAddressConfig()
+	addrCfg.Options = map[string]string{
+		"host": host,
+		"port": "12345",
+	}
+	options := map[string]string{}
+	if family != "" {
+		options["family"] = family
+	}
+	ri := testutil.CreateSignedTestRouterInfo(t, options, &addrCfg)
+	return *ri
+}
+
+func uniqueIPv4Prefixes(t *testing.T, peers []router_info.RouterInfo) map[[2]byte]struct{} {
+	t.Helper()
+	prefixes := make(map[[2]byte]struct{})
+	for _, peer := range peers {
+		for _, addr := range peer.RouterAddresses() {
+			host, err := addr.Host()
+			require.NoError(t, err)
+			ip := net.ParseIP(host.String())
+			require.NotNil(t, ip)
+			ipv4 := ip.To4()
+			require.NotNil(t, ipv4)
+			prefixes[[2]byte{ipv4[0], ipv4[1]}] = struct{}{}
+		}
+	}
+	return prefixes
+}
+
+func uniqueFamilies(t *testing.T, peers []router_info.RouterInfo) map[string]struct{} {
+	t.Helper()
+	familyKey, err := common.ToI2PString("family")
+	require.NoError(t, err)
+	families := make(map[string]struct{})
+	for _, peer := range peers {
+		familyValue := peer.Options().Values().Get(familyKey)
+		require.NotNil(t, familyValue)
+		family, err := familyValue.Data()
+		require.NoError(t, err)
+		families[family] = struct{}{}
+	}
+	return families
 }

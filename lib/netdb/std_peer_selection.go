@@ -2,6 +2,7 @@ package netdb
 
 import (
 	"fmt"
+	"net"
 	"sort"
 	"strings"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/go-i2p/logger"
 
 	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/common/router_address"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/bootstrap"
 	"github.com/go-i2p/go-i2p/lib/util/logutil"
@@ -286,11 +288,155 @@ func (db *StdNetDB) selectRandomPeers(available []router_info.RouterInfo, count 
 		indices[i], indices[j] = indices[j], indices[i]
 	})
 
-	selected := make([]router_info.RouterInfo, count)
-	for i := 0; i < count; i++ {
-		selected[i] = available[indices[i]]
+	selected, deferred := selectDiversePeers(available, indices, count)
+	logDiversityFallback(count, len(selected), len(deferred))
+	return appendDeferredPeers(selected, deferred, count)
+}
+
+func selectDiversePeers(available []router_info.RouterInfo, indices []int, count int) ([]router_info.RouterInfo, []router_info.RouterInfo) {
+	selected := make([]router_info.RouterInfo, 0, count)
+	deferred := make([]router_info.RouterInfo, 0, count)
+	state := newPeerDiversityState()
+
+	for _, index := range indices {
+		candidate := available[index]
+		if state.accepts(candidate) {
+			selected = append(selected, candidate)
+			if len(selected) == count {
+				return selected, deferred
+			}
+			continue
+		}
+		deferred = append(deferred, candidate)
+	}
+
+	return selected, deferred
+}
+
+func logDiversityFallback(requested, selected, deferred int) {
+	if deferred == 0 || selected >= requested {
+		return
+	}
+	log.WithFields(logger.Fields{
+		"at":               "StdNetDB.selectRandomPeers",
+		"reason":           "diversity_pool_exhausted",
+		"requested":        requested,
+		"selected_diverse": selected,
+		"fallback_needed":  requested - selected,
+	}).Info("Relaxing peer diversity constraints to satisfy selection request")
+}
+
+func appendDeferredPeers(selected, deferred []router_info.RouterInfo, count int) []router_info.RouterInfo {
+	if len(selected) >= count {
+		return selected
+	}
+	for _, candidate := range deferred {
+		selected = append(selected, candidate)
+		if len(selected) == count {
+			break
+		}
 	}
 	return selected
+}
+
+type peerDiversityState struct {
+	families     map[string]struct{}
+	ipv4Prefixes map[[2]byte]struct{}
+	ipv6Prefixes map[[6]byte]struct{}
+}
+
+func newPeerDiversityState() *peerDiversityState {
+	return &peerDiversityState{
+		families:     make(map[string]struct{}),
+		ipv4Prefixes: make(map[[2]byte]struct{}),
+		ipv6Prefixes: make(map[[6]byte]struct{}),
+	}
+}
+
+func (state *peerDiversityState) accepts(ri router_info.RouterInfo) bool {
+	family := routerFamilyName(ri)
+	if family != "" {
+		if _, exists := state.families[family]; exists {
+			return false
+		}
+	}
+
+	for _, addr := range ri.RouterAddresses() {
+		prefix, familyType, ok := routerAddressPrefix(addr)
+		if !ok {
+			continue
+		}
+		switch familyType {
+		case 4:
+			if _, exists := state.ipv4Prefixes[prefix.ipv4]; exists {
+				return false
+			}
+		case 6:
+			if _, exists := state.ipv6Prefixes[prefix.ipv6]; exists {
+				return false
+			}
+		}
+	}
+
+	if family != "" {
+		state.families[family] = struct{}{}
+	}
+	for _, addr := range ri.RouterAddresses() {
+		prefix, familyType, ok := routerAddressPrefix(addr)
+		if !ok {
+			continue
+		}
+		switch familyType {
+		case 4:
+			state.ipv4Prefixes[prefix.ipv4] = struct{}{}
+		case 6:
+			state.ipv6Prefixes[prefix.ipv6] = struct{}{}
+		}
+	}
+	return true
+}
+
+type peerPrefix struct {
+	ipv4 [2]byte
+	ipv6 [6]byte
+}
+
+func routerAddressPrefix(addr *router_address.RouterAddress) (peerPrefix, int, bool) {
+	if addr == nil {
+		return peerPrefix{}, 0, false
+	}
+	host, err := addr.Host()
+	if err != nil {
+		return peerPrefix{}, 0, false
+	}
+	ip := net.ParseIP(host.String())
+	if ip == nil {
+		return peerPrefix{}, 0, false
+	}
+	if ipv4 := ip.To4(); ipv4 != nil {
+		return peerPrefix{ipv4: [2]byte{ipv4[0], ipv4[1]}}, 4, true
+	}
+	ipv6 := ip.To16()
+	if ipv6 == nil {
+		return peerPrefix{}, 0, false
+	}
+	return peerPrefix{ipv6: [6]byte{ipv6[0], ipv6[1], ipv6[2], ipv6[3], ipv6[4], ipv6[5]}}, 6, true
+}
+
+func routerFamilyName(ri router_info.RouterInfo) string {
+	familyKey, err := common.ToI2PString("family")
+	if err != nil {
+		return ""
+	}
+	familyValue := ri.Options().Values().Get(familyKey)
+	if familyValue == nil {
+		return ""
+	}
+	family, err := familyValue.Data()
+	if err != nil {
+		return ""
+	}
+	return family
 }
 
 // SelectPeers selects a random subset of peers for tunnel building
