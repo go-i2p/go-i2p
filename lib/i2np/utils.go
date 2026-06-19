@@ -164,8 +164,24 @@ func ReadI2NPType(data []byte) (int, error) {
 
 	messageType := common.Integer([]byte{data[0]})
 	typeValue := messageType.Int()
+	logLevel, logMessage := getI2NPTypeLogLevel(typeValue)
 
-	// Compute log level and message based on message type
+	// Single log call with computed level and message
+	fields := logger.Fields{
+		"at":   "i2np.ReadI2NPType",
+		"type": messageType,
+	}
+	if logLevel == "warn" {
+		log.WithFields(fields).Warn(logMessage)
+	} else {
+		log.WithFields(fields).Debug(logMessage)
+	}
+
+	return typeValue, nil
+}
+
+// getI2NPTypeLogLevel returns the log level and message for a parsed I2NP type.
+func getI2NPTypeLogLevel(typeValue int) (string, string) {
 	logLevel := "debug"
 	logMessage := "parsed_i2np_type"
 
@@ -182,18 +198,7 @@ func ReadI2NPType(data []byte) (int, error) {
 		logMessage = "reserved_i2np_type"
 	}
 
-	// Single log call with computed level and message
-	fields := logger.Fields{
-		"at":   "i2np.ReadI2NPType",
-		"type": messageType,
-	}
-	if logLevel == "warn" {
-		log.WithFields(fields).Warn(logMessage)
-	} else {
-		log.WithFields(fields).Debug(logMessage)
-	}
-
-	return typeValue, nil
+	return logLevel, logMessage
 }
 
 // ReadI2NPNTCPMessageID reads the message ID from NTCP data

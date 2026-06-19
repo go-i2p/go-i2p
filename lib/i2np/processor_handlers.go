@@ -183,13 +183,40 @@ func (p *MessageProcessor) processTunnelGatewayMessage(msg Message) error {
 		return err
 	}
 
-	p.logTunnelGatewayProcessing(tgMsg)
+	log.WithFields(logger.Fields{
+		"at":           "processTunnelGatewayMessage",
+		"tunnel_id":    tgMsg.TunnelID,
+		"payload_size": tgMsg.Length,
+	}).Debug("Processing TunnelGateway message")
 
-	if err := p.validateTunnelGatewayPayload(tgMsg); err != nil {
-		return err
+	if tgMsg.Length == 0 || len(tgMsg.Data) == 0 {
+		log.WithFields(logger.Fields{
+			"at":        "processTunnelGatewayMessage",
+			"tunnel_id": tgMsg.TunnelID,
+			"reason":    "empty_payload",
+		}).Warn("TunnelGateway message has empty payload")
+		return oops.Errorf("TunnelGateway message has empty payload")
 	}
 
-	return p.forwardToTunnelGatewayHandler(tgMsg)
+	if p.tunnelGatewayHandler == nil {
+		log.WithFields(logger.Fields{
+			"at":        "processTunnelGatewayMessage",
+			"tunnel_id": tgMsg.TunnelID,
+			"reason":    "no tunnel gateway handler configured",
+		}).Warn("TunnelGateway message received but no handler configured")
+		return oops.Errorf("no tunnel gateway handler configured")
+	}
+
+	if err := p.tunnelGatewayHandler.HandleGateway(tgMsg.TunnelID, tgMsg.Data); err != nil {
+		log.WithFields(logger.Fields{
+			"at":        "processTunnelGatewayMessage",
+			"tunnel_id": tgMsg.TunnelID,
+			"error":     err,
+		}).Error("Failed to handle TunnelGateway message")
+		return oops.Wrapf(err, "tunnel gateway handling failed")
+	}
+
+	return nil
 }
 
 // extractTunnelGatewayMessage extracts a TunnelGateway from an I2NP message.
@@ -209,16 +236,12 @@ func (p *MessageProcessor) extractTunnelGatewayMessage(msg Message) (*TunnelGate
 		return nil, oops.Errorf("message is not a TunnelGateway")
 	}
 
-	return p.parseTunnelGatewayFromPayload(carrier.GetData())
-}
-
-// parseTunnelGatewayFromPayload parses a TunnelGateway from raw payload bytes.
-func (p *MessageProcessor) parseTunnelGatewayFromPayload(payload []byte) (*TunnelGateway, error) {
+	payload := carrier.GetData()
 	if len(payload) < 6 {
 		return nil, oops.Errorf("TunnelGateway payload too short: %d bytes", len(payload))
 	}
 
-	tgMsg := &TunnelGateway{}
+	tgMsg = &TunnelGateway{}
 	tgMsg.TunnelID = buildrecord.TunnelID(binary.BigEndian.Uint32(payload[0:4]))
 	tgMsg.Length = int(binary.BigEndian.Uint16(payload[4:6]))
 
@@ -229,28 +252,6 @@ func (p *MessageProcessor) parseTunnelGatewayFromPayload(payload []byte) (*Tunne
 	tgMsg.Data = make([]byte, tgMsg.Length)
 	copy(tgMsg.Data, payload[6:6+tgMsg.Length])
 	return tgMsg, nil
-}
-
-// logTunnelGatewayProcessing logs the processing of a TunnelGateway message.
-func (p *MessageProcessor) logTunnelGatewayProcessing(tgMsg *TunnelGateway) {
-	log.WithFields(logger.Fields{
-		"at":           "processTunnelGatewayMessage",
-		"tunnel_id":    tgMsg.TunnelID,
-		"payload_size": tgMsg.Length,
-	}).Debug("Processing TunnelGateway message")
-}
-
-// validateTunnelGatewayPayload validates that the TunnelGateway has a non-empty payload.
-func (p *MessageProcessor) validateTunnelGatewayPayload(tgMsg *TunnelGateway) error {
-	if tgMsg.Length == 0 || len(tgMsg.Data) == 0 {
-		log.WithFields(logger.Fields{
-			"at":        "processTunnelGatewayMessage",
-			"tunnel_id": tgMsg.TunnelID,
-			"reason":    "empty_payload",
-		}).Warn("TunnelGateway message has empty payload")
-		return oops.Errorf("TunnelGateway message has empty payload")
-	}
-	return nil
 }
 
 // forwardToTunnelGatewayHandler forwards the TunnelGateway message to the configured handler.
@@ -367,15 +368,15 @@ func (p *MessageProcessor) processGarlicMessage(msg Message, depth int) error {
 		// to continue processing other messages. Only LOCAL garlic messages for
 		// this router would decrypt successfully anyway.
 		log.WithFields(logger.Fields{
-			"msg_id":          msg.MessageID(),
-			"message_type":    msg.Type(),
-			"encrypted_size":  len(encryptedData),
-			"skip_reason":     "garlic_decrypt_failed",
-			"error":           err,
-			"mitigation":      "router will skip this message and continue processing others",
-			"root_cause":      "peers may have old cached RouterInfo - call publisher.ForceRouterInfoRepublish()",
+			"msg_id":         msg.MessageID(),
+			"message_type":   msg.Type(),
+			"encrypted_size": len(encryptedData),
+			"skip_reason":    "garlic_decrypt_failed",
+			"error":          err,
+			"mitigation":     "router will skip this message and continue processing others",
+			"root_cause":     "peers may have old cached RouterInfo - call publisher.ForceRouterInfoRepublish()",
 		}).Debug("Skipping garlic message - decryption failed (likely transit traffic or key mismatch)")
-		return nil  // ← CRITICAL: Return nil instead of error to allow message processing to continue
+		return nil // ← CRITICAL: Return nil instead of error to allow message processing to continue
 	}
 
 	var allCloves []GarlicClove
