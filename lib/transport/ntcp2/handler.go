@@ -74,14 +74,12 @@ func (h *DefaultHandler) OnHandshakeError(rawConn net.Conn, err error) {
 // ValidateTimestamp checks whether a peer's timestamp is within ±60 seconds
 // of the local clock. Returns a *ClockSkewError if the skew is excessive.
 func (h *DefaultHandler) ValidateTimestamp(peerTime uint32) error {
-	if err := ValidateTimestamp(peerTime); err != nil {
+	return transport.ValidateTimestampAndLog(peerTime, ValidateTimestamp, func(peerTime uint32, err error) {
 		log.WithFields(map[string]interface{}{
 			"peer_time": peerTime,
 			"error":     err.Error(),
 		}).Warn("NTCP2 peer clock skew exceeds tolerance")
-		return err
-	}
-	return nil
+	})
 }
 
 // SendTermination constructs and sends an encrypted termination block through

@@ -43,3 +43,16 @@ func MeasureTimestampSkewAgainstNow(peerTime uint32) int64 {
 	localTime := uint32(time.Now().Unix())
 	return CalculateTimestampSkew(peerTime, localTime)
 }
+
+// ValidateTimestampAndLog runs a caller-provided timestamp validator and
+// invokes logFailure when validation fails.
+func ValidateTimestampAndLog(peerTime uint32, validate func(uint32) error, logFailure func(uint32, error)) error {
+	err := validate(peerTime)
+	if err == nil {
+		return nil
+	}
+	if logFailure != nil {
+		logFailure(peerTime, err)
+	}
+	return err
+}

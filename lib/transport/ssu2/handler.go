@@ -1,7 +1,6 @@
 package ssu2
 
 import (
-	"math"
 	"time"
 
 	"github.com/go-i2p/go-i2p/lib/transport"
@@ -63,22 +62,33 @@ func (h *DefaultHandler) ValidateTimestamp(peerTime uint32) error {
 		)
 	}
 
-	now := uint32(time.Now().Unix())
-	skewSeconds := transport.CalculateTimestampSkew(peerTime, now)
-
-	if !transport.IsTimestampWithinTolerance(peerTime, h.maxSkew) {
+	return transport.ValidateTimestampAndLog(peerTime, h.validateClockSkew, func(peerTime uint32, _ error) {
+		now := uint32(time.Now().Unix())
+		skewSeconds := transport.CalculateTimestampSkew(peerTime, now)
 		log.WithFields(map[string]interface{}{
 			"peer_time":    peerTime,
 			"local_time":   now,
-			"diff_seconds": math.Abs(float64(skewSeconds)),
+			"diff_seconds": absInt64(skewSeconds),
 			"max_skew":     h.maxSkew.Seconds(),
 		}).Warn("SSU2 peer clock skew exceeds tolerance")
+	})
+}
+
+func (h *DefaultHandler) validateClockSkew(peerTime uint32) error {
+	if !transport.IsTimestampWithinTolerance(peerTime, h.maxSkew) {
 		return WrapSSU2Error(
 			ErrHandshakeFailed,
 			"clock skew too large",
 		)
 	}
 	return nil
+}
+
+func absInt64(v int64) float64 {
+	if v < 0 {
+		return float64(-v)
+	}
+	return float64(v)
 }
 
 // SendTermination sends a termination block through the SSU2 connection.
