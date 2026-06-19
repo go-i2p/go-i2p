@@ -412,7 +412,7 @@ func (tb *TunnelBuilder) createAllHopRecords(
 	replyIVs := make([][16]byte, req.HopCount)
 
 	for i := 0; i < req.HopCount; i++ {
-		record, replyKey, replyIV, err := tb.createHopRecord(i, req, hopTunnelIDs, peers)
+		hopRecord, err := tb.generateHopRecord(i, req, hopTunnelIDs, peers)
 		if err != nil {
 			log.WithError(err).WithFields(logger.Fields{
 				"at":        "(TunnelBuilder) createAllHopRecords",
@@ -424,14 +424,19 @@ func (tb *TunnelBuilder) createAllHopRecords(
 			return nil, nil, nil, oops.Errorf("failed to create record for hop %d: %w", i, err)
 		}
 
-		tb.logHopRecordCreation(i, req, hopTunnelIDs[i], peers[i])
-
-		records[i] = record
-		replyKeys[i] = replyKey
-		replyIVs[i] = replyIV
+		records[i] = hopRecord.record
+		replyKeys[i] = hopRecord.replyKey
+		replyIVs[i] = hopRecord.replyIV
 	}
 
 	return records, replyKeys, replyIVs, nil
+}
+
+// generatedHopRecord contains all generated artifacts for a single hop.
+type generatedHopRecord struct {
+	record   BuildRequestRecord
+	replyKey session_key.SessionKey
+	replyIV  [16]byte
 }
 
 // determineHopPosition determines the position of a hop in the tunnel (gateway, endpoint, or participant).
@@ -471,7 +476,7 @@ func (tb *TunnelBuilder) logHopRecordCreation(hopIndex int, req BuildTunnelReque
 	}).Debug("created build record for tunnel hop")
 }
 
-// createHopRecord creates a build request record for a single tunnel hop.
+// generateHopRecord creates and logs a build request record for a single tunnel hop.
 //
 // The record contains:
 // - Tunnel IDs for routing (receive and next hop)
@@ -479,32 +484,32 @@ func (tb *TunnelBuilder) logHopRecordCreation(hopIndex int, req BuildTunnelReque
 // - Cryptographic keys for tunnel message encryption (layer key, IV key)
 // - Reply encryption keys for build response
 // - Timestamp and message ID
-func (tb *TunnelBuilder) createHopRecord(
+func (tb *TunnelBuilder) generateHopRecord(
 	hopIndex int,
 	req BuildTunnelRequest,
 	hopTunnelIDs []TunnelID,
 	peers []router_info.RouterInfo,
-) (BuildRequestRecord, session_key.SessionKey, [16]byte, error) {
+) (generatedHopRecord, error) {
 	layerKey, ivKey, replyKey, replyIV, err := generateHopCryptoKeys()
 	if err != nil {
-		return BuildRequestRecord{}, session_key.SessionKey{}, [16]byte{}, err
+		return generatedHopRecord{}, err
 	}
 
 	receiveTunnel, nextTunnel, ourIdent, nextIdent, err := tb.determineRoutingParams(
 		hopIndex, req, hopTunnelIDs, peers,
 	)
 	if err != nil {
-		return BuildRequestRecord{}, session_key.SessionKey{}, [16]byte{}, oops.Errorf("failed to determine routing params: %w", err)
+		return generatedHopRecord{}, oops.Errorf("failed to determine routing params: %w", err)
 	}
 
 	padding, err := generateRecordPadding()
 	if err != nil {
-		return BuildRequestRecord{}, session_key.SessionKey{}, [16]byte{}, err
+		return generatedHopRecord{}, err
 	}
 
 	sendMessageID, err := generateMessageID()
 	if err != nil {
-		return BuildRequestRecord{}, session_key.SessionKey{}, [16]byte{}, oops.Errorf("failed to generate message ID: %w", err)
+		return generatedHopRecord{}, oops.Errorf("failed to generate message ID: %w", err)
 	}
 
 	flag := determineBuildRecordFlag(hopIndex, req.HopCount, req.IsInbound)
@@ -513,8 +518,13 @@ func (tb *TunnelBuilder) createHopRecord(
 		layerKey, ivKey, replyKey, replyIV, padding,
 		sendMessageID, flag,
 	)
+	tb.logHopRecordCreation(hopIndex, req, hopTunnelIDs[hopIndex], peers[hopIndex])
 
-	return record, replyKey, replyIV, nil
+	return generatedHopRecord{
+		record:   record,
+		replyKey: replyKey,
+		replyIV:  replyIV,
+	}, nil
 }
 
 // generateHopCryptoKeys generates all cryptographic keys needed for a tunnel hop.

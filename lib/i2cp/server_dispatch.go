@@ -1082,25 +1082,14 @@ func (s *Server) parseSendMessagePayload(msg *Message, session *Session) (*SendM
 		return nil, oops.Errorf("failed to parse SendMessage payload: %w", err)
 	}
 
-	// Validate payload size to prevent exceeding I2CP limits after garlic encryption
-	// i2psnark compatibility: Account for overhead from garlic encryption
-	// Data message (4 bytes) + garlic encryption (~200 bytes typical)
-	// Conservative limit: MaxPayloadSize - 2048 bytes for all overhead
-	// Increased overhead budget to accommodate larger i2psnark messages
-	const maxSafePayloadSize = MaxPayloadSize - 2048
-	if len(sendMsg.Payload) > maxSafePayloadSize {
-		// i2psnark compatibility: Log detailed size information for debugging
-		log.WithFields(logger.Fields{
-			"at":              "i2cp.Server.parseSendMessagePayload",
-			"sessionID":       session.ID(),
-			"payloadSize":     len(sendMsg.Payload),
-			"maxAllowed":      maxSafePayloadSize,
-			"maxPayloadSize":  MaxPayloadSize,
-			"overhead":        512,
-			"destinationHash": logutil.HashPrefixPlain(sendMsg.Destination),
-		}).Error("send_message_payload_too_large")
-		return nil, oops.Errorf("message payload too large: %d bytes (max %d bytes to allow for encryption overhead)",
-			len(sendMsg.Payload), maxSafePayloadSize)
+	if err := validateSendPayloadSizeWithContext(
+		"i2cp.Server.parseSendMessagePayload",
+		session.ID(),
+		sendMsg.Destination,
+		len(sendMsg.Payload),
+		"send_message_payload_too_large",
+	); err != nil {
+		return nil, err
 	}
 
 	return sendMsg, nil
@@ -1217,22 +1206,50 @@ func (s *Server) parseSendMessageExpiresPayload(msg *Message, session *Session) 
 		return nil, oops.Errorf("failed to parse SendMessageExpires payload: %w", err)
 	}
 
-	// Validate payload size (same limits as SendMessage)
-	const maxSafePayloadSize = MaxPayloadSize - 2048
-	if len(sendMsg.Payload) > maxSafePayloadSize {
-		log.WithFields(logger.Fields{
-			"at":              "i2cp.Server.parseSendMessageExpiresPayload",
-			"sessionID":       session.ID(),
-			"payloadSize":     len(sendMsg.Payload),
-			"maxAllowed":      maxSafePayloadSize,
-			"maxPayloadSize":  MaxPayloadSize,
-			"destinationHash": logutil.HashPrefixPlain(sendMsg.Destination),
-		}).Error("send_message_expires_payload_too_large")
-		return nil, oops.Errorf("message payload too large: %d bytes (max %d bytes to allow for encryption overhead)",
-			len(sendMsg.Payload), maxSafePayloadSize)
+	if err := validateSendPayloadSizeWithContext(
+		"i2cp.Server.parseSendMessageExpiresPayload",
+		session.ID(),
+		sendMsg.Destination,
+		len(sendMsg.Payload),
+		"send_message_expires_payload_too_large",
+	); err != nil {
+		return nil, err
 	}
 
 	return sendMsg, nil
+}
+
+// validateSendPayloadSizeWithContext validates SendMessage-like payload sizes
+// using the shared encryption-overhead safety budget used by SendMessage and
+// SendMessageExpires parsing paths.
+func validateSendPayloadSizeWithContext(
+	at string,
+	sessionID uint16,
+	destination common.Hash,
+	payloadSize int,
+	logReason string,
+) error {
+	// Account for post-parse overhead from garlic wrapping/encryption.
+	const maxSafePayloadSize = MaxPayloadSize - 2048
+	if payloadSize <= maxSafePayloadSize {
+		return nil
+	}
+
+	log.WithFields(logger.Fields{
+		"at":              at,
+		"sessionID":       sessionID,
+		"payloadSize":     payloadSize,
+		"maxAllowed":      maxSafePayloadSize,
+		"maxPayloadSize":  MaxPayloadSize,
+		"overhead":        512,
+		"destinationHash": logutil.HashPrefixPlain(destination),
+	}).Error(logReason)
+
+	return oops.Errorf(
+		"message payload too large: %d bytes (max %d bytes to allow for encryption overhead)",
+		payloadSize,
+		maxSafePayloadSize,
+	)
 }
 
 // routeMessageExpiresWithStatus routes a SendMessageExpires message asynchronously with

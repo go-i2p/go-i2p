@@ -193,8 +193,8 @@ func (m *Message) MarshalBinary() ([]byte, error) {
 
 	// Validate payload size per I2CP specification
 	payloadLen := len(m.Payload)
-	if payloadLen > MaxPayloadSize {
-		return nil, oops.Errorf("i2cp message payload too large: %d bytes (max %d bytes per I2CP spec)", payloadLen, MaxPayloadSize)
+	if err := validatePayloadSize(uint32(payloadLen)); err != nil {
+		return nil, err
 	}
 
 	// Per I2CP spec: wire format is length(4) + type(1) + payload
@@ -252,8 +252,8 @@ func validateUnmarshalHeader(data []byte) (uint32, error) {
 	}
 
 	payloadLen := binary.BigEndian.Uint32(data[0:4])
-	if payloadLen > MaxPayloadSize {
-		return 0, oops.Errorf("i2cp message payload too large: %d bytes (max %d bytes per I2CP spec)", payloadLen, MaxPayloadSize)
+	if err := validatePayloadSize(payloadLen); err != nil {
+		return 0, err
 	}
 
 	expectedTotal := uint64(payloadLen) + 5
@@ -476,8 +476,8 @@ func logLargePayload(payloadLen uint32, msgType uint8, sessionID uint16) {
 func readMessagePayload(r io.Reader, payloadLen uint32) ([]byte, error) {
 	// Validate payload size before allocation (defense-in-depth)
 	// Even though caller should validate, we check here to prevent misuse
-	if payloadLen > MaxPayloadSize {
-		return nil, oops.Errorf("payload size %d exceeds maximum %d", payloadLen, MaxPayloadSize)
+	if err := validatePayloadSize(payloadLen); err != nil {
+		return nil, err
 	}
 
 	// Safe to allocate after validation
