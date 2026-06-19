@@ -144,23 +144,30 @@ func (sr *SessionRegistry) Remove(peerHash data.Hash) {
 	}
 }
 
+func atomicCompareAndSwapRetry(ptr *int32, predicate func(int32) bool, delta int32) (int32, bool) {
+	for {
+		current := atomic.LoadInt32(ptr)
+		if !predicate(current) {
+			return current, false
+		}
+		if atomic.CompareAndSwapInt32(ptr, current, current+delta) {
+			return current + delta, true
+		}
+	}
+}
+
 // DecrementCountSafe performs a safe atomic decrement with runtime assertions.
 // Catches double-decrements and other accounting errors at runtime.
 // If the counter would go negative, logs error and force-resets to 0 (safety net).
 func (sr *SessionRegistry) DecrementCountSafe() {
-	for {
-		current := atomic.LoadInt32(&sr.sessionCount)
-		if current <= 0 {
-			sr.logger.WithField("current_count", current).
-				Error("CRITICAL: sessionCount would go negative on decrement (accounting bug detected)")
-			// Force-reset as safety net to prevent persistent negative state
-			atomic.StoreInt32(&sr.sessionCount, 0)
-			return
-		}
-		if atomic.CompareAndSwapInt32(&sr.sessionCount, current, current-1) {
-			return
-		}
-		// CAS failed, retry (another goroutine won the race)
+	current, ok := atomicCompareAndSwapRetry(&sr.sessionCount, func(value int32) bool {
+		return value > 0
+	}, -1)
+	if !ok {
+		sr.logger.WithField("current_count", current).
+			Error("CRITICAL: sessionCount would go negative on decrement (accounting bug detected)")
+		// Force-reset as safety net to prevent persistent negative state
+		atomic.StoreInt32(&sr.sessionCount, 0)
 	}
 }
 
@@ -178,17 +185,10 @@ func (sr *SessionRegistry) IncrementCount() {
 // CheckLimitAndIncrement atomically checks if the count is below maxLimit and increments if so.
 // Returns (nil, true) if increment succeeded, (ErrLimitReached, false) if limit reached.
 func (sr *SessionRegistry) CheckLimitAndIncrement(maxLimit int) bool {
-	for {
-		current := atomic.LoadInt32(&sr.sessionCount)
-		if int(current) >= maxLimit {
-			return false
-		}
-		// Atomically increment
-		if atomic.CompareAndSwapInt32(&sr.sessionCount, current, current+1) {
-			return true
-		}
-		// CAS failed, retry
-	}
+	_, ok := atomicCompareAndSwapRetry(&sr.sessionCount, func(current int32) bool {
+		return int(current) < maxLimit
+	}, 1)
+	return ok
 }
 
 // SetShutdown marks the registry as shutting down.

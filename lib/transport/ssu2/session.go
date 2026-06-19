@@ -76,15 +76,12 @@ func NewSSU2Session(conn *ssu2noise.SSU2Conn, ctx context.Context, logger *logge
 // NewSSU2SessionDeferred creates a new SSU2 session without starting workers.
 // Call StartWorkers() after confirming the session will be used.
 func NewSSU2SessionDeferred(conn *ssu2noise.SSU2Conn, ctx context.Context, logger *logger.Entry) *SSU2Session {
-	sessionLogger := logger.WithFields(map[string]interface{}{
-		"component":   "ssu2_session",
-		"remote_addr": conn.RemoteAddr().String(),
-	})
+	core, sessionLogger := transport.NewSessionCoreWithLogger(ctx, logger, "ssu2_session", conn.RemoteAddr().String())
 	sessionLogger.Info("Creating new SSU2 session")
 
 	rtt := ssu2noise.NewRTTEstimator()
 	s := &SSU2Session{
-		SessionCore:     transport.NewSessionCore(ctx, sessionLogger),
+		SessionCore:     core,
 		conn:            conn,
 		rttEstimator:    rtt,
 		congestionCtrl:  ssu2noise.NewCongestionController(rtt),

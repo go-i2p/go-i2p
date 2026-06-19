@@ -52,14 +52,11 @@ func NewNTCP2Session(conn net.Conn, ctx context.Context, logger *logger.Entry) *
 // after winning a LoadOrStore race). This prevents spawning goroutines for sessions
 // that will be immediately discarded.
 func NewNTCP2SessionDeferred(conn net.Conn, ctx context.Context, logger *logger.Entry) *NTCP2Session {
-	sessionLogger := logger.WithFields(map[string]interface{}{
-		"component":   "ntcp2_session",
-		"remote_addr": conn.RemoteAddr().String(),
-	})
+	core, sessionLogger := transport.NewSessionCoreWithLogger(ctx, logger, "ntcp2_session", conn.RemoteAddr().String())
 	sessionLogger.Info("Creating new NTCP2 session")
 
 	session := &NTCP2Session{
-		SessionCore: transport.NewSessionCore(ctx, sessionLogger),
+		SessionCore: core,
 		conn:        conn,
 		rekeyState:  newRekeyState(),
 		lastError:   nil,

@@ -701,21 +701,18 @@ func (tmux *TransportMuxer) ActiveSessionCount() int {
 // releaseConnectionSlot if the session creation ultimately fails.
 func (tmux *TransportMuxer) checkConnectionLimit() error {
 	max := int32(tmux.getMaxConnections())
-	for {
-		current := atomic.LoadInt32(&tmux.activeSessionCount)
-		if current >= max {
-			tmux.logMuxerMethod("checkConnectionLimit", logger.Fields{
-				"reason":          "connection_pool_full",
-				"active_sessions": int(current),
-				"max_connections": int(max),
-			}, "warn", "connection pool limit reached")
-			return ErrConnectionPoolFull
-		}
-		if atomic.CompareAndSwapInt32(&tmux.activeSessionCount, current, current+1) {
-			return nil
-		}
-		// CAS failed — another goroutine changed the counter; retry
+	current, ok := atomicCompareAndSwapRetry(&tmux.activeSessionCount, func(value int32) bool {
+		return value < max
+	}, 1)
+	if !ok {
+		tmux.logMuxerMethod("checkConnectionLimit", logger.Fields{
+			"reason":          "connection_pool_full",
+			"active_sessions": int(current),
+			"max_connections": int(max),
+		}, "warn", "connection pool limit reached")
+		return ErrConnectionPoolFull
 	}
+	return nil
 }
 
 // GetTransports returns a copy of the slice of transports in this muxer.

@@ -92,6 +92,20 @@ func NewSessionCore(ctx context.Context, logger *logger.Entry) *SessionCore {
 	}
 }
 
+// NewSessionLogger creates a logger entry with standard session identity fields.
+func NewSessionLogger(base *logger.Entry, component, remoteAddr string) *logger.Entry {
+	return base.WithFields(map[string]interface{}{
+		"component":   component,
+		"remote_addr": remoteAddr,
+	})
+}
+
+// NewSessionCoreWithLogger builds both a session-scoped logger and SessionCore.
+func NewSessionCoreWithLogger(ctx context.Context, base *logger.Entry, component, remoteAddr string) (*SessionCore, *logger.Entry) {
+	sessionLogger := NewSessionLogger(base, component, remoteAddr)
+	return NewSessionCore(ctx, sessionLogger), sessionLogger
+}
+
 // QueueSendI2NP queues an I2NP message to be sent over the session.
 // Returns an error if the session is closed or the send queue fills after
 // a 500ms timeout. Thread-safe: uses atomic operations and channels.
