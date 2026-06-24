@@ -177,7 +177,7 @@ tagandrelease() {
   comment_out_replaces
   echo "Updating our packages for $1" 1>&2
   update_our_packages
-  if [ $DRY_RUN = true ]; then
+  if [ "$DRY_RUN" = true ]; then
     echo "Dry run: skipping git tag and release for $1" 1>&2
     if [ "$CHECKIN_DRY_RUN" = true ]; then
       echo "Dry run: skipping git add and commit for $1" 1>&2

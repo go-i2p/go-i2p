@@ -52,8 +52,8 @@ github.com/go-i2p/go-nat-listener v0.0.0-20260402222111-bfda0025cb1b h1:KzL/bql7
 github.com/go-i2p/go-nat-listener v0.0.0-20260402222111-bfda0025cb1b/go.mod h1:hd95uOrwhTa2coFcJkBlGwGgOpjVNVYkAXxRvwIJRsE=
 github.com/go-i2p/go-noise v0.1.59999 h1:VWHlUNeQ7r1iTkP4FVNnXtko1VAqjpmM7Vw8ilaylhE=
 github.com/go-i2p/go-noise v0.1.59999/go.mod h1:KORJHx+6h7Czf/W6xQFUtEu5u33CyBMLsHsak+Pz6gk=
-github.com/go-i2p/go-noise v0.1.60000-0.20260624210455-c5cd198c4109 h1:zngXLgp2SbDFurRyOzvcl/FGz4Tiv8lukMq29FcVeRI=
-github.com/go-i2p/go-noise v0.1.60000-0.20260624210455-c5cd198c4109/go.mod h1:c2Jt/1Hw5PQ4jipRO1THLlaQ4sc1DeOLdOFvR1Hnmo8=
+github.com/go-i2p/go-noise v0.1.60000-0.20260624212226-39a6608d96b7 h1:m9LuyJdtNdKcJCNIV/42qF6uBeAIRoD88kMMiA0FRJM=
+github.com/go-i2p/go-noise v0.1.60000-0.20260624212226-39a6608d96b7/go.mod h1:1O1T23OLQwD8vrYvjLzgEaGdh6GH5SepYMBBhnVtbUQ=
 github.com/go-i2p/go-unzip v0.0.0-20260417162122-21146ed7aca8 h1:efCudZqf5/F4Mj/WYLqKveOwTPW81vVrn8Z0K7GFkTM=
 github.com/go-i2p/go-unzip v0.0.0-20260417162122-21146ed7aca8/go.mod h1:Jy8JMJDZNzy6u4s1FGNeVvDAsuBJn24nxyNLS0QmYpM=
 github.com/go-i2p/i2p-control v0.0.0-20260608000308-d8ed861a259c h1:Euk+tCxpdF9h9L7A5/KsXm/o8cOzNiVNU3PbQ2ieYwE=
@@ -66,6 +66,8 @@ github.com/go-i2p/noise v1.1.1-0.20260612013029-6d1ef3427561 h1:ygcYOpsJO6hvWjEz
 github.com/go-i2p/noise v1.1.1-0.20260612013029-6d1ef3427561/go.mod h1:/79lUu1iKd1yW+zqLI7QjY2MUpsGkGStKM7XVDxPeEc=
 github.com/go-i2p/path v0.1.59999 h1:khgviL/FL5lJS4tfeoyR0M+fJacUD8YAwY+NdUn3cuI=
 github.com/go-i2p/path v0.1.59999/go.mod h1:MCQDJqY4tS+xX2voQA7+urDL7RWhZdkzArM8FN3IqzU=
+github.com/go-i2p/path v0.1.60000-0.20260612012938-437d7ee74b3a h1:kcv5gaDDMr8VkK5Ei0G39v4faW9RquJt6iMY68b4zNQ=
+github.com/go-i2p/path v0.1.60000-0.20260612012938-437d7ee74b3a/go.mod h1:4hrhWHVAEN7tmk+aPczx2vlj4o0t7OrnNfTYnGAHxXc=
 github.com/go-i2p/pool v0.1.5999 h1:ONkelvfkMbs6TUOMXQGa2kzs/q00M1s9Al8mOTmT7Wc=
 github.com/go-i2p/pool v0.1.5999/go.mod h1:Zym7CbOOzCUr2035zySra0PI/cAeumk59+zHW1Sv4hg=
 github.com/go-i2p/pool v0.1.59999 h1:jWTzOypfVFvhcUPhrkzOq0i2rMtz8A1QJjzv9f8YIEg=
