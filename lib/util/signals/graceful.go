@@ -14,9 +14,7 @@ const defaultGracefulTimeout = 30 * time.Second
 // pre-shutdown handler to prevent extremely short timeouts.
 const minPerHandlerTimeout = 1 * time.Second
 
-var (
-	gracefulTimeout time.Duration
-)
+var gracefulTimeout time.Duration
 
 // init sets the default graceful timeout
 func init() {

@@ -87,7 +87,7 @@ func MuxWithLimit(maxConnections int, t ...Transport) (tmux *TransportMuxer) {
 	return tmux
 }
 
-func (tmux *TransportMuxer) logMuxerMethod(methodName string, fields logger.Fields, level string, message string) {
+func (tmux *TransportMuxer) logMuxerMethod(methodName string, fields logger.Fields, level, message string) {
 	entry := logAt("(TransportMuxer) " + methodName).WithFields(fields)
 	switch level {
 	case "error":

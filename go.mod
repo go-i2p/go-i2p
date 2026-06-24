@@ -6,21 +6,21 @@ require (
 	github.com/beevik/ntp v1.5.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
-	github.com/go-i2p/common v0.1.60000-0.20260612012818-ffa84716e922
+	github.com/go-i2p/common v0.1.59999
 	github.com/go-i2p/crypto v0.1.60000-0.20260612012729-bcf561943886
 	github.com/go-i2p/go-nat-listener v0.0.0-20260402222111-bfda0025cb1b
-	github.com/go-i2p/go-noise v0.1.60000-0.20260612013208-808b7529e803
+	github.com/go-i2p/go-noise v0.1.59999
 	github.com/go-i2p/go-unzip v0.0.0-20260417162122-21146ed7aca8
 	github.com/go-i2p/i2p-control v0.0.0-20260608000308-d8ed861a259c
 	github.com/go-i2p/i2ptui v0.0.0-20260607232722-b95832d1b84a
 	github.com/go-i2p/logger v0.1.60000-0.20260612012503-bec4044a2b0d
 	github.com/go-i2p/noise v1.1.1-0.20260612013029-6d1ef3427561
-	github.com/go-i2p/su3 v0.1.60000-0.20260612012616-389e1d2c2310
+	github.com/go-i2p/su3 v0.1.59999
 	github.com/samber/oops v1.22.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
-	go.step.sm/crypto v0.82.0
+	go.step.sm/crypto v0.84.0
 	golang.org/x/crypto v0.53.0
 	golang.org/x/time v0.15.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -44,7 +44,7 @@ require (
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/go-i2p/elgamal v0.1.59999 // indirect
 	github.com/go-i2p/go-i2pcontrol v0.1.9-0.20260607233455-950087a3858f // indirect
-	github.com/go-i2p/path v0.1.60000-0.20260612012938-437d7ee74b3a // indirect
+	github.com/go-i2p/path v0.1.59999 // indirect
 	github.com/go-i2p/pool v0.1.59999 // indirect
 	github.com/go-i2p/red25519 v0.0.0-20260302212615-1093a31f680d // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
@@ -59,7 +59,7 @@ require (
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/oklog/ulid/v2 v2.1.1 // indirect
-	github.com/pelletier/go-toml/v2 v2.3.1 // indirect
+	github.com/pelletier/go-toml/v2 v2.4.2 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/sagikazarmark/locafero v0.12.0 // indirect

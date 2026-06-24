@@ -64,6 +64,7 @@ func (m *iterativeMockDB) GetAllLeaseSets() []LeaseSetEntry { return nil }
 func (m *iterativeMockDB) StoreLeaseSet(key common.Hash, data []byte, dataType byte) error {
 	return nil
 }
+
 func (m *iterativeMockDB) StoreOwnLeaseSet(key common.Hash, data []byte, dataType byte) error {
 	return nil
 }

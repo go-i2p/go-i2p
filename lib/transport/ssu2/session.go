@@ -690,7 +690,8 @@ func (s *SSU2Session) processRetransmission(seq uint64, p *pendingI2NP, now time
 		// with no ACK correlation was causing every session to self-close
 		// after the first message aged out (HIGH audit finding).
 		s.Logger().WithField("attempts", p.attempts).Warn(
-			"I2NP message exceeded max retransmissions; dropping (delivery unconfirmed, SSU2 ACK not correlated)")
+			"I2NP message exceeded max retransmissions; dropping (delivery unconfirmed, SSU2 ACK not correlated)",
+		)
 		return retransmitDelete
 	}
 	// Check if conn has been detached (SM-2 fix: losing promotion race).

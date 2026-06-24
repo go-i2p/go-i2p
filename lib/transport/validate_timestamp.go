@@ -14,7 +14,7 @@ const ClockSkewTolerance = 60 * time.Second
 // CalculateTimestampSkew returns the observed clock skew (in seconds) between
 // a peer's timestamp and the local time. Positive skew means the peer's clock
 // is ahead of ours. This can be used for diagnostic logging and validation.
-func CalculateTimestampSkew(peerTime uint32, localTime uint32) int64 {
+func CalculateTimestampSkew(peerTime, localTime uint32) int64 {
 	return int64(peerTime) - int64(localTime)
 }
 

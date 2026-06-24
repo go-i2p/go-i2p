@@ -164,7 +164,7 @@ func (sm *GarlicSessionManager) logDecryptStart(incomingTag [8]byte, oneTimeTagR
 	if encryptedSize >= 8 {
 		ourPubKey := sm.GetPublicKey()
 		ourPubKeyHex := fmt.Sprintf("%x", ourPubKey[:8])
-		
+
 		log.WithFields(logger.Fields{
 			"at":                           "DecryptGarlicMessage",
 			"incoming_tag":                 fmt.Sprintf("%x", incomingTag),
@@ -182,20 +182,21 @@ func (sm *GarlicSessionManager) logDecryptStart(incomingTag [8]byte, oneTimeTagR
 //  1. Peers have cached OLD RouterInfo with different X25519 key
 //  2. Our router restarted/regenerated keys but hasn't republished yet
 //  3. Network hasn't converged on newest RouterInfo version
+//
 // Solution: RouterInfo republish is handled by publisher.ForceRouterInfoRepublish()
 func (sm *GarlicSessionManager) logDecryptFailure(incomingTag [8]byte, oneTimeTagRegistered bool, mapSize int, err error) {
 	ourPubKey := sm.GetPublicKey()
 	ourPubKeyHex := fmt.Sprintf("%x", ourPubKey[:8])
-	
+
 	errStr := fmt.Sprintf("%v", err)
 	isNoiseError := strings.Contains(errStr, "chacha20poly1305") || strings.Contains(errStr, "Noise IK")
-	
+
 	// Log as INFO (not WARN) for expected Noise IK failures from old RouterInfo cached at peers
 	logLevel := "Info"
 	if isNoiseError {
 		logLevel = "Info (expected from old cached RouterInfo at peers)"
 	}
-	
+
 	log.WithFields(logger.Fields{
 		"at":                          "DecryptGarlicMessage",
 		"incoming_tag":                fmt.Sprintf("%x", incomingTag),

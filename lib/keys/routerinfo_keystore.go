@@ -576,7 +576,7 @@ func (ks *RouterInfoKeystore) buildRouterIdentity(publicKey types.PublicKey, cer
 	if !ok {
 		return nil, oops.Errorf("public key does not implement SigningPublicKey (got %T)", publicKey)
 	}
-	
+
 	// DIAGNOSTIC: Verify encryption keys match
 	ks.verifyEncryptionKeyConsistency()
 
@@ -600,36 +600,36 @@ func (ks *RouterInfoKeystore) verifyEncryptionKeyConsistency() {
 		log.WithField("at", "verifyEncryptionKeyConsistency").Warn("Encryption keys are nil")
 		return
 	}
-	
+
 	// Derive public key from the private key
 	derivedPubKey, err := ks.encryptionPrivKey.Public()
 	if err != nil {
 		log.WithError(err).WithField("at", "verifyEncryptionKeyConsistency").Error("Failed to derive public key from private key")
 		return
 	}
-	
+
 	// Compare byte representations
 	storedKeyBytes := ks.encryptionPubKey.Bytes()
 	derivedKeyBytes := derivedPubKey.Bytes()
-	
+
 	// Log first 8 bytes of each for diagnosis
 	storedHex := fmt.Sprintf("%x", storedKeyBytes[:8])
 	derivedHex := fmt.Sprintf("%x", derivedKeyBytes[:8])
-	
+
 	if len(storedKeyBytes) != len(derivedKeyBytes) || !bytesEqual(storedKeyBytes, derivedKeyBytes) {
 		log.WithFields(logger.Fields{
-			"at":           "verifyEncryptionKeyConsistency",
-			"stored_key":   storedHex,
-			"derived_key":  derivedHex,
-			"mismatch":     "YES - CRITICAL BUG",
+			"at":          "verifyEncryptionKeyConsistency",
+			"stored_key":  storedHex,
+			"derived_key": derivedHex,
+			"mismatch":    "YES - CRITICAL BUG",
 		}).Error("ENCRYPTION KEY MISMATCH: Stored public key does not match key derived from private key")
 		return
 	}
-	
+
 	log.WithFields(logger.Fields{
-		"at":          "verifyEncryptionKeyConsistency",
+		"at":                 "verifyEncryptionKeyConsistency",
 		"encryption_key_hex": storedHex,
-		"status":      "MATCH - keys are consistent",
+		"status":             "MATCH - keys are consistent",
 	}).Info("Encryption key verification passed")
 }
 
@@ -638,20 +638,20 @@ func (ks *RouterInfoKeystore) logEncryptionKeyLoaded(privKeyBytes []byte, isExis
 	privKeyHex := fmt.Sprintf("%x", privKeyBytes[:8])
 	pubKeyHex := fmt.Sprintf("%x", ks.encryptionPubKey.Bytes()[:8])
 	fullPubKeyHex := fmt.Sprintf("%x", ks.encryptionPubKey.Bytes())
-	
+
 	action := "generated"
 	if isExisting {
 		action = "loaded from disk"
 	}
-	
+
 	log.WithFields(logger.Fields{
-		"at":                     "loadOrGenerateEncryptionKey",
-		"action":                 action,
-		"enc_privkey_first8":     privKeyHex,
-		"enc_pubkey_first8":      pubKeyHex,
-		"enc_pubkey_full":        fullPubKeyHex,
-		"timestamp":              time.Now().UTC().Format(time.RFC3339),
-		"migration_hint":         "this X25519 key will be embedded in RouterInfo - must be consistent for peers to decrypt our messages",
+		"at":                 "loadOrGenerateEncryptionKey",
+		"action":             action,
+		"enc_privkey_first8": privKeyHex,
+		"enc_pubkey_first8":  pubKeyHex,
+		"enc_pubkey_full":    fullPubKeyHex,
+		"timestamp":          time.Now().UTC().Format(time.RFC3339),
+		"migration_hint":     "this X25519 key will be embedded in RouterInfo - must be consistent for peers to decrypt our messages",
 	}).Info("X25519 encryption key tracking")
 }
 

@@ -226,7 +226,8 @@ func (e *Entry) clearFields() {
 // The assigner function should assign the parsed data to the appropriate entry field.
 func (e *Entry) processAndAssign(typeName string, data []byte,
 	parser func([]byte) (interface{}, error),
-	assigner func(interface{})) error {
+	assigner func(interface{}),
+) error {
 	val, err := parser(data)
 	if err != nil {
 		return oops.Errorf("failed to parse %s: %w", typeName, err)
