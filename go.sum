@@ -46,8 +46,8 @@ github.com/go-i2p/elgamal v0.1.59999 h1:zK/PL82556guw9OTwIUeyEXtrekLqFEfur4T/7EL
 github.com/go-i2p/elgamal v0.1.59999/go.mod h1:doBqsiGCnCL7TzgKr+mJnfodAD7i5wEWMpap0qgKsAw=
 github.com/go-i2p/go-i2pcontrol v0.1.9-0.20260607233455-950087a3858f h1:FJJXgN8/jrNptI5wz9MX7axrgQxq8/z+FSeoMt0ipAA=
 github.com/go-i2p/go-i2pcontrol v0.1.9-0.20260607233455-950087a3858f/go.mod h1:+jmWmXsfpg9fVmNmaLFCykYyxkYphdrLRD54UwNw2Qs=
-github.com/go-i2p/go-nat-listener v0.1.61 h1:tfLoZoaLO4POJ77yn+/ZiVxjQ/B6IWW3WMtDRgqpMwg=
-github.com/go-i2p/go-nat-listener v0.1.61/go.mod h1:grAvt54cQEIfhOH4xwTGSWHgXtUyf0co9HlWDccj64E=
+github.com/go-i2p/go-nat-listener v0.1.62 h1:zdk8blH5yXydYlppq6NX/y0H803B3iJkcMp1nNebGiM=
+github.com/go-i2p/go-nat-listener v0.1.62/go.mod h1:grAvt54cQEIfhOH4xwTGSWHgXtUyf0co9HlWDccj64E=
 github.com/go-i2p/go-noise v0.1.60000-0.20260624210455-c5cd198c4109 h1:zngXLgp2SbDFurRyOzvcl/FGz4Tiv8lukMq29FcVeRI=
 github.com/go-i2p/go-noise v0.1.60000-0.20260624210455-c5cd198c4109/go.mod h1:c2Jt/1Hw5PQ4jipRO1THLlaQ4sc1DeOLdOFvR1Hnmo8=
 github.com/go-i2p/go-unzip v0.0.0-20260417162122-21146ed7aca8 h1:efCudZqf5/F4Mj/WYLqKveOwTPW81vVrn8Z0K7GFkTM=
