@@ -3,6 +3,68 @@
 # takes one argument: the version to tag
 VERSION=$1
 
+# Ordered repository definitions.
+# Format for each token: <repo_name>:<hash_var_name>
+HASH_REPOS_PAIRS='
+logger:LOGGER_TAG_HASH
+elgamal:ELGAMAL_TAG_HASH
+su3:SU3_TAG_HASH
+crypto:CRYPTO_TAG_HASH
+common:COMMON_TAG_HASH
+noise:NOISE_TAG_HASH
+go-nat-listener:GO_NAT_LISTENER_TAG_HASH
+path:PATH_TAG_HASH
+pool:POOL_TAG_HASH
+go-noise:GO_NOISE_TAG_HASH
+go-i2p:GO_I2P_TAG_HASH
+go-i2cp:GO_I2CP_TAG_HASH
+go-datagrams:GO_DATAGRAMS_TAG_HASH
+go-streaming:GO_STREAMING_TAG_HASH
+go-sam-bridge:GO_SAM_BRIDGE_TAG_HASH
+'
+
+# Preserve existing update ordering exactly, including duplicate "noise" updates.
+UPDATE_ORDER='
+logger
+elgamal
+su3
+crypto
+common
+noise
+go-nat-listener
+path
+pool
+noise
+go-noise
+go-i2p
+go-i2cp
+go-datagrams
+go-streaming
+go-sam-bridge
+'
+
+# Preserve existing release ordering exactly, including LIBS split and P0OL_TAG_HASH typo.
+RELEASE_REPOS_LIBS='
+logger:LOGGER_TAG_HASH
+elgamal:ELGAMAL_TAG_HASH
+su3:SU3_TAG_HASH
+crypto:CRYPTO_TAG_HASH
+common:COMMON_TAG_HASH
+'
+
+RELEASE_REPOS_NON_LIBS='
+pool:P0OL_TAG_HASH
+path:PATH_TAG_HASH
+noise:NOISE_TAG_HASH
+go-nat-listener:GO_NAT_LISTENER_TAG_HASH
+go-noise:GO_NOISE_TAG_HASH
+go-i2p:GO_I2P_TAG_HASH
+go-i2cp:GO_I2CP_TAG_HASH
+go-datagrams:GO_DATAGRAMS_TAG_HASH
+go-streaming:GO_STREAMING_TAG_HASH
+go-sam-bridge:GO_SAM_BRIDGE_TAG_HASH
+'
+
 if [ -z "$VERSION" ]; then
   echo "Usage: $0 <version>"
   exit 1
@@ -61,34 +123,40 @@ collecthash() {
   echo "$TAG_HASH"
 }
 
-LOGGER_TAG_HASH=$(collecthash logger) # 0
-echo "logger tag hash: $LOGGER_TAG_HASH" 1>&2
-ELGAMAL_TAG_HASH=$(collecthash elgamal) # 0
-echo "elgamal tag hash: $ELGAMAL_TAG_HASH" 1>&2
-SU3_TAG_HASH=$(collecthash su3) # 0
-echo "su3 tag hash: $SU3_TAG_HASH" 1>&2
-CRYPTO_TAG_HASH=$(collecthash crypto) # 1
-echo "crypto tag hash: $CRYPTO_TAG_HASH" 1>&2
-COMMON_TAG_HASH=$(collecthash common) # 2
-echo "common tag hash: $COMMON_TAG_HASH" 1>&2
-NOISE_TAG_HASH=$(collecthash noise) # 3
-echo "noise tag hash: $NOISE_TAG_HASH" 1>&2
-PATH_TAG_HASH=$(collecthash path) # 4
-echo "path tag hash: $PATH_TAG_HASH" 1>&2
-POOL_TAG_HASH=$(collecthash pool) # 5
-echo "pool tag hash: $POOL_TAG_HASH" 1>&2
-GO_NOISE_TAG_HASH=$(collecthash go-noise) # 6
-echo "go-noise tag hash: $GO_NOISE_TAG_HASH" 1>&2
-GO_I2P_TAG_HASH=$(collecthash go-i2p) # 7
-echo "go-i2p tag hash: $GO_I2P_TAG_HASH" 1>&2
-GO_I2CP_TAG_HASH=$(collecthash go-i2cp) # 8
-echo "go-i2cp tag hash: $GO_I2CP_TAG_HASH" 1>&2
-GO_DATAGRAMS_TAG_HASH=$(collecthash go-datagrams) # 8
-echo "go-datagrams tag hash: $GO_DATAGRAMS_TAG_HASH" 1>&2
-GO_STREAMING_TAG_HASH=$(collecthash go-streaming) # 9
-echo "go-streaming tag hash: $GO_STREAMING_TAG_HASH" 1>&2
-GO_SAM_BRIDGE_TAG_HASH=$(collecthash go-sam-bridge) # 10
-echo "go-sam-bridge tag hash: $GO_SAM_BRIDGE_TAG_HASH" 1>&2
+assign_var() {
+  # shellcheck disable=SC2039
+  eval "$1=\"$2\""
+}
+
+value_of() {
+  # shellcheck disable=SC2039
+  eval "printf '%s' \"\${$1}\""
+}
+
+hash_var_for_repo() {
+  repo_name=$1
+  for entry in $HASH_REPOS_PAIRS; do
+    repo=${entry%%:*}
+    var=${entry#*:}
+    if [ "$repo" = "$repo_name" ]; then
+      echo "$var"
+      return 0
+    fi
+  done
+  return 1
+}
+
+collect_all_hashes() {
+  for entry in $HASH_REPOS_PAIRS; do
+    repo=${entry%%:*}
+    var=${entry#*:}
+    hash=$(collecthash "$repo")
+    assign_var "$var" "$hash"
+    echo "$repo tag hash: $hash" 1>&2
+  done
+}
+
+collect_all_hashes
 
 echo "Collected tag hashes. Proceeding to tag version v$VERSION" 1>&2
 
@@ -106,21 +174,11 @@ update_our_packages() {
   echo "Updating the packages" 1>&2
   go-check-updates -u 1>&2
   go get -u ./... 1>&2
-  update_by_tag_hash logger $LOGGER_TAG_HASH
-  update_by_tag_hash elgamal $ELGAMAL_TAG_HASH
-  update_by_tag_hash su3 $SU3_TAG_HASH
-  update_by_tag_hash crypto $CRYPTO_TAG_HASH
-  update_by_tag_hash common $COMMON_TAG_HASH
-  update_by_tag_hash noise $NOISE_TAG_HASH
-  update_by_tag_hash path $PATH_TAG_HASH
-  update_by_tag_hash pool $POOL_TAG_HASH
-  update_by_tag_hash noise $NOISE_TAG_HASH
-  update_by_tag_hash go-noise $GO_NOISE_TAG_HASH
-  update_by_tag_hash go-i2p $GO_I2P_TAG_HASH
-  update_by_tag_hash go-i2cp $GO_I2CP_TAG_HASH
-  update_by_tag_hash go-datagrams $GO_DATAGRAMS_TAG_HASH
-  update_by_tag_hash go-streaming $GO_STREAMING_TAG_HASH
-  update_by_tag_hash go-sam-bridge $GO_SAM_BRIDGE_TAG_HASH
+  for repo in $UPDATE_ORDER; do
+    var=$(hash_var_for_repo "$repo")
+    hash=$(value_of "$var")
+    update_by_tag_hash "$repo" "$hash"
+  done
   go mod tidy -v 1>&2
   go build -v ./... 1>&2
   gofumpt -w -s -extra . 1>&2
@@ -142,21 +200,9 @@ correct_our_tags() {
   echo "Updating the packages" 1>&2
   go-check-updates -u 1>&2
   go get -u ./... 1>&2
-  update_by_version logger "v$VERSION"
-  update_by_version elgamal "v$VERSION"
-  update_by_version su3 "v$VERSION"
-  update_by_version crypto "v$VERSION"
-  update_by_version common "v$VERSION"
-  update_by_version noise "v$VERSION"
-  update_by_version path "v$VERSION"
-  update_by_version pool "v$VERSION"
-  update_by_version noise "v$VERSION"
-  update_by_version go-noise "v$VERSION"
-  update_by_version go-i2p "v$VERSION"
-  update_by_version go-i2cp "v$VERSION"
-  update_by_version go-datagrams "v$VERSION"
-  update_by_version go-streaming "v$VERSION"
-  update_by_version go-sam-bridge "v$VERSION"
+  for repo in $UPDATE_ORDER; do
+    update_by_version "$repo" "v$VERSION"
+  done
   go mod tidy -v 1>&2
   go build -v ./... 1>&2
   gofumpt -w -s -extra . 1>&2
@@ -170,7 +216,7 @@ cleanup() {
 
 tagandrelease() {
   cd "$GOI2P_DIR"
-  cd $1
+  cd "$1"
   echo "tagging and releasing $1 v$VERSION" 1>&2
   #cleanup
   echo "Commenting out replace directives and updating our packages for $1" 1>&2
@@ -235,29 +281,26 @@ tagandrelease() {
   fi
 }
 
+run_release_set() {
+  for entry in $1; do
+    repo=${entry%%:*}
+    var=${entry#*:}
+    hash=$(tagandrelease "$repo")
+    assign_var "$var" "$hash"
+  done
+}
+
 echo "Tagging and releasing version v$VERSION" 1>&2
 
 #echo "tag and release output test"
 #tagandrelease logger
 #echo "tag and release output test complete"
 #exit
-LOGGER_TAG_HASH=$(tagandrelease logger) # 0
-ELGAMAL_TAG_HASH=$(tagandrelease elgamal) # 2
-SU3_TAG_HASH=$(tagandrelease su3) # 1
-CRYPTO_TAG_HASH=$(tagandrelease crypto) # 3
-COMMON_TAG_HASH=$(tagandrelease common) # 4
+run_release_set "$RELEASE_REPOS_LIBS"
 if [ "$LIBS" = "true" ]; then
-  echo "LIBS is true, skipping noise, go-noise, go-i2p, go-i2cp, go-datagrams, go-streaming, and go-sam-bridge" 1>&2
+  echo "LIBS is true, skipping noise, go-nat-listener, go-noise, go-i2p, go-i2cp, go-datagrams, go-streaming, and go-sam-bridge" 1>&2
   exit 0
 fi
-P0OL_TAG_HASH=$(tagandrelease pool) # 5
-PATH_TAG_HASH=$(tagandrelease path) # 5
-NOISE_TAG_HASH=$(tagandrelease noise) # 5
-GO_NOISE_TAG_HASH=$(tagandrelease go-noise) # 6
-GO_I2P_TAG_HASH=$(tagandrelease go-i2p) # 7
-GO_I2CP_TAG_HASH=$(tagandrelease go-i2cp) # 8
-GO_DATAGRAMS_TAG_HASH=$(tagandrelease go-datagrams) # 9
-GO_STREAMING_TAG_HASH=$(tagandrelease go-streaming) # 10
-GO_SAM_BRIDGE_TAG_HASH=$(tagandrelease go-sam-bridge) # 11
+run_release_set "$RELEASE_REPOS_NON_LIBS"
 
 echo "Successfully tagged and released version v$VERSION" 1>&2
