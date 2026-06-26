@@ -2,6 +2,8 @@ package netdb
 
 import (
 	"context"
+	crand "crypto/rand"
+	"encoding/binary"
 	"sync"
 	"time"
 
@@ -51,6 +53,10 @@ type Publisher struct {
 
 	// tunnel pool for sending DatabaseStore messages
 	pool *tunnel.Pool
+
+	// inboundPool is used to select a reply tunnel for DatabaseStore acknowledgments.
+	// Optional: if nil or no active tunnel is available, reply routing fields remain unset.
+	inboundPool *tunnel.Pool
 
 	// fieldMu protects transport from concurrent read/write
 	fieldMu sync.RWMutex
@@ -122,6 +128,15 @@ func NewPublisher(db NetworkDatabase, pool *tunnel.Pool, transport SessionProvid
 		leaseSetInterval:   config.LeaseSetInterval,
 		floodfillCount:     config.FloodfillCount,
 	}
+}
+
+// SetInboundPool sets the inbound tunnel pool used for DatabaseStore reply routing.
+// When configured and active inbound tunnels exist, published DatabaseStore messages
+// include ReplyTunnelID/ReplyGateway so floodfill acknowledgments have a valid return path.
+func (p *Publisher) SetInboundPool(inboundPool *tunnel.Pool) {
+	p.fieldMu.Lock()
+	p.inboundPool = inboundPool
+	p.fieldMu.Unlock()
 }
 
 // Start begins periodic publishing of RouterInfo and LeaseSets.
@@ -686,6 +701,16 @@ func (p *Publisher) createTunnelGatewayMessage(hash common.Hash, data []byte, da
 //   - DatabaseStoreTypeMetaLeaseSet (7): For MetaLeaseSet entries (0.9.40+)
 func (p *Publisher) createDatabaseStoreMessage(hash common.Hash, data []byte, dataType byte) (i2np.Message, error) {
 	dbStore := i2np.NewDatabaseStore(hash, data, dataType)
+	replyToken, err := generateReplyToken()
+	if err != nil {
+		return nil, oops.Errorf("failed to generate DatabaseStore reply token: %w", err)
+	}
+	dbStore.ReplyToken = replyToken
+
+	if replyTunnelID, replyGateway, ok := p.selectReplyRoute(); ok {
+		dbStore.ReplyTunnelID = replyTunnelID
+		dbStore.ReplyGateway = replyGateway
+	}
 	dbStoreMsg := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeDatabaseStore)
 
 	dbStoreData, err := dbStore.MarshalBinary()
@@ -695,6 +720,53 @@ func (p *Publisher) createDatabaseStoreMessage(hash common.Hash, data []byte, da
 	dbStoreMsg.SetData(dbStoreData)
 
 	return dbStoreMsg, nil
+}
+
+// selectReplyRoute returns a reply tunnel ID and gateway hash for DatabaseStore acks.
+//
+// ReplyGateway must identify the inbound tunnel gateway router (IBGW), not our
+// local router hash, because the sender targets the gateway that owns the
+// ReplyTunnelID path.
+//
+// Returns ok=false when no valid inbound reply route is available.
+func (p *Publisher) selectReplyRoute() ([4]byte, common.Hash, bool) {
+	p.fieldMu.RLock()
+	inboundPool := p.inboundPool
+	p.fieldMu.RUnlock()
+
+	if inboundPool == nil {
+		return [4]byte{}, common.Hash{}, false
+	}
+
+	inbound := inboundPool.SelectTunnel()
+	if inbound == nil {
+		return [4]byte{}, common.Hash{}, false
+	}
+	if len(inbound.Hops) == 0 {
+		return [4]byte{}, common.Hash{}, false
+	}
+
+	var replyTunnelID [4]byte
+	binary.BigEndian.PutUint32(replyTunnelID[:], uint32(inbound.ID))
+	return replyTunnelID, inbound.Hops[0], true
+}
+
+// generateReplyToken returns a cryptographically random non-zero DatabaseStore reply token.
+// Floodfills use a non-zero token to decide whether to flood the store entry.
+func generateReplyToken() ([4]byte, error) {
+	var token [4]byte
+	for attempt := 0; attempt < 3; attempt++ {
+		if _, err := crand.Read(token[:]); err != nil {
+			return [4]byte{}, err
+		}
+		if token != ([4]byte{}) {
+			return token, nil
+		}
+	}
+
+	// Extremely unlikely fallback: preserve non-zero invariant even if RNG repeatedly returns all-zero bytes.
+	token[3] = 1
+	return token, nil
 }
 
 // sendMessageThroughGateway sends an I2NP message to a gateway router via transport.

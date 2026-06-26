@@ -1,6 +1,7 @@
 package netdb
 
 import (
+	"encoding/binary"
 	"fmt"
 	"os"
 	"sync"
@@ -113,6 +114,14 @@ type publisherTestEnv struct {
 	gatewayHash common.Hash
 }
 
+type staticRouterInfoProvider struct {
+	ri *router_info.RouterInfo
+}
+
+func (p staticRouterInfoProvider) GetRouterInfo() (*router_info.RouterInfo, error) {
+	return p.ri, nil
+}
+
 // setupPublisherWithTunnel creates a publisher test environment with an active
 // tunnel whose gateway is stored in the mock NetDB. The caller specifies the
 // tunnel ID and any extra hops beyond the gateway.
@@ -186,6 +195,81 @@ func TestSendDatabaseStoreToFloodfill_RouterInfoFallsBackToDirectTransport(t *te
 	sentMessages := transport.GetSentMessages(floodfillHash)
 	require.Len(t, sentMessages, 1, "Expected direct DatabaseStore message to floodfill")
 	assert.Equal(t, i2np.I2NPMessageTypeDatabaseStore, sentMessages[0].Type(), "Expected direct DatabaseStore message type")
+}
+
+func TestCreateDatabaseStoreMessage_IncludesNonZeroReplyToken(t *testing.T) {
+	db := newMockNetDB()
+	transport := newMockTransportManager()
+	selector := &mockPeerSelector{}
+	pool := tunnel.NewTunnelPool(selector)
+	publisher := NewPublisher(db, pool, transport, nil, DefaultPublisherConfig())
+
+	hash := common.Hash{1, 2, 3, 4, 5, 6, 7, 8}
+	data := []byte("dbstore payload")
+
+	msg, err := publisher.createDatabaseStoreMessage(hash, data, i2np.DatabaseStoreTypeLeaseSet2)
+	require.NoError(t, err)
+	require.Equal(t, i2np.I2NPMessageTypeDatabaseStore, msg.Type())
+
+	baseMsg, ok := msg.(*i2np.BaseI2NPMessage)
+	require.True(t, ok, "createDatabaseStoreMessage should return base I2NP message wrapper")
+
+	// createDatabaseStoreMessage wraps a full serialized DatabaseStore inside the
+	// outer base message data. Decode the inner base message first, then parse
+	// the DatabaseStore payload.
+	wireBytes := baseMsg.GetData()
+	inner := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeDatabaseStore)
+	require.NoError(t, inner.UnmarshalBinary(wireBytes), "must parse inner serialized I2NP message")
+
+	var parsed i2np.DatabaseStore
+	require.NoError(t, parsed.UnmarshalBinary(inner.GetData()), "must parse DatabaseStore payload")
+
+	replyToken := binary.BigEndian.Uint32(parsed.ReplyToken[:])
+	assert.NotZero(t, replyToken, "reply token must be non-zero so floodfills trigger flooding")
+}
+
+func TestCreateDatabaseStoreMessage_IncludesReplyRouteWhenInboundAvailable(t *testing.T) {
+	db := newMockNetDB()
+	transport := newMockTransportManager()
+	selector := &mockPeerSelector{}
+	outboundPool := tunnel.NewTunnelPool(selector)
+	inboundPool := tunnel.NewTunnelPool(selector)
+
+	ourRI := createValidRouterInfo(t)
+	replyGateway := common.Hash{0xAA, 0xBB, 0xCC, 0xDD}
+
+	// Add one active inbound tunnel for reply routing.
+	inboundPool.AddTunnel(&tunnel.TunnelState{
+		ID:        tunnel.TunnelID(0x10203040),
+		Hops:      []common.Hash{replyGateway},
+		State:     tunnel.TunnelReady,
+		CreatedAt: time.Now(),
+		IsInbound: true,
+	})
+
+	provider := staticRouterInfoProvider{ri: &ourRI}
+	publisher := NewPublisher(db, outboundPool, transport, provider, DefaultPublisherConfig())
+	publisher.SetInboundPool(inboundPool)
+
+	hash := common.Hash{1, 2, 3, 4, 5, 6, 7, 8}
+	data := []byte("dbstore payload")
+
+	msg, err := publisher.createDatabaseStoreMessage(hash, data, i2np.DatabaseStoreTypeLeaseSet2)
+	require.NoError(t, err)
+
+	baseMsg, ok := msg.(*i2np.BaseI2NPMessage)
+	require.True(t, ok)
+
+	inner := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeDatabaseStore)
+	require.NoError(t, inner.UnmarshalBinary(baseMsg.GetData()))
+
+	var parsed i2np.DatabaseStore
+	require.NoError(t, parsed.UnmarshalBinary(inner.GetData()))
+
+	assert.Equal(t, uint32(0x10203040), binary.BigEndian.Uint32(parsed.ReplyTunnelID[:]),
+		"reply tunnel ID should be populated from active inbound tunnel")
+	assert.Equal(t, replyGateway, parsed.ReplyGateway,
+		"reply gateway should be the inbound tunnel gateway hop hash")
 }
 
 // TestSendDatabaseStoreToFloodfill_WithActiveTunnel tests successful tunnel selection and message transmission

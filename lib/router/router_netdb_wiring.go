@@ -155,6 +155,9 @@ func (r *Router) launchPublisher(tunnelPool *tunnel.Pool) {
 
 	publisherConfig := netdb.DefaultPublisherConfig()
 	r.publisher = netdb.NewPublisher(dbAdapter, tunnelPool, transportAdapter, riProvider, publisherConfig)
+	if r.tunnelManager != nil {
+		r.publisher.SetInboundPool(r.tunnelManager.GetInboundPool())
+	}
 
 	if err := r.publisher.Start(); err != nil {
 		log.WithError(err).WithFields(logger.Fields{
