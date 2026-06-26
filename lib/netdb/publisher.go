@@ -461,9 +461,11 @@ func (p *Publisher) PublishRouterInfo(ri router_info.RouterInfo) error {
 	return p.sendDatabaseStoreMessages(hash, compressed, i2np.DatabaseStoreTypeRouterInfo, floodfills)
 }
 
-// selectFloodfillsForPublishing selects the closest floodfills for a given hash
+// selectFloodfillsForPublishing selects the closest floodfills for a given hash.
+// Per the I2P spec the DHT key used for peer selection is the routing key,
+// not the raw hash: routing_key = SHA256(hash || yyyyMMdd_UTC).
 func (p *Publisher) selectFloodfillsForPublishing(hash common.Hash) ([]router_info.RouterInfo, error) {
-	floodfills, err := p.db.SelectFloodfillRouters(hash, p.floodfillCount)
+	floodfills, err := p.db.SelectFloodfillRouters(RoutingKey(hash, time.Now()), p.floodfillCount)
 	if err != nil {
 		log.WithError(err).Error("Failed to select floodfill routers")
 		return nil, err

@@ -480,7 +480,9 @@ func (kr *KademliaResolver) collectLookupResult(resultChan chan *router_info.Rou
 	}
 }
 
-// findClosestPeers returns peers closest to the target hash using XOR distance
+// findClosestPeers returns peers closest to the target hash using XOR distance.
+// Per the I2P spec, peer selection for a DHT lookup uses the routing key, not
+// the raw target hash: routing_key = SHA256(target || yyyyMMdd_UTC).
 func (kr *KademliaResolver) findClosestPeers(target common.Hash) []common.Hash {
 	const K = 8 // Standard Kademlia parameter for number of closest peers to return
 
@@ -491,15 +493,19 @@ func (kr *KademliaResolver) findClosestPeers(target common.Hash) []common.Hash {
 		return []common.Hash{}
 	}
 
-	// Calculate XOR distances for all peers
-	peers := kr.calculatePeerDistances(allRouterInfos, target)
+	// Derive the routing key for today's UTC date.  The routing key is what
+	// determines which floodfills are "close" in the DHT.
+	rk := RoutingKey(target, time.Now())
+
+	// Calculate XOR distances for all peers using the routing key
+	peers := kr.calculatePeerDistances(allRouterInfos, rk)
 	if len(peers) == 0 {
 		log.WithFields(logger.Fields{"at": "findClosestPeers"}).Debug("No suitable peers found after filtering")
 		return []common.Hash{}
 	}
 
 	// Sort and select closest peers
-	return kr.selectClosestPeers(peers, target, K)
+	return kr.selectClosestPeers(peers, rk, K)
 }
 
 // calculatePeerDistances calculates XOR distances for all router infos.

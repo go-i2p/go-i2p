@@ -1,11 +1,32 @@
 package netdb
 
 import (
+	"crypto/sha256"
 	"strings"
+	"time"
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
 )
+
+// RoutingKey derives the I2P routing key for a given hash on the given UTC date.
+//
+// Per the I2P spec (Common Structures / NetDB Routing Key):
+//
+//	routing_key = SHA256(hash || date)
+//
+// where date is the UTC calendar date formatted as "yyyyMMdd" (e.g. "20260626").
+// This mapping changes every midnight UTC, so publish and lookup must always use
+// the same (current) date or the data will be stored at and queried from entirely
+// different floodfill nodes.
+//
+// Note: this returns a [32]byte identical in length to common.Hash so callers can
+// pass it directly to SelectFloodfillRouters / XOR-distance calculations.
+func RoutingKey(h common.Hash, now time.Time) common.Hash {
+	date := now.UTC().Format("20060102") // Go reference time equivalent of yyyyMMdd
+	sum := sha256.Sum256(append(h[:], []byte(date)...))
+	return sum
+}
 
 // CalculateXORDistance calculates the XOR distance between two hashes.
 // XOR distance is the bitwise XOR of the two hashes, used in Kademlia DHT.

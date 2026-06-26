@@ -673,10 +673,12 @@ func (fs *FloodfillServer) sendDatabaseSearchReplyMessage(
 }
 
 // selectClosestFloodfills selects the closest floodfill routers to the target key.
+// Per the I2P spec the DHT key used for peer selection is the routing key:
+// routing_key = SHA256(targetKey || yyyyMMdd_UTC).
 func (fs *FloodfillServer) selectClosestFloodfills(targetKey common.Hash) []common.Hash {
 	const maxPeers = 7
 
-	floodfills, err := fs.db.SelectFloodfillRouters(targetKey, maxPeers)
+	floodfills, err := fs.db.SelectFloodfillRouters(RoutingKey(targetKey, time.Now()), maxPeers)
 	if err != nil {
 		log.WithError(err).Warn("Failed to select floodfill routers for search reply")
 		return []common.Hash{}
@@ -728,8 +730,9 @@ func (fs *FloodfillServer) FloodDatabaseStore(key common.Hash, data []byte, data
 }
 
 // selectFloodPeers selects the closest floodfill routers for flooding, excluding ourselves.
+// Uses the I2P routing key (SHA256(key || yyyyMMdd_UTC)) for DHT peer selection.
 func (fs *FloodfillServer) selectFloodPeers(key common.Hash) ([]router_info.RouterInfo, error) {
-	return fs.db.SelectFloodfillRouters(key, fs.floodCount+1)
+	return fs.db.SelectFloodfillRouters(RoutingKey(key, time.Now()), fs.floodCount+1)
 }
 
 // floodToSelectedPeers sends the DatabaseStore message to eligible floodfill peers,
