@@ -282,7 +282,7 @@ func (r *Router) dispatchByMessageType(msg i2np.Message, mr *i2np.I2NPMessageDis
 	case i2np.I2NPMessageTypeDatabaseLookup:
 		return r.routeDatabaseLookup(msg, mr, fs)
 	case i2np.I2NPMessageTypeDatabaseSearchReply:
-		return mr.RouteDatabaseMessage(msg)
+		return r.routeDatabaseSearchReply(msg, mr)
 	case i2np.I2NPMessageTypeData, i2np.I2NPMessageTypeDeliveryStatus,
 		i2np.I2NPMessageTypeGarlic, i2np.I2NPMessageTypeTunnelData,
 		i2np.I2NPMessageTypeTunnelGateway:
@@ -315,6 +315,18 @@ func (r *Router) routeDatabaseLookup(msg i2np.Message, mr *i2np.I2NPMessageDispa
 		}
 	}
 	return mr.RouteDatabaseMessage(msg)
+}
+
+// routeDatabaseSearchReply handles DatabaseSearchReply message routing.
+// Search replies must be parsed into the concrete type and dispatched through
+// the message processor so iterative lookup suggestion handlers are invoked.
+func (r *Router) routeDatabaseSearchReply(msg i2np.Message, mr *i2np.I2NPMessageDispatcher) error {
+	searchReply, err := r.parseDatabaseSearchReplyMessage(msg)
+	if err != nil {
+		return oops.Wrapf(err, "failed to parse DatabaseSearchReply message")
+	}
+
+	return mr.GetProcessor().ProcessMessage(searchReply)
 }
 
 // parseDatabaseStoreMessage extracts and parses DatabaseStore data from a BaseI2NPMessage.
@@ -353,6 +365,22 @@ func (r *Router) parseDatabaseLookupMessage(msg i2np.Message) (*i2np.DatabaseLoo
 		return nil, oops.Wrapf(err, "failed to parse DatabaseLookup")
 	}
 	return &dl, nil
+}
+
+// parseDatabaseSearchReplyMessage extracts and parses a DatabaseSearchReply
+// from a BaseI2NPMessage payload.
+func (r *Router) parseDatabaseSearchReplyMessage(msg i2np.Message) (*i2np.DatabaseSearchReply, error) {
+	dataCarrier, ok := msg.(i2np.DataCarrier)
+	if !ok {
+		return nil, oops.Errorf("message does not implement DataCarrier interface")
+	}
+
+	searchReply, err := i2np.ReadDatabaseSearchReply(dataCarrier.GetData())
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to parse DatabaseSearchReply")
+	}
+
+	return searchReply, nil
 }
 
 // Session Management Methods

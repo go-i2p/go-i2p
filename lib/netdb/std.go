@@ -794,6 +794,27 @@ func (db *StdNetDB) storeRouterInfoFromMessageInternal(key common.Hash, data []b
 	return db.finalizeRouterInfoStorage(key, ri)
 }
 
+// storeRouterInfoLocalInternal stores a locally-constructed RouterInfo.
+// Unlike StoreRouterInfoFromMessage, this path accepts raw serialized
+// RouterInfo bytes (not DatabaseStore payload format) and intentionally
+// bypasses introduction admission limits.
+func (db *StdNetDB) storeRouterInfoLocalInternal(hash common.Hash, data []byte) error {
+	ri, err := parseRouterInfoData(data)
+	if err != nil {
+		return oops.Errorf("failed to parse RouterInfo: %w", err)
+	}
+
+	if err := db.validateRouterInfo(hash, ri); err != nil {
+		return err
+	}
+
+	if !db.addRouterInfoToCache(hash, ri) {
+		return nil
+	}
+
+	return db.finalizeRouterInfoStorage(hash, ri)
+}
+
 // decompressAndParseRouterInfo decompresses and parses RouterInfo payload.
 func (db *StdNetDB) decompressAndParseRouterInfo(data []byte) (router_info.RouterInfo, error) {
 	// DatabaseStore RouterInfo payload is: [2-byte compressed length][gzip data]
@@ -946,7 +967,7 @@ func (db *StdNetDB) StoreRouterInfo(ri router_info.RouterInfo) {
 		log.WithError(err).WithField("at", "StdNetDB.StoreRouterInfo").Warn("cannot serialize RouterInfo")
 		return
 	}
-	if err := db.StoreRouterInfoFromMessage(hash, data, 0); err != nil {
+	if err := db.storeRouterInfoLocalInternal(hash, data); err != nil {
 		log.WithError(err).WithFields(logger.Fields{
 			"at":   "StdNetDB.StoreRouterInfo",
 			"hash": hash.String(),
@@ -967,7 +988,7 @@ func (db *StdNetDB) StoreRouterInfoWithError(ri router_info.RouterInfo) error {
 	if err != nil {
 		return oops.Errorf("cannot serialize RouterInfo: %w", err)
 	}
-	if err := db.StoreRouterInfoFromMessage(hash, data, 0); err != nil {
+	if err := db.storeRouterInfoLocalInternal(hash, data); err != nil {
 		return oops.Errorf("failed to store RouterInfo in NetDB (hash=%s): %w", hash.String(), err)
 	}
 	return nil

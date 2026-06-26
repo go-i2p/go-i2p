@@ -311,3 +311,34 @@ func TestGetResponseHandler(t *testing.T) {
 		t.Error("GetResponseHandler should return the response handler")
 	}
 }
+
+func TestValidateRemoteLookupCapability_TransportWithNilPool(t *testing.T) {
+	resolver := &KademliaResolver{
+		NetworkDatabase: newMockNetworkDatabase(),
+		pool:            nil, // direct lookup path
+		transport:       &mockLookupTransport{},
+		responseHandler: NewLookupResponseHandler(),
+	}
+
+	err := resolver.validateRemoteLookupCapability()
+	if err != nil {
+		t.Fatalf("expected nil error with transport configured and nil pool, got: %v", err)
+	}
+}
+
+func TestValidateRemoteLookupCapability_NoTransport(t *testing.T) {
+	resolver := &KademliaResolver{
+		NetworkDatabase: newMockNetworkDatabase(),
+		pool:            nil,
+		transport:       nil,
+		responseHandler: NewLookupResponseHandler(),
+	}
+
+	err := resolver.validateRemoteLookupCapability()
+	if err == nil {
+		t.Fatal("expected error when transport is not configured")
+	}
+	if err.Error() != "lookup transport required for remote lookups" {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

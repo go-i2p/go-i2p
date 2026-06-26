@@ -223,13 +223,22 @@ func (kr *KademliaResolver) isRouterInfoStale(ri router_info.RouterInfo, h commo
 
 // validateRemoteLookupCapability checks if remote lookups are possible.
 func (kr *KademliaResolver) validateRemoteLookupCapability() error {
-	if kr.pool == nil {
+	kr.mu.RLock()
+	hasTransport := kr.transport != nil
+	hasPool := kr.pool != nil
+	kr.mu.RUnlock()
+
+	if !hasTransport {
 		log.WithFields(logger.Fields{
-			"at":     "validateRemoteLookupCapability",
-			"reason": "tunnel pool not configured",
+			"at":      "validateRemoteLookupCapability",
+			"reason":  "lookup transport not configured",
+			"hasPool": hasPool,
 		}).Error("Cannot perform remote lookup")
-		return oops.Errorf("tunnel pool required for remote lookups")
+		return oops.Errorf("lookup transport required for remote lookups")
 	}
+
+	// The lookup transport is the actual network dependency for iterative
+	// lookups; a tunnel pool is optional and may be nil for direct lookups.
 	return nil
 }
 
