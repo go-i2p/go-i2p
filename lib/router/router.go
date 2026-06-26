@@ -2,12 +2,12 @@ package router
 
 import (
 	"context"
-	"encoding/base64"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/go-i2p/common/base32"
+	i2pbase64 "github.com/go-i2p/common/base64"
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/crypto/types"
@@ -470,8 +470,12 @@ func (r *Router) GetLocalRouterIdentityHash() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// Return as base64 (standard encoding used by Java I2P)
-	return base64.StdEncoding.EncodeToString(hash[:]), nil
+	return encodeRouterIdentityHash(hash), nil
+}
+
+// encodeRouterIdentityHash returns a RouterHash using I2P base64 alphabet.
+func encodeRouterIdentityHash(hash common.Hash) string {
+	return i2pbase64.EncodeToString(hash[:])
 }
 
 // GetPublisher returns the NetDB publisher instance used by this router.
