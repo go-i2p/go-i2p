@@ -429,6 +429,25 @@ func (p *MessageProcessor) ProcessMessage(msg Message) error {
 // through the process pipeline to prevent H6 recursion bombs.
 // depth tracks the current garlic LOCAL delivery nesting level (0 = outermost).
 func (p *MessageProcessor) processMessageWithDepth(msg Message, depth int) error {
+	if msg == nil {
+		return oops.Errorf("invalid I2NP message: nil message")
+	}
+
+	messageType, err := safeProcessorMessageType(msg)
+	if err != nil {
+		return err
+	}
+
+	messageID, err := safeProcessorMessageID(msg)
+	if err != nil {
+		return err
+	}
+
+	expiration, err := safeProcessorMessageExpiration(msg)
+	if err != nil {
+		return err
+	}
+
 	// Snapshot the expiration validator under the read lock, then release.
 	// The process* methods read handler fields that are only mutated by
 	// Set* methods during initialization, so they are safe to access
@@ -439,13 +458,20 @@ func (p *MessageProcessor) processMessageWithDepth(msg Message, depth int) error
 
 	log.WithFields(logger.Fields{
 		"at":           "ProcessMessage",
-		"message_type": msg.Type(),
+		"message_type": messageType,
 		"garlic_depth": depth,
 	}).Debug("Processing I2NP message")
 
 	// Validate message expiration before processing
 	if ev != nil {
-		if err := ev.ValidateMessage(msg); err != nil {
+		if err := ev.ValidateExpiration(expiration); err != nil {
+			log.WithFields(logger.Fields{
+				"at":         "ExpirationValidator.ValidateMessage",
+				"type":       messageType,
+				"message_id": messageID,
+				"expiration": expiration.UTC(),
+				"now":        ev.now().UTC(),
+			}).Warn("rejecting expired message")
 			return err
 		}
 	}
@@ -455,11 +481,11 @@ func (p *MessageProcessor) processMessageWithDepth(msg Message, depth int) error
 	// This prevents DatabaseStore reply-token amplification, build-reply state
 	// corruption, and spurious delivery-status callbacks from replayed messages.
 	if p.replayCache != nil {
-		id := msg.MessageID()
+		id := messageID
 		if p.replayCache.Seen(id) {
 			log.WithFields(logger.Fields{
 				"at":           "ProcessMessage",
-				"message_type": msg.Type(),
+				"message_type": messageType,
 				"message_id":   id,
 			}).Debug("dropping replayed I2NP message")
 			return nil
@@ -472,12 +498,47 @@ func (p *MessageProcessor) processMessageWithDepth(msg Message, depth int) error
 	return p.processMessageDispatch(msg, depth)
 }
 
+func safeProcessorMessageType(msg Message) (messageType int, err error) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			err = oops.Errorf("invalid I2NP message metadata: type panic: %v", rec)
+		}
+	}()
+	messageType = msg.Type()
+	return messageType, nil
+}
+
+func safeProcessorMessageID(msg Message) (messageID int, err error) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			err = oops.Errorf("invalid I2NP message metadata: message ID panic: %v", rec)
+		}
+	}()
+	messageID = msg.MessageID()
+	return messageID, nil
+}
+
+func safeProcessorMessageExpiration(msg Message) (expiration time.Time, err error) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			err = oops.Errorf("invalid I2NP message metadata: expiration panic: %v", rec)
+		}
+	}()
+	expiration = msg.Expiration()
+	return expiration, nil
+}
+
 // processMessageDispatch routes a message to the appropriate handler.
 // It must be called without p.mu held to allow safe re-entrant calls
 // from garlic LOCAL delivery (handleLocalDelivery → processMessageWithDepth).
 // depth tracks the current garlic nesting level and is threaded to garlic handlers.
 func (p *MessageProcessor) processMessageDispatch(msg Message, depth int) error {
-	switch msg.Type() {
+	messageType, err := safeProcessorMessageType(msg)
+	if err != nil {
+		return err
+	}
+
+	switch messageType {
 	case I2NPMessageTypeData:
 		return p.processDataMessage(msg)
 	case I2NPMessageTypeDatabaseStore:
@@ -510,19 +571,19 @@ func (p *MessageProcessor) processMessageDispatch(msg Message, depth int) error 
 		// Per I2P spec, message types 224-254 are reserved for experimental use.
 		// A production router should silently drop unknown types to support
 		// protocol extensibility. Return an error only for truly invalid types.
-		if msg.Type() >= 224 && msg.Type() <= 254 {
+		if messageType >= 224 && messageType <= 254 {
 			log.WithFields(logger.Fields{
 				"at":           "processMessageDispatch",
-				"message_type": msg.Type(),
+				"message_type": messageType,
 			}).Debug("Dropping experimental message type (224-254 range)")
 			return nil
 		}
 		log.WithFields(logger.Fields{
 			"at":           "processMessageDispatch",
-			"message_type": msg.Type(),
+			"message_type": messageType,
 			"reason":       "unknown message type",
 		}).Error("Cannot process message")
-		return oops.Errorf("unknown message type: %d", msg.Type())
+		return oops.Errorf("unknown message type: %d", messageType)
 	}
 }
 

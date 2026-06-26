@@ -488,6 +488,27 @@ func TestProcessMessageDispatch_TunnelBuildReply(t *testing.T) {
 	}
 }
 
+func TestProcessMessage_TypedNilMessageDoesNotPanic(t *testing.T) {
+	processor := NewMessageProcessor()
+
+	var nilBase *BaseI2NPMessage
+	var msg Message = nilBase
+
+	err := processor.ProcessMessage(msg)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid I2NP message metadata")
+}
+
+func TestProcessMessage_NilEmbeddedBaseDoesNotPanic(t *testing.T) {
+	processor := NewMessageProcessor()
+
+	msg := &DatabaseSearchReply{}
+	err := processor.ProcessMessage(msg)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid I2NP message metadata")
+}
+
 // =============================================================================
 // MOCK-BASED GARLIC INTERFACE TESTS
 // =============================================================================
