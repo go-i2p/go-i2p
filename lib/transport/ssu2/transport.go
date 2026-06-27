@@ -2,6 +2,8 @@ package ssu2
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"net"
@@ -503,50 +505,57 @@ func (t *SSU2Transport) extractPeerHash(conn net.Conn) data.Hash {
 //
 // Current Implementation Limitation:
 // The go-noise/ssu2 library does not currently expose the peer's ephemeral key through
-// the SSU2Conn public API. This function uses the peer's RouterHash (identity) as a
-// proxy replay token. This is a partial mitigation that prevents replay from the SAME
-// peer but does not prevent replays from different peers using intercepted handshake messages.
+// the SSU2Conn public API. This function derives a deterministic proxy token from
+// stable connection identity fields. This remains weaker than true ephemeral-key
+// replay protection and should be replaced when upstream exposes handshake material.
 //
 // TODO (Requires go-noise collaboration):
 // 1. Extract the peer's ephemeral key from the first Noise message (first 32 bytes per IK)
 // 2. Call handler.CheckReplay(ephemeralKey) before returning from this function
 // 3. Document the ephemeral key extraction point in go-noise/ssu2
 //
-// For now, we use a derived key based on remote address and connection metadata:
-// This is not cryptographically sound but provides some protection against naive replays.
+// For now, we derive a stable proxy key from connection metadata.
 func (t *SSU2Transport) checkConnectionReplay(conn net.Conn) bool {
 	if t.handler == nil {
 		// Handler not initialized; cannot check replay (should not happen in normal operation)
 		return false
 	}
 
-	// Derive a temporary replay key from connection metadata
-	// NOTE: This is NOT the actual Noise ephemeral key and should be replaced
-	// once go-noise exposes the ephemeral key publicly.
-	var replayKey [32]byte
-	if remoteAddr, ok := conn.RemoteAddr().(*net.UDPAddr); ok {
-		// Create a 32-byte key from remote address + current nanosecond
-		// This is a placeholder to test the replay cache mechanism
-		addr := remoteAddr.IP.String()
-		port := uint16(remoteAddr.Port)
-		now := time.Now().UnixNano()
-
-		// Fill the key with deterministic data from the address
-		// Use only the connection-specific part for differentiation
-		copy(replayKey[:16], []byte(addr)[:min(len(addr), 16)])
-		replayKey[16] = byte(port >> 8)
-		replayKey[17] = byte(port)
-		// Use lower bits of nanosecond timestamp for ephemeral variation
-		replayKey[18] = byte((now >> 24) & 0xFF)
-		replayKey[19] = byte((now >> 16) & 0xFF)
-		replayKey[20] = byte((now >> 8) & 0xFF)
-		replayKey[21] = byte(now & 0xFF)
-	}
+	replayKey := deriveReplayProxyKey(conn)
 
 	// Call CheckReplay with the derived key
 	// Once go-noise exposes the actual ephemeral key, replace with:
 	// return t.handler.CheckReplay(actualEphemeralKeyFromNoiseHandshake)
 	return t.handler.CheckReplay(replayKey)
+}
+
+// deriveReplayProxyKey hashes stable connection identity fields into a 32-byte key.
+// This is a temporary proxy until the handshake ephemeral key is exposed upstream.
+func deriveReplayProxyKey(conn net.Conn) [32]byte {
+	h := sha256.New()
+
+	if ssu2Addr, ok := conn.RemoteAddr().(*ssu2noise.SSU2Addr); ok {
+		routerHash := ssu2Addr.RouterHash()
+		_, _ = h.Write(routerHash[:])
+
+		var connIDBuf [8]byte
+		binary.BigEndian.PutUint64(connIDBuf[:], ssu2Addr.ConnectionID())
+		_, _ = h.Write(connIDBuf[:])
+
+		if udpAddr, ok := ssu2Addr.UnderlyingAddr().(*net.UDPAddr); ok {
+			_, _ = h.Write(udpAddr.IP)
+			var portBuf [2]byte
+			binary.BigEndian.PutUint16(portBuf[:], uint16(udpAddr.Port))
+			_, _ = h.Write(portBuf[:])
+		}
+	} else if remote := conn.RemoteAddr(); remote != nil {
+		_, _ = h.Write([]byte(remote.Network()))
+		_, _ = h.Write([]byte(remote.String()))
+	}
+
+	var replayKey [32]byte
+	copy(replayKey[:], h.Sum(nil))
+	return replayKey
 }
 
 // min returns the minimum of two integers
