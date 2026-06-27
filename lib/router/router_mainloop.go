@@ -8,6 +8,7 @@ import (
 	"time"
 
 	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/go-i2p/lib/i2cp"
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/transport"
 	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
@@ -128,16 +129,22 @@ func (r *Router) initializeCoreComponents() error {
 	return nil
 }
 
-// wireInboundHandler sets up the InboundMessageHandler for tunnel-to-I2CP delivery
-// if an I2CP server is running.
+// wireInboundHandler sets up the InboundMessageHandler for tunnel-data processing.
+// The handler is always created so exploratory/transit tunnel data remains functional
+// even when I2CP is disabled.
 func (r *Router) wireInboundHandler() {
+	var sessionManager *i2cp.SessionManager
 	if r.i2cpServer != nil {
-		r.inboundHandler = NewInboundMessageHandler(r.i2cpServer.GetSessionManager())
-		log.WithFields(logger.Fields{
-			"at":     "(Router) mainloop",
-			"reason": "InboundMessageHandler wired to I2CP session manager",
-		}).Debug("inbound message handler initialized")
+		sessionManager = r.i2cpServer.GetSessionManager()
 	}
+
+	r.inboundHandler = NewInboundMessageHandler(sessionManager)
+	log.WithFields(logger.Fields{
+		"at":              "(Router) mainloop",
+		"has_i2cp":        r.i2cpServer != nil,
+		"has_session_mgr": sessionManager != nil,
+		"reason":          "InboundMessageHandler initialized for tunnel-data processing",
+	}).Debug("inbound message handler initialized")
 }
 
 // Session Monitoring and Message Processing

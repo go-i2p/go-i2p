@@ -137,6 +137,10 @@ func (h *InboundMessageHandler) RegisterTunnel(tunnelID tunnel.TunnelID, session
 //
 // Returns the created endpoint or an error if creation or registration fails.
 func (h *InboundMessageHandler) CreateEndpointForSession(tunnelID tunnel.TunnelID, sessionID uint16, decryption cryptotunnel.TunnelEncryptor) (*tunnel.Endpoint, error) {
+	if h.sessionManager == nil {
+		return nil, oops.Errorf("cannot create endpoint for session %d: I2CP session manager not configured", sessionID)
+	}
+
 	// Create the message handler that delivers decrypted messages to the I2CP session
 	messageHandler := h.createMessageHandler(sessionID)
 
@@ -309,6 +313,10 @@ func (h *InboundMessageHandler) decryptAndDeliver(tunnelID tunnel.TunnelID, data
 // Returns a MessageHandler callback function.
 func (h *InboundMessageHandler) createMessageHandler(sessionID uint16) tunnel.MessageHandler {
 	return func(msgBytes []byte) error {
+		if h.sessionManager == nil {
+			return oops.Errorf("cannot deliver message for session %d: I2CP session manager not configured", sessionID)
+		}
+
 		// Look up the session
 		session, ok := h.sessionManager.GetSession(sessionID)
 		if !ok {
@@ -433,6 +441,16 @@ func (h *InboundMessageHandler) RegisterExploratoryTunnel(tunnelID tunnel.Tunnel
 //
 // Returns an error if the tunnel cannot be registered or if the session is not found.
 func (h *InboundMessageHandler) RegisterClientTunnel(tunnelID tunnel.TunnelID, sessionID uint16) error {
+	if h.sessionManager == nil {
+		log.WithFields(logger.Fields{
+			"at":         "RegisterClientTunnel",
+			"tunnel_id":  tunnelID,
+			"session_id": sessionID,
+			"reason":     "I2CP session manager not configured",
+		}).Error("Failed to register client tunnel")
+		return oops.Errorf("cannot register client tunnel %d: I2CP session manager not configured", tunnelID)
+	}
+
 	// Keep explicit session existence validation so tunnel builds fail fast when
 	// the owning session has already been removed.
 	if _, exists := h.sessionManager.GetSession(sessionID); !exists {
