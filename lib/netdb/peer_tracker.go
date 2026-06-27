@@ -408,7 +408,7 @@ func isStaleUnlocked(stats *PeerStats) bool {
 	}
 	// Recent failures without recent success
 	hourAgo := time.Now().Add(-1 * time.Hour)
-	if stats.ConsecutiveFails >= 3 && !stats.LastFailure.IsZero() && stats.LastFailure.After(hourAgo) {
+	if stats.ConsecutiveFails >= consecutiveFailThreshold && !stats.LastFailure.IsZero() && stats.LastFailure.After(hourAgo) {
 		if stats.LastSuccess.IsZero() || stats.LastSuccess.Before(hourAgo) {
 			return true
 		}
