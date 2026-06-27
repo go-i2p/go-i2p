@@ -244,7 +244,7 @@ func (pt *PeerTracker) hasLowSuccessRate(stats *PeerStats, hash common.Hash) boo
 // hasRecentFailuresWithoutSuccess checks if the peer has recent failures with no recent successes.
 // Returns true if peer has consecutive failures in the last hour but no success in that period.
 func (pt *PeerTracker) hasRecentFailuresWithoutSuccess(stats *PeerStats, hash common.Hash) bool {
-	hourAgo := time.Now().Add(-1 * time.Hour)
+	hourAgo := time.Now().Add(-StalenessCheckWindow)
 	if stats.ConsecutiveFails >= consecutiveFailThreshold && !stats.LastFailure.IsZero() && stats.LastFailure.After(hourAgo) {
 		if stats.LastSuccess.IsZero() || stats.LastSuccess.Before(hourAgo) {
 			log.WithFields(logger.Fields{
@@ -407,8 +407,8 @@ func isStaleUnlocked(stats *PeerStats) bool {
 		}
 	}
 	// Recent failures without recent success
-	hourAgo := time.Now().Add(-1 * time.Hour)
-	if stats.ConsecutiveFails >= 3 && !stats.LastFailure.IsZero() && stats.LastFailure.After(hourAgo) {
+	hourAgo := time.Now().Add(-StalenessCheckWindow)
+	if stats.ConsecutiveFails >= consecutiveFailThreshold && !stats.LastFailure.IsZero() && stats.LastFailure.After(hourAgo) {
 		if stats.LastSuccess.IsZero() || stats.LastSuccess.Before(hourAgo) {
 			return true
 		}

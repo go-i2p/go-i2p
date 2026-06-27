@@ -1418,7 +1418,7 @@ func (db *StdNetDB) GetActivePeerCount() int {
 		return 0
 	}
 
-	hourAgo := time.Now().Add(-1 * time.Hour)
+	hourAgo := time.Now().Add(-StalenessCheckWindow)
 	count := 0
 
 	// Iterate through all tracked peers and count those with recent successful connections
