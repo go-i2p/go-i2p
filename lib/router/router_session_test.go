@@ -258,6 +258,17 @@ func TestMultipleSessionRemoval(t *testing.T) {
 	assert.Equal(t, 0, len(router.activeSessions))
 }
 
+// TestWireInboundHandler_WithoutI2CP ensures tunnel-data processing stays wired
+// even when I2CP is disabled and no session manager is available.
+func TestWireInboundHandler_WithoutI2CP(t *testing.T) {
+	router := &Router{}
+
+	router.wireInboundHandler()
+
+	require.NotNil(t, router.inboundHandler, "inbound handler should always be initialized")
+	assert.Nil(t, router.inboundHandler.sessionManager, "session manager should be nil when I2CP is disabled")
+}
+
 // TestSessionMapInitialization tests that activeSessions map must be initialized
 func TestSessionMapInitialization(t *testing.T) {
 	// Router with nil activeSessions map (testing edge case)
