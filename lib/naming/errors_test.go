@@ -12,14 +12,10 @@ func TestSentinelErrorsAreNonNull(t *testing.T) {
 	assert.NotNil(t, ErrHostnameNotFound)
 	assert.NotNil(t, ErrEmptyHostname)
 	assert.NotNil(t, ErrInvalidB32Length)
-	assert.NotNil(t, ErrResolverNotInitialized)
-	assert.NotNil(t, ErrInvalidBase64Destination)
 
 	assert.NotEmpty(t, ErrHostnameNotFound.Error())
 	assert.NotEmpty(t, ErrEmptyHostname.Error())
 	assert.NotEmpty(t, ErrInvalidB32Length.Error())
-	assert.NotEmpty(t, ErrResolverNotInitialized.Error())
-	assert.NotEmpty(t, ErrInvalidBase64Destination.Error())
 }
 
 // TestAddressConstantsAreCorrect verifies that B32 address constants

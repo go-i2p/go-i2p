@@ -13,11 +13,3 @@ var ErrEmptyHostname = errors.New("empty hostname")
 // ErrInvalidB32Length is returned when a .b32.i2p address does not have
 // the expected 52-character base32 encoding.
 var ErrInvalidB32Length = errors.New("invalid b32 address length")
-
-// ErrResolverNotInitialized is returned when an operation requires the
-// resolver to be initialized but it has not been created yet.
-var ErrResolverNotInitialized = errors.New("resolver not initialized")
-
-// ErrInvalidBase64Destination is returned when the base64-encoded
-// destination in a hosts.txt line cannot be decoded.
-var ErrInvalidBase64Destination = errors.New("invalid base64 destination")

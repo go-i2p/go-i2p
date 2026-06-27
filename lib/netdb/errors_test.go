@@ -11,13 +11,9 @@ import (
 func TestSentinelErrorsAreNonNull(t *testing.T) {
 	assert.NotNil(t, ErrNoPeerData)
 	assert.NotNil(t, ErrInvalidPeerHash)
-	assert.NotNil(t, ErrCorruptedProfiles)
-	assert.NotNil(t, ErrNetDBNotInitialized)
 
 	assert.NotEmpty(t, ErrNoPeerData.Error())
 	assert.NotEmpty(t, ErrInvalidPeerHash.Error())
-	assert.NotEmpty(t, ErrCorruptedProfiles.Error())
-	assert.NotEmpty(t, ErrNetDBNotInitialized.Error())
 }
 
 // TestThresholdConstantsArePositive verifies that threshold constants
