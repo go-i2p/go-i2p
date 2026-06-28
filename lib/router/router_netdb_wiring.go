@@ -1,6 +1,8 @@
 package router
 
 import (
+	"time"
+
 	"github.com/samber/oops"
 
 	"github.com/go-i2p/logger"
@@ -64,15 +66,13 @@ func (r *Router) startFloodfillServer() {
 // startExplorer instantiates and starts the NetDB explorer. The explorer
 // actively discovers new peers by performing iterative lookups for random keys,
 // improving peer diversity over time. It requires a running tunnel pool.
-func (r *Router) startExplorer() {
+func (r *Router) startExplorer() error {
 	if r.netdb == nil || r.tunnelManager == nil {
-		log.WithFields(logger.Fields{"at": "startExplorer"}).Debug("NetDB explorer deferred: NetDB or tunnel manager not ready")
-		return
+		return oops.Errorf("NetDB explorer deferred: NetDB or tunnel manager not ready")
 	}
 	tunnelPool := r.tunnelManager.GetOutboundPool()
 	if tunnelPool == nil {
-		log.WithFields(logger.Fields{"at": "startExplorer"}).Debug("NetDB explorer deferred: tunnel pool not available")
-		return
+		return oops.Errorf("NetDB explorer deferred: tunnel pool not available")
 	}
 
 	cfg := netdb.DefaultExplorerConfig()
@@ -102,24 +102,23 @@ func (r *Router) startExplorer() {
 	}
 
 	if err := r.explorer.Start(); err != nil {
-		log.WithError(err).Warn("Failed to start NetDB explorer")
 		r.explorer = nil
-		return
+		return oops.Wrapf(err, "failed to start NetDB explorer")
 	}
 	log.WithFields(logger.Fields{"at": "startExplorer"}).Debug("NetDB explorer started")
+	return nil
 }
 
 // startPublisher creates and starts the NetDB publisher for periodic RouterInfo and LeaseSet
 // publishing to floodfill routers. The publisher requires NetDB, transport, and a tunnel pool.
 // If prerequisites are not met, a warning is logged and publishing is skipped.
-func (r *Router) startPublisher() {
+func (r *Router) startPublisher() error {
 	tunnelPool, err := r.resolvePublisherDependencies()
 	if err != nil {
-		log.WithFields(logger.Fields{"at": "startPublisher"}).Warn(err.Error())
-		return
+		return err
 	}
 
-	r.launchPublisher(tunnelPool)
+	return r.launchPublisher(tunnelPool)
 }
 
 // resolvePublisherDependencies verifies that NetDB, TransportMuxer, and a
@@ -144,7 +143,7 @@ func (r *Router) resolvePublisherDependencies() (*tunnel.Pool, error) {
 
 // launchPublisher constructs the publisher from adapters and starts it.
 // On failure the publisher field is left nil and a warning is logged.
-func (r *Router) launchPublisher(tunnelPool *tunnel.Pool) {
+func (r *Router) launchPublisher(tunnelPool *tunnel.Pool) error {
 	dbAdapter := &publisherNetDBAdapter{db: r.netdb}
 	transportAdapter := &publisherTransportAdapter{muxer: r.transports}
 
@@ -166,7 +165,7 @@ func (r *Router) launchPublisher(tunnelPool *tunnel.Pool) {
 			"reason": "publisher start failed",
 		}).Warn("Failed to start NetDB publisher, RouterInfo will not be republished")
 		r.publisher = nil
-		return
+		return oops.Wrapf(err, "failed to start NetDB publisher")
 	}
 
 	log.WithFields(logger.Fields{
@@ -184,6 +183,53 @@ func (r *Router) launchPublisher(tunnelPool *tunnel.Pool) {
 	if r.i2cpServer != nil {
 		r.i2cpServer.SetLeaseSetPublisher(r.publisher)
 	}
+
+	return nil
+}
+
+// startNetDBServiceWatchdog keeps critical NetDB services alive after startup.
+// It retries startup for publisher/explorer when they are not running and retries
+// deferred I2CP router-hash wiring if the first attempt failed during early startup.
+func (r *Router) startNetDBServiceWatchdog() {
+	r.wg.Add(1)
+	go func() {
+		defer r.wg.Done()
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-r.ctx.Done():
+				return
+			case <-ticker.C:
+				r.retryI2CPRouterHashWiring()
+				r.ensurePublisherRunning()
+				r.ensureExplorerRunning()
+			}
+		}
+	}()
+}
+
+func (r *Router) ensurePublisherRunning() {
+	if r.publisher != nil {
+		return
+	}
+	if err := r.startPublisher(); err != nil {
+		log.WithError(err).WithField("at", "startNetDBServiceWatchdog").Warn("publisher recovery attempt failed")
+		return
+	}
+	log.WithField("at", "startNetDBServiceWatchdog").Info("publisher recovered")
+}
+
+func (r *Router) ensureExplorerRunning() {
+	if r.explorer != nil {
+		return
+	}
+	if err := r.startExplorer(); err != nil {
+		log.WithError(err).WithField("at", "startNetDBServiceWatchdog").Warn("explorer recovery attempt failed")
+		return
+	}
+	log.WithField("at", "startNetDBServiceWatchdog").Info("explorer recovered")
 }
 
 // initializeNetDB creates and configures the network database.

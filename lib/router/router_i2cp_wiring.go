@@ -82,6 +82,20 @@ func (r *Router) configureI2CPRouterHash(server *i2cp.Server) {
 	server.SetRouterHash(routerHash)
 }
 
+// retryI2CPRouterHashWiring retries I2CP router-hash propagation for session
+// tunnel pools in case early startup ordering caused initial hash derivation to fail.
+func (r *Router) retryI2CPRouterHashWiring() {
+	if r.i2cpServer == nil {
+		return
+	}
+	routerHash, err := r.getOurRouterHash()
+	if err != nil {
+		log.WithError(err).WithField("at", "retryI2CPRouterHashWiring").Debug("router hash still unavailable for I2CP session pools")
+		return
+	}
+	r.i2cpServer.SetRouterHash(routerHash)
+}
+
 // configureI2CPAuth sets up password authentication if credentials are provided.
 func (r *Router) configureI2CPAuth(server *i2cp.Server) {
 	if r.cfg.I2CP.Username == "" || r.cfg.I2CP.Password == "" {

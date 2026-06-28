@@ -17,7 +17,7 @@ import (
 // This reduces duplication across the various stopXxx methods.
 
 // initializeMessageRouter sets up message routing with NetDB integration
-func (r *Router) initializeMessageRouter() {
+func (r *Router) initializeMessageRouter() error {
 	messageConfig := i2np.I2NPMessageDispatcherConfig{
 		MaxRetries:     3,
 		DefaultTimeout: 30 * time.Second,
@@ -28,17 +28,22 @@ func (r *Router) initializeMessageRouter() {
 	r.messageRouter.SetPeerSelector(r.netdb)
 	r.messageRouter.SetSessionProvider(r)
 
-	r.initializeTunnelManager()
+	if err := r.initializeTunnelManager(); err != nil {
+		return oops.Wrapf(err, "failed to initialize tunnel manager")
+	}
 	r.wireDispatcherTunnelManager()
 	r.wireParticipantManager()
 	r.initializeGarlicRouter()
 	r.wireGarlicSessionManager()
 	r.wireTunnelDataHandler()
 	r.wireTunnelGatewayHandler()
-	r.wireBuildRecordIdentity()
+	if err := r.wireBuildRecordIdentity(); err != nil {
+		return oops.Wrapf(err, "failed to wire build-record identity")
+	}
 	r.wireI2CPTunnelBuilder()
 
 	log.WithFields(logger.Fields{"at": "initializeMessageRouter"}).Debug("Message router initialized with NetDB, peer selection, session provider, tunnel data handler, garlic sessions, and garlic forwarding")
+	return nil
 }
 
 // wireDispatcherTunnelManager unifies the dispatcher's tunnel manager with the router's.
@@ -131,11 +136,10 @@ func (d *tunnelGatewayDispatcher) HandleGateway(tunnelID tunnel.TunnelID, payloa
 }
 
 // wireBuildRecordIdentity wires router identity and crypto keys for build record decryption.
-func (r *Router) wireBuildRecordIdentity() {
+func (r *Router) wireBuildRecordIdentity() error {
 	routerHash, err := r.getOurRouterHash()
 	if err != nil {
-		log.WithError(err).Error("Failed to get router hash for build record identity — transit tunnel building will be degraded")
-		return
+		return oops.Wrapf(err, "failed to derive router hash for build-record identity")
 	}
 	privKeyBytes := r.keystore.GetEncryptionPrivateKey().Bytes()
 	buildCrypto := i2np.NewBuildRecordCrypto()
@@ -148,7 +152,11 @@ func (r *Router) wireBuildRecordIdentity() {
 	if r.tunnelManager != nil {
 		r.tunnelManager.SetOurRouterHash(routerHash)
 	}
+	if r.i2cpServer != nil {
+		r.i2cpServer.SetRouterHash(routerHash)
+	}
 	log.WithFields(logger.Fields{"at": "initializeMessageRouter"}).Debug("MessageProcessor identity, decryptor, and private key wired for build record decryption")
+	return nil
 }
 
 // wireI2CPTunnelBuilder wires the tunnel manager into the I2CP server.
@@ -480,7 +488,7 @@ func (r *Router) launchOutboundFallbackCheck(pool *tunnel.Pool) {
 
 // initializeTunnelManager creates and configures the tunnel manager for building and maintaining tunnels.
 // The tunnel manager coordinates tunnel building, maintains tunnel pools, and handles tunnel lifecycle.
-func (r *Router) initializeTunnelManager() {
+func (r *Router) initializeTunnelManager() error {
 	// Create tunnel manager with NetDB as peer selector
 	tm := i2np.NewTunnelManager(r.netdb)
 
@@ -498,8 +506,7 @@ func (r *Router) initializeTunnelManager() {
 
 	// Set router hash on pools before starting maintenance
 	if err := r.configureRouterHashOnPools(inboundPool, outboundPool); err != nil {
-		log.WithError(err).Error("Failed to get router hash for tunnel pools; skipping maintenance startup until identity is available")
-		return
+		return oops.Wrapf(err, "failed to configure router hash on tunnel pools")
 	}
 
 	// Configure pool policies (hop count, auto-fallback) before starting maintenance
@@ -535,6 +542,7 @@ func (r *Router) initializeTunnelManager() {
 		"peer_selector": "netdb",
 		"pools_created": true,
 	}).Debug("Tunnel manager initialized with peer selection")
+	return nil
 }
 
 // initializeGarlicRouter sets up garlic message forwarding for non-LOCAL delivery types.

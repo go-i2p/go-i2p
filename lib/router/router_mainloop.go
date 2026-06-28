@@ -66,11 +66,23 @@ func (r *Router) mainloop() {
 	log.WithField("at", "mainloop").Debug("step 2: wiring inbound handler")
 	r.wireInboundHandler()
 	log.WithField("at", "mainloop").Debug("step 3: initializing message router (includes ConstructRouterInfo for identity hash)")
-	r.initializeMessageRouter()
+	if err := r.initializeMessageRouter(); err != nil {
+		r.startupErr <- oops.Wrapf(err, "message router initialization failed")
+		r.Stop()
+		return
+	}
 	log.WithField("at", "mainloop").Debug("step 4: starting publisher")
-	r.startPublisher()
+	if err := r.startPublisher(); err != nil {
+		r.startupErr <- oops.Wrapf(err, "publisher startup failed")
+		r.Stop()
+		return
+	}
 	log.WithField("at", "mainloop").Debug("step 5: starting explorer")
-	r.startExplorer()
+	if err := r.startExplorer(); err != nil {
+		r.startupErr <- oops.Wrapf(err, "explorer startup failed")
+		r.Stop()
+		return
+	}
 	log.WithField("at", "mainloop").Debug("step 6: starting floodfill server")
 	r.startFloodfillServer()
 	log.WithField("at", "mainloop").Debug("step 7: starting SSU2 NAT detection")
@@ -95,6 +107,10 @@ func (r *Router) mainloop() {
 	// Start session monitors for inbound message processing
 	log.WithField("at", "mainloop").Debug("starting session monitors")
 	r.startSessionMonitors()
+
+	// Keep critical NetDB services alive and retry I2CP hash wiring after startup.
+	log.WithField("at", "mainloop").Debug("starting NetDB service watchdog")
+	r.startNetDBServiceWatchdog()
 
 	r.runMainLoop()
 	log.WithFields(logger.Fields{"at": "mainloop"}).Debug("Exiting router mainloop")
