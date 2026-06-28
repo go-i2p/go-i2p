@@ -344,6 +344,64 @@ func TestSetDataMessageHandler(t *testing.T) {
 	assert.NotNil(t, processor.dataMessageHandler)
 }
 
+func TestProcessDatabaseStoreMessage_FromBaseMessageDataCarrier(t *testing.T) {
+	processor := NewMessageProcessor()
+	mockStore := newMockNetDBStore()
+	processor.SetDatabaseManager(NewDatabaseManager(mockStore))
+
+	var key common.Hash
+	copy(key[:], "dbstore-base-message-key-123456789")
+
+	dbStore := &DatabaseStore{
+		BaseI2NPMessage: NewBaseI2NPMessage(I2NPMessageTypeDatabaseStore),
+		Key:             key,
+		Data:            []byte("router-info-body"),
+		StoreType:       0,
+	}
+	body, err := dbStore.MarshalPayload()
+	require.NoError(t, err)
+
+	base := NewBaseI2NPMessage(I2NPMessageTypeDatabaseStore)
+	base.SetData(body)
+
+	err = processor.processDatabaseStoreMessage(base)
+	require.NoError(t, err)
+	assert.Equal(t, 1, mockStore.callCount)
+}
+
+func TestProcessDatabaseSearchReplyMessage_FromBaseMessageDataCarrier(t *testing.T) {
+	processor := NewMessageProcessor()
+	handler := &mockSearchReplyHandler{}
+	processor.SetSearchReplyHandler(handler)
+
+	var key common.Hash
+	copy(key[:], "dbsearchreply-base-key-123456789012")
+	var from common.Hash
+	copy(from[:], "dbsearchreply-from-key-12345678901")
+	var peer common.Hash
+	copy(peer[:], "dbsearchreply-peer-key-12345678901")
+
+	reply := DatabaseSearchReply{
+		BaseI2NPMessage: NewBaseI2NPMessage(I2NPMessageTypeDatabaseSearchReply),
+		Key:             key,
+		From:            from,
+		Count:           1,
+		PeerHashes:      []common.Hash{peer},
+	}
+	body, err := reply.MarshalPayload()
+	require.NoError(t, err)
+
+	base := NewBaseI2NPMessage(I2NPMessageTypeDatabaseSearchReply)
+	base.SetData(body)
+
+	err = processor.processDatabaseSearchReplyMessage(base)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(handler.calls))
+	assert.Equal(t, key, handler.calls[0].key)
+	require.Equal(t, 1, len(handler.calls[0].peerHashes))
+	assert.Equal(t, peer, handler.calls[0].peerHashes[0])
+}
+
 // TestSetDeliveryStatusHandler tests setter
 func TestSetDeliveryStatusHandler(t *testing.T) {
 	processor := NewMessageProcessor()

@@ -44,14 +44,13 @@ func (p *MessageProcessor) processDatabaseStoreMessage(msg Message) error {
 		return oops.Errorf("database manager not configured")
 	}
 
-	// Type assert to *DatabaseStore
-	dbStore, ok := msg.(*DatabaseStore)
-	if !ok {
+	dbStore, err := coerceDatabaseStoreMessage(msg)
+	if err != nil {
 		log.WithFields(logger.Fields{
 			"at":     "processDatabaseStoreMessage",
-			"reason": "type_assertion_failed",
-		}).Error("Message is not a DatabaseStore")
-		return oops.Errorf("message is not a DatabaseStore")
+			"reason": "coerce_failed",
+		}).WithError(err).Error("Message is not a parseable DatabaseStore")
+		return err
 	}
 
 	key := dbStore.GetStoreKey()
@@ -122,14 +121,13 @@ func (p *MessageProcessor) sendDatabaseStoreAck(dbStore *DatabaseStore) {
 // These messages contain peer hash suggestions when a lookup fails to find the exact key.
 // The suggested peers are delivered to the search reply handler for iterative lookup follow-up.
 func (p *MessageProcessor) processDatabaseSearchReplyMessage(msg Message) error {
-	// Type assert to *DatabaseSearchReply
-	searchReply, ok := msg.(*DatabaseSearchReply)
-	if !ok {
+	searchReply, err := coerceDatabaseSearchReplyMessage(msg)
+	if err != nil {
 		log.WithFields(logger.Fields{
 			"at":     "processDatabaseSearchReplyMessage",
-			"reason": "type_assertion_failed",
-		}).Error("Message is not a DatabaseSearchReply")
-		return oops.Errorf("message is not a DatabaseSearchReply")
+			"reason": "coerce_failed",
+		}).WithError(err).Error("Message is not a parseable DatabaseSearchReply")
+		return err
 	}
 
 	log.WithFields(logger.Fields{
@@ -172,6 +170,56 @@ func (p *MessageProcessor) processDatabaseSearchReplyMessage(msg Message) error 
 	}
 
 	return nil
+}
+
+// coerceDatabaseStoreMessage returns a concrete DatabaseStore by accepting either
+// an already-parsed *DatabaseStore or a DataCarrier payload that can be parsed.
+func coerceDatabaseStoreMessage(msg Message) (*DatabaseStore, error) {
+	if dbStore, ok := msg.(*DatabaseStore); ok {
+		return dbStore, nil
+	}
+
+	carrier, ok := msg.(DataCarrier)
+	if !ok {
+		return nil, oops.Errorf("message is not a DatabaseStore and does not implement DataCarrier")
+	}
+
+	payload := carrier.GetData()
+	if len(payload) == 0 {
+		return nil, oops.Errorf("DatabaseStore payload is empty")
+	}
+
+	dbStore := &DatabaseStore{}
+	if err := dbStore.UnmarshalBinary(payload); err != nil {
+		return nil, oops.Wrapf(err, "failed to parse DatabaseStore payload")
+	}
+
+	return dbStore, nil
+}
+
+// coerceDatabaseSearchReplyMessage returns a concrete DatabaseSearchReply by
+// accepting either an already-parsed *DatabaseSearchReply or a DataCarrier payload.
+func coerceDatabaseSearchReplyMessage(msg Message) (*DatabaseSearchReply, error) {
+	if searchReply, ok := msg.(*DatabaseSearchReply); ok {
+		return searchReply, nil
+	}
+
+	carrier, ok := msg.(DataCarrier)
+	if !ok {
+		return nil, oops.Errorf("message is not a DatabaseSearchReply and does not implement DataCarrier")
+	}
+
+	payload := carrier.GetData()
+	if len(payload) == 0 {
+		return nil, oops.Errorf("DatabaseSearchReply payload is empty")
+	}
+
+	searchReply, err := ReadDatabaseSearchReply(payload)
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to parse DatabaseSearchReply payload")
+	}
+
+	return searchReply, nil
 }
 
 // processTunnelGatewayMessage processes TunnelGateway messages.

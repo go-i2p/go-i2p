@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/common/router_info"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -138,4 +139,89 @@ func TestRouterNetDB_IsolationFromClient(t *testing.T) {
 func TestRouterNetDB_LeaseSetOperations(t *testing.T) {
 	routerDB := newTestRouterNetDB(t)
 	assertEmptyLeaseSetOperations(t, routerDB)
+}
+
+func TestSelectPeers_DoesNotHardExcludeStalePeers(t *testing.T) {
+	routerDB := newTestRouterNetDB(t)
+	db := routerDB.StdNetDB
+
+	peerA := *createTestRouterInfoWithOptions(t, map[string]string{"caps": "R"})
+	peerB := *createTestRouterInfoWithOptions(t, map[string]string{"caps": "R"})
+	setRouterHostPort(t, &peerA, "198.51.100.10", "12345")
+	setRouterHostPort(t, &peerB, "198.51.100.11", "12345")
+
+	hashA, err := peerA.IdentHash()
+	assert.NoError(t, err)
+	hashB, err := peerB.IdentHash()
+	assert.NoError(t, err)
+
+	db.riCache.put(hashA, Entry{RouterInfo: &peerA})
+	db.riCache.put(hashB, Entry{RouterInfo: &peerB})
+
+	for i := 0; i < 3; i++ {
+		db.PeerTracker.RecordFailure(hashA, "simulated transient failure")
+	}
+
+	peers, err := routerDB.SelectPeers(2, nil)
+	assert.NoError(t, err)
+	assert.GreaterOrEqual(t, len(peers), 1)
+
+	seenA := false
+	for _, ri := range peers {
+		h, herr := ri.IdentHash()
+		assert.NoError(t, herr)
+		if h == hashA {
+			seenA = true
+			break
+		}
+	}
+	assert.True(t, seenA, "stale-classified peer should remain eligible for selection")
+}
+
+func TestSelectFloodfillRouters_DoesNotHardExcludeStaleFloodfills(t *testing.T) {
+	routerDB := newTestRouterNetDB(t)
+	db := routerDB.StdNetDB
+
+	ffA := *createTestRouterInfoWithOptions(t, map[string]string{"caps": "fR"})
+	ffB := *createTestRouterInfoWithOptions(t, map[string]string{"caps": "fR"})
+	setRouterHostPort(t, &ffA, "203.0.113.10", "12345")
+	setRouterHostPort(t, &ffB, "203.0.113.11", "12345")
+
+	hashA, err := ffA.IdentHash()
+	assert.NoError(t, err)
+	hashB, err := ffB.IdentHash()
+	assert.NoError(t, err)
+
+	db.riCache.put(hashA, Entry{RouterInfo: &ffA})
+	db.riCache.put(hashB, Entry{RouterInfo: &ffB})
+
+	for i := 0; i < 3; i++ {
+		db.PeerTracker.RecordFailure(hashA, "simulated transient floodfill failure")
+	}
+
+	selected, err := routerDB.SelectFloodfillRouters(hashB, 2)
+	assert.NoError(t, err)
+	assert.GreaterOrEqual(t, len(selected), 1)
+
+	seenA := false
+	for _, ri := range selected {
+		h, herr := ri.IdentHash()
+		assert.NoError(t, herr)
+		if h == hashA {
+			seenA = true
+			break
+		}
+	}
+	assert.True(t, seenA, "stale-classified floodfill should remain eligible for selection")
+}
+
+func setRouterHostPort(t *testing.T, ri *router_info.RouterInfo, host, port string) {
+	t.Helper()
+	addrs := ri.RouterAddresses()
+	assert.NotNil(t, addrs)
+	assert.GreaterOrEqual(t, len(addrs), 1)
+	for i := range addrs {
+		assert.NoError(t, addrs[i].SetOption("host", host))
+		assert.NoError(t, addrs[i].SetOption("port", port))
+	}
 }

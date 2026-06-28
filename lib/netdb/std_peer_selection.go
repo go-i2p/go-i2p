@@ -164,7 +164,7 @@ func shouldSkipPeer(ri router_info.RouterInfo, excludeMap map[common.Hash]bool, 
 	skipChecks := []func() bool{
 		func() bool { return shouldSkipExcluded(riHash, excludeMap, stats) },
 		func() bool { return shouldSkipNoAddresses(ri, stats) },
-		func() bool { return shouldSkipStale(riHash, tracker, stats) },
+		func() bool { return classifyStalePeer(riHash, tracker, stats) },
 		func() bool { return shouldSkipNoCaps(ri, riHash, stats) },
 		func() bool { return shouldSkipOldRouterInfo(ri, riHash, stats) },
 	}
@@ -196,15 +196,16 @@ func shouldSkipNoAddresses(ri router_info.RouterInfo, stats *peerFilterStats) bo
 	return false
 }
 
-// shouldSkipStale checks if the peer is marked as stale by the tracker.
-func shouldSkipStale(riHash common.Hash, tracker *PeerTracker, stats *peerFilterStats) bool {
-	if tracker.IsLikelyStale(riHash) {
+// classifyStalePeer records stale peer status for observability but does not
+// hard-exclude the peer from selection. Hard exclusion can starve candidate
+// sets under transient network churn.
+func classifyStalePeer(riHash common.Hash, tracker *PeerTracker, stats *peerFilterStats) bool {
+	if tracker != nil && tracker.IsLikelyStale(riHash) {
 		log.WithFields(logger.Fields{
 			"peer_hash": logutil.HashPrefixPlain(riHash),
 			"reason":    "peer_marked_stale_by_tracker",
-		}).Debug("Skipping stale peer")
+		}).Debug("Classified peer as stale (kept eligible with lower priority)")
 		stats.skippedStale++
-		return true
 	}
 	return false
 }
@@ -546,8 +547,7 @@ func (db *StdNetDB) filterFloodfillRouters(routers []router_info.RouterInfo) []r
 		if db.PeerTracker != nil {
 			if riHash, err := ri.IdentHash(); err == nil && db.PeerTracker.IsLikelyStale(riHash) {
 				log.WithField("peer_hash", logutil.HashPrefixPlain(riHash)).
-					Debug("Skipping stale floodfill router")
-				continue
+					Debug("Classified floodfill router as stale (retained for resilience)")
 			}
 		}
 		floodfills = append(floodfills, ri)
