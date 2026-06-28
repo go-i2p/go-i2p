@@ -1105,8 +1105,9 @@ func TestResourceExhaustion_TotalParticipantLimit(t *testing.T) {
 	t.Logf("Security test passed: hard limit enforcement at %d participants", stats.CurrentParticipants)
 }
 
-// TestResourceExhaustion_PerSourceRateLimit verifies that per-source rate limiting
-// prevents a single malicious source from overwhelming the router with tunnel build requests.
+// TestResourceExhaustion_PerSourceRateLimit verifies that ProcessBuildRequest does
+// not apply pseudo per-source throttling when requester identity is unavailable.
+// Requests from one hash must not implicitly penalize another hash in this path.
 func TestResourceExhaustion_PerSourceRateLimit(t *testing.T) {
 	// Use small limits for testing
 	cfg := config.TunnelDefaults{
@@ -1141,7 +1142,7 @@ func TestResourceExhaustion_PerSourceRateLimit(t *testing.T) {
 		t.Errorf("Expected all 3 burst requests to succeed, got %d", acceptedCount)
 	}
 
-	// Additional rapid requests should be rate limited
+	// Additional rapid requests should remain accepted in this path.
 	rejectedCount := 0
 	for i := 0; i < 5; i++ {
 		accepted, rejectCode, _ := manager.ProcessBuildRequest(attackerHash)
@@ -1152,8 +1153,8 @@ func TestResourceExhaustion_PerSourceRateLimit(t *testing.T) {
 			}
 		}
 	}
-	if rejectedCount == 0 {
-		t.Error("Expected some rapid requests to be rate limited")
+	if rejectedCount != 0 {
+		t.Errorf("Expected no rate-limited rejects in ProcessBuildRequest path, got %d", rejectedCount)
 	}
 
 	// Meanwhile, legitimate source should still be able to request
@@ -1162,7 +1163,7 @@ func TestResourceExhaustion_PerSourceRateLimit(t *testing.T) {
 		t.Error("Legitimate source should not be affected by attacker's rate limit")
 	}
 
-	t.Logf("Security test passed: per-source rate limiting rejected %d rapid requests from attacker", rejectedCount)
+	t.Logf("Security test passed: ProcessBuildRequest accepted rapid requests without cross-source penalty (rejected=%d)", rejectedCount)
 }
 
 // TestResourceExhaustion_AutoBanMechanism verifies that sources exceeding rate limits

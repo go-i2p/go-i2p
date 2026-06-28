@@ -433,23 +433,9 @@ func (m *ParticipantManager) ProcessBuildRequest(targetHash common.Hash) (accept
 		return false, BuildReplyCodeBandwidth, limitReason
 	}
 
-	// Check 2: Global rate limiting (if enabled)
-	// Note: This is not per-source limiting; it applies globally to all tunnel build requests.
-	// The tunnel build protocol does not carry the initiator identity at intermediate hops.
-	if m.sourceLimiter != nil && m.sourceLimiterEnabled {
-		if allowed, rateReason := m.sourceLimiter.AllowRequest(targetHash); !allowed {
-			log.WithFields(logger.Fields{
-				"at":     "Manager.ProcessBuildRequest",
-				"phase":  "tunnel_build",
-				"target": truncateHash(targetHash),
-				"reason": rateReason,
-				"action": "reject_build_request",
-			}).Warn("rejecting tunnel build request due to rate limit")
-
-			// Use BANDWIDTH to hide specific rejection reason per I2P spec
-			return false, BuildReplyCodeBandwidth, rateReason
-		}
-	}
+	// Source limiter intentionally bypassed here: this call path only has the
+	// target hash from the build record (typically our own hash), not a true
+	// requester identity. Using it as a source key causes global self-throttling.
 
 	return true, 0, ""
 }

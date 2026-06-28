@@ -1,7 +1,9 @@
 package i2np
 
 import (
+	"crypto/sha256"
 	"testing"
+	"time"
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
@@ -93,13 +95,20 @@ func TestDatabaseManager_SelectClosestFloodfills(t *testing.T) {
 		t.Error("SelectFloodfillRouters should have been called")
 	}
 
-	if mockNetDB.selectTargetHash != targetKey {
-		t.Errorf("Expected target hash %x, got %x", targetKey, mockNetDB.selectTargetHash)
+	expectedRoutingKey := deriveRoutingKeyForTest(targetKey, time.Now())
+	if mockNetDB.selectTargetHash != expectedRoutingKey {
+		t.Errorf("Expected routing key %x, got %x", expectedRoutingKey, mockNetDB.selectTargetHash)
 	}
 
 	if mockNetDB.selectRequestedCount != 7 {
 		t.Errorf("Expected request count 7, got %d", mockNetDB.selectRequestedCount)
 	}
+}
+
+func deriveRoutingKeyForTest(h common.Hash, now time.Time) common.Hash {
+	date := now.UTC().Format("20060102")
+	sum := sha256.Sum256(append(h[:], []byte(date)...))
+	return sum
 }
 
 // TestDatabaseManager_SelectClosestFloodfills_LimitedPeers tests with fewer floodfills than requested

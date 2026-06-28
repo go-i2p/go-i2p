@@ -3,6 +3,8 @@ package i2np
 import (
 	"bytes"
 	"compress/gzip"
+	"crypto/sha256"
+	"encoding/binary"
 	"io"
 	"sync"
 	"time"
@@ -211,8 +213,16 @@ func (dm *DatabaseManager) retrieveRouterInfo(key common.Hash) ([]byte, error) {
 
 // sendDatabaseStoreResponse sends a DatabaseStore message back to the requester
 func (dm *DatabaseManager) sendDatabaseStoreResponse(key common.Hash, data []byte, to common.Hash) error {
-	// Create DatabaseStore message with the found RouterInfo
-	response := NewDatabaseStore(key, data, 0) // RouterInfo type is 0
+	compressed, err := gzipCompress(data)
+	if err != nil {
+		return oops.Errorf("failed to gzip RouterInfo for DatabaseStore response: %w", err)
+	}
+	// RouterInfo payload in DatabaseStore is 2-byte big-endian compressed length + gzip data.
+	payload := make([]byte, 2+len(compressed))
+	binary.BigEndian.PutUint16(payload[:2], uint16(len(compressed)))
+	copy(payload[2:], compressed)
+
+	response := NewDatabaseStore(key, payload, 0) // RouterInfo type is 0
 	return dm.sendResponse(response, to)
 }
 
@@ -266,7 +276,8 @@ func (dm *DatabaseManager) hasFloodfillSelector() bool {
 
 // fetchFloodfillRouters retrieves floodfill routers for the target key.
 func (dm *DatabaseManager) fetchFloodfillRouters(targetKey common.Hash, count int) ([]router_info.RouterInfo, error) {
-	floodfills, err := dm.floodfillSelector.SelectFloodfillRouters(targetKey, count)
+	routingKey := deriveRoutingKey(targetKey, time.Now())
+	floodfills, err := dm.floodfillSelector.SelectFloodfillRouters(routingKey, count)
 	if err != nil {
 		log.WithError(err).Warn("Failed to select floodfill routers for DatabaseSearchReply")
 		return nil, err
@@ -277,6 +288,14 @@ func (dm *DatabaseManager) fetchFloodfillRouters(targetKey common.Hash, count in
 	}
 
 	return floodfills, nil
+}
+
+// deriveRoutingKey computes the I2P DHT routing key for the current UTC date:
+// SHA256(hash || yyyyMMdd). Kept local to avoid package cycles with netdb.
+func deriveRoutingKey(h common.Hash, now time.Time) common.Hash {
+	date := now.UTC().Format("20060102")
+	sum := sha256.Sum256(append(h[:], []byte(date)...))
+	return sum
 }
 
 // convertRoutersToHashes converts RouterInfo list to hash list, skipping invalid entries.
@@ -411,6 +430,18 @@ func validateGzipSize(data []byte, maxUncompressed, maxRatio int) (int, error) {
 	}
 
 	return int(n), nil
+}
+
+func gzipCompress(data []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	w := gzip.NewWriter(&buf)
+	if _, err := w.Write(data); err != nil {
+		return nil, err
+	}
+	if err := w.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 // StoreData stores data using DatabaseWriter interface and NetDB integration

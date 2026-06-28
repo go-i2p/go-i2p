@@ -344,7 +344,9 @@ func TestSourceLimiter_Stop(t *testing.T) {
 	}
 }
 
-// TestProcessBuildRequest_Integration verifies ProcessBuildRequest with source limiting.
+// TestProcessBuildRequest_Integration verifies ProcessBuildRequest acceptance when
+// global limits are healthy. Source limiting is intentionally not applied in
+// this path because requester identity is unavailable at intermediate hops.
 func TestProcessBuildRequest_Integration(t *testing.T) {
 	cfg := config.TunnelDefaults{
 		MaxParticipatingTunnels:    100,
@@ -371,16 +373,16 @@ func TestProcessBuildRequest_Integration(t *testing.T) {
 		}
 	}
 
-	// 3rd request should be rejected due to rate limit
+	// Additional requests should remain accepted while global limits are healthy.
 	accepted, code, reason := m.ProcessBuildRequest(hash)
-	if accepted {
-		t.Error("3rd request should be rejected due to rate limit")
+	if !accepted {
+		t.Errorf("3rd request should be accepted, got rejected: code=%d, reason=%s", code, reason)
 	}
-	if code != BuildReplyCodeBandwidth {
-		t.Errorf("expected code %d (bandwidth), got %d", BuildReplyCodeBandwidth, code)
+	if code != 0 {
+		t.Errorf("expected code 0 for accepted request, got %d", code)
 	}
-	if reason != "rate_limit_exceeded" {
-		t.Errorf("expected reason 'rate_limit_exceeded', got '%s'", reason)
+	if reason != "" {
+		t.Errorf("expected empty reason for accepted request, got '%s'", reason)
 	}
 }
 
@@ -439,7 +441,7 @@ func TestGetLimitStats_WithSourceLimiter(t *testing.T) {
 	hash := createTestHash(1)
 	m.ProcessBuildRequest(hash)
 	m.ProcessBuildRequest(hash)
-	m.ProcessBuildRequest(hash) // This one gets rejected
+	m.ProcessBuildRequest(hash)
 
 	stats := m.GetLimitStats()
 
@@ -461,14 +463,14 @@ func TestGetLimitStats_WithSourceLimiter(t *testing.T) {
 	if stats.SourceLimiter == nil {
 		t.Fatal("expected source limiter stats")
 	}
-	if stats.SourceLimiter.TrackedSources != 1 {
-		t.Errorf("expected 1 tracked source, got %d", stats.SourceLimiter.TrackedSources)
+	if stats.SourceLimiter.TrackedSources != 0 {
+		t.Errorf("expected 0 tracked sources in ProcessBuildRequest path, got %d", stats.SourceLimiter.TrackedSources)
 	}
-	if stats.SourceLimiter.TotalRequests != 3 {
-		t.Errorf("expected 3 total requests, got %d", stats.SourceLimiter.TotalRequests)
+	if stats.SourceLimiter.TotalRequests != 0 {
+		t.Errorf("expected 0 source-limiter requests in ProcessBuildRequest path, got %d", stats.SourceLimiter.TotalRequests)
 	}
-	if stats.SourceLimiter.TotalRejections != 1 {
-		t.Errorf("expected 1 rejection, got %d", stats.SourceLimiter.TotalRejections)
+	if stats.SourceLimiter.TotalRejections != 0 {
+		t.Errorf("expected 0 source-limiter rejections in ProcessBuildRequest path, got %d", stats.SourceLimiter.TotalRejections)
 	}
 }
 
