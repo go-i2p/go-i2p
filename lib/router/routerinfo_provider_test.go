@@ -306,6 +306,10 @@ func TestIsPubliclyRoutableHost(t *testing.T) {
 		{name: "loopback ipv6", host: "::1", want: false},
 		{name: "link local ipv6", host: "fe80::1", want: false},
 		{name: "unique local ipv6", host: "fc00::1", want: false},
+		{name: "cgnat ipv4", host: "100.64.1.1", want: false},
+		{name: "test-net-1 ipv4", host: "192.0.2.10", want: false},
+		{name: "test-net-2 ipv4", host: "198.51.100.10", want: false},
+		{name: "test-net-3 ipv4", host: "203.0.113.10", want: false},
 		{name: "public ipv4", host: "8.8.8.8", want: true},
 		{name: "public ipv6", host: "2001:4860:4860::8888", want: true},
 	}
@@ -340,6 +344,7 @@ func TestHasReachableAddress_UsesPublicRoutableHostPolicy(t *testing.T) {
 		{name: "private only", hosts: []string{"10.0.0.3", "192.168.1.2"}, want: false},
 		{name: "loopback only", hosts: []string{"127.0.0.1", "::1"}, want: false},
 		{name: "link local only", hosts: []string{"169.254.2.2", "fe80::2"}, want: false},
+		{name: "special-use only", hosts: []string{"100.64.5.5", "192.0.2.7", "198.51.100.8", "203.0.113.9"}, want: false},
 		{name: "public ipv4 present", hosts: []string{"10.0.0.3", "8.8.8.8"}, want: true},
 		{name: "public ipv6 present", hosts: []string{"fc00::2", "2001:4860:4860::8888"}, want: true},
 	}

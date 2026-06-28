@@ -47,6 +47,10 @@ func TestIsPublicHost(t *testing.T) {
 	}{
 		{"8.8.8.8", true},
 		{"1.1.1.1", true},
+		{"100.64.1.1", false},
+		{"192.0.2.1", false},
+		{"198.51.100.1", false},
+		{"203.0.113.1", false},
 		{"127.0.0.1", false},
 		{"10.0.0.1", false},
 		{"192.168.1.1", false},

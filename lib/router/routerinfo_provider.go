@@ -234,5 +234,35 @@ func isPubliclyRoutableHost(host string) bool {
 	if ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
 		return false
 	}
+	if ip4 := ip.To4(); ip4 != nil && isSpecialUseIPv4(ip4) {
+		return false
+	}
 	return true
+}
+
+// isSpecialUseIPv4 returns true for non-routable special-use IPv4 ranges that
+// should not be treated as publicly reachable endpoints in RouterInfo caps.
+func isSpecialUseIPv4(ip net.IP) bool {
+	if ip == nil || ip.To4() == nil {
+		return false
+	}
+	if ip[0] == 100 && ip[1]&0xC0 == 64 {
+		return true // 100.64.0.0/10 carrier-grade NAT
+	}
+	if ip[0] == 192 && ip[1] == 0 && ip[2] == 0 {
+		return true // 192.0.0.0/24 IETF protocol assignments
+	}
+	if ip[0] == 192 && ip[1] == 0 && ip[2] == 2 {
+		return true // 192.0.2.0/24 TEST-NET-1
+	}
+	if ip[0] == 198 && ip[1] == 51 && ip[2] == 100 {
+		return true // 198.51.100.0/24 TEST-NET-2
+	}
+	if ip[0] == 203 && ip[1] == 0 && ip[2] == 113 {
+		return true // 203.0.113.0/24 TEST-NET-3
+	}
+	if ip[0] >= 224 {
+		return true // multicast and reserved classes
+	}
+	return false
 }

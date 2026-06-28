@@ -20,6 +20,32 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type staticSessionProvider struct {
+	session i2np.I2NPTransportSession
+}
+
+func (m *staticSessionProvider) GetSessionByHash(hash common.Hash) (i2np.I2NPTransportSession, error) {
+	return m.session, nil
+}
+
+type captureTransportSession struct {
+	mu   sync.Mutex
+	msgs []i2np.Message
+}
+
+func (s *captureTransportSession) QueueSendI2NP(msg i2np.Message) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.msgs = append(s.msgs, msg)
+	return nil
+}
+
+func (s *captureTransportSession) SendQueueSize() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.msgs)
+}
+
 // TestNewInboundMessageHandler tests handler creation
 func TestNewInboundMessageHandler(t *testing.T) {
 	sessionManager := i2cp.NewSessionManager()
@@ -376,6 +402,42 @@ func TestCreateEndpointForSession_NilDecryptor(t *testing.T) {
 	_, err = handler.CreateEndpointForSession(tunnelID, session.ID(), nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to create endpoint")
+}
+
+func TestInboundForwardToTunnel_QueuesTunnelGateway(t *testing.T) {
+	capture := &captureTransportSession{}
+	h := NewInboundMessageHandler(i2cp.NewSessionManager())
+	h.SetSessionProvider(&staticSessionProvider{session: capture})
+
+	err := h.ForwardToTunnel(1234, [32]byte{9}, []byte{0xAA, 0xBB})
+	require.NoError(t, err)
+
+	capture.mu.Lock()
+	require.Len(t, capture.msgs, 1)
+	msg := capture.msgs[0]
+	capture.mu.Unlock()
+
+	assert.Equal(t, i2np.I2NPMessageTypeTunnelGateway, msg.Type())
+}
+
+func TestInboundForwardToRouter_ParsesAndQueuesI2NP(t *testing.T) {
+	capture := &captureTransportSession{}
+	h := NewInboundMessageHandler(i2cp.NewSessionManager())
+	h.SetSessionProvider(&staticSessionProvider{session: capture})
+
+	inner := i2np.NewDataMessage([]byte("hello-router"))
+	innerBytes, err := inner.MarshalBinary()
+	require.NoError(t, err)
+
+	err = h.ForwardToRouter([32]byte{7}, innerBytes)
+	require.NoError(t, err)
+
+	capture.mu.Lock()
+	require.Len(t, capture.msgs, 1)
+	forwarded := capture.msgs[0]
+	capture.mu.Unlock()
+
+	assert.Equal(t, i2np.I2NPMessageTypeData, forwarded.Type())
 }
 
 // transitMockTransportSession is a mock implementation of i2np.I2NPTransportSession for transit testing

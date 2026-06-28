@@ -219,7 +219,10 @@ func shouldSkipIP(ip net.IP) bool {
 // isPublicIPv4 returns true if the IP is a publicly routable IPv4 address.
 func isPublicIPv4(ip net.IP) bool {
 	ip4 := ip.To4()
-	return ip4 != nil && ip.IsGlobalUnicast() && !ip.IsPrivate()
+	if ip4 == nil || !ip.IsGlobalUnicast() || ip.IsPrivate() {
+		return false
+	}
+	return !isSpecialUseIPv4(ip4)
 }
 
 // isPublicIP returns true if the IP string represents a publicly routable address
@@ -229,7 +232,40 @@ func isPublicIP(ipStr string) bool {
 	if ip == nil {
 		return false
 	}
-	return ip.IsGlobalUnicast() && !ip.IsPrivate()
+	if !ip.IsGlobalUnicast() || ip.IsPrivate() {
+		return false
+	}
+	if ip4 := ip.To4(); ip4 != nil {
+		return !isSpecialUseIPv4(ip4)
+	}
+	return true
+}
+
+// isSpecialUseIPv4 returns true for non-routable special-use IPv4 ranges that
+// should never be published as direct-reachability endpoints.
+func isSpecialUseIPv4(ip net.IP) bool {
+	if ip == nil || ip.To4() == nil {
+		return false
+	}
+	if ip[0] == 100 && ip[1]&0xC0 == 64 {
+		return true // 100.64.0.0/10 carrier-grade NAT
+	}
+	if ip[0] == 192 && ip[1] == 0 && ip[2] == 0 {
+		return true // 192.0.0.0/24 IETF protocol assignments
+	}
+	if ip[0] == 192 && ip[1] == 0 && ip[2] == 2 {
+		return true // 192.0.2.0/24 TEST-NET-1
+	}
+	if ip[0] == 198 && ip[1] == 51 && ip[2] == 100 {
+		return true // 198.51.100.0/24 TEST-NET-2
+	}
+	if ip[0] == 203 && ip[1] == 0 && ip[2] == 113 {
+		return true // 203.0.113.0/24 TEST-NET-3
+	}
+	if ip[0] >= 224 {
+		return true // multicast and reserved classes
+	}
+	return false
 }
 
 // extractTransportAddress extracts and validates the host and port from the transport's listening address.

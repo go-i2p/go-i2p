@@ -286,3 +286,22 @@ func BenchmarkConvertToRouterAddress(b *testing.B) {
 		}
 	}
 }
+
+func TestIsPublicIP_SpecialUseIPv4(t *testing.T) {
+	tests := []struct {
+		ip   string
+		want bool
+	}{
+		{ip: "100.64.1.1", want: false},
+		{ip: "192.0.2.1", want: false},
+		{ip: "198.51.100.1", want: false},
+		{ip: "203.0.113.1", want: false},
+		{ip: "8.8.8.8", want: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.ip, func(t *testing.T) {
+			assert.Equal(t, tt.want, isPublicIP(tt.ip))
+		})
+	}
+}

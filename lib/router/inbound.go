@@ -5,10 +5,12 @@ import (
 	"encoding/binary"
 	"sync"
 
+	common "github.com/go-i2p/common/data"
 	cryptotunnel "github.com/go-i2p/crypto/tunnel"
 	"github.com/go-i2p/go-i2p/lib/i2cp"
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
@@ -155,6 +157,7 @@ func (h *InboundMessageHandler) CreateEndpointForSession(tunnelID tunnel.TunnelI
 		}).WithError(err).Error("Failed to create endpoint")
 		return nil, oops.Wrapf(err, "failed to create endpoint")
 	}
+	endpoint.SetForwarder(h)
 
 	// Register the tunnel
 	if err := h.RegisterTunnel(tunnelID, sessionID, endpoint); err != nil {
@@ -416,6 +419,7 @@ func (h *InboundMessageHandler) RegisterExploratoryTunnel(tunnelID tunnel.Tunnel
 	if err != nil {
 		return oops.Wrapf(err, "create exploratory endpoint for tunnel %d", tunnelID)
 	}
+	endpoint.SetForwarder(h)
 
 	if err := h.RegisterTunnel(tunnelID, 0, endpoint); err != nil {
 		endpoint.Stop()
@@ -500,6 +504,62 @@ func (h *InboundMessageHandler) GetTunnelSession(tunnelID tunnel.TunnelID) (uint
 	}
 
 	return entry.sessionID, true
+}
+
+// ForwardToTunnel routes endpoint DTTunnel deliveries via transport by wrapping
+// the payload in a TunnelGateway message addressed to the gateway router.
+func (h *InboundMessageHandler) ForwardToTunnel(tunnelID uint32, gatewayHash [32]byte, msgBytes []byte) error {
+	h.mu.RLock()
+	sp := h.sessionProvider
+	h.mu.RUnlock()
+
+	if sp == nil {
+		return oops.Errorf("session provider not wired for tunnel forwarding")
+	}
+
+	gateway := common.Hash(gatewayHash)
+	session, err := sp.GetSessionByHash(gateway)
+	if err != nil {
+		return oops.Wrapf(err, "failed to get session for tunnel forwarding to %s", logutil.HashPrefix(gateway))
+	}
+
+	gwMsg := i2np.NewTunnelGatewayMessage(tunnel.TunnelID(tunnelID), msgBytes)
+	if err := session.QueueSendI2NP(gwMsg); err != nil {
+		return oops.Wrapf(err, "failed to send tunnel forwarding message via %s", logutil.HashPrefix(gateway))
+	}
+
+	return nil
+}
+
+// ForwardToRouter routes endpoint DTRouter deliveries via transport by parsing
+// the I2NP payload and sending it to the target router.
+func (h *InboundMessageHandler) ForwardToRouter(routerHash [32]byte, msgBytes []byte) error {
+	h.mu.RLock()
+	sp := h.sessionProvider
+	h.mu.RUnlock()
+
+	if sp == nil {
+		return oops.Errorf("session provider not wired for router forwarding")
+	}
+
+	target := common.Hash(routerHash)
+	session, err := sp.GetSessionByHash(target)
+	if err != nil {
+		return oops.Wrapf(err, "failed to get session for router forwarding to %s", logutil.HashPrefix(target))
+	}
+
+	inner := &i2np.BaseI2NPMessage{}
+	if err := inner.UnmarshalBinary(msgBytes); err != nil {
+		if err2 := inner.UnmarshalShortI2NP(msgBytes); err2 != nil {
+			return oops.Errorf("parse forwarded router message failed (standard: %v, short: %v)", err, err2)
+		}
+	}
+
+	if err := session.QueueSendI2NP(inner); err != nil {
+		return oops.Wrapf(err, "failed to send router forwarding message to %s", logutil.HashPrefix(target))
+	}
+
+	return nil
 }
 
 // getParticipant retrieves a participant tunnel by tunnel ID.
