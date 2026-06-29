@@ -16,6 +16,7 @@ import (
 
 	i2pbase64 "github.com/go-i2p/common/base64"
 	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/common/router_address"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/bootstrap"
 	"github.com/go-i2p/go-i2p/lib/config"
@@ -23,6 +24,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/keys"
 	"github.com/go-i2p/go-i2p/lib/netdb"
+	ssu2 "github.com/go-i2p/go-i2p/lib/transport/ssu2"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/stretchr/testify/require"
 )
@@ -76,8 +78,8 @@ func TestLiveNetworkPublishRouterInfo(t *testing.T) {
 	require.NotNil(t, r.transports, "transport muxer should be initialized after router startup")
 	require.NotNil(t, r.tunnelManager, "tunnel manager should be initialized after router startup")
 
-	// Use a dedicated one-shot publisher for this test path so explicit publish
-	// diagnostics are not conflated with background periodic publish loops.
+	// Use a dedicated one-shot publisher for this test path so the log output
+	// reflects whether Java I2P accepted and ACKed this go-i2p RouterInfo.
 	tracingTransport := &liveTracingSessionProvider{
 		t:     t,
 		inner: &publisherTransportAdapter{muxer: r.transports},
@@ -160,6 +162,7 @@ func TestLiveNetworkPublishRouterInfo(t *testing.T) {
 
 	ri, err := r.routerInfoProv.GetRouterInfo()
 	require.NoError(t, err, "failed to get local routerinfo for publication")
+	logLiveRouterInfoForPublish(t, *ri)
 
 	preStats := testPublisher.GetStats()
 	t.Logf("routerinfo publish pre-stats: publish_ok=%d publish_fail=%d send_ok=%d send_fail=%d verify_ok=%d verify_fail=%d ack_ok=%d ack_unexpected=%d",
@@ -220,8 +223,9 @@ func TestLiveNetworkPublishRouterInfo(t *testing.T) {
 	})
 	t.Logf("routerinfo publish diagnostics: %s", publishDiag)
 	if err != nil {
-		// No ACK received means the floodfill did not accept the DSM.
-		// send_ok > 0 only means bytes left our socket — it is NOT proof of acceptance.
+		// No ACK received means the Java floodfill did not accept the DSM.
+		// send_ok > 0 only means bytes left our socket — it is NOT proof that
+		// Java I2P stored the go-i2p RouterInfo.
 		statsAfterErr := testPublisher.GetStats()
 		t.Logf("routerinfo publish failed: send_ok=+%d send_fail=+%d ack_ok=+%d ack_unexpected=+%d error=%v",
 			statsAfterErr.RouterInfoSendSuccess-preStats.RouterInfoSendSuccess,
@@ -230,7 +234,7 @@ func TestLiveNetworkPublishRouterInfo(t *testing.T) {
 			statsAfterErr.ReplyTokenAckUnexpected-preStats.ReplyTokenAckUnexpected,
 			err,
 		)
-		require.NoError(t, err, "routerinfo publish failed: floodfill did not acknowledge the DatabaseStore message")
+		require.NoError(t, err, "Java floodfill did not acknowledge the go-i2p RouterInfo DatabaseStore message")
 	}
 
 	postStats := testPublisher.GetStats()
@@ -593,6 +597,67 @@ func routerInfoOptionString(ri router_info.RouterInfo, key string) string {
 		return ""
 	}
 	return s
+}
+
+func logLiveRouterInfoForPublish(t *testing.T, ri router_info.RouterInfo) {
+	var publishedText string
+	if published := ri.Published(); published != nil {
+		publishedAt := published.Time()
+		publishedText = fmt.Sprintf("%s age=%s", publishedAt.UTC().Format(time.RFC3339), time.Since(publishedAt).Round(time.Second))
+	} else {
+		publishedText = "<nil>"
+	}
+
+	t.Logf("routerinfo under test: published=%s caps=%q version=%q addr_count=%d",
+		publishedText,
+		string(ri.RouterCapabilities()),
+		routerInfoOptionString(ri, "router.version"),
+		len(ri.RouterAddresses()),
+	)
+
+	for index, addr := range ri.RouterAddresses() {
+		if addr == nil {
+			t.Logf("routerinfo addr[%d]: <nil>", index)
+			continue
+		}
+
+		host := ""
+		if addr.CheckOption(router_address.HOST_OPTION_KEY) {
+			if hostStr := addr.HostString(); hostStr != nil {
+				if hostData, err := hostStr.Data(); err == nil {
+					host = hostData
+				}
+			}
+		}
+
+		port := ""
+		if addr.CheckOption(router_address.PORT_OPTION_KEY) {
+			if portStr := addr.PortString(); portStr != nil {
+				if portData, err := portStr.Data(); err == nil {
+					port = portData
+				}
+			}
+		}
+
+		caps := ""
+		if addr.CheckOption(router_address.CAPS_OPTION_KEY) {
+			if capsStr := addr.CapsString(); capsStr != nil {
+				if capsData, err := capsStr.Data(); err == nil {
+					caps = capsData
+				}
+			}
+		}
+
+		t.Logf("routerinfo addr[%d]: style=%q cost=%d host=%q port=%q caps=%q introducers=%d",
+			index,
+			addr.TransportStyle(),
+			addr.Cost(),
+			host,
+			port,
+			caps,
+			len(ssu2.ExtractIntroducers(addr)),
+		)
+	}
 }
 
 type liveNetworkNoopPeerSelector struct{}
