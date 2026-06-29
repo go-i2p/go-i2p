@@ -23,7 +23,7 @@ const RouterInfoCleanupInterval = 10 * time.Minute
 // MinRouterInfoCount is the minimum number of RouterInfos to keep in the NetDB
 // even if they are expired. This prevents the NetDB from becoming empty during
 // periods of poor connectivity or clock skew, which would prevent re-bootstrapping.
-const MinRouterInfoCount = 25
+const MinRouterInfoCount = 200
 
 // trackRouterInfoExpiration records when a RouterInfo was published so the expiration
 // cleaner can remove it when it becomes stale. The expiration time is calculated as

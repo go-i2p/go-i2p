@@ -537,10 +537,8 @@ func (p *Publisher) verifyRouterInfoRetrievable(target common.Hash, floodfills [
 		if msgType != i2np.I2NPMessageTypeDatabaseStore {
 			continue
 		}
-		msg := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeDatabaseStore)
-		msg.SetData(respData)
 		store := &i2np.DatabaseStore{BaseI2NPMessage: i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeDatabaseStore)}
-		if err := store.UnmarshalBinary(msg); err != nil {
+		if err := store.UnmarshalBinary(respData); err != nil {
 			continue
 		}
 		if store.GetLeaseSetType() == i2np.DatabaseStoreTypeRouterInfo && store.GetStoreKey() == target {

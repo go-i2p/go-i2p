@@ -82,14 +82,9 @@ func (p *MessageProcessor) processDatabaseStoreMessage(msg Message) error {
 
 	// Correlate this store with any outstanding direct DatabaseLookup waiting on
 	// this key so a blocked SendDatabaseLookup can return the RouterInfo. The
-	// body is re-serialized because the resolver re-parses it via UnmarshalBinary.
+	// payload is forwarded because resolver parse helpers expect payload bytes.
 	if deliverer := p.lookupReplyDeliverer; deliverer != nil {
-		if body, err := dbStore.MarshalBinary(); err == nil {
-			deliverer.DeliverLookupReply(key, I2NPMessageTypeDatabaseStore, body)
-		} else {
-			log.WithError(err).WithField("at", "processDatabaseStoreMessage").
-				Debug("could not re-serialize DatabaseStore for lookup correlation")
-		}
+		deliverer.DeliverLookupReply(key, I2NPMessageTypeDatabaseStore, dbStore.GetData())
 	}
 
 	// Send DeliveryStatus acknowledgment when a non-zero reply token is present.
@@ -161,11 +156,11 @@ func (p *MessageProcessor) processDatabaseSearchReplyMessage(msg Message) error 
 	// this key so a blocked SendDatabaseLookup returns the suggestions and the
 	// resolver can follow them to the next iterative round.
 	if deliverer := p.lookupReplyDeliverer; deliverer != nil {
-		if body, err := searchReply.MarshalBinary(); err == nil {
-			deliverer.DeliverLookupReply(searchReply.Key, I2NPMessageTypeDatabaseSearchReply, body)
+		if payload, err := searchReply.MarshalPayload(); err == nil {
+			deliverer.DeliverLookupReply(searchReply.Key, I2NPMessageTypeDatabaseSearchReply, payload)
 		} else {
 			log.WithError(err).WithField("at", "processDatabaseSearchReplyMessage").
-				Debug("could not re-serialize DatabaseSearchReply for lookup correlation")
+				Debug("could not serialize DatabaseSearchReply payload for lookup correlation")
 		}
 	}
 

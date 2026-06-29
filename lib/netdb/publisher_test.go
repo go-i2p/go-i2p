@@ -1,13 +1,27 @@
 package netdb
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"time"
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
+	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/stretchr/testify/assert"
 )
+
+type mockLookupTransportPublisher struct {
+	fn func(ctx context.Context, peerRI router_info.RouterInfo, lookup *i2np.DatabaseLookup) ([]byte, int, error)
+}
+
+func (m *mockLookupTransportPublisher) SendDatabaseLookup(ctx context.Context, peerRI router_info.RouterInfo, lookup *i2np.DatabaseLookup) ([]byte, int, error) {
+	if m.fn == nil {
+		return nil, 0, errors.New("mock lookup transport not configured")
+	}
+	return m.fn(ctx, peerRI, lookup)
+}
 
 // TestPublisherCreation tests creating a new publisher
 func TestPublisherCreation(t *testing.T) {
@@ -60,6 +74,10 @@ func TestPublisherGetStats(t *testing.T) {
 	assert.Equal(t, 3*time.Minute, stats.LeaseSetInterval)
 	assert.Equal(t, 6, stats.FloodfillCount)
 	assert.True(t, stats.IsRunning)
+	assert.Equal(t, uint64(0), stats.RouterInfoPublishSuccess)
+	assert.Equal(t, uint64(0), stats.RouterInfoPublishFail)
+	assert.Equal(t, uint64(0), stats.RouterInfoVerifySuccess)
+	assert.Equal(t, uint64(0), stats.RouterInfoVerifyFail)
 }
 
 // TestPublisherStopBeforeStart tests stopping a publisher that was never started
@@ -212,4 +230,60 @@ func TestPublisherIntervalConfigurations(t *testing.T) {
 			assert.Equal(t, tc.leaseSetInterval, publisher.leaseSetInterval)
 		})
 	}
+}
+
+func TestVerifyRouterInfoRetrievable_SucceedsOnMatchingDatabaseStore(t *testing.T) {
+	db := newMockNetDB()
+	p := NewPublisher(db, nil, nil, nil, DefaultPublisherConfig())
+	p.verifyTimeout = 100 * time.Millisecond
+
+	target := common.Hash{1, 2, 3, 4}
+	floodfills := []router_info.RouterInfo{{}}
+
+	p.SetLookupTransport(&mockLookupTransportPublisher{fn: func(ctx context.Context, peerRI router_info.RouterInfo, lookup *i2np.DatabaseLookup) ([]byte, int, error) {
+		ds := i2np.NewDatabaseStore(target, []byte{0, 0}, i2np.DatabaseStoreTypeRouterInfo)
+		ds.ReplyToken = [4]byte{}
+		wire, err := ds.MarshalPayload()
+		if err != nil {
+			return nil, 0, err
+		}
+		return wire, i2np.I2NPMessageTypeDatabaseStore, nil
+	}})
+
+	err := p.verifyRouterInfoRetrievable(target, floodfills)
+	assert.NoError(t, err)
+}
+
+func TestVerifyRouterInfoRetrievable_FailsWhenNoMatchingStore(t *testing.T) {
+	db := newMockNetDB()
+	p := NewPublisher(db, nil, nil, nil, DefaultPublisherConfig())
+	p.verifyTimeout = 100 * time.Millisecond
+
+	target := common.Hash{1, 2, 3, 4}
+	floodfills := []router_info.RouterInfo{{}}
+
+	p.SetLookupTransport(&mockLookupTransportPublisher{fn: func(ctx context.Context, peerRI router_info.RouterInfo, lookup *i2np.DatabaseLookup) ([]byte, int, error) {
+		wrong := common.Hash{9, 9, 9, 9}
+		ds := i2np.NewDatabaseStore(wrong, []byte{0, 0}, i2np.DatabaseStoreTypeRouterInfo)
+		wire, err := ds.MarshalPayload()
+		if err != nil {
+			return nil, 0, err
+		}
+		return wire, i2np.I2NPMessageTypeDatabaseStore, nil
+	}})
+
+	err := p.verifyRouterInfoRetrievable(target, floodfills)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "post-publish RouterInfo verification failed")
+}
+
+func TestVerifyRouterInfoRetrievable_SkipsWithoutLookupTransport(t *testing.T) {
+	db := newMockNetDB()
+	p := NewPublisher(db, nil, nil, nil, DefaultPublisherConfig())
+
+	target := common.Hash{1, 2, 3, 4}
+	floodfills := []router_info.RouterInfo{{}}
+
+	err := p.verifyRouterInfoRetrievable(target, floodfills)
+	assert.NoError(t, err)
 }
