@@ -211,18 +211,8 @@ func TestCreateDatabaseStoreMessage_IncludesNonZeroReplyToken(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, i2np.I2NPMessageTypeDatabaseStore, msg.Type())
 
-	baseMsg, ok := msg.(*i2np.BaseI2NPMessage)
-	require.True(t, ok, "createDatabaseStoreMessage should return base I2NP message wrapper")
-
-	// createDatabaseStoreMessage wraps a full serialized DatabaseStore inside the
-	// outer base message data. Decode the inner base message first, then parse
-	// the DatabaseStore payload.
-	wireBytes := baseMsg.GetData()
-	inner := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeDatabaseStore)
-	require.NoError(t, inner.UnmarshalBinary(wireBytes), "must parse inner serialized I2NP message")
-
-	var parsed i2np.DatabaseStore
-	require.NoError(t, parsed.UnmarshalBinary(inner.GetData()), "must parse DatabaseStore payload")
+	parsed, ok := msg.(*i2np.DatabaseStore)
+	require.True(t, ok, "createDatabaseStoreMessage should return DatabaseStore message")
 
 	replyToken := binary.BigEndian.Uint32(parsed.ReplyToken[:])
 	assert.NotZero(t, replyToken, "reply token must be non-zero so floodfills trigger flooding")
@@ -257,14 +247,8 @@ func TestCreateDatabaseStoreMessage_IncludesReplyRouteWhenInboundAvailable(t *te
 	msg, err := publisher.createDatabaseStoreMessage(hash, data, i2np.DatabaseStoreTypeLeaseSet2)
 	require.NoError(t, err)
 
-	baseMsg, ok := msg.(*i2np.BaseI2NPMessage)
-	require.True(t, ok)
-
-	inner := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeDatabaseStore)
-	require.NoError(t, inner.UnmarshalBinary(baseMsg.GetData()))
-
-	var parsed i2np.DatabaseStore
-	require.NoError(t, parsed.UnmarshalBinary(inner.GetData()))
+	parsed, ok := msg.(*i2np.DatabaseStore)
+	require.True(t, ok, "createDatabaseStoreMessage should return DatabaseStore message")
 
 	assert.Equal(t, uint32(0x10203040), binary.BigEndian.Uint32(parsed.ReplyTunnelID[:]),
 		"reply tunnel ID should be populated from active inbound tunnel")

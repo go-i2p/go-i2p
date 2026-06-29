@@ -889,15 +889,7 @@ func (p *Publisher) createDatabaseStoreMessage(hash common.Hash, data []byte, da
 		dbStore.ReplyTunnelID = replyTunnelID
 		dbStore.ReplyGateway = replyGateway
 	}
-	dbStoreMsg := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeDatabaseStore)
-
-	dbStoreData, err := dbStore.MarshalBinary()
-	if err != nil {
-		return nil, oops.Errorf("failed to marshal DatabaseStore: %w", err)
-	}
-	dbStoreMsg.SetData(dbStoreData)
-
-	return dbStoreMsg, nil
+	return dbStore, nil
 }
 
 // selectReplyRoute returns a reply tunnel ID and gateway hash for DatabaseStore acks.
