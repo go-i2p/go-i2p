@@ -8,12 +8,14 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	i2pbase64 "github.com/go-i2p/common/base64"
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/lease_set"
 	"github.com/go-i2p/common/router_info"
@@ -706,6 +708,38 @@ func bindPlainTCPListener(listenerAddress string, requestedPort int) (net.Listen
 // Per the I2P spec the DHT key used for peer selection is the routing key,
 // not the raw hash: routing_key = SHA256(hash || yyyyMMdd_UTC).
 func (p *Publisher) selectFloodfillsForPublishing(hash common.Hash) ([]router_info.RouterInfo, error) {
+	if forced := strings.TrimSpace(os.Getenv("FORCE_TARGET_ROUTER")); forced != "" {
+		forcedHash, err := parseForceTargetRouterHash(forced)
+		if err != nil {
+			log.WithError(err).WithFields(logger.Fields{
+				"at":    "selectFloodfillsForPublishing",
+				"value": forced,
+			}).Warn("Ignoring invalid FORCE_TARGET_ROUTER override")
+		} else {
+			routers := p.db.GetAllRouterInfos()
+			for _, ri := range routers {
+				riHash, riErr := ri.IdentHash()
+				if riErr != nil {
+					continue
+				}
+				if riHash == forcedHash {
+					log.WithFields(logger.Fields{
+						"at":                  "selectFloodfillsForPublishing",
+						"force_target_router": forced,
+						"target_hash":         logutil.HashPrefixPlain(hash),
+					}).Info("Using FORCE_TARGET_ROUTER override for RouterInfo publication")
+					return []router_info.RouterInfo{ri}, nil
+				}
+			}
+			log.WithFields(logger.Fields{
+				"at":                  "selectFloodfillsForPublishing",
+				"force_target_router": forced,
+				"target_hash":         logutil.HashPrefixPlain(hash),
+				"known_routers":       len(routers),
+			}).Warn("FORCE_TARGET_ROUTER not found in NetDB; falling back to normal floodfill selection")
+		}
+	}
+
 	floodfills, err := p.db.SelectFloodfillRouters(RoutingKey(hash, time.Now()), p.floodfillCount)
 	if err != nil {
 		log.WithError(err).Error("Failed to select floodfill routers")
@@ -734,6 +768,19 @@ func (p *Publisher) selectFloodfillsForPublishing(hash common.Hash) ([]router_in
 	}).Debug("Selected floodfill routers for publishing")
 
 	return eligible, nil
+}
+
+func parseForceTargetRouterHash(value string) (common.Hash, error) {
+	raw, err := i2pbase64.DecodeString(value)
+	if err != nil {
+		return common.Hash{}, oops.Wrapf(err, "failed to decode FORCE_TARGET_ROUTER")
+	}
+	if len(raw) != len(common.Hash{}) {
+		return common.Hash{}, oops.Errorf("FORCE_TARGET_ROUTER decoded to %d bytes, want %d", len(raw), len(common.Hash{}))
+	}
+	var h common.Hash
+	copy(h[:], raw)
+	return h, nil
 }
 
 // isEligiblePublishFloodfill applies additional publication-time eligibility checks
@@ -976,6 +1023,16 @@ func (p *Publisher) sendDatabaseStoreDirect(hash common.Hash, data []byte, dataT
 		"floodfill_hash": logutil.HashPrefixPlain(ffHash),
 		"msg_type":       msg.Type(),
 	}).Debug("Sending DatabaseStore directly to floodfill")
+	if dbStore, ok := msg.(*i2np.DatabaseStore); ok {
+		log.WithFields(logger.Fields{
+			"at":              "sendDatabaseStoreDirect",
+			"data_hash":       logutil.HashPrefixPlain(hash),
+			"floodfill_hash":  logutil.HashPrefixPlain(ffHash),
+			"reply_token":     binary.BigEndian.Uint32(dbStore.ReplyToken[:]),
+			"reply_tunnel_id": binary.BigEndian.Uint32(dbStore.ReplyTunnelID[:]),
+			"reply_gateway":   logutil.HashPrefixPlain(dbStore.ReplyGateway),
+		}).Info("RouterInfo DatabaseStore reply route fields")
+	}
 
 	p.fieldMu.RLock()
 	transport := p.transport
@@ -1070,6 +1127,15 @@ func (p *Publisher) createDatabaseStoreMessage(hash common.Hash, data []byte, da
 		dbStore.ReplyToken = replyToken
 		dbStore.ReplyTunnelID = replyTunnelID
 		dbStore.ReplyGateway = replyGateway
+		log.WithFields(logger.Fields{
+			"at":              "createDatabaseStoreMessage",
+			"data_hash":       logutil.HashPrefixPlain(hash),
+			"store_type":      dataType,
+			"reply_token":     binary.BigEndian.Uint32(replyToken[:]),
+			"reply_tunnel_id": binary.BigEndian.Uint32(replyTunnelID[:]),
+			"reply_gateway":   logutil.HashPrefixPlain(replyGateway),
+			"reply_route":     "inbound_tunnel",
+		}).Info("DatabaseStore reply route selected")
 		p.registerPendingReplyToken(replyToken)
 	} else if dataType == i2np.DatabaseStoreTypeRouterInfo {
 		// For RouterInfo publication, request a DeliveryStatus/flood even when no
@@ -1087,6 +1153,15 @@ func (p *Publisher) createDatabaseStoreMessage(hash common.Hash, data []byte, da
 				}
 			}
 		}
+		log.WithFields(logger.Fields{
+			"at":              "createDatabaseStoreMessage",
+			"data_hash":       logutil.HashPrefixPlain(hash),
+			"store_type":      dataType,
+			"reply_token":     binary.BigEndian.Uint32(replyToken[:]),
+			"reply_tunnel_id": binary.BigEndian.Uint32(dbStore.ReplyTunnelID[:]),
+			"reply_gateway":   logutil.HashPrefixPlain(dbStore.ReplyGateway),
+			"reply_route":     "direct_router",
+		}).Info("DatabaseStore direct reply route selected")
 		p.registerPendingReplyToken(replyToken)
 	}
 	return dbStore, nil
@@ -1197,13 +1272,28 @@ func (p *Publisher) selectReplyRoute() ([4]byte, common.Hash, bool) {
 	if inbound == nil {
 		return [4]byte{}, common.Hash{}, false
 	}
-	if len(inbound.Hops) == 0 {
-		return [4]byte{}, common.Hash{}, false
-	}
 
 	var replyTunnelID [4]byte
 	binary.BigEndian.PutUint32(replyTunnelID[:], uint32(inbound.ID))
-	return replyTunnelID, inbound.Hops[0], true
+
+	// For a multi-hop inbound tunnel the first hop is the IBGW. For a
+	// zero-hop tunnel (Hops is empty) we ARE the gateway ourselves — use our
+	// own router hash so the floodfill can route the DeliveryStatus back.
+	var gateway common.Hash
+	if len(inbound.Hops) > 0 {
+		gateway = inbound.Hops[0]
+	} else if p.routerInfoProvider != nil {
+		if ri, err := p.routerInfoProvider.GetRouterInfo(); err == nil {
+			if h, err := ri.IdentHash(); err == nil {
+				gateway = h
+			}
+		}
+	}
+	if gateway == (common.Hash{}) {
+		return [4]byte{}, common.Hash{}, false
+	}
+
+	return replyTunnelID, gateway, true
 }
 
 // generateReplyToken returns a cryptographically random non-zero DatabaseStore reply token.

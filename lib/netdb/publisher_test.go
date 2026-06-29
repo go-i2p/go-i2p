@@ -5,9 +5,11 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
+	i2pbase64 "github.com/go-i2p/common/base64"
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/bootstrap"
@@ -375,6 +377,38 @@ func TestPublishRouterInfo_FailsWhenNoAck(t *testing.T) {
 	assert.Equal(t, uint64(1), stats.RouterInfoPublishFail)
 	assert.Equal(t, uint64(1), stats.RouterInfoSendSuccess)
 	assert.Equal(t, uint64(0), stats.RouterInfoSendFail)
+}
+
+func TestSelectFloodfillsForPublishing_UsesForceTargetRouterOverride(t *testing.T) {
+	db := newPublisherVerifyStubDB()
+	p := NewPublisher(db, nil, nil, nil, DefaultPublisherConfig())
+
+	forced := createValidRouterInfo(t)
+	other := createValidRouterInfo(t)
+	assert.NoError(t, db.SetFloodfills([]router_info.RouterInfo{forced, other}))
+
+	forcedHash, err := forced.IdentHash()
+	assert.NoError(t, err)
+	forcedHashB64 := i2pbase64.EncodeToString(forcedHash[:])
+
+	old := os.Getenv("FORCE_TARGET_ROUTER")
+	assert.NoError(t, os.Setenv("FORCE_TARGET_ROUTER", forcedHashB64))
+	t.Cleanup(func() {
+		if old == "" {
+			_ = os.Unsetenv("FORCE_TARGET_ROUTER")
+			return
+		}
+		_ = os.Setenv("FORCE_TARGET_ROUTER", old)
+	})
+
+	hash := common.Hash{0xAA, 0xBB, 0xCC, 0xDD}
+	selected, err := p.selectFloodfillsForPublishing(hash)
+	assert.NoError(t, err)
+	assert.Len(t, selected, 1)
+
+	selectedHash, err := selected[0].IdentHash()
+	assert.NoError(t, err)
+	assert.Equal(t, forcedHash, selectedHash)
 }
 
 func TestCreateDatabaseStoreMessage_TracksReplyTokenAsPending(t *testing.T) {

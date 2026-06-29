@@ -102,8 +102,8 @@ func (p *MessageProcessor) sendDatabaseStoreAck(dbStore *DatabaseStore) {
 	if token == 0 {
 		return
 	}
-	if dbStore.ReplyTunnelID == ([4]byte{}) || dbStore.ReplyGateway == (common.Hash{}) {
-		log.WithFields(logger.Fields{"at": "sendDatabaseStoreAck"}).Debug("skipping DatabaseStore ack: missing reply route")
+	if dbStore.ReplyGateway == (common.Hash{}) {
+		log.WithFields(logger.Fields{"at": "sendDatabaseStoreAck"}).Debug("skipping DatabaseStore ack: missing reply gateway")
 		return
 	}
 	if p.cloveForwarder == nil {
@@ -112,8 +112,26 @@ func (p *MessageProcessor) sendDatabaseStoreAck(dbStore *DatabaseStore) {
 	}
 	tunnelID := buildrecord.TunnelID(binary.BigEndian.Uint32(dbStore.ReplyTunnelID[:]))
 	ack := NewDeliveryStatusMessage(int(token), time.Now())
+	if tunnelID == 0 {
+		log.WithFields(logger.Fields{
+			"at":           "sendDatabaseStoreAck",
+			"reply_token":  token,
+			"reply_tunnel": uint32(tunnelID),
+			"path":         "router",
+		}).Debug("sending DatabaseStore ack via router delivery")
+		if err := p.cloveForwarder.ForwardToRouter(dbStore.ReplyGateway, ack); err != nil {
+			log.WithField("error", err).Debug("failed to send DatabaseStore ack via router delivery")
+		}
+		return
+	}
+	log.WithFields(logger.Fields{
+		"at":           "sendDatabaseStoreAck",
+		"reply_token":  token,
+		"reply_tunnel": uint32(tunnelID),
+		"path":         "tunnel",
+	}).Debug("sending DatabaseStore ack via tunnel delivery")
 	if err := p.cloveForwarder.ForwardThroughTunnel(dbStore.ReplyGateway, tunnelID, ack); err != nil {
-		log.WithField("error", err).Debug("failed to send DatabaseStore ack")
+		log.WithField("error", err).Debug("failed to send DatabaseStore ack via tunnel delivery")
 	}
 }
 
@@ -329,22 +347,53 @@ func (p *MessageProcessor) forwardToTunnelGatewayHandler(tgMsg *TunnelGateway) e
 // If a DeliveryStatusHandler is configured, the status is forwarded to confirm delivery.
 // Otherwise, the status is logged and discarded.
 func (p *MessageProcessor) processDeliveryStatusMessage(msg Message) error {
-	statusReporter, ok := msg.(StatusReporter)
-	if !ok {
-		return oops.Errorf("message does not implement StatusReporter interface")
+	log.WithFields(logger.Fields{
+		"at": "processDeliveryStatusMessage",
+	}).Debug("delivery status dispatch entered")
+
+	// Try the typed path first (locally constructed messages).
+	if statusReporter, ok := msg.(StatusReporter); ok {
+		msgID := statusReporter.GetStatusMessageID()
+		timestamp := statusReporter.GetTimestamp()
+		log.WithFields(logger.Fields{
+			"message_id": msgID,
+			"timestamp":  timestamp,
+		}).Debug("Processing delivery status")
+		if p.deliveryStatusHandler != nil {
+			return p.deliveryStatusHandler.HandleDeliveryStatus(msgID, timestamp)
+		}
+		log.WithFields(logger.Fields{
+			"at":         "processDeliveryStatusMessage",
+			"message_id": msgID,
+			"reason":     "no handler configured",
+		}).Warn("Delivery status discarded - no DeliveryStatusHandler set")
+		return nil
 	}
 
-	msgID := statusReporter.GetStatusMessageID()
-	timestamp := statusReporter.GetTimestamp()
+	// Wire-received messages arrive as *BaseI2NPMessage (DataCarrier) — parse payload directly.
+	carrier, ok := msg.(DataCarrier)
+	if !ok {
+		return oops.Errorf("DeliveryStatus message does not implement DataCarrier interface")
+	}
+	payload := carrier.GetData()
+	if len(payload) < 12 {
+		return oops.Errorf("DeliveryStatus payload too short: %d bytes (need 12)", len(payload))
+	}
+
+	msgID := int(binary.BigEndian.Uint32(payload[0:4]))
+	var date common.Date
+	copy(date[:], payload[4:12])
+	timestamp := date.Time()
+
 	log.WithFields(logger.Fields{
+		"at":         "processDeliveryStatusMessage",
 		"message_id": msgID,
 		"timestamp":  timestamp,
-	}).Debug("Processing delivery status")
+	}).Debug("Processing wire-received delivery status")
 
 	if p.deliveryStatusHandler != nil {
 		return p.deliveryStatusHandler.HandleDeliveryStatus(msgID, timestamp)
 	}
-
 	log.WithFields(logger.Fields{
 		"at":         "processDeliveryStatusMessage",
 		"message_id": msgID,
