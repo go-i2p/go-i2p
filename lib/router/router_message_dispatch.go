@@ -307,7 +307,7 @@ func (r *Router) routeDatabaseStore(msg i2np.Message, mr *i2np.I2NPMessageDispat
 
 // routeDatabaseLookup handles DatabaseLookup message routing with optional floodfill handling.
 func (r *Router) routeDatabaseLookup(msg i2np.Message, mr *i2np.I2NPMessageDispatcher, fs *netdb.FloodfillServer) error {
-	if fs != nil {
+	if fs != nil && fs.IsEnabled() {
 		lookup, err := r.parseDatabaseLookupMessage(msg)
 		if err != nil {
 			return oops.Wrapf(err, "failed to parse DatabaseLookup message")

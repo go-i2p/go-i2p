@@ -606,12 +606,51 @@ func (p *Publisher) selectFloodfillsForPublishing(hash common.Hash) ([]router_in
 		return nil, err
 	}
 
+	eligible := make([]router_info.RouterInfo, 0, len(floodfills))
+	for _, ri := range floodfills {
+		if isEligiblePublishFloodfill(ri) {
+			eligible = append(eligible, ri)
+		}
+	}
+
+	if len(eligible) == 0 {
+		log.WithFields(logger.Fields{
+			"hash":       logutil.HashPrefixPlain(hash),
+			"floodfills": len(floodfills),
+		}).Warn("No eligible floodfills after publication hardening; falling back to raw floodfill set")
+		return floodfills, nil
+	}
+
 	log.WithFields(logger.Fields{
-		"hash":       logutil.HashPrefixPlain(hash),
-		"floodfills": len(floodfills),
+		"hash":                logutil.HashPrefixPlain(hash),
+		"floodfills":          len(floodfills),
+		"eligible_floodfills": len(eligible),
 	}).Debug("Selected floodfill routers for publishing")
 
-	return floodfills, nil
+	return eligible, nil
+}
+
+// isEligiblePublishFloodfill applies additional publication-time eligibility checks
+// beyond the caps="f" floodfill marker. Publishing to unreachable or stale floodfills
+// can make RouterInfo look successfully published locally while remaining
+// unretrievable by remote routers.
+func isEligiblePublishFloodfill(ri router_info.RouterInfo) bool {
+	if !strings.ContainsRune(ri.RouterCapabilities(), 'R') || strings.ContainsRune(ri.RouterCapabilities(), 'H') {
+		return false
+	}
+
+	direct, viaIntro := hasReachableAddress(&ri)
+	if !direct && !viaIntro {
+		return false
+	}
+
+	if published := ri.Published(); published != nil {
+		if time.Since(published.Time()) > maxRouterInfoAge {
+			return false
+		}
+	}
+
+	return true
 }
 
 // sendDatabaseStoreMessages sends DatabaseStore messages to specified floodfills
@@ -724,17 +763,28 @@ func (p *Publisher) sendDatabaseStoreMessagesAtLeastOne(hash common.Hash, data [
 // through an outbound tunnel for anonymity. This method coordinates the tunnel selection,
 // message creation, and delivery to the gateway router.
 func (p *Publisher) sendDatabaseStoreToFloodfill(hash common.Hash, data []byte, dataType byte, floodfill router_info.RouterInfo) error {
-	// Select and validate outbound tunnel
+	// For RouterInfo publication, prefer direct delivery to the selected floodfill.
+	// This guarantees destination targeting for the highest-impact publication path.
+	if dataType == i2np.DatabaseStoreTypeRouterInfo {
+		ffHash, err := floodfill.IdentHash()
+		if err != nil {
+			return oops.Errorf("failed to get floodfill hash: %w", err)
+		}
+
+		log.WithFields(logger.Fields{
+			"data_hash":      logutil.HashPrefixPlain(hash),
+			"floodfill_hash": logutil.HashPrefixPlain(ffHash),
+		}).Debug("Sending RouterInfo DatabaseStore directly to selected floodfill")
+
+		return p.sendDatabaseStoreDirect(hash, data, dataType, floodfill)
+	}
+
+	// For non-RouterInfo entries keep tunnel-anonymous publication behavior.
 	selectedTunnel, gatewayHash, err := p.selectAndValidateTunnel()
 	if err != nil {
-		if dataType == i2np.DatabaseStoreTypeRouterInfo {
-			log.WithError(err).WithField("hash", logutil.HashPrefixPlain(hash)).Info("No outbound tunnel available; falling back to direct RouterInfo publication")
-			return p.sendDatabaseStoreDirect(hash, data, dataType, floodfill)
-		}
 		return err
 	}
 
-	// Get floodfill hash for logging and validation
 	ffHash, err := floodfill.IdentHash()
 	if err != nil {
 		return oops.Errorf("failed to get floodfill hash: %w", err)

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
@@ -99,6 +100,10 @@ func (p *MessageProcessor) processDatabaseStoreMessage(msg Message) error {
 func (p *MessageProcessor) sendDatabaseStoreAck(dbStore *DatabaseStore) {
 	token := binary.BigEndian.Uint32(dbStore.ReplyToken[:])
 	if token == 0 {
+		return
+	}
+	if dbStore.ReplyTunnelID == ([4]byte{}) || dbStore.ReplyGateway == (common.Hash{}) {
+		log.WithFields(logger.Fields{"at": "sendDatabaseStoreAck"}).Debug("skipping DatabaseStore ack: missing reply route")
 		return
 	}
 	if p.cloveForwarder == nil {
