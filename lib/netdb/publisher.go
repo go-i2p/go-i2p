@@ -493,7 +493,7 @@ func (p *Publisher) PublishRouterInfo(ri router_info.RouterInfo) error {
 		"hash":              hash.String()[:16],
 	}).Debug("RouterInfo compressed for transmission")
 
-	if err := p.sendDatabaseStoreMessages(hash, payload, i2np.DatabaseStoreTypeRouterInfo, floodfills); err != nil {
+	if err := p.sendDatabaseStoreMessagesAtLeastOne(hash, payload, i2np.DatabaseStoreTypeRouterInfo, floodfills); err != nil {
 		return err
 	}
 
@@ -615,6 +615,64 @@ func (p *Publisher) sendDatabaseStoreMessages(hash common.Hash, data []byte, dat
 		"hash":       logutil.HashPrefixPlain(hash),
 		"floodfills": len(floodfills),
 	}).Debug("Successfully published to all floodfills")
+
+	return nil
+}
+
+// sendDatabaseStoreMessagesAtLeastOne sends DatabaseStore messages and treats
+// partial delivery as success as long as at least one floodfill accepted the
+// message. This is used for RouterInfo publication so transient transport
+// outages do not make publication fail when we still reached part of the
+// network and can be flooded onward.
+func (p *Publisher) sendDatabaseStoreMessagesAtLeastOne(hash common.Hash, data []byte, dataType byte, floodfills []router_info.RouterInfo) error {
+	var wg sync.WaitGroup
+	errChan := make(chan error, len(floodfills))
+
+	for _, ff := range floodfills {
+		wg.Add(1)
+		go func(floodfill router_info.RouterInfo) {
+			defer wg.Done()
+
+			if err := p.sendDatabaseStoreToFloodfill(hash, data, dataType, floodfill); err != nil {
+				errChan <- err
+			}
+		}(ff)
+	}
+
+	wg.Wait()
+	close(errChan)
+
+	var errors []error
+	for err := range errChan {
+		errors = append(errors, err)
+	}
+
+	successes := len(floodfills) - len(errors)
+	if successes <= 0 {
+		if len(errors) == 0 {
+			return oops.Errorf("failed to send to any floodfill: no floodfills selected")
+		}
+		return oops.Errorf("failed to send to any floodfill (%d attempted): first error: %w", len(floodfills), errors[0])
+	}
+
+	if len(errors) > 0 {
+		errMsgs := make([]string, 0, len(errors))
+		for _, e := range errors {
+			errMsgs = append(errMsgs, e.Error())
+		}
+		log.WithFields(logger.Fields{
+			"hash":         logutil.HashPrefixPlain(hash),
+			"successes":    successes,
+			"errors":       len(errors),
+			"total":        len(floodfills),
+			"error_detail": errMsgs,
+		}).Warn("RouterInfo publish reached at least one floodfill; continuing despite partial send failures")
+	} else {
+		log.WithFields(logger.Fields{
+			"hash":       logutil.HashPrefixPlain(hash),
+			"floodfills": len(floodfills),
+		}).Debug("Successfully published to all floodfills")
+	}
 
 	return nil
 }
