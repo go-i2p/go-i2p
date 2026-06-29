@@ -612,10 +612,9 @@ func (kr *KademliaResolver) queryPeer(ctx context.Context, peer, target common.H
 		return nil, oops.Errorf("cannot query peer: our router hash is not set")
 	}
 
-	// Use exploration lookups for iterative discovery so peers return
-	// search-reply suggestions (including non-floodfills) instead of only
-	// strict RI semantics.
-	lookup := i2np.NewDatabaseLookup(target, fromHash, i2np.DatabaseLookupFlagTypeExploration, nil)
+	// Use RouterInfo lookup semantics so peers may return the requested RI
+	// directly when they have it, while still allowing search-reply fallback.
+	lookup := i2np.NewDatabaseLookup(target, fromHash, i2np.DatabaseLookupFlagTypeRI, nil)
 
 	// Send the lookup and wait for response
 	responseData, msgType, err := transport.SendDatabaseLookup(ctx, *peerRI, lookup)

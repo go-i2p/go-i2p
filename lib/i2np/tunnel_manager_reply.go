@@ -356,6 +356,9 @@ func (tm *TunnelManager) updateTunnelBasedOnReply(matchingTunnel *tunnel.TunnelS
 func (tm *TunnelManager) handleSuccessfulBuild(matchingTunnel *tunnel.TunnelState, messageID int) {
 	buildTimeMs := float64(time.Since(matchingTunnel.CreatedAt).Milliseconds())
 	matchingTunnel.State = tunnel.TunnelReady
+	if pool := tm.getPoolForTunnel(matchingTunnel.IsInbound); pool != nil {
+		pool.InvalidateActiveCache()
+	}
 
 	// Route the build success event to the appropriate window based on tunnel origin.
 	// Client tunnels (I2CP session pools) are tracked separately from exploratory tunnels.

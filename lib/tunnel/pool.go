@@ -436,6 +436,14 @@ func (p *Pool) ReanchorBuildStart(id TunnelID) {
 	tunnel.CreatedAt = time.Now()
 }
 
+// InvalidateActiveCache marks the active tunnel cache dirty so the next
+// selection or active-list read rebuilds from current tunnel states.
+// This must be called when tunnel readiness changes in-place without
+// adding/removing entries from p.tunnels.
+func (p *Pool) InvalidateActiveCache() {
+	p.cachedDirty.Store(true)
+}
+
 // RemoveTunnel removes a tunnel from the pool
 func (p *Pool) RemoveTunnel(id TunnelID) {
 	p.mutex.Lock()

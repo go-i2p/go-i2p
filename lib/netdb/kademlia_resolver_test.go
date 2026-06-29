@@ -3,6 +3,7 @@ package netdb
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/bootstrap"
 	"github.com/go-i2p/go-i2p/lib/i2np"
+	"github.com/go-i2p/go-i2p/lib/testutil"
 )
 
 // mockLookupTransport implements LookupTransport for testing
@@ -251,6 +253,42 @@ func TestQueryPeerPeerNotFound(t *testing.T) {
 	expectedPrefix := "peer 0a141e0000000000 not found in local database"
 	if err.Error() != expectedPrefix {
 		t.Errorf("Unexpected error: %v", err)
+	}
+}
+
+func TestQueryPeer_UsesRouterInfoLookupType(t *testing.T) {
+	mockDB := newMockNetworkDatabase()
+	peerRI := *testutil.CreateSignedTestRouterInfo(t, map[string]string{"caps": "fR"}, nil)
+	peerHash, err := peerRI.IdentHash()
+	if err != nil {
+		t.Fatalf("failed to compute peer hash: %v", err)
+	}
+	mockDB.routerInfos[peerHash] = peerRI
+
+	ourHash := common.Hash{1, 2, 3, 4}
+	targetHash := common.Hash{5, 6, 7, 8}
+
+	mockTransport := &mockLookupTransport{
+		sendFunc: func(ctx context.Context, peer router_info.RouterInfo, lookup *i2np.DatabaseLookup) ([]byte, int, error) {
+			if lookup == nil {
+				return nil, 0, fmt.Errorf("lookup was nil")
+			}
+			if lookup.Flags&i2np.DatabaseLookupFlagTypeExploration != i2np.DatabaseLookupFlagTypeRI {
+				return nil, 0, fmt.Errorf("unexpected lookup type bits: 0x%02x", lookup.Flags&i2np.DatabaseLookupFlagTypeExploration)
+			}
+			return nil, 0, fmt.Errorf("stop after lookup assertion")
+		},
+	}
+
+	resolver := NewKademliaResolverWithTransport(mockDB, nil, mockTransport, ourHash)
+	ctx := context.Background()
+
+	_, err = resolver.queryPeer(ctx, peerHash, targetHash)
+	if err == nil {
+		t.Fatal("expected queryPeer to return error from mock transport")
+	}
+	if got := err.Error(); got != "lookup failed: stop after lookup assertion" {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
