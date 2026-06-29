@@ -466,7 +466,12 @@ func (fs *FloodfillServer) lookupRouterInfo(key common.Hash) ([]byte, byte, erro
 		return nil, 0, err
 	}
 
-	return compressed, i2np.DatabaseStoreTypeRouterInfo, nil
+	// RouterInfo DatabaseStore payload MUST be: 2-byte compressed length + gzip bytes.
+	payload := make([]byte, 2+len(compressed))
+	binary.BigEndian.PutUint16(payload[:2], uint16(len(compressed)))
+	copy(payload[2:], compressed)
+
+	return payload, i2np.DatabaseStoreTypeRouterInfo, nil
 }
 
 // lookupLeaseSet looks up a LeaseSet by hash.

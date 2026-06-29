@@ -132,17 +132,17 @@ type Pool struct {
 	buildFailures        int           // Consecutive build failures
 	ctx                  context.Context
 	cancel               context.CancelFunc
-	maintWg              sync.WaitGroup            // Track maintenance goroutine
-	failedPeers          map[common.Hash]time.Time // FIX #5: Track failed peer connection attempts
-	failedPeersMu        sync.RWMutex              // FIX #5: Protect failed peers map
-	peerTracker          PeerTracker               // Optional peer reputation tracking (netdb integration)
-	cachedActive         atomic.Value              // []*TunnelState - lock-free cached sorted active tunnels
-	cachedDirty          atomic.Bool               // True when cache needs rebuild
-	inFlightExpiredCount int                       // Consecutive inbound build timeouts (no VTBRM received)
-	autoFallbackFn       func() bool               // Returns true when no public address is available
-	routerHash           common.Hash               // Our router's identity hash, used as ReplyGateway in build requests
-	startupGate          <-chan struct{}           // BUG-1: closed when pre-conditions for first build are met
-	replyTunnelProvider  func() (TunnelID, bool)   // Returns an active inbound tunnel ID for reply routing (nil = direct delivery)
+	maintWg              sync.WaitGroup                       // Track maintenance goroutine
+	failedPeers          map[common.Hash]time.Time            // FIX #5: Track failed peer connection attempts
+	failedPeersMu        sync.RWMutex                         // FIX #5: Protect failed peers map
+	peerTracker          PeerTracker                          // Optional peer reputation tracking (netdb integration)
+	cachedActive         atomic.Value                         // []*TunnelState - lock-free cached sorted active tunnels
+	cachedDirty          atomic.Bool                          // True when cache needs rebuild
+	inFlightExpiredCount int                                  // Consecutive inbound build timeouts (no VTBRM received)
+	autoFallbackFn       func() bool                          // Returns true when no public address is available
+	routerHash           common.Hash                          // Our router's identity hash, used as ReplyGateway in build requests
+	startupGate          <-chan struct{}                      // BUG-1: closed when pre-conditions for first build are met
+	replyTunnelProvider  func() (TunnelID, common.Hash, bool) // Returns reply tunnel ID + gateway hash for reply routing (nil = direct delivery)
 }
 
 // SetStartupGate sets a channel that maintenanceLoop waits on before
@@ -164,7 +164,7 @@ func (p *Pool) SetStartupGate(gate <-chan struct{}) {
 // on the existing NTCP2 session) rather than ROUTER delivery mode (direct
 // type-26 to our router address, which fails behind NAT).
 // A nil provider (default) leaves ReplyTunnelID=0 (ROUTER delivery).
-func (p *Pool) SetReplyTunnelProvider(fn func() (TunnelID, bool)) {
+func (p *Pool) SetReplyTunnelProvider(fn func() (TunnelID, common.Hash, bool)) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 	p.replyTunnelProvider = fn
@@ -682,9 +682,13 @@ func (p *Pool) prepareBuildRequest(excludePeers []common.Hash) BuildTunnelReques
 	}
 
 	replyTunnelID := TunnelID(0)
+	replyGateway := ourHash
 	if provider != nil {
-		if id, ok := provider(); ok {
+		if id, gw, ok := provider(); ok {
 			replyTunnelID = id
+			if gw != (common.Hash{}) {
+				replyGateway = gw
+			}
 		}
 	}
 
@@ -697,7 +701,7 @@ func (p *Pool) prepareBuildRequest(excludePeers []common.Hash) BuildTunnelReques
 		ExcludePeers:              progressiveExclude,
 		RequireDirectConnectivity: true,          // FIX: Only select directly-contactable peers
 		OurIdentity:               ourHash,       // Our router hash for reply routing
-		ReplyGateway:              ourHash,       // Last hop sends reply to our inbound tunnel gateway (us)
+		ReplyGateway:              replyGateway,  // Last hop sends reply to inbound tunnel gateway (IBGW)
 		ReplyTunnelID:             replyTunnelID, // Non-zero = TUNNEL delivery via existing session (NAT-safe)
 	}
 }
@@ -923,9 +927,13 @@ func (p *Pool) RetryTunnelBuild(tunnelID TunnelID, isInbound bool, hopCount int)
 	p.mutex.RUnlock()
 
 	replyTunnelID := TunnelID(0)
+	replyGateway := routerHash
 	if provider != nil {
-		if id, ok := provider(); ok {
+		if id, gw, ok := provider(); ok {
 			replyTunnelID = id
+			if gw != (common.Hash{}) {
+				replyGateway = gw
+			}
 		}
 	}
 
@@ -937,7 +945,7 @@ func (p *Pool) RetryTunnelBuild(tunnelID TunnelID, isInbound bool, hopCount int)
 		ExcludePeers:              p.GetFailedPeers(),
 		RequireDirectConnectivity: true,
 		OurIdentity:               routerHash,
-		ReplyGateway:              routerHash,
+		ReplyGateway:              replyGateway,
 		ReplyTunnelID:             replyTunnelID, // Non-zero = TUNNEL delivery via existing session (NAT-safe)
 	}
 

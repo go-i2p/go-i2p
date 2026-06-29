@@ -466,6 +466,11 @@ func (p *Publisher) PublishRouterInfo(ri router_info.RouterInfo) error {
 		return oops.Errorf("failed to gzip-compress RouterInfo: %w", err)
 	}
 
+	// RouterInfo DatabaseStore payload MUST be: 2-byte compressed length + gzip bytes.
+	payload := make([]byte, 2+len(compressed))
+	binary.BigEndian.PutUint16(payload[:2], uint16(len(compressed)))
+	copy(payload[2:], compressed)
+
 	log.WithFields(logger.Fields{
 		"at":                "PublishRouterInfo",
 		"uncompressed_size": len(riBytes),
@@ -473,7 +478,7 @@ func (p *Publisher) PublishRouterInfo(ri router_info.RouterInfo) error {
 		"hash":              hash.String()[:16],
 	}).Debug("RouterInfo compressed for transmission")
 
-	return p.sendDatabaseStoreMessages(hash, compressed, i2np.DatabaseStoreTypeRouterInfo, floodfills)
+	return p.sendDatabaseStoreMessages(hash, payload, i2np.DatabaseStoreTypeRouterInfo, floodfills)
 }
 
 // selectFloodfillsForPublishing selects the closest floodfills for a given hash.

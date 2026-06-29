@@ -115,14 +115,17 @@ func NewTunnelManager(peerSelector tunnel.PeerSelector) *TunnelManager {
 
 	// Initialize ReplyProcessor with default config for reply decryption
 	tm.replyProcessor = NewReplyProcessor(DefaultReplyProcessorConfig(), tm)
-	replyTunnelProvider := func() (tunnel.TunnelID, bool) {
+	replyTunnelProvider := func() (tunnel.TunnelID, common.Hash, bool) {
 		if tm.inboundPool == nil {
-			return 0, false
+			return 0, common.Hash{}, false
 		}
 		if inbound := tm.inboundPool.SelectTunnel(); inbound != nil {
-			return inbound.ID, true
+			if len(inbound.Hops) > 0 {
+				return inbound.ID, inbound.Hops[0], true
+			}
+			return inbound.ID, common.Hash{}, true
 		}
-		return 0, false
+		return 0, common.Hash{}, false
 	}
 	tm.inboundPool.SetReplyTunnelProvider(replyTunnelProvider)
 	tm.outboundPool.SetReplyTunnelProvider(replyTunnelProvider)

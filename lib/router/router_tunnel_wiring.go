@@ -271,14 +271,17 @@ func (r *Router) wireReplyTunnelProviders(inboundPool, outboundPool *tunnel.Pool
 		return
 	}
 
-	makeProvider := func(pool *tunnel.Pool) func() (tunnel.TunnelID, bool) {
-		return func() (tunnel.TunnelID, bool) {
+	makeProvider := func(pool *tunnel.Pool) func() (tunnel.TunnelID, common.Hash, bool) {
+		return func() (tunnel.TunnelID, common.Hash, bool) {
 			active := pool.GetActiveTunnels()
 			if len(active) == 0 {
-				return 0, false
+				return 0, common.Hash{}, false
 			}
 			// Prefer the oldest active tunnel for stability.
-			return active[0].ID, true
+			if len(active[0].Hops) > 0 {
+				return active[0].ID, active[0].Hops[0], true
+			}
+			return active[0].ID, common.Hash{}, true
 		}
 	}
 

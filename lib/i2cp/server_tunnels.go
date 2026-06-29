@@ -184,16 +184,19 @@ func (s *Server) applySessionPoolRoutingConfig(pool *tunnel.Pool) {
 
 // makeReplyTunnelProvider returns a provider that picks a stable active tunnel
 // from the given pool for reply routing.
-func makeReplyTunnelProvider(pool *tunnel.Pool) func() (tunnel.TunnelID, bool) {
-	return func() (tunnel.TunnelID, bool) {
+func makeReplyTunnelProvider(pool *tunnel.Pool) func() (tunnel.TunnelID, common.Hash, bool) {
+	return func() (tunnel.TunnelID, common.Hash, bool) {
 		if pool == nil {
-			return 0, false
+			return 0, common.Hash{}, false
 		}
 		active := pool.GetActiveTunnels()
 		if len(active) == 0 {
-			return 0, false
+			return 0, common.Hash{}, false
 		}
-		return active[0].ID, true
+		if len(active[0].Hops) > 0 {
+			return active[0].ID, active[0].Hops[0], true
+		}
+		return active[0].ID, common.Hash{}, true
 	}
 }
 
