@@ -198,7 +198,7 @@ func TestSendDatabaseStoreToFloodfill_RouterInfoFallsBackToDirectTransport(t *te
 	assert.Equal(t, i2np.I2NPMessageTypeDatabaseStore, sentMessages[0].Type(), "Expected direct DatabaseStore message type")
 }
 
-func TestSendDatabaseStoreToFloodfill_RouterInfoFallsBackToTunnelWhenDirectTransportUnavailable(t *testing.T) {
+func TestSendDatabaseStoreToFloodfill_RouterInfoDirectSendFailsWhenTransportUnavailable(t *testing.T) {
 	db := newMockNetDB()
 	transport := &routingMockTransportManager{sessions: make(map[string]*mockTransportSession)}
 	selector := &mockPeerSelector{}
@@ -231,11 +231,11 @@ func TestSendDatabaseStoreToFloodfill_RouterInfoFallsBackToTunnelWhenDirectTrans
 	floodfill := directFloodfill
 
 	err = publisher.sendDatabaseStoreToFloodfill(hash, data, i2np.DatabaseStoreTypeRouterInfo, floodfill)
-	assert.NoError(t, err)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get transport session to floodfill")
 
 	sentMessages := transport.GetSentMessages(gatewayHash)
-	require.Len(t, sentMessages, 1, "Expected RouterInfo fallback to send through tunnel gateway")
-	assert.Equal(t, i2np.I2NPMessageTypeTunnelGateway, sentMessages[0].Type(), "Expected tunnel gateway message type on fallback")
+	require.Len(t, sentMessages, 0, "RouterInfo publish should not fallback to tunnel gateway when direct transport is unavailable")
 }
 
 type routingMockTransportManager struct {
@@ -310,7 +310,48 @@ func TestCreateDatabaseStoreMessage_IncludesNonZeroReplyToken(t *testing.T) {
 	require.True(t, ok, "createDatabaseStoreMessage should return DatabaseStore message")
 
 	replyToken := binary.BigEndian.Uint32(parsed.ReplyToken[:])
-	assert.NotZero(t, replyToken, "reply token must be non-zero so floodfills trigger flooding")
+	assert.Zero(t, replyToken, "reply token must remain zero when no inbound reply route is available")
+}
+
+func TestCreateDatabaseStoreMessage_TracksReplyTokenOnlyWhenReplyRouteAvailable(t *testing.T) {
+	db := newMockNetDB()
+	transport := newMockTransportManager()
+	selector := &mockPeerSelector{}
+	outboundPool := tunnel.NewTunnelPool(selector)
+	inboundPool := tunnel.NewTunnelPool(selector)
+
+	providerRI := createValidRouterInfo(t)
+	publisher := NewPublisher(db, outboundPool, transport, staticRouterInfoProvider{ri: &providerRI}, DefaultPublisherConfig())
+
+	hash := common.Hash{9, 8, 7, 6, 5, 4, 3, 2}
+	msg, err := publisher.createDatabaseStoreMessage(hash, []byte("dbstore payload"), i2np.DatabaseStoreTypeRouterInfo)
+	require.NoError(t, err)
+	parsed, ok := msg.(*i2np.DatabaseStore)
+	require.True(t, ok)
+	assert.NotZero(t, binary.BigEndian.Uint32(parsed.ReplyToken[:]), "RouterInfo should carry a reply token even without inbound reply tunnel")
+	assert.NotEqual(t, common.Hash{}, parsed.ReplyGateway, "RouterInfo should include direct reply gateway when no inbound reply tunnel exists")
+	assert.Zero(t, binary.BigEndian.Uint32(parsed.ReplyTunnelID[:]), "RouterInfo direct reply should not set reply tunnel ID without inbound reply tunnel")
+	token := binary.BigEndian.Uint32(parsed.ReplyToken[:])
+	_, pending := publisher.pendingReplyTokens.Load(token)
+	assert.True(t, pending, "reply token should be tracked for RouterInfo direct reply route")
+
+	inboundPool.AddTunnel(&tunnel.TunnelState{
+		ID:        tunnel.TunnelID(0x01020304),
+		Hops:      []common.Hash{{0xAA, 0xBB, 0xCC, 0xDD}},
+		State:     tunnel.TunnelReady,
+		CreatedAt: time.Now(),
+		IsInbound: true,
+	})
+	publisher.SetInboundPool(inboundPool)
+
+	msg, err = publisher.createDatabaseStoreMessage(hash, []byte("dbstore payload"), i2np.DatabaseStoreTypeRouterInfo)
+	require.NoError(t, err)
+	parsed, ok = msg.(*i2np.DatabaseStore)
+	require.True(t, ok)
+	token = binary.BigEndian.Uint32(parsed.ReplyToken[:])
+	assert.NotZero(t, token, "reply token must be non-zero when a reply route is available")
+	_, pending = publisher.pendingReplyTokens.Load(token)
+	assert.True(t, pending, "reply token should be tracked when a reply route is available")
 }
 
 func TestCreateDatabaseStoreMessage_IncludesReplyRouteWhenInboundAvailable(t *testing.T) {

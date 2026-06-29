@@ -13,6 +13,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/bootstrap"
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/testutil"
+	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -80,6 +81,8 @@ func TestPublisherGetStats(t *testing.T) {
 	assert.True(t, stats.IsRunning)
 	assert.Equal(t, uint64(0), stats.RouterInfoPublishSuccess)
 	assert.Equal(t, uint64(0), stats.RouterInfoPublishFail)
+	assert.Equal(t, uint64(0), stats.RouterInfoSendSuccess)
+	assert.Equal(t, uint64(0), stats.RouterInfoSendFail)
 	assert.Equal(t, uint64(0), stats.RouterInfoVerifySuccess)
 	assert.Equal(t, uint64(0), stats.RouterInfoVerifyFail)
 }
@@ -351,6 +354,8 @@ func TestPublishRouterInfo_RetriesVerificationAndSucceeds(t *testing.T) {
 	stats := p.GetStats()
 	assert.Equal(t, uint64(1), stats.RouterInfoPublishSuccess)
 	assert.Equal(t, uint64(0), stats.RouterInfoPublishFail)
+	assert.Equal(t, uint64(1), stats.RouterInfoSendSuccess)
+	assert.Equal(t, uint64(0), stats.RouterInfoSendFail)
 	assert.Equal(t, uint64(1), stats.RouterInfoVerifySuccess)
 	assert.Equal(t, uint64(0), stats.RouterInfoVerifyFail)
 }
@@ -379,13 +384,24 @@ func TestPublishRouterInfo_FailsWhenVerificationNeverSucceeds(t *testing.T) {
 	stats := p.GetStats()
 	assert.Equal(t, uint64(0), stats.RouterInfoPublishSuccess)
 	assert.Equal(t, uint64(1), stats.RouterInfoPublishFail)
+	assert.Equal(t, uint64(1), stats.RouterInfoSendSuccess)
+	assert.Equal(t, uint64(0), stats.RouterInfoSendFail)
 	assert.Equal(t, uint64(0), stats.RouterInfoVerifySuccess)
 	assert.Equal(t, uint64(1), stats.RouterInfoVerifyFail)
 }
 
 func TestCreateDatabaseStoreMessage_TracksReplyTokenAsPending(t *testing.T) {
 	db := newPublisherVerifyStubDB()
+	inboundPool := tunnel.NewTunnelPool(&mockPeerSelector{})
+	inboundPool.AddTunnel(&tunnel.TunnelState{
+		ID:        tunnel.TunnelID(0x01020304),
+		Hops:      []common.Hash{{0xAA, 0xBB, 0xCC, 0xDD}},
+		State:     tunnel.TunnelReady,
+		CreatedAt: time.Now(),
+		IsInbound: true,
+	})
 	p := NewPublisher(db, nil, nil, nil, DefaultPublisherConfig())
+	p.SetInboundPool(inboundPool)
 
 	hash := common.Hash{0xAA, 0xBB, 0xCC}
 	msg, err := p.createDatabaseStoreMessage(hash, []byte{0x01, 0x02}, i2np.DatabaseStoreTypeRouterInfo)

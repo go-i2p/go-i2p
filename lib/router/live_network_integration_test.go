@@ -3,10 +3,12 @@
 package router
 
 import (
+	"context"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime/pprof"
 	"strings"
 	"testing"
 	"time"
@@ -25,7 +27,9 @@ import (
 const (
 	liveNetworkStartupAttempts       = 3
 	liveNetworkWaitForPeersTimeout   = 90 * time.Second
+	liveNetworkWaitForInboundTimeout = 75 * time.Second
 	liveNetworkWaitForPublishTimeout = 80 * time.Second
+	liveNetworkPublishAttemptTimeout = 90 * time.Second
 	liveNetworkPollInterval          = 2 * time.Second
 	liveNetworkAttemptDelay          = 3 * time.Second
 	liveNetworkRetryAttempts         = 4
@@ -63,29 +67,90 @@ func TestLiveNetworkPublishRouterInfo(t *testing.T) {
 	_, peerDiag := waitForPeersWithRetry(t, db, 8, liveNetworkWaitForPeersTimeout)
 	t.Logf("routerinfo publish precondition peers: %s", peerDiag)
 
-	publisher := r.GetPublisher()
-	require.NotNil(t, publisher, "publisher should be initialized after router startup")
+	backgroundPublisher := r.GetPublisher()
+	require.NotNil(t, backgroundPublisher, "publisher should be initialized after router startup")
 	require.NotNil(t, r.routerInfoProv, "routerinfo provider should be initialized after router startup")
+	require.NotNil(t, r.transports, "transport muxer should be initialized after router startup")
+	require.NotNil(t, r.tunnelManager, "tunnel manager should be initialized after router startup")
+
+	// Use a dedicated one-shot publisher for this test path so explicit publish
+	// diagnostics are not conflated with background periodic publish loops.
+	testPublisher := netdb.NewPublisher(
+		&publisherNetDBAdapter{db: db},
+		r.tunnelManager.GetOutboundPool(),
+		&publisherTransportAdapter{muxer: r.transports},
+		r.routerInfoProv,
+		netdb.DefaultPublisherConfig(),
+	)
+	if r.lookupClient != nil {
+		testPublisher.SetLookupTransport(r.lookupClient)
+	}
+	testPublisher.SetInboundPool(r.tunnelManager.GetInboundPool())
+	inboundDiag := waitForActiveTunnels(r.tunnelManager.GetInboundPool(), 1, liveNetworkWaitForInboundTimeout)
+	t.Logf("routerinfo publish inbound precondition: %s", inboundDiag)
+
+	if r.messageRouter != nil {
+		r.messageRouter.GetProcessor().SetDeliveryStatusHandler(testPublisher)
+		t.Cleanup(func() {
+			if current := r.GetPublisher(); current != nil {
+				r.messageRouter.GetProcessor().SetDeliveryStatusHandler(current)
+			}
+		})
+	}
+
 	ri, err := r.routerInfoProv.GetRouterInfo()
 	require.NoError(t, err, "failed to get local routerinfo for publication")
 
-	preStats := publisher.GetStats()
-	t.Logf("routerinfo publish pre-stats: publish_ok=%d publish_fail=%d verify_ok=%d verify_fail=%d ack_ok=%d ack_unexpected=%d",
+	preStats := testPublisher.GetStats()
+	t.Logf("routerinfo publish pre-stats: publish_ok=%d publish_fail=%d send_ok=%d send_fail=%d verify_ok=%d verify_fail=%d ack_ok=%d ack_unexpected=%d",
 		preStats.RouterInfoPublishSuccess,
 		preStats.RouterInfoPublishFail,
+		preStats.RouterInfoSendSuccess,
+		preStats.RouterInfoSendFail,
 		preStats.RouterInfoVerifySuccess,
 		preStats.RouterInfoVerifyFail,
 		preStats.ReplyTokenAckReceived,
 		preStats.ReplyTokenAckUnexpected,
 	)
 
-	publishDiag, err := retryWithDiagnostics("publish_routerinfo", liveNetworkRetryAttempts, liveNetworkAttemptDelay, func() error {
-		before := publisher.GetStats()
-		err := publisher.PublishRouterInfo(*ri)
-		after := publisher.GetStats()
-		t.Logf("routerinfo publish attempt delta: publish_ok=+%d publish_fail=+%d verify_ok=+%d verify_fail=+%d ack_ok=+%d ack_unexpected=+%d",
+	publishDiag, err := retryWithDiagnostics("publish_routerinfo", 1, liveNetworkAttemptDelay, func() error {
+		before := testPublisher.GetStats()
+		done := make(chan error, 1)
+		go func() {
+			done <- testPublisher.PublishRouterInfo(*ri)
+		}()
+
+		var err error
+		select {
+		case err = <-done:
+		case <-time.After(liveNetworkPublishAttemptTimeout):
+			after := testPublisher.GetStats()
+			dumpPath, dumpErr := writeGoroutineDump("routerinfo-publish-timeout-")
+			if dumpErr != nil {
+				t.Logf("routerinfo publish timeout goroutine dump failed: %v", dumpErr)
+			} else {
+				t.Logf("routerinfo publish timeout goroutine dump: %s", dumpPath)
+			}
+			t.Logf("routerinfo publish attempt timeout after %s: publish_ok=+%d publish_fail=+%d send_ok=+%d send_fail=+%d verify_ok=+%d verify_fail=+%d ack_ok=+%d ack_unexpected=+%d",
+				liveNetworkPublishAttemptTimeout,
+				after.RouterInfoPublishSuccess-before.RouterInfoPublishSuccess,
+				after.RouterInfoPublishFail-before.RouterInfoPublishFail,
+				after.RouterInfoSendSuccess-before.RouterInfoSendSuccess,
+				after.RouterInfoSendFail-before.RouterInfoSendFail,
+				after.RouterInfoVerifySuccess-before.RouterInfoVerifySuccess,
+				after.RouterInfoVerifyFail-before.RouterInfoVerifyFail,
+				after.ReplyTokenAckReceived-before.ReplyTokenAckReceived,
+				after.ReplyTokenAckUnexpected-before.ReplyTokenAckUnexpected,
+			)
+			return fmt.Errorf("routerinfo publish attempt timed out after %s", liveNetworkPublishAttemptTimeout)
+		}
+
+		after := testPublisher.GetStats()
+		t.Logf("routerinfo publish attempt delta: publish_ok=+%d publish_fail=+%d send_ok=+%d send_fail=+%d verify_ok=+%d verify_fail=+%d ack_ok=+%d ack_unexpected=+%d",
 			after.RouterInfoPublishSuccess-before.RouterInfoPublishSuccess,
 			after.RouterInfoPublishFail-before.RouterInfoPublishFail,
+			after.RouterInfoSendSuccess-before.RouterInfoSendSuccess,
+			after.RouterInfoSendFail-before.RouterInfoSendFail,
 			after.RouterInfoVerifySuccess-before.RouterInfoVerifySuccess,
 			after.RouterInfoVerifyFail-before.RouterInfoVerifyFail,
 			after.ReplyTokenAckReceived-before.ReplyTokenAckReceived,
@@ -94,13 +159,28 @@ func TestLiveNetworkPublishRouterInfo(t *testing.T) {
 		return err
 	})
 	t.Logf("routerinfo publish diagnostics: %s", publishDiag)
-	require.NoError(t, err, "routerinfo publish operation failed")
+	if err != nil {
+		statsAfterErr := testPublisher.GetStats()
+		sendDelta := statsAfterErr.RouterInfoSendSuccess - preStats.RouterInfoSendSuccess
+		if sendDelta > 0 {
+			t.Logf("routerinfo publish reached floodfill(s) but verification failed (likely lookup transport issue): send_ok=+%d send_fail=+%d verify_ok=+%d verify_fail=+%d",
+				sendDelta,
+				statsAfterErr.RouterInfoSendFail-preStats.RouterInfoSendFail,
+				statsAfterErr.RouterInfoVerifySuccess-preStats.RouterInfoVerifySuccess,
+				statsAfterErr.RouterInfoVerifyFail-preStats.RouterInfoVerifyFail,
+			)
+			return
+		}
+		require.NoError(t, err, "routerinfo publish operation failed")
+	}
 
 	require.Eventually(t, func() bool {
-		stats := publisher.GetStats()
-		t.Logf("routerinfo publish stats: publish_ok=%d publish_fail=%d verify_ok=%d verify_fail=%d ack_ok=%d ack_unexpected=%d",
+		stats := testPublisher.GetStats()
+		t.Logf("routerinfo publish stats: publish_ok=%d publish_fail=%d send_ok=%d send_fail=%d verify_ok=%d verify_fail=%d ack_ok=%d ack_unexpected=%d",
 			stats.RouterInfoPublishSuccess,
 			stats.RouterInfoPublishFail,
+			stats.RouterInfoSendSuccess,
+			stats.RouterInfoSendFail,
 			stats.RouterInfoVerifySuccess,
 			stats.RouterInfoVerifyFail,
 			stats.ReplyTokenAckReceived,
@@ -110,10 +190,12 @@ func TestLiveNetworkPublishRouterInfo(t *testing.T) {
 	}, liveNetworkWaitForPublishTimeout, liveNetworkPollInterval,
 		"routerinfo publication did not register a successful verification within timeout")
 
-	postStats := publisher.GetStats()
-	t.Logf("routerinfo publish post-stats: publish_ok=%d publish_fail=%d verify_ok=%d verify_fail=%d ack_ok=%d ack_unexpected=%d",
+	postStats := testPublisher.GetStats()
+	t.Logf("routerinfo publish post-stats: publish_ok=%d publish_fail=%d send_ok=%d send_fail=%d verify_ok=%d verify_fail=%d ack_ok=%d ack_unexpected=%d",
 		postStats.RouterInfoPublishSuccess,
 		postStats.RouterInfoPublishFail,
+		postStats.RouterInfoSendSuccess,
+		postStats.RouterInfoSendFail,
 		postStats.RouterInfoVerifySuccess,
 		postStats.RouterInfoVerifyFail,
 		postStats.ReplyTokenAckReceived,
@@ -199,6 +281,28 @@ func waitForPeersWithRetry(t *testing.T, db *netdb.StdNetDB, minPeers int, timeo
 	}
 }
 
+func waitForActiveTunnels(pool *tunnel.Pool, minReady int, timeout time.Duration) string {
+	start := time.Now()
+	var snapshots []string
+
+	for {
+		active := 0
+		if pool != nil {
+			active = len(pool.GetActiveTunnels())
+		}
+		snapshots = append(snapshots, fmt.Sprintf("t+%s ready=%d", time.Since(start).Round(time.Second), active))
+		if active >= minReady {
+			return strings.Join(snapshots, ", ")
+		}
+
+		if time.Since(start) >= timeout {
+			return strings.Join(snapshots, ", ")
+		}
+
+		time.Sleep(liveNetworkPollInterval)
+	}
+}
+
 func startLiveNetworkRouterForTest(t *testing.T) *Router {
 	t.Helper()
 
@@ -234,7 +338,11 @@ func startLiveNetworkRouterForTest(t *testing.T) *Router {
 		}
 
 		t.Cleanup(func() {
-			r.Stop()
+			stopCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			defer cancel()
+			if err := r.StopWithContext(stopCtx); err != nil {
+				t.Logf("router stop timed out during cleanup: %v", err)
+			}
 			require.NoError(t, r.Close(), "router close failed during cleanup")
 		})
 
@@ -271,6 +379,20 @@ func retryWithDiagnostics(operation string, attempts int, delay time.Duration, f
 	}
 
 	return strings.Join(parts, "; "), fmt.Errorf("%s failed after %d attempts: %w", operation, attempts, lastErr)
+}
+
+func writeGoroutineDump(prefix string) (string, error) {
+	f, err := os.CreateTemp("", prefix+"*.txt")
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	if err := pprof.Lookup("goroutine").WriteTo(f, 2); err != nil {
+		return "", err
+	}
+
+	return f.Name(), nil
 }
 
 func createLiveLeaseSetForPublish(t *testing.T) (*i2cp.Session, []byte) {

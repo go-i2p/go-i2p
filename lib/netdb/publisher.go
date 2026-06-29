@@ -18,7 +18,6 @@ import (
 	"github.com/go-i2p/common/lease_set"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/i2np"
-	"github.com/go-i2p/go-i2p/lib/transport"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/go-i2p/logger"
@@ -91,8 +90,11 @@ type Publisher struct {
 
 	// verification settings and counters
 	verifyTimeout            time.Duration
+	sendAttemptTimeout       time.Duration
 	routerInfoPublishSuccess atomic.Uint64
 	routerInfoPublishFail    atomic.Uint64
+	routerInfoSendSuccess    atomic.Uint64
+	routerInfoSendFail       atomic.Uint64
 	routerInfoVerifySuccess  atomic.Uint64
 	routerInfoVerifyFail     atomic.Uint64
 	ackReplyTokenReceived    atomic.Uint64
@@ -107,6 +109,11 @@ type publisherLoopSpec struct {
 	interval time.Duration
 	action   func()
 }
+
+var (
+	errSessionAcquireTimeout = errors.New("transport session acquisition timed out")
+	errQueueSendTimeout      = errors.New("i2np queue send timed out")
+)
 
 // PublisherConfig holds configuration for database publishing
 type PublisherConfig struct {
@@ -153,6 +160,7 @@ func NewPublisher(db NetworkDatabase, pool *tunnel.Pool, transport SessionProvid
 		leaseSetInterval:   config.LeaseSetInterval,
 		floodfillCount:     config.FloodfillCount,
 		verifyTimeout:      15 * time.Second,
+		sendAttemptTimeout: 20 * time.Second,
 	}
 }
 
@@ -452,6 +460,12 @@ func (p *Publisher) PublishRouterInfo(ri router_info.RouterInfo) error {
 	if err != nil {
 		return oops.Errorf("failed to get router hash: %w", err)
 	}
+	if !ri.IsValid() {
+		return oops.Errorf("refusing to publish invalid RouterInfo")
+	}
+	if err := ri.ValidatePublishable(); err != nil {
+		return oops.Errorf("refusing to publish unpublishable RouterInfo: %w", err)
+	}
 	log.WithFields(logger.Fields{
 		"at":        "PublishRouterInfo",
 		"hash":      logutil.HashPrefixPlain(hash),
@@ -509,15 +523,23 @@ func (p *Publisher) PublishRouterInfo(ri router_info.RouterInfo) error {
 	}).Debug("RouterInfo compressed for transmission")
 
 	if err := p.sendDatabaseStoreMessagesAtLeastOne(hash, payload, i2np.DatabaseStoreTypeRouterInfo, floodfills); err != nil {
+		p.routerInfoSendFail.Add(1)
 		p.routerInfoPublishFail.Add(1)
 		return err
 	}
+	p.routerInfoSendSuccess.Add(1)
 
 	const verifyAttempts = 4
 	const verifyRetryDelay = 2 * time.Second
 
 	var verifyErr error
 	for attempt := 1; attempt <= verifyAttempts; attempt++ {
+		log.WithFields(logger.Fields{
+			"at":      "PublishRouterInfo",
+			"hash":    logutil.HashPrefixPlain(hash),
+			"attempt": attempt,
+			"max":     verifyAttempts,
+		}).Info("Starting RouterInfo post-publish verification attempt")
 		verifyErr = p.verifyRouterInfoRetrievable(hash, floodfills)
 		if verifyErr == nil {
 			p.routerInfoPublishSuccess.Add(1)
@@ -561,39 +583,107 @@ func (p *Publisher) verifyRouterInfoRetrievable(target common.Hash, floodfills [
 		return oops.Errorf("no floodfills available for RouterInfo verification")
 	}
 
-	for _, ff := range floodfills {
-		ctx, cancel := context.WithTimeout(p.ctx, p.verifyTimeout)
-		from := target
-		if p.routerInfoProvider != nil {
-			if ri, err := p.routerInfoProvider.GetRouterInfo(); err == nil {
-				if riHash, err := ri.IdentHash(); err == nil {
-					from = riHash
-				}
+	from := target
+	if p.routerInfoProvider != nil {
+		if ri, err := p.routerInfoProvider.GetRouterInfo(); err == nil {
+			if riHash, err := ri.IdentHash(); err == nil {
+				from = riHash
 			}
 		}
-		lookup := i2np.NewDatabaseLookup(target, from, i2np.DatabaseLookupFlagTypeRI, nil)
-		respData, msgType, err := transport.SendDatabaseLookup(ctx, ff, lookup)
-		cancel()
-		if err != nil {
-			continue
-		}
-		if msgType != i2np.I2NPMessageTypeDatabaseStore {
-			continue
-		}
-		store := &i2np.DatabaseStore{BaseI2NPMessage: i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeDatabaseStore)}
-		if err := store.UnmarshalBinary(respData); err != nil {
-			continue
-		}
-		if store.GetLeaseSetType() == i2np.DatabaseStoreTypeRouterInfo && store.GetStoreKey() == target {
+	}
+
+	replyTunnelID, replyGateway, hasReplyRoute := p.selectReplyRoute()
+
+	type verifyResult struct {
+		matched bool
+		reason  string
+	}
+
+	results := make(chan verifyResult, len(floodfills))
+	for _, ff := range floodfills {
+		go func(floodfill router_info.RouterInfo) {
+			ctx, cancel := context.WithTimeout(p.ctx, p.verifyTimeout)
+			defer cancel()
+
+			ffHash, ffHashErr := floodfill.IdentHash()
+			lookup := i2np.NewDatabaseLookup(target, from, i2np.DatabaseLookupFlagTypeRI, nil)
+			if hasReplyRoute {
+				lookup = i2np.NewDatabaseLookupWithTunnel(target, replyGateway, replyTunnelID, i2np.DatabaseLookupFlagTypeRI, nil)
+			}
+			respData, msgType, err := sendDatabaseLookupWithTimeout(ctx, transport, floodfill, lookup)
+			if err != nil {
+				reason := fmt.Sprintf("lookup_failed ff=%s err=%v", safeLogHashPrefix(ffHash, ffHashErr), err)
+				log.WithError(err).WithFields(logger.Fields{
+					"at":             "verifyRouterInfoRetrievable",
+					"target":         logutil.HashPrefixPlain(target),
+					"floodfill_hash": safeLogHashPrefix(ffHash, ffHashErr),
+				}).Warn("RouterInfo verification lookup failed")
+				results <- verifyResult{matched: false, reason: reason}
+				return
+			}
+
+			if msgType != i2np.I2NPMessageTypeDatabaseStore {
+				reason := fmt.Sprintf("unexpected_msg_type ff=%s type=%d", safeLogHashPrefix(ffHash, ffHashErr), msgType)
+				log.WithFields(logger.Fields{
+					"at":             "verifyRouterInfoRetrievable",
+					"target":         logutil.HashPrefixPlain(target),
+					"floodfill_hash": safeLogHashPrefix(ffHash, ffHashErr),
+					"msg_type":       msgType,
+				}).Warn("RouterInfo verification received non-DatabaseStore reply")
+				results <- verifyResult{matched: false, reason: reason}
+				return
+			}
+
+			store := &i2np.DatabaseStore{BaseI2NPMessage: i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeDatabaseStore)}
+			if err := store.UnmarshalBinary(respData); err != nil {
+				reason := fmt.Sprintf("store_unmarshal_failed ff=%s err=%v", safeLogHashPrefix(ffHash, ffHashErr), err)
+				log.WithError(err).WithFields(logger.Fields{
+					"at":             "verifyRouterInfoRetrievable",
+					"target":         logutil.HashPrefixPlain(target),
+					"floodfill_hash": safeLogHashPrefix(ffHash, ffHashErr),
+				}).Warn("RouterInfo verification could not parse DatabaseStore reply")
+				results <- verifyResult{matched: false, reason: reason}
+				return
+			}
+
+			log.WithFields(logger.Fields{
+				"at":                "verifyRouterInfoRetrievable",
+				"target":            logutil.HashPrefixPlain(target),
+				"floodfill_hash":    safeLogHashPrefix(ffHash, ffHashErr),
+				"store_type":        store.GetLeaseSetType(),
+				"store_key":         logutil.HashPrefixPlain(store.GetStoreKey()),
+				"reply_token":       binary.BigEndian.Uint32(store.ReplyToken[:]),
+				"reply_gateway_set": store.ReplyGateway != (common.Hash{}),
+			}).Info("RouterInfo verification received DatabaseStore reply")
+
+			matched := store.GetLeaseSetType() == i2np.DatabaseStoreTypeRouterInfo && store.GetStoreKey() == target
+			if matched {
+				results <- verifyResult{matched: true}
+				return
+			}
+			results <- verifyResult{matched: false, reason: fmt.Sprintf("mismatch ff=%s store_type=%d store_key=%s", safeLogHashPrefix(ffHash, ffHashErr), store.GetLeaseSetType(), logutil.HashPrefixPlain(store.GetStoreKey()))}
+		}(ff)
+	}
+
+	failureReasons := make([]string, 0, len(floodfills))
+	for i := 0; i < len(floodfills); i++ {
+		result := <-results
+		if result.matched {
 			log.WithFields(logger.Fields{
 				"at":     "verifyRouterInfoRetrievable",
 				"target": logutil.HashPrefixPlain(target),
 			}).Info("RouterInfo post-publish verification succeeded")
 			return nil
 		}
+		if result.reason != "" {
+			failureReasons = append(failureReasons, result.reason)
+		}
 	}
 
-	return oops.Errorf("post-publish RouterInfo verification failed: no floodfill returned matching RouterInfo")
+	if len(failureReasons) == 0 {
+		return oops.Errorf("post-publish RouterInfo verification failed: no floodfill returned matching RouterInfo")
+	}
+	return oops.Errorf("post-publish RouterInfo verification failed: no floodfill returned matching RouterInfo; details: %s", strings.Join(failureReasons, "; "))
 }
 
 func bindPlainTCPListener(listenerAddress string, requestedPort int) (net.Listener, string, error) {
@@ -686,27 +776,37 @@ func isEligiblePublishFloodfill(ri router_info.RouterInfo) bool {
 
 // sendDatabaseStoreMessages sends DatabaseStore messages to specified floodfills
 func (p *Publisher) sendDatabaseStoreMessages(hash common.Hash, data []byte, dataType byte, floodfills []router_info.RouterInfo) error {
-	var wg sync.WaitGroup
-	errChan := make(chan error, len(floodfills))
+	if len(floodfills) == 0 {
+		return oops.Errorf("failed to send to any floodfill: no floodfills selected")
+	}
 
+	type sendResult struct {
+		err error
+	}
+
+	resultCh := make(chan sendResult, len(floodfills))
 	for _, ff := range floodfills {
-		wg.Add(1)
 		go func(floodfill router_info.RouterInfo) {
-			defer wg.Done()
+			errCh := make(chan error, 1)
+			go func() {
+				errCh <- p.sendDatabaseStoreToFloodfill(hash, data, dataType, floodfill)
+			}()
 
-			if err := p.sendDatabaseStoreToFloodfill(hash, data, dataType, floodfill); err != nil {
-				errChan <- err
+			select {
+			case err := <-errCh:
+				resultCh <- sendResult{err: err}
+			case <-time.After(p.sendAttemptTimeout):
+				resultCh <- sendResult{err: oops.Errorf("database store send timed out after %s", p.sendAttemptTimeout)}
 			}
 		}(ff)
 	}
 
-	wg.Wait()
-	close(errChan)
-
-	// Collect any errors
 	var errors []error
-	for err := range errChan {
-		errors = append(errors, err)
+	for i := 0; i < len(floodfills); i++ {
+		result := <-resultCh
+		if result.err != nil {
+			errors = append(errors, result.err)
+		}
 	}
 
 	if len(errors) > 0 {
@@ -738,26 +838,37 @@ func (p *Publisher) sendDatabaseStoreMessages(hash common.Hash, data []byte, dat
 // outages do not make publication fail when we still reached part of the
 // network and can be flooded onward.
 func (p *Publisher) sendDatabaseStoreMessagesAtLeastOne(hash common.Hash, data []byte, dataType byte, floodfills []router_info.RouterInfo) error {
-	var wg sync.WaitGroup
-	errChan := make(chan error, len(floodfills))
+	if len(floodfills) == 0 {
+		return oops.Errorf("failed to send to any floodfill: no floodfills selected")
+	}
 
+	type sendResult struct {
+		err error
+	}
+
+	resultCh := make(chan sendResult, len(floodfills))
 	for _, ff := range floodfills {
-		wg.Add(1)
 		go func(floodfill router_info.RouterInfo) {
-			defer wg.Done()
+			errCh := make(chan error, 1)
+			go func() {
+				errCh <- p.sendDatabaseStoreToFloodfill(hash, data, dataType, floodfill)
+			}()
 
-			if err := p.sendDatabaseStoreToFloodfill(hash, data, dataType, floodfill); err != nil {
-				errChan <- err
+			select {
+			case err := <-errCh:
+				resultCh <- sendResult{err: err}
+			case <-time.After(p.sendAttemptTimeout):
+				resultCh <- sendResult{err: oops.Errorf("database store send timed out after %s", p.sendAttemptTimeout)}
 			}
 		}(ff)
 	}
 
-	wg.Wait()
-	close(errChan)
-
 	var errors []error
-	for err := range errChan {
-		errors = append(errors, err)
+	for i := 0; i < len(floodfills); i++ {
+		result := <-resultCh
+		if result.err != nil {
+			errors = append(errors, result.err)
+		}
 	}
 
 	successes := len(floodfills) - len(errors)
@@ -796,6 +907,9 @@ func (p *Publisher) sendDatabaseStoreMessagesAtLeastOne(hash common.Hash, data [
 func (p *Publisher) sendDatabaseStoreToFloodfill(hash common.Hash, data []byte, dataType byte, floodfill router_info.RouterInfo) error {
 	// For RouterInfo publication, prefer direct delivery to the selected floodfill.
 	// This guarantees destination targeting for the highest-impact publication path.
+	// Do NOT fall back to tunnel-gateway wrapping for RouterInfo: a bare
+	// DatabaseStore injected into an outbound tunnel is delivered to that
+	// tunnel's endpoint, not explicitly to the selected floodfill.
 	if dataType == i2np.DatabaseStoreTypeRouterInfo {
 		ffHash, err := floodfill.IdentHash()
 		if err != nil {
@@ -808,36 +922,6 @@ func (p *Publisher) sendDatabaseStoreToFloodfill(hash common.Hash, data []byte, 
 		}).Debug("Sending RouterInfo DatabaseStore directly to selected floodfill")
 
 		if err := p.sendDatabaseStoreDirect(hash, data, dataType, floodfill); err != nil {
-			if errors.Is(err, transport.ErrNoTransportAvailable) || strings.Contains(err.Error(), "no transports available") || strings.Contains(err.Error(), "transport manager not available") {
-				log.WithFields(logger.Fields{
-					"data_hash":      logutil.HashPrefixPlain(hash),
-					"floodfill_hash": logutil.HashPrefixPlain(ffHash),
-					"reason":         err.Error(),
-				}).Warn("Direct RouterInfo publish unavailable; falling back to tunnel delivery")
-
-				selectedTunnel, gatewayHash, tunnelErr := p.selectAndValidateTunnel()
-				if tunnelErr != nil {
-					return err
-				}
-
-				tunnelGateway, tunnelErr := p.createTunnelGatewayMessage(hash, data, dataType, selectedTunnel.ID)
-				if tunnelErr != nil {
-					return tunnelErr
-				}
-
-				if tunnelErr = p.sendMessageThroughGateway(gatewayHash, tunnelGateway); tunnelErr != nil {
-					return tunnelErr
-				}
-
-				log.WithFields(logger.Fields{
-					"data_hash":      logutil.HashPrefixPlain(hash),
-					"floodfill_hash": logutil.HashPrefixPlain(ffHash),
-					"tunnel_id":      selectedTunnel.ID,
-					"gateway_hash":   logutil.HashPrefixPlain(gatewayHash),
-				}).Debug("RouterInfo DatabaseStore sent through fallback tunnel")
-
-				return nil
-			}
 			return err
 		}
 		return nil
@@ -915,11 +999,11 @@ func (p *Publisher) sendDatabaseStoreDirect(hash common.Hash, data []byte, dataT
 		return oops.Errorf("transport manager not available")
 	}
 
-	session, err := transport.GetSession(floodfill)
+	session, err := getSessionWithTimeout(p.sendAttemptTimeout, transport, floodfill)
 	if err != nil {
 		return oops.Errorf("failed to get transport session to floodfill: %w", err)
 	}
-	if err := session.QueueSendI2NP(msg); err != nil {
+	if err := queueSendI2NPWithTimeout(p.sendAttemptTimeout, session, msg); err != nil {
 		return oops.Errorf("failed to queue direct DatabaseStore transmission: %w", err)
 	}
 	return nil
@@ -993,16 +1077,32 @@ func (p *Publisher) createTunnelGatewayMessage(hash common.Hash, data []byte, da
 //   - DatabaseStoreTypeMetaLeaseSet (7): For MetaLeaseSet entries (0.9.40+)
 func (p *Publisher) createDatabaseStoreMessage(hash common.Hash, data []byte, dataType byte) (i2np.Message, error) {
 	dbStore := i2np.NewDatabaseStore(hash, data, dataType)
-	replyToken, err := generateReplyToken()
-	if err != nil {
-		return nil, oops.Errorf("failed to generate DatabaseStore reply token: %w", err)
-	}
-	dbStore.ReplyToken = replyToken
-	p.registerPendingReplyToken(replyToken)
-
 	if replyTunnelID, replyGateway, ok := p.selectReplyRoute(); ok {
+		replyToken, err := generateReplyToken()
+		if err != nil {
+			return nil, oops.Errorf("failed to generate DatabaseStore reply token: %w", err)
+		}
+		dbStore.ReplyToken = replyToken
 		dbStore.ReplyTunnelID = replyTunnelID
 		dbStore.ReplyGateway = replyGateway
+		p.registerPendingReplyToken(replyToken)
+	} else if dataType == i2np.DatabaseStoreTypeRouterInfo {
+		// For RouterInfo publication, request a DeliveryStatus/flood even when no
+		// inbound reply tunnel is available by setting a direct-reply gateway.
+		// With reply token > 0, DatabaseStore includes reply routing fields.
+		replyToken, err := generateReplyToken()
+		if err != nil {
+			return nil, oops.Errorf("failed to generate DatabaseStore reply token: %w", err)
+		}
+		dbStore.ReplyToken = replyToken
+		if p.routerInfoProvider != nil {
+			if ri, err := p.routerInfoProvider.GetRouterInfo(); err == nil {
+				if riHash, err := ri.IdentHash(); err == nil {
+					dbStore.ReplyGateway = riHash
+				}
+			}
+		}
+		p.registerPendingReplyToken(replyToken)
 	}
 	return dbStore, nil
 }
@@ -1115,6 +1215,34 @@ func generateReplyToken() ([4]byte, error) {
 	return token, nil
 }
 
+func safeLogHashPrefix(hash common.Hash, err error) string {
+	if err != nil {
+		return "unknown"
+	}
+	return logutil.HashPrefixPlain(hash)
+}
+
+func sendDatabaseLookupWithTimeout(ctx context.Context, transport LookupTransport, ff router_info.RouterInfo, lookup *i2np.DatabaseLookup) ([]byte, int, error) {
+	type lookupResult struct {
+		data    []byte
+		msgType int
+		err     error
+	}
+
+	resultCh := make(chan lookupResult, 1)
+	go func() {
+		data, msgType, err := transport.SendDatabaseLookup(ctx, ff, lookup)
+		resultCh <- lookupResult{data: data, msgType: msgType, err: err}
+	}()
+
+	select {
+	case result := <-resultCh:
+		return result.data, result.msgType, result.err
+	case <-ctx.Done():
+		return nil, 0, oops.Errorf("lookup timed out waiting for transport session or reply: %w", ctx.Err())
+	}
+}
+
 // sendMessageThroughGateway sends an I2NP message to a gateway router via transport.
 // This retrieves the gateway RouterInfo, establishes a transport session, and queues
 // the message for transmission.
@@ -1132,16 +1260,65 @@ func (p *Publisher) sendMessageThroughGateway(gatewayHash common.Hash, msg i2np.
 	if transport == nil {
 		return oops.Errorf("transport manager not available")
 	}
-	session, err := transport.GetSession(*gatewayRouterInfo)
+	session, err := getSessionWithTimeout(p.sendAttemptTimeout, transport, *gatewayRouterInfo)
 	if err != nil {
 		return oops.Errorf("failed to get transport session to gateway: %w", err)
 	}
 
 	// Queue message for transmission
-	if err := session.QueueSendI2NP(msg); err != nil {
+	if err := queueSendI2NPWithTimeout(p.sendAttemptTimeout, session, msg); err != nil {
 		return oops.Errorf("failed to queue message for transmission: %w", err)
 	}
 	return nil
+}
+
+type sessionAcquireResult struct {
+	session I2NPSender
+	err     error
+}
+
+func getSessionWithTimeout(timeout time.Duration, transport SessionProvider, peer router_info.RouterInfo) (I2NPSender, error) {
+	if timeout <= 0 {
+		timeout = 10 * time.Second
+	}
+
+	resultCh := make(chan sessionAcquireResult, 1)
+	go func() {
+		session, err := transport.GetSession(peer)
+		resultCh <- sessionAcquireResult{session: session, err: err}
+	}()
+
+	select {
+	case result := <-resultCh:
+		if result.err != nil {
+			return nil, result.err
+		}
+		return result.session, nil
+	case <-time.After(timeout):
+		return nil, oops.Wrapf(errSessionAcquireTimeout, "after %s", timeout)
+	}
+}
+
+type queueSendResult struct {
+	err error
+}
+
+func queueSendI2NPWithTimeout(timeout time.Duration, session I2NPSender, msg i2np.Message) error {
+	if timeout <= 0 {
+		timeout = 10 * time.Second
+	}
+
+	resultCh := make(chan queueSendResult, 1)
+	go func() {
+		resultCh <- queueSendResult{err: session.QueueSendI2NP(msg)}
+	}()
+
+	select {
+	case result := <-resultCh:
+		return result.err
+	case <-time.After(timeout):
+		return oops.Wrapf(errQueueSendTimeout, "after %s", timeout)
+	}
 }
 
 // getGatewayRouterInfo retrieves the RouterInfo for a gateway router from the NetDB.
@@ -1201,6 +1378,8 @@ func (p *Publisher) GetStats() PublisherStats {
 		IsRunning:                p.ctx.Err() == nil,
 		RouterInfoPublishSuccess: p.routerInfoPublishSuccess.Load(),
 		RouterInfoPublishFail:    p.routerInfoPublishFail.Load(),
+		RouterInfoSendSuccess:    p.routerInfoSendSuccess.Load(),
+		RouterInfoSendFail:       p.routerInfoSendFail.Load(),
 		RouterInfoVerifySuccess:  p.routerInfoVerifySuccess.Load(),
 		RouterInfoVerifyFail:     p.routerInfoVerifyFail.Load(),
 		ReplyTokenAckReceived:    p.ackReplyTokenReceived.Load(),
@@ -1216,6 +1395,8 @@ type PublisherStats struct {
 	IsRunning                bool
 	RouterInfoPublishSuccess uint64
 	RouterInfoPublishFail    uint64
+	RouterInfoSendSuccess    uint64
+	RouterInfoSendFail       uint64
 	RouterInfoVerifySuccess  uint64
 	RouterInfoVerifyFail     uint64
 	ReplyTokenAckReceived    uint64
