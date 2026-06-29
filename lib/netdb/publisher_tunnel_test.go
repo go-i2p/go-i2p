@@ -12,6 +12,7 @@ import (
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/keys"
+	"github.com/go-i2p/go-i2p/lib/transport"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -195,6 +196,100 @@ func TestSendDatabaseStoreToFloodfill_RouterInfoFallsBackToDirectTransport(t *te
 	sentMessages := transport.GetSentMessages(floodfillHash)
 	require.Len(t, sentMessages, 1, "Expected direct DatabaseStore message to floodfill")
 	assert.Equal(t, i2np.I2NPMessageTypeDatabaseStore, sentMessages[0].Type(), "Expected direct DatabaseStore message type")
+}
+
+func TestSendDatabaseStoreToFloodfill_RouterInfoFallsBackToTunnelWhenDirectTransportUnavailable(t *testing.T) {
+	db := newMockNetDB()
+	transport := &routingMockTransportManager{sessions: make(map[string]*mockTransportSession)}
+	selector := &mockPeerSelector{}
+	pool := tunnel.NewTunnelPool(selector)
+
+	publisher := NewPublisher(db, pool, transport, nil, DefaultPublisherConfig())
+
+	// Add a valid outbound tunnel and gateway RouterInfo so the fallback path can succeed.
+	gatewayRI := createValidRouterInfo(t)
+	gatewayHash, err := gatewayRI.IdentHash()
+	require.NoError(t, err)
+	db.StoreRouterInfo(gatewayRI)
+
+	pool.AddTunnel(&tunnel.TunnelState{
+		ID:        tunnel.TunnelID(12345),
+		Hops:      []common.Hash{gatewayHash},
+		State:     tunnel.TunnelReady,
+		CreatedAt: time.Now(),
+	})
+
+	directFloodfill := createValidRouterInfo(t)
+	directFloodfillHash, err := directFloodfill.IdentHash()
+	require.NoError(t, err)
+
+	transport.failForHash(directFloodfillHash)
+	transport.allowForHash(gatewayHash)
+
+	hash := common.Hash{1, 2, 3, 4, 5, 6, 7, 8}
+	data := []byte("compressed routerinfo bytes")
+	floodfill := directFloodfill
+
+	err = publisher.sendDatabaseStoreToFloodfill(hash, data, i2np.DatabaseStoreTypeRouterInfo, floodfill)
+	assert.NoError(t, err)
+
+	sentMessages := transport.GetSentMessages(gatewayHash)
+	require.Len(t, sentMessages, 1, "Expected RouterInfo fallback to send through tunnel gateway")
+	assert.Equal(t, i2np.I2NPMessageTypeTunnelGateway, sentMessages[0].Type(), "Expected tunnel gateway message type on fallback")
+}
+
+type routingMockTransportManager struct {
+	mu          sync.Mutex
+	sessions    map[string]*mockTransportSession
+	failHashes  map[string]struct{}
+	allowHashes map[string]struct{}
+}
+
+func (m *routingMockTransportManager) failForHash(hash common.Hash) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.failHashes == nil {
+		m.failHashes = make(map[string]struct{})
+	}
+	m.failHashes[string(hash[:])] = struct{}{}
+}
+
+func (m *routingMockTransportManager) allowForHash(hash common.Hash) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.allowHashes == nil {
+		m.allowHashes = make(map[string]struct{})
+	}
+	m.allowHashes[string(hash[:])] = struct{}{}
+}
+
+func (m *routingMockTransportManager) GetSession(routerInfo router_info.RouterInfo) (I2NPSender, error) {
+	hash, err := routerInfo.IdentHash()
+	if err != nil {
+		return nil, err
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	key := string(hash[:])
+	if _, blocked := m.failHashes[key]; blocked {
+		return nil, transport.ErrNoTransportAvailable
+	}
+	if session, ok := m.sessions[key]; ok {
+		return session, nil
+	}
+	session := newMockTransportSession()
+	m.sessions[key] = session
+	return session, nil
+}
+
+func (m *routingMockTransportManager) GetSentMessages(hash common.Hash) []i2np.Message {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if session, ok := m.sessions[string(hash[:])]; ok {
+		return session.GetSentMessages()
+	}
+	return nil
 }
 
 func TestCreateDatabaseStoreMessage_IncludesNonZeroReplyToken(t *testing.T) {

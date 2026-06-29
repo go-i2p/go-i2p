@@ -4,6 +4,7 @@ import (
 	"context"
 	crand "crypto/rand"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"net"
 	"strconv"
@@ -16,6 +17,7 @@ import (
 	"github.com/go-i2p/common/lease_set"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/i2np"
+	"github.com/go-i2p/go-i2p/lib/transport"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/go-i2p/logger"
@@ -264,11 +266,9 @@ func (p *Publisher) publishOurRouterInfo() {
 
 	// Publish the RouterInfo using the existing PublishRouterInfo method
 	if err := p.PublishRouterInfo(*ri); err != nil {
-		p.routerInfoPublishFail.Add(1)
 		log.WithError(err).Warn("Failed to publish local RouterInfo")
 		return
 	}
-	p.routerInfoPublishSuccess.Add(1)
 
 	log.WithFields(logger.Fields{
 		"at":              "publishOurRouterInfo",
@@ -498,16 +498,36 @@ func (p *Publisher) PublishRouterInfo(ri router_info.RouterInfo) error {
 	}).Debug("RouterInfo compressed for transmission")
 
 	if err := p.sendDatabaseStoreMessagesAtLeastOne(hash, payload, i2np.DatabaseStoreTypeRouterInfo, floodfills); err != nil {
+		p.routerInfoPublishFail.Add(1)
 		return err
 	}
 
-	if err := p.verifyRouterInfoRetrievable(hash, floodfills); err != nil {
-		p.routerInfoVerifyFail.Add(1)
-		return err
+	const verifyAttempts = 4
+	const verifyRetryDelay = 2 * time.Second
+
+	var verifyErr error
+	for attempt := 1; attempt <= verifyAttempts; attempt++ {
+		verifyErr = p.verifyRouterInfoRetrievable(hash, floodfills)
+		if verifyErr == nil {
+			p.routerInfoPublishSuccess.Add(1)
+			p.routerInfoVerifySuccess.Add(1)
+			return nil
+		}
+
+		if attempt < verifyAttempts {
+			log.WithError(verifyErr).WithFields(logger.Fields{
+				"at":      "PublishRouterInfo",
+				"hash":    logutil.HashPrefixPlain(hash),
+				"attempt": attempt,
+				"max":     verifyAttempts,
+			}).Warn("RouterInfo verification failed; retrying")
+			time.Sleep(verifyRetryDelay)
+		}
 	}
 
-	p.routerInfoVerifySuccess.Add(1)
-	return nil
+	p.routerInfoPublishFail.Add(1)
+	p.routerInfoVerifyFail.Add(1)
+	return oops.Errorf("post-publish RouterInfo verification failed after %d attempts: %w", verifyAttempts, verifyErr)
 }
 
 // verifyRouterInfoRetrievable probes selected floodfills with a RouterInfo lookup
@@ -776,7 +796,40 @@ func (p *Publisher) sendDatabaseStoreToFloodfill(hash common.Hash, data []byte, 
 			"floodfill_hash": logutil.HashPrefixPlain(ffHash),
 		}).Debug("Sending RouterInfo DatabaseStore directly to selected floodfill")
 
-		return p.sendDatabaseStoreDirect(hash, data, dataType, floodfill)
+		if err := p.sendDatabaseStoreDirect(hash, data, dataType, floodfill); err != nil {
+			if errors.Is(err, transport.ErrNoTransportAvailable) || strings.Contains(err.Error(), "no transports available") || strings.Contains(err.Error(), "transport manager not available") {
+				log.WithFields(logger.Fields{
+					"data_hash":      logutil.HashPrefixPlain(hash),
+					"floodfill_hash": logutil.HashPrefixPlain(ffHash),
+					"reason":         err.Error(),
+				}).Warn("Direct RouterInfo publish unavailable; falling back to tunnel delivery")
+
+				selectedTunnel, gatewayHash, tunnelErr := p.selectAndValidateTunnel()
+				if tunnelErr != nil {
+					return err
+				}
+
+				tunnelGateway, tunnelErr := p.createTunnelGatewayMessage(hash, data, dataType, selectedTunnel.ID)
+				if tunnelErr != nil {
+					return tunnelErr
+				}
+
+				if tunnelErr = p.sendMessageThroughGateway(gatewayHash, tunnelGateway); tunnelErr != nil {
+					return tunnelErr
+				}
+
+				log.WithFields(logger.Fields{
+					"data_hash":      logutil.HashPrefixPlain(hash),
+					"floodfill_hash": logutil.HashPrefixPlain(ffHash),
+					"tunnel_id":      selectedTunnel.ID,
+					"gateway_hash":   logutil.HashPrefixPlain(gatewayHash),
+				}).Debug("RouterInfo DatabaseStore sent through fallback tunnel")
+
+				return nil
+			}
+			return err
+		}
+		return nil
 	}
 
 	// For non-RouterInfo entries keep tunnel-anonymous publication behavior.

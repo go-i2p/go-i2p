@@ -3,11 +3,13 @@ package netdb
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
+	"github.com/go-i2p/go-i2p/lib/bootstrap"
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/testutil"
 	"github.com/stretchr/testify/assert"
@@ -312,6 +314,147 @@ func TestVerifyRouterInfoRetrievable_SkipsWithoutLookupTransport(t *testing.T) {
 
 	err := p.verifyRouterInfoRetrievable(target, floodfills)
 	assert.NoError(t, err)
+}
+
+func TestPublishRouterInfo_RetriesVerificationAndSucceeds(t *testing.T) {
+	db := newPublisherVerifyStubDB()
+	transport := newMockTransportManager()
+	p := NewPublisher(db, nil, transport, nil, DefaultPublisherConfig())
+
+	floodfill := createValidRouterInfo(t)
+	err := db.SetFloodfills([]router_info.RouterInfo{floodfill})
+	assert.NoError(t, err)
+
+	verifyCalls := 0
+	ri := createValidRouterInfo(t)
+	riHash, err := ri.IdentHash()
+	assert.NoError(t, err)
+
+	p.SetLookupTransport(&mockLookupTransportPublisher{fn: func(ctx context.Context, peerRI router_info.RouterInfo, lookup *i2np.DatabaseLookup) ([]byte, int, error) {
+		verifyCalls++
+		if verifyCalls < 3 {
+			return nil, 0, errors.New("temporary verification miss")
+		}
+		ds := i2np.NewDatabaseStore(riHash, []byte{0, 0}, i2np.DatabaseStoreTypeRouterInfo)
+		wire, err := ds.MarshalPayload()
+		if err != nil {
+			return nil, 0, err
+		}
+		return wire, i2np.I2NPMessageTypeDatabaseStore, nil
+	}})
+
+	err = p.PublishRouterInfo(ri)
+	assert.NoError(t, err)
+	assert.Equal(t, 3, verifyCalls, "verification should retry until success")
+
+	stats := p.GetStats()
+	assert.Equal(t, uint64(1), stats.RouterInfoPublishSuccess)
+	assert.Equal(t, uint64(0), stats.RouterInfoPublishFail)
+	assert.Equal(t, uint64(1), stats.RouterInfoVerifySuccess)
+	assert.Equal(t, uint64(0), stats.RouterInfoVerifyFail)
+}
+
+func TestPublishRouterInfo_FailsWhenVerificationNeverSucceeds(t *testing.T) {
+	db := newPublisherVerifyStubDB()
+	transport := newMockTransportManager()
+	p := NewPublisher(db, nil, transport, nil, DefaultPublisherConfig())
+
+	floodfill := createValidRouterInfo(t)
+	err := db.SetFloodfills([]router_info.RouterInfo{floodfill})
+	assert.NoError(t, err)
+
+	verifyCalls := 0
+	p.SetLookupTransport(&mockLookupTransportPublisher{fn: func(ctx context.Context, peerRI router_info.RouterInfo, lookup *i2np.DatabaseLookup) ([]byte, int, error) {
+		verifyCalls++
+		return nil, 0, errors.New("verification miss")
+	}})
+
+	ri := createValidRouterInfo(t)
+	err = p.PublishRouterInfo(ri)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "post-publish RouterInfo verification failed after")
+	assert.Equal(t, 4, verifyCalls, "verification should retry the configured number of times")
+
+	stats := p.GetStats()
+	assert.Equal(t, uint64(0), stats.RouterInfoPublishSuccess)
+	assert.Equal(t, uint64(1), stats.RouterInfoPublishFail)
+	assert.Equal(t, uint64(0), stats.RouterInfoVerifySuccess)
+	assert.Equal(t, uint64(1), stats.RouterInfoVerifyFail)
+}
+
+type publisherVerifyStubDB struct {
+	routerInfos map[common.Hash]router_info.RouterInfo
+	floodfills  []router_info.RouterInfo
+}
+
+func newPublisherVerifyStubDB() *publisherVerifyStubDB {
+	return &publisherVerifyStubDB{routerInfos: make(map[common.Hash]router_info.RouterInfo)}
+}
+
+func (m *publisherVerifyStubDB) SetFloodfills(floodfills []router_info.RouterInfo) error {
+	m.floodfills = floodfills
+	for _, ff := range floodfills {
+		h, err := ff.IdentHash()
+		if err != nil {
+			return err
+		}
+		m.routerInfos[h] = ff
+	}
+	return nil
+}
+
+func (m *publisherVerifyStubDB) GetRouterInfo(hash common.Hash) chan router_info.RouterInfo {
+	ch := make(chan router_info.RouterInfo, 1)
+	if ri, ok := m.routerInfos[hash]; ok {
+		ch <- ri
+	}
+	close(ch)
+	return ch
+}
+
+func (m *publisherVerifyStubDB) GetAllRouterInfos() []router_info.RouterInfo {
+	res := make([]router_info.RouterInfo, 0, len(m.routerInfos))
+	for _, ri := range m.routerInfos {
+		res = append(res, ri)
+	}
+	return res
+}
+
+func (m *publisherVerifyStubDB) StoreRouterInfo(ri router_info.RouterInfo) {
+	if h, err := ri.IdentHash(); err == nil {
+		m.routerInfos[h] = ri
+	}
+}
+
+func (m *publisherVerifyStubDB) Reseed(b bootstrap.Bootstrap, minRouters int) error { return nil }
+func (m *publisherVerifyStubDB) Size() int                                          { return len(m.routerInfos) }
+func (m *publisherVerifyStubDB) RecalculateSize() error                             { return nil }
+func (m *publisherVerifyStubDB) Ensure() error                                      { return nil }
+
+func (m *publisherVerifyStubDB) SelectFloodfillRouters(targetHash common.Hash, count int) ([]router_info.RouterInfo, error) {
+	if len(m.floodfills) == 0 {
+		return nil, fmt.Errorf("no floodfills")
+	}
+	if count >= len(m.floodfills) {
+		return append([]router_info.RouterInfo(nil), m.floodfills...), nil
+	}
+	return append([]router_info.RouterInfo(nil), m.floodfills[:count]...), nil
+}
+
+func (m *publisherVerifyStubDB) GetLeaseSetCount() int { return 0 }
+
+func (m *publisherVerifyStubDB) GetAllLeaseSets() []LeaseSetEntry { return nil }
+
+func (m *publisherVerifyStubDB) GetPublicLeaseSets() []LeaseSetEntry { return nil }
+
+func (m *publisherVerifyStubDB) IsOwnLeaseSet(hash common.Hash) bool { return false }
+
+func (m *publisherVerifyStubDB) StoreLeaseSet(key common.Hash, data []byte, dataType byte) error {
+	return nil
+}
+
+func (m *publisherVerifyStubDB) StoreOwnLeaseSet(key common.Hash, data []byte, dataType byte) error {
+	return nil
 }
 
 type mockRouterInfoProviderPublisher struct {
