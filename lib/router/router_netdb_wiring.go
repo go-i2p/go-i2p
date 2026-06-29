@@ -161,6 +161,9 @@ func (r *Router) launchPublisher(tunnelPool *tunnel.Pool) error {
 	}
 	if r.messageRouter != nil {
 		r.messageRouter.GetProcessor().SetDeliveryStatusHandler(r.publisher)
+		if r.floodfillServer != nil {
+			r.messageRouter.GetProcessor().SetFloodfillReplicator(r.floodfillServer)
+		}
 	}
 	if r.tunnelManager != nil {
 		r.publisher.SetInboundPool(r.tunnelManager.GetInboundPool())

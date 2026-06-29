@@ -149,6 +149,13 @@ type DeliveryStatusHandler interface {
 	HandleDeliveryStatus(msgID int, timestamp time.Time) error
 }
 
+// FloodfillReplicator defines the interface for propagating accepted DatabaseStore
+// entries to nearby floodfills when this router operates in floodfill mode.
+type FloodfillReplicator interface {
+	// FloodDatabaseStore republishes a successfully accepted store entry.
+	FloodDatabaseStore(key common.Hash, data []byte, dataType byte)
+}
+
 // TunnelBuildReplyProcessor defines the interface for processing tunnel build reply messages - re-exported from lib/tunnel/build
 type TunnelBuildReplyProcessor = build.TunnelBuildReplyProcessor
 
@@ -211,6 +218,7 @@ type MessageProcessor struct {
 	lookupReplyDeliverer  LookupReplyDeliverer      // Optional deliverer correlating DB replies to direct lookups
 	dataMessageHandler    DataMessageHandler        // Optional handler for Data message payloads
 	deliveryStatusHandler DeliveryStatusHandler     // Optional handler for delivery status confirmations
+	floodfillReplicator   FloodfillReplicator       // Optional floodfill re-propagation for accepted DatabaseStores
 	buildReplyProcessor   TunnelBuildReplyProcessor // Optional processor for tunnel build reply messages
 	buildRequestDecryptor BuildRequestDecryptor     // Optional decryptor for inbound build request records
 	ourRouterHash         common.Hash               // Our router identity hash for filtering build records
@@ -339,6 +347,15 @@ func (p *MessageProcessor) SetDataMessageHandler(handler DataMessageHandler) {
 func (p *MessageProcessor) SetDeliveryStatusHandler(handler DeliveryStatusHandler) {
 	p.setField("SetDeliveryStatusHandler", func() {
 		p.deliveryStatusHandler = handler
+	})
+}
+
+// SetFloodfillReplicator sets the floodfill-side DatabaseStore re-propagation hook.
+// When configured, accepted DatabaseStore entries carrying a non-zero reply token
+// are re-flooded to nearby floodfills after local storage succeeds.
+func (p *MessageProcessor) SetFloodfillReplicator(replicator FloodfillReplicator) {
+	p.setField("SetFloodfillReplicator", func() {
+		p.floodfillReplicator = replicator
 	})
 }
 

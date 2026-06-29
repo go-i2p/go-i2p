@@ -498,6 +498,9 @@ func (p *Publisher) PublishRouterInfo(ri router_info.RouterInfo) error {
 	if err := ri.ValidatePublishable(); err != nil {
 		return oops.Errorf("refusing to publish unpublishable RouterInfo: %w", err)
 	}
+	if !isPublishableLocalRouterInfo(&ri) {
+		return oops.Errorf("refusing to publish unreachable RouterInfo: caps=%q addresses=%d", string(ri.RouterCapabilities()), len(ri.RouterAddresses()))
+	}
 	log.WithFields(logger.Fields{
 		"at":        "PublishRouterInfo",
 		"hash":      logutil.HashPrefixPlain(hash),
@@ -836,6 +839,17 @@ func isEligiblePublishFloodfill(ri router_info.RouterInfo) bool {
 	}
 
 	return true
+}
+
+func isPublishableLocalRouterInfo(ri *router_info.RouterInfo) bool {
+	if ri == nil {
+		return false
+	}
+	if strings.ContainsRune(ri.RouterCapabilities(), 'H') || !strings.ContainsRune(ri.RouterCapabilities(), 'R') {
+		return false
+	}
+	direct, viaIntro := hasReachableAddress(ri)
+	return direct || viaIntro
 }
 
 // sendDatabaseStoreMessages sends DatabaseStore messages to specified floodfills

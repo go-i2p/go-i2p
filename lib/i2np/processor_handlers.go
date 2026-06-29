@@ -88,6 +88,15 @@ func (p *MessageProcessor) processDatabaseStoreMessage(msg Message) error {
 		deliverer.DeliverLookupReply(key, I2NPMessageTypeDatabaseStore, dbStore.GetData())
 	}
 
+	// In floodfill mode, a successful store carrying a non-zero reply token must
+	// be re-propagated to nearby floodfills so the entry becomes network-visible
+	// beyond this single accepting router.
+	if replicator := p.floodfillReplicator; replicator != nil {
+		if token := binary.BigEndian.Uint32(dbStore.ReplyToken[:]); token != 0 {
+			replicator.FloodDatabaseStore(key, data, storeType)
+		}
+	}
+
 	// Send DeliveryStatus acknowledgment when a non-zero reply token is present.
 	p.sendDatabaseStoreAck(dbStore)
 
