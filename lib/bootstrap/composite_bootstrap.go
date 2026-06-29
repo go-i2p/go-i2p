@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/config"
@@ -104,7 +105,9 @@ func (cb *CompositeBootstrap) getPeersAutoFallback(ctx context.Context, n int) (
 	reseedErr = err
 
 	// Fall back to local netDb
-	peers, err = tryLocalNetDBBootstrap(cb.localNetDBBootstrap, ctx, n)
+	localCtx, cancel := localFallbackContext(ctx)
+	defer cancel()
+	peers, err = tryLocalNetDBBootstrap(cb.localNetDBBootstrap, localCtx, n)
 	if err == nil {
 		return peers, nil
 	}
@@ -112,6 +115,23 @@ func (cb *CompositeBootstrap) getPeersAutoFallback(ctx context.Context, n int) (
 
 	// All methods failed - return aggregated error for debugging
 	return nil, buildAggregatedError(fileErr, reseedErr, netDBErr)
+}
+
+// localFallbackContext ensures the local netDb fallback is not skipped just
+// because a previous remote bootstrap phase exhausted the caller's deadline.
+// Local filesystem bootstrap is fast and independent of network timing, so when
+// the parent context is already done we give the local fallback a short fresh
+// budget to evaluate available RouterInfo files.
+func localFallbackContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	if ctx == nil {
+		return context.WithTimeout(context.Background(), 5*time.Second)
+	}
+
+	if ctx.Err() == nil {
+		return ctx, func() {}
+	}
+
+	return context.WithTimeout(context.Background(), 5*time.Second)
 }
 
 // tryFileBootstrap attempts to obtain peers from the local reseed file.

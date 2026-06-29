@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 
@@ -46,14 +47,14 @@ func NewLocalNetDBBootstrapWithPaths(paths []string) *LocalNetDBBootstrap {
 
 // GetPeers implements the Bootstrap interface by reading RouterInfos from local netDb
 func (lb *LocalNetDBBootstrap) GetPeers(ctx context.Context, n int) ([]router_info.RouterInfo, error) {
-	// Find the first available netDb directory
-	netDBPath, err := lb.findNetDBDirectory()
+	// Find all available netDb directories and aggregate peers across them so
+	// mixed Java I2P + i2pd installs contribute to the bootstrap set.
+	netDBPaths, err := lb.findNetDBDirectories()
 	if err != nil {
 		return nil, oops.Wrapf(err, "no local netDb found")
 	}
 
-	// Read RouterInfos from the directory
-	routerInfos, err := lb.readRouterInfosFromDirectory(ctx, netDBPath, n)
+	routerInfos, err := lb.readRouterInfosFromDirectories(ctx, netDBPaths, n)
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to read RouterInfos from local netDb")
 	}
@@ -61,19 +62,26 @@ func (lb *LocalNetDBBootstrap) GetPeers(ctx context.Context, n int) ([]router_in
 	return routerInfos, nil
 }
 
-// findNetDBDirectory searches for an existing netDb directory
-func (lb *LocalNetDBBootstrap) findNetDBDirectory() (string, error) {
+// findNetDBDirectories searches for existing netDb directories.
+func (lb *LocalNetDBBootstrap) findNetDBDirectories() ([]string, error) {
+	var paths []string
+
 	for _, path := range lb.searchPaths {
 		expanded := expandPath(path)
 
 		// Check if this is a valid netDb directory
 		if lb.isValidNetDBDirectory(expanded) {
-			return expanded, nil
+			paths = append(paths, expanded)
 		}
 	}
 
+	if len(paths) > 0 {
+		sort.Strings(paths)
+		return paths, nil
+	}
+
 	log.WithField("searched", len(lb.searchPaths)).Warn("no valid netdb directory found in search paths")
-	return "", oops.Errorf("no valid netDb directory found in search paths: %v", lb.searchPaths)
+	return nil, oops.Errorf("no valid netDb directory found in search paths: %v", lb.searchPaths)
 }
 
 // isValidNetDBDirectory checks if a path contains a valid netDb structure
@@ -139,6 +147,55 @@ func (lb *LocalNetDBBootstrap) readRouterInfosFromDirectory(ctx context.Context,
 	}
 
 	return routerInfos, nil
+}
+
+// readRouterInfosFromDirectories aggregates RouterInfos across multiple valid
+// local netDb directories while de-duplicating by router hash.
+func (lb *LocalNetDBBootstrap) readRouterInfosFromDirectories(ctx context.Context, paths []string, maxCount int) ([]router_info.RouterInfo, error) {
+	seen := make(map[string]struct{})
+	aggregated := make([]router_info.RouterInfo, 0)
+	var lastErr error
+
+	for _, path := range paths {
+		remaining := maxCount
+		if maxCount > 0 {
+			remaining = maxCount - len(aggregated)
+			if remaining <= 0 {
+				break
+			}
+		}
+
+		routerInfos, err := lb.readRouterInfosFromDirectory(ctx, path, remaining)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+
+		for _, ri := range routerInfos {
+			hash, err := ri.IdentHash()
+			if err != nil {
+				continue
+			}
+			key := hash.String()
+			if _, exists := seen[key]; exists {
+				continue
+			}
+			seen[key] = struct{}{}
+			aggregated = append(aggregated, ri)
+			if maxCount > 0 && len(aggregated) >= maxCount {
+				return aggregated, nil
+			}
+		}
+	}
+
+	if len(aggregated) == 0 {
+		if lastErr != nil {
+			return nil, lastErr
+		}
+		return nil, oops.Errorf("no valid RouterInfo files found in %v", paths)
+	}
+
+	return aggregated, nil
 }
 
 // createWalkFunction creates a filepath.WalkFunc that processes RouterInfo files

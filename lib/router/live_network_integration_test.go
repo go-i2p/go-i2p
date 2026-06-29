@@ -1,0 +1,417 @@
+//go:build integration
+
+package router
+
+import (
+	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/common/router_info"
+	"github.com/go-i2p/go-i2p/lib/bootstrap"
+	"github.com/go-i2p/go-i2p/lib/config"
+	"github.com/go-i2p/go-i2p/lib/i2cp"
+	"github.com/go-i2p/go-i2p/lib/keys"
+	"github.com/go-i2p/go-i2p/lib/netdb"
+	"github.com/go-i2p/go-i2p/lib/tunnel"
+	"github.com/stretchr/testify/require"
+)
+
+const (
+	liveNetworkStartupAttempts       = 3
+	liveNetworkWaitForPeersTimeout   = 90 * time.Second
+	liveNetworkWaitForPublishTimeout = 80 * time.Second
+	liveNetworkPollInterval          = 2 * time.Second
+	liveNetworkAttemptDelay          = 3 * time.Second
+	liveNetworkRetryAttempts         = 4
+)
+
+func TestLiveNetworkBootstrapAndInterop(t *testing.T) {
+	requireLiveNetworkIntegration(t)
+	sources := discoverLiveInteropSources(t)
+
+	r := startLiveNetworkRouterForTest(t)
+	db := r.GetNetDB()
+	require.NotNil(t, db, "netdb should be initialized")
+
+	allPeers, diag := waitForPeersWithRetry(t, db, 12, liveNetworkWaitForPeersTimeout)
+	t.Logf("live netdb bootstrap diagnostics: %s", diag)
+	require.GreaterOrEqual(t, len(allPeers), 12, "live bootstrap did not discover enough peers")
+
+	overlap := liveInteropOverlap(allPeers, sources)
+	t.Logf("peer interop diagnostics: total=%d java_source=%d java_seen=%d i2pd_source=%d i2pd_seen=%d samples=[%s]",
+		len(allPeers), len(sources.JavaPeers), overlap.JavaMatches, len(sources.I2PDPeers), overlap.I2PDMatches, strings.Join(overlap.Samples, " | "))
+
+	require.GreaterOrEqual(t, overlap.JavaMatches, 1,
+		"expected at least one router from %s to appear in live netdb snapshot; diagnostics=%s", sources.JavaLabel, overlap.DiagnosticSummary())
+	require.GreaterOrEqual(t, overlap.I2PDMatches, 1,
+		"expected at least one router from %s to appear in live netdb snapshot; diagnostics=%s", sources.I2PDLabel, overlap.DiagnosticSummary())
+}
+
+func TestLiveNetworkPublishRouterInfo(t *testing.T) {
+	requireLiveNetworkIntegration(t)
+
+	r := startLiveNetworkRouterForTest(t)
+	db := r.GetNetDB()
+	require.NotNil(t, db, "netdb should be initialized")
+
+	_, peerDiag := waitForPeersWithRetry(t, db, 8, liveNetworkWaitForPeersTimeout)
+	t.Logf("routerinfo publish precondition peers: %s", peerDiag)
+
+	publisher := r.GetPublisher()
+	require.NotNil(t, publisher, "publisher should be initialized after router startup")
+	require.NotNil(t, r.routerInfoProv, "routerinfo provider should be initialized after router startup")
+	ri, err := r.routerInfoProv.GetRouterInfo()
+	require.NoError(t, err, "failed to get local routerinfo for publication")
+
+	publishDiag, err := retryWithDiagnostics("publish_routerinfo", liveNetworkRetryAttempts, liveNetworkAttemptDelay, func() error {
+		return publisher.PublishRouterInfo(*ri)
+	})
+	t.Logf("routerinfo publish diagnostics: %s", publishDiag)
+	require.NoError(t, err, "routerinfo publish operation failed")
+
+	require.Eventually(t, func() bool {
+		stats := publisher.GetStats()
+		t.Logf("routerinfo publish stats: publish_ok=%d publish_fail=%d verify_ok=%d verify_fail=%d",
+			stats.RouterInfoPublishSuccess,
+			stats.RouterInfoPublishFail,
+			stats.RouterInfoVerifySuccess,
+			stats.RouterInfoVerifyFail,
+		)
+		return stats.RouterInfoVerifySuccess > 0
+	}, liveNetworkWaitForPublishTimeout, liveNetworkPollInterval,
+		"routerinfo publication did not register a successful verification within timeout")
+}
+
+func TestLiveNetworkPublishLeaseSet(t *testing.T) {
+	requireLiveNetworkIntegration(t)
+
+	r := startLiveNetworkRouterForTest(t)
+	db := r.GetNetDB()
+	require.NotNil(t, db, "netdb should be initialized")
+
+	_, peerDiag := waitForPeersWithRetry(t, db, 8, liveNetworkWaitForPeersTimeout)
+	t.Logf("leaseset publish precondition peers: %s", peerDiag)
+
+	publisher := r.GetPublisher()
+	require.NotNil(t, publisher, "publisher should be initialized after router startup")
+
+	session, leaseSetBytes := createLiveLeaseSetForPublish(t)
+	require.NotNil(t, session, "session should be created")
+
+	destBytes, err := session.Destination().Bytes()
+	require.NoError(t, err, "destination hash should be available")
+	destHash := common.HashData(destBytes)
+
+	publishDiag, err := retryWithDiagnostics("publish_leaseset", liveNetworkRetryAttempts, liveNetworkAttemptDelay, func() error {
+		return publisher.PublishLeaseSet(destHash, leaseSetBytes)
+	})
+	t.Logf("leaseset publish diagnostics: %s", publishDiag)
+	require.NoError(t, err, "leaseset publish operation failed")
+
+	require.Eventually(t, func() bool {
+		isOwn := db.IsOwnLeaseSet(destHash)
+		count := db.GetLeaseSetCount()
+		t.Logf("leaseset state: own=%v total_leasesets=%d dest=%s", isOwn, count, hashPrefix(destHash))
+		return isOwn && count > 0
+	}, liveNetworkWaitForPublishTimeout, liveNetworkPollInterval,
+		"published leaseset was not persisted in local netdb as own leaseset within timeout")
+}
+
+type liveInteropSources struct {
+	JavaLabel string
+	I2PDLabel string
+	JavaPeers map[string]router_info.RouterInfo
+	I2PDPeers map[string]router_info.RouterInfo
+}
+
+type liveInteropOverlapSummary struct {
+	JavaMatches int
+	I2PDMatches int
+	Samples     []string
+}
+
+func (s liveInteropOverlapSummary) DiagnosticSummary() string {
+	return fmt.Sprintf("java_matches=%d i2pd_matches=%d samples=%s", s.JavaMatches, s.I2PDMatches, strings.Join(s.Samples, " | "))
+}
+
+func waitForPeersWithRetry(t *testing.T, db *netdb.StdNetDB, minPeers int, timeout time.Duration) ([]router_info.RouterInfo, string) {
+	t.Helper()
+
+	start := time.Now()
+	var snapshots []string
+
+	for {
+		peers := db.GetAllRouterInfos()
+		snapshots = append(snapshots, fmt.Sprintf("t+%s peers=%d", time.Since(start).Round(time.Second), len(peers)))
+		if len(peers) >= minPeers {
+			return peers, strings.Join(snapshots, ", ")
+		}
+
+		if time.Since(start) >= timeout {
+			return peers, strings.Join(snapshots, ", ")
+		}
+
+		time.Sleep(liveNetworkPollInterval)
+	}
+}
+
+func startLiveNetworkRouterForTest(t *testing.T) *Router {
+	t.Helper()
+
+	var diagnostics []string
+
+	for attempt := 1; attempt <= liveNetworkStartupAttempts; attempt++ {
+		cfg := config.DefaultRouterConfig()
+		cfg.WorkingDir = t.TempDir()
+		cfg.BaseDir = cfg.WorkingDir
+		cfg.NetDB.Path = cfg.WorkingDir + "/netDb"
+		cfg.I2CP.Enabled = false
+		cfg.I2PControl.Enabled = false
+		cfg.Bootstrap.BootstrapType = "auto"
+		cfg.Bootstrap.LowPeerThreshold = 4
+		cfg.Bootstrap.LocalNetDBPaths = preferredLiveNetDBPaths()
+
+		r, err := CreateRouter(cfg)
+		if err != nil {
+			diagnostics = append(diagnostics, fmt.Sprintf("attempt=%d create_error=%q", attempt, err.Error()))
+			if attempt < liveNetworkStartupAttempts {
+				time.Sleep(liveNetworkAttemptDelay)
+			}
+			continue
+		}
+
+		if err := r.Start(); err != nil {
+			diagnostics = append(diagnostics, fmt.Sprintf("attempt=%d start_error=%q bootstrap_type=%s low_peer_threshold=%d", attempt, err.Error(), cfg.Bootstrap.BootstrapType, cfg.Bootstrap.LowPeerThreshold))
+			_ = r.Close()
+			if attempt < liveNetworkStartupAttempts {
+				time.Sleep(liveNetworkAttemptDelay)
+			}
+			continue
+		}
+
+		t.Cleanup(func() {
+			r.Stop()
+			require.NoError(t, r.Close(), "router close failed during cleanup")
+		})
+
+		if len(diagnostics) > 0 {
+			t.Logf("live router startup retries before success: %s", strings.Join(diagnostics, " | "))
+		}
+		return r
+	}
+
+	t.Fatalf("failed to start live-network router after %d attempts: %s", liveNetworkStartupAttempts, strings.Join(diagnostics, " | "))
+	return nil
+}
+
+func retryWithDiagnostics(operation string, attempts int, delay time.Duration, fn func() error) (string, error) {
+	if attempts < 1 {
+		attempts = 1
+	}
+
+	var parts []string
+	var lastErr error
+
+	for i := 1; i <= attempts; i++ {
+		err := fn()
+		if err == nil {
+			parts = append(parts, fmt.Sprintf("%s attempt=%d status=ok", operation, i))
+			return strings.Join(parts, "; "), nil
+		}
+
+		lastErr = err
+		parts = append(parts, fmt.Sprintf("%s attempt=%d status=err error=%q", operation, i, err.Error()))
+		if i < attempts {
+			time.Sleep(delay)
+		}
+	}
+
+	return strings.Join(parts, "; "), fmt.Errorf("%s failed after %d attempts: %w", operation, attempts, lastErr)
+}
+
+func createLiveLeaseSetForPublish(t *testing.T) (*i2cp.Session, []byte) {
+	t.Helper()
+
+	keyStore, err := keys.NewDestinationKeyStore()
+	require.NoError(t, err, "failed to create destination keystore for leaseset publication")
+
+	session, err := i2cp.NewSession(1, keyStore.Destination(), i2cp.DefaultSessionConfig(), keyStore.SigningPrivateKey(), keyStore.EncryptionPrivateKey(), keyStore.IdentityPadding())
+	require.NoError(t, err, "failed to create i2cp session for leaseset publication")
+
+	pool := tunnel.NewTunnelPool(&liveNetworkNoopPeerSelector{})
+	pool.AddTunnel(&tunnel.TunnelState{
+		ID:        tunnel.TunnelID(1),
+		Hops:      []common.Hash{testLiveHash(0x11), testLiveHash(0x22)},
+		State:     tunnel.TunnelReady,
+		CreatedAt: time.Now(),
+		IsInbound: true,
+	})
+	session.SetInboundPool(pool)
+	t.Cleanup(pool.Stop)
+
+	leaseSetBytes, err := session.CreateLeaseSet()
+	require.NoError(t, err, "failed to construct leaseset for live publish")
+	require.NotEmpty(t, leaseSetBytes, "created leaseset must not be empty")
+
+	return session, leaseSetBytes
+}
+
+func requireLiveNetworkIntegration(t *testing.T) {
+	t.Helper()
+
+	if os.Getenv("GO_I2P_INTEGRATION") == "" {
+		t.Skip("skipping live network integration test; set GO_I2P_INTEGRATION=1")
+	}
+}
+
+func discoverLiveInteropSources(t *testing.T) liveInteropSources {
+	t.Helper()
+
+	paths := preferredLiveNetDBPaths()
+	require.GreaterOrEqual(t, len(paths), 2, "expected both Java and i2pd local netDb paths to be present")
+
+	javaPeers := loadLocalNetDBPeers(t, paths[0])
+	i2pdPeers := loadLocalNetDBPeers(t, paths[1])
+
+	require.NotEmpty(t, javaPeers, "expected peers in %s", paths[0])
+	require.NotEmpty(t, i2pdPeers, "expected peers in %s", paths[1])
+
+	return liveInteropSources{
+		JavaLabel: paths[0],
+		I2PDLabel: paths[1],
+		JavaPeers: javaPeers,
+		I2PDPeers: i2pdPeers,
+	}
+}
+
+func preferredLiveNetDBPaths() []string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
+
+	candidates := []string{
+		filepath.Join(home, ".i2p", "netDb"),
+		filepath.Join(home, "i2p", "netDb"),
+	}
+
+	paths := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+			paths = append(paths, candidate)
+		}
+	}
+	return paths
+}
+
+func loadLocalNetDBPeers(t *testing.T, path string) map[string]router_info.RouterInfo {
+	t.Helper()
+
+	result := make(map[string]router_info.RouterInfo)
+	err := filepath.WalkDir(path, func(filePath string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil || entry == nil || entry.IsDir() || !strings.HasSuffix(filePath, ".dat") || !strings.Contains(filePath, "routerInfo-") {
+			return nil
+		}
+
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			return nil
+		}
+
+		peer, _, err := router_info.ReadRouterInfo(data)
+		if err != nil {
+			return nil
+		}
+		if !bootstrap.HasDirectConnectivity(peer) {
+			return nil
+		}
+		if err := bootstrap.ValidateRouterInfo(peer); err != nil {
+			return nil
+		}
+		if err := bootstrap.VerifyRouterInfoSignature(peer); err != nil {
+			return nil
+		}
+
+		hash, err := peer.IdentHash()
+		if err != nil {
+			return nil
+		}
+		result[hash.String()] = peer
+		return nil
+	})
+	require.NoError(t, err, "failed to load local netDb peers from %s", path)
+	return result
+}
+
+func liveInteropOverlap(peers []router_info.RouterInfo, sources liveInteropSources) liveInteropOverlapSummary {
+	result := liveInteropOverlapSummary{Samples: make([]string, 0, 8)}
+
+	for _, peer := range peers {
+		hash, err := peer.IdentHash()
+		if err != nil {
+			continue
+		}
+		key := hash.String()
+		version := routerInfoOptionString(peer, "router.version")
+		caps := string(peer.RouterCapabilities())
+
+		if _, ok := sources.JavaPeers[key]; ok {
+			result.JavaMatches++
+			if len(result.Samples) < 8 {
+				result.Samples = append(result.Samples, fmt.Sprintf("java hash=%s ver=%q caps=%q", hashPrefix(hash), version, caps))
+			}
+		}
+		if _, ok := sources.I2PDPeers[key]; ok {
+			result.I2PDMatches++
+			if len(result.Samples) < 8 {
+				result.Samples = append(result.Samples, fmt.Sprintf("i2pd hash=%s ver=%q caps=%q", hashPrefix(hash), version, caps))
+			}
+		}
+	}
+
+	return result
+}
+
+func routerInfoOptionString(ri router_info.RouterInfo, key string) string {
+	k, err := common.ToI2PString(key)
+	if err != nil {
+		return ""
+	}
+	v := ri.Options().Values().Get(k)
+	if v == nil {
+		return ""
+	}
+	s, err := v.Data()
+	if err != nil {
+		return ""
+	}
+	return s
+}
+
+type liveNetworkNoopPeerSelector struct{}
+
+func (s *liveNetworkNoopPeerSelector) SelectPeers(count int, exclude []common.Hash) ([]router_info.RouterInfo, error) {
+	return nil, nil
+}
+
+func testLiveHash(fill byte) common.Hash {
+	var hash common.Hash
+	for i := range hash {
+		hash[i] = fill
+	}
+	return hash
+}
+
+func hashPrefix(hash common.Hash) string {
+	s := hash.String()
+	if len(s) <= 12 {
+		return s
+	}
+	return s[:12]
+}

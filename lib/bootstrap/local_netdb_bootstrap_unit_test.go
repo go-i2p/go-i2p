@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/go-i2p/go-i2p/lib/config"
+	"github.com/go-i2p/go-i2p/lib/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -183,4 +184,31 @@ func TestLocalNetDBBootstrap_ContextCancellation(t *testing.T) {
 	// Should get a context cancellation error
 	assert.Error(t, err)
 	assert.Nil(t, peers)
+}
+
+func TestLocalNetDBBootstrap_GetPeersAggregatesMultipleDirectories(t *testing.T) {
+	tmpDir := t.TempDir()
+	javaPath := filepath.Join(tmpDir, "java-netDb")
+	i2pdPath := filepath.Join(tmpDir, "i2pd-netDb")
+	require.NoError(t, os.MkdirAll(filepath.Join(javaPath, "rA"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(i2pdPath, "rB"), 0o755))
+
+	addrCfg1 := testutil.DefaultRouterAddressConfig()
+	addrCfg1.Options = map[string]string{"host": testHost, "port": testPort}
+	ri1 := testutil.CreateSignedTestRouterInfo(t, map[string]string{"router.version": "0.9.67"}, &addrCfg1)
+	ri1Bytes, err := ri1.Bytes()
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(javaPath, "rA", "routerInfo-java.dat"), ri1Bytes, 0o644))
+
+	addrCfg2 := testutil.DefaultRouterAddressConfig()
+	addrCfg2.Options = map[string]string{"host": testHost, "port": "12346"}
+	ri2 := testutil.CreateSignedTestRouterInfo(t, map[string]string{"router.version": "0.9.68"}, &addrCfg2)
+	ri2Bytes, err := ri2.Bytes()
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(i2pdPath, "rB", "routerInfo-i2pd.dat"), ri2Bytes, 0o644))
+
+	lb := NewLocalNetDBBootstrapWithPaths([]string{javaPath, i2pdPath})
+	peers, err := lb.GetPeers(context.Background(), 0)
+	require.NoError(t, err)
+	require.Len(t, peers, 2)
 }

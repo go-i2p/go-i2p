@@ -2,6 +2,8 @@ package bootstrap
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -155,4 +157,31 @@ func TestCompositeBootstrap_FallbackToLocalNetDb(t *testing.T) {
 		t.Log("Local netDb was found on the system - test adapted to this case")
 		assert.NotNil(t, peers)
 	}
+}
+
+// TestCompositeBootstrap_LocalFallbackAfterContextExpiry verifies that local
+// netDb fallback still gets a chance to run even if an earlier bootstrap phase
+// consumed the caller context deadline.
+func TestCompositeBootstrap_LocalFallbackAfterContextExpiry(t *testing.T) {
+	tmpDir := t.TempDir()
+	netdbPath := filepath.Join(tmpDir, "netDb")
+	require.NoError(t, os.MkdirAll(filepath.Join(netdbPath, "rA"), 0o755))
+
+	ri := createSignedTestRouterInfo(t, map[string]string{"caps": "fR", "router.version": "0.9.67"})
+	bytes, err := ri.Bytes()
+	require.NoError(t, err)
+
+	filePath := filepath.Join(netdbPath, "rA", "routerInfo-test.dat")
+	require.NoError(t, os.WriteFile(filePath, bytes, 0o644))
+
+	cb := newTestCompositeBootstrap(t, "auto", "", newTestInvalidReseedServers())
+	cb.localNetDBBootstrap = NewLocalNetDBBootstrapWithPaths([]string{netdbPath})
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Nanosecond)
+	defer cancel()
+	time.Sleep(10 * time.Millisecond)
+
+	peers, err := cb.GetPeers(ctx, 1)
+	require.NoError(t, err)
+	require.Len(t, peers, 1)
 }

@@ -3,6 +3,7 @@ package netdb
 import (
 	"encoding/binary"
 	"io"
+	"reflect"
 
 	"github.com/go-i2p/common/encrypted_leaseset"
 	"github.com/go-i2p/common/lease_set"
@@ -72,7 +73,7 @@ func (e *Entry) Serialize(w io.Writer) error {
 
 	for _, spec := range specs {
 		field := spec.getter(e)
-		if field != nil {
+		if !isNilSerializable(field) {
 			log.WithField("type", spec.name).Debug("Writing entry")
 			return e.serializeAndWrite(w, spec)
 		}
@@ -112,6 +113,22 @@ func (e *Entry) writeEntryData(w io.Writer, entryType byte, data []byte) error {
 	}
 
 	return e.writeData(w, data)
+}
+
+// isNilSerializable reports whether a bytesSerializable value is nil, including
+// typed nil pointers stored inside the interface.
+func isNilSerializable(field bytesSerializable) bool {
+	if field == nil {
+		return true
+	}
+
+	v := reflect.ValueOf(field)
+	switch v.Kind() {
+	case reflect.Pointer, reflect.Interface, reflect.Slice, reflect.Map, reflect.Func, reflect.Chan:
+		return v.IsNil()
+	default:
+		return false
+	}
 }
 
 // writeEntryType writes the entry type indicator.
