@@ -9,6 +9,7 @@ import (
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/i2np"
+	"github.com/go-i2p/go-i2p/lib/testutil"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -250,8 +251,33 @@ func TestVerifyRouterInfoRetrievable_SucceedsOnMatchingDatabaseStore(t *testing.
 		return wire, i2np.I2NPMessageTypeDatabaseStore, nil
 	}})
 
-	err := p.verifyRouterInfoRetrievable(target, floodfills)
+	verifyErr := p.verifyRouterInfoRetrievable(target, floodfills)
+	assert.NoError(t, verifyErr)
+}
+
+func TestVerifyRouterInfoRetrievable_UsesLocalRouterIdentityWhenAvailable(t *testing.T) {
+	db := newMockNetDB()
+	localRI := *testutil.CreateSignedTestRouterInfo(t, nil, nil)
+	p := NewPublisher(db, nil, nil, &mockRouterInfoProviderPublisher{ri: localRI}, DefaultPublisherConfig())
+	p.verifyTimeout = 100 * time.Millisecond
+
+	localHash, err := localRI.IdentHash()
 	assert.NoError(t, err)
+	target := common.Hash{1, 2, 3, 4}
+	floodfills := []router_info.RouterInfo{{}}
+
+	p.SetLookupTransport(&mockLookupTransportPublisher{fn: func(ctx context.Context, peerRI router_info.RouterInfo, lookup *i2np.DatabaseLookup) ([]byte, int, error) {
+		assert.Equal(t, localHash, lookup.From, "verification lookup should use our local router identity as From")
+		ds := i2np.NewDatabaseStore(target, []byte{0, 0}, i2np.DatabaseStoreTypeRouterInfo)
+		wire, err := ds.MarshalPayload()
+		if err != nil {
+			return nil, 0, err
+		}
+		return wire, i2np.I2NPMessageTypeDatabaseStore, nil
+	}})
+
+	verifyErr := p.verifyRouterInfoRetrievable(target, floodfills)
+	assert.NoError(t, verifyErr)
 }
 
 func TestVerifyRouterInfoRetrievable_FailsWhenNoMatchingStore(t *testing.T) {
@@ -272,9 +298,9 @@ func TestVerifyRouterInfoRetrievable_FailsWhenNoMatchingStore(t *testing.T) {
 		return wire, i2np.I2NPMessageTypeDatabaseStore, nil
 	}})
 
-	err := p.verifyRouterInfoRetrievable(target, floodfills)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "post-publish RouterInfo verification failed")
+	verifyErr := p.verifyRouterInfoRetrievable(target, floodfills)
+	assert.Error(t, verifyErr)
+	assert.Contains(t, verifyErr.Error(), "post-publish RouterInfo verification failed")
 }
 
 func TestVerifyRouterInfoRetrievable_SkipsWithoutLookupTransport(t *testing.T) {
@@ -286,4 +312,12 @@ func TestVerifyRouterInfoRetrievable_SkipsWithoutLookupTransport(t *testing.T) {
 
 	err := p.verifyRouterInfoRetrievable(target, floodfills)
 	assert.NoError(t, err)
+}
+
+type mockRouterInfoProviderPublisher struct {
+	ri router_info.RouterInfo
+}
+
+func (m *mockRouterInfoProviderPublisher) GetRouterInfo() (*router_info.RouterInfo, error) {
+	return &m.ri, nil
 }

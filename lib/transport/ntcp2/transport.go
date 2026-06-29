@@ -272,6 +272,37 @@ func bindOSAssignedPort(config *Config) (net.Listener, string, error) {
 	return result.Listener, result.BoundAddress, nil
 }
 
+func bindPlainTCPListener(listenerAddress string, requestedPort int) (net.Listener, string, error) {
+	listenCfg := net.ListenConfig{}
+
+	host, _, err := net.SplitHostPort(listenerAddress)
+	if err != nil {
+		if listenerAddress == "" || strings.HasPrefix(listenerAddress, ":") {
+			host = ""
+		} else {
+			return nil, "", oops.Wrapf(err, "failed to parse listener address")
+		}
+	}
+
+	bindAddr := listenerAddress
+	if requestedPort != 0 {
+		if host == "" {
+			bindAddr = fmt.Sprintf(":%d", requestedPort)
+		} else if strings.Contains(host, ":") {
+			bindAddr = fmt.Sprintf("[%s]:%d", host, requestedPort)
+		} else {
+			bindAddr = fmt.Sprintf("%s:%d", host, requestedPort)
+		}
+	}
+
+	listener, err := listenCfg.Listen(context.Background(), "tcp", bindAddr)
+	if err != nil {
+		return nil, "", oops.Wrapf(err, "failed to create TCP listener on %s", bindAddr)
+	}
+
+	return listener, listener.Addr().String(), nil
+}
+
 // isLoopbackAddress returns true if host is empty, a loopback IP, or resolves
 // entirely to loopback addresses. P-1 fix: catches "localhost" and other hostnames.
 
@@ -310,6 +341,9 @@ func setupNetworkListener(transport *NTCP2Transport, config *Config, ntcp2Config
 		if err == nil {
 			tcpListener = result.Listener
 			boundAddr = result.BoundAddress
+		} else {
+			transport.logger.WithError(err).Warn("NAT traversal failed, falling back to plain TCP listener")
+			tcpListener, boundAddr, err = bindPlainTCPListener(config.ListenerAddress, iport)
 		}
 	}
 	if err != nil {
@@ -1100,8 +1134,29 @@ func (t *NTCP2Transport) createNewListenerWithConfig(ntcp2Config *ntcp2.Config, 
 	natCfg.RequestedPort = iport
 	result, err := nat.BindWithNATTraversal(natCfg)
 	if err != nil {
-		t.logger.WithError(err).Error("Failed to rebind listener with NAT traversal")
-		return nil, "", nil, WrapNTCP2Error(err, "rebinding listener")
+		t.logger.WithError(err).Warn("NAT traversal failed during listener recreation; falling back to plain TCP listener")
+		tcpListener, boundAddr, bindErr := bindPlainTCPListener(listenerAddress, iport)
+		if bindErr != nil {
+			t.logger.WithError(bindErr).Error("Failed to create plain TCP listener during listener recreation fallback")
+			return nil, "", nil, WrapNTCP2Error(bindErr, "rebinding listener")
+		}
+		listener, err := ntcp2.NewNTCP2Listener(tcpListener, ntcp2Config)
+		if err != nil {
+			if closeErr := tcpListener.Close(); closeErr != nil {
+				t.logger.WithError(closeErr).Warn("Failed to close TCP listener after NTCP2 listener creation failure")
+			}
+			t.logger.WithError(err).Error("Failed to create new NTCP2 listener during fallback")
+			return nil, "", nil, WrapNTCP2Error(err, "creating new listener")
+		}
+		var portMapper *nat.PortMapperManager
+		host, portStr, _ := net.SplitHostPort(boundAddr)
+		if !nat.IsLoopbackAddress(host) {
+			port, _ := strconv.Atoi(portStr)
+			portMapCfg := &nat.PortMapperConfig{Network: "tcp", InternalPort: port, Context: t.ctx}
+			portMapper = nat.NewPortMapperManager(portMapCfg)
+			t.logger.WithField("internal_port", port).Debug("Started TCP port mapper")
+		}
+		return listener, boundAddr, portMapper, nil
 	}
 	tcpListener := result.Listener
 	boundAddr := result.BoundAddress

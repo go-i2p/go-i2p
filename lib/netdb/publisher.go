@@ -4,6 +4,10 @@ import (
 	"context"
 	crand "crypto/rand"
 	"encoding/binary"
+	"fmt"
+	"net"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -528,7 +532,15 @@ func (p *Publisher) verifyRouterInfoRetrievable(target common.Hash, floodfills [
 
 	for _, ff := range floodfills {
 		ctx, cancel := context.WithTimeout(p.ctx, p.verifyTimeout)
-		lookup := i2np.NewDatabaseLookup(target, target, i2np.DatabaseLookupFlagTypeRI, nil)
+		from := target
+		if p.routerInfoProvider != nil {
+			if ri, err := p.routerInfoProvider.GetRouterInfo(); err == nil {
+				if riHash, err := ri.IdentHash(); err == nil {
+					from = riHash
+				}
+			}
+		}
+		lookup := i2np.NewDatabaseLookup(target, from, i2np.DatabaseLookupFlagTypeRI, nil)
 		respData, msgType, err := transport.SendDatabaseLookup(ctx, ff, lookup)
 		cancel()
 		if err != nil {
@@ -551,6 +563,37 @@ func (p *Publisher) verifyRouterInfoRetrievable(target common.Hash, floodfills [
 	}
 
 	return oops.Errorf("post-publish RouterInfo verification failed: no floodfill returned matching RouterInfo")
+}
+
+func bindPlainTCPListener(listenerAddress string, requestedPort int) (net.Listener, string, error) {
+	listenCfg := net.ListenConfig{}
+
+	host, _, err := net.SplitHostPort(listenerAddress)
+	if err != nil {
+		if requestedPort == 0 && listenerAddress == "" {
+			host = ""
+		} else {
+			return nil, "", oops.Wrapf(err, "invalid listener address: %s", listenerAddress)
+		}
+	}
+
+	bindAddr := listenerAddress
+	if requestedPort != 0 {
+		if host == "" {
+			bindAddr = ":" + strconv.Itoa(requestedPort)
+		} else if strings.Contains(host, ":") {
+			bindAddr = fmt.Sprintf("[%s]:%d", host, requestedPort)
+		} else {
+			bindAddr = fmt.Sprintf("%s:%d", host, requestedPort)
+		}
+	}
+
+	listener, err := listenCfg.Listen(context.Background(), "tcp", bindAddr)
+	if err != nil {
+		return nil, "", oops.Wrapf(err, "failed to create TCP listener on %s", bindAddr)
+	}
+
+	return listener, listener.Addr().String(), nil
 }
 
 // selectFloodfillsForPublishing selects the closest floodfills for a given hash.
