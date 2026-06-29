@@ -322,6 +322,8 @@ func (r *Router) launchInboundReadinessWatcher(inboundPool, outboundPool *tunnel
 
 // runInboundReadinessLoop polls for inbound pool readiness with timeout handling.
 func (r *Router) runInboundReadinessLoop(inboundPool, outboundPool *tunnel.Pool, inboundReady chan struct{}, deadline *time.Timer, poll *time.Ticker) {
+	var buildingOnlySince time.Time
+
 	for {
 		select {
 		case <-r.ctx.Done():
@@ -331,11 +333,57 @@ func (r *Router) runInboundReadinessLoop(inboundPool, outboundPool *tunnel.Pool,
 			r.handleInboundReadinessTimeout(inboundPool, outboundPool, inboundReady)
 			return
 		case <-poll.C:
+			if r.shouldTriggerEarlyInboundFallback(inboundPool, &buildingOnlySince) {
+				r.handleInboundReadinessTimeout(inboundPool, outboundPool, inboundReady)
+				return
+			}
 			if r.checkInboundPoolReady(inboundPool, inboundReady) {
 				return
 			}
 		}
 	}
+}
+
+// shouldTriggerEarlyInboundFallback detects an inbound startup stall where
+// builds are in flight but no tunnel ever becomes ready for an extended period.
+func (r *Router) shouldTriggerEarlyInboundFallback(inboundPool *tunnel.Pool, buildingOnlySince *time.Time) bool {
+	if inboundPool == nil {
+		if buildingOnlySince != nil {
+			*buildingOnlySince = time.Time{}
+		}
+		return false
+	}
+
+	stats := inboundPool.GetPoolStats()
+	if stats.Active > 0 {
+		*buildingOnlySince = time.Time{}
+		return false
+	}
+
+	if stats.Building == 0 {
+		*buildingOnlySince = time.Time{}
+		return false
+	}
+
+	now := time.Now()
+	if buildingOnlySince.IsZero() {
+		*buildingOnlySince = now
+		return false
+	}
+
+	const earlyFallbackAfter = 30 * time.Second
+	if now.Sub(*buildingOnlySince) < earlyFallbackAfter {
+		return false
+	}
+
+	log.WithFields(logger.Fields{
+		"at":                       "runInboundReadinessLoop",
+		"active_tunnels":           stats.Active,
+		"building_tunnels":         stats.Building,
+		"building_only_duration":   now.Sub(*buildingOnlySince),
+		"early_fallback_threshold": earlyFallbackAfter,
+	}).Warn("inbound startup stalled in building-only state; triggering early fallback")
+	return true
 }
 
 // checkInboundPoolReady checks if the inbound pool has active tunnels.

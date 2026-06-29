@@ -320,74 +320,61 @@ func TestVerifyRouterInfoRetrievable_SkipsWithoutLookupTransport(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestPublishRouterInfo_RetriesVerificationAndSucceeds(t *testing.T) {
+func TestPublishRouterInfo_SucceedsOnAck(t *testing.T) {
 	db := newPublisherVerifyStubDB()
 	transport := newMockTransportManager()
 	p := NewPublisher(db, nil, transport, nil, DefaultPublisherConfig())
+	p.ackTimeout = 2 * time.Second // fast for test
 
 	floodfill := createValidRouterInfo(t)
 	err := db.SetFloodfills([]router_info.RouterInfo{floodfill})
 	assert.NoError(t, err)
 
-	verifyCalls := 0
 	ri := createValidRouterInfo(t)
-	riHash, err := ri.IdentHash()
-	assert.NoError(t, err)
 
-	p.SetLookupTransport(&mockLookupTransportPublisher{fn: func(ctx context.Context, peerRI router_info.RouterInfo, lookup *i2np.DatabaseLookup) ([]byte, int, error) {
-		verifyCalls++
-		if verifyCalls < 3 {
-			return nil, 0, errors.New("temporary verification miss")
-		}
-		ds := i2np.NewDatabaseStore(riHash, []byte{0, 0}, i2np.DatabaseStoreTypeRouterInfo)
-		wire, err := ds.MarshalPayload()
-		if err != nil {
-			return nil, 0, err
-		}
-		return wire, i2np.I2NPMessageTypeDatabaseStore, nil
-	}})
+	// Simulate the floodfill sending back a DeliveryStatus ACK shortly after
+	// the DSM is sent. This is the correct signal that the DSM was accepted.
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		p.pendingReplyTokens.Range(func(key, value any) bool {
+			token := key.(uint32)
+			_ = p.HandleDeliveryStatus(int(token), time.Now())
+			return false // handle first pending token only
+		})
+	}()
 
 	err = p.PublishRouterInfo(ri)
 	assert.NoError(t, err)
-	assert.Equal(t, 3, verifyCalls, "verification should retry until success")
 
 	stats := p.GetStats()
 	assert.Equal(t, uint64(1), stats.RouterInfoPublishSuccess)
 	assert.Equal(t, uint64(0), stats.RouterInfoPublishFail)
 	assert.Equal(t, uint64(1), stats.RouterInfoSendSuccess)
 	assert.Equal(t, uint64(0), stats.RouterInfoSendFail)
-	assert.Equal(t, uint64(1), stats.RouterInfoVerifySuccess)
-	assert.Equal(t, uint64(0), stats.RouterInfoVerifyFail)
+	assert.Equal(t, uint64(1), stats.ReplyTokenAckReceived)
 }
 
-func TestPublishRouterInfo_FailsWhenVerificationNeverSucceeds(t *testing.T) {
+func TestPublishRouterInfo_FailsWhenNoAck(t *testing.T) {
 	db := newPublisherVerifyStubDB()
 	transport := newMockTransportManager()
 	p := NewPublisher(db, nil, transport, nil, DefaultPublisherConfig())
+	p.ackTimeout = 100 * time.Millisecond // very fast for test — no ACK will arrive
 
 	floodfill := createValidRouterInfo(t)
 	err := db.SetFloodfills([]router_info.RouterInfo{floodfill})
 	assert.NoError(t, err)
 
-	verifyCalls := 0
-	p.SetLookupTransport(&mockLookupTransportPublisher{fn: func(ctx context.Context, peerRI router_info.RouterInfo, lookup *i2np.DatabaseLookup) ([]byte, int, error) {
-		verifyCalls++
-		return nil, 0, errors.New("verification miss")
-	}})
-
 	ri := createValidRouterInfo(t)
+	// No HandleDeliveryStatus call — floodfill silently dropped the DSM.
 	err = p.PublishRouterInfo(ri)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "post-publish RouterInfo verification failed after")
-	assert.Equal(t, 4, verifyCalls, "verification should retry the configured number of times")
+	assert.Contains(t, err.Error(), "floodfill did not acknowledge RouterInfo DatabaseStore")
 
 	stats := p.GetStats()
 	assert.Equal(t, uint64(0), stats.RouterInfoPublishSuccess)
 	assert.Equal(t, uint64(1), stats.RouterInfoPublishFail)
 	assert.Equal(t, uint64(1), stats.RouterInfoSendSuccess)
 	assert.Equal(t, uint64(0), stats.RouterInfoSendFail)
-	assert.Equal(t, uint64(0), stats.RouterInfoVerifySuccess)
-	assert.Equal(t, uint64(1), stats.RouterInfoVerifyFail)
 }
 
 func TestCreateDatabaseStoreMessage_TracksReplyTokenAsPending(t *testing.T) {

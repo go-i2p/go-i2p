@@ -91,6 +91,7 @@ type Publisher struct {
 	// verification settings and counters
 	verifyTimeout            time.Duration
 	sendAttemptTimeout       time.Duration
+	ackTimeout               time.Duration // how long to wait for a floodfill DeliveryStatus ACK
 	routerInfoPublishSuccess atomic.Uint64
 	routerInfoPublishFail    atomic.Uint64
 	routerInfoSendSuccess    atomic.Uint64
@@ -161,6 +162,7 @@ func NewPublisher(db NetworkDatabase, pool *tunnel.Pool, transport SessionProvid
 		floodfillCount:     config.FloodfillCount,
 		verifyTimeout:      15 * time.Second,
 		sendAttemptTimeout: 20 * time.Second,
+		ackTimeout:         20 * time.Second,
 	}
 }
 
@@ -522,6 +524,7 @@ func (p *Publisher) PublishRouterInfo(ri router_info.RouterInfo) error {
 		"hash":              hash.String()[:16],
 	}).Debug("RouterInfo compressed for transmission")
 
+	ackBefore := p.ackReplyTokenReceived.Load()
 	if err := p.sendDatabaseStoreMessagesAtLeastOne(hash, payload, i2np.DatabaseStoreTypeRouterInfo, floodfills); err != nil {
 		p.routerInfoSendFail.Add(1)
 		p.routerInfoPublishFail.Add(1)
@@ -529,38 +532,20 @@ func (p *Publisher) PublishRouterInfo(ri router_info.RouterInfo) error {
 	}
 	p.routerInfoSendSuccess.Add(1)
 
-	const verifyAttempts = 4
-	const verifyRetryDelay = 2 * time.Second
-
-	var verifyErr error
-	for attempt := 1; attempt <= verifyAttempts; attempt++ {
+	// Wait for a DeliveryStatus ACK from at least one floodfill. A matching ACK
+	// is proof the floodfill accepted and stored the DatabaseStore message.
+	// Without an ACK the DSM was silently dropped or rejected by all floodfills.
+	if p.waitForPublishAck(ackBefore, p.ackTimeout) {
+		p.routerInfoPublishSuccess.Add(1)
 		log.WithFields(logger.Fields{
-			"at":      "PublishRouterInfo",
-			"hash":    logutil.HashPrefixPlain(hash),
-			"attempt": attempt,
-			"max":     verifyAttempts,
-		}).Info("Starting RouterInfo post-publish verification attempt")
-		verifyErr = p.verifyRouterInfoRetrievable(hash, floodfills)
-		if verifyErr == nil {
-			p.routerInfoPublishSuccess.Add(1)
-			p.routerInfoVerifySuccess.Add(1)
-			return nil
-		}
-
-		if attempt < verifyAttempts {
-			log.WithError(verifyErr).WithFields(logger.Fields{
-				"at":      "PublishRouterInfo",
-				"hash":    logutil.HashPrefixPlain(hash),
-				"attempt": attempt,
-				"max":     verifyAttempts,
-			}).Warn("RouterInfo verification failed; retrying")
-			time.Sleep(verifyRetryDelay)
-		}
+			"at":   "PublishRouterInfo",
+			"hash": logutil.HashPrefixPlain(hash),
+		}).Info("RouterInfo publication confirmed by floodfill ACK")
+		return nil
 	}
 
 	p.routerInfoPublishFail.Add(1)
-	p.routerInfoVerifyFail.Add(1)
-	return oops.Errorf("post-publish RouterInfo verification failed after %d attempts: %w", verifyAttempts, verifyErr)
+	return oops.Errorf("floodfill did not acknowledge RouterInfo DatabaseStore within %s (DSM sent but no ACK received)", p.ackTimeout)
 }
 
 // verifyRouterInfoRetrievable probes selected floodfills with a RouterInfo lookup
@@ -1105,6 +1090,30 @@ func (p *Publisher) createDatabaseStoreMessage(hash common.Hash, data []byte, da
 		p.registerPendingReplyToken(replyToken)
 	}
 	return dbStore, nil
+}
+
+// waitForPublishAck polls for a DeliveryStatus ACK from any floodfill as proof
+// that the DatabaseStore was accepted. ackBefore must be snapshotted from
+// ackReplyTokenReceived.Load() immediately before the send call so that only
+// ACKs generated for this publication attempt are counted.
+// Returns true if at least one ACK arrived within the timeout window.
+func (p *Publisher) waitForPublishAck(ackBefore uint64, timeout time.Duration) bool {
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	poll := time.NewTicker(250 * time.Millisecond)
+	defer poll.Stop()
+	for {
+		select {
+		case <-p.ctx.Done():
+			return false
+		case <-deadline.C:
+			return false
+		case <-poll.C:
+			if p.ackReplyTokenReceived.Load() > ackBefore {
+				return true
+			}
+		}
+	}
 }
 
 // HandleDeliveryStatus records DeliveryStatus acknowledgements for pending

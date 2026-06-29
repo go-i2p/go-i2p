@@ -86,8 +86,28 @@ func TestLiveNetworkPublishRouterInfo(t *testing.T) {
 		testPublisher.SetLookupTransport(r.lookupClient)
 	}
 	testPublisher.SetInboundPool(r.tunnelManager.GetInboundPool())
+	if inboundPool := r.tunnelManager.GetInboundPool(); inboundPool != nil {
+		poolStats := inboundPool.GetPoolStats()
+		t.Logf("routerinfo publish inbound pool stats before wait: total=%d active=%d building=%d failed=%d near_expiry=%d",
+			poolStats.Total,
+			poolStats.Active,
+			poolStats.Building,
+			poolStats.Failed,
+			poolStats.NearExpiry,
+		)
+	}
 	inboundDiag := waitForActiveTunnels(r.tunnelManager.GetInboundPool(), 1, liveNetworkWaitForInboundTimeout)
 	t.Logf("routerinfo publish inbound precondition: %s", inboundDiag)
+	if inboundPool := r.tunnelManager.GetInboundPool(); inboundPool != nil {
+		poolStats := inboundPool.GetPoolStats()
+		t.Logf("routerinfo publish inbound pool stats after wait: total=%d active=%d building=%d failed=%d near_expiry=%d",
+			poolStats.Total,
+			poolStats.Active,
+			poolStats.Building,
+			poolStats.Failed,
+			poolStats.NearExpiry,
+		)
+	}
 
 	if r.messageRouter != nil {
 		r.messageRouter.GetProcessor().SetDeliveryStatusHandler(testPublisher)
@@ -160,51 +180,32 @@ func TestLiveNetworkPublishRouterInfo(t *testing.T) {
 	})
 	t.Logf("routerinfo publish diagnostics: %s", publishDiag)
 	if err != nil {
+		// No ACK received means the floodfill did not accept the DSM.
+		// send_ok > 0 only means bytes left our socket — it is NOT proof of acceptance.
 		statsAfterErr := testPublisher.GetStats()
-		sendDelta := statsAfterErr.RouterInfoSendSuccess - preStats.RouterInfoSendSuccess
-		if sendDelta > 0 {
-			t.Logf("routerinfo publish reached floodfill(s) but verification failed (likely lookup transport issue): send_ok=+%d send_fail=+%d verify_ok=+%d verify_fail=+%d",
-				sendDelta,
-				statsAfterErr.RouterInfoSendFail-preStats.RouterInfoSendFail,
-				statsAfterErr.RouterInfoVerifySuccess-preStats.RouterInfoVerifySuccess,
-				statsAfterErr.RouterInfoVerifyFail-preStats.RouterInfoVerifyFail,
-			)
-			return
-		}
-		require.NoError(t, err, "routerinfo publish operation failed")
+		t.Logf("routerinfo publish failed: send_ok=+%d send_fail=+%d ack_ok=+%d ack_unexpected=+%d error=%v",
+			statsAfterErr.RouterInfoSendSuccess-preStats.RouterInfoSendSuccess,
+			statsAfterErr.RouterInfoSendFail-preStats.RouterInfoSendFail,
+			statsAfterErr.ReplyTokenAckReceived-preStats.ReplyTokenAckReceived,
+			statsAfterErr.ReplyTokenAckUnexpected-preStats.ReplyTokenAckUnexpected,
+			err,
+		)
+		require.NoError(t, err, "routerinfo publish failed: floodfill did not acknowledge the DatabaseStore message")
 	}
 
-	require.Eventually(t, func() bool {
-		stats := testPublisher.GetStats()
-		t.Logf("routerinfo publish stats: publish_ok=%d publish_fail=%d send_ok=%d send_fail=%d verify_ok=%d verify_fail=%d ack_ok=%d ack_unexpected=%d",
-			stats.RouterInfoPublishSuccess,
-			stats.RouterInfoPublishFail,
-			stats.RouterInfoSendSuccess,
-			stats.RouterInfoSendFail,
-			stats.RouterInfoVerifySuccess,
-			stats.RouterInfoVerifyFail,
-			stats.ReplyTokenAckReceived,
-			stats.ReplyTokenAckUnexpected,
-		)
-		return stats.RouterInfoVerifySuccess > preStats.RouterInfoVerifySuccess
-	}, liveNetworkWaitForPublishTimeout, liveNetworkPollInterval,
-		"routerinfo publication did not register a successful verification within timeout")
-
 	postStats := testPublisher.GetStats()
-	t.Logf("routerinfo publish post-stats: publish_ok=%d publish_fail=%d send_ok=%d send_fail=%d verify_ok=%d verify_fail=%d ack_ok=%d ack_unexpected=%d",
+	t.Logf("routerinfo publish post-stats: publish_ok=%d publish_fail=%d send_ok=%d send_fail=%d ack_ok=%d ack_unexpected=%d",
 		postStats.RouterInfoPublishSuccess,
 		postStats.RouterInfoPublishFail,
 		postStats.RouterInfoSendSuccess,
 		postStats.RouterInfoSendFail,
-		postStats.RouterInfoVerifySuccess,
-		postStats.RouterInfoVerifyFail,
 		postStats.ReplyTokenAckReceived,
 		postStats.ReplyTokenAckUnexpected,
 	)
 	require.Greater(t,
 		postStats.ReplyTokenAckReceived,
 		preStats.ReplyTokenAckReceived,
-		"expected at least one reply-token DeliveryStatus acknowledgement after RouterInfo publication",
+		"expected at least one DeliveryStatus ACK from a floodfill after RouterInfo publication",
 	)
 }
 
