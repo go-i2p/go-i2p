@@ -5,11 +5,9 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"os"
 	"testing"
 	"time"
 
-	i2pbase64 "github.com/go-i2p/common/base64"
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/bootstrap"
@@ -389,17 +387,9 @@ func TestSelectFloodfillsForPublishing_UsesForceTargetRouterOverride(t *testing.
 
 	forcedHash, err := forced.IdentHash()
 	assert.NoError(t, err)
-	forcedHashB64 := i2pbase64.EncodeToString(forcedHash[:])
 
-	old := os.Getenv("FORCE_TARGET_ROUTER")
-	assert.NoError(t, os.Setenv("FORCE_TARGET_ROUTER", forcedHashB64))
-	t.Cleanup(func() {
-		if old == "" {
-			_ = os.Unsetenv("FORCE_TARGET_ROUTER")
-			return
-		}
-		_ = os.Setenv("FORCE_TARGET_ROUTER", old)
-	})
+	// Use the test-only API — no env var involved.
+	p.SetForceTargetHash(forcedHash)
 
 	hash := common.Hash{0xAA, 0xBB, 0xCC, 0xDD}
 	selected, err := p.selectFloodfillsForPublishing(hash)

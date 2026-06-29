@@ -8,14 +8,12 @@ import (
 	"fmt"
 	"math"
 	"net"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	i2pbase64 "github.com/go-i2p/common/base64"
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/lease_set"
 	"github.com/go-i2p/common/router_info"
@@ -76,6 +74,16 @@ type Publisher struct {
 	// lookupTransport performs direct DatabaseLookup probes used to verify
 	// post-publication RouterInfo retrievability from remote floodfills.
 	lookupTransport LookupTransport
+
+	// forceTargetHash, when non-nil, pins publication to a single router hash
+	// instead of normal floodfill selection. Only set by tests via
+	// SetForceTargetHash. Never read in production paths.
+	forceTargetHash *common.Hash
+
+	// forceTargetResolver is used together with forceTargetHash when the
+	// target hash is not in local NetDB. Only set by tests via
+	// SetForceTargetResolver.
+	forceTargetResolver Resolver
 
 	// routerInfoProvider supplies our local RouterInfo for publishing
 	routerInfoProvider RouterInfoProvider
@@ -174,6 +182,26 @@ func NewPublisher(db NetworkDatabase, pool *tunnel.Pool, transport SessionProvid
 func (p *Publisher) SetInboundPool(inboundPool *tunnel.Pool) {
 	p.fieldMu.Lock()
 	p.inboundPool = inboundPool
+	p.fieldMu.Unlock()
+}
+
+// SetForceTargetHash pins all RouterInfo publication to a single target hash
+// for the lifetime of this Publisher. Intended for use in tests only; never
+// call this from production code. When the target hash is not in local NetDB,
+// a resolver set via SetForceTargetResolver is used to fetch it from the
+// network.
+func (p *Publisher) SetForceTargetHash(h common.Hash) {
+	p.fieldMu.Lock()
+	p.forceTargetHash = &h
+	p.fieldMu.Unlock()
+}
+
+// SetForceTargetResolver pairs with SetForceTargetHash: when the forced target
+// is not in local NetDB, this resolver performs a network lookup. Intended for
+// use in tests only; never call this from production code.
+func (p *Publisher) SetForceTargetResolver(r Resolver) {
+	p.fieldMu.Lock()
+	p.forceTargetResolver = r
 	p.fieldMu.Unlock()
 }
 
@@ -708,35 +736,52 @@ func bindPlainTCPListener(listenerAddress string, requestedPort int) (net.Listen
 // Per the I2P spec the DHT key used for peer selection is the routing key,
 // not the raw hash: routing_key = SHA256(hash || yyyyMMdd_UTC).
 func (p *Publisher) selectFloodfillsForPublishing(hash common.Hash) ([]router_info.RouterInfo, error) {
-	if forced := strings.TrimSpace(os.Getenv("FORCE_TARGET_ROUTER")); forced != "" {
-		forcedHash, err := parseForceTargetRouterHash(forced)
-		if err != nil {
-			log.WithError(err).WithFields(logger.Fields{
-				"at":    "selectFloodfillsForPublishing",
-				"value": forced,
-			}).Warn("Ignoring invalid FORCE_TARGET_ROUTER override")
-		} else {
-			routers := p.db.GetAllRouterInfos()
-			for _, ri := range routers {
-				riHash, riErr := ri.IdentHash()
-				if riErr != nil {
-					continue
-				}
-				if riHash == forcedHash {
-					log.WithFields(logger.Fields{
-						"at":                  "selectFloodfillsForPublishing",
-						"force_target_router": forced,
-						"target_hash":         logutil.HashPrefixPlain(hash),
-					}).Info("Using FORCE_TARGET_ROUTER override for RouterInfo publication")
-					return []router_info.RouterInfo{ri}, nil
-				}
+	p.fieldMu.RLock()
+	forcedHash := p.forceTargetHash
+	resolver := p.forceTargetResolver
+	p.fieldMu.RUnlock()
+
+	if forcedHash != nil {
+		routers := p.db.GetAllRouterInfos()
+		for _, ri := range routers {
+			riHash, riErr := ri.IdentHash()
+			if riErr != nil {
+				continue
 			}
+			if riHash == *forcedHash {
+				log.WithFields(logger.Fields{
+					"at":          "selectFloodfillsForPublishing",
+					"forced_hash": logutil.HashPrefixPlain(*forcedHash),
+					"target_hash": logutil.HashPrefixPlain(hash),
+				}).Info("forced target router found in local NetDB; using as sole publication target")
+				return []router_info.RouterInfo{ri}, nil
+			}
+		}
+		log.WithFields(logger.Fields{
+			"at":            "selectFloodfillsForPublishing",
+			"forced_hash":   logutil.HashPrefixPlain(*forcedHash),
+			"known_routers": len(routers),
+		}).Warn("forced target router not in local NetDB; attempting network lookup")
+
+		if resolver != nil {
+			if ri, rerr := resolver.Lookup(*forcedHash, 30*time.Second); rerr == nil && ri != nil {
+				p.db.StoreRouterInfo(*ri)
+				log.WithFields(logger.Fields{
+					"at":          "selectFloodfillsForPublishing",
+					"forced_hash": logutil.HashPrefixPlain(*forcedHash),
+				}).Info("forced target router resolved from network; using as sole publication target")
+				return []router_info.RouterInfo{*ri}, nil
+			} else if rerr != nil {
+				log.WithError(rerr).WithFields(logger.Fields{
+					"at":          "selectFloodfillsForPublishing",
+					"forced_hash": logutil.HashPrefixPlain(*forcedHash),
+				}).Warn("forced target router network lookup failed; falling back to normal floodfill selection")
+			}
+		} else {
 			log.WithFields(logger.Fields{
-				"at":                  "selectFloodfillsForPublishing",
-				"force_target_router": forced,
-				"target_hash":         logutil.HashPrefixPlain(hash),
-				"known_routers":       len(routers),
-			}).Warn("FORCE_TARGET_ROUTER not found in NetDB; falling back to normal floodfill selection")
+				"at":          "selectFloodfillsForPublishing",
+				"forced_hash": logutil.HashPrefixPlain(*forcedHash),
+			}).Warn("forced target router not found and no resolver configured; falling back to normal floodfill selection")
 		}
 	}
 
@@ -768,19 +813,6 @@ func (p *Publisher) selectFloodfillsForPublishing(hash common.Hash) ([]router_in
 	}).Debug("Selected floodfill routers for publishing")
 
 	return eligible, nil
-}
-
-func parseForceTargetRouterHash(value string) (common.Hash, error) {
-	raw, err := i2pbase64.DecodeString(value)
-	if err != nil {
-		return common.Hash{}, oops.Wrapf(err, "failed to decode FORCE_TARGET_ROUTER")
-	}
-	if len(raw) != len(common.Hash{}) {
-		return common.Hash{}, oops.Errorf("FORCE_TARGET_ROUTER decoded to %d bytes, want %d", len(raw), len(common.Hash{}))
-	}
-	var h common.Hash
-	copy(h[:], raw)
-	return h, nil
 }
 
 // isEligiblePublishFloodfill applies additional publication-time eligibility checks

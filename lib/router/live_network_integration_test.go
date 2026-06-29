@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	i2pbase64 "github.com/go-i2p/common/base64"
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/bootstrap"
@@ -86,6 +87,39 @@ func TestLiveNetworkPublishRouterInfo(t *testing.T) {
 		testPublisher.SetLookupTransport(r.lookupClient)
 	}
 	testPublisher.SetInboundPool(r.tunnelManager.GetInboundPool())
+
+	// FORCE_TARGET_ROUTER: test-only hook that pins publication to a single
+	// known-controlled router for Java-side diagnosis. The env var is read here
+	// (in test code) and injected via the test-only Publisher API so that
+	// production code never touches os.Getenv.
+	if rawTarget := strings.TrimSpace(os.Getenv("FORCE_TARGET_ROUTER")); rawTarget != "" {
+		if rawBytes, decErr := i2pbase64.DecodeString(rawTarget); decErr == nil && len(rawBytes) == 32 {
+			var forcedHash common.Hash
+			copy(forcedHash[:], rawBytes)
+			testPublisher.SetForceTargetHash(forcedHash)
+			t.Logf("FORCE_TARGET_ROUTER: forcing publication target to %x", forcedHash[:8])
+		} else {
+			t.Logf("FORCE_TARGET_ROUTER: ignoring invalid value %q (decode error: %v)", rawTarget, decErr)
+		}
+	}
+
+	// Wire a Kademlia resolver so the forced target can be looked up from the
+	// network when not yet present in local NetDB.
+	if r.lookupClient != nil {
+		ourHash := common.Hash{}
+		if ri, riErr := r.routerInfoProv.GetRouterInfo(); riErr == nil {
+			if h, hErr := ri.IdentHash(); hErr == nil {
+				ourHash = h
+			}
+		}
+		kadResolver := netdb.NewKademliaResolverWithTransport(
+			&publisherNetDBAdapter{db: db},
+			r.tunnelManager.GetOutboundPool(),
+			r.lookupClient,
+			ourHash,
+		)
+		testPublisher.SetForceTargetResolver(kadResolver)
+	}
 	if inboundPool := r.tunnelManager.GetInboundPool(); inboundPool != nil {
 		poolStats := inboundPool.GetPoolStats()
 		t.Logf("routerinfo publish inbound pool stats before wait: total=%d active=%d building=%d failed=%d near_expiry=%d",
