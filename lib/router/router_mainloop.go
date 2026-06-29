@@ -10,6 +10,7 @@ import (
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/i2cp"
 	"github.com/go-i2p/go-i2p/lib/i2np"
+	"github.com/go-i2p/go-i2p/lib/netdb"
 	"github.com/go-i2p/go-i2p/lib/transport"
 	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
 	ssu2 "github.com/go-i2p/go-i2p/lib/transport/ssu2"
@@ -70,6 +71,10 @@ func (r *Router) mainloop() {
 		r.startupErr <- oops.Wrapf(err, "message router initialization failed")
 		r.Stop()
 		return
+	}
+	if r.lookupClient == nil && r.transports != nil && r.messageRouter != nil {
+		r.lookupClient = netdb.NewDatabaseLookupClient(&publisherTransportAdapter{muxer: r.transports})
+		r.messageRouter.GetProcessor().SetLookupReplyDeliverer(r.lookupClient)
 	}
 	log.WithField("at", "mainloop").Debug("step 4: starting publisher")
 	if err := r.startPublisher(); err != nil {

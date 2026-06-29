@@ -88,9 +88,11 @@ func (r *Router) startExplorer() error {
 	// instance is registered as the processor's reply deliverer so inbound
 	// DatabaseStore / DatabaseSearchReply messages wake the blocked lookups.
 	if r.transports != nil && r.messageRouter != nil {
-		lookupClient := netdb.NewDatabaseLookupClient(&publisherTransportAdapter{muxer: r.transports})
-		cfg.Transport = lookupClient
-		r.messageRouter.GetProcessor().SetLookupReplyDeliverer(lookupClient)
+		if r.lookupClient == nil {
+			r.lookupClient = netdb.NewDatabaseLookupClient(&publisherTransportAdapter{muxer: r.transports})
+		}
+		cfg.Transport = r.lookupClient
+		r.messageRouter.GetProcessor().SetLookupReplyDeliverer(r.lookupClient)
 	} else {
 		log.WithFields(logger.Fields{"at": "startExplorer"}).Warn("NetDB explorer starting without transport: transport or message router not ready, lookups will be local-only")
 	}
@@ -154,6 +156,9 @@ func (r *Router) launchPublisher(tunnelPool *tunnel.Pool) error {
 
 	publisherConfig := netdb.DefaultPublisherConfig()
 	r.publisher = netdb.NewPublisher(dbAdapter, tunnelPool, transportAdapter, riProvider, publisherConfig)
+	if r.lookupClient != nil {
+		r.publisher.SetLookupTransport(r.lookupClient)
+	}
 	if r.tunnelManager != nil {
 		r.publisher.SetInboundPool(r.tunnelManager.GetInboundPool())
 	}

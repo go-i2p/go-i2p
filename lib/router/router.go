@@ -107,6 +107,10 @@ type Router struct {
 	// explorer actively discovers new NetDB peers via random-key XOR lookups
 	explorer *netdb.Explorer
 
+	// lookupClient is the shared direct DatabaseLookup transport used by
+	// NetDB subsystems (explorer + publisher verification).
+	lookupClient *netdb.DatabaseLookupClient
+
 	// floodfillServer handles incoming DatabaseLookup requests when this router
 	// is configured as a floodfill router
 	floodfillServer *netdb.FloodfillServer

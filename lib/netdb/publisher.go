@@ -5,6 +5,7 @@ import (
 	crand "crypto/rand"
 	"encoding/binary"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	common "github.com/go-i2p/common/data"
@@ -64,6 +65,10 @@ type Publisher struct {
 	// transport for sending I2NP messages to gateway routers
 	transport SessionProvider
 
+	// lookupTransport performs direct DatabaseLookup probes used to verify
+	// post-publication RouterInfo retrievability from remote floodfills.
+	lookupTransport LookupTransport
+
 	// routerInfoProvider supplies our local RouterInfo for publishing
 	routerInfoProvider RouterInfoProvider
 
@@ -76,6 +81,13 @@ type Publisher struct {
 	routerInfoInterval time.Duration // how often to republish RouterInfo
 	leaseSetInterval   time.Duration // how often to republish LeaseSets
 	floodfillCount     int           // how many floodfills to publish to
+
+	// verification settings and counters
+	verifyTimeout            time.Duration
+	routerInfoPublishSuccess atomic.Uint64
+	routerInfoPublishFail    atomic.Uint64
+	routerInfoVerifySuccess  atomic.Uint64
+	routerInfoVerifyFail     atomic.Uint64
 }
 
 type publisherLoopSpec struct {
@@ -127,6 +139,7 @@ func NewPublisher(db NetworkDatabase, pool *tunnel.Pool, transport SessionProvid
 		routerInfoInterval: config.RouterInfoInterval,
 		leaseSetInterval:   config.LeaseSetInterval,
 		floodfillCount:     config.FloodfillCount,
+		verifyTimeout:      15 * time.Second,
 	}
 }
 
@@ -247,9 +260,11 @@ func (p *Publisher) publishOurRouterInfo() {
 
 	// Publish the RouterInfo using the existing PublishRouterInfo method
 	if err := p.PublishRouterInfo(*ri); err != nil {
+		p.routerInfoPublishFail.Add(1)
 		log.WithError(err).Warn("Failed to publish local RouterInfo")
 		return
 	}
+	p.routerInfoPublishSuccess.Add(1)
 
 	log.WithFields(logger.Fields{
 		"at":              "publishOurRouterInfo",
@@ -478,7 +493,66 @@ func (p *Publisher) PublishRouterInfo(ri router_info.RouterInfo) error {
 		"hash":              hash.String()[:16],
 	}).Debug("RouterInfo compressed for transmission")
 
-	return p.sendDatabaseStoreMessages(hash, payload, i2np.DatabaseStoreTypeRouterInfo, floodfills)
+	if err := p.sendDatabaseStoreMessages(hash, payload, i2np.DatabaseStoreTypeRouterInfo, floodfills); err != nil {
+		return err
+	}
+
+	if err := p.verifyRouterInfoRetrievable(hash, floodfills); err != nil {
+		p.routerInfoVerifyFail.Add(1)
+		return err
+	}
+
+	p.routerInfoVerifySuccess.Add(1)
+	return nil
+}
+
+// verifyRouterInfoRetrievable probes selected floodfills with a RouterInfo lookup
+// for our hash. Success requires at least one DatabaseStore RouterInfo response
+// matching the target hash, proving network retrievability beyond local publish.
+func (p *Publisher) verifyRouterInfoRetrievable(target common.Hash, floodfills []router_info.RouterInfo) error {
+	p.fieldMu.RLock()
+	transport := p.lookupTransport
+	p.fieldMu.RUnlock()
+	if transport == nil {
+		log.WithFields(logger.Fields{
+			"at":     "verifyRouterInfoRetrievable",
+			"target": logutil.HashPrefixPlain(target),
+			"reason": "lookup transport not configured; skipping post-publish verification",
+		}).Warn("RouterInfo publication verification skipped")
+		return nil
+	}
+
+	if len(floodfills) == 0 {
+		return oops.Errorf("no floodfills available for RouterInfo verification")
+	}
+
+	for _, ff := range floodfills {
+		ctx, cancel := context.WithTimeout(p.ctx, p.verifyTimeout)
+		lookup := i2np.NewDatabaseLookup(target, target, i2np.DatabaseLookupFlagTypeRI, nil)
+		respData, msgType, err := transport.SendDatabaseLookup(ctx, ff, lookup)
+		cancel()
+		if err != nil {
+			continue
+		}
+		if msgType != i2np.I2NPMessageTypeDatabaseStore {
+			continue
+		}
+		msg := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeDatabaseStore)
+		msg.SetData(respData)
+		store := &i2np.DatabaseStore{BaseI2NPMessage: i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeDatabaseStore)}
+		if err := store.UnmarshalBinary(msg); err != nil {
+			continue
+		}
+		if store.GetLeaseSetType() == i2np.DatabaseStoreTypeRouterInfo && store.GetStoreKey() == target {
+			log.WithFields(logger.Fields{
+				"at":     "verifyRouterInfoRetrievable",
+				"target": logutil.HashPrefixPlain(target),
+			}).Info("RouterInfo post-publish verification succeeded")
+			return nil
+		}
+	}
+
+	return oops.Errorf("post-publish RouterInfo verification failed: no floodfill returned matching RouterInfo")
 }
 
 // selectFloodfillsForPublishing selects the closest floodfills for a given hash.
@@ -836,6 +910,14 @@ func (p *Publisher) SetTransport(transport SessionProvider) {
 	p.fieldMu.Unlock()
 }
 
+// SetLookupTransport configures the direct lookup transport used for
+// post-publication RouterInfo retrievability checks.
+func (p *Publisher) SetLookupTransport(transport LookupTransport) {
+	p.fieldMu.Lock()
+	p.lookupTransport = transport
+	p.fieldMu.Unlock()
+}
+
 // PublishOurRouterInfo triggers an immediate republication of our RouterInfo
 // to floodfill routers. Use this when the RouterInfo has changed (e.g. after
 // introducer addresses are updated following NAT detection).
@@ -846,19 +928,27 @@ func (p *Publisher) PublishOurRouterInfo() {
 // GetStats returns statistics about publishing activity
 func (p *Publisher) GetStats() PublisherStats {
 	return PublisherStats{
-		RouterInfoInterval: p.routerInfoInterval,
-		LeaseSetInterval:   p.leaseSetInterval,
-		FloodfillCount:     p.floodfillCount,
-		IsRunning:          p.ctx.Err() == nil,
+		RouterInfoInterval:       p.routerInfoInterval,
+		LeaseSetInterval:         p.leaseSetInterval,
+		FloodfillCount:           p.floodfillCount,
+		IsRunning:                p.ctx.Err() == nil,
+		RouterInfoPublishSuccess: p.routerInfoPublishSuccess.Load(),
+		RouterInfoPublishFail:    p.routerInfoPublishFail.Load(),
+		RouterInfoVerifySuccess:  p.routerInfoVerifySuccess.Load(),
+		RouterInfoVerifyFail:     p.routerInfoVerifyFail.Load(),
 	}
 }
 
 // PublisherStats contains statistics about publisher activity
 type PublisherStats struct {
-	RouterInfoInterval time.Duration
-	LeaseSetInterval   time.Duration
-	FloodfillCount     int
-	IsRunning          bool
+	RouterInfoInterval       time.Duration
+	LeaseSetInterval         time.Duration
+	FloodfillCount           int
+	IsRunning                bool
+	RouterInfoPublishSuccess uint64
+	RouterInfoPublishFail    uint64
+	RouterInfoVerifySuccess  uint64
+	RouterInfoVerifyFail     uint64
 }
 
 // Compile-time interface check
