@@ -4,6 +4,7 @@ package router
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"io/fs"
 	"os"
@@ -19,6 +20,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/bootstrap"
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/i2cp"
+	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/keys"
 	"github.com/go-i2p/go-i2p/lib/netdb"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
@@ -76,10 +78,14 @@ func TestLiveNetworkPublishRouterInfo(t *testing.T) {
 
 	// Use a dedicated one-shot publisher for this test path so explicit publish
 	// diagnostics are not conflated with background periodic publish loops.
+	tracingTransport := &liveTracingSessionProvider{
+		t:     t,
+		inner: &publisherTransportAdapter{muxer: r.transports},
+	}
 	testPublisher := netdb.NewPublisher(
 		&publisherNetDBAdapter{db: db},
 		r.tunnelManager.GetOutboundPool(),
-		&publisherTransportAdapter{muxer: r.transports},
+		tracingTransport,
 		r.routerInfoProv,
 		netdb.DefaultPublisherConfig(),
 	)
@@ -609,4 +615,43 @@ func hashPrefix(hash common.Hash) string {
 		return s
 	}
 	return s[:12]
+}
+
+// liveTracingSessionProvider wraps publish sessions and emits deterministic
+// test logs for DatabaseStore reply-route fields right before send.
+type liveTracingSessionProvider struct {
+	t     *testing.T
+	inner netdb.SessionProvider
+}
+
+func (p *liveTracingSessionProvider) GetSession(routerInfo router_info.RouterInfo) (netdb.I2NPSender, error) {
+	session, err := p.inner.GetSession(routerInfo)
+	if err != nil {
+		return nil, err
+	}
+	targetHash, _ := routerInfo.IdentHash()
+	return &liveTracingI2NPSender{t: p.t, inner: session, targetHash: targetHash}, nil
+}
+
+type liveTracingI2NPSender struct {
+	t          *testing.T
+	inner      netdb.I2NPSender
+	targetHash common.Hash
+}
+
+func (s *liveTracingI2NPSender) QueueSendI2NP(msg i2np.Message) error {
+	if dbStore, ok := msg.(*i2np.DatabaseStore); ok {
+		s.t.Logf("publish trace dbstore: target=%s target_full=%s store_type=%d reply_token=%d reply_tunnel_id=%d reply_gateway=%s reply_gateway_full=%s key=%s key_full=%s",
+			hashPrefix(s.targetHash),
+			s.targetHash.String(),
+			dbStore.StoreType,
+			binary.BigEndian.Uint32(dbStore.ReplyToken[:]),
+			binary.BigEndian.Uint32(dbStore.ReplyTunnelID[:]),
+			hashPrefix(dbStore.ReplyGateway),
+			dbStore.ReplyGateway.String(),
+			hashPrefix(dbStore.Key),
+			dbStore.Key.String(),
+		)
+	}
+	return s.inner.QueueSendI2NP(msg)
 }
