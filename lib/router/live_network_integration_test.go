@@ -69,23 +69,61 @@ func TestLiveNetworkPublishRouterInfo(t *testing.T) {
 	ri, err := r.routerInfoProv.GetRouterInfo()
 	require.NoError(t, err, "failed to get local routerinfo for publication")
 
+	preStats := publisher.GetStats()
+	t.Logf("routerinfo publish pre-stats: publish_ok=%d publish_fail=%d verify_ok=%d verify_fail=%d ack_ok=%d ack_unexpected=%d",
+		preStats.RouterInfoPublishSuccess,
+		preStats.RouterInfoPublishFail,
+		preStats.RouterInfoVerifySuccess,
+		preStats.RouterInfoVerifyFail,
+		preStats.ReplyTokenAckReceived,
+		preStats.ReplyTokenAckUnexpected,
+	)
+
 	publishDiag, err := retryWithDiagnostics("publish_routerinfo", liveNetworkRetryAttempts, liveNetworkAttemptDelay, func() error {
-		return publisher.PublishRouterInfo(*ri)
+		before := publisher.GetStats()
+		err := publisher.PublishRouterInfo(*ri)
+		after := publisher.GetStats()
+		t.Logf("routerinfo publish attempt delta: publish_ok=+%d publish_fail=+%d verify_ok=+%d verify_fail=+%d ack_ok=+%d ack_unexpected=+%d",
+			after.RouterInfoPublishSuccess-before.RouterInfoPublishSuccess,
+			after.RouterInfoPublishFail-before.RouterInfoPublishFail,
+			after.RouterInfoVerifySuccess-before.RouterInfoVerifySuccess,
+			after.RouterInfoVerifyFail-before.RouterInfoVerifyFail,
+			after.ReplyTokenAckReceived-before.ReplyTokenAckReceived,
+			after.ReplyTokenAckUnexpected-before.ReplyTokenAckUnexpected,
+		)
+		return err
 	})
 	t.Logf("routerinfo publish diagnostics: %s", publishDiag)
 	require.NoError(t, err, "routerinfo publish operation failed")
 
 	require.Eventually(t, func() bool {
 		stats := publisher.GetStats()
-		t.Logf("routerinfo publish stats: publish_ok=%d publish_fail=%d verify_ok=%d verify_fail=%d",
+		t.Logf("routerinfo publish stats: publish_ok=%d publish_fail=%d verify_ok=%d verify_fail=%d ack_ok=%d ack_unexpected=%d",
 			stats.RouterInfoPublishSuccess,
 			stats.RouterInfoPublishFail,
 			stats.RouterInfoVerifySuccess,
 			stats.RouterInfoVerifyFail,
+			stats.ReplyTokenAckReceived,
+			stats.ReplyTokenAckUnexpected,
 		)
-		return stats.RouterInfoVerifySuccess > 0
+		return stats.RouterInfoVerifySuccess > preStats.RouterInfoVerifySuccess
 	}, liveNetworkWaitForPublishTimeout, liveNetworkPollInterval,
 		"routerinfo publication did not register a successful verification within timeout")
+
+	postStats := publisher.GetStats()
+	t.Logf("routerinfo publish post-stats: publish_ok=%d publish_fail=%d verify_ok=%d verify_fail=%d ack_ok=%d ack_unexpected=%d",
+		postStats.RouterInfoPublishSuccess,
+		postStats.RouterInfoPublishFail,
+		postStats.RouterInfoVerifySuccess,
+		postStats.RouterInfoVerifyFail,
+		postStats.ReplyTokenAckReceived,
+		postStats.ReplyTokenAckUnexpected,
+	)
+	require.Greater(t,
+		postStats.ReplyTokenAckReceived,
+		preStats.ReplyTokenAckReceived,
+		"expected at least one reply-token DeliveryStatus acknowledgement after RouterInfo publication",
+	)
 }
 
 func TestLiveNetworkPublishLeaseSet(t *testing.T) {
