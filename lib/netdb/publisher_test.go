@@ -2,6 +2,7 @@ package netdb
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"testing"
@@ -380,6 +381,54 @@ func TestPublishRouterInfo_FailsWhenVerificationNeverSucceeds(t *testing.T) {
 	assert.Equal(t, uint64(1), stats.RouterInfoPublishFail)
 	assert.Equal(t, uint64(0), stats.RouterInfoVerifySuccess)
 	assert.Equal(t, uint64(1), stats.RouterInfoVerifyFail)
+}
+
+func TestCreateDatabaseStoreMessage_TracksReplyTokenAsPending(t *testing.T) {
+	db := newPublisherVerifyStubDB()
+	p := NewPublisher(db, nil, nil, nil, DefaultPublisherConfig())
+
+	hash := common.Hash{0xAA, 0xBB, 0xCC}
+	msg, err := p.createDatabaseStoreMessage(hash, []byte{0x01, 0x02}, i2np.DatabaseStoreTypeRouterInfo)
+	assert.NoError(t, err)
+
+	store, ok := msg.(*i2np.DatabaseStore)
+	assert.True(t, ok)
+	token := binary.BigEndian.Uint32(store.ReplyToken[:])
+	assert.NotZero(t, token)
+
+	_, pending := p.pendingReplyTokens.Load(token)
+	assert.True(t, pending, "reply token should be tracked as pending")
+}
+
+func TestHandleDeliveryStatus_ConsumesPendingReplyToken(t *testing.T) {
+	db := newPublisherVerifyStubDB()
+	p := NewPublisher(db, nil, nil, nil, DefaultPublisherConfig())
+
+	token := [4]byte{0x01, 0x02, 0x03, 0x04}
+	p.registerPendingReplyToken(token)
+
+	msgID := int(binary.BigEndian.Uint32(token[:]))
+	err := p.HandleDeliveryStatus(msgID, time.Now())
+	assert.NoError(t, err)
+
+	stats := p.GetStats()
+	assert.Equal(t, uint64(1), stats.ReplyTokenAckReceived)
+	assert.Equal(t, uint64(0), stats.ReplyTokenAckUnexpected)
+
+	_, pending := p.pendingReplyTokens.Load(uint32(msgID))
+	assert.False(t, pending, "pending token should be removed once acked")
+}
+
+func TestHandleDeliveryStatus_UnknownTokenIncrementsUnexpected(t *testing.T) {
+	db := newPublisherVerifyStubDB()
+	p := NewPublisher(db, nil, nil, nil, DefaultPublisherConfig())
+
+	err := p.HandleDeliveryStatus(12345, time.Now())
+	assert.NoError(t, err)
+
+	stats := p.GetStats()
+	assert.Equal(t, uint64(0), stats.ReplyTokenAckReceived)
+	assert.Equal(t, uint64(1), stats.ReplyTokenAckUnexpected)
 }
 
 type publisherVerifyStubDB struct {

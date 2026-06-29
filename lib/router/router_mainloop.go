@@ -82,6 +82,9 @@ func (r *Router) mainloop() {
 		r.Stop()
 		return
 	}
+	if r.messageRouter != nil && r.publisher != nil {
+		r.messageRouter.GetProcessor().SetDeliveryStatusHandler(r.publisher)
+	}
 	log.WithField("at", "mainloop").Debug("step 5: starting explorer")
 	if err := r.startExplorer(); err != nil {
 		r.startupErr <- oops.Wrapf(err, "explorer startup failed")

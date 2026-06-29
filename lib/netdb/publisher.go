@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"math"
 	"net"
 	"strconv"
 	"strings"
@@ -94,6 +95,12 @@ type Publisher struct {
 	routerInfoPublishFail    atomic.Uint64
 	routerInfoVerifySuccess  atomic.Uint64
 	routerInfoVerifyFail     atomic.Uint64
+	ackReplyTokenReceived    atomic.Uint64
+	ackReplyTokenUnexpected  atomic.Uint64
+
+	// pendingReplyTokens tracks outstanding DatabaseStore reply tokens awaiting
+	// DeliveryStatus acknowledgements from floodfills.
+	pendingReplyTokens sync.Map // map[uint32]time.Time
 }
 
 type publisherLoopSpec struct {
@@ -229,6 +236,8 @@ func (p *Publisher) runPublisherLoop(loop publisherLoopSpec) {
 // This makes our router discoverable in the I2P network by distributing our
 // RouterInfo to the closest floodfill routers in the DHT.
 func (p *Publisher) publishOurRouterInfo() {
+	p.cleanupStaleReplyTokens(45 * time.Minute)
+
 	log.WithFields(logger.Fields{"at": "publishOurRouterInfo"}).Debug("Publishing our RouterInfo")
 
 	// Check if RouterInfo provider is configured
@@ -298,6 +307,8 @@ func (p *Publisher) ForceRouterInfoRepublish() error {
 
 // publishAllLeaseSets publishes all LeaseSets in the database
 func (p *Publisher) publishAllLeaseSets() {
+	p.cleanupStaleReplyTokens(45 * time.Minute)
+
 	log.WithFields(logger.Fields{"at": "publishAllLeaseSets"}).Debug("Publishing all LeaseSets")
 
 	// Get all LeaseSets from the database
@@ -987,12 +998,74 @@ func (p *Publisher) createDatabaseStoreMessage(hash common.Hash, data []byte, da
 		return nil, oops.Errorf("failed to generate DatabaseStore reply token: %w", err)
 	}
 	dbStore.ReplyToken = replyToken
+	p.registerPendingReplyToken(replyToken)
 
 	if replyTunnelID, replyGateway, ok := p.selectReplyRoute(); ok {
 		dbStore.ReplyTunnelID = replyTunnelID
 		dbStore.ReplyGateway = replyGateway
 	}
 	return dbStore, nil
+}
+
+// HandleDeliveryStatus records DeliveryStatus acknowledgements for pending
+// DatabaseStore reply tokens. It is wired into MessageProcessor via router
+// startup and allows publication diagnostics to confirm token round-trips.
+func (p *Publisher) HandleDeliveryStatus(msgID int, timestamp time.Time) error {
+	if msgID <= 0 || uint64(msgID) > math.MaxUint32 {
+		p.ackReplyTokenUnexpected.Add(1)
+		log.WithFields(logger.Fields{
+			"at":         "Publisher.HandleDeliveryStatus",
+			"message_id": msgID,
+			"timestamp":  timestamp,
+			"reason":     "out-of-range message id",
+		}).Debug("Ignoring unexpected DeliveryStatus")
+		return nil
+	}
+
+	token := uint32(msgID)
+	if createdAt, ok := p.pendingReplyTokens.LoadAndDelete(token); ok {
+		p.ackReplyTokenReceived.Add(1)
+		if ts, ok := createdAt.(time.Time); ok {
+			log.WithFields(logger.Fields{
+				"at":         "Publisher.HandleDeliveryStatus",
+				"message_id": msgID,
+				"timestamp":  timestamp,
+				"ack_delay":  time.Since(ts).String(),
+			}).Debug("Received DeliveryStatus for tracked DatabaseStore reply token")
+		}
+		return nil
+	}
+
+	p.ackReplyTokenUnexpected.Add(1)
+	log.WithFields(logger.Fields{
+		"at":         "Publisher.HandleDeliveryStatus",
+		"message_id": msgID,
+		"timestamp":  timestamp,
+		"reason":     "no pending reply token",
+	}).Debug("Received DeliveryStatus for unknown reply token")
+	return nil
+}
+
+func (p *Publisher) registerPendingReplyToken(token [4]byte) {
+	key := binary.BigEndian.Uint32(token[:])
+	if key == 0 {
+		return
+	}
+	p.pendingReplyTokens.Store(key, time.Now())
+}
+
+func (p *Publisher) cleanupStaleReplyTokens(ttl time.Duration) {
+	if ttl <= 0 {
+		return
+	}
+	cutoff := time.Now().Add(-ttl)
+	p.pendingReplyTokens.Range(func(key, value any) bool {
+		createdAt, ok := value.(time.Time)
+		if !ok || createdAt.Before(cutoff) {
+			p.pendingReplyTokens.Delete(key)
+		}
+		return true
+	})
 }
 
 // selectReplyRoute returns a reply tunnel ID and gateway hash for DatabaseStore acks.
@@ -1130,6 +1203,8 @@ func (p *Publisher) GetStats() PublisherStats {
 		RouterInfoPublishFail:    p.routerInfoPublishFail.Load(),
 		RouterInfoVerifySuccess:  p.routerInfoVerifySuccess.Load(),
 		RouterInfoVerifyFail:     p.routerInfoVerifyFail.Load(),
+		ReplyTokenAckReceived:    p.ackReplyTokenReceived.Load(),
+		ReplyTokenAckUnexpected:  p.ackReplyTokenUnexpected.Load(),
 	}
 }
 
@@ -1143,6 +1218,8 @@ type PublisherStats struct {
 	RouterInfoPublishFail    uint64
 	RouterInfoVerifySuccess  uint64
 	RouterInfoVerifyFail     uint64
+	ReplyTokenAckReceived    uint64
+	ReplyTokenAckUnexpected  uint64
 }
 
 // Compile-time interface check
@@ -1151,4 +1228,5 @@ var _ interface {
 	Stop()
 	PublishLeaseSet(hash common.Hash, leaseSetData []byte) error
 	PublishRouterInfo(ri router_info.RouterInfo) error
+	HandleDeliveryStatus(msgID int, timestamp time.Time) error
 } = (*Publisher)(nil)
