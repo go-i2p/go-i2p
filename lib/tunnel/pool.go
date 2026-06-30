@@ -692,7 +692,11 @@ func (p *Pool) prepareBuildRequest(excludePeers []common.Hash) BuildTunnelReques
 
 	replyTunnelID := TunnelID(0)
 	replyGateway := ourHash
-	if provider != nil {
+	// Inbound tunnels must terminate at this router (IBEP -> us). If we inject a
+	// non-zero ReplyTunnelID here, the built tunnel endpoint forwards onward into
+	// another tunnel instead of delivering locally, which can blackhole return
+	// traffic such as DeliveryStatus ACKs.
+	if !p.config.IsInbound && provider != nil {
 		if id, gw, ok := provider(); ok {
 			replyTunnelID = id
 			if gw != (common.Hash{}) {

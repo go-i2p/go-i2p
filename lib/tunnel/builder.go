@@ -447,11 +447,14 @@ type generatedHopRecord struct {
 // determineHopPosition determines the position of a hop in the tunnel (gateway, endpoint, or participant).
 func (tb *TunnelBuilder) determineHopPosition(hopIndex, hopCount int, isInbound bool) string {
 	if hopIndex == 0 {
+		if isInbound {
+			return "endpoint"
+		}
 		return "gateway"
 	}
 	if hopIndex == hopCount-1 {
 		if isInbound {
-			return "endpoint"
+			return "gateway"
 		}
 		return "endpoint"
 	}
