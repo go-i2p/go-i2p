@@ -92,6 +92,7 @@ func TestLiveNetworkPublishRouterInfo(t *testing.T) {
 		r.routerInfoProv,
 		netdb.DefaultPublisherConfig(),
 	)
+	testPublisher.SetAckTimeout(60 * time.Second)
 	if r.lookupClient != nil {
 		testPublisher.SetLookupTransport(r.lookupClient)
 	}

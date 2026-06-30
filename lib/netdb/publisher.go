@@ -188,6 +188,18 @@ func (p *Publisher) SetInboundPool(inboundPool *tunnel.Pool) {
 	p.fieldMu.Unlock()
 }
 
+// SetAckTimeout overrides the DeliveryStatus ACK wait timeout used by
+// PublishRouterInfo. Primarily intended for integration tests where
+// live-network latency can exceed the default window.
+func (p *Publisher) SetAckTimeout(timeout time.Duration) {
+	if timeout <= 0 {
+		return
+	}
+	p.fieldMu.Lock()
+	p.ackTimeout = timeout
+	p.fieldMu.Unlock()
+}
+
 // SetForceTargetHash pins all RouterInfo publication to a single target hash
 // for the lifetime of this Publisher. Intended for use in tests only; never
 // call this from production code. When the target hash is not in local NetDB,
