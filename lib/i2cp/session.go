@@ -424,14 +424,12 @@ func prepareDestinationAndKeys(dest *destination.Destination, sigPriv types.Sign
 	}
 
 	// Case 2: Client provided only a destination (no private keys)
-	// We cannot honor the destination without private keys for LeaseSet signing
-	// and message decryption. Log a warning and generate fresh keys.
+	// go-i2p requires clients to always provide private keys for their destinations;
+	// the router does not manage client identities. Reject this as an error.
 	if dest != nil {
-		log.WithFields(logger.Fields{
-			"at":     "prepareDestinationAndKeys",
-			"reason": "destination_without_private_keys",
-		}).Warn("Client provided destination without private keys; " +
-			"generating fresh identity (provide private keys to preserve identity)")
+		return nil, nil, oops.Errorf(
+			"client destination requires private keys: go-i2p design requires clients to always provide " +
+			"signing and encryption private keys for their persistent identity; destinations without keys cannot be used")
 	}
 
 	// Case 3: No destination and no keys — generate everything fresh
