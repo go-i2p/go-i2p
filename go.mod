@@ -6,10 +6,10 @@ require (
 	github.com/beevik/ntp v1.5.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
-	github.com/go-i2p/common v0.1.60000-0.20260612012818-ffa84716e922
+	github.com/go-i2p/common v0.1.60000-0.20260630205407-2aad226af4a6
 	github.com/go-i2p/crypto v0.1.60000-0.20260612012729-bcf561943886
 	github.com/go-i2p/go-nat-listener v0.1.62
-	github.com/go-i2p/go-noise v0.1.60000-0.20260625225340-e0137524bd57
+	github.com/go-i2p/go-noise v0.1.60000-0.20260630210647-09e572c2736c
 	github.com/go-i2p/go-unzip v0.0.0-20260417162122-21146ed7aca8
 	github.com/go-i2p/i2p-control v0.0.0-20260608000308-d8ed861a259c
 	github.com/go-i2p/i2ptui v0.0.0-20260607232722-b95832d1b84a
@@ -80,11 +80,11 @@ require (
 	golang.org/x/text v0.38.0 // indirect
 )
 
-// Active local-development replace directives. These point go-noise (NTCP2/SSU2
-// Noise handshake) and path at the in-tree working copies so transport fixes
-// landed locally are actually built. Removing them silently downgrades to the
-// last published pseudo-version and reverts those fixes, which breaks transport.
-replace github.com/go-i2p/go-noise => ../go-noise
+// go-noise (NTCP2/SSU2 Noise handshake) and common are pinned below to the
+// pushed commits that contain the integrated transport (TR-1) and per-client
+// EncryptedLeaseSet authorization (L-3) fixes. To resume cross-module local
+// development, re-enable the corresponding replace directive.
+//replace github.com/go-i2p/go-noise => ../go-noise
 
 //replace github.com/go-i2p/path => ../path
 
@@ -93,7 +93,7 @@ replace github.com/go-i2p/go-noise => ../go-noise
 // publish intermediate versions.
 
 // Group 1: common, crypto, elgamal
-replace github.com/go-i2p/common => ../common
+//replace github.com/go-i2p/common => ../common
 
 //replace github.com/go-i2p/crypto => ../crypto
 
