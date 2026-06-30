@@ -121,6 +121,15 @@ func (r *Router) GetNetworkStatus() int {
 	// firewalled variant (FIREWALLED, or ERROR_SYMMETRIC_NAT for symmetric NAT)
 	// rather than OK. Without this guard a firewalled router with a
 	// PeerTest-confirmed external address misreports as fully reachable.
+	//
+	// Precedence rule: a directly-reachable public-IPv4 host wins over any
+	// (possibly stale or in-progress) relay-requiring NAT classification in the
+	// SSU2 cache. Such a host is reachable by unsolicited direct inbound by
+	// definition, so report OK and never a firewalled variant. This makes the
+	// verdict deterministic regardless of PeerTest timing.
+	if r.directPublicExternalAddr() != "" {
+		return 0 // OK — directly reachable via public IPv4
+	}
 	if code := r.inboundBlockedStatusCode(); code != 0 {
 		return code
 	}

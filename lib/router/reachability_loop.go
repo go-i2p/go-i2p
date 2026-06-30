@@ -198,6 +198,11 @@ func (r *Router) refreshNTCP2LocalRouterInfo() {
 //  1. SSU2 PeerTest / NAT-PMP confirmed address (cached in natStateCache)
 //  2. NTCP2 published host:port from the current RouterInfo addresses
 //     (BUG-2 fix: NTCP2-only routers were always returning "" here)
+//  3. Locally-determined public IPv4 bind/host address. A publicly-routable
+//     IPv4 host is directly reachable by definition, so this guarantees a
+//     non-empty external address even before PeerTest completes (or when it
+//     cannot run for lack of SSU2 peers), preventing a public node from being
+//     misclassified as FIREWALLED.
 //
 // Returns "" when no evidence is available.
 func (r *Router) collectBestExternalAddr() string {
@@ -208,7 +213,23 @@ func (r *Router) collectBestExternalAddr() string {
 
 	// 2. Fall back to the NTCP2 address from the current RouterInfo.
 	//    This covers NTCP2-only deployments on static or NAT-forwarded IPs.
-	return r.getNTCP2ExternalAddr()
+	if addr := r.getNTCP2ExternalAddr(); addr != "" {
+		return addr
+	}
+
+	// 3. Final fallback: locally-detected public IPv4 (directly reachable).
+	return r.directPublicExternalAddr()
+}
+
+// directPublicExternalAddr returns the locally-determined public IPv4
+// external address ("ip:port") from the SSU2 transport, or "" when the host is
+// not bound to / does not own a publicly routable IPv4 address.
+func (r *Router) directPublicExternalAddr() string {
+	ssu2Transport := r.getSSU2Transport()
+	if ssu2Transport == nil {
+		return ""
+	}
+	return ssu2Transport.DirectPublicExternalAddr()
 }
 
 // getSSU2ExternalAddr retrieves the cached external address from SSU2 transport.

@@ -25,11 +25,15 @@ func (r *Router) startSSU2NATDetection() {
 
 	candidates := r.collectSSU2Candidates()
 	if len(candidates) < 2 {
-		log.WithField("count", len(candidates)).Debug("SSU2 NAT detection deferred: insufficient SSU2 peers")
-		return
+		log.WithField("count", len(candidates)).Debug("SSU2 NAT detection: insufficient SSU2 peers for PeerTest; attempting public-IP short-circuit only")
 	}
 
 	republish := r.createRepublishCallback()
+	// Always invoke detection. Even with <2 SSU2 peers the transport still runs
+	// the public-IP short-circuit (a publicly-bound IPv4 host is directly
+	// reachable without PeerTest), guaranteeing a terminal NAT classification
+	// instead of leaving the router stuck reporting TESTING. StartNATDetection
+	// skips the PeerTest exchange itself when peers are insufficient.
 	ssu2Transport.StartNATDetection(candidates, republish)
 	log.WithFields(logger.Fields{"at": "startSSU2NATDetection"}).Debug("SSU2 NAT detection goroutine started")
 }

@@ -314,46 +314,10 @@ func buildSSU2Options(host, portStr string, transport *SSU2Transport, introducer
 
 // isPublicHost returns true if host is a globally-routable, non-private IP.
 // Mirrors ntcp2.isPublicIP so introducer-only publication uses the same
-// reachability criterion as NTCP2's caps-only fallback.
+// reachability criterion as NTCP2's caps-only fallback. Delegates to the
+// canonical classifier in lib/nat.
 func isPublicHost(host string) bool {
-	ip := net.ParseIP(host)
-	if ip == nil {
-		return false
-	}
-	if !ip.IsGlobalUnicast() || ip.IsPrivate() {
-		return false
-	}
-	if ip4 := ip.To4(); ip4 != nil {
-		return !isSpecialUseIPv4(ip4)
-	}
-	return true
-}
-
-// isSpecialUseIPv4 returns true for non-routable special-use IPv4 ranges that
-// should not be published as direct SSU2 host endpoints.
-func isSpecialUseIPv4(ip net.IP) bool {
-	if ip == nil || ip.To4() == nil {
-		return false
-	}
-	if ip[0] == 100 && ip[1]&0xC0 == 64 {
-		return true // 100.64.0.0/10 carrier-grade NAT
-	}
-	if ip[0] == 192 && ip[1] == 0 && ip[2] == 0 {
-		return true // 192.0.0.0/24 IETF protocol assignments
-	}
-	if ip[0] == 192 && ip[1] == 0 && ip[2] == 2 {
-		return true // 192.0.2.0/24 TEST-NET-1
-	}
-	if ip[0] == 198 && ip[1] == 51 && ip[2] == 100 {
-		return true // 198.51.100.0/24 TEST-NET-2
-	}
-	if ip[0] == 203 && ip[1] == 0 && ip[2] == 113 {
-		return true // 203.0.113.0/24 TEST-NET-3
-	}
-	if ip[0] >= 224 {
-		return true // multicast and reserved classes
-	}
-	return false
+	return nat.IsPubliclyRoutableHost(host)
 }
 
 // hasUsableIntroducer returns true if at least one entry in introducers carries
@@ -476,7 +440,10 @@ func detectExternalIP() string {
 }
 
 // findBestPublicIP searches interface addresses for the best public IP.
-// Prefers public IPv4; falls back to any IP if no public IPv4 is found.
+// Prefers public IPv4; falls back to any non-private IP if no public IPv4 is
+// found. Mirrors ntcp2.findBestExternalIP: RFC 1918 private addresses are never
+// used as a fallback, so the two transports advertise consistent endpoints and
+// a private bind address is not published as if it were reachable.
 func findBestPublicIP(addrs []net.Addr) string {
 	var fallback string
 	for _, addr := range addrs {
@@ -489,7 +456,7 @@ func findBestPublicIP(addrs []net.Addr) string {
 			return ip.String()
 		}
 
-		if fallback == "" {
+		if fallback == "" && !ip.IsPrivate() {
 			fallback = ip.String()
 		}
 	}
@@ -513,9 +480,13 @@ func shouldSkipAddress(ip net.IP) bool {
 }
 
 // isPublicIPv4Address returns true if the IP is a publicly routable IPv4 address.
+// BUG FIX: the previous implementation only checked To4()+IsGlobalUnicast(),
+// which treats RFC 1918 private ranges (and CGNAT) as public because Go's
+// IsGlobalUnicast() returns true for them. Delegating to the canonical
+// classifier in lib/nat ensures private/CGNAT/special-use IPs are correctly
+// excluded, matching the NTCP2 and router-status classifiers.
 func isPublicIPv4Address(ip net.IP) bool {
-	ip4 := ip.To4()
-	return ip4 != nil && ip.IsGlobalUnicast()
+	return nat.IsPublicRoutableIPv4(ip)
 }
 
 // buildBaseSSU2Options creates the base options map for an SSU2 RouterAddress.
