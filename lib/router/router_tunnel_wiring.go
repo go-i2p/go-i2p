@@ -68,6 +68,12 @@ func (r *Router) wireParticipantManager() {
 	if r.cfg != nil && (r.cfg.Hidden || !r.cfg.AcceptTunnels) {
 		r.participantManager.SetRefuseAllTransit(true)
 	}
+	// Wire the bandwidth limit (config is bytes/s; transit build options are
+	// KB/s) so transit build requests can be evaluated against our capacity,
+	// matching i2pd's TransitTunnel bandwidth handling.
+	if r.cfg != nil && r.cfg.MaxBandwidth > 0 {
+		r.participantManager.SetBandwidthLimitKBps(uint32(r.cfg.MaxBandwidth / 1024))
+	}
 	log.WithFields(logger.Fields{"at": "initializeMessageRouter"}).Debug("Participant manager and build reply forwarder wired into message processor")
 }
 

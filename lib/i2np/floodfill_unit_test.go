@@ -100,8 +100,8 @@ func TestDatabaseManager_SelectClosestFloodfills(t *testing.T) {
 		t.Errorf("Expected routing key %x, got %x", expectedRoutingKey, mockNetDB.selectTargetHash)
 	}
 
-	if mockNetDB.selectRequestedCount != 7 {
-		t.Errorf("Expected request count 7, got %d", mockNetDB.selectRequestedCount)
+	if mockNetDB.selectRequestedCount != 3 {
+		t.Errorf("Expected request count 3, got %d", mockNetDB.selectRequestedCount)
 	}
 }
 
@@ -118,9 +118,9 @@ func TestDatabaseManager_SelectClosestFloodfills_LimitedPeers(t *testing.T) {
 	targetKey := common.Hash{0xFF}
 	_ = dbManager.selectClosestFloodfills(targetKey)
 
-	// Should have requested 7 but only 3 available
-	if mockNetDB.selectRequestedCount != 7 {
-		t.Errorf("Expected request count 7, got %d", mockNetDB.selectRequestedCount)
+	// Should have requested 3 (i2pd parity) but only 3 available
+	if mockNetDB.selectRequestedCount != 3 {
+		t.Errorf("Expected request count 3, got %d", mockNetDB.selectRequestedCount)
 	}
 }
 

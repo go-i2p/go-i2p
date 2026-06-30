@@ -2,6 +2,7 @@ package i2np
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 
 	common "github.com/go-i2p/common/data"
@@ -403,8 +404,20 @@ func (p *MessageProcessor) processAllBuildRecords(messageID int, records []Build
 func (p *MessageProcessor) processSingleBuildRecord(messageID, index int, record BuildRequestRecord, rawData []byte, isShortBuild bool) {
 	accepted, rejectCode, reason := p.participantManager.ProcessBuildRequest(record.OurIdent)
 
+	// availableBW is the bandwidth (KB/s) advertised back to the tunnel creator
+	// in the reply's "b" option. It stays 0 unless the request is accepted and
+	// the bandwidth policy computes a non-zero offer.
+	var availableBW uint32
+
 	if accepted {
-		if err := p.handleAcceptedBuildRecord(messageID, index, record); err != nil {
+		// Apply the transit-tunnel bandwidth policy (i2pd TransitTunnel build
+		// handling): a non-zero reject code overrides acceptance with code 30.
+		bwReject, avail := p.participantManager.EvaluateBuildBandwidth(record.MinBandwidthKBps, record.RequestedBandwidthKBps)
+		if bwReject != 0 {
+			rejectCode = bwReject
+			p.handleRejectedBuildRecord(messageID, index, record, rejectCode,
+				"insufficient transit bandwidth")
+		} else if err := p.handleAcceptedBuildRecord(messageID, index, record); err != nil {
 			// Registration failed — send a rejection reply so the tunnel builder
 			// knows this hop is non-functional instead of a phantom success.
 			rejectCode = TunnelBuildReplyReject
@@ -412,13 +425,14 @@ func (p *MessageProcessor) processSingleBuildRecord(messageID, index int, record
 				fmt.Sprintf("participant registration failed: %v", err))
 		} else {
 			rejectCode = TunnelBuildReplySuccess
+			availableBW = avail
 		}
 	} else {
 		p.handleRejectedBuildRecord(messageID, index, record, rejectCode, reason)
 	}
 
 	// Generate and send build reply message
-	if err := p.generateAndSendBuildReply(messageID, index, record, rejectCode, rawData, isShortBuild); err != nil {
+	if err := p.generateAndSendBuildReply(messageID, index, record, rejectCode, availableBW, rawData, isShortBuild); err != nil {
 		log.WithError(err).WithFields(logger.Fields{
 			"at":             "processSingleBuildRecord",
 			"message_id":     messageID,
@@ -439,8 +453,8 @@ func (p *MessageProcessor) processSingleBuildRecord(messageID, index int, record
 //
 // For VTB (isShortBuild=false) the original AEAD path is unchanged:
 //   - 528-byte cleartext → ChaCha20-Poly1305 AEAD → 544-byte ciphertext
-func (p *MessageProcessor) generateAndSendBuildReply(messageID, index int, record BuildRequestRecord, replyCode byte, rawData []byte, isShortBuild bool) error {
-	encryptedReply, err := p.encryptBuildReply(index, record, replyCode, rawData, isShortBuild)
+func (p *MessageProcessor) generateAndSendBuildReply(messageID, index int, record BuildRequestRecord, replyCode byte, availableBW uint32, rawData []byte, isShortBuild bool) error {
+	encryptedReply, err := p.encryptBuildReply(index, record, replyCode, availableBW, rawData, isShortBuild)
 	if err != nil {
 		return err
 	}
@@ -454,21 +468,21 @@ func (p *MessageProcessor) generateAndSendBuildReply(messageID, index int, recor
 }
 
 // encryptBuildReply encrypts a build reply using the appropriate encryption path.
-func (p *MessageProcessor) encryptBuildReply(index int, record BuildRequestRecord, replyCode byte, rawData []byte, isShortBuild bool) ([]byte, error) {
+func (p *MessageProcessor) encryptBuildReply(index int, record BuildRequestRecord, replyCode byte, availableBW uint32, rawData []byte, isShortBuild bool) ([]byte, error) {
 	if isShortBuild {
-		return p.encryptSTBMReply(index, replyCode, rawData)
+		return p.encryptSTBMReply(index, replyCode, availableBW, rawData)
 	}
 	return p.encryptVTBReply(index, record, replyCode)
 }
 
 // encryptSTBMReply encrypts a short tunnel build reply.
-func (p *MessageProcessor) encryptSTBMReply(index int, replyCode byte, rawData []byte) ([]byte, error) {
+func (p *MessageProcessor) encryptSTBMReply(index int, replyCode byte, availableBW uint32, rawData []byte) ([]byte, error) {
 	var crypto stbmSlotCrypto
 	if p.stbmSlotCrypto != nil {
 		crypto = p.stbmSlotCrypto[index]
 	}
 
-	encryptedReply, err := p.buildSTBMReplyMessage(rawData, index, crypto, replyCode)
+	encryptedReply, err := p.buildSTBMReplyMessage(rawData, index, crypto, replyCode, availableBW)
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to build STBM reply message")
 	}
@@ -524,7 +538,7 @@ func (p *MessageProcessor) logBuildReplySuccess(messageID, index int, replyCode 
 // Our slot (ourIndex) is encrypted with ChaCha20-Poly1305 AEAD using the Noise-derived
 // replyKey and noiseHash as AD. All other slots are ChaCha20-XOR'd with the same replyKey.
 // Matches i2pd I2NPProtocol.cpp transit-hop reply construction.
-func (p *MessageProcessor) buildSTBMReplyMessage(rawData []byte, ourIndex int, crypto stbmSlotCrypto, replyCode byte) ([]byte, error) {
+func (p *MessageProcessor) buildSTBMReplyMessage(rawData []byte, ourIndex int, crypto stbmSlotCrypto, replyCode byte, availableBW uint32) ([]byte, error) {
 	count, expected, err := p.validateSTBMReplyParams(rawData, ourIndex)
 	if err != nil {
 		return nil, err
@@ -532,7 +546,7 @@ func (p *MessageProcessor) buildSTBMReplyMessage(rawData []byte, ourIndex int, c
 
 	replyData := p.initializeSTBMReply(rawData, expected, count)
 
-	if err := p.encryptSTBMSlots(replyData, count, ourIndex, crypto, replyCode); err != nil {
+	if err := p.encryptSTBMSlots(replyData, count, ourIndex, crypto, replyCode, availableBW); err != nil {
 		return nil, err
 	}
 
@@ -574,13 +588,13 @@ func (p *MessageProcessor) initializeSTBMReply(rawData []byte, expected, count i
 }
 
 // encryptSTBMSlots encrypts all slots: AEAD for our slot, ChaCha20 XOR for others.
-func (p *MessageProcessor) encryptSTBMSlots(replyData []byte, count, ourIndex int, crypto stbmSlotCrypto, replyCode byte) error {
+func (p *MessageProcessor) encryptSTBMSlots(replyData []byte, count, ourIndex int, crypto stbmSlotCrypto, replyCode byte, availableBW uint32) error {
 	var nonce [12]byte
 	for j := 0; j < count; j++ {
 		slotOffset := 1 + j*ShortBuildRecordSize
 		nonce[4] = byte(j)
 		if j == ourIndex {
-			if err := p.encryptOwnSTBMSlot(replyData, slotOffset, nonce, crypto, replyCode); err != nil {
+			if err := p.encryptOwnSTBMSlot(replyData, slotOffset, nonce, crypto, replyCode, availableBW); err != nil {
 				return err
 			}
 		} else {
@@ -593,8 +607,8 @@ func (p *MessageProcessor) encryptSTBMSlots(replyData []byte, count, ourIndex in
 }
 
 // encryptOwnSTBMSlot AEAD-encrypts our slot with the reply code.
-func (p *MessageProcessor) encryptOwnSTBMSlot(replyData []byte, slotOffset int, nonce [12]byte, crypto stbmSlotCrypto, replyCode byte) error {
-	cleartext := p.prepareSTBMSlotCleartext(replyCode)
+func (p *MessageProcessor) encryptOwnSTBMSlot(replyData []byte, slotOffset int, nonce [12]byte, crypto stbmSlotCrypto, replyCode byte, availableBW uint32) error {
+	cleartext := p.prepareSTBMSlotCleartext(replyCode, availableBW)
 	aead, err := chacha20poly1305.New(crypto.replyKey[:])
 	if err != nil {
 		return oops.Wrapf(err, "ChaCha20-Poly1305 init failed")
@@ -604,14 +618,48 @@ func (p *MessageProcessor) encryptOwnSTBMSlot(replyData []byte, slotOffset int, 
 	return nil
 }
 
-// prepareSTBMSlotCleartext prepares 202-byte cleartext: zero options, random padding, retCode at [201].
-func (p *MessageProcessor) prepareSTBMSlotCleartext(replyCode byte) [ShortBuildRecordSize - 16]byte {
+// prepareSTBMSlotCleartext prepares 202-byte cleartext: options mapping in
+// [0:201], retCode at [201]. When availableBW is non-zero, the reply advertises
+// the available transit bandwidth (KB/s) via the "b" option mapping (i2pd
+// TransitTunnel reply); otherwise the options field is empty (0x0000) and the
+// remaining bytes are random padding.
+func (p *MessageProcessor) prepareSTBMSlotCleartext(replyCode byte, availableBW uint32) [ShortBuildRecordSize - 16]byte {
 	var cleartext [ShortBuildRecordSize - 16]byte // 202 bytes
-	cleartext[0] = 0x00                           // options high byte
-	cleartext[1] = 0x00                           // options low byte
-	rand.Read(cleartext[2:201])                   // padding (error ignored, acceptable for padding)
+
+	optionBytes := encodeBuildReplyOptions(availableBW)
+	if len(optionBytes) > 0 && len(optionBytes) <= 201 {
+		// Write the serialized options mapping at the front, random-pad the rest.
+		copy(cleartext[0:], optionBytes)
+		rand.Read(cleartext[len(optionBytes):201]) // padding (error ignored)
+	} else {
+		cleartext[0] = 0x00         // options high byte (empty mapping)
+		cleartext[1] = 0x00         // options low byte
+		rand.Read(cleartext[2:201]) // padding (error ignored, acceptable for padding)
+	}
 	cleartext[201] = replyCode
 	return cleartext
+}
+
+// encodeBuildReplyOptions serializes the short build reply options mapping. When
+// availableBW > 0 it emits a single "b" entry carrying the available transit
+// bandwidth in KB/s as a decimal string (matching i2pd). When availableBW == 0
+// it returns nil so the caller emits an empty options field, preserving the
+// previous default reply layout.
+func encodeBuildReplyOptions(availableBW uint32) []byte {
+	if availableBW == 0 {
+		return nil
+	}
+	mapping, err := common.GoMapToMapping(map[string]string{
+		"b": strconv.FormatUint(uint64(availableBW), 10),
+	})
+	if err != nil {
+		return nil
+	}
+	data, err := mapping.DataSafe()
+	if err != nil {
+		return nil
+	}
+	return data
 }
 
 // xorOtherSTBMSlot ChaCha20-XORs other slots so the next hop can peel our layer.

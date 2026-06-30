@@ -64,6 +64,18 @@ type ParticipantManager interface {
 	// - nextHopIdent: The router hash of the next hop for routing (may be empty)
 	// - nextHopTunnel: The tunnel ID at the next hop for routing (0 if endpoint)
 	RegisterParticipant(tunnelID buildrecord.TunnelID, targetHash common.Hash, expiry time.Time, layerKey, ivKey session_key.SessionKey, nextHopIdent common.Hash, nextHopTunnel buildrecord.TunnelID) error
+
+	// EvaluateBuildBandwidth applies the transit-tunnel bandwidth policy to a
+	// build request's bandwidth options. minKBps and requestedKBps come from the
+	// short build record's "m" and "r" tunnel build options (KB/s; zero means
+	// unspecified).
+	//
+	// Returns:
+	// - rejectCode: BuildReplyCodeBandwidth (30) when the minimum cannot be
+	//   honored, otherwise 0.
+	// - availableKBps: bandwidth (KB/s) to advertise back to the creator in the
+	//   reply's "b" option, or 0 when nothing should be advertised.
+	EvaluateBuildBandwidth(minKBps, requestedKBps uint32) (rejectCode byte, availableKBps uint32)
 }
 
 // BuildReplyForwarder defines the interface for forwarding tunnel build replies.

@@ -198,6 +198,8 @@ type mockParticipantManager struct {
 	rejectReason    string
 	registeredCount int
 	registerErr     error
+	bwRejectCode    byte
+	bwAvailableKBps uint32
 }
 
 func newMockParticipantManager(acceptAll bool) *mockParticipantManager {
@@ -228,6 +230,12 @@ func (m *mockParticipantManager) getRegisteredCount() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.registeredCount
+}
+
+func (m *mockParticipantManager) EvaluateBuildBandwidth(minKBps, requestedKBps uint32) (rejectCode byte, availableKBps uint32) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.bwRejectCode, m.bwAvailableKBps
 }
 
 // --- Shared helper: createTestBuildRequestRecord ---

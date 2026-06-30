@@ -8,6 +8,22 @@ Package ntcp2 implements the NTCP2 transport protocol for the I2P network. NTCP2
 is a TCP-based transport that uses the Noise protocol framework (XK pattern) for
 authenticated key agreement, providing forward secrecy and identity hiding.
 
+# Implementation Notes
+
+## NAT Traversal
+
+As of 2026-06, NAT traversal logic (UPnP/NAT-PMP, loopback detection,
+SO_REUSEADDR socket options, and TOCTOU retry handling) has been extracted to
+the shared lib/nat package. The bindOSAssignedPort and bindWithNATTraversal
+functions in this package are now thin wrappers around
+nat.ProbeAndBindWithNATTraversal and nat.BindWithNATTraversal respectively.
+
+Future enhancements to NAT handling should be implemented in lib/nat, not here.
+This ensures consistent behavior across all transports (NTCP2, SSU2, and any
+future transport implementations).
+
+See lib/nat/doc.go for details on the NAT traversal implementation.
+
 ## Usage
 
 ```go
@@ -105,24 +121,25 @@ const (
 	// TerminationMsg2DecryptionFailure indicates message 2 (handshake) decryption failed.
 	TerminationMsg2DecryptionFailure byte = 12
 
-	// TerminationMsg3DecryptionFailure1 indicates message 3 part 1 (handshake) decryption failed.
-	TerminationMsg3DecryptionFailure1 byte = 13
+	// TerminationMsg3Error indicates an error processing message 3 of the handshake
+	// (decryption failure or invalid contents). Matches i2pd eNTCP2Message3Error.
+	TerminationMsg3Error byte = 13
 
-	// TerminationMsg3DecryptionFailure2 indicates message 3 part 2 (handshake) decryption failed.
-	TerminationMsg3DecryptionFailure2 byte = 14
+	// TerminationIntraFrameReadTimeout indicates a timeout while reading a frame
+	// during the data phase. Matches i2pd eNTCP2IntraFrameReadTimeout.
+	TerminationIntraFrameReadTimeout byte = 14
 
-	// TerminationBadAliceRouterInfo indicates Alice's RouterInfo in message 3 was invalid
-	// (could not be parsed, missing required fields, or the RouterInfo public key does not
-	// match the static key from the Noise handshake).
-	TerminationBadAliceRouterInfo byte = 15
+	// TerminationRouterInfoSignatureVerificationFail indicates the peer's RouterInfo
+	// signature verification failed. Matches i2pd eNTCP2RouterInfoSignatureVerificationFail.
+	TerminationRouterInfoSignatureVerificationFail byte = 15
 
-	// TerminationBadAliceRouterInfoSignature indicates Alice's RouterInfo signature
-	// verification failed.
-	TerminationBadAliceRouterInfoSignature byte = 16
+	// TerminationIncorrectSParameter indicates the static key (the Noise "s" parameter)
+	// is incorrect — e.g. it does not match the encryption key published in the peer's
+	// RouterInfo. Matches i2pd eNTCP2IncorrectSParameter.
+	TerminationIncorrectSParameter byte = 16
 
-	// TerminationStaticKeysMismatch indicates the static key from the Noise handshake
-	// does not match the encryption key published in Alice's RouterInfo.
-	TerminationStaticKeysMismatch byte = 17
+	// TerminationBanned indicates the peer is banned. Matches i2pd eNTCP2Banned.
+	TerminationBanned byte = 17
 )
 ```
 Termination reason codes per the NTCP2 specification. These are used in the
@@ -131,11 +148,11 @@ termination block (block type 0x04) to indicate why the session is being closed.
 Spec reference: https://geti2p.net/spec/ntcp2#termination
 
 ```go
-const ClockSkewTolerance = 30 * time.Second
+const ClockSkewTolerance = transport.ClockSkewTolerance
 ```
-ClockSkewTolerance is the maximum allowed difference between local and peer
-timestamps. Per the NTCP2 spec, connections with a clock skew exceeding this
-value should be terminated with reason code 6.
+ClockSkewTolerance is re-exported from the shared transport package. Per the
+NTCP2 spec, connections with a clock skew exceeding this value should be
+terminated with reason code 6.
 
 We intentionally use 30 s (half the go-noise default of 60 s) to narrow the
 post-restart replay window: a captured handshake msg1 is only replayable for up
@@ -168,6 +185,7 @@ var (
 	ErrFramingError           = oops.New("I2NP message framing error")
 	ErrInvalidListenerAddress = oops.New("invalid listener address for NTCP2")
 	ErrInvalidConfig          = oops.New("invalid NTCP2 configuration")
+	ErrUnexpectedConnType     = oops.New("accepted connection is not *ntcp2.Conn")
 )
 ```
 
@@ -269,6 +287,13 @@ func FrameI2NPMessageAsBlock(msg i2np.Message) ([]byte, error)
 FrameI2NPMessageAsBlock frames an I2NP message using NTCP2 block format. The
 message is serialized with a 9-byte short header and wrapped in a type-3 (I2NP)
 block. The result can be combined with other blocks via SerializeBlocks.
+
+The 9-byte short header is mandatory for every NTCP2 data-phase I2NP block,
+regardless of the concrete message type. i2pd reconstructs the full 16-byte
+header by reading the 9-byte short header and adding 7 bytes (NTCP2.cpp
+FromNTCP2); sending a 16-byte standard header here would shift the payload by 7
+bytes and corrupt every message. The 16-byte standard header is only used for
+tunnel-delivered messages (inside TunnelGateway/TunnelData), never here.
 
 Spec reference: https://geti2p.net/spec/ntcp2#data-phase
 
@@ -372,7 +397,14 @@ code received from a peer. The descriptions match i2pd's definitions.
 ```go
 func UnframeI2NPMessage(conn net.Conn) (i2np.Message, error)
 ```
-UnframeI2NPMessage unframes I2NP messages from an NTCP2 data stream.
+UnframeI2NPMessage unframes I2NP messages from an internal test/pipe stream.
+
+M-4 WARNING: This function reads a NON-STANDARD 4-byte big-endian length prefix.
+It is NOT compliant with the NTCP2 spec, which uses a 2-byte SipHash-obfuscated
+length field handled by the NTCP2Conn.Read layer. Do NOT call this function on a
+real NTCP2 connection — use BlockUnframer (which parses spec-compliant NTCP2
+block frames) instead. This function is retained for internal benchmark/test
+helpers that use pre-decoded I2NP wire format over net.Pipe.
 
 #### func  ValidateTimestamp
 
@@ -463,8 +495,11 @@ NewOptionsBlock creates an Options block (type 1) from an Options struct.
 ```go
 func NewPaddingBlock(size int) Block
 ```
-NewPaddingBlock creates a Padding block (type 254) with the specified number of
-zero bytes. The receiver ignores the content.
+NewPaddingBlock creates a Padding block (type 254) filled with cryptographically
+random bytes. The NTCP2 spec requires random padding; zero padding is
+distinguishable from Java I2P's output and fingerprintable (M-3 / G-9 fix). If
+the CSPRNG fails (should never happen in practice), the padding falls back to a
+zero-filled slice rather than panicking.
 
 #### func  NewRouterInfoBlock
 
@@ -523,9 +558,13 @@ BytesRead returns the number of bytes read during the last ReadNextMessage call.
 ```go
 func (u *BlockUnframer) ReadNextMessage() (i2np.Message, error)
 ```
-ReadNextMessage reads and parses the next NTCP2 frame, returning the first I2NP
-message found. Non-I2NP blocks are passed to BlockCallback if set. Multiple I2NP
-messages in a single frame are buffered for subsequent calls.
+ReadNextMessage reads and parses NTCP2 frames until an I2NP message is found or
+the connection is closed. Non-I2NP blocks are passed to BlockCallback. Multiple
+I2NP messages in a single frame are buffered for subsequent calls.
+
+Uses an iterative loop rather than recursion so that a peer sending an unbounded
+stream of non-I2NP (e.g. padding-only) frames cannot cause a goroutine stack
+overflow.
 
 #### type ClockSkewError
 
@@ -592,11 +631,13 @@ configuration is invalid.
 
 ```go
 type DefaultHandler struct {
+	*transport.BaseHandler
 }
 ```
 
 DefaultHandler implements NTCP2Handler using the existing functions in this
-package. It is wired into the NTCP2Transport at construction time.
+package. It is wired into the NTCP2Transport at construction time. The replay
+cache is managed by the embedded BaseHandler.
 
 #### func  NewDefaultHandler
 
@@ -607,21 +648,6 @@ NewDefaultHandler creates a new DefaultHandler with a fresh replay cache. Call
 Close() on the handler when it is no longer needed to stop the background cache
 cleanup goroutine.
 
-#### func (*DefaultHandler) CheckReplay
-
-```go
-func (h *DefaultHandler) CheckReplay(ephemeralKey [32]byte) bool
-```
-CheckReplay checks whether an ephemeral key has been seen before using the
-shared replay cache. Returns true if the key is a duplicate (replay attack).
-
-#### func (*DefaultHandler) Close
-
-```go
-func (h *DefaultHandler) Close()
-```
-Close releases resources held by the handler (stops replay cache cleanup).
-
 #### func (*DefaultHandler) OnHandshakeError
 
 ```go
@@ -630,14 +656,6 @@ func (h *DefaultHandler) OnHandshakeError(rawConn net.Conn, err error)
 OnHandshakeError applies probing resistance (random delay + junk read) on the
 raw TCP connection. This makes handshake failures indistinguishable from a
 random TCP service to an active prober.
-
-#### func (*DefaultHandler) ReplayCacheSize
-
-```go
-func (h *DefaultHandler) ReplayCacheSize() int
-```
-ReplayCacheSize returns the current number of entries in the replay cache.
-Useful for monitoring and diagnostics.
 
 #### func (*DefaultHandler) SendTermination
 
@@ -663,7 +681,14 @@ type I2NPUnframer struct {
 }
 ```
 
-I2NPUnframer provides stream-based unframing for continuous reading.
+I2NPUnframer provides stream-based unframing for test/pipe use only.
+
+M-4 WARNING: I2NPUnframer reads a NON-STANDARD 4-byte big-endian length prefix
+that does NOT appear in the NTCP2 specification. Real NTCP2 connections use a
+2-byte SipHash-obfuscated length field, handled transparently by NTCP2Conn.Read.
+Use BlockUnframer for spec-compliant NTCP2 data-phase parsing. I2NPUnframer
+exists only to support tests and benchmarks that write raw I2NP frames over a
+net.Pipe.
 
 #### func  NewI2NPUnframer
 
@@ -747,6 +772,9 @@ Implementations must be safe for concurrent use across multiple goroutines.
 
 ```go
 type NTCP2Session struct {
+	// Shared session core fields: queues, bandwidth tracking, lifecycle, and callbacks.
+	// This embeds *SessionCore, so callers can call QueueSendI2NP, ReadNextI2NP, etc. directly.
+	*transport.SessionCore
 }
 ```
 
@@ -778,9 +806,9 @@ sessions that will be immediately discarded.
 func (s *NTCP2Session) Close() error
 ```
 Close closes the session cleanly. It first waits briefly for the send queue to
-drain (up to sendQueueDrainTimeout) before sending an encrypted termination
-block (reason 0 = normal close) and closing the connection. This gives queued
-messages a chance to be transmitted rather than being silently dropped.
+drain before sending an encrypted termination block (reason 0 = normal close)
+and closing the connection. This gives queued messages a chance to be
+transmitted rather than being silently dropped.
 
 #### func (*NTCP2Session) CloseWithReason
 
@@ -799,25 +827,16 @@ plaintext termination blocks are ever sent.
 
 Spec reference: https://geti2p.net/spec/ntcp2#termination
 
-#### func (*NTCP2Session) DroppedMessages
+#### func (*NTCP2Session) DetachConn
 
 ```go
-func (s *NTCP2Session) DroppedMessages() uint64
+func (s *NTCP2Session) DetachConn()
 ```
-DroppedMessages returns the number of received messages that were dropped due to
-the receive channel being full (backpressure). A non-zero value indicates the
-consumer is not keeping up with inbound message rate.
-
-#### func (*NTCP2Session) GetBandwidthStats
-
-```go
-func (s *NTCP2Session) GetBandwidthStats() (bytesSent, bytesReceived uint64)
-```
-GetBandwidthStats returns the total bytes sent and received by this session.
-Each counter is read atomically, but the pair is not a consistent snapshot: a
-concurrent send/receive between the two loads may cause slight skew. This is
-acceptable for monitoring and rate estimation; use a mutex-guarded snapshot if
-exact point-in-time consistency is ever required.
+DetachConn clears the session's reference to the underlying connection,
+preventing Close() from closing the socket. This is used when a session loses a
+promotion race — the winner owns the socket, so the loser must not close it.
+Workers will still stop cleanly when Close() cancels the session context (SM-2
+fix).
 
 #### func (*NTCP2Session) GetRekeyStats
 
@@ -828,37 +847,14 @@ GetRekeyStats returns rekeying statistics for this session: messagesSinceRekey
 is the count of messages since the last rekey (or session start), rekeyCount is
 the total number of successful rekeys performed.
 
-#### func (*NTCP2Session) QueueSendI2NP
-
-```go
-func (s *NTCP2Session) QueueSendI2NP(msg i2np.Message) error
-```
-QueueSendI2NP queues an I2NP message to be sent over the session. Returns an
-error if the session is closed or the send queue is full after a timeout.
-
 #### func (*NTCP2Session) ReadNextI2NP
 
 ```go
 func (s *NTCP2Session) ReadNextI2NP() (i2np.Message, error)
 ```
 ReadNextI2NP blocking reads the next fully received I2NP message from this
-session.
-
-#### func (*NTCP2Session) SendQueueSize
-
-```go
-func (s *NTCP2Session) SendQueueSize() int
-```
-SendQueueSize returns how many I2NP messages are not completely sent yet.
-
-#### func (*NTCP2Session) SetCleanupCallback
-
-```go
-func (s *NTCP2Session) SetCleanupCallback(callback func())
-```
-SetCleanupCallback sets a callback function that will be called when the session
-closes. Thread-safe: protected by callbackMu to prevent data race with
-callCleanupCallback.
+session. If a critical error occurred during receive processing, it is returned
+instead of waiting for more messages.
 
 #### func (*NTCP2Session) SetRouterInfoCallback
 
@@ -910,12 +906,26 @@ first call to Accept().
 
 Spec reference: https://geti2p.net/spec/ntcp2#probing-resistance
 
+#### func (*NTCP2Transport) AcceptedConnPromotionAttempts
+
+```go
+func (t *NTCP2Transport) AcceptedConnPromotionAttempts() int32
+```
+AcceptedConnPromotionAttempts returns the number of times
+promoteInboundConnection refused to promote an acceptedConn (X-1 bug detection
+metric). This counter should remain at 0 in a correct implementation. A non-zero
+value indicates findExistingSession bypassed the acceptedConn guard and
+attempted dual socket ownership.
+
 #### func (*NTCP2Transport) Addr
 
 ```go
 func (t *NTCP2Transport) Addr() net.Addr
 ```
-Addr returns the network address the transport is bound to.
+Addr returns the network address the transport is bound to (plain IP:port). This
+returns the unwrapped TCP address for consistency with config.ListenerAddress.
+If callers need the wrapped NTCP2 address with router hash metadata, they should
+use ExtractNTCP2Addr on the transport's identity instead.
 
 #### func (*NTCP2Transport) Close
 
@@ -933,6 +943,27 @@ Compatible returns true if a routerInfo is compatible with this transport. It
 checks that the RouterInfo has at least one directly dialable NTCP2 address
 (i.e., one with a valid host and port), not just any NTCP2 address listing.
 
+#### func (*NTCP2Transport) GetRouterInfoParseFailures
+
+```go
+func (t *NTCP2Transport) GetRouterInfoParseFailures() int
+```
+GetRouterInfoParseFailures returns the total count of RouterInfo parse failures
+since transport startup. Incremented each time ReadRouterInfo fails on inbound
+msg3. EH-1 fix: Exposes peer RouterInfo quality for monitoring and alerting.
+High count indicates peer misconfiguration, network corruption, or attack
+attempts.
+
+#### func (*NTCP2Transport) GetRouterInfoStoreFailures
+
+```go
+func (t *NTCP2Transport) GetRouterInfoStoreFailures() int
+```
+GetRouterInfoStoreFailures returns the total count of RouterInfo storage
+failures since transport startup. Incremented each time storeRouterInfoInNetDB
+fails. E-3 fix: Exposes NetDB health for monitoring and alerting. High count
+indicates NetDB unavailability or I/O errors that break OBEP reply routing.
+
 #### func (*NTCP2Transport) GetSession
 
 ```go
@@ -943,7 +974,7 @@ GetSession obtains a transport session with a router given its RouterInfo.
 #### func (*NTCP2Transport) GetSessionCount
 
 ```go
-func (t *NTCP2Transport) GetSessionCount() int
+func (t *NTCP2Transport) GetSessionCount() int32
 ```
 GetSessionCount returns the number of active sessions managed by this transport.
 Uses an atomic counter for O(1) performance instead of iterating the session
@@ -957,6 +988,14 @@ func (t *NTCP2Transport) GetTotalBandwidth() (totalBytesSent, totalBytesReceived
 GetTotalBandwidth returns the total bytes sent and received across all active
 sessions. This aggregates bandwidth statistics from all sessions managed by this
 transport.
+
+#### func (*NTCP2Transport) GetTransportMetrics
+
+```go
+func (t *NTCP2Transport) GetTransportMetrics() TransportMetricsSnapshot
+```
+GetTransportMetrics returns a point-in-time snapshot of all transport metric
+counters for monitoring and diagnostics.
 
 #### func (*NTCP2Transport) Name
 
@@ -1012,6 +1051,17 @@ version that includes the transport's address. Safe to call during transport
 initialization (before the router starts accepting connections). Unlike
 SetIdentity, this does NOT recreate the listener.
 
+#### func (*NTCP2Transport) ValidateSessionCountingInvariant
+
+```go
+func (t *NTCP2Transport) ValidateSessionCountingInvariant() int
+```
+ValidateSessionCountingInvariant checks that sessionCount matches the number of
+entries in the sessions map (A-1 fix for SA-2). This invariant must hold:
+sessionCount == number of (net.Conn + acceptedConn + *NTCP2Session) entries
+Returns the mismatch count (0 = healthy, >0 = accounting bug detected). SA-2
+FIX: Added explicit invariant validation to detect session counting leaks.
+
 #### type Options
 
 ```go
@@ -1059,8 +1109,16 @@ parameters.
 ```go
 func DefaultOptions() *Options
 ```
-DefaultOptions returns the default NTCP2 options with no padding limits, no
-dummy traffic, and no delay. This is the most permissive configuration.
+DefaultOptions returns the default NTCP2 options.
+
+PaddingMax is set to 0.06 (up to 6 % of the frame payload size), matching i2pd's
+NTCP2_MAX_PADDING_RATIO (6 %, see i2pd NTCP2.h / NTCP2.cpp CreatePaddingBlock).
+PaddingMin remains 0 so that frames with small payloads are not forced to carry
+unnecessary overhead, while a non-zero PaddingMax still prevents fingerprinting
+via the absence of padding. Padding bytes are generated from crypto/rand by
+NewPaddingBlock.
+
+Spec reference: https://geti2p.net/spec/ntcp2#options-block
 
 #### func  ParseOptions
 
@@ -1123,6 +1181,36 @@ go-noise library's NTCP2Conn and NoiseConn both implement this interface (since
 go-noise v0.1.4), so rekeying is fully functional for NTCP2 sessions.
 
 Implementations must be safe for concurrent use.
+
+#### type TransportMetricsSnapshot
+
+```go
+type TransportMetricsSnapshot struct {
+	// StaleSessionsReconciled is the number of times Close() found non-zero
+	// stale sessions during final reconciliation. This should always be 0
+	// when session accounting is correct (A-3 fix). Non-zero indicates
+	// accounting drift bugs (typically from A-1, A-2, X-2, X-3 issues).
+	StaleSessionsReconciled uint64
+
+	// QueueSendTimeouts is the number of inbound handshakes that timed out
+	// trying to send their connection to the pendingConns queue (TE-2 metric).
+	// High values indicate Accept() consumer is slow or blocked.
+	QueueSendTimeouts uint64
+
+	// MaxPendingConnsQueueDepth is the maximum observed length of the
+	// pendingConns channel (0-64). Used for capacity planning and detecting
+	// sustained queue pressure under load.
+	MaxPendingConnsQueueDepth uint64
+
+	// PendingConnsQueueFullEvents is the number of times an inbound handshake
+	// attempted to send to a full queue (len=64). High values indicate queue
+	// capacity should be increased or Accept() throughput optimized.
+	PendingConnsQueueFullEvents uint64
+}
+```
+
+TransportMetricsSnapshot is a point-in-time copy of all transport metric
+counters.
 
 
 

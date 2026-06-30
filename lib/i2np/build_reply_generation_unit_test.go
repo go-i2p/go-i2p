@@ -115,7 +115,7 @@ func TestGenerateAndSendBuildReply_EncryptionWorks(t *testing.T) {
 	messageID := 1005
 
 	// Execute
-	err := processor.generateAndSendBuildReply(messageID, 0, record, TunnelBuildReplySuccess, nil, false)
+	err := processor.generateAndSendBuildReply(messageID, 0, record, TunnelBuildReplySuccess, 0, nil, false)
 
 	// Verify
 	require.NoError(t, err, "Should successfully generate and send reply")
@@ -152,7 +152,7 @@ func TestGenerateAndSendBuildReply_AllReplyCodes(t *testing.T) {
 			record := createTestBuildRequestRecord(t)
 			record.NextTunnel = 0 // Force direct router forwarding
 
-			err := processor.generateAndSendBuildReply(1, 0, record, tc.replyCode, nil, false)
+			err := processor.generateAndSendBuildReply(1, 0, record, tc.replyCode, 0, nil, false)
 			require.NoError(t, err)
 
 			routerCalls := mockForwarder.getRouterCalls()

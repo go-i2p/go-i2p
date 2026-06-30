@@ -68,6 +68,17 @@ type ParticipantManager struct {
 	// hop. Atomic for lock-free read/write from the build-request hot path.
 	refuseAllTransit atomic.Bool
 
+	// bandwidthLimitKBps is the router's total bandwidth limit in KB/s, used to
+	// evaluate transit-tunnel build bandwidth options (i2pd GetBandwidthLimit).
+	// Zero disables the bandwidth check. Atomic for lock-free read from the
+	// build-request hot path.
+	bandwidthLimitKBps atomic.Uint32
+
+	// transitBandwidthFn optionally returns the router's current transit
+	// bandwidth usage in bytes/s (i2pd GetTransitBandwidth). Nil/unset is
+	// treated as zero usage. Stored atomically for lock-free hot-path reads.
+	transitBandwidthFn atomic.Pointer[func() uint32]
+
 	// Rejection statistics (atomic for lock-free access)
 	rejectCountTotal  uint64 // Total rejections due to limits
 	rejectCountRecent uint64 // Recent rejections (reset periodically)
@@ -438,6 +449,76 @@ func (m *ParticipantManager) ProcessBuildRequest(targetHash common.Hash) (accept
 	// requester identity. Using it as a source key causes global self-throttling.
 
 	return true, 0, ""
+}
+
+// SetBandwidthLimitKBps configures the router's total bandwidth limit in KB/s
+// used when evaluating transit-tunnel build bandwidth options. A value of zero
+// disables the bandwidth check (build requests are accepted regardless of the
+// "m"/"r" options). Safe for concurrent use.
+func (m *ParticipantManager) SetBandwidthLimitKBps(kbps uint32) {
+	m.bandwidthLimitKBps.Store(kbps)
+}
+
+// SetTransitBandwidthProvider sets the callback that reports the router's
+// current transit bandwidth usage in bytes/s. Passing nil clears the provider,
+// in which case usage is treated as zero. Safe for concurrent use.
+func (m *ParticipantManager) SetTransitBandwidthProvider(fn func() uint32) {
+	if fn == nil {
+		m.transitBandwidthFn.Store(nil)
+		return
+	}
+	m.transitBandwidthFn.Store(&fn)
+}
+
+// EvaluateBuildBandwidth applies the i2pd transit-tunnel bandwidth policy to a
+// build request's bandwidth options (minKBps from the "m" option and
+// requestedKBps from the "r" option, both in KB/s; zero means unspecified).
+//
+// It returns:
+//   - rejectCode: BuildReplyCodeBandwidth (30) when the requested minimum cannot
+//     be honored, otherwise 0.
+//   - availableKBps: the bandwidth (KB/s) to advertise back to the tunnel creator
+//     in the reply's "b" option, or 0 when there is nothing to advertise.
+//
+// This mirrors i2pd's TransitTunnel build-record handling: bandwidth options are
+// expressed in KB/s while the configured limit and current usage are compared in
+// bytes/s. When no bandwidth limit is configured the request is accepted and
+// nothing is advertised.
+func (m *ParticipantManager) EvaluateBuildBandwidth(minKBps, requestedKBps uint32) (rejectCode byte, availableKBps uint32) {
+	limitKBps := m.bandwidthLimitKBps.Load()
+	if limitKBps == 0 {
+		return 0, 0
+	}
+	limitBytes := uint64(limitKBps) * 1024
+
+	var useBytes uint64
+	if fnPtr := m.transitBandwidthFn.Load(); fnPtr != nil {
+		useBytes = uint64((*fnPtr)())
+	}
+
+	// Minimum bandwidth gate: reject if the required minimum plus current usage
+	// would exceed the configured limit.
+	if minKBps > 0 {
+		if uint64(minKBps)*1024+useBytes > limitBytes {
+			return BuildReplyCodeBandwidth, 0
+		}
+	}
+
+	// Requested bandwidth: compute what we can actually offer back to the creator.
+	if requestedKBps > 0 {
+		if useBytes < limitBytes {
+			availBytes := limitBytes - useBytes
+			if uint64(requestedKBps)*1024 > availBytes {
+				availableKBps = uint32(availBytes / 1024)
+			} else {
+				availableKBps = requestedKBps
+			}
+		} else {
+			return BuildReplyCodeBandwidth, 0
+		}
+	}
+
+	return 0, availableKBps
 }
 
 // RegisterParticipant creates and registers a new participating tunnel.
