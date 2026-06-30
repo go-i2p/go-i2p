@@ -241,8 +241,6 @@ func TestInboundBlockedStatusCode_Expired(t *testing.T) {
 	assert.False(t, tr.IsInboundBlocked())
 }
 
-
-
 // TestRecordObservation_ConfirmsAfterThreshold verifies that recordObservation
 // returns a confirmed address only once the peerTestConfirmThreshold is met.
 func TestRecordObservation_ConfirmsAfterThreshold(t *testing.T) {

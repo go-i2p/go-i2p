@@ -361,7 +361,7 @@ func extractNATAddrHostPort(addr *nat.NATAddr) (string, string, error) {
 func splitNATHostPort(addr string) (host, port string, err error) {
 	host, port, err = net.SplitHostPort(addr)
 	if err == nil {
-		return
+		return host, port, err
 	}
 	// Detect unbracketed IPv6: more than one colon means IPv6, not IPv4.
 	if strings.Count(addr, ":") < 2 {

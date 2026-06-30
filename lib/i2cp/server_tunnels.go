@@ -454,10 +454,10 @@ func filterValidTunnels(tunnels []*tunnel.TunnelState) ([]*tunnel.TunnelState, e
 func encodeLeaseSetPayload(sessionID uint16, tunnels []*tunnel.TunnelState) []byte {
 	// Payload: SessionID(2 bytes) + NumLeases(1 byte) + 44*N bytes for lease entries
 	payload := make([]byte, 2+1+len(tunnels)*44)
-	
+
 	// Write session ID (2 bytes, big endian)
 	binary.BigEndian.PutUint16(payload[0:2], sessionID)
-	
+
 	// Write number of leases (1 byte) at offset 2
 	payload[2] = byte(len(tunnels))
 

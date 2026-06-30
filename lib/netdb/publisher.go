@@ -1166,10 +1166,10 @@ func (p *Publisher) sendDatabaseStoreDirect(hash common.Hash, data []byte, dataT
 		if binary.BigEndian.Uint32(dbStore.ReplyToken[:]) != 0 && binary.BigEndian.Uint32(dbStore.ReplyTunnelID[:]) == 0 {
 			dbStore.ReplyGateway = ffHash
 			log.WithFields(logger.Fields{
-				"at":                    "sendDatabaseStoreDirect",
-				"data_hash":             logutil.HashPrefixPlain(hash),
-				"floodfill_hash":        logutil.HashPrefixPlain(ffHash),
-				"direct_reply_gateway":  logutil.HashPrefixPlain(dbStore.ReplyGateway),
+				"at":                     "sendDatabaseStoreDirect",
+				"data_hash":              logutil.HashPrefixPlain(hash),
+				"floodfill_hash":         logutil.HashPrefixPlain(ffHash),
+				"direct_reply_gateway":   logutil.HashPrefixPlain(dbStore.ReplyGateway),
 				"reply_route_correction": "direct_reply_gateway_to_target_floodfill",
 			}).Info("Corrected direct DatabaseStore reply gateway to floodfill target")
 		}

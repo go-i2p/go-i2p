@@ -429,7 +429,8 @@ func prepareDestinationAndKeys(dest *destination.Destination, sigPriv types.Sign
 	if dest != nil {
 		return nil, nil, oops.Errorf(
 			"client destination requires private keys: go-i2p design requires clients to always provide " +
-			"signing and encryption private keys for their persistent identity; destinations without keys cannot be used")
+				"signing and encryption private keys for their persistent identity; destinations without keys cannot be used",
+		)
 	}
 
 	// Case 3: No destination and no keys — generate everything fresh
