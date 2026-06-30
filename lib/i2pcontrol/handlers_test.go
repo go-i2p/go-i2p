@@ -191,20 +191,19 @@ func TestNetworkStatusString(t *testing.T) {
 	}
 }
 
-// TestRouterInfoHandler_NetStatusStringField verifies the I2PControl interface
-// exposes a granular human-readable reachability string for every FIREWALLED
-// variant via the i2p.router.net.status.string field, alongside the numeric
-// i2p.router.net.status code.
-func TestRouterInfoHandler_NetStatusStringField(t *testing.T) {
+// TestRouterInfoHandler_NetStatusGranularCode verifies the standard
+// i2p.router.net.status field carries the granular reachability code directly,
+// including each FIREWALLED variant such as FIREWALLED (2) and
+// ERROR_SYMMETRIC_NAT (11), without needing a non-standard extension field.
+func TestRouterInfoHandler_NetStatusGranularCode(t *testing.T) {
 	cases := []struct {
-		name       string
-		code       int
-		wantString string
+		name string
+		code int
 	}{
-		{"ok", 0, "OK"},
-		{"firewalled", 2, "FIREWALLED"},
-		{"hidden", 3, "HIDDEN"},
-		{"symmetric_nat", 11, "ERROR_SYMMETRIC_NAT"},
+		{"ok", 0},
+		{"firewalled", 2},
+		{"hidden", 3},
+		{"symmetric_nat", 11},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -213,23 +212,11 @@ func TestRouterInfoHandler_NetStatusStringField(t *testing.T) {
 				netStatus:        c.code,
 			}
 			handler := NewRouterInfoHandler(NewRouterStatsProvider(router, "0.1.0-test"))
-			resultMap := invokeHandler(t, handler, `{
-				"i2p.router.net.status": null,
-				"i2p.router.net.status.string": null
-			}`)
+			resultMap := invokeHandler(t, handler, `{"i2p.router.net.status": null}`)
 
 			assert.Equal(t, c.code, resultMap["i2p.router.net.status"])
-			assert.Equal(t, c.wantString, resultMap["i2p.router.net.status.string"])
 		})
 	}
-}
-
-// TestRouterInfoHandler_NetStatusStringDefault verifies the granular status
-// string is included in the default RouterInfo field set.
-func TestRouterInfoHandler_NetStatusStringDefault(t *testing.T) {
-	handler := NewRouterInfoHandler(newStatsHandler(true, "0.1.0"))
-	resultMap := invokeHandler(t, handler, `{}`)
-	assert.Contains(t, resultMap, "i2p.router.net.status.string")
 }
 
 func TestRouterInfoHandler_InvalidJSON(t *testing.T) {
