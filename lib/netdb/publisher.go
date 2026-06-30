@@ -1162,6 +1162,19 @@ func (p *Publisher) sendDatabaseStoreDirect(hash common.Hash, data []byte, dataT
 		return 0, oops.Errorf("failed to get floodfill hash: %w", err)
 	}
 
+	if dbStore, ok := msg.(*i2np.DatabaseStore); ok {
+		if binary.BigEndian.Uint32(dbStore.ReplyToken[:]) != 0 && binary.BigEndian.Uint32(dbStore.ReplyTunnelID[:]) == 0 {
+			dbStore.ReplyGateway = ffHash
+			log.WithFields(logger.Fields{
+				"at":                    "sendDatabaseStoreDirect",
+				"data_hash":             logutil.HashPrefixPlain(hash),
+				"floodfill_hash":        logutil.HashPrefixPlain(ffHash),
+				"direct_reply_gateway":  logutil.HashPrefixPlain(dbStore.ReplyGateway),
+				"reply_route_correction": "direct_reply_gateway_to_target_floodfill",
+			}).Info("Corrected direct DatabaseStore reply gateway to floodfill target")
+		}
+	}
+
 	log.WithFields(logger.Fields{
 		"data_hash":      logutil.HashPrefixPlain(hash),
 		"floodfill_hash": logutil.HashPrefixPlain(ffHash),
@@ -1282,7 +1295,31 @@ func (p *Publisher) createTunnelGatewayMessage(hash common.Hash, data []byte, da
 //   - DatabaseStoreTypeMetaLeaseSet (7): For MetaLeaseSet entries (0.9.40+)
 func (p *Publisher) createDatabaseStoreMessage(hash common.Hash, data []byte, dataType byte) (i2np.Message, error) {
 	dbStore := i2np.NewDatabaseStore(hash, data, dataType)
-	if replyTunnelID, replyGateway, ok := p.selectReplyRoute(); ok {
+	useTunnelReplyRoute := false
+	var replyTunnelID [4]byte
+	var replyGateway common.Hash
+	if rtID, rg, ok := p.selectReplyRoute(); ok {
+		replyTunnelID = rtID
+		replyGateway = rg
+		useTunnelReplyRoute = true
+		// RouterInfo publication needs ACK reliability over strict anonymity.
+		// If the selected reply route resolves to our own router hash as gateway,
+		// treat it as a direct-reply scenario instead of a tunnel reply route.
+		if dataType == i2np.DatabaseStoreTypeRouterInfo {
+			if localRouterHash, ok := p.localRouterHash(); ok && replyGateway == localRouterHash {
+				log.WithFields(logger.Fields{
+					"at":            "createDatabaseStoreMessage",
+					"data_hash":     logutil.HashPrefixPlain(hash),
+					"store_type":    dataType,
+					"reply_gateway": logutil.HashPrefixPlain(replyGateway),
+					"reply_route":   "direct_router_fallback",
+				}).Info("RouterInfo reply route uses local gateway hash; falling back to direct reply fields")
+				useTunnelReplyRoute = false
+			}
+		}
+	}
+
+	if useTunnelReplyRoute {
 		replyToken, err := generateReplyToken()
 		if err != nil {
 			return nil, oops.Errorf("failed to generate DatabaseStore reply token: %w", err)
@@ -1328,6 +1365,21 @@ func (p *Publisher) createDatabaseStoreMessage(hash common.Hash, data []byte, da
 		p.registerPendingReplyToken(replyToken)
 	}
 	return dbStore, nil
+}
+
+func (p *Publisher) localRouterHash() (common.Hash, bool) {
+	if p.routerInfoProvider == nil {
+		return common.Hash{}, false
+	}
+	ri, err := p.routerInfoProvider.GetRouterInfo()
+	if err != nil || ri == nil {
+		return common.Hash{}, false
+	}
+	h, err := ri.IdentHash()
+	if err != nil || h == (common.Hash{}) {
+		return common.Hash{}, false
+	}
+	return h, true
 }
 
 // waitForPublishAck polls for a DeliveryStatus ACK from any floodfill as proof

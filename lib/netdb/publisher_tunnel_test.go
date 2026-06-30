@@ -433,6 +433,45 @@ func TestCreateDatabaseStoreMessage_UsesInboundGatewayMetadataForReplyRoute(t *t
 		"reply gateway must not use middle hop")
 }
 
+func TestCreateDatabaseStoreMessage_RouterInfoSelfGatewayRouteFallsBackToDirectReply(t *testing.T) {
+	db := newMockNetDB()
+	transport := newMockTransportManager()
+	selector := &mockPeerSelector{}
+	outboundPool := tunnel.NewTunnelPool(selector)
+	inboundPool := tunnel.NewTunnelPool(selector)
+
+	ourRI := createValidRouterInfo(t)
+	ourHash, err := ourRI.IdentHash()
+	require.NoError(t, err)
+
+	// A zero-hop style inbound tunnel yields local router hash as reply gateway.
+	inboundPool.AddTunnel(&tunnel.TunnelState{
+		ID:              tunnel.TunnelID(0x0A0B0C0D),
+		GatewayTunnelID: tunnel.TunnelID(0x0A0B0C0D),
+		Hops:            nil,
+		State:           tunnel.TunnelReady,
+		CreatedAt:       time.Now(),
+		IsInbound:       true,
+	})
+
+	provider := staticRouterInfoProvider{ri: &ourRI}
+	publisher := NewPublisher(db, outboundPool, transport, provider, DefaultPublisherConfig())
+	publisher.SetInboundPool(inboundPool)
+
+	msg, err := publisher.createDatabaseStoreMessage(common.Hash{1, 2, 3, 4}, []byte("dbstore payload"), i2np.DatabaseStoreTypeRouterInfo)
+	require.NoError(t, err)
+
+	parsed, ok := msg.(*i2np.DatabaseStore)
+	require.True(t, ok, "createDatabaseStoreMessage should return DatabaseStore message")
+
+	replyToken := binary.BigEndian.Uint32(parsed.ReplyToken[:])
+	assert.NotZero(t, replyToken, "RouterInfo should still carry a reply token")
+	assert.Zero(t, binary.BigEndian.Uint32(parsed.ReplyTunnelID[:]), "direct fallback must not set reply tunnel ID")
+	assert.Equal(t, ourHash, parsed.ReplyGateway, "direct fallback should target our local router hash")
+	_, pending := publisher.pendingReplyTokens.Load(replyToken)
+	assert.True(t, pending, "reply token should be tracked for direct fallback route")
+}
+
 // TestSendDatabaseStoreToFloodfill_WithActiveTunnel tests successful tunnel selection and message transmission
 func TestSendDatabaseStoreToFloodfill_WithActiveTunnel(t *testing.T) {
 	env := setupPublisherWithTunnel(t, 12345, []common.Hash{

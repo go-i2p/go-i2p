@@ -734,11 +734,15 @@ type liveTracingI2NPSender struct {
 
 func (s *liveTracingI2NPSender) QueueSendI2NP(msg i2np.Message) error {
 	if dbStore, ok := msg.(*i2np.DatabaseStore); ok {
+		exp := dbStore.Expiration().UTC()
 		s.t.Logf(
-			"publish trace dbstore: target=%s target_full=%s store_type=%d reply_token=%d reply_tunnel_id=%d reply_gateway=%s reply_gateway_full=%s key=%s key_full=%s",
+			"publish trace dbstore: target=%s target_full=%s store_type=%d msg_id=%d expiration_utc=%s expires_in=%s reply_token=%d reply_tunnel_id=%d reply_gateway=%s reply_gateway_full=%s key=%s key_full=%s",
 			hashPrefix(s.targetHash),
 			s.targetHash.String(),
 			dbStore.StoreType,
+			dbStore.MessageID(),
+			exp.Format(time.RFC3339Nano),
+			time.Until(exp).String(),
 			binary.BigEndian.Uint32(dbStore.ReplyToken[:]),
 			binary.BigEndian.Uint32(dbStore.ReplyTunnelID[:]),
 			hashPrefix(dbStore.ReplyGateway),
