@@ -561,9 +561,12 @@ func (s *Server) handleGetDate(msg *Message) (*Message, error) {
 }
 
 // handleGetBandwidthLimits returns bandwidth limits
+// Per I2CP v0.9.67 spec, returns 64 bytes of bandwidth data (16 × uint32 big endian)
 func (s *Server) handleGetBandwidthLimits(msg *Message) (*Message, error) {
-	// I2CP BandwidthLimits format: two 4-byte integers (big endian)
-	// [inbound_limit:4][outbound_limit:4]
+	// I2CP BandwidthLimits format per spec:
+	// [inbound_limit:4][outbound_limit:4][spare:56]
+	// The 16 uint32 values represent various bandwidth-related metrics.
+	// Currently only inbound and outbound limits are populated; rest are zero-filled.
 	// Values are in bytes per second (0 = unlimited)
 
 	var inboundLimit, outboundLimit uint32
@@ -575,19 +578,17 @@ func (s *Server) handleGetBandwidthLimits(msg *Message) (*Message, error) {
 		outboundLimit = 1024 * 1024
 	}
 
-	payload := make([]byte, 8)
+	// Per I2CP spec: BandwidthLimits is 64 bytes (16 uint32 values, big endian)
+	payload := make([]byte, 64)
 
-	// Inbound limit (4 bytes, big endian)
-	payload[0] = byte(inboundLimit >> 24)
-	payload[1] = byte(inboundLimit >> 16)
-	payload[2] = byte(inboundLimit >> 8)
-	payload[3] = byte(inboundLimit)
+	// First uint32 (bytes 0-3): Inbound limit
+	binary.BigEndian.PutUint32(payload[0:4], inboundLimit)
 
-	// Outbound limit (4 bytes, big endian)
-	payload[4] = byte(outboundLimit >> 24)
-	payload[5] = byte(outboundLimit >> 16)
-	payload[6] = byte(outboundLimit >> 8)
-	payload[7] = byte(outboundLimit)
+	// Second uint32 (bytes 4-7): Outbound limit
+	binary.BigEndian.PutUint32(payload[4:8], outboundLimit)
+
+	// Remaining 56 bytes (bytes 8-63): Zero-filled for future use
+	// (Already initialized to zero by make())
 
 	response := &Message{
 		Type:      MessageTypeBandwidthLimits,
@@ -600,7 +601,8 @@ func (s *Server) handleGetBandwidthLimits(msg *Message) (*Message, error) {
 		"reason":       "client_requested",
 		"inbound_bps":  inboundLimit,
 		"outbound_bps": outboundLimit,
-	}).Debug("returning bandwidth limits")
+		"payloadSize":  len(payload),
+	}).Debug("returning_bandwidth_limits")
 
 	return response, nil
 }
@@ -1032,8 +1034,19 @@ func (s *Server) handleSendMessage(msg *Message, sessionPtr **Session) (*Message
 		return nil, err
 	}
 
+	// Extract destination hash for routing
+	destHash, err := sendMsg.Destination.Hash()
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Server.handleSendMessage",
+			"sessionID": session.ID(),
+			"error":     err.Error(),
+		}).Error("failed_to_compute_destination_hash")
+		return nil, oops.Errorf("failed to compute destination hash: %w", err)
+	}
+
 	acceptMsg := s.acceptAndRouteMessage(
-		session, sendMsg.Destination, len(sendMsg.Payload), 0,
+		session, destHash, len(sendMsg.Payload), sendMsg.Nonce,
 		logger.Fields{"at": "i2cp.Server.handleSendMessage"},
 		func(messageID uint32) { s.routeMessageWithStatus(session, messageID, sendMsg) },
 	)
@@ -1051,7 +1064,7 @@ func (s *Server) validateSessionForSending(sessionPtr **Session) (*Session, erro
 // parseSendMessagePayload parses the SendMessage payload from the message.
 // Note: msg.Payload includes the 2-byte SessionID prefix (already extracted by
 // ReadMessage into msg.SessionID), so we strip it before parsing the actual
-// SendMessage payload which starts with Destination(32 bytes) + Payload.
+// SendMessage payload per I2CP spec.
 func (s *Server) parseSendMessagePayload(msg *Message, session *Session) (*SendMessagePayload, error) {
 	// i2psnark compatibility: Log SendMessage details before parsing
 	log.WithFields(logger.Fields{
@@ -1062,7 +1075,7 @@ func (s *Server) parseSendMessagePayload(msg *Message, session *Session) (*SendM
 
 	// Strip the 2-byte SessionID prefix from the wire payload.
 	// ReadMessage extracts SessionID into msg.SessionID but does not remove it
-	// from msg.Payload. ParseSendMessagePayload expects: Destination(32) + Payload.
+	// from msg.Payload. ParseSendMessagePayload expects: Destination + PayloadLen + Payload + Nonce.
 	if len(msg.Payload) < 2 {
 		return nil, oops.Errorf("SendMessage payload too short: %d bytes (need at least 2 for SessionID)", len(msg.Payload))
 	}
@@ -1082,10 +1095,17 @@ func (s *Server) parseSendMessagePayload(msg *Message, session *Session) (*SendM
 		return nil, oops.Errorf("failed to parse SendMessage payload: %w", err)
 	}
 
+	// Validate destination is set
+	// Note: destination.Destination is a value type, so we check for zero value instead
+	destHash, err := sendMsg.Destination.Hash()
+	if err != nil {
+		return nil, oops.Errorf("failed to compute destination hash: %w", err)
+	}
+
 	if err := validateSendPayloadSizeWithContext(
 		"i2cp.Server.parseSendMessagePayload",
 		session.ID(),
-		sendMsg.Destination,
+		destHash,
 		len(sendMsg.Payload),
 		"send_message_payload_too_large",
 	); err != nil {
@@ -1160,8 +1180,19 @@ func (s *Server) handleSendMessageExpires(msg *Message, sessionPtr **Session) (*
 		return nil, err
 	}
 
+	// Extract destination hash for routing
+	destHash, err := sendMsgExpires.Destination.Hash()
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Server.handleSendMessageExpires",
+			"sessionID": session.ID(),
+			"error":     err.Error(),
+		}).Error("failed_to_compute_destination_hash")
+		return nil, oops.Errorf("failed to compute destination hash: %w", err)
+	}
+
 	acceptMsg := s.acceptAndRouteMessage(
-		session, sendMsgExpires.Destination, len(sendMsgExpires.Payload), sendMsgExpires.Nonce,
+		session, destHash, len(sendMsgExpires.Payload), sendMsgExpires.Nonce,
 		logger.Fields{
 			"at":         "i2cp.Server.handleSendMessageExpires",
 			"nonce":      sendMsgExpires.Nonce,
@@ -1176,7 +1207,7 @@ func (s *Server) handleSendMessageExpires(msg *Message, sessionPtr **Session) (*
 // parseSendMessageExpiresPayload parses the SendMessageExpires payload from the message.
 // Note: msg.Payload includes the 2-byte SessionID prefix (already extracted by
 // ReadMessage into msg.SessionID), so we strip it before parsing the actual
-// SendMessageExpires payload which starts with Destination(32 bytes) + Payload + Nonce + Expiration.
+// SendMessageExpires payload per I2CP spec.
 func (s *Server) parseSendMessageExpiresPayload(msg *Message, session *Session) (*SendMessageExpiresPayload, error) {
 	log.WithFields(logger.Fields{
 		"at":          "i2cp.Server.parseSendMessageExpiresPayload",
@@ -1187,7 +1218,7 @@ func (s *Server) parseSendMessageExpiresPayload(msg *Message, session *Session) 
 	// Strip the 2-byte SessionID prefix from the wire payload.
 	// ReadMessage extracts SessionID into msg.SessionID but does not remove it
 	// from msg.Payload. ParseSendMessageExpiresPayload expects:
-	// Destination(32) + PayloadLen(4) + Payload + Nonce(4) + Expiration(8).
+	// Destination + PayloadLen + Payload + Nonce + Flags + Expiration.
 	if len(msg.Payload) < 2 {
 		return nil, oops.Errorf("SendMessageExpires payload too short: %d bytes (need at least 2 for SessionID)", len(msg.Payload))
 	}
@@ -1206,10 +1237,17 @@ func (s *Server) parseSendMessageExpiresPayload(msg *Message, session *Session) 
 		return nil, oops.Errorf("failed to parse SendMessageExpires payload: %w", err)
 	}
 
+	// Validate destination is set
+	// Note: destination.Destination is a value type, so we check for zero value instead
+	destHash, err := sendMsg.Destination.Hash()
+	if err != nil {
+		return nil, oops.Errorf("failed to compute destination hash: %w", err)
+	}
+
 	if err := validateSendPayloadSizeWithContext(
 		"i2cp.Server.parseSendMessageExpiresPayload",
 		session.ID(),
-		sendMsg.Destination,
+		destHash,
 		len(sendMsg.Payload),
 		"send_message_expires_payload_too_large",
 	); err != nil {
@@ -1255,11 +1293,25 @@ func validateSendPayloadSizeWithContext(
 // routeMessageExpiresWithStatus routes a SendMessageExpires message asynchronously with
 // delivery status tracking and expiration checking.
 func (s *Server) routeMessageExpiresWithStatus(session *Session, messageID uint32, sendMsg *SendMessageExpiresPayload) {
+	// Extract destination hash for routing
+	destHash, err := sendMsg.Destination.Hash()
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Server.routeMessageExpiresWithStatus",
+			"sessionID": session.ID(),
+			"messageID": messageID,
+			"error":     err.Error(),
+		}).Error("failed_to_compute_destination_hash")
+		statusCallback := s.buildStatusCallback(session, sendMsg.Nonce)
+		statusCallback(messageID, MessageStatusNoLeaseSet, uint32(len(sendMsg.Payload)), sendMsg.Nonce)
+		return
+	}
+
 	log.WithFields(logger.Fields{
 		"at":          "i2cp.Server.routeMessageExpiresWithStatus",
 		"sessionID":   session.ID(),
 		"messageID":   messageID,
-		"destination": logutil.HashPrefixPlain(sendMsg.Destination),
+		"destination": logutil.HashPrefixPlain(destHash),
 		"payloadSize": len(sendMsg.Payload),
 		"expiration":  sendMsg.Expiration,
 		"nonce":       sendMsg.Nonce,
@@ -1267,33 +1319,47 @@ func (s *Server) routeMessageExpiresWithStatus(session *Session, messageID uint3
 
 	statusCallback := s.buildStatusCallback(session, sendMsg.Nonce)
 
-	destPubKey, err := s.resolveDestinationKey(sendMsg.Destination)
+	destPubKey, err := s.resolveDestinationKey(destHash)
 	if err != nil {
-		logDestinationResolutionFailure("routeMessageExpiresWithStatus", session.ID(), messageID, sendMsg.Destination, err)
+		logDestinationResolutionFailure("routeMessageExpiresWithStatus", session.ID(), messageID, destHash, err)
 		statusCallback(messageID, MessageStatusNoLeaseSet, uint32(len(sendMsg.Payload)), sendMsg.Nonce)
 		return
 	}
 
-	s.dispatchToMessageRouter("routeMessageExpiresWithStatus", session, messageID, sendMsg.Destination, destPubKey, sendMsg.Payload, sendMsg.Expiration, statusCallback)
+	s.dispatchToMessageRouter("routeMessageExpiresWithStatus", session, messageID, destHash, destPubKey, sendMsg.Payload, sendMsg.Expiration, statusCallback)
 }
 
 // routeMessageWithStatus routes a message asynchronously with delivery status tracking.
 // This method is called from a goroutine and handles the complete routing flow including
 // status callbacks to notify the client of delivery success/failure.
 func (s *Server) routeMessageWithStatus(session *Session, messageID uint32, sendMsg *SendMessagePayload) {
+	// Extract destination hash for routing
+	destHash, err := sendMsg.Destination.Hash()
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Server.routeMessageWithStatus",
+			"sessionID": session.ID(),
+			"messageID": messageID,
+			"error":     err.Error(),
+		}).Error("failed_to_compute_destination_hash")
+		statusCallback := s.buildStatusCallback(session, 0)
+		statusCallback(messageID, MessageStatusNoLeaseSet, uint32(len(sendMsg.Payload)), 0)
+		return
+	}
+
 	log.WithFields(logger.Fields{
 		"at":          "i2cp.Server.routeMessageWithStatus",
 		"sessionID":   session.ID(),
 		"messageID":   messageID,
-		"destination": logutil.HashPrefixPlain(sendMsg.Destination),
+		"destination": logutil.HashPrefixPlain(destHash),
 		"payloadSize": len(sendMsg.Payload),
 	}).Debug("routing_message_async")
 
 	statusCallback := s.buildStatusCallback(session, 0)
 
-	destPubKey, err := s.resolveDestinationKey(sendMsg.Destination)
+	destPubKey, err := s.resolveDestinationKey(destHash)
 	if err != nil {
-		logDestinationResolutionFailure("routeMessageWithStatus", session.ID(), messageID, sendMsg.Destination, err)
+		logDestinationResolutionFailure("routeMessageWithStatus", session.ID(), messageID, destHash, err)
 		statusCallback(messageID, MessageStatusNoLeaseSet, uint32(len(sendMsg.Payload)), 0)
 		return
 	}
@@ -1303,13 +1369,13 @@ func (s *Server) routeMessageWithStatus(session *Session, messageID uint32, send
 			"at":          "i2cp.Server.routeMessageWithStatus",
 			"sessionID":   session.ID(),
 			"messageID":   messageID,
-			"destination": logutil.HashPrefixPlain(sendMsg.Destination),
+			"destination": logutil.HashPrefixPlain(destHash),
 		}).Warn("no_message_router_message_queued")
 		statusCallback(messageID, MessageStatusFailure, uint32(len(sendMsg.Payload)), 0)
 		return
 	}
 
-	s.dispatchToMessageRouter("routeMessageWithStatus", session, messageID, sendMsg.Destination, destPubKey, sendMsg.Payload, 0, statusCallback)
+	s.dispatchToMessageRouter("routeMessageWithStatus", session, messageID, destHash, destPubKey, sendMsg.Payload, 0, statusCallback)
 }
 
 // buildStatusCallback creates a status callback that sends a MessageStatus response

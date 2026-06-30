@@ -349,7 +349,7 @@ func logTunnelsReady(sessionID uint16, inboundCount, outboundCount int) {
 
 // sendLeaseSetRequest builds and sends the RequestVariableLeaseSet message to the client.
 func (s *Server) sendLeaseSetRequest(session *Session, conn net.Conn, sessionID uint16, inTunnels []*tunnel.TunnelState) error {
-	payload, err := s.buildRequestVariableLeaseSetPayload(inTunnels)
+	payload, err := s.buildRequestVariableLeaseSetPayload(sessionID, inTunnels)
 	if err != nil {
 		log.WithFields(logger.Fields{
 			"at":        "i2cp.Server.monitorTunnelsAndRequestLeaseSet",
@@ -414,18 +414,19 @@ func startLeaseSetMaintenance(session *Session, sessionID uint16) {
 // buildRequestVariableLeaseSetPayload constructs the payload for RequestVariableLeaseSet (type 37).
 // Payload format per I2CP spec:
 //
-//	1 byte: number of leases (N)
+//	SessionID: 2 bytes (big endian uint16) - session identifier
+//	NumLeases: 1 byte - number of leases (N)
 //	For each lease (N times):
 //	  32 bytes: tunnel gateway router hash
 //	  4 bytes:  tunnel ID (big endian uint32)
 //	  8 bytes:  end date (milliseconds since epoch, big endian uint64)
-func (s *Server) buildRequestVariableLeaseSetPayload(tunnels []*tunnel.TunnelState) ([]byte, error) {
+func (s *Server) buildRequestVariableLeaseSetPayload(sessionID uint16, tunnels []*tunnel.TunnelState) ([]byte, error) {
 	validTunnels, err := filterValidTunnels(tunnels)
 	if err != nil {
 		return nil, err
 	}
 
-	return encodeLeaseSetPayload(validTunnels), nil
+	return encodeLeaseSetPayload(sessionID, validTunnels), nil
 }
 
 // filterValidTunnels removes nil and zero-hop tunnels and enforces a maximum
@@ -447,14 +448,21 @@ func filterValidTunnels(tunnels []*tunnel.TunnelState) ([]*tunnel.TunnelState, e
 	return validTunnels, nil
 }
 
-// encodeLeaseSetPayload serializes validated tunnels into the I2CP
-// RequestVariableLeaseSet payload format: 1 byte count followed by
+// encodeLeaseSetPayload serializes session ID and validated tunnels into the I2CP
+// RequestVariableLeaseSet payload format: 2-byte session ID, 1-byte count, followed by
 // N lease entries of 44 bytes each (32-byte hash + 4-byte ID + 8-byte end date).
-func encodeLeaseSetPayload(tunnels []*tunnel.TunnelState) []byte {
-	payload := make([]byte, 1+len(tunnels)*44)
-	payload[0] = byte(len(tunnels))
+func encodeLeaseSetPayload(sessionID uint16, tunnels []*tunnel.TunnelState) []byte {
+	// Payload: SessionID(2 bytes) + NumLeases(1 byte) + 44*N bytes for lease entries
+	payload := make([]byte, 2+1+len(tunnels)*44)
+	
+	// Write session ID (2 bytes, big endian)
+	binary.BigEndian.PutUint16(payload[0:2], sessionID)
+	
+	// Write number of leases (1 byte) at offset 2
+	payload[2] = byte(len(tunnels))
 
-	offset := 1
+	// Write lease entries starting at offset 3
+	offset := 3
 	now := time.Now()
 	for _, tun := range tunnels {
 		offset = encodeLeaseEntry(payload, offset, tun, now)

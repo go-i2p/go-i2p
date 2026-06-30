@@ -4,68 +4,93 @@ import (
 	"encoding/binary"
 	"math"
 
-	"github.com/go-i2p/common/data"
-	"github.com/go-i2p/go-i2p/lib/util/logutil"
+	"github.com/go-i2p/common/destination"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
 
-// SendMessagePayload represents the payload structure of a SendMessage (type 7) message.
+// SendMessagePayload represents the payload structure of a SendMessage (type 5) message.
 // This structure follows the I2CP v0.9.67 specification for client-to-router message delivery.
 //
-// Format:
+// Format per I2CP spec:
 //
-//	SessionID: uint16 (already in Message header)
-//	Destination: Hash (32 bytes) - SHA256 hash of target destination
-//	Payload: []byte (variable length) - actual message data to send
+//	Destination: full I2P Destination (variable length, typically ~387+ bytes)
+//	PayloadLen: uint32 (4 bytes, big endian) - length of message payload
+//	Payload: []byte (variable length, max 256 KB) - actual message data to send
+//	Nonce: uint32 (4 bytes, big endian) - random nonce for delivery status correlation
 //
 // The router will wrap this payload in garlic encryption and route it through
 // the outbound tunnel pool to the specified destination.
 //
 // IMPORTANT: Per I2CP wire format, the total payload size is limited to MaxPayloadSize
 // (currently 256 KB for i2psnark compatibility). Client applications like i2psnark may
-// send payloads larger than the original 64 KB limit. Applications requiring larger
-// messages should fragment them at the application layer, though i2psnark file transfers
-// can use the full 256 KB limit.
+// send payloads larger than the original 64 KB limit.
 type SendMessagePayload struct {
-	Destination data.Hash // 32-byte SHA256 hash of target destination
-	Payload     []byte    // Message data to send (variable length, max 256 KB)
+	Destination destination.Destination // Full I2P Destination of target
+	Payload     []byte                  // Message data to send (variable length, max 256 KB)
+	Nonce       uint32                  // Random nonce for message identification and status correlation
 }
 
 // ParseSendMessagePayload deserializes a SendMessage payload from wire format.
 // Returns an error if the payload is too short or malformed.
 //
-// Wire format:
+// Wire format per I2CP spec:
 //
-//	bytes 0-31:  Destination hash (32 bytes)
-//	bytes 32+:   Message payload (variable length)
+//	bytes 0+:      Destination (variable length, typically ~387+ bytes)
+//	bytes N:N+4:   Payload length (4 bytes, big endian)
+//	bytes N+4+M:   Message payload (M bytes, as specified by PayloadLen)
+//	bytes N+4+M+4: Nonce (4 bytes, big endian)
 func ParseSendMessagePayload(rawData []byte) (*SendMessagePayload, error) {
-	smp := &SendMessagePayload{}
+	if len(rawData) < 4 {
+		return nil, oops.Errorf("send message payload too short: need at least 4 bytes for destination+length, got %d", len(rawData))
+	}
 
-	// Parse destination hash (first 32 bytes)
-	hash, remainder, err := data.ReadHash(rawData)
+	// Parse destination (variable-length structure)
+	dest, remaining, err := destination.ReadDestination(rawData)
 	if err != nil {
 		log.WithFields(logger.Fields{
 			"at":       "i2cp.ParseSendMessagePayload",
 			"dataSize": len(rawData),
-			"required": 32,
-		}).Error("send_message_payload_too_short")
-		return nil, oops.Errorf("send message payload too short: need at least 32 bytes for destination, got %d", len(rawData))
+			"error":    err.Error(),
+		}).Error("failed_to_parse_destination")
+		return nil, oops.Errorf("failed to parse destination: %w", err)
 	}
-	smp.Destination = hash
 
-	// Parse message payload (remaining bytes)
-	if len(remainder) > 0 {
-		smp.Payload = make([]byte, len(remainder))
-		copy(smp.Payload, remainder)
-	} else {
-		smp.Payload = []byte{}
+	// Need at least 4 (payload length) + 4 (nonce) bytes remaining
+	if len(remaining) < 8 {
+		return nil, oops.Errorf("send message payload too short after destination: need at least 8 bytes for length+nonce, got %d", len(remaining))
+	}
+
+	// Parse payload length (4 bytes, big endian)
+	payloadLen := binary.BigEndian.Uint32(remaining[0:4])
+	if err := validatePayloadSize(payloadLen); err != nil {
+		return nil, err
+	}
+
+	// Verify enough data for payload + nonce
+	if len(remaining) < 4+int(payloadLen)+4 {
+		return nil, oops.Errorf("send message truncated: need %d bytes, got %d", 4+payloadLen+4, len(remaining))
+	}
+
+	// Extract payload
+	payloadStart := 4
+	payloadEnd := 4 + int(payloadLen)
+	payload := make([]byte, payloadLen)
+	copy(payload, remaining[payloadStart:payloadEnd])
+
+	// Extract nonce (at offset 4 + payloadLen)
+	nonce := binary.BigEndian.Uint32(remaining[payloadEnd : payloadEnd+4])
+
+	smp := &SendMessagePayload{
+		Destination: dest,
+		Payload:     payload,
+		Nonce:       nonce,
 	}
 
 	log.WithFields(logger.Fields{
 		"at":          "i2cp.ParseSendMessagePayload",
-		"destination": logutil.HashPrefixPlain(smp.Destination),
-		"payloadSize": len(smp.Payload),
+		"payloadSize": len(payload),
+		"nonce":       nonce,
 	}).Debug("parsed_send_message_payload")
 
 	return smp, nil
@@ -74,22 +99,37 @@ func ParseSendMessagePayload(rawData []byte) (*SendMessagePayload, error) {
 // MarshalBinary serializes the SendMessagePayload to wire format.
 // Returns the serialized bytes ready to be sent as an I2CP message payload.
 func (smp *SendMessagePayload) MarshalBinary() ([]byte, error) {
-	// Calculate total size: 32 (destination) + len(payload)
-	totalSize := 32 + len(smp.Payload)
+	// Serialize destination
+	destBytes, err := smp.Destination.Bytes()
+	if err != nil {
+		return nil, oops.Errorf("failed to serialize destination: %w", err)
+	}
+
+	// Calculate total size: destBytes + 4 (length) + payloadLen + 4 (nonce)
+	totalSize := len(destBytes) + 4 + len(smp.Payload) + 4
 	result := make([]byte, totalSize)
 
-	// Write destination hash
-	copy(result[0:32], smp.Destination[:])
+	// Write destination
+	copy(result[0:], destBytes)
+	offset := len(destBytes)
+
+	// Write payload length
+	binary.BigEndian.PutUint32(result[offset:offset+4], uint32(len(smp.Payload)))
+	offset += 4
 
 	// Write payload
 	if len(smp.Payload) > 0 {
-		copy(result[32:], smp.Payload)
+		copy(result[offset:], smp.Payload)
+		offset += len(smp.Payload)
 	}
+
+	// Write nonce
+	binary.BigEndian.PutUint32(result[offset:offset+4], smp.Nonce)
 
 	log.WithFields(logger.Fields{
 		"at":          "i2cp.SendMessagePayload.MarshalBinary",
-		"destination": logutil.HashPrefixPlain(smp.Destination),
 		"payloadSize": len(smp.Payload),
+		"nonce":       smp.Nonce,
 		"totalSize":   totalSize,
 	}).Debug("marshaled_send_message_payload")
 
@@ -103,6 +143,7 @@ func (smp *SendMessagePayload) MarshalBinary() ([]byte, error) {
 //
 //	SessionID: uint16 (2 bytes) - session identifier (part of wire format, not common header)
 //	MessageID: uint32 (4 bytes) - unique identifier for this message
+//	PayloadLen: uint32 (4 bytes, big endian) - length of decrypted message data
 //	Payload: []byte (variable length) - decrypted message data
 //
 // The router sends this to the client after receiving and decrypting a message
@@ -124,17 +165,17 @@ type MessagePayloadPayload struct {
 //
 //	bytes 0-1:   SessionID (2 bytes, big endian)
 //	bytes 2-5:   MessageID (4 bytes, big endian)
-//	bytes 6+:    Message payload (variable length)
+//	bytes 6-9:   Payload length (4 bytes, big endian)
+//	bytes 10+:   Message payload (variable length)
 func ParseMessagePayloadPayload(data []byte) (*MessagePayloadPayload, error) {
-	// Minimum size: 2 bytes SessionID + 4 bytes MessageID = 6 bytes
-	// Payload can be empty (0 bytes), so minimum is exactly 6
-	if len(data) < 6 {
+	// Minimum size: 2 (SessionID) + 4 (MessageID) + 4 (PayloadLen) = 10 bytes
+	if len(data) < 10 {
 		log.WithFields(logger.Fields{
 			"at":       "i2cp.ParseMessagePayloadPayload",
 			"dataSize": len(data),
-			"required": 6,
+			"required": 10,
 		}).Error("message_payload_too_short")
-		return nil, oops.Errorf("message payload too short: need at least 6 bytes (SessionID + MessageID), got %d", len(data))
+		return nil, oops.Errorf("message payload too short: need at least 10 bytes (SessionID + MessageID + PayloadLen), got %d", len(data))
 	}
 
 	mpp := &MessagePayloadPayload{}
@@ -145,11 +186,21 @@ func ParseMessagePayloadPayload(data []byte) (*MessagePayloadPayload, error) {
 	// Parse message ID (next 4 bytes, big endian)
 	mpp.MessageID = binary.BigEndian.Uint32(data[2:6])
 
-	// Parse message payload (remaining bytes)
-	payloadLen := len(data) - 6
+	// Parse payload length (next 4 bytes, big endian)
+	payloadLen := binary.BigEndian.Uint32(data[6:10])
+	if err := validatePayloadSize(payloadLen); err != nil {
+		return nil, err
+	}
+
+	// Verify enough data for payload
+	if len(data) < 10+int(payloadLen) {
+		return nil, oops.Errorf("message payload truncated: need %d bytes total, got %d", 10+payloadLen, len(data))
+	}
+
+	// Extract payload
 	if payloadLen > 0 {
 		mpp.Payload = make([]byte, payloadLen)
-		copy(mpp.Payload, data[6:])
+		copy(mpp.Payload, data[10:10+payloadLen])
 	} else {
 		mpp.Payload = []byte{}
 	}
@@ -167,8 +218,8 @@ func ParseMessagePayloadPayload(data []byte) (*MessagePayloadPayload, error) {
 // MarshalBinary serializes the MessagePayloadPayload to wire format.
 // Returns the serialized bytes ready to be sent as an I2CP message payload.
 func (mpp *MessagePayloadPayload) MarshalBinary() ([]byte, error) {
-	// Calculate total size: 2 (session ID) + 4 (message ID) + len(payload)
-	totalSize := 6 + len(mpp.Payload)
+	// Calculate total size: 2 (session ID) + 4 (message ID) + 4 (payload length) + len(payload)
+	totalSize := 10 + len(mpp.Payload)
 	result := make([]byte, totalSize)
 
 	// Write session ID (big endian)
@@ -177,9 +228,12 @@ func (mpp *MessagePayloadPayload) MarshalBinary() ([]byte, error) {
 	// Write message ID (big endian)
 	binary.BigEndian.PutUint32(result[2:6], mpp.MessageID)
 
+	// Write payload length (big endian)
+	binary.BigEndian.PutUint32(result[6:10], uint32(len(mpp.Payload)))
+
 	// Write payload
 	if len(mpp.Payload) > 0 {
-		copy(result[6:], mpp.Payload)
+		copy(result[10:], mpp.Payload)
 	}
 
 	log.WithFields(logger.Fields{
@@ -198,7 +252,8 @@ func (mpp *MessagePayloadPayload) MarshalBinary() ([]byte, error) {
 //
 // Format per I2CP v0.9.67 specification:
 //
-//	Destination: Hash (32 bytes) - SHA256 hash of target destination
+//	Destination: full I2P Destination (variable length, typically ~387+ bytes)
+//	PayloadLen: uint32 (4 bytes, big endian) - length of message payload
 //	Payload: []byte (variable length) - actual message data to send
 //	Nonce: uint32 (4 bytes) - random nonce for message identification
 //	Flags: uint16 (2 bytes) - delivery flags (currently unused, set to 0)
@@ -210,78 +265,90 @@ func (mpp *MessagePayloadPayload) MarshalBinary() ([]byte, error) {
 // Flags field is reserved for future use (e.g., priority, encryption options).
 // Currently should be set to 0.
 type SendMessageExpiresPayload struct {
-	Destination data.Hash // 32-byte SHA256 hash of target destination
-	Payload     []byte    // Message data to send (variable length, max 256 KB)
-	Nonce       uint32    // Random nonce for message identification
-	Flags       uint16    // Delivery flags (reserved, set to 0)
-	Expiration  uint64    // Expiration time in milliseconds since epoch (48-bit)
+	Destination destination.Destination // Full I2P Destination of target
+	Payload     []byte                  // Message data to send (variable length, max 256 KB)
+	Nonce       uint32                  // Random nonce for message identification
+	Flags       uint16                  // Delivery flags (reserved, set to 0)
+	Expiration  uint64                  // Expiration time in milliseconds since epoch (48-bit)
 }
 
 // ParseSendMessageExpiresPayload deserializes a SendMessageExpires payload from wire format.
 // Returns an error if the payload is too short or malformed.
 //
-// Wire format:
+// Wire format per I2CP spec:
 //
-//	bytes 0-31:      Destination hash (32 bytes)
-//	bytes 32-(N-13): Message payload (variable length)
-//	bytes (N-12)-(N-9): Nonce (4 bytes, big endian)
-//	bytes (N-8)-(N-7):  Flags (2 bytes, big endian)
-//	bytes (N-6)-(N-1):  Expiration (6 bytes, big endian, 48-bit timestamp)
-//
-// Where N is the total payload size.
+//	bytes 0+:      Destination (variable length, typically ~387+ bytes)
+//	bytes N:N+4:   Payload length (4 bytes, big endian)
+//	bytes N+4+M:   Message payload (M bytes, as specified by PayloadLen)
+//	bytes N+4+M+4: Nonce (4 bytes, big endian)
+//	bytes N+4+M+8: Flags (2 bytes, big endian)
+//	bytes N+4+M+10: Expiration (6 bytes, big endian, 48-bit timestamp)
 func ParseSendMessageExpiresPayload(rawData []byte) (*SendMessageExpiresPayload, error) {
-	// Minimum size: 32 (destination) + 0 (payload) + 4 (nonce) + 2 (flags) + 6 (expiration) = 44 bytes
-	minSize := 32 + 4 + 2 + 6 // 44 bytes
-	if len(rawData) < minSize {
+	if len(rawData) < 4 {
+		return nil, oops.Errorf("send message expires payload too short: need at least 4 bytes for destination+length, got %d", len(rawData))
+	}
+
+	// Parse destination (variable-length structure)
+	dest, remaining, err := destination.ReadDestination(rawData)
+	if err != nil {
 		log.WithFields(logger.Fields{
 			"at":       "i2cp.ParseSendMessageExpiresPayload",
 			"dataSize": len(rawData),
-			"required": minSize,
-		}).Error("send_message_expires_payload_too_short")
-		return nil, oops.Errorf("send message expires payload too short: need at least %d bytes, got %d", minSize, len(rawData))
+			"error":    err.Error(),
+		}).Error("failed_to_parse_destination")
+		return nil, oops.Errorf("failed to parse destination: %w", err)
 	}
 
-	smp := &SendMessageExpiresPayload{}
-
-	// Parse destination hash (first 32 bytes)
-	hash, remainder, err := data.ReadHash(rawData)
-	if err != nil {
-		return nil, oops.Errorf("failed to read destination hash: %w", err)
-	}
-	smp.Destination = hash
-
-	// Parse message payload (variable middle section)
-	// The fixed fields (nonce, flags, expiration) are at the end
-	payloadLen := len(remainder) - 12 // remaining - (nonce+flags+expiration)
-	if payloadLen > 0 {
-		smp.Payload = make([]byte, payloadLen)
-		copy(smp.Payload, remainder[:payloadLen])
-	} else {
-		smp.Payload = []byte{}
+	// Need at least 4 (payload length) + 4 (nonce) + 2 (flags) + 6 (expiration) = 16 bytes remaining
+	if len(remaining) < 16 {
+		return nil, oops.Errorf("send message expires payload too short after destination: need at least 16 bytes for length+nonce+flags+expiration, got %d", len(remaining))
 	}
 
-	// Parse fixed fields at the end
-	offset := payloadLen
-	smp.Nonce = binary.BigEndian.Uint32(remainder[offset : offset+4])
-	smp.Flags = binary.BigEndian.Uint16(remainder[offset+4 : offset+6])
+	// Parse payload length (4 bytes, big endian)
+	payloadLen := binary.BigEndian.Uint32(remaining[0:4])
+	if err := validatePayloadSize(payloadLen); err != nil {
+		return nil, err
+	}
+
+	// Verify enough data for payload + nonce + flags + expiration
+	if len(remaining) < 4+int(payloadLen)+12 {
+		return nil, oops.Errorf("send message expires truncated: need %d bytes, got %d", 4+payloadLen+12, len(remaining))
+	}
+
+	// Extract payload
+	payloadStart := 4
+	payloadEnd := 4 + int(payloadLen)
+	payload := make([]byte, payloadLen)
+	copy(payload, remaining[payloadStart:payloadEnd])
+
+	// Extract nonce, flags, and expiration from fixed fields after payload
+	fixedStart := payloadEnd
+	nonce := binary.BigEndian.Uint32(remaining[fixedStart : fixedStart+4])
+	flags := binary.BigEndian.Uint16(remaining[fixedStart+4 : fixedStart+6])
 
 	// Parse 48-bit expiration (6 bytes) into uint64
-	// Read 6 bytes and shift into 64-bit value
-	expBytes := remainder[offset+6 : offset+12]
-	smp.Expiration = uint64(expBytes[0])<<40 |
+	expBytes := remaining[fixedStart+6 : fixedStart+12]
+	expiration := uint64(expBytes[0])<<40 |
 		uint64(expBytes[1])<<32 |
 		uint64(expBytes[2])<<24 |
 		uint64(expBytes[3])<<16 |
 		uint64(expBytes[4])<<8 |
 		uint64(expBytes[5])
 
+	smp := &SendMessageExpiresPayload{
+		Destination: dest,
+		Payload:     payload,
+		Nonce:       nonce,
+		Flags:       flags,
+		Expiration:  expiration,
+	}
+
 	log.WithFields(logger.Fields{
 		"at":          "i2cp.ParseSendMessageExpiresPayload",
-		"destination": logutil.HashPrefixPlain(smp.Destination),
-		"payloadSize": payloadLen,
-		"nonce":       smp.Nonce,
-		"flags":       smp.Flags,
-		"expiration":  smp.Expiration,
+		"payloadSize": len(payload),
+		"nonce":       nonce,
+		"flags":       flags,
+		"expiration":  expiration,
 	}).Debug("parsed_send_message_expires_payload")
 
 	return smp, nil
@@ -290,15 +357,25 @@ func ParseSendMessageExpiresPayload(rawData []byte) (*SendMessageExpiresPayload,
 // MarshalBinary serializes the SendMessageExpiresPayload to wire format.
 // Returns the serialized bytes ready to be sent as an I2CP message payload.
 func (smp *SendMessageExpiresPayload) MarshalBinary() ([]byte, error) {
-	// Calculate total size: 32 (destination) + len(payload) + 4 (nonce) + 2 (flags) + 6 (expiration)
-	totalSize := 32 + len(smp.Payload) + 12
+	// Serialize destination
+	destBytes, err := smp.Destination.Bytes()
+	if err != nil {
+		return nil, oops.Errorf("failed to serialize destination: %w", err)
+	}
+
+	// Calculate total size: destBytes + 4 (length) + payloadLen + 4 (nonce) + 2 (flags) + 6 (expiration)
+	totalSize := len(destBytes) + 4 + len(smp.Payload) + 12
 	result := make([]byte, totalSize)
 
-	// Write destination hash
-	copy(result[0:32], smp.Destination[:])
+	// Write destination
+	copy(result[0:], destBytes)
+	offset := len(destBytes)
+
+	// Write payload length
+	binary.BigEndian.PutUint32(result[offset:offset+4], uint32(len(smp.Payload)))
+	offset += 4
 
 	// Write payload
-	offset := 32
 	if len(smp.Payload) > 0 {
 		copy(result[offset:], smp.Payload)
 		offset += len(smp.Payload)
@@ -306,21 +383,22 @@ func (smp *SendMessageExpiresPayload) MarshalBinary() ([]byte, error) {
 
 	// Write nonce (4 bytes, big endian)
 	binary.BigEndian.PutUint32(result[offset:offset+4], smp.Nonce)
+	offset += 4
 
 	// Write flags (2 bytes, big endian)
-	binary.BigEndian.PutUint16(result[offset+4:offset+6], smp.Flags)
+	binary.BigEndian.PutUint16(result[offset:offset+2], smp.Flags)
+	offset += 2
 
 	// Write expiration (6 bytes, big endian, 48-bit)
-	result[offset+6] = byte(smp.Expiration >> 40)
-	result[offset+7] = byte(smp.Expiration >> 32)
-	result[offset+8] = byte(smp.Expiration >> 24)
-	result[offset+9] = byte(smp.Expiration >> 16)
-	result[offset+10] = byte(smp.Expiration >> 8)
-	result[offset+11] = byte(smp.Expiration)
+	result[offset] = byte(smp.Expiration >> 40)
+	result[offset+1] = byte(smp.Expiration >> 32)
+	result[offset+2] = byte(smp.Expiration >> 24)
+	result[offset+3] = byte(smp.Expiration >> 16)
+	result[offset+4] = byte(smp.Expiration >> 8)
+	result[offset+5] = byte(smp.Expiration)
 
 	log.WithFields(logger.Fields{
 		"at":          "i2cp.SendMessageExpiresPayload.MarshalBinary",
-		"destination": logutil.HashPrefixPlain(smp.Destination),
 		"payloadSize": len(smp.Payload),
 		"nonce":       smp.Nonce,
 		"flags":       smp.Flags,
