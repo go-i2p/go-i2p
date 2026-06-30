@@ -1263,6 +1263,13 @@ func (p *Publisher) createTunnelGatewayMessage(hash common.Hash, data []byte, da
 //   - DatabaseStoreTypeMetaLeaseSet (7): For MetaLeaseSet entries (0.9.40+)
 func (p *Publisher) createDatabaseStoreMessage(hash common.Hash, data []byte, dataType byte) (i2np.Message, error) {
 	dbStore := i2np.NewDatabaseStore(hash, data, dataType)
+	if dataType == i2np.DatabaseStoreTypeRouterInfo {
+		// RouterInfo publication may traverse long paths and cross clock-skewed
+		// peers before reaching a floodfill. The BaseI2NP default (60s) is too
+		// tight for live-network publish/ack round-trips and can be dropped as
+		// expired before ACK generation.
+		dbStore.SetExpiration(time.Now().Add(10 * time.Minute))
+	}
 	if replyTunnelID, replyGateway, ok := p.selectReplyRoute(); ok {
 		replyToken, err := generateReplyToken()
 		if err != nil {
@@ -1482,15 +1489,21 @@ func (p *Publisher) selectReplyRoute() ([4]byte, common.Hash, bool) {
 		}
 	}
 
-	var replyTunnelID [4]byte
-	binary.BigEndian.PutUint32(replyTunnelID[:], uint32(inbound.ID))
+	replyID := inbound.GatewayTunnelID
+	if replyID == 0 {
+		replyID = inbound.ID
+	}
 
-	// For a multi-hop inbound tunnel the first hop is the IBGW. For a
+	var replyTunnelID [4]byte
+	binary.BigEndian.PutUint32(replyTunnelID[:], uint32(replyID))
+
+	// For a multi-hop inbound tunnel the last hop is the IBGW in our stored
+	// hop ordering. For a
 	// zero-hop tunnel (Hops is empty) we ARE the gateway ourselves — use our
 	// own router hash so the floodfill can route the DeliveryStatus back.
 	var gateway common.Hash
 	if len(inbound.Hops) > 0 {
-		gateway = inbound.Hops[0]
+		gateway = inbound.Hops[len(inbound.Hops)-1]
 	} else if p.routerInfoProvider != nil {
 		if ri, err := p.routerInfoProvider.GetRouterInfo(); err == nil {
 			if h, err := ri.IdentHash(); err == nil {

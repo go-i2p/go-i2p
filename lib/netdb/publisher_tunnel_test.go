@@ -392,6 +392,47 @@ func TestCreateDatabaseStoreMessage_IncludesReplyRouteWhenInboundAvailable(t *te
 		"reply gateway should be the inbound tunnel gateway hop hash")
 }
 
+func TestCreateDatabaseStoreMessage_UsesInboundGatewayMetadataForReplyRoute(t *testing.T) {
+	db := newMockNetDB()
+	transport := newMockTransportManager()
+	selector := &mockPeerSelector{}
+	outboundPool := tunnel.NewTunnelPool(selector)
+	inboundPool := tunnel.NewTunnelPool(selector)
+
+	ourRI := createValidRouterInfo(t)
+	endpointHop := common.Hash{0x01, 0x02, 0x03, 0x04}
+	middleHop := common.Hash{0x05, 0x06, 0x07, 0x08}
+	gatewayHop := common.Hash{0x09, 0x0A, 0x0B, 0x0C}
+
+	inboundPool.AddTunnel(&tunnel.TunnelState{
+		ID:              tunnel.TunnelID(0x01020304),
+		GatewayTunnelID: tunnel.TunnelID(0xA1B2C3D4),
+		Hops:            []common.Hash{endpointHop, middleHop, gatewayHop},
+		State:           tunnel.TunnelReady,
+		CreatedAt:       time.Now(),
+		IsInbound:       true,
+	})
+
+	provider := staticRouterInfoProvider{ri: &ourRI}
+	publisher := NewPublisher(db, outboundPool, transport, provider, DefaultPublisherConfig())
+	publisher.SetInboundPool(inboundPool)
+
+	msg, err := publisher.createDatabaseStoreMessage(common.Hash{1, 2, 3, 4}, []byte("dbstore payload"), i2np.DatabaseStoreTypeLeaseSet2)
+	require.NoError(t, err)
+
+	parsed, ok := msg.(*i2np.DatabaseStore)
+	require.True(t, ok, "createDatabaseStoreMessage should return DatabaseStore message")
+
+	assert.Equal(t, uint32(0xA1B2C3D4), binary.BigEndian.Uint32(parsed.ReplyTunnelID[:]),
+		"reply tunnel ID should use inbound gateway tunnel metadata")
+	assert.Equal(t, gatewayHop, parsed.ReplyGateway,
+		"reply gateway should be derived from inbound gateway hop")
+	assert.NotEqual(t, endpointHop, parsed.ReplyGateway,
+		"reply gateway must not use inbound endpoint hop")
+	assert.NotEqual(t, middleHop, parsed.ReplyGateway,
+		"reply gateway must not use middle hop")
+}
+
 // TestSendDatabaseStoreToFloodfill_WithActiveTunnel tests successful tunnel selection and message transmission
 func TestSendDatabaseStoreToFloodfill_WithActiveTunnel(t *testing.T) {
 	env := setupPublisherWithTunnel(t, 12345, []common.Hash{

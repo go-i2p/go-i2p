@@ -260,12 +260,13 @@ func (tm *TunnelManager) buildZeroHopInbound(req tunnel.BuildTunnelRequest) (tun
 		return 0, nil, oops.Wrapf(err, "failed to create zero-hop inbound build request")
 	}
 	state := &tunnel.TunnelState{
-		ID:        result.TunnelID,
-		Hops:      nil,
-		State:     tunnel.TunnelReady,
-		CreatedAt: time.Now(),
-		Responses: nil,
-		IsInbound: true,
+		ID:              result.TunnelID,
+		GatewayTunnelID: result.GatewayTunnelID,
+		Hops:            nil,
+		State:           tunnel.TunnelReady,
+		CreatedAt:       time.Now(),
+		Responses:       nil,
+		IsInbound:       true,
 	}
 	tm.inboundPool.AddTunnel(state)
 	log.WithFields(logger.Fields{
@@ -368,12 +369,13 @@ func (tm *TunnelManager) extractPeerHashes(result *tunnel.TunnelBuildResult) []c
 // createTunnelStateFromResult creates tunnel state tracking from build result
 func (tm *TunnelManager) createTunnelStateFromResult(result *tunnel.TunnelBuildResult) *tunnel.TunnelState {
 	tunnelState := &tunnel.TunnelState{
-		ID:        result.TunnelID,
-		Hops:      extractHashesWithZero(result.Hops),
-		State:     tunnel.TunnelBuilding,
-		CreatedAt: time.Now(),
-		Responses: make([]tunnel.BuildResponse, 0, len(result.Hops)),
-		IsInbound: result.IsInbound,
+		ID:              result.TunnelID,
+		GatewayTunnelID: result.GatewayTunnelID,
+		Hops:            extractHashesWithZero(result.Hops),
+		State:           tunnel.TunnelBuilding,
+		CreatedAt:       time.Now(),
+		Responses:       make([]tunnel.BuildResponse, 0, len(result.Hops)),
+		IsInbound:       result.IsInbound,
 	}
 	return tunnelState
 }

@@ -189,7 +189,7 @@ func TestLiveNetworkPublishRouterInfo(t *testing.T) {
 		preStats.ReplyTokenAckUnexpected,
 	)
 
-	publishDiag, err := retryWithDiagnostics("publish_routerinfo", 1, liveNetworkAttemptDelay, func() error {
+	publishDiag, err := retryWithDiagnostics("publish_routerinfo", liveNetworkRetryAttempts, liveNetworkAttemptDelay, func() error {
 		before := testPublisher.GetStats()
 		done := make(chan error, 1)
 		go func() {

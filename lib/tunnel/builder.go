@@ -67,14 +67,15 @@ type BuildTunnelRequest struct {
 
 // TunnelBuildResult contains the result of building a tunnel request.
 type TunnelBuildResult struct {
-	TunnelID      TunnelID                 // The generated tunnel ID
-	Hops          []router_info.RouterInfo // Selected router hops
-	Records       []BuildRequestRecord     // Build records for each hop
-	ReplyKeys     []session_key.SessionKey // Reply decryption keys for each hop
-	ReplyIVs      [][16]byte               // Reply IVs for each hop
-	NoiseHashes   [][32]byte               // Per-hop Noise transcript hashes (m_H) for STBM reply AEAD decryption
-	UseShortBuild bool                     // True if using Short Tunnel Build (STBM), false for Variable Tunnel Build
-	IsInbound     bool                     // True if this is an inbound tunnel
+	TunnelID        TunnelID                 // The generated tunnel ID
+	GatewayTunnelID TunnelID                 // Inbound gateway receive tunnel ID (same as TunnelID for zero-hop)
+	Hops            []router_info.RouterInfo // Selected router hops
+	Records         []BuildRequestRecord     // Build records for each hop
+	ReplyKeys       []session_key.SessionKey // Reply decryption keys for each hop
+	ReplyIVs        [][16]byte               // Reply IVs for each hop
+	NoiseHashes     [][32]byte               // Per-hop Noise transcript hashes (m_H) for STBM reply AEAD decryption
+	UseShortBuild   bool                     // True if using Short Tunnel Build (STBM), false for Variable Tunnel Build
+	IsInbound       bool                     // True if this is an inbound tunnel
 }
 
 // CreateBuildRequest generates a complete tunnel build request with encrypted records.
@@ -204,14 +205,20 @@ func (tb *TunnelBuilder) CreateBuildRequest(req BuildTunnelRequest) (*TunnelBuil
 
 	logBuildRequestComplete(req, hopTunnelIDs[0], len(records))
 
+	gatewayTunnelID := hopTunnelIDs[0]
+	if req.IsInbound {
+		gatewayTunnelID = hopTunnelIDs[len(hopTunnelIDs)-1]
+	}
+
 	return &TunnelBuildResult{
-		TunnelID:      hopTunnelIDs[0],
-		Hops:          peers,
-		Records:       records,
-		ReplyKeys:     replyKeys,
-		ReplyIVs:      replyIVs,
-		UseShortBuild: req.UseShortBuild,
-		IsInbound:     req.IsInbound,
+		TunnelID:        hopTunnelIDs[0],
+		GatewayTunnelID: gatewayTunnelID,
+		Hops:            peers,
+		Records:         records,
+		ReplyKeys:       replyKeys,
+		ReplyIVs:        replyIVs,
+		UseShortBuild:   req.UseShortBuild,
+		IsInbound:       req.IsInbound,
 	}, nil
 }
 
@@ -317,13 +324,14 @@ func (tb *TunnelBuilder) createZeroHopInboundResult(req BuildTunnelRequest) (*Tu
 		"reason":    "zero-hop inbound tunnel built locally; no build message required",
 	}).Debug("created zero-hop inbound tunnel")
 	return &TunnelBuildResult{
-		TunnelID:      tunnelID,
-		Hops:          nil,
-		Records:       nil,
-		ReplyKeys:     nil,
-		ReplyIVs:      nil,
-		UseShortBuild: req.UseShortBuild,
-		IsInbound:     true,
+		TunnelID:        tunnelID,
+		GatewayTunnelID: tunnelID,
+		Hops:            nil,
+		Records:         nil,
+		ReplyKeys:       nil,
+		ReplyIVs:        nil,
+		UseShortBuild:   req.UseShortBuild,
+		IsInbound:       true,
 	}, nil
 }
 
