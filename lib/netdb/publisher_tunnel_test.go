@@ -400,14 +400,14 @@ func TestCreateDatabaseStoreMessage_UsesInboundGatewayMetadataForReplyRoute(t *t
 	inboundPool := tunnel.NewTunnelPool(selector)
 
 	ourRI := createValidRouterInfo(t)
-	endpointHop := common.Hash{0x01, 0x02, 0x03, 0x04}
+	gatewayHop := common.Hash{0x01, 0x02, 0x03, 0x04}
 	middleHop := common.Hash{0x05, 0x06, 0x07, 0x08}
-	gatewayHop := common.Hash{0x09, 0x0A, 0x0B, 0x0C}
+	endpointHop := common.Hash{0x09, 0x0A, 0x0B, 0x0C}
 
 	inboundPool.AddTunnel(&tunnel.TunnelState{
 		ID:              tunnel.TunnelID(0x01020304),
 		GatewayTunnelID: tunnel.TunnelID(0xA1B2C3D4),
-		Hops:            []common.Hash{endpointHop, middleHop, gatewayHop},
+		Hops:            []common.Hash{gatewayHop, middleHop, endpointHop},
 		State:           tunnel.TunnelReady,
 		CreatedAt:       time.Now(),
 		IsInbound:       true,

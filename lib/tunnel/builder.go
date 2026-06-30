@@ -68,7 +68,7 @@ type BuildTunnelRequest struct {
 // TunnelBuildResult contains the result of building a tunnel request.
 type TunnelBuildResult struct {
 	TunnelID        TunnelID                 // The generated tunnel ID
-	GatewayTunnelID TunnelID                 // Inbound gateway receive tunnel ID (same as TunnelID for zero-hop)
+	GatewayTunnelID TunnelID                 // Inbound gateway receive tunnel ID
 	Hops            []router_info.RouterInfo // Selected router hops
 	Records         []BuildRequestRecord     // Build records for each hop
 	ReplyKeys       []session_key.SessionKey // Reply decryption keys for each hop
@@ -206,9 +206,6 @@ func (tb *TunnelBuilder) CreateBuildRequest(req BuildTunnelRequest) (*TunnelBuil
 	logBuildRequestComplete(req, hopTunnelIDs[0], len(records))
 
 	gatewayTunnelID := hopTunnelIDs[0]
-	if req.IsInbound {
-		gatewayTunnelID = hopTunnelIDs[len(hopTunnelIDs)-1]
-	}
 
 	return &TunnelBuildResult{
 		TunnelID:        hopTunnelIDs[0],
@@ -450,14 +447,11 @@ type generatedHopRecord struct {
 // determineHopPosition determines the position of a hop in the tunnel (gateway, endpoint, or participant).
 func (tb *TunnelBuilder) determineHopPosition(hopIndex, hopCount int, isInbound bool) string {
 	if hopIndex == 0 {
-		if isInbound {
-			return "endpoint"
-		}
 		return "gateway"
 	}
 	if hopIndex == hopCount-1 {
 		if isInbound {
-			return "gateway"
+			return "endpoint"
 		}
 		return "endpoint"
 	}
@@ -637,9 +631,9 @@ func assembleBuildRecord(
 // - Last hop (endpoint): receives from previous, sends to destination (0)
 //
 // For inbound tunnels:
-// - First hop (endpoint): receives from sender, sends to next hop
+// - First hop (gateway): receives from sender, sends to next hop
 // - Middle hops: receive from previous, send to next
-// - Last hop (gateway): receives from previous, sends to us (specified tunnel ID)
+// - Last hop (endpoint): receives from previous, sends to us (specified tunnel ID)
 func (tb *TunnelBuilder) determineRoutingParams(
 	hopIndex int,
 	req BuildTunnelRequest,
@@ -679,11 +673,11 @@ func (tb *TunnelBuilder) determineInboundRouting(
 	receiveTunnel = hopTunnelIDs[hopIndex]
 
 	if isLastHop {
-		// Gateway (last hop) sends to our specified tunnel
+		// Endpoint (last hop) sends to our specified tunnel
 		nextTunnel = req.ReplyTunnelID
 		nextIdent = req.ReplyGateway
 	} else {
-		// Endpoint/middle sends to next hop using that hop's receive tunnel ID
+		// Gateway/middle sends to next hop using that hop's receive tunnel ID
 		nextTunnel = hopTunnelIDs[hopIndex+1]
 		nextIdent, err = peers[hopIndex+1].IdentHash()
 		if err != nil {

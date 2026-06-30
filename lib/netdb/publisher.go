@@ -1497,13 +1497,13 @@ func (p *Publisher) selectReplyRoute() ([4]byte, common.Hash, bool) {
 	var replyTunnelID [4]byte
 	binary.BigEndian.PutUint32(replyTunnelID[:], uint32(replyID))
 
-	// For a multi-hop inbound tunnel the last hop is the IBGW in our stored
+	// For a multi-hop inbound tunnel the first hop is the IBGW in our stored
 	// hop ordering. For a
 	// zero-hop tunnel (Hops is empty) we ARE the gateway ourselves — use our
 	// own router hash so the floodfill can route the DeliveryStatus back.
 	var gateway common.Hash
 	if len(inbound.Hops) > 0 {
-		gateway = inbound.Hops[len(inbound.Hops)-1]
+		gateway = inbound.Hops[0]
 	} else if p.routerInfoProvider != nil {
 		if ri, err := p.routerInfoProvider.GetRouterInfo(); err == nil {
 			if h, err := ri.IdentHash(); err == nil {
