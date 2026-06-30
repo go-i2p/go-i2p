@@ -61,6 +61,11 @@ type I2PControlConfig struct {
 	// who front the router with their own TLS-terminating reverse proxy.
 	// When false (the default), a non-loopback bind must use HTTPS.
 	AllowPlaintextNonLoopback bool
+
+	// AllowDefaultPasswordNonLoopback, when true, allows the legacy default
+	// password on non-loopback binds for interoperability with existing tools.
+	// Default is false for safer-by-default deployments.
+	AllowDefaultPasswordNonLoopback bool
 }
 
 // DefaultI2PControlConfig returns sensible defaults for I2PControl server.
@@ -81,5 +86,6 @@ func DefaultI2PControlConfig() I2PControlConfig {
 		TokenExpiration:           10 * time.Minute,
 		StrictAuth:                false,
 		AllowPlaintextNonLoopback: false,
+		AllowDefaultPasswordNonLoopback: false,
 	}
 }

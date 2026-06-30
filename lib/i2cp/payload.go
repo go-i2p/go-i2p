@@ -2,8 +2,10 @@ package i2cp
 
 import (
 	"encoding/binary"
+	"encoding/hex"
 	"math"
 
+	commondata "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/destination"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
@@ -525,9 +527,13 @@ func (dp *DisconnectPayload) MarshalBinary() ([]byte, error) {
 //
 // The server will return a HostReply message with the same RequestID.
 type HostLookupPayload struct {
-	RequestID  uint32 // Unique request identifier
-	LookupType uint16 // 0=hash, 1=hostname
+	SessionID uint16 // Session ID (i2pd wire shape)
+	RequestID uint32 // Unique request identifier
+	TimeoutMs uint32 // Timeout in milliseconds (i2pd wire shape)
+
+	LookupType uint16 // 0=hash, 1=hostname (encoded as one byte on wire)
 	Query      string // Hash or hostname to lookup
+	Hash       []byte // Raw 32-byte hash for hash lookups when provided on-wire
 }
 
 const (
@@ -539,58 +545,68 @@ const (
 // ParseHostLookupPayload deserializes a HostLookup payload from wire format.
 // Returns an error if the payload is too short or malformed.
 //
-// Wire format:
+// Wire format (i2pd authoritative shape):
 //
-//	bytes 0-3:   RequestID (uint32, big endian)
-//	bytes 4-5:   LookupType (uint16, big endian)
-//	bytes 6-7:   Query length (uint16, big endian)
-//	bytes 8+:    Query string (length specified by bytes 6-7)
+//	bytes 0-1:   SessionID (uint16, big endian)
+//	bytes 2-5:   RequestID (uint32, big endian)
+//	bytes 6-9:   TimeoutMs (uint32, big endian)
+//	byte  10:    LookupType (0=hash, 1=hostname)
+//	bytes 11+:   Query payload (32-byte hash or I2PString hostname)
 func ParseHostLookupPayload(data []byte) (*HostLookupPayload, error) {
-	// Minimum size: 4 (requestID) + 2 (type) + 2 (length) = 8 bytes
-	if len(data) < 8 {
+	parsed, err := parseCanonicalHostLookupPayload(data)
+	if err != nil {
 		log.WithFields(logger.Fields{
 			"at":       "i2cp.ParseHostLookupPayload",
 			"dataSize": len(data),
-			"required": 8,
-		}).Error("host_lookup_payload_too_short")
-		return nil, oops.Errorf("host lookup payload too short: need at least 8 bytes, got %d", len(data))
+			"error":    err.Error(),
+		}).Error("host_lookup_payload_parse_failed")
+		return nil, err
+	}
+	return parsed, nil
+}
+
+func parseCanonicalHostLookupPayload(data []byte) (*HostLookupPayload, error) {
+	if len(data) < 11 {
+		return nil, oops.Errorf("host lookup payload too short: need at least 11 bytes for canonical format, got %d", len(data))
 	}
 
-	hlp := &HostLookupPayload{}
-
-	// Parse request ID (first 4 bytes, big endian)
-	hlp.RequestID = binary.BigEndian.Uint32(data[0:4])
-
-	// Parse lookup type (bytes 4-5, big endian)
-	hlp.LookupType = binary.BigEndian.Uint16(data[4:6])
-
-	// Parse query length (bytes 6-7, big endian)
-	queryLen := binary.BigEndian.Uint16(data[6:8])
-
-	// Validate we have enough bytes for the query string
-	if len(data) < 8+int(queryLen) {
-		log.WithFields(logger.Fields{
-			"at":          "i2cp.ParseHostLookupPayload",
-			"dataSize":    len(data),
-			"queryLen":    queryLen,
-			"requiredLen": 8 + int(queryLen),
-		}).Error("host_lookup_payload_incomplete")
-		return nil, oops.Errorf("host lookup payload incomplete: need %d bytes for query, got %d", 8+int(queryLen), len(data))
+	hlp := &HostLookupPayload{
+		SessionID:  binary.BigEndian.Uint16(data[0:2]),
+		RequestID:  binary.BigEndian.Uint32(data[2:6]),
+		TimeoutMs:  binary.BigEndian.Uint32(data[6:10]),
+		LookupType: uint16(data[10]),
 	}
 
-	// Parse query string
-	if queryLen > 0 {
-		hlp.Query = string(data[8 : 8+queryLen])
-	} else {
-		hlp.Query = ""
+	body := data[11:]
+	switch hlp.LookupType {
+	case HostLookupTypeHash:
+		if len(body) < 32 {
+			return nil, oops.Errorf("host lookup hash payload too short: need 32 bytes, got %d", len(body))
+		}
+		hlp.Hash = make([]byte, 32)
+		copy(hlp.Hash, body[:32])
+		hlp.Query = hex.EncodeToString(hlp.Hash)
+	case HostLookupTypeHostname:
+		str, _, err := commondata.ReadI2PString(body)
+		if err != nil {
+			return nil, oops.Errorf("failed to parse host lookup hostname: %w", err)
+		}
+		hostname, err := str.Data()
+		if err != nil {
+			return nil, oops.Errorf("failed to decode host lookup hostname: %w", err)
+		}
+		hlp.Query = hostname
+	default:
+		return nil, oops.Errorf("unsupported host lookup type: %d", hlp.LookupType)
 	}
 
 	log.WithFields(logger.Fields{
 		"at":         "i2cp.ParseHostLookupPayload",
+		"sessionID":  hlp.SessionID,
+		"timeoutMs":  hlp.TimeoutMs,
 		"requestID":  hlp.RequestID,
 		"lookupType": hlp.LookupType,
-		"queryLen":   queryLen,
-		"query":      hlp.Query,
+		"queryLen":   len(hlp.Query),
 	}).Debug("parsed_host_lookup_payload")
 
 	return hlp, nil
@@ -599,32 +615,51 @@ func ParseHostLookupPayload(data []byte) (*HostLookupPayload, error) {
 // MarshalBinary serializes the HostLookupPayload to wire format.
 // Returns the serialized bytes ready to be sent as an I2CP message payload.
 func (hlp *HostLookupPayload) MarshalBinary() ([]byte, error) {
-	queryBytes := []byte(hlp.Query)
-	if len(queryBytes) > math.MaxUint16 {
-		return nil, oops.Errorf("host lookup query too long: %d bytes (max %d)", len(queryBytes), math.MaxUint16)
+	var body []byte
+	switch hlp.LookupType {
+	case HostLookupTypeHash:
+		if len(hlp.Hash) == 32 {
+			body = make([]byte, 32)
+			copy(body, hlp.Hash)
+		} else {
+			hashHex := hlp.Query
+			if len(hashHex) < 64 {
+				return nil, oops.Errorf("host lookup hash query too short: need 64 hex chars, got %d", len(hashHex))
+			}
+			decoded, err := hex.DecodeString(hashHex[:64])
+			if err != nil {
+				return nil, oops.Errorf("invalid host lookup hash encoding: %w", err)
+			}
+			if len(decoded) != 32 {
+				return nil, oops.Errorf("invalid host lookup hash size: %d", len(decoded))
+			}
+			body = decoded
+		}
+	case HostLookupTypeHostname:
+		i2pStr, err := commondata.ToI2PString(hlp.Query)
+		if err != nil {
+			return nil, oops.Errorf("invalid host lookup hostname encoding: %w", err)
+		}
+		body = i2pStr
+	default:
+		return nil, oops.Errorf("unsupported host lookup type: %d", hlp.LookupType)
 	}
-	totalSize := 4 + 2 + 2 + len(queryBytes) // requestID + type + length + query
+
+	totalSize := 2 + 4 + 4 + 1 + len(body)
 	result := make([]byte, totalSize)
-
-	// Write request ID (big endian)
-	binary.BigEndian.PutUint32(result[0:4], hlp.RequestID)
-
-	// Write lookup type (big endian)
-	binary.BigEndian.PutUint16(result[4:6], hlp.LookupType)
-
-	// Write query length (big endian)
-	binary.BigEndian.PutUint16(result[6:8], uint16(len(queryBytes)))
-
-	// Write query string
-	if len(queryBytes) > 0 {
-		copy(result[8:], queryBytes)
-	}
+	binary.BigEndian.PutUint16(result[0:2], hlp.SessionID)
+	binary.BigEndian.PutUint32(result[2:6], hlp.RequestID)
+	binary.BigEndian.PutUint32(result[6:10], hlp.TimeoutMs)
+	result[10] = byte(hlp.LookupType)
+	copy(result[11:], body)
 
 	log.WithFields(logger.Fields{
 		"at":         "i2cp.HostLookupPayload.MarshalBinary",
+		"sessionID":  hlp.SessionID,
+		"timeoutMs":  hlp.TimeoutMs,
 		"requestID":  hlp.RequestID,
 		"lookupType": hlp.LookupType,
-		"queryLen":   len(queryBytes),
+		"queryLen":   len(hlp.Query),
 		"query":      hlp.Query,
 		"totalSize":  totalSize,
 	}).Debug("marshaled_host_lookup_payload")

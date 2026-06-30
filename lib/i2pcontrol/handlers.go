@@ -691,6 +691,52 @@ type NetworkSettingHandler struct {
 	stats RouterStatsProvider
 }
 
+// ClientServicesInfoHandler implements the ClientServicesInfo RPC method.
+// It reports client-service availability using i2pd-compatible keys.
+type ClientServicesInfoHandler struct{}
+
+// NewClientServicesInfoHandler creates a new ClientServicesInfo handler.
+func NewClientServicesInfoHandler() *ClientServicesInfoHandler {
+	return &ClientServicesInfoHandler{}
+}
+
+// Handle processes ClientServicesInfo requests.
+// Request params are field selectors; response includes matching fields only.
+func (h *ClientServicesInfoHandler) Handle(ctx context.Context, params json.RawMessage) (interface{}, error) {
+	var req map[string]interface{}
+	if err := decodeParams("ClientServicesInfo", params, &req); err != nil {
+		return nil, err
+	}
+
+	available := map[string]interface{}{
+		"I2PTunnel": map[string]interface{}{
+			"client": map[string]interface{}{},
+			"server": map[string]interface{}{},
+		},
+		"HTTPProxy": map[string]interface{}{"enabled": false},
+		"SOCKS":     map[string]interface{}{"enabled": false},
+		"SAM":       map[string]interface{}{"enabled": false},
+		"BOB":       map[string]interface{}{"enabled": false},
+		"I2CP":      map[string]interface{}{"enabled": viper.GetBool("i2cp.enabled")},
+	}
+
+	result := make(map[string]interface{})
+	if len(req) == 0 {
+		for k, v := range available {
+			result[k] = v
+		}
+		return result, nil
+	}
+
+	for key := range req {
+		if value, ok := available[key]; ok {
+			result[key] = value
+		}
+	}
+
+	return result, nil
+}
+
 // NewNetworkSettingHandler creates a new NetworkSetting handler.
 //
 // Parameters:

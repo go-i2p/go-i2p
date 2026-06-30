@@ -64,15 +64,8 @@ func (s *Server) handleMessage(conn net.Conn, msg *Message, sessionPtr **Session
 	case MessageTypeHostLookup:
 		return s.handleHostLookup(conn, msg)
 
-	// Legacy I2CP message types deprecated in v0.9.67. Payload formats differ
-	// from their modern equivalents (38/39) so a transparent shim is not safe.
-	// Return an explicit error so old clients can be updated.
 	case MessageTypeDestLookup:
-		log.WithFields(logger.Fields{
-			"at":      "i2cp.Server.handleMessage",
-			"msgType": MessageTypeName(msg.Type),
-		}).Warn("legacy DestLookup (type 34) received; use HostLookup (type 38)")
-		return nil, oops.Errorf("legacy message type %d (DestLookup) not supported; use HostLookup (type 38)", msg.Type)
+		return s.handleDestLookup(msg)
 
 	case MessageTypeBlindingInfo:
 		return s.handleBlindingInfo(msg, sessionPtr)
@@ -96,14 +89,22 @@ func (s *Server) handleCreateSession(msg *Message, sessionPtr **Session) (*Messa
 	// Parse and validate session configuration
 	dest, config, err := parseSessionConfiguration(msg.Payload)
 	if err != nil {
-		return nil, oops.Errorf("session configuration error: %w", err)
+		log.WithFields(logger.Fields{
+			"at":    "i2cp.Server.handleCreateSession",
+			"error": err.Error(),
+		}).Warn("invalid_create_session_payload")
+		return buildSessionStatusResponseWithCode(0, SessionStatusInvalid), nil
 	}
 
 	// Create session with parsed or default configuration
 	// If dest is nil, NewSession will generate a new destination
 	session, err := s.manager.CreateSession(dest, config)
 	if err != nil {
-		return nil, oops.Errorf("failed to create session: %w", err)
+		log.WithFields(logger.Fields{
+			"at":    "i2cp.Server.handleCreateSession",
+			"error": err.Error(),
+		}).Warn("session_creation_refused")
+		return buildSessionStatusResponseWithCode(0, SessionStatusRefused), nil
 	}
 
 	// Configure LeaseSet publisher if available
@@ -141,21 +142,11 @@ func (s *Server) handleCreateSession(msg *Message, sessionPtr **Session) (*Messa
 
 // parseSessionConfiguration extracts and validates session configuration from payload.
 // Returns destination, configuration, and any error encountered during parsing or validation.
-// Empty payloads return defaults with no error (backward compatibility with tests).
-// Parse or validation failures return an error instead of silently falling back to defaults.
+// Parse or validation failures return an error.
 func parseSessionConfiguration(payload []byte) (*destination.Destination, *SessionConfig, error) {
-	// Empty payload - use defaults (backward compatibility with tests)
-	if len(payload) == 0 {
-		log.WithFields(logger.Fields{
-			"at":           "parseSessionConfiguration",
-			"reason":       "empty_payload_backward_compat",
-			"payload_size": 0,
-		}).Debug("using default session config")
-		return nil, DefaultSessionConfig(), nil
-	}
-
-	// Parse destination and session configuration from payload
-	dest, config, err := ParseCreateSessionPayload(payload)
+	// Parse destination and signed session configuration from payload.
+	// Strict behavior requires date+signature verification.
+	dest, config, err := ParseCreateSessionSignedPayload(payload)
 	if err != nil {
 		log.WithFields(logger.Fields{
 			"at":           "parseSessionConfiguration",
@@ -183,17 +174,21 @@ func parseSessionConfiguration(payload []byte) (*destination.Destination, *Sessi
 // initializeSessionTunnelPools creates and configures tunnel pools for a session.
 
 // Per I2CP spec: SessionStatus payload is SessionID(2 bytes) + Status(1 byte)
-// Status 1 = Created (session was successfully created)
-func buildSessionStatusResponse(sessionID uint16) *Message {
+func buildSessionStatusResponseWithCode(sessionID uint16, status uint8) *Message {
 	payload := make([]byte, 3)
 	binary.BigEndian.PutUint16(payload[0:2], sessionID) // SessionID
-	payload[2] = SessionStatusCreated                   // Status: Created (was incorrectly 0x00/Destroyed)
+	payload[2] = status
 
 	return &Message{
 		Type:      MessageTypeSessionStatus,
 		SessionID: sessionID, // Keep for application logic
 		Payload:   payload,
 	}
+}
+
+// buildSessionStatusResponse creates a successful "created" session status response.
+func buildSessionStatusResponse(sessionID uint16) *Message {
+	return buildSessionStatusResponseWithCode(sessionID, SessionStatusCreated)
 }
 
 // buildMessageStatusResponse creates a MessageStatus message.
@@ -250,28 +245,6 @@ func (s *Server) handleDestroySession(msg *Message, sessionPtr **Session) (*Mess
 	}, nil
 }
 
-// stripSessionIDPrefix removes the 2-byte SessionID prefix from the payload.
-func stripSessionIDPrefix(payload []byte) ([]byte, error) {
-	if len(payload) < 2 {
-		return nil, oops.Errorf("ReconfigureSession payload too short: %d bytes (need at least 2 for SessionID)", len(payload))
-	}
-	return payload[2:], nil
-}
-
-// parseAndValidateReconfigPayload parses and validates the reconfigure session payload.
-func parseAndValidateReconfigPayload(payloadData []byte) (*SessionConfig, error) {
-	newConfig, err := ParseReconfigureSessionPayload(payloadData)
-	if err != nil {
-		log.WithError(err).Error("failed to parse reconfigure session payload")
-		return nil, oops.Errorf("failed to parse reconfigure payload: %w", err)
-	}
-	if err := ValidateSessionConfig(newConfig); err != nil {
-		log.WithError(err).Warn("invalid session config in reconfigure request")
-		return nil, oops.Errorf("invalid configuration: %w", err)
-	}
-	return newConfig, nil
-}
-
 // logReconfigSuccess logs a successful session reconfiguration.
 func logReconfigSuccess(sessionID uint16, cfg *SessionConfig) {
 	log.WithFields(logger.Fields{
@@ -286,21 +259,47 @@ func logReconfigSuccess(sessionID uint16, cfg *SessionConfig) {
 
 func (s *Server) handleReconfigureSession(msg *Message, sessionPtr **Session) (*Message, error) {
 	if *sessionPtr == nil {
-		return nil, oops.Errorf("session not active")
+		return buildSessionStatusResponseWithCode(0, SessionStatusInvalid), nil
 	}
 
-	payloadData, err := stripSessionIDPrefix(msg.Payload)
+	parsedSessionID, parsedDest, newConfig, err := ParseReconfigureSessionSignedPayload(msg.Payload)
 	if err != nil {
-		return nil, err
+		log.WithFields(logger.Fields{
+			"at":    "i2cp.Server.handleReconfigureSession",
+			"error": err.Error(),
+		}).Warn("invalid_signed_reconfigure_payload")
+		return buildSessionStatusResponseWithCode((*sessionPtr).ID(), SessionStatusInvalid), nil
 	}
 
-	newConfig, err := parseAndValidateReconfigPayload(payloadData)
-	if err != nil {
-		return nil, err
+	if parsedSessionID != (*sessionPtr).ID() {
+		log.WithFields(logger.Fields{
+			"at":              "i2cp.Server.handleReconfigureSession",
+			"sessionID":       (*sessionPtr).ID(),
+			"parsedSessionID": parsedSessionID,
+		}).Warn("reconfigure_session_id_mismatch")
+		return buildSessionStatusResponseWithCode((*sessionPtr).ID(), SessionStatusInvalid), nil
+	}
+
+	if !(*sessionPtr).Destination().Equals(parsedDest) {
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Server.handleReconfigureSession",
+			"sessionID": (*sessionPtr).ID(),
+		}).Warn("reconfigure_destination_mismatch")
+		return buildSessionStatusResponseWithCode((*sessionPtr).ID(), SessionStatusInvalid), nil
+	}
+
+	if err := ValidateSessionConfig(newConfig); err != nil {
+		log.WithError(err).Warn("invalid session config in reconfigure request")
+		return buildSessionStatusResponseWithCode((*sessionPtr).ID(), SessionStatusInvalid), nil
 	}
 
 	if err := (*sessionPtr).Reconfigure(newConfig); err != nil {
-		return nil, oops.Errorf("failed to reconfigure session: %w", err)
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Server.handleReconfigureSession",
+			"sessionID": (*sessionPtr).ID(),
+			"error":     err.Error(),
+		}).Warn("failed_to_reconfigure_session")
+		return buildSessionStatusResponseWithCode((*sessionPtr).ID(), SessionStatusInvalid), nil
 	}
 
 	if err := s.rebuildSessionTunnelPools(*sessionPtr); err != nil {
@@ -312,7 +311,7 @@ func (s *Server) handleReconfigureSession(msg *Message, sessionPtr **Session) (*
 	}
 
 	logReconfigSuccess((*sessionPtr).ID(), newConfig)
-	return nil, nil
+	return buildSessionStatusResponseWithCode((*sessionPtr).ID(), SessionStatusUpdated), nil
 }
 
 // handleCreateLeaseSet creates and publishes a LeaseSet for the session.
@@ -898,6 +897,44 @@ func (s *Server) handleHostLookup(_ net.Conn, msg *Message) (*Message, error) {
 	return buildHostReplyMessage(msg.SessionID, replyPayload)
 }
 
+// handleDestLookup handles DestLookup (type 34) requests.
+// Per i2pd behavior, request payload is a 32-byte destination hash and reply payload
+// is either the full destination bytes (found) or the original 32-byte hash (not found).
+func (s *Server) handleDestLookup(msg *Message) (*Message, error) {
+	if len(msg.Payload) < 32 {
+		return nil, oops.Errorf("dest lookup payload too short: need 32 bytes, got %d", len(msg.Payload))
+	}
+
+	var destHash common.Hash
+	copy(destHash[:], msg.Payload[:32])
+
+	if s.netdb == nil {
+		return buildDestReplyMessage(msg.SessionID, msg.Payload[:32]), nil
+	}
+
+	leaseSetBytes, err := s.netdb.GetLeaseSetBytes(destHash)
+	if err != nil {
+		return buildDestReplyMessage(msg.SessionID, msg.Payload[:32]), nil
+	}
+
+	destBytes, err := s.extractDestinationFromLeaseSet(leaseSetBytes)
+	if err != nil {
+		return nil, oops.Errorf("failed to extract destination from leaseset: %w", err)
+	}
+
+	return buildDestReplyMessage(msg.SessionID, destBytes), nil
+}
+
+func buildDestReplyMessage(sessionID uint16, payload []byte) *Message {
+	data := make([]byte, len(payload))
+	copy(data, payload)
+	return &Message{
+		Type:      MessageTypeDestReply,
+		SessionID: sessionID,
+		Payload:   data,
+	}
+}
+
 // lookupDestinationByHash queries NetDB for a LeaseSet by hash and extracts the destination.
 // Returns HostReplyPayload with the destination bytes if found, or an error code if not found.
 // newErrorReply creates an error HostReplyPayload with the given error code.
@@ -913,6 +950,11 @@ func newErrorReply(requestID uint32, code uint8) *HostReplyPayload {
 // Returns the parsed hash and nil if successful, or a zero hash and an error reply if parsing fails.
 func parseDestinationHash(lookupMsg *HostLookupPayload) (common.Hash, *HostReplyPayload) {
 	var destHash common.Hash
+
+	if len(lookupMsg.Hash) == len(destHash) {
+		copy(destHash[:], lookupMsg.Hash)
+		return destHash, nil
+	}
 
 	if len(lookupMsg.Query) < 64 {
 		log.WithFields(logger.Fields{

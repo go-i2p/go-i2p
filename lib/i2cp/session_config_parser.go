@@ -1,6 +1,7 @@
 package i2cp
 
 import (
+	"encoding/binary"
 	"fmt"
 	"strconv"
 	"time"
@@ -81,6 +82,36 @@ func ParseCreateSessionPayload(payload []byte) (*destination.Destination, *Sessi
 	return dest, config, nil
 }
 
+// ParseCreateSessionSignedPayload parses and verifies a signed CreateSession payload.
+//
+// Strict wire format:
+//   - Destination (variable length)
+//   - Options size (2 bytes, big endian)
+//   - Options mapping bytes (exactly options size bytes)
+//   - Date (8 bytes)
+//   - Signature (size depends on destination signing type)
+func ParseCreateSessionSignedPayload(payload []byte) (*destination.Destination, *SessionConfig, error) {
+	dest, remaining, err := parseDestination(payload)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	config, signedLen, sig, err := parseSignedSessionBody(remaining)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if err := verifySignedSessionData(dest, payload[:len(payload)-len(sig)], sig); err != nil {
+		return nil, nil, err
+	}
+
+	if signedLen != len(remaining)-len(sig) {
+		return nil, nil, oops.Errorf("create session signed payload malformed: parsed length mismatch")
+	}
+
+	return dest, config, nil
+}
+
 // ParseReconfigureSessionPayload parses a ReconfigureSession message payload.
 // Returns the updated session configuration.
 //
@@ -102,6 +133,98 @@ func ParseReconfigureSessionPayload(payload []byte) (*SessionConfig, error) {
 	}
 
 	return config, nil
+}
+
+// ParseReconfigureSessionSignedPayload parses and verifies a signed ReconfigureSession payload.
+//
+// Strict wire format:
+//   - SessionID (2 bytes)
+//   - Destination (variable length)
+//   - Options size (2 bytes)
+//   - Options mapping bytes
+//   - Date (8 bytes)
+//   - Signature (size depends on destination signing type)
+func ParseReconfigureSessionSignedPayload(payload []byte) (uint16, *destination.Destination, *SessionConfig, error) {
+	if len(payload) < 2 {
+		return 0, nil, nil, oops.Errorf("reconfigure session payload too short: %d bytes", len(payload))
+	}
+
+	sessionID := binary.BigEndian.Uint16(payload[:2])
+	body := payload[2:]
+
+	dest, remaining, err := parseDestination(body)
+	if err != nil {
+		return 0, nil, nil, err
+	}
+
+	config, signedLen, sig, err := parseSignedSessionBody(remaining)
+	if err != nil {
+		return 0, nil, nil, err
+	}
+
+	if err := verifySignedSessionData(dest, body[:len(body)-len(sig)], sig); err != nil {
+		return 0, nil, nil, err
+	}
+
+	if signedLen != len(remaining)-len(sig) {
+		return 0, nil, nil, oops.Errorf("reconfigure session signed payload malformed: parsed length mismatch")
+	}
+
+	return sessionID, dest, config, nil
+}
+
+func parseSignedSessionBody(remaining []byte) (*SessionConfig, int, []byte, error) {
+	if len(remaining) < 2 {
+		return nil, 0, nil, oops.Errorf("signed session payload missing options length")
+	}
+
+	optionsSize := int(binary.BigEndian.Uint16(remaining[0:2]))
+	optionsEnd := 2 + optionsSize
+	if len(remaining) < optionsEnd+8 {
+		return nil, 0, nil, oops.Errorf("signed session payload too short for options+date")
+	}
+
+	optionsBytes := remaining[:optionsEnd]
+	config, err := parseSessionOptions(optionsBytes)
+	if err != nil {
+		return nil, 0, nil, oops.Errorf("failed to parse signed session options: %w", err)
+	}
+
+	dateEnd := optionsEnd + 8
+	signature := remaining[dateEnd:]
+	if len(signature) == 0 {
+		return nil, 0, nil, oops.Errorf("signed session payload missing signature")
+	}
+
+	return config, dateEnd, signature, nil
+}
+
+func verifySignedSessionData(dest *destination.Destination, signedData []byte, sig []byte) error {
+	if dest == nil || dest.KeysAndCert == nil || dest.KeyCertificate == nil {
+		return oops.Errorf("destination missing key certificate")
+	}
+
+	expectedSigSize := dest.KeyCertificate.SignatureSize()
+	if expectedSigSize <= 0 {
+		return oops.Errorf("unknown signing type for destination")
+	}
+	if len(sig) != expectedSigSize {
+		return oops.Errorf("invalid signature size: got %d, expected %d", len(sig), expectedSigSize)
+	}
+
+	spk, err := dest.SigningPublicKey()
+	if err != nil {
+		return oops.Errorf("failed to get destination signing public key: %w", err)
+	}
+	verifier, err := spk.NewVerifier()
+	if err != nil {
+		return oops.Errorf("failed to create verifier: %w", err)
+	}
+	if err := verifier.Verify(signedData, sig); err != nil {
+		return oops.Errorf("signature verification failed: %w", err)
+	}
+
+	return nil
 }
 
 // parseDestination extracts an I2P Destination from the payload.

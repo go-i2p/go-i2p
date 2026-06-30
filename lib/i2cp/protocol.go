@@ -153,13 +153,9 @@ const (
 // Protocol limits as per I2CP specification
 const (
 	// MaxPayloadSize is the maximum size for I2CP message payloads.
-	// i2psnark compatibility: The I2CP wire format uses a 4-byte length field (uint32),
-	// theoretically supporting up to 4 GB. Java I2P routers accept payloads larger than
-	// 64 KB. i2psnark-standalone sends payloads exceeding 65535 bytes for file transfers.
-	// Setting limit to 256 KB (262144 bytes) to match Java I2P behavior while preventing
-	// memory exhaustion attacks. This allows i2psnark to function properly while maintaining
-	// reasonable DoS protection.
-	MaxPayloadSize = 262144 // 256 KB
+	// i2pd authoritative behavior limits I2CP message payloads to 65535 bytes
+	// (I2CP_MAX_MESSAGE_LENGTH in i2pd/libi2pd_client/I2CP.h).
+	MaxPayloadSize = 65535
 
 	// MaxMessageSize is the maximum total I2CP message size including header.
 	// Header per I2CP spec: length(4) + type(1) = 5 bytes

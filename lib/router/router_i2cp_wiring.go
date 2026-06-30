@@ -43,13 +43,13 @@ func (r *Router) startI2CPServer() error {
 // createI2CPServer creates a new I2CP server with the router's configuration.
 func (r *Router) createI2CPServer() (*i2cp.Server, error) {
 	serverConfig := &i2cp.ServerConfig{
-		ListenAddr:        r.cfg.I2CP.Address,
-		Network:           r.cfg.I2CP.Network,
-		MaxSessions:       r.cfg.I2CP.MaxSessions,
-		ReadTimeout:       r.cfg.I2CP.ReadTimeout,
-		WriteTimeout:      r.cfg.I2CP.WriteTimeout,
-		SessionTimeout:    r.cfg.I2CP.SessionTimeout,
-		LeaseSetPublisher: nil, // C1 FIX: Will be set later via SetLeaseSetPublisher after publisher is started
+		ListenAddr:                     r.cfg.I2CP.Address,
+		Network:                        r.cfg.I2CP.Network,
+		MaxSessions:                    r.cfg.I2CP.MaxSessions,
+		ReadTimeout:                    r.cfg.I2CP.ReadTimeout,
+		WriteTimeout:                   r.cfg.I2CP.WriteTimeout,
+		SessionTimeout:                 r.cfg.I2CP.SessionTimeout,
+		LeaseSetPublisher:              nil, // C1 FIX: Will be set later via SetLeaseSetPublisher after publisher is started
 	}
 
 	server, err := i2cp.NewServer(serverConfig)

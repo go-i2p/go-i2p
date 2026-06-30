@@ -132,7 +132,8 @@ func initializeAuthManager(password string) (*AuthManager, error) {
 }
 
 // registerRPCHandlers creates a method registry and registers all RPC handlers.
-// Returns the configured registry with Echo, GetRate, RouterInfo, Authenticate, RouterManager, NetworkSetting, and I2PControl handlers.
+// Returns the configured registry with Echo, GetRate, RouterInfo, Authenticate,
+// RouterManager, NetworkSetting, ClientServicesInfo, and I2PControl handlers.
 func registerRPCHandlers(ctx context.Context, wg *sync.WaitGroup, stats RouterStatsProvider, authManager *AuthManager, cfg *config.I2PControlConfig) *MethodRegistry {
 	registry := NewMethodRegistry()
 
@@ -142,6 +143,7 @@ func registerRPCHandlers(ctx context.Context, wg *sync.WaitGroup, stats RouterSt
 	registry.Register("Authenticate", newAuthenticateHandler(authManager, cfg))
 	registry.Register("RouterManager", NewRouterManagerHandler(ctx, wg, stats.GetRouterControl()))
 	registry.Register("NetworkSetting", NewNetworkSettingHandler(stats))
+	registry.Register("ClientServicesInfo", NewClientServicesInfoHandler())
 	registry.Register("I2PControl", NewI2PControlHandler(authManager, cfg))
 	registry.Register("AdvancedSettings", NewAdvancedSettingsHandler())
 
