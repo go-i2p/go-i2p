@@ -1168,10 +1168,14 @@ func (p *Publisher) sendDatabaseStoreDirect(hash common.Hash, data []byte, dataT
 		"msg_type":       msg.Type(),
 	}).Debug("Sending DatabaseStore directly to floodfill")
 	if dbStore, ok := msg.(*i2np.DatabaseStore); ok {
+		exp := dbStore.Expiration()
 		log.WithFields(logger.Fields{
 			"at":              "sendDatabaseStoreDirect",
 			"data_hash":       logutil.HashPrefixPlain(hash),
 			"floodfill_hash":  logutil.HashPrefixPlain(ffHash),
+			"message_id":      dbStore.MessageID(),
+			"expiration_utc":  exp.UTC().Format(time.RFC3339Nano),
+			"expires_in":      time.Until(exp).String(),
 			"reply_token":     binary.BigEndian.Uint32(dbStore.ReplyToken[:]),
 			"reply_tunnel_id": binary.BigEndian.Uint32(dbStore.ReplyTunnelID[:]),
 			"reply_gateway":   logutil.HashPrefixPlain(dbStore.ReplyGateway),
@@ -1241,6 +1245,21 @@ func (p *Publisher) createTunnelGatewayMessage(hash common.Hash, data []byte, da
 	dbStoreMsg, err := p.createDatabaseStoreMessage(hash, data, dataType)
 	if err != nil {
 		return nil, err
+	}
+	if dbStore, ok := dbStoreMsg.(*i2np.DatabaseStore); ok {
+		exp := dbStore.Expiration()
+		log.WithFields(logger.Fields{
+			"at":              "createTunnelGatewayMessage",
+			"data_hash":       logutil.HashPrefixPlain(hash),
+			"store_type":      dataType,
+			"message_id":      dbStore.MessageID(),
+			"expiration_utc":  exp.UTC().Format(time.RFC3339Nano),
+			"expires_in":      time.Until(exp).String(),
+			"reply_token":     binary.BigEndian.Uint32(dbStore.ReplyToken[:]),
+			"reply_tunnel_id": binary.BigEndian.Uint32(dbStore.ReplyTunnelID[:]),
+			"reply_gateway":   logutil.HashPrefixPlain(dbStore.ReplyGateway),
+			"outbound_tunnel": tunnelID,
+		}).Info("DatabaseStore fields before tunnel wrapping")
 	}
 
 	// Marshal DatabaseStore message for tunnel wrapping
