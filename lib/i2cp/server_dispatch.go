@@ -8,6 +8,7 @@ import (
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/destination"
+	"github.com/go-i2p/common/lease_set2"
 	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
@@ -397,7 +398,16 @@ func (s *Server) handleCreateLeaseSet2(msg *Message, sessionPtr **Session) (*Mes
 	session := *sessionPtr
 	logLeaseSet2Request(session.ID(), len(msg.Payload))
 
-	leaseSetBytes, err := extractLeaseSet2Payload(msg.Payload)
+	// Extract SessionID (first 2 bytes)
+	if len(msg.Payload) < 3 { // SessionID(2) + StoreType(1) minimum
+		return nil, oops.Errorf("CreateLeaseSet2 payload too short: %d bytes (need at least 3 for SessionID+StoreType)", len(msg.Payload))
+	}
+
+	// Parse StoreType (1 byte after SessionID)
+	storeType := msg.Payload[2]
+
+	// Extract LeaseSet2 and private keys from the remaining payload
+	leaseSetBytes, privKeys, err := parseCreateLeaseSet2Payload(msg.Payload[3:], storeType)
 	if err != nil {
 		return nil, err
 	}
@@ -407,14 +417,28 @@ func (s *Server) handleCreateLeaseSet2(msg *Message, sessionPtr **Session) (*Mes
 	}
 
 	log.WithFields(logger.Fields{
-		"at":        "i2cp.Server.handleCreateLeaseSet2",
-		"sessionID": session.ID(),
-		"size":      len(leaseSetBytes),
+		"at":             "i2cp.Server.handleCreateLeaseSet2",
+		"sessionID":      session.ID(),
+		"storeType":      storeType,
+		"leaseSetSize":   len(leaseSetBytes),
+		"numPrivateKeys": len(privKeys),
 	}).Info("leaseset2_received")
 
 	if err := session.ValidateLeaseSet2Data(leaseSetBytes); err != nil {
 		logLeaseSet2ValidationError(session.ID(), err)
 		return nil, oops.Errorf("LeaseSet2 validation failed: %w", err)
+	}
+
+	// Store private keys in session for decryption of inbound messages
+	if len(privKeys) > 0 {
+		if err := session.StorePrivateKeys(privKeys); err != nil {
+			log.WithFields(logger.Fields{
+				"at":        "i2cp.Server.handleCreateLeaseSet2",
+				"sessionID": session.ID(),
+				"error":     err.Error(),
+			}).Warn("failed_to_store_private_keys")
+			// Don't fail on private key storage error; continue with LeaseSet
+		}
 	}
 
 	session.SetCurrentLeaseSet(leaseSetBytes)
@@ -438,8 +462,96 @@ func logLeaseSet2Request(sessionID uint16, payloadSize int) {
 	}).Debug("handling_create_leaseset2")
 }
 
-// extractLeaseSet2Payload strips the 2-byte SessionID prefix from the payload.
+// parseCreateLeaseSet2Payload extracts LeaseSet2 and private keys from the payload.
+// Format per I2CP spec (after SessionID + StoreType are removed):
+//
+//	LeaseSet2: variable length (destination + published + expires + flags + key sections + leases + signature)
+//	NumPrivateKeys: 1 byte
+//	For each private key:
+//	  KeyType: 2 bytes (big endian)
+//	  KeyLen: 2 bytes (big endian)
+//	  KeyData: KeyLen bytes
+func parseCreateLeaseSet2Payload(payload []byte, storeType uint8) ([]byte, map[uint16][]byte, error) {
+	if len(payload) < 400 { // Minimum LeaseSet2 size
+		return nil, nil, oops.Errorf("payload too short for LeaseSet2: %d bytes", len(payload))
+	}
+
+	// Parse LeaseSet2 using the lease_set2 package
+	_, remaining, err := lease_set2.ReadLeaseSet2(payload)
+	if err != nil {
+		return nil, nil, oops.Errorf("invalid LeaseSet2: %w", err)
+	}
+
+	// Get the LeaseSet2 bytes
+	leaseSetBytes := payload[:len(payload)-len(remaining)]
+
+	// Parse private keys from remaining bytes
+	privateKeys := make(map[uint16][]byte)
+
+	if len(remaining) > 0 {
+		// Read NumPrivateKeys (1 byte)
+		if len(remaining) < 1 {
+			return leaseSetBytes, nil, nil // No private keys section
+		}
+
+		numPrivateKeys := remaining[0]
+		offset := 1
+
+		for i := uint8(0); i < numPrivateKeys; i++ {
+			// Check for KeyType (2 bytes) + KeyLen (2 bytes)
+			if offset+4 > len(remaining) {
+				log.WithFields(logger.Fields{
+					"at":           "i2cp.parseCreateLeaseSet2Payload",
+					"index":        i,
+					"offset":       offset,
+					"dataLen":      len(remaining),
+					"expectedSize": offset + 4,
+				}).Warn("truncated_private_key_header")
+				break
+			}
+
+			// Read KeyType (2 bytes, big endian)
+			keyType := binary.BigEndian.Uint16(remaining[offset : offset+2])
+			offset += 2
+
+			// Read KeyLen (2 bytes, big endian)
+			keyLen := binary.BigEndian.Uint16(remaining[offset : offset+2])
+			offset += 2
+
+			// Check if we have enough data for the key
+			if offset+int(keyLen) > len(remaining) {
+				log.WithFields(logger.Fields{
+					"at":      "i2cp.parseCreateLeaseSet2Payload",
+					"index":   i,
+					"keyType": keyType,
+					"keyLen":  keyLen,
+					"offset":  offset,
+					"dataLen": len(remaining),
+				}).Warn("truncated_private_key_data")
+				break
+			}
+
+			// Extract key data
+			keyData := remaining[offset : offset+int(keyLen)]
+			offset += int(keyLen)
+
+			// Store key by type
+			privateKeys[keyType] = keyData
+
+			log.WithFields(logger.Fields{
+				"at":      "i2cp.parseCreateLeaseSet2Payload",
+				"keyType": keyType,
+				"keyLen":  keyLen,
+			}).Debug("parsed_private_key")
+		}
+	}
+
+	return leaseSetBytes, privateKeys, nil
+}
+
+// extractLeaseSet2Payload strips the 2-byte SessionID prefix from the payload (deprecated, use parseCreateLeaseSet2Payload).
 func extractLeaseSet2Payload(payload []byte) ([]byte, error) {
+	// Deprecated: use parseCreateLeaseSet2Payload instead
 	if len(payload) < 2 {
 		return nil, oops.Errorf("CreateLeaseSet2 payload too short: %d bytes (need at least 2 for SessionID)", len(payload))
 	}

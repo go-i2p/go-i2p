@@ -217,6 +217,48 @@ type Session struct {
 	stopOnce    sync.Once      // Ensure cleanup happens only once
 	maintWg     sync.WaitGroup // Track maintenance goroutine
 	maintTicker *time.Ticker   // Ticker for LeaseSet maintenance
+
+	// Client-provided encryption keys from CreateLeaseSet2 (for decrypting inbound messages)
+	clientEncryptionKeys map[uint16][]byte // KeyType -> Private key data
+}
+
+// StorePrivateKeys stores client-provided encryption keys from CreateLeaseSet2.
+// These keys are used to decrypt inbound messages sent to tunnels in this LeaseSet.
+// Maps KeyType to private key data for use in inbound message decryption.
+func (s *Session) StorePrivateKeys(keys map[uint16][]byte) error {
+	if len(keys) == 0 {
+		return nil // No keys to store
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.clientEncryptionKeys == nil {
+		s.clientEncryptionKeys = make(map[uint16][]byte)
+	}
+
+	// Store each key by type
+	for keyType, keyData := range keys {
+		if len(keyData) == 0 {
+			continue // Skip empty keys
+		}
+
+		// Make a copy to avoid holding reference to external buffer
+		keyDataCopy := make([]byte, len(keyData))
+		copy(keyDataCopy, keyData)
+		s.clientEncryptionKeys[keyType] = keyDataCopy
+	}
+
+	return nil
+}
+
+// GetEncryptionPrivateKey retrieves a client-provided encryption private key by type.
+// Returns nil if the key type is not stored.
+func (s *Session) GetEncryptionPrivateKey(keyType uint16) []byte {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return s.clientEncryptionKeys[keyType]
 }
 
 // IncomingMessage represents a message received from the I2P network
