@@ -197,11 +197,22 @@ func resolveUDPAddress(addr *router_address.RouterAddress) (*net.UDPAddr, error)
 }
 
 // resolvePublishedHost returns the best host to publish in the RouterAddress.
-// If the listener is on a private IP and a PeerTest-detected external address
-// is cached in the transport's natStateCache, the external address is returned;
-// otherwise the raw listener host is returned unchanged.
+// If the listener host is not itself publicly routable (RFC1918 private, CGNAT,
+// a special-use range, or an unspecified/wildcard address) and a PeerTest- /
+// NAT-PMP-confirmed external address is cached in the transport's natStateCache,
+// the external address is returned; otherwise the raw listener host is returned
+// unchanged. The substituted host is re-validated by buildSSU2Options, so a
+// cached external that is itself non-public still falls back to a caps-only
+// address rather than leaking a private host.
+//
+// BUG FIX: the previous gate only substituted for ip.IsPrivate() (RFC1918),
+// which silently skipped CGNAT (100.64.0.0/10), special-use ranges, and
+// wildcard binds — so a router behind carrier-grade NAT with a confirmed public
+// external would publish an unreachable caps-only address despite being
+// reachable. Gating on the canonical "not publicly routable" classifier closes
+// that gap.
 func resolvePublishedHost(host string, transport *SSU2Transport) string {
-	if ip := net.ParseIP(host); ip != nil && ip.IsPrivate() {
+	if !isPublicHost(host) {
 		if transport.natStateCache != nil {
 			if cachedExt := transport.natStateCache.getExternal(); cachedExt != "" {
 				return cachedExt

@@ -121,3 +121,50 @@ func TestIsPubliclyRoutableHost(t *testing.T) {
 		}
 	}
 }
+
+func TestIsPubliclyRoutableIP(t *testing.T) {
+	cases := []struct {
+		name string
+		ip   string
+		want bool
+	}{
+		{"public_ipv4", "1.2.3.4", true},
+		{"private_ipv4", "192.168.0.1", false},
+		{"cgnat_ipv4", "100.64.0.1", false},
+		{"testnet_ipv4", "203.0.113.1", false},
+		{"loopback_ipv4", "127.0.0.1", false},
+		{"unspecified_ipv4", "0.0.0.0", false},
+		{"global_ipv6", "2001:db8::1", true},
+		{"ula_ipv6", "fc00::1", false},
+		{"loopback_ipv6", "::1", false},
+		{"linklocal_ipv6", "fe80::1", false},
+		{"unspecified_ipv6", "::", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := IsPubliclyRoutableIP(net.ParseIP(tc.ip)); got != tc.want {
+				t.Errorf("IsPubliclyRoutableIP(%s) = %v, want %v", tc.ip, got, tc.want)
+			}
+		})
+	}
+	// nil input must not panic and returns false.
+	if IsPubliclyRoutableIP(nil) {
+		t.Error("IsPubliclyRoutableIP(nil) = true, want false")
+	}
+}
+
+// TestIsPubliclyRoutableHost_MatchesIP verifies the string and net.IP entry
+// points agree for every IP literal, so callers using either form get the same
+// reachability verdict.
+func TestIsPubliclyRoutableHost_MatchesIP(t *testing.T) {
+	for _, s := range []string{
+		"1.2.3.4", "10.0.0.1", "100.64.0.1", "203.0.113.1",
+		"127.0.0.1", "0.0.0.0", "2001:db8::1", "fc00::1", "::1", "fe80::1",
+	} {
+		host := IsPubliclyRoutableHost(s)
+		ip := IsPubliclyRoutableIP(net.ParseIP(s))
+		if host != ip {
+			t.Errorf("disagreement for %q: host=%v ip=%v", s, host, ip)
+		}
+	}
+}

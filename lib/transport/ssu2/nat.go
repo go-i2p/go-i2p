@@ -1345,11 +1345,12 @@ func (t *SSU2Transport) GetCachedExternalAddr() string {
 
 // DirectPublicExternalAddr returns the locally-determined external address
 // ("ip:port") when this router is bound to — or its host owns — a publicly
-// routable IPv4 address, or "" otherwise. Unlike GetCachedExternalAddr this
-// does not depend on PeerTest having completed: a public-IPv4 host is directly
-// reachable by definition. Callers use it as the authoritative "directly
-// reachable" signal so a public node is never misreported as FIREWALLED or left
-// stuck in TESTING when PeerTest cannot run (e.g. too few SSU2 peers).
+// routable address (IPv4 or IPv6), or "" otherwise. Unlike GetCachedExternalAddr
+// this does not depend on PeerTest having completed: a publicly-addressed host
+// is directly reachable by definition. Callers use it as the authoritative
+// "directly reachable" signal so a public node is never misreported as
+// FIREWALLED or left stuck in TESTING when PeerTest cannot run (e.g. too few
+// SSU2 peers).
 func (t *SSU2Transport) DirectPublicExternalAddr() string {
 	ip, port, ok := t.publicBoundAddress()
 	if !ok {
@@ -1433,16 +1434,17 @@ func (t *SSU2Transport) AllocateRelayTag(addr *net.UDPAddr) (uint32, error) {
 // The goroutine is tracked in the transport WaitGroup and exits cleanly when
 // the transport context is cancelled.
 func (t *SSU2Transport) StartNATDetection(candidates []router_info.RouterInfo, republish func()) {
-	// Public-IP short-circuit: a host bound to a publicly routable IPv4 address
-	// is directly reachable by definition. Seed the terminal DIRECT (NATNone)
-	// classification immediately and skip PeerTest entirely, so reachability does
-	// not depend on having >=2 SSU2 peers or on probes succeeding — and so a
-	// PeerTest timeout can never downgrade a genuinely public node to FIREWALLED.
+	// Public-IP short-circuit: a host bound to (or whose interface owns) a
+	// publicly routable address — IPv4 or IPv6 — is directly reachable by
+	// definition. Seed the terminal DIRECT (NATNone) classification immediately
+	// and skip PeerTest entirely, so reachability does not depend on having >=2
+	// SSU2 peers or on probes succeeding — and so a PeerTest timeout can never
+	// downgrade a genuinely public node to FIREWALLED.
 	if t.seedDirectReachability() {
 		if republish != nil {
 			republish()
 		}
-		t.logger.Info("NAT detection: bound to public IPv4; classified DIRECT, skipping PeerTest")
+		t.logger.Info("NAT detection: bound to a public IP; classified DIRECT, skipping PeerTest")
 		return
 	}
 
@@ -1458,17 +1460,17 @@ func (t *SSU2Transport) StartNATDetection(candidates []router_info.RouterInfo, r
 }
 
 // seedDirectReachability inspects the transport's bound local address and, when
-// it is a publicly routable IPv4, seeds the NAT state cache with a direct
-// (NATNone) classification plus the corresponding external address.
+// it is publicly routable (IPv4 or IPv6), seeds the NAT state cache with a
+// direct (NATNone) classification plus the corresponding external address.
 //
-// This is the public-IP short-circuit: a host with a public, routable IPv4 is
-// deterministically classified "direct" without waiting for — or depending on —
-// SSU2 PeerTest, which can silently fail when too few SSU2 peers are available
-// or when probes are dropped. It is idempotent: it only writes when a public
-// IPv4 is detected and the cache does not already hold the identical direct
-// classification.
+// This is the public-IP short-circuit: a host with a public, routable address
+// is deterministically classified "direct" without waiting for — or depending
+// on — SSU2 PeerTest, which can silently fail when too few SSU2 peers are
+// available or when probes are dropped. It is idempotent: it only writes when a
+// public address is detected and the cache does not already hold the identical
+// direct classification.
 //
-// Returns true when the host is directly reachable via a public IPv4.
+// Returns true when the host is directly reachable via a public address.
 func (t *SSU2Transport) seedDirectReachability() bool {
 	if t.natStateCache == nil {
 		return false
@@ -1486,29 +1488,30 @@ func (t *SSU2Transport) seedDirectReachability() bool {
 	}
 	t.natStateCache.set(ssu2noise.NATNone, ext)
 	t.saveNATState()
-	t.logger.WithField("external", ext).Info("NAT detection: public IPv4 bound locally; classified DIRECT (short-circuit)")
+	t.logger.WithField("external", ext).Info("NAT detection: public IP bound locally; classified DIRECT (short-circuit)")
 	return true
 }
 
-// publicBoundAddress resolves the transport's externally-visible IPv4 address
-// and port when the local bind is itself a public IPv4, or when a wildcard bind
-// (0.0.0.0/::) is backed by a host interface that owns a public IPv4 address.
-// Returns ok=false when no public IPv4 reachability can be established locally.
+// publicBoundAddress resolves the transport's externally-visible address and
+// port when the local bind is itself a publicly routable IP (IPv4 or IPv6), or
+// when a wildcard bind (0.0.0.0/::) is backed by a host interface that owns a
+// publicly routable address. Returns ok=false when no public reachability can
+// be established locally.
 func (t *SSU2Transport) publicBoundAddress() (net.IP, uint16, bool) {
 	ip, port, err := t.localIPPort()
 	if err != nil {
 		return nil, 0, false
 	}
 	if ip.IsUnspecified() {
-		// Wildcard bind: probe interface addresses for a public IPv4.
+		// Wildcard bind: probe interface addresses for a publicly routable IP.
 		if ext := detectExternalIP(); ext != "" {
-			if pip := net.ParseIP(ext); pip != nil && nat.IsPublicRoutableIPv4(pip) {
+			if pip := net.ParseIP(ext); nat.IsPubliclyRoutableIP(pip) {
 				return pip, port, true
 			}
 		}
 		return nil, 0, false
 	}
-	if nat.IsPublicRoutableIPv4(ip) {
+	if nat.IsPubliclyRoutableIP(ip) {
 		return ip, port, true
 	}
 	return nil, 0, false

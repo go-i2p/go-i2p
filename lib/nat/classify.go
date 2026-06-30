@@ -61,13 +61,16 @@ func IsPublicRoutableIPv4(ip net.IP) bool {
 	return !IsSpecialUseIPv4(ip4)
 }
 
-// IsPubliclyRoutableHost reports whether host is an IP literal that is publicly
-// routable and reachable by remote peers. IPv4 literals are classified via
-// IsPublicRoutableIPv4 semantics; IPv6 literals must be global-unicast and
-// non-private. Non-literal hosts (hostnames) and unspecified/loopback/
-// link-local addresses return false.
-func IsPubliclyRoutableHost(host string) bool {
-	ip := net.ParseIP(host)
+// IsPubliclyRoutableIP reports whether ip is a publicly routable address that
+// remote peers can reach directly, for either address family. IPv4 addresses
+// use IsPublicRoutableIPv4 semantics (RFC 1918, CGNAT, and special-use ranges
+// excluded); IPv6 addresses must be global-unicast and non-private (ULA
+// fc00::/7, loopback, link-local, and unspecified excluded).
+//
+// This is the family-agnostic core used by both IsPubliclyRoutableHost (string
+// input) and callers that already hold a net.IP (e.g. the SSU2 public-IP
+// short-circuit), so IPv4 and IPv6 reachability are judged identically.
+func IsPubliclyRoutableIP(ip net.IP) bool {
 	if ip == nil {
 		return false
 	}
@@ -82,4 +85,13 @@ func IsPubliclyRoutableHost(host string) bool {
 		return !IsSpecialUseIPv4(ip4)
 	}
 	return true
+}
+
+// IsPubliclyRoutableHost reports whether host is an IP literal that is publicly
+// routable and reachable by remote peers. IPv4 literals are classified via
+// IsPublicRoutableIPv4 semantics; IPv6 literals must be global-unicast and
+// non-private. Non-literal hosts (hostnames) and unspecified/loopback/
+// link-local addresses return false.
+func IsPubliclyRoutableHost(host string) bool {
+	return IsPubliclyRoutableIP(net.ParseIP(host))
 }
