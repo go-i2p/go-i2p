@@ -402,6 +402,15 @@ func (h *InboundMessageHandler) createControlPlaneHandler() tunnel.MessageHandle
 			}
 		}
 
+		if inner.Type() == i2np.I2NPMessageTypeDeliveryStatus {
+			log.WithFields(logger.Fields{
+				"at":           "createControlPlaneHandler",
+				"message_type": inner.Type(),
+				"message_id":   inner.MessageID(),
+				"message_len":  len(msgBytes),
+			}).Info("control-plane inbound tunnel delivered DeliveryStatus to processor")
+		}
+
 		return proc.ProcessMessage(inner)
 	}
 }

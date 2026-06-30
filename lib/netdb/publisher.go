@@ -560,10 +560,11 @@ func (p *Publisher) PublishRouterInfo(ri router_info.RouterInfo) error {
 		"hash":              hash.String()[:16],
 	}).Debug("RouterInfo compressed for transmission")
 
+	// Live networks can temporarily lack direct transport reachability to one of
+	// the selected floodfills. Requiring only one successful send keeps
+	// publication progressing to ACK validation while still proving at least one
+	// floodfill accepted transport delivery.
 	minSends := 1
-	if len(floodfills) > 1 {
-		minSends = 2
-	}
 	ackTokens, err := p.sendDatabaseStoreMessagesWithMinSuccess(hash, payload, i2np.DatabaseStoreTypeRouterInfo, floodfills, minSends)
 	if err != nil {
 		p.routerInfoSendFail.Add(1)
@@ -1337,6 +1338,23 @@ func (p *Publisher) waitForPublishAckTokens(tokens []uint32, timeout time.Durati
 		case <-p.ctx.Done():
 			return false
 		case <-deadline.C:
+			pendingTokenCount := 0
+			for _, token := range tokens {
+				if token == 0 {
+					continue
+				}
+				if _, ok := p.pendingReplyTokens.Load(token); ok {
+					pendingTokenCount++
+				}
+			}
+			log.WithFields(logger.Fields{
+				"at":                       "waitForPublishAckTokens",
+				"timeout":                  timeout.String(),
+				"candidate_tokens":         len(tokens),
+				"candidate_tokens_pending": pendingTokenCount,
+				"ack_ok_total":             p.ackReplyTokenReceived.Load(),
+				"ack_unexpected_total":     p.ackReplyTokenUnexpected.Load(),
+			}).Info("timed out waiting for DeliveryStatus ACK tokens")
 			return false
 		case <-poll.C:
 			for _, token := range tokens {
@@ -1436,9 +1454,20 @@ func (p *Publisher) selectReplyRoute() ([4]byte, common.Hash, bool) {
 		return [4]byte{}, common.Hash{}, false
 	}
 
-	inbound := inboundPool.SelectTunnel()
-	if inbound == nil {
+	active := inboundPool.GetActiveTunnels()
+	if len(active) == 0 {
 		return [4]byte{}, common.Hash{}, false
+	}
+
+	// Prefer multi-hop inbound tunnels for reply routing. A multi-hop tunnel has
+	// a distinct remote IBGW, which is the canonical destination for
+	// DatabaseStore DeliveryStatus replies from floodfills.
+	inbound := active[0]
+	for _, candidate := range active {
+		if candidate != nil && len(candidate.Hops) > 0 {
+			inbound = candidate
+			break
+		}
 	}
 
 	var replyTunnelID [4]byte
