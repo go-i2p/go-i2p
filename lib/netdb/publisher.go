@@ -1263,13 +1263,6 @@ func (p *Publisher) createTunnelGatewayMessage(hash common.Hash, data []byte, da
 //   - DatabaseStoreTypeMetaLeaseSet (7): For MetaLeaseSet entries (0.9.40+)
 func (p *Publisher) createDatabaseStoreMessage(hash common.Hash, data []byte, dataType byte) (i2np.Message, error) {
 	dbStore := i2np.NewDatabaseStore(hash, data, dataType)
-	if dataType == i2np.DatabaseStoreTypeRouterInfo {
-		// RouterInfo publication may traverse long paths and cross clock-skewed
-		// peers before reaching a floodfill. The BaseI2NP default (60s) is too
-		// tight for live-network publish/ack round-trips and can be dropped as
-		// expired before ACK generation.
-		dbStore.SetExpiration(time.Now().Add(10 * time.Minute))
-	}
 	if replyTunnelID, replyGateway, ok := p.selectReplyRoute(); ok {
 		replyToken, err := generateReplyToken()
 		if err != nil {
