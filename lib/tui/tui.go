@@ -20,11 +20,39 @@ const (
 	ReachabilityHidden ReachabilityState = "Hidden"
 	// ReachabilityFirewalled means the router is behind NAT and is using introducers.
 	ReachabilityFirewalled ReachabilityState = "Firewalled+Introducers"
+	// ReachabilityInboundBlocked means the router has a confirmed external
+	// address and is reachable via introducers / hole-punching, but unsolicited
+	// direct inbound connections are blocked (relay-requiring NAT).
+	ReachabilityInboundBlocked ReachabilityState = "Reachable, inbound blocked"
 	// ReachabilityIPv4 means the router has a publicly reachable IPv4 address.
 	ReachabilityIPv4 ReachabilityState = "Reachable IPv4"
 	// ReachabilityIPv6 means the router has a publicly reachable IPv6 address.
 	ReachabilityIPv6 ReachabilityState = "Reachable IPv6"
 )
+
+// ReachabilityFromNetworkStatus maps an I2PControl i2p.router.net.status code
+// to a ReachabilityState for display. The TUI obtains the status code over the
+// I2PControl JSON-RPC interface, so this is the canonical translation point
+// between the wire protocol and the displayed reachability label.
+//
+// Codes follow lib/i2pcontrol/handlers.go::networkStatusString. All firewalled
+// variants (including symmetric-NAT) map to ReachabilityInboundBlocked: the
+// router is reachable via introducers but cannot accept unsolicited inbound
+// connections.
+func ReachabilityFromNetworkStatus(code int) ReachabilityState {
+	switch code {
+	case 0: // OK — directly reachable
+		return ReachabilityIPv4
+	case 1: // TESTING — not yet connected to any peers
+		return ReachabilityUnknown
+	case 2, 4, 5, 6, 7, 11: // FIREWALLED variants / symmetric NAT
+		return ReachabilityInboundBlocked
+	case 3: // HIDDEN
+		return ReachabilityHidden
+	default:
+		return ReachabilityUnknown
+	}
+}
 
 // ReachabilityStatusMsg is a tea.Msg that updates the displayed reachability state.
 type ReachabilityStatusMsg struct {
@@ -134,11 +162,12 @@ var (
 				Bold(true)
 
 	reachabilityColors = map[ReachabilityState]string{
-		ReachabilityUnknown:    "240", // grey
-		ReachabilityHidden:     "214", // orange
-		ReachabilityFirewalled: "220", // yellow
-		ReachabilityIPv4:       "82",  // green
-		ReachabilityIPv6:       "39",  // cyan
+		ReachabilityUnknown:        "240", // grey
+		ReachabilityHidden:         "214", // orange
+		ReachabilityFirewalled:     "220", // yellow
+		ReachabilityInboundBlocked: "208", // amber
+		ReachabilityIPv4:           "82",  // green
+		ReachabilityIPv6:           "39",  // cyan
 	}
 )
 

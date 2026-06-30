@@ -249,6 +249,7 @@ func NewRouterInfoHandler(stats RouterStatsProvider) *RouterInfoHandler {
 func (h *RouterInfoHandler) buildAvailableFields() map[string]interface{} {
 	routerStats := h.stats.GetRouterInfo()
 	bandwidthStats := h.stats.GetBandwidthStats()
+	netStatus := h.stats.GetNetworkStatus()
 
 	fields := map[string]interface{}{
 		"i2p.router.uptime":                    routerStats.Uptime,
@@ -262,11 +263,17 @@ func (h *RouterInfoHandler) buildAvailableFields() map[string]interface{} {
 		"i2p.router.netdb.isreseeding":         routerStats.IsReseeding,
 		"i2p.router.net.tunnels.inbound":       routerStats.InboundTunnels,
 		"i2p.router.net.tunnels.outbound":      routerStats.OutboundTunnels,
-		"i2p.router.net.status":                h.stats.GetNetworkStatus(),
-		"i2p.router.net.bw.inbound.1s":         bandwidthStats.InboundRate1s,
-		"i2p.router.net.bw.inbound.15s":        bandwidthStats.InboundRate,
-		"i2p.router.net.bw.outbound.1s":        bandwidthStats.OutboundRate1s,
-		"i2p.router.net.bw.outbound.15s":       bandwidthStats.OutboundRate,
+		"i2p.router.net.status":                netStatus,
+		// Human-readable network status name (non-standard I2PControl extension).
+		// Exposes the specific reachability variant — including each FIREWALLED
+		// variant such as FIREWALLED and ERROR_SYMMETRIC_NAT — so clients can
+		// render a granular reachability label without re-deriving it from the
+		// numeric code.
+		"i2p.router.net.status.string":   networkStatusString(netStatus),
+		"i2p.router.net.bw.inbound.1s":   bandwidthStats.InboundRate1s,
+		"i2p.router.net.bw.inbound.15s":  bandwidthStats.InboundRate,
+		"i2p.router.net.bw.outbound.1s":  bandwidthStats.OutboundRate1s,
+		"i2p.router.net.bw.outbound.15s": bandwidthStats.OutboundRate,
 	}
 
 	// Add local router identity hash (non-standard I2PControl extension for i2ptui)
@@ -299,6 +306,7 @@ func selectRequestedOrDefaultFields(req, availableFields map[string]interface{})
 		result["i2p.router.net.tunnels.participating"] = availableFields["i2p.router.net.tunnels.participating"]
 		result["i2p.router.netdb.knownpeers"] = availableFields["i2p.router.netdb.knownpeers"]
 		result["i2p.router.net.status"] = availableFields["i2p.router.net.status"]
+		result["i2p.router.net.status.string"] = availableFields["i2p.router.net.status.string"]
 	}
 
 	return result

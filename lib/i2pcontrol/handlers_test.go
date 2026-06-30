@@ -161,6 +161,77 @@ func TestRouterInfoHandler_NotRunning(t *testing.T) {
 	assert.Equal(t, 8, resultMap["i2p.router.net.status"])
 }
 
+// TestNetworkStatusString verifies every I2PControl numeric status code maps to
+// its distinct human-readable name, so clients receive an individual string for
+// each FIREWALLED variant rather than a single coarse label.
+func TestNetworkStatusString(t *testing.T) {
+	cases := []struct {
+		code int
+		want string
+	}{
+		{0, "OK"},
+		{1, "TESTING"},
+		{2, "FIREWALLED"},
+		{3, "HIDDEN"},
+		{4, "WARN_FIREWALLED_AND_FAST"},
+		{5, "WARN_FIREWALLED_AND_FLOODFILL"},
+		{6, "WARN_FIREWALLED_WITH_INBOUND_TCP"},
+		{7, "WARN_FIREWALLED_WITH_UDP_DISABLED"},
+		{8, "ERROR_I2CP"},
+		{9, "ERROR_CLOCK_SKEW"},
+		{10, "ERROR_PRIVATE_TCP_ADDRESS"},
+		{11, "ERROR_SYMMETRIC_NAT"},
+		{12, "ERROR_UDP_PORT_IN_USE"},
+		{13, "ERROR_NO_ACTIVE_PEERS_CHECK_CONNECTION_AND_FIREWALL"},
+		{14, "ERROR_UDP_DISABLED_AND_TCP_UNSET"},
+		{99, "UNKNOWN"},
+	}
+	for _, c := range cases {
+		assert.Equalf(t, c.want, networkStatusString(c.code), "code %d", c.code)
+	}
+}
+
+// TestRouterInfoHandler_NetStatusStringField verifies the I2PControl interface
+// exposes a granular human-readable reachability string for every FIREWALLED
+// variant via the i2p.router.net.status.string field, alongside the numeric
+// i2p.router.net.status code.
+func TestRouterInfoHandler_NetStatusStringField(t *testing.T) {
+	cases := []struct {
+		name       string
+		code       int
+		wantString string
+	}{
+		{"ok", 0, "OK"},
+		{"firewalled", 2, "FIREWALLED"},
+		{"hidden", 3, "HIDDEN"},
+		{"symmetric_nat", 11, "ERROR_SYMMETRIC_NAT"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			router := &mockRouterWithNetworkStatus{
+				mockRouterAccess: mockRouterAccess{running: true},
+				netStatus:        c.code,
+			}
+			handler := NewRouterInfoHandler(NewRouterStatsProvider(router, "0.1.0-test"))
+			resultMap := invokeHandler(t, handler, `{
+				"i2p.router.net.status": null,
+				"i2p.router.net.status.string": null
+			}`)
+
+			assert.Equal(t, c.code, resultMap["i2p.router.net.status"])
+			assert.Equal(t, c.wantString, resultMap["i2p.router.net.status.string"])
+		})
+	}
+}
+
+// TestRouterInfoHandler_NetStatusStringDefault verifies the granular status
+// string is included in the default RouterInfo field set.
+func TestRouterInfoHandler_NetStatusStringDefault(t *testing.T) {
+	handler := NewRouterInfoHandler(newStatsHandler(true, "0.1.0"))
+	resultMap := invokeHandler(t, handler, `{}`)
+	assert.Contains(t, resultMap, "i2p.router.net.status.string")
+}
+
 func TestRouterInfoHandler_InvalidJSON(t *testing.T) {
 	handler := NewRouterInfoHandler(newStatsHandler(true, "0.1.0"))
 

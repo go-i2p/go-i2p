@@ -1290,6 +1290,49 @@ func (t *SSU2Transport) GetCachedNATType() ssu2noise.NATType {
 	return natType
 }
 
+// IsInboundBlocked reports whether the most recent NAT detection concluded that
+// unsolicited inbound connections are blocked, i.e. the router is reachable
+// only via introducers / hole-punching (restricted, port-restricted, or
+// symmetric NAT). Returns false when the NAT type is unknown or indicates
+// direct reachability (no NAT / full-cone), so callers do not misreport a
+// directly-reachable or not-yet-tested router as inbound-blocked.
+func (t *SSU2Transport) IsInboundBlocked() bool {
+	return t.InboundBlockedStatusCode() != 0
+}
+
+// InboundBlockedStatusCode maps the most recent NAT detection result to the
+// I2PControl network-status code that most specifically describes how inbound
+// connectivity is blocked, giving callers a granular view of the firewalled
+// state rather than a single coarse "firewalled" verdict:
+//
+//	11 (ERROR_SYMMETRIC_NAT) — behind a symmetric NAT; per-destination port
+//	   mapping prevents introducer-assisted inbound connections from working
+//	   reliably.
+//	 2 (FIREWALLED)          — restricted or port-restricted NAT; reachable via
+//	   introducers / hole-punching but not by unsolicited direct inbound.
+//	 0                       — inbound is not blocked: NAT type is unknown
+//	   (not yet tested) or indicates direct reachability (no NAT / full-cone).
+//
+// Returning 0 for the unknown/direct cases ensures a directly-reachable or
+// not-yet-tested router is never misreported as inbound-blocked.
+func (t *SSU2Transport) InboundBlockedStatusCode() int {
+	if t.natStateCache == nil {
+		return 0
+	}
+	natType, valid := t.natStateCache.get()
+	if !valid {
+		return 0
+	}
+	switch {
+	case ssu2noise.IsSymmetricNAT(natType):
+		return 11 // ERROR_SYMMETRIC_NAT
+	case ssu2noise.RequiresRelay(natType) || natType == ssu2noise.NATRestricted:
+		return 2 // FIREWALLED
+	default:
+		return 0
+	}
+}
+
 // GetCachedExternalAddr returns the external address string confirmed by
 // PeerTest observations (or by NAT-PMP/UPnP mapping). Returns "" when no
 // confirmed external address is available yet.
@@ -1628,19 +1671,44 @@ func (t *SSU2Transport) checkPeerTestComplete(nonce uint32, candidates []router_
 	t.natStateCache.set(natType, extStr)
 	t.saveNATState()
 
-	if natType == ssu2noise.NATRestricted || natType == ssu2noise.NATSymmetric {
+	switch {
+	case ssu2noise.RequiresRelay(natType) || natType == ssu2noise.NATRestricted:
+		// Relay/hole-punch required (restricted, port-restricted, or symmetric
+		// NAT): register introducers so peers can reach us via them.
 		t.registerIntroducers(candidates, republish)
-	} else if natType == ssu2noise.NATCone && extStr != "" && republish != nil {
-		// Full-cone NAT with a detected external address: republish immediately
-		// so the correct public IP is advertised without waiting for the next
-		// periodic republish interval.
+	case ssu2noise.HasPublicIP(natType) && extStr != "" && republish != nil:
+		// Directly reachable (no NAT / full-cone NAT) with a detected external
+		// address: republish immediately so the correct public IP is advertised
+		// without waiting for the next periodic republish interval. RC-2 fix:
+		// previously NATNone fell through here and the 'R' cap was never set
+		// until the slow reachability loop ran.
 		republish()
 	}
 	return true
 }
 
 // classifyNATType determines the NAT type from a completed test.
+//
+// RC-1/RC-5 fix: the authoritative classification is the NATType the
+// PeerTestManager already computed (via CompleteTest) and stored on the test.
+// The previous implementation reconstructed a TestResult that omitted the
+// DirectProbeSuccess/RelayedProbeSuccess/*Consistent fields that
+// DetermineNATType keys on, so every completed test collapsed to NATUnknown.
+// We trust test.NATType when it is a known type and only fall back to
+// re-deriving from the full stored TestResult (which retains the probe fields)
+// when the test left the type unresolved — keeping this path in agreement with
+// GetNATType so the two classifiers cannot diverge.
 func (t *SSU2Transport) classifyNATType(test *ssu2noise.PeerTest) ssu2noise.NATType {
+	if test.NATType != ssu2noise.NATUnknown {
+		return test.NATType
+	}
+	// Fall back to the full stored result, which preserves the probe-success
+	// flags DetermineNATType requires.
+	if t.peerTestManager != nil {
+		if result := t.peerTestManager.GetResult(test.ExternalAddr); result != nil {
+			return ssu2noise.DetermineNATType(result)
+		}
+	}
 	return ssu2noise.DetermineNATType(&ssu2noise.TestResult{
 		ExternalAddr: test.ExternalAddr,
 		Reachable:    test.Reachable,

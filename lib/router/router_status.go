@@ -92,11 +92,14 @@ func (r *Router) GetSSU2Addr() net.Addr {
 // GetNetworkStatus returns the I2PControl network status code.
 // Status codes:
 //
-//	0  = OK          (running, reachable confirmed external address)
-//	1  = TESTING     (not yet connected to any peers)
-//	2  = FIREWALLED  (running, has peers, but no confirmed external address)
-//	3  = HIDDEN      (router is in hidden mode by configuration)
-//	8  = ERROR_I2CP  (router not running)
+//	0  = OK                  (running, directly reachable with a confirmed external address)
+//	1  = TESTING             (not yet connected to any peers)
+//	2  = FIREWALLED          (inbound blocked: no confirmed external address, or
+//	                          reachable only via introducers behind a restricted /
+//	                          port-restricted NAT — "reachable but inbound blocked")
+//	3  = HIDDEN              (router is in hidden mode by configuration)
+//	8  = ERROR_I2CP          (router not running)
+//	11 = ERROR_SYMMETRIC_NAT (reachable only via introducers behind a symmetric NAT)
 func (r *Router) GetNetworkStatus() int {
 	if !r.IsRunning() {
 		return 8 // ERROR_I2CP
@@ -113,5 +116,27 @@ func (r *Router) GetNetworkStatus() int {
 	if r.collectBestExternalAddr() == "" {
 		return 2 // FIREWALLED
 	}
+	// We have a confirmed external address. If NAT detection concluded that
+	// unsolicited inbound connections are blocked, report the specific
+	// firewalled variant (FIREWALLED, or ERROR_SYMMETRIC_NAT for symmetric NAT)
+	// rather than OK. Without this guard a firewalled router with a
+	// PeerTest-confirmed external address misreports as fully reachable.
+	if code := r.inboundBlockedStatusCode(); code != 0 {
+		return code
+	}
 	return 0 // OK
+}
+
+// inboundBlockedStatusCode returns the I2PControl status code that describes how
+// NAT detection found inbound connectivity to be blocked (2 = FIREWALLED,
+// 11 = ERROR_SYMMETRIC_NAT), or 0 when SSU2 is unavailable or NAT detection has
+// not (yet) found a relay-requiring NAT. Returning 0 in the unavailable /
+// not-yet-tested / directly-reachable cases ensures such routers are never
+// misreported as inbound-blocked.
+func (r *Router) inboundBlockedStatusCode() int {
+	ssu2Transport := r.getSSU2Transport()
+	if ssu2Transport == nil {
+		return 0
+	}
+	return ssu2Transport.InboundBlockedStatusCode()
 }

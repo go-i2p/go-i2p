@@ -33,6 +33,7 @@ func TestUpdate_AllReachabilityStates(t *testing.T) {
 		ReachabilityUnknown,
 		ReachabilityHidden,
 		ReachabilityFirewalled,
+		ReachabilityInboundBlocked,
 		ReachabilityIPv4,
 		ReachabilityIPv6,
 	}
@@ -43,6 +44,41 @@ func TestUpdate_AllReachabilityStates(t *testing.T) {
 		require.True(t, ok, "state: %s", state)
 		assert.Equal(t, state, wm.reachabilityStatus, "state: %s", state)
 	}
+}
+
+// TestReachabilityFromNetworkStatus verifies the I2PControl net.status code is
+// translated to the correct reachability label, with every FIREWALLED variant
+// (including symmetric NAT, code 11) mapping to the inbound-blocked state.
+func TestReachabilityFromNetworkStatus(t *testing.T) {
+	cases := []struct {
+		code int
+		want ReachabilityState
+	}{
+		{0, ReachabilityIPv4},            // OK
+		{1, ReachabilityUnknown},         // TESTING
+		{2, ReachabilityInboundBlocked},  // FIREWALLED
+		{3, ReachabilityHidden},          // HIDDEN
+		{4, ReachabilityInboundBlocked},  // WARN_FIREWALLED_AND_FAST
+		{5, ReachabilityInboundBlocked},  // WARN_FIREWALLED_AND_FLOODFILL
+		{6, ReachabilityInboundBlocked},  // WARN_FIREWALLED_WITH_INBOUND_TCP
+		{7, ReachabilityInboundBlocked},  // WARN_FIREWALLED_WITH_UDP_DISABLED
+		{11, ReachabilityInboundBlocked}, // ERROR_SYMMETRIC_NAT
+		{8, ReachabilityUnknown},         // ERROR_I2CP
+		{99, ReachabilityUnknown},        // out of range
+	}
+	for _, c := range cases {
+		assert.Equalf(t, c.want, ReachabilityFromNetworkStatus(c.code), "code %d", c.code)
+	}
+}
+
+// TestRenderReachabilityStatus_InboundBlocked verifies the inbound-blocked state
+// renders its distinct label in the status line.
+func TestRenderReachabilityStatus_InboundBlocked(t *testing.T) {
+	m := New("pass", "127.0.0.1:7650")
+	m.reachabilityStatus = ReachabilityInboundBlocked
+
+	line := m.renderReachabilityStatus()
+	assert.True(t, strings.Contains(line, "Reachable, inbound blocked"), "status line should contain inbound-blocked label: %q", line)
 }
 
 // TestRenderReachabilityStatus_ContainsState verifies the status line includes

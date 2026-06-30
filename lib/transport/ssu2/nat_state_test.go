@@ -181,7 +181,67 @@ func TestNatState_GetExternal_Expired(t *testing.T) {
 	assert.Equal(t, "", ns.getExternal())
 }
 
-// ---- D5 tests: PeerTest aggregator confirmation logic -------------------
+// TestInboundBlockedStatusCode verifies that the SSU2 transport maps each NAT
+// type to the correct granular I2PControl status code: symmetric NAT to
+// ERROR_SYMMETRIC_NAT (11), other relay-requiring / restricted NATs to
+// FIREWALLED (2), and directly-reachable or unknown NAT types to 0 (not
+// blocked). This is the source of the granular FIREWALLED variant reported over
+// I2PControl.
+func TestInboundBlockedStatusCode(t *testing.T) {
+	cases := []struct {
+		name     string
+		natType  ssu2noise.NATType
+		wantCode int
+		wantBool bool
+	}{
+		{"symmetric", ssu2noise.NATSymmetric, 11, true},
+		{"port_restricted", ssu2noise.NATPortRestricted, 2, true},
+		{"restricted", ssu2noise.NATRestricted, 2, true},
+		{"cone", ssu2noise.NATCone, 0, false},
+		{"none", ssu2noise.NATNone, 0, false},
+		{"unknown", ssu2noise.NATUnknown, 0, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			tr := &SSU2Transport{
+				natStateCache: &natState{},
+				logger:        testLogger(),
+			}
+			tr.natStateCache.set(c.natType, "203.0.113.5:1234")
+
+			assert.Equal(t, c.wantCode, tr.InboundBlockedStatusCode())
+			assert.Equal(t, c.wantBool, tr.IsInboundBlocked())
+		})
+	}
+}
+
+// TestInboundBlockedStatusCode_NoCache verifies that an SSU2 transport with no
+// NAT cache reports not-blocked (code 0), so a not-yet-initialized transport is
+// never misreported as firewalled.
+func TestInboundBlockedStatusCode_NoCache(t *testing.T) {
+	tr := &SSU2Transport{logger: testLogger()}
+	assert.Equal(t, 0, tr.InboundBlockedStatusCode())
+	assert.False(t, tr.IsInboundBlocked())
+}
+
+// TestInboundBlockedStatusCode_Expired verifies that an expired NAT result is
+// treated as not-blocked, since stale firewalled state must not linger past the
+// detection TTL.
+func TestInboundBlockedStatusCode_Expired(t *testing.T) {
+	tr := &SSU2Transport{
+		natStateCache: &natState{},
+		logger:        testLogger(),
+	}
+	tr.natStateCache.set(ssu2noise.NATSymmetric, "203.0.113.5:1234")
+	tr.natStateCache.mu.Lock()
+	tr.natStateCache.updated = time.Now().Add(-natResultTTL - time.Second)
+	tr.natStateCache.mu.Unlock()
+
+	assert.Equal(t, 0, tr.InboundBlockedStatusCode())
+	assert.False(t, tr.IsInboundBlocked())
+}
+
+
 
 // TestRecordObservation_ConfirmsAfterThreshold verifies that recordObservation
 // returns a confirmed address only once the peerTestConfirmThreshold is met.
