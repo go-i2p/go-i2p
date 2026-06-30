@@ -829,12 +829,49 @@ func (db *StdNetDB) decompressAndParseRouterInfo(data []byte) (router_info.Route
 }
 
 // validateRouterInfo verifies hash and signature of RouterInfo.
+// expectedNetID is the I2P network identifier go-i2p participates in. i2pd's
+// production network uses netID 2; a RouterInfo advertising a different (or no)
+// netID belongs to another network and is rejected, matching i2pd which marks
+// such routers unreachable. Keep this in sync with the netId option set on the
+// local RouterInfo.
+const expectedNetID = "2"
+
 func (db *StdNetDB) validateRouterInfo(key common.Hash, ri router_info.RouterInfo) error {
 	if err := verifyRouterInfoHash(key, ri); err != nil {
 		return err
 	}
 
-	return verifyRouterInfoSignature(ri)
+	if err := verifyRouterInfoSignature(ri); err != nil {
+		return err
+	}
+
+	return verifyRouterInfoNetwork(ri)
+}
+
+// verifyRouterInfoNetwork rejects RouterInfos that omit the netId or router.version
+// properties, or that advertise a netId for a different I2P network. This mirrors
+// i2pd's RouterInfo parsing, which marks a router unreachable when netId is absent,
+// the netId does not match the local network, or the router version is missing.
+func verifyRouterInfoNetwork(ri router_info.RouterInfo) error {
+	options := ri.Options()
+	opts, err := options.ToGoMap()
+	if err != nil {
+		return oops.Errorf("failed to read RouterInfo options: %w", err)
+	}
+
+	netID, ok := opts["netId"]
+	if !ok || netID == "" {
+		return oops.Errorf("RouterInfo missing netId property")
+	}
+	if netID != expectedNetID {
+		return oops.Errorf("RouterInfo netId %q does not match network %q", netID, expectedNetID)
+	}
+
+	if version, ok := opts["router.version"]; !ok || version == "" {
+		return oops.Errorf("RouterInfo missing router.version property")
+	}
+
+	return nil
 }
 
 func (db *StdNetDB) admitRouterInfoIntroduction(key common.Hash, source *common.Hash) error {
@@ -1295,25 +1332,34 @@ func (db *StdNetDB) loadLeaseSetEntryFromFile(filePath string) (*Entry, error) {
 	return entry, nil
 }
 
+// leaseSetEndDateThreshold mirrors i2pd's LEASE_ENDDATE_THRESHOLD (51s). A LeaseSet
+// within this window of its nominal expiration is treated as already expired: the
+// tunnels it advertises need lead time to be rebuilt, so leases this close to expiry
+// are no longer usable. Dropping them early matches i2pd and avoids handing out
+// about-to-expire leases.
+const leaseSetEndDateThreshold = 51 * time.Second
+
 // isLeaseSetEntryExpired checks whether a LeaseSet entry has already expired.
 func (db *StdNetDB) isLeaseSetEntryExpired(entry *Entry) bool {
-	now := time.Now()
+	// Compare against a cutoff shifted forward by the end-date threshold so that a
+	// LeaseSet is considered expired once now > expiration - leaseSetEndDateThreshold.
+	cutoff := time.Now().Add(leaseSetEndDateThreshold)
 
 	if entry.LeaseSet != nil {
 		exp, err := entry.LeaseSet.NewestExpiration()
-		if err == nil && now.After(exp.Time()) {
+		if err == nil && cutoff.After(exp.Time()) {
 			return true
 		}
 		return false
 	}
 	if entry.LeaseSet2 != nil {
-		return now.After(entry.LeaseSet2.ExpirationTime())
+		return cutoff.After(entry.LeaseSet2.ExpirationTime())
 	}
 	if entry.EncryptedLeaseSet != nil {
-		return now.After(entry.EncryptedLeaseSet.ExpirationTime())
+		return cutoff.After(entry.EncryptedLeaseSet.ExpirationTime())
 	}
 	if entry.MetaLeaseSet != nil {
-		return now.After(entry.MetaLeaseSet.ExpirationTime())
+		return cutoff.After(entry.MetaLeaseSet.ExpirationTime())
 	}
 	// Unknown type — treat as expired
 	return true

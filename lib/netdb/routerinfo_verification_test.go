@@ -5,6 +5,7 @@ import (
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
+	"github.com/go-i2p/go-i2p/lib/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -78,4 +79,42 @@ func TestStoreRouterInfo_StillRejectsHashMismatch(t *testing.T) {
 
 	err := db.StoreRouterInfoFromMessage(testHash, testData, 0)
 	assert.Error(t, err, "should fail at parse or hash check")
+}
+
+// TestVerifyRouterInfoNetwork_AcceptsValid verifies a well-formed RouterInfo
+// carrying netId=2 and a router.version passes network validation.
+func TestVerifyRouterInfoNetwork_AcceptsValid(t *testing.T) {
+	ri := testutil.CreateSignedTestRouterInfo(t, nil, nil)
+	require.NotNil(t, ri)
+	assert.NoError(t, verifyRouterInfoNetwork(*ri))
+}
+
+// TestVerifyRouterInfoNetwork_RejectsWrongNetID verifies a RouterInfo advertising
+// a netId for a different network is rejected, matching i2pd.
+func TestVerifyRouterInfoNetwork_RejectsWrongNetID(t *testing.T) {
+	ri := testutil.CreateSignedTestRouterInfo(t, map[string]string{"netId": "42"}, nil)
+	require.NotNil(t, ri)
+	err := verifyRouterInfoNetwork(*ri)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "netId")
+}
+
+// TestVerifyRouterInfoNetwork_RejectsMissingNetID verifies a RouterInfo without a
+// netId value is rejected.
+func TestVerifyRouterInfoNetwork_RejectsMissingNetID(t *testing.T) {
+	ri := testutil.CreateSignedTestRouterInfo(t, map[string]string{"netId": ""}, nil)
+	require.NotNil(t, ri)
+	err := verifyRouterInfoNetwork(*ri)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "netId")
+}
+
+// TestVerifyRouterInfoNetwork_RejectsMissingVersion verifies a RouterInfo without a
+// router.version value is rejected.
+func TestVerifyRouterInfoNetwork_RejectsMissingVersion(t *testing.T) {
+	ri := testutil.CreateSignedTestRouterInfo(t, map[string]string{"router.version": ""}, nil)
+	require.NotNil(t, ri)
+	err := verifyRouterInfoNetwork(*ri)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "router.version")
 }

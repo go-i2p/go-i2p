@@ -104,6 +104,12 @@ type KademliaResolver struct {
 	ourHash common.Hash
 	// response handler for correlating responses
 	responseHandler *LookupResponseHandler
+	// exploration marks this resolver as performing NetDB exploration. When set,
+	// queryPeer sends DatabaseLookup messages with the exploration lookup type so
+	// floodfills return previously-unknown routers (matching i2pd's exploratory
+	// lookups) instead of treating the request as a direct RouterInfo lookup.
+	// Guarded by mu like transport/ourHash.
+	exploration bool
 }
 
 // peerDistance represents a peer with its calculated XOR distance
@@ -581,11 +587,12 @@ func (kr *KademliaResolver) queryPeer(ctx context.Context, peer, target common.H
 		"target": logutil.HashPrefixPlain(target),
 	}).Debug("Querying peer for RouterInfo")
 
-	// Snapshot transport and ourHash under read lock to avoid races
-	// with SetTransport / SetOurHash called from another goroutine.
+	// Snapshot transport, ourHash and exploration under read lock to avoid races
+	// with SetTransport / SetOurHash / SetExploration called from another goroutine.
 	kr.mu.RLock()
 	transport := kr.transport
 	ourHash := kr.ourHash
+	exploration := kr.exploration
 	kr.mu.RUnlock()
 
 	// Check if transport is configured
@@ -612,9 +619,15 @@ func (kr *KademliaResolver) queryPeer(ctx context.Context, peer, target common.H
 		return nil, oops.Errorf("cannot query peer: our router hash is not set")
 	}
 
-	// Use RouterInfo lookup semantics so peers may return the requested RI
-	// directly when they have it, while still allowing search-reply fallback.
-	lookup := i2np.NewDatabaseLookup(target, fromHash, i2np.DatabaseLookupFlagTypeRI, nil)
+	// Choose the lookup type: exploration lookups ask floodfills for routers we
+	// don't yet know about, while normal lookups use RouterInfo semantics so peers
+	// may return the requested RI directly when they have it (with search-reply
+	// fallback otherwise).
+	lookupType := i2np.DatabaseLookupFlagTypeRI
+	if exploration {
+		lookupType = i2np.DatabaseLookupFlagTypeExploration
+	}
+	lookup := i2np.NewDatabaseLookup(target, fromHash, lookupType, nil)
 
 	// Send the lookup and wait for response
 	responseData, msgType, err := transport.SendDatabaseLookup(ctx, *peerRI, lookup)

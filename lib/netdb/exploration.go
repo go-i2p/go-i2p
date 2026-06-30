@@ -301,6 +301,10 @@ func (e *Explorer) performExploratoryLookup(index int, lookupHash common.Hash) e
 	resolver := e.cachedResolver
 	if resolver == nil && e.transport != nil {
 		resolver = NewKademliaResolverWithTransport(e.db, e.pool, e.transport, e.ourHash)
+		// Mark the resolver as exploratory so its DatabaseLookup messages use the
+		// exploration lookup type, prompting floodfills to return routers we don't
+		// yet know about rather than treating the random hash as a direct RI lookup.
+		resolver.SetExploration(true)
 		e.cachedResolver = resolver
 	}
 	e.fieldMu.Unlock()

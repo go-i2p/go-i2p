@@ -101,8 +101,10 @@ func CreateSignedTestRouterInfo(tb testing.TB, options map[string]string, addrCf
 	routerAddr, err := router_address.NewRouterAddress(addrCfg.Cost, addrCfg.Expiration, addrCfg.Transport, addrCfg.Options)
 	require.NoError(tb, err, "Failed to create router address")
 
-	// Merge default options with provided options
-	mergedOptions := map[string]string{"router.version": "0.9.64"}
+	// Merge default options with provided options. Real RouterInfos always carry
+	// both netId and router.version; include them by default so fixtures pass the
+	// same network validation a production router applies. Callers may override.
+	mergedOptions := map[string]string{"router.version": "0.9.64", "netId": "2"}
 	for k, v := range options {
 		mergedOptions[k] = v
 	}

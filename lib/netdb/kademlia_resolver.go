@@ -83,6 +83,21 @@ func (kr *KademliaResolver) SetOurHash(hash common.Hash) {
 	}).Debug("our router hash set")
 }
 
+// SetExploration marks this resolver as performing NetDB exploration. When enabled,
+// remote lookups are sent with the exploration lookup type so floodfills return
+// routers we don't yet know about, matching i2pd's exploratory DatabaseLookup
+// behavior rather than a direct RouterInfo lookup.
+func (kr *KademliaResolver) SetExploration(exploration bool) {
+	kr.mu.Lock()
+	kr.exploration = exploration
+	kr.mu.Unlock()
+	log.WithFields(logger.Fields{
+		"at":          "KademliaResolver.SetExploration",
+		"reason":      "exploration_configured",
+		"exploration": exploration,
+	}).Debug("exploration mode set")
+}
+
 // GetResponseHandler returns the response handler for registering incoming responses.
 // This should be called by the message processor to deliver DatabaseStore and
 // DatabaseSearchReply messages to waiting lookups.
