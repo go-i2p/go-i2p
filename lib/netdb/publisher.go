@@ -114,6 +114,9 @@ type Publisher struct {
 	// pendingReplyTokens tracks outstanding DatabaseStore reply tokens awaiting
 	// DeliveryStatus acknowledgements from floodfills.
 	pendingReplyTokens sync.Map // map[uint32]time.Time
+	// ackedReplyTokens tracks recently acknowledged reply tokens so publication
+	// attempts can wait on their own tokens instead of a global ack counter.
+	ackedReplyTokens sync.Map // map[uint32]time.Time
 }
 
 type publisherLoopSpec struct {
@@ -557,8 +560,12 @@ func (p *Publisher) PublishRouterInfo(ri router_info.RouterInfo) error {
 		"hash":              hash.String()[:16],
 	}).Debug("RouterInfo compressed for transmission")
 
-	ackBefore := p.ackReplyTokenReceived.Load()
-	if err := p.sendDatabaseStoreMessagesAtLeastOne(hash, payload, i2np.DatabaseStoreTypeRouterInfo, floodfills); err != nil {
+	minSends := 1
+	if len(floodfills) > 1 {
+		minSends = 2
+	}
+	ackTokens, err := p.sendDatabaseStoreMessagesWithMinSuccess(hash, payload, i2np.DatabaseStoreTypeRouterInfo, floodfills, minSends)
+	if err != nil {
 		p.routerInfoSendFail.Add(1)
 		p.routerInfoPublishFail.Add(1)
 		return err
@@ -568,7 +575,7 @@ func (p *Publisher) PublishRouterInfo(ri router_info.RouterInfo) error {
 	// Wait for a DeliveryStatus ACK from at least one floodfill. A matching ACK
 	// is proof the floodfill accepted and stored the DatabaseStore message.
 	// Without an ACK the DSM was silently dropped or rejected by all floodfills.
-	if p.waitForPublishAck(ackBefore, p.ackTimeout) {
+	if p.waitForPublishAckTokens(ackTokens, p.ackTimeout) {
 		p.routerInfoPublishSuccess.Add(1)
 		log.WithFields(logger.Fields{
 			"at":   "PublishRouterInfo",
@@ -579,6 +586,77 @@ func (p *Publisher) PublishRouterInfo(ri router_info.RouterInfo) error {
 
 	p.routerInfoPublishFail.Add(1)
 	return oops.Errorf("floodfill did not acknowledge RouterInfo DatabaseStore within %s (DSM sent but no ACK received)", p.ackTimeout)
+}
+
+// sendDatabaseStoreMessagesWithMinSuccess sends DatabaseStore messages to floodfills
+// and returns the reply tokens from successful sends. It fails if successful sends
+// are below minSuccess.
+func (p *Publisher) sendDatabaseStoreMessagesWithMinSuccess(hash common.Hash, data []byte, dataType byte, floodfills []router_info.RouterInfo, minSuccess int) ([]uint32, error) {
+	if len(floodfills) == 0 {
+		return nil, oops.Errorf("failed to send to any floodfill: no floodfills selected")
+	}
+	if minSuccess <= 0 {
+		minSuccess = 1
+	}
+	if minSuccess > len(floodfills) {
+		minSuccess = len(floodfills)
+	}
+
+	type sendResult struct {
+		token uint32
+		err   error
+	}
+
+	resultCh := make(chan sendResult, len(floodfills))
+	for _, ff := range floodfills {
+		go func(floodfill router_info.RouterInfo) {
+			errCh := make(chan struct {
+				token uint32
+				err   error
+			}, 1)
+			go func() {
+				token, err := p.sendDatabaseStoreToFloodfill(hash, data, dataType, floodfill)
+				errCh <- struct {
+					token uint32
+					err   error
+				}{token: token, err: err}
+			}()
+
+			select {
+			case result := <-errCh:
+				resultCh <- sendResult{token: result.token, err: result.err}
+			case <-time.After(p.sendAttemptTimeout):
+				resultCh <- sendResult{err: oops.Errorf("database store send timed out after %s", p.sendAttemptTimeout)}
+			}
+		}(ff)
+	}
+
+	errors := make([]error, 0, len(floodfills))
+	ackTokens := make([]uint32, 0, len(floodfills))
+	for i := 0; i < len(floodfills); i++ {
+		result := <-resultCh
+		if result.err != nil {
+			errors = append(errors, result.err)
+			continue
+		}
+		if result.token != 0 {
+			ackTokens = append(ackTokens, result.token)
+		}
+	}
+
+	successes := len(floodfills) - len(errors)
+	if successes < minSuccess {
+		if len(errors) == 0 {
+			return nil, oops.Errorf("floodfill send quorum not met: successes=%d min_required=%d", successes, minSuccess)
+		}
+		return nil, oops.Errorf("floodfill send quorum not met: successes=%d min_required=%d first_error=%w", successes, minSuccess, errors[0])
+	}
+
+	if len(ackTokens) == 0 {
+		return nil, oops.Errorf("floodfill send succeeded but no reply tokens were produced")
+	}
+
+	return ackTokens, nil
 }
 
 // verifyRouterInfoRetrievable probes selected floodfills with a RouterInfo lookup
@@ -867,7 +945,8 @@ func (p *Publisher) sendDatabaseStoreMessages(hash common.Hash, data []byte, dat
 		go func(floodfill router_info.RouterInfo) {
 			errCh := make(chan error, 1)
 			go func() {
-				errCh <- p.sendDatabaseStoreToFloodfill(hash, data, dataType, floodfill)
+				_, err := p.sendDatabaseStoreToFloodfill(hash, data, dataType, floodfill)
+				errCh <- err
 			}()
 
 			select {
@@ -929,7 +1008,8 @@ func (p *Publisher) sendDatabaseStoreMessagesAtLeastOne(hash common.Hash, data [
 		go func(floodfill router_info.RouterInfo) {
 			errCh := make(chan error, 1)
 			go func() {
-				errCh <- p.sendDatabaseStoreToFloodfill(hash, data, dataType, floodfill)
+				_, err := p.sendDatabaseStoreToFloodfill(hash, data, dataType, floodfill)
+				errCh <- err
 			}()
 
 			select {
@@ -982,7 +1062,7 @@ func (p *Publisher) sendDatabaseStoreMessagesAtLeastOne(hash common.Hash, data [
 // sendDatabaseStoreToFloodfill sends a DatabaseStore message to a specific floodfill
 // through an outbound tunnel for anonymity. This method coordinates the tunnel selection,
 // message creation, and delivery to the gateway router.
-func (p *Publisher) sendDatabaseStoreToFloodfill(hash common.Hash, data []byte, dataType byte, floodfill router_info.RouterInfo) error {
+func (p *Publisher) sendDatabaseStoreToFloodfill(hash common.Hash, data []byte, dataType byte, floodfill router_info.RouterInfo) (uint32, error) {
 	// For RouterInfo publication, prefer direct delivery to the selected floodfill.
 	// This guarantees destination targeting for the highest-impact publication path.
 	// Do NOT fall back to tunnel-gateway wrapping for RouterInfo: a bare
@@ -991,7 +1071,7 @@ func (p *Publisher) sendDatabaseStoreToFloodfill(hash common.Hash, data []byte, 
 	if dataType == i2np.DatabaseStoreTypeRouterInfo {
 		ffHash, err := floodfill.IdentHash()
 		if err != nil {
-			return oops.Errorf("failed to get floodfill hash: %w", err)
+			return 0, oops.Errorf("failed to get floodfill hash: %w", err)
 		}
 
 		log.WithFields(logger.Fields{
@@ -999,21 +1079,22 @@ func (p *Publisher) sendDatabaseStoreToFloodfill(hash common.Hash, data []byte, 
 			"floodfill_hash": logutil.HashPrefixPlain(ffHash),
 		}).Debug("Sending RouterInfo DatabaseStore directly to selected floodfill")
 
-		if err := p.sendDatabaseStoreDirect(hash, data, dataType, floodfill); err != nil {
-			return err
+		token, err := p.sendDatabaseStoreDirect(hash, data, dataType, floodfill)
+		if err != nil {
+			return 0, err
 		}
-		return nil
+		return token, nil
 	}
 
 	// For non-RouterInfo entries keep tunnel-anonymous publication behavior.
 	selectedTunnel, gatewayHash, err := p.selectAndValidateTunnel()
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	ffHash, err := floodfill.IdentHash()
 	if err != nil {
-		return oops.Errorf("failed to get floodfill hash: %w", err)
+		return 0, oops.Errorf("failed to get floodfill hash: %w", err)
 	}
 
 	log.WithFields(logger.Fields{
@@ -1025,7 +1106,7 @@ func (p *Publisher) sendDatabaseStoreToFloodfill(hash common.Hash, data []byte, 
 	// Create and wrap DatabaseStore message for tunnel delivery
 	tunnelGateway, err := p.createTunnelGatewayMessage(hash, data, dataType, selectedTunnel.ID)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	log.WithFields(logger.Fields{
@@ -1037,7 +1118,7 @@ func (p *Publisher) sendDatabaseStoreToFloodfill(hash common.Hash, data []byte, 
 
 	// Send message through gateway router
 	if err := p.sendMessageThroughGateway(gatewayHash, tunnelGateway); err != nil {
-		return err
+		return 0, err
 	}
 
 	log.WithFields(logger.Fields{
@@ -1047,21 +1128,25 @@ func (p *Publisher) sendDatabaseStoreToFloodfill(hash common.Hash, data []byte, 
 		"gateway_hash":   logutil.HashPrefixPlain(gatewayHash),
 	}).Debug("DatabaseStore sent to tunnel gateway for transmission")
 
-	return nil
+	return 0, nil
 }
 
 // sendDatabaseStoreDirect sends a DatabaseStore message directly to a floodfill
 // over the transport session. This is only used as a bootstrap path for
 // RouterInfo publication when no outbound exploratory tunnel is available yet.
-func (p *Publisher) sendDatabaseStoreDirect(hash common.Hash, data []byte, dataType byte, floodfill router_info.RouterInfo) error {
+func (p *Publisher) sendDatabaseStoreDirect(hash common.Hash, data []byte, dataType byte, floodfill router_info.RouterInfo) (uint32, error) {
 	msg, err := p.createDatabaseStoreMessage(hash, data, dataType)
 	if err != nil {
-		return err
+		return 0, err
+	}
+	replyToken := uint32(0)
+	if dbStore, ok := msg.(*i2np.DatabaseStore); ok {
+		replyToken = binary.BigEndian.Uint32(dbStore.ReplyToken[:])
 	}
 
 	ffHash, err := floodfill.IdentHash()
 	if err != nil {
-		return oops.Errorf("failed to get floodfill hash: %w", err)
+		return 0, oops.Errorf("failed to get floodfill hash: %w", err)
 	}
 
 	log.WithFields(logger.Fields{
@@ -1084,17 +1169,17 @@ func (p *Publisher) sendDatabaseStoreDirect(hash common.Hash, data []byte, dataT
 	transport := p.transport
 	p.fieldMu.RUnlock()
 	if transport == nil {
-		return oops.Errorf("transport manager not available")
+		return 0, oops.Errorf("transport manager not available")
 	}
 
 	session, err := getSessionWithTimeout(p.sendAttemptTimeout, transport, floodfill)
 	if err != nil {
-		return oops.Errorf("failed to get transport session to floodfill: %w", err)
+		return 0, oops.Errorf("failed to get transport session to floodfill: %w", err)
 	}
 	if err := queueSendI2NPWithTimeout(p.sendAttemptTimeout, session, msg); err != nil {
-		return oops.Errorf("failed to queue direct DatabaseStore transmission: %w", err)
+		return 0, oops.Errorf("failed to queue direct DatabaseStore transmission: %w", err)
 	}
-	return nil
+	return replyToken, nil
 }
 
 // selectAndValidateTunnel selects an active outbound tunnel and validates it has hops.
@@ -1237,6 +1322,35 @@ func (p *Publisher) waitForPublishAck(ackBefore uint64, timeout time.Duration) b
 	}
 }
 
+// waitForPublishAckTokens waits for a DeliveryStatus ACK for one of the provided
+// reply tokens. This avoids cross-attribution between concurrent publish attempts.
+func (p *Publisher) waitForPublishAckTokens(tokens []uint32, timeout time.Duration) bool {
+	if len(tokens) == 0 {
+		return false
+	}
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	poll := time.NewTicker(250 * time.Millisecond)
+	defer poll.Stop()
+	for {
+		select {
+		case <-p.ctx.Done():
+			return false
+		case <-deadline.C:
+			return false
+		case <-poll.C:
+			for _, token := range tokens {
+				if token == 0 {
+					continue
+				}
+				if _, ok := p.ackedReplyTokens.Load(token); ok {
+					return true
+				}
+			}
+		}
+	}
+}
+
 // HandleDeliveryStatus records DeliveryStatus acknowledgements for pending
 // DatabaseStore reply tokens. It is wired into MessageProcessor via router
 // startup and allows publication diagnostics to confirm token round-trips.
@@ -1255,6 +1369,7 @@ func (p *Publisher) HandleDeliveryStatus(msgID int, timestamp time.Time) error {
 	token := uint32(msgID)
 	if createdAt, ok := p.pendingReplyTokens.LoadAndDelete(token); ok {
 		p.ackReplyTokenReceived.Add(1)
+		p.ackedReplyTokens.Store(token, time.Now())
 		if ts, ok := createdAt.(time.Time); ok {
 			log.WithFields(logger.Fields{
 				"at":         "Publisher.HandleDeliveryStatus",
@@ -1293,6 +1408,13 @@ func (p *Publisher) cleanupStaleReplyTokens(ttl time.Duration) {
 		createdAt, ok := value.(time.Time)
 		if !ok || createdAt.Before(cutoff) {
 			p.pendingReplyTokens.Delete(key)
+		}
+		return true
+	})
+	p.ackedReplyTokens.Range(func(key, value any) bool {
+		ackedAt, ok := value.(time.Time)
+		if !ok || ackedAt.Before(cutoff) {
+			p.ackedReplyTokens.Delete(key)
 		}
 		return true
 	})

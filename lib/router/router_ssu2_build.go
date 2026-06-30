@@ -44,16 +44,6 @@ func createSSU2TransportInstance(r *Router, ri *router_info.RouterInfo, addr str
 		return nil, err
 	}
 	ssu2Config.WorkingDir = r.cfg.WorkingDir
-
-	ssu2Transport, err := ssu2.NewSSU2Transport(*ri, ssu2Config, r.keystore)
-	if err != nil {
-		log.WithError(err).Error("Failed to create SSU2 transport")
-		return nil, err
-	}
-	if r.netdb != nil && r.netdb.PeerTracker != nil {
-		ssu2Transport.SetPeerConnNotifier(r.netdb.PeerTracker)
-	}
-
 	ssu2Config.RouterLookupFunc = func(hash common.Hash) (router_info.RouterInfo, error) {
 		ch := r.netdb.GetRouterInfo(hash)
 		var ri router_info.RouterInfo
@@ -70,21 +60,24 @@ func createSSU2TransportInstance(r *Router, ri *router_info.RouterInfo, addr str
 	}
 
 	ssu2Config.RouterStoreFunc = func(data []byte) error {
-		// Parse RouterInfo from block data
+		// Parse RouterInfo from SSU2 block payload (raw RouterInfo bytes).
 		ri, _, err := router_info.ReadRouterInfo(data)
 		if err != nil {
 			return oops.Wrapf(err, "failed to parse RouterInfo from SSU2 block")
 		}
-		// Compute identity hash
-		hash, err := ri.IdentHash()
-		if err != nil {
-			return oops.Wrapf(err, "failed to compute identity hash from RouterInfo")
-		}
-		// Store in NetDB (delegates to StoreRouterInfoFromMessage with signature verification)
-		if err := r.netdb.Store(hash, data, 0); err != nil {
+		if err := r.netdb.StoreRouterInfoWithError(ri); err != nil {
 			return oops.Wrapf(err, "failed to store RouterInfo in NetDB")
 		}
 		return nil
+	}
+
+	ssu2Transport, err := ssu2.NewSSU2Transport(*ri, ssu2Config, r.keystore)
+	if err != nil {
+		log.WithError(err).Error("Failed to create SSU2 transport")
+		return nil, err
+	}
+	if r.netdb != nil && r.netdb.PeerTracker != nil {
+		ssu2Transport.SetPeerConnNotifier(r.netdb.PeerTracker)
 	}
 
 	log.WithFields(logger.Fields{"at": "buildSSU2Transport"}).Debug("SSU2 transport created successfully")

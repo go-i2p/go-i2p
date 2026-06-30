@@ -247,7 +247,7 @@ func calculateSSU2AddressCost(options map[string]string) uint8 {
 	if _, hasHost := options["host"]; hasHost {
 		return 8
 	}
-	if caps, hasCaps := options["caps"]; hasCaps && caps == "B" {
+	if caps, hasCaps := options["caps"]; hasCaps && strings.Contains(caps, "B") {
 		// Introducer-reachable: peers can reach us via the listed
 		// introducers, so this is "directly reachable" in cost terms.
 		return 8
@@ -281,9 +281,10 @@ func createSSU2RouterAddress(cost uint8, options map[string]string) (*router_add
 // optional introducer hints) are emitted.
 func buildSSU2Options(host, portStr string, transport *SSU2Transport, introducers []*ssu2noise.RegisteredIntroducer) map[string]string {
 	if !isPublicHost(host) && hasUsableIntroducer(introducers) {
+		familyCaps := ssu2AddressFamilyCaps(host)
 		options := map[string]string{
 			router_address.PROTOCOL_VERSION_OPTION_KEY: "2",
-			router_address.CAPS_OPTION_KEY:             "B",
+			router_address.CAPS_OPTION_KEY:             familyCaps + "B",
 		}
 		addStaticKeyOption(options, transport)
 		addIntroKeyOption(options, transport)
@@ -298,7 +299,7 @@ func buildSSU2Options(host, portStr string, transport *SSU2Transport, introducer
 		// reply traffic (build replies, etc.).
 		options := map[string]string{
 			router_address.PROTOCOL_VERSION_OPTION_KEY: "2",
-			router_address.CAPS_OPTION_KEY:             "4", // IPv4 SSU2 capability, unpublished
+			router_address.CAPS_OPTION_KEY:             ssu2AddressFamilyCaps(host),
 		}
 		addStaticKeyOption(options, transport)
 		addIntroKeyOption(options, transport)
@@ -359,15 +360,32 @@ func isSpecialUseIPv4(ip net.IP) bool {
 // both a router hash and a non-zero relay tag (the minimum needed for a remote
 // peer to drive the introducer flow).
 func hasUsableIntroducer(introducers []*ssu2noise.RegisteredIntroducer) bool {
+	now := time.Now()
 	for _, intro := range introducers {
 		if intro == nil {
 			continue
 		}
-		if len(intro.RouterHash) > 0 && intro.RelayTag != 0 {
+		if len(intro.RouterHash) == 0 || intro.RelayTag == 0 || intro.AddedAt.IsZero() {
+			continue
+		}
+		if intro.AddedAt.Add(4 * time.Hour).After(now) {
 			return true
 		}
 	}
 	return false
+}
+
+// ssu2AddressFamilyCaps derives address-family capability flags from host.
+// Returns "4", "6", or "46" when the family cannot be determined.
+func ssu2AddressFamilyCaps(host string) string {
+	ip := net.ParseIP(host)
+	if ip == nil || ip.IsUnspecified() {
+		return "46"
+	}
+	if ip.To4() != nil {
+		return "4"
+	}
+	return "6"
 }
 
 // extractHostPort unwraps SSU2Addr and extracts host and port from the listener address.
@@ -514,6 +532,9 @@ func addStaticKeyOption(options map[string]string, transport *SSU2Transport) {
 // addIntroducerOptions adds introducer information to the options map.
 func addIntroducerOptions(options map[string]string, introducers []*ssu2noise.RegisteredIntroducer) {
 	for i, intro := range introducers {
+		if i > router_address.MAX_INTRODUCER_NUMBER {
+			break
+		}
 		if intro == nil {
 			continue
 		}

@@ -130,7 +130,8 @@ func TestLiveNetworkPublishRouterInfo(t *testing.T) {
 	}
 	if inboundPool := r.tunnelManager.GetInboundPool(); inboundPool != nil {
 		poolStats := inboundPool.GetPoolStats()
-		t.Logf("routerinfo publish inbound pool stats before wait: total=%d active=%d building=%d failed=%d near_expiry=%d",
+		t.Logf(
+			"routerinfo publish inbound pool stats before wait: total=%d active=%d building=%d failed=%d near_expiry=%d",
 			poolStats.Total,
 			poolStats.Active,
 			poolStats.Building,
@@ -142,7 +143,8 @@ func TestLiveNetworkPublishRouterInfo(t *testing.T) {
 	t.Logf("routerinfo publish inbound precondition: %s", inboundDiag)
 	if inboundPool := r.tunnelManager.GetInboundPool(); inboundPool != nil {
 		poolStats := inboundPool.GetPoolStats()
-		t.Logf("routerinfo publish inbound pool stats after wait: total=%d active=%d building=%d failed=%d near_expiry=%d",
+		t.Logf(
+			"routerinfo publish inbound pool stats after wait: total=%d active=%d building=%d failed=%d near_expiry=%d",
 			poolStats.Total,
 			poolStats.Active,
 			poolStats.Building,
@@ -165,7 +167,8 @@ func TestLiveNetworkPublishRouterInfo(t *testing.T) {
 	logLiveRouterInfoForPublish(t, *ri)
 
 	preStats := testPublisher.GetStats()
-	t.Logf("routerinfo publish pre-stats: publish_ok=%d publish_fail=%d send_ok=%d send_fail=%d verify_ok=%d verify_fail=%d ack_ok=%d ack_unexpected=%d",
+	t.Logf(
+		"routerinfo publish pre-stats: publish_ok=%d publish_fail=%d send_ok=%d send_fail=%d verify_ok=%d verify_fail=%d ack_ok=%d ack_unexpected=%d",
 		preStats.RouterInfoPublishSuccess,
 		preStats.RouterInfoPublishFail,
 		preStats.RouterInfoSendSuccess,
@@ -194,7 +197,8 @@ func TestLiveNetworkPublishRouterInfo(t *testing.T) {
 			} else {
 				t.Logf("routerinfo publish timeout goroutine dump: %s", dumpPath)
 			}
-			t.Logf("routerinfo publish attempt timeout after %s: publish_ok=+%d publish_fail=+%d send_ok=+%d send_fail=+%d verify_ok=+%d verify_fail=+%d ack_ok=+%d ack_unexpected=+%d",
+			t.Logf(
+				"routerinfo publish attempt timeout after %s: publish_ok=+%d publish_fail=+%d send_ok=+%d send_fail=+%d verify_ok=+%d verify_fail=+%d ack_ok=+%d ack_unexpected=+%d",
 				liveNetworkPublishAttemptTimeout,
 				after.RouterInfoPublishSuccess-before.RouterInfoPublishSuccess,
 				after.RouterInfoPublishFail-before.RouterInfoPublishFail,
@@ -209,7 +213,8 @@ func TestLiveNetworkPublishRouterInfo(t *testing.T) {
 		}
 
 		after := testPublisher.GetStats()
-		t.Logf("routerinfo publish attempt delta: publish_ok=+%d publish_fail=+%d send_ok=+%d send_fail=+%d verify_ok=+%d verify_fail=+%d ack_ok=+%d ack_unexpected=+%d",
+		t.Logf(
+			"routerinfo publish attempt delta: publish_ok=+%d publish_fail=+%d send_ok=+%d send_fail=+%d verify_ok=+%d verify_fail=+%d ack_ok=+%d ack_unexpected=+%d",
 			after.RouterInfoPublishSuccess-before.RouterInfoPublishSuccess,
 			after.RouterInfoPublishFail-before.RouterInfoPublishFail,
 			after.RouterInfoSendSuccess-before.RouterInfoSendSuccess,
@@ -227,7 +232,8 @@ func TestLiveNetworkPublishRouterInfo(t *testing.T) {
 		// send_ok > 0 only means bytes left our socket — it is NOT proof that
 		// Java I2P stored the go-i2p RouterInfo.
 		statsAfterErr := testPublisher.GetStats()
-		t.Logf("routerinfo publish failed: send_ok=+%d send_fail=+%d ack_ok=+%d ack_unexpected=+%d error=%v",
+		t.Logf(
+			"routerinfo publish failed: send_ok=+%d send_fail=+%d ack_ok=+%d ack_unexpected=+%d error=%v",
 			statsAfterErr.RouterInfoSendSuccess-preStats.RouterInfoSendSuccess,
 			statsAfterErr.RouterInfoSendFail-preStats.RouterInfoSendFail,
 			statsAfterErr.ReplyTokenAckReceived-preStats.ReplyTokenAckReceived,
@@ -238,7 +244,8 @@ func TestLiveNetworkPublishRouterInfo(t *testing.T) {
 	}
 
 	postStats := testPublisher.GetStats()
-	t.Logf("routerinfo publish post-stats: publish_ok=%d publish_fail=%d send_ok=%d send_fail=%d ack_ok=%d ack_unexpected=%d",
+	t.Logf(
+		"routerinfo publish post-stats: publish_ok=%d publish_fail=%d send_ok=%d send_fail=%d ack_ok=%d ack_unexpected=%d",
 		postStats.RouterInfoPublishSuccess,
 		postStats.RouterInfoPublishFail,
 		postStats.RouterInfoSendSuccess,
@@ -246,7 +253,8 @@ func TestLiveNetworkPublishRouterInfo(t *testing.T) {
 		postStats.ReplyTokenAckReceived,
 		postStats.ReplyTokenAckUnexpected,
 	)
-	require.Greater(t,
+	require.Greater(
+		t,
 		postStats.ReplyTokenAckReceived,
 		preStats.ReplyTokenAckReceived,
 		"expected at least one DeliveryStatus ACK from a floodfill after RouterInfo publication",
@@ -608,7 +616,8 @@ func logLiveRouterInfoForPublish(t *testing.T, ri router_info.RouterInfo) {
 		publishedText = "<nil>"
 	}
 
-	t.Logf("routerinfo under test: published=%s caps=%q version=%q addr_count=%d",
+	t.Logf(
+		"routerinfo under test: published=%s caps=%q version=%q addr_count=%d",
 		publishedText,
 		string(ri.RouterCapabilities()),
 		routerInfoOptionString(ri, "router.version"),
@@ -648,7 +657,8 @@ func logLiveRouterInfoForPublish(t *testing.T, ri router_info.RouterInfo) {
 			}
 		}
 
-		t.Logf("routerinfo addr[%d]: style=%q cost=%d host=%q port=%q caps=%q introducers=%d",
+		t.Logf(
+			"routerinfo addr[%d]: style=%q cost=%d host=%q port=%q caps=%q introducers=%d",
 			index,
 			addr.TransportStyle(),
 			addr.Cost(),
@@ -706,7 +716,8 @@ type liveTracingI2NPSender struct {
 
 func (s *liveTracingI2NPSender) QueueSendI2NP(msg i2np.Message) error {
 	if dbStore, ok := msg.(*i2np.DatabaseStore); ok {
-		s.t.Logf("publish trace dbstore: target=%s target_full=%s store_type=%d reply_token=%d reply_tunnel_id=%d reply_gateway=%s reply_gateway_full=%s key=%s key_full=%s",
+		s.t.Logf(
+			"publish trace dbstore: target=%s target_full=%s store_type=%d reply_token=%d reply_tunnel_id=%d reply_gateway=%s reply_gateway_full=%s key=%s key_full=%s",
 			hashPrefix(s.targetHash),
 			s.targetHash.String(),
 			dbStore.StoreType,

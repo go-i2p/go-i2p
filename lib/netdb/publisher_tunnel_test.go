@@ -172,7 +172,7 @@ func TestSendDatabaseStoreToFloodfill_NoActiveTunnels(t *testing.T) {
 	floodfill := createValidRouterInfo(t)
 
 	// Should fail with no tunnels
-	err := publisher.sendDatabaseStoreToFloodfill(hash, data, i2np.DatabaseStoreTypeLeaseSet2, floodfill)
+	_, err := publisher.sendDatabaseStoreToFloodfill(hash, data, i2np.DatabaseStoreTypeLeaseSet2, floodfill)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "no active outbound tunnels")
 }
@@ -190,7 +190,7 @@ func TestSendDatabaseStoreToFloodfill_RouterInfoFallsBackToDirectTransport(t *te
 	floodfillHash, err := floodfill.IdentHash()
 	require.NoError(t, err)
 
-	err = publisher.sendDatabaseStoreToFloodfill(hash, data, i2np.DatabaseStoreTypeRouterInfo, floodfill)
+	_, err = publisher.sendDatabaseStoreToFloodfill(hash, data, i2np.DatabaseStoreTypeRouterInfo, floodfill)
 	assert.NoError(t, err)
 
 	sentMessages := transport.GetSentMessages(floodfillHash)
@@ -230,7 +230,7 @@ func TestSendDatabaseStoreToFloodfill_RouterInfoDirectSendFailsWhenTransportUnav
 	data := []byte("compressed routerinfo bytes")
 	floodfill := directFloodfill
 
-	err = publisher.sendDatabaseStoreToFloodfill(hash, data, i2np.DatabaseStoreTypeRouterInfo, floodfill)
+	_, err = publisher.sendDatabaseStoreToFloodfill(hash, data, i2np.DatabaseStoreTypeRouterInfo, floodfill)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to get transport session to floodfill")
 
@@ -405,7 +405,7 @@ func TestSendDatabaseStoreToFloodfill_WithActiveTunnel(t *testing.T) {
 	floodfill := createValidRouterInfo(t)
 
 	// Should succeed with active tunnel and transport
-	err := env.publisher.sendDatabaseStoreToFloodfill(hash, data, i2np.DatabaseStoreTypeLeaseSet2, floodfill)
+	_, err := env.publisher.sendDatabaseStoreToFloodfill(hash, data, i2np.DatabaseStoreTypeLeaseSet2, floodfill)
 	assert.NoError(t, err)
 
 	// Verify message was sent through transport
@@ -444,7 +444,7 @@ func TestSendDatabaseStoreToFloodfill_TunnelWithNoHops(t *testing.T) {
 	floodfill := createValidRouterInfo(t)
 
 	// Should fail with tunnel that has no hops
-	err := publisher.sendDatabaseStoreToFloodfill(hash, data, i2np.DatabaseStoreTypeLeaseSet2, floodfill)
+	_, err := publisher.sendDatabaseStoreToFloodfill(hash, data, i2np.DatabaseStoreTypeLeaseSet2, floodfill)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "tunnel has no hops")
 }
@@ -477,7 +477,7 @@ func TestSendDatabaseStoreToFloodfill_GatewayNotInNetDB(t *testing.T) {
 	floodfill := createValidRouterInfo(t)
 
 	// Should fail when gateway not found in NetDB
-	err := publisher.sendDatabaseStoreToFloodfill(hash, data, i2np.DatabaseStoreTypeLeaseSet2, floodfill)
+	_, err := publisher.sendDatabaseStoreToFloodfill(hash, data, i2np.DatabaseStoreTypeLeaseSet2, floodfill)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to retrieve RouterInfo for gateway")
 }
@@ -522,7 +522,7 @@ func TestSendDatabaseStoreToFloodfill_MultipleTunnelsRoundRobin(t *testing.T) {
 	// Send multiple times and verify messages distributed across gateways
 	sends := 6
 	for i := 0; i < sends; i++ {
-		err := publisher.sendDatabaseStoreToFloodfill(hash, data, i2np.DatabaseStoreTypeLeaseSet2, floodfill)
+		_, err := publisher.sendDatabaseStoreToFloodfill(hash, data, i2np.DatabaseStoreTypeLeaseSet2, floodfill)
 		assert.NoError(t, err, "Send %d should succeed", i+1)
 	}
 
@@ -551,7 +551,7 @@ func TestSendDatabaseStoreToFloodfill_LargeData(t *testing.T) {
 	floodfill := createValidRouterInfo(t)
 
 	// Should handle large payloads without error
-	err := env.publisher.sendDatabaseStoreToFloodfill(hash, data, i2np.DatabaseStoreTypeLeaseSet2, floodfill)
+	_, err := env.publisher.sendDatabaseStoreToFloodfill(hash, data, i2np.DatabaseStoreTypeLeaseSet2, floodfill)
 	assert.NoError(t, err)
 
 	// Verify message was sent
@@ -571,7 +571,7 @@ func TestSendDatabaseStoreToFloodfill_EmptyData(t *testing.T) {
 	floodfill := createValidRouterInfo(t)
 
 	// Should handle empty data (may represent deletion or placeholder)
-	err := env.publisher.sendDatabaseStoreToFloodfill(hash, data, i2np.DatabaseStoreTypeLeaseSet2, floodfill)
+	_, err := env.publisher.sendDatabaseStoreToFloodfill(hash, data, i2np.DatabaseStoreTypeLeaseSet2, floodfill)
 	assert.NoError(t, err)
 
 	// Verify message was sent
@@ -597,7 +597,7 @@ func TestSendDatabaseStoreToFloodfill_ConcurrentSends(t *testing.T) {
 			defer wg.Done()
 			hash := common.Hash{byte(index), byte(index + 1), byte(index + 2)}
 			data := []byte(fmt.Sprintf("concurrent send %d", index))
-			err := env.publisher.sendDatabaseStoreToFloodfill(hash, data, i2np.DatabaseStoreTypeLeaseSet2, floodfill)
+			_, err := env.publisher.sendDatabaseStoreToFloodfill(hash, data, i2np.DatabaseStoreTypeLeaseSet2, floodfill)
 			if err != nil {
 				errors <- err
 			}

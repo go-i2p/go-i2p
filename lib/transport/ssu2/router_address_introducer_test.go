@@ -80,6 +80,7 @@ func TestHasUsableIntroducer(t *testing.T) {
 	assert.True(t, hasUsableIntroducer([]*ssu2noise.RegisteredIntroducer{{
 		RouterHash: make([]byte, 32),
 		RelayTag:   42,
+		AddedAt:    time.Now(),
 	}}))
 }
 
@@ -106,7 +107,7 @@ func TestConvertToRouterAddress_IntroducerOnly(t *testing.T) {
 	// Caps and version must signal introducer-required mode.
 	caps, err := ra.CapsString().Data()
 	require.NoError(t, err)
-	assert.Equal(t, "B", caps, "caps must be 'B' for introducer-required address")
+	assert.Equal(t, "4B", caps, "caps must include family plus 'B' for introducer-required address")
 
 	ver, err := ra.ProtocolVersionString().Data()
 	require.NoError(t, err)

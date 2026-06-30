@@ -468,8 +468,21 @@ func buildRouterAddressOptions(host, port, staticKey string, ntcp2Config *ntcp2n
 	log.WithField("host", host).Debug("Host is not publicly routable; publishing caps-only NTCP2 address")
 	options := map[string]string{
 		"s":    staticKey,
-		"caps": "4", // eV4 = 1 in i2pd AddressCaps; signals IPv4 NTCP2 capability
+		"caps": ntcp2AddressFamilyCaps(host),
 		"v":    "2",
 	}
 	return options, nil
+}
+
+// ntcp2AddressFamilyCaps derives address-family capability flags from host.
+// Returns "4", "6", or "46" when the family cannot be determined.
+func ntcp2AddressFamilyCaps(host string) string {
+	ip := net.ParseIP(host)
+	if ip == nil || ip.IsUnspecified() {
+		return "46"
+	}
+	if ip.To4() != nil {
+		return "4"
+	}
+	return "6"
 }
