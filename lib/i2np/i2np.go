@@ -164,6 +164,56 @@ const MaxI2NPStandardPayload = 65535
 // Format: type(1) + msgID(4) + shortExpiration(4) = 9 bytes
 const ShortI2NPHeaderSize = 9
 
+// StandardI2NPHeaderSize is the size of the full/standard I2NP header.
+// Format: type(1) + msgID(4) + expiration(8) + size(2) + checksum(1) = 16 bytes.
+// This header is REQUIRED only for tunnel-delivered I2NP messages (inside
+// TunnelGateway/TunnelData). All NTCP2 and SSU2 data-phase I2NP blocks use the
+// 9-byte short header (ShortI2NPHeaderSize) instead — see MarshalMessageShort.
+const StandardI2NPHeaderSize = 16
+
+// MarshalMessageShort serializes any I2NP message using the 9-byte short header
+// format required for NTCP2 and SSU2 data-phase I2NP blocks (block type 3).
+//
+// This is the single source of truth for short-header framing across both
+// transports. Unlike asserting *BaseI2NPMessage (which fails for typed message
+// structs and silently falls back to the 16-byte header), this works for every
+// concrete message type. The payload is derived from MarshalBinary() with the
+// 16-byte standard header stripped, so typed messages that compute their
+// payload lazily inside MarshalBinary (e.g. *DatabaseStore via SetData) are
+// serialized correctly — calling GetData() directly would return stale data.
+//
+// Short header format:
+//   - Type (1 byte)
+//   - Message ID (4 bytes, big-endian)
+//   - Short Expiration (4 bytes, big-endian, seconds since epoch)
+func MarshalMessageShort(msg Message) ([]byte, error) {
+	full, err := msg.MarshalBinary()
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to marshal I2NP message for short framing")
+	}
+	if len(full) < StandardI2NPHeaderSize {
+		return nil, oops.Errorf("i2np: marshaled message too short to derive short header: %d bytes, need at least %d",
+			len(full), StandardI2NPHeaderSize)
+	}
+	body := full[StandardI2NPHeaderSize:]
+
+	result := make([]byte, ShortI2NPHeaderSize+len(body))
+
+	// Type (1 byte)
+	result[0] = byte(msg.Type())
+
+	// Message ID (4 bytes, big-endian)
+	binary.BigEndian.PutUint32(result[1:5], uint32(msg.MessageID()))
+
+	// Short Expiration (4 bytes, big-endian, seconds since epoch)
+	binary.BigEndian.PutUint32(result[5:9], uint32(msg.Expiration().Unix()))
+
+	// Payload
+	copy(result[ShortI2NPHeaderSize:], body)
+
+	return result, nil
+}
+
 // MarshalShortI2NP serializes the I2NP message using the 9-byte short header
 // format used in NTCP2 block type 3 (I2NP message blocks).
 //

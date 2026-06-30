@@ -13,24 +13,21 @@ import (
 // The message is serialized with a 9-byte short header and wrapped in a type-3
 // (I2NP) block. The result can be combined with other blocks via SerializeBlocks.
 //
+// The 9-byte short header is mandatory for every NTCP2 data-phase I2NP block,
+// regardless of the concrete message type. i2pd reconstructs the full 16-byte
+// header by reading the 9-byte short header and adding 7 bytes (NTCP2.cpp
+// FromNTCP2); sending a 16-byte standard header here would shift the payload by
+// 7 bytes and corrupt every message. The 16-byte standard header is only used
+// for tunnel-delivered messages (inside TunnelGateway/TunnelData), never here.
+//
 // Spec reference: https://geti2p.net/spec/ntcp2#data-phase
 func FrameI2NPMessageAsBlock(msg i2np.Message) ([]byte, error) {
 	log.WithField("message_type", msg.Type()).Debug("Framing I2NP message as NTCP2 block")
 
-	// Use the short I2NP header format for NTCP2 blocks
-	baseMsg, ok := msg.(*i2np.BaseI2NPMessage)
-	if !ok {
-		// Fall back to standard marshal for non-base messages
-		data, err := msg.MarshalBinary()
-		if err != nil {
-			log.WithError(err).Error("Failed to marshal I2NP message")
-			return nil, err
-		}
-		block := NewI2NPBlock(data)
-		return SerializeBlocks(block), nil
-	}
-
-	shortData, err := baseMsg.MarshalShortI2NP()
+	// Use the short I2NP header format for NTCP2 blocks. MarshalMessageShort
+	// handles every concrete message type uniformly (BaseI2NPMessage and typed
+	// structs such as *DatabaseStore alike).
+	shortData, err := i2np.MarshalMessageShort(msg)
 	if err != nil {
 		log.WithError(err).Error("Failed to marshal I2NP message with short header")
 		return nil, err

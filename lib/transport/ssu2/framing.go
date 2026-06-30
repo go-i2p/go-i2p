@@ -10,10 +10,12 @@ import (
 )
 
 // FrameI2NPToBlock serializes an I2NP message into an SSU2 block type 3.
-// The message is serialized using its standard binary format and wrapped
-// in an SSU2Block with BlockTypeI2NPMessage.
+// The message is serialized with the mandatory 9-byte short I2NP header (the
+// same format NTCP2 uses; SSU2 has the same format as NTCP2) and wrapped in an
+// SSU2Block with BlockTypeI2NPMessage. The 16-byte standard header is never
+// used on the wire here — only tunnel-delivered messages carry it.
 func FrameI2NPToBlock(msg i2np.Message) (*ssu2noise.SSU2Block, error) {
-	data, err := msg.MarshalBinary()
+	data, err := i2np.MarshalMessageShort(msg)
 	if err != nil {
 		log.WithError(err).Error("failed to marshal I2NP message for SSU2 block")
 		return nil, oops.Wrapf(err, "failed to marshal I2NP message")
@@ -37,7 +39,7 @@ func ParseI2NPFromBlock(block *ssu2noise.SSU2Block) (i2np.Message, error) {
 		return nil, oops.Errorf("empty I2NP block data")
 	}
 	msg := &i2np.BaseI2NPMessage{}
-	if err := msg.UnmarshalBinary(block.Data); err != nil {
+	if err := msg.UnmarshalShortI2NP(block.Data); err != nil {
 		log.WithError(err).Error("failed to unmarshal I2NP message from SSU2 block")
 		return nil, oops.Wrapf(err, "failed to unmarshal I2NP message")
 	}
@@ -45,9 +47,10 @@ func ParseI2NPFromBlock(block *ssu2noise.SSU2Block) (i2np.Message, error) {
 }
 
 // FrameI2NPForSSU2 serializes an I2NP message to raw bytes suitable for
-// SSU2Conn.Write. This is the SSU2 equivalent of NTCP2's FrameI2NPMessage.
+// SSU2Conn.Write. This is the SSU2 equivalent of NTCP2's FrameI2NPMessage and
+// uses the mandatory 9-byte short I2NP header.
 func FrameI2NPForSSU2(msg i2np.Message) ([]byte, error) {
-	data, err := msg.MarshalBinary()
+	data, err := i2np.MarshalMessageShort(msg)
 	if err != nil {
 		log.WithError(err).Error("failed to marshal I2NP message for SSU2")
 		return nil, oops.Wrapf(err, "failed to marshal I2NP message")
@@ -63,7 +66,7 @@ func ParseI2NPFromSSU2(data []byte) (i2np.Message, error) {
 		return nil, oops.Errorf("empty I2NP data")
 	}
 	msg := &i2np.BaseI2NPMessage{}
-	if err := msg.UnmarshalBinary(data); err != nil {
+	if err := msg.UnmarshalShortI2NP(data); err != nil {
 		log.WithError(err).Error("failed to unmarshal I2NP message from SSU2")
 		return nil, oops.Wrapf(err, "failed to unmarshal I2NP message")
 	}

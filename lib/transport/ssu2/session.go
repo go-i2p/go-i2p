@@ -368,26 +368,14 @@ func (s *SSU2Session) sendWithCongestionControl(msg i2np.Message) error {
 
 // marshalI2NPShort converts an I2NP message to the 9-byte SSU2 short header
 // format: Type(1) + MessageID(4) + ShortExpiration(4) + Body.
+//
+// SSU2 data-phase I2NP blocks use the same 9-byte short header as NTCP2
+// (SSU2Session.cpp: "SSU2 has the same format as NTCP2"). Framing is delegated
+// to i2np.MarshalMessageShort so both transports share one implementation and
+// typed messages whose payload is computed lazily in MarshalBinary (e.g.
+// *DatabaseStore) are serialized correctly rather than via stale GetData().
 func marshalI2NPShort(msg i2np.Message) ([]byte, error) {
-	var body []byte
-	if dc, ok := msg.(i2np.DataCarrier); ok {
-		body = dc.GetData()
-	} else {
-		full, err := msg.MarshalBinary()
-		if err != nil {
-			return nil, err
-		}
-		if len(full) < 16 {
-			return nil, oops.Errorf("NTCP data too short: %d bytes", len(full))
-		}
-		body = full[16:]
-	}
-	result := make([]byte, i2np.ShortI2NPHeaderSize+len(body))
-	result[0] = byte(msg.Type())
-	binary.BigEndian.PutUint32(result[1:5], uint32(msg.MessageID()))
-	binary.BigEndian.PutUint32(result[5:9], uint32(msg.Expiration().Unix()))
-	copy(result[i2np.ShortI2NPHeaderSize:], body)
-	return result, nil
+	return i2np.MarshalMessageShort(msg)
 }
 
 // fragmentSSU2Short splits SSU2 short-header data into correctly formatted
