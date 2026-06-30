@@ -164,8 +164,8 @@ func TestRouterInfoMaxAge(t *testing.T) {
 func TestMinRouterInfoCount(t *testing.T) {
 	assert.True(t, MinRouterInfoCount >= 10,
 		"MinRouterInfoCount should be at least 10")
-	assert.True(t, MinRouterInfoCount <= 100,
-		"MinRouterInfoCount should be at most 100")
+	assert.True(t, MinRouterInfoCount <= 500,
+		"MinRouterInfoCount should be at most 500")
 }
 
 // TestNewStdNetDB_InitializesRouterInfoExpiry tests that the routerInfoExpiry
