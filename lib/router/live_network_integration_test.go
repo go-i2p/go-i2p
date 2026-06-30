@@ -30,14 +30,15 @@ import (
 )
 
 const (
-	liveNetworkStartupAttempts       = 3
-	liveNetworkWaitForPeersTimeout   = 90 * time.Second
-	liveNetworkWaitForInboundTimeout = 75 * time.Second
-	liveNetworkWaitForPublishTimeout = 80 * time.Second
-	liveNetworkPublishAttemptTimeout = 90 * time.Second
-	liveNetworkPollInterval          = 2 * time.Second
-	liveNetworkAttemptDelay          = 3 * time.Second
-	liveNetworkRetryAttempts         = 4
+	liveNetworkStartupAttempts        = 3
+	liveNetworkWaitForPeersTimeout    = 90 * time.Second
+	liveNetworkWaitForInboundTimeout  = 75 * time.Second
+	liveNetworkWaitForOutboundTimeout = 90 * time.Second
+	liveNetworkWaitForPublishTimeout  = 80 * time.Second
+	liveNetworkPublishAttemptTimeout  = 90 * time.Second
+	liveNetworkPollInterval           = 2 * time.Second
+	liveNetworkAttemptDelay           = 3 * time.Second
+	liveNetworkRetryAttempts          = 4
 )
 
 func TestLiveNetworkBootstrapAndInterop(t *testing.T) {
@@ -139,6 +140,14 @@ func TestLiveNetworkPublishRouterInfo(t *testing.T) {
 			poolStats.NearExpiry,
 		)
 	}
+	// Wait for outbound tunnels first: without them the tunnel-build protocol
+	// cannot complete multi-hop inbound tunnels, leaving us with 0-hop inbound
+	// tunnels (our router as IBGW).  A 0-hop IBGW forces the floodfill to dial
+	// us directly for the DeliveryStatus ACK, which fails for brand-new routers
+	// whose RouterInfo hasn't propagated yet.
+	outboundDiag := waitForActiveTunnels(r.tunnelManager.GetOutboundPool(), 1, liveNetworkWaitForOutboundTimeout)
+	t.Logf("routerinfo publish outbound precondition: %s", outboundDiag)
+
 	inboundDiag := waitForActiveTunnels(r.tunnelManager.GetInboundPool(), 1, liveNetworkWaitForInboundTimeout)
 	t.Logf("routerinfo publish inbound precondition: %s", inboundDiag)
 	if inboundPool := r.tunnelManager.GetInboundPool(); inboundPool != nil {
@@ -270,6 +279,14 @@ func TestLiveNetworkPublishLeaseSet(t *testing.T) {
 
 	_, peerDiag := waitForPeersWithRetry(t, db, 8, liveNetworkWaitForPeersTimeout)
 	t.Logf("leaseset publish precondition peers: %s", peerDiag)
+
+	// Both outbound and inbound tunnels must be active before publishing a
+	// LeaseSet: outbound tunnels are used to send the DatabaseStore to the
+	// floodfill, and inbound tunnels provide the reply path for the ACK.
+	outboundDiag := waitForActiveTunnels(r.tunnelManager.GetOutboundPool(), 1, liveNetworkWaitForOutboundTimeout)
+	t.Logf("leaseset publish outbound precondition: %s", outboundDiag)
+	inboundDiag := waitForActiveTunnels(r.tunnelManager.GetInboundPool(), 1, liveNetworkWaitForInboundTimeout)
+	t.Logf("leaseset publish inbound precondition: %s", inboundDiag)
 
 	publisher := r.GetPublisher()
 	require.NotNil(t, publisher, "publisher should be initialized after router startup")

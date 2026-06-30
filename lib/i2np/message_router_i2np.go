@@ -96,7 +96,11 @@ func (mr *I2NPMessageDispatcher) RouteMessage(msg Message) error {
 	}
 
 	// Check for expiration
-	if time.Now().After(msg.Expiration()) {
+	// Use the same tolerance as ExpirationValidator (DefaultExpirationTolerance = 5 minutes).
+	// Messages created with short TTLs (e.g. i2pd uses 8 s for DeliveryStatus) may arrive
+	// expired after traversing the tunnel network; a 5-minute window matches the processor.
+	toleratedExpiry := msg.Expiration().Add(time.Duration(DefaultExpirationTolerance) * time.Second)
+	if time.Now().After(toleratedExpiry) {
 		return oops.Errorf("message %d has expired", msg.MessageID())
 	}
 

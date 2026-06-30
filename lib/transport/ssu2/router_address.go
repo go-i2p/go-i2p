@@ -410,12 +410,35 @@ func unwrapSSU2Addr(addr net.Addr) net.Addr {
 
 // extractNATAddrHostPort extracts host and port from a NATAddr's external address.
 func extractNATAddrHostPort(natAddr *nat.NATAddr) (string, string, error) {
-	host, portStr, err := net.SplitHostPort(natAddr.ExternalAddr())
+	host, portStr, err := splitNATHostPort(natAddr.ExternalAddr())
 	if err != nil {
-		return "", "", oops.Wrapf(err, "failed to parse NATAddr external address %q", natAddr.ExternalAddr())
+		return "", "", err
 	}
 	host = replaceUnspecifiedWithExternal(host)
 	return host, portStr, nil
+}
+
+// splitNATHostPort splits an address string that may be an unbracketed IPv6+port
+// produced by go-nat-listener (fmt.Sprintf("%s:%d", externalIP, port)).
+// For IPv4 and already-bracketed IPv6 the standard net.SplitHostPort is used.
+// For bare IPv6 (e.g. "2001:db8::1:4567") the last colon is treated as the
+// host/port delimiter and brackets are added before retrying.
+func splitNATHostPort(addr string) (host, port string, err error) {
+	host, port, err = net.SplitHostPort(addr)
+	if err == nil {
+		return
+	}
+	// Detect unbracketed IPv6: more than one colon means IPv6, not IPv4.
+	if strings.Count(addr, ":") < 2 {
+		return "", "", oops.Wrapf(err, "failed to parse NATAddr external address %q", addr)
+	}
+	lastColon := strings.LastIndex(addr, ":")
+	candidate := "[" + addr[:lastColon] + "]:" + addr[lastColon+1:]
+	host, port, err2 := net.SplitHostPort(candidate)
+	if err2 != nil {
+		return "", "", oops.Wrapf(err, "failed to parse NATAddr external address %q", addr)
+	}
+	return host, port, nil
 }
 
 // extractStandardHostPort extracts host and port from a standard address using String().

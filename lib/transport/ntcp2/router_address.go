@@ -3,6 +3,7 @@ package ntcp2
 import (
 	"fmt"
 	"net"
+	"strings"
 	"time"
 
 	i2pbase64 "github.com/go-i2p/common/base64"
@@ -316,9 +317,9 @@ func extractFromTCPAddr(typedAddr *net.TCPAddr) (string, string, error) {
 
 // extractFromNATAddr extracts host and port from a NATAddr, using external address.
 func extractFromNATAddr(typedAddr *nat.NATAddr) (string, string, error) {
-	host, port, err := net.SplitHostPort(typedAddr.ExternalAddr())
+	host, port, err := splitNATHostPort(typedAddr.ExternalAddr())
 	if err != nil {
-		return "", "", oops.Wrapf(err, "failed to parse NATAddr external address %q", typedAddr.ExternalAddr())
+		return "", "", err
 	}
 	host = resolveUnspecifiedIP(host)
 	return host, port, nil
@@ -376,9 +377,9 @@ func extractTCPAddrHostPort(addr *net.TCPAddr) (string, string, error) {
 
 // extractNATAddrHostPort extracts host and port from a NATAddr, using external IP fallback if needed.
 func extractNATAddrHostPort(addr *nat.NATAddr) (string, string, error) {
-	host, port, err := net.SplitHostPort(addr.ExternalAddr())
+	host, port, err := splitNATHostPort(addr.ExternalAddr())
 	if err != nil {
-		return "", "", oops.Wrapf(err, "failed to parse NATAddr external address %q", addr.ExternalAddr())
+		return "", "", err
 	}
 
 	if parsedIP := net.ParseIP(host); parsedIP != nil && parsedIP.IsUnspecified() {
@@ -387,6 +388,30 @@ func extractNATAddrHostPort(addr *nat.NATAddr) (string, string, error) {
 		}
 	}
 
+	return host, port, nil
+}
+
+// splitNATHostPort splits an address string that may be an unbracketed IPv6+port
+// produced by go-nat-listener (fmt.Sprintf("%s:%d", externalIP, port)).
+// For IPv4 and already-bracketed IPv6 the standard net.SplitHostPort is used.
+// For bare IPv6 (e.g. "2001:db8::1:4567") the last colon is treated as the
+// host/port delimiter and brackets are added before retrying.
+func splitNATHostPort(addr string) (host, port string, err error) {
+	host, port, err = net.SplitHostPort(addr)
+	if err == nil {
+		return
+	}
+	// Detect unbracketed IPv6: more than one colon means IPv6, not IPv4.
+	if strings.Count(addr, ":") < 2 {
+		// Not IPv6 — return the original error.
+		return "", "", oops.Wrapf(err, "failed to parse NATAddr external address %q", addr)
+	}
+	lastColon := strings.LastIndex(addr, ":")
+	candidate := "[" + addr[:lastColon] + "]:" + addr[lastColon+1:]
+	host, port, err2 := net.SplitHostPort(candidate)
+	if err2 != nil {
+		return "", "", oops.Wrapf(err, "failed to parse NATAddr external address %q", addr)
+	}
 	return host, port, nil
 }
 
