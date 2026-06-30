@@ -9,6 +9,7 @@ import (
 	"time"
 
 	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/common/router_address"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/keys"
@@ -19,7 +20,10 @@ import (
 )
 
 // createValidRouterInfo creates a truly valid RouterInfo for testing.
-// Uses the actual keystore to generate proper keys and RouterInfo.
+// Uses the actual keystore to generate proper keys and RouterInfo. The RouterInfo
+// is constructed with a directly-reachable NTCP2 address (host+port) and the
+// Reachable capability so it passes publication reachability checks
+// (isPublishableLocalRouterInfo) and peer-selection filtering.
 func createValidRouterInfo(t *testing.T) router_info.RouterInfo {
 	// Create temporary directory for keystore
 	tmpDir, err := os.MkdirTemp("", "netdb-test-*")
@@ -30,8 +34,20 @@ func createValidRouterInfo(t *testing.T) router_info.RouterInfo {
 	keystore, err := keys.NewRouterInfoKeystore(tmpDir, "test-router")
 	require.NoError(t, err)
 
-	// Construct RouterInfo (this creates valid keys and identity)
-	ri, err := keystore.ConstructRouterInfo(nil)
+	// Build a directly-dialable NTCP2 address (host + port) so the RouterInfo is
+	// considered reachable by hasReachableAddress / isPublishableLocalRouterInfo.
+	ntcp2Addr, err := router_address.NewRouterAddress(3, time.Now().Add(24*time.Hour), "NTCP2", map[string]string{
+		"host": "1.2.3.4",
+		"port": "12345",
+	})
+	require.NoError(t, err)
+
+	// Construct RouterInfo (this creates valid keys and identity). Reachable:true
+	// makes the caps string advertise "R" instead of "U".
+	ri, err := keystore.ConstructRouterInfo(
+		[]*router_address.RouterAddress{ntcp2Addr},
+		keys.RouterInfoOptions{Reachable: true},
+	)
 	require.NoError(t, err)
 	require.NotNil(t, ri)
 
