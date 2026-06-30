@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -120,8 +121,12 @@ func (cb *CompositeBootstrap) getPeersAutoFallback(ctx context.Context, n int) (
 // localFallbackContext ensures the local netDb fallback is not skipped just
 // because a previous remote bootstrap phase exhausted the caller's deadline.
 // Local filesystem bootstrap is fast and independent of network timing, so when
-// the parent context is already done we give the local fallback a short fresh
-// budget to evaluate available RouterInfo files.
+// the parent context's deadline was exceeded we give the local fallback a short
+// fresh budget to evaluate available RouterInfo files.
+//
+// An explicit cancellation (context.Canceled) is different: the caller has asked
+// us to abort, so we honor it and propagate the cancelled context rather than
+// starting a fresh budget.
 func localFallbackContext(ctx context.Context) (context.Context, context.CancelFunc) {
 	if ctx == nil {
 		return context.WithTimeout(context.Background(), 5*time.Second)
@@ -131,6 +136,12 @@ func localFallbackContext(ctx context.Context) (context.Context, context.CancelF
 		return ctx, func() {}
 	}
 
+	// Caller explicitly cancelled — do not resurrect a fresh budget; abort.
+	if errors.Is(ctx.Err(), context.Canceled) {
+		return ctx, func() {}
+	}
+
+	// Parent deadline exceeded: give local filesystem bootstrap a fresh budget.
 	return context.WithTimeout(context.Background(), 5*time.Second)
 }
 
