@@ -51,19 +51,19 @@ const optionsBlockMinSize = 11
 
 // DefaultOptions returns the default NTCP2 options.
 //
-// M-3 FIX: PaddingMax is set to 1.0 (up to 100 % of the frame payload
-// size), matching the Java I2P convention of non-zero padding on every
-// data-phase frame. PaddingMin remains 0 so that frames with small
-// payloads are not forced to carry unnecessary overhead. Padding bytes
-// are generated from crypto/rand by NewPaddingBlock, preventing
-// fingerprinting via the absence or predictability of padding.
+// PaddingMax is set to 0.06 (up to 6 % of the frame payload size), matching
+// i2pd's NTCP2_MAX_PADDING_RATIO (6 %, see i2pd NTCP2.h / NTCP2.cpp
+// CreatePaddingBlock). PaddingMin remains 0 so that frames with small payloads
+// are not forced to carry unnecessary overhead, while a non-zero PaddingMax
+// still prevents fingerprinting via the absence of padding. Padding bytes are
+// generated from crypto/rand by NewPaddingBlock.
 //
 // Spec reference: https://geti2p.net/spec/ntcp2#options-block
 func DefaultOptions() *Options {
 	return &Options{
 		Version:    0,
 		PaddingMin: 0,
-		PaddingMax: 1.0, // M-3 FIX: non-zero max to avoid fingerprintability
+		PaddingMax: 0.06, // i2pd NTCP2_MAX_PADDING_RATIO = 6%
 		DummyMin:   0,
 		DummyMax:   0,
 		DelayMin:   0,

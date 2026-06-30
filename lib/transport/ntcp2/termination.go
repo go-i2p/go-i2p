@@ -54,24 +54,25 @@ const (
 	// TerminationMsg2DecryptionFailure indicates message 2 (handshake) decryption failed.
 	TerminationMsg2DecryptionFailure byte = 12
 
-	// TerminationMsg3DecryptionFailure1 indicates message 3 part 1 (handshake) decryption failed.
-	TerminationMsg3DecryptionFailure1 byte = 13
+	// TerminationMsg3Error indicates an error processing message 3 of the handshake
+	// (decryption failure or invalid contents). Matches i2pd eNTCP2Message3Error.
+	TerminationMsg3Error byte = 13
 
-	// TerminationMsg3DecryptionFailure2 indicates message 3 part 2 (handshake) decryption failed.
-	TerminationMsg3DecryptionFailure2 byte = 14
+	// TerminationIntraFrameReadTimeout indicates a timeout while reading a frame
+	// during the data phase. Matches i2pd eNTCP2IntraFrameReadTimeout.
+	TerminationIntraFrameReadTimeout byte = 14
 
-	// TerminationBadAliceRouterInfo indicates Alice's RouterInfo in message 3 was invalid
-	// (could not be parsed, missing required fields, or the RouterInfo public key does not
-	// match the static key from the Noise handshake).
-	TerminationBadAliceRouterInfo byte = 15
+	// TerminationRouterInfoSignatureVerificationFail indicates the peer's RouterInfo
+	// signature verification failed. Matches i2pd eNTCP2RouterInfoSignatureVerificationFail.
+	TerminationRouterInfoSignatureVerificationFail byte = 15
 
-	// TerminationBadAliceRouterInfoSignature indicates Alice's RouterInfo signature
-	// verification failed.
-	TerminationBadAliceRouterInfoSignature byte = 16
+	// TerminationIncorrectSParameter indicates the static key (the Noise "s" parameter)
+	// is incorrect — e.g. it does not match the encryption key published in the peer's
+	// RouterInfo. Matches i2pd eNTCP2IncorrectSParameter.
+	TerminationIncorrectSParameter byte = 16
 
-	// TerminationStaticKeysMismatch indicates the static key from the Noise handshake
-	// does not match the encryption key published in Alice's RouterInfo.
-	TerminationStaticKeysMismatch byte = 17
+	// TerminationBanned indicates the peer is banned. Matches i2pd eNTCP2Banned.
+	TerminationBanned byte = 17
 )
 
 // terminationBlockType is the NTCP2 data-phase block type for termination.
@@ -150,16 +151,16 @@ func TerminationReasonString(reason byte) string {
 		return "message 1 decryption failure"
 	case TerminationMsg2DecryptionFailure:
 		return "message 2 decryption failure"
-	case TerminationMsg3DecryptionFailure1:
-		return "message 3 decryption failure (part 1)"
-	case TerminationMsg3DecryptionFailure2:
-		return "message 3 decryption failure (part 2)"
-	case TerminationBadAliceRouterInfo:
-		return "bad Alice RouterInfo"
-	case TerminationBadAliceRouterInfoSignature:
-		return "Alice RouterInfo signature verification failed"
-	case TerminationStaticKeysMismatch:
-		return "static keys mismatch"
+	case TerminationMsg3Error:
+		return "message 3 error"
+	case TerminationIntraFrameReadTimeout:
+		return "intra-frame read timeout"
+	case TerminationRouterInfoSignatureVerificationFail:
+		return "RouterInfo signature verification failed"
+	case TerminationIncorrectSParameter:
+		return "incorrect s parameter (static key)"
+	case TerminationBanned:
+		return "banned"
 	default:
 		return "unknown"
 	}

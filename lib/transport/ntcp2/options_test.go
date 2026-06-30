@@ -11,8 +11,10 @@ func TestDefaultOptions(t *testing.T) {
 	opts := DefaultOptions()
 	assert.Equal(t, uint8(0), opts.Version)
 	assert.Equal(t, float64(0), opts.PaddingMin)
-	// M-3 FIX: PaddingMax must be non-zero to avoid zero-padding fingerprinting.
-	assert.Greater(t, opts.PaddingMax, float64(0), "DefaultOptions PaddingMax must be > 0 (M-3 fix)")
+	// PaddingMax must be non-zero to avoid zero-padding fingerprinting, and
+	// should match i2pd's NTCP2_MAX_PADDING_RATIO (6%).
+	assert.Greater(t, opts.PaddingMax, float64(0), "DefaultOptions PaddingMax must be > 0")
+	assert.InDelta(t, 0.06, opts.PaddingMax, 0.01, "DefaultOptions PaddingMax should match i2pd 6% ratio")
 	assert.Equal(t, uint16(0), opts.DummyMin)
 	assert.Equal(t, uint16(0), opts.DummyMax)
 	assert.Equal(t, uint16(0), opts.DelayMin)

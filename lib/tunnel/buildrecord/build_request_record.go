@@ -6,6 +6,7 @@ package buildrecord
 
 import (
 	"errors"
+	"strconv"
 	"time"
 
 	"github.com/go-i2p/logger"
@@ -51,6 +52,16 @@ type BuildRequestRecord struct {
 	RequestTime   time.Time
 	SendMessageID int
 	Padding       [29]byte
+
+	// MinBandwidthKBps is the minimum bandwidth (KB/s) the tunnel creator
+	// requires from this hop, parsed from the short build record's tunnel
+	// build options mapping (key "m", i2pd TRANSIT_TUNNEL_MINIMUM_BANDWIDTH).
+	// Zero means unspecified. Only populated by ReadShortBuildRequestRecord.
+	MinBandwidthKBps uint32
+	// RequestedBandwidthKBps is the bandwidth (KB/s) the tunnel creator
+	// requests from this hop (key "r", i2pd TRANSIT_TUNNEL_REQUESTED_BANDWIDTH).
+	// Zero means unspecified. Only populated by ReadShortBuildRequestRecord.
+	RequestedBandwidthKBps uint32
 }
 
 // ReadBuildRequestRecord parses a BuildRequestRecord from the provided byte slice.
@@ -428,6 +439,38 @@ func ReadShortBuildRequestRecord(data []byte) (BuildRequestRecord, error) {
 	record.RequestTime = time.Unix(int64(minutesSinceEpoch)*60, 0)
 	record.SendMessageID = common.Integer(data[52:56]).Int()
 
+	// Tunnel build options mapping occupies bytes [56:154] (98 bytes) in the
+	// short cleartext (i2pd SHORT_REQUEST_RECORD_TUNNEL_BUILD_OPTIONS_OFFSET).
+	// Parse best-effort: a malformed or empty options block leaves the
+	// bandwidth fields at zero, matching i2pd's tolerant handling.
+	record.MinBandwidthKBps, record.RequestedBandwidthKBps = parseShortBuildOptions(data[56:ShortCleartextLen])
+
 	log.WithFields(logger.Fields{"at": "ReadShortBuildRequestRecord"}).Debug("ReadShortBuildRequestRecord: parsed 154-byte STBM cleartext")
 	return record, nil
+}
+
+// parseShortBuildOptions extracts the transit-tunnel bandwidth options ("m" and
+// "r", both decimal KB/s strings) from a short build record's options mapping.
+// It is intentionally tolerant: any parse failure yields zero values, matching
+// i2pd's behavior of ignoring malformed or absent build options.
+func parseShortBuildOptions(optionsRegion []byte) (minKBps, requestedKBps uint32) {
+	mapping, _, errs := common.ReadMapping(optionsRegion)
+	if len(errs) != 0 {
+		return 0, 0
+	}
+	gomap, err := mapping.ToGoMap()
+	if err != nil {
+		return 0, 0
+	}
+	if v, ok := gomap["m"]; ok {
+		if n, perr := strconv.ParseUint(v, 10, 32); perr == nil {
+			minKBps = uint32(n)
+		}
+	}
+	if v, ok := gomap["r"]; ok {
+		if n, perr := strconv.ParseUint(v, 10, 32); perr == nil {
+			requestedKBps = uint32(n)
+		}
+	}
+	return minKBps, requestedKBps
 }

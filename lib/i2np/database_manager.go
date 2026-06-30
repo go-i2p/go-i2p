@@ -248,10 +248,11 @@ func (dm *DatabaseManager) sendDatabaseSearchReply(key, to common.Hash) error {
 }
 
 // selectClosestFloodfills selects the closest floodfill routers to suggest for a lookup.
-// Returns up to 7 peer hashes (implementation convention; spec allows 0-255) sorted by XOR distance to target.
+// Returns up to 3 peer hashes (matching i2pd's GetClosestFloodfills(..., 3, ...) in
+// NetDb.cpp; spec allows 0-255) sorted by XOR distance to target.
 // If no floodfill selector is configured, returns empty list for backward compatibility.
 func (dm *DatabaseManager) selectClosestFloodfills(targetKey common.Hash) []common.Hash {
-	const defaultFloodfillCount = 7 // I2P standard practice
+	const defaultFloodfillCount = 3 // i2pd NetDb.cpp DatabaseSearchReply uses 3 closest floodfills
 
 	if !dm.hasFloodfillSelector() {
 		return []common.Hash{}

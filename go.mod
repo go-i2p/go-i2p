@@ -84,7 +84,7 @@ require (
 // Noise handshake) and path at the in-tree working copies so transport fixes
 // landed locally are actually built. Removing them silently downgrades to the
 // last published pseudo-version and reverts those fixes, which breaks transport.
-//replace github.com/go-i2p/go-noise => ../go-noise
+replace github.com/go-i2p/go-noise => ../go-noise
 
 //replace github.com/go-i2p/path => ../path
 
@@ -93,7 +93,7 @@ require (
 // publish intermediate versions.
 
 // Group 1: common, crypto, elgamal
-//replace github.com/go-i2p/common => ../common
+replace github.com/go-i2p/common => ../common
 
 //replace github.com/go-i2p/crypto => ../crypto
 
