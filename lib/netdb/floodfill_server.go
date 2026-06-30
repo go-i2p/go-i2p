@@ -12,9 +12,12 @@ import (
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
+	"github.com/go-i2p/common/session_tag"
+	cryptochacha "github.com/go-i2p/crypto/chacha20poly1305"
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/go-i2p/go-i2p/lib/util/logutil"
+	noiseratchet "github.com/go-i2p/go-noise/ratchet"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
@@ -389,6 +392,9 @@ func (fs *FloodfillServer) HandleDatabaseLookup(lookup *i2np.DatabaseLookup) err
 	// Attempt to find the data locally
 	data, dataType, err := fs.lookupData(key, lookupType)
 	if err == nil && len(data) > 0 {
+		if lookup.IsECIES() {
+			return fs.sendEncryptedLookupReply(key, data, dataType, lookup, transport)
+		}
 		// Found locally — check delivery preference from lookup flags
 		// deliveryFlag (bit 0): 0 = send directly, 1 = send through tunnel
 		deliveryFlag := lookup.Flags & 0x01
@@ -401,12 +407,101 @@ func (fs *FloodfillServer) HandleDatabaseLookup(lookup *i2np.DatabaseLookup) err
 	}
 
 	// Not found — respond with DatabaseSearchReply containing closest floodfills
+	if lookup.IsECIES() {
+		return fs.sendEncryptedSearchReply(key, lookup, transport)
+	}
 	// Also check delivery preference for search replies
 	deliveryFlag := lookup.Flags & 0x01
 	if deliveryFlag == 1 {
 		return fs.sendDatabaseSearchReplyThroughTunnel(key, lookup.ReplyTunnelID, from, transport)
 	}
 	return fs.sendDatabaseSearchReply(key, from, transport)
+}
+
+func (fs *FloodfillServer) sendEncryptedLookupReply(
+	key common.Hash,
+	data []byte,
+	dataType byte,
+	lookup *i2np.DatabaseLookup,
+	transport FloodfillTransport,
+) error {
+	store := i2np.NewDatabaseStore(key, data, dataType)
+	msg, err := wrapEncryptedLookupReply(store, lookup)
+	if err != nil {
+		return err
+	}
+	return fs.sendReplyMessageByPreference(msg, lookup, transport)
+}
+
+func (fs *FloodfillServer) sendEncryptedSearchReply(
+	key common.Hash,
+	lookup *i2np.DatabaseLookup,
+	transport FloodfillTransport,
+) error {
+	peerHashes := fs.selectClosestFloodfills(key)
+	reply := i2np.NewDatabaseSearchReply(key, fs.ourHash, peerHashes)
+	msg, err := wrapEncryptedLookupReply(reply, lookup)
+	if err != nil {
+		return err
+	}
+	return fs.sendReplyMessageByPreference(msg, lookup, transport)
+}
+
+func (fs *FloodfillServer) sendReplyMessageByPreference(msg i2np.Message, lookup *i2np.DatabaseLookup, transport FloodfillTransport) error {
+	if transport == nil {
+		return oops.Errorf("no transport available to send encrypted lookup reply")
+	}
+	if lookup.Flags&0x01 == 1 {
+		gatewayHash := lookup.From
+		tunnelID := tunnel.TunnelID(binary.BigEndian.Uint32(lookup.ReplyTunnelID[:]))
+		payload, err := msg.MarshalBinary()
+		if err != nil {
+			return oops.Wrapf(err, "failed to marshal encrypted lookup reply for tunnel delivery")
+		}
+		return transport.SendI2NPMessage(fs.ctx, gatewayHash, i2np.NewTunnelGatewayMessage(tunnelID, payload))
+	}
+	return transport.SendI2NPMessage(fs.ctx, lookup.From, msg)
+}
+
+func wrapEncryptedLookupReply(msg i2np.Message, lookup *i2np.DatabaseLookup) (i2np.Message, error) {
+	if !lookup.IsECIES() {
+		return nil, oops.Errorf("only ECIES encrypted lookup replies are implemented")
+	}
+	if lookup.Tags <= 0 || len(lookup.GetECIESReplyTags()) == 0 {
+		return nil, oops.Errorf("ECIES encrypted lookup reply requested without tags")
+	}
+
+	payload, err := msg.MarshalBinary()
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to marshal lookup reply payload")
+	}
+
+	ratchetPayload, err := noiseratchet.BuildNSPayload(payload)
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to build ECIES payload")
+	}
+
+	var key [32]byte
+	copy(key[:], lookup.ReplyKey[:])
+	aead, err := cryptochacha.NewAEAD(key)
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to initialize ECIES reply AEAD")
+	}
+
+	tag := lookup.GetECIESReplyTags()[0]
+	nonce := make([]byte, cryptochacha.NonceSize)
+	ciphertext, mac, err := aead.Encrypt(ratchetPayload, tag.Bytes(), nonce)
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to encrypt ECIES lookup reply")
+	}
+
+	encrypted := make([]byte, 0, session_tag.ECIESSessionTagSize+len(nonce)+len(ciphertext)+len(mac))
+	encrypted = append(encrypted, tag.Bytes()...)
+	encrypted = append(encrypted, nonce...)
+	encrypted = append(encrypted, ciphertext...)
+	encrypted = append(encrypted, mac[:]...)
+
+	return i2np.WrapInGarlicMessage(encrypted)
 }
 
 // determineLookupType extracts the lookup type from the DatabaseLookup flags.

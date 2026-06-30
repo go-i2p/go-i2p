@@ -60,6 +60,9 @@ func (r *Router) startFloodfillServer() {
 		cfg.OurHash = ourHash
 	}
 	r.floodfillServer = netdb.NewFloodfillServer(r.netdb, adapter, cfg)
+	if r.messageRouter != nil {
+		r.messageRouter.GetProcessor().SetFloodfillReplicator(r.floodfillServer)
+	}
 	log.WithField("enabled", cfg.Enabled).Debug("Floodfill server started")
 }
 

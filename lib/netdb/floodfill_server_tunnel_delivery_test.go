@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/common/session_key"
+	"github.com/go-i2p/common/session_tag"
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 )
@@ -270,5 +272,127 @@ func TestDeliveryFlagExtraction(t *testing.T) {
 				t.Errorf("Expected deliveryFlag %d, got %d", tt.expectedFlag, deliveryFlag)
 			}
 		})
+	}
+}
+
+func TestHandleDatabaseLookupDirectECIESResponse(t *testing.T) {
+	db := NewStdNetDB(t.TempDir())
+	if err := db.Ensure(); err != nil {
+		t.Fatalf("Failed to ensure DB: %v", err)
+	}
+
+	transport := &mockFloodfillTransport{}
+	var ourHash common.Hash
+	copy(ourHash[:], []byte("our_hash_for_ecies_direct_reply!!"))
+
+	fs := NewFloodfillServer(db, transport, FloodfillConfig{Enabled: true, OurHash: ourHash, FloodCount: 4})
+
+	var testKey common.Hash
+	copy(testKey[:], []byte("nonexistent_key_for_ecies_direct!!"))
+	var requesterHash common.Hash
+	copy(requesterHash[:], []byte("requester_for_ecies_direct_reply!"))
+
+	var replyKey session_key.SessionKey
+	replyKey[0] = 0x11
+	tagBytes := make([]byte, 8)
+	tagBytes[0] = 0x22
+	eciesTag, err := session_tag.NewECIESSessionTagFromBytes(tagBytes)
+	if err != nil {
+		t.Fatalf("Failed to create ECIES tag: %v", err)
+	}
+
+	lookup := &i2np.DatabaseLookup{
+		Key:            testKey,
+		From:           requesterHash,
+		Flags:          i2np.DatabaseLookupFlagECIES,
+		ReplyKey:       replyKey,
+		Tags:           1,
+		ECIESReplyTags: []session_tag.ECIESSessionTag{eciesTag},
+	}
+
+	err = fs.HandleDatabaseLookup(lookup)
+	if err != nil {
+		t.Fatalf("HandleDatabaseLookup failed: %v", err)
+	}
+
+	msgs := transport.getMessages()
+	if len(msgs) != 1 {
+		t.Fatalf("Expected 1 message, got %d", len(msgs))
+	}
+	if msgs[0].to != requesterHash {
+		t.Fatal("ECIES direct reply should be sent to requester")
+	}
+	garlic, ok := msgs[0].msg.(*i2np.BaseI2NPMessage)
+	if !ok {
+		t.Fatalf("Expected garlic BaseI2NPMessage, got %T", msgs[0].msg)
+	}
+	if garlic.Type() != i2np.I2NPMessageTypeGarlic {
+		t.Fatalf("Expected garlic message type, got %d", garlic.Type())
+	}
+	data := garlic.GetData()
+	if len(data) < 8+12+16 {
+		t.Fatalf("ECIES garlic reply too short: %d", len(data))
+	}
+	if got := data[:8]; string(got) != string(tagBytes) {
+		t.Fatalf("ECIES reply did not preserve requested session tag")
+	}
+}
+
+func TestHandleDatabaseLookupTunnelECIESResponse(t *testing.T) {
+	db := NewStdNetDB(t.TempDir())
+	if err := db.Ensure(); err != nil {
+		t.Fatalf("Failed to ensure DB: %v", err)
+	}
+
+	transport := &mockFloodfillTransport{}
+	var ourHash common.Hash
+	copy(ourHash[:], []byte("our_hash_for_ecies_tunnel_reply!!"))
+
+	fs := NewFloodfillServer(db, transport, FloodfillConfig{Enabled: true, OurHash: ourHash, FloodCount: 4})
+
+	var testKey common.Hash
+	copy(testKey[:], []byte("nonexistent_key_for_ecies_tunnel!!"))
+	var gatewayHash common.Hash
+	copy(gatewayHash[:], []byte("gateway_for_ecies_tunnel_reply!!!"))
+
+	var replyKey session_key.SessionKey
+	replyKey[1] = 0x33
+	tagBytes := make([]byte, 8)
+	tagBytes[1] = 0x44
+	eciesTag, err := session_tag.NewECIESSessionTagFromBytes(tagBytes)
+	if err != nil {
+		t.Fatalf("Failed to create ECIES tag: %v", err)
+	}
+	replyTunnelID := [4]byte{0x00, 0x00, 0x27, 0x11}
+
+	lookup := &i2np.DatabaseLookup{
+		Key:            testKey,
+		From:           gatewayHash,
+		Flags:          i2np.DatabaseLookupFlagTunnel | i2np.DatabaseLookupFlagECIES,
+		ReplyTunnelID:  replyTunnelID,
+		ReplyKey:       replyKey,
+		Tags:           1,
+		ECIESReplyTags: []session_tag.ECIESSessionTag{eciesTag},
+	}
+
+	err = fs.HandleDatabaseLookup(lookup)
+	if err != nil {
+		t.Fatalf("HandleDatabaseLookup failed: %v", err)
+	}
+
+	msgs := transport.getMessages()
+	if len(msgs) != 1 {
+		t.Fatalf("Expected 1 message, got %d", len(msgs))
+	}
+	if msgs[0].to != gatewayHash {
+		t.Fatal("ECIES tunnel reply should be sent to gateway")
+	}
+	gatewayMsg, ok := msgs[0].msg.(*i2np.TunnelGateway)
+	if !ok {
+		t.Fatalf("Expected TunnelGateway, got %T", msgs[0].msg)
+	}
+	expectedTunnelID := tunnel.TunnelID(binary.BigEndian.Uint32(replyTunnelID[:]))
+	if gatewayMsg.TunnelID != expectedTunnelID {
+		t.Fatalf("Tunnel ID mismatch: expected %d, got %d", expectedTunnelID, gatewayMsg.TunnelID)
 	}
 }
