@@ -3,6 +3,7 @@ package router
 import (
 	"bytes"
 	"encoding/binary"
+	"sort"
 	"sync"
 
 	common "github.com/go-i2p/common/data"
@@ -267,13 +268,26 @@ func extractTunnelPayload(msg i2np.Message) ([]byte, tunnel.TunnelID, error) {
 func (h *InboundMessageHandler) lookupTunnelEntry(tunnelID tunnel.TunnelID) (*inboundTunnelEntry, bool) {
 	h.mu.RLock()
 	entry, exists := h.tunnelSessions[tunnelID]
+	registeredCount := len(h.tunnelSessions)
+	registeredIDs := make([]tunnel.TunnelID, 0, len(h.tunnelSessions))
+	if !exists {
+		for id := range h.tunnelSessions {
+			registeredIDs = append(registeredIDs, id)
+		}
+	}
 	h.mu.RUnlock()
 
 	if !exists {
+		sort.Slice(registeredIDs, func(i, j int) bool { return registeredIDs[i] < registeredIDs[j] })
+		if len(registeredIDs) > 8 {
+			registeredIDs = registeredIDs[:8]
+		}
 		log.WithFields(logger.Fields{
-			"at":        "(InboundMessageHandler) HandleTunnelData",
-			"reason":    "unregistered_tunnel",
-			"tunnel_id": tunnelID,
+			"at":                      "(InboundMessageHandler) HandleTunnelData",
+			"reason":                  "unregistered_tunnel",
+			"tunnel_id":               tunnelID,
+			"registered_tunnel_count": registeredCount,
+			"registered_tunnel_ids":   registeredIDs,
 		}).Debug("received TunnelData for unregistered tunnel")
 		return nil, false
 	}
@@ -373,7 +387,7 @@ func (p *passthroughTunnelEncryptor) Type() cryptotunnel.TunnelEncryptionType {
 // router's MessageProcessor.  This mirrors what tunnelGatewayDispatcher does
 // for TunnelGateway messages, but for TunnelData arriving at an exploratory /
 // reply inbound endpoint.
-func (h *InboundMessageHandler) createControlPlaneHandler() tunnel.MessageHandler {
+func (h *InboundMessageHandler) createControlPlaneHandler(tunnelID tunnel.TunnelID) tunnel.MessageHandler {
 	return func(msgBytes []byte) error {
 		h.mu.RLock()
 		proc := h.processor
@@ -405,6 +419,7 @@ func (h *InboundMessageHandler) createControlPlaneHandler() tunnel.MessageHandle
 		if inner.Type() == i2np.I2NPMessageTypeDeliveryStatus {
 			log.WithFields(logger.Fields{
 				"at":           "createControlPlaneHandler",
+				"tunnel_id":    tunnelID,
 				"message_type": inner.Type(),
 				"message_id":   inner.MessageID(),
 				"message_len":  len(msgBytes),
@@ -424,7 +439,7 @@ func (h *InboundMessageHandler) createControlPlaneHandler() tunnel.MessageHandle
 // sends TunnelData directly to our router (NextIdent = our hash) without
 // layering the encryption of T1's intermediate hops.
 func (h *InboundMessageHandler) RegisterExploratoryTunnel(tunnelID tunnel.TunnelID) error {
-	endpoint, err := tunnel.NewEndpoint(tunnelID, &passthroughTunnelEncryptor{}, h.createControlPlaneHandler())
+	endpoint, err := tunnel.NewEndpoint(tunnelID, &passthroughTunnelEncryptor{}, h.createControlPlaneHandler(tunnelID))
 	if err != nil {
 		return oops.Wrapf(err, "create exploratory endpoint for tunnel %d", tunnelID)
 	}
