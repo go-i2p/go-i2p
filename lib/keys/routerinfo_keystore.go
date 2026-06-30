@@ -434,9 +434,17 @@ type RouterInfoOptions struct {
 	// uses "R" (Reachable); when false, "U" (Unreachable).
 	Reachable bool
 	// Floodfill indicates whether the router should advertise the "f" (floodfill)
-	// capability. When true, "f" replaces "N" (not floodfill) in the caps string.
-	// Floodfills store and distribute netDB entries.
+	// capability. When true, "f" is appended to the caps string. Floodfills store
+	// and distribute netDB entries. Floodfill is an independent flag from the
+	// bandwidth tier; it is signalled solely by the presence of "f".
 	Floodfill bool
+	// BandwidthTier is the single-letter bandwidth capability advertised in the
+	// caps string. Valid values are K/L/M/N/O/P/X (ascending throughput). When
+	// empty it defaults to "L" (12-48 KBps), matching i2pd's default tier for a
+	// non-high-bandwidth router. O/P/X are treated as high bandwidth by i2pd;
+	// floodfills are promoted to at least "O" because i2pd requires floodfills to
+	// be high bandwidth.
+	BandwidthTier string
 	// NetID is the network identifier. Defaults to "2" (production I2P network).
 	// Set to "3" for testnet or other values for experimental networks.
 	NetID string
@@ -520,6 +528,9 @@ func (ks *RouterInfoKeystore) mergeStringFields(dest *RouterInfoOptions, src Rou
 	}
 	if src.Version != "" {
 		dest.Version = src.Version
+	}
+	if src.BandwidthTier != "" {
+		dest.BandwidthTier = src.BandwidthTier
 	}
 }
 
@@ -754,8 +765,9 @@ func (ks *RouterInfoKeystore) assembleRouterInfo(routerIdentity *router_identity
 	// Reference: https://geti2p.net/spec/ntcp2#datetime
 	publishedTime := rawTime.Round(time.Second)
 
-	// Build caps string - base caps then congestion flag per PROP_162
-	caps := ks.buildCapsString(opts.CongestionFlag, opts.Reachable, opts.Floodfill, opts.Hidden)
+	// Build caps string - bandwidth tier, floodfill, hidden, reachability, then
+	// congestion flag per PROP_162.
+	caps := ks.buildCapsString(opts.CongestionFlag, opts.BandwidthTier, opts.Reachable, opts.Floodfill, opts.Hidden)
 
 	netID := opts.NetID
 	if netID == "" {
@@ -803,29 +815,85 @@ func (ks *RouterInfoKeystore) assembleRouterInfo(routerIdentity *router_identity
 	return ri, nil
 }
 
+// defaultBandwidthTier is advertised when no tier is supplied. 'L' (12-48 KBps)
+// is i2pd's own default tier for a non-high-bandwidth router.
+const defaultBandwidthTier = "L"
+
+// validBandwidthTiers are the only legal bandwidth capability letters per the I2P
+// common-structures spec, in ascending throughput order:
+//
+//	K: <12 KBps   L: 12-48 KBps   M: 48-64 KBps   N: 64-128 KBps
+//	O: 128-256 KBps   P: 256-2048 KBps   X: >2048 KBps
+//
+// i2pd's RouterInfo::ExtractCaps reads the first such letter into m_BandwidthCap
+// and flags O/P/X as high bandwidth (eHighBandwidth / eExtraBandwidth).
+var validBandwidthTiers = map[string]bool{
+	"K": true, "L": true, "M": true, "N": true, "O": true, "P": true, "X": true,
+}
+
+// highBandwidthTiers are the tiers i2pd treats as high bandwidth.
+var highBandwidthTiers = map[string]bool{
+	"O": true, "P": true, "X": true,
+}
+
+// normalizeBandwidthTier returns a valid single-letter bandwidth tier, falling
+// back to defaultBandwidthTier for empty or invalid input.
+func normalizeBandwidthTier(tier string) string {
+	if validBandwidthTiers[tier] {
+		return tier
+	}
+	if tier != "" {
+		log.WithFields(map[string]interface{}{
+			"at":             "buildCapsString",
+			"bandwidth_tier": tier,
+			"reason":         "invalid bandwidth tier, using default",
+		}).Warn("invalid bandwidth tier provided")
+	}
+	return defaultBandwidthTier
+}
+
 // buildCapsString constructs the capabilities string for RouterInfo.
-// Per PROP_162, congestion flags (D/E/G) are appended after R/U.
-// Capabilities: f = Floodfill, N = Not floodfill, R = Reachable, U = Unreachable, H = Hidden.
+//
+// The caps string encodes independent capability flags, mirroring i2pd's
+// LocalRouterInfo::UpdateCapsProperty ordering: bandwidth tier, optional
+// floodfill ("f"), optional hidden ("H"), reachability ("R"/"U"), then any
+// congestion flag (D/E/G per PROP_162).
+//
+// Capabilities: K/L/M/N/O/P/X = bandwidth tier, f = Floodfill, R = Reachable,
+// U = Unreachable, H = Hidden.
+//
+// IMPORTANT: floodfill is signalled ONLY by the presence of "f"; a non-floodfill
+// router appends nothing. "N" is NOT a "not floodfill" marker — in I2P it is the
+// 64-128 KBps bandwidth tier, so emitting it for non-floodfill routers caused
+// i2pd to misread the router's bandwidth. A valid bandwidth tier letter is always
+// emitted so that i2pd's ExtractCaps populates m_BandwidthCap (an absent tier
+// leaves the router with no bandwidth cap and IsHighBandwidth()=false).
+//
 // When hidden is true, the reachability flag is forced to "U" and "H" is appended,
-// matching Java I2P's hidden-mode RouterInfo semantics.
-func (ks *RouterInfoKeystore) buildCapsString(congestionFlag string, reachable, floodfill, hidden bool) string {
+// matching Java I2P's hidden-mode RouterInfo semantics. Floodfills are promoted to
+// at least the "O" tier because i2pd requires floodfills to be high bandwidth.
+func (ks *RouterInfoKeystore) buildCapsString(congestionFlag, bandwidthTier string, reachable, floodfill, hidden bool) string {
+	tier := normalizeBandwidthTier(bandwidthTier)
+	if floodfill && !highBandwidthTiers[tier] {
+		tier = "O"
+	}
+
 	reachabilityFlag := "U"
 	if reachable && !hidden {
 		reachabilityFlag = "R"
 	}
 
-	floodfillFlag := "N"
+	caps := tier
 	if floodfill {
-		floodfillFlag = "f"
+		caps += "f"
 	}
-
-	baseCaps := floodfillFlag + reachabilityFlag
 	if hidden {
-		baseCaps += "H"
+		caps += "H"
 	}
+	caps += reachabilityFlag
 
 	if congestionFlag == "" {
-		return baseCaps
+		return caps
 	}
 
 	// Validate congestion flag is one of D, E, or G
@@ -835,8 +903,8 @@ func (ks *RouterInfoKeystore) buildCapsString(congestionFlag string, reachable, 
 			"congestion_flag": congestionFlag,
 			"reason":          "invalid congestion flag, ignoring",
 		}).Warn("invalid congestion flag provided")
-		return baseCaps
+		return caps
 	}
 
-	return baseCaps + congestionFlag
+	return caps + congestionFlag
 }

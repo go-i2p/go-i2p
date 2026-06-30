@@ -994,7 +994,35 @@ func (t *SSU2Transport) createBaseDialConfig() (*ssu2noise.SSU2Config, error) {
 	if ik := t.GetIntroKey(); len(ik) == 32 {
 		dialConfig.IntroKey = ik
 	}
+
+	if err := t.attachLocalRouterInfo(dialConfig); err != nil {
+		return nil, err
+	}
 	return dialConfig, nil
+}
+
+// attachLocalRouterInfo serializes our local RouterInfo and attaches it to the
+// dial config so it is transmitted in the SSU2 SessionConfirmed message.
+//
+// Without this, go-noise falls back to sending only our 32-byte RouterHash, which
+// i2pd rejects during strict static-key verification: a bare hash does not contain
+// an SSU2 address with the "s" (static key) parameter, so the responder cannot
+// match the Noise-authenticated key and terminates the session. Mirrors the NTCP2
+// transport's msg3 RouterInfo handling (attachLocalRouterInfo).
+func (t *SSU2Transport) attachLocalRouterInfo(dialConfig *ssu2noise.SSU2Config) error {
+	t.identityMu.RLock()
+	localRI := t.identity
+	t.identityMu.RUnlock()
+
+	riBytes, err := localRI.Bytes()
+	if err != nil {
+		return oops.Wrapf(err, "cannot serialize local RouterInfo for SSU2 SessionConfirmed")
+	}
+	if len(riBytes) == 0 {
+		return oops.Errorf("local RouterInfo serialized to zero bytes; cannot send SSU2 SessionConfirmed")
+	}
+	dialConfig.WithLocalRouterInfo(riBytes)
+	return nil
 }
 
 // applyRemotePeerConfig sets the remote router hash, static key, and intro key on the dial config.

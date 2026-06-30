@@ -423,35 +423,35 @@ func TestRouterInfoKeystore_ConstructRouterInfo_WithCongestionFlag(t *testing.T)
 		{
 			name:            "no options - base caps",
 			opts:            nil,
-			expectedCapsSub: "NU",
+			expectedCapsSub: "LU",
 		},
 		{
 			name: "with D flag",
 			opts: []RouterInfoOptions{
 				{CongestionFlag: "D"},
 			},
-			expectedCapsSub: "NUD",
+			expectedCapsSub: "LUD",
 		},
 		{
 			name: "with E flag",
 			opts: []RouterInfoOptions{
 				{CongestionFlag: "E"},
 			},
-			expectedCapsSub: "NUE",
+			expectedCapsSub: "LUE",
 		},
 		{
 			name: "with G flag",
 			opts: []RouterInfoOptions{
 				{CongestionFlag: "G"},
 			},
-			expectedCapsSub: "NUG",
+			expectedCapsSub: "LUG",
 		},
 		{
 			name: "empty option struct",
 			opts: []RouterInfoOptions{
 				{},
 			},
-			expectedCapsSub: "NU",
+			expectedCapsSub: "LU",
 		},
 		{
 			name: "multiple options - last wins",
@@ -459,7 +459,7 @@ func TestRouterInfoKeystore_ConstructRouterInfo_WithCongestionFlag(t *testing.T)
 				{CongestionFlag: "D"},
 				{CongestionFlag: "E"},
 			},
-			expectedCapsSub: "NUE",
+			expectedCapsSub: "LUE",
 		},
 	}
 
@@ -505,8 +505,8 @@ func TestRouterInfoKeystore_ConstructRouterInfo_BackwardCompatible(t *testing.T)
 	}
 
 	caps := ri.RouterCapabilities()
-	if !strings.Contains(caps, "NU") {
-		t.Errorf("caps %q does not contain 'NU'", caps)
+	if !strings.Contains(caps, "LU") {
+		t.Errorf("caps %q does not contain 'LU'", caps)
 	}
 }
 

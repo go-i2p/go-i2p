@@ -507,6 +507,10 @@ func (t *SSU2Transport) initializeCharlieDialConfig(charlieHash data.Hash) (*ssu
 	}
 	dialConfig = dialConfig.WithRemoteRouterHash(charlieHash)
 
+	if err := t.attachLocalRouterInfo(dialConfig); err != nil {
+		return nil, err
+	}
+
 	return dialConfig, nil
 }
 

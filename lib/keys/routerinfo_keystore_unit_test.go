@@ -239,58 +239,115 @@ func TestRouterInfoKeystore_BuildCapsString(t *testing.T) {
 	tests := []struct {
 		name           string
 		congestionFlag string
+		bandwidthTier  string
 		reachable      bool
 		expected       string
 	}{
 		{
 			name:           "no congestion flag, unreachable",
 			congestionFlag: "",
+			bandwidthTier:  "L",
 			reachable:      false,
-			expected:       "NU",
+			expected:       "LU",
 		},
 		{
 			name:           "no congestion flag, reachable",
 			congestionFlag: "",
+			bandwidthTier:  "L",
 			reachable:      true,
-			expected:       "NR",
+			expected:       "LR",
 		},
 		{
 			name:           "D flag - medium congestion, unreachable",
 			congestionFlag: "D",
+			bandwidthTier:  "L",
 			reachable:      false,
-			expected:       "NUD",
+			expected:       "LUD",
 		},
 		{
 			name:           "E flag - high congestion, reachable",
 			congestionFlag: "E",
+			bandwidthTier:  "L",
 			reachable:      true,
-			expected:       "NRE",
+			expected:       "LRE",
 		},
 		{
 			name:           "G flag - rejecting all",
 			congestionFlag: "G",
+			bandwidthTier:  "L",
 			reachable:      false,
-			expected:       "NUG",
+			expected:       "LUG",
 		},
 		{
-			name:           "invalid flag - ignored",
-			congestionFlag: "X",
+			name:           "invalid congestion flag - ignored",
+			congestionFlag: "Z",
+			bandwidthTier:  "L",
 			reachable:      false,
-			expected:       "NU",
+			expected:       "LU",
 		},
 		{
 			name:           "lowercase d - ignored (case sensitive)",
 			congestionFlag: "d",
+			bandwidthTier:  "L",
 			reachable:      false,
-			expected:       "NU",
+			expected:       "LU",
+		},
+		{
+			name:           "high bandwidth tier O, reachable",
+			congestionFlag: "",
+			bandwidthTier:  "O",
+			reachable:      true,
+			expected:       "OR",
+		},
+		{
+			name:           "empty bandwidth tier defaults to L",
+			congestionFlag: "",
+			bandwidthTier:  "",
+			reachable:      true,
+			expected:       "LR",
+		},
+		{
+			name:           "invalid bandwidth tier defaults to L",
+			congestionFlag: "",
+			bandwidthTier:  "Q",
+			reachable:      true,
+			expected:       "LR",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := ks.buildCapsString(tt.congestionFlag, tt.reachable, false, false)
+			result := ks.buildCapsString(tt.congestionFlag, tt.bandwidthTier, tt.reachable, false, false)
 			if result != tt.expected {
-				t.Errorf("buildCapsString(%q, %v, false, false) = %q, want %q", tt.congestionFlag, tt.reachable, result, tt.expected)
+				t.Errorf("buildCapsString(%q, %q, %v, false, false) = %q, want %q", tt.congestionFlag, tt.bandwidthTier, tt.reachable, result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestRouterInfoKeystore_BuildCapsString_Floodfill verifies that floodfill is
+// signalled by the "f" flag (never "N", which is a bandwidth tier) and that a
+// floodfill router is promoted to at least the high-bandwidth "O" tier.
+func TestRouterInfoKeystore_BuildCapsString_Floodfill(t *testing.T) {
+	ks := &RouterInfoKeystore{}
+	tests := []struct {
+		name          string
+		bandwidthTier string
+		reachable     bool
+		floodfill     bool
+		expected      string
+	}{
+		{"non-floodfill emits no f, keeps tier", "L", true, false, "LR"},
+		{"floodfill appends f and is promoted to O", "L", true, true, "OfR"},
+		{"floodfill with high tier P retained", "P", true, true, "PfR"},
+		{"floodfill unreachable", "L", false, true, "OfU"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ks.buildCapsString("", tt.bandwidthTier, tt.reachable, tt.floodfill, false)
+			if result != tt.expected {
+				t.Errorf("buildCapsString(%q, %q, %v, %v, false) = %q, want %q",
+					"", tt.bandwidthTier, tt.reachable, tt.floodfill, result, tt.expected)
 			}
 		})
 	}
@@ -302,23 +359,24 @@ func TestRouterInfoKeystore_BuildCapsString(t *testing.T) {
 func TestRouterInfoKeystore_BuildCapsString_Hidden(t *testing.T) {
 	ks := &RouterInfoKeystore{}
 	tests := []struct {
-		name      string
-		reachable bool
-		floodfill bool
-		flag      string
-		expected  string
+		name          string
+		reachable     bool
+		floodfill     bool
+		bandwidthTier string
+		flag          string
+		expected      string
 	}{
-		{"hidden, unreachable, no congestion", false, false, "", "NUH"},
-		{"hidden, reachable input ignored", true, false, "", "NUH"},
-		{"hidden, floodfill", false, true, "", "fUH"},
-		{"hidden with G congestion", false, false, "G", "NUHG"},
+		{"hidden, unreachable, no congestion", false, false, "L", "", "LHU"},
+		{"hidden, reachable input ignored", true, false, "L", "", "LHU"},
+		{"hidden, floodfill", false, true, "L", "", "OfHU"},
+		{"hidden with G congestion", false, false, "L", "G", "LHUG"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := ks.buildCapsString(tt.flag, tt.reachable, tt.floodfill, true)
+			result := ks.buildCapsString(tt.flag, tt.bandwidthTier, tt.reachable, tt.floodfill, true)
 			if result != tt.expected {
-				t.Errorf("buildCapsString(%q, %v, %v, true) = %q, want %q",
-					tt.flag, tt.reachable, tt.floodfill, result, tt.expected)
+				t.Errorf("buildCapsString(%q, %q, %v, %v, true) = %q, want %q",
+					tt.flag, tt.bandwidthTier, tt.reachable, tt.floodfill, result, tt.expected)
 			}
 		})
 	}
