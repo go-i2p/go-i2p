@@ -913,14 +913,21 @@ const expectedNetID = "2"
 
 func (db *StdNetDB) validateRouterInfo(key common.Hash, ri router_info.RouterInfo) error {
 	if err := verifyRouterInfoHash(key, ri); err != nil {
+		db.routerInfoStoreStats.rejectedHashCount.Add(1)
 		return err
 	}
 
 	if err := verifyRouterInfoSignature(ri); err != nil {
+		db.routerInfoStoreStats.rejectedSignatureCount.Add(1)
 		return err
 	}
 
-	return db.verifyRouterInfoNetwork(ri)
+	if err := db.verifyRouterInfoNetwork(ri); err != nil {
+		db.routerInfoStoreStats.rejectedNetworkCount.Add(1)
+		return err
+	}
+
+	return nil
 }
 
 // verifyRouterInfoNetwork rejects RouterInfos that omit the netId or router.version

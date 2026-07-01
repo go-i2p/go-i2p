@@ -140,6 +140,15 @@ type RouterInfoStats struct {
 	// RouterInfoRejectValidationCount is the number of RouterInfo rejects due to hash/signature/network validation failures.
 	RouterInfoRejectValidationCount uint64
 
+	// RouterInfoRejectHashCount is the number of RouterInfo rejects due to identity-hash mismatches.
+	RouterInfoRejectHashCount uint64
+
+	// RouterInfoRejectSignatureCount is the number of RouterInfo rejects due to invalid signatures.
+	RouterInfoRejectSignatureCount uint64
+
+	// RouterInfoRejectNetworkCount is the number of RouterInfo rejects due to netId/router.version network policy checks.
+	RouterInfoRejectNetworkCount uint64
+
 	// RouterInfoRejectAdmissionCount is the number of RouterInfo rejects due to admission limits.
 	RouterInfoRejectAdmissionCount uint64
 
@@ -373,6 +382,9 @@ func (rsp *routerStatsProvider) collectNetDBStats(stats *RouterInfoStats) {
 	stats.RouterInfoRejectDataTypeCount = storeStats.RejectedDataTypeCount
 	stats.RouterInfoRejectParseCount = storeStats.RejectedParseCount
 	stats.RouterInfoRejectValidationCount = storeStats.RejectedValidationCount
+	stats.RouterInfoRejectHashCount = storeStats.RejectedHashCount
+	stats.RouterInfoRejectSignatureCount = storeStats.RejectedSignatureCount
+	stats.RouterInfoRejectNetworkCount = storeStats.RejectedNetworkCount
 	stats.RouterInfoRejectAdmissionCount = storeStats.RejectedAdmissionCount
 	stats.RouterInfoRejectCount =
 		stats.RouterInfoRejectDataTypeCount +
