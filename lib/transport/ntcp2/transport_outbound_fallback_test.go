@@ -191,6 +191,12 @@ func buildPeerRouterInfoWithFallbackCandidates(
 	_, livePort, err := net.SplitHostPort(liveAddr)
 	require.NoError(t, err)
 
+	peerBytes, err := peer.Bytes()
+	require.NoError(t, err)
+	peerInfo, remainder, err := router_info.ReadRouterInfo(peerBytes)
+	require.NoError(t, err)
+	require.Len(t, remainder, 0)
+
 	addresses := peer.RouterAddresses()
 	require.NotEmpty(t, addresses, "peer RouterInfo must contain at least one NTCP2 address")
 	require.NotNil(t, addresses[0].TransportOptions)
@@ -205,14 +211,13 @@ func buildPeerRouterInfoWithFallbackCandidates(
 	closedOptions["host"] = "localhost"
 	closedOptions["port"] = closedPort
 
-	primary := &testutil.RouterAddressConfig{
-		Cost:       3,
-		Expiration: time.Now().Add(24 * time.Hour),
-		Transport:  "NTCP2",
-		Options:    closedOptions,
-	}
+	closedCandidate, err := router_address.NewRouterAddress(3, time.Now().Add(24*time.Hour), "NTCP2", closedOptions)
+	require.NoError(t, err)
 
-	peerInfo := testutil.CreateSignedTestRouterInfo(t, nil, primary)
+	peerAddresses := peerInfo.RouterAddresses()
+	require.NotEmpty(t, peerAddresses)
+	peerAddresses[0] = closedCandidate
+
 	liveOptions := map[string]string{}
 	for k, v := range baseOptions {
 		liveOptions[k] = v
@@ -221,9 +226,9 @@ func buildPeerRouterInfoWithFallbackCandidates(
 	liveOptions["port"] = livePort
 	secondary, err := router_address.NewRouterAddress(3, time.Now().Add(24*time.Hour), "NTCP2", liveOptions)
 	require.NoError(t, err)
-	require.NoError(t, peerInfo.AddAddress(secondary))
+	require.NoError(t, (&peerInfo).AddAddress(secondary))
 
-	return *peerInfo
+	return peerInfo
 }
 
 func TestGetSession_FallbackFromClosedPortToLiveResponder(t *testing.T) {
