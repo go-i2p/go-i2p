@@ -1243,6 +1243,8 @@ func (db *StdNetDB) StartExpirationCleaner() {
 // runPeriodicMaintenance performs less-frequent cleanup tasks every 10 ticks.
 // This includes RouterInfo expiration, peer tracker pruning, and refresh cooldown sweeping.
 func (db *StdNetDB) runPeriodicMaintenance(tickCount int) {
+	db.retryPendingRouterInfoPersists()
+
 	if tickCount%10 != 0 {
 		return
 	}

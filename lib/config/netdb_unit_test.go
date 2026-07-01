@@ -24,6 +24,8 @@ func TestDefaultNetDbConfig(t *testing.T) {
 	assert.Equal(t, 2*time.Minute, cfg.LeaseSetRefreshThreshold, "LeaseSetRefreshThreshold")
 	assert.Equal(t, 5*time.Minute, cfg.ExplorationInterval, "ExplorationInterval")
 	assert.False(t, cfg.FloodfillEnabled, "FloodfillEnabled should be false by default")
+	assert.True(t, cfg.StrictRouterInfoNetworkValidation, "StrictRouterInfoNetworkValidation should be true by default")
+	assert.Equal(t, 80, cfg.RouterInfoAdmissionPressureThresholdPct, "RouterInfoAdmissionPressureThresholdPct")
 }
 
 // TestNetDbConfigViperRoundTrip verifies that NetDBConfig fields are populated
@@ -37,6 +39,8 @@ func TestNetDbConfigViperRoundTrip(t *testing.T) {
 	assert.NotZero(t, cfg.NetDB.ExpirationCheckInterval, "ExpirationCheckInterval should be populated")
 	assert.NotZero(t, cfg.NetDB.LeaseSetRefreshThreshold, "LeaseSetRefreshThreshold should be populated")
 	assert.NotZero(t, cfg.NetDB.ExplorationInterval, "ExplorationInterval should be populated")
+	assert.True(t, cfg.NetDB.StrictRouterInfoNetworkValidation, "StrictRouterInfoNetworkValidation should be populated")
+	assert.NotZero(t, cfg.NetDB.RouterInfoAdmissionPressureThresholdPct, "RouterInfoAdmissionPressureThresholdPct should be populated")
 }
 
 // TestNetDbConfigUpdateRoundTrip verifies that UpdateRouterConfig populates
@@ -50,4 +54,5 @@ func TestNetDbConfigUpdateRoundTrip(t *testing.T) {
 	assert.NotZero(t, netdb.MaxRouterInfos, "MaxRouterInfos should be populated after UpdateRouterConfig")
 	assert.NotZero(t, netdb.MaxLeaseSets, "MaxLeaseSets should be populated after UpdateRouterConfig")
 	assert.NotZero(t, netdb.ExpirationCheckInterval, "ExpirationCheckInterval should be populated after UpdateRouterConfig")
+	assert.NotZero(t, netdb.RouterInfoAdmissionPressureThresholdPct, "RouterInfoAdmissionPressureThresholdPct should be populated after UpdateRouterConfig")
 }

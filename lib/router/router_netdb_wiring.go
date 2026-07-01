@@ -263,6 +263,8 @@ func (r *Router) initializeNetDB() error {
 	log.WithFields(logger.Fields{"at": "initializeNetDB"}).Debug("Initializing network database")
 	r.netdb = netdb.NewStdNetDB(r.cfg.NetDB.Path)
 	r.netdb.SetMaxRouterInfos(r.cfg.NetDB.MaxRouterInfos)
+	r.netdb.SetStrictRouterInfoNetworkValidation(r.cfg.NetDB.StrictRouterInfoNetworkValidation)
+	r.netdb.SetRouterInfoAdmissionPressureThreshold(r.cfg.NetDB.RouterInfoAdmissionPressureThresholdPct)
 	log.WithField("netdb_path", r.cfg.NetDB.Path).Debug("Created StdNetDB")
 	return nil
 }

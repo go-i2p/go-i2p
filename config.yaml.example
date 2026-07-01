@@ -54,6 +54,10 @@ netdb:
   exploration_interval: 5m
   # Whether this router acts as floodfill
   floodfill_enabled: false
+  # Require netId and router.version on inbound RouterInfos
+  strict_routerinfo_network_validation: true
+  # Enable source-based RouterInfo admission limits when cache reaches this usage percentage
+  routerinfo_admission_pressure_threshold_pct: 80
 
 # Bootstrap Configuration
 bootstrap:

@@ -127,6 +127,10 @@ func registerNetDBFlags(cmd *cobra.Command) {
 		"How often to explore the network for new peers")
 	cmd.PersistentFlags().Bool("netdb.floodfill-enabled", defaults.NetDB.FloodfillEnabled,
 		"Operate as a floodfill router")
+	cmd.PersistentFlags().Bool("netdb.strict-routerinfo-network-validation", defaults.NetDB.StrictRouterInfoNetworkValidation,
+		"Require netId and router.version on inbound RouterInfos")
+	cmd.PersistentFlags().Int("netdb.routerinfo-admission-pressure-threshold-pct", defaults.NetDB.RouterInfoAdmissionPressureThresholdPct,
+		"Cache pressure percentage where RouterInfo source admission limits engage")
 }
 
 func registerBootstrapFlags(cmd *cobra.Command) {

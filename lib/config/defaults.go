@@ -105,6 +105,16 @@ type NetDBDefaults struct {
 	// FloodfillEnabled determines if this router acts as floodfill
 	// Default: false (regular router mode)
 	FloodfillEnabled bool
+
+	// StrictRouterInfoNetworkValidation enforces required network options
+	// on inbound RouterInfo entries.
+	// Default: true
+	StrictRouterInfoNetworkValidation bool
+
+	// RouterInfoAdmissionPressureThresholdPct sets the cache utilization
+	// percentage where source-based RouterInfo admission limits engage.
+	// Default: 80
+	RouterInfoAdmissionPressureThresholdPct int
 }
 
 // BootstrapDefaults contains default values for network bootstrap
@@ -399,13 +409,15 @@ func buildRouterDefaults(baseDir, workingDir string) RouterDefaults {
 // buildNetDBDefaults creates default network database configuration values.
 func buildNetDBDefaults(workingDir string) NetDBDefaults {
 	return NetDBDefaults{
-		Path:                     filepath.Join(workingDir, "netDb"),
-		MaxRouterInfos:           5000,
-		MaxLeaseSets:             1000,
-		ExpirationCheckInterval:  1 * time.Minute,
-		LeaseSetRefreshThreshold: 2 * time.Minute,
-		ExplorationInterval:      5 * time.Minute,
-		FloodfillEnabled:         false,
+		Path:                                    filepath.Join(workingDir, "netDb"),
+		MaxRouterInfos:                          5000,
+		MaxLeaseSets:                            1000,
+		ExpirationCheckInterval:                 1 * time.Minute,
+		LeaseSetRefreshThreshold:                2 * time.Minute,
+		ExplorationInterval:                     5 * time.Minute,
+		FloodfillEnabled:                        false,
+		StrictRouterInfoNetworkValidation:       true,
+		RouterInfoAdmissionPressureThresholdPct: 80,
 	}
 }
 
@@ -593,6 +605,14 @@ func validateNetDBMaxLeaseSets(maxLeaseSets int) error {
 	return validateMinInt("max_lease_sets", "NetDBConfig", maxLeaseSets, 1)
 }
 
+func validateRouterInfoAdmissionPressureThresholdPct(threshold int) error {
+	if threshold < 1 || threshold > 99 {
+		log.WithField("router_info_admission_pressure_threshold_pct", threshold).Error("Invalid NetDB configuration")
+		return newValidationError("NetDB.RouterInfoAdmissionPressureThresholdPct must be between 1 and 99")
+	}
+	return nil
+}
+
 // runValidation runs a sequence of validator functions with logging bookends.
 func runValidation(name, startMsg, successMsg string, validators ...func() error) error {
 	logValidationStart(name, startMsg)
@@ -612,6 +632,9 @@ func validateNetDB(netdb NetDBDefaults) error {
 		func() error { return validateNetDBPath(netdb.Path) },
 		func() error { return validateNetDBMaxRouterInfos(netdb.MaxRouterInfos) },
 		func() error { return validateNetDBMaxLeaseSets(netdb.MaxLeaseSets) },
+		func() error {
+			return validateRouterInfoAdmissionPressureThresholdPct(netdb.RouterInfoAdmissionPressureThresholdPct)
+		},
 	)
 }
 

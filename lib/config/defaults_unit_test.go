@@ -31,6 +31,8 @@ func TestDefaults(t *testing.T) {
 	assert.Equal(t, 5000, cfg.NetDB.MaxRouterInfos, "NetDB.MaxRouterInfos")
 	assert.Equal(t, 1000, cfg.NetDB.MaxLeaseSets, "NetDB.MaxLeaseSets")
 	assert.Equal(t, 1*time.Minute, cfg.NetDB.ExpirationCheckInterval, "NetDB.ExpirationCheckInterval")
+	assert.True(t, cfg.NetDB.StrictRouterInfoNetworkValidation, "NetDB.StrictRouterInfoNetworkValidation")
+	assert.Equal(t, 80, cfg.NetDB.RouterInfoAdmissionPressureThresholdPct, "NetDB.RouterInfoAdmissionPressureThresholdPct")
 	assert.False(t, cfg.NetDB.FloodfillEnabled, "NetDB.FloodfillEnabled should be false by default")
 
 	// Bootstrap defaults

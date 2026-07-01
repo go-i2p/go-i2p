@@ -62,6 +62,18 @@ func TestValidate_NetDBInvalidMaxLeaseSets(t *testing.T) {
 	requireValidationFails(t, cfg, "Validate() should fail when MaxLeaseSets < 1")
 }
 
+func TestValidate_NetDBInvalidRouterInfoPressureThresholdLow(t *testing.T) {
+	cfg := Defaults()
+	cfg.NetDB.RouterInfoAdmissionPressureThresholdPct = 0
+	requireValidationFails(t, cfg, "Validate() should fail when RouterInfoAdmissionPressureThresholdPct < 1")
+}
+
+func TestValidate_NetDBInvalidRouterInfoPressureThresholdHigh(t *testing.T) {
+	cfg := Defaults()
+	cfg.NetDB.RouterInfoAdmissionPressureThresholdPct = 100
+	requireValidationFails(t, cfg, "Validate() should fail when RouterInfoAdmissionPressureThresholdPct > 99")
+}
+
 // TestValidate_NetDBEmptyPath verifies validation catches empty NetDB path
 func TestValidate_NetDBEmptyPath(t *testing.T) {
 	cfg := Defaults()

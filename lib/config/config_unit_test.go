@@ -54,6 +54,8 @@ func TestCurrentConfigDefaultsRoundTrip(t *testing.T) {
 	// NetDB section
 	assert.Equal(t, defaults.NetDB.MaxRouterInfos, cfg.NetDB.MaxRouterInfos, "MaxRouterInfos")
 	assert.Equal(t, defaults.NetDB.ExpirationCheckInterval, cfg.NetDB.ExpirationCheckInterval, "ExpirationCheckInterval")
+	assert.Equal(t, defaults.NetDB.StrictRouterInfoNetworkValidation, cfg.NetDB.StrictRouterInfoNetworkValidation, "StrictRouterInfoNetworkValidation")
+	assert.Equal(t, defaults.NetDB.RouterInfoAdmissionPressureThresholdPct, cfg.NetDB.RouterInfoAdmissionPressureThresholdPct, "RouterInfoAdmissionPressureThresholdPct")
 
 	// Bootstrap section
 	assert.Equal(t, defaults.Bootstrap.LowPeerThreshold, cfg.Bootstrap.LowPeerThreshold, "LowPeerThreshold")

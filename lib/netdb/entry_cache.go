@@ -96,6 +96,15 @@ func (ec *entryCache) setCapacity(max int) {
 	}
 }
 
+// setAdmissionPressureThreshold updates the pressure percentage where
+// per-source admission limits engage.
+func (ec *entryCache) setAdmissionPressureThreshold(percent int) {
+	if ec.admission == nil {
+		return
+	}
+	ec.admission.SetPressureThresholdPercent(percent)
+}
+
 // setExpiry records the expiration time for an entry.
 func (ec *entryCache) setExpiry(key common.Hash, expiry time.Time) {
 	ec.mu.Lock()

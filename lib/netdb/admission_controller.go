@@ -63,6 +63,17 @@ func (c *admissionController) SetCapacity(capacity int) {
 	c.mu.Unlock()
 }
 
+// SetPressureThresholdPercent updates the cache pressure threshold at which
+// per-source admission limits engage.
+func (c *admissionController) SetPressureThresholdPercent(percent int) {
+	if percent < 1 || percent > 99 {
+		return
+	}
+	c.mu.Lock()
+	c.config.pressurePct = percent
+	c.mu.Unlock()
+}
+
 // AllowIntroduction returns true when an introduction from source for key should be accepted
 // under current admission pressure and per-source limits.
 func (c *admissionController) AllowIntroduction(source *common.Hash, key common.Hash, currentCount int) bool {

@@ -126,6 +126,8 @@ func setNetDBDefaults(defaults ConfigDefaults) {
 		{"netdb.lease_set_refresh_threshold", defaults.NetDB.LeaseSetRefreshThreshold},
 		{"netdb.exploration_interval", defaults.NetDB.ExplorationInterval},
 		{"netdb.floodfill_enabled", defaults.NetDB.FloodfillEnabled},
+		{"netdb.strict_routerinfo_network_validation", defaults.NetDB.StrictRouterInfoNetworkValidation},
+		{"netdb.routerinfo_admission_pressure_threshold_pct", defaults.NetDB.RouterInfoAdmissionPressureThresholdPct},
 	})
 }
 
@@ -302,13 +304,15 @@ func currentRouterConfig() RouterDefaults {
 
 func currentNetDBConfig() NetDBDefaults {
 	return NetDBDefaults{
-		Path:                     viper.GetString("netdb.path"),
-		MaxRouterInfos:           viper.GetInt("netdb.max_router_infos"),
-		MaxLeaseSets:             viper.GetInt("netdb.max_lease_sets"),
-		ExpirationCheckInterval:  viper.GetDuration("netdb.expiration_check_interval"),
-		LeaseSetRefreshThreshold: viper.GetDuration("netdb.lease_set_refresh_threshold"),
-		ExplorationInterval:      viper.GetDuration("netdb.exploration_interval"),
-		FloodfillEnabled:         viper.GetBool("netdb.floodfill_enabled"),
+		Path:                                    viper.GetString("netdb.path"),
+		MaxRouterInfos:                          viper.GetInt("netdb.max_router_infos"),
+		MaxLeaseSets:                            viper.GetInt("netdb.max_lease_sets"),
+		ExpirationCheckInterval:                 viper.GetDuration("netdb.expiration_check_interval"),
+		LeaseSetRefreshThreshold:                viper.GetDuration("netdb.lease_set_refresh_threshold"),
+		ExplorationInterval:                     viper.GetDuration("netdb.exploration_interval"),
+		FloodfillEnabled:                        viper.GetBool("netdb.floodfill_enabled"),
+		StrictRouterInfoNetworkValidation:       viper.GetBool("netdb.strict_routerinfo_network_validation"),
+		RouterInfoAdmissionPressureThresholdPct: viper.GetInt("netdb.routerinfo_admission_pressure_threshold_pct"),
 	}
 }
 
@@ -355,13 +359,15 @@ func currentI2PControlConfig() I2PControlDefaults {
 // buildNetDBConfig creates a NetDBConfig from current viper settings.
 func buildNetDBConfig() *NetDBConfig {
 	return &NetDBConfig{
-		Path:                     viper.GetString("netdb.path"),
-		MaxRouterInfos:           viper.GetInt("netdb.max_router_infos"),
-		MaxLeaseSets:             viper.GetInt("netdb.max_lease_sets"),
-		ExpirationCheckInterval:  viper.GetDuration("netdb.expiration_check_interval"),
-		LeaseSetRefreshThreshold: viper.GetDuration("netdb.lease_set_refresh_threshold"),
-		ExplorationInterval:      viper.GetDuration("netdb.exploration_interval"),
-		FloodfillEnabled:         viper.GetBool("netdb.floodfill_enabled"),
+		Path:                                    viper.GetString("netdb.path"),
+		MaxRouterInfos:                          viper.GetInt("netdb.max_router_infos"),
+		MaxLeaseSets:                            viper.GetInt("netdb.max_lease_sets"),
+		ExpirationCheckInterval:                 viper.GetDuration("netdb.expiration_check_interval"),
+		LeaseSetRefreshThreshold:                viper.GetDuration("netdb.lease_set_refresh_threshold"),
+		ExplorationInterval:                     viper.GetDuration("netdb.exploration_interval"),
+		FloodfillEnabled:                        viper.GetBool("netdb.floodfill_enabled"),
+		StrictRouterInfoNetworkValidation:       viper.GetBool("netdb.strict_routerinfo_network_validation"),
+		RouterInfoAdmissionPressureThresholdPct: viper.GetInt("netdb.routerinfo_admission_pressure_threshold_pct"),
 	}
 }
 

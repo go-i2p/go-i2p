@@ -51,6 +51,21 @@ type StdNetDB struct {
 
 	// expiryMutex protects expiry tracking across both caches
 	expiryMutex sync.RWMutex
+
+	// strictRouterInfoNetworkValidation controls whether missing RouterInfo
+	// network options are rejected during ingestion.
+	strictRouterInfoNetworkValidation bool
+
+	// routerInfoExpectedNetID defines the expected I2P netId value.
+	routerInfoExpectedNetID string
+
+	// pendingRouterInfoPersists tracks RouterInfos that are accepted in-memory
+	// but need filesystem persistence retries.
+	persistMu                 sync.Mutex
+	pendingRouterInfoPersists map[common.Hash]routerInfoPersistRetryState
+
+	// routerInfoStoreStats tracks ingestion outcomes and persistence health.
+	routerInfoStoreStats routerInfoStoreStats
 }
 
 // NewStdNetDB creates and returns a new StdNetDB rooted at the given directory path,
@@ -79,15 +94,19 @@ func NewStdNetDB(db string) *StdNetDB {
 	}
 
 	ndb := &StdNetDB{
-		DB:                db,
-		riCache:           newEntryCache(config.DefaultNetDBConfig.MaxRouterInfos, riAdmissionConfig),
-		lsCache:           newEntryCache(config.DefaultNetDBConfig.MaxLeaseSets, lsAdmissionConfig),
-		ownLeaseSets:      make(map[common.Hash]bool),
-		PeerTracker:       NewPeerTracker(),
-		riRefreshCooldown: newTimeBucketedCooldown(riRefreshCooldownDuration),
-		ctx:               ctx,
-		cancel:            cancel,
+		DB:                                db,
+		riCache:                           newEntryCache(config.DefaultNetDBConfig.MaxRouterInfos, riAdmissionConfig),
+		lsCache:                           newEntryCache(config.DefaultNetDBConfig.MaxLeaseSets, lsAdmissionConfig),
+		ownLeaseSets:                      make(map[common.Hash]bool),
+		PeerTracker:                       NewPeerTracker(),
+		riRefreshCooldown:                 newTimeBucketedCooldown(riRefreshCooldownDuration),
+		ctx:                               ctx,
+		cancel:                            cancel,
+		strictRouterInfoNetworkValidation: config.DefaultNetDBConfig.StrictRouterInfoNetworkValidation,
+		routerInfoExpectedNetID:           expectedNetID,
+		pendingRouterInfoPersists:         make(map[common.Hash]routerInfoPersistRetryState),
 	}
+	ndb.riCache.setAdmissionPressureThreshold(config.DefaultNetDBConfig.RouterInfoAdmissionPressureThresholdPct)
 
 	ndb.StartExpirationCleaner()
 	return ndb
@@ -97,6 +116,18 @@ func NewStdNetDB(db string) *StdNetDB {
 // Values below 10 are ignored to preserve minimum validated configuration limits.
 func (db *StdNetDB) SetMaxRouterInfos(max int) {
 	db.riCache.setCapacity(max)
+}
+
+// SetStrictRouterInfoNetworkValidation toggles strict option validation for
+// inbound RouterInfos.
+func (db *StdNetDB) SetStrictRouterInfoNetworkValidation(strict bool) {
+	db.strictRouterInfoNetworkValidation = strict
+}
+
+// SetRouterInfoAdmissionPressureThreshold updates the cache pressure
+// percentage at which source-based admission limits engage.
+func (db *StdNetDB) SetRouterInfoAdmissionPressureThreshold(percent int) {
+	db.riCache.setAdmissionPressureThreshold(percent)
 }
 
 // GetMaxRouterInfos returns the current RouterInfo capacity.
@@ -727,17 +758,16 @@ func (db *StdNetDB) addRouterInfoToCache(key common.Hash, ri router_info.RouterI
 
 // persistRouterInfoToFilesystem saves a RouterInfo entry to the filesystem.
 // If the save fails, it removes the entry from the in-memory cache.
-func (db *StdNetDB) persistRouterInfoToFilesystem(key common.Hash, ri router_info.RouterInfo) error {
+func (db *StdNetDB) persistRouterInfoToFilesystem(key common.Hash, ri router_info.RouterInfo) (bool, error) {
 	entry := &Entry{
 		RouterInfo: &ri,
 	}
 
 	if err := db.SaveEntry(entry); err != nil {
-		log.WithError(err).Error("Failed to save RouterInfo to filesystem")
-		db.riCache.delete(key)
-		return oops.Errorf("failed to save RouterInfo to filesystem: %w", err)
+		db.scheduleRouterInfoPersistRetry(key, err, false)
+		return false, nil
 	}
-	return nil
+	return true, nil
 }
 
 // Store dispatches a DatabaseStore message to the appropriate handler based on data type.
@@ -784,25 +814,31 @@ func (db *StdNetDB) StoreRouterInfoFromMessageWithSource(key common.Hash, data [
 
 func (db *StdNetDB) storeRouterInfoFromMessageInternal(key common.Hash, data []byte, dataType byte, source *common.Hash) error {
 	if err := validateRouterInfoDataType(dataType); err != nil {
+		db.routerInfoStoreStats.rejectedDataTypeCount.Add(1)
 		return err
 	}
 
 	ri, err := db.decompressAndParseRouterInfo(data)
 	if err != nil {
+		db.routerInfoStoreStats.rejectedParseCount.Add(1)
 		return err
 	}
 
 	if err := db.validateRouterInfo(key, ri); err != nil {
+		db.routerInfoStoreStats.rejectedValidationCount.Add(1)
 		return err
 	}
 
 	if err := db.admitRouterInfoIntroduction(key, source); err != nil {
+		db.routerInfoStoreStats.rejectedAdmissionCount.Add(1)
 		return err
 	}
 
 	if !db.addRouterInfoToCache(key, ri) {
+		db.routerInfoStoreStats.duplicateOrStaleCount.Add(1)
 		return nil
 	}
+	db.routerInfoStoreStats.acceptedCount.Add(1)
 
 	return db.finalizeRouterInfoStorage(key, ri)
 }
@@ -814,16 +850,20 @@ func (db *StdNetDB) storeRouterInfoFromMessageInternal(key common.Hash, data []b
 func (db *StdNetDB) storeRouterInfoLocalInternal(hash common.Hash, data []byte) error {
 	ri, err := parseRouterInfoData(data)
 	if err != nil {
+		db.routerInfoStoreStats.rejectedParseCount.Add(1)
 		return oops.Errorf("failed to parse RouterInfo: %w", err)
 	}
 
 	if err := db.validateRouterInfo(hash, ri); err != nil {
+		db.routerInfoStoreStats.rejectedValidationCount.Add(1)
 		return err
 	}
 
 	if !db.addRouterInfoToCache(hash, ri) {
+		db.routerInfoStoreStats.duplicateOrStaleCount.Add(1)
 		return nil
 	}
+	db.routerInfoStoreStats.acceptedCount.Add(1)
 
 	return db.finalizeRouterInfoStorage(hash, ri)
 }
@@ -858,14 +898,14 @@ func (db *StdNetDB) validateRouterInfo(key common.Hash, ri router_info.RouterInf
 		return err
 	}
 
-	return verifyRouterInfoNetwork(ri)
+	return db.verifyRouterInfoNetwork(ri)
 }
 
 // verifyRouterInfoNetwork rejects RouterInfos that omit the netId or router.version
 // properties, or that advertise a netId for a different I2P network. This mirrors
 // i2pd's RouterInfo parsing, which marks a router unreachable when netId is absent,
 // the netId does not match the local network, or the router version is missing.
-func verifyRouterInfoNetwork(ri router_info.RouterInfo) error {
+func (db *StdNetDB) verifyRouterInfoNetwork(ri router_info.RouterInfo) error {
 	options := ri.Options()
 	opts, err := options.ToGoMap()
 	if err != nil {
@@ -873,18 +913,28 @@ func verifyRouterInfoNetwork(ri router_info.RouterInfo) error {
 	}
 
 	netID, ok := opts["netId"]
-	if !ok || netID == "" {
+	if (!ok || netID == "") && db.strictRouterInfoNetworkValidation {
 		return oops.Errorf("RouterInfo missing netId property")
 	}
-	if netID != expectedNetID {
-		return oops.Errorf("RouterInfo netId %q does not match network %q", netID, expectedNetID)
+	if ok && netID != "" && netID != db.routerInfoExpectedNetID {
+		return oops.Errorf("RouterInfo netId %q does not match network %q", netID, db.routerInfoExpectedNetID)
 	}
 
-	if version, ok := opts["router.version"]; !ok || version == "" {
+	if version, ok := opts["router.version"]; (!ok || version == "") && db.strictRouterInfoNetworkValidation {
 		return oops.Errorf("RouterInfo missing router.version property")
 	}
 
 	return nil
+}
+
+// verifyRouterInfoNetwork validates RouterInfo network options using strict
+// defaults for test and compatibility callers.
+func verifyRouterInfoNetwork(ri router_info.RouterInfo) error {
+	tmp := &StdNetDB{
+		strictRouterInfoNetworkValidation: true,
+		routerInfoExpectedNetID:           expectedNetID,
+	}
+	return tmp.verifyRouterInfoNetwork(ri)
 }
 
 func (db *StdNetDB) admitRouterInfoIntroduction(key common.Hash, source *common.Hash) error {
@@ -988,8 +1038,13 @@ func (db *StdNetDB) evictSoonestExpiringLeaseSet() common.Hash {
 func (db *StdNetDB) finalizeRouterInfoStorage(key common.Hash, ri router_info.RouterInfo) error {
 	db.trackRouterInfoPublishedDate(key, ri)
 
-	if err := db.persistRouterInfoToFilesystem(key, ri); err != nil {
+	persisted, err := db.persistRouterInfoToFilesystem(key, ri)
+	if err != nil {
 		return err
+	}
+	if !persisted {
+		log.WithField("hash", key).Warn("RouterInfo accepted in memory; filesystem persistence deferred")
+		return nil
 	}
 
 	log.WithField("hash", key).Debug("Successfully stored RouterInfo")

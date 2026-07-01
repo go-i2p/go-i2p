@@ -125,6 +125,20 @@ type RouterInfoStats struct {
 	// HighCapacityPeers is the number of reliable, high-performance peers
 	HighCapacityPeersCount int
 
+	// RouterInfoAcceptCount is the number of RouterInfos accepted into memory.
+	RouterInfoAcceptCount uint64
+
+	// RouterInfoRejectCount is the total number of rejected RouterInfo ingest attempts.
+	RouterInfoRejectCount uint64
+
+	// RouterInfoPersistDeferredCount is the number of accepted RouterInfos whose
+	// initial filesystem persistence was deferred.
+	RouterInfoPersistDeferredCount uint64
+
+	// RouterInfoPersistPendingCount is the number of RouterInfos awaiting
+	// filesystem persistence retry.
+	RouterInfoPersistPendingCount uint64
+
 	// IsReseeding indicates if the router is currently performing a NetDB reseed operation
 	IsReseeding bool
 
@@ -341,6 +355,16 @@ func (rsp *routerStatsProvider) collectNetDBStats(stats *RouterInfoStats) {
 	stats.ActivePeersCount = netdbReader.GetActivePeerCount()
 	stats.FastPeersCount = netdbReader.GetFastPeerCount()
 	stats.HighCapacityPeersCount = netdbReader.GetHighCapacityPeerCount()
+
+	storeStats := concreteNetDB.GetRouterInfoStoreStats()
+	stats.RouterInfoAcceptCount = storeStats.AcceptedCount
+	stats.RouterInfoRejectCount =
+		storeStats.RejectedDataTypeCount +
+			storeStats.RejectedParseCount +
+			storeStats.RejectedValidationCount +
+			storeStats.RejectedAdmissionCount
+	stats.RouterInfoPersistDeferredCount = storeStats.PersistDeferredCount
+	stats.RouterInfoPersistPendingCount = storeStats.PersistPendingCount
 }
 
 // collectParticipatingTunnelStats populates participating tunnel count in the provided RouterInfoStats.

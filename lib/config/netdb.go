@@ -26,14 +26,22 @@ type NetDBConfig struct {
 	ExplorationInterval time.Duration
 	// FloodfillEnabled determines if this router operates as a floodfill router
 	FloodfillEnabled bool
+	// StrictRouterInfoNetworkValidation enforces required RouterInfo network
+	// options (netId and router.version) on ingestion.
+	StrictRouterInfoNetworkValidation bool
+	// RouterInfoAdmissionPressureThresholdPct controls when per-source
+	// admission limits become active as cache pressure rises.
+	RouterInfoAdmissionPressureThresholdPct int
 }
 
 // DefaultNetDBConfig holds the default settings for netdb.
 var DefaultNetDBConfig = NetDBConfig{
-	Path:                     filepath.Join(defaultConfig(), "netDb"),
-	MaxRouterInfos:           5000,
-	MaxLeaseSets:             1000,
-	ExpirationCheckInterval:  1 * time.Minute,
-	LeaseSetRefreshThreshold: 2 * time.Minute,
-	ExplorationInterval:      5 * time.Minute,
+	Path:                                    filepath.Join(defaultConfig(), "netDb"),
+	MaxRouterInfos:                          5000,
+	MaxLeaseSets:                            1000,
+	ExpirationCheckInterval:                 1 * time.Minute,
+	LeaseSetRefreshThreshold:                2 * time.Minute,
+	ExplorationInterval:                     5 * time.Minute,
+	StrictRouterInfoNetworkValidation:       true,
+	RouterInfoAdmissionPressureThresholdPct: 80,
 }
