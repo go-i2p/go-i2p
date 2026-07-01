@@ -39,6 +39,7 @@ const (
 	liveNetworkPollInterval           = 2 * time.Second
 	liveNetworkAttemptDelay           = 3 * time.Second
 	liveNetworkRetryAttempts          = 4
+	liveNetworkArtifactDir            = "tmp/live-network-artifacts"
 )
 
 func TestLiveNetworkBootstrapAndInterop(t *testing.T) {
@@ -294,6 +295,7 @@ func TestLiveNetworkPublishLeaseSet(t *testing.T) {
 
 	session, leaseSetBytes := createLiveLeaseSetForPublish(t)
 	require.NotNil(t, session, "session should be created")
+	resolver := netdb.NewDestinationResolver(db)
 
 	destBytes, err := session.Destination().Bytes()
 	require.NoError(t, err, "destination hash should be available")
@@ -305,13 +307,32 @@ func TestLiveNetworkPublishLeaseSet(t *testing.T) {
 	t.Logf("leaseset publish diagnostics: %s", publishDiag)
 	require.NoError(t, err, "leaseset publish operation failed")
 
+	var retrievedBytes []byte
 	require.Eventually(t, func() bool {
 		isOwn := db.IsOwnLeaseSet(destHash)
 		count := db.GetLeaseSetCount()
-		t.Logf("leaseset state: own=%v total_leasesets=%d dest=%s", isOwn, count, hashPrefix(destHash))
-		return isOwn && count > 0
+		leaseSet2Bytes, leaseSetErr := db.GetLeaseSet2Bytes(destHash)
+		if leaseSetErr == nil {
+			retrievedBytes = append(retrievedBytes[:0], leaseSet2Bytes...)
+		}
+		t.Logf("leaseset state: own=%v total_leasesets=%d dest=%s retrieved=%t err=%v", isOwn, count, hashPrefix(destHash), len(leaseSet2Bytes) > 0, leaseSetErr)
+		return isOwn && count > 0 && leaseSetErr == nil && len(leaseSet2Bytes) > 0
 	}, liveNetworkWaitForPublishTimeout, liveNetworkPollInterval,
 		"published leaseset was not persisted in local netdb as own leaseset within timeout")
+
+	require.Equal(t, leaseSetBytes, retrievedBytes, "retrieved LeaseSet2 bytes should match published bytes")
+	_, err = resolver.ResolveDestination(destHash)
+	require.NoError(t, err, "published leaseset should be retrievable through destination resolution")
+
+	recordLiveNetworkArtifact(t, "leaseset-publish", strings.Join([]string{
+		fmt.Sprintf("test=%s", t.Name()),
+		fmt.Sprintf("dest=%s", destHash.String()),
+		fmt.Sprintf("publish_diag=%s", publishDiag),
+		fmt.Sprintf("published_bytes=%d", len(leaseSetBytes)),
+		fmt.Sprintf("retrieved_bytes=%d", len(retrievedBytes)),
+		fmt.Sprintf("own=%t", db.IsOwnLeaseSet(destHash)),
+		fmt.Sprintf("leaseset_count=%d", db.GetLeaseSetCount()),
+	}, "\n"))
 }
 
 type liveInteropSources struct {
@@ -464,6 +485,32 @@ func writeGoroutineDump(prefix string) (string, error) {
 	}
 
 	return f.Name(), nil
+}
+
+func recordLiveNetworkArtifact(t *testing.T, name, body string) {
+	t.Helper()
+
+	if err := os.MkdirAll(liveNetworkArtifactDir, 0o755); err != nil {
+		t.Logf("live artifact mkdir failed: %v", err)
+		return
+	}
+
+	fileName := sanitizeArtifactName(t.Name() + "-" + name + ".txt")
+	path := filepath.Join(liveNetworkArtifactDir, fileName)
+	if err := os.WriteFile(path, []byte(body+"\n"), 0o600); err != nil {
+		t.Logf("live artifact write failed: %v", err)
+		return
+	}
+	if absPath, err := filepath.Abs(path); err == nil {
+		t.Logf("live artifact recorded: %s", absPath)
+	} else {
+		t.Logf("live artifact recorded: %s", path)
+	}
+}
+
+func sanitizeArtifactName(name string) string {
+	replacer := strings.NewReplacer("/", "-", "\\", "-", " ", "-", ":", "-")
+	return replacer.Replace(name)
 }
 
 func createLiveLeaseSetForPublish(t *testing.T) (*i2cp.Session, []byte) {
