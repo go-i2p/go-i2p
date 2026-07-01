@@ -76,8 +76,13 @@ func (h *DefaultHandler) OnHandshakeError(rawConn net.Conn, err error) {
 func (h *DefaultHandler) ValidateTimestamp(peerTime uint32) error {
 	return transport.ValidateTimestampAndLog(peerTime, ValidateTimestamp, func(peerTime uint32, err error) {
 		log.WithFields(map[string]interface{}{
-			"peer_time": peerTime,
-			"error":     err.Error(),
+			"at":            "(NTCP2 DefaultHandler) ValidateTimestamp",
+			"reason":        "clock_skew_exceeded",
+			"phase":         "handshake",
+			"session_state": "pre_auth",
+			"transport":     "ntcp2",
+			"peer_time":     peerTime,
+			"error":         err.Error(),
 		}).Warn("NTCP2 peer clock skew exceeds tolerance")
 	})
 }
@@ -90,7 +95,14 @@ func (h *DefaultHandler) SendTermination(conn *gonoise.Conn, reason byte) error 
 	block := BuildTerminationBlock(reason)
 	_, err := conn.Write(block)
 	if err != nil {
-		log.WithError(err).WithField("reason", reason).Warn("failed to send NTCP2 termination block")
+		log.WithError(err).WithFields(map[string]interface{}{
+			"at":             "(NTCP2 DefaultHandler) SendTermination",
+			"reason":         "termination_write_failed",
+			"phase":          "teardown",
+			"session_state":  "closing",
+			"transport":      "ntcp2",
+			"termination_id": reason,
+		}).Warn("failed to send NTCP2 termination block")
 	}
 	return err
 }

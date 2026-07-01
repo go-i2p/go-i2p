@@ -1,6 +1,8 @@
 package transport
 
 import (
+	"fmt"
+
 	gonoise "github.com/go-i2p/go-noise/ntcp2"
 )
 
@@ -24,7 +26,13 @@ func NewBaseHandler() *BaseHandler {
 // shared replay cache. Returns true if the key is a duplicate (replay attack).
 func (h *BaseHandler) CheckReplay(ephemeralKey [32]byte) bool {
 	if h.replayCache.CheckAndAdd(ephemeralKey) {
-		log.Warn("replay attack detected: duplicate ephemeral key")
+		logAt("(BaseHandler) CheckReplay").WithFields(map[string]interface{}{
+			"reason":        "replay_detected",
+			"phase":         "handshake",
+			"key_prefix":    fmt.Sprintf("%x", ephemeralKey[:4]),
+			"cache_size":    h.replayCache.Size(),
+			"session_state": "pre_auth",
+		}).Warn("replay attack detected: duplicate ephemeral key")
 		return true
 	}
 	return false

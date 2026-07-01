@@ -54,7 +54,13 @@ func (h *DefaultHandler) ValidateTimestamp(peerTime uint32) error {
 	// H3 FIX: Reject peerTime=0. The I2P spec requires timestamps in handshake messages.
 	// Treating zero as "not provided" creates a replay vulnerability.
 	if peerTime == 0 {
-		log.Warn("SSU2 handshake rejected: peerTime is zero (required by spec)")
+		log.WithFields(map[string]interface{}{
+			"at":            "(SSU2 DefaultHandler) ValidateTimestamp",
+			"reason":        "peer_time_missing",
+			"phase":         "handshake",
+			"session_state": "pre_auth",
+			"transport":     "ssu2",
+		}).Warn("SSU2 handshake rejected: peerTime is zero (required by spec)")
 		return WrapSSU2Error(
 			ErrHandshakeFailed,
 			"peerTime is zero (required by I2P spec)",
@@ -65,10 +71,15 @@ func (h *DefaultHandler) ValidateTimestamp(peerTime uint32) error {
 		now := uint32(time.Now().Unix())
 		skewSeconds := transport.CalculateTimestampSkew(peerTime, now)
 		log.WithFields(map[string]interface{}{
-			"peer_time":    peerTime,
-			"local_time":   now,
-			"diff_seconds": absInt64(skewSeconds),
-			"max_skew":     h.maxSkew.Seconds(),
+			"at":            "(SSU2 DefaultHandler) ValidateTimestamp",
+			"reason":        "clock_skew_exceeded",
+			"phase":         "handshake",
+			"session_state": "pre_auth",
+			"transport":     "ssu2",
+			"peer_time":     peerTime,
+			"local_time":    now,
+			"diff_seconds":  absInt64(skewSeconds),
+			"max_skew":      h.maxSkew.Seconds(),
 		}).Warn("SSU2 peer clock skew exceeds tolerance")
 	})
 }
@@ -96,7 +107,14 @@ func (h *DefaultHandler) SendTermination(conn *ssu2noise.SSU2Conn, reason byte) 
 	block := buildTerminationBlock(reason)
 	_, err := conn.Write(block)
 	if err != nil {
-		log.WithError(err).WithField("reason", reason).Warn("failed to send SSU2 termination block")
+		log.WithError(err).WithFields(map[string]interface{}{
+			"at":             "(SSU2 DefaultHandler) SendTermination",
+			"reason":         "termination_write_failed",
+			"phase":          "teardown",
+			"session_state":  "closing",
+			"transport":      "ssu2",
+			"termination_id": reason,
+		}).Warn("failed to send SSU2 termination block")
 	}
 	return err
 }

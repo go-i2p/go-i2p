@@ -22,6 +22,7 @@ Also, we're picking up the pace. More little points between big releases. This i
 Advice for Users: It's probably not safe yet, nor does it do the things you want yet. However, we have reached significant milestones in interacting with the network and are beginning to use it more regularly in a handful of non-anonymous services.
 
 Anonymity-sensitive operators should review [Anonymity-Safe Logging](docs/anonymity-logging.md) and avoid debug logging in production.
+Transport and tunnel triage guidance is documented in [Transport and Tunnel Observability](docs/transport-observability.md).
 
 ### Implemented Features
 
