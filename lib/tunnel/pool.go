@@ -1115,7 +1115,8 @@ func (p *Pool) computePeerCooldown(peerHash common.Hash, reason string) time.Dur
 func baseCooldownForFailureReason(reason string) time.Duration {
 	r := strings.ToLower(reason)
 
-	if containsAnySubstring(r,
+	if containsAnySubstring(
+		r,
 		"local",
 		"transport_not_ready",
 		"no transports available",
@@ -1127,7 +1128,8 @@ func baseCooldownForFailureReason(reason string) time.Duration {
 		return localFailureCooldown
 	}
 
-	if containsAnySubstring(r,
+	if containsAnySubstring(
+		r,
 		"permanent",
 		"incompatible",
 		"invalid_routerinfo",
@@ -1146,7 +1148,8 @@ func classifyTunnelBuildFailureReason(err error) string {
 	}
 
 	errText := strings.ToLower(err.Error())
-	if containsAnySubstring(errText,
+	if containsAnySubstring(
+		errText,
 		"no transports available",
 		"transport unavailable",
 		"context cancelled",
@@ -1157,7 +1160,8 @@ func classifyTunnelBuildFailureReason(err error) string {
 		return "tunnel_build_failed_local"
 	}
 
-	if containsAnySubstring(errText,
+	if containsAnySubstring(
+		errText,
 		"incompatible",
 		"invalid routerinfo",
 		"no valid address",

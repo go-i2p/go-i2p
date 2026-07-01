@@ -59,7 +59,6 @@ type ServerConfig struct {
 	// LeaseSet publisher for distributing LeaseSets to the network (optional)
 	// If nil, sessions will function but won't publish to the network
 	LeaseSetPublisher LeaseSetPublisher
-
 }
 
 // DefaultServerConfig returns a ServerConfig with sensible defaults.
@@ -67,12 +66,12 @@ type ServerConfig struct {
 // ensuring a single source of truth for I2CP defaults.
 func DefaultServerConfig() *ServerConfig {
 	return &ServerConfig{
-		ListenAddr:                    config.DefaultI2CPConfig.Address,
-		Network:                       config.DefaultI2CPConfig.Network,
-		MaxSessions:                   config.DefaultI2CPConfig.MaxSessions,
-		ReadTimeout:                   60 * time.Second,
-		WriteTimeout:                  30 * time.Second,
-		SessionTimeout:                30 * time.Minute,
+		ListenAddr:     config.DefaultI2CPConfig.Address,
+		Network:        config.DefaultI2CPConfig.Network,
+		MaxSessions:    config.DefaultI2CPConfig.MaxSessions,
+		ReadTimeout:    60 * time.Second,
+		WriteTimeout:   30 * time.Second,
+		SessionTimeout: 30 * time.Minute,
 	}
 }
 

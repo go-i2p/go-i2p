@@ -47,7 +47,6 @@ type I2CPConfig struct {
 	// WriteTimeout is the maximum time to wait for client writes.
 	// Default: 30 seconds.
 	WriteTimeout time.Duration
-
 }
 
 // RouterConfig holds the router configuration options.
@@ -125,14 +124,14 @@ func defaultConfig() string {
 
 // DefaultI2CPConfig provides default I2CP server configuration
 var DefaultI2CPConfig = I2CPConfig{
-	Enabled:                       true,
-	Address:                       fmt.Sprintf("localhost:%d", DefaultI2CPPort),
-	Network:                       "tcp",
-	MaxSessions:                   100,
-	MessageQueueSize:              64,
-	SessionTimeout:                30 * time.Minute,
-	ReadTimeout:                   60 * time.Second,
-	WriteTimeout:                  30 * time.Second,
+	Enabled:          true,
+	Address:          fmt.Sprintf("localhost:%d", DefaultI2CPPort),
+	Network:          "tcp",
+	MaxSessions:      100,
+	MessageQueueSize: 64,
+	SessionTimeout:   30 * time.Minute,
+	ReadTimeout:      60 * time.Second,
+	WriteTimeout:     30 * time.Second,
 }
 
 // DefaultTransportConfig provides default transport layer configuration

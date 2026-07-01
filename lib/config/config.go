@@ -323,28 +323,28 @@ func currentBootstrapConfig() BootstrapDefaults {
 
 func currentI2CPConfig() I2CPDefaults {
 	return I2CPDefaults{
-		Enabled:                        viper.GetBool("i2cp.enabled"),
-		Address:                        viper.GetString("i2cp.address"),
-		Network:                        viper.GetString("i2cp.network"),
-		MaxSessions:                    viper.GetInt("i2cp.max_sessions"),
-		MessageQueueSize:               viper.GetInt("i2cp.message_queue_size"),
-		SessionTimeout:                 viper.GetDuration("i2cp.session_timeout"),
-		ReadTimeout:                    viper.GetDuration("i2cp.read_timeout"),
-		WriteTimeout:                   viper.GetDuration("i2cp.write_timeout"),
+		Enabled:          viper.GetBool("i2cp.enabled"),
+		Address:          viper.GetString("i2cp.address"),
+		Network:          viper.GetString("i2cp.network"),
+		MaxSessions:      viper.GetInt("i2cp.max_sessions"),
+		MessageQueueSize: viper.GetInt("i2cp.message_queue_size"),
+		SessionTimeout:   viper.GetDuration("i2cp.session_timeout"),
+		ReadTimeout:      viper.GetDuration("i2cp.read_timeout"),
+		WriteTimeout:     viper.GetDuration("i2cp.write_timeout"),
 	}
 }
 
 func currentI2PControlConfig() I2PControlDefaults {
 	return I2PControlDefaults{
-		Enabled:                   viper.GetBool("i2pcontrol.enabled"),
-		Address:                   viper.GetString("i2pcontrol.address"),
-		Password:                  viper.GetString("i2pcontrol.password"),
-		UseHTTPS:                  viper.GetBool("i2pcontrol.use_https"),
-		CertFile:                  viper.GetString("i2pcontrol.cert_file"),
-		KeyFile:                   viper.GetString("i2pcontrol.key_file"),
-		TokenExpiration:           viper.GetDuration("i2pcontrol.token_expiration"),
-		StrictAuth:                viper.GetBool("i2pcontrol.strict_auth"),
-		AllowPlaintextNonLoopback: viper.GetBool("i2pcontrol.allow_plaintext_non_loopback"),
+		Enabled:                         viper.GetBool("i2pcontrol.enabled"),
+		Address:                         viper.GetString("i2pcontrol.address"),
+		Password:                        viper.GetString("i2pcontrol.password"),
+		UseHTTPS:                        viper.GetBool("i2pcontrol.use_https"),
+		CertFile:                        viper.GetString("i2pcontrol.cert_file"),
+		KeyFile:                         viper.GetString("i2pcontrol.key_file"),
+		TokenExpiration:                 viper.GetDuration("i2pcontrol.token_expiration"),
+		StrictAuth:                      viper.GetBool("i2pcontrol.strict_auth"),
+		AllowPlaintextNonLoopback:       viper.GetBool("i2pcontrol.allow_plaintext_non_loopback"),
 		AllowDefaultPasswordNonLoopback: viper.GetBool("i2pcontrol.allow_default_password_non_loopback"),
 	}
 }
@@ -387,31 +387,31 @@ func buildBootstrapConfig(caller string) (*BootstrapConfig, error) {
 // buildI2CPConfig creates an I2CPConfig from current viper settings.
 func buildI2CPConfig() *I2CPConfig {
 	return &I2CPConfig{
-		Enabled:                        viper.GetBool("i2cp.enabled"),
-		Address:                        viper.GetString("i2cp.address"),
-		Network:                        viper.GetString("i2cp.network"),
-		MaxSessions:                    viper.GetInt("i2cp.max_sessions"),
-		Username:                       viper.GetString("i2cp.username"),
-		Password:                       viper.GetString("i2cp.password"),
-		MessageQueueSize:               viper.GetInt("i2cp.message_queue_size"),
-		SessionTimeout:                 viper.GetDuration("i2cp.session_timeout"),
-		ReadTimeout:                    viper.GetDuration("i2cp.read_timeout"),
-		WriteTimeout:                   viper.GetDuration("i2cp.write_timeout"),
+		Enabled:          viper.GetBool("i2cp.enabled"),
+		Address:          viper.GetString("i2cp.address"),
+		Network:          viper.GetString("i2cp.network"),
+		MaxSessions:      viper.GetInt("i2cp.max_sessions"),
+		Username:         viper.GetString("i2cp.username"),
+		Password:         viper.GetString("i2cp.password"),
+		MessageQueueSize: viper.GetInt("i2cp.message_queue_size"),
+		SessionTimeout:   viper.GetDuration("i2cp.session_timeout"),
+		ReadTimeout:      viper.GetDuration("i2cp.read_timeout"),
+		WriteTimeout:     viper.GetDuration("i2cp.write_timeout"),
 	}
 }
 
 // buildI2PControlConfig creates an I2PControlConfig from current viper settings.
 func buildI2PControlConfig() *I2PControlConfig {
 	return &I2PControlConfig{
-		Enabled:                   viper.GetBool("i2pcontrol.enabled"),
-		Address:                   viper.GetString("i2pcontrol.address"),
-		Password:                  viper.GetString("i2pcontrol.password"),
-		UseHTTPS:                  viper.GetBool("i2pcontrol.use_https"),
-		CertFile:                  viper.GetString("i2pcontrol.cert_file"),
-		KeyFile:                   viper.GetString("i2pcontrol.key_file"),
-		TokenExpiration:           viper.GetDuration("i2pcontrol.token_expiration"),
-		StrictAuth:                viper.GetBool("i2pcontrol.strict_auth"),
-		AllowPlaintextNonLoopback: viper.GetBool("i2pcontrol.allow_plaintext_non_loopback"),
+		Enabled:                         viper.GetBool("i2pcontrol.enabled"),
+		Address:                         viper.GetString("i2pcontrol.address"),
+		Password:                        viper.GetString("i2pcontrol.password"),
+		UseHTTPS:                        viper.GetBool("i2pcontrol.use_https"),
+		CertFile:                        viper.GetString("i2pcontrol.cert_file"),
+		KeyFile:                         viper.GetString("i2pcontrol.key_file"),
+		TokenExpiration:                 viper.GetDuration("i2pcontrol.token_expiration"),
+		StrictAuth:                      viper.GetBool("i2pcontrol.strict_auth"),
+		AllowPlaintextNonLoopback:       viper.GetBool("i2pcontrol.allow_plaintext_non_loopback"),
 		AllowDefaultPasswordNonLoopback: viper.GetBool("i2pcontrol.allow_default_password_non_loopback"),
 	}
 }

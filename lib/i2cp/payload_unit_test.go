@@ -69,7 +69,7 @@ func TestParseSendMessagePayload(t *testing.T) {
 				return buf
 			}(),
 			wantErr:       false,
-			expectedSize: 0,
+			expectedSize:  0,
 			expectedNonce: 0xAABBCCDD,
 		},
 		{
@@ -899,7 +899,8 @@ func TestSendMessageExpiresPayloadParse(t *testing.T) {
 				binary.BigEndian.PutUint16(flagsBytes, 0x0000)
 				buf = append(buf, flagsBytes...)
 				expMs := uint64(time.Now().Add(5 * time.Minute).UnixMilli())
-				buf = append(buf,
+				buf = append(
+					buf,
 					byte(expMs>>40),
 					byte(expMs>>32),
 					byte(expMs>>24),
@@ -931,7 +932,8 @@ func TestSendMessageExpiresPayloadParse(t *testing.T) {
 				binary.BigEndian.PutUint16(flagsBytes, 0x0001)
 				buf = append(buf, flagsBytes...)
 				expMs := uint64(time.Now().Add(10 * time.Minute).UnixMilli())
-				buf = append(buf,
+				buf = append(
+					buf,
 					byte(expMs>>40),
 					byte(expMs>>32),
 					byte(expMs>>24),
@@ -973,7 +975,8 @@ func TestSendMessageExpiresPayloadParse(t *testing.T) {
 				binary.BigEndian.PutUint16(flagsBytes, 0xFFFF)
 				buf = append(buf, flagsBytes...)
 				expMs := uint64(time.Now().Add(1 * time.Hour).UnixMilli())
-				buf = append(buf,
+				buf = append(
+					buf,
 					byte(expMs>>40),
 					byte(expMs>>32),
 					byte(expMs>>24),
@@ -1124,14 +1127,14 @@ func TestExpirationTime(t *testing.T) {
 
 func TestHostLookupPayloadParse(t *testing.T) {
 	tests := []struct {
-		name        string
-		data        []byte
+		name          string
+		data          []byte
 		wantSessionID uint16
-		wantID      uint32
+		wantID        uint32
 		wantTimeoutMs uint32
-		wantType    uint16
-		wantQuery   string
-		shouldError bool
+		wantType      uint16
+		wantQuery     string
+		shouldError   bool
 	}{
 		{
 			name: "hash_lookup",
@@ -1145,11 +1148,11 @@ func TestHostLookupPayloadParse(t *testing.T) {
 				return buf
 			}(),
 			wantSessionID: 0x1234,
-			wantID:      12345,
+			wantID:        12345,
 			wantTimeoutMs: 6000,
-			wantType:    HostLookupTypeHash,
-			wantQuery:   "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-			shouldError: false,
+			wantType:      HostLookupTypeHash,
+			wantQuery:     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			shouldError:   false,
 		},
 		{
 			name: "hostname_lookup",
@@ -1163,11 +1166,11 @@ func TestHostLookupPayloadParse(t *testing.T) {
 				return buf
 			}(),
 			wantSessionID: 0x4321,
-			wantID:      67890,
+			wantID:        67890,
 			wantTimeoutMs: 7000,
-			wantType:    HostLookupTypeHostname,
-			wantQuery:   "example.i2p",
-			shouldError: false,
+			wantType:      HostLookupTypeHostname,
+			wantQuery:     "example.i2p",
+			shouldError:   false,
 		},
 		{
 			name: "empty_query",
@@ -1180,11 +1183,11 @@ func TestHostLookupPayloadParse(t *testing.T) {
 				return buf
 			}(),
 			wantSessionID: 0,
-			wantID:      99999,
+			wantID:        99999,
 			wantTimeoutMs: 0,
-			wantType:    HostLookupTypeHostname,
-			wantQuery:   "",
-			shouldError: true,
+			wantType:      HostLookupTypeHostname,
+			wantQuery:     "",
+			shouldError:   true,
 		},
 		{
 			name:        "too_short",

@@ -77,15 +77,15 @@ type I2PControlConfig struct {
 // - Standard default password (should be changed; config file creation generates a random one)
 func DefaultI2PControlConfig() I2PControlConfig {
 	return I2PControlConfig{
-		Enabled:                   true,
-		Address:                   "localhost:7650",
-		Password:                  "itoopie",
-		UseHTTPS:                  false,
-		CertFile:                  "",
-		KeyFile:                   "",
-		TokenExpiration:           10 * time.Minute,
-		StrictAuth:                false,
-		AllowPlaintextNonLoopback: false,
+		Enabled:                         true,
+		Address:                         "localhost:7650",
+		Password:                        "itoopie",
+		UseHTTPS:                        false,
+		CertFile:                        "",
+		KeyFile:                         "",
+		TokenExpiration:                 10 * time.Minute,
+		StrictAuth:                      false,
+		AllowPlaintextNonLoopback:       false,
 		AllowDefaultPasswordNonLoopback: false,
 	}
 }

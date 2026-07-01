@@ -175,7 +175,6 @@ type I2CPDefaults struct {
 	// WriteTimeout is maximum time to wait for client writes
 	// Default: 30 seconds
 	WriteTimeout time.Duration
-
 }
 
 // I2PControlDefaults contains default values for I2PControl JSON-RPC server
@@ -420,14 +419,14 @@ func buildBootstrapDefaults() BootstrapDefaults {
 // buildI2CPDefaults creates default I2CP server configuration values.
 func buildI2CPDefaults() I2CPDefaults {
 	return I2CPDefaults{
-		Enabled:                        true,
-		Address:                        "localhost:7654",
-		Network:                        "tcp",
-		MaxSessions:                    100,
-		MessageQueueSize:               64,
-		SessionTimeout:                 30 * time.Minute,
-		ReadTimeout:                    60 * time.Second,
-		WriteTimeout:                   30 * time.Second,
+		Enabled:          true,
+		Address:          "localhost:7654",
+		Network:          "tcp",
+		MaxSessions:      100,
+		MessageQueueSize: 64,
+		SessionTimeout:   30 * time.Minute,
+		ReadTimeout:      60 * time.Second,
+		WriteTimeout:     30 * time.Second,
 	}
 }
 
@@ -438,15 +437,15 @@ func buildI2CPDefaults() I2CPDefaults {
 // used with a security warning.
 func buildI2PControlDefaults() I2PControlDefaults {
 	return I2PControlDefaults{
-		Enabled:                   true,
-		Address:                   "localhost:7650",
-		Password:                  "itoopie",
-		UseHTTPS:                  false,
-		CertFile:                  "",
-		KeyFile:                   "",
-		TokenExpiration:           10 * time.Minute,
-		StrictAuth:                false,
-		AllowPlaintextNonLoopback: false,
+		Enabled:                         true,
+		Address:                         "localhost:7650",
+		Password:                        "itoopie",
+		UseHTTPS:                        false,
+		CertFile:                        "",
+		KeyFile:                         "",
+		TokenExpiration:                 10 * time.Minute,
+		StrictAuth:                      false,
+		AllowPlaintextNonLoopback:       false,
 		AllowDefaultPasswordNonLoopback: false,
 	}
 }

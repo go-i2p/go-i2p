@@ -156,7 +156,8 @@ func failureWeightForClass(class peerFailureClass) int {
 func classifyFailureReason(reason string) peerFailureClass {
 	r := strings.ToLower(reason)
 
-	if containsAny(r,
+	if containsAny(
+		r,
 		"no transports available",
 		"transport unavailable",
 		"transport_not_ready",
@@ -169,7 +170,8 @@ func classifyFailureReason(reason string) peerFailureClass {
 		return peerFailureClassLocal
 	}
 
-	if containsAny(r,
+	if containsAny(
+		r,
 		"permanent",
 		"incompatible",
 		"invalid routerinfo",

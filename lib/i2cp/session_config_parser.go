@@ -199,7 +199,7 @@ func parseSignedSessionBody(remaining []byte) (*SessionConfig, int, []byte, erro
 	return config, dateEnd, signature, nil
 }
 
-func verifySignedSessionData(dest *destination.Destination, signedData []byte, sig []byte) error {
+func verifySignedSessionData(dest *destination.Destination, signedData, sig []byte) error {
 	if dest == nil || dest.KeysAndCert == nil || dest.KeyCertificate == nil {
 		return oops.Errorf("destination missing key certificate")
 	}
