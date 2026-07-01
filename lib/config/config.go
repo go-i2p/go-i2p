@@ -377,13 +377,16 @@ func buildBootstrapConfig(caller string) (*BootstrapConfig, error) {
 	localNetDBPaths := parseLocalNetDBPaths(caller)
 
 	return &BootstrapConfig{
-		LowPeerThreshold: viper.GetInt("bootstrap.low_peer_threshold"),
-		BootstrapType:    viper.GetString("bootstrap.bootstrap_type"),
-		ReseedFilePath:   viper.GetString("bootstrap.reseed_file_path"),
-		ReseedServers:    reseedServers,
-		LocalNetDBPaths:  localNetDBPaths,
-		MinReseedServers: viper.GetInt("bootstrap.min_reseed_servers"),
-		ReseedStrategy:   viper.GetString("bootstrap.reseed_strategy"),
+		LowPeerThreshold:    viper.GetInt("bootstrap.low_peer_threshold"),
+		ReseedTimeout:       viper.GetDuration("bootstrap.reseed_timeout"),
+		MinimumReseedPeers:  viper.GetInt("bootstrap.minimum_reseed_peers"),
+		ReseedRetryInterval: viper.GetDuration("bootstrap.reseed_retry_interval"),
+		BootstrapType:       viper.GetString("bootstrap.bootstrap_type"),
+		ReseedFilePath:      viper.GetString("bootstrap.reseed_file_path"),
+		ReseedServers:       reseedServers,
+		LocalNetDBPaths:     localNetDBPaths,
+		MinReseedServers:    viper.GetInt("bootstrap.min_reseed_servers"),
+		ReseedStrategy:      viper.GetString("bootstrap.reseed_strategy"),
 	}, nil
 }
 

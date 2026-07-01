@@ -65,9 +65,11 @@ func (p *MessageProcessor) processDatabaseStoreMessage(msg Message) error {
 		"data_size":  len(data),
 	}).Debug("Processing DatabaseStore message")
 
-	storeErr := p.dbManager.StoreData(dbStore)
+	var storeErr error
 	if sourceProvider, ok := msg.(SourceHashProvider); ok {
 		storeErr = p.dbManager.StoreDataFromPeer(dbStore, sourceProvider.SourceHash())
+	} else {
+		storeErr = p.dbManager.StoreData(dbStore)
 	}
 
 	// Store in NetDB — dispatched by type to appropriate handler

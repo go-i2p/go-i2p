@@ -75,15 +75,15 @@ func (vs *ValidationStats) LogSummary(phase string) {
 // the RouterInfo is valid, false otherwise. The caller and source parameters
 // are used only for log context.
 func classifyRouterInfo(ri router_info.RouterInfo, stats *ValidationStats, caller, source string) bool {
-	if !HasDirectConnectivity(ri) {
-		stats.RecordInvalid("no direct NTCP2 connectivity (introducer-only or missing host/port)")
+	if !HasDirectConnectivity(ri) && !HasSSU2IntroducerConnectivity(ri) {
+		stats.RecordInvalid("no reachable NTCP2/SSU2 connectivity (direct or introducer)")
 		log.WithFields(logger.Fields{
 			"at":          caller,
 			"phase":       "pre-filter",
-			"reason":      "no direct NTCP2 connectivity",
+			"reason":      "no reachable NTCP2/SSU2 connectivity",
 			"router_hash": GetRouterHashString(ri),
 			"source":      source,
-		}).Debug("skipping RouterInfo without direct NTCP2 connectivity")
+		}).Debug("skipping RouterInfo without direct or introducer connectivity")
 		return false
 	}
 
@@ -483,7 +483,18 @@ func validateSSUAddress(addr *router_address.RouterAddress) error {
 
 // validateSSU2Address validates SSU2-specific requirements.
 func validateSSU2Address(addr *router_address.RouterAddress) error {
-	return validateTransportHostPort(addr, "SSU2")
+	err := validateTransportHostPort(addr, "SSU2")
+	if err == nil {
+		return nil
+	}
+
+	// SSU2 introducer-only routers are valid bootstrap candidates even without
+	// direct host/port.
+	if ihStr, err := addr.IntroducerHashString(0).Data(); err == nil && ihStr != "" {
+		return nil
+	}
+
+	return err
 }
 
 // GetRouterHashString returns a hex string representation of the RouterInfo's IdentHash

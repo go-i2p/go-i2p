@@ -219,6 +219,7 @@ func (r *Router) startNetDBServiceWatchdog() {
 				r.retryI2CPRouterHashWiring()
 				r.ensurePublisherRunning()
 				r.ensureExplorerRunning()
+				r.maintainNetDBPeerFloor()
 			}
 		}
 	}()

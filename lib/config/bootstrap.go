@@ -1,5 +1,7 @@
 package config
 
+import "time"
+
 // ReseedConfig holds configuration for a single reseed server.
 // Reseed servers provide initial peer RouterInfo files to bootstrap network connectivity.
 type ReseedConfig struct {
@@ -17,6 +19,12 @@ type BootstrapConfig struct {
 	// LowPeerThreshold defines the minimum number of known peers before reseeding.
 	// If the router has fewer peers than this threshold, it will attempt to reseed.
 	LowPeerThreshold int
+	// ReseedTimeout is maximum time to wait for reseed operations.
+	ReseedTimeout time.Duration
+	// MinimumReseedPeers is minimum peers to acquire during reseed.
+	MinimumReseedPeers int
+	// ReseedRetryInterval is time between reseed attempts.
+	ReseedRetryInterval time.Duration
 	// BootstrapType specifies which bootstrap method to use exclusively.
 	// Valid values: "auto" (default, tries all methods), "file", "reseed", "local"
 	// When set to a specific type, only that method will be used.
@@ -47,9 +55,12 @@ type BootstrapConfig struct {
 // Uses all known reseed servers from KnownReseedServers for maximum availability.
 // MinReseedServers defaults to DefaultMinReseedServers (2) matching Java I2P.
 var DefaultBootstrapConfig = BootstrapConfig{
-	LowPeerThreshold: 10,
-	BootstrapType:    "auto", // Default to composite (tries all methods)
-	ReseedFilePath:   "",     // No default reseed file
+	LowPeerThreshold:    10,
+	ReseedTimeout:       60 * time.Second,
+	MinimumReseedPeers:  50,
+	ReseedRetryInterval: 5 * time.Minute,
+	BootstrapType:       "auto", // Default to composite (tries all methods)
+	ReseedFilePath:      "",     // No default reseed file
 	// Use all known reseed servers for maximum availability
 	ReseedServers: KnownReseedServers,
 	// Local netDb paths are populated at runtime based on OS

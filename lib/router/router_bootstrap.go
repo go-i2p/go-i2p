@@ -3,11 +3,17 @@ package router
 import (
 	"context"
 	"strconv"
+	"time"
 
 	"github.com/go-i2p/go-i2p/lib/bootstrap"
 	"github.com/samber/oops"
 
 	"github.com/go-i2p/logger"
+)
+
+const (
+	inNetworkPeerTarget  = 500
+	emergencyReseedFloor = 40
 )
 
 // ensureNetDBReady validates NetDB state and performs reseed if needed.
@@ -27,7 +33,7 @@ func (r *Router) ensureNetDBReady() error {
 		log.WithFields(logger.Fields{"at": "ensureNetDBReady"}).Warn("Unable to determine NetDB size")
 	}
 
-	if r.netdb.Size() < r.cfg.Bootstrap.LowPeerThreshold {
+	if r.netdb.Size() < r.emergencyReseedThreshold() {
 		return r.performReseed()
 	}
 	return nil
@@ -43,6 +49,7 @@ func (r *Router) performReseed() error {
 // It selects the appropriate bootstrapper based on configuration and executes
 // the reseed operation with cancellation support.
 func (r *Router) performReseedWithContext(ctx context.Context) error {
+	r.markReseedAttempt()
 	r.setReseedingFlag(true)
 	defer r.setReseedingFlag(false)
 
@@ -56,6 +63,92 @@ func (r *Router) performReseedWithContext(ctx context.Context) error {
 	return r.executeReseedWithContext(ctx, bootstrapper)
 }
 
+func (r *Router) markReseedAttempt() {
+	r.reseedMutex.Lock()
+	r.lastReseedAttempt = time.Now()
+	r.reseedMutex.Unlock()
+}
+
+func (r *Router) reseedCooldownInterval() time.Duration {
+	if r.cfg != nil && r.cfg.Bootstrap.ReseedRetryInterval > 0 {
+		return r.cfg.Bootstrap.ReseedRetryInterval
+	}
+	return 5 * time.Minute
+}
+
+func (r *Router) canAttemptReseedNow() bool {
+	r.reseedMutex.RLock()
+	defer r.reseedMutex.RUnlock()
+
+	if r.isReseeding {
+		return false
+	}
+	if r.lastReseedAttempt.IsZero() {
+		return true
+	}
+	return time.Since(r.lastReseedAttempt) >= r.reseedCooldownInterval()
+}
+
+func (r *Router) emergencyReseedThreshold() int {
+	threshold := emergencyReseedFloor
+	if r.cfg != nil && r.cfg.Bootstrap.LowPeerThreshold > threshold {
+		threshold = r.cfg.Bootstrap.LowPeerThreshold
+	}
+	return threshold
+}
+
+// maintainNetDBPeerFloor prefers in-network recovery for low peer counts and
+// uses reseed only as an emergency fallback when peer counts are critically low.
+func (r *Router) maintainNetDBPeerFloor() {
+	if r.netdb == nil {
+		return
+	}
+
+	current := r.netdb.Size()
+	reseedThreshold := r.emergencyReseedThreshold()
+
+	// Stay in-network for peer recovery under normal low-count conditions.
+	if current >= reseedThreshold {
+		if current < inNetworkPeerTarget {
+			log.WithFields(logger.Fields{
+				"at":      "maintainNetDBPeerFloor",
+				"current": current,
+				"target":  inNetworkPeerTarget,
+				"mode":    "in-network-exploration",
+			}).Info("NetDB below integration target; continuing in-network discovery")
+		}
+		return
+	}
+
+	if !r.canAttemptReseedNow() {
+		return
+	}
+
+	log.WithFields(logger.Fields{
+		"at":               "maintainNetDBPeerFloor",
+		"current":          current,
+		"reseed_threshold": reseedThreshold,
+		"target":           inNetworkPeerTarget,
+		"mode":             "emergency-reseed",
+	}).Warn("NetDB critically low, triggering emergency reseed")
+
+	ctx := context.Background()
+	if r.cfg != nil && r.cfg.Bootstrap.ReseedTimeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, r.cfg.Bootstrap.ReseedTimeout)
+		defer cancel()
+	}
+
+	if err := r.performReseedWithContext(ctx); err != nil {
+		log.WithError(err).WithFields(logger.Fields{
+			"at":               "maintainNetDBPeerFloor",
+			"current":          current,
+			"reseed_threshold": reseedThreshold,
+			"mode":             "emergency-reseed",
+		}).Warn("Emergency reseed attempt failed")
+	}
+}
+
 // setReseedingFlag safely sets the isReseeding flag with proper mutex protection.
 func (r *Router) setReseedingFlag(value bool) {
 	r.reseedMutex.Lock()
@@ -65,15 +158,16 @@ func (r *Router) setReseedingFlag(value bool) {
 
 // logReseedStart logs the beginning of the reseed operation with relevant metrics.
 func (r *Router) logReseedStart() {
+	reseedThreshold := r.emergencyReseedThreshold()
 	log.WithFields(logger.Fields{
 		"at":             "(Router) performReseed",
 		"phase":          "bootstrap",
-		"reason":         "netdb below threshold, initiating bootstrap",
+		"reason":         "netdb critically low, initiating emergency bootstrap",
 		"current_size":   r.netdb.Size(),
-		"threshold":      r.cfg.Bootstrap.LowPeerThreshold,
-		"shortfall":      r.cfg.Bootstrap.LowPeerThreshold - r.netdb.Size(),
+		"threshold":      reseedThreshold,
+		"shortfall":      reseedThreshold - r.netdb.Size(),
 		"bootstrap_type": r.cfg.Bootstrap.BootstrapType,
-	}).Warn("netDb below threshold, initiating bootstrap")
+	}).Warn("netDb critically low, initiating emergency bootstrap")
 }
 
 // createBootstrapper creates the appropriate bootstrapper based on user configuration.
@@ -162,13 +256,14 @@ func (r *Router) executeReseed(bootstrapper bootstrap.Bootstrap) error {
 // executeReseedWithContext performs the actual reseed operation using the provided bootstrapper.
 // It logs success or failure and returns any error encountered.
 func (r *Router) executeReseedWithContext(ctx context.Context, bootstrapper bootstrap.Bootstrap) error {
-	if err := r.netdb.ReseedWithContext(ctx, bootstrapper, r.cfg.Bootstrap.LowPeerThreshold); err != nil {
+	targetFloor := r.emergencyReseedThreshold()
+	if err := r.netdb.ReseedWithContext(ctx, bootstrapper, targetFloor); err != nil {
 		log.WithError(err).WithFields(logger.Fields{
 			"at":           "(Router) executeReseed",
 			"phase":        "bootstrap",
 			"reason":       "bootstrap failed but continuing",
 			"current_size": r.netdb.Size(),
-			"target":       r.cfg.Bootstrap.LowPeerThreshold,
+			"target":       targetFloor,
 			"impact":       "router will operate with limited peer connectivity",
 		}).Warn("bootstrap failed, continuing with limited NetDB")
 		return err
@@ -178,8 +273,8 @@ func (r *Router) executeReseedWithContext(ctx context.Context, bootstrapper boot
 		"phase":        "bootstrap",
 		"reason":       "bootstrap completed successfully",
 		"netdb_size":   r.netdb.Size(),
-		"threshold":    r.cfg.Bootstrap.LowPeerThreshold,
-		"peers_gained": r.netdb.Size() - (r.cfg.Bootstrap.LowPeerThreshold - 1),
+		"threshold":    targetFloor,
+		"peers_gained": r.netdb.Size() - (targetFloor - 1),
 	}).Info("bootstrap completed successfully")
 	return nil
 }

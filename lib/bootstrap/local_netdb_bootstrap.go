@@ -235,8 +235,8 @@ func (lb *LocalNetDBBootstrap) logReadFailure(filePath string, err error) {
 // cryptographic signature of a RouterInfo before it is added to the bootstrap set.
 // Returns nil on success or an error describing the first failed check.
 func validateRouterInfoForBootstrap(ri router_info.RouterInfo, filePath string) error {
-	if !HasDirectConnectivity(ri) {
-		return oops.Errorf("no direct connectivity")
+	if !HasDirectConnectivity(ri) && !HasSSU2IntroducerConnectivity(ri) {
+		return oops.Errorf("no reachable direct/introducer connectivity")
 	}
 
 	if err := ValidateRouterInfo(ri); err != nil {

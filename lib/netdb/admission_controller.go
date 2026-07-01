@@ -73,7 +73,11 @@ func (c *admissionController) AllowIntroduction(source *common.Hash, key common.
 		return true
 	}
 	if source == nil {
-		return false
+		// Source attribution can be unavailable on some inbound paths.
+		// Rejecting all such introductions as soon as pressure starts (80%) can
+		// stall NetDB growth. Keep accepting until critical pressure, then hard-stop.
+		criticalThreshold := (c.capacity * 95) / 100
+		return currentCount < criticalThreshold
 	}
 
 	now := time.Now()

@@ -117,6 +117,8 @@ type Router struct {
 
 	// isReseeding tracks whether the router is currently performing a reseed operation
 	isReseeding bool
+	// lastReseedAttempt tracks when a reseed was last triggered to avoid tight retry loops
+	lastReseedAttempt time.Time
 	// reseedMutex protects concurrent access to isReseeding flag (Lock 3: acquired after sessionMutex if needed)
 	reseedMutex sync.RWMutex
 
