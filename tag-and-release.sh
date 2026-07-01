@@ -123,11 +123,23 @@ collecthash() {
     return 1
   }
   echo "Collecting tag hash for $1" 1>&2
-  sync_repo_to_latest_checked_in || {
-    echo "ERROR: failed to sync repository $1" 1>&2
-    return 1
-  }
-  TAG_HASH=$(/usr/bin/git rev-parse HEAD)
+  if [ "$DRY_RUN" = true ]; then
+    branch=$(detect_default_branch) || {
+      echo "ERROR: failed to detect default branch for $1" 1>&2
+      return 1
+    }
+    /usr/bin/git fetch origin "$branch" 1>&2 || {
+      echo "ERROR: failed to fetch origin/$branch for $1" 1>&2
+      return 1
+    }
+    TAG_HASH=$(/usr/bin/git rev-parse FETCH_HEAD)
+  else
+    sync_repo_to_latest_checked_in || {
+      echo "ERROR: failed to sync repository $1" 1>&2
+      return 1
+    }
+    TAG_HASH=$(/usr/bin/git rev-parse HEAD)
+  fi
   if [ -z "$TAG_HASH" ]; then
     echo "ERROR: failed to collect HEAD hash for $1" 1>&2
     return 1
@@ -139,16 +151,17 @@ collecthash() {
 }
 
 detect_default_branch() {
+  if /usr/bin/git show-ref --verify --quiet refs/heads/main || /usr/bin/git show-ref --verify --quiet refs/remotes/origin/main; then
+    echo "main"
+    return 0
+  fi
+
   branch=$(/usr/bin/git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##')
   if [ -n "$branch" ]; then
     echo "$branch"
     return 0
   fi
 
-  if /usr/bin/git show-ref --verify --quiet refs/heads/main || /usr/bin/git show-ref --verify --quiet refs/remotes/origin/main; then
-    echo "main"
-    return 0
-  fi
   if /usr/bin/git show-ref --verify --quiet refs/heads/trunk || /usr/bin/git show-ref --verify --quiet refs/remotes/origin/trunk; then
     echo "trunk"
     return 0
@@ -164,7 +177,7 @@ detect_default_branch() {
 
 sync_repo_to_latest_checked_in() {
   branch=$(detect_default_branch) || return 1
-  if [ "$CHECKIN_DRY_RUN" = true ]; then
+  if [ "$DRY_RUN" = true ]; then
     echo "Dry run: skipping sync to origin/$branch in $(pwd)" 1>&2
     return 0
   fi
@@ -211,7 +224,7 @@ ensure_hash_published() {
     return 0
   fi
 
-  if [ "$CHECKIN_DRY_RUN" = true ]; then
+  if [ "$DRY_RUN" = true ]; then
     echo "ERROR: $repo hash $hash is not available on origin during dry-run" 1>&2
     return 1
   fi
@@ -354,7 +367,7 @@ update_our_packages() {
   go build -v ./... 1>&2
   gofumpt -w -s -extra . 1>&2
   echo "Updated our packages to upcoming v$VERSION by specific hashes" 1>&2
-  if [ "$CHECKIN_DRY_RUN" = true ]; then
+  if [ "$CHECKIN_DRY_RUN" = true ] || [ "$DRY_RUN" = true ]; then
     echo "Dry run: skipping dependency update commit" 1>&2
   else
     /usr/bin/git commit -am "Update dependencies to v$VERSION" 1>&2
@@ -398,7 +411,7 @@ correct_our_tags() {
   go build -v ./... 1>&2
   gofumpt -w -s -extra . 1>&2
   echo "Updated our packages to v$VERSION" 1>&2
-  if [ "$CHECKIN_DRY_RUN" = true ]; then
+  if [ "$CHECKIN_DRY_RUN" = true ] || [ "$DRY_RUN" = true ]; then
     echo "Dry run: skipping dependency update commit" 1>&2
   else
     /usr/bin/git commit -am "Update dependencies to v$VERSION" 1>&2
