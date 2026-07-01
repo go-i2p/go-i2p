@@ -53,6 +53,13 @@ const (
 	// timeouts that trigger the hop-reduction auto-fallback when no public
 	// address is available.
 	autoFallbackThreshold = 3
+
+	defaultPeerCooldown   = 5 * time.Minute
+	localFailureCooldown  = 90 * time.Second
+	ambiguousFailureDecay = 3 * time.Minute
+	hardFailureCooldown   = 10 * time.Minute
+	minAdaptiveCooldown   = 30 * time.Second
+	maxAdaptiveCooldown   = 15 * time.Minute
 )
 
 // BuildResponse represents a response from a tunnel hop
@@ -135,6 +142,7 @@ type Pool struct {
 	cancel               context.CancelFunc
 	maintWg              sync.WaitGroup                       // Track maintenance goroutine
 	failedPeers          map[common.Hash]time.Time            // FIX #5: Track failed peer connection attempts
+	failedPeerCooldown   map[common.Hash]time.Duration        // Adaptive cooldown per failed peer
 	failedPeersMu        sync.RWMutex                         // FIX #5: Protect failed peers map
 	peerTracker          PeerTracker                          // Optional peer reputation tracking (netdb integration)
 	cachedActive         atomic.Value                         // []*TunnelState - lock-free cached sorted active tunnels
@@ -187,6 +195,12 @@ type PeerTracker interface {
 	RecordSuccess(hash common.Hash, responseTimeMs int64)
 }
 
+// peerScorer is an optional capability exposed by NetDB peer trackers.
+// When available we use it to bias failed-peer cooldown length.
+type peerScorer interface {
+	ScorePeer(hash common.Hash) float64
+}
+
 // NewTunnelPool creates a new tunnel pool with the given peer selector and default configuration
 func NewTunnelPool(selector PeerSelector) *Pool {
 	return NewTunnelPoolWithConfig(selector, DefaultPoolConfig())
@@ -196,14 +210,15 @@ func NewTunnelPool(selector PeerSelector) *Pool {
 func NewTunnelPoolWithConfig(selector PeerSelector, config PoolConfig) *Pool {
 	ctx, cancel := context.WithCancel(context.Background())
 	p := &Pool{
-		tunnels:       make(map[TunnelID]*TunnelState),
-		peerSelector:  selector,
-		config:        config,
-		lastBuildTime: time.Time{},                     // Zero time
-		failedPeers:   make(map[common.Hash]time.Time), // FIX #5: Track failed connection attempts
-		ctx:           ctx,
-		cancel:        cancel,
-		peerTracker:   nil, // Will be set via SetPeerTracker if NetDB integration is enabled
+		tunnels:            make(map[TunnelID]*TunnelState),
+		peerSelector:       selector,
+		config:             config,
+		lastBuildTime:      time.Time{},                     // Zero time
+		failedPeers:        make(map[common.Hash]time.Time), // FIX #5: Track failed connection attempts
+		failedPeerCooldown: make(map[common.Hash]time.Duration),
+		ctx:                ctx,
+		cancel:             cancel,
+		peerTracker:        nil, // Will be set via SetPeerTracker if NetDB integration is enabled
 	}
 	// Initialize atomic fields
 	p.cachedDirty.Store(true)
@@ -740,7 +755,8 @@ func (p *Pool) executeBuildWithRetry(req *BuildTunnelRequest) (TunnelID, error) 
 		result, err := builder.BuildTunnel(*req)
 		if err != nil {
 			p.logBuildFailure(err, retry, maxRetries, req)
-			lastBuildPeers = p.extractAndMarkFailedPeers(result)
+			reason := classifyTunnelBuildFailureReason(err)
+			lastBuildPeers = p.extractAndMarkFailedPeersWithReason(result, reason)
 			continue
 		}
 
@@ -964,7 +980,8 @@ func (p *Pool) RetryTunnelBuild(tunnelID TunnelID, isInbound bool, hopCount int)
 
 	result, err := builder.BuildTunnel(req)
 	if err != nil {
-		p.extractAndMarkFailedPeers(result)
+		reason := classifyTunnelBuildFailureReason(err)
+		p.extractAndMarkFailedPeersWithReason(result, reason)
 		p.logRetryFailure(tunnelID, isInbound, hopCount, err)
 		return err
 	}
@@ -998,19 +1015,27 @@ func (p *Pool) logRetryFailure(tunnelID TunnelID, isInbound bool, hopCount int, 
 // each peer as failed. Returns the peer hashes for progressive exclusion on retry.
 // Safe to call with a nil result (returns nil).
 func (p *Pool) extractAndMarkFailedPeers(result *BuildTunnelResult) []common.Hash {
+	return p.extractAndMarkFailedPeersWithReason(result, "tunnel_build_failed")
+}
+
+// extractAndMarkFailedPeersWithReason marks each failed peer with a classified
+// reason so cooldown and tracker penalties can distinguish local/transient
+// failures from hard peer-attributable failures.
+func (p *Pool) extractAndMarkFailedPeersWithReason(result *BuildTunnelResult, reason string) []common.Hash {
 	if result == nil || len(result.PeerHashes) == 0 {
 		return nil
 	}
 
 	for _, peerHash := range result.PeerHashes {
-		p.MarkPeerFailed(peerHash)
+		p.MarkPeerFailedWithReason(peerHash, reason)
 	}
 
 	log.WithFields(logger.Fields{
-		"at":         "Pool.extractAndMarkFailedPeers",
-		"phase":      "tunnel_build",
-		"peer_count": len(result.PeerHashes),
-		"reason":     "marked peers from failed build for cooldown exclusion",
+		"at":             "Pool.extractAndMarkFailedPeers",
+		"phase":          "tunnel_build",
+		"peer_count":     len(result.PeerHashes),
+		"reason":         "marked peers from failed build for cooldown exclusion",
+		"failure_reason": reason,
 	}).Debug("extracted and marked failed peers from build result")
 
 	return result.PeerHashes
@@ -1020,8 +1045,18 @@ func (p *Pool) extractAndMarkFailedPeers(result *BuildTunnelResult) []common.Has
 // This peer will be avoided for a cooldown period to prevent wasted retry attempts.
 // If a PeerTracker is configured, the failure is also reported for reputation tracking.
 func (p *Pool) MarkPeerFailed(peerHash common.Hash) {
+	p.MarkPeerFailedWithReason(peerHash, "tunnel_build_failed")
+}
+
+// MarkPeerFailedWithReason records that a peer failed to establish a connection.
+// This peer will be avoided for a reason-aware cooldown period.
+// If a PeerTracker is configured, the failure is also reported for reputation tracking.
+func (p *Pool) MarkPeerFailedWithReason(peerHash common.Hash, reason string) {
+	cooldown := p.computePeerCooldown(peerHash, reason)
+
 	p.failedPeersMu.Lock()
 	p.failedPeers[peerHash] = time.Now()
+	p.failedPeerCooldown[peerHash] = cooldown
 	p.failedPeersMu.Unlock()
 
 	// Read peerTracker under p.mutex (same lock used by SetPeerTracker)
@@ -1032,17 +1067,116 @@ func (p *Pool) MarkPeerFailed(peerHash common.Hash) {
 
 	// Report to NetDB peer tracker if configured (outside lock to avoid deadlock)
 	if tracker != nil {
-		tracker.RecordFailure(peerHash, "tunnel_build_failed")
+		tracker.RecordFailure(peerHash, reason)
 	}
 
 	log.WithFields(logger.Fields{
-		"at":        "Pool.MarkPeerFailed",
-		"phase":     "tunnel_build",
-		"peer_hash": logutil.HashPrefix(peerHash),
-		"reason":    "peer connection failed, marking for cooldown",
-		"impact":    "peer will be excluded from tunnel building temporarily",
-		"tracked":   tracker != nil,
+		"at":             "Pool.MarkPeerFailed",
+		"phase":          "tunnel_build",
+		"peer_hash":      logutil.HashPrefix(peerHash),
+		"reason":         "peer connection failed, marking for cooldown",
+		"failure_reason": reason,
+		"cooldown":       cooldown,
+		"impact":         "peer will be excluded from tunnel building temporarily",
+		"tracked":        tracker != nil,
 	}).Debug("marked peer as failed")
+}
+
+func (p *Pool) computePeerCooldown(peerHash common.Hash, reason string) time.Duration {
+	base := baseCooldownForFailureReason(reason)
+
+	p.mutex.RLock()
+	tracker := p.peerTracker
+	p.mutex.RUnlock()
+
+	scorer, ok := tracker.(peerScorer)
+	if !ok {
+		return base
+	}
+
+	score := scorer.ScorePeer(peerHash)
+	cooldown := base
+	if score >= 0.75 {
+		cooldown = time.Duration(float64(base) * 0.6)
+	} else if score <= 0.25 {
+		cooldown = time.Duration(float64(base) * 1.4)
+	}
+
+	if cooldown < minAdaptiveCooldown {
+		cooldown = minAdaptiveCooldown
+	}
+	if cooldown > maxAdaptiveCooldown {
+		cooldown = maxAdaptiveCooldown
+	}
+
+	return cooldown
+}
+
+func baseCooldownForFailureReason(reason string) time.Duration {
+	r := strings.ToLower(reason)
+
+	if containsAnySubstring(r,
+		"local",
+		"transport_not_ready",
+		"no transports available",
+		"context cancelled",
+		"context canceled",
+		"startup",
+		"reply tunnel unavailable",
+	) {
+		return localFailureCooldown
+	}
+
+	if containsAnySubstring(r,
+		"permanent",
+		"incompatible",
+		"invalid_routerinfo",
+		"no valid address",
+		"banned",
+	) {
+		return hardFailureCooldown
+	}
+
+	return ambiguousFailureDecay
+}
+
+func classifyTunnelBuildFailureReason(err error) string {
+	if err == nil {
+		return "tunnel_build_failed"
+	}
+
+	errText := strings.ToLower(err.Error())
+	if containsAnySubstring(errText,
+		"no transports available",
+		"transport unavailable",
+		"context cancelled",
+		"context canceled",
+		"reply tunnel unavailable",
+		"router identity not yet initialized",
+	) {
+		return "tunnel_build_failed_local"
+	}
+
+	if containsAnySubstring(errText,
+		"incompatible",
+		"invalid routerinfo",
+		"no valid address",
+		"banned",
+		"permanent",
+	) {
+		return "tunnel_build_failed_permanent"
+	}
+
+	return "tunnel_build_failed_ambiguous"
+}
+
+func containsAnySubstring(s string, terms ...string) bool {
+	for _, term := range terms {
+		if strings.Contains(s, term) {
+			return true
+		}
+	}
+	return false
 }
 
 // IsPeerFailed checks if a peer is currently in the failed state.
@@ -1054,8 +1188,10 @@ func (p *Pool) IsPeerFailed(peerHash common.Hash) bool {
 	if !exists {
 		return false
 	}
-	// 5-minute cooldown period
-	cooldownPeriod := 5 * time.Minute
+	cooldownPeriod := defaultPeerCooldown
+	if custom, ok := p.failedPeerCooldown[peerHash]; ok && custom > 0 {
+		cooldownPeriod = custom
+	}
 	return time.Since(failTime) < cooldownPeriod
 }
 
@@ -1066,13 +1202,17 @@ func (p *Pool) CleanupFailedPeers() {
 	defer p.failedPeersMu.Unlock()
 
 	now := time.Now()
-	cooldownPeriod := 5 * time.Minute
 	var cleaned []common.Hash
 
 	for hash, failTime := range p.failedPeers {
+		cooldownPeriod := defaultPeerCooldown
+		if custom, ok := p.failedPeerCooldown[hash]; ok && custom > 0 {
+			cooldownPeriod = custom
+		}
 		if now.Sub(failTime) > cooldownPeriod {
 			cleaned = append(cleaned, hash)
 			delete(p.failedPeers, hash)
+			delete(p.failedPeerCooldown, hash)
 		}
 	}
 
@@ -1082,7 +1222,7 @@ func (p *Pool) CleanupFailedPeers() {
 			"phase":         "tunnel_build",
 			"cleaned_count": len(cleaned),
 			"remaining":     len(p.failedPeers),
-			"cooldown":      cooldownPeriod,
+			"cooldown":      "adaptive",
 		}).Debug("cleaned up expired failed peer entries")
 	}
 }
@@ -1099,10 +1239,13 @@ func (p *Pool) GetFailedPeers() []common.Hash {
 
 	// Create slice with only peers still in cooldown
 	now := time.Now()
-	cooldownPeriod := 5 * time.Minute
 	failed := make([]common.Hash, 0, len(p.failedPeers))
 
 	for hash, failTime := range p.failedPeers {
+		cooldownPeriod := defaultPeerCooldown
+		if custom, ok := p.failedPeerCooldown[hash]; ok && custom > 0 {
+			cooldownPeriod = custom
+		}
 		if now.Sub(failTime) < cooldownPeriod {
 			failed = append(failed, hash)
 		}

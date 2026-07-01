@@ -1,6 +1,7 @@
 package netdb
 
 import (
+	"strings"
 	"sync"
 	"time"
 
@@ -34,6 +35,18 @@ const (
 	highSuccessRateThreshold = 0.75 // Above this rate, peer is considered reliable
 	minAttemptsForStats      = 5    // Minimum attempts before success rate is meaningful
 	consecutiveFailThreshold = 3    // Consecutive failures triggering staleness
+
+	localFailureWeight  = 0 // Local/transient infrastructure issue (do not blame peer)
+	ambiguousFailWeight = 1 // Unknown/transient peer path issue
+	hardFailureWeight   = 2 // Strong peer-attributable failure signal
+)
+
+type peerFailureClass int
+
+const (
+	peerFailureClassAmbiguous peerFailureClass = iota
+	peerFailureClassLocal
+	peerFailureClassHard
 )
 
 // NewPeerTracker creates a new peer tracking system.
@@ -112,17 +125,82 @@ func (pt *PeerTracker) RecordFailure(hash common.Hash, reason string) {
 	defer pt.mu.Unlock()
 
 	stats := pt.getOrCreateStats(hash)
+	failureClass := classifyFailureReason(reason)
+	failWeight := failureWeightForClass(failureClass)
 
 	stats.FailureCount++
 	stats.LastFailure = time.Now()
-	stats.ConsecutiveFails++
+	stats.ConsecutiveFails += failWeight
 
 	log.WithFields(logger.Fields{
 		"peer_hash":         shortHash(hash.String(), 16),
 		"failure_count":     stats.FailureCount,
 		"consecutive_fails": stats.ConsecutiveFails,
+		"failure_weight":    failWeight,
+		"failure_class":     failureClass.String(),
 		"reason":            reason,
 	}).Debug("Recorded connection failure")
+}
+
+func failureWeightForClass(class peerFailureClass) int {
+	switch class {
+	case peerFailureClassLocal:
+		return localFailureWeight
+	case peerFailureClassHard:
+		return hardFailureWeight
+	default:
+		return ambiguousFailWeight
+	}
+}
+
+func classifyFailureReason(reason string) peerFailureClass {
+	r := strings.ToLower(reason)
+
+	if containsAny(r,
+		"no transports available",
+		"transport unavailable",
+		"transport_not_ready",
+		"context cancelled",
+		"context canceled",
+		"startup",
+		"reply tunnel unavailable",
+		"router identity not yet initialized",
+	) {
+		return peerFailureClassLocal
+	}
+
+	if containsAny(r,
+		"permanent",
+		"incompatible",
+		"invalid routerinfo",
+		"no valid address",
+		"malformed",
+		"banned",
+	) {
+		return peerFailureClassHard
+	}
+
+	return peerFailureClassAmbiguous
+}
+
+func (c peerFailureClass) String() string {
+	switch c {
+	case peerFailureClassLocal:
+		return "local"
+	case peerFailureClassHard:
+		return "hard"
+	default:
+		return "ambiguous"
+	}
+}
+
+func containsAny(s string, terms ...string) bool {
+	for _, term := range terms {
+		if strings.Contains(s, term) {
+			return true
+		}
+	}
+	return false
 }
 
 // RecordPermanentFailure records a structurally permanent connection failure

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -893,11 +894,13 @@ func (p *Publisher) selectFloodfillsForPublishing(hash common.Hash) ([]router_in
 	}
 
 	if len(eligible) == 0 {
+		prioritized := prioritizeFloodfillFallback(p.db, floodfills)
 		log.WithFields(logger.Fields{
-			"hash":       logutil.HashPrefixPlain(hash),
-			"floodfills": len(floodfills),
-		}).Warn("No eligible floodfills after publication hardening; falling back to raw floodfill set")
-		return floodfills, nil
+			"hash":        logutil.HashPrefixPlain(hash),
+			"floodfills":  len(floodfills),
+			"prioritized": len(prioritized),
+		}).Warn("No eligible floodfills after publication hardening; falling back to prioritized floodfill set")
+		return prioritized, nil
 	}
 
 	log.WithFields(logger.Fields{
@@ -907,6 +910,54 @@ func (p *Publisher) selectFloodfillsForPublishing(hash common.Hash) ([]router_in
 	}).Debug("Selected floodfill routers for publishing")
 
 	return eligible, nil
+}
+
+// prioritizeFloodfillFallback returns a deterministic fallback ordering that
+// prefers non-stale and higher-score peers when publication hardening filters
+// everything out. This preserves liveness while reducing repeated publication
+// attempts to chronically weak floodfills.
+func prioritizeFloodfillFallback(db NetworkDatabase, candidates []router_info.RouterInfo) []router_info.RouterInfo {
+	stdDB, ok := db.(*StdNetDB)
+	if !ok || stdDB.PeerTracker == nil || len(candidates) <= 1 {
+		return candidates
+	}
+
+	type scoredFloodfill struct {
+		ri    router_info.RouterInfo
+		score float64
+		stale bool
+	}
+
+	scored := make([]scoredFloodfill, 0, len(candidates))
+	for _, ri := range candidates {
+		hash, err := ri.IdentHash()
+		if err != nil {
+			scored = append(scored, scoredFloodfill{ri: ri, score: 0.5, stale: false})
+			continue
+		}
+		scored = append(scored, scoredFloodfill{
+			ri:    ri,
+			score: stdDB.PeerTracker.ScorePeer(hash),
+			stale: stdDB.PeerTracker.IsLikelyStale(hash),
+		})
+	}
+
+	sort.SliceStable(scored, func(i, j int) bool {
+		if scored[i].stale != scored[j].stale {
+			return !scored[i].stale
+		}
+		if scored[i].score == scored[j].score {
+			return i < j
+		}
+		return scored[i].score > scored[j].score
+	})
+
+	prioritized := make([]router_info.RouterInfo, 0, len(scored))
+	for _, candidate := range scored {
+		prioritized = append(prioritized, candidate.ri)
+	}
+
+	return prioritized
 }
 
 // isEligiblePublishFloodfill applies additional publication-time eligibility checks
