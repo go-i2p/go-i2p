@@ -436,9 +436,6 @@ tagandrelease() {
   fi
   echo "tagging and releasing $1 v$VERSION" 1>&2
   sync_repo_to_latest_checked_in
-  #cleanup
-  echo "Commenting out replace directives and updating our packages for $1" 1>&2
-  comment_out_replaces
   if [ "$DRY_RUN" = true ]; then
     echo "Dry run: skipping git tag and release for $1" 1>&2
     if [ "$CHECKIN_DRY_RUN" = true ]; then
@@ -493,6 +490,9 @@ tagandrelease() {
   echo "$1 v$VERSION tag hash: $TAG_HASH" 1>&2
   echo "$TAG_HASH"
   push 1>&2
+  #cleanup
+  echo "Commenting out replace directives and updating our packages for $1" 1>&2
+  comment_out_replaces
   echo "Updating our packages for $1" 1>&2
   update_our_packages
   correct_our_tags 1>&2
