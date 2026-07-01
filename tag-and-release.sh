@@ -108,6 +108,7 @@ comment_out_replaces() {
     echo "Dry run: skipping git commit for commented out replace directives" 1>&2
   else
     /usr/bin/git commit -am "Comment out replace directives" 1>&2
+    push_after_commit 1>&2
   fi
   #go mod tidy
   rm go.mod.bak
@@ -117,6 +118,14 @@ push() {
   /usr/bin/git push origin main || /usr/bin/git push origin trunk || /usr/bin/git push origin master
   /usr/bin/git push --tags --force
   /usr/bin/git push origin v$VERSION --force
+}
+
+push_after_commit() {
+  /usr/bin/git push origin main || /usr/bin/git push origin trunk || /usr/bin/git push origin master
+  if /usr/bin/git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null 2>&1; then
+    /usr/bin/git push --tags --force
+    /usr/bin/git push origin v$VERSION --force
+  fi
 }
 
 # descend into the go-i2p namespace and collect checkin hashes
@@ -355,6 +364,7 @@ update_our_packages() {
     echo "Dry run: skipping dependency update commit" 1>&2
   else
     /usr/bin/git commit -am "Update dependencies to v$VERSION" 1>&2
+    push_after_commit 1>&2
   fi
 }
 
@@ -403,6 +413,7 @@ correct_our_tags() {
     echo "Dry run: skipping dependency update commit" 1>&2
   else
     /usr/bin/git commit -am "Update dependencies to v$VERSION" 1>&2
+    push_after_commit 1>&2
   fi
 }
 
@@ -427,7 +438,7 @@ tagandrelease() {
     else
       /usr/bin/git add -v . 1>&2
       /usr/bin/git commit -am "library sync for v$VERSION" 1>&2
-      push 1>&2
+      push_after_commit 1>&2
     fi
     echo "$1 v$VERSION dry-run hash: $START_HASH" 1>&2
     echo "$START_HASH"
@@ -438,6 +449,7 @@ tagandrelease() {
     rm RELEASE_NOTES.md
     git add -v -f RELEASE_NOTES.md 1>&2
     git commit -m "Remove short RELEASE_NOTES.md for $1" 1>&2
+    push_after_commit 1>&2
   fi
   if [ ! -f RELEASE_NOTES.md ]; then
     echo "Release notes for: \`$1\` Version \`$VERSION\`" > RELEASE_NOTES.md
@@ -448,6 +460,7 @@ tagandrelease() {
     echo "" >> RELEASE_NOTES.md
     git add -v -f RELEASE_NOTES.md 1>&2
     git commit -m "Add placeholder RELEASE_NOTES.md for $1" 1>&2
+    push_after_commit 1>&2
   fi
   # if the top line of RELEASE_NOTES does not contain $VERSION, replace it
   FIRST_LINE=$(head -n 1 RELEASE_NOTES.md)
@@ -460,6 +473,7 @@ tagandrelease() {
     mv RELEASE_NOTES.md.tmp RELEASE_NOTES.md
     git add -v -f RELEASE_NOTES.md 1>&2
     git commit -m "Update RELEASE_NOTES.md for v$VERSION" 1>&2
+    push_after_commit 1>&2
   fi
   if /usr/bin/git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null 2>&1; then
     echo "Local tag v$VERSION already exists, replacing it" 1>&2
@@ -470,10 +484,10 @@ tagandrelease() {
     echo "ERROR: failed to create tag v$VERSION for $1" 1>&2
     exit 1
   fi
+  push 1>&2
   TAG_HASH=$(/usr/bin/git rev-parse "v$VERSION")
   echo "$1 v$VERSION tag hash: $TAG_HASH" 1>&2
   echo "$TAG_HASH"
-  push 1>&2
   #cleanup
   echo "Commenting out replace directives and updating our packages for $1" 1>&2
   comment_out_replaces
