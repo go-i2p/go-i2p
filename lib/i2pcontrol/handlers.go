@@ -251,22 +251,26 @@ func (h *RouterInfoHandler) buildAvailableFields() map[string]interface{} {
 	bandwidthStats := h.stats.GetBandwidthStats()
 
 	fields := map[string]interface{}{
-		"i2p.router.uptime":                    routerStats.Uptime,
-		"i2p.router.version":                   routerStats.Version,
-		"i2p.router.status":                    routerStats.Status,
-		"i2p.router.net.tunnels.participating": routerStats.ParticipatingTunnels,
-		"i2p.router.netdb.knownpeers":          routerStats.KnownPeers,
-		"i2p.router.netdb.activepeers":         routerStats.ActivePeersCount,
-		"i2p.router.netdb.fastpeers":           routerStats.FastPeersCount,
-		"i2p.router.netdb.highcapacitypeers":   routerStats.HighCapacityPeersCount,
-		"i2p.router.netdb.isreseeding":         routerStats.IsReseeding,
-		"i2p.router.net.tunnels.inbound":       routerStats.InboundTunnels,
-		"i2p.router.net.tunnels.outbound":      routerStats.OutboundTunnels,
-		"i2p.router.net.status":                h.stats.GetNetworkStatus(),
-		"i2p.router.net.bw.inbound.1s":         bandwidthStats.InboundRate1s,
-		"i2p.router.net.bw.inbound.15s":        bandwidthStats.InboundRate,
-		"i2p.router.net.bw.outbound.1s":        bandwidthStats.OutboundRate1s,
-		"i2p.router.net.bw.outbound.15s":       bandwidthStats.OutboundRate,
+		"i2p.router.uptime":                            routerStats.Uptime,
+		"i2p.router.version":                           routerStats.Version,
+		"i2p.router.status":                            routerStats.Status,
+		"i2p.router.net.tunnels.participating":         routerStats.ParticipatingTunnels,
+		"i2p.router.netdb.knownpeers":                  routerStats.KnownPeers,
+		"i2p.router.netdb.activepeers":                 routerStats.ActivePeersCount,
+		"i2p.router.netdb.fastpeers":                   routerStats.FastPeersCount,
+		"i2p.router.netdb.highcapacitypeers":           routerStats.HighCapacityPeersCount,
+		"i2p.router.netdb.routerinfo.accepted":         routerStats.RouterInfoAcceptCount,
+		"i2p.router.netdb.routerinfo.rejected":         routerStats.RouterInfoRejectCount,
+		"i2p.router.netdb.routerinfo.persist_deferred": routerStats.RouterInfoPersistDeferredCount,
+		"i2p.router.netdb.routerinfo.persist_pending":  routerStats.RouterInfoPersistPendingCount,
+		"i2p.router.netdb.isreseeding":                 routerStats.IsReseeding,
+		"i2p.router.net.tunnels.inbound":               routerStats.InboundTunnels,
+		"i2p.router.net.tunnels.outbound":              routerStats.OutboundTunnels,
+		"i2p.router.net.status":                        h.stats.GetNetworkStatus(),
+		"i2p.router.net.bw.inbound.1s":                 bandwidthStats.InboundRate1s,
+		"i2p.router.net.bw.inbound.15s":                bandwidthStats.InboundRate,
+		"i2p.router.net.bw.outbound.1s":                bandwidthStats.OutboundRate1s,
+		"i2p.router.net.bw.outbound.15s":               bandwidthStats.OutboundRate,
 	}
 
 	// Add local router identity hash (non-standard I2PControl extension for i2ptui)
@@ -298,6 +302,9 @@ func selectRequestedOrDefaultFields(req, availableFields map[string]interface{})
 		result["i2p.router.version"] = availableFields["i2p.router.version"]
 		result["i2p.router.net.tunnels.participating"] = availableFields["i2p.router.net.tunnels.participating"]
 		result["i2p.router.netdb.knownpeers"] = availableFields["i2p.router.netdb.knownpeers"]
+		result["i2p.router.netdb.routerinfo.accepted"] = availableFields["i2p.router.netdb.routerinfo.accepted"]
+		result["i2p.router.netdb.routerinfo.rejected"] = availableFields["i2p.router.netdb.routerinfo.rejected"]
+		result["i2p.router.netdb.routerinfo.persist_pending"] = availableFields["i2p.router.netdb.routerinfo.persist_pending"]
 		result["i2p.router.net.status"] = availableFields["i2p.router.net.status"]
 	}
 

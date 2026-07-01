@@ -302,7 +302,21 @@ func (r *Router) routeDatabaseStore(msg i2np.Message, mr *i2np.I2NPMessageDispat
 	if err != nil {
 		return oops.Wrapf(err, "failed to parse DatabaseStore message")
 	}
-	return mr.RouteDatabaseMessageFromPeer(dbStore, &fromPeer)
+	return mr.GetProcessor().ProcessMessage(&sourcedDatabaseStoreMessage{
+		DatabaseStore: dbStore,
+		source:        fromPeer,
+	})
+}
+
+// sourcedDatabaseStoreMessage preserves source peer attribution while passing
+// DatabaseStore messages through the processor pipeline.
+type sourcedDatabaseStoreMessage struct {
+	*i2np.DatabaseStore
+	source common.Hash
+}
+
+func (m *sourcedDatabaseStoreMessage) SourceHash() common.Hash {
+	return m.source
 }
 
 // routeDatabaseLookup handles DatabaseLookup message routing with optional floodfill handling.
