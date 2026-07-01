@@ -1520,6 +1520,20 @@ func (t *NTCP2Transport) dialNTCP2Connection(routerInfo router_info.RouterInfo) 
 	}
 
 	peerHashBytes := t.getPeerHashBytes(routerInfo)
+	return t.tryDialCandidates(ntcp2Addrs, peerHashBytes, config)
+}
+
+func (t *NTCP2Transport) tryDialCandidates(ntcp2Addrs []net.Addr, peerHashBytes []byte, config *ntcp2.Config) (*ntcp2.Conn, error) {
+	return dialCandidatesWithPerformer(t, ntcp2Addrs, peerHashBytes, config, t.performNTCP2Handshake)
+}
+
+func dialCandidatesWithPerformer(
+	t *NTCP2Transport,
+	ntcp2Addrs []net.Addr,
+	peerHashBytes []byte,
+	config *ntcp2.Config,
+	perform func(net.Addr, string, []byte, *ntcp2.Config, time.Time) (*ntcp2.Conn, error),
+) (*ntcp2.Conn, error) {
 	var lastErr error
 
 	for i, ntcp2Addr := range ntcp2Addrs {
@@ -1537,7 +1551,7 @@ func (t *NTCP2Transport) dialNTCP2Connection(routerInfo router_info.RouterInfo) 
 
 		t.logTCPConnectionAttempt(tcpAddrString, peerHashBytes)
 		tcpDialStart := time.Now()
-		conn, err := t.performNTCP2Handshake(ntcp2Addr, tcpAddrString, peerHashBytes, config, tcpDialStart)
+		conn, err := perform(ntcp2Addr, tcpAddrString, peerHashBytes, config, tcpDialStart)
 		if err == nil {
 			return conn, nil
 		}
