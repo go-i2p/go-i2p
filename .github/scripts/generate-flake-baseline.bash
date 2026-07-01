@@ -6,6 +6,7 @@ repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 iterations=${1:-3}
 output_file=${2:-"${repo_root}/docs/transport-flake-baseline.md"}
 test_timeout=${3:-"20m"}
+requested_timeout=${test_timeout}
 
 if ! [[ "${iterations}" =~ ^[0-9]+$ ]] || (( iterations < 1 )); then
 	echo "usage: $0 [iterations>=1] [output-file] [per-test-timeout|default]" >&2
@@ -84,9 +85,11 @@ mkdir -p "$(dirname "${output_file}")"
 	echo "## Reproduction"
 	echo
 	echo '```bash'
-	echo "bash .github/scripts/generate-flake-baseline.bash ${iterations} ${output_file} ${test_timeout}"
-	echo "# Use Go's default timeout behavior for very long suites"
-	echo "bash .github/scripts/generate-flake-baseline.bash ${iterations} ${output_file} default"
+	echo "bash .github/scripts/generate-flake-baseline.bash ${iterations} ${output_file} ${requested_timeout}"
+	if [[ "${requested_timeout}" != "default" ]]; then
+		echo "# Use Go's default timeout behavior for very long suites"
+		echo "bash .github/scripts/generate-flake-baseline.bash ${iterations} ${output_file} default"
+	fi
 	echo '```'
 } > "${output_file}"
 
