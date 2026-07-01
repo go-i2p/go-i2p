@@ -11,6 +11,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/netdb"
+	"github.com/go-i2p/go-i2p/lib/transport"
 	tunnelpkg "github.com/go-i2p/go-i2p/lib/tunnel"
 )
 
@@ -546,6 +547,17 @@ type mockRouterAccessWithTransportSessions struct {
 	ssu2Count  int
 }
 
+// mockRouterAccessWithTransportFailureStats wraps mockRouterAccess with
+// configurable transport mux failure counters.
+type mockRouterAccessWithTransportFailureStats struct {
+	mockRouterAccess
+	failureStats transport.MuxSessionFailureStats
+}
+
+func (m *mockRouterAccessWithTransportFailureStats) GetTransportSessionFailureStats() transport.MuxSessionFailureStats {
+	return m.failureStats
+}
+
 func (m *mockRouterAccessWithTransportSessions) GetNTCP2SessionCount() int {
 	return m.ntcp2Count
 }
@@ -590,6 +602,35 @@ func TestStatsTransportActivePeers(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestStatsTransportSessionFailureCounters(t *testing.T) {
+	router := &mockRouterAccessWithTransportFailureStats{
+		mockRouterAccess: mockRouterAccess{running: true},
+		failureStats: transport.MuxSessionFailureStats{
+			SessionAttempts:       100,
+			NoCompatibleTransport: 17,
+			AllTransportsFailed:   29,
+			PeerCooldownSkipped:   13,
+			ConnectionPoolFull:    5,
+		},
+	}
+
+	provider := NewRouterStatsProvider(router, "0.1.0-test")
+
+	assertRate := func(stat string, want float64) {
+		t.Helper()
+		got := provider.GetRateForPeriod(stat, 60000)
+		if got != want {
+			t.Fatalf("%s = %v, want %v", stat, got, want)
+		}
+	}
+
+	assertRate("transport.session.attempts", 100)
+	assertRate("transport.session.fail.noCompatible", 17)
+	assertRate("transport.session.fail.allFailed", 29)
+	assertRate("transport.session.skip.cooldown", 13)
+	assertRate("transport.session.fail.poolFull", 5)
 }
 
 // mockRouterWithNetworkStatus is a minimal RouterAccess that lets tests control

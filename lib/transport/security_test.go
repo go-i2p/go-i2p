@@ -90,6 +90,27 @@ type mockTransportWithOrder struct {
 	mu         *sync.Mutex
 }
 
+// mockTransportSessionError is a transport stub that is compatible but always
+// fails session establishment.
+type mockTransportSessionError struct {
+	err error
+}
+
+func (m *mockTransportSessionError) Accept() (net.Conn, error) { return nil, nil }
+func (m *mockTransportSessionError) Addr() net.Addr            { return nil }
+func (m *mockTransportSessionError) SetIdentity(ident router_info.RouterInfo) error {
+	return nil
+}
+func (m *mockTransportSessionError) GetSession(routerInfo router_info.RouterInfo) (TransportSession, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return nil, errors.New("session setup failed")
+}
+func (m *mockTransportSessionError) Compatible(routerInfo router_info.RouterInfo) bool { return true }
+func (m *mockTransportSessionError) Close() error                                      { return nil }
+func (m *mockTransportSessionError) Name() string                                      { return "mock-session-error" }
+
 func (m *mockTransportWithOrder) Accept() (net.Conn, error) {
 	return nil, nil
 }
@@ -238,6 +259,76 @@ func TestConnectionPoolingLimitsEnforced(t *testing.T) {
 	_, err = muxer.GetSession(emptyRI)
 	require.NoError(t, err, "Session after release should succeed")
 	assert.Equal(t, 2, muxer.ActiveSessionCount(), "Should have 2 active sessions again")
+}
+
+// TestSessionFailureStats verifies per-reason session failure counters.
+func TestSessionFailureStats(t *testing.T) {
+	t.Run("no compatible transport", func(t *testing.T) {
+		callOrder := make([]string, 0)
+		var mu sync.Mutex
+		transport := &mockTransportWithOrder{
+			name:       "incompatible",
+			compatible: false,
+			callOrder:  &callOrder,
+			mu:         &mu,
+		}
+		muxer := Mux(transport)
+
+		_, err := muxer.GetSession(router_info.RouterInfo{})
+		require.ErrorIs(t, err, ErrNoTransportAvailable)
+
+		stats := muxer.GetSessionFailureStats()
+		assert.Equal(t, uint64(1), stats.SessionAttempts)
+		assert.Equal(t, uint64(1), stats.NoCompatibleTransport)
+		assert.Equal(t, uint64(0), stats.AllTransportsFailed)
+	})
+
+	t.Run("all compatible transports failed", func(t *testing.T) {
+		muxer := Mux(&mockTransportSessionError{})
+
+		_, err := muxer.GetSession(router_info.RouterInfo{})
+		require.ErrorIs(t, err, ErrNoTransportAvailable)
+
+		stats := muxer.GetSessionFailureStats()
+		assert.Equal(t, uint64(1), stats.SessionAttempts)
+		assert.Equal(t, uint64(0), stats.NoCompatibleTransport)
+		assert.Equal(t, uint64(1), stats.AllTransportsFailed)
+	})
+
+	t.Run("pool full", func(t *testing.T) {
+		callOrder := make([]string, 0)
+		var mu sync.Mutex
+		transport := &mockTransportWithOrder{
+			name:       "limited",
+			compatible: true,
+			callOrder:  &callOrder,
+			mu:         &mu,
+		}
+		muxer := MuxWithLimit(1, transport)
+
+		_, err := muxer.GetSession(router_info.RouterInfo{})
+		require.NoError(t, err)
+		_, err = muxer.GetSession(router_info.RouterInfo{})
+		require.ErrorIs(t, err, ErrConnectionPoolFull)
+
+		stats := muxer.GetSessionFailureStats()
+		assert.Equal(t, uint64(2), stats.SessionAttempts)
+		assert.Equal(t, uint64(1), stats.ConnectionPoolFull)
+	})
+
+	t.Run("peer cooldown skip", func(t *testing.T) {
+		muxer := Mux(&mockTransportSessionError{})
+
+		_, err := muxer.GetSession(router_info.RouterInfo{})
+		require.ErrorIs(t, err, ErrNoTransportAvailable)
+		_, err = muxer.GetSession(router_info.RouterInfo{})
+		require.ErrorIs(t, err, ErrNoTransportAvailable)
+
+		stats := muxer.GetSessionFailureStats()
+		assert.Equal(t, uint64(2), stats.SessionAttempts)
+		assert.Equal(t, uint64(1), stats.AllTransportsFailed)
+		assert.Equal(t, uint64(1), stats.PeerCooldownSkipped)
+	})
 }
 
 // TestAcceptEnforcesConnectionLimit verifies that Accept respects the connection limit.

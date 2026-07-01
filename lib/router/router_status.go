@@ -89,6 +89,16 @@ func (r *Router) GetSSU2Addr() net.Addr {
 	return nil
 }
 
+// GetTransportSessionFailureStats returns session-attempt outcome counters from
+// the transport muxer. It returns zero-valued stats when transports are not ready.
+func (r *Router) GetTransportSessionFailureStats() transport.MuxSessionFailureStats {
+	muxer := r.transports
+	if muxer == nil {
+		return transport.MuxSessionFailureStats{}
+	}
+	return muxer.GetSessionFailureStats()
+}
+
 // GetNetworkStatus returns the I2PControl network status code.
 // Status codes:
 //

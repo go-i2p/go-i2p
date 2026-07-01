@@ -66,6 +66,28 @@ type TransportMuxer struct {
 	// closeOnce ensures Close() is idempotent.
 	closeOnce sync.Once
 	closeErr  error
+
+	// sessionAttemptsTotal counts all outbound GetSession attempts.
+	sessionAttemptsTotal uint64
+	// sessionNoCompatibleTotal counts failures where no transport matched peer addresses.
+	sessionNoCompatibleTotal uint64
+	// sessionAllFailedTotal counts failures where one or more transports matched
+	// but every session establishment attempt failed.
+	sessionAllFailedTotal uint64
+	// sessionCooldownSkippedTotal counts attempts skipped due to peer cooldown.
+	sessionCooldownSkippedTotal uint64
+	// sessionPoolFullTotal counts failures due to reaching connection pool limit.
+	sessionPoolFullTotal uint64
+}
+
+// MuxSessionFailureStats is a point-in-time snapshot of session-attempt outcomes
+// tracked by TransportMuxer.
+type MuxSessionFailureStats struct {
+	SessionAttempts       uint64
+	NoCompatibleTransport uint64
+	AllTransportsFailed   uint64
+	PeerCooldownSkipped   uint64
+	ConnectionPoolFull    uint64
 }
 
 // Mux combines a set of transports together.
@@ -401,10 +423,13 @@ func (tmux *TransportMuxer) findCompatibleSession(routerInfo router_info.RouterI
 }
 
 func (tmux *TransportMuxer) beginSessionAttempt(routerInfo router_info.RouterInfo) error {
+	atomic.AddUint64(&tmux.sessionAttemptsTotal, 1)
+
 	peerHash, _ := routerInfo.IdentHash()
 
 	// Skip peers that recently failed all transports (cooldown window).
 	if tmux.isPeerCoolingDown(peerHash) {
+		atomic.AddUint64(&tmux.sessionCooldownSkippedTotal, 1)
 		tmux.logMuxerMethod("GetSession", logger.Fields{
 			"reason":    "peer_cooldown",
 			"peer_hash": logutil.HashPrefix(peerHash),
@@ -424,8 +449,10 @@ func (tmux *TransportMuxer) beginSessionAttempt(routerInfo router_info.RouterInf
 
 func (tmux *TransportMuxer) handleSessionFailure(routerInfo router_info.RouterInfo, compatibleFound bool) error {
 	if compatibleFound {
+		atomic.AddUint64(&tmux.sessionAllFailedTotal, 1)
 		tmux.logAllTransportsFailed(routerInfo)
 	} else {
+		atomic.AddUint64(&tmux.sessionNoCompatibleTotal, 1)
 		tmux.logNoTransportError(routerInfo)
 	}
 	return ErrNoTransportAvailable
@@ -705,6 +732,7 @@ func (tmux *TransportMuxer) checkConnectionLimit() error {
 		return value < max
 	}, 1)
 	if !ok {
+		atomic.AddUint64(&tmux.sessionPoolFullTotal, 1)
 		tmux.logMuxerMethod("checkConnectionLimit", logger.Fields{
 			"reason":          "connection_pool_full",
 			"active_sessions": int(current),
@@ -713,6 +741,17 @@ func (tmux *TransportMuxer) checkConnectionLimit() error {
 		return ErrConnectionPoolFull
 	}
 	return nil
+}
+
+// GetSessionFailureStats returns a snapshot of tracked session-attempt outcomes.
+func (tmux *TransportMuxer) GetSessionFailureStats() MuxSessionFailureStats {
+	return MuxSessionFailureStats{
+		SessionAttempts:       atomic.LoadUint64(&tmux.sessionAttemptsTotal),
+		NoCompatibleTransport: atomic.LoadUint64(&tmux.sessionNoCompatibleTotal),
+		AllTransportsFailed:   atomic.LoadUint64(&tmux.sessionAllFailedTotal),
+		PeerCooldownSkipped:   atomic.LoadUint64(&tmux.sessionCooldownSkippedTotal),
+		ConnectionPoolFull:    atomic.LoadUint64(&tmux.sessionPoolFullTotal),
+	}
 }
 
 // GetTransports returns a copy of the slice of transports in this muxer.

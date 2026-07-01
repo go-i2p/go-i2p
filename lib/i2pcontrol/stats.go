@@ -8,6 +8,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/netdb"
+	"github.com/go-i2p/go-i2p/lib/transport"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 )
 
@@ -739,6 +740,8 @@ func (rsp *routerStatsProvider) GetRateForPeriod(stat string, periodMs int64) fl
 		return rsp.getTunnelBuildRate(stat, periodMs)
 	case stat == "tcp.activePeers" || stat == "udp.activePeers":
 		return rsp.getTransportPeersCount(stat)
+	case rsp.isTransportSessionFailureStat(stat):
+		return rsp.getTransportSessionFailureCount(stat)
 	default:
 		log.WithField("stat", stat).Debug("i2pcontrol: GetRateForPeriod unknown stat name, returning 0")
 		return 0
@@ -820,6 +823,41 @@ func (rsp *routerStatsProvider) getTransportPeersCount(stat string) float64 {
 		return float64(rsp.router.GetNTCP2SessionCount())
 	case "udp.activePeers":
 		return float64(rsp.router.GetSSU2SessionCount())
+	default:
+		return 0
+	}
+}
+
+func (rsp *routerStatsProvider) isTransportSessionFailureStat(stat string) bool {
+	return stat == "transport.session.attempts" ||
+		stat == "transport.session.fail.noCompatible" ||
+		stat == "transport.session.fail.allFailed" ||
+		stat == "transport.session.skip.cooldown" ||
+		stat == "transport.session.fail.poolFull"
+}
+
+type transportSessionFailureStatsReader interface {
+	GetTransportSessionFailureStats() transport.MuxSessionFailureStats
+}
+
+func (rsp *routerStatsProvider) getTransportSessionFailureCount(stat string) float64 {
+	reader, ok := rsp.router.(transportSessionFailureStatsReader)
+	if !ok {
+		return 0
+	}
+
+	stats := reader.GetTransportSessionFailureStats()
+	switch stat {
+	case "transport.session.attempts":
+		return float64(stats.SessionAttempts)
+	case "transport.session.fail.noCompatible":
+		return float64(stats.NoCompatibleTransport)
+	case "transport.session.fail.allFailed":
+		return float64(stats.AllTransportsFailed)
+	case "transport.session.skip.cooldown":
+		return float64(stats.PeerCooldownSkipped)
+	case "transport.session.fail.poolFull":
+		return float64(stats.ConnectionPoolFull)
 	default:
 		return 0
 	}
@@ -976,6 +1014,17 @@ func (rr RealRouter) GetNTCP2SessionCount() int {
 // GetSSU2SessionCount returns active SSU2 (UDP) session count (implements RouterAccess)
 func (rr RealRouter) GetSSU2SessionCount() int {
 	return rr.Router.GetSSU2SessionCount()
+}
+
+// GetTransportSessionFailureStats returns transport mux session-attempt outcome counters.
+func (rr RealRouter) GetTransportSessionFailureStats() transport.MuxSessionFailureStats {
+	typed, ok := rr.Router.(interface {
+		GetTransportSessionFailureStats() transport.MuxSessionFailureStats
+	})
+	if !ok {
+		return transport.MuxSessionFailureStats{}
+	}
+	return typed.GetTransportSessionFailureStats()
 }
 
 // Stop initiates graceful shutdown (implements RouterAccess)
