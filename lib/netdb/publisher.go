@@ -624,24 +624,8 @@ func (p *Publisher) sendDatabaseStoreMessagesWithMinSuccess(hash common.Hash, da
 	resultCh := make(chan sendResult, len(floodfills))
 	for _, ff := range floodfills {
 		go func(floodfill router_info.RouterInfo) {
-			errCh := make(chan struct {
-				token uint32
-				err   error
-			}, 1)
-			go func() {
-				token, err := p.sendDatabaseStoreToFloodfill(hash, data, dataType, floodfill)
-				errCh <- struct {
-					token uint32
-					err   error
-				}{token: token, err: err}
-			}()
-
-			select {
-			case result := <-errCh:
-				resultCh <- sendResult{token: result.token, err: result.err}
-			case <-time.After(p.sendAttemptTimeout):
-				resultCh <- sendResult{err: oops.Errorf("database store send timed out after %s", p.sendAttemptTimeout)}
-			}
+			token, err := p.sendDatabaseStoreToFloodfill(hash, data, dataType, floodfill)
+			resultCh <- sendResult{token: token, err: err}
 		}(ff)
 	}
 
@@ -1007,18 +991,8 @@ func (p *Publisher) sendDatabaseStoreMessages(hash common.Hash, data []byte, dat
 	resultCh := make(chan sendResult, len(floodfills))
 	for _, ff := range floodfills {
 		go func(floodfill router_info.RouterInfo) {
-			errCh := make(chan error, 1)
-			go func() {
-				_, err := p.sendDatabaseStoreToFloodfill(hash, data, dataType, floodfill)
-				errCh <- err
-			}()
-
-			select {
-			case err := <-errCh:
-				resultCh <- sendResult{err: err}
-			case <-time.After(p.sendAttemptTimeout):
-				resultCh <- sendResult{err: oops.Errorf("database store send timed out after %s", p.sendAttemptTimeout)}
-			}
+			_, err := p.sendDatabaseStoreToFloodfill(hash, data, dataType, floodfill)
+			resultCh <- sendResult{err: err}
 		}(ff)
 	}
 
@@ -1070,18 +1044,8 @@ func (p *Publisher) sendDatabaseStoreMessagesAtLeastOne(hash common.Hash, data [
 	resultCh := make(chan sendResult, len(floodfills))
 	for _, ff := range floodfills {
 		go func(floodfill router_info.RouterInfo) {
-			errCh := make(chan error, 1)
-			go func() {
-				_, err := p.sendDatabaseStoreToFloodfill(hash, data, dataType, floodfill)
-				errCh <- err
-			}()
-
-			select {
-			case err := <-errCh:
-				resultCh <- sendResult{err: err}
-			case <-time.After(p.sendAttemptTimeout):
-				resultCh <- sendResult{err: oops.Errorf("database store send timed out after %s", p.sendAttemptTimeout)}
-			}
+			_, err := p.sendDatabaseStoreToFloodfill(hash, data, dataType, floodfill)
+			resultCh <- sendResult{err: err}
 		}(ff)
 	}
 
@@ -1253,11 +1217,11 @@ func (p *Publisher) sendDatabaseStoreDirect(hash common.Hash, data []byte, dataT
 		return 0, oops.Errorf("transport manager not available")
 	}
 
-	session, err := getSessionWithTimeout(p.sendAttemptTimeout, transport, floodfill)
+	session, err := transport.GetSession(floodfill)
 	if err != nil {
 		return 0, oops.Errorf("failed to get transport session to floodfill: %w", err)
 	}
-	if err := queueSendI2NPWithTimeout(p.sendAttemptTimeout, session, msg); err != nil {
+	if err := session.QueueSendI2NP(msg); err != nil {
 		return 0, oops.Errorf("failed to queue direct DatabaseStore transmission: %w", err)
 	}
 	return replyToken, nil
@@ -1659,24 +1623,7 @@ func safeLogHashPrefix(hash common.Hash, err error) string {
 }
 
 func sendDatabaseLookupWithTimeout(ctx context.Context, transport LookupTransport, ff router_info.RouterInfo, lookup *i2np.DatabaseLookup) ([]byte, int, error) {
-	type lookupResult struct {
-		data    []byte
-		msgType int
-		err     error
-	}
-
-	resultCh := make(chan lookupResult, 1)
-	go func() {
-		data, msgType, err := transport.SendDatabaseLookup(ctx, ff, lookup)
-		resultCh <- lookupResult{data: data, msgType: msgType, err: err}
-	}()
-
-	select {
-	case result := <-resultCh:
-		return result.data, result.msgType, result.err
-	case <-ctx.Done():
-		return nil, 0, oops.Errorf("lookup timed out waiting for transport session or reply: %w", ctx.Err())
-	}
+	return transport.SendDatabaseLookup(ctx, ff, lookup)
 }
 
 // sendMessageThroughGateway sends an I2NP message to a gateway router via transport.
@@ -1696,65 +1643,16 @@ func (p *Publisher) sendMessageThroughGateway(gatewayHash common.Hash, msg i2np.
 	if transport == nil {
 		return oops.Errorf("transport manager not available")
 	}
-	session, err := getSessionWithTimeout(p.sendAttemptTimeout, transport, *gatewayRouterInfo)
+	session, err := transport.GetSession(*gatewayRouterInfo)
 	if err != nil {
 		return oops.Errorf("failed to get transport session to gateway: %w", err)
 	}
 
 	// Queue message for transmission
-	if err := queueSendI2NPWithTimeout(p.sendAttemptTimeout, session, msg); err != nil {
+	if err := session.QueueSendI2NP(msg); err != nil {
 		return oops.Errorf("failed to queue message for transmission: %w", err)
 	}
 	return nil
-}
-
-type sessionAcquireResult struct {
-	session I2NPSender
-	err     error
-}
-
-func getSessionWithTimeout(timeout time.Duration, transport SessionProvider, peer router_info.RouterInfo) (I2NPSender, error) {
-	if timeout <= 0 {
-		timeout = 10 * time.Second
-	}
-
-	resultCh := make(chan sessionAcquireResult, 1)
-	go func() {
-		session, err := transport.GetSession(peer)
-		resultCh <- sessionAcquireResult{session: session, err: err}
-	}()
-
-	select {
-	case result := <-resultCh:
-		if result.err != nil {
-			return nil, result.err
-		}
-		return result.session, nil
-	case <-time.After(timeout):
-		return nil, oops.Wrapf(errSessionAcquireTimeout, "after %s", timeout)
-	}
-}
-
-type queueSendResult struct {
-	err error
-}
-
-func queueSendI2NPWithTimeout(timeout time.Duration, session I2NPSender, msg i2np.Message) error {
-	if timeout <= 0 {
-		timeout = 10 * time.Second
-	}
-
-	resultCh := make(chan queueSendResult, 1)
-	go func() {
-		resultCh <- queueSendResult{err: session.QueueSendI2NP(msg)}
-	}()
-
-	select {
-	case result := <-resultCh:
-		return result.err
-	case <-time.After(timeout):
-		return oops.Wrapf(errQueueSendTimeout, "after %s", timeout)
-	}
 }
 
 // getGatewayRouterInfo retrieves the RouterInfo for a gateway router from the NetDB.
