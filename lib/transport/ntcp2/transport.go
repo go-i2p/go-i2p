@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"strconv"
 	"strings"
@@ -1457,12 +1456,6 @@ func (t *NTCP2Transport) handleDialFailure(routerHash data.Hash, routerHashBytes
 			n.RecordPermanentFailure(routerHash, "no_reachable_ntcp2_address")
 		} else {
 			n.RecordFailure(routerHash, err.Error())
-		}
-	}
-	// On EOF the peer likely rotated its static key; evict the cached RI.
-	if errors.Is(err, io.EOF) {
-		if r := t.routerInfoRefresher; r != nil {
-			go r.RequestRouterInfoRefresh(routerHash)
 		}
 	}
 }
