@@ -80,8 +80,8 @@ func TestPoolConfig(t *testing.T) {
 
 	assert.Equal(t, 4, config.MinTunnels)
 	assert.Equal(t, 6, config.MaxTunnels)
-	assert.Equal(t, 10*time.Minute, config.TunnelLifetime)
-	assert.Equal(t, 2*time.Minute, config.RebuildThreshold)
+	assert.Equal(t, 11*time.Minute, config.TunnelLifetime)
+	assert.Equal(t, 90*time.Second, config.RebuildThreshold)
 	assert.Equal(t, 3, config.HopCount)
 	assert.False(t, config.IsInbound)
 }

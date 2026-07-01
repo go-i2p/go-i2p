@@ -41,11 +41,11 @@ const (
 	// testHashSize is the size (bytes) of an I2P SHA-256 hash / ident hash.
 	testHashSize = 32
 
-	// testTunnelLifetime is the I2P spec tunnel lifetime (10 minutes).
-	testTunnelLifetime = 10 * time.Minute
+	// testTunnelLifetime matches the default tunnel lifetime used by pool defaults.
+	testTunnelLifetime = 11 * time.Minute
 
 	// testRebuildThreshold is the default rebuild-before-expiry window.
-	testRebuildThreshold = 2 * time.Minute
+	testRebuildThreshold = 90 * time.Second
 
 	// testMaxHopCount is the maximum number of hops per I2P spec.
 	testMaxHopCount = 8

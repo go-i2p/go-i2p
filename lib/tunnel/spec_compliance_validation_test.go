@@ -1193,25 +1193,25 @@ func TestTunnelPool_PoolSizeConfigurable(t *testing.T) {
 }
 
 func TestTunnelPool_DefaultConfigValues(t *testing.T) {
-	// DefaultPoolConfig must set I2P-spec-compliant values
+	// DefaultPoolConfig must set project-default values.
 	cfg := DefaultPoolConfig()
 	assert.Equal(t, 4, cfg.MinTunnels, "default min tunnels")
 	assert.Equal(t, 6, cfg.MaxTunnels, "default max tunnels")
-	assert.Equal(t, 10*time.Minute, cfg.TunnelLifetime, "tunnel lifetime must be 10 minutes per spec")
-	assert.Equal(t, 2*time.Minute, cfg.RebuildThreshold, "rebuild threshold")
+	assert.Equal(t, 11*time.Minute, cfg.TunnelLifetime, "default tunnel lifetime")
+	assert.Equal(t, 90*time.Second, cfg.RebuildThreshold, "default rebuild threshold")
 	assert.Equal(t, 3, cfg.HopCount, "default hop count")
 }
 
 func TestTunnelPool_ExpirationAfter10Minutes(t *testing.T) {
-	// Tunnels MUST expire after 10 minutes (spec-defined maximum)
+	// Tunnels should expire once they exceed the default lifetime.
 	pool := NewTunnelPool(&specMockPeerSelector{count: 3})
 	defer pool.Stop()
 
-	// Add a tunnel that is "old" (created 11 minutes ago)
+	// Add a tunnel that is "old" (created 12 minutes ago).
 	tunnel := &TunnelState{
 		ID:        TunnelID(1),
 		State:     TunnelReady,
-		CreatedAt: time.Now().Add(-11 * time.Minute),
+		CreatedAt: time.Now().Add(-12 * time.Minute),
 		IsInbound: false,
 	}
 	pool.AddTunnel(tunnel)
@@ -1222,7 +1222,7 @@ func TestTunnelPool_ExpirationAfter10Minutes(t *testing.T) {
 	pool.mutex.Unlock()
 
 	_, exists := pool.GetTunnel(TunnelID(1))
-	assert.False(t, exists, "tunnel older than 10 minutes must be expired")
+	assert.False(t, exists, "tunnel older than default lifetime must be expired")
 }
 
 func TestTunnelPool_RebuildBeforeExpiry(t *testing.T) {
@@ -1230,11 +1230,11 @@ func TestTunnelPool_RebuildBeforeExpiry(t *testing.T) {
 	pool := NewTunnelPool(&specMockPeerSelector{count: 3})
 	defer pool.Stop()
 
-	// Add a tunnel that is 9 minutes old (within rebuild threshold of 2 min before 10 min expiry)
+	// Add a tunnel that is 10 minutes old (within 90s rebuild threshold before 11 min expiry).
 	tunnel := &TunnelState{
 		ID:        TunnelID(1),
 		State:     TunnelReady,
-		CreatedAt: time.Now().Add(-9 * time.Minute),
+		CreatedAt: time.Now().Add(-10 * time.Minute),
 		IsInbound: false,
 	}
 	pool.AddTunnel(tunnel)

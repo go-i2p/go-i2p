@@ -79,6 +79,13 @@ type ParticipantManager struct {
 	// treated as zero usage. Stored atomically for lock-free hot-path reads.
 	transitBandwidthFn atomic.Pointer[func() uint32]
 
+	// transitWindowSec/transitWindowBytes track a coarse per-second moving
+	// estimate of transit bytes successfully forwarded by this router.
+	// This backs the default transit bandwidth provider when no external
+	// provider is wired.
+	transitWindowSec   atomic.Int64
+	transitWindowBytes atomic.Uint64
+
 	// Rejection statistics (atomic for lock-free access)
 	rejectCountTotal  uint64 // Total rejections due to limits
 	rejectCountRecent uint64 // Recent rejections (reset periodically)
@@ -468,6 +475,38 @@ func (m *ParticipantManager) SetTransitBandwidthProvider(fn func() uint32) {
 		return
 	}
 	m.transitBandwidthFn.Store(&fn)
+}
+
+// ObserveTransitForwardedBytes records bytes successfully forwarded through
+// transit participation paths. The counter is maintained in 1-second buckets
+// so it can be queried as an approximate bytes/second usage signal.
+func (m *ParticipantManager) ObserveTransitForwardedBytes(n int) {
+	if n <= 0 {
+		return
+	}
+	nowSec := time.Now().Unix()
+	prevSec := m.transitWindowSec.Load()
+	if prevSec != nowSec {
+		if m.transitWindowSec.CompareAndSwap(prevSec, nowSec) {
+			m.transitWindowBytes.Store(0)
+		}
+	}
+	m.transitWindowBytes.Add(uint64(n))
+}
+
+// GetTransitBandwidthBytesPerSecond returns the current per-second transit
+// forwarding estimate in bytes/s. If no bytes were observed in the current
+// second, it returns 0.
+func (m *ParticipantManager) GetTransitBandwidthBytesPerSecond() uint32 {
+	nowSec := time.Now().Unix()
+	if m.transitWindowSec.Load() != nowSec {
+		return 0
+	}
+	b := m.transitWindowBytes.Load()
+	if b > uint64(^uint32(0)) {
+		return ^uint32(0)
+	}
+	return uint32(b)
 }
 
 // EvaluateBuildBandwidth applies the i2pd transit-tunnel bandwidth policy to a

@@ -714,6 +714,10 @@ func (h *InboundMessageHandler) forwardToNextHop(participant *tunnel.Participant
 		}).Error("Failed to queue transit tunnel data for sending")
 		return oops.Wrapf(err, "failed to queue transit tunnel data for sending")
 	}
+	if h.participantManager != nil {
+		// Count full tunnel message bytes (tunnel ID + payload) to match relay load.
+		h.participantManager.ObserveTransitForwardedBytes(len(decryptedData))
+	}
 
 	log.WithFields(logger.Fields{
 		"at":          "forwardToNextHop",

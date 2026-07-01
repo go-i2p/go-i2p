@@ -99,9 +99,17 @@ func (v *ExpirationValidator) ValidateExpiration(expiration time.Time) error {
 	if !v.enabled {
 		return nil
 	}
+	now := v.now()
+	if v.toleranceSeconds > 0 {
+		maxFuture := now.Add(3 * time.Duration(v.toleranceSeconds) * time.Second)
+		if expiration.After(maxFuture) {
+			futureBy := expiration.Sub(now)
+			return oops.Errorf("message expiration too far in future by %v (expiration: %v, now: %v, future_tolerance: %ds)",
+				futureBy.Round(time.Second), expiration.UTC(), now.UTC(), 3*v.toleranceSeconds)
+		}
+	}
 
 	if v.IsExpired(expiration) {
-		now := v.now()
 		age := now.Sub(expiration)
 		return oops.Wrapf(ErrI2NPMessageExpired,
 			"message expired %v ago (expiration: %v, now: %v, tolerance: %ds)",

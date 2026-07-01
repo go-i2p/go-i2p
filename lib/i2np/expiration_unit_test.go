@@ -487,7 +487,10 @@ func TestExpirationValidator_FarFutureExpiration(t *testing.T) {
 		WithTolerance(300).
 		WithTimeSource(func() time.Time { return now })
 
-	// Far future expiration should be valid
+	// IsExpired checks only "past" expiry semantics.
 	futureTime := now.Add(100 * 365 * 24 * time.Hour) // 100 years
 	assert.False(t, v.IsExpired(futureTime))
+	err := v.ValidateExpiration(futureTime)
+	assert.Error(t, err, "far future expiration should be rejected by validation")
+	assert.Contains(t, err.Error(), "too far in future")
 }

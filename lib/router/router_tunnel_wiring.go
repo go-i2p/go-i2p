@@ -74,6 +74,9 @@ func (r *Router) wireParticipantManager() {
 	if r.cfg != nil && r.cfg.MaxBandwidth > 0 {
 		r.participantManager.SetBandwidthLimitKBps(uint32(r.cfg.MaxBandwidth / 1024))
 	}
+	// Feed live transit forwarding rate (bytes/s) into build admission so
+	// requested/minimum bandwidth checks account for current relay load.
+	r.participantManager.SetTransitBandwidthProvider(r.participantManager.GetTransitBandwidthBytesPerSecond)
 	log.WithFields(logger.Fields{"at": "initializeMessageRouter"}).Debug("Participant manager and build reply forwarder wired into message processor")
 }
 
