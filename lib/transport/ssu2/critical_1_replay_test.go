@@ -47,10 +47,13 @@ func TestCRITICAL_1_CheckConnectionReplayIntegration(t *testing.T) {
 	// Create a mock connection (we can't create a real SSU2Conn without full infrastructure)
 	// This test documents what SHOULD happen:
 	// 1. Connection arrives with ephemeral key
-	// 2. Transport extracts ephemeral key (currently uses proxy from address)
-	// 3. Transport calls handler.CheckReplay(ephemeralKey)
+	// 2. Transport reads replay token from validated SessionRequest via
+	//    conn.GetReplayToken() when available
+	// 3. Transport calls handler.CheckReplay(replayKey)
 	// 4. If replay is detected, connection is closed and slot is unreserved
-	// 5. If not a replay, connection is registered and returned
+	// 5. If replay token is nil (not yet validated), transport falls back to
+	//    metadata-derived replay key to preserve existing behavior
+	// 6. If not a replay, connection is registered and returned
 
 	// For now, verify that checkConnectionReplay exists and the handler interface is wired
 	handler := NewDefaultHandler()
@@ -71,31 +74,19 @@ func TestCRITICAL_1_CheckConnectionReplayIntegration(t *testing.T) {
 	handler.Close()
 }
 
-// TestCRITICAL_1_EphemeralKeyExtraction documents the current limitation and
-// future work needed to fully implement replay checking.
+// TestCRITICAL_1_ReplayTokenAccessorAvailable documents replay-material behavior.
 //
-// CURRENT STATE (Partial Implementation):
-// The checkConnectionReplay() function uses a derived key from connection metadata
-// (remote address + port + timestamp) as a proxy for the actual Noise ephemeral key.
-// This provides protection against naive replays but is NOT cryptographically sound.
-//
-// REQUIRED FIX (Depends on go-noise/ssu2 library):
-// 1. go-noise must expose the peer's ephemeral public key from Noise handshake
-// 2. Ephemeral key is in first 32 bytes of SessionRequest message (Noise IK pattern)
-// 3. Transport must extract actual ephemeral key and pass to CheckReplay()
-// 4. This test should be updated to validate actual ephemeral key checking
-func TestCRITICAL_1_EphemeralKeyExtractionLimitation(t *testing.T) {
-	// This test documents the current limitation
-	t.Log("LIMITATION: Ephemeral key extraction not yet integrated")
-	t.Log("REASON: go-noise/ssu2 does not expose ephemeral key through public API")
-	t.Log("STATUS: Using proxy key from connection metadata (partial protection)")
-	t.Log("TODO: Once go-noise exposes ephemeral key, update checkConnectionReplay()")
-	t.Log("      to use actual Noise ephemeral key for full replay protection")
+// Primary path: replay token from SessionRequest validation is used directly.
+// Fallback path: nil token means "not yet validated", so metadata fallback applies.
+func TestCRITICAL_1_ReplayTokenAccessorAvailable(t *testing.T) {
+	t.Log("STATUS: go-noise exposes conn.GetReplayToken() and conn.GetPeerEphemeralKey()")
+	t.Log("BEHAVIOR: checkConnectionReplay prefers replay token when available")
+	t.Log("FALLBACK: nil replay token is treated as not-yet-validated; metadata key fallback remains")
 
-	// Verify that replay checking infrastructure is in place
+	// Verify replay checking infrastructure is in place
 	handler := NewDefaultHandler()
 	defer handler.Close()
 
-	// The infrastructure is ready; it just needs the actual ephemeral key
+	// Infrastructure is active regardless of replay-material source.
 	require.NotNil(t, handler)
 }

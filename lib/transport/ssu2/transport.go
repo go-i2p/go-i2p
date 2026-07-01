@@ -465,8 +465,9 @@ func (t *SSU2Transport) trackInboundConnection(conn net.Conn) (net.Conn, bool) {
 	}
 
 	// CRITICAL-1 FIX: Check replay status of inbound connection.
-	// This validates that the peer's ephemeral key from the Noise handshake
-	// has not been seen before. See checkConnectionReplay() for details.
+	// Primary path: use go-noise replay material from the validated
+	// SessionRequest via conn.GetReplayToken(). See checkConnectionReplay()
+	// for nil-token fallback behavior.
 	if t.checkConnectionReplay(conn) {
 		// Replay detected: close connection and unreserve slot
 		t.sessionRegistry.DecrementCountSafe()
@@ -497,36 +498,46 @@ func (t *SSU2Transport) extractPeerHash(conn net.Conn) data.Hash {
 }
 
 // checkConnectionReplay performs anti-replay validation for an inbound SSU2 connection.
-// CRITICAL-1 FIX: Anti-Replay Cache Population
 //
-// Per SSU2 specification (Noise IK pattern), each inbound connection includes an ephemeral
-// public key from the initiator in the first message. To prevent replay attacks, this
-// ephemeral key MUST be checked against the replay cache before processing the connection.
+// Primary path (preferred): when conn is *ssu2noise.SSU2Conn and SessionRequest
+// has been validated, use conn.GetReplayToken() directly for replay-cache checks.
 //
-// Current Implementation Limitation:
-// The go-noise/ssu2 library does not currently expose the peer's ephemeral key through
-// the SSU2Conn public API. This function derives a deterministic proxy token from
-// stable connection identity fields. This remains weaker than true ephemeral-key
-// replay protection and should be replaced when upstream exposes handshake material.
-//
-// TODO (Requires go-noise collaboration):
-// 1. Extract the peer's ephemeral key from the first Noise message (first 32 bytes per IK)
-// 2. Call handler.CheckReplay(ephemeralKey) before returning from this function
-// 3. Document the ephemeral key extraction point in go-noise/ssu2
-//
-// For now, we derive a stable proxy key from connection metadata.
+// Fallback path (compatibility): if replay token is nil (not yet validated) or conn
+// is not an *ssu2noise.SSU2Conn, derive a deterministic proxy key from connection
+// metadata to preserve existing behavior.
 func (t *SSU2Transport) checkConnectionReplay(conn net.Conn) bool {
 	if t.handler == nil {
 		// Handler not initialized; cannot check replay (should not happen in normal operation)
 		return false
 	}
 
-	replayKey := deriveReplayProxyKey(conn)
+	if ssu2Conn, ok := conn.(*ssu2noise.SSU2Conn); ok {
+		replayToken := ssu2Conn.GetReplayToken()
+		if replayToken != nil {
+			return t.handler.CheckReplay(replayTokenToReplayKey(replayToken))
+		}
 
-	// Call CheckReplay with the derived key
-	// Once go-noise exposes the actual ephemeral key, replace with:
-	// return t.handler.CheckReplay(actualEphemeralKeyFromNoiseHandshake)
+		// Nil replay token means SessionRequest replay material is not yet available.
+		// Preserve existing behavior with metadata-based fallback.
+		t.logger.WithField("remote_addr", conn.RemoteAddr().String()).Debug("SSU2 replay token unavailable (not yet validated); using metadata fallback")
+	}
+
+	replayKey := deriveReplayProxyKey(conn)
 	return t.handler.CheckReplay(replayKey)
+}
+
+// replayTokenToReplayKey converts replay token bytes into the fixed-size key used
+// by the transport replay cache.
+//
+// If token length is exactly 32 bytes, it is used directly. Otherwise we hash
+// it to 32 bytes to preserve deterministic replay-key semantics.
+func replayTokenToReplayKey(token []byte) [32]byte {
+	if len(token) == 32 {
+		var replayKey [32]byte
+		copy(replayKey[:], token)
+		return replayKey
+	}
+	return sha256.Sum256(token)
 }
 
 // deriveReplayProxyKey hashes stable connection identity fields into a 32-byte key.
