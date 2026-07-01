@@ -180,12 +180,20 @@ func isPermittedUnauthenticatedBindHost(host, listenAddr string) error {
 // corresponding chmod in Start()).
 func (s *Server) enforceBindPolicy() error {
 	if s.isAuthenticationRequired() {
-		if err := s.enforceAuthenticatedBindPolicy(); err != nil {
-			return err
-		}
-		s.warnIfCleartextAuthOnNetwork()
-		return nil
+		return s.enforceAuthenticatedBindPolicyWithWarning()
 	}
+	return s.enforceUnauthenticatedBindPolicy()
+}
+
+func (s *Server) enforceAuthenticatedBindPolicyWithWarning() error {
+	if err := s.enforceAuthenticatedBindPolicy(); err != nil {
+		return err
+	}
+	s.warnIfCleartextAuthOnNetwork()
+	return nil
+}
+
+func (s *Server) enforceUnauthenticatedBindPolicy() error {
 	if s.config.Network != "tcp" {
 		return nil
 	}

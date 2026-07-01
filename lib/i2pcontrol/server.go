@@ -9,6 +9,8 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -420,31 +422,35 @@ func (s *Server) startTokenCleanup() {
 // Stop gracefully shuts down the server, waiting for active requests to complete.
 func (s *Server) Stop() {
 	s.stopOnce.Do(func() {
-		log.WithFields(logger.Fields{
-			"at": "(Server).Stop",
-		}).Info("Stopping I2PControl server")
-
-		// Cancel context to signal goroutines
-		s.cancel()
-
-		// Shutdown HTTP server with timeout
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		if err := s.httpServer.Shutdown(ctx); err != nil {
-			log.WithFields(logger.Fields{
-				"at":     "(Server).Stop",
-				"reason": err.Error(),
-			}).Error("Error during server shutdown")
-		}
-
-		// Wait for all goroutines to finish
-		s.wg.Wait()
-
-		log.WithFields(logger.Fields{
-			"at": "(Server).Stop",
-		}).Info("I2PControl server stopped")
+		s.stopServer()
 	})
+}
+
+func (s *Server) stopServer() {
+	log.WithFields(logger.Fields{
+		"at": "(Server).Stop",
+	}).Info("Stopping I2PControl server")
+
+	// Cancel context to signal goroutines
+	s.cancel()
+
+	// Shutdown HTTP server with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := s.httpServer.Shutdown(ctx); err != nil {
+		log.WithFields(logger.Fields{
+			"at":     "(Server).Stop",
+			"reason": err.Error(),
+		}).Error("Error during server shutdown")
+	}
+
+	// Wait for all goroutines to finish
+	s.wg.Wait()
+
+	log.WithFields(logger.Fields{
+		"at": "(Server).Stop",
+	}).Info("I2PControl server stopped")
 }
 
 // handleRPC processes JSON-RPC requests on the /jsonrpc endpoint.
@@ -456,7 +462,7 @@ func (s *Server) Stop() {
 // 5. Dispatch to method handler
 // 6. Serialize and return response
 func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
-	s.setCORSHeaders(w)
+	s.setCORSHeaders(w, r)
 
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusOK)
@@ -517,13 +523,8 @@ func (s *Server) handleValidatedRequest(w http.ResponseWriter, r *http.Request, 
 // Access-Control-Allow-Origin is restricted to the server's own address and scheme,
 // preventing cross-site request exposure from arbitrary origins.
 // Also sets security headers (X-Content-Type-Options, Strict-Transport-Security).
-func (s *Server) setCORSHeaders(w http.ResponseWriter) {
-	scheme := "http"
-	if s.config.UseHTTPS {
-		scheme = "https"
-	}
-
-	origin := fmt.Sprintf("%s://%s", scheme, s.config.Address)
+func (s *Server) setCORSHeaders(w http.ResponseWriter, r *http.Request) {
+	origin := s.corsOriginForRequest(r)
 	w.Header().Set("Access-Control-Allow-Origin", origin)
 	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
@@ -533,6 +534,57 @@ func (s *Server) setCORSHeaders(w http.ResponseWriter) {
 	if s.config.UseHTTPS {
 		w.Header().Set("Strict-Transport-Security", "max-age=31536000")
 	}
+}
+
+// corsOriginForRequest derives a usable CORS origin for this request.
+// When the configured bind host is wildcard/unspecified, prefer request host
+// to avoid emitting unusable origins like "http://0.0.0.0:7650".
+func (s *Server) corsOriginForRequest(r *http.Request) string {
+	scheme := "http"
+	if s.config.UseHTTPS {
+		scheme = "https"
+	}
+
+	hostPort := s.config.Address
+	host, port, err := net.SplitHostPort(s.config.Address)
+	if err == nil && isWildcardOrUnspecifiedHost(host) {
+		requestHost := r.Host
+		if reqHost, reqPort, splitErr := net.SplitHostPort(r.Host); splitErr == nil {
+			requestHost = reqHost
+			if reqPort != "" {
+				port = reqPort
+			}
+		}
+		if requestHost != "" {
+			hostPort = net.JoinHostPort(requestHost, port)
+		}
+	}
+
+	defaultOrigin := fmt.Sprintf("%s://%s", scheme, hostPort)
+	reqOrigin := r.Header.Get("Origin")
+	if reqOrigin == "" {
+		return defaultOrigin
+	}
+
+	parsedOrigin, err := url.Parse(reqOrigin)
+	if err != nil || parsedOrigin.Host == "" {
+		return defaultOrigin
+	}
+
+	if strings.EqualFold(parsedOrigin.Scheme, scheme) && strings.EqualFold(parsedOrigin.Host, hostPort) {
+		return reqOrigin
+	}
+
+	return defaultOrigin
+}
+
+func isWildcardOrUnspecifiedHost(host string) bool {
+	if host == "" {
+		return true
+	}
+	trimmed := strings.Trim(host, "[]")
+	ip := net.ParseIP(trimmed)
+	return ip != nil && ip.IsUnspecified()
 }
 
 // validateHTTPRequest checks that the HTTP method is POST and Content-Type is application/json.

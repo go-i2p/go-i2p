@@ -69,43 +69,59 @@ func (rb *ReseedBootstrap) GetPeers(ctx context.Context, n int) ([]router_info.R
 	}
 	rb.logReseedStart(n)
 
-	// Try multi-server reseed first if configured (Java I2P parity)
-	if rb.shouldUseMultiServerReseed() {
-		peers, err := rb.MultiServerReseed(ctx, n)
-		if err == nil && len(peers) > 0 {
-			rb.logMultiServerSuccess(len(peers), n)
-			return peers, nil
-		}
-		// Log failure and fall back to single-server mode
-		log.WithError(err).WithFields(logger.Fields{
-			"at":          "(ReseedBootstrap) GetPeers",
-			"phase":       "bootstrap",
-			"reason":      "multi-server reseed failed, falling back to single-server",
-			"min_servers": rb.config.MinReseedServers,
-			"peer_count":  len(peers),
-			"fallback":    "single_server_sequential",
-		}).Warn("multi-server reseed failed, attempting single-server fallback")
-
-		// M-7 FIX: Apply exponential backoff before retrying with single-server mode
-		// This prevents thundering-herd when all servers are temporarily unavailable
-		backoffDuration := computeBackoffDuration(1) // First retry gets 30s backoff
-		log.WithFields(logger.Fields{
-			"at":       "(ReseedBootstrap) GetPeers",
-			"reason":   "applying backoff before single-server retry",
-			"duration": backoffDuration.String(),
-		}).Info("backoff before single-server reseed retry")
-
-		select {
-		case <-time.After(backoffDuration):
-			// Backoff complete, continue with single-server retry
-		case <-ctx.Done():
-			// Context cancelled during backoff
-			return nil, ctx.Err()
-		}
+	if peers, done, err := rb.tryMultiServerReseed(ctx, n); done {
+		return peers, err
 	}
 
 	// Single-server sequential mode (original behavior)
 	return rb.singleServerReseed(ctx, n)
+}
+
+func (rb *ReseedBootstrap) tryMultiServerReseed(ctx context.Context, n int) ([]router_info.RouterInfo, bool, error) {
+	if !rb.shouldUseMultiServerReseed() {
+		return nil, false, nil
+	}
+
+	peers, err := rb.MultiServerReseed(ctx, n)
+	if err == nil && len(peers) > 0 {
+		rb.logMultiServerSuccess(len(peers), n)
+		return peers, true, nil
+	}
+
+	rb.logMultiServerFallback(err, len(peers))
+	if err := rb.waitForSingleServerFallbackBackoff(ctx); err != nil {
+		return nil, true, err
+	}
+
+	return nil, false, nil
+}
+
+func (rb *ReseedBootstrap) logMultiServerFallback(err error, peerCount int) {
+	log.WithError(err).WithFields(logger.Fields{
+		"at":          "(ReseedBootstrap) GetPeers",
+		"phase":       "bootstrap",
+		"reason":      "multi-server reseed failed, falling back to single-server",
+		"min_servers": rb.config.MinReseedServers,
+		"peer_count":  peerCount,
+		"fallback":    "single_server_sequential",
+	}).Warn("multi-server reseed failed, attempting single-server fallback")
+}
+
+func (rb *ReseedBootstrap) waitForSingleServerFallbackBackoff(ctx context.Context) error {
+	// M-7 FIX: Apply exponential backoff before retrying with single-server mode.
+	backoffDuration := computeBackoffDuration(1) // First retry gets 30s backoff
+	log.WithFields(logger.Fields{
+		"at":       "(ReseedBootstrap) GetPeers",
+		"reason":   "applying backoff before single-server retry",
+		"duration": backoffDuration.String(),
+	}).Info("backoff before single-server reseed retry")
+
+	select {
+	case <-time.After(backoffDuration):
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // shouldUseMultiServerReseed returns true if multi-server mode should be attempted.

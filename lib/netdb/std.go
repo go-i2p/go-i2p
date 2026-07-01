@@ -541,11 +541,7 @@ func (db *StdNetDB) isReseedRequired(minRouters int) bool {
 
 // retrievePeersFromBootstrap gets peers from the bootstrap provider with timeout.
 func (db *StdNetDB) retrievePeersFromBootstrap(parent context.Context, b bootstrap.Bootstrap) ([]router_info.RouterInfo, error) {
-	if parent == nil {
-		parent = context.Background()
-	}
-
-	ctx, cancel := context.WithTimeout(parent, reseed.DefaultDialTimeout)
+	ctx, cancel := reseedRequestContext(parent)
 	defer cancel()
 
 	peersChan, err := b.GetPeers(ctx, 0) // Get as many peers as possible
@@ -555,6 +551,13 @@ func (db *StdNetDB) retrievePeersFromBootstrap(parent context.Context, b bootstr
 	}
 
 	return peersChan, nil
+}
+
+func reseedRequestContext(parent context.Context) (context.Context, context.CancelFunc) {
+	if parent == nil {
+		parent = context.Background()
+	}
+	return context.WithTimeout(parent, reseed.DefaultDialTimeout)
 }
 
 // verifiedRouterEntry holds a RouterInfo that has passed signature and timestamp validation.

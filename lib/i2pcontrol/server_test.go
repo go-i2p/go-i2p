@@ -486,7 +486,9 @@ func TestSecurityHeaders(t *testing.T) {
 
 		// Use a mock ResponseWriter to capture headers
 		mockW := &mockResponseWriter{header: make(http.Header)}
-		server.setCORSHeaders(mockW)
+		req, _ := http.NewRequest("OPTIONS", "https://127.0.0.1/jsonrpc", nil)
+		req.Host = cfg.Address
+		server.setCORSHeaders(mockW, req)
 
 		// X-Content-Type-Options should be set
 		if got := mockW.header.Get("X-Content-Type-Options"); got != "nosniff" {
@@ -496,6 +498,27 @@ func TestSecurityHeaders(t *testing.T) {
 		// Strict-Transport-Security should be set for HTTPS
 		if got := mockW.header.Get("Strict-Transport-Security"); got != "max-age=31536000" {
 			t.Errorf("Expected Strict-Transport-Security: max-age=31536000, got %q", got)
+		}
+	})
+
+	t.Run("wildcard_bind_uses_request_host_for_origin", func(t *testing.T) {
+		cfg := testConfig(7650)
+		cfg.Address = "0.0.0.0:7650"
+		cfg.UseHTTPS = false
+		cfg.AllowPlaintextNonLoopback = true
+
+		server, err := NewServer(cfg, stats)
+		if err != nil {
+			t.Fatalf("NewServer failed: %v", err)
+		}
+
+		mockW := &mockResponseWriter{header: make(http.Header)}
+		req, _ := http.NewRequest("OPTIONS", "http://127.0.0.1:7650/jsonrpc", nil)
+		req.Host = "127.0.0.1:7650"
+		server.setCORSHeaders(mockW, req)
+
+		if got := mockW.header.Get("Access-Control-Allow-Origin"); got != "http://127.0.0.1:7650" {
+			t.Errorf("Expected wildcard bind CORS origin to use request host, got %q", got)
 		}
 	})
 }

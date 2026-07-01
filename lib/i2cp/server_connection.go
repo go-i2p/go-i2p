@@ -51,32 +51,38 @@ func (s *Server) acceptLoop() {
 	defer s.wg.Done()
 
 	for {
-		shouldStop := false
-
-		func() {
-			defer recoverAcceptIterationPanic()
-
-			conn, stop := s.acceptAndLogConnection()
-			if stop {
-				shouldStop = true
-				return
-			}
-			if conn == nil {
-				return
-			}
-
-			if s.shouldRejectConnection(conn) {
-				return
-			}
-
-			s.wg.Add(1)
-			go s.handleConnection(conn)
-		}()
-
-		if shouldStop {
+		if s.acceptLoopIteration() {
 			return
 		}
 	}
+}
+
+// acceptLoopIteration processes a single accept-loop iteration.
+// Returns true when the loop should terminate.
+func (s *Server) acceptLoopIteration() bool {
+	shouldStop := false
+
+	func() {
+		defer recoverAcceptIterationPanic()
+
+		conn, stop := s.acceptAndLogConnection()
+		if stop {
+			shouldStop = true
+			return
+		}
+		if conn == nil {
+			return
+		}
+
+		if s.shouldRejectConnection(conn) {
+			return
+		}
+
+		s.wg.Add(1)
+		go s.handleConnection(conn)
+	}()
+
+	return shouldStop
 }
 
 // sessionTimeoutCleanup periodically checks for idle sessions and closes them

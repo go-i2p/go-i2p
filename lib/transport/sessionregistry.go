@@ -115,21 +115,8 @@ func (sr *SessionRegistry) Promote(peerHash data.Hash, original, newSession inte
 	}
 
 	// CAS succeeded! We own the session now. Run the setup callbacks.
-	if opts.PreflightCheck != nil {
-		if err := opts.PreflightCheck(); err != nil {
-			sr.logger.WithField("peer_hash", logutil.HashPrefixPlain(peerHash)).
-				WithError(err).Error("Preflight check failed after CAS; rolling back promotion")
-
-			if !sr.sessions.CompareAndSwap(peerHash, newSession, original) {
-				current, exists := sr.sessions.Load(peerHash)
-				sr.logger.WithField("peer_hash", logutil.HashPrefixPlain(peerHash)).WithFields(logger.Fields{
-					"entry_exists": exists,
-					"entry_type":   fmt.Sprintf("%T", current),
-				}).Error("Failed to roll back session promotion after preflight failure")
-			}
-
-			return nil, false
-		}
+	if !sr.runPreflightOrRollback(peerHash, original, newSession, opts.PreflightCheck) {
+		return nil, false
 	}
 
 	// Install cleanup callback BEFORE starting workers (HIGH-8.2 fix)
@@ -145,6 +132,29 @@ func (sr *SessionRegistry) Promote(peerHash data.Hash, original, newSession inte
 	}
 
 	return newSession, true
+}
+
+func (sr *SessionRegistry) runPreflightOrRollback(peerHash data.Hash, original, newSession interface{}, preflight func() error) bool {
+	if preflight == nil {
+		return true
+	}
+
+	if err := preflight(); err != nil {
+		sr.logger.WithField("peer_hash", logutil.HashPrefixPlain(peerHash)).
+			WithError(err).Error("Preflight check failed after CAS; rolling back promotion")
+
+		if !sr.sessions.CompareAndSwap(peerHash, newSession, original) {
+			current, exists := sr.sessions.Load(peerHash)
+			sr.logger.WithField("peer_hash", logutil.HashPrefixPlain(peerHash)).WithFields(logger.Fields{
+				"entry_exists": exists,
+				"entry_type":   fmt.Sprintf("%T", current),
+			}).Error("Failed to roll back session promotion after preflight failure")
+		}
+
+		return false
+	}
+
+	return true
 }
 
 // Remove removes a session from the registry and decrements the session count safely.
