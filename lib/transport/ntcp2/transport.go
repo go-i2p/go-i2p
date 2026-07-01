@@ -1455,6 +1455,13 @@ func (t *NTCP2Transport) createOutboundSession(routerInfo router_info.RouterInfo
 func (t *NTCP2Transport) handleDialFailure(routerHash data.Hash, routerHashBytes [32]byte, err error) {
 	t.unreserveSessionSlot()
 	t.logger.WithError(err).WithField("router_hash", logutil.HashPrefixPlain(routerHashBytes)).Debug("Failed to dial NTCP2 connection")
+	if t.routerInfoRefresher != nil && shouldRefreshRouterInfoOnDialFailure(err) {
+		t.routerInfoRefresher.RequestRouterInfoRefresh(routerHash)
+		t.logger.WithFields(map[string]interface{}{
+			"router_hash": logutil.HashPrefixPlain(routerHashBytes),
+			"reason":      classifyDialError(err),
+		}).Info("Requested RouterInfo refresh after NTCP2 dial failure")
+	}
 	if n := t.getPeerConnNotifier(); n != nil {
 		if isPermanentNTCP2DialFailure(err) {
 			n.RecordPermanentFailure(routerHash, "no_reachable_ntcp2_address")
@@ -1469,6 +1476,15 @@ func (t *NTCP2Transport) handleDialFailure(routerHash data.Hash, routerHashBytes
 // or handshake failure that should be retried.
 func isPermanentNTCP2DialFailure(err error) bool {
 	return errors.Is(err, ErrInvalidRouterInfo) || errors.Is(err, ErrNTCP2NotSupported)
+}
+
+func shouldRefreshRouterInfoOnDialFailure(err error) bool {
+	switch classifyDialError(err) {
+	case "handshake_rejected_eof", "connection_reset", "handshake_failed":
+		return true
+	default:
+		return false
+	}
 }
 
 // finalizeOutboundSession sets up the session object and records success metrics.
@@ -1492,7 +1508,7 @@ func (t *NTCP2Transport) finalizeOutboundSession(conn *ntcp2.Conn, routerHash da
 }
 
 func (t *NTCP2Transport) dialNTCP2Connection(routerInfo router_info.RouterInfo) (*ntcp2.Conn, error) {
-	ntcp2Addr, tcpAddrString, err := t.extractNTCP2AddressInfo(routerInfo)
+	ntcp2Addrs, err := t.extractNTCP2AddressInfo(routerInfo)
 	if err != nil {
 		return nil, err
 	}
@@ -1504,40 +1520,49 @@ func (t *NTCP2Transport) dialNTCP2Connection(routerInfo router_info.RouterInfo) 
 	}
 
 	peerHashBytes := t.getPeerHashBytes(routerInfo)
-	t.logTCPConnectionAttempt(tcpAddrString, peerHashBytes)
+	var lastErr error
 
-	tcpDialStart := time.Now()
-	// Note: Previously there was a separate testTCPConnection() call here that would
-	// dial, immediately close, then dial again in performNTCP2Handshake. This doubled
-	// connection attempts, wasted file descriptors, and added latency. The actual
-	// NTCP2 handshake will fail with appropriate diagnostics if TCP is unreachable.
+	for i, ntcp2Addr := range ntcp2Addrs {
+		tcpAddrString := ntcp2Addr.String()
+		if wrapped, ok := ntcp2Addr.(*ntcp2.Addr); ok {
+			tcpAddrString = wrapped.UnderlyingAddr().String()
+		}
 
-	return t.performNTCP2Handshake(ntcp2Addr, tcpAddrString, peerHashBytes, config, tcpDialStart)
+		t.logger.WithFields(map[string]interface{}{
+			"candidate_index": i + 1,
+			"candidate_total": len(ntcp2Addrs),
+			"remote_addr":     tcpAddrString,
+			"peer_hash":       logutil.BytePrefix(peerHashBytes),
+		}).Debug("Attempting NTCP2 dial candidate")
+
+		t.logTCPConnectionAttempt(tcpAddrString, peerHashBytes)
+		tcpDialStart := time.Now()
+		conn, err := t.performNTCP2Handshake(ntcp2Addr, tcpAddrString, peerHashBytes, config, tcpDialStart)
+		if err == nil {
+			return conn, nil
+		}
+		lastErr = err
+		t.logger.WithError(err).WithFields(map[string]interface{}{
+			"candidate_index": i + 1,
+			"candidate_total": len(ntcp2Addrs),
+		}).Debug("NTCP2 dial candidate failed")
+	}
+
+	if lastErr == nil {
+		lastErr = oops.Errorf("NTCP2 dial failed: no dial candidates available")
+	}
+	return nil, lastErr
 }
 
-// extractNTCP2AddressInfo extracts the NTCP2 address and TCP address string from router info.
-func (t *NTCP2Transport) extractNTCP2AddressInfo(routerInfo router_info.RouterInfo) (net.Addr, string, error) {
-	ntcp2Addr, err := ExtractNTCP2Addr(routerInfo)
+// extractNTCP2AddressInfo extracts all dialable NTCP2 addresses from router info.
+func (t *NTCP2Transport) extractNTCP2AddressInfo(routerInfo router_info.RouterInfo) ([]net.Addr, error) {
+	ntcp2Addrs, err := ExtractNTCP2DialCandidates(routerInfo)
 	if err != nil {
 		t.logger.WithError(err).Debug("Failed to extract NTCP2 address from RouterInfo")
-		return nil, "", WrapNTCP2Error(err, "extracting NTCP2 address")
+		return nil, WrapNTCP2Error(err, "extracting NTCP2 address")
 	}
-
-	// Extract the underlying TCP address for raw connection test
-	// ntcp2Addr.String() returns "ntcp2://hash/initiator/ip:port" format
-	// We need just the "ip:port" part for net.DialTimeout
-	var tcpAddrString string
-	if ntcpAddr, ok := ntcp2Addr.(*ntcp2.Addr); ok {
-		// NTCP2Addr has an UnderlyingAddr() method that returns the wrapped net.Addr
-		underlyingAddr := ntcpAddr.UnderlyingAddr()
-		tcpAddrString = underlyingAddr.String()
-	} else {
-		// Fallback to string representation (shouldn't happen)
-		tcpAddrString = ntcp2Addr.String()
-	}
-
-	t.logger.WithField("remote_addr", ntcp2Addr.String()).Debug("Extracted NTCP2 address")
-	return ntcp2Addr, tcpAddrString, nil
+	t.logger.WithField("candidate_count", len(ntcp2Addrs)).Debug("Extracted NTCP2 dial candidates")
+	return ntcp2Addrs, nil
 }
 
 // getPeerHashBytes extracts the peer hash bytes from router info.

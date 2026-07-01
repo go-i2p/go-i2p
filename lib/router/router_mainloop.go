@@ -234,7 +234,7 @@ func (r *Router) handleNewConnection(conn net.Conn) {
 		peerHash := common.Hash(addr.RouterHash())
 		sessionLog := logger.WithField("peer_hash", logutil.HashPrefix(peerHash))
 		session := ntcp.NewNTCP2Session(conn, r.ctx, sessionLog)
-		session.SetCleanupCallback(func() { r.removeSession(peerHash) })
+		session.AppendCleanupCallback(func() { r.removeSession(peerHash) })
 		r.addSession(peerHash, session)
 		r.wg.Add(1)
 		go func() {
@@ -254,7 +254,7 @@ func (r *Router) handleNewConnection(conn net.Conn) {
 		}
 		session := ssu2.NewSSU2Session(ssu2Conn, r.ctx, sessionLog)
 		r.attachInboundSSU2TransportCallbacks(session)
-		session.SetCleanupCallback(func() { r.removeSession(peerHash) })
+		session.AppendCleanupCallback(func() { r.removeSession(peerHash) })
 		r.addSession(peerHash, session)
 		r.wg.Add(1)
 		go func() {

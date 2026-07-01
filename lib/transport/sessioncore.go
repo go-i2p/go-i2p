@@ -169,6 +169,27 @@ func (sc *SessionCore) SetCleanupCallback(callback func()) {
 	sc.callbackMu.Unlock()
 }
 
+// AppendCleanupCallback appends a callback to the existing cleanup chain.
+// Callbacks are invoked in registration order when cleanup runs.
+// Thread-safe: protected by callbackMu.
+func (sc *SessionCore) AppendCleanupCallback(callback func()) {
+	if callback == nil {
+		return
+	}
+
+	sc.callbackMu.Lock()
+	existing := sc.cleanupCallback
+	if existing == nil {
+		sc.cleanupCallback = callback
+	} else {
+		sc.cleanupCallback = func() {
+			existing()
+			callback()
+		}
+	}
+	sc.callbackMu.Unlock()
+}
+
 // callCleanupCallback calls the cleanup callback if set, ensuring it runs
 // exactly once via cleanupOnce. Thread-safe.
 func (sc *SessionCore) CallCleanupCallback() {

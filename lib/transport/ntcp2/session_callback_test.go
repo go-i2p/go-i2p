@@ -95,6 +95,31 @@ func TestSetCleanupCallback_CalledOnClose(t *testing.T) {
 	assert.Equal(t, int32(1), atomic.LoadInt32(&called))
 }
 
+func TestAppendCleanupCallback_CallsBothCallbacksOnce(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	session := &NTCP2Session{
+		SessionCore: transport.NewSessionCore(ctx, logger.WithField("test", "callback_append")),
+	}
+
+	var firstCalled int32
+	var secondCalled int32
+
+	session.SetCleanupCallback(func() {
+		atomic.AddInt32(&firstCalled, 1)
+	})
+	session.AppendCleanupCallback(func() {
+		atomic.AddInt32(&secondCalled, 1)
+	})
+
+	session.CallCleanupCallback()
+	session.CallCleanupCallback() // cleanupOnce should prevent re-run
+
+	assert.Equal(t, int32(1), atomic.LoadInt32(&firstCalled), "first callback should run exactly once")
+	assert.Equal(t, int32(1), atomic.LoadInt32(&secondCalled), "second callback should run exactly once")
+}
+
 // TestSetCleanupCallback_NilSafe verifies no panic when no callback is set.
 func TestSetCleanupCallback_NilSafe(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())

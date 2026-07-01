@@ -155,7 +155,7 @@ func (r *Router) validateTransportMuxer(hash common.Hash) error {
 type sessionRegisterer interface {
 	transport.TransportSession
 	i2npReader
-	SetCleanupCallback(func())
+	AppendCleanupCallback(func())
 }
 
 // registerTypedSession is a generic helper for registering transport sessions (NTCP2, SSU2).
@@ -167,7 +167,7 @@ type sessionRegisterer interface {
 // 5. Log successful registration with transport type name
 // This avoids duplication of identical code across NTCP2Session and SSU2Session cases.
 func (r *Router) registerTypedSession(hash common.Hash, session sessionRegisterer, transportName string) {
-	session.SetCleanupCallback(func() { r.removeSession(hash) })
+	session.AppendCleanupCallback(func() { r.removeSession(hash) })
 	r.addSession(hash, session)
 	r.wg.Add(1)
 	go func() {

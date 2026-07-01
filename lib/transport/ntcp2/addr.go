@@ -33,6 +33,16 @@ func isIPv4RouterAddress(addr *router_address.RouterAddress) bool {
 // ExtractNTCP2Addr extracts the NTCP2 network address from a RouterInfo structure.
 // It validates NTCP2 support and returns a properly wrapped NTCP2 address with router hash metadata.
 func ExtractNTCP2Addr(routerInfo router_info.RouterInfo) (net.Addr, error) {
+	candidates, err := ExtractNTCP2DialCandidates(routerInfo)
+	if err != nil {
+		return nil, err
+	}
+	return candidates[0], nil
+}
+
+// ExtractNTCP2DialCandidates extracts all valid dialable NTCP2 addresses from RouterInfo.
+// Candidates are returned in preferred order: IPv4 first, then IPv6.
+func ExtractNTCP2DialCandidates(routerInfo router_info.RouterInfo) ([]net.Addr, error) {
 	routerHashBytes, err := getRouterHashBytes(routerInfo)
 	if err != nil {
 		return nil, err
@@ -42,7 +52,65 @@ func ExtractNTCP2Addr(routerInfo router_info.RouterInfo) (net.Addr, error) {
 		return nil, err
 	}
 
-	return findValidNTCP2Address(routerInfo, routerHashBytes)
+	addresses := routerInfo.RouterAddresses()
+	logAddressSearch(routerHashBytes, len(addresses))
+
+	var ipv4Candidates []net.Addr
+	var ipv6Candidates []net.Addr
+	seen := make(map[string]struct{})
+
+	for i, addr := range addresses {
+		logAddressCheck(i, addr)
+
+		if !isNTCP2Transport(addr) {
+			continue
+		}
+
+		candidate, err := processNTCP2Address(addr, routerInfo)
+		if err != nil {
+			logAddressProcessingFailure(i, err)
+			continue
+		}
+
+		key := candidate.String()
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+
+		if isIPv4Candidate(candidate) {
+			ipv4Candidates = append(ipv4Candidates, candidate)
+		} else {
+			ipv6Candidates = append(ipv6Candidates, candidate)
+		}
+	}
+
+	candidates := append(ipv4Candidates, ipv6Candidates...)
+	if len(candidates) == 0 {
+		logNoValidAddressFound(routerHashBytes, len(addresses))
+		return nil, ErrInvalidRouterInfo
+	}
+
+	log.WithFields(map[string]interface{}{
+		"router_hash":     logutil.BytePrefix(routerHashBytes),
+		"candidate_count": len(candidates),
+		"ipv4_candidates": len(ipv4Candidates),
+		"ipv6_candidates": len(ipv6Candidates),
+	}).Info("Successfully extracted NTCP2 dial candidates")
+
+	return candidates, nil
+}
+
+func isIPv4Candidate(addr net.Addr) bool {
+	switch a := addr.(type) {
+	case *ntcp2.Addr:
+		if tcpAddr, ok := a.UnderlyingAddr().(*net.TCPAddr); ok {
+			return tcpAddr.IP != nil && tcpAddr.IP.To4() != nil
+		}
+	case *net.TCPAddr:
+		return a.IP != nil && a.IP.To4() != nil
+	}
+	return false
 }
 
 // getRouterHashBytes retrieves and returns the router hash bytes from RouterInfo.

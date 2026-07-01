@@ -9,6 +9,7 @@ import (
 	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/testutil"
+	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -19,6 +20,16 @@ type testPeerConnNotifier struct {
 	failures   int
 	permanent  int
 	lastReason string
+}
+
+type testRouterInfoRefresher struct {
+	count int
+	hash  data.Hash
+}
+
+func (r *testRouterInfoRefresher) RequestRouterInfoRefresh(hash data.Hash) {
+	r.count++
+	r.hash = hash
 }
 
 func (n *testPeerConnNotifier) RecordAttempt(_ data.Hash) {
@@ -116,6 +127,29 @@ func TestHandleDialFailure_ClassifierUsesPermanentFailureForInvalidNTCP2Data(t *
 
 	assert.Equal(t, 2, notifier.permanent, "structural NTCP2 failures should be permanent")
 	assert.Equal(t, 1, notifier.failures, "non-structural failures should remain transient")
+}
+
+func TestHandleDialFailure_RequestsRouterInfoRefreshOnHandshakeRejectPatterns(t *testing.T) {
+	transport, _ := newMinimalTransport()
+	defer transport.Close()
+
+	refresher := &testRouterInfoRefresher{}
+	transport.SetRouterInfoRefresher(refresher)
+
+	var routerHash data.Hash
+	for i := range routerHash {
+		routerHash[i] = byte(i + 11)
+	}
+
+	transport.handleDialFailure(routerHash, routerHash, oops.Errorf("EOF"))
+	assert.Equal(t, 1, refresher.count, "EOF handshake rejections should trigger RouterInfo refresh")
+	assert.Equal(t, routerHash, refresher.hash)
+
+	transport.handleDialFailure(routerHash, routerHash, oops.Errorf("read: connection reset by peer"))
+	assert.Equal(t, 2, refresher.count, "connection reset should trigger RouterInfo refresh")
+
+	transport.handleDialFailure(routerHash, routerHash, oops.Errorf("context canceled"))
+	assert.Equal(t, 2, refresher.count, "cancellation should not trigger RouterInfo refresh")
 }
 
 func TestInboundHandshakeWorker_UsesConfiguredPendingQueueTimeout(t *testing.T) {
