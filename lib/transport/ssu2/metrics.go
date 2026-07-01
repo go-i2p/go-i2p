@@ -34,17 +34,51 @@ type ReachabilitySnapshot struct {
 	// anti-replay validation was deferred because SessionRequest replay
 	// material was not yet available.
 	ReplayChecksDeferred uint64
+
+	// SessionPeerTerminations counts OnTermination callbacks received from peers.
+	SessionPeerTerminations uint64
+
+	// SessionReadTimeoutRetries counts receive-loop read timeouts that were
+	// treated as retryable (non-fatal) in SSU2 sessions.
+	SessionReadTimeoutRetries uint64
+
+	// SessionRecvBackpressureDrops counts inbound messages dropped due to full
+	// receive channel backpressure in SSU2Session.
+	SessionRecvBackpressureDrops uint64
 }
 
 // GetReachabilityCounters returns a point-in-time snapshot of all
 // reachability-related counters for monitoring and diagnostics.
 func (t *SSU2Transport) GetReachabilityCounters() ReachabilitySnapshot {
 	return ReachabilitySnapshot{
-		NATMappingSuccess:       t.reachMetrics.natMappingSuccess.Load(),
-		NATMappingFailure:       t.reachMetrics.natMappingFailure.Load(),
-		PeerTestConfirmed:       t.reachMetrics.peerTestConfirmed.Load(),
-		PublishedAddrChanged:    t.reachMetrics.publishedAddrChanged.Load(),
-		StaleSessionsReconciled: t.reachMetrics.staleSessionsReconciled.Load(),
-		ReplayChecksDeferred:    t.reachMetrics.replayChecksDeferred.Load(),
+		NATMappingSuccess:            t.reachMetrics.natMappingSuccess.Load(),
+		NATMappingFailure:            t.reachMetrics.natMappingFailure.Load(),
+		PeerTestConfirmed:            t.reachMetrics.peerTestConfirmed.Load(),
+		PublishedAddrChanged:         t.reachMetrics.publishedAddrChanged.Load(),
+		StaleSessionsReconciled:      t.reachMetrics.staleSessionsReconciled.Load(),
+		ReplayChecksDeferred:         t.reachMetrics.replayChecksDeferred.Load(),
+		SessionPeerTerminations:      globalSSU2SessionChurn.sessionPeerTerminations.Load(),
+		SessionReadTimeoutRetries:    globalSSU2SessionChurn.sessionReadTimeoutRetries.Load(),
+		SessionRecvBackpressureDrops: globalSSU2SessionChurn.sessionRecvBackpressureDrops.Load(),
 	}
 }
+
+type ssu2SessionChurnMetrics struct {
+	sessionPeerTerminations      atomic.Uint64
+	sessionReadTimeoutRetries    atomic.Uint64
+	sessionRecvBackpressureDrops atomic.Uint64
+}
+
+func recordSSU2PeerTermination() {
+	globalSSU2SessionChurn.sessionPeerTerminations.Add(1)
+}
+
+func recordSSU2ReadTimeoutRetry() {
+	globalSSU2SessionChurn.sessionReadTimeoutRetries.Add(1)
+}
+
+func recordSSU2RecvBackpressureDrop() {
+	globalSSU2SessionChurn.sessionRecvBackpressureDrops.Add(1)
+}
+
+var globalSSU2SessionChurn ssu2SessionChurnMetrics

@@ -112,6 +112,19 @@ func (r *Router) GetNTCP2TransportMetrics() ntcp.TransportMetricsSnapshot {
 	return ntcp.TransportMetricsSnapshot{}
 }
 
+// GetSSU2ReachabilityCounters returns a snapshot of SSU2 reachability and
+// session churn counters. Returns zero-value snapshot when SSU2 is unavailable.
+func (r *Router) GetSSU2ReachabilityCounters() ssu2.ReachabilitySnapshot {
+	t := r.findTransport(func(t transport.Transport) bool {
+		_, ok := t.(*ssu2.SSU2Transport)
+		return ok
+	})
+	if st, ok := t.(*ssu2.SSU2Transport); ok {
+		return st.GetReachabilityCounters()
+	}
+	return ssu2.ReachabilitySnapshot{}
+}
+
 // GetNetworkStatus returns the I2PControl network status code.
 // Status codes:
 //

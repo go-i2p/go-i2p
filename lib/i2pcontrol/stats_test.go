@@ -13,6 +13,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/netdb"
 	"github.com/go-i2p/go-i2p/lib/transport"
 	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
+	ssu2transport "github.com/go-i2p/go-i2p/lib/transport/ssu2"
 	tunnelpkg "github.com/go-i2p/go-i2p/lib/tunnel"
 )
 
@@ -568,6 +569,15 @@ func (m *mockRouterAccessWithNTCP2Metrics) GetNTCP2TransportMetrics() ntcp.Trans
 	return m.metrics
 }
 
+type mockRouterAccessWithSSU2Metrics struct {
+	mockRouterAccess
+	metrics ssu2transport.ReachabilitySnapshot
+}
+
+func (m *mockRouterAccessWithSSU2Metrics) GetSSU2ReachabilityCounters() ssu2transport.ReachabilitySnapshot {
+	return m.metrics
+}
+
 func (m *mockRouterAccessWithTransportSessions) GetNTCP2SessionCount() int {
 	return m.ntcp2Count
 }
@@ -666,6 +676,31 @@ func TestStatsNTCP2SessionChurnCounters(t *testing.T) {
 	assertRate("transport.ntcp2.session.eofClose", 21)
 	assertRate("transport.ntcp2.session.timeoutOrReset", 34)
 	assertRate("transport.ntcp2.session.recvBackpressureDrop", 8)
+}
+
+func TestStatsSSU2SessionChurnCounters(t *testing.T) {
+	router := &mockRouterAccessWithSSU2Metrics{
+		mockRouterAccess: mockRouterAccess{running: true},
+		metrics: ssu2transport.ReachabilitySnapshot{
+			SessionPeerTerminations:      12,
+			SessionReadTimeoutRetries:    27,
+			SessionRecvBackpressureDrops: 6,
+		},
+	}
+
+	provider := NewRouterStatsProvider(router, "0.1.0-test")
+
+	assertRate := func(stat string, want float64) {
+		t.Helper()
+		got := provider.GetRateForPeriod(stat, 60000)
+		if got != want {
+			t.Fatalf("%s = %v, want %v", stat, got, want)
+		}
+	}
+
+	assertRate("transport.ssu2.session.peerTermination", 12)
+	assertRate("transport.ssu2.session.readTimeoutRetry", 27)
+	assertRate("transport.ssu2.session.recvBackpressureDrop", 6)
 }
 
 // mockRouterWithNetworkStatus is a minimal RouterAccess that lets tests control

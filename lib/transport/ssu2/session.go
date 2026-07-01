@@ -112,6 +112,7 @@ func (s *SSU2Session) wireDataHandlerCallbacks() {
 func (s *SSU2Session) buildMergedCallbacks(extra *BlockCallbackConfig) ssu2noise.DataHandlerCallbacks {
 	cbs := ssu2noise.DataHandlerCallbacks{
 		OnTermination: func(_ uint64, reason uint8, _ []byte) {
+			recordSSU2PeerTermination()
 			s.Logger().WithField("termination_reason", reason).Warn("SSU2 session terminated by peer")
 			s.Cancel()
 		},
@@ -831,6 +832,7 @@ func (s *SSU2Session) deliverMessage(msg i2np.Message) error {
 	case <-s.GetContext().Done():
 		return s.GetContext().Err()
 	case <-timer.C:
+		recordSSU2RecvBackpressureDrop()
 		s.RecordDroppedMessage()
 		s.Logger().Warn("Receive channel full, dropping message")
 		return nil
@@ -899,6 +901,9 @@ func (s *SSU2Session) readFrame(buf []byte) (int, receiveAction) {
 // handleReadError classifies a read error and returns the appropriate action.
 func (s *SSU2Session) handleReadError(err error) receiveAction {
 	action := classifyReceiveError(err)
+	if action == receiveRetry {
+		recordSSU2ReadTimeoutRetry()
+	}
 	if action == receiveFatal {
 		s.Logger().WithError(err).Debug("Read error on SSU2 session")
 	}

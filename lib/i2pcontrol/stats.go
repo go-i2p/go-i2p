@@ -10,6 +10,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/netdb"
 	"github.com/go-i2p/go-i2p/lib/transport"
 	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
+	ssu2transport "github.com/go-i2p/go-i2p/lib/transport/ssu2"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 )
 
@@ -745,6 +746,8 @@ func (rsp *routerStatsProvider) GetRateForPeriod(stat string, periodMs int64) fl
 		return rsp.getTransportSessionFailureCount(stat)
 	case rsp.isNTCP2TransportMetricStat(stat):
 		return rsp.getNTCP2TransportMetric(stat)
+	case rsp.isSSU2TransportMetricStat(stat):
+		return rsp.getSSU2TransportMetric(stat)
 	default:
 		log.WithField("stat", stat).Debug("i2pcontrol: GetRateForPeriod unknown stat name, returning 0")
 		return 0
@@ -889,6 +892,34 @@ func (rsp *routerStatsProvider) getNTCP2TransportMetric(stat string) float64 {
 		return float64(metrics.SessionTimeoutOrReset)
 	case "transport.ntcp2.session.recvBackpressureDrop":
 		return float64(metrics.SessionRecvBackpressure)
+	default:
+		return 0
+	}
+}
+
+func (rsp *routerStatsProvider) isSSU2TransportMetricStat(stat string) bool {
+	return stat == "transport.ssu2.session.peerTermination" ||
+		stat == "transport.ssu2.session.readTimeoutRetry" ||
+		stat == "transport.ssu2.session.recvBackpressureDrop"
+}
+
+type ssu2TransportMetricsReader interface {
+	GetSSU2ReachabilityCounters() ssu2transport.ReachabilitySnapshot
+}
+
+func (rsp *routerStatsProvider) getSSU2TransportMetric(stat string) float64 {
+	reader, ok := rsp.router.(ssu2TransportMetricsReader)
+	if !ok {
+		return 0
+	}
+	metrics := reader.GetSSU2ReachabilityCounters()
+	switch stat {
+	case "transport.ssu2.session.peerTermination":
+		return float64(metrics.SessionPeerTerminations)
+	case "transport.ssu2.session.readTimeoutRetry":
+		return float64(metrics.SessionReadTimeoutRetries)
+	case "transport.ssu2.session.recvBackpressureDrop":
+		return float64(metrics.SessionRecvBackpressureDrops)
 	default:
 		return 0
 	}
@@ -1067,6 +1098,17 @@ func (rr RealRouter) GetNTCP2TransportMetrics() ntcp.TransportMetricsSnapshot {
 		return ntcp.TransportMetricsSnapshot{}
 	}
 	return typed.GetNTCP2TransportMetrics()
+}
+
+// GetSSU2ReachabilityCounters returns SSU2 reachability/session counters when available.
+func (rr RealRouter) GetSSU2ReachabilityCounters() ssu2transport.ReachabilitySnapshot {
+	typed, ok := rr.Router.(interface {
+		GetSSU2ReachabilityCounters() ssu2transport.ReachabilitySnapshot
+	})
+	if !ok {
+		return ssu2transport.ReachabilitySnapshot{}
+	}
+	return typed.GetSSU2ReachabilityCounters()
 }
 
 // Stop initiates graceful shutdown (implements RouterAccess)
