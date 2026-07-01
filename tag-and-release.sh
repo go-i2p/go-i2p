@@ -3,6 +3,9 @@
 # takes one argument: the version to tag
 VERSION=$1
 
+# Resolve paths relative to this script so invocation cwd does not matter.
+SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+
 # Ordered repository definitions.
 # Format for each token: <repo_name>:<hash_var_name>
 HASH_REPOS_PAIRS='
@@ -111,13 +114,24 @@ push() {
 }
 
 # descend into the go-i2p namespace and collect checkin hashes
-cd ../
+cd "$SCRIPT_DIR/.." || exit 1
 GOI2P_DIR=$(pwd)
 
 collecthash() {
-  cd "$1" && echo "Collecting tag hash for $1" 1>&2
-  sync_repo_to_latest_checked_in
+  cd "$GOI2P_DIR/$1" || {
+    echo "ERROR: repository directory not found: $GOI2P_DIR/$1" 1>&2
+    return 1
+  }
+  echo "Collecting tag hash for $1" 1>&2
+  sync_repo_to_latest_checked_in || {
+    echo "ERROR: failed to sync repository $1" 1>&2
+    return 1
+  }
   TAG_HASH=$(/usr/bin/git rev-parse HEAD)
+  if [ -z "$TAG_HASH" ]; then
+    echo "ERROR: failed to collect HEAD hash for $1" 1>&2
+    return 1
+  fi
   REMOTE=$(/usr/bin/git remote -v)
   cd "$GOI2P_DIR"
   echo "$1 tag hash: $TAG_HASH Remote: $REMOTE" 1>&2
@@ -187,7 +201,7 @@ collect_all_hashes() {
   for entry in $HASH_REPOS_PAIRS; do
     repo=${entry%%:*}
     var=${entry#*:}
-    hash=$(collecthash "$repo")
+    hash=$(collecthash "$repo") || exit 1
     assign_var "$var" "$hash"
     echo "$repo tag hash: $hash" 1>&2
   done
@@ -200,7 +214,14 @@ echo "Collected tag hashes. Proceeding to tag version v$VERSION" 1>&2
 update_by_tag_hash() {
   echo "updating $1 to tag hash $2" 1>&2
   module="github.com/go-i2p/$1"
-  go get "$module@$2" 1>&2
+  if [ -z "$2" ]; then
+    echo "ERROR: empty tag hash for $module" 1>&2
+    exit 1
+  fi
+  if ! go get "$module@$2" 1>&2; then
+    echo "ERROR: go get failed for $module@$2" 1>&2
+    exit 1
+  fi
 
   resolved_version=$(go list -m -f '{{.Version}}' "$module" 2>/dev/null || true)
   short_hash=$(printf '%s' "$2" | cut -c1-12)
@@ -208,8 +229,13 @@ update_by_tag_hash() {
     *"$short_hash"*)
       ;;
     *)
-      echo "ERROR: $module resolved to $resolved_version (expected commit containing $short_hash)" 1>&2
-      exit 1
+      # Some modules resolve to a tag instead of a pseudo-version. Accept that
+      # only when the resolved tag points to the exact expected commit.
+      resolved_tag_hash=$(cd "$GOI2P_DIR/$1" 2>/dev/null && /usr/bin/git rev-list -n 1 "$resolved_version" 2>/dev/null || true)
+      if [ "$resolved_tag_hash" != "$2" ]; then
+        echo "ERROR: $module resolved to $resolved_version (expected commit $2)" 1>&2
+        exit 1
+      fi
       ;;
   esac
 }
@@ -218,7 +244,12 @@ update_by_tag_hash() {
 # use go mod tidy to clean up unused deps
 update_our_packages() {
   echo "Updating the packages" 1>&2
+  current_repo=$(basename "$(pwd)")
   for repo in $UPDATE_ORDER; do
+    if [ "$repo" = "$current_repo" ]; then
+      echo "Skipping self-update for $repo" 1>&2
+      continue
+    fi
     var=$(hash_var_for_repo "$repo")
     hash=$(value_of "$var")
     update_by_tag_hash "$repo" "$hash"
@@ -233,7 +264,10 @@ update_our_packages() {
 update_by_version() {
   echo "updating $1 to version $2" 1>&2
   module="github.com/go-i2p/$1"
-  go get "$module@$2" 1>&2
+  if ! go get "$module@$2" 1>&2; then
+    echo "ERROR: go get failed for $module@$2" 1>&2
+    exit 1
+  fi
 
   resolved_version=$(go list -m -f '{{.Version}}' "$module" 2>/dev/null || true)
   if [ "$resolved_version" != "$2" ]; then
@@ -246,7 +280,12 @@ update_by_version() {
 # use go mod tidy to clean up unused deps
 correct_our_tags() {
   echo "Updating the packages" 1>&2
+  current_repo=$(basename "$(pwd)")
   for repo in $UPDATE_ORDER; do
+    if [ "$repo" = "$current_repo" ]; then
+      echo "Skipping self-update for $repo" 1>&2
+      continue
+    fi
     update_by_version "$repo" "v$VERSION"
   done
   go mod tidy -v 1>&2
@@ -332,7 +371,14 @@ run_release_set() {
   for entry in $1; do
     repo=${entry%%:*}
     var=${entry#*:}
-    hash=$(tagandrelease "$repo")
+    hash=$(tagandrelease "$repo") || {
+      echo "ERROR: tag and release failed for $repo" 1>&2
+      exit 1
+    }
+    if [ -z "$hash" ]; then
+      echo "ERROR: empty tag hash returned for $repo" 1>&2
+      exit 1
+    fi
     assign_var "$var" "$hash"
   done
 }
