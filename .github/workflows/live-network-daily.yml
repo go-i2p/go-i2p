@@ -1,0 +1,50 @@
+name: Daily Live Network Integration
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+
+concurrency:
+  group: daily-live-network
+  cancel-in-progress: false
+
+jobs:
+  live-network:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Run daily live-network integration suite
+        run: bash .github/scripts/run-live-network-daily.sh
+
+      - name: Publish live-network artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: daily-live-network-artifacts
+          if-no-files-found: warn
+          path: |
+            test-logs/live-network-attempt*.log
+            test-logs/java-i2p.log
+            test-logs/i2pd.log
+            tmp/live-network-artifacts/**
+
+      - name: Write workflow summary
+        if: always()
+        shell: bash
+        run: |
+          status_file="tmp/live-network-artifacts/ci-status.txt"
+          if [[ -f "${status_file}" ]]; then
+            cat "${status_file}" >> "${GITHUB_STEP_SUMMARY}"
+          else
+            echo 'result=unknown' >> "${GITHUB_STEP_SUMMARY}"
+          fi
