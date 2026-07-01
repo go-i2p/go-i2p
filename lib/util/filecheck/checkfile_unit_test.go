@@ -5,12 +5,7 @@ import (
 	"testing"
 )
 
-// =============================================================================
-// Unit Tests for checkfile.go — CheckFileExists, CheckFileAge
-// =============================================================================
-
-// TestCheckFileExistsWithValidFile verifies CheckFileExists returns true for existing files.
-func TestCheckFileExistsWithValidFile(t *testing.T) {
+func TestCheckFileExists(t *testing.T) {
 	tmpFile, err := os.CreateTemp("", "test_check_file_*.txt")
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
@@ -18,32 +13,31 @@ func TestCheckFileExistsWithValidFile(t *testing.T) {
 	tmpFile.Close()
 	defer os.Remove(tmpFile.Name())
 
-	if !CheckFileExists(tmpFile.Name()) {
-		t.Errorf("CheckFileExists returned false for existing file: %s", tmpFile.Name())
-	}
-}
-
-// TestCheckFileExistsWithNonExistent verifies CheckFileExists returns false for non-existent files.
-func TestCheckFileExistsWithNonExistent(t *testing.T) {
-	if CheckFileExists(nonExistentFilePath) {
-		t.Errorf("CheckFileExists returned true for non-existent file: %s", nonExistentFilePath)
-	}
-}
-
-// TestCheckFileExistsWithDirectory verifies CheckFileExists returns true for directories.
-func TestCheckFileExistsWithDirectory(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "test_check_dir_*")
 	if err != nil {
 		t.Fatalf("Failed to create temp directory: %v", err)
 	}
 	defer os.RemoveAll(tmpDir)
 
-	if !CheckFileExists(tmpDir) {
-		t.Errorf("CheckFileExists returned false for existing directory: %s", tmpDir)
+	tests := []struct {
+		name string
+		path string
+		want bool
+	}{
+		{name: "existing_file", path: tmpFile.Name(), want: true},
+		{name: "existing_directory", path: tmpDir, want: true},
+		{name: "missing_path", path: nonExistentFilePath, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := CheckFileExists(tt.path); got != tt.want {
+				t.Errorf("CheckFileExists(%q) = %v, want %v", tt.path, got, tt.want)
+			}
+		})
 	}
 }
 
-// TestCheckFileAge verifies file age checking logic.
 func TestCheckFileAge(t *testing.T) {
 	tmpFile, err := os.CreateTemp("", "test_file_age_*.txt")
 	if err != nil {
@@ -52,21 +46,23 @@ func TestCheckFileAge(t *testing.T) {
 	tmpFile.Close()
 	defer os.Remove(tmpFile.Name())
 
-	// A newly created file should not be "old" (older than 1 minute)
-	if CheckFileAge(tmpFile.Name(), 1) {
-		t.Errorf("Newly created file should not be older than 1 minute")
+	tests := []struct {
+		name   string
+		path   string
+		maxAge int
+		want   bool
+	}{
+		{name: "new_file_not_old", path: tmpFile.Name(), maxAge: 1, want: false},
+		{name: "negative_max_age", path: tmpFile.Name(), maxAge: -1, want: false},
+		{name: "missing_path", path: nonExistentFilePath, maxAge: 1, want: false},
 	}
 
-	// Negative maxAge should return false (invalid parameter)
-	if CheckFileAge(tmpFile.Name(), -1) {
-		t.Errorf("Negative maxAge should return false (invalid parameter)")
-	}
-}
-
-// TestCheckFileAgeNonExistent verifies CheckFileAge returns false for non-existent files.
-func TestCheckFileAgeNonExistent(t *testing.T) {
-	if CheckFileAge(nonExistentFilePath, 1) {
-		t.Errorf("CheckFileAge should return false for non-existent file")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := CheckFileAge(tt.path, tt.maxAge); got != tt.want {
+				t.Errorf("CheckFileAge(%q, %d) = %v, want %v", tt.path, tt.maxAge, got, tt.want)
+			}
+		})
 	}
 }
 
@@ -84,4 +80,11 @@ func TestCheckFileAgeTimezoneIndependent(t *testing.T) {
 	_ = CheckFileAge(tmpFile.Name(), 0)
 	_ = CheckFileAge(tmpFile.Name(), 1)
 	_ = CheckFileAge(tmpFile.Name(), 60)
+}
+
+func TestPathSafetyNoTraversal(t *testing.T) {
+	for _, tc := range pathTraversalTestCases {
+		_ = CheckFileExists(tc)
+		_ = CheckFileAge(tc, 1)
+	}
 }

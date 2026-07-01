@@ -43,14 +43,34 @@ func TestRegisterAndCloseAll(t *testing.T) {
 	}
 }
 
-// TestCloseAllWithErrors verifies errors during close don't stop other closers.
-func TestCloseAllWithErrors(t *testing.T) {
-	closer1 := &mockCloser{}
-	closer2 := &mockCloser{closeError: errors.New("close error")}
-	closer3 := &mockCloser{}
+func TestCloseAllVariants(t *testing.T) {
+	tests := []struct {
+		name    string
+		closers []*mockCloser
+	}{
+		{
+			name: "all_closers_succeed",
+			closers: []*mockCloser{
+				{},
+				{},
+				{},
+			},
+		},
+		{
+			name: "close_error_does_not_stop_others",
+			closers: []*mockCloser{
+				{},
+				{closeError: errors.New("close error")},
+				{},
+			},
+		},
+	}
 
-	// Should not panic and should close all closers
-	registerClosersAndVerifyAll(t, closer1, closer2, closer3)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			registerClosersAndVerifyAll(t, tt.closers...)
+		})
+	}
 }
 
 // TestRegisterCloserThreadSafety verifies thread-safe registration.
@@ -88,25 +108,35 @@ func TestRegisterCloserThreadSafety(t *testing.T) {
 }
 
 // TestCloseAllEmptyList verifies CloseAll handles empty list gracefully.
-func TestCloseAllEmptyList(t *testing.T) {
-	resetCloseables()
+func TestCloseAllIdempotence(t *testing.T) {
+	tests := []struct {
+		name          string
+		registerCount int
+		closeCalls    int
+	}{
+		{name: "empty_list", registerCount: 0, closeCalls: 1},
+		{name: "multiple_close_calls", registerCount: 1, closeCalls: 3},
+	}
 
-	// Should not panic
-	CloseAll()
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resetCloseables()
+			closers := make([]*mockCloser, 0, tt.registerCount)
+			for i := 0; i < tt.registerCount; i++ {
+				c := &mockCloser{}
+				closers = append(closers, c)
+				RegisterCloser(c)
+			}
 
-// TestCloseAllIdempotent verifies calling CloseAll multiple times is safe.
-func TestCloseAllIdempotent(t *testing.T) {
-	resetCloseables()
+			for i := 0; i < tt.closeCalls; i++ {
+				CloseAll()
+			}
 
-	closer := &mockCloser{}
-	RegisterCloser(closer)
-
-	CloseAll()
-	CloseAll() // Second call should be safe
-	CloseAll() // Third call should be safe
-
-	if !closer.IsClosed() {
-		t.Error("closer was not closed")
+			for i, c := range closers {
+				if !c.IsClosed() {
+					t.Errorf("closer%d was not closed", i+1)
+				}
+			}
+		})
 	}
 }

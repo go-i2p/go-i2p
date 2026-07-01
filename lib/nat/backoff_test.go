@@ -8,65 +8,100 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestBackoffConfig_CalculateNextBackoff_Doubling(t *testing.T) {
-	cfg := &BackoffConfig{
-		Initial: 10 * time.Second,
-		Max:     5 * time.Minute,
-		Factor:  2.0,
+func TestBackoffConfig_CalculateNextBackoff(t *testing.T) {
+	tests := []struct {
+		name    string
+		cfg     *BackoffConfig
+		current time.Duration
+		want    time.Duration
+	}{
+		{
+			name: "doubling_from_10s",
+			cfg: &BackoffConfig{
+				Initial: 10 * time.Second,
+				Max:     5 * time.Minute,
+				Factor:  2.0,
+			},
+			current: 10 * time.Second,
+			want:    20 * time.Second,
+		},
+		{
+			name: "doubling_from_20s",
+			cfg: &BackoffConfig{
+				Initial: 10 * time.Second,
+				Max:     5 * time.Minute,
+				Factor:  2.0,
+			},
+			current: 20 * time.Second,
+			want:    40 * time.Second,
+		},
+		{
+			name: "doubling_from_40s",
+			cfg: &BackoffConfig{
+				Initial: 10 * time.Second,
+				Max:     5 * time.Minute,
+				Factor:  2.0,
+			},
+			current: 40 * time.Second,
+			want:    80 * time.Second,
+		},
+		{
+			name: "capped_when_growth_exceeds_max",
+			cfg: &BackoffConfig{
+				Initial: 30 * time.Second,
+				Max:     2 * time.Minute,
+				Factor:  2.0,
+			},
+			current: 90 * time.Second,
+			want:    2 * time.Minute,
+		},
+		{
+			name: "stays_at_max",
+			cfg: &BackoffConfig{
+				Initial: 30 * time.Second,
+				Max:     2 * time.Minute,
+				Factor:  2.0,
+			},
+			current: 2 * time.Minute,
+			want:    2 * time.Minute,
+		},
+		{
+			name: "above_max_returns_max",
+			cfg: &BackoffConfig{
+				Initial: 30 * time.Second,
+				Max:     2 * time.Minute,
+				Factor:  2.0,
+			},
+			current: 5 * time.Minute,
+			want:    2 * time.Minute,
+		},
+		{
+			name: "custom_factor_from_10s",
+			cfg: &BackoffConfig{
+				Initial: 10 * time.Second,
+				Max:     10 * time.Minute,
+				Factor:  1.5,
+			},
+			current: 10 * time.Second,
+			want:    15 * time.Second,
+		},
+		{
+			name: "custom_factor_from_15s",
+			cfg: &BackoffConfig{
+				Initial: 10 * time.Second,
+				Max:     10 * time.Minute,
+				Factor:  1.5,
+			},
+			current: 15 * time.Second,
+			want:    time.Duration(float64(15*time.Second) * 1.5),
+		},
 	}
 
-	// Test doubling behavior
-	current := 10 * time.Second
-	next := cfg.CalculateNextBackoff(current)
-	assert.Equal(t, 20*time.Second, next, "should double from 10s to 20s")
-
-	current = 20 * time.Second
-	next = cfg.CalculateNextBackoff(current)
-	assert.Equal(t, 40*time.Second, next, "should double from 20s to 40s")
-
-	current = 40 * time.Second
-	next = cfg.CalculateNextBackoff(current)
-	assert.Equal(t, 80*time.Second, next, "should double from 40s to 80s")
-}
-
-func TestBackoffConfig_CalculateNextBackoff_Capped(t *testing.T) {
-	cfg := &BackoffConfig{
-		Initial: 30 * time.Second,
-		Max:     2 * time.Minute,
-		Factor:  2.0,
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, tt.cfg.CalculateNextBackoff(tt.current))
+		})
 	}
-
-	// Test capping at max
-	current := 90 * time.Second // 90s * 2 = 180s = 3min, but max is 2min
-	next := cfg.CalculateNextBackoff(current)
-	assert.Equal(t, 2*time.Minute, next, "should cap at 2min")
-
-	// Test already at max
-	current = 2 * time.Minute
-	next = cfg.CalculateNextBackoff(current)
-	assert.Equal(t, 2*time.Minute, next, "should stay at max")
-
-	// Test above max
-	current = 5 * time.Minute
-	next = cfg.CalculateNextBackoff(current)
-	assert.Equal(t, 2*time.Minute, next, "should return max when current > max")
-}
-
-func TestBackoffConfig_CalculateNextBackoff_CustomFactor(t *testing.T) {
-	cfg := &BackoffConfig{
-		Initial: 10 * time.Second,
-		Max:     10 * time.Minute,
-		Factor:  1.5, // 1.5x growth instead of 2x
-	}
-
-	current := 10 * time.Second
-	next := cfg.CalculateNextBackoff(current)
-	assert.Equal(t, 15*time.Second, next, "should multiply by 1.5 from 10s to 15s")
-
-	current = 15 * time.Second
-	next = cfg.CalculateNextBackoff(current)
-	expected := time.Duration(float64(15*time.Second) * 1.5)
-	assert.Equal(t, expected, next, "should multiply by 1.5 from 15s")
 }
 
 func TestDefaultBackoffConfig(t *testing.T) {

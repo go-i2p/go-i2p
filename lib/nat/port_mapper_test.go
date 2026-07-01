@@ -33,9 +33,9 @@ func TestPortMapperManager_CreateAndStop(t *testing.T) {
 	assert.NoError(t, err, "Stop should not return error")
 }
 
-// TestPortMapperManager_GetExternalPort_NoMapping tests that GetExternalPort
-// returns 0 when no mapping is active.
-func TestPortMapperManager_GetExternalPort_NoMapping(t *testing.T) {
+// TestPortMapperManager_NoMappingAccessors verifies no-mapping accessors
+// return zero values when the retry loop is never allowed to run.
+func TestPortMapperManager_NoMappingAccessors(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately to prevent retry loop from doing anything
 
@@ -46,29 +46,22 @@ func TestPortMapperManager_GetExternalPort_NoMapping(t *testing.T) {
 	}
 
 	pmm := NewPortMapperManager(cfg)
-	port := pmm.GetExternalPort()
-	assert.Equal(t, 0, port, "should return 0 when no mapping active")
+	defer pmm.Stop()
 
-	_ = pmm.Stop()
-}
-
-// TestPortMapperManager_GetExternalIP_NoMapping tests that GetExternalIP
-// returns empty string when no mapping is active.
-func TestPortMapperManager_GetExternalIP_NoMapping(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // Cancel immediately to prevent retry loop from doing anything
-
-	cfg := &PortMapperConfig{
-		Network:      "udp",
-		InternalPort: 9001,
-		Context:      ctx,
+	tests := []struct {
+		name string
+		got  any
+		want any
+	}{
+		{name: "external_port", got: pmm.GetExternalPort(), want: 0},
+		{name: "external_ip", got: pmm.GetExternalIP(), want: ""},
 	}
 
-	pmm := NewPortMapperManager(cfg)
-	ip := pmm.GetExternalIP()
-	assert.Equal(t, "", ip, "should return empty string when no mapping active")
-
-	_ = pmm.Stop()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, tt.got, "expected zero-value accessor result when no mapping is active")
+		})
+	}
 }
 
 // TestPortMapperManager_StopTwice_Idempotent tests that calling Stop() twice is safe.
