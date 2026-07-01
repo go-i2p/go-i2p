@@ -164,7 +164,7 @@ detect_default_branch() {
 
 sync_repo_to_latest_checked_in() {
   branch=$(detect_default_branch) || return 1
-  if [ "$DRY_RUN" = true ]; then
+  if [ "$CHECKIN_DRY_RUN" = true ]; then
     echo "Dry run: skipping sync to origin/$branch in $(pwd)" 1>&2
     return 0
   fi
@@ -197,11 +197,44 @@ hash_var_for_repo() {
   return 1
 }
 
+remote_has_hash() {
+  repo=$1
+  hash=$2
+  /usr/bin/git -C "$GOI2P_DIR/$repo" ls-remote origin 2>/dev/null | awk '{print $1}' | grep -qi "^$hash$"
+}
+
+ensure_hash_published() {
+  repo=$1
+  hash=$2
+
+  if remote_has_hash "$repo" "$hash"; then
+    return 0
+  fi
+
+  if [ "$CHECKIN_DRY_RUN" = true ]; then
+    echo "ERROR: $repo hash $hash is not available on origin during dry-run" 1>&2
+    return 1
+  fi
+
+  cd "$GOI2P_DIR/$repo" || return 1
+  branch=$(detect_default_branch) || return 1
+  echo "Publishing missing hash $hash for $repo via origin/$branch" 1>&2
+  /usr/bin/git push origin "$branch" 1>&2 || return 1
+  cd "$GOI2P_DIR" || return 1
+
+  if ! remote_has_hash "$repo" "$hash"; then
+    echo "ERROR: $repo hash $hash still not visible on origin after push" 1>&2
+    return 1
+  fi
+  return 0
+}
+
 collect_all_hashes() {
   for entry in $HASH_REPOS_PAIRS; do
     repo=${entry%%:*}
     var=${entry#*:}
     hash=$(collecthash "$repo") || exit 1
+    ensure_hash_published "$repo" "$hash" || exit 1
     assign_var "$var" "$hash"
     echo "$repo tag hash: $hash" 1>&2
   done
@@ -232,15 +265,70 @@ verify_resolved_by_hash() {
   esac
 }
 
+resolve_version_for_hash() {
+  module=$1
+  hash=$2
+  GOPROXY=direct go mod download -json "$module@$hash" 2>/dev/null | sed -n 's/^[[:space:]]*"Version": "\([^"]*\)",/\1/p' | head -n 1
+}
+
+ensure_version_downloadable() {
+  module=$1
+  version=$2
+  GOPROXY=direct go mod download "$module@$version" 1>&2
+}
+
+drop_local_replace() {
+  module=$1
+  /usr/bin/go mod edit -dropreplace "$module" 2>/dev/null || true
+}
+
+force_update_by_hash() {
+  repo=$1
+  hash=$2
+  module="github.com/go-i2p/$repo"
+
+  echo "updating $repo to tag hash $hash" 1>&2
+  if [ -z "$hash" ]; then
+    echo "ERROR: empty tag hash for $module" 1>&2
+    exit 1
+  fi
+
+  drop_local_replace "$module"
+  resolved_version=$(resolve_version_for_hash "$module" "$hash")
+  if [ -z "$resolved_version" ]; then
+    echo "ERROR: could not resolve pseudo-version for $module@$hash" 1>&2
+    exit 1
+  fi
+
+  if ! ensure_version_downloadable "$module" "$resolved_version"; then
+    echo "ERROR: direct hash download failed for $module@$hash" 1>&2
+    exit 1
+  fi
+
+  /usr/bin/go mod edit -require "$module@$resolved_version"
+  verify_resolved_by_hash "$repo" "$hash"
+}
+
+force_update_by_version() {
+  repo=$1
+  version=$2
+  module="github.com/go-i2p/$repo"
+
+  echo "updating $repo to version $version" 1>&2
+  drop_local_replace "$module"
+  if ! ensure_version_downloadable "$module" "$version"; then
+    echo "ERROR: direct version update failed for $module@$version" 1>&2
+    exit 1
+  fi
+  /usr/bin/go mod edit -require "$module@$version"
+  verify_resolved_by_version "$repo" "$version"
+}
+
 # go get all our packages at the new version
 # use go mod tidy to clean up unused deps
 update_our_packages() {
   echo "Updating the packages" 1>&2
   current_repo=$(basename "$(pwd)")
-
-  # Build one atomic go get request for all target modules to avoid
-  # sequential MVS churn that appears as mid-run downgrades/upgrades.
-  set --
   for repo in $UPDATE_ORDER; do
     if [ "$repo" = "$current_repo" ]; then
       echo "Skipping self-update for $repo" 1>&2
@@ -248,34 +336,29 @@ update_our_packages() {
     fi
     var=$(hash_var_for_repo "$repo")
     hash=$(value_of "$var")
-    module="github.com/go-i2p/$repo"
-    echo "queueing $repo at tag hash $hash" 1>&2
-    if [ -z "$hash" ]; then
-      echo "ERROR: empty tag hash for $module" 1>&2
-      exit 1
-    fi
-    set -- "$@" "$module@$hash"
+    force_update_by_hash "$repo" "$hash"
   done
 
-  if ! go get "$@" 1>&2; then
-    echo "ERROR: atomic go get by hash failed" 1>&2
-    exit 1
-  fi
-
+  # Reconcile once more so later module updates cannot undo earlier pins.
+  echo "Reconciling all hash-pinned updates" 1>&2
   for repo in $UPDATE_ORDER; do
     if [ "$repo" = "$current_repo" ]; then
       continue
     fi
     var=$(hash_var_for_repo "$repo")
     hash=$(value_of "$var")
-    verify_resolved_by_hash "$repo" "$hash"
+    force_update_by_hash "$repo" "$hash"
   done
 
   go mod tidy -v 1>&2
   go build -v ./... 1>&2
   gofumpt -w -s -extra . 1>&2
   echo "Updated our packages to upcoming v$VERSION by specific hashes" 1>&2
-  /usr/bin/git commit -am "Update dependencies to v$VERSION" 1>&2
+  if [ "$CHECKIN_DRY_RUN" = true ]; then
+    echo "Dry run: skipping dependency update commit" 1>&2
+  else
+    /usr/bin/git commit -am "Update dependencies to v$VERSION" 1>&2
+  fi
 }
 
 verify_resolved_by_version() {
@@ -294,35 +377,32 @@ verify_resolved_by_version() {
 correct_our_tags() {
   echo "Updating the packages" 1>&2
   current_repo=$(basename "$(pwd)")
-
-  set --
   for repo in $UPDATE_ORDER; do
     if [ "$repo" = "$current_repo" ]; then
       echo "Skipping self-update for $repo" 1>&2
       continue
     fi
-    module="github.com/go-i2p/$repo"
-    echo "queueing $repo at version v$VERSION" 1>&2
-    set -- "$@" "$module@v$VERSION"
+    force_update_by_version "$repo" "v$VERSION"
   done
 
-  if ! go get "$@" 1>&2; then
-    echo "ERROR: atomic go get by version failed" 1>&2
-    exit 1
-  fi
-
+  # Reconcile once more so later module updates cannot undo earlier pins.
+  echo "Reconciling all version-pinned updates" 1>&2
   for repo in $UPDATE_ORDER; do
     if [ "$repo" = "$current_repo" ]; then
       continue
     fi
-    verify_resolved_by_version "$repo" "v$VERSION"
+    force_update_by_version "$repo" "v$VERSION"
   done
 
   go mod tidy -v 1>&2
   go build -v ./... 1>&2
   gofumpt -w -s -extra . 1>&2
   echo "Updated our packages to v$VERSION" 1>&2
-  /usr/bin/git commit -am "Update dependencies to v$VERSION" 1>&2
+  if [ "$CHECKIN_DRY_RUN" = true ]; then
+    echo "Dry run: skipping dependency update commit" 1>&2
+  else
+    /usr/bin/git commit -am "Update dependencies to v$VERSION" 1>&2
+  fi
 }
 
 cleanup() {
@@ -332,6 +412,11 @@ cleanup() {
 tagandrelease() {
   cd "$GOI2P_DIR"
   cd "$1"
+  hash_var=$(hash_var_for_repo "$1" || true)
+  START_HASH=$(value_of "$hash_var")
+  if [ -z "$START_HASH" ]; then
+    START_HASH=$(/usr/bin/git rev-parse HEAD)
+  fi
   echo "tagging and releasing $1 v$VERSION" 1>&2
   sync_repo_to_latest_checked_in
   #cleanup
@@ -348,9 +433,8 @@ tagandrelease() {
       /usr/bin/git commit -am "library sync for v$VERSION" 1>&2
       push 1>&2
     fi
-    TAG_HASH=$(/usr/bin/git rev-parse "HEAD")
-    echo "$1 v$VERSION tag hash: $TAG_HASH" 1>&2
-    echo "$TAG_HASH"
+    echo "$1 v$VERSION dry-run hash: $START_HASH" 1>&2
+    echo "$START_HASH"
     return
   fi
   # if release nodes is less than 6 lines long, delete it and create a placeholder
