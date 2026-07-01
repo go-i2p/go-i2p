@@ -685,6 +685,7 @@ func (hlp *HostLookupPayload) MarshalBinary() ([]byte, error) {
 // If ResultCode is 0 (success), Destination contains the full destination structure.
 // If ResultCode is non-zero, Destination is empty.
 type HostReplyPayload struct {
+	SessionID   uint16 // Session ID that served the lookup (i2pd wire shape)
 	RequestID   uint32 // Matches RequestID from HostLookup
 	ResultCode  uint8  // 0=success, non-zero=error
 	Destination []byte // Full destination (empty if error)
@@ -703,36 +704,41 @@ const (
 //
 // Wire format:
 //
-//	bytes 0-3:   RequestID (uint32, big endian)
-//	byte 4:      ResultCode (uint8)
-//	bytes 5+:    Destination (optional, only if ResultCode=0)
+//	bytes 0-1:   SessionID (uint16, big endian)
+//	bytes 2-5:   RequestID (uint32, big endian)
+//	byte 6:      ResultCode (uint8)
+//	bytes 7+:    Destination (optional, only if ResultCode=0)
 func ParseHostReplyPayload(data []byte) (*HostReplyPayload, error) {
-	// Minimum size: 4 (requestID) + 1 (resultCode) = 5 bytes
-	if len(data) < 5 {
+	// Minimum size: 2 (sessionID) + 4 (requestID) + 1 (resultCode) = 7 bytes
+	if len(data) < 7 {
 		log.WithFields(logger.Fields{
 			"at":       "i2cp.ParseHostReplyPayload",
 			"dataSize": len(data),
-			"required": 5,
+			"required": 7,
 		}).Error("host_reply_payload_too_short")
-		return nil, oops.Errorf("host reply payload too short: need at least 5 bytes, got %d", len(data))
+		return nil, oops.Errorf("host reply payload too short: need at least 7 bytes, got %d", len(data))
 	}
 
 	hrp := &HostReplyPayload{}
 
-	// Parse request ID (first 4 bytes, big endian)
-	hrp.RequestID = binary.BigEndian.Uint32(data[0:4])
+	// Parse session ID (first 2 bytes, big endian)
+	hrp.SessionID = binary.BigEndian.Uint16(data[0:2])
 
-	// Parse result code (byte 4)
-	hrp.ResultCode = data[4]
+	// Parse request ID (next 4 bytes, big endian)
+	hrp.RequestID = binary.BigEndian.Uint32(data[2:6])
+
+	// Parse result code (byte 6)
+	hrp.ResultCode = data[6]
 
 	// Parse destination (remaining bytes, if any)
-	if len(data) > 5 {
-		hrp.Destination = make([]byte, len(data)-5)
-		copy(hrp.Destination, data[5:])
+	if len(data) > 7 {
+		hrp.Destination = make([]byte, len(data)-7)
+		copy(hrp.Destination, data[7:])
 	}
 
 	log.WithFields(logger.Fields{
 		"at":         "i2cp.ParseHostReplyPayload",
+		"sessionID":  hrp.SessionID,
 		"requestID":  hrp.RequestID,
 		"resultCode": hrp.ResultCode,
 		"destSize":   len(hrp.Destination),
@@ -744,22 +750,26 @@ func ParseHostReplyPayload(data []byte) (*HostReplyPayload, error) {
 // MarshalBinary serializes the HostReplyPayload to wire format.
 // Returns the serialized bytes ready to be sent as an I2CP message payload.
 func (hrp *HostReplyPayload) MarshalBinary() ([]byte, error) {
-	totalSize := 4 + 1 + len(hrp.Destination) // requestID + resultCode + destination
+	totalSize := 2 + 4 + 1 + len(hrp.Destination) // sessionID + requestID + resultCode + destination
 	result := make([]byte, totalSize)
 
+	// Write session ID (big endian)
+	binary.BigEndian.PutUint16(result[0:2], hrp.SessionID)
+
 	// Write request ID (big endian)
-	binary.BigEndian.PutUint32(result[0:4], hrp.RequestID)
+	binary.BigEndian.PutUint32(result[2:6], hrp.RequestID)
 
 	// Write result code
-	result[4] = hrp.ResultCode
+	result[6] = hrp.ResultCode
 
 	// Write destination (if present)
 	if len(hrp.Destination) > 0 {
-		copy(result[5:], hrp.Destination)
+		copy(result[7:], hrp.Destination)
 	}
 
 	log.WithFields(logger.Fields{
 		"at":         "i2cp.HostReplyPayload.MarshalBinary",
+		"sessionID":  hrp.SessionID,
 		"requestID":  hrp.RequestID,
 		"resultCode": hrp.ResultCode,
 		"destSize":   len(hrp.Destination),

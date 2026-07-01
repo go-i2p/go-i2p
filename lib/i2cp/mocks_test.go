@@ -474,11 +474,11 @@ func buildSendMessageRequest(t *testing.T, dest, payload string) (*Server, *Sess
 	session, err := server.manager.CreateSession(nil, nil)
 	require.NoError(t, err, "CreateSession()")
 
-	var destHash common.Hash
-	copy(destHash[:], []byte(dest))
+	testDest, err := createTestDestination()
+	require.NoError(t, err, "createTestDestination()")
 
 	sendPayload := &SendMessagePayload{
-		Destination: destHash,
+		Destination: *testDest,
 		Payload:     []byte(payload),
 	}
 

@@ -197,10 +197,11 @@ func setupAuthTestServer(t *testing.T) (*Server, *httptest.Server) {
 	t.Helper()
 	stats := &mockStatsForAuth{running: true}
 	cfg := &config.I2PControlConfig{
-		Enabled:  true,
-		Address:  "127.0.0.1:0",
-		Password: "testpassword",
-		UseHTTPS: false,
+		Enabled:    true,
+		Address:    "127.0.0.1:0",
+		Password:   "testpassword",
+		UseHTTPS:   false,
+		StrictAuth: false,
 	}
 
 	server, err := NewServer(cfg, stats)
@@ -211,8 +212,27 @@ func setupAuthTestServer(t *testing.T) (*Server, *httptest.Server) {
 	return server, ts
 }
 
-// TestAuthorizationRequiredForProtectedMethods verifies protected methods require authentication.
-func TestAuthorizationRequiredForProtectedMethods(t *testing.T) {
+func setupStrictAuthTestServer(t *testing.T) (*Server, *httptest.Server) {
+	t.Helper()
+	stats := &mockStatsForAuth{running: true}
+	cfg := &config.I2PControlConfig{
+		Enabled:    true,
+		Address:    "127.0.0.1:0",
+		Password:   "testpassword",
+		UseHTTPS:   false,
+		StrictAuth: true,
+	}
+
+	server, err := NewServer(cfg, stats)
+	require.NoError(t, err)
+
+	ts := httptest.NewServer(http.HandlerFunc(server.handleRPC))
+	t.Cleanup(func() { ts.Close() })
+	return server, ts
+}
+
+// TestAuthorizationCompatModeAllowsMethodsWithoutToken verifies i2pd-compatible default behavior.
+func TestAuthorizationCompatModeAllowsMethodsWithoutToken(t *testing.T) {
 	_, ts := setupAuthTestServer(t)
 
 	// List of protected methods (require authentication)
@@ -227,8 +247,31 @@ func TestAuthorizationRequiredForProtectedMethods(t *testing.T) {
 	for _, method := range protectedMethods {
 		t.Run(method+"_without_token", func(t *testing.T) {
 			rpcResp := postRPC(t, ts.URL, method, map[string]interface{}{})
+			if rpcResp.Error == nil {
+				return
+			}
+			assert.NotEqual(t, ErrCodeAuthRequired, rpcResp.Error.Code, "Method %s should not be rejected for missing token in compat mode", method)
+			assert.NotEqual(t, ErrCodeTokenNotExist, rpcResp.Error.Code, "Method %s should not be rejected for invalid token in compat mode", method)
+		})
+	}
+}
 
-			assert.NotNil(t, rpcResp.Error, "Method %s should require authentication", method)
+// TestAuthorizationRequiredForProtectedMethodsStrict verifies protected methods require authentication when strict_auth=true.
+func TestAuthorizationRequiredForProtectedMethodsStrict(t *testing.T) {
+	_, ts := setupStrictAuthTestServer(t)
+
+	protectedMethods := []string{
+		"GetRate",
+		"RouterInfo",
+		"RouterManager",
+		"NetworkSetting",
+		"I2PControl",
+	}
+
+	for _, method := range protectedMethods {
+		t.Run(method+"_without_token", func(t *testing.T) {
+			rpcResp := postRPC(t, ts.URL, method, map[string]interface{}{})
+			assert.NotNil(t, rpcResp.Error, "Method %s should require authentication in strict mode", method)
 			if rpcResp.Error != nil {
 				assert.True(t, rpcResp.Error.Code == ErrCodeInvalidParams || rpcResp.Error.Code == ErrCodeAuthRequired,
 					"Expected auth error for %s, got code %d: %s", method, rpcResp.Error.Code, rpcResp.Error.Message)
@@ -254,15 +297,26 @@ func TestAuthorizationAuthenticateMethodNoTokenRequired(t *testing.T) {
 	assert.Contains(t, result, "Token", "Expected Token in response")
 }
 
-// TestAuthorizationInvalidTokenRejected verifies invalid tokens are rejected.
-func TestAuthorizationInvalidTokenRejected(t *testing.T) {
+// TestAuthorizationInvalidTokenAcceptedInCompatMode verifies invalid tokens are tolerated in compatibility mode.
+func TestAuthorizationInvalidTokenAcceptedInCompatMode(t *testing.T) {
 	_, ts := setupAuthTestServer(t)
 
 	rpcResp := postRPC(t, ts.URL, "RouterInfo", map[string]interface{}{
 		"Token": "invalid_fake_token_12345",
 	})
 
-	assert.NotNil(t, rpcResp.Error, "Expected error for invalid token")
+	assert.Nil(t, rpcResp.Error, "Invalid token should be tolerated in compatibility mode")
+}
+
+// TestAuthorizationInvalidTokenRejectedStrict verifies invalid tokens are rejected when strict_auth=true.
+func TestAuthorizationInvalidTokenRejectedStrict(t *testing.T) {
+	_, ts := setupStrictAuthTestServer(t)
+
+	rpcResp := postRPC(t, ts.URL, "RouterInfo", map[string]interface{}{
+		"Token": "invalid_fake_token_12345",
+	})
+
+	assert.NotNil(t, rpcResp.Error, "Expected error for invalid token in strict mode")
 	if rpcResp.Error != nil {
 		assert.Equal(t, ErrCodeTokenNotExist, rpcResp.Error.Code)
 	}

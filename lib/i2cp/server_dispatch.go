@@ -805,7 +805,7 @@ func (s *Server) handleHostnameLookup(lookupMsg *HostLookupPayload) *HostReplyPa
 			"requestID": lookupMsg.RequestID,
 			"query":     lookupMsg.Query,
 		}).Debug("hostname_lookup_not_implemented")
-		return newErrorReply(lookupMsg.RequestID, HostReplyError)
+		return newErrorReply(lookupMsg.SessionID, lookupMsg.RequestID, HostReplyError)
 	}
 
 	destBytes, err := s.hostnameResolver.ResolveHostname(lookupMsg.Query)
@@ -816,7 +816,7 @@ func (s *Server) handleHostnameLookup(lookupMsg *HostLookupPayload) *HostReplyPa
 			"hostname":  lookupMsg.Query,
 			"error":     err.Error(),
 		}).Debug("hostname_lookup_failed")
-		return newErrorReply(lookupMsg.RequestID, HostReplyNotFound)
+		return newErrorReply(lookupMsg.SessionID, lookupMsg.RequestID, HostReplyNotFound)
 	}
 
 	log.WithFields(logger.Fields{
@@ -826,6 +826,7 @@ func (s *Server) handleHostnameLookup(lookupMsg *HostLookupPayload) *HostReplyPa
 		"destLen":   len(destBytes),
 	}).Debug("hostname_lookup_resolved")
 	return &HostReplyPayload{
+		SessionID:   lookupMsg.SessionID,
 		RequestID:   lookupMsg.RequestID,
 		ResultCode:  HostReplySuccess,
 		Destination: destBytes,
@@ -839,11 +840,13 @@ func handleUnknownLookupType(lookupMsg *HostLookupPayload) *HostReplyPayload {
 		"requestID":  lookupMsg.RequestID,
 		"lookupType": lookupMsg.LookupType,
 	}).Warn("unknown_lookup_type")
-	return newErrorReply(lookupMsg.RequestID, HostReplyError)
+	return newErrorReply(lookupMsg.SessionID, lookupMsg.RequestID, HostReplyError)
 }
 
 // buildHostReplyMessage constructs the host reply message from payload.
 func buildHostReplyMessage(sessionID uint16, replyPayload *HostReplyPayload) (*Message, error) {
+	replyPayload.SessionID = sessionID
+
 	replyData, err := replyPayload.MarshalBinary()
 	if err != nil {
 		log.WithFields(logger.Fields{
@@ -938,8 +941,9 @@ func buildDestReplyMessage(sessionID uint16, payload []byte) *Message {
 // lookupDestinationByHash queries NetDB for a LeaseSet by hash and extracts the destination.
 // Returns HostReplyPayload with the destination bytes if found, or an error code if not found.
 // newErrorReply creates an error HostReplyPayload with the given error code.
-func newErrorReply(requestID uint32, code uint8) *HostReplyPayload {
+func newErrorReply(sessionID uint16, requestID uint32, code uint8) *HostReplyPayload {
 	return &HostReplyPayload{
+		SessionID:   sessionID,
 		RequestID:   requestID,
 		ResultCode:  code,
 		Destination: nil,
@@ -962,7 +966,7 @@ func parseDestinationHash(lookupMsg *HostLookupPayload) (common.Hash, *HostReply
 			"requestID": lookupMsg.RequestID,
 			"queryLen":  len(lookupMsg.Query),
 		}).Warn("query_too_short_for_hash")
-		return destHash, newErrorReply(lookupMsg.RequestID, HostReplyError)
+		return destHash, newErrorReply(lookupMsg.SessionID, lookupMsg.RequestID, HostReplyError)
 	}
 
 	_, err := fmt.Sscanf(lookupMsg.Query[:64], "%x", &destHash)
@@ -973,7 +977,7 @@ func parseDestinationHash(lookupMsg *HostLookupPayload) (common.Hash, *HostReply
 			"query":     lookupMsg.Query,
 			"error":     err.Error(),
 		}).Warn("invalid_hash_format")
-		return destHash, newErrorReply(lookupMsg.RequestID, HostReplyError)
+		return destHash, newErrorReply(lookupMsg.SessionID, lookupMsg.RequestID, HostReplyError)
 	}
 
 	return destHash, nil
@@ -981,7 +985,7 @@ func parseDestinationHash(lookupMsg *HostLookupPayload) (common.Hash, *HostReply
 
 // queryLeaseSetFromNetDB queries the NetDB for a LeaseSet and extracts the destination.
 // Returns the destination bytes and nil if successful, or nil and an error reply if the query fails.
-func (s *Server) queryLeaseSetFromNetDB(destHash common.Hash, requestID uint32) ([]byte, *HostReplyPayload) {
+func (s *Server) queryLeaseSetFromNetDB(destHash common.Hash, sessionID uint16, requestID uint32) ([]byte, *HostReplyPayload) {
 	leaseSetBytes, err := s.netdb.GetLeaseSetBytes(destHash)
 	if err != nil {
 		log.WithFields(logger.Fields{
@@ -990,7 +994,7 @@ func (s *Server) queryLeaseSetFromNetDB(destHash common.Hash, requestID uint32) 
 			"destHash":  logutil.HashPrefixPlain(destHash),
 			"error":     err.Error(),
 		}).Debug("leaseset_not_found_in_netdb")
-		return nil, newErrorReply(requestID, HostReplyNotFound)
+		return nil, newErrorReply(sessionID, requestID, HostReplyNotFound)
 	}
 
 	destination, err := s.extractDestinationFromLeaseSet(leaseSetBytes)
@@ -1001,7 +1005,7 @@ func (s *Server) queryLeaseSetFromNetDB(destHash common.Hash, requestID uint32) 
 			"destHash":  logutil.HashPrefixPlain(destHash),
 			"error":     err.Error(),
 		}).Error("failed_to_extract_destination")
-		return nil, newErrorReply(requestID, HostReplyError)
+		return nil, newErrorReply(sessionID, requestID, HostReplyError)
 	}
 
 	return destination, nil
@@ -1013,7 +1017,7 @@ func (s *Server) lookupDestinationByHash(lookupMsg *HostLookupPayload) *HostRepl
 			"at":        "i2cp.Server.lookupDestinationByHash",
 			"requestID": lookupMsg.RequestID,
 		}).Warn("no_netdb_configured")
-		return newErrorReply(lookupMsg.RequestID, HostReplyError)
+		return newErrorReply(lookupMsg.SessionID, lookupMsg.RequestID, HostReplyError)
 	}
 
 	destHash, errReply := parseDestinationHash(lookupMsg)
@@ -1021,7 +1025,7 @@ func (s *Server) lookupDestinationByHash(lookupMsg *HostLookupPayload) *HostRepl
 		return errReply
 	}
 
-	destination, errReply := s.queryLeaseSetFromNetDB(destHash, lookupMsg.RequestID)
+	destination, errReply := s.queryLeaseSetFromNetDB(destHash, lookupMsg.SessionID, lookupMsg.RequestID)
 	if errReply != nil {
 		return errReply
 	}
@@ -1034,6 +1038,7 @@ func (s *Server) lookupDestinationByHash(lookupMsg *HostLookupPayload) *HostRepl
 	}).Info("destination_found")
 
 	return &HostReplyPayload{
+		SessionID:   lookupMsg.SessionID,
 		RequestID:   lookupMsg.RequestID,
 		ResultCode:  HostReplySuccess,
 		Destination: destination,

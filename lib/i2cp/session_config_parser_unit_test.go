@@ -501,3 +501,25 @@ func TestFullParsePipeline_NewOptions(t *testing.T) {
 	assert.NotContains(t, config.UnsupportedOptions, "i2cp.encryptLeaseSet")
 	assert.Contains(t, config.UnsupportedOptions, "i2cp.messageReliability")
 }
+
+func TestParseSessionOptions_RecordsUnsupportedKeys(t *testing.T) {
+	config := DefaultSessionConfig()
+	options := map[string]string{
+		"inbound.length":          "3",
+		"i2cp.leaseSetAuthType":   "1",
+		"i2cp.leaseSetClient.psk": "abc123",
+		"trustedRouters":          "routerA,routerB",
+	}
+
+	applyTunnelLengthOptions(config, options)
+	applyTunnelQuantityOptions(config, options)
+	applyTunnelLifetimeOptions(config, options)
+	applyMessageOptions(config, options)
+	applyMetadataOptions(config, options)
+	recordUnsupportedSessionOptions(config, options)
+
+	assert.Equal(t, "1", config.UnsupportedOptions["i2cp.leaseSetAuthType"])
+	assert.Equal(t, "abc123", config.UnsupportedOptions["i2cp.leaseSetClient.psk"])
+	assert.Equal(t, "routerA,routerB", config.UnsupportedOptions["trustedRouters"])
+	assert.NotContains(t, config.UnsupportedOptions, "inbound.length")
+}

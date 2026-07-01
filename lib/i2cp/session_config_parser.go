@@ -275,8 +275,48 @@ func parseSessionOptions(optionsBytes []byte) (*SessionConfig, error) {
 	applyTunnelLifetimeOptions(config, optionsMap)
 	applyMessageOptions(config, optionsMap)
 	applyMetadataOptions(config, optionsMap)
+	recordUnsupportedSessionOptions(config, optionsMap)
 
 	return config, nil
+}
+
+var supportedSessionOptionKeys = map[string]struct{}{
+	"inbound.length":           {},
+	"outbound.length":          {},
+	"inbound.quantity":         {},
+	"outbound.quantity":        {},
+	"inbound.backupQuantity":   {},
+	"outbound.backupQuantity":  {},
+	"inbound.lengthVariance":   {},
+	"outbound.lengthVariance":  {},
+	"i2cp.messageReliability":  {},
+	"i2cp.gzip":                {},
+	"i2cp.encryptLeaseSet":     {},
+	"i2cp.dontPublishLeaseSet": {},
+	"inbound.nickname":         {},
+	"outbound.nickname":        {},
+}
+
+// recordUnsupportedSessionOptions captures options supplied by clients that are
+// currently not implemented by go-i2p so compatibility gaps are explicit.
+func recordUnsupportedSessionOptions(config *SessionConfig, options map[string]string) {
+	for key, value := range options {
+		if _, supported := supportedSessionOptionKeys[key]; supported {
+			continue
+		}
+		if config.UnsupportedOptions == nil {
+			config.UnsupportedOptions = make(map[string]string)
+		}
+		if _, alreadyRecorded := config.UnsupportedOptions[key]; alreadyRecorded {
+			continue
+		}
+		config.UnsupportedOptions[key] = value
+		log.WithFields(logger.Fields{
+			"at":     "i2cp.recordUnsupportedSessionOptions",
+			"option": key,
+			"value":  value,
+		}).Warn("unsupported_session_option")
+	}
 }
 
 // mappingToGoMap converts an I2P Mapping to a Go map[string]string.

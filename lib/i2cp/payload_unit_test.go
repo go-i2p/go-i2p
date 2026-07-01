@@ -104,16 +104,15 @@ func TestParseSendMessagePayload(t *testing.T) {
 
 // TestSendMessagePayloadMarshalBinary tests marshaling of SendMessagePayload
 func TestSendMessagePayloadMarshalBinary(t *testing.T) {
-	// Create test destination hash
-	var destHash data.Hash
-	for i := 0; i < 32; i++ {
-		destHash[i] = byte(i * 2)
-	}
+	dest, err := createTestDestination()
+	require.NoError(t, err)
+	destBytes, err := dest.Bytes()
+	require.NoError(t, err)
 
 	payload := []byte("Test message payload")
 
 	smp := &SendMessagePayload{
-		Destination: destHash,
+		Destination: *dest,
 		Payload:     payload,
 	}
 
@@ -121,23 +120,25 @@ func TestSendMessagePayloadMarshalBinary(t *testing.T) {
 	data, err := smp.MarshalBinary()
 	require.NoError(t, err)
 
-	expectedSize := 32 + len(payload)
+	expectedSize := len(destBytes) + 4 + len(payload) + 4
 	assert.Equal(t, expectedSize, len(data), "marshaled size")
 
-	for i := 0; i < 32; i++ {
-		assert.Equal(t, byte(i*2), data[i], "destination byte %d", i)
-	}
+	assert.True(t, bytes.Equal(destBytes, data[:len(destBytes)]), "destination bytes mismatch")
+	payloadLen := binary.BigEndian.Uint32(data[len(destBytes) : len(destBytes)+4])
+	assert.Equal(t, uint32(len(payload)), payloadLen, "payload length field")
 
-	assert.True(t, bytes.Equal(data[32:], payload), "payload mismatch")
+	payloadStart := len(destBytes) + 4
+	payloadEnd := payloadStart + len(payload)
+	assert.True(t, bytes.Equal(data[payloadStart:payloadEnd], payload), "payload mismatch")
 }
 
 // TestSendMessagePayloadRoundTrip tests marshal/unmarshal round trip
 func TestSendMessagePayloadRoundTrip(t *testing.T) {
-	var destHash data.Hash
-	copy(destHash[:], []byte("this_is_a_32_byte_destination!!"))
+	dest, err := createTestDestination()
+	require.NoError(t, err)
 
 	original := &SendMessagePayload{
-		Destination: destHash,
+		Destination: *dest,
 		Payload:     []byte("Round trip test payload"),
 	}
 
@@ -149,7 +150,7 @@ func TestSendMessagePayloadRoundTrip(t *testing.T) {
 	result, err := ParseSendMessagePayload(data)
 	require.NoError(t, err)
 
-	assert.Equal(t, original.Destination, result.Destination, "destination")
+	assert.True(t, original.Destination.Equals(&result.Destination), "destination")
 	assert.True(t, bytes.Equal(original.Payload, result.Payload), "payload")
 }
 
@@ -288,17 +289,19 @@ func TestMessagePayloadPayloadRoundTrip(t *testing.T) {
 
 // TestSendMessagePayloadEmptyPayload tests handling of empty payload
 func TestSendMessagePayloadEmptyPayload(t *testing.T) {
-	var destHash data.Hash
-	copy(destHash[:], make([]byte, 32))
+	dest, err := createTestDestination()
+	require.NoError(t, err)
+	destBytes, err := dest.Bytes()
+	require.NoError(t, err)
 
 	smp := &SendMessagePayload{
-		Destination: destHash,
+		Destination: *dest,
 		Payload:     []byte{},
 	}
 
 	data, err := smp.MarshalBinary()
 	require.NoError(t, err)
-	assert.Equal(t, 32, len(data), "marshaled size")
+	assert.Equal(t, len(destBytes)+8, len(data), "marshaled size")
 
 	result, err := ParseSendMessagePayload(data)
 	require.NoError(t, err)
@@ -973,13 +976,15 @@ func TestSendMessageExpiresPayloadParse(t *testing.T) {
 
 // TestSendMessageExpiresPayloadMarshal tests marshaling of SendMessageExpires payload
 func TestSendMessageExpiresPayloadMarshal(t *testing.T) {
-	dest := data.Hash{}
-	copy(dest[:], bytes.Repeat([]byte{0xAA}, 32))
+	dest, err := createTestDestination()
+	require.NoError(t, err)
+	destBytes, err := dest.Bytes()
+	require.NoError(t, err)
 
 	expMs := uint64(time.Now().Add(15 * time.Minute).UnixMilli())
 
 	smp := &SendMessageExpiresPayload{
-		Destination: dest,
+		Destination: *dest,
 		Payload:     []byte("hello world"),
 		Nonce:       0x11223344,
 		Flags:       0x0002,
@@ -989,13 +994,17 @@ func TestSendMessageExpiresPayloadMarshal(t *testing.T) {
 	marshaled, err := smp.MarshalBinary()
 	require.NoError(t, err)
 
-	expectedSize := 32 + len(smp.Payload) + 12
+	expectedSize := len(destBytes) + 4 + len(smp.Payload) + 12
 	assert.Equal(t, expectedSize, len(marshaled), "marshaled size")
 
-	assert.True(t, bytes.Equal(marshaled[0:32], dest[:]), "destination mismatch")
-	assert.True(t, bytes.Equal(marshaled[32:32+len(smp.Payload)], smp.Payload), "payload mismatch")
+	assert.True(t, bytes.Equal(marshaled[0:len(destBytes)], destBytes), "destination mismatch")
+	payloadLen := binary.BigEndian.Uint32(marshaled[len(destBytes) : len(destBytes)+4])
+	assert.Equal(t, uint32(len(smp.Payload)), payloadLen, "payload length")
+	payloadStart := len(destBytes) + 4
+	payloadEnd := payloadStart + len(smp.Payload)
+	assert.True(t, bytes.Equal(marshaled[payloadStart:payloadEnd], smp.Payload), "payload mismatch")
 
-	offset := 32 + len(smp.Payload)
+	offset := payloadEnd
 	nonce := binary.BigEndian.Uint32(marshaled[offset : offset+4])
 	assert.Equal(t, uint32(0x11223344), nonce, "nonce")
 
@@ -1026,11 +1035,11 @@ func TestSendMessageExpiresRoundTrip(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dest := data.Hash{}
-			copy(dest[:], bytes.Repeat([]byte{0xBB}, 32))
+			dest, err := createTestDestination()
+			require.NoError(t, err)
 
 			original := &SendMessageExpiresPayload{
-				Destination: dest,
+				Destination: *dest,
 				Payload:     tt.payload,
 				Nonce:       0xDEADBEEF,
 				Flags:       0x1234,
@@ -1045,7 +1054,7 @@ func TestSendMessageExpiresRoundTrip(t *testing.T) {
 			parsed, err := ParseSendMessageExpiresPayload(marshaled)
 			require.NoError(t, err)
 
-			assert.Equal(t, original.Destination, parsed.Destination, "destination")
+			assert.True(t, original.Destination.Equals(&parsed.Destination), "destination")
 			assert.True(t, bytes.Equal(original.Payload, parsed.Payload), "payload")
 			assert.Equal(t, original.Nonce, parsed.Nonce, "nonce")
 			assert.Equal(t, original.Flags, parsed.Flags, "flags")
@@ -1293,65 +1302,74 @@ func TestHostLookupRoundTrip(t *testing.T) {
 
 func TestHostReplyPayloadParse(t *testing.T) {
 	tests := []struct {
-		name        string
-		data        []byte
-		wantID      uint32
-		wantCode    uint8
-		wantDestLen int
-		shouldError bool
+		name          string
+		data          []byte
+		wantSessionID uint16
+		wantID        uint32
+		wantCode      uint8
+		wantDestLen   int
+		shouldError   bool
 	}{
 		{
 			name: "success_with_destination",
 			data: func() []byte {
 				buf := new(bytes.Buffer)
+				binary.Write(buf, binary.BigEndian, uint16(0x1234))
 				binary.Write(buf, binary.BigEndian, uint32(12345))
 				buf.WriteByte(HostReplySuccess)
 				buf.Write(make([]byte, 387)) // Standard destination size
 				return buf.Bytes()
 			}(),
-			wantID:      12345,
-			wantCode:    HostReplySuccess,
-			wantDestLen: 387,
-			shouldError: false,
+			wantSessionID: 0x1234,
+			wantID:        12345,
+			wantCode:      HostReplySuccess,
+			wantDestLen:   387,
+			shouldError:   false,
 		},
 		{
 			name: "not_found",
 			data: func() []byte {
 				buf := new(bytes.Buffer)
+				binary.Write(buf, binary.BigEndian, uint16(0x1234))
 				binary.Write(buf, binary.BigEndian, uint32(67890))
 				buf.WriteByte(HostReplyNotFound)
 				return buf.Bytes()
 			}(),
-			wantID:      67890,
-			wantCode:    HostReplyNotFound,
-			wantDestLen: 0,
-			shouldError: false,
+			wantSessionID: 0x1234,
+			wantID:        67890,
+			wantCode:      HostReplyNotFound,
+			wantDestLen:   0,
+			shouldError:   false,
 		},
 		{
 			name: "timeout",
 			data: func() []byte {
 				buf := new(bytes.Buffer)
+				binary.Write(buf, binary.BigEndian, uint16(0x1234))
 				binary.Write(buf, binary.BigEndian, uint32(11111))
 				buf.WriteByte(HostReplyTimeout)
 				return buf.Bytes()
 			}(),
-			wantID:      11111,
-			wantCode:    HostReplyTimeout,
-			wantDestLen: 0,
-			shouldError: false,
+			wantSessionID: 0x1234,
+			wantID:        11111,
+			wantCode:      HostReplyTimeout,
+			wantDestLen:   0,
+			shouldError:   false,
 		},
 		{
 			name: "error",
 			data: func() []byte {
 				buf := new(bytes.Buffer)
+				binary.Write(buf, binary.BigEndian, uint16(0x1234))
 				binary.Write(buf, binary.BigEndian, uint32(99999))
 				buf.WriteByte(HostReplyError)
 				return buf.Bytes()
 			}(),
-			wantID:      99999,
-			wantCode:    HostReplyError,
-			wantDestLen: 0,
-			shouldError: false,
+			wantSessionID: 0x1234,
+			wantID:        99999,
+			wantCode:      HostReplyError,
+			wantDestLen:   0,
+			shouldError:   false,
 		},
 		{
 			name:        "too_short",
@@ -1370,6 +1388,7 @@ func TestHostReplyPayloadParse(t *testing.T) {
 			}
 
 			require.NoError(t, err)
+			assert.Equal(t, tt.wantSessionID, payload.SessionID)
 			assert.Equal(t, tt.wantID, payload.RequestID)
 			assert.Equal(t, tt.wantCode, payload.ResultCode)
 			assert.Equal(t, tt.wantDestLen, len(payload.Destination))
@@ -1386,41 +1405,45 @@ func TestHostReplyPayloadMarshal(t *testing.T) {
 		{
 			name: "success_with_destination",
 			payload: &HostReplyPayload{
+				SessionID:   0x1234,
 				RequestID:   54321,
 				ResultCode:  HostReplySuccess,
 				Destination: make([]byte, 387),
 			},
 			check: func(data []byte) error {
-				assert.Equal(t, 5+387, len(data), "data length")
-				reqID := binary.BigEndian.Uint32(data[0:4])
+				assert.Equal(t, 7+387, len(data), "data length")
+				assert.Equal(t, uint16(0x1234), binary.BigEndian.Uint16(data[0:2]), "SessionID")
+				reqID := binary.BigEndian.Uint32(data[2:6])
 				assert.Equal(t, uint32(54321), reqID, "RequestID")
-				assert.Equal(t, HostReplySuccess, data[4], "ResultCode")
+				assert.Equal(t, HostReplySuccess, data[6], "ResultCode")
 				return nil
 			},
 		},
 		{
 			name: "not_found",
 			payload: &HostReplyPayload{
+				SessionID:   0x1234,
 				RequestID:   11111,
 				ResultCode:  HostReplyNotFound,
 				Destination: nil,
 			},
 			check: func(data []byte) error {
-				assert.Equal(t, 5, len(data), "data length")
-				assert.Equal(t, HostReplyNotFound, data[4], "ResultCode")
+				assert.Equal(t, 7, len(data), "data length")
+				assert.Equal(t, HostReplyNotFound, data[6], "ResultCode")
 				return nil
 			},
 		},
 		{
 			name: "timeout",
 			payload: &HostReplyPayload{
+				SessionID:   0x1234,
 				RequestID:   22222,
 				ResultCode:  HostReplyTimeout,
 				Destination: []byte{}, // Empty slice
 			},
 			check: func(data []byte) error {
-				assert.Equal(t, 5, len(data), "data length")
-				assert.Equal(t, HostReplyTimeout, data[4], "ResultCode")
+				assert.Equal(t, 7, len(data), "data length")
+				assert.Equal(t, HostReplyTimeout, data[6], "ResultCode")
 				return nil
 			},
 		},
@@ -1446,6 +1469,7 @@ func TestHostReplyRoundTrip(t *testing.T) {
 		{
 			name: "success_with_destination",
 			payload: &HostReplyPayload{
+				SessionID:   0x1234,
 				RequestID:   12345,
 				ResultCode:  HostReplySuccess,
 				Destination: make([]byte, 387),
@@ -1454,6 +1478,7 @@ func TestHostReplyRoundTrip(t *testing.T) {
 		{
 			name: "not_found",
 			payload: &HostReplyPayload{
+				SessionID:   0x1234,
 				RequestID:   67890,
 				ResultCode:  HostReplyNotFound,
 				Destination: nil,
@@ -1462,6 +1487,7 @@ func TestHostReplyRoundTrip(t *testing.T) {
 		{
 			name: "timeout",
 			payload: &HostReplyPayload{
+				SessionID:   0x1234,
 				RequestID:   11111,
 				ResultCode:  HostReplyTimeout,
 				Destination: []byte{},
@@ -1470,6 +1496,7 @@ func TestHostReplyRoundTrip(t *testing.T) {
 		{
 			name: "error",
 			payload: &HostReplyPayload{
+				SessionID:   0x1234,
 				RequestID:   99999,
 				ResultCode:  HostReplyError,
 				Destination: nil,
@@ -1485,6 +1512,7 @@ func TestHostReplyRoundTrip(t *testing.T) {
 			parsed, err := ParseHostReplyPayload(data)
 			require.NoError(t, err)
 
+			assert.Equal(t, tt.payload.SessionID, parsed.SessionID)
 			assert.Equal(t, tt.payload.RequestID, parsed.RequestID)
 			assert.Equal(t, tt.payload.ResultCode, parsed.ResultCode)
 			assert.Equal(t, len(tt.payload.Destination), len(parsed.Destination))
@@ -1550,6 +1578,7 @@ func TestHostLookup_PayloadParsing(t *testing.T) {
 // TestHostLookup_ReplyPayloadMarshaling verifies HostReply marshaling.
 func TestHostLookup_ReplyPayloadMarshaling(t *testing.T) {
 	reply := &HostReplyPayload{
+		SessionID:   0x1234,
 		RequestID:   12345,
 		ResultCode:  HostReplySuccess,
 		Destination: make([]byte, 387), // Minimal destination
@@ -1559,8 +1588,9 @@ func TestHostLookup_ReplyPayloadMarshaling(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify header
-	assert.Equal(t, uint32(12345), binary.BigEndian.Uint32(data[0:4]), "RequestID not serialized correctly")
-	assert.Equal(t, HostReplySuccess, data[4], "ResultCode not serialized correctly")
+	assert.Equal(t, uint16(0x1234), binary.BigEndian.Uint16(data[0:2]), "SessionID not serialized correctly")
+	assert.Equal(t, uint32(12345), binary.BigEndian.Uint32(data[2:6]), "RequestID not serialized correctly")
+	assert.Equal(t, HostReplySuccess, data[6], "ResultCode not serialized correctly")
 }
 
 // =============================================================================

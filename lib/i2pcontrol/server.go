@@ -558,11 +558,23 @@ func (s *Server) validateAuthentication(req *Request) *RPCError {
 		Token string `json:"Token"`
 	}
 	if err := json.Unmarshal(req.Params, &params); err != nil || params.Token == "" {
-		return NewRPCError(ErrCodeAuthRequired, "No authentication token presented")
+		if s.config.StrictAuth {
+			return NewRPCError(ErrCodeAuthRequired, "No authentication token presented")
+		}
+		// i2pd compatibility mode: methods are callable without presenting a token.
+		return nil
 	}
 
 	if !s.authManager.ValidateToken(params.Token) {
-		return NewRPCError(ErrCodeTokenNotExist, "Authentication token does not exist or has expired")
+		if s.config.StrictAuth {
+			return NewRPCError(ErrCodeTokenNotExist, "Authentication token does not exist or has expired")
+		}
+		// i2pd compatibility mode: tolerate stale/unknown tokens and proceed.
+		log.WithFields(logger.Fields{
+			"at":     "i2pcontrol.validateAuthentication",
+			"method": req.Method,
+		}).Debug("invalid_token_tolerated_in_compat_mode")
+		return nil
 	}
 
 	return nil

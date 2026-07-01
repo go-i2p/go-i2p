@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-i2p/common/data"
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/stretchr/testify/assert"
@@ -396,16 +395,16 @@ func TestBuildRequestVariableLeaseSetPayload_FilteredCount(t *testing.T) {
 		},
 	}
 
-	payload, err := server.buildRequestVariableLeaseSetPayload(tunnels)
+	payload, err := server.buildRequestVariableLeaseSetPayload(7, tunnels)
 	require.NoError(t, err, "buildRequestVariableLeaseSetPayload() error")
 
-	assertLeaseSetPayload(t, payload, 2)
+	assertLeaseSetPayload(t, payload, 7, 2)
 
 	// Verify first lease gateway hash
-	assert.Equal(t, string(hash1[:]), string(payload[1:1+32]), "First lease gateway hash")
+	assert.Equal(t, string(hash1[:]), string(payload[3:3+32]), "First lease gateway hash")
 
-	// Verify second lease gateway hash (offset: 1 + 44)
-	assert.Equal(t, string(hash2[:]), string(payload[45:45+32]), "Second lease gateway hash")
+	// Verify second lease gateway hash (offset: 3 + 44)
+	assert.Equal(t, string(hash2[:]), string(payload[47:47+32]), "Second lease gateway hash")
 }
 
 // TestBuildRequestVariableLeaseSetPayload_AllFilteredReturnsError verifies
@@ -419,16 +418,18 @@ func TestBuildRequestVariableLeaseSetPayload_AllFilteredReturnsError(t *testing.
 		nil,
 	}
 
-	_, err := server.buildRequestVariableLeaseSetPayload(tunnels)
+	_, err := server.buildRequestVariableLeaseSetPayload(7, tunnels)
 	assert.Error(t, err, "Expected error when all tunnels are filtered out")
 }
 
 // assertLeaseSetPayload verifies payload count byte and size match expected lease count.
-func assertLeaseSetPayload(t *testing.T, payload []byte, expectedCount int) {
+func assertLeaseSetPayload(t *testing.T, payload []byte, expectedSessionID uint16, expectedCount int) {
 	t.Helper()
-	leaseCount := int(payload[0])
+	actualSessionID := binary.BigEndian.Uint16(payload[0:2])
+	assert.Equal(t, expectedSessionID, actualSessionID, "SessionID")
+	leaseCount := int(payload[2])
 	assert.Equal(t, expectedCount, leaseCount, "Lease count")
-	expectedSize := 1 + expectedCount*44
+	expectedSize := 3 + expectedCount*44
 	assert.Equal(t, expectedSize, len(payload), "Payload size")
 }
 
@@ -446,10 +447,10 @@ func TestBuildRequestVariableLeaseSetPayload_AllValid(t *testing.T) {
 		{ID: 3, Hops: []common.Hash{hash}, CreatedAt: time.Now()},
 	}
 
-	payload, err := server.buildRequestVariableLeaseSetPayload(tunnels)
+	payload, err := server.buildRequestVariableLeaseSetPayload(7, tunnels)
 	require.NoError(t, err, "buildRequestVariableLeaseSetPayload() error")
 
-	assertLeaseSetPayload(t, payload, 3)
+	assertLeaseSetPayload(t, payload, 7, 3)
 }
 
 // TestServerTunnelPoolConfiguration verifies that tunnel pools are properly configured
@@ -946,6 +947,7 @@ func TestAllowHostLookup_RateLimitedPerConnection(t *testing.T) {
 
 	reply, err := ParseHostReplyPayload(response.Payload)
 	require.NoError(t, err)
+	assert.Equal(t, uint16(0), reply.SessionID)
 	assert.Equal(t, uint32(77), reply.RequestID)
 	assert.Equal(t, byte(HostReplyTimeout), reply.ResultCode)
 }
@@ -1411,13 +1413,13 @@ func buildWirePayload(sessionID uint16, innerBytes []byte) []byte {
 func TestParseSendMessagePayloadWithSessionIDPrefix(t *testing.T) {
 	server, session := createTestServerSession(t)
 
-	var destHash data.Hash
-	copy(destHash[:], []byte("known_destination_hash_32bytes!"))
+	testDest, err := createTestDestination()
+	require.NoError(t, err, "createTestDestination() error")
 
 	messagePayload := []byte("hello i2p network")
 
 	sendPayload := &SendMessagePayload{
-		Destination: destHash,
+		Destination: *testDest,
 		Payload:     messagePayload,
 	}
 
@@ -1433,7 +1435,7 @@ func TestParseSendMessagePayloadWithSessionIDPrefix(t *testing.T) {
 	parsed, err := server.parseSendMessagePayload(msg, session)
 	require.NoError(t, err, "parseSendMessagePayload() error")
 
-	assert.Equal(t, destHash, parsed.Destination, "destination hash mismatch")
+	assert.True(t, parsed.Destination.Equals(testDest), "destination mismatch")
 	assert.Equal(t, string(messagePayload), string(parsed.Payload), "payload mismatch")
 }
 
@@ -1458,13 +1460,13 @@ func TestParseSendMessagePayloadTooShort(t *testing.T) {
 func TestParseSendMessageExpiresPayloadWithSessionIDPrefix(t *testing.T) {
 	server, session := createTestServerSession(t)
 
-	var destHash data.Hash
-	copy(destHash[:], []byte("known_destination_hash_32bytes!"))
+	testDest, err := createTestDestination()
+	require.NoError(t, err, "createTestDestination() error")
 
 	messagePayload := []byte("expires test payload")
 
 	sendPayload := &SendMessageExpiresPayload{
-		Destination: destHash,
+		Destination: *testDest,
 		Payload:     messagePayload,
 		Nonce:       12345,
 		Expiration:  1700000000000,
@@ -1482,7 +1484,7 @@ func TestParseSendMessageExpiresPayloadWithSessionIDPrefix(t *testing.T) {
 	parsed, err := server.parseSendMessageExpiresPayload(msg, session)
 	require.NoError(t, err, "parseSendMessageExpiresPayload() error")
 
-	assert.Equal(t, destHash, parsed.Destination, "destination hash mismatch")
+	assert.True(t, parsed.Destination.Equals(testDest), "destination mismatch")
 	assert.Equal(t, string(messagePayload), string(parsed.Payload), "payload mismatch")
 	assert.Equal(t, uint32(12345), parsed.Nonce, "nonce")
 	assert.Equal(t, uint64(1700000000000), parsed.Expiration, "expiration")

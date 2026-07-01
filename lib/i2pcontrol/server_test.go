@@ -295,30 +295,40 @@ func TestEchoHandler(t *testing.T) {
 		}
 	})
 
-	t.Run("missing_token", func(t *testing.T) {
+	t.Run("missing_token_compat_mode", func(t *testing.T) {
 		resp := doRequest(t, url, "Echo", map[string]interface{}{
 			"Echo": "test",
 		})
 
-		if resp.Error == nil {
-			t.Fatal("Expected error for missing token")
+		if resp.Error != nil {
+			t.Fatalf("Expected no auth error in compatibility mode, got: %v", resp.Error)
 		}
-		if resp.Error.Code != ErrCodeAuthRequired {
-			t.Errorf("Expected ErrCodeAuthRequired, got %d", resp.Error.Code)
+		result, ok := resp.Result.(map[string]interface{})
+		if !ok {
+			t.Fatal("Expected result to be a map")
+		}
+		echo, ok := result["Result"].(string)
+		if !ok || echo != "test" {
+			t.Errorf("Expected Result='test', got %v", echo)
 		}
 	})
 
-	t.Run("invalid_token", func(t *testing.T) {
+	t.Run("invalid_token_compat_mode", func(t *testing.T) {
 		resp := doRequest(t, url, "Echo", map[string]interface{}{
 			"Token": "invalid_token",
 			"Echo":  "test",
 		})
 
-		if resp.Error == nil {
-			t.Fatal("Expected error for invalid token")
+		if resp.Error != nil {
+			t.Fatalf("Expected no auth error in compatibility mode, got: %v", resp.Error)
 		}
-		if resp.Error.Code != ErrCodeTokenNotExist {
-			t.Errorf("Expected ErrCodeTokenNotExist, got %d", resp.Error.Code)
+		result, ok := resp.Result.(map[string]interface{})
+		if !ok {
+			t.Fatal("Expected result to be a map")
+		}
+		echo, ok := result["Result"].(string)
+		if !ok || echo != "test" {
+			t.Errorf("Expected Result='test', got %v", echo)
 		}
 	})
 }

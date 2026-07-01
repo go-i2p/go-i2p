@@ -212,18 +212,21 @@ func (s *Server) sendDisconnectMessage(conn net.Conn, reason string) {
 		}
 	}()
 
-	// M-8 FIX: Create and send Disconnect message with proper error reason
-	// I2CP Disconnect message: command byte (30) + reason string length/content
-	// Format: 1 byte command (30) + 2 byte length + reason string
-	disconnectCmd := byte(30) // I2CP Disconnect command
-	reasonBytes := []byte(reason)
+	payload, err := (&DisconnectPayload{Reason: reason}).MarshalBinary()
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":     "i2cp.Server.sendDisconnectMessage",
+			"reason": reason,
+			"error":  err,
+		}).Debug("failed_to_marshal_disconnect_payload")
+		return
+	}
 
-	// M-8 FIX: Build message: command + length (2-byte big-endian) + reason
-	msg := make([]byte, 1+2+len(reasonBytes))
-	msg[0] = disconnectCmd
-	msg[1] = byte((len(reasonBytes) >> 8) & 0xFF)
-	msg[2] = byte(len(reasonBytes) & 0xFF)
-	copy(msg[3:], reasonBytes)
+	disconnectMsg := &Message{
+		Type:      MessageTypeDisconnect,
+		SessionID: SessionIDReservedControl,
+		Payload:   payload,
+	}
 
 	// M-8 FIX: Send with short timeout (don't block indefinitely)
 	if err := conn.SetWriteDeadline(time.Now().Add(500 * time.Millisecond)); err != nil {
@@ -231,7 +234,7 @@ func (s *Server) sendDisconnectMessage(conn net.Conn, reason string) {
 	}
 	defer conn.SetWriteDeadline(time.Time{}) // Clear deadline
 
-	if _, err := conn.Write(msg); err != nil {
+	if err := WriteMessage(conn, disconnectMsg); err != nil {
 		log.WithFields(logger.Fields{
 			"at":     "i2cp.Server.sendDisconnectMessage",
 			"reason": reason,
