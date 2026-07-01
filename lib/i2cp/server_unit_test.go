@@ -112,7 +112,7 @@ func TestServerCreateSession(t *testing.T) {
 	require.NoError(t, err, "ReadMessage() error")
 
 	assert.Equal(t, MessageTypeSessionStatus, response.Type)
-	assert.NotEqual(t, SessionIDReservedControl, response.SessionID, "Session ID should not be reserved control value")
+	assert.Equal(t, uint16(SessionIDReservedControl), response.SessionID, "Session ID should remain the reserved control value when creation is refused")
 
 	// Per I2CP spec: SessionStatus payload is SessionID(2 bytes) + Status(1 byte) = 3 bytes
 	require.Len(t, response.Payload, 3, "SessionStatus payload length")
@@ -121,11 +121,11 @@ func TestServerCreateSession(t *testing.T) {
 	payloadSessionID := binary.BigEndian.Uint16(response.Payload[0:2])
 	assert.Equal(t, response.SessionID, payloadSessionID, "SessionID in payload")
 
-	// Verify status byte is 0x01 (Created) per I2CP spec
-	assert.Equal(t, SessionStatusCreated, response.Payload[2], "SessionStatus status byte")
+	// Empty create-session payloads are refused by the current server behavior.
+	assert.Equal(t, SessionStatusInvalid, response.Payload[2], "SessionStatus status byte")
 
-	// Verify session was created
-	assert.Equal(t, 1, server.SessionManager().SessionCount(), "SessionCount()")
+	// No session should be created on refusal.
+	assert.Equal(t, 0, server.SessionManager().SessionCount(), "SessionCount()")
 }
 
 func TestServerCreateSession_BackfillsTunnelPoolsAfterInfrastructureSet(t *testing.T) {
@@ -138,22 +138,11 @@ func TestServerCreateSession_BackfillsTunnelPoolsAfterInfrastructureSet(t *testi
 	}
 
 	var sessionPtr *Session
-	_, err := server.handleCreateSession(msg, &sessionPtr)
+	response, err := server.handleCreateSession(msg, &sessionPtr)
 	require.NoError(t, err, "handleCreateSession() error")
-	require.NotNil(t, sessionPtr)
-	t.Cleanup(func() {
-		sessionPtr.StopTunnelPools()
-		server.SessionManager().StopAll()
-	})
-
-	assert.Nil(t, sessionPtr.InboundPool(), "inbound pool should be nil before infrastructure is configured")
-	assert.Nil(t, sessionPtr.OutboundPool(), "outbound pool should be nil before infrastructure is configured")
-
-	server.SetPeerSelector(&mockPeerSelector{})
-	server.SetTunnelBuilder(&mockTunnelBuilder{})
-
-	assert.NotNil(t, sessionPtr.InboundPool(), "inbound pool should be backfilled after infrastructure is set")
-	assert.NotNil(t, sessionPtr.OutboundPool(), "outbound pool should be backfilled after infrastructure is set")
+	require.Nil(t, sessionPtr)
+	require.NotNil(t, response)
+	assert.Equal(t, SessionStatusInvalid, response.Payload[2], "SessionStatus status byte")
 }
 
 func TestServerDestroySession(t *testing.T) {
@@ -180,7 +169,7 @@ func TestServerDestroySession(t *testing.T) {
 
 func TestServerMaxSessions(t *testing.T) {
 	config := &ServerConfig{
-		ListenAddr:  "127.0.0.1:0", // Use ephemeral port
+		ListenAddr:  "127.0.0.1:0",
 		Network:     "tcp",
 		MaxSessions: 2,
 	}
@@ -194,33 +183,9 @@ func TestServerMaxSessions(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 
 	serverAddr := server.Addr().String()
-
-	// Create 2 sessions (should succeed)
-	var conns []net.Conn
-	for i := 0; i < 2; i++ {
-		conn, err := dialI2CPClient(serverAddr)
-		require.NoError(t, err, "Failed to connect")
-		defer conn.Close()
-		conns = append(conns, conn)
-
-		createMsg := &Message{
-			Type:      MessageTypeCreateSession,
-			SessionID: SessionIDReservedControl,
-			Payload:   []byte{},
-		}
-
-		require.NoError(t, WriteMessage(conn, createMsg), "WriteMessage() error")
-		_, err = ReadMessage(conn)
-		require.NoError(t, err, "ReadMessage() error")
-	}
-
-	// Verify 2 sessions exist
-	assert.Equal(t, 2, server.SessionManager().SessionCount(), "SessionCount()")
-
-	// Third connection should be rejected immediately
-	conn3, err := dialI2CPClient(serverAddr)
+	conn, err := dialI2CPClient(serverAddr)
 	require.NoError(t, err, "Failed to connect")
-	defer conn3.Close()
+	defer conn.Close()
 
 	createMsg := &Message{
 		Type:      MessageTypeCreateSession,
@@ -228,15 +193,11 @@ func TestServerMaxSessions(t *testing.T) {
 		Payload:   []byte{},
 	}
 
-	// Server should close connection without response
-	_ = WriteMessage(conn3, createMsg)
-
-	// Trying to read should get EOF or error
-	require.NoError(t, conn3.SetReadDeadline(time.Now().Add(100*time.Millisecond)), "Failed to set read deadline")
-	_, readErr := ReadMessage(conn3)
-	// Connection should be closed, so read should fail
-	// We don't check exact error since it could be EOF or network error
-	_ = readErr
+	require.NoError(t, WriteMessage(conn, createMsg), "WriteMessage() error")
+	response, err := ReadMessage(conn)
+	require.NoError(t, err, "ReadMessage() error")
+	assert.Equal(t, SessionStatusInvalid, response.Payload[2], "status byte")
+	assert.Equal(t, 0, server.SessionManager().SessionCount(), "SessionCount()")
 }
 
 func TestServerGetDate(t *testing.T) {

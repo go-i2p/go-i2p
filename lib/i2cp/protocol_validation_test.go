@@ -118,7 +118,7 @@ func TestMessageTypeHandlers(t *testing.T) {
 		{
 			name:        "ReconfigureSession handler exists",
 			messageType: MessageTypeReconfigureSession,
-			expectError: true, // Will error without session
+			expectError: false,
 			description: "ReconfigureSession should be handled",
 		},
 		{
@@ -305,12 +305,12 @@ func TestPayloadSizeEnforcement(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name:        "Medium payload (64 KB)",
-			payloadSize: 65536,
+			name:        "Medium payload (64 KB minus 1)",
+			payloadSize: 65535,
 			expectError: false,
 		},
 		{
-			name:        "Large payload (256 KB - at limit)",
+			name:        "Large payload (at limit)",
 			payloadSize: MaxPayloadSize,
 			expectError: false,
 		},
@@ -378,7 +378,6 @@ func TestMessageRoundTrip(t *testing.T) {
 		{
 			name:    "Empty payload",
 			msgType: MessageTypeGetDate,
-			session: 0,
 			payload: []byte{},
 		},
 		{
@@ -626,9 +625,9 @@ func TestProtocolCompliance_MessageStatusCodes(t *testing.T) {
 
 // TestMessageFraming_PayloadSizeLimits verifies payload size limits.
 func TestMessageFraming_PayloadSizeLimits(t *testing.T) {
-	// Verify MaxPayloadSize is reasonable (256 KB for i2psnark compatibility)
-	if MaxPayloadSize != 262144 {
-		t.Errorf("MaxPayloadSize = %d, want 262144 (256 KB)", MaxPayloadSize)
+	// Verify MaxPayloadSize follows the current I2CP framing ceiling.
+	if MaxPayloadSize != 65535 {
+		t.Errorf("MaxPayloadSize = %d, want 65535", MaxPayloadSize)
 	}
 
 	// MaxMessageSize should be header + payload

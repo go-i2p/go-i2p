@@ -43,7 +43,7 @@ func TestParseSendMessagePayload(t *testing.T) {
 				buf = append(buf, nonceBytes...)
 				return buf
 			}(),
-			wantErr: false,
+			wantErr:       false,
 			expectedSize:  len("Hello, I2P!"),
 			expectedNonce: 0x11223344,
 		},
@@ -1126,7 +1126,9 @@ func TestHostLookupPayloadParse(t *testing.T) {
 	tests := []struct {
 		name        string
 		data        []byte
+		wantSessionID uint16
 		wantID      uint32
+		wantTimeoutMs uint32
 		wantType    uint16
 		wantQuery   string
 		shouldError bool
@@ -1134,30 +1136,35 @@ func TestHostLookupPayloadParse(t *testing.T) {
 		{
 			name: "hash_lookup",
 			data: func() []byte {
-				buf := new(bytes.Buffer)
-				binary.Write(buf, binary.BigEndian, uint32(12345))                      // RequestID
-				binary.Write(buf, binary.BigEndian, uint16(HostLookupTypeHash))         // Type
-				binary.Write(buf, binary.BigEndian, uint16(52))                         // Query length (base64 hash)
-				buf.WriteString("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA") // 52 char hash
-				return buf.Bytes()
+				buf := make([]byte, 11+32)
+				binary.BigEndian.PutUint16(buf[0:2], 0x1234)
+				binary.BigEndian.PutUint32(buf[2:6], 12345)
+				binary.BigEndian.PutUint32(buf[6:10], 6000)
+				buf[10] = byte(HostLookupTypeHash)
+				copy(buf[11:], bytes.Repeat([]byte{0xaa}, 32))
+				return buf
 			}(),
+			wantSessionID: 0x1234,
 			wantID:      12345,
+			wantTimeoutMs: 6000,
 			wantType:    HostLookupTypeHash,
-			wantQuery:   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			wantQuery:   "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 			shouldError: false,
 		},
 		{
 			name: "hostname_lookup",
 			data: func() []byte {
-				buf := new(bytes.Buffer)
-				binary.Write(buf, binary.BigEndian, uint32(67890))
-				binary.Write(buf, binary.BigEndian, uint16(HostLookupTypeHostname))
-				hostname := "example.i2p"
-				binary.Write(buf, binary.BigEndian, uint16(len(hostname)))
-				buf.WriteString(hostname)
-				return buf.Bytes()
+				buf := make([]byte, 11+12)
+				binary.BigEndian.PutUint16(buf[0:2], 0x4321)
+				binary.BigEndian.PutUint32(buf[2:6], 67890)
+				binary.BigEndian.PutUint32(buf[6:10], 7000)
+				buf[10] = byte(HostLookupTypeHostname)
+				copy(buf[11:], []byte{0x0b, 'e', 'x', 'a', 'm', 'p', 'l', 'e', '.', 'i', '2', 'p'})
+				return buf
 			}(),
+			wantSessionID: 0x4321,
 			wantID:      67890,
+			wantTimeoutMs: 7000,
 			wantType:    HostLookupTypeHostname,
 			wantQuery:   "example.i2p",
 			shouldError: false,
@@ -1165,16 +1172,19 @@ func TestHostLookupPayloadParse(t *testing.T) {
 		{
 			name: "empty_query",
 			data: func() []byte {
-				buf := new(bytes.Buffer)
-				binary.Write(buf, binary.BigEndian, uint32(99999))
-				binary.Write(buf, binary.BigEndian, uint16(HostLookupTypeHostname))
-				binary.Write(buf, binary.BigEndian, uint16(0)) // Empty query
-				return buf.Bytes()
+				buf := make([]byte, 11)
+				binary.BigEndian.PutUint16(buf[0:2], 0)
+				binary.BigEndian.PutUint32(buf[2:6], 99999)
+				binary.BigEndian.PutUint32(buf[6:10], 0)
+				buf[10] = byte(HostLookupTypeHostname)
+				return buf
 			}(),
+			wantSessionID: 0,
 			wantID:      99999,
+			wantTimeoutMs: 0,
 			wantType:    HostLookupTypeHostname,
 			wantQuery:   "",
-			shouldError: false,
+			shouldError: true,
 		},
 		{
 			name:        "too_short",
@@ -1205,7 +1215,9 @@ func TestHostLookupPayloadParse(t *testing.T) {
 			}
 
 			require.NoError(t, err)
+			assert.Equal(t, tt.wantSessionID, payload.SessionID)
 			assert.Equal(t, tt.wantID, payload.RequestID)
+			assert.Equal(t, tt.wantTimeoutMs, payload.TimeoutMs)
 			assert.Equal(t, tt.wantType, payload.LookupType)
 			assert.Equal(t, tt.wantQuery, payload.Query)
 		})
@@ -1216,105 +1228,25 @@ func TestHostLookupPayloadMarshal(t *testing.T) {
 	tests := []struct {
 		name    string
 		payload *HostLookupPayload
-		check   func([]byte) error
 	}{
 		{
 			name: "hash_lookup",
 			payload: &HostLookupPayload{
+				SessionID:  0x1234,
 				RequestID:  54321,
+				TimeoutMs:  1000,
 				LookupType: HostLookupTypeHash,
-				Query:      "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
-			},
-			check: func(data []byte) error {
-				assert.Equal(t, 8+52, len(data), "data length")
-				reqID := binary.BigEndian.Uint32(data[0:4])
-				assert.Equal(t, uint32(54321), reqID, "RequestID")
-				lookupType := binary.BigEndian.Uint16(data[4:6])
-				assert.Equal(t, HostLookupTypeHash, lookupType, "LookupType")
-				queryLen := binary.BigEndian.Uint16(data[6:8])
-				assert.Equal(t, uint16(52), queryLen, "QueryLength")
-				return nil
+				Query:      "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 			},
 		},
 		{
 			name: "hostname_lookup",
 			payload: &HostLookupPayload{
+				SessionID:  0x4321,
 				RequestID:  11111,
+				TimeoutMs:  2000,
 				LookupType: HostLookupTypeHostname,
 				Query:      "test.i2p",
-			},
-			check: func(data []byte) error {
-				assert.Equal(t, 16, len(data), "data length")
-				lookupType := binary.BigEndian.Uint16(data[4:6])
-				assert.Equal(t, HostLookupTypeHostname, lookupType, "LookupType")
-				query := string(data[8:])
-				assert.Equal(t, "test.i2p", query, "Query")
-				return nil
-			},
-		},
-		{
-			name: "empty_query",
-			payload: &HostLookupPayload{
-				RequestID:  0,
-				LookupType: HostLookupTypeHostname,
-				Query:      "",
-			},
-			check: func(data []byte) error {
-				assert.Equal(t, 8, len(data), "data length")
-				queryLen := binary.BigEndian.Uint16(data[6:8])
-				assert.Equal(t, uint16(0), queryLen, "QueryLength")
-				return nil
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			data, err := tt.payload.MarshalBinary()
-			require.NoError(t, err)
-
-			if err := tt.check(data); err != nil {
-				t.Error(err)
-			}
-		})
-	}
-}
-
-func TestHostLookupRoundTrip(t *testing.T) {
-	tests := []struct {
-		name    string
-		payload *HostLookupPayload
-	}{
-		{
-			name: "hash_lookup",
-			payload: &HostLookupPayload{
-				RequestID:  12345,
-				LookupType: HostLookupTypeHash,
-				Query:      "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
-			},
-		},
-		{
-			name: "hostname_lookup",
-			payload: &HostLookupPayload{
-				RequestID:  67890,
-				LookupType: HostLookupTypeHostname,
-				Query:      "example.i2p",
-			},
-		},
-		{
-			name: "long_hostname",
-			payload: &HostLookupPayload{
-				RequestID:  99999,
-				LookupType: HostLookupTypeHostname,
-				Query:      "very-long-hostname-that-tests-longer-queries.i2p",
-			},
-		},
-		{
-			name: "empty_query",
-			payload: &HostLookupPayload{
-				RequestID:  0,
-				LookupType: HostLookupTypeHash,
-				Query:      "",
 			},
 		},
 	}
@@ -1327,7 +1259,63 @@ func TestHostLookupRoundTrip(t *testing.T) {
 			parsed, err := ParseHostLookupPayload(data)
 			require.NoError(t, err)
 
+			assert.Equal(t, tt.payload.SessionID, parsed.SessionID)
 			assert.Equal(t, tt.payload.RequestID, parsed.RequestID)
+			assert.Equal(t, tt.payload.TimeoutMs, parsed.TimeoutMs)
+			assert.Equal(t, tt.payload.LookupType, parsed.LookupType)
+			assert.Equal(t, tt.payload.Query, parsed.Query)
+		})
+	}
+}
+
+func TestHostLookupRoundTrip(t *testing.T) {
+	tests := []struct {
+		name    string
+		payload *HostLookupPayload
+	}{
+		{
+			name: "hash_lookup",
+			payload: &HostLookupPayload{
+				SessionID:  0x1234,
+				RequestID:  12345,
+				TimeoutMs:  3000,
+				LookupType: HostLookupTypeHash,
+				Query:      "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+			},
+		},
+		{
+			name: "hostname_lookup",
+			payload: &HostLookupPayload{
+				SessionID:  0x5678,
+				RequestID:  67890,
+				TimeoutMs:  4000,
+				LookupType: HostLookupTypeHostname,
+				Query:      "example.i2p",
+			},
+		},
+		{
+			name: "long_hostname",
+			payload: &HostLookupPayload{
+				SessionID:  0x9abc,
+				RequestID:  99999,
+				TimeoutMs:  5000,
+				LookupType: HostLookupTypeHostname,
+				Query:      "very-long-hostname-that-tests-longer-queries.i2p",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data, err := tt.payload.MarshalBinary()
+			require.NoError(t, err)
+
+			parsed, err := ParseHostLookupPayload(data)
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.payload.SessionID, parsed.SessionID)
+			assert.Equal(t, tt.payload.RequestID, parsed.RequestID)
+			assert.Equal(t, tt.payload.TimeoutMs, parsed.TimeoutMs)
 			assert.Equal(t, tt.payload.LookupType, parsed.LookupType)
 			assert.Equal(t, tt.payload.Query, parsed.Query)
 		})
@@ -1579,25 +1567,22 @@ func TestHostLookupTypeNames(t *testing.T) {
 
 // TestHostLookup_PayloadParsing verifies HostLookup payload parsing.
 func TestHostLookup_PayloadParsing(t *testing.T) {
-	// Valid hash lookup - correct wire format:
-	// bytes 0-3:   RequestID (uint32, big endian)
-	// bytes 4-5:   LookupType (uint16, big endian)
-	// bytes 6-7:   Query length (uint16, big endian)
-	// bytes 8+:    Query string
 	t.Run("valid_hash_lookup", func(t *testing.T) {
-		// Create a hash lookup with a 32-byte hash query
-		hashQuery := string(make([]byte, 32))
-		payload := make([]byte, 8+len(hashQuery)) // 4+2+2 header + query
-		binary.BigEndian.PutUint32(payload[0:4], 12345)
-		binary.BigEndian.PutUint16(payload[4:6], HostLookupTypeHash)
-		binary.BigEndian.PutUint16(payload[6:8], uint16(len(hashQuery)))
-		copy(payload[8:], hashQuery)
+		payload := make([]byte, 11+32)
+		binary.BigEndian.PutUint16(payload[0:2], 0x1234)
+		binary.BigEndian.PutUint32(payload[2:6], 12345)
+		binary.BigEndian.PutUint32(payload[6:10], 6000)
+		payload[10] = byte(HostLookupTypeHash)
+		copy(payload[11:], bytes.Repeat([]byte{0xab}, 32))
 
 		lookup, err := ParseHostLookupPayload(payload)
 		require.NoError(t, err)
 
+		assert.Equal(t, uint16(0x1234), lookup.SessionID)
 		assert.Equal(t, uint32(12345), lookup.RequestID)
+		assert.Equal(t, uint32(6000), lookup.TimeoutMs)
 		assert.Equal(t, HostLookupTypeHash, lookup.LookupType)
+		assert.Equal(t, "abababababababababababababababababababababababababababababababab", lookup.Query)
 	})
 
 	// Truncated payload

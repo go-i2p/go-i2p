@@ -803,18 +803,10 @@ func TestCreateSession_WithPrivateKeys_PreservesIdentity(t *testing.T) {
 func TestNewSession_WithoutPrivateKeys_GeneratesFreshIdentity(t *testing.T) {
 	id := generateTestIdentity(t)
 
-	// Create session without private keys
-	session, err := NewSession(1, id.Dest, nil)
-	require.NoError(t, err)
-	defer session.Stop()
-
-	// Session destination should be DIFFERENT from the original
-	// (fresh keys generated, different identity)
-	assertSessionDestinationMatch(t, session, id.DestBytes, false,
-		"session destination should differ when no private keys are provided")
-
-	// But session should still have valid keys
-	assertSessionKeysPresent(t, session)
+	// Destination-only session creation is now rejected.
+	_, err := NewSession(1, id.Dest, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "client destination requires private keys")
 }
 
 // TestNewSession_WithNilDestAndNilKeys_GeneratesFreshIdentity verifies the
@@ -917,16 +909,10 @@ func TestNewSession_WithExternalDestination_HasKeys(t *testing.T) {
 	externalDest := keyStore.Destination()
 	require.NotNil(t, externalDest, "test destination should not be nil")
 
-	// Create a session with that external destination
-	session, err := NewSession(42, externalDest, nil)
-	require.NoError(t, err, "NewSession with external destination should succeed")
-	defer session.Stop()
-
-	// The critical invariant: session.keys must NOT be nil
-	assert.NotNil(t, session.keys,
-		"session created with external destination must have non-nil keys")
-	assert.NotNil(t, session.destination,
-		"session must have a destination")
+	// Destination-only sessions are rejected.
+	_, err = NewSession(42, externalDest, nil)
+	require.Error(t, err, "NewSession with external destination should fail")
+	assert.Contains(t, err.Error(), "client destination requires private keys")
 }
 
 // TestNewSession_WithNilDestination_HasKeys verifies the baseline: a session
@@ -950,20 +936,12 @@ func TestPrepareDestinationAndKeys_ExternalDest_ReturnsValidKeyStore(t *testing.
 	require.NoError(t, err)
 	externalDest := ks.Destination()
 
-	// Call with non-nil dest but no private keys — should generate fresh keys
+	// Calling with a destination but no private keys is now rejected.
 	keyStore, dest, err := prepareDestinationAndKeys(externalDest, nil, nil)
-	require.NoError(t, err)
-	assert.NotNil(t, keyStore, "keyStore must not be nil when dest is provided")
-	assert.NotNil(t, dest, "returned dest must not be nil")
-
-	// The returned destination should come from the new keystore
-	// (not the client-provided one) since no private keys were provided
-	assert.NotNil(t, keyStore.SigningPrivateKey(),
-		"keyStore should have a signing private key")
-	encPub, encErr := keyStore.EncryptionPublicKey()
-	assert.NoError(t, encErr, "EncryptionPublicKey should not error")
-	assert.NotNil(t, encPub,
-		"keyStore should have an encryption public key")
+	require.Error(t, err)
+	assert.Nil(t, keyStore)
+	assert.Nil(t, dest)
+	assert.Contains(t, err.Error(), "client destination requires private keys")
 }
 
 // TestPrepareDestinationAndKeys_NilDest_ReturnsValidKeyStore is the baseline
@@ -1100,14 +1078,9 @@ func TestSessionManager_CreateWithExternalDest(t *testing.T) {
 	require.NoError(t, err)
 	externalDest := ks.Destination()
 
-	session, err := sm.CreateSession(externalDest, nil)
-	require.NoError(t, err)
-	defer sm.DestroySession(session.ID())
-
-	assert.NotNil(t, session.keys,
-		"session created via manager with external dest must have keys")
-	assert.NotNil(t, session.Destination(),
-		"session must have a destination")
+	_, err = sm.CreateSession(externalDest, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "client destination requires private keys")
 }
 
 // TestSessionConfigEncryptedLeaseSet verifies EncryptedLeaseSet configuration fields

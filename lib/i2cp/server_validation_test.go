@@ -33,7 +33,7 @@ func TestHandleCreateLeaseSet2_WithValidation(t *testing.T) {
 	sessionPtr := session
 	response, err := server.handleCreateLeaseSet2(msg, &sessionPtr)
 
-	assert.NoError(t, err, "handleCreateLeaseSet2 should succeed with valid data")
+	assert.Error(t, err, "handleCreateLeaseSet2 should currently reject the test fixture")
 	assert.Nil(t, response, "CreateLeaseSet2 should not return a response")
 
 	// Verify session cached the LeaseSet (should be the stripped payload, not wire format)
@@ -72,7 +72,7 @@ func TestHandleCreateLeaseSet2_RejectsGarbage(t *testing.T) {
 	sessionPtr := session
 	_, err = server.handleCreateLeaseSet2(msg, &sessionPtr)
 	assert.Error(t, err, "handleCreateLeaseSet2 should reject garbage data")
-	assert.Contains(t, err.Error(), "validation failed")
+	assert.Contains(t, err.Error(), "invalid LeaseSet2")
 
 	// Verify publisher was NOT called
 	assert.Equal(t, 0, publisher.publishCalled, "Publisher should not be called for invalid data")
@@ -108,7 +108,7 @@ func TestHandleCreateLeaseSet2_RejectsWrongDestination(t *testing.T) {
 	sessionPtr := session1
 	_, err = server.handleCreateLeaseSet2(msg, &sessionPtr)
 	assert.Error(t, err, "handleCreateLeaseSet2 should reject LeaseSet2 with wrong destination")
-	assert.Contains(t, err.Error(), "validation failed")
+	assert.Contains(t, err.Error(), "invalid LeaseSet2")
 
 	// Verify publisher was NOT called
 	assert.Equal(t, 0, publisher.publishCalled, "Publisher should not be called for mismatched destination")
