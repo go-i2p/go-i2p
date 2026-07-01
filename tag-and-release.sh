@@ -211,29 +211,21 @@ collect_all_hashes
 
 echo "Collected tag hashes. Proceeding to tag version v$VERSION" 1>&2
 
-update_by_tag_hash() {
-  echo "updating $1 to tag hash $2" 1>&2
-  module="github.com/go-i2p/$1"
-  if [ -z "$2" ]; then
-    echo "ERROR: empty tag hash for $module" 1>&2
-    exit 1
-  fi
-  if ! go get "$module@$2" 1>&2; then
-    echo "ERROR: go get failed for $module@$2" 1>&2
-    exit 1
-  fi
-
+verify_resolved_by_hash() {
+  repo=$1
+  hash=$2
+  module="github.com/go-i2p/$repo"
   resolved_version=$(go list -m -f '{{.Version}}' "$module" 2>/dev/null || true)
-  short_hash=$(printf '%s' "$2" | cut -c1-12)
+  short_hash=$(printf '%s' "$hash" | cut -c1-12)
   case "$resolved_version" in
     *"$short_hash"*)
       ;;
     *)
       # Some modules resolve to a tag instead of a pseudo-version. Accept that
       # only when the resolved tag points to the exact expected commit.
-      resolved_tag_hash=$(cd "$GOI2P_DIR/$1" 2>/dev/null && /usr/bin/git rev-list -n 1 "$resolved_version" 2>/dev/null || true)
-      if [ "$resolved_tag_hash" != "$2" ]; then
-        echo "ERROR: $module resolved to $resolved_version (expected commit $2)" 1>&2
+      resolved_tag_hash=$(cd "$GOI2P_DIR/$repo" 2>/dev/null && /usr/bin/git rev-list -n 1 "$resolved_version" 2>/dev/null || true)
+      if [ "$resolved_tag_hash" != "$hash" ]; then
+        echo "ERROR: $module resolved to $resolved_version (expected commit $hash)" 1>&2
         exit 1
       fi
       ;;
@@ -245,6 +237,10 @@ update_by_tag_hash() {
 update_our_packages() {
   echo "Updating the packages" 1>&2
   current_repo=$(basename "$(pwd)")
+
+  # Build one atomic go get request for all target modules to avoid
+  # sequential MVS churn that appears as mid-run downgrades/upgrades.
+  set --
   for repo in $UPDATE_ORDER; do
     if [ "$repo" = "$current_repo" ]; then
       echo "Skipping self-update for $repo" 1>&2
@@ -252,8 +248,29 @@ update_our_packages() {
     fi
     var=$(hash_var_for_repo "$repo")
     hash=$(value_of "$var")
-    update_by_tag_hash "$repo" "$hash"
+    module="github.com/go-i2p/$repo"
+    echo "queueing $repo at tag hash $hash" 1>&2
+    if [ -z "$hash" ]; then
+      echo "ERROR: empty tag hash for $module" 1>&2
+      exit 1
+    fi
+    set -- "$@" "$module@$hash"
   done
+
+  if ! go get "$@" 1>&2; then
+    echo "ERROR: atomic go get by hash failed" 1>&2
+    exit 1
+  fi
+
+  for repo in $UPDATE_ORDER; do
+    if [ "$repo" = "$current_repo" ]; then
+      continue
+    fi
+    var=$(hash_var_for_repo "$repo")
+    hash=$(value_of "$var")
+    verify_resolved_by_hash "$repo" "$hash"
+  done
+
   go mod tidy -v 1>&2
   go build -v ./... 1>&2
   gofumpt -w -s -extra . 1>&2
@@ -261,17 +278,13 @@ update_our_packages() {
   /usr/bin/git commit -am "Update dependencies to v$VERSION" 1>&2
 }
 
-update_by_version() {
-  echo "updating $1 to version $2" 1>&2
-  module="github.com/go-i2p/$1"
-  if ! go get "$module@$2" 1>&2; then
-    echo "ERROR: go get failed for $module@$2" 1>&2
-    exit 1
-  fi
-
+verify_resolved_by_version() {
+  repo=$1
+  expected_version=$2
+  module="github.com/go-i2p/$repo"
   resolved_version=$(go list -m -f '{{.Version}}' "$module" 2>/dev/null || true)
-  if [ "$resolved_version" != "$2" ]; then
-    echo "ERROR: $module resolved to $resolved_version (expected exactly $2)" 1>&2
+  if [ "$resolved_version" != "$expected_version" ]; then
+    echo "ERROR: $module resolved to $resolved_version (expected exactly $expected_version)" 1>&2
     exit 1
   fi
 }
@@ -281,13 +294,30 @@ update_by_version() {
 correct_our_tags() {
   echo "Updating the packages" 1>&2
   current_repo=$(basename "$(pwd)")
+
+  set --
   for repo in $UPDATE_ORDER; do
     if [ "$repo" = "$current_repo" ]; then
       echo "Skipping self-update for $repo" 1>&2
       continue
     fi
-    update_by_version "$repo" "v$VERSION"
+    module="github.com/go-i2p/$repo"
+    echo "queueing $repo at version v$VERSION" 1>&2
+    set -- "$@" "$module@v$VERSION"
   done
+
+  if ! go get "$@" 1>&2; then
+    echo "ERROR: atomic go get by version failed" 1>&2
+    exit 1
+  fi
+
+  for repo in $UPDATE_ORDER; do
+    if [ "$repo" = "$current_repo" ]; then
+      continue
+    fi
+    verify_resolved_by_version "$repo" "v$VERSION"
+  done
+
   go mod tidy -v 1>&2
   go build -v ./... 1>&2
   gofumpt -w -s -extra . 1>&2
