@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-i2p/common/data"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -17,49 +16,61 @@ func TestParseSendMessagePayload(t *testing.T) {
 		name          string
 		input         []byte
 		wantErr       bool
-		expectedDest  data.Hash
 		expectedSize  int
+		expectedNonce uint32
 		errorContains string
 	}{
 		{
 			name: "Valid payload with data",
 			input: func() []byte {
-				// Create 32-byte destination + message payload
-				dest := make([]byte, 32)
-				for i := 0; i < 32; i++ {
-					dest[i] = byte(i)
+				dest, err := createTestDestination()
+				if err != nil {
+					panic(err)
+				}
+				destBytes, err := dest.Bytes()
+				if err != nil {
+					panic(err)
 				}
 				payload := []byte("Hello, I2P!")
-				return append(dest, payload...)
+				buf := make([]byte, 0, len(destBytes)+4+len(payload)+4)
+				buf = append(buf, destBytes...)
+				lenBytes := make([]byte, 4)
+				binary.BigEndian.PutUint32(lenBytes, uint32(len(payload)))
+				buf = append(buf, lenBytes...)
+				buf = append(buf, payload...)
+				nonceBytes := make([]byte, 4)
+				binary.BigEndian.PutUint32(nonceBytes, 0x11223344)
+				buf = append(buf, nonceBytes...)
+				return buf
 			}(),
 			wantErr: false,
-			expectedDest: func() data.Hash {
-				var h data.Hash
-				for i := 0; i < 32; i++ {
-					h[i] = byte(i)
-				}
-				return h
-			}(),
-			expectedSize: len("Hello, I2P!"),
+			expectedSize:  len("Hello, I2P!"),
+			expectedNonce: 0x11223344,
 		},
 		{
 			name: "Valid payload with empty message",
 			input: func() []byte {
-				dest := make([]byte, 32)
-				for i := 0; i < 32; i++ {
-					dest[i] = byte(255 - i)
+				dest, err := createTestDestination()
+				if err != nil {
+					panic(err)
 				}
-				return dest
-			}(),
-			wantErr: false,
-			expectedDest: func() data.Hash {
-				var h data.Hash
-				for i := 0; i < 32; i++ {
-					h[i] = byte(255 - i)
+				destBytes, err := dest.Bytes()
+				if err != nil {
+					panic(err)
 				}
-				return h
+				buf := make([]byte, 0, len(destBytes)+8)
+				buf = append(buf, destBytes...)
+				lenBytes := make([]byte, 4)
+				binary.BigEndian.PutUint32(lenBytes, 0)
+				buf = append(buf, lenBytes...)
+				nonceBytes := make([]byte, 4)
+				binary.BigEndian.PutUint32(nonceBytes, 0xAABBCCDD)
+				buf = append(buf, nonceBytes...)
+				return buf
 			}(),
+			wantErr:       false,
 			expectedSize: 0,
+			expectedNonce: 0xAABBCCDD,
 		},
 		{
 			name:          "Too short - empty",
@@ -71,13 +82,13 @@ func TestParseSendMessagePayload(t *testing.T) {
 			name:          "Too short - only 16 bytes",
 			input:         make([]byte, 16),
 			wantErr:       true,
-			errorContains: "too short",
+			errorContains: "failed to parse destination",
 		},
 		{
 			name:          "Too short - 31 bytes",
 			input:         make([]byte, 31),
 			wantErr:       true,
-			errorContains: "too short",
+			errorContains: "failed to parse destination",
 		},
 	}
 
@@ -96,8 +107,8 @@ func TestParseSendMessagePayload(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, result)
 
-			assert.Equal(t, tt.expectedDest, result.Destination, "destination")
 			assert.Equal(t, tt.expectedSize, len(result.Payload), "payload size")
+			assert.Equal(t, tt.expectedNonce, result.Nonce, "nonce")
 		})
 	}
 }
@@ -167,15 +178,17 @@ func TestParseMessagePayloadPayload(t *testing.T) {
 		{
 			name: "Valid payload with data",
 			input: func() []byte {
-				// SessionID (2 bytes) + MessageID (4 bytes) + payload
-				data := make([]byte, 6)
+				payload := []byte("Received message")
+				data := make([]byte, 10+len(payload))
 				data[0] = 0x00
 				data[1] = 0x01 // SessionID = 0x0001
 				data[2] = 0x00
 				data[3] = 0x00
 				data[4] = 0x12
 				data[5] = 0x34 // MessageID = 0x00001234 = 4660
-				return append(data, []byte("Received message")...)
+				binary.BigEndian.PutUint32(data[6:10], uint32(len(payload)))
+				copy(data[10:], payload)
+				return data
 			}(),
 			wantErr:       false,
 			expectedMsgID: 0x1234,
@@ -184,14 +197,15 @@ func TestParseMessagePayloadPayload(t *testing.T) {
 		{
 			name: "Valid payload with empty message",
 			input: func() []byte {
-				// SessionID (2 bytes) + MessageID (4 bytes), no payload
-				data := make([]byte, 6)
+				// SessionID (2 bytes) + MessageID (4 bytes) + payloadLen(4), no payload
+				data := make([]byte, 10)
 				data[0] = 0x00
 				data[1] = 0x02 // SessionID = 0x0002
 				data[2] = 0xFF
 				data[3] = 0xFF
 				data[4] = 0xFF
 				data[5] = 0xFF // MessageID = 0xFFFFFFFF
+				binary.BigEndian.PutUint32(data[6:10], 0)
 				return data
 			}(),
 			wantErr:       false,
@@ -211,8 +225,8 @@ func TestParseMessagePayloadPayload(t *testing.T) {
 			errorContains: "too short",
 		},
 		{
-			name:          "Too short - 3 bytes",
-			input:         make([]byte, 3),
+			name:          "Too short - 9 bytes",
+			input:         make([]byte, 9),
 			wantErr:       true,
 			errorContains: "too short",
 		},
@@ -253,7 +267,7 @@ func TestMessagePayloadPayloadMarshalBinary(t *testing.T) {
 	data, err := mpp.MarshalBinary()
 	require.NoError(t, err)
 
-	expectedSize := 6 + len(payload)
+	expectedSize := 10 + len(payload)
 	assert.Equal(t, expectedSize, len(data), "marshaled size")
 
 	assert.Equal(t, byte(0x12), data[0], "sessionID high byte")
@@ -264,7 +278,9 @@ func TestMessagePayloadPayloadMarshalBinary(t *testing.T) {
 	assert.Equal(t, byte(0xCD), data[4], "messageID byte 2")
 	assert.Equal(t, byte(0xEF), data[5], "messageID byte 3")
 
-	assert.True(t, bytes.Equal(data[6:], payload), "payload mismatch")
+	payloadLen := binary.BigEndian.Uint32(data[6:10])
+	assert.Equal(t, uint32(len(payload)), payloadLen, "payload length")
+	assert.True(t, bytes.Equal(data[10:], payload), "payload mismatch")
 }
 
 // TestMessagePayloadPayloadRoundTrip tests marshal/unmarshal round trip
@@ -853,6 +869,11 @@ func TestDisconnectMaxLength(t *testing.T) {
 
 // TestSendMessageExpiresPayloadParse tests parsing of SendMessageExpires payload
 func TestSendMessageExpiresPayloadParse(t *testing.T) {
+	testDest, err := createTestDestination()
+	require.NoError(t, err)
+	testDestBytes, err := testDest.Bytes()
+	require.NoError(t, err)
+
 	tests := []struct {
 		name         string
 		payload      []byte
@@ -866,22 +887,26 @@ func TestSendMessageExpiresPayloadParse(t *testing.T) {
 		{
 			name: "valid_empty_payload",
 			payload: func() []byte {
-				buf := make([]byte, 44) // 32 + 0 + 4 + 2 + 6
-				// Destination (32 bytes)
-				copy(buf[0:32], bytes.Repeat([]byte{0x01}, 32))
-				// Empty message payload (0 bytes)
-				// Nonce (4 bytes) at offset 32
-				binary.BigEndian.PutUint32(buf[32:36], 0x12345678)
-				// Flags (2 bytes) at offset 36
-				binary.BigEndian.PutUint16(buf[36:38], 0x0000)
-				// Expiration (6 bytes) at offset 38
+				buf := make([]byte, 0, len(testDestBytes)+16)
+				buf = append(buf, testDestBytes...)
+				lenBytes := make([]byte, 4)
+				binary.BigEndian.PutUint32(lenBytes, 0)
+				buf = append(buf, lenBytes...)
+				nonceBytes := make([]byte, 4)
+				binary.BigEndian.PutUint32(nonceBytes, 0x12345678)
+				buf = append(buf, nonceBytes...)
+				flagsBytes := make([]byte, 2)
+				binary.BigEndian.PutUint16(flagsBytes, 0x0000)
+				buf = append(buf, flagsBytes...)
 				expMs := uint64(time.Now().Add(5 * time.Minute).UnixMilli())
-				buf[38] = byte(expMs >> 40)
-				buf[39] = byte(expMs >> 32)
-				buf[40] = byte(expMs >> 24)
-				buf[41] = byte(expMs >> 16)
-				buf[42] = byte(expMs >> 8)
-				buf[43] = byte(expMs)
+				buf = append(buf,
+					byte(expMs>>40),
+					byte(expMs>>32),
+					byte(expMs>>24),
+					byte(expMs>>16),
+					byte(expMs>>8),
+					byte(expMs),
+				)
 				return buf
 			}(),
 			expectError:  false,
@@ -893,25 +918,27 @@ func TestSendMessageExpiresPayloadParse(t *testing.T) {
 			name: "valid_with_payload",
 			payload: func() []byte {
 				msgPayload := []byte("test message")
-				totalSize := 32 + len(msgPayload) + 12 // dest + payload + fixed
-				buf := make([]byte, totalSize)
-				// Destination
-				copy(buf[0:32], bytes.Repeat([]byte{0x02}, 32))
-				// Message payload
-				copy(buf[32:32+len(msgPayload)], msgPayload)
-				offset := 32 + len(msgPayload)
-				// Nonce
-				binary.BigEndian.PutUint32(buf[offset:offset+4], 0xABCDEF01)
-				// Flags
-				binary.BigEndian.PutUint16(buf[offset+4:offset+6], 0x0001)
-				// Expiration
+				buf := make([]byte, 0, len(testDestBytes)+4+len(msgPayload)+12)
+				buf = append(buf, testDestBytes...)
+				lenBytes := make([]byte, 4)
+				binary.BigEndian.PutUint32(lenBytes, uint32(len(msgPayload)))
+				buf = append(buf, lenBytes...)
+				buf = append(buf, msgPayload...)
+				nonceBytes := make([]byte, 4)
+				binary.BigEndian.PutUint32(nonceBytes, 0xABCDEF01)
+				buf = append(buf, nonceBytes...)
+				flagsBytes := make([]byte, 2)
+				binary.BigEndian.PutUint16(flagsBytes, 0x0001)
+				buf = append(buf, flagsBytes...)
 				expMs := uint64(time.Now().Add(10 * time.Minute).UnixMilli())
-				buf[offset+6] = byte(expMs >> 40)
-				buf[offset+7] = byte(expMs >> 32)
-				buf[offset+8] = byte(expMs >> 24)
-				buf[offset+9] = byte(expMs >> 16)
-				buf[offset+10] = byte(expMs >> 8)
-				buf[offset+11] = byte(expMs)
+				buf = append(buf,
+					byte(expMs>>40),
+					byte(expMs>>32),
+					byte(expMs>>24),
+					byte(expMs>>16),
+					byte(expMs>>8),
+					byte(expMs),
+				)
 				return buf
 			}(),
 			expectError:  false,
@@ -921,32 +948,39 @@ func TestSendMessageExpiresPayloadParse(t *testing.T) {
 		},
 		{
 			name:        "too_short_missing_all",
-			payload:     make([]byte, 31), // Need at least 44
+			payload:     make([]byte, 3), // Need at least destination + length
 			expectError: true,
 		},
 		{
 			name:        "too_short_missing_fixed_fields",
-			payload:     make([]byte, 40), // 32 dest + 8, but need 12 fixed
+			payload:     append(append([]byte{}, testDestBytes...), make([]byte, 8)...),
 			expectError: true,
 		},
 		{
 			name: "large_payload",
 			payload: func() []byte {
 				msgPayload := bytes.Repeat([]byte("X"), 1024)
-				totalSize := 32 + len(msgPayload) + 12
-				buf := make([]byte, totalSize)
-				copy(buf[0:32], bytes.Repeat([]byte{0x03}, 32))
-				copy(buf[32:32+len(msgPayload)], msgPayload)
-				offset := 32 + len(msgPayload)
-				binary.BigEndian.PutUint32(buf[offset:offset+4], 0x99999999)
-				binary.BigEndian.PutUint16(buf[offset+4:offset+6], 0xFFFF)
+				buf := make([]byte, 0, len(testDestBytes)+4+len(msgPayload)+12)
+				buf = append(buf, testDestBytes...)
+				lenBytes := make([]byte, 4)
+				binary.BigEndian.PutUint32(lenBytes, uint32(len(msgPayload)))
+				buf = append(buf, lenBytes...)
+				buf = append(buf, msgPayload...)
+				nonceBytes := make([]byte, 4)
+				binary.BigEndian.PutUint32(nonceBytes, 0x99999999)
+				buf = append(buf, nonceBytes...)
+				flagsBytes := make([]byte, 2)
+				binary.BigEndian.PutUint16(flagsBytes, 0xFFFF)
+				buf = append(buf, flagsBytes...)
 				expMs := uint64(time.Now().Add(1 * time.Hour).UnixMilli())
-				buf[offset+6] = byte(expMs >> 40)
-				buf[offset+7] = byte(expMs >> 32)
-				buf[offset+8] = byte(expMs >> 24)
-				buf[offset+9] = byte(expMs >> 16)
-				buf[offset+10] = byte(expMs >> 8)
-				buf[offset+11] = byte(expMs)
+				buf = append(buf,
+					byte(expMs>>40),
+					byte(expMs>>32),
+					byte(expMs>>24),
+					byte(expMs>>16),
+					byte(expMs>>8),
+					byte(expMs),
+				)
 				return buf
 			}(),
 			expectError:  false,

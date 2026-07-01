@@ -2,10 +2,35 @@ package i2cp
 
 import (
 	"bytes"
+	"encoding/binary"
 	"net"
 	"testing"
 	"time"
 )
+
+func decodeDisconnectFrame(t *testing.T, msg []byte) string {
+	t.Helper()
+	if len(msg) < 7 {
+		t.Fatalf("disconnect frame too short: got %d bytes, need at least 7", len(msg))
+	}
+
+	payloadLen := int(binary.BigEndian.Uint32(msg[0:4]))
+	if msg[4] != MessageTypeDisconnect {
+		t.Fatalf("expected disconnect message type %d, got %d", MessageTypeDisconnect, msg[4])
+	}
+	if len(msg) != 5+payloadLen {
+		t.Fatalf("disconnect frame length mismatch: declared payload %d, total %d", payloadLen, len(msg))
+	}
+	if payloadLen < 2 {
+		t.Fatalf("disconnect payload too short: %d", payloadLen)
+	}
+
+	reasonLen := int(binary.BigEndian.Uint16(msg[5:7]))
+	if payloadLen != 2+reasonLen {
+		t.Fatalf("disconnect reason length mismatch: payload=%d reason=%d", payloadLen, reasonLen)
+	}
+	return string(msg[7 : 7+reasonLen])
+}
 
 // mockConn is a mock network connection for testing
 type mockConn struct {
@@ -71,25 +96,14 @@ func TestM8_SendDisconnectMessage_SessionLimitReason(t *testing.T) {
 	mockConn := &mockConn{}
 	server.sendDisconnectMessage(mockConn, "session_limit_reached")
 
-	// M-8 FIX: Verify Disconnect message was written
-	// Format: command (1 byte) + length (2 bytes) + reason string
+	// M-8 FIX: Verify framed I2CP Disconnect message was written
 	msg := mockConn.writeBuffer.Bytes()
 	if len(msg) == 0 {
 		t.Fatalf("no message written to connection")
 	}
 
-	// M-8 FIX: Check command byte (30 = Disconnect)
-	if msg[0] != 30 {
-		t.Errorf("expected command byte 30, got %d", msg[0])
-	}
-
-	// M-8 FIX: Check reason string is present
-	reasonLen := int(msg[1])<<8 | int(msg[2])
 	expectedReason := "session_limit_reached"
-	if reasonLen != len(expectedReason) {
-		t.Errorf("expected reason length %d, got %d", len(expectedReason), reasonLen)
-	}
-	reason := string(msg[3 : 3+reasonLen])
+	reason := decodeDisconnectFrame(t, msg)
 	if reason != expectedReason {
 		t.Errorf("expected reason %q, got %q", expectedReason, reason)
 	}
@@ -115,16 +129,10 @@ func TestM8_SendDisconnectMessage_ConnectionLimitReason(t *testing.T) {
 		t.Fatalf("no message written to connection")
 	}
 
-	// M-8 FIX: Check command byte (30 = Disconnect)
-	if msg[0] != 30 {
-		t.Errorf("expected command byte 30, got %d", msg[0])
-	}
-
-	// M-8 FIX: Verify reason string
-	reasonLen := int(msg[1])<<8 | int(msg[2])
 	expectedReason := "connection_limit_reached"
-	if reasonLen != len(expectedReason) {
-		t.Errorf("expected reason length %d, got %d", len(expectedReason), reasonLen)
+	reason := decodeDisconnectFrame(t, msg)
+	if reason != expectedReason {
+		t.Errorf("expected reason %q, got %q", expectedReason, reason)
 	}
 }
 
@@ -205,9 +213,10 @@ func TestM8_ShouldRejectConnection_SendsDisconnectOnMaxConnections(t *testing.T)
 		t.Fatalf("no Disconnect message sent before closing connection")
 	}
 
-	// M-8 FIX: Verify it's a Disconnect command
-	if msg[0] != 30 {
-		t.Errorf("expected Disconnect command (30), got %d", msg[0])
+	// M-8 FIX: Verify framed disconnect is valid and has expected reason
+	reason := decodeDisconnectFrame(t, msg)
+	if reason != "connection_limit_reached" {
+		t.Errorf("expected reason %q, got %q", "connection_limit_reached", reason)
 	}
 }
 
@@ -224,16 +233,11 @@ func TestM8_DisconnectMessage_EmptyReason(t *testing.T) {
 	mockConn := &mockConn{}
 	server.sendDisconnectMessage(mockConn, "")
 
-	// M-8 FIX: Verify message format even with empty reason
+	// M-8 FIX: Verify framed message format even with empty reason
 	msg := mockConn.writeBuffer.Bytes()
-	if len(msg) < 3 {
-		t.Fatalf("message too short for header: %d bytes", len(msg))
-	}
-
-	// M-8 FIX: Empty reason should have length 0
-	reasonLen := int(msg[1])<<8 | int(msg[2])
-	if reasonLen != 0 {
-		t.Errorf("expected zero length for empty reason, got %d", reasonLen)
+	reason := decodeDisconnectFrame(t, msg)
+	if reason != "" {
+		t.Errorf("expected empty reason, got %q", reason)
 	}
 }
 
@@ -253,12 +257,7 @@ func TestM8_DisconnectMessage_LongReason(t *testing.T) {
 
 	// M-8 FIX: Verify long reason is properly encoded
 	msg := mockConn.writeBuffer.Bytes()
-	reasonLen := int(msg[1])<<8 | int(msg[2])
-	if reasonLen != len(longReason) {
-		t.Errorf("expected reason length %d, got %d", len(longReason), reasonLen)
-	}
-
-	reason := string(msg[3 : 3+reasonLen])
+	reason := decodeDisconnectFrame(t, msg)
 	if reason != longReason {
 		t.Errorf("expected reason %q, got %q", longReason, reason)
 	}
