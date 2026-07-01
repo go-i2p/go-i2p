@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Transport and Tunnel Observability - go-i2p/go-i2p</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <nav class="nav-sidebar">
+    <div class="repo-info">
+      <h2>
+        <a href="../index.html">go-i2p/go-i2p</a>
+      </h2>
+      <div class="repo-meta">
+        📝 2271 commits
+         • 📜 MIT License
+      </div>
+    </div>
+    
+    <ul class="nav-links">
+      <li><a href="../index.html">Repository Overview</a></li>
+      
+      
+        <div class="nav-section-title">Documentation:</div>
+        
+          <li><a href="../docs/docs/anonymity-logging.html" >Anonymity-Safe Logging</a></li>
+        
+          <li><a href="../docs/CONTRIBUTING.html" >Contributing</a></li>
+        
+          <li><a href="../docs/docs/i2pcontrol.html" >I2PControl JSON-RPC Server User Guide</a></li>
+        
+          <li><a href="../docs/docs/llm-disclosure.html" >Llm Disclosure</a></li>
+        
+          <li><a href="../docs/docs/interop-matrix.html" >Mixed-Peer Interoperability Matrix</a></li>
+        
+          <li><a href="../docs/lib/netdb/ISOLATION.html" >NetDB Client/Router Isolation</a></li>
+        
+          <li><a href="../docs/RELEASE_NOTES.html" >RELEASE NOTES</a></li>
+        
+          <li><a href="../docs/template.html" >Template</a></li>
+        
+          <li><a href="../docs/docs/transport-flake-baseline.html" >Transport and Tunnel Flake Baseline</a></li>
+        
+          <li><a href="../docs/docs/transport-observability.html" class="active">Transport and Tunnel Observability</a></li>
+        
+      
+    </ul>
+    
+    <div class="nav-footer">
+      <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a>
+    </div>
+  </nav>
+  
+  <div class="main-content">
+    <header class="page-header">
+      <h1>Transport and Tunnel Observability - go-i2p/go-i2p</h1>
+    </header>
+    
+    <main>
+      <div class="doc-content">
+        <h1 id="transport-and-tunnel-observability">Transport and Tunnel Observability</h1>
+
+<p>This document defines the minimum metrics and structured log taxonomy used to
+triage transport and tunnel incidents in go-i2p.</p>
+
+<h2 id="scope">Scope</h2>
+
+<ul>
+<li>Transport protocols: NTCP2 and SSU2</li>
+<li>Session lifecycle: handshake, established data flow, teardown</li>
+<li>Tunnel path: build, forwarding, and delivery status/error flow</li>
+</ul>
+
+<h2 id="minimum-metrics-set">Minimum Metrics Set</h2>
+
+<p>These metrics are intentionally minimal. They are enough to answer: what failed,
+where, and at what rate.</p>
+
+<h3 id="transport-session-metrics">Transport Session Metrics</h3>
+
+<ul>
+<li><code>transport_handshake_attempts_total{transport, direction}</code></li>
+<li><code>transport_handshake_failures_total{transport, direction, reason}</code></li>
+<li><code>transport_handshake_replay_reject_total{transport}</code></li>
+<li><code>transport_clock_skew_reject_total{transport}</code></li>
+<li><code>transport_sessions_active{transport}</code></li>
+<li><code>transport_session_close_total{transport, reason}</code></li>
+</ul>
+
+<h3 id="message-path-metrics">Message-Path Metrics</h3>
+
+<ul>
+<li><code>transport_i2np_send_fail_total{transport, phase}</code></li>
+<li><code>transport_i2np_recv_drop_total{transport, reason}</code></li>
+<li><code>tunnel_fragment_reassembly_fail_total{reason}</code></li>
+<li><code>tunnel_delivery_status_timeout_total</code></li>
+</ul>
+
+<h3 id="nat-introducer-metrics">NAT/Introducer Metrics</h3>
+
+<ul>
+<li><code>ssu2_peer_test_fail_total{phase, reason}</code></li>
+<li><code>ssu2_relay_request_reject_total{reason}</code></li>
+<li><code>ssu2_hole_punch_fail_total{reason}</code></li>
+</ul>
+
+<h2 id="log-taxonomy">Log Taxonomy</h2>
+
+<p>All warning and error logs in transport/tunnel critical paths should include
+structured context for reliable triage.</p>
+
+<h3 id="required-fields">Required Fields</h3>
+
+<ul>
+<li><code>at</code>: code location or logical operation</li>
+<li><code>reason</code>: compact machine-parseable reason category</li>
+<li><code>phase</code>: lifecycle phase (for example <code>handshake</code>, <code>established</code>, <code>teardown</code>)</li>
+</ul>
+
+<h3 id="strongly-recommended-fields">Strongly Recommended Fields</h3>
+
+<ul>
+<li><code>transport</code>: <code>ntcp2</code> or <code>ssu2</code></li>
+<li><code>session_state</code>: current session state if known</li>
+<li><code>peer_hash</code>: short, privacy-safe peer hash prefix when available</li>
+<li><code>direction</code>: <code>inbound</code> or <code>outbound</code></li>
+<li><code>error</code>: attached via <code>WithError(err)</code></li>
+</ul>
+
+<h3 id="reason-vocabulary">Reason Vocabulary</h3>
+
+<p>Use stable, low-cardinality reason labels, for example:</p>
+
+<ul>
+<li><code>replay_detected</code></li>
+<li><code>clock_skew_exceeded</code></li>
+<li><code>termination_write_failed</code></li>
+<li><code>queue_full</code></li>
+<li><code>parse_failed</code></li>
+</ul>
+
+<h2 id="operator-safe-defaults">Operator-Safe Defaults</h2>
+
+<ul>
+<li>Production: <code>DEBUG_I2P=warn</code> (or <code>DEBUG_I2P=error</code> for strict environments)</li>
+<li>Never use <code>DEBUG_I2P=debug</code> in anonymity-sensitive production deployments</li>
+<li>Keep warning/error retention minimal and access restricted</li>
+</ul>
+
+<p>For full deployment guidance, see <code>docs/anonymity-logging.md</code>.</p>
+
+<h2 id="anti-footgun-guidance">Anti-Footgun Guidance</h2>
+
+<ul>
+<li>Do not log full peer identities or full cryptographic material.</li>
+<li>Prefer hash/key prefixes over complete values.</li>
+<li>Keep <code>reason</code> values stable; do not embed dynamic text in <code>reason</code>.</li>
+<li>Emit one clear warning/error per failure point; avoid duplicate spam.</li>
+</ul>
+
+      </div>
+    </main>
+    
+    <footer class="page-footer">
+      <p>Generated on 2026-07-01 19:24:31 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
+    </footer>
+  </div>
+</body>
+</html>

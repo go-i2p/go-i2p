@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mixed-Peer Interoperability Matrix - go-i2p/go-i2p</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <nav class="nav-sidebar">
+    <div class="repo-info">
+      <h2>
+        <a href="../index.html">go-i2p/go-i2p</a>
+      </h2>
+      <div class="repo-meta">
+        📝 2271 commits
+         • 📜 MIT License
+      </div>
+    </div>
+    
+    <ul class="nav-links">
+      <li><a href="../index.html">Repository Overview</a></li>
+      
+      
+        <div class="nav-section-title">Documentation:</div>
+        
+          <li><a href="../docs/docs/anonymity-logging.html" >Anonymity-Safe Logging</a></li>
+        
+          <li><a href="../docs/CONTRIBUTING.html" >Contributing</a></li>
+        
+          <li><a href="../docs/docs/i2pcontrol.html" >I2PControl JSON-RPC Server User Guide</a></li>
+        
+          <li><a href="../docs/docs/llm-disclosure.html" >Llm Disclosure</a></li>
+        
+          <li><a href="../docs/docs/interop-matrix.html" class="active">Mixed-Peer Interoperability Matrix</a></li>
+        
+          <li><a href="../docs/lib/netdb/ISOLATION.html" >NetDB Client/Router Isolation</a></li>
+        
+          <li><a href="../docs/RELEASE_NOTES.html" >RELEASE NOTES</a></li>
+        
+          <li><a href="../docs/template.html" >Template</a></li>
+        
+          <li><a href="../docs/docs/transport-flake-baseline.html" >Transport and Tunnel Flake Baseline</a></li>
+        
+          <li><a href="../docs/docs/transport-observability.html" >Transport and Tunnel Observability</a></li>
+        
+      
+    </ul>
+    
+    <div class="nav-footer">
+      <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a>
+    </div>
+  </nav>
+  
+  <div class="main-content">
+    <header class="page-header">
+      <h1>Mixed-Peer Interoperability Matrix - go-i2p/go-i2p</h1>
+    </header>
+    
+    <main>
+      <div class="doc-content">
+        <h1 id="mixed-peer-interoperability-matrix">Mixed-Peer Interoperability Matrix</h1>
+
+<p>Updated: 2026-07-01
+Owner: transport-maintainers</p>
+
+<p>This matrix captures the current interoperability evidence for mixed peers (Java I2P + i2pd) using the live-network integration suite.</p>
+
+<h2 id="scope">Scope</h2>
+
+<ul>
+<li>Local router under test: go-i2p.</li>
+<li>External peers: Java I2P (geti2p/i2p) and i2pd (purplei2p/i2pd).</li>
+<li>Verification source:
+
+<ul>
+<li>Integration tests in <code>lib/router/live_network_integration_test.go</code>.</li>
+<li>CI workflow <code>.github/workflows/live-network-daily.yml</code>.</li>
+<li>Runner script <code>.github/scripts/run-live-network-daily.sh</code>.</li>
+</ul></li>
+</ul>
+
+<h2 id="matrix">Matrix</h2>
+
+<table>
+<thead>
+<tr>
+<th>Path</th>
+<th>Java I2P peer coverage</th>
+<th>i2pd peer coverage</th>
+<th>Validation method</th>
+<th>Pass criteria</th>
+<th>Artifacts</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td>Bootstrap and peer overlap</td>
+<td>Required (<code>overlap.JavaMatches &gt;= 1</code>)</td>
+<td>Required (<code>overlap.I2PDMatches &gt;= 1</code>)</td>
+<td><code>TestLiveNetworkBootstrapAndInterop</code></td>
+<td>Router starts and discovers at least one peer from each source netDb snapshot</td>
+<td><code>test-logs/live-network-attempt*.log</code>, <code>tmp/live-network-artifacts/**</code></td>
+</tr>
+
+<tr>
+<td>RouterInfo publication</td>
+<td>Required ACK path (Java floodfill DeliveryStatus ACK)</td>
+<td>Mixed-peer routing baseline from shared netDb and transport paths</td>
+<td><code>TestLiveNetworkPublishRouterInfo</code> with retries and diagnostics</td>
+<td>At least one ACK after publish (<code>ReplyTokenAckReceived</code> increases)</td>
+<td><code>test-logs/live-network-attempt*.log</code>, optional timeout dump path in test log</td>
+</tr>
+
+<tr>
+<td>LeaseSet publication and retrieval</td>
+<td>Required as part of floodfill publication path exercised by the test</td>
+<td>Required as part of mixed-peer bootstrap and route selection preconditions</td>
+<td><code>TestLiveNetworkPublishLeaseSet</code></td>
+<td>Publish succeeds, LeaseSet persists in local netDb, retrieved bytes match published bytes</td>
+<td><code>tmp/live-network-artifacts/leaseset-publish*</code>, <code>test-logs/live-network-attempt*.log</code></td>
+</tr>
+</tbody>
+</table>
+
+<h2 id="execution">Execution</h2>
+
+<pre><code class="language-bash">bash .github/scripts/run-live-network-daily.sh
+</code></pre>
+
+<p>Manual integration invocation (without the daily wrapper):</p>
+
+<pre><code class="language-bash">GO_I2P_INTEGRATION=1 go test -tags=integration -count=1 -v ./lib/router -run '^TestLiveNetwork'
+</code></pre>
+
+<h2 id="quarantine-policy">Quarantine policy</h2>
+
+<p>The daily workflow retries once and classifies known transient network patterns as quarantined (non-blocking) while still storing logs/artifacts for triage.</p>
+
+<p>Known transient patterns are tracked in <code>.github/scripts/run-live-network-daily.sh</code> under <code>transient_pattern</code>.</p>
+
+<h2 id="maintenance-checklist">Maintenance checklist</h2>
+
+<ul>
+<li>Update this matrix when test names, pass criteria, or artifact paths change.</li>
+<li>Keep Java and i2pd container images current in the daily workflow.</li>
+<li>Keep quarantine patterns narrow to avoid hiding deterministic regressions.</li>
+</ul>
+
+      </div>
+    </main>
+    
+    <footer class="page-footer">
+      <p>Generated on 2026-07-01 19:24:31 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
+    </footer>
+  </div>
+</body>
+</html>
