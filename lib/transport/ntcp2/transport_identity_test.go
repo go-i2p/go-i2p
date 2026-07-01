@@ -1,6 +1,7 @@
 package ntcp2
 
 import (
+	"net"
 	"testing"
 	"time"
 
@@ -36,6 +37,27 @@ func (n *testPeerConnNotifier) RecordFailure(_ data.Hash, reason string) {
 func (n *testPeerConnNotifier) RecordPermanentFailure(_ data.Hash, reason string) {
 	n.permanent++
 	n.lastReason = reason
+}
+
+type handoffTimeoutConn struct {
+	*acceptMockConn
+	closed chan struct{}
+}
+
+func newHandoffTimeoutConn(remoteAddr string) *handoffTimeoutConn {
+	return &handoffTimeoutConn{
+		acceptMockConn: newAcceptMockConn(remoteAddr),
+		closed:         make(chan struct{}),
+	}
+}
+
+func (c *handoffTimeoutConn) Close() error {
+	select {
+	case <-c.closed:
+	default:
+		close(c.closed)
+	}
+	return c.acceptMockConn.Close()
 }
 
 func makeRouterInfoWithNTCP2StaticKey(t *testing.T, staticKey []byte) router_info.RouterInfo {
@@ -94,4 +116,40 @@ func TestHandleDialFailure_ClassifierUsesPermanentFailureForInvalidNTCP2Data(t *
 
 	assert.Equal(t, 2, notifier.permanent, "structural NTCP2 failures should be permanent")
 	assert.Equal(t, 1, notifier.failures, "non-structural failures should remain transient")
+}
+
+func TestInboundHandshakeWorker_UsesConfiguredPendingQueueTimeout(t *testing.T) {
+	transport := newTestTransport(newMockListener(), 1)
+	transport.pendingConns = make(chan net.Conn, 1)
+	transport.pendingConns <- newAcceptMockConn("10.0.0.9:9000")
+	transport.testBypassHandshakeTypeCheck = true
+
+	cfg := transport.config.Load()
+	require.NotNil(t, cfg)
+	newCfg := *cfg
+	newCfg.PendingConnQueueTimeout = 25 * time.Millisecond
+	transport.config.Store(&newCfg)
+
+	conn := newHandoffTimeoutConn("10.0.0.10:9001")
+	done := make(chan struct{})
+	go func() {
+		transport.inboundHandshakeWorker(conn)
+		close(done)
+	}()
+
+	select {
+	case <-conn.closed:
+	case <-time.After(2 * time.Second):
+		t.Fatal("expected inbound handoff timeout to close the connection")
+	}
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("expected inboundHandshakeWorker to exit after queue timeout")
+	}
+
+	assert.Equal(t, int32(0), transport.GetSessionCount(), "timed-out handoff should release the reserved session slot")
+	assert.Equal(t, uint64(1), transport.metrics.queueSendTimeouts.Load(), "timeout metric should increment")
+	assert.Equal(t, 1, len(transport.pendingConns), "pre-existing pending connection should remain queued")
 }

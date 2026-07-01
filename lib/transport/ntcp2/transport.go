@@ -576,7 +576,10 @@ func (t *NTCP2Transport) inboundHandshakeWorker(conn net.Conn) {
 	// Use a timeout to send to the pending queue to avoid indefinitely blocking
 	// and holding a reserved slot when the queue is full or Accept() is slow.
 	// If the send times out, close the connection and unreserve.
-	const queueTimeout = 5 * time.Second
+	queueTimeout := 5 * time.Second
+	if cfg := t.config.Load(); cfg != nil && cfg.PendingConnQueueTimeout > 0 {
+		queueTimeout = cfg.PendingConnQueueTimeout
+	}
 	sendCtx, cancel := context.WithTimeout(context.Background(), queueTimeout)
 	defer cancel()
 

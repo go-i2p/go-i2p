@@ -1,6 +1,8 @@
 package ntcp2
 
 import (
+	"time"
+
 	"github.com/go-i2p/go-noise/ntcp2"
 	"github.com/go-i2p/logger"
 )
@@ -11,9 +13,10 @@ const DefaultMaxSessions = 512
 
 // Config holds the configuration parameters for an NTCP2 transport instance, including listener address, working directory, and session limits.
 type Config struct {
-	ListenerAddress string // Address to listen on, e.g., ":42069"
-	WorkingDir      string // Working directory for persistent storage (e.g., ~/.go-i2p/config)
-	MaxSessions     int    // Maximum number of concurrent sessions (0 = use DefaultMaxSessions)
+	ListenerAddress         string // Address to listen on, e.g., ":42069"
+	WorkingDir              string // Working directory for persistent storage (e.g., ~/.go-i2p/config)
+	MaxSessions             int    // Maximum number of concurrent sessions (0 = use DefaultMaxSessions)
+	PendingConnQueueTimeout time.Duration
 	*ntcp2.Config
 }
 
@@ -35,9 +38,10 @@ func NewConfig(listenerAddress string) (*Config, error) {
 		"listener_address": listenerAddress,
 	}).Debug("creating new NTCP2 config")
 	return &Config{
-		ListenerAddress: listenerAddress,
-		WorkingDir:      "",  // Must be set before use
-		Config:          nil, // Will be set when identity is provided
+		ListenerAddress:         listenerAddress,
+		WorkingDir:              "", // Must be set before use
+		PendingConnQueueTimeout: 5 * time.Second,
+		Config:                  nil, // Will be set when identity is provided
 	}, nil
 }
 
