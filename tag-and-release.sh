@@ -74,7 +74,13 @@ if [ -z "$VERSION" ]; then
 fi
 
 if [ "$DRY_RUN" = true ]; then
-  echo "Attempting a dry run, dependencies will be updated but not checked in"
+  # DRY_RUN means push/commit are allowed; only tag/release is skipped.
+  # CHECKIN_DRY_RUN is the mode that suppresses check-ins.
+  if [ "$CHECKIN_DRY_RUN" = true ]; then
+    echo "DRY_RUN=true overrides CHECKIN_DRY_RUN=true; proceeding with check-ins and push (tag/release skipped)" 1>&2
+    CHECKIN_DRY_RUN=false
+  fi
+  echo "Attempting a dry run, tags/releases will be skipped" 1>&2
 fi
 
 git() {
