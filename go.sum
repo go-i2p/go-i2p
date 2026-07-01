@@ -46,10 +46,10 @@ github.com/go-i2p/elgamal v0.1.60000-0.20260701131626-b5c8141026fc h1:giOkER76Ac
 github.com/go-i2p/elgamal v0.1.60000-0.20260701131626-b5c8141026fc/go.mod h1:kB4tWTyeTkycDUAlFYhd17H8Lth0ugSA0PH4/YJArrQ=
 github.com/go-i2p/go-i2pcontrol v0.1.9-0.20260607233455-950087a3858f h1:FJJXgN8/jrNptI5wz9MX7axrgQxq8/z+FSeoMt0ipAA=
 github.com/go-i2p/go-i2pcontrol v0.1.9-0.20260607233455-950087a3858f/go.mod h1:+jmWmXsfpg9fVmNmaLFCykYyxkYphdrLRD54UwNw2Qs=
-github.com/go-i2p/go-nat-listener v0.1.66 h1:/BmvlKO9mHvMVkvD7MlTF6T8U+f9Jxrmh3IZy2O+0ZE=
-github.com/go-i2p/go-nat-listener v0.1.66/go.mod h1:yHYD4Fo8E0ndPyBPeDgQjgx/yAm7SeyaCMjMuDIYtK4=
-github.com/go-i2p/go-noise v0.1.60000-0.20260701134708-a15c74fe448e h1:SoNalIHW8NpLlV5a92uSl2XKFL9ZqHIP/rSeXlPxk70=
-github.com/go-i2p/go-noise v0.1.60000-0.20260701134708-a15c74fe448e/go.mod h1:UjkutokkrU5wytJbyCsqq+e3SnDArEkyMJNAruv2wG8=
+github.com/go-i2p/go-nat-listener v0.1.67 h1:1vrAd8xFHpRgDqT6SFOHX/MNjAds1oujQ8iYHYj76Gk=
+github.com/go-i2p/go-nat-listener v0.1.67/go.mod h1:yHYD4Fo8E0ndPyBPeDgQjgx/yAm7SeyaCMjMuDIYtK4=
+github.com/go-i2p/go-noise v0.1.60000-0.20260701140013-e7d2a94c1aa9 h1:CxSNDWO7SYCbuMpYTEEIrmHh24CtvGV/mLUt2rCiZdc=
+github.com/go-i2p/go-noise v0.1.60000-0.20260701140013-e7d2a94c1aa9/go.mod h1:0nYvEDdRArdHU2eagnIex5e+GzLxCY7oFXmfnP9fhV4=
 github.com/go-i2p/go-unzip v0.0.0-20260417162122-21146ed7aca8 h1:efCudZqf5/F4Mj/WYLqKveOwTPW81vVrn8Z0K7GFkTM=
 github.com/go-i2p/go-unzip v0.0.0-20260417162122-21146ed7aca8/go.mod h1:Jy8JMJDZNzy6u4s1FGNeVvDAsuBJn24nxyNLS0QmYpM=
 github.com/go-i2p/i2p-control v0.0.0-20260608000308-d8ed861a259c h1:Euk+tCxpdF9h9L7A5/KsXm/o8cOzNiVNU3PbQ2ieYwE=
