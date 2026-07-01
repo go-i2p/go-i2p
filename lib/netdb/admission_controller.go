@@ -13,6 +13,7 @@ const (
 	routerInfoPerSourceIntroduced  = 256
 	routerInfoTrackedSourcesMax    = 2048
 	routerInfoPressureThresholdPct = 80
+	admissionCriticalThresholdPct  = 95
 
 	leaseSetAdmissionWindow      = time.Hour
 	leaseSetPerSourceIntroduced  = 256
@@ -83,12 +84,17 @@ func (c *admissionController) AllowIntroduction(source *common.Hash, key common.
 	if !c.underPressure(currentCount) {
 		return true
 	}
+
+	if !c.atCriticalPressure(currentCount) {
+		// Before critical occupancy, keep admitting introductions to avoid
+		// startup/bootstrap stalls when RouterInfos arrive from a small set of
+		// peers or when source attribution is incomplete on some paths.
+		return true
+	}
+
 	if source == nil {
-		// Source attribution can be unavailable on some inbound paths.
-		// Rejecting all such introductions as soon as pressure starts (80%) can
-		// stall NetDB growth. Keep accepting until critical pressure, then hard-stop.
-		criticalThreshold := (c.capacity * 95) / 100
-		return currentCount < criticalThreshold
+		// At critical pressure, require source attribution for fair accounting.
+		return false
 	}
 
 	now := time.Now()
@@ -113,6 +119,16 @@ func (c *admissionController) AllowIntroduction(source *common.Hash, key common.
 
 	window.introductions[key] = now
 	return true
+}
+
+// atCriticalPressure returns true when cache occupancy is high enough to
+// enforce strict per-source fairness.
+func (c *admissionController) atCriticalPressure(currentCount int) bool {
+	if c.capacity <= 0 {
+		return false
+	}
+	criticalThreshold := (c.capacity * admissionCriticalThresholdPct) / 100
+	return currentCount >= criticalThreshold
 }
 
 // isKeyReintroduction reports whether the source has already introduced the key.
