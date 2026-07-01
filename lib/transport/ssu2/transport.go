@@ -507,15 +507,23 @@ func (t *SSU2Transport) checkConnectionReplay(conn net.Conn) bool {
 	}
 
 	if ssu2Conn, ok := conn.(*ssu2noise.SSU2Conn); ok {
-		replayToken := ssu2Conn.GetReplayToken()
-		if replayToken != nil {
-			return t.handler.CheckReplay(replayTokenToReplayKey(replayToken))
-		}
-
-		// Nil replay token means SessionRequest replay material is not yet available.
-		t.logger.WithField("remote_addr", conn.RemoteAddr().String()).Debug("SSU2 replay token unavailable (not yet validated); skipping replay check")
+		return t.checkReplayToken(ssu2Conn.GetReplayToken(), conn.RemoteAddr().String())
 	}
 
+	return false
+}
+
+// checkReplayToken performs replay-cache validation from SessionRequest replay
+// material. A nil token indicates replay material is not yet available.
+func (t *SSU2Transport) checkReplayToken(replayToken []byte, remoteAddr string) bool {
+	if replayToken != nil {
+		return t.handler.CheckReplay(replayTokenToReplayKey(replayToken))
+	}
+
+	// Nil replay token means SessionRequest replay material is not yet available.
+	// Track deferred checks for observability and triage.
+	t.reachMetrics.replayChecksDeferred.Add(1)
+	t.logger.WithField("remote_addr", remoteAddr).Debug("SSU2 replay token unavailable (not yet validated); deferring replay check")
 	return false
 }
 

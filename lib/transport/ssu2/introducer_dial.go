@@ -46,10 +46,15 @@ const (
 // multiple slow introducers are present.
 // EH-3 fix: Check NAT health before attempting introducer dial.
 func (t *SSU2Transport) dialViaIntroducer(charlieRI router_info.RouterInfo, charlieHash data.Hash) (transport.TransportSession, error) {
+	t.recordPeerAttempt(charlieHash)
+	dialStart := time.Now()
+
 	// R-2 fix: Atomic config snapshot
 	cfg := t.config.Load()
 	if cfg.RouterLookupFunc == nil {
-		return nil, oops.Errorf("RouterLookupFunc not configured: cannot dial via introducer")
+		err := oops.Errorf("RouterLookupFunc not configured: cannot dial via introducer")
+		t.recordPeerFailure(charlieHash, err)
+		return nil, err
 	}
 
 	// EH-3 fix: Check NAT managers health before attempting relay/introducer dial.
@@ -58,12 +63,16 @@ func (t *SSU2Transport) dialViaIntroducer(charlieRI router_info.RouterInfo, char
 	// relay will be unavailable and the dial will fail with confusing errors;
 	// fail fast with a clear error instead.
 	if !t.NATManagersHealthy() {
-		return nil, oops.Errorf("NAT managers degraded: cannot dial via introducer (try direct addresses only)")
+		err := oops.Errorf("NAT managers degraded: cannot dial via introducer (try direct addresses only)")
+		t.recordPeerFailure(charlieHash, err)
+		return nil, err
 	}
 
 	introducers := t.collectIntroducers(charlieRI)
 	if len(introducers) == 0 {
-		return nil, oops.Errorf("no valid introducers found for router %x", charlieHash[:4])
+		err := oops.Errorf("no valid introducers found for router %x", charlieHash[:4])
+		t.recordPeerFailure(charlieHash, err)
+		return nil, err
 	}
 
 	// T-2 fix: Apply an overall deadline to the entire introducer phase.
@@ -94,18 +103,23 @@ func (t *SSU2Transport) dialViaIntroducer(charlieRI router_info.RouterInfo, char
 			if res.err == nil {
 				// Success: cancel remaining attempts and return the session.
 				cancel()
+				t.recordPeerSuccess(charlieHash, time.Since(dialStart).Milliseconds())
 				return res.session, nil
 			}
 			t.logger.WithField("error", res.err).Debug("introducer attempt failed")
 			lastErr = res.err
 		case <-ctx.Done():
 			// Overall deadline exceeded.
-			return nil, oops.Errorf("introducer phase timed out after %v: %w", introducerPhaseTimeout, ctx.Err())
+			err := oops.Errorf("introducer phase timed out after %v: %w", introducerPhaseTimeout, ctx.Err())
+			t.recordPeerFailure(charlieHash, err)
+			return nil, err
 		}
 	}
 
 	// All introducers failed.
-	return nil, oops.Wrapf(lastErr, "all %d introducer(s) failed for router %x", len(introducers), charlieHash[:4])
+	err := oops.Wrapf(lastErr, "all %d introducer(s) failed for router %x", len(introducers), charlieHash[:4])
+	t.recordPeerFailure(charlieHash, err)
+	return nil, err
 }
 
 // collectIntroducers gathers all distinct IntroducerAddr entries from all SSU2

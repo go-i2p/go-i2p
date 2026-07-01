@@ -10,6 +10,7 @@ type reachabilityMetrics struct {
 	peerTestConfirmed       atomic.Uint64
 	publishedAddrChanged    atomic.Uint64
 	staleSessionsReconciled atomic.Uint64 // A-3: how many Close() operations found non-zero stale sessions
+	replayChecksDeferred    atomic.Uint64 // deferred anti-replay checks due to unavailable SessionRequest replay token
 }
 
 // ReachabilitySnapshot is a point-in-time copy of all reachability counters.
@@ -29,6 +30,10 @@ type ReachabilitySnapshot struct {
 	// when session accounting is correct (A-3 fix). Non-zero indicates
 	// accounting drift bugs (typically from A-1, A-2, X-2, X-3 issues).
 	StaleSessionsReconciled uint64
+	// ReplayChecksDeferred is the number of inbound SSU2 connections where
+	// anti-replay validation was deferred because SessionRequest replay
+	// material was not yet available.
+	ReplayChecksDeferred uint64
 }
 
 // GetReachabilityCounters returns a point-in-time snapshot of all
@@ -40,5 +45,6 @@ func (t *SSU2Transport) GetReachabilityCounters() ReachabilitySnapshot {
 		PeerTestConfirmed:       t.reachMetrics.peerTestConfirmed.Load(),
 		PublishedAddrChanged:    t.reachMetrics.publishedAddrChanged.Load(),
 		StaleSessionsReconciled: t.reachMetrics.staleSessionsReconciled.Load(),
+		ReplayChecksDeferred:    t.reachMetrics.replayChecksDeferred.Load(),
 	}
 }
