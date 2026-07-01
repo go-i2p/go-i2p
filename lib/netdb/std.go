@@ -188,6 +188,17 @@ func (db *StdNetDB) GetRouterInfo(hash common.Hash) (chnl chan router_info.Route
 		return chnl
 	}
 
+	if db.isRouterInfoRefreshCoolingDown(hash) {
+		log.WithFields(logger.Fields{
+			"at":     "(StdNetDB) GetRouterInfo",
+			"reason": "refresh cooldown active",
+			"hash":   logutil.HashPrefix(hash),
+		}).Debug("routerInfo lookup suppressed while refresh cooldown is active")
+		chnl = make(chan router_info.RouterInfo)
+		close(chnl)
+		return chnl
+	}
+
 	// Load from file
 	data, err := db.loadRouterInfoFromFile(hash)
 	if err != nil {
@@ -1691,15 +1702,26 @@ func (db *StdNetDB) RequestRouterInfoRefresh(hash common.Hash) {
 	_, existed := db.riCache.get(hash)
 	db.riCache.delete(hash)
 	db.riCache.deleteExpiry(hash)
-	db.removeRouterInfoFromDisk(hash)
 
 	if existed {
 		log.WithFields(logger.Fields{
 			"at":        "StdNetDB.RequestRouterInfoRefresh",
 			"peer_hash": logutil.HashPrefixPlain(hash),
-			"reason":    "stale RouterInfo evicted after handshake EOF",
-		}).Info("Evicted stale RouterInfo from cache and disk; next lookup must refetch it")
+			"reason":    "stale RouterInfo evicted after refresh request",
+		}).Info("Evicted stale RouterInfo from cache; disk copy retained until refresh cooldown expires")
 	}
+}
+
+func (db *StdNetDB) isRouterInfoRefreshCoolingDown(hash common.Hash) bool {
+	prev, loaded := db.riRefreshCooldown.Load(hash)
+	if !loaded {
+		return false
+	}
+	prevTime, ok := prev.(time.Time)
+	if !ok {
+		return false
+	}
+	return time.Since(prevTime) < riRefreshCooldownDuration
 }
 
 // sweepRefreshCooldown removes entries from riRefreshCooldown that are older

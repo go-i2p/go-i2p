@@ -211,14 +211,14 @@ func TestStdNetDB_RequestRouterInfoRefresh_RemovesPersistentEntry(t *testing.T) 
 	if _, ok := db.riCache.getExpiry(hash); ok {
 		t.Fatal("expected RouterInfo expiry to be removed")
 	}
-	if _, err := os.Stat(db.SkiplistFile(hash)); !os.IsNotExist(err) {
-		t.Fatalf("expected RouterInfo file to be removed, got: %v", err)
+	if _, err := os.Stat(db.SkiplistFile(hash)); err != nil {
+		t.Fatalf("expected RouterInfo file to remain on disk, got: %v", err)
 	}
 
 	if ch := db.GetRouterInfo(hash); ch == nil {
 		t.Fatal("expected closed channel, got nil")
 	} else if _, ok := <-ch; ok {
-		t.Fatal("expected refreshed RouterInfo lookup to miss until refetched")
+		t.Fatal("expected refreshed RouterInfo lookup to miss while refresh cooldown is active")
 	}
 }
 
