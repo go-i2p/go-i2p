@@ -569,6 +569,70 @@ func TestE2E_OutboundMessageRouting(t *testing.T) {
 	}
 }
 
+// TestE2E_SendMessageIngressToTunnelEgress verifies the full I2CP send path.
+// It exercises the server ingress handler, destination resolution, message
+// routing, and tunnel gateway dispatch in one flow.
+func TestE2E_SendMessageIngressToTunnelEgress(t *testing.T) {
+	server, session, _, outboundPool, cleanup := setupTestEnvironment(t)
+	defer cleanup()
+
+	addTestTunnelsToPool(outboundPool, 4000, "ingress-egress-gateway-hash-1234567890", 1)
+
+	var gatewayHash data.Hash
+	copy(gatewayHash[:], []byte("ingress-egress-gateway-hash-1234567890"))
+	gatewayHash[31] = 0
+
+	transportSent := make(chan struct{}, 1)
+	var sentGateway data.Hash
+	var sentMsg i2np.Message
+	transportSend := func(peerHash data.Hash, msg i2np.Message) error {
+		sentGateway = peerHash
+		sentMsg = msg
+		transportSent <- struct{}{}
+		return nil
+	}
+
+	server.SetDestinationResolver(&mockDestinationResolver{})
+	server.SetMessageRouter(NewMessageRouter(newMockGarlicEncryptor(), transportSend))
+
+	dest, err := createTestDestination()
+	require.NoError(t, err)
+
+	payload := []byte("Hello from I2CP ingress")
+	sendPayload := &SendMessagePayload{
+		Destination: *dest,
+		Payload:     payload,
+		Nonce:       0x10203040,
+	}
+	wirePayload, err := sendPayload.MarshalBinary()
+	require.NoError(t, err)
+
+	msg := &Message{
+		Type:      MessageTypeSendMessage,
+		SessionID: session.ID(),
+		Payload:   prependSessionID(session.ID(), wirePayload),
+	}
+
+	sessionPtr := session
+	response, err := server.handleSendMessage(msg, &sessionPtr)
+	require.NoError(t, err)
+	require.NotNil(t, response)
+	assert.Equal(t, session.ID(), response.SessionID)
+	assert.Equal(t, MessageTypeMessageStatus, response.Type)
+	require.Len(t, response.Payload, 15)
+	assert.Equal(t, MessageStatusAccepted, response.Payload[6])
+
+	select {
+	case <-transportSent:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for tunnel egress dispatch")
+	}
+
+	assert.Equal(t, gatewayHash, sentGateway)
+	assert.Equal(t, i2np.I2NPMessageTypeGarlic, sentMsg.Type())
+	assert.Len(t, outboundPool.GetActiveTunnels(), 1)
+}
+
 // =============================================================================
 // ERROR FLOW INTEGRATION TESTS
 // =============================================================================

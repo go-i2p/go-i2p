@@ -394,6 +394,48 @@ func TestFailedPeersExcludedFromSubsequentBuilds(t *testing.T) {
 	assert.Contains(t, capturedExcludeList, peerA)
 }
 
+func TestBuildTunnelStress_ConstrainedPeers(t *testing.T) {
+	pool, _, peers := setupPoolWithFailingPeerBuilder(t, 0x41, 0x42)
+
+	var buildCount int
+	var snapshotCount int
+	builder := &callbackBuilder{
+		callback: func(req BuildTunnelRequest) (*BuildTunnelResult, error) {
+			buildCount++
+			snapshot := append([]common.Hash(nil), req.ExcludePeers...)
+			snapshotCount++
+			if snapshotCount == 1 {
+				assert.Empty(t, snapshot, "first constrained build should start without exclusions")
+			} else {
+				assert.NotEmpty(t, snapshot, "rebuilds should carry failed peers forward")
+			}
+
+			if buildCount%3 != 0 {
+				return &BuildTunnelResult{
+					TunnelID:   0,
+					PeerHashes: peers,
+				}, assert.AnError
+			}
+
+			return &BuildTunnelResult{
+				TunnelID:   TunnelID(9000),
+				PeerHashes: nil,
+			}, nil
+		},
+	}
+	pool.SetTunnelBuilder(builder)
+
+	req := newBuildTunnelRequest(3, false)
+	for i := 0; i < 3; i++ {
+		_, err := pool.executeBuildWithRetry(&req)
+		require.NoError(t, err, "constrained rebuild cycle %d should eventually succeed", i)
+	}
+
+	assert.Equal(t, 9, buildCount, "stress loop should exercise constrained rebuilds")
+	assert.True(t, pool.IsPeerFailed(peers[0]))
+	assert.True(t, pool.IsPeerFailed(peers[1]))
+}
+
 // callbackBuilder is a flexible test builder that delegates to a callback function.
 type callbackBuilder struct {
 	callback func(req BuildTunnelRequest) (*BuildTunnelResult, error)
