@@ -51,8 +51,7 @@ func TestCRITICAL_1_CheckConnectionReplayIntegration(t *testing.T) {
 	//    conn.GetReplayToken() when available
 	// 3. Transport calls handler.CheckReplay(replayKey)
 	// 4. If replay is detected, connection is closed and slot is unreserved
-	// 5. If replay token is nil (not yet validated), transport falls back to
-	//    metadata-derived replay key to preserve existing behavior
+	// 5. If replay token is nil (not yet validated), replay check is skipped
 	// 6. If not a replay, connection is registered and returned
 
 	// For now, verify that checkConnectionReplay exists and the handler interface is wired
@@ -76,12 +75,12 @@ func TestCRITICAL_1_CheckConnectionReplayIntegration(t *testing.T) {
 
 // TestCRITICAL_1_ReplayTokenAccessorAvailable documents replay-material behavior.
 //
-// Primary path: replay token from SessionRequest validation is used directly.
-// Fallback path: nil token means "not yet validated", so metadata fallback applies.
+// Replay path: token from SessionRequest validation is used directly.
+// Nil token means "not yet validated", so replay check is deferred.
 func TestCRITICAL_1_ReplayTokenAccessorAvailable(t *testing.T) {
 	t.Log("STATUS: go-noise exposes conn.GetReplayToken() and conn.GetPeerEphemeralKey()")
 	t.Log("BEHAVIOR: checkConnectionReplay prefers replay token when available")
-	t.Log("FALLBACK: nil replay token is treated as not-yet-validated; metadata key fallback remains")
+	t.Log("BEHAVIOR: nil replay token is treated as not-yet-validated; replay check is deferred")
 
 	// Verify replay checking infrastructure is in place
 	handler := NewDefaultHandler()

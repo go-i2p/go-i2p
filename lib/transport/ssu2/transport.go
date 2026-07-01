@@ -3,7 +3,6 @@ package ssu2
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"net"
@@ -501,10 +500,6 @@ func (t *SSU2Transport) extractPeerHash(conn net.Conn) data.Hash {
 //
 // Primary path (preferred): when conn is *ssu2noise.SSU2Conn and SessionRequest
 // has been validated, use conn.GetReplayToken() directly for replay-cache checks.
-//
-// Fallback path (compatibility): if replay token is nil (not yet validated) or conn
-// is not an *ssu2noise.SSU2Conn, derive a deterministic proxy key from connection
-// metadata to preserve existing behavior.
 func (t *SSU2Transport) checkConnectionReplay(conn net.Conn) bool {
 	if t.handler == nil {
 		// Handler not initialized; cannot check replay (should not happen in normal operation)
@@ -518,12 +513,10 @@ func (t *SSU2Transport) checkConnectionReplay(conn net.Conn) bool {
 		}
 
 		// Nil replay token means SessionRequest replay material is not yet available.
-		// Preserve existing behavior with metadata-based fallback.
-		t.logger.WithField("remote_addr", conn.RemoteAddr().String()).Debug("SSU2 replay token unavailable (not yet validated); using metadata fallback")
+		t.logger.WithField("remote_addr", conn.RemoteAddr().String()).Debug("SSU2 replay token unavailable (not yet validated); skipping replay check")
 	}
 
-	replayKey := deriveReplayProxyKey(conn)
-	return t.handler.CheckReplay(replayKey)
+	return false
 }
 
 // replayTokenToReplayKey converts replay token bytes into the fixed-size key used
@@ -538,35 +531,6 @@ func replayTokenToReplayKey(token []byte) [32]byte {
 		return replayKey
 	}
 	return sha256.Sum256(token)
-}
-
-// deriveReplayProxyKey hashes stable connection identity fields into a 32-byte key.
-// This is a temporary proxy until the handshake ephemeral key is exposed upstream.
-func deriveReplayProxyKey(conn net.Conn) [32]byte {
-	h := sha256.New()
-
-	if ssu2Addr, ok := conn.RemoteAddr().(*ssu2noise.SSU2Addr); ok {
-		routerHash := ssu2Addr.RouterHash()
-		_, _ = h.Write(routerHash[:])
-
-		var connIDBuf [8]byte
-		binary.BigEndian.PutUint64(connIDBuf[:], ssu2Addr.ConnectionID())
-		_, _ = h.Write(connIDBuf[:])
-
-		if udpAddr, ok := ssu2Addr.UnderlyingAddr().(*net.UDPAddr); ok {
-			_, _ = h.Write(udpAddr.IP)
-			var portBuf [2]byte
-			binary.BigEndian.PutUint16(portBuf[:], uint16(udpAddr.Port))
-			_, _ = h.Write(portBuf[:])
-		}
-	} else if remote := conn.RemoteAddr(); remote != nil {
-		_, _ = h.Write([]byte(remote.Network()))
-		_, _ = h.Write([]byte(remote.String()))
-	}
-
-	var replayKey [32]byte
-	copy(replayKey[:], h.Sum(nil))
-	return replayKey
 }
 
 // min returns the minimum of two integers
