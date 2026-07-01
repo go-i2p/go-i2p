@@ -58,6 +58,9 @@ func (m *mockNetworkDatabase) GetAllRouterInfos() []router_info.RouterInfo {
 
 func (m *mockNetworkDatabase) StoreRouterInfo(ri router_info.RouterInfo) {
 	m.storedRIs = append(m.storedRIs, ri)
+	if hash, err := ri.IdentHash(); err == nil {
+		m.routerInfos[hash] = ri
+	}
 }
 
 func (m *mockNetworkDatabase) Reseed(b bootstrap.Bootstrap, minRouters int) error {
@@ -77,7 +80,16 @@ func (m *mockNetworkDatabase) Ensure() error {
 }
 
 func (m *mockNetworkDatabase) SelectFloodfillRouters(targetHash common.Hash, count int) ([]router_info.RouterInfo, error) {
-	return nil, nil
+	var floodfills []router_info.RouterInfo
+	for _, ri := range m.routerInfos {
+		if IsFloodfillRouter(ri) {
+			floodfills = append(floodfills, ri)
+		}
+	}
+	return selectClosestByDistance(floodfills, func(ri router_info.RouterInfo) common.Hash {
+		hash, _ := ri.IdentHash()
+		return hash
+	}, targetHash, count), nil
 }
 
 func (m *mockNetworkDatabase) GetLeaseSetCount() int {
@@ -224,7 +236,7 @@ func TestQueryPeerNoTransport(t *testing.T) {
 	peerHash := common.Hash{1, 2, 3}
 	targetHash := common.Hash{4, 5, 6}
 
-	_, err := resolver.queryPeer(ctx, peerHash, targetHash)
+	_, err := resolver.queryPeer(ctx, peerHash, targetHash, false)
 	if err == nil {
 		t.Error("Should return error without transport")
 	}
@@ -245,7 +257,7 @@ func TestQueryPeerPeerNotFound(t *testing.T) {
 	peerHash := common.Hash{10, 20, 30} // Not in database
 	targetHash := common.Hash{4, 5, 6}
 
-	_, err := resolver.queryPeer(ctx, peerHash, targetHash)
+	_, err := resolver.queryPeer(ctx, peerHash, targetHash, false)
 	if err == nil {
 		t.Error("Should return error when peer not found")
 	}
@@ -283,7 +295,7 @@ func TestQueryPeer_UsesRouterInfoLookupType(t *testing.T) {
 	resolver := NewKademliaResolverWithTransport(mockDB, nil, mockTransport, ourHash)
 	ctx := context.Background()
 
-	_, err = resolver.queryPeer(ctx, peerHash, targetHash)
+	_, err = resolver.queryPeer(ctx, peerHash, targetHash, false)
 	if err == nil {
 		t.Fatal("expected queryPeer to return error from mock transport")
 	}

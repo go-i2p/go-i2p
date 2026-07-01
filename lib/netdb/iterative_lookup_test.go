@@ -2,6 +2,7 @@ package netdb
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"testing"
 	"time"
@@ -171,88 +172,71 @@ func TestIterativeLookup_NoPeers(t *testing.T) {
 // the SearchReplyError suggestions. The integration of these pieces is the
 // iterative lookup.
 func TestIterativeLookup_FollowsSuggestions(t *testing.T) {
-	// Test the suggestion extraction from SearchReplyError through queryBatchParallel
-	// This validates the core iterative mechanism:
-	// 1. Query peers
-	// 2. Extract suggestions from SearchReplyError
-	// 3. Add suggestions to unqueried set
+	db := newMockNetworkDatabase()
+	seed := *createTestRouterInfoWithOptions(t, map[string]string{"caps": "fR", "host": "1.2.3.4", "port": "12345", "transport": "NTCP2"})
+	suggested := *createTestRouterInfoWithOptions(t, map[string]string{"caps": "R", "host": "2.3.4.5", "port": "12346", "transport": "NTCP2"})
+	target := *createTestRouterInfoWithOptions(t, map[string]string{"caps": "R", "host": "3.4.5.6", "port": "12347", "transport": "NTCP2"})
 
-	// Simulate a SearchReplyError with suggestions
-	suggestions := []common.Hash{{10, 20}, {30, 40}, {50, 60}}
-	err := &SearchReplyError{Suggestions: suggestions}
-
-	// Verify errors.As works for extracting suggestions
-	var searchErr *SearchReplyError
-	if !errors.As(err, &searchErr) {
-		t.Fatal("errors.As should match SearchReplyError")
+	seedHash, err := seed.IdentHash()
+	if err != nil {
+		t.Fatalf("seed hash: %v", err)
 	}
-	if len(searchErr.Suggestions) != 3 {
-		t.Errorf("expected 3 suggestions, got %d", len(searchErr.Suggestions))
+	suggestedHash, err := suggested.IdentHash()
+	if err != nil {
+		t.Fatalf("suggested hash: %v", err)
 	}
-
-	// Verify the iterative loop logic: simulate multiple rounds
-	queried := make(map[common.Hash]bool)
-	unqueried := make(map[common.Hash]bool)
-
-	// Start with peer1
-	peer1 := common.Hash{1}
-	unqueried[peer1] = true
-
-	// Round 1: query peer1, it suggests peer2 and peer3
-	batch := []common.Hash{peer1}
-	for _, p := range batch {
-		queried[p] = true
-		delete(unqueried, p)
-	}
-	// Simulate receiving suggestions
-	round1Suggestions := []common.Hash{{2}, {3}}
-	for _, s := range round1Suggestions {
-		if !queried[s] && !unqueried[s] {
-			unqueried[s] = true
-		}
+	targetHash, err := target.IdentHash()
+	if err != nil {
+		t.Fatalf("target hash: %v", err)
 	}
 
-	if len(unqueried) != 2 {
-		t.Errorf("after round 1, expected 2 unqueried peers, got %d", len(unqueried))
-	}
-	if !unqueried[common.Hash{2}] || !unqueried[common.Hash{3}] {
-		t.Error("expected peers {2} and {3} to be unqueried")
+	db.StoreRouterInfo(seed)
+
+	transport := &mockLookupTransport{
+		sendFunc: func(ctx context.Context, peerRI router_info.RouterInfo, lookup *i2np.DatabaseLookup) ([]byte, int, error) {
+			peerHash, err := peerRI.IdentHash()
+			if err != nil {
+				return nil, 0, err
+			}
+
+			switch {
+			case peerHash == seedHash && lookup.Key == targetHash:
+				reply := i2np.NewDatabaseSearchReply(targetHash, seedHash, []common.Hash{suggestedHash})
+				payload, err := reply.MarshalPayload()
+				return payload, i2np.I2NPMessageTypeDatabaseSearchReply, err
+			case peerHash == seedHash && lookup.Key == suggestedHash:
+				return marshalRouterInfoStore(t, suggestedHash, suggested), i2np.I2NPMessageTypeDatabaseStore, nil
+			case peerHash == suggestedHash && lookup.Key == targetHash:
+				return marshalRouterInfoStore(t, targetHash, target), i2np.I2NPMessageTypeDatabaseStore, nil
+			default:
+				t.Logf("unexpected lookup path peer=%x target=%x", peerHash[:8], lookup.Key[:8])
+				return nil, 0, errors.New("unexpected lookup path")
+			}
+		},
 	}
 
-	// Round 2: query peer2 and peer3, peer2 suggests peer4
-	batch = []common.Hash{{2}, {3}}
-	for _, p := range batch {
-		queried[p] = true
-		delete(unqueried, p)
+	resolver := NewKademliaResolverWithTransport(db, nil, transport, seedHash)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	result, err := resolver.iterativeLookup(ctx, targetHash)
+	if err != nil {
+		t.Fatalf("iterative lookup failed: %v", err)
 	}
-	round2Suggestions := []common.Hash{{4}}
-	for _, s := range round2Suggestions {
-		if !queried[s] && !unqueried[s] {
-			unqueried[s] = true
-		}
+	if result == nil {
+		t.Fatal("expected RouterInfo result")
+	}
+	gotHash, err := result.IdentHash()
+	if err != nil {
+		t.Fatalf("result hash: %v", err)
+	}
+	if gotHash != targetHash {
+		t.Fatalf("lookup returned wrong RouterInfo: got %x want %x", gotHash[:8], targetHash[:8])
 	}
 
-	if len(unqueried) != 1 {
-		t.Errorf("after round 2, expected 1 unqueried peer, got %d", len(unqueried))
-	}
-	if !unqueried[common.Hash{4}] {
-		t.Error("expected peer {4} to be unqueried")
-	}
-	if len(queried) != 3 {
-		t.Errorf("expected 3 queried peers, got %d", len(queried))
-	}
-
-	// Verify duplicates are not re-added
-	duplicateSuggestion := common.Hash{1} // already queried
-	if !queried[duplicateSuggestion] {
-		t.Error("peer {1} should be in queried set")
-	}
-	// Simulate receiving duplicate
-	if !queried[duplicateSuggestion] && !unqueried[duplicateSuggestion] {
-		unqueried[duplicateSuggestion] = true
-	}
-	if unqueried[duplicateSuggestion] {
-		t.Error("already-queried peer should not be re-added to unqueried")
+	if _, ok := db.routerInfos[suggestedHash]; !ok {
+		t.Fatal("expected suggested peer RouterInfo to be stored")
 	}
 }
 
@@ -381,7 +365,7 @@ func TestQueryBatchParallel(t *testing.T) {
 	resolver := NewKademliaResolverWithTransport(mockDB, nil, transport, common.Hash{0})
 
 	ctx := context.Background()
-	results := resolver.queryBatchParallel(ctx, []common.Hash{peer1, peer2}, target)
+	results := resolver.queryBatchParallel(ctx, []common.Hash{peer1, peer2}, target, true)
 
 	// Both peers should produce results (even if errors due to empty IdentHash)
 	if len(results) != 2 {
@@ -430,4 +414,25 @@ func TestMaxIterativeLookupHops(t *testing.T) {
 	if MaxConcurrentQueries != 3 {
 		t.Errorf("expected MaxConcurrentQueries=3, got %d", MaxConcurrentQueries)
 	}
+}
+
+func marshalRouterInfoStore(t *testing.T, key common.Hash, ri router_info.RouterInfo) []byte {
+	t.Helper()
+	raw, err := ri.Bytes()
+	if err != nil {
+		t.Fatalf("RouterInfo bytes: %v", err)
+	}
+	compressed, err := gzipCompress(raw)
+	if err != nil {
+		t.Fatalf("gzip RouterInfo: %v", err)
+	}
+	payload := make([]byte, 2+len(compressed))
+	binary.BigEndian.PutUint16(payload[:2], uint16(len(compressed)))
+	copy(payload[2:], compressed)
+	store := i2np.NewDatabaseStore(key, payload, i2np.DatabaseStoreTypeRouterInfo)
+	data, err := store.MarshalPayload()
+	if err != nil {
+		t.Fatalf("marshal DatabaseStore: %v", err)
+	}
+	return data
 }

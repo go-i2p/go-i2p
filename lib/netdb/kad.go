@@ -255,6 +255,10 @@ const (
 
 	// MaxConcurrentQueries is the number of peers queried in parallel per round.
 	MaxConcurrentQueries = 3
+
+	// peerResolutionTimeout bounds the on-demand lookup used to resolve a
+	// suggested peer's RouterInfo before querying it for the original target.
+	peerResolutionTimeout = 5 * time.Second
 )
 
 // performRemoteLookup executes an iterative Kademlia lookup in a goroutine.
@@ -320,12 +324,16 @@ func (s *LookupState) hasPendingPeers() bool {
 // It maintains sets of queried and unqueried peers, querying the closest unqueried
 // peers each round and adding suggestions from DatabaseSearchReply responses.
 func (kr *KademliaResolver) iterativeLookup(ctx context.Context, target common.Hash) (*router_info.RouterInfo, error) {
+	return kr.iterativeLookupWithOptions(ctx, target, true)
+}
+
+func (kr *KademliaResolver) iterativeLookupWithOptions(ctx context.Context, target common.Hash, resolveSuggestedPeers bool) (*router_info.RouterInfo, error) {
 	state, err := kr.initializeLookupState(target)
 	if err != nil {
 		return nil, err
 	}
 
-	return kr.executeLookupRounds(ctx, target, state)
+	return kr.executeLookupRounds(ctx, target, state, resolveSuggestedPeers)
 }
 
 // initializeLookupState prepares the initial state for an iterative lookup by finding
@@ -347,13 +355,13 @@ func (kr *KademliaResolver) initializeLookupState(target common.Hash) (*LookupSt
 
 // executeLookupRounds performs iterative Kademlia lookup rounds until a RouterInfo is found,
 // the search is exhausted, or the maximum hop count is reached.
-func (kr *KademliaResolver) executeLookupRounds(ctx context.Context, target common.Hash, state *LookupState) (*router_info.RouterInfo, error) {
+func (kr *KademliaResolver) executeLookupRounds(ctx context.Context, target common.Hash, state *LookupState, resolveSuggestedPeers bool) (*router_info.RouterInfo, error) {
 	for hop := 0; hop < MaxIterativeLookupHops; hop++ {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
 
-		ri, exhausted := kr.processLookupRound(ctx, target, state, hop)
+		ri, exhausted := kr.processLookupRound(ctx, target, state, hop, resolveSuggestedPeers)
 		if ri != nil {
 			return ri, nil
 		}
@@ -369,7 +377,7 @@ func (kr *KademliaResolver) executeLookupRounds(ctx context.Context, target comm
 // It selects the closest unqueried peers, queries them in parallel, and merges
 // suggestions into the unqueried set. Returns a non-nil RouterInfo if found,
 // or true for exhausted if no unqueried peers remain.
-func (kr *KademliaResolver) processLookupRound(ctx context.Context, target common.Hash, state *LookupState, hop int) (ri *router_info.RouterInfo, exhausted bool) {
+func (kr *KademliaResolver) processLookupRound(ctx context.Context, target common.Hash, state *LookupState, hop int, resolveSuggestedPeers bool) (ri *router_info.RouterInfo, exhausted bool) {
 	batch := kr.selectClosestUnqueried(target, state.unqueried, MaxConcurrentQueries)
 	if len(batch) == 0 {
 		log.WithFields(logger.Fields{
@@ -388,7 +396,7 @@ func (kr *KademliaResolver) processLookupRound(ctx context.Context, target commo
 		"queried":    len(state.queried),
 	}).Debug("Starting iterative lookup round")
 
-	results := kr.queryBatchParallel(ctx, batch, target)
+	results := kr.queryBatchParallel(ctx, batch, target, resolveSuggestedPeers)
 	kr.markBatchQueried(batch, state)
 
 	return kr.mergeQueryResults(results, state)
@@ -430,7 +438,7 @@ func (kr *KademliaResolver) selectClosestUnqueried(target common.Hash, unqueried
 }
 
 // queryBatchParallel queries multiple peers concurrently and collects their results.
-func (kr *KademliaResolver) queryBatchParallel(ctx context.Context, peers []common.Hash, target common.Hash) []iterativeQueryResult {
+func (kr *KademliaResolver) queryBatchParallel(ctx context.Context, peers []common.Hash, target common.Hash, resolveSuggestedPeers bool) []iterativeQueryResult {
 	resultsCh := make(chan iterativeQueryResult, len(peers))
 	var wg sync.WaitGroup
 
@@ -438,7 +446,7 @@ func (kr *KademliaResolver) queryBatchParallel(ctx context.Context, peers []comm
 		wg.Add(1)
 		go func(p common.Hash) {
 			defer wg.Done()
-			ri, err := kr.queryPeer(ctx, p, target)
+			ri, err := kr.queryPeer(ctx, p, target, resolveSuggestedPeers)
 			result := iterativeQueryResult{ri: ri, err: err}
 
 			// Extract suggestions from SearchReplyError
@@ -500,6 +508,11 @@ func (kr *KademliaResolver) collectLookupResult(resultChan chan *router_info.Rou
 // the raw target hash: routing_key = SHA256(target || yyyyMMdd_UTC).
 func (kr *KademliaResolver) findClosestPeers(target common.Hash) []common.Hash {
 	const K = 8 // Standard Kademlia parameter for number of closest peers to return
+	rk := RoutingKey(target, time.Now())
+
+	if seeds := kr.selectClosestFloodfillSeeds(rk, K); len(seeds) > 0 {
+		return seeds
+	}
 
 	// Get all known router infos from the network database
 	allRouterInfos := kr.NetworkDatabase.GetAllRouterInfos()
@@ -507,10 +520,6 @@ func (kr *KademliaResolver) findClosestPeers(target common.Hash) []common.Hash {
 		log.WithFields(logger.Fields{"at": "findClosestPeers"}).Debug("No peers available in network database")
 		return []common.Hash{}
 	}
-
-	// Derive the routing key for today's UTC date.  The routing key is what
-	// determines which floodfills are "close" in the DHT.
-	rk := RoutingKey(target, time.Now())
 
 	// Calculate XOR distances for all peers using the routing key
 	peers := kr.calculatePeerDistances(allRouterInfos, rk)
@@ -521,6 +530,31 @@ func (kr *KademliaResolver) findClosestPeers(target common.Hash) []common.Hash {
 
 	// Sort and select closest peers
 	return kr.selectClosestPeers(peers, rk, K)
+}
+
+func (kr *KademliaResolver) selectClosestFloodfillSeeds(routingKey common.Hash, count int) []common.Hash {
+	floodfills, err := kr.NetworkDatabase.SelectFloodfillRouters(routingKey, count)
+	if err != nil || len(floodfills) == 0 {
+		return nil
+	}
+
+	seeds := make([]common.Hash, 0, len(floodfills))
+	for _, ri := range floodfills {
+		hash, err := ri.IdentHash()
+		if err != nil {
+			continue
+		}
+		seeds = append(seeds, hash)
+	}
+
+	if len(seeds) > 0 {
+		log.WithFields(logger.Fields{
+			"at":    "findClosestPeers",
+			"seeds": len(seeds),
+		}).Debug("Seeded iterative lookup from floodfill routers")
+	}
+
+	return seeds
 }
 
 // calculatePeerDistances calculates XOR distances for all router infos.
@@ -580,7 +614,7 @@ func (kr *KademliaResolver) selectClosestPeers(peers []peerDistance, target comm
 
 // queryPeer sends a DatabaseLookup request to a specific peer and waits for a response.
 // Returns the RouterInfo if found, or an error if the lookup failed or the peer doesn't have it.
-func (kr *KademliaResolver) queryPeer(ctx context.Context, peer, target common.Hash) (*router_info.RouterInfo, error) {
+func (kr *KademliaResolver) queryPeer(ctx context.Context, peer, target common.Hash, resolveSuggestedPeers bool) (*router_info.RouterInfo, error) {
 	log.WithFields(logger.Fields{
 		"at":     "queryPeer",
 		"peer":   logutil.HashPrefixPlain(peer),
@@ -607,9 +641,9 @@ func (kr *KademliaResolver) queryPeer(ctx context.Context, peer, target common.H
 	}
 
 	// Get the peer's RouterInfo from our database
-	peerRI := kr.getPeerRouterInfo(peer)
-	if peerRI == nil {
-		return nil, oops.Errorf("peer %x not found in local database", peer[:8])
+	peerRI, err := kr.resolvePeerRouterInfo(ctx, peer, resolveSuggestedPeers)
+	if err != nil {
+		return nil, err
 	}
 
 	// Determine which hash to use as "from" in the lookup
@@ -642,6 +676,37 @@ func (kr *KademliaResolver) queryPeer(ctx context.Context, peer, target common.H
 
 	// Process the response based on message type
 	return kr.processLookupResponse(responseData, msgType, target)
+}
+
+func (kr *KademliaResolver) resolvePeerRouterInfo(ctx context.Context, peerHash common.Hash, allowNetworkResolution bool) (*router_info.RouterInfo, error) {
+	if peerRI := kr.getPeerRouterInfo(peerHash); peerRI != nil {
+		return peerRI, nil
+	}
+	if !allowNetworkResolution {
+		return nil, oops.Errorf("peer %x not found in local database", peerHash[:8])
+	}
+
+	resolveCtx, cancel := withClampedTimeout(ctx, peerResolutionTimeout)
+	defer cancel()
+
+	peerRI, err := kr.iterativeLookupWithOptions(resolveCtx, peerHash, false)
+	if err != nil {
+		return nil, oops.Errorf("peer %x not found in local database and resolution failed: %w", peerHash[:8], err)
+	}
+	return peerRI, nil
+}
+
+func withClampedTimeout(ctx context.Context, max time.Duration) (context.Context, context.CancelFunc) {
+	if deadline, ok := ctx.Deadline(); ok {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			return context.WithCancel(ctx)
+		}
+		if remaining < max {
+			return context.WithTimeout(ctx, remaining)
+		}
+	}
+	return context.WithTimeout(ctx, max)
 }
 
 // getPeerRouterInfo retrieves a peer's RouterInfo from the local database.

@@ -144,6 +144,12 @@ type LookupReplyDeliverer interface {
 	DeliverLookupReply(key common.Hash, msgType int, data []byte) bool
 }
 
+// SourceHashProvider exposes the source peer hash for an inbound message when
+// the caller has preserved that context.
+type SourceHashProvider interface {
+	SourceHash() common.Hash
+}
+
 // DataMessageHandler defines the interface for handling incoming Data messages.
 // Data messages carry end-to-end payloads that need to be delivered to I2CP sessions.
 type DataMessageHandler interface {

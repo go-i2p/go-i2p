@@ -184,6 +184,44 @@ func TestStdNetDB_Path(t *testing.T) {
 	}
 }
 
+func TestStdNetDB_RequestRouterInfoRefresh_RemovesPersistentEntry(t *testing.T) {
+	db := newTestStdNetDB(t)
+	ri := *createTestRouterInfoWithOptions(t, map[string]string{"caps": "R"})
+	hash, err := ri.IdentHash()
+	if err != nil {
+		t.Fatalf("failed to compute RouterInfo hash: %v", err)
+	}
+
+	db.StoreRouterInfo(ri)
+	if _, ok := db.riCache.get(hash); !ok {
+		t.Fatal("expected RouterInfo in cache before refresh")
+	}
+	if _, ok := db.riCache.getExpiry(hash); !ok {
+		t.Fatal("expected RouterInfo expiry before refresh")
+	}
+	if _, err := os.Stat(db.SkiplistFile(hash)); err != nil {
+		t.Fatalf("expected RouterInfo file before refresh: %v", err)
+	}
+
+	db.RequestRouterInfoRefresh(hash)
+
+	if _, ok := db.riCache.get(hash); ok {
+		t.Fatal("expected RouterInfo cache entry to be removed")
+	}
+	if _, ok := db.riCache.getExpiry(hash); ok {
+		t.Fatal("expected RouterInfo expiry to be removed")
+	}
+	if _, err := os.Stat(db.SkiplistFile(hash)); !os.IsNotExist(err) {
+		t.Fatalf("expected RouterInfo file to be removed, got: %v", err)
+	}
+
+	if ch := db.GetRouterInfo(hash); ch == nil {
+		t.Fatal("expected closed channel, got nil")
+	} else if _, ok := <-ch; ok {
+		t.Fatal("expected refreshed RouterInfo lookup to miss until refetched")
+	}
+}
+
 // Helper functions for testing
 func containsString(s, substr string) bool {
 	for i := 0; i <= len(s)-len(substr); i++ {

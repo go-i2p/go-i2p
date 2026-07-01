@@ -1622,13 +1622,15 @@ func (db *StdNetDB) RequestRouterInfoRefresh(hash common.Hash) {
 
 	_, existed := db.riCache.get(hash)
 	db.riCache.delete(hash)
+	db.riCache.deleteExpiry(hash)
+	db.removeRouterInfoFromDisk(hash)
 
 	if existed {
 		log.WithFields(logger.Fields{
 			"at":        "StdNetDB.RequestRouterInfoRefresh",
 			"peer_hash": logutil.HashPrefixPlain(hash),
 			"reason":    "stale RouterInfo evicted after handshake EOF",
-		}).Info("Evicted stale RouterInfo from cache; will be refreshed on next reseed")
+		}).Info("Evicted stale RouterInfo from cache and disk; next lookup must refetch it")
 	}
 }
 

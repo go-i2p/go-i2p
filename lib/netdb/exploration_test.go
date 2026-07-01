@@ -20,10 +20,10 @@ func TestExplorerCreation(t *testing.T) {
 	assert.Equal(t, config.LookupTimeout, explorer.lookupTimeout)
 }
 
-// TestExplorerStartWithoutTunnelPool tests that Start fails without a tunnel pool
-func TestExplorerStartWithoutTunnelPool(t *testing.T) {
+// TestExplorerStartWithoutTransport tests that Start fails when lookup transport is absent.
+func TestExplorerStartWithoutTransport(t *testing.T) {
 	explorer := newTestExplorerDefault(t)
-	assertExplorerRequiresTunnelPool(t, explorer.Start)
+	assertExplorerRequiresTransport(t, explorer.Start)
 }
 
 // TestExplorerDefaultConfig tests the default configuration values
@@ -64,10 +64,23 @@ func TestExplorerStopBeforeStart(t *testing.T) {
 	assert.False(t, stats.IsRunning)
 }
 
-// TestExplorerExploreOnceWithoutTunnelPool tests ExploreOnce without tunnel pool
-func TestExplorerExploreOnceWithoutTunnelPool(t *testing.T) {
+// TestExplorerExploreOnceWithoutTransport tests ExploreOnce without lookup transport.
+func TestExplorerExploreOnceWithoutTransport(t *testing.T) {
 	explorer := newTestExplorerDefault(t)
-	assertExplorerRequiresTunnelPool(t, explorer.ExploreOnce)
+	assertExplorerRequiresTransport(t, explorer.ExploreOnce)
+}
+
+func TestExplorerStartWithoutTunnelPool_WhenTransportPresent(t *testing.T) {
+	db := newMockNetDB()
+	config := DefaultExplorerConfig()
+	config.Transport = &mockLookupTransport{}
+	config.LookupTimeout = 50 * time.Millisecond
+	explorer := NewExplorer(db, nil, config)
+
+	if err := explorer.Start(); err != nil {
+		t.Fatalf("expected explorer to start with direct lookup transport: %v", err)
+	}
+	explorer.Stop()
 }
 
 // TestExplorerConcurrencyLimits tests that concurrency is respected

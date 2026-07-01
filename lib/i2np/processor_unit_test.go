@@ -18,6 +18,15 @@ type mockNetDBStore struct {
 	callCount int               // Track number of calls
 }
 
+type sourcedBaseMessage struct {
+	*BaseI2NPMessage
+	source common.Hash
+}
+
+func (m *sourcedBaseMessage) SourceHash() common.Hash {
+	return m.source
+}
+
 func newMockNetDBStore() *mockNetDBStore {
 	return &mockNetDBStore{
 		stored: make(map[string][]byte),
@@ -367,6 +376,36 @@ func TestProcessDatabaseStoreMessage_FromBaseMessageDataCarrier(t *testing.T) {
 	err = processor.processDatabaseStoreMessage(base)
 	require.NoError(t, err)
 	assert.Equal(t, 1, mockStore.callCount)
+}
+
+func TestProcessDatabaseStoreMessage_UsesSourceAwareStorePath(t *testing.T) {
+	processor := NewMessageProcessor()
+	mockStore := &sourceAwareStoreMock{}
+	processor.SetDatabaseManager(NewDatabaseManager(mockStore))
+
+	var key, source common.Hash
+	copy(key[:], "dbstore-source-aware-key-123456789")
+	copy(source[:], "dbstore-source-peer-123456789012")
+
+	dbStore := &DatabaseStore{
+		BaseI2NPMessage: NewBaseI2NPMessage(I2NPMessageTypeDatabaseStore),
+		Key:             key,
+		Data:            []byte("router-info-body"),
+		StoreType:       0,
+	}
+	body, err := dbStore.MarshalPayload()
+	require.NoError(t, err)
+
+	base := &sourcedBaseMessage{
+		BaseI2NPMessage: NewBaseI2NPMessage(I2NPMessageTypeDatabaseStore),
+		source:          source,
+	}
+	base.SetData(body)
+
+	err = processor.processDatabaseStoreMessage(base)
+	require.NoError(t, err)
+	assert.True(t, mockStore.usedSourcePath)
+	assert.Equal(t, source, mockStore.source)
 }
 
 func TestProcessDatabaseSearchReplyMessage_FromBaseMessageDataCarrier(t *testing.T) {

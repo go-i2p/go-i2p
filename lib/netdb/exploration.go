@@ -137,8 +137,8 @@ func NewExplorer(db NetworkDatabase, pool *tunnel.Pool, config ExplorerConfig) *
 // Start begins periodic database exploration.
 // Exploration runs in a background goroutine until Stop is called.
 func (e *Explorer) Start() error {
-	if e.pool == nil {
-		return oops.Errorf("tunnel pool required for exploration")
+	if e.transport == nil {
+		return oops.Errorf("lookup transport required for exploration")
 	}
 
 	log.WithFields(logger.Fields{
@@ -401,8 +401,8 @@ func (e *Explorer) calculateExplorationInterval() time.Duration {
 // ExploreOnce performs a single exploration round and returns immediately.
 // Useful for testing or manual exploration triggers.
 func (e *Explorer) ExploreOnce() error {
-	if e.pool == nil {
-		return oops.Errorf("tunnel pool required for exploration")
+	if e.transport == nil {
+		return oops.Errorf("lookup transport required for exploration")
 	}
 
 	log.WithFields(logger.Fields{

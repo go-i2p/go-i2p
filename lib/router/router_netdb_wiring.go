@@ -70,12 +70,12 @@ func (r *Router) startFloodfillServer() {
 // actively discovers new peers by performing iterative lookups for random keys,
 // improving peer diversity over time. It requires a running tunnel pool.
 func (r *Router) startExplorer() error {
-	if r.netdb == nil || r.tunnelManager == nil {
-		return oops.Errorf("NetDB explorer deferred: NetDB or tunnel manager not ready")
+	if r.netdb == nil {
+		return oops.Errorf("NetDB explorer deferred: NetDB not ready")
 	}
-	tunnelPool := r.tunnelManager.GetOutboundPool()
-	if tunnelPool == nil {
-		return oops.Errorf("NetDB explorer deferred: tunnel pool not available")
+	var tunnelPool *tunnel.Pool
+	if r.tunnelManager != nil {
+		tunnelPool = r.tunnelManager.GetOutboundPool()
 	}
 
 	cfg := netdb.DefaultExplorerConfig()
@@ -97,7 +97,7 @@ func (r *Router) startExplorer() error {
 		cfg.Transport = r.lookupClient
 		r.messageRouter.GetProcessor().SetLookupReplyDeliverer(r.lookupClient)
 	} else {
-		log.WithFields(logger.Fields{"at": "startExplorer"}).Warn("NetDB explorer starting without transport: transport or message router not ready, lookups will be local-only")
+		return oops.Errorf("NetDB explorer deferred: transport or message router not ready")
 	}
 
 	r.explorer = netdb.NewExplorer(r.netdb, tunnelPool, cfg)

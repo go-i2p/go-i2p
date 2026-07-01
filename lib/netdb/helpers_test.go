@@ -339,13 +339,13 @@ func assertRouterInfoMethodsExist(t *testing.T, routerDB *RouterNetDB) {
 // Explorer assertion helpers
 // ---------------------------------------------------------------------------
 
-// assertExplorerRequiresTunnelPool verifies that the given explorer operation
-// fails with a "tunnel pool required" error.
-func assertExplorerRequiresTunnelPool(t *testing.T, op func() error) {
+// assertExplorerRequiresTransport verifies that the given explorer operation
+// fails with a "lookup transport required" error.
+func assertExplorerRequiresTransport(t *testing.T, op func() error) {
 	t.Helper()
 	err := op()
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "tunnel pool required")
+	assert.Contains(t, err.Error(), "lookup transport required")
 }
 
 // ---------------------------------------------------------------------------
