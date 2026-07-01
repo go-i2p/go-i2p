@@ -13,7 +13,7 @@
         <a href="../index.html">go-i2p/go-i2p</a>
       </h2>
       <div class="repo-meta">
-        📝 2271 commits
+        📝 2272 commits
          • 📜 MIT License
       </div>
     </div>
@@ -204,6 +204,27 @@ curl -X POST http://localhost:7650/jsonrpc \
 <td><code>10m</code></td>
 <td>Token validity duration</td>
 </tr>
+
+<tr>
+<td><code>strict_auth</code></td>
+<td>bool</td>
+<td><code>false</code></td>
+<td>Refuse startup with default password</td>
+</tr>
+
+<tr>
+<td><code>allow_plaintext_non_loopback</code></td>
+<td>bool</td>
+<td><code>false</code></td>
+<td>Permit non-loopback HTTP bind (unsafe unless behind trusted TLS proxy)</td>
+</tr>
+
+<tr>
+<td><code>cors_allowed_origins</code></td>
+<td>[]string</td>
+<td>derived localhost defaults</td>
+<td>Explicit CORS origin allowlist</td>
+</tr>
 </tbody>
 </table>
 
@@ -231,6 +252,17 @@ i2pcontrol:
   use_https: false
   # cert_file: &quot;/path/to/cert.pem&quot;
   # key_file: &quot;/path/to/key.pem&quot;
+
+  # Refuse startup if password is still default (recommended for production)
+  strict_auth: true
+
+  # Keep false unless you intentionally terminate TLS externally
+  allow_plaintext_non_loopback: false
+
+  # Optional explicit browser CORS allowlist for JSON-RPC
+  cors_allowed_origins:
+    - &quot;http://127.0.0.1:7650&quot;
+    - &quot;http://localhost:7650&quot;
   
   # Token expiration (examples: 5m, 15m, 1h)
   token_expiration: 10m
@@ -264,6 +296,13 @@ export I2PCONTROL_PASSWORD=my-password
 <li><strong>Password required</strong>: Cannot be empty</li>
 <li><strong>HTTPS requirements</strong>: If <code>use_https</code> is true, both <code>cert_file</code> and <code>key_file</code> must be specified</li>
 <li><strong>Port availability</strong>: Specified port must not be in use</li>
+<li><strong>Non-loopback safety rails</strong>:
+
+<ul>
+<li>default password is refused on non-loopback binds</li>
+<li>cleartext non-loopback bind requires <code>allow_plaintext_non_loopback=true</code></li>
+</ul></li>
+<li><strong>CORS policy</strong>: when <code>cors_allowed_origins</code> is unset, localhost-safe defaults are used</li>
 </ul>
 
 <p>Validation errors appear in logs:</p>
@@ -279,6 +318,58 @@ export I2PCONTROL_PASSWORD=my-password
 
 <p>All RPC methods (except <code>Authenticate</code>) require a valid authentication token.</p>
 
+<h3 id="auth-contract">Auth Contract</h3>
+
+<ul>
+<li>Default/compat mode (<code>strict_auth=false</code>): startup permits default password for local interoperability.</li>
+<li>Strict mode (<code>strict_auth=true</code>): startup fails when password remains <code>itoopie</code>.</li>
+<li>Runtime method policy: every non-<code>Authenticate</code> method requires a valid token.</li>
+<li>Recommended production posture: <code>strict_auth=true</code>, custom password, and HTTPS.</li>
+</ul>
+
+<h3 id="control-surface-profiles">Control-Surface Profiles</h3>
+
+<table>
+<thead>
+<tr>
+<th>Profile</th>
+<th>Address</th>
+<th>TLS</th>
+<th>strict_auth</th>
+<th>allow_plaintext_non_loopback</th>
+<th>Notes</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td>Embedded/Dev</td>
+<td><code>localhost:7650</code></td>
+<td>optional</td>
+<td><code>false</code> or <code>true</code></td>
+<td><code>false</code></td>
+<td>Local-only; default-safe for quick start</td>
+</tr>
+
+<tr>
+<td>Team LAN via reverse proxy</td>
+<td>non-loopback</td>
+<td>proxy TLS</td>
+<td><code>true</code></td>
+<td><code>true</code></td>
+<td>Only when trusted TLS proxy terminates externally</td>
+</tr>
+
+<tr>
+<td>Direct production exposure</td>
+<td>non-loopback</td>
+<td><code>use_https=true</code></td>
+<td><code>true</code></td>
+<td><code>false</code></td>
+<td>Preferred direct deployment posture</td>
+</tr>
+</tbody>
+</table>
 <p><strong>Step 1: Authenticate</strong></p>
 
 <pre><code class="language-bash">curl -X POST http://localhost:7650/jsonrpc \
@@ -1459,7 +1550,7 @@ if __name__ == '__main__':
     </main>
     
     <footer class="page-footer">
-      <p>Generated on 2026-07-01 19:24:31 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
+      <p>Generated on 2026-07-01 19:43:08 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
     </footer>
   </div>
 </body>
