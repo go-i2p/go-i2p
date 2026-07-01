@@ -776,7 +776,7 @@ func (fs *FloodfillServer) sendDatabaseSearchReplyMessage(
 // Per the I2P spec the DHT key used for peer selection is the routing key:
 // routing_key = SHA256(targetKey || yyyyMMdd_UTC).
 func (fs *FloodfillServer) selectClosestFloodfills(targetKey common.Hash) []common.Hash {
-	const maxPeers = 7
+	const maxPeers = 3
 
 	floodfills, err := fs.db.SelectFloodfillRouters(RoutingKey(targetKey, time.Now()), maxPeers)
 	if err != nil {

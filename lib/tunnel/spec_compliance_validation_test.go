@@ -611,15 +611,15 @@ func TestTunnelMessages_FragmentReassembly_MaxConcurrentAssemblies(t *testing.T)
 }
 
 func TestTunnelMessages_FragmentReassembly_StaleFragmentTimeout(t *testing.T) {
-	// Default fragment timeout is 60 seconds
+	// Default fragment timeout is 8 seconds (aligned with i2pd I2NP expiration timeout)
 	enc := &mockPassthroughEncryptor{}
 	handler := func(msgBytes []byte) error { return nil }
 	ep, err := NewEndpoint(TunnelID(1), enc, handler)
 	require.NoError(t, err)
 	defer ep.Stop()
 
-	assert.Equal(t, 60*1000*1000*1000, int(ep.fragmentTimeout.Nanoseconds()),
-		"Default fragment timeout must be 60 seconds")
+	assert.Equal(t, 8*1000*1000*1000, int(ep.fragmentTimeout.Nanoseconds()),
+		"Default fragment timeout must be 8 seconds")
 }
 
 // --- Message ID ---

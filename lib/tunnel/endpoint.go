@@ -121,7 +121,7 @@ func NewEndpoint(tunnelID TunnelID, decryption tunnel.TunnelEncryptor, handler M
 		decryption:      decryption,
 		handler:         handler,
 		fragments:       make(map[uint32]*fragmentAssembler),
-		fragmentTimeout: 60 * time.Second, // Default 60 second timeout for incomplete fragments
+		fragmentTimeout: 8 * time.Second, // Match i2pd I2NP_MESSAGE_EXPIRATION_TIMEOUT for incomplete fragments
 		stopChan:        make(chan struct{}),
 	}
 
