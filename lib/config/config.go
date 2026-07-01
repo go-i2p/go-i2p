@@ -156,6 +156,7 @@ func setI2CPDefaults(defaults ConfigDefaults) {
 		{"i2cp.write_timeout", defaults.I2CP.WriteTimeout},
 		{"i2cp.username", ""},
 		{"i2cp.password", ""},
+		{"i2cp.allow_insecure_cleartext_auth", defaults.I2CP.AllowInsecureCleartextAuth},
 	})
 }
 
@@ -387,16 +388,17 @@ func buildBootstrapConfig(caller string) (*BootstrapConfig, error) {
 // buildI2CPConfig creates an I2CPConfig from current viper settings.
 func buildI2CPConfig() *I2CPConfig {
 	return &I2CPConfig{
-		Enabled:          viper.GetBool("i2cp.enabled"),
-		Address:          viper.GetString("i2cp.address"),
-		Network:          viper.GetString("i2cp.network"),
-		MaxSessions:      viper.GetInt("i2cp.max_sessions"),
-		Username:         viper.GetString("i2cp.username"),
-		Password:         viper.GetString("i2cp.password"),
-		MessageQueueSize: viper.GetInt("i2cp.message_queue_size"),
-		SessionTimeout:   viper.GetDuration("i2cp.session_timeout"),
-		ReadTimeout:      viper.GetDuration("i2cp.read_timeout"),
-		WriteTimeout:     viper.GetDuration("i2cp.write_timeout"),
+		Enabled:                    viper.GetBool("i2cp.enabled"),
+		Address:                    viper.GetString("i2cp.address"),
+		Network:                    viper.GetString("i2cp.network"),
+		MaxSessions:                viper.GetInt("i2cp.max_sessions"),
+		Username:                   viper.GetString("i2cp.username"),
+		Password:                   viper.GetString("i2cp.password"),
+		AllowInsecureCleartextAuth: viper.GetBool("i2cp.allow_insecure_cleartext_auth"),
+		MessageQueueSize:           viper.GetInt("i2cp.message_queue_size"),
+		SessionTimeout:             viper.GetDuration("i2cp.session_timeout"),
+		ReadTimeout:                viper.GetDuration("i2cp.read_timeout"),
+		WriteTimeout:               viper.GetDuration("i2cp.write_timeout"),
 	}
 }
 

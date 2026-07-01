@@ -1,6 +1,7 @@
 package router
 
 import (
+	"context"
 	"strconv"
 
 	"github.com/go-i2p/go-i2p/lib/bootstrap"
@@ -35,6 +36,13 @@ func (r *Router) ensureNetDBReady() error {
 // performReseed executes network database reseeding process.
 // It selects the appropriate bootstrapper based on configuration and executes the reseed operation.
 func (r *Router) performReseed() error {
+	return r.performReseedWithContext(context.Background())
+}
+
+// performReseedWithContext executes network database reseeding process.
+// It selects the appropriate bootstrapper based on configuration and executes
+// the reseed operation with cancellation support.
+func (r *Router) performReseedWithContext(ctx context.Context) error {
 	r.setReseedingFlag(true)
 	defer r.setReseedingFlag(false)
 
@@ -45,7 +53,7 @@ func (r *Router) performReseed() error {
 		return err
 	}
 
-	return r.executeReseed(bootstrapper)
+	return r.executeReseedWithContext(ctx, bootstrapper)
 }
 
 // setReseedingFlag safely sets the isReseeding flag with proper mutex protection.
@@ -148,7 +156,13 @@ func (r *Router) createFallbackBootstrapper() bootstrap.Bootstrap {
 // executeReseed performs the actual reseed operation using the provided bootstrapper.
 // It logs success or failure and returns any error encountered.
 func (r *Router) executeReseed(bootstrapper bootstrap.Bootstrap) error {
-	if err := r.netdb.Reseed(bootstrapper, r.cfg.Bootstrap.LowPeerThreshold); err != nil {
+	return r.executeReseedWithContext(context.Background(), bootstrapper)
+}
+
+// executeReseedWithContext performs the actual reseed operation using the provided bootstrapper.
+// It logs success or failure and returns any error encountered.
+func (r *Router) executeReseedWithContext(ctx context.Context, bootstrapper bootstrap.Bootstrap) error {
+	if err := r.netdb.ReseedWithContext(ctx, bootstrapper, r.cfg.Bootstrap.LowPeerThreshold); err != nil {
 		log.WithError(err).WithFields(logger.Fields{
 			"at":           "(Router) executeReseed",
 			"phase":        "bootstrap",

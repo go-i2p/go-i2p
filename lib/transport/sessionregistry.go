@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"fmt"
 	"sync"
 	"sync/atomic"
 
@@ -117,7 +118,17 @@ func (sr *SessionRegistry) Promote(peerHash data.Hash, original, newSession inte
 	if opts.PreflightCheck != nil {
 		if err := opts.PreflightCheck(); err != nil {
 			sr.logger.WithField("peer_hash", logutil.HashPrefixPlain(peerHash)).
-				WithError(err).Error("Preflight check failed after CAS")
+				WithError(err).Error("Preflight check failed after CAS; rolling back promotion")
+
+			if !sr.sessions.CompareAndSwap(peerHash, newSession, original) {
+				current, exists := sr.sessions.Load(peerHash)
+				sr.logger.WithField("peer_hash", logutil.HashPrefixPlain(peerHash)).WithFields(logger.Fields{
+					"entry_exists": exists,
+					"entry_type":   fmt.Sprintf("%T", current),
+				}).Error("Failed to roll back session promotion after preflight failure")
+			}
+
+			return nil, false
 		}
 	}
 

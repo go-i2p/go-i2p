@@ -533,7 +533,7 @@ func (h *RouterManagerHandler) executeReseedAsync() {
 func (h *RouterManagerHandler) runReseedWithTimeout(reseedCtx context.Context) {
 	done := make(chan error, 1)
 	go func() {
-		done <- h.RouterControl.Reseed()
+		done <- h.invokeReseed(reseedCtx)
 	}()
 
 	select {
@@ -542,6 +542,19 @@ func (h *RouterManagerHandler) runReseedWithTimeout(reseedCtx context.Context) {
 	case <-reseedCtx.Done():
 		h.logReseedTimeout(reseedCtx)
 	}
+}
+
+// invokeReseed executes reseed, preferring context-aware control paths when available.
+func (h *RouterManagerHandler) invokeReseed(reseedCtx context.Context) error {
+	type reseedWithContext interface {
+		ReseedWithContext(context.Context) error
+	}
+
+	if control, ok := h.RouterControl.(reseedWithContext); ok {
+		return control.ReseedWithContext(reseedCtx)
+	}
+
+	return h.RouterControl.Reseed()
 }
 
 // logReseedCompletion logs the result of a completed reseed operation.

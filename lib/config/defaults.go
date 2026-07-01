@@ -159,6 +159,10 @@ type I2CPDefaults struct {
 	// Default: 100 sessions
 	MaxSessions int
 
+	// AllowInsecureCleartextAuth allows authenticated non-loopback I2CP over
+	// cleartext TCP. Default: false (fail-closed).
+	AllowInsecureCleartextAuth bool
+
 	// MessageQueueSize is the buffer size for outbound messages per session
 	// Default: 64 messages
 	MessageQueueSize int
@@ -419,14 +423,15 @@ func buildBootstrapDefaults() BootstrapDefaults {
 // buildI2CPDefaults creates default I2CP server configuration values.
 func buildI2CPDefaults() I2CPDefaults {
 	return I2CPDefaults{
-		Enabled:          true,
-		Address:          "localhost:7654",
-		Network:          "tcp",
-		MaxSessions:      100,
-		MessageQueueSize: 64,
-		SessionTimeout:   30 * time.Minute,
-		ReadTimeout:      60 * time.Second,
-		WriteTimeout:     30 * time.Second,
+		Enabled:                    true,
+		Address:                    "localhost:7654",
+		Network:                    "tcp",
+		MaxSessions:                100,
+		AllowInsecureCleartextAuth: false,
+		MessageQueueSize:           64,
+		SessionTimeout:             30 * time.Minute,
+		ReadTimeout:                60 * time.Second,
+		WriteTimeout:               30 * time.Second,
 	}
 }
 

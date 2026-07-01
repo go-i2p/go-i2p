@@ -32,6 +32,12 @@ type I2CPConfig struct {
 	// See Username for details.
 	Password string
 
+	// AllowInsecureCleartextAuth allows authenticated I2CP TCP binds on
+	// non-loopback addresses, even though credentials are sent in cleartext
+	// during handshake. Default: false (fail-closed). Enable only when an
+	// external TLS/front-proxy control is in place.
+	AllowInsecureCleartextAuth bool
+
 	// MessageQueueSize is the buffer size for outbound messages per session.
 	// Default: 64 messages.
 	MessageQueueSize int
@@ -124,14 +130,15 @@ func defaultConfig() string {
 
 // DefaultI2CPConfig provides default I2CP server configuration
 var DefaultI2CPConfig = I2CPConfig{
-	Enabled:          true,
-	Address:          fmt.Sprintf("localhost:%d", DefaultI2CPPort),
-	Network:          "tcp",
-	MaxSessions:      100,
-	MessageQueueSize: 64,
-	SessionTimeout:   30 * time.Minute,
-	ReadTimeout:      60 * time.Second,
-	WriteTimeout:     30 * time.Second,
+	Enabled:                    true,
+	Address:                    fmt.Sprintf("localhost:%d", DefaultI2CPPort),
+	Network:                    "tcp",
+	MaxSessions:                100,
+	AllowInsecureCleartextAuth: false,
+	MessageQueueSize:           64,
+	SessionTimeout:             30 * time.Minute,
+	ReadTimeout:                60 * time.Second,
+	WriteTimeout:               30 * time.Second,
 }
 
 // DefaultTransportConfig provides default transport layer configuration

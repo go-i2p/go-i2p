@@ -180,6 +180,9 @@ func isPermittedUnauthenticatedBindHost(host, listenAddr string) error {
 // corresponding chmod in Start()).
 func (s *Server) enforceBindPolicy() error {
 	if s.isAuthenticationRequired() {
+		if err := s.enforceAuthenticatedBindPolicy(); err != nil {
+			return err
+		}
 		s.warnIfCleartextAuthOnNetwork()
 		return nil
 	}
@@ -192,6 +195,35 @@ func (s *Server) enforceBindPolicy() error {
 		return nil
 	}
 	return isPermittedUnauthenticatedBindHost(host, s.config.ListenAddr)
+}
+
+// enforceAuthenticatedBindPolicy rejects non-loopback cleartext TCP auth binds
+// unless the explicit unsafe acknowledgment flag is set.
+func (s *Server) enforceAuthenticatedBindPolicy() error {
+	if s.config.Network != "tcp" {
+		return nil
+	}
+	host, _, err := net.SplitHostPort(s.config.ListenAddr)
+	if err != nil {
+		return nil
+	}
+
+	if ip := net.ParseIP(host); ip != nil {
+		if ip.IsLoopback() {
+			return nil
+		}
+	} else if strings.EqualFold(host, "localhost") {
+		return nil
+	}
+
+	if s.config.AllowInsecureCleartextAuth {
+		return nil
+	}
+
+	return oops.Errorf(
+		"i2cp: refusing authenticated cleartext TCP listener on %q; set i2cp.allow_insecure_cleartext_auth=true only when protected by trusted TLS/front-proxy",
+		s.config.ListenAddr,
+	)
 }
 
 // warnIfCleartextAuthOnNetwork emits a warning when the server is configured

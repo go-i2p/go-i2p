@@ -507,11 +507,17 @@ func (db *StdNetDB) saveLeaseSetEntry(hash common.Hash, entry Entry) (err error)
 // Reseed performs a reseed if we have less than minRouters known routers.
 // Returns error if reseed failed.
 func (db *StdNetDB) Reseed(b bootstrap.Bootstrap, minRouters int) (err error) {
+	return db.ReseedWithContext(context.Background(), b, minRouters)
+}
+
+// ReseedWithContext performs a reseed with cancellation support.
+// Returns error if reseed failed or the context is canceled.
+func (db *StdNetDB) ReseedWithContext(ctx context.Context, b bootstrap.Bootstrap, minRouters int) (err error) {
 	if !db.isReseedRequired(minRouters) {
 		return nil
 	}
 
-	peers, err := db.retrievePeersFromBootstrap(b)
+	peers, err := db.retrievePeersFromBootstrap(ctx, b)
 	if err != nil {
 		return err
 	}
@@ -534,8 +540,12 @@ func (db *StdNetDB) isReseedRequired(minRouters int) bool {
 }
 
 // retrievePeersFromBootstrap gets peers from the bootstrap provider with timeout.
-func (db *StdNetDB) retrievePeersFromBootstrap(b bootstrap.Bootstrap) ([]router_info.RouterInfo, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), reseed.DefaultDialTimeout)
+func (db *StdNetDB) retrievePeersFromBootstrap(parent context.Context, b bootstrap.Bootstrap) ([]router_info.RouterInfo, error) {
+	if parent == nil {
+		parent = context.Background()
+	}
+
+	ctx, cancel := context.WithTimeout(parent, reseed.DefaultDialTimeout)
 	defer cancel()
 
 	peersChan, err := b.GetPeers(ctx, 0) // Get as many peers as possible

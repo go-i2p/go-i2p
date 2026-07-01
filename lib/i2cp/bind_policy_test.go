@@ -73,6 +73,55 @@ func TestServer_StartRefusesHostnameWithoutAuth(t *testing.T) {
 	}
 }
 
+func TestServer_StartRefusesAuthenticatedNonLoopbackWithoutUnsafeAck(t *testing.T) {
+	srv, err := NewServer(&ServerConfig{
+		ListenAddr:  "0.0.0.0:0",
+		Network:     "tcp",
+		MaxSessions: 10,
+	})
+	if err != nil {
+		t.Fatalf("NewServer: %v", err)
+	}
+
+	auth, err := NewPasswordAuthenticator("user", "pass")
+	if err != nil {
+		t.Fatalf("NewPasswordAuthenticator: %v", err)
+	}
+	srv.SetAuthenticator(auth)
+
+	err = srv.Start()
+	if err == nil {
+		srv.Stop()
+		t.Fatal("expected Start to refuse authenticated non-loopback cleartext bind without unsafe ack")
+	}
+	if !strings.Contains(err.Error(), "allow_insecure_cleartext_auth") {
+		t.Fatalf("expected unsafe-ack guidance in error, got %q", err.Error())
+	}
+}
+
+func TestServer_StartAllowsAuthenticatedNonLoopbackWithUnsafeAck(t *testing.T) {
+	srv, err := NewServer(&ServerConfig{
+		ListenAddr:                 "0.0.0.0:0",
+		Network:                    "tcp",
+		MaxSessions:                10,
+		AllowInsecureCleartextAuth: true,
+	})
+	if err != nil {
+		t.Fatalf("NewServer: %v", err)
+	}
+
+	auth, err := NewPasswordAuthenticator("user", "pass")
+	if err != nil {
+		t.Fatalf("NewPasswordAuthenticator: %v", err)
+	}
+	srv.SetAuthenticator(auth)
+
+	if err := srv.Start(); err != nil {
+		t.Fatalf("expected Start to succeed with explicit unsafe ack, got %v", err)
+	}
+	_ = srv.Stop()
+}
+
 // TestServer_UnixSocketPermissions asserts the I2CP server chmods its Unix
 // socket to 0o600 so only the owning user can connect. See AUDIT.md MEDIUM
 // — "Unix-domain socket permissions for the I2CP listener...".

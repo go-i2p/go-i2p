@@ -18,13 +18,14 @@ const (
 	hostLookupBurst = 60
 )
 
-// recoverFromAcceptPanic recovers from any panic in the accept loop to prevent server crash.
-func recoverFromAcceptPanic() {
+// recoverAcceptIterationPanic recovers from any panic in an accept-loop
+// iteration so the acceptor keeps running instead of silently dying.
+func recoverAcceptIterationPanic() {
 	if r := recover(); r != nil {
 		log.WithFields(logger.Fields{
 			"at":    "i2cp.Server.acceptLoop",
 			"panic": r,
-		}).Error("panic_in_accept_loop")
+		}).Error("panic_in_accept_loop_iteration")
 	}
 }
 
@@ -48,23 +49,33 @@ func (s *Server) acceptAndLogConnection() (net.Conn, bool) {
 // acceptLoop accepts incoming connections
 func (s *Server) acceptLoop() {
 	defer s.wg.Done()
-	defer recoverFromAcceptPanic()
 
 	for {
-		conn, shouldStop := s.acceptAndLogConnection()
+		shouldStop := false
+
+		func() {
+			defer recoverAcceptIterationPanic()
+
+			conn, stop := s.acceptAndLogConnection()
+			if stop {
+				shouldStop = true
+				return
+			}
+			if conn == nil {
+				return
+			}
+
+			if s.shouldRejectConnection(conn) {
+				return
+			}
+
+			s.wg.Add(1)
+			go s.handleConnection(conn)
+		}()
+
 		if shouldStop {
 			return
 		}
-		if conn == nil {
-			continue
-		}
-
-		if s.shouldRejectConnection(conn) {
-			continue
-		}
-
-		s.wg.Add(1)
-		go s.handleConnection(conn)
 	}
 }
 

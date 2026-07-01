@@ -312,6 +312,29 @@ func (m *mockRouterControl) Reseed() error {
 	return nil
 }
 
+type mockRouterControlWithContext struct {
+	shutdownCalled          bool
+	reseedCalled            bool
+	reseedWithContextCalled bool
+	reseedContextErr        error
+}
+
+func (m *mockRouterControlWithContext) Stop() {
+	m.shutdownCalled = true
+}
+
+func (m *mockRouterControlWithContext) Reseed() error {
+	m.reseedCalled = true
+	return nil
+}
+
+func (m *mockRouterControlWithContext) ReseedWithContext(ctx context.Context) error {
+	m.reseedWithContextCalled = true
+	<-ctx.Done()
+	m.reseedContextErr = ctx.Err()
+	return ctx.Err()
+}
+
 func TestRouterManagerHandler_Operations(t *testing.T) {
 	operations := []struct {
 		name      string
@@ -345,6 +368,31 @@ func TestRouterManagerHandler_InvalidJSON(t *testing.T) {
 	if err == nil {
 		t.Fatal("Handle() expected error for invalid JSON, got nil")
 	}
+}
+
+func TestRouterManagerHandler_InvokeReseed_UsesContextAwareReseed(t *testing.T) {
+	mockControl := &mockRouterControlWithContext{}
+	handler := NewRouterManagerHandler(context.Background(), &sync.WaitGroup{}, mockControl)
+
+	reseedCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := handler.invokeReseed(reseedCtx)
+
+	assert.True(t, mockControl.reseedWithContextCalled, "context-aware reseed path should be used")
+	assert.False(t, mockControl.reseedCalled, "legacy reseed path should not be used when context-aware path is available")
+	assert.Error(t, mockControl.reseedContextErr, "context-aware reseed should observe context timeout/cancellation")
+	assert.ErrorIs(t, err, context.Canceled)
+}
+
+func TestRouterManagerHandler_InvokeReseed_FallbackToLegacyReseed(t *testing.T) {
+	mockControl := &mockRouterControl{}
+	handler := NewRouterManagerHandler(context.Background(), &sync.WaitGroup{}, mockControl)
+
+	err := handler.invokeReseed(context.Background())
+
+	assert.True(t, mockControl.reseedCalled, "legacy reseed should be used when context-aware path is unavailable")
+	assert.NoError(t, err)
 }
 
 // Test NetworkSetting Handler

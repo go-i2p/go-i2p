@@ -461,10 +461,16 @@ func (r *Router) IsReseeding() bool {
 // This can be called via I2PControl to manually repopulate the network database.
 // It runs in the current goroutine and returns any error encountered.
 func (r *Router) Reseed() error {
+	return r.ReseedWithContext(context.Background())
+}
+
+// ReseedWithContext triggers an explicit NetDB reseed operation and propagates
+// cancellation to bootstrap retrieval.
+func (r *Router) ReseedWithContext(ctx context.Context) error {
 	logAt("(Router) Reseed").WithFields(logger.Fields{
 		"reason": "explicit reseed requested",
 	}).Info("Manual reseed triggered")
-	return r.performReseed()
+	return r.performReseedWithContext(ctx)
 }
 
 // GetLocalRouterIdentityHash returns the identity hash of this router as a base64-encoded string.

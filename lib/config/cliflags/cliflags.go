@@ -169,6 +169,9 @@ func registerI2CPFlags(cmd *cobra.Command) {
 		"I2CP authentication username (empty = no auth)")
 	cmd.PersistentFlags().String("i2cp.password", "",
 		"I2CP authentication password (empty = no auth)")
+	cmd.PersistentFlags().Bool("i2cp.allow-insecure-cleartext-auth",
+		config.DefaultI2CPConfig.AllowInsecureCleartextAuth,
+		"Allow non-loopback authenticated I2CP over cleartext TCP (unsafe; prefer TLS/front-proxy)")
 	cmd.PersistentFlags().Int("i2cp.message-queue-size",
 		config.DefaultI2CPConfig.MessageQueueSize,
 		"Buffer size for outbound messages per session")
@@ -381,6 +384,7 @@ func bindI2CPFlags(cmd *cobra.Command, v *viper.Viper) error {
 		{"i2cp.max_sessions", "i2cp.max-sessions"},
 		{"i2cp.username", "i2cp.username"},
 		{"i2cp.password", "i2cp.password"},
+		{"i2cp.allow_insecure_cleartext_auth", "i2cp.allow-insecure-cleartext-auth"},
 		{"i2cp.message_queue_size", "i2cp.message-queue-size"},
 		{"i2cp.session_timeout", "i2cp.session-timeout"},
 		{"i2cp.read_timeout", "i2cp.read-timeout"},
