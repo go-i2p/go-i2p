@@ -99,6 +99,19 @@ func (r *Router) GetTransportSessionFailureStats() transport.MuxSessionFailureSt
 	return muxer.GetSessionFailureStats()
 }
 
+// GetNTCP2TransportMetrics returns a snapshot of NTCP2 transport counters.
+// Returns a zero-value snapshot when NTCP2 transport is unavailable.
+func (r *Router) GetNTCP2TransportMetrics() ntcp.TransportMetricsSnapshot {
+	t := r.findTransport(func(t transport.Transport) bool {
+		_, ok := t.(*ntcp.NTCP2Transport)
+		return ok
+	})
+	if nt, ok := t.(*ntcp.NTCP2Transport); ok {
+		return nt.GetTransportMetrics()
+	}
+	return ntcp.TransportMetricsSnapshot{}
+}
+
 // GetNetworkStatus returns the I2PControl network status code.
 // Status codes:
 //

@@ -9,6 +9,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/netdb"
 	"github.com/go-i2p/go-i2p/lib/transport"
+	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 )
 
@@ -742,6 +743,8 @@ func (rsp *routerStatsProvider) GetRateForPeriod(stat string, periodMs int64) fl
 		return rsp.getTransportPeersCount(stat)
 	case rsp.isTransportSessionFailureStat(stat):
 		return rsp.getTransportSessionFailureCount(stat)
+	case rsp.isNTCP2TransportMetricStat(stat):
+		return rsp.getNTCP2TransportMetric(stat)
 	default:
 		log.WithField("stat", stat).Debug("i2pcontrol: GetRateForPeriod unknown stat name, returning 0")
 		return 0
@@ -858,6 +861,34 @@ func (rsp *routerStatsProvider) getTransportSessionFailureCount(stat string) flo
 		return float64(stats.PeerCooldownSkipped)
 	case "transport.session.fail.poolFull":
 		return float64(stats.ConnectionPoolFull)
+	default:
+		return 0
+	}
+}
+
+func (rsp *routerStatsProvider) isNTCP2TransportMetricStat(stat string) bool {
+	return stat == "transport.ntcp2.session.eofClose" ||
+		stat == "transport.ntcp2.session.timeoutOrReset" ||
+		stat == "transport.ntcp2.session.recvBackpressureDrop"
+}
+
+type ntcp2TransportMetricsReader interface {
+	GetNTCP2TransportMetrics() ntcp.TransportMetricsSnapshot
+}
+
+func (rsp *routerStatsProvider) getNTCP2TransportMetric(stat string) float64 {
+	reader, ok := rsp.router.(ntcp2TransportMetricsReader)
+	if !ok {
+		return 0
+	}
+	metrics := reader.GetNTCP2TransportMetrics()
+	switch stat {
+	case "transport.ntcp2.session.eofClose":
+		return float64(metrics.SessionEOFCloses)
+	case "transport.ntcp2.session.timeoutOrReset":
+		return float64(metrics.SessionTimeoutOrReset)
+	case "transport.ntcp2.session.recvBackpressureDrop":
+		return float64(metrics.SessionRecvBackpressure)
 	default:
 		return 0
 	}
@@ -1025,6 +1056,17 @@ func (rr RealRouter) GetTransportSessionFailureStats() transport.MuxSessionFailu
 		return transport.MuxSessionFailureStats{}
 	}
 	return typed.GetTransportSessionFailureStats()
+}
+
+// GetNTCP2TransportMetrics returns an NTCP2 transport metrics snapshot when available.
+func (rr RealRouter) GetNTCP2TransportMetrics() ntcp.TransportMetricsSnapshot {
+	typed, ok := rr.Router.(interface {
+		GetNTCP2TransportMetrics() ntcp.TransportMetricsSnapshot
+	})
+	if !ok {
+		return ntcp.TransportMetricsSnapshot{}
+	}
+	return typed.GetNTCP2TransportMetrics()
 }
 
 // Stop initiates graceful shutdown (implements RouterAccess)

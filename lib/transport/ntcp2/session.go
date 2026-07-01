@@ -490,10 +490,12 @@ func (s *NTCP2Session) readNextMessageFromBlocks(unframer *BlockUnframer) (i2np.
 func (s *NTCP2Session) handleReceiveError(err error) {
 	switch {
 	case errors.Is(err, io.EOF):
+		recordSessionEOFClose()
 		s.Logger().WithError(err).Warn("Connection closed by remote peer (EOF)")
 	case errors.Is(err, net.ErrClosed):
 		s.Logger().WithError(err).Warn("Read on closed connection")
 	case isTimeoutOrReset(err):
+		recordSessionTimeoutOrReset()
 		s.Logger().WithError(err).Warn("Connection lost (timeout or reset)")
 	default:
 		s.Logger().WithError(err).Error("Failed to read message from connection")
@@ -561,6 +563,7 @@ func (s *NTCP2Session) queueWithBackpressure(msg i2np.Message) bool {
 
 // recordAndLogDroppedMessage increments the dropped message counter and logs the event.
 func (s *NTCP2Session) recordAndLogDroppedMessage(msg i2np.Message) {
+	recordSessionRecvBackpressure()
 	s.RecordDroppedMessage()
 	dropped := s.DroppedMessages()
 	s.Logger().WithFields(map[string]interface{}{
