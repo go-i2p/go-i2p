@@ -50,6 +50,8 @@ github.com/go-i2p/go-nat-listener v0.1.62 h1:zdk8blH5yXydYlppq6NX/y0H803B3iJkcMp
 github.com/go-i2p/go-nat-listener v0.1.62/go.mod h1:grAvt54cQEIfhOH4xwTGSWHgXtUyf0co9HlWDccj64E=
 github.com/go-i2p/go-noise v0.1.599 h1:riwTKTM+Cesu9n/Le4h/F2m83NmGnoV4aJhsNH1+2Rc=
 github.com/go-i2p/go-noise v0.1.599/go.mod h1:AxUoYvoCtdlOdcZ+oVg0PUxZmWrMmCmuH4ehbMy5jGo=
+github.com/go-i2p/go-noise v0.1.60000-0.20260701023741-378fb24ce3e7 h1:88HS2ePNlAZO0N9JFXdREdwCoVHULmL0b1NAOKO7zDA=
+github.com/go-i2p/go-noise v0.1.60000-0.20260701023741-378fb24ce3e7/go.mod h1:PGimHiRxpOtz2m4HvM1xWlbPaWY7rEOZk+gprxvJ/S0=
 github.com/go-i2p/go-unzip v0.0.0-20260417162122-21146ed7aca8 h1:efCudZqf5/F4Mj/WYLqKveOwTPW81vVrn8Z0K7GFkTM=
 github.com/go-i2p/go-unzip v0.0.0-20260417162122-21146ed7aca8/go.mod h1:Jy8JMJDZNzy6u4s1FGNeVvDAsuBJn24nxyNLS0QmYpM=
 github.com/go-i2p/i2p-control v0.0.0-20260608000308-d8ed861a259c h1:Euk+tCxpdF9h9L7A5/KsXm/o8cOzNiVNU3PbQ2ieYwE=
@@ -62,8 +64,12 @@ github.com/go-i2p/noise v1.1.1-0.20260612013029-6d1ef3427561 h1:ygcYOpsJO6hvWjEz
 github.com/go-i2p/noise v1.1.1-0.20260612013029-6d1ef3427561/go.mod h1:/79lUu1iKd1yW+zqLI7QjY2MUpsGkGStKM7XVDxPeEc=
 github.com/go-i2p/path v0.1.5999 h1:IMGZtgRxbhOj5Lo/Q0zOwJc/be7PSh0Rim3sMg8zZF0=
 github.com/go-i2p/path v0.1.5999/go.mod h1:leu1S+RExGMeob5qkP6FvKvf5fsL2yc54mSVwyVY474=
+github.com/go-i2p/path v0.1.60000-0.20260701023528-b274f9e99ade h1:Qy0EwK6MuqJ1U6SJ3mzlEJHjv8C89m5ox5zNAHgDooc=
+github.com/go-i2p/path v0.1.60000-0.20260701023528-b274f9e99ade/go.mod h1:MyZ8aeWUgaq0DK919e9+nsD08+lTgnlQ+rl8kBLc+AI=
 github.com/go-i2p/pool v0.1.62 h1:MwxWUHzwWQeuvgU4lUH9LR0GbmWBT293geDRqot2GQQ=
 github.com/go-i2p/pool v0.1.62/go.mod h1:lquSi5F4rCNAouSomrLPZ6zF/Znr3Jq4xBz/pac0CSU=
+github.com/go-i2p/pool v0.1.59999 h1:jWTzOypfVFvhcUPhrkzOq0i2rMtz8A1QJjzv9f8YIEg=
+github.com/go-i2p/pool v0.1.59999/go.mod h1:O1i9HtW0zSaoHAzVLmDTEvHYD9VzLnvfBDd/aKk2N7Y=
 github.com/go-i2p/red25519 v0.0.0-20260302212615-1093a31f680d h1:a7DHsr9SOEjybZVtH3e0kJpXy40mZb1V+dGm9tptOl8=
 github.com/go-i2p/red25519 v0.0.0-20260302212615-1093a31f680d/go.mod h1:6bX00E8eUkSstzG2c8L4MIuL6pX5VCYjcWjBVOMXk0M=
 github.com/go-i2p/su3 v0.1.60000-0.20260701023342-822c65cd244a h1:A7+ffW9s3X5Fo8wQ7YqTjU2fH+yisiKCzPEaIaW3Buo=
