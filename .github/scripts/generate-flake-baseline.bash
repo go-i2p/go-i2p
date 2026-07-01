@@ -5,10 +5,18 @@ set -euo pipefail
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 iterations=${1:-3}
 output_file=${2:-"${repo_root}/docs/transport-flake-baseline.md"}
+test_timeout=${3:-"20m"}
 
 if ! [[ "${iterations}" =~ ^[0-9]+$ ]] || (( iterations < 1 )); then
-	echo "usage: $0 [iterations>=1] [output-file]" >&2
+	echo "usage: $0 [iterations>=1] [output-file] [per-test-timeout|default]" >&2
 	exit 2
+fi
+
+timeout_args=()
+if [[ "${test_timeout}" == "default" ]]; then
+	test_timeout="go-default"
+else
+	timeout_args=("-timeout=${test_timeout}")
 fi
 
 packages=(
@@ -31,7 +39,8 @@ for pkg in "${packages[@]}"; do
 	fails=0
 	echo "sampling ${pkg} (${iterations} runs)" >&2
 	for ((i = 1; i <= iterations; i++)); do
-		if (cd "${repo_root}" && go test -count=1 -timeout=2m "${pkg}" >/dev/null); then
+		echo "  run ${i}/${iterations} (timeout=${test_timeout})" >&2
+		if (cd "${repo_root}" && go test -count=1 "${timeout_args[@]}" "${pkg}" >/dev/null); then
 			passes=$((passes + 1))
 		else
 			fails=$((fails + 1))
@@ -53,6 +62,7 @@ mkdir -p "$(dirname "${output_file}")"
 	echo
 	echo "- Generated: ${generated_at}"
 	echo "- Iterations per package: ${iterations}"
+	echo "- Per-test timeout: ${test_timeout}"
 	echo "- Scope: transport and tunnel critical-path packages"
 	echo "- Result: ${total_passes}/${total_runs} passing runs"
 	echo
@@ -74,7 +84,9 @@ mkdir -p "$(dirname "${output_file}")"
 	echo "## Reproduction"
 	echo
 	echo '```bash'
-	echo "bash .github/scripts/generate-flake-baseline.bash ${iterations} ${output_file}"
+	echo "bash .github/scripts/generate-flake-baseline.bash ${iterations} ${output_file} ${test_timeout}"
+	echo "# Use Go's default timeout behavior for very long suites"
+	echo "bash .github/scripts/generate-flake-baseline.bash ${iterations} ${output_file} default"
 	echo '```'
 } > "${output_file}"
 
