@@ -67,6 +67,15 @@ type RouterStatsProvider interface {
 	// Supported stat names:
 	//   bw.sendBps, bw.receiveBps, bw.combined         — bandwidth in bytes/sec
 	//   tunnel.participatingTunnels                     — participating tunnel count
+	//   netdb.routerinfo.accepted                       — cumulative accepted RouterInfo count
+	//   netdb.routerinfo.rejected                       — cumulative rejected RouterInfo count
+	//   netdb.routerinfo.rejected.datatype              — cumulative invalid data-type rejects
+	//   netdb.routerinfo.rejected.parse                 — cumulative parse/decompression rejects
+	//   netdb.routerinfo.rejected.validation            — cumulative validation rejects
+	//   netdb.routerinfo.rejected.hash                  — cumulative identity-hash rejects
+	//   netdb.routerinfo.rejected.signature             — cumulative signature rejects
+	//   netdb.routerinfo.rejected.network               — cumulative netId/version policy rejects
+	//   netdb.routerinfo.rejected.admission             — cumulative admission-limit rejects
 	//   tunnel.buildExploratorySuccess                  — count of successful exploratory builds
 	//   tunnel.buildExploratoryReject                   — count of rejected exploratory builds
 	//   tunnel.buildExploratoryExpire                   — count of timed-out exploratory builds
@@ -724,6 +733,8 @@ func (rsp *routerStatsProvider) GetRateForPeriod(stat string, periodMs int64) fl
 		return rsp.getBandwidthRate(stat, periodMs)
 	case stat == "tunnel.participatingTunnels":
 		return rsp.getParticipatingTunnelsRate(periodMs)
+	case rsp.isNetDBRouterInfoStat(stat):
+		return rsp.getNetDBRouterInfoRateStat(stat)
 	case rsp.isTunnelBuildStat(stat):
 		return rsp.getTunnelBuildRate(stat, periodMs)
 	case stat == "tcp.activePeers" || stat == "udp.activePeers":
@@ -809,6 +820,60 @@ func (rsp *routerStatsProvider) getTransportPeersCount(stat string) float64 {
 		return float64(rsp.router.GetNTCP2SessionCount())
 	case "udp.activePeers":
 		return float64(rsp.router.GetSSU2SessionCount())
+	default:
+		return 0
+	}
+}
+
+func (rsp *routerStatsProvider) isNetDBRouterInfoStat(stat string) bool {
+	return stat == "netdb.routerinfo.accepted" ||
+		stat == "netdb.routerinfo.rejected" ||
+		stat == "netdb.routerinfo.rejected.datatype" ||
+		stat == "netdb.routerinfo.rejected.parse" ||
+		stat == "netdb.routerinfo.rejected.validation" ||
+		stat == "netdb.routerinfo.rejected.hash" ||
+		stat == "netdb.routerinfo.rejected.signature" ||
+		stat == "netdb.routerinfo.rejected.network" ||
+		stat == "netdb.routerinfo.rejected.admission"
+}
+
+func (rsp *routerStatsProvider) getNetDBRouterInfoRateStat(stat string) float64 {
+	netdbReader := rsp.router.GetNetDB()
+	if netdbReader == nil {
+		return 0
+	}
+
+	concreteNetDB, ok := netdbReader.(*netdb.StdNetDB)
+	if !ok || concreteNetDB == nil {
+		return 0
+	}
+
+	storeStats := concreteNetDB.GetRouterInfoStoreStats()
+
+	switch stat {
+	case "netdb.routerinfo.accepted":
+		return float64(storeStats.AcceptedCount)
+	case "netdb.routerinfo.rejected":
+		return float64(
+			storeStats.RejectedDataTypeCount +
+				storeStats.RejectedParseCount +
+				storeStats.RejectedValidationCount +
+				storeStats.RejectedAdmissionCount,
+		)
+	case "netdb.routerinfo.rejected.datatype":
+		return float64(storeStats.RejectedDataTypeCount)
+	case "netdb.routerinfo.rejected.parse":
+		return float64(storeStats.RejectedParseCount)
+	case "netdb.routerinfo.rejected.validation":
+		return float64(storeStats.RejectedValidationCount)
+	case "netdb.routerinfo.rejected.hash":
+		return float64(storeStats.RejectedHashCount)
+	case "netdb.routerinfo.rejected.signature":
+		return float64(storeStats.RejectedSignatureCount)
+	case "netdb.routerinfo.rejected.network":
+		return float64(storeStats.RejectedNetworkCount)
+	case "netdb.routerinfo.rejected.admission":
+		return float64(storeStats.RejectedAdmissionCount)
 	default:
 		return 0
 	}

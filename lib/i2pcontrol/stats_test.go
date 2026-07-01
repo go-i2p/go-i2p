@@ -2,9 +2,11 @@ package i2pcontrol
 
 import (
 	"net"
+	"os"
 	"testing"
 	"time"
 
+	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/crypto/tunnel"
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/i2np"
@@ -652,5 +654,34 @@ func TestGetRateForPeriod_ClientBuildRejectExpireStats(t *testing.T) {
 	}
 	if expire != 0 {
 		t.Errorf("tunnel.buildClientExpire = %v, want 0", expire)
+	}
+}
+
+func TestGetRateForPeriod_NetDBRouterInfoRejectParseStat(t *testing.T) {
+	dbDir := t.TempDir()
+	db := netdb.NewStdNetDB(dbDir)
+	t.Cleanup(func() {
+		db.Stop()
+		_ = os.RemoveAll(dbDir)
+	})
+
+	router := &mockRouterAccess{
+		netdb:   db,
+		running: true,
+	}
+	provider := NewRouterStatsProvider(router, "0.1.0-test")
+
+	var key common.Hash
+	// Invalid DatabaseStore RouterInfo payload (too short to decode) to trigger parse rejection.
+	if err := db.Store(key, []byte{0x00}, 0); err == nil {
+		t.Fatalf("expected parse failure storing invalid RouterInfo payload")
+	}
+
+	if got := provider.GetRateForPeriod("netdb.routerinfo.rejected.parse", 60000); got < 1 {
+		t.Fatalf("netdb.routerinfo.rejected.parse = %v, want >= 1", got)
+	}
+
+	if got := provider.GetRateForPeriod("netdb.routerinfo.rejected", 60000); got < 1 {
+		t.Fatalf("netdb.routerinfo.rejected = %v, want >= 1", got)
 	}
 }
