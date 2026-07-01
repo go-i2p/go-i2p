@@ -7,9 +7,9 @@ require (
 	github.com/emirpasic/gods v1.18.1
 	github.com/eyedeekay/go-unzip v0.0.0-20240201194209-560d8225b50e
 	github.com/flynn/noise v1.1.0
-	github.com/go-i2p/common v0.0.0-20250715213359-dfa5527ece83
-	github.com/go-i2p/crypto v0.0.0-20250715205812-c9e7853bc978
-	github.com/go-i2p/logger v0.0.0-20241123010126-3050657e5d0c
+	github.com/go-i2p/common v0.1.60000-0.20260701131656-2242deb3c69c
+	github.com/go-i2p/crypto v0.1.60000-0.20260701131646-150ebb601f17
+	github.com/go-i2p/logger v0.1.60000-0.20260701131042-844a6cd1489b
 	github.com/samber/oops v1.19.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/cobra v1.9.1
@@ -23,6 +23,17 @@ require (
 	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/fsnotify/fsnotify v1.8.0 // indirect
+	github.com/go-i2p/elgamal v0.1.60000-0.20260701131626-b5c8141026fc
+	github.com/go-i2p/go-datagrams v0.1.60000-0.20260630224546-15bdfdac5a52
+	github.com/go-i2p/go-i2cp v0.1.60000-0.20260630224428-d27f0dc69875
+	github.com/go-i2p/go-nat-listener v0.1.62
+	github.com/go-i2p/go-noise v0.1.60000-0.20260701023741-378fb24ce3e7
+	github.com/go-i2p/go-sam-bridge v0.1.60000-0.20260630224957-882cef9d113b
+	github.com/go-i2p/go-streaming v0.1.60000-0.20260630224821-837043bc2134
+	github.com/go-i2p/noise v0.1.62
+	github.com/go-i2p/path v0.1.60000-0.20260701024803-f84897415fbe
+	github.com/go-i2p/pool v0.1.60000-0.20260701024803-1cb9658f5256
+	github.com/go-i2p/su3 v0.1.60000-0.20260701131636-345eb07e80b5
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/magiconair/properties v1.8.9 // indirect

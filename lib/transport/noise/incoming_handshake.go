@@ -43,7 +43,7 @@ func (c *NoiseSession) RunIncomingHandshake() error {
 	return nil
 }
 
-func (c *NoiseSession) ComposeReceiverHandshakeMessage(localStatic noise.DHKey, remoteStatic []byte, payload []byte, ephemeralPrivate []byte) (negData, msg []byte, state *noise.HandshakeState, err error) {
+func (c *NoiseSession) ComposeReceiverHandshakeMessage(localStatic noise.DHKey, remoteStatic, payload, ephemeralPrivate []byte) (negData, msg []byte, state *noise.HandshakeState, err error) {
 	log.Debug("Starting ComposeReceiverHandshakeMessage")
 
 	if len(remoteStatic) != 0 && len(remoteStatic) != noise.DH25519.DHLen() {

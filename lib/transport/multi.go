@@ -20,7 +20,7 @@ func Mux(t ...Transport) (tmux *TransportMuxer) {
 	tmux = new(TransportMuxer)
 	tmux.trans = append(tmux.trans, t...)
 	log.Debug("TransportMuxer created successfully")
-	return
+	return tmux
 }
 
 // set the identity for every transport
@@ -31,12 +31,12 @@ func (tmux *TransportMuxer) SetIdentity(ident router_info.RouterInfo) (err error
 		if err != nil {
 			log.WithError(err).WithField("transport_index", i).Error("TransportMuxer: Failed to set identity for transport")
 			// an error happened let's return and complain
-			return
+			return err
 		}
 		log.WithField("transport_index", i).Debug("TransportMuxer: Identity set successfully for transport")
 	}
 	log.Debug("TransportMuxer: Identity set successfully for all transports")
-	return
+	return err
 }
 
 // close every transport that this transport muxer has
@@ -52,7 +52,7 @@ func (tmux *TransportMuxer) Close() (err error) {
 		}
 	}
 	log.Debug("TransportMuxer: All transports closed")
-	return
+	return err
 }
 
 // the name of this transport with the names of all the ones that we mux
@@ -87,13 +87,13 @@ func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s Tra
 			}
 			// we got a session
 			log.WithField("transport_index", i).Debug("TransportMuxer: Successfully got session from transport")
-			return
+			return s, err
 		}
 	}
 	log.Error("TransportMuxer: Failed to get session, no compatible transport available")
 	// we failed to get a session for this routerInfo
 	err = ErrNoTransportAvailable
-	return
+	return s, err
 }
 
 // is there a transport that we mux that is compatible with this router info?
@@ -103,9 +103,9 @@ func (tmux *TransportMuxer) Compatible(routerInfo router_info.RouterInfo) (compa
 		if t.Compatible(routerInfo) {
 			log.WithField("transport_index", i).Debug("TransportMuxer: Found compatible transport")
 			compat = true
-			return
+			return compat
 		}
 	}
 	log.Debug("TransportMuxer: No compatible transport found")
-	return
+	return compat
 }

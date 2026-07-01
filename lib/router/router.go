@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/go-i2p/go-i2p/lib/bootstrap"
 	"github.com/go-i2p/common/base32"
+	"github.com/go-i2p/go-i2p/lib/bootstrap"
 	"github.com/go-i2p/go-i2p/lib/transport/ntcp"
 
 	"github.com/go-i2p/logger"
@@ -111,7 +111,7 @@ func FromConfig(c *config.RouterConfig) (r *Router, err error) {
 	r.cfg = c
 	r.closeChnl = make(chan bool)
 	log.Debug("Router created successfully from configuration")
-	return
+	return r, err
 }
 
 // Wait blocks until router is fully stopped

@@ -47,7 +47,6 @@ func (rb *ReseedBootstrap) GetPeers(ctx context.Context, n int) ([]router_info.R
 
 		// Perform the actual reseeding operation synchronously
 		serverRIs, err := reseeder.SingleReseed(server.Url)
-
 		if err != nil {
 			log.WithError(err).WithField("server", server.Url).Warn("Reseed attempt failed")
 			lastErr = oops.Errorf("reseed from %s failed: %v", server.Url, err)

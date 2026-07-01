@@ -3,9 +3,9 @@ package netdb
 import (
 	"time"
 
-	"github.com/go-i2p/go-i2p/lib/bootstrap"
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
+	"github.com/go-i2p/go-i2p/lib/bootstrap"
 )
 
 // resolves unknown RouterInfos given the hash of their RouterIdentity

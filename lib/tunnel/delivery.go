@@ -417,7 +417,7 @@ func (delivery_instructions DeliveryInstructions) TunnelID() (tunnel_id uint32, 
 	has_tunnel_id, err := delivery_instructions.HasTunnelID()
 	if err != nil {
 		log.WithError(err).Error("Failed to check HasTunnelID")
-		return
+		return tunnel_id, err
 	}
 	if has_tunnel_id {
 		if len(delivery_instructions) >= FLAG_SIZE+TUNNEL_ID_SIZE {
@@ -431,7 +431,7 @@ func (delivery_instructions DeliveryInstructions) TunnelID() (tunnel_id uint32, 
 		log.Error("DeliveryInstructions are not of type DT_TUNNEL")
 		err = oops.Errorf("DeliveryInstructions are not of type DT_TUNNEL")
 	}
-	return
+	return tunnel_id, err
 }
 
 // Return the hash for these DeliveryInstructions, which varies by hash type.
@@ -443,7 +443,7 @@ func (delivery_instructions DeliveryInstructions) Hash() (hash common.Hash, err 
 	delivery_type, err := delivery_instructions.DeliveryType()
 	if err != nil {
 		log.WithError(err).Error("Failed to get DeliveryType")
-		return
+		return hash, err
 	}
 	hash_start := FLAG_SIZE
 	hash_end := FLAG_SIZE + HASH_SIZE
@@ -469,7 +469,7 @@ func (delivery_instructions DeliveryInstructions) Hash() (hash common.Hash, err 
 		log.Error("No Hash on DeliveryInstructions not of type DT_TUNNEL or DT_ROUTER")
 		err = oops.Errorf("No Hash on DeliveryInstructions not of type DT_TUNNEL or DT_ROUTER")
 	}
-	return
+	return hash, err
 }
 
 // Return the DelayFactor if present and any errors encountered parsing the DeliveryInstructions.
@@ -478,14 +478,14 @@ func (delivery_instructions DeliveryInstructions) Delay() (delay_factor DelayFac
 	delay, err := delivery_instructions.HasDelay()
 	if err != nil {
 		log.WithError(err).Error("Failed to check HasDelay")
-		return
+		return delay_factor, err
 	}
 	if delay {
 		var di_type byte
 		di_type, err = delivery_instructions.DeliveryType()
 		if err != nil {
 			log.WithError(err).Error("Failed to get DeliveryType")
-			return
+			return delay_factor, err
 		}
 		if di_type == DT_TUNNEL {
 			if len(delivery_instructions) >= FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE {
@@ -494,7 +494,7 @@ func (delivery_instructions DeliveryInstructions) Delay() (delay_factor DelayFac
 			} else {
 				log.Error("DeliveryInstructions is invalid, does not contain enough data for DelayFactor")
 				err = oops.Errorf("DeliveryInstructions is invalid, does not contain enough data for DelayFactor")
-				return
+				return delay_factor, err
 			}
 		} else if di_type == DT_ROUTER {
 			if len(delivery_instructions) >= FLAG_SIZE+HASH_SIZE {
@@ -503,7 +503,7 @@ func (delivery_instructions DeliveryInstructions) Delay() (delay_factor DelayFac
 			} else {
 				log.Error("DeliveryInstructions is invalid, does not contain enough data for DelayFactor")
 				err = oops.Errorf("DeliveryInstructions is invalid, does not contain enough data for DelayFactor")
-				return
+				return delay_factor, err
 			}
 		} else {
 			log.WithFields(logrus.Fields{
@@ -511,7 +511,7 @@ func (delivery_instructions DeliveryInstructions) Delay() (delay_factor DelayFac
 			}).Warn("Delay not present on DeliveryInstructions not of type DT_TUNNEL or DT_ROUTER")
 		}
 	}
-	return
+	return delay_factor, err
 }
 
 // Return the I2NP Message ID or 0 and an error if the data is not available for this
@@ -521,7 +521,7 @@ func (delivery_instructions DeliveryInstructions) MessageID() (msgid uint32, err
 	di_type, err := delivery_instructions.Type()
 	if err != nil {
 		log.WithError(err).Error("Failed to get DeliveryInstructions type")
-		return
+		return msgid, err
 	}
 	if di_type == FOLLOW_ON_FRAGMENT {
 		if len(delivery_instructions) >= 5 {
@@ -536,7 +536,7 @@ func (delivery_instructions DeliveryInstructions) MessageID() (msgid uint32, err
 		message_id_index, err = delivery_instructions.message_id_index()
 		if err != nil {
 			log.WithError(err).Error("Failed to get message_id_index")
-			return
+			return msgid, err
 		}
 		if len(delivery_instructions) >= message_id_index+4 {
 			msgid = binary.BigEndian.Uint32(delivery_instructions[message_id_index : message_id_index+4])
@@ -549,7 +549,7 @@ func (delivery_instructions DeliveryInstructions) MessageID() (msgid uint32, err
 		log.Error("No Message ID for DeliveryInstructions not of type FIRST_FRAGMENT or FOLLOW_ON_FRAGMENT")
 		err = oops.Errorf("No Message ID for DeliveryInstructions not of type FIRST_FRAGMENT or FOLLOW_ON_FRAGMENT")
 	}
-	return
+	return msgid, err
 }
 
 // Return the Extended Options data if present, or an error if not present.  Extended Options in unimplemented
@@ -559,29 +559,29 @@ func (delivery_instructions DeliveryInstructions) ExtendedOptions() (data []byte
 	ops, err := delivery_instructions.HasExtendedOptions()
 	if err != nil {
 		log.WithError(err).Error("Failed to check HasExtendedOptions")
-		return
+		return data, err
 	}
 	if ops {
 		var extended_options_index int
 		extended_options_index, err = delivery_instructions.extended_options_index()
 		if err != nil {
 			log.WithError(err).Error("Failed to get extended_options_index")
-			return
+			return data, err
 		}
 		if len(delivery_instructions) < extended_options_index+2 {
 			log.Error("DeliveryInstructions are invalid, length is shorter than required for Extended Options")
 			err = oops.Errorf("DeliveryInstructions are invalid, length is shorter than required for Extended Options")
-			return
+			return data, err
 		} else {
 			extended_options_size := common.Integer([]byte{delivery_instructions[extended_options_index]})
 			if len(delivery_instructions) < extended_options_index+1+extended_options_size.Int() {
 				log.Error("DeliveryInstructions are invalid, length is shorter than specified in Extended Options")
 				err = oops.Errorf("DeliveryInstructions are invalid, length is shorter than specified in Extended Options")
-				return
+				return data, err
 			} else {
 				data = delivery_instructions[extended_options_index+1 : extended_options_size.Int()]
 				log.WithField("extended_options_length", len(data)).Debug("Extended Options retrieved")
-				return
+				return data, err
 			}
 
 		}
@@ -589,7 +589,7 @@ func (delivery_instructions DeliveryInstructions) ExtendedOptions() (data []byte
 		log.Error("DeliveryInstruction does not have the ExtendedOptions flag set")
 		err = oops.Errorf("DeliveryInstruction does not have the ExtendedOptions flag set")
 	}
-	return
+	return data, err
 }
 
 // Return the size of the associated I2NP fragment and an error if the data is unavailable.
@@ -598,7 +598,7 @@ func (delivery_instructions DeliveryInstructions) FragmentSize() (frag_size uint
 	di_type, err := delivery_instructions.Type()
 	if err != nil {
 		log.WithError(err).Error("Failed to get DeliveryInstructions type")
-		return
+		return frag_size, err
 	}
 	if di_type == FOLLOW_ON_FRAGMENT {
 		if len(delivery_instructions) >= 7 {
@@ -613,7 +613,7 @@ func (delivery_instructions DeliveryInstructions) FragmentSize() (frag_size uint
 		fragment_size_index, err = delivery_instructions.fragment_size_index()
 		if err != nil {
 			log.WithError(err).Error("Failed to get fragment_size_index")
-			return
+			return frag_size, err
 		}
 		if len(delivery_instructions) >= fragment_size_index+2 {
 			frag_size = binary.BigEndian.Uint16(delivery_instructions[fragment_size_index : fragment_size_index+2])
@@ -626,7 +626,7 @@ func (delivery_instructions DeliveryInstructions) FragmentSize() (frag_size uint
 		log.Error("No Fragment Size for DeliveryInstructions not of type FIRST_FRAGMENT or FOLLOW_ON_FRAGMENT")
 		err = oops.Errorf("No Fragment Size for DeliveryInstructions not of type FIRST_FRAGMENT or FOLLOW_ON_FRAGMENT")
 	}
-	return
+	return frag_size, err
 }
 
 // Find the correct index for the Message ID in a FIRST_FRAGMENT DeliveryInstructions
@@ -635,7 +635,7 @@ func (delivery_instructions DeliveryInstructions) message_id_index() (message_id
 	fragmented, err := delivery_instructions.Fragmented()
 	if err != nil {
 		log.WithError(err).Error("Failed to check if DeliveryInstructions are fragmented")
-		return
+		return message_id, err
 	}
 	if fragmented {
 		// Start counting after the flags
@@ -646,7 +646,7 @@ func (delivery_instructions DeliveryInstructions) message_id_index() (message_id
 		di_type, err = delivery_instructions.DeliveryType()
 		if err != nil {
 			log.WithError(err).Error("Failed to get DeliveryType")
-			return
+			return message_id, err
 		}
 		if di_type == DT_TUNNEL {
 			message_id += 36
@@ -659,7 +659,7 @@ func (delivery_instructions DeliveryInstructions) message_id_index() (message_id
 		delay, err = delivery_instructions.HasDelay()
 		if err != nil {
 			log.WithError(err).Error("Failed to check HasDelay")
-			return
+			return message_id, err
 		}
 		if delay {
 			message_id++
@@ -678,7 +678,7 @@ func (delivery_instructions DeliveryInstructions) extended_options_index() (exte
 	ops, err := delivery_instructions.HasExtendedOptions()
 	if err != nil {
 		log.WithError(err).Error("Failed to check HasExtendedOptions")
-		return
+		return extended_options, err
 	}
 	if ops {
 		// Start counting after the flags
@@ -689,7 +689,7 @@ func (delivery_instructions DeliveryInstructions) extended_options_index() (exte
 		di_type, err = delivery_instructions.DeliveryType()
 		if err != nil {
 			log.WithError(err).Error("Failed to get DeliveryType")
-			return
+			return extended_options, err
 		}
 		if di_type == DT_TUNNEL {
 			extended_options += 36
@@ -702,7 +702,7 @@ func (delivery_instructions DeliveryInstructions) extended_options_index() (exte
 		delay, err = delivery_instructions.HasDelay()
 		if err != nil {
 			log.WithError(err).Error("Failed to check HasDelay")
-			return
+			return extended_options, err
 		}
 		if delay {
 			extended_options++
@@ -721,7 +721,7 @@ func (delivery_instructions DeliveryInstructions) extended_options_index() (exte
 		log.Error("DeliveryInstruction does not have the ExtendedOptions flag set")
 		err = oops.Errorf("DeliveryInstruction does not have the ExtendedOptions flag set")
 	}
-	return
+	return extended_options, err
 }
 
 // Find the index of the Fragment Size data in this Delivery Instruction.
@@ -735,7 +735,7 @@ func (delivery_instructions DeliveryInstructions) fragment_size_index() (fragmen
 	di_type, err = delivery_instructions.DeliveryType()
 	if err != nil {
 		log.WithError(err).Error("Failed to get DeliveryType")
-		return
+		return fragment_size, err
 	}
 	if di_type == DT_TUNNEL {
 		fragment_size += 36
@@ -748,7 +748,7 @@ func (delivery_instructions DeliveryInstructions) fragment_size_index() (fragmen
 	delay, err = delivery_instructions.HasDelay()
 	if err != nil {
 		log.WithError(err).Error("Failed to check HasDelay")
-		return
+		return fragment_size, err
 	}
 	if delay {
 		fragment_size++
@@ -780,12 +780,12 @@ func maybeAppendTunnelID(data, current []byte) (now []byte, err error) {
 			log.Debug("TunnelID appended")
 		} else {
 			log.WithError(err).Error("Failed to get TunnelID")
-			return
+			return now, err
 		}
 	} else {
 		log.Debug("No TunnelID to append")
 	}
-	return
+	return now, err
 }
 
 func maybeAppendHash(di_flag DeliveryInstructions, data, current []byte) (now []byte, err error) {
@@ -805,7 +805,7 @@ func maybeAppendHash(di_flag DeliveryInstructions, data, current []byte) (now []
 	} else {
 		log.Debug("No Hash to append")
 	}
-	return
+	return now, err
 }
 
 func maybeAppendDelay(di_flag DeliveryInstructions, data, current []byte) (now []byte, err error) {
@@ -826,7 +826,7 @@ func maybeAppendDelay(di_flag DeliveryInstructions, data, current []byte) (now [
 	} else {
 		log.Debug("No Delay to append")
 	}
-	return
+	return now, err
 }
 
 func maybeAppendMessageID(di_flag DeliveryInstructions, di_type int, data, current []byte) (now []byte, err error) {
@@ -860,7 +860,7 @@ func maybeAppendMessageID(di_flag DeliveryInstructions, di_type int, data, curre
 			log.Debug("MessageID appended for FOLLOW_ON_FRAGMENT")
 		}
 	}
-	return
+	return now, err
 }
 
 func maybeAppendExtendedOptions(di_flag DeliveryInstructions, data, current []byte) (now []byte, err error) {
@@ -872,7 +872,7 @@ func maybeAppendExtendedOptions(di_flag DeliveryInstructions, data, current []by
 	} else {
 		log.Debug("No ExtendedOptions to append")
 	}
-	return
+	return now, err
 }
 
 func maybeAppendSize(di_flag DeliveryInstructions, di_type int, data, current []byte) (now []byte, err error) {
@@ -892,7 +892,7 @@ func maybeAppendSize(di_flag DeliveryInstructions, di_type int, data, current []
 			log.Debug("Size appended for FOLLOW_ON_FRAGMENT")
 		}
 	}
-	return
+	return now, err
 }
 
 func readDeliveryInstructions(data []byte) (instructions DeliveryInstructions, remainder []byte, err error) {
@@ -900,7 +900,7 @@ func readDeliveryInstructions(data []byte) (instructions DeliveryInstructions, r
 	if len(data) < 1 {
 		log.Error("No data provided")
 		err = oops.Errorf("no data provided")
-		return
+		return instructions, remainder, err
 	}
 
 	di_flag := DeliveryInstructions(data[:1])
@@ -914,43 +914,43 @@ func readDeliveryInstructions(data []byte) (instructions DeliveryInstructions, r
 		di_data, err = maybeAppendTunnelID(data, di_data)
 		if err != nil {
 			log.WithError(err).Error("Failed to append TunnelID")
-			return
+			return instructions, remainder, err
 		}
 		di_data, err = maybeAppendHash(di_flag, data, di_data)
 		if err != nil {
 			log.WithError(err).Error("Failed to append Hash")
-			return
+			return instructions, remainder, err
 		}
 		di_data, err = maybeAppendDelay(di_flag, data, di_data)
 		if err != nil {
 			log.WithError(err).Error("Failed to append Delay")
-			return
+			return instructions, remainder, err
 		}
 		di_data, err = maybeAppendMessageID(di_flag, di_type, data, di_data)
 		if err != nil {
 			log.WithError(err).Error("Failed to append MessageID")
-			return
+			return instructions, remainder, err
 		}
 		di_data, err = maybeAppendExtendedOptions(di_flag, data, di_data)
 		if err != nil {
 			log.WithError(err).Error("Failed to append ExtendedOptions")
-			return
+			return instructions, remainder, err
 		}
 		di_data, err = maybeAppendSize(di_flag, di_type, data, di_data)
 		if err != nil {
 			log.WithError(err).Error("Failed to append Size")
-			return
+			return instructions, remainder, err
 		}
 	} else if di_type == FOLLOW_ON_FRAGMENT {
 		di_data, err = maybeAppendMessageID(di_flag, di_type, data, di_data)
 		if err != nil {
 			log.WithError(err).Error("Failed to append MessageID")
-			return
+			return instructions, remainder, err
 		}
 		di_data, err = maybeAppendSize(di_flag, di_type, data, di_data)
 		if err != nil {
 			log.WithError(err).Error("Failed to append Size")
-			return
+			return instructions, remainder, err
 		}
 	}
 
@@ -962,5 +962,5 @@ func readDeliveryInstructions(data []byte) (instructions DeliveryInstructions, r
 		"remainder_length":    len(remainder),
 	}).Debug("Successfully read DeliveryInstructions")
 
-	return
+	return instructions, remainder, err
 }

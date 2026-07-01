@@ -108,7 +108,7 @@ func (s *NoiseSession) peerStaticKey() ([32]byte, error) {
 	return [32]byte{}, oops.Errorf("Remote static key error")
 }
 
-type VerifyCallbackFunc func(publicKey []byte, data []byte) error
+type VerifyCallbackFunc func(publicKey, data []byte) error
 
 func NewNoiseTransportSession(ri router_info.RouterInfo) (transport.TransportSession, error) {
 	log.WithField("router_info", ri.String()).Debug("Creating new NoiseTransportSession")

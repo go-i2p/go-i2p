@@ -130,7 +130,7 @@ func (c *NTCP2Session) DecryptWithDerivedKey(
 
 // DeriveSessionKeys derives all required keys for a session using existing X25519 shared secret
 // This replaces scattered key derivation across session files
-func (c *NTCP2Session) DeriveSessionKeys(sharedSecret []byte, ephemeralKey []byte) error {
+func (c *NTCP2Session) DeriveSessionKeys(sharedSecret, ephemeralKey []byte) error {
 	kdfContext := kdf.NewNTCP2KDF()
 
 	// Derive ChaCha20 key

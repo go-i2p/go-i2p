@@ -54,7 +54,7 @@ func ReadAndValidatePadding(conn net.Conn, paddingLen int) error {
 }
 
 // CalculatePaddingLength determines padding length based on content size and randomness
-func CalculatePaddingLength(contentSize int, minSize int, minPadding int, maxExtraPadding int) int {
+func CalculatePaddingLength(contentSize, minSize, minPadding, maxExtraPadding int) int {
 	// Use defaults if parameters are invalid
 	if minSize <= 0 {
 		minSize = DefaultMinSize

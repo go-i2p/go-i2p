@@ -177,7 +177,7 @@ func (kr *KademliaResolver) findClosestPeers(target common.Hash) []common.Hash {
 }
 
 // queryPeer sends a lookup request to a specific peer through the tunnel
-func (kr *KademliaResolver) queryPeer(ctx context.Context, peer common.Hash, target common.Hash) (*router_info.RouterInfo, error) {
+func (kr *KademliaResolver) queryPeer(ctx context.Context, peer, target common.Hash) (*router_info.RouterInfo, error) {
 	// This would send a DatabaseLookup message through the tunnel to the peer
 	// The implementation would:
 	// 1. Create an I2NP DatabaseLookup message
@@ -196,5 +196,5 @@ func NewKademliaResolver(netDb NetworkDatabase, pool *tunnel.Pool) (r Resolver) 
 			pool:            pool,
 		}
 	}
-	return
+	return r
 }

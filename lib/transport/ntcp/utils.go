@@ -13,7 +13,7 @@ import (
 )
 
 // DecryptOptionsBlock decrypts the options block from a SessionRequest message
-func (c *NTCP2Session) DecryptOptionsBlock(encryptedOptions []byte, obfuscatedX []byte, deobfuscatedX []byte) ([]byte, error) {
+func (c *NTCP2Session) DecryptOptionsBlock(encryptedOptions, obfuscatedX, deobfuscatedX []byte) ([]byte, error) {
 	return c.PerformAEADOperation(
 		deobfuscatedX,    // Key material
 		encryptedOptions, // Data to decrypt

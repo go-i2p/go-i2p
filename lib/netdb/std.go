@@ -13,11 +13,11 @@ import (
 	"github.com/go-i2p/logger"
 	"github.com/sirupsen/logrus"
 
-	"github.com/go-i2p/go-i2p/lib/bootstrap"
 	"github.com/go-i2p/common/base32"
 	"github.com/go-i2p/common/base64"
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
+	"github.com/go-i2p/go-i2p/lib/bootstrap"
 	"github.com/go-i2p/go-i2p/lib/netdb/reseed"
 	"github.com/go-i2p/go-i2p/lib/util"
 )
@@ -45,7 +45,7 @@ func (db *StdNetDB) GetRouterInfo(hash common.Hash) (chnl chan router_info.Route
 	if ri, ok := db.RouterInfos[hash]; ok {
 		log.Debug("RouterInfo found in memory cache")
 		chnl <- *ri.RouterInfo
-		return
+		return chnl
 	}
 	fname := db.SkiplistFile(hash)
 	buff := new(bytes.Buffer)
@@ -72,7 +72,7 @@ func (db *StdNetDB) GetRouterInfo(hash common.Hash) (chnl chan router_info.Route
 	} else {
 		log.WithError(err).Error("Failed to parse RouterInfo")
 	}
-	return
+	return chnl
 }
 
 func (db *StdNetDB) GetAllRouterInfos() (ri []router_info.RouterInfo) {
@@ -83,7 +83,7 @@ func (db *StdNetDB) GetAllRouterInfos() (ri []router_info.RouterInfo) {
 			ri = append(ri, *e.RouterInfo)
 		}
 	}
-	return
+	return ri
 }
 
 // get the skiplist file that a RouterInfo with this hash would go in
@@ -91,7 +91,7 @@ func (db *StdNetDB) SkiplistFile(hash common.Hash) (fpath string) {
 	fname := base64.EncodeToString(hash[:])
 	fpath = filepath.Join(db.Path(), fmt.Sprintf("r%c", fname[0]), fmt.Sprintf("routerInfo-%s.dat", fname))
 	log.WithField("file_path", fpath).Debug("Generated skiplist file path")
-	return
+	return fpath
 }
 
 // get netdb path
@@ -124,7 +124,7 @@ func (db *StdNetDB) Size() (routers int) {
 	} else {
 		log.WithError(err).Error("Failed to read NetDB size cache file")
 	}
-	return
+	return routers
 }
 
 // name of file to hold precomputed size of netdb
@@ -214,7 +214,7 @@ func (db *StdNetDB) RecalculateSize() (err error) {
 	} else {
 		log.WithError(err).Error("Failed to update NetDB size cache file")
 	}
-	return
+	return err
 }
 
 // return true if the network db directory exists and is writable
@@ -256,7 +256,7 @@ func (db *StdNetDB) SaveEntry(e *Entry) (err error) {
 			log.Errorf("failed to save netdb entry: %s", err.Error())
 		}
 	*/
-	return
+	return err
 }
 
 func (db *StdNetDB) Save() (err error) {
@@ -267,7 +267,7 @@ func (db *StdNetDB) Save() (err error) {
 			log.WithError(e).Error("Failed to save NetDB entry")
 		}
 	}
-	return
+	return err
 }
 
 // reseed if we have less than minRouters known routers
@@ -322,7 +322,7 @@ func (db *StdNetDB) Ensure() (err error) {
 	} else {
 		log.Debug("NetDB directory already exists")
 	}
-	return
+	return err
 }
 
 // create base network database directory
@@ -338,11 +338,11 @@ func (db *StdNetDB) Create() (err error) {
 			err = os.MkdirAll(filepath.Join(p, fmt.Sprintf("r%c", c)), mode)
 			if err != nil {
 				log.WithError(err).Error("Failed to create subdirectory")
-				return
+				return err
 			}
 		}
 	} else {
 		log.WithError(err).Error("Failed to create root network database directory")
 	}
-	return
+	return err
 }

@@ -102,7 +102,7 @@ func (noopt *NoiseTransport) SetIdentity(ident router_info.RouterInfo) (err erro
 			"reason": "network socket is null",
 		}).Error("network socket is null")
 		err = oops.Errorf("network socket is null")
-		return
+		return err
 	}
 	log.Debug("NoiseTransport: Identity set successfully")
 	return nil
