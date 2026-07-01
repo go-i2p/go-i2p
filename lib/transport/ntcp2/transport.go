@@ -927,10 +927,6 @@ func (t *NTCP2Transport) Addr() net.Addr {
 // initialization (before the router starts accepting connections). Unlike
 // SetIdentity, this does NOT recreate the listener.
 func (t *NTCP2Transport) UpdateLocalRouterInfo(ri router_info.RouterInfo) {
-	t.identityMu.Lock()
-	t.identity = ri
-	t.identityMu.Unlock()
-
 	// HIGH-1.3 fix: Load config atomically
 	cfg := t.config.Load()
 	staticKey := cfg.Config.StaticKey
@@ -943,7 +939,12 @@ func (t *NTCP2Transport) UpdateLocalRouterInfo(ri router_info.RouterInfo) {
 				"GetNTCP2AddressWithStaticKey check). Investigate the call site that " +
 				"supplied this RouterInfo.",
 		)
+		return
 	}
+
+	t.identityMu.Lock()
+	t.identity = ri
+	t.identityMu.Unlock()
 }
 
 // SetPeerConnNotifier wires a connection-outcome notifier into the transport.
@@ -1452,12 +1453,19 @@ func (t *NTCP2Transport) handleDialFailure(routerHash data.Hash, routerHashBytes
 	t.unreserveSessionSlot()
 	t.logger.WithError(err).WithField("router_hash", logutil.HashPrefixPlain(routerHashBytes)).Debug("Failed to dial NTCP2 connection")
 	if n := t.getPeerConnNotifier(); n != nil {
-		if errors.Is(err, ErrInvalidRouterInfo) {
+		if isPermanentNTCP2DialFailure(err) {
 			n.RecordPermanentFailure(routerHash, "no_reachable_ntcp2_address")
 		} else {
 			n.RecordFailure(routerHash, err.Error())
 		}
 	}
+}
+
+// isPermanentNTCP2DialFailure returns true when the error represents a peer
+// that is structurally unreachable for NTCP2, rather than a transient network
+// or handshake failure that should be retried.
+func isPermanentNTCP2DialFailure(err error) bool {
+	return errors.Is(err, ErrInvalidRouterInfo) || errors.Is(err, ErrNTCP2NotSupported)
 }
 
 // finalizeOutboundSession sets up the session object and records success metrics.

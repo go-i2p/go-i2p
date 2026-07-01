@@ -43,7 +43,7 @@ func ExtractPeerStaticKey(routerInfo router_info.RouterInfo) ([]byte, error) {
 		return staticKey, nil
 	}
 
-	return nil, oops.Errorf("no valid NTCP2 static key found in RouterInfo")
+	return nil, oops.Wrapf(ErrInvalidRouterInfo, "no valid NTCP2 static key found in RouterInfo")
 }
 
 // extractStaticKeyFromAddress attempts to extract the static key from a single
