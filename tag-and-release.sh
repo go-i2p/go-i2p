@@ -319,11 +319,17 @@ force_update_by_hash() {
 force_update_by_version() {
   repo=$1
   version=$2
+  fallback_hash=$3
   module="github.com/go-i2p/$repo"
 
   echo "updating $repo to version $version" 1>&2
   drop_local_replace "$module"
   if ! ensure_version_downloadable "$module" "$version"; then
+    if [ -n "$fallback_hash" ]; then
+      echo "Version $version unavailable for $repo; falling back to hash $fallback_hash" 1>&2
+      force_update_by_hash "$repo" "$fallback_hash"
+      return
+    fi
     echo "ERROR: direct version update failed for $module@$version" 1>&2
     exit 1
   fi
@@ -389,7 +395,9 @@ correct_our_tags() {
       echo "Skipping self-update for $repo" 1>&2
       continue
     fi
-    force_update_by_version "$repo" "v$VERSION"
+    var=$(hash_var_for_repo "$repo")
+    hash=$(value_of "$var")
+    force_update_by_version "$repo" "v$VERSION" "$hash"
   done
 
   # Reconcile once more so later module updates cannot undo earlier pins.
@@ -398,7 +406,9 @@ correct_our_tags() {
     if [ "$repo" = "$current_repo" ]; then
       continue
     fi
-    force_update_by_version "$repo" "v$VERSION"
+    var=$(hash_var_for_repo "$repo")
+    hash=$(value_of "$var")
+    force_update_by_version "$repo" "v$VERSION" "$hash"
   done
 
   go mod tidy -v 1>&2
@@ -429,8 +439,6 @@ tagandrelease() {
   #cleanup
   echo "Commenting out replace directives and updating our packages for $1" 1>&2
   comment_out_replaces
-  echo "Updating our packages for $1" 1>&2
-  update_our_packages
   if [ "$DRY_RUN" = true ]; then
     echo "Dry run: skipping git tag and release for $1" 1>&2
     if [ "$CHECKIN_DRY_RUN" = true ]; then
@@ -472,11 +480,21 @@ tagandrelease() {
     git add -v -f RELEASE_NOTES.md 1>&2
     git commit -m "Update RELEASE_NOTES.md for v$VERSION" 1>&2
   fi
-  git tag -sa "v$VERSION" -m "$1 v$VERSION" 1>&2
+  if /usr/bin/git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null 2>&1; then
+    echo "Local tag v$VERSION already exists, replacing it" 1>&2
+    /usr/bin/git tag -d "v$VERSION" 1>&2
+  fi
+
+  if ! git tag -sa "v$VERSION" -m "$1 v$VERSION" 1>&2; then
+    echo "ERROR: failed to create tag v$VERSION for $1" 1>&2
+    exit 1
+  fi
   TAG_HASH=$(/usr/bin/git rev-parse "v$VERSION")
   echo "$1 v$VERSION tag hash: $TAG_HASH" 1>&2
   echo "$TAG_HASH"
   push 1>&2
+  echo "Updating our packages for $1" 1>&2
+  update_our_packages
   correct_our_tags 1>&2
   if [ -f RELEASE_NOTES.md ]; then
     github_release release \
