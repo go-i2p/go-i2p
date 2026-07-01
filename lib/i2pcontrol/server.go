@@ -2,6 +2,7 @@ package i2pcontrol
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -250,8 +251,14 @@ func (s *Server) Start() error {
 		log.WithFields(logger.Fields{"at": "Start"}).Info("I2PControl server is disabled")
 		return nil
 	}
+	return s.startEnabledServer()
+}
 
-	s.startHTTPServer()
+// startEnabledServer starts listener serving and token cleanup for an enabled server.
+func (s *Server) startEnabledServer() error {
+	if err := s.startHTTPServer(); err != nil {
+		return err
+	}
 	s.startTokenCleanup()
 
 	return nil
@@ -269,18 +276,19 @@ func (s *Server) Addr() net.Addr {
 	return s.listener.Addr()
 }
 
-// startHTTPServer launches the HTTP or HTTPS server in a background goroutine.
-func (s *Server) startHTTPServer() {
+// startHTTPServer validates startup prerequisites, binds the listening socket,
+// and then launches the serving loop in a background goroutine.
+func (s *Server) startHTTPServer() error {
+	listener, err := s.createListener()
+	if err != nil {
+		return err
+	}
+
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
 
-		var err error
-		if s.config.UseHTTPS {
-			err = s.startHTTPSServer()
-		} else {
-			err = s.startPlainHTTPServer()
-		}
+		err := s.serveOnListener(listener)
 
 		if err != nil && err != http.ErrServerClosed {
 			log.WithFields(logger.Fields{
@@ -289,13 +297,59 @@ func (s *Server) startHTTPServer() {
 			}).Error("I2PControl server error")
 		}
 	}()
+
+	return nil
 }
 
-// startHTTPSServer validates HTTPS configuration and starts the TLS server.
-func (s *Server) startHTTPSServer() error {
+// createListener validates transport configuration and binds the listener.
+func (s *Server) createListener() (net.Listener, error) {
+	protocol := "HTTP"
+	if s.config.UseHTTPS {
+		protocol = "HTTPS"
+	}
+
+	log.WithFields(logger.Fields{
+		"at":       "(Server).createListener",
+		"address":  s.config.Address,
+		"protocol": protocol,
+	}).Info("Starting I2PControl server")
+
+	if err := s.validateHTTPSConfig(); err != nil {
+		return nil, err
+	}
+
+	// Note: net.Listen("tcp", addr) may attempt IPv6 resolution first if addr
+	// is a hostname like "localhost". On systems with IPv6 disabled, this can
+	// result in a confusing "bind: cannot assign requested address" error.
+	// If you encounter this, specify an explicit IP literal instead:
+	// e.g., "127.0.0.1:7650" for IPv4-only or "::1:7650" for IPv6-only.
+	listener, err := net.Listen("tcp", s.config.Address)
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to create listener on %s", s.config.Address)
+	}
+
+	s.mu.Lock()
+	s.listener = listener
+	s.mu.Unlock()
+
+	log.WithFields(logger.Fields{
+		"at":      "(Server).createListener",
+		"address": listener.Addr().String(),
+	}).Info("I2PControl server listening")
+
+	return listener, nil
+}
+
+// validateHTTPSConfig performs startup-time HTTPS checks so Start() can fail
+// before reporting success when certificates are invalid.
+func (s *Server) validateHTTPSConfig() error {
+	if !s.config.UseHTTPS {
+		return nil
+	}
+
 	if s.config.CertFile == "" || s.config.KeyFile == "" {
 		log.WithFields(logger.Fields{
-			"at":       "(Server).startHTTPSServer",
+			"at":       "(Server).validateHTTPSConfig",
 			"reason":   "missing cert or key file",
 			"certFile": s.config.CertFile,
 			"keyFile":  s.config.KeyFile,
@@ -303,61 +357,18 @@ func (s *Server) startHTTPSServer() error {
 		return oops.Errorf("missing certificate or key file")
 	}
 
-	log.WithFields(logger.Fields{
-		"at":       "(Server).startHTTPSServer",
-		"address":  s.config.Address,
-		"protocol": "HTTPS",
-	}).Info("Starting I2PControl server")
-
-	// Note: net.Listen("tcp", addr) may attempt IPv6 resolution first if addr
-	// is a hostname like "localhost". On systems with IPv6 disabled, this can
-	// result in a confusing "bind: cannot assign requested address" error.
-	// If you encounter this, specify an explicit IP literal instead:
-	// e.g., "127.0.0.1:7650" for IPv4-only or "::1:7650" for IPv6-only.
-	listener, err := net.Listen("tcp", s.config.Address)
-	if err != nil {
-		return oops.Wrapf(err, "failed to create listener on %s", s.config.Address)
+	if _, err := tls.LoadX509KeyPair(s.config.CertFile, s.config.KeyFile); err != nil {
+		return oops.Wrapf(err, "failed to load TLS certificate/key")
 	}
 
-	s.mu.Lock()
-	s.listener = listener
-	s.mu.Unlock()
-
-	log.WithFields(logger.Fields{
-		"at":      "(Server).startHTTPSServer",
-		"address": listener.Addr().String(),
-	}).Info("I2PControl server listening")
-
-	return s.httpServer.ServeTLS(listener, s.config.CertFile, s.config.KeyFile)
+	return nil
 }
 
-// startPlainHTTPServer starts the HTTP server without TLS.
-func (s *Server) startPlainHTTPServer() error {
-	log.WithFields(logger.Fields{
-		"at":       "(Server).startPlainHTTPServer",
-		"address":  s.config.Address,
-		"protocol": "HTTP",
-	}).Info("Starting I2PControl server")
-
-	// Note: net.Listen("tcp", addr) may attempt IPv6 resolution first if addr
-	// is a hostname like "localhost". On systems with IPv6 disabled, this can
-	// result in a confusing "bind: cannot assign requested address" error.
-	// If you encounter this, specify an explicit IP literal instead:
-	// e.g., "127.0.0.1:7650" for IPv4-only or "::1:7650" for IPv6-only.
-	listener, err := net.Listen("tcp", s.config.Address)
-	if err != nil {
-		return oops.Wrapf(err, "failed to create listener on %s", s.config.Address)
+// serveOnListener runs the HTTP(S) serving loop against an already-bound listener.
+func (s *Server) serveOnListener(listener net.Listener) error {
+	if s.config.UseHTTPS {
+		return s.httpServer.ServeTLS(listener, s.config.CertFile, s.config.KeyFile)
 	}
-
-	s.mu.Lock()
-	s.listener = listener
-	s.mu.Unlock()
-
-	log.WithFields(logger.Fields{
-		"at":      "(Server).startPlainHTTPServer",
-		"address": listener.Addr().String(),
-	}).Info("I2PControl server listening")
-
 	return s.httpServer.Serve(listener)
 }
 
@@ -558,23 +569,11 @@ func (s *Server) validateAuthentication(req *Request) *RPCError {
 		Token string `json:"Token"`
 	}
 	if err := json.Unmarshal(req.Params, &params); err != nil || params.Token == "" {
-		if s.config.StrictAuth {
-			return NewRPCError(ErrCodeAuthRequired, "No authentication token presented")
-		}
-		// i2pd compatibility mode: methods are callable without presenting a token.
-		return nil
+		return NewRPCError(ErrCodeAuthRequired, "No authentication token presented")
 	}
 
 	if !s.authManager.ValidateToken(params.Token) {
-		if s.config.StrictAuth {
-			return NewRPCError(ErrCodeTokenNotExist, "Authentication token does not exist or has expired")
-		}
-		// i2pd compatibility mode: tolerate stale/unknown tokens and proceed.
-		log.WithFields(logger.Fields{
-			"at":     "i2pcontrol.validateAuthentication",
-			"method": req.Method,
-		}).Debug("invalid_token_tolerated_in_compat_mode")
-		return nil
+		return NewRPCError(ErrCodeTokenNotExist, "Authentication token does not exist or has expired")
 	}
 
 	return nil

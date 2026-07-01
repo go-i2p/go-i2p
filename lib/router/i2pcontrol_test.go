@@ -3,7 +3,9 @@ package router
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -116,6 +118,70 @@ func TestI2PControlNilConfig(t *testing.T) {
 
 	if r.i2pcontrolServer != nil {
 		t.Error("i2pcontrolServer should not be set when config is nil")
+	}
+}
+
+// TestI2PControlStartupFailure_OccupiedPort verifies startup fails when the
+// configured control port is already bound.
+func TestI2PControlStartupFailure_OccupiedPort(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to reserve test port: %v", err)
+	}
+	defer listener.Close()
+
+	cfg := &config.RouterConfig{
+		I2PControl: &config.I2PControlConfig{
+			Enabled:         true,
+			Address:         listener.Addr().String(),
+			Password:        "test-password",
+			UseHTTPS:        false,
+			TokenExpiration: 10 * time.Minute,
+		},
+	}
+
+	r := &Router{cfg: cfg, running: true}
+
+	err = r.startI2PControlServer()
+	if err == nil {
+		t.Fatal("expected startup error when control port is occupied")
+	}
+	if !strings.Contains(err.Error(), "failed to create listener") {
+		t.Fatalf("expected listener creation error, got: %v", err)
+	}
+	if r.i2pcontrolServer != nil {
+		t.Fatal("i2pcontrolServer should remain nil on startup failure")
+	}
+}
+
+// TestI2PControlStartupFailure_BadCertificate verifies startup fails before
+// reporting success when HTTPS certificate files are invalid.
+func TestI2PControlStartupFailure_BadCertificate(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	cfg := &config.RouterConfig{
+		I2PControl: &config.I2PControlConfig{
+			Enabled:         true,
+			Address:         "127.0.0.1:0",
+			Password:        "test-password",
+			UseHTTPS:        true,
+			CertFile:        tmpDir + "/missing-cert.pem",
+			KeyFile:         tmpDir + "/missing-key.pem",
+			TokenExpiration: 10 * time.Minute,
+		},
+	}
+
+	r := &Router{cfg: cfg, running: true}
+
+	err := r.startI2PControlServer()
+	if err == nil {
+		t.Fatal("expected startup error with invalid HTTPS certificate files")
+	}
+	if !strings.Contains(err.Error(), "failed to load TLS certificate/key") {
+		t.Fatalf("expected TLS load error, got: %v", err)
+	}
+	if r.i2pcontrolServer != nil {
+		t.Fatal("i2pcontrolServer should remain nil on startup failure")
 	}
 }
 

@@ -231,8 +231,9 @@ func setupStrictAuthTestServer(t *testing.T) (*Server, *httptest.Server) {
 	return server, ts
 }
 
-// TestAuthorizationCompatModeAllowsMethodsWithoutToken verifies i2pd-compatible default behavior.
-func TestAuthorizationCompatModeAllowsMethodsWithoutToken(t *testing.T) {
+// TestAuthorizationRequiredForProtectedMethods verifies protected methods
+// require authentication by default.
+func TestAuthorizationRequiredForProtectedMethods(t *testing.T) {
 	_, ts := setupAuthTestServer(t)
 
 	// List of protected methods (require authentication)
@@ -247,11 +248,11 @@ func TestAuthorizationCompatModeAllowsMethodsWithoutToken(t *testing.T) {
 	for _, method := range protectedMethods {
 		t.Run(method+"_without_token", func(t *testing.T) {
 			rpcResp := postRPC(t, ts.URL, method, map[string]interface{}{})
-			if rpcResp.Error == nil {
-				return
+			assert.NotNil(t, rpcResp.Error, "Method %s should require authentication", method)
+			if rpcResp.Error != nil {
+				assert.True(t, rpcResp.Error.Code == ErrCodeInvalidParams || rpcResp.Error.Code == ErrCodeAuthRequired,
+					"Expected auth error for %s, got code %d: %s", method, rpcResp.Error.Code, rpcResp.Error.Message)
 			}
-			assert.NotEqual(t, ErrCodeAuthRequired, rpcResp.Error.Code, "Method %s should not be rejected for missing token in compat mode", method)
-			assert.NotEqual(t, ErrCodeTokenNotExist, rpcResp.Error.Code, "Method %s should not be rejected for invalid token in compat mode", method)
 		})
 	}
 }
@@ -297,15 +298,19 @@ func TestAuthorizationAuthenticateMethodNoTokenRequired(t *testing.T) {
 	assert.Contains(t, result, "Token", "Expected Token in response")
 }
 
-// TestAuthorizationInvalidTokenAcceptedInCompatMode verifies invalid tokens are tolerated in compatibility mode.
-func TestAuthorizationInvalidTokenAcceptedInCompatMode(t *testing.T) {
+// TestAuthorizationInvalidTokenRejected verifies invalid tokens are rejected
+// for protected methods.
+func TestAuthorizationInvalidTokenRejected(t *testing.T) {
 	_, ts := setupAuthTestServer(t)
 
 	rpcResp := postRPC(t, ts.URL, "RouterInfo", map[string]interface{}{
 		"Token": "invalid_fake_token_12345",
 	})
 
-	assert.Nil(t, rpcResp.Error, "Invalid token should be tolerated in compatibility mode")
+	assert.NotNil(t, rpcResp.Error, "Expected error for invalid token")
+	if rpcResp.Error != nil {
+		assert.Equal(t, ErrCodeTokenNotExist, rpcResp.Error.Code)
+	}
 }
 
 // TestAuthorizationInvalidTokenRejectedStrict verifies invalid tokens are rejected when strict_auth=true.
