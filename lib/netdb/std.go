@@ -927,7 +927,7 @@ func (db *StdNetDB) verifyRouterInfoNetwork(ri router_info.RouterInfo) error {
 	if (!ok || netID == "") && db.strictRouterInfoNetworkValidation {
 		return oops.Errorf("RouterInfo missing netId property")
 	}
-	if ok && netID != "" && netID != db.routerInfoExpectedNetID && db.strictRouterInfoNetworkValidation {
+	if ok && netID != "" && netID != db.routerInfoExpectedNetID {
 		return oops.Errorf("RouterInfo netId %q does not match network %q", netID, db.routerInfoExpectedNetID)
 	}
 
