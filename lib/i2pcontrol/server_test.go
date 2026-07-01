@@ -521,6 +521,46 @@ func TestSecurityHeaders(t *testing.T) {
 			t.Errorf("Expected wildcard bind CORS origin to use request host, got %q", got)
 		}
 	})
+
+	t.Run("cors_allowlist_accepts_explicit_origin", func(t *testing.T) {
+		cfg := testConfig(7650)
+		cfg.CORSAllowedOrigins = []string{"http://console.local:7650", "http://127.0.0.1:7650"}
+
+		server, err := NewServer(cfg, stats)
+		if err != nil {
+			t.Fatalf("NewServer failed: %v", err)
+		}
+
+		mockW := &mockResponseWriter{header: make(http.Header)}
+		req, _ := http.NewRequest("OPTIONS", "http://127.0.0.1:7650/jsonrpc", nil)
+		req.Host = "127.0.0.1:7650"
+		req.Header.Set("Origin", "http://console.local:7650")
+		server.setCORSHeaders(mockW, req)
+
+		if got := mockW.header.Get("Access-Control-Allow-Origin"); got != "http://console.local:7650" {
+			t.Errorf("Expected explicit CORS allowlist origin, got %q", got)
+		}
+	})
+
+	t.Run("cors_allowlist_rejects_non_allowlisted_origin", func(t *testing.T) {
+		cfg := testConfig(7650)
+		cfg.CORSAllowedOrigins = []string{"http://127.0.0.1:7650"}
+
+		server, err := NewServer(cfg, stats)
+		if err != nil {
+			t.Fatalf("NewServer failed: %v", err)
+		}
+
+		mockW := &mockResponseWriter{header: make(http.Header)}
+		req, _ := http.NewRequest("OPTIONS", "http://127.0.0.1:7650/jsonrpc", nil)
+		req.Host = "127.0.0.1:7650"
+		req.Header.Set("Origin", "http://evil.example")
+		server.setCORSHeaders(mockW, req)
+
+		if got := mockW.header.Get("Access-Control-Allow-Origin"); got != "http://127.0.0.1:7650" {
+			t.Errorf("Expected fallback to first allowlist origin, got %q", got)
+		}
+	})
 }
 
 // mockResponseWriter is a minimal http.ResponseWriter for testing header setting

@@ -3,8 +3,10 @@ package i2pcontrol
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/stretchr/testify/assert"
@@ -335,6 +337,42 @@ func (m *mockRouterControlWithContext) ReseedWithContext(ctx context.Context) er
 	return ctx.Err()
 }
 
+type mockRouterControlSingleFlight struct {
+	mu        sync.Mutex
+	started   chan struct{}
+	release   chan struct{}
+	calls     int
+	lastError error
+}
+
+func (m *mockRouterControlSingleFlight) Stop() {}
+
+func (m *mockRouterControlSingleFlight) Reseed() error {
+	return nil
+}
+
+func (m *mockRouterControlSingleFlight) ReseedWithContext(ctx context.Context) error {
+	m.mu.Lock()
+	m.calls++
+	m.mu.Unlock()
+	select {
+	case m.started <- struct{}{}:
+	default:
+	}
+	select {
+	case <-m.release:
+		return m.lastError
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (m *mockRouterControlSingleFlight) callCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.calls
+}
+
 func TestRouterManagerHandler_Operations(t *testing.T) {
 	operations := []struct {
 		name      string
@@ -393,6 +431,79 @@ func TestRouterManagerHandler_InvokeReseed_FallbackToLegacyReseed(t *testing.T) 
 
 	assert.True(t, mockControl.reseedCalled, "legacy reseed should be used when context-aware path is unavailable")
 	assert.NoError(t, err)
+}
+
+func TestRouterManagerHandler_ReseedSingleFlightAndStatus(t *testing.T) {
+	control := &mockRouterControlSingleFlight{
+		started: make(chan struct{}, 1),
+		release: make(chan struct{}),
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	handler := NewRouterManagerHandler(ctx, &sync.WaitGroup{}, control)
+
+	first := invokeHandler(t, handler, `{"Reseed": null}`)
+	firstStatus, ok := first["Reseed"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "accepted", firstStatus["status"])
+
+	select {
+	case <-control.started:
+	case <-time.After(250 * time.Millisecond):
+		t.Fatal("timed out waiting for first reseed to start")
+	}
+
+	second := invokeHandler(t, handler, `{"Reseed": null}`)
+	secondStatus, ok := second["Reseed"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "running", secondStatus["status"])
+	assert.Equal(t, 1, control.callCount(), "single-flight must prevent concurrent reseed calls")
+
+	statusWhileRunning := invokeHandler(t, handler, `{"ReseedStatus": null}`)
+	state, ok := statusWhileRunning["ReseedStatus"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "running", state["status"])
+	assert.Equal(t, true, state["running"])
+
+	close(control.release)
+
+	require.Eventually(t, func() bool {
+		status := invokeHandler(t, handler, `{"ReseedStatus": null}`)
+		state, ok := status["ReseedStatus"].(map[string]interface{})
+		if !ok {
+			return false
+		}
+		return state["status"] == "completed"
+	}, 500*time.Millisecond, 25*time.Millisecond)
+
+	statusCompleted := invokeHandler(t, handler, `{"ReseedStatus": null}`)
+	completedState := statusCompleted["ReseedStatus"].(map[string]interface{})
+	assert.Equal(t, false, completedState["running"])
+	assert.NotEmpty(t, completedState["started_at"])
+	assert.NotEmpty(t, completedState["ended_at"])
+}
+
+func TestRouterManagerHandler_ReseedStatusFailedOnError(t *testing.T) {
+	control := &mockRouterControlSingleFlight{
+		started:   make(chan struct{}, 1),
+		release:   make(chan struct{}),
+		lastError: errors.New("boom"),
+	}
+	handler := NewRouterManagerHandler(context.Background(), &sync.WaitGroup{}, control)
+
+	invokeHandler(t, handler, `{"Reseed": null}`)
+	close(control.release)
+
+	require.Eventually(t, func() bool {
+		status := invokeHandler(t, handler, `{"ReseedStatus": null}`)
+		state := status["ReseedStatus"].(map[string]interface{})
+		return state["status"] == "failed"
+	}, 500*time.Millisecond, 25*time.Millisecond)
+
+	statusFailed := invokeHandler(t, handler, `{"ReseedStatus": null}`)
+	failedState := statusFailed["ReseedStatus"].(map[string]interface{})
+	assert.Equal(t, "boom", failedState["error"])
 }
 
 // Test NetworkSetting Handler

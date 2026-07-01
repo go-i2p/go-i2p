@@ -186,6 +186,14 @@ i2pcontrol:
   # preserve interop with legacy I2PControl clients.
   # strict_auth: false
 
+  # Explicit browser CORS allowlist for /jsonrpc.
+  # Leave unset to use safe localhost defaults derived from listen port:
+  #   http://localhost:<port>, http://127.0.0.1:<port>, http://[::1]:<port>
+  # Example for custom dashboard origin:
+  # cors_allowed_origins:
+  #   - "http://127.0.0.1:7650"
+  #   - "http://console.local:7650"
+
   # Permit a non-loopback bind (e.g. 0.0.0.0) with use_https=false. Intended
   # for deployments that terminate TLS at a trusted reverse proxy; otherwise
   # the password and session tokens travel in the clear.

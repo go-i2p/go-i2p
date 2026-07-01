@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -261,6 +262,7 @@ func (s *Server) startEnabledServer() error {
 	if err := s.startHTTPServer(); err != nil {
 		return err
 	}
+	s.logStartupPosture()
 	s.startTokenCleanup()
 
 	return nil
@@ -286,13 +288,18 @@ func (s *Server) startHTTPServer() error {
 		return err
 	}
 
+	ready := make(chan struct{})
+	errCh := make(chan error, 1)
+
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
+		close(ready)
 
 		err := s.serveOnListener(listener)
 
 		if err != nil && err != http.ErrServerClosed {
+			errCh <- err
 			log.WithFields(logger.Fields{
 				"at":     "(Server).startHTTPServer",
 				"reason": err.Error(),
@@ -300,7 +307,60 @@ func (s *Server) startHTTPServer() error {
 		}
 	}()
 
+	<-ready
+
+	// Explicit startup barrier: if Serve exits immediately, fail Start().
+	// Otherwise, report startup success once the serving loop survives the
+	// initial grace window.
+	select {
+	case serveErr := <-errCh:
+		return oops.Wrapf(serveErr, "i2pcontrol: serve loop terminated during startup")
+	case <-time.After(100 * time.Millisecond):
+	}
+
 	return nil
+}
+
+func (s *Server) logStartupPosture() {
+	bindScope := "unknown"
+	host, _, err := net.SplitHostPort(s.config.Address)
+	if err == nil {
+		switch {
+		case isWildcardOrUnspecifiedHost(host):
+			bindScope = "wildcard"
+		case nat.IsLoopbackAddress(host):
+			bindScope = "loopback"
+		default:
+			bindScope = "non_loopback"
+		}
+	}
+
+	authMode := "custom_password"
+	if s.config.Password == defaultI2PControlPassword {
+		if s.config.StrictAuth {
+			authMode = "strict_default_password_refused"
+		} else {
+			authMode = "compat_default_password"
+		}
+	} else if s.config.StrictAuth {
+		authMode = "strict_custom_password"
+	}
+
+	tlsPosture := "plaintext_http"
+	if s.config.UseHTTPS {
+		tlsPosture = "https"
+	}
+
+	log.WithFields(logger.Fields{
+		"at":               "(Server).Start",
+		"address":          s.config.Address,
+		"bind_scope":       bindScope,
+		"auth_mode":        authMode,
+		"tls_posture":      tlsPosture,
+		"cors_allowlist":   strings.Join(s.corsAllowlist(), ","),
+		"strict_auth":      s.config.StrictAuth,
+		"token_expiration": s.config.TokenExpiration.String(),
+	}).Info("I2PControl startup posture")
 }
 
 // createListener validates transport configuration and binds the listener.
@@ -528,6 +588,7 @@ func (s *Server) setCORSHeaders(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", origin)
 	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Set("Vary", "Origin")
 
 	// Security headers (see AUDIT.md LOW finding)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -540,27 +601,8 @@ func (s *Server) setCORSHeaders(w http.ResponseWriter, r *http.Request) {
 // When the configured bind host is wildcard/unspecified, prefer request host
 // to avoid emitting unusable origins like "http://0.0.0.0:7650".
 func (s *Server) corsOriginForRequest(r *http.Request) string {
-	scheme := "http"
-	if s.config.UseHTTPS {
-		scheme = "https"
-	}
-
-	hostPort := s.config.Address
-	host, port, err := net.SplitHostPort(s.config.Address)
-	if err == nil && isWildcardOrUnspecifiedHost(host) {
-		requestHost := r.Host
-		if reqHost, reqPort, splitErr := net.SplitHostPort(r.Host); splitErr == nil {
-			requestHost = reqHost
-			if reqPort != "" {
-				port = reqPort
-			}
-		}
-		if requestHost != "" {
-			hostPort = net.JoinHostPort(requestHost, port)
-		}
-	}
-
-	defaultOrigin := fmt.Sprintf("%s://%s", scheme, hostPort)
+	allowlist := s.corsAllowlist()
+	defaultOrigin := allowlist[0]
 	reqOrigin := r.Header.Get("Origin")
 	if reqOrigin == "" {
 		return defaultOrigin
@@ -571,11 +613,57 @@ func (s *Server) corsOriginForRequest(r *http.Request) string {
 		return defaultOrigin
 	}
 
-	if strings.EqualFold(parsedOrigin.Scheme, scheme) && strings.EqualFold(parsedOrigin.Host, hostPort) {
-		return reqOrigin
+	for _, allowed := range allowlist {
+		if strings.EqualFold(reqOrigin, allowed) {
+			return reqOrigin
+		}
 	}
 
 	return defaultOrigin
+}
+
+func (s *Server) corsAllowlist() []string {
+	if len(s.config.CORSAllowedOrigins) > 0 {
+		allowlist := make([]string, 0, len(s.config.CORSAllowedOrigins))
+		for _, origin := range s.config.CORSAllowedOrigins {
+			trimmed := strings.TrimSpace(origin)
+			if trimmed != "" {
+				allowlist = append(allowlist, trimmed)
+			}
+		}
+		if len(allowlist) > 0 {
+			sort.Strings(allowlist)
+			return allowlist
+		}
+	}
+
+	scheme := "http"
+	if s.config.UseHTTPS {
+		scheme = "https"
+	}
+
+	host, port, err := net.SplitHostPort(s.config.Address)
+	if err != nil || port == "" {
+		return []string{fmt.Sprintf("%s://localhost:%d", scheme, config.DefaultI2PControlPort)}
+	}
+
+	origins := map[string]struct{}{
+		fmt.Sprintf("%s://localhost:%s", scheme, port): {},
+		fmt.Sprintf("%s://127.0.0.1:%s", scheme, port): {},
+		fmt.Sprintf("%s://[::1]:%s", scheme, port):     {},
+	}
+
+	if !isWildcardOrUnspecifiedHost(host) {
+		host = strings.Trim(host, "[]")
+		origins[fmt.Sprintf("%s://%s:%s", scheme, host, port)] = struct{}{}
+	}
+
+	allowlist := make([]string, 0, len(origins))
+	for origin := range origins {
+		allowlist = append(allowlist, origin)
+	}
+	sort.Strings(allowlist)
+	return allowlist
 }
 
 func isWildcardOrUnspecifiedHost(host string) bool {

@@ -387,6 +387,13 @@ type RouterManagerHandler struct {
 	ctx context.Context
 	// wg tracks handler goroutines so the server can wait for them on shutdown.
 	wg *sync.WaitGroup
+
+	reseedMu        sync.Mutex
+	reseedRunning   bool
+	reseedStatus    string
+	reseedLastError string
+	reseedStartedAt time.Time
+	reseedEndedAt   time.Time
 }
 
 // NewRouterManagerHandler creates a new RouterManager handler.
@@ -404,6 +411,7 @@ func NewRouterManagerHandler(ctx context.Context, wg *sync.WaitGroup, control in
 		RouterControl: control,
 		ctx:           ctx,
 		wg:            wg,
+		reseedStatus:  "idle",
 	}
 }
 
@@ -421,6 +429,7 @@ func (h *RouterManagerHandler) Handle(ctx context.Context, params json.RawMessag
 	h.handleRestart(req, result)
 	h.handleRestartGraceful(req, result)
 	h.handleReseed(req, result)
+	h.handleReseedStatus(req, result)
 	h.handleFindUpdates(req, result)
 	h.handleUpdate(req, result)
 
@@ -497,11 +506,24 @@ func (h *RouterManagerHandler) handleReseed(req, result map[string]interface{}) 
 	}
 
 	if !h.validateRouterControlForReseed(result) {
+		result["Reseed"] = map[string]interface{}{"status": "rejected", "error": "router control not available"}
+		return
+	}
+
+	if !h.tryBeginReseed() {
+		result["Reseed"] = map[string]interface{}{"status": "running"}
 		return
 	}
 
 	h.executeReseedAsync()
-	result["Reseed"] = nil
+	result["Reseed"] = map[string]interface{}{"status": "accepted"}
+}
+
+func (h *RouterManagerHandler) handleReseedStatus(req, result map[string]interface{}) {
+	if _, ok := req["ReseedStatus"]; !ok {
+		return
+	}
+	result["ReseedStatus"] = h.snapshotReseedState()
 }
 
 // validateRouterControlForReseed checks if RouterControl is available for reseed.
@@ -510,8 +532,52 @@ func (h *RouterManagerHandler) validateRouterControlForReseed(result map[string]
 		return true
 	}
 	log.WithFields(logger.Fields{"at": "handleReseed"}).Warn("Reseed requested but RouterControl is nil")
-	result["Reseed"] = "error: router control not available"
 	return false
+}
+
+func (h *RouterManagerHandler) tryBeginReseed() bool {
+	h.reseedMu.Lock()
+	defer h.reseedMu.Unlock()
+	if h.reseedRunning {
+		return false
+	}
+	h.reseedRunning = true
+	h.reseedStatus = "running"
+	h.reseedLastError = ""
+	h.reseedStartedAt = time.Now().UTC()
+	h.reseedEndedAt = time.Time{}
+	return true
+}
+
+func (h *RouterManagerHandler) finishReseed(status string, err error) {
+	h.reseedMu.Lock()
+	defer h.reseedMu.Unlock()
+	h.reseedRunning = false
+	h.reseedStatus = status
+	h.reseedEndedAt = time.Now().UTC()
+	if err != nil {
+		h.reseedLastError = err.Error()
+	}
+}
+
+func (h *RouterManagerHandler) snapshotReseedState() map[string]interface{} {
+	h.reseedMu.Lock()
+	defer h.reseedMu.Unlock()
+
+	state := map[string]interface{}{
+		"status":  h.reseedStatus,
+		"running": h.reseedRunning,
+	}
+	if !h.reseedStartedAt.IsZero() {
+		state["started_at"] = h.reseedStartedAt.Format(time.RFC3339)
+	}
+	if !h.reseedEndedAt.IsZero() {
+		state["ended_at"] = h.reseedEndedAt.Format(time.RFC3339)
+	}
+	if h.reseedLastError != "" {
+		state["error"] = h.reseedLastError
+	}
+	return state
 }
 
 // executeReseedAsync executes a reseed operation asynchronously with timeout.
@@ -525,23 +591,24 @@ func (h *RouterManagerHandler) executeReseedAsync() {
 
 		log.WithFields(logger.Fields{"at": "handleReseed"}).Info("Reseed requested via I2PControl")
 
-		h.runReseedWithTimeout(reseedCtx)
+		status, err := h.runReseedWithTimeout(reseedCtx)
+		h.finishReseed(status, err)
 	}()
 }
 
 // runReseedWithTimeout runs the reseed operation with timeout handling.
-func (h *RouterManagerHandler) runReseedWithTimeout(reseedCtx context.Context) {
-	done := make(chan error, 1)
-	go func() {
-		done <- h.invokeReseed(reseedCtx)
-	}()
-
-	select {
-	case err := <-done:
+func (h *RouterManagerHandler) runReseedWithTimeout(reseedCtx context.Context) (string, error) {
+	err := h.invokeReseed(reseedCtx)
+	if err != nil {
+		if reseedCtx.Err() == context.DeadlineExceeded {
+			h.logReseedTimeout(reseedCtx)
+			return "failed", err
+		}
 		h.logReseedCompletion(err)
-	case <-reseedCtx.Done():
-		h.logReseedTimeout(reseedCtx)
+		return "failed", err
 	}
+	h.logReseedCompletion(nil)
+	return "completed", nil
 }
 
 // invokeReseed executes reseed, preferring context-aware control paths when available.

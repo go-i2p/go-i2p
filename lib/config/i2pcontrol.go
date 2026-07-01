@@ -66,6 +66,11 @@ type I2PControlConfig struct {
 	// password on non-loopback binds for interoperability with existing tools.
 	// Default is false for safer-by-default deployments.
 	AllowDefaultPasswordNonLoopback bool
+
+	// CORSAllowedOrigins configures explicit CORS origin allowlist entries.
+	// When empty, the server derives safe localhost-oriented defaults from the
+	// configured listen port.
+	CORSAllowedOrigins []string
 }
 
 // DefaultI2PControlConfig returns sensible defaults for I2PControl server.
@@ -87,5 +92,6 @@ func DefaultI2PControlConfig() I2PControlConfig {
 		StrictAuth:                      false,
 		AllowPlaintextNonLoopback:       false,
 		AllowDefaultPasswordNonLoopback: false,
+		CORSAllowedOrigins:              nil,
 	}
 }

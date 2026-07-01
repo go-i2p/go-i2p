@@ -224,6 +224,10 @@ type I2PControlDefaults struct {
 	// AllowDefaultPasswordNonLoopback allows the default password on
 	// non-loopback binds for compatibility with legacy deployments.
 	AllowDefaultPasswordNonLoopback bool
+
+	// CORSAllowedOrigins explicitly whitelists browser origins for I2PControl.
+	// Empty means server-derived localhost-safe defaults.
+	CORSAllowedOrigins []string
 }
 
 // TunnelDefaults contains default values for tunnel management
@@ -452,6 +456,7 @@ func buildI2PControlDefaults() I2PControlDefaults {
 		StrictAuth:                      false,
 		AllowPlaintextNonLoopback:       false,
 		AllowDefaultPasswordNonLoopback: false,
+		CORSAllowedOrigins:              nil,
 	}
 }
 

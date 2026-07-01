@@ -95,6 +95,9 @@ Save the token for subsequent requests.
 | `cert_file` | string | `""` | TLS certificate path |
 | `key_file` | string | `""` | TLS private key path |
 | `token_expiration` | duration | `10m` | Token validity duration |
+| `strict_auth` | bool | `false` | Refuse startup with default password |
+| `allow_plaintext_non_loopback` | bool | `false` | Permit non-loopback HTTP bind (unsafe unless behind trusted TLS proxy) |
+| `cors_allowed_origins` | []string | derived localhost defaults | Explicit CORS origin allowlist |
 
 ### Configuration Methods
 
@@ -121,6 +124,17 @@ i2pcontrol:
   use_https: false
   # cert_file: "/path/to/cert.pem"
   # key_file: "/path/to/key.pem"
+
+  # Refuse startup if password is still default (recommended for production)
+  strict_auth: true
+
+  # Keep false unless you intentionally terminate TLS externally
+  allow_plaintext_non_loopback: false
+
+  # Optional explicit browser CORS allowlist for JSON-RPC
+  cors_allowed_origins:
+    - "http://127.0.0.1:7650"
+    - "http://localhost:7650"
   
   # Token expiration (examples: 5m, 15m, 1h)
   token_expiration: 10m
@@ -155,6 +169,10 @@ The server validates configuration on startup:
 - **Password required**: Cannot be empty
 - **HTTPS requirements**: If `use_https` is true, both `cert_file` and `key_file` must be specified
 - **Port availability**: Specified port must not be in use
+- **Non-loopback safety rails**:
+  - default password is refused on non-loopback binds
+  - cleartext non-loopback bind requires `allow_plaintext_non_loopback=true`
+- **CORS policy**: when `cors_allowed_origins` is unset, localhost-safe defaults are used
 
 Validation errors appear in logs:
 
@@ -169,6 +187,21 @@ ERRO[0000] failed to start I2PControl server             error="password cannot 
 ### Authentication Flow
 
 All RPC methods (except `Authenticate`) require a valid authentication token.
+
+### Auth Contract
+
+- Default/compat mode (`strict_auth=false`): startup permits default password for local interoperability.
+- Strict mode (`strict_auth=true`): startup fails when password remains `itoopie`.
+- Runtime method policy: every non-`Authenticate` method requires a valid token.
+- Recommended production posture: `strict_auth=true`, custom password, and HTTPS.
+
+### Control-Surface Profiles
+
+| Profile | Address | TLS | strict_auth | allow_plaintext_non_loopback | Notes |
+|---|---|---|---|---|---|
+| Embedded/Dev | `localhost:7650` | optional | `false` or `true` | `false` | Local-only; default-safe for quick start |
+| Team LAN via reverse proxy | non-loopback | proxy TLS | `true` | `true` | Only when trusted TLS proxy terminates externally |
+| Direct production exposure | non-loopback | `use_https=true` | `true` | `false` | Preferred direct deployment posture |
 
 **Step 1: Authenticate**
 

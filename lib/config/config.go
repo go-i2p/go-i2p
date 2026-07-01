@@ -173,6 +173,7 @@ func setI2PControlDefaults(defaults ConfigDefaults) {
 		{"i2pcontrol.strict_auth", defaults.I2PControl.StrictAuth},
 		{"i2pcontrol.allow_plaintext_non_loopback", defaults.I2PControl.AllowPlaintextNonLoopback},
 		{"i2pcontrol.allow_default_password_non_loopback", defaults.I2PControl.AllowDefaultPasswordNonLoopback},
+		{"i2pcontrol.cors_allowed_origins", defaults.I2PControl.CORSAllowedOrigins},
 	})
 }
 
@@ -347,6 +348,7 @@ func currentI2PControlConfig() I2PControlDefaults {
 		StrictAuth:                      viper.GetBool("i2pcontrol.strict_auth"),
 		AllowPlaintextNonLoopback:       viper.GetBool("i2pcontrol.allow_plaintext_non_loopback"),
 		AllowDefaultPasswordNonLoopback: viper.GetBool("i2pcontrol.allow_default_password_non_loopback"),
+		CORSAllowedOrigins:              viper.GetStringSlice("i2pcontrol.cors_allowed_origins"),
 	}
 }
 
@@ -415,6 +417,7 @@ func buildI2PControlConfig() *I2PControlConfig {
 		StrictAuth:                      viper.GetBool("i2pcontrol.strict_auth"),
 		AllowPlaintextNonLoopback:       viper.GetBool("i2pcontrol.allow_plaintext_non_loopback"),
 		AllowDefaultPasswordNonLoopback: viper.GetBool("i2pcontrol.allow_default_password_non_loopback"),
+		CORSAllowedOrigins:              viper.GetStringSlice("i2pcontrol.cors_allowed_origins"),
 	}
 }
 

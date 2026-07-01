@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"runtime"
 	"testing"
 	"time"
 
@@ -318,6 +319,32 @@ func TestVerifyRouterInfoRetrievable_SkipsWithoutLookupTransport(t *testing.T) {
 
 	err := p.verifyRouterInfoRetrievable(target, floodfills)
 	assert.NoError(t, err)
+}
+
+func TestVerifyRouterInfoRetrievable_TimeoutStressHasStableGoroutines(t *testing.T) {
+	db := newMockNetDB()
+	p := NewPublisher(db, nil, nil, nil, DefaultPublisherConfig())
+	p.verifyTimeout = 25 * time.Millisecond
+
+	target := common.Hash{1, 2, 3, 4}
+	floodfills := make([]router_info.RouterInfo, 8)
+
+	p.SetLookupTransport(&mockLookupTransportPublisher{fn: func(ctx context.Context, peerRI router_info.RouterInfo, lookup *i2np.DatabaseLookup) ([]byte, int, error) {
+		<-ctx.Done()
+		return nil, 0, ctx.Err()
+	}})
+
+	baseline := runtime.NumGoroutine()
+	for i := 0; i < 25; i++ {
+		err := p.verifyRouterInfoRetrievable(target, floodfills)
+		assert.Error(t, err)
+	}
+
+	assert.Eventually(t, func() bool {
+		// Allow headroom for test/runtime goroutines while still detecting
+		// unbounded growth from stalled verification paths.
+		return runtime.NumGoroutine() <= baseline+32
+	}, 2*time.Second, 50*time.Millisecond)
 }
 
 func TestPublishRouterInfo_SucceedsOnAck(t *testing.T) {
