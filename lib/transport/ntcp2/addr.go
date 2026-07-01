@@ -20,16 +20,6 @@ func probeIPv6() bool {
 	return transport.ProbeIPv6()
 }
 
-// isIPv4RouterAddress returns true if a RouterAddress host is a plain IPv4 address.
-func isIPv4RouterAddress(addr *router_address.RouterAddress) bool {
-	host, err := addr.Host()
-	if err != nil {
-		return false
-	}
-	ip := net.ParseIP(host.String())
-	return ip != nil && ip.To4() != nil
-}
-
 // ExtractNTCP2Addr extracts the NTCP2 network address from a RouterInfo structure.
 // It validates NTCP2 support and returns a properly wrapped NTCP2 address with router hash metadata.
 func ExtractNTCP2Addr(routerInfo router_info.RouterInfo) (net.Addr, error) {
@@ -134,59 +124,12 @@ func validateNTCP2Support(routerInfo *router_info.RouterInfo, hashBytes []byte) 
 	return nil
 }
 
-// findValidNTCP2Address iterates through router addresses to find and wrap a valid NTCP2 address.
-func findValidNTCP2Address(routerInfo router_info.RouterInfo, hashBytes []byte) (net.Addr, error) {
-	addresses := routerInfo.RouterAddresses()
-	logAddressSearch(hashBytes, len(addresses))
-
-	ipv6Fallback := searchForPreferredAddress(addresses, routerInfo, hashBytes)
-
-	if ipv6Fallback != nil {
-		logSuccessfulExtraction(ipv6Fallback, hashBytes)
-		return ipv6Fallback, nil
-	}
-
-	logNoValidAddressFound(hashBytes, len(addresses))
-	return nil, ErrInvalidRouterInfo
-}
-
 // logAddressSearch logs the start of NTCP2 address search.
 func logAddressSearch(hashBytes []byte, addressCount int) {
 	log.WithFields(map[string]interface{}{
 		"router_hash":   logutil.BytePrefix(hashBytes),
 		"address_count": addressCount,
 	}).Debug("Searching for valid NTCP2 address")
-}
-
-// searchForPreferredAddress performs a two-pass search: prefer IPv4 NTCP2 addresses;
-// fall back to IPv6 only when IPv4 is unavailable (AUDIT P4 + P1/RC-3).
-// Returns the preferred address (IPv4 immediately, or IPv6 fallback if no IPv4 found).
-func searchForPreferredAddress(addresses []*router_address.RouterAddress, routerInfo router_info.RouterInfo, hashBytes []byte) net.Addr {
-	var ipv6Fallback net.Addr
-	for i, addr := range addresses {
-		logAddressCheck(i, addr)
-
-		if !isNTCP2Transport(addr) {
-			continue
-		}
-
-		ntcp2Addr, err := processNTCP2Address(addr, routerInfo)
-		if err != nil {
-			logAddressProcessingFailure(i, err)
-			continue
-		}
-
-		if isIPv4RouterAddress(addr) {
-			// IPv4 – return immediately (preferred path).
-			logSuccessfulExtraction(ntcp2Addr, hashBytes)
-			return ntcp2Addr
-		}
-		// IPv6 – keep as fallback, continue looking for IPv4.
-		if ipv6Fallback == nil {
-			ipv6Fallback = ntcp2Addr
-		}
-	}
-	return ipv6Fallback
 }
 
 // logAddressCheck logs the transport style of the address being checked.
@@ -256,14 +199,6 @@ func processNTCP2Address(addr *router_address.RouterAddress, routerInfo router_i
 	}
 
 	return WrapNTCP2Addr(tcpAddr, hashVal)
-}
-
-// logSuccessfulExtraction logs the successful NTCP2 address extraction.
-func logSuccessfulExtraction(addr net.Addr, hashBytes []byte) {
-	log.WithFields(map[string]interface{}{
-		"router_hash": logutil.BytePrefix(hashBytes),
-		"tcp_addr":    addr.String(),
-	}).Info("Successfully extracted NTCP2 address")
 }
 
 // isNTCP2Transport checks if a router address uses the NTCP2 transport style.
