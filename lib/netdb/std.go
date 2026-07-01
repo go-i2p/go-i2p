@@ -805,6 +805,17 @@ func (db *StdNetDB) Store(key common.Hash, data []byte, dataType byte) error {
 	}
 }
 
+// StoreFromPeer stores a network database entry with source peer context.
+// Source attribution is currently used by RouterInfo admission fairness.
+func (db *StdNetDB) StoreFromPeer(key common.Hash, data []byte, dataType byte, source common.Hash) error {
+	switch dataType {
+	case 0:
+		return db.StoreRouterInfoFromMessageWithSource(key, data, dataType, source)
+	default:
+		return db.Store(key, data, dataType)
+	}
+}
+
 // StoreRouterInfoFromMessage stores a RouterInfo entry in the database from I2NP DatabaseStore message.
 // It takes the pre-computed identity hash, raw serialized data, and data type byte.
 // This is used internally by Store() and by adapters that receive RouterInfo from network messages.

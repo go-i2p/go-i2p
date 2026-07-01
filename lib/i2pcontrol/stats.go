@@ -131,6 +131,18 @@ type RouterInfoStats struct {
 	// RouterInfoRejectCount is the total number of rejected RouterInfo ingest attempts.
 	RouterInfoRejectCount uint64
 
+	// RouterInfoRejectDataTypeCount is the number of RouterInfo rejects due to invalid store type.
+	RouterInfoRejectDataTypeCount uint64
+
+	// RouterInfoRejectParseCount is the number of RouterInfo rejects due to parse/decompression failures.
+	RouterInfoRejectParseCount uint64
+
+	// RouterInfoRejectValidationCount is the number of RouterInfo rejects due to hash/signature/network validation failures.
+	RouterInfoRejectValidationCount uint64
+
+	// RouterInfoRejectAdmissionCount is the number of RouterInfo rejects due to admission limits.
+	RouterInfoRejectAdmissionCount uint64
+
 	// RouterInfoPersistDeferredCount is the number of accepted RouterInfos whose
 	// initial filesystem persistence was deferred.
 	RouterInfoPersistDeferredCount uint64
@@ -358,11 +370,15 @@ func (rsp *routerStatsProvider) collectNetDBStats(stats *RouterInfoStats) {
 
 	storeStats := concreteNetDB.GetRouterInfoStoreStats()
 	stats.RouterInfoAcceptCount = storeStats.AcceptedCount
+	stats.RouterInfoRejectDataTypeCount = storeStats.RejectedDataTypeCount
+	stats.RouterInfoRejectParseCount = storeStats.RejectedParseCount
+	stats.RouterInfoRejectValidationCount = storeStats.RejectedValidationCount
+	stats.RouterInfoRejectAdmissionCount = storeStats.RejectedAdmissionCount
 	stats.RouterInfoRejectCount =
-		storeStats.RejectedDataTypeCount +
-			storeStats.RejectedParseCount +
-			storeStats.RejectedValidationCount +
-			storeStats.RejectedAdmissionCount
+		stats.RouterInfoRejectDataTypeCount +
+			stats.RouterInfoRejectParseCount +
+			stats.RouterInfoRejectValidationCount +
+			stats.RouterInfoRejectAdmissionCount
 	stats.RouterInfoPersistDeferredCount = storeStats.PersistDeferredCount
 	stats.RouterInfoPersistPendingCount = storeStats.PersistPendingCount
 }
