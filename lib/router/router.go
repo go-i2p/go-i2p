@@ -111,6 +111,10 @@ type Router struct {
 	// NetDB subsystems (explorer + publisher verification).
 	lookupClient *netdb.DatabaseLookupClient
 
+	// searchReplyPrefetcher consumes DatabaseSearchReply suggestions and
+	// asynchronously resolves suggested peers into local RouterInfos.
+	searchReplyPrefetcher *netdb.SearchReplyPrefetcher
+
 	// floodfillServer handles incoming DatabaseLookup requests when this router
 	// is configured as a floodfill router
 	floodfillServer *netdb.FloodfillServer

@@ -259,6 +259,10 @@ const (
 	// peerResolutionTimeout bounds the on-demand lookup used to resolve a
 	// suggested peer's RouterInfo before querying it for the original target.
 	peerResolutionTimeout = 5 * time.Second
+
+	// perPeerQueryTimeout clamps each peer query within a batch so one slow
+	// peer does not consume most of the caller's global lookup budget.
+	perPeerQueryTimeout = 8 * time.Second
 )
 
 // performRemoteLookup executes an iterative Kademlia lookup in a goroutine.
@@ -446,7 +450,10 @@ func (kr *KademliaResolver) queryBatchParallel(ctx context.Context, peers []comm
 		wg.Add(1)
 		go func(p common.Hash) {
 			defer wg.Done()
-			ri, err := kr.queryPeer(ctx, p, target, resolveSuggestedPeers)
+			queryCtx, cancel := withClampedTimeout(ctx, perPeerQueryTimeout)
+			defer cancel()
+
+			ri, err := kr.queryPeer(queryCtx, p, target, resolveSuggestedPeers)
 			result := iterativeQueryResult{ri: ri, err: err}
 
 			// Extract suggestions from SearchReplyError
@@ -509,10 +516,7 @@ func (kr *KademliaResolver) collectLookupResult(resultChan chan *router_info.Rou
 func (kr *KademliaResolver) findClosestPeers(target common.Hash) []common.Hash {
 	const K = 8 // Standard Kademlia parameter for number of closest peers to return
 	rk := RoutingKey(target, time.Now())
-
-	if seeds := kr.selectClosestFloodfillSeeds(rk, K); len(seeds) > 0 {
-		return seeds
-	}
+	seeds := kr.selectClosestFloodfillSeeds(rk, K)
 
 	// Get all known router infos from the network database
 	allRouterInfos := kr.NetworkDatabase.GetAllRouterInfos()
@@ -525,11 +529,39 @@ func (kr *KademliaResolver) findClosestPeers(target common.Hash) []common.Hash {
 	peers := kr.calculatePeerDistances(allRouterInfos, rk)
 	if len(peers) == 0 {
 		log.WithFields(logger.Fields{"at": "findClosestPeers"}).Debug("No suitable peers found after filtering")
-		return []common.Hash{}
+		return seeds
 	}
 
-	// Sort and select closest peers
-	return kr.selectClosestPeers(peers, rk, K)
+	// Sort and select closest peers, then merge with floodfill seeds so we
+	// keep floodfill bias while still hedging against stale/unreachable seeds.
+	closest := kr.selectClosestPeers(peers, rk, K)
+	return mergePeerCandidates(seeds, closest, K)
+}
+
+func mergePeerCandidates(seeds, closest []common.Hash, max int) []common.Hash {
+	if max <= 0 {
+		return nil
+	}
+
+	merged := make([]common.Hash, 0, max)
+	seen := make(map[common.Hash]struct{}, max)
+
+	appendUnique := func(peers []common.Hash) {
+		for _, p := range peers {
+			if len(merged) >= max {
+				return
+			}
+			if _, ok := seen[p]; ok {
+				continue
+			}
+			seen[p] = struct{}{}
+			merged = append(merged, p)
+		}
+	}
+
+	appendUnique(seeds)
+	appendUnique(closest)
+	return merged
 }
 
 func (kr *KademliaResolver) selectClosestFloodfillSeeds(routingKey common.Hash, count int) []common.Hash {

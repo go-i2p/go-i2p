@@ -538,7 +538,8 @@ func (db *StdNetDB) SelectFloodfillRouters(targetHash common.Hash, count int) ([
 // that are not marked stale by PeerTracker.
 // A router is considered floodfill if its "caps" option contains the character 'f'.
 func (db *StdNetDB) filterFloodfillRouters(routers []router_info.RouterInfo) []router_info.RouterInfo {
-	var floodfills []router_info.RouterInfo
+	fresh := make([]router_info.RouterInfo, 0)
+	stale := make([]router_info.RouterInfo, 0)
 
 	for _, ri := range routers {
 		if !db.isFloodfillRouter(ri) {
@@ -547,12 +548,15 @@ func (db *StdNetDB) filterFloodfillRouters(routers []router_info.RouterInfo) []r
 		if db.PeerTracker != nil {
 			if riHash, err := ri.IdentHash(); err == nil && db.PeerTracker.IsLikelyStale(riHash) {
 				log.WithField("peer_hash", logutil.HashPrefixPlain(riHash)).
-					Debug("Classified floodfill router as stale (retained for resilience)")
+					Debug("Classified floodfill router as stale (de-prioritized, retained as fallback)")
+				stale = append(stale, ri)
+				continue
 			}
 		}
-		floodfills = append(floodfills, ri)
+		fresh = append(fresh, ri)
 	}
 
+	floodfills := append(fresh, stale...)
 	return floodfills
 }
 

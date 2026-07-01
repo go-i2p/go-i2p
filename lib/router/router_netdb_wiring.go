@@ -96,6 +96,10 @@ func (r *Router) startExplorer() error {
 		}
 		cfg.Transport = r.lookupClient
 		r.messageRouter.GetProcessor().SetLookupReplyDeliverer(r.lookupClient)
+		if r.searchReplyPrefetcher == nil {
+			r.searchReplyPrefetcher = netdb.NewSearchReplyPrefetcher(r.netdb, tunnelPool, r.lookupClient, ourHash, 5*time.Second, 4)
+		}
+		r.messageRouter.GetProcessor().SetSearchReplyHandler(r.searchReplyPrefetcher)
 	} else {
 		return oops.Errorf("NetDB explorer deferred: transport or message router not ready")
 	}
