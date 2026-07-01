@@ -126,14 +126,19 @@ func (t *SSU2Transport) dialViaIntroducer(charlieRI router_info.RouterInfo, char
 // addresses in charlieRI.
 func (t *SSU2Transport) collectIntroducers(charlieRI router_info.RouterInfo) []IntroducerAddr {
 	var result []IntroducerAddr
-	seen := make(map[data.Hash]bool)
+	type introducerKey struct {
+		hash data.Hash
+		tag  uint32
+	}
+	seen := make(map[introducerKey]bool)
 	for _, addr := range charlieRI.RouterAddresses() {
 		if !isSSU2Transport(addr) {
 			continue
 		}
 		for _, intro := range ExtractIntroducers(addr) {
-			if !seen[intro.RouterHash] {
-				seen[intro.RouterHash] = true
+			key := introducerKey{hash: intro.RouterHash, tag: intro.RelayTag}
+			if !seen[key] {
+				seen[key] = true
 				result = append(result, intro)
 			}
 		}

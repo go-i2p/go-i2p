@@ -774,7 +774,10 @@ func (t *SSU2Transport) GetSession(routerInfo router_info.RouterInfo) (transport
 		return t.dialViaIntroducer(routerInfo, routerHash)
 	}
 
-	return nil, oops.Errorf("no reachable SSU2 address for router %x", routerHash[:4])
+	err = oops.Wrapf(ErrInvalidRouterInfo, "no reachable SSU2 address for router %x", routerHash[:4])
+	t.recordPeerAttempt(routerHash)
+	t.recordPeerFailure(routerHash, err)
+	return nil, err
 }
 
 func (t *SSU2Transport) findExistingSession(routerHash data.Hash) (transport.TransportSession, bool) {
