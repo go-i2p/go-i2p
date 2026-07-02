@@ -246,11 +246,12 @@ func (sr *SessionRegistry) Load(peerHash data.Hash) (interface{}, bool) {
 // LoadOrStore atomically loads or stores a value in the registry.
 // Returns (value, loaded) where value is the stored or loaded value,
 // and loaded is true if the value was already present.
-// NOTE: Does NOT increment the session count. Session count must be incremented
-// separately via CheckLimitAndIncrement (for production use) or StoreWithCount (for tests).
-// This prevents double-counting when CheckLimitAndIncrement has already reserved a slot.
 func (sr *SessionRegistry) LoadOrStore(peerHash data.Hash, value interface{}) (interface{}, bool) {
 	actual, loaded := sr.sessions.LoadOrStore(peerHash, value)
+	// Increment the session count if this is a fresh entry
+	if !loaded {
+		sr.IncrementCount()
+	}
 	return actual, loaded
 }
 
