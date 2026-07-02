@@ -458,7 +458,11 @@ func (t *SSU2Transport) establishCharlieSession(charlieRI router_info.RouterInfo
 		return nil, oops.Wrapf(err, "failed to build dial config for Charlie")
 	}
 
-	conn, err := ssu2noise.DialSSU2WithHandshakeContext(t.ctx, nil, charlieAddr, dialConfig)
+	// Dial over the listener socket when bound so the SessionRequest to Charlie
+	// leaves from our advertised port — the same port the hole-punch opened in
+	// our NAT. An ephemeral-socket dial would use a different source port that
+	// Charlie's NAT mapping does not expect, defeating the relay hole-punch.
+	conn, err := t.dialOutbound(charlieAddr, dialConfig)
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to dial Charlie at %v", charlieAddr)
 	}

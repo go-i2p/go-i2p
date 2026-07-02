@@ -934,7 +934,7 @@ func (t *SSU2Transport) createOutboundSession(routerInfo router_info.RouterInfo,
 
 	t.recordPeerAttempt(routerHash)
 	dialStart := time.Now()
-	conn, err := ssu2noise.DialSSU2WithHandshakeContext(t.ctx, nil, remoteUDPAddr, dialConfig)
+	conn, err := t.dialOutbound(remoteUDPAddr, dialConfig)
 	if err != nil {
 		t.recordPeerFailure(routerHash, err)
 		t.logger.WithFields(map[string]interface{}{
@@ -952,6 +952,27 @@ func (t *SSU2Transport) createOutboundSession(routerInfo router_info.RouterInfo,
 	t.recordPeerSuccess(routerHash, time.Since(dialStart).Milliseconds())
 	slotUsed = newSlotUsed
 	return session, nil
+}
+
+// dialOutbound establishes an outbound SSU2 connection to remoteAddr using
+// dialConfig. When a listener is bound, the dial is multiplexed over the
+// listener's socket via DialSSU2ViaListener so the outbound SessionRequest
+// originates from our advertised port. This is essential for firewalled /
+// symmetric-NAT reachability and for introducer hole-punching, which only opens
+// the NAT mapping for the advertised port. When no listener is bound (dial-only
+// configuration or pre-bind startup), it falls back to an ephemeral-socket dial
+// where go-noise allocates a throwaway socket internally.
+func (t *SSU2Transport) dialOutbound(remoteAddr *net.UDPAddr, dialConfig *ssu2noise.SSU2Config) (*ssu2noise.SSU2Conn, error) {
+	// Snapshot the listener under identityMu to avoid a race with SetIdentity /
+	// Close, matching the pattern used by Accept() and Addr().
+	t.identityMu.RLock()
+	listener := t.listener
+	t.identityMu.RUnlock()
+
+	if listener != nil {
+		return listener.DialSSU2ViaListener(t.ctx, remoteAddr, dialConfig)
+	}
+	return ssu2noise.DialSSU2WithHandshakeContext(t.ctx, nil, remoteAddr, dialConfig)
 }
 
 // prepareDialConfig creates the dial configuration for an outbound SSU2 session.
