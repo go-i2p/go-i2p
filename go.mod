@@ -110,3 +110,6 @@ require (
 //replace github.com/go-i2p/su3 => ../su3
 
 //replace github.com/go-i2p/go-nat-listener => ../go-nat-listener
+
+replace github.com/go-i2p/i2ptui => ../i2ptui
+replace github.com/go-i2p/i2p-control => ../i2p-control
