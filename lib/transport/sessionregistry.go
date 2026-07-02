@@ -58,10 +58,16 @@ func NewSessionRegistry(logger *logger.Entry) *SessionRegistry {
 // On duplicate, the connection is NOT added to the registry; the caller should
 // handle closing it. The session slot is unreserved by the caller.
 //
-// Note: Session count should already be incremented by CheckLimitAndIncrement
-// before this method is called.
+// NTCP2 BUGFIX: This method now increments session count for fresh inbound connections.
+// The inbound handshake path calls CheckLimitAndIncrement to reserve a slot, but that
+// only ensures capacity before handshake. The actual increment (session becomes live)
+// happens here when the connection is stored. Outbound sessions increment via LoadOrStore.
 func (sr *SessionRegistry) TrackInboundConnection(conn interface{}, peerHash data.Hash) bool {
 	_, loaded := sr.sessions.LoadOrStore(peerHash, conn)
+	if !loaded {
+		// Fresh inbound connection stored — increment session count
+		sr.IncrementCount()
+	}
 	return !loaded
 }
 
@@ -203,13 +209,15 @@ func (sr *SessionRegistry) IncrementCount() {
 	atomic.AddInt32(&sr.sessionCount, 1)
 }
 
-// CheckLimitAndIncrement atomically checks if the count is below maxLimit and increments if so.
-// Returns (nil, true) if increment succeeded, (ErrLimitReached, false) if limit reached.
+// CheckLimitAndIncrement atomically checks if the count is below maxLimit.
+// Returns true if count < maxLimit (under capacity), false if at/over limit.
+// NOTE: This does NOT increment the count. It only checks available capacity.
+// The actual increment happens when the session/connection is stored in the map
+// (via TrackInboundConnection for inbound, or LoadOrStore for outbound).
+// This method is used to fail fast before expensive handshakes when capacity is exhausted.
 func (sr *SessionRegistry) CheckLimitAndIncrement(maxLimit int) bool {
-	_, ok := atomicCompareAndSwapRetry(&sr.sessionCount, func(current int32) bool {
-		return int(current) < maxLimit
-	}, 1)
-	return ok
+	current := atomic.LoadInt32(&sr.sessionCount)
+	return int(current) < maxLimit
 }
 
 // SetShutdown marks the registry as shutting down.
