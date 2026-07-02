@@ -146,7 +146,14 @@ func (pmm *PortMapperManager) attemptMapping() bool {
 		return false
 	}
 
-	gwIP, _ := mapper.GetExternalIP()
+	gwIP, err := mapper.GetExternalIP()
+	if err != nil {
+		log.WithFields(map[string]interface{}{
+			"network": pmm.network,
+			"port":    pmm.internalPort,
+			"error":   err,
+		}).Debug("Failed to retrieve external IP from NAT mapper")
+	}
 	log.WithFields(map[string]interface{}{
 		"gateway": gwIP,
 		"network": pmm.network,
