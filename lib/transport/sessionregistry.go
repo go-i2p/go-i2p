@@ -58,16 +58,10 @@ func NewSessionRegistry(logger *logger.Entry) *SessionRegistry {
 // On duplicate, the connection is NOT added to the registry; the caller should
 // handle closing it. The session slot is unreserved by the caller.
 //
-// NTCP2 BUGFIX: This method now increments session count for fresh inbound connections.
-// The inbound handshake path calls CheckLimitAndIncrement to reserve a slot, but that
-// only ensures capacity before handshake. The actual increment (session becomes live)
-// happens here when the connection is stored. Outbound sessions increment via LoadOrStore.
+// NOTE: This method does NOT increment the session count. The count was already
+// incremented by CheckLimitAndIncrement when the slot was reserved before the handshake.
 func (sr *SessionRegistry) TrackInboundConnection(conn interface{}, peerHash data.Hash) bool {
 	_, loaded := sr.sessions.LoadOrStore(peerHash, conn)
-	if !loaded {
-		// Fresh inbound connection stored — increment session count
-		sr.IncrementCount()
-	}
 	return !loaded
 }
 
@@ -209,15 +203,26 @@ func (sr *SessionRegistry) IncrementCount() {
 	atomic.AddInt32(&sr.sessionCount, 1)
 }
 
-// CheckLimitAndIncrement atomically checks if the count is below maxLimit.
-// Returns true if count < maxLimit (under capacity), false if at/over limit.
-// NOTE: This does NOT increment the count. It only checks available capacity.
-// The actual increment happens when the session/connection is stored in the map
-// (via TrackInboundConnection for inbound, or LoadOrStore for outbound).
-// This method is used to fail fast before expensive handshakes when capacity is exhausted.
+// CheckLimitAndIncrement atomically checks if count < maxLimit and increments if true.
+// Returns true if count was below limit and has been incremented (slot reserved).
+// Returns false if already at/over limit (no increment, no slot reserved).
+// Used to reserve a slot before expensive operations (handshakes, dials) to prevent
+// oversubscription when multiple goroutines call this concurrently.
+// On success, the caller MUST ensure either:
+//   - The session/connection is stored in the map (via TrackInboundConnection or LoadOrStore), OR
+//   - unreserveSessionSlot() is called if the operation fails (e.g., handshake timeout)
 func (sr *SessionRegistry) CheckLimitAndIncrement(maxLimit int) bool {
-	current := atomic.LoadInt32(&sr.sessionCount)
-	return int(current) < maxLimit
+	for {
+		current := atomic.LoadInt32(&sr.sessionCount)
+		if int(current) >= maxLimit {
+			return false // At/over limit, no slot reserved
+		}
+		// Try to increment atomically
+		if atomic.CompareAndSwapInt32(&sr.sessionCount, current, current+1) {
+			return true // Incremented successfully, slot reserved
+		}
+		// CAS failed (another goroutine changed the count), retry
+	}
 }
 
 // SetShutdown marks the registry as shutting down.
@@ -254,12 +259,10 @@ func (sr *SessionRegistry) Load(peerHash data.Hash) (interface{}, bool) {
 // LoadOrStore atomically loads or stores a value in the registry.
 // Returns (value, loaded) where value is the stored or loaded value,
 // and loaded is true if the value was already present.
+// NOTE: This method does NOT increment the count. The caller must have already
+// called CheckLimitAndIncrement to reserve a slot before storing.
 func (sr *SessionRegistry) LoadOrStore(peerHash data.Hash, value interface{}) (interface{}, bool) {
 	actual, loaded := sr.sessions.LoadOrStore(peerHash, value)
-	// Increment the session count if this is a fresh entry
-	if !loaded {
-		sr.IncrementCount()
-	}
 	return actual, loaded
 }
 
