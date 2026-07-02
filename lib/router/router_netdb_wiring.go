@@ -7,6 +7,8 @@ import (
 
 	"github.com/go-i2p/logger"
 
+	common "github.com/go-i2p/common/data"
+
 	"github.com/go-i2p/go-i2p/lib/netdb"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 )
@@ -100,6 +102,12 @@ func (r *Router) startExplorer() error {
 			r.searchReplyPrefetcher = netdb.NewSearchReplyPrefetcher(r.netdb, tunnelPool, r.lookupClient, ourHash, 5*time.Second, 4)
 		}
 		r.messageRouter.GetProcessor().SetSearchReplyHandler(r.searchReplyPrefetcher)
+		// If we successfully got ourHash after initialization, update the prefetcher
+		// in case it was initially created with a zero hash. This repairs the prefetcher
+		// so it can perform peer suggestion lookups instead of silently rejecting them.
+		if err == nil && ourHash != (common.Hash{}) {
+			r.searchReplyPrefetcher.SetOurHash(ourHash)
+		}
 	} else {
 		return oops.Errorf("NetDB explorer deferred: transport or message router not ready")
 	}

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	common "github.com/go-i2p/common/data"
@@ -118,7 +119,8 @@ type GarlicMessageRouter struct {
 	wg           sync.WaitGroup                   // Tracks background goroutines
 
 	// Channel draining worker pool
-	drainRequests chan drainRequest // Bounded channel for drain requests
+	drainRequests      chan drainRequest // Bounded channel for drain requests
+	fallbackDrainCount atomic.Int64      // Counts fallback drain activations for observability
 }
 
 // NewGarlicMessageRouter creates a new garlic message router with required dependencies.
@@ -316,7 +318,10 @@ func (gr *GarlicMessageRouter) tryQueueLeaseSetDrain(ch chan lease_set.LeaseSet)
 }
 
 // fallbackDrainLeaseSet spawns an emergency goroutine to drain a LeaseSet channel.
+// This is only called when the bounded drain worker pool queue is full, indicating
+// sustained overload. The counter tracks these activations for observability.
 func (gr *GarlicMessageRouter) fallbackDrainLeaseSet(ch chan lease_set.LeaseSet) {
+	gr.fallbackDrainCount.Add(1)
 	log.WithField("at", "drainLeaseSetChannel").Warn("Drain queue full, using fallback")
 	gr.wg.Add(1)
 	go func() {
@@ -580,7 +585,10 @@ func (gr *GarlicMessageRouter) tryQueueRouterInfoDrain(ch chan router_info.Route
 }
 
 // fallbackDrainRouterInfo spawns an emergency goroutine to drain a RouterInfo channel.
+// This is only called when the bounded drain worker pool queue is full, indicating
+// sustained overload. The counter tracks these activations for observability.
 func (gr *GarlicMessageRouter) fallbackDrainRouterInfo(ch chan router_info.RouterInfo) {
+	gr.fallbackDrainCount.Add(1)
 	log.WithField("at", "drainRouterInfoChannel").Warn("Drain queue full, using fallback")
 	gr.wg.Add(1)
 	go func() {
@@ -982,4 +990,11 @@ func (gr *GarlicMessageRouter) queuePendingMessage(destHash common.Hash, msg i2n
 	}).Debug("Queued message for pending LeaseSet lookup")
 
 	return nil
+}
+
+// GetFallbackDrainCount returns the number of times the fallback drain path has been taken.
+// This metric indicates how often the bounded drain worker pool queue has been saturated,
+// signaling sustained overload in the garlic message router.
+func (gr *GarlicMessageRouter) GetFallbackDrainCount() int64 {
+	return gr.fallbackDrainCount.Load()
 }

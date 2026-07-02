@@ -129,3 +129,14 @@ func (p *SearchReplyPrefetcher) hasLocalRouterInfo(peerHash common.Hash) bool {
 	_, err := ri.IdentHash()
 	return err == nil
 }
+
+// SetOurHash updates the prefetcher's resolver with our router identity hash.
+// This is called when the router's identity becomes available after startup.
+// If ourHash was initially zero, this repairs the prefetcher so it can perform
+// lookups instead of silently rejecting them.
+func (p *SearchReplyPrefetcher) SetOurHash(hash common.Hash) {
+	if p == nil || p.resolver == nil {
+		return
+	}
+	p.resolver.SetOurHash(hash)
+}

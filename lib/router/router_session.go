@@ -160,15 +160,17 @@ type sessionRegisterer interface {
 
 // registerTypedSession is a generic helper for registering transport sessions (NTCP2, SSU2).
 // It consolidates the common 5-step registration pattern across all session types:
-// 1. Set cleanup callback to remove session on close
-// 2. Add session to router's session registry
+// 1. Add session to router's session registry before cleanup callback (closes ordering window)
+// 2. Set cleanup callback to remove session on close
 // 3. Increment waitgroup to track reader goroutine lifetime
 // 4. Start reader goroutine to process inbound I2NP messages
 // 5. Log successful registration with transport type name
 // This avoids duplication of identical code across NTCP2Session and SSU2Session cases.
+// Note: addSession is called before AppendCleanupCallback to prevent a race where
+// the cleanup fires before the entry exists in the registry.
 func (r *Router) registerTypedSession(hash common.Hash, session sessionRegisterer, transportName string) {
-	session.AppendCleanupCallback(func() { r.removeSession(hash) })
 	r.addSession(hash, session)
+	session.AppendCleanupCallback(func() { r.removeSession(hash) })
 	r.wg.Add(1)
 	go func() {
 		defer r.wg.Done()
