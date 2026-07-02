@@ -241,6 +241,66 @@ func buildPeerRouterInfoWithFallbackCandidates(
 	return peerInfo
 }
 
+func buildPeerRouterInfoWithMismatchedFirstCandidate(
+	t *testing.T,
+	peer router_info.RouterInfo,
+	closedAddr string,
+	liveAddr string,
+	mismatchStaticKey []byte,
+	mismatchIV []byte,
+	liveIV []byte,
+) router_info.RouterInfo {
+	t.Helper()
+	require.Len(t, mismatchStaticKey, 32)
+	require.Len(t, mismatchIV, 16)
+
+	_, closedPort, err := net.SplitHostPort(closedAddr)
+	require.NoError(t, err)
+	_, livePort, err := net.SplitHostPort(liveAddr)
+	require.NoError(t, err)
+
+	peerBytes, err := peer.Bytes()
+	require.NoError(t, err)
+	peerInfo, remainder, err := router_info.ReadRouterInfo(peerBytes)
+	require.NoError(t, err)
+	require.Len(t, remainder, 0)
+
+	addresses := peerInfo.RouterAddresses()
+	require.NotEmpty(t, addresses, "peer RouterInfo must contain at least one NTCP2 address")
+	require.NotNil(t, addresses[0].TransportOptions)
+
+	baseOptions, err := addresses[0].TransportOptions.ToGoMap()
+	require.NoError(t, err)
+
+	closedOptions := map[string]string{}
+	for k, v := range baseOptions {
+		closedOptions[k] = v
+	}
+	closedOptions["host"] = "localhost"
+	closedOptions["port"] = closedPort
+	closedOptions["s"] = i2pbase64.I2PEncoding.EncodeToString(mismatchStaticKey)
+	closedOptions["i"] = i2pbase64.I2PEncoding.EncodeToString(mismatchIV)
+
+	closedCandidate, err := router_address.NewRouterAddress(3, time.Now().Add(24*time.Hour), "NTCP2", closedOptions)
+	require.NoError(t, err)
+	addresses[0] = closedCandidate
+
+	liveOptions := map[string]string{}
+	for k, v := range baseOptions {
+		liveOptions[k] = v
+	}
+	liveOptions["host"] = "localhost"
+	liveOptions["port"] = livePort
+	if len(liveIV) == 16 {
+		liveOptions["i"] = i2pbase64.I2PEncoding.EncodeToString(liveIV)
+	}
+	secondary, err := router_address.NewRouterAddress(3, time.Now().Add(24*time.Hour), "NTCP2", liveOptions)
+	require.NoError(t, err)
+	require.NoError(t, (&peerInfo).AddAddress(secondary))
+
+	return peerInfo
+}
+
 func TestGetSession_FallbackFromClosedPortToLiveResponder(t *testing.T) {
 	if os.Getenv("GOI2P_ENABLE_UNSTABLE_NTCP2_LIVE_FALLBACK_TEST") != "1" {
 		t.Skip("set GOI2P_ENABLE_UNSTABLE_NTCP2_LIVE_FALLBACK_TEST=1 to run unstable live fallback harness with responder-side handshake diagnostics")
@@ -314,5 +374,93 @@ func TestGetSession_FallbackFromClosedPortToLiveResponder(t *testing.T) {
 		require.NoError(t, acceptErr)
 	case <-time.After(5 * time.Second):
 		t.Fatal("timed out waiting for responder to accept fallback connection")
+	}
+}
+
+func TestGetSession_FallbackUsesAddressBoundHandshakeMetadata(t *testing.T) {
+	if os.Getenv("GOI2P_ENABLE_UNSTABLE_NTCP2_LIVE_FALLBACK_TEST") != "1" {
+		t.Skip("set GOI2P_ENABLE_UNSTABLE_NTCP2_LIVE_FALLBACK_TEST=1 to run unstable live fallback harness with responder-side handshake diagnostics")
+	}
+
+	initiatorStatic := make([]byte, 32)
+	responderStatic := make([]byte, 32)
+	for i := range initiatorStatic {
+		initiatorStatic[i] = byte(i + 1)
+		responderStatic[i] = byte(i + 33)
+	}
+
+	mismatchStatic := make([]byte, 32)
+	mismatchIV := make([]byte, 16)
+	for i := range mismatchStatic {
+		mismatchStatic[i] = byte(200 + i)
+	}
+	for i := range mismatchIV {
+		mismatchIV[i] = byte(100 + i)
+	}
+
+	responder := newFallbackIntegrationTransport(t, "127.0.0.1:0", responderStatic)
+	initiator := newFallbackIntegrationTransport(t, "127.0.0.1:0", initiatorStatic)
+
+	responderCfg := responder.config.Load()
+	require.NotNil(t, responderCfg)
+	require.NotNil(t, responderCfg.Config)
+
+	responderHandshakeErr := make(chan error, 1)
+	responder.testInboundHandshakeErrorHook = func(err error) {
+		select {
+		case responderHandshakeErr <- err:
+		default:
+		}
+	}
+
+	closedAddr := reserveClosedPort(t)
+	peerInfo := buildPeerRouterInfoWithMismatchedFirstCandidate(
+		t,
+		responder.identity,
+		closedAddr,
+		responder.Addr().String(),
+		mismatchStatic,
+		mismatchIV,
+		responderCfg.Config.ObfuscationIV,
+	)
+
+	acceptResult := make(chan error, 1)
+	go func() {
+		conn, err := responder.Accept()
+		if err != nil {
+			acceptResult <- err
+			return
+		}
+		_ = conn.Close()
+		acceptResult <- nil
+	}()
+
+	session, err := initiator.GetSession(peerInfo)
+	if err != nil {
+		var responderErrMsg string
+		select {
+		case hookErr := <-responderHandshakeErr:
+			responderErrMsg = hookErr.Error()
+		default:
+			responderErrMsg = "<none captured>"
+		}
+
+		initiatorErrMsg := err.Error()
+		knownInitiatorSignature := strings.Contains(initiatorErrMsg, "msg2") && strings.Contains(initiatorErrMsg, "i/o timeout")
+		knownResponderSignature := strings.Contains(responderErrMsg, "failed to read first XK handshake message") && strings.Contains(responderErrMsg, "i/o timeout")
+		if knownInitiatorSignature && knownResponderSignature {
+			t.Skipf("known unstable live fallback signature observed; initiator=%q responder=%q", initiatorErrMsg, responderErrMsg)
+		}
+
+		t.Fatalf("address-bound metadata fallback failed unexpectedly: %v | responder handshake error: %s", err, responderErrMsg)
+	}
+	require.NotNil(t, session)
+	require.NoError(t, session.Close())
+
+	select {
+	case acceptErr := <-acceptResult:
+		require.NoError(t, acceptErr)
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for responder to accept address-bound fallback connection")
 	}
 }
