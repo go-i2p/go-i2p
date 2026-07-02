@@ -764,13 +764,40 @@ func (t *SSU2Transport) GetSession(routerInfo router_info.RouterInfo) (transport
 		return session, nil
 	}
 
-	if HasDialableSSU2Address(&routerInfo) {
-		return t.createOutboundSession(routerInfo, routerHash)
-	}
-
 	// R-2 fix: Atomic config snapshot
 	cfg := t.config.Load()
-	if cfg.RouterLookupFunc != nil && HasIntroducerOnlySSU2Address(&routerInfo) {
+	// canRelay is true when the peer advertises usable introducers and we can
+	// look up the introducer RouterInfos. Despite its name, HasIntroducerOnly...
+	// simply reports whether any SSU2 address carries introducer entries.
+	canRelay := cfg.RouterLookupFunc != nil && HasIntroducerOnlySSU2Address(&routerInfo)
+
+	if HasDialableSSU2Address(&routerInfo) {
+		session, dialErr := t.createOutboundSession(routerInfo, routerHash)
+		if dialErr == nil {
+			return session, nil
+		}
+		// Direct SSU2 dial failed. When the peer also advertises introducers,
+		// fall back to a relayed (introducer) dial. This is the primary
+		// reachability path for firewalled / symmetric-NAT peers — and for us
+		// when our own egress cannot complete a direct handshake: the direct
+		// address is unreachable but the peer stays reachable via relay. Without
+		// this fallback a firewalled router never grows its NetDB past the
+		// reseed floor because exploration dials never complete.
+		if canRelay {
+			t.logger.WithFields(map[string]interface{}{
+				"router_hash":  logutil.HashPrefix(routerHash),
+				"direct_error": dialErr.Error(),
+			}).Debug("direct SSU2 dial failed; attempting introducer fallback")
+			introSession, introErr := t.dialViaIntroducer(routerInfo, routerHash)
+			if introErr == nil {
+				return introSession, nil
+			}
+			return nil, oops.Wrapf(introErr, "direct SSU2 dial failed (%v) and introducer fallback failed", dialErr)
+		}
+		return nil, dialErr
+	}
+
+	if canRelay {
 		return t.dialViaIntroducer(routerInfo, routerHash)
 	}
 

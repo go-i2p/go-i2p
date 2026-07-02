@@ -124,6 +124,10 @@ type Router struct {
 	isReseeding bool
 	// lastReseedAttempt tracks when a reseed was last triggered to avoid tight retry loops
 	lastReseedAttempt time.Time
+	// lastNetDBAccepted holds the previous acceptedCount sample used to log the
+	// per-tick delta of newly stored RouterInfos. Accessed only by the single
+	// NetDB service watchdog goroutine, so it needs no synchronization.
+	lastNetDBAccepted uint64
 	// reseedMutex protects concurrent access to isReseeding flag (Lock 3: acquired after sessionMutex if needed)
 	reseedMutex sync.RWMutex
 

@@ -241,9 +241,47 @@ func (r *Router) startNetDBServiceWatchdog() {
 				r.ensurePublisherRunning()
 				r.ensureExplorerRunning()
 				r.maintainNetDBPeerFloor()
+				r.logNetDBStoreStats()
 			}
 		}
 	}()
+}
+
+// logNetDBStoreStats emits a periodic operator-facing telemetry line that makes
+// the RouterInfo intake pipeline observable without a debug build. It reports
+// the in-memory NetDB size alongside cumulative intake counters and the number
+// of RouterInfos accepted since the previous tick ("accepted_delta").
+//
+// This is the primary signal for distinguishing an *insertion* failure from a
+// *counting/reporting* failure when the peer count plateaus at the reseed floor:
+//   - accepted rising while size is flat  -> counting/cache bug (investigate cache)
+//   - accepted flat AND rejected_* flat   -> no new RouterInfos arriving at all
+//     (upstream: transport reachability / exploration produces no replies)
+//   - duplicate_or_stale rising alone     -> only already-known RIs are returned
+//     (exploration is not discovering net-new peers)
+func (r *Router) logNetDBStoreStats() {
+	if r.netdb == nil {
+		return
+	}
+	stats := r.netdb.GetRouterInfoStoreStats()
+	delta := stats.AcceptedCount - r.lastNetDBAccepted
+	r.lastNetDBAccepted = stats.AcceptedCount
+
+	log.WithFields(logger.Fields{
+		"at":                "logNetDBStoreStats",
+		"size":              r.netdb.Size(),
+		"accepted":          stats.AcceptedCount,
+		"accepted_delta":    delta,
+		"duplicate_orstale": stats.DuplicateOrStaleCount,
+		"rejected_parse":    stats.RejectedParseCount,
+		"rejected_validate": stats.RejectedValidationCount,
+		"rejected_hash":     stats.RejectedHashCount,
+		"rejected_sig":      stats.RejectedSignatureCount,
+		"rejected_network":  stats.RejectedNetworkCount,
+		"rejected_admit":    stats.RejectedAdmissionCount,
+		"rejected_datatype": stats.RejectedDataTypeCount,
+		"persist_pending":   stats.PersistPendingCount,
+	}).Info("NetDB RouterInfo intake stats")
 }
 
 func (r *Router) ensurePublisherRunning() {

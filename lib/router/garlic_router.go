@@ -489,6 +489,17 @@ func (gr *GarlicMessageRouter) handleReflexiveDelivery(routerHash common.Hash, m
 		return oops.Errorf("reflexive delivery failed: processor not configured")
 	}
 
+	// Attribute reflexively-delivered DatabaseStore messages to our own router
+	// hash before processing. Without a source these unattributed RouterInfo
+	// introductions are hard-rejected by the NetDB admission controller at
+	// critical cache pressure (source == nil ⇒ reject). Supplying a stable,
+	// non-nil source instead gives them a single bounded admission window, so
+	// legitimate garlic-delivered RouterInfos still contribute to NetDB growth
+	// near capacity while remaining rate-limited against flooding.
+	if ds, ok := msg.(*i2np.DatabaseStore); ok {
+		msg = &sourcedDatabaseStoreMessage{DatabaseStore: ds, source: gr.routerIdentity}
+	}
+
 	return gr.processor.ProcessMessage(msg)
 }
 
