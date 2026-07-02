@@ -8,6 +8,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/go-i2p/common v0.1.60000-0.20260701134558-e5f5cf65a7f5
 	github.com/go-i2p/crypto v0.1.60000-0.20260701135847-3ade996b68a0
+	github.com/go-i2p/go-i2pcontrol v0.1.9-0.20260607233455-950087a3858f
 	github.com/go-i2p/go-nat-listener v0.1.67
 	github.com/go-i2p/go-noise v0.1.60000-0.20260701163221-a80624c4f7e2
 	github.com/go-i2p/go-unzip v0.0.0-20260417162122-21146ed7aca8
@@ -43,7 +44,6 @@ require (
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/go-i2p/elgamal v0.1.60000-0.20260701131626-b5c8141026fc // indirect
-	github.com/go-i2p/go-i2pcontrol v0.1.9-0.20260607233455-950087a3858f // indirect
 	github.com/go-i2p/path v0.1.60000-0.20260701134624-ee3ce0cb2483 // indirect
 	github.com/go-i2p/pool v0.1.60000-0.20260701134610-0724f29e205d // indirect
 	github.com/go-i2p/red25519 v0.0.0-20260302212615-1093a31f680d // indirect
@@ -84,7 +84,12 @@ require (
 // pushed commits that contain the integrated transport (TR-1) and per-client
 // EncryptedLeaseSet authorization (L-3) fixes. To resume cross-module local
 // development, re-enable the corresponding replace directive.
-//replace github.com/go-i2p/go-noise => ../go-noise
+//
+// TEMPORARY: replace enabled to build against the local go-noise checkout that
+// adds SSU2Listener.DialSSU2ViaListener (outbound demultiplexing over the
+// listener socket). Revert to the pinned pseudo-version once go-noise is tagged
+// and published with that API.
+replace github.com/go-i2p/go-noise => ../go-noise
 
 //replace github.com/go-i2p/path => ../path
 
@@ -112,4 +117,5 @@ require (
 //replace github.com/go-i2p/go-nat-listener => ../go-nat-listener
 
 replace github.com/go-i2p/i2ptui => ../i2ptui
+
 replace github.com/go-i2p/i2p-control => ../i2p-control
