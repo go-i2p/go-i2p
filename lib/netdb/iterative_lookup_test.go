@@ -365,7 +365,7 @@ func TestQueryBatchParallel(t *testing.T) {
 	resolver := NewKademliaResolverWithTransport(mockDB, nil, transport, common.Hash{0})
 
 	ctx := context.Background()
-	results := resolver.queryBatchParallel(ctx, []common.Hash{peer1, peer2}, target, true)
+	results := resolver.queryBatchParallel(ctx, []common.Hash{peer1, peer2}, target, true, false)
 
 	// Both peers should produce results (even if errors due to empty IdentHash)
 	if len(results) != 2 {

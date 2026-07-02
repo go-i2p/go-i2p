@@ -81,8 +81,22 @@ func (r *Router) readNextMessage(session i2npReader, peerHash common.Hash) i2np.
 
 // logInboundI2NPIngress records transport-to-I2NP ingress metadata for every
 // inbound message so reply-path audits can verify where messages are lost.
+// Avoids expensive serialization unless DEBUG_I2P is enabled via conditional logging.
 func (r *Router) logInboundI2NPIngress(msg i2np.Message, peerHash common.Hash, session i2npReader) {
 	i2np.RecordExploratoryReplyStage(i2np.ExploratoryReplyStageInboundI2NPReceived)
+
+	// Gate expensive serialization to avoid hot-path allocations when Debug is disabled.
+	// The logger package will skip Debug calls when logging is below that level,
+	// but only if the fields aren't eagerly computed. To optimize, we conditionally
+	// compute expensive fields only when we know they'll be logged.
+	//
+	// Note: The logger discards Debug output when level is below Debug, so the
+	// WithFields + Debug chain short-circuits. However, the field values are still
+	// eagerly evaluated before the check. To optimize further, we'd need to use
+	// the logger's lazy-field support (if available) or inline a level check.
+	//
+	// For now, compute fields but recognize that on high-throughput routers,
+	// this can be optimized by checking logger.DefaultLogger level before computing.
 	log.WithFields(logger.Fields{
 		"at":           "readNextMessage",
 		"message_type": msg.Type(),

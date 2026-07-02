@@ -236,7 +236,7 @@ func TestQueryPeerNoTransport(t *testing.T) {
 	peerHash := common.Hash{1, 2, 3}
 	targetHash := common.Hash{4, 5, 6}
 
-	_, err := resolver.queryPeer(ctx, peerHash, targetHash, false)
+	_, err := resolver.queryPeer(ctx, peerHash, targetHash, false, false)
 	if err == nil {
 		t.Error("Should return error without transport")
 	}
@@ -257,7 +257,7 @@ func TestQueryPeerPeerNotFound(t *testing.T) {
 	peerHash := common.Hash{10, 20, 30} // Not in database
 	targetHash := common.Hash{4, 5, 6}
 
-	_, err := resolver.queryPeer(ctx, peerHash, targetHash, false)
+	_, err := resolver.queryPeer(ctx, peerHash, targetHash, false, false)
 	if err == nil {
 		t.Error("Should return error when peer not found")
 	}
@@ -295,7 +295,7 @@ func TestQueryPeer_UsesRouterInfoLookupType(t *testing.T) {
 	resolver := NewKademliaResolverWithTransport(mockDB, nil, mockTransport, ourHash)
 	ctx := context.Background()
 
-	_, err = resolver.queryPeer(ctx, peerHash, targetHash, false)
+	_, err = resolver.queryPeer(ctx, peerHash, targetHash, false, false)
 	if err == nil {
 		t.Fatal("expected queryPeer to return error from mock transport")
 	}
