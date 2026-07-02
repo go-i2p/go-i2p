@@ -336,7 +336,7 @@ func TestAccept_MixedInboundOutbound(t *testing.T) {
 
 	// Simulate an outbound session by storing directly in sessions map
 	outboundHash := newTestPeerHash("outbound-peer-hash-for-testing!!")
-	transport.sessionRegistry.LoadOrStore(outboundHash, "outbound-placeholder")
+	transport.sessionRegistry.StoreWithCount(outboundHash, "outbound-placeholder")
 	assert.Equal(t, int32(2), transport.GetSessionCount(), "count should include pre-loaded inbound + outbound")
 
 	// Accept the pre-loaded inbound connection

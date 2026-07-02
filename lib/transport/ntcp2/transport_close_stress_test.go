@@ -50,7 +50,7 @@ func TestCloseWithHighConnectionChurn(t *testing.T) {
 			})
 
 			// Store and close after a brief moment to simulate real lifecycle
-			transport.sessionRegistry.LoadOrStore(peerHash, session)
+			transport.sessionRegistry.StoreWithCount(peerHash, session)
 
 			// Simulate work and cleanup
 			_ = session.Close()
@@ -173,7 +173,7 @@ func TestSessionCountReconciliation(t *testing.T) {
 	session := NewNTCP2Session(conn, transport.ctx, transport.logger)
 
 	// Store in map but DON'T set cleanup callback
-	transport.sessionRegistry.LoadOrStore(peerHash, session)
+	transport.sessionRegistry.StoreWithCount(peerHash, session)
 
 	assert.Equal(t, int32(1), transport.GetSessionCount())
 

@@ -77,8 +77,7 @@ func TestSetupSession_DuplicateSession(t *testing.T) {
 	session1.SetCleanupCallback(func() {
 		transport.removeSession(routerHash)
 	})
-	_, loaded := transport.sessionRegistry.LoadOrStore(routerHash, session1)
-	require.False(t, loaded, "first store should succeed")
+	transport.sessionRegistry.StoreWithCount(routerHash, session1)
 
 	assert.Equal(t, int32(1), transport.GetSessionCount(), "should have 1 session")
 
@@ -136,7 +135,10 @@ func TestSetupSession_ConcurrentDuplicate(t *testing.T) {
 				session.Close()
 				sessions[idx] = existing.(*NTCP2Session)
 			} else {
-				// Won the store — set up cleanup and count.
+				// Won the store — manually increment count to simulate CheckLimitAndIncrement
+				// (in production, this would have been called before LoadOrStore)
+				transport.sessionRegistry.IncrementCount()
+				// Set up cleanup callback
 				session.SetCleanupCallback(func() {
 					transport.removeSession(routerHash)
 				})
@@ -184,7 +186,7 @@ func TestSetupSession_NoCleanupCallbackOnDuplicate(t *testing.T) {
 	session1.SetCleanupCallback(func() {
 		transport.removeSession(routerHash)
 	})
-	transport.sessionRegistry.LoadOrStore(routerHash, session1)
+	transport.sessionRegistry.StoreWithCount(routerHash, session1)
 
 	// Create a duplicate session and close it (simulating the fix).
 	conn2 := newMockSetupConn()
@@ -212,7 +214,7 @@ func TestFindExistingSession_PromotesInboundConn(t *testing.T) {
 
 	// Simulate Accept: store a raw net.Conn in the sessions map.
 	conn := newMockSetupConn()
-	transport.sessionRegistry.LoadOrStore(routerHash, net.Conn(conn))
+	transport.sessionRegistry.StoreWithCount(routerHash, net.Conn(conn))
 
 	// findExistingSession should detect the net.Conn and promote it to *NTCP2Session.
 	session, found := transport.findExistingSession(routerHash)

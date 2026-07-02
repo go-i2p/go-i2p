@@ -31,7 +31,7 @@ func TestSetCleanupCallback_CalledSynchronouslyOnClose(t *testing.T) {
 	session.StartWorkers()
 
 	// Store in transport map to simulate real usage
-	transport.sessionRegistry.LoadOrStore(peerHash, session)
+	transport.sessionRegistry.StoreWithCount(peerHash, session)
 
 	// Close the session
 	err := session.Close()
@@ -62,7 +62,7 @@ func TestSetCleanupCallback_FiresExactlyOnce(t *testing.T) {
 	})
 	session.StartWorkers()
 
-	transport.sessionRegistry.LoadOrStore(peerHash, session)
+	transport.sessionRegistry.StoreWithCount(peerHash, session)
 
 	// Attempt concurrent Close() calls
 	var wg sync.WaitGroup
@@ -93,6 +93,10 @@ func TestPromoteInboundConnection_CallbackFiresBeforeMapRemoval(t *testing.T) {
 	// Create an accepted connection
 	peerHash := newTestPeerHash("promote-test")
 	conn := newAcceptMockConn("10.0.0.1:5001")
+
+	// Simulate checkSessionLimit being called first (production inbound path)
+	transport.sessionRegistry.CheckLimitAndIncrement(100)
+
 	tracked, fresh := transport.trackInboundConnection(conn)
 	require.True(t, fresh)
 
