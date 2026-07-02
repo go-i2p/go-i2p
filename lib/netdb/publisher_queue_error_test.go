@@ -32,6 +32,10 @@ func (m *failingTransportManager) GetSession(routerInfo router_info.RouterInfo) 
 	return m.session, nil
 }
 
+func (m *failingTransportManager) ReleaseSession() {
+	// Mock implementation: no-op
+}
+
 // setupGatewayTest creates a mock NetDB with a valid gateway RouterInfo and returns
 // the db, gateway hash, and a test I2NP message. Reduces boilerplate in gateway tests.
 func setupGatewayTest(t *testing.T) (*mockNetDB, common.Hash, i2np.Message) {

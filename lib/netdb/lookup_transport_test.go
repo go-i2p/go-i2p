@@ -47,6 +47,10 @@ func (m *mockSessionProvider) GetSession(_ router_info.RouterInfo) (I2NPSender, 
 	return m.sender, nil
 }
 
+func (m *mockSessionProvider) ReleaseSession() {
+	// Mock implementation: no-op
+}
+
 func keyFromByte(b byte) common.Hash {
 	var h common.Hash
 	for i := range h {

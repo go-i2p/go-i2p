@@ -97,6 +97,10 @@ func (m *mockTransportManager) GetSentMessages(hash common.Hash) []i2np.Message 
 	return nil
 }
 
+func (m *mockTransportManager) ReleaseSession() {
+	// Mock implementation: no-op
+}
+
 // mockTransportSession implements TransportSession for testing
 type mockTransportSession struct {
 	mu           sync.Mutex
@@ -306,6 +310,10 @@ func (m *routingMockTransportManager) GetSentMessages(hash common.Hash) []i2np.M
 		return session.GetSentMessages()
 	}
 	return nil
+}
+
+func (m *routingMockTransportManager) ReleaseSession() {
+	// Mock implementation: no-op
 }
 
 func TestCreateDatabaseStoreMessage_IncludesNonZeroReplyToken(t *testing.T) {

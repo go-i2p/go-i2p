@@ -161,6 +161,7 @@ func (c *DatabaseLookupClient) SendDatabaseLookup(ctx context.Context, peerRI ro
 	if err != nil {
 		return nil, 0, oops.Errorf("failed to get session to peer: %w", err)
 	}
+	defer c.provider.ReleaseSession() // H-1 fix: release slot after send
 	if err := session.QueueSendI2NP(msg); err != nil {
 		return nil, 0, oops.Errorf("failed to queue DatabaseLookup: %w", err)
 	}

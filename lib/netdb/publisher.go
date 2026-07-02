@@ -34,6 +34,12 @@ type SessionProvider interface {
 	// Returns an established TransportSession and nil on success.
 	// Returns nil and an error on error.
 	GetSession(routerInfo router_info.RouterInfo) (I2NPSender, error)
+
+	// ReleaseSession decrements the transport pool slot counter. Must be called
+	// after each GetSession to release the reserved slot, even if the underlying
+	// connection is reused. Fixes H-1 connection pool leak. Callers typically
+	// call this via defer immediately after GetSession succeeds.
+	ReleaseSession()
 }
 
 // I2NPSender represents a session for sending I2NP messages to a router.

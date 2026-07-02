@@ -202,11 +202,21 @@ func (db *StdNetDB) GetRouterInfo(hash common.Hash) (chnl chan router_info.Route
 	// Load from file
 	data, err := db.loadRouterInfoFromFile(hash)
 	if err != nil {
-		log.WithError(err).WithFields(logger.Fields{
+		// Downgrade file-not-found (routine cache miss) to Debug; keep other I/O errors at Error.
+		logLevel := "error"
+		if os.IsNotExist(err) {
+			logLevel = "debug"
+		}
+		logEntry := log.WithError(err).WithFields(logger.Fields{
 			"at":     "(StdNetDB) GetRouterInfo",
 			"reason": "file load failed",
 			"hash":   logutil.HashPrefix(hash),
-		}).Error("failed to load RouterInfo from file")
+		})
+		if logLevel == "debug" {
+			logEntry.Debug("failed to load RouterInfo from file")
+		} else {
+			logEntry.Error("failed to load RouterInfo from file")
+		}
 		// Return a closed empty channel instead of nil so that callers
 		// doing <-chnl receive the zero value immediately rather than
 		// blocking forever on a nil channel.

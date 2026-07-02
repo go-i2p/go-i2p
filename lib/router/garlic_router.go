@@ -646,6 +646,7 @@ func (gr *GarlicMessageRouter) sendMessageToRouter(routerHash common.Hash, route
 		}).WithError(err).Error("Failed to get transport session")
 		return oops.Wrapf(err, "failed to get session for router %x", routerHash[:8])
 	}
+	defer gr.transportMgr.ReleaseSession() // H-1 fix: release slot after send
 
 	if err := session.QueueSendI2NP(msg); err != nil {
 		log.WithFields(logger.Fields{
