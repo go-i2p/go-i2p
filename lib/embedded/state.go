@@ -36,7 +36,6 @@ func (e *StandardEmbeddedRouter) Start() error {
 		return oops.Wrapf(err, "router startup failed")
 	}
 	e.running = true
-	e.done = make(chan struct{})
 
 	// CRITICAL-6 FIX: Capture publisher AFTER router starts (when it's initialized)
 	// Publisher is initialized during router.Start() in launchPublisher()
@@ -83,7 +82,18 @@ func (e *StandardEmbeddedRouter) Stop() error {
 	e.mu.Lock()
 
 	if !e.running {
+		// Even if not running, close the done channel to signal any Wait() goroutines.
+		// This prevents indefinite blocking if Wait() is called before Start().
+		doneCh := e.done
 		e.mu.Unlock()
+
+		// Close the done channel to wake up any Wait() callers
+		e.doneOnce.Do(func() {
+			if doneCh != nil {
+				close(doneCh)
+			}
+		})
+
 		log.WithFields(logger.Fields{
 			"at":     "StandardEmbeddedRouter.Stop",
 			"phase":  "shutdown",
@@ -133,25 +143,22 @@ func (e *StandardEmbeddedRouter) Stop() error {
 
 // Wait blocks until the router is stopped via Stop()/HardStop()/StopWithContext().
 //
-// Precondition: Wait must be called *after* Start() has returned successfully.
-// If Wait is called before Start() — or after Stop() has already completed —
-// it returns immediately because there is no live shutdown channel to await.
-// Callers that race Wait against Start (e.g. spawning `go r.Wait()` in one
-// goroutine while another goroutine calls Start) must synchronize themselves;
-// this method does not block until Start populates the internal done channel.
+// Precondition: This method is safe to call at any time after the router is constructed.
+// If called before Start(), it will block until either Start() is called and then Stop(),
+// or Stop() is called directly. Callers that race Wait() against Start() will block
+// until the first Stop() call completes.
 // See AUDIT.md M-5.
 func (e *StandardEmbeddedRouter) Wait() {
 	e.mu.RLock()
-	running := e.running
 	doneCh := e.done
 	e.mu.RUnlock()
 
-	if !running || doneCh == nil {
+	if doneCh == nil {
 		log.WithFields(logger.Fields{
 			"at":     "StandardEmbeddedRouter.Wait",
 			"phase":  "waiting",
-			"reason": "router is not running",
-		}).Debug("wait called on non-running router")
+			"reason": "router not yet constructed",
+		}).Debug("wait called on non-initialized router")
 		return
 	}
 

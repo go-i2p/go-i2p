@@ -116,25 +116,40 @@ func TestEmbeddedRouter_HardStopOnNonRunning(t *testing.T) {
 	assert.False(t, router.IsRunning())
 }
 
-// TestEmbeddedRouter_WaitOnNonRunning tests Wait on non-running router.
-func TestEmbeddedRouter_WaitOnNonRunning(t *testing.T) {
+// TestEmbeddedRouter_WaitBeforeStart tests that Wait() blocks before Start() is called,
+// and unblocks only after Stop() is called. This ensures proper lifecycle ordering.
+func TestEmbeddedRouter_WaitBeforeStart(t *testing.T) {
 	cfg := config.DefaultRouterConfig()
 	router, err := NewStandardEmbeddedRouter(cfg)
 	require.NoError(t, err)
 
-	// Wait on non-running router should return immediately
+	// Wait in a goroutine; it should block until Stop() is called
 	done := make(chan struct{})
 	go func() {
 		router.Wait()
 		close(done)
 	}()
 
-	// Use timeout to verify it returns quickly
+	// Give Wait() time to start blocking
+	time.Sleep(50 * time.Millisecond)
+
+	// Verify it's still blocked (hasn't returned yet)
 	select {
 	case <-done:
-		// Good - returned immediately
+		t.Error("Wait should block when called before Start(), but it returned immediately")
+	default:
+		// Good - still blocked
+	}
+
+	// Now call Stop(); Wait() should unblock
+	router.Stop()
+
+	// Wait for Wait() to return
+	select {
+	case <-done:
+		// Good - returned after Stop()
 	case <-time.After(100 * time.Millisecond):
-		t.Error("Wait on non-running router should return immediately")
+		t.Error("Wait should unblock after Stop(), but it didn't")
 	}
 }
 

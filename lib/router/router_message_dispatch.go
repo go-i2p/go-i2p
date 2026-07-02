@@ -162,6 +162,7 @@ var (
 	readWarnMinInterval     = 5 * time.Second
 	readWarnCleanupInterval = 1 * time.Minute  // How often to cleanup stale entries
 	readWarnMaxAge          = 10 * time.Minute // Remove entries not updated for this duration
+	readWarnMaxMapSize      = 5000             // Max entries in readWarnLastByPeer map; evict oldest when exceeded
 )
 
 func shouldLogReadWarn(peerHash string) bool {
@@ -173,6 +174,23 @@ func shouldLogReadWarn(peerHash string) bool {
 	if ok && now.Sub(last) < readWarnMinInterval {
 		return false
 	}
+
+	// Enforce max map size by evicting oldest entry if at capacity
+	if len(readWarnLastByPeer) >= readWarnMaxMapSize && !ok {
+		// Only evict if this is a new peer; don't evict for existing peers being updated
+		oldest := ""
+		oldestTime := now
+		for peer, t := range readWarnLastByPeer {
+			if t.Before(oldestTime) {
+				oldest = peer
+				oldestTime = t
+			}
+		}
+		if oldest != "" {
+			delete(readWarnLastByPeer, oldest)
+		}
+	}
+
 	readWarnLastByPeer[peerHash] = now
 	return true
 }
@@ -181,6 +199,7 @@ func shouldLogReadWarn(peerHash string) bool {
 // This prevents unbounded memory growth by evicting entries that haven't been
 // updated for readWarnMaxAge. Called periodically by startReadWarnLimiterCleanup.
 // Thread-safe for concurrent access via readWarnLimiterMu.
+// Also logs if map remains near capacity even after cleanup, indicating high churn.
 func cleanupReadWarnLastByPeer() {
 	readWarnLimiterMu.Lock()
 	defer readWarnLimiterMu.Unlock()
@@ -194,12 +213,18 @@ func cleanupReadWarnLastByPeer() {
 		}
 	}
 
-	if evicted > 0 {
-		log.WithFields(logger.Fields{
-			"at":      "cleanupReadWarnLastByPeer",
-			"evicted": evicted,
-			"mapSize": len(readWarnLastByPeer),
-		}).Debug("Read warn limiter map cleanup")
+	mapSize := len(readWarnLastByPeer)
+	logFields := logger.Fields{
+		"at":      "cleanupReadWarnLastByPeer",
+		"evicted": evicted,
+		"mapSize": mapSize,
+	}
+
+	if mapSize > (readWarnMaxMapSize * 9 / 10) {
+		// Map is at 90%+ capacity; log at Warn level to indicate high peer churn
+		log.WithFields(logFields).Warn("Read warn limiter map near capacity")
+	} else if evicted > 0 {
+		log.WithFields(logFields).Debug("Read warn limiter map cleanup")
 	}
 }
 
