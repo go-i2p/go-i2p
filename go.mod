@@ -10,7 +10,7 @@ require (
 	github.com/go-i2p/crypto v0.1.60000-0.20260701135847-3ade996b68a0
 	github.com/go-i2p/go-i2pcontrol v0.1.9-0.20260607233455-950087a3858f
 	github.com/go-i2p/go-nat-listener v0.1.67
-	github.com/go-i2p/go-noise v0.1.60000-0.20260701163221-a80624c4f7e2
+	github.com/go-i2p/go-noise v0.1.60000-0.20260702155224-859815f0df08
 	github.com/go-i2p/go-unzip v0.0.0-20260417162122-21146ed7aca8
 	github.com/go-i2p/i2p-control v0.0.0-20260608000308-d8ed861a259c
 	github.com/go-i2p/i2ptui v0.0.0-20260607232722-b95832d1b84a
@@ -84,12 +84,6 @@ require (
 // pushed commits that contain the integrated transport (TR-1) and per-client
 // EncryptedLeaseSet authorization (L-3) fixes. To resume cross-module local
 // development, re-enable the corresponding replace directive.
-//
-// TEMPORARY: replace enabled to build against the local go-noise checkout that
-// adds SSU2Listener.DialSSU2ViaListener (outbound demultiplexing over the
-// listener socket). Revert to the pinned pseudo-version once go-noise is tagged
-// and published with that API.
-replace github.com/go-i2p/go-noise => ../go-noise
 
 //replace github.com/go-i2p/path => ../path
 
