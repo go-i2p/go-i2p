@@ -547,16 +547,26 @@ func (t *NTCP2Transport) inboundHandshakeWorker(conn net.Conn) {
 	// TE-1 fix: Create context with timeout for handshake, using t.ctx as parent
 	// so that transport shutdown deadline is also honored. This prevents handshakes
 	// from continuing beyond the transport context deadline, which ensures:
-	// 1. Transport can shut down cleanly without waiting for 30s handshakes
-	// 2. Respects min(transport deadline, 30s handshake timeout)
+	// 1. Transport can shut down cleanly without waiting for 60s handshakes
+	// 2. Respects min(transport deadline, 60s handshake timeout)
 	// 3. Propagates transport shutdown to in-flight handshakes
-	const handshakeTimeout = 30 * time.Second
+	// INCREASED FROM 30s to 60s to allow Noise XK protocol full message exchange time
+	const handshakeTimeout = 60 * time.Second
+
+	remoteAddr := "<unknown>"
+	if conn.RemoteAddr() != nil {
+		remoteAddr = conn.RemoteAddr().String()
+	}
+
+	t.logger.WithField("remote_addr", remoteAddr).Debug("[DIAG] Starting inbound handshake worker; timeout=60s")
 	handshakeCtx, cancel := context.WithTimeout(t.ctx, handshakeTimeout)
 	defer cancel()
 
 	if err := t.performInboundHandshake(conn, handshakeCtx); err != nil {
 		// L-1/T-1 FIX: Handshake failed. No slot was reserved, so just return.
 		// performInboundHandshake already closes conn; no unreserve needed.
+		t.logger.WithField("remote_addr", remoteAddr).WithError(err).
+			Warn("[DIAG] Handshake worker exiting after performInboundHandshake error")
 		return
 	}
 
@@ -576,7 +586,9 @@ func (t *NTCP2Transport) inboundHandshakeWorker(conn net.Conn) {
 
 	tracked, isFresh := t.trackInboundConnection(conn)
 	if !isFresh {
-		// Duplicate detected: already closed and unreserved, nothing more to do.
+		// Duplicate detected: unreserved in trackInboundConnection, but conn must be closed.
+		// The conn returned here is the raw, untracked connection, so close it explicitly.
+		_ = tracked.Close()
 		return
 	}
 
@@ -706,14 +718,36 @@ func (t *NTCP2Transport) onInboundHandshakeError(err error) {
 // executeHandshake performs the Noise XK handshake with probing resistance on failure.
 // HIGH-2.2 fix: Uses handshakeCtx (with timeout) to prevent goroutine leaks on slow/stuck handshakes.
 func (t *NTCP2Transport) executeHandshake(ntcp2Conn *ntcp2.Conn, handshakeCtx context.Context) error {
-	if err := ntcp2Conn.UnderlyingConn().Handshake(handshakeCtx); err != nil {
+	remoteAddr := "<unknown>"
+	if ntcp2Conn.RemoteAddr() != nil {
+		remoteAddr = ntcp2Conn.RemoteAddr().String()
+	}
+
+	t.logger.WithField("remote_addr", remoteAddr).Debug("[DIAG] executeHandshake: calling ntcp2Conn.UnderlyingConn().Handshake()")
+	err := ntcp2Conn.UnderlyingConn().Handshake(handshakeCtx)
+
+	if err != nil {
 		raw := extractRawConn(ntcp2Conn.UnderlyingConn())
-		t.logger.WithError(err).Debug("Inbound handshake failed, applying probing resistance")
+
+		// DIAGNOSTIC: Log timeout vs other errors differently
+		if errors.Is(err, context.DeadlineExceeded) {
+			t.logger.WithFields(map[string]interface{}{
+				"remote_addr": remoteAddr,
+				"error_type":  "context.DeadlineExceeded",
+				"timeout_sec": 60,
+			}).Warn("[DIAG] Inbound handshake TIMEOUT - Noise XK protocol exceeded 60s deadline")
+		} else {
+			t.logger.WithField("remote_addr", remoteAddr).WithError(err).
+				Warn("[DIAG] Inbound handshake FAILED - applying probing resistance")
+		}
+
 		applyProbingResistance(raw)
 		_ = ntcp2Conn.Close()
 		// L-1/T-1 FIX: No slot was reserved before handshake, so no unreserve needed.
 		return WrapNTCP2Error(err, "inbound handshake (probing resistance applied)")
 	}
+
+	t.logger.WithField("remote_addr", remoteAddr).Debug("[DIAG] Inbound Noise XK handshake succeeded, propagating peer static key")
 	ntcp2Conn.PropagatePeerStaticKey()
 	return nil
 }

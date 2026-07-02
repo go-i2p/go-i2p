@@ -5,6 +5,7 @@
 *.coverprofile
 *exportable-fuzz.zip
 go-i2p
+go-i2p-*
 *.exe
 .idea/
 router.info
