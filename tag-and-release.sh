@@ -19,6 +19,8 @@ go-nat-listener:GO_NAT_LISTENER_TAG_HASH
 path:PATH_TAG_HASH
 pool:POOL_TAG_HASH
 go-noise:GO_NOISE_TAG_HASH
+i2p-control:I2P_CONTROL_TAG_HASH
+i2ptui:I2PTUI_TAG_HASH
 go-i2p:GO_I2P_TAG_HASH
 go-i2cp:GO_I2CP_TAG_HASH
 go-datagrams:GO_DATAGRAMS_TAG_HASH
@@ -39,6 +41,8 @@ path
 pool
 noise
 go-noise
+i2p-control
+i2ptui
 go-i2p
 go-i2cp
 go-datagrams
@@ -61,6 +65,8 @@ path:PATH_TAG_HASH
 noise:NOISE_TAG_HASH
 go-nat-listener:GO_NAT_LISTENER_TAG_HASH
 go-noise:GO_NOISE_TAG_HASH
+i2p-control:I2P_CONTROL_TAG_HASH
+i2ptui:I2PTUI_TAG_HASH
 go-i2p:GO_I2P_TAG_HASH
 go-i2cp:GO_I2CP_TAG_HASH
 go-datagrams:GO_DATAGRAMS_TAG_HASH
