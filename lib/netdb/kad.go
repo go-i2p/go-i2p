@@ -95,8 +95,11 @@ type KademliaResolver struct {
 	// what tunnel pool to use when doing lookup
 	// if nil the lookup will be done directly
 	pool *tunnel.Pool
-	// mu protects transport and ourHash which may be set after construction
-	// via SetTransport / SetOurHash while queryPeer reads them concurrently.
+	// inboundPool provides inbound tunnels for reply routing in discovery lookups.
+	// When available, enables firewalled routers to receive replies via tunnel-reply lookups.
+	inboundPool *tunnel.Pool
+	// mu protects transport, ourHash, and inboundPool which may be set after construction
+	// via SetTransport / SetOurHash / SetInboundPool while queryPeer reads them concurrently.
 	mu sync.RWMutex
 	// transport for sending lookup messages (optional)
 	transport LookupTransport
@@ -692,6 +695,60 @@ func (kr *KademliaResolver) getKnownPeersSample(maxSample int) []common.Hash {
 	return result
 }
 
+// selectReplyRoute returns a reply tunnel ID and gateway hash for DatabaseLookup queries.
+// This enables firewalled routers to receive replies via tunnel-reply lookups.
+// Returns empty values and ok=false when no valid inbound reply route is available.
+//
+// ReplyGateway must identify the inbound tunnel gateway router (IBGW), not our local router
+// hash, because the sender targets the gateway that owns the ReplyTunnelID path.
+func (kr *KademliaResolver) selectReplyRoute() ([4]byte, common.Hash, bool) {
+	kr.mu.RLock()
+	inboundPool := kr.inboundPool
+	kr.mu.RUnlock()
+
+	if inboundPool == nil {
+		return [4]byte{}, common.Hash{}, false
+	}
+
+	active := inboundPool.GetActiveTunnels()
+	if len(active) == 0 {
+		return [4]byte{}, common.Hash{}, false
+	}
+
+	// Prefer multi-hop inbound tunnels for reply routing. A multi-hop tunnel has
+	// a distinct remote IBGW, which is the canonical destination for replies from
+	// floodfills when using tunnel-reply lookups.
+	inbound := active[0]
+	for _, candidate := range active {
+		if candidate != nil && len(candidate.Hops) > 0 {
+			inbound = candidate
+			break
+		}
+	}
+
+	replyID := inbound.GatewayTunnelID
+	if replyID == 0 {
+		replyID = inbound.ID
+	}
+
+	var replyTunnelID [4]byte
+	binary.BigEndian.PutUint32(replyTunnelID[:], uint32(replyID))
+
+	// ReplyGateway is the IBGW router's hash (not our own hash). For single-hop
+	// inbound tunnels where Hops is empty, the gateway is the direct peer we sent
+	// the tunnel build to. For multi-hop tunnels, it's the first hop's router hash.
+	var replyGateway common.Hash
+	if len(inbound.Hops) > 0 {
+		replyGateway = inbound.Hops[0]
+	} else {
+		// Single-hop: we would need to know the peer we sent the build to.
+		// For now, we don't support single-hop reply routing. Future optimization.
+		return [4]byte{}, common.Hash{}, false
+	}
+
+	return replyTunnelID, replyGateway, true
+}
+
 // queryPeer sends a DatabaseLookup request to a specific peer and waits for a response.
 // Returns the RouterInfo if found, or an error if the lookup failed or the peer doesn't have it.
 // The exploration parameter controls whether to use exploration-type lookups (returning
@@ -748,7 +805,30 @@ func (kr *KademliaResolver) queryPeer(ctx context.Context, peer, target common.H
 		// This reduces re-suggestion of already-known peers and improves growth.
 		excludedPeers = kr.getKnownPeersSample(100)
 	}
-	lookup := i2np.NewDatabaseLookup(target, fromHash, lookupType, excludedPeers)
+
+	// Attempt to use tunnel-reply for firewalled routers to enable them to receive
+	// responses without direct reachability. This mirrors publisher.go behavior and
+	// allows non-floodfill routers without public IP to grow their NetDB.
+	replyTunnelID, replyGateway, hasReplyRoute := kr.selectReplyRoute()
+	var lookup *i2np.DatabaseLookup
+	if hasReplyRoute {
+		lookup = i2np.NewDatabaseLookupWithTunnel(target, replyGateway, replyTunnelID, lookupType, excludedPeers)
+		log.WithFields(logger.Fields{
+			"at":           "queryPeer",
+			"peer":         logutil.HashPrefixPlain(peer),
+			"target":       logutil.HashPrefixPlain(target),
+			"reply_type":   "tunnel",
+			"reply_tunnel": binary.BigEndian.Uint32(replyTunnelID[:]),
+		}).Debug("DatabaseLookup with tunnel-reply")
+	} else {
+		lookup = i2np.NewDatabaseLookup(target, fromHash, lookupType, excludedPeers)
+		log.WithFields(logger.Fields{
+			"at":         "queryPeer",
+			"peer":       logutil.HashPrefixPlain(peer),
+			"target":     logutil.HashPrefixPlain(target),
+			"reply_type": "direct",
+		}).Debug("DatabaseLookup with direct-reply")
+	}
 
 	// Send the lookup and wait for response
 	responseData, msgType, err := transport.SendDatabaseLookup(ctx, *peerRI, lookup)

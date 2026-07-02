@@ -194,6 +194,26 @@ func (e *Explorer) SetOurHash(hash common.Hash) {
 	e.fieldMu.Unlock()
 }
 
+// SetInboundPool sets the inbound tunnel pool for tunnel-reply discovery lookups.
+// This enables firewalled routers to receive responses via tunnel-reply lookups
+// instead of only direct-reply lookups. Call this after the inbound pool is ready.
+func (e *Explorer) SetInboundPool(pool *tunnel.Pool) {
+	e.fieldMu.Lock()
+	defer e.fieldMu.Unlock()
+
+	// Set the inbound pool on the cached resolver if it exists,
+	// so in-flight lookups can use tunnel-reply immediately.
+	if e.cachedResolver != nil {
+		e.cachedResolver.SetInboundPool(pool)
+	}
+
+	log.WithFields(logger.Fields{
+		"at":       "(Explorer) SetInboundPool",
+		"reason":   "inbound_pool_configured",
+		"has_pool": pool != nil,
+	}).Debug("inbound tunnel pool set on explorer for tunnel-reply lookups")
+}
+
 // explorationLoop runs periodic exploration rounds
 func (e *Explorer) explorationLoop() {
 	defer e.wg.Done()

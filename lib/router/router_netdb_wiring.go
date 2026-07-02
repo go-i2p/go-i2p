@@ -110,6 +110,13 @@ func (r *Router) startExplorer() error {
 		r.explorer.SetOurHash(ourHash)
 	}
 
+	// Set the inbound pool for tunnel-reply support in discovery lookups.
+	// This enables firewalled routers to receive responses via reply tunnels
+	// instead of only direct-reply lookups, allowing the NetDB to grow.
+	if r.tunnelManager != nil {
+		r.explorer.SetInboundPool(r.tunnelManager.GetInboundPool())
+	}
+
 	if err := r.explorer.Start(); err != nil {
 		r.explorer = nil
 		return oops.Wrapf(err, "failed to start NetDB explorer")

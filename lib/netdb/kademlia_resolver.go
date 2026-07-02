@@ -104,3 +104,17 @@ func (kr *KademliaResolver) SetExploration(exploration bool) {
 func (kr *KademliaResolver) GetResponseHandler() *LookupResponseHandler {
 	return kr.responseHandler
 }
+
+// SetInboundPool sets the inbound tunnel pool for reply routing in discovery lookups.
+// When available, enables firewalled routers to receive replies via tunnel-reply lookups
+// instead of only direct-reply lookups.
+func (kr *KademliaResolver) SetInboundPool(pool *tunnel.Pool) {
+	kr.mu.Lock()
+	kr.inboundPool = pool
+	kr.mu.Unlock()
+	log.WithFields(logger.Fields{
+		"at":       "KademliaResolver.SetInboundPool",
+		"reason":   "inbound_pool_configured",
+		"has_pool": pool != nil,
+	}).Debug("inbound tunnel pool set for reply routing")
+}
