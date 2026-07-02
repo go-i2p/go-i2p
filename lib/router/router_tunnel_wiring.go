@@ -626,10 +626,10 @@ func (r *Router) initializeGarlicRouter() {
 
 	// Create garlic message router with router infrastructure
 	gr := NewGarlicMessageRouter(
-		garlicNetDB,  // NetDB for LeaseSet/RouterInfo lookups
-		r.transports, // Transport for sending to peer routers
-		tunnelPool,   // Tunnel pool for DESTINATION and TUNNEL delivery
-		routerHash,   // Our identity for reflexive routing
+		garlicNetDB,         // NetDB for LeaseSet/RouterInfo lookups
+		r.transports.Load(), // Transport for sending to peer routers
+		tunnelPool,          // Tunnel pool for DESTINATION and TUNNEL delivery
+		routerHash,          // Our identity for reflexive routing
 	)
 
 	// Set bidirectional references for LOCAL delivery recursion
@@ -644,7 +644,7 @@ func (r *Router) initializeGarlicRouter() {
 	log.WithFields(logger.Fields{
 		"our_hash":        logutil.HashPrefix(routerHash),
 		"tunnel_support":  tunnelPool != nil,
-		"transport_ready": r.transports != nil,
+		"transport_ready": r.transports.Load() != nil,
 		"netdb_ready":     r.netdb != nil,
 	}).Debug("Garlic message router initialized for non-LOCAL clove forwarding")
 }

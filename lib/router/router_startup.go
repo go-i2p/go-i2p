@@ -63,7 +63,7 @@ func (r *Router) validateSubsystems() error {
 	if r.keystore == nil {
 		return oops.Errorf("router not fully initialized: keystore is nil (use CreateRouter, not FromConfig directly)")
 	}
-	if r.transports == nil {
+	if r.transports.Load() == nil {
 		return oops.Errorf("router not fully initialized: transport muxer is nil (use CreateRouter, not FromConfig directly)")
 	}
 	return nil

@@ -248,7 +248,8 @@ func (r *Router) ensureStopped() {
 // closeTransports closes the transport muxer and all underlying connections.
 // Returns the first error encountered during transport shutdown.
 func (r *Router) closeTransports() error {
-	if r.transports == nil {
+	muxer := r.transports.Load()
+	if muxer == nil {
 		return nil
 	}
 
@@ -260,7 +261,7 @@ func (r *Router) closeTransports() error {
 	}).Debug("closing TransportMuxer")
 
 	var closeErr error
-	if err := r.transports.Close(); err != nil {
+	if err := muxer.Close(); err != nil {
 		log.WithError(err).WithFields(logger.Fields{
 			"at":     "(Router) Close",
 			"phase":  "finalization",
@@ -268,7 +269,7 @@ func (r *Router) closeTransports() error {
 		}).Warn("error closing transport muxer")
 		closeErr = err
 	}
-	r.transports = nil
+	r.transports.Store(nil)
 	return closeErr
 }
 

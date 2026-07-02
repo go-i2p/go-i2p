@@ -126,7 +126,8 @@ func (r *Router) establishOutboundSession(hash common.Hash, routerInfo *router_i
 		return nil, err
 	}
 
-	transportSession, err := r.transports.GetSession(*routerInfo)
+	muxer := r.transports.Load()
+	transportSession, err := muxer.GetSession(*routerInfo)
 	if err != nil {
 		r.logSessionEstablishmentFailure(hash, routerInfo, err)
 		return nil, oops.Wrapf(err, "failed to establish outbound session")
@@ -137,7 +138,7 @@ func (r *Router) establishOutboundSession(hash common.Hash, routerInfo *router_i
 
 // validateTransportMuxer checks if the transport muxer is initialized.
 func (r *Router) validateTransportMuxer(hash common.Hash) error {
-	if r.transports == nil {
+	if r.transports.Load() == nil {
 		log.WithFields(logger.Fields{
 			"at":        "Router.GetSessionByHash",
 			"phase":     "session_establishment",

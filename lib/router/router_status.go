@@ -11,7 +11,7 @@ import (
 // findTransport returns the first transport of the specified type, or nil if not found.
 // This consolidates the common pattern: get muxer, nil check, iterate transports, type-assert.
 func (r *Router) findTransport(typeCheck func(transport.Transport) bool) transport.Transport {
-	muxer := r.transports
+	muxer := r.transports.Load()
 	if muxer == nil {
 		return nil
 	}
@@ -61,8 +61,8 @@ func (r *Router) GetSSU2SessionCount() int {
 // This is used by I2PControl to expose NTCP2 port and address information.
 // Returns nil if no transports are available.
 func (r *Router) GetTransportAddr() net.Addr {
-	// Capture locally to avoid TOCTOU race with concurrent shutdown.
-	muxer := r.transports
+	// Capture locally using atomic load for thread-safe access.
+	muxer := r.transports.Load()
 	if muxer == nil {
 		return nil
 	}
@@ -92,7 +92,7 @@ func (r *Router) GetSSU2Addr() net.Addr {
 // GetTransportSessionFailureStats returns session-attempt outcome counters from
 // the transport muxer. It returns zero-valued stats when transports are not ready.
 func (r *Router) GetTransportSessionFailureStats() transport.MuxSessionFailureStats {
-	muxer := r.transports
+	muxer := r.transports.Load()
 	if muxer == nil {
 		return transport.MuxSessionFailureStats{}
 	}

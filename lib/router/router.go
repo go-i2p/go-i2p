@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-i2p/common/base32"
@@ -44,8 +45,8 @@ import (
 type Router struct {
 	// keystore for router info
 	keystore *keys.RouterInfoKeystore
-	// multi-transport manager
-	transports *transport.TransportMuxer
+	// multi-transport manager (atomic-safe to avoid TOCTOU race during shutdown)
+	transports atomic.Pointer[transport.TransportMuxer]
 	// netdb
 	netdb *netdb.StdNetDB
 	// message router for processing I2NP messages
@@ -197,7 +198,7 @@ func initializeNetDBAndTransports(r *Router, ri *router_info.RouterInfo, cfg *co
 		return err
 	}
 
-	r.transports = transport.Mux(transports...)
+	r.transports.Store(transport.Mux(transports...))
 	return nil
 }
 

@@ -231,9 +231,8 @@ func (bt *BandwidthTracker) GetRate15s() (inbound, outbound uint64) {
 // This method is used by the bandwidth tracker to sample bandwidth usage.
 func (r *Router) getTotalBandwidth() (sent, received uint64) {
 	// Capture TransportMuxer locally to avoid TOCTOU race:
-	// the field could be set to nil by concurrent shutdown between
-	// the nil check and the method call.
-	muxer := r.transports
+	// the field is now atomic-safe, so this load is thread-safe.
+	muxer := r.transports.Load()
 	if muxer == nil {
 		return 0, 0
 	}

@@ -77,14 +77,14 @@ func TestLiveNetworkPublishRouterInfo(t *testing.T) {
 	backgroundPublisher := r.GetPublisher()
 	require.NotNil(t, backgroundPublisher, "publisher should be initialized after router startup")
 	require.NotNil(t, r.routerInfoProv, "routerinfo provider should be initialized after router startup")
-	require.NotNil(t, r.transports, "transport muxer should be initialized after router startup")
+	require.NotNil(t, r.transports.Load(), "transport muxer should be initialized after router startup")
 	require.NotNil(t, r.tunnelManager, "tunnel manager should be initialized after router startup")
 
 	// Use a dedicated one-shot publisher for this test path so the log output
 	// reflects whether Java I2P accepted and ACKed this go-i2p RouterInfo.
 	tracingTransport := &liveTracingSessionProvider{
 		t:     t,
-		inner: &publisherTransportAdapter{muxer: r.transports},
+		inner: &publisherTransportAdapter{muxer: r.transports.Load()},
 	}
 	testPublisher := netdb.NewPublisher(
 		&publisherNetDBAdapter{db: db},

@@ -48,11 +48,12 @@ func (r *Router) stopFloodfillServer() {
 // and transport muxer. Floodfill serving is disabled by default; set
 // netdb.floodfill_enabled in the config to enable it.
 func (r *Router) startFloodfillServer() {
-	if r.netdb == nil || r.transports == nil {
+	muxer := r.transports.Load()
+	if r.netdb == nil || muxer == nil {
 		log.WithFields(logger.Fields{"at": "startFloodfillServer"}).Debug("Floodfill server deferred: NetDB or transport muxer not ready")
 		return
 	}
-	adapter := &floodfillTransportAdapter{muxer: r.transports, db: r.netdb}
+	adapter := &floodfillTransportAdapter{muxer: muxer, db: r.netdb}
 	cfg := netdb.DefaultFloodfillConfig()
 	if r.cfg != nil && r.cfg.NetDB != nil {
 		cfg.Enabled = r.cfg.NetDB.FloodfillEnabled
@@ -92,9 +93,10 @@ func (r *Router) startExplorer() error {
 	// over transport sessions and correlates replies by target key. The SAME
 	// instance is registered as the processor's reply deliverer so inbound
 	// DatabaseStore / DatabaseSearchReply messages wake the blocked lookups.
-	if r.transports != nil && r.messageRouter != nil {
+	muxer := r.transports.Load()
+	if muxer != nil && r.messageRouter != nil {
 		if r.lookupClient == nil {
-			r.lookupClient = netdb.NewDatabaseLookupClient(&publisherTransportAdapter{muxer: r.transports})
+			r.lookupClient = netdb.NewDatabaseLookupClient(&publisherTransportAdapter{muxer: muxer})
 		}
 		cfg.Transport = r.lookupClient
 		r.messageRouter.GetProcessor().SetLookupReplyDeliverer(r.lookupClient)
@@ -152,7 +154,7 @@ func (r *Router) resolvePublisherDependencies() (*tunnel.Pool, error) {
 	if r.netdb == nil {
 		return nil, oops.Errorf("Cannot start publisher: NetDB not initialized")
 	}
-	if r.transports == nil {
+	if r.transports.Load() == nil {
 		return nil, oops.Errorf("Cannot start publisher: TransportMuxer not initialized")
 	}
 	var tunnelPool *tunnel.Pool
@@ -169,7 +171,7 @@ func (r *Router) resolvePublisherDependencies() (*tunnel.Pool, error) {
 // On failure the publisher field is left nil and a warning is logged.
 func (r *Router) launchPublisher(tunnelPool *tunnel.Pool) error {
 	dbAdapter := &publisherNetDBAdapter{db: r.netdb}
-	transportAdapter := &publisherTransportAdapter{muxer: r.transports}
+	transportAdapter := &publisherTransportAdapter{muxer: r.transports.Load()}
 
 	var riProvider netdb.RouterInfoProvider
 	if r.routerInfoProv != nil {

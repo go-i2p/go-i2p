@@ -41,7 +41,7 @@ func (r *Router) startSSU2NATDetection() {
 // getSSU2Transport retrieves the SSU2 transport from the TransportMuxer.
 // Returns nil if SSU2 is not enabled or muxer is not set.
 func (r *Router) getSSU2Transport() *ssu2.SSU2Transport {
-	muxer := r.transports
+	muxer := r.transports.Load()
 	if muxer == nil {
 		return nil
 	}

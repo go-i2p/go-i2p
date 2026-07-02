@@ -72,8 +72,9 @@ func (r *Router) mainloop() {
 		r.Stop()
 		return
 	}
-	if r.lookupClient == nil && r.transports != nil && r.messageRouter != nil {
-		r.lookupClient = netdb.NewDatabaseLookupClient(&publisherTransportAdapter{muxer: r.transports})
+	muxer := r.transports.Load()
+	if r.lookupClient == nil && muxer != nil && r.messageRouter != nil {
+		r.lookupClient = netdb.NewDatabaseLookupClient(&publisherTransportAdapter{muxer: muxer})
 		r.messageRouter.GetProcessor().SetLookupReplyDeliverer(r.lookupClient)
 	}
 	log.WithField("at", "mainloop").Debug("step 4: starting publisher")
@@ -209,7 +210,7 @@ func (r *Router) shouldContinueMonitoring() bool {
 // acceptInboundConnection attempts to accept a new connection with timeout.
 // Returns nil if timeout occurs, connection fails, or TransportMuxer is nil (during shutdown).
 func (r *Router) acceptInboundConnection() net.Conn {
-	muxer := r.transports
+	muxer := r.transports.Load()
 	if muxer == nil {
 		return nil
 	}
@@ -272,10 +273,11 @@ func (r *Router) handleNewConnection(conn net.Conn) {
 // attachInboundSSU2TransportCallbacks wires transport-level callbacks into an
 // inbound SSU2 session when an SSU2 transport is active in the muxer.
 func (r *Router) attachInboundSSU2TransportCallbacks(session *ssu2.SSU2Session) {
-	if r == nil || r.transports == nil || session == nil {
+	muxer := r.transports.Load()
+	if r == nil || muxer == nil || session == nil {
 		return
 	}
-	for _, tr := range r.transports.GetTransports() {
+	for _, tr := range muxer.GetTransports() {
 		if ssu2Tr, ok := tr.(*ssu2.SSU2Transport); ok {
 			ssu2Tr.AttachTransportCallbacks(session)
 			return
