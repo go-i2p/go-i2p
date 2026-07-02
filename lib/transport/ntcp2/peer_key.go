@@ -27,16 +27,11 @@ import (
 func ExtractPeerStaticKey(routerInfo router_info.RouterInfo) ([]byte, error) {
 	addresses := routerInfo.RouterAddresses()
 	for _, addr := range addresses {
-		style := addr.TransportStyle()
-		styleStr, err := style.Data()
-		if err != nil {
-			continue
-		}
-		if !strings.EqualFold(styleStr, "ntcp2") {
+		if !isNTCP2Transport(addr) {
 			continue
 		}
 
-		staticKey, err := extractStaticKeyFromAddress(addr)
+		staticKey, err := ExtractPeerStaticKeyFromAddress(addr)
 		if err != nil {
 			continue
 		}
@@ -44,6 +39,19 @@ func ExtractPeerStaticKey(routerInfo router_info.RouterInfo) ([]byte, error) {
 	}
 
 	return nil, oops.Wrapf(ErrInvalidRouterInfo, "no valid NTCP2 static key found in RouterInfo")
+}
+
+// ExtractPeerStaticKeyFromAddress extracts a 32-byte static key from a single
+// NTCP2 RouterAddress.
+func ExtractPeerStaticKeyFromAddress(addr *router_address.RouterAddress) ([]byte, error) {
+	if addr == nil {
+		return nil, oops.Errorf("nil NTCP2 address")
+	}
+	if !isNTCP2Transport(addr) {
+		return nil, oops.Errorf("address is not NTCP2")
+	}
+
+	return extractStaticKeyFromAddress(addr)
 }
 
 // extractStaticKeyFromAddress attempts to extract the static key from a single
@@ -64,23 +72,35 @@ func extractStaticKeyFromAddress(addr *router_address.RouterAddress) ([]byte, er
 func ExtractPeerIV(routerInfo router_info.RouterInfo) ([]byte, error) {
 	addresses := routerInfo.RouterAddresses()
 	for _, addr := range addresses {
-		style := addr.TransportStyle()
-		styleStr, err := style.Data()
-		if err != nil {
-			continue
-		}
-		if !strings.EqualFold(styleStr, "ntcp2") {
+		if !isNTCP2Transport(addr) {
 			continue
 		}
 
-		iv, err := addr.InitializationVector()
+		iv, err := ExtractPeerIVFromAddress(addr)
 		if err != nil {
 			continue
 		}
-		return iv[:], nil
+		return iv, nil
 	}
 
 	return nil, oops.Errorf("no valid NTCP2 IV found in RouterInfo")
+}
+
+// ExtractPeerIVFromAddress extracts the 16-byte obfuscation IV from a single
+// NTCP2 RouterAddress.
+func ExtractPeerIVFromAddress(addr *router_address.RouterAddress) ([]byte, error) {
+	if addr == nil {
+		return nil, oops.Errorf("nil NTCP2 address")
+	}
+	if !isNTCP2Transport(addr) {
+		return nil, oops.Errorf("address is not NTCP2")
+	}
+
+	iv, err := addr.InitializationVector()
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to extract IV")
+	}
+	return iv[:], nil
 }
 
 // ConfigureDialConfig sets the peer's static key and obfuscation IV on a
@@ -90,11 +110,26 @@ func ExtractPeerIV(routerInfo router_info.RouterInfo) ([]byte, error) {
 // Spec reference: https://geti2p.net/spec/ntcp2 — Noise XK pattern requires
 // the initiator to pre-know the responder's static public key.
 func ConfigureDialConfig(config *ntcp2.Config, peerInfo router_info.RouterInfo) error {
+	for _, addr := range peerInfo.RouterAddresses() {
+		if !isNTCP2Transport(addr) {
+			continue
+		}
+		if err := ConfigureDialConfigFromAddress(config, addr); err == nil {
+			return nil
+		}
+	}
+
+	return oops.Wrapf(ErrInvalidRouterInfo, "failed to extract peer static key for XK handshake")
+}
+
+// ConfigureDialConfigFromAddress sets peer static key and optional obfuscation
+// IV using a specific NTCP2 RouterAddress.
+func ConfigureDialConfigFromAddress(config *ntcp2.Config, peerAddr *router_address.RouterAddress) error {
 	// Extract and set the peer's static key as the *remote* static key.
 	// The Noise XK pre-message is "← s": the initiator must know the
 	// responder's static public key before the handshake begins.
 	// WithStaticKey sets the local key; WithRemoteStaticKey sets the peer's key.
-	staticKey, err := ExtractPeerStaticKey(peerInfo)
+	staticKey, err := ExtractPeerStaticKeyFromAddress(peerAddr)
 	if err != nil {
 		return oops.Wrapf(err, "failed to extract peer static key for XK handshake")
 	}
@@ -107,7 +142,7 @@ func ConfigureDialConfig(config *ntcp2.Config, peerInfo router_info.RouterInfo) 
 	}).Debug("Configured peer remote static key for XK handshake")
 
 	// Extract and set the peer's obfuscation IV
-	iv, err := ExtractPeerIV(peerInfo)
+	iv, err := ExtractPeerIVFromAddress(peerAddr)
 	if err != nil {
 		// IV extraction failure is non-fatal — AES obfuscation may not be
 		// available for all peers.

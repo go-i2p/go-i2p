@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/go-i2p/common/data"
+	"github.com/go-i2p/common/router_address"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/crypto/types"
 	"github.com/go-i2p/go-i2p/lib/nat"
@@ -1527,35 +1528,20 @@ func (t *NTCP2Transport) finalizeOutboundSession(conn *ntcp2.Conn, routerHash da
 }
 
 func (t *NTCP2Transport) dialNTCP2Connection(routerInfo router_info.RouterInfo) (*ntcp2.Conn, error) {
-	ntcp2Addrs, err := t.extractNTCP2AddressInfo(routerInfo)
+	candidates, err := t.extractNTCP2AddressInfo(routerInfo)
 	if err != nil {
-		return nil, err
-	}
-
-	config, err := t.createNTCP2Config(routerInfo)
-	if err != nil {
-		t.logger.WithError(err).Error("Failed to create NTCP2 config for outbound connection")
 		return nil, err
 	}
 
 	peerHashBytes := t.getPeerHashBytes(routerInfo)
-	return t.tryDialCandidates(ntcp2Addrs, peerHashBytes, config)
+	return t.tryDialCandidates(candidates, peerHashBytes, routerInfo)
 }
 
-func (t *NTCP2Transport) tryDialCandidates(ntcp2Addrs []net.Addr, peerHashBytes []byte, config *ntcp2.Config) (*ntcp2.Conn, error) {
-	return dialCandidatesWithPerformer(t, ntcp2Addrs, peerHashBytes, config, t.performNTCP2Handshake)
-}
-
-func dialCandidatesWithPerformer(
-	t *NTCP2Transport,
-	ntcp2Addrs []net.Addr,
-	peerHashBytes []byte,
-	config *ntcp2.Config,
-	perform func(net.Addr, string, []byte, *ntcp2.Config, time.Time) (*ntcp2.Conn, error),
-) (*ntcp2.Conn, error) {
+func (t *NTCP2Transport) tryDialCandidates(candidates []NTCP2DialCandidate, peerHashBytes []byte, routerInfo router_info.RouterInfo) (*ntcp2.Conn, error) {
 	var lastErr error
 
-	for i, ntcp2Addr := range ntcp2Addrs {
+	for i, candidate := range candidates {
+		ntcp2Addr := candidate.Addr
 		tcpAddrString := ntcp2Addr.String()
 		if wrapped, ok := ntcp2Addr.(*ntcp2.Addr); ok {
 			tcpAddrString = wrapped.UnderlyingAddr().String()
@@ -1563,7 +1549,59 @@ func dialCandidatesWithPerformer(
 
 		t.logger.WithFields(map[string]interface{}{
 			"candidate_index": i + 1,
-			"candidate_total": len(ntcp2Addrs),
+			"candidate_total": len(candidates),
+			"remote_addr":     tcpAddrString,
+			"peer_hash":       logutil.BytePrefix(peerHashBytes),
+		}).Debug("Attempting NTCP2 dial candidate")
+
+		config, err := t.createNTCP2ConfigForAddress(routerInfo, candidate.RouterAddress)
+		if err != nil {
+			lastErr = err
+			t.logger.WithError(err).WithFields(map[string]interface{}{
+				"candidate_index": i + 1,
+				"candidate_total": len(candidates),
+			}).Warn("Failed to create NTCP2 config for dial candidate")
+			continue
+		}
+
+		t.logTCPConnectionAttempt(tcpAddrString, peerHashBytes)
+		tcpDialStart := time.Now()
+		conn, err := t.performNTCP2Handshake(ntcp2Addr, tcpAddrString, peerHashBytes, config, tcpDialStart)
+		if err == nil {
+			return conn, nil
+		}
+		lastErr = err
+		t.logger.WithError(err).WithFields(map[string]interface{}{
+			"candidate_index": i + 1,
+			"candidate_total": len(candidates),
+		}).Debug("NTCP2 dial candidate failed")
+	}
+
+	if lastErr == nil {
+		lastErr = oops.Errorf("NTCP2 dial failed: no dial candidates available")
+	}
+	return nil, lastErr
+}
+
+func dialCandidatesWithPerformer(
+	t *NTCP2Transport,
+	candidates []NTCP2DialCandidate,
+	peerHashBytes []byte,
+	config *ntcp2.Config,
+	perform func(net.Addr, string, []byte, *ntcp2.Config, time.Time) (*ntcp2.Conn, error),
+) (*ntcp2.Conn, error) {
+	var lastErr error
+
+	for i, candidate := range candidates {
+		ntcp2Addr := candidate.Addr
+		tcpAddrString := ntcp2Addr.String()
+		if wrapped, ok := ntcp2Addr.(*ntcp2.Addr); ok {
+			tcpAddrString = wrapped.UnderlyingAddr().String()
+		}
+
+		t.logger.WithFields(map[string]interface{}{
+			"candidate_index": i + 1,
+			"candidate_total": len(candidates),
 			"remote_addr":     tcpAddrString,
 			"peer_hash":       logutil.BytePrefix(peerHashBytes),
 		}).Debug("Attempting NTCP2 dial candidate")
@@ -1577,7 +1615,7 @@ func dialCandidatesWithPerformer(
 		lastErr = err
 		t.logger.WithError(err).WithFields(map[string]interface{}{
 			"candidate_index": i + 1,
-			"candidate_total": len(ntcp2Addrs),
+			"candidate_total": len(candidates),
 		}).Debug("NTCP2 dial candidate failed")
 	}
 
@@ -1588,14 +1626,14 @@ func dialCandidatesWithPerformer(
 }
 
 // extractNTCP2AddressInfo extracts all dialable NTCP2 addresses from router info.
-func (t *NTCP2Transport) extractNTCP2AddressInfo(routerInfo router_info.RouterInfo) ([]net.Addr, error) {
-	ntcp2Addrs, err := ExtractNTCP2DialCandidates(routerInfo)
+func (t *NTCP2Transport) extractNTCP2AddressInfo(routerInfo router_info.RouterInfo) ([]NTCP2DialCandidate, error) {
+	candidates, err := ExtractNTCP2DialCandidatesWithMetadata(routerInfo)
 	if err != nil {
 		t.logger.WithError(err).Debug("Failed to extract NTCP2 address from RouterInfo")
 		return nil, WrapNTCP2Error(err, "extracting NTCP2 address")
 	}
-	t.logger.WithField("candidate_count", len(ntcp2Addrs)).Debug("Extracted NTCP2 dial candidates")
-	return ntcp2Addrs, nil
+	t.logger.WithField("candidate_count", len(candidates)).Debug("Extracted NTCP2 dial candidates")
+	return candidates, nil
 }
 
 // getPeerHashBytes extracts the peer hash bytes from router info.
@@ -1789,6 +1827,24 @@ func getSyscallError(err error) string {
 }
 
 func (t *NTCP2Transport) createNTCP2Config(routerInfo router_info.RouterInfo) (*ntcp2.Config, error) {
+	for _, addr := range routerInfo.RouterAddresses() {
+		if addr == nil {
+			continue
+		}
+		if !isNTCP2Transport(addr) {
+			continue
+		}
+		return t.createNTCP2ConfigForAddress(routerInfo, addr)
+	}
+
+	return nil, oops.Wrapf(ErrInvalidRouterInfo, "no NTCP2 address found in RouterInfo")
+}
+
+func (t *NTCP2Transport) createNTCP2ConfigForAddress(routerInfo router_info.RouterInfo, peerAddr *router_address.RouterAddress) (*ntcp2.Config, error) {
+	if peerAddr == nil {
+		return nil, oops.Wrapf(ErrInvalidRouterInfo, "nil peer RouterAddress")
+	}
+
 	remoteHash, err := routerInfo.IdentHash()
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to get remote router hash")
@@ -1805,7 +1861,7 @@ func (t *NTCP2Transport) createNTCP2Config(routerInfo router_info.RouterInfo) (*
 	config.WithStaticKey(ourStaticKey)
 	config = config.WithRemoteRouterHash(remoteHash)
 
-	if err := ConfigureDialConfig(config, routerInfo); err != nil {
+	if err := ConfigureDialConfigFromAddress(config, peerAddr); err != nil {
 		t.logger.WithError(err).Error("Cannot extract peer static key for NTCP2 XK handshake - peer RouterInfo is missing required 's=' option")
 		return nil, WrapNTCP2Error(err, "extracting peer NTCP2 static key")
 	}

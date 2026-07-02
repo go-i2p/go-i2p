@@ -45,6 +45,10 @@ func TestTryDialCandidates_AttemptsUntilSuccess(t *testing.T) {
 		makeWrappedAddr(t, "127.0.0.1:11001", 1),
 		makeWrappedAddr(t, "127.0.0.1:11002", 2),
 	}
+	candidates := []NTCP2DialCandidate{
+		{Addr: addrs[0]},
+		{Addr: addrs[1]},
+	}
 
 	attempted := make([]string, 0, 2)
 	failErr := errors.New("first failed")
@@ -60,7 +64,7 @@ func TestTryDialCandidates_AttemptsUntilSuccess(t *testing.T) {
 	peerHashBytes := make([]byte, 32)
 	config := &noise.Config{}
 
-	conn, err := dialCandidatesWithPerformer(transport, addrs, peerHashBytes, config, perform)
+	conn, err := dialCandidatesWithPerformer(transport, candidates, peerHashBytes, config, perform)
 	require.NoError(t, err)
 	require.NotNil(t, conn)
 	assert.Equal(t, []string{"127.0.0.1:11001", "127.0.0.1:11002"}, attempted)
@@ -73,6 +77,10 @@ func TestTryDialCandidates_AllFailReturnsLastError(t *testing.T) {
 	addrs := []net.Addr{
 		makeWrappedAddr(t, "127.0.0.1:12001", 3),
 		makeWrappedAddr(t, "127.0.0.1:12002", 4),
+	}
+	candidates := []NTCP2DialCandidate{
+		{Addr: addrs[0]},
+		{Addr: addrs[1]},
 	}
 
 	firstErr := errors.New("first")
@@ -90,7 +98,7 @@ func TestTryDialCandidates_AllFailReturnsLastError(t *testing.T) {
 	peerHashBytes := make([]byte, 32)
 	config := &noise.Config{}
 
-	conn, err := dialCandidatesWithPerformer(transport, addrs, peerHashBytes, config, perform)
+	conn, err := dialCandidatesWithPerformer(transport, candidates, peerHashBytes, config, perform)
 	assert.Nil(t, conn)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, lastErr)

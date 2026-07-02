@@ -14,6 +14,14 @@ import (
 	"github.com/samber/oops"
 )
 
+// NTCP2DialCandidate pairs a dialable network address with the exact
+// RouterAddress entry that produced it. Outbound dialers must use this binding
+// so the handshake static key/IV are selected from the same address record.
+type NTCP2DialCandidate struct {
+	Addr          net.Addr
+	RouterAddress *router_address.RouterAddress
+}
+
 // Redirect to shared transport.ProbeIPv6 (consolidation H-5).
 // probeIPv6 wraps the shared transport.ProbeIPv6 for backward compatibility within ntcp2 package.
 func probeIPv6() bool {
@@ -33,6 +41,23 @@ func ExtractNTCP2Addr(routerInfo router_info.RouterInfo) (net.Addr, error) {
 // ExtractNTCP2DialCandidates extracts all valid dialable NTCP2 addresses from RouterInfo.
 // Candidates are returned in preferred order: IPv4 first, then IPv6.
 func ExtractNTCP2DialCandidates(routerInfo router_info.RouterInfo) ([]net.Addr, error) {
+	detailedCandidates, err := ExtractNTCP2DialCandidatesWithMetadata(routerInfo)
+	if err != nil {
+		return nil, err
+	}
+
+	candidates := make([]net.Addr, 0, len(detailedCandidates))
+	for _, candidate := range detailedCandidates {
+		candidates = append(candidates, candidate.Addr)
+	}
+
+	return candidates, nil
+}
+
+// ExtractNTCP2DialCandidatesWithMetadata extracts all valid dialable NTCP2
+// addresses from RouterInfo and preserves the source RouterAddress for each
+// candidate.
+func ExtractNTCP2DialCandidatesWithMetadata(routerInfo router_info.RouterInfo) ([]NTCP2DialCandidate, error) {
 	routerHashBytes, err := getRouterHashBytes(routerInfo)
 	if err != nil {
 		return nil, err
@@ -45,8 +70,8 @@ func ExtractNTCP2DialCandidates(routerInfo router_info.RouterInfo) ([]net.Addr, 
 	addresses := routerInfo.RouterAddresses()
 	logAddressSearch(routerHashBytes, len(addresses))
 
-	var ipv4Candidates []net.Addr
-	var ipv6Candidates []net.Addr
+	var ipv4Candidates []NTCP2DialCandidate
+	var ipv6Candidates []NTCP2DialCandidate
 	seen := make(map[string]struct{})
 
 	for i, addr := range addresses {
@@ -68,10 +93,15 @@ func ExtractNTCP2DialCandidates(routerInfo router_info.RouterInfo) ([]net.Addr, 
 		}
 		seen[key] = struct{}{}
 
+		dialCandidate := NTCP2DialCandidate{
+			Addr:          candidate,
+			RouterAddress: addr,
+		}
+
 		if isIPv4Candidate(candidate) {
-			ipv4Candidates = append(ipv4Candidates, candidate)
+			ipv4Candidates = append(ipv4Candidates, dialCandidate)
 		} else {
-			ipv6Candidates = append(ipv6Candidates, candidate)
+			ipv6Candidates = append(ipv6Candidates, dialCandidate)
 		}
 	}
 
