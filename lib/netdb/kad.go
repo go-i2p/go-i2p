@@ -644,6 +644,54 @@ func (kr *KademliaResolver) selectClosestPeers(peers []peerDistance, target comm
 	return result
 }
 
+// getKnownPeersSample returns a sample of hashes of routers known in the local database.
+// This is used for the exclude-set in exploratory lookups to prevent floodfills from
+// repeatedly suggesting routers we already have.
+// maxSample limits the returned set to avoid oversized DatabaseLookup messages.
+func (kr *KademliaResolver) getKnownPeersSample(maxSample int) []common.Hash {
+	if maxSample <= 0 {
+		return nil
+	}
+
+	allRouters := kr.NetworkDatabase.GetAllRouterInfos()
+	if len(allRouters) == 0 {
+		return nil
+	}
+
+	// Extract hashes from RouterInfos
+	allHashes := make([]common.Hash, 0, len(allRouters))
+	for _, ri := range allRouters {
+		hash, err := ri.IdentHash()
+		if err != nil {
+			// Skip routers with invalid hashes
+			continue
+		}
+		allHashes = append(allHashes, hash)
+	}
+
+	if len(allHashes) == 0 {
+		return nil
+	}
+
+	// If the number of known routers fits in maxSample, return all their hashes.
+	// Otherwise, sample uniformly across the slice to avoid systematic bias.
+	if len(allHashes) <= maxSample {
+		return allHashes
+	}
+
+	// Sample uniformly: return every Nth element where N = len(allHashes) / maxSample
+	result := make([]common.Hash, 0, maxSample)
+	step := len(allHashes) / maxSample
+	for i := 0; i < len(allHashes); i += step {
+		result = append(result, allHashes[i])
+		if len(result) >= maxSample {
+			break
+		}
+	}
+
+	return result
+}
+
 // queryPeer sends a DatabaseLookup request to a specific peer and waits for a response.
 // Returns the RouterInfo if found, or an error if the lookup failed or the peer doesn't have it.
 func (kr *KademliaResolver) queryPeer(ctx context.Context, peer, target common.Hash, resolveSuggestedPeers bool) (*router_info.RouterInfo, error) {
@@ -690,10 +738,15 @@ func (kr *KademliaResolver) queryPeer(ctx context.Context, peer, target common.H
 	// may return the requested RI directly when they have it (with search-reply
 	// fallback otherwise).
 	lookupType := i2np.DatabaseLookupFlagTypeRI
+	var excludedPeers []common.Hash
 	if exploration {
 		lookupType = i2np.DatabaseLookupFlagTypeExploration
+		// For exploratory lookups, include known peers in the exclude-set so
+		// floodfills bias toward returning previously-unknown routers.
+		// This reduces re-suggestion of already-known peers and improves growth.
+		excludedPeers = kr.getKnownPeersSample(100)
 	}
-	lookup := i2np.NewDatabaseLookup(target, fromHash, lookupType, nil)
+	lookup := i2np.NewDatabaseLookup(target, fromHash, lookupType, excludedPeers)
 
 	// Send the lookup and wait for response
 	responseData, msgType, err := transport.SendDatabaseLookup(ctx, *peerRI, lookup)
