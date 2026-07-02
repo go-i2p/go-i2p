@@ -406,6 +406,14 @@ func TestPerformInboundHandshake_RejectsNonNTCP2Conn(t *testing.T) {
 	transport := newNilListenerTestTransport(t, 10)
 	transport.testBypassHandshakeTypeCheck = false // Explicitly disable bypass for this test
 
+	hookErrCh := make(chan error, 1)
+	transport.testInboundHandshakeErrorHook = func(err error) {
+		select {
+		case hookErrCh <- err:
+		default:
+		}
+	}
+
 	// L-1/T-1: No slot is reserved before handshake anymore.
 	// Verify sessionCount starts at 0.
 	assert.Equal(t, int32(0), transport.GetSessionCount(), "slot should NOT be reserved before handshake")
@@ -422,6 +430,14 @@ func TestPerformInboundHandshake_RejectsNonNTCP2Conn(t *testing.T) {
 	require.Error(t, err, "performInboundHandshake should return an error for non-*ntcp2.Conn")
 	assert.Contains(t, err.Error(), "not *ntcp2.Conn",
 		"error message should indicate the type mismatch")
+
+	select {
+	case hookErr := <-hookErrCh:
+		require.Error(t, hookErr)
+		assert.Contains(t, hookErr.Error(), "not *ntcp2.Conn")
+	default:
+		t.Fatal("expected inbound handshake error hook to capture rejection error")
+	}
 
 	// L-1/T-1: The slot was never reserved, so sessionCount should still be 0.
 	assert.Equal(t, int32(0), transport.GetSessionCount(),
@@ -635,6 +651,7 @@ func TestTE2_StressTest_RapidConnections(t *testing.T) {
 	}
 
 	metrics := transport.GetTransportMetrics()
-	assert.True(t, metrics.MaxPendingConnsQueueDepth >= 0,
-		"max depth should be non-negative after rapid updates")
+	assert.GreaterOrEqual(t, metrics.MaxPendingConnsQueueDepth, uint64(0))
+	assert.LessOrEqual(t, metrics.MaxPendingConnsQueueDepth, uint64(64),
+		"max depth should stay within the simulated depth range")
 }

@@ -3,6 +3,7 @@ package ntcp2
 import (
 	"errors"
 	"net"
+	"os"
 	"testing"
 	"time"
 
@@ -232,7 +233,9 @@ func buildPeerRouterInfoWithFallbackCandidates(
 }
 
 func TestGetSession_FallbackFromClosedPortToLiveResponder(t *testing.T) {
-	t.Skip("live dual-transport handshake remains unstable in test harness (msg2 timeout after msg1); deterministic fallback behavior is covered by dialCandidatesWithPerformer tests")
+	if os.Getenv("GOI2P_ENABLE_UNSTABLE_NTCP2_LIVE_FALLBACK_TEST") != "1" {
+		t.Skip("set GOI2P_ENABLE_UNSTABLE_NTCP2_LIVE_FALLBACK_TEST=1 to run unstable live fallback harness with responder-side handshake diagnostics")
+	}
 
 	initiatorStatic := make([]byte, 32)
 	responderStatic := make([]byte, 32)
@@ -246,6 +249,14 @@ func TestGetSession_FallbackFromClosedPortToLiveResponder(t *testing.T) {
 	responderCfg := responder.config.Load()
 	require.NotNil(t, responderCfg)
 	require.NotNil(t, responderCfg.Config)
+
+	responderHandshakeErr := make(chan error, 1)
+	responder.testInboundHandshakeErrorHook = func(err error) {
+		select {
+		case responderHandshakeErr <- err:
+		default:
+		}
+	}
 
 	closedAddr := reserveClosedPort(t)
 	peerInfo := buildPeerRouterInfoWithFallbackCandidates(
@@ -268,7 +279,16 @@ func TestGetSession_FallbackFromClosedPortToLiveResponder(t *testing.T) {
 	}()
 
 	session, err := initiator.GetSession(peerInfo)
-	require.NoError(t, err, "outbound session should succeed by falling back to live address")
+	if err != nil {
+		var responderErrMsg string
+		select {
+		case hookErr := <-responderHandshakeErr:
+			responderErrMsg = hookErr.Error()
+		default:
+			responderErrMsg = "<none captured>"
+		}
+		t.Fatalf("outbound session failed: %v | responder handshake error: %s", err, responderErrMsg)
+	}
 	require.NotNil(t, session)
 	require.NoError(t, session.Close())
 

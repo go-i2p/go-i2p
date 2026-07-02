@@ -84,6 +84,12 @@ type NTCP2Transport struct {
 	// which panics if the field is set and a real listener is bound.
 	testBypassHandshakeTypeCheck bool
 
+	// testInboundHandshakeErrorHook is a test-only callback invoked whenever
+	// inbound handshake processing returns an error. It is intentionally not
+	// used in production logic and exists solely to improve diagnostics in
+	// integration tests where initiator-side failures can mask responder causes.
+	testInboundHandshakeErrorHook func(error)
+
 	// Protects identity, config.Config, and listener from concurrent
 	// access by SetIdentity vs GetSession/Accept/Compatible.
 	identityMu sync.RWMutex
@@ -665,22 +671,35 @@ func (t *NTCP2Transport) performInboundHandshake(conn net.Conn, handshakeCtx con
 			Error("Accepted connection is not *ntcp2.Conn; rejecting")
 		_ = conn.Close()
 		// L-1/T-1 FIX: No slot was reserved before handshake, so no unreserve needed.
-		return oops.Errorf("accepted connection is not *ntcp2.Conn (got %T)", conn)
+		err := oops.Errorf("accepted connection is not *ntcp2.Conn (got %T)", conn)
+		t.onInboundHandshakeError(err)
+		return err
 	}
 
 	// HIGH-2.2: Use handshakeCtx (with timeout) for the handshake, not t.ctx
 	if err := t.executeHandshake(ntcp2Conn, handshakeCtx); err != nil {
+		t.onInboundHandshakeError(err)
 		return err
 	}
 
 	t.setupAEADErrorCallback(ntcp2Conn)
 
 	if err := t.extractAndStorePeerRouterInfo(ntcp2Conn, conn); err != nil {
+		t.onInboundHandshakeError(err)
 		return err
 	}
 
 	t.logHandshakeSuccess(conn)
 	return nil
+}
+
+func (t *NTCP2Transport) onInboundHandshakeError(err error) {
+	if err == nil {
+		return
+	}
+	if hook := t.testInboundHandshakeErrorHook; hook != nil {
+		hook(err)
+	}
 }
 
 // executeHandshake performs the Noise XK handshake with probing resistance on failure.
