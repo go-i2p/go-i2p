@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-i2p/common/router_address"
 	"github.com/go-i2p/common/router_info"
+	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/keys"
 	"github.com/go-i2p/go-i2p/lib/nat"
 	"github.com/go-i2p/go-i2p/lib/netdb"
@@ -125,11 +126,19 @@ func (p *routerInfoProvider) convertTransportToAddress(t any) *router_address.Ro
 // buildRouterInfoOptions constructs RouterInfoOptions with the current congestion flag.
 // Returns empty options if no congestion monitor is configured.
 func (p *routerInfoProvider) buildRouterInfoOptions() keys.RouterInfoOptions {
+	cfg := p.routerConfig()
+	opts := keys.RouterInfoOptions{
+		BandwidthTier: resolveRouterBandwidthTier(cfg),
+	}
+	if cfg != nil && cfg.NetDB != nil {
+		opts.Floodfill = cfg.NetDB.FloodfillEnabled
+	}
+
 	p.monitorMu.RLock()
 	monitor := p.congestionMonitor
 	p.monitorMu.RUnlock()
 	if monitor == nil {
-		return keys.RouterInfoOptions{}
+		return opts
 	}
 
 	flag := monitor.GetCongestionFlag()
@@ -148,9 +157,15 @@ func (p *routerInfoProvider) buildRouterInfoOptions() keys.RouterInfoOptions {
 		p.lastCongestionFlag.Store(flagStr)
 	}
 
-	return keys.RouterInfoOptions{
-		CongestionFlag: flagStr,
+	opts.CongestionFlag = flagStr
+	return opts
+}
+
+func (p *routerInfoProvider) routerConfig() *config.RouterConfig {
+	if p == nil || p.router == nil {
+		return nil
 	}
+	return p.router.cfg
 }
 
 // SetCongestionMonitor sets the congestion state provider for the routerinfo_provider.

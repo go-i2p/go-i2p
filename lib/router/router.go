@@ -281,7 +281,9 @@ func recomputeReachabilityCaps(r *Router, ri *router_info.RouterInfo, ntcp2Trans
 		return nil
 	}
 
-	rebuilt, err := r.keystore.ConstructRouterInfo(addrs, keys.RouterInfoOptions{Reachable: wantReachable})
+	opts := routerInfoOptionsFromConfig(r.cfg)
+	opts.Reachable = wantReachable
+	rebuilt, err := r.keystore.ConstructRouterInfo(addrs, opts)
 	if err != nil {
 		return oops.Wrapf(err, "rebuilding RouterInfo with Reachable=%v", wantReachable)
 	}
@@ -356,7 +358,9 @@ func validateRouterKeys(r *Router) error {
 // no public endpoint or only private (RFC1918 / loopback) hosts.
 func constructRouterInfo(r *Router) (*router_info.RouterInfo, error) {
 	log.WithField("at", "constructRouterInfo").Debug("calling ConstructRouterInfo")
-	ri, err := r.keystore.ConstructRouterInfo(nil, keys.RouterInfoOptions{Reachable: false})
+	opts := routerInfoOptionsFromConfig(r.cfg)
+	opts.Reachable = false
+	ri, err := r.keystore.ConstructRouterInfo(nil, opts)
 	if err != nil {
 		logError("failed to construct RouterInfo", err)
 		return nil, err
@@ -366,6 +370,20 @@ func constructRouterInfo(r *Router) (*router_info.RouterInfo, error) {
 		"caps": ri.RouterCapabilities(),
 	}).Debug("RouterInfo constructed successfully")
 	return ri, nil
+}
+
+func routerInfoOptionsFromConfig(cfg *config.RouterConfig) keys.RouterInfoOptions {
+	opts := keys.RouterInfoOptions{
+		BandwidthTier: resolveRouterBandwidthTier(cfg),
+	}
+	if cfg == nil {
+		return opts
+	}
+	opts.Hidden = cfg.Hidden
+	if cfg.NetDB != nil {
+		opts.Floodfill = cfg.NetDB.FloodfillEnabled
+	}
+	return opts
 }
 
 // FromConfig creates a minimal Router stub from config. This is a low-level

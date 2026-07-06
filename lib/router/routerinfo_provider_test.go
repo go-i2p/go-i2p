@@ -254,10 +254,10 @@ func TestRouterInfoProvider_WithCongestionIntegration(t *testing.T) {
 	require.NotNil(t, ri)
 
 	// Check that the caps include the D flag
-	// RouterCapabilities may include I2P length prefix, so use Contains
+	// RouterCapabilities may include I2P length prefix, so use Contains.
 	caps := ri.RouterCapabilities()
 	assert.Contains(t, caps, "D", "RouterInfo caps should contain D flag")
-	assert.Contains(t, caps, "LU", "RouterInfo caps should contain base caps LU")
+	assert.Contains(t, caps, "U", "RouterInfo caps should contain unreachable flag when no publishable address exists")
 }
 
 // TestRouterInfoProvider_CongestionFlagTransitions tests RouterInfo with changing congestion
@@ -271,13 +271,13 @@ func TestRouterInfoProvider_CongestionFlagTransitions(t *testing.T) {
 	// Test None -> D -> E -> G transitions
 	flagTests := []struct {
 		flag         config.CongestionFlag
-		expectedCaps string
+		expectedFlag string
 	}{
-		{config.CongestionFlagNone, "LU"},
-		{config.CongestionFlagD, "LUD"},
-		{config.CongestionFlagE, "LUE"},
-		{config.CongestionFlagG, "LUG"},
-		{config.CongestionFlagNone, "LU"}, // Back to none
+		{config.CongestionFlagNone, ""},
+		{config.CongestionFlagD, "D"},
+		{config.CongestionFlagE, "E"},
+		{config.CongestionFlagG, "G"},
+		{config.CongestionFlagNone, ""}, // Back to none
 	}
 
 	for _, tt := range flagTests {
@@ -288,7 +288,10 @@ func TestRouterInfoProvider_CongestionFlagTransitions(t *testing.T) {
 
 		// RouterCapabilities may include I2P length prefix, so use Contains
 		caps := ri.RouterCapabilities()
-		assert.Contains(t, caps, tt.expectedCaps, "Caps should contain %q for flag %q", tt.expectedCaps, tt.flag)
+		assert.Contains(t, caps, "U", "Caps should contain unreachable flag when no publishable address exists")
+		if tt.expectedFlag != "" {
+			assert.Contains(t, caps, tt.expectedFlag, "Caps should contain congestion flag %q", tt.expectedFlag)
+		}
 	}
 }
 

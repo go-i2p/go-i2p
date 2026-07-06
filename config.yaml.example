@@ -35,6 +35,9 @@ router:
   always_one_hop_outbound: false
   # Maximum bandwidth in bytes/sec (0 = unlimited)
   max_bandwidth: 1048576
+  # Optional RouterInfo bandwidth capability tier override (K/L/M/N/O/P/X).
+  # Leave empty or omit to auto-derive from configured bandwidth + session limits.
+  # bandwidth_tier: ""
   # Maximum concurrent transport connections
   max_connections: 200
 

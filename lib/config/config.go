@@ -108,7 +108,7 @@ func setRouterDefaults(defaults ConfigDefaults) {
 		{"router.max_bandwidth", uint64(1024 * 1024)},
 		{"router.max_bandwidth_in", uint64(0)},
 		{"router.max_bandwidth_out", uint64(0)},
-		{"router.bandwidth_tier", "L"},
+		{"router.bandwidth_tier", defaults.Router.BandwidthTier},
 		{"router.share_percentage", 0},
 		{"router.max_connections", 200},
 		{"router.accept_tunnels", true},

@@ -76,7 +76,7 @@ type RouterDefaults struct {
 	MaxConcurrentSessions int
 
 	// BandwidthTier is the RouterInfo bandwidth capability letter (K/L/M/N/O/P/X).
-	// Default: "L"
+	// Default: "" (auto-derived from configured bandwidth/session limits).
 	BandwidthTier string
 }
 
@@ -407,7 +407,7 @@ func buildRouterDefaults(baseDir, workingDir string) RouterDefaults {
 		RouterInfoRefreshInterval: 30 * time.Minute,
 		MessageExpirationTime:     60 * time.Second,
 		MaxConcurrentSessions:     200,
-		BandwidthTier:             "L",
+		BandwidthTier:             "",
 	}
 }
 
@@ -577,9 +577,15 @@ func validateRouter(router RouterDefaults) error {
 		log.WithField("max_concurrent_sessions", router.MaxConcurrentSessions).Error("Invalid router configuration")
 		return newValidationError("Router.MaxConcurrentSessions must be at least 1")
 	}
-	if router.BandwidthTier == "" {
-		log.WithField("bandwidth_tier", router.BandwidthTier).Error("Invalid router configuration")
-		return newValidationError("Router.BandwidthTier must not be empty")
+	if router.BandwidthTier != "" {
+		tier := strings.ToUpper(router.BandwidthTier)
+		switch tier {
+		case "K", "L", "M", "N", "O", "P", "X":
+			// Explicit tier is valid.
+		default:
+			log.WithField("bandwidth_tier", router.BandwidthTier).Error("Invalid router configuration")
+			return newValidationError("Router.BandwidthTier must be one of K/L/M/N/O/P/X when set")
+		}
 	}
 	if router.MessageExpirationTime < 1*time.Second {
 		log.WithField("message_expiration_time", router.MessageExpirationTime).Error("Invalid router configuration")

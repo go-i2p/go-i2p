@@ -80,7 +80,7 @@ type RouterConfig struct {
 	MaxBandwidthOut uint64
 	// BandwidthTier is the RouterInfo bandwidth capability letter (K/L/M/N/O/P/X).
 	// Set to "X" for X-class advertising in RouterInfo caps.
-	// Default: "L".
+	// Default: "" (auto-derived from configured bandwidth and session limits).
 	BandwidthTier string
 	// SharePercentage is the percentage (0–100) of bandwidth to share for transit tunnels.
 	// Default: 0 (no explicit limit — router participates if AcceptTunnels is true).
@@ -157,7 +157,7 @@ var defaultRouterConfig = &RouterConfig{
 	BaseDir:        defaultBase(),
 	WorkingDir:     defaultConfig(),
 	MaxBandwidth:   1024 * 1024, // 1 MB/s
-	BandwidthTier:  "L",
+	BandwidthTier:  "",
 	MaxConnections: 200,
 	AcceptTunnels:  true,
 	Tunnel:         defaultTunnelConfigPtr(),
