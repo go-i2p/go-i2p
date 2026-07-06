@@ -34,7 +34,8 @@ func makeRouterInfoWithNTCP2Addresses(t *testing.T, addresses ...map[string]stri
 }
 
 func TestExtractNTCP2DialCandidates_MultipleIPv4AndDedup(t *testing.T) {
-	ri := makeRouterInfoWithNTCP2Addresses(t,
+	ri := makeRouterInfoWithNTCP2Addresses(
+		t,
 		map[string]string{"host": "198.51.100.10", "port": "12345"},
 		map[string]string{"host": "198.51.100.10", "port": "12345"}, // duplicate
 		map[string]string{"host": "203.0.113.20", "port": "22345"},
@@ -49,7 +50,8 @@ func TestExtractNTCP2DialCandidates_MultipleIPv4AndDedup(t *testing.T) {
 }
 
 func TestExtractNTCP2Addr_ReturnsFirstPreferredCandidate(t *testing.T) {
-	ri := makeRouterInfoWithNTCP2Addresses(t,
+	ri := makeRouterInfoWithNTCP2Addresses(
+		t,
 		map[string]string{"host": "198.51.100.10", "port": "12345"},
 		map[string]string{"host": "203.0.113.20", "port": "22345"},
 	)

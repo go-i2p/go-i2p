@@ -101,15 +101,19 @@ func (m *mockTransportSessionError) Addr() net.Addr            { return nil }
 func (m *mockTransportSessionError) SetIdentity(ident router_info.RouterInfo) error {
 	return nil
 }
+
 func (m *mockTransportSessionError) GetSession(routerInfo router_info.RouterInfo) (TransportSession, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
 	return nil, errors.New("session setup failed")
 }
+
 func (m *mockTransportSessionError) Compatible(routerInfo router_info.RouterInfo) bool { return true }
-func (m *mockTransportSessionError) Close() error                                      { return nil }
-func (m *mockTransportSessionError) Name() string                                      { return "mock-session-error" }
+
+func (m *mockTransportSessionError) Close() error { return nil }
+
+func (m *mockTransportSessionError) Name() string { return "mock-session-error" }
 
 func (m *mockTransportWithOrder) Accept() (net.Conn, error) {
 	return nil, nil

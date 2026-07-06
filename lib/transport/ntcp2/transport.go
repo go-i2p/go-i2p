@@ -95,6 +95,9 @@ type NTCP2Transport struct {
 	// access by SetIdentity vs GetSession/Accept/Compatible.
 	identityMu sync.RWMutex
 
+	// Protects config from static key mutation
+	staticKeyMu sync.Mutex
+
 	// Lifecycle management
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -725,7 +728,6 @@ func (t *NTCP2Transport) executeHandshake(ntcp2Conn *ntcp2.Conn, handshakeCtx co
 
 	t.logger.WithField("remote_addr", remoteAddr).Debug("[DIAG] executeHandshake: calling ntcp2Conn.UnderlyingConn().Handshake()")
 	err := ntcp2Conn.UnderlyingConn().Handshake(handshakeCtx)
-
 	if err != nil {
 		t.recordNoiseHandshakeFailure()
 		raw := extractRawConn(ntcp2Conn.UnderlyingConn())
@@ -1921,9 +1923,8 @@ func (t *NTCP2Transport) createNTCP2ConfigForAddress(routerInfo router_info.Rout
 func (t *NTCP2Transport) ensureLocalStaticKeyConfigured() ([]byte, error) {
 	cfg := t.config.Load()
 	if cfg == nil || cfg.Config == nil {
-		return nil, oops.Errorf("transport config is not initialized")
+		return nil, oops.Errorf("ntcp2 config is not initialized")
 	}
-
 	if len(cfg.Config.StaticKey) == 32 {
 		return cfg.Config.StaticKey, nil
 	}
@@ -1932,24 +1933,35 @@ func (t *NTCP2Transport) ensureLocalStaticKeyConfigured() ([]byte, error) {
 		return nil, oops.Errorf("keystore is not configured")
 	}
 
+	t.staticKeyMu.Lock()
+	defer t.staticKeyMu.Unlock()
+
+	// Re-check after lock in case another goroutine already fixed it.
+	cfg = t.config.Load()
+	if cfg == nil || cfg.Config == nil {
+		return nil, oops.Errorf("ntcp2 config is not initialized")
+	}
+	if len(cfg.Config.StaticKey) == 32 {
+		return cfg.Config.StaticKey, nil
+	}
+
 	t.identityMu.RLock()
 	identity := t.identity
 	t.identityMu.RUnlock()
 
-	newCfg := *cfg
-	newNoiseCfg := *cfg.Config
-	if err := loadStaticKeyFromRouter(&newNoiseCfg, identity, t.keystore, nil); err != nil {
+	// IMPORTANT: do not copy ntcp2.Config by value (contains atomic internals).
+	if err := loadStaticKeyFromRouter(cfg.Config, identity, t.keystore, nil); err != nil {
 		return nil, WrapNTCP2Error(err, "loading static key from router keystore")
 	}
-	newCfg.Config = &newNoiseCfg
-	t.config.Store(&newCfg)
-
-	if len(newNoiseCfg.StaticKey) != 32 {
-		return nil, oops.Errorf("invalid static key size after keystore load: got %d", len(newNoiseCfg.StaticKey))
+	if len(cfg.Config.StaticKey) != 32 {
+		return nil, oops.Errorf("invalid static key size after keystore load: got %d", len(cfg.Config.StaticKey))
 	}
 
+	// republish current cfg for visibility symmetry with existing flow
+	t.config.Store(cfg)
+
 	t.logger.Debug("Recovered missing NTCP2 static key from keystore for strict RouterInfo verification")
-	return newNoiseCfg.StaticKey, nil
+	return cfg.Config.StaticKey, nil
 }
 
 // attachLocalRouterInfo serializes our RouterInfo and attaches it to the config for msg3.

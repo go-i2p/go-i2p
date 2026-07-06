@@ -334,7 +334,7 @@ func (kr *KademliaResolver) iterativeLookup(ctx context.Context, target common.H
 	return kr.iterativeLookupWithOptions(ctx, target, true, kr.exploration)
 }
 
-func (kr *KademliaResolver) iterativeLookupWithOptions(ctx context.Context, target common.Hash, resolveSuggestedPeers bool, exploration bool) (*router_info.RouterInfo, error) {
+func (kr *KademliaResolver) iterativeLookupWithOptions(ctx context.Context, target common.Hash, resolveSuggestedPeers, exploration bool) (*router_info.RouterInfo, error) {
 	state, err := kr.initializeLookupState(target)
 	if err != nil {
 		return nil, err
@@ -362,7 +362,7 @@ func (kr *KademliaResolver) initializeLookupState(target common.Hash) (*LookupSt
 
 // executeLookupRounds performs iterative Kademlia lookup rounds until a RouterInfo is found,
 // the search is exhausted, or the maximum hop count is reached.
-func (kr *KademliaResolver) executeLookupRounds(ctx context.Context, target common.Hash, state *LookupState, resolveSuggestedPeers bool, exploration bool) (*router_info.RouterInfo, error) {
+func (kr *KademliaResolver) executeLookupRounds(ctx context.Context, target common.Hash, state *LookupState, resolveSuggestedPeers, exploration bool) (*router_info.RouterInfo, error) {
 	for hop := 0; hop < MaxIterativeLookupHops; hop++ {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
@@ -384,7 +384,7 @@ func (kr *KademliaResolver) executeLookupRounds(ctx context.Context, target comm
 // It selects the closest unqueried peers, queries them in parallel, and merges
 // suggestions into the unqueried set. Returns a non-nil RouterInfo if found,
 // or true for exhausted if no unqueried peers remain.
-func (kr *KademliaResolver) processLookupRound(ctx context.Context, target common.Hash, state *LookupState, hop int, resolveSuggestedPeers bool, exploration bool) (ri *router_info.RouterInfo, exhausted bool) {
+func (kr *KademliaResolver) processLookupRound(ctx context.Context, target common.Hash, state *LookupState, hop int, resolveSuggestedPeers, exploration bool) (ri *router_info.RouterInfo, exhausted bool) {
 	batch := kr.selectClosestUnqueried(target, state.unqueried, MaxConcurrentQueries)
 	if len(batch) == 0 {
 		log.WithFields(logger.Fields{
@@ -445,7 +445,7 @@ func (kr *KademliaResolver) selectClosestUnqueried(target common.Hash, unqueried
 }
 
 // queryBatchParallel queries multiple peers concurrently and collects their results.
-func (kr *KademliaResolver) queryBatchParallel(ctx context.Context, peers []common.Hash, target common.Hash, resolveSuggestedPeers bool, exploration bool) []iterativeQueryResult {
+func (kr *KademliaResolver) queryBatchParallel(ctx context.Context, peers []common.Hash, target common.Hash, resolveSuggestedPeers, exploration bool) []iterativeQueryResult {
 	resultsCh := make(chan iterativeQueryResult, len(peers))
 	var wg sync.WaitGroup
 
@@ -753,7 +753,7 @@ func (kr *KademliaResolver) selectReplyRoute() ([4]byte, common.Hash, bool) {
 // Returns the RouterInfo if found, or an error if the lookup failed or the peer doesn't have it.
 // The exploration parameter controls whether to use exploration-type lookups (returning
 // search suggestions) or normal lookups (returning the target RouterInfo or search suggestions).
-func (kr *KademliaResolver) queryPeer(ctx context.Context, peer, target common.Hash, resolveSuggestedPeers bool, exploration bool) (*router_info.RouterInfo, error) {
+func (kr *KademliaResolver) queryPeer(ctx context.Context, peer, target common.Hash, resolveSuggestedPeers, exploration bool) (*router_info.RouterInfo, error) {
 	log.WithFields(logger.Fields{
 		"at":     "queryPeer",
 		"peer":   logutil.HashPrefixPlain(peer),
