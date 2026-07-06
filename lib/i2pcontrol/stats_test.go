@@ -629,10 +629,22 @@ func TestStatsTransportActivePeers(t *testing.T) {
 				t.Errorf("tcp.activePeers = %v, want %d", tcpPeers, tt.ntcp2Count)
 			}
 
+			// Test tcp.Sessions alias (NTCP2)
+			tcpSessions := provider.GetRateForPeriod("tcp.Sessions", 60000)
+			if tcpSessions != float64(tt.ntcp2Count) {
+				t.Errorf("tcp.Sessions = %v, want %d", tcpSessions, tt.ntcp2Count)
+			}
+
 			// Test udp.activePeers (SSU2)
 			udpPeers := provider.GetRateForPeriod("udp.activePeers", 60000)
 			if udpPeers != float64(tt.ssu2Count) {
 				t.Errorf("udp.activePeers = %v, want %d", udpPeers, tt.ssu2Count)
+			}
+
+			// Test udp.Sessions alias (SSU2)
+			udpSessions := provider.GetRateForPeriod("udp.Sessions", 60000)
+			if udpSessions != float64(tt.ssu2Count) {
+				t.Errorf("udp.Sessions = %v, want %d", udpSessions, tt.ssu2Count)
 			}
 		})
 	}
@@ -649,8 +661,9 @@ func TestStatsTransportSessionFailureCounters(t *testing.T) {
 			ConnectionPoolFull:    5,
 		},
 		metrics: ntcp.TransportMetricsSnapshot{
-			TCPDialFailures:        41,
-			NoiseHandshakeFailures: 19,
+			TCPDialFailures:         41,
+			NoiseHandshakeFailures:  19,
+			SessionEstablishedTotal: 23,
 		},
 	}
 
@@ -671,6 +684,8 @@ func TestStatsTransportSessionFailureCounters(t *testing.T) {
 	assertRate("transport.session.fail.poolFull", 5)
 	assertRate("transport.session.fail.tcpDial", 41)
 	assertRate("transport.session.fail.noiseHandshake", 19)
+	assertRate("transport.ntcp2.session.established", 23)
+	assertRate("transport.session.success.ntcp2", 23)
 }
 
 func TestStatsNTCP2SessionChurnCounters(t *testing.T) {
@@ -679,6 +694,7 @@ func TestStatsNTCP2SessionChurnCounters(t *testing.T) {
 		metrics: ntcp.TransportMetricsSnapshot{
 			TCPDialFailures:         5,
 			NoiseHandshakeFailures:  7,
+			SessionEstablishedTotal: 11,
 			SessionEOFCloses:        21,
 			SessionTimeoutOrReset:   34,
 			SessionRecvBackpressure: 8,
@@ -700,6 +716,8 @@ func TestStatsNTCP2SessionChurnCounters(t *testing.T) {
 	assertRate("transport.ntcp2.session.recvBackpressureDrop", 8)
 	assertRate("transport.session.fail.tcpDial", 5)
 	assertRate("transport.session.fail.noiseHandshake", 7)
+	assertRate("transport.ntcp2.session.established", 11)
+	assertRate("transport.session.success.ntcp2", 11)
 }
 
 func TestStatsSSU2SessionChurnCounters(t *testing.T) {

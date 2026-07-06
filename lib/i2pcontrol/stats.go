@@ -88,6 +88,8 @@ type RouterStatsProvider interface {
 	//   tunnel.buildRequestTime                         — average build duration in milliseconds
 	//   transport.session.fail.tcpDial                  — cumulative NTCP2 TCP-dial failures
 	//   transport.session.fail.noiseHandshake           — cumulative NTCP2 Noise/msg3 failures
+	//   transport.ntcp2.session.established             — cumulative NTCP2 established sessions
+	//   transport.session.success.ntcp2                 — alias for NTCP2 established sessions
 	GetRateForPeriod(stat string, periodMs int64) float64
 
 	// GetLocalRouterIdentityHash returns the base64-encoded identity hash of this router.
@@ -742,7 +744,7 @@ func (rsp *routerStatsProvider) GetRateForPeriod(stat string, periodMs int64) fl
 		return rsp.getNetDBRouterInfoRateStat(stat)
 	case rsp.isTunnelBuildStat(stat):
 		return rsp.getTunnelBuildRate(stat, periodMs)
-	case stat == "tcp.activePeers" || stat == "udp.activePeers":
+	case stat == "tcp.activePeers" || stat == "udp.activePeers" || stat == "tcp.Sessions" || stat == "udp.Sessions":
 		return rsp.getTransportPeersCount(stat)
 	case rsp.isTransportSessionFailureStat(stat):
 		return rsp.getTransportSessionFailureCount(stat)
@@ -831,6 +833,10 @@ func (rsp *routerStatsProvider) getTransportPeersCount(stat string) float64 {
 		return float64(rsp.router.GetNTCP2SessionCount())
 	case "udp.activePeers":
 		return float64(rsp.router.GetSSU2SessionCount())
+	case "tcp.Sessions":
+		return float64(rsp.router.GetNTCP2SessionCount())
+	case "udp.Sessions":
+		return float64(rsp.router.GetSSU2SessionCount())
 	default:
 		return 0
 	}
@@ -880,6 +886,8 @@ func (rsp *routerStatsProvider) getTransportSessionFailureCount(stat string) flo
 func (rsp *routerStatsProvider) isNTCP2TransportMetricStat(stat string) bool {
 	return stat == "transport.session.fail.tcpDial" ||
 		stat == "transport.session.fail.noiseHandshake" ||
+		stat == "transport.ntcp2.session.established" ||
+		stat == "transport.session.success.ntcp2" ||
 		stat == "transport.ntcp2.session.eofClose" ||
 		stat == "transport.ntcp2.session.timeoutOrReset" ||
 		stat == "transport.ntcp2.session.recvBackpressureDrop"
@@ -900,6 +908,8 @@ func (rsp *routerStatsProvider) getNTCP2TransportMetric(stat string) float64 {
 		return float64(metrics.TCPDialFailures)
 	case "transport.session.fail.noiseHandshake":
 		return float64(metrics.NoiseHandshakeFailures)
+	case "transport.ntcp2.session.established", "transport.session.success.ntcp2":
+		return float64(metrics.SessionEstablishedTotal)
 	case "transport.ntcp2.session.eofClose":
 		return float64(metrics.SessionEOFCloses)
 	case "transport.ntcp2.session.timeoutOrReset":

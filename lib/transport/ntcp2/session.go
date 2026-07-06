@@ -6,8 +6,10 @@ import (
 	"context"
 	"errors"
 	"io"
+	"math/rand"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-i2p/go-i2p/lib/i2np"
@@ -36,6 +38,10 @@ type NTCP2Session struct {
 	// RouterInfo callback (called when a RouterInfo block is received from peer)
 	routerInfoMu       sync.Mutex
 	routerInfoCallback func([]byte)
+
+	createdAtUnixNano int64
+	lastSendUnixNano  int64
+	lastRecvUnixNano  int64
 }
 
 // NewNTCP2Session creates a new NTCP2 session and immediately starts background
@@ -62,6 +68,10 @@ func NewNTCP2SessionDeferred(conn net.Conn, ctx context.Context, logger *logger.
 		lastError:   nil,
 		errorOnce:   sync.Once{},
 	}
+	now := time.Now().UnixNano()
+	atomic.StoreInt64(&session.createdAtUnixNano, now)
+	atomic.StoreInt64(&session.lastSendUnixNano, now)
+	atomic.StoreInt64(&session.lastRecvUnixNano, now)
 
 	sessionLogger.Info("NTCP2 session created (deferred workers)")
 	return session
@@ -115,6 +125,7 @@ func (s *NTCP2Session) Close() error {
 func (s *NTCP2Session) CloseWithReason(reason byte) error {
 	var err error
 	s.CloseOnce().Do(func() {
+		s.logSessionLifecycleSummary(reason)
 		s.Logger().WithField("reason", TerminationReasonString(reason)).Info("Closing NTCP2 session")
 
 		// Wait for send queue to drain before canceling context.
@@ -155,6 +166,43 @@ func (s *NTCP2Session) CloseWithReason(reason byte) error {
 		s.Logger().Info("NTCP2 session closed successfully")
 	})
 	return err
+}
+
+func (s *NTCP2Session) markSendActivity() {
+	atomic.StoreInt64(&s.lastSendUnixNano, time.Now().UnixNano())
+}
+
+func (s *NTCP2Session) markRecvActivity() {
+	atomic.StoreInt64(&s.lastRecvUnixNano, time.Now().UnixNano())
+}
+
+func durationSinceUnixNano(ts int64) time.Duration {
+	if ts <= 0 {
+		return 0
+	}
+	return time.Since(time.Unix(0, ts))
+}
+
+func (s *NTCP2Session) logSessionLifecycleSummary(reason byte) {
+	age := durationSinceUnixNano(atomic.LoadInt64(&s.createdAtUnixNano))
+	idleSend := durationSinceUnixNano(atomic.LoadInt64(&s.lastSendUnixNano))
+	idleRecv := durationSinceUnixNano(atomic.LoadInt64(&s.lastRecvUnixNano))
+	bytesSent, bytesReceived := s.GetBandwidthStats()
+
+	fields := map[string]interface{}{
+		"close_reason":       TerminationReasonString(reason),
+		"session_age_ms":     age.Milliseconds(),
+		"idle_since_send_ms": idleSend.Milliseconds(),
+		"idle_since_recv_ms": idleRecv.Milliseconds(),
+		"bytes_sent":         bytesSent,
+		"bytes_received":     bytesReceived,
+		"dropped_messages":   s.DroppedMessages(),
+	}
+	if s.lastError != nil {
+		fields["last_error"] = s.lastError.Error()
+	}
+
+	s.Logger().WithFields(fields).Info("NTCP2 session lifecycle summary")
 }
 
 // DetachConn clears the session's reference to the underlying connection,
@@ -222,10 +270,12 @@ func (s *NTCP2Session) sendWorker() {
 	s.Logger().Debug("Send worker started")
 	defer s.Logger().Debug("Send worker stopped")
 
+	nextMetaAt := time.Now().Add(ntcp2NextMetaInterval())
+
 	for {
 		select {
 		case msg := <-s.SendQueue():
-			if !s.processSendQueueMessage(msg) {
+			if !s.processSendQueueMessage(msg, &nextMetaAt) {
 				s.discardRemainingMessages()
 				return
 			}
@@ -236,6 +286,20 @@ func (s *NTCP2Session) sendWorker() {
 	}
 }
 
+// Java I2P-style NTCP2 DateTime metadata cadence.
+// Metadata is emitted on outbound data writes when due, with half-to-full
+// jitter around the base frequency.
+const ntcp2MetaFrequency = 45 * time.Minute
+
+func ntcp2NextMetaInterval() time.Duration {
+	return nextMetaIntervalWithRand(rand.Int63n)
+}
+
+func nextMetaIntervalWithRand(randInt63n func(int64) int64) time.Duration {
+	half := ntcp2MetaFrequency / 2
+	return half + time.Duration(randInt63n(int64(half)))
+}
+
 // discardRemainingMessages drains and discards any messages left in the send queue
 // after the worker decides to stop. This delegates to the SessionCore shared implementation.
 func (s *NTCP2Session) discardRemainingMessages() {
@@ -244,7 +308,7 @@ func (s *NTCP2Session) discardRemainingMessages() {
 
 // processSendQueueMessage processes a single I2NP message from the send queue.
 // Returns false if an error occurred and the worker should stop, true otherwise.
-func (s *NTCP2Session) processSendQueueMessage(msg i2np.Message) bool {
+func (s *NTCP2Session) processSendQueueMessage(msg i2np.Message, nextMetaAt *time.Time) bool {
 	newSize := s.AddToSendQueueSize(-1)
 	s.Logger().WithFields(map[string]interface{}{
 		"message_type":       msg.Type(),
@@ -256,7 +320,17 @@ func (s *NTCP2Session) processSendQueueMessage(msg i2np.Message) bool {
 		return false
 	}
 
+	framedData = s.attachDateTimeMetadataIfDue(framedData, nextMetaAt)
+
 	return s.writeFramedData(framedData)
+}
+
+func (s *NTCP2Session) attachDateTimeMetadataIfDue(framedData []byte, nextMetaAt *time.Time) []byte {
+	if time.Now().Before(*nextMetaAt) {
+		return framedData
+	}
+	*nextMetaAt = time.Now().Add(ntcp2NextMetaInterval())
+	return append(SerializeBlocks(NewDateTimeBlock()), framedData...)
 }
 
 // frameMessage frames an I2NP message for transmission using NTCP2 block format.
@@ -288,6 +362,7 @@ func (s *NTCP2Session) writeFramedData(framedData []byte) bool {
 	}
 	// Track outbound bandwidth
 	s.AddToBytesSent(uint64(bytesWritten))
+	s.markSendActivity()
 	s.Logger().WithField("bytes_written", bytesWritten).Debug("Message written successfully")
 
 	// Track message count for rekeying
@@ -384,6 +459,7 @@ func (s *NTCP2Session) createBlockUnframer() *BlockUnframer {
 
 // handleNonI2NPBlock processes non-I2NP blocks received during the data phase.
 func (s *NTCP2Session) handleNonI2NPBlock(block Block) {
+	s.markRecvActivity()
 	switch block.Type {
 	case BlockTypeDateTime:
 		if ts, err := ParseDateTimeBlock(block.Data); err == nil {
@@ -479,6 +555,7 @@ func (s *NTCP2Session) readNextMessageFromBlocks(unframer *BlockUnframer) (i2np.
 		// Track bytes received atomically
 		bytesRead := unframer.BytesRead()
 		s.AddToBytesReceived(uint64(bytesRead))
+		s.markRecvActivity()
 		s.Logger().WithField("bytes_read", bytesRead).Debug("Message read successfully")
 	}
 	return msg, err

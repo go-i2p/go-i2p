@@ -910,6 +910,8 @@ func (t *NTCP2Transport) trackInboundConnection(conn net.Conn) (net.Conn, bool) 
 		},
 	}
 
+	t.recordSessionEstablished()
+
 	t.logger.WithFields(map[string]interface{}{
 		"remote_addr":   conn.RemoteAddr().String(),
 		"peer_hash":     logutil.HashPrefixPlain(peerHash),
@@ -1559,6 +1561,7 @@ func (t *NTCP2Transport) finalizeOutboundSession(conn *ntcp2.Conn, routerHash da
 	if n := t.getPeerConnNotifier(); n != nil {
 		n.RecordSuccess(routerHash, time.Since(dialStart).Milliseconds())
 	}
+	t.recordSessionEstablished()
 	t.logger.WithFields(map[string]interface{}{
 		"router_hash": logutil.HashPrefixPlain(routerHashBytes),
 		"remote_addr": conn.RemoteAddr().String(),

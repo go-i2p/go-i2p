@@ -14,8 +14,11 @@ func TestTransportMetricsHandshakePhaseFailureCounters(t *testing.T) {
 	transport.recordNoiseHandshakeFailure()
 	transport.recordNoiseHandshakeFailure()
 	transport.recordNoiseHandshakeFailure()
+	transport.recordSessionEstablished()
+	transport.recordSessionEstablished()
 
 	metrics := transport.GetTransportMetrics()
 	require.Equal(t, uint64(2), metrics.TCPDialFailures)
 	require.Equal(t, uint64(3), metrics.NoiseHandshakeFailures)
+	require.Equal(t, uint64(2), metrics.SessionEstablishedTotal)
 }

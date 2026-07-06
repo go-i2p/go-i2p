@@ -11,6 +11,7 @@ type transportMetrics struct {
 	pendingConnsQueueFullEvents atomic.Uint64 // TE-2: how many times send attempted with full queue
 	tcpDialFailures             atomic.Uint64 // Outbound NTCP2 failures that never reached Noise (TCP dial/connect stage)
 	noiseHandshakeFailures      atomic.Uint64 // NTCP2 Noise/msg3 handshake failures after TCP connect
+	sessionEstablishedTotal     atomic.Uint64 // Cumulative inbound+outbound session establishments
 
 	// Session-level churn counters (process-wide aggregate across all NTCP2Session
 	// instances, including those created outside NTCP2Transport).
@@ -50,6 +51,10 @@ type TransportMetricsSnapshot struct {
 	// Noise handshake errors and msg3 RouterInfo processing failures.
 	NoiseHandshakeFailures uint64
 
+	// SessionEstablishedTotal counts cumulative NTCP2 sessions established
+	// (outbound finalize success + fresh inbound tracking).
+	SessionEstablishedTotal uint64
+
 	// SessionEOFCloses counts receive-loop terminations due to EOF.
 	SessionEOFCloses uint64
 
@@ -72,6 +77,7 @@ func (t *NTCP2Transport) GetTransportMetrics() TransportMetricsSnapshot {
 		PendingConnsQueueFullEvents: t.metrics.pendingConnsQueueFullEvents.Load(),
 		TCPDialFailures:             t.metrics.tcpDialFailures.Load(),
 		NoiseHandshakeFailures:      t.metrics.noiseHandshakeFailures.Load(),
+		SessionEstablishedTotal:     t.metrics.sessionEstablishedTotal.Load(),
 		SessionEOFCloses:            globalNTCP2SessionChurn.sessionEOFCloses.Load(),
 		SessionTimeoutOrReset:       globalNTCP2SessionChurn.sessionTimeoutOrReset.Load(),
 		SessionRecvBackpressure:     globalNTCP2SessionChurn.sessionRecvBackpressure.Load(),
@@ -84,6 +90,10 @@ func (t *NTCP2Transport) recordTCPDialFailure() {
 
 func (t *NTCP2Transport) recordNoiseHandshakeFailure() {
 	t.metrics.noiseHandshakeFailures.Add(1)
+}
+
+func (t *NTCP2Transport) recordSessionEstablished() {
+	t.metrics.sessionEstablishedTotal.Add(1)
 }
 
 func recordSessionEOFClose() {
