@@ -108,6 +108,7 @@ func setRouterDefaults(defaults ConfigDefaults) {
 		{"router.max_bandwidth", uint64(1024 * 1024)},
 		{"router.max_bandwidth_in", uint64(0)},
 		{"router.max_bandwidth_out", uint64(0)},
+		{"router.bandwidth_tier", "L"},
 		{"router.share_percentage", 0},
 		{"router.max_connections", 200},
 		{"router.accept_tunnels", true},
@@ -262,6 +263,7 @@ func NewRouterConfigFromViper() (*RouterConfig, error) {
 		MaxBandwidth:         viper.GetUint64("router.max_bandwidth"),
 		MaxBandwidthIn:       viper.GetUint64("router.max_bandwidth_in"),
 		MaxBandwidthOut:      viper.GetUint64("router.max_bandwidth_out"),
+		BandwidthTier:        viper.GetString("router.bandwidth_tier"),
 		SharePercentage:      viper.GetInt("router.share_percentage"),
 		MaxConnections:       viper.GetInt("router.max_connections"),
 		AcceptTunnels:        viper.GetBool("router.accept_tunnels"),
@@ -299,6 +301,7 @@ func currentRouterConfig() RouterDefaults {
 		RouterInfoRefreshInterval: viper.GetDuration("router.info_refresh_interval"),
 		MessageExpirationTime:     viper.GetDuration("router.message_expiration_time"),
 		MaxConcurrentSessions:     viper.GetInt("router.max_concurrent_sessions"),
+		BandwidthTier:             viper.GetString("router.bandwidth_tier"),
 	}
 }
 

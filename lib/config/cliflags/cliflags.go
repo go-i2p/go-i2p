@@ -91,6 +91,8 @@ func registerRouterFlags(cmd *cobra.Command) {
 		"Working directory for I2P router")
 	cmd.PersistentFlags().Uint64("router.max-bandwidth", routerCfg.MaxBandwidth,
 		"Maximum bandwidth in bytes/sec (0 = unlimited)")
+	cmd.PersistentFlags().String("router.bandwidth-tier", routerCfg.BandwidthTier,
+		"RouterInfo bandwidth capability tier (K/L/M/N/O/P/X)")
 	cmd.PersistentFlags().Int("router.max-connections", routerCfg.MaxConnections,
 		"Maximum concurrent transport connections")
 	cmd.PersistentFlags().Bool("router.accept-tunnels", routerCfg.AcceptTunnels,
@@ -346,6 +348,7 @@ func bindRouterFlags(cmd *cobra.Command, v *viper.Viper) error {
 		{"base_dir", "base-dir"},
 		{"working_dir", "working-dir"},
 		{"router.max_bandwidth", "router.max-bandwidth"},
+		{"router.bandwidth_tier", "router.bandwidth-tier"},
 		{"router.max_connections", "router.max-connections"},
 		{"router.accept_tunnels", "router.accept-tunnels"},
 		{"router.hidden", "router.hidden"},

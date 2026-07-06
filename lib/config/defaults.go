@@ -74,6 +74,10 @@ type RouterDefaults struct {
 	// MaxConcurrentSessions is maximum number of active transport sessions
 	// Default: 200
 	MaxConcurrentSessions int
+
+	// BandwidthTier is the RouterInfo bandwidth capability letter (K/L/M/N/O/P/X).
+	// Default: "L"
+	BandwidthTier string
 }
 
 // NetDBDefaults contains default values for network database configuration
@@ -403,6 +407,7 @@ func buildRouterDefaults(baseDir, workingDir string) RouterDefaults {
 		RouterInfoRefreshInterval: 30 * time.Minute,
 		MessageExpirationTime:     60 * time.Second,
 		MaxConcurrentSessions:     200,
+		BandwidthTier:             "L",
 	}
 }
 
@@ -571,6 +576,10 @@ func validateRouter(router RouterDefaults) error {
 	if router.MaxConcurrentSessions < 1 {
 		log.WithField("max_concurrent_sessions", router.MaxConcurrentSessions).Error("Invalid router configuration")
 		return newValidationError("Router.MaxConcurrentSessions must be at least 1")
+	}
+	if router.BandwidthTier == "" {
+		log.WithField("bandwidth_tier", router.BandwidthTier).Error("Invalid router configuration")
+		return newValidationError("Router.BandwidthTier must not be empty")
 	}
 	if router.MessageExpirationTime < 1*time.Second {
 		log.WithField("message_expiration_time", router.MessageExpirationTime).Error("Invalid router configuration")

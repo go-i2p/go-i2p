@@ -78,6 +78,10 @@ type RouterConfig struct {
 	// MaxBandwidthOut is the outbound bandwidth limit in bytes per second.
 	// Set to 0 to fall back to MaxBandwidth. Set to 0 with MaxBandwidth=0 for unlimited.
 	MaxBandwidthOut uint64
+	// BandwidthTier is the RouterInfo bandwidth capability letter (K/L/M/N/O/P/X).
+	// Set to "X" for X-class advertising in RouterInfo caps.
+	// Default: "L".
+	BandwidthTier string
 	// SharePercentage is the percentage (0–100) of bandwidth to share for transit tunnels.
 	// Default: 0 (no explicit limit — router participates if AcceptTunnels is true).
 	SharePercentage int
@@ -153,6 +157,7 @@ var defaultRouterConfig = &RouterConfig{
 	BaseDir:        defaultBase(),
 	WorkingDir:     defaultConfig(),
 	MaxBandwidth:   1024 * 1024, // 1 MB/s
+	BandwidthTier:  "L",
 	MaxConnections: 200,
 	AcceptTunnels:  true,
 	Tunnel:         defaultTunnelConfigPtr(),
@@ -234,6 +239,7 @@ func copyBaseFields(src *RouterConfig) *RouterConfig {
 		MaxBandwidth:         src.MaxBandwidth,
 		MaxBandwidthIn:       src.MaxBandwidthIn,
 		MaxBandwidthOut:      src.MaxBandwidthOut,
+		BandwidthTier:        src.BandwidthTier,
 		SharePercentage:      src.SharePercentage,
 		MaxConnections:       src.MaxConnections,
 		AcceptTunnels:        src.AcceptTunnels,
