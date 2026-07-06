@@ -727,6 +727,7 @@ func (t *NTCP2Transport) executeHandshake(ntcp2Conn *ntcp2.Conn, handshakeCtx co
 	err := ntcp2Conn.UnderlyingConn().Handshake(handshakeCtx)
 
 	if err != nil {
+		t.recordNoiseHandshakeFailure()
 		raw := extractRawConn(ntcp2Conn.UnderlyingConn())
 
 		// DIAGNOSTIC: Log timeout vs other errors differently
@@ -764,6 +765,7 @@ func (t *NTCP2Transport) setupAEADErrorCallback(ntcp2Conn *ntcp2.Conn) {
 func (t *NTCP2Transport) extractAndStorePeerRouterInfo(ntcp2Conn *ntcp2.Conn, conn net.Conn) error {
 	riBytes := ntcp2Conn.PeerRouterInfoBytes()
 	if len(riBytes) == 0 {
+		t.recordNoiseHandshakeFailure()
 		t.logger.WithField("remote_addr", conn.RemoteAddr().String()).
 			Warn("Inbound NTCP2: no RouterInfo block in msg3 — protocol violation; closing")
 		_ = ntcp2Conn.Close()
@@ -773,6 +775,7 @@ func (t *NTCP2Transport) extractAndStorePeerRouterInfo(ntcp2Conn *ntcp2.Conn, co
 
 	peerRI, _, parseErr := router_info.ReadRouterInfo(riBytes)
 	if parseErr != nil {
+		t.recordNoiseHandshakeFailure()
 		// EH-1 fix: Track parse failures separately for operator observability.
 		// This allows alerting on RouterInfo quality issues without conflating
 		// with NetDB storage failures.
@@ -1707,6 +1710,7 @@ func (t *NTCP2Transport) performNTCP2Handshake(ntcp2Addr net.Addr, tcpAddrString
 	tcpDialer := &net.Dialer{}
 	tcpConn, err := tcpDialer.DialContext(dialCtx, "tcp", tcpAddrString)
 	if err != nil {
+		t.recordTCPDialFailure()
 		handshakeDuration := time.Since(tcpDialStart)
 		t.logHandshakeFailure(tcpAddrString, peerHashBytes, err, handshakeDuration)
 		return nil, WrapNTCP2Error(err, "dialing NTCP2 connection (TCP)")
@@ -1731,6 +1735,7 @@ func (t *NTCP2Transport) performNTCP2Handshake(ntcp2Addr net.Addr, tcpAddrString
 	defer cancel()
 
 	if err := conn.Handshake(handshakeCtx); err != nil {
+		t.recordNoiseHandshakeFailure()
 		handshakeDuration := time.Since(handshakeStart)
 		t.logHandshakeFailure(tcpAddrString, peerHashBytes, err, handshakeDuration)
 

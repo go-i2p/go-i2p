@@ -9,6 +9,8 @@ type transportMetrics struct {
 	queueSendTimeouts           atomic.Uint64 // TE-2: how many inbound handshakes timed out sending to pendingConns queue
 	maxPendingConnsQueueDepth   atomic.Uint64 // TE-2: maximum observed depth of pendingConns queue (for capacity planning)
 	pendingConnsQueueFullEvents atomic.Uint64 // TE-2: how many times send attempted with full queue
+	tcpDialFailures             atomic.Uint64 // Outbound NTCP2 failures that never reached Noise (TCP dial/connect stage)
+	noiseHandshakeFailures      atomic.Uint64 // NTCP2 Noise/msg3 handshake failures after TCP connect
 
 	// Session-level churn counters (process-wide aggregate across all NTCP2Session
 	// instances, including those created outside NTCP2Transport).
@@ -40,6 +42,14 @@ type TransportMetricsSnapshot struct {
 	// capacity should be increased or Accept() throughput optimized.
 	PendingConnsQueueFullEvents uint64
 
+	// TCPDialFailures counts outbound NTCP2 attempts that failed during the TCP
+	// connect phase before the Noise handshake could begin.
+	TCPDialFailures uint64
+
+	// NoiseHandshakeFailures counts NTCP2 failures after TCP connect, including
+	// Noise handshake errors and msg3 RouterInfo processing failures.
+	NoiseHandshakeFailures uint64
+
 	// SessionEOFCloses counts receive-loop terminations due to EOF.
 	SessionEOFCloses uint64
 
@@ -60,10 +70,20 @@ func (t *NTCP2Transport) GetTransportMetrics() TransportMetricsSnapshot {
 		QueueSendTimeouts:           t.metrics.queueSendTimeouts.Load(),
 		MaxPendingConnsQueueDepth:   t.metrics.maxPendingConnsQueueDepth.Load(),
 		PendingConnsQueueFullEvents: t.metrics.pendingConnsQueueFullEvents.Load(),
+		TCPDialFailures:             t.metrics.tcpDialFailures.Load(),
+		NoiseHandshakeFailures:      t.metrics.noiseHandshakeFailures.Load(),
 		SessionEOFCloses:            globalNTCP2SessionChurn.sessionEOFCloses.Load(),
 		SessionTimeoutOrReset:       globalNTCP2SessionChurn.sessionTimeoutOrReset.Load(),
 		SessionRecvBackpressure:     globalNTCP2SessionChurn.sessionRecvBackpressure.Load(),
 	}
+}
+
+func (t *NTCP2Transport) recordTCPDialFailure() {
+	t.metrics.tcpDialFailures.Add(1)
+}
+
+func (t *NTCP2Transport) recordNoiseHandshakeFailure() {
+	t.metrics.noiseHandshakeFailures.Add(1)
 }
 
 func recordSessionEOFClose() {

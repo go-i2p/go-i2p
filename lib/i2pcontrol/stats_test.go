@@ -569,6 +569,20 @@ func (m *mockRouterAccessWithNTCP2Metrics) GetNTCP2TransportMetrics() ntcp.Trans
 	return m.metrics
 }
 
+type mockRouterAccessWithTransportFailureAndNTCP2Metrics struct {
+	mockRouterAccess
+	failureStats transport.MuxSessionFailureStats
+	metrics      ntcp.TransportMetricsSnapshot
+}
+
+func (m *mockRouterAccessWithTransportFailureAndNTCP2Metrics) GetTransportSessionFailureStats() transport.MuxSessionFailureStats {
+	return m.failureStats
+}
+
+func (m *mockRouterAccessWithTransportFailureAndNTCP2Metrics) GetNTCP2TransportMetrics() ntcp.TransportMetricsSnapshot {
+	return m.metrics
+}
+
 type mockRouterAccessWithSSU2Metrics struct {
 	mockRouterAccess
 	metrics ssu2transport.ReachabilitySnapshot
@@ -625,7 +639,7 @@ func TestStatsTransportActivePeers(t *testing.T) {
 }
 
 func TestStatsTransportSessionFailureCounters(t *testing.T) {
-	router := &mockRouterAccessWithTransportFailureStats{
+	router := &mockRouterAccessWithTransportFailureAndNTCP2Metrics{
 		mockRouterAccess: mockRouterAccess{running: true},
 		failureStats: transport.MuxSessionFailureStats{
 			SessionAttempts:       100,
@@ -633,6 +647,10 @@ func TestStatsTransportSessionFailureCounters(t *testing.T) {
 			AllTransportsFailed:   29,
 			PeerCooldownSkipped:   13,
 			ConnectionPoolFull:    5,
+		},
+		metrics: ntcp.TransportMetricsSnapshot{
+			TCPDialFailures:        41,
+			NoiseHandshakeFailures: 19,
 		},
 	}
 
@@ -651,12 +669,16 @@ func TestStatsTransportSessionFailureCounters(t *testing.T) {
 	assertRate("transport.session.fail.allFailed", 29)
 	assertRate("transport.session.skip.cooldown", 13)
 	assertRate("transport.session.fail.poolFull", 5)
+	assertRate("transport.session.fail.tcpDial", 41)
+	assertRate("transport.session.fail.noiseHandshake", 19)
 }
 
 func TestStatsNTCP2SessionChurnCounters(t *testing.T) {
 	router := &mockRouterAccessWithNTCP2Metrics{
 		mockRouterAccess: mockRouterAccess{running: true},
 		metrics: ntcp.TransportMetricsSnapshot{
+			TCPDialFailures:         5,
+			NoiseHandshakeFailures:  7,
 			SessionEOFCloses:        21,
 			SessionTimeoutOrReset:   34,
 			SessionRecvBackpressure: 8,
@@ -676,6 +698,8 @@ func TestStatsNTCP2SessionChurnCounters(t *testing.T) {
 	assertRate("transport.ntcp2.session.eofClose", 21)
 	assertRate("transport.ntcp2.session.timeoutOrReset", 34)
 	assertRate("transport.ntcp2.session.recvBackpressureDrop", 8)
+	assertRate("transport.session.fail.tcpDial", 5)
+	assertRate("transport.session.fail.noiseHandshake", 7)
 }
 
 func TestStatsSSU2SessionChurnCounters(t *testing.T) {
