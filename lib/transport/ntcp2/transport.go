@@ -1889,8 +1889,10 @@ func (t *NTCP2Transport) createNTCP2ConfigForAddress(routerInfo router_info.Rout
 		return nil, oops.Wrapf(err, "failed to get remote router hash")
 	}
 
-	cfg := t.config.Load()
-	ourStaticKey := cfg.Config.StaticKey
+	ourStaticKey, err := t.ensureLocalStaticKeyConfigured()
+	if err != nil {
+		return nil, oops.Wrapf(err, "local NTCP2 static key is not configured")
+	}
 
 	config, err := ntcp2.NewNTCP2Config(remoteHash, true)
 	if err != nil {
@@ -1910,6 +1912,44 @@ func (t *NTCP2Transport) createNTCP2ConfigForAddress(routerInfo router_info.Rout
 	}
 
 	return config, nil
+}
+
+// ensureLocalStaticKeyConfigured returns a valid 32-byte local static key for
+// NTCP2 handshakes. If the current transport config is missing the static key,
+// it derives the key from the router keystore and atomically stores it back in
+// t.config so subsequent dials use a fully populated config.
+func (t *NTCP2Transport) ensureLocalStaticKeyConfigured() ([]byte, error) {
+	cfg := t.config.Load()
+	if cfg == nil || cfg.Config == nil {
+		return nil, oops.Errorf("transport config is not initialized")
+	}
+
+	if len(cfg.Config.StaticKey) == 32 {
+		return cfg.Config.StaticKey, nil
+	}
+
+	if t.keystore == nil {
+		return nil, oops.Errorf("keystore is not configured")
+	}
+
+	t.identityMu.RLock()
+	identity := t.identity
+	t.identityMu.RUnlock()
+
+	newCfg := *cfg
+	newNoiseCfg := *cfg.Config
+	if err := loadStaticKeyFromRouter(&newNoiseCfg, identity, t.keystore, nil); err != nil {
+		return nil, WrapNTCP2Error(err, "loading static key from router keystore")
+	}
+	newCfg.Config = &newNoiseCfg
+	t.config.Store(&newCfg)
+
+	if len(newNoiseCfg.StaticKey) != 32 {
+		return nil, oops.Errorf("invalid static key size after keystore load: got %d", len(newNoiseCfg.StaticKey))
+	}
+
+	t.logger.Debug("Recovered missing NTCP2 static key from keystore for strict RouterInfo verification")
+	return newNoiseCfg.StaticKey, nil
 }
 
 // attachLocalRouterInfo serializes our RouterInfo and attaches it to the config for msg3.
