@@ -183,6 +183,17 @@ func durationSinceUnixNano(ts int64) time.Duration {
 	return time.Since(time.Unix(0, ts))
 }
 
+// shouldCloseForIdle reports whether both send and receive directions have been
+// idle longer than the supplied Java-style maintenance window.
+func (s *NTCP2Session) shouldCloseForIdle(now time.Time, expire time.Duration) bool {
+	if expire <= 0 {
+		return false
+	}
+	idleSend := now.Sub(time.Unix(0, atomic.LoadInt64(&s.lastSendUnixNano)))
+	idleRecv := now.Sub(time.Unix(0, atomic.LoadInt64(&s.lastRecvUnixNano)))
+	return idleSend > expire && idleRecv > expire
+}
+
 func (s *NTCP2Session) logSessionLifecycleSummary(reason byte) {
 	age := durationSinceUnixNano(atomic.LoadInt64(&s.createdAtUnixNano))
 	idleSend := durationSinceUnixNano(atomic.LoadInt64(&s.lastSendUnixNano))

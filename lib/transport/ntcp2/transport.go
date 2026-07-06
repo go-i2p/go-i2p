@@ -24,6 +24,16 @@ import (
 	"github.com/samber/oops"
 )
 
+const (
+	ntcp2FailsafeIterationFreq = 2 * time.Second
+	ntcp2MinExpireIdleTime     = 120 * time.Second
+	ntcp2MaxExpireIdleTime     = 11 * time.Minute
+	ntcp2MayDisconnectTimeout  = 10 * time.Second
+	ntcp2RiStoreInterval       = 29 * time.Minute
+	ntcp2IdleExpireIncrease    = 1 * time.Second
+	ntcp2IdleExpireDecrease    = 3 * time.Second
+)
+
 // NTCP2Transport implements the I2P NTCP2 transport protocol, managing listener setup, session lifecycle, and peer connections.
 type NTCP2Transport struct {
 	// Network listener (uses net.Listener interface per guidelines)
@@ -103,6 +113,9 @@ type NTCP2Transport struct {
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 
+	// Java-style shared idle window for NTCP2 failsafe maintenance.
+	idleExpireWriteTime int64 // atomic, time.Duration stored as nanoseconds
+
 	// Port mapping lifecycle manager for UPnP/NAT-PMP (Phase 4 integration)
 	portMapperManager *nat.PortMapperManager
 
@@ -158,6 +171,7 @@ func NewNTCP2Transport(identity router_info.RouterInfo, config *Config, keystore
 	}
 
 	logger.WithField("address", transport.Addr().String()).Info("NTCP2 transport initialized successfully")
+	transport.startIdleMaintenance()
 
 	// CRITICAL-5.1: Verify map integrity at startup (debug build)
 	if invalidCount := transport.verifyMapIntegrity(); invalidCount > 0 {
@@ -255,7 +269,111 @@ func buildTransportInstance(config *Config, identity router_info.RouterInfo, key
 	}
 	// HIGH-1.3 fix: Initialize atomic.Pointer[Config] with Store
 	t.config.Store(config)
+	atomic.StoreInt64(&t.idleExpireWriteTime, int64(ntcp2MaxExpireIdleTime))
 	return t
+}
+
+// startIdleMaintenance launches the Java-style failsafe loop.
+// The loop is intentionally transport-wide, matching NTCP's shared idle window.
+func (t *NTCP2Transport) startIdleMaintenance() {
+	t.wg.Add(1)
+	go t.runIdleMaintenance()
+}
+
+func (t *NTCP2Transport) runIdleMaintenance() {
+	defer t.wg.Done()
+	ticker := time.NewTicker(ntcp2FailsafeIterationFreq)
+	defer ticker.Stop()
+
+	t.logger.Debug("NTCP2 idle maintenance loop started")
+	defer t.logger.Debug("NTCP2 idle maintenance loop stopped")
+
+	for {
+		select {
+		case <-t.ctx.Done():
+			return
+		case <-ticker.C:
+			t.runIdleMaintenancePass()
+		}
+	}
+}
+
+func (t *NTCP2Transport) runIdleMaintenancePass() {
+	now := time.Now()
+	haveCapacity := t.haveCapacity(33)
+	t.updateIdleExpireWriteTime(haveCapacity)
+	expire := t.currentIdleExpireWriteTime()
+
+	failsafeCloses := 0
+	t.sessionRegistry.RangeWithHash(func(hash data.Hash, value interface{}) bool {
+		session, ok := value.(*NTCP2Session)
+		if !ok || session == nil {
+			return true
+		}
+		if session.GetContext().Err() != nil {
+			return true
+		}
+		if session.shouldCloseForIdle(now, expire) {
+			failsafeCloses++
+			if err := session.CloseWithReason(TerminationIdleTimeout); err != nil {
+				t.logger.WithError(err).WithField("peer_hash", logutil.HashPrefixPlain(hash.Bytes())).Debug("NTCP2 idle close returned error")
+			}
+		}
+		return true
+	})
+
+	if failsafeCloses > 0 {
+		t.logger.WithFields(map[string]interface{}{
+			"idle_expire":     expire.String(),
+			"failsafe_closes": failsafeCloses,
+		}).Info("NTCP2 idle maintenance closed stale sessions")
+	}
+}
+
+func (t *NTCP2Transport) currentIdleExpireWriteTime() time.Duration {
+	value := atomic.LoadInt64(&t.idleExpireWriteTime)
+	if value <= 0 {
+		return ntcp2MaxExpireIdleTime
+	}
+	return time.Duration(value)
+}
+
+func (t *NTCP2Transport) updateIdleExpireWriteTime(haveCapacity bool) {
+	for {
+		current := atomic.LoadInt64(&t.idleExpireWriteTime)
+		if current <= 0 {
+			current = int64(ntcp2MaxExpireIdleTime)
+		}
+
+		next := time.Duration(current)
+		if haveCapacity {
+			next += ntcp2IdleExpireIncrease
+			if next > ntcp2MaxExpireIdleTime {
+				next = ntcp2MaxExpireIdleTime
+			}
+		} else {
+			next -= ntcp2IdleExpireDecrease
+			if next < ntcp2MinExpireIdleTime {
+				next = ntcp2MinExpireIdleTime
+			}
+		}
+
+		if atomic.CompareAndSwapInt64(&t.idleExpireWriteTime, current, int64(next)) {
+			return
+		}
+	}
+}
+
+func (t *NTCP2Transport) haveCapacity(percent int) bool {
+	if percent <= 0 {
+		return true
+	}
+	maxSessions := t.config.Load().GetMaxSessions()
+	if maxSessions <= 0 {
+		return true
+	}
+	current := int(t.sessionRegistry.Count())
+	return current*100 < maxSessions*percent
 }
 
 // setupNetworkListener creates and attaches the TCP and NTCP2 listeners to the transport.
