@@ -45,7 +45,13 @@ type RouterInfoKeystore struct {
 	// identity hash remains stable across ConstructRouterInfo() calls.
 	// Without caching, random padding would be regenerated on every call,
 	// producing a different identity hash each time.
+	// paddingMutex protects concurrent access to cachedPadding, mirroring
+	// keyIDMutex above. ConstructRouterInfo() (and therefore this field) can
+	// be reached concurrently from many independent goroutines (tunnel
+	// building, NetDB store operations, introducer selection), so this must
+	// not be a plain unguarded field.
 	cachedPadding []byte
+	paddingMutex  sync.RWMutex
 }
 
 // Ensure RouterInfoKeystore implements KeyStore interface at compile time
@@ -690,16 +696,30 @@ func (ks *RouterInfoKeystore) generateIdentityPaddingFromSizes(pubKeySize, sigKe
 			pubKeySize, sigKeySize, pubKeySize+sigKeySize, keys_and_cert.KEYS_AND_CERT_DATA_SIZE)
 	}
 
+	ks.paddingMutex.RLock()
 	if len(ks.cachedPadding) == paddingSize {
-		return ks.cachedPadding, nil
+		cached := ks.cachedPadding
+		ks.paddingMutex.RUnlock()
+		return cached, nil
 	}
+	ks.paddingMutex.RUnlock()
 
 	padding, err := ks.loadOrGeneratePadding(paddingSize)
 	if err != nil {
 		return nil, err
 	}
+
+	ks.paddingMutex.Lock()
+	// Re-check under the write lock in case another goroutine already
+	// populated cachedPadding while we were loading/generating.
+	if len(ks.cachedPadding) == paddingSize {
+		cached := ks.cachedPadding
+		ks.paddingMutex.Unlock()
+		return cached, nil
+	}
 	ks.cachedPadding = padding
-	return ks.cachedPadding, nil
+	ks.paddingMutex.Unlock()
+	return padding, nil
 }
 
 // loadOrGeneratePadding tries to load persisted padding or generates new padding.

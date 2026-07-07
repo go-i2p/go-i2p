@@ -1227,6 +1227,7 @@ func (p *Publisher) sendDatabaseStoreDirect(hash common.Hash, data []byte, dataT
 	if err != nil {
 		return 0, oops.Errorf("failed to get transport session to floodfill: %w", err)
 	}
+	defer transport.ReleaseSession()
 	if err := session.QueueSendI2NP(msg); err != nil {
 		return 0, oops.Errorf("failed to queue direct DatabaseStore transmission: %w", err)
 	}
@@ -1653,6 +1654,7 @@ func (p *Publisher) sendMessageThroughGateway(gatewayHash common.Hash, msg i2np.
 	if err != nil {
 		return oops.Errorf("failed to get transport session to gateway: %w", err)
 	}
+	defer transport.ReleaseSession()
 
 	// Queue message for transmission
 	if err := session.QueueSendI2NP(msg); err != nil {

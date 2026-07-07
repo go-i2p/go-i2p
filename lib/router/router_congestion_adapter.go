@@ -2,6 +2,7 @@ package router
 
 import (
 	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
+	ssu2 "github.com/go-i2p/go-i2p/lib/transport/ssu2"
 
 	"github.com/go-i2p/logger"
 
@@ -80,11 +81,18 @@ func (r *Router) getConnectionCount() int {
 	if muxer == nil {
 		return 0
 	}
-	// Count active sessions from all transports
+	// Count active sessions from all transports. Both NTCP2 and SSU2 must be
+	// counted here (mirroring bandwidth.go's getTotalBandwidth type-switch) —
+	// omitting SSU2 under-reports connection load for SSU2-heavy/UDP-only
+	// routers, biasing the PROP_162 congestion monitor toward reporting less
+	// congestion than actually exists.
 	count := 0
 	for _, t := range muxer.GetTransports() {
-		if ntcp2Transport, ok := t.(*ntcp.NTCP2Transport); ok {
-			count += int(ntcp2Transport.GetSessionCount())
+		switch tr := t.(type) {
+		case *ntcp.NTCP2Transport:
+			count += int(tr.GetSessionCount())
+		case *ssu2.SSU2Transport:
+			count += int(tr.GetSessionCount())
 		}
 	}
 	return count
