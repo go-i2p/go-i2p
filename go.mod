@@ -13,7 +13,7 @@ require (
 	github.com/go-i2p/go-noise v0.1.60000-0.20260702214916-13bc4ddf48b3
 	github.com/go-i2p/go-unzip v0.0.0-20260417162122-21146ed7aca8
 	github.com/go-i2p/i2p-control v0.0.0-20260608000308-d8ed861a259c
-	github.com/go-i2p/i2ptui v0.0.0-20260607232722-b95832d1b84a
+	github.com/go-i2p/i2ptui v0.0.0-20260702013237-ee2aab7fb675
 	github.com/go-i2p/logger v0.1.60000-0.20260701134448-2648c3b0e040
 	github.com/go-i2p/noise v1.1.1-0.20260612013029-6d1ef3427561
 	github.com/go-i2p/su3 v0.1.60000-0.20260701134531-62efdb4e3f71
@@ -77,7 +77,7 @@ require (
 	golang.org/x/net v0.56.0 // indirect
 	golang.org/x/sync v0.21.0 // indirect
 	golang.org/x/sys v0.46.0 // indirect
-	golang.org/x/text v0.38.0 // indirect
+	golang.org/x/text v0.39.0 // indirect
 )
 
 // go-noise (NTCP2/SSU2 Noise handshake) and common are pinned below to the
