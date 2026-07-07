@@ -1,6 +1,8 @@
 package embedded
 
 import (
+	"sync"
+
 	"github.com/go-i2p/go-i2p/lib/router"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
@@ -36,6 +38,16 @@ func (e *StandardEmbeddedRouter) Start() error {
 		return oops.Wrapf(err, "router startup failed")
 	}
 	e.running = true
+
+	// Re-arm the one-shot completion signal for this run. done/doneOnce were
+	// previously shared for the lifetime of the Go struct, so a Stop() call
+	// that happened before this successful Start() (e.g. defensive cleanup,
+	// or an aborted startup rollback) would have already closed 'done',
+	// causing Wait() to return immediately forever after even while the
+	// router is actively running. Giving each Start()/Stop() pair its own
+	// channel fixes this silent lifecycle bug. See AUDIT.md Level 10 MEDIUM.
+	e.done = make(chan struct{})
+	e.doneOnce = sync.Once{}
 
 	// CRITICAL-6 FIX: Capture publisher AFTER router starts (when it's initialized)
 	// Publisher is initialized during router.Start() in launchPublisher()
