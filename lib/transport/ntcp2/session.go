@@ -31,10 +31,7 @@ type NTCP2Session struct {
 	// Rekeying state — tracks message counts for periodic rekeying
 	rekeyState *rekeyState
 
-	// Error handling
-	lastError   error
-	lastErrorMu sync.RWMutex
-	errorOnce   sync.Once
+
 
 	// RouterInfo callback (called when a RouterInfo block is received from peer)
 	routerInfoMu       sync.Mutex
@@ -67,7 +64,6 @@ func NewNTCP2SessionDeferred(conn net.Conn, ctx context.Context, logger *logger.
 		conn:        conn,
 		rekeyState:  newRekeyState(),
 		lastError:   nil,
-		errorOnce:   sync.Once{},
 	}
 	now := time.Now().UnixNano()
 	atomic.StoreInt64(&session.createdAtUnixNano, now)
@@ -96,15 +92,7 @@ func (s *NTCP2Session) ReadNextI2NP() (i2np.Message, error) {
 	case msg := <-s.RecvChan():
 		return msg, nil
 	case <-s.GetContext().Done():
-		s.lastErrorMu.RLock()
-		lastErr := s.lastError
-		s.lastErrorMu.RUnlock()
-		if lastErr != nil {
-			return nil, lastErr
-		}
-		return nil, ErrSessionClosed
-	}
-}
+
 
 // Close closes the session cleanly.
 // It first waits briefly for the send queue to drain
@@ -213,12 +201,7 @@ func (s *NTCP2Session) logSessionLifecycleSummary(reason byte) {
 		"bytes_received":     bytesReceived,
 		"dropped_messages":   s.DroppedMessages(),
 	}
-	s.lastErrorMu.RLock()
-	lastErr := s.lastError
-	s.lastErrorMu.RUnlock()
-	if lastErr != nil {
-		fields["last_error"] = lastErr.Error()
-	}
+
 
 	s.Logger().WithFields(fields).Info("NTCP2 session lifecycle summary")
 }
@@ -694,15 +677,20 @@ func (s *NTCP2Session) GetRekeyStats() (messagesSinceRekey, rekeyCount uint64) {
 	return s.rekeyState.totalMessages(), s.rekeyState.getRekeyCount()
 }
 
+// getError returns the last error recorded by setError, if any. Safe for
+// concurrent use with setError.
+func (s *NTCP2Session) getError() error {
+	s.errorMu.Lock()
+	defer s.errorMu.Unlock()
+	return s.lastError
+}
+
 // setError sets the last error (once) and cancels the session context.
 // Cleanup callback is NOT called here — it is deferred to Close() which
 // waits for workers to finish first, preventing the transport from
 // creating a new session to the same peer while old workers still run.
 func (s *NTCP2Session) setError(err error) {
-	s.errorOnce.Do(func() {
-		s.lastErrorMu.Lock()
-		s.lastError = err
-		s.lastErrorMu.Unlock()
+
 		// EOF indicates the remote peer closed the connection — this is normal
 		// peer churn, not an error condition. Log at Warn to avoid flooding
 		// the error log with non-actionable entries.
@@ -715,5 +703,5 @@ func (s *NTCP2Session) setError(err error) {
 			s.Logger().WithError(err).Error("Session error")
 		}
 		s.Cancel()
-	})
+	}
 }

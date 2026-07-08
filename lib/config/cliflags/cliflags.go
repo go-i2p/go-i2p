@@ -367,6 +367,8 @@ func bindNetDBFlags(cmd *cobra.Command, v *viper.Viper) error {
 		{"netdb.lease_set_refresh_threshold", "netdb.lease-set-refresh-threshold"},
 		{"netdb.exploration_interval", "netdb.exploration-interval"},
 		{"netdb.floodfill_enabled", "netdb.floodfill-enabled"},
+		{"netdb.strict_routerinfo_network_validation", "netdb.strict-routerinfo-network-validation"},
+		{"netdb.routerinfo_admission_pressure_threshold_pct", "netdb.routerinfo-admission-pressure-threshold-pct"},
 	})
 }
 

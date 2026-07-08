@@ -231,7 +231,6 @@ func extractGarlicFromPayload(payload []byte) ([][]byte, error) {
 	log.WithFields(logger.Fields{
 		"at":          "extractGarlicFromPayload",
 		"payload_len": len(payload),
-		"payload_hex": fmt.Sprintf("%x", payload[:min(len(payload), 64)]),
 	}).Debug("Extracting garlic from ratchet payload")
 
 	blocks, err := noiseratchet.ParsePayload(payload)
@@ -251,7 +250,6 @@ func extractGarlicFromPayload(payload []byte) ([][]byte, error) {
 			"block_idx":  i,
 			"block_type": block.Type,
 			"data_len":   len(block.Data),
-			"data_hex":   fmt.Sprintf("%x", block.Data[:min(len(block.Data), 32)]),
 		}).Debug("Ratchet payload block")
 
 		if block.Type == noiseratchet.BlockGarlicClove {
@@ -259,7 +257,6 @@ func extractGarlicFromPayload(payload []byte) ([][]byte, error) {
 				"at":        "extractGarlicFromPayload",
 				"clove_idx": len(cloves),
 				"data_len":  len(block.Data),
-				"data_head": fmt.Sprintf("%x", block.Data[:min(len(block.Data), 32)]),
 			}).Debug("Found GarlicClove block")
 			cloves = append(cloves, block.Data)
 		}

@@ -153,6 +153,54 @@ func TestEmbeddedRouter_WaitBeforeStart(t *testing.T) {
 	}
 }
 
+// TestEmbeddedRouter_StopBeforeStartThenStartThenWait tests the sequence that
+// previously poisoned Wait()'s blocking contract: a defensive Stop() call
+// before Start() has ever succeeded must not cause a later, genuinely-running
+// Start() to make Wait() return immediately. See AUDIT.md Level 10 MEDIUM.
+func TestEmbeddedRouter_StopBeforeStartThenStartThenWait(t *testing.T) {
+	mock := &MockRouter{}
+	cfg := &config.RouterConfig{
+		BaseDir:    "/tmp/test",
+		WorkingDir: "/tmp/test/working",
+	}
+
+	router, err := NewStandardEmbeddedRouterWith(mock, cfg)
+	require.NoError(t, err)
+
+	// Defensive/idempotent Stop() before Start() has ever been called.
+	require.NoError(t, router.Stop())
+
+	// Now start the router for real.
+	require.NoError(t, router.Start())
+	require.True(t, router.IsRunning())
+
+	// Wait() must block now, since the router is genuinely running — a stale
+	// closed 'done' channel from the pre-Start() Stop() call must not leak
+	// into this run.
+	done := make(chan struct{})
+	go func() {
+		router.Wait()
+		close(done)
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+	select {
+	case <-done:
+		t.Error("Wait should block while the router is running, but it returned immediately")
+	default:
+		// Good - still blocked
+	}
+
+	require.NoError(t, router.Stop())
+
+	select {
+	case <-done:
+		// Good - returned after Stop()
+	case <-time.After(100 * time.Millisecond):
+		t.Error("Wait should unblock after Stop(), but it didn't")
+	}
+}
+
 // -----------------------------------------------------------------------------
 // Error Handling Tests
 // Verifies errors don't leak sensitive information

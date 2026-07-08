@@ -45,6 +45,25 @@ func (ec *entryCache) get(key common.Hash) (Entry, bool) {
 	return entry, exists
 }
 
+// getNotExpired retrieves an entry from the cache and atomically verifies it
+// has not expired, under a single lock acquisition. This closes the TOCTOU
+// window that existed when callers separately called get() and isExpired():
+// a concurrent eviction (cleanExpiredLeaseSets) could delete the entry between
+// the two calls, causing a just-evicted entry to be returned as if still valid.
+// Returns (Entry{}, false) if the key is absent or has expired.
+func (ec *entryCache) getNotExpired(key common.Hash, now time.Time) (Entry, bool) {
+	ec.mu.RLock()
+	defer ec.mu.RUnlock()
+	entry, exists := ec.entries[key]
+	if !exists {
+		return Entry{}, false
+	}
+	if expiry, hasExpiry := ec.expiry[key]; hasExpiry && now.After(expiry) {
+		return Entry{}, false
+	}
+	return entry, true
+}
+
 // getCacheState returns cache state for admission checks: (exists, currentCount, maxCapacity).
 func (ec *entryCache) getCacheState(key common.Hash) (exists bool, current, max int) {
 	ec.mu.RLock()

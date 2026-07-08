@@ -178,18 +178,14 @@ func (db *StdNetDB) addLeaseSetToCache(key common.Hash, ls lease_set.LeaseSet) b
 		return true
 	}
 
-	// New LeaseSet: check admission limits and capacity without releasing the lock.
-	// Releasing and re-acquiring the lock here would allow concurrent writers to
-	// invalidate the count and capacity snapshot (TOCTOU), potentially bypassing
-	// capacity limits.
-	currentCount := len(db.lsCache.entries)
-
-	err := db.checkLeaseSetAdmissionLimits(key, nil, currentCount)
-	if err != nil {
-		log.WithField("hash", key).Debug("LeaseSet introduction rejected by admission control")
-		return false
-	}
-
+	// New LeaseSet: check capacity/eviction first, then admission limits, using a
+	// count snapshot taken after eviction has settled. Performing the admission
+	// check before capacity/eviction (as before) used a count snapshot that a
+	// concurrent writer or the eviction itself could invalidate, allowing an
+	// admission decision to be made against stale data. Capacity itself is
+	// re-verified after eviction below, so ordering admission after it keeps
+	// both checks consistent with the same up-to-date snapshot.
+	//
 	// Check capacity and evict if needed. evictSoonestExpiringLeaseSet acquires
 	// db.lsCache.mu internally, so release our lock first, evict, then re-acquire
 	// and re-read the count to confirm we still have room.
@@ -203,6 +199,12 @@ func (db *StdNetDB) addLeaseSetToCache(key common.Hash, ls lease_set.LeaseSet) b
 			log.WithField("hash", key).Debug("LeaseSet dropped: cache still at capacity after eviction")
 			return false
 		}
+	}
+
+	currentCount := len(db.lsCache.entries)
+	if err := db.checkLeaseSetAdmissionLimits(key, nil, currentCount); err != nil {
+		log.WithField("hash", key).Debug("LeaseSet introduction rejected by admission control")
+		return false
 	}
 
 	// Track expiration time for cleanup FIRST (lock is held)
@@ -337,19 +339,23 @@ func (db *StdNetDB) GetLeaseSet(hash common.Hash) (chnl chan lease_set.LeaseSet)
 // getLeaseSetFromCache attempts to retrieve a LeaseSet from the memory cache.
 // Returns nil if not in cache, indicating caller should try disk.
 func (db *StdNetDB) getLeaseSetFromCache(hash common.Hash) chan lease_set.LeaseSet {
-	entry, ok := db.lsCache.get(hash)
-
+	// entry and its expiry are checked atomically under a single lock to avoid
+	// a TOCTOU window where a concurrent eviction (cleanExpiredLeaseSets) could
+	// delete the entry between a separate get() and isExpired() call, returning
+	// a just-evicted LeaseSet as if it were still valid.
+	entry, ok := db.lsCache.getNotExpired(hash, time.Now())
 	if !ok {
-		return nil // Not in cache, try disk
+		// Distinguish "not present" from "present but expired" only for logging;
+		// both cases fall through to disk/empty handling below.
+		if _, exists := db.lsCache.get(hash); !exists {
+			return nil // Not in cache, try disk
+		}
+		log.WithField("hash", hash).Debug("LeaseSet expired, not serving from cache")
+		return emptyLeaseSetChannel()
 	}
 
 	if entry.LeaseSet == nil {
 		log.WithField("hash", hash).Debug("Entry found but is not a classic LeaseSet")
-		return emptyLeaseSetChannel()
-	}
-
-	if db.isLeaseSetExpired(hash) {
-		log.WithField("hash", hash).Debug("LeaseSet expired, not serving from cache")
 		return emptyLeaseSetChannel()
 	}
 
