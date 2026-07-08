@@ -18,6 +18,10 @@ import (
 func TestSanitizePath_ValidPaths(t *testing.T) {
 	tempDir := t.TempDir()
 
+	if cleanTemp, err := filepath.EvalSymlinks(tempDir); err == nil {
+		tempDir = cleanTemp
+	}
+
 	testCases := []struct {
 		name     string
 		basePath string
