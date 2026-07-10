@@ -539,3 +539,13 @@ func ValidateRecordCount(countField, recordCount int, tunnelTypeName string) err
 
 	return nil
 }
+
+// BaseMessageFromMessage creates a base message using metadata from msg and payload.
+func BaseMessageFromMessage(msg Message, payload []byte) *BaseI2NPMessage {
+	return &BaseI2NPMessage{
+		type_:      msg.Type(),
+		messageID:  msg.MessageID(),
+		expiration: msg.Expiration(),
+		data:       payload,
+	}
+}
