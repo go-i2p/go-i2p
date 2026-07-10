@@ -228,6 +228,7 @@ func coerceDatabaseStoreMessage(msg Message) (*DatabaseStore, error) {
 		return nil, oops.Wrapf(err, "failed to parse DatabaseStore payload")
 	}
 
+	dbStore.BaseI2NPMessage = BaseMessageFromMessage(msg, payload)
 	return dbStore, nil
 }
 
@@ -252,6 +253,7 @@ func coerceDatabaseSearchReplyMessage(msg Message) (*DatabaseSearchReply, error)
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to parse DatabaseSearchReply payload")
 	}
+	searchReply.BaseI2NPMessage = BaseMessageFromMessage(msg, payload)
 
 	return searchReply, nil
 }
