@@ -1,6 +1,7 @@
 package i2np
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -472,6 +473,8 @@ func (p *MessageProcessor) processMessageWithDepth(msg Message, depth int) error
 	if err != nil {
 		return err
 	}
+
+	func() { fmt.Println("test") }()
 
 	messageID, err := safeProcessorMessageID(msg)
 	if err != nil {
