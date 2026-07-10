@@ -75,7 +75,7 @@ godoc:
 setup:
 	go install github.com/aquasecurity/trivy/cmd/trivy@latest
 	go install github.com/leaanthony/comply@latest
-	go install mvdan.cc/gofumpt@latest"
+	go install mvdan.cc/gofumpt@latest
 	go install github.com/robertkrimen/godocdown@latest
 	go install github.com/github-release/github-release@latest
 	go install github.com/ofabry/go-callvis@latest
