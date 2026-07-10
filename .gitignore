@@ -18,3 +18,10 @@ err
 *.disabled
 *.bak
 *.backup*
+*.yaml
+*.log
+*.dat
+*.env
+.zed
+.vscode
+.DS_store
