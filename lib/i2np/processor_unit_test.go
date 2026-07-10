@@ -372,6 +372,16 @@ func TestProcessDatabaseStoreMessage_FromBaseMessageDataCarrier(t *testing.T) {
 
 	base := NewBaseI2NPMessage(I2NPMessageTypeDatabaseStore)
 	base.SetData(body)
+	base.SetMessageID(0x10203040)
+	base.SetExpiration(time.Unix(1_770_000_000, 0).UTC())
+
+	parsed, err := coerceDatabaseStoreMessage(base)
+	require.NoError(t, err)
+	require.NotNil(t, parsed.BaseI2NPMessage)
+	assert.Equal(t, base.Type(), parsed.Type())
+	assert.Equal(t, base.MessageID(), parsed.MessageID())
+	assert.Equal(t, base.Expiration(), parsed.Expiration())
+	assert.Equal(t, body, parsed.GetData())
 
 	err = processor.processDatabaseStoreMessage(base)
 	require.NoError(t, err)
@@ -432,6 +442,16 @@ func TestProcessDatabaseSearchReplyMessage_FromBaseMessageDataCarrier(t *testing
 
 	base := NewBaseI2NPMessage(I2NPMessageTypeDatabaseSearchReply)
 	base.SetData(body)
+	base.SetMessageID(0x50607080)
+	base.SetExpiration(time.Unix(1_770_000_060, 0).UTC())
+
+	parsed, err := coerceDatabaseSearchReplyMessage(base)
+	require.NoError(t, err)
+	require.NotNil(t, parsed.BaseI2NPMessage)
+	assert.Equal(t, base.Type(), parsed.Type())
+	assert.Equal(t, base.MessageID(), parsed.MessageID())
+	assert.Equal(t, base.Expiration(), parsed.Expiration())
+	assert.Equal(t, body, parsed.GetData())
 
 	err = processor.processDatabaseSearchReplyMessage(base)
 	require.NoError(t, err)
