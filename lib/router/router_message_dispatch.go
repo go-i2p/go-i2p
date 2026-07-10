@@ -406,6 +406,7 @@ func (r *Router) parseDatabaseStoreMessage(msg i2np.Message) (*i2np.DatabaseStor
 		"key":        dbStore.GetStoreKey().String(),
 	}).Info("Parsed DatabaseStore message from peer")
 
+	dbStore.BaseI2NPMessage = i2np.BaseMessageFromMessage(msg, dataCarrier.GetData())
 	return dbStore, nil
 }
 
@@ -436,11 +437,7 @@ func (r *Router) parseDatabaseSearchReplyMessage(msg i2np.Message) (*i2np.Databa
 		return nil, oops.Wrapf(err, "failed to parse DatabaseSearchReply")
 	}
 
-	base := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeDatabaseSearchReply)
-	base.SetMessageID(msg.MessageID())
-	base.SetExpiration(msg.Expiration())
-	base.SetData(payload)
-	searchReply.BaseI2NPMessage = base
+	searchReply.BaseI2NPMessage = i2np.BaseMessageFromMessage(msg, payload)
 
 	return searchReply, nil
 }
