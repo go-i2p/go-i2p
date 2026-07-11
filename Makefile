@@ -80,3 +80,4 @@ setup:
 	go install github.com/github-release/github-release@latest
 	go install github.com/ofabry/go-callvis@latest
 	go install github.com/evilmartians/lefthook@latest
+	lefthook install
