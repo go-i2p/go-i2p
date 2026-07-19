@@ -31,14 +31,7 @@ type NTCP2Session struct {
 	// Rekeying state — tracks message counts for periodic rekeying
 	rekeyState *rekeyState
 
-	// Error handling. errorMu guards lastError since it is written once from
-	// the receiveWorker goroutine (setError) but read concurrently from both
-	// ReadNextI2NP and logSessionLifecycleSummary (called from CloseWithReason,
-	// which can run concurrently with a still-live receiveWorker). Two
-	// independent sync.Once instances do not establish a happens-before edge
-	// with each other, so a plain field + errorOnce was a genuine data race.
-	errorMu   sync.Mutex
-	lastError error
+
 
 	// RouterInfo callback (called when a RouterInfo block is received from peer)
 	routerInfoMu       sync.Mutex
@@ -99,12 +92,7 @@ func (s *NTCP2Session) ReadNextI2NP() (i2np.Message, error) {
 	case msg := <-s.RecvChan():
 		return msg, nil
 	case <-s.GetContext().Done():
-		if lastErr := s.getError(); lastErr != nil {
-			return nil, lastErr
-		}
-		return nil, ErrSessionClosed
-	}
-}
+
 
 // Close closes the session cleanly.
 // It first waits briefly for the send queue to drain
@@ -213,9 +201,7 @@ func (s *NTCP2Session) logSessionLifecycleSummary(reason byte) {
 		"bytes_received":     bytesReceived,
 		"dropped_messages":   s.DroppedMessages(),
 	}
-	if lastErr := s.getError(); lastErr != nil {
-		fields["last_error"] = lastErr.Error()
-	}
+
 
 	s.Logger().WithFields(fields).Info("NTCP2 session lifecycle summary")
 }
@@ -704,16 +690,7 @@ func (s *NTCP2Session) getError() error {
 // waits for workers to finish first, preventing the transport from
 // creating a new session to the same peer while old workers still run.
 func (s *NTCP2Session) setError(err error) {
-	s.errorMu.Lock()
-	first := s.lastError == nil
-	if first {
-		s.lastError = err
-	}
-	s.errorMu.Unlock()
-	if !first {
-		return
-	}
-	{
+
 		// EOF indicates the remote peer closed the connection — this is normal
 		// peer churn, not an error condition. Log at Warn to avoid flooding
 		// the error log with non-actionable entries.
