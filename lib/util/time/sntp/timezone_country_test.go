@@ -168,12 +168,20 @@ func TestGetLocalCountryCode(t *testing.T) {
 	}
 }
 
-func TestGetLocalCountryCode_WithKnownTZ(t *testing.T) {
-	// Force a known timezone via TZ env var and verify the full chain
-	origTZ := os.Getenv("TZ")
-	defer os.Setenv("TZ", origTZ)
+type mockTimezoneProvider struct {
+	tz string
+}
 
-	os.Setenv("TZ", "America/New_York")
+func (m *mockTimezoneProvider) detectIANATimezone() string {
+	return m.tz
+}
+
+func TestGetLocalCountryCode_WithKnownTZ(t *testing.T) {
+	// Force a known timezone via mock provider and verify the full chain
+	origProvider := currentTimezoneProvider
+	defer func() { currentTimezoneProvider = origProvider }()
+
+	currentTimezoneProvider = &mockTimezoneProvider{tz: "America/New_York"}
 	cc := getLocalCountryCode()
 	assert.Equal(t, "us", cc)
 }
