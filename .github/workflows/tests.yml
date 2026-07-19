@@ -31,9 +31,9 @@ jobs:
           - os: ubuntu-latest
             goos: linux
             goarch: arm64
-          - os: ubuntu-latest
-            goos: linux
-            goarch: 386
+#          - os: ubuntu-latest
+#            goos: linux
+#            goarch: 386
           # Windows targets
           - os: ubuntu-latest
             goos: windows
@@ -41,9 +41,9 @@ jobs:
           - os: ubuntu-latest
             goos: windows
             goarch: arm64
-          - os: ubuntu-latest
-            goos: windows
-            goarch: 386
+#          - os: ubuntu-latest
+#            goos: windows
+#            goarch: 386
           # macOS targets (cross-compiled from ubuntu-latest)
           - os: ubuntu-latest
             goos: darwin
