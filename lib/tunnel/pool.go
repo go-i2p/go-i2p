@@ -1115,11 +1115,26 @@ func (p *Pool) computePeerCooldown(peerHash common.Hash, reason string) time.Dur
 func baseCooldownForFailureReason(reason string) time.Duration {
 	r := strings.ToLower(reason)
 
+	// Transport establishment failures are peer-attributable
+	if containsAnySubstring(
+		r,
+		"no transports available",
+		"transport unavailable",
+		"failed to establish outbound session",
+		"failed to get session for gateway",
+		"failed to dial",
+		"connection refused",
+		"no route to host",
+		"i/o timeout",
+		"handshake",
+	) {
+		return hardFailureCooldown
+	}
+
 	if containsAnySubstring(
 		r,
 		"local",
 		"transport_not_ready",
-		"no transports available",
 		"context cancelled",
 		"context canceled",
 		"startup",
@@ -1152,6 +1167,19 @@ func classifyTunnelBuildFailureReason(err error) string {
 		errText,
 		"no transports available",
 		"transport unavailable",
+		"failed to establish outbound session",
+		"failed to get session for gateway",
+		"failed to dial",
+		"connection refused",
+		"no route to host",
+		"i/o timeout",
+		"handshake",
+	) {
+		return "tunnel_build_failed_permanent"
+	}
+
+	if containsAnySubstring(
+		errText,
 		"context cancelled",
 		"context canceled",
 		"reply tunnel unavailable",

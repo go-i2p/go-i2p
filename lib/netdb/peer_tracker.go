@@ -156,10 +156,27 @@ func failureWeightForClass(class peerFailureClass) int {
 func classifyFailureReason(reason string) peerFailureClass {
 	r := strings.ToLower(reason)
 
+	// Transport establishment failures are peer-attributable: the peer advertised
+	// addresses in their RouterInfo but we couldn't establish a session to them.
+	// This indicates the peer is unreachable (firewalled, offline, bad addresses).
 	if containsAny(
 		r,
 		"no transports available",
 		"transport unavailable",
+		"failed to establish outbound session",
+		"failed to get session for gateway",
+		"failed to dial",
+		"connection refused",
+		"no route to host",
+		"i/o timeout",
+		"handshake",
+	) {
+		return peerFailureClassHard
+	}
+
+	// Local infrastructure issues (not the peer's fault)
+	if containsAny(
+		r,
 		"transport_not_ready",
 		"context cancelled",
 		"context canceled",
@@ -229,6 +246,34 @@ func (pt *PeerTracker) RecordPermanentFailure(hash common.Hash, reason string) {
 		"consecutive_fails": stats.ConsecutiveFails,
 		"reason":            reason,
 	}).Debug("Recorded permanent connection failure — peer immediately marked stale")
+}
+
+// RecordPermanentFailureTransport implements transport.PeerConnNotifier.
+// Called when a peer is structurally unreachable.
+func (pt *PeerTracker) RecordPermanentFailureTransport(peerHash [32]byte, transportName string, reason string) {
+	hash := common.Hash(peerHash)
+	pt.RecordPermanentFailure(hash, reason)
+}
+
+// RecordTransportSuccess implements transport.PeerConnNotifier.
+// Called when a transport handshake completes successfully.
+func (pt *PeerTracker) RecordTransportSuccess(peerHash [32]byte, transportName string, responseTimeMs int64) {
+	hash := common.Hash(peerHash)
+	pt.RecordSuccess(hash, responseTimeMs)
+}
+
+// RecordTransportFailure implements transport.PeerConnNotifier.
+// Called when a transport dial or handshake fails.
+func (pt *PeerTracker) RecordTransportFailure(peerHash [32]byte, transportName string, reason string) {
+	hash := common.Hash(peerHash)
+	pt.RecordFailure(hash, reason)
+}
+
+// RecordTransportAttempt implements transport.PeerConnNotifier.
+// Called just before a transport dial attempt begins.
+func (pt *PeerTracker) RecordTransportAttempt(peerHash [32]byte, transportName string) {
+	hash := common.Hash(peerHash)
+	pt.RecordAttempt(hash)
 }
 
 // GetStats retrieves statistics for a peer.

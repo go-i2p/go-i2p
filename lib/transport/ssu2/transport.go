@@ -587,7 +587,7 @@ func (t *SSU2Transport) getPeerConnNotifier() transport.PeerConnNotifier {
 // recordPeerAttempt notifies the PeerTracker of a dial attempt if wired.
 func (t *SSU2Transport) recordPeerAttempt(hash data.Hash) {
 	if n := t.getPeerConnNotifier(); n != nil {
-		n.RecordAttempt(hash)
+		n.RecordTransportAttempt(hash.Bytes(), "ssu2")
 	}
 }
 
@@ -596,9 +596,9 @@ func (t *SSU2Transport) recordPeerAttempt(hash data.Hash) {
 func (t *SSU2Transport) recordPeerFailure(hash data.Hash, err error) {
 	if n := t.getPeerConnNotifier(); n != nil {
 		if errors.Is(err, ErrInvalidRouterInfo) {
-			n.RecordPermanentFailure(hash, "no_reachable_ssu2_address")
+			n.RecordPermanentFailureTransport(hash.Bytes(), "ssu2", "no_reachable_ssu2_address")
 		} else {
-			n.RecordFailure(hash, err.Error())
+			n.RecordTransportFailure(hash.Bytes(), "ssu2", err.Error())
 		}
 	}
 }
@@ -606,7 +606,7 @@ func (t *SSU2Transport) recordPeerFailure(hash data.Hash, err error) {
 // recordPeerSuccess notifies the PeerTracker of a successful connection.
 func (t *SSU2Transport) recordPeerSuccess(hash data.Hash, latencyMs int64) {
 	if n := t.getPeerConnNotifier(); n != nil {
-		n.RecordSuccess(hash, latencyMs)
+		n.RecordTransportSuccess(hash.Bytes(), "ssu2", latencyMs)
 	}
 }
 

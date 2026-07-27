@@ -202,7 +202,15 @@ func initializeNetDBAndTransports(r *Router, ri *router_info.RouterInfo, cfg *co
 		return err
 	}
 
-	r.transports.Store(transport.Mux(transports...))
+	tmux := transport.Mux(transports...)
+	// Wire transport-layer connection feedback to NetDB PeerTracker so that
+	// dial attempts and handshake outcomes update peer reputation in real time.
+	// This prevents reachable peers from being marked stale after a single
+	// tunnel-build failure when the transport layer actually succeeded.
+	if r.netdb != nil && r.netdb.PeerTracker != nil {
+		tmux.SetPeerConnNotifier(r.netdb.PeerTracker)
+	}
+	r.transports.Store(tmux)
 	return nil
 }
 

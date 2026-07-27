@@ -32,20 +32,20 @@ func (r *testRouterInfoRefresher) RequestRouterInfoRefresh(hash data.Hash) {
 	r.hash = hash
 }
 
-func (n *testPeerConnNotifier) RecordAttempt(_ data.Hash) {
+func (n *testPeerConnNotifier) RecordTransportAttempt(_ [32]byte, _ string) {
 	n.attempts++
 }
 
-func (n *testPeerConnNotifier) RecordSuccess(_ data.Hash, _ int64) {
+func (n *testPeerConnNotifier) RecordTransportSuccess(_ [32]byte, _ string, _ int64) {
 	n.successes++
 }
 
-func (n *testPeerConnNotifier) RecordFailure(_ data.Hash, reason string) {
+func (n *testPeerConnNotifier) RecordTransportFailure(_ [32]byte, _ string, reason string) {
 	n.failures++
 	n.lastReason = reason
 }
 
-func (n *testPeerConnNotifier) RecordPermanentFailure(_ data.Hash, reason string) {
+func (n *testPeerConnNotifier) RecordPermanentFailureTransport(_ [32]byte, _ string, reason string) {
 	n.permanent++
 	n.lastReason = reason
 }

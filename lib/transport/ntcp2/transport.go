@@ -1618,7 +1618,7 @@ func (t *NTCP2Transport) createOutboundSession(routerInfo router_info.RouterInfo
 	t.logger.WithField("router_hash", logutil.HashPrefixPlain(routerHashBytes)).Info("Creating new outbound NTCP2 session")
 
 	if n := t.getPeerConnNotifier(); n != nil {
-		n.RecordAttempt(routerHash)
+		n.RecordTransportAttempt(routerHashBytes, "ntcp2")
 	}
 	dialStart := time.Now()
 	conn, err := t.dialNTCP2Connection(routerInfo)
@@ -1643,9 +1643,9 @@ func (t *NTCP2Transport) handleDialFailure(routerHash data.Hash, routerHashBytes
 	}
 	if n := t.getPeerConnNotifier(); n != nil {
 		if isPermanentNTCP2DialFailure(err) {
-			n.RecordPermanentFailure(routerHash, "no_reachable_ntcp2_address")
+			n.RecordPermanentFailureTransport(routerHashBytes, "ntcp2", "no_reachable_ntcp2_address")
 		} else {
-			n.RecordFailure(routerHash, err.Error())
+			n.RecordTransportFailure(routerHashBytes, "ntcp2", err.Error())
 		}
 	}
 }
@@ -1677,7 +1677,7 @@ func (t *NTCP2Transport) finalizeOutboundSession(conn *ntcp2.Conn, routerHash da
 		return nil, oops.Errorf("failed to set up session for %x: corrupt session map entry, connection closed", routerHashBytes[:8])
 	}
 	if n := t.getPeerConnNotifier(); n != nil {
-		n.RecordSuccess(routerHash, time.Since(dialStart).Milliseconds())
+		n.RecordTransportSuccess(routerHashBytes, "ntcp2", time.Since(dialStart).Milliseconds())
 	}
 	t.recordSessionEstablished()
 	t.logger.WithFields(map[string]interface{}{

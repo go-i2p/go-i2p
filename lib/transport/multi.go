@@ -47,6 +47,11 @@ type TransportMuxer struct {
 	failedPeers    map[[32]byte]time.Time
 	peerCooldownMu sync.Mutex
 
+	// peerConnNotifier receives transport-layer connection feedback so that
+	// higher-level routing components (e.g. PeerTracker) can update peer
+	// reputation without coupling the transport packages to netdb.
+	peerConnNotifier PeerConnNotifier
+
 	// acceptChan is a persistent channel fed by long-lived accept goroutines.
 	// Lazily initialised by ensureAcceptLoop. Connections arriving here are
 	// not yet counted against the connection limit — the caller of Accept /
@@ -119,6 +124,13 @@ func (tmux *TransportMuxer) logMuxerMethod(methodName string, fields logger.Fiel
 	default:
 		entry.Debug(message)
 	}
+}
+
+// SetPeerConnNotifier sets the callback for transport-layer connection feedback.
+// This allows higher-level components (e.g. PeerTracker) to receive success/failure
+// notifications without importing transport packages.
+func (tmux *TransportMuxer) SetPeerConnNotifier(notifier PeerConnNotifier) {
+	tmux.peerConnNotifier = notifier
 }
 
 // ReleaseSession decrements the active session counter.
@@ -266,13 +278,22 @@ func (tmux *TransportMuxer) Name() string {
 // Returns the session and nil if successful, or nil and an error if it fails.
 func (tmux *TransportMuxer) tryGetSessionFromTransport(t Transport, routerInfo router_info.RouterInfo, index int) (TransportSession, error) {
 	peerHash, _ := routerInfo.IdentHash()
+	startTime := time.Now()
 	logAt("(TransportMuxer) GetSession").WithFields(logger.Fields{
 		"reason":          "compatible_transport_found",
 		"transport_index": index,
 	}).Debug("found compatible transport, attempting session")
 
+	if tmux.peerConnNotifier != nil {
+		tmux.peerConnNotifier.RecordTransportAttempt(peerHash, t.Name())
+	}
+
 	s, err := t.GetSession(routerInfo)
 	if err != nil {
+		elapsedMs := time.Since(startTime).Milliseconds()
+		if tmux.peerConnNotifier != nil {
+			tmux.peerConnNotifier.RecordTransportFailure(peerHash, t.Name(), err.Error())
+		}
 		logAt("(TransportMuxer) GetSession").WithFields(logger.Fields{
 			"phase":           "session_establishment",
 			"reason":          "session_creation_failed",
@@ -280,15 +301,22 @@ func (tmux *TransportMuxer) tryGetSessionFromTransport(t Transport, routerInfo r
 			"transport_index": index,
 			"peer_hash":       fmt.Sprintf("%x", peerHash[:]),
 			"error":           err.Error(),
+			"elapsed_ms":      elapsedMs,
 			"impact":          "cannot communicate with this peer via this transport",
 			"addresses":       len(routerInfo.RouterAddresses()),
 		}).Warn("transport session failed, trying next transport")
 		return nil, err
 	}
 
+	elapsedMs := time.Since(startTime).Milliseconds()
+	if tmux.peerConnNotifier != nil {
+		tmux.peerConnNotifier.RecordTransportSuccess(peerHash, t.Name(), elapsedMs)
+	}
+
 	logAt("(TransportMuxer) GetSession").WithFields(logger.Fields{
 		"reason":          "session_established",
 		"transport_index": index,
+		"elapsed_ms":      elapsedMs,
 	}).Debug("successfully got session from transport")
 	return s, nil
 }
@@ -448,12 +476,24 @@ func (tmux *TransportMuxer) beginSessionAttempt(routerInfo router_info.RouterInf
 }
 
 func (tmux *TransportMuxer) handleSessionFailure(routerInfo router_info.RouterInfo, compatibleFound bool) error {
+	peerHash, _ := routerInfo.IdentHash()
+
 	if compatibleFound {
 		atomic.AddUint64(&tmux.sessionAllFailedTotal, 1)
 		tmux.logAllTransportsFailed(routerInfo)
+
+		// Notify peer tracker of transport failure
+		if tmux.peerConnNotifier != nil {
+			tmux.peerConnNotifier.RecordTransportFailure(peerHash, "all", "all compatible transports failed to establish session")
+		}
 	} else {
 		atomic.AddUint64(&tmux.sessionNoCompatibleTotal, 1)
 		tmux.logNoTransportError(routerInfo)
+
+		// Notify peer tracker of no compatible transport
+		if tmux.peerConnNotifier != nil {
+			tmux.peerConnNotifier.RecordTransportFailure(peerHash, "none", "no compatible transport for peer's address types")
+		}
 	}
 	return ErrNoTransportAvailable
 }

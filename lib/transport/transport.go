@@ -13,20 +13,20 @@ import (
 // higher-level routing components (e.g. PeerTracker) can update peer
 // reputation without coupling the transport packages to netdb.
 type PeerConnNotifier interface {
-	// RecordAttempt is called just before a dial attempt begins.
-	RecordAttempt(hash common.Hash)
-	// RecordSuccess is called when a handshake completes successfully.
+	// RecordTransportAttempt is called just before a dial attempt begins.
+	RecordTransportAttempt(peerHash [32]byte, transportName string)
+	// RecordTransportSuccess is called when a handshake completes successfully.
 	// responseTimeMs is the round-trip to fully-established session in ms.
-	RecordSuccess(hash common.Hash, responseTimeMs int64)
-	// RecordFailure is called when a dial or handshake fails.
-	RecordFailure(hash common.Hash, reason string)
+	RecordTransportSuccess(peerHash [32]byte, transportName string, responseTimeMs int64)
+	// RecordTransportFailure is called when a dial or handshake fails.
+	RecordTransportFailure(peerHash [32]byte, transportName string, reason string)
 	// RecordPermanentFailure is called when a peer is structurally unreachable
 	// (e.g. IPv6-only peer with no local IPv6 connectivity, or a malformed
 	// RouterInfo with no valid address).  It immediately advances the peer's
 	// consecutive-failure counter to the staleness threshold so that
 	// IsLikelyStale() returns true on the very next hop-selection pass,
 	// preventing repeated wasted dial attempts.
-	RecordPermanentFailure(hash common.Hash, reason string)
+	RecordPermanentFailureTransport(peerHash [32]byte, transportName string, reason string)
 }
 
 // RouterInfoRefresher allows transport layers to request a stale RouterInfo

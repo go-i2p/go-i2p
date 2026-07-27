@@ -26,26 +26,26 @@ type testPeerConnNotifier struct {
 	lastFailure      string
 }
 
-func (n *testPeerConnNotifier) RecordAttempt(_ data.Hash) {
+func (n *testPeerConnNotifier) RecordTransportAttempt(_ [32]byte, _ string) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	n.attempts++
 }
 
-func (n *testPeerConnNotifier) RecordSuccess(_ data.Hash, _ int64) {
+func (n *testPeerConnNotifier) RecordTransportSuccess(_ [32]byte, _ string, _ int64) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	n.successes++
 }
 
-func (n *testPeerConnNotifier) RecordFailure(_ data.Hash, reason string) {
+func (n *testPeerConnNotifier) RecordTransportFailure(_ [32]byte, _ string, reason string) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	n.failures++
 	n.lastFailure = reason
 }
 
-func (n *testPeerConnNotifier) RecordPermanentFailure(_ data.Hash, reason string) {
+func (n *testPeerConnNotifier) RecordPermanentFailureTransport(_ [32]byte, _ string, reason string) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	n.permanentFailure++
