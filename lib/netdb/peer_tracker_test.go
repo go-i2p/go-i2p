@@ -70,13 +70,14 @@ func TestConsecutiveFailures(t *testing.T) {
 	pt := NewPeerTracker()
 	hash := testHash(4)
 
-	// Record 3 failures
+	// Record 3 failures - "connection refused" is a hard failure (weight 2)
 	for i := 0; i < 3; i++ {
 		pt.RecordFailure(hash, "connection refused")
 	}
 
 	stats := pt.GetStats(hash)
-	assert.Equal(t, 3, stats.ConsecutiveFails)
+	// Each "connection refused" failure adds weight 2 (hard failure)
+	assert.Equal(t, 6, stats.ConsecutiveFails)
 	assert.Equal(t, 3, stats.FailureCount)
 
 	// Success resets consecutive failures
