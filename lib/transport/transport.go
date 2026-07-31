@@ -98,6 +98,10 @@ type Transport interface {
 	// return true if a routerInfo is compatible with this transport
 	Compatible(routerInfo router_info.RouterInfo) bool
 
+	// HasSession returns true if an active session exists for the given peer hash.
+	// This allows higher layers to check session availability without triggering a new dial.
+	HasSession(peerHash common.Hash) bool
+
 	// close the transport cleanly
 	// blocks until done
 	// returns an error if one happens
