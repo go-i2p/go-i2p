@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
@@ -529,6 +530,17 @@ func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s Tra
 func (tmux *TransportMuxer) Compatible(routerInfo router_info.RouterInfo) bool {
 	for _, t := range tmux.trans {
 		if t.Compatible(routerInfo) {
+			return true
+		}
+	}
+	return false
+}
+
+// HasSession returns true if any underlying transport has an active session for the given peer hash.
+// This allows higher layers to check session availability without triggering a new dial attempt.
+func (tmux *TransportMuxer) HasSession(peerHash common.Hash) bool {
+	for _, t := range tmux.trans {
+		if t.HasSession(peerHash) {
 			return true
 		}
 	}
