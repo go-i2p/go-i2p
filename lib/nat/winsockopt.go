@@ -1,5 +1,5 @@
-//go:build !windows
-// +build !windows
+//go:build windows
+// +build windows
 
 package nat
 
@@ -17,7 +17,7 @@ func createReuseAddrControl(logContext string) func(string, string, syscall.RawC
 	return func(network, address string, c syscall.RawConn) error {
 		var sockoptErr error
 		err := c.Control(func(fd uintptr) {
-			if sockoptErr = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1); sockoptErr != nil {
+			if sockoptErr = syscall.SetsockoptInt(syscall.Handle(fd), syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1); sockoptErr != nil {
 				log.WithError(sockoptErr).WithField("context", logContext).Warn("Failed to set SO_REUSEADDR")
 			}
 		})
