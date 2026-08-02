@@ -2370,6 +2370,14 @@ func (t *NTCP2Transport) GetSessionCount() int32 {
 	return t.sessionRegistry.Count()
 }
 
+// HasSession returns true if an active session exists for the given peer hash.
+// This lets higher layers (e.g. tunnel peer selection) check reachability
+// without triggering a new dial attempt. Implements transport.Transport.
+func (t *NTCP2Transport) HasSession(peerHash data.Hash) bool {
+	_, ok := t.sessionRegistry.Load(peerHash)
+	return ok
+}
+
 // GetRouterInfoParseFailures returns the total count of RouterInfo parse failures
 // since transport startup. Incremented each time ReadRouterInfo fails on inbound msg3.
 // EH-1 fix: Exposes peer RouterInfo quality for monitoring and alerting. High count

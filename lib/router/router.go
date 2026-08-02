@@ -210,6 +210,14 @@ func initializeNetDBAndTransports(r *Router, ri *router_info.RouterInfo, cfg *co
 	if r.netdb != nil && r.netdb.PeerTracker != nil {
 		tmux.SetPeerConnNotifier(r.netdb.PeerTracker)
 	}
+	// Bias tunnel peer selection toward peers we already have an established
+	// transport session with. Without this, selection commits builds to peers
+	// it then cannot dial ("no transports available"), the build fails, the
+	// peer is marked failed, and selection never converges — so client tunnel
+	// pools never reach a ready state and no LeaseSet is ever published.
+	if r.netdb != nil {
+		r.netdb.SetConnectedPeerProvider(r.connectedPeerHashes)
+	}
 	r.transports.Store(tmux)
 	return nil
 }

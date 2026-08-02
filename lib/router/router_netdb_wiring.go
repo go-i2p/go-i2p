@@ -1,6 +1,8 @@
 package router
 
 import (
+	"context"
+	"encoding/binary"
 	"time"
 
 	"github.com/samber/oops"
@@ -8,9 +10,12 @@ import (
 	"github.com/go-i2p/logger"
 
 	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/common/router_info"
 
+	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/netdb"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 )
 
 // logSubsystemStop logs a subsystem shutdown event with standard fields.
@@ -131,8 +136,118 @@ func (r *Router) startExplorer() error {
 		r.explorer = nil
 		return oops.Wrapf(err, "failed to start NetDB explorer")
 	}
+
+	// Now that the lookup client and tunnel pools are ready, wire an on-demand
+	// network LeaseSet lookup into the NetDB. This makes .b32.i2p hash lookups
+	// for destinations we have never contacted actually query the network
+	// (closest floodfills) instead of returning KEY_NOT_FOUND immediately.
+	if r.netdb != nil && r.lookupClient != nil {
+		r.netdb.SetLeaseSetNetworkLookup(r.lookupLeaseSetFromNetwork)
+	}
+
 	log.WithFields(logger.Fields{"at": "startExplorer"}).Debug("NetDB explorer started")
 	return nil
+}
+
+// leaseSetNetworkLookupTimeout bounds a single on-demand network LeaseSet
+// lookup (across all queried floodfills).
+const leaseSetNetworkLookupTimeout = 10 * time.Second
+
+// leaseSetNetworkLookupFloodfillCount is the number of closest floodfills
+// queried (in order) for an on-demand LeaseSet lookup before giving up.
+const leaseSetNetworkLookupFloodfillCount = 3
+
+// lookupLeaseSetFromNetwork performs an on-demand network DatabaseLookup for a
+// LeaseSet that is missing locally. It queries the closest floodfill routers
+// with a LeaseSet-type lookup; inbound DatabaseStore replies are stored in the
+// NetDB by the message processor, so on success the LeaseSet becomes available
+// via the local cache. Returns true if the LeaseSet was stored locally.
+//
+// Installed as the NetDB's LeaseSetNetworkLookup provider. Safe to call from
+// NetDB read paths (I2CP HostLookup, naming resolver).
+func (r *Router) lookupLeaseSetFromNetwork(hash common.Hash) bool {
+	r.runMux.RLock()
+	running := r.running
+	r.runMux.RUnlock()
+	if !running || r.netdb == nil || r.lookupClient == nil {
+		return false
+	}
+
+	floodfills, err := r.netdb.SelectFloodfillRouters(hash, leaseSetNetworkLookupFloodfillCount)
+	if err != nil || len(floodfills) == 0 {
+		log.WithError(err).WithFields(logger.Fields{
+			"at":   "lookupLeaseSetFromNetwork",
+			"hash": logutil.HashPrefix(hash),
+		}).Debug("no floodfills available for on-demand LeaseSet lookup")
+		return false
+	}
+
+	ourHash, err := r.getOurRouterHash()
+	if err != nil {
+		return false
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), leaseSetNetworkLookupTimeout)
+	defer cancel()
+
+	replyTunnelID, replyGateway, hasReplyRoute := r.selectLeaseSetReplyRoute()
+
+	for i := range floodfills {
+		if r.queryFloodfillForLeaseSet(ctx, floodfills[i], hash, ourHash, replyTunnelID, replyGateway, hasReplyRoute) {
+			return true
+		}
+	}
+	return false
+}
+
+// selectLeaseSetReplyRoute returns an inbound reply tunnel for LeaseSet
+// lookups when one is available, so firewalled routers can receive the reply.
+func (r *Router) selectLeaseSetReplyRoute() (tunnelID [4]byte, gateway common.Hash, ok bool) {
+	if r.tunnelManager == nil {
+		return tunnelID, gateway, false
+	}
+	inbound := r.tunnelManager.GetInboundPool()
+	if inbound == nil {
+		return tunnelID, gateway, false
+	}
+	active := inbound.GetActiveTunnels()
+	if len(active) == 0 || len(active[0].Hops) == 0 {
+		return tunnelID, gateway, false
+	}
+	var idBytes [4]byte
+	binary.BigEndian.PutUint32(idBytes[:], uint32(active[0].ID))
+	return idBytes, active[0].Hops[0], true
+}
+
+// queryFloodfillForLeaseSet sends a single LeaseSet DatabaseLookup to one
+// floodfill and reports whether the LeaseSet is now available locally.
+func (r *Router) queryFloodfillForLeaseSet(ctx context.Context, ff router_info.RouterInfo, hash, ourHash common.Hash, replyTunnelID [4]byte, replyGateway common.Hash, hasReplyRoute bool) bool {
+	var lookup *i2np.DatabaseLookup
+	if hasReplyRoute {
+		lookup = i2np.NewDatabaseLookupWithTunnel(hash, replyGateway, replyTunnelID, i2np.DatabaseLookupFlagTypeLS, nil)
+	} else {
+		lookup = i2np.NewDatabaseLookup(hash, ourHash, i2np.DatabaseLookupFlagTypeLS, nil)
+	}
+
+	_, _, err := r.lookupClient.SendDatabaseLookup(ctx, ff, lookup)
+	if err != nil {
+		log.WithError(err).WithFields(logger.Fields{
+			"at":   "lookupLeaseSetFromNetwork",
+			"hash": logutil.HashPrefix(hash),
+		}).Debug("LeaseSet lookup to floodfill failed")
+		return false
+	}
+
+	// The processor stores an inbound LeaseSet DatabaseStore into the NetDB.
+	// Confirm the LeaseSet is now locally resolvable.
+	if _, err := r.netdb.GetLeaseSetBytes(hash); err == nil {
+		log.WithFields(logger.Fields{
+			"at":   "lookupLeaseSetFromNetwork",
+			"hash": logutil.HashPrefix(hash),
+		}).Debug("on-demand network LeaseSet lookup succeeded")
+		return true
+	}
+	return false
 }
 
 // startPublisher creates and starts the NetDB publisher for periodic RouterInfo and LeaseSet

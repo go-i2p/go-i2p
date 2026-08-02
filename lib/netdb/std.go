@@ -39,6 +39,27 @@ type StdNetDB struct {
 
 	PeerTracker *PeerTracker // tracks connection success/failure for peers
 
+	// connectedPeerProvider, when set, returns the set of peer hashes that
+	// currently have an established transport session. Peer selection uses
+	// this to bias tunnel hop selection toward peers we can already reach,
+	// which lets tunnel builds converge instead of repeatedly committing to
+	// peers that then fail to dial ("no transports available"). Guarded by
+	// connectedPeerMu. May be nil (cold start / not wired), in which case
+	// selection falls back to reachability-heuristic-only behavior.
+	connectedPeerProvider func() map[common.Hash]struct{}
+	connectedPeerMu       sync.RWMutex
+
+	// leaseSetNetworkLookup, when set, performs an on-demand network
+	// DatabaseLookup for a LeaseSet that is not present in the local cache or
+	// on disk (e.g. an outbound .b32.i2p lookup for a destination we have
+	// never contacted). It should block until the LeaseSet is retrieved and
+	// stored locally or the lookup fails/times out. Guarded by
+	// leaseSetLookupMu. May be nil, in which case a local miss is terminal
+	// (previous behavior). Returns true if the network lookup stored a
+	// matching LeaseSet locally.
+	leaseSetNetworkLookup func(hash common.Hash) bool
+	leaseSetLookupMu      sync.RWMutex
+
 	// riRefreshCooldown stores the time of the last RequestRouterInfoRefresh
 	// call per peer hash to prevent thundering-herd re-fetches.
 	// Uses time-bucketed structure for O(1) cleanup without iteration.
@@ -116,6 +137,57 @@ func NewStdNetDB(db string) *StdNetDB {
 // Values below 10 are ignored to preserve minimum validated configuration limits.
 func (db *StdNetDB) SetMaxRouterInfos(max int) {
 	db.riCache.setCapacity(max)
+}
+
+// SetConnectedPeerProvider installs a callback that returns the set of peer
+// hashes with an established transport session. When set, SelectPeers biases
+// tunnel hop selection toward these peers so builds converge on peers we can
+// already reach. Passing nil disables the bias (falls back to reachability
+// heuristics only). Thread-safe.
+func (db *StdNetDB) SetConnectedPeerProvider(provider func() map[common.Hash]struct{}) {
+	db.connectedPeerMu.Lock()
+	db.connectedPeerProvider = provider
+	db.connectedPeerMu.Unlock()
+}
+
+// connectedPeers returns the current set of peer hashes with an established
+// transport session, or nil if no provider is configured. The returned map
+// must be treated as read-only by callers.
+func (db *StdNetDB) connectedPeers() map[common.Hash]struct{} {
+	db.connectedPeerMu.RLock()
+	provider := db.connectedPeerProvider
+	db.connectedPeerMu.RUnlock()
+	if provider == nil {
+		return nil
+	}
+	return provider()
+}
+
+// SetLeaseSetNetworkLookup installs a callback used to perform an on-demand
+// network DatabaseLookup for a LeaseSet that is missing from the local cache
+// and disk. When set, GetLeaseSet / GetLeaseSetBytes will attempt a network
+// lookup on a local miss (for example an outbound .b32.i2p lookup for a
+// destination we have never contacted) instead of immediately returning
+// not-found. Passing nil restores the local-only behavior. Thread-safe.
+func (db *StdNetDB) SetLeaseSetNetworkLookup(lookup func(hash common.Hash) bool) {
+	db.leaseSetLookupMu.Lock()
+	db.leaseSetNetworkLookup = lookup
+	db.leaseSetLookupMu.Unlock()
+}
+
+// tryNetworkLeaseSetLookup invokes the configured network LeaseSet lookup for
+// the given hash, returning true if a matching LeaseSet was retrieved and
+// stored locally. Returns false if no lookup is configured or the lookup did
+// not find a LeaseSet.
+func (db *StdNetDB) tryNetworkLeaseSetLookup(hash common.Hash) bool {
+	db.leaseSetLookupMu.RLock()
+	lookup := db.leaseSetNetworkLookup
+	db.leaseSetLookupMu.RUnlock()
+	if lookup == nil {
+		return false
+	}
+	log.WithField("hash", hash).Debug("LeaseSet not local; attempting on-demand network lookup")
+	return lookup(hash)
 }
 
 // SetStrictRouterInfoNetworkValidation toggles strict option validation for

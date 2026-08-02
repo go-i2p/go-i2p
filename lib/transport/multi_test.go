@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -42,6 +43,10 @@ func (m *mockTransport) GetSession(routerInfo router_info.RouterInfo) (Transport
 
 func (m *mockTransport) Compatible(routerInfo router_info.RouterInfo) bool {
 	return true
+}
+
+func (m *mockTransport) HasSession(peerHash common.Hash) bool {
+	return false
 }
 
 func (m *mockTransport) Close() error {
@@ -341,6 +346,7 @@ func (s *slowAcceptTransport) GetSession(routerInfo router_info.RouterInfo) (Tra
 	return nil, nil
 }
 func (s *slowAcceptTransport) Compatible(routerInfo router_info.RouterInfo) bool { return true }
+func (s *slowAcceptTransport) HasSession(peerHash common.Hash) bool              { return false }
 func (s *slowAcceptTransport) Close() error                                      { return nil }
 func (s *slowAcceptTransport) Name() string                                      { return "SlowAcceptTransport" }
 

@@ -482,13 +482,76 @@ func (db *StdNetDB) SelectPeers(count int, exclude []common.Hash) ([]router_info
 		return available, nil
 	}
 
-	selected := db.selectRandomPeers(available, count)
+	selected := db.selectPreferringConnected(available, count)
 	log.WithFields(logger.Fields{
 		"at":             "StdNetDB.SelectPeers",
 		"reason":         "selection_complete",
-		"selected_peers": count,
+		"selected_peers": len(selected),
 	}).Debug("peer selection completed")
 	return selected, nil
+}
+
+// selectPreferringConnected biases selection toward peers that already have an
+// established transport session. This lets tunnel builds converge on peers we
+// can actually reach instead of repeatedly gambling on undialable peers, which
+// is the root cause of the "no transports available" build-retry loop that
+// prevents client tunnel pools from ever reaching a ready state.
+//
+// The bias is soft: connected peers are drawn from first (still randomized and
+// diversity-filtered), and any shortfall is filled from the remaining peers.
+// When no provider is wired or no peers are connected yet (e.g. cold start),
+// this degrades exactly to the previous random-diverse behavior.
+func (db *StdNetDB) selectPreferringConnected(available []router_info.RouterInfo, count int) []router_info.RouterInfo {
+	connected := db.connectedPeers()
+	if len(connected) == 0 {
+		return db.selectRandomPeers(available, count)
+	}
+
+	connectedPeers, otherPeers := partitionByConnected(available, connected)
+
+	logConnectedBias(len(connectedPeers), len(otherPeers), count)
+
+	// Draw from connected peers first (randomized + diversity-filtered), then
+	// top up from the remaining peers if we could not fill the request.
+	selected := db.selectRandomPeers(connectedPeers, count)
+	if len(selected) >= count {
+		return selected
+	}
+
+	remaining := count - len(selected)
+	selected = append(selected, db.selectRandomPeers(otherPeers, remaining)...)
+	return selected
+}
+
+// partitionByConnected splits peers into those with an established transport
+// session and the rest, preserving the reliability-sorted input order within
+// each group. Peers whose hash cannot be computed fall into the "other" group.
+func partitionByConnected(available []router_info.RouterInfo, connected map[common.Hash]struct{}) (connectedPeers, otherPeers []router_info.RouterInfo) {
+	for _, ri := range available {
+		hash, err := ri.IdentHash()
+		if err != nil {
+			otherPeers = append(otherPeers, ri)
+			continue
+		}
+		if _, ok := connected[hash]; ok {
+			connectedPeers = append(connectedPeers, ri)
+		} else {
+			otherPeers = append(otherPeers, ri)
+		}
+	}
+	return connectedPeers, otherPeers
+}
+
+// logConnectedBias records how the connected-peer bias partitioned the
+// candidate set for observability of tunnel-build convergence.
+func logConnectedBias(connectedCount, otherCount, requested int) {
+	log.WithFields(logger.Fields{
+		"at":              "StdNetDB.SelectPeers",
+		"reason":          "connected_peer_bias",
+		"connected_peers": connectedCount,
+		"other_peers":     otherCount,
+		"requested_count": requested,
+	}).Debug("biasing tunnel peer selection toward peers with established sessions")
 }
 
 // SelectFloodfillRouters selects the closest floodfill routers to a target hash

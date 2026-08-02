@@ -30,6 +30,24 @@ func (r *Router) removeSession(peerHash common.Hash) {
 	log.WithField("peer_hash", logutil.HashPrefix(peerHash)).Debug("Removed session")
 }
 
+// connectedPeerHashes returns the set of peer hashes that currently have an
+// established transport session. It is installed on the NetDB as the connected
+// peer provider so tunnel peer selection can prefer peers we can already reach.
+// Thread-safe for concurrent read access using RWMutex.
+func (r *Router) connectedPeerHashes() map[common.Hash]struct{} {
+	r.sessionMutex.RLock()
+	defer r.sessionMutex.RUnlock()
+
+	if len(r.activeSessions) == 0 {
+		return nil
+	}
+	hashes := make(map[common.Hash]struct{}, len(r.activeSessions))
+	for peerHash := range r.activeSessions {
+		hashes[peerHash] = struct{}{}
+	}
+	return hashes
+}
+
 // getSessionByHash retrieves a session for a specific peer.
 // Returns an error if no active session exists for the given peer hash.
 // Thread-safe for concurrent read access using RWMutex.

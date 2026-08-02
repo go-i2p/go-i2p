@@ -15,6 +15,7 @@ import (
 	"sync"
 	"testing"
 
+	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/stretchr/testify/assert"
@@ -46,6 +47,7 @@ func TestTransportInterface_RequiredMethods(t *testing.T) {
 		"SetIdentity", // Bind router identity
 		"GetSession",  // Establish session with peer
 		"Compatible",  // Check peer compatibility
+		"HasSession",  // Report existing session without dialing
 		"Close",       // Lifecycle cleanup
 		"Name",        // Transport identification
 	}
@@ -556,6 +558,8 @@ func (m *mockTransportFallback) Compatible(routerInfo router_info.RouterInfo) bo
 	return m.compatible
 }
 
+func (m *mockTransportFallback) HasSession(peerHash common.Hash) bool { return false }
+
 func (m *mockTransportFallback) Close() error { return nil }
 
 func (m *mockTransportFallback) Name() string { return m.name }
@@ -572,6 +576,7 @@ func (m *mockTransportNamed) GetSession(ri router_info.RouterInfo) (TransportSes
 	return nil, nil
 }
 func (m *mockTransportNamed) Compatible(ri router_info.RouterInfo) bool { return false }
+func (m *mockTransportNamed) HasSession(peerHash common.Hash) bool      { return false }
 func (m *mockTransportNamed) Close() error                              { return nil }
 func (m *mockTransportNamed) Name() string                              { return m.name }
 
@@ -588,5 +593,6 @@ func (m *mockTransportCompat) GetSession(ri router_info.RouterInfo) (TransportSe
 	return nil, nil
 }
 func (m *mockTransportCompat) Compatible(ri router_info.RouterInfo) bool { return m.compatible }
+func (m *mockTransportCompat) HasSession(peerHash common.Hash) bool      { return false }
 func (m *mockTransportCompat) Close() error                              { return nil }
 func (m *mockTransportCompat) Name() string                              { return m.name }

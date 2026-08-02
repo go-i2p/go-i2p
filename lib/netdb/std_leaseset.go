@@ -333,7 +333,42 @@ func (db *StdNetDB) GetLeaseSet(hash common.Hash) (chnl chan lease_set.LeaseSet)
 		return chnl
 	}
 
-	return db.loadLeaseSetFromDisk(hash)
+	// Try disk. loadLeaseSetFromDiskIfPresent reports whether an on-disk
+	// LeaseSet was actually found so we can distinguish a real hit from the
+	// empty "not found" channel without inspecting channel internals.
+	if diskChnl, found := db.loadLeaseSetFromDiskIfPresent(hash); found {
+		return diskChnl
+	}
+
+	// Local cache and disk both missed. Attempt an on-demand network lookup
+	// (if wired) so outbound .b32.i2p lookups for destinations we have never
+	// contacted actually query the network instead of returning not-found.
+	if db.tryNetworkLeaseSetLookup(hash) {
+		if chnl = db.getLeaseSetFromCache(hash); chnl != nil {
+			return chnl
+		}
+	}
+
+	return emptyLeaseSetChannel()
+}
+
+// loadLeaseSetFromDiskIfPresent loads a LeaseSet from the filesystem and
+// reports whether a classic LeaseSet was actually present. This lets callers
+// distinguish a genuine on-disk hit from the empty not-found channel.
+func (db *StdNetDB) loadLeaseSetFromDiskIfPresent(hash common.Hash) (chan lease_set.LeaseSet, bool) {
+	entry, err := db.loadLeaseSetEntryFromFile(db.SkiplistFileForLeaseSet(hash))
+	if err != nil {
+		log.WithError(err).Debug("Failed to load LeaseSet entry from file")
+		return emptyLeaseSetChannel(), false
+	}
+
+	if entry.LeaseSet == nil {
+		log.WithField("hash", hash).Debug("On-disk entry is not a classic LeaseSet")
+		return emptyLeaseSetChannel(), false
+	}
+
+	db.lsCache.put(hash, Entry{LeaseSet: entry.LeaseSet})
+	return leaseSetChannel(*entry.LeaseSet), true
 }
 
 // getLeaseSetFromCache attempts to retrieve a LeaseSet from the memory cache.
@@ -360,24 +395,6 @@ func (db *StdNetDB) getLeaseSetFromCache(hash common.Hash) chan lease_set.LeaseS
 	}
 
 	log.WithFields(logger.Fields{"at": "getLeaseSetFromCache"}).Debug("LeaseSet found in memory cache")
-	return leaseSetChannel(*entry.LeaseSet)
-}
-
-// loadLeaseSetFromDisk loads a LeaseSet from filesystem and caches it.
-func (db *StdNetDB) loadLeaseSetFromDisk(hash common.Hash) chan lease_set.LeaseSet {
-	entry, err := db.loadLeaseSetEntryFromFile(db.SkiplistFileForLeaseSet(hash))
-	if err != nil {
-		log.WithError(err).Debug("Failed to load LeaseSet entry from file")
-		return emptyLeaseSetChannel()
-	}
-
-	if entry.LeaseSet == nil {
-		log.WithField("hash", hash).Debug("On-disk entry is not a classic LeaseSet")
-		return emptyLeaseSetChannel()
-	}
-
-	db.lsCache.put(hash, Entry{LeaseSet: entry.LeaseSet})
-
 	return leaseSetChannel(*entry.LeaseSet)
 }
 
@@ -477,6 +494,17 @@ func (db *StdNetDB) fetchLeaseSetBytes(
 	data, err := db.loadLeaseSetFromFile(hash)
 	if err != nil {
 		log.WithError(err).Debug(typeName + " not found in filesystem")
+
+		// Local cache and disk both missed. Attempt an on-demand network
+		// lookup (if wired) so hash lookups (e.g. I2CP HostLookup for a
+		// .b32.i2p destination we have never contacted) actually query the
+		// network instead of returning not-found immediately.
+		if db.tryNetworkLeaseSetLookup(hash) {
+			if data, cacheErr := db.checkCacheForLeaseSet(hash, typeName, cacheCheck); data != nil || cacheErr != nil {
+				return data, cacheErr
+			}
+		}
+
 		return nil, oops.Errorf("%s not found: %w", typeName, err)
 	}
 

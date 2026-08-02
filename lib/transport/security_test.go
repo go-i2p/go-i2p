@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/stretchr/testify/assert"
@@ -111,6 +112,8 @@ func (m *mockTransportSessionError) GetSession(routerInfo router_info.RouterInfo
 
 func (m *mockTransportSessionError) Compatible(routerInfo router_info.RouterInfo) bool { return true }
 
+func (m *mockTransportSessionError) HasSession(peerHash common.Hash) bool { return false }
+
 func (m *mockTransportSessionError) Close() error { return nil }
 
 func (m *mockTransportSessionError) Name() string { return "mock-session-error" }
@@ -143,6 +146,8 @@ func (m *mockTransportWithOrder) Compatible(routerInfo router_info.RouterInfo) b
 	m.mu.Unlock()
 	return m.compatible
 }
+
+func (m *mockTransportWithOrder) HasSession(peerHash common.Hash) bool { return false }
 
 func (m *mockTransportWithOrder) Close() error {
 	return nil
@@ -223,6 +228,7 @@ func (m *mockTransportWithAddr) GetSession(routerInfo router_info.RouterInfo) (T
 	return nil, nil
 }
 func (m *mockTransportWithAddr) Compatible(routerInfo router_info.RouterInfo) bool { return false }
+func (m *mockTransportWithAddr) HasSession(peerHash common.Hash) bool              { return false }
 func (m *mockTransportWithAddr) Close() error                                      { return nil }
 func (m *mockTransportWithAddr) Name() string                                      { return "MockWithAddr" }
 
@@ -472,6 +478,8 @@ func (m *mockTransportWithClose) Compatible(routerInfo router_info.RouterInfo) b
 	return false
 }
 
+func (m *mockTransportWithClose) HasSession(peerHash common.Hash) bool { return false }
+
 func (m *mockTransportWithClose) Close() error {
 	if m.onClose != nil {
 		m.onClose()
@@ -527,6 +535,8 @@ func (m *mockTransportWithCloseError) GetSession(routerInfo router_info.RouterIn
 func (m *mockTransportWithCloseError) Compatible(routerInfo router_info.RouterInfo) bool {
 	return false
 }
+
+func (m *mockTransportWithCloseError) HasSession(peerHash common.Hash) bool { return false }
 
 func (m *mockTransportWithCloseError) Close() error {
 	return m.closeErr

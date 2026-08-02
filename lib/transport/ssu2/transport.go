@@ -1350,6 +1350,14 @@ func (t *SSU2Transport) GetSessionCount() int32 {
 	return t.sessionRegistry.Count()
 }
 
+// HasSession returns true if an active session exists for the given peer hash.
+// This lets higher layers (e.g. tunnel peer selection) check reachability
+// without triggering a new dial attempt. Implements transport.Transport.
+func (t *SSU2Transport) HasSession(peerHash data.Hash) bool {
+	_, ok := t.sessionRegistry.Load(peerHash)
+	return ok
+}
+
 // GetTotalBandwidth returns the total bytes sent and received across all active sessions.
 func (t *SSU2Transport) GetTotalBandwidth() (totalBytesSent, totalBytesReceived uint64) {
 	t.sessionRegistry.Range(func(_, value interface{}) bool {
