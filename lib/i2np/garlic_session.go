@@ -388,3 +388,92 @@ func WrapInGarlicMessage(encryptedGarlic []byte) (*BaseI2NPMessage, error) {
 
 	return msg, nil
 }
+
+// ExtractDataPayloadsFromInboundGarlic decrypts an inbound I2NP Garlic message's
+// encrypted payload using the supplied GarlicSessionManager (which must wrap the
+// recipient destination's ECIES-X25519 private key), then extracts the
+// application payload from every Data (type 20) clove it contains.
+//
+// This is the receive-side inverse of the send path
+// (i2cp.MessageRouter builds a Data clove, encrypts it to the destination, and
+// wraps it via WrapInGarlicMessage). It is used by the router's inbound tunnel
+// handler to turn the encrypted garlic delivered by a client's inbound tunnel
+// into the plaintext payloads that are queued to the owning I2CP session.
+//
+// encryptedGarlic is the raw I2NP Garlic message data (GetData()); a 4-byte
+// length prefix, if present, is stripped automatically. Returns one byte slice
+// per Data clove found. Non-Data cloves (e.g. status/delivery cloves) are
+// skipped. Returns an error if decryption fails or no Data clove is present.
+func ExtractDataPayloadsFromInboundGarlic(sm *GarlicSessionManager, encryptedGarlic []byte) ([][]byte, error) {
+	if sm == nil {
+		return nil, oops.Errorf("nil garlic session manager")
+	}
+	if len(encryptedGarlic) == 0 {
+		return nil, oops.Errorf("empty garlic ciphertext")
+	}
+
+	ciphertext, err := stripGarlicLengthPrefixIfPresent(encryptedGarlic, 0)
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to strip garlic length prefix")
+	}
+
+	decrypted, _, _, err := sm.DecryptGarlicMessage(ciphertext)
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to decrypt inbound garlic")
+	}
+
+	// Each decrypted entry is a full serialized Garlic message (as produced by
+	// GarlicBuilder.BuildAndSerialize on the send side), so it is parsed with
+	// DeserializeGarlic rather than as a single clove.
+	var payloads [][]byte
+	for _, garlicBytes := range decrypted {
+		garlic, err := DeserializeGarlic(garlicBytes, 0)
+		if err != nil {
+			log.WithError(err).Debug("skipping unparseable inbound garlic")
+			continue
+		}
+		for i := range garlic.Cloves {
+			payload, ok := extractDataClovePayload(garlic.Cloves[i])
+			if ok {
+				payloads = append(payloads, payload)
+			}
+		}
+	}
+
+	if len(payloads) == 0 {
+		return nil, oops.Errorf("inbound garlic contained no Data cloves")
+	}
+	return payloads, nil
+}
+
+// extractDataClovePayload returns the application payload carried by a Data
+// (type 20) garlic clove. The clove's inner message data is framed as
+// [4-byte length][payload]; this strips that framing. Returns (nil, false) for
+// non-Data cloves or malformed framing.
+func extractDataClovePayload(clove GarlicClove) ([]byte, bool) {
+	if clove.Message == nil || clove.Message.Type() != I2NPMessageTypeData {
+		return nil, false
+	}
+
+	carrier, ok := clove.Message.(DataCarrier)
+	if !ok {
+		return nil, false
+	}
+	data := carrier.GetData()
+	if len(data) < 4 {
+		return nil, false
+	}
+
+	declaredLen := int(binary.BigEndian.Uint32(data[0:4]))
+	body := data[4:]
+	if declaredLen != len(body) {
+		// Framing mismatch: fall back to the raw data body so a length-field
+		// discrepancy does not silently drop an otherwise-valid payload.
+		log.WithFields(logger.Fields{
+			"at":           "extractDataClovePayload",
+			"declared_len": declaredLen,
+			"actual_len":   len(body),
+		}).Debug("Data clove length prefix mismatch; using raw body")
+	}
+	return body, true
+}

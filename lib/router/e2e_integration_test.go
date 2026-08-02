@@ -12,6 +12,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	noiseratchet "github.com/go-i2p/go-noise/ratchet"
+	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -119,13 +120,12 @@ func TestE2E_MultipleMessagesConcurrent(t *testing.T) {
 	// Wait for transmission
 	env.WaitForOutboundTransmission(t, 3*time.Second)
 
-	// Process all sent messages (ES) + the initial NS through inbound tunnels
+	// Process all remaining sent messages (ES) through inbound tunnels. The NS
+	// message (messages[0]) was already decrypted and delivered by
+	// CompleteGarlicHandshake above, so it must not be processed again (the
+	// ratchet rejects a replayed NS).
 	sentGarlicMessages := env.ExtractAllSentGarlicMessages(t)
 	assert.Equal(t, numMessages-1, len(sentGarlicMessages), "Should send remaining messages")
-
-	// Process the first message (already extracted above)
-	err = env.ProcessInboundMessage(nsMsg, messages[0])
-	require.NoError(t, err, "Failed to process NS message")
 
 	for i, garlicMsg := range sentGarlicMessages {
 		err := env.ProcessInboundMessage(garlicMsg, messages[i+1])
@@ -181,11 +181,10 @@ func TestE2E_TunnelFailureAndRecovery(t *testing.T) {
 	garlicMsg1 := env.ExtractSentGarlicMessage(t)
 	require.NotNil(t, garlicMsg1)
 
-	// Complete NS→NSR handshake so subsequent messages can use Existing Session
+	// Complete NS→NSR handshake so subsequent messages can use Existing Session.
+	// This also decrypts and delivers the NS message's payload to the receiver,
+	// so we do NOT call ProcessInboundMessage on the same NS message again.
 	env.CompleteGarlicHandshake(t, garlicMsg1)
-
-	err = env.ProcessInboundMessage(garlicMsg1, payload1)
-	require.NoError(t, err)
 
 	ctx1, cancel1 := context.WithTimeout(context.Background(), 2*time.Second)
 	msg1, err := env.ReceiveMessageAtClient(ctx1, env.receiverSession)
@@ -201,7 +200,14 @@ func TestE2E_TunnelFailureAndRecovery(t *testing.T) {
 	env.RebuildTunnels(t)
 	assert.NotEmpty(t, env.senderOutboundPool.GetActiveTunnels(), "Tunnels should be rebuilt")
 
-	// Send another message with new tunnels
+	// Clear previously-sent messages so the recovery send is extracted fresh.
+	// (The first NS message was already consumed by CompleteGarlicHandshake; the
+	// ratchet rejects a replayed NS, so we must not re-extract sentMessages[0].)
+	env.sentMutex.Lock()
+	env.sentMessages = env.sentMessages[:0]
+	env.sentMutex.Unlock()
+
+	// Send another message with new tunnels (Existing Session now)
 	payload2 := []byte("Message after tunnel recovery")
 	sendAndReceiveE2E(t, env, payload2)
 }
@@ -475,13 +481,45 @@ func (env *e2eTestEnvironment) ExtractAllSentGarlicMessages(t *testing.T) []i2np
 }
 
 // ProcessInboundMessage simulates inbound tunnel processing and delivery to I2CP session
-// In a real system, this would involve tunnel decryption and message routing
-// For testing, we directly queue the payload to simulate successful delivery
-func (env *e2eTestEnvironment) ProcessInboundMessage(garlicMsg i2np.Message, expectedPayload []byte) error {
-	// In production: garlic message would be decrypted, routed through inbound tunnel,
-	// and delivered to the destination session's message queue
-	// For testing: we simulate this by directly queueing the expected payload
-	return env.receiverSession.QueueIncomingMessage(expectedPayload)
+// This now exercises the REAL inbound delivery path: the garlic message is
+// decrypted with the receiver's ECIES key and its Data clove payload(s) are
+// extracted and queued to the receiver session — exactly as the production
+// InboundMessageHandler does. It no longer stubs the decryption step.
+func (env *e2eTestEnvironment) ProcessInboundMessage(garlicMsg i2np.Message, _ []byte) error {
+	baseMsg, ok := garlicMsg.(*i2np.BaseI2NPMessage)
+	if !ok {
+		return oops.Errorf("expected *i2np.BaseI2NPMessage, got %T", garlicMsg)
+	}
+
+	payloads, err := i2np.ExtractDataPayloadsFromInboundGarlic(env.receiverGarlicManager, baseMsg.GetData())
+	if err != nil {
+		return oops.Wrapf(err, "failed to decrypt/extract inbound garlic")
+	}
+
+	for _, payload := range payloads {
+		if err := env.receiverSession.QueueIncomingMessage(payload); err != nil {
+			return oops.Wrapf(err, "failed to queue decrypted payload")
+		}
+	}
+	return nil
+}
+
+// dataClovePayloadForTest extracts the application payload from a Data garlic
+// clove ([4-byte length][payload] framing). Returns nil for non-Data cloves.
+// Used by the e2e harness to deliver the NS handshake message's payload.
+func dataClovePayloadForTest(clove i2np.GarlicClove) []byte {
+	if clove.Message == nil || clove.Message.Type() != i2np.I2NPMessageTypeData {
+		return nil
+	}
+	carrier, ok := clove.Message.(i2np.DataCarrier)
+	if !ok {
+		return nil
+	}
+	data := carrier.GetData()
+	if len(data) < 4 {
+		return nil
+	}
+	return data[4:]
 }
 
 // ReceiveMessageAtClient receives a message at the I2CP client session
@@ -573,10 +611,28 @@ func (env *e2eTestEnvironment) CompleteGarlicHandshake(t *testing.T, nsMsg i2np.
 	nsData := baseMsg.GetData()
 	require.NotEmpty(t, nsData, "garlic message data should not be empty")
 
-	// Receiver decrypts the NS garlic message to get sessionHash
-	_, _, sessionHash, err := env.receiverGarlicManager.DecryptGarlicMessage(nsData)
+	// Receiver decrypts the NS garlic message to get sessionHash. This consumes
+	// the NS message (the ratchet's replay protection rejects a second decrypt
+	// of the same ephemeral), so the NS payload is delivered here and callers
+	// must NOT also call ProcessInboundMessage on the same NS message.
+	cloves, _, sessionHash, err := env.receiverGarlicManager.DecryptGarlicMessage(nsData)
 	require.NoError(t, err, "Receiver failed to decrypt NS")
 	require.NotNil(t, sessionHash, "sessionHash must be non-nil for New Session")
+
+	// Deliver the NS message's Data-clove payload(s) to the receiver session so
+	// the handshake message's application data is not lost.
+	for _, garlicBytes := range cloves {
+		garlic, derr := i2np.DeserializeGarlic(garlicBytes, 0)
+		if derr != nil {
+			continue
+		}
+		for i := range garlic.Cloves {
+			payload := dataClovePayloadForTest(garlic.Cloves[i])
+			if payload != nil {
+				require.NoError(t, env.receiverSession.QueueIncomingMessage(payload))
+			}
+		}
+	}
 
 	// Receiver sends NSR to complete the handshake
 	nsrPayload, err := noiseratchet.BuildNSPayload([]byte("nsr"))

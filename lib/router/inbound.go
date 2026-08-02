@@ -144,8 +144,12 @@ func (h *InboundMessageHandler) CreateEndpointForSession(tunnelID tunnel.TunnelI
 		return nil, oops.Errorf("cannot create endpoint for session %d: I2CP session manager not configured", sessionID)
 	}
 
-	// Create the message handler that delivers decrypted messages to the I2CP session
-	messageHandler := h.createMessageHandler(sessionID)
+	// Build the per-session garlic decryptor from the destination's ECIES key so
+	// inbound end-to-end-encrypted garlic can be decrypted before delivery.
+	decryptor := h.buildSessionGarlicDecryptor(sessionID)
+
+	// Create the message handler that decrypts and delivers messages to the I2CP session
+	messageHandler := h.createMessageHandler(sessionID, decryptor)
 
 	// Create the endpoint with the handler wired in
 	endpoint, err := tunnel.NewEndpoint(tunnelID, decryption, messageHandler)
@@ -320,21 +324,28 @@ func (h *InboundMessageHandler) decryptAndDeliver(tunnelID tunnel.TunnelID, data
 }
 
 // createMessageHandler creates a message handler callback for a specific session.
-// This handler is called by the tunnel endpoint when a decrypted message is ready.
+// This handler is called by the tunnel endpoint when a reassembled message is ready.
 //
 // The handler:
-// 1. Receives the raw I2NP message bytes from the endpoint
-// 2. Looks up the I2CP session
-// 3. Queues the message for delivery to the client
+//  1. Receives the reassembled I2NP message bytes from the endpoint. For client
+//     traffic this is an I2NP Garlic message (type 11) encrypted end-to-end to
+//     the destination.
+//  2. Decrypts the garlic using the session's ECIES-X25519 key and extracts the
+//     application payload from the Data clove(s).
+//  3. Looks up the I2CP session and queues each payload for delivery to the client.
+//
+// decryptor is the per-session garlic decryptor built from the destination's
+// encryption private key. When nil (no usable key), the handler falls back to
+// queuing the raw bytes so control/testing paths still function; this fallback
+// path cannot deliver real application data.
 //
 // Returns a MessageHandler callback function.
-func (h *InboundMessageHandler) createMessageHandler(sessionID uint16) tunnel.MessageHandler {
+func (h *InboundMessageHandler) createMessageHandler(sessionID uint16, decryptor *i2np.GarlicSessionManager) tunnel.MessageHandler {
 	return func(msgBytes []byte) error {
 		if h.sessionManager == nil {
 			return oops.Errorf("cannot deliver message for session %d: I2CP session manager not configured", sessionID)
 		}
 
-		// Look up the session
 		session, ok := h.sessionManager.GetSession(sessionID)
 		if !ok {
 			log.WithFields(logger.Fields{
@@ -345,22 +356,101 @@ func (h *InboundMessageHandler) createMessageHandler(sessionID uint16) tunnel.Me
 			return oops.Errorf("session %d not found", sessionID)
 		}
 
-		// Queue the message for delivery to the client
-		if err := session.QueueIncomingMessage(msgBytes); err != nil {
-			log.WithFields(logger.Fields{
-				"session_id": sessionID,
-				"error":      err,
-			}).Error("Failed to queue incoming message")
-			return oops.Wrapf(err, "failed to queue message")
+		payloads, err := h.extractClientPayloads(sessionID, msgBytes, decryptor)
+		if err != nil {
+			return err
 		}
 
-		log.WithFields(logger.Fields{
-			"session_id":   sessionID,
-			"message_size": len(msgBytes),
-		}).Debug("Queued incoming message for I2CP session")
+		for _, payload := range payloads {
+			if err := session.QueueIncomingMessage(payload); err != nil {
+				log.WithFields(logger.Fields{
+					"session_id": sessionID,
+					"error":      err,
+				}).Error("Failed to queue incoming message")
+				return oops.Wrapf(err, "failed to queue message")
+			}
+			log.WithFields(logger.Fields{
+				"session_id":   sessionID,
+				"message_size": len(payload),
+			}).Debug("Queued incoming message for I2CP session")
+		}
 
 		return nil
 	}
+}
+
+// extractClientPayloads turns the reassembled inbound message bytes into the
+// application payload(s) that should be delivered to the I2CP client.
+//
+// For client traffic the bytes are an I2NP Garlic message encrypted to the
+// destination: it is decrypted with the session's ECIES key and the Data clove
+// payload(s) are returned. If the bytes are not a garlic message, or no
+// decryptor is available, the raw bytes are returned unchanged (best-effort
+// fallback) so non-garlic/control and legacy paths keep working.
+func (h *InboundMessageHandler) extractClientPayloads(sessionID uint16, msgBytes []byte, decryptor *i2np.GarlicSessionManager) ([][]byte, error) {
+	if decryptor == nil {
+		log.WithFields(logger.Fields{
+			"at":         "extractClientPayloads",
+			"session_id": sessionID,
+			"reason":     "no garlic decryptor for session",
+		}).Warn("delivering raw inbound bytes without garlic decryption (session has no ECIES key)")
+		return [][]byte{msgBytes}, nil
+	}
+
+	inner := &i2np.BaseI2NPMessage{}
+	if err := inner.UnmarshalBinary(msgBytes); err != nil {
+		if err2 := inner.UnmarshalShortI2NP(msgBytes); err2 != nil {
+			return nil, oops.Errorf("failed to parse inbound I2NP message for session %d: %v", sessionID, err2)
+		}
+	}
+
+	if inner.Type() != i2np.I2NPMessageTypeGarlic {
+		// Not garlic (e.g. a bare Data message in tests); deliver as-is.
+		return [][]byte{msgBytes}, nil
+	}
+
+	payloads, err := i2np.ExtractDataPayloadsFromInboundGarlic(decryptor, inner.GetData())
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":         "extractClientPayloads",
+			"session_id": sessionID,
+			"error":      err.Error(),
+		}).Error("failed to decrypt/extract inbound garlic for I2CP session")
+		return nil, oops.Wrapf(err, "failed to extract client payloads for session %d", sessionID)
+	}
+
+	return payloads, nil
+}
+
+// buildSessionGarlicDecryptor constructs a per-session garlic decryptor from the
+// destination's ECIES-X25519 private key. Returns nil (with a warning) when the
+// session has no usable key, in which case inbound application data cannot be
+// decrypted for that session.
+func (h *InboundMessageHandler) buildSessionGarlicDecryptor(sessionID uint16) *i2np.GarlicSessionManager {
+	session, ok := h.sessionManager.GetSession(sessionID)
+	if !ok {
+		return nil
+	}
+
+	key, ok := session.ECIESDecryptionKey()
+	if !ok {
+		log.WithFields(logger.Fields{
+			"at":         "buildSessionGarlicDecryptor",
+			"session_id": sessionID,
+			"reason":     "no ECIES private key available",
+		}).Warn("cannot build inbound garlic decryptor; inbound data delivery will be impaired")
+		return nil
+	}
+
+	decryptor, err := i2np.NewGarlicSessionManager(key)
+	if err != nil {
+		log.WithError(err).WithFields(logger.Fields{
+			"at":         "buildSessionGarlicDecryptor",
+			"session_id": sessionID,
+		}).Error("failed to create inbound garlic decryptor for session")
+		return nil
+	}
+	return decryptor
 }
 
 // passthroughTunnelEncryptor is a no-op TunnelEncryptor used for exploratory /

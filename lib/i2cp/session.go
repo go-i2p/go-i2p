@@ -261,6 +261,39 @@ func (s *Session) GetEncryptionPrivateKey(keyType uint16) []byte {
 	return s.clientEncryptionKeys[keyType]
 }
 
+// ECIESDecryptionKey returns the 32-byte X25519 (ECIES) private key used to
+// decrypt inbound garlic messages addressed to this session's destination.
+//
+// It prefers a client-provided key from CreateLeaseSet2 (the authoritative key
+// matching the published LeaseSet2 when the client manages its own keys) and
+// falls back to the session's own key store (when the router generated the
+// destination). Returns ok=false if no usable 32-byte X25519 key is available.
+func (s *Session) ECIESDecryptionKey() ([32]byte, bool) {
+	var key [32]byte
+
+	s.mu.RLock()
+	clientKey := s.clientEncryptionKeys[key_certificate.KEYCERT_CRYPTO_X25519]
+	keystore := s.keys
+	s.mu.RUnlock()
+
+	if len(clientKey) == 32 {
+		copy(key[:], clientKey)
+		return key, true
+	}
+
+	if keystore != nil {
+		if priv := keystore.EncryptionPrivateKey(); priv != nil {
+			b := priv.Bytes()
+			if len(b) == 32 {
+				copy(key[:], b)
+				return key, true
+			}
+		}
+	}
+
+	return key, false
+}
+
 // IncomingMessage represents a message received from the I2P network
 type IncomingMessage struct {
 	Payload   []byte    // Message data

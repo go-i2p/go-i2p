@@ -7,9 +7,11 @@ import (
 	"time"
 
 	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/common/key_certificate"
 	"github.com/go-i2p/common/session_key"
 	"github.com/go-i2p/crypto/types"
 
+	"github.com/go-i2p/crypto/ecies"
 	"github.com/go-i2p/crypto/rand"
 
 	"github.com/go-i2p/crypto/tunnel"
@@ -240,8 +242,9 @@ func TestCreateMessageHandler(t *testing.T) {
 	session, err := sessionManager.CreateSession(nil, i2cp.DefaultSessionConfig())
 	require.NoError(t, err)
 
-	// Create handler
-	msgHandler := handler.createMessageHandler(session.ID())
+	// Create handler with a nil decryptor: this exercises the best-effort
+	// fallback path (no ECIES key), which queues the raw bytes unchanged.
+	msgHandler := handler.createMessageHandler(session.ID(), nil)
 	assert.NotNil(t, msgHandler)
 
 	// Test handler with message
@@ -262,12 +265,90 @@ func TestCreateMessageHandlerInvalidSession(t *testing.T) {
 	handler := NewInboundMessageHandler(sessionManager)
 
 	// Create handler for non-existent session
-	msgHandler := handler.createMessageHandler(9999)
+	msgHandler := handler.createMessageHandler(9999, nil)
 
 	// Should error
 	err := msgHandler([]byte("test"))
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
+}
+
+// TestInboundGarlicDecryptedAndDelivered is the end-to-end regression test for
+// the inbound-data blocking bug: an encrypted garlic message addressed to a
+// session's destination key must be decrypted, its Data clove extracted, and
+// the plaintext payload delivered to the I2CP client — NOT queued as raw
+// ciphertext. This exercises the exact production path the message handler uses.
+func TestInboundGarlicDecryptedAndDelivered(t *testing.T) {
+	sessionManager := i2cp.NewSessionManager()
+	handler := NewInboundMessageHandler(sessionManager)
+
+	session, err := sessionManager.CreateSession(nil, i2cp.DefaultSessionConfig())
+	require.NoError(t, err)
+
+	// Install a known ECIES-X25519 key on the session (as CreateLeaseSet2 would),
+	// and derive the matching public key the sender encrypts to.
+	recvPub, recvPriv, err := ecies.GenerateKeyPair()
+	require.NoError(t, err)
+	require.NoError(t, session.StorePrivateKeys(map[uint16][]byte{
+		key_certificate.KEYCERT_CRYPTO_X25519: recvPriv,
+	}))
+
+	var recvPubKey [32]byte
+	copy(recvPubKey[:], recvPub)
+	destHash := types.SHA256(recvPubKey[:])
+
+	// Build + encrypt a garlic exactly like the i2cp sender does.
+	senderSM, err := i2np.GenerateGarlicSessionManager()
+	require.NoError(t, err)
+	builder, err := i2np.NewGarlicBuilderWithDefaults()
+	require.NoError(t, err)
+	appPayload := []byte("end-to-end inbound payload")
+	require.NoError(t, builder.AddLocalDeliveryClove(i2np.NewDataMessage(appPayload), 1))
+	ciphertext, err := i2np.EncryptGarlicWithBuilder(senderSM, builder, destHash, recvPubKey)
+	require.NoError(t, err)
+	garlicMsg, err := i2np.WrapInGarlicMessage(ciphertext)
+	require.NoError(t, err)
+	garlicBytes, err := garlicMsg.MarshalBinary()
+	require.NoError(t, err)
+
+	// Build the per-session decryptor and message handler the same way the
+	// production registration path (CreateEndpointForSession) does.
+	decryptor := handler.buildSessionGarlicDecryptor(session.ID())
+	require.NotNil(t, decryptor, "session with an ECIES key must yield a decryptor")
+	msgHandler := handler.createMessageHandler(session.ID(), decryptor)
+
+	require.NoError(t, msgHandler(garlicBytes))
+
+	// The client must receive the DECRYPTED application payload, not ciphertext.
+	received, err := session.ReceiveMessage()
+	require.NoError(t, err)
+	require.NotNil(t, received)
+	assert.Equal(t, appPayload, received.Payload,
+		"client must receive the decrypted payload, not raw garlic ciphertext")
+}
+
+// TestBuildSessionGarlicDecryptor_UsesKeystoreFallback verifies that a session
+// created without client-provided keys still yields a decryptor, using the
+// freshly generated destination keystore's ECIES key.
+func TestBuildSessionGarlicDecryptor_UsesKeystoreFallback(t *testing.T) {
+	sessionManager := i2cp.NewSessionManager()
+	handler := NewInboundMessageHandler(sessionManager)
+
+	session, err := sessionManager.CreateSession(nil, i2cp.DefaultSessionConfig())
+	require.NoError(t, err)
+
+	// A session with a router-generated destination has a keystore ECIES key,
+	// so a decryptor can always be built.
+	dec := handler.buildSessionGarlicDecryptor(session.ID())
+	assert.NotNil(t, dec)
+}
+
+// TestBuildSessionGarlicDecryptor_UnknownSession verifies a missing session
+// yields a nil decryptor without panicking.
+func TestBuildSessionGarlicDecryptor_UnknownSession(t *testing.T) {
+	sessionManager := i2cp.NewSessionManager()
+	handler := NewInboundMessageHandler(sessionManager)
+	assert.Nil(t, handler.buildSessionGarlicDecryptor(4242))
 }
 
 // TestConcurrentTunnelRegistration tests concurrent tunnel operations
