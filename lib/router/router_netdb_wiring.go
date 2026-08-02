@@ -239,8 +239,11 @@ func (r *Router) queryFloodfillForLeaseSet(ctx context.Context, ff router_info.R
 	}
 
 	// The processor stores an inbound LeaseSet DatabaseStore into the NetDB.
-	// Confirm the LeaseSet is now locally resolvable.
-	if _, err := r.netdb.GetLeaseSetBytes(hash); err == nil {
+	// Confirm the LeaseSet is now locally resolvable. Use HasLeaseSetLocal
+	// (cache-only, no network hook) rather than GetLeaseSetBytes here: the
+	// latter would re-trigger this very network lookup on a still-missing
+	// hash and recurse indefinitely.
+	if r.netdb.HasLeaseSetLocal(hash) {
 		log.WithFields(logger.Fields{
 			"at":   "lookupLeaseSetFromNetwork",
 			"hash": logutil.HashPrefix(hash),

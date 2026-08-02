@@ -567,6 +567,16 @@ func (db *StdNetDB) GetLeaseSetCount() int {
 	return db.lsCache.count()
 }
 
+// HasLeaseSetLocal reports whether a LeaseSet for the given hash is present in
+// the local in-memory cache. Unlike GetLeaseSet / GetLeaseSetBytes, it never
+// triggers the on-demand network lookup hook, so it is safe to call from
+// within a network-lookup implementation to check for arrival without
+// re-entering the lookup (which would otherwise recurse).
+func (db *StdNetDB) HasLeaseSetLocal(hash common.Hash) bool {
+	_, exists := db.lsCache.get(hash)
+	return exists
+}
+
 // verifiableLeaseSet is satisfied by any lease set variant that supports
 // cryptographic signature verification.
 type verifiableLeaseSet interface {
