@@ -273,8 +273,12 @@ func TestCreateMessageHandlerRejectsNonGarlicPayload(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "expected I2NP garlic")
 
-	_, err = session.ReceiveMessage()
-	assert.Error(t, err)
+	// No message should have been queued since handler rejected the payload.
+	// Stop the session so ReceiveMessage returns immediately.
+	session.Stop()
+	msg, err := session.ReceiveMessage()
+	assert.NoError(t, err)
+	assert.Nil(t, msg, "no message should have been queued")
 }
 
 // TestCreateMessageHandlerInvalidSession tests handler with invalid session
