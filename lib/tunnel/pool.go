@@ -755,8 +755,7 @@ func (p *Pool) executeBuildWithRetry(req *BuildTunnelRequest) (TunnelID, error) 
 		result, err := builder.BuildTunnel(*req)
 		if err != nil {
 			p.logBuildFailure(err, retry, maxRetries, req)
-			reason := classifyTunnelBuildFailureReason(err)
-			lastBuildPeers = p.extractAndMarkFailedPeersWithReason(result, reason)
+			lastBuildPeers = p.extractAndMarkFailedPeersForError(result, err)
 			continue
 		}
 
@@ -980,8 +979,7 @@ func (p *Pool) RetryTunnelBuild(tunnelID TunnelID, isInbound bool, hopCount int)
 
 	result, err := builder.BuildTunnel(req)
 	if err != nil {
-		reason := classifyTunnelBuildFailureReason(err)
-		p.extractAndMarkFailedPeersWithReason(result, reason)
+		p.extractAndMarkFailedPeersForError(result, err)
 		p.logRetryFailure(tunnelID, isInbound, hopCount, err)
 		return err
 	}
@@ -1039,6 +1037,90 @@ func (p *Pool) extractAndMarkFailedPeersWithReason(result *BuildTunnelResult, re
 	}).Debug("extracted and marked failed peers from build result")
 
 	return result.PeerHashes
+}
+
+// extractAndMarkFailedPeersForError performs failure attribution that respects
+// which hops are actually implicated by the failure, avoiding over-penalizing
+// innocent hops.
+//
+// Attribution rules:
+//   - Gateway-only failures (we could not establish a transport session to the
+//     first hop / could not send the build request): ONLY the gateway
+//     (PeerHashes[0]) is penalized. Hops 2..N never received the build message,
+//     so blaming them for a first-hop transport failure would wrongly poison
+//     otherwise-good peers (e.g. penalizing all 3 hops when only the gateway is
+//     unreachable). The remaining hops are still returned so they can be
+//     temporarily excluded from the immediate retry for path diversity, but
+//     they are NOT recorded as failed with the peer-tracker and receive no
+//     cooldown penalty.
+//   - All other failures (build timeout, rejection reply, ambiguous): the
+//     specific culprit is unknown, so every selected hop is marked as before.
+//
+// Returns the peer hashes to exclude on the next retry attempt (always the full
+// set, so retries pick a fresh path regardless of who was penalized).
+func (p *Pool) extractAndMarkFailedPeersForError(result *BuildTunnelResult, err error) []common.Hash {
+	if result == nil || len(result.PeerHashes) == 0 {
+		return nil
+	}
+
+	reason := classifyTunnelBuildFailureReason(err)
+
+	if isGatewayOnlyFailure(err) {
+		gateway := result.PeerHashes[0]
+		p.MarkPeerFailedWithReason(gateway, reason)
+
+		log.WithFields(logger.Fields{
+			"at":             "Pool.extractAndMarkFailedPeersForError",
+			"phase":          "tunnel_build",
+			"total_hops":     len(result.PeerHashes),
+			"penalized_hops": 1,
+			"penalized_peer": logutil.HashPrefix(gateway),
+			"failure_reason": reason,
+			"reason":         "gateway/transport send failure attributed to first hop only; remaining hops not contacted, not penalized",
+		}).Debug("scoped tunnel build failure attribution to gateway")
+
+		return result.PeerHashes
+	}
+
+	// Culprit unknown (timeout/rejection/ambiguous): mark all selected hops.
+	for _, peerHash := range result.PeerHashes {
+		p.MarkPeerFailedWithReason(peerHash, reason)
+	}
+
+	log.WithFields(logger.Fields{
+		"at":             "Pool.extractAndMarkFailedPeersForError",
+		"phase":          "tunnel_build",
+		"total_hops":     len(result.PeerHashes),
+		"penalized_hops": len(result.PeerHashes),
+		"failure_reason": reason,
+		"reason":         "unattributable build failure; all selected hops marked for cooldown exclusion",
+	}).Debug("marked all hops for unattributable tunnel build failure")
+
+	return result.PeerHashes
+}
+
+// isGatewayOnlyfailure reports whether a tunnel build error occurred at the
+// step of sending the build request to the gateway (first hop) — before any
+// hop-to-hop forwarding could occur. For these failures only the gateway is
+// implicated; the remaining hops never received the build record and must not
+// be penalized.
+func isGatewayOnlyFailure(err error) bool {
+	if err == nil {
+		return false
+	}
+	errText := strings.ToLower(err.Error())
+	return containsAnySubstring(
+		errText,
+		"no transports available",
+		"transport unavailable",
+		"failed to establish outbound session",
+		"failed to get session for gateway",
+		"failed to send build request",
+		"failed to send tunnel build message",
+		"failed to dial",
+		"connection refused",
+		"no route to host",
+	)
 }
 
 // MarkPeerFailed records that a peer failed to establish a connection.

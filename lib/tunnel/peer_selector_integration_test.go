@@ -6,6 +6,7 @@ import (
 	"time"
 
 	common "github.com/go-i2p/common/data"
+	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -124,6 +125,122 @@ func TestExtractAndMarkFailedPeers_ReportsToTracker(t *testing.T) {
 	})
 
 	assert.Equal(t, 2, tracker.failureCount())
+}
+
+// TestExtractAndMarkFailedPeersForError_GatewayOnly verifies that a transport /
+// gateway send failure penalizes ONLY the first hop (gateway) — not the middle
+// and end hops that never received the build request. This is the fix for
+// wrongly penalizing all 3 routers in a path when only the gateway failed.
+func TestExtractAndMarkFailedPeersForError_GatewayOnly(t *testing.T) {
+	pool := NewTunnelPool(&MockPeerSelector{})
+	defer pool.Stop()
+
+	tracker := &mockPeerTracker{}
+	pool.SetPeerTracker(tracker)
+
+	gateway := makePeerHash(0xAA) // first hop
+	middle := makePeerHash(0xBB)
+	end := makePeerHash(0xCC)
+
+	gatewayErrors := []error{
+		oops.Errorf("failed to send build request: failed to get session for gateway aabbccdd: failed to establish outbound session: no transports available"),
+		oops.Errorf("failed to send tunnel build message to gateway aabbccdd: connection refused"),
+		oops.Errorf("failed to establish outbound session: no route to host"),
+	}
+
+	for _, buildErr := range gatewayErrors {
+		tracker.mu.Lock()
+		tracker.failures = nil
+		tracker.mu.Unlock()
+		pool.CleanupFailedPeers()
+		// Force-clear cooldown state between cases.
+		pool.failedPeersMu.Lock()
+		pool.failedPeers = make(map[common.Hash]time.Time)
+		pool.failedPeerCooldown = make(map[common.Hash]time.Duration)
+		pool.failedPeersMu.Unlock()
+
+		excluded := pool.extractAndMarkFailedPeersForError(&BuildTunnelResult{
+			PeerHashes: []common.Hash{gateway, middle, end},
+		}, buildErr)
+
+		// All hops are still returned for retry exclusion (path diversity)...
+		assert.Len(t, excluded, 3, "all hops returned for retry exclusion")
+
+		// ...but ONLY the gateway is actually penalized.
+		assert.True(t, pool.IsPeerFailed(gateway), "gateway must be penalized")
+		assert.False(t, pool.IsPeerFailed(middle), "middle hop must NOT be penalized (never contacted)")
+		assert.False(t, pool.IsPeerFailed(end), "end hop must NOT be penalized (never contacted)")
+
+		failed := tracker.failedHashes()
+		assert.Equal(t, []common.Hash{gateway}, failed,
+			"only the gateway should be reported to the peer tracker for err=%q", buildErr.Error())
+	}
+}
+
+// TestExtractAndMarkFailedPeersForError_UnattributableMarksAll verifies that a
+// failure whose culprit cannot be isolated (e.g. build timeout) still marks all
+// selected hops, since we cannot know which one dropped the request.
+func TestExtractAndMarkFailedPeersForError_UnattributableMarksAll(t *testing.T) {
+	pool := NewTunnelPool(&MockPeerSelector{})
+	defer pool.Stop()
+
+	tracker := &mockPeerTracker{}
+	pool.SetPeerTracker(tracker)
+
+	gateway := makePeerHash(0xA1)
+	middle := makePeerHash(0xB1)
+	end := makePeerHash(0xC1)
+
+	err := oops.Errorf("tunnel build failed after 3 retries: build reply timeout")
+	excluded := pool.extractAndMarkFailedPeersForError(&BuildTunnelResult{
+		PeerHashes: []common.Hash{gateway, middle, end},
+	}, err)
+
+	assert.Len(t, excluded, 3)
+	assert.True(t, pool.IsPeerFailed(gateway))
+	assert.True(t, pool.IsPeerFailed(middle))
+	assert.True(t, pool.IsPeerFailed(end))
+	assert.Equal(t, 3, tracker.failureCount(),
+		"unattributable failure marks all hops")
+}
+
+// TestExtractAndMarkFailedPeersForError_NilAndEmpty verifies safe handling.
+func TestExtractAndMarkFailedPeersForError_NilAndEmpty(t *testing.T) {
+	pool := NewTunnelPool(&MockPeerSelector{})
+	defer pool.Stop()
+
+	assert.Nil(t, pool.extractAndMarkFailedPeersForError(nil, oops.Errorf("x")))
+	assert.Nil(t, pool.extractAndMarkFailedPeersForError(&BuildTunnelResult{}, oops.Errorf("x")))
+	assert.Empty(t, pool.failedPeers)
+}
+
+// TestIsGatewayOnlyFailure verifies the classifier distinguishes gateway/send
+// failures (single-hop attributable) from unattributable failures.
+func TestIsGatewayOnlyFailure(t *testing.T) {
+	gatewayOnly := []string{
+		"no transports available",
+		"failed to get session for gateway abcd1234",
+		"failed to send build request: no transports available",
+		"failed to send tunnel build message to gateway abcd",
+		"failed to establish outbound session",
+		"connection refused",
+		"no route to host",
+	}
+	for _, s := range gatewayOnly {
+		assert.True(t, isGatewayOnlyFailure(oops.Errorf("%s", s)), "expected gateway-only: %q", s)
+	}
+
+	unattributable := []string{
+		"tunnel build failed after 3 retries",
+		"build reply timeout",
+		"context cancelled",
+		"reply tunnel unavailable",
+	}
+	for _, s := range unattributable {
+		assert.False(t, isGatewayOnlyFailure(oops.Errorf("%s", s)), "expected not gateway-only: %q", s)
+	}
+
+	assert.False(t, isGatewayOnlyFailure(nil), "nil error is not gateway-only")
 }
 
 func TestExecuteBuildWithRetry_ExcludesFailedPeersOnRetry(t *testing.T) {
@@ -468,6 +585,14 @@ func (t *mockPeerTracker) failureCount() int {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return len(t.failures)
+}
+
+func (t *mockPeerTracker) failedHashes() []common.Hash {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	out := make([]common.Hash, len(t.failures))
+	copy(out, t.failures)
+	return out
 }
 
 func TestEndToEnd_FailedBuildExcludesPeersFromNextAttempt(t *testing.T) {
