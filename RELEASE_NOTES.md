@@ -1,3 +1,12 @@
+Release notes for: `go-i2p` Version `0.1.68`
+============================================
+
+This release is only recommended for developers at this time.
+The first general-use release will be version `0.2.0`
+
+Fixes an issue where tunnels were never ready for leaseset publication.
+Fixes another issue where incorrect keys were used for inbound tunnels.
+
 Release notes for: `go-i2p` Version `0.1.67`
 ==========================================
 
