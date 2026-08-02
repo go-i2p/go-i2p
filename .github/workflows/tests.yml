@@ -100,9 +100,6 @@ jobs:
       - name: Install gofumpt
         run: go install mvdan.cc/gofumpt@latest
 
-      - name: Go mod tidy
-        run: go mod tidy
-
       - name: Run all tests
         run: go test -v ./...
         env:
