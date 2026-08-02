@@ -337,9 +337,8 @@ func (h *InboundMessageHandler) decryptAndDeliver(tunnelID tunnel.TunnelID, data
 //  3. Looks up the I2CP session and queues each payload for delivery to the client.
 //
 // decryptor is the per-session garlic decryptor built from the destination's
-// encryption private key. When nil (no usable key), the handler falls back to
-// queuing the raw bytes so control/testing paths still function; this fallback
-// path cannot deliver real application data.
+// encryption private key. When nil (no usable key), the handler rejects the
+// inbound payload rather than delivering it as raw bytes.
 //
 // Returns a MessageHandler callback function.
 func (h *InboundMessageHandler) createMessageHandler(sessionID uint16, decryptor *i2np.GarlicSessionManager) tunnel.MessageHandler {
@@ -386,9 +385,8 @@ func (h *InboundMessageHandler) createMessageHandler(sessionID uint16, decryptor
 //
 // For client traffic the bytes are an I2NP Garlic message encrypted to the
 // destination: it is decrypted with the session's ECIES key and the Data clove
-// payload(s) are returned. If the bytes are not a garlic message, or no
-// decryptor is available, the raw bytes are returned unchanged (best-effort
-// fallback) so non-garlic/control and legacy paths keep working.
+// payload(s) are returned. Non-garlic payloads and missing decryptors are
+// rejected explicitly so only valid inbound client traffic is delivered.
 func (h *InboundMessageHandler) extractClientPayloads(sessionID uint16, msgBytes []byte, decryptor *i2np.GarlicSessionManager) ([][]byte, error) {
 	if decryptor == nil {
 		log.WithFields(logger.Fields{

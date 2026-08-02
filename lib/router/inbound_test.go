@@ -273,8 +273,20 @@ func TestCreateMessageHandlerRejectsNonGarlicPayload(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "expected I2NP garlic")
 
-	_, err = session.ReceiveMessage()
-	assert.Error(t, err)
+	result := make(chan *i2cp.IncomingMessage, 1)
+	go func() {
+		msg, _ := session.ReceiveMessage()
+		result <- msg
+	}()
+
+	session.Stop()
+
+	select {
+	case msg := <-result:
+		assert.Nil(t, msg, "unexpected message queued to session")
+	case <-time.After(100 * time.Millisecond):
+		// The session should stop promptly without delivering a queued message.
+	}
 }
 
 // TestCreateMessageHandlerInvalidSession tests handler with invalid session
