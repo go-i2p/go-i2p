@@ -231,10 +231,12 @@ func (h *InboundMessageHandler) HandleTunnelData(msg i2np.Message) error {
 		return h.handleTransitTunnelData(tunnelID, data, participant)
 	}
 
-	// Otherwise, handle as inbound endpoint tunnel
+	// Otherwise, handle as inbound endpoint tunnel.
+	// Unregistered tunnels are treated as an error so misrouted or stale messages
+	// are not silently dropped.
 	entry, ok := h.lookupTunnelEntry(tunnelID)
 	if !ok {
-		return nil
+		return oops.Errorf("tunnel %d is not registered for inbound delivery", tunnelID)
 	}
 
 	return h.decryptAndDeliver(tunnelID, data, entry)
@@ -393,8 +395,8 @@ func (h *InboundMessageHandler) extractClientPayloads(sessionID uint16, msgBytes
 			"at":         "extractClientPayloads",
 			"session_id": sessionID,
 			"reason":     "no garlic decryptor for session",
-		}).Warn("delivering raw inbound bytes without garlic decryption (session has no ECIES key)")
-		return [][]byte{msgBytes}, nil
+		}).Error("refusing inbound payload without garlic decryptor")
+		return nil, oops.Errorf("no garlic decryptor available for session %d", sessionID)
 	}
 
 	inner := &i2np.BaseI2NPMessage{}
@@ -405,8 +407,7 @@ func (h *InboundMessageHandler) extractClientPayloads(sessionID uint16, msgBytes
 	}
 
 	if inner.Type() != i2np.I2NPMessageTypeGarlic {
-		// Not garlic (e.g. a bare Data message in tests); deliver as-is.
-		return [][]byte{msgBytes}, nil
+		return nil, oops.Errorf("expected I2NP garlic message for session %d, got %v", sessionID, inner.Type())
 	}
 
 	payloads, err := i2np.ExtractDataPayloadsFromInboundGarlic(decryptor, inner.GetData())

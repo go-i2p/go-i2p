@@ -265,9 +265,10 @@ func TestInboundMessageHandler_UnregisteredTunnel(t *testing.T) {
 
 	msg := &mockTunnelCarrier{data: tunnelData}
 
-	// Should handle gracefully without error (logs warning but doesn't fail)
+	// Unregistered tunnels should now be treated as an error rather than silently dropped.
 	err := handler.HandleTunnelData(msg)
-	assert.NoError(t, err, "Should handle unregistered tunnel without error")
+	assert.Error(t, err, "Should report an unregistered tunnel explicitly")
+	assert.Contains(t, err.Error(), "not registered")
 }
 
 // mockTunnelCarrier implements i2np.Message and i2np.TunnelCarrier for testing
