@@ -17,12 +17,12 @@ Same format as TunnelBuildMessage, with BuildResponseRecords
 // TunnelBuildReply constants for processing responses
 // These are aliases of the canonical constants in lib/tunnel/replycodes
 const (
-	TunnelBuildReplySuccess   = replycodes.TunnelBuildReplySuccess   // Tunnel hop accepted the request
-	TunnelBuildReplyReject    = replycodes.TunnelBuildReplyReject    // General rejection
-	TunnelBuildReplyOverload  = replycodes.TunnelBuildReplyOverload  // Router is overloaded
-	TunnelBuildReplyBandwidth = replycodes.TunnelBuildReplyBandwidth // Insufficient bandwidth
-	TunnelBuildReplyInvalid   = replycodes.TunnelBuildReplyInvalid   // Invalid request data
-	TunnelBuildReplyExpired   = replycodes.TunnelBuildReplyExpired   // Request has expired
+	TunnelBuildReplySuccess                      = replycodes.TunnelBuildReplySuccess                      // Tunnel hop accepted the request
+	TunnelBuildReplyProbabilisticRejectionLegacy = replycodes.TunnelBuildReplyProbabilisticRejectionLegacy // Deprecated probabilistic rejection (0x01)
+	TunnelBuildReplyOverload                     = replycodes.TunnelBuildReplyOverload                     // Deprecated overload (0x02)
+	TunnelBuildReplyBandwidth                    = replycodes.TunnelBuildReplyBandwidth                    // Bandwidth rejection (0x03) - actively used
+	TunnelBuildReplyInvalid                      = replycodes.TunnelBuildReplyInvalid                      // Deprecated invalid request (0x04)
+	TunnelBuildReplyCritical                     = replycodes.TunnelBuildReplyCritical                     // Critical rejection (0x05) - not "expired"
 )
 
 // TunnelBuildReply represents an I2NP TunnelBuildReply message containing exactly 8 build response records indicating the success or failure of a tunnel build request.
