@@ -1190,12 +1190,12 @@ func classifyReplyCodeToReason(reply []byte) string {
 		return "tunnel_build_failed_permanent"
 	case replycodes.TunnelBuildReplyOverload:
 		return "tunnel_build_failed_permanent"
-	case replycodes.TunnelBuildReplyBandwidth:
+	case replycodes.TunnelBuildReplyProbabilisticRejection:
 		return "tunnel_build_failed_permanent"
 	case replycodes.TunnelBuildReplyInvalid:
 		return "tunnel_build_failed_permanent"
-	case replycodes.TunnelBuildReplyExpired:
-		return "tunnel_build_failed_local"
+	case replycodes.TunnelBuildReplyCritical:
+		return "tunnel_build_failed_permanent"
 	default:
 		return "tunnel_build_failed_ambiguous"
 	}
