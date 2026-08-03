@@ -11,6 +11,7 @@ import (
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
+	"github.com/go-i2p/go-i2p/lib/tunnel/replycodes"
 	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
@@ -1121,6 +1122,83 @@ func isGatewayOnlyFailure(err error) bool {
 		"connection refused",
 		"no route to host",
 	)
+}
+
+// MarkFailedHopsFromReply applies penalties based on per-hop reply codes from a
+// tunnel build reply. This enables per-hop attribution: only hops that actually
+// rejected the build are penalized, while hops that accepted are not penalized.
+//
+// Parameters:
+//   - hops: The peer hashes for each hop in the tunnel (index = hop index)
+//   - responses: Per-hop build responses from the reply, containing Success and Reply code
+//
+// Returns the peer hashes that were penalized (for retry exclusion).
+func (p *Pool) MarkFailedHopsFromReply(hops []common.Hash, responses []BuildResponse) []common.Hash {
+	if len(hops) == 0 || len(responses) == 0 {
+		return nil
+	}
+
+	var penalized []common.Hash
+
+	for _, resp := range responses {
+		if resp.HopIndex < 0 || resp.HopIndex >= len(hops) {
+			log.WithFields(logger.Fields{
+				"at":         "Pool.MarkFailedHopsFromReply",
+				"hop_index":  resp.HopIndex,
+				"total_hops": len(hops),
+			}).Warn("invalid hop index in build response, skipping")
+			continue
+		}
+
+		if !resp.Success {
+			peerHash := hops[resp.HopIndex]
+			reason := classifyReplyCodeToReason(resp.Reply)
+			p.MarkPeerFailedWithReason(peerHash, reason)
+			penalized = append(penalized, peerHash)
+
+			log.WithFields(logger.Fields{
+				"at":             "Pool.MarkFailedHopsFromReply",
+				"phase":          "tunnel_build",
+				"hop_index":      resp.HopIndex,
+				"peer_hash":      logutil.HashPrefix(peerHash),
+				"reply_code":     resp.Reply[0],
+				"failure_reason": reason,
+			}).Debug("penalized rejecting hop from tunnel build reply")
+		}
+	}
+
+	log.WithFields(logger.Fields{
+		"at":              "Pool.MarkFailedHopsFromReply",
+		"phase":           "tunnel_build",
+		"total_hops":      len(hops),
+		"penalized_hops":  len(penalized),
+		"penalized_peers": len(penalized),
+	}).Debug("per-hop tunnel build failure attribution from reply")
+
+	return penalized
+}
+
+// classifyReplyCodeToReason maps a tunnel build reply code to a failure reason string
+// for consistent penalty classification and cooldown calculation.
+func classifyReplyCodeToReason(reply []byte) string {
+	if len(reply) == 0 {
+		return "tunnel_build_failed_ambiguous"
+	}
+	code := reply[0]
+	switch code {
+	case replycodes.TunnelBuildReplyReject:
+		return "tunnel_build_failed_permanent"
+	case replycodes.TunnelBuildReplyOverload:
+		return "tunnel_build_failed_permanent"
+	case replycodes.TunnelBuildReplyBandwidth:
+		return "tunnel_build_failed_permanent"
+	case replycodes.TunnelBuildReplyInvalid:
+		return "tunnel_build_failed_permanent"
+	case replycodes.TunnelBuildReplyExpired:
+		return "tunnel_build_failed_local"
+	default:
+		return "tunnel_build_failed_ambiguous"
+	}
 }
 
 // MarkPeerFailed records that a peer failed to establish a connection.

@@ -1,6 +1,7 @@
 package i2np
 
 import (
+	"github.com/go-i2p/go-i2p/lib/tunnel/replycodes"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
@@ -14,13 +15,14 @@ Same format as TunnelBuildMessage, with BuildResponseRecords
 */
 
 // TunnelBuildReply constants for processing responses
+// These are aliases of the canonical constants in lib/tunnel/replycodes
 const (
-	TunnelBuildReplySuccess   = 0x00 // Tunnel hop accepted the request
-	TunnelBuildReplyReject    = 0x01 // General rejection
-	TunnelBuildReplyOverload  = 0x02 // Router is overloaded
-	TunnelBuildReplyBandwidth = 0x03 // Insufficient bandwidth
-	TunnelBuildReplyInvalid   = 0x04 // Invalid request data
-	TunnelBuildReplyExpired   = 0x05 // Request has expired
+	TunnelBuildReplySuccess   = replycodes.TunnelBuildReplySuccess   // Tunnel hop accepted the request
+	TunnelBuildReplyReject    = replycodes.TunnelBuildReplyReject    // General rejection
+	TunnelBuildReplyOverload  = replycodes.TunnelBuildReplyOverload  // Router is overloaded
+	TunnelBuildReplyBandwidth = replycodes.TunnelBuildReplyBandwidth // Insufficient bandwidth
+	TunnelBuildReplyInvalid   = replycodes.TunnelBuildReplyInvalid   // Invalid request data
+	TunnelBuildReplyExpired   = replycodes.TunnelBuildReplyExpired   // Request has expired
 )
 
 // TunnelBuildReply represents an I2NP TunnelBuildReply message containing exactly 8 build response records indicating the success or failure of a tunnel build request.

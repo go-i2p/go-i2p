@@ -348,6 +348,10 @@ func (tm *TunnelManager) updateTunnelBasedOnReply(matchingTunnel *tunnel.TunnelS
 	if replyErr == nil {
 		tm.handleSuccessfulBuild(matchingTunnel, messageID)
 	} else {
+		// Apply per-hop attribution for failed builds
+		if pool := tm.getPoolForTunnel(matchingTunnel.IsInbound); pool != nil {
+			pool.MarkFailedHopsFromReply(matchingTunnel.Hops, responses)
+		}
 		tm.handleFailedBuild(matchingTunnel, messageID, replyErr)
 	}
 }
