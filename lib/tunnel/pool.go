@@ -1186,11 +1186,11 @@ func classifyReplyCodeToReason(reply []byte) string {
 	}
 	code := reply[0]
 	switch code {
-	case replycodes.TunnelBuildReplyReject:
+	case replycodes.TunnelBuildReplyProbabilisticRejectionLegacy:
 		return "tunnel_build_failed_permanent"
 	case replycodes.TunnelBuildReplyOverload:
 		return "tunnel_build_failed_permanent"
-	case replycodes.TunnelBuildReplyProbabilisticRejection:
+	case replycodes.TunnelBuildReplyBandwidth:
 		return "tunnel_build_failed_permanent"
 	case replycodes.TunnelBuildReplyInvalid:
 		return "tunnel_build_failed_permanent"

@@ -23,6 +23,10 @@ const (
 	TunnelBuildReplyBandwidth                    = replycodes.TunnelBuildReplyBandwidth                    // Bandwidth rejection (0x03) - actively used
 	TunnelBuildReplyInvalid                      = replycodes.TunnelBuildReplyInvalid                      // Deprecated invalid request (0x04)
 	TunnelBuildReplyCritical                     = replycodes.TunnelBuildReplyCritical                     // Critical rejection (0x05) - not "expired"
+
+	// Deprecated aliases for backward compatibility
+	TunnelBuildReplyReject  = replycodes.TunnelBuildReplyProbabilisticRejectionLegacy
+	TunnelBuildReplyExpired = replycodes.TunnelBuildReplyCritical
 )
 
 // TunnelBuildReply represents an I2NP TunnelBuildReply message containing exactly 8 build response records indicating the success or failure of a tunnel build request.
