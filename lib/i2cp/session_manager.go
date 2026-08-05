@@ -26,6 +26,8 @@ func NewSessionManager() *SessionManager {
 // Optional private keys (signingPrivKey, encryptionPrivKey) can be provided
 // to preserve the client's persistent identity across sessions.
 func (sm *SessionManager) CreateSession(dest *destination.Destination, config *SessionConfig, privKeys ...interface{}) (*Session, error) {
+	var session *Session
+	var err error
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
@@ -39,15 +41,32 @@ func (sm *SessionManager) CreateSession(dest *destination.Destination, config *S
 		return nil, err
 	}
 
-	// Create session with its own isolated in-memory NetDB
-	session, err := NewSession(sessionID, dest, config, privKeys...)
-	if err != nil {
-		log.WithFields(logger.Fields{
-			"at":        "i2cp.SessionManager.CreateSession",
-			"sessionID": sessionID,
-			"error":     err.Error(),
-		}).Error("failed_to_create_session")
-		return nil, err
+	if len(privKeys) == 0 {
+		var sessionKeys *SessionKeys
+		sessionKeys, err = NewSessionKeys()
+		if err != nil {
+			return nil, err
+		}
+		session, err = NewSessionWithKeys(sessionID, dest, config, sessionKeys)
+		if err != nil {
+			log.WithFields(logger.Fields{
+				"at":        "i2cp.SessionManager.CreateSession",
+				"sessionID": sessionID,
+				"error":     err.Error(),
+			}).Error("failed_to_create_session_with_keys")
+			return nil, err
+		}
+	} else {
+		// Create session with its own isolated in-memory NetDB
+		session, err = NewSession(sessionID, dest, config, privKeys...)
+		if err != nil {
+			log.WithFields(logger.Fields{
+				"at":        "i2cp.SessionManager.CreateSession",
+				"sessionID": sessionID,
+				"error":     err.Error(),
+			}).Error("failed_to_create_session")
+			return nil, err
+		}
 	}
 
 	// Register session
