@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-i2p/crypto/curve25519"
 	ed25519i2p "github.com/go-i2p/crypto/ed25519"
 	"github.com/go-i2p/crypto/rand"
 	"github.com/go-i2p/crypto/types"
@@ -308,6 +309,35 @@ type SessionKeys struct {
 	Signing         types.SigningPrivateKey    // Signing private key
 	Encryption      types.PrivateEncryptionKey // Encryption private key
 	IdentityPadding []byte                     // Optional identity padding
+}
+
+// NewSessionKeys generates new session keys
+func NewSessionKeys() (*SessionKeys, error) {
+	// Create SigningPrivateKey
+	_, signingPrivKey, err := ed25519i2p.GenerateEd25519KeyPair()
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":    "NewSessionKeys",
+			"error": err.Error(),
+		}).Error("failed to generate signing key")
+		return nil, err
+	}
+
+	// Create PrivateEncryptionKey
+	_, encPrivKey, err := curve25519.GenerateKeyPair()
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":    "NewSessionKeys",
+			"error": err.Error(),
+		}).Error("failed to generate encryption key")
+		return nil, err
+	}
+
+	// return SessionKeys
+	return &SessionKeys{
+		Signing:    signingPrivKey,
+		Encryption: encPrivKey,
+	}, nil
 }
 
 // The signingPrivKey and encryptionPrivKey parameters allow clients to provide their own
