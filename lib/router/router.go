@@ -159,7 +159,7 @@ func CreateRouter(cfg *config.RouterConfig) (*Router, error) {
 		return nil, err
 	}
 
-	log.WithField("at", "CreateRouter").Debug("startup phase: router created successfully")
+	log.WithField("at", "CreateRouter").Info("startup phase: router created successfully")
 	return r, nil
 }
 

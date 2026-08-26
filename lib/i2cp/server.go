@@ -736,5 +736,5 @@ func (s *Server) logMessageDelivered(sessionID uint16, messageID uint32, size in
 		"sessionID":   sessionID,
 		"messageID":   messageID,
 		"payloadSize": size,
-	}).Info("delivered_message_to_client")
+	}).Debug("delivered_message_to_client")
 }

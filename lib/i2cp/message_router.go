@@ -139,7 +139,7 @@ func (mr *MessageRouter) logRoutingStart(session *Session, messageID uint32, des
 		"destination":  logutil.HashPrefixPlain(destinationHash),
 		"payloadSize":  len(payload),
 		"expirationMs": expirationMs,
-	}).Info("routing_outbound_message")
+	}).Debug("routing_outbound_message")
 }
 
 // checkMessageExpiration validates the message has not expired and notifies callback on expiration.
@@ -395,7 +395,7 @@ func (mr *MessageRouter) logSuccessfulRouting(
 		"gateway":     gatewayStr,
 		"destination": logutil.HashPrefixPlain(destinationHash),
 		"payloadSize": payloadSize,
-	}).Info("message_routed_successfully")
+	}).Debug("message_routed_successfully")
 }
 
 // SendThroughTunnel sends an I2NP message through a specific tunnel.

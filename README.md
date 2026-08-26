@@ -130,12 +130,18 @@ Logging can be enabled and configured using the `DEBUG_I2P` environment variable
 
 > **Note:** Logging is configured via environment variables (not config.yaml or command-line flags) because it is managed by an external logger package and needs to be set before the application starts.
 
-There are three available log levels:
+There are four available log levels:
 
-- Debug
+- Debug (very high volume — hot-path / crypto detail; local troubleshooting only)
 
 ```shell
 export DEBUG_I2P=debug
+```
+
+- Info (lifecycle and operational milestones; recommended default for `./run.sh` and day-to-day runs)
+
+```shell
+export DEBUG_I2P=info
 ```
 
 - Warn
@@ -150,7 +156,7 @@ export DEBUG_I2P=warn
 export DEBUG_I2P=error
 ```
 
-If DEBUG_I2P is set to an unrecognized variable, it will fall back to "debug".
+If `DEBUG_I2P` is set to an unrecognized value, go-i2p falls back to **info**.
 
 ## Fast-Fail mode
 

@@ -59,7 +59,7 @@ func NewNTCP2Session(conn net.Conn, ctx context.Context, logger *logger.Entry) *
 // that will be immediately discarded.
 func NewNTCP2SessionDeferred(conn net.Conn, ctx context.Context, logger *logger.Entry) *NTCP2Session {
 	core, sessionLogger := transport.NewSessionCoreWithLogger(ctx, logger, "ntcp2_session", conn.RemoteAddr().String())
-	sessionLogger.Info("Creating new NTCP2 session")
+	sessionLogger.Debug("Creating new NTCP2 session")
 
 	session := &NTCP2Session{
 		SessionCore: core,
@@ -82,7 +82,7 @@ func (s *NTCP2Session) StartWorkers() {
 	s.WaitGroup().Add(2)
 	go s.sendWorker()
 	go s.receiveWorker()
-	s.Logger().Info("NTCP2 session workers started")
+	s.Logger().Debug("NTCP2 session workers started")
 }
 
 // ReadNextI2NP blocking reads the next fully received I2NP message from this session.
@@ -205,7 +205,7 @@ func (s *NTCP2Session) logSessionLifecycleSummary(reason byte) {
 		"dropped_messages":   s.DroppedMessages(),
 	}
 
-	s.Logger().WithFields(fields).Info("NTCP2 session lifecycle summary")
+	s.Logger().WithFields(fields).Debug("NTCP2 session lifecycle summary")
 }
 
 // DetachConn clears the session's reference to the underlying connection,

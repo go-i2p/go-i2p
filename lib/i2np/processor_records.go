@@ -720,7 +720,7 @@ func (p *MessageProcessor) handleAcceptedBuildRecord(messageID, index int, recor
 		"record_index":   index,
 		"receive_tunnel": record.ReceiveTunnel,
 		"target_hash":    logutil.HashPrefix(record.OurIdent),
-	}).Info("accepting tunnel build request")
+	}).Debug("accepting tunnel build request")
 
 	expiry := time.Now().Add(10 * time.Minute) // Tunnel lifetime per I2P spec
 	err := p.participantManager.RegisterParticipant(
@@ -751,7 +751,7 @@ func (p *MessageProcessor) handleRejectedBuildRecord(messageID, index int, recor
 		"receive_tunnel": record.ReceiveTunnel,
 		"reject_code":    rejectCode,
 		"reason":         reason,
-	}).Info("rejecting tunnel build request")
+	}).Debug("rejecting tunnel build request")
 }
 
 // parseTunnelBuildRecords parses the build request records from message data.

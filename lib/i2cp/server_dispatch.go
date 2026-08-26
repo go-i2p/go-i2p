@@ -421,7 +421,7 @@ func (s *Server) handleCreateLeaseSet2(msg *Message, sessionPtr **Session) (*Mes
 		"storeType":      storeType,
 		"leaseSetSize":   len(leaseSetBytes),
 		"numPrivateKeys": len(privKeys),
-	}).Info("leaseset2_received")
+	}).Debug("leaseset2_received")
 
 	if err := session.ValidateLeaseSet2Data(leaseSetBytes); err != nil {
 		logLeaseSet2ValidationError(session.ID(), err)
@@ -792,7 +792,7 @@ func logHostLookupRequest(sessionID uint16, lookupMsg *HostLookupPayload) {
 		"requestID":  lookupMsg.RequestID,
 		"lookupType": lookupMsg.LookupType,
 		"query":      lookupMsg.Query,
-	}).Info("host_lookup_requested")
+	}).Debug("host_lookup_requested")
 }
 
 // handleHostnameLookup handles hostname lookup type.
@@ -1035,7 +1035,7 @@ func (s *Server) lookupDestinationByHash(lookupMsg *HostLookupPayload) *HostRepl
 		"requestID":    lookupMsg.RequestID,
 		"destHash":     logutil.HashPrefixPlain(destHash),
 		"destByteSize": len(destination),
-	}).Info("destination_found")
+	}).Debug("destination_found")
 
 	return &HostReplyPayload{
 		SessionID:   lookupMsg.SessionID,
@@ -1119,7 +1119,7 @@ func parseAndLogBlindingInfo(msg *Message, session *Session) (*BlindingInfoPaylo
 		"sessionID": session.ID(),
 		"enabled":   blindingInfo.Enabled,
 		"hasSecret": len(blindingInfo.Secret) > 0,
-	}).Info("received_blinding_info")
+	}).Debug("received_blinding_info")
 
 	return blindingInfo, nil
 }
@@ -1474,7 +1474,7 @@ func (s *Server) routeMessageExpiresWithStatus(session *Session, messageID uint3
 		"payloadSize": len(sendMsg.Payload),
 		"expiration":  sendMsg.Expiration,
 		"nonce":       sendMsg.Nonce,
-	}).Info("routing_message_expires")
+	}).Debug("routing_message_expires")
 
 	statusCallback := s.buildStatusCallback(session, sendMsg.Nonce)
 

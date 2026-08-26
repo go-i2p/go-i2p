@@ -89,7 +89,7 @@ func (t *TunnelBuildReply) logReplyCompletion(successCount, recordCount int) {
 		"success_count": successCount,
 		"total_hops":    recordCount,
 		"success_rate":  float64(successCount) / float64(recordCount),
-	}).Info("TunnelBuildReply processing completed")
+	}).Debug("TunnelBuildReply processing completed")
 }
 
 // determineBuildResult determines the final result based on success count.
