@@ -13,7 +13,7 @@
         <a href="index.html">go-i2p/go-i2p</a>
       </h2>
       <div class="repo-meta">
-        📝 2373 commits
+        📝 2375 commits
          • 📜 MIT License
       </div>
     </div>
@@ -60,12 +60,12 @@
       <div class="repo-stats">
         
         <div class="repo-stat">
-          <span>📝</span> <span>2373 commits</span>
+          <span>📝</span> <span>2375 commits</span>
         </div>
         
         
         <div class="repo-stat">
-          <span>📅</span> <span>Last updated: August 7, 2026</span>
+          <span>📅</span> <span>Last updated: August 27, 2026</span>
         </div>
         
         
@@ -258,13 +258,20 @@ Transport and tunnel triage guidance is documented in <a href="docs/transport-ob
 <p><strong>Note:</strong> Logging is configured via environment variables (not config.yaml or command-line flags) because it is managed by an external logger package and needs to be set before the application starts.</p>
 </blockquote>
 
-<p>There are three available log levels:</p>
+<p>There are four available log levels:</p>
 
 <ul>
-<li>Debug</li>
+<li>Debug (very high volume — hot-path / crypto detail; local troubleshooting only)</li>
 </ul>
 
 <pre><code class="language-shell">export DEBUG_I2P=debug
+</code></pre>
+
+<ul>
+<li>Info (lifecycle and operational milestones; recommended default for <code>./run.sh</code> and day-to-day runs)</li>
+</ul>
+
+<pre><code class="language-shell">export DEBUG_I2P=info
 </code></pre>
 
 <ul>
@@ -281,7 +288,7 @@ Transport and tunnel triage guidance is documented in <a href="docs/transport-ob
 <pre><code class="language-shell">export DEBUG_I2P=error
 </code></pre>
 
-<p>If DEBUG_I2P is set to an unrecognized variable, it will fall back to &ldquo;debug&rdquo;.</p>
+<p>If <code>DEBUG_I2P</code> is set to an unrecognized value, go-i2p falls back to <strong>info</strong>.</p>
 
 <h2 id="fast-fail-mode">Fast-Fail mode</h2>
 
@@ -361,7 +368,7 @@ requiring acknowledgment must implement their own delivery-confirmation layer
                 idk
               </div>
               <div class="contributor-commits">
-                2003 commits
+                2004 commits
               </div>
             </div>
           </div>
@@ -433,7 +440,7 @@ requiring acknowledgment must implement their own delivery-confirmation layer
     </main>
     
     <footer class="page-footer">
-      <p>Generated on 2026-08-27 16:12:38 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
+      <p>Generated on 2026-08-27 22:46:38 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
     </footer>
   </div>
 </body>
