@@ -504,6 +504,16 @@ func (s *Server) readClientMessage(conn net.Conn) (*Message, error) {
 	// - Payload read: bounded by MessageReadTimeout (30s) to prevent slow-send attacks
 	// The idle timeout between messages is handled by the connection-level deadline
 	// set by the accept loop or connection handler, not here.
+	// Apply idle timeout before reading so idle clients don't hang forever.
+	if s.config.ReadTimeout > 0 {
+		if err := conn.SetReadDeadline(time.Now().Add(s.config.ReadTimeout)); err != nil {
+			log.WithFields(logger.Fields{
+				"at":    "i2cp.Server.readClientMessage",
+				"error": err.Error(),
+			}).Warn("failed_to_set_read_deadline")
+		}
+	}
+
 	msg, err := ReadMessage(conn, MessageReadTimeout*time.Second)
 	if err != nil {
 		// i2psnark compatibility: Log connection state on read failures
