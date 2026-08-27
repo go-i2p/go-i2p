@@ -101,7 +101,7 @@ func NewRouterInfoKeystore(dir, name string) (*RouterInfoKeystore, error) {
 		return nil, err
 	}
 
-	log.WithField("at", "NewRouterInfoKeystore").Debug("Successfully created RouterInfo keystore")
+	log.WithField("at", "NewRouterInfoKeystore").Info("Successfully created RouterInfo keystore")
 	return initializeKeystore(dir, name, privateKey, encryptionPubKey, encryptionPrivKey), nil
 }
 
@@ -647,7 +647,7 @@ func (ks *RouterInfoKeystore) verifyEncryptionKeyConsistency() {
 		"at":                 "verifyEncryptionKeyConsistency",
 		"encryption_key_hex": storedHex,
 		"status":             "MATCH - keys are consistent",
-	}).Info("Encryption key verification passed")
+	}).Debug("Encryption key verification passed")
 }
 
 // logEncryptionKeyLoaded logs encryption key loading/generation events with version tracking.
@@ -669,7 +669,7 @@ func (ks *RouterInfoKeystore) logEncryptionKeyLoaded(privKeyBytes []byte, isExis
 		"enc_pubkey_full":    fullPubKeyHex,
 		"timestamp":          time.Now().UTC().Format(time.RFC3339),
 		"migration_hint":     "this X25519 key will be embedded in RouterInfo - must be consistent for peers to decrypt our messages",
-	}).Info("X25519 encryption key tracking")
+	}).Debug("X25519 encryption key tracking")
 }
 
 // bytesEqual compares two byte slices for equality

@@ -120,7 +120,7 @@ func (m *CongestionMonitor) Start() {
 		"reason":           "congestion monitoring started",
 		"averaging_window": m.cfg.AveragingWindow,
 		"max_samples":      m.maxSamples,
-	}).Debug("congestion monitor started")
+	}).Info("congestion monitor started")
 }
 
 // Stop stops the background sampling goroutine.
@@ -133,7 +133,7 @@ func (m *CongestionMonitor) Stop() {
 		log.WithFields(logger.Fields{
 			"at":     "CongestionMonitor.Stop",
 			"reason": "congestion monitoring stopped",
-		}).Debug("congestion monitor stopped")
+		}).Info("congestion monitor stopped")
 	})
 }
 

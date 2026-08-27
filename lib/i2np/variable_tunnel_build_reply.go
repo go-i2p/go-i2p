@@ -76,7 +76,7 @@ func (v *VariableTunnelBuildReply) logReplyCompletion(successCount, recordCount 
 	if recordCount > 0 {
 		fields["success_rate"] = float64(successCount) / float64(recordCount)
 	}
-	log.WithFields(fields).Info("VariableTunnelBuildReply processing completed")
+	log.WithFields(fields).Debug("VariableTunnelBuildReply processing completed")
 }
 
 // determineBuildResult determines the final result based on success count.

@@ -115,7 +115,7 @@ func (r *Router) maintainNetDBPeerFloor() {
 				"current": current,
 				"target":  inNetworkPeerTarget,
 				"mode":    "in-network-exploration",
-			}).Info("NetDB below integration target; continuing in-network discovery")
+			}).Debug("NetDB below integration target; continuing in-network discovery")
 		}
 		return
 	}

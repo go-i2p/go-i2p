@@ -67,6 +67,7 @@ Use stable, low-cardinality reason labels, for example:
 
 ## Operator-Safe Defaults
 
+- Day-to-day / `./run.sh`: `DEBUG_I2P=info` (lifecycle and operational milestones)
 - Production: `DEBUG_I2P=warn` (or `DEBUG_I2P=error` for strict environments)
 - Never use `DEBUG_I2P=debug` in anonymity-sensitive production deployments
 - Keep warning/error retention minimal and access restricted

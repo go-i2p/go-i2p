@@ -159,7 +159,7 @@ func NewNTCP2Transport(identity router_info.RouterInfo, config *Config, keystore
 		return nil, err
 	}
 
-	logger.Debug("Crypto keys initialized successfully")
+	logger.Info("Crypto keys initialized successfully")
 	config.Config = ntcp2Config
 
 	transport := buildTransportInstance(config, identity, keystore, ctx, cancel, logger)
@@ -285,8 +285,8 @@ func (t *NTCP2Transport) runIdleMaintenance() {
 	ticker := time.NewTicker(ntcp2FailsafeIterationFreq)
 	defer ticker.Stop()
 
-	t.logger.Debug("NTCP2 idle maintenance loop started")
-	defer t.logger.Debug("NTCP2 idle maintenance loop stopped")
+	t.logger.Info("NTCP2 idle maintenance loop started")
+	defer t.logger.Info("NTCP2 idle maintenance loop stopped")
 
 	for {
 		select {
@@ -488,7 +488,7 @@ func setupNetworkListener(transport *NTCP2Transport, config *Config, ntcp2Config
 			Context:      transport.ctx,
 		}
 		transport.portMapperManager = nat.NewPortMapperManager(cfg)
-		transport.logger.WithField("internal_port", port).Debug("Started TCP port mapper")
+		transport.logger.WithField("internal_port", port).Info("Started TCP port mapper")
 	}
 
 	return attachNTCP2Listener(transport, tcpListener, ntcp2Config)
@@ -622,7 +622,7 @@ func (t *NTCP2Transport) acceptNextConnection() bool {
 			return false
 		default:
 			// Transient error: log as info, sleep briefly to avoid tight loop, and continue
-			t.logger.WithError(err).Info("Transient accept error; will retry")
+			t.logger.WithError(err).Debug("Transient accept error; will retry")
 			time.Sleep(10 * time.Millisecond)
 			return true
 		}
@@ -979,7 +979,7 @@ func (t *NTCP2Transport) logHandshakeSuccess(conn net.Conn) {
 		"remote_addr":      conn.RemoteAddr().String(),
 		"local_caps":       localRI.RouterCapabilities(),
 		"local_addr_count": localRI.RouterAddressCount(),
-	}).Info("Inbound Noise XK handshake completed successfully (responder role)")
+	}).Debug("Inbound Noise XK handshake completed successfully (responder role)")
 }
 
 func (t *NTCP2Transport) writeTerminationBlockBestEffort(rawConn net.Conn, term []byte) {
@@ -1034,7 +1034,7 @@ func (t *NTCP2Transport) trackInboundConnection(conn net.Conn) (net.Conn, bool) 
 		"remote_addr":   conn.RemoteAddr().String(),
 		"peer_hash":     logutil.HashPrefixPlain(peerHash),
 		"session_count": t.GetSessionCount(),
-	}).Info("Accepted and tracked incoming NTCP2 connection")
+	}).Debug("Accepted and tracked incoming NTCP2 connection")
 	return wrappedConn, true // Mark as fresh
 }
 
@@ -1336,7 +1336,7 @@ func (t *NTCP2Transport) createNewListenerWithConfig(ntcp2Config *ntcp2.Config, 
 			port, _ := strconv.Atoi(portStr)
 			portMapCfg := &nat.PortMapperConfig{Network: "tcp", InternalPort: port, Context: t.ctx}
 			portMapper = nat.NewPortMapperManager(portMapCfg)
-			t.logger.WithField("internal_port", port).Debug("Started TCP port mapper")
+			t.logger.WithField("internal_port", port).Info("Started TCP port mapper")
 		}
 		return listener, boundAddr, portMapper, nil
 	}
@@ -1365,7 +1365,7 @@ func (t *NTCP2Transport) createNewListenerWithConfig(ntcp2Config *ntcp2.Config, 
 			Context:      t.ctx,
 		}
 		portMapper = nat.NewPortMapperManager(portMapCfg)
-		t.logger.WithField("internal_port", port).Debug("Started TCP port mapper for new listener")
+		t.logger.WithField("internal_port", port).Info("Started TCP port mapper for new listener")
 	}
 
 	return listener, boundAddr, portMapper, nil
@@ -1519,7 +1519,7 @@ func (t *NTCP2Transport) validateExistingSession(s *NTCP2Session, routerHash dat
 	t.logger.WithFields(map[string]interface{}{
 		"router_hash":     logutil.HashPrefixPlain(routerHashBytes),
 		"send_queue_size": s.SendQueueSize(),
-	}).Info("Reusing existing NTCP2 session")
+	}).Debug("Reusing existing NTCP2 session")
 	return s, true
 }
 
@@ -1573,7 +1573,7 @@ func (t *NTCP2Transport) promoteInboundConnection(conn net.Conn, original interf
 			promoted.StartWorkers()
 			t.logger.WithFields(map[string]interface{}{
 				"router_hash": logutil.HashPrefixPlain(routerHashBytes),
-			}).Info("Promoted inbound net.Conn to NTCP2Session")
+			}).Debug("Promoted inbound net.Conn to NTCP2Session")
 		},
 	}
 
@@ -1615,7 +1615,7 @@ func (t *NTCP2Transport) createOutboundSession(routerInfo router_info.RouterInfo
 		return nil, err
 	}
 
-	t.logger.WithField("router_hash", logutil.HashPrefixPlain(routerHashBytes)).Info("Creating new outbound NTCP2 session")
+	t.logger.WithField("router_hash", logutil.HashPrefixPlain(routerHashBytes)).Debug("Creating new outbound NTCP2 session")
 
 	if n := t.getPeerConnNotifier(); n != nil {
 		n.RecordTransportAttempt(routerHashBytes, "ntcp2")
@@ -1683,7 +1683,7 @@ func (t *NTCP2Transport) finalizeOutboundSession(conn *ntcp2.Conn, routerHash da
 	t.logger.WithFields(map[string]interface{}{
 		"router_hash": logutil.HashPrefixPlain(routerHashBytes),
 		"remote_addr": conn.RemoteAddr().String(),
-	}).Info("Successfully created outbound NTCP2 session")
+	}).Debug("Successfully created outbound NTCP2 session")
 	return session, nil
 }
 
@@ -1809,7 +1809,7 @@ func (t *NTCP2Transport) logTCPConnectionAttempt(tcpAddrString string, peerHashB
 		"remote_addr": tcpAddrString,
 		"peer_hash":   logutil.BytePrefix(peerHashBytes),
 	}).Debug("Attempting raw TCP connection before noise handshake")
-	t.logger.Infof("Attempting TCP connection to peer at %s (hash: %s)", tcpAddrString, logutil.BytePrefix(peerHashBytes))
+	t.logger.Debugf("Attempting TCP connection to peer at %s (hash: %s)", tcpAddrString, logutil.BytePrefix(peerHashBytes))
 }
 
 // performNTCP2Handshake performs the NTCP2 handshake after successful TCP connection.
@@ -1824,7 +1824,7 @@ func (t *NTCP2Transport) logTCPConnectionAttempt(tcpAddrString string, peerHashB
 //
 // Spec reference: https://geti2p.net/spec/ntcp2#probing-resistance
 func (t *NTCP2Transport) performNTCP2Handshake(ntcp2Addr net.Addr, tcpAddrString string, peerHashBytes []byte, config *ntcp2.Config, tcpDialStart time.Time) (*ntcp2.Conn, error) {
-	t.logger.WithField("remote_addr", ntcp2Addr.String()).Info("Dialing NTCP2 connection")
+	t.logger.WithField("remote_addr", ntcp2Addr.String()).Debug("Dialing NTCP2 connection")
 
 	// Phase 1a: TCP dial with a 10 s deadline (P0.2: reduced from 30 s to avoid
 	// blocking goroutines for 30 s against hosts that silently drop SYN packets).
@@ -2121,7 +2121,7 @@ func (t *NTCP2Transport) attachLocalRouterInfo(config *ntcp2.Config) error {
 		"ri_bytes_prefix": fmt.Sprintf("%x", riBytes[:min(16, len(riBytes))]),
 		"ri_bytes_suffix": fmt.Sprintf("%x", riBytes[max(0, len(riBytes)-16):]),
 		"ri_bytes_full":   fmt.Sprintf("%x", riBytes),
-	}).Info("LocalRouterInfo for msg3 outbound")
+	}).Debug("LocalRouterInfo for msg3 outbound")
 	config.WithLocalRouterInfo(riBytes)
 	return nil
 }
@@ -2288,7 +2288,7 @@ func (t *NTCP2Transport) promoteRawConnToSession(rawConn net.Conn, routerHash da
 			promoted.StartWorkers()
 			t.logger.WithFields(map[string]interface{}{
 				"router_hash": logutil.HashPrefixPlain(routerHashBytes),
-			}).Info("Promoted inbound net.Conn to NTCP2Session in setupSession")
+			}).Debug("Promoted inbound net.Conn to NTCP2Session in setupSession")
 		},
 	}
 
@@ -2361,7 +2361,7 @@ func (t *NTCP2Transport) removeSession(routerHash data.Hash) {
 	// will only decrement truly-stale sessions (those that weren't cleaned up).
 	// This makes shutdown accounting deterministic.
 	t.sessionRegistry.Remove(routerHash)
-	t.logger.WithField("router_hash", logutil.HashPrefixPlain(routerHashBytes)).Info("Removed session from transport session map")
+	t.logger.WithField("router_hash", logutil.HashPrefixPlain(routerHashBytes)).Debug("Removed session from transport session map")
 }
 
 // GetSessionCount returns the number of active sessions managed by this transport.

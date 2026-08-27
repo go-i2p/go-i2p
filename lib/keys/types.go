@@ -141,7 +141,7 @@ func (ks *KeyStoreImpl) StoreKeys() error {
 		log.WithError(err).WithField("path", fullPath).Error("Failed to write private key file")
 		return err
 	}
-	log.WithField("path", fullPath).Info("Successfully stored private key")
+	log.WithField("path", fullPath).Debug("Successfully stored private key")
 	return nil
 }
 

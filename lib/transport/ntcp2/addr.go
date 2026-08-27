@@ -116,7 +116,7 @@ func ExtractNTCP2DialCandidatesWithMetadata(routerInfo router_info.RouterInfo) (
 		"candidate_count": len(candidates),
 		"ipv4_candidates": len(ipv4Candidates),
 		"ipv6_candidates": len(ipv6Candidates),
-	}).Info("Successfully extracted NTCP2 dial candidates")
+	}).Debug("Successfully extracted NTCP2 dial candidates")
 
 	return candidates, nil
 }

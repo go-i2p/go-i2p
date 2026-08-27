@@ -367,7 +367,7 @@ func (p *MessageProcessor) forwardToTunnelGatewayHandler(tgMsg *TunnelGateway) e
 func (p *MessageProcessor) processDeliveryStatusMessage(msg Message) error {
 	log.WithFields(logger.Fields{
 		"at": "processDeliveryStatusMessage",
-	}).Info("delivery status dispatch entered")
+	}).Debug("delivery status dispatch entered")
 
 	// Try the typed path first (locally constructed messages).
 	if statusReporter, ok := msg.(StatusReporter); ok {
@@ -377,7 +377,7 @@ func (p *MessageProcessor) processDeliveryStatusMessage(msg Message) error {
 			"at":         "processDeliveryStatusMessage",
 			"message_id": msgID,
 			"timestamp":  timestamp,
-		}).Info("Processing typed delivery status")
+		}).Debug("Processing typed delivery status")
 		if p.deliveryStatusHandler != nil {
 			return p.deliveryStatusHandler.HandleDeliveryStatus(msgID, timestamp)
 		}
@@ -409,7 +409,7 @@ func (p *MessageProcessor) processDeliveryStatusMessage(msg Message) error {
 		"message_id":  msgID,
 		"timestamp":   timestamp,
 		"payload_len": len(payload),
-	}).Info("Processing wire-received delivery status")
+	}).Debug("Processing wire-received delivery status")
 
 	if p.deliveryStatusHandler != nil {
 		return p.deliveryStatusHandler.HandleDeliveryStatus(msgID, timestamp)

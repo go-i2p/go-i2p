@@ -404,7 +404,7 @@ func (r *Router) parseDatabaseStoreMessage(msg i2np.Message) (*i2np.DatabaseStor
 		"message_id": msg.MessageID(),
 		"store_type": dbStore.GetStoreType(),
 		"key":        dbStore.GetStoreKey().String(),
-	}).Info("Parsed DatabaseStore message from peer")
+	}).Debug("Parsed DatabaseStore message from peer")
 
 	dbStore.BaseI2NPMessage = i2np.BaseMessageFromMessage(msg, dataCarrier.GetData())
 	return dbStore, nil

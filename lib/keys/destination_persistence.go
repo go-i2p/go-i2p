@@ -113,7 +113,7 @@ func LoadOrCreateDestinationKeyStore(dir, name string) (*DestinationKeyStore, er
 
 	dks, err := LoadDestinationKeyStore(dir, name)
 	if err == nil {
-		log.WithFields(logger.Fields{"at": "LoadOrCreateDestinationKeyStore"}).Debug("Loaded existing destination key store")
+		log.WithFields(logger.Fields{"at": "LoadOrCreateDestinationKeyStore"}).Info("Loaded existing destination key store")
 		return dks, nil
 	}
 
@@ -132,7 +132,7 @@ func LoadOrCreateDestinationKeyStore(dir, name string) (*DestinationKeyStore, er
 	}
 
 	// File truly does not exist — safe to create fresh keys
-	log.WithField("reason", err.Error()).Debug("Creating new destination key store")
+	log.WithField("reason", err.Error()).Info("Creating new destination key store")
 	dks, err = NewDestinationKeyStore()
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to create destination key store")
