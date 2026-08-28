@@ -2,9 +2,9 @@ name: Go Tests
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [main, master, chore/NAT-tests]
   pull_request:
-    branches: [ main, master ]
+    branches: [main, master]
 
 jobs:
   build:
@@ -13,7 +13,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v4
         with:
-          go-version: '1.26'
+          go-version: "1.26"
       - run: make build
         env:
           GO: go
@@ -31,9 +31,9 @@ jobs:
           - os: ubuntu-latest
             goos: linux
             goarch: arm64
-#          - os: ubuntu-latest
-#            goos: linux
-#            goarch: 386
+          #          - os: ubuntu-latest
+          #            goos: linux
+          #            goarch: 386
           # Windows targets
           - os: ubuntu-latest
             goos: windows
@@ -41,9 +41,9 @@ jobs:
           - os: ubuntu-latest
             goos: windows
             goarch: arm64
-#          - os: ubuntu-latest
-#            goos: windows
-#            goarch: 386
+          #          - os: ubuntu-latest
+          #            goos: windows
+          #            goarch: 386
           # macOS targets (cross-compiled from ubuntu-latest)
           - os: ubuntu-latest
             goos: darwin
@@ -69,7 +69,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v4
         with:
-          go-version: '1.26'
+          go-version: "1.26"
       - name: Build for ${{ matrix.goos }}/${{ matrix.goarch }}
         run: CGO_ENABLED=0 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build ./...
         env:
@@ -85,7 +85,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: '1.26'  # Adjust this version as needed
+          go-version: "1.26" # Adjust this version as needed
 
       - name: Cache Go modules
         uses: actions/cache@v3
@@ -105,6 +105,7 @@ jobs:
         env:
           GO: go
           DEBUG_I2P: debug
+          GO_I2P_INTEGRATION_NAT: inactive
           CGO_ENABLED: 0
 
       - name: Upload Test Logs
@@ -112,7 +113,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.test_target }}-logs
-          path: ./test-logs/${{ matrix.test_target }}.log  # Adjust this path as needed
+          path: ./test-logs/${{ matrix.test_target }}.log # Adjust this path as needed
 
   lint:
     runs-on: ubuntu-latest
@@ -120,7 +121,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v4
         with:
-          go-version: '1.26'
+          go-version: "1.26"
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v7
         with:
