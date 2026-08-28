@@ -71,7 +71,12 @@ func (r *Router) cancelRouterContext() {
 // Stop initiates router shutdown and waits for all goroutines to complete.
 // This method blocks until the router is fully stopped.
 func (r *Router) Stop() {
-	logShutdownStep(1, "shutdown requested", "stopping router")
+	log.WithFields(logger.Fields{
+		"at":     "(Router) Stop",
+		"phase":  "shutdown",
+		"step":   1,
+		"reason": "shutdown requested",
+	}).Info("stopping router")
 	r.runMux.Lock()
 
 	if r.checkAlreadyStopped() {
@@ -86,7 +91,12 @@ func (r *Router) Stop() {
 
 	logShutdownStep(3, "waiting for goroutines to complete", "waiting for router goroutines to finish")
 	r.wg.Wait()
-	logShutdownStep(4, "all subsystems stopped", "router stopped successfully")
+	log.WithFields(logger.Fields{
+		"at":     "(Router) Stop",
+		"phase":  "shutdown",
+		"step":   4,
+		"reason": "all subsystems stopped",
+	}).Info("router stopped successfully")
 }
 
 // StopWithContext initiates router shutdown like Stop, but respects the
@@ -94,7 +104,12 @@ func (r *Router) Stop() {
 // all goroutines finish, the method returns the context error. This allows
 // HardStop to bound the time spent waiting for graceful shutdown.
 func (r *Router) StopWithContext(ctx context.Context) error {
-	logShutdownStep(1, "shutdown requested (with context)", "stopping router")
+	log.WithFields(logger.Fields{
+		"at":     "(Router) Stop",
+		"phase":  "shutdown",
+		"step":   1,
+		"reason": "shutdown requested (with context)",
+	}).Info("stopping router")
 	r.runMux.Lock()
 
 	if r.checkAlreadyStopped() {
@@ -117,7 +132,12 @@ func (r *Router) StopWithContext(ctx context.Context) error {
 
 	select {
 	case <-done:
-		logShutdownStep(4, "all subsystems stopped", "router stopped successfully")
+		log.WithFields(logger.Fields{
+			"at":     "(Router) Stop",
+			"phase":  "shutdown",
+			"step":   4,
+			"reason": "all subsystems stopped",
+		}).Info("router stopped successfully")
 		return nil
 	case <-ctx.Done():
 		logShutdownStep(4, "context cancelled", "router stop interrupted by context")

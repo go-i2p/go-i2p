@@ -13,6 +13,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/config/configcmd"
 	"github.com/go-i2p/go-i2p/lib/embedded"
 	"github.com/go-i2p/go-i2p/lib/tui/tuicmd"
+	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/go-i2p/go-i2p/lib/util/signals"
 	"github.com/go-i2p/logger"
 	"github.com/spf13/cobra"
@@ -31,6 +32,7 @@ var RootCmd = &cobra.Command{
 }
 
 func init() {
+	logutil.ApplyDebugI2PEnv()
 	cobra.OnInitialize(config.InitConfigOrExit)
 	cliflags.RegisterAll(RootCmd)
 	if err := cliflags.BindAll(RootCmd, viper.GetViper()); err != nil {

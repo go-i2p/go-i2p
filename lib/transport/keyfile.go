@@ -32,7 +32,7 @@ func LoadOrGenerateKeyFile(workingDir, filePath string, expectedSize int, keyNam
 				keyName, expectedSize, len(data),
 			)
 		}
-		log.Debug("Successfully loaded existing key")
+		log.Info("Successfully loaded existing key")
 		return data, nil
 	}
 

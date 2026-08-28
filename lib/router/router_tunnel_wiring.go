@@ -202,7 +202,7 @@ func (r *Router) configureRouterHashOnPools(inboundPool, outboundPool *tunnel.Po
 			"at":          "configureRouterHashOnPools",
 			"pool":        "outbound",
 			"router_hash": hashHex,
-		}).Info("Router hash set on outbound pool")
+		}).Debug("Router hash set on outbound pool")
 	}
 	if inboundPool != nil {
 		inboundPool.SetRouterHash(routerHash)
@@ -210,7 +210,7 @@ func (r *Router) configureRouterHashOnPools(inboundPool, outboundPool *tunnel.Po
 			"at":          "configureRouterHashOnPools",
 			"pool":        "inbound",
 			"router_hash": hashHex,
-		}).Info("Router hash set on inbound pool")
+		}).Debug("Router hash set on inbound pool")
 	}
 	return nil
 }
@@ -662,7 +662,7 @@ func (r *Router) wireGarlicSessionManager() {
 	log.WithFields(logger.Fields{
 		"at":                     "wireGarlicSessionManager",
 		"encryption_privkey_hex": privKeyHex,
-	}).Info("Creating garlic session manager with encryption private key")
+	}).Debug("Creating garlic session manager with encryption private key")
 
 	garlicMgr, err := i2np.NewGarlicSessionManager(privKey)
 	if err != nil {
@@ -677,7 +677,7 @@ func (r *Router) wireGarlicSessionManager() {
 		"at":                "wireGarlicSessionManager",
 		"garlic_pubkey_hex": pubKeyHex,
 		"full_pubkey_hex":   fmt.Sprintf("%x", pubKey[:]),
-	}).Info("Garlic session manager created - this is the key peers must use to encrypt to us")
+	}).Debug("Garlic session manager created - this is the key peers must use to encrypt to us")
 
 	r.messageRouter.GetProcessor().SetGarlicSessionManager(garlicMgr)
 	if r.tunnelManager != nil {

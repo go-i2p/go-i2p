@@ -242,7 +242,7 @@ func (r *Router) handleNewConnection(conn net.Conn) {
 			defer r.wg.Done()
 			r.processSessionMessages(session, staticAuthenticatedPeer{hash: peerHash, handshakeComplete: true})
 		}()
-		sessionLog.Info("Started monitoring new inbound NTCP2 session")
+		sessionLog.Debug("Started monitoring new inbound NTCP2 session")
 
 	case *ssu2noise.SSU2Addr:
 		peerHash := common.Hash(addr.RouterHash())
@@ -262,7 +262,7 @@ func (r *Router) handleNewConnection(conn net.Conn) {
 			defer r.wg.Done()
 			r.processSessionMessages(session, staticAuthenticatedPeer{hash: peerHash, handshakeComplete: true})
 		}()
-		sessionLog.Info("Started monitoring new inbound SSU2 session")
+		sessionLog.Debug("Started monitoring new inbound SSU2 session")
 
 	default:
 		sessionLogger.WithField("addr_type", fmt.Sprintf("%T", conn.RemoteAddr())).Error("Unrecognised inbound connection address type, dropping")

@@ -3,9 +3,49 @@ package logutil
 
 import (
 	"fmt"
+	"os"
+	"strings"
+	"sync"
 
 	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/logger"
 )
+
+var applyDebugI2POnce sync.Once
+
+func init() {
+	ApplyDebugI2PEnv()
+}
+
+// ApplyDebugI2PEnv overrides the external go-i2p logger so DEBUG_I2P=info is a
+// first-class level. The logger package only honors debug/warn/error and treats
+// unrecognized values (including "info") as debug, which makes Info() a no-op
+// relative to Debug(). Empty DEBUG_I2P is left unchanged (logs discarded).
+func ApplyDebugI2PEnv() {
+	applyDebugI2POnce.Do(applyDebugI2PEnv)
+}
+
+func applyDebugI2PEnv() {
+	raw := strings.ToLower(strings.TrimSpace(os.Getenv("DEBUG_I2P")))
+	if raw == "" {
+		return
+	}
+
+	l := logger.GetGoI2PLogger()
+	switch raw {
+	case "debug":
+		l.SetLevel(logger.DebugLevel)
+	case "info":
+		l.SetLevel(logger.InfoLevel)
+	case "warn":
+		l.SetLevel(logger.WarnLevel)
+	case "error":
+		l.SetLevel(logger.ErrorLevel)
+	default:
+		// fallback to info
+		l.SetLevel(logger.InfoLevel)
+	}
+}
 
 // HashPrefix returns a hex string prefix of the given hash for safe anonymity-aware logging.
 // It returns the first 8 bytes (16 hex characters) of the hash formatted as lowercase hex,

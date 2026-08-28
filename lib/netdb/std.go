@@ -1213,7 +1213,7 @@ func (db *StdNetDB) StoreRouterInfoWithError(ri router_info.RouterInfo) error {
 // Ensure ensures that the network database exists and loads existing RouterInfos.
 func (db *StdNetDB) Ensure() (err error) {
 	if !db.Exists() {
-		log.WithFields(logger.Fields{"at": "Ensure"}).Debug("NetDB directory does not exist, creating it")
+		log.WithFields(logger.Fields{"at": "Ensure"}).Info("NetDB directory does not exist, creating it")
 		err = db.Create()
 	} else {
 		log.WithFields(logger.Fields{"at": "Ensure"}).Debug("NetDB directory already exists")
@@ -1808,7 +1808,7 @@ func (db *StdNetDB) RequestRouterInfoRefresh(hash common.Hash) {
 			"at":        "StdNetDB.RequestRouterInfoRefresh",
 			"peer_hash": logutil.HashPrefixPlain(hash),
 			"reason":    "stale RouterInfo evicted after refresh request",
-		}).Info("Evicted stale RouterInfo from cache; disk copy retained until refresh cooldown expires")
+		}).Debug("Evicted stale RouterInfo from cache; disk copy retained until refresh cooldown expires")
 	}
 }
 

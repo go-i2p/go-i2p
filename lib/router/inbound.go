@@ -514,7 +514,7 @@ func (h *InboundMessageHandler) createControlPlaneHandler(tunnelID tunnel.Tunnel
 				"message_type": inner.Type(),
 				"message_id":   inner.MessageID(),
 				"message_len":  len(msgBytes),
-			}).Info("control-plane inbound tunnel delivered DeliveryStatus to processor")
+			}).Debug("control-plane inbound tunnel delivered DeliveryStatus to processor")
 		}
 
 		return proc.ProcessMessage(inner)

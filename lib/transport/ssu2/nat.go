@@ -1523,7 +1523,7 @@ func (t *SSU2Transport) publicBoundAddress() (net.IP, uint16, bool) {
 func (t *SSU2Transport) runNATDetection(candidates []router_info.RouterInfo, republish func()) {
 	// T-1 fix: Single-flight check — if detection already running, skip this call.
 	if !t.natDetectionRunning.CompareAndSwap(false, true) {
-		t.logger.Info("NAT detection already in progress; skipping concurrent run")
+		t.logger.Debug("NAT detection already in progress; skipping concurrent run")
 		return
 	}
 	defer t.natDetectionRunning.Store(false)
@@ -1733,7 +1733,7 @@ func (t *SSU2Transport) scheduleNATDetectionRetry(backoff time.Duration) {
 		t.peerTestRetryMu.Unlock()
 
 		if len(candidates) >= 2 {
-			t.logger.Info("NAT detection: retry timer fired; re-running peer test")
+			t.logger.Debug("NAT detection: retry timer fired; re-running peer test")
 			t.wg.Add(1)
 			go func() {
 				defer t.wg.Done()

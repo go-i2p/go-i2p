@@ -618,7 +618,7 @@ func (m *ParticipantManager) RegisterParticipant(tunnelID TunnelID, sourceHash c
 		"next_hop_ident":  logutil.HashPrefix(nextHopIdent),
 		"next_hop_tunnel": nextHopTunnel,
 		"lifetime":        lifetime,
-	}).Info("registered participating tunnel")
+	}).Debug("registered participating tunnel")
 
 	return nil
 }

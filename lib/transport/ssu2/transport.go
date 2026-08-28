@@ -888,7 +888,7 @@ func (t *SSU2Transport) promoteInboundConnection(conn net.Conn, original interfa
 			promoted.StartWorkers()
 			t.logger.WithFields(map[string]interface{}{
 				"router_hash": logutil.HashPrefix(routerHash),
-			}).Info("Promoted inbound net.Conn to SSU2Session")
+			}).Debug("Promoted inbound net.Conn to SSU2Session")
 		},
 	}
 
@@ -1218,7 +1218,7 @@ func (t *SSU2Transport) promoteRawConnToSession(rawConn net.Conn, routerHash dat
 			promoted.StartWorkers()
 			t.logger.WithFields(map[string]interface{}{
 				"router_hash": logutil.HashPrefix(routerHash),
-			}).Info("Promoted inbound net.Conn to SSU2Session in registerOrReuseSession")
+			}).Debug("Promoted inbound net.Conn to SSU2Session in registerOrReuseSession")
 		},
 	}
 

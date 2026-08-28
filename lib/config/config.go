@@ -584,7 +584,7 @@ func createDefaultConfig(defaultConfigDir string) error {
 		"phase":       "startup",
 		"config_file": defaultConfigFile,
 		"config_dir":  defaultConfigDir,
-	}).Debug("created default configuration")
+	}).Info("created default configuration")
 	return nil
 }
 
@@ -607,7 +607,7 @@ func handleConfigFile() error {
 			"reason":      "config_file_loaded",
 			"phase":       "startup",
 			"config_file": viper.ConfigFileUsed(),
-		}).Debug("using config file")
+		}).Info("using config file")
 	}
 	return nil
 }

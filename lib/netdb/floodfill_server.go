@@ -339,7 +339,7 @@ func (fs *FloodfillServer) Stop() {
 	if fs.lookupLimiter != nil {
 		fs.lookupLimiter.Stop()
 	}
-	log.WithFields(logger.Fields{"at": "Stop"}).Debug("Floodfill server stopped")
+	log.WithFields(logger.Fields{"at": "Stop"}).Info("Floodfill server stopped")
 }
 
 // HandleDatabaseLookup processes an incoming DatabaseLookup request.

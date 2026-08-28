@@ -266,7 +266,7 @@ func logPeerFilteringResults(allRouterInfos, available []router_info.RouterInfo,
 		"skipped_no_r_cap":      stats.skippedNoRCap,
 		"skipped_hash_error":    stats.skippedHashError,
 		"usability_ratio":       fmt.Sprintf("%.1f%%", float64(len(available))*100.0/float64(len(allRouterInfos))),
-	}).Info("Peer filtering complete")
+	}).Debug("Peer filtering complete")
 }
 
 // selectRandomPeers randomly selects the requested number of peers from available pool.

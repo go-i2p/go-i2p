@@ -202,7 +202,7 @@ func (r *Router) registerTypedSession(hash common.Hash, session sessionRegistere
 		defer r.wg.Done()
 		r.processSessionMessages(session, staticAuthenticatedPeer{hash: hash, handshakeComplete: true})
 	}()
-	log.WithField("peer_hash", logutil.HashPrefix(hash)).Infof("Established and registered new outbound %s session", transportName)
+	log.WithField("peer_hash", logutil.HashPrefix(hash)).Debugf("Established and registered new outbound %s session", transportName)
 }
 
 // registerNewSession stores a newly established session and starts a reader

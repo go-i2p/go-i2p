@@ -287,7 +287,7 @@ func (pmm *PortMapperManager) Stop() error {
 		log.WithFields(map[string]interface{}{
 			"network":       pmm.network,
 			"external_port": pmm.extPort,
-		}).Debug("Port mapping cleaned up")
+		}).Info("Port mapping cleaned up")
 		pmm.mapper = nil
 		pmm.extPort = 0
 		pmm.extIP = ""

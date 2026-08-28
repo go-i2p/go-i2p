@@ -208,7 +208,7 @@ func (sm *GarlicSessionManager) logDecryptFailure(incomingTag [8]byte, oneTimeTa
 		"is_crypto_error":             isNoiseError,
 		"log_level":                   logLevel,
 		"mitigation":                  "call publisher.ForceRouterInfoRepublish() to propagate current key",
-	}).Info("Garlic decrypt failed - likely cause is peers have old cached RouterInfo with different X25519 key")
+	}).Debug("Garlic decrypt failed - likely cause is peers have old cached RouterInfo with different X25519 key")
 }
 
 // logDecryptSuccess logs diagnostics when decryption succeeds.

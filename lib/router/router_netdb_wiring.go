@@ -71,7 +71,7 @@ func (r *Router) startFloodfillServer() {
 	if r.messageRouter != nil {
 		r.messageRouter.GetProcessor().SetFloodfillReplicator(r.floodfillServer)
 	}
-	log.WithField("enabled", cfg.Enabled).Debug("Floodfill server started")
+	log.WithField("enabled", cfg.Enabled).Info("Floodfill server started")
 }
 
 // startExplorer instantiates and starts the NetDB explorer. The explorer
@@ -399,7 +399,7 @@ func (r *Router) logNetDBStoreStats() {
 		"rejected_admit":    stats.RejectedAdmissionCount,
 		"rejected_datatype": stats.RejectedDataTypeCount,
 		"persist_pending":   stats.PersistPendingCount,
-	}).Info("NetDB RouterInfo intake stats")
+	}).Debug("NetDB RouterInfo intake stats")
 }
 
 func (r *Router) ensurePublisherRunning() {
