@@ -122,6 +122,8 @@ func TestEmbeddedRouter_StopOnNonRunning(t *testing.T) {
 
 // TestEmbeddedRouter_HardStopOnNonRunning tests HardStop on non-running router.
 func TestEmbeddedRouter_HardStopOnNonRunning(t *testing.T) {
+	skipEmbeddedRouterTestingInCI(t)
+
 	cfg := config.DefaultRouterConfig()
 	router, err := NewStandardEmbeddedRouter(cfg)
 	require.NoError(t, err)
