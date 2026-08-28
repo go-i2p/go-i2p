@@ -192,7 +192,7 @@ func (tm *TunnelManager) Stop() {
 			tm.outboundPool.Stop()
 		}
 
-		log.WithFields(logger.Fields{"at": "Stop"}).Debug("Tunnel manager stopped")
+		log.WithFields(logger.Fields{"at": "Stop"}).Info("Tunnel manager stopped")
 	})
 }
 

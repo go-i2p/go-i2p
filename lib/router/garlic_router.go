@@ -829,7 +829,7 @@ func (gr *GarlicMessageRouter) retryPendingLookups() {
 		log.WithFields(logger.Fields{
 			"dest_hash":     logutil.HashPrefix(fw.destHash),
 			"message_count": len(fw.messages),
-		}).Info("LeaseSet found, processing pending messages")
+		}).Debug("LeaseSet found, processing pending messages")
 		gr.forwardPendingMessages(fw.destHash, fw.gatewayHash, fw.tunnelID, fw.messages)
 	}
 }

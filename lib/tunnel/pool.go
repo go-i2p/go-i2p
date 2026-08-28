@@ -366,7 +366,7 @@ func (p *Pool) ResetBuildFailures() {
 	log.WithFields(logger.Fields{
 		"at":                "Pool.ResetBuildFailures",
 		"previous_failures": oldFailures,
-	}).Info("Reset exponential backoff counter for reply tunnel availability")
+	}).Debug("Reset exponential backoff counter for reply tunnel availability")
 }
 
 // SetHopCount overrides the configured per-tunnel hop count for this pool.
@@ -516,7 +516,7 @@ func (p *Pool) Stop() {
 		"phase":     "tunnel_build",
 		"reason":    "pool maintenance shutdown completed",
 		"pool_size": len(p.tunnels),
-	}).Debug("tunnel pool stopped")
+	}).Info("tunnel pool stopped")
 }
 
 // CleanupExpiredTunnels removes tunnels that have been building for too long
@@ -943,7 +943,7 @@ func (p *Pool) RetryTunnelBuild(tunnelID TunnelID, isInbound bool, hopCount int)
 		"tunnel_id":  tunnelID,
 		"is_inbound": isInbound,
 		"hop_count":  hopCount,
-	}).Info("retrying tunnel build after timeout")
+	}).Debug("retrying tunnel build after timeout")
 
 	builder := p.getTunnelBuilder()
 	if builder == nil {
@@ -990,7 +990,7 @@ func (p *Pool) RetryTunnelBuild(tunnelID TunnelID, isInbound bool, hopCount int)
 		"original_id": tunnelID,
 		"new_id":      result.TunnelID,
 		"is_inbound":  isInbound,
-	}).Info("tunnel retry build initiated")
+	}).Debug("tunnel retry build initiated")
 
 	return nil
 }

@@ -216,7 +216,7 @@ func (s *SSU2Session) StartWorkers() {
 	s.WaitGroup().Add(2)
 	go s.sendWorker()
 	go s.receiveWorker()
-	s.Logger().Info("SSU2 session workers started")
+	s.Logger().Debug("SSU2 session workers started")
 }
 
 // Close closes the session cleanly with a normal-close termination reason.

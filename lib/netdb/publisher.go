@@ -322,7 +322,7 @@ func (p *Publisher) publishOurRouterInfo() {
 			"at":                     "publishOurRouterInfo",
 			"router_identity_prefix": riHash.String()[:16],
 			"router_identity_full":   riHash.String(),
-		}).Info("RouterInfo details before publishing")
+		}).Debug("RouterInfo details before publishing")
 	}
 
 	// Validate RouterInfo before publishing
@@ -527,7 +527,7 @@ func (p *Publisher) PublishRouterInfo(ri router_info.RouterInfo) error {
 		"at":        "PublishRouterInfo",
 		"hash":      logutil.HashPrefixPlain(hash),
 		"full_hash": hash.String(),
-	}).Info("Publishing RouterInfo to floodfills")
+	}).Debug("Publishing RouterInfo to floodfills")
 
 	// Select closest floodfill routers
 	floodfills, err := p.selectFloodfillsForPublishing(hash)
@@ -546,7 +546,7 @@ func (p *Publisher) PublishRouterInfo(ri router_info.RouterInfo) error {
 			"at":               "PublishRouterInfo",
 			"floodfill_count":  len(floodfills),
 			"floodfill_hashes": ffHashes,
-		}).Info("Selected floodfill routers for publication")
+		}).Debug("Selected floodfill routers for publication")
 	}
 
 	// Send DatabaseStore message to each selected floodfill.
@@ -600,7 +600,7 @@ func (p *Publisher) PublishRouterInfo(ri router_info.RouterInfo) error {
 		log.WithFields(logger.Fields{
 			"at":   "PublishRouterInfo",
 			"hash": logutil.HashPrefixPlain(hash),
-		}).Info("RouterInfo publication confirmed by floodfill ACK")
+		}).Debug("RouterInfo publication confirmed by floodfill ACK")
 		return nil
 	}
 
@@ -754,7 +754,7 @@ func (p *Publisher) verifyRouterInfoRetrievable(target common.Hash, floodfills [
 				"store_key":         logutil.HashPrefixPlain(store.GetStoreKey()),
 				"reply_token":       binary.BigEndian.Uint32(store.ReplyToken[:]),
 				"reply_gateway_set": store.ReplyGateway != (common.Hash{}),
-			}).Info("RouterInfo verification received DatabaseStore reply")
+			}).Debug("RouterInfo verification received DatabaseStore reply")
 
 			matched := store.GetLeaseSetType() == i2np.DatabaseStoreTypeRouterInfo && store.GetStoreKey() == target
 			if matched {
@@ -772,7 +772,7 @@ func (p *Publisher) verifyRouterInfoRetrievable(target common.Hash, floodfills [
 			log.WithFields(logger.Fields{
 				"at":     "verifyRouterInfoRetrievable",
 				"target": logutil.HashPrefixPlain(target),
-			}).Info("RouterInfo post-publish verification succeeded")
+			}).Debug("RouterInfo post-publish verification succeeded")
 			return nil
 		}
 		if result.reason != "" {
@@ -838,7 +838,7 @@ func (p *Publisher) selectFloodfillsForPublishing(hash common.Hash) ([]router_in
 					"at":          "selectFloodfillsForPublishing",
 					"forced_hash": logutil.HashPrefixPlain(*forcedHash),
 					"target_hash": logutil.HashPrefixPlain(hash),
-				}).Info("forced target router found in local NetDB; using as sole publication target")
+				}).Debug("forced target router found in local NetDB; using as sole publication target")
 				return []router_info.RouterInfo{ri}, nil
 			}
 		}
@@ -854,7 +854,7 @@ func (p *Publisher) selectFloodfillsForPublishing(hash common.Hash) ([]router_in
 				log.WithFields(logger.Fields{
 					"at":          "selectFloodfillsForPublishing",
 					"forced_hash": logutil.HashPrefixPlain(*forcedHash),
-				}).Info("forced target router resolved from network; using as sole publication target")
+				}).Debug("forced target router resolved from network; using as sole publication target")
 				return []router_info.RouterInfo{*ri}, nil
 			} else if rerr != nil {
 				log.WithError(rerr).WithFields(logger.Fields{
@@ -1192,7 +1192,7 @@ func (p *Publisher) sendDatabaseStoreDirect(hash common.Hash, data []byte, dataT
 				"floodfill_hash":         logutil.HashPrefixPlain(ffHash),
 				"direct_reply_gateway":   logutil.HashPrefixPlain(dbStore.ReplyGateway),
 				"reply_route_correction": "direct_reply_gateway_to_target_floodfill",
-			}).Info("Corrected direct DatabaseStore reply gateway to floodfill target")
+			}).Debug("Corrected direct DatabaseStore reply gateway to floodfill target")
 		}
 	}
 
@@ -1213,7 +1213,7 @@ func (p *Publisher) sendDatabaseStoreDirect(hash common.Hash, data []byte, dataT
 			"reply_token":     binary.BigEndian.Uint32(dbStore.ReplyToken[:]),
 			"reply_tunnel_id": binary.BigEndian.Uint32(dbStore.ReplyTunnelID[:]),
 			"reply_gateway":   logutil.HashPrefixPlain(dbStore.ReplyGateway),
-		}).Info("RouterInfo DatabaseStore reply route fields")
+		}).Debug("RouterInfo DatabaseStore reply route fields")
 	}
 
 	p.fieldMu.RLock()
@@ -1294,7 +1294,7 @@ func (p *Publisher) createTunnelGatewayMessage(hash common.Hash, data []byte, da
 			"reply_tunnel_id": binary.BigEndian.Uint32(dbStore.ReplyTunnelID[:]),
 			"reply_gateway":   logutil.HashPrefixPlain(dbStore.ReplyGateway),
 			"outbound_tunnel": tunnelID,
-		}).Info("DatabaseStore fields before tunnel wrapping")
+		}).Debug("DatabaseStore fields before tunnel wrapping")
 	}
 
 	// Marshal DatabaseStore message for tunnel wrapping
@@ -1335,7 +1335,7 @@ func (p *Publisher) createDatabaseStoreMessage(hash common.Hash, data []byte, da
 					"store_type":    dataType,
 					"reply_gateway": logutil.HashPrefixPlain(replyGateway),
 					"reply_route":   "direct_router_fallback",
-				}).Info("RouterInfo reply route uses local gateway hash; falling back to direct reply fields")
+				}).Debug("RouterInfo reply route uses local gateway hash; falling back to direct reply fields")
 				useTunnelReplyRoute = false
 			}
 		}
@@ -1357,7 +1357,7 @@ func (p *Publisher) createDatabaseStoreMessage(hash common.Hash, data []byte, da
 			"reply_tunnel_id": binary.BigEndian.Uint32(replyTunnelID[:]),
 			"reply_gateway":   logutil.HashPrefixPlain(replyGateway),
 			"reply_route":     "inbound_tunnel",
-		}).Info("DatabaseStore reply route selected")
+		}).Debug("DatabaseStore reply route selected")
 		p.registerPendingReplyToken(replyToken)
 	} else if dataType == i2np.DatabaseStoreTypeRouterInfo {
 		// For RouterInfo publication, request a DeliveryStatus/flood even when no
@@ -1383,7 +1383,7 @@ func (p *Publisher) createDatabaseStoreMessage(hash common.Hash, data []byte, da
 			"reply_tunnel_id": binary.BigEndian.Uint32(dbStore.ReplyTunnelID[:]),
 			"reply_gateway":   logutil.HashPrefixPlain(dbStore.ReplyGateway),
 			"reply_route":     "direct_router",
-		}).Info("DatabaseStore direct reply route selected")
+		}).Debug("DatabaseStore direct reply route selected")
 		p.registerPendingReplyToken(replyToken)
 	}
 	return dbStore, nil
@@ -1459,7 +1459,7 @@ func (p *Publisher) waitForPublishAckTokens(tokens []uint32, timeout time.Durati
 				"candidate_tokens_pending": pendingTokenCount,
 				"ack_ok_total":             p.ackReplyTokenReceived.Load(),
 				"ack_unexpected_total":     p.ackReplyTokenUnexpected.Load(),
-			}).Info("timed out waiting for DeliveryStatus ACK tokens")
+			}).Debug("timed out waiting for DeliveryStatus ACK tokens")
 			return false
 		case <-poll.C:
 			for _, token := range tokens {

@@ -419,7 +419,7 @@ func (tt *TunnelTester) HealthCheck() HealthCheckResult {
 		"healthy":         check.HealthyTunnels,
 		"unhealthy":       check.UnhealthyTunnels,
 		"average_latency": check.AverageLatency,
-	}).Info("Tunnel pool health check completed")
+	}).Debug("Tunnel pool health check completed")
 
 	return check
 }

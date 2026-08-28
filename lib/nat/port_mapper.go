@@ -135,6 +135,14 @@ func (pmm *PortMapperManager) retryLoop() {
 // attemptMapping attempts to create a port mapper and map the port.
 // Returns true if successful, false if should retry.
 func (pmm *PortMapperManager) attemptMapping() bool {
+	// Check if stopped before attempting mapping
+	pmm.mu.Lock()
+	stopped := pmm.stopped
+	pmm.mu.Unlock()
+	if stopped {
+		return false
+	}
+
 	// Create port mapper
 	mapper, err := pmm.createMapper()
 	if err != nil {
@@ -279,7 +287,7 @@ func (pmm *PortMapperManager) Stop() error {
 		log.WithFields(map[string]interface{}{
 			"network":       pmm.network,
 			"external_port": pmm.extPort,
-		}).Debug("Port mapping cleaned up")
+		}).Info("Port mapping cleaned up")
 		pmm.mapper = nil
 		pmm.extPort = 0
 		pmm.extIP = ""

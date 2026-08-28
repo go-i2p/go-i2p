@@ -176,7 +176,7 @@ func TestE2E_ClientProtocolFlow(t *testing.T) {
 
 	// Read SessionStatus response
 	t.Log("→ Attempting to read SessionStatus response...")
-	statusMsg, err := ReadMessage(conn)
+	statusMsg, err := ReadMessage(conn, 0) // No timeout for test
 	require.NoError(t, err)
 	t.Log("✓ SessionStatus response received successfully")
 	require.Equal(t, uint8(MessageTypeSessionStatus), uint8(statusMsg.Type))
@@ -220,7 +220,7 @@ func TestE2E_MessageDeliveryToClient(t *testing.T) {
 
 	// Read messages from client connection
 	for i, expectedPayload := range testMessages {
-		msg, err := ReadMessage(clientConn)
+		msg, err := ReadMessage(clientConn, 0) // No timeout for test
 		require.NoError(t, err, "failed to read message %d", i)
 		require.Equal(t, uint8(MessageTypeMessagePayload), uint8(msg.Type))
 		require.Equal(t, session.ID(), msg.SessionID)
@@ -326,7 +326,7 @@ func TestE2E_MultipleSessionsConcurrent(t *testing.T) {
 		err = WriteMessage(conn, createMsg)
 		require.NoError(t, err)
 
-		statusMsg, err := ReadMessage(conn)
+		statusMsg, err := ReadMessage(conn, 0) // No timeout for test
 		require.NoError(t, err)
 		require.Equal(t, uint8(MessageTypeSessionStatus), uint8(statusMsg.Type))
 

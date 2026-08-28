@@ -53,7 +53,7 @@ func reSignAndVerifyRouterInfo(ri *router_info.RouterInfo, ks *keys.RouterInfoKe
 	log.WithFields(logger.Fields{
 		"addr_count": ri.RouterAddressCount(),
 		"ri_len":     len(riBytes),
-	}).Info("Re-signed RouterInfo passes local verification")
+	}).Debug("Re-signed RouterInfo passes local verification")
 	return nil
 }
 

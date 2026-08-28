@@ -261,10 +261,15 @@ func validateUnmarshalHeader(data []byte) (uint32, error) {
 }
 
 // ReadMessage reads a complete I2CP message from a reader.
-func ReadMessage(r io.Reader) (*Message, error) {
+// The read deadline is applied only to the payload read, not the header read,
+// to avoid treating idle time between messages as a timeout.
+// The idle timeout (time between messages) is controlled by the caller via
+// ServerConfig.ReadTimeout, while MessageReadTimeout bounds the payload read.
+func ReadMessage(r io.Reader, payloadReadTimeout time.Duration) (*Message, error) {
 	connInfo := identifyConnection(r)
-	setReaderDeadline(r)
 
+	// Read header WITHOUT deadline - this bounds the idle gap between messages
+	// The caller (readClientMessage) sets the idle timeout via ServerConfig.ReadTimeout
 	header, err := readMessageHeader(r)
 	if err != nil {
 		logHeaderReadFailure(connInfo, err)
@@ -279,6 +284,11 @@ func ReadMessage(r io.Reader) (*Message, error) {
 	}
 
 	logLargePayload(payloadLen, msgType, sessionID)
+
+	// NOW set deadline for payload read only
+	if payloadReadTimeout > 0 {
+		setPayloadReadDeadline(r, payloadReadTimeout)
+	}
 
 	payload, err := readMessagePayload(r, payloadLen)
 	if err != nil {
@@ -301,6 +311,22 @@ func ReadMessage(r io.Reader) (*Message, error) {
 		SessionID: sessionID,
 		Payload:   payload,
 	}, nil
+}
+
+// setPayloadReadDeadline sets a read deadline on the connection for payload reads only.
+// This prevents slow-send attacks where attackers claim large payloads
+// but drip-feed data slowly to exhaust connection resources.
+func setPayloadReadDeadline(r io.Reader, timeout time.Duration) {
+	conn, ok := r.(net.Conn)
+	if !ok {
+		return
+	}
+
+	deadline := time.Now().Add(timeout)
+	if err := conn.SetReadDeadline(deadline); err != nil {
+		// Log but don't fail - deadline setting is defensive, not critical
+		log.WithError(err).Debug("failed_to_set_payload_read_deadline")
+	}
 }
 
 // identifyConnection returns a human-readable identifier for the reader's remote address.

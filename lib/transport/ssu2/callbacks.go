@@ -92,7 +92,7 @@ func (c *BlockCallbackConfig) ToDataHandlerCallbacks() ssu2noise.DataHandlerCall
 func DefaultBlockCallbacks() *BlockCallbackConfig {
 	return &BlockCallbackConfig{
 		OnTermination: func(_ uint64, reason uint8, _ []byte) {
-			log.WithField("reason", reason).Info("Received SSU2 termination block")
+			log.WithField("reason", reason).Debug("Received SSU2 termination block")
 		},
 		OnRouterInfo: func(_ []byte) error {
 			log.WithFields(logger.Fields{"at": "DefaultBlockCallbacks"}).Debug("Received RouterInfo block (using default handler - production wiring via buildTransportCallbacks)")

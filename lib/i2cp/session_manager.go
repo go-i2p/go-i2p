@@ -25,6 +25,8 @@ func NewSessionManager() *SessionManager {
 // CreateSession creates a new session with the given destination and config.
 // Optional private keys (signingPrivKey, encryptionPrivKey) can be provided
 // to preserve the client's persistent identity across sessions.
+// If a destination is provided, private keys MUST also be provided (go-i2p requires
+// clients to always provide private keys for their destinations).
 func (sm *SessionManager) CreateSession(dest *destination.Destination, config *SessionConfig, privKeys ...interface{}) (*Session, error) {
 	var session *Session
 	var err error
@@ -39,6 +41,14 @@ func (sm *SessionManager) CreateSession(dest *destination.Destination, config *S
 			"activeSessions": len(sm.sessions),
 		}).Error("no_available_session_ids")
 		return nil, err
+	}
+
+	// If destination is provided, private keys are required
+	if dest != nil && len(privKeys) == 0 {
+		return nil, oops.Errorf(
+			"client destination requires private keys: go-i2p design requires clients to always provide " +
+				"signing and encryption private keys for their persistent identity; destinations without keys cannot be used",
+		)
 	}
 
 	if len(privKeys) == 0 {

@@ -513,9 +513,9 @@ at the connection/session layer.
 #### func  ReadMessage
 
 ```go
-func ReadMessage(r io.Reader) (*Message, error)
+func ReadMessage(r io.Reader, payloadReadTimeout time.Duration) (*Message, error)
 ```
-ReadMessage reads a complete I2CP message from a reader.
+ReadMessage reads a complete I2CP message from a reader. The read deadline is applied only to the payload read, not the header read, to avoid treating idle time between messages as a timeout. The idle timeout (time between messages) is controlled by the caller via ServerConfig.ReadTimeout, while MessageReadTimeout bounds the payload read.
 
 #### func (*Message) MarshalBinary
 

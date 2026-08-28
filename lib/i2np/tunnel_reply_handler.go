@@ -532,7 +532,7 @@ func (rp *ReplyProcessor) retryBuild(tunnelID buildrecord.TunnelID, pending *Pen
 		"tunnel_id":     tunnelID,
 		"retry_count":   retryAttempt,
 		"backoff_delay": backoffDelay.Seconds(),
-	}).Info("Scheduling tunnel build retry")
+	}).Debug("Scheduling tunnel build retry")
 
 	// Schedule retry after backoff delay.
 	// The callback checks rp.stopped to avoid operating on torn-down resources

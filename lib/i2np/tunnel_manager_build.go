@@ -462,7 +462,7 @@ func (tm *TunnelManager) logBuildRequestSent(result *tunnel.TunnelBuildResult, m
 		"reply_tunnel_id":  req.ReplyTunnelID,
 		"our_identity":     req.OurIdentity.String()[:16],
 		"reply_gateway":    req.ReplyGateway.String()[:16],
-	}).Info("Tunnel build request sent")
+	}).Debug("Tunnel build request sent")
 }
 
 // sendBuildMessage sends a tunnel build message (STBM or VTB) based on the result.

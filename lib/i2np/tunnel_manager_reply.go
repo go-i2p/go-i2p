@@ -506,7 +506,7 @@ func (tm *TunnelManager) logExploratoryReplyFunnelSummary() {
 		"garlic_decrypt_success_ratio":     safeRatio(decryptSuccess, decryptAttempt),
 		"short_reply_correlation_ratio":    safeRatio(correlated, correlated+uncorrelated),
 		"short_reply_dispatch_correlation": safeRatio(correlated, dispatched),
-	}).Info("Exploratory reply funnel summary")
+	}).Debug("Exploratory reply funnel summary")
 }
 
 // removeExpiredBuildRequests removes build requests older than 90 seconds.
