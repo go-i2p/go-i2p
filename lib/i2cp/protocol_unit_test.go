@@ -152,7 +152,7 @@ func TestReadWriteMessage(t *testing.T) {
 	}
 
 	// Read from buffer
-	got, err := ReadMessage(buf)
+	got, err := ReadMessage(buf, 0) // No timeout for test
 	if err != nil {
 		t.Fatalf("ReadMessage() error = %v", err)
 	}
@@ -313,7 +313,7 @@ func TestReadMessagePayloadSizeLimit(t *testing.T) {
 
 	buf := bytes.NewBuffer(header)
 
-	_, err := ReadMessage(buf)
+	_, err := ReadMessage(buf, 0) // No timeout for test
 	if err == nil {
 		t.Error("Expected error when reading oversized message, got nil")
 		return

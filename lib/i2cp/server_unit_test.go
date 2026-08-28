@@ -55,7 +55,7 @@ func createSessionOnConn(t *testing.T, conn net.Conn) uint16 {
 		Payload:   []byte{},
 	}
 	require.NoError(t, WriteMessage(conn, createMsg), "WriteMessage() error")
-	response, err := ReadMessage(conn)
+	response, err := ReadMessage(conn, 0) // No timeout for test
 	require.NoError(t, err, "ReadMessage() error")
 	require.Equal(t, MessageTypeSessionStatus, response.Type, "Response type mismatch")
 	return response.SessionID
@@ -108,7 +108,7 @@ func TestServerCreateSession(t *testing.T) {
 	require.NoError(t, WriteMessage(conn, createMsg), "WriteMessage() error")
 
 	// Read SessionStatus response
-	response, err := ReadMessage(conn)
+	response, err := ReadMessage(conn, 0) // No timeout for test
 	require.NoError(t, err, "ReadMessage() error")
 
 	assert.Equal(t, MessageTypeSessionStatus, response.Type)
@@ -194,7 +194,7 @@ func TestServerMaxSessions(t *testing.T) {
 	}
 
 	require.NoError(t, WriteMessage(conn, createMsg), "WriteMessage() error")
-	response, err := ReadMessage(conn)
+	response, err := ReadMessage(conn, 0) // No timeout for test
 	require.NoError(t, err, "ReadMessage() error")
 	assert.Equal(t, SessionStatusInvalid, response.Payload[2], "status byte")
 	assert.Equal(t, 0, server.SessionManager().SessionCount(), "SessionCount()")
@@ -212,7 +212,7 @@ func TestServerGetDate(t *testing.T) {
 
 	require.NoError(t, WriteMessage(conn, getDateMsg), "WriteMessage() error")
 
-	response, err := ReadMessage(conn)
+	response, err := ReadMessage(conn, 0) // No timeout for test
 	require.NoError(t, err, "ReadMessage() error")
 
 	assert.Equal(t, MessageTypeSetDate, response.Type)
@@ -279,7 +279,7 @@ func BenchmarkServerCreateSession(b *testing.B) {
 		}
 
 		_ = WriteMessage(conn, createMsg)
-		_, _ = ReadMessage(conn)
+		_, _ = ReadMessage(conn, 0) // No timeout for test
 		conn.Close()
 	}
 }
@@ -1175,7 +1175,7 @@ func TestDeliverMessagesToClientIntegration(t *testing.T) {
 	var readErr error
 
 	go func() {
-		readMsg, readErr = ReadMessage(clientConn)
+		readMsg, readErr = ReadMessage(clientConn, 0) // No timeout for test
 		close(readDone)
 	}()
 
@@ -1223,7 +1223,7 @@ func TestDeliverMessagesToClientMultiple(t *testing.T) {
 
 	go func() {
 		for i := 0; i < numMessages; i++ {
-			msg, err := ReadMessage(clientConn)
+			msg, err := ReadMessage(clientConn, 0) // No timeout for test
 			if err != nil {
 				t.Logf("Read error: %v", err)
 				break
@@ -1266,7 +1266,7 @@ func TestDeliverMessagesToClientMessageIDIncrement(t *testing.T) {
 
 	go func() {
 		for i := 0; i < numMessages; i++ {
-			msg, err := ReadMessage(clientConn)
+			msg, err := ReadMessage(clientConn, 0) // No timeout for test
 			if err != nil {
 				break
 			}

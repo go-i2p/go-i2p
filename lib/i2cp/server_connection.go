@@ -487,16 +487,6 @@ func (s *Server) processAndRespond(conn net.Conn, msg *Message, sessionPtr **Ses
 
 // readClientMessage reads an I2CP message from the connection with rate limiting.
 func (s *Server) readClientMessage(conn net.Conn) (*Message, error) {
-	// Set read deadline if timeout is configured
-	if s.config.ReadTimeout > 0 {
-		if err := conn.SetReadDeadline(time.Now().Add(s.config.ReadTimeout)); err != nil {
-			log.WithFields(logger.Fields{
-				"at":    "i2cp.Server.readClientMessage",
-				"error": err.Error(),
-			}).Warn("failed_to_set_read_deadline")
-		}
-	}
-
 	// Check connection-level rate limits before reading
 	if !s.checkConnectionRateLimit(conn) {
 		state := s.getOrCreateConnectionState(conn)
@@ -509,7 +499,22 @@ func (s *Server) readClientMessage(conn net.Conn) (*Message, error) {
 		return nil, oops.Errorf("connection rate limit exceeded")
 	}
 
-	msg, err := ReadMessage(conn)
+	// ReadMessage now handles deadlines internally:
+	// - Header read: no deadline (idle timeout controlled by ServerConfig.ReadTimeout via caller)
+	// - Payload read: bounded by MessageReadTimeout (30s) to prevent slow-send attacks
+	// The idle timeout between messages is handled by the connection-level deadline
+	// set by the accept loop or connection handler, not here.
+	// Apply idle timeout before reading so idle clients don't hang forever.
+	if s.config.ReadTimeout > 0 {
+		if err := conn.SetReadDeadline(time.Now().Add(s.config.ReadTimeout)); err != nil {
+			log.WithFields(logger.Fields{
+				"at":    "i2cp.Server.readClientMessage",
+				"error": err.Error(),
+			}).Warn("failed_to_set_read_deadline")
+		}
+	}
+
+	msg, err := ReadMessage(conn, MessageReadTimeout*time.Second)
 	if err != nil {
 		// i2psnark compatibility: Log connection state on read failures
 		state := s.getOrCreateConnectionState(conn)
