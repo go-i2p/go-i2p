@@ -2,7 +2,7 @@ name: Go Tests
 
 on:
   push:
-    branches: [main, master, chore/NAT-tests]
+    branches: [main, master]
   pull_request:
     branches: [main, master]
 
