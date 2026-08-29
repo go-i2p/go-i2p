@@ -249,7 +249,7 @@ func (s *Server) sendDisconnectMessage(conn net.Conn, reason string) {
 	if err := conn.SetWriteDeadline(time.Now().Add(500 * time.Millisecond)); err != nil {
 		return // Can't set deadline, give up
 	}
-	defer conn.SetWriteDeadline(time.Time{}) // Clear deadline
+	defer func() { _ = conn.SetWriteDeadline(time.Time{}) }() // Clear deadline
 
 	if err := WriteMessage(conn, disconnectMsg); err != nil {
 		log.WithFields(logger.Fields{

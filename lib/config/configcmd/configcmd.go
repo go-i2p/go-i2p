@@ -30,20 +30,20 @@ func runConfig(cmd *cobra.Command, args []string) {
 	if configFile == "" {
 		configFile = "(none; using defaults and command-line flags)"
 	}
-	fmt.Fprintf(out, "configuration file: %s\n", configFile)
-	fmt.Fprintf(out, "base directory:     %s\n", cfg.BaseDir)
-	fmt.Fprintf(out, "working directory:  %s\n", cfg.WorkingDir)
+	_, _ = fmt.Fprintf(out, "configuration file: %s\n", configFile)
+	_, _ = fmt.Fprintf(out, "base directory:     %s\n", cfg.BaseDir)
+	_, _ = fmt.Fprintf(out, "working directory:  %s\n", cfg.WorkingDir)
 	if cfg.NetDB != nil {
-		fmt.Fprintf(out, "netDb path:         %s\n", cfg.NetDB.Path)
+		_, _ = fmt.Fprintf(out, "netDb path:         %s\n", cfg.NetDB.Path)
 	}
 	if cfg.Bootstrap != nil {
-		fmt.Fprintf(out, "bootstrap type:     %s\n", cfg.Bootstrap.BootstrapType)
-		fmt.Fprintf(out, "low peer threshold: %d\n", cfg.Bootstrap.LowPeerThreshold)
-		fmt.Fprintf(out, "reseed servers (%d):\n", len(cfg.Bootstrap.ReseedServers))
+		_, _ = fmt.Fprintf(out, "bootstrap type:     %s\n", cfg.Bootstrap.BootstrapType)
+		_, _ = fmt.Fprintf(out, "low peer threshold: %d\n", cfg.Bootstrap.LowPeerThreshold)
+		_, _ = fmt.Fprintf(out, "reseed servers (%d):\n", len(cfg.Bootstrap.ReseedServers))
 		for i, server := range cfg.Bootstrap.ReseedServers {
-			fmt.Fprintf(out, "  [%d] %s\n", i, server.URL)
+			_, _ = fmt.Fprintf(out, "  [%d] %s\n", i, server.URL)
 			if server.SU3Fingerprint != "" {
-				fmt.Fprintf(out, "      su3 fingerprint: %s\n", server.SU3Fingerprint)
+				_, _ = fmt.Fprintf(out, "      su3 fingerprint: %s\n", server.SU3Fingerprint)
 			}
 		}
 	}
