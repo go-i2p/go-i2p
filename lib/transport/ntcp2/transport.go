@@ -548,7 +548,12 @@ func (t *NTCP2Transport) startInboundAcceptRunner() {
 			listener := t.listener
 			t.identityMu.RUnlock()
 			if listener != nil {
-				listener.Close()
+				err := listener.Close()
+				if err != nil {
+					log.WithFields(logger.Fields{
+						"at": "startInboundAcceptRunner",
+					}).Warn("Error closing listener during transport shutdown: ", err)
+				}
 			}
 		}()
 	})
@@ -869,7 +874,10 @@ func (t *NTCP2Transport) executeHandshake(ntcp2Conn *ntcp2.Conn, handshakeCtx co
 	}
 
 	t.logger.WithField("remote_addr", remoteAddr).Debug("[DIAG] Inbound Noise XK handshake succeeded, propagating peer static key")
-	ntcp2Conn.PropagatePeerStaticKey()
+	err = ntcp2Conn.PropagatePeerStaticKey()
+	if err != nil {
+		return WrapNTCP2Error(err, "propagating peer static key")
+	}
 	return nil
 }
 

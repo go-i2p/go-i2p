@@ -632,9 +632,14 @@ func (p *MessageProcessor) prepareSTBMSlotCleartext(replyCode byte, availableBW 
 		copy(cleartext[0:], optionBytes)
 		rand.Read(cleartext[len(optionBytes):201]) // padding (error ignored)
 	} else {
-		cleartext[0] = 0x00         // options high byte (empty mapping)
-		cleartext[1] = 0x00         // options low byte
-		rand.Read(cleartext[2:201]) // padding (error ignored, acceptable for padding)
+		cleartext[0] = 0x00                   // options high byte (empty mapping)
+		cleartext[1] = 0x00                   // options low byte
+		_, err := rand.Read(cleartext[2:201]) // padding (error ignored, acceptable for padding)
+		if err != nil {
+			log.WithFields(logger.Fields{
+				"at": "prepareSTBMSlotCleartext",
+			}).Warn("Error in padding generation", err)
+		}
 	}
 	cleartext[201] = replyCode
 	return cleartext
