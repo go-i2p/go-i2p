@@ -246,6 +246,11 @@ func probePort(cfg *BindConfig) (int, error) {
 	}
 
 	probeAddr := constructProbeAddress("")
+	log.WithFields(
+		map[string]interface{}{
+			"at": "probeAddr",
+		},
+	).Info("Constructed base probeAddr", probeAddr)
 	// Re-construct with actual host
 	host, err := extractHostFromListenerAddress(cfg.ListenerAddress)
 	if err != nil {
