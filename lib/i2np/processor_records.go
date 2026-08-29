@@ -630,7 +630,7 @@ func (p *MessageProcessor) prepareSTBMSlotCleartext(replyCode byte, availableBW 
 	if len(optionBytes) > 0 && len(optionBytes) <= 201 {
 		// Write the serialized options mapping at the front, random-pad the rest.
 		copy(cleartext[0:], optionBytes)
-		rand.Read(cleartext[len(optionBytes):201]) // padding (error ignored)
+		_, _ = rand.Read(cleartext[len(optionBytes):201]) // padding (error ignored)
 	} else {
 		cleartext[0] = 0x00                   // options high byte (empty mapping)
 		cleartext[1] = 0x00                   // options low byte

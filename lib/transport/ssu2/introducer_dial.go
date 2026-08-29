@@ -507,7 +507,9 @@ func (t *SSU2Transport) buildCharlieDialConfig(charlieRI router_info.RouterInfo,
 		return nil, err
 	}
 
-	t.configureIntroKeys(dialConfig, charlieRI)
+	if err := t.configureIntroKeys(dialConfig, charlieRI); err != nil {
+		return nil, err
+	}
 
 	return dialConfig, nil
 }

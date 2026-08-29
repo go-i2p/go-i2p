@@ -406,7 +406,7 @@ func (tm *TunnelManager) handleFailedBuild(matchingTunnel *tunnel.TunnelState, m
 	// W-1 fix: Unregister inbound exploratory tunnels that failed to complete
 	// their build, so they don't receive messages intended for tunnels that
 	// might reuse the same tunnel ID.
-	if matchingTunnel.IsInbound && !(known && req.isClientTunnel) && tm.inboundHandler != nil {
+	if matchingTunnel.IsInbound && (!known || !req.isClientTunnel) && tm.inboundHandler != nil {
 		tm.inboundHandler.UnregisterTunnel(matchingTunnel.ID)
 	}
 
