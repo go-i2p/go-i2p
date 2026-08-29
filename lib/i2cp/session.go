@@ -518,10 +518,15 @@ func createIsolatedNetDB() *netdb.ClientNetDB {
 }
 
 // determineQueueSize calculates the message queue size from config or returns default.
+const maxQueueSize = 10000
+
 func determineQueueSize(config *SessionConfig) int {
 	queueSize := config.MessageQueueSize
 	if queueSize <= 0 {
 		return 100
+	}
+	if queueSize > maxQueueSize {
+		return maxQueueSize
 	}
 	return queueSize
 }
@@ -815,6 +820,18 @@ func (s *Session) Reconfigure(newConfig *SessionConfig) error {
 	mergeConfigUpdates(s.config, newConfig)
 	logConfigurationChanges(s.id, &oldConfigCopy, s.config)
 
+	// H601 FIX: If tunnel-related parameters changed, rebuild tunnel pools
+	// to maintain state/config consistency.
+	if tunnelConfigChanged(&oldConfigCopy, s.config) {
+		s.StopTunnelPools()
+		// Note: Pool recreation must be triggered by the caller (e.g., session manager)
+		// since this method does not have access to tunnel builder infrastructure.
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Session.Reconfigure",
+			"sessionID": s.id,
+		}).Info("tunnel_config_changed_pools_stopped_rebuild_required")
+	}
+
 	return nil
 }
 
@@ -896,6 +913,19 @@ func mergeMetadataParameters(existing, newConfig *SessionConfig) {
 	if newConfig.Nickname != "" {
 		existing.Nickname = newConfig.Nickname
 	}
+}
+
+// tunnelConfigChanged checks whether tunnel-related configuration fields changed.
+func tunnelConfigChanged(old, new *SessionConfig) bool {
+	return old.InboundTunnelLength != new.InboundTunnelLength ||
+		old.OutboundTunnelLength != new.OutboundTunnelLength ||
+		old.InboundTunnelCount != new.InboundTunnelCount ||
+		old.OutboundTunnelCount != new.OutboundTunnelCount ||
+		old.TunnelLifetime != new.TunnelLifetime ||
+		old.InboundLengthVariance != new.InboundLengthVariance ||
+		old.OutboundLengthVariance != new.OutboundLengthVariance ||
+		old.InboundBackupQuantity != new.InboundBackupQuantity ||
+		old.OutboundBackupQuantity != new.OutboundBackupQuantity
 }
 
 // logConfigurationChanges logs the before and after state of tunnel configuration.
