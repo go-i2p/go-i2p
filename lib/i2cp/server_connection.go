@@ -365,7 +365,7 @@ func (s *Server) readProtocolByte(conn net.Conn) bool {
 				"error": err.Error(),
 			}).Warn("failed_to_set_protocol_byte_read_deadline")
 		}
-		defer conn.SetReadDeadline(time.Time{}) // clear so runConnectionLoop starts fresh
+		defer func() { _ = conn.SetReadDeadline(time.Time{}) }() // clear so runConnectionLoop starts fresh
 	}
 
 	protocolByte := make([]byte, 1)
