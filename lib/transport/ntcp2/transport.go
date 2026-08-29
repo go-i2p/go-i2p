@@ -464,12 +464,12 @@ func setupNetworkListener(transport *NTCP2Transport, config *Config, ntcp2Config
 	} else {
 		cfg := nat.DefaultBindConfig("tcp", config.ListenerAddress)
 		cfg.RequestedPort = iport
-		result, err := nat.BindWithNATTraversal(cfg)
-		if err == nil {
+		result, bindErr := nat.BindWithNATTraversal(cfg)
+		if bindErr == nil {
 			tcpListener = result.Listener
 			boundAddr = result.BoundAddress
 		} else {
-			transport.logger.WithError(err).Warn("NAT traversal failed, falling back to plain TCP listener")
+			transport.logger.WithError(bindErr).Warn("NAT traversal failed, falling back to plain TCP listener")
 			tcpListener, boundAddr, err = bindPlainTCPListener(config.ListenerAddress, iport)
 		}
 	}
