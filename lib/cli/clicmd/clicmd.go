@@ -1,3 +1,4 @@
+// Package clicmd provides CLI subcommands for go-i2p control.
 package clicmd
 
 import (

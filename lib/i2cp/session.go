@@ -301,7 +301,7 @@ type IncomingMessage struct {
 	Timestamp time.Time // When the message was received
 }
 
-// NewSession creates a new I2CP session with its own isolated in-memory NetDB.
+// SessionKeys holds the private keys and optional padding for an I2CP session.
 // The destination parameter can be nil, in which case a new destination will be generated.
 // SessionKeys holds the private keys and optional padding for an I2CP session.
 // This replaces the type-unsafe variadic interface{} approach in NewSession.
@@ -340,12 +340,14 @@ func NewSessionKeys() (*SessionKeys, error) {
 	}, nil
 }
 
+// NewSession creates a new I2CP session with its own isolated in-memory NetDB.
 // The signingPrivKey and encryptionPrivKey parameters allow clients to provide their own
 // key material for persistent identity across sessions. When both private keys are provided,
 // the destination is reconstructed from them (honoring the client's identity per I2CP spec).
 // When nil, fresh keys are generated.
 // Each session gets a completely separate in-memory StdNetDB instance to prevent client linkability.
 // Client NetDBs are ephemeral and not persisted to disk.
+// NewSession creates a new I2CP session with its own isolated in-memory NetDB.
 func NewSession(id uint16, dest *destination.Destination, config *SessionConfig, privKeys ...interface{}) (*Session, error) {
 	config = ensureValidConfig(config)
 

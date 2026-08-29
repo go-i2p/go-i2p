@@ -1,3 +1,4 @@
+// Package cli provides CLI command registration for go-i2p control.
 package cli
 
 import (
