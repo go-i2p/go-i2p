@@ -155,8 +155,8 @@ func bindWithNAT(cfg *BindConfig) (*BindResult, error) {
 	}, nil
 }
 
-// Thread-safe: Multiple goroutines may call concurrently.
 // BindWithNATTraversal binds the specified port with NAT traversal.
+// Thread-safe: Multiple goroutines may call concurrently.
 func BindWithNATTraversal(cfg *BindConfig) (*BindResult, error) {
 	// Parse host from ListenerAddress
 	host, _, err := net.SplitHostPort(cfg.ListenerAddress)
