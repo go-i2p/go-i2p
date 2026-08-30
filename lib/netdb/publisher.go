@@ -6,9 +6,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
-	"net"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -780,37 +778,6 @@ func (p *Publisher) verifyRouterInfoRetrievable(target common.Hash, floodfills [
 	return oops.Errorf("post-publish RouterInfo verification failed: no floodfill returned matching RouterInfo; details: %s", strings.Join(failureReasons, "; "))
 }
 
-func bindPlainTCPListener(listenerAddress string, requestedPort int) (net.Listener, string, error) {
-	listenCfg := net.ListenConfig{}
-
-	host, _, err := net.SplitHostPort(listenerAddress)
-	if err != nil {
-		if requestedPort == 0 && listenerAddress == "" {
-			host = ""
-		} else {
-			return nil, "", oops.Wrapf(err, "invalid listener address: %s", listenerAddress)
-		}
-	}
-
-	bindAddr := listenerAddress
-	if requestedPort != 0 {
-		if host == "" {
-			bindAddr = ":" + strconv.Itoa(requestedPort)
-		} else if strings.Contains(host, ":") {
-			bindAddr = fmt.Sprintf("[%s]:%d", host, requestedPort)
-		} else {
-			bindAddr = fmt.Sprintf("%s:%d", host, requestedPort)
-		}
-	}
-
-	listener, err := listenCfg.Listen(context.Background(), "tcp", bindAddr)
-	if err != nil {
-		return nil, "", oops.Wrapf(err, "failed to create TCP listener on %s", bindAddr)
-	}
-
-	return listener, listener.Addr().String(), nil
-}
-
 // selectFloodfillsForPublishing selects the closest floodfills for a given hash.
 // Per the I2P spec the DHT key used for peer selection is the routing key,
 // not the raw hash: routing_key = SHA256(hash || yyyyMMdd_UTC).
@@ -1023,66 +990,6 @@ func (p *Publisher) sendDatabaseStoreMessages(hash common.Hash, data []byte, dat
 		"hash":       logutil.HashPrefixPlain(hash),
 		"floodfills": len(floodfills),
 	}).Debug("Successfully published to all floodfills")
-
-	return nil
-}
-
-// sendDatabaseStoreMessagesAtLeastOne sends DatabaseStore messages and treats
-// partial delivery as success as long as at least one floodfill accepted the
-// message. This is used for RouterInfo publication so transient transport
-// outages do not make publication fail when we still reached part of the
-// network and can be flooded onward.
-func (p *Publisher) sendDatabaseStoreMessagesAtLeastOne(hash common.Hash, data []byte, dataType byte, floodfills []router_info.RouterInfo) error {
-	if len(floodfills) == 0 {
-		return oops.Errorf("failed to send to any floodfill: no floodfills selected")
-	}
-
-	type sendResult struct {
-		err error
-	}
-
-	resultCh := make(chan sendResult, len(floodfills))
-	for _, ff := range floodfills {
-		go func(floodfill router_info.RouterInfo) {
-			_, err := p.sendDatabaseStoreToFloodfill(hash, data, dataType, floodfill)
-			resultCh <- sendResult{err: err}
-		}(ff)
-	}
-
-	var errors []error
-	for i := 0; i < len(floodfills); i++ {
-		result := <-resultCh
-		if result.err != nil {
-			errors = append(errors, result.err)
-		}
-	}
-
-	successes := len(floodfills) - len(errors)
-	if successes <= 0 {
-		if len(errors) == 0 {
-			return oops.Errorf("failed to send to any floodfill: no floodfills selected")
-		}
-		return oops.Errorf("failed to send to any floodfill (%d attempted): first error: %w", len(floodfills), errors[0])
-	}
-
-	if len(errors) > 0 {
-		errMsgs := make([]string, 0, len(errors))
-		for _, e := range errors {
-			errMsgs = append(errMsgs, e.Error())
-		}
-		log.WithFields(logger.Fields{
-			"hash":         logutil.HashPrefixPlain(hash),
-			"successes":    successes,
-			"errors":       len(errors),
-			"total":        len(floodfills),
-			"error_detail": errMsgs,
-		}).Warn("RouterInfo publish reached at least one floodfill; continuing despite partial send failures")
-	} else {
-		log.WithFields(logger.Fields{
-			"hash":       logutil.HashPrefixPlain(hash),
-			"floodfills": len(floodfills),
-		}).Debug("Successfully published to all floodfills")
-	}
 
 	return nil
 }
