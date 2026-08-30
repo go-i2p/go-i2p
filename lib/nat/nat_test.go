@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
 	"runtime"
 	"testing"
 	"time"
@@ -150,6 +151,10 @@ func TestBindWithNATTraversal_UDP_Loopback(t *testing.T) {
 
 // TestBindWithNATTraversal_TCP_Wildcard tests TCP binding on wildcard address
 func TestBindWithNATTraversal_TCP_Wildcard(t *testing.T) {
+	if os.Getenv("GO_I2P_INTEGRATION_NAT") != "" {
+		t.Skip("Skipping bind with NAT traversal test in CI: UPnP/NAT-PMP fails in action runners")
+	}
+
 	cfg := DefaultBindConfig("tcp", ":0")
 	result, err := BindWithNATTraversal(cfg)
 	require.NoError(t, err, "BindWithNATTraversal should succeed for wildcard")
@@ -165,6 +170,10 @@ func TestBindWithNATTraversal_TCP_Wildcard(t *testing.T) {
 
 // TestBindWithNATTraversal_UDP_Wildcard tests UDP binding on wildcard address
 func TestBindWithNATTraversal_UDP_Wildcard(t *testing.T) {
+	if os.Getenv("GO_I2P_INTEGRATION_NAT") != "" {
+		t.Skip("Skipping bind with NAT traversal test in CI: UPnP/NAT-PMP fails in action runners")
+	}
+
 	cfg := DefaultBindConfig("udp", ":0")
 	result, err := BindWithNATTraversal(cfg)
 	require.NoError(t, err, "BindWithNATTraversal should succeed for wildcard")
@@ -291,6 +300,10 @@ func TestProbeAndBindWithNATTraversal_RetryExhaustion(t *testing.T) {
 
 // TestProbeAndBindWithNATTraversal_Wildcard tests wildcard binding
 func TestProbeAndBindWithNATTraversal_Wildcard(t *testing.T) {
+	if os.Getenv("GO_I2P_INTEGRATION_NAT") != "" {
+		t.Skip("Skipping probe and bind NAT traversal test in CI: UPnP/NAT-PMP fails in action runners")
+	}
+
 	cfg := DefaultBindConfig("tcp", ":0")
 	result, err := ProbeAndBindWithNATTraversal(cfg)
 	require.NoError(t, err, "ProbeAndBindWithNATTraversal should succeed for wildcard")
@@ -337,6 +350,10 @@ func TestBindWithNATTraversal_RequestedPortLoopback(t *testing.T) {
 
 // TestProbeAndBindWithNATTraversal_UDPWildcard tests UDP wildcard binding
 func TestProbeAndBindWithNATTraversal_UDPWildcard(t *testing.T) {
+	if os.Getenv("GO_I2P_INTEGRATION_NAT") != "" {
+		t.Skip("Skipping probe and bind NAT traversal test in CI: UPnP/NAT-PMP fails in action runners")
+	}
+
 	cfg := DefaultBindConfig("udp", ":0")
 	result, err := ProbeAndBindWithNATTraversal(cfg)
 	require.NoError(t, err, "ProbeAndBindWithNATTraversal should succeed for UDP wildcard")

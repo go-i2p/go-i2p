@@ -1,6 +1,7 @@
 package ntcp2
 
 import (
+	"os"
 	"testing"
 	"time"
 
@@ -64,6 +65,10 @@ func newTestIdentityAndKeystore(t *testing.T) (router_info.RouterInfo, KeystoreP
 func TestPortMapperLifecycle(t *testing.T) {
 	// Create a config that will bind to a wildcard address (non-loopback)
 	// This will trigger port mapper initialization
+	if os.Getenv("GO_I2P_INTEGRATION_NAT") != "" {
+		t.Skip("Skipping port mapper lifecycle test in CI: UPnP/NAT-PMP fails in action runners")
+	}
+
 	config, err := NewConfig("0.0.0.0:0") // OS-assigned port on all interfaces
 	require.NoError(t, err)
 
@@ -115,6 +120,9 @@ func TestPortMapperNotInitializedForLoopback(t *testing.T) {
 // TestPortMapperCloseBeforeMapping verifies that closing the transport immediately
 // after creation (before port mapping succeeds) does not cause deadlock or panic.
 func TestPortMapperCloseBeforeMapping(t *testing.T) {
+	if os.Getenv("GO_I2P_INTEGRATION_NAT") != "" {
+		t.Skip("Skipping port mapper lifecycle test in CI: UPnP/NAT-PMP fails in action runners")
+	}
 	config, err := NewConfig("0.0.0.0:0")
 	require.NoError(t, err)
 
