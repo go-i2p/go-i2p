@@ -1,3 +1,4 @@
+// Package testhelpers provides shared test utilities for NTCP2 and SSU2 transport tests.
 package testhelpers
 
 import (
@@ -29,13 +30,7 @@ func NewTestPeerHash(content string) data.Hash {
 	return h
 }
 
-// NewMinimalTransport creates a minimal transport with only the fields required
-// for non-network methods (Name, Addr, GetSessionCount, etc.). The transport's
-// context is cleaned up automatically via t.Cleanup.
-//
-// This is a protocol-agnostic helper that returns the low-level fields needed
-// by both NTCP2 and SSU2 transports. Callers should embed this in their
-// protocol-specific factory functions.
+// MinimalTransportFields holds the common fields needed for minimal transport tests.
 type MinimalTransportFields struct {
 	Ctx             context.Context
 	Cancel          context.CancelFunc

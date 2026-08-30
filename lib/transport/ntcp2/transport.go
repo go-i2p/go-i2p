@@ -845,10 +845,9 @@ func (t *NTCP2Transport) onInboundHandshakeError(err error) {
 // HIGH-2.2 fix: Uses handshakeCtx (with timeout) to prevent goroutine leaks on slow/stuck handshakes.
 func (t *NTCP2Transport) executeHandshake(ntcp2Conn *ntcp2.Conn, handshakeCtx context.Context) error {
 	remoteAddr := "<unknown>"
-	if ntcp2Conn.RemoteAddr() != nil {
-		remoteAddr = ntcp2Conn.RemoteAddr().String()
+	if ra := ntcp2Conn.RemoteAddr(); ra != nil {
+		remoteAddr = ra.String()
 	}
-
 	t.logger.WithField("remote_addr", remoteAddr).Debug("[DIAG] executeHandshake: calling ntcp2Conn.UnderlyingConn().Handshake()")
 	err := ntcp2Conn.UnderlyingConn().Handshake(handshakeCtx)
 	if err != nil {

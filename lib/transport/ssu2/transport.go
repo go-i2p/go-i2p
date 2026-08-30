@@ -32,21 +32,7 @@ type abandonedRelayTag struct {
 	reason      string // why registration failed
 }
 
-// Session Map Ownership Invariant (X-3 fix):
-// Each peerHash (RouterHash) in the sessions map has EXACTLY ONE owner at any given time:
-//   - net.Conn (raw or *ssu2noise.SSU2Conn): owned by trackInboundConnection, transferable to Accept or promotion
-//   - acceptedConn: owned by the Accept() consumer; MUST NOT be promoted (dual-ownership)
-//   - *SSU2Session: owned by the session lifecycle; cleanup via removeSession
-//
-// State transitions use CompareAndSwap to prevent race conditions:
-//   - rawConn → acceptedConn: CAS in inboundHandshakeWorker (after successful queue send)
-//   - rawConn → *SSU2Session: CAS in promoteInboundConnection (via GetSession) or registerOrReuseSession
-//
-// If inbound Accept CAS fails, a concurrent GetSession/dial has already promoted the connection;
-// do not deliver to Accept (ownership already transferred to the session).
-// If promotion CAS fails, another goroutine won the race; close the duplicate session.
-//
-// SSU2Transport implements transport.Transport for SSU2 connections.
+// SSU2Transport implements the SSU2 transport protocol for I2P connections.
 type SSU2Transport struct {
 	listener *ssu2noise.SSU2Listener
 	// R-2 fix: use atomic.Pointer for thread-safe config swaps (mirrors NTCP2 HIGH-1.3 pattern)

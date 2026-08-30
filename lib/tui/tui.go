@@ -179,7 +179,7 @@ func (m WrapperModel) renderReachabilityStatus() string {
 	if !ok {
 		color = "240"
 	}
-	styled := reachabilityStyle.Copy().Foreground(lipgloss.Color(color)).Render(string(state))
+	styled := reachabilityStyle.Foreground(lipgloss.Color(color)).Render(string(state))
 	return fmt.Sprintf("  Network: %s", styled)
 }
 

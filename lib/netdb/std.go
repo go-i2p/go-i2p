@@ -207,7 +207,7 @@ func (db *StdNetDB) GetMaxRouterInfos() int {
 	return db.riCache.getCapacity()
 }
 
-// GetRouterInfos ... that returns a snapshot of the RouterInfos map.
+// GetRouterInfos returns a snapshot of the RouterInfos map.
 // This method exists for API compatibility; new code should use the riCache directly if possible.
 func (db *StdNetDB) GetRouterInfos() map[common.Hash]Entry {
 	db.riCache.mu.RLock()
@@ -219,7 +219,7 @@ func (db *StdNetDB) GetRouterInfos() map[common.Hash]Entry {
 	return snapshot
 }
 
-// LeaseSets is a backward-compatible accessor that returns a snapshot of the LeaseSets map.
+// GetLeaseSets returns a snapshot of the LeaseSets map.
 // This method exists for API compatibility; new code should use the lsCache directly if possible.
 func (db *StdNetDB) GetLeaseSets() map[common.Hash]Entry {
 	db.lsCache.mu.RLock()

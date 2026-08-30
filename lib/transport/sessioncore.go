@@ -190,7 +190,7 @@ func (sc *SessionCore) AppendCleanupCallback(callback func()) {
 	sc.callbackMu.Unlock()
 }
 
-// callCleanupCallback calls the cleanup callback if set, ensuring it runs
+// CallCleanupCallback calls the cleanup callback if set, ensuring it runs
 // exactly once via cleanupOnce. Thread-safe.
 func (sc *SessionCore) CallCleanupCallback() {
 	sc.cleanupOnce.Do(func() {
@@ -220,7 +220,7 @@ func (sc *SessionCore) recordBandwidth(sent, received uint64) {
 	}
 }
 
-// recordDroppedMessage increments the dropped-message counter.
+// RecordDroppedMessage increments the dropped-message counter.
 // Called when an inbound message cannot be queued (backpressure).
 func (sc *SessionCore) RecordDroppedMessage() {
 	atomic.AddUint64(&sc.droppedMessages, 1)
