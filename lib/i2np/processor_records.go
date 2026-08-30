@@ -264,16 +264,6 @@ func (p *MessageProcessor) parseBuildResponseRecords(data []byte, isShortBuild b
 	return parseResponseRecords(data, recordCount, recordSize, 1, isShortBuild)
 }
 
-// processTunnelBuildRequest is the common handler for both STBM and VTB messages.
-// It extracts the build records, validates the request, and generates a reply.
-//
-// Parameters:
-// - msg: The incoming I2NP tunnel build message
-// - isShortBuild: True for STBM format, false for VTB format
-func (p *MessageProcessor) processTunnelBuildRequest(msg Message, isShortBuild bool) error {
-	return newBuildRequestProcessor(p, msg, isShortBuild).process()
-}
-
 // buildRequestProcessor centralizes the common extract → validate → parse → log → dispatch flow.
 type buildRequestProcessor struct {
 	processor *MessageProcessor
