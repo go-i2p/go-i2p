@@ -1305,30 +1305,6 @@ func (p *Publisher) localRouterHash() (common.Hash, bool) {
 	return h, true
 }
 
-// waitForPublishAck polls for a DeliveryStatus ACK from any floodfill as proof
-// that the DatabaseStore was accepted. ackBefore must be snapshotted from
-// ackReplyTokenReceived.Load() immediately before the send call so that only
-// ACKs generated for this publication attempt are counted.
-// Returns true if at least one ACK arrived within the timeout window.
-func (p *Publisher) waitForPublishAck(ackBefore uint64, timeout time.Duration) bool {
-	deadline := time.NewTimer(timeout)
-	defer deadline.Stop()
-	poll := time.NewTicker(250 * time.Millisecond)
-	defer poll.Stop()
-	for {
-		select {
-		case <-p.ctx.Done():
-			return false
-		case <-deadline.C:
-			return false
-		case <-poll.C:
-			if p.ackReplyTokenReceived.Load() > ackBefore {
-				return true
-			}
-		}
-	}
-}
-
 // waitForPublishAckTokens waits for a DeliveryStatus ACK for one of the provided
 // reply tokens. This avoids cross-attribution between concurrent publish attempts.
 func (p *Publisher) waitForPublishAckTokens(tokens []uint32, timeout time.Duration) bool {
