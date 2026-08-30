@@ -338,28 +338,6 @@ func (p *MessageProcessor) extractTunnelGatewayMessage(msg Message) (*TunnelGate
 	return tgMsg, nil
 }
 
-// forwardToTunnelGatewayHandler forwards the TunnelGateway message to the configured handler.
-func (p *MessageProcessor) forwardToTunnelGatewayHandler(tgMsg *TunnelGateway) error {
-	if p.tunnelGatewayHandler == nil {
-		log.WithFields(logger.Fields{
-			"at":        "processTunnelGatewayMessage",
-			"tunnel_id": tgMsg.TunnelID,
-			"reason":    "no tunnel gateway handler configured",
-		}).Warn("TunnelGateway message received but no handler configured")
-		return oops.Errorf("no tunnel gateway handler configured")
-	}
-
-	if err := p.tunnelGatewayHandler.HandleGateway(tgMsg.TunnelID, tgMsg.Data); err != nil {
-		log.WithFields(logger.Fields{
-			"at":        "processTunnelGatewayMessage",
-			"tunnel_id": tgMsg.TunnelID,
-			"error":     err,
-		}).Error("Failed to handle TunnelGateway message")
-		return oops.Wrapf(err, "tunnel gateway handling failed")
-	}
-
-	return nil
-}
 
 // processDeliveryStatusMessage processes delivery status messages using StatusReporter interface.
 // If a DeliveryStatusHandler is configured, the status is forwarded to confirm delivery.

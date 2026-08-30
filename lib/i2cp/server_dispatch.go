@@ -548,15 +548,6 @@ func parseCreateLeaseSet2Payload(payload []byte, storeType uint8) ([]byte, map[u
 	return leaseSetBytes, privateKeys, nil
 }
 
-// extractLeaseSet2Payload strips the 2-byte SessionID prefix from the payload (deprecated, use parseCreateLeaseSet2Payload).
-func extractLeaseSet2Payload(payload []byte) ([]byte, error) {
-	// Deprecated: use parseCreateLeaseSet2Payload instead
-	if len(payload) < 2 {
-		return nil, oops.Errorf("CreateLeaseSet2 payload too short: %d bytes (need at least 2 for SessionID)", len(payload))
-	}
-	return payload[2:], nil
-}
-
 // validateLeaseSet2PayloadSize checks the minimum payload size for a valid LeaseSet2.
 func validateLeaseSet2PayloadSize(sessionID uint16, leaseSetBytes []byte) error {
 	// Minimum LeaseSet2: destination (387+ bytes) + published (8) + expires (2) + flags (2) + leases (1+) ≈ 400 bytes

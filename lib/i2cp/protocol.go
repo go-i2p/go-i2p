@@ -411,21 +411,6 @@ func extractSessionIDFromPayload(msgType uint8, payload []byte) uint16 {
 	return 0
 }
 
-// setReaderDeadline sets a read deadline on the connection to prevent slow-send attacks.
-// The deadline is only applied when the reader is a net.Conn.
-func setReaderDeadline(r io.Reader) {
-	conn, ok := r.(net.Conn)
-	if !ok {
-		return
-	}
-
-	deadline := time.Now().Add(MessageReadTimeout * time.Second)
-	if err := conn.SetReadDeadline(deadline); err != nil {
-		// Log but don't fail - deadline setting is defensive, not critical
-		log.WithError(err).Debug("failed_to_set_read_deadline")
-	}
-}
-
 // readMessageHeader reads the I2CP message header from the reader.
 // Per I2CP spec: header is length(4) + type(1) = 5 bytes total.
 func readMessageHeader(r io.Reader) ([]byte, error) {

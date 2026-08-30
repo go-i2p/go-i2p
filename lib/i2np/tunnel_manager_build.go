@@ -715,37 +715,6 @@ func encryptBuildRecords(result *tunnel.TunnelBuildResult) ([8][528]byte, error)
 	return encryptedData, nil
 }
 
-// serializeBuildRecords serializes all 8 encrypted records into a contiguous byte slice.
-// Used for TunnelBuild (type 21) which has NO count prefix and always 8 records.
-// Unused slots are filled with random data to prevent observers from distinguishing
-// tunnel length by counting zero-filled records. Returns an error if random padding
-// cannot be generated (all-zero slots would reveal the true hop count).
-func serializeBuildRecords(encryptedData [8][528]byte, recordCount int) ([]byte, error) {
-	data := make([]byte, 8*528)
-	for i := 0; i < 8; i++ {
-		if i < recordCount {
-			copy(data[i*528:(i+1)*528], encryptedData[i][:])
-		} else {
-			// Fill unused slot with random padding
-			if _, err := rand.Read(data[i*528 : (i+1)*528]); err != nil {
-				return nil, oops.Wrapf(err, "failed to generate random padding for unused slot %d", i)
-			}
-		}
-	}
-	return data, nil
-}
-
-// serializeVariableBuildRecords serializes encrypted records with a count prefix byte.
-// Used for VariableTunnelBuild (type 23) which has a 1-byte count followed by N records.
-// Only the actual number of records is included (no padding to 8).
-func serializeVariableBuildRecords(encryptedData [8][528]byte, recordCount int) []byte {
-	data := make([]byte, 1+recordCount*528)
-	data[0] = byte(recordCount)
-	for i := 0; i < recordCount; i++ {
-		copy(data[1+i*528:1+(i+1)*528], encryptedData[i][:])
-	}
-	return data
-}
 
 // generateMessageID generates a unique message ID for tracking build requests.
 // Uses cryptographically secure random to avoid collisions and predictability.

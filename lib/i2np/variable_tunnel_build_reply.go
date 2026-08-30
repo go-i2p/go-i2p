@@ -92,10 +92,5 @@ func (v *VariableTunnelBuildReply) processHopResponse(hopIndex int, record Build
 	return processValidatedHopResponseRecord(hopIndex, record, "Variable tunnel ")
 }
 
-// validateResponseRecord delegates to the shared ValidateBuildResponseRecord helper.
-func (v *VariableTunnelBuildReply) validateResponseRecord(record BuildResponseRecord) error {
-	return ValidateBuildResponseRecord(record)
-}
-
 // Compile-time interface satisfaction check
 var _ TunnelReplyHandler = (*VariableTunnelBuildReply)(nil)
