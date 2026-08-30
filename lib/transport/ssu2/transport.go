@@ -527,14 +527,6 @@ func replayTokenToReplayKey(token []byte) [32]byte {
 	return sha256.Sum256(token)
 }
 
-// min returns the minimum of two integers
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 // Addr returns the network address the transport is bound to.
 func (t *SSU2Transport) Addr() net.Addr {
 	t.identityMu.RLock()

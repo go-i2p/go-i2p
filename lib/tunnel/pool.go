@@ -885,12 +885,6 @@ func (p *Pool) getTunnelCount() int {
 	return len(p.tunnels)
 }
 
-// getActiveTunnelsLocked returns active tunnels sorted by ID for deterministic order (must hold mutex)
-// DEPRECATED: Use getActiveTunnels() for lock-free access. This function remains for legacy callers.
-func (p *Pool) getActiveTunnelsLocked() []*TunnelState {
-	return p.rebuildActiveCacheLocked()
-}
-
 // GetPoolStats returns statistics about the pool
 func (p *Pool) GetPoolStats() PoolStats {
 	p.mutex.RLock()
