@@ -681,11 +681,11 @@ func (s *NTCP2Session) GetRekeyStats() (messagesSinceRekey, rekeyCount uint64) {
 
 // getError returns the last error recorded by setError, if any. Safe for
 // concurrent use with setError.
-func (s *NTCP2Session) getError() error {
+/*func (s *NTCP2Session) getError() error {
 	s.errorMu.Lock()
 	defer s.errorMu.Unlock()
 	return s.lastError
-}
+}*/
 
 // setError sets the last error (once) and cancels the session context.
 // Cleanup callback is NOT called here — it is deferred to Close() which
