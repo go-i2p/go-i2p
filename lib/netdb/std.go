@@ -70,8 +70,8 @@ type StdNetDB struct {
 	cancel    context.CancelFunc
 	cleanupWg sync.WaitGroup
 
-	// expiryMutex protects expiry tracking across both caches
-	expiryMutex sync.RWMutex
+	// expiryMutex protects expiry tracking across both caches(unused ATM)
+	// expiryMutex sync.RWMutex
 
 	// strictRouterInfoNetworkValidation controls whether missing RouterInfo
 	// network options are rejected during ingestion.
