@@ -247,12 +247,6 @@ func (r *Router) createFallbackBootstrapper() bootstrap.Bootstrap {
 	return bootstrap.NewCompositeBootstrap(r.cfg.Bootstrap)
 }
 
-// executeReseed performs the actual reseed operation using the provided bootstrapper.
-// It logs success or failure and returns any error encountered.
-func (r *Router) executeReseed(bootstrapper bootstrap.Bootstrap) error {
-	return r.executeReseedWithContext(context.Background(), bootstrapper)
-}
-
 // executeReseedWithContext performs the actual reseed operation using the provided bootstrapper.
 // It logs success or failure and returns any error encountered.
 func (r *Router) executeReseedWithContext(ctx context.Context, bootstrapper bootstrap.Bootstrap) error {
