@@ -250,7 +250,7 @@ func (pt *PeerTracker) RecordPermanentFailure(hash common.Hash, reason string) {
 
 // RecordPermanentFailureTransport implements transport.PeerConnNotifier.
 // Called when a peer is structurally unreachable.
-func (pt *PeerTracker) RecordPermanentFailureTransport(peerHash [32]byte, transportName string, reason string) {
+func (pt *PeerTracker) RecordPermanentFailureTransport(peerHash [32]byte, transportName, reason string) {
 	hash := common.Hash(peerHash)
 	pt.RecordPermanentFailure(hash, reason)
 }
@@ -264,7 +264,7 @@ func (pt *PeerTracker) RecordTransportSuccess(peerHash [32]byte, transportName s
 
 // RecordTransportFailure implements transport.PeerConnNotifier.
 // Called when a transport dial or handshake fails.
-func (pt *PeerTracker) RecordTransportFailure(peerHash [32]byte, transportName string, reason string) {
+func (pt *PeerTracker) RecordTransportFailure(peerHash [32]byte, transportName, reason string) {
 	hash := common.Hash(peerHash)
 	pt.RecordFailure(hash, reason)
 }

@@ -323,10 +323,6 @@ func (s *LookupState) hasBeenQueried(peer common.Hash) bool {
 	return s.queried[peer]
 }
 
-func (s *LookupState) hasPendingPeers() bool {
-	return len(s.unqueried) > 0
-}
-
 // iterativeLookup performs an iterative Kademlia lookup following peer suggestions.
 // It maintains sets of queried and unqueried peers, querying the closest unqueried
 // peers each round and adding suggestions from DatabaseSearchReply responses.

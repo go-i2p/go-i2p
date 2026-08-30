@@ -151,7 +151,7 @@ func (sl *SourceLimiter) getOrCreateSourceState(sourceHash common.Hash, now time
 // Called when the sources map reaches capacity to make room for new entries.
 func (sl *SourceLimiter) evictLRUSource(now time.Time) {
 	var lruHash common.Hash
-	var lruTime = now.Add(1 * time.Hour) // Initialize to far future
+	lruTime := now.Add(1 * time.Hour) // Initialize to far future
 
 	// Find the entry with the oldest lastUpdate time
 	for hash, state := range sl.sources {

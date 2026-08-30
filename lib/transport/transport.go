@@ -19,14 +19,14 @@ type PeerConnNotifier interface {
 	// responseTimeMs is the round-trip to fully-established session in ms.
 	RecordTransportSuccess(peerHash [32]byte, transportName string, responseTimeMs int64)
 	// RecordTransportFailure is called when a dial or handshake fails.
-	RecordTransportFailure(peerHash [32]byte, transportName string, reason string)
+	RecordTransportFailure(peerHash [32]byte, transportName, reason string)
 	// RecordPermanentFailure is called when a peer is structurally unreachable
 	// (e.g. IPv6-only peer with no local IPv6 connectivity, or a malformed
 	// RouterInfo with no valid address).  It immediately advances the peer's
 	// consecutive-failure counter to the staleness threshold so that
 	// IsLikelyStale() returns true on the very next hop-selection pass,
 	// preventing repeated wasted dial attempts.
-	RecordPermanentFailureTransport(peerHash [32]byte, transportName string, reason string)
+	RecordPermanentFailureTransport(peerHash [32]byte, transportName, reason string)
 }
 
 // RouterInfoRefresher allows transport layers to request a stale RouterInfo

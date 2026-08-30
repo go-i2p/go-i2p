@@ -715,7 +715,6 @@ func encryptBuildRecords(result *tunnel.TunnelBuildResult) ([8][528]byte, error)
 	return encryptedData, nil
 }
 
-
 // generateMessageID generates a unique message ID for tracking build requests.
 // Uses cryptographically secure random to avoid collisions and predictability.
 func (tm *TunnelManager) generateMessageID() (int, error) {

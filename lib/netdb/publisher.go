@@ -4,7 +4,6 @@ import (
 	"context"
 	crand "crypto/rand"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"math"
 	"net"
@@ -130,11 +129,6 @@ type publisherLoopSpec struct {
 	interval time.Duration
 	action   func()
 }
-
-var (
-	errSessionAcquireTimeout = errors.New("transport session acquisition timed out")
-	errQueueSendTimeout      = errors.New("i2np queue send timed out")
-)
 
 // PublisherConfig holds configuration for database publishing
 type PublisherConfig struct {

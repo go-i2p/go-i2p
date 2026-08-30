@@ -338,7 +338,6 @@ func (p *MessageProcessor) extractTunnelGatewayMessage(msg Message) (*TunnelGate
 	return tgMsg, nil
 }
 
-
 // processDeliveryStatusMessage processes delivery status messages using StatusReporter interface.
 // If a DeliveryStatusHandler is configured, the status is forwarded to confirm delivery.
 // Otherwise, the status is logged and discarded.

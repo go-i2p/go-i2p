@@ -40,12 +40,12 @@ func (n *testPeerConnNotifier) RecordTransportSuccess(_ [32]byte, _ string, _ in
 	n.successes++
 }
 
-func (n *testPeerConnNotifier) RecordTransportFailure(_ [32]byte, _ string, reason string) {
+func (n *testPeerConnNotifier) RecordTransportFailure(_ [32]byte, _, reason string) {
 	n.failures++
 	n.lastReason = reason
 }
 
-func (n *testPeerConnNotifier) RecordPermanentFailureTransport(_ [32]byte, _ string, reason string) {
+func (n *testPeerConnNotifier) RecordPermanentFailureTransport(_ [32]byte, _, reason string) {
 	n.permanent++
 	n.lastReason = reason
 }

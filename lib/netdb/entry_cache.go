@@ -5,7 +5,6 @@ import (
 	"time"
 
 	common "github.com/go-i2p/common/data"
-	"github.com/samber/oops"
 )
 
 // entryCache is a generic cache for both RouterInfos and LeaseSets.
@@ -62,16 +61,6 @@ func (ec *entryCache) getNotExpired(key common.Hash, now time.Time) (Entry, bool
 		return Entry{}, false
 	}
 	return entry, true
-}
-
-// getCacheState returns cache state for admission checks: (exists, currentCount, maxCapacity).
-func (ec *entryCache) getCacheState(key common.Hash) (exists bool, current, max int) {
-	ec.mu.RLock()
-	_, exists = ec.entries[key]
-	current = len(ec.entries)
-	max = ec.capacity
-	ec.mu.RUnlock()
-	return exists, current, max
 }
 
 // put stores an entry in the cache.
@@ -156,14 +145,6 @@ func (ec *entryCache) deleteExpiry(key common.Hash) {
 func (ec *entryCache) isExpired(key common.Hash, now time.Time) bool {
 	expiry, exists := ec.getExpiry(key)
 	return exists && now.After(expiry)
-}
-
-// checkCapacity checks if cache is at capacity.
-func (ec *entryCache) checkCapacity(current int) error {
-	if ec.capacity > 0 && current >= ec.capacity {
-		return oops.Errorf("cache capacity reached (%d)", ec.capacity)
-	}
-	return nil
 }
 
 // checkAdmissionLimits checks if an introduction should be accepted.
