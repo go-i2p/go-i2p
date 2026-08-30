@@ -1100,22 +1100,6 @@ func (db *StdNetDB) logAdmissionRejection(key common.Hash, source *common.Hash) 
 	}
 }
 
-// getLeaseSetCacheState returns the cache state for admission checks.
-func (db *StdNetDB) getLeaseSetCacheState(key common.Hash) (exists bool, current, max int) {
-	current = db.lsCache.count()
-	max = db.lsCache.getCapacity()
-	_, exists = db.lsCache.get(key)
-	return exists, current, max
-}
-
-// checkLeaseSetCapacity checks if the LeaseSet cache has reached capacity.
-func (db *StdNetDB) checkLeaseSetCapacity(current, max int) error {
-	if max > 0 && current >= max {
-		return oops.Errorf("LeaseSet capacity reached (%d)", max)
-	}
-	return nil
-}
-
 // checkLeaseSetAdmissionLimits checks admission rate limits for the LeaseSet introduction.
 func (db *StdNetDB) checkLeaseSetAdmissionLimits(key common.Hash, source *common.Hash, current int) error {
 	if !db.lsCache.checkAdmissionLimits(key, source, current) {
