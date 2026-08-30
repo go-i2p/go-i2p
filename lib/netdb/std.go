@@ -207,7 +207,7 @@ func (db *StdNetDB) GetMaxRouterInfos() int {
 	return db.riCache.getCapacity()
 }
 
-// RouterInfos is a backward-compatible accessor that returns a snapshot of the RouterInfos map.
+// GetRouterInfos ... that returns a snapshot of the RouterInfos map.
 // This method exists for API compatibility; new code should use the riCache directly if possible.
 func (db *StdNetDB) GetRouterInfos() map[common.Hash]Entry {
 	db.riCache.mu.RLock()
