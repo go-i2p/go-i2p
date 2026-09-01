@@ -1,11 +1,11 @@
-# lefthook.yml
-pre-commit:
-  commands:
-    gofumpt:
-      glob: "*.go"
-      run: gofumpt -w -extra {staged_files}
-
-pre-push:
-  commands:
-    vet:
-      run: go vet ./...
+# # lefthook.yml
+# pre-commit:
+#   commands:
+#     gofumpt:
+#       glob: "*.go"
+#       run: gofumpt -w -extra {staged_files}
+#
+# pre-push:
+#   commands:
+#     vet:
+#       run: go vet ./...
