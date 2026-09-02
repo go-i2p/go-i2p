@@ -72,6 +72,11 @@ func (r *Router) mainloop() {
 		r.Stop()
 		return
 	}
+	// Initialize congestion monitoring AFTER wireParticipantManager (called
+	// inside initializeMessageRouter) so participantManager is fully set
+	// before the congestion monitor reads it — eliminates the data race
+	// between wireParticipantManager (write) and getParticipantCount (read).
+	r.initializeCongestionMonitoring()
 	muxer := r.transports.Load()
 	if r.lookupClient == nil && muxer != nil && r.messageRouter != nil {
 		r.lookupClient = netdb.NewDatabaseLookupClient(&publisherTransportAdapter{muxer: muxer})

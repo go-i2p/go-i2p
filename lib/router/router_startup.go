@@ -42,11 +42,9 @@ func (r *Router) Start() error {
 	r.initializeLifecycleContext()
 	log.WithField("at", "Start").Debug("step 3/6: initializing bandwidth tracker")
 	r.initializeBandwidthTracker()
-	log.WithField("at", "Start").Debug("step 4/6: initializing congestion monitoring")
-	r.initializeCongestionMonitoring()
-	log.WithField("at", "Start").Debug("step 5/6: initializing router info provider")
+	log.WithField("at", "Start").Debug("step 4/6: initializing router info provider")
 	r.initializeRouterInfoProvider()
-	log.WithField("at", "Start").Debug("step 6/6: launching mainloop")
+	log.WithField("at", "Start").Debug("step 5/6: launching mainloop")
 	r.launchMainloop()
 
 	// Release runMux BEFORE blocking on startupErr to prevent deadlocking
