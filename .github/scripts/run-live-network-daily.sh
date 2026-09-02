@@ -36,7 +36,7 @@ wait_for_routerinfos() {
 
 	start_ts=$(date +%s)
 	while true; do
-		count=$(eval "${count_cmd}")
+		count=$(eval "${count_cmd}") || count=0  # Catch command failures
 		count=${count:-0}
 		if [[ "${count}" =~ ^[0-9]+$ ]] && (( count >= min_count )); then
 			echo "${label}: discovered ${count} routerInfo entries"
@@ -44,7 +44,9 @@ wait_for_routerinfos() {
 		fi
 
 		if (( $(date +%s) - start_ts >= timeout_seconds )); then
-			echo "${label}: timed out waiting for ${min_count} routerInfo entries" >&2
+			echo "${label}: timed out waiting for ${min_count} routerInfo entries (only found: ${count})" >&2
+			# Log diagnostic info
+			echo "DEBUG: Current count for ${label}: ${count}" >&2
 			return 1
 		fi
 
@@ -87,6 +89,14 @@ docker run -d \
 echo "Starting i2pd container"
 docker run -d --name "${i2pd_container}" purplei2p/i2pd:latest >/dev/null
 
+# After starting containers (after line 88)
+echo "Waiting for containers to be healthy..."
+sleep 5  # Give containers time to initialize
+
+# Check container status
+docker logs "${java_container}" | tail -5 || true
+docker logs "${i2pd_container}" | tail -5 || true
+
 wait_for_routerinfos \
 	"java-i2p" \
 	"find \"${HOME}/.i2p/netDb\" -type f -name 'routerInfo-*.dat' 2>/dev/null | wc -l | tr -d ' '" \
@@ -99,9 +109,10 @@ wait_for_routerinfos \
 	8 \
 	900
 
-i2pd_netdb_path=$(docker exec "${i2pd_container}" sh -lc 'find / -type d -name netDb 2>/dev/null | head -n 1')
+i2pd_netdb_path=$(docker exec "${i2pd_container}" sh -lc 'find / -type d -name netDb 2>/dev/null | head -n 1' || echo "")
 if [[ -z "${i2pd_netdb_path}" ]]; then
-	echo "failed to discover i2pd netDb path" >&2
+	echo "Failed to discover i2pd netDb path. Container logs:" >&2
+	docker logs "${i2pd_container}" | tail -20 >&2
 	write_status "failed" "missing_i2pd_netdb_path"
 	exit 1
 fi
