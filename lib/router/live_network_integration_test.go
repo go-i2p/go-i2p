@@ -7,9 +7,11 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io/fs"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime/pprof"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -180,7 +182,45 @@ func TestLiveNetworkPublishRouterInfo(t *testing.T) {
 	// Skip publication if our RouterInfo has empty hosts (unreachable); let Java reject on their side.
 	hasEmptyHost := false
 	for _, addr := range ri.RouterAddresses() {
-		if addr.Host == "" || addr.Port == 0 {
+		hostStr := addr.HostString()
+		if hostStr == nil {
+			t.Logf("routerinfo addr has empty host: style=%q cost=%d", addr.TransportStyle(), addr.Cost())
+			hasEmptyHost = true
+			break
+		}
+		host, err := hostStr.Data()
+		if err != nil || host == "" {
+			t.Logf("routerinfo addr has empty host: style=%q cost=%d host=%q", addr.TransportStyle(), addr.Cost(), host)
+			hasEmptyHost = true
+			break
+		}
+		portStr := addr.PortString()
+		if portStr == nil {
+			t.Logf("routerinfo addr has empty port: host=%q", host)
+			hasEmptyHost = true
+			break
+		}
+		ports, err := portStr.Data()
+		if err != nil || ports == "" {
+			t.Logf("routerinfo addr has empty port: host=%q ports=%q", host, ports)
+			hasEmptyHost = true
+			break
+		}
+		addr := net.JoinHostPort(host, ports)
+		host, ports, err = net.SplitHostPort(addr)
+		if err != nil {
+			t.Logf("routerinfo addr parse error: %v", err)
+			hasEmptyHost = true
+			break
+		}
+		port, err := strconv.Atoi(ports)
+		if err != nil {
+			t.Logf("routerinfo addr port parse error: %v", err)
+			hasEmptyHost = true
+			break
+		}
+		if host == "" || port == 0 {
+			t.Logf("routerinfo addr has empty host or port: host=%q port=%d", host, port)
 			hasEmptyHost = true
 			break
 		}

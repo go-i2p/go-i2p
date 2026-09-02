@@ -1995,7 +1995,6 @@ func getSyscallError(err error) string {
 	return "not_syscall_error"
 }
 
-
 func (t *NTCP2Transport) createNTCP2ConfigForAddress(routerInfo router_info.RouterInfo, peerAddr *router_address.RouterAddress) (*ntcp2.Config, error) {
 	if peerAddr == nil {
 		return nil, oops.Wrapf(ErrInvalidRouterInfo, "nil peer RouterAddress")

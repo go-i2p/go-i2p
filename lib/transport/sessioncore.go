@@ -203,7 +203,6 @@ func (sc *SessionCore) CallCleanupCallback() {
 	})
 }
 
-
 // RecordDroppedMessage increments the dropped-message counter.
 // Called when an inbound message cannot be queued (backpressure).
 func (sc *SessionCore) RecordDroppedMessage() {
