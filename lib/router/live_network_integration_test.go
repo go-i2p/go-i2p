@@ -764,6 +764,12 @@ type liveTracingSessionProvider struct {
 	inner netdb.SessionProvider
 }
 
+func (p *liveTracingSessionProvider) ReleaseSession() {
+	if p.inner != nil {
+		p.inner.ReleaseSession()
+	}
+}
+
 func (p *liveTracingSessionProvider) GetSession(routerInfo router_info.RouterInfo) (netdb.I2NPSender, error) {
 	session, err := p.inner.GetSession(routerInfo)
 	if err != nil {
