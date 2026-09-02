@@ -15,12 +15,12 @@ import (
 func TestRouterCloseReleasesResources(t *testing.T) {
 	router := createTestRouterWithKeystore(t)
 
-	// Start the router
-	router.Start()
-	time.Sleep(50 * time.Millisecond)
+	// Start the router (Start() blocks until startup completes)
+	err := router.Start()
+	assert.NoError(t, err, "Router should start successfully")
 
-	// Verify resources are initialized
-	assertRouterRunning(t, router, true, "Router should be running")
+	// Verify router is running after successful start
+	assertRouterRunning(t, router, true, "Router should be running after Start()")
 
 	// Close the router (should call Stop() internally if still running)
 	assertCloseReleasesResources(t, router)
@@ -32,8 +32,8 @@ func TestRouterCloseAfterStop(t *testing.T) {
 	router := createTestRouterWithKeystore(t)
 
 	// Start and then stop the router
-	router.Start()
-	time.Sleep(50 * time.Millisecond)
+	err := router.Start()
+	assert.NoError(t, err, "Router should start successfully")
 	router.Stop()
 
 	// Allow time for async goroutines to complete
@@ -64,10 +64,10 @@ func TestRouterCloseIdempotent(t *testing.T) {
 	router := createTestRouterWithKeystore(t)
 
 	// Start and close the router
-	router.Start()
-	time.Sleep(50 * time.Millisecond)
+	err := router.Start()
+	assert.NoError(t, err, "Router should start successfully")
 
-	err := router.Close()
+	err = router.Close()
 	assert.NoError(t, err, "First Close() should succeed")
 
 	// Second Close() should also succeed (or at least not panic)
@@ -114,10 +114,10 @@ func TestRouterCannotRestartAfterClose(t *testing.T) {
 	router := createTestRouterWithKeystore(t)
 
 	// Start, then close the router
-	router.Start()
-	time.Sleep(50 * time.Millisecond)
+	err := router.Start()
+	assert.NoError(t, err, "Router should start successfully")
 
-	err := router.Close()
+	err = router.Close()
 	assert.NoError(t, err)
 
 	// Note: After Close(), the router's resources are nilled out.

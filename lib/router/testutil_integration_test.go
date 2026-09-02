@@ -26,8 +26,13 @@ func createTestRouter(t *testing.T) *Router {
 // createTestRouterWithKeystore creates a Router and initializes its keystore.
 func createTestRouterWithKeystore(t *testing.T) *Router {
 	t.Helper()
-	router := createTestRouter(t)
-	err := initializeRouterKeystore(router, router.cfg)
+	tempDir := t.TempDir()
+	cfg := config.DefaultRouterConfig()
+	cfg.WorkingDir = tempDir
+	cfg.I2CP.Enabled = false
+
+	router, err := CreateRouter(cfg)
 	require.NoError(t, err)
+	require.NotNil(t, router)
 	return router
 }

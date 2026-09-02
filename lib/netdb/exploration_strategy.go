@@ -291,7 +291,7 @@ func (s *AdaptiveStrategy) generateKeyInBucket(bucketIdx int) (common.Hash, erro
 	}
 
 	// Start with our hash and flip the target bit
-	key := s.createKeyWithFlippedBit(bucketIdx)
+	key := s.createKeyWithFlippedBit(s.ourHash, bucketIdx)
 
 	// Randomize all less significant bits
 	if err := s.randomizeLowerBits(&key, bucketIdx); err != nil {
@@ -302,9 +302,9 @@ func (s *AdaptiveStrategy) generateKeyInBucket(bucketIdx int) (common.Hash, erro
 }
 
 // createKeyWithFlippedBit creates a key with the bit at bucketIdx flipped.
-func (s *AdaptiveStrategy) createKeyWithFlippedBit(bucketIdx int) common.Hash {
+func (s *AdaptiveStrategy) createKeyWithFlippedBit(ourHash common.Hash, bucketIdx int) common.Hash {
 	var key common.Hash
-	copy(key[:], s.ourHash[:])
+	copy(key[:], ourHash[:])
 
 	// Flip the bit at position bucketIdx to create distance
 	byteIdx := bucketIdx / 8
