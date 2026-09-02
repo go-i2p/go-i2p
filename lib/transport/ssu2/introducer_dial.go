@@ -200,14 +200,6 @@ func (t *SSU2Transport) establishBobSessionWithContext(ctx context.Context, intr
 	return bobSSU2Session, nil
 }
 
-	if !ok {
-		return nil, oops.Errorf("unexpected Bob session type %T", bobSession)
-	}
-
-	return bobSSU2Session, nil
-}
-
-// pendingRelayResponse wraps a relay-response channel with a consumed flag
 // so that a delivery attempt arriving after the waiter has timed out is
 // silently dropped instead of buffered indefinitely.
 type pendingRelayResponse struct {
@@ -233,21 +225,6 @@ func (t *SSU2Transport) sendRelayRequestAndWaitWithContext(ctx context.Context, 
 }
 
 // sendRelayRequestAndWait sends a RelayRequest to Bob and waits for Charlie's RelayResponse.
-func (t *SSU2Transport) sendRelayRequestAndWait(bobSSU2Session *SSU2Session, intro IntroducerAddr, charlieHash data.Hash, nonce uint32) (*ssu2noise.RelayResponseBlock, error) {
-	pending := &pendingRelayResponse{ch: make(chan *ssu2noise.RelayResponseBlock, 1)}
-	t.pendingRelayResponses.Store(nonce, pending)
-	defer func() {
-		pending.consumed.Store(true)
-		t.pendingRelayResponses.Delete(nonce)
-	}()
-
-	if err := t.sendRelayRequest(bobSSU2Session, intro, charlieHash, nonce); err != nil {
-		return nil, oops.Wrapf(err, "failed to send RelayRequest to Bob")
-	}
-
-	return t.waitForRelayResponse(pending.ch)
-}
-
 // waitForRelayResponseWithContext waits for Charlie's RelayResponse or times out,
 // honoring the parent context for early cancellation (T-2 fix).
 func (t *SSU2Transport) waitForRelayResponseWithContext(ctx context.Context, responseCh chan *ssu2noise.RelayResponseBlock) (*ssu2noise.RelayResponseBlock, error) {
@@ -263,22 +240,6 @@ func (t *SSU2Transport) waitForRelayResponseWithContext(ctx context.Context, res
 		return resp, nil
 	case <-ctx.Done():
 		return nil, oops.Errorf("relay request timed out or canceled: %w", ctx.Err())
-	}
-}
-
-// waitForRelayResponse waits for Charlie's RelayResponse or times out.
-func (t *SSU2Transport) waitForRelayResponse(responseCh chan *ssu2noise.RelayResponseBlock) (*ssu2noise.RelayResponseBlock, error) {
-	ctx, cancel := context.WithTimeout(t.ctx, relayRequestTimeout)
-	defer cancel()
-
-	select {
-	case resp, ok := <-responseCh:
-		if !ok || resp == nil {
-			return nil, oops.Errorf("relay response channel closed unexpectedly")
-		}
-		return resp, nil
-	case <-ctx.Done():
-		return nil, oops.Errorf("relay request timed out after %v", relayRequestTimeout)
 	}
 }
 
