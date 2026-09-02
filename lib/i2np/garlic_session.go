@@ -446,7 +446,7 @@ func ExtractDataPayloadsFromInboundGarlic(sm *GarlicSessionManager, encryptedGar
 	return payloads, nil
 }
 
-// extractDataClovePayload returns the application payload carried by a Data
+// ExtractDataClovePayload returns the application payload carried by a Data
 // (type 20) garlic clove. The clove's inner message data is framed as
 // [4-byte length][payload]; this strips that framing. Returns (nil, false) for
 // non-Data cloves or malformed framing.
