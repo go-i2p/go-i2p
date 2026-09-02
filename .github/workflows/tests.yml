@@ -101,7 +101,7 @@ jobs:
         run: go install mvdan.cc/gofumpt@latest
 
       - name: Run all tests
-        run: go test -v ./...
+        run: go test ./...
         env:
           GO: go
           DEBUG_I2P: debug
