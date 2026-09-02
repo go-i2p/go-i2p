@@ -56,8 +56,17 @@ func TestLiveNetworkGarlicTunnel(t *testing.T) {
 	require.NoError(t, err, "decrypt garlic message")
 	require.NotEmpty(t, decryptedAll, "decrypt must return at least one clove payload")
 
+	// Per I2P spec: decrypted payload is a serialized Garlic message; parse it
+	// and extract the Data clove's application payload.
+	garlic, err := i2np.DeserializeGarlic(decryptedAll[0], 0)
+	require.NoError(t, err, "deserialize decrypted garlic")
+	require.NotEmpty(t, garlic.Cloves, "garlic must contain cloves")
+
+	payload, ok := i2np.ExtractDataClovePayload(garlic.Cloves[0])
+	require.True(t, ok, "first clove must be a Data clove")
+
 	// Verify payload extraction matches original
-	assert.True(t, bytes.Equal(appPayload, decryptedAll[0]),
+	assert.True(t, bytes.Equal(appPayload, payload),
 		"extracted payload must equal original application payload")
 
 	// Verify session state (new session: empty tag, non-nil session hash)

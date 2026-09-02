@@ -450,6 +450,11 @@ func ExtractDataPayloadsFromInboundGarlic(sm *GarlicSessionManager, encryptedGar
 // (type 20) garlic clove. The clove's inner message data is framed as
 // [4-byte length][payload]; this strips that framing. Returns (nil, false) for
 // non-Data cloves or malformed framing.
+// ExtractDataClovePayload is exported for spec-compliant payload extraction.
+func ExtractDataClovePayload(clove GarlicClove) ([]byte, bool) {
+	return extractDataClovePayload(clove)
+}
+
 func extractDataClovePayload(clove GarlicClove) ([]byte, bool) {
 	if clove.Message == nil || clove.Message.Type() != I2NPMessageTypeData {
 		return nil, false
