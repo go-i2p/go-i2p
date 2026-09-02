@@ -55,7 +55,8 @@ type TunnelManager struct {
 	buildMutex       sync.RWMutex          // Protect pending builds map
 	cleanupTicker    *time.Ticker          // Periodic cleanup of expired requests
 	cleanupStop      chan struct{}         // Signal to stop cleanup goroutine
-	cleanupOnce      sync.Once             // Ensures cleanup goroutine starts at most once
+	cleanupMutex     sync.Mutex            // Protects cleanupTicker/close coordination
+	cleanupStarted   bool                  // Whether cleanup goroutine has been started (under cleanupMutex)
 	stopOnce         sync.Once             // Ensures Stop() is idempotent (no double-close panic)
 	replyProcessor   *ReplyProcessor       // Handles reply decryption and processing
 	// garlicKeyRegistrar receives one-time garlic keys derived from STBM Noise
@@ -154,11 +155,15 @@ func NewTunnelManager(peerSelector tunnel.PeerSelector) *TunnelManager {
 // ensureCleanupStarted lazily starts the background cleanup goroutine.
 // Safe to call multiple times; the goroutine is started at most once.
 func (tm *TunnelManager) ensureCleanupStarted() {
-	tm.cleanupOnce.Do(func() {
-		tm.cleanupTicker = time.NewTicker(30 * time.Second)
-		go tm.cleanupExpiredBuilds()
-		log.WithFields(logger.Fields{"at": "ensureCleanupStarted"}).Debug("Tunnel manager cleanup goroutine started (lazy)")
-	})
+	tm.cleanupMutex.Lock()
+	defer tm.cleanupMutex.Unlock()
+	if tm.cleanupStarted {
+		return
+	}
+	tm.cleanupStarted = true
+	tm.cleanupTicker = time.NewTicker(30 * time.Second)
+	go tm.cleanupExpiredBuilds()
+	log.WithFields(logger.Fields{"at": "ensureCleanupStarted"}).Debug("Tunnel manager cleanup goroutine started (lazy)")
 }
 
 // SetGarlicKeyRegistrar wires the GarlicKeyRegistrar so that one-time garlic
@@ -180,10 +185,14 @@ func (tm *TunnelManager) SetInboundHandler(h InboundHandlerRegistrar) {
 // Should be called when shutting down the router.
 func (tm *TunnelManager) Stop() {
 	tm.stopOnce.Do(func() {
+		tm.cleanupMutex.Lock()
 		if tm.cleanupTicker != nil {
 			tm.cleanupTicker.Stop()
 		}
-		close(tm.cleanupStop)
+		if tm.cleanupStarted {
+			close(tm.cleanupStop)
+		}
+		tm.cleanupMutex.Unlock()
 
 		if tm.inboundPool != nil {
 			tm.inboundPool.Stop()
