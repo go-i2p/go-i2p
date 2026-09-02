@@ -182,8 +182,11 @@ func (t *SSU2Transport) startNATCleanup() {
 			case <-natCtx.Done():
 				return
 			case <-ticker.C:
-				if t.peerTestManager != nil {
-					t.peerTestManager.CleanupExpired()
+				t.natManagerMu.RLock()
+				pm := t.peerTestManager
+				t.natManagerMu.RUnlock()
+				if pm != nil {
+					pm.CleanupExpired()
 				}
 			}
 		}
