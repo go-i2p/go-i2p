@@ -19,6 +19,7 @@ import (
 
 // TunnelState represents the current state of a tunnel during building
 type TunnelState struct {
+	mu              sync.RWMutex
 	ID              TunnelID
 	GatewayTunnelID TunnelID         // Inbound gateway receive tunnel ID (for reply routing)
 	Hops            []common.Hash    // Router hashes for each hop
@@ -27,6 +28,20 @@ type TunnelState struct {
 	ResponseCount   int              // Number of responses received
 	Responses       []BuildResponse  // Responses from each hop
 	IsInbound       bool             // True if this is an inbound tunnel
+}
+
+// SetState updates the tunnel build state with proper synchronization.
+func (t *TunnelState) SetState(s TunnelBuildState) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.State = s
+}
+
+// GetState reads the tunnel build state with proper synchronization.
+func (t *TunnelState) GetState() TunnelBuildState {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.State
 }
 
 // TunnelBuildState represents different states during tunnel building
@@ -421,12 +436,15 @@ func (p *Pool) AddTunnel(tunnel *TunnelState) {
 	defer p.mutex.Unlock()
 	p.tunnels[tunnel.ID] = tunnel
 	p.cachedDirty.Store(true)
+	tunnel.mu.RLock()
+	ts := tunnel.GetState()
+	tunnel.mu.RUnlock()
 	log.WithFields(logger.Fields{
 		"at":           "(Pool) AddTunnel",
 		"phase":        "tunnel_build",
 		"reason":       "tunnel registered in pool",
 		"tunnel_id":    tunnel.ID,
-		"tunnel_state": tunnel.State,
+		"tunnel_state": ts,
 		"hop_count":    len(tunnel.Hops),
 		"pool_size":    len(p.tunnels),
 	}).Debug("added tunnel to pool")
@@ -447,7 +465,13 @@ func (p *Pool) ReanchorBuildStart(id TunnelID) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 	tunnel, exists := p.tunnels[id]
-	if !exists || tunnel.State != TunnelBuilding {
+	if !exists {
+		return
+	}
+	tunnel.mu.RLock()
+	state := tunnel.GetState()
+	tunnel.mu.RUnlock()
+	if state != TunnelBuilding {
 		return
 	}
 	tunnel.CreatedAt = time.Now()
@@ -468,19 +492,23 @@ func (p *Pool) RemoveTunnel(id TunnelID) {
 	tunnel, existed := p.tunnels[id]
 	delete(p.tunnels, id)
 	p.cachedDirty.Store(true)
+	var tsStr string
+	if existed {
+		tunnel.mu.RLock()
+		ts := tunnel.GetState()
+		tunnel.mu.RUnlock()
+		tsStr = fmt.Sprintf("%v", ts)
+	} else {
+		tsStr = "unknown"
+	}
 	log.WithFields(logger.Fields{
-		"at":        "(Pool) RemoveTunnel",
-		"phase":     "tunnel_build",
-		"reason":    "tunnel removed from pool",
-		"tunnel_id": id,
-		"existed":   existed,
-		"tunnel_state": func() string {
-			if existed {
-				return fmt.Sprintf("%v", tunnel.State)
-			}
-			return "unknown"
-		}(),
-		"pool_size": len(p.tunnels),
+		"at":           "(Pool) RemoveTunnel",
+		"phase":        "tunnel_build",
+		"reason":       "tunnel removed from pool",
+		"tunnel_id":    id,
+		"existed":      existed,
+		"tunnel_state": tsStr,
+		"pool_size":    len(p.tunnels),
 	}).Debug("removed tunnel from pool")
 }
 
@@ -491,7 +519,10 @@ func (p *Pool) GetActiveTunnels() []*TunnelState {
 
 	var active []*TunnelState
 	for _, tunnel := range p.tunnels {
-		if tunnel.State == TunnelReady {
+		tunnel.mu.RLock()
+		state := tunnel.GetState()
+		tunnel.mu.RUnlock()
+		if state == TunnelReady {
 			active = append(active, tunnel)
 		}
 	}
@@ -528,7 +559,10 @@ func (p *Pool) CleanupExpiredTunnels(maxAge time.Duration) {
 	var expired []TunnelID
 
 	for id, tunnel := range p.tunnels {
-		if tunnel.State == TunnelBuilding && now.Sub(tunnel.CreatedAt) > maxAge {
+		tunnel.mu.RLock()
+		state := tunnel.GetState()
+		tunnel.mu.RUnlock()
+		if state == TunnelBuilding && now.Sub(tunnel.CreatedAt) > maxAge {
 			expired = append(expired, id)
 		}
 	}
@@ -864,7 +898,10 @@ func (p *Pool) rebuildActiveCacheLocked() []*TunnelState {
 
 	var active []*TunnelState
 	for _, tunnel := range p.tunnels {
-		if tunnel.State == TunnelReady {
+		tunnel.mu.RLock()
+		state := tunnel.GetState()
+		tunnel.mu.RUnlock()
+		if state == TunnelReady {
 			active = append(active, tunnel)
 		}
 	}
@@ -894,7 +931,10 @@ func (p *Pool) GetPoolStats() PoolStats {
 	now := time.Now()
 
 	for _, tunnel := range p.tunnels {
-		switch tunnel.State {
+		tunnel.mu.RLock()
+		state := tunnel.GetState()
+		tunnel.mu.RUnlock()
+		switch state {
 		case TunnelBuilding:
 			stats.Building++
 		case TunnelReady:

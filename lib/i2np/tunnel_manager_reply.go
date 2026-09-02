@@ -359,7 +359,7 @@ func (tm *TunnelManager) updateTunnelBasedOnReply(matchingTunnel *tunnel.TunnelS
 // handleSuccessfulBuild processes a successful tunnel build.
 func (tm *TunnelManager) handleSuccessfulBuild(matchingTunnel *tunnel.TunnelState, messageID int) {
 	buildTimeMs := float64(time.Since(matchingTunnel.CreatedAt).Milliseconds())
-	matchingTunnel.State = tunnel.TunnelReady
+	matchingTunnel.SetState(tunnel.TunnelReady)
 	if pool := tm.getPoolForTunnel(matchingTunnel.IsInbound); pool != nil {
 		pool.InvalidateActiveCache()
 	}
@@ -387,7 +387,7 @@ func (tm *TunnelManager) handleSuccessfulBuild(matchingTunnel *tunnel.TunnelStat
 
 // handleFailedBuild processes a failed tunnel build and schedules cleanup.
 func (tm *TunnelManager) handleFailedBuild(matchingTunnel *tunnel.TunnelState, messageID int, replyErr error) {
-	matchingTunnel.State = tunnel.TunnelFailed
+	matchingTunnel.SetState(tunnel.TunnelFailed)
 
 	// Keep exploratory and I2CP client build outcomes in separate windows.
 	// This prevents client failures from skewing exploratory reject statistics.
