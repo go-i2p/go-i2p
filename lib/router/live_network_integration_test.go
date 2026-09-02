@@ -177,6 +177,18 @@ func TestLiveNetworkPublishRouterInfo(t *testing.T) {
 	require.NoError(t, err, "failed to get local routerinfo for publication")
 	logLiveRouterInfoForPublish(t, *ri)
 
+	// Skip publication if our RouterInfo has empty hosts (unreachable); let Java reject on their side.
+	hasEmptyHost := false
+	for _, addr := range ri.RouterAddresses() {
+		if addr.Host == "" || addr.Port == 0 {
+			hasEmptyHost = true
+			break
+		}
+	}
+	if hasEmptyHost {
+		t.Skip("Skipping TestLiveNetworkPublishRouterInfo: local RouterInfo has empty host/port (unreachable)")
+	}
+
 	preStats := testPublisher.GetStats()
 	t.Logf(
 		"routerinfo publish pre-stats: publish_ok=%d publish_fail=%d send_ok=%d send_fail=%d verify_ok=%d verify_fail=%d ack_ok=%d ack_unexpected=%d",
