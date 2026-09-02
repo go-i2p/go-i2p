@@ -1995,19 +1995,6 @@ func getSyscallError(err error) string {
 	return "not_syscall_error"
 }
 
-func (t *NTCP2Transport) createNTCP2Config(routerInfo router_info.RouterInfo) (*ntcp2.Config, error) {
-	for _, addr := range routerInfo.RouterAddresses() {
-		if addr == nil {
-			continue
-		}
-		if !isNTCP2Transport(addr) {
-			continue
-		}
-		return t.createNTCP2ConfigForAddress(routerInfo, addr)
-	}
-
-	return nil, oops.Wrapf(ErrInvalidRouterInfo, "no NTCP2 address found in RouterInfo")
-}
 
 func (t *NTCP2Transport) createNTCP2ConfigForAddress(routerInfo router_info.RouterInfo, peerAddr *router_address.RouterAddress) (*ntcp2.Config, error) {
 	if peerAddr == nil {

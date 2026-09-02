@@ -293,36 +293,6 @@ func leaseSetChannel(ls lease_set.LeaseSet) chan lease_set.LeaseSet {
 	return valueChannel(ls)
 }
 
-// emptyLeaseSet2Channel returns a closed empty channel indicating LeaseSet2 not found.
-func emptyLeaseSet2Channel() chan lease_set2.LeaseSet2 {
-	return emptyChannel[lease_set2.LeaseSet2]()
-}
-
-// leaseSet2Channel returns a channel containing the given LeaseSet2.
-func leaseSet2Channel(ls2 lease_set2.LeaseSet2) chan lease_set2.LeaseSet2 {
-	return valueChannel(ls2)
-}
-
-// emptyEncryptedLeaseSetChannel returns a closed empty channel indicating EncryptedLeaseSet not found.
-func emptyEncryptedLeaseSetChannel() chan encrypted_leaseset.EncryptedLeaseSet {
-	return emptyChannel[encrypted_leaseset.EncryptedLeaseSet]()
-}
-
-// encryptedLeaseSetChannel returns a channel containing the given EncryptedLeaseSet.
-func encryptedLeaseSetChannel(els encrypted_leaseset.EncryptedLeaseSet) chan encrypted_leaseset.EncryptedLeaseSet {
-	return valueChannel(els)
-}
-
-// emptyMetaLeaseSetChannel returns a closed empty channel indicating MetaLeaseSet not found.
-func emptyMetaLeaseSetChannel() chan meta_leaseset.MetaLeaseSet {
-	return emptyChannel[meta_leaseset.MetaLeaseSet]()
-}
-
-// metaLeaseSetChannel returns a channel containing the given MetaLeaseSet.
-func metaLeaseSetChannel(mls meta_leaseset.MetaLeaseSet) chan meta_leaseset.MetaLeaseSet {
-	return valueChannel(mls)
-}
-
 // GetLeaseSet retrieves a LeaseSet from the database by its hash.
 // Returns a channel that yields the LeaseSet or nil if not found.
 // Checks memory cache first, then loads from filesystem if necessary.

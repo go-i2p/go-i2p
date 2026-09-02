@@ -175,12 +175,6 @@ func (t *SSU2Transport) tryOneIntroducerWithContext(ctx context.Context, charlie
 	return t.dialCharlieDirectly(charlieRI, charlieHash, resp)
 }
 
-// tryOneIntroducer attempts relay through a single introducer entry.
-// Kept for backward compatibility; wraps tryOneIntroducerWithContext with t.ctx.
-func (t *SSU2Transport) tryOneIntroducer(charlieRI router_info.RouterInfo, charlieHash data.Hash, intro IntroducerAddr) (transport.TransportSession, error) {
-	return t.tryOneIntroducerWithContext(t.ctx, charlieRI, charlieHash, intro)
-}
-
 // establishBobSessionWithContext looks up Bob's RouterInfo and establishes a session to Bob,
 // honoring the parent context for cancellation.
 func (t *SSU2Transport) establishBobSessionWithContext(ctx context.Context, intro IntroducerAddr) (*SSU2Session, error) {
@@ -206,21 +200,6 @@ func (t *SSU2Transport) establishBobSessionWithContext(ctx context.Context, intr
 	return bobSSU2Session, nil
 }
 
-// establishBobSession looks up Bob's RouterInfo and establishes a session to Bob.
-func (t *SSU2Transport) establishBobSession(intro IntroducerAddr) (*SSU2Session, error) {
-	// R-2 fix: Atomic config snapshot
-	cfg := t.config.Load()
-	bobRI, err := cfg.RouterLookupFunc(intro.RouterHash)
-	if err != nil {
-		return nil, oops.Wrapf(err, "Bob (%x...) lookup failed", intro.RouterHash[:4])
-	}
-
-	bobSession, err := t.GetSession(bobRI)
-	if err != nil {
-		return nil, oops.Wrapf(err, "failed to get session to Bob (%x...)", intro.RouterHash[:4])
-	}
-
-	bobSSU2Session, ok := bobSession.(*SSU2Session)
 	if !ok {
 		return nil, oops.Errorf("unexpected Bob session type %T", bobSession)
 	}

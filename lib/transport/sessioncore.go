@@ -203,22 +203,6 @@ func (sc *SessionCore) CallCleanupCallback() {
 	})
 }
 
-// recordSendQueueDecrement records that a message has been fully sent.
-// Called by send workers to decrement sendQueueSize after writing to the wire.
-func (sc *SessionCore) recordSendQueueDecrement() {
-	atomic.AddInt32(&sc.sendQueueSize, -1)
-}
-
-// recordBandwidth records bytes sent or received via atomic add.
-// Called by send/receive workers to update bandwidth counters.
-func (sc *SessionCore) recordBandwidth(sent, received uint64) {
-	if sent > 0 {
-		atomic.AddUint64(&sc.bytesSent, sent)
-	}
-	if received > 0 {
-		atomic.AddUint64(&sc.bytesReceived, received)
-	}
-}
 
 // RecordDroppedMessage increments the dropped-message counter.
 // Called when an inbound message cannot be queued (backpressure).
