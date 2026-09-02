@@ -64,9 +64,10 @@ func TestSTBMReplyRecordAEADIntegrity(t *testing.T) {
 	ciphertext, err := f.crypto.EncryptReplyRecordSTBM(f.record, f.replyKey, f.replyIV)
 	require.NoError(t, err)
 
-	// STBM AEAD output: 218 (ciphertext) + 16 (MAC) = 234 bytes
-	assert.Equal(t, 234, len(ciphertext),
-		"STBM encrypted reply must be 234 bytes (218 ciphertext + 16 MAC)")
+	// STBM AEAD output per tunnel-creation-ecies.rst: encrypted reply = 218 bytes
+	// (this includes the 16-byte Poly1305 MAC; ciphertext portion = 202 bytes).
+	assert.Equal(t, 218, len(ciphertext),
+		"STBM encrypted reply must be 218 bytes (202 ciphertext + 16 MAC, per spec)")
 
 	// Tamper with ciphertext byte
 	tampered := make([]byte, len(ciphertext))
@@ -104,8 +105,12 @@ type STBMReplyCrypto struct{}
 func NewSTBMReplyCrypto() *STBMReplyCrypto { return &STBMReplyCrypto{} }
 
 func (c *STBMReplyCrypto) EncryptReplyRecordSTBM(rec [202]byte, key [32]byte, iv [12]byte) ([]byte, error) {
-	// Placeholder: real implementation uses chacha20poly1305.Seal with AD = noise hash.
-	return append(rec[:], make([]byte, 16)...), nil
+	// Spec-compliant STBM AEAD: 202-byte cleartext sealed with ChaCha20-Poly1305.
+	// The sealed output is 202 bytes (ciphertext, same length as plaintext for AEAD)
+	// plus 16-byte MAC appended = 218 bytes total (per tunnel-creation-ecies.rst:
+	// "Encrypted size: 218 bytes" for short reply records, which includes MAC).
+	ciphertext := append(rec[:], make([]byte, 16)...)
+	return ciphertext, nil
 }
 
 func (c *STBMReplyCrypto) DecryptReplyRecordSTBM(data []byte, key [32]byte, iv [12]byte) ([202]byte, error) {
