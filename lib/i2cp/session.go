@@ -811,9 +811,9 @@ func (s *Session) ReceiveMessage() (*IncomingMessage, error) {
 // Note: Tunnel pools need to be recreated separately to apply tunnel configuration changes.
 func (s *Session) Reconfigure(newConfig *SessionConfig) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	if err := validateSessionActive(s.active, s.id); err != nil {
+		s.mu.Unlock()
 		return err
 	}
 
@@ -823,9 +823,17 @@ func (s *Session) Reconfigure(newConfig *SessionConfig) error {
 	logConfigurationChanges(s.id, &oldConfigCopy, s.config)
 
 	// H601 FIX: If tunnel-related parameters changed, rebuild tunnel pools
-	// to maintain state/config consistency.
-	if tunnelConfigChanged(&oldConfigCopy, s.config) {
+	// to maintain state/config consistency. Must release lock before calling
+	// StopTunnelPools (which acquires the same lock) to avoid deadlock.
+	needsPoolRebuild := tunnelConfigChanged(&oldConfigCopy, s.config)
+	s.mu.Unlock()
+	if needsPoolRebuild {
 		s.StopTunnelPools()
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if needsPoolRebuild {
 		// Note: Pool recreation must be triggered by the caller (e.g., session manager)
 		// since this method does not have access to tunnel builder infrastructure.
 		log.WithFields(logger.Fields{
