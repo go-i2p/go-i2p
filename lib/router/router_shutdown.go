@@ -147,8 +147,12 @@ func (r *Router) StopWithContext(ctx context.Context) error {
 
 // stopNetDB shuts down the network database if it exists and logs the result.
 func (r *Router) stopNetDB() {
-	if r.netdb != nil {
-		r.netdb.Stop()
+	r.runMux.Lock()
+	nd := r.netdb
+	r.runMux.Unlock()
+
+	if nd != nil {
+		nd.Stop()
 		logSubsystemStop("(Router) stopNetDB", "netDB")
 	}
 }

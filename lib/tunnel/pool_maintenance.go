@@ -171,7 +171,7 @@ func (p *Pool) cleanupExpiredTunnelsLocked() {
 			if p.isBuildTimeout(tunnel, age) {
 				buildTimeouts++
 			}
-		} else if tunnel.State == TunnelReady {
+		} else if tunnel.GetState() == TunnelReady {
 			hasActiveTunnel = true
 		}
 	}
@@ -184,7 +184,7 @@ func (p *Pool) cleanupExpiredTunnelsLocked() {
 // checkTunnelExpiration determines if a tunnel should be expired and logs the reason.
 func (p *Pool) checkTunnelExpiration(tunnel *TunnelState, age time.Duration, id TunnelID) bool {
 	// Remove tunnels that exceeded lifetime
-	if tunnel.State == TunnelReady && age > p.config.TunnelLifetime {
+	if tunnel.GetState() == TunnelReady && age > p.config.TunnelLifetime {
 		log.WithFields(logger.Fields{
 			"at":           "(Pool) cleanupExpiredTunnelsLocked",
 			"phase":        "tunnel_build",
@@ -197,12 +197,12 @@ func (p *Pool) checkTunnelExpiration(tunnel *TunnelState, age time.Duration, id 
 	}
 
 	// Remove failed tunnels
-	if tunnel.State == TunnelFailed {
+	if tunnel.GetState() == TunnelFailed {
 		return true
 	}
 
 	// Remove in-flight builds that exceeded the 90-second VTBRM deadline
-	if tunnel.State == TunnelBuilding && age > tunnelBuildTimeout {
+	if tunnel.GetState() == TunnelBuilding && age > tunnelBuildTimeout {
 		return true
 	}
 
@@ -214,10 +214,10 @@ func (p *Pool) isBuildTimeout(tunnel *TunnelState, age time.Duration) bool {
 	if !p.config.IsInbound {
 		return false
 	}
-	if tunnel.State == TunnelFailed && age >= tunnelBuildTimeout {
+	if tunnel.GetState() == TunnelFailed && age >= tunnelBuildTimeout {
 		return true
 	}
-	if tunnel.State == TunnelBuilding && age > tunnelBuildTimeout {
+	if tunnel.GetState() == TunnelBuilding && age > tunnelBuildTimeout {
 		return true
 	}
 	return false

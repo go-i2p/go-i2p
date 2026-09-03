@@ -139,28 +139,50 @@ func (r *Router) launchMainloop() {
 	}()
 }
 
-// awaitStartupResult blocks until the mainloop reports startup success or failure.
+// awaitStartupResult blocks until the mainloop reports startup success or failure,
+// or until the router context is cancelled (e.g. by Stop()).
 func (r *Router) awaitStartupResult() error {
-	if err := <-r.startupErr; err != nil {
-		log.WithError(err).WithFields(logger.Fields{
-			"at":     "(Router) Start",
-			"phase":  "startup",
-			"reason": "startup-critical subsystem failed",
-		}).Error("router startup failed")
-		return err
-	}
-	log.WithFields(logger.Fields{
-		"at":     "(Router) Start",
-		"phase":  "running",
-		"reason": "all startup-critical subsystems initialized",
-	}).Info("router started successfully")
-	if r.cfg != nil && r.cfg.Hidden {
+	select {
+	case err := <-r.startupErr:
+		if err != nil {
+			log.WithError(err).WithFields(logger.Fields{
+				"at":     "(Router) Start",
+				"phase":  "startup",
+				"reason": "startup-critical subsystem failed",
+			}).Error("router startup failed")
+			return err
+		}
 		log.WithFields(logger.Fields{
 			"at":     "(Router) Start",
 			"phase":  "running",
-			"reason": "hidden mode active",
-			"caps":   "NUH (no transit, no inbound from network)",
-		}).Info("router is in hidden mode: refusing transit, publishing no transport addresses")
+			"reason": "all startup-critical subsystems initialized",
+		}).Info("router started successfully")
+		if r.cfg != nil && r.cfg.Hidden {
+			log.WithFields(logger.Fields{
+				"at":     "(Router) Start",
+				"phase":  "running",
+				"reason": "hidden mode active",
+				"caps":   "NUH (no transit, no inbound from network)",
+			}).Info("router is in hidden mode: refusing transit, publishing no transport addresses")
+		}
+		return nil
+	case <-func() <-chan struct{} {
+		if r.ctx != nil {
+			return r.ctx.Done()
+		}
+		ch := make(chan struct{})
+		return ch
+	}():
+		if r.ctx != nil && r.ctx.Err() != nil {
+			log.WithFields(logger.Fields{
+				"at":     "(Router) Start",
+				"phase":  "startup",
+				"reason": "startup interrupted by shutdown",
+			}).Warn("router startup interrupted by shutdown")
+			return r.ctx.Err()
+		}
+		// Context was nil when select started; startupErr must have fired.
+		// This branch is unreachable in practice but kept for completeness.
+		return oops.Errorf("router startup interrupted")
 	}
-	return nil
 }
