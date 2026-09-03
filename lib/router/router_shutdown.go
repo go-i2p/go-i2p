@@ -208,6 +208,10 @@ func (r *Router) stopI2CPServer() {
 // sendCloseSignal sends the close signal to the router channel without blocking.
 // It uses a non-blocking send to prevent deadlocks if the channel is full or already signaled.
 func (r *Router) sendCloseSignal() {
+	if r.closeChnl == nil {
+		log.WithFields(logger.Fields{"at": "sendCloseSignal"}).Debug("close channel already finalized, skipping send")
+		return
+	}
 	select {
 	case r.closeChnl <- true:
 		log.WithFields(logger.Fields{"at": "sendCloseSignal"}).Debug("Router stop signal sent")
@@ -367,14 +371,16 @@ func (r *Router) clearRoutingComponents() {
 func (r *Router) finalizeCloseChannel() {
 	r.closeOnce.Do(func() {
 		if r.closeChnl != nil {
-			close(r.closeChnl)
+			// Do NOT close the channel here — closing races with
+			// sendCloseSignal() which may still be sending. Just
+			// nil it out so future sends become no-ops.
 			r.closeChnl = nil
 			log.WithFields(logger.Fields{
 				"at":     "(Router) Close",
 				"phase":  "finalization",
 				"step":   8,
-				"reason": "close channel finalized",
-			}).Debug("close channel closed")
+				"reason": "close channel finalized (not closed to avoid race with sendCloseSignal)",
+			}).Debug("close channel finalized (set to nil, not closed)")
 		}
 	})
 }
