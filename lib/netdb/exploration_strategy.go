@@ -286,12 +286,16 @@ func (s *AdaptiveStrategy) calculateBucket(routerHash common.Hash) int {
 // generateKeyInBucket creates a hash that falls into the specified Kademlia bucket.
 // The bucket is determined by the position of the most significant differing bit.
 func (s *AdaptiveStrategy) generateKeyInBucket(bucketIdx int) (common.Hash, error) {
+	s.mu.RLock()
+	ourHash := s.ourHash
+	s.mu.RUnlock()
+
 	if bucketIdx < 0 || bucketIdx >= NumKademliaBuckets {
 		return common.Hash{}, oops.Errorf("invalid bucket index: %d", bucketIdx)
 	}
 
 	// Start with our hash and flip the target bit
-	key := s.createKeyWithFlippedBit(s.ourHash, bucketIdx)
+	key := s.createKeyWithFlippedBit(ourHash, bucketIdx)
 
 	// Randomize all less significant bits
 	if err := s.randomizeLowerBits(&key, bucketIdx); err != nil {
