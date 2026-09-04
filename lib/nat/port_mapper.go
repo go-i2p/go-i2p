@@ -190,8 +190,12 @@ func (pmm *PortMapperManager) attemptMapping() bool {
 	}
 	pmm.mu.Unlock()
 
+        pmm.mu.Lock()
+        extIP := pmm.extIP
+        pmm.mu.Unlock()
+
 	log.WithFields(map[string]interface{}{
-		"external_ip":   pmm.extIP,
+		"external_ip":   extIP,
 		"external_port": externalPort,
 		"internal_port": pmm.internalPort,
 		"network":       pmm.network,
