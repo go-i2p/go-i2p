@@ -93,6 +93,9 @@ func (s *NTCP2Session) ReadNextI2NP() (i2np.Message, error) {
 	case msg := <-s.RecvChan():
 		return msg, nil
 	case <-s.GetContext().Done():
+		if err := s.getError(); err != nil {
+			return nil, err
+		}
 		return nil, s.GetContext().Err()
 	}
 }
@@ -197,6 +200,7 @@ func (s *NTCP2Session) logSessionLifecycleSummary(reason byte) {
 
 	fields := map[string]interface{}{
 		"close_reason":       TerminationReasonString(reason),
+		"last_error":         s.getError(),
 		"session_age_ms":     age.Milliseconds(),
 		"idle_since_send_ms": idleSend.Milliseconds(),
 		"idle_since_recv_ms": idleRecv.Milliseconds(),
@@ -681,11 +685,11 @@ func (s *NTCP2Session) GetRekeyStats() (messagesSinceRekey, rekeyCount uint64) {
 
 // getError returns the last error recorded by setError, if any. Safe for
 // concurrent use with setError.
-/*func (s *NTCP2Session) getError() error {
+func (s *NTCP2Session) getError() error {
 	s.errorMu.Lock()
 	defer s.errorMu.Unlock()
 	return s.lastError
-}*/
+}
 
 // setError sets the last error (once) and cancels the session context.
 // Cleanup callback is NOT called here — it is deferred to Close() which
