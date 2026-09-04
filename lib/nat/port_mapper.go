@@ -3,6 +3,7 @@ package nat
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	nattraversal "github.com/go-i2p/go-nat-listener"
@@ -30,7 +31,7 @@ type PortMapperManager struct {
 	mapper    nattraversal.PortMapper
 	extPort   int    // Currently mapped external port (0 if no mapping active)
 	extIP     string // External IP address from mapper
-	stopped   bool   // Prevent duplicate Stop() calls
+	stopped   int32  // Prevent duplicate Stop() calls (atomic)
 }
 
 // PortMapperConfig configures a PortMapperManager.
@@ -137,7 +138,7 @@ func (pmm *PortMapperManager) retryLoop() {
 func (pmm *PortMapperManager) attemptMapping() bool {
 	// Check if stopped before attempting mapping
 	pmm.mu.Lock()
-	stopped := pmm.stopped
+	stopped := atomic.LoadInt32(&pmm.stopped) == 1
 	pmm.mu.Unlock()
 	if stopped {
 		return false
@@ -241,11 +242,11 @@ func (pmm *PortMapperManager) GetExternalIP() string {
 // when the parent context is already done.
 func (pmm *PortMapperManager) Stop() error {
 	pmm.mu.Lock()
-	if pmm.stopped {
+	if atomic.LoadInt32(&pmm.stopped) == 1 {
 		pmm.mu.Unlock()
 		return nil
 	}
-	pmm.stopped = true
+	atomic.StoreInt32(&pmm.stopped, 1)
 	pmm.cancel() // Signal retry goroutine to exit
 	pmm.mu.Unlock()
 

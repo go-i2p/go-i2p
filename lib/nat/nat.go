@@ -47,7 +47,7 @@ func DefaultBindConfig(network, listenerAddress string) *BindConfig {
 	return &BindConfig{
 		Network:         network,
 		ListenerAddress: listenerAddress,
-		NATTimeout:      15 * time.Second,
+		NATTimeout:      3 * time.Second,
 		MaxRetries:      5,
 		RetryBaseDelay:  50 * time.Millisecond,
 	}
