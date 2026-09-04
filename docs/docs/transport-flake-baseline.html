@@ -13,7 +13,7 @@
         <a href="../index.html">go-i2p/go-i2p</a>
       </h2>
       <div class="repo-meta">
-        📝 2464 commits
+        📝 2467 commits
          • 📜 MIT License
       </div>
     </div>
@@ -62,10 +62,11 @@
         <h1 id="transport-and-tunnel-flake-baseline">Transport and Tunnel Flake Baseline</h1>
 
 <ul>
-<li>Generated: 2026-07-01T18:11:25Z</li>
+<li>Generated: 2026-09-04T22:28:39Z</li>
 <li>Iterations per package: 2</li>
+<li>Per-test timeout: 20m</li>
 <li>Scope: transport and tunnel critical-path packages</li>
-<li>Result: <sup>11</sup>&frasl;<sub>12</sub> passing runs</li>
+<li>Result: <sup>12</sup>&frasl;<sub>12</sub> passing runs</li>
 </ul>
 
 <h2 id="package-results">Package Results</h2>
@@ -88,8 +89,8 @@
 
 <tr>
 <td>./lib/transport/ntcp2</td>
-<td align="right">1</td>
-<td align="right">1</td>
+<td align="right">2</td>
+<td align="right">0</td>
 </tr>
 
 <tr>
@@ -133,25 +134,27 @@
 
 <tbody>
 <tr>
-<td>P1</td>
-<td>./lib/transport/ntcp2</td>
-<td><sup>1</sup>&frasl;<sub>2</sub> failed runs</td>
+<td>P2</td>
+<td>transport+tunnel</td>
+<td>No flaky failures observed in this sample</td>
 <td>transport-maintainers</td>
-<td>Capture failing seed/logs and stabilize nondeterminism in this package</td>
+<td>Keep scheduled sampling and gate on new failures</td>
 </tr>
 </tbody>
 </table>
 
 <h2 id="reproduction">Reproduction</h2>
 
-<pre><code class="language-bash">bash .github/scripts/generate-flake-baseline.bash 2 docs/transport-flake-baseline.md
+<pre><code class="language-bash">bash .github/scripts/generate-flake-baseline.bash 2 docs/transport-flake-baseline.md 20m
+# Use Go's default timeout behavior for very long suites
+bash .github/scripts/generate-flake-baseline.bash 2 docs/transport-flake-baseline.md default
 </code></pre>
 
       </div>
     </main>
     
     <footer class="page-footer">
-      <p>Generated on 2026-09-04 20:26:44 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
+      <p>Generated on 2026-09-04 22:37:52 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
     </footer>
   </div>
 </body>
