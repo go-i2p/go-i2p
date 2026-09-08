@@ -13,7 +13,7 @@
         <a href="../index.html">go-i2p/go-i2p</a>
       </h2>
       <div class="repo-meta">
-        📝 2468 commits
+        📝 647 commits
          • 📜 MIT License
       </div>
     </div>
@@ -24,25 +24,11 @@
       
         <div class="nav-section-title">Documentation:</div>
         
-          <li><a href="../docs/docs/anonymity-logging.html" >Anonymity-Safe Logging</a></li>
-        
           <li><a href="../docs/CONTRIBUTING.html" class="active">Contributing</a></li>
-        
-          <li><a href="../docs/docs/i2pcontrol.html" >I2PControl JSON-RPC Server User Guide</a></li>
-        
-          <li><a href="../docs/docs/llm-disclosure.html" >Llm Disclosure</a></li>
-        
-          <li><a href="../docs/docs/interop-matrix.html" >Mixed-Peer Interoperability Matrix</a></li>
-        
-          <li><a href="../docs/lib/netdb/ISOLATION.html" >NetDB Client/Router Isolation</a></li>
-        
-          <li><a href="../docs/RELEASE_NOTES.html" >RELEASE NOTES</a></li>
         
           <li><a href="../docs/template.html" >Template</a></li>
         
-          <li><a href="../docs/docs/transport-flake-baseline.html" >Transport and Tunnel Flake Baseline</a></li>
-        
-          <li><a href="../docs/docs/transport-observability.html" >Transport and Tunnel Observability</a></li>
+          <li><a href="../docs/ROADMAP.html" >go-i2p Implementation Roadmap</a></li>
         
       
     </ul>
@@ -61,9 +47,7 @@
       <div class="doc-content">
         <h1 id="contributing">Contributing</h1>
 
-<p>Thanks for taking a look at go-i2p!</p>
-
-<p>Please reach out if you have any questions or need help getting started. We have an IRC channel on IRC2P: #go-i2p-dev and we&rsquo;re reachable here at github.com/go-i2p also.</p>
+<p>Thanks for taking a look at go-i2p!  Please reach out if you have any questions or need help getting started. We have an IRC channel on IRC2P: #go-i2p-dev and we&rsquo;re reachable here at github.com/go-i2p also.</p>
 
 <h2 id="getting-started">Getting Started</h2>
 
@@ -75,14 +59,14 @@ The instructions will be similar for other Linux distributions with slightly dif
 <pre><code class="language-sh"># For obtaining, modifying, compiling, and tracking changes to go-i2p, install:
 sudo apt-get install golang-go make git
 # If you want to generate markdown versions of the godoc locally, also install:
-go install github.com/robertkrimen/godocdown@latest
+go install github.com/robertkrimen/godocdown/godocdown@master
 # If you want to generate call graphs locally, also install:
-go install github.com/ofabry/go-callvis@latest
+go install github.com/ofabry/go-callvis@master
 </code></pre>
 
 <p>On Windows, one must install the latest versions of Go and Git Bash from their respective sources.</p>
 
-<h2 id="set-up-your-workspace">Set up your workspace</h2>
+<h2 id="set-up-your-workspace">Set up your workspace:</h2>
 
 <pre><code class="language-sh">github_username=yourusername
 cd $(go env GOPATH)
@@ -92,21 +76,9 @@ github.com/go-i2p/go-i2p
 
 <p>Fork go-i2p and clone it into your workspace.  Make sure you can execute <code>go test ./...</code> in the project&rsquo;s root directory.  At that point you should have everything you need to start making changes and opening pull requests.</p>
 
-<h2 id="standards">Standards</h2>
-
-<p>go-i2p maintains fairly strict standards intended to improve debuggability, readability, understandability, and overall maintainability. These are not dogma, but they are generally applicable.</p>
-
-<ul>
-<li>Keep functions around 35 lines long or less</li>
-<li>Keep cyclomatic complexity of functions below about 10</li>
-<li>Keep nesting depth less than 3</li>
-</ul>
-
-<p>If a function requires more code than that, carefully consider the discrete tasks inside it and consider breaking them out into their own, named, private function with a documentation comment. This makes higher-level functions more readable &ldquo;orchestration&rdquo; style functions, and isolates complexity into smaller, readily testable functions that do one thing well. All our lives will be easier if you do this.</p>
-
 <h2 id="i2p-specifications">I2P Specifications</h2>
 
-<p>The I2P community maintains up-to-date <a href="https://geti2p.net/spec" target="_blank">specifications</a> of most of the application, which are being used to create go-i2p.  Currently, most of the common data structures (located in <code>github.com/go-i2p/common</code>, the contemporary, non-experimental cryptography (located in <code>github.com/go-i2p/crypto</code> and <code>github.com/go-i2p/go-noise</code>)) have been implemented and tested, and serve as good examples.</p>
+<p>The I2P community maintains up-to-date <a href="https://geti2p.net/spec" target="_blank">specifications</a> of most of the application, which are being used to create go-i2p.  Currently, most the of common data structures (located in <code>lib/common/</code>) have been implemented and tested, and serve as good examples.</p>
 
 <h2 id="testing">Testing</h2>
 
@@ -136,7 +108,17 @@ github.com/go-i2p/go-i2p
 
 <h4 id="testing-1">Testing</h4>
 
-<p>Testify is used to assert test cases in some tests in go-i2p for simplicity. In other cases, only the std library is used. Either approach is valid, what is important is that you add tests.</p>
+<p>Testify is used to assert test cases in all tests in go-i2p for simplicity.  Here is an example from the RouterInfo tests:</p>
+
+<pre><code class="language-go">func TestRouterAddressCountReturnsCorrectCount(t *testing.T) {
+	assert := assert.New(t)
+
+	router_info := buildFullRouterInfo()
+	count, err := router_info.RouterAddressCount()
+	assert.Nil(err)
+	assert.Equal(1, count, &quot;RouterInfo.RouterAddressCount() did not return correct count&quot;)
+}
+</code></pre>
 
 <h2 id="pull-requests">Pull Requests</h2>
 
@@ -146,7 +128,7 @@ github.com/go-i2p/go-i2p
     </main>
     
     <footer class="page-footer">
-      <p>Generated on 2026-09-08 19:33:27 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
+      <p>Generated on 2026-09-08 19:35:31 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
     </footer>
   </div>
 </body>

@@ -13,7 +13,7 @@
         <a href="index.html">go-i2p/go-i2p</a>
       </h2>
       <div class="repo-meta">
-        📝 2468 commits
+        📝 647 commits
          • 📜 MIT License
       </div>
     </div>
@@ -24,25 +24,11 @@
       
         <div class="nav-section-title">Documentation:</div>
         
-          <li><a href="docs/docs/anonymity-logging.html">Anonymity-Safe Logging</a></li>
-        
           <li><a href="docs/CONTRIBUTING.html">Contributing</a></li>
-        
-          <li><a href="docs/docs/i2pcontrol.html">I2PControl JSON-RPC Server User Guide</a></li>
-        
-          <li><a href="docs/docs/llm-disclosure.html">Llm Disclosure</a></li>
-        
-          <li><a href="docs/docs/interop-matrix.html">Mixed-Peer Interoperability Matrix</a></li>
-        
-          <li><a href="docs/lib/netdb/ISOLATION.html">NetDB Client/Router Isolation</a></li>
-        
-          <li><a href="docs/RELEASE_NOTES.html">RELEASE NOTES</a></li>
         
           <li><a href="docs/template.html">Template</a></li>
         
-          <li><a href="docs/docs/transport-flake-baseline.html">Transport and Tunnel Flake Baseline</a></li>
-        
-          <li><a href="docs/docs/transport-observability.html">Transport and Tunnel Observability</a></li>
+          <li><a href="docs/ROADMAP.html">go-i2p Implementation Roadmap</a></li>
         
       
     </ul>
@@ -60,7 +46,7 @@
       <div class="repo-stats">
         
         <div class="repo-stat">
-          <span>📝</span> <span>2468 commits</span>
+          <span>📝</span> <span>647 commits</span>
         </div>
         
         
@@ -81,33 +67,16 @@
       <section id="readme" class="repo-section">
         <h2>README</h2>
         <div class="readme-content">
-          <h1 id="go-i2p"><code>go-i2p</code></h1>
+          <h1 id="go-i2p">go-i2p</h1>
 
 <p>A pure Go implementation of the I2P router.</p>
 
 <h2 id="status">Status</h2>
 
-<p><code>go-i2p</code> is in active development. We recently completed several significant milestones including:</p>
-
-<ul>
-<li><strong>Complete I2CP Protocol Server</strong>: Full session lifecycle management, message routing, and client support</li>
-<li><strong>End-to-End Message Routing</strong>: Complete message routing system connecting I2CP clients through tunnels to other destinations with garlic encryption</li>
-<li><strong>Tunnel System</strong>: Automatic tunnel building, pool management, and cryptographic processing</li>
-<li><strong>Transport Layer</strong>: Full NTCP2 implementation with session management</li>
-</ul>
-
-<p>The core router functionality is now operational. We have tested functionality using i2psnark-standalone against our I2CP API server. Basic compatibility is available. We are now focused application layer protocols. We have a mostly-complete I2CP client, a prototype of a Streaming library, and a pretty boring Datagrams library, all of which are requirements for SAMv3.3(which we also have), which is what all our applications use. Refining these components and making them production-ready is the immediate goal.</p>
-
-<p><strong><code>go-i2p</code> is still in very early development.</strong> It has bugs. It is probably very distinct on the network. You probably should use a more established router for now.</p>
-
-<p>Advice for Developers: The API is still unstable below <code>go-i2p/onramp</code>. In fact, we&rsquo;re going to aggressively remove broken, crappy versions of functions from the low-level components over the <code>0.1.6</code> to <code>0.2.0</code> development cycle. The <code>0.2.0</code> release will have only the type-safe, memory-safe, functionally-correct versions of everything. We&rsquo;ll apply <code>DEPRECATED</code> notices to the godoc of anything we&rsquo;re removing in advance of removing it but it <em>is going to go</em>. How much low-level stuff you want to use is going to affect how much your life is going to change in the next ~4 big releases.</p>
-
-<p>Also, we&rsquo;re picking up the pace. More little points between big releases. This is because issues surfaced in one repository may actually require fixes in an upstream repo and this way it&rsquo;s easier to keep the tags in sync.</p>
-
-<p>Advice for Users: It&rsquo;s probably not safe yet, nor does it do the things you want yet. However, we have reached significant milestones in interacting with the network and are beginning to use it more regularly in a handful of non-anonymous services.</p>
-
-<p>Anonymity-sensitive operators should review <a href="docs/anonymity-logging.md" target="_blank">Anonymity-Safe Logging</a> and avoid debug logging in production.
-Transport and tunnel triage guidance is documented in <a href="docs/transport-observability.md" target="_blank">Transport and Tunnel Observability</a>.</p>
+<p>go-i2p is in early development. The master branch is being refactored and API&rsquo;s are
+definitely going to change. If you choose to use any part of this code right now,
+please keep up with these changes, as they will not be backward compatible and require
+<strong>Fundamentally</strong> changing any code that treats this as a dependency.</p>
 
 <h3 id="implemented-features">Implemented Features</h3>
 
@@ -115,13 +84,10 @@ Transport and tunnel triage guidance is documented in <a href="docs/transport-ob
 <li>Clients
 
 <ul>
-<li>[X] I2CP Protocol Server (v0.9.67 - tested with i2psnark-standalone)</li>
-<li>[X] Message routing (outbound I2CP → tunnels → garlic encryption)</li>
-<li>[X] Inbound message delivery (tunnel → I2CP sessions)</li>
-<li>[X] <a href="https://github.com/go-i2p/go-i2cp" target="_blank">I2CP Client: https://github.com/go-i2p/go-i2cp</a></li>
-<li>[X] <a href="https://github.com/go-i2p/go-datagrams" target="_blank">Datagrams: https://github.com/go-i2p/go-datagrams</a></li>
-<li>[X] <a href="https://github.com/go-i2p/go-streaming" target="_blank">Streaming: https://github.com/go-i2p/go-streaming</a></li>
-<li>[X] <a href="https://github.com/go-i2p/go-sam-bridge" target="_blank">SAM API v3.3: https://github.com/go-i2p/go-sam-bridge</a></li>
+<li>[ ] Datagrams</li>
+<li>[ ] I2CP</li>
+<li>[ ] Message routing</li>
+<li>[ ] Streaming</li>
 </ul></li>
 <li><a href="https://github.com/go-i2p/crypto" target="_blank">Cryptographic primitives(see also: https://github.com/go-i2p/crypto)</a>
 
@@ -145,93 +111,75 @@ Transport and tunnel triage guidance is documented in <a href="docs/transport-ob
 <li>[X] RSA_SHA384_3072</li>
 <li>[X] RSA_SHA512_4096</li>
 <li>[X] Ed25519</li>
-<li>[X] Red25519</li>
+<li>[ ] Red25519</li>
 </ul></li>
 <li>[X] ElGamal</li>
 <li>[X] AES256</li>
 <li>[X] X25519</li>
 <li>[X] ChaCha20/Poly1305</li>
-<li>[X] Elligator2</li>
+<li>[ ] Elligator2</li>
 <li>[X] HKDF</li>
 <li>[X] HMAC</li>
 <li>[X] Noise subsystem</li>
 </ul></li>
-<li>End-to-End Crypto (crypto engine in <a href="https://github.com/go-i2p/go-noise/tree/main/ratchet" target="_blank">go-noise/ratchet</a>)
+<li>End-to-End Crypto
 
 <ul>
-<li>[X] Garlic messages (thin adapter in <code>lib/i2np/garlic_session.go</code> → <code>go-noise/ratchet.SessionManager</code>)</li>
-<li>[X] ECIES-X25519-AEAD-Ratchet (primary, implemented in <code>go-noise/ratchet/</code>)</li>
-<li>[X] Tunnel build record crypto (adapter in <code>lib/i2np/build_record_crypto.go</code> → <code>go-noise/ratchet.BuildRecordCrypto</code>)</li>
-<li>[ ] ElGamal/AES+SessionTag (not implemented - ECIES-only destinations supported)</li>
+<li>[ ] Garlic messages</li>
+<li>[ ] ElGamal/AES+SessionTag</li>
+<li>[ ] Ratchet/X25519</li>
 </ul></li>
 <li>I2NP
 
 <ul>
-<li>[X] Message parsing and serialization</li>
-<li>[X] Message interfaces and factory patterns</li>
-<li>[X] Database Store/Lookup message structures</li>
-<li>[X] Tunnel Build message structures</li>
-<li>[X] Data, DeliveryStatus, TunnelData messages</li>
-<li>[X] Build Request/Response Record parsing</li>
-<li>[X] Message routing and handling</li>
+<li>[X] Message parsing</li>
+<li>[ ] Message handling</li>
 </ul></li>
 <li>NetDB
 
 <ul>
-<li>[X] Local storage interface</li>
-<li>[X] Reseed functionality (basic implementation)</li>
-<li>[X] Persistence to disk</li>
-<li>[X] RouterInfo management</li>
-<li>[X] LeaseSet management</li>
-<li>[X] Lookups</li>
-<li>[X] Expiry</li>
-<li>[X] Exploration</li>
-<li>[X] Publishing</li>
-<li>[X] Floodfill</li>
-<li>[X] LS2 and Encrypted Leasesets (I2CP clients can publish; storage/retrieval supported; inbound client-side decryption and MetaLeaseSet resolution implemented)</li>
+<li>[~] Local storage</li>
+<li>[~] Persistence to disk</li>
+<li>[X] Reseeding</li>
+<li>[ ] Lookups</li>
+<li>[ ] Expiry</li>
+<li>[ ] Exploration</li>
+<li>[ ] Publishing</li>
+<li>[ ] Floodfill</li>
+<li>[ ] LS2 and Encrypted Leasesets</li>
 </ul></li>
-<li>Transport Layer
+<li><a href="https://github.com/go-i2p/go-noise" target="_blank">Transports(see also: https://github.com/go-i2p/go-noise</a>
 
 <ul>
-<li>[X] Transport manager and interfaces</li>
+<li>[X] Transport manager</li>
 <li>NTCP2
 
 <ul>
-<li>[X] Session handshake using noise protocol</li>
-<li>[X] Connection management</li>
-<li>[X] I2NP message framing and unframing</li>
-<li>[X] Session lifecycle management</li>
-<li>[X] Message queuing and worker threads</li>
+<li>[X] Handshake</li>
+<li>[ ] Session tracking</li>
+<li>[ ] Automatic session creation</li>
 </ul></li>
-<li>SSU2 (<strong>currently experimental</strong> — see <code>--transport.ssu2-enabled</code> help text)
+<li>SSU2
 
 <ul>
-<li>[X] Session handshake</li>
-<li>[X] Connection management</li>
-<li>[X] Peer Tests (experimental — all roles implemented; end-to-end integration ongoing)</li>
-<li>[X] Introducers (experimental — registration and republish wired)</li>
-</ul></li>
-<li><a href="https://github.com/go-i2p/go-noise" target="_blank">Noise Subsystem (see also https://github.com/go-i2p/go-noise)</a>
-
-<ul>
-<li>[X] Noise Socket Framework</li>
-<li>[X] NTCP2 Socket Framework</li>
-<li>[X] ECIES-X25519-AEAD-Ratchet engine (<code>ratchet/</code> package)</li>
-<li>[X] SSU2 Socket Framework</li>
+<li>[ ] Handshake</li>
+<li>[ ] Session tracking</li>
+<li>[ ] Automatic session creation</li>
+<li>[ ] Peer Tests</li>
+<li>[ ] Introducers</li>
 </ul></li>
 </ul></li>
 <li>Tunnels
 
 <ul>
-<li>[X] Message structure parsing (delivery instructions)</li>
-<li>[X] Fragment handling and reassembly</li>
-<li>[X] Build Request/Response record interfaces</li>
-<li>[X] Tunnel building and management</li>
-<li>[X] Tunnel cryptography (layered encryption)</li>
-<li>[X] Gateway and endpoint implementation</li>
-<li>[X] Participant functionality</li>
+<li>[ ] Building</li>
+<li>[ ] Build Message Crypto (ElGamal)</li>
+<li>[ ] Build Message Crypto (ECIES)</li>
+<li>[ ] Participating</li>
+<li>[ ] Tunnel Message Crypto</li>
+<li>[ ] Tunnel Message Fragmentation/Reassembly</li>
 </ul></li>
-<li><a href="https://github.com/go-i2p/common" target="_blank">Common Data Structures (see also: https://github.com/go-i2p/common)</a>
+<li><a href="https://github.com/go-i2p/common" target="_blank">Common Data Structures(see also: https://github.com/go-i2p/common</a>
 
 <ul>
 <li>[X] Keys and Cert</li>
@@ -254,24 +202,13 @@ Transport and tunnel triage guidance is documented in <a href="docs/transport-ob
 
 <p>Logging can be enabled and configured using the <code>DEBUG_I2P</code> environment variable. By default, logging is disabled.</p>
 
-<blockquote>
-<p><strong>Note:</strong> Logging is configured via environment variables (not config.yaml or command-line flags) because it is managed by an external logger package and needs to be set before the application starts.</p>
-</blockquote>
-
-<p>There are four available log levels:</p>
+<p>There are three available log levels:</p>
 
 <ul>
-<li>Debug (very high volume — hot-path / crypto detail; local troubleshooting only)</li>
+<li>Debug</li>
 </ul>
 
 <pre><code class="language-shell">export DEBUG_I2P=debug
-</code></pre>
-
-<ul>
-<li>Info (lifecycle and operational milestones; recommended default for <code>./run.sh</code> and day-to-day runs)</li>
-</ul>
-
-<pre><code class="language-shell">export DEBUG_I2P=info
 </code></pre>
 
 <ul>
@@ -288,7 +225,7 @@ Transport and tunnel triage guidance is documented in <a href="docs/transport-ob
 <pre><code class="language-shell">export DEBUG_I2P=error
 </code></pre>
 
-<p>If <code>DEBUG_I2P</code> is set to an unrecognized value, go-i2p falls back to <strong>info</strong>.</p>
+<p>If DEBUG_I2P is set to an unrecognized variable, it will fall back to &ldquo;debug&rdquo;.</p>
 
 <h2 id="fast-fail-mode">Fast-Fail mode</h2>
 
@@ -299,47 +236,6 @@ It is unsafe for production use, and intended only for debugging and testing pur
 </code></pre>
 
 <p>If <code>WARNFAIL_I2P</code> is set and <code>DEBUG_I2P</code> is unset, <code>DEBUG_I2P</code> will be set to <code>debug</code>.</p>
-
-<h2 id="i2cp-server">I2CP Server</h2>
-
-<p>The I2CP (I2P Client Protocol) server allows client applications to communicate with the I2P router. It is enabled by default and listens on <code>localhost:7654</code>.</p>
-
-<h3 id="configuration">Configuration</h3>
-
-<p>You can configure the I2CP server using command-line flags:</p>
-
-<pre><code class="language-shell"># Disable I2CP server
-go-i2p --i2cp.enabled=false
-
-# Change listen address
-go-i2p --i2cp.address=0.0.0.0:7654
-
-# Adjust maximum sessions (default is 100)
-go-i2p --i2cp.max-sessions=200
-
-# Valid range for i2cp.max-sessions is 1-320
-
-# Use Unix domain socket instead of TCP
-go-i2p --i2cp.network=unix --i2cp.address=/tmp/i2cp.sock
-</code></pre>
-
-<h3 id="features">Features</h3>
-
-<ul>
-<li><strong>Session Management</strong>: Create, reconfigure, and destroy client sessions</li>
-<li><strong>Message Protocol</strong>: Full I2CP v0.9.67 protocol implementation</li>
-<li><strong>Multi-client Support</strong>: Handle multiple concurrent client sessions (default: 100)</li>
-<li><strong>Thread-safe</strong>: Concurrent session access with proper synchronization</li>
-</ul>
-
-<blockquote>
-<p><strong>Note:</strong> <code>messageReliability=Guaranteed</code> is not yet implemented. Sessions
-requesting guaranteed delivery fall back to <code>BestEffort</code> silently. Applications
-requiring acknowledgment must implement their own delivery-confirmation layer
-(e.g., via the go-streaming library).</p>
-</blockquote>
-
-<p>For more details, see <code>lib/i2cp/README.md</code>.</p>
 
 <h2 id="contributing">Contributing</h2>
 
@@ -368,7 +264,7 @@ requiring acknowledgment must implement their own delivery-confirmation layer
                 eyedeekay
               </div>
               <div class="contributor-commits">
-                2065 commits
+                293 commits
               </div>
             </div>
           </div>
@@ -406,21 +302,6 @@ requiring acknowledgment must implement their own delivery-confirmation layer
           <div class="contributor-item">
             <!-- Use first letter as avatar if no image available -->
             <div class="contributor-avatar">
-              N
-            </div>
-            <div class="contributor-info">
-              <div class="contributor-name">
-                Nicholas Lopez
-              </div>
-              <div class="contributor-commits">
-                42 commits
-              </div>
-            </div>
-          </div>
-          
-          <div class="contributor-item">
-            <!-- Use first letter as avatar if no image available -->
-            <div class="contributor-avatar">
               J
             </div>
             <div class="contributor-info">
@@ -433,6 +314,21 @@ requiring acknowledgment must implement their own delivery-confirmation layer
             </div>
           </div>
           
+          <div class="contributor-item">
+            <!-- Use first letter as avatar if no image available -->
+            <div class="contributor-avatar">
+              H
+            </div>
+            <div class="contributor-info">
+              <div class="contributor-name">
+                Hayden Parker
+              </div>
+              <div class="contributor-commits">
+                28 commits
+              </div>
+            </div>
+          </div>
+          
         </div>
         <a href="https://github.com/go-i2p/go-i2p/graphs/contributors" target="_blank">View all contributors on GitHub →</a>
       </section>
@@ -440,7 +336,7 @@ requiring acknowledgment must implement their own delivery-confirmation layer
     </main>
     
     <footer class="page-footer">
-      <p>Generated on 2026-09-08 19:33:27 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
+      <p>Generated on 2026-09-08 19:35:31 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
     </footer>
   </div>
 </body>
