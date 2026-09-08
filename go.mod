@@ -8,11 +8,11 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/go-i2p/common v0.1.60000-0.20260701134558-e5f5cf65a7f5
 	github.com/go-i2p/crypto v0.1.60000-0.20260701135847-3ade996b68a0
-	github.com/go-i2p/go-nat-listener v0.1.66
-	github.com/go-i2p/go-noise v0.1.68-0.20260908212414-ea1af9e69a42
+	github.com/go-i2p/go-nat-listener v0.1.70
+	github.com/go-i2p/go-noise v0.1.60000-0.20260701134708-a15c74fe448e
 	github.com/go-i2p/go-unzip v0.0.0-20260908193701-6ecb33740b07
-	github.com/go-i2p/i2p-control v0.0.0-20260908193413-063a370d5b1a
-	github.com/go-i2p/i2ptui v0.0.0-20260908193845-7949658379bf
+	github.com/go-i2p/i2p-control v0.1.70
+	github.com/go-i2p/i2ptui v0.1.70
 	github.com/go-i2p/logger v0.1.60000-0.20260701134448-2648c3b0e040
 	github.com/go-i2p/noise v1.1.1-0.20260612013029-6d1ef3427561
 	github.com/go-i2p/su3 v0.1.60000-0.20260701134531-62efdb4e3f71
@@ -43,7 +43,7 @@ require (
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/go-i2p/elgamal v0.1.60000-0.20260701131626-b5c8141026fc // indirect
 	github.com/go-i2p/go-i2pcontrol v0.1.9-0.20260607233455-950087a3858f // indirect
-	github.com/go-i2p/path v0.1.599 // indirect
+	github.com/go-i2p/path v0.1.60000-0.20260701134624-ee3ce0cb2483 // indirect
 	github.com/go-i2p/pool v0.1.60000-0.20260701134610-0724f29e205d // indirect
 	github.com/go-i2p/red25519 v0.0.0-20260908204607-9444de34c638 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect

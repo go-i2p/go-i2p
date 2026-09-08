@@ -190,9 +190,9 @@ func (pmm *PortMapperManager) attemptMapping() bool {
 	}
 	pmm.mu.Unlock()
 
-        pmm.mu.Lock()
-        extIP := pmm.extIP
-        pmm.mu.Unlock()
+	pmm.mu.Lock()
+	extIP := pmm.extIP
+	pmm.mu.Unlock()
 
 	log.WithFields(map[string]interface{}{
 		"external_ip":   extIP,
