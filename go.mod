@@ -45,7 +45,7 @@ require (
 	github.com/go-i2p/go-i2pcontrol v0.1.9-0.20260607233455-950087a3858f // indirect
 	github.com/go-i2p/path v0.1.60000-0.20260701134624-ee3ce0cb2483 // indirect
 	github.com/go-i2p/pool v0.1.60000-0.20260701134610-0724f29e205d // indirect
-	github.com/go-i2p/red25519 v0.0.0-20260908194341-f23f94ae4c5f // indirect
+	github.com/go-i2p/red25519 v0.0.0-20260908204607-9444de34c638 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/huin/goupnp v1.3.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
