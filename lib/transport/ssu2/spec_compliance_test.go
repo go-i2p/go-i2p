@@ -129,10 +129,13 @@ func TestSpec_ShortHeaderMessageTypes(t *testing.T) {
 		p := ssu2noise.NewSSU2Packet(mt, 0)
 		p.Header = make([]byte, ssu2noise.ShortHeaderSize)
 		p.MAC = make([]byte, ssu2noise.MACSize) // production code fills with Poly1305
-		serialised, err := p.Serialize()
-		require.NoError(t, err, "message type %d with short header should serialize", mt)
-		assert.GreaterOrEqual(t, len(serialised), ssu2noise.ShortHeaderSize,
-			"serialised packet for message type %d must be >= ShortHeaderSize", mt)
+		_, err := p.Serialize()
+		// A packet with only a 16-byte header + MAC is below the 40-byte
+		// minimum enforced by SSU2Packet.validate(); serialization must
+		// fail with "packet too small".
+		require.Error(t, err, "message type %d with short header should fail validation (packet too small)", mt)
+		assert.Contains(t, err.Error(), "packet too small",
+			"message type %d should fail with 'packet too small'", mt)
 	}
 }
 
