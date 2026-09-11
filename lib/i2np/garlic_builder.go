@@ -336,6 +336,11 @@ func serializeGarlic(garlic *Garlic) ([]byte, error) {
 	// Write message ID + expiration
 	buf = appendIDAndExpiration(buf, uint32(garlic.MessageID), garlic.Expiration)
 
+	// F092 fix: prepend 4-byte big-endian length prefix (spec-compliant wire format)
+	lengthPrefix := make([]byte, 4)
+	binary.BigEndian.PutUint32(lengthPrefix, uint32(len(buf)))
+	buf = append(lengthPrefix, buf...)
+
 	return buf, nil
 }
 
