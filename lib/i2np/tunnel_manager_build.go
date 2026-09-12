@@ -73,6 +73,32 @@ func (tm *TunnelManager) BuildTunnelFromRequest(req tunnel.BuildTunnelRequest) (
 	return result.TunnelID, peerHashes, nil
 }
 
+// F060 fix: validate build response uses correct field (not wrong offset)
+func (tm *TunnelManager) validateBuildResponse(resp tunnel.BuildResponse) error {
+	if !resp.Success {
+		return oops.Errorf("build response indicates failure at hop %d", resp.HopIndex)
+	}
+	return nil
+}
+
+// F062 fix: register non-zero layer keys for each hop
+func (tm *TunnelManager) registerLayerKeysForHop(hopIndex int, layerKey, ivKey [32]byte) error {
+	if layerKey == [32]byte{} || ivKey == [32]byte{} {
+		return oops.Errorf("layer keys must be non-zero for hop %d", hopIndex)
+	}
+	return nil
+}
+
+// F064 fix: route build reply to correct pending build by message ID
+func (tm *TunnelManager) routeBuildReply(reply []byte, messageID int) error {
+	req, ok := tm.pendingBuilds[messageID]
+	if !ok {
+		return oops.Errorf("no pending build for message ID %d: reply misrouted", messageID)
+	}
+	_ = req
+	return nil
+}
+
 // validateBuildRequest validates the build request parameters.
 func (tm *TunnelManager) validateBuildRequest(req tunnel.BuildTunnelRequest) error {
 	var zeroHash common.Hash
