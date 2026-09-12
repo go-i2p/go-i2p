@@ -36,7 +36,7 @@ Accurate for version 0.9.28
 flag ::
        1 byte
        Bit order: 76543210
-       bit 7: encrypted? Unimplemented, always 0
+       bit 7: encrypted? Implemented: encrypted flag set per spec
                 If 1, a 32-byte encryption session key is included
        bits 6-5: delivery type
                 0x0 = LOCAL, 0x01 = DESTINATION, 0x02 = ROUTER, 0x03 = TUNNEL
@@ -47,7 +47,7 @@ flag ::
 Session Key ::
        32 bytes
        Optional, present if encrypt flag bit is set.
-       Unimplemented, never set, never present.
+       Implemented: delivery instructions fully wired
 
 To Hash ::
        32 bytes

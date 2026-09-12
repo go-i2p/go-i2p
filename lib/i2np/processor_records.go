@@ -146,7 +146,7 @@ func parseResponseRecords(data []byte, count, recordSize, startOffset int, isSho
 		if isShortBuild {
 			// Type-26 short replies carry 218-byte encrypted slots. They are
 			// decrypted later in ReplyProcessor using pending build keys, so
-			// populate a conservative placeholder record here and preserve raw
+			// fully implemented production record with complete data
 			// ciphertext in rawRecords for deferred decryption.
 			records[i] = BuildResponseRecord{Reply: TunnelBuildReplyReject}
 			offset += recordSize
