@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Template - go-i2p/go-i2p</title>
+  <title>Tunnel Build F060 F064 Fix - go-i2p/go-i2p</title>
   <link rel="stylesheet" href="../style.css">
 </head>
 <body>
@@ -38,13 +38,13 @@
         
           <li><a href="../docs/RELEASE_NOTES.html" >RELEASE NOTES</a></li>
         
-          <li><a href="../docs/template.html" class="active">Template</a></li>
+          <li><a href="../docs/template.html" >Template</a></li>
         
           <li><a href="../docs/docs/transport-flake-baseline.html" >Transport and Tunnel Flake Baseline</a></li>
         
           <li><a href="../docs/docs/transport-observability.html" >Transport and Tunnel Observability</a></li>
         
-          <li><a href="../docs/lib/i2np/tunnel_build_f060_f064_fix.html" >Tunnel Build F060 F064 Fix</a></li>
+          <li><a href="../docs/lib/i2np/tunnel_build_f060_f064_fix.html" class="active">Tunnel Build F060 F064 Fix</a></li>
         
       
     </ul>
@@ -56,26 +56,28 @@
   
   <div class="main-content">
     <header class="page-header">
-      <h1>Template - go-i2p/go-i2p</h1>
+      <h1>Tunnel Build F060 F064 Fix - go-i2p/go-i2p</h1>
     </header>
     
     <main>
       <div class="doc-content">
-        <p>{{ .EmitHeader }}</p>
+        <p>package i2np</p>
 
-<p><img src="../images/{{ .Name }}.svg" alt="{{ .Name }}.svg" /></p>
-
-<p>{{ .EmitSynopsis }}</p>
-
-<p>{{ .EmitUsage }}</p>
-
-<p>{{ if .IsCommand  }} &hellip; {{ end }}</p>
-
-<p>{{ .Name }}</p>
-
-<p>{{ .ImportPath }}</p>
-
-<p><a href="template.html" target="_blank">go-i2p template file</a></p>
+<p>// F060-F064: Tunnel build reply structural fixes.
+// Per audit (AUDIT.md Phase 5):
+// - F060: Build record acceptance must test the correct response field (not wrong offset)
+// - F061: Build reply message type and identifier must match spec (not deprecated aliases)
+// - F062: Layer keys must be registered (not zeroed) for each hop
+// - F063: Creator must derive keys for its own hops (not skip derivation)
+// - F064: Build reply must be routed correctly (not misrouted to wrong tunnel)
+//
+// These require structural rewrites of tunnel_manager_build.go and
+// tunnel_build_reply.go. The partial fixes (W-1, BUG-5, CRITICAL-1/2/3)
+// address routing/registration but full spec-compliance requires:
+// 1. Correct BuildResponseRecord parsing (F060)
+// 2. Correct reply message type mapping (F061)
+// 3. Non-zero layer key derivation per hop (F062, F063)
+// 4. Correct reply routing to pending build (F064)</p>
 
       </div>
     </main>
