@@ -275,7 +275,7 @@ func (gb *GarlicBuilder) BuildAndSerialize() ([]byte, error) {
 
 // serializeGarlic converts a Garlic structure to its wire format (unencrypted).
 //
-// Wire format:
+// Spec-compliant wire format (per ecies.rst "Garlic Clove block"):
 // +----+----+----+----+----+----+----+----+
 // | num|  clove 1                         |
 // +----+                                  +
@@ -295,10 +295,13 @@ func (gb *GarlicBuilder) BuildAndSerialize() ([]byte, error) {
 // +----+----+----+----+----+----+----+
 //
 // num: 1 byte (number of cloves)
-// clove: variable length (delivery instructions + I2NP message + metadata)
+// clove: variable length (delivery instructions + 9-byte short header + body)
 // Certificate: 3 bytes (always NULL in current implementation)
 // Message_ID: 4 bytes
 // Expiration: 8 bytes (milliseconds since epoch)
+//
+// Note: The 4-byte length prefix is added by the caller (WrapInGarlicMessage
+// or the I2NP Garlic message layer) when framing the encrypted payload.
 func serializeGarlic(garlic *Garlic) ([]byte, error) {
 	if garlic == nil {
 		log.WithField("at", "serializeGarlic").Error("Attempted to serialize nil garlic")
@@ -317,7 +320,7 @@ func serializeGarlic(garlic *Garlic) ([]byte, error) {
 	// Write clove count (1 byte)
 	buf = append(buf, byte(garlic.Count))
 
-	// Serialize each clove
+	// Serialize each clove (now uses 9-byte short header format)
 	for i, clove := range garlic.Cloves {
 		cloveBytes, err := serializeGarlicClove(&clove)
 		if err != nil {
@@ -353,25 +356,28 @@ func appendIDAndExpiration(buf []byte, id uint32, expiration time.Time) []byte {
 
 // serializeGarlicClove converts a GarlicClove to its wire format.
 //
-// Wire format:
+// Spec-compliant wire format (per ecies.rst "Garlic Clove block"):
 // +----+----+----+----+----+----+----+----+
 // | Delivery Instructions                 |
 // ~   (variable: 1, 33, or 37 bytes)     ~
 // |                                       |
 // +----+----+----+----+----+----+----+----+
-// | I2NP Message                          |
+// | Type(1) | MsgID(4) | ShortExp(4)     |
+// +----+----+----+----+----+----+----+----+
+// | Body (payload from MarshalBinary)     |
 // ~   (variable length)                  ~
 // |                                       |
 // +----+----+----+----+----+----+----+----+
-// |    Clove ID       |     Expiration
-// +----+----+----+----+----+----+----+----+
 //
-//	| Certificate  |
-//
-// +----+----+----+----+----+----+----+
+// The 9-byte short I2NP header replaces the legacy 16-byte standard
+// header + clove ID + expiration + certificate trailer.
 func serializeGarlicClove(clove *GarlicClove) ([]byte, error) {
 	if clove == nil {
 		return nil, oops.Errorf("cannot serialize nil garlic clove")
+	}
+
+	if clove.Message == nil {
+		return nil, oops.Errorf("garlic clove contains nil I2NP message")
 	}
 
 	buf := make([]byte, 0, 128)
@@ -383,23 +389,24 @@ func serializeGarlicClove(clove *GarlicClove) ([]byte, error) {
 	}
 	buf = append(buf, instructionsBytes...)
 
-	// Serialize I2NP message
-	if clove.Message == nil {
-		return nil, oops.Errorf("garlic clove contains nil I2NP message")
-	}
-	messageBytes, err := clove.Message.MarshalBinary()
+	// Write the 9-byte short I2NP header: type(1) + msgID(4) + shortExp(4)
+	header := make([]byte, 9)
+	header[0] = byte(clove.Message.Type())
+	binary.BigEndian.PutUint32(header[1:5], uint32(clove.Message.MessageID()))
+	binary.BigEndian.PutUint32(header[5:9], uint32(clove.Expiration.Unix()))
+	buf = append(buf, header...)
+
+	// Write the body (payload without the 16-byte standard header)
+	fullBytes, err := clove.Message.MarshalBinary()
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to serialize I2NP message")
 	}
-	buf = append(buf, messageBytes...)
-
-	// Write clove ID + expiration
-	buf = appendIDAndExpiration(buf, uint32(clove.CloveID), clove.Expiration)
-
-	// Write certificate (3 bytes - always NULL)
-	// I2P spec: certificate = type(1 byte) + length(2 bytes big-endian)
-	// NULL cert: type=0x00, length=0x0000 → 3 bytes total
-	buf = append(buf, 0x00, 0x00, 0x00)
+	// Strip the 16-byte standard header to get the body
+	if len(fullBytes) > StandardI2NPHeaderSize {
+		buf = append(buf, fullBytes[StandardI2NPHeaderSize:]...)
+	} else {
+		buf = append(buf, fullBytes...)
+	}
 
 	return buf, nil
 }
@@ -717,6 +724,9 @@ func parseGarlicMetadata(data []byte, offset int) (certificate.Certificate, int,
 
 // deserializeGarlicClove parses a single garlic clove from bytes.
 // Returns the clove, number of bytes consumed, and any error.
+//
+// This handles both the legacy format (full I2NP header + clove metadata)
+// and the spec-compliant format (9-byte short I2NP header, no clove ID/expiration/cert trailer).
 func deserializeGarlicClove(data []byte, nestingDepth int) (*GarlicClove, int, error) {
 	if len(data) < 1 {
 		return nil, 0, oops.Errorf("clove data too short")
@@ -731,7 +741,31 @@ func deserializeGarlicClove(data []byte, nestingDepth int) (*GarlicClove, int, e
 	}
 	offset += bytesRead
 
-	// Parse I2NP message from the embedded bytes
+	// Determine format: if remaining data has at least 9 bytes and
+	// the byte at offset looks like a valid I2NP message type (1-26),
+	// try the spec-compliant short header format first.
+	// Otherwise, fall back to the legacy format.
+	if len(data) >= offset+9 {
+		// Try spec-compliant format: 9-byte short header
+		msgType := int(data[offset])
+		if msgType >= 1 && msgType <= 26 {
+			// Parse the 9-byte short I2NP header
+			i2npMsg, msgLen, err := parseShortI2NPHeader(data, offset)
+			if err == nil {
+				offset += msgLen
+				// Spec-compliant format: no clove ID, expiration, or cert trailer
+				return &GarlicClove{
+					DeliveryInstructions: *di,
+					Message:              i2npMsg,
+					CloveID:              i2npMsg.MessageID(),
+					Expiration:           i2npMsg.Expiration(),
+					Certificate:          *certificate.NewCertificate(),
+				}, offset, nil
+			}
+		}
+	}
+
+	// Legacy format: full I2NP header + clove metadata
 	i2npMsg, messageLength, err := parseEmbeddedI2NPMessage(data, offset)
 	if err != nil {
 		return nil, 0, oops.Wrapf(err, "failed to parse embedded I2NP message")

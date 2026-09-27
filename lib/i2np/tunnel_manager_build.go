@@ -73,29 +73,52 @@ func (tm *TunnelManager) BuildTunnelFromRequest(req tunnel.BuildTunnelRequest) (
 	return result.TunnelID, peerHashes, nil
 }
 
-// F060 fix: validate build response uses correct field (not wrong offset)
+// validateBuildResponse verifies that the build response carries a real success
+// payload and that the hop index is sane before the reply is treated as valid.
+// The response record itself is validated earlier by the shared BuildResponseRecord
+// validators; this gate closes the remaining router-side gap where a success
+// response might be accepted without any actual payload from the remote hop.
 func (tm *TunnelManager) validateBuildResponse(resp tunnel.BuildResponse) error {
+	if resp.HopIndex < 0 {
+		return oops.Errorf("build response has invalid hop index %d", resp.HopIndex)
+	}
 	if !resp.Success {
 		return oops.Errorf("build response indicates failure at hop %d", resp.HopIndex)
 	}
-	return nil
-}
-
-// F062 fix: register non-zero layer keys for each hop
-func (tm *TunnelManager) registerLayerKeysForHop(hopIndex int, layerKey, ivKey [32]byte) error {
-	if layerKey == [32]byte{} || ivKey == [32]byte{} {
-		return oops.Errorf("layer keys must be non-zero for hop %d", hopIndex)
+	if len(resp.Reply) == 0 {
+		return oops.Errorf("build response success at hop %d is missing payload data", resp.HopIndex)
 	}
 	return nil
 }
 
-// F064 fix: route build reply to correct pending build by message ID
+// registerLayerKeysForHop enforces the phase-5 requirement that each hop's
+// intermediate layer keys must be populated before the tunnel participant is
+// installed. Zero keys are never valid on the wire and must be rejected.
+func (tm *TunnelManager) registerLayerKeysForHop(hopIndex int, layerKey, ivKey [32]byte) error {
+	if layerKey == [32]byte{} {
+		return oops.Errorf("layer key must be non-zero for hop %d", hopIndex)
+	}
+	if ivKey == [32]byte{} {
+		return oops.Errorf("IV key must be non-zero for hop %d", hopIndex)
+	}
+	return nil
+}
+
+// routeBuildReply confirms that an inbound build reply belongs to a tracked
+// pending tunnel build. This prevents the creator from misrouting a valid reply
+// back into the transit path as if it were a fresh build request.
 func (tm *TunnelManager) routeBuildReply(reply []byte, messageID int) error {
+	if len(reply) == 0 {
+		return oops.Errorf("build reply for message ID %d is empty: reply payload missing", messageID)
+	}
+
+	tm.buildMutex.RLock()
+	defer tm.buildMutex.RUnlock()
+
 	req, ok := tm.pendingBuilds[messageID]
-	if !ok {
+	if !ok || req == nil {
 		return oops.Errorf("no pending build for message ID %d: reply misrouted", messageID)
 	}
-	_ = req
 	return nil
 }
 
