@@ -851,6 +851,30 @@ func readI2NPMessageLength(data []byte, offset int) (int, error) {
 	return messageLength, nil
 }
 
+// parseShortI2NPHeader parses the 9-byte short I2NP message format used in garlic cloves.
+// Short format structure:
+//   - type (1 byte) at offset 0
+//   - msg_id (4 bytes) at offset 1-4, big-endian
+//   - expiration (4 bytes) at offset 5-8, big-endian (milliseconds since epoch)
+// This format omits the standard I2NP message size field and is used for compatibility
+// with garlic clove embedding.
+func parseShortI2NPHeader(data []byte, offset int) (Message, int, error) {
+	if len(data) < offset+9 {
+		return nil, 0, oops.Errorf("insufficient data for short I2NP header (need 9 bytes, have %d)", len(data)-offset)
+	}
+
+	msgType := int(data[offset])
+	msgID := readI2NPMessageID(data[offset+1:])
+	expirationMs := readI2NPExpiration(data[offset+5:])
+
+	// Create a new I2NP message with the extracted header fields
+	msg := NewBaseI2NPMessage(msgType)
+	msg.SetMessageID(msgID)
+	msg.SetExpiration(time.UnixMilli(int64(expirationMs)))
+
+	return msg, 9, nil
+}
+
 // parseCloveMetadata extracts clove ID, expiration, and certificate from clove trailer.
 func parseCloveMetadata(data []byte, offset int) (int, time.Time, certificate.Certificate, error) {
 	// Ensure enough data for clove ID + expiration + certificate

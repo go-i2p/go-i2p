@@ -1,6 +1,7 @@
 package ntcp2
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -919,6 +920,17 @@ func (t *NTCP2Transport) extractAndStorePeerRouterInfo(ntcp2Conn *ntcp2.Conn, co
 		_ = ntcp2Conn.Close()
 		// L-1/T-1 FIX: No slot was reserved before handshake, so no unreserve needed.
 		return oops.Errorf("RouterInfo parse failed: %w", parseErr)
+	}
+
+	// F107 FIX: Verify that the Noise-authenticated static key matches the RouterInfo's "s" option.
+	// This prevents attackers from presenting a third party's RouterInfo and impersonating them.
+	// The responder MUST compare the authenticated static key against the published NTCP2 "s" option.
+	if err := t.verifyRouterInfoStaticKey(ntcp2Conn, peerRI, conn); err != nil {
+		t.recordNoiseHandshakeFailure()
+		t.logger.WithError(err).WithField("remote_addr", conn.RemoteAddr().String()).
+			Warn("Inbound NTCP2: RouterInfo static key mismatch; terminating handshake")
+		_ = ntcp2Conn.Close()
+		return err
 	}
 
 	t.updateRemoteAddressWithIdentHash(ntcp2Conn, peerRI)
@@ -2403,6 +2415,32 @@ func (t *NTCP2Transport) GetTotalBandwidth() (totalBytesSent, totalBytesReceived
 		"total_bytes_received": totalBytesReceived,
 	}).Debug("Aggregated bandwidth across all sessions")
 	return totalBytesSent, totalBytesReceived
+}
+
+// verifyRouterInfoStaticKey implements F107 security check:
+// Verify that the Noise-authenticated static key matches the RouterInfo's published "s" option.
+// This prevents attackers from presenting a third party's RouterInfo and impersonating them.
+// Per I2P spec: the responder MUST compare the authenticated static key (from Noise handshake)
+// against the published NTCP2 "s" option before accepting the RouterInfo.
+func (t *NTCP2Transport) verifyRouterInfoStaticKey(ntcp2Conn *ntcp2.Conn, peerRI router_info.RouterInfo, conn net.Conn) error {
+	// Extract the Noise-authenticated static key (32 bytes) from the completed handshake
+	authenticatedKey := ntcp2Conn.PeerStaticKey()
+	if len(authenticatedKey) != 32 {
+		return oops.Errorf("F107: peer static key has unexpected length %d (want 32)", len(authenticatedKey))
+	}
+
+	// Extract the published "s" option from the RouterInfo
+	publishedKey, err := ExtractPeerStaticKey(peerRI)
+	if err != nil {
+		return oops.Wrapf(err, "F107: failed to extract static key from RouterInfo")
+	}
+
+	// Compare the two keys byte-for-byte
+	if !bytes.Equal(authenticatedKey, publishedKey) {
+		return oops.Errorf("F107: Noise-authenticated static key does not match RouterInfo 's' option; probable identity attack by %s", conn.RemoteAddr().String())
+	}
+
+	return nil
 }
 
 // Close closes the transport cleanly.
