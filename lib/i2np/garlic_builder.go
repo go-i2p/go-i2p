@@ -856,6 +856,7 @@ func readI2NPMessageLength(data []byte, offset int) (int, error) {
 //   - type (1 byte) at offset 0
 //   - msg_id (4 bytes) at offset 1-4, big-endian
 //   - expiration (4 bytes) at offset 5-8, big-endian (milliseconds since epoch)
+//
 // This format omits the standard I2NP message size field and is used for compatibility
 // with garlic clove embedding.
 func parseShortI2NPHeader(data []byte, offset int) (Message, int, error) {
@@ -864,8 +865,8 @@ func parseShortI2NPHeader(data []byte, offset int) (Message, int, error) {
 	}
 
 	msgType := int(data[offset])
-	msgID := readI2NPMessageID(data[offset+1:])
-	expirationMs := readI2NPExpiration(data[offset+5:])
+	msgID := common.Integer(data[offset+1 : offset+5]).Int()
+	expirationMs := common.Integer(data[offset+5 : offset+9]).Int()
 
 	// Create a new I2NP message with the extracted header fields
 	msg := NewBaseI2NPMessage(msgType)
