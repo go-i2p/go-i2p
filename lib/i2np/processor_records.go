@@ -355,14 +355,17 @@ func (p *MessageProcessor) logParsedBuildRequest(messageID, recordCount int, isS
 	}).Debug("parsed tunnel build request")
 }
 
-// processAllBuildRecords processes each build record to find ones destined for us.
-// Only the record matching our router identity (OurIdent) is processed locally;
-// the others belong to different hops and are skipped.
+// processAllBuildRecords processes each build record destined for us.
+// F060 FIX: All records in this list have already been validated and filtered by
+// tryParseRecord(): only records that were successfully decrypted (which proves they
+// were meant for us) are included. The short build record format does not carry an
+// OurIdent field at all (it is zero), so the previous check `record.OurIdent !=
+// p.ourRouterHash` always failed for short records, preventing them from ever being
+// processed. The decryption itself is sufficient proof of correctness.
 //
-// IMPORTANT: If our router hash has not been set (is zero), NO records are processed.
-// This prevents the router from incorrectly participating in all hops of a tunnel
-// when its identity is unknown. Callers must call SetOurRouterHash before processing
-// any tunnel build messages.
+// IMPORTANT: If our router hash has not been set (is zero), NO records are added
+// to the list by tryParseRecord, so this function will be called with an empty list.
+// Callers must call SetOurRouterHash before processing any tunnel build messages.
 func (p *MessageProcessor) processAllBuildRecords(messageID int, records []BuildRequestRecord, rawData []byte, isShortBuild bool) error {
 	var zeroHash common.Hash
 	if p.ourRouterHash == zeroHash {
@@ -374,15 +377,8 @@ func (p *MessageProcessor) processAllBuildRecords(messageID int, records []Build
 	}
 
 	for i, record := range records {
-		if record.OurIdent != p.ourRouterHash {
-			log.WithFields(logger.Fields{
-				"at":           "processAllBuildRecords",
-				"message_id":   messageID,
-				"record_index": i,
-				"record_ident": logutil.HashPrefix(record.OurIdent),
-			}).Debug("Skipping build record not destined for us")
-			continue
-		}
+		// F060 FIX: Removed the OurIdent check. The record has already been accepted
+		// by tryParseRecord's decryption (short) or forwarding logic (other).
 		p.processSingleBuildRecord(messageID, i, record, rawData, isShortBuild)
 	}
 	return nil
