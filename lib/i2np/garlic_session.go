@@ -369,10 +369,31 @@ func EncryptGarlicWithBuilder(
 }
 
 // WrapInGarlicMessage creates a Garlic I2NP message from encrypted garlic data.
-// This wraps the encrypted garlic in the proper I2NP message structure.
+// This wraps the encrypted garlic in the proper I2NP message structure with
+// the spec-required 4-byte length prefix.
+//
+// Spec-compliant garlic message format (per i2np.rst "Garlic"):
+//   Encrypted ::
+//     +----+----+----+----+----+----+----+----+
+//     |      length       | data              |
+//     +----+----+----+----+                   +
+//     |                                       |
+//     ~                                       ~
+//     |                                       |
+//     +----+----+----+----+----+----+----+----+
+//
+//   length :: 4 byte Integer (number of bytes that follow)
+//   data   :: $length bytes of encrypted garlic
+//
+// F459/F461 fix: Add the mandatory 4-byte length prefix before the encrypted payload.
 func WrapInGarlicMessage(encryptedGarlic []byte) (*BaseI2NPMessage, error) {
 	if len(encryptedGarlic) == 0 {
 		return nil, oops.Errorf("cannot wrap empty garlic data")
+	}
+
+	// Validate payload size against the 4-byte length field limit
+	if len(encryptedGarlic) > 65535 {
+		return nil, oops.Errorf("encrypted garlic exceeds maximum size: %d > 65535", len(encryptedGarlic))
 	}
 
 	msgIDBytes := make([]byte, 4)
@@ -384,7 +405,11 @@ func WrapInGarlicMessage(encryptedGarlic []byte) (*BaseI2NPMessage, error) {
 	msg := NewBaseI2NPMessage(I2NPMessageTypeGarlic)
 	msg.SetMessageID(messageID)
 	msg.SetExpiration(time.Now().Add(10 * time.Second))
-	msg.data = encryptedGarlic
+
+	// F459/F461: Prepend the 4-byte length prefix (spec-required)
+	lengthPrefix := make([]byte, 4)
+	binary.BigEndian.PutUint32(lengthPrefix, uint32(len(encryptedGarlic)))
+	msg.data = append(lengthPrefix, encryptedGarlic...)
 
 	return msg, nil
 }
