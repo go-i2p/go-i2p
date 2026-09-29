@@ -373,17 +373,18 @@ func EncryptGarlicWithBuilder(
 // the spec-required 4-byte length prefix.
 //
 // Spec-compliant garlic message format (per i2np.rst "Garlic"):
-//   Encrypted ::
-//     +----+----+----+----+----+----+----+----+
-//     |      length       | data              |
-//     +----+----+----+----+                   +
-//     |                                       |
-//     ~                                       ~
-//     |                                       |
-//     +----+----+----+----+----+----+----+----+
 //
-//   length :: 4 byte Integer (number of bytes that follow)
-//   data   :: $length bytes of encrypted garlic
+//	Encrypted ::
+//	  +----+----+----+----+----+----+----+----+
+//	  |      length       | data              |
+//	  +----+----+----+----+                   +
+//	  |                                       |
+//	  ~                                       ~
+//	  |                                       |
+//	  +----+----+----+----+----+----+----+----+
+//
+//	length :: 4 byte Integer (number of bytes that follow)
+//	data   :: $length bytes of encrypted garlic
 //
 // F459/F461 fix: Add the mandatory 4-byte length prefix before the encrypted payload.
 func WrapInGarlicMessage(encryptedGarlic []byte) (*BaseI2NPMessage, error) {

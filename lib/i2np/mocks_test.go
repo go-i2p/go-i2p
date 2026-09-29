@@ -121,6 +121,7 @@ type routerForwardCall struct {
 	messageID        int
 	encryptedRecords []byte
 	isShortBuild     bool
+	inputMessageType int // F061: track input message type for reply type verification
 }
 
 type tunnelForwardCall struct {
@@ -129,6 +130,7 @@ type tunnelForwardCall struct {
 	messageID        int
 	encryptedRecords []byte
 	isShortBuild     bool
+	inputMessageType int // F061: track input message type for reply type verification
 }
 
 // mockBuildReplyForwarder implements BuildReplyForwarder for testing
@@ -147,7 +149,7 @@ func newMockBuildReplyForwarder() *mockBuildReplyForwarder {
 	}
 }
 
-func (m *mockBuildReplyForwarder) ForwardBuildReplyToRouter(routerHash common.Hash, messageID int, encryptedRecords []byte, isShortBuild bool) error {
+func (m *mockBuildReplyForwarder) ForwardBuildReplyToRouter(routerHash common.Hash, messageID int, encryptedRecords []byte, isShortBuild bool, inputMessageType int) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.routerCalls = append(m.routerCalls, routerForwardCall{
@@ -155,11 +157,12 @@ func (m *mockBuildReplyForwarder) ForwardBuildReplyToRouter(routerHash common.Ha
 		messageID:        messageID,
 		encryptedRecords: encryptedRecords,
 		isShortBuild:     isShortBuild,
+		inputMessageType: inputMessageType,
 	})
 	return m.forwardToRouterErr
 }
 
-func (m *mockBuildReplyForwarder) ForwardBuildReplyThroughTunnel(gatewayHash common.Hash, tunnelID tunnel.TunnelID, messageID int, encryptedRecords []byte, isShortBuild bool) error {
+func (m *mockBuildReplyForwarder) ForwardBuildReplyThroughTunnel(gatewayHash common.Hash, tunnelID tunnel.TunnelID, messageID int, encryptedRecords []byte, isShortBuild bool, inputMessageType int) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.tunnelCalls = append(m.tunnelCalls, tunnelForwardCall{
@@ -168,6 +171,7 @@ func (m *mockBuildReplyForwarder) ForwardBuildReplyThroughTunnel(gatewayHash com
 		messageID:        messageID,
 		encryptedRecords: encryptedRecords,
 		isShortBuild:     isShortBuild,
+		inputMessageType: inputMessageType,
 	})
 	return m.forwardToTunnelErr
 }

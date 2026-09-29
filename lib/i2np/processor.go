@@ -90,7 +90,8 @@ type BuildReplyForwarder interface {
 	// - messageID: The I2NP message ID for the reply
 	// - encryptedRecords: The complete encrypted build reply records
 	// - isShortBuild: Whether this is a Short Tunnel Build Message (STBM) format
-	ForwardBuildReplyToRouter(routerHash common.Hash, messageID int, encryptedRecords []byte, isShortBuild bool) error
+	// - inputMessageType: The input message type (21=TunnelBuild, 23=VariableTunnelBuild, 25=ShortTunnelBuild) for F061 correct reply type mapping
+	ForwardBuildReplyToRouter(routerHash common.Hash, messageID int, encryptedRecords []byte, isShortBuild bool, inputMessageType int) error
 
 	// ForwardBuildReplyThroughTunnel forwards a build reply message through a reply tunnel.
 	// This is used when the build request specifies a reply tunnel for the response.
@@ -101,7 +102,8 @@ type BuildReplyForwarder interface {
 	// - messageID: The I2NP message ID for the reply
 	// - encryptedRecords: The complete encrypted build reply records
 	// - isShortBuild: Whether this is a Short Tunnel Build Message (STBM) format
-	ForwardBuildReplyThroughTunnel(gatewayHash common.Hash, tunnelID buildrecord.TunnelID, messageID int, encryptedRecords []byte, isShortBuild bool) error
+	// - inputMessageType: The input message type (21=TunnelBuild, 23=VariableTunnelBuild, 25=ShortTunnelBuild) for F061 correct reply type mapping
+	ForwardBuildReplyThroughTunnel(gatewayHash common.Hash, tunnelID buildrecord.TunnelID, messageID int, encryptedRecords []byte, isShortBuild bool, inputMessageType int) error
 }
 
 // TunnelGatewayHandler defines the interface for handling TunnelGateway messages.

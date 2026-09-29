@@ -266,17 +266,19 @@ func (p *MessageProcessor) parseBuildResponseRecords(data []byte, isShortBuild b
 
 // buildRequestProcessor centralizes the common extract → validate → parse → log → dispatch flow.
 type buildRequestProcessor struct {
-	processor *MessageProcessor
-	msg       Message
-	isShort   bool
-	parse     func([]byte) ([]BuildRequestRecord, error)
+	processor        *MessageProcessor
+	msg              Message
+	isShort          bool
+	inputMessageType int // F061: Track input type to send correct reply type
+	parse            func([]byte) ([]BuildRequestRecord, error)
 }
 
 func newBuildRequestProcessor(p *MessageProcessor, msg Message, isShortBuild bool) buildRequestProcessor {
 	return buildRequestProcessor{
-		processor: p,
-		msg:       msg,
-		isShort:   isShortBuild,
+		processor:        p,
+		msg:              msg,
+		isShort:          isShortBuild,
+		inputMessageType: msg.Type(),
 		parse: func(data []byte) ([]BuildRequestRecord, error) {
 			return p.parseTunnelBuildRecords(data, isShortBuild)
 		},
@@ -285,9 +287,10 @@ func newBuildRequestProcessor(p *MessageProcessor, msg Message, isShortBuild boo
 
 func newFixedBuildRequestProcessor(p *MessageProcessor, msg Message) buildRequestProcessor {
 	return buildRequestProcessor{
-		processor: p,
-		msg:       msg,
-		isShort:   false,
+		processor:        p,
+		msg:              msg,
+		isShort:          false,
+		inputMessageType: msg.Type(), // F061: Preserve type 21 to send type 22 reply, not 24
 		parse: func(data []byte) ([]BuildRequestRecord, error) {
 			records, err := p.parseFixedTunnelBuildRecords(data)
 			if err != nil {
@@ -314,7 +317,7 @@ func (b buildRequestProcessor) process() error {
 	}
 
 	b.processor.logParsedBuildRequest(b.msg.MessageID(), len(records), b.isShort)
-	return b.processor.processAllBuildRecords(b.msg.MessageID(), records, data, b.isShort)
+	return b.processor.processAllBuildRecords(b.msg.MessageID(), records, data, b.isShort, b.inputMessageType)
 }
 
 // validateParticipantManager checks if the participant manager is configured.
@@ -363,10 +366,15 @@ func (p *MessageProcessor) logParsedBuildRequest(messageID, recordCount int, isS
 // p.ourRouterHash` always failed for short records, preventing them from ever being
 // processed. The decryption itself is sufficient proof of correctness.
 //
+// F061 FIX: inputMessageType is preserved to send the correct reply type:
+// - Type 21 TunnelBuild → send type 22 TunnelBuildReply
+// - Type 23 VariableTunnelBuild → send type 24 VariableTunnelBuildReply
+// - Type 25 ShortTunnelBuild → send type 26 ShortTunnelBuildReply
+//
 // IMPORTANT: If our router hash has not been set (is zero), NO records are added
 // to the list by tryParseRecord, so this function will be called with an empty list.
 // Callers must call SetOurRouterHash before processing any tunnel build messages.
-func (p *MessageProcessor) processAllBuildRecords(messageID int, records []BuildRequestRecord, rawData []byte, isShortBuild bool) error {
+func (p *MessageProcessor) processAllBuildRecords(messageID int, records []BuildRequestRecord, rawData []byte, isShortBuild bool, inputMessageType int) error {
 	var zeroHash common.Hash
 	if p.ourRouterHash == zeroHash {
 		log.WithFields(logger.Fields{
@@ -379,7 +387,7 @@ func (p *MessageProcessor) processAllBuildRecords(messageID int, records []Build
 	for i, record := range records {
 		// F060 FIX: Removed the OurIdent check. The record has already been accepted
 		// by tryParseRecord's decryption (short) or forwarding logic (other).
-		p.processSingleBuildRecord(messageID, i, record, rawData, isShortBuild)
+		p.processSingleBuildRecord(messageID, i, record, rawData, isShortBuild, inputMessageType)
 	}
 	return nil
 }
@@ -387,7 +395,8 @@ func (p *MessageProcessor) processAllBuildRecords(messageID int, records []Build
 // processSingleBuildRecord validates and processes a single build request record.
 // After validating and accepting/rejecting the request, it generates an encrypted
 // BuildResponseRecord and forwards it to the next hop.
-func (p *MessageProcessor) processSingleBuildRecord(messageID, index int, record BuildRequestRecord, rawData []byte, isShortBuild bool) {
+// inputMessageType is passed to generateAndSendBuildReply for F061: correct reply type mapping.
+func (p *MessageProcessor) processSingleBuildRecord(messageID, index int, record BuildRequestRecord, rawData []byte, isShortBuild bool, inputMessageType int) {
 	accepted, rejectCode, reason := p.participantManager.ProcessBuildRequest(record.OurIdent)
 
 	// availableBW is the bandwidth (KB/s) advertised back to the tunnel creator
@@ -418,7 +427,7 @@ func (p *MessageProcessor) processSingleBuildRecord(messageID, index int, record
 	}
 
 	// Generate and send build reply message
-	if err := p.generateAndSendBuildReply(messageID, index, record, rejectCode, availableBW, rawData, isShortBuild); err != nil {
+	if err := p.generateAndSendBuildReply(messageID, index, record, rejectCode, availableBW, rawData, isShortBuild, inputMessageType); err != nil {
 		log.WithError(err).WithFields(logger.Fields{
 			"at":             "processSingleBuildRecord",
 			"message_id":     messageID,
@@ -431,6 +440,11 @@ func (p *MessageProcessor) processSingleBuildRecord(messageID, index int, record
 // generateAndSendBuildReply creates an encrypted BuildResponseRecord and forwards it.
 // This implements the core of tunnel participation response handling.
 //
+// F061 FIX: inputMessageType determines the output reply type:
+// - Type 21 TunnelBuild → send type 22 reply
+// - Type 23 VariableTunnelBuild → send type 24 reply
+// - Type 25 ShortTunnelBuild → send type 26 reply
+//
 // For STBM (isShortBuild=true) the wire format differs from VTB:
 //   - Reply record: 218 bytes, ChaCha20 stream XOR (no Poly1305 tag)
 //   - Our reply slot is written at position 'index' in the full N-slot message
@@ -439,13 +453,13 @@ func (p *MessageProcessor) processSingleBuildRecord(messageID, index int, record
 //
 // For VTB (isShortBuild=false) the original AEAD path is unchanged:
 //   - 528-byte cleartext → ChaCha20-Poly1305 AEAD → 544-byte ciphertext
-func (p *MessageProcessor) generateAndSendBuildReply(messageID, index int, record BuildRequestRecord, replyCode byte, availableBW uint32, rawData []byte, isShortBuild bool) error {
+func (p *MessageProcessor) generateAndSendBuildReply(messageID, index int, record BuildRequestRecord, replyCode byte, availableBW uint32, rawData []byte, isShortBuild bool, inputMessageType int) error {
 	encryptedReply, err := p.encryptBuildReply(index, record, replyCode, availableBW, rawData, isShortBuild)
 	if err != nil {
 		return err
 	}
 
-	if err := p.forwardBuildReply(messageID, record, encryptedReply, isShortBuild); err != nil {
+	if err := p.forwardBuildReply(messageID, record, encryptedReply, isShortBuild, inputMessageType); err != nil {
 		return oops.Wrapf(err, "failed to forward build reply")
 	}
 
@@ -666,7 +680,11 @@ func (p *MessageProcessor) xorOtherSTBMSlot(replyData []byte, slotOffset, slotIn
 
 // forwardBuildReply sends the encrypted build reply to the appropriate next hop.
 // The next hop is determined by the NextIdent and NextTunnel fields in the BuildRequestRecord.
-func (p *MessageProcessor) forwardBuildReply(messageID int, record BuildRequestRecord, encryptedReply []byte, isShortBuild bool) error {
+// F061 FIX: inputMessageType is used to determine the output reply type (not isShortBuild alone):
+// - Type 21 TunnelBuild → send type 22 reply
+// - Type 23 VariableTunnelBuild → send type 24 reply
+// - Type 25 ShortTunnelBuild → send type 26 reply
+func (p *MessageProcessor) forwardBuildReply(messageID int, record BuildRequestRecord, encryptedReply []byte, isShortBuild bool, inputMessageType int) error {
 	// Check if we have a forwarder configured
 	if p.buildReplyForwarder == nil {
 		log.WithFields(logger.Fields{
@@ -688,6 +706,7 @@ func (p *MessageProcessor) forwardBuildReply(messageID int, record BuildRequestR
 			messageID,
 			encryptedReply,
 			isShortBuild,
+			inputMessageType,
 		)
 	}
 
@@ -698,6 +717,7 @@ func (p *MessageProcessor) forwardBuildReply(messageID int, record BuildRequestR
 		messageID,
 		encryptedReply,
 		isShortBuild,
+		inputMessageType,
 	)
 }
 
