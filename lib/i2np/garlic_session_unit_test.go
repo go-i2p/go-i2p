@@ -2,6 +2,7 @@ package i2np
 
 import (
 	"bytes"
+	"encoding/binary"
 	"testing"
 	"time"
 
@@ -175,6 +176,7 @@ func TestMultipleDestinations(t *testing.T) {
 }
 
 // TestWrapInGarlicMessage tests wrapping encrypted data in I2NP Garlic message.
+// Verifies that the spec-required 4-byte length prefix is prepended (F459/F461).
 func TestWrapInGarlicMessage(t *testing.T) {
 	encryptedData := []byte("encrypted garlic payload data")
 
@@ -182,7 +184,21 @@ func TestWrapInGarlicMessage(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, I2NPMessageTypeGarlic, msg.Type(), "message type")
-	assert.True(t, bytes.Equal(msg.data, encryptedData), "payload mismatch")
+	
+	// Verify the 4-byte length prefix is present (F459/F461 fix)
+	assert.GreaterOrEqual(t, len(msg.data), 4, "msg.data must have at least 4-byte length prefix")
+	
+	// Extract and verify the length prefix
+	lengthPrefix := binary.BigEndian.Uint32(msg.data[0:4])
+	assert.Equal(t, uint32(len(encryptedData)), lengthPrefix, 
+		"4-byte length prefix should match encrypted data length")
+	
+	// Verify the encrypted data follows the prefix
+	assert.Equal(t, len(encryptedData)+4, len(msg.data), 
+		"msg.data should be 4-byte prefix + encrypted data")
+	assert.True(t, bytes.Equal(msg.data[4:], encryptedData), 
+		"encrypted data should match after 4-byte prefix")
+	
 	assert.NotZero(t, msg.MessageID(), "message ID should not be zero")
 	assert.True(t, msg.Expiration().After(time.Now()), "expiration should be in the future")
 }
