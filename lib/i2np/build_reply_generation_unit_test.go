@@ -73,7 +73,7 @@ func TestProcessSingleBuildRecord_TunnelForwarding(t *testing.T) {
 	messageID := 1003
 
 	// Execute
-	processor.processSingleBuildRecord(messageID, 0, record, nil, false)
+	processor.processSingleBuildRecord(messageID, 0, record, nil, false, 25)
 
 	// Verify
 	tunnelCalls := mockForwarder.getTunnelCalls()
@@ -101,7 +101,7 @@ func TestProcessSingleBuildRecord_NoForwarder(t *testing.T) {
 	messageID := 1004
 
 	// Execute - should not panic, just log warning
-	processor.processSingleBuildRecord(messageID, 0, record, nil, false)
+	processor.processSingleBuildRecord(messageID, 0, record, nil, false, 25)
 
 	// Verify - participant should still be registered even without forwarder
 	assert.Equal(t, 1, mockParticipant.getRegisteredCount(), "Participant should still be registered")
@@ -115,7 +115,7 @@ func TestGenerateAndSendBuildReply_EncryptionWorks(t *testing.T) {
 	messageID := 1005
 
 	// Execute
-	err := processor.generateAndSendBuildReply(messageID, 0, record, TunnelBuildReplySuccess, 0, nil, false)
+	err := processor.generateAndSendBuildReply(messageID, 0, record, TunnelBuildReplySuccess, 0, nil, false, 25)
 
 	// Verify
 	require.NoError(t, err, "Should successfully generate and send reply")
@@ -152,7 +152,7 @@ func TestGenerateAndSendBuildReply_AllReplyCodes(t *testing.T) {
 			record := createTestBuildRequestRecord(t)
 			record.NextTunnel = 0 // Force direct router forwarding
 
-			err := processor.generateAndSendBuildReply(1, 0, record, tc.replyCode, 0, nil, false)
+			err := processor.generateAndSendBuildReply(1, 0, record, tc.replyCode, 0, nil, false, 25)
 			require.NoError(t, err)
 
 			routerCalls := mockForwarder.getRouterCalls()
@@ -179,7 +179,7 @@ func TestForwardBuildReply_RouterForwardError(t *testing.T) {
 	record.NextTunnel = 0 // Direct router forwarding
 
 	// Execute
-	err := processor.forwardBuildReply(1, record, []byte("test-encrypted-data"), false)
+	err := processor.forwardBuildReply(1, record, []byte("test-encrypted-data"), false, 25)
 
 	// Verify
 	assert.Error(t, err, "Should return error from forwarder")
@@ -198,7 +198,7 @@ func TestForwardBuildReply_TunnelForwardError(t *testing.T) {
 	record.NextTunnel = tunnel.TunnelID(12345) // Tunnel forwarding
 
 	// Execute
-	err := processor.forwardBuildReply(1, record, []byte("test-encrypted-data"), false)
+	err := processor.forwardBuildReply(1, record, []byte("test-encrypted-data"), false, 25)
 
 	// Verify
 	assert.Error(t, err, "Should return error from forwarder")
@@ -228,7 +228,7 @@ func TestMultipleBuildRecords_Processing(t *testing.T) {
 	messageID := 2000
 
 	// Execute
-	processor.processAllBuildRecords(messageID, records, nil, false)
+	processor.processAllBuildRecords(messageID, records, nil, false, 25)
 
 	// Verify
 	assert.Equal(t, 5, mockParticipant.getRegisteredCount(), "All participants should be registered")

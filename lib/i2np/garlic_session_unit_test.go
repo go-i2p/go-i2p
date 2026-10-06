@@ -209,6 +209,60 @@ func TestWrapInGarlicMessage_EmptyData(t *testing.T) {
 	assert.Error(t, err, "expected error when wrapping empty data")
 }
 
+// TestGarlicCloveSerializationFormat verifies spec-compliant garlic clove format (F048, F093, F458, F461).
+// Per ecies.rst, clove format must be:
+// [DeliveryInstructions(variable)] + [type(1)] + [msgID(4)] + [expiration(4, seconds)] + [body]
+func TestGarlicCloveSerializationFormat(t *testing.T) {
+	builder, err := NewGarlicBuilderWithDefaults()
+	require.NoError(t, err)
+
+	// Create a simple test message
+	testPayload := []byte("test clove payload")
+	msg := NewDataMessage(testPayload)
+	msgID := 12345
+	msg.SetMessageID(msgID)
+	expiration := time.Unix(1234567890, 0)
+	msg.SetExpiration(expiration)
+
+	// Add as local delivery clove (simplest delivery type)
+	require.NoError(t, builder.AddLocalDeliveryClove(msg, 1))
+
+	// Serialize the garlic
+	payload, err := builder.BuildAndSerialize()
+	require.NoError(t, err)
+
+	// Parse the serialized garlic manually to verify format
+	offset := 0
+
+	// First byte should be clove count (1)
+	assert.Equal(t, byte(1), payload[offset], "clove count should be 1")
+	offset++
+
+	// Next byte is delivery instructions flag (LOCAL = 0x00)
+	assert.Equal(t, byte(0x00), payload[offset], "LOCAL delivery flag")
+	offset++
+
+	// Next byte should be I2NP message type (Data = 20)
+	msgType := payload[offset]
+	assert.Equal(t, byte(I2NPMessageTypeData), msgType, "message type should be Data (20)")
+	offset++
+
+	// Next 4 bytes should be message ID in big-endian
+	extractedMsgID := binary.BigEndian.Uint32(payload[offset : offset+4])
+	assert.Equal(t, uint32(msgID), extractedMsgID, "message ID mismatch")
+	offset += 4
+
+	// Next 4 bytes should be expiration (Unix seconds, not milliseconds)
+	extractedExpiration := binary.BigEndian.Uint32(payload[offset : offset+4])
+	assert.Equal(t, uint32(expiration.Unix()), extractedExpiration, 
+		"expiration should be Unix seconds (4 bytes), not milliseconds")
+	offset += 4
+
+	// Remaining bytes should be the message body (without 16-byte standard I2NP header)
+	// At minimum, should have some body data
+	assert.Greater(t, len(payload)-offset, 0, "clove should have message body")
+}
+
 // TestNewSessionMessageFormat tests that New Session messages follow the correct format.
 func TestNewSessionMessageFormat(t *testing.T) {
 	sm, destPubKey, destHash := setupNewGarlicSession(t)
