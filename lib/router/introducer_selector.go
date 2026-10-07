@@ -185,45 +185,11 @@ func (r *Router) logIntroducerCandidateStats(stats introducerStats) {
 	}).Info("introducer candidate search complete")
 }
 
-// isIntroducerCandidate returns true when ri qualifies as one of our
-// introducers under the C2 selection rules.
-func (r *Router) isIntroducerCandidate(ri router_info.RouterInfo, ourHash common.Hash, ourHashErr error, connected map[common.Hash]struct{}) bool {
-	h, err := ri.IdentHash()
-	if err != nil {
-		return false
-	}
-	if ourHashErr == nil && h == ourHash {
-		return false
-	}
-	if !ssu2.HasDialableSSU2Address(&ri) {
-		return false
-	}
-	if !capsContainsReachable(ri.RouterCapabilities()) {
-		return false
-	}
-	if _, ok := connected[h]; !ok {
-		return false
-	}
-	return true
-}
-
 // capsContainsReachable returns true when the caps string advertises 'R'.
 // The caps field is a free-form string of single-character capability flags;
 // I2P routers may prepend a length byte, so a substring check is used.
 func capsContainsReachable(caps string) bool {
 	return strings.ContainsRune(caps, 'R')
-}
-
-// snapshotConnectedHashes returns the set of peer hashes with an active
-// transport session. Used to filter candidates by current connectivity.
-func (r *Router) snapshotConnectedHashes() map[common.Hash]struct{} {
-	r.sessionMutex.RLock()
-	defer r.sessionMutex.RUnlock()
-	out := make(map[common.Hash]struct{}, len(r.activeSessions))
-	for h := range r.activeSessions {
-		out[h] = struct{}{}
-	}
-	return out
 }
 
 // applyIntroducerCandidates registers each candidate with the SSU2 transport

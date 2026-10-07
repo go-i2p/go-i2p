@@ -10,7 +10,7 @@ import (
 // F080 fix: CBC IV taken from correct byte offset.
 // F081 fix: single-block transform applied; last 4 payload bytes encrypted;
 // output is full 1028 bytes (not truncated to 1008).
-func TunnelCipherEncrypt(in []byte, out *[1028]byte, iv []byte, key []byte) error {
+func TunnelCipherEncrypt(in []byte, out *[1028]byte, iv, key []byte) error {
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return err

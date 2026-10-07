@@ -25,3 +25,7 @@ err
 .zed
 .vscode
 .DS_store
+
+# go-stats-generator artifacts
+midpoint.json
+.go-stats-generator/

@@ -431,60 +431,6 @@ func TestBuildResponseRecord_BoundsChecking(t *testing.T) {
 }
 
 // =============================================================================
-// GarlicElGamal Bounds Checking Tests
-// =============================================================================
-
-func TestGarlicElGamal_BoundsChecking(t *testing.T) {
-	tests := []struct {
-		name        string
-		data        []byte
-		expectError bool
-		errContains string
-	}{
-		{
-			name:        "empty data",
-			data:        []byte{},
-			expectError: true,
-			errContains: "at least 4 bytes",
-		},
-		{
-			name:        "only length field - 3 bytes",
-			data:        []byte{0, 0, 0},
-			expectError: true,
-			errContains: "at least 4 bytes",
-		},
-		{
-			name:        "length says 100 but only 10 available",
-			data:        append([]byte{0, 0, 0, 100}, make([]byte, 10)...),
-			expectError: true,
-			errContains: "insufficient data",
-		},
-		{
-			name:        "length matches available data",
-			data:        append([]byte{0, 0, 0, 10}, make([]byte, 10)...),
-			expectError: false,
-		},
-		{
-			name:        "zero length",
-			data:        []byte{0, 0, 0, 0},
-			expectError: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			_, err := NewGarlicElGamal(tt.data)
-			if tt.expectError {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errContains)
-			} else {
-				require.NoError(t, err)
-			}
-		})
-	}
-}
-
-// =============================================================================
 // I2NP Header Parsing Tests (utils.go)
 // =============================================================================
 
@@ -534,11 +480,6 @@ func TestI2NPHeaderParsing_BoundsChecking(t *testing.T) {
 	t.Run("ReadI2NPSecondGenTransportHeader", func(t *testing.T) {
 		_, err := ReadI2NPSecondGenTransportHeader(make([]byte, 8)) // Need 9
 		assert.Equal(t, ErrI2NPNotEnoughData, err)
-	})
-
-	t.Run("ReadI2NPSSUHeader", func(t *testing.T) {
-		_, err := ReadI2NPSSUHeader(make([]byte, 4)) // Need 5
-		assert.Error(t, err)
 	})
 }
 

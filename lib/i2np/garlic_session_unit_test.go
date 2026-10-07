@@ -184,21 +184,21 @@ func TestWrapInGarlicMessage(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, I2NPMessageTypeGarlic, msg.Type(), "message type")
-	
+
 	// Verify the 4-byte length prefix is present (F459/F461 fix)
 	assert.GreaterOrEqual(t, len(msg.data), 4, "msg.data must have at least 4-byte length prefix")
-	
+
 	// Extract and verify the length prefix
 	lengthPrefix := binary.BigEndian.Uint32(msg.data[0:4])
-	assert.Equal(t, uint32(len(encryptedData)), lengthPrefix, 
+	assert.Equal(t, uint32(len(encryptedData)), lengthPrefix,
 		"4-byte length prefix should match encrypted data length")
-	
+
 	// Verify the encrypted data follows the prefix
-	assert.Equal(t, len(encryptedData)+4, len(msg.data), 
+	assert.Equal(t, len(encryptedData)+4, len(msg.data),
 		"msg.data should be 4-byte prefix + encrypted data")
-	assert.True(t, bytes.Equal(msg.data[4:], encryptedData), 
+	assert.True(t, bytes.Equal(msg.data[4:], encryptedData),
 		"encrypted data should match after 4-byte prefix")
-	
+
 	assert.NotZero(t, msg.MessageID(), "message ID should not be zero")
 	assert.True(t, msg.Expiration().After(time.Now()), "expiration should be in the future")
 }
@@ -254,7 +254,7 @@ func TestGarlicCloveSerializationFormat(t *testing.T) {
 
 	// Next 4 bytes should be expiration (Unix seconds, not milliseconds)
 	extractedExpiration := binary.BigEndian.Uint32(payload[offset : offset+4])
-	assert.Equal(t, uint32(expiration.Unix()), extractedExpiration, 
+	assert.Equal(t, uint32(expiration.Unix()), extractedExpiration,
 		"expiration should be Unix seconds (4 bytes), not milliseconds")
 	offset += 4
 

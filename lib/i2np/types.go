@@ -23,12 +23,6 @@ type I2NPNTCPHeader struct {
 	Data       []byte
 }
 
-// I2NPSSUHeader represents a parsed I2NP message header for SSU transport
-type I2NPSSUHeader struct {
-	Type       int
-	Expiration time.Time
-}
-
 // I2NPSecondGenTransportHeader represents the compact 9-byte I2NP header used over NTCP2 and SSU2 transports, replacing the standard 16-byte header.
 type I2NPSecondGenTransportHeader struct {
 	Type       int

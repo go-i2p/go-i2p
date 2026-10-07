@@ -401,9 +401,9 @@ func serializeGarlicClove(clove *GarlicClove) ([]byte, error) {
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to serialize I2NP message")
 	}
-	// Strip the 16-byte standard header to get the body
-	if len(fullBytes) > StandardI2NPHeaderSize {
-		buf = append(buf, fullBytes[StandardI2NPHeaderSize:]...)
+	// Strip the 9-byte short header to get the wire body
+	if len(fullBytes) > 9 {
+		buf = append(buf, fullBytes[9:]...)
 	} else {
 		buf = append(buf, fullBytes...)
 	}
@@ -731,124 +731,48 @@ func deserializeGarlicClove(data []byte, nestingDepth int) (*GarlicClove, int, e
 	if len(data) < 1 {
 		return nil, 0, oops.Errorf("clove data too short")
 	}
-
 	offset := 0
 
-	// Parse delivery instructions
 	di, bytesRead, err := deserializeDeliveryInstructions(data[offset:])
 	if err != nil {
 		return nil, 0, oops.Wrapf(err, "failed to parse delivery instructions")
 	}
 	offset += bytesRead
 
-	// Determine format: if remaining data has at least 9 bytes and
-	// the byte at offset looks like a valid I2NP message type (1-26),
-	// try the spec-compliant short header format first.
-	// Otherwise, fall back to the legacy format.
-	if len(data) >= offset+9 {
-		// Try spec-compliant format: 9-byte short header
-		msgType := int(data[offset])
-		if msgType >= 1 && msgType <= 26 {
-			// Parse the 9-byte short I2NP header
-			i2npMsg, msgLen, err := parseShortI2NPHeader(data, offset)
-			if err == nil {
-				offset += msgLen
-				// Spec-compliant format: no clove ID, expiration, or cert trailer
-				return &GarlicClove{
-					DeliveryInstructions: *di,
-					Message:              i2npMsg,
-					CloveID:              i2npMsg.MessageID(),
-					Expiration:           i2npMsg.Expiration(),
-					Certificate:          *certificate.NewCertificate(),
-				}, offset, nil
-			}
-		}
-	}
-
-	// Legacy format: full I2NP header + clove metadata
-	i2npMsg, messageLength, err := parseEmbeddedI2NPMessage(data, offset)
+	i2npMsg, msgLen, err := parseShortI2NPHeader(data, offset)
 	if err != nil {
-		return nil, 0, oops.Wrapf(err, "failed to parse embedded I2NP message")
+		return nil, 0, oops.Wrapf(err, "failed to parse spec-compliant short I2NP header")
 	}
-	offset += messageLength
+	offset += msgLen
 
-	// Parse clove metadata
-	cloveID, expiration, cert, err := parseCloveMetadata(data, offset)
+	// Read body bytes: payload length derived from message serialization
+	fullBytes, err := i2npMsg.MarshalBinary()
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, oops.Wrapf(err, "failed to serialize message for body length")
 	}
-	offset += 4 + 8 + 3 // clove ID + expiration + certificate
+	bodyLen := len(fullBytes)
+	if len(fullBytes) > 9 {
+		bodyLen = len(fullBytes) - 9
+	}
+	if len(data) < offset+bodyLen {
+		return nil, 0, oops.Errorf("insufficient data for garlic clove body: need %d bytes, have %d", bodyLen, len(data)-offset)
+	}
+	bodyData := data[offset : offset+bodyLen]
+	offset += bodyLen
+	_ = bodyData // body embedded in wire format; message carries header fields
+	// Rebuild message with header + body payload
+	msgWithBody := NewBaseI2NPMessage(i2npMsg.Type())
+	msgWithBody.SetMessageID(i2npMsg.MessageID())
+	msgWithBody.SetExpiration(i2npMsg.Expiration())
+	msgWithBody.SetData(bodyData)
 
 	return &GarlicClove{
 		DeliveryInstructions: *di,
-		Message:              i2npMsg,
-		CloveID:              cloveID,
-		Expiration:           expiration,
-		Certificate:          cert,
+		Message:              msgWithBody,
+		CloveID:              i2npMsg.MessageID(),
+		Expiration:           i2npMsg.Expiration(),
+		Certificate:          *certificate.NewCertificate(),
 	}, offset, nil
-}
-
-// parseEmbeddedI2NPMessage parses an I2NP message embedded within a garlic clove.
-// It reads the standard NTCP I2NP header (16 bytes) to determine the message type
-// and payload size, then creates a properly typed Message carrying the payload.
-func parseEmbeddedI2NPMessage(data []byte, offset int) (Message, int, error) {
-	messageLength, err := readI2NPMessageLength(data, offset)
-	if err != nil {
-		return nil, 0, err
-	}
-	if len(data) < offset+messageLength {
-		return nil, 0, oops.Errorf("insufficient data for embedded I2NP message: need %d, have %d", offset+messageLength, len(data))
-	}
-
-	// The first byte of the I2NP header is the message type
-	msgType := int(data[offset])
-
-	log.WithFields(logger.Fields{
-		"at":             "parseEmbeddedI2NPMessage",
-		"msg_type":       msgType,
-		"message_length": messageLength,
-		"offset":         offset,
-		"data_len":       len(data),
-	}).Debug("Parsing embedded I2NP message")
-
-	msg := NewBaseI2NPMessage(msgType)
-
-	// UnmarshalBinary will parse the full NTCP-format header + payload
-	if err := msg.UnmarshalBinary(data[offset : offset+messageLength]); err != nil {
-		return nil, 0, oops.Wrapf(err, "failed to unmarshal embedded I2NP message (type %d)", msgType)
-	}
-
-	return msg, messageLength, nil
-}
-
-// readI2NPMessageLength validates I2NP message header and returns total message length.
-// Standard I2NP header structure:
-//   - type (1 byte) at offset 0
-//   - msg_id (4 bytes) at offset 1-4
-//   - expiration (8 bytes) at offset 5-12
-//   - size (2 bytes) at offset 13-14
-//   - checksum (1 byte) at offset 15
-//   - data (size bytes) at offset 16+
-func readI2NPMessageLength(data []byte, offset int) (int, error) {
-	if len(data) < offset+16 {
-		return 0, oops.Errorf("insufficient data for I2NP message header (need %d bytes, have %d)", offset+16, len(data))
-	}
-
-	// Read message size from I2NP header (bytes 13-14 from start of message)
-	messageSize, err := ReadI2NPNTCPMessageSize(data[offset:])
-	if err != nil {
-		return 0, oops.Wrapf(err, "failed to read I2NP message size")
-	}
-
-	// Total I2NP message length = 16-byte header + message data
-	messageLength := 16 + messageSize
-
-	// Validate we have enough data for the complete message
-	if len(data) < offset+messageLength {
-		return 0, oops.Errorf("insufficient data for I2NP message (need %d bytes, have %d)", offset+messageLength, len(data))
-	}
-
-	return messageLength, nil
 }
 
 // parseShortI2NPHeader parses the 9-byte short I2NP message format used in garlic cloves.
@@ -874,41 +798,6 @@ func parseShortI2NPHeader(data []byte, offset int) (Message, int, error) {
 	msg.SetExpiration(time.UnixMilli(int64(expirationMs)))
 
 	return msg, 9, nil
-}
-
-// parseCloveMetadata extracts clove ID, expiration, and certificate from clove trailer.
-func parseCloveMetadata(data []byte, offset int) (int, time.Time, certificate.Certificate, error) {
-	// Ensure enough data for clove ID + expiration + certificate
-	if len(data) < offset+4+8+3 {
-		return 0, time.Time{}, certificate.Certificate{}, oops.Errorf("insufficient data for clove trailer")
-	}
-
-	// Read clove ID (4 bytes)
-	cloveID := int(binary.BigEndian.Uint32(data[offset : offset+4]))
-
-	// Read expiration (8 bytes)
-	expirationMs := binary.BigEndian.Uint64(data[offset+4 : offset+12])
-	expiration := time.UnixMilli(int64(expirationMs))
-
-	// Read certificate (3 bytes minimum: type + 2-byte length)
-	certType := data[offset+12]
-	certLen := binary.BigEndian.Uint16(data[offset+13 : offset+15])
-	if certType != 0 || certLen != 0 {
-		// Non-NULL certificate — validate we have enough data for the payload
-		if len(data) < offset+15+int(certLen) {
-			return 0, time.Time{}, certificate.Certificate{}, oops.Errorf(
-				"insufficient data for certificate payload: need %d bytes, have %d",
-				offset+15+int(certLen), len(data),
-			)
-		}
-		return 0, time.Time{}, certificate.Certificate{}, oops.Errorf(
-			"unsupported non-NULL certificate in garlic clove (type=%d, len=%d)", certType, certLen,
-		)
-	}
-
-	cert := *certificate.NewCertificate()
-
-	return cloveID, expiration, cert, nil
 }
 
 // deserializeDeliveryInstructions parses delivery instructions from bytes.

@@ -74,15 +74,6 @@ func makeBenchmarkReplyKeys() (session_key.SessionKey, [16]byte, [495]byte) {
 	return replyKey, replyIV, randomData
 }
 
-// makeSSUExpirationData creates a 5-byte SSU expiration test buffer:
-// 1 type byte (0x00) followed by 4-byte big-endian seconds.
-func makeSSUExpirationData(seconds uint32) []byte {
-	data := make([]byte, 5)
-	data[0] = 0x00
-	binary.BigEndian.PutUint32(data[1:5], seconds)
-	return data
-}
-
 // setupSearchReplyProcessor creates a MessageProcessor with expiration checks
 // disabled and a mock search reply handler attached.
 func setupSearchReplyProcessor(t *testing.T) (*MessageProcessor, *mockSearchReplyHandler) {

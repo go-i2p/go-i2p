@@ -5,7 +5,6 @@
 package build
 
 import (
-	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/common/session_key"
 	"github.com/go-i2p/go-i2p/lib/tunnel/buildrecord"
@@ -101,21 +100,4 @@ type TunnelReplyProcessor interface {
 
 	// ProcessBuildReply processes an incoming tunnel build reply message.
 	ProcessBuildReply(handler TunnelReplyHandler, tunnelID buildrecord.TunnelID) error
-}
-
-// LegacySessionProvider provides access to transport sessions for legacy TunnelBuild messages.
-// Modern code should use BuildSessionProvider instead.
-type LegacySessionProvider interface {
-	// GetSessionByHash retrieves a transport session for sending legacy I2NP messages.
-	GetSessionByHash(hash common.Hash) (LegacyTransportSession, error)
-}
-
-// LegacyTransportSession represents a transport session that can queue legacy I2NP messages.
-type LegacyTransportSession interface {
-	// QueueSendI2NP queues a legacy I2NP message for transmission.
-	// The message parameter must be a concrete I2NP message type.
-	QueueSendI2NP(msg interface{}) error
-
-	// SendQueueSize returns the current send queue depth.
-	SendQueueSize() int
 }

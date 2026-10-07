@@ -227,28 +227,6 @@ func TestSecondGenTransportHeader_MarshalRoundtrip(t *testing.T) {
 	assert.Equal(t, original.Expiration.Unix(), parsed.Expiration.Unix())
 }
 
-// TestLegacySSUHeader_Is5Bytes verifies the legacy SSU header (5 bytes).
-func TestLegacySSUHeader_Is5Bytes(t *testing.T) {
-	data := make([]byte, 5)
-	data[0] = byte(I2NPMessageTypeDatabaseLookup)
-	binary.BigEndian.PutUint32(data[1:5], 86400) // 86400 seconds
-
-	header, err := ReadI2NPSSUHeader(data)
-	require.NoError(t, err)
-
-	assert.Equal(t, I2NPMessageTypeDatabaseLookup, header.Type)
-	assert.Equal(t, int64(86400), header.Expiration.Unix())
-}
-
-// TestLegacySSUHeader_TooShort verifies rejection of data < 5 bytes.
-func TestLegacySSUHeader_TooShort(t *testing.T) {
-	for _, length := range []int{0, 1, 3, 4} {
-		_, err := ReadI2NPSSUHeader(make([]byte, length))
-		assert.Equal(t, ErrI2NPNotEnoughData, err,
-			"data of length %d must be rejected", length)
-	}
-}
-
 // TestBothHeaderFormats_Supported verifies that the same message type can be
 // parsed from both standard (16-byte) and second-gen transport (9-byte) headers.
 func TestBothHeaderFormats_Supported(t *testing.T) {
@@ -3402,21 +3380,6 @@ func TestLegacyCrypto_ElGamalBuildRecords_FlagPresence(t *testing.T) {
 	t.Log("CRITICAL FINDING: ElGamal build record types (528 bytes) are present in the codebase.")
 	t.Log("The modern I2P spec recommends ECIES-only (218-byte short records).")
 	t.Log("528-byte records remain for backward compatibility with older routers.")
-}
-
-// TestLegacyCrypto_AESSessionTag_FlagPresence flags the existence of
-// GarlicElGamal (AES session tag garlic encryption).
-func TestLegacyCrypto_AESSessionTag_FlagPresence(t *testing.T) {
-	// GarlicElGamal is a legacy type that uses ElGamal/AES encryption
-	garlic, err := NewGarlicElGamal([]byte{0x00, 0x00, 0x00, 0x04, 0x01, 0x02, 0x03, 0x04})
-	require.NoError(t, err)
-	assert.NotNil(t, garlic, "GarlicElGamal type exists — legacy AES session tag garlic")
-	assert.Equal(t, uint32(4), garlic.Length)
-	assert.Equal(t, []byte{0x01, 0x02, 0x03, 0x04}, garlic.Data)
-
-	t.Log("CRITICAL FINDING: GarlicElGamal type exists for legacy ElGamal/AES garlic encryption.")
-	t.Log("Modern I2P uses ECIES-X25519-AEAD-Ratchet (Proposal 144) exclusively.")
-	t.Log("GarlicElGamal remains for backward compatibility parsing of legacy messages.")
 }
 
 // TestLegacyCrypto_AESBuildRecordDecryption_FlagPresence flags the AES-256-CBC

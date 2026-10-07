@@ -130,31 +130,6 @@ func ReadI2NPSecondGenTransportHeader(dat []byte) (I2NPSecondGenTransportHeader,
 	return header, nil
 }
 
-// ReadI2NPSSUHeader reads an I2NP SSU header
-func ReadI2NPSSUHeader(data []byte) (I2NPSSUHeader, error) {
-	header := I2NPSSUHeader{}
-
-	messageType, err := ReadI2NPType(data)
-	if err != nil {
-		log.WithError(err).Error("Failed to read I2NP type")
-		return header, err
-	} else {
-		header.Type = messageType
-	}
-
-	messageDate, err := ReadI2NPSSUMessageExpiration(data)
-	if err != nil {
-		log.WithError(err).Error("Failed to read I2NP SSU message expiration")
-		return header, err
-	} else {
-		header.Expiration = messageDate.Time()
-	}
-	log.WithFields(logger.Fields{
-		"type": header.Type,
-	}).Debug("Parsed I2NP SSU header")
-	return header, nil
-}
-
 // ReadI2NPType reads the I2NP message type from data
 // L-2 Consolidation: Unified logging logic into single computed log call
 func ReadI2NPType(data []byte) (int, error) {
@@ -238,31 +213,6 @@ func ReadI2NPNTCPMessageExpiration(data []byte) (common.Date, error) {
 
 	log.WithFields(logger.Fields{
 		"at":   "i2np.ReadI2NPNTCPMessageExpiration",
-		"date": date,
-	}).Debug("parsed_i2np_message_date")
-	return date, nil
-}
-
-// ReadI2NPSSUMessageExpiration reads the expiration from SSU data
-// Note: Short expiration is a 4-byte unsigned integer that will wrap around
-// on February 7, 2106. As of that date, an offset must be added to get the
-// correct time. See I2NP specification for details.
-func ReadI2NPSSUMessageExpiration(data []byte) (common.Date, error) {
-	if len(data) < 5 {
-		return common.Date{}, ErrI2NPNotEnoughData
-	}
-
-	// SSU short expiration is a 4-byte unsigned integer in seconds since epoch.
-	// Date stores milliseconds since epoch as an 8-byte big-endian integer,
-	// so we must convert seconds to milliseconds before encoding.
-	seconds := binary.BigEndian.Uint32(data[1:5])
-	milliseconds := uint64(seconds) * 1000
-
-	date := common.Date{}
-	binary.BigEndian.PutUint64(date[:], milliseconds)
-
-	log.WithFields(logger.Fields{
-		"at":   "i2np.ReadI2NPSSUMessageExpiration",
 		"date": date,
 	}).Debug("parsed_i2np_message_date")
 	return date, nil

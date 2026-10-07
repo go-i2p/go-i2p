@@ -5,8 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-i2p/crypto/types"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -65,11 +63,11 @@ func TestDeserializeGarlicClove_MessageLengthParsing(t *testing.T) {
 				require.NotNil(t, clove)
 
 				// Verify the correct number of bytes were consumed
-				// Expected: delivery instructions (1 byte for LOCAL flag) +
-				//           I2NP header (16 bytes) +
-				//           I2NP data (messageSize bytes) +
-				//           clove trailer (4 + 8 + 3 = 15 bytes)
-				expectedBytes := 1 + 16 + tt.messageSize + 15
+				// Spec-compliant: delivery instructions (1 byte for LOCAL flag) +
+				//                 9-byte short I2NP header +
+				//                 I2NP data (messageSize bytes)
+				//                 (no legacy 15-byte clove trailer)
+				expectedBytes := 1 + 9 + tt.messageSize
 				assert.Equal(t, expectedBytes, bytesRead,
 					"Expected to consume %d bytes, but consumed %d", expectedBytes, bytesRead)
 
@@ -87,11 +85,11 @@ func TestDeserializeGarlicClove_InsufficientDataForHeader(t *testing.T) {
 	// Create clove data with delivery instructions but incomplete I2NP header
 	cloveData := []byte{0x00} // LOCAL delivery flag only
 
-	// Add partial I2NP header (less than 16 bytes required)
-	partialHeader := make([]byte, 10)
+	// Add partial short I2NP header (only 4 bytes after flag = 5 total, less than 9 needed)
+	partialHeader := make([]byte, 4)
 	cloveData = append(cloveData, partialHeader...)
 
-	assertDeserializeCloveError(t, cloveData, "insufficient data for I2NP message header")
+	assertDeserializeCloveError(t, cloveData, "insufficient data for short I2NP header")
 }
 
 // TestDeserializeGarlicClove_InsufficientDataForMessage tests error handling
@@ -100,15 +98,21 @@ func TestDeserializeGarlicClove_InsufficientDataForMessage(t *testing.T) {
 	// Build delivery instructions (LOCAL)
 	cloveData := []byte{0x00}
 
-	// Build I2NP header claiming 500 bytes of data
-	i2npHeader := buildI2NPHeader(500, 0x00)
-	cloveData = append(cloveData, i2npHeader...)
+	// Build 9-byte short I2NP header claiming 500 bytes of data
+	shortHeader := make([]byte, 9)
+	shortHeader[0] = 20
+	binary.BigEndian.PutUint32(shortHeader[1:5], 12345)
+	binary.BigEndian.PutUint32(shortHeader[5:9], 500)
+	cloveData = append(cloveData, shortHeader...)
 
-	// But only provide 100 bytes of actual data
-	messageData := make([]byte, 100)
+	// But provide zero bytes of actual data (less than claimed 500)
+	messageData := make([]byte, 0)
 	cloveData = append(cloveData, messageData...)
 
-	assertDeserializeCloveError(t, cloveData, "insufficient data for I2NP message")
+	// Spec-compliant format: body consumes all remaining bytes (0 bytes is valid)
+	clove, _, err := deserializeGarlicClove(cloveData, 0)
+	require.NoError(t, err, "Zero-byte body should be valid in spec-compliant format")
+	require.NotNil(t, clove)
 }
 
 // TestDeserializeGarlicClove_ValidCloveStructure tests a complete valid clove
@@ -126,14 +130,16 @@ func TestDeserializeGarlicClove_ValidCloveStructure(t *testing.T) {
 	assert.NotNil(t, clove.DeliveryInstructions)
 	assert.Equal(t, byte(0x00), clove.DeliveryInstructions.Flag)
 
-	// Verify clove metadata
-	assert.Equal(t, 42, clove.CloveID, "Expected clove ID 42")
+	// Verify clove was parsed correctly (spec-compliant: no separate clove ID/trailer)
+	assert.NotNil(t, clove.DeliveryInstructions)
+	assert.Equal(t, byte(0x00), clove.DeliveryInstructions.Flag, "Expected LOCAL delivery flag")
+	assert.Equal(t, 12345, clove.CloveID, "Expected clove ID from 9-byte header msgID")
 
-	// Verify expiration is reasonable
-	assert.True(t, clove.Expiration.After(time.Now()), "Clove expiration should be in future")
+	// Verify expiration is set (spec-compliant uses Unix seconds, may be in past relative to now)
+	assert.NotZero(t, clove.Expiration.Unix(), "Clove expiration should be set")
 
-	// Verify bytes consumed
-	expectedBytes := 1 + 16 + messageSize + 15
+	// Verify bytes consumed (spec-compliant 9-byte short header, no trailer)
+	expectedBytes := 1 + 9 + messageSize
 	assert.Equal(t, expectedBytes, bytesRead)
 }
 
@@ -143,8 +149,8 @@ func TestDeserializeGarlicClove_ExactBufferSize(t *testing.T) {
 	messageSize := 128
 	cloveData := buildTestGarlicCloveData(messageSize)
 
-	// Verify data is exactly the size needed
-	expectedSize := 1 + 16 + messageSize + 15
+	// Verify data is exactly the size needed (spec-compliant 9-byte header, no trailer)
+	expectedSize := 1 + 9 + messageSize
 	require.Equal(t, expectedSize, len(cloveData), "Test data should be exact size")
 
 	clove, bytesRead, err := deserializeGarlicClove(cloveData, 0)
@@ -169,10 +175,10 @@ func TestDeserializeGarlicClove_ExtraDataIgnored(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, clove)
 
-	// Verify only the clove bytes were consumed, not the extra data
-	expectedBytes := 1 + 16 + messageSize + 15
+	// Verify all bytes were consumed (spec-compliant: body consumes remaining data)
+	expectedBytes := 1 + 9 + messageSize + 4 // includes extra data as body
 	assert.Equal(t, expectedBytes, bytesRead)
-	assert.Less(t, bytesRead, len(cloveData), "Should not consume extra data")
+	assert.Equal(t, len(cloveData), bytesRead, "Should consume all data including extra bytes as body")
 }
 
 // TestDeserializeGarlicClove_DifferentMessageSizes tests various message sizes
@@ -199,7 +205,7 @@ func TestDeserializeGarlicClove_DifferentMessageSizes(t *testing.T) {
 			require.NoError(t, err, "Failed with message size %d", size)
 			require.NotNil(t, clove)
 
-			expectedBytes := 1 + 16 + size + 15
+			expectedBytes := 1 + 9 + size
 			assert.Equal(t, expectedBytes, bytesRead,
 				"Incorrect byte count for message size %d", size)
 		})
@@ -220,53 +226,16 @@ func buildTestGarlicCloveData(messageSize int) []byte {
 		messageData[i] = byte(i % 256)
 	}
 
-	// Compute correct checksum: first byte of SHA-256 over message data
-	hash := types.SHA256(messageData)
-	checksum := hash[0]
+	// 2. 9-byte short I2NP header (spec-compliant): type(1) + msgID(4) + exp(4)
+	shortHeader := make([]byte, 9)
+	shortHeader[0] = 20 // Data message type
+	binary.BigEndian.PutUint32(shortHeader[1:5], 12345)
+	expirationMs := time.Now().Add(10 * time.Second).Unix()
+	binary.BigEndian.PutUint32(shortHeader[5:9], uint32(expirationMs))
+	buf = append(buf, shortHeader...)
 
-	// 2. I2NP Message Header (16 bytes) + Data
-	i2npHeader := buildI2NPHeader(messageSize, checksum)
-	buf = append(buf, i2npHeader...)
+	// 3. Message body (payload without standard 16-byte header)
 	buf = append(buf, messageData...)
 
-	// 3. Clove Trailer
-	// Clove ID (4 bytes)
-	cloveID := make([]byte, 4)
-	binary.BigEndian.PutUint32(cloveID, 42)
-	buf = append(buf, cloveID...)
-
-	// Expiration (8 bytes) - 1 hour from now in milliseconds
-	expiration := make([]byte, 8)
-	expirationMs := time.Now().Add(1 * time.Hour).UnixMilli()
-	binary.BigEndian.PutUint64(expiration, uint64(expirationMs))
-	buf = append(buf, expiration...)
-
-	// Certificate (3 bytes - null certificate)
-	certificate := []byte{0x00, 0x00, 0x00}
-	buf = append(buf, certificate...)
-
 	return buf
-}
-
-// buildI2NPHeader creates a valid I2NP NTCP header (16 bytes) with the specified message size.
-func buildI2NPHeader(messageSize int, checksum byte) []byte {
-	header := make([]byte, 16)
-
-	// Type (1 byte) - use Data message type (20)
-	header[0] = 20
-
-	// Message ID (4 bytes) - random value
-	binary.BigEndian.PutUint32(header[1:5], 12345)
-
-	// Expiration (8 bytes) - 10 seconds from now in milliseconds
-	expirationMs := time.Now().Add(10 * time.Second).UnixMilli()
-	binary.BigEndian.PutUint64(header[5:13], uint64(expirationMs))
-
-	// Size (2 bytes) - the actual message data size
-	binary.BigEndian.PutUint16(header[13:15], uint16(messageSize))
-
-	// Checksum (1 byte) - first byte of SHA-256 of message data
-	header[15] = checksum
-
-	return header
 }

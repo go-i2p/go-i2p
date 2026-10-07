@@ -272,14 +272,6 @@ func DeriveSTBMOBEPGarlicKeyAndTag(postReplyCK [32]byte) ([32]byte, [8]byte, err
 	return garlicKey, tag, nil
 }
 
-// DeriveSTBMLegacyGarlicKeyFromChainingKey is retained for compatibility.
-// It wraps DeriveSTBMOBEPGarlicKeyAndTag with the old name.
-//
-// Deprecated: use DeriveSTBMOBEPGarlicKeyAndTag directly. Will be removed in v0.2.0.
-func DeriveSTBMLegacyGarlicKeyFromChainingKey(chainingKey [32]byte) ([32]byte, [8]byte, error) {
-	return DeriveSTBMOBEPGarlicKeyAndTag(chainingKey)
-}
-
 // DecryptShortBuildRequestRecordNoise is the inverse of EncryptShortBuildRequestRecord:
 // it decrypts a 218-byte STBM record using the Noise_N_25519_ChaChaPoly_SHA256
 // transcript described above. The caller supplies the local router's static

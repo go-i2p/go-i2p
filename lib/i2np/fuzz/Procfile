@@ -1,1 +1,0 @@
-header: go-fuzz -bin=header/exportable-fuzz.zip -workdir=header -procs=2
