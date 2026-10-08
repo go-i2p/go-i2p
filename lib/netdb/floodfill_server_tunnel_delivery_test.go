@@ -330,10 +330,17 @@ func TestHandleDatabaseLookupDirectECIESResponse(t *testing.T) {
 		t.Fatalf("Expected garlic message type, got %d", garlic.Type())
 	}
 	data := garlic.GetData()
-	if len(data) < 8+12+16 {
+	// Garlic message data is framed as [4-byte length prefix][encrypted payload]
+	// (WrapInGarlicMessage adds the spec-required length prefix), and the
+	// encrypted payload begins with the 8-byte ECIES session tag.
+	if len(data) < 4+8+12+16 {
 		t.Fatalf("ECIES garlic reply too short: %d", len(data))
 	}
-	if got := data[:8]; string(got) != string(tagBytes) {
+	declaredLen := binary.BigEndian.Uint32(data[:4])
+	if int(declaredLen) != len(data)-4 {
+		t.Fatalf("Garlic length prefix %d does not match payload size %d", declaredLen, len(data)-4)
+	}
+	if got := data[4:12]; string(got) != string(tagBytes) {
 		t.Fatalf("ECIES reply did not preserve requested session tag")
 	}
 }

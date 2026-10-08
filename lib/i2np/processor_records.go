@@ -385,8 +385,13 @@ func (p *MessageProcessor) processAllBuildRecords(messageID int, records []Build
 	}
 
 	for i, record := range records {
-		// F060 FIX: Removed the OurIdent check. The record has already been accepted
-		// by tryParseRecord's decryption (short) or forwarding logic (other).
+		// F060 FIX: Short build records do not carry an OurIdent field (it is
+		// zero), so decryption by tryParseRecord is the sole proof of ownership
+		// and no OurIdent filter applies. Non-short (legacy/VTB) records DO carry
+		// OurIdent and must be filtered so we only process records destined for us.
+		if !isShortBuild && record.OurIdent != p.ourRouterHash {
+			continue
+		}
 		p.processSingleBuildRecord(messageID, i, record, rawData, isShortBuild, inputMessageType)
 	}
 	return nil

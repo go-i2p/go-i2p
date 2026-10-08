@@ -1620,13 +1620,13 @@ func TestGarlic_SessionTagDerivation_DifferentKeysProduceDifferentTags(t *testin
 
 // =============================================================================
 // Audit Item: Garlic — Clove format
-// Clove = DeliveryInstructions(var) + Message(var) + CloveID(4) +
-// Expiration(8) + Certificate(3, always NULL)
+// Container clove = DeliveryInstructions(var) + 9-byte short I2NP header +
+// bodyLen(4) + body(var). The legacy CloveID/Expiration/Certificate trailer
+// has been removed; expiration is carried in the short header (Unix seconds).
 // =============================================================================
 
 // TestGarlic_CloveFormat_SerializationLayout verifies the garlic clove wire format:
-// delivery_instructions(variable) + i2np_message(variable) + cloveID(4) +
-// expiration(8) + certificate(3).
+// delivery_instructions(variable) + 9-byte short I2NP header + bodyLen(4) + body.
 func TestGarlic_CloveFormat_SerializationLayout(t *testing.T) {
 	// Create a simple LOCAL delivery clove with a known I2NP message
 	payload := []byte{0xDE, 0xAD}
@@ -1646,35 +1646,39 @@ func TestGarlic_CloveFormat_SerializationLayout(t *testing.T) {
 	require.NoError(t, err)
 
 	// LOCAL delivery instructions = 1 byte (flag only)
-	// I2NP message = 16-byte header + payload
-	innerData, err := innerMsg.MarshalBinary()
-	require.NoError(t, err)
+	// Body = DataMessage.GetData() = [4-byte length][payload]
+	body := innerMsg.GetData()
 
-	// Certificate NULL per I2P spec = type(1) + length(2) = 3 bytes
-	const certLen = 3
-
-	// Expected: DI(1) + I2NP(len) + CloveID(4) + Exp(8) + Cert(3)
-	expectedLen := 1 + len(innerData) + 4 + 8 + certLen
+	// Expected: DI(1) + short header(9) + bodyLen(4) + body
+	expectedLen := 1 + ShortI2NPHeaderSize + 4 + len(body)
 	assert.Equal(t, expectedLen, len(data),
-		"clove size must be DI(1) + I2NP(%d) + CloveID(4) + Exp(8) + Cert(%d) = %d",
-		len(innerData), certLen, expectedLen)
+		"clove size must be DI(1) + short header(9) + bodyLen(4) + body(%d) = %d",
+		len(body), expectedLen)
 
-	offset := 1 + len(innerData)
+	offset := 1
 
-	// CloveID at offset (after DI + I2NP)
-	cloveID := binary.BigEndian.Uint32(data[offset : offset+4])
-	assert.Equal(t, uint32(0x00AABBCC), cloveID, "CloveID must be at correct offset")
+	// Short I2NP header: type(1) at offset
+	assert.Equal(t, byte(I2NPMessageTypeData), data[offset], "message type must be Data (20)")
+	offset++
 
-	// Expiration at offset+4
-	expMs := binary.BigEndian.Uint64(data[offset+4 : offset+12])
-	assert.Equal(t, uint64(1704067200000), expMs,
-		"Expiration must be milliseconds since epoch at correct offset")
+	// msgID(4)
+	msgID := binary.BigEndian.Uint32(data[offset : offset+4])
+	assert.Equal(t, uint32(0x12345678), msgID, "message ID must be at correct offset")
+	offset += 4
 
-	// Certificate at end (3 bytes, NULL = all zeros per I2P spec)
-	certStart := offset + 12
-	assert.Equal(t, byte(0), data[certStart], "certificate type must be 0 (NULL)")
-	assert.Equal(t, byte(0), data[certStart+1], "certificate length high byte must be 0")
-	assert.Equal(t, byte(0), data[certStart+2], "certificate length low byte must be 0")
+	// expiration(4, Unix seconds) — from the I2NP message, not garlic-level
+	expSecs := binary.BigEndian.Uint32(data[offset : offset+4])
+	assert.Equal(t, uint32(1704067200), expSecs,
+		"expiration must be Unix seconds from the I2NP message")
+	offset += 4
+
+	// bodyLen(4)
+	bodyLen := binary.BigEndian.Uint32(data[offset : offset+4])
+	assert.Equal(t, uint32(len(body)), bodyLen, "body length prefix must match body size")
+	offset += 4
+
+	// body
+	assert.Equal(t, body, data[offset:offset+len(body)], "body must be the raw message data")
 }
 
 // TestGarlic_CloveFormat_DeliveryInstructionSizes verifies the typical

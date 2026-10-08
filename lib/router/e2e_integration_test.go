@@ -2,6 +2,7 @@ package router
 
 import (
 	"context"
+	"encoding/binary"
 	"sync"
 	"testing"
 	"time"
@@ -610,6 +611,17 @@ func (env *e2eTestEnvironment) CompleteGarlicHandshake(t *testing.T, nsMsg i2np.
 	require.True(t, ok, "expected *i2np.BaseI2NPMessage")
 	nsData := baseMsg.GetData()
 	require.NotEmpty(t, nsData, "garlic message data should not be empty")
+
+	// The wire Garlic message data is framed as [4-byte length][ciphertext]
+	// (WrapInGarlicMessage adds the spec-required prefix). The production
+	// receive path strips it via extractGarlicData before decryption; do the
+	// same here so DecryptGarlicMessage sees ciphertext starting with the
+	// 8-byte session tag.
+	if len(nsData) >= 4 {
+		if declaredLen := binary.BigEndian.Uint32(nsData[:4]); int(declaredLen) == len(nsData)-4 {
+			nsData = nsData[4:]
+		}
+	}
 
 	// Receiver decrypts the NS garlic message to get sessionHash. This consumes
 	// the NS message (the ratchet's replay protection rejects a second decrypt
