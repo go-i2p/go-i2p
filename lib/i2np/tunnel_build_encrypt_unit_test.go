@@ -273,6 +273,110 @@ func convertToI2NPRecord(rec tunnel.BuildRequestRecord) BuildRequestRecord {
 	}
 }
 
+// TestSTBMLayerKeys_CreatorMatchesHop verifies the F062/F063 fix end-to-end:
+// the tunnel creator's derived layer/IV keys (stored on result.Records by
+// updateLayerKeysFromHKDF) must be byte-identical to the keys each transit hop
+// independently derives from the same Noise chaining key (DeriveSTBMLayerKeys).
+// If these diverge, tunnel data encrypted by the creator cannot be decrypted
+// by the hops.
+func TestSTBMLayerKeys_CreatorMatchesHop(t *testing.T) {
+	hop1RI, hop1KS := createTestHop(t)
+	hop2RI, hop2KS := createTestHop(t)
+
+	rec1 := createTestTunnelRecord(t)
+	rec2 := createTestTunnelRecord(t)
+	rec2.ReceiveTunnel = tunnel.TunnelID(54321)
+	rec2.SendMessageID = 99
+
+	result := &tunnel.TunnelBuildResult{
+		TunnelID:      tunnel.TunnelID(12345),
+		Hops:          []router_info.RouterInfo{*hop1RI, *hop2RI},
+		Records:       []tunnel.BuildRequestRecord{rec1, rec2},
+		UseShortBuild: true,
+		IsInbound:     false,
+	}
+
+	tm := &TunnelManager{}
+	msg, err := tm.createShortTunnelBuildMessage(result, 1001)
+	require.NoError(t, err, "createShortTunnelBuildMessage should not fail")
+	require.NotNil(t, msg)
+
+	baseMsg := msg.(*BaseI2NPMessage)
+	data := baseMsg.GetData()
+	require.Equal(t, 1+2*ShortBuildRecordSize, len(data))
+
+	encRec1Data := data[1 : 1+ShortBuildRecordSize]
+	encRec2Data := data[1+ShortBuildRecordSize : 1+2*ShortBuildRecordSize]
+
+	// Hop 1 side: decrypt its record, derive the reply key, then the layer keys.
+	var enc1 [ShortBuildRecordSize]byte
+	copy(enc1[:], encRec1Data)
+	ck1, _, err := DecryptSTBMRecordReturningChainingKeyAndHash(enc1, hop1KS.GetEncryptionPrivateKey().Bytes())
+	require.NoError(t, err)
+	rk1, postReplyCK1, err := DeriveSTBMReplyKey(ck1)
+	require.NoError(t, err)
+	hop1LayerKey, hop1IVKey, _, err := DeriveSTBMLayerKeys(postReplyCK1)
+	require.NoError(t, err)
+
+	// Creator side must have derived the SAME keys for hop 1 (F063).
+	assert.Equal(t, hop1LayerKey[:], result.Records[0].LayerKey[:],
+		"creator's hop-1 layer key must match the hop's derived layer key")
+	assert.Equal(t, hop1IVKey[:], result.Records[0].IVKey[:],
+		"creator's hop-1 IV key must match the hop's derived IV key")
+
+	// Hop 2 side: peel hop 1's layer, decrypt, derive keys.
+	var enc2 [ShortBuildRecordSize]byte
+	copy(enc2[:], encRec2Data)
+	require.NoError(t, chacha20XORRecord(&enc2, rk1, 1), "peeling hop1 layer off record 2")
+
+	ck2, _, err := DecryptSTBMRecordReturningChainingKeyAndHash(enc2, hop2KS.GetEncryptionPrivateKey().Bytes())
+	require.NoError(t, err)
+	_, postReplyCK2, err := DeriveSTBMReplyKey(ck2)
+	require.NoError(t, err)
+	hop2LayerKey, hop2IVKey, _, err := DeriveSTBMLayerKeys(postReplyCK2)
+	require.NoError(t, err)
+
+	// Creator side must have derived the SAME keys for hop 2 (F063).
+	assert.Equal(t, hop2LayerKey[:], result.Records[1].LayerKey[:],
+		"creator's hop-2 layer key must match the hop's derived layer key")
+	assert.Equal(t, hop2IVKey[:], result.Records[1].IVKey[:],
+		"creator's hop-2 IV key must match the hop's derived IV key")
+
+	// Keys must be non-zero (F062 guard).
+	assert.NotEqual(t, make([]byte, 32), result.Records[0].LayerKey[:], "hop-1 layer key must be non-zero")
+	assert.NotEqual(t, make([]byte, 32), result.Records[1].LayerKey[:], "hop-2 layer key must be non-zero")
+	assert.NotEqual(t, make([]byte, 32), result.Records[0].IVKey[:], "hop-1 IV key must be non-zero")
+	assert.NotEqual(t, make([]byte, 32), result.Records[1].IVKey[:], "hop-2 IV key must be non-zero")
+}
+
+// TestDeriveSTBMLayerKeys_Deterministic verifies that DeriveSTBMLayerKeys is a
+// pure function of the post-reply chaining key (both creator and hop derive
+// identical output for identical input) and that the OBEP garlic key chain is
+// built on the same intermediate keys.
+func TestDeriveSTBMLayerKeys_Deterministic(t *testing.T) {
+	var ck [32]byte
+	for i := range ck {
+		ck[i] = byte(i)
+	}
+
+	lk1, iv1, next1, err := DeriveSTBMLayerKeys(ck)
+	require.NoError(t, err)
+	lk2, iv2, next2, err := DeriveSTBMLayerKeys(ck)
+	require.NoError(t, err)
+
+	assert.Equal(t, lk1, lk2, "layer key derivation must be deterministic")
+	assert.Equal(t, iv1, iv2, "IV key derivation must be deterministic")
+	assert.Equal(t, next1, next2, "chaining key derivation must be deterministic")
+	assert.NotEqual(t, [32]byte{}, lk1, "layer key must be non-zero")
+	assert.NotEqual(t, [32]byte{}, iv1, "IV key must be non-zero")
+
+	// The OBEP garlic key chain must consume the same intermediate chaining key.
+	garlicKey, tag, err := DeriveSTBMOBEPGarlicKeyAndTag(ck)
+	require.NoError(t, err)
+	assert.NotEqual(t, [32]byte{}, garlicKey, "garlic key must be non-zero")
+	assert.NotEqual(t, [8]byte{}, tag, "garlic tag must be non-zero")
+}
+
 // Test helper methods for backward compatibility with existing tests.
 // These wrap the new serialized methods and parse results back to Message objects.
 

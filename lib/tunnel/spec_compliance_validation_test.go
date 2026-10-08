@@ -1572,6 +1572,37 @@ func TestCryptoAudit_ManagerUsesAESForParticipants(t *testing.T) {
 	assert.Equal(t, 1, m.ParticipantCount())
 }
 
+// TestCryptoAudit_RegisterParticipantRejectsZeroKeys verifies the F062
+// defense-in-depth guard: zero layer/IV keys are never valid on the wire and
+// must be rejected at registration rather than creating a participant tunnel
+// that cannot decrypt any real tunnel data.
+func TestCryptoAudit_RegisterParticipantRejectsZeroKeys(t *testing.T) {
+	var validKey session_key.SessionKey
+	for i := range validKey {
+		validKey[i] = byte(i + 1)
+	}
+	var zeroKey session_key.SessionKey
+
+	m := NewManager()
+	defer m.Stop()
+
+	err := m.RegisterParticipant(
+		TunnelID(1), common.Hash{0x01}, time.Now().Add(10*time.Minute),
+		zeroKey, validKey, common.Hash{0x02}, TunnelID(2),
+	)
+	require.Error(t, err, "zero layer key must be rejected")
+	assert.Contains(t, err.Error(), "layer key is zero")
+
+	err = m.RegisterParticipant(
+		TunnelID(1), common.Hash{0x01}, time.Now().Add(10*time.Minute),
+		validKey, zeroKey, common.Hash{0x02}, TunnelID(2),
+	)
+	require.Error(t, err, "zero IV key must be rejected")
+	assert.Contains(t, err.Error(), "IV key is zero")
+
+	assert.Equal(t, 0, m.ParticipantCount(), "no participant may be registered with zero keys")
+}
+
 func TestCryptoAudit_GatewayEncryptionConcurrencySafe(t *testing.T) {
 	// Gateway must serialize concurrent encryption calls (encMu)
 	gw := createSpecGateway(t)
