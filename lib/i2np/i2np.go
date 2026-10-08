@@ -52,13 +52,6 @@ func (f *MessageFactory) CreateTunnelDataMessage(tunnelID buildrecord.TunnelID, 
 	return NewTunnelDataMessage(tunnelID, data)
 }
 
-// CreateTunnelBuildMessage creates a new tunnel build message
-func (f *MessageFactory) CreateTunnelBuildMessage(records [8]BuildRequestRecord) Message {
-	return &TunnelBuildMessage{
-		BaseI2NPMessage: NewBaseI2NPMessage(I2NPMessageTypeTunnelBuild),
-		Records:         TunnelBuild(records),
-	}
-}
 
 // BaseI2NPMessage provides a basic implementation of Message
 type BaseI2NPMessage struct {

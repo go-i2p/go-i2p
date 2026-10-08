@@ -1,7 +1,5 @@
 package i2np
 
-import "github.com/go-i2p/logger"
-
 /*
 I2P I2NP VariableTunnelBuild
 https://geti2p.net/spec/i2np
@@ -23,23 +21,12 @@ total size: 1+$num*528
 */
 
 // VariableTunnelBuild represents an I2NP VariableTunnelBuild message containing a variable number of build request records for tunnel construction.
+//
+// NOTE: This type is retained for receive-side parsing and spec-compliance
+// record-count validation only. The send-side constructor has been removed —
+// production builds use ShortTunnelBuild (STBM, type 25) exclusively.
 type VariableTunnelBuild struct {
 	sliceRecordSet
-}
-
-// NewVariableTunnelBuilder creates a new VariableTunnelBuild and returns it as TunnelBuilder interface
-func NewVariableTunnelBuilder(records []BuildRequestRecord) TunnelBuilder {
-	log.WithFields(logger.Fields{
-		"at":           "NewVariableTunnelBuilder",
-		"record_count": len(records),
-	}).Debug("Creating VariableTunnelBuild")
-
-	return &VariableTunnelBuild{
-		sliceRecordSet: sliceRecordSet{
-			Count:               len(records),
-			BuildRequestRecords: records,
-		},
-	}
 }
 
 // Compile-time interface satisfaction check

@@ -19,9 +19,9 @@ func NewBuildMessageFactory() build.BuildMessageFactory {
 	return &buildMessageFactory{}
 }
 
-// createVariableBuildMessage is a generic helper for creating variable-record tunnel build messages.
-// It computes total message size, marshals records, and creates an I2NP message of the given type.
-// Consolidation for M-1: eliminates duplication between CreateShortTunnelBuildMessage and CreateVariableTunnelBuildMessage.
+// createVariableBuildMessage is a generic helper for creating count-prefixed
+// tunnel build messages. It computes total message size, marshals records, and
+// creates an I2NP message of the given type. Used by CreateShortTunnelBuildMessage.
 func (f *buildMessageFactory) createVariableBuildMessage(msgType int, typeName string, encryptedRecords [][]byte, messageID int) ([]byte, error) {
 	// Calculate total size: 1 byte for count + all encrypted records
 	totalSize := 1

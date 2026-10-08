@@ -176,23 +176,6 @@ func TestTunnelBuildMessage_InterfaceCompliance(t *testing.T) {
 	assert.NotNil(t, expiration)
 }
 
-// TestMessageFactory_CreateTunnelBuildMessage tests factory method
-func TestMessageFactory_CreateTunnelBuildMessage(t *testing.T) {
-	factory := NewMessageFactory()
-	records := createTestBuildRequestRecords()
-
-	msg := factory.CreateTunnelBuildMessage(records)
-
-	// Verify it returns Message interface
-	assert.NotNil(t, msg)
-	assert.Equal(t, I2NPMessageTypeTunnelBuild, msg.Type())
-
-	// Verify it can be cast to TunnelBuilder
-	builder, ok := msg.(TunnelBuilder)
-	assert.True(t, ok)
-	assert.Equal(t, 8, builder.GetRecordCount())
-}
-
 // Helper function to create test build request records
 func createTestBuildRequestRecords() [8]BuildRequestRecord {
 	var records [8]BuildRequestRecord
