@@ -72,7 +72,7 @@ func TestBuildMessageFactory_ValidPayload_Variable(t *testing.T) {
 		}
 	}
 
-	serialized, err := factory.CreateVariableTunnelBuildMessage(validRecords, 98765)
+	serialized, err := factory.CreateShortTunnelBuildMessage(validRecords, 98765)
 
 	require.NoError(t, err, "expected no error for valid payload")
 	require.NotNil(t, serialized, "expected non-nil result")
@@ -84,7 +84,7 @@ func TestBuildMessageFactory_ValidPayload_Variable(t *testing.T) {
 	msg := &BaseI2NPMessage{}
 	err = msg.UnmarshalBinary(serialized)
 	require.NoError(t, err, "serialized message should be parseable")
-	assert.Equal(t, I2NPMessageTypeVariableTunnelBuild, msg.Type())
+	assert.Equal(t, I2NPMessageTypeShortTunnelBuild, msg.Type())
 	assert.Equal(t, 98765, msg.MessageID())
 }
 
@@ -101,7 +101,7 @@ func TestBuildMessageFactory_ValidPayload_Tunnel(t *testing.T) {
 		}
 	}
 
-	serialized, err := factory.CreateTunnelBuildMessage(validRecords, 11223)
+	serialized, err := factory.CreateShortTunnelBuildMessage(validRecords, 11223)
 
 	require.NoError(t, err, "expected no error for valid payload")
 	require.NotNil(t, serialized, "expected non-nil result")
@@ -113,6 +113,6 @@ func TestBuildMessageFactory_ValidPayload_Tunnel(t *testing.T) {
 	msg := &BaseI2NPMessage{}
 	err = msg.UnmarshalBinary(serialized)
 	require.NoError(t, err, "serialized message should be parseable")
-	assert.Equal(t, I2NPMessageTypeTunnelBuild, msg.Type())
+	assert.Equal(t, I2NPMessageTypeShortTunnelBuild, msg.Type())
 	assert.Equal(t, 11223, msg.MessageID())
 }
