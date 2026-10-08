@@ -3356,34 +3356,37 @@ func TestCryptoAudit_SessionTagRatchet_Prop144Section5(t *testing.T) {
 }
 
 // ============================================================================
-// Section 6 — Legacy Crypto Found
+// Section 6 — Legacy (Receive-Path Interop) Crypto
 // ============================================================================
 
-// TestLegacyCrypto_ElGamalBuildRecords_FlagPresence flags the existence of
-// 528-byte ElGamal build record types. Per modern spec, only ECIES should be used.
+// TestLegacyCrypto_ElGamalBuildRecords_FlagPresence documents the presence of
+// 528-byte long-format build record types. These are NOT ElGamal — they use
+// ECIES-X25519-AEAD (see EncryptBuildRequestRecord). The 528-byte long format
+// is retained for RECEIVE-path interop with pre-STBM peers; the send path uses
+// 218-byte ECIES short records (STBM, proposal 152).
 func TestLegacyCrypto_ElGamalBuildRecords_FlagPresence(t *testing.T) {
-	// StandardBuildRecordSize = 528 is still defined (legacy ElGamal + ECIES long format)
+	// StandardBuildRecordSize = 528 is the ECIES long-format record size
 	assert.Equal(t, 528, StandardBuildRecordSize,
-		"CRITICAL: StandardBuildRecordSize (528) is defined — this is the ElGamal/ECIES-long record size")
+		"StandardBuildRecordSize (528) is the ECIES long-format record size")
 
 	// Document: BuildResponseRecordELGamalAES and BuildResponseRecordELGamal types exist
 	var elgamalAES BuildResponseRecordELGamalAES
 	assert.Equal(t, 528, len(elgamalAES),
-		"CRITICAL: BuildResponseRecordELGamalAES [528]byte type exists — legacy ElGamal/AES record")
+		"BuildResponseRecordELGamalAES [528]byte type exists — ECIES long-format record")
 
 	var elgamal BuildResponseRecordELGamal
 	assert.Equal(t, 528, len(elgamal),
-		"CRITICAL: BuildResponseRecordELGamal [528]byte type exists — legacy ElGamal record")
+		"BuildResponseRecordELGamal [528]byte type exists — ECIES long-format record")
 
-	// TunnelBuild uses 8×528 = 4224 byte format (legacy-compatible)
+	// TunnelBuild uses 8×528 = 4224 byte format (receive-path interop)
 	var tb TunnelBuild
 	totalSize := len(tb) * StandardBuildRecordSize
 	assert.Equal(t, 4224, totalSize,
-		"TunnelBuild uses 528-byte records (legacy ElGamal format)")
+		"TunnelBuild uses 528-byte records (ECIES long format)")
 
-	t.Log("CRITICAL FINDING: ElGamal build record types (528 bytes) are present in the codebase.")
-	t.Log("The modern I2P spec recommends ECIES-only (218-byte short records).")
-	t.Log("528-byte records remain for backward compatibility with older routers.")
+	t.Log("NOTE: 528-byte long-format build record types are present for receive-path interop.")
+	t.Log("The modern send path uses ECIES-only 218-byte short records (STBM).")
+	t.Log("528-byte records remain so this router can parse builds/replies from older peers.")
 }
 
 // TestLegacyCrypto_AESBuildRecordDecryption_FlagPresence flags the AES-256-CBC

@@ -561,7 +561,9 @@ func TestProcessBuildReplyCommon_ShortReply_EncryptedSlots(t *testing.T) {
 	assert.Len(t, handler.RawRecordData, 1)
 	assert.Len(t, handler.RawRecordData[0], ShortBuildRecordSize)
 	assert.Len(t, handler.BuildResponseRecords, 1)
-	assert.Equal(t, byte(TunnelBuildReplyReject), handler.BuildResponseRecords[0].Reply)
+	// Encrypted slots carry the internal pending-decryption sentinel until
+	// ReplyProcessor decrypts them; never a real wire rejection code.
+	assert.Equal(t, byte(TunnelBuildReplyPendingDecryption), handler.BuildResponseRecords[0].Reply)
 }
 
 // TestProcessMessageDispatch_ShortReply_EncryptedSlots verifies dispatch path

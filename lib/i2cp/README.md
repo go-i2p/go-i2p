@@ -94,13 +94,10 @@ const (
 
 	// Advanced features
 	MessageTypeBlindingInfo uint8 = 42 // Client -> Router: Blinded destination parameters
-
-	// Deprecated/legacy message types
-	MessageTypeDestLookup uint8 = 34 // Client -> Router: Deprecated in v0.9.67, use type 38 (SPEC: 34, was 13)
-	MessageTypeDestReply  uint8 = 35 // Router -> Client: Deprecated in v0.9.67, use type 39 (SPEC: 35, was 14)
 )
 ```
-Message type constants as defined in I2CP v0.9.67
+Message type constants as defined in I2CP v0.9.67. The deprecated DestLookup/DestReply
+types (34/35) are not supported; HostLookup/HostReply (38/39) supersede them.
 
 ```go
 const (

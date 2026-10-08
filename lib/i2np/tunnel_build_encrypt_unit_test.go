@@ -188,104 +188,19 @@ func TestCreateShortTunnelBuildMessage_RegistersOBEPGarlicKey(t *testing.T) {
 	assert.Len(t, registrar.registrations, 1, "should register exactly one garlic key (OBEP path only, no compat)")
 }
 
-// TestCreateBuildMessage_EncryptsRecords verifies that both TunnelBuild (type 21)
-// and VariableTunnelBuild (type 23) encrypt records correctly.
-func TestCreateBuildMessage_EncryptsRecords(t *testing.T) {
-	tests := []struct {
-		name         string
-		createMsg    func(*TunnelManager, *tunnel.TunnelBuildResult, int) (Message, error)
-		expectedLen  int
-		recordOffset int
-		checkPrefix  bool
-		tunnelID     tunnel.TunnelID
-		msgID        int
-	}{
-		{
-			name: "TunnelBuild_Type21_Fixed8Records",
-			createMsg: func(tm *TunnelManager, r *tunnel.TunnelBuildResult, id int) (Message, error) {
-				return tm.createTunnelBuildMessage(r, id)
-			},
-			expectedLen:  8 * 528,
-			recordOffset: 0,
-			tunnelID:     tunnel.TunnelID(11111),
-			msgID:        2002,
-		},
-		{
-			name: "VariableTunnelBuild_Type23_CountPrefix",
-			createMsg: func(tm *TunnelManager, r *tunnel.TunnelBuildResult, id int) (Message, error) {
-				return tm.createVariableTunnelBuildMessage(r, id)
-			},
-			expectedLen:  1 + 1*528,
-			recordOffset: 1,
-			checkPrefix:  true,
-			tunnelID:     tunnel.TunnelID(11112),
-			msgID:        2003,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			hop1RI, hop1KS := createTestHop(t)
-			rec1 := createTestTunnelRecord(t)
-			result := makeSingleHopBuildResult(*hop1RI, rec1, tt.tunnelID, false)
-
-			tm := &TunnelManager{}
-			msg, err := tt.createMsg(tm, result, tt.msgID)
-			require.NoError(t, err)
-			require.NotNil(t, msg)
-
-			baseMsg := msg.(*BaseI2NPMessage)
-			data := baseMsg.GetData()
-			require.Equal(t, tt.expectedLen, len(data))
-
-			if tt.checkPrefix {
-				assert.Equal(t, byte(1), data[0], "First byte should be record count")
-			}
-
-			var enc1 [528]byte
-			copy(enc1[:], data[tt.recordOffset:tt.recordOffset+528])
-			decrypted1, err := DecryptBuildRequestRecord(enc1, hop1KS.GetEncryptionPrivateKey().Bytes())
-			require.NoError(t, err, "decryption of record 1 should succeed")
-			assert.Equal(t, rec1.ReceiveTunnel, decrypted1.ReceiveTunnel)
-			assert.Equal(t, rec1.SendMessageID, decrypted1.SendMessageID)
-		})
-	}
-}
-
-// TestSelectBuildMessage_ShortBuild verifies that selectBuildMessage routes
-// to STBM when UseShortBuild is true.
-func TestSelectBuildMessage_ShortBuild(t *testing.T) {
+// TestCreateShortTunnelBuildMessage_ShortBuildRouting verifies that the STBM
+// creation path produces a SHORT_TUNNEL_BUILD (type 25) message.
+func TestCreateShortTunnelBuildMessage_ShortBuildRouting(t *testing.T) {
 	hopRI, _ := createTestHop(t)
 	rec := createTestTunnelRecord(t)
 
 	result := makeSingleHopBuildResult(*hopRI, rec, tunnel.TunnelID(33333), true)
 
 	tm := &TunnelManager{}
-	msg, err := tm.selectBuildMessage(result, 3003)
+	msg, err := tm.createShortTunnelBuildMessage(result, 3003)
 	require.NoError(t, err)
 	assert.Equal(t, I2NPMessageTypeShortTunnelBuild, msg.Type(),
 		"should create SHORT_TUNNEL_BUILD message")
-}
-
-// TestSelectBuildMessage_LegacyBuild verifies that selectBuildMessage routes
-// to VTB when UseShortBuild is false.
-func TestSelectBuildMessage_LegacyBuild(t *testing.T) {
-	hopRI, _ := createTestHop(t)
-	rec := createTestTunnelRecord(t)
-
-	result := &tunnel.TunnelBuildResult{
-		TunnelID:      tunnel.TunnelID(44444),
-		Hops:          []router_info.RouterInfo{*hopRI},
-		Records:       []tunnel.BuildRequestRecord{rec},
-		UseShortBuild: false,
-		IsInbound:     false,
-	}
-
-	tm := &TunnelManager{}
-	msg, err := tm.selectBuildMessage(result, 4004)
-	require.NoError(t, err)
-	assert.Equal(t, I2NPMessageTypeTunnelBuild, msg.Type(),
-		"should create TUNNEL_BUILD message")
 }
 
 // TestCreateShortTunnelBuildMessage_MismatchedHops verifies error handling when
@@ -306,28 +221,6 @@ func TestCreateShortTunnelBuildMessage_MismatchedHops(t *testing.T) {
 
 	tm := &TunnelManager{}
 	_, err := tm.createShortTunnelBuildMessage(result, 5005)
-	assert.Error(t, err, "should fail when records outnumber hops")
-	assert.Contains(t, err.Error(), "no corresponding hop")
-}
-
-// TestCreateTunnelBuildMessage_MismatchedHops verifies error handling
-// for the TunnelBuild (type 21) path.
-func TestCreateTunnelBuildMessage_MismatchedHops(t *testing.T) {
-	hopRI, _ := createTestHop(t)
-	rec1 := createTestTunnelRecord(t)
-	rec2 := createTestTunnelRecord(t)
-
-	// 2 records but only 1 hop — should fail
-	result := &tunnel.TunnelBuildResult{
-		TunnelID:      tunnel.TunnelID(66666),
-		Hops:          []router_info.RouterInfo{*hopRI},
-		Records:       []tunnel.BuildRequestRecord{rec1, rec2},
-		UseShortBuild: false,
-		IsInbound:     false,
-	}
-
-	tm := &TunnelManager{}
-	_, err := tm.createTunnelBuildMessage(result, 6006)
 	assert.Error(t, err, "should fail when records outnumber hops")
 	assert.Contains(t, err.Error(), "no corresponding hop")
 }
@@ -388,53 +281,6 @@ func (tm *TunnelManager) createShortTunnelBuildMessage(result *tunnel.TunnelBuil
 		tm.messageFactory = NewBuildMessageFactory()
 	}
 	data, err := tm.createSerializedShortTunnelBuildMessage(result, messageID)
-	if err != nil {
-		return nil, err
-	}
-	// Parse the serialized message back into a Message object
-	msg := &BaseI2NPMessage{}
-	if err := msg.UnmarshalBinary(data); err != nil {
-		return nil, err
-	}
-	return msg, nil
-}
-
-func (tm *TunnelManager) createTunnelBuildMessage(result *tunnel.TunnelBuildResult, messageID int) (Message, error) {
-	if tm.messageFactory == nil {
-		tm.messageFactory = NewBuildMessageFactory()
-	}
-	data, err := tm.createSerializedTunnelBuildMessage(result, messageID)
-	if err != nil {
-		return nil, err
-	}
-	// Parse the serialized message back into a Message object
-	msg := &BaseI2NPMessage{}
-	if err := msg.UnmarshalBinary(data); err != nil {
-		return nil, err
-	}
-	return msg, nil
-}
-
-func (tm *TunnelManager) selectBuildMessage(result *tunnel.TunnelBuildResult, messageID int) (Message, error) {
-	if result.UseShortBuild {
-		return tm.createShortTunnelBuildMessage(result, messageID)
-	}
-	return tm.createTunnelBuildMessage(result, messageID)
-}
-
-func (tm *TunnelManager) createVariableTunnelBuildMessage(result *tunnel.TunnelBuildResult, messageID int) (Message, error) {
-	if tm.messageFactory == nil {
-		tm.messageFactory = NewBuildMessageFactory()
-	}
-	encryptedData, err := encryptBuildRecords(result)
-	if err != nil {
-		return nil, err
-	}
-	records := make([][]byte, len(result.Records))
-	for i := range result.Records {
-		records[i] = encryptedData[i][:]
-	}
-	data, err := tm.messageFactory.CreateVariableTunnelBuildMessage(records, messageID)
 	if err != nil {
 		return nil, err
 	}

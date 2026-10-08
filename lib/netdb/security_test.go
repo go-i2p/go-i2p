@@ -674,11 +674,13 @@ func TestPublisher_PublishLeaseSetValidation(t *testing.T) {
 	db := newMockNetDB()
 	publisher := NewPublisher(db, nil, nil, nil, DefaultPublisherConfig())
 
-	// Test with empty LeaseSet (will fail validation)
+	// Test with empty LeaseSet (will fail serialization)
 	hash := common.Hash{1, 2, 3, 4}
-	emptyLS := lease_set.LeaseSet{} // Empty LeaseSet
+	emptyLS := &lease_set.LeaseSet{} // Empty LeaseSet
 
-	err := publisher.publishLeaseSetObject(hash, emptyLS)
-	assert.Error(t, err, "Empty LeaseSet should fail validation")
-	assert.Contains(t, err.Error(), "invalid LeaseSet", "Error should indicate validation failure")
+	err := publisher.publishLeaseSetEntry(LeaseSetEntry{
+		Hash:  hash,
+		Entry: Entry{LeaseSet: emptyLS},
+	})
+	assert.Error(t, err, "Empty LeaseSet should fail publishing")
 }

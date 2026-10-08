@@ -13,7 +13,6 @@ import (
 	"time"
 
 	common "github.com/go-i2p/common/data"
-	"github.com/go-i2p/common/lease_set"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
@@ -426,32 +425,6 @@ func (p *Publisher) publishLeaseSetEntry(lsEntry LeaseSetEntry) error {
 
 	// Send DatabaseStore message to each selected floodfill with the correct store type
 	return p.sendDatabaseStoreMessages(lsEntry.Hash, lsBytes, storeType, floodfills)
-}
-
-// publishLeaseSetObject is an internal method that publishes a typed LeaseSet object.
-// This is used internally by publishAllLeaseSets to publish LeaseSets retrieved from the database.
-// Note: This method publishes original LeaseSets (type 1), not LeaseSet2.
-func (p *Publisher) publishLeaseSetObject(hash common.Hash, ls lease_set.LeaseSet) error {
-	log.WithField("hash", logutil.HashPrefixPlain(hash)).Debug("Publishing LeaseSet")
-
-	// Validate LeaseSet before attempting serialization
-	if err := ls.Validate(); err != nil {
-		return oops.Errorf("invalid LeaseSet: %w", err)
-	}
-
-	// Select closest floodfill routers
-	floodfills, err := p.selectFloodfillsForPublishing(hash)
-	if err != nil {
-		return oops.Errorf("failed to select floodfills: %w", err)
-	}
-
-	// Send DatabaseStore message to each selected floodfill
-	// Use DatabaseStoreTypeLeaseSet (1) since this is an original LeaseSet, not LeaseSet2
-	lsBytes, err := ls.Bytes()
-	if err != nil {
-		return oops.Errorf("failed to serialize LeaseSet: %w", err)
-	}
-	return p.sendDatabaseStoreMessages(hash, lsBytes, i2np.DatabaseStoreTypeLeaseSet, floodfills)
 }
 
 // PublishLeaseSet publishes raw LeaseSet bytes to floodfill routers.

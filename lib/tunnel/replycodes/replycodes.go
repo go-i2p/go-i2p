@@ -27,4 +27,11 @@ const (
 	// TunnelBuildReplyCritical indicates a critical tunnel rejection (0x05).
 	// This is NOT "expired" - it's a critical rejection. Not sent, but processed if received.
 	TunnelBuildReplyCritical = 0x05
+
+	// TunnelBuildReplyPendingDecryption is an internal sentinel (0xFF) marking a
+	// reply record whose Reply field has not yet been populated because the
+	// record is still encrypted and awaiting deferred decryption. It is never
+	// transmitted on the wire and never appears in a decrypted cleartext record
+	// (spec codes are 0x00-0x05). Consumers must not treat it as a rejection.
+	TunnelBuildReplyPendingDecryption = 0xFF
 )

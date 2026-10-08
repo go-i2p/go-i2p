@@ -1560,8 +1560,6 @@ func TestHostLookupTypeNames(t *testing.T) {
 	assert.Equal(t, uint8(39), MessageTypeHostReply)
 	assert.Equal(t, "HostLookup", MessageTypeName(MessageTypeHostLookup))
 	assert.Equal(t, "HostReply", MessageTypeName(MessageTypeHostReply))
-	assert.Equal(t, uint8(34), MessageTypeDestLookup)
-	assert.Equal(t, uint8(35), MessageTypeDestReply)
 }
 
 // =============================================================================

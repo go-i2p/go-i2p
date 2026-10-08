@@ -48,21 +48,15 @@ type GarlicKeyRegistrar interface {
 // BuildMessageFactory creates serialized I2NP tunnel build messages.
 // This interface decouples tunnel coordination from I2NP message types,
 // allowing lib/tunnel/build to construct messages without importing lib/i2np.
+//
+// Only the modern Short Tunnel Build (STBM, type 25) send format is supported.
+// The legacy fixed TunnelBuild (type 21) and VariableTunnelBuild (type 23)
+// send paths have been removed; their receive-side parsing remains for interop.
 type BuildMessageFactory interface {
 	// CreateShortTunnelBuildMessage creates a serialized Short Tunnel Build message (type 25).
 	// encryptedRecords contains 218-byte encrypted STBM records, messageID is the I2NP message ID.
 	// Returns the serialized message bytes ready for transmission and any marshaling error.
 	CreateShortTunnelBuildMessage(encryptedRecords [][]byte, messageID int) ([]byte, error)
-
-	// CreateVariableTunnelBuildMessage creates a serialized Variable Tunnel Build message (type 23).
-	// encryptedRecords contains 528-byte encrypted VTB records, messageID is the I2NP message ID.
-	// Returns the serialized message bytes ready for transmission and any marshaling error.
-	CreateVariableTunnelBuildMessage(encryptedRecords [][]byte, messageID int) ([]byte, error)
-
-	// CreateTunnelBuildMessage creates a serialized Tunnel Build message (type 21).
-	// encryptedRecords must contain exactly 8 records of 528 bytes each, messageID is the I2NP message ID.
-	// Returns the serialized message bytes ready for transmission and any marshaling error.
-	CreateTunnelBuildMessage(encryptedRecords [][]byte, messageID int) ([]byte, error)
 }
 
 // BuildRecordEncryptor handles encryption of tunnel build request records.
@@ -76,7 +70,8 @@ type BuildRecordEncryptor interface {
 		hop router_info.RouterInfo,
 	) (encrypted [218]byte, chainKey, noiseHash [32]byte, err error)
 
-	// EncryptBuildRequestRecord encrypts a legacy ElGamal build request record (528 bytes).
+	// EncryptBuildRequestRecord encrypts a long-format (528-byte) build request
+	// record using ECIES-X25519-AEAD.
 	EncryptBuildRequestRecord(
 		record buildrecord.BuildRequestRecord,
 		hop router_info.RouterInfo,

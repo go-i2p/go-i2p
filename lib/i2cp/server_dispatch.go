@@ -64,9 +64,6 @@ func (s *Server) handleMessage(conn net.Conn, msg *Message, sessionPtr **Session
 	case MessageTypeHostLookup:
 		return s.handleHostLookup(conn, msg)
 
-	case MessageTypeDestLookup:
-		return s.handleDestLookup(msg)
-
 	case MessageTypeBlindingInfo:
 		return s.handleBlindingInfo(msg, sessionPtr)
 
@@ -889,44 +886,6 @@ func (s *Server) handleHostLookup(_ net.Conn, msg *Message) (*Message, error) {
 	}
 
 	return buildHostReplyMessage(msg.SessionID, replyPayload)
-}
-
-// handleDestLookup handles DestLookup (type 34) requests.
-// Per i2pd behavior, request payload is a 32-byte destination hash and reply payload
-// is either the full destination bytes (found) or the original 32-byte hash (not found).
-func (s *Server) handleDestLookup(msg *Message) (*Message, error) {
-	if len(msg.Payload) < 32 {
-		return nil, oops.Errorf("dest lookup payload too short: need 32 bytes, got %d", len(msg.Payload))
-	}
-
-	var destHash common.Hash
-	copy(destHash[:], msg.Payload[:32])
-
-	if s.netdb == nil {
-		return buildDestReplyMessage(msg.SessionID, msg.Payload[:32]), nil
-	}
-
-	leaseSetBytes, err := s.netdb.GetLeaseSetBytes(destHash)
-	if err != nil {
-		return buildDestReplyMessage(msg.SessionID, msg.Payload[:32]), nil
-	}
-
-	destBytes, err := s.extractDestinationFromLeaseSet(leaseSetBytes)
-	if err != nil {
-		return nil, oops.Errorf("failed to extract destination from leaseset: %w", err)
-	}
-
-	return buildDestReplyMessage(msg.SessionID, destBytes), nil
-}
-
-func buildDestReplyMessage(sessionID uint16, payload []byte) *Message {
-	data := make([]byte, len(payload))
-	copy(data, payload)
-	return &Message{
-		Type:      MessageTypeDestReply,
-		SessionID: sessionID,
-		Payload:   data,
-	}
 }
 
 // lookupDestinationByHash queries NetDB for a LeaseSet by hash and extracts the destination.

@@ -54,18 +54,6 @@ const (
 
 	// Advanced features
 	MessageTypeBlindingInfo uint8 = 42 // Client -> Router: Blinded destination parameters
-
-	// Deprecated/legacy message types
-	MessageTypeDestLookup uint8 = 34 // Client -> Router: Deprecated in v0.9.67, use type 38 (SPEC: 34, was 13)
-	MessageTypeDestReply  uint8 = 35 // Router -> Client: Deprecated in v0.9.67, use type 39 (SPEC: 35, was 14)
-)
-
-// messageTypeReceiveMessageBegin and messageTypeReceiveMessageEnd are legacy I2CP message
-// types (6 and 7) that are not supported in fast-receive mode. They are retained as
-// unexported constants so the session-ID extraction switch can handle them without magic numbers.
-const (
-	messageTypeReceiveMessageBegin uint8 = 6 // Client -> Router: removed, not supported
-	messageTypeReceiveMessageEnd   uint8 = 7 // Client -> Router: removed, not supported
 )
 
 // messageTypeNames maps message type constants to human-readable names.
@@ -90,10 +78,6 @@ var messageTypeNames = map[uint8]string{
 	MessageTypeHostLookup:              "HostLookup",
 	MessageTypeHostReply:               "HostReply",
 	MessageTypeBlindingInfo:            "BlindingInfo",
-	MessageTypeDestLookup:              "DestLookup (deprecated)",
-	MessageTypeDestReply:               "DestReply (deprecated)",
-	messageTypeReceiveMessageBegin:     "ReceiveMessageBegin (removed)",
-	messageTypeReceiveMessageEnd:       "ReceiveMessageEnd (removed)",
 }
 
 // Reserved session IDs
@@ -385,8 +369,6 @@ func logPayloadReadFailure(connInfo string, msgType uint8, sessionID uint16, pay
 // - ReconfigureSession (type 2): SessionID(2) + config_data
 // - DestroySession (type 3): SessionID(2)
 // - SendMessage (type 5): SessionID(2) + message_data
-// - ReceiveMessageBegin (type 6): SessionID(2) + message_data
-// - ReceiveMessageEnd (type 7): SessionID(2) + MessageID(4)
 // - CreateLeaseSet (type 4): SessionID(2) + leaseset_data
 // - SendMessageExpires (type 36): SessionID(2) + message_data
 func extractSessionIDFromPayload(msgType uint8, payload []byte) uint16 {
@@ -398,8 +380,6 @@ func extractSessionIDFromPayload(msgType uint8, payload []byte) uint16 {
 		MessageTypeReconfigureSession,
 		MessageTypeDestroySession,
 		MessageTypeSendMessage,
-		messageTypeReceiveMessageBegin,
-		messageTypeReceiveMessageEnd,
 		MessageTypeCreateLeaseSet,
 		MessageTypeCreateLeaseSet2,
 		MessageTypeSendMessageExpires:

@@ -15,7 +15,7 @@ func TestRouter_TunnelManagerInitialization(t *testing.T) {
 	router := createReadyTestRouter(t)
 
 	assert.NotNil(t, router.GetTunnelManager(), "Tunnel manager should be initialized")
-	pool := router.GetTunnelManager().GetPool()
+	pool := router.GetTunnelManager().GetOutboundPool()
 	assert.NotNil(t, pool, "Tunnel manager should have a pool")
 }
 
@@ -28,11 +28,11 @@ func TestRouter_GarlicRouterTunnelPoolIntegration(t *testing.T) {
 }
 
 // TestRouter_TunnelPoolAccessibility verifies that the tunnel pool is accessible
-// through the tunnel manager's GetPool() method.
+// through the tunnel manager's GetOutboundPool() method.
 func TestRouter_TunnelPoolAccessibility(t *testing.T) {
 	router := createReadyTestRouter(t)
 
-	pool := router.GetTunnelManager().GetPool()
+	pool := router.GetTunnelManager().GetOutboundPool()
 	require.NotNil(t, pool, "Tunnel pool should be accessible")
 
 	stats := pool.GetPoolStats()
@@ -60,6 +60,6 @@ func TestRouter_InitializationOrder(t *testing.T) {
 	assert.NotNil(t, router.GetTunnelManager(), "Tunnel manager should be initialized")
 	assert.NotNil(t, router.GetGarlicRouter(), "Garlic router should be initialized")
 
-	pool := router.GetTunnelManager().GetPool()
+	pool := router.GetTunnelManager().GetOutboundPool()
 	assert.NotNil(t, pool, "Tunnel manager should provide access to tunnel pool")
 }

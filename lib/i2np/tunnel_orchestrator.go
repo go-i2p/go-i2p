@@ -22,7 +22,6 @@ type TunnelBuildCoordinator interface {
 	// Build operations — structurally satisfies tunnel.BuilderInterface
 	BuildTunnel(req tunnel.BuildTunnelRequest) (*tunnel.BuildTunnelResult, error)
 	BuildTunnelFromRequest(req tunnel.BuildTunnelRequest) (buildrecord.TunnelID, []common.Hash, error)
-	BuildTunnelWithBuilder(builder TunnelBuilder) error
 
 	// Reply processing — structurally satisfies TunnelBuildReplyProcessor
 	ProcessTunnelBuildReply(handler TunnelReplyHandler, messageID int) error
@@ -34,7 +33,6 @@ type TunnelBuildCoordinator interface {
 // observability layer. Any substitute only needs to implement these 10 methods.
 type TunnelStatsReader interface {
 	// Pool access
-	GetPool() *tunnel.Pool
 	GetInboundPool() *tunnel.Pool
 	GetOutboundPool() *tunnel.Pool
 

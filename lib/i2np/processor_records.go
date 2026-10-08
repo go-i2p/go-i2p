@@ -145,10 +145,12 @@ func parseResponseRecords(data []byte, count, recordSize, startOffset int, isSho
 		rawRecords[i] = rawCopy
 		if isShortBuild {
 			// Type-26 short replies carry 218-byte encrypted slots. They are
-			// decrypted later in ReplyProcessor using pending build keys, so
-			// fully implemented production record with complete data
-			// ciphertext in rawRecords for deferred decryption.
-			records[i] = BuildResponseRecord{Reply: TunnelBuildReplyReject}
+			// decrypted later in ReplyProcessor using pending build keys; the
+			// actual ciphertext is preserved in rawRecords for that deferred
+			// decryption. The Reply field is set to an internal "pending
+			// decryption" sentinel so pre-decryption consumers cannot mistake
+			// it for a real wire rejection code.
+			records[i] = BuildResponseRecord{Reply: TunnelBuildReplyPendingDecryption}
 			offset += recordSize
 			continue
 		}
@@ -420,7 +422,9 @@ func (p *MessageProcessor) processSingleBuildRecord(messageID, index int, record
 		} else if err := p.handleAcceptedBuildRecord(messageID, index, record); err != nil {
 			// Registration failed — send a rejection reply so the tunnel builder
 			// knows this hop is non-functional instead of a phantom success.
-			rejectCode = TunnelBuildReplyReject
+			// Use the spec-sanctioned bandwidth rejection (0x03): 0x01 is a
+			// deprecated receive-only code and must never be transmitted.
+			rejectCode = TunnelBuildReplyBandwidth
 			p.handleRejectedBuildRecord(messageID, index, record, rejectCode,
 				fmt.Sprintf("participant registration failed: %v", err))
 		} else {

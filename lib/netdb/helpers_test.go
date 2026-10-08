@@ -116,14 +116,16 @@ func assertLeaseSetPresence(t *testing.T, db *StdNetDB, hash common.Hash, should
 }
 
 // assertPublishLeaseSetInvalid verifies that publishing an empty LeaseSet
-// returns an "invalid LeaseSet" error.
+// returns an error.
 func assertPublishLeaseSetInvalid(t *testing.T, publisher *Publisher) {
 	t.Helper()
-	ls := lease_set.LeaseSet{}
+	ls := &lease_set.LeaseSet{}
 	hash := common.Hash{1, 2, 3, 4}
-	err := publisher.publishLeaseSetObject(hash, ls)
+	err := publisher.publishLeaseSetEntry(LeaseSetEntry{
+		Hash:  hash,
+		Entry: Entry{LeaseSet: ls},
+	})
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid LeaseSet")
 }
 
 // ---------------------------------------------------------------------------
@@ -374,17 +376,19 @@ func marshalAndProcessSearchReply(t *testing.T, marshalFn func(*i2np.DatabaseSea
 }
 
 // assertPublishEmptyLeaseSetFails creates a Publisher with default config and
-// verifies that publishing an empty LeaseSet returns an "invalid LeaseSet" error.
+// verifies that publishing an empty LeaseSet returns an error.
 func assertPublishEmptyLeaseSetFails(t *testing.T) {
 	t.Helper()
 	db := newMockNetDB()
 	config := DefaultPublisherConfig()
 	publisher := NewPublisher(db, nil, nil, nil, config)
 
-	ls := lease_set.LeaseSet{}
+	ls := &lease_set.LeaseSet{}
 	hash := common.Hash{1, 2, 3, 4}
 
-	err := publisher.publishLeaseSetObject(hash, ls)
+	err := publisher.publishLeaseSetEntry(LeaseSetEntry{
+		Hash:  hash,
+		Entry: Entry{LeaseSet: ls},
+	})
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid LeaseSet")
 }

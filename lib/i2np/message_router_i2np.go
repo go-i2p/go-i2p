@@ -130,24 +130,6 @@ func (mr *I2NPMessageDispatcher) RouteDatabaseMessageFromPeer(msg interface{}, s
 	return oops.Errorf("message does not implement database interfaces")
 }
 
-// RouteTunnelMessage routes tunnel-related messages
-func (mr *I2NPMessageDispatcher) RouteTunnelMessage(msg interface{}) error {
-	if builder, ok := msg.(TunnelBuilder); ok {
-		return mr.tunnelMgr.BuildTunnelWithBuilder(builder)
-	}
-
-	if handler, ok := msg.(TunnelReplyHandler); ok {
-		// Extract message ID from the message interface
-		var messageID int
-		if i2npMsg, ok := msg.(Message); ok {
-			messageID = i2npMsg.MessageID()
-		}
-		return mr.tunnelMgr.ProcessTunnelReply(handler, messageID)
-	}
-
-	return oops.Errorf("message does not implement tunnel interfaces")
-}
-
 // SetTunnelManager replaces the internal TunnelManager with an external one.
 // This must be called from the router after r.tunnelManager is created so that
 // both the dispatcher and the router share the same pendingBuilds map, enabling

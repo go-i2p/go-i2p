@@ -1,7 +1,6 @@
 package i2np
 
 import (
-	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
@@ -59,12 +58,6 @@ func (t *TunnelBuild) GetBuildRecords() []BuildRequestRecord {
 // GetRecordCount returns the number of build records
 func (t *TunnelBuild) GetRecordCount() int {
 	return 8
-}
-
-// NewTunnelBuilder creates a new TunnelBuild and returns it as TunnelBuilder interface
-func NewTunnelBuilder(records [8]BuildRequestRecord) TunnelBuilder {
-	tb := TunnelBuild(records)
-	return &tb
 }
 
 // GetBuildRecords implements TunnelBuilder interface
@@ -173,47 +166,6 @@ func (msg *TunnelBuildMessage) UnmarshalBinary(data []byte) error {
 	}).Debug("TunnelBuild message unmarshaled successfully")
 
 	return nil
-}
-
-// NewEncryptedTunnelBuildMessage creates a new TunnelBuild I2NP message with encrypted records.
-//
-// Each BuildRequestRecord is encrypted using ECIES-X25519-AEAD encryption against
-// the corresponding hop's RouterInfo. This produces specification-compliant 528-byte
-// encrypted records suitable for network transmission.
-//
-// Parameters:
-//   - records: The 8 cleartext BuildRequestRecords
-//   - recipientRouterInfos: The RouterInfo for each hop (one per record)
-//
-// Returns the encrypted TunnelBuildMessage or an error if encryption fails.
-func NewEncryptedTunnelBuildMessage(records [8]BuildRequestRecord, recipientRouterInfos [8]router_info.RouterInfo) (*TunnelBuildMessage, error) {
-	log.WithFields(logger.Fields{
-		"at":           "NewEncryptedTunnelBuildMessage",
-		"record_count": 8,
-	}).Debug("Creating encrypted TunnelBuild message")
-
-	msg := &TunnelBuildMessage{
-		BaseI2NPMessage: NewBaseI2NPMessage(I2NPMessageTypeTunnelBuild),
-		Records:         TunnelBuild(records),
-		encrypted:       true,
-	}
-
-	data := make([]byte, 8*528)
-	for i := 0; i < 8; i++ {
-		encrypted, err := EncryptBuildRequestRecord(records[i], recipientRouterInfos[i])
-		if err != nil {
-			return nil, oops.Wrapf(err, "failed to encrypt build request record %d", i)
-		}
-		copy(data[i*528:(i+1)*528], encrypted[:])
-	}
-	msg.SetData(data)
-
-	log.WithFields(logger.Fields{
-		"at":        "NewEncryptedTunnelBuildMessage",
-		"data_size": len(data),
-	}).Debug("Encrypted TunnelBuild message created successfully")
-
-	return msg, nil
 }
 
 // UnmarshalEncryptedBinary deserializes and decrypts a TunnelBuild message.

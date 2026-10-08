@@ -24,6 +24,10 @@ const (
 	TunnelBuildReplyInvalid                      = replycodes.TunnelBuildReplyInvalid                      // Deprecated invalid request (0x04)
 	TunnelBuildReplyCritical                     = replycodes.TunnelBuildReplyCritical                     // Critical rejection (0x05) - not "expired"
 
+	// TunnelBuildReplyPendingDecryption is an internal sentinel (0xFF) for reply
+	// records awaiting deferred decryption. Never transmitted on the wire.
+	TunnelBuildReplyPendingDecryption = replycodes.TunnelBuildReplyPendingDecryption
+
 	// Deprecated aliases for backward compatibility
 	TunnelBuildReplyReject  = replycodes.TunnelBuildReplyProbabilisticRejectionLegacy
 	TunnelBuildReplyExpired = replycodes.TunnelBuildReplyCritical

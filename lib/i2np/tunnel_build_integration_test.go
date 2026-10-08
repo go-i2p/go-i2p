@@ -99,11 +99,6 @@ func TestTunnelManager_BuildTunnel_Core(t *testing.T) {
 	// Test TunnelManager methods in isolation
 	tm := NewTunnelManager(nil)
 
-	// Test tunnel ID generation
-	tunnelID, err := tm.generateTunnelID()
-	assert.NoError(t, err)
-	assert.NotEqual(t, tunnel.TunnelID(0), tunnelID)
-
 	// Test that TunnelManager can be created and configured
 	assert.NotNil(t, tm)
 	assert.Nil(t, tm.sessionProvider) // Should start nil
@@ -153,29 +148,6 @@ func TestTunnelManager_SetSessionProvider(t *testing.T) {
 	// Can set it back to nil
 	tm.SetSessionProvider(nil)
 	assert.Nil(t, tm.sessionProvider)
-}
-
-// TestTunnelManager_GenerateTunnelID tests tunnel ID generation
-func TestTunnelManager_GenerateTunnelID(t *testing.T) {
-	tm := NewTunnelManager(nil)
-
-	// Generate multiple tunnel IDs
-	ids := make(map[tunnel.TunnelID]bool)
-	for i := 0; i < 100; i++ {
-		id, err := tm.generateTunnelID()
-		assert.NoError(t, err)
-
-		// Verify ID is non-zero
-		assert.NotEqual(t, tunnel.TunnelID(0), id)
-
-		// Verify uniqueness (highly likely with time-based generation)
-		_, exists := ids[id]
-		assert.False(t, exists, "Tunnel ID should be unique")
-		ids[id] = true
-
-		// Small delay to ensure time-based uniqueness
-		time.Sleep(time.Nanosecond)
-	}
 }
 
 // TestTunnelBuildMessage_InterfaceCompliance verifies interface satisfaction

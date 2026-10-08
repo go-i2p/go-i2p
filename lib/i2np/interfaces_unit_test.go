@@ -179,13 +179,6 @@ func TestMessageRouter(t *testing.T) {
 	lookup := &DatabaseLookup{Key: key, From: key, Flags: 0x01}
 	err = router.RouteDatabaseMessage(lookup)
 	assert.NoError(t, err)
-
-	// Test routing tunnel message - should get error due to insufficient peers
-	records := [8]BuildRequestRecord{}
-	builder := NewTunnelBuilder(records)
-	err = router.RouteTunnelMessage(builder)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "insufficient peers")
 }
 
 func TestInterfaceComposition(t *testing.T) {

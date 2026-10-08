@@ -56,39 +56,6 @@ func (f *buildMessageFactory) CreateShortTunnelBuildMessage(encryptedRecords [][
 	return f.createVariableBuildMessage(I2NPMessageTypeShortTunnelBuild, "Short Tunnel Build (type 25)", encryptedRecords, messageID)
 }
 
-// CreateVariableTunnelBuildMessage creates a serialized Variable Tunnel Build message (type 23).
-// Refactored for M-1: now delegates to createVariableBuildMessage.
-func (f *buildMessageFactory) CreateVariableTunnelBuildMessage(encryptedRecords [][]byte, messageID int) ([]byte, error) {
-	return f.createVariableBuildMessage(I2NPMessageTypeVariableTunnelBuild, "Variable Tunnel Build (type 23)", encryptedRecords, messageID)
-}
-
-// CreateTunnelBuildMessage creates a serialized Tunnel Build message (type 21).
-// Must have exactly 8 records of 528 bytes each, with NO count prefix byte.
-func (f *buildMessageFactory) CreateTunnelBuildMessage(encryptedRecords [][]byte, messageID int) ([]byte, error) {
-	// Type 21 has exactly 8 records at 528 bytes each with NO count prefix
-	const expectedRecordSize = 528
-	totalSize := len(encryptedRecords) * expectedRecordSize
-
-	data := make([]byte, totalSize)
-
-	// Copy encrypted records into the message (no count prefix for type 21)
-	offset := 0
-	for _, rec := range encryptedRecords {
-		copy(data[offset:], rec)
-		offset += len(rec)
-	}
-
-	msg := NewBaseI2NPMessage(I2NPMessageTypeTunnelBuild)
-	msg.SetMessageID(messageID)
-	msg.SetData(data)
-
-	serialized, err := msg.MarshalBinary()
-	if err != nil {
-		return nil, oops.Wrapf(err, "failed to marshal Tunnel Build message (type 21, msgID %d)", messageID)
-	}
-	return serialized, nil
-}
-
 // buildSessionAdapter adapts I2NPTransportSession to build.BuildSession interface.
 type buildSessionAdapter struct {
 	session I2NPTransportSession
@@ -145,7 +112,8 @@ func (e *buildRecordEncryptor) EncryptShortBuildRequestRecordWithChain(
 	return EncryptShortBuildRequestRecordWithChain(record, hop)
 }
 
-// EncryptBuildRequestRecord encrypts a legacy ElGamal build request record.
+// EncryptBuildRequestRecord encrypts a long-format (528-byte) build request
+// record using ECIES-X25519-AEAD.
 func (e *buildRecordEncryptor) EncryptBuildRequestRecord(
 	record buildrecord.BuildRequestRecord,
 	hop router_info.RouterInfo,

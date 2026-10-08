@@ -164,7 +164,7 @@ func TestTunnelBuildMessage_RecordParsing(t *testing.T) {
 // TestTunnelBuild_GetBuildRecords tests TunnelBuild interface
 func TestTunnelBuild_GetBuildRecords(t *testing.T) {
 	records := createKnownValueBuildRequestRecords()
-	tb := NewTunnelBuilder(records)
+	tb := TunnelBuild(records)
 
 	buildRecords := tb.GetBuildRecords()
 	assert.Equal(t, 8, len(buildRecords))

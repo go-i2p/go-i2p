@@ -30,52 +30,6 @@ func TestBuildMessageFactory_OversizedPayload_Short(t *testing.T) {
 	}
 }
 
-// TestBuildMessageFactory_OversizedPayload_Variable tests that CreateVariableTunnelBuildMessage
-// returns an error when the payload exceeds I2NP size limits.
-func TestBuildMessageFactory_OversizedPayload_Variable(t *testing.T) {
-	factory := NewBuildMessageFactory()
-
-	// Create an oversized payload: 1 byte count + many huge records
-	oversizedRecords := make([][]byte, 150)
-	for i := range oversizedRecords {
-		oversizedRecords[i] = make([]byte, 500) // 150 * 500 = 75000 bytes > 65519
-	}
-
-	serialized, err := factory.CreateVariableTunnelBuildMessage(oversizedRecords, 67890)
-
-	// Should fail because payload is too large for I2NP 16-bit size field
-	assert.Error(t, err, "expected error for oversized payload")
-	assert.Nil(t, serialized, "expected nil result on error")
-	if err != nil {
-		assert.Contains(t, err.Error(), "marshal", "error should mention marshaling")
-	}
-}
-
-// TestBuildMessageFactory_OversizedPayload_Tunnel tests that CreateTunnelBuildMessage
-// returns an error when the payload exceeds I2NP size limits.
-func TestBuildMessageFactory_OversizedPayload_Tunnel(t *testing.T) {
-	factory := NewBuildMessageFactory()
-
-	// I2NP messages have a 16-bit length field, so max is 65535 bytes.
-	// Create valid-sized records but too many of them: 125 * 528 = 66000 bytes > 65535
-	oversizedRecords := make([][]byte, 125)
-	for i := range oversizedRecords {
-		oversizedRecords[i] = make([]byte, 528) // Valid size but too many records
-		for j := range oversizedRecords[i] {
-			oversizedRecords[i][j] = byte(i + j)
-		}
-	}
-
-	serialized, err := factory.CreateTunnelBuildMessage(oversizedRecords, 11111)
-
-	// Should fail because payload is too large for I2NP 16-bit size field
-	assert.Error(t, err, "expected error for oversized payload")
-	assert.Nil(t, serialized, "expected nil result on error")
-	if err != nil {
-		assert.Contains(t, err.Error(), "marshal", "error should mention marshaling")
-	}
-}
-
 // TestBuildMessageFactory_ValidPayload_Short tests normal operation with valid payload.
 func TestBuildMessageFactory_ValidPayload_Short(t *testing.T) {
 	factory := NewBuildMessageFactory()
