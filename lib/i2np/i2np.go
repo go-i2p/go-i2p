@@ -52,7 +52,6 @@ func (f *MessageFactory) CreateTunnelDataMessage(tunnelID buildrecord.TunnelID, 
 	return NewTunnelDataMessage(tunnelID, data)
 }
 
-
 // BaseI2NPMessage provides a basic implementation of Message
 type BaseI2NPMessage struct {
 	type_      int
