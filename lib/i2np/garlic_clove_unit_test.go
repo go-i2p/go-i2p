@@ -9,9 +9,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestDeserializeGarlicClove_MessageLengthParsing tests that I2NP message length
-// is correctly read from the header instead of using a hardcoded placeholder.
-func TestDeserializeGarlicClove_MessageLengthParsing(t *testing.T) {
+// TestParseECIESGarlicClove_MessageLengthParsing tests that the spec-compliant
+// clove format (DI + 9-byte short header + body-to-end) parses correctly for
+// various body sizes.
+func TestParseECIESGarlicClove_MessageLengthParsing(t *testing.T) {
 	tests := []struct {
 		name           string
 		messageSize    int
@@ -50,8 +51,8 @@ func TestDeserializeGarlicClove_MessageLengthParsing(t *testing.T) {
 			// Build a valid garlic clove with LOCAL delivery and I2NP message
 			cloveData := buildTestGarlicCloveData(tt.messageSize)
 
-			// Deserialize the clove
-			clove, bytesRead, err := deserializeGarlicClove(cloveData, 0)
+			// Parse the spec-compliant single clove
+			garlic, err := ParseECIESGarlicClove(cloveData)
 
 			if tt.expectError {
 				require.Error(t, err)
@@ -59,29 +60,25 @@ func TestDeserializeGarlicClove_MessageLengthParsing(t *testing.T) {
 					assert.Contains(t, err.Error(), tt.errorSubstring)
 				}
 			} else {
-				require.NoError(t, err, "Failed to deserialize clove with message size %d", tt.messageSize)
-				require.NotNil(t, clove)
+				require.NoError(t, err, "Failed to parse clove with message size %d", tt.messageSize)
+				require.NotNil(t, garlic)
+				require.Len(t, garlic.Cloves, 1)
 
-				// Verify the correct number of bytes were consumed
-				// Spec-compliant: delivery instructions (1 byte for LOCAL flag) +
-				//                 9-byte short I2NP header +
-				//                 I2NP data (messageSize bytes)
-				//                 (no legacy 15-byte clove trailer)
-				expectedBytes := 1 + 9 + tt.messageSize
-				assert.Equal(t, expectedBytes, bytesRead,
-					"Expected to consume %d bytes, but consumed %d", expectedBytes, bytesRead)
+				clove := garlic.Cloves[0]
 
 				// Verify clove was parsed correctly
-				assert.NotNil(t, clove.DeliveryInstructions)
 				assert.Equal(t, byte(0x00), clove.DeliveryInstructions.Flag, "Expected LOCAL delivery flag")
+				carrier, ok := clove.Message.(DataCarrier)
+				require.True(t, ok, "clove message must carry data")
+				assert.Equal(t, tt.messageSize, len(carrier.GetData()), "body must extend to end of buffer")
 			}
 		})
 	}
 }
 
-// TestDeserializeGarlicClove_InsufficientDataForHeader tests error handling
+// TestParseECIESGarlicClove_InsufficientDataForHeader tests error handling
 // when there's not enough data for the I2NP message header.
-func TestDeserializeGarlicClove_InsufficientDataForHeader(t *testing.T) {
+func TestParseECIESGarlicClove_InsufficientDataForHeader(t *testing.T) {
 	// Create clove data with delivery instructions but incomplete I2NP header
 	cloveData := []byte{0x00} // LOCAL delivery flag only
 
@@ -89,101 +86,76 @@ func TestDeserializeGarlicClove_InsufficientDataForHeader(t *testing.T) {
 	partialHeader := make([]byte, 4)
 	cloveData = append(cloveData, partialHeader...)
 
-	assertDeserializeCloveError(t, cloveData, "insufficient data for short I2NP header")
+	_, err := ParseECIESGarlicClove(cloveData)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "too short")
 }
 
-// TestDeserializeGarlicClove_InsufficientDataForMessage tests error handling
-// when the I2NP header specifies a size larger than available data.
-func TestDeserializeGarlicClove_InsufficientDataForMessage(t *testing.T) {
+// TestParseECIESGarlicClove_ZeroByteBody tests that a clove with a 9-byte
+// header and zero body bytes is valid (body extends to end = empty).
+func TestParseECIESGarlicClove_ZeroByteBody(t *testing.T) {
 	// Build delivery instructions (LOCAL)
 	cloveData := []byte{0x00}
 
-	// Build 9-byte short I2NP header claiming 500 bytes of data
+	// Build 9-byte short I2NP header
 	shortHeader := make([]byte, 9)
 	shortHeader[0] = 20
 	binary.BigEndian.PutUint32(shortHeader[1:5], 12345)
-	binary.BigEndian.PutUint32(shortHeader[5:9], 500)
+	binary.BigEndian.PutUint32(shortHeader[5:9], uint32(time.Now().Add(10*time.Second).Unix()))
 	cloveData = append(cloveData, shortHeader...)
 
-	// But provide zero bytes of actual data (less than claimed 500)
-	messageData := make([]byte, 0)
-	cloveData = append(cloveData, messageData...)
-
 	// Spec-compliant format: body consumes all remaining bytes (0 bytes is valid)
-	clove, _, err := deserializeGarlicClove(cloveData, 0)
+	garlic, err := ParseECIESGarlicClove(cloveData)
 	require.NoError(t, err, "Zero-byte body should be valid in spec-compliant format")
-	require.NotNil(t, clove)
+	require.NotNil(t, garlic)
+	require.Len(t, garlic.Cloves, 1)
+	carrier, ok := garlic.Cloves[0].Message.(DataCarrier)
+	require.True(t, ok, "clove message must carry data")
+	assert.Empty(t, carrier.GetData())
 }
 
-// TestDeserializeGarlicClove_ValidCloveStructure tests a complete valid clove
+// TestParseECIESGarlicClove_ValidCloveStructure tests a complete valid clove
 // with all components properly sized.
-func TestDeserializeGarlicClove_ValidCloveStructure(t *testing.T) {
+func TestParseECIESGarlicClove_ValidCloveStructure(t *testing.T) {
 	messageSize := 256
 	cloveData := buildTestGarlicCloveData(messageSize)
 
-	clove, bytesRead, err := deserializeGarlicClove(cloveData, 0)
+	garlic, err := ParseECIESGarlicClove(cloveData)
 
 	require.NoError(t, err)
-	require.NotNil(t, clove)
+	require.NotNil(t, garlic)
+	require.Len(t, garlic.Cloves, 1)
+
+	clove := garlic.Cloves[0]
 
 	// Verify all clove components
-	assert.NotNil(t, clove.DeliveryInstructions)
-	assert.Equal(t, byte(0x00), clove.DeliveryInstructions.Flag)
-
-	// Verify clove was parsed correctly (spec-compliant: no separate clove ID/trailer)
-	assert.NotNil(t, clove.DeliveryInstructions)
 	assert.Equal(t, byte(0x00), clove.DeliveryInstructions.Flag, "Expected LOCAL delivery flag")
-	assert.Equal(t, 12345, clove.CloveID, "Expected clove ID from 9-byte header msgID")
+	assert.Equal(t, 12345, clove.Message.MessageID(), "Expected message ID from 9-byte header")
+	assert.Equal(t, I2NPMessageTypeData, clove.Message.Type(), "Expected Data message type")
 
-	// Verify expiration is set (spec-compliant uses Unix seconds, may be in past relative to now)
-	assert.NotZero(t, clove.Expiration.Unix(), "Clove expiration should be set")
+	// Verify expiration is set (spec-compliant uses Unix seconds)
+	assert.NotZero(t, clove.Message.Expiration().Unix(), "Message expiration should be set")
 
-	// Verify bytes consumed (spec-compliant 9-byte short header, no trailer)
-	expectedBytes := 1 + 9 + messageSize
-	assert.Equal(t, expectedBytes, bytesRead)
+	// Verify body extends to end of buffer
+	carrier, ok := clove.Message.(DataCarrier)
+	require.True(t, ok, "clove message must carry data")
+	assert.Equal(t, messageSize, len(carrier.GetData()))
 }
 
-// TestDeserializeGarlicClove_ExactBufferSize tests that deserialization works
-// when buffer size exactly matches requirements (no extra bytes).
-func TestDeserializeGarlicClove_ExactBufferSize(t *testing.T) {
-	messageSize := 128
-	cloveData := buildTestGarlicCloveData(messageSize)
+// TestParseECIESGarlicClove_EmptyInput tests that empty input is rejected.
+func TestParseECIESGarlicClove_EmptyInput(t *testing.T) {
+	_, err := ParseECIESGarlicClove(nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "empty")
 
-	// Verify data is exactly the size needed (spec-compliant 9-byte header, no trailer)
-	expectedSize := 1 + 9 + messageSize
-	require.Equal(t, expectedSize, len(cloveData), "Test data should be exact size")
-
-	clove, bytesRead, err := deserializeGarlicClove(cloveData, 0)
-
-	require.NoError(t, err)
-	require.NotNil(t, clove)
-	assert.Equal(t, expectedSize, bytesRead)
+	_, err = ParseECIESGarlicClove([]byte{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "empty")
 }
 
-// TestDeserializeGarlicClove_ExtraDataIgnored tests that extra bytes after
-// a valid clove are ignored (not consumed).
-func TestDeserializeGarlicClove_ExtraDataIgnored(t *testing.T) {
-	messageSize := 64
-	cloveData := buildTestGarlicCloveData(messageSize)
-
-	// Add extra bytes that should not be consumed
-	extraData := []byte{0xFF, 0xFF, 0xFF, 0xFF}
-	cloveData = append(cloveData, extraData...)
-
-	clove, bytesRead, err := deserializeGarlicClove(cloveData, 0)
-
-	require.NoError(t, err)
-	require.NotNil(t, clove)
-
-	// Verify all bytes were consumed (spec-compliant: body consumes remaining data)
-	expectedBytes := 1 + 9 + messageSize + 4 // includes extra data as body
-	assert.Equal(t, expectedBytes, bytesRead)
-	assert.Equal(t, len(cloveData), bytesRead, "Should consume all data including extra bytes as body")
-}
-
-// TestDeserializeGarlicClove_DifferentMessageSizes tests various message sizes
-// to ensure the size parsing works correctly for edge cases.
-func TestDeserializeGarlicClove_DifferentMessageSizes(t *testing.T) {
+// TestParseECIESGarlicClove_DifferentMessageSizes tests various message sizes
+// to ensure the body-to-end parsing works correctly for edge cases.
+func TestParseECIESGarlicClove_DifferentMessageSizes(t *testing.T) {
 	messageSizes := []int{
 		1,     // Minimum
 		127,   // Just under 128
@@ -200,20 +172,23 @@ func TestDeserializeGarlicClove_DifferentMessageSizes(t *testing.T) {
 		t.Run(string(rune(size)), func(t *testing.T) {
 			cloveData := buildTestGarlicCloveData(size)
 
-			clove, bytesRead, err := deserializeGarlicClove(cloveData, 0)
+			garlic, err := ParseECIESGarlicClove(cloveData)
 
 			require.NoError(t, err, "Failed with message size %d", size)
-			require.NotNil(t, clove)
+			require.NotNil(t, garlic)
+			require.Len(t, garlic.Cloves, 1)
 
-			expectedBytes := 1 + 9 + size
-			assert.Equal(t, expectedBytes, bytesRead,
-				"Incorrect byte count for message size %d", size)
+			carrier, ok := garlic.Cloves[0].Message.(DataCarrier)
+			require.True(t, ok, "clove message must carry data")
+			assert.Equal(t, size, len(carrier.GetData()),
+				"Incorrect body size for message size %d", size)
 		})
 	}
 }
 
 // buildTestGarlicCloveData creates a properly formatted garlic clove byte sequence
-// with LOCAL delivery and an I2NP message of the specified size.
+// in the spec-compliant ECIES format:
+// DeliveryInstructions (LOCAL = 1 byte) + 9-byte short I2NP header + body.
 func buildTestGarlicCloveData(messageSize int) []byte {
 	var buf []byte
 
@@ -230,8 +205,8 @@ func buildTestGarlicCloveData(messageSize int) []byte {
 	shortHeader := make([]byte, 9)
 	shortHeader[0] = 20 // Data message type
 	binary.BigEndian.PutUint32(shortHeader[1:5], 12345)
-	expirationMs := time.Now().Add(10 * time.Second).Unix()
-	binary.BigEndian.PutUint32(shortHeader[5:9], uint32(expirationMs))
+	expirationSecs := time.Now().Add(10 * time.Second).Unix()
+	binary.BigEndian.PutUint32(shortHeader[5:9], uint32(expirationSecs))
 	buf = append(buf, shortHeader...)
 
 	// 3. Message body (payload without standard 16-byte header)

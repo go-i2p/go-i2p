@@ -366,9 +366,9 @@ func createTestSessionWithZeroHopTunnels(t *testing.T) *Session {
 }
 
 // mockGarlicEncryptor implements GarlicMessageEncryptor for testing.
-// It encrypts by prefixing a tag to the plaintext (no real crypto).
+// It encrypts by prefixing a tag to the concatenated clove payloads (no real crypto).
 type mockGarlicEncryptor struct {
-	encryptFunc func(destinationHash common.Hash, destinationPubKey [32]byte, plaintextGarlic []byte) ([]byte, error)
+	encryptFunc func(destinationHash common.Hash, destinationPubKey [32]byte, cloves [][]byte) ([]byte, error)
 	encryptErr  error
 	callCount   int
 }
@@ -377,18 +377,26 @@ func newMockGarlicEncryptor() *mockGarlicEncryptor {
 	return &mockGarlicEncryptor{}
 }
 
-func (m *mockGarlicEncryptor) EncryptGarlicMessage(destinationHash common.Hash, destinationPubKey [32]byte, plaintextGarlic []byte) ([]byte, error) {
+func (m *mockGarlicEncryptor) EncryptGarlicMessage(destinationHash common.Hash, destinationPubKey [32]byte, cloves [][]byte) ([]byte, error) {
 	m.callCount++
 	if m.encryptFunc != nil {
-		return m.encryptFunc(destinationHash, destinationPubKey, plaintextGarlic)
+		return m.encryptFunc(destinationHash, destinationPubKey, cloves)
 	}
 	if m.encryptErr != nil {
 		return nil, m.encryptErr
 	}
-	// Default: return plaintext prefixed with a mock tag (simulates encryption)
-	result := make([]byte, 8+len(plaintextGarlic))
+	// Default: return concatenated clove payloads prefixed with a mock tag (simulates encryption)
+	var total int
+	for _, c := range cloves {
+		total += len(c)
+	}
+	result := make([]byte, 8+total)
 	copy(result[:8], []byte("MOCKENCR"))
-	copy(result[8:], plaintextGarlic)
+	off := 8
+	for _, c := range cloves {
+		copy(result[off:], c)
+		off += len(c)
+	}
 	return result, nil
 }
 

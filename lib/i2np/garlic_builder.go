@@ -21,13 +21,8 @@ const (
 	MaxGarlicCloves = 64
 
 	// MaxGarlicNestingDepth is the maximum depth of nested garlic messages.
-	// Used by both parse-time (DeserializeGarlic) and process-time (handleLocalDelivery)
-	// depth guards to prevent stack overflow and recursion bombs.
+	// Used by parse-time depth guards to prevent stack overflow and recursion bombs.
 	MaxGarlicNestingDepth = 3
-
-	// MinGarlicSize is the minimum valid garlic message size in bytes.
-	// Garlic = num(1) + cert(3) + msgID(4) + expiration(8)
-	MinGarlicSize = 1 + 3 + 4 + 8
 )
 
 // GarlicBuilder provides methods to construct encrypted garlic messages.
@@ -247,12 +242,18 @@ func (gb *GarlicBuilder) Build() (*Garlic, error) {
 	return garlic, nil
 }
 
-// BuildAndSerialize constructs the garlic message and serializes it to bytes.
-// This produces the plaintext garlic payload ready for encryption.
+// BuildClovePayloads constructs the garlic message and returns one spec-compliant
+// clove payload per clove. Each payload is: DeliveryInstructions + 9-byte short
+// I2NP header (type || msgID || exp-seconds) + I2NP body (extends to end).
 //
-// Returns the serialized plaintext garlic message (unencrypted).
-func (gb *GarlicBuilder) BuildAndSerialize() ([]byte, error) {
-	log.WithField("at", "BuildAndSerialize").Debug("Building and serializing garlic message")
+// Per the ECIES-X25519-AEAD-Ratchet spec (ratchet.md §Garlic Clove), each clove
+// is contained in its own type-11 payload block. The Clove Set format (count byte,
+// certificate, garlic-level msgID/expiration) is NOT used.
+//
+// Returns one byte slice per clove, ready to be wrapped as individual
+// BlockGarlicClove entries in the ratchet payload.
+func (gb *GarlicBuilder) BuildClovePayloads() ([][]byte, error) {
+	log.WithField("at", "BuildClovePayloads").Debug("Building spec-compliant clove payloads")
 
 	garlic, err := gb.Build()
 	if err != nil {
@@ -260,98 +261,20 @@ func (gb *GarlicBuilder) BuildAndSerialize() ([]byte, error) {
 		return nil, oops.Wrapf(err, "failed to build garlic message")
 	}
 
-	payload, err := serializeGarlic(garlic)
-	if err != nil {
-		log.WithError(err).Error("Failed to serialize garlic message")
-		return nil, oops.Wrapf(err, "failed to serialize garlic message")
-	}
-
-	log.WithFields(logger.Fields{
-		"at":           "BuildAndSerialize",
-		"payload_size": len(payload),
-	}).Debug("Garlic message serialized successfully")
-	return payload, nil
-}
-
-// serializeGarlic converts a Garlic structure to its wire format (unencrypted).
-//
-// Spec-compliant wire format (per ecies.rst "Garlic Clove block"):
-// +----+----+----+----+----+----+----+----+
-// | num|  clove 1                         |
-// +----+                                  +
-// |                                       |
-// ~   (variable length)                  ~
-// |                                       |
-// +----+----+----+----+----+----+----+----+
-// |         clove 2 ...                   |
-// ~                                       ~
-// |                                       |
-// +----+----+----+----+----+----+----+----+
-// | Certificate  |   Message_ID      |
-// +----+----+----+----+----+----+----+----+
-//
-//	Expiration               |
-//
-// +----+----+----+----+----+----+----+
-//
-// num: 1 byte (number of cloves)
-// clove: variable length (delivery instructions + 9-byte short header + body)
-// Certificate: 3 bytes (always NULL in current implementation)
-// Message_ID: 4 bytes
-// Expiration: 8 bytes (milliseconds since epoch)
-//
-// Note: The 4-byte length prefix is added by the caller (WrapInGarlicMessage
-// or the I2NP Garlic message layer) when framing the encrypted payload.
-func serializeGarlic(garlic *Garlic) ([]byte, error) {
-	if garlic == nil {
-		log.WithField("at", "serializeGarlic").Error("Attempted to serialize nil garlic")
-		return nil, oops.Errorf("cannot serialize nil garlic message")
-	}
-
-	log.WithFields(logger.Fields{
-		"at":          "serializeGarlic",
-		"clove_count": garlic.Count,
-	}).Debug("Serializing garlic message")
-
-	// Estimate buffer size (cloves are variable length, so this is approximate)
-	estimatedSize := 1 + (len(garlic.Cloves) * 100) + 3 + 4 + 8
-	buf := make([]byte, 0, estimatedSize)
-
-	// Write clove count (1 byte)
-	buf = append(buf, byte(garlic.Count))
-
-	// Serialize each clove (now uses 9-byte short header format)
+	payloads := make([][]byte, 0, len(garlic.Cloves))
 	for i, clove := range garlic.Cloves {
 		cloveBytes, err := serializeGarlicClove(&clove)
 		if err != nil {
 			return nil, oops.Wrapf(err, "failed to serialize garlic clove %d", i)
 		}
-		buf = append(buf, cloveBytes...)
+		payloads = append(payloads, cloveBytes)
 	}
 
-	// Write certificate (3 bytes - always NULL)
-	// I2P spec: certificate = type(1 byte) + length(2 bytes big-endian)
-	// NULL cert: type=0x00, length=0x0000 → 3 bytes total
-	buf = append(buf, 0x00, 0x00, 0x00)
-
-	// Write message ID + expiration
-	buf = appendIDAndExpiration(buf, uint32(garlic.MessageID), garlic.Expiration)
-
-	return buf, nil
-}
-
-// appendIDAndExpiration appends a 4-byte big-endian ID and an 8-byte
-// big-endian millisecond-epoch expiration timestamp to buf.
-func appendIDAndExpiration(buf []byte, id uint32, expiration time.Time) []byte {
-	idBytes := make([]byte, 4)
-	binary.BigEndian.PutUint32(idBytes, id)
-	buf = append(buf, idBytes...)
-
-	expBytes := make([]byte, 8)
-	binary.BigEndian.PutUint64(expBytes, uint64(expiration.UnixMilli()))
-	buf = append(buf, expBytes...)
-
-	return buf
+	log.WithFields(logger.Fields{
+		"at":          "BuildClovePayloads",
+		"clove_count": len(payloads),
+	}).Debug("Spec-compliant clove payloads built successfully")
+	return payloads, nil
 }
 
 // serializeGarlicClove converts a GarlicClove to its wire format.
@@ -398,16 +321,13 @@ func serializeGarlicClove(clove *GarlicClove) ([]byte, error) {
 	binary.BigEndian.PutUint32(header[5:9], uint32(clove.Message.Expiration().Unix()))
 	buf = append(buf, header...)
 
-	// Write the body: 4-byte big-endian length + raw payload bytes (no standard
-	// 16-byte I2NP header). The length prefix makes each clove self-delimiting
-	// so multi-clove garlic containers can be parsed unambiguously.
+	// Write the body: raw payload bytes (no standard 16-byte I2NP header,
+	// no length prefix). Per the ECIES spec, the I2NP message body extends
+	// to the end of the block; the block's own size field delimits it.
 	var bodyData []byte
 	if carrier, ok := clove.Message.(DataCarrier); ok {
 		bodyData = carrier.GetData()
 	}
-	bodyLen := make([]byte, 4)
-	binary.BigEndian.PutUint32(bodyLen, uint32(len(bodyData)))
-	buf = append(buf, bodyLen...)
 	buf = append(buf, bodyData...)
 
 	return buf, nil
@@ -546,303 +466,6 @@ func NewRouterDeliveryInstructions(routerHash common.Hash) GarlicCloveDeliveryIn
 		Flag: 0x40, // ROUTER delivery (bits 6-5 = 0x10 = 0x40)
 		Hash: routerHash,
 	}
-}
-
-// DeserializeGarlic parses a decrypted garlic message from bytes with validation.
-// This function enforces security limits to prevent resource exhaustion attacks.
-//
-// Security validations:
-// - Maximum clove count (64) to prevent memory exhaustion
-// - Maximum nesting depth (3) to prevent stack overflow from recursive garlic
-// - Proper bounds checking for all fields
-//
-// Returns the parsed Garlic structure or an error if validation fails.
-func DeserializeGarlic(data []byte, nestingDepth int) (*Garlic, error) {
-	log.WithFields(logger.Fields{
-		"at":            "DeserializeGarlic",
-		"data_size":     len(data),
-		"nesting_depth": nestingDepth,
-	}).Debug("Deserializing garlic message")
-
-	// Validate garlic structure
-	if err := validateGarlicStructure(data, nestingDepth, MinGarlicSize, MaxGarlicNestingDepth); err != nil {
-		log.WithError(err).Error("Garlic structure validation failed")
-		return nil, err
-	}
-
-	// Parse garlic components
-	garlic, err := parseGarlicStructure(data, nestingDepth, MaxGarlicCloves)
-	if err != nil {
-		log.WithError(err).Error("Failed to parse garlic structure")
-		return nil, err
-	}
-
-	log.WithFields(logger.Fields{
-		"at":          "DeserializeGarlic",
-		"clove_count": garlic.Count,
-		"message_id":  garlic.MessageID,
-	}).Debug("Garlic message deserialized successfully")
-	return garlic, nil
-}
-
-// validateGarlicStructure validates nesting depth and data size.
-func validateGarlicStructure(data []byte, nestingDepth, minSize, maxDepth int) error {
-	if err := validateGarlicNestingDepth(nestingDepth, maxDepth); err != nil {
-		return err
-	}
-	return validateGarlicDataSize(data, minSize)
-}
-
-// parseGarlicStructure parses all garlic components and builds the structure.
-func parseGarlicStructure(data []byte, nestingDepth, maxCloves int) (*Garlic, error) {
-	cloveCount, offset, err := parseGarlicCloveCount(data, maxCloves)
-	if err != nil {
-		return nil, err
-	}
-
-	cloves, offset, err := parseGarlicCloves(data, offset, cloveCount, nestingDepth)
-	if err != nil {
-		return nil, err
-	}
-
-	cert, messageID, expiration, err := parseGarlicMetadata(data, offset)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Garlic{
-		Count:       cloveCount,
-		Cloves:      cloves,
-		Certificate: cert,
-		MessageID:   messageID,
-		Expiration:  expiration,
-	}, nil
-}
-
-// validateGarlicNestingDepth checks if the nesting depth exceeds the maximum allowed.
-func validateGarlicNestingDepth(nestingDepth, maxDepth int) error {
-	if nestingDepth > maxDepth {
-		return oops.Errorf("garlic nesting depth exceeded: %d > %d", nestingDepth, maxDepth)
-	}
-	return nil
-}
-
-// validateGarlicDataSize checks if the data buffer meets the minimum size requirement.
-func validateGarlicDataSize(data []byte, minSize int) error {
-	if len(data) < minSize {
-		return oops.Errorf("garlic data too short: need at least %d bytes, got %d", minSize, len(data))
-	}
-	return nil
-}
-
-// parseGarlicCloveCount reads and validates the clove count from the data buffer.
-func parseGarlicCloveCount(data []byte, maxCloves int) (int, int, error) {
-	cloveCount := int(data[0])
-	if cloveCount > maxCloves {
-		return 0, 0, oops.Errorf("garlic clove count too high: %d > %d (possible resource exhaustion attack)", cloveCount, maxCloves)
-	}
-	return cloveCount, 1, nil
-}
-
-// parseGarlicCloves parses all cloves from the data buffer starting at the given offset.
-func parseGarlicCloves(data []byte, offset, cloveCount, nestingDepth int) ([]GarlicClove, int, error) {
-	cloves := make([]GarlicClove, cloveCount)
-
-	log.WithFields(logger.Fields{
-		"at":           "parseGarlicCloves",
-		"data_len":     len(data),
-		"start_offset": offset,
-		"clove_count":  cloveCount,
-	}).Debug("Starting clove parsing")
-
-	for i := 0; i < cloveCount; i++ {
-		clove, bytesRead, err := deserializeContainerGarlicClove(data[offset:], nestingDepth)
-		if err != nil {
-			return nil, 0, oops.Wrapf(err, "failed to parse clove %d", i)
-		}
-		cloves[i] = *clove
-
-		log.WithFields(logger.Fields{
-			"at":          "parseGarlicCloves",
-			"clove_index": i,
-			"bytes_read":  bytesRead,
-			"new_offset":  offset + bytesRead,
-		}).Debug("Parsed clove")
-
-		offset += bytesRead
-	}
-
-	log.WithFields(logger.Fields{
-		"at":           "parseGarlicCloves",
-		"final_offset": offset,
-		"data_len":     len(data),
-	}).Debug("Finished clove parsing")
-
-	return cloves, offset, nil
-}
-
-// parseGarlicMetadata parses the certificate, message ID, and expiration from the data buffer.
-func parseGarlicMetadata(data []byte, offset int) (certificate.Certificate, int, time.Time, error) {
-	const metadataSize = 3 + 4 + 8 // cert(3) + msgID(4) + exp(8)
-
-	if len(data) < offset+metadataSize {
-		return certificate.Certificate{}, 0, time.Time{}, oops.Errorf("insufficient data for garlic trailer: need %d bytes, have %d", metadataSize, len(data)-offset)
-	}
-
-	// Validate garlic-level certificate: spec says "always NULL in the current implementation"
-	certType := data[offset]
-	certLen := binary.BigEndian.Uint16(data[offset+1 : offset+3])
-
-	// Debug logging to diagnose offset calculation issues
-	dumpLen := 32
-	if offset+dumpLen > len(data) {
-		dumpLen = len(data) - offset
-	}
-	log.WithFields(logger.Fields{
-		"at":        "parseGarlicMetadata",
-		"data_len":  len(data),
-		"offset":    offset,
-		"certType":  certType,
-		"certLen":   certLen,
-		"bytes_hex": fmt.Sprintf("%x", data[offset:offset+dumpLen]),
-	}).Debug("Parsing garlic metadata")
-
-	if certType != 0 || certLen != 0 {
-		return certificate.Certificate{}, 0, time.Time{}, oops.Errorf(
-			"unsupported non-NULL garlic certificate (type=%d, len=%d) at offset=%d, data_len=%d", certType, certLen, offset, len(data),
-		)
-	}
-	cert := *certificate.NewCertificate()
-	offset += 3
-
-	messageID := int(binary.BigEndian.Uint32(data[offset:offset+4]) & 0x7FFFFFFF)
-	offset += 4
-
-	expirationMs := binary.BigEndian.Uint64(data[offset : offset+8])
-	expiration := time.UnixMilli(int64(expirationMs))
-
-	return cert, messageID, expiration, nil
-}
-
-// deserializeGarlicClove parses a single garlic clove from bytes.
-// Returns the clove, number of bytes consumed, and any error.
-//
-// This handles both the legacy format (full I2NP header + clove metadata)
-// and the spec-compliant format (9-byte short I2NP header, no clove ID/expiration/cert trailer).
-func deserializeGarlicClove(data []byte, nestingDepth int) (*GarlicClove, int, error) {
-	if len(data) < 1 {
-		return nil, 0, oops.Errorf("clove data too short")
-	}
-	offset := 0
-
-	di, bytesRead, err := deserializeDeliveryInstructions(data[offset:])
-	if err != nil {
-		return nil, 0, oops.Wrapf(err, "failed to parse delivery instructions")
-	}
-	offset += bytesRead
-
-	i2npMsg, msgLen, err := parseShortI2NPHeader(data, offset)
-	if err != nil {
-		return nil, 0, oops.Wrapf(err, "failed to parse spec-compliant short I2NP header")
-	}
-	offset += msgLen
-
-	// Spec-compliant format: the body extends to the end of the clove data.
-	// There is no explicit body-length field and no per-clove trailer
-	// (CloveID/Expiration/Certificate were part of the legacy format).
-	bodyData := data[offset:]
-	offset = len(data)
-
-	// Rebuild message with header fields + body payload.
-	msgWithBody := NewBaseI2NPMessage(i2npMsg.Type())
-	msgWithBody.SetMessageID(i2npMsg.MessageID())
-	msgWithBody.SetExpiration(i2npMsg.Expiration())
-	msgWithBody.SetData(bodyData)
-
-	return &GarlicClove{
-		DeliveryInstructions: *di,
-		Message:              msgWithBody,
-		CloveID:              i2npMsg.MessageID(),
-		Expiration:           i2npMsg.Expiration(),
-		Certificate:          *certificate.NewCertificate(),
-	}, offset, nil
-}
-
-// deserializeContainerGarlicClove parses a single garlic clove from a
-// serialized garlic container (serializeGarlic output). Unlike the ECIES
-// single-clove format where the body extends to the end of the buffer,
-// container cloves carry a 4-byte big-endian body length after the 9-byte
-// short I2NP header so multiple cloves can be parsed sequentially.
-//
-// Container clove layout:
-//
-//	[DeliveryInstructions(var)] [type(1) msgID(4) exp(4)] [bodyLen(4)] [body(bodyLen)]
-func deserializeContainerGarlicClove(data []byte, nestingDepth int) (*GarlicClove, int, error) {
-	if len(data) < 1 {
-		return nil, 0, oops.Errorf("clove data too short")
-	}
-	offset := 0
-
-	di, bytesRead, err := deserializeDeliveryInstructions(data[offset:])
-	if err != nil {
-		return nil, 0, oops.Wrapf(err, "failed to parse delivery instructions")
-	}
-	offset += bytesRead
-
-	if len(data) < offset+ShortI2NPHeaderSize+4 {
-		return nil, 0, oops.Errorf("insufficient data for clove header + body length: need %d bytes, have %d", ShortI2NPHeaderSize+4, len(data)-offset)
-	}
-
-	msgType := int(data[offset])
-	msgID := int(binary.BigEndian.Uint32(data[offset+1 : offset+5]))
-	expSecs := binary.BigEndian.Uint32(data[offset+5 : offset+9])
-	bodyLen := int(binary.BigEndian.Uint32(data[offset+9 : offset+13]))
-	offset += ShortI2NPHeaderSize + 4
-
-	if bodyLen < 0 || len(data) < offset+bodyLen {
-		return nil, 0, oops.Errorf("insufficient data for garlic clove body: need %d bytes, have %d", bodyLen, len(data)-offset)
-	}
-	bodyData := make([]byte, bodyLen)
-	copy(bodyData, data[offset:offset+bodyLen])
-	offset += bodyLen
-
-	msgWithBody := NewBaseI2NPMessage(msgType)
-	msgWithBody.SetMessageID(msgID)
-	msgWithBody.SetExpiration(time.Unix(int64(expSecs), 0))
-	msgWithBody.SetData(bodyData)
-
-	return &GarlicClove{
-		DeliveryInstructions: *di,
-		Message:              msgWithBody,
-		CloveID:              msgID,
-		Expiration:           time.Unix(int64(expSecs), 0),
-		Certificate:          *certificate.NewCertificate(),
-	}, offset, nil
-}
-
-// parseShortI2NPHeader parses the 9-byte short I2NP message format used in garlic cloves.
-// Short format structure:
-//   - type (1 byte) at offset 0
-//   - msg_id (4 bytes) at offset 1-4, big-endian
-//   - expiration (4 bytes) at offset 5-8, big-endian (milliseconds since epoch)
-//
-// This format omits the standard I2NP message size field and is used for compatibility
-// with garlic clove embedding.
-func parseShortI2NPHeader(data []byte, offset int) (Message, int, error) {
-	if len(data) < offset+9 {
-		return nil, 0, oops.Errorf("insufficient data for short I2NP header (need 9 bytes, have %d)", len(data)-offset)
-	}
-
-	msgType := int(data[offset])
-	msgID := common.Integer(data[offset+1 : offset+5]).Int()
-	expirationMs := common.Integer(data[offset+5 : offset+9]).Int()
-
-	// Create a new I2NP message with the extracted header fields
-	msg := NewBaseI2NPMessage(msgType)
-	msg.SetMessageID(msgID)
-	msg.SetExpiration(time.UnixMilli(int64(expirationMs)))
-
-	return msg, 9, nil
 }
 
 // deserializeDeliveryInstructions parses delivery instructions from bytes.

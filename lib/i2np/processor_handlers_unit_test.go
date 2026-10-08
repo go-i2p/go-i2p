@@ -19,9 +19,9 @@ func TestParseECIESGarlicClove_LocalShortTunnelBuildReply(t *testing.T) {
 	binary.BigEndian.PutUint32(data[6:10], uint32(expiry.Unix()))
 	copy(data[10:], payload)
 
-	garlic, err := parseECIESGarlicClove(data)
+	garlic, err := ParseECIESGarlicClove(data)
 	if err != nil {
-		t.Fatalf("parseECIESGarlicClove returned error: %v", err)
+		t.Fatalf("ParseECIESGarlicClove returned error: %v", err)
 	}
 
 	if garlic.Count != 1 {

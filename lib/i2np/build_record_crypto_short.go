@@ -232,6 +232,39 @@ func hkdf64(ck [32]byte, info string) ([64]byte, error) {
 	return out, err
 }
 
+// DeriveSTBMLayerKeys derives the tunnel layer key and IV key for a hop that
+// accepted an STBM build record, matching i2pd's TransitTunnel.cpp derivation.
+//
+// Input: postReplyCK — the Noise chaining key after the "SMTunnelReplyKey" HKDF
+// step (i.e. the second return value of DeriveSTBMReplyKey).
+//
+// Derivation:
+//
+//	HKDF64(postReplyCK, "SMTunnelLayerKey") -> ck1 || layerKey
+//	HKDF64(ck1, "TunnelLayerIVKey")         -> ck2 || ivKey
+//
+// The short build record format does not carry layer/IV keys in its cleartext;
+// both the transit hop and the tunnel creator MUST derive them from the Noise
+// chaining key with this exact chain, or tunnel data decryption will fail.
+func DeriveSTBMLayerKeys(postReplyCK [32]byte) (layerKey, ivKey, nextCK [32]byte, err error) {
+	out1, err := hkdf64(postReplyCK, "SMTunnelLayerKey")
+	if err != nil {
+		return layerKey, ivKey, nextCK, oops.Wrapf(err, "HKDF for SMTunnelLayerKey failed")
+	}
+	var ck1 [32]byte
+	copy(ck1[:], out1[0:32])
+	copy(layerKey[:], out1[32:64])
+
+	out2, err := hkdf64(ck1, "TunnelLayerIVKey")
+	if err != nil {
+		return layerKey, ivKey, nextCK, oops.Wrapf(err, "HKDF for TunnelLayerIVKey failed")
+	}
+	copy(nextCK[:], out2[0:32])
+	copy(ivKey[:], out2[32:64])
+
+	return layerKey, ivKey, nextCK, nil
+}
+
 // DeriveSTBMOBEPGarlicKeyAndTag derives the one-time garlic key and tag that
 // the OBEP uses to wrap its ShortTunnelBuildReply, matching i2pd exactly.
 //
@@ -248,19 +281,10 @@ func DeriveSTBMOBEPGarlicKeyAndTag(postReplyCK [32]byte) ([32]byte, [8]byte, err
 	var garlicKey [32]byte
 	var tag [8]byte
 
-	out1, err := hkdf64(postReplyCK, "SMTunnelLayerKey")
+	_, _, ck2, err := DeriveSTBMLayerKeys(postReplyCK)
 	if err != nil {
-		return garlicKey, tag, oops.Wrapf(err, "HKDF for SMTunnelLayerKey failed")
+		return garlicKey, tag, err
 	}
-	var ck1 [32]byte
-	copy(ck1[:], out1[0:32])
-
-	out2, err := hkdf64(ck1, "TunnelLayerIVKey")
-	if err != nil {
-		return garlicKey, tag, oops.Wrapf(err, "HKDF for TunnelLayerIVKey failed")
-	}
-	var ck2 [32]byte
-	copy(ck2[:], out2[0:32])
 
 	out3, err := hkdf64(ck2, "RGarlicKeyAndTag")
 	if err != nil {

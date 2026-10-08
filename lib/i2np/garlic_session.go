@@ -74,21 +74,43 @@ func GenerateGarlicSessionManager() (*GarlicSessionManager, error) {
 // Parameters:
 //   - destinationHash: Hash of the destination's public key (common.Hash)
 //   - destinationPubKey: The destination's X25519 public key (32 bytes)
-//   - plaintextGarlic: Serialized garlic message (from GarlicBuilder.BuildAndSerialize)
+//   - cloves: One serialized spec-compliant clove payload per clove
+//     (from GarlicBuilder.BuildClovePayloads)
+//
+// Returns encrypted garlic message ready to send via I2NP.
+// EncryptGarlicMessage encrypts garlic cloves for the given destination.
+// This translates the common.Hash destinationHash to [32]byte and delegates to
+// the underlying ratchet.SessionManager.
+//
+// Each clove payload (DeliveryInstructions + 9-byte short I2NP header + body,
+// as produced by serializeGarlicClove / GarlicBuilder.BuildClovePayloads) is
+// wrapped in its own type-11 GarlicClove block inside the ECIES-X25519-AEAD-Ratchet
+// payload, per ratchet.md §"Garlic Clove": "The Clove Set format specified in
+// [I2NP] is not used. Each clove is contained in its own block."
+//
+// Parameters:
+//   - destinationHash: Hash of the destination's public key (common.Hash)
+//   - destinationPubKey: The destination's X25519 public key (32 bytes)
+//   - cloves: One serialized spec-compliant clove payload per clove
 //
 // Returns encrypted garlic message ready to send via I2NP.
 func (sm *GarlicSessionManager) EncryptGarlicMessage(
 	destinationHash common.Hash,
 	destinationPubKey [32]byte,
-	plaintextGarlic []byte,
+	cloves [][]byte,
 ) ([]byte, error) {
+	if len(cloves) == 0 {
+		return nil, oops.Errorf("cannot encrypt garlic message with zero cloves")
+	}
 	hashArr := [32]byte(destinationHash)
 
-	// Wrap raw garlic bytes in the ratchet payload format required by go-noise.
-	// BuildNSPayload prepends a DateTime block and wraps the data as a GarlicClove block.
-	// This format is required for New Session messages (ratchet.md §1b) and is also
-	// valid for Existing Session messages (which accept any payload).
-	payload, err := noiseratchet.BuildNSPayload(plaintextGarlic)
+	// Build the ratchet payload: DateTime block first (required for New Session,
+	// valid for Existing Session), then one GarlicClove block per clove.
+	builder := noiseratchet.NewSessionPayloadBuilder()
+	for _, clove := range cloves {
+		builder = builder.AddBlock(noiseratchet.NewGarlicCloveBlock(clove))
+	}
+	payload, err := builder.Build()
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to build ratchet payload")
 	}
@@ -348,19 +370,20 @@ func (sm *GarlicSessionManager) Close() error {
 }
 
 // EncryptGarlicWithBuilder is a convenience function that builds and encrypts a garlic message.
-// This combines GarlicBuilder.BuildAndSerialize with GarlicSessionManager.EncryptGarlicMessage.
+// This combines GarlicBuilder.BuildClovePayloads with GarlicSessionManager.EncryptGarlicMessage,
+// emitting one spec-compliant type-11 GarlicClove block per clove.
 func EncryptGarlicWithBuilder(
 	sm *GarlicSessionManager,
 	builder *GarlicBuilder,
 	destinationHash common.Hash,
 	destinationPubKey [32]byte,
 ) ([]byte, error) {
-	plaintext, err := builder.BuildAndSerialize()
+	cloves, err := builder.BuildClovePayloads()
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to build garlic message")
 	}
 
-	ciphertext, err := sm.EncryptGarlicMessage(destinationHash, destinationPubKey, plaintext)
+	ciphertext, err := sm.EncryptGarlicMessage(destinationHash, destinationPubKey, cloves)
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to encrypt garlic message")
 	}
@@ -448,14 +471,15 @@ func ExtractDataPayloadsFromInboundGarlic(sm *GarlicSessionManager, encryptedGar
 		return nil, oops.Wrapf(err, "failed to decrypt inbound garlic")
 	}
 
-	// Each decrypted entry is a full serialized Garlic message (as produced by
-	// GarlicBuilder.BuildAndSerialize on the send side), so it is parsed with
-	// DeserializeGarlic rather than as a single clove.
+	// Each decrypted entry is a single spec-compliant clove payload
+	// (DeliveryInstructions + 9-byte short I2NP header + body-to-end), one per
+	// type-11 GarlicClove block, so it is parsed with parseECIESGarlicClove —
+	// the same code path used by the production garlic processor.
 	var payloads [][]byte
-	for _, garlicBytes := range decrypted {
-		garlic, err := DeserializeGarlic(garlicBytes, 0)
+	for _, cloveBytes := range decrypted {
+		garlic, err := ParseECIESGarlicClove(cloveBytes)
 		if err != nil {
-			log.WithError(err).Debug("skipping unparseable inbound garlic")
+			log.WithError(err).Debug("skipping unparseable inbound garlic clove")
 			continue
 		}
 		for i := range garlic.Cloves {

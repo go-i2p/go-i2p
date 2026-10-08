@@ -181,7 +181,7 @@ func BenchmarkGarlicEncryption(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := garlicMgr.EncryptGarlicMessage(destHash, destPubKey, payload)
+		_, err := garlicMgr.EncryptGarlicMessage(destHash, destPubKey, [][]byte{payload})
 		if err != nil {
 			b.Fatalf("Garlic encryption failed: %v", err)
 		}

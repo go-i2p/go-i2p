@@ -173,22 +173,20 @@ func TestBuild_Success(t *testing.T) {
 	assert.True(t, garlic.Expiration.Equal(expiration), "expiration")
 }
 
-func TestBuildAndSerialize(t *testing.T) {
+func TestBuildClovePayloads(t *testing.T) {
 	builder, err := NewGarlicBuilderWithDefaults()
 	require.NoError(t, err)
 
 	message := createTestDataMessage(t, []byte("test payload"))
 	require.NoError(t, builder.AddLocalDeliveryClove(message, 1))
 
-	payload, err := builder.BuildAndSerialize()
+	payloads, err := builder.BuildClovePayloads()
 	require.NoError(t, err)
-	assert.NotEmpty(t, payload, "payload should not be empty")
-	assert.Equal(t, byte(1), payload[0], "clove count byte")
-}
-
-func TestSerializeGarlic_NilInput(t *testing.T) {
-	_, err := serializeGarlic(nil)
-	assert.Error(t, err, "expected error for nil garlic")
+	require.Len(t, payloads, 1, "one payload per clove")
+	assert.NotEmpty(t, payloads[0], "clove payload should not be empty")
+	// LOCAL delivery instructions = 1 flag byte, then the 9-byte short I2NP header
+	assert.Equal(t, byte(0x00), payloads[0][0], "LOCAL delivery flag byte")
+	assert.Equal(t, byte(I2NPMessageTypeData), payloads[0][1], "short header type byte")
 }
 
 func TestSerializeGarlicClove_NilInput(t *testing.T) {
@@ -258,13 +256,19 @@ func TestGarlicSerialization_RoundTrip(t *testing.T) {
 	destHash := createTestHash()
 	require.NoError(t, builder.AddDestinationDeliveryClove(message3, 3, destHash))
 
-	payload, err := builder.BuildAndSerialize()
+	payloads, err := builder.BuildClovePayloads()
 	require.NoError(t, err)
 
-	assert.Greater(t, len(payload), 16, "payload too small")
-	assert.Equal(t, byte(3), payload[0], "clove count")
+	require.Len(t, payloads, 3, "one payload per clove")
+	for _, p := range payloads {
+		assert.NotEmpty(t, p, "clove payload must not be empty")
+	}
 
-	t.Logf("Serialized garlic message: %d bytes", len(payload))
+	total := 0
+	for _, p := range payloads {
+		total += len(p)
+	}
+	t.Logf("Serialized garlic cloves: %d bytes total", total)
 }
 
 // Helper functions

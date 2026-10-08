@@ -543,7 +543,11 @@ func logGarlicPrefixStripped(messageID, framedSize, declaredSize, ciphertextSize
 	}).Debug("Stripped Garlic length prefix before decryption")
 }
 
-func parseECIESGarlicClove(data []byte) (*Garlic, error) {
+// ParseECIESGarlicClove parses a single spec-compliant ECIES garlic clove payload:
+// DeliveryInstructions + 9-byte short I2NP header (type||msgID||exp-seconds) + body
+// extending to the end of the buffer. This is the wire format carried by each
+// type-11 GarlicClove block (ratchet.md §"Garlic Clove").
+func ParseECIESGarlicClove(data []byte) (*Garlic, error) {
 	if len(data) == 0 {
 		return nil, oops.Errorf("empty ECIES garlic clove")
 	}
@@ -609,7 +613,7 @@ func (p *MessageProcessor) decryptGarlicData(msgID int, encryptedData []byte) ([
 
 // parseAndLogGarlic parses the decrypted ECIES clove payload and logs the result.
 func (p *MessageProcessor) parseAndLogGarlic(msgID int, decryptedData []byte, sessionTag [8]byte) (*Garlic, error) {
-	garlic, err := parseECIESGarlicClove(decryptedData)
+	garlic, err := ParseECIESGarlicClove(decryptedData)
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to parse decrypted ECIES garlic clove")
 	}

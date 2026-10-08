@@ -15,12 +15,13 @@ import (
 // This interface is satisfied by both *i2np.GarlicSessionManager (the concrete adapter)
 // and test mocks. It uses I2P-specific types (common.Hash) at the boundary.
 type GarlicMessageEncryptor interface {
-	// EncryptGarlicMessage encrypts plaintext for a destination.
+	// EncryptGarlicMessage encrypts garlic cloves for a destination.
 	// destinationHash: I2P hash identifying the session.
 	// destinationPubKey: X25519 public key of the recipient.
-	// plaintextGarlic: serialized garlic message bytes.
+	// cloves: one serialized spec-compliant clove payload per clove
+	// (DeliveryInstructions + 9-byte short I2NP header + body).
 	// Returns encrypted bytes.
-	EncryptGarlicMessage(destinationHash common.Hash, destinationPubKey [32]byte, plaintextGarlic []byte) ([]byte, error)
+	EncryptGarlicMessage(destinationHash common.Hash, destinationPubKey [32]byte, cloves [][]byte) ([]byte, error)
 }
 
 // MessageRouter handles routing outbound I2CP messages through the I2P network.
@@ -242,34 +243,34 @@ func (mr *MessageRouter) buildEncryptedGarlicMessage(
 
 	dataMsg := i2np.NewDataMessage(payload)
 
-	plaintextGarlic, err := mr.buildPlaintextGarlicMessage(session, destinationHash, dataMsg)
+	clovePayloads, err := mr.buildPlaintextGarlicMessage(session, destinationHash, dataMsg)
 	if err != nil {
 		return nil, err
 	}
 
-	encryptedGarlic, err := mr.encryptGarlicMessage(session, destinationHash, destinationPubKey, plaintextGarlic)
+	encryptedGarlic, err := mr.encryptGarlicMessage(session, destinationHash, destinationPubKey, clovePayloads)
 	if err != nil {
 		return nil, err
 	}
 
 	log.WithFields(logger.Fields{
-		"at":                 "i2cp.MessageRouter.buildEncryptedGarlicMessage",
-		"sessionID":          session.ID(),
-		"destination":        logutil.HashPrefixPlain(destinationHash),
-		"plaintextSize":      len(plaintextGarlic),
-		"encryptedSize":      len(encryptedGarlic),
-		"encryptionOverhead": len(encryptedGarlic) - len(plaintextGarlic),
+		"at":            "i2cp.MessageRouter.buildEncryptedGarlicMessage",
+		"sessionID":     session.ID(),
+		"destination":   logutil.HashPrefixPlain(destinationHash),
+		"cloveCount":    len(clovePayloads),
+		"encryptedSize": len(encryptedGarlic),
 	}).Debug("garlic_encrypted_successfully")
 
 	return mr.wrapInGarlicMessage(session, destinationHash, encryptedGarlic)
 }
 
-// buildPlaintextGarlicMessage creates a plaintext garlic message with the data clove.
+// buildPlaintextGarlicMessage creates the spec-compliant plaintext garlic clove
+// payloads (one per clove: DeliveryInstructions + 9-byte short I2NP header + body).
 func (mr *MessageRouter) buildPlaintextGarlicMessage(
 	session *Session,
 	destinationHash common.Hash,
 	dataMsg i2np.Message,
-) ([]byte, error) {
+) ([][]byte, error) {
 	garlicBuilder, err := i2np.NewGarlicBuilderWithDefaults()
 	if err != nil {
 		log.WithFields(logger.Fields{
@@ -291,7 +292,7 @@ func (mr *MessageRouter) buildPlaintextGarlicMessage(
 		return nil, oops.Errorf("failed to add garlic clove: %w", err)
 	}
 
-	plaintextGarlic, err := garlicBuilder.BuildAndSerialize()
+	clovePayloads, err := garlicBuilder.BuildClovePayloads()
 	if err != nil {
 		log.WithFields(logger.Fields{
 			"at":          "i2cp.MessageRouter.buildPlaintextGarlicMessage",
@@ -302,20 +303,20 @@ func (mr *MessageRouter) buildPlaintextGarlicMessage(
 		return nil, oops.Errorf("failed to build garlic message: %w", err)
 	}
 
-	return plaintextGarlic, nil
+	return clovePayloads, nil
 }
 
-// encryptGarlicMessage encrypts a plaintext garlic message using ECIES-X25519-AEAD.
+// encryptGarlicMessage encrypts garlic clove payloads using ECIES-X25519-AEAD.
 func (mr *MessageRouter) encryptGarlicMessage(
 	session *Session,
 	destinationHash common.Hash,
 	destinationPubKey [32]byte,
-	plaintextGarlic []byte,
+	clovePayloads [][]byte,
 ) ([]byte, error) {
 	encryptedGarlic, err := mr.garlicSessions.EncryptGarlicMessage(
 		destinationHash,
 		destinationPubKey,
-		plaintextGarlic,
+		clovePayloads,
 	)
 	if err != nil {
 		log.WithFields(logger.Fields{

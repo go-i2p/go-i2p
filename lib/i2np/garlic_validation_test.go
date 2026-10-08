@@ -110,10 +110,11 @@ func TestECIESKeyExchange_Correctness(t *testing.T) {
 	require.NoError(t, err, "Decryption should succeed")
 	require.NotEmpty(t, plaintextAll, "decrypt must return at least one clove")
 
-	// Verify original plaintext can be recovered
-	originalPlaintext, err := builder.BuildAndSerialize()
+	// Verify original clove payload can be recovered
+	originalClovePayloads, err := builder.BuildClovePayloads()
 	require.NoError(t, err)
-	assert.Equal(t, originalPlaintext, plaintextAll[0], "Decrypted plaintext should match original")
+	require.NotEmpty(t, originalClovePayloads)
+	assert.Equal(t, originalClovePayloads[0], plaintextAll[0], "Decrypted clove payload should match original")
 }
 
 // TestECIESKeyExchange_NonceUniqueness verifies that each encryption produces
@@ -172,9 +173,10 @@ func TestRatchetState_ForwardSecrecy(t *testing.T) {
 	require.NotEmpty(t, plaintext1All, "decrypt must return at least one clove")
 	assert.Equal(t, [8]byte{}, tag1, "First message should have empty session tag (New Session)")
 
-	original1, err := builder1.BuildAndSerialize()
+	original1, err := builder1.BuildClovePayloads()
 	require.NoError(t, err)
-	assert.Equal(t, original1, plaintext1All[0])
+	require.NotEmpty(t, original1)
+	assert.Equal(t, original1[0], plaintext1All[0])
 
 	// Second message should use existing session
 	assert.Equal(t, 1, f.senderSM.GetSessionCount(), "Sender should have 1 session")

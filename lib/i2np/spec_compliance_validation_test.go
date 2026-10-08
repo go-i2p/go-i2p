@@ -1384,7 +1384,7 @@ func performFullHandshake(t *testing.T, sender, receiver *GarlicSessionManager,
 	destHash, destPubKey [32]byte, plaintext []byte,
 ) []byte {
 	t.Helper()
-	nsMsg, err := sender.EncryptGarlicMessage(destHash, destPubKey, plaintext)
+	nsMsg, err := sender.EncryptGarlicMessage(destHash, destPubKey, [][]byte{plaintext})
 	require.NoError(t, err)
 	_, _, sessionHash, err := receiver.DecryptGarlicMessage(nsMsg)
 	require.NoError(t, err)
@@ -1420,7 +1420,7 @@ func TestGarlic_ECIES_NewSessionMessageFormat(t *testing.T) {
 	sm, destSM, destHash := setupGarlicPair(t, 0x42)
 
 	plaintext := []byte("test garlic payload")
-	encrypted, err := sm.EncryptGarlicMessage(destHash, destSM.GetPublicKey(), plaintext)
+	encrypted, err := sm.EncryptGarlicMessage(destHash, destSM.GetPublicKey(), [][]byte{plaintext})
 	require.NoError(t, err)
 
 	// New Session: [ephPub(32)] + [nonce(12)] + [ciphertext(N)] + [tag(16)]
@@ -1459,7 +1459,7 @@ func TestGarlic_ECIES_ExistingSessionMessageFormat(t *testing.T) {
 	performFullHandshake(t, sm, destSM, destHash, destSM.GetPublicKey(), plaintext)
 
 	// Second message: uses Existing Session (handshake is complete)
-	encrypted, err := sm.EncryptGarlicMessage(destHash, destSM.GetPublicKey(), plaintext)
+	encrypted, err := sm.EncryptGarlicMessage(destHash, destSM.GetPublicKey(), [][]byte{plaintext})
 	require.NoError(t, err)
 
 	// Existing Session: [sessionTag(8)] + [nonce(12)] + [ciphertext(N)] + [tag(16)]
@@ -1525,7 +1525,7 @@ func TestGarlic_ECIES_NewSessionReplyNotSeparatelyImplemented(t *testing.T) {
 
 	receiver, sender, destHash := setupGarlicPair(t, 0x46)
 
-	enc, err := sender.EncryptGarlicMessage(destHash, receiver.GetPublicKey(), []byte("NS"))
+	enc, err := sender.EncryptGarlicMessage(destHash, receiver.GetPublicKey(), [][]byte{[]byte("NS")})
 	require.NoError(t, err)
 
 	_, _, _, err = receiver.DecryptGarlicMessage(enc)
@@ -1544,7 +1544,7 @@ func TestGarlic_ECIES_ChaCha20Poly1305Used(t *testing.T) {
 
 	// Encrypt with known plaintext
 	plaintext := []byte("chacha20 poly1305 test")
-	encrypted, err := sm.EncryptGarlicMessage(destHash, destSM.GetPublicKey(), plaintext)
+	encrypted, err := sm.EncryptGarlicMessage(destHash, destSM.GetPublicKey(), [][]byte{plaintext})
 	require.NoError(t, err)
 
 	// New Session format: [ephPub(32)] + [nonce(12)] + [ciphertext(N)] + [tag(16)]
@@ -1620,13 +1620,14 @@ func TestGarlic_SessionTagDerivation_DifferentKeysProduceDifferentTags(t *testin
 
 // =============================================================================
 // Audit Item: Garlic — Clove format
-// Container clove = DeliveryInstructions(var) + 9-byte short I2NP header +
-// bodyLen(4) + body(var). The legacy CloveID/Expiration/Certificate trailer
-// has been removed; expiration is carried in the short header (Unix seconds).
+// Spec-compliant clove = DeliveryInstructions(var) + 9-byte short I2NP header +
+// body(var, extends to end of block). The legacy CloveID/Expiration/Certificate
+// trailer and the bodyLen(4) prefix are NOT used; expiration is carried in the
+// short header (Unix seconds).
 // =============================================================================
 
 // TestGarlic_CloveFormat_SerializationLayout verifies the garlic clove wire format:
-// delivery_instructions(variable) + 9-byte short I2NP header + bodyLen(4) + body.
+// delivery_instructions(variable) + 9-byte short I2NP header + body (to end).
 func TestGarlic_CloveFormat_SerializationLayout(t *testing.T) {
 	// Create a simple LOCAL delivery clove with a known I2NP message
 	payload := []byte{0xDE, 0xAD}
@@ -1649,10 +1650,10 @@ func TestGarlic_CloveFormat_SerializationLayout(t *testing.T) {
 	// Body = DataMessage.GetData() = [4-byte length][payload]
 	body := innerMsg.GetData()
 
-	// Expected: DI(1) + short header(9) + bodyLen(4) + body
-	expectedLen := 1 + ShortI2NPHeaderSize + 4 + len(body)
+	// Expected: DI(1) + short header(9) + body (no bodyLen prefix)
+	expectedLen := 1 + ShortI2NPHeaderSize + len(body)
 	assert.Equal(t, expectedLen, len(data),
-		"clove size must be DI(1) + short header(9) + bodyLen(4) + body(%d) = %d",
+		"clove size must be DI(1) + short header(9) + body(%d) = %d",
 		len(body), expectedLen)
 
 	offset := 1
@@ -1672,13 +1673,8 @@ func TestGarlic_CloveFormat_SerializationLayout(t *testing.T) {
 		"expiration must be Unix seconds from the I2NP message")
 	offset += 4
 
-	// bodyLen(4)
-	bodyLen := binary.BigEndian.Uint32(data[offset : offset+4])
-	assert.Equal(t, uint32(len(body)), bodyLen, "body length prefix must match body size")
-	offset += 4
-
-	// body
-	assert.Equal(t, body, data[offset:offset+len(body)], "body must be the raw message data")
+	// body extends to end of buffer (no length prefix)
+	assert.Equal(t, body, data[offset:], "body must be the raw message data extending to end")
 }
 
 // TestGarlic_CloveFormat_DeliveryInstructionSizes verifies the typical
@@ -1720,9 +1716,13 @@ func TestGarlic_CloveFormat_CertificateAlwaysNULL(t *testing.T) {
 	assert.Equal(t, byte(0), nullCert[2], "certificate length low byte must be 0")
 }
 
-// TestGarlic_CloveFormat_GarlicWireFormat verifies the complete garlic message
-// wire format: count(1) + cloves(var) + certificate(3) + messageID(4) + expiration(8).
-func TestGarlic_CloveFormat_GarlicWireFormat(t *testing.T) {
+// TestGarlic_CloveFormat_NoCloveSetWrapper verifies that the ECIES garlic wire
+// format does NOT use the legacy Clove Set wrapper: there is no count byte, no
+// certificate, and no garlic-level messageID/expiration trailer. Per ratchet.md
+// §Garlic Clove: "The Clove Set format specified in [I2NP] is not used. Each
+// clove is contained in its own block." Each clove payload must begin directly
+// with the Delivery Instructions flag byte.
+func TestGarlic_CloveFormat_NoCloveSetWrapper(t *testing.T) {
 	builder := NewGarlicBuilder(0x12345678, time.UnixMilli(1704067200000))
 
 	msg := NewDataMessage([]byte("test"))
@@ -1732,32 +1732,29 @@ func TestGarlic_CloveFormat_GarlicWireFormat(t *testing.T) {
 	err := builder.AddLocalDeliveryClove(msg, 1)
 	require.NoError(t, err)
 
-	payload, err := builder.BuildAndSerialize()
+	payloads, err := builder.BuildClovePayloads()
 	require.NoError(t, err)
+	require.Len(t, payloads, 1, "one payload per clove")
 
-	// First byte: clove count
-	assert.Equal(t, byte(1), payload[0], "first byte must be clove count")
+	payload := payloads[0]
 
-	// Last 15 bytes: certificate(3) + messageID(4) + expiration(8)
-	trailerStart := len(payload) - 15
-	require.True(t, trailerStart > 1, "payload must have room for trailer")
+	// First byte must be the LOCAL delivery-instructions flag, NOT a clove count.
+	assert.Equal(t, byte(0x00), payload[0], "payload must start with DI flag byte (no count byte)")
 
-	// Certificate (3 bytes NULL per I2P spec)
-	assert.Equal(t, byte(0), payload[trailerStart], "garlic certificate type = 0")
-	assert.Equal(t, byte(0), payload[trailerStart+1], "garlic certificate len high = 0")
-	assert.Equal(t, byte(0), payload[trailerStart+2], "garlic certificate len low = 0")
+	// The short I2NP header follows immediately: type(1) + msgID(4) + exp(4).
+	assert.Equal(t, byte(I2NPMessageTypeData), payload[1], "short header type byte")
+	msgID := binary.BigEndian.Uint32(payload[2:6])
+	assert.Equal(t, uint32(1), msgID, "short header message ID")
 
-	// Message ID (4 bytes)
-	msgID := binary.BigEndian.Uint32(payload[trailerStart+3 : trailerStart+7])
-	assert.Equal(t, uint32(0x12345678), msgID, "garlic message ID must match")
-
-	// Expiration (8 bytes)
-	expMs := binary.BigEndian.Uint64(payload[trailerStart+7 : trailerStart+15])
-	assert.Equal(t, uint64(1704067200000), expMs, "garlic expiration must match")
+	// No garlic-level trailer: the payload ends with the I2NP body. The body of a
+	// Data message is [4-byte length][payload]; total = DI(1) + header(9) + body.
+	body := msg.GetData()
+	assert.Equal(t, 1+9+len(body), len(payload), "payload must have no trailer beyond the body")
 }
 
 // TestGarlic_CloveFormat_Roundtrip verifies that a garlic message with
-// a single clove survives a serialize→deserialize cycle.
+// a single clove survives a serialize→parse cycle using the spec-compliant
+// per-clove format (BuildClovePayloads → ParseECIESGarlicClove).
 func TestGarlic_CloveFormat_Roundtrip(t *testing.T) {
 	fixedExp := time.UnixMilli(1704067200000)
 	builder := NewGarlicBuilder(42, fixedExp)
@@ -1769,21 +1766,20 @@ func TestGarlic_CloveFormat_Roundtrip(t *testing.T) {
 	err := builder.AddLocalDeliveryClove(msg1, 100)
 	require.NoError(t, err)
 
-	payload, err := builder.BuildAndSerialize()
+	payloads, err := builder.BuildClovePayloads()
+	require.NoError(t, err)
+	require.Len(t, payloads, 1, "one payload per clove")
+
+	garlic, err := ParseECIESGarlicClove(payloads[0])
 	require.NoError(t, err)
 
-	assert.Equal(t, byte(1), payload[0], "first byte must be clove count")
-
-	garlic, err := DeserializeGarlic(payload, 0)
-	require.NoError(t, err)
-
-	assert.Equal(t, 1, garlic.Count, "clove count must be preserved")
-	assert.Equal(t, 1, len(garlic.Cloves), "must have 1 clove")
-	assert.Equal(t, 42, garlic.MessageID, "garlic messageID must be preserved")
+	require.Equal(t, 1, len(garlic.Cloves), "must have 1 clove")
+	assert.Equal(t, 1, garlic.Cloves[0].Message.MessageID(), "message ID must be preserved")
 }
 
 // TestGarlic_CloveFormat_MultiCloveRoundtrip verifies that a garlic message with
-// multiple cloves survives a serialize→deserialize cycle.
+// multiple cloves produces one spec-compliant payload per clove and each
+// survives the serialize→parse cycle independently.
 func TestGarlic_CloveFormat_MultiCloveRoundtrip(t *testing.T) {
 	fixedExp := time.UnixMilli(1704067200000)
 	builder := NewGarlicBuilder(42, fixedExp)
@@ -1801,15 +1797,16 @@ func TestGarlic_CloveFormat_MultiCloveRoundtrip(t *testing.T) {
 	err = builder.AddLocalDeliveryClove(msg2, 200)
 	require.NoError(t, err)
 
-	payload, err := builder.BuildAndSerialize()
+	payloads, err := builder.BuildClovePayloads()
 	require.NoError(t, err)
+	require.Len(t, payloads, 2, "one payload per clove")
 
-	garlic, err := DeserializeGarlic(payload, 0)
-	require.NoError(t, err)
-
-	assert.Equal(t, 2, garlic.Count, "clove count must be preserved")
-	assert.Equal(t, 2, len(garlic.Cloves), "must have 2 cloves")
-	assert.Equal(t, 42, garlic.MessageID, "garlic messageID must be preserved")
+	for i, p := range payloads {
+		garlic, perr := ParseECIESGarlicClove(p)
+		require.NoError(t, perr, "clove %d must parse", i)
+		require.Equal(t, 1, len(garlic.Cloves), "clove %d must have 1 clove", i)
+		assert.Equal(t, i+1, garlic.Cloves[0].Message.MessageID(), "clove %d message ID preserved", i)
+	}
 }
 
 // TestGarlic_CloveFormat_MaxCloves255 verifies the clove count is a single
@@ -2050,11 +2047,12 @@ func TestGarlic_DeliveryInstructions_GarlicRoundtripAllTypes(t *testing.T) {
 			err := tc.addClove(builder, msg)
 			require.NoError(t, err)
 
-			payload, err := builder.BuildAndSerialize()
+			payloads, err := builder.BuildClovePayloads()
 			require.NoError(t, err)
+			require.Len(t, payloads, 1, "one payload per clove")
 
-			garlic, err := DeserializeGarlic(payload, 0)
-			require.NoError(t, err, "garlic deserialization must succeed for %s", tc.name)
+			garlic, err := ParseECIESGarlicClove(payloads[0])
+			require.NoError(t, err, "garlic clove parsing must succeed for %s", tc.name)
 
 			require.Equal(t, 1, len(garlic.Cloves), "must have 1 clove")
 			clove := garlic.Cloves[0]
@@ -2116,30 +2114,33 @@ func TestGarlic_DeliveryInstructions_MixedTypesRoundtrip(t *testing.T) {
 	msg3.SetExpiration(fixedExp)
 	require.NoError(t, builder.AddTunnelDeliveryClove(msg3, 13, gatewayHash, tid))
 
-	payload, err := builder.BuildAndSerialize()
+	payloads, err := builder.BuildClovePayloads()
 	require.NoError(t, err)
+	require.Len(t, payloads, 4, "one payload per clove")
 
-	garlic, err := DeserializeGarlic(payload, 0)
-	require.NoError(t, err)
-
-	require.Equal(t, 4, garlic.Count, "must have 4 cloves")
-	require.Equal(t, 4, len(garlic.Cloves))
+	var cloves []GarlicClove
+	for _, p := range payloads {
+		garlic, perr := ParseECIESGarlicClove(p)
+		require.NoError(t, perr)
+		require.Len(t, garlic.Cloves, 1)
+		cloves = append(cloves, garlic.Cloves[0])
+	}
 
 	// Clove 0: LOCAL
-	assert.Equal(t, byte(0x00), garlic.Cloves[0].DeliveryInstructions.Flag, "clove 0 = LOCAL")
+	assert.Equal(t, byte(0x00), cloves[0].DeliveryInstructions.Flag, "clove 0 = LOCAL")
 
 	// Clove 1: DESTINATION with destHash
-	assert.Equal(t, byte(0x20), garlic.Cloves[1].DeliveryInstructions.Flag, "clove 1 = DESTINATION")
-	assert.Equal(t, destHash, garlic.Cloves[1].DeliveryInstructions.Hash, "clove 1 destHash preserved")
+	assert.Equal(t, byte(0x20), cloves[1].DeliveryInstructions.Flag, "clove 1 = DESTINATION")
+	assert.Equal(t, destHash, cloves[1].DeliveryInstructions.Hash, "clove 1 destHash preserved")
 
 	// Clove 2: ROUTER with routerHash
-	assert.Equal(t, byte(0x40), garlic.Cloves[2].DeliveryInstructions.Flag, "clove 2 = ROUTER")
-	assert.Equal(t, routerHash, garlic.Cloves[2].DeliveryInstructions.Hash, "clove 2 routerHash preserved")
+	assert.Equal(t, byte(0x40), cloves[2].DeliveryInstructions.Flag, "clove 2 = ROUTER")
+	assert.Equal(t, routerHash, cloves[2].DeliveryInstructions.Hash, "clove 2 routerHash preserved")
 
 	// Clove 3: TUNNEL with gatewayHash + tunnelID
-	assert.Equal(t, byte(0x60), garlic.Cloves[3].DeliveryInstructions.Flag, "clove 3 = TUNNEL")
-	assert.Equal(t, gatewayHash, garlic.Cloves[3].DeliveryInstructions.Hash, "clove 3 gatewayHash preserved")
-	assert.Equal(t, tid, garlic.Cloves[3].DeliveryInstructions.TunnelID, "clove 3 tunnelID preserved")
+	assert.Equal(t, byte(0x60), cloves[3].DeliveryInstructions.Flag, "clove 3 = TUNNEL")
+	assert.Equal(t, gatewayHash, cloves[3].DeliveryInstructions.Hash, "clove 3 gatewayHash preserved")
+	assert.Equal(t, tid, cloves[3].DeliveryInstructions.TunnelID, "clove 3 tunnelID preserved")
 }
 
 // TestGarlic_DeliveryInstructions_TruncatedData verifies that the deserializer
@@ -2302,7 +2303,7 @@ func TestGarlic_SessionLifecycle_FirstMessageIsNewSession(t *testing.T) {
 	destPubKey, destHash := generateDestKey(t)
 
 	plaintext := []byte("first message to new destination")
-	ciphertext, err := sm.EncryptGarlicMessage(destHash, destPubKey, plaintext)
+	ciphertext, err := sm.EncryptGarlicMessage(destHash, destPubKey, [][]byte{plaintext})
 	require.NoError(t, err)
 
 	// New Session format minimum: 32 + 12 + len(plaintext) + 16 = 60 + len(plaintext)
@@ -2338,7 +2339,7 @@ func TestGarlic_SessionLifecycle_SecondMessageIsExistingSession(t *testing.T) {
 	firstMsg := performFullHandshake(t, sm, receiverSM, destHash, destPubKey, plaintext)
 
 	// Second message (should be Existing Session, handshake is complete).
-	secondMsg, err := sm.EncryptGarlicMessage(destHash, destPubKey, plaintext)
+	secondMsg, err := sm.EncryptGarlicMessage(destHash, destPubKey, [][]byte{plaintext})
 	require.NoError(t, err)
 
 	// Existing Session format: [tag(8)] + [nonce(12)] + [ciphertext(N)] + [authTag(16)]
@@ -2365,7 +2366,7 @@ func TestGarlic_SessionLifecycle_InboundNewSessionCreatesRatchetState(t *testing
 	receiverSM, receiverPubKey, destHash := generateReceiverWithPubKey(t)
 	plaintext := []byte("new session message")
 
-	ciphertext, err := senderSM.EncryptGarlicMessage(destHash, receiverPubKey, plaintext)
+	ciphertext, err := senderSM.EncryptGarlicMessage(destHash, receiverPubKey, [][]byte{plaintext})
 	require.NoError(t, err)
 
 	// Receiver should have 0 sessions before decryption.
@@ -2409,7 +2410,7 @@ func TestGarlic_SessionLifecycle_NewSessionFormatDistinctFromExistingSession(t *
 	newSessionMsg := performFullHandshake(t, senderSM, receiverSM, destHash, destPubKey, plaintext)
 
 	// Second message is Existing Session (handshake is now complete).
-	existingSessionMsg, err := senderSM.EncryptGarlicMessage(destHash, destPubKey, plaintext)
+	existingSessionMsg, err := senderSM.EncryptGarlicMessage(destHash, destPubKey, [][]byte{plaintext})
 	require.NoError(t, err)
 
 	// New Session starts with 32 bytes of ephemeral public key.
@@ -2479,7 +2480,7 @@ func TestGarlic_AssociatedData_NewSessionDecryptionUsesNilAD(t *testing.T) {
 	plaintext := []byte("new session roundtrip verifying nil AD")
 
 	// Encrypt (New Session — uses nil AD internally).
-	ciphertext, err := senderSM.EncryptGarlicMessage(destHash, receiverPubKey, plaintext)
+	ciphertext, err := senderSM.EncryptGarlicMessage(destHash, receiverPubKey, [][]byte{plaintext})
 	require.NoError(t, err)
 
 	// Decrypt (New Session — uses nil AD internally).
@@ -3280,7 +3281,7 @@ func TestCryptoAudit_GarlicEncryption_ECIESRatchetImplemented(t *testing.T) {
 	destHash := types.SHA256(receiverPub[:])
 	plaintext := []byte("crypto audit garlic test")
 
-	ciphertext, err := sm.EncryptGarlicMessage(destHash, receiverPub, plaintext)
+	ciphertext, err := sm.EncryptGarlicMessage(destHash, receiverPub, [][]byte{plaintext})
 	require.NoError(t, err)
 	assert.True(t, len(ciphertext) > 0, "ECIES garlic ciphertext must be non-empty")
 

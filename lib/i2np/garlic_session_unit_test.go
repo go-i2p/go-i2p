@@ -97,9 +97,10 @@ func TestNewSessionEncryption(t *testing.T) {
 
 	assert.Equal(t, 1, sm.GetSessionCount(), "session count after encryption")
 
-	plaintext, err := builder.BuildAndSerialize()
+	clovePayloads, err := builder.BuildClovePayloads()
 	require.NoError(t, err)
-	assert.False(t, bytes.Equal(ciphertext, plaintext), "ciphertext should not equal plaintext")
+	require.NotEmpty(t, clovePayloads)
+	assert.False(t, bytes.Equal(ciphertext, clovePayloads[0]), "ciphertext should not equal plaintext")
 }
 
 // TestNewSessionDecryption tests decrypting a new session garlic message.
@@ -115,8 +116,9 @@ func TestNewSessionDecryption(t *testing.T) {
 	dataMsg := NewDataMessage(testPayload)
 	require.NoError(t, builder.AddLocalDeliveryClove(dataMsg, 1))
 
-	originalPlaintext, err := builder.BuildAndSerialize()
+	originalClovePayloads, err := builder.BuildClovePayloads()
 	require.NoError(t, err)
+	require.NotEmpty(t, originalClovePayloads)
 
 	ciphertext, err := EncryptGarlicWithBuilder(senderSM, builder, destHash, receiverPubKey)
 	require.NoError(t, err)
@@ -126,7 +128,7 @@ func TestNewSessionDecryption(t *testing.T) {
 	require.NotEmpty(t, decryptedAll, "decrypt must return at least one clove")
 
 	assert.Equal(t, [8]byte{}, sessionTag, "expected empty session tag for new session")
-	assert.Equal(t, originalPlaintext, decryptedAll[0], "decrypted plaintext should match original")
+	assert.Equal(t, originalClovePayloads[0], decryptedAll[0], "decrypted clove payload should match original")
 }
 
 // TestExistingSessionEncryptDecrypt tests encrypt/decrypt round-trip via existing session.
@@ -138,7 +140,8 @@ func TestExistingSessionEncryptDecrypt(t *testing.T) {
 	builder2, _ := NewGarlicBuilderWithDefaults()
 	dataMsg2 := NewDataMessage([]byte("second message"))
 	builder2.AddLocalDeliveryClove(dataMsg2, 2)
-	original2, _ := builder2.BuildAndSerialize()
+	original2, _ := builder2.BuildClovePayloads()
+	require.NotEmpty(t, original2)
 
 	ct2, err := EncryptGarlicWithBuilder(senderSM, builder2, destHash, receiverPubKey)
 	require.NoError(t, err, "second encrypt")
@@ -148,7 +151,7 @@ func TestExistingSessionEncryptDecrypt(t *testing.T) {
 	require.NotEmpty(t, dec2All, "decrypt must return at least one clove")
 
 	assert.NotEqual(t, [8]byte{}, tag2, "expected non-empty session tag for existing session")
-	assert.True(t, bytes.Equal(dec2All[0], original2), "decrypted plaintext should match for existing session")
+	assert.True(t, bytes.Equal(dec2All[0], original2[0]), "decrypted clove payload should match for existing session")
 }
 
 // TestMultipleDestinations tests encrypting for different destinations.
@@ -227,18 +230,18 @@ func TestGarlicCloveSerializationFormat(t *testing.T) {
 	// Add as local delivery clove (simplest delivery type)
 	require.NoError(t, builder.AddLocalDeliveryClove(msg, 1))
 
-	// Serialize the garlic
-	payload, err := builder.BuildAndSerialize()
+	// Serialize the spec-compliant clove payloads (one per clove, no clove-set wrapper)
+	payloads, err := builder.BuildClovePayloads()
 	require.NoError(t, err)
+	require.Len(t, payloads, 1, "one payload per clove")
+	payload := payloads[0]
 
-	// Parse the serialized garlic manually to verify format
+	// Parse the serialized clove manually to verify format.
+	// Per ratchet.md §Garlic Clove there is NO clove count byte and NO clove-set
+	// wrapper: the block is DeliveryInstructions + 9-byte short header + body.
 	offset := 0
 
-	// First byte should be clove count (1)
-	assert.Equal(t, byte(1), payload[offset], "clove count should be 1")
-	offset++
-
-	// Next byte is delivery instructions flag (LOCAL = 0x00)
+	// First byte is delivery instructions flag (LOCAL = 0x00)
 	assert.Equal(t, byte(0x00), payload[offset], "LOCAL delivery flag")
 	offset++
 

@@ -108,16 +108,6 @@ func buildOurIdentTestData(identLen int, identByte byte) (testData, ourIdent []b
 	return testData, ourIdent
 }
 
-// assertDeserializeCloveError asserts that deserializeGarlicClove returns an error
-// containing errMsg and a nil clove.
-func assertDeserializeCloveError(t *testing.T, cloveData []byte, errMsg string) {
-	t.Helper()
-	clove, _, err := deserializeGarlicClove(cloveData, 0)
-	require.Error(t, err)
-	assert.Nil(t, clove)
-	assert.Contains(t, err.Error(), errMsg)
-}
-
 // processDirectBuildRecord creates a test build request record with NextTunnel=0
 // (direct router forwarding) and calls processSingleBuildRecord.
 func processDirectBuildRecord(t *testing.T, processor *MessageProcessor, messageID int) BuildRequestRecord {
@@ -259,7 +249,7 @@ func assertFieldOffsets(t *testing.T, data []byte, checks []fieldCheck) {
 // Returns the ciphertext for further testing.
 func assertGarlicNewSessionRoundtrip(t *testing.T, sender, receiver *GarlicSessionManager, destHash [32]byte, plaintext []byte) []byte {
 	t.Helper()
-	encrypted, err := sender.EncryptGarlicMessage(destHash, receiver.GetPublicKey(), plaintext)
+	encrypted, err := sender.EncryptGarlicMessage(destHash, receiver.GetPublicKey(), [][]byte{plaintext})
 	require.NoError(t, err)
 	decryptedAll, sessionTag, _, err := receiver.DecryptGarlicMessage(encrypted)
 	require.NoError(t, err)

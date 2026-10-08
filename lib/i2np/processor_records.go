@@ -872,6 +872,12 @@ func (p *MessageProcessor) tryParseRecord(
 // decryptShortRecord decrypts a 218-byte STBM record using ECIES-X25519-AEAD.
 // As a side effect it populates p.stbmSlotCrypto[index] with the Noise-derived
 // reply key and transcript hash that are needed to build the AEAD reply.
+//
+// F062 FIX: The short record format does not carry layer/IV keys in its
+// cleartext, so the returned record would have zero LayerKey/IVKey. Both the
+// transit hop and the tunnel creator must derive them from the Noise chaining
+// key (post-reply) via DeriveSTBMLayerKeys. We populate record.LayerKey and
+// record.IVKey here so handleAcceptedBuildRecord registers real (non-zero) keys.
 func (p *MessageProcessor) decryptShortRecord(recordData []byte, index int) (BuildRequestRecord, error) {
 	var encrypted [218]byte
 	copy(encrypted[:], recordData[:218])
@@ -879,7 +885,7 @@ func (p *MessageProcessor) decryptShortRecord(recordData []byte, index int) (Bui
 	if err != nil {
 		return BuildRequestRecord{}, err
 	}
-	replyKey, _, err := DeriveSTBMReplyKey(ck)
+	replyKey, postReplyCK, err := DeriveSTBMReplyKey(ck)
 	if err != nil {
 		return BuildRequestRecord{}, oops.Wrapf(err, "failed to derive STBM reply key for slot %d", index)
 	}
@@ -887,7 +893,22 @@ func (p *MessageProcessor) decryptShortRecord(recordData []byte, index int) (Bui
 		p.stbmSlotCrypto = make(map[int]stbmSlotCrypto)
 	}
 	p.stbmSlotCrypto[index] = stbmSlotCrypto{replyKey: replyKey, noiseHash: noiseHash}
-	return DecryptShortBuildRequestRecord(encrypted, p.ourPrivateKey)
+
+	record, err := DecryptShortBuildRequestRecord(encrypted, p.ourPrivateKey)
+	if err != nil {
+		return BuildRequestRecord{}, err
+	}
+
+	// F062 FIX: derive the tunnel layer/IV keys from the post-reply chaining key
+	// and populate the record so participant registration uses real keys.
+	layerKey, ivKey, _, err := DeriveSTBMLayerKeys(postReplyCK)
+	if err != nil {
+		return BuildRequestRecord{}, oops.Wrapf(err, "failed to derive STBM layer keys for slot %d", index)
+	}
+	copy(record.LayerKey[:], layerKey[:])
+	copy(record.IVKey[:], ivKey[:])
+
+	return record, nil
 }
 
 // isRecordForUs checks whether the first 16 bytes of the encrypted record

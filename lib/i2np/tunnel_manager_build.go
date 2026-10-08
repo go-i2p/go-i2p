@@ -73,55 +73,6 @@ func (tm *TunnelManager) BuildTunnelFromRequest(req tunnel.BuildTunnelRequest) (
 	return result.TunnelID, peerHashes, nil
 }
 
-// validateBuildResponse verifies that the build response carries a real success
-// payload and that the hop index is sane before the reply is treated as valid.
-// The response record itself is validated earlier by the shared BuildResponseRecord
-// validators; this gate closes the remaining router-side gap where a success
-// response might be accepted without any actual payload from the remote hop.
-func (tm *TunnelManager) validateBuildResponse(resp tunnel.BuildResponse) error {
-	if resp.HopIndex < 0 {
-		return oops.Errorf("build response has invalid hop index %d", resp.HopIndex)
-	}
-	if !resp.Success {
-		return oops.Errorf("build response indicates failure at hop %d", resp.HopIndex)
-	}
-	if len(resp.Reply) == 0 {
-		return oops.Errorf("build response success at hop %d is missing payload data", resp.HopIndex)
-	}
-	return nil
-}
-
-// registerLayerKeysForHop enforces the phase-5 requirement that each hop's
-// intermediate layer keys must be populated before the tunnel participant is
-// installed. Zero keys are never valid on the wire and must be rejected.
-func (tm *TunnelManager) registerLayerKeysForHop(hopIndex int, layerKey, ivKey [32]byte) error {
-	if layerKey == [32]byte{} {
-		return oops.Errorf("layer key must be non-zero for hop %d", hopIndex)
-	}
-	if ivKey == [32]byte{} {
-		return oops.Errorf("IV key must be non-zero for hop %d", hopIndex)
-	}
-	return nil
-}
-
-// routeBuildReply confirms that an inbound build reply belongs to a tracked
-// pending tunnel build. This prevents the creator from misrouting a valid reply
-// back into the transit path as if it were a fresh build request.
-func (tm *TunnelManager) routeBuildReply(reply []byte, messageID int) error {
-	if len(reply) == 0 {
-		return oops.Errorf("build reply for message ID %d is empty: reply payload missing", messageID)
-	}
-
-	tm.buildMutex.RLock()
-	defer tm.buildMutex.RUnlock()
-
-	req, ok := tm.pendingBuilds[messageID]
-	if !ok || req == nil {
-		return oops.Errorf("no pending build for message ID %d: reply misrouted", messageID)
-	}
-	return nil
-}
-
 // validateBuildRequest validates the build request parameters.
 func (tm *TunnelManager) validateBuildRequest(req tunnel.BuildTunnelRequest) error {
 	var zeroHash common.Hash
@@ -595,6 +546,15 @@ func (tm *TunnelManager) createSerializedShortTunnelBuildMessage(result *tunnel.
 
 	tm.updateReplyKeysWithHKDF(result, replyKeys, noiseHashes)
 
+	// F063 FIX: The STBM cleartext does not carry layer/IV keys, so each hop
+	// derives them from the Noise chaining key. The tunnel creator must derive
+	// the SAME keys for its own hops (from each hop's post-reply chaining key)
+	// and install them on result.Records so the creator's tunnel-data path
+	// (gateway/endpoint encryptors) encrypts with keys the hops can decrypt.
+	if err := tm.updateLayerKeysFromHKDF(result, postReplyCKs); err != nil {
+		return nil, err
+	}
+
 	if err := tm.registerGarlicReplyKeys(noiseHashes, postReplyCKs, messageID, result.TunnelID); err != nil {
 		return nil, err
 	}
@@ -674,6 +634,30 @@ func (tm *TunnelManager) updateReplyKeysWithHKDF(result *tunnel.TunnelBuildResul
 		result.ReplyKeys[i] = session_key.SessionKey(rk)
 	}
 	result.NoiseHashes = noiseHashes
+}
+
+// updateLayerKeysFromHKDF overwrites result.Records[i].LayerKey/IVKey with keys
+// HKDF-derived from each hop's post-reply Noise chaining key, matching exactly
+// what the transit hop derives (DeriveSTBMLayerKeys).
+//
+// F063 FIX: For STBM the 154-byte cleartext does not carry layer/IV keys, so the
+// random keys placed in the record by the builder are never transmitted. The
+// creator must derive the same keys the hops will, and install them on the
+// records so the creator's own tunnel-data encryption uses them. Without this,
+// the creator would encrypt tunnel data with keys the hops never learned.
+func (tm *TunnelManager) updateLayerKeysFromHKDF(result *tunnel.TunnelBuildResult, postReplyCKs [][32]byte) error {
+	if len(postReplyCKs) != len(result.Records) {
+		return oops.Errorf("post-reply chaining key count %d does not match record count %d", len(postReplyCKs), len(result.Records))
+	}
+	for i, ck := range postReplyCKs {
+		layerKey, ivKey, _, err := DeriveSTBMLayerKeys(ck)
+		if err != nil {
+			return oops.Wrapf(err, "failed to derive layer keys for hop %d", i)
+		}
+		copy(result.Records[i].LayerKey[:], layerKey[:])
+		copy(result.Records[i].IVKey[:], ivKey[:])
+	}
+	return nil
 }
 
 // registerGarlicReplyKeys derives and registers the one-time garlic key for OBEP reply decryption.

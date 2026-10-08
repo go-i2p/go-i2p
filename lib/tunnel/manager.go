@@ -579,6 +579,18 @@ func (m *ParticipantManager) RegisterParticipant(tunnelID TunnelID, sourceHash c
 		return oops.Errorf("tunnel expiry is in the past")
 	}
 
+	// F062 defense-in-depth: zero layer/IV keys are never valid on the wire.
+	// For STBM builds the keys are HKDF-derived from the Noise chaining key
+	// (see i2np.decryptShortRecord); a zero key here means the derivation was
+	// skipped, and registering it would create a participant tunnel that cannot
+	// decrypt any real tunnel data.
+	if layerKey == (session_key.SessionKey{}) {
+		return oops.Errorf("cannot register participant for tunnel %d: layer key is zero", tunnelID)
+	}
+	if ivKey == (session_key.SessionKey{}) {
+		return oops.Errorf("cannot register participant for tunnel %d: IV key is zero", tunnelID)
+	}
+
 	// Create the tunnel decryption using the layer and IV keys from the build request
 	// Convert session_key.SessionKey to tunnel.TunnelKey (both are [32]byte)
 	var tunnelLayerKey, tunnelIVKey tunnel.TunnelKey

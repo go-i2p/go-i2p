@@ -632,9 +632,10 @@ func (env *e2eTestEnvironment) CompleteGarlicHandshake(t *testing.T, nsMsg i2np.
 	require.NotNil(t, sessionHash, "sessionHash must be non-nil for New Session")
 
 	// Deliver the NS message's Data-clove payload(s) to the receiver session so
-	// the handshake message's application data is not lost.
-	for _, garlicBytes := range cloves {
-		garlic, derr := i2np.DeserializeGarlic(garlicBytes, 0)
+	// the handshake message's application data is not lost. Each decrypted entry
+	// is a single spec-compliant clove payload (DI + 9-byte short header + body).
+	for _, cloveBytes := range cloves {
+		garlic, derr := i2np.ParseECIESGarlicClove(cloveBytes)
 		if derr != nil {
 			continue
 		}

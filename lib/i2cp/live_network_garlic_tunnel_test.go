@@ -47,19 +47,21 @@ func TestLiveNetworkGarlicTunnel(t *testing.T) {
 	require.NotEmpty(t, ciphertext, "ciphertext must not be empty")
 
 	// Verify ciphertext differs from plaintext (encryption occurred)
-	plaintext, err := builder.BuildAndSerialize()
-	require.NoError(t, err, "serialize plaintext")
-	assert.False(t, bytes.Equal(ciphertext, plaintext), "ciphertext must differ from plaintext")
+	clovePayloads, err := builder.BuildClovePayloads()
+	require.NoError(t, err, "serialize plaintext cloves")
+	require.NotEmpty(t, clovePayloads, "must have at least one clove payload")
+	assert.False(t, bytes.Equal(ciphertext, clovePayloads[0]), "ciphertext must differ from plaintext")
 
 	// Decrypt inbound message through receiver's session
 	decryptedAll, sessionTag, sessionHash, err := receiverSM.DecryptGarlicMessage(ciphertext)
 	require.NoError(t, err, "decrypt garlic message")
 	require.NotEmpty(t, decryptedAll, "decrypt must return at least one clove payload")
 
-	// Per I2P spec: decrypted payload is a serialized Garlic message; parse it
-	// and extract the Data clove's application payload.
-	garlic, err := i2np.DeserializeGarlic(decryptedAll[0], 0)
-	require.NoError(t, err, "deserialize decrypted garlic")
+	// Per the ECIES spec each decrypted entry is a single clove payload
+	// (DI + 9-byte short header + body); parse it and extract the Data clove's
+	// application payload.
+	garlic, err := i2np.ParseECIESGarlicClove(decryptedAll[0])
+	require.NoError(t, err, "parse decrypted garlic clove")
 	require.NotEmpty(t, garlic.Cloves, "garlic must contain cloves")
 
 	payload, ok := i2np.ExtractDataClovePayload(garlic.Cloves[0])

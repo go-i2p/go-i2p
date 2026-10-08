@@ -6,10 +6,10 @@ require (
 	github.com/beevik/ntp v1.5.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
-	github.com/go-i2p/common v0.1.70001
-	github.com/go-i2p/crypto v0.1.70001
+	github.com/go-i2p/common v0.1.70002-0.20260928021252-c0bcc3d5067f
+	github.com/go-i2p/crypto v0.1.70002-0.20260922121909-236a5a5632eb
 	github.com/go-i2p/go-nat-listener v0.1.70001
-	github.com/go-i2p/go-noise v0.1.70001
+	github.com/go-i2p/go-noise v0.1.70002-0.20260922121840-b2eda442959a
 	github.com/go-i2p/go-unzip v0.0.0-20260908193701-6ecb33740b07
 	github.com/go-i2p/i2p-control v0.1.70001
 	github.com/go-i2p/i2ptui v0.1.70001
