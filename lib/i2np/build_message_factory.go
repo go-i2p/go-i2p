@@ -2,7 +2,6 @@ package i2np
 
 import (
 	common "github.com/go-i2p/common/data"
-	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/common/session_key"
 	"github.com/go-i2p/go-i2p/lib/tunnel/build"
 	"github.com/go-i2p/go-i2p/lib/tunnel/buildrecord"
@@ -94,31 +93,6 @@ func (p *buildSessionProvider) GetSessionByHash(hash common.Hash) (build.BuildSe
 		return nil, err
 	}
 	return newBuildSessionAdapter(session), nil
-}
-
-// buildRecordEncryptor implements build.BuildRecordEncryptor.
-type buildRecordEncryptor struct{}
-
-// NewBuildRecordEncryptor creates a new encryptor for tunnel build records.
-func NewBuildRecordEncryptor() build.BuildRecordEncryptor {
-	return &buildRecordEncryptor{}
-}
-
-// EncryptShortBuildRequestRecordWithChain encrypts a Short (ECIES) build request record.
-func (e *buildRecordEncryptor) EncryptShortBuildRequestRecordWithChain(
-	record buildrecord.BuildRequestRecord,
-	hop router_info.RouterInfo,
-) ([218]byte, [32]byte, [32]byte, error) {
-	return EncryptShortBuildRequestRecordWithChain(record, hop)
-}
-
-// EncryptBuildRequestRecord encrypts a long-format (528-byte) build request
-// record using ECIES-X25519-AEAD.
-func (e *buildRecordEncryptor) EncryptBuildRequestRecord(
-	record buildrecord.BuildRequestRecord,
-	hop router_info.RouterInfo,
-) ([528]byte, error) {
-	return EncryptBuildRequestRecord(record, hop)
 }
 
 // replyProcessorAdapter adapts *ReplyProcessor to build.TunnelReplyProcessor interface.

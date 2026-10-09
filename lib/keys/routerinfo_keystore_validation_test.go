@@ -357,36 +357,3 @@ func TestOnlyModernCryptoInGenerateNewKey(t *testing.T) {
 		t.Error("generateNewKey() function not found in routerinfo_keystore.go")
 	}
 }
-
-// TestOfflineSignatures_NotImplemented documents that Proposal 123 (offline/transient
-// signing keys) is not yet implemented in go-i2p's key management.
-func TestOfflineSignatures_NotImplemented(t *testing.T) {
-	files, err := filepath.Glob("*.go")
-	if err != nil {
-		t.Fatalf("filepath.Glob() failed: %v", err)
-	}
-
-	offlineRefs := 0
-	for _, f := range files {
-		if strings.HasSuffix(f, "_test.go") {
-			continue
-		}
-		content, err := os.ReadFile(f)
-		if err != nil {
-			t.Fatalf("ReadFile(%s) failed: %v", f, err)
-		}
-		src := strings.ToLower(string(content))
-		if strings.Contains(src, "offline") || strings.Contains(src, "transient") {
-			offlineRefs++
-			t.Logf("Found offline/transient reference in %s", f)
-		}
-	}
-
-	if offlineRefs > 0 {
-		t.Logf("AUDIT NOTE: %d production files reference offline/transient keys — "+
-			"verify Proposal 123 compliance if implemented", offlineRefs)
-	} else {
-		t.Logf("AUDIT NOTE: Proposal 123 (offline signatures / transient keys) is NOT implemented. " +
-			"This is acceptable for initial implementation but should be tracked as future work.")
-	}
-}

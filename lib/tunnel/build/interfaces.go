@@ -5,7 +5,6 @@
 package build
 
 import (
-	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/common/session_key"
 	"github.com/go-i2p/go-i2p/lib/tunnel/buildrecord"
 )
@@ -57,25 +56,6 @@ type BuildMessageFactory interface {
 	// encryptedRecords contains 218-byte encrypted STBM records, messageID is the I2NP message ID.
 	// Returns the serialized message bytes ready for transmission and any marshaling error.
 	CreateShortTunnelBuildMessage(encryptedRecords [][]byte, messageID int) ([]byte, error)
-}
-
-// BuildRecordEncryptor handles encryption of tunnel build request records.
-// This interface decouples tunnel coordination from I2NP cryptographic operations.
-type BuildRecordEncryptor interface {
-	// EncryptShortBuildRequestRecordWithChain encrypts a Short (ECIES) build request record
-	// for the specified hop, returning the encrypted record (218 bytes), chaining key,
-	// Noise transcript hash, and any error.
-	EncryptShortBuildRequestRecordWithChain(
-		record buildrecord.BuildRequestRecord,
-		hop router_info.RouterInfo,
-	) (encrypted [218]byte, chainKey, noiseHash [32]byte, err error)
-
-	// EncryptBuildRequestRecord encrypts a long-format (528-byte) build request
-	// record using ECIES-X25519-AEAD.
-	EncryptBuildRequestRecord(
-		record buildrecord.BuildRequestRecord,
-		hop router_info.RouterInfo,
-	) ([528]byte, error)
 }
 
 // TunnelReplyProcessor processes tunnel build replies and manages reply decryption.

@@ -45,14 +45,12 @@ var (
 // Standard cleartext (before encryption) is 222 bytes.
 // Short cleartext (ECIES short) is 154 bytes (218 - 16 toPeer - 32 ephKey - 16 MAC).
 const (
-	StandardBuildRecordSize          = 528                                  // Encrypted on-wire size for standard/variable tunnel build records
-	ShortBuildRecordSize             = buildrecord.ShortRecordSize          // 218
-	StandardBuildRecordCleartextLen  = buildrecord.StandardCleartextLen     // 222
-	ElGamalBuildRecordCleartextLen   = buildrecord.StandardCleartextLen     // 222
-	ECIESLongBuildRecordCleartextLen = 464                                  // Cleartext length for ECIES-X25519 long-form build request records
-	ShortBuildRecordCleartextLen     = buildrecord.ShortCleartextLen        // 154
-	ShortRecordHeaderSize            = 64                                   // toPeer(16) + ephemeralKey(32) + MAC(16)
-	DefaultExpirationSeconds         = buildrecord.DefaultExpirationSeconds // 480
+	StandardBuildRecordSize         = 528                                  // Encrypted on-wire size for standard/variable tunnel build records
+	ShortBuildRecordSize            = buildrecord.ShortRecordSize          // 218
+	StandardBuildRecordCleartextLen = buildrecord.StandardCleartextLen     // 222
+	ShortBuildRecordCleartextLen    = buildrecord.ShortCleartextLen        // 154
+	ShortRecordHeaderSize           = 64                                   // toPeer(16) + ephemeralKey(32) + MAC(16)
+	DefaultExpirationSeconds        = buildrecord.DefaultExpirationSeconds // 480
 )
 
 // DefaultExpirationTolerance is the default expiration tolerance for clock skew (5 minutes into the past).

@@ -39,9 +39,6 @@ import (
 // Never acquire in reverse order or skip levels, as this creates deadlock risk.
 // Currently, sessionMutex and keystoreMux are rarely acquired together in
 // practice; document any new cross-mutex code paths with inline comments.
-//
-// Future (0.2.0): Consider grouping into sub-structs (routerNetdb, routerClients,
-// routerTelemetry) to reduce god-object size and clarify ownership boundaries.
 type Router struct {
 	// keystore for router info
 	keystore *keys.RouterInfoKeystore

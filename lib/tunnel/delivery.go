@@ -646,8 +646,6 @@ func (di *DeliveryInstructions) FragmentSize() (fragSize uint16, err error) {
 	return di.fragmentSize, nil
 }
 
-// Legacy helper functions have been removed - no longer needed with struct-based implementation
-
 func readDeliveryInstructions(data []byte) (instructions *DeliveryInstructions, remainder []byte, err error) {
 	logAt("readDeliveryInstructions").Debug("Reading DeliveryInstructions")
 	return readDeliveryInstructionsStruct(data)

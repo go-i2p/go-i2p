@@ -23,14 +23,8 @@ var KnownReseedServers = []*ReseedConfig{
 	{URL: "https://reseed-fr.i2pd.xyz/", SU3Fingerprint: "r4sas-reseed_at_mail.i2p.crt"},
 	// Additional community servers
 	{URL: "https://www2.mk16.de/", SU3Fingerprint: "i2p-reseed_at_mk16.de.crt"},
-	// reseed2.i2p.net removed: persistently returns connection-refused on every bootstrap
-	// attempt. Bootstrap completes via the other servers.
 	{URL: "https://reseed.diva.exchange/", SU3Fingerprint: "reseed_at_diva.exchange.crt"},
 	{URL: "https://i2p.novg.net/", SU3Fingerprint: "igor_at_novg.net.crt"},
-	// i2pseed.creativecowpat.net:8443 removed: TLS certificate uses only a Legacy
-	// Common Name with no Subject Alternative Names (SANs). Go's TLS stack rejects
-	// such certificates since Go 1.15 (x509: certificate relies on legacy Common
-	// Name field), causing a permanent failure on every bootstrap attempt.
 	{URL: "https://reseed.onion.im/", SU3Fingerprint: "lazygravy_at_mail.i2p.crt"},
 }
 
