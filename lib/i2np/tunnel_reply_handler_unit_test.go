@@ -26,7 +26,7 @@ func TestTunnelBuildReply_ProcessReply_AllReject(t *testing.T) {
 	assert.Error(t, err, "ProcessReply should fail when all hops reject")
 	assert.Contains(t, err.Error(), "tunnel build failed")
 	// The error message will contain the first hop's rejection, not the count
-	assert.Contains(t, err.Error(), "rejected request")
+	assert.Contains(t, err.Error(), "rejected with code 10")
 }
 
 // TestTunnelBuildReply_ProcessReply_MixedResponses tests tunnel build with mixed success/failure
@@ -46,7 +46,7 @@ func TestTunnelBuildReply_ProcessReply_SingleFailure(t *testing.T) {
 	err := reply.ProcessReply()
 
 	assert.Error(t, err, "ProcessReply should fail when any hop rejects")
-	assert.Contains(t, err.Error(), "router overloaded")
+	assert.Contains(t, err.Error(), "rejected with code 20")
 }
 
 // TestTunnelBuildReply_ProcessReply_UnknownReplyCode tests handling of unknown reply codes
@@ -56,7 +56,7 @@ func TestTunnelBuildReply_ProcessReply_UnknownReplyCode(t *testing.T) {
 	err := reply.ProcessReply()
 
 	assert.Error(t, err, "ProcessReply should fail with unknown reply codes")
-	assert.Contains(t, err.Error(), "unknown reply code")
+	assert.Contains(t, err.Error(), "rejected with code 255")
 }
 
 // TestTunnelBuildReply_ProcessReply_EmptyHash tests handling of invalid response records
@@ -152,12 +152,11 @@ func TestProcessHopResponse_AllReplyCodes(t *testing.T) {
 		errorContains string
 	}{
 		{TunnelBuildReplySuccess, true, false, ""},
-		{TunnelBuildReplyProbabilisticRejectionLegacy, false, true, "rejected request"},
-		{TunnelBuildReplyOverload, false, true, "router overloaded"},
-		{TunnelBuildReplyBandwidth, false, true, "insufficient bandwidth"},
-		{TunnelBuildReplyInvalid, false, true, "invalid request data"},
-		{TunnelBuildReplyCritical, false, true, "request expired"},
-		{0xFF, false, true, "unknown reply code"}, // Unknown code
+		{TunnelBuildReplyProbabilisticReject, false, true, "rejected with code 10"},
+		{TunnelBuildReplyTransientOverload, false, true, "rejected with code 20"},
+		{TunnelBuildReplyBandwidth, false, true, "rejected with code 30"},
+		{TunnelBuildReplyCritical, false, true, "rejected with code 50"},
+		{0xFF, false, true, "rejected with code 255"}, // Non-standard code is still a rejection
 	}
 
 	for _, tc := range testCases {

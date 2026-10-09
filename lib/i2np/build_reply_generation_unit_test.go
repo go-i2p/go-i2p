@@ -53,7 +53,7 @@ func TestProcessSingleBuildRecord_AcceptedRequest(t *testing.T) {
 
 func TestProcessSingleBuildRecord_RejectedRequest(t *testing.T) {
 	processor, mockForwarder, mockParticipant := setupBuildReplyTest(t, false)
-	mockParticipant.rejectCode = TunnelBuildReplyOverload
+	mockParticipant.rejectCode = TunnelBuildReplyTransientOverload
 	mockParticipant.rejectReason = "router overloaded"
 
 	processDirectBuildRecord(t, processor, 1002)
@@ -138,11 +138,10 @@ func TestGenerateAndSendBuildReply_AllReplyCodes(t *testing.T) {
 		replyCode byte
 	}{
 		{"SUCCESS", TunnelBuildReplySuccess},
-		{"REJECT", TunnelBuildReplyProbabilisticRejectionLegacy},
-		{"OVERLOAD", TunnelBuildReplyOverload},
+		{"REJECT", TunnelBuildReplyProbabilisticReject},
+		{"OVERLOAD", TunnelBuildReplyTransientOverload},
 		{"BANDWIDTH", TunnelBuildReplyBandwidth},
-		{"INVALID", TunnelBuildReplyInvalid},
-		{"EXPIRED", TunnelBuildReplyCritical},
+		{"CRITICAL", TunnelBuildReplyCritical},
 	}
 
 	for _, tc := range testCases {

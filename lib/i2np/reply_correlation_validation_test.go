@@ -429,7 +429,7 @@ func TestReplyProcessor_KeyIVMismatch(t *testing.T) {
 func createRejectedVariableTunnelBuildReply(hopCount int) *VariableTunnelBuildReply {
 	records := make([]BuildResponseRecord, hopCount)
 	for i := 0; i < hopCount; i++ {
-		records[i] = createValidResponseRecordWithReply(TunnelBuildReplyProbabilisticRejectionLegacy)
+		records[i] = createValidResponseRecordWithReply(TunnelBuildReplyProbabilisticReject)
 	}
 	return &VariableTunnelBuildReply{
 		Count:                hopCount,

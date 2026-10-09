@@ -1214,25 +1214,23 @@ func (p *Pool) MarkFailedHopsFromReply(hops []common.Hash, responses []BuildResp
 
 // classifyReplyCodeToReason maps a tunnel build reply code to a failure reason string
 // for consistent penalty classification and cooldown calculation.
+//
+// Wire codes per tunnel-creation.rst: 0 = accepted, 10 = probabilistic reject,
+// 20 = transient overload, 30 = bandwidth, 50 = critical. Any non-zero code is
+// a rejection; code 20 is transient (the peer may recover), all others are
+// treated as permanent for penalty purposes.
 func classifyReplyCodeToReason(reply []byte) string {
 	if len(reply) == 0 {
 		return "tunnel_build_failed_ambiguous"
 	}
 	code := reply[0]
-	switch code {
-	case replycodes.TunnelBuildReplyProbabilisticRejectionLegacy:
-		return "tunnel_build_failed_permanent"
-	case replycodes.TunnelBuildReplyOverload:
-		return "tunnel_build_failed_permanent"
-	case replycodes.TunnelBuildReplyBandwidth:
-		return "tunnel_build_failed_permanent"
-	case replycodes.TunnelBuildReplyInvalid:
-		return "tunnel_build_failed_permanent"
-	case replycodes.TunnelBuildReplyCritical:
-		return "tunnel_build_failed_permanent"
-	default:
+	if code == replycodes.TunnelBuildReplySuccess {
 		return "tunnel_build_failed_ambiguous"
 	}
+	if code == replycodes.TunnelBuildReplyTransientOverload {
+		return "tunnel_build_failed_transient"
+	}
+	return "tunnel_build_failed_permanent"
 }
 
 // MarkPeerFailed records that a peer failed to establish a connection.

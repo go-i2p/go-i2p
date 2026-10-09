@@ -36,7 +36,7 @@ func TestNewShortTunnelBuildReply(t *testing.T) {
 func TestShortTunnelBuildReplyGetReplyRecords(t *testing.T) {
 	records := []BuildResponseRecord{
 		createTestBuildResponseRecord(TunnelBuildReplySuccess),
-		createTestBuildResponseRecord(TunnelBuildReplyProbabilisticRejectionLegacy),
+		createTestBuildResponseRecord(TunnelBuildReplyProbabilisticReject),
 	}
 
 	reply := NewShortTunnelBuildReply(records)
@@ -51,8 +51,8 @@ func TestShortTunnelBuildReplyGetReplyRecords(t *testing.T) {
 		t.Errorf("Expected first record Reply=%d, got %d", TunnelBuildReplySuccess, replyRecords[0].Reply)
 	}
 
-	if replyRecords[1].Reply != TunnelBuildReplyProbabilisticRejectionLegacy {
-		t.Errorf("Expected second record Reply=%d, got %d", TunnelBuildReplyProbabilisticRejectionLegacy, replyRecords[1].Reply)
+	if replyRecords[1].Reply != TunnelBuildReplyProbabilisticReject {
+		t.Errorf("Expected second record Reply=%d, got %d", TunnelBuildReplyProbabilisticReject, replyRecords[1].Reply)
 	}
 }
 
@@ -75,7 +75,7 @@ func TestShortTunnelBuildReplyProcessReplyAllSuccess(t *testing.T) {
 func TestShortTunnelBuildReplyProcessReplyWithRejection(t *testing.T) {
 	records := []BuildResponseRecord{
 		createTestBuildResponseRecord(TunnelBuildReplySuccess),
-		createTestBuildResponseRecord(TunnelBuildReplyProbabilisticRejectionLegacy), // One hop rejects
+		createTestBuildResponseRecord(TunnelBuildReplyProbabilisticReject), // One hop rejects
 		createTestBuildResponseRecord(TunnelBuildReplySuccess),
 	}
 
@@ -95,7 +95,7 @@ func TestShortTunnelBuildReplyProcessReplyWithRejection(t *testing.T) {
 // TestShortTunnelBuildReplyProcessReplyAllRejected tests ProcessReply when all hops reject
 func TestShortTunnelBuildReplyProcessReplyAllRejected(t *testing.T) {
 	records := []BuildResponseRecord{
-		createTestBuildResponseRecord(TunnelBuildReplyOverload),
+		createTestBuildResponseRecord(TunnelBuildReplyTransientOverload),
 		createTestBuildResponseRecord(TunnelBuildReplyBandwidth),
 	}
 
@@ -176,11 +176,10 @@ func TestShortTunnelBuildReplyVariousReplyCodes(t *testing.T) {
 		shouldPass bool
 	}{
 		{"Success", TunnelBuildReplySuccess, true},
-		{"Reject", TunnelBuildReplyProbabilisticRejectionLegacy, false},
-		{"Overload", TunnelBuildReplyOverload, false},
+		{"Reject", TunnelBuildReplyProbabilisticReject, false},
+		{"Overload", TunnelBuildReplyTransientOverload, false},
 		{"Bandwidth", TunnelBuildReplyBandwidth, false},
-		{"Invalid", TunnelBuildReplyInvalid, false},
-		{"Expired", TunnelBuildReplyCritical, false},
+		{"Critical", TunnelBuildReplyCritical, false},
 	}
 
 	for _, tc := range testCases {

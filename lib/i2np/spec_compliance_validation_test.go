@@ -2919,14 +2919,14 @@ func TestTunnelBuild_RecordFormat_ParseRoundTrip(t *testing.T) {
 	assert.Equal(t, original.SendMessageID, parsed.SendMessageID)
 }
 
-// TestTunnelBuild_ReplyProcessing_ReplyCodes verifies all defined reply codes.
+// TestTunnelBuild_ReplyProcessing_ReplyCodes verifies all defined reply codes
+// match the I2P wire values (tunnel-creation.rst, Java TunnelHistory, i2pd).
 func TestTunnelBuild_ReplyProcessing_ReplyCodes(t *testing.T) {
-	assert.Equal(t, byte(0x00), byte(TunnelBuildReplySuccess), "SUCCESS = 0x00")
-	assert.Equal(t, byte(0x01), byte(TunnelBuildReplyProbabilisticRejectionLegacy), "REJECT = 0x01")
-	assert.Equal(t, byte(0x02), byte(TunnelBuildReplyOverload), "OVERLOAD = 0x02")
-	assert.Equal(t, byte(0x03), byte(TunnelBuildReplyBandwidth), "BANDWIDTH = 0x03")
-	assert.Equal(t, byte(0x04), byte(TunnelBuildReplyInvalid), "INVALID = 0x04")
-	assert.Equal(t, byte(0x05), byte(TunnelBuildReplyCritical), "EXPIRED = 0x05")
+	assert.Equal(t, byte(0), byte(TunnelBuildReplySuccess), "SUCCESS = 0")
+	assert.Equal(t, byte(10), byte(TunnelBuildReplyProbabilisticReject), "PROBABILISTIC_REJECT = 10")
+	assert.Equal(t, byte(20), byte(TunnelBuildReplyTransientOverload), "TRANSIENT_OVERLOAD = 20")
+	assert.Equal(t, byte(30), byte(TunnelBuildReplyBandwidth), "BANDWIDTH = 30")
+	assert.Equal(t, byte(50), byte(TunnelBuildReplyCritical), "CRITICAL = 50")
 }
 
 // makeTestResponseRecords creates n BuildResponseRecords all with TunnelBuildReplySuccess.
@@ -2953,7 +2953,7 @@ func TestTunnelBuild_ReplyProcessing_OneReject(t *testing.T) {
 	records := makeTestResponseRecords(8)
 	// Override record 3 with a rejection
 	rd := makeRandomData(func(j int) byte { return byte(3 + j%256) })
-	records[3] = CreateBuildResponseRecord(TunnelBuildReplyProbabilisticRejectionLegacy, rd)
+	records[3] = CreateBuildResponseRecord(TunnelBuildReplyProbabilisticReject, rd)
 
 	reply := &TunnelBuildReply{Records: [8]BuildResponseRecord(records)}
 	err := reply.ProcessReply()
@@ -3227,7 +3227,7 @@ func TestVariableTunnelBuildReply_Format_CountPlusRecords(t *testing.T) {
 
 // TestVariableTunnelBuildReply_Format_SHA256Integrity verifies hash integrity check.
 func TestVariableTunnelBuildReply_Format_SHA256Integrity(t *testing.T) {
-	assertBuildResponseRecordHash(t, TunnelBuildReplyOverload, func(i int) byte { return byte(i * 3) })
+	assertBuildResponseRecordHash(t, TunnelBuildReplyTransientOverload, func(i int) byte { return byte(i * 3) })
 }
 
 // TestShortTunnelBuildReply_Format_AllAccepted verifies ShortTunnelBuildReply processes correctly.

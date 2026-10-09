@@ -209,7 +209,7 @@ type mockParticipantManager struct {
 func newMockParticipantManager(acceptAll bool) *mockParticipantManager {
 	return &mockParticipantManager{
 		acceptAll:    acceptAll,
-		rejectCode:   TunnelBuildReplyProbabilisticRejectionLegacy,
+		rejectCode:   TunnelBuildReplyProbabilisticReject,
 		rejectReason: "mock rejection",
 	}
 }
@@ -281,7 +281,7 @@ func createSuccessfulTunnelBuildReply() *TunnelBuildReply {
 func createRejectedTunnelBuildReply() *TunnelBuildReply {
 	var reply TunnelBuildReply
 	for i := 0; i < 8; i++ {
-		reply.Records[i] = createValidResponseRecordWithReply(TunnelBuildReplyProbabilisticRejectionLegacy)
+		reply.Records[i] = createValidResponseRecordWithReply(TunnelBuildReplyProbabilisticReject)
 	}
 	return &reply
 }
@@ -292,9 +292,9 @@ func createMixedTunnelBuildReply() *TunnelBuildReply {
 	replyCodes := []byte{
 		TunnelBuildReplySuccess,
 		TunnelBuildReplySuccess,
-		TunnelBuildReplyProbabilisticRejectionLegacy,
+		TunnelBuildReplyProbabilisticReject,
 		TunnelBuildReplySuccess,
-		TunnelBuildReplyOverload,
+		TunnelBuildReplyTransientOverload,
 		TunnelBuildReplySuccess,
 		TunnelBuildReplyBandwidth,
 		TunnelBuildReplySuccess,
@@ -310,7 +310,7 @@ func createSingleFailureTunnelBuildReply() *TunnelBuildReply {
 	var reply TunnelBuildReply
 	for i := 0; i < 8; i++ {
 		if i == 3 {
-			reply.Records[i] = createValidResponseRecordWithReply(TunnelBuildReplyOverload)
+			reply.Records[i] = createValidResponseRecordWithReply(TunnelBuildReplyTransientOverload)
 		} else {
 			reply.Records[i] = createValidResponseRecordWithReply(TunnelBuildReplySuccess)
 		}
@@ -366,9 +366,9 @@ func createMixedVariableTunnelBuildReply(hopCount int) *VariableTunnelBuildReply
 	records := make([]BuildResponseRecord, hopCount)
 	replyCodes := []byte{
 		TunnelBuildReplySuccess,
-		TunnelBuildReplyProbabilisticRejectionLegacy,
+		TunnelBuildReplyProbabilisticReject,
 		TunnelBuildReplySuccess,
-		TunnelBuildReplyOverload,
+		TunnelBuildReplyTransientOverload,
 	}
 	for i := 0; i < hopCount; i++ {
 		records[i] = createValidResponseRecordWithReply(replyCodes[i%len(replyCodes)])

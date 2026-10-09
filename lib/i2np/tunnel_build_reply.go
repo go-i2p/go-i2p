@@ -17,12 +17,11 @@ Same format as TunnelBuildMessage, with BuildResponseRecords
 // TunnelBuildReply constants for processing responses
 // These are aliases of the canonical constants in lib/tunnel/replycodes
 const (
-	TunnelBuildReplySuccess                      = replycodes.TunnelBuildReplySuccess                      // Tunnel hop accepted the request
-	TunnelBuildReplyProbabilisticRejectionLegacy = replycodes.TunnelBuildReplyProbabilisticRejectionLegacy // Deprecated probabilistic rejection (0x01)
-	TunnelBuildReplyOverload                     = replycodes.TunnelBuildReplyOverload                     // Deprecated overload (0x02)
-	TunnelBuildReplyBandwidth                    = replycodes.TunnelBuildReplyBandwidth                    // Bandwidth rejection (0x03) - actively used
-	TunnelBuildReplyInvalid                      = replycodes.TunnelBuildReplyInvalid                      // Deprecated invalid request (0x04)
-	TunnelBuildReplyCritical                     = replycodes.TunnelBuildReplyCritical                     // Critical rejection (0x05) - not "expired"
+	TunnelBuildReplySuccess             = replycodes.TunnelBuildReplySuccess             // Tunnel hop accepted the request (0)
+	TunnelBuildReplyProbabilisticReject = replycodes.TunnelBuildReplyProbabilisticReject // Probabilistic rejection (10)
+	TunnelBuildReplyTransientOverload   = replycodes.TunnelBuildReplyTransientOverload   // Transient overload (20)
+	TunnelBuildReplyBandwidth           = replycodes.TunnelBuildReplyBandwidth           // Bandwidth rejection (30) - standard reject code
+	TunnelBuildReplyCritical            = replycodes.TunnelBuildReplyCritical            // Critical rejection (50)
 
 	// TunnelBuildReplyPendingDecryption is an internal sentinel (0xFF) for reply
 	// records awaiting deferred decryption. Never transmitted on the wire.

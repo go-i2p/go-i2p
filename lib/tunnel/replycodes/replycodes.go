@@ -1,37 +1,42 @@
 package replycodes
 
-// Tunnel build reply codes as defined in the I2P specification.
-// In practice, only 0x00 (Success) and 0x03 (Bandwidth Rejection) are sent.
-// The other codes are deprecated but we still process them if received from other routers.
+// Tunnel build reply codes as defined in the I2P specification
+// (tunnel-creation.rst, BuildResponseRecord reply byte).
+//
+// The wire values are 0 (accepted), 10 (probabilistic reject), 20 (transient
+// overload), 30 (bandwidth), and 50 (critical). These match Java I2P's
+// TunnelHistory constants (TUNNEL_REJECT_PROBABALISTIC_REJECT=10,
+// TUNNEL_REJECT_TRANSIENT_OVERLOAD=20, TUNNEL_REJECT_BANDWIDTH=30,
+// TUNNEL_REJECT_CRIT=50) and i2pd's retCode usage (30).
+//
+// In practice, only 0 (Success) and 30 (Bandwidth) are sent by current
+// routers. The other codes are processed if received for interop.
 const (
 	// TunnelBuildReplySuccess indicates the hop accepted the tunnel build request.
-	// This is the only success code and is actively used.
-	TunnelBuildReplySuccess = 0x00
+	// This is the only success code.
+	TunnelBuildReplySuccess = 0
 
-	// TunnelBuildReplyProbabilisticRejectionLegacy is deprecated (0x01).
-	// Not sent, but processed if received from other routers.
-	// Indicates a probabilistic build rejection.
-	TunnelBuildReplyProbabilisticRejectionLegacy = 0x01
+	// TunnelBuildReplyProbabilisticReject indicates a probabilistic rejection
+	// due to a flood of build requests (wire code 10). Rarely sent.
+	TunnelBuildReplyProbabilisticReject = 10
 
-	// TunnelBuildReplyOverload is deprecated (0x02). Not sent, but processed if received.
-	TunnelBuildReplyOverload = 0x02
+	// TunnelBuildReplyTransientOverload indicates temporary CPU/job/tunnel
+	// overload (wire code 20). Rarely sent.
+	TunnelBuildReplyTransientOverload = 20
 
-	// TunnelBuildReplyBandwidth indicates a bandwidth rejection (0x03).
-	// This is the standard rejection code actively used in place of the deprecated codes.
-	// It indicates the hop rejected the build due to insufficient bandwidth/capacity.
-	TunnelBuildReplyBandwidth = 0x03
+	// TunnelBuildReplyBandwidth indicates a bandwidth-limit rejection
+	// (wire code 30). This is the standard rejection code used for most
+	// rejections, even when the real reason is not bandwidth.
+	TunnelBuildReplyBandwidth = 30
 
-	// TunnelBuildReplyInvalid is deprecated (0x04). Not sent, but processed if received.
-	TunnelBuildReplyInvalid = 0x04
-
-	// TunnelBuildReplyCritical indicates a critical tunnel rejection (0x05).
-	// This is NOT "expired" - it's a critical rejection. Not sent, but processed if received.
-	TunnelBuildReplyCritical = 0x05
+	// TunnelBuildReplyCritical indicates a critical rejection such as router
+	// shutdown (wire code 50). Not currently sent by Java I2P.
+	TunnelBuildReplyCritical = 50
 
 	// TunnelBuildReplyPendingDecryption is an internal sentinel (0xFF) marking a
 	// reply record whose Reply field has not yet been populated because the
 	// record is still encrypted and awaiting deferred decryption. It is never
 	// transmitted on the wire and never appears in a decrypted cleartext record
-	// (spec codes are 0x00-0x05). Consumers must not treat it as a rejection.
+	// (spec codes are 0-50). Consumers must not treat it as a rejection.
 	TunnelBuildReplyPendingDecryption = 0xFF
 )

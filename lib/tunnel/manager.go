@@ -10,18 +10,20 @@ import (
 	"github.com/go-i2p/crypto/rand"
 	"github.com/go-i2p/crypto/tunnel"
 	"github.com/go-i2p/go-i2p/lib/config"
+	"github.com/go-i2p/go-i2p/lib/tunnel/replycodes"
 	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
 
-// Build reply codes per I2P specification (TUNNEL-CREATION)
+// Build reply codes per I2P specification (TUNNEL-CREATION).
+// Aliases of the canonical constants in lib/tunnel/replycodes.
 const (
-	BuildReplyCodeAccepted            = 0  // Tunnel accepted
-	BuildReplyCodeProbabilisticReject = 10 // Rejected: probabilistic reject
-	BuildReplyCodeTransientOverload   = 20 // Rejected: transient overload
-	BuildReplyCodeBandwidth           = 30 // Rejected: bandwidth limit (used for most rejections)
-	BuildReplyCodeCritical            = 50 // Rejected: critical (router shutdown, etc.)
+	BuildReplyCodeAccepted            = replycodes.TunnelBuildReplySuccess             // Tunnel accepted (0)
+	BuildReplyCodeProbabilisticReject = replycodes.TunnelBuildReplyProbabilisticReject // Rejected: probabilistic reject (10)
+	BuildReplyCodeTransientOverload   = replycodes.TunnelBuildReplyTransientOverload   // Rejected: transient overload (20)
+	BuildReplyCodeBandwidth           = replycodes.TunnelBuildReplyBandwidth           // Rejected: bandwidth limit (30, used for most rejections)
+	BuildReplyCodeCritical            = replycodes.TunnelBuildReplyCritical            // Rejected: critical (50, router shutdown, etc.)
 )
 
 // Rejection probability constants for participation load-based throttling.
