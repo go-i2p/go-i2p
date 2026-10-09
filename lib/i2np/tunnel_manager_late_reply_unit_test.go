@@ -16,7 +16,7 @@ type uncorrelatedReplyHandlerStub struct {
 }
 
 func (s *uncorrelatedReplyHandlerStub) GetReplyRecords() []BuildResponseRecord {
-	return []BuildResponseRecord{{Reply: TunnelBuildReplyReject}}
+	return []BuildResponseRecord{{Reply: TunnelBuildReplyProbabilisticRejectionLegacy}}
 }
 
 func (s *uncorrelatedReplyHandlerStub) GetRawReplyRecords() [][]byte {
@@ -97,7 +97,7 @@ func TestProcessUncorrelatedReply_LateShortBuildBestEffortDecryptReclassifies(t 
 	encrypted := makeEncryptedSTBMReplySlotForTest(t, key, noiseHash, 0, TunnelBuildReplySuccess)
 	handler := &ShortTunnelBuildReply{
 		Count:                1,
-		BuildResponseRecords: []BuildResponseRecord{{Reply: TunnelBuildReplyReject}},
+		BuildResponseRecords: []BuildResponseRecord{{Reply: TunnelBuildReplyProbabilisticRejectionLegacy}},
 		RawRecordData:        [][]byte{encrypted},
 	}
 

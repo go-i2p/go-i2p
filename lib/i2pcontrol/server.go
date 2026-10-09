@@ -66,10 +66,10 @@ func NewServer(cfg *config.I2PControlConfig, stats RouterStatsProvider) (*Server
 
 // validateServerConfig checks that required server configuration parameters are valid.
 // Returns an error if config is nil, stats is nil, or password is empty.
-// It additionally refuses to start when (a) StrictAuth is set and the password
-// is the well-known default, or (b) the bind address resolves to a non-loopback
-// interface while the insecure defaults (default password or plaintext HTTP)
-// are in effect and no explicit opt-in has been granted.
+// It additionally refuses to start when (a) the password is the well-known
+// default, or (b) the bind address resolves to a non-loopback interface while
+// the insecure defaults (default password or plaintext HTTP) are in effect and
+// no explicit opt-in has been granted.
 func validateServerConfig(cfg *config.I2PControlConfig, stats RouterStatsProvider) error {
 	if cfg == nil {
 		return oops.Errorf("i2pcontrol: config cannot be nil")
@@ -80,8 +80,8 @@ func validateServerConfig(cfg *config.I2PControlConfig, stats RouterStatsProvide
 	if cfg.Password == "" {
 		return oops.Errorf("i2pcontrol: password cannot be empty")
 	}
-	if cfg.StrictAuth && cfg.Password == defaultI2PControlPassword {
-		return oops.Errorf("i2pcontrol: strict_auth is enabled and password is the default; set a non-default password")
+	if cfg.Password == defaultI2PControlPassword {
+		return oops.Errorf("i2pcontrol: password is the well-known default; set a non-default password")
 	}
 	return validateBindPolicy(cfg)
 }
@@ -224,10 +224,6 @@ func buildAuthenticateResponse(api *int, token, password string) map[string]inte
 		"API":   *api,
 		"Token": token,
 	}
-	if password == defaultI2PControlPassword {
-		resp["Warning"] = "authenticated with the default password 'itoopie'; this is retained only for backward-compatibility and is not recommended for production"
-		logDefaultPasswordAuth()
-	}
 	return resp
 }
 
@@ -336,15 +332,6 @@ func (s *Server) logStartupPosture() {
 	}
 
 	authMode := "custom_password"
-	if s.config.Password == defaultI2PControlPassword {
-		if s.config.StrictAuth {
-			authMode = "strict_default_password_refused"
-		} else {
-			authMode = "compat_default_password"
-		}
-	} else if s.config.StrictAuth {
-		authMode = "strict_custom_password"
-	}
 
 	tlsPosture := "plaintext_http"
 	if s.config.UseHTTPS {
@@ -358,7 +345,6 @@ func (s *Server) logStartupPosture() {
 		"auth_mode":        authMode,
 		"tls_posture":      tlsPosture,
 		"cors_allowlist":   strings.Join(s.corsAllowlist(), ","),
-		"strict_auth":      s.config.StrictAuth,
 		"token_expiration": s.config.TokenExpiration.String(),
 	}).Info("I2PControl startup posture")
 }
@@ -432,32 +418,6 @@ func (s *Server) serveOnListener(listener net.Listener) error {
 		return s.httpServer.ServeTLS(listener, s.config.CertFile, s.config.KeyFile)
 	}
 	return s.httpServer.Serve(listener)
-}
-
-// defaultPasswordWarnInterval throttles the repeated advisory emitted when
-// clients authenticate with the backward-compatibility default password.
-const defaultPasswordWarnInterval = 5 * time.Minute
-
-var (
-	defaultPasswordWarnMu   sync.Mutex
-	defaultPasswordWarnLast time.Time
-)
-
-// logDefaultPasswordAuth emits a rate-limited warning whenever an authenticated
-// session uses the backward-compatibility default password. The first call in
-// each interval window is logged; subsequent calls are suppressed so that a
-// busy monitoring client does not drown the log.
-func logDefaultPasswordAuth() {
-	defaultPasswordWarnMu.Lock()
-	defer defaultPasswordWarnMu.Unlock()
-	if !defaultPasswordWarnLast.IsZero() && time.Since(defaultPasswordWarnLast) < defaultPasswordWarnInterval {
-		return
-	}
-	defaultPasswordWarnLast = time.Now()
-	log.WithFields(logger.Fields{
-		"at":     "i2pcontrol.Authenticate",
-		"reason": "default_password_in_use",
-	}).Warn("I2PControl authenticated with default password 'itoopie' — retained for backward-compatibility; change password or set strict_auth=true in production")
 }
 
 // startTokenCleanup launches a background goroutine to periodically clean expired tokens.

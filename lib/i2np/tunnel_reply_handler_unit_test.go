@@ -152,11 +152,11 @@ func TestProcessHopResponse_AllReplyCodes(t *testing.T) {
 		errorContains string
 	}{
 		{TunnelBuildReplySuccess, true, false, ""},
-		{TunnelBuildReplyReject, false, true, "rejected request"},
+		{TunnelBuildReplyProbabilisticRejectionLegacy, false, true, "rejected request"},
 		{TunnelBuildReplyOverload, false, true, "router overloaded"},
 		{TunnelBuildReplyBandwidth, false, true, "insufficient bandwidth"},
 		{TunnelBuildReplyInvalid, false, true, "invalid request data"},
-		{TunnelBuildReplyExpired, false, true, "request expired"},
+		{TunnelBuildReplyCritical, false, true, "request expired"},
 		{0xFF, false, true, "unknown reply code"}, // Unknown code
 	}
 

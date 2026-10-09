@@ -7,7 +7,6 @@ import (
 	"github.com/go-i2p/common/destination"
 	"github.com/go-i2p/common/encrypted_leaseset"
 	"github.com/go-i2p/common/key_certificate"
-	"github.com/go-i2p/common/lease_set"
 	"github.com/go-i2p/common/lease_set2"
 	"github.com/go-i2p/common/meta_leaseset"
 	"github.com/go-i2p/go-i2p/lib/util/logutil"
@@ -17,17 +16,16 @@ import (
 
 // DestinationResolver resolves I2P destinations to their encryption public keys.
 // It looks up LeaseSets from the NetDB and extracts the appropriate encryption key
-// based on the destination's key type (ElGamal for legacy, X25519 for modern).
+// (X25519 for modern ECIES-X25519-AEAD destinations).
 //
 // The resolver tries LeaseSet2 first (modern default since I2P 0.9.38), then falls
-// back to classic LeaseSet. EncryptedLeaseSets are supported via
-// ResolveEncryptedDestination, which requires the original destination and derives
+// back to classic LeaseSet bytes parsed as LeaseSet2. EncryptedLeaseSets are supported
+// via ResolveEncryptedDestination, which requires the original destination and derives
 // the blinded hash, subcredential, and decrypts the inner LeaseSet2.
 // MetaLeaseSets are supported via ResolveMetaDestination, which fetches the
 // MetaLeaseSet, selects the best entry by cost, and resolves the referenced LeaseSet.
 type DestinationResolver struct {
 	netdb interface {
-		GetLeaseSet(hash common.Hash) chan lease_set.LeaseSet
 		GetLeaseSetBytes(hash common.Hash) ([]byte, error)
 		GetLeaseSet2Bytes(hash common.Hash) ([]byte, error)
 		GetEncryptedLeaseSetBytes(hash common.Hash) ([]byte, error)
@@ -37,7 +35,6 @@ type DestinationResolver struct {
 
 // NewDestinationResolver creates a new destination resolver with the given NetDB.
 func NewDestinationResolver(netdb interface {
-	GetLeaseSet(hash common.Hash) chan lease_set.LeaseSet
 	GetLeaseSetBytes(hash common.Hash) ([]byte, error)
 	GetLeaseSet2Bytes(hash common.Hash) ([]byte, error)
 	GetEncryptedLeaseSetBytes(hash common.Hash) ([]byte, error)
@@ -53,10 +50,9 @@ func NewDestinationResolver(netdb interface {
 // This supports both legacy LeaseSets (with ElGamal keys) and modern LeaseSet2 (with X25519 keys).
 //
 // The resolution process tries LeaseSet2 first (the modern default since I2P 0.9.38),
-// then falls back to classic LeaseSet:
+// then falls back to classic LeaseSet bytes parsed as LeaseSet2:
 // 1. Try to get LeaseSet2 bytes from NetDB and extract X25519 key
 // 2. If LeaseSet2 not found, try classic LeaseSet bytes parsed as LeaseSet2
-// 3. If that also fails, try classic LeaseSet lookup and extract from legacy format
 //
 // Returns:
 // - publicKey: The X25519 public key for garlic encryption (32 bytes)
@@ -78,31 +74,12 @@ func (dr *DestinationResolver) ResolveDestination(destHash common.Hash) ([32]byt
 		return key, nil
 	}
 
-	// Fall back to classic LeaseSet lookup
-	lsChan := dr.netdb.GetLeaseSet(destHash)
-
-	if lsChan == nil {
-		log.WithFields(logger.Fields{
-			"at":               "ResolveDestination",
-			"destination_hash": logutil.HashPrefix(destHash),
-			"reason":           "not found in netdb",
-		}).Error("Destination lookup failed")
-		return [32]byte{}, oops.Errorf("destination %x not found in netdb", destHash[:8])
-	}
-
-	// Read from channel
-	ls, ok := <-lsChan
-	if !ok {
-		log.WithFields(logger.Fields{
-			"at":               "ResolveDestination",
-			"destination_hash": logutil.HashPrefix(destHash),
-			"reason":           "channel closed",
-		}).Error("Failed to retrieve LeaseSet")
-		return [32]byte{}, oops.Errorf("failed to retrieve LeaseSet for destination %x", destHash[:8])
-	}
-
-	// Extract key from legacy LeaseSet format
-	return dr.extractKeyFromLegacyLeaseSet(ls)
+	log.WithFields(logger.Fields{
+		"at":               "ResolveDestination",
+		"destination_hash": logutil.HashPrefix(destHash),
+		"reason":           "not found in netdb",
+	}).Error("Destination lookup failed")
+	return [32]byte{}, oops.Errorf("destination %x not found in netdb", destHash[:8])
 }
 
 // extractKeyFromLeaseSet2Direct attempts to extract X25519 encryption key from LeaseSet2
@@ -218,52 +195,6 @@ func (dr *DestinationResolver) extractValidX25519Key(encKey lease_set2.Encryptio
 	log.WithField("destination_hash", logutil.HashPrefix(destHash)).
 		Debug("Extracted X25519 key from LeaseSet2")
 	return pubKey, nil
-}
-
-// extractKeyFromLegacyLeaseSet extracts the encryption key from a legacy LeaseSet.
-// Legacy LeaseSets use ElGamal encryption, which is incompatible with ECIES-X25519-AEAD.
-// This returns an error indicating the destination uses unsupported encryption.
-//
-// Note: This router intentionally supports only ECIES-X25519-AEAD destinations.
-// ElGamal/AES+SessionTag is not and will not be implemented (see GAPS.md).
-func (dr *DestinationResolver) extractKeyFromLegacyLeaseSet(ls lease_set.LeaseSet) ([32]byte, error) {
-	dest := ls.Destination()
-
-	// Check if destination uses X25519 via key certificate
-	if dest.KeyCertificate != nil {
-		return dr.extractX25519KeyFromCertificate(dest)
-	}
-
-	// Legacy ElGamal key — intentionally unsupported; this router only supports ECIES-X25519-AEAD
-	return [32]byte{}, oops.Errorf("destination uses ElGamal encryption which is intentionally unsupported; this router only supports ECIES-X25519-AEAD destinations (see GAPS.md)")
-}
-
-// extractX25519KeyFromCertificate extracts an X25519 key from a destination's key certificate.
-// Returns the X25519 key if the destination uses X25519 encryption, otherwise returns an error.
-func (dr *DestinationResolver) extractX25519KeyFromCertificate(dest destination.Destination) ([32]byte, error) {
-	cryptoType := dest.KeyCertificate.PublicKeyType()
-	if cryptoType != key_certificate.KEYCERT_CRYPTO_X25519 {
-		return [32]byte{}, oops.Errorf("destination uses crypto type %d, not X25519", cryptoType)
-	}
-
-	return dr.extractX25519KeyBytes(dest)
-}
-
-// extractX25519KeyBytes extracts the X25519 key bytes from a destination's receiving public key.
-func (dr *DestinationResolver) extractX25519KeyBytes(dest destination.Destination) ([32]byte, error) {
-	pubKeyBytes := dest.ReceivingPublic.Bytes()
-	if len(pubKeyBytes) != 32 {
-		return [32]byte{}, oops.Errorf("invalid X25519 key length in destination: %d", len(pubKeyBytes))
-	}
-
-	var key [32]byte
-	copy(key[:], pubKeyBytes)
-
-	log.WithFields(logger.Fields{
-		"at":     "extractX25519KeyFromLegacyLeaseSet",
-		"reason": "legacy_leaseset_x25519_dest",
-	}).Debug("extracted X25519 key from legacy LeaseSet")
-	return key, nil
 }
 
 // ResolveEncryptedDestination resolves an I2P destination that publishes an

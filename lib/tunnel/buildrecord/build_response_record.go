@@ -46,13 +46,6 @@ total length: 528
 // ErrBuildResponseRecordNotEnoughData is returned when a byte slice is too short for a BuildResponseRecord field.
 var ErrBuildResponseRecordNotEnoughData = errors.New("not enough build response record data")
 
-type (
-	// BuildResponseRecordELGamalAES stores a legacy fixed-size ElGamal/AES build response record.
-	BuildResponseRecordELGamalAES [528]byte
-	// BuildResponseRecordELGamal is a legacy alias for ElGamal/AES build response record bytes.
-	BuildResponseRecordELGamal [528]byte
-)
-
 /*
 BuildResponseRecord struct contains a response to BuildRequestRecord
 concerning the creation of one hop in the tunnel

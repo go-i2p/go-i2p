@@ -80,17 +80,11 @@ func (h *EchoHandler) Handle(ctx context.Context, params json.RawMessage) (inter
 }
 
 // GetRateHandler implements the GetRate RPC method.
-// Supports two calling conventions:
 //
-// 1. Java I2P spec style (used by go-i2pcontrol / go-i2p TUI):
+// Java I2P spec style (used by go-i2pcontrol / go-i2p TUI):
 //
 //	{"Stat": "bw.sendBps", "Period": 300000}
 //	→ {"Result": 12345.0}
-//
-// 2. Legacy field-list style:
-//
-//	{"i2p.router.net.bw.inbound.15s": null, "i2p.router.net.bw.outbound.15s": null}
-//	→ {"i2p.router.net.bw.inbound.15s": 12345.67, ...}
 //
 // The Stat/Period style MUST return {"Result": float64} or clients like
 // go-i2pcontrol will panic when they type-assert retpre["Result"].(float64).
@@ -108,21 +102,19 @@ func NewGetRateHandler(stats RouterStatsProvider) *GetRateHandler {
 	}
 }
 
-// Handle processes the GetRate request.
-// Detects Stat/Period format first; falls back to legacy field-list format.
+// Handle processes the GetRate request using the Stat/Period format.
 func (h *GetRateHandler) Handle(ctx context.Context, params json.RawMessage) (interface{}, error) {
 	var req map[string]interface{}
 	if err := decodeParams("GetRate", params, &req); err != nil {
 		return nil, err
 	}
 
-	// Check for Stat/Period style request
-	if statName, ok := req["Stat"]; ok {
-		return h.handleStatPeriodStyle(req, statName)
+	statName, ok := req["Stat"]
+	if !ok {
+		return nil, NewRPCError(ErrCodeInvalidParams, "GetRate requires a Stat parameter")
 	}
 
-	// Legacy field-list style
-	return h.handleFieldListStyle(req)
+	return h.handleStatPeriodStyle(req, statName)
 }
 
 // handleStatPeriodStyle processes Stat/Period style requests: {"Stat": "statName", "Period": ms}.
@@ -153,44 +145,6 @@ func (h *GetRateHandler) extractPeriodMs(req map[string]interface{}) int64 {
 	}
 
 	return int64(v)
-}
-
-// handleFieldListStyle processes legacy field-list style: {"i2p.router.net.bw.inbound.15s": null, ...}.
-func (h *GetRateHandler) handleFieldListStyle(req map[string]interface{}) (interface{}, error) {
-	bwStats := h.stats.GetBandwidthStats()
-	result := make(map[string]interface{})
-
-	for key := range req {
-		if err := h.addBandwidthField(key, bwStats, result); err != nil {
-			return nil, err
-		}
-	}
-
-	// Return all fields when none were explicitly requested
-	if len(result) == 0 {
-		h.addDefaultBandwidthFields(bwStats, result)
-	}
-
-	return result, nil
-}
-
-// addBandwidthField adds a single bandwidth field to the result map.
-func (h *GetRateHandler) addBandwidthField(key string, bwStats BandwidthStats, result map[string]interface{}) error {
-	switch key {
-	case "i2p.router.net.bw.inbound.15s":
-		result[key] = bwStats.InboundRate
-	case "i2p.router.net.bw.outbound.15s":
-		result[key] = bwStats.OutboundRate
-	default:
-		return NewRPCError(ErrCodeInvalidParams, fmt.Sprintf("unsupported GetRate key: %s", key))
-	}
-	return nil
-}
-
-// addDefaultBandwidthFields adds default inbound and outbound bandwidth fields.
-func (h *GetRateHandler) addDefaultBandwidthFields(bwStats BandwidthStats, result map[string]interface{}) {
-	result["i2p.router.net.bw.inbound.15s"] = bwStats.InboundRate
-	result["i2p.router.net.bw.outbound.15s"] = bwStats.OutboundRate
 }
 
 // resolveStatName maps a Java I2P stat name to a float64 value for the given
@@ -391,8 +345,9 @@ type RouterManagerHandler struct {
 	RouterControl interface {
 		// Stop initiates graceful router shutdown
 		Stop()
-		// Reseed triggers a manual NetDB reseed operation
-		Reseed() error
+		// ReseedWithContext triggers a manual NetDB reseed operation with
+		// cancellation support
+		ReseedWithContext(context.Context) error
 	}
 	// ctx is the server context used to signal cancellation to handler goroutines.
 	ctx context.Context
@@ -415,7 +370,7 @@ type RouterManagerHandler struct {
 //   - control: Router control interface (typically the Router itself)
 func NewRouterManagerHandler(ctx context.Context, wg *sync.WaitGroup, control interface {
 	Stop()
-	Reseed() error
+	ReseedWithContext(context.Context) error
 },
 ) *RouterManagerHandler {
 	return &RouterManagerHandler{
@@ -622,17 +577,9 @@ func (h *RouterManagerHandler) runReseedWithTimeout(reseedCtx context.Context) (
 	return "completed", nil
 }
 
-// invokeReseed executes reseed, preferring context-aware control paths when available.
+// invokeReseed executes reseed using the context-aware control path.
 func (h *RouterManagerHandler) invokeReseed(reseedCtx context.Context) error {
-	type reseedWithContext interface {
-		ReseedWithContext(context.Context) error
-	}
-
-	if control, ok := h.RouterControl.(reseedWithContext); ok {
-		return control.ReseedWithContext(reseedCtx)
-	}
-
-	return h.RouterControl.Reseed()
+	return h.RouterControl.ReseedWithContext(reseedCtx)
 }
 
 // logReseedCompletion logs the result of a completed reseed operation.

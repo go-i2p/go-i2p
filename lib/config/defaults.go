@@ -227,10 +227,6 @@ type I2PControlDefaults struct {
 	// Default: 10 minutes
 	TokenExpiration time.Duration
 
-	// StrictAuth refuses to start when the password is still the upstream
-	// default ("itoopie"). Default: false (retain backward-compatibility).
-	StrictAuth bool
-
 	// AllowPlaintextNonLoopback permits a non-loopback bind without HTTPS.
 	// Default: false (fail-closed for non-loopback plaintext binds).
 	AllowPlaintextNonLoopback bool
@@ -470,7 +466,6 @@ func buildI2PControlDefaults() I2PControlDefaults {
 		CertFile:                        "",
 		KeyFile:                         "",
 		TokenExpiration:                 10 * time.Minute,
-		StrictAuth:                      false,
 		AllowPlaintextNonLoopback:       false,
 		AllowDefaultPasswordNonLoopback: false,
 		CORSAllowedOrigins:              nil,
@@ -833,7 +828,7 @@ func validateI2PControlSecurity(i2pcontrol I2PControlDefaults) error {
 		}).Warn("I2PControl is bound to a non-localhost address over HTTP — auth tokens will be sent in cleartext; enable HTTPS for production use")
 	}
 
-	// Warn: default password on localhost
+	// Warn: default password on localhost (server startup enforces refusal)
 	if i2pcontrol.Password == "itoopie" {
 		log.WithFields(logger.Fields{
 			"at":     "validateI2PControlConfig",

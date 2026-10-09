@@ -138,11 +138,11 @@ func TestGenerateAndSendBuildReply_AllReplyCodes(t *testing.T) {
 		replyCode byte
 	}{
 		{"SUCCESS", TunnelBuildReplySuccess},
-		{"REJECT", TunnelBuildReplyReject},
+		{"REJECT", TunnelBuildReplyProbabilisticRejectionLegacy},
 		{"OVERLOAD", TunnelBuildReplyOverload},
 		{"BANDWIDTH", TunnelBuildReplyBandwidth},
 		{"INVALID", TunnelBuildReplyInvalid},
-		{"EXPIRED", TunnelBuildReplyExpired},
+		{"EXPIRED", TunnelBuildReplyCritical},
 	}
 
 	for _, tc := range testCases {

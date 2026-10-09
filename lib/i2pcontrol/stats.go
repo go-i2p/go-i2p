@@ -1,6 +1,7 @@
 package i2pcontrol
 
 import (
+	"context"
 	"net"
 	"sync"
 	"time"
@@ -50,7 +51,7 @@ type RouterStatsProvider interface {
 	// This is used by RouterManagerHandler to perform control operations (shutdown, restart, etc.)
 	GetRouterControl() interface {
 		Stop()
-		Reseed() error
+		ReseedWithContext(context.Context) error
 	}
 
 	// GetNetworkStatus returns the I2PControl network status code (0–14).
@@ -684,7 +685,7 @@ func (rsp *routerStatsProvider) IsRunning() bool {
 // This allows RouterManagerHandler to perform control operations like shutdown and reseed.
 func (rsp *routerStatsProvider) GetRouterControl() interface {
 	Stop()
-	Reseed() error
+	ReseedWithContext(context.Context) error
 } {
 	return rsp.router
 }
@@ -1028,7 +1029,7 @@ type RouterBackend interface {
 	GetNTCP2SessionCount() int
 	GetSSU2SessionCount() int
 	Stop()
-	Reseed() error
+	ReseedWithContext(context.Context) error
 	GetTransportAddr() net.Addr
 	GetSSU2Addr() net.Addr
 	GetLocalRouterIdentityHash() (string, error)
@@ -1140,9 +1141,9 @@ func (rr RealRouter) Stop() {
 	rr.Router.Stop()
 }
 
-// Reseed triggers a manual NetDB reseed (implements RouterAccess)
-func (rr RealRouter) Reseed() error {
-	return rr.Router.Reseed()
+// ReseedWithContext triggers a manual NetDB reseed with cancellation support (implements RouterAccess)
+func (rr RealRouter) ReseedWithContext(ctx context.Context) error {
+	return rr.Router.ReseedWithContext(ctx)
 }
 
 // GetTransportAddr returns the listening address of the first transport (implements RouterAccess)

@@ -36,7 +36,7 @@ func TestNewShortTunnelBuildReply(t *testing.T) {
 func TestShortTunnelBuildReplyGetReplyRecords(t *testing.T) {
 	records := []BuildResponseRecord{
 		createTestBuildResponseRecord(TunnelBuildReplySuccess),
-		createTestBuildResponseRecord(TunnelBuildReplyReject),
+		createTestBuildResponseRecord(TunnelBuildReplyProbabilisticRejectionLegacy),
 	}
 
 	reply := NewShortTunnelBuildReply(records)
@@ -51,26 +51,8 @@ func TestShortTunnelBuildReplyGetReplyRecords(t *testing.T) {
 		t.Errorf("Expected first record Reply=%d, got %d", TunnelBuildReplySuccess, replyRecords[0].Reply)
 	}
 
-	if replyRecords[1].Reply != TunnelBuildReplyReject {
-		t.Errorf("Expected second record Reply=%d, got %d", TunnelBuildReplyReject, replyRecords[1].Reply)
-	}
-}
-
-// TestShortTunnelBuildReplyGetResponseRecords tests backward compatibility
-func TestShortTunnelBuildReplyGetResponseRecords(t *testing.T) {
-	records := []BuildResponseRecord{
-		createTestBuildResponseRecord(TunnelBuildReplySuccess),
-	}
-
-	reply := NewShortTunnelBuildReply(records)
-
-	// Both methods should return the same data
-	responseRecords := reply.GetResponseRecords()
-	replyRecords := reply.GetReplyRecords()
-
-	if len(responseRecords) != len(replyRecords) {
-		t.Errorf("GetResponseRecords and GetReplyRecords return different lengths: %d vs %d",
-			len(responseRecords), len(replyRecords))
+	if replyRecords[1].Reply != TunnelBuildReplyProbabilisticRejectionLegacy {
+		t.Errorf("Expected second record Reply=%d, got %d", TunnelBuildReplyProbabilisticRejectionLegacy, replyRecords[1].Reply)
 	}
 }
 
@@ -93,7 +75,7 @@ func TestShortTunnelBuildReplyProcessReplyAllSuccess(t *testing.T) {
 func TestShortTunnelBuildReplyProcessReplyWithRejection(t *testing.T) {
 	records := []BuildResponseRecord{
 		createTestBuildResponseRecord(TunnelBuildReplySuccess),
-		createTestBuildResponseRecord(TunnelBuildReplyReject), // One hop rejects
+		createTestBuildResponseRecord(TunnelBuildReplyProbabilisticRejectionLegacy), // One hop rejects
 		createTestBuildResponseRecord(TunnelBuildReplySuccess),
 	}
 
@@ -194,11 +176,11 @@ func TestShortTunnelBuildReplyVariousReplyCodes(t *testing.T) {
 		shouldPass bool
 	}{
 		{"Success", TunnelBuildReplySuccess, true},
-		{"Reject", TunnelBuildReplyReject, false},
+		{"Reject", TunnelBuildReplyProbabilisticRejectionLegacy, false},
 		{"Overload", TunnelBuildReplyOverload, false},
 		{"Bandwidth", TunnelBuildReplyBandwidth, false},
 		{"Invalid", TunnelBuildReplyInvalid, false},
-		{"Expired", TunnelBuildReplyExpired, false},
+		{"Expired", TunnelBuildReplyCritical, false},
 	}
 
 	for _, tc := range testCases {

@@ -19,7 +19,7 @@ func TestValidateServerConfig_RejectsNonLoopbackPlaintext(t *testing.T) {
 		cfg := &config.I2PControlConfig{
 			Enabled:         true,
 			Address:         "localhost:7650",
-			Password:        "itoopie",
+			Password:        "strong-password",
 			UseHTTPS:        false,
 			TokenExpiration: 10 * time.Minute,
 		}
@@ -32,7 +32,7 @@ func TestValidateServerConfig_RejectsNonLoopbackPlaintext(t *testing.T) {
 		cfg := &config.I2PControlConfig{
 			Enabled:         true,
 			Address:         "127.0.0.1:7650",
-			Password:        "itoopie",
+			Password:        "strong-password",
 			UseHTTPS:        false,
 			TokenExpiration: 10 * time.Minute,
 		}
@@ -72,7 +72,7 @@ func TestValidateServerConfig_RejectsNonLoopbackPlaintext(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error for non-loopback bind with default password")
 		}
-		if !strings.Contains(err.Error(), "default password") {
+		if !strings.Contains(err.Error(), "default") {
 			t.Fatalf("expected error to mention default password, got %q", err.Error())
 		}
 	})
@@ -91,21 +91,20 @@ func TestValidateServerConfig_RejectsNonLoopbackPlaintext(t *testing.T) {
 		}
 	})
 
-	t.Run("strict_auth_rejects_default_password", func(t *testing.T) {
+	t.Run("default_password_rejected", func(t *testing.T) {
 		cfg := &config.I2PControlConfig{
 			Enabled:         true,
 			Address:         "localhost:7650",
 			Password:        "itoopie",
 			UseHTTPS:        false,
-			StrictAuth:      true,
 			TokenExpiration: 10 * time.Minute,
 		}
 		_, err := NewServer(cfg, stats)
 		if err == nil {
-			t.Fatal("expected error for strict_auth with default password")
+			t.Fatal("expected error for default password")
 		}
-		if !strings.Contains(err.Error(), "strict_auth") {
-			t.Fatalf("expected error to mention strict_auth, got %q", err.Error())
+		if !strings.Contains(err.Error(), "default") {
+			t.Fatalf("expected error to mention default password, got %q", err.Error())
 		}
 	})
 }

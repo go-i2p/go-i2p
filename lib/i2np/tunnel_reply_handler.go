@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/go-i2p/common/session_key"
-	aescbc "github.com/go-i2p/crypto/aes"
 	"github.com/go-i2p/go-i2p/lib/tunnel/buildrecord"
 	"github.com/go-i2p/go-noise/ratchet"
 	"github.com/go-i2p/logger"
@@ -28,7 +27,7 @@ type ReplyProcessorConfig struct {
 	RetryBackoff time.Duration
 
 	// EnableDecryption enables ECIES-X25519-AEAD (ChaCha20/Poly1305) decryption of encrypted build reply records.
-	// This is the modern I2P standard (spec 0.9.44+), replacing legacy AES-256-CBC.
+	// This is the I2P standard (spec 0.9.44+).
 	// Default: true (required for production).
 	EnableDecryption bool
 }
@@ -248,8 +247,7 @@ func (rp *ReplyProcessor) processReplyWithHandler(handler TunnelReplyHandler, tu
 // Two formats are handled depending on record size:
 //   - 218 bytes (ShortBuildRecordSize): STBM format — multi-pass ChaCha20 layer peel
 //     followed by ChaCha20-Poly1305 AEAD decrypt. Ret code at plaintext[201].
-//   - 544 bytes: Modern VTB — ChaCha20-Poly1305 AEAD (528 ciphertext + 16 auth tag).
-//   - 528 bytes: Legacy VTB — AES-256-CBC.
+//   - 544 bytes: VTB — ChaCha20-Poly1305 AEAD (528 ciphertext + 16 auth tag).
 //
 // Uses raw encrypted bytes from GetRawReplyRecords() instead of re-serializing parsed records,
 // because round-tripping through parse/serialize corrupts the original ciphertext.
@@ -288,7 +286,7 @@ func (rp *ReplyProcessor) validateRecordCounts(records []BuildResponseRecord, ra
 	return nil
 }
 
-// decryptVTBReplyRecords handles standard VTB reply decryption (simple per-record AEAD or AES).
+// decryptVTBReplyRecords handles standard VTB reply decryption (per-record AEAD).
 func (rp *ReplyProcessor) decryptVTBReplyRecords(records []BuildResponseRecord, rawRecords [][]byte, pending *PendingBuildRequest) error {
 	for i := range records {
 		decrypted, err := rp.decryptRecord(rawRecords[i], pending.ReplyKeys[i], pending.ReplyIVs[i])
@@ -410,7 +408,7 @@ func decryptSTBMReplySlot(encrypted []byte, key, noiseHash [32]byte, index int) 
 }
 
 // decryptRecord decrypts a single encrypted build response record from raw bytes.
-// Uses ChaCha20-Poly1305 AEAD (modern mode, I2P 0.9.44+) or AES-256-CBC (legacy).
+// Uses ChaCha20-Poly1305 AEAD (I2P 0.9.44+).
 //
 // The encrypted parameter must be the original wire bytes, NOT re-serialized from
 // a parsed record, as round-tripping through parse/serialize would corrupt the ciphertext.
@@ -421,13 +419,9 @@ func (rp *ReplyProcessor) decryptRecord(
 ) ([]byte, error) {
 	crypto := NewBuildRecordCrypto()
 
-	// Perform actual ChaCha20-Poly1305 AEAD decryption.
+	// ChaCha20-Poly1305 AEAD decryption.
 	// DecryptReplyRecord expects 544 bytes (528 ciphertext + 16 auth tag).
-	// If the record data is only 528 bytes (legacy AES-256-CBC format where
-	// no auth tag is appended), we cannot use ChaCha20-Poly1305 and must
-	// fall back to treating the data as AES-encrypted.
 	if len(encrypted) == 544 {
-		// Modern path: ChaCha20-Poly1305 AEAD with 16-byte auth tag
 		decryptedRecord, err := crypto.DecryptReplyRecord(encrypted, replyKey, replyIV)
 		if err != nil {
 			return nil, oops.Wrapf(err, "ChaCha20-Poly1305 decryption failed")
@@ -443,27 +437,7 @@ func (rp *ReplyProcessor) decryptRecord(
 		return cleartext, nil
 	}
 
-	if len(encrypted) == 528 {
-		// Legacy path: AES-256-CBC decryption (528-byte records, no auth tag).
-		// AES-256-CBC was removed from go-noise/ratchet; use go-i2p/crypto/aes directly.
-		decrypter := &aescbc.AESSymmetricDecrypter{
-			Key: replyKey[:],
-			IV:  replyIV[:],
-		}
-		cleartext, err := decrypter.DecryptNoPadding(encrypted)
-		if err != nil {
-			return nil, oops.Wrapf(err, "AES-256-CBC decryption failed")
-		}
-
-		log.WithFields(logger.Fields{
-			"encryption": "AES-256-CBC",
-			"size":       len(cleartext),
-		}).Debug("Decrypted tunnel build reply record (legacy)")
-
-		return cleartext, nil
-	}
-
-	return nil, oops.Errorf("unexpected encrypted record size: %d (expected 528 or 544)", len(encrypted))
+	return nil, oops.Errorf("unexpected encrypted record size: %d (expected 544)", len(encrypted))
 }
 
 // handleBuildSuccess handles successful tunnel build completion.

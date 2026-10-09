@@ -2,8 +2,6 @@
 --
     import "github.com/go-i2p/go-i2p/lib/i2np"
 
-![i2np.svg](i2np.svg)
-
 Package i2np implements the I2P Network Protocol (I2NP) for router-to-router
 communication.
 
@@ -93,14 +91,14 @@ I2NP Message Type Constants Moved from: header.go
 
 ```go
 const (
-	StandardBuildRecordSize          = 528 // Encrypted on-wire size for standard/variable tunnel build records
-	ShortBuildRecordSize             = 218 // Encrypted on-wire size for short tunnel build records (ECIES)
-	StandardBuildRecordCleartextLen  = 222 // Cleartext length for standard ElGamal build request records
-	ElGamalBuildRecordCleartextLen   = 222 // Cleartext length for ElGamal build request records (same as StandardBuildRecordCleartextLen)
-	ECIESLongBuildRecordCleartextLen = 464 // Cleartext length for ECIES-X25519 long-form build request records
-	ShortBuildRecordCleartextLen     = 154 // Cleartext length for short ECIES build request records (218 - 64)
-	ShortRecordHeaderSize            = 64  // toPeer(16) + ephemeralKey(32) + MAC(16)
-	DefaultExpirationSeconds         = 480 // Default tunnel expiration: 8 minutes
+	StandardBuildRecordSize          = 528                                  // Encrypted on-wire size for standard/variable tunnel build records
+	ShortBuildRecordSize             = buildrecord.ShortRecordSize          // 218
+	StandardBuildRecordCleartextLen  = buildrecord.StandardCleartextLen     // 222
+	ElGamalBuildRecordCleartextLen   = buildrecord.StandardCleartextLen     // 222
+	ECIESLongBuildRecordCleartextLen = 464                                  // Cleartext length for ECIES-X25519 long-form build request records
+	ShortBuildRecordCleartextLen     = buildrecord.ShortCleartextLen        // 154
+	ShortRecordHeaderSize            = 64                                   // toPeer(16) + ephemeralKey(32) + MAC(16)
+	DefaultExpirationSeconds         = buildrecord.DefaultExpirationSeconds // 480
 )
 ```
 Build record size constants per the I2P specification. Standard (ElGamal)
@@ -150,41 +148,52 @@ DatabaseStore type constants (bits 3-0 of type field)
 
 ```go
 const (
-	// MaxRouterInfoSize is the maximum size for a RouterInfo (gzip-compressed)
-	// Real RouterInfos are typically 2-6KB; 64KB provides large safety margin
+	// MaxRouterInfoSize is the maximum size for a RouterInfo in gzip-compressed form
+	// (wire format, on-disk format). Real compressed RouterInfos are typically 2-6KB;
+	// 64KB provides large safety margin.
 	MaxRouterInfoSize = 65536 // 64KB
+
+	// MaxDecompressedRouterInfoSize is the maximum size for a RouterInfo after
+	// decompression. Per I2P spec, RouterInfos are typically <4KB decompressed;
+	// 8KB provides a safe upper bound to prevent gzip-bomb DoS.
+	MaxDecompressedRouterInfoSize = 8192 // 8KB
 
 	// MaxLeaseSetSize is the maximum size for any LeaseSet type
 	// LeaseSets are typically <2KB; 32KB provides large safety margin
 	MaxLeaseSetSize = 32768 // 32KB
 )
 ```
-Size limits for DatabaseStore data payloads
+Size limits for DatabaseStore data payloads Centralized here per AUDIT.md LOW
+finding to ensure consistent limits across packages.
 
 ```go
 const (
-	// ExploratoryReplyStage* constants identify checkpoints in the exploratory reply funnel.
-	ExploratoryReplyStageInboundI2NPReceived    = "inbound_i2np_received"
-	ExploratoryReplyStageTunnelGatewayParsed    = "tunnel_gateway_inner_parsed"
-	ExploratoryReplyStageGarlicDecryptAttempt   = "garlic_decrypt_attempted"
-	ExploratoryReplyStageGarlicDecryptSuccess   = "garlic_decrypt_succeeded"
-	ExploratoryReplyStageShortReplyDispatched   = "short_build_reply_dispatched"
-	ExploratoryReplyStageShortReplyCorrelated   = "short_build_reply_correlated"
-	ExploratoryReplyStageShortReplyUncorrelated = "short_build_reply_uncorrelated"
+	// MaxGarlicCloves is the maximum number of cloves in a garlic message.
+	// This limit prevents memory exhaustion from excessively large clove lists.
+	MaxGarlicCloves = 64
+
+	// MaxGarlicNestingDepth is the maximum depth of nested garlic messages.
+	// Used by parse-time depth guards to prevent stack overflow and recursion bombs.
+	MaxGarlicNestingDepth = 3
 )
 ```
 
 ```go
 const (
-	TunnelBuildReplySuccess   = 0x00 // Tunnel hop accepted the request
-	TunnelBuildReplyReject    = 0x01 // General rejection
-	TunnelBuildReplyOverload  = 0x02 // Router is overloaded
-	TunnelBuildReplyBandwidth = 0x03 // Insufficient bandwidth
-	TunnelBuildReplyInvalid   = 0x04 // Invalid request data
-	TunnelBuildReplyExpired   = 0x05 // Request has expired
+	TunnelBuildReplySuccess                      = replycodes.TunnelBuildReplySuccess                      // Tunnel hop accepted the request
+	TunnelBuildReplyProbabilisticRejectionLegacy = replycodes.TunnelBuildReplyProbabilisticRejectionLegacy // Deprecated probabilistic rejection (0x01)
+	TunnelBuildReplyOverload                     = replycodes.TunnelBuildReplyOverload                     // Deprecated overload (0x02)
+	TunnelBuildReplyBandwidth                    = replycodes.TunnelBuildReplyBandwidth                    // Bandwidth rejection (0x03) - actively used
+	TunnelBuildReplyInvalid                      = replycodes.TunnelBuildReplyInvalid                      // Deprecated invalid request (0x04)
+	TunnelBuildReplyCritical                     = replycodes.TunnelBuildReplyCritical                     // Critical rejection (0x05) - not "expired"
+
+	// TunnelBuildReplyPendingDecryption is an internal sentinel (0xFF) for reply
+	// records awaiting deferred decryption. Never transmitted on the wire.
+	TunnelBuildReplyPendingDecryption = replycodes.TunnelBuildReplyPendingDecryption
 )
 ```
-TunnelBuildReply constants for processing responses
+TunnelBuildReply constants for processing responses These are aliases of the
+canonical constants in lib/tunnel/replycodes
 
 ```go
 const DefaultExpirationTolerance = 5 * 60 // 5 minutes in seconds
@@ -193,6 +202,13 @@ const DefaultExpirationTolerance = 5 * 60 // 5 minutes in seconds
 DefaultExpirationTolerance is the default expiration tolerance for clock skew (5
 minutes into the past). This allows for reasonable clock differences between I2P
 routers while still rejecting clearly expired messages.
+
+```go
+const MaxI2NPMessageSize = 32 * 1024 // 32 KB
+
+```
+MaxI2NPMessageSize is the maximum size for an I2NP message payload. Per I2P
+specification, messages are typically limited to 32 KB.
 
 ```go
 const MaxI2NPStandardPayload = 65535
@@ -208,10 +224,27 @@ ShortI2NPHeaderSize is the size of the short I2NP header used in NTCP2 blocks.
 Format: type(1) + msgID(4) + shortExpiration(4) = 9 bytes
 
 ```go
+const StandardI2NPHeaderSize = 16
+```
+StandardI2NPHeaderSize is the size of the full/standard I2NP header. Format:
+type(1) + msgID(4) + expiration(8) + size(2) + checksum(1) = 16 bytes. This
+header is REQUIRED only for tunnel-delivered I2NP messages (inside
+TunnelGateway/TunnelData). All NTCP2 and SSU2 data-phase I2NP blocks use the
+9-byte short header (ShortI2NPHeaderSize) instead — see MarshalMessageShort.
+
+```go
+var (
+	ReadBuildResponseRecord     = buildrecord.ReadBuildResponseRecord
+	ValidateBuildResponseRecord = buildrecord.ValidateBuildResponseRecord
+)
+```
+Re-export functions from buildrecord package
+
+```go
 var (
 	ErrI2NPNotEnoughData                = errors.New("not enough i2np header data")
-	ErrBuildRequestRecordNotEnoughData  = errors.New("not enough i2np build request record data")
-	ErrBuildResponseRecordNotEnoughData = errors.New("not enough i2np build response record data")
+	ErrBuildRequestRecordNotEnoughData  = buildrecord.ErrNotEnoughData
+	ErrBuildResponseRecordNotEnoughData = buildrecord.ErrBuildResponseRecordNotEnoughData
 	ErrDatabaseLookupNotEnoughData      = errors.New("not enough i2np database lookup data")
 	ErrDatabaseSearchReplyNotEnoughData = errors.New("not enough i2np database search reply data")
 	ErrDatabaseLookupInvalidSize        = errors.New("database lookup excluded peers size exceeds protocol limit")
@@ -225,7 +258,7 @@ build_response_record.go, database_lookup.go
 #### func  CheckMessageExpiration
 
 ```go
-func CheckMessageExpiration(msg I2NPMessage) error
+func CheckMessageExpiration(msg Message) error
 ```
 CheckMessageExpiration is a convenience function that validates message
 expiration using the default validator settings (5 minute tolerance).
@@ -257,45 +290,25 @@ AEAD-decrypt as DecryptSTBMRecordReturningChainingKey but also returns the
 post-decrypt Noise handshake hash (m_H). The transit hop needs m_H as AEAD
 associated data when constructing its ShortTunnelBuildReply record.
 
-#### func  DeriveSTBMGarlicKey
+#### func  DeriveSTBMLayerKeys
 
 ```go
-func DeriveSTBMGarlicKey(noiseHash [32]byte) ([32]byte, [8]byte, error)
+func DeriveSTBMLayerKeys(postReplyCK [32]byte) (layerKey, ivKey, nextCK [32]byte, err error)
 ```
-DeriveSTBMGarlicKey derives the one-time symmetric garlic key used by the OBEP
-to wrap a ShortTunnelBuildReply in a garlic message (type 11).
+DeriveSTBMLayerKeys derives the tunnel layer key and IV key for a hop that
+accepted an STBM build record, matching i2pd's TransitTunnel.cpp derivation.
 
-The key material is derived from the STBM Noise transcript hash using:
+Input: postReplyCK — the Noise chaining key after the "SMTunnelReplyKey" HKDF
+step (i.e. the second return value of DeriveSTBMReplyKey).
 
-    HKDF(noiseHash, "", "AttachLayerEncryption") -> 32 bytes
+Derivation:
 
-Slicing follows the one-time garlic decryptor contract in go-noise:
+    HKDF64(postReplyCK, "SMTunnelLayerKey") -> ck1 || layerKey
+    HKDF64(ck1, "TunnelLayerIVKey")         -> ck2 || ivKey
 
-    - key = keyMaterial[0:32]
-    - tag = keyMaterial[24:32]
-
-#### func  DeriveSTBMGarlicKeyFromChainingKey
-
-```go
-func DeriveSTBMGarlicKeyFromChainingKey(chainingKey [32]byte) ([32]byte, [8]byte, error)
-```
-DeriveSTBMGarlicKeyFromChainingKey derives the one-time symmetric garlic key/tag
-from the post-reply HKDF chaining key as a compatibility fallback.
-
-Some implementations derive the attach-layer key from the Noise transcript hash,
-while others derive it from the evolving HKDF chaining key used for
-SMTunnelReplyKey and subsequent per-hop keys. Registering both derivations
-allows inbound decrypt to match either sender behavior.
-
-#### func  DeriveSTBMLegacyGarlicKeyFromChainingKey
-
-```go
-func DeriveSTBMLegacyGarlicKeyFromChainingKey(chainingKey [32]byte) ([32]byte, [8]byte, error)
-```
-DeriveSTBMLegacyGarlicKeyFromChainingKey is retained for compatibility. It wraps
-DeriveSTBMOBEPGarlicKeyAndTag with the old name.
-
-Deprecated: use DeriveSTBMOBEPGarlicKeyAndTag directly.
+The short build record format does not carry layer/IV keys in its cleartext;
+both the transit hop and the tunnel creator MUST derive them from the Noise
+chaining key with this exact chain, or tunnel data decryption will fail.
 
 #### func  DeriveSTBMOBEPGarlicKeyAndTag
 
@@ -333,6 +346,16 @@ The derivation matches i2pd:
 Returns both the replyKey and the new chaining key so callers can continue the
 HKDF chain (e.g. for layer/IV/garlic key derivation).
 
+#### func  DetermineBuildResult
+
+```go
+func DetermineBuildResult(successCount, recordCount int, firstError error, tunnelType string) error
+```
+DetermineBuildResult evaluates tunnel build outcome based on success counts and
+first encountered error. L-1 Consolidation: Shared by tunnel_build_reply.go and
+variable_tunnel_build_reply.go. tunnelType should be lowercase (e.g., "tunnel",
+"variable tunnel") for error messages.
+
 #### func  EncryptBuildRequestRecord
 
 ```go
@@ -355,8 +378,9 @@ func EncryptGarlicWithBuilder(
 ) ([]byte, error)
 ```
 EncryptGarlicWithBuilder is a convenience function that builds and encrypts a
-garlic message. This combines GarlicBuilder.BuildAndSerialize with
-GarlicSessionManager.EncryptGarlicMessage.
+garlic message. This combines GarlicBuilder.BuildClovePayloads with
+GarlicSessionManager.EncryptGarlicMessage, emitting one spec-compliant type-11
+GarlicClove block per clove.
 
 #### func  EncryptShortBuildRequestRecord
 
@@ -403,6 +427,38 @@ per-hop key derivation chain. Also returns the Noise transcript hash (m_H) after
 EncryptAndHash, which the initiator stores and later uses as AEAD associated
 data when decrypting each hop's ShortTunnelBuildReply record.
 
+#### func  ExtractDataClovePayload
+
+```go
+func ExtractDataClovePayload(clove GarlicClove) ([]byte, bool)
+```
+ExtractDataClovePayload returns the application payload carried by a Data (type
+20) garlic clove. The clove's inner message data is framed as [4-byte
+length][payload]; this strips that framing. Returns (nil, false) for non-Data
+cloves or malformed framing. ExtractDataClovePayload is exported for
+spec-compliant payload extraction.
+
+#### func  ExtractDataPayloadsFromInboundGarlic
+
+```go
+func ExtractDataPayloadsFromInboundGarlic(sm *GarlicSessionManager, encryptedGarlic []byte) ([][]byte, error)
+```
+ExtractDataPayloadsFromInboundGarlic decrypts an inbound I2NP Garlic message's
+encrypted payload using the supplied GarlicSessionManager (which must wrap the
+recipient destination's ECIES-X25519 private key), then extracts the application
+payload from every Data (type 20) clove it contains.
+
+This is the receive-side inverse of the send path (i2cp.MessageRouter builds a
+Data clove, encrypts it to the destination, and wraps it via
+WrapInGarlicMessage). It is used by the router's inbound tunnel handler to turn
+the encrypted garlic delivered by a client's inbound tunnel into the plaintext
+payloads that are queued to the owning I2CP session.
+
+encryptedGarlic is the raw I2NP Garlic message data (GetData()); a 4-byte length
+prefix, if present, is stripped automatically. Returns one byte slice per Data
+clove found. Non-Data cloves (e.g. status/delivery cloves) are skipped. Returns
+an error if decryption fails or no Data clove is present.
+
 #### func  ExtractIdentityHashPrefix
 
 ```go
@@ -414,10 +470,32 @@ common.Hash (remaining bytes zero).
 #### func  IsMessageExpired
 
 ```go
-func IsMessageExpired(msg I2NPMessage) bool
+func IsMessageExpired(msg Message) bool
 ```
 IsMessageExpired is a convenience function that checks if a message is expired
 using the default validator settings (5 minute tolerance).
+
+#### func  MarshalMessageShort
+
+```go
+func MarshalMessageShort(msg Message) ([]byte, error)
+```
+MarshalMessageShort serializes any I2NP message using the 9-byte short header
+format required for NTCP2 and SSU2 data-phase I2NP blocks (block type 3).
+
+This is the single source of truth for short-header framing across both
+transports. Unlike asserting *BaseI2NPMessage (which fails for typed message
+structs and silently falls back to the 16-byte header), this works for every
+concrete message type. The payload is derived from MarshalBinary() with the
+16-byte standard header stripped, so typed messages that compute their payload
+lazily inside MarshalBinary (e.g. *DatabaseStore via SetData) are serialized
+correctly — calling GetData() directly would return stale data.
+
+Short header format:
+
+    - Type (1 byte)
+    - Message ID (4 bytes, big-endian)
+    - Short Expiration (4 bytes, big-endian, seconds since epoch)
 
 #### func  MarshalSecondGenTransportHeader
 
@@ -428,6 +506,36 @@ MarshalSecondGenTransportHeader serializes an I2NP NTCP2/SSU2 header into a
 9-byte buffer: type (1 byte) + msg_id (4 bytes, big-endian) + short_expiration
 (4 bytes, seconds since epoch, big-endian). This is the inverse of
 ReadI2NPSecondGenTransportHeader.
+
+#### func  NewBuildMessageFactory
+
+```go
+func NewBuildMessageFactory() build.BuildMessageFactory
+```
+NewBuildMessageFactory creates a new factory for tunnel build messages.
+
+#### func  NewBuildRecordEncryptor
+
+```go
+func NewBuildRecordEncryptor() build.BuildRecordEncryptor
+```
+NewBuildRecordEncryptor creates a new encryptor for tunnel build records.
+
+#### func  NewBuildSessionProvider
+
+```go
+func NewBuildSessionProvider(sp SessionProvider) build.BuildSessionProvider
+```
+NewBuildSessionProvider creates a build.BuildSessionProvider that wraps a
+SessionProvider.
+
+#### func  NewReplyProcessorAdapter
+
+```go
+func NewReplyProcessorAdapter(rp *ReplyProcessor) build.TunnelReplyProcessor
+```
+NewReplyProcessorAdapter wraps a ReplyProcessor to implement
+build.TunnelReplyProcessor.
 
 #### func  ReadI2NPNTCPData
 
@@ -464,27 +572,18 @@ func ReadI2NPNTCPMessageSize(data []byte) (int, error)
 ```
 ReadI2NPNTCPMessageSize reads the message size from NTCP data
 
-#### func  ReadI2NPSSUMessageExpiration
-
-```go
-func ReadI2NPSSUMessageExpiration(data []byte) (common.Date, error)
-```
-ReadI2NPSSUMessageExpiration reads the expiration from SSU data Note: Short
-expiration is a 4-byte unsigned integer that will wrap around on February 7,
-2106. As of that date, an offset must be added to get the correct time. See I2NP
-specification for details.
-
 #### func  ReadI2NPType
 
 ```go
 func ReadI2NPType(data []byte) (int, error)
 ```
-ReadI2NPType reads the I2NP message type from data
+ReadI2NPType reads the I2NP message type from data L-2 Consolidation: Unified
+logging logic into single computed log call
 
 #### func  RecordExploratoryReplyStage
 
 ```go
-func RecordExploratoryReplyStage(stage string)
+func RecordExploratoryReplyStage(stage ExploratoryReplyStage)
 ```
 RecordExploratoryReplyStage increments a stage counter used to audit the
 exploratory reply funnel from transport ingress through reply correlation.
@@ -512,6 +611,27 @@ func SnapshotExploratoryReplyStages() map[string]uint64
 SnapshotExploratoryReplyStages returns current exploratory reply funnel
 counters.
 
+#### func  TunnelCipherEncrypt
+
+```go
+func TunnelCipherEncrypt(in []byte, out *[1028]byte, iv, key []byte) error
+```
+TunnelCipherEncrypt performs AES-CBC tunnel-layer encryption per I2P spec. F079
+fix: operates through pointer (not value copy) so mutations persist. F080 fix:
+CBC IV taken from correct byte offset. F081 fix: single-block transform applied;
+last 4 payload bytes encrypted; output is full 1028 bytes (not truncated to
+1008).
+
+#### func  ValidateRecordCount
+
+```go
+func ValidateRecordCount(countField, recordCount int, tunnelTypeName string) error
+```
+ValidateRecordCount validates that Count field matches actual record count. L-4
+Consolidation: Shared by variable_tunnel_build_reply.go and
+short_tunnel_build_reply.go. tunnelTypeName is used in log messages (e.g.,
+"VariableTunnelBuildReply", "ShortTunnelBuildReply")
+
 #### func  VerifyIdentityHash
 
 ```go
@@ -528,17 +648,25 @@ type BaseI2NPMessage struct {
 }
 ```
 
-BaseI2NPMessage provides a basic implementation of I2NPMessage
+BaseI2NPMessage provides a basic implementation of Message
+
+#### func  BaseMessageFromMessage
+
+```go
+func BaseMessageFromMessage(msg Message, payload []byte) *BaseI2NPMessage
+```
+BaseMessageFromMessage creates a base message using metadata from msg and
+payload.
 
 #### func  NewBaseI2NPMessage
 
 ```go
 func NewBaseI2NPMessage(msgType int) *BaseI2NPMessage
 ```
-NewBaseI2NPMessage creates a new base I2NP message. If crypto/rand fails to
-generate a message ID, falls back to a time-based ID and logs a critical
-warning. This avoids panicking in library code while still providing a usable
-(if less random) ID.
+NewBaseI2NPMessage creates a new base I2NP message. Panics if the system CSPRNG
+is unavailable. An I2P router cannot safely generate message IDs without a
+cryptographically secure source of randomness; proceeding with predictable IDs
+would silently leak anonymity.
 
 #### func  WrapInGarlicMessage
 
@@ -546,7 +674,25 @@ warning. This avoids panicking in library code while still providing a usable
 func WrapInGarlicMessage(encryptedGarlic []byte) (*BaseI2NPMessage, error)
 ```
 WrapInGarlicMessage creates a Garlic I2NP message from encrypted garlic data.
-This wraps the encrypted garlic in the proper I2NP message structure.
+This wraps the encrypted garlic in the proper I2NP message structure with the
+spec-required 4-byte length prefix.
+
+Spec-compliant garlic message format (per i2np.rst "Garlic"):
+
+    Encrypted ::
+      +----+----+----+----+----+----+----+----+
+      |      length       | data              |
+      +----+----+----+----+                   +
+      |                                       |
+      ~                                       ~
+      |                                       |
+      +----+----+----+----+----+----+----+----+
+
+    length :: 4 byte Integer (number of bytes that follow)
+    data   :: $length bytes of encrypted garlic
+
+F459/F461 fix: Add the mandatory 4-byte length prefix before the encrypted
+payload.
 
 #### func (*BaseI2NPMessage) Expiration
 
@@ -723,7 +869,8 @@ type BuildReplyForwarder interface {
 	// - messageID: The I2NP message ID for the reply
 	// - encryptedRecords: The complete encrypted build reply records
 	// - isShortBuild: Whether this is a Short Tunnel Build Message (STBM) format
-	ForwardBuildReplyToRouter(routerHash common.Hash, messageID int, encryptedRecords []byte, isShortBuild bool) error
+	// - inputMessageType: The input message type (21=TunnelBuild, 23=VariableTunnelBuild, 25=ShortTunnelBuild) for F061 correct reply type mapping
+	ForwardBuildReplyToRouter(routerHash common.Hash, messageID int, encryptedRecords []byte, isShortBuild bool, inputMessageType int) error
 
 	// ForwardBuildReplyThroughTunnel forwards a build reply message through a reply tunnel.
 	// This is used when the build request specifies a reply tunnel for the response.
@@ -734,7 +881,8 @@ type BuildReplyForwarder interface {
 	// - messageID: The I2NP message ID for the reply
 	// - encryptedRecords: The complete encrypted build reply records
 	// - isShortBuild: Whether this is a Short Tunnel Build Message (STBM) format
-	ForwardBuildReplyThroughTunnel(gatewayHash common.Hash, tunnelID tunnel.TunnelID, messageID int, encryptedRecords []byte, isShortBuild bool) error
+	// - inputMessageType: The input message type (21=TunnelBuild, 23=VariableTunnelBuild, 25=ShortTunnelBuild) for F061 correct reply type mapping
+	ForwardBuildReplyThroughTunnel(gatewayHash common.Hash, tunnelID buildrecord.TunnelID, messageID int, encryptedRecords []byte, isShortBuild bool, inputMessageType int) error
 }
 ```
 
@@ -760,25 +908,13 @@ ECIES-X25519-AEAD decryption so that test mocks can be substituted.
 #### type BuildRequestRecord
 
 ```go
-type BuildRequestRecord struct {
-	ReceiveTunnel tunnel.TunnelID
-	OurIdent      common.Hash
-	NextTunnel    tunnel.TunnelID
-	NextIdent     common.Hash
-	LayerKey      session_key.SessionKey
-	IVKey         session_key.SessionKey
-	ReplyKey      session_key.SessionKey
-	ReplyIV       [16]byte
-	Flag          int
-	RequestTime   time.Time
-	SendMessageID int
-	Padding       [29]byte
-}
+type BuildRequestRecord = buildrecord.BuildRequestRecord
 ```
 
-BuildRequestRecord represents a single record in a tunnel build request,
-containing the cryptographic keys and routing information needed to construct
-one hop in a tunnel.
+BuildRequestRecord is a type alias for buildrecord.BuildRequestRecord, the
+canonical definition. Both lib/tunnel and lib/i2np share this type without
+import cycles. Parsing, serialization, and accessor methods are defined in
+lib/tunnel/buildrecord.
 
 #### func  DecryptBuildRequestRecord
 
@@ -827,6 +963,10 @@ Returns the parsed cleartext BuildRequestRecord on success.
 func ReadBuildRequestRecord(data []byte) (BuildRequestRecord, error)
 ```
 ReadBuildRequestRecord parses a BuildRequestRecord from the provided byte slice.
+It delegates to buildrecord.ReadBuildRequestRecord and translates any error to
+ErrBuildRequestRecordNotEnoughData. The original buildrecord error is discarded
+to provide a uniform I2NP error type for all parsing failures (I2NP spec does
+not distinguish between different parse failure modes in this context).
 
 #### func  ReadShortBuildRequestRecord
 
@@ -834,141 +974,18 @@ ReadBuildRequestRecord parses a BuildRequestRecord from the provided byte slice.
 func ReadShortBuildRequestRecord(data []byte) (BuildRequestRecord, error)
 ```
 ReadShortBuildRequestRecord parses the 154-byte STBM cleartext payload into a
-BuildRequestRecord. The STBM cleartext uses a compact layout: cryptographic keys
-(LayerKey, IVKey, ReplyKey) are absent and must be derived via HKDF by the
-caller.
-
-Cleartext layout (154 bytes):
-
-    [0:4]    receiveTunnel (4 bytes)
-    [4:8]    nextTunnel    (4 bytes)
-    [8:40]   next_ident     (32 bytes)
-    [40]     flag           (1 byte)
-    [44:48]  request_time   (4 bytes, minutes since epoch)
-    [52:56]  sendMessageID (4 bytes)
-
-#### func (*BuildRequestRecord) Bytes
-
-```go
-func (b *BuildRequestRecord) Bytes() []byte
-```
-Bytes serializes the BuildRequestRecord to its cleartext 222-byte
-representation. The caller is responsible for encrypting this data.
-
-#### func (*BuildRequestRecord) GetIVKey
-
-```go
-func (b *BuildRequestRecord) GetIVKey() session_key.SessionKey
-```
-GetIVKey returns the IV session key
-
-#### func (*BuildRequestRecord) GetLayerKey
-
-```go
-func (b *BuildRequestRecord) GetLayerKey() session_key.SessionKey
-```
-GetLayerKey returns the layer session key
-
-#### func (*BuildRequestRecord) GetNextIdent
-
-```go
-func (b *BuildRequestRecord) GetNextIdent() common.Hash
-```
-GetNextIdent returns the next identity hash
-
-#### func (*BuildRequestRecord) GetNextTunnel
-
-```go
-func (b *BuildRequestRecord) GetNextTunnel() tunnel.TunnelID
-```
-GetNextTunnel returns the next tunnel ID
-
-#### func (*BuildRequestRecord) GetOurIdent
-
-```go
-func (b *BuildRequestRecord) GetOurIdent() common.Hash
-```
-GetOurIdent returns our identity hash
-
-#### func (*BuildRequestRecord) GetReceiveTunnel
-
-```go
-func (b *BuildRequestRecord) GetReceiveTunnel() tunnel.TunnelID
-```
-GetReceiveTunnel returns the receive tunnel ID
-
-#### func (*BuildRequestRecord) GetReplyKey
-
-```go
-func (b *BuildRequestRecord) GetReplyKey() session_key.SessionKey
-```
-GetReplyKey returns the reply session key
-
-#### func (*BuildRequestRecord) ShortBytes
-
-```go
-func (b *BuildRequestRecord) ShortBytes() []byte
-```
-ShortBytes serializes the BuildRequestRecord to the 218-byte ECIES short record
-wire format as defined in the I2P specification (proposal 157, since 0.9.49).
-
-Short build records use a more compact layout than the standard 222-byte ElGamal
-cleartext. Keys (LayerKey, IVKey, ReplyKey) are derived via HKDF rather than
-transmitted explicitly, saving significant space.
-
-On-wire format (218 bytes total):
-
-    toPeer:         16 bytes - truncated SHA-256 of peer's RouterIdentity
-    ephemeral key:  32 bytes - X25519 public key (placeholder pre-encryption)
-    encrypted data: 170 bytes - AEAD(cleartext 154 bytes) + 16-byte MAC
-
-Cleartext payload layout (154 bytes):
-
-    receiveTunnel:  4 bytes [0:4]
-    nextTunnel:     4 bytes [4:8]
-    next_ident:     32 bytes [8:40]
-    flag:            1 byte  [40] + 2 unused bytes [41:43]
-    layer_enc_type:  1 byte  [43]
-    request_time:    4 bytes [44:48] (minutes since epoch)
-    expiration:      4 bytes [48:52] (seconds)
-    sendMessageID: 4 bytes [52:56]
-    options/padding: 98 bytes [56:154]
-
-The caller is responsible for applying ECIES encryption.
-
-#### type BuildRequestRecordElGamal
-
-```go
-type BuildRequestRecordElGamal [528]byte
-```
-
-BuildRequestRecordElGamal is a legacy alias for ElGamal/AES build request record
-bytes.
-
-#### type BuildRequestRecordElGamalAES
-
-```go
-type BuildRequestRecordElGamalAES [528]byte
-```
-
-BuildRequestRecordElGamalAES stores a legacy fixed-size ElGamal/AES build
-request record.
+BuildRequestRecord. It delegates to buildrecord.ReadShortBuildRequestRecord and
+translates any error to ErrBuildRequestRecordNotEnoughData. The original
+buildrecord error is discarded (see ReadBuildRequestRecord for rationale).
 
 #### type BuildResponseRecord
 
 ```go
-type BuildResponseRecord struct {
-	Hash       common.Hash
-	RandomData [495]byte
-	Reply      byte
-}
+type BuildResponseRecord = buildrecord.BuildResponseRecord
 ```
 
-BuildResponseRecord struct contains a response to BuildRequestRecord concerning
-the creation of one hop in the tunnel
-
-BuildResponseRecord represents a single response record in a tunnel build reply,
-indicating whether a hop accepted or rejected the tunnel build request.
+Type alias for BuildResponseRecord - canonical definition in
+lib/tunnel/buildrecord
 
 #### func  CreateBuildResponseRecord
 
@@ -984,31 +1001,105 @@ Parameters:
 
 Returns a BuildResponseRecord with the SHA-256 hash properly computed.
 
-#### func  ReadBuildResponseRecord
+#### type ByteReader
 
 ```go
-func ReadBuildResponseRecord(data []byte) (BuildResponseRecord, error)
+type ByteReader struct {
+}
 ```
-ReadBuildResponseRecord parses a BuildResponseRecord from the provided byte
-slice.
 
-#### type BuildResponseRecordELGamal
+ByteReader provides a cursor-style interface for sequential byte reading,
+similar to bytes.Reader in the Go standard library. Each read operation advances
+the offset, eliminating the need for callers to track positions manually. This
+prevents off-by-one errors and simplifies parsing logic.
+
+Error handling follows Go's io.Reader pattern: on error, the reader is not
+advanced, allowing callers to inspect the failed position.
+
+#### func  NewByteReader
 
 ```go
-type BuildResponseRecordELGamal [528]byte
+func NewByteReader(data []byte) *ByteReader
 ```
+NewByteReader creates a new ByteReader positioned at offset 0.
 
-BuildResponseRecordELGamal is a legacy alias for ElGamal/AES build response
-record bytes.
-
-#### type BuildResponseRecordELGamalAES
+#### func (*ByteReader) Offset
 
 ```go
-type BuildResponseRecordELGamalAES [528]byte
+func (br *ByteReader) Offset() int
 ```
+Offset returns the current read position.
 
-BuildResponseRecordELGamalAES stores a legacy fixed-size ElGamal/AES build
-response record.
+#### func (*ByteReader) Peek
+
+```go
+func (br *ByteReader) Peek(n int) ([]byte, error)
+```
+Peek returns the next n bytes without advancing the offset. Returns
+ErrI2NPNotEnoughData if fewer than n bytes remain.
+
+#### func (*ByteReader) ReadByte
+
+```go
+func (br *ByteReader) ReadByte() (byte, error)
+```
+ReadByte reads a single byte and advances the offset. Returns
+ErrI2NPNotEnoughData if there are no bytes remaining.
+
+#### func (*ByteReader) ReadBytes
+
+```go
+func (br *ByteReader) ReadBytes(n int) ([]byte, error)
+```
+ReadBytes reads n bytes and advances the offset. Returns ErrI2NPNotEnoughData if
+fewer than n bytes remain. The returned slice is a view into the underlying
+data; modifications affect the original buffer.
+
+#### func (*ByteReader) ReadDate
+
+```go
+func (br *ByteReader) ReadDate() (common.Date, error)
+```
+ReadDate reads an 8-byte I2P Date (millisecond timestamp) and advances the
+offset. Returns ErrI2NPNotEnoughData if fewer than 8 bytes remain.
+
+#### func (*ByteReader) ReadHash
+
+```go
+func (br *ByteReader) ReadHash() (common.Hash, error)
+```
+ReadHash reads a 32-byte router hash and advances the offset. Returns
+ErrI2NPNotEnoughData if fewer than 32 bytes remain.
+
+#### func (*ByteReader) ReadInt
+
+```go
+func (br *ByteReader) ReadInt() (int, error)
+```
+ReadInt reads a 4-byte big-endian integer and advances the offset. Returns
+ErrI2NPNotEnoughData if fewer than 4 bytes remain.
+
+#### func (*ByteReader) ReadInt64
+
+```go
+func (br *ByteReader) ReadInt64() (int64, error)
+```
+ReadInt64 reads an 8-byte big-endian integer and advances the offset. Returns
+ErrI2NPNotEnoughData if fewer than 8 bytes remain.
+
+#### func (*ByteReader) Remaining
+
+```go
+func (br *ByteReader) Remaining() int
+```
+Remaining returns the number of bytes left to read.
+
+#### func (*ByteReader) Reset
+
+```go
+func (br *ByteReader) Reset()
+```
+Reset resets the reader to the beginning.
 
 #### type Data
 
@@ -1210,7 +1301,7 @@ generation.
 #### func  NewDatabaseManager
 
 ```go
-func NewDatabaseManager(netdb I2NPNetDBStore) *DatabaseManager
+func NewDatabaseManager(netdb NetDBStore) *DatabaseManager
 ```
 NewDatabaseManager creates a new database manager with NetDB integration
 
@@ -1593,7 +1684,7 @@ valid, or an error describing the expiration issue.
 #### func (*ExpirationValidator) ValidateMessage
 
 ```go
-func (v *ExpirationValidator) ValidateMessage(msg I2NPMessage) error
+func (v *ExpirationValidator) ValidateMessage(msg Message) error
 ```
 ValidateMessage checks if an I2NP message has expired. Returns nil if valid, or
 an error if the message has expired.
@@ -1613,6 +1704,43 @@ func (v *ExpirationValidator) WithTolerance(seconds int64) *ExpirationValidator
 ```
 WithTolerance sets the clock skew tolerance in seconds. Returns the validator
 for method chaining.
+
+#### type ExploratoryReplyStage
+
+```go
+type ExploratoryReplyStage int
+```
+
+ExploratoryReplyStage identifies checkpoints in the exploratory reply funnel.
+L-5 Consolidation: Typed enum instead of string constants for type-safe
+dispatch.
+
+```go
+const (
+	ExploratoryReplyStageInboundI2NPReceived ExploratoryReplyStage = iota
+	ExploratoryReplyStageTunnelGatewayParsed
+	ExploratoryReplyStageGarlicDecryptAttempt
+	ExploratoryReplyStageGarlicDecryptSuccess
+	ExploratoryReplyStageShortReplyDispatched
+	ExploratoryReplyStageShortReplyCorrelated
+	ExploratoryReplyStageShortReplyUncorrelated
+	ExploratoryReplyStageLateReplyReclassedOK
+	ExploratoryReplyStageLateReplyReclassedFail
+	ExploratoryReplyStageLateReplyShortSkipped
+)
+```
+
+#### type FloodfillReplicator
+
+```go
+type FloodfillReplicator interface {
+	// FloodDatabaseStore republishes a successfully accepted store entry.
+	FloodDatabaseStore(key common.Hash, data []byte, dataType byte)
+}
+```
+
+FloodfillReplicator defines the interface for propagating accepted DatabaseStore
+entries to nearby floodfills when this router operates in floodfill mode.
 
 #### type FloodfillSelector
 
@@ -1639,19 +1767,15 @@ type Garlic struct {
 Garlic represents an I2NP Garlic message containing one or more encrypted garlic
 cloves for anonymous message delivery.
 
-#### func  DeserializeGarlic
+#### func  ParseECIESGarlicClove
 
 ```go
-func DeserializeGarlic(data []byte, nestingDepth int) (*Garlic, error)
+func ParseECIESGarlicClove(data []byte) (*Garlic, error)
 ```
-DeserializeGarlic parses a decrypted garlic message from bytes with validation.
-This function enforces security limits to prevent resource exhaustion attacks.
-
-Security validations: - Maximum clove count (64) to prevent memory exhaustion -
-Maximum nesting depth (3) to prevent stack overflow from recursive garlic -
-Proper bounds checking for all fields
-
-Returns the parsed Garlic structure or an error if validation fails.
+ParseECIESGarlicClove parses a single spec-compliant ECIES garlic clove payload:
+DeliveryInstructions + 9-byte short I2NP header (type||msgID||exp-seconds) +
+body extending to the end of the buffer. This is the wire format carried by each
+type-11 GarlicClove block (ratchet.md §"Garlic Clove").
 
 #### func (*Garlic) GetCloveCount
 
@@ -1704,7 +1828,7 @@ Random message ID - Expiration set to 10 seconds from now
 ```go
 func (gb *GarlicBuilder) AddClove(
 	deliveryInstructions GarlicCloveDeliveryInstructions,
-	message I2NPMessage,
+	message Message,
 	cloveID int,
 	cloveExpiration time.Time,
 ) error
@@ -1721,7 +1845,7 @@ garlic message expiration)
 
 ```go
 func (gb *GarlicBuilder) AddDestinationDeliveryClove(
-	message I2NPMessage,
+	message Message,
 	cloveID int,
 	destinationHash common.Hash,
 ) error
@@ -1735,7 +1859,7 @@ destinationHash: SHA256 hash of the destination
 #### func (*GarlicBuilder) AddLocalDeliveryClove
 
 ```go
-func (gb *GarlicBuilder) AddLocalDeliveryClove(message I2NPMessage, cloveID int) error
+func (gb *GarlicBuilder) AddLocalDeliveryClove(message Message, cloveID int) error
 ```
 AddLocalDeliveryClove adds a clove with LOCAL delivery instructions. This is the
 simplest delivery type - the message is processed locally by the recipient.
@@ -1746,7 +1870,7 @@ message: The I2NP message to wrap cloveID: Unique identifier for this clove
 
 ```go
 func (gb *GarlicBuilder) AddRouterDeliveryClove(
-	message I2NPMessage,
+	message Message,
 	cloveID int,
 	routerHash common.Hash,
 ) error
@@ -1761,10 +1885,10 @@ routerHash: SHA256 hash of the destination router
 
 ```go
 func (gb *GarlicBuilder) AddTunnelDeliveryClove(
-	message I2NPMessage,
+	message Message,
 	cloveID int,
 	gatewayHash common.Hash,
-	tunnelID tunnel.TunnelID,
+	tunnelID buildrecord.TunnelID,
 ) error
 ```
 AddTunnelDeliveryClove adds a clove with TUNNEL delivery instructions. The
@@ -1783,22 +1907,28 @@ Build constructs the unencrypted Garlic message structure. This produces a
 Garlic object ready for encryption. The actual encryption is handled by
 SessionManager (ECIES-X25519-AEAD-Ratchet).
 
-#### func (*GarlicBuilder) BuildAndSerialize
+#### func (*GarlicBuilder) BuildClovePayloads
 
 ```go
-func (gb *GarlicBuilder) BuildAndSerialize() ([]byte, error)
+func (gb *GarlicBuilder) BuildClovePayloads() ([][]byte, error)
 ```
-BuildAndSerialize constructs the garlic message and serializes it to bytes. This
-produces the plaintext garlic payload ready for encryption.
+BuildClovePayloads constructs the garlic message and returns one spec-compliant
+clove payload per clove. Each payload is: DeliveryInstructions + 9-byte short
+I2NP header (type || msgID || exp-seconds) + I2NP body (extends to end).
 
-Returns the serialized plaintext garlic message (unencrypted).
+Per the ECIES-X25519-AEAD-Ratchet spec (ratchet.md §Garlic Clove), each clove is
+contained in its own type-11 payload block. The Clove Set format (count byte,
+certificate, garlic-level msgID/expiration) is NOT used.
+
+Returns one byte slice per clove, ready to be wrapped as individual
+BlockGarlicClove entries in the ratchet payload.
 
 #### type GarlicClove
 
 ```go
 type GarlicClove struct {
 	DeliveryInstructions GarlicCloveDeliveryInstructions
-	I2NPMessage          I2NPMessage
+	Message              Message
 	CloveID              int
 	Expiration           time.Time
 	Certificate          certificate.Certificate
@@ -1815,7 +1945,7 @@ type GarlicCloveDeliveryInstructions struct {
 	Flag       byte
 	SessionKey session_key.SessionKey
 	Hash       common.Hash
-	TunnelID   tunnel.TunnelID
+	TunnelID   buildrecord.TunnelID
 	Delay      int
 }
 ```
@@ -1850,7 +1980,7 @@ routerHash: SHA256 hash of the destination router
 #### func  NewTunnelDeliveryInstructions
 
 ```go
-func NewTunnelDeliveryInstructions(gatewayHash common.Hash, tunnelID tunnel.TunnelID) GarlicCloveDeliveryInstructions
+func NewTunnelDeliveryInstructions(gatewayHash common.Hash, tunnelID buildrecord.TunnelID) GarlicCloveDeliveryInstructions
 ```
 NewTunnelDeliveryInstructions creates delivery instructions for tunnel delivery.
 gatewayHash: SHA256 hash of the tunnel gateway router tunnelID: Destination
@@ -1862,15 +1992,15 @@ tunnel ID
 type GarlicCloveForwarder interface {
 	// ForwardToDestination forwards a message to a destination hash (delivery type 0x01).
 	// The forwarder should lookup the destination's LeaseSet and route through a tunnel.
-	ForwardToDestination(destHash common.Hash, msg I2NPMessage) error
+	ForwardToDestination(destHash common.Hash, msg Message) error
 
 	// ForwardToRouter forwards a message directly to a router hash (delivery type 0x02).
 	// The forwarder should send the message via the transport layer.
-	ForwardToRouter(routerHash common.Hash, msg I2NPMessage) error
+	ForwardToRouter(routerHash common.Hash, msg Message) error
 
 	// ForwardThroughTunnel forwards a message through a tunnel to a gateway (delivery type 0x03).
 	// The forwarder should wrap the message in a TunnelGateway envelope and send to the gateway.
-	ForwardThroughTunnel(gatewayHash common.Hash, tunnelID tunnel.TunnelID, msg I2NPMessage) error
+	ForwardThroughTunnel(gatewayHash common.Hash, tunnelID buildrecord.TunnelID, msg Message) error
 }
 ```
 
@@ -1879,52 +2009,24 @@ different delivery targets. This interface enables the MessageProcessor to
 delegate non-LOCAL delivery types to router-level components that have access to
 NetDB, transport, and tunnel infrastructure.
 
-#### type GarlicElGamal
-
-```go
-type GarlicElGamal struct {
-	Length uint32
-	Data   []byte
-}
-```
-
-GarlicElGamal represents an ElGamal encrypted garlic message with proper
-structure
-
-#### func  NewGarlicElGamal
-
-```go
-func NewGarlicElGamal(bytes []byte) (*GarlicElGamal, error)
-```
-NewGarlicElGamal creates a new GarlicElGamal from raw bytes
-
-#### func (*GarlicElGamal) Bytes
-
-```go
-func (g *GarlicElGamal) Bytes() ([]byte, error)
-```
-Bytes serializes the GarlicElGamal to bytes
-
 #### type GarlicKeyRegistrar
 
 ```go
-type GarlicKeyRegistrar interface {
-	// RegisterOneTimeGarlicKey stores a single-use garlic key for a pending
-	// ShortTunnelBuildReply. tag is garlicKeyMaterial[24:32], key is [0:32].
-	RegisterOneTimeGarlicKey(tag [8]byte, key [32]byte)
-}
+type GarlicKeyRegistrar = build.GarlicKeyRegistrar
 ```
 
-GarlicKeyRegistrar allows callers to register one-time symmetric garlic keys
-derived from STBM Noise transcript hashes. Implemented by *GarlicSessionManager.
+GarlicKeyRegistrar allows callers to register one-time symmetric garlic keys -
+re-exported from lib/tunnel/build
 
 #### type GarlicMessageDecryptor
 
 ```go
 type GarlicMessageDecryptor interface {
 	// DecryptGarlicMessage decrypts an encrypted garlic message.
-	// Returns plaintext, session tag, session hash (non-nil for New Session), and error.
-	DecryptGarlicMessage(encrypted []byte) (plaintext []byte, sessionTag [8]byte, sessionHash *[32]byte, err error)
+	// Returns all GarlicClove payloads found in the ratchet payload (a spec-compliant
+	// payload may contain more than one GarlicClove block), session tag, session hash
+	// (non-nil for New Session), and error.
+	DecryptGarlicMessage(encrypted []byte) (cloves [][]byte, sessionTag [8]byte, sessionHash *[32]byte, err error)
 }
 ```
 
@@ -1997,14 +2099,16 @@ is safe to call Close multiple times.
 #### func (*GarlicSessionManager) DecryptGarlicMessage
 
 ```go
-func (sm *GarlicSessionManager) DecryptGarlicMessage(encryptedGarlic []byte) ([]byte, [8]byte, *[32]byte, error)
+func (sm *GarlicSessionManager) DecryptGarlicMessage(encryptedGarlic []byte) ([][]byte, [8]byte, *[32]byte, error)
 ```
 DecryptGarlicMessage decrypts an encrypted garlic message. Handles both New
 Session and Existing Session message types.
 
 Returns:
 
-    - plaintext: the decrypted garlic payload
+    - cloves: all GarlicClove payloads from the ratchet payload. A spec-compliant
+      payload may contain more than one GarlicClove block; all are returned so that
+      every clove's delivery instructions are executed rather than silently dropped.
     - sessionTag: the 8-byte tag used to identify the session (zero for NS and NSR)
     - sessionHash: SHA-256(initiatorStaticPub) for New Session messages; nil otherwise.
       Callers that need to send a New Session Reply must pass the dereferenced
@@ -2016,7 +2120,7 @@ Returns:
 func (sm *GarlicSessionManager) EncryptGarlicMessage(
 	destinationHash common.Hash,
 	destinationPubKey [32]byte,
-	plaintextGarlic []byte,
+	cloves [][]byte,
 ) ([]byte, error)
 ```
 EncryptGarlicMessage encrypts a plaintext garlic message for the given
@@ -2030,7 +2134,25 @@ Parameters:
 
     - destinationHash: Hash of the destination's public key (common.Hash)
     - destinationPubKey: The destination's X25519 public key (32 bytes)
-    - plaintextGarlic: Serialized garlic message (from GarlicBuilder.BuildAndSerialize)
+    - cloves: One serialized spec-compliant clove payload per clove
+      (from GarlicBuilder.BuildClovePayloads)
+
+Returns encrypted garlic message ready to send via I2NP. EncryptGarlicMessage
+encrypts garlic cloves for the given destination. This translates the
+common.Hash destinationHash to [32]byte and delegates to the underlying
+ratchet.SessionManager.
+
+Each clove payload (DeliveryInstructions + 9-byte short I2NP header + body, as
+produced by serializeGarlicClove / GarlicBuilder.BuildClovePayloads) is wrapped
+in its own type-11 GarlicClove block inside the ECIES-X25519-AEAD-Ratchet
+payload, per ratchet.md §"Garlic Clove": "The Clove Set format specified in
+[I2NP] is not used. Each clove is contained in its own block."
+
+Parameters:
+
+    - destinationHash: Hash of the destination's public key (common.Hash)
+    - destinationPubKey: The destination's X25519 public key (32 bytes)
+    - cloves: One serialized spec-compliant clove payload per clove
 
 Returns encrypted garlic message ready to send via I2NP.
 
@@ -2098,28 +2220,6 @@ type HashProvider interface {
 
 HashProvider represents types that provide hash identification
 
-#### type I2NPMessage
-
-```go
-type I2NPMessage interface {
-	MessageSerializer
-	MessageIdentifier
-	MessageExpiration
-}
-```
-
-I2NPMessage interface represents any I2NP message that can be
-marshaled/unmarshaled This is the primary interface that combines all core
-message behaviors
-
-#### func  NewI2NPMessage
-
-```go
-func NewI2NPMessage(msgType int) I2NPMessage
-```
-NewI2NPMessage creates a new base I2NP message and returns it as I2NPMessage
-interface
-
 #### type I2NPMessageDispatcher
 
 ```go
@@ -2162,21 +2262,14 @@ context so storage paths can apply source-aware admission controls.
 #### func (*I2NPMessageDispatcher) RouteMessage
 
 ```go
-func (mr *I2NPMessageDispatcher) RouteMessage(msg I2NPMessage) error
+func (mr *I2NPMessageDispatcher) RouteMessage(msg Message) error
 ```
 RouteMessage routes messages based on their interfaces
-
-#### func (*I2NPMessageDispatcher) RouteTunnelMessage
-
-```go
-func (mr *I2NPMessageDispatcher) RouteTunnelMessage(msg interface{}) error
-```
-RouteTunnelMessage routes tunnel-related messages
 
 #### func (*I2NPMessageDispatcher) SetNetDB
 
 ```go
-func (mr *I2NPMessageDispatcher) SetNetDB(netdb I2NPNetDBStore)
+func (mr *I2NPMessageDispatcher) SetNetDB(netdb NetDBStore)
 ```
 SetNetDB sets the NetDB store for database operations. If the netdb implements
 FloodfillSelector, it will also be configured for floodfill functionality.
@@ -2212,12 +2305,16 @@ provider must implement SessionProvider interface with GetSessionByHash method.
 #### func (*I2NPMessageDispatcher) SetTunnelManager
 
 ```go
-func (mr *I2NPMessageDispatcher) SetTunnelManager(tm *TunnelManager)
+func (mr *I2NPMessageDispatcher) SetTunnelManager(tm TunnelBuildCoordinator)
 ```
 SetTunnelManager replaces the internal TunnelManager with an external one. This
 must be called from the router after r.tunnelManager is created so that both the
 dispatcher and the router share the same pendingBuilds map, enabling build-reply
 correlation (A3 fix).
+
+The parameter type is TunnelBuildCoordinator rather than TunnelOrchestrator
+because I2NPMessageDispatcher only needs the build and reply-processing surface;
+stats access is handled by I2PControl through TunnelStatsReader.
 
 #### type I2NPMessageDispatcherConfig
 
@@ -2230,50 +2327,6 @@ type I2NPMessageDispatcherConfig struct {
 ```
 
 I2NPMessageDispatcherConfig represents configuration for message routing
-
-#### type I2NPMessageFactory
-
-```go
-type I2NPMessageFactory struct{}
-```
-
-I2NPMessageFactory provides methods to create I2NP messages as interfaces
-
-#### func  NewI2NPMessageFactory
-
-```go
-func NewI2NPMessageFactory() *I2NPMessageFactory
-```
-NewI2NPMessageFactory creates a new message factory
-
-#### func (*I2NPMessageFactory) CreateDataMessage
-
-```go
-func (f *I2NPMessageFactory) CreateDataMessage(payload []byte) I2NPMessage
-```
-CreateDataMessage creates a new data message
-
-#### func (*I2NPMessageFactory) CreateDeliveryStatusMessage
-
-```go
-func (f *I2NPMessageFactory) CreateDeliveryStatusMessage(messageID int, timestamp time.Time) I2NPMessage
-```
-CreateDeliveryStatusMessage creates a new delivery status message
-
-#### func (*I2NPMessageFactory) CreateTunnelBuildMessage
-
-```go
-func (f *I2NPMessageFactory) CreateTunnelBuildMessage(records [8]BuildRequestRecord) I2NPMessage
-```
-CreateTunnelBuildMessage creates a new tunnel build message
-
-#### func (*I2NPMessageFactory) CreateTunnelDataMessage
-
-```go
-func (f *I2NPMessageFactory) CreateTunnelDataMessage(tunnelID tunnel.TunnelID, data [1024]byte) I2NPMessage
-```
-CreateTunnelDataMessage creates a new tunnel data message with the given tunnel
-ID and data.
 
 #### type I2NPNTCPHeader
 
@@ -2297,53 +2350,6 @@ func ReadI2NPNTCPHeader(data []byte) (I2NPNTCPHeader, error)
 ```
 ReadI2NPNTCPHeader reads an entire I2NP message and returns the parsed header
 with embedded encrypted data
-
-#### type I2NPNetDBStore
-
-```go
-type I2NPNetDBStore interface {
-	Store(key common.Hash, data []byte, dataType byte) error
-}
-```
-
-I2NPNetDBStore defines the interface for storing network database entries.
-Implementations must dispatch to the appropriate storage method based on
-dataType:
-
-    - 0: RouterInfo
-    - 1: LeaseSet
-    - 3: LeaseSet2
-    - 5: EncryptedLeaseSet
-    - 7: MetaLeaseSet
-
-#### type I2NPNetDBStoreWithSource
-
-```go
-type I2NPNetDBStoreWithSource interface {
-	StoreFromPeer(key common.Hash, data []byte, dataType byte, source common.Hash) error
-}
-```
-
-I2NPNetDBStoreWithSource extends I2NPNetDBStore with source-peer context.
-Implementations can use this for fairness/rate controls on first-seen entries.
-
-#### type I2NPSSUHeader
-
-```go
-type I2NPSSUHeader struct {
-	Type       int
-	Expiration time.Time
-}
-```
-
-I2NPSSUHeader represents a parsed I2NP message header for SSU transport
-
-#### func  ReadI2NPSSUHeader
-
-```go
-func ReadI2NPSSUHeader(data []byte) (I2NPSSUHeader, error)
-```
-ReadI2NPSSUHeader reads an I2NP SSU header
 
 #### type I2NPSecondGenTransportHeader
 
@@ -2373,13 +2379,79 @@ The checksum is not required since errors are caught in decryption.
 
 ```go
 type I2NPTransportSession interface {
-	QueueSendI2NP(msg I2NPMessage) error
+	QueueSendI2NP(msg Message) error
 	SendQueueSize() int
 }
 ```
 
 I2NPTransportSession defines the interface for sending I2NP messages back to
 requesters
+
+#### type InboundHandlerRegistrar
+
+```go
+type InboundHandlerRegistrar interface {
+	RegisterExploratoryTunnel(tunnelID tunnel.TunnelID) error
+	// RegisterClientTunnel registers an inbound client tunnel endpoint for message delivery to an I2CP session.
+	// sessionID identifies the owning I2CP session.
+	// The inbound handler implementation is responsible for creating the endpoint with proper session context.
+	RegisterClientTunnel(tunnelID tunnel.TunnelID, sessionID uint16) error
+	UnregisterTunnel(tunnelID tunnel.TunnelID)
+}
+```
+
+InboundHandlerRegistrar is implemented by InboundMessageHandler (lib/router) and
+allows the TunnelManager to register/unregister newly-active inbound tunnels as
+control-plane (exploratory) endpoints without importing lib/router, which would
+create an import cycle.
+
+When an inbound tunnel build succeeds, the TunnelManager calls
+RegisterExploratoryTunnel so that subsequent TunnelData messages addressed to
+that tunnel ID (e.g. build replies sent via TUNNEL delivery mode) are forwarded
+to the MessageProcessor rather than silently dropped.
+
+When an inbound tunnel fails or expires, the TunnelManager calls
+UnregisterTunnel to clean up the endpoint so the tunnel ID can be safely reused
+without receiving stale messages.
+
+#### type LookupReplyDeliverer
+
+```go
+type LookupReplyDeliverer interface {
+	// DeliverLookupReply hands a reply body to a pending lookup keyed by the
+	// target hash. msgType is the I2NP type (DatabaseStore or
+	// DatabaseSearchReply) and data is the serialized message body. Returns true
+	// if a pending lookup consumed the reply.
+	DeliverLookupReply(key common.Hash, msgType int, data []byte) bool
+}
+```
+
+LookupReplyDeliverer correlates inbound DatabaseStore / DatabaseSearchReply
+messages with outstanding direct DatabaseLookup requests. It is implemented by
+the NetDB lookup client, which blocks a SendDatabaseLookup call until the
+matching reply is delivered here. Correlation is by the looked-up KEY, since I2P
+DatabaseLookup replies carry the key rather than the request's message ID.
+
+#### type Message
+
+```go
+type Message interface {
+	MessageSerializer
+	MessageIdentifier
+	MessageExpiration
+}
+```
+
+Message interface represents any I2NP message that can be marshaled/unmarshaled
+This is the primary interface that combines all core message behaviors
+
+#### func  NewI2NPMessage
+
+```go
+func NewI2NPMessage(msgType int) Message
+```
+NewI2NPMessage creates a new base I2NP message and returns it as Message
+interface
 
 #### type MessageExpiration
 
@@ -2391,6 +2463,43 @@ type MessageExpiration interface {
 ```
 
 MessageExpiration represents types that have expiration management
+
+#### type MessageFactory
+
+```go
+type MessageFactory struct{}
+```
+
+MessageFactory provides methods to create I2NP messages as interfaces
+
+#### func  NewMessageFactory
+
+```go
+func NewMessageFactory() *MessageFactory
+```
+NewMessageFactory creates a new message factory
+
+#### func (*MessageFactory) CreateDataMessage
+
+```go
+func (f *MessageFactory) CreateDataMessage(payload []byte) Message
+```
+CreateDataMessage creates a new data message
+
+#### func (*MessageFactory) CreateDeliveryStatusMessage
+
+```go
+func (f *MessageFactory) CreateDeliveryStatusMessage(messageID int, timestamp time.Time) Message
+```
+CreateDeliveryStatusMessage creates a new delivery status message
+
+#### func (*MessageFactory) CreateTunnelDataMessage
+
+```go
+func (f *MessageFactory) CreateTunnelDataMessage(tunnelID buildrecord.TunnelID, data [1024]byte) Message
+```
+CreateTunnelDataMessage creates a new tunnel data message with the given tunnel
+ID and data.
 
 #### type MessageIdentifier
 
@@ -2439,7 +2548,7 @@ EnableExpirationCheck enables expiration validation in the processor.
 #### func (*MessageProcessor) ProcessMessage
 
 ```go
-func (p *MessageProcessor) ProcessMessage(msg I2NPMessage) error
+func (p *MessageProcessor) ProcessMessage(msg Message) error
 ```
 ProcessMessage processes any I2NP message using interfaces. Messages are first
 validated for expiration before processing. Expired messages are rejected with
@@ -2536,6 +2645,15 @@ func (p *MessageProcessor) SetExpirationValidator(v *ExpirationValidator)
 SetExpirationValidator sets a custom expiration validator for message
 processing. If not set, a default validator with 5-minute tolerance is used.
 
+#### func (*MessageProcessor) SetFloodfillReplicator
+
+```go
+func (p *MessageProcessor) SetFloodfillReplicator(replicator FloodfillReplicator)
+```
+SetFloodfillReplicator sets the floodfill-side DatabaseStore re-propagation
+hook. When configured, accepted DatabaseStore entries carrying a non-zero reply
+token are re-flooded to nearby floodfills after local storage succeeds.
+
 #### func (*MessageProcessor) SetGarlicSessionManager
 
 ```go
@@ -2545,6 +2663,17 @@ SetGarlicSessionManager sets the garlic session manager for decrypting garlic
 messages. This must be called before processing garlic messages, otherwise they
 will fail with an error. Accepts any implementation of GarlicMessageDecryptor,
 including *GarlicSessionManager and test mocks.
+
+#### func (*MessageProcessor) SetLookupReplyDeliverer
+
+```go
+func (p *MessageProcessor) SetLookupReplyDeliverer(deliverer LookupReplyDeliverer)
+```
+SetLookupReplyDeliverer sets the deliverer that correlates inbound DatabaseStore
+/ DatabaseSearchReply messages with outstanding direct DatabaseLookup requests.
+When set, those replies are forwarded to the deliverer so a blocked
+SendDatabaseLookup can return. If not set, replies are only processed for their
+side effects (NetDB store / suggestion logging).
 
 #### func (*MessageProcessor) SetOurPrivateKey
 
@@ -2623,6 +2752,35 @@ type NetDBRetriever interface {
 
 NetDBRetriever defines the interface for retrieving RouterInfo entries
 
+#### type NetDBStore
+
+```go
+type NetDBStore interface {
+	Store(key common.Hash, data []byte, dataType byte) error
+}
+```
+
+NetDBStore defines the interface for storing network database entries.
+Implementations must dispatch to the appropriate storage method based on
+dataType:
+
+    - 0: RouterInfo
+    - 1: LeaseSet
+    - 3: LeaseSet2
+    - 5: EncryptedLeaseSet
+    - 7: MetaLeaseSet
+
+#### type NetDBStoreWithSource
+
+```go
+type NetDBStoreWithSource interface {
+	StoreFromPeer(key common.Hash, data []byte, dataType byte, source common.Hash) error
+}
+```
+
+NetDBStoreWithSource extends NetDBStore with source-peer context.
+Implementations can use this for fairness/rate controls on first-seen entries.
+
 #### type ParticipantManager
 
 ```go
@@ -2631,25 +2789,44 @@ type ParticipantManager interface {
 	// Returns whether the request should be accepted, the rejection code if not,
 	// and a human-readable reason for logging.
 	//
+	// Note: The identifier passed is the target router (the router receiving this
+	// tunnel build request), not the original source. Rate limiting is enforced
+	// as a global limit, not per-source, because the actual tunnel initiator
+	// identity is not available at intermediate hops in the I2P protocol.
+	//
 	// Parameters:
-	// - sourceHash: The router hash of the requester (from BuildRequestRecord.OurIdent)
+	// - targetHash: The router hash of the target (from BuildRequestRecord.OurIdent)
 	//
 	// Returns:
 	// - accepted: Whether the request should be accepted
 	// - rejectCode: I2P-compliant rejection code if not accepted (0 if accepted)
 	// - reason: Human-readable reason for logging (empty if accepted)
-	ProcessBuildRequest(sourceHash common.Hash) (accepted bool, rejectCode byte, reason string)
+	ProcessBuildRequest(targetHash common.Hash) (accepted bool, rejectCode byte, reason string)
 
 	// RegisterParticipant registers a new participating tunnel after acceptance.
 	// This should be called after ProcessBuildRequest returns accepted=true.
 	//
 	// Parameters:
 	// - tunnelID: The tunnel ID for the participating tunnel
-	// - sourceHash: The router hash of the requester
+	// - targetHash: The router hash of the target (our identity from the build request record)
 	// - expiry: When the tunnel participation expires
 	// - layerKey: The layer encryption key from the build request record
 	// - ivKey: The IV key from the build request record
-	RegisterParticipant(tunnelID tunnel.TunnelID, sourceHash common.Hash, expiry time.Time, layerKey, ivKey session_key.SessionKey) error
+	// - nextHopIdent: The router hash of the next hop for routing (may be empty)
+	// - nextHopTunnel: The tunnel ID at the next hop for routing (0 if endpoint)
+	RegisterParticipant(tunnelID buildrecord.TunnelID, targetHash common.Hash, expiry time.Time, layerKey, ivKey session_key.SessionKey, nextHopIdent common.Hash, nextHopTunnel buildrecord.TunnelID) error
+
+	// EvaluateBuildBandwidth applies the transit-tunnel bandwidth policy to a
+	// build request's bandwidth options. minKBps and requestedKBps come from the
+	// short build record's "m" and "r" tunnel build options (KB/s; zero means
+	// unspecified).
+	//
+	// Returns:
+	// - rejectCode: BuildReplyCodeBandwidth (30) when the minimum cannot be
+	//   honored, otherwise 0.
+	// - availableKBps: bandwidth (KB/s) to advertise back to the creator in the
+	//   reply's "b" option, or 0 when nothing should be advertised.
+	EvaluateBuildBandwidth(minKBps, requestedKBps uint32) (rejectCode byte, availableKBps uint32)
 }
 ```
 
@@ -2680,7 +2857,7 @@ PayloadCarrier interface
 
 ```go
 type PendingBuildRequest struct {
-	TunnelID     tunnel.TunnelID
+	TunnelID     buildrecord.TunnelID
 	RequestedAt  time.Time
 	ReplyKeys    []session_key.SessionKey // ECIES-X25519-AEAD keys for decrypting each hop's reply
 	ReplyIVs     [][16]byte               // Nonces/IVs for AEAD decryption
@@ -2730,7 +2907,7 @@ GetPendingBuildCount returns the number of currently pending tunnel builds.
 #### func (*ReplyProcessor) GetPendingBuildInfo
 
 ```go
-func (rp *ReplyProcessor) GetPendingBuildInfo(tunnelID tunnel.TunnelID) *PendingBuildRequest
+func (rp *ReplyProcessor) GetPendingBuildInfo(tunnelID buildrecord.TunnelID) *PendingBuildRequest
 ```
 GetPendingBuildInfo returns information about a specific pending build. Returns
 nil if the build is not found.
@@ -2738,7 +2915,7 @@ nil if the build is not found.
 #### func (*ReplyProcessor) ProcessBuildReply
 
 ```go
-func (rp *ReplyProcessor) ProcessBuildReply(handler TunnelReplyHandler, tunnelID tunnel.TunnelID) error
+func (rp *ReplyProcessor) ProcessBuildReply(handler TunnelReplyHandler, tunnelID buildrecord.TunnelID) error
 ```
 ProcessBuildReply processes a tunnel build reply message. It decrypts encrypted
 reply records, validates responses, and updates tunnel state.
@@ -2755,7 +2932,7 @@ Returns nil on successful build, error otherwise.
 
 ```go
 func (rp *ReplyProcessor) RegisterPendingBuild(
-	tunnelID tunnel.TunnelID,
+	tunnelID buildrecord.TunnelID,
 	replyKeys []session_key.SessionKey,
 	replyIVs [][16]byte,
 	isInbound bool,
@@ -2777,7 +2954,7 @@ Parameters:
 #### func (*ReplyProcessor) SetPendingBuildNoiseHashes
 
 ```go
-func (rp *ReplyProcessor) SetPendingBuildNoiseHashes(tunnelID tunnel.TunnelID, noiseHashes [][32]byte) error
+func (rp *ReplyProcessor) SetPendingBuildNoiseHashes(tunnelID buildrecord.TunnelID, noiseHashes [][32]byte) error
 ```
 SetPendingBuildNoiseHashes stores the per-hop Noise transcript hashes for an
 in-progress STBM build. These are the m_H values (Noise handshake hash after
@@ -2788,7 +2965,7 @@ RegisterPendingBuild.
 #### func (*ReplyProcessor) SetRetryCallback
 
 ```go
-func (rp *ReplyProcessor) SetRetryCallback(callback func(tunnel.TunnelID, bool, int) error)
+func (rp *ReplyProcessor) SetRetryCallback(callback func(buildrecord.TunnelID, bool, int) error)
 ```
 SetRetryCallback sets the callback function for retrying failed builds. The
 callback receives the tunnel ID, tunnel direction, and hop count.
@@ -2897,8 +3074,6 @@ SessionTagProvider represents types that provide session tags
 
 ```go
 type ShortTunnelBuild struct {
-	Count               int
-	BuildRequestRecords []BuildRequestRecord
 }
 ```
 
@@ -2920,14 +3095,14 @@ record.
 ```go
 func (s *ShortTunnelBuild) GetBuildRecords() []BuildRequestRecord
 ```
-GetBuildRecords returns the build request records
+GetBuildRecords returns the build request records.
 
 #### func (*ShortTunnelBuild) GetRecordCount
 
 ```go
 func (s *ShortTunnelBuild) GetRecordCount() int
 ```
-GetRecordCount returns the number of build records
+GetRecordCount returns the number of build records.
 
 #### type ShortTunnelBuildReply
 
@@ -2971,13 +3146,6 @@ func (s *ShortTunnelBuildReply) GetReplyRecords() []BuildResponseRecord
 GetReplyRecords returns the build response records (TunnelReplyHandler
 interface)
 
-#### func (*ShortTunnelBuildReply) GetResponseRecords
-
-```go
-func (s *ShortTunnelBuildReply) GetResponseRecords() []BuildResponseRecord
-```
-GetResponseRecords returns the build response records (legacy method name)
-
 #### func (*ShortTunnelBuildReply) ProcessReply
 
 ```go
@@ -2987,6 +3155,17 @@ ProcessReply processes the short tunnel build reply by analyzing each response
 record. Similar to VariableTunnelBuildReply but specifically for short tunnel
 builds (v0.9.51+). Validates response integrity and determines tunnel build
 success/failure.
+
+#### type SourceHashProvider
+
+```go
+type SourceHashProvider interface {
+	SourceHash() common.Hash
+}
+```
+
+SourceHashProvider exposes the source peer hash for an inbound message when the
+caller has preserved that context.
 
 #### type StatusReporter
 
@@ -3029,6 +3208,33 @@ func (t *TunnelBuild) GetRecordCount() int
 ```
 GetRecordCount returns the number of build records
 
+#### type TunnelBuildCoordinator
+
+```go
+type TunnelBuildCoordinator interface {
+	// Configuration — dependency injection points
+	SetOurRouterHash(hash common.Hash)
+	SetGarlicKeyRegistrar(r GarlicKeyRegistrar)
+	SetSessionProvider(provider SessionProvider)
+	SetPeerSelector(selector tunnel.PeerSelector)
+
+	// Lifecycle
+	Stop()
+
+	// Build operations — structurally satisfies tunnel.BuilderInterface
+	BuildTunnel(req tunnel.BuildTunnelRequest) (*tunnel.BuildTunnelResult, error)
+	BuildTunnelFromRequest(req tunnel.BuildTunnelRequest) (buildrecord.TunnelID, []common.Hash, error)
+
+	// Reply processing — structurally satisfies TunnelBuildReplyProcessor
+	ProcessTunnelBuildReply(handler TunnelReplyHandler, messageID int) error
+	ProcessTunnelReply(handler TunnelReplyHandler, messageID int) error
+}
+```
+
+TunnelBuildCoordinator is the narrow interface needed by I2NPMessageDispatcher.
+It covers dependency injection, build emission, and reply processing — the
+operations that belong to the message-routing layer.
+
 #### type TunnelBuildMessage
 
 ```go
@@ -3038,26 +3244,7 @@ type TunnelBuildMessage struct {
 }
 ```
 
-TunnelBuildMessage wraps TunnelBuild to implement I2NPMessage interface
-
-#### func  NewEncryptedTunnelBuildMessage
-
-```go
-func NewEncryptedTunnelBuildMessage(records [8]BuildRequestRecord, recipientRouterInfos [8]router_info.RouterInfo) (*TunnelBuildMessage, error)
-```
-NewEncryptedTunnelBuildMessage creates a new TunnelBuild I2NP message with
-encrypted records.
-
-Each BuildRequestRecord is encrypted using ECIES-X25519-AEAD encryption against
-the corresponding hop's RouterInfo. This produces specification-compliant
-528-byte encrypted records suitable for network transmission.
-
-Parameters:
-
-    - records: The 8 cleartext BuildRequestRecords
-    - recipientRouterInfos: The RouterInfo for each hop (one per record)
-
-Returns the encrypted TunnelBuildMessage or an error if encryption fails.
+TunnelBuildMessage wraps TunnelBuild to implement Message interface
 
 #### func (*TunnelBuildMessage) GetBuildRecords
 
@@ -3078,9 +3265,9 @@ GetRecordCount implements TunnelBuilder interface
 ```go
 func (msg *TunnelBuildMessage) MarshalBinary() ([]byte, error)
 ```
-MarshalBinary serializes the TunnelBuild message using BaseI2NPMessage. Logs a
-warning if the records have not been encrypted, as cleartext build records are
-not specification-compliant for network transmission.
+MarshalBinary serializes the TunnelBuild message using BaseI2NPMessage. Returns
+an error if records are not encrypted, because cleartext build records are not
+specification-compliant for network transmission.
 
 #### func (*TunnelBuildMessage) UnmarshalBinary
 
@@ -3122,6 +3309,11 @@ TunnelBuildReply represents an I2NP TunnelBuildReply message containing exactly
 8 build response records indicating the success or failure of a tunnel build
 request.
 
+NOTE (0.2.0 consolidation opportunity): This type shares GetReplyRecords() and
+GetRawReplyRecords() accessors with VariableTunnelBuildReply, differing only in
+backing storage ([8]array vs []slice). See tunnel_build.go for the full context
+on consolidating fixed/variable accessors into a generic recordSet[T] type.
+
 #### func (*TunnelBuildReply) GetRawReplyRecords
 
 ```go
@@ -3143,33 +3335,26 @@ func (t *TunnelBuildReply) ProcessReply() error
 ```
 ProcessReply processes the tunnel build reply by analyzing each response record.
 It validates response integrity, determines tunnel build success/failure, and
-returns detailed results for each hop.
+returns detailed results for each hop. Implements replyStepProcessor interface
+for unified reply processing.
 
 #### type TunnelBuildReplyProcessor
 
 ```go
-type TunnelBuildReplyProcessor interface {
-	// ProcessTunnelBuildReply handles a parsed tunnel build reply.
-	// handler provides the reply records, messageID correlates with the original request.
-	ProcessTunnelBuildReply(handler TunnelReplyHandler, messageID int) error
-}
+type TunnelBuildReplyProcessor = build.TunnelBuildReplyProcessor
 ```
 
 TunnelBuildReplyProcessor defines the interface for processing tunnel build
-reply messages. When a tunnel build reply (types 22, 24, 26) arrives, the
-processor correlates it with the original build request and updates tunnel state
-accordingly.
+reply messages - re-exported from lib/tunnel/build
 
 #### type TunnelBuilder
 
 ```go
-type TunnelBuilder interface {
-	GetBuildRecords() []BuildRequestRecord
-	GetRecordCount() int
-}
+type TunnelBuilder = build.TunnelBuilder
 ```
 
-TunnelBuilder represents types that can build tunnels
+TunnelBuilder represents types that can build tunnels - re-exported from
+lib/tunnel/build
 
 #### func  NewShortTunnelBuilder
 
@@ -3180,28 +3365,12 @@ NewShortTunnelBuilder creates a new ShortTunnelBuild and returns it as
 TunnelBuilder interface. This is the modern, preferred format for tunnel
 building (added in I2P 0.9.51).
 
-#### func  NewTunnelBuilder
-
-```go
-func NewTunnelBuilder(records [8]BuildRequestRecord) TunnelBuilder
-```
-NewTunnelBuilder creates a new TunnelBuild and returns it as TunnelBuilder
-interface
-
-#### func  NewVariableTunnelBuilder
-
-```go
-func NewVariableTunnelBuilder(records []BuildRequestRecord) TunnelBuilder
-```
-NewVariableTunnelBuilder creates a new VariableTunnelBuild and returns it as
-TunnelBuilder interface
-
 #### type TunnelCarrier
 
 ```go
 type TunnelCarrier interface {
 	GetTunnelData() []byte
-	GetTunnelID() tunnel.TunnelID
+	GetTunnelID() buildrecord.TunnelID
 }
 ```
 
@@ -3212,7 +3381,7 @@ EncryptedData(1008) = 1028 bytes.
 #### func  NewTunnelCarrier
 
 ```go
-func NewTunnelCarrier(tunnelID tunnel.TunnelID, data [1024]byte) TunnelCarrier
+func NewTunnelCarrier(tunnelID buildrecord.TunnelID, data [1024]byte) TunnelCarrier
 ```
 NewTunnelCarrier creates a new TunnelData message and returns it as
 TunnelCarrier interface.
@@ -3249,14 +3418,14 @@ TunnelData.
 #### func (*TunnelData) SetTunnelID
 
 ```go
-func (td *TunnelData) SetTunnelID(id tunnel.TunnelID)
+func (td *TunnelData) SetTunnelID(id buildrecord.TunnelID)
 ```
 SetTunnelID sets the 4-byte tunnel identifier in the TunnelData.
 
 #### func (*TunnelData) TunnelID
 
 ```go
-func (td *TunnelData) TunnelID() tunnel.TunnelID
+func (td *TunnelData) TunnelID() buildrecord.TunnelID
 ```
 TunnelID extracts the 4-byte tunnel identifier from the TunnelData.
 
@@ -3266,7 +3435,7 @@ TunnelID extracts the 4-byte tunnel identifier from the TunnelData.
 type TunnelDataHandler interface {
 	// HandleTunnelData processes an incoming TunnelData message by looking up the
 	// tunnel endpoint, decrypting the payload, and delivering it to the owning session.
-	HandleTunnelData(msg I2NPMessage) error
+	HandleTunnelData(msg Message) error
 }
 ```
 
@@ -3280,8 +3449,8 @@ session.
 ```go
 type TunnelDataMessage struct {
 	*BaseI2NPMessage
-	TunnelID tunnel.TunnelID // 4-byte tunnel identifier
-	Data     [1024]byte      // Fixed size encrypted tunnel data
+	TunnelID buildrecord.TunnelID // 4-byte tunnel identifier
+	Data     [1024]byte           // Fixed size encrypted tunnel data
 }
 ```
 
@@ -3295,7 +3464,7 @@ https://geti2p.net/spec/i2np#tunneldata
 #### func  NewTunnelDataMessage
 
 ```go
-func NewTunnelDataMessage(tunnelID tunnel.TunnelID, data [1024]byte) *TunnelDataMessage
+func NewTunnelDataMessage(tunnelID buildrecord.TunnelID, data [1024]byte) *TunnelDataMessage
 ```
 NewTunnelDataMessage creates a new TunnelData message with the given tunnel ID
 and data.
@@ -3310,7 +3479,7 @@ GetTunnelData returns the 1024-byte tunnel data (without the TunnelID prefix).
 #### func (*TunnelDataMessage) GetTunnelID
 
 ```go
-func (t *TunnelDataMessage) GetTunnelID() tunnel.TunnelID
+func (t *TunnelDataMessage) GetTunnelID() buildrecord.TunnelID
 ```
 GetTunnelID returns the tunnel identifier for this message.
 
@@ -3327,7 +3496,7 @@ UnmarshalBinary deserializes a TunnelData message. The payload must be exactly
 ```go
 type TunnelGateway struct {
 	*BaseI2NPMessage
-	TunnelID tunnel.TunnelID
+	TunnelID buildrecord.TunnelID
 	Length   int
 	Data     []byte
 }
@@ -3339,7 +3508,7 @@ data through a tunnel gateway.
 #### func  NewTunnelGatewayMessage
 
 ```go
-func NewTunnelGatewayMessage(tunnelID tunnel.TunnelID, payload []byte) *TunnelGateway
+func NewTunnelGatewayMessage(tunnelID buildrecord.TunnelID, payload []byte) *TunnelGateway
 ```
 NewTunnelGatewayMessage creates a new TunnelGateway message
 
@@ -3356,7 +3525,7 @@ UnmarshalBinary deserializes a TunnelGateway message
 type TunnelGatewayHandler interface {
 	// HandleGateway processes an incoming TunnelGateway message by looking up the tunnel,
 	// encrypting the payload, and forwarding it to the next hop.
-	HandleGateway(tunnelID tunnel.TunnelID, payload []byte) error
+	HandleGateway(tunnelID buildrecord.TunnelID, payload []byte) error
 }
 ```
 
@@ -3369,8 +3538,8 @@ resulting TunnelData message to the next hop.
 
 ```go
 type TunnelIdentifier interface {
-	GetReceiveTunnel() tunnel.TunnelID
-	GetNextTunnel() tunnel.TunnelID
+	GetReceiveTunnel() buildrecord.TunnelID
+	GetNextTunnel() buildrecord.TunnelID
 }
 ```
 
@@ -3379,7 +3548,7 @@ TunnelIdentifier represents types that identify tunnel endpoints
 #### func  CreateTunnelRecord
 
 ```go
-func CreateTunnelRecord(receiveTunnel, nextTunnel tunnel.TunnelID,
+func CreateTunnelRecord(receiveTunnel, nextTunnel buildrecord.TunnelID,
 	ourIdent, nextIdent common.Hash,
 ) TunnelIdentifier
 ```
@@ -3430,15 +3599,6 @@ pending build request with reply decryption keys 4. Sends the build request via
 appropriate transport 5. Returns the tunnel ID, selected peer hashes, and any
 error
 
-#### func (*TunnelManager) BuildTunnelWithBuilder
-
-```go
-func (tm *TunnelManager) BuildTunnelWithBuilder(builder TunnelBuilder) error
-```
-BuildTunnelWithBuilder builds a tunnel using the i2np.TunnelBuilder message
-interface. This is used for message routing and differs from BuildTunnel
-(tunnel.BuilderInterface).
-
 #### func (*TunnelManager) GetBuildAvgTimeMs
 
 ```go
@@ -3476,6 +3636,22 @@ GetBuildSuccessCount returns the number of successful tunnel builds within
 windowMs milliseconds. Maps to the Java I2P stat
 "tunnel.buildExploratorySuccess".
 
+#### func (*TunnelManager) GetClientBuildExpireCount
+
+```go
+func (tm *TunnelManager) GetClientBuildExpireCount(windowMs int64) float64
+```
+GetClientBuildExpireCount returns the number of timed-out I2CP client session
+tunnel builds within windowMs milliseconds.
+
+#### func (*TunnelManager) GetClientBuildRejectCount
+
+```go
+func (tm *TunnelManager) GetClientBuildRejectCount(windowMs int64) float64
+```
+GetClientBuildRejectCount returns the number of explicitly rejected I2CP client
+session tunnel builds within windowMs milliseconds.
+
 #### func (*TunnelManager) GetClientBuildSuccessCount
 
 ```go
@@ -3498,14 +3674,6 @@ GetInboundPool returns the inbound tunnel pool.
 func (tm *TunnelManager) GetOutboundPool() *tunnel.Pool
 ```
 GetOutboundPool returns the outbound tunnel pool.
-
-#### func (*TunnelManager) GetPool
-
-```go
-func (tm *TunnelManager) GetPool() *tunnel.Pool
-```
-GetPool returns the outbound tunnel pool for backward compatibility. Deprecated:
-Use GetInboundPool() or GetOutboundPool() for specific pools.
 
 #### func (*TunnelManager) ProcessTunnelBuildReply
 
@@ -3535,6 +3703,23 @@ SetGarlicKeyRegistrar wires the GarlicKeyRegistrar so that one-time garlic reply
 keys derived from STBM builds can be registered for later decryption. Must be
 called before the first tunnel build is initiated.
 
+#### func (*TunnelManager) SetInboundHandler
+
+```go
+func (tm *TunnelManager) SetInboundHandler(h InboundHandlerRegistrar)
+```
+SetInboundHandler wires the InboundHandlerRegistrar so that newly-active inbound
+tunnels are registered as control-plane (exploratory) endpoints. Must be called
+before tunnel builds begin.
+
+#### func (*TunnelManager) SetMessageFactory
+
+```go
+func (tm *TunnelManager) SetMessageFactory(factory build.BuildMessageFactory)
+```
+SetMessageFactory sets the factory for creating serialized I2NP tunnel build
+messages. Must be called before tunnel building begins.
+
 #### func (*TunnelManager) SetOurRouterHash
 
 ```go
@@ -3544,6 +3729,14 @@ SetOurRouterHash propagates our router's identity hash to both tunnel pools so
 they can populate the ReplyGateway field in build requests. Without this, the
 last hop in every tunnel build sends its reply to an all-zeros peer and the
 reply is never received.
+
+#### func (*TunnelManager) SetPeerSelector
+
+```go
+func (tm *TunnelManager) SetPeerSelector(selector tunnel.PeerSelector)
+```
+SetPeerSelector replaces the peer selector and rebuilds the tunnel pools. If
+pools are already active they are stopped before the new ones are created.
 
 #### func (*TunnelManager) SetSessionProvider
 
@@ -3561,46 +3754,89 @@ Stop gracefully stops the tunnel manager and cleans up resources. Safe to call
 multiple times — subsequent calls are no-ops. Should be called when shutting
 down the router.
 
-#### type TunnelReplyHandler
+#### type TunnelOrchestrator
 
 ```go
-type TunnelReplyHandler interface {
-	GetReplyRecords() []BuildResponseRecord
-	// GetRawReplyRecords returns the raw encrypted record bytes before parsing.
-	// This is needed for decryption: re-serializing parsed records corrupts
-	// the original ciphertext. Returns nil if raw records were not preserved.
-	GetRawReplyRecords() [][]byte
-	ProcessReply() error
+type TunnelOrchestrator interface {
+	TunnelBuildCoordinator
+	TunnelStatsReader
+	// SetInboundHandler wires the InboundHandlerRegistrar so that newly-active
+	// inbound tunnels are registered as control-plane endpoints (C-1 fix).
+	SetInboundHandler(h InboundHandlerRegistrar)
 }
 ```
 
-TunnelReplyHandler represents types that handle tunnel build replies
+TunnelOrchestrator defines the full interface for the tunnel build coordinator.
+It composes TunnelBuildCoordinator and TunnelStatsReader into a single seam for
+callers that need the complete surface (e.g. router wiring). Consumers that only
+need a subset should depend on TunnelBuildCoordinator or TunnelStatsReader
+directly.
+
+TunnelOrchestrator structurally satisfies:
+
+    - tunnel.BuilderInterface    (BuildTunnel — used by i2cp.Server.SetTunnelBuilder)
+    - TunnelBuildReplyProcessor  (ProcessTunnelBuildReply — used by MessageProcessor)
+
+#### type TunnelReplyHandler
+
+```go
+type TunnelReplyHandler = build.TunnelReplyHandler
+```
+
+TunnelReplyHandler represents types that handle tunnel build replies -
+re-exported from lib/tunnel/build
+
+#### type TunnelStatsReader
+
+```go
+type TunnelStatsReader interface {
+	// Pool access
+	GetInboundPool() *tunnel.Pool
+	GetOutboundPool() *tunnel.Pool
+
+	// Build metrics
+	GetBuildSuccessCount(windowMs int64) float64
+	GetBuildRejectCount(windowMs int64) float64
+	GetBuildExpireCount(windowMs int64) float64
+	GetBuildAvgTimeMs(windowMs int64) float64
+	GetClientBuildSuccessCount(windowMs int64) float64
+	GetClientBuildRejectCount(windowMs int64) float64
+	GetClientBuildExpireCount(windowMs int64) float64
+}
+```
+
+TunnelStatsReader is the narrow interface needed by I2PControl and router status
+reporters. It covers pool access and build-metrics reads — the operations that
+belong to the observability layer. Any substitute only needs to implement these
+10 methods.
 
 #### type VariableTunnelBuild
 
 ```go
 type VariableTunnelBuild struct {
-	Count               int
-	BuildRequestRecords []BuildRequestRecord
 }
 ```
 
 VariableTunnelBuild represents an I2NP VariableTunnelBuild message containing a
 variable number of build request records for tunnel construction.
 
+NOTE: This type is retained for receive-side parsing and spec-compliance
+record-count validation only. The send-side constructor has been removed —
+production builds use ShortTunnelBuild (STBM, type 25) exclusively.
+
 #### func (*VariableTunnelBuild) GetBuildRecords
 
 ```go
-func (v *VariableTunnelBuild) GetBuildRecords() []BuildRequestRecord
+func (s *VariableTunnelBuild) GetBuildRecords() []BuildRequestRecord
 ```
-GetBuildRecords returns the build request records
+GetBuildRecords returns the build request records.
 
 #### func (*VariableTunnelBuild) GetRecordCount
 
 ```go
-func (v *VariableTunnelBuild) GetRecordCount() int
+func (s *VariableTunnelBuild) GetRecordCount() int
 ```
-GetRecordCount returns the number of build records
+GetRecordCount returns the number of build records.
 
 #### type VariableTunnelBuildReply
 
@@ -3614,6 +3850,11 @@ type VariableTunnelBuildReply struct {
 
 VariableTunnelBuildReply represents an I2NP VariableTunnelBuildReply message
 containing a variable number of build response records.
+
+NOTE (0.2.0 consolidation opportunity): This type shares GetReplyRecords() and
+GetRawReplyRecords() accessors with TunnelBuildReply, differing only in backing
+storage ([8]array vs []slice). See tunnel_build.go for the full context on
+consolidating fixed/variable accessors into a generic recordSet[T] type.
 
 #### func (*VariableTunnelBuildReply) GetRawReplyRecords
 
@@ -3638,11 +3879,3 @@ ProcessReply processes the variable tunnel build reply by analyzing each
 response record. Similar to TunnelBuildReply but handles variable-length tunnels
 (1-8 hops). Validates response integrity and determines tunnel build
 success/failure.
-
-
-
-i2np 
-
-github.com/go-i2p/go-i2p/lib/i2np
-
-[go-i2p template file](template.md)

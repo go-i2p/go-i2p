@@ -338,13 +338,13 @@ func TestValidateRouterInfoOptionKeys_AllSpecKeys(t *testing.T) {
 	assert.NoError(t, ValidateRouterInfoOptionKeys(options), "all spec keys")
 }
 
-func TestValidateRouterInfoOptionKeys_DeprecatedKeysAccepted(t *testing.T) {
+func TestValidateRouterInfoOptionKeys_DeprecatedKeysRejected(t *testing.T) {
 	options := map[string]string{
 		"router.version": "0.9.64",
 		"coreVersion":    "0.9.64",
 		"stat_uptime":    "3600",
 	}
-	assert.NoError(t, ValidateRouterInfoOptionKeys(options), "deprecated keys")
+	assert.Error(t, ValidateRouterInfoOptionKeys(options), "deprecated keys removed in 0.9.24 must be rejected")
 }
 
 func TestValidateRouterInfoOptionKeys_StatPrefixAccepted(t *testing.T) {

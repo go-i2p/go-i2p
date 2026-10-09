@@ -1,6 +1,7 @@
 package i2pcontrol
 
 import (
+	"context"
 	"net"
 
 	"github.com/go-i2p/go-i2p/lib/config"
@@ -106,8 +107,9 @@ type RouterController interface {
 	// Stop initiates graceful shutdown of the router.
 	Stop()
 
-	// Reseed triggers a manual NetDB reseed operation.
-	Reseed() error
+	// ReseedWithContext triggers a manual NetDB reseed operation with
+	// cancellation support.
+	ReseedWithContext(context.Context) error
 }
 
 // RouterAccess defines the minimal interface needed to collect router statistics.

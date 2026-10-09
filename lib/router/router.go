@@ -502,13 +502,6 @@ func (r *Router) IsReseeding() bool {
 	return r.isReseeding
 }
 
-// Reseed triggers an explicit NetDB reseed operation.
-// This can be called via I2PControl to manually repopulate the network database.
-// It runs in the current goroutine and returns any error encountered.
-func (r *Router) Reseed() error {
-	return r.ReseedWithContext(context.Background())
-}
-
 // ReseedWithContext triggers an explicit NetDB reseed operation and propagates
 // cancellation to bootstrap retrieval.
 func (r *Router) ReseedWithContext(ctx context.Context) error {

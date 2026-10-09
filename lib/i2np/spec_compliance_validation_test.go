@@ -25,7 +25,6 @@ import (
 	"github.com/go-i2p/crypto/types"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 
-	aescbc "github.com/go-i2p/crypto/aes"
 	noiseratchet "github.com/go-i2p/go-noise/ratchet"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -2923,11 +2922,11 @@ func TestTunnelBuild_RecordFormat_ParseRoundTrip(t *testing.T) {
 // TestTunnelBuild_ReplyProcessing_ReplyCodes verifies all defined reply codes.
 func TestTunnelBuild_ReplyProcessing_ReplyCodes(t *testing.T) {
 	assert.Equal(t, byte(0x00), byte(TunnelBuildReplySuccess), "SUCCESS = 0x00")
-	assert.Equal(t, byte(0x01), byte(TunnelBuildReplyReject), "REJECT = 0x01")
+	assert.Equal(t, byte(0x01), byte(TunnelBuildReplyProbabilisticRejectionLegacy), "REJECT = 0x01")
 	assert.Equal(t, byte(0x02), byte(TunnelBuildReplyOverload), "OVERLOAD = 0x02")
 	assert.Equal(t, byte(0x03), byte(TunnelBuildReplyBandwidth), "BANDWIDTH = 0x03")
 	assert.Equal(t, byte(0x04), byte(TunnelBuildReplyInvalid), "INVALID = 0x04")
-	assert.Equal(t, byte(0x05), byte(TunnelBuildReplyExpired), "EXPIRED = 0x05")
+	assert.Equal(t, byte(0x05), byte(TunnelBuildReplyCritical), "EXPIRED = 0x05")
 }
 
 // makeTestResponseRecords creates n BuildResponseRecords all with TunnelBuildReplySuccess.
@@ -2954,7 +2953,7 @@ func TestTunnelBuild_ReplyProcessing_OneReject(t *testing.T) {
 	records := makeTestResponseRecords(8)
 	// Override record 3 with a rejection
 	rd := makeRandomData(func(j int) byte { return byte(3 + j%256) })
-	records[3] = CreateBuildResponseRecord(TunnelBuildReplyReject, rd)
+	records[3] = CreateBuildResponseRecord(TunnelBuildReplyProbabilisticRejectionLegacy, rd)
 
 	reply := &TunnelBuildReply{Records: [8]BuildResponseRecord(records)}
 	err := reply.ProcessReply()
@@ -3360,24 +3359,15 @@ func TestCryptoAudit_SessionTagRatchet_Prop144Section5(t *testing.T) {
 // Section 6 — Legacy (Receive-Path Interop) Crypto
 // ============================================================================
 
-// TestLegacyCrypto_ElGamalBuildRecords_FlagPresence documents the presence of
+// TestLegacyCrypto_LongFormatBuildRecords_FlagPresence documents the presence of
 // 528-byte long-format build record types. These are NOT ElGamal — they use
 // ECIES-X25519-AEAD (see EncryptBuildRequestRecord). The 528-byte long format
 // is retained for RECEIVE-path interop with pre-STBM peers; the send path uses
 // 218-byte ECIES short records (STBM, proposal 152).
-func TestLegacyCrypto_ElGamalBuildRecords_FlagPresence(t *testing.T) {
+func TestLegacyCrypto_LongFormatBuildRecords_FlagPresence(t *testing.T) {
 	// StandardBuildRecordSize = 528 is the ECIES long-format record size
 	assert.Equal(t, 528, StandardBuildRecordSize,
 		"StandardBuildRecordSize (528) is the ECIES long-format record size")
-
-	// Document: BuildResponseRecordELGamalAES and BuildResponseRecordELGamal types exist
-	var elgamalAES BuildResponseRecordELGamalAES
-	assert.Equal(t, 528, len(elgamalAES),
-		"BuildResponseRecordELGamalAES [528]byte type exists — ECIES long-format record")
-
-	var elgamal BuildResponseRecordELGamal
-	assert.Equal(t, 528, len(elgamal),
-		"BuildResponseRecordELGamal [528]byte type exists — ECIES long-format record")
 
 	// TunnelBuild uses 8×528 = 4224 byte format (receive-path interop)
 	var tb TunnelBuild
@@ -3385,33 +3375,7 @@ func TestLegacyCrypto_ElGamalBuildRecords_FlagPresence(t *testing.T) {
 	assert.Equal(t, 4224, totalSize,
 		"TunnelBuild uses 528-byte records (ECIES long format)")
 
-	t.Log("NOTE: 528-byte long-format build record types are present for receive-path interop.")
+	t.Log("NOTE: 528-byte long-format build records are present for receive-path interop.")
 	t.Log("The modern send path uses ECIES-only 218-byte short records (STBM).")
 	t.Log("528-byte records remain so this router can parse builds/replies from older peers.")
-}
-
-// TestLegacyCrypto_AESBuildRecordDecryption_FlagPresence flags the AES-256-CBC
-// decryption path for legacy reply record processing.
-// AES-256-CBC was removed from go-noise/ratchet; this test now validates the
-// go-i2p/crypto/aes path used for backward-compatible decryption.
-func TestLegacyCrypto_AESBuildRecordDecryption_FlagPresence(t *testing.T) {
-	// Prepare a valid 528-byte ciphertext (all zeros, AES will decrypt it)
-	ciphertext := make([]byte, 528)
-	var key [32]byte
-	var iv [16]byte
-
-	// AES-256-CBC decryption is now done via go-i2p/crypto/aes directly
-	decrypter := &aescbc.AESSymmetricDecrypter{
-		Key: key[:],
-		IV:  iv[:],
-	}
-	result, err := decrypter.DecryptNoPadding(ciphertext)
-	// AES decryption of zeros with zero key/IV will succeed (just produces garbage plaintext)
-	require.NoError(t, err)
-	assert.Equal(t, 528, len(result),
-		"Legacy AES-256-CBC decryption path exists via go-i2p/crypto/aes")
-
-	t.Log("FINDING: AES-256-CBC decryption path now uses go-i2p/crypto/aes directly.")
-	t.Log("This is used for legacy build reply record decryption (pre-0.9.44).")
-	t.Log("Modern path uses ChaCha20-Poly1305 via go-noise/ratchet.")
 }

@@ -2,6 +2,7 @@ package i2pcontrol
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -43,9 +44,9 @@ func (m *mockServerStatsProvider) GetNetworkStatus() int {
 
 func (m *mockServerStatsProvider) GetRouterControl() interface {
 	Stop()
-	Reseed() error
+	ReseedWithContext(context.Context) error
 } {
-	// Return a simple mock that implements Stop() and Reseed()
+	// Return a simple mock that implements Stop() and ReseedWithContext()
 	return mockStopControl{}
 }
 
@@ -56,8 +57,8 @@ func (m *mockServerStatsProvider) GetLocalRouterIdentityHash() (string, error) {
 
 type mockStopControl struct{}
 
-func (mockStopControl) Stop()         {}
-func (mockStopControl) Reseed() error { return nil }
+func (mockStopControl) Stop()                                       {}
+func (mockStopControl) ReseedWithContext(ctx context.Context) error { return nil }
 
 // testConfig creates a test I2PControl configuration
 func testConfig(port int) *config.I2PControlConfig {

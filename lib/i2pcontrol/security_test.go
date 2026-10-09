@@ -176,7 +176,7 @@ func (m *mockStatsForAuth) GetNetworkStatus() int {
 
 func (m *mockStatsForAuth) GetRouterControl() interface {
 	Stop()
-	Reseed() error
+	ReseedWithContext(context.Context) error
 } {
 	return &mockStopCtrl{}
 }
@@ -188,8 +188,8 @@ func (m *mockStatsForAuth) GetLocalRouterIdentityHash() (string, error) {
 
 type mockStopCtrl struct{}
 
-func (m *mockStopCtrl) Stop()         {}
-func (m *mockStopCtrl) Reseed() error { return nil }
+func (m *mockStopCtrl) Stop()                                       {}
+func (m *mockStopCtrl) ReseedWithContext(ctx context.Context) error { return nil }
 
 // setupAuthTestServer creates a configured I2PControl server with an httptest server for testing.
 // Returns the server, the test HTTP server URL, and a cleanup function.
@@ -197,30 +197,10 @@ func setupAuthTestServer(t *testing.T) (*Server, *httptest.Server) {
 	t.Helper()
 	stats := &mockStatsForAuth{running: true}
 	cfg := &config.I2PControlConfig{
-		Enabled:    true,
-		Address:    "127.0.0.1:0",
-		Password:   "testpassword",
-		UseHTTPS:   false,
-		StrictAuth: false,
-	}
-
-	server, err := NewServer(cfg, stats)
-	require.NoError(t, err)
-
-	ts := httptest.NewServer(http.HandlerFunc(server.handleRPC))
-	t.Cleanup(func() { ts.Close() })
-	return server, ts
-}
-
-func setupStrictAuthTestServer(t *testing.T) (*Server, *httptest.Server) {
-	t.Helper()
-	stats := &mockStatsForAuth{running: true}
-	cfg := &config.I2PControlConfig{
-		Enabled:    true,
-		Address:    "127.0.0.1:0",
-		Password:   "testpassword",
-		UseHTTPS:   false,
-		StrictAuth: true,
+		Enabled:  true,
+		Address:  "127.0.0.1:0",
+		Password: "testpassword",
+		UseHTTPS: false,
 	}
 
 	server, err := NewServer(cfg, stats)
@@ -257,9 +237,9 @@ func TestAuthorizationRequiredForProtectedMethods(t *testing.T) {
 	}
 }
 
-// TestAuthorizationRequiredForProtectedMethodsStrict verifies protected methods require authentication when strict_auth=true.
+// TestAuthorizationRequiredForProtectedMethodsStrict verifies protected methods require authentication.
 func TestAuthorizationRequiredForProtectedMethodsStrict(t *testing.T) {
-	_, ts := setupStrictAuthTestServer(t)
+	_, ts := setupAuthTestServer(t)
 
 	protectedMethods := []string{
 		"GetRate",
@@ -313,9 +293,9 @@ func TestAuthorizationInvalidTokenRejected(t *testing.T) {
 	}
 }
 
-// TestAuthorizationInvalidTokenRejectedStrict verifies invalid tokens are rejected when strict_auth=true.
+// TestAuthorizationInvalidTokenRejectedStrict verifies invalid tokens are rejected.
 func TestAuthorizationInvalidTokenRejectedStrict(t *testing.T) {
-	_, ts := setupStrictAuthTestServer(t)
+	_, ts := setupAuthTestServer(t)
 
 	rpcResp := postRPC(t, ts.URL, "RouterInfo", map[string]interface{}{
 		"Token": "invalid_fake_token_12345",
@@ -790,10 +770,10 @@ func (m *mockRouterAccessBandwidth) GetTransportAddr() net.Addr { return nil }
 func (m *mockRouterAccessBandwidth) GetBandwidthRates1s() (inbound, outbound uint64) {
 	return m.inbound / 2, m.outbound / 2
 }
-func (m *mockRouterAccessBandwidth) GetNetworkStatus() int { return 0 }
-func (m *mockRouterAccessBandwidth) GetSSU2Addr() net.Addr { return nil }
-func (m *mockRouterAccessBandwidth) Stop()                 {}
-func (m *mockRouterAccessBandwidth) Reseed() error         { return nil }
+func (m *mockRouterAccessBandwidth) GetNetworkStatus() int                       { return 0 }
+func (m *mockRouterAccessBandwidth) GetSSU2Addr() net.Addr                       { return nil }
+func (m *mockRouterAccessBandwidth) Stop()                                       {}
+func (m *mockRouterAccessBandwidth) ReseedWithContext(ctx context.Context) error { return nil }
 func (m *mockRouterAccessBandwidth) GetLocalRouterIdentityHash() (string, error) {
 	return "test-router-hash", nil
 }
@@ -836,8 +816,8 @@ func TestBandwidthStatsHandlerIntegration(t *testing.T) {
 	ctx := context.Background()
 
 	params, _ := json.Marshal(map[string]interface{}{
-		"i2p.router.net.bw.inbound.15s":  nil,
-		"i2p.router.net.bw.outbound.15s": nil,
+		"Stat":   "bw.inboundRate",
+		"Period": 15000,
 	})
 
 	result, err := handler.Handle(ctx, params)
@@ -846,16 +826,8 @@ func TestBandwidthStatsHandlerIntegration(t *testing.T) {
 	resultMap, ok := result.(map[string]interface{})
 	require.True(t, ok, "Expected map result, got %T", result)
 
-	// Verify expected fields are present
-	assert.Contains(t, resultMap, "i2p.router.net.bw.inbound.15s")
-	assert.Contains(t, resultMap, "i2p.router.net.bw.outbound.15s")
-
-	// Values should match what mockStatsForAuth returns
-	expectedInbound := float64(1000)
-	expectedOutbound := float64(2000)
-
-	assert.Equal(t, expectedInbound, resultMap["i2p.router.net.bw.inbound.15s"])
-	assert.Equal(t, expectedOutbound, resultMap["i2p.router.net.bw.outbound.15s"])
+	// Stat/Period style returns {"Result": float64}
+	assert.Contains(t, resultMap, "Result")
 }
 
 // TestBandwidthStatsConcurrentAccess verifies thread-safe bandwidth stat access.
@@ -881,30 +853,6 @@ func TestBandwidthStatsConcurrentAccess(t *testing.T) {
 	}
 
 	wg.Wait()
-}
-
-// TestBandwidthStatsSelectiveFieldRequest verifies only requested fields are returned.
-func TestBandwidthStatsSelectiveFieldRequest(t *testing.T) {
-	stats := &mockStatsForAuth{running: true}
-	handler := NewGetRateHandler(stats)
-	ctx := context.Background()
-
-	// Request only inbound
-	params, _ := json.Marshal(map[string]interface{}{
-		"i2p.router.net.bw.inbound.15s": nil,
-	})
-
-	result, err := handler.Handle(ctx, params)
-	require.NoError(t, err)
-
-	resultMap, ok := result.(map[string]interface{})
-	require.True(t, ok, "Expected map result, got %T", result)
-
-	assert.Contains(t, resultMap, "i2p.router.net.bw.inbound.15s")
-
-	// Outbound should not be in response when only inbound was requested
-	assert.NotContains(t, resultMap, "i2p.router.net.bw.outbound.15s",
-		"Outbound field should not be present when not requested")
 }
 
 // =============================================================================

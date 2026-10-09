@@ -1,6 +1,7 @@
 package i2pcontrol
 
 import (
+	"context"
 	"net"
 	"testing"
 
@@ -77,7 +78,7 @@ func (m *mockRouterAccessForPeerStats) Stop() {
 	// Mock implementation - no-op for test
 }
 
-func (m *mockRouterAccessForPeerStats) Reseed() error {
+func (m *mockRouterAccessForPeerStats) ReseedWithContext(ctx context.Context) error {
 	return nil
 }
 

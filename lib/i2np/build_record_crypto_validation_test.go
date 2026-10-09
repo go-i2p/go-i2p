@@ -298,11 +298,11 @@ func TestBuildRecordCrypto_AllReplyCodes(t *testing.T) {
 
 	replyCodes := []byte{
 		TunnelBuildReplySuccess,
-		TunnelBuildReplyReject,
+		TunnelBuildReplyProbabilisticRejectionLegacy,
 		TunnelBuildReplyOverload,
 		TunnelBuildReplyBandwidth,
 		TunnelBuildReplyInvalid,
-		TunnelBuildReplyExpired,
+		TunnelBuildReplyCritical,
 		0xFF, // Unknown code
 	}
 
@@ -339,7 +339,7 @@ func replyCodeName(code byte) string {
 	switch code {
 	case TunnelBuildReplySuccess:
 		return "SUCCESS"
-	case TunnelBuildReplyReject:
+	case TunnelBuildReplyProbabilisticRejectionLegacy:
 		return "REJECT"
 	case TunnelBuildReplyOverload:
 		return "OVERLOAD"
@@ -347,7 +347,7 @@ func replyCodeName(code byte) string {
 		return "BANDWIDTH"
 	case TunnelBuildReplyInvalid:
 		return "INVALID"
-	case TunnelBuildReplyExpired:
+	case TunnelBuildReplyCritical:
 		return "EXPIRED"
 	default:
 		return "UNKNOWN"

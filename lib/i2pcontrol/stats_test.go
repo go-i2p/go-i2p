@@ -1,6 +1,7 @@
 package i2pcontrol
 
 import (
+	"context"
 	"net"
 	"os"
 	"testing"
@@ -107,7 +108,7 @@ func (m *mockRouterAccess) Stop() {
 	m.running = false
 }
 
-func (m *mockRouterAccess) Reseed() error {
+func (m *mockRouterAccess) ReseedWithContext(ctx context.Context) error {
 	return nil
 }
 

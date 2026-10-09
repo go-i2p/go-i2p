@@ -2,8 +2,6 @@
 --
     import "github.com/go-i2p/go-i2p/lib/config"
 
-![config.svg](config.svg)
-
 Package config provides configuration structures and defaults for go-i2p.
 
 Package config provides configuration management for go-i2p router.
@@ -121,9 +119,12 @@ default location.
 
 ```go
 var DefaultBootstrapConfig = BootstrapConfig{
-	LowPeerThreshold: 10,
-	BootstrapType:    "auto",
-	ReseedFilePath:   "",
+	LowPeerThreshold:    10,
+	ReseedTimeout:       60 * time.Second,
+	MinimumReseedPeers:  50,
+	ReseedRetryInterval: 5 * time.Minute,
+	BootstrapType:       "auto",
+	ReseedFilePath:      "",
 
 	ReseedServers: KnownReseedServers,
 
@@ -140,26 +141,29 @@ MinReseedServers defaults to DefaultMinReseedServers (2) matching Java I2P.
 
 ```go
 var DefaultI2CPConfig = I2CPConfig{
-	Enabled:          true,
-	Address:          fmt.Sprintf("localhost:%d", DefaultI2CPPort),
-	Network:          "tcp",
-	MaxSessions:      100,
-	MessageQueueSize: 64,
-	SessionTimeout:   30 * time.Minute,
-	ReadTimeout:      60 * time.Second,
-	WriteTimeout:     30 * time.Second,
+	Enabled:                    true,
+	Address:                    fmt.Sprintf("localhost:%d", DefaultI2CPPort),
+	Network:                    "tcp",
+	MaxSessions:                100,
+	AllowInsecureCleartextAuth: false,
+	MessageQueueSize:           64,
+	SessionTimeout:             30 * time.Minute,
+	ReadTimeout:                60 * time.Second,
+	WriteTimeout:               30 * time.Second,
 }
 ```
 DefaultI2CPConfig provides default I2CP server configuration
 
 ```go
 var DefaultNetDBConfig = NetDBConfig{
-	Path:                     filepath.Join(defaultConfig(), "netDb"),
-	MaxRouterInfos:           5000,
-	MaxLeaseSets:             1000,
-	ExpirationCheckInterval:  1 * time.Minute,
-	LeaseSetRefreshThreshold: 2 * time.Minute,
-	ExplorationInterval:      5 * time.Minute,
+	Path:                                    filepath.Join(defaultConfig(), "netDb"),
+	MaxRouterInfos:                          5000,
+	MaxLeaseSets:                            1000,
+	ExpirationCheckInterval:                 1 * time.Minute,
+	LeaseSetRefreshThreshold:                2 * time.Minute,
+	ExplorationInterval:                     5 * time.Minute,
+	StrictRouterInfoNetworkValidation:       true,
+	RouterInfoAdmissionPressureThresholdPct: 80,
 }
 ```
 DefaultNetDBConfig holds the default settings for netdb.
@@ -168,19 +172,6 @@ DefaultNetDBConfig holds the default settings for netdb.
 var DefaultTransportConfig = buildTransportDefaults()
 ```
 DefaultTransportConfig provides default transport layer configuration
-
-```go
-var DeprecatedRouterInfoOptionKeys = map[string]string{
-	"coreVersion": "Core library version (DEPRECATED: removed in 0.9.24, never used)",
-	"stat_uptime": "Router uptime statistics (DEPRECATED: removed in 0.9.24, unused since 0.7.9)",
-}
-```
-DeprecatedRouterInfoOptionKeys contains keys that were once valid but have been
-removed from the I2P spec. They are accepted without error but should not be
-emitted by new routers.
-
-coreVersion: Never used, removed in release 0.9.24 stat_uptime: Unused since
-0.7.9, removed in 0.9.24
 
 ```go
 var KnownReseedServers = []*ReseedConfig{
@@ -427,7 +418,6 @@ ValidateRouterInfoOptionKeys checks that the given option keys map contains only
 spec-recognized keys. Returns an error listing any unrecognized keys.
 
 Keys matching the "stat_" prefix are allowed per spec (various statistics).
-Deprecated keys (coreVersion, stat_uptime) are accepted with a warning.
 
 This helps prevent accidental inclusion of proprietary or debug keys that could
 cause the RouterInfo to be rejected by other routers on the network.
@@ -511,6 +501,12 @@ type BootstrapConfig struct {
 	// LowPeerThreshold defines the minimum number of known peers before reseeding.
 	// If the router has fewer peers than this threshold, it will attempt to reseed.
 	LowPeerThreshold int
+	// ReseedTimeout is maximum time to wait for reseed operations.
+	ReseedTimeout time.Duration
+	// MinimumReseedPeers is minimum peers to acquire during reseed.
+	MinimumReseedPeers int
+	// ReseedRetryInterval is time between reseed attempts.
+	ReseedRetryInterval time.Duration
 	// BootstrapType specifies which bootstrap method to use exclusively.
 	// Valid values: "auto" (default, tries all methods), "file", "reseed", "local"
 	// When set to a specific type, only that method will be used.
@@ -790,6 +786,12 @@ type I2CPConfig struct {
 	// See Username for details.
 	Password string
 
+	// AllowInsecureCleartextAuth allows authenticated I2CP TCP binds on
+	// non-loopback addresses, even though credentials are sent in cleartext
+	// during handshake. Default: false (fail-closed). Enable only when an
+	// external TLS/front-proxy control is in place.
+	AllowInsecureCleartextAuth bool
+
 	// MessageQueueSize is the buffer size for outbound messages per session.
 	// Default: 64 messages.
 	MessageQueueSize int
@@ -829,6 +831,10 @@ type I2CPDefaults struct {
 	// MaxSessions is maximum concurrent I2CP sessions
 	// Default: 100 sessions
 	MaxSessions int
+
+	// AllowInsecureCleartextAuth allows authenticated non-loopback I2CP over
+	// cleartext TCP. Default: false (fail-closed).
+	AllowInsecureCleartextAuth bool
 
 	// MessageQueueSize is the buffer size for outbound messages per session
 	// Default: 64 messages
@@ -903,6 +909,16 @@ type I2PControlConfig struct {
 	// who front the router with their own TLS-terminating reverse proxy.
 	// When false (the default), a non-loopback bind must use HTTPS.
 	AllowPlaintextNonLoopback bool
+
+	// AllowDefaultPasswordNonLoopback, when true, allows the legacy default
+	// password on non-loopback binds for interoperability with existing tools.
+	// Default is false for safer-by-default deployments.
+	AllowDefaultPasswordNonLoopback bool
+
+	// CORSAllowedOrigins configures explicit CORS origin allowlist entries.
+	// When empty, the server derives safe localhost-oriented defaults from the
+	// configured listen port.
+	CORSAllowedOrigins []string
 }
 ```
 
@@ -967,6 +983,14 @@ type I2PControlDefaults struct {
 	// AllowPlaintextNonLoopback permits a non-loopback bind without HTTPS.
 	// Default: false (fail-closed for non-loopback plaintext binds).
 	AllowPlaintextNonLoopback bool
+
+	// AllowDefaultPasswordNonLoopback allows the default password on
+	// non-loopback binds for compatibility with legacy deployments.
+	AllowDefaultPasswordNonLoopback bool
+
+	// CORSAllowedOrigins explicitly whitelists browser origins for I2PControl.
+	// Empty means server-derived localhost-safe defaults.
+	CORSAllowedOrigins []string
 }
 ```
 
@@ -995,6 +1019,12 @@ type NetDBConfig struct {
 	ExplorationInterval time.Duration
 	// FloodfillEnabled determines if this router operates as a floodfill router
 	FloodfillEnabled bool
+	// StrictRouterInfoNetworkValidation enforces required RouterInfo network
+	// options (netId and router.version) on ingestion.
+	StrictRouterInfoNetworkValidation bool
+	// RouterInfoAdmissionPressureThresholdPct controls when per-source
+	// admission limits become active as cache pressure rises.
+	RouterInfoAdmissionPressureThresholdPct int
 }
 ```
 
@@ -1031,6 +1061,16 @@ type NetDBDefaults struct {
 	// FloodfillEnabled determines if this router acts as floodfill
 	// Default: false (regular router mode)
 	FloodfillEnabled bool
+
+	// StrictRouterInfoNetworkValidation enforces required network options
+	// on inbound RouterInfo entries.
+	// Default: true
+	StrictRouterInfoNetworkValidation bool
+
+	// RouterInfoAdmissionPressureThresholdPct sets the cache utilization
+	// percentage where source-based RouterInfo admission limits engage.
+	// Default: 80
+	RouterInfoAdmissionPressureThresholdPct int
 }
 ```
 
@@ -1104,6 +1144,10 @@ type RouterConfig struct {
 	// MaxBandwidthOut is the outbound bandwidth limit in bytes per second.
 	// Set to 0 to fall back to MaxBandwidth. Set to 0 with MaxBandwidth=0 for unlimited.
 	MaxBandwidthOut uint64
+	// BandwidthTier is the RouterInfo bandwidth capability letter (K/L/M/N/O/P/X).
+	// Set to "X" for X-class advertising in RouterInfo caps.
+	// Default: "" (auto-derived from configured bandwidth and session limits).
+	BandwidthTier string
 	// SharePercentage is the percentage (0–100) of bandwidth to share for transit tunnels.
 	// Default: 0 (no explicit limit — router participates if AcceptTunnels is true).
 	SharePercentage int
@@ -1169,11 +1213,12 @@ use without holding locks.
 #### func  NewRouterConfigFromViper
 
 ```go
-func NewRouterConfigFromViper() *RouterConfig
+func NewRouterConfigFromViper() (*RouterConfig, error)
 ```
 NewRouterConfigFromViper creates a new RouterConfig from current viper settings.
 This is the preferred way to get config instead of using the global
-RouterConfigProperties.
+RouterConfigProperties. Returns an error if the configuration is invalid (e.g.,
+custom reseed servers fail to parse).
 
 #### type RouterDefaults
 
@@ -1198,6 +1243,10 @@ type RouterDefaults struct {
 	// MaxConcurrentSessions is maximum number of active transport sessions
 	// Default: 200
 	MaxConcurrentSessions int
+
+	// BandwidthTier is the RouterInfo bandwidth capability letter (K/L/M/N/O/P/X).
+	// Default: "" (auto-derived from configured bandwidth/session limits).
+	BandwidthTier string
 }
 ```
 
@@ -1324,11 +1373,3 @@ SoftLimitParticipatingTunnels returns 50% of MaxParticipatingTunnels. The soft
 limit is always derived, not independently configured. Probabilistic rejection
 starts at the soft limit and increases toward 100% as we approach the hard
 limit.
-
-
-
-config 
-
-github.com/go-i2p/go-i2p/lib/config
-
-[go-i2p template file](template.md)

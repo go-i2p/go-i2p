@@ -169,29 +169,18 @@ i2pcontrol:
   # Listen address for I2PControl server
   # Default: localhost:7650 (I2PControl standard port)
   # WARNING: Binding to a non-loopback interface (e.g. 0.0.0.0) is refused by
-  # default when combined with use_https=false or the default password. See
-  # allow_plaintext_non_loopback and strict_auth below for the relevant opt-ins.
+  # default when combined with use_https=false. See allow_plaintext_non_loopback
+  # below for the relevant opt-in.
   address: "localhost:7650"
   
   # Password for authentication
-  # Default: "itoopie" — retained ONLY for backward-compatibility with upstream
-  # Java I2P I2PControl clients and third-party monitoring dashboards that
-  # hard-code this value. It is NOT safe for production:
-  #   * Any co-resident local user can authenticate and invoke router control
-  #     methods (shutdown, restart, network-setting changes).
-  #   * Combined with use_https=false, the password is also visible to anyone
-  #     with CAP_NET_RAW or tcpdump access on the host.
-  # Production operators should change this password AND enable HTTPS, or set
-  # strict_auth=true (below) to refuse the default entirely.
-  password: "itoopie"
+  # The well-known default "itoopie" is REFUSED at startup. A random password
+  # is generated when the config file is first created. Operators must set a
+  # non-default password here.
+  password: "CHANGE_ME"
   
   # Enable HTTPS (recommended for remote access)
   use_https: false
-
-  # Strict authentication — when true, the server refuses to start if the
-  # password is still the well-known default "itoopie". Leave false to
-  # preserve interop with legacy I2PControl clients.
-  # strict_auth: false
 
   # Explicit browser CORS allowlist for /jsonrpc.
   # Leave unset to use safe localhost defaults derived from listen port:

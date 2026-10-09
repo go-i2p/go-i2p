@@ -209,7 +209,7 @@ type mockParticipantManager struct {
 func newMockParticipantManager(acceptAll bool) *mockParticipantManager {
 	return &mockParticipantManager{
 		acceptAll:    acceptAll,
-		rejectCode:   TunnelBuildReplyReject,
+		rejectCode:   TunnelBuildReplyProbabilisticRejectionLegacy,
 		rejectReason: "mock rejection",
 	}
 }
@@ -281,7 +281,7 @@ func createSuccessfulTunnelBuildReply() *TunnelBuildReply {
 func createRejectedTunnelBuildReply() *TunnelBuildReply {
 	var reply TunnelBuildReply
 	for i := 0; i < 8; i++ {
-		reply.Records[i] = createValidResponseRecordWithReply(TunnelBuildReplyReject)
+		reply.Records[i] = createValidResponseRecordWithReply(TunnelBuildReplyProbabilisticRejectionLegacy)
 	}
 	return &reply
 }
@@ -292,7 +292,7 @@ func createMixedTunnelBuildReply() *TunnelBuildReply {
 	replyCodes := []byte{
 		TunnelBuildReplySuccess,
 		TunnelBuildReplySuccess,
-		TunnelBuildReplyReject,
+		TunnelBuildReplyProbabilisticRejectionLegacy,
 		TunnelBuildReplySuccess,
 		TunnelBuildReplyOverload,
 		TunnelBuildReplySuccess,
@@ -366,7 +366,7 @@ func createMixedVariableTunnelBuildReply(hopCount int) *VariableTunnelBuildReply
 	records := make([]BuildResponseRecord, hopCount)
 	replyCodes := []byte{
 		TunnelBuildReplySuccess,
-		TunnelBuildReplyReject,
+		TunnelBuildReplyProbabilisticRejectionLegacy,
 		TunnelBuildReplySuccess,
 		TunnelBuildReplyOverload,
 	}

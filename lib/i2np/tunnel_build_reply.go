@@ -27,10 +27,6 @@ const (
 	// TunnelBuildReplyPendingDecryption is an internal sentinel (0xFF) for reply
 	// records awaiting deferred decryption. Never transmitted on the wire.
 	TunnelBuildReplyPendingDecryption = replycodes.TunnelBuildReplyPendingDecryption
-
-	// Deprecated aliases for backward compatibility
-	TunnelBuildReplyReject  = replycodes.TunnelBuildReplyProbabilisticRejectionLegacy
-	TunnelBuildReplyExpired = replycodes.TunnelBuildReplyCritical
 )
 
 // TunnelBuildReply represents an I2NP TunnelBuildReply message containing exactly 8 build response records indicating the success or failure of a tunnel build request.

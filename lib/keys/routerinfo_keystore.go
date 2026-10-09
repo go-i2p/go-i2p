@@ -126,19 +126,7 @@ func ensureDirectoryExists(dir string) error {
 func loadOrGenerateKey(dir, name string) (types.PrivateKey, error) {
 	// Use the same naming convention as StoreKeys: name + ".key"
 	fullPath := filepath.Join(dir, name+".key")
-	// Also check the legacy path without ".key" suffix for backward compatibility
-	legacyPath := filepath.Join(dir, name)
 	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
-		// Check legacy path
-		if _, err := os.Stat(legacyPath); err == nil {
-			log.WithField("path", legacyPath).Debug("Loading existing key from legacy path")
-			keyData, err := os.ReadFile(legacyPath)
-			if err != nil {
-				log.WithError(err).Error("Failed to read legacy key file")
-				return nil, err
-			}
-			return loadExistingKey(keyData)
-		}
 		log.WithField("path", fullPath).Debug("Generating new key")
 		return generateNewKey()
 	}

@@ -49,7 +49,7 @@ func TestShortTunnelBuildReply(t *testing.T) {
 		t.Errorf("expected 3 records, got %d", reply.GetRecordCount())
 	}
 
-	retrievedRecords := reply.GetResponseRecords()
+	retrievedRecords := reply.GetReplyRecords()
 	if len(retrievedRecords) != 3 {
 		t.Errorf("expected 3 response records, got %d", len(retrievedRecords))
 	}

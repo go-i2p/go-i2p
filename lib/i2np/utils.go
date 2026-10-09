@@ -426,7 +426,7 @@ func processHopReplyCode(hopIndex int, replyCode byte, logPrefix string) (bool, 
 		log.WithField("hop_index", hopIndex).Debug(logPrefix + "Hop accepted tunnel build request")
 		return true, nil
 
-	case TunnelBuildReplyReject:
+	case TunnelBuildReplyProbabilisticRejectionLegacy:
 		log.WithField("hop_index", hopIndex).Warn(logPrefix + "Hop rejected tunnel build request")
 		return false, oops.Errorf("hop %d: rejected request", hopIndex)
 
@@ -442,7 +442,7 @@ func processHopReplyCode(hopIndex int, replyCode byte, logPrefix string) (bool, 
 		log.WithField("hop_index", hopIndex).Warn(logPrefix + "Hop received invalid request data")
 		return false, oops.Errorf("hop %d: invalid request data", hopIndex)
 
-	case TunnelBuildReplyExpired:
+	case TunnelBuildReplyCritical:
 		log.WithField("hop_index", hopIndex).Warn(logPrefix + "Hop request has expired")
 		return false, oops.Errorf("hop %d: request expired", hopIndex)
 

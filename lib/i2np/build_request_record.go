@@ -143,13 +143,6 @@ padding :: Data
 total length: 222
 */
 
-type (
-	// BuildRequestRecordElGamalAES stores a legacy fixed-size ElGamal/AES build request record.
-	BuildRequestRecordElGamalAES [528]byte
-	// BuildRequestRecordElGamal is a legacy alias for ElGamal/AES build request record bytes.
-	BuildRequestRecordElGamal [528]byte
-)
-
 // BuildRequestRecord is a type alias for buildrecord.BuildRequestRecord,
 // the canonical definition. Both lib/tunnel and lib/i2np share this type
 // without import cycles. Parsing, serialization, and accessor methods are

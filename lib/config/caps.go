@@ -273,17 +273,6 @@ var SpecRouterInfoOptionKeys = map[string]string{
 	"family.sig": "Router family signature (base64)",
 }
 
-// DeprecatedRouterInfoOptionKeys contains keys that were once valid but have
-// been removed from the I2P spec. They are accepted without error but should
-// not be emitted by new routers.
-//
-// coreVersion: Never used, removed in release 0.9.24
-// stat_uptime: Unused since 0.7.9, removed in 0.9.24
-var DeprecatedRouterInfoOptionKeys = map[string]string{
-	"coreVersion": "Core library version (DEPRECATED: removed in 0.9.24, never used)",
-	"stat_uptime": "Router uptime statistics (DEPRECATED: removed in 0.9.24, unused since 0.7.9)",
-}
-
 // statOptionPrefix is the prefix for spec-allowed statistics option keys.
 // The spec allows various stat_ keys (e.g., stat_tunnel.buildExploratoryExpire.60m).
 const statOptionPrefix = "stat_"
@@ -292,7 +281,6 @@ const statOptionPrefix = "stat_"
 // only spec-recognized keys. Returns an error listing any unrecognized keys.
 //
 // Keys matching the "stat_" prefix are allowed per spec (various statistics).
-// Deprecated keys (coreVersion, stat_uptime) are accepted with a warning.
 //
 // This helps prevent accidental inclusion of proprietary or debug keys that
 // could cause the RouterInfo to be rejected by other routers on the network.
@@ -300,13 +288,6 @@ func ValidateRouterInfoOptionKeys(options map[string]string) error {
 	var unknownKeys []string
 	for key := range options {
 		if _, ok := SpecRouterInfoOptionKeys[key]; ok {
-			continue
-		}
-		if _, ok := DeprecatedRouterInfoOptionKeys[key]; ok {
-			log.WithFields(logger.Fields{
-				"at":  "ValidateRouterInfoOptionKeys",
-				"key": key,
-			}).Warn("RouterInfo option key is deprecated per I2P spec")
 			continue
 		}
 		if strings.HasPrefix(key, statOptionPrefix) {

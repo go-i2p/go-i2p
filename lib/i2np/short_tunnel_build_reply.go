@@ -33,11 +33,6 @@ type ShortTunnelBuildReply struct {
 	RawRecordData        [][]byte // Original encrypted bytes before parsing
 }
 
-// GetResponseRecords returns the build response records (legacy method name)
-func (s *ShortTunnelBuildReply) GetResponseRecords() []BuildResponseRecord {
-	return s.BuildResponseRecords
-}
-
 // GetReplyRecords returns the build response records (TunnelReplyHandler interface)
 func (s *ShortTunnelBuildReply) GetReplyRecords() []BuildResponseRecord {
 	return s.BuildResponseRecords

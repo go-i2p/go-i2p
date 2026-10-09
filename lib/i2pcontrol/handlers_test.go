@@ -83,37 +83,6 @@ func TestEchoHandler_InvalidJSON(t *testing.T) {
 
 // Test GetRate Handler
 
-func TestGetRateHandler_AllFields(t *testing.T) {
-	handler := NewGetRateHandler(newStatsHandler(true, "0.1.0"))
-	resultMap := invokeHandler(t, handler, `{
-		"i2p.router.net.bw.inbound.15s": null,
-		"i2p.router.net.bw.outbound.15s": null
-	}`)
-
-	assert.Contains(t, resultMap, "i2p.router.net.bw.inbound.15s")
-	assert.Contains(t, resultMap, "i2p.router.net.bw.outbound.15s")
-
-	// Should return actual bandwidth from mock (1024 bytes/sec from GetBandwidthRates)
-	assert.Equal(t, 0.0, resultMap["i2p.router.net.bw.inbound.15s"])
-	assert.Equal(t, 1024.0, resultMap["i2p.router.net.bw.outbound.15s"])
-}
-
-func TestGetRateHandler_SingleField(t *testing.T) {
-	handler := NewGetRateHandler(newStatsHandler(true, "0.1.0"))
-	resultMap := invokeHandler(t, handler, `{"i2p.router.net.bw.inbound.15s": null}`)
-
-	assert.Contains(t, resultMap, "i2p.router.net.bw.inbound.15s")
-	assert.NotContains(t, resultMap, "i2p.router.net.bw.outbound.15s")
-}
-
-func TestGetRateHandler_NoFields(t *testing.T) {
-	handler := NewGetRateHandler(newStatsHandler(true, "0.1.0"))
-	resultMap := invokeHandler(t, handler, `{}`)
-
-	// Should return all fields when none specified
-	assert.Equal(t, 2, len(resultMap))
-}
-
 func TestGetRateHandler_InvalidJSON(t *testing.T) {
 	assertHandlerError(t, NewGetRateHandler(newStatsHandler(true, "0.1.0")), `{invalid}`, ErrCodeInvalidParams)
 }
@@ -309,7 +278,7 @@ func (m *mockRouterControl) Stop() {
 	m.shutdownCalled = true
 }
 
-func (m *mockRouterControl) Reseed() error {
+func (m *mockRouterControl) ReseedWithContext(ctx context.Context) error {
 	m.reseedCalled = true
 	return nil
 }
@@ -323,11 +292,6 @@ type mockRouterControlWithContext struct {
 
 func (m *mockRouterControlWithContext) Stop() {
 	m.shutdownCalled = true
-}
-
-func (m *mockRouterControlWithContext) Reseed() error {
-	m.reseedCalled = true
-	return nil
 }
 
 func (m *mockRouterControlWithContext) ReseedWithContext(ctx context.Context) error {
@@ -346,10 +310,6 @@ type mockRouterControlSingleFlight struct {
 }
 
 func (m *mockRouterControlSingleFlight) Stop() {}
-
-func (m *mockRouterControlSingleFlight) Reseed() error {
-	return nil
-}
 
 func (m *mockRouterControlSingleFlight) ReseedWithContext(ctx context.Context) error {
 	m.mu.Lock()
@@ -418,19 +378,8 @@ func TestRouterManagerHandler_InvokeReseed_UsesContextAwareReseed(t *testing.T) 
 	err := handler.invokeReseed(reseedCtx)
 
 	assert.True(t, mockControl.reseedWithContextCalled, "context-aware reseed path should be used")
-	assert.False(t, mockControl.reseedCalled, "legacy reseed path should not be used when context-aware path is available")
 	assert.Error(t, mockControl.reseedContextErr, "context-aware reseed should observe context timeout/cancellation")
 	assert.ErrorIs(t, err, context.Canceled)
-}
-
-func TestRouterManagerHandler_InvokeReseed_FallbackToLegacyReseed(t *testing.T) {
-	mockControl := &mockRouterControl{}
-	handler := NewRouterManagerHandler(context.Background(), &sync.WaitGroup{}, mockControl)
-
-	err := handler.invokeReseed(context.Background())
-
-	assert.True(t, mockControl.reseedCalled, "legacy reseed should be used when context-aware path is unavailable")
-	assert.NoError(t, err)
 }
 
 func TestRouterManagerHandler_ReseedSingleFlightAndStatus(t *testing.T) {
@@ -717,7 +666,7 @@ func BenchmarkEchoHandler(b *testing.B) {
 func BenchmarkGetRateHandler(b *testing.B) {
 	mockStats := &mockRouterAccess{running: true}
 	statsProvider := NewRouterStatsProvider(mockStats, "0.1.0")
-	benchmarkRPCHandler(b, NewGetRateHandler(statsProvider), json.RawMessage(`{"i2p.router.net.bw.inbound.15s": null}`))
+	benchmarkRPCHandler(b, NewGetRateHandler(statsProvider), json.RawMessage(`{"Stat": "bw.inboundRate", "Period": 15000}`))
 }
 
 func BenchmarkRouterInfoHandler(b *testing.B) {
@@ -1079,18 +1028,4 @@ func TestI2PControlHandler_PortAndAddressNullRead(t *testing.T) {
 	m := result.(map[string]interface{})
 	assert.Contains(t, m, "i2pcontrol.port", "null port read must return current port")
 	assert.Contains(t, m, "i2pcontrol.address", "null address read must return current address")
-}
-
-// TestGetRateHandler_UnknownLegacyKey verifies that an unknown GetRate key
-// returns ErrCodeInvalidParams rather than silently ignoring it (M-2).
-func TestGetRateHandler_UnknownLegacyKey(t *testing.T) {
-	handler := NewGetRateHandler(newStatsHandler(true, "0.1.0"))
-
-	params := json.RawMessage(`{"i2p.router.net.bw.unknown": null}`)
-	_, err := handler.Handle(context.Background(), params)
-	require.Error(t, err)
-
-	rpcErr, ok := err.(*RPCError)
-	require.True(t, ok, "error should be *RPCError")
-	assert.Equal(t, ErrCodeInvalidParams, rpcErr.Code)
 }
