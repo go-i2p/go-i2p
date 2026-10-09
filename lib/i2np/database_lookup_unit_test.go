@@ -491,6 +491,8 @@ func TestReadDatabaseLookupECIESReplyTagsTooLittleData(t *testing.T) {
 	assert.Equal(ErrDatabaseLookupNotEnoughData, err)
 }
 
+// TestReadDatabaseLookupECIESReplyTagsZeroTags validates that a zero tag count
+// yields no reply tags and leaves the offset unchanged.
 func TestReadDatabaseLookupECIESReplyTagsZeroTags(t *testing.T) {
 	assert := assert.New(t)
 
