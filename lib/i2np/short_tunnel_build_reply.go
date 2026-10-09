@@ -22,8 +22,8 @@ num ::
        1 byte Integer
        Valid values: 1-8
 
-record size: 218 bytes (ElGamal/AES) or variable (ECIES)
-total size: 1+$num*218 (for ElGamal/AES records)
+record size: 218 bytes
+total size: 1+$num*218
 */
 
 // ShortTunnelBuildReply represents an I2NP ShortTunnelBuildReply message, the reply counterpart to ShortTunnelBuild containing compact build response records.

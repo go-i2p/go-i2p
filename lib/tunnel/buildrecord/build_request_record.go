@@ -25,7 +25,7 @@ var ErrNotEnoughData = errors.New("not enough build request record data")
 
 // Size constants for BuildRequestRecord serialization.
 const (
-	// StandardCleartextLen is the cleartext size for legacy ElGamal/ECIES-long records (222 bytes).
+	// StandardCleartextLen is the cleartext size for standard/long build records (222 bytes).
 	StandardCleartextLen = 222
 	// ShortRecordSize is the encrypted on-wire size for short ECIES build records (218 bytes).
 	ShortRecordSize = 218

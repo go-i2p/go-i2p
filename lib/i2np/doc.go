@@ -19,7 +19,6 @@
 // I2NP uses modern cryptography:
 //   - ECIES-X25519-AEAD-Ratchet for garlic encryption
 //   - ChaCha20-Poly1305 for tunnel build records
-//   - ElGamal/AES (legacy, compatibility only)
 //
 // See github.com/go-i2p/crypto for cryptographic primitives.
 //

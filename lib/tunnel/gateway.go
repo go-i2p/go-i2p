@@ -19,8 +19,7 @@ import (
 //
 // Design decisions:
 // - Works with raw bytes to avoid import cycles with i2np package
-// - Uses crypto/tunnel package with ECIES-X25519-AEAD (ChaCha20/Poly1305) by default
-// - Supports both modern ECIES and legacy AES-256-CBC for compatibility
+// - Uses crypto/tunnel package with ECIES-X25519-AEAD (ChaCha20/Poly1305)
 // - Simple interface focused on core functionality
 // - Error handling at each step with clear error messages
 // - Supports DTLocal, DTTunnel, and DTRouter delivery types
@@ -29,7 +28,6 @@ type Gateway struct {
 	tunnelID   TunnelID
 	encryption tunnel.TunnelEncryptor
 	nextHopID  TunnelID
-	msgIDSeq   uint32     // no longer used as a counter; fragment IDs come from crypto/rand
 	encMu      sync.Mutex // protects concurrent calls to encryption.Encrypt
 }
 
@@ -575,14 +573,13 @@ func (g *Gateway) writeChecksum(msg []byte, paddingSize int) {
 }
 
 // encryptTunnelMessage applies tunnel encryption to the message.
-// Supports both modern ECIES-X25519 and legacy AES-256-CBC encryption.
+// Supports ECIES-X25519 encryption.
 func (g *Gateway) encryptTunnelMessage(msg []byte) ([]byte, error) {
 	// Use the crypto/tunnel package to encrypt
-	// Modern ECIES-X25519 uses ChaCha20/Poly1305 AEAD
-	// Legacy AES uses AES-256-CBC with dual-layer encryption
+	// ECIES-X25519 uses ChaCha20/Poly1305 AEAD
 
 	// Serialize concurrent encryption calls to protect stateful TunnelEncryptor
-	// implementations. Current implementations (AES, ECIES) are stateless,
+	// implementations. Current implementations are stateless,
 	// but the interface contract does not guarantee this.
 	g.encMu.Lock()
 	defer g.encMu.Unlock()

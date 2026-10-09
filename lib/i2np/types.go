@@ -5,7 +5,6 @@ import (
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/session_key"
-	"github.com/go-i2p/common/session_tag"
 	"github.com/go-i2p/go-i2p/lib/tunnel/build"
 	"github.com/go-i2p/go-i2p/lib/tunnel/buildrecord"
 )
@@ -132,12 +131,6 @@ type SessionKeyProvider interface {
 	GetIVKey() session_key.SessionKey
 }
 
-// SessionTagProvider represents types that provide session tags
-type SessionTagProvider interface {
-	GetReplyTags() []session_tag.SessionTag
-	GetTagCount() int
-}
-
 // TunnelIdentifier represents types that identify tunnel endpoints
 type TunnelIdentifier interface {
 	GetReceiveTunnel() buildrecord.TunnelID
@@ -180,9 +173,8 @@ var (
 	_ GarlicProcessor = (*Garlic)(nil)
 
 	// Database interfaces
-	_ DatabaseReader     = (*DatabaseLookup)(nil)
-	_ DatabaseWriter     = (*DatabaseStore)(nil)
-	_ SessionTagProvider = (*DatabaseLookup)(nil)
+	_ DatabaseReader = (*DatabaseLookup)(nil)
+	_ DatabaseWriter = (*DatabaseStore)(nil)
 
 	// Tunnel interfaces
 	_ TunnelBuilder      = (*TunnelBuild)(nil)

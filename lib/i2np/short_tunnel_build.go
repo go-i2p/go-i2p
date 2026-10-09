@@ -20,11 +20,8 @@ num ::
        1 byte Integer
        Valid values: 1-8
 
-record size: 218 bytes (ElGamal/AES) or variable (ECIES)
-total size: 1+$num*218 (for ElGamal/AES records)
-
-Note: ECIES-X25519 records are variable length and more compact.
-The modern I2P network uses ECIES primarily, with ElGamal/AES for backward compatibility.
+record size: 218 bytes
+total size: 1+$num*218
 */
 
 // ShortTunnelBuild represents an I2NP ShortTunnelBuild message, a modern compact format for tunnel build requests introduced in I2P 0.9.51.

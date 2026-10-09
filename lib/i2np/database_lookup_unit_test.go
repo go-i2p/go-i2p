@@ -10,30 +10,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// buildSessionTagsAndAppend creates count session tags with unique marker bytes
-// and appends both tags and raw bytes to the data slice.
-func buildSessionTagsAndAppend(t *testing.T, data []byte, count, off1, off2 int, val1, val2 byte) ([]byte, []session_tag.SessionTag) {
-	t.Helper()
-	var tags []session_tag.SessionTag
-	for i := 0; i < count; i++ {
-		tag := make([]byte, 32)
-		tag[i+off1] = val1
-		tag[i+off2] = val2
-		sessionTag, err := session_tag.NewSessionTagFromBytes(tag)
-		require.NoError(t, err, "Failed to create session tag %d", i)
-		tags = append(tags, sessionTag)
-		data = append(data, tag...)
-	}
-	return data, tags
-}
-
 // assertNoEncryptionFields verifies encryption-related fields are zero/nil.
 func assertNoEncryptionFields(t *testing.T, dl DatabaseLookup) {
 	t.Helper()
 	assert := assert.New(t)
 	assert.Equal(session_key.SessionKey{}, dl.ReplyKey)
 	assert.Equal(0, dl.Tags)
-	assert.Nil(dl.ReplyTags)
 	assert.Nil(dl.ECIESReplyTags)
 }
 
@@ -413,64 +395,11 @@ func TestReadDatabaseLookupTagsValidData(t *testing.T) {
 	assert.Equal(nil, err)
 }
 
-func TestReadDatabaseLookupReplyTagsTooLittleData(t *testing.T) {
-	assert := assert.New(t)
-
-	length := 99
-	data := make([]byte, length)
-	tags := 10
-	data = append(data, byte(tags))
-	data = append(data, 0x34)
-
-	length, tags, err := readDatabaseLookupTags(length, data)
-	length, replyTags, err := readDatabaseLookupReplyTags(length, data, tags)
-	assert.Equal(100, length)
-	assert.Equal([]session_tag.SessionTag{}, replyTags)
-	assert.Equal(ErrDatabaseLookupNotEnoughData, err)
-}
-
-func TestReadDatabaseLookupReplyTagsZeroTags(t *testing.T) {
-	assert := assert.New(t)
-
-	length := 99
-	data := make([]byte, length)
-	tags := 0
-	data = append(data, byte(tags))
-	data = append(data, 0x23)
-
-	length, tags, err := readDatabaseLookupTags(length, data)
-
-	var expectedReplyTags []session_tag.SessionTag
-
-	length, replyTags, err := readDatabaseLookupReplyTags(length, data, tags)
-	assert.Equal(expectedReplyTags, replyTags)
-	assert.Equal(100, length)
-	assert.Equal(nil, err)
-}
-
-func TestReadDatabaseLookupReplyTagsValidData(t *testing.T) {
-	assert := assert.New(t)
-
-	length := 99
-	data := make([]byte, length)
-	tags := 10
-	data = append(data, byte(tags))
-
-	length, tags, err := readDatabaseLookupTags(length, data)
-
-	data, expectedReplyTags := buildSessionTagsAndAppend(t, data, tags, 1, 5, 0x43, 0x89)
-
-	length, replyTags, err := readDatabaseLookupReplyTags(length, data, tags)
-	assert.Equal(expectedReplyTags, replyTags)
-	assert.Equal(100+32*tags, length)
-	assert.Equal(nil, err)
-}
-
 func TestReadDatabaseLookupTooLittleData(t *testing.T) {
 	assert := assert.New(t)
 
-	// Build message with encryption flag set but not enough data for encryption fields
-	data := buildLookupHeader(0x00, 0x00, DatabaseLookupFlagEncryption, nil, [2]byte{0x00, 0x00})
+	// Build message with ECIES flag set but not enough data for encryption fields
+	data := buildLookupHeader(0x00, 0x00, DatabaseLookupFlagECIES, nil, [2]byte{0x00, 0x00})
 	// Only 10 bytes of reply key data — not enough for a 32-byte key
 	data = append(data, make([]byte, 10)...)
 
@@ -481,17 +410,26 @@ func TestReadDatabaseLookupTooLittleData(t *testing.T) {
 func TestReadDatabaseLookupValidData(t *testing.T) {
 	assert := assert.New(t)
 
-	data, exp := buildFullLookupMessage(0x03, 15)
+	data, exp := buildFullLookupMessage(0x13, 15)
 
 	expectedTags := 15
 	data = append(data, byte(expectedTags))
 
-	data, expectedReplyTags := buildSessionTagsAndAppend(t, data, expectedTags, 3, 13, 0x22, 0x11)
+	var expectedReplyTags []session_tag.ECIESSessionTag
+	for i := 0; i < expectedTags; i++ {
+		tag := make([]byte, 8)
+		tag[3] = 0x22
+		tag[7] = 0x11
+		eciesTag, err := session_tag.NewECIESSessionTagFromBytes(tag)
+		require.NoError(t, err, "Failed to create ECIES session tag %d", i)
+		expectedReplyTags = append(expectedReplyTags, eciesTag)
+		data = append(data, tag...)
+	}
 
 	databaseLookup, err := ReadDatabaseLookup(data)
 	assertLookupFieldsMatch(t, databaseLookup, exp)
 	assert.Equal(expectedTags, databaseLookup.Tags)
-	assert.Equal(expectedReplyTags, databaseLookup.ReplyTags)
+	assert.Equal(expectedReplyTags, databaseLookup.ECIESReplyTags)
 	assert.Equal(err, nil)
 }
 
@@ -583,8 +521,6 @@ func TestReadDatabaseLookupWithECIESFlag(t *testing.T) {
 	assertLookupFieldsMatch(t, databaseLookup, exp)
 	assert.Equal(expectedTags, databaseLookup.Tags)
 	assert.True(databaseLookup.IsECIES())
-	// ElGamal tags should be nil/empty since ECIESFlag is set
-	assert.Nil(databaseLookup.ReplyTags)
 	// ECIES tags should be populated
 	assert.Equal(expectedECIESTags, databaseLookup.ECIESReplyTags)
 	assert.Equal(2, len(databaseLookup.ECIESReplyTags))
@@ -632,12 +568,12 @@ func TestReadDatabaseLookupNoEncryptionWithExcludedPeers(t *testing.T) {
 	assertNoEncryptionFields(t, databaseLookup)
 }
 
-// TestReadDatabaseLookupWithEncryptionFlagStillWorks verifies that lookups
-// WITH the encryption flag set still parse encryption fields correctly.
-func TestReadDatabaseLookupWithEncryptionFlagStillWorks(t *testing.T) {
+// TestReadDatabaseLookupWithECIESFlagStillWorks verifies that lookups
+// WITH the ECIES flag set still parse encryption fields correctly.
+func TestReadDatabaseLookupWithECIESFlagStillWorks(t *testing.T) {
 	assert := assert.New(t)
 
-	flags := byte(DatabaseLookupFlagEncryption)
+	flags := byte(DatabaseLookupFlagECIES)
 	data := buildLookupHeader(0x11, 0x22, flags, nil, [2]byte{0x00, 0x00})
 
 	// ReplyKey (32 bytes)
@@ -649,18 +585,18 @@ func TestReadDatabaseLookupWithEncryptionFlagStillWorks(t *testing.T) {
 	// Tags: 1
 	data = append(data, 0x01)
 
-	// 1 ElGamal reply tag (32 bytes)
-	tagData := make([]byte, 32)
+	// 1 ECIES reply tag (8 bytes)
+	tagData := make([]byte, 8)
 	tagData[0] = 0xEE
 	data = append(data, tagData...)
 
 	databaseLookup, err := ReadDatabaseLookup(data)
-	assert.Nil(err, "Encrypted DatabaseLookup should parse without error")
+	assert.Nil(err, "ECIES DatabaseLookup should parse without error")
 	assert.Equal(flags, databaseLookup.Flags)
-	assert.True(databaseLookup.hasEncryption())
+	assert.True(databaseLookup.IsECIES())
 	assert.Equal(expectedReplyKey, databaseLookup.ReplyKey)
 	assert.Equal(1, databaseLookup.Tags)
-	assert.Equal(1, len(databaseLookup.ReplyTags))
+	assert.Equal(1, len(databaseLookup.ECIESReplyTags))
 }
 
 // TestReadDatabaseLookupExplorationNoEncryption verifies an exploration lookup

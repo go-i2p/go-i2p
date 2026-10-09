@@ -223,21 +223,16 @@ func TestSendWithDeliveryFragmentedTunnel(t *testing.T) {
 func TestSendWithDeliveryMsgIDIncrement(t *testing.T) {
 	gw := createTestGatewayPassthrough(t)
 
-	// Initial msgIDSeq should be 0
-	assert.Equal(t, uint32(0), gw.msgIDSeq)
-
-	// A non-fragmented send should not increment msgIDSeq
+	// A non-fragmented send should succeed.
 	smallMsg := make([]byte, 100)
 	_, err := gw.SendWithDelivery(smallMsg, LocalDelivery())
 	require.NoError(t, err)
-	assert.Equal(t, uint32(0), gw.msgIDSeq, "Non-fragmented send should not increment msgIDSeq")
 
 	// A fragmented send should produce a non-zero message ID (now generated via crypto/rand,
 	// not a sequential counter, so we only verify the send succeeds without error).
 	largeMsg := make([]byte, 1050)
 	_, err = gw.SendWithDelivery(largeMsg, LocalDelivery())
 	require.NoError(t, err)
-	// msgIDSeq is no longer a monotonic counter; message IDs come from crypto/rand.
 
 	// Second fragmented send should also succeed.
 	_, err = gw.SendWithDelivery(largeMsg, LocalDelivery())

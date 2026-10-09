@@ -61,9 +61,8 @@
 // # Cryptography
 //
 // Each tunnel hop uses:
-//   - AES256 for layer encryption
-//   - HMAC-SHA256 for integrity
-//   - ElGamal or ECIES for build record encryption
+//   - ChaCha20-Poly1305 for layer encryption
+//   - ECIES-X25519 for build record encryption
 //
 // See github.com/go-i2p/crypto for cryptographic primitives.
 package tunnel

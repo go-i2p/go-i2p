@@ -42,8 +42,7 @@ type MessageForwarder interface {
 // Design decisions:
 // - Simple callback-based message delivery
 // - Works with raw bytes to avoid import cycles
-// - Uses crypto/tunnel package with ECIES-X25519-AEAD (ChaCha20/Poly1305) by default
-// - Supports both modern ECIES and legacy AES-256-CBC for compatibility
+// - Uses crypto/tunnel package with ECIES-X25519-AEAD (ChaCha20/Poly1305)
 // - Handles fragment reassembly for large messages
 // - Automatic cleanup of stale fragments (default: 60 seconds)
 // - Thread-safe for concurrent message processing
@@ -196,11 +195,10 @@ func (e *Endpoint) Receive(encryptedData []byte) error {
 }
 
 // decryptTunnelMessage applies tunnel decryption to the encrypted data.
-// Supports both modern ECIES-X25519 and legacy AES-256-CBC decryption.
+// Supports ECIES-X25519 decryption.
 func (e *Endpoint) decryptTunnelMessage(encryptedData []byte) ([]byte, error) {
 	// The TunnelEncryptor interface now returns errors for better error handling
-	// Modern ECIES-X25519 uses ChaCha20/Poly1305 AEAD for authenticated decryption
-	// Legacy AES uses AES-256-CBC with dual-layer decryption
+	// ECIES-X25519 uses ChaCha20/Poly1305 AEAD for authenticated decryption
 	decrypted, err := e.decryption.Decrypt(encryptedData)
 	if err != nil {
 		log.WithFields(logger.Fields{

@@ -134,22 +134,22 @@ func addParticipantToManager(t *testing.T, m *ParticipantManager, id TunnelID) *
 // Used by: builder_test.go, spec_compliance_test.go
 func specMakeRouterInfo(id byte) router_info.RouterInfo {
 	buf := make([]byte, 467)
-	// Bytes 0-255: ElGamal public key (unique per id)
+	// Bytes 0-255: X25519 public key field (32-byte key + 224 padding, unique per id)
 	for i := 0; i < 256; i++ {
 		buf[i] = id
 	}
-	// Bytes 256-383: signing key area (96 padding + 32 Ed25519 key)
+	// Bytes 256-383: signing key field (96 padding + 32 Ed25519 key)
 	for i := 256; i < 384; i++ {
 		buf[i] = id
 	}
-	// Certificate: type=5 (KEY), length=4, sigType=7 (Ed25519), cryptoType=0 (ElGamal)
+	// Certificate: type=5 (KEY), length=4, sigType=7 (Ed25519), cryptoType=4 (X25519)
 	buf[384] = 0x05
 	buf[385] = 0x00
 	buf[386] = 0x04
 	buf[387] = 0x00
 	buf[388] = 0x07
 	buf[389] = 0x00
-	buf[390] = 0x00
+	buf[390] = 0x04
 	// Published date (8 bytes) — use a fixed timestamp to be deterministic
 	binary.BigEndian.PutUint64(buf[391:399], uint64(1700000000000))
 	// Address count: 0

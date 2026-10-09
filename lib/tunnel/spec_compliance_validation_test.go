@@ -693,15 +693,6 @@ func TestTunnelMessages_MessageID_NotPresentWhenUnfragmented(t *testing.T) {
 	assert.Error(t, err, "Message ID must not be available on unfragmented first fragment")
 }
 
-func TestTunnelMessages_MessageID_GatewayUsesMonotonicCounter(t *testing.T) {
-	// Gateway uses atomic counter for message IDs during fragmentation
-	gw := createSpecGateway(t)
-
-	// The msgIDSeq is an atomic uint32 counter starting at 0
-	// Each call to sendFragmented increments it
-	assert.Equal(t, uint32(0), gw.msgIDSeq, "Message ID counter must start at 0")
-}
-
 func TestTunnelMessages_MessageID_FragmentSizeField2Bytes(t *testing.T) {
 	// Fragment size is 2-byte big-endian uint16
 	// For follow-on: at bytes [5:7]
@@ -1633,9 +1624,8 @@ func TestLegacyCrypto_AESEncryptorExists(t *testing.T) {
 }
 
 func TestLegacyCrypto_DocReferencesLegacy(t *testing.T) {
-	// doc.go references both AES256 and ElGamal/ECIES — verify awareness
-	// These are documentation references, not code implementations
-	// The actual encryption is delegated to the crypto/tunnel package
+	// The tunnel package supports both AES-256-CBC and ECIES tunnel encryption.
+	// The actual encryption is delegated to the crypto/tunnel package.
 
 	// Verify the code uses the TunnelEncryptor interface (not raw AES calls)
 	enc := &specMockEncryptor{}

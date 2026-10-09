@@ -47,7 +47,7 @@ func NewDestinationResolver(netdb interface {
 }
 
 // ResolveDestination looks up a destination by its hash and returns the encryption public key.
-// This supports both legacy LeaseSets (with ElGamal keys) and modern LeaseSet2 (with X25519 keys).
+// This supports both classic LeaseSets and modern LeaseSet2 (with X25519 keys).
 //
 // The resolution process tries LeaseSet2 first (the modern default since I2P 0.9.38),
 // then falls back to classic LeaseSet bytes parsed as LeaseSet2:

@@ -232,11 +232,6 @@ func TestDatabaseLookupFlagConstants(t *testing.T) {
 		t.Errorf("Tunnel flag should be 0x01, got 0x%02x", DatabaseLookupFlagTunnel)
 	}
 
-	// Encryption should be 0x02 (bit 1 = 1)
-	if DatabaseLookupFlagEncryption != 0x02 {
-		t.Errorf("Encryption flag should be 0x02, got 0x%02x", DatabaseLookupFlagEncryption)
-	}
-
 	// Type Normal should be 0x00 (bits 3-2 = 00)
 	if DatabaseLookupFlagTypeNormal != 0x00 {
 		t.Errorf("TypeNormal flag should be 0x00, got 0x%02x", DatabaseLookupFlagTypeNormal)

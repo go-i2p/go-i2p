@@ -51,8 +51,6 @@ func TestDatabaseLookup_ECIESOnlyMarshalRoundTrip(t *testing.T) {
 
 	// Verify the flags are set correctly
 	require.True(lookup.IsECIES(), "ECIES flag should be set")
-	require.False(lookup.hasEncryption(), "ElGamal encryption flag should NOT be set")
-	require.True(lookup.hasAnyEncryption(), "hasAnyEncryption should return true for ECIES-only")
 
 	// Marshal, verify size, and unmarshal
 	parsed := marshalUnmarshalLookup(t, lookup, 32+32+1+2+32+1+8)
@@ -66,7 +64,6 @@ func TestDatabaseLookup_ECIESOnlyMarshalRoundTrip(t *testing.T) {
 	assert.Equal(1, parsed.Tags)
 	assert.Equal(1, len(parsed.ECIESReplyTags))
 	assert.Equal(eciesTag, parsed.ECIESReplyTags[0])
-	assert.Nil(parsed.ReplyTags, "ElGamal tags should be nil for ECIES-only lookup")
 }
 
 // TestDatabaseLookup_ECIESWithTunnelMarshalRoundTrip verifies ECIES + tunnel flag.
@@ -123,58 +120,6 @@ func TestDatabaseLookup_ECIESWithTunnelMarshalRoundTrip(t *testing.T) {
 	assert.Equal(tag2, parsed.ECIESReplyTags[1])
 }
 
-// TestDatabaseLookup_ElGamalEncryptionStillWorks verifies that the fix
-// for ECIES doesn't break the existing ElGamal encryption path (bit 1).
-func TestDatabaseLookup_ElGamalEncryptionStillWorks(t *testing.T) {
-	require := require.New(t)
-
-	key := common.Hash{}
-	key[0] = 0x10
-
-	from := common.Hash{}
-	from[0] = 0x20
-
-	replyKeyData := make([]byte, 32)
-	replyKeyData[0] = 0x44
-	replyKey := session_key.SessionKey(replyKeyData)
-
-	tagData := make([]byte, 32)
-	tagData[0] = 0xBB
-	tagData[31] = 0xCC
-	tag, err := session_tag.NewSessionTagFromBytes(tagData)
-	require.Nil(err)
-
-	// Flags: encryption(0x02) only, no ECIES
-	lookup := &DatabaseLookup{
-		Key:           key,
-		From:          from,
-		Flags:         DatabaseLookupFlagEncryption,
-		ReplyTunnelID: [4]byte{},
-		Size:          0,
-		ExcludedPeers: nil,
-		ReplyKey:      replyKey,
-		Tags:          1,
-		ReplyTags:     []session_tag.SessionTag{tag},
-	}
-
-	require.True(lookup.hasEncryption())
-	require.False(lookup.IsECIES())
-	require.True(lookup.hasAnyEncryption())
-
-	parsed := marshalUnmarshalLookup(t, lookup, 32+32+1+2+32+1+32)
-
-	assert := assert.New(t)
-	assert.Equal(key, parsed.Key)
-	assert.Equal(from, parsed.From)
-	assert.Equal(DatabaseLookupFlagEncryption, parsed.Flags)
-	assert.False(parsed.IsECIES())
-	assert.Equal(replyKey, parsed.ReplyKey)
-	assert.Equal(1, parsed.Tags)
-	assert.Equal(1, len(parsed.ReplyTags))
-	assert.Equal(tag, parsed.ReplyTags[0])
-	assert.Nil(parsed.ECIESReplyTags)
-}
-
 // TestDatabaseLookup_NoEncryptionMarshalSize verifies that a lookup without
 // any encryption flags doesn't include encryption fields.
 func TestDatabaseLookup_NoEncryptionMarshalSize(t *testing.T) {
@@ -187,11 +132,11 @@ func TestDatabaseLookup_NoEncryptionMarshalSize(t *testing.T) {
 
 	// key(32) + from(32) + flags(1) + size(2) = 67
 	assert.Equal(67, len(data))
-	assert.False(lookup.hasAnyEncryption())
+	assert.False(lookup.IsECIES())
 }
 
-// TestDatabaseLookup_HasAnyEncryption verifies the hasAnyEncryption helper.
-func TestDatabaseLookup_HasAnyEncryption(t *testing.T) {
+// TestDatabaseLookup_IsECIES verifies the IsECIES helper.
+func TestDatabaseLookup_IsECIES(t *testing.T) {
 	tests := []struct {
 		name     string
 		flags    byte
@@ -199,19 +144,16 @@ func TestDatabaseLookup_HasAnyEncryption(t *testing.T) {
 	}{
 		{"NoFlags", 0x00, false},
 		{"TunnelOnly", DatabaseLookupFlagTunnel, false},
-		{"ElGamalOnly", DatabaseLookupFlagEncryption, true},
 		{"ECIESOnly", DatabaseLookupFlagECIES, true},
-		{"BothEncryption", DatabaseLookupFlagEncryption | DatabaseLookupFlagECIES, true},
 		{"TunnelPlusECIES", DatabaseLookupFlagTunnel | DatabaseLookupFlagECIES, true},
-		{"TunnelPlusElGamal", DatabaseLookupFlagTunnel | DatabaseLookupFlagEncryption, true},
-		{"AllFlags", DatabaseLookupFlagTunnel | DatabaseLookupFlagEncryption | DatabaseLookupFlagECIES, true},
+		{"AllFlags", DatabaseLookupFlagTunnel | DatabaseLookupFlagTypeRI | DatabaseLookupFlagECIES, true},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			lookup := &DatabaseLookup{Flags: tc.flags}
-			assert.Equal(t, tc.expected, lookup.hasAnyEncryption(),
-				"hasAnyEncryption() for flags 0x%02x", tc.flags)
+			assert.Equal(t, tc.expected, lookup.IsECIES(),
+				"IsECIES() for flags 0x%02x", tc.flags)
 		})
 	}
 }

@@ -16,8 +16,8 @@ import (
 //
 // Design decisions:
 // - Simple relay logic: decrypt and forward
-// - Uses crypto/tunnel with ECIES-X25519-AEAD (ChaCha20/Poly1305) by default
-// - Supports both modern ECIES and legacy AES-256-CBC for compatibility
+// - Uses crypto/tunnel with ECIES-X25519-AEAD (ChaCha20/Poly1305)
+// - Uses ECIES-X25519-AEAD (ChaCha20/Poly1305) for tunnel layer encryption
 // - No message inspection (maintains tunnel privacy)
 // - Stateless processing for better performance
 // - Tracks creation time and expiration (tunnels typically last 10 minutes)
@@ -194,8 +194,7 @@ func (p *Participant) Process(encryptedData []byte) (nextHopID TunnelID, decrypt
 	}
 
 	// Decrypt one layer of encryption
-	// Modern ECIES-X25519 uses ChaCha20/Poly1305 AEAD for authenticated decryption
-	// Legacy AES uses AES-256-CBC with dual-layer decryption and IV handling
+	// ECIES-X25519 uses ChaCha20/Poly1305 AEAD for authenticated decryption
 	decrypted, err := p.decryption.Decrypt(encryptedData)
 	if err != nil {
 		log.WithFields(logger.Fields{

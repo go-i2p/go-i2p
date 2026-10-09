@@ -905,14 +905,11 @@ func TestDatabaseLookup_LookupTypes_BitPositions(t *testing.T) {
 }
 
 // TestDatabaseLookup_LookupTypes_OtherFlagBits verifies the other flag bits:
-// bit 0 = delivery (direct/tunnel), bit 1 = encryption, bit 4 = ECIES.
+// bit 0 = delivery (direct/tunnel), bit 4 = ECIES.
 func TestDatabaseLookup_LookupTypes_OtherFlagBits(t *testing.T) {
 	// bit 0: delivery flag
 	assert.Equal(t, byte(0x00), DatabaseLookupFlagDirect, "direct reply: bit 0 = 0")
 	assert.Equal(t, byte(0x01), DatabaseLookupFlagTunnel, "tunnel reply: bit 0 = 1")
-
-	// bit 1: encryption flag
-	assert.Equal(t, byte(0x02), DatabaseLookupFlagEncryption, "encryption: bit 1 = 1")
 
 	// bit 4: ECIES flag
 	assert.Equal(t, byte(0x10), DatabaseLookupFlagECIES, "ECIES: bit 4 = 1")
@@ -921,10 +918,10 @@ func TestDatabaseLookup_LookupTypes_OtherFlagBits(t *testing.T) {
 // TestDatabaseLookup_LookupTypes_ParseFromFlags verifies the lookup type can be
 // extracted from a flags byte that also has other bits set.
 func TestDatabaseLookup_LookupTypes_ParseFromFlags(t *testing.T) {
-	// Combine tunnel reply + encryption + RI lookup + ECIES
-	flags := DatabaseLookupFlagTunnel | DatabaseLookupFlagEncryption |
+	// Combine tunnel reply + RI lookup + ECIES
+	flags := DatabaseLookupFlagTunnel |
 		DatabaseLookupFlagTypeRI | DatabaseLookupFlagECIES
-	// flags = 0x01 | 0x02 | 0x08 | 0x10 = 0x1B
+	// flags = 0x01 | 0x08 | 0x10 = 0x19
 
 	// Extract lookup type via bits 3-2 mask
 	lookupType := flags & 0x0C
@@ -974,41 +971,9 @@ func TestDatabaseLookup_LookupTypes_MarshalRoundtrip(t *testing.T) {
 
 // =============================================================================
 // Audit Item: DatabaseLookup — Reply encryption
-// When encryption flag (bit 1) or ECIES flag (bit 4) is set:
-// reply_key (32 bytes) + tags count (1 byte) + reply_tags (count * 32 or 8)
+// When the ECIES flag (bit 4) is set:
+// reply_key (32 bytes) + tags count (1 byte) + reply_tags (count * 8)
 // =============================================================================
-
-// TestDatabaseLookup_ReplyEncryption_ElGamalFields verifies the legacy (ElGamal)
-// encryption fields: reply_key (32 bytes) + tags (1 byte) + reply_tags (n*32).
-func TestDatabaseLookup_ReplyEncryption_ElGamalFields(t *testing.T) {
-	key := common.Hash{}
-	from := common.Hash{}
-	from[0] = 0x01
-
-	dl := NewDatabaseLookup(key, from, DatabaseLookupFlagTypeLS, nil)
-	// Enable encryption (bit 1)
-	dl.Flags |= DatabaseLookupFlagEncryption
-
-	// Set reply key
-	replyKey := session_key.SessionKey{}
-	replyKey[0] = 0xAA
-	replyKey[31] = 0xBB
-	dl.ReplyKey = replyKey
-
-	// Set 2 legacy 32-byte session tags
-	tag1, _ := session_tag.NewSessionTagFromBytes(make([]byte, 32))
-	tag2, _ := session_tag.NewSessionTagFromBytes(make([]byte, 32))
-	dl.Tags = 2
-	dl.ReplyTags = []session_tag.SessionTag{tag1, tag2}
-
-	parsed := lookupRoundtrip(t, dl)
-
-	assert.True(t, parsed.hasEncryption(), "encryption flag must be set")
-	assert.False(t, parsed.IsECIES(), "ECIES flag must NOT be set")
-	assert.Equal(t, replyKey, parsed.ReplyKey, "reply key must survive roundtrip")
-	assert.Equal(t, 2, parsed.Tags, "tag count must survive roundtrip")
-	assert.Equal(t, 2, len(parsed.ReplyTags), "legacy reply tags must survive roundtrip")
-}
 
 // TestDatabaseLookup_ReplyEncryption_ECIESFields verifies ECIES encryption
 // fields: reply_key (32 bytes) + tags (1 byte) + reply_tags (n*8).

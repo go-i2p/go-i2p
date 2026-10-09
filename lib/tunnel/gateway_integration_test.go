@@ -8,9 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestGateway_MsgIDSeqAtomic verifies that concurrent calls to sendFragmented
-// produce unique message IDs (no duplicates due to race conditions).
-// This tests the fix for the EDGE CASE BUG: Gateway msgIDSeq Not Thread-Safe.
+// TestGateway_MsgIDSeqAtomic verifies that concurrent generation of message IDs
+// produces unique values (no duplicates due to race conditions).
 func TestGateway_MsgIDSeqAtomic(t *testing.T) {
 	// Directly test the atomic counter behavior
 	var counter uint32

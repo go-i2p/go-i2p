@@ -2,22 +2,20 @@
 package testutil
 
 import (
-	"bytes"
 	"testing"
 	"time"
 
 	"github.com/go-i2p/crypto/rand"
 
-	"github.com/go-i2p/common/certificate"
-	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/key_certificate"
 	"github.com/go-i2p/common/keys_and_cert"
 	"github.com/go-i2p/common/router_address"
 	"github.com/go-i2p/common/router_identity"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/common/signature"
+	"github.com/go-i2p/crypto/curve25519"
 	"github.com/go-i2p/crypto/ed25519"
-	elgamal "github.com/go-i2p/crypto/elg"
+	"github.com/go-i2p/crypto/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -40,7 +38,7 @@ func DefaultRouterAddressConfig() RouterAddressConfig {
 }
 
 // CreateSignedTestRouterInfo creates a properly signed RouterInfo for testing.
-// Uses Ed25519 signing keys and ElGamal encryption keys, matching the I2P standard.
+// Uses Ed25519 signing keys and X25519 encryption keys, matching the I2P standard.
 // addrCfg controls the router address parameters; pass nil to use defaults.
 func CreateSignedTestRouterInfo(tb testing.TB, options map[string]string, addrCfg *RouterAddressConfig) *router_info.RouterInfo {
 	tb.Helper()
@@ -60,30 +58,17 @@ func CreateSignedTestRouterInfo(tb testing.TB, options map[string]string, addrCf
 
 	ed25519PubKey := ed25519PubKeyRaw
 
-	// Generate ElGamal encryption key pair
-	var elgPrivKey elgamal.PrivateKey
-	err = elgamal.ElgamalGenerate(&elgPrivKey.PrivateKey, rand.Reader)
-	require.NoError(tb, err, "Failed to generate ElGamal key")
+	// Generate X25519 encryption key pair
+	x25519PubKey, _, err := curve25519.GenerateKeyPair()
+	require.NoError(tb, err, "Failed to generate X25519 key")
 
-	var elgPubKey elgamal.ElgPublicKey
-	yBytes := elgPrivKey.PublicKey.Y.Bytes()
-	require.LessOrEqual(tb, len(yBytes), 256, "ElGamal public key Y too large")
-	copy(elgPubKey[256-len(yBytes):], yBytes)
+	receivingPubKey, ok := x25519PubKey.(types.ReceivingPublicKey)
+	require.True(tb, ok, "X25519 public key does not implement ReceivingPublicKey")
 
-	// Create KEY certificate for Ed25519/ElGamal
-	var payload bytes.Buffer
-	signingType, err := common.NewIntegerFromInt(7, 2) // Ed25519
-	require.NoError(tb, err)
-	cryptoType, err := common.NewIntegerFromInt(0, 2) // ElGamal
-	require.NoError(tb, err)
-	payload.Write(*signingType)
-	payload.Write(*cryptoType)
-
-	cert, err := certificate.NewCertificateWithType(certificate.CERT_KEY, payload.Bytes())
-	require.NoError(tb, err, "Failed to create certificate")
-
-	keyCert, err := key_certificate.KeyCertificateFromCertificate(cert)
+	// Create KEY certificate for Ed25519/X25519
+	keyCert, err := key_certificate.NewEd25519X25519KeyCertificate()
 	require.NoError(tb, err, "Failed to create key certificate")
+	cert := &keyCert.Certificate
 
 	// Create padding
 	pubKeySize := keyCert.CryptoSize()
@@ -94,7 +79,7 @@ func CreateSignedTestRouterInfo(tb testing.TB, options map[string]string, addrCf
 	require.NoError(tb, err, "Failed to generate padding")
 
 	// Create RouterIdentity
-	routerIdentity, err := router_identity.NewRouterIdentity(elgPubKey, ed25519PubKey, cert, padding)
+	routerIdentity, err := router_identity.NewRouterIdentity(receivingPubKey, ed25519PubKey, cert, padding)
 	require.NoError(tb, err, "Failed to create router identity")
 
 	// Create router address

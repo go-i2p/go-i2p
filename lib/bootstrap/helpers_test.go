@@ -79,7 +79,7 @@ func createTestRouterAddress(transportStyle string, options map[string]string) *
 }
 
 // createSignedTestRouterInfo creates a properly signed RouterInfo for testing.
-// Uses Ed25519 signing keys and ElGamal encryption keys, matching the I2P standard.
+// Uses Ed25519 signing keys and X25519 encryption keys, matching the I2P standard.
 func createSignedTestRouterInfo(tb testing.TB, options map[string]string) *router_info.RouterInfo {
 	tb.Helper()
 	addrCfg := testutil.DefaultRouterAddressConfig()

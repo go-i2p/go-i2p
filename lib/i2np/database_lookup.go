@@ -193,7 +193,6 @@ type DatabaseLookup struct {
 	ExcludedPeers  []common.Hash
 	ReplyKey       session_key.SessionKey
 	Tags           int
-	ReplyTags      []session_tag.SessionTag
 	ECIESReplyTags []session_tag.ECIESSessionTag
 }
 
@@ -208,10 +207,10 @@ func ReadDatabaseLookup(data []byte) (DatabaseLookup, error) {
 	}
 
 	// Per I2P spec, encryption fields (reply_key, tags, reply_tags) are only
-	// present when encryptionFlag (bit 1) or ECIESFlag (bit 4) is set.
-	// Parsing them unconditionally on unencrypted lookups would read past
-	// the excluded peers into garbage data.
-	if databaseLookup.hasEncryption() || (databaseLookup.Flags&DatabaseLookupFlagECIES) != 0 {
+	// present when the ECIESFlag (bit 4) is set. Parsing them unconditionally
+	// on unencrypted lookups would read past the excluded peers into garbage
+	// data.
+	if (databaseLookup.Flags & DatabaseLookupFlagECIES) != 0 {
 		if err := parseEncryptionFields(&databaseLookup, data, endOffset); err != nil {
 			return databaseLookup, err
 		}
@@ -280,27 +279,12 @@ func parseEncryptionFields(databaseLookup *DatabaseLookup, data []byte, offset i
 		return err
 	}
 
-	return readReplyTagsByType(databaseLookup, offset, data, databaseLookup.Tags)
-}
-
-// readReplyTagsByType reads either ECIES or legacy reply tags based on the encryption flag.
-func readReplyTagsByType(databaseLookup *DatabaseLookup, offset int, data []byte, tags int) error {
-	ecies := (databaseLookup.Flags & 0x10) != 0
-	if ecies {
-		_, eciesTags, err := readDatabaseLookupECIESReplyTags(offset, data, tags)
-		if err != nil {
-			log.WithError(err).Error("Failed to read ECIESReplyTags")
-			return err
-		}
-		databaseLookup.ECIESReplyTags = eciesTags
-	} else {
-		_, replyTags, err := readDatabaseLookupReplyTags(offset, data, tags)
-		if err != nil {
-			log.WithError(err).Error("Failed to read ReplyTags")
-			return err
-		}
-		databaseLookup.ReplyTags = replyTags
+	_, eciesTags, err := readDatabaseLookupECIESReplyTags(offset, data, databaseLookup.Tags)
+	if err != nil {
+		log.WithError(err).Error("Failed to read ECIESReplyTags")
+		return err
 	}
+	databaseLookup.ECIESReplyTags = eciesTags
 	return nil
 }
 
@@ -438,27 +422,6 @@ func readDatabaseLookupTags(length int, data []byte) (int, int, error) {
 	return length + 1, tags, nil
 }
 
-func readDatabaseLookupReplyTags(length int, data []byte, tags int) (int, []session_tag.SessionTag, error) {
-	if len(data) < length+tags*32 {
-		return length, []session_tag.SessionTag{}, ErrDatabaseLookupNotEnoughData
-	}
-	var replyTags []session_tag.SessionTag
-	for i := 0; i < tags; i++ {
-		offset := length + i*32
-		tag, err := session_tag.NewSessionTagFromBytes(data[offset : offset+32])
-		if err != nil {
-			return length, []session_tag.SessionTag{}, err
-		}
-		replyTags = append(replyTags, tag)
-	}
-
-	log.WithFields(logger.Fields{
-		"at":         "i2np.database_lookup.readDatabaseLookupReplyTags",
-		"reply_tags": replyTags,
-	}).Debug("parsed_database_lookup_reply_tags")
-	return length + tags*32, replyTags, nil
-}
-
 func readDatabaseLookupECIESReplyTags(length int, data []byte, tags int) (int, []session_tag.ECIESSessionTag, error) {
 	tagSize := session_tag.ECIESSessionTagSize
 	if len(data) < length+tags*tagSize {
@@ -496,11 +459,6 @@ func (d *DatabaseLookup) GetFlags() byte {
 	return d.Flags
 }
 
-// GetReplyTags returns the reply tags
-func (d *DatabaseLookup) GetReplyTags() []session_tag.SessionTag {
-	return d.ReplyTags
-}
-
 // GetECIESReplyTags returns the ECIES reply tags (8-byte)
 func (d *DatabaseLookup) GetECIESReplyTags() []session_tag.ECIESSessionTag {
 	return d.ECIESReplyTags
@@ -522,8 +480,6 @@ const (
 	DatabaseLookupFlagDirect byte = 0x00
 	// DatabaseLookupFlagTunnel means send reply to a tunnel (bit 0 = 1)
 	DatabaseLookupFlagTunnel byte = 0x01
-	// DatabaseLookupFlagEncryption means encrypt reply (bit 1 = 1)
-	DatabaseLookupFlagEncryption byte = 0x02
 	// DatabaseLookupFlagTypeNormal is a normal lookup (bits 3-2 = 00)
 	DatabaseLookupFlagTypeNormal byte = 0x00
 	// DatabaseLookupFlagTypeLS is a LeaseSet lookup (bits 3-2 = 01)
@@ -564,7 +520,6 @@ func NewDatabaseLookup(key, from common.Hash, lookupType byte, excludedPeers []c
 		ExcludedPeers:  excludedPeers,
 		ReplyKey:       session_key.SessionKey{}, // No encryption
 		Tags:           0,
-		ReplyTags:      nil,
 		ECIESReplyTags: nil,
 	}
 }
@@ -598,7 +553,6 @@ func NewDatabaseLookupWithTunnel(key, replyGateway common.Hash, replyTunnelID [4
 		ExcludedPeers:  excludedPeers,
 		ReplyKey:       session_key.SessionKey{},
 		Tags:           0,
-		ReplyTags:      nil,
 		ECIESReplyTags: nil,
 	}
 }
@@ -643,13 +597,9 @@ func (d *DatabaseLookup) calculateMarshalSize() int {
 
 	totalSize += d.Size * 32
 
-	if d.hasAnyEncryption() {
+	if d.IsECIES() {
 		totalSize += 32 + 1 // reply_key + tags count
-		if d.IsECIES() {
-			totalSize += d.Tags * 8
-		} else {
-			totalSize += d.Tags * 32
-		}
+		totalSize += d.Tags * 8
 	}
 
 	return totalSize
@@ -658,18 +608,6 @@ func (d *DatabaseLookup) calculateMarshalSize() int {
 // hasTunnelReply returns true if the tunnel reply flag is set.
 func (d *DatabaseLookup) hasTunnelReply() bool {
 	return (d.Flags & DatabaseLookupFlagTunnel) != 0
-}
-
-// hasEncryption returns true if the encryption flag is set.
-func (d *DatabaseLookup) hasEncryption() bool {
-	return (d.Flags & DatabaseLookupFlagEncryption) != 0
-}
-
-// hasAnyEncryption returns true if either the ElGamal encryption flag (bit 1)
-// or the ECIES flag (bit 4) is set. Both indicate that reply_key, tags, and
-// reply_tags fields are present in the wire format.
-func (d *DatabaseLookup) hasAnyEncryption() bool {
-	return d.hasEncryption() || d.IsECIES()
 }
 
 // marshalFixedFields writes the key, from, flags, and reply tunnel ID into the buffer.
@@ -709,10 +647,10 @@ func (d *DatabaseLookup) marshalExcludedPeers(result []byte, offset int) int {
 	return offset
 }
 
-// marshalEncryptionFields writes the reply key and session tags into the buffer
-// when encryption is requested.
+// marshalEncryptionFields writes the reply key and ECIES session tags into
+// the buffer when ECIES reply encryption is requested.
 func (d *DatabaseLookup) marshalEncryptionFields(result []byte, offset int) {
-	if !d.hasAnyEncryption() {
+	if !d.IsECIES() {
 		return
 	}
 
@@ -722,21 +660,13 @@ func (d *DatabaseLookup) marshalEncryptionFields(result []byte, offset int) {
 	result[offset] = byte(d.Tags)
 	offset++
 
-	if d.IsECIES() {
-		for i := 0; i < d.Tags && i < len(d.ECIESReplyTags); i++ {
-			copy(result[offset:offset+8], d.ECIESReplyTags[i].Bytes())
-			offset += 8
-		}
-	} else {
-		for i := 0; i < d.Tags && i < len(d.ReplyTags); i++ {
-			copy(result[offset:offset+32], d.ReplyTags[i].Bytes())
-			offset += 32
-		}
+	for i := 0; i < d.Tags && i < len(d.ECIESReplyTags); i++ {
+		copy(result[offset:offset+8], d.ECIESReplyTags[i].Bytes())
+		offset += 8
 	}
 }
 
 // Compile-time interface satisfaction checks
 var (
-	_ DatabaseReader     = (*DatabaseLookup)(nil)
-	_ SessionTagProvider = (*DatabaseLookup)(nil)
+	_ DatabaseReader = (*DatabaseLookup)(nil)
 )

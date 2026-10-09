@@ -28,7 +28,7 @@ length ::
 
 data ::
      $length bytes
-     ElGamal encrypted data
+     encrypted data
 
 Unencrypted data:
 
