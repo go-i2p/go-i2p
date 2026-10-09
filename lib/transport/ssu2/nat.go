@@ -57,23 +57,61 @@ func initNATManagers(t *SSU2Transport) error {
 	// partially initialized state.
 	relayMgr := ssu2noise.NewRelayManager(listener)
 	introducerReg := ssu2noise.NewIntroducerRegistry(3)
-	verifyFn := func(block *ssu2noise.RelayIntroBlock, signerKey ed25519.PublicKey) error {
-		// H2 FIX: Placeholder verification at init time.
-		// Real verification happens in session.go's VerifyRelayIntroSignature callback,
-		// where bobRouterHash is captured from the session context (bobSession.conn.RemoteAddr()).
-		// This callback just performs basic sanity checks.
-		if block == nil {
-			return oops.Errorf("relay intro: missing block")
+	// resolveHolePunchContext resolves the peer identities and signer key for
+	// incoming hole-punch messages. Per SSU2 spec §Hole Punch, the RelayIntro
+	// signature covers Bob's and Charlie's router hashes, so both must be
+	// resolved from live session state (fail-closed when unknown):
+	//   - BobHash:     router hash of the introducer session (attempt.Introducer)
+	//   - CharlieHash: router hash of the target session (attempt.RemoteAddr),
+	//                  or the local router's hash when the target is ourselves
+	//   - signerKey:   Alice's Ed25519 key, looked up in NetDB from the block's
+	//                  AliceRouterHash
+	resolver := func(info ssu2noise.HolePunchVerifyInfo) (ssu2noise.HolePunchVerifyContext, ed25519.PublicKey, bool) {
+		var ctx ssu2noise.HolePunchVerifyContext
+
+		// Resolve Bob's hash from the introducer session.
+		bobSession := t.findSessionByAddr(info.IntroducerAddr)
+		if bobSession == nil {
+			t.logger.Debug("hole-punch verify: no session for introducer address; failing closed")
+			return ctx, nil, false
 		}
-		if len(block.Signature) == 0 {
-			return oops.Errorf("relay intro: missing signature")
+		ctx.BobHash = extractBobRouterHash(bobSession)
+
+		// Resolve Charlie's hash from the target session.
+		charlieSession := t.findSessionByAddr(info.RemoteAddr)
+		if charlieSession == nil {
+			t.logger.Debug("hole-punch verify: no session for remote address; failing closed")
+			return ctx, nil, false
 		}
-		return nil
+		ctx.CharlieHash = extractBobRouterHash(charlieSession)
+
+		// Resolve the signer's (Alice's) Ed25519 key from NetDB.
+		if info.Block == nil || len(info.Block.AliceRouterHash) != 32 {
+			t.logger.Debug("hole-punch verify: block missing Alice router hash; failing closed")
+			return ctx, nil, false
+		}
+		var aliceHash data.Hash
+		copy(aliceHash[:], info.Block.AliceRouterHash)
+
+		cfg := t.config.Load()
+		if cfg.RouterLookupFunc == nil {
+			t.logger.Debug("hole-punch verify: RouterLookupFunc not configured; failing closed")
+			return ctx, nil, false
+		}
+		aliceRI, err := cfg.RouterLookupFunc(aliceHash)
+		if err != nil {
+			t.logger.WithField("error", err).Debug("hole-punch verify: NetDB lookup for Alice failed; failing closed")
+			return ctx, nil, false
+		}
+		alicePubKey, err := extractEd25519PublicKey(aliceRI)
+		if err != nil {
+			t.logger.WithField("error", err).Debug("hole-punch verify: failed to extract Alice's Ed25519 key; failing closed")
+			return ctx, nil, false
+		}
+
+		return ctx, alicePubKey, true
 	}
-	var err error
-	// H2 FIX: Pass verifyFn with old signature (no bobRouterHash).
-	// Real Ed25519 verification happens in session.go where bobRouterHash is available.
-	holePunch, err := ssu2noise.NewHolePunchCoordinator(relayMgr, verifyFn)
+	holePunch, err := ssu2noise.NewHolePunchCoordinator(relayMgr, resolver)
 	if err != nil {
 		// MEDIUM 5.5: HolePunchCoordinator initialization failure should be reported,
 		// not silently downgraded to a warning. Return the error so the caller can decide
