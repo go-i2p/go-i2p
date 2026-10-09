@@ -9,194 +9,115 @@ import (
 )
 
 /*
-I2P I2NP DatabaseLookup
-https://geti2p.net/spec/i2np#databaselookup
-Accurate for version 0.9.65
+DatabaseLookup is part of the I2P database subsystem. It queries the
+distributed database for a RouterInfo or LeaseSet by SHA-256 key.
 
-+----+----+----+----+----+----+----+----+
-| SHA256 hash as the key to look up     |
-+                                       +
-|                                       |
-+                                       +
-|                                       |
-+                                       +
-|                                       |
-+----+----+----+----+----+----+----+----+
-| SHA256 hash of the routerInfo         |
-+ who is asking or the gateway to       +
-| send the reply to                     |
-+                                       +
-|                                       |
-+                                       +
-|                                       |
-+----+----+----+----+----+----+----+----+
-|flag| reply_tunnelId    | size    |    |
-+----+----+----+----+----+----+----+    +
-| SHA256 of key1 to exclude             |
-+                                       +
-|                                       |
-+                                       +
-|                                       |
-+                                  +----+
-|                                  |    |
-+----+----+----+----+----+----+----+    +
-| SHA256 of key2 to exclude             |
-+                                       +
-~                                       ~
-+                                  +----+
-|                                  |    |
-+----+----+----+----+----+----+----+    +
-|                                       |
-+                                       +
-|   Session key if reply encryption     |
-+   was requested                       +
-|                                       |
-+                                  +----+
-|                                  |tags|
-+----+----+----+----+----+----+----+----+
-|                                       |
-+                                       +
-|   Session tags if reply encryption    |
-+   was requested                       +
-|                                       |
-+                                       +
-|                                       |
-+----+----+----+----+----+----+----+----+
+In the protocol, a router that needs a peer's identity (RouterInfo) or
+lease set sends a DatabaseLookup to its floodfill peers. The peers
+search their local database and reply with a DatabaseSearchReplyMessage.
+The reply can be delivered directly to the requesting router or routed
+through a reply tunnel for additional anonymity.
 
-key ::
-    32 bytes
-    SHA256 hash of the object to lookup
+When the ECIES flag is set, the reply is encrypted with
+ECIES-X25519-AEAD-Ratchet (ChaCha20-Poly1305). The sender includes a
+32-byte SessionKey and one or more 8-byte ECIES SessionTags so the
+receiving router can decrypt the reply.
 
-from ::
-     32 bytes
-     if deliveryFlag == 0, the SHA256 hash of the routerInfo entry this
-                           request came from (to which the reply should be
-                           sent)
-     if deliveryFlag == 1, the SHA256 hash of the reply tunnel gateway (to
-                           which the reply should be sent)
+Wire format:
 
-flags ::
-     1 byte
-     bit order: 76543210
-     bit 0: deliveryFlag
-             0  => send reply directly
-             1  => send reply to some tunnel
-     bit 1: encryptionFlag
-             through release 0.9.5, must be set to 0
-             as of release 0.9.6, ignored
-             as of release 0.9.7:
-             0  => send unencrypted reply
-             1  => send AES encrypted reply using enclosed key and tag
-     bits 3-2: lookup type flags
-             through release 0.9.5, must be set to 00
-             as of release 0.9.6, ignored
-             as of release 0.9.16:
-             00  => normal lookup, return RouterInfo or LeaseSet or
-                    DatabaseSearchReplyMessage
-                    Not recommended when sending to routers
-                    with version 0.9.16 or higher.
-             01  => LS lookup, return LeaseSet or
-                    DatabaseSearchReplyMessage
-                    As of release 0.9.38, may also return a
-                    LeaseSet2, MetaLeaseSet, or EncryptedLeaseSet.
-             10  => RI lookup, return RouterInfo or
-                    DatabaseSearchReplyMessage
-             11  => exploration lookup, return DatabaseSearchReplyMessage
-                    containing non-floodfill routers only (replaces an
-                    excludedPeer of all zeroes)
-     bit 4: ECIESFlag
-             before release 0.9.46 ignored
-             as of release 0.9.46:
-             0  => send unencrypted or ElGamal reply
-             1  => send ChaCha/Poly encrypted reply using enclosed key
-                   (whether tag is enclosed depends on bit 1)
-     bits 7-5:
-             through release 0.9.5, must be set to 0
-             as of release 0.9.6, ignored, set to 0 for compatibility with
-             future uses and with older routers
+  +--------------------------------------------------+
+  | key (32 bytes)                                   |
+  +--------------------------------------------------+
+  | from (32 bytes)                                  |
+  +--------------------------------------------------+
+  | flags (1 byte)                                   |
+  +--------------------------------------------------+
+  | reply_tunnelId (4 bytes)  [if deliveryFlag == 1] |
+  +--------------------------------------------------+
+  | size (2 bytes)                                   |
+  +--------------------------------------------------+
+  | excludedPeers (size x 32 bytes)                  |
+  +--------------------------------------------------+
+  | reply_key (32 bytes)    [if ECIES flag set]      |
+  +--------------------------------------------------+
+  | tags (1 byte)           [if ECIES flag set]      |
+  +--------------------------------------------------+
+  | reply_tags (tags x 8 bytes) [if ECIES flag set]  |
+  +--------------------------------------------------+
 
-reply_tunnelId ::
-               4 byte TunnelID
-               only included if deliveryFlag == 1
-               tunnelId of the tunnel to send the reply to, nonzero
+Fields:
 
-size ::
-     2 byte Integer
-     valid range: 0-512
-     number of peers to exclude from the DatabaseSearchReplyMessage
+  key:
+    SHA-256 hash of the object to look up (RouterInfo or LeaseSet).
 
-excludedPeers ::
-              $size SHA256 hashes of 32 bytes each (total $size*32 bytes)
-              if the lookup fails, these peers are requested to be excluded
-              from the list in the DatabaseSearchReplyMessage.
-              if excludedPeers includes a hash of all zeroes, the request is
-              exploratory, and the DatabaseSearchReplyMessage is requested
-              to list non-floodfill routers only.
+  from:
+    If deliveryFlag == 0: SHA-256 hash of the requesting router's
+    RouterInfo. If deliveryFlag == 1: SHA-256 hash of the reply tunnel
+    gateway.
 
-reply_key ::
-     32 byte key
-     see below
+  flags (bit order 76543210):
+    bit 0  deliveryFlag: 0 = direct reply, 1 = reply via tunnel.
+    bit 1  reserved (must be 0).
+    bits 3-2 lookup type:
+             00 = normal (RouterInfo or LeaseSet)
+             01 = LeaseSet only
+             10 = RouterInfo only
+             11 = exploration (non-floodfill routers only)
+    bit 4  ECIES flag: 0 = unencrypted reply, 1 = ECIES-encrypted reply.
+    bits 7-5 reserved (must be 0).
 
-tags ::
-     1 byte Integer
-     valid range: 1-32 (typically 1)
-     the number of reply tags that follow
-     see below
+  reply_tunnelId:
+    4-byte tunnel ID of the reply tunnel. Present only when
+    deliveryFlag == 1.
 
-reply_tags ::
-     one or more 8 or 32 byte session tags (typically one)
-     see below
+  size:
+    Number of excluded peers (0-512).
 
+  excludedPeers:
+    SHA-256 hashes of routers to exclude from the reply. If the list
+    contains an all-zero hash, the lookup is exploratory.
 
-ElG to ElG
+  reply_key:
+    32-byte ECIES SessionKey. Present only when the ECIES flag is set.
 
-reply_key ::
-     32 byte SessionKey big-endian
-     only included if encryptionFlag == 1 AND ECIESFlag == 0, only as of release 0.9.7
+  tags:
+    Number of ECIES reply tags that follow (typically 1). Present only
+    when the ECIES flag is set.
 
-tags ::
-     1 byte Integer
-     valid range: 1-32 (typically 1)
-     the number of reply tags that follow
-     only included if encryptionFlag == 1 AND ECIESFlag == 0, only as of release 0.9.7
+  reply_tags:
+    One or more 8-byte ECIES SessionTags. Present only when the ECIES
+    flag is set.
 
-reply_tags ::
-     one or more 32 byte SessionTags (typically one)
-     only included if encryptionFlag == 1 AND ECIESFlag == 0, only as of release 0.9.7
-
-
-ECIES to ElG
-
-reply_key ::
-     32 byte ECIES SessionKey big-endian
-     only included if encryptionFlag == 0 AND ECIESFlag == 1, only as of release 0.9.46
-
-tags ::
-     1 byte Integer
-     required value: 1
-     the number of reply tags that follow
-     only included if encryptionFlag == 0 AND ECIESFlag == 1, only as of release 0.9.46
-
-reply_tags ::
-     an 8 byte ECIES SessionTag
-     only included if encryptionFlag == 0 AND ECIESFlag == 1, only as of release 0.9.46
-
+Spec: https://geti2p.net/spec/i2np#databaselookup
+ECIES: https://geti2p.net/spec/ecies
 */
 
-// DatabaseLookup represents an I2NP DatabaseLookup message used to query the network database for a RouterInfo or LeaseSet.
+// DatabaseLookup is an I2NP message that queries the distributed database
+// for a RouterInfo or LeaseSet by SHA-256 key.
+//
+// It is part of the database subsystem: the Router sends it to floodfill
+// peers, which search their local database and reply with a
+// DatabaseSearchReplyMessage. The reply is delivered directly or through a
+// reply tunnel, and can be ECIES-encrypted.
+//
+// See the package-level wire format diagram above for the on-wire layout.
 type DatabaseLookup struct {
-	Key            common.Hash
-	From           common.Hash
-	Flags          byte
-	ReplyTunnelID  [4]byte
-	Size           int
-	ExcludedPeers  []common.Hash
-	ReplyKey       session_key.SessionKey
-	Tags           int
-	ECIESReplyTags []session_tag.ECIESSessionTag
+	Key            common.Hash             // SHA-256 hash of the object to look up
+	From           common.Hash             // RouterInfo hash (direct) or reply tunnel gateway hash (tunnel)
+	Flags          byte                    // delivery, lookup type, and ECIES flags
+	ReplyTunnelID  [4]byte                 // reply tunnel ID (present only when deliveryFlag == 1)
+	Size           int                     // number of excluded peers (0-512)
+	ExcludedPeers  []common.Hash           // routers to exclude from the reply
+	ReplyKey       session_key.SessionKey  // ECIES SessionKey (present only when ECIES flag set)
+	Tags           int                     // number of ECIES reply tags (present only when ECIES flag set)
+	ECIESReplyTags []session_tag.ECIESSessionTag // 8-byte ECIES SessionTags (present only when ECIES flag set)
 }
 
-// ReadDatabaseLookup parses a DatabaseLookup message from the provided byte slice.
+// ReadDatabaseLookup parses a DatabaseLookup message from the wire.
+//
+// It reads the fixed fields (key, from, flags), the conditional
+// reply_tunnelId, the excluded peers, and — when the ECIES flag (bit 4) is
+// set — the reply encryption fields (reply_key, tags, reply_tags).
 func ReadDatabaseLookup(data []byte) (DatabaseLookup, error) {
 	log.WithFields(logger.Fields{"at": "ReadDatabaseLookup"}).Debug("Reading DatabaseLookup")
 	databaseLookup := DatabaseLookup{}
@@ -444,62 +365,76 @@ func readDatabaseLookupECIESReplyTags(length int, data []byte, tags int) (int, [
 	return length + tags*tagSize, replyTags, nil
 }
 
-// GetKey returns the lookup key
+// GetKey returns the SHA-256 hash of the object being looked up.
 func (d *DatabaseLookup) GetKey() common.Hash {
 	return d.Key
 }
 
-// GetFrom returns the from hash
+// GetFrom returns the reply destination: the requesting router's RouterInfo
+// hash for a direct reply, or the reply tunnel gateway hash for a tunnel reply.
 func (d *DatabaseLookup) GetFrom() common.Hash {
 	return d.From
 }
 
-// GetFlags returns the lookup flags
+// GetFlags returns the raw flags byte (delivery, lookup type, and ECIES bits).
 func (d *DatabaseLookup) GetFlags() byte {
 	return d.Flags
 }
 
-// GetECIESReplyTags returns the ECIES reply tags (8-byte)
+// GetECIESReplyTags returns the 8-byte ECIES SessionTags used to decrypt the
+// encrypted reply. Present only when the ECIES flag is set.
 func (d *DatabaseLookup) GetECIESReplyTags() []session_tag.ECIESSessionTag {
 	return d.ECIESReplyTags
 }
 
-// GetTagCount returns the number of tags
+// GetTagCount returns the number of ECIES reply tags.
 func (d *DatabaseLookup) GetTagCount() int {
 	return d.Tags
 }
 
-// IsECIES returns true if the ECIESFlag (bit 4) is set in the flags byte
+// IsECIES reports whether the reply is ECIES-encrypted (bit 4 set).
 func (d *DatabaseLookup) IsECIES() bool {
 	return (d.Flags & 0x10) != 0
 }
 
-// DatabaseLookup flag constants for constructing lookup messages
+// Flag constants for the DatabaseLookup flags byte.
+//
+// The flags byte is split into three fields:
+//
+//	bit 0    delivery: direct reply (0) or tunnel reply (1)
+//	bits 3-2 lookup type: normal, LeaseSet, RouterInfo, or exploration
+//	bit 4    ECIES: reply is ECIES-encrypted
+//
+// Combine one delivery flag, one lookup type, and optionally the ECIES flag.
 const (
-	// DatabaseLookupFlagDirect means send reply directly (bit 0 = 0)
+	// DatabaseLookupFlagDirect requests a direct reply (bit 0 = 0).
 	DatabaseLookupFlagDirect byte = 0x00
-	// DatabaseLookupFlagTunnel means send reply to a tunnel (bit 0 = 1)
+	// DatabaseLookupFlagTunnel requests a reply routed through a tunnel (bit 0 = 1).
 	DatabaseLookupFlagTunnel byte = 0x01
-	// DatabaseLookupFlagTypeNormal is a normal lookup (bits 3-2 = 00)
+	// DatabaseLookupFlagTypeNormal requests a normal lookup returning a
+	// RouterInfo or LeaseSet (bits 3-2 = 00).
 	DatabaseLookupFlagTypeNormal byte = 0x00
-	// DatabaseLookupFlagTypeLS is a LeaseSet lookup (bits 3-2 = 01)
+	// DatabaseLookupFlagTypeLS requests a LeaseSet lookup (bits 3-2 = 01).
 	DatabaseLookupFlagTypeLS byte = 0x04
-	// DatabaseLookupFlagTypeRI is a RouterInfo lookup (bits 3-2 = 10)
+	// DatabaseLookupFlagTypeRI requests a RouterInfo lookup (bits 3-2 = 10).
 	DatabaseLookupFlagTypeRI byte = 0x08
-	// DatabaseLookupFlagTypeExploration is an exploration lookup (bits 3-2 = 11)
+	// DatabaseLookupFlagTypeExploration requests an exploration lookup that
+	// returns non-floodfill routers only (bits 3-2 = 11).
 	DatabaseLookupFlagTypeExploration byte = 0x0C
-	// DatabaseLookupFlagECIES means use ECIES encryption for reply (bit 4 = 1)
+	// DatabaseLookupFlagECIES requests an ECIES-encrypted reply (bit 4 = 1).
 	DatabaseLookupFlagECIES byte = 0x10
 )
 
-// NewDatabaseLookup creates a new DatabaseLookup message for RouterInfo lookups.
-// This creates a simple direct-reply lookup without encryption.
+// NewDatabaseLookup creates a DatabaseLookup that requests a direct,
+// unencrypted reply. The reply is sent straight to the router identified by
+// from.
 //
 // Parameters:
-//   - key: The hash of the RouterInfo/LeaseSet to look up
-//   - from: The hash of our router (where to send the reply)
-//   - lookupType: The type of lookup (DatabaseLookupFlagTypeRI, DatabaseLookupFlagTypeLS, etc.)
-//   - excludedPeers: Peers to exclude from DatabaseSearchReply (can be nil)
+//   - key: SHA-256 hash of the RouterInfo or LeaseSet to look up
+//   - from: SHA-256 hash of the requesting router's RouterInfo
+//   - lookupType: one of DatabaseLookupFlagTypeRI, DatabaseLookupFlagTypeLS,
+//     DatabaseLookupFlagTypeNormal, or DatabaseLookupFlagTypeExploration
+//   - excludedPeers: routers to exclude from the reply (may be nil)
 func NewDatabaseLookup(key, from common.Hash, lookupType byte, excludedPeers []common.Hash) *DatabaseLookup {
 	log.WithFields(logger.Fields{
 		"at":            "NewDatabaseLookup",
@@ -524,14 +459,17 @@ func NewDatabaseLookup(key, from common.Hash, lookupType byte, excludedPeers []c
 	}
 }
 
-// NewDatabaseLookupWithTunnel creates a DatabaseLookup that sends replies through a tunnel.
+// NewDatabaseLookupWithTunnel creates a DatabaseLookup that requests a reply
+// routed through a reply tunnel, adding a layer of anonymity between the
+// responder and the requester.
 //
 // Parameters:
-//   - key: The hash of the RouterInfo/LeaseSet to look up
-//   - replyGateway: The hash of the tunnel gateway router
-//   - replyTunnelID: The tunnel ID to send the reply through
-//   - lookupType: The type of lookup (DatabaseLookupFlagTypeRI, DatabaseLookupFlagTypeLS, etc.)
-//   - excludedPeers: Peers to exclude from DatabaseSearchReply (can be nil)
+//   - key: SHA-256 hash of the RouterInfo or LeaseSet to look up
+//   - replyGateway: SHA-256 hash of the reply tunnel's gateway router
+//   - replyTunnelID: the tunnel ID to route the reply through
+//   - lookupType: one of DatabaseLookupFlagTypeRI, DatabaseLookupFlagTypeLS,
+//     DatabaseLookupFlagTypeNormal, or DatabaseLookupFlagTypeExploration
+//   - excludedPeers: routers to exclude from the reply (may be nil)
 func NewDatabaseLookupWithTunnel(key, replyGateway common.Hash, replyTunnelID [4]byte, lookupType byte, excludedPeers []common.Hash) *DatabaseLookup {
 	log.WithFields(logger.Fields{
 		"at":              "NewDatabaseLookupWithTunnel",
@@ -557,8 +495,12 @@ func NewDatabaseLookupWithTunnel(key, replyGateway common.Hash, replyTunnelID [4
 	}
 }
 
-// MarshalBinary serializes the DatabaseLookup message to binary format.
-// The format follows the I2NP specification for DatabaseLookup messages.
+// MarshalBinary serializes the DatabaseLookup to its I2NP wire format.
+//
+// It writes the fixed fields, the conditional reply_tunnelId, the excluded
+// peers, and — when the ECIES flag is set — the reply encryption fields.
+// Size is recomputed from ExcludedPeers so the wire field always matches the
+// slice, regardless of how the struct was constructed.
 func (d *DatabaseLookup) MarshalBinary() ([]byte, error) {
 	// Always recompute Size from the actual slice length so that the wire field
 	// and the in-memory slice are consistent, regardless of how the struct was

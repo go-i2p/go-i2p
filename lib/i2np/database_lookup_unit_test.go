@@ -1,5 +1,11 @@
 package i2np
 
+// These tests validate the DatabaseLookup wire-format parsing required by the
+// I2NP specification (https://geti2p.net/spec/i2np#databaselookup): each field
+// is read at the correct offset, conditional fields (reply_tunnelId, ECIES
+// reply fields) appear only when their flag is set, and malformed or
+// truncated input is rejected.
+
 import (
 	"testing"
 
@@ -114,6 +120,8 @@ func buildFullLookupMessage(flags byte, peerCount int) ([]byte, lookupExpected) 
 	}
 }
 
+// TestReadDatabaseLookupKeyTooLittleData validates that reading the 32-byte
+// key rejects input shorter than 32 bytes.
 func TestReadDatabaseLookupKeyTooLittleData(t *testing.T) {
 	assert := assert.New(t)
 
@@ -123,6 +131,8 @@ func TestReadDatabaseLookupKeyTooLittleData(t *testing.T) {
 	assert.Equal(ErrDatabaseLookupNotEnoughData, err)
 }
 
+// TestReadDatabaseLookupKeyValidData validates that a 32-byte key is read
+// verbatim and advances the offset by 32.
 func TestReadDatabaseLookupKeyValidData(t *testing.T) {
 	assert := assert.New(t)
 
@@ -138,6 +148,8 @@ func TestReadDatabaseLookupKeyValidData(t *testing.T) {
 	assert.Equal(nil, err)
 }
 
+// TestReadDatabaseLookupFromTooLittleData validates that reading the 32-byte
+// "from" router hash rejects input shorter than 32 bytes.
 func TestReadDatabaseLookupFromTooLittleData(t *testing.T) {
 	assert := assert.New(t)
 
@@ -195,6 +207,9 @@ func TestReadDatabaseLookupFlagsValidData(t *testing.T) {
 	assert.Equal(nil, err)
 }
 
+// TestReadDatabaseLookupReplyTunnelIDTooLittleData validates that reading the
+// 4-byte reply tunnel ID rejects input shorter than 4 bytes when the tunnel
+// delivery flag is set.
 func TestReadDatabaseLookupReplyTunnelIDTooLittleData(t *testing.T) {
 	assert := assert.New(t)
 
@@ -214,6 +229,9 @@ func TestReadDatabaseLookupReplyTunnelIDTooLittleData(t *testing.T) {
 	assert.Equal(ErrDatabaseLookupNotEnoughData, err)
 }
 
+// TestReadDatabaseLookupReplyTunnelIDNotIncluded validates that when the
+// tunnel delivery flag is unset, no reply tunnel ID is read and the offset is
+// unchanged.
 func TestReadDatabaseLookupReplyTunnelIDNotIncluded(t *testing.T) {
 	assert := assert.New(t)
 
@@ -227,6 +245,8 @@ func TestReadDatabaseLookupReplyTunnelIDNotIncluded(t *testing.T) {
 	assert.Equal(nil, err)
 }
 
+// TestReadDatabaseLookupReplyTunnelIDValidData validates that a 4-byte reply
+// tunnel ID is read verbatim when the tunnel delivery flag is set.
 func TestReadDatabaseLookupReplyTunnelIDValidData(t *testing.T) {
 	assert := assert.New(t)
 
@@ -247,6 +267,8 @@ func TestReadDatabaseLookupReplyTunnelIDValidData(t *testing.T) {
 	assert.Equal(nil, err)
 }
 
+// TestReadDatabaseLookupSizeTooLittleData validates that reading the 2-byte
+// excluded-peer count rejects input shorter than 2 bytes.
 func TestReadDatabaseLookupSizeTooLittleData(t *testing.T) {
 	assert := assert.New(t)
 
@@ -276,6 +298,8 @@ func TestReadDatabaseLookupSizeValidData(t *testing.T) {
 	assert.Equal(nil, err)
 }
 
+// TestReadDatabaseLookupExcludedPeersTooLittleData validates that reading
+// excluded peers rejects input shorter than the declared peer count.
 func TestReadDatabaseLookupExcludedPeersTooLittleData(t *testing.T) {
 	assert := assert.New(t)
 
@@ -295,6 +319,8 @@ func TestReadDatabaseLookupExcludedPeersTooLittleData(t *testing.T) {
 	assert.Equal(ErrDatabaseLookupNotEnoughData, err)
 }
 
+// TestReadDatabaseLookupExcludedPeersZeroSize validates that a zero peer count
+// yields no excluded peers and advances the offset by only the 2-byte size.
 func TestReadDatabaseLookupExcludedPeersZeroSize(t *testing.T) {
 	assert := assert.New(t)
 
@@ -314,6 +340,8 @@ func TestReadDatabaseLookupExcludedPeersZeroSize(t *testing.T) {
 	assert.Equal(nil, err)
 }
 
+// TestReadDatabaseLookupExcludedPeersValidData validates that N excluded
+// peers are read as N consecutive 32-byte router hashes.
 func TestReadDatabaseLookupExcludedPeersValidData(t *testing.T) {
 	assert := assert.New(t)
 
@@ -340,6 +368,8 @@ func TestReadDatabaseLookupExcludedPeersValidData(t *testing.T) {
 	assert.Equal(nil, err)
 }
 
+// TestReadDatabaseLookupReplyKeyTooLittleData validates that reading the
+// 32-byte ECIES reply key rejects input shorter than 32 bytes.
 func TestReadDatabaseLookupReplyKeyTooLittleData(t *testing.T) {
 	assert := assert.New(t)
 
@@ -353,6 +383,8 @@ func TestReadDatabaseLookupReplyKeyTooLittleData(t *testing.T) {
 	assert.Equal(ErrDatabaseLookupNotEnoughData, err)
 }
 
+// TestReadDatabaseLookupReplyKeyValidData validates that a 32-byte ECIES
+// reply key is read verbatim and advances the offset by 32.
 func TestReadDatabaseLookupReplyKeyValidData(t *testing.T) {
 	assert := assert.New(t)
 
@@ -369,6 +401,8 @@ func TestReadDatabaseLookupReplyKeyValidData(t *testing.T) {
 	assert.Equal(nil, err)
 }
 
+// TestReadDatabaseLookupTagsTooLittleData validates that reading the 1-byte
+// ECIES tag count rejects empty input.
 func TestReadDatabaseLookupTagsTooLittleData(t *testing.T) {
 	assert := assert.New(t)
 
@@ -381,6 +415,8 @@ func TestReadDatabaseLookupTagsTooLittleData(t *testing.T) {
 	assert.Equal(ErrDatabaseLookupNotEnoughData, err)
 }
 
+// TestReadDatabaseLookupTagsValidData validates that the 1-byte ECIES tag
+// count is read verbatim and advances the offset by 1.
 func TestReadDatabaseLookupTagsValidData(t *testing.T) {
 	assert := assert.New(t)
 
@@ -395,6 +431,8 @@ func TestReadDatabaseLookupTagsValidData(t *testing.T) {
 	assert.Equal(nil, err)
 }
 
+// TestReadDatabaseLookupTooLittleData validates that a DatabaseLookup with the
+// ECIES flag set but truncated encryption fields is rejected.
 func TestReadDatabaseLookupTooLittleData(t *testing.T) {
 	assert := assert.New(t)
 
@@ -407,6 +445,9 @@ func TestReadDatabaseLookupTooLittleData(t *testing.T) {
 	assert.Equal(ErrDatabaseLookupNotEnoughData, err)
 }
 
+// TestReadDatabaseLookupValidData validates that a complete DatabaseLookup
+// message — including ECIES reply fields — is parsed with every field at the
+// correct wire offset.
 func TestReadDatabaseLookupValidData(t *testing.T) {
 	assert := assert.New(t)
 
@@ -433,6 +474,8 @@ func TestReadDatabaseLookupValidData(t *testing.T) {
 	assert.Equal(err, nil)
 }
 
+// TestReadDatabaseLookupECIESReplyTagsTooLittleData validates that reading ECIES
+// reply tags rejects input shorter than tags×8 bytes.
 func TestReadDatabaseLookupECIESReplyTagsTooLittleData(t *testing.T) {
 	assert := assert.New(t)
 
@@ -490,6 +533,9 @@ func TestReadDatabaseLookupECIESReplyTagsValidData(t *testing.T) {
 	assert.Nil(err)
 }
 
+// TestReadDatabaseLookupWithECIESFlag validates that when the ECIES flag
+// (bit 4) is set, the parser reads the 32-byte reply_key, the tag count, and
+// the 8-byte ECIES reply tags — not the legacy 32-byte ElGamal tags.
 func TestReadDatabaseLookupWithECIESFlag(t *testing.T) {
 	assert := assert.New(t)
 
@@ -530,10 +576,9 @@ func TestReadDatabaseLookupWithECIESFlag(t *testing.T) {
 	}
 }
 
-// TestReadDatabaseLookupNoEncryptionFlags verifies that a DatabaseLookup message
-// without encryption flags (bit 1 and bit 4 both unset) parses correctly and does
-// NOT attempt to read encryption fields past the excluded peers.
-// This is the most common case on the I2P network.
+// TestReadDatabaseLookupNoEncryptionFlags validates that an unencrypted
+// DatabaseLookup (ECIES flag unset) parses without reading encryption fields
+// past the excluded peers — the most common case on the I2P network.
 func TestReadDatabaseLookupNoEncryptionFlags(t *testing.T) {
 	assert := assert.New(t)
 
@@ -550,9 +595,10 @@ func TestReadDatabaseLookupNoEncryptionFlags(t *testing.T) {
 	assertNoEncryptionFields(t, databaseLookup)
 }
 
-// TestReadDatabaseLookupNoEncryptionWithExcludedPeers verifies parsing of
-// an unencrypted lookup with excluded peers — data ends right after the peers
-// and no garbage is read as encryption fields.
+// TestReadDatabaseLookupNoEncryptionWithExcludedPeers validates that an
+// unencrypted lookup with excluded peers parses correctly, with the message
+// ending right after the peers and no trailing bytes misread as encryption
+// fields.
 func TestReadDatabaseLookupNoEncryptionWithExcludedPeers(t *testing.T) {
 	assert := assert.New(t)
 
@@ -568,8 +614,9 @@ func TestReadDatabaseLookupNoEncryptionWithExcludedPeers(t *testing.T) {
 	assertNoEncryptionFields(t, databaseLookup)
 }
 
-// TestReadDatabaseLookupWithECIESFlagStillWorks verifies that lookups
-// WITH the ECIES flag set still parse encryption fields correctly.
+// TestReadDatabaseLookupWithECIESFlagStillWorks validates that a direct-reply
+// ECIES lookup (ECIES flag set, no tunnel) parses the 32-byte reply_key, a
+// single tag count, and one 8-byte ECIES reply tag.
 func TestReadDatabaseLookupWithECIESFlagStillWorks(t *testing.T) {
 	assert := assert.New(t)
 
@@ -599,8 +646,9 @@ func TestReadDatabaseLookupWithECIESFlagStillWorks(t *testing.T) {
 	assert.Equal(1, len(databaseLookup.ECIESReplyTags))
 }
 
-// TestReadDatabaseLookupExplorationNoEncryption verifies an exploration lookup
-// (bits 3-2 = 11) without encryption parses correctly.
+// TestReadDatabaseLookupExplorationNoEncryption validates that an exploration
+// lookup (bits 3-2 = 11) with an all-zero excluded-peer marker parses
+// correctly without encryption fields.
 func TestReadDatabaseLookupExplorationNoEncryption(t *testing.T) {
 	assert := assert.New(t)
 
