@@ -508,6 +508,8 @@ func TestReadDatabaseLookupECIESReplyTagsZeroTags(t *testing.T) {
 	assert.Nil(err)
 }
 
+// TestReadDatabaseLookupECIESReplyTagsValidData validates that N ECIES reply
+// tags are read as N consecutive 8-byte tags.
 func TestReadDatabaseLookupECIESReplyTagsValidData(t *testing.T) {
 	assert := assert.New(t)
 
