@@ -59,6 +59,10 @@ type RouterInfoStorerWithErrors interface {
 }
 
 // TransportSession is a session between 2 routers for transmitting i2np messages securely.
+// It is the transport-level connection established by a concrete transport
+// (NTCP2 over TCP, SSU2 over UDP) after its Noise handshake completes. Higher
+// layers use it to queue outbound I2NP messages and read inbound ones without
+// knowing which transport carries them.
 type TransportSession interface {
 	// queue an i2np message to be sent over the session
 	// returns an error if the session is closed or the send queue is full
@@ -75,7 +79,9 @@ type TransportSession interface {
 }
 
 // Transport defines the interface for an I2P transport layer capable of accepting connections,
-// managing sessions, and binding to a router identity.
+// managing sessions, and binding to a router identity. Concrete implementations
+// (NTCP2 over TCP, SSU2 over UDP) use Noise for key exchange and encryption, and
+// expose established connections as TransportSession values.
 type Transport interface {
 	// Accept accepts an incoming session.
 	Accept() (net.Conn, error)

@@ -26,24 +26,36 @@ record size: 218 bytes
 total size: 1+$num*218
 */
 
-// ShortTunnelBuildReply represents an I2NP ShortTunnelBuildReply message, the reply counterpart to ShortTunnelBuild containing compact build response records.
+// ShortTunnelBuildReply represents an I2NP ShortTunnelBuildReply message,
+// the reply counterpart to ShortTunnelBuild. It carries one compact
+// 218-byte build response record per hop (1-8 records), which the
+// TunnelManager uses to determine whether the short tunnel build succeeded.
+// See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the wire format.
+// See also [ShortTunnelBuild] and [TunnelBuildReply].
 type ShortTunnelBuildReply struct {
 	Count                int
 	BuildResponseRecords []BuildResponseRecord
 	RawRecordData        [][]byte // Original encrypted bytes before parsing
 }
 
-// GetReplyRecords returns the build response records (TunnelReplyHandler interface)
+// GetReplyRecords returns the parsed build response records. It satisfies
+// the TunnelReplyHandler interface so the reply processor can handle
+// short and standard build replies uniformly.
+// See also [TunnelReplyHandler].
 func (s *ShortTunnelBuildReply) GetReplyRecords() []BuildResponseRecord {
 	return s.BuildResponseRecords
 }
 
-// GetRawReplyRecords returns the original encrypted record bytes.
+// GetRawReplyRecords returns the original encrypted record bytes as they
+// appeared on the wire, before parsing. Useful for debugging and for
+// re-decryption attempts when parsing fails.
 func (s *ShortTunnelBuildReply) GetRawReplyRecords() [][]byte {
 	return s.RawRecordData
 }
 
-// GetRecordCount returns the number of response records
+// GetRecordCount returns the number of response records, as declared in
+// the 1-byte count field of the message. ProcessReply validates that this
+// matches the actual number of parsed records.
 func (s *ShortTunnelBuildReply) GetRecordCount() int {
 	return s.Count
 }
@@ -171,7 +183,10 @@ func (s *ShortTunnelBuildReply) determineBuildResult(successCount, recordCount i
 	return oops.Errorf("short tunnel build failed: %d of %d hops rejected", failedHops, recordCount)
 }
 
-// NewShortTunnelBuildReply creates a new ShortTunnelBuildReply
+// NewShortTunnelBuildReply creates a new ShortTunnelBuildReply from a set
+// of already-parsed build response records, setting the record count
+// automatically.
+// See also [ShortTunnelBuildReply].
 func NewShortTunnelBuildReply(records []BuildResponseRecord) *ShortTunnelBuildReply {
 	log.WithFields(logger.Fields{
 		"at":           "NewShortTunnelBuildReply",

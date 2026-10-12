@@ -72,7 +72,12 @@ Total length: Typical length is:
        37 bytes for TUNNEL delivery
 */
 
-// GarlicCloveDeliveryInstructions represents the delivery instructions for a garlic clove, specifying how and where the enclosed I2NP message should be delivered.
+// GarlicCloveDeliveryInstructions specifies how and where the enclosed I2NP
+// message in a garlic clove should be delivered. The flag byte encodes the
+// delivery type (LOCAL, DESTINATION, ROUTER, or TUNNEL), an optional
+// encryption session key, an optional target hash, and an optional tunnel ID.
+// See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the wire format.
+// See also [GarlicClove], [GarlicBuilder].
 type GarlicCloveDeliveryInstructions struct {
 	Flag       byte
 	SessionKey session_key.SessionKey

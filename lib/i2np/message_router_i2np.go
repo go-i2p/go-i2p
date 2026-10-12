@@ -10,14 +10,20 @@ import (
 	"github.com/samber/oops"
 )
 
-// I2NPMessageDispatcherConfig represents configuration for message routing
+// I2NPMessageDispatcherConfig holds configuration for the I2NP message
+// dispatcher: retry limits, default timeouts, and whether routing is logged.
+// See also [I2NPMessageDispatcher].
 type I2NPMessageDispatcherConfig struct {
 	MaxRetries     int
 	DefaultTimeout time.Duration
 	EnableLogging  bool
 }
 
-// I2NPMessageDispatcher demonstrates advanced interface-based routing
+// I2NPMessageDispatcher routes inbound I2NP messages to the appropriate
+// subsystem: generic messages go to the MessageProcessor, database messages
+// to the DatabaseManager, and tunnel builds to the TunnelManager. It is the
+// central dispatch point between the transport layer and the I2NP handlers.
+// See also [MessageProcessor], [DatabaseManager], and [TunnelManager].
 type I2NPMessageDispatcher struct {
 	config    I2NPMessageDispatcherConfig
 	processor *MessageProcessor
@@ -25,7 +31,11 @@ type I2NPMessageDispatcher struct {
 	tunnelMgr TunnelBuildCoordinator
 }
 
-// NewI2NPMessageDispatcher creates a new message router
+// NewI2NPMessageDispatcher creates a new message router with the given
+// configuration. The NetDB store and peer selector are not available at
+// construction time, so they must be injected later via SetNetDB and
+// SetPeerSelector.
+// See also [I2NPMessageDispatcherConfig].
 func NewI2NPMessageDispatcher(config I2NPMessageDispatcherConfig) *I2NPMessageDispatcher {
 	return &I2NPMessageDispatcher{
 		config:    config,
@@ -65,7 +75,9 @@ func (mr *I2NPMessageDispatcher) SetOurRouterHash(hash common.Hash) {
 	log.WithField("router_hash", logutil.HashPrefix(hash)).Debug("Configured router identity for floodfill responses")
 }
 
-// SetPeerSelector sets the peer selector for the TunnelManager
+// SetPeerSelector sets the peer selector used by the TunnelManager to pick
+// routers for outbound tunnel builds. It must be called after construction,
+// since the selector is owned by the router.
 func (mr *I2NPMessageDispatcher) SetPeerSelector(selector tunnel.PeerSelector) {
 	mr.tunnelMgr.SetPeerSelector(selector)
 }
@@ -85,7 +97,11 @@ func (mr *I2NPMessageDispatcher) SetSessionProvider(provider SessionProvider) {
 	log.WithFields(logger.Fields{"at": "SetSessionProvider"}).Debug("Session provider configured for message router")
 }
 
-// RouteMessage routes messages based on their interfaces
+// RouteMessage routes an inbound I2NP message to the MessageProcessor after
+// checking its expiration. The expiration check applies the same 5-minute
+// tolerance as the processor, since messages with short TTLs (e.g.
+// DeliveryStatus) may arrive slightly expired after tunnel traversal.
+// See also [MessageProcessor].
 func (mr *I2NPMessageDispatcher) RouteMessage(msg Message) error {
 	// Log message if enabled
 	if mr.config.EnableLogging {
@@ -108,7 +124,11 @@ func (mr *I2NPMessageDispatcher) RouteMessage(msg Message) error {
 	return mr.processor.ProcessMessage(msg)
 }
 
-// RouteDatabaseMessage routes database-related messages
+// RouteDatabaseMessage routes database-related messages (DatabaseLookup,
+// DatabaseStore) to the DatabaseManager without source peer context. Use
+// RouteDatabaseMessageFromPeer when the source peer is known, so storage
+// paths can apply source-aware admission controls.
+// See also [DatabaseManager].
 func (mr *I2NPMessageDispatcher) RouteDatabaseMessage(msg interface{}) error {
 	return mr.RouteDatabaseMessageFromPeer(msg, nil)
 }

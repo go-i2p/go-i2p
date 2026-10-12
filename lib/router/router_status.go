@@ -24,6 +24,8 @@ func (r *Router) findTransport(typeCheck func(transport.Transport) bool) transpo
 }
 
 // GetActiveSessionCount returns the number of active transport sessions.
+// The count is used by I2PControl status reporting and by the network
+// status logic to detect a router with no peers.
 // Thread-safe access to the activeSessions map.
 func (r *Router) GetActiveSessionCount() int {
 	r.sessionMutex.RLock()
@@ -32,7 +34,8 @@ func (r *Router) GetActiveSessionCount() int {
 }
 
 // GetNTCP2SessionCount returns the number of active NTCP2 (TCP) sessions.
-// Returns 0 if the NTCP2 transport is not available.
+// The count is exposed through I2PControl so clients can see how many
+// TCP peers are connected. Returns 0 if the NTCP2 transport is not available.
 func (r *Router) GetNTCP2SessionCount() int {
 	t := r.findTransport(func(t transport.Transport) bool {
 		_, ok := t.(*ntcp.NTCP2Transport)
@@ -45,7 +48,8 @@ func (r *Router) GetNTCP2SessionCount() int {
 }
 
 // GetSSU2SessionCount returns the number of active SSU2 (UDP) sessions.
-// Returns 0 if the SSU2 transport is not available.
+// The count is exposed through I2PControl so clients can see how many
+// UDP peers are connected. Returns 0 if the SSU2 transport is not available.
 func (r *Router) GetSSU2SessionCount() int {
 	t := r.findTransport(func(t transport.Transport) bool {
 		_, ok := t.(*ssu2.SSU2Transport)
@@ -77,7 +81,8 @@ func (r *Router) GetTransportAddr() net.Addr {
 }
 
 // GetSSU2Addr returns the listening UDP address of the SSU2 transport.
-// Returns nil if SSU2 is not available or not yet bound.
+// The address is exposed through I2PControl so clients can see the UDP
+// endpoint. Returns nil if SSU2 is not available or not yet bound.
 func (r *Router) GetSSU2Addr() net.Addr {
 	t := r.findTransport(func(t transport.Transport) bool {
 		_, ok := t.(*ssu2.SSU2Transport)
@@ -90,7 +95,9 @@ func (r *Router) GetSSU2Addr() net.Addr {
 }
 
 // GetTransportSessionFailureStats returns session-attempt outcome counters from
-// the transport muxer. It returns zero-valued stats when transports are not ready.
+// the transport muxer. The counters let operators see how often inbound and
+// outbound session attempts fail and why.
+// It returns zero-valued stats when transports are not ready.
 func (r *Router) GetTransportSessionFailureStats() transport.MuxSessionFailureStats {
 	muxer := r.transports.Load()
 	if muxer == nil {
@@ -100,6 +107,8 @@ func (r *Router) GetTransportSessionFailureStats() transport.MuxSessionFailureSt
 }
 
 // GetNTCP2TransportMetrics returns a snapshot of NTCP2 transport counters.
+// The snapshot covers handshake, ratchet, and message counters so operators
+// can diagnose transport-level problems.
 // Returns a zero-value snapshot when NTCP2 transport is unavailable.
 func (r *Router) GetNTCP2TransportMetrics() ntcp.TransportMetricsSnapshot {
 	t := r.findTransport(func(t transport.Transport) bool {

@@ -50,7 +50,10 @@ func NewGarlicSessionManager(privateKey [32]byte) (*GarlicSessionManager, error)
 	return &GarlicSessionManager{inner: inner, oneTimeDiag: make(map[[8]byte]struct{})}, nil
 }
 
-// GenerateGarlicSessionManager creates a session manager with a fresh key pair.
+// GenerateGarlicSessionManager creates a session manager with a fresh ECIES-X25519
+// key pair. Use this when the router is starting for the first time or regenerating
+// its identity, as opposed to NewGarlicSessionManager which loads an existing key.
+// See also [GarlicSessionManager].
 func GenerateGarlicSessionManager() (*GarlicSessionManager, error) {
 	log.WithFields(logger.Fields{
 		"at": "GenerateGarlicSessionManager",
@@ -64,20 +67,6 @@ func GenerateGarlicSessionManager() (*GarlicSessionManager, error) {
 	return &GarlicSessionManager{inner: inner, oneTimeDiag: make(map[[8]byte]struct{})}, nil
 }
 
-// EncryptGarlicMessage encrypts a plaintext garlic message for the given destination.
-// This translates the common.Hash destinationHash to [32]byte and delegates to
-// the underlying ratchet.SessionManager.
-//
-// The raw garlic bytes are automatically wrapped in the ECIES-X25519-AEAD-Ratchet
-// payload format (DateTime + GarlicClove blocks) required by the go-noise library.
-//
-// Parameters:
-//   - destinationHash: Hash of the destination's public key (common.Hash)
-//   - destinationPubKey: The destination's X25519 public key (32 bytes)
-//   - cloves: One serialized spec-compliant clove payload per clove
-//     (from GarlicBuilder.BuildClovePayloads)
-//
-// Returns encrypted garlic message ready to send via I2NP.
 // EncryptGarlicMessage encrypts garlic cloves for the given destination.
 // This translates the common.Hash destinationHash to [32]byte and delegates to
 // the underlying ratchet.SessionManager.
@@ -94,6 +83,7 @@ func GenerateGarlicSessionManager() (*GarlicSessionManager, error) {
 //   - cloves: One serialized spec-compliant clove payload per clove
 //
 // Returns encrypted garlic message ready to send via I2NP.
+// See also [GarlicBuilder] and [WrapInGarlicMessage].
 func (sm *GarlicSessionManager) EncryptGarlicMessage(
 	destinationHash common.Hash,
 	destinationPubKey [32]byte,
@@ -334,21 +324,29 @@ func (sm *GarlicSessionManager) RegisterOneTimeGarlicKey(tag [8]byte, key [32]by
 }
 
 // GetPublicKey returns this session manager's X25519 public key.
+// Peers embed this key in their RouterInfo so they can initiate ECIES
+// New Session handshakes toward this router.
 func (sm *GarlicSessionManager) GetPublicKey() [32]byte {
 	return sm.inner.GetPublicKey()
 }
 
-// GetSessionCount returns the number of active sessions.
+// GetSessionCount returns the number of active ratchet sessions.
+// This is used for diagnostics and to detect session growth from
+// peers that have not yet converged on the current RouterInfo key.
 func (sm *GarlicSessionManager) GetSessionCount() int {
 	return sm.inner.GetSessionCount()
 }
 
 // CleanupExpiredSessions removes sessions that haven't been used recently.
+// Without periodic cleanup, ratchet key material for inactive peers would
+// accumulate in memory indefinitely. Returns the number of sessions removed.
 func (sm *GarlicSessionManager) CleanupExpiredSessions() int {
 	return sm.inner.CleanupExpiredSessions()
 }
 
 // StartCleanupLoop starts periodic cleanup of expired sessions.
+// The loop runs until ctx is cancelled, which normally happens when the
+// router shuts down (see Close).
 func (sm *GarlicSessionManager) StartCleanupLoop(ctx context.Context) {
 	sm.inner.StartCleanupLoop(ctx)
 }
@@ -500,7 +498,7 @@ func ExtractDataPayloadsFromInboundGarlic(sm *GarlicSessionManager, encryptedGar
 // (type 20) garlic clove. The clove's inner message data is framed as
 // [4-byte length][payload]; this strips that framing. Returns (nil, false) for
 // non-Data cloves or malformed framing.
-// ExtractDataClovePayload is exported for spec-compliant payload extraction.
+// See also [ExtractDataPayloadsFromInboundGarlic].
 func ExtractDataClovePayload(clove GarlicClove) ([]byte, bool) {
 	return extractDataClovePayload(clove)
 }

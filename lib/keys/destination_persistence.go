@@ -39,6 +39,8 @@ var (
 // The file contains the signing private key, encryption private key, and
 // the full serialized destination (KeysAndCert), allowing exact reconstruction
 // on load — preserving the same .b32.i2p address across restarts.
+//
+// See also [LoadDestinationKeyStore], [LoadOrCreateDestinationKeyStore].
 func (dks *DestinationKeyStore) StoreKeys(dir, name string) error {
 	log.WithFields(map[string]interface{}{
 		"at":   "DestinationKeyStore.StoreKeys",
@@ -70,6 +72,8 @@ func (dks *DestinationKeyStore) StoreKeys(dir, name string) error {
 
 // LoadDestinationKeyStore loads a previously persisted DestinationKeyStore from disk.
 // Returns the reconstructed key store with the same destination identity (same .b32.i2p address).
+//
+// See also [LoadOrCreateDestinationKeyStore].
 func LoadDestinationKeyStore(dir, name string) (*DestinationKeyStore, error) {
 	log.WithFields(map[string]interface{}{
 		"at":   "LoadDestinationKeyStore",
@@ -100,6 +104,8 @@ func LoadDestinationKeyStore(dir, name string) (*DestinationKeyStore, error) {
 // If the file exists but is corrupted or unreadable, an error is returned
 // instead of silently generating a new identity (which would cause identity loss).
 // This is the primary entry point for services that need a stable destination identity.
+//
+// See also [DestinationKeyStore], [LoadDestinationKeyStore].
 func LoadOrCreateDestinationKeyStore(dir, name string) (*DestinationKeyStore, error) {
 	log.WithFields(map[string]interface{}{
 		"at":   "LoadOrCreateDestinationKeyStore",
@@ -378,6 +384,8 @@ func (dks *DestinationKeyStore) archiveCurrentKeys(dir, name string) error {
 // The old keys are archived to a timestamped file in the same directory,
 // allowing recovery of old keys if needed for decrypting previous messages.
 // Returns the new DestinationKeyStore with freshly generated keys.
+//
+// See also [DestinationKeyStore.RotateKeys].
 func (dks *DestinationKeyStore) RotateDestinationKeys(dir, name string) (*DestinationKeyStore, error) {
 	log.WithFields(map[string]interface{}{
 		"at":   "RotateDestinationKeys",

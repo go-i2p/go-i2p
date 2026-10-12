@@ -30,32 +30,47 @@ record size: 528 bytes
 total size: 8*528 = 4224 bytes
 */
 
-// TunnelBuild represents the raw 8 build request records
+// TunnelBuild represents the raw 8 build request records of a standard
+// I2NP TunnelBuild message. Each 528-byte record is encrypted with
+// ECIES-X25519-AEAD so only the addressed router can read it.
+// See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the wire format.
+// See also [BuildRequestRecord] and [TunnelBuildMessage].
 type TunnelBuild [8]BuildRequestRecord
 
-// TunnelBuildMessage wraps TunnelBuild to implement Message interface
+// TunnelBuildMessage wraps TunnelBuild to implement the Message interface,
+// adding the I2NP header so the build can be sent over the network.
+// Records must be encrypted (via EncryptBuildRequestRecord) before
+// MarshalBinary will succeed.
+// See also [TunnelBuild] and [UnmarshalEncryptedBinary].
 type TunnelBuildMessage struct {
 	*BaseI2NPMessage
 	Records   TunnelBuild
 	encrypted bool // true when records have been encrypted for network transmission
 }
 
-// GetBuildRecords returns the build request records
+// GetBuildRecords returns the build request records as a slice. It
+// satisfies the TunnelBuilder interface so the TunnelManager can inspect
+// the hops of a build.
+// See also [TunnelBuilder].
 func (t *TunnelBuild) GetBuildRecords() []BuildRequestRecord {
 	return t[:]
 }
 
-// GetRecordCount returns the number of build records
+// GetRecordCount returns the number of build records. Standard tunnel
+// builds always carry exactly 8 records (one per hop).
 func (t *TunnelBuild) GetRecordCount() int {
 	return 8
 }
 
-// GetBuildRecords implements TunnelBuilder interface
+// GetBuildRecords implements the TunnelBuilder interface, exposing the
+// message's build request records for inspection by the TunnelManager.
+// See also [TunnelBuilder].
 func (msg *TunnelBuildMessage) GetBuildRecords() []BuildRequestRecord {
 	return msg.Records[:]
 }
 
-// GetRecordCount implements TunnelBuilder interface
+// GetRecordCount implements the TunnelBuilder interface. Standard tunnel
+// builds always carry exactly 8 records (one per hop).
 func (msg *TunnelBuildMessage) GetRecordCount() int {
 	return 8
 }

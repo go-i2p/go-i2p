@@ -9,6 +9,10 @@ import (
 )
 
 // I2PControlServer is the interface satisfied by *i2pcontrol.Server.
+// The router depends on this interface rather than the concrete server so
+// that I2PControl can be disabled or stubbed in tests without changing the
+// router's lifecycle code.
+// See [I2P Spec: I2PControl](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2cp.rst) for the protocol.
 type I2PControlServer interface {
 	Start() error
 	Stop()

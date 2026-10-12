@@ -17,7 +17,9 @@ import (
 	"github.com/samber/oops"
 )
 
-// TunnelState represents the current state of a tunnel during building
+// TunnelState represents the current state of a tunnel during building.
+// The pool tracks one TunnelState per tunnel so it can decide when to
+// rebuild, expire, or select tunnels for message delivery.
 type TunnelState struct {
 	mu              sync.RWMutex
 	ID              TunnelID
@@ -78,14 +80,20 @@ const (
 	maxAdaptiveCooldown   = 15 * time.Minute
 )
 
-// BuildResponse represents a response from a tunnel hop
+// BuildResponse represents a response from a tunnel hop.
+// Each hop in the build chain replies with its own success or rejection
+// code, which the pool uses to attribute build failures to specific peers.
+// See [I2P Spec: Tunnel Creation](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/tunnel.rst) for the reply codes.
 type BuildResponse struct {
 	HopIndex int    // Index of the hop that responded
 	Success  bool   // Whether the hop accepted the tunnel
 	Reply    []byte // Raw response data
 }
 
-// PeerSelector defines interface for selecting peers for tunnel building
+// PeerSelector defines interface for selecting peers for tunnel building.
+// The pool asks a PeerSelector for candidate hops each time it builds a
+// tunnel; implementations may filter or score peers before returning them.
+// See also [DefaultPeerSelector].
 type PeerSelector interface {
 	SelectPeers(count int, exclude []common.Hash) ([]router_info.RouterInfo, error)
 }
@@ -99,14 +107,20 @@ type BuildTunnelResult struct {
 	PeerHashes []common.Hash // Hashes of peers selected for this build attempt
 }
 
-// BuilderInterface defines interface for building tunnels
+// BuilderInterface defines interface for building tunnels.
+// The pool calls this to turn a BuildTunnelRequest into an actual tunnel
+// build on the wire, keeping the pool decoupled from the builder internals.
+// See also [TunnelBuilder].
 type BuilderInterface interface {
 	// BuildTunnel initiates building a new tunnel with the specified parameters.
 	// Returns a BuildTunnelResult containing the tunnel ID and selected peer hashes.
 	BuildTunnel(req BuildTunnelRequest) (*BuildTunnelResult, error)
 }
 
-// PoolConfig defines configuration parameters for a tunnel pool
+// PoolConfig defines configuration parameters for a tunnel pool.
+// It controls how many tunnels the pool keeps, how long they live, and how
+// aggressively the pool retries failed builds.
+// See also [DefaultPoolConfig].
 type PoolConfig struct {
 	// MinTunnels is the minimum number of tunnels to maintain
 	MinTunnels int
@@ -129,7 +143,9 @@ type PoolConfig struct {
 	IsClientPool bool
 }
 
-// DefaultPoolConfig returns a configuration with sensible defaults
+// DefaultPoolConfig returns a configuration with sensible defaults.
+// Use this when the application has no specific tuning requirements; the
+// values match the I2P spec's recommended tunnel lifetime and hop count.
 func DefaultPoolConfig() PoolConfig {
 	return PoolConfig{
 		MinTunnels:       4,
@@ -143,7 +159,11 @@ func DefaultPoolConfig() PoolConfig {
 	}
 }
 
-// Pool manages a collection of tunnels with automatic maintenance
+// Pool manages a collection of tunnels with automatic maintenance.
+// A pool keeps a steady set of tunnels in the TunnelReady state so that
+// message senders always have a path to forward layered-encrypted data
+// through. It builds, expires, and rebuilds tunnels in the background.
+// See also [TunnelState] and [PoolConfig].
 type Pool struct {
 	tunnels              map[TunnelID]*TunnelState
 	mutex                sync.RWMutex
@@ -217,12 +237,16 @@ type peerScorer interface {
 	ScorePeer(hash common.Hash) float64
 }
 
-// NewTunnelPool creates a new tunnel pool with the given peer selector and default configuration
+// NewTunnelPool creates a new tunnel pool with the given peer selector and default configuration.
+// The pool starts empty; call StartMaintenance to begin building tunnels in
+// the background.
 func NewTunnelPool(selector PeerSelector) *Pool {
 	return NewTunnelPoolWithConfig(selector, DefaultPoolConfig())
 }
 
-// NewTunnelPoolWithConfig creates a new tunnel pool with custom configuration
+// NewTunnelPoolWithConfig creates a new tunnel pool with custom configuration.
+// Use this when the application needs non-default tunnel counts, lifetimes,
+// or hop counts, for example a client pool with application-specified hops.
 func NewTunnelPoolWithConfig(selector PeerSelector, config PoolConfig) *Pool {
 	ctx, cancel := context.WithCancel(context.Background())
 	p := &Pool{
@@ -422,7 +446,9 @@ func (p *Pool) getTunnelBuilder() BuilderInterface {
 	return p.tunnelBuilder
 }
 
-// GetTunnel retrieves a tunnel by ID
+// GetTunnel retrieves a tunnel by ID.
+// Callers use this to inspect a specific tunnel's state, for example when
+// handling a build reply for a known tunnel.
 func (p *Pool) GetTunnel(id TunnelID) (*TunnelState, bool) {
 	p.mutex.RLock()
 	defer p.mutex.RUnlock()
@@ -430,7 +456,9 @@ func (p *Pool) GetTunnel(id TunnelID) (*TunnelState, bool) {
 	return tunnel, exists
 }
 
-// AddTunnel adds a new tunnel to the pool
+// AddTunnel adds a new tunnel to the pool.
+// The tunnel builder calls this once a build request has been sent, so the
+// pool can track the tunnel through its building and ready states.
 func (p *Pool) AddTunnel(tunnel *TunnelState) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
@@ -485,7 +513,9 @@ func (p *Pool) InvalidateActiveCache() {
 	p.cachedDirty.Store(true)
 }
 
-// RemoveTunnel removes a tunnel from the pool
+// RemoveTunnel removes a tunnel from the pool.
+// This is called when a tunnel has failed or been explicitly closed, so the
+// pool can replace it during its next maintenance cycle.
 func (p *Pool) RemoveTunnel(id TunnelID) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
@@ -512,7 +542,9 @@ func (p *Pool) RemoveTunnel(id TunnelID) {
 	}).Debug("removed tunnel from pool")
 }
 
-// GetActiveTunnels returns all active tunnels
+// GetActiveTunnels returns all active tunnels.
+// Only tunnels in the TunnelReady state are returned, so callers can safely
+// use them to forward messages without further state checks.
 func (p *Pool) GetActiveTunnels() []*TunnelState {
 	p.mutex.RLock()
 	defer p.mutex.RUnlock()
@@ -536,7 +568,9 @@ func (p *Pool) GetActiveTunnels() []*TunnelState {
 	return active
 }
 
-// Stop gracefully stops the pool maintenance goroutine
+// Stop gracefully stops the pool maintenance goroutine.
+// Call this during router shutdown so the pool stops building tunnels and
+// releases its background goroutine.
 func (p *Pool) Stop() {
 	if p.cancel != nil {
 		p.cancel()
@@ -550,7 +584,10 @@ func (p *Pool) Stop() {
 	}).Info("tunnel pool stopped")
 }
 
-// CleanupExpiredTunnels removes tunnels that have been building for too long
+// CleanupExpiredTunnels removes tunnels that have been building for too long.
+// Builds that exceed the I2P spec's 90-second reply deadline are dropped so
+// the pool can retry them with fresh peers.
+// See [I2P Spec: Tunnel Creation](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/tunnel.rst) for the build deadline.
 func (p *Pool) CleanupExpiredTunnels(maxAge time.Duration) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
@@ -922,7 +959,9 @@ func (p *Pool) getTunnelCount() int {
 	return len(p.tunnels)
 }
 
-// GetPoolStats returns statistics about the pool
+// GetPoolStats returns statistics about the pool.
+// Useful for monitoring how many tunnels are ready, building, or failing,
+// and how close the ready ones are to expiration.
 func (p *Pool) GetPoolStats() PoolStats {
 	p.mutex.RLock()
 	defer p.mutex.RUnlock()
@@ -952,7 +991,9 @@ func (p *Pool) GetPoolStats() PoolStats {
 	return stats
 }
 
-// PoolStats contains statistics about a tunnel pool
+// PoolStats contains statistics about a tunnel pool.
+// It is a point-in-time snapshot returned by GetPoolStats for monitoring
+// and diagnostics.
 type PoolStats struct {
 	Total      int // Total tunnels in pool
 	Active     int // Ready for use

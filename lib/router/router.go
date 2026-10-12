@@ -26,7 +26,10 @@ import (
 
 // Router is the core I2P router implementation that manages transports, the network database,
 // tunnel pools, and message routing for participating in the I2P network.
-// Router is the core I2P router implementation.
+// It owns the router's identity (RouterInfo and keys), the NetDB of peer
+// RouterInfos, and the transports used to reach other routers.
+// See [I2P Spec: RouterInfo](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/routerinfo.rst) for the RouterInfo format the router signs and publishes.
+// See also [CreateRouter], [GarlicMessageRouter], [InboundMessageHandler], [CongestionMonitor].
 // Lock Ordering (CRITICAL: must be respected to prevent deadlocks):
 // When acquiring multiple mutexes, always acquire in this order:
 // 1. runMux (protects running flag and router lifecycle state)
@@ -135,7 +138,10 @@ type Router struct {
 	startupErr chan error
 }
 
-// CreateRouter creates a router with the provided configuration
+// CreateRouter creates a router with the provided configuration.
+// It validates the config, builds the keystore and RouterInfo, initializes
+// the NetDB and transports, and wires all subsystems together.
+// See also [Router].
 func CreateRouter(cfg *config.RouterConfig) (*Router, error) {
 	if err := validateCreateRouterConfig(cfg); err != nil {
 		logError("invalid router configuration", err)
@@ -403,6 +409,7 @@ func routerInfoOptionsFromConfig(cfg *config.RouterConfig) keys.RouterInfoOption
 // Use CreateRouter instead, which fully initializes the router.
 // Calling Start() on a router created solely via FromConfig will return
 // an error because required subsystems (keystore, transport) are nil.
+// See also [CreateRouter].
 func FromConfig(c *config.RouterConfig) (r *Router, err error) {
 	if c == nil {
 		return nil, oops.Errorf("router config cannot be nil")
@@ -424,7 +431,9 @@ func FromConfig(c *config.RouterConfig) (r *Router, err error) {
 	return r, err
 }
 
-// Wait blocks until router is fully stopped
+// Wait blocks until router is fully stopped.
+// Callers use this after Stop() to know when all router goroutines have
+// finished and resources are released.
 func (r *Router) Wait() {
 	logAt("(Router) Wait").WithFields(logger.Fields{
 		"phase":  "running",
@@ -438,7 +447,8 @@ func (r *Router) Wait() {
 }
 
 // GetTunnelManager returns the tunnel manager in a thread-safe manner.
-// Returns nil if the tunnel manager has not been initialized yet.
+// The tunnel manager builds and maintains the tunnel pools the router
+// uses for anonymous delivery. Returns nil if not initialized yet.
 func (r *Router) GetTunnelManager() i2np.TunnelOrchestrator {
 	r.runMux.RLock()
 	defer r.runMux.RUnlock()
@@ -446,6 +456,8 @@ func (r *Router) GetTunnelManager() i2np.TunnelOrchestrator {
 }
 
 // GetParticipantManager returns the participant manager for transit tunnel tracking.
+// The participant manager tracks tunnels where this router is a transit
+// hop, which the congestion monitor reads to compute load.
 // Returns nil if not initialized.
 func (r *Router) GetParticipantManager() *tunnel.ParticipantManager {
 	r.runMux.RLock()
@@ -454,7 +466,9 @@ func (r *Router) GetParticipantManager() *tunnel.ParticipantManager {
 }
 
 // GetGarlicRouter returns the garlic router in a thread-safe manner.
-// Returns nil if the garlic router has not been initialized yet.
+// The garlic router delivers Garlic messages to their destinations, so
+// callers use it to forward anonymous traffic. Returns nil if the garlic
+// router has not been initialized yet.
 func (r *Router) GetGarlicRouter() *GarlicMessageRouter {
 	r.runMux.RLock()
 	defer r.runMux.RUnlock()
@@ -470,17 +484,22 @@ func (r *Router) GetCongestionMonitor() CongestionStateProvider {
 }
 
 // GetNetDB returns the router's underlying network database instance.
+// The NetDB holds the RouterInfos of other routers and is the source of
+// truth for peer selection and floodfill replication.
 func (r *Router) GetNetDB() *netdb.StdNetDB {
 	return r.netdb
 }
 
 // GetConfig returns the router configuration for I2PControl.
+// The I2PControl server reads the config to answer client queries about
+// the router's settings.
 func (r *Router) GetConfig() *config.RouterConfig {
 	return r.cfg
 }
 
 // IsRunning returns whether the router is currently operational.
-// Thread-safe access to running state.
+// Callers use this to gate operations that require a live router, such as
+// publishing or tunnel building. Thread-safe access to running state.
 func (r *Router) IsRunning() bool {
 	r.runMux.RLock()
 	defer r.runMux.RUnlock()

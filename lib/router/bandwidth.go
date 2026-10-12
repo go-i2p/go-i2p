@@ -11,7 +11,10 @@ import (
 	ssu2 "github.com/go-i2p/go-i2p/lib/transport/ssu2"
 )
 
-// BandwidthSample represents a single bandwidth measurement at a point in time.
+// BandwidthSample is a single bandwidth measurement taken at one point in time.
+// The tracker keeps a short window of these to compute the 1-second and
+// 15-second rolling rates that I2PControl and the congestion monitor report.
+// See also [BandwidthTracker].
 type BandwidthSample struct {
 	timestamp     time.Time
 	bytesSent     uint64
@@ -40,6 +43,9 @@ type BandwidthTracker struct {
 }
 
 // NewBandwidthTracker creates a new bandwidth tracker with 1-second sampling.
+// The tracker feeds the router's I2PControl statistics and the congestion
+// monitor, so it must be started before either of those subsystems reports
+// bandwidth utilization.
 func NewBandwidthTracker() *BandwidthTracker {
 	return &BandwidthTracker{
 		samples:        make([]BandwidthSample, 0, 15),
@@ -213,16 +219,22 @@ func (bt *BandwidthTracker) computeElapsedSeconds(now, oldest time.Time) uint64 
 }
 
 // GetRates returns the 15-second inbound and outbound bandwidth rates in bytes per second.
+// The 15-second window smooths out short bursts, making it the rate used for
+// sustained-utilization checks such as congestion flag computation.
 func (bt *BandwidthTracker) GetRates() (inbound, outbound uint64) {
 	return bt.inboundRate15s.Load(), bt.outboundRate15s.Load()
 }
 
 // GetRate1s returns the 1-second inbound and outbound bandwidth rates in bytes per second.
+// The short window reflects current load, which is useful for detecting
+// transient spikes that the 15-second average would hide.
 func (bt *BandwidthTracker) GetRate1s() (inbound, outbound uint64) {
 	return bt.inboundRate1s.Load(), bt.outboundRate1s.Load()
 }
 
 // GetRate15s returns the 15-second inbound and outbound bandwidth rates in bytes per second.
+// This is the same window as GetRates, exposed under a name that matches the
+// 1-second variant for callers that want both windows side by side.
 func (bt *BandwidthTracker) GetRate15s() (inbound, outbound uint64) {
 	return bt.inboundRate15s.Load(), bt.outboundRate15s.Load()
 }

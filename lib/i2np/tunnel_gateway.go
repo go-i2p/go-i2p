@@ -30,7 +30,12 @@ data ::
      actual payload of this message
 */
 
-// TunnelGateway represents an I2NP TunnelGateway message used to wrap and deliver data through a tunnel gateway.
+// TunnelGateway represents an I2NP TunnelGateway message used to wrap and
+// deliver data through a tunnel gateway. Unlike TunnelData, the payload
+// length is variable (2-byte length field), which makes it suitable for
+// messages that do not fit the fixed 1024-byte tunnel data format.
+// See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the wire format.
+// See also [TunnelDataMessage].
 type TunnelGateway struct {
 	*BaseI2NPMessage
 	TunnelID buildrecord.TunnelID
@@ -38,7 +43,11 @@ type TunnelGateway struct {
 	Data     []byte
 }
 
-// NewTunnelGatewayMessage creates a new TunnelGateway message
+// NewTunnelGatewayMessage creates a new TunnelGateway message wrapping the
+// given payload for delivery through the tunnel identified by tunnelID.
+// The wire payload (tunnel ID + length + data) is pre-serialized so the
+// message is ready for transmission.
+// See also [TunnelGateway].
 func NewTunnelGatewayMessage(tunnelID buildrecord.TunnelID, payload []byte) *TunnelGateway {
 	log.WithFields(logger.Fields{
 		"at":          "NewTunnelGatewayMessage",
@@ -63,7 +72,10 @@ func NewTunnelGatewayMessage(tunnelID buildrecord.TunnelID, payload []byte) *Tun
 	return msg
 }
 
-// UnmarshalBinary deserializes a TunnelGateway message
+// UnmarshalBinary deserializes a TunnelGateway message from the wire
+// format: 4-byte tunnel ID, 2-byte length, then the payload. It validates
+// that the payload is not truncated before copying it out.
+// See also [NewTunnelGatewayMessage].
 func (t *TunnelGateway) UnmarshalBinary(data []byte) error {
 	// First unmarshal the base message
 	if err := t.BaseI2NPMessage.UnmarshalBinary(data); err != nil {

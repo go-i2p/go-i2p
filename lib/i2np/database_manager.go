@@ -16,7 +16,12 @@ import (
 	"github.com/samber/oops"
 )
 
-// DatabaseManager coordinates database-related message processing and response generation.
+// DatabaseManager coordinates processing of I2NP database messages
+// (DatabaseLookup, DatabaseStore, DatabaseSearchReply). It validates
+// incoming messages, rate-limits lookups by source, stores data in the
+// NetDB, and generates the appropriate response messages.
+// See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the message formats.
+// See also [DatabaseLookup], [DatabaseStore], [DatabaseSearchReply].
 type DatabaseManager struct {
 	netdb             NetDBStore
 	retriever         NetDBRetriever
@@ -50,28 +55,42 @@ type NetDBStoreWithSource interface {
 }
 
 // NetDBRetriever defines the interface for retrieving RouterInfo entries
+// from the network database. DatabaseManager uses it to look up RouterInfo
+// data when responding to DatabaseLookup messages.
+// See also [NetDBStore].
 type NetDBRetriever interface {
 	GetRouterInfoBytes(hash common.Hash) ([]byte, error)
 	GetRouterInfoCount() int
 }
 
-// FloodfillSelector defines the interface for selecting closest floodfill routers
+// FloodfillSelector defines the interface for selecting the closest
+// floodfill routers for a target hash. DatabaseManager uses it to pick
+// which floodfills to query when a lookup misses the local NetDB.
 type FloodfillSelector interface {
 	SelectFloodfillRouters(targetHash common.Hash, count int) ([]router_info.RouterInfo, error)
 }
 
-// I2NPTransportSession defines the interface for sending I2NP messages back to requesters
+// I2NPTransportSession defines the interface for sending I2NP messages
+// back to requesters. DatabaseManager uses it to deliver DatabaseSearchReply
+// and DeliveryStatus messages over the transport layer.
+// See also [SessionProvider].
 type I2NPTransportSession interface {
 	QueueSendI2NP(msg Message) error
 	SendQueueSize() int
 }
 
 // SessionProvider defines the interface for obtaining transport sessions
+// by router hash. DatabaseManager uses it to find the session to a peer
+// before sending a response message.
+// See also [I2NPTransportSession].
 type SessionProvider interface {
 	GetSessionByHash(hash common.Hash) (I2NPTransportSession, error)
 }
 
-// NewDatabaseManager creates a new database manager with NetDB integration
+// NewDatabaseManager creates a new database manager with NetDB integration.
+// The retriever, floodfill selector, and session provider are set later via
+// their respective Set methods, allowing the manager to be constructed
+// before all dependencies are available.
 func NewDatabaseManager(netdb NetDBStore) *DatabaseManager {
 	dm := &DatabaseManager{
 		netdb:             netdb,
@@ -84,27 +103,36 @@ func NewDatabaseManager(netdb NetDBStore) *DatabaseManager {
 	return dm
 }
 
-// SetRetriever sets the NetDB retriever for database operations
+// SetRetriever sets the NetDB retriever used to look up RouterInfo entries
+// when responding to DatabaseLookup messages.
 func (dm *DatabaseManager) SetRetriever(retriever NetDBRetriever) {
 	dm.retriever = retriever
 }
 
-// SetFloodfillSelector sets the floodfill selector for selecting closest floodfill routers
+// SetFloodfillSelector sets the floodfill selector used to pick the closest
+// floodfill routers when a lookup misses the local NetDB.
 func (dm *DatabaseManager) SetFloodfillSelector(selector FloodfillSelector) {
 	dm.floodfillSelector = selector
 }
 
-// SetOurRouterHash sets our router's identity hash for use in DatabaseSearchReply messages
+// SetOurRouterHash sets our router's identity hash, which is included in
+// DatabaseSearchReply messages so the requester knows which router answered.
+// See also [DatabaseSearchReply].
 func (dm *DatabaseManager) SetOurRouterHash(hash common.Hash) {
 	dm.ourRouterHash = hash
 }
 
-// SetSessionProvider sets the session provider for sending responses
+// SetSessionProvider sets the session provider used to find transport
+// sessions when sending response messages to peers.
 func (dm *DatabaseManager) SetSessionProvider(provider SessionProvider) {
 	dm.sessionProvider = provider
 }
 
-// PerformLookup performs a database lookup using DatabaseReader interface and generates appropriate responses
+// PerformLookup processes a DatabaseLookup message: it rate-limits the
+// source, looks up the requested key in the NetDB, and generates the
+// appropriate DatabaseSearchReply or DeliveryStatus response.
+// See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the lookup flow.
+// See also [DatabaseLookup], [DatabaseSearchReply].
 func (dm *DatabaseManager) PerformLookup(reader DatabaseReader) error {
 	// Check rate limit before processing
 	from := reader.GetFrom()
@@ -445,12 +473,19 @@ func gzipCompress(data []byte) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// StoreData stores data using DatabaseWriter interface and NetDB integration
+// StoreData processes a DatabaseStore message: it validates the data,
+// stores it in the NetDB, and sends a DeliveryStatus response to the
+// source.
+// See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the store flow.
+// See also [DatabaseStore].
 func (dm *DatabaseManager) StoreData(writer DatabaseWriter) error {
 	return dm.storeDataInternal(writer, nil)
 }
 
 // StoreDataFromPeer stores data with source peer context when available.
+// The source hash lets the NetDB apply fairness or rate controls on
+// first-seen entries from a specific peer.
+// See also [NetDBStoreWithSource].
 func (dm *DatabaseManager) StoreDataFromPeer(writer DatabaseWriter, source common.Hash) error {
 	return dm.storeDataInternal(writer, &source)
 }

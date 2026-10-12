@@ -140,15 +140,20 @@ func validateDeliveryStatusTimestamp(timestamp time.Time) error {
 	return nil
 }
 
-// DeliveryStatusMessage represents an I2NP DeliveryStatus message
-// Moved from: messages.go
+// DeliveryStatusMessage represents an I2NP DeliveryStatus message (type 10)
+// used to confirm the successful delivery or creation of a message. The
+// 12-byte payload holds the 4-byte message ID and the 8-byte timestamp.
+// See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the wire format.
+// See also [DeliveryStatus], [StatusReporter].
 type DeliveryStatusMessage struct {
 	*BaseI2NPMessage
 	StatusMessageID int
 	Timestamp       time.Time
 }
 
-// NewDeliveryStatusMessage creates a new DeliveryStatus message
+// NewDeliveryStatusMessage creates a new DeliveryStatus message for the
+// given message ID and timestamp. The payload is a 12-byte buffer with the
+// message ID and I2P Date in big-endian order.
 func NewDeliveryStatusMessage(messageID int, timestamp time.Time) *DeliveryStatusMessage {
 	log.WithFields(logger.Fields{
 		"at":         "NewDeliveryStatusMessage",
@@ -188,12 +193,18 @@ func NewDeliveryStatusMessage(messageID int, timestamp time.Time) *DeliveryStatu
 	return msg
 }
 
-// NewDeliveryStatusReporter creates a new DeliveryStatus message and returns it as StatusReporter interface
+// NewDeliveryStatusReporter creates a new DeliveryStatus message and
+// returns it as a StatusReporter, so callers that only need to send a
+// status can work with the interface instead of the concrete type.
+// See also [StatusReporter].
 func NewDeliveryStatusReporter(messageID int, timestamp time.Time) StatusReporter {
 	return NewDeliveryStatusMessage(messageID, timestamp)
 }
 
-// UnmarshalBinary deserializes a DeliveryStatus message
+// UnmarshalBinary deserializes a DeliveryStatus message. After parsing the
+// base header and 12-byte payload, it validates the timestamp (rejecting
+// expired or far-future values) and checks the replay cache to reject
+// replayed messages.
 func (d *DeliveryStatusMessage) UnmarshalBinary(data []byte) error {
 	log.WithFields(logger.Fields{
 		"at":        "UnmarshalBinary",
@@ -264,12 +275,14 @@ func (d *DeliveryStatusMessage) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
-// GetStatusMessageID returns the status message ID
+// GetStatusMessageID returns the ID of the message this DeliveryStatus
+// confirms delivery of.
 func (d *DeliveryStatusMessage) GetStatusMessageID() int {
 	return d.StatusMessageID
 }
 
-// GetTimestamp returns the timestamp
+// GetTimestamp returns the time the message was successfully created or
+// delivered.
 func (d *DeliveryStatusMessage) GetTimestamp() time.Time {
 	return d.Timestamp
 }

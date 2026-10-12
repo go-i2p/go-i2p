@@ -18,7 +18,10 @@ type TunnelDataMessage struct {
 	Data     [1024]byte           // Fixed size encrypted tunnel data
 }
 
-// NewTunnelDataMessage creates a new TunnelData message with the given tunnel ID and data.
+// NewTunnelDataMessage creates a new TunnelData message with the given
+// tunnel ID and data. The wire payload (4-byte tunnel ID + 1024-byte data)
+// is pre-serialized so the message is ready for transmission.
+// See also [TunnelDataMessage].
 func NewTunnelDataMessage(tunnelID buildrecord.TunnelID, data [1024]byte) *TunnelDataMessage {
 	msg := &TunnelDataMessage{
 		BaseI2NPMessage: NewBaseI2NPMessage(I2NPMessageTypeTunnelData),
@@ -34,7 +37,10 @@ func NewTunnelDataMessage(tunnelID buildrecord.TunnelID, data [1024]byte) *Tunne
 	return msg
 }
 
-// NewTunnelCarrier creates a new TunnelData message and returns it as TunnelCarrier interface.
+// NewTunnelCarrier creates a new TunnelData message and returns it as a
+// TunnelCarrier interface. Use this when the caller only needs the generic
+// carrier surface (tunnel ID + payload) rather than the concrete type.
+// See also [TunnelCarrier] and [NewTunnelDataMessage].
 func NewTunnelCarrier(tunnelID buildrecord.TunnelID, data [1024]byte) TunnelCarrier {
 	return NewTunnelDataMessage(tunnelID, data)
 }
@@ -63,12 +69,18 @@ func (t *TunnelDataMessage) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
-// GetTunnelData returns the 1024-byte tunnel data (without the TunnelID prefix).
+// GetTunnelData returns the 1024-byte tunnel data (without the TunnelID
+// prefix). It satisfies the TunnelCarrier interface so the router can
+// forward the payload to the next hop.
+// See also [TunnelCarrier].
 func (t *TunnelDataMessage) GetTunnelData() []byte {
 	return t.Data[:]
 }
 
-// GetTunnelID returns the tunnel identifier for this message.
+// GetTunnelID returns the tunnel identifier for this message. It
+// satisfies the TunnelCarrier interface and identifies which tunnel the
+// message is directed at.
+// See also [TunnelCarrier].
 func (t *TunnelDataMessage) GetTunnelID() buildrecord.TunnelID {
 	return t.TunnelID
 }

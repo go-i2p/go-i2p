@@ -48,8 +48,13 @@ type entryTypeSpec struct {
 	getter   func(*Entry) bytesSerializable // Extracts the field from Entry
 }
 
-// Entry is a netdb entry that wraps a router info, lease set, lease set2, encrypted lease set, or meta lease set
-// and provides serialization.
+// Entry is a netdb entry that wraps a RouterInfo, LeaseSet, LeaseSet2,
+// EncryptedLeaseSet, or MetaLeaseSet and provides serialization.
+// It is the single on-disk record type for the NetDB: every value the
+// database persists to a skiplist file is written as an Entry, so one type
+// covers all the data the NetDB replicates. Exactly one of the embedded
+// fields is set for a given Entry.
+// See also [FileTypeRouterInfo], [FileTypeLeaseSet], [FileTypeLeaseSet2], [FileTypeEncryptedLeaseSet], [FileTypeMetaLeaseSet].
 type Entry struct {
 	*router_info.RouterInfo
 	*lease_set.LeaseSet
@@ -59,6 +64,12 @@ type Entry struct {
 }
 
 // Serialize writes the Entry to the provided writer using a dispatch table approach.
+// It writes a one-byte file-format type code, a two-byte big-endian length, and
+// the serialized payload of whichever embedded field is set. This is the format
+// the NetDB uses when persisting entries to skiplist files, so the type code
+// must match the local file format (see the FileType* constants), not the
+// DatabaseStore wire codes.
+// See also [Deserialize], [FileTypeRouterInfo].
 func (e *Entry) Serialize(w io.Writer) error {
 	log.WithField("at", "Entry.Serialize").Debug("Writing netdb entry")
 
@@ -163,6 +174,11 @@ func (e *Entry) writeData(w io.Writer, data []byte) error {
 }
 
 // Deserialize reads an Entry from the given reader, parsing the entry type indicator and data payload.
+// It is the inverse of Serialize: it reads the one-byte type code and the
+// two-byte length, then parses the payload into the matching embedded field.
+// The NetDB uses this to load persisted entries back from skiplist files on
+// startup and on disk-fallback reads.
+// See also [Serialize], [FileTypeRouterInfo].
 func (e *Entry) Deserialize(r io.Reader) (err error) {
 	entryType, err := e.readEntryType(r)
 	if err != nil {

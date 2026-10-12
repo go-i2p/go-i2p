@@ -23,7 +23,11 @@ time_stamp :: Date
              time the message was successfully created or delivered
 */
 
-// DeliveryStatus represents an I2NP DeliveryStatus message used to confirm the successful delivery or creation of a message.
+// DeliveryStatus is a lightweight representation of the I2NP DeliveryStatus
+// payload (type 10), which confirms the successful delivery or creation of
+// a message. It carries the 4-byte message ID and the 8-byte timestamp.
+// See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the wire format.
+// See also [DeliveryStatusMessage].
 type DeliveryStatus struct {
 	MessageID int
 	Timestamp time.Time

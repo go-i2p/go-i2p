@@ -25,7 +25,12 @@ func deriveKeyIDFromPublicKey(publicKey types.PublicKey) string {
 	return hex.EncodeToString(keyBytes)
 }
 
-// KeyStore is an interface for storing and retrieving keys
+// KeyStore is an interface for storing and retrieving the key pair that
+// identifies an I2P endpoint. Implementations back a single identity: the
+// public key is embedded in RouterInfo or a destination address, while the
+// private key stays on disk and is used to sign LeaseSets or RouterInfos.
+//
+// See also [KeyStoreImpl], [RouterInfoKeystore].
 type KeyStore interface {
 	KeyID() string
 	// GetKeys returns the public and private keys
@@ -34,7 +39,13 @@ type KeyStore interface {
 	StoreKeys() error
 }
 
-// KeyStoreImpl is a filesystem-backed implementation of the KeyStore interface that manages a single private key and its derived public key.
+// KeyStoreImpl is a filesystem-backed implementation of the KeyStore interface
+// that manages a single private key and its derived public key. It is the
+// simplest keystore: one key pair, one file, suitable for identities that
+// only need to sign (for example a LeaseSet signer) without a separate
+// encryption key.
+//
+// See also [KeyStore], [RouterInfoKeystore].
 type KeyStoreImpl struct {
 	dir        string
 	name       string
@@ -45,7 +56,9 @@ type KeyStoreImpl struct {
 	cachedKeyIDOnce sync.Once
 }
 
-// NewKeyStoreImpl creates a new KeyStoreImpl that stores keys in the given directory with the specified name prefix.
+// NewKeyStoreImpl creates a new KeyStoreImpl that stores keys in the given
+// directory with the specified name prefix. The name is used as the KeyID when
+// set, which keeps key file names stable across restarts.
 func NewKeyStoreImpl(dir, name string, privateKey types.PrivateKey) *KeyStoreImpl {
 	log.WithFields(logger.Fields{
 		"at":   "NewKeyStoreImpl",
@@ -59,7 +72,10 @@ func NewKeyStoreImpl(dir, name string, privateKey types.PrivateKey) *KeyStoreImp
 	}
 }
 
-// KeyID returns a stable, filesystem-safe identifier for this keystore, using the configured name or a hex-encoded prefix of the public key.
+// KeyID returns a stable, filesystem-safe identifier for this keystore, using
+// the configured name or a hex-encoded prefix of the public key. Stability
+// matters because the KeyID is used in key file names; a changing ID would
+// orphan previously stored keys on disk.
 func (ks *KeyStoreImpl) KeyID() string {
 	// Use sync.Once to ensure deterministic KeyID across multiple calls
 	ks.cachedKeyIDOnce.Do(func() {
@@ -100,6 +116,8 @@ func (ks *KeyStoreImpl) computeKeyID() string {
 }
 
 // GetKeys returns the public and private key pair managed by this KeyStoreImpl.
+// The public key is what gets embedded in RouterInfo or a destination address;
+// the private key is only ever used locally for signing.
 func (ks *KeyStoreImpl) GetKeys() (types.PublicKey, types.PrivateKey, error) {
 	log.WithField("at", "GetKeys").Debug("Retrieving key pair")
 	if ks.privateKey == nil {
@@ -114,7 +132,9 @@ func (ks *KeyStoreImpl) GetKeys() (types.PublicKey, types.PrivateKey, error) {
 	return public, ks.privateKey, nil
 }
 
-// StoreKeys persists the private key to the filesystem in the configured directory with appropriate permissions.
+// StoreKeys persists the private key to the filesystem in the configured
+// directory with restrictive permissions (0600 file, 0700 directory) so that
+// key material is not readable by other users on the host.
 func (ks *KeyStoreImpl) StoreKeys() error {
 	log.WithFields(logger.Fields{
 		"at":  "StoreKeys",

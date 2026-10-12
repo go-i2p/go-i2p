@@ -379,7 +379,9 @@ func readDatabaseLookupECIESReplyTags(length int, data []byte, tags int) (int, [
 	return length + tags*tagSize, replyTags, nil
 }
 
-// GetKey returns the SHA-256 hash of the object being looked up.
+// GetKey returns the SHA-256 hash of the object being looked up. This is the
+// NetDB key the lookup targets, such as a RouterInfo or LeaseSet hash.
+// See also [DatabaseLookup].
 func (d *DatabaseLookup) GetKey() common.Hash {
 	return d.Key
 }
@@ -391,6 +393,8 @@ func (d *DatabaseLookup) GetFrom() common.Hash {
 }
 
 // GetFlags returns the raw flags byte (delivery, lookup type, and ECIES bits).
+// The flags control how the reply is delivered and whether it is encrypted.
+// See also [DatabaseLookup].
 func (d *DatabaseLookup) GetFlags() byte {
 	return d.Flags
 }
@@ -401,12 +405,16 @@ func (d *DatabaseLookup) GetECIESReplyTags() []session_tag.ECIESSessionTag {
 	return d.ECIESReplyTags
 }
 
-// GetTagCount returns the number of ECIES reply tags.
+// GetTagCount returns the number of ECIES reply tags. Each tag pairs with an
+// entry in GetECIESReplyTags and is used to decrypt the encrypted reply.
+// See also [DatabaseLookup].
 func (d *DatabaseLookup) GetTagCount() int {
 	return d.Tags
 }
 
-// IsECIES reports whether the reply is ECIES-encrypted (bit 4 set).
+// IsECIES reports whether the reply is ECIES-encrypted (bit 4 set). When true,
+// the reply payload is encrypted with the ECIES reply tags.
+// See also [DatabaseLookup].
 func (d *DatabaseLookup) IsECIES() bool {
 	return (d.Flags & 0x10) != 0
 }

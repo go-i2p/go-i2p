@@ -92,7 +92,10 @@ type peerLimit struct {
 }
 
 // NewFloodfillRateLimiter creates a rate limiter allowing maxPerMinute requests
-// per peer per minute with burst capacity.
+// per peer per minute with burst capacity. It also applies a default aggregate
+// global cap so that many distinct peers cannot overwhelm the floodfill server
+// together.
+// See also [FloodfillRateLimiter], [NewFloodfillRateLimiterWithGlobal].
 func NewFloodfillRateLimiter(maxPerMinute, burstSize int) *FloodfillRateLimiter {
 	// Default global cap: 2000 requests/minute with burst 500.
 	// This bounds aggregate work across many peer identities.
@@ -100,7 +103,10 @@ func NewFloodfillRateLimiter(maxPerMinute, burstSize int) *FloodfillRateLimiter 
 }
 
 // NewFloodfillRateLimiterWithGlobal creates a rate limiter with per-peer and
-// aggregate global token buckets.
+// aggregate global token buckets. The per-peer bucket bounds a single peer,
+// while the global bucket bounds the total load across all peers, protecting
+// the floodfill server from both targeted and distributed lookup floods.
+// See also [FloodfillRateLimiter].
 func NewFloodfillRateLimiterWithGlobal(maxPerMinute, burstSize, globalPerMinute, globalBurstSize int) *FloodfillRateLimiter {
 	now := time.Now()
 	rl := &FloodfillRateLimiter{
@@ -123,6 +129,10 @@ func NewFloodfillRateLimiterWithGlobal(maxPerMinute, burstSize, globalPerMinute,
 }
 
 // Allow returns true if the peer is within its rate limit.
+// It guards the floodfill server against a single peer issuing
+// DatabaseLookup requests faster than its per-peer budget, protecting
+// the NetDB from lookup floods.
+// See also [FloodfillRateLimiter].
 func (rl *FloodfillRateLimiter) Allow(peer common.Hash) bool {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
@@ -199,6 +209,9 @@ func tokenBucketAllow(elapsed, currentTokens, refillRate, maxBurst float64) (flo
 }
 
 // GlobalRejectedCount returns how many requests were rejected by the global bucket.
+// It exposes the global rate-limit rejections so operators can see when the
+// floodfill server as a whole is shedding load, not just individual peers.
+// See also [FloodfillRateLimiter].
 func (rl *FloodfillRateLimiter) GlobalRejectedCount() uint64 {
 	return atomic.LoadUint64(&rl.globalRejected)
 }
@@ -235,6 +248,9 @@ func (rl *FloodfillRateLimiter) removeStalePeers() {
 }
 
 // LastSeen returns the last observed time for a peer, if present.
+// It lets the rate limiter track peer activity for its sliding-window
+// accounting and for logging which peers are hitting the limits.
+// See also [FloodfillRateLimiter].
 func (rl *FloodfillRateLimiter) LastSeen(peer common.Hash) (time.Time, bool) {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
@@ -251,13 +267,22 @@ func (rl *FloodfillRateLimiter) Stop() {
 	rl.wg.Wait()
 }
 
-// FloodfillTransport defines the interface for sending I2NP messages back to lookup
+// FloodfillTransport defines the interface for sending I2NP messages back to
+// the router that issued a lookup. The floodfill server uses it to reply with
+// DatabaseStore or DatabaseSearchReply messages and to flood stored data to
+// other floodfill routers.
+// See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the message formats.
+// See also [FloodfillServer].
 type FloodfillTransport interface {
 	// SendI2NPMessage sends an I2NP message to the router identified by routerHash.
 	SendI2NPMessage(ctx context.Context, routerHash common.Hash, msg i2np.Message) error
 }
 
 // FloodfillConfig holds configuration for the floodfill server.
+// It controls whether this router serves as a floodfill, its identity hash
+// (used for Kademlia distance calculations), and how many peers to flood
+// stored data to.
+// See also [FloodfillServer], [DefaultFloodfillConfig].
 type FloodfillConfig struct {
 	// Enabled controls whether the router serves as a floodfill
 	Enabled bool
@@ -270,6 +295,9 @@ type FloodfillConfig struct {
 }
 
 // DefaultFloodfillConfig returns the default floodfill configuration (disabled by default).
+// Floodfill serving is opt-in, so the default keeps the server disabled and
+// uses a flood count of 4 peers.
+// See also [FloodfillConfig], [FloodfillServer].
 func DefaultFloodfillConfig() FloodfillConfig {
 	return FloodfillConfig{
 		Enabled:    false,
@@ -278,6 +306,9 @@ func DefaultFloodfillConfig() FloodfillConfig {
 }
 
 // NewFloodfillServer creates a new floodfill server.
+// It serves incoming DatabaseLookup requests from the NetDB and floods
+// stored data to other floodfill routers, making this router a replication
+// point for the network database.
 //
 // Parameters:
 //   - db: the underlying StdNetDB for data storage and retrieval
@@ -312,6 +343,9 @@ func NewFloodfillServer(db *StdNetDB, transport FloodfillTransport, config Flood
 }
 
 // SetTransport sets the transport used for sending responses.
+// It allows the transport to be wired after construction, since the
+// transport is often not available when the floodfill server is created.
+// See also [FloodfillTransport].
 func (fs *FloodfillServer) SetTransport(transport FloodfillTransport) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
@@ -319,6 +353,9 @@ func (fs *FloodfillServer) SetTransport(transport FloodfillTransport) {
 }
 
 // SetEnabled enables or disables floodfill serving.
+// It lets the router toggle floodfill behavior at runtime without
+// reconstructing the server, for example when the router's role changes.
+// See also [FloodfillServer].
 func (fs *FloodfillServer) SetEnabled(enabled bool) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
@@ -327,6 +364,9 @@ func (fs *FloodfillServer) SetEnabled(enabled bool) {
 }
 
 // IsEnabled returns whether the floodfill server is enabled.
+// It reports the current serving state so callers can check whether the
+// router will respond to DatabaseLookup requests.
+// See also [FloodfillServer].
 func (fs *FloodfillServer) IsEnabled() bool {
 	fs.mu.RLock()
 	defer fs.mu.RUnlock()
@@ -334,6 +374,9 @@ func (fs *FloodfillServer) IsEnabled() bool {
 }
 
 // Stop shuts down the floodfill server.
+// It cancels the server's context and stops the lookup rate limiter,
+// releasing the resources used to serve DatabaseLookup requests.
+// See also [FloodfillServer].
 func (fs *FloodfillServer) Stop() {
 	fs.cancel()
 	if fs.lookupLimiter != nil {

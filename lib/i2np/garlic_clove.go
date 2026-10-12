@@ -41,7 +41,13 @@ Expiration :: Date (8 bytes)
 Certificate :: Always NULL in the current implementation (3 bytes total, all zeroes)
 */
 
-// GarlicClove represents a single clove within an I2NP Garlic message, containing delivery instructions, an embedded I2NP message, and expiration metadata.
+// GarlicClove represents a single clove within an I2NP Garlic message.
+// Each clove carries delivery instructions, an embedded I2NP message, a
+// unique clove ID, an expiration timestamp, and a certificate (always NULL
+// in the current implementation). Cloves are the unit of anonymous delivery
+// in the Garlic format.
+// See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the wire format.
+// See also [Garlic], [GarlicCloveDeliveryInstructions].
 type GarlicClove struct {
 	DeliveryInstructions GarlicCloveDeliveryInstructions
 	Message              Message

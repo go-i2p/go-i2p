@@ -39,6 +39,10 @@ type SessionProvider interface {
 }
 
 // I2NPSender represents a session for sending I2NP messages to a router.
+// The Publisher uses this to hand off DatabaseStore messages to the transport
+// layer, which delivers them to the target floodfill router. Keeping this as an
+// interface decouples publishing from a concrete session implementation.
+// See also [SessionProvider].
 type I2NPSender interface {
 	// QueueSendI2NP queues an I2NP message to be sent over the session.
 	// Returns an error if the session is closed or send queue is full.
@@ -56,7 +60,10 @@ type RouterInfoProvider interface {
 
 // Publisher handles publishing RouterInfo and LeaseSets to floodfill routers.
 // Publishing ensures that our router and client destinations can be found
-// by other routers in the network.
+// by other routers in the network. It periodically sends DatabaseStore
+// messages to the closest floodfill routers so the NetDB replicates our data.
+// See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the DatabaseStore message format.
+// See also [NewPublisher], [PublisherConfig].
 type Publisher struct {
 	// netdb for floodfill router selection
 	db NetworkDatabase
@@ -127,7 +134,10 @@ type publisherLoopSpec struct {
 	action   func()
 }
 
-// PublisherConfig holds configuration for database publishing
+// PublisherConfig holds configuration for database publishing.
+// It controls how often the Publisher republishes the local RouterInfo and
+// LeaseSets, and how many of the closest floodfill routers to publish to.
+// See also [DefaultPublisherConfig], [NewPublisher].
 type PublisherConfig struct {
 	// RouterInfoInterval is how often to republish our RouterInfo (default: 30 minutes)
 	RouterInfoInterval time.Duration
@@ -139,7 +149,10 @@ type PublisherConfig struct {
 	FloodfillCount int
 }
 
-// DefaultPublisherConfig returns the default publisher configuration
+// DefaultPublisherConfig returns the default publisher configuration.
+// It republishes the RouterInfo every 30 minutes, LeaseSets every 5 minutes,
+// and publishes to the 4 closest floodfill routers.
+// See also [PublisherConfig], [NewPublisher].
 func DefaultPublisherConfig() PublisherConfig {
 	return PublisherConfig{
 		RouterInfoInterval: 30 * time.Minute,
@@ -245,6 +258,10 @@ func (p *Publisher) Start() error {
 }
 
 // Stop halts database publishing and waits for in-flight publishes to complete.
+// It cancels the publisher context so the periodic publish loops stop, then
+// blocks until all running publish goroutines have finished, so no DatabaseStore
+// messages are sent after Stop returns.
+// See also [Publisher].
 func (p *Publisher) Stop() {
 	log.WithFields(logger.Fields{"at": "Stop"}).Info("Stopping database publisher")
 	p.cancel()
@@ -468,7 +485,12 @@ func (p *Publisher) PublishLeaseSet(hash common.Hash, leaseSetData []byte) error
 	return p.sendDatabaseStoreMessages(hash, leaseSetData, i2np.DatabaseStoreTypeLeaseSet2, floodfills)
 }
 
-// PublishRouterInfo publishes a specific RouterInfo to floodfill routers
+// PublishRouterInfo publishes a specific RouterInfo to floodfill routers.
+// It validates the RouterInfo, selects the closest floodfill routers by
+// Kademlia XOR distance, gzip-compresses the RouterInfo (as required by the
+// DatabaseStore message format), and sends a DatabaseStore message to each.
+// See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the DatabaseStore message format.
+// See also [Publisher], [PublishLeaseSet].
 func (p *Publisher) PublishRouterInfo(ri router_info.RouterInfo) error {
 	hash, err := ri.IdentHash()
 	if err != nil {
@@ -1554,7 +1576,11 @@ func (p *Publisher) PublishOurRouterInfo() {
 	p.publishOurRouterInfo()
 }
 
-// GetStats returns statistics about publishing activity
+// GetStats returns statistics about publishing activity.
+// It snapshots the publisher's configuration and the success/failure counters
+// for RouterInfo publishing, sending, and verification, so operators can
+// monitor whether the local RouterInfo is being published and verified.
+// See also [PublisherStats], [Publisher].
 func (p *Publisher) GetStats() PublisherStats {
 	return PublisherStats{
 		RouterInfoInterval:       p.routerInfoInterval,
@@ -1572,7 +1598,12 @@ func (p *Publisher) GetStats() PublisherStats {
 	}
 }
 
-// PublisherStats contains statistics about publisher activity
+// PublisherStats contains statistics about publisher activity.
+// It captures the publisher's configuration (intervals, floodfill count),
+// whether it is currently running, and the success/failure counters for
+// RouterInfo publishing, sending, and verification, plus reply-token ACK
+// accounting. It is returned by GetStats for monitoring and diagnostics.
+// See also [GetStats], [Publisher].
 type PublisherStats struct {
 	RouterInfoInterval       time.Duration
 	LeaseSetInterval         time.Duration

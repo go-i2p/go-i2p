@@ -21,6 +21,8 @@ import (
 // LookupTransport defines the interface for sending DatabaseLookup messages
 // and receiving responses. This enables the KademliaResolver to perform
 // network-based DHT lookups.
+// See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the DatabaseLookup message format.
+// See also [KademliaResolver].
 type LookupTransport interface {
 	// SendDatabaseLookup sends a DatabaseLookup message to a peer and waits for a response.
 	// Returns the response (either DatabaseStore or DatabaseSearchReply data) or an error.
@@ -29,7 +31,9 @@ type LookupTransport interface {
 }
 
 // LookupResponseHandler handles incoming DatabaseStore and DatabaseSearchReply messages
-// for pending lookups. It correlates responses with outstanding requests using message IDs.
+// for pending lookups. It correlates responses with outstanding requests using message IDs,
+// so a lookup can block until the peer's reply arrives.
+// See also [NewLookupResponseHandler].
 type LookupResponseHandler struct {
 	pending map[int]chan lookupResponse // maps message ID to response channel
 	mu      sync.Mutex
@@ -41,14 +45,21 @@ type lookupResponse struct {
 	data    []byte // Raw message data
 }
 
-// NewLookupResponseHandler creates a new handler for lookup responses
+// NewLookupResponseHandler creates a new handler for lookup responses.
+// It tracks outstanding DatabaseLookup requests so that the DatabaseStore or
+// DatabaseSearchReply messages that arrive later can be matched back to the
+// lookup that sent the request.
+// See also [LookupResponseHandler].
 func NewLookupResponseHandler() *LookupResponseHandler {
 	return &LookupResponseHandler{
 		pending: make(map[int]chan lookupResponse),
 	}
 }
 
-// RegisterPending registers a pending lookup with the given message ID
+// RegisterPending registers a pending lookup with the given message ID.
+// It returns a channel that the lookup blocks on until the peer's response
+// arrives, keyed by the I2NP message ID of the outgoing DatabaseLookup.
+// See also [LookupResponseHandler].
 func (h *LookupResponseHandler) RegisterPending(messageID int) chan lookupResponse {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -57,7 +68,10 @@ func (h *LookupResponseHandler) RegisterPending(messageID int) chan lookupRespon
 	return ch
 }
 
-// UnregisterPending removes a pending lookup registration
+// UnregisterPending removes a pending lookup registration.
+// It closes the response channel and drops the entry so that a lookup that
+// timed out or was cancelled no longer waits on a reply that will never come.
+// See also [LookupResponseHandler].
 func (h *LookupResponseHandler) UnregisterPending(messageID int) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -67,7 +81,11 @@ func (h *LookupResponseHandler) UnregisterPending(messageID int) {
 	}
 }
 
-// HandleResponse delivers a response to the waiting lookup if one exists
+// HandleResponse delivers a response to the waiting lookup if one exists.
+// It is called when a DatabaseStore or DatabaseSearchReply message arrives;
+// it matches the message ID to a pending lookup and unblocks it. It returns
+// false if no lookup is waiting for that message ID.
+// See also [LookupResponseHandler].
 func (h *LookupResponseHandler) HandleResponse(messageID, msgType int, data []byte) bool {
 	h.mu.Lock()
 	ch, ok := h.pending[messageID]
@@ -89,6 +107,11 @@ func (h *LookupResponseHandler) HandleResponse(messageID, msgType int, data []by
 }
 
 // KademliaResolver resolves router infos with recursive kademlia lookup.
+// It finds a RouterInfo by querying the Kademlia DHT: it starts from the
+// local NetDB and, if not found, sends DatabaseLookup messages to peers that
+// are progressively closer to the target hash until a peer returns the data.
+// See [I2P Spec: Database](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/database.rst) for the lookup protocol.
+// See also [LookupTransport], [LookupResponseHandler].
 type KademliaResolver struct {
 	// netdb to store result into
 	NetworkDatabase
@@ -298,6 +321,10 @@ type iterativeQueryResult struct {
 }
 
 // LookupState tracks the queried and unqueried peers for an iterative lookup.
+// It lets the Kademlia lookup avoid re-querying a peer and always pick the
+// closest unqueried peer each round, so the search converges on the target
+// hash without redundant DatabaseLookup messages.
+// See also [KademliaResolver].
 type LookupState struct {
 	queried   map[common.Hash]bool
 	unqueried map[common.Hash]bool
@@ -998,7 +1025,10 @@ func decompressRouterInfoPayload(storeData []byte) ([]byte, error) {
 }
 
 // SearchReplyError is returned when a peer responds with a DatabaseSearchReply
-// instead of a DatabaseStore. It contains the suggested peer hashes for iterative lookup.
+// instead of a DatabaseStore. It contains the suggested peer hashes for iterative lookup,
+// which the Kademlia resolver uses to steer the search toward peers closer to the target.
+// See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the DatabaseSearchReply message format.
+// See also [KademliaResolver].
 type SearchReplyError struct {
 	Suggestions []common.Hash
 }

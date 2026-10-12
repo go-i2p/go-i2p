@@ -11,15 +11,20 @@ import (
 // Per I2P specification, messages are typically limited to 32 KB.
 const MaxI2NPMessageSize = 32 * 1024 // 32 KB
 
-// DataMessage represents an I2NP Data message
-// Moved from: messages.go
+// DataMessage represents an I2NP Data message (type 20). It carries an
+// arbitrary payload through a tunnel to the destination router. The payload
+// is length-prefixed (4 bytes big-endian) followed by the raw data.
+// See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the wire format.
+// See also [Data].
 type DataMessage struct {
 	*BaseI2NPMessage
 	PayloadLength int
 	Payload       []byte
 }
 
-// NewDataMessage creates a new Data message
+// NewDataMessage creates a new Data message wrapping the given payload.
+// It sets the message type to I2NPMessageTypeData and serializes the
+// length-prefixed payload into the message data field.
 func NewDataMessage(payload []byte) *DataMessage {
 	log.WithFields(logger.Fields{
 		"at":           "NewDataMessage",
@@ -41,17 +46,24 @@ func NewDataMessage(payload []byte) *DataMessage {
 	return msg
 }
 
-// NewDataMessageWithPayload creates a new Data message and returns it as PayloadCarrier interface
+// NewDataMessageWithPayload creates a new Data message and returns it as a
+// PayloadCarrier. This is a convenience wrapper for callers that need the
+// interface type rather than the concrete *DataMessage.
+// See also [PayloadCarrier].
 func NewDataMessageWithPayload(payload []byte) PayloadCarrier {
 	return NewDataMessage(payload)
 }
 
-// GetPayload returns the actual payload data
+// GetPayload returns the raw payload bytes carried by this Data message.
+// The returned slice is the message's internal buffer; callers should not
+// modify it in place.
 func (d *DataMessage) GetPayload() []byte {
 	return d.Payload
 }
 
-// UnmarshalBinary deserializes a Data message
+// UnmarshalBinary deserializes a Data message from its wire format. It
+// unmarshals the base I2NP header, then extracts the 4-byte length prefix
+// and payload. It rejects payloads exceeding MaxI2NPMessageSize.
 func (d *DataMessage) UnmarshalBinary(data []byte) error {
 	log.WithFields(logger.Fields{
 		"at":        "DataMessage.UnmarshalBinary",

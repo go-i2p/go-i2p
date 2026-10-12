@@ -22,8 +22,12 @@ import (
 // LeaseSet Storage and Retrieval Methods
 // ======================================================================
 
-// SkiplistFileForLeaseSet generates the skiplist file path for a LeaseSet
-// LeaseSets use 'l' prefix instead of 'r' for router infos
+// SkiplistFileForLeaseSet generates the skiplist file path for a LeaseSet.
+// LeaseSets use the 'l' prefix instead of 'r' for RouterInfos, so each
+// LeaseSet lives in its own file under a skiplist directory derived from the
+// hash. This is the on-disk location used by the persistence and disk-fallback
+// paths for all LeaseSet variants.
+// See also [SkiplistFile], [Path].
 func (db *StdNetDB) SkiplistFileForLeaseSet(hash common.Hash) string {
 	fname := base64.EncodeToString(hash[:])
 	fpath := filepath.Join(db.Path(), fmt.Sprintf("l%c", fname[0]), fmt.Sprintf("leaseSet-%s.dat", fname))
@@ -34,6 +38,8 @@ func (db *StdNetDB) SkiplistFileForLeaseSet(hash common.Hash) string {
 // StoreLeaseSet stores a LeaseSet entry in the database from I2NP DatabaseStore message.
 // This method validates and dispatches to the appropriate typed store method based on dataType.
 // Accepts dataType 1 (LeaseSet), 3 (LeaseSet2), 5 (EncryptedLeaseSet), and 7 (MetaLeaseSet).
+// See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the DatabaseStore message format.
+// See also [StoreLeaseSet2], [StoreEncryptedLeaseSet], [StoreMetaLeaseSet].
 func (db *StdNetDB) StoreLeaseSet(key common.Hash, data []byte, dataType byte) error {
 	log.WithField("hash", key).Debug("Storing LeaseSet from DatabaseStore message")
 
@@ -516,6 +522,10 @@ func (db *StdNetDB) checkCacheForLeaseSet(
 }
 
 // GetLeaseSetBytes retrieves LeaseSet data as bytes from the database.
+// It checks the in-memory cache first and falls back to the on-disk skiplist
+// file, so callers get the raw serialized LeaseSet regardless of whether it
+// is currently cached.
+// See also [GetLeaseSet], [SkiplistFileForLeaseSet].
 func (db *StdNetDB) GetLeaseSetBytes(hash common.Hash) ([]byte, error) {
 	return db.fetchLeaseSetBytes(
 		hash, "LeaseSet",
@@ -533,6 +543,9 @@ func (db *StdNetDB) GetLeaseSetBytes(hash common.Hash) ([]byte, error) {
 }
 
 // GetLeaseSetCount returns the total number of LeaseSet entries in memory cache.
+// It counts the LeaseSets held in the in-memory cache, which is the fast path
+// for monitoring how much lease-set data the NetDB is currently holding.
+// See also [GetAllLeaseSets].
 func (db *StdNetDB) GetLeaseSetCount() int {
 	return db.lsCache.count()
 }
@@ -597,6 +610,8 @@ func (db *StdNetDB) storeLeaseSetVariant(
 // StoreLeaseSet2 stores a LeaseSet2 entry in the database from I2NP DatabaseStore message.
 // This method validates, parses, caches, and persists LeaseSet2 data.
 // dataType should be 3 for LeaseSet2 (matching I2P protocol specification).
+// See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the DatabaseStore message format.
+// See also [StoreLeaseSet].
 func (db *StdNetDB) StoreLeaseSet2(key common.Hash, data []byte, dataType byte) error {
 	var ls2 lease_set2.LeaseSet2
 	return db.storeLeaseSetVariant(
@@ -813,6 +828,10 @@ func (db *StdNetDB) parseAndCacheLeaseSet2(hash common.Hash, data []byte) (lease
 }
 
 // GetLeaseSet2Bytes retrieves LeaseSet2 data as bytes from the database.
+// It checks the in-memory cache first and falls back to the on-disk skiplist
+// file, so callers get the raw serialized LeaseSet2 regardless of whether it
+// is currently cached.
+// See also [GetLeaseSet2], [SkiplistFileForLeaseSet].
 func (db *StdNetDB) GetLeaseSet2Bytes(hash common.Hash) ([]byte, error) {
 	return db.getLeaseSetBytesWithHandlers(hash, db.leaseSet2BytesHandlers())
 }
@@ -850,6 +869,8 @@ func (db *StdNetDB) leaseSet2BytesHandlers() leaseSetBytesHandlers {
 // StoreEncryptedLeaseSet stores an EncryptedLeaseSet entry in the database from I2NP DatabaseStore message.
 // This method validates, parses, caches, and persists EncryptedLeaseSet data.
 // dataType should be 5 for EncryptedLeaseSet (matching I2P protocol specification).
+// See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the DatabaseStore message format.
+// See also [StoreLeaseSet].
 func (db *StdNetDB) StoreEncryptedLeaseSet(key common.Hash, data []byte, dataType byte) error {
 	var els encrypted_leaseset.EncryptedLeaseSet
 	return db.storeLeaseSetVariant(
@@ -971,6 +992,10 @@ func (db *StdNetDB) parseAndCacheEncryptedLeaseSet(hash common.Hash, data []byte
 }
 
 // GetEncryptedLeaseSetBytes retrieves EncryptedLeaseSet data as bytes from the database.
+// It checks the in-memory cache first and falls back to the on-disk skiplist
+// file, so callers get the raw serialized EncryptedLeaseSet regardless of
+// whether it is currently cached.
+// See also [GetEncryptedLeaseSet], [SkiplistFileForLeaseSet].
 func (db *StdNetDB) GetEncryptedLeaseSetBytes(hash common.Hash) ([]byte, error) {
 	return db.getLeaseSetBytesWithHandlers(hash, db.encryptedLeaseSetBytesHandlers())
 }
@@ -998,6 +1023,8 @@ func (db *StdNetDB) encryptedLeaseSetBytesHandlers() leaseSetBytesHandlers {
 // StoreMetaLeaseSet stores a MetaLeaseSet entry in the database from I2NP DatabaseStore message.
 // This method validates, parses, caches, and persists MetaLeaseSet data.
 // dataType should be 7 for MetaLeaseSet (matching I2P protocol specification).
+// See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the DatabaseStore message format.
+// See also [StoreLeaseSet].
 func (db *StdNetDB) StoreMetaLeaseSet(key common.Hash, data []byte, dataType byte) error {
 	var mls meta_leaseset.MetaLeaseSet
 	return db.storeLeaseSetVariant(
@@ -1115,6 +1142,10 @@ func (db *StdNetDB) parseAndCacheMetaLeaseSet(hash common.Hash, data []byte) (me
 }
 
 // GetMetaLeaseSetBytes retrieves MetaLeaseSet data as bytes from the database.
+// It checks the in-memory cache first and falls back to the on-disk skiplist
+// file, so callers get the raw serialized MetaLeaseSet regardless of whether
+// it is currently cached.
+// See also [GetMetaLeaseSet], [SkiplistFileForLeaseSet].
 func (db *StdNetDB) GetMetaLeaseSetBytes(hash common.Hash) ([]byte, error) {
 	return db.getLeaseSetBytesWithHandlers(hash, db.metaLeaseSetBytesHandlers())
 }

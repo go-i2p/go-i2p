@@ -24,6 +24,12 @@ import (
 )
 
 // StdNetDB is the standard network database implementation using local filesystem skiplist.
+// It is the primary NetDB: it caches RouterInfos and LeaseSets in memory and
+// persists them to a skiplist directory on disk, and it serves as the store
+// that receives data from DatabaseStore messages and the source for
+// DatabaseLookup responses.
+// See [I2P Spec: Database](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/database.rst) for the NetDB role.
+// See also [NetworkDatabase], [Entry].
 type StdNetDB struct {
 	DB string
 
@@ -203,6 +209,9 @@ func (db *StdNetDB) SetRouterInfoAdmissionPressureThreshold(percent int) {
 }
 
 // GetMaxRouterInfos returns the current RouterInfo capacity.
+// This is the admission-control ceiling for how many RouterInfos the NetDB
+// will hold in memory; it is the value set by SetMaxRouterInfos.
+// See also [SetMaxRouterInfos].
 func (db *StdNetDB) GetMaxRouterInfos() int {
 	return db.riCache.getCapacity()
 }
@@ -376,6 +385,10 @@ func (db *StdNetDB) parseAndCacheRouterInfo(hash common.Hash, data []byte) (rout
 }
 
 // SkiplistFile returns the skiplist file path for a RouterInfo with the given hash.
+// The NetDB stores each RouterInfo in its own file under a skiplist directory
+// derived from the hash, so this maps a hash to the on-disk location used by
+// SaveEntry and the disk fallback in GetRouterInfo.
+// See also [SaveEntry], [GetRouterInfo].
 func (db *StdNetDB) SkiplistFile(hash common.Hash) (fpath string) {
 	fname := base64.EncodeToString(hash[:])
 	fpath = filepath.Join(db.Path(), fmt.Sprintf("r%c", fname[0]), fmt.Sprintf("routerInfo-%s.dat", fname))
@@ -384,6 +397,9 @@ func (db *StdNetDB) SkiplistFile(hash common.Hash) (fpath string) {
 }
 
 // Path returns the netdb directory path.
+// This is the root directory of the on-disk NetDB where the skiplist
+// subdirectories for RouterInfos and LeaseSets live.
+// See also [SkiplistFile], [Create].
 func (db *StdNetDB) Path() string {
 	return string(db.DB)
 }
@@ -500,6 +516,10 @@ func (db *StdNetDB) RecalculateSize() error {
 }
 
 // Exists returns true if the network db directory exists and is writable.
+// It verifies the root directory and every skiplist subdirectory are present,
+// so callers can tell whether the on-disk NetDB is ready to be loaded or must
+// be created first.
+// See also [Path], [Create].
 func (db *StdNetDB) Exists() bool {
 	p := db.Path()
 	// check root directory
@@ -516,6 +536,10 @@ func (db *StdNetDB) Exists() bool {
 }
 
 // SaveEntry persists a single RouterInfo Entry to disk in the NetDB skiplist directory.
+// It writes the serialized Entry to the file named by SkiplistFile for the
+// RouterInfo's identity hash, so the entry survives a restart and can be
+// served from disk when it is not in the in-memory cache.
+// See also [SkiplistFile], [Entry].
 func (db *StdNetDB) SaveEntry(e *Entry) (err error) {
 	if e.RouterInfo == nil {
 		return oops.Errorf("cannot save entry: RouterInfo is nil (only RouterInfo entries can be persisted to the NetDB skiplist)")
@@ -553,6 +577,9 @@ func (db *StdNetDB) SaveEntry(e *Entry) (err error) {
 }
 
 // Save persists all in-memory RouterInfo and LeaseSet entries to disk.
+// It flushes the entire in-memory NetDB to the skiplist directory so that a
+// restart does not lose data that has not yet been written individually.
+// See also [SaveEntry], [SkiplistFile].
 func (db *StdNetDB) Save() error {
 	logAt("Save").Debug("Saving all NetDB entries")
 
@@ -870,6 +897,8 @@ func (db *StdNetDB) persistRouterInfoToFilesystem(key common.Hash, ri router_inf
 // - 3: LeaseSet2
 // - 5: EncryptedLeaseSet
 // - 7: MetaLeaseSet
+// See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the DatabaseStore message format.
+// See also [StoreRouterInfoFromMessage], [StoreLeaseSet].
 func (db *StdNetDB) Store(key common.Hash, data []byte, dataType byte) error {
 	switch dataType {
 	case 0:
@@ -1195,6 +1224,10 @@ func (db *StdNetDB) StoreRouterInfoWithError(ri router_info.RouterInfo) error {
 }
 
 // Ensure ensures that the network database exists and loads existing RouterInfos.
+// It is the startup entry point for the NetDB: if the on-disk directory is
+// missing it creates it, otherwise it loads the persisted RouterInfos and
+// LeaseSets back into the in-memory caches.
+// See also [Exists], [Create].
 func (db *StdNetDB) Ensure() (err error) {
 	if !db.Exists() {
 		log.WithFields(logger.Fields{"at": "Ensure"}).Info("NetDB directory does not exist, creating it")
@@ -1593,7 +1626,11 @@ func (db *StdNetDB) Create() (err error) {
 	return nil
 }
 
-// GetRouterInfoBytes retrieves RouterInfo data as bytes from the database
+// GetRouterInfoBytes retrieves RouterInfo data as bytes from the database.
+// It checks the in-memory cache first and falls back to the on-disk skiplist
+// file, so callers get the raw serialized RouterInfo regardless of whether it
+// is currently cached.
+// See also [GetRouterInfo], [SkiplistFile].
 func (db *StdNetDB) GetRouterInfoBytes(hash common.Hash) ([]byte, error) {
 	log.WithField("hash", hash).Debug("Getting RouterInfo bytes")
 
@@ -1627,7 +1664,10 @@ func (db *StdNetDB) GetRouterInfoBytes(hash common.Hash) ([]byte, error) {
 	return data, nil
 }
 
-// GetRouterInfoCount returns the total number of RouterInfo entries in the database
+// GetRouterInfoCount returns the total number of RouterInfo entries in the database.
+// It is a convenience wrapper over Size, which counts the RouterInfos held in
+// the in-memory cache.
+// See also [Size].
 func (db *StdNetDB) GetRouterInfoCount() int {
 	return db.Size()
 }

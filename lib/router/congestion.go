@@ -38,7 +38,10 @@ type CongestionMetricsCollector interface {
 	IsAcceptingTunnels() bool
 }
 
-// CongestionSample represents a single congestion measurement at a point in time.
+// CongestionSample is a single congestion measurement taken at one point in time.
+// The monitor keeps a rolling window of these to compute the weighted average
+// ratio that drives the D/E/G flag state machine.
+// See also [CongestionMonitor].
 type CongestionSample struct {
 	Timestamp                time.Time
 	ParticipatingTunnelRatio float64
@@ -54,6 +57,9 @@ type CongestionSample struct {
 // - Implements hysteresis to prevent flag flapping at threshold boundaries
 // - Thread-safe for concurrent access from RouterInfo publisher
 // - State machine: None → D → E → G with hysteresis thresholds for downgrades
+//
+// See [I2P Spec: RouterInfo](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/routerinfo.rst) for the congestion flags advertised in RouterInfo caps.
+// See also [CongestionStateProvider].
 type CongestionMonitor struct {
 	mu sync.RWMutex
 
@@ -83,6 +89,8 @@ type CongestionMonitor struct {
 
 // NewCongestionMonitor creates a new congestion monitor with the given configuration.
 // The collector parameter provides metrics; if nil, a no-op collector is used.
+// The router starts the monitor during initialization so that the congestion
+// flag is ready before the first RouterInfo is published.
 func NewCongestionMonitor(cfg config.CongestionDefaults, collector CongestionMetricsCollector) *CongestionMonitor {
 	// Default to 1-second sampling, calculate max samples from averaging window
 	sampleInterval := time.Second
@@ -111,6 +119,8 @@ func NewCongestionMonitor(cfg config.CongestionDefaults, collector CongestionMet
 }
 
 // Start begins the background congestion sampling goroutine.
+// Sampling must run continuously so the flag reflects current load; the
+// RouterInfo publisher reads the flag on every republish.
 func (m *CongestionMonitor) Start() {
 	m.wg.Add(1)
 	go m.samplingLoop()
@@ -344,6 +354,8 @@ func (m *CongestionMonitor) GetCongestionFlag() config.CongestionFlag {
 }
 
 // GetCongestionLevel returns the numeric congestion level (0=none, 1=D, 2=E, 3=G).
+// The numeric form is convenient for comparisons and logging where the flag
+// string would be awkward to work with.
 func (m *CongestionMonitor) GetCongestionLevel() int {
 	return m.GetCongestionFlag().CongestionLevel()
 }
@@ -363,6 +375,8 @@ func (m *CongestionMonitor) GetCurrentRatio() float64 {
 }
 
 // GetSampleCount returns the current number of samples in the rolling window.
+// The count grows from zero until the averaging window is full, so callers
+// can tell whether the current flag is based on a full or partial window.
 func (m *CongestionMonitor) GetSampleCount() int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -424,6 +438,9 @@ var (
 
 // RouterMetricsCollector collects congestion metrics from router subsystems.
 // This is the production implementation of CongestionMetricsCollector.
+// It reads live values from the tunnel manager, bandwidth tracker, and
+// transports so the monitor always reflects current router load.
+// See also [CongestionMetricsCollector].
 type RouterMetricsCollector struct {
 	// participantCountFunc returns current participating tunnel count
 	participantCountFunc func() int
@@ -462,9 +479,13 @@ func NewRouterMetricsCollector(opts ...RouterMetricsOption) *RouterMetricsCollec
 }
 
 // RouterMetricsOption configures a RouterMetricsCollector.
+// Options let the router wire in its own metric sources without the
+// collector needing to know about the router's internals.
 type RouterMetricsOption func(*RouterMetricsCollector)
 
 // WithParticipantCount sets the function to get current participant count.
+// Participating tunnels are the primary congestion signal, so this source
+// feeds the highest-weighted term in the average ratio.
 func WithParticipantCount(f func() int) RouterMetricsOption {
 	return func(c *RouterMetricsCollector) {
 		if f != nil {
@@ -474,6 +495,8 @@ func WithParticipantCount(f func() int) RouterMetricsOption {
 }
 
 // WithMaxParticipants sets the function to get max participants.
+// The ratio of current to max participants is the denominator of the
+// primary congestion signal.
 func WithMaxParticipants(f func() int) RouterMetricsOption {
 	return func(c *RouterMetricsCollector) {
 		if f != nil {
@@ -483,6 +506,8 @@ func WithMaxParticipants(f func() int) RouterMetricsOption {
 }
 
 // WithBandwidthRates sets the function to get bandwidth rates.
+// Bandwidth utilization is a secondary congestion signal that catches
+// routers saturated by traffic but not by tunnel count.
 func WithBandwidthRates(f func() (inbound, outbound uint64)) RouterMetricsOption {
 	return func(c *RouterMetricsCollector) {
 		if f != nil {
@@ -492,6 +517,8 @@ func WithBandwidthRates(f func() (inbound, outbound uint64)) RouterMetricsOption
 }
 
 // WithMaxBandwidth sets the function to get max bandwidth.
+// The configured limit is the denominator of the bandwidth utilization
+// ratio; a zero value means unlimited and yields a ratio of zero.
 func WithMaxBandwidth(f func() uint64) RouterMetricsOption {
 	return func(c *RouterMetricsCollector) {
 		if f != nil {
@@ -501,6 +528,8 @@ func WithMaxBandwidth(f func() uint64) RouterMetricsOption {
 }
 
 // WithConnectionCount sets the function to get connection count.
+// Connection saturation is a secondary congestion signal that catches
+// routers at their transport connection limit.
 func WithConnectionCount(f func() int) RouterMetricsOption {
 	return func(c *RouterMetricsCollector) {
 		if f != nil {
@@ -510,6 +539,8 @@ func WithConnectionCount(f func() int) RouterMetricsOption {
 }
 
 // WithMaxConnections sets the function to get max connections.
+// The configured limit is the denominator of the connection utilization
+// ratio.
 func WithMaxConnections(f func() int) RouterMetricsOption {
 	return func(c *RouterMetricsCollector) {
 		if f != nil {
@@ -519,6 +550,8 @@ func WithMaxConnections(f func() int) RouterMetricsOption {
 }
 
 // WithAcceptingTunnels sets the function to check if accepting tunnels.
+// A router that rejects all tunnels advertises the G flag regardless of
+// measured load, so this source short-circuits the state machine.
 func WithAcceptingTunnels(f func() bool) RouterMetricsOption {
 	return func(c *RouterMetricsCollector) {
 		if f != nil {
@@ -541,11 +574,15 @@ func computeClampedRatio(current, max int) float64 {
 }
 
 // GetParticipatingTunnelRatio returns current/max participating tunnels ratio.
+// This is the highest-weighted congestion signal (0.50 per PROP_162), since
+// transit tunnel load is the dominant cost for a router.
 func (c *RouterMetricsCollector) GetParticipatingTunnelRatio() float64 {
 	return computeClampedRatio(c.participantCountFunc(), c.maxParticipantsFunc())
 }
 
 // GetBandwidthUtilization returns current bandwidth usage ratio.
+// This is one of the two lower-weighted congestion signals (0.25 per
+// PROP_162), using the higher of inbound or outbound rate.
 func (c *RouterMetricsCollector) GetBandwidthUtilization() float64 {
 	inbound, outbound := c.bandwidthRatesFunc()
 	maxBandwidth := c.maxBandwidthFunc()
@@ -568,11 +605,15 @@ func (c *RouterMetricsCollector) GetBandwidthUtilization() float64 {
 }
 
 // GetConnectionUtilization returns connection count / max connections ratio.
+// This is one of the two lower-weighted congestion signals (0.25 per
+// PROP_162), tracking transport session load.
 func (c *RouterMetricsCollector) GetConnectionUtilization() float64 {
 	return computeClampedRatio(c.connectionCountFunc(), c.maxConnectionsFunc())
 }
 
 // IsAcceptingTunnels returns whether the router is accepting tunnel participation.
+// A router that rejects all tunnels advertises the G flag regardless of
+// measured load, so this source short-circuits the state machine.
 func (c *RouterMetricsCollector) IsAcceptingTunnels() bool {
 	return c.acceptingTunnelsFunc()
 }

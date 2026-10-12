@@ -67,7 +67,9 @@ func (v *ExpirationValidator) Enable() *ExpirationValidator {
 	return v
 }
 
-// IsEnabled returns whether expiration checking is enabled.
+// IsEnabled reports whether expiration checking is active. Callers can use
+// this to skip validation when the validator has been disabled.
+// See also [ExpirationValidator].
 func (v *ExpirationValidator) IsEnabled() bool {
 	return v.enabled
 }
@@ -173,7 +175,9 @@ func SetDefaultExpirationValidator(v *ExpirationValidator) {
 	}
 }
 
-// ResetDefaultExpirationValidator resets to a fresh default validator.
+// ResetDefaultExpirationValidator restores the package-level validator to a
+// fresh default, undoing any prior SetDefaultExpirationValidator call.
+// See also [SetDefaultExpirationValidator].
 func ResetDefaultExpirationValidator() {
 	defaultValidatorMu.Lock()
 	defaultExpirationValidator = NewExpirationValidator()

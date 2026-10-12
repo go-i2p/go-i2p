@@ -18,7 +18,9 @@ type BuildRecordCrypto struct {
 	inner *ratchet.BuildReplyCrypto
 }
 
-// NewBuildRecordCrypto creates a new build record crypto handler.
+// NewBuildRecordCrypto creates a new build record crypto handler. It wraps a
+// fresh go-noise/ratchet.BuildReplyCrypto, which holds the per-build reply
+// keys and IVs used to encrypt and decrypt tunnel build records.
 func NewBuildRecordCrypto() *BuildRecordCrypto {
 	return &BuildRecordCrypto{
 		inner: ratchet.NewBuildReplyCrypto(),

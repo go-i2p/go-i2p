@@ -246,7 +246,11 @@ type MessageProcessor struct {
 	stbmSlotCrypto        map[int]stbmSlotCrypto    // Per-slot STBM crypto state (valid during one message processing call)
 }
 
-// NewMessageProcessor creates a new message processor
+// NewMessageProcessor creates a new message processor with default
+// configuration: build record crypto, an expiration validator, and a reply
+// processor. The processor is the main handler for inbound I2NP messages
+// (tunnel builds, data, delivery status, database lookups).
+// See also [MessageProcessor].
 func NewMessageProcessor() *MessageProcessor {
 	log.WithField("at", "NewMessageProcessor").Debug("Creating new message processor")
 	crypto := NewBuildRecordCrypto()
@@ -433,7 +437,8 @@ func (p *MessageProcessor) DisableExpirationCheck() {
 	}
 }
 
-// EnableExpirationCheck enables expiration validation in the processor.
+// EnableExpirationCheck re-enables expiration validation in the processor
+// after it was disabled with DisableExpirationCheck.
 func (p *MessageProcessor) EnableExpirationCheck() {
 	if p.expirationValidator != nil {
 		p.expirationValidator.Enable()

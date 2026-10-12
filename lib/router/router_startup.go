@@ -11,11 +11,10 @@ import (
 // logSubsystemStop logs a subsystem shutdown event with standard fields.
 // This reduces duplication across the various stopXxx methods.
 
-// Start starts router mainloop and returns an error if startup-critical
+// Start starts the router's main loop and returns an error if startup-critical
 // subsystems (NetDB, I2CP, I2PControl) fail to initialize.
 // The router must be created via CreateRouter (not bare FromConfig) so that
 // the keystore and transport are properly initialized before Start is called.
-// Start initializes all subsystems and starts the router's main loop.
 // It acquires runMux for the duration of pre-launch setup, then releases it
 // before blocking on the mainloop's startup-error channel.
 func (r *Router) Start() error {

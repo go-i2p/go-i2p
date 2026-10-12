@@ -16,19 +16,29 @@ Accurate for version 0.9.28
 Same format as VariableTunnelBuildMessage, with BuildResponseRecords.
 */
 
-// VariableTunnelBuildReply represents an I2NP VariableTunnelBuildReply message containing a variable number of build response records.
+// VariableTunnelBuildReply represents an I2NP VariableTunnelBuildReply
+// message containing a variable number (1-8) of build response records,
+// the reply counterpart to VariableTunnelBuild. It is used to process
+// replies for variable-length tunnels.
+// See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the wire format.
+// See also [VariableTunnelBuild] and [TunnelBuildReply].
 type VariableTunnelBuildReply struct {
 	Count                int
 	BuildResponseRecords []BuildResponseRecord
 	RawRecordData        [][]byte // Original encrypted bytes before parsing
 }
 
-// GetReplyRecords returns the build response records
+// GetReplyRecords returns the parsed build response records. It satisfies
+// the TunnelReplyHandler interface so the reply processor can handle
+// variable-length and standard build replies uniformly.
+// See also [TunnelReplyHandler].
 func (v *VariableTunnelBuildReply) GetReplyRecords() []BuildResponseRecord {
 	return v.BuildResponseRecords
 }
 
-// GetRawReplyRecords returns the original encrypted record bytes.
+// GetRawReplyRecords returns the original encrypted record bytes as they
+// appeared on the wire, before parsing. Useful for debugging and for
+// re-decryption attempts when parsing fails.
 func (v *VariableTunnelBuildReply) GetRawReplyRecords() [][]byte {
 	return v.RawRecordData
 }

@@ -126,33 +126,62 @@ total length: 7 bytes
 
 const (
 	// DTLocal indicates delivery to the local router context.
+	// The receiving router processes the message itself instead of
+	// forwarding it onward.
 	DTLocal = iota
+	// DTTunnel routes the message to a specific tunnel on a gateway router,
+	// identified by a tunnel ID and the gateway's 32-byte identity hash.
 	DTTunnel
+	// DTRouter sends the message directly to a specific router, identified
+	// by its 32-byte identity hash, without going through a tunnel.
 	DTRouter
+	// DTUnused is a reserved delivery type. Messages carrying it are invalid
+	// and rejected by the parser.
 	DTUnused
 )
 
 const (
 	// FirstFragment marks the first fragment in a message sequence.
+	// It carries the full delivery instructions (delivery type, tunnel ID,
+	// hash, and optional fields).
 	FirstFragment = iota
+	// FollowOnFragment marks a continuation fragment. It carries only the
+	// fragment number, message ID, and fragment size, so the receiver can
+	// reassemble the original message.
 	FollowOnFragment
 )
 
 const (
 	// FlagSize is the size in bytes of a fragment flag field.
-	FlagSize               = 1
-	TunnelIDSize           = 4
-	HashSize               = 32
-	DelaySize              = 1
-	MessageIDSize          = 4
+	// The flag byte is the first byte of every delivery instruction and
+	// encodes the fragment type, delivery type, and feature bits.
+	FlagSize = 1
+	// TunnelIDSize is the size in bytes of a tunnel ID field.
+	TunnelIDSize = 4
+	// HashSize is the size in bytes of a router identity hash field.
+	HashSize = 32
+	// DelaySize is the size in bytes of the optional delay field.
+	DelaySize = 1
+	// MessageIDSize is the size in bytes of the message ID field used to
+	// reassemble fragmented messages.
+	MessageIDSize = 4
+	// ExtendedOptionsMinSize is the minimum size in bytes of the extended
+	// options field (one length byte plus at least one option byte).
 	ExtendedOptionsMinSize = 2
-	SizeFieldSize          = 2
+	// SizeFieldSize is the size in bytes of the fragment size field.
+	SizeFieldSize = 2
 )
 
 // DelayFactor represents a delay factor byte for tunnel message delivery instructions.
+// It tells the receiving router how long to hold the message before
+// delivering it. This feature is unimplemented in the Java router.
 type DelayFactor byte
 
-// DeliveryInstructions represents I2P tunnel message delivery instructions
+// DeliveryInstructions represents I2P tunnel message delivery instructions.
+// They sit at the start of every decrypted tunnel message and tell the
+// receiving router where to send the payload: locally, to a tunnel on a
+// gateway router, or directly to a router.
+// See [I2P Spec: Tunnel Message](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/tunnel-message.rst) for the wire format.
 type DeliveryInstructions struct {
 	// Type: FirstFragment or FollowOnFragment
 	fragmentType int
@@ -175,13 +204,17 @@ type DeliveryInstructions struct {
 	// messageID and fragmentSize also used for FollowOnFragment
 }
 
-// NewDeliveryInstructions creates a new DeliveryInstructions from raw bytes
+// NewDeliveryInstructions creates a new DeliveryInstructions from raw bytes.
+// Use this to parse the delivery instructions that follow the checksum and
+// zero byte in a decrypted tunnel message.
 func NewDeliveryInstructions(bytes []byte) (*DeliveryInstructions, error) {
 	di, _, err := readDeliveryInstructionsStruct(bytes)
 	return di, err
 }
 
-// Bytes serializes the DeliveryInstructions to bytes
+// Bytes serializes the DeliveryInstructions to bytes.
+// The output is ready to be placed at the start of a tunnel message payload
+// before encryption.
 func (di *DeliveryInstructions) Bytes() ([]byte, error) {
 	if di == nil {
 		return nil, oops.Errorf("cannot serialize nil DeliveryInstructions")

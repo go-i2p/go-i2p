@@ -25,7 +25,13 @@ import (
 	"github.com/samber/oops"
 )
 
-// RouterInfoKeystore is an implementation of KeyStore for storing and retrieving RouterInfo private keys and exporting RouterInfos
+// RouterInfoKeystore is an implementation of KeyStore for storing and
+// retrieving RouterInfo private keys and exporting RouterInfos. It holds the
+// Ed25519 signing key used to sign the router's RouterInfo (the signed
+// advertisement describing the router) and the X25519 encryption key used as
+// the router's NTCP2 static key.
+//
+// See also [KeyStore], [NewRouterInfoKeystore], [RouterInfoOptions].
 type RouterInfoKeystore struct {
 	*sntp.RouterTimestamper
 	dir               string
@@ -72,7 +78,11 @@ func (ks *RouterInfoKeystore) Close() {
 
 // NewRouterInfoKeystore creates a new RouterInfoKeystore with fresh and new private keys
 // it accepts a directory to store the keys in and a name for the keys
-// then it generates new private keys for the routerInfo if none exist
+// then it generates new private keys for the routerInfo if none exist.
+// Loading existing keys (instead of generating new ones) is what keeps the
+// router's identity stable across restarts.
+//
+// See also [RouterInfoKeystore], [KeyStore].
 func NewRouterInfoKeystore(dir, name string) (*RouterInfoKeystore, error) {
 	log.WithFields(map[string]interface{}{
 		"at":   "NewRouterInfoKeystore",
@@ -246,7 +256,9 @@ func loadExistingKey(keyData []byte) (types.PrivateKey, error) {
 	return &key, nil
 }
 
-// GetKeys returns the public and private signing key pair held by this RouterInfoKeystore.
+// GetKeys returns the public and private signing key pair held by this
+// RouterInfoKeystore. The public key is embedded in the RouterInfo identity;
+// the private key signs the RouterInfo and any LeaseSets the router issues.
 func (ks *RouterInfoKeystore) GetKeys() (types.PublicKey, types.PrivateKey, error) {
 	log.WithField("at", "GetKeys").Debug("Retrieving keys")
 	public, err := ks.privateKey.Public()
@@ -258,7 +270,8 @@ func (ks *RouterInfoKeystore) GetKeys() (types.PublicKey, types.PrivateKey, erro
 	return public, ks.privateKey, nil
 }
 
-// GetSigningPrivateKey returns the Ed25519 signing private key.
+// GetSigningPrivateKey returns the Ed25519 signing private key. Callers use
+// it to sign RouterInfos and LeaseSets; it must never leave the process.
 func (ks *RouterInfoKeystore) GetSigningPrivateKey() types.PrivateKey {
 	return ks.privateKey
 }
@@ -271,7 +284,10 @@ func (ks *RouterInfoKeystore) GetEncryptionPrivateKey() types.PrivateEncryptionK
 	return ks.encryptionPrivKey
 }
 
-// StoreKeys persists the signing and encryption private keys to disk in the configured directory.
+// StoreKeys persists the signing and encryption private keys to disk in the
+// configured directory with restrictive permissions. Persisting both keys is
+// what keeps the router's identity (and NTCP2 static key) stable across
+// restarts.
 func (ks *RouterInfoKeystore) StoreKeys() error {
 	log.WithField("at", "StoreKeys").Debug("Storing keys to disk")
 
@@ -337,7 +353,10 @@ func (ks *RouterInfoKeystore) storeEncryptionKey(keyName string) error {
 	return nil
 }
 
-// KeyID returns a stable, filesystem-safe identifier for this keystore, derived from the configured name or the public key.
+// KeyID returns a stable, filesystem-safe identifier for this keystore,
+// derived from the configured name or the public key. Stability matters
+// because the KeyID is used in key file names; a changing ID would orphan
+// previously stored keys on disk.
 func (ks *RouterInfoKeystore) KeyID() string {
 	// If a name is explicitly set, always return it
 	if ks.name != "" {
@@ -454,7 +473,11 @@ type RouterInfoOptions struct {
 }
 
 // ConstructRouterInfo creates a complete RouterInfo structure with signing keys and certificate.
+// The RouterInfo is the signed advertisement a router publishes to the NetDB
+// so other routers can learn its addresses and capabilities.
 // The opts parameter allows specifying optional parameters like congestion flags.
+//
+// See also [RouterInfoOptions].
 func (ks *RouterInfoKeystore) ConstructRouterInfo(addresses []*router_address.RouterAddress, opts ...RouterInfoOptions) (*router_info.RouterInfo, error) {
 	ks.logConstructionStart(len(addresses))
 

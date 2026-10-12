@@ -301,6 +301,8 @@ type i2npReader interface {
 
 // AuthenticatedPeer defines the minimum identity guarantees required before
 // starting a session message processor.
+// Both NTCP2 and SSU2 sessions satisfy this interface once their Noise
+// handshake completes, so the main loop can treat them uniformly.
 type AuthenticatedPeer interface {
 	PeerHash() common.Hash
 	HandshakeComplete() bool

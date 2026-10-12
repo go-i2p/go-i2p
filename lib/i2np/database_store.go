@@ -126,7 +126,12 @@ data ::
      If type == 7, data is an uncompressed MetaLeaseSet, handled by lib/netdb.
 */
 
-// DatabaseStore represents an I2NP DatabaseStore message used to publish a RouterInfo or LeaseSet to the network database.
+// DatabaseStore represents an I2NP DatabaseStore message (type 1) used to
+// publish a RouterInfo or LeaseSet to the network database. The message
+// carries the store key, the data type, reply routing info, and the
+// payload to be stored.
+// See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the wire format.
+// See also [DatabaseManager], [DatabaseStoreTypeRouterInfo].
 type DatabaseStore struct {
 	*BaseI2NPMessage
 	Key           common.Hash
@@ -137,7 +142,9 @@ type DatabaseStore struct {
 	Data          []byte
 }
 
-// NewDatabaseStore creates a new DatabaseStore message
+// NewDatabaseStore creates a new DatabaseStore message with the given key,
+// data, and data type. The reply fields are zeroed, meaning the response
+// is sent directly (no tunnel) with no reply token.
 func NewDatabaseStore(key common.Hash, data []byte, dataType byte) *DatabaseStore {
 	log.WithFields(logger.Fields{
 		"at":        "NewDatabaseStore",
@@ -157,17 +164,22 @@ func NewDatabaseStore(key common.Hash, data []byte, dataType byte) *DatabaseStor
 	}
 }
 
-// GetStoreKey returns the store key
+// GetStoreKey returns the store key, which is the hash of the data being
+// stored (e.g. the identity hash for a RouterInfo).
 func (d *DatabaseStore) GetStoreKey() common.Hash {
 	return d.Key
 }
 
-// GetStoreData returns the store data
+// GetStoreData returns the raw payload to be stored in the NetDB, such as a
+// RouterInfo or LeaseSet. The payload type is given by GetStoreType.
+// See also [DatabaseStore].
 func (d *DatabaseStore) GetStoreData() []byte {
 	return d.Data
 }
 
-// GetStoreType returns the store type
+// GetStoreType returns the store type byte, which encodes the data type
+// (RouterInfo, LeaseSet, etc.) in bits 3-0 and flags in the upper bits.
+// See also [GetLeaseSetType].
 func (d *DatabaseStore) GetStoreType() byte {
 	return d.StoreType
 }
@@ -183,11 +195,13 @@ func (d *DatabaseStore) GetLeaseSetType() int {
 }
 
 // IsRouterInfo returns true if this DatabaseStore contains a RouterInfo
+// entry (type 0).
 func (d *DatabaseStore) IsRouterInfo() bool {
 	return d.GetLeaseSetType() == DatabaseStoreTypeRouterInfo
 }
 
-// IsLeaseSet returns true if this DatabaseStore contains any type of LeaseSet
+// IsLeaseSet returns true if this DatabaseStore contains any type of
+// LeaseSet (LeaseSet, LeaseSet2, EncryptedLeaseSet, or MetaLeaseSet).
 func (d *DatabaseStore) IsLeaseSet() bool {
 	leaseSetType := d.GetLeaseSetType()
 	return leaseSetType == DatabaseStoreTypeLeaseSet ||
@@ -197,6 +211,7 @@ func (d *DatabaseStore) IsLeaseSet() bool {
 }
 
 // IsLeaseSet2 returns true if this DatabaseStore contains a LeaseSet2
+// entry (type 3), the standard LeaseSet format since I2P 0.9.38.
 func (d *DatabaseStore) IsLeaseSet2() bool {
 	return d.GetLeaseSetType() == DatabaseStoreTypeLeaseSet2
 }
@@ -296,7 +311,10 @@ func readReplyRoutingInfo(d *DatabaseStore, remainder []byte) ([]byte, error) {
 	return rem, nil
 }
 
-// UnmarshalBinary deserializes the DatabaseStore message from I2NP message data
+// UnmarshalBinary deserializes the DatabaseStore message from I2NP message
+// data, parsing the key, store type, reply token, and payload.
+// See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the wire format.
+// See also [DatabaseStore].
 func (d *DatabaseStore) UnmarshalBinary(data []byte) error {
 	if len(data) < 37 { // Minimum: key(32) + type(1) + replyToken(4)
 		return oops.Errorf("DatabaseStore message too short: %d bytes", len(data))

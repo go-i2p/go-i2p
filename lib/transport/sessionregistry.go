@@ -42,6 +42,8 @@ type SessionRegistry struct {
 }
 
 // NewSessionRegistry creates a new session registry with the given logger.
+// It is shared by the NTCP2 and SSU2 transports to enforce the single-owner
+// invariant on their session maps. See also [SessionRegistry].
 func NewSessionRegistry(logger *logger.Entry) *SessionRegistry {
 	return &SessionRegistry{
 		logger: logger,
@@ -69,7 +71,9 @@ func (sr *SessionRegistry) MarkAccepted(peerHash data.Hash, original interface{}
 	return sr.sessions.CompareAndSwap(peerHash, original, marker)
 }
 
-// PromoteOptions configures promotion behavior.
+// PromoteOptions configures promotion behavior. It carries the callbacks that
+// Promote runs once a raw connection wins the promotion race, so the registry
+// stays transport-agnostic. See also [SessionRegistry.Promote].
 type PromoteOptions struct {
 	// PreflightCheck is called after CAS succeeds but before callback/workers start.
 	// Used for logging/validation. Can be nil.
@@ -184,7 +188,8 @@ func (sr *SessionRegistry) DecrementCountSafe() {
 	}
 }
 
-// Count returns the current session count.
+// Count returns the current session count. It is an O(1) read of the
+// maintained counter, used to enforce the session limit. See also [SessionRegistry].
 func (sr *SessionRegistry) Count() int32 {
 	return atomic.LoadInt32(&sr.sessionCount)
 }
@@ -223,7 +228,8 @@ func (sr *SessionRegistry) SetShutdown() {
 	atomic.StoreInt32(&sr.isShuttingDown, 1)
 }
 
-// IsShuttingDown returns true if the registry is shutting down.
+// IsShuttingDown returns true if the registry is shutting down. Callers use it
+// to stop accepting new inbound connections during transport shutdown.
 func (sr *SessionRegistry) IsShuttingDown() bool {
 	return atomic.LoadInt32(&sr.isShuttingDown) != 0
 }
@@ -258,7 +264,8 @@ func (sr *SessionRegistry) LoadOrStore(peerHash data.Hash, value interface{}) (i
 	return actual, loaded
 }
 
-// Delete removes an entry from the registry.
+// Delete removes an entry from the registry without adjusting the session
+// count. Use Remove instead when the entry represents a counted session.
 func (sr *SessionRegistry) Delete(peerHash data.Hash) {
 	sr.sessions.Delete(peerHash)
 }

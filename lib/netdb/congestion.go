@@ -130,6 +130,9 @@ func (c *CongestionCache) evictEntry(skipHash common.Hash) {
 }
 
 // Delete removes a cached flag (called when RouterInfo is updated).
+// It drops the entry for the given peer so the next lookup re-parses the
+// congestion flag from the fresh RouterInfo.
+// See also [CongestionCache], [Set].
 func (c *CongestionCache) Delete(hash common.Hash) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -138,6 +141,9 @@ func (c *CongestionCache) Delete(hash common.Hash) {
 }
 
 // Clear removes all cached flags.
+// It resets the cache to an empty state, forcing all congestion flags to be
+// re-parsed from their RouterInfos on the next lookup.
+// See also [CongestionCache], [Delete].
 func (c *CongestionCache) Clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -146,6 +152,9 @@ func (c *CongestionCache) Clear() {
 }
 
 // Size returns the number of cached flags.
+// It reports how many peers currently have a cached congestion flag, which is
+// useful for monitoring cache usage and eviction behavior.
+// See also [CongestionCache], [Clear].
 func (c *CongestionCache) Size() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()

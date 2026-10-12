@@ -84,6 +84,9 @@ func (c *ClientNetDB) Ensure() error {
 }
 
 // Path returns the filesystem path where the database is stored.
+// It delegates to the underlying StdNetDB, which owns the on-disk skiplist
+// directory layout for the client's NetDB.
+// See also [ClientNetDB], [Ensure].
 func (c *ClientNetDB) Path() string {
 	return c.db.Path()
 }

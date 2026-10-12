@@ -28,18 +28,28 @@ const (
 	TunnelBuildReplyPendingDecryption = replycodes.TunnelBuildReplyPendingDecryption
 )
 
-// TunnelBuildReply represents an I2NP TunnelBuildReply message containing exactly 8 build response records indicating the success or failure of a tunnel build request.
+// TunnelBuildReply represents an I2NP TunnelBuildReply message containing
+// exactly 8 build response records, one per hop, indicating the success or
+// failure of a tunnel build request. The TunnelManager processes replies
+// with ProcessReply to decide whether the tunnel is usable.
+// See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the wire format.
+// See also [BuildResponseRecord] and [ShortTunnelBuildReply].
 type TunnelBuildReply struct {
 	Records       [8]BuildResponseRecord
 	RawRecordData [][]byte // Original encrypted bytes before parsing
 }
 
-// GetReplyRecords returns the build response records
+// GetReplyRecords returns the parsed build response records. It satisfies
+// the TunnelReplyHandler interface so the reply processor can handle
+// standard and short build replies uniformly.
+// See also [TunnelReplyHandler].
 func (t *TunnelBuildReply) GetReplyRecords() []BuildResponseRecord {
 	return t.Records[:]
 }
 
-// GetRawReplyRecords returns the original encrypted record bytes.
+// GetRawReplyRecords returns the original encrypted record bytes as they
+// appeared on the wire, before parsing. Useful for debugging and for
+// re-decryption attempts when parsing fails.
 func (t *TunnelBuildReply) GetRawReplyRecords() [][]byte {
 	return t.RawRecordData
 }

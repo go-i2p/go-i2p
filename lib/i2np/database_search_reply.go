@@ -246,7 +246,9 @@ func ReadDatabaseSearchReply(data []byte) (*DatabaseSearchReply, error) {
 	return reply, nil
 }
 
-// String returns a human-readable representation of the DatabaseSearchReply
+// String returns a human-readable representation of the DatabaseSearchReply,
+// showing the looked-up key and reply destination.
+// See also [DatabaseSearchReply].
 func (d *DatabaseSearchReply) String() string {
 	keyStr := d.Key.String()
 	fromStr := d.From.String()

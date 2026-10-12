@@ -68,7 +68,9 @@ func RecordExploratoryReplyStage(stage ExploratoryReplyStage) {
 	}
 }
 
-// SnapshotExploratoryReplyStages returns current exploratory reply funnel counters.
+// SnapshotExploratoryReplyStages returns a copy of the current exploratory
+// reply funnel counters, keyed by stage name, for reporting and debugging.
+// See also [RecordExploratoryReplyStage].
 func SnapshotExploratoryReplyStages() map[string]uint64 {
 	result := make(map[string]uint64)
 	for stage, name := range stageNames {

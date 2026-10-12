@@ -432,14 +432,22 @@ func appendDelayIfNeeded(di *GarlicCloveDeliveryInstructions, buf *[]byte) {
 
 // Helper functions for creating common delivery instruction patterns
 
-// NewLocalDeliveryInstructions creates delivery instructions for local processing.
+// NewLocalDeliveryInstructions creates delivery instructions for local
+// processing (flag 0x00). The receiving router handles the clove itself
+// rather than forwarding it to another hop.
+// See [I2P Spec: Garlic](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/garlic.rst) for the delivery instruction flags.
+// See also [GarlicCloveDeliveryInstructions].
 func NewLocalDeliveryInstructions() GarlicCloveDeliveryInstructions {
 	return GarlicCloveDeliveryInstructions{
 		Flag: 0x00, // LOCAL delivery (bits 6-5 = 0x00)
 	}
 }
 
-// NewTunnelDeliveryInstructions creates delivery instructions for tunnel delivery.
+// NewTunnelDeliveryInstructions creates delivery instructions for tunnel
+// delivery (flag 0x60). The clove is forwarded into the destination tunnel
+// identified by tunnelID at the gateway router.
+// See [I2P Spec: Garlic](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/garlic.rst) for the delivery instruction flags.
+// See also [GarlicCloveDeliveryInstructions].
 // gatewayHash: SHA256 hash of the tunnel gateway router
 // tunnelID: Destination tunnel ID
 func NewTunnelDeliveryInstructions(gatewayHash common.Hash, tunnelID buildrecord.TunnelID) GarlicCloveDeliveryInstructions {
@@ -450,7 +458,11 @@ func NewTunnelDeliveryInstructions(gatewayHash common.Hash, tunnelID buildrecord
 	}
 }
 
-// NewDestinationDeliveryInstructions creates delivery instructions for destination delivery.
+// NewDestinationDeliveryInstructions creates delivery instructions for
+// destination delivery (flag 0x20). The clove is delivered to the
+// destination identified by its hash.
+// See [I2P Spec: Garlic](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/garlic.rst) for the delivery instruction flags.
+// See also [GarlicCloveDeliveryInstructions].
 // destinationHash: SHA256 hash of the destination
 func NewDestinationDeliveryInstructions(destinationHash common.Hash) GarlicCloveDeliveryInstructions {
 	return GarlicCloveDeliveryInstructions{
@@ -459,7 +471,11 @@ func NewDestinationDeliveryInstructions(destinationHash common.Hash) GarlicClove
 	}
 }
 
-// NewRouterDeliveryInstructions creates delivery instructions for router delivery.
+// NewRouterDeliveryInstructions creates delivery instructions for router
+// delivery (flag 0x40). The clove is delivered to the router identified by
+// its hash.
+// See [I2P Spec: Garlic](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/garlic.rst) for the delivery instruction flags.
+// See also [GarlicCloveDeliveryInstructions].
 // routerHash: SHA256 hash of the destination router
 func NewRouterDeliveryInstructions(routerHash common.Hash) GarlicCloveDeliveryInstructions {
 	return GarlicCloveDeliveryInstructions{

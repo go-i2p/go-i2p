@@ -29,20 +29,31 @@ type Message interface {
 	MessageExpiration
 }
 
-// MessageFactory provides methods to create I2NP messages as interfaces
+// MessageFactory provides methods to create I2NP messages as interfaces.
+// It lets callers construct typed messages (Data, DeliveryStatus, TunnelData)
+// without importing the concrete constructors, which keeps the router's
+// message-routing code decoupled from individual message types.
 type MessageFactory struct{}
 
-// NewMessageFactory creates a new message factory
+// NewMessageFactory creates a new message factory.
+// The factory holds no state; it exists purely as a construction point
+// so message creation can be injected and mocked in tests.
 func NewMessageFactory() *MessageFactory {
 	return &MessageFactory{}
 }
 
-// CreateDataMessage creates a new data message
+// CreateDataMessage creates a new Data (type 20) message carrying the given
+// application payload. Data messages are the primary I2NP message type used
+// to deliver application data between destinations.
+// See also [DataMessage].
 func (f *MessageFactory) CreateDataMessage(payload []byte) Message {
 	return NewDataMessage(payload)
 }
 
-// CreateDeliveryStatusMessage creates a new delivery status message
+// CreateDeliveryStatusMessage creates a new DeliveryStatus (type 1) message
+// acknowledging delivery of a previously sent message. Routers use these to
+// report whether a message reached its destination or was dropped.
+// See also [DeliveryStatusMessage].
 func (f *MessageFactory) CreateDeliveryStatusMessage(messageID int, timestamp time.Time) Message {
 	return NewDeliveryStatusMessage(messageID, timestamp)
 }
@@ -52,7 +63,11 @@ func (f *MessageFactory) CreateTunnelDataMessage(tunnelID buildrecord.TunnelID, 
 	return NewTunnelDataMessage(tunnelID, data)
 }
 
-// BaseI2NPMessage provides a basic implementation of Message
+// BaseI2NPMessage provides a basic implementation of Message.
+// It holds the common header fields (type, message ID, expiration) and the
+// raw payload shared by all I2NP message types, and implements both the
+// 16-byte standard header and the 9-byte short header wire formats.
+// See also [Message] and [NewBaseI2NPMessage].
 type BaseI2NPMessage struct {
 	type_      int
 	messageID  int
@@ -107,42 +122,59 @@ func NewBaseI2NPMessage(msgType int) *BaseI2NPMessage {
 	}
 }
 
-// NewI2NPMessage creates a new base I2NP message and returns it as Message interface
+// NewI2NPMessage creates a new base I2NP message and returns it as a Message
+// interface. Use this when the caller only needs the generic Message surface
+// rather than the concrete *BaseI2NPMessage type.
+// See also [NewBaseI2NPMessage].
 func NewI2NPMessage(msgType int) Message {
 	return NewBaseI2NPMessage(msgType)
 }
 
-// Type returns the message type
+// Type returns the I2NP message type number (e.g. 20 for Data, 21 for
+// TunnelBuild). The type byte is the first byte of every I2NP header and
+// determines how the payload is interpreted.
+// See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the message type registry.
 func (m *BaseI2NPMessage) Type() int {
 	return m.type_
 }
 
-// MessageID returns the message ID
+// MessageID returns the 32-bit message ID assigned to this message.
+// Message IDs are used by peers to correlate DeliveryStatus replies with
+// the original message.
 func (m *BaseI2NPMessage) MessageID() int {
 	return m.messageID
 }
 
-// SetMessageID sets the message ID
+// SetMessageID sets the message ID. Routers normally leave the randomly
+// generated ID from construction untouched; this is used when re-sending
+// or when the ID must match a value chosen by the caller.
 func (m *BaseI2NPMessage) SetMessageID(id int) {
 	m.messageID = id
 }
 
-// Expiration returns the expiration time
+// Expiration returns the expiration time of this message. Routers drop
+// messages whose expiration is in the past (with a small tolerance), so
+// this bounds how long a message may linger in the network.
 func (m *BaseI2NPMessage) Expiration() time.Time {
 	return m.expiration
 }
 
-// SetExpiration sets the expiration time
+// SetExpiration sets the expiration time. The default set by
+// NewBaseI2NPMessage is 60 seconds from creation, per the spec
+// recommendation.
 func (m *BaseI2NPMessage) SetExpiration(exp time.Time) {
 	m.expiration = exp
 }
 
-// SetData sets the message data
+// SetData sets the message payload. The payload is the message body that
+// follows the I2NP header on the wire.
 func (m *BaseI2NPMessage) SetData(data []byte) {
 	m.data = data
 }
 
-// GetData returns the message data
+// GetData returns the message payload. Note that typed messages which
+// compute their payload lazily in MarshalBinary may return stale data here;
+// use MarshalBinary for serialization.
 func (m *BaseI2NPMessage) GetData() []byte {
 	return m.data
 }
@@ -306,7 +338,11 @@ func (m *BaseI2NPMessage) MarshalBinary() ([]byte, error) {
 	return result, nil
 }
 
-// UnmarshalBinary deserializes the I2NP message from NTCP format
+// UnmarshalBinary deserializes the I2NP message from NTCP format. It
+// accepts both the 16-byte standard header and the 9-byte short header
+// (used by NTCP2 data-phase blocks) and stores the payload in the message.
+// See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the header formats.
+// See also [MarshalBinary].
 func (m *BaseI2NPMessage) UnmarshalBinary(data []byte) error {
 	if len(data) < 16 {
 		return oops.Errorf("i2np message too short: %d bytes", len(data))

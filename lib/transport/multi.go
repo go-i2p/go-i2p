@@ -30,7 +30,9 @@ const peerCooldown = 60 * time.Second
 var _ Transport = (*TransportMuxer)(nil)
 
 // TransportMuxer muxes multiple transports into one Transport.
-// It implements transport.Transport.
+// It implements transport.Transport. It lets a router run NTCP2 and SSU2
+// side by side and present them as a single transport, trying each underlying
+// transport in order when establishing a session with a peer.
 type TransportMuxer struct {
 	// the underlying transports we are using in order of most prominant to least
 	trans []Transport
@@ -96,7 +98,9 @@ type MuxSessionFailureStats struct {
 	ConnectionPoolFull    uint64
 }
 
-// Mux combines a set of transports together.
+// Mux combines a set of transports together into a single TransportMuxer.
+// The transports are tried in the order given (most preferred first) when a
+// session is requested. See also [TransportMuxer].
 func Mux(t ...Transport) (tmux *TransportMuxer) {
 	tmux = &TransportMuxer{
 		acceptDone:  make(chan struct{}),
@@ -109,6 +113,8 @@ func Mux(t ...Transport) (tmux *TransportMuxer) {
 }
 
 // MuxWithLimit creates a TransportMuxer with a specified maximum connection limit.
+// The limit caps the total number of concurrent sessions across all muxed
+// transports, protecting the router from resource exhaustion. See also [Mux].
 func MuxWithLimit(maxConnections int, t ...Transport) (tmux *TransportMuxer) {
 	tmux = Mux(t...)
 	tmux.MaxConnections = maxConnections
@@ -148,7 +154,9 @@ func (tmux *TransportMuxer) ReleaseSession() {
 	}
 }
 
-// SetIdentity sets the identity for every transport.
+// SetIdentity sets the identity for every transport. Each underlying transport
+// is bound to the same router identity so the muxer presents a single router to
+// the network. See also [Transport.SetIdentity].
 func (tmux *TransportMuxer) SetIdentity(ident router_info.RouterInfo) (err error) {
 	identHash, _ := ident.IdentHash()
 	tmux.logMuxerMethod("SetIdentity", logger.Fields{
@@ -178,7 +186,9 @@ func (tmux *TransportMuxer) SetIdentity(ident router_info.RouterInfo) (err error
 	return err
 }
 
-// Close closes every transport that this transport muxer has.
+// Close closes every transport that this transport muxer has. It stops the
+// persistent accept loop and waits for its goroutines to exit, so the muxer is
+// safe to discard once it returns.
 func (tmux *TransportMuxer) Close() (err error) {
 	tmux.closeOnce.Do(func() {
 		tmux.logMuxerMethod("Close", logger.Fields{
@@ -527,6 +537,8 @@ func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s Tra
 }
 
 // Compatible returns true if there is a transport that we mux that is compatible with this router info.
+// It is used by higher layers to decide whether a peer is reachable through any
+// of the muxed transports before attempting a session.
 func (tmux *TransportMuxer) Compatible(routerInfo router_info.RouterInfo) bool {
 	for _, t := range tmux.trans {
 		if t.Compatible(routerInfo) {
@@ -770,6 +782,7 @@ func (tmux *TransportMuxer) getMaxConnections() int {
 }
 
 // ActiveSessionCount returns the current number of active sessions tracked by the muxer.
+// It is used to enforce the connection limit and for monitoring. See also [TransportMuxer].
 func (tmux *TransportMuxer) ActiveSessionCount() int {
 	return int(atomic.LoadInt32(&tmux.activeSessionCount))
 }
@@ -796,6 +809,8 @@ func (tmux *TransportMuxer) checkConnectionLimit() error {
 }
 
 // GetSessionFailureStats returns a snapshot of tracked session-attempt outcomes.
+// It exposes the counters that explain why outbound sessions fail, which is
+// useful for diagnostics. See also [MuxSessionFailureStats].
 func (tmux *TransportMuxer) GetSessionFailureStats() MuxSessionFailureStats {
 	return MuxSessionFailureStats{
 		SessionAttempts:       atomic.LoadUint64(&tmux.sessionAttemptsTotal),

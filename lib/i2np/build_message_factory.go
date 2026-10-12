@@ -13,7 +13,11 @@ import (
 // to create messages without importing lib/i2np.
 type buildMessageFactory struct{}
 
-// NewBuildMessageFactory creates a new factory for tunnel build messages.
+// NewBuildMessageFactory creates a new factory for serialized I2NP tunnel
+// build messages. The factory lets the lib/tunnel/build package create
+// wire-format messages without importing lib/i2p directly, keeping the
+// build logic decoupled from the transport layer.
+// See also [I2NPMessageTypeShortTunnelBuild].
 func NewBuildMessageFactory() build.BuildMessageFactory {
 	return &buildMessageFactory{}
 }
@@ -49,8 +53,11 @@ func (f *buildMessageFactory) createVariableBuildMessage(msgType int, typeName s
 	return serialized, nil
 }
 
-// CreateShortTunnelBuildMessage creates a serialized Short Tunnel Build message (type 25).
-// Refactored: now delegates to createVariableBuildMessage.
+// CreateShortTunnelBuildMessage creates a serialized Short Tunnel Build
+// message (type 25). The message carries a count-prefixed list of encrypted
+// build records, one per hop in the tunnel chain.
+// See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the wire format.
+// See also [ShortTunnelBuild].
 func (f *buildMessageFactory) CreateShortTunnelBuildMessage(encryptedRecords [][]byte, messageID int) ([]byte, error) {
 	return f.createVariableBuildMessage(I2NPMessageTypeShortTunnelBuild, "Short Tunnel Build (type 25)", encryptedRecords, messageID)
 }
@@ -65,7 +72,11 @@ func newBuildSessionAdapter(session I2NPTransportSession) build.BuildSession {
 	return &buildSessionAdapter{session: session}
 }
 
-// Send implements build.BuildSession by unmarshaling bytes and calling QueueSendI2NP.
+// Send implements build.BuildSession by unmarshaling the serialized I2NP
+// message and queuing it on the underlying transport session. This is the
+// bridge that lets the tunnel build package send messages without knowing
+// about I2NP framing.
+// See also [I2NPTransportSession].
 func (a *buildSessionAdapter) Send(data []byte) error {
 	// Unmarshal the serialized message
 	msg := &BaseI2NPMessage{}
@@ -80,7 +91,10 @@ type buildSessionProvider struct {
 	sessionProvider SessionProvider
 }
 
-// NewBuildSessionProvider creates a build.BuildSessionProvider that wraps a SessionProvider.
+// NewBuildSessionProvider creates a build.BuildSessionProvider that wraps
+// an I2NP SessionProvider. This adapter lets the tunnel build package look
+// up transport sessions by router hash without importing lib/i2np.
+// See also [SessionProvider].
 func NewBuildSessionProvider(sp SessionProvider) build.BuildSessionProvider {
 	return &buildSessionProvider{sessionProvider: sp}
 }
@@ -100,12 +114,17 @@ type replyProcessorAdapter struct {
 	replyProcessor *ReplyProcessor
 }
 
-// NewReplyProcessorAdapter wraps a ReplyProcessor to implement build.TunnelReplyProcessor.
+// NewReplyProcessorAdapter wraps a ReplyProcessor to implement the
+// build.TunnelReplyProcessor interface. This lets the tunnel build package
+// register pending builds and process replies without importing lib/i2np.
+// See also [ReplyProcessor].
 func NewReplyProcessorAdapter(rp *ReplyProcessor) build.TunnelReplyProcessor {
 	return &replyProcessorAdapter{replyProcessor: rp}
 }
 
-// RegisterPendingBuild implements build.TunnelReplyProcessor.
+// RegisterPendingBuild implements build.TunnelReplyProcessor by delegating
+// to the wrapped ReplyProcessor. It records the reply keys and IVs for a
+// tunnel build so that incoming replies can be decrypted and matched.
 func (a *replyProcessorAdapter) RegisterPendingBuild(
 	tunnelID buildrecord.TunnelID,
 	replyKeys []session_key.SessionKey,
@@ -116,12 +135,16 @@ func (a *replyProcessorAdapter) RegisterPendingBuild(
 	return a.replyProcessor.RegisterPendingBuild(tunnelID, replyKeys, replyIVs, isInbound, hopCount)
 }
 
-// SetPendingBuildNoiseHashes implements build.TunnelReplyProcessor.
+// SetPendingBuildNoiseHashes implements build.TunnelReplyProcessor by
+// delegating to the wrapped ReplyProcessor. It stores the Noise protocol
+// hash values for a pending build so that STBM replies can be verified.
 func (a *replyProcessorAdapter) SetPendingBuildNoiseHashes(tunnelID buildrecord.TunnelID, noiseHashes [][32]byte) error {
 	return a.replyProcessor.SetPendingBuildNoiseHashes(tunnelID, noiseHashes)
 }
 
-// ProcessBuildReply implements build.TunnelReplyProcessor.
+// ProcessBuildReply implements build.TunnelReplyProcessor by delegating to
+// the wrapped ReplyProcessor. It decrypts and dispatches a tunnel build
+// reply to the given handler.
 func (a *replyProcessorAdapter) ProcessBuildReply(handler build.TunnelReplyHandler, tunnelID buildrecord.TunnelID) error {
 	return a.replyProcessor.ProcessBuildReply(handler, tunnelID)
 }

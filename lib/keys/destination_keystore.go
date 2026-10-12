@@ -15,6 +15,10 @@ import (
 // DestinationKeyStore stores both encryption and signing private keys
 // for an I2P destination, enabling LeaseSet2 creation and message encryption.
 // Uses modern cryptography: Ed25519 for signing and X25519 for encryption.
+// The public keys are serialized into the destination address (base64) that
+// peers use to reach this endpoint.
+//
+// See also [LoadOrCreateDestinationKeyStore], [LoadDestinationKeyStore].
 type DestinationKeyStore struct {
 	destination       *destination.Destination
 	encryptionPrivKey types.PrivateEncryptionKey // X25519 private key (32 bytes)
@@ -25,6 +29,8 @@ type DestinationKeyStore struct {
 // NewDestinationKeyStore creates a new key store with generated Ed25519/X25519 keys.
 // This generates a new destination with fresh keys suitable for creating LeaseSet2s
 // using modern I2P cryptography (ECIES-X25519-AEAD-Ratchet compatible).
+// Use [LoadOrCreateDestinationKeyStore] instead when a stable identity across
+// restarts is required.
 func NewDestinationKeyStore() (*DestinationKeyStore, error) {
 	log.WithField("at", "NewDestinationKeyStore").Debug("Creating new destination keystore")
 
@@ -156,19 +162,24 @@ func assembleKeysAndCert(keyCert *key_certificate.KeyCertificate, encryptionPubK
 	return keysAndCert, nil
 }
 
-// Destination returns the public destination
+// Destination returns the public destination. This is the value that gets
+// serialized into a destination address (base64) and shared with peers so
+// they can encrypt messages to this endpoint.
 func (dks *DestinationKeyStore) Destination() *destination.Destination {
 	log.WithField("at", "Destination").Debug("Returning destination")
 	return dks.destination
 }
 
-// SigningPrivateKey returns the signing private key for creating LeaseSets
+// SigningPrivateKey returns the Ed25519 signing private key. It is used to
+// sign LeaseSets that advertise the tunnels delivering to this destination.
 func (dks *DestinationKeyStore) SigningPrivateKey() types.SigningPrivateKey {
 	log.WithField("at", "SigningPrivateKey").Debug("Returning signing private key")
 	return dks.signingPrivKey
 }
 
-// EncryptionPrivateKey returns the encryption private key for decrypting messages
+// EncryptionPrivateKey returns the X25519 encryption private key. It is used
+// to derive the shared secrets that decrypt messages sent to this
+// destination (ECIES).
 func (dks *DestinationKeyStore) EncryptionPrivateKey() types.PrivateEncryptionKey {
 	log.WithField("at", "EncryptionPrivateKey").Debug("Returning encryption private key")
 	return dks.encryptionPrivKey
@@ -181,7 +192,8 @@ func (dks *DestinationKeyStore) IdentityPadding() []byte {
 	return dks.padding
 }
 
-// SigningPublicKey returns the signing public key
+// SigningPublicKey returns the Ed25519 signing public key. Peers use it to
+// verify signatures on LeaseSets issued by this destination.
 func (dks *DestinationKeyStore) SigningPublicKey() (types.SigningPublicKey, error) {
 	log.WithField("at", "SigningPublicKey").Debug("Retrieving signing public key")
 	key, err := dks.destination.SigningPublicKey()
@@ -192,7 +204,8 @@ func (dks *DestinationKeyStore) SigningPublicKey() (types.SigningPublicKey, erro
 	return key, nil
 }
 
-// EncryptionPublicKey returns the encryption public key
+// EncryptionPublicKey returns the X25519 encryption public key. It is the key
+// embedded in the destination address that senders use to encrypt messages.
 func (dks *DestinationKeyStore) EncryptionPublicKey() (types.ReceivingPublicKey, error) {
 	log.WithField("at", "EncryptionPublicKey").Debug("Retrieving encryption public key")
 	key, err := dks.destination.PublicKey()
@@ -384,6 +397,8 @@ func (dks *DestinationKeyStore) applyRotatedKeys(ks *rotatedKeySet, dir, name st
 //   - name: base name for key files
 //
 // Returns the previous destination (for logging/notification) and any error.
+//
+// See also [DestinationKeyStore.RotateDestinationKeys].
 func (dks *DestinationKeyStore) RotateKeys(dir, name string) (*destination.Destination, error) {
 	log.WithFields(map[string]interface{}{
 		"at":   "DestinationKeyStore.RotateKeys",

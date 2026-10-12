@@ -42,7 +42,11 @@ type expiredBuild struct {
 	expiredAt time.Time
 }
 
-// TunnelManager coordinates tunnel building and management
+// TunnelManager coordinates tunnel building and management. It maintains
+// separate inbound and outbound tunnel pools, tracks pending build requests
+// for reply correlation, and handles build timeouts and retries. It is the
+// core component that implements the TunnelOrchestrator interface.
+// See also [TunnelOrchestrator], [TunnelBuildCoordinator], and [NewTunnelManager].
 type TunnelManager struct {
 	inboundPool      *tunnel.Pool
 	outboundPool     *tunnel.Pool
@@ -205,7 +209,9 @@ func (tm *TunnelManager) Stop() {
 	})
 }
 
-// SetSessionProvider sets the session provider for sending tunnel build messages
+// SetSessionProvider sets the session provider used to send tunnel build
+// messages over the network. It must be called before tunnel building
+// begins, since builds cannot be transmitted without a session provider.
 func (tm *TunnelManager) SetSessionProvider(provider SessionProvider) {
 	tm.sessionProvider = provider
 	// Also set up the adapted build.SessionProvider
