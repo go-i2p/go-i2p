@@ -88,7 +88,7 @@ func (t *TunnelBuildReply) logReplyCompletion(successCount, recordCount int) {
 // determineBuildResult determines the final result based on success count.
 // Implements replyStepProcessor interface.
 // Returns nil if all hops accepted, otherwise returns an appropriate error.
-// L-1 Consolidation: Delegates to shared DetermineBuildResult helper.
+// Delegates to shared DetermineBuildResult helper.
 func (t *TunnelBuildReply) determineBuildResult(successCount, recordCount int, firstError error) error {
 	return DetermineBuildResult(successCount, recordCount, firstError, "tunnel")
 }

@@ -17,9 +17,9 @@ const (
 	reachabilityLoopInterval = 5 * time.Minute
 
 	// reachabilityInitialDelay is how long after startup to fire the first
-	// reachability check.  Java I2P updates within ~90 seconds; we use 90s
+	// reachability check. Java I2P updates within ~90 seconds; we use 90s
 	// here so stale 'U' caps are corrected quickly on the first tick
-	// (GAP-4 fix — previously the first check was delayed 5 minutes).
+	// (previously the first check was delayed 5 minutes).
 	reachabilityInitialDelay = 90 * time.Second
 
 	// reachabilityResignMinInterval rate-limits RouterInfo re-publication to
@@ -45,7 +45,7 @@ func (r *Router) reachabilityLoop() {
 	defer ticker.Stop()
 
 	// initialTimer fires once at reachabilityInitialDelay to run the first
-	// reachability check quickly after startup (GAP-4 fix).
+	// reachability check quickly after startup.
 	initialTimer := time.NewTimer(reachabilityInitialDelay)
 	defer initialTimer.Stop()
 
@@ -110,7 +110,7 @@ func (r *Router) handleAddressLoss(ext, prev string, lastPublished *atomic.Value
 	}
 
 	log.WithFields(logger.Fields{
-		"at":       "reachabilityLoop",
+		"at": "reachabilityLoop",
 		"prev_ext": prev,
 	}).Info("external address lost — republishing RouterInfo with caps-only addresses")
 
@@ -133,7 +133,7 @@ func (r *Router) shouldRateLimitRepublication(lastResignAt time.Time) bool {
 	now := time.Now()
 	if now.Sub(lastResignAt) < reachabilityResignMinInterval {
 		log.WithFields(logger.Fields{
-			"at":        "reachabilityLoop",
+			"at": "reachabilityLoop",
 			"wait_secs": reachabilityResignMinInterval.Seconds(),
 		}).Debug("RouterInfo republication rate-limited; will retry next tick")
 		return true
@@ -144,9 +144,9 @@ func (r *Router) shouldRateLimitRepublication(lastResignAt time.Time) bool {
 // republishWithNewAddress publishes the RouterInfo with the new external address.
 func (r *Router) republishWithNewAddress(ext, prev string, lastPublished *atomic.Value, lastResignAt *time.Time) {
 	log.WithFields(logger.Fields{
-		"at":       "reachabilityLoop",
+		"at": "reachabilityLoop",
 		"prev_ext": prev,
-		"new_ext":  ext,
+		"new_ext": ext,
 	}).Info("external address changed — republishing RouterInfo")
 
 	if r.publisher != nil {
@@ -185,7 +185,7 @@ func (r *Router) refreshNTCP2LocalRouterInfo() {
 		if nt, ok := t.(*ntcp2.NTCP2Transport); ok {
 			nt.UpdateLocalRouterInfo(*ri)
 			log.WithFields(logger.Fields{
-				"at":   "refreshNTCP2LocalRouterInfo",
+				"at": "refreshNTCP2LocalRouterInfo",
 				"caps": ri.RouterCapabilities(),
 			}).Info("NTCP2 local RouterInfo refreshed for msg3")
 			return
@@ -195,15 +195,14 @@ func (r *Router) refreshNTCP2LocalRouterInfo() {
 
 // collectBestExternalAddr returns the best confirmed external address from
 // available evidence sources, in priority order:
-//  1. SSU2 PeerTest / NAT-PMP confirmed address (cached in natStateCache)
-//  2. NTCP2 published host:port from the current RouterInfo addresses
-//     (BUG-2 fix: NTCP2-only routers were always returning "" here)
-//  3. Locally-determined public IPv4 bind/host address. A publicly-routable
-//     IPv4 host is directly reachable by definition, so this guarantees a
-//     non-empty external address even before PeerTest completes (or when it
-//     cannot run for lack of SSU2 peers), preventing a public node from being
-//     misclassified as FIREWALLED.
-//
+// 1. SSU2 PeerTest / NAT-PMP confirmed address (cached in natStateCache)
+// 2. NTCP2 published host:port from the current RouterInfo addresses
+// (BUG-2 fix: NTCP2-only routers were always returning "" here)
+// 3. Locally-determined public IPv4 bind/host address. A publicly-routable
+// IPv4 host is directly reachable by definition, so this guarantees a
+// non-empty external address even before PeerTest completes (or when it
+// cannot run for lack of SSU2 peers), preventing a public node from being
+// misclassified as FIREWALLED.
 // Returns "" when no evidence is available.
 func (r *Router) collectBestExternalAddr() string {
 	// 1. SSU2 PeerTest / NAT-PMP is the highest-quality source.
@@ -212,7 +211,7 @@ func (r *Router) collectBestExternalAddr() string {
 	}
 
 	// 2. Fall back to the NTCP2 address from the current RouterInfo.
-	//    This covers NTCP2-only deployments on static or NAT-forwarded IPs.
+	// This covers NTCP2-only deployments on static or NAT-forwarded IPs.
 	if addr := r.getNTCP2ExternalAddr(); addr != "" {
 		return addr
 	}

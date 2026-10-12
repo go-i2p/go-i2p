@@ -50,7 +50,7 @@ func (r *Router) initializeMessageRouter() error {
 func (r *Router) wireDispatcherTunnelManager() {
 	r.messageRouter.SetTunnelManager(r.tunnelManager)
 	r.messageRouter.GetProcessor().SetBuildReplyProcessor(r.tunnelManager)
-	// C-1 fix: wire the inbound handler into the tunnel manager so that newly-active
+	// wire the inbound handler into the tunnel manager so that newly-active
 	// inbound tunnels are registered as control-plane endpoints immediately on success.
 	if r.inboundHandler != nil {
 		r.tunnelManager.SetInboundHandler(r.inboundHandler)
@@ -91,7 +91,7 @@ func (r *Router) wireTunnelDataHandler() {
 		}
 		// Wire the session provider for forwarding transit tunnel messages
 		r.inboundHandler.SetSessionProvider(r)
-		// C-1 fix: give inboundHandler access to the MessageProcessor so that
+		// give inboundHandler access to the MessageProcessor so that
 		// decrypted messages from exploratory tunnels are dispatched as I2NP.
 		r.inboundHandler.SetProcessor(r.messageRouter.GetProcessor())
 		log.WithFields(logger.Fields{"at": "initializeMessageRouter"}).Debug("InboundMessageHandler wired as TunnelData handler with participant manager and session provider for transit forwarding")
@@ -501,7 +501,6 @@ func (r *Router) launchProactiveFallbackChecks(inboundPool, outboundPool *tunnel
 }
 
 // launchInboundFallbackCheck starts a goroutine to trigger inbound fallback after timeout.
-//
 // After a full build-timeout window (plus a small grace) has elapsed with zero
 // active tunnels, the current hop configuration has demonstrably failed to build
 // any tunnel. That is stronger, direct evidence of unreachability than the
@@ -525,7 +524,6 @@ func (r *Router) launchInboundFallbackCheck(pool *tunnel.Pool) {
 }
 
 // launchOutboundFallbackCheck starts a goroutine to trigger outbound fallback after timeout.
-//
 // See launchInboundFallbackCheck: zero active tunnels after the build-timeout
 // window is direct evidence the current outbound hop configuration cannot
 // complete, so the fallback to one-hop is forced regardless of the address-form

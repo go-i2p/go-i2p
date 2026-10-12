@@ -26,20 +26,20 @@ import (
 // abandonedRelayTag tracks a relay tag that was allocated but not successfully
 // registered, for monitoring and future cleanup.
 type abandonedRelayTag struct {
-	tag         uint32
-	addr        *net.UDPAddr
+	tag uint32
+	addr *net.UDPAddr
 	allocatedAt time.Time
-	reason      string // why registration failed
+	reason string // why registration failed
 }
 
 // SSU2Transport implements the SSU2 transport protocol for I2P connections.
 type SSU2Transport struct {
 	listener *ssu2noise.SSU2Listener
-	// R-2 fix: use atomic.Pointer for thread-safe config swaps (mirrors NTCP2 HIGH-1.3 pattern)
-	config   atomic.Pointer[Config]
+	// use atomic.Pointer for thread-safe config swaps (mirrors NTCP2 pattern)
+	config atomic.Pointer[Config]
 	identity router_info.RouterInfo
 	keystore KeystoreProvider
-	handler  *DefaultHandler
+	handler *DefaultHandler
 
 	// Session management via shared SessionRegistry (H2 fix: unified NTCP2/SSU2 implementation).
 	// See "Session Map Ownership Invariant" comment above for details on state transitions.
@@ -47,16 +47,16 @@ type SSU2Transport struct {
 
 	identityMu sync.RWMutex
 
-	// HIGH-1.2 fix: Dedicated lock for NAT manager pointers to prevent races
+	// Dedicated lock for NAT manager pointers to prevent races
 	// between SetIdentity (stopNATManagers/initNATManagers) and callbacks.
 	// Protects: peerTestManager, relayManager, introducerRegistry, holePunchCoord, keyRotationManager
 	natManagerMu sync.RWMutex
 
 	// NAT traversal managers (initialised after listener starts).
-	peerTestManager    *ssu2noise.PeerTestManager
-	relayManager       *ssu2noise.RelayManager
+	peerTestManager *ssu2noise.PeerTestManager
+	relayManager *ssu2noise.RelayManager
 	introducerRegistry *ssu2noise.IntroducerRegistry
-	holePunchCoord     *ssu2noise.HolePunchCoordinator
+	holePunchCoord *ssu2noise.HolePunchCoordinator
 
 	// pendingRelayResponses holds channels waiting for a RelayResponse keyed by nonce.
 	// Used by dialViaIntroducer to synchronise with the protocol callback.
@@ -72,7 +72,7 @@ type SSU2Transport struct {
 	portMapperManager *nat.PortMapperManager
 
 	// Key management.
-	persistentConfig   *PersistentConfig
+	persistentConfig *PersistentConfig
 	keyRotationManager *ssu2noise.KeyRotationManager
 
 	// peerConnNotifier receives connection outcome feedback (optional).
@@ -82,17 +82,17 @@ type SSU2Transport struct {
 	// abandonedRelayTags tracks relay tags allocated but not successfully registered.
 	// Used for monitoring and future cleanup when a release API becomes available.
 	abandonedRelayTagsMu sync.Mutex
-	abandonedRelayTags   []abandonedRelayTag
+	abandonedRelayTags []abandonedRelayTag
 
-	ctx    context.Context
+	ctx context.Context
 	cancel context.CancelFunc
-	wg     sync.WaitGroup
+	wg sync.WaitGroup
 
 	// NAT manager lifecycle: per-generation context for NAT goroutines and managers.
-	// L-1: Cancelled and replaced on each SetIdentity to stop old NAT goroutines
+	// Cancelled and replaced on each SetIdentity to stop old NAT goroutines
 	// before starting new ones.
-	natCtxMu  sync.Mutex
-	natCtx    context.Context
+	natCtxMu sync.Mutex
+	natCtx context.Context
 	natCancel context.CancelFunc
 
 	logger *logger.Entry
@@ -121,16 +121,16 @@ type SSU2Transport struct {
 
 	// Peer test retry state (T-1 fix): tracks consecutive failures and timing
 	// for exponential backoff retry of NAT detection. Protected by peerTestRetryMu.
-	peerTestRetryMu     sync.Mutex
-	peerTestRetryCount  int
+	peerTestRetryMu sync.Mutex
+	peerTestRetryCount int
 	peerTestLastAttempt time.Time
-	peerTestCandidates  []router_info.RouterInfo
+	peerTestCandidates []router_info.RouterInfo
 	peerTestRepublishFn func()
-	peerTestRetryTimer  *time.Timer
+	peerTestRetryTimer *time.Timer
 
 	// closeOnce ensures Close() is idempotent.
 	closeOnce sync.Once
-	closeErr  error
+	closeErr error
 
 	// reachMetrics tracks reachability-related events for monitoring.
 	reachMetrics reachabilityMetrics
@@ -188,7 +188,7 @@ func prepareIdentityAndLog(identity router_info.RouterInfo, listenerAddress stri
 		return oops.Wrapf(err, "failed to get router identity hash")
 	}
 	l.WithFields(map[string]interface{}{
-		"router_hash":      logutil.HashPrefix(identHash),
+		"router_hash": logutil.HashPrefix(identHash),
 		"listener_address": listenerAddress,
 	}).Info("Initializing SSU2 transport")
 	return nil
@@ -213,17 +213,17 @@ func setupSSU2Config(identity router_info.RouterInfo, keystore KeystoreProvider,
 // createSSU2TransportStruct creates the SSU2Transport struct with default values.
 func createSSU2TransportStruct(config *Config, identity router_info.RouterInfo, keystore KeystoreProvider, ctx context.Context, cancel context.CancelFunc, l *logger.Entry) *SSU2Transport {
 	t := &SSU2Transport{
-		identity:              identity,
-		keystore:              keystore,
-		handler:               NewDefaultHandler(),
-		sessionRegistry:       transport.NewSessionRegistry(l),
-		natStateCache:         &natState{},
+		identity: identity,
+		keystore: keystore,
+		handler: NewDefaultHandler(),
+		sessionRegistry: transport.NewSessionRegistry(l),
+		natStateCache: &natState{},
 		peerTestGlobalLimiter: rate.NewLimiter(100, 200),
-		ctx:                   ctx,
-		cancel:                cancel,
-		logger:                l,
+		ctx: ctx,
+		cancel: cancel,
+		logger: l,
 	}
-	// R-2 fix: Initialize atomic.Pointer[Config] with Store (mirrors NTCP2 HIGH-1.3)
+	// Initialize atomic.Pointer[Config] with Store (mirrors NTCP2)
 	t.config.Store(config)
 	return t
 }
@@ -320,10 +320,10 @@ func createUDPConn(config *Config, iport int) (net.PacketConn, string, error) {
 // so the resulting connection carries a real external address.
 // To handle the TOCTOU race where another process may claim the port between
 // probe and rebind, this function retries up to maxPortProbeRetries times.
-// Each retry probes a new port and attempts rebind.
-// P-1 partial mitigation: Increased retries to 5, added jitter, clear error message.
-// P-2 fix: Returns bound address instead of relying on caller extraction.
-//
+// Each retry probes a new port and attempts rebind, with jitter between
+// attempts to reduce the chance of repeated collisions.
+// The function returns the bound address so the caller does not have to
+// extract it from the listener.
 // Note: On iOS, app sandbox restrictions prevent net.ListenPacket and net.ListenUDP
 // on arbitrary ports without the com.apple.developer.networking.multipath entitlement
 // or a NEPacketTunnelProvider extension. Attempting to listen will fail with EACCES.
@@ -374,20 +374,20 @@ func (t *SSU2Transport) Accept() (net.Conn, error) {
 		return nil, ErrSessionClosed
 	}
 
-	// L-3 fix part 1: Fast-path reject if pool already full (non-reserving check)
+	// Fast-path reject if pool already full (non-reserving check)
 	// This provides immediate rejection for tests/callers checking capacity
 	// without blocking on Accept() when we know we can't serve the connection.
 	if t.isSessionLimitReached() {
 		return nil, ErrConnectionPoolFull
 	}
 
-	// L-3 fix part 2: Accept connection BEFORE reserving slot (don't hold reservation while blocking)
+	// Accept connection BEFORE reserving slot (don't hold reservation while blocking)
 	conn, err := listener.Accept()
 	if err != nil {
 		return nil, err
 	}
 
-	// L-3 fix part 3: Now reserve slot after we have actual connection
+	// Now reserve slot after we have actual connection
 	// Handles race where pool filled while blocking on Accept()
 	if err := t.checkSessionLimit(); err != nil {
 		// Close the accepted connection since we can't serve it
@@ -403,7 +403,7 @@ func (t *SSU2Transport) Accept() (net.Conn, error) {
 		return nil, ErrDuplicateSession
 	}
 
-	// Mark the connection as accepted to prevent dual-ownership via promotion (R-3).
+	// Mark the connection as accepted to prevent dual-ownership via promotion.
 	// Use MarkAccepted to handle CAS atomically and avoid clobbering a concurrent promotion (X-3).
 	peerHash := t.extractPeerHash(tracked)
 	// The original value should be the underlying raw conn (before wrapping in transport.TrackedConn).
@@ -412,14 +412,14 @@ func (t *SSU2Transport) Accept() (net.Conn, error) {
 	originalConn := tracked.(*transport.TrackedConn).Conn
 	if !t.sessionRegistry.MarkAccepted(peerHash, originalConn) {
 		// Promotion race: concurrent GetSession won.
-		// CRITICAL-2.1 FIX: Do NOT call tracked.Close() here!
+		// Do NOT call tracked.Close() here!
 		// The promoted session owns the connection now. Calling tracked.Close()
 		// would fire onClose → removeSession, incorrectly deleting the promoted
 		// session from the map while it's still alive.
 		// Let the TrackedConn wrapper be GC'd harmlessly.
 		t.logger.WithFields(map[string]interface{}{
 			"remote_addr": conn.RemoteAddr().String(),
-			"peer_hash":   logutil.HashPrefix(peerHash),
+			"peer_hash": logutil.HashPrefix(peerHash),
 		}).Debug("Inbound SSU2 connection promoted concurrently; not delivering to Accept")
 		// Note: We DO NOT unreserve the slot here because the promoted session
 		// is still using it. The session's cleanup callback will handle unreserving
@@ -434,7 +434,7 @@ func (t *SSU2Transport) Accept() (net.Conn, error) {
 // and wraps it to ensure cleanup on close. Returns (wrappedConn, isFresh) where
 // isFresh=true if this was a new insertion, or isFresh=false if a duplicate was detected.
 // On duplicate detection, the duplicate is closed and the reserved slot is unreserved.
-// CRITICAL-1 FIX: After connection registration, check replay status of peer.
+// After connection registration, check replay status of peer.
 // This prevents attackers from replaying the initial Noise handshake message.
 func (t *SSU2Transport) trackInboundConnection(conn net.Conn) (net.Conn, bool) {
 	peerHash := t.extractPeerHash(conn)
@@ -444,12 +444,12 @@ func (t *SSU2Transport) trackInboundConnection(conn net.Conn) (net.Conn, bool) {
 		conn.Close()
 		t.logger.WithFields(map[string]interface{}{
 			"remote_addr": conn.RemoteAddr().String(),
-			"peer_hash":   logutil.HashPrefix(peerHash),
+			"peer_hash": logutil.HashPrefix(peerHash),
 		}).Debug("Duplicate inbound SSU2 connection detected and closed; reservation unreserved")
 		return conn, false // Mark as duplicate
 	}
 
-	// CRITICAL-1 FIX: Check replay status of inbound connection.
+	// Check replay status of inbound connection.
 	// Primary path: use go-noise replay material from the validated
 	// SessionRequest via conn.GetReplayToken(). See checkConnectionReplay()
 	// for nil-token fallback behavior.
@@ -459,7 +459,7 @@ func (t *SSU2Transport) trackInboundConnection(conn net.Conn) (net.Conn, bool) {
 		conn.Close()
 		t.logger.WithFields(map[string]interface{}{
 			"remote_addr": conn.RemoteAddr().String(),
-			"peer_hash":   logutil.HashPrefix(peerHash),
+			"peer_hash": logutil.HashPrefix(peerHash),
 		}).Warn("SSU2 anti-replay check rejected inbound connection (possible replay attack)")
 		return conn, false // Mark as replay
 	}
@@ -483,7 +483,6 @@ func (t *SSU2Transport) extractPeerHash(conn net.Conn) data.Hash {
 }
 
 // checkConnectionReplay performs anti-replay validation for an inbound SSU2 connection.
-//
 // Primary path (preferred): when conn is *ssu2noise.SSU2Conn and SessionRequest
 // has been validated, use conn.GetReplayToken() directly for replay-cache checks.
 func (t *SSU2Transport) checkConnectionReplay(conn net.Conn) bool {
@@ -515,7 +514,6 @@ func (t *SSU2Transport) checkReplayToken(replayToken []byte, remoteAddr string) 
 
 // replayTokenToReplayKey converts replay token bytes into the fixed-size key used
 // by the transport replay cache.
-//
 // If token length is exactly 32 bytes, it is used directly. Otherwise we hash
 // it to 32 bytes to preserve deterministic replay-key semantics.
 func replayTokenToReplayKey(token []byte) [32]byte {
@@ -611,15 +609,15 @@ func (t *SSU2Transport) SetIdentity(ident router_info.RouterInfo) error {
 	// the transport claims a new identity, violating protocol coherence.
 	// Close old listener and create new one with updated config.
 
-	// BUG FIX HIGH SM-1 / L-1: Stop NAT managers and goroutines before swapping the listener.
+	// Stop NAT managers and goroutines before swapping the listener.
 	// NAT managers hold references to the old listener and must be re-initialized.
-	// L-1 fix item 3: Call stopNATManagers() before initNATManagers().
+	// Call stopNATManagers() before initNATManagers().
 	stopNATManagers(t)
 
 	// S-2 + S-3 fix: Snapshot old state (listener, address, identity, config) for rollback.
 	// Keep old listener active during new listener creation for atomic swap.
 	t.identityMu.RLock()
-	oldCfg := t.config.Load() // R-2 fix: Load config snapshot atomically
+	oldCfg := t.config.Load() // Load config snapshot atomically
 	currentAddr := oldCfg.ListenerAddress
 	oldListener := t.listener
 	oldIdentity := t.identity
@@ -643,7 +641,7 @@ func (t *SSU2Transport) SetIdentity(ident router_info.RouterInfo) error {
 		// S-2 fix: Create new UDP connection and listener outside the lock.
 		// On any failure, return error immediately without touching t.listener.
 		// This keeps old listener active so Accept() continues working.
-		// R-2 fix: Use snapshotted oldCfg instead of direct t.config access
+		// Use snapshotted oldCfg instead of direct t.config access
 		natCfg := nat.DefaultBindConfig("udp", oldCfg.ListenerAddress)
 		natCfg.RequestedPort = port
 		result, err := nat.BindWithNATTraversal(natCfg)
@@ -670,18 +668,18 @@ func (t *SSU2Transport) SetIdentity(ident router_info.RouterInfo) error {
 		// S-2 + S-3 fix: Install new listener AND update identity/config under lock.
 		// From this point, Accept() uses new listener and NAT init sees new identity.
 		// If NAT/key init fails below, rollback restores ALL old state atomically.
-		// R-2 fix: Copy-on-write config update (mirrors NTCP2 HIGH-1.3 pattern)
+		// Copy-on-write config update (mirrors NTCP2 pattern)
 		newCfg := *oldCfg // Shallow copy
 		newCfg.ListenerAddress = newAddr
 		newCfg.SSU2Config = ssu2Config
 
 		t.identityMu.Lock()
 		t.listener = listener
-		t.config.Store(&newCfg) // R-2 fix: Atomic config store
+		t.config.Store(&newCfg) // Atomic config store
 		t.identity = ident
 		t.identityMu.Unlock()
 
-		// BUG FIX HIGH SM-1: Re-initialize NAT managers with the new listener.
+		// Re-initialize NAT managers with the new listener.
 		// NAT managers must be bound to the new listener, not the old one.
 		// S-3 fix: NAT managers now see new identity (t.identity updated above).
 		// S-2 fix: On failure, close new listener and restore ALL old state.
@@ -690,27 +688,27 @@ func (t *SSU2Transport) SetIdentity(ident router_info.RouterInfo) error {
 			t.natManagersHealthy.Store(false) // E-2 fix: Mark NAT degraded
 			t.logger.WithError(err).Error("Failed to reinitialize NAT managers after identity update")
 			// Rollback ALL state: listener, address, identity, config
-			// R-2 fix: Restore oldCfg atomically
+			// Restore oldCfg atomically
 			t.identityMu.Lock()
 			_ = t.listener.Close() // Close failed new listener
 			t.listener = oldListener
-			t.config.Store(oldCfg) // R-2 fix: Atomic config restore
+			t.config.Store(oldCfg) // Atomic config restore
 			t.identity = oldIdentity
 			t.identityMu.Unlock()
 			return err
 		}
 		t.natManagersHealthy.Store(true) // E-2 fix: Mark NAT healthy on success
 
-		// L-1 item 4: Re-initialize keyRotationManager with the new identity's keys.
+		// Re-initialize keyRotationManager with the new identity's keys.
 		// S-2 fix: On failure, close new listener and restore ALL old state.
 		if err := initKeyManagement(t, ssu2Config); err != nil {
 			t.logger.WithError(err).Error("Failed to reinitialize key rotation manager after identity update")
 			// Rollback ALL state: listener, address, identity, config
-			// R-2 fix: Restore oldCfg atomically
+			// Restore oldCfg atomically
 			t.identityMu.Lock()
 			_ = t.listener.Close() // Close failed new listener
 			t.listener = oldListener
-			t.config.Store(oldCfg) // R-2 fix: Atomic config restore
+			t.config.Store(oldCfg) // Atomic config restore
 			t.identity = oldIdentity
 			t.identityMu.Unlock()
 			return err
@@ -742,7 +740,7 @@ func (t *SSU2Transport) GetSession(routerInfo router_info.RouterInfo) (transport
 		return session, nil
 	}
 
-	// R-2 fix: Atomic config snapshot
+	// Atomic config snapshot
 	cfg := t.config.Load()
 	// canRelay is true when the peer advertises usable introducers and we can
 	// look up the introducer RouterInfos. Despite its name, HasIntroducerOnly...
@@ -763,7 +761,7 @@ func (t *SSU2Transport) GetSession(routerInfo router_info.RouterInfo) (transport
 		// reseed floor because exploration dials never complete.
 		if canRelay {
 			t.logger.WithFields(map[string]interface{}{
-				"router_hash":  logutil.HashPrefix(routerHash),
+				"router_hash": logutil.HashPrefix(routerHash),
 				"direct_error": dialErr.Error(),
 			}).Debug("direct SSU2 dial failed; attempting introducer fallback")
 			introSession, introErr := t.dialViaIntroducer(routerInfo, routerHash)
@@ -831,13 +829,13 @@ func (t *SSU2Transport) promoteInboundConnection(conn net.Conn, original interfa
 	if !ok {
 		return nil, false
 	}
-	// R-2 fix: Atomic config snapshot
+	// Atomic config snapshot
 	cfg := t.config.Load()
 	promoted := NewSSU2SessionDeferred(ssu2Conn, t.ctx, t.logger)
 	promoted.maxRetransmit = cfg.GetMaxRetransmissions()
 	promoted.SetTransportCallbacks(t.buildTransportCallbacks(promoted))
 
-	// CRITICAL-3.1 FIX: Start workers AFTER CAS succeeds, not before.
+	// Start workers AFTER CAS succeeds, not before.
 	// Starting workers before CAS means losers have running workers that may
 	// interfere with the winner's connection (frame corruption, data races).
 	// The old comment claimed this "ensures no other goroutine sees a session
@@ -847,14 +845,14 @@ func (t *SSU2Transport) promoteInboundConnection(conn net.Conn, original interfa
 	// Use SessionRegistry.Promote to handle CAS, callback setup, and worker startup atomically
 	promoteOpts := transport.PromoteOptions{
 		PreflightCheck: func() error {
-			// Pre-flight check: verify session is in map before starting workers (CRITICAL-3.1)
+			// Pre-flight check: verify session is in map before starting workers
 			if mapValue, exists := t.sessionRegistry.Load(routerHash); !exists {
 				t.logger.WithField("router_hash", logutil.HashPrefix(routerHash)).
-					Error("CRITICAL-3.1 violation: CAS succeeded but session missing from map before StartWorkers")
+					Error("CAS succeeded but session missing from map before StartWorkers")
 				return fmt.Errorf("session not in map")
 			} else if mapSession, ok := mapValue.(*SSU2Session); !ok || mapSession != promoted {
 				t.logger.WithField("router_hash", logutil.HashPrefix(routerHash)).
-					Error("CRITICAL-3.1 violation: CAS succeeded but wrong session in map before StartWorkers")
+					Error("CAS succeeded but wrong session in map before StartWorkers")
 				return fmt.Errorf("wrong session in map")
 			}
 			return nil
@@ -917,7 +915,7 @@ func (t *SSU2Transport) createOutboundSession(routerInfo router_info.RouterInfo,
 		t.recordPeerFailure(routerHash, err)
 		t.logger.WithFields(map[string]interface{}{
 			"router_hash": logutil.HashPrefix(routerHash),
-			"error":       err.Error(),
+			"error": err.Error(),
 		}).Warn("SSU2 outbound dial failed")
 		return nil, WrapSSU2Error(err, "dialing SSU2 connection")
 	}
@@ -1015,7 +1013,6 @@ func (t *SSU2Transport) createBaseDialConfig() (*ssu2noise.SSU2Config, error) {
 
 // attachLocalRouterInfo serializes our local RouterInfo and attaches it to the
 // dial config so it is transmitted in the SSU2 SessionConfirmed message.
-//
 // Without this, go-noise falls back to sending only our 32-byte RouterHash, which
 // i2pd rejects during strict static-key verification: a bare hash does not contain
 // an SSU2 address with the "s" (static key) parameter, so the responder cannot
@@ -1079,13 +1076,13 @@ func extractRemoteStaticKey(routerInfo router_info.RouterInfo) ([]byte, error) {
 // registerOrReuseSession creates a new session or returns an existing one for the router hash.
 // Returns the session, a boolean indicating if a new slot is used, and any error.
 func (t *SSU2Transport) registerOrReuseSession(conn *ssu2noise.SSU2Conn, routerHash data.Hash) (*SSU2Session, bool, error) {
-	// R-2 fix: Atomic config snapshot
+	// Atomic config snapshot
 	cfg := t.config.Load()
 	session := NewSSU2SessionDeferred(conn, t.ctx, t.logger)
 	session.maxRetransmit = cfg.GetMaxRetransmissions()
 	session.SetTransportCallbacks(t.buildTransportCallbacks(session))
 
-	// CRITICAL-3.1 FIX: Start workers AFTER LoadOrStore succeeds, not before.
+	// Start workers AFTER LoadOrStore succeeds, not before.
 	// Starting workers before LoadOrStore means losers have running workers that
 	// may interfere with the winner's connection (frame corruption, data races).
 	// The old comment claimed this "ensures no other goroutine sees a session
@@ -1124,16 +1121,16 @@ func (t *SSU2Transport) registerOrReuseSession(conn *ssu2noise.SSU2Conn, routerH
 	}
 
 	// We won the store — start workers NOW
-	// Pre-flight check: verify session is in map before starting workers (CRITICAL-3.1)
+	// Pre-flight check: verify session is in map before starting workers
 	if mapValue, exists := t.sessionRegistry.Load(routerHash); !exists {
 		t.logger.WithField("router_hash", logutil.HashPrefix(routerHash)).
-			Error("CRITICAL-3.1 violation: LoadOrStore succeeded but session missing from map before StartWorkers")
+			Error("LoadOrStore succeeded but session missing from map before StartWorkers")
 	} else if mapSession, ok := mapValue.(*SSU2Session); !ok || mapSession != session {
 		t.logger.WithField("router_hash", logutil.HashPrefix(routerHash)).
-			Error("CRITICAL-3.1 violation: LoadOrStore succeeded but wrong session in map before StartWorkers")
+			Error("LoadOrStore succeeded but wrong session in map before StartWorkers")
 	}
 
-	// Set cleanup callback BEFORE starting workers (HIGH-8.2 fix).
+	// Set cleanup callback BEFORE starting workers.
 	// If a Close() happens between StartWorkers and SetCleanupCallback, the
 	// session would be orphaned in the map because cleanup is not installed yet.
 	session.SetCleanupCallback(func() {
@@ -1155,19 +1152,19 @@ func (t *SSU2Transport) promoteRawConnToSession(rawConn net.Conn, routerHash dat
 		// Not an SSU2Conn — cannot promote.
 		t.logger.WithFields(map[string]interface{}{
 			"router_hash": logutil.HashPrefix(routerHash),
-			"conn_type":   fmt.Sprintf("%T", rawConn),
+			"conn_type": fmt.Sprintf("%T", rawConn),
 		}).Error("promoteRawConnToSession: cannot promote non-SSU2Conn")
 		return nil
 	}
 
-	// R-2 fix: Atomic config snapshot
+	// Atomic config snapshot
 	cfg := t.config.Load()
 	// Create a new SSU2Session from the raw conn.
 	promoted := NewSSU2SessionDeferred(ssu2Conn, t.ctx, t.logger)
 	promoted.maxRetransmit = cfg.GetMaxRetransmissions()
 	promoted.SetTransportCallbacks(t.buildTransportCallbacks(promoted))
 
-	// CRITICAL-3.1 FIX: Start workers AFTER CAS succeeds, not before.
+	// Start workers AFTER CAS succeeds, not before.
 	// Starting workers before CAS means losers have running workers that may
 	// interfere with the winner's connection (frame corruption, data races).
 	// The old comment claimed this "ensures no other goroutine sees a session
@@ -1177,14 +1174,14 @@ func (t *SSU2Transport) promoteRawConnToSession(rawConn net.Conn, routerHash dat
 	// Use SessionRegistry.Promote to handle CAS, callback setup, and worker startup atomically
 	promoteOpts := transport.PromoteOptions{
 		PreflightCheck: func() error {
-			// Pre-flight check: verify session is in map before starting workers (CRITICAL-3.1)
+			// Pre-flight check: verify session is in map before starting workers
 			if mapValue, exists := t.sessionRegistry.Load(routerHash); !exists {
 				t.logger.WithField("router_hash", logutil.HashPrefix(routerHash)).
-					Error("CRITICAL-3.1 violation: CAS succeeded but session missing from map before StartWorkers")
+					Error("CAS succeeded but session missing from map before StartWorkers")
 				return fmt.Errorf("session not in map")
 			} else if mapSession, ok := mapValue.(*SSU2Session); !ok || mapSession != promoted {
 				t.logger.WithField("router_hash", logutil.HashPrefix(routerHash)).
-					Error("CRITICAL-3.1 violation: CAS succeeded but wrong session in map before StartWorkers")
+					Error("CAS succeeded but wrong session in map before StartWorkers")
 				return fmt.Errorf("wrong session in map")
 			}
 			return nil
@@ -1208,7 +1205,7 @@ func (t *SSU2Transport) promoteRawConnToSession(rawConn net.Conn, routerHash dat
 
 	// Another goroutine won the promotion race — discard ours.
 	// Detach the shared conn first so the loser doesn't close the winner's socket.
-	// Workers will exit when Close() cancels the session context (CRITICAL-3.1 ensures
+	// Workers will exit when Close() cancels the session context (ensures
 	// workers were never started on loser, so this just cleans up session resources).
 	promoted.DetachConn()
 	_ = promoted.Close()
@@ -1227,7 +1224,7 @@ func (t *SSU2Transport) Compatible(routerInfo router_info.RouterInfo) bool {
 	if HasDialableSSU2Address(&routerInfo) {
 		return true
 	}
-	// R-2 fix: Atomic config snapshot
+	// Atomic config snapshot
 	cfg := t.config.Load()
 	if cfg.RouterLookupFunc != nil && HasIntroducerOnlySSU2Address(&routerInfo) {
 		return true
@@ -1251,7 +1248,7 @@ func (t *SSU2Transport) Close() error {
 		t.sessionRegistry.SetShutdown()
 		t.cancel()
 
-		// L-1 FIX: Call stopNATManagers() to properly coordinate NAT shutdown with context
+		// Call stopNATManagers() to properly coordinate NAT shutdown with context
 		// cancellation, manager locks, and retry goroutine cleanup. This must happen before
 		// manually closing any other managers to prevent races.
 		stopNATManagers(t)
@@ -1353,7 +1350,7 @@ func (t *SSU2Transport) GetTotalBandwidth() (totalBytesSent, totalBytesReceived 
 // This is a non-reserving check used for fail-fast rejection in Accept().
 // Use checkSessionLimit() when you need to atomically reserve a slot.
 func (t *SSU2Transport) isSessionLimitReached() bool {
-	// R-2 fix: Atomic config snapshot
+	// Atomic config snapshot
 	cfg := t.config.Load()
 	current := t.sessionRegistry.Count()
 	maxSessions := cfg.GetMaxSessions()
@@ -1361,7 +1358,7 @@ func (t *SSU2Transport) isSessionLimitReached() bool {
 }
 
 func (t *SSU2Transport) checkSessionLimit() error {
-	// R-2 fix: Atomic config snapshot
+	// Atomic config snapshot
 	cfg := t.config.Load()
 	maxSessions := cfg.GetMaxSessions()
 
@@ -1398,7 +1395,7 @@ func (t *SSU2Transport) findSessionByAddr(addr *net.UDPAddr) *SSU2Session {
 		if !ok {
 			return true
 		}
-		// Use locked accessor to avoid race with DetachConn (R-1 fix).
+		// Use locked accessor to avoid race with DetachConn.
 		remoteAddr := s.RemoteAddr()
 		if remoteAddr != nil && remoteAddr.String() == addrString {
 			found = s
@@ -1423,7 +1420,7 @@ func (t *SSU2Transport) findSessionByHash(hash data.Hash) *SSU2Session {
 		return s
 	}
 
-	// Skip connections already delivered to Accept() (R-3 fix).
+	// Skip connections already delivered to Accept().
 	// The Accept() consumer owns the socket; promotion would create dual ownership.
 	if _, ok := val.(transport.AcceptedConn); ok {
 		return nil

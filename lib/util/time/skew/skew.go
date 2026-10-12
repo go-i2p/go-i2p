@@ -18,13 +18,10 @@ var nowFunc = time.Now
 // ValidateTimestamp checks whether the given timestamp is within the acceptable
 // clock skew window (±MaxClockSkew from the current time). It returns nil if
 // the timestamp is valid, or a descriptive error if it falls outside the window.
-//
 // A zero-value time.Time is always rejected as invalid.
-//
 // This implements the I2P spec requirement: "Router MUST reject RouterInfo with
 // published timestamp >60 minutes in the future or past."
-//
-// M-26 Consolidation: This now delegates to ValidateTimestampWithSkew with
+// This now delegates to ValidateTimestampWithSkew with
 // the MaxClockSkew constant, eliminating duplicate validation logic.
 func ValidateTimestamp(published time.Time) error {
 	return ValidateTimestampWithSkew(published, MaxClockSkew)
@@ -40,7 +37,6 @@ func IsTimestampValid(published time.Time) bool {
 // ValidateTimestampWithSkew checks whether the given timestamp is within a
 // custom clock skew window. This is useful for subsystems that need different
 // tolerances (e.g., NTCP2 handshake uses ±2 minutes).
-//
 // A zero-value time.Time is always rejected. A non-positive maxSkew is rejected
 // with an error.
 func ValidateTimestampWithSkew(published time.Time, maxSkew time.Duration) error {

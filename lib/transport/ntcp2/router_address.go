@@ -91,13 +91,11 @@ func logConversionSuccess(host, port string) {
 
 // ConvertToRouterAddress converts an NTCP2Transport's listening address to a RouterAddress
 // suitable for publishing in RouterInfo. This enables other routers to connect to this transport.
-//
 // The function extracts:
 // - Host IP address from the transport's listener
 // - Port number from the transport's listener
 // - Static public key from the NTCP2 configuration
 // - Initialization vector (IV) for AES obfuscation
-//
 // Returns a RouterAddress with transport style "NTCP2" and all required options,
 // or an error if address extraction or conversion fails.
 func ConvertToRouterAddress(transport *NTCP2Transport) (*router_address.RouterAddress, error) {
@@ -136,7 +134,7 @@ func prepareRouterAddressComponents(transport *NTCP2Transport) (host, port strin
 		return "", "", nil, err
 	}
 
-	// HIGH-1.3 fix: Load config atomically
+	// Load config atomically
 	cfg := transport.config.Load()
 	options, err = buildRouterAddressOptions(host, port, staticKey, cfg.Config)
 	if err != nil {
@@ -379,15 +377,13 @@ func splitNATHostPort(addr string) (host, port string, err error) {
 
 // validateAndExtractStaticKey validates the NTCP2 configuration and extracts the base64-encoded
 // static PUBLIC key for publication in RouterAddress.
-//
 // IMPORTANT: The Config.StaticKey contains the X25519 PRIVATE key (used internally
 // by the Noise handshake). The NTCP2 spec requires publishing the corresponding PUBLIC
 // key as the 's=' parameter. This function derives the public key via X25519 scalar
 // base multiplication before encoding.
-//
 // Returns the base64-encoded static public key string and any validation error encountered.
 func validateAndExtractStaticKey(transport *NTCP2Transport) (string, error) {
-	// HIGH-1.3 fix: Load config atomically
+	// Load config atomically
 	cfg := transport.config.Load()
 	if cfg == nil || cfg.Config == nil {
 		log.WithFields(logger.Fields{"at": "validateAndExtractStaticKey"}).Error("Transport NTCP2 configuration is not initialized")
@@ -421,11 +417,9 @@ func validateAndExtractStaticKey(transport *NTCP2Transport) (string, error) {
 
 // buildRouterAddressOptions constructs the options map for the RouterAddress with all required
 // NTCP2 parameters including host, port, static key, and IV.
-//
 // Per I2P specification (https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ntcp2.rst):
 // - Static key 's': 32 bytes binary (X25519 public key), 44 bytes I2P base64-encoded
 // - IV 'i': 16 bytes binary (big-endian), 24 bytes I2P base64-encoded
-//
 // Returns the options map and an error if validation fails.
 func buildRouterAddressOptions(host, port, staticKey string, ntcp2Config *ntcp2noise.Config) (map[string]string, error) {
 	// Validate IV length (required per spec: 16 bytes binary -> 24 bytes Base64)

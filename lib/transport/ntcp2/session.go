@@ -25,23 +25,23 @@ type NTCP2Session struct {
 	*transport.SessionCore
 
 	// Underlying connection (uses net.Conn interface per guidelines)
-	conn   net.Conn   // Will be *ntcp2.NTCP2Conn internally
-	connMu sync.Mutex // protects conn field (SM-2 fix)
+	conn net.Conn // Will be *ntcp2.NTCP2Conn internally
+	connMu sync.Mutex // protects conn field
 
 	// Rekeying state — tracks message counts for periodic rekeying
 	rekeyState *rekeyState
 
 	// Error tracking for receive worker
-	errorMu   sync.Mutex
+	errorMu sync.Mutex
 	lastError error
 
 	// RouterInfo callback (called when a RouterInfo block is received from peer)
-	routerInfoMu       sync.Mutex
+	routerInfoMu sync.Mutex
 	routerInfoCallback func([]byte)
 
 	createdAtUnixNano int64
-	lastSendUnixNano  int64
-	lastRecvUnixNano  int64
+	lastSendUnixNano int64
+	lastRecvUnixNano int64
 }
 
 // NewNTCP2Session creates a new NTCP2 session and immediately starts background
@@ -63,8 +63,8 @@ func NewNTCP2SessionDeferred(conn net.Conn, ctx context.Context, logger *logger.
 
 	session := &NTCP2Session{
 		SessionCore: core,
-		conn:        conn,
-		rekeyState:  newRekeyState(),
+		conn: conn,
+		rekeyState: newRekeyState(),
 	}
 	now := time.Now().UnixNano()
 	atomic.StoreInt64(&session.createdAtUnixNano, now)
@@ -113,12 +113,10 @@ func (s *NTCP2Session) Close() error {
 // If the reason is an AEAD failure (reason 4), the termination block is NOT sent
 // because the cipher state may be corrupted — instead, only probing-resistance
 // junk-read is performed on the underlying connection.
-//
 // For all other reasons, an encrypted termination block is sent through the
 // NTCP2 connection's Noise cipher state (via conn.Write), which ensures it is
 // encrypted and has a SipHash-obfuscated length prefix like any other data-phase
 // frame. No plaintext termination blocks are ever sent.
-//
 // Spec reference: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ntcp2.rst
 func (s *NTCP2Session) CloseWithReason(reason byte) error {
 	var err error
@@ -199,14 +197,14 @@ func (s *NTCP2Session) logSessionLifecycleSummary(reason byte) {
 	bytesSent, bytesReceived := s.GetBandwidthStats()
 
 	fields := map[string]interface{}{
-		"close_reason":       TerminationReasonString(reason),
-		"last_error":         s.getError(),
-		"session_age_ms":     age.Milliseconds(),
+		"close_reason": TerminationReasonString(reason),
+		"last_error": s.getError(),
+		"session_age_ms": age.Milliseconds(),
 		"idle_since_send_ms": idleSend.Milliseconds(),
 		"idle_since_recv_ms": idleRecv.Milliseconds(),
-		"bytes_sent":         bytesSent,
-		"bytes_received":     bytesReceived,
-		"dropped_messages":   s.DroppedMessages(),
+		"bytes_sent": bytesSent,
+		"bytes_received": bytesReceived,
+		"dropped_messages": s.DroppedMessages(),
 	}
 
 	s.Logger().WithFields(fields).Debug("NTCP2 session lifecycle summary")
@@ -216,7 +214,7 @@ func (s *NTCP2Session) logSessionLifecycleSummary(reason byte) {
 // preventing Close() from closing the socket. This is used when a session
 // loses a promotion race — the winner owns the socket, so the loser must
 // not close it. Workers will still stop cleanly when Close() cancels the
-// session context (SM-2 fix).
+// session context.
 func (s *NTCP2Session) DetachConn() {
 	s.connMu.Lock()
 	s.conn = nil
@@ -227,7 +225,6 @@ func (s *NTCP2Session) DetachConn() {
 // NTCP2 connection's Noise cipher state. The block is encrypted and framed
 // by conn.Write, which applies AEAD encryption and SipHash length obfuscation,
 // ensuring no plaintext termination block ever appears on the wire.
-//
 // This is a best-effort operation: errors are logged but do not prevent the
 // session from closing.
 func (s *NTCP2Session) sendEncryptedTermination(reason byte) {
@@ -240,7 +237,7 @@ func (s *NTCP2Session) sendEncryptedTermination(reason byte) {
 
 	block := BuildTerminationBlock(reason)
 	s.Logger().WithFields(map[string]interface{}{
-		"reason":     TerminationReasonString(reason),
+		"reason": TerminationReasonString(reason),
 		"block_size": len(block),
 	}).Debug("Sending encrypted termination block")
 
@@ -318,7 +315,7 @@ func (s *NTCP2Session) discardRemainingMessages() {
 func (s *NTCP2Session) processSendQueueMessage(msg i2np.Message, nextMetaAt *time.Time) bool {
 	newSize := s.AddToSendQueueSize(-1)
 	s.Logger().WithFields(map[string]interface{}{
-		"message_type":       msg.Type(),
+		"message_type": msg.Type(),
 		"remaining_in_queue": newSize,
 	}).Debug("Processing message from send queue")
 
@@ -354,7 +351,7 @@ func (s *NTCP2Session) frameMessage(msg i2np.Message) ([]byte, error) {
 // writeFramedData writes framed data to the connection.
 // Returns false if an error occurred, true if write succeeded.
 func (s *NTCP2Session) writeFramedData(framedData []byte) bool {
-	// Check if conn has been detached (SM-2 fix: losing promotion race).
+	// Check if conn has been detached.
 	s.connMu.Lock()
 	conn := s.conn
 	s.connMu.Unlock()
@@ -405,7 +402,7 @@ func (s *NTCP2Session) receiveWorker() {
 // processNextInboundMessageFromBlocks sets a read deadline, reads the next message, and queues it.
 // Returns false if the receive loop should exit due to a fatal error or queuing failure.
 func (s *NTCP2Session) processNextInboundMessageFromBlocks(unframer *BlockUnframer) bool {
-	// Check if conn has been detached (SM-2 fix: losing promotion race).
+	// Check if conn has been detached.
 	// This prevents nil dereference when DetachConn() is called before workers exit.
 	s.connMu.Lock()
 	conn := s.conn
@@ -484,9 +481,9 @@ func (s *NTCP2Session) handleNonI2NPBlock(block Block) {
 			reason = block.Data[terminationBlockPayloadSize-1]
 		}
 		s.Logger().WithFields(map[string]interface{}{
-			"at":          "(NTCP2Session) handleNonI2NPBlock",
+			"at": "(NTCP2Session) handleNonI2NPBlock",
 			"reason_code": reason,
-			"reason":      TerminationReasonString(reason),
+			"reason": TerminationReasonString(reason),
 		}).Warn("Received Termination block from peer, closing session")
 		// Close in a goroutine to avoid deadlock: Close() calls wg.Wait(),
 		// and this callback runs inside the receive worker goroutine.
@@ -651,7 +648,7 @@ func (s *NTCP2Session) recordAndLogDroppedMessage(msg i2np.Message) {
 	s.RecordDroppedMessage()
 	dropped := s.DroppedMessages()
 	s.Logger().WithFields(map[string]interface{}{
-		"message_type":  msg.Type(),
+		"message_type": msg.Type(),
 		"total_dropped": dropped,
 		"recv_chan_cap": cap(s.RecvChan()),
 	}).Warn("Dropping received message - receive channel full (backpressure)")
@@ -663,7 +660,7 @@ func (s *NTCP2Session) checkRekey(totalMessages uint64) {
 	if totalMessages >= RekeyThreshold {
 		s.Logger().WithFields(map[string]interface{}{
 			"total_messages": totalMessages,
-			"threshold":      RekeyThreshold,
+			"threshold": RekeyThreshold,
 		}).Info("Rekey threshold reached, attempting session rekey")
 		s.connMu.Lock()
 		conn := s.conn

@@ -38,7 +38,6 @@ func (tm *TunnelManager) BuildTunnel(req tunnel.BuildTunnelRequest) (*tunnel.Bui
 
 // BuildTunnelFromRequest builds a tunnel from a BuildTunnelRequest using the tunnel.TunnelBuilder.
 // This is the recommended method for building tunnels with proper request tracking and retry support.
-//
 // The method:
 // 1. Uses tunnel.TunnelBuilder to create encrypted build records
 // 2. Generates a unique message ID for request/reply correlation
@@ -121,7 +120,6 @@ func (tm *TunnelManager) prepareAndSendBuild(req tunnel.BuildTunnelRequest) (*tu
 	// overwrites result.ReplyKeys with the HKDF-derived keys that the remote
 	// hops will actually use to encrypt their reply slots. Registration must
 	// happen after send so it captures the correct keys.
-	//
 	// IMPORTANT: sendBuildMessage may block for tens of seconds while
 	// sessionProvider.GetSessionByHash performs a NetDB RouterInfo lookup
 	// (up to 30s) plus the outbound NTCP2/SSU2 dial and Noise handshake.
@@ -139,7 +137,6 @@ func (tm *TunnelManager) prepareAndSendBuild(req tunnel.BuildTunnelRequest) (*tu
 	// Registration at this point (before finalizePendingBuild) ensures the reply
 	// can be received. Client tunnels are registered in finalizePendingBuild with
 	// session context to route messages directly to the I2CP session.
-	//
 	// If registration fails here, finalizePendingBuild will attempt registration
 	// again as a fallback (e.g., if the registration service was not yet ready).
 	// Duplicate registrations are caught and silently ignored as expected failures.
@@ -203,11 +200,11 @@ func (tm *TunnelManager) finalizePendingBuild(result *tunnel.TunnelBuildResult, 
 
 	// Register inbound tunnels:
 	// - Exploratory: W-1 fix registers early in prepareAndSendBuild to catch
-	//   replies immediately. finalizePendingBuild re-attempts as fallback if
-	//   early registration failed (e.g., if registration service was not yet ready).
-	//   Duplicate registrations are silently ignored (caught as "already registered").
-	// - Client: CRITICAL-1 fix registers here with session context for I2CP delivery,
-	//   ensuring inbound messages route to the owning session instead of being dropped.
+	// replies immediately. finalizePendingBuild re-attempts as fallback if
+	// early registration failed (e.g., if registration service was not yet ready).
+	// Duplicate registrations are silently ignored (caught as "already registered").
+	// - Client: registers here with session context for I2CP delivery,
+	// ensuring inbound messages route to the owning session instead of being dropped.
 	if req.IsInbound && tm.inboundHandler != nil {
 		if req.IsClientTunnel {
 			// Client tunnel: register with session context for I2CP message delivery
@@ -278,12 +275,12 @@ func (tm *TunnelManager) buildZeroHopInbound(req tunnel.BuildTunnelRequest) (tun
 		"reason":           "zero-hop inbound tunnel registered as active without build message",
 	}).Info("Zero-hop inbound tunnel built")
 
-	// CRITICAL-2 fix: After creating a zero-hop inbound tunnel (which can serve as a reply tunnel),
+	// After creating a zero-hop inbound tunnel (which can serve as a reply tunnel),
 	// immediately trigger outbound tunnel maintenance so that outbound tunnels can be built
 	// using this new reply tunnel. This breaks the bootstrap deadlock where outbound builds
 	// fail with "no active reply tunnels" while inbound tunnels are being created.
 	if tm.outboundPool != nil {
-		// CRITICAL-3 fix: Reset exponential backoff BEFORE maintenance so builds proceed immediately
+		// Reset exponential backoff BEFORE maintenance so builds proceed immediately
 		// instead of being blocked by the backoff delay. When reply tunnels become available,
 		// previous failures should not block new attempts.
 		tm.outboundPool.ResetBuildFailures()
@@ -531,7 +528,6 @@ func (tm *TunnelManager) createSerializedBuildMessage(result *tunnel.TunnelBuild
 // Each build record is encrypted with the corresponding hop's X25519 public key
 // using the STBM-format ECIES-X25519-AEAD encryption (zero nonce, ephemeral key
 // as AD) before being placed into the message.
-//
 // Per the I2P tunnel-creation-ECIES specification (proposal 152), STBM records
 // are 218 bytes each on the wire. Using the long-format 528-byte records here
 // causes peers to reject the entire message (silent EOF after the NTCP2
@@ -639,7 +635,6 @@ func (tm *TunnelManager) updateReplyKeysWithHKDF(result *tunnel.TunnelBuildResul
 // updateLayerKeysFromHKDF overwrites result.Records[i].LayerKey/IVKey with keys
 // HKDF-derived from each hop's post-reply Noise chaining key, matching exactly
 // what the transit hop derives (DeriveSTBMLayerKeys).
-//
 // F063 FIX: For STBM the 154-byte cleartext does not carry layer/IV keys, so the
 // random keys placed in the record by the builder are never transmitted. The
 // creator must derive the same keys the hops will, and install them on the
@@ -713,6 +708,6 @@ func (tm *TunnelManager) generateMessageID() (int, error) {
 	if _, err := rand.Read(buf[:]); err != nil {
 		return 0, oops.Wrapf(err, "failed to generate random message ID")
 	}
-	// LOW-1 FIX: Use the full 32-bit ID space (removed 0x7FFFFFFF mask)
+	// Use the full 32-bit ID space (removed 0x7FFFFFFF mask)
 	return int(binary.BigEndian.Uint32(buf[:])), nil
 }

@@ -10,9 +10,7 @@ import (
 )
 
 // NTCP2 data-phase block types per the specification.
-//
 // Spec reference: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ntcp2.rst
-//
 // After the Noise XK handshake completes, both peers exchange AEAD-encrypted
 // frames. Each decrypted frame payload consists of one or more concatenated
 // blocks. Every block begins with a 3-byte header: [type:1][size:2].
@@ -156,7 +154,7 @@ func NewI2NPBlock(i2npData []byte) Block {
 
 // NewPaddingBlock creates a Padding block (type 254) filled with cryptographically
 // random bytes. The NTCP2 spec requires random padding; zero padding is
-// distinguishable from Java I2P's output and fingerprintable (M-3 / G-9 fix).
+// distinguishable from Java I2P's output and fingerprintable.
 // If the CSPRNG fails (should never happen in practice), the padding falls back
 // to a zero-filled slice rather than panicking.
 func NewPaddingBlock(size int) Block {
@@ -171,10 +169,8 @@ func NewPaddingBlock(size int) Block {
 
 // NewRouterInfoBlock creates a RouterInfo block (type 2) with a flag byte
 // prepended. Per ntcp2.rst §1575-1577, the flag byte encodes:
-//
 //	bit 0: 0 = local store (RouterInfoFlagLocalStore), 1 = flood request (RouterInfoFlagFloodRequest)
 //	bits 1-7: unused, must be 0
-//
 // IMPORTANT: RouterInfo in NTCP2 blocks is NEVER gzip-compressed.
 // Use RouterInfoFlagLocalStore (0x00) or RouterInfoFlagFloodRequest (0x01).
 func NewRouterInfoBlock(routerInfoBytes []byte, flag byte) Block {

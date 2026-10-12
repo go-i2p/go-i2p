@@ -12,26 +12,23 @@ import (
 
 // SessionRegistry manages the ownership invariant for transport session maps,
 // eliminating duplication between NTCP2Transport and SSU2Transport.
-//
 // Session Map Ownership Invariant (X-3 fix):
 // Each peerHash in the sessions map has EXACTLY ONE owner at any given time:
-//   - net.Conn (or transport-specific conn type): owned by trackInbound,
-//     transferable to Accept or promotion
-//   - acceptedConn: owned by the Accept() consumer; MUST NOT be promoted (dual-ownership)
-//   - Session: owned by the session lifecycle; cleanup via Remove
-//
+// - net.Conn (or transport-specific conn type): owned by trackInbound,
+// transferable to Accept or promotion
+// - acceptedConn: owned by the Accept() consumer; MUST NOT be promoted (dual-ownership)
+// - Session: owned by the session lifecycle; cleanup via Remove
 // State transitions use CompareAndSwap to prevent race conditions:
-//   - rawConn → acceptedConn: tracked but wrapped to prevent promotion
-//   - rawConn → Session: CAS in Promote (after successful session creation)
-//
+// - rawConn → acceptedConn: tracked but wrapped to prevent promotion
+// - rawConn → Session: CAS in Promote (after successful session creation)
 // If inbound Accept CAS fails, a concurrent GetSession has already promoted the connection;
 // do not deliver to Accept (ownership already transferred to the session).
 // If promotion CAS fails, another goroutine won the race; close the duplicate session.
 type SessionRegistry struct {
 	// sessions map[RouterHash]<value> where value can be:
-	//  - net.Conn (raw inbound connection after tracking, before Accept or promotion)
-	//  - acceptedConn (wrapper marking ownership transferred to Accept() consumer - MUST NOT promote)
-	//  - Session (fully established session)
+	// - net.Conn (raw inbound connection after tracking, before Accept or promotion)
+	// - acceptedConn (wrapper marking ownership transferred to Accept() consumer - MUST NOT promote)
+	// - Session (fully established session)
 	sessions sync.Map
 
 	// sessionCount tracks active sessions (used for O(1) SessionCount queries)
@@ -54,10 +51,8 @@ func NewSessionRegistry(logger *logger.Entry) *SessionRegistry {
 // TrackInboundConnection attempts to track a raw inbound connection.
 // Returns true if this is a fresh connection (first time seeing this peer).
 // Returns false if a duplicate was detected (another connection from same peer already exists).
-//
 // On duplicate, the connection is NOT added to the registry; the caller should
 // handle closing it. The session slot is unreserved by the caller.
-//
 // NOTE: This method does NOT increment the session count. The count was already
 // incremented by CheckLimitAndIncrement when the slot was reserved before the handshake.
 func (sr *SessionRegistry) TrackInboundConnection(conn interface{}, peerHash data.Hash) bool {
@@ -67,7 +62,6 @@ func (sr *SessionRegistry) TrackInboundConnection(conn interface{}, peerHash dat
 
 // MarkAccepted marks a tracked connection as delivered to Accept().
 // This prevents the connection from being promoted to a session (dual-ownership protection).
-//
 // Returns true if the mark succeeded, false if the connection was already promoted
 // or removed (in which case no accept should be delivered).
 func (sr *SessionRegistry) MarkAccepted(peerHash data.Hash, original interface{}) bool {
@@ -92,14 +86,12 @@ type PromoteOptions struct {
 // Promote attempts to promote a raw connection to a session via CompareAndSwap.
 // The newSession must be the session object to store in the registry.
 // Returns (session, true) if promotion succeeded, (nil, false) if it lost the race.
-//
 // On promotion success:
-//  1. PreflightCheck is called (if provided) for validation
-//  2. SetCallback is called to install the cleanup callback
-//  3. StartWorkers is called to begin session's background work
-//
+// 1. PreflightCheck is called (if provided) for validation
+// 2. SetCallback is called to install the cleanup callback
+// 3. StartWorkers is called to begin session's background work
 // On promotion failure (race lost):
-//   - The caller is responsible for closing the session and connection
+// - The caller is responsible for closing the session and connection
 func (sr *SessionRegistry) Promote(peerHash data.Hash, original, newSession interface{}, opts PromoteOptions) (interface{}, bool) {
 	// Defense-in-depth: refuse to promote an AcceptedConn (dual-ownership protection)
 	if _, ok := original.(*AcceptedConn); ok {
@@ -119,7 +111,7 @@ func (sr *SessionRegistry) Promote(peerHash data.Hash, original, newSession inte
 		return nil, false
 	}
 
-	// Install cleanup callback BEFORE starting workers (HIGH-8.2 fix)
+	// Install cleanup callback BEFORE starting workers
 	if opts.SetCallback != nil {
 		opts.SetCallback(func() {
 			sr.Remove(peerHash)
@@ -147,7 +139,7 @@ func (sr *SessionRegistry) runPreflightOrRollback(peerHash data.Hash, original, 
 			current, exists := sr.sessions.Load(peerHash)
 			sr.logger.WithField("peer_hash", logutil.HashPrefixPlain(peerHash)).WithFields(logger.Fields{
 				"entry_exists": exists,
-				"entry_type":   fmt.Sprintf("%T", current),
+				"entry_type": fmt.Sprintf("%T", current),
 			}).Error("Failed to roll back session promotion after preflight failure")
 		}
 
@@ -209,8 +201,8 @@ func (sr *SessionRegistry) IncrementCount() {
 // Used to reserve a slot before expensive operations (handshakes, dials) to prevent
 // oversubscription when multiple goroutines call this concurrently.
 // On success, the caller MUST ensure either:
-//   - The session/connection is stored in the map (via TrackInboundConnection or LoadOrStore), OR
-//   - unreserveSessionSlot() is called if the operation fails (e.g., handshake timeout)
+// - The session/connection is stored in the map (via TrackInboundConnection or LoadOrStore), OR
+// - unreserveSessionSlot() is called if the operation fails (e.g., handshake timeout)
 func (sr *SessionRegistry) CheckLimitAndIncrement(maxLimit int) bool {
 	for {
 		current := atomic.LoadInt32(&sr.sessionCount)

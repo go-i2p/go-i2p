@@ -181,7 +181,7 @@ type sessionRegisterer interface {
 // registerTypedSession is a generic helper for registering transport sessions (NTCP2, SSU2).
 // It consolidates the common 5-step registration pattern across all session types:
 // 1. Add session to router's session registry before cleanup callback (closes ordering window)
-// 2. Set cleanup callback to remove session on close AND release transport pool slot (H-1 fix)
+// 2. Set cleanup callback to remove session on close AND release transport pool slot
 // 3. Increment waitgroup to track reader goroutine lifetime
 // 4. Start reader goroutine to process inbound I2NP messages
 // 5. Log successful registration with transport type name
@@ -191,7 +191,7 @@ type sessionRegisterer interface {
 func (r *Router) registerTypedSession(hash common.Hash, session sessionRegisterer, transportName string, muxer *transport.TransportMuxer) {
 	r.addSession(hash, session)
 	// Append both cleanup callbacks in order:
-	// 1. Release transport pool slot (fixes H-1 connection leak)
+	// 1. Release transport pool slot
 	// 2. Remove session from registry
 	if muxer != nil {
 		session.AppendCleanupCallback(func() { muxer.ReleaseSession() })
@@ -209,8 +209,8 @@ func (r *Router) registerTypedSession(hash common.Hash, session sessionRegistere
 // goroutine so that inbound I2NP messages on outbound sessions are processed.
 // Without the reader goroutine, messages (e.g. tunnel build replies) pile up in
 // the session's recvChan and are never consumed, which was the root cause of
-// zero operational tunnels (RCA-1 / AUDIT.md).
-// muxer is passed in to fix H-1 (connection pool leak): a cleanup callback is
+// zero operational tunnels.
+// muxer is passed in to fix a connection pool leak: a cleanup callback is
 // registered on the concrete session to release the transport pool slot when
 // the session closes, even though the trackedSession wrapper is unwrapped here.
 func (r *Router) registerNewSession(hash common.Hash, transportSession i2np.I2NPTransportSession, muxer *transport.TransportMuxer) {
@@ -218,7 +218,7 @@ func (r *Router) registerNewSession(hash common.Hash, transportSession i2np.I2NP
 	// can match the concrete session type (NTCP2Session, SSU2Session).
 	// Without this, the *trackedSession wrapper causes every case to miss,
 	// falling through to the default branch and preventing reader goroutines
-	// from starting on outbound sessions (see AUDIT-2026-04-09.md RCA-1).
+	// from starting on outbound sessions.
 	type unwrapper interface {
 		Unwrap() transport.TransportSession
 	}
@@ -241,7 +241,7 @@ func (r *Router) registerNewSession(hash common.Hash, transportSession i2np.I2NP
 // logSessionEstablishmentFailure logs detailed context about session establishment failures.
 // Downgraded from Error to Warn because the error is already returned to
 // the caller; logging it again at Error inflated the apparent error count (E4/E5
-// in the AUDIT report were the same event logged twice).
+// were the same event logged twice).
 func (r *Router) logSessionEstablishmentFailure(hash common.Hash, routerInfo *router_info.RouterInfo, err error) {
 	log.WithFields(logger.Fields{
 		"at":            "Router.GetSessionByHash",

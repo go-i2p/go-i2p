@@ -12,14 +12,12 @@ import (
 // FrameI2NPMessageAsBlock frames an I2NP message using NTCP2 block format.
 // The message is serialized with a 9-byte short header and wrapped in a type-3
 // (I2NP) block. The result can be combined with other blocks via SerializeBlocks.
-//
 // The 9-byte short header is mandatory for every NTCP2 data-phase I2NP block,
 // regardless of the concrete message type. i2pd reconstructs the full 16-byte
 // header by reading the 9-byte short header and adding 7 bytes (NTCP2.cpp
 // FromNTCP2); sending a 16-byte standard header here would shift the payload by
 // 7 bytes and corrupt every message. The 16-byte standard header is only used
 // for tunnel-delivered messages (inside TunnelGateway/TunnelData), never here.
-//
 // Spec reference: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ntcp2.rst
 func FrameI2NPMessageAsBlock(msg i2np.Message) ([]byte, error) {
 	log.WithField("message_type", msg.Type()).Debug("Framing I2NP message as NTCP2 block")
@@ -38,17 +36,16 @@ func FrameI2NPMessageAsBlock(msg i2np.Message) ([]byte, error) {
 	payload := SerializeBlocks(block)
 
 	log.WithFields(map[string]interface{}{
-		"message_type":   msg.Type(),
+		"message_type": msg.Type(),
 		"short_data_len": len(shortData),
-		"block_payload":  len(payload),
+		"block_payload": len(payload),
 	}).Debug("I2NP message framed as NTCP2 block successfully")
 
 	return payload, nil
 }
 
 // UnframeI2NPMessage unframes I2NP messages from an internal test/pipe stream.
-//
-// M-4 WARNING: This function reads a NON-STANDARD 4-byte big-endian length
+// WARNING: This function reads a NON-STANDARD 4-byte big-endian length
 // prefix. It is NOT compliant with the NTCP2 spec, which uses a 2-byte
 // SipHash-obfuscated length field handled by the NTCP2Conn.Read layer.
 // Do NOT call this function on a real NTCP2 connection — use BlockUnframer
@@ -62,24 +59,23 @@ func UnframeI2NPMessage(conn net.Conn) (i2np.Message, error) {
 }
 
 // I2NPUnframer provides stream-based unframing for test/pipe use only.
-//
-// M-4 WARNING: I2NPUnframer reads a NON-STANDARD 4-byte big-endian length
+// WARNING: I2NPUnframer reads a NON-STANDARD 4-byte big-endian length
 // prefix that does NOT appear in the NTCP2 specification. Real NTCP2
 // connections use a 2-byte SipHash-obfuscated length field, handled
 // transparently by NTCP2Conn.Read. Use BlockUnframer for spec-compliant
 // NTCP2 data-phase parsing. I2NPUnframer exists only to support tests
 // and benchmarks that write raw I2NP frames over a net.Pipe.
 type I2NPUnframer struct {
-	conn           net.Conn
-	bytesRead      int // Track bytes read in last operation
+	conn net.Conn
+	bytesRead int // Track bytes read in last operation
 	totalBytesRead int // Track cumulative bytes read
 }
 
 // NewI2NPUnframer creates a new I2NPUnframer that reads length-prefixed I2NP messages from the given connection.
 func NewI2NPUnframer(conn net.Conn) *I2NPUnframer {
 	return &I2NPUnframer{
-		conn:           conn,
-		bytesRead:      0,
+		conn: conn,
+		bytesRead: 0,
 		totalBytesRead: 0,
 	}
 }
@@ -113,7 +109,7 @@ func (u *I2NPUnframer) ReadNextMessage() (i2np.Message, error) {
 	const maxI2NPMessageSize = 65516
 	if length > maxI2NPMessageSize || length < 0 {
 		log.WithFields(map[string]interface{}{
-			"length":   length,
+			"length": length,
 			"max_size": maxI2NPMessageSize,
 		}).Error("Message length exceeds maximum allowed size")
 		return nil, oops.Errorf("message length %d exceeds max %d", length, maxI2NPMessageSize)
@@ -134,9 +130,9 @@ func (u *I2NPUnframer) ReadNextMessage() (i2np.Message, error) {
 	}
 
 	log.WithFields(map[string]interface{}{
-		"message_type":   msg.Type(),
+		"message_type": msg.Type(),
 		"message_length": length,
-		"bytes_read":     u.bytesRead,
+		"bytes_read": u.bytesRead,
 	}).Debug("Successfully read and unframed I2NP message")
 	return msg, nil
 }
@@ -151,8 +147,8 @@ func (u *I2NPUnframer) readFull(buf []byte) error {
 // BlockUnframer reads NTCP2 block-framed data from a connection and extracts
 // I2NP messages. It handles all block types per the NTCP2 spec.
 type BlockUnframer struct {
-	conn           net.Conn
-	bytesRead      int // Track bytes read in last operation
+	conn net.Conn
+	bytesRead int // Track bytes read in last operation
 	totalBytesRead int // Track cumulative bytes read
 	// bufferedMsgs holds I2NP messages extracted from multi-block frames
 	bufferedMsgs []i2np.Message
@@ -163,7 +159,7 @@ type BlockUnframer struct {
 // NewBlockUnframer creates an unframer for NTCP2 block-based protocol.
 func NewBlockUnframer(conn net.Conn) *BlockUnframer {
 	return &BlockUnframer{
-		conn:         conn,
+		conn: conn,
 		bufferedMsgs: nil,
 	}
 }
@@ -176,7 +172,6 @@ func (u *BlockUnframer) BytesRead() int {
 // ReadNextMessage reads and parses NTCP2 frames until an I2NP message is found
 // or the connection is closed. Non-I2NP blocks are passed to BlockCallback.
 // Multiple I2NP messages in a single frame are buffered for subsequent calls.
-//
 // Uses an iterative loop rather than recursion so that a peer sending an
 // unbounded stream of non-I2NP (e.g. padding-only) frames cannot cause a
 // goroutine stack overflow.
@@ -293,8 +288,8 @@ func (u *BlockUnframer) parseI2NPBlock(data []byte) (i2np.Message, error) {
 
 	log.WithFields(map[string]interface{}{
 		"message_type": msg.Type(),
-		"message_id":   msg.MessageID(),
-		"data_len":     len(data),
+		"message_id": msg.MessageID(),
+		"data_len": len(data),
 	}).Debug("Parsed I2NP message from block")
 
 	return msg, nil

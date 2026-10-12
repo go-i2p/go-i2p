@@ -63,11 +63,9 @@ Accurate for version 0.9.66
 
 // DatabaseSearchReply is an I2NP message returned in response to a failed
 // DatabaseLookup, containing the hashes of alternative peers to query.
-//
 // It is the reply half of the database subsystem: when a floodfill router
 // cannot satisfy a DatabaseLookup, it answers with this message so the
 // requester can keep iterating toward the target key.
-//
 // See the package-level wire format diagram above for the on-wire layout.
 type DatabaseSearchReply struct {
 	*BaseI2NPMessage
@@ -78,7 +76,6 @@ type DatabaseSearchReply struct {
 }
 
 // NewDatabaseSearchReply creates a new DatabaseSearchReply message.
-//
 // It is used by a floodfill router to answer a DatabaseLookup it cannot
 // satisfy: key is the lookup key being echoed back, from is the responder's
 // RouterInfo hash, and peerHashes are the RouterIdentity hashes of routers
@@ -173,7 +170,6 @@ func readPeerHashes(remainder []byte, count int) ([]common.Hash, []byte, error) 
 // 16"). This implementation rejects replies with more than 16 suggestions:
 // beyond the recommended maximum, a peer could inject an oversized suggestion
 // set and skew the local router's iterative (Kademlia-style) lookup fan-out.
-// See AUDIT.md for the deviation from the wire format's 0–255 range.
 const maxDatabaseSearchReplySuggestions = 16
 
 // UnmarshalBinary deserializes the DatabaseSearchReply message from binary

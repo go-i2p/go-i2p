@@ -31,25 +31,23 @@ const (
 
 // dialViaIntroducer establishes a session to Charlie by routing through one of
 // Charlie's introducers (Bob).
-//
 // SSU2 relay 6-step flow (§Relay in the SSU2 spec):
-//  1. Alice → Bob:     RelayRequest (signed with Alice's Ed25519 key)
-//  2. Bob   → Charlie: RelayIntro
-//  3. Charlie → Bob:   RelayResponse
-//  4. Bob   → Alice:   RelayResponse  (Code=0 ⇒ accepted, contains Charlie addr)
-//  5. Charlie → Alice: HolePunch      (optional NAT punch-through)
-//  6. Alice → Charlie: SessionRequest (direct UDP)
-//
+// 1. Alice → Bob: RelayRequest (signed with Alice's Ed25519 key)
+// 2. Bob → Charlie: RelayIntro
+// 3. Charlie → Bob: RelayResponse
+// 4. Bob → Alice: RelayResponse (Code=0 ⇒ accepted, contains Charlie addr)
+// 5. Charlie → Alice: HolePunch (optional NAT punch-through)
+// 6. Alice → Charlie: SessionRequest (direct UDP)
 // T-2 fix: Introducers are tried concurrently with an overall phase deadline,
 // taking the first successful result and canceling remaining attempts. This
 // prevents sequential 10s waits from blocking the dial path for 30s+ when
 // multiple slow introducers are present.
-// EH-3 fix: Check NAT health before attempting introducer dial.
+// Check NAT health before attempting introducer dial.
 func (t *SSU2Transport) dialViaIntroducer(charlieRI router_info.RouterInfo, charlieHash data.Hash) (transport.TransportSession, error) {
 	t.recordPeerAttempt(charlieHash)
 	dialStart := time.Now()
 
-	// R-2 fix: Atomic config snapshot
+	// Atomic config snapshot
 	cfg := t.config.Load()
 	if cfg.RouterLookupFunc == nil {
 		err := oops.Errorf("RouterLookupFunc not configured: cannot dial via introducer")
@@ -57,7 +55,7 @@ func (t *SSU2Transport) dialViaIntroducer(charlieRI router_info.RouterInfo, char
 		return nil, err
 	}
 
-	// EH-3 fix: Check NAT managers health before attempting relay/introducer dial.
+	// Check NAT managers health before attempting relay/introducer dial.
 	// Introducer-based connections require NAT managers (relay manager for RelayRequest,
 	// hole punch coordinator for optional NAT punch-through). If NAT init failed,
 	// relay will be unavailable and the dial will fail with confusing errors;
@@ -82,7 +80,7 @@ func (t *SSU2Transport) dialViaIntroducer(charlieRI router_info.RouterInfo, char
 	// Try all introducers concurrently with bounded fan-out.
 	type result struct {
 		session transport.TransportSession
-		err     error
+		err error
 	}
 	resultCh := make(chan result, len(introducers))
 
@@ -128,7 +126,7 @@ func (t *SSU2Transport) collectIntroducers(charlieRI router_info.RouterInfo) []I
 	var result []IntroducerAddr
 	type introducerKey struct {
 		hash data.Hash
-		tag  uint32
+		tag uint32
 	}
 	seen := make(map[introducerKey]bool)
 	for _, addr := range charlieRI.RouterAddresses() {
@@ -178,7 +176,7 @@ func (t *SSU2Transport) tryOneIntroducerWithContext(ctx context.Context, charlie
 // establishBobSessionWithContext looks up Bob's RouterInfo and establishes a session to Bob,
 // honoring the parent context for cancellation.
 func (t *SSU2Transport) establishBobSessionWithContext(ctx context.Context, intro IntroducerAddr) (*SSU2Session, error) {
-	// R-2 fix: Atomic config snapshot
+	// Atomic config snapshot
 	cfg := t.config.Load()
 	bobRI, err := cfg.RouterLookupFunc(intro.RouterHash)
 	if err != nil {
@@ -203,7 +201,7 @@ func (t *SSU2Transport) establishBobSessionWithContext(ctx context.Context, intr
 // so that a delivery attempt arriving after the waiter has timed out is
 // silently dropped instead of buffered indefinitely.
 type pendingRelayResponse struct {
-	ch       chan *ssu2noise.RelayResponseBlock
+	ch chan *ssu2noise.RelayResponseBlock
 	consumed atomic.Bool
 }
 
@@ -274,12 +272,12 @@ func (t *SSU2Transport) sendRelayRequest(bobSession *SSU2Session, intro Introduc
 	}
 
 	req := &ssu2noise.RelayRequestBlock{
-		Nonce:     nonce,
-		RelayTag:  intro.RelayTag,
+		Nonce: nonce,
+		RelayTag: intro.RelayTag,
 		Timestamp: timestamp,
-		Version:   2,
+		Version: 2,
 		AlicePort: alicePort,
-		AliceIP:   aliceIP,
+		AliceIP: aliceIP,
 		Signature: sig,
 	}
 	block, err := ssu2noise.EncodeRelayRequest(req)
@@ -322,7 +320,7 @@ func (t *SSU2Transport) externalAddressForRelay() (net.IP, uint16, error) {
 }
 
 // localIPPort extracts Alice's IP and port from the transport listener.
-// R-3 fix: Read t.listener under identityMu to avoid race with SetIdentity.
+// Read t.listener under identityMu to avoid race with SetIdentity.
 func (t *SSU2Transport) localIPPort() (net.IP, uint16, error) {
 	t.identityMu.RLock()
 	listener := t.listener
@@ -359,7 +357,7 @@ func (t *SSU2Transport) dialCharlieDirectly(charlieRI router_info.RouterInfo, ch
 	}
 
 	charlieAddr := &net.UDPAddr{
-		IP:   resp.CharlieIP,
+		IP: resp.CharlieIP,
 		Port: int(resp.CharliePort),
 	}
 	t.logger.WithField("charlie_addr", charlieAddr).Debug("dialing Charlie directly after relay")
@@ -373,13 +371,12 @@ func (t *SSU2Transport) dialCharlieDirectly(charlieRI router_info.RouterInfo, ch
 
 // waitForHolePunch waits for Charlie's hole-punch packets to arrive.
 // Returns error if context is cancelled during the wait.
-//
 // T-3 fix: Uses the configurable HolePunchDelay from config. The delay allows
 // Charlie's hole-punch packets to create NAT state before Alice sends the direct
 // SessionRequest. Built-in SSU2 message retransmission makes a too-early send
 // recoverable if the delay is insufficient for the network conditions.
 func (t *SSU2Transport) waitForHolePunch() error {
-	// R-2 fix: Atomic config snapshot
+	// Atomic config snapshot
 	cfg := t.config.Load()
 	delay := cfg.GetHolePunchDelay()
 	select {

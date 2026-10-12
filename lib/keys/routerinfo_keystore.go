@@ -383,7 +383,7 @@ func (ks *RouterInfoKeystore) KeyID() string {
 
 // tryGenerateKeyIDFromPrivateKey attempts to generate a KeyID from the private key.
 // Returns the keyID and a boolean indicating whether a fallback is needed.
-// Uses shared deriveKeyIDFromPublicKey helper (M-31 consolidation).
+// Uses shared deriveKeyIDFromPublicKey helper.
 func (ks *RouterInfoKeystore) tryGenerateKeyIDFromPrivateKey() (keyID string, needsFallback bool) {
 	// Handle nil privateKey case
 	if ks.privateKey == nil {
@@ -762,7 +762,7 @@ func (ks *RouterInfoKeystore) assembleRouterInfo(routerIdentity *router_identity
 
 	// router.version is required by i2pd (and Java I2P): if absent, i2pd sets
 	// m_Version=0 which triggers SetUnreachable(true) → reason_code=15 in NTCP2
-	// ProcessSessionConfirmed.  Minimum accepted by i2pd is NETDB_MIN_ALLOWED_VERSION
+	// ProcessSessionConfirmed. Minimum accepted by i2pd is NETDB_MIN_ALLOWED_VERSION
 	// = 0.9.58; use 0.9.63 which also clears NETDB_MIN_PEER_TEST_VERSION (0.9.62).
 	routerVersion := opts.Version
 	if routerVersion == "" {
@@ -807,10 +807,8 @@ const defaultBandwidthTier = "L"
 
 // validBandwidthTiers are the only legal bandwidth capability letters per the I2P
 // common-structures spec, in ascending throughput order:
-//
-//	K: <12 KBps   L: 12-48 KBps   M: 48-64 KBps   N: 64-128 KBps
-//	O: 128-256 KBps   P: 256-2048 KBps   X: >2048 KBps
-//
+//	K: <12 KBps L: 12-48 KBps M: 48-64 KBps N: 64-128 KBps
+//	O: 128-256 KBps P: 256-2048 KBps X: >2048 KBps
 // i2pd's RouterInfo::ExtractCaps reads the first such letter into m_BandwidthCap
 // and flags O/P/X as high bandwidth (eHighBandwidth / eExtraBandwidth).
 var validBandwidthTiers = map[string]bool{
@@ -839,22 +837,18 @@ func normalizeBandwidthTier(tier string) string {
 }
 
 // buildCapsString constructs the capabilities string for RouterInfo.
-//
 // The caps string encodes independent capability flags, mirroring i2pd's
 // LocalRouterInfo::UpdateCapsProperty ordering: bandwidth tier, optional
 // floodfill ("f"), optional hidden ("H"), reachability ("R"/"U"), then any
 // congestion flag (D/E/G per PROP_162).
-//
 // Capabilities: K/L/M/N/O/P/X = bandwidth tier, f = Floodfill, R = Reachable,
 // U = Unreachable, H = Hidden.
-//
 // IMPORTANT: floodfill is signalled ONLY by the presence of "f"; a non-floodfill
 // router appends nothing. "N" is NOT a "not floodfill" marker — in I2P it is the
 // 64-128 KBps bandwidth tier, so emitting it for non-floodfill routers caused
 // i2pd to misread the router's bandwidth. A valid bandwidth tier letter is always
 // emitted so that i2pd's ExtractCaps populates m_BandwidthCap (an absent tier
 // leaves the router with no bandwidth cap and IsHighBandwidth()=false).
-//
 // When hidden is true, the reachability flag is forced to "U" and "H" is appended,
 // matching Java I2P's hidden-mode RouterInfo semantics. Floodfills are promoted to
 // at least the "O" tier because i2pd requires floodfills to be high bandwidth.

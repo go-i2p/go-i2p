@@ -56,11 +56,9 @@ func NewReseedBootstrap(config *config.BootstrapConfig) *ReseedBootstrap {
 
 // GetPeers implements the Bootstrap interface by obtaining RouterInfos
 // from configured reseed servers.
-//
 // When MinReseedServers > 1 and enough servers are configured, it uses
 // MultiServerReseed for concurrent fetching with strategy-based result combination.
 // This matches Java I2P's security model requiring multiple server confirmation.
-//
 // Falls back to sequential single-server mode if multi-server reseed fails
 // or when MinReseedServers == 1.
 func (rb *ReseedBootstrap) GetPeers(ctx context.Context, n int) ([]router_info.RouterInfo, error) {
@@ -108,7 +106,7 @@ func (rb *ReseedBootstrap) logMultiServerFallback(err error, peerCount int) {
 }
 
 func (rb *ReseedBootstrap) waitForSingleServerFallbackBackoff(ctx context.Context) error {
-	// M-7 FIX: Apply exponential backoff before retrying with single-server mode.
+	// Apply exponential backoff before retrying with single-server mode.
 	backoffDuration := computeBackoffDuration(1) // First retry gets 30s backoff
 	log.WithFields(logger.Fields{
 		"at":       "(ReseedBootstrap) GetPeers",
@@ -433,7 +431,7 @@ func (rb *ReseedBootstrap) logReseedComplete(totalPeers, attemptedServers, succe
 	}).Info("bootstrap peer acquisition completed")
 }
 
-// M-7 FIX: computeBackoffDuration calculates exponential backoff with jitter.
+// computeBackoffDuration calculates exponential backoff with jitter.
 // Implements: 30s → 1m → 2m → 4m → 8m → 16m → 30m (capped)
 // This prevents thundering-herd against reseed servers when all are temporarily unavailable.
 func computeBackoffDuration(attemptNumber int) time.Duration {

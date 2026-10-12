@@ -131,7 +131,7 @@ func ReadI2NPSecondGenTransportHeader(dat []byte) (I2NPSecondGenTransportHeader,
 }
 
 // ReadI2NPType reads the I2NP message type from data
-// L-2 Consolidation: Unified logging logic into single computed log call
+// Unified logging logic into single computed log call
 func ReadI2NPType(data []byte) (int, error) {
 	if len(data) < 1 {
 		return 0, ErrI2NPNotEnoughData
@@ -295,7 +295,6 @@ func CreateDatabaseEntry(key common.Hash, data []byte, dataType byte) DatabaseWr
 // similar to bytes.Reader in the Go standard library. Each read operation
 // advances the offset, eliminating the need for callers to track positions
 // manually. This prevents off-by-one errors and simplifies parsing logic.
-//
 // Error handling follows Go's io.Reader pattern: on error, the reader is not
 // advanced, allowing callers to inspect the failed position.
 type ByteReader struct {
@@ -415,7 +414,6 @@ func (br *ByteReader) Reset() {
 // processHopReplyCode handles the reply code from a single hop in a tunnel build reply.
 // It returns (success, error) where success indicates if the hop accepted the tunnel.
 // The logPrefix is prepended to log messages for context (e.g., "Variable tunnel " or "").
-//
 // Per tunnel-creation.rst, the reply byte is 0 for accept and non-zero for
 // reject. The defined reject codes are 10 (probabilistic), 20 (transient
 // overload), 30 (bandwidth), and 50 (critical). Any other non-zero value is
@@ -451,7 +449,7 @@ func processHopReplyCode(hopIndex int, replyCode byte, logPrefix string) (bool, 
 }
 
 // DetermineBuildResult evaluates tunnel build outcome based on success counts and first encountered error.
-// L-1 Consolidation: Shared by tunnel_build_reply.go and variable_tunnel_build_reply.go.
+// Shared by tunnel_build_reply.go and variable_tunnel_build_reply.go.
 // tunnelType should be lowercase (e.g., "tunnel", "variable tunnel") for error messages.
 func DetermineBuildResult(successCount, recordCount int, firstError error, tunnelType string) error {
 	if successCount == recordCount {
@@ -470,7 +468,7 @@ func DetermineBuildResult(successCount, recordCount int, firstError error, tunne
 }
 
 // ValidateRecordCount validates that Count field matches actual record count.
-// L-4 Consolidation: Shared by variable_tunnel_build_reply.go and short_tunnel_build_reply.go.
+// Shared by variable_tunnel_build_reply.go and short_tunnel_build_reply.go.
 // tunnelTypeName is used in log messages (e.g., "VariableTunnelBuildReply", "ShortTunnelBuildReply")
 func ValidateRecordCount(countField, recordCount int, tunnelTypeName string) error {
 	if countField != recordCount {

@@ -12,7 +12,7 @@ import (
 	"github.com/samber/oops"
 )
 
-// M-4 FIX: Replay cache for DeliveryStatus messages
+// Replay cache for DeliveryStatus messages
 // Bounds: 1000 recent messages, entries expire after 1 hour
 const (
 	deliveryStatusReplayCacheCapacity = 1000
@@ -27,7 +27,7 @@ type dsReplayCacheEntry struct {
 
 // dsReplayCache holds a mutex-protected FIFO for O(1) eviction and a map for
 // O(1) lookup. The list maintains insertion order so the oldest entry is always
-// at the front (MEDIUM-2 audit fix: was O(n) scan on every insertion).
+// at the front, letting us evict expired entries without scanning the whole cache.
 type dsReplayCache struct {
 	mu   sync.Mutex
 	m    map[[32]byte]*list.Element // key → list element
@@ -51,13 +51,14 @@ func clearDeliveryStatusReplayCacheForTesting() {
 	c.fifo.Init()
 }
 
-// M-4 FIX: Time skew tolerance for timestamp validation (±1 hour per I2P spec)
+// Time skew tolerance for timestamp validation (±1 hour per I2P spec)
 // This matches the expiration window used in I2NP messages generally
 const deliveryStatusTimestampSkew = 1 * time.Hour
 
-// validateDeliveryStatusNotReplayed checks if a DeliveryStatus message has been seen before.
-// Returns nil if the message is new, or an error if it's a replay.
-// M-4 / MEDIUM-2 FIX: O(1) insertion and eviction via FIFO list + map.
+// validateDeliveryStatusNotReplayed checks if a DeliveryStatus message has been
+// seen before. Returns nil if the message is new, or an error if it's a replay.
+// The underlying cache uses a FIFO list + map, so both insertion and eviction
+// are O(1).
 func validateDeliveryStatusNotReplayed(messageID int, timestamp time.Time) error {
 	// Build cache key: SHA-256(messageID || timestamp)
 	h := sha256.New()
@@ -112,7 +113,7 @@ func validateDeliveryStatusNotReplayed(messageID int, timestamp time.Time) error
 }
 
 // validateDeliveryStatusTimestamp checks if the timestamp is within acceptable bounds.
-// M-4 FIX: Enforced expiry gate (±skew tolerance, then rejects).
+// Enforced expiry gate (±skew tolerance, then rejects).
 // Returns nil if valid, or an error if far-future (likely hostile).
 // Note: Very old timestamps (e.g., epoch/zero) are accepted to preserve backwards
 // compatibility with test data and unusual scenarios.
@@ -234,7 +235,7 @@ func (d *DeliveryStatusMessage) UnmarshalBinary(data []byte) error {
 
 	d.Timestamp = date.Time()
 
-	// M-4 FIX: Enforce timestamp validation (reject expired/far-future messages)
+	// Enforce timestamp validation (reject expired/far-future messages)
 	if err := validateDeliveryStatusTimestamp(d.Timestamp); err != nil {
 		log.WithError(err).WithFields(logger.Fields{
 			"at":         "UnmarshalBinary",
@@ -244,7 +245,7 @@ func (d *DeliveryStatusMessage) UnmarshalBinary(data []byte) error {
 		return err
 	}
 
-	// M-4 FIX: Enforce replay detection (reject replayed messages)
+	// Enforce replay detection (reject replayed messages)
 	if err := validateDeliveryStatusNotReplayed(d.StatusMessageID, d.Timestamp); err != nil {
 		log.WithError(err).WithFields(logger.Fields{
 			"at":         "UnmarshalBinary",

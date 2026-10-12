@@ -45,11 +45,11 @@ type BindConfig struct {
 // DefaultBindConfig returns a BindConfig with sensible defaults.
 func DefaultBindConfig(network, listenerAddress string) *BindConfig {
 	return &BindConfig{
-		Network:         network,
+		Network: network,
 		ListenerAddress: listenerAddress,
-		NATTimeout:      3 * time.Second,
-		MaxRetries:      5,
-		RetryBaseDelay:  50 * time.Millisecond,
+		NATTimeout: 3 * time.Second,
+		MaxRetries: 5,
+		RetryBaseDelay: 50 * time.Millisecond,
 	}
 }
 
@@ -65,25 +65,21 @@ type BindResult struct {
 
 	// BoundAddress is the actual local address string (e.g., "192.168.1.5:9002").
 	// For NAT-traversed bindings, this may contain the external IP discovered via
-	// UPnP/NAT-PMP. Callers should use this value for config updates (R-2/P-2 pattern).
+	// UPnP/NAT-PMP. Callers should use this value for config updates (copy-on-write pattern).
 	BoundAddress string
 }
 
 // BindWithNATTraversal binds the specified port with NAT traversal.
-//
 // Loopback addresses (127.x.x.x, ::1, "localhost") bypass NAT traversal entirely.
 // For all other addresses, UPnP/NAT-PMP discovery runs with cfg.NATTimeout,
 // then falls back to plain bind if NAT mapping fails.
-//
 // SO_REUSEADDR is set on the socket to allow immediate rebind after probe close
 // (reduces TOCTOU window in ProbeAndBindWithNATTraversal).
-//
 // Returns:
-//   - BindResult with bound listener/connection and local/external address
-//   - Error if bind fails
-//
+// - BindResult with bound listener/connection and local/external address
+// - Error if bind fails
 // bindLoopback creates a listener on a loopback address without NAT traversal.
-// M-32 Consolidation: Extracted from BindWithNATTraversal to reduce nesting depth.
+// Extracted from BindWithNATTraversal to reduce nesting depth.
 func bindLoopback(cfg *BindConfig, host string) (*BindResult, error) {
 	listenCfg := net.ListenConfig{
 		Control: createReuseAddrControl("loopback listener"),
@@ -109,7 +105,7 @@ func bindLoopback(cfg *BindConfig, host string) (*BindResult, error) {
 			return nil, oops.Wrapf(err, "failed to create TCP listener on %s", bindAddr)
 		}
 		return &BindResult{
-			Listener:     listener,
+			Listener: listener,
 			BoundAddress: listener.Addr().String(),
 		}, nil
 	}
@@ -120,13 +116,13 @@ func bindLoopback(cfg *BindConfig, host string) (*BindResult, error) {
 		return nil, oops.Wrapf(err, "failed to create UDP listener on %s", bindAddr)
 	}
 	return &BindResult{
-		PacketConn:   conn,
+		PacketConn: conn,
 		BoundAddress: conn.LocalAddr().String(),
 	}, nil
 }
 
 // bindWithNAT creates a listener with NAT traversal for non-loopback addresses.
-// M-32 Consolidation: Extracted from BindWithNATTraversal to reduce nesting depth.
+// Extracted from BindWithNATTraversal to reduce nesting depth.
 func bindWithNAT(cfg *BindConfig) (*BindResult, error) {
 	natCtx, natCancel := context.WithTimeout(context.Background(), cfg.NATTimeout)
 	defer natCancel()
@@ -139,7 +135,7 @@ func bindWithNAT(cfg *BindConfig) (*BindResult, error) {
 			return nil, oops.Wrapf(err, "failed to create TCP listener with NAT traversal")
 		}
 		return &BindResult{
-			Listener:     listener,
+			Listener: listener,
 			BoundAddress: listener.Addr().String(),
 		}, nil
 	}
@@ -150,7 +146,7 @@ func bindWithNAT(cfg *BindConfig) (*BindResult, error) {
 		return nil, oops.Wrapf(err, "failed to create UDP listener with NAT traversal")
 	}
 	return &BindResult{
-		PacketConn:   natPL.PacketConn(),
+		PacketConn: natPL.PacketConn(),
 		BoundAddress: natPL.Addr().String(),
 	}, nil
 }
@@ -214,7 +210,7 @@ func constructProbeAddress(host string) string {
 
 // extractAndCloseProbeListener extracts the port from a listener and closes it.
 // Handles error logging and works with both TCP and UDP addresses.
-// M-29 Consolidation: Shared helper for both TCP and UDP probe port extraction.
+// Shared helper for both TCP and UDP probe port extraction.
 func extractAndCloseProbeListener(listener net.Listener, packetConn net.PacketConn, network string) (int, error) {
 	var port int
 	var closeErr error
@@ -301,9 +297,9 @@ func rebindWithRetry(cfg *BindConfig, assignedPort int) (*BindResult, error) {
 		// Retry with jitter if not last attempt
 		if attempt < cfg.MaxRetries-1 {
 			log.WithFields(map[string]interface{}{
-				"port":    assignedPort,
+				"port": assignedPort,
 				"attempt": attempt + 1,
-				"error":   err,
+				"error": err,
 			}).Warn("TOCTOU race: probed port claimed by another process; retrying")
 
 			jitteredDelay := applyJitter(cfg.RetryBaseDelay)
@@ -319,18 +315,14 @@ func rebindWithRetry(cfg *BindConfig, assignedPort int) (*BindResult, error) {
 
 // ProbeAndBindWithNATTraversal discovers an OS-assigned free port, then rebinds
 // it with NAT traversal (UPnP/NAT-PMP with fallback to plain bind).
-//
-// This function implements the P-1 TOCTOU mitigation: probe port → close → rebind
+// This function implements the TOCTOU mitigation: probe port → close → rebind
 // with SO_REUSEADDR and retry-with-jitter on "address already in use".
-//
 // Network type must be "tcp", "udp", or variants ("tcp4", "udp6", etc.).
-//
 // Returns:
-//   - BindResult with bound listener/connection and external address
-//   - Error if all retries exhausted or non-recoverable error encountered
-//
+// - BindResult with bound listener/connection and external address
+// - Error if all retries exhausted or non-recoverable error encountered
 // Thread-safe: Multiple goroutines may call concurrently (each probes independently).
-// Refactored for H-11: complexity reduced from ~15 to ~5 via helper functions.
+// Refactored: complexity reduced from ~15 to ~5 via helper functions.
 func ProbeAndBindWithNATTraversal(cfg *BindConfig) (*BindResult, error) {
 	// Validate network type
 	isTCP := strings.HasPrefix(strings.ToLower(cfg.Network), "tcp")

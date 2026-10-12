@@ -50,7 +50,7 @@ func (f *buildMessageFactory) createVariableBuildMessage(msgType int, typeName s
 }
 
 // CreateShortTunnelBuildMessage creates a serialized Short Tunnel Build message (type 25).
-// Refactored for M-1: now delegates to createVariableBuildMessage.
+// Refactored: now delegates to createVariableBuildMessage.
 func (f *buildMessageFactory) CreateShortTunnelBuildMessage(encryptedRecords [][]byte, messageID int) ([]byte, error) {
 	return f.createVariableBuildMessage(I2NPMessageTypeShortTunnelBuild, "Short Tunnel Build (type 25)", encryptedRecords, messageID)
 }

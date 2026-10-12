@@ -32,18 +32,18 @@ const (
 // IntroducerRegistry, and HolePunchCoordinator on a freshly started transport.
 // Must be called after t.listener is initialised.
 // Returns an error if HolePunchCoordinator initialization fails.
-// L-1: Creates a per-generation context for NAT goroutines so they can be cancelled
+// Creates a per-generation context for NAT goroutines so they can be cancelled
 // on SetIdentity without affecting the transport-level context.
-// R-4 partial fix: Reads t.listener under identityMu to avoid TOCTOU with SetIdentity.
-// HIGH-1.2 fix: Writes all manager pointers under natManagerMu to prevent concurrent
+// Reads t.listener under identityMu to avoid TOCTOU with SetIdentity.
+// Writes all manager pointers under natManagerMu to prevent concurrent
 // callback reads from seeing nil or partially-initialized managers.
 func initNATManagers(t *SSU2Transport) error {
-	// Create per-generation context for NAT goroutines (L-1 fix item 2).
+	// Create per-generation context for NAT goroutines.
 	t.natCtxMu.Lock()
 	t.natCtx, t.natCancel = context.WithCancel(t.ctx)
 	t.natCtxMu.Unlock()
 
-	// R-4: Snapshot t.listener under lock to avoid race with SetIdentity.
+	// Snapshot t.listener under lock to avoid race with SetIdentity.
 	t.identityMu.RLock()
 	listener := t.listener
 	t.identityMu.RUnlock()
@@ -52,7 +52,7 @@ func initNATManagers(t *SSU2Transport) error {
 		return oops.New("cannot initialize NAT managers: listener is nil")
 	}
 
-	// HIGH-1.2 fix: Build all managers first, THEN install them under the write lock
+	// Build all managers first, THEN install them under the write lock
 	// as a batch. This minimizes the critical section and prevents callbacks from seeing
 	// partially initialized state.
 	relayMgr := ssu2noise.NewRelayManager(listener)
@@ -61,11 +61,11 @@ func initNATManagers(t *SSU2Transport) error {
 	// incoming hole-punch messages. Per SSU2 spec §Hole Punch, the RelayIntro
 	// signature covers Bob's and Charlie's router hashes, so both must be
 	// resolved from live session state (fail-closed when unknown):
-	//   - BobHash:     router hash of the introducer session (attempt.Introducer)
-	//   - CharlieHash: router hash of the target session (attempt.RemoteAddr),
-	//                  or the local router's hash when the target is ourselves
-	//   - signerKey:   Alice's Ed25519 key, looked up in NetDB from the block's
-	//                  AliceRouterHash
+	// - BobHash: router hash of the introducer session (attempt.Introducer)
+	// - CharlieHash: router hash of the target session (attempt.RemoteAddr),
+	// or the local router's hash when the target is ourselves
+	// - signerKey: Alice's Ed25519 key, looked up in NetDB from the block's
+	// AliceRouterHash
 	resolver := func(info ssu2noise.HolePunchVerifyInfo) (ssu2noise.HolePunchVerifyContext, ed25519.PublicKey, bool) {
 		var ctx ssu2noise.HolePunchVerifyContext
 
@@ -125,7 +125,7 @@ func initNATManagers(t *SSU2Transport) error {
 	t.loadNATState()
 	t.startNATCleanup()
 
-	// HIGH-1.2 fix: Now install all managers under the write lock.
+	// Now install all managers under the write lock.
 	// This prevents callbacks from starting to read managers until all are fully initialized.
 	t.natManagerMu.Lock()
 	defer t.natManagerMu.Unlock()
@@ -137,9 +137,9 @@ func initNATManagers(t *SSU2Transport) error {
 	// Start port mapper with retry logic (extracted to lib/nat).
 	if port, valid := t.validateAndExtractPort(); valid {
 		cfg := &nat.PortMapperConfig{
-			Network:      "udp",
+			Network: "udp",
 			InternalPort: port,
-			Context:      t.natCtx,
+			Context: t.natCtx,
 		}
 		t.portMapperManager = nat.NewPortMapperManager(cfg)
 	}
@@ -148,11 +148,11 @@ func initNATManagers(t *SSU2Transport) error {
 }
 
 // stopNATManagers stops all NAT managers and cancels the per-generation NAT context
-// to signal NAT goroutines (cleanup, port mapping) to exit. L-1 fix item 1.
+// to signal NAT goroutines (cleanup, port mapping) to exit. .
 // Must be called before initNATManagers in SetIdentity.
-// HIGH-1.2 fix: Acquire write lock to protect manager pointer writes from concurrent reads in callbacks.
+// Acquire write lock to protect manager pointer writes from concurrent reads in callbacks.
 func stopNATManagers(t *SSU2Transport) {
-	// Cancel the per-generation NAT context to stop NAT goroutines (L-1 item 2).
+	// Cancel the per-generation NAT context to stop NAT goroutines.
 	t.natCtxMu.Lock()
 	if t.natCancel != nil {
 		t.natCancel()
@@ -161,13 +161,13 @@ func stopNATManagers(t *SSU2Transport) {
 	}
 	t.natCtxMu.Unlock()
 
-	// HIGH-1.2 fix: Stop all managers under write lock to prevent callbacks from reading
+	// Stop all managers under write lock to prevent callbacks from reading
 	// half-cleared state. Callbacks acquire read lock and nil-check; if they start before
 	// this lock is acquired, they see consistent manager state.
 	t.natManagerMu.Lock()
 	defer t.natManagerMu.Unlock()
 
-	// Stop all managers explicitly (L-1 item 4).
+	// Stop all managers explicitly.
 	if t.relayManager != nil {
 		t.relayManager.Stop()
 		t.relayManager = nil
@@ -237,11 +237,10 @@ func (t *SSU2Transport) buildTransportCallbacks(session *SSU2Session) *BlockCall
 // handleRouterInfoBlock processes RouterInfo block data received from a peer.
 // If RouterStoreFunc is configured, it delegates storage to NetDB; otherwise
 // it logs and skips processing (test/default behavior).
-//
 // E-4 fix: Emits a warn-level log (once per transport lifetime) when RouterInfo
 // blocks arrive but RouterStoreFunc is nil, to catch misconfiguration in production.
 func (t *SSU2Transport) handleRouterInfoBlock(data []byte) error {
-	// R-2 fix: Atomic config snapshot
+	// Atomic config snapshot
 	cfg := t.config.Load()
 	if cfg.RouterStoreFunc == nil {
 		// Warn once if RouterInfo blocks are received but no store function is configured.
@@ -266,7 +265,7 @@ func (t *SSU2Transport) handleRouterInfoBlock(data []byte) error {
 // Returns (true, nil) if signature is valid, and (false, error) on verification failure
 // or when RouterLookupFunc is unavailable (fail-closed).
 func (t *SSU2Transport) verifyRelayRequestSignature(block *ssu2noise.RelayRequestBlock, senderHash data.Hash) (bool, error) {
-	// R-2 fix: Atomic config snapshot
+	// Atomic config snapshot
 	cfg := t.config.Load()
 	if cfg.RouterLookupFunc == nil {
 		return false, oops.Errorf("signature verification unavailable: RouterLookupFunc not configured")
@@ -282,7 +281,7 @@ func (t *SSU2Transport) verifyRelayRequestSignature(block *ssu2noise.RelayReques
 	}
 
 	// Look up Charlie's hash from the relay tag
-	// RC-3 fix: Acquire read lock to safely read relayManager.
+	// Acquire read lock to safely read relayManager.
 	// SetIdentity can modify this pointer, so we must hold the lock for consistency.
 	t.natManagerMu.RLock()
 	relayMgr := t.relayManager
@@ -340,7 +339,7 @@ func (t *SSU2Transport) verifyRelayRequestSignature(block *ssu2noise.RelayReques
 // Returns (true, nil) if signature is valid, and (false, error) on verification failure
 // or when RouterLookupFunc is unavailable (fail-closed).
 func (t *SSU2Transport) verifyRelayResponseSignature(block *ssu2noise.RelayResponseBlock, senderHash data.Hash) (bool, error) {
-	// R-2 fix: Atomic config snapshot
+	// Atomic config snapshot
 	cfg := t.config.Load()
 	if cfg.RouterLookupFunc == nil {
 		return false, oops.Errorf("signature verification unavailable: RouterLookupFunc not configured")
@@ -382,9 +381,9 @@ func (t *SSU2Transport) verifyRelayResponseSignature(block *ssu2noise.RelayRespo
 // verification failure (bad signature) or that verification could not be
 // performed (fail-closed). The previous (bool, error) form was redundant —
 // every invalid path also returned an error — and risked future callers
-// misreading a (false, nil) tuple as success. See AUDIT.md M-4.
+// misreading a (false, nil) tuple as success.
 func (t *SSU2Transport) verifyPeerTestSignature(block *ssu2noise.PeerTestBlock, senderHash data.Hash) error {
-	// R-2 fix: Atomic config snapshot
+	// Atomic config snapshot
 	cfg := t.config.Load()
 	if cfg.RouterLookupFunc == nil {
 		return oops.Errorf("signature verification unavailable: RouterLookupFunc not configured")
@@ -392,16 +391,16 @@ func (t *SSU2Transport) verifyPeerTestSignature(block *ssu2noise.PeerTestBlock, 
 	// Resolve Alice's hash up-front and fail-closed for codes 3/4 before any
 	// NetDB lookup. PeerTest signed-data inclusion of Alice's hash depends on
 	// the message code:
-	//   - Messages 1 (Alice→Bob) and 2 (Bob→Charlie): aliceHash MUST be nil.
-	//   - Messages 3 (Charlie→Bob) and 4 (Bob→Alice): aliceHash MUST be Alice's
-	//     32-byte router hash. Per the SSU2 PeerTest block layout, message 4
-	//     carries it explicitly in the optional RouterHash field; message 3
-	//     does not carry it on the wire and the verifier must obtain it from
-	//     external context (not currently plumbed through to this callback).
+	// - Messages 1 (Alice→Bob) and 2 (Bob→Charlie): aliceHash MUST be nil.
+	// - Messages 3 (Charlie→Bob) and 4 (Bob→Alice): aliceHash MUST be Alice's
+	// 32-byte router hash. Per the SSU2 PeerTest block layout, message 4
+	// carries it explicitly in the optional RouterHash field; message 3
+	// does not carry it on the wire and the verifier must obtain it from
+	// external context (not currently plumbed through to this callback).
 	// We fail-closed for codes 3/4 when Alice's hash cannot be determined,
 	// rather than silently substituting senderHash (which would either reject
 	// legitimate signatures or accept signatures attributable to the sender as
-	// proof of Alice's claim — see AUDIT.md H-1).
+	// proof of Alice's claim —).
 	var aliceHash *data.Hash
 	switch block.MessageCode {
 	case ssu2noise.PeerTestResponse, ssu2noise.PeerTestResult:
@@ -476,7 +475,7 @@ func extractSenderHash(session *SSU2Session) data.Hash {
 	if session == nil {
 		return data.Hash{}
 	}
-	// Use locked accessor to avoid race with DetachConn (R-1 fix).
+	// Use locked accessor to avoid race with DetachConn.
 	remoteAddr := session.RemoteAddr()
 	if remoteAddr == nil {
 		return data.Hash{}
@@ -491,7 +490,7 @@ func extractSenderHash(session *SSU2Session) data.Hash {
 // message code to support Alice (initiator), Bob (relay), and Charlie
 // (responder) roles in the SSU2 peer test protocol.
 func (t *SSU2Transport) handlePeerTestBlock(block *ssu2noise.SSU2Block, session *SSU2Session) error {
-	// HIGH-1.2 fix: Acquire read lock to safely read peerTestManager.
+	// Acquire read lock to safely read peerTestManager.
 	// SetIdentity can modify this pointer, so we must hold the lock for consistency.
 	t.natManagerMu.RLock()
 	mgr := t.peerTestManager
@@ -524,7 +523,7 @@ func (t *SSU2Transport) handlePeerTestAsAlice(ptBlock *ssu2noise.PeerTestBlock, 
 	nonce := ptBlock.Nonce
 	externalAddr := extractAliceAddress(ptBlock)
 
-	// CRITICAL-6.1: Fail-closed if manager unavailable. Without this check,
+	// Fail-closed if manager unavailable. Without this check,
 	// an attacker can send unsolicited PeerTest replies when manager is nil
 	// (e.g., after initialization failure) and bypass nonce verification,
 	// poisoning the external address cache with arbitrary IPs.
@@ -545,7 +544,7 @@ func (t *SSU2Transport) handlePeerTestAsAlice(ptBlock *ssu2noise.PeerTestBlock, 
 
 	result := &ssu2noise.TestResult{
 		ExternalAddr: externalAddr,
-		Reachable:    externalAddr != nil,
+		Reachable: externalAddr != nil,
 	}
 	if completeErr := mgr.CompleteTest(nonce, result); completeErr != nil {
 		t.logger.Debug("PeerTest complete (non-initiator path)")
@@ -561,7 +560,7 @@ func extractAliceAddress(ptBlock *ssu2noise.PeerTestBlock) *net.UDPAddr {
 		return nil
 	}
 	return &net.UDPAddr{
-		IP:   net.IP(ptBlock.AliceIP),
+		IP: net.IP(ptBlock.AliceIP),
 		Port: int(ptBlock.AlicePort),
 	}
 }
@@ -631,7 +630,7 @@ func parsePeerTestAliceAddr(ptBlock *ssu2noise.PeerTestBlock) *net.UDPAddr {
 		return nil
 	}
 	return &net.UDPAddr{
-		IP:   net.IP(ptBlock.AliceIP),
+		IP: net.IP(ptBlock.AliceIP),
 		Port: int(ptBlock.AlicePort),
 	}
 }
@@ -704,8 +703,8 @@ func (t *SSU2Transport) handlePeerTestAsBob(ptBlock *ssu2noise.PeerTestBlock, se
 	if verifyErr := t.verifyPeerTestSignature(ptBlock, senderHash); verifyErr != nil {
 		t.logger.WithFields(map[string]interface{}{
 			"sender_hash": senderHash[:4],
-			"nonce":       ptBlock.Nonce,
-			"error":       verifyErr,
+			"nonce": ptBlock.Nonce,
+			"error": verifyErr,
 		}).Warn("PeerTest signature verification failed, rejecting")
 		return verifyErr
 	}
@@ -720,7 +719,7 @@ func (t *SSU2Transport) handlePeerTestAsBob(ptBlock *ssu2noise.PeerTestBlock, se
 		t.logger.Debug("PeerTest Bob: cannot resolve Charlie address, ignoring")
 		return nil
 	}
-	// HIGH-1.2 fix: mgr is already locked and safe to use
+	// mgr is already locked and safe to use
 	if mgr != nil {
 		if _, err := mgr.CreateRelayTest(ptBlock.Nonce, aliceAddr, charlieAddr); err != nil {
 			t.logger.WithField("error", err).Debug("PeerTest Bob: failed to create relay test")
@@ -754,12 +753,12 @@ func (t *SSU2Transport) forwardPeerTestToCharlie(ptBlock *ssu2noise.PeerTestBloc
 	}
 	relayBlock := &ssu2noise.PeerTestBlock{
 		MessageCode: ssu2noise.PeerTestRelay,
-		Nonce:       ptBlock.Nonce,
-		Version:     ptBlock.Version,
-		Timestamp:   ptBlock.Timestamp,
-		AlicePort:   ptBlock.AlicePort,
-		AliceIP:     ptBlock.AliceIP,
-		Signature:   ptBlock.Signature,
+		Nonce: ptBlock.Nonce,
+		Version: ptBlock.Version,
+		Timestamp: ptBlock.Timestamp,
+		AlicePort: ptBlock.AlicePort,
+		AliceIP: ptBlock.AliceIP,
+		Signature: ptBlock.Signature,
 	}
 	encoded, err := ssu2noise.EncodePeerTestBlock(relayBlock)
 	if err != nil {
@@ -776,7 +775,7 @@ func (t *SSU2Transport) handlePeerTestAsCharlie(ptBlock *ssu2noise.PeerTestBlock
 	var aliceAddr *net.UDPAddr
 	if len(ptBlock.AliceIP) > 0 {
 		aliceAddr = &net.UDPAddr{
-			IP:   net.IP(ptBlock.AliceIP),
+			IP: net.IP(ptBlock.AliceIP),
 			Port: int(ptBlock.AlicePort),
 		}
 	}
@@ -784,7 +783,7 @@ func (t *SSU2Transport) handlePeerTestAsCharlie(ptBlock *ssu2noise.PeerTestBlock
 		t.logger.Debug("PeerTest Charlie: missing Alice address, ignoring")
 		return nil
 	}
-	// HIGH-1.2 fix: mgr is already locked and safe to use
+	// mgr is already locked and safe to use
 	if mgr != nil {
 		if err := mgr.CreateResponderTest(ptBlock.Nonce, aliceAddr, nil); err != nil {
 			t.logger.WithField("error", err).Debug("PeerTest Charlie: failed to create responder test")
@@ -802,9 +801,9 @@ func (t *SSU2Transport) handlePeerTestAsCharlie(ptBlock *ssu2noise.PeerTestBlock
 func (t *SSU2Transport) sendProbeToAlice(ptBlock *ssu2noise.PeerTestBlock, aliceAddr *net.UDPAddr, relaySession *SSU2Session) error {
 	probeBlock := &ssu2noise.PeerTestBlock{
 		MessageCode: ssu2noise.PeerTestProbe,
-		Nonce:       ptBlock.Nonce,
-		Version:     ptBlock.Version,
-		Timestamp:   uint32(time.Now().Unix()),
+		Nonce: ptBlock.Nonce,
+		Version: ptBlock.Version,
+		Timestamp: uint32(time.Now().Unix()),
 	}
 	encoded, err := ssu2noise.EncodePeerTestBlock(probeBlock)
 	if err != nil {
@@ -841,7 +840,7 @@ func (t *SSU2Transport) anyActiveSession() *SSU2Session {
 // the signature using Alice's Ed25519 signing key from NetDB, and forwards a
 // RelayIntro to Charlie via the session associated with the relay tag.
 func (t *SSU2Transport) handleRelayRequestBlock(block *ssu2noise.SSU2Block, session *SSU2Session) error {
-	// HIGH-1.2 fix: Acquire read lock to safely read relayManager.
+	// Acquire read lock to safely read relayManager.
 	// SetIdentity can modify this pointer, so we must hold the lock for consistency.
 	t.natManagerMu.RLock()
 	mgr := t.relayManager
@@ -876,15 +875,15 @@ func (t *SSU2Transport) handleRelayRequestBlock(block *ssu2noise.SSU2Block, sess
 	if verifyErr != nil {
 		t.logger.WithFields(map[string]interface{}{
 			"sender_hash": senderHash[:4],
-			"nonce":       req.Nonce,
-			"error":       verifyErr,
+			"nonce": req.Nonce,
+			"error": verifyErr,
 		}).Warn("RelayRequest signature verification failed, rejecting")
 		return verifyErr
 	}
 	if !valid {
 		t.logger.WithFields(map[string]interface{}{
 			"sender_hash": senderHash[:4],
-			"nonce":       req.Nonce,
+			"nonce": req.Nonce,
 		}).Warn("RelayRequest signature invalid, rejecting")
 		return oops.Errorf("invalid RelayRequest signature")
 	}
@@ -898,7 +897,7 @@ func (t *SSU2Transport) handleRelayRequestBlock(block *ssu2noise.SSU2Block, sess
 // there is no active session to Charlie. Enforces introducer capability
 // validation (caps=B) via RouterLookupFunc before forwarding.
 func (t *SSU2Transport) forwardRelayIntro(req *ssu2noise.RelayRequestBlock, mgr *ssu2noise.RelayManager) error {
-	// HIGH-1.2 fix: mgr is already locked and safe to use
+	// mgr is already locked and safe to use
 	if mgr == nil {
 		return nil
 	}
@@ -914,7 +913,7 @@ func (t *SSU2Transport) forwardRelayIntro(req *ssu2noise.RelayRequestBlock, mgr 
 	}
 	if !t.hasIntroducerCapability(session) {
 		t.logger.WithFields(map[string]interface{}{
-			"relay_tag":    req.RelayTag,
+			"relay_tag": req.RelayTag,
 			"charlie_addr": tag.ForAddr,
 		}).Warn("RelayRequest rejected: Charlie lacks introducer capability caps=B")
 		return nil
@@ -930,7 +929,7 @@ func (t *SSU2Transport) forwardRelayIntro(req *ssu2noise.RelayRequestBlock, mgr 
 // hasIntroducerCapability returns true when session's remote peer advertises
 // introducer capability (caps=B) in its RouterInfo.
 func (t *SSU2Transport) hasIntroducerCapability(session *SSU2Session) bool {
-	// R-2 fix: Atomic config snapshot
+	// Atomic config snapshot
 	cfg := t.config.Load()
 	if t == nil || cfg == nil || cfg.RouterLookupFunc == nil || session == nil || session.conn == nil {
 		return false
@@ -944,7 +943,7 @@ func (t *SSU2Transport) hasIntroducerCapability(session *SSU2Session) bool {
 	if err != nil {
 		t.logger.WithFields(map[string]interface{}{
 			"router_hash": rh.String(),
-			"error":       err,
+			"error": err,
 		}).Warn("RelayRequest rejected: failed RouterInfo lookup for Charlie")
 		return false
 	}
@@ -954,13 +953,13 @@ func (t *SSU2Transport) hasIntroducerCapability(session *SSU2Session) bool {
 // buildRelayIntro constructs a RelayIntroBlock from a RelayRequest.
 func buildRelayIntro(req *ssu2noise.RelayRequestBlock) *ssu2noise.RelayIntroBlock {
 	return &ssu2noise.RelayIntroBlock{
-		Nonce:         req.Nonce,
+		Nonce: req.Nonce,
 		AliceRelayTag: req.RelayTag,
-		Timestamp:     req.Timestamp,
-		Version:       req.Version,
-		AlicePort:     req.AlicePort,
-		AliceIP:       req.AliceIP,
-		Signature:     req.Signature,
+		Timestamp: req.Timestamp,
+		Version: req.Version,
+		AlicePort: req.AlicePort,
+		AliceIP: req.AliceIP,
+		Signature: req.Signature,
 	}
 }
 
@@ -983,7 +982,7 @@ func (t *SSU2Transport) handleRelayResponseBlock(block *ssu2noise.SSU2Block) err
 
 // isRelayResponseValid checks if relay response processing is possible.
 func (t *SSU2Transport) isRelayResponseValid(block *ssu2noise.SSU2Block) bool {
-	// HIGH-1.2 fix: Acquire read lock to safely read relayManager.
+	// Acquire read lock to safely read relayManager.
 	t.natManagerMu.RLock()
 	mgr := t.relayManager
 	t.natManagerMu.RUnlock()
@@ -1030,7 +1029,7 @@ func (t *SSU2Transport) deliverRelayResponse(resp *ssu2noise.RelayResponseBlock)
 // Bob so Bob can forward it to Alice. bobSession is the session from which
 // the RelayIntro arrived.
 func (t *SSU2Transport) handleRelayIntroBlock(block *ssu2noise.SSU2Block, bobSession *SSU2Session) error {
-	// HIGH-1.2 fix: Acquire read lock to safely read holePunchCoord.
+	// Acquire read lock to safely read holePunchCoord.
 	t.natManagerMu.RLock()
 	coord := t.holePunchCoord
 	t.natManagerMu.RUnlock()
@@ -1066,7 +1065,7 @@ func (t *SSU2Transport) handleRelayIntroBlock(block *ssu2noise.SSU2Block, bobSes
 // bobSession carries Bob's session (from which the RelayIntro arrived).
 func (t *SSU2Transport) initiateHolePunch(intro *ssu2noise.RelayIntroBlock, bobSession *SSU2Session, coord *ssu2noise.HolePunchCoordinator) error {
 	aliceAddr := &net.UDPAddr{
-		IP:   net.IP(intro.AliceIP),
+		IP: net.IP(intro.AliceIP),
 		Port: int(intro.AlicePort),
 	}
 
@@ -1074,7 +1073,7 @@ func (t *SSU2Transport) initiateHolePunch(intro *ssu2noise.RelayIntroBlock, bobS
 	// Reject private, loopback, multicast, and other invalid addresses.
 	if !isValidExternalAddress(aliceAddr.IP) {
 		t.logger.WithFields(map[string]interface{}{
-			"alice_ip":   aliceAddr.IP.String(),
+			"alice_ip": aliceAddr.IP.String(),
 			"alice_port": aliceAddr.Port,
 		}).Warn("hole-punch: rejected RelayIntro with invalid Alice IP (potential reflection attack)")
 		return oops.Errorf("invalid Alice IP address: %s", aliceAddr.IP)
@@ -1103,7 +1102,7 @@ func (t *SSU2Transport) initiateHolePunch(intro *ssu2noise.RelayIntroBlock, bobS
 	// BUG FIX HIGH E-2: Only send hole-punch/RelayResponse when InitiateHolePunch succeeds.
 	// This prevents reflection attacks where an attacker triggers emissions to arbitrary IPs.
 	// E-2 fix (defense-in-depth): Guard against nil holePunchCoord (NAT-degraded mode).
-	// HIGH-1.2 fix: coord is already locked and safe to use
+	// coord is already locked and safe to use
 	if coord == nil {
 		t.logger.Warn("hole-punch: coordinator unavailable (NAT-degraded mode); cannot complete hole-punch")
 		return oops.Errorf("NAT managers not initialized")
@@ -1141,7 +1140,7 @@ func (t *SSU2Transport) verifyRelayIntroSignature(intro *ssu2noise.RelayIntroBlo
 	}
 
 	// Look up Alice's RouterInfo from NetDB to get her Ed25519 signing key
-	// R-2 fix: Atomic config snapshot
+	// Atomic config snapshot
 	cfg := t.config.Load()
 	if cfg.RouterLookupFunc == nil {
 		return oops.Errorf("signature verification unavailable: RouterLookupFunc not configured")
@@ -1184,7 +1183,7 @@ func (t *SSU2Transport) verifyRelayIntroSignature(intro *ssu2noise.RelayIntroBlo
 
 	t.logger.WithFields(map[string]interface{}{
 		"alice_hash": fmt.Sprintf("%x", aliceHash[:4]),
-		"bob_hash":   fmt.Sprintf("%x", bobHash[:4]),
+		"bob_hash": fmt.Sprintf("%x", bobHash[:4]),
 	}).Debug("RelayIntro signature verified successfully with correct Bob hash")
 
 	return nil
@@ -1260,7 +1259,7 @@ func (t *SSU2Transport) prepareRelayResponseCredentials() ([]byte, []byte, error
 // extractBobRouterHash extracts the router hash from Bob's session address.
 func extractBobRouterHash(bobSession *SSU2Session) data.Hash {
 	var bobHash data.Hash
-	// Use locked accessor to avoid race with DetachConn (R-1 fix).
+	// Use locked accessor to avoid race with DetachConn.
 	remoteAddr := bobSession.RemoteAddr()
 	if remoteAddr == nil {
 		return bobHash
@@ -1342,15 +1341,13 @@ func (t *SSU2Transport) IsInboundBlocked() bool {
 // I2PControl network-status code that most specifically describes how inbound
 // connectivity is blocked, giving callers a granular view of the firewalled
 // state rather than a single coarse "firewalled" verdict:
-//
 //	11 (ERROR_SYMMETRIC_NAT) — behind a symmetric NAT; per-destination port
-//	   mapping prevents introducer-assisted inbound connections from working
-//	   reliably.
-//	 2 (FIREWALLED)          — restricted or port-restricted NAT; reachable via
-//	   introducers / hole-punching but not by unsolicited direct inbound.
-//	 0                       — inbound is not blocked: NAT type is unknown
-//	   (not yet tested) or indicates direct reachability (no NAT / full-cone).
-//
+//	 mapping prevents introducer-assisted inbound connections from working
+//	 reliably.
+//	 2 (FIREWALLED) — restricted or port-restricted NAT; reachable via
+//	 introducers / hole-punching but not by unsolicited direct inbound.
+//	 0 — inbound is not blocked: NAT type is unknown
+//	 (not yet tested) or indicates direct reachability (no NAT / full-cone).
 // Returning 0 for the unknown/direct cases ensures a directly-reachable or
 // not-yet-tested router is never misreported as inbound-blocked.
 func (t *SSU2Transport) InboundBlockedStatusCode() int {
@@ -1464,11 +1461,9 @@ func (t *SSU2Transport) AllocateRelayTag(addr *net.UDPAddr) (uint32, error) {
 // testing to determine our NAT type. candidates must contain at least two
 // SSU2-capable RouterInfos: the first is Bob (relay peer), the second is
 // Charlie (responder peer).
-//
 // On NAT types that require introducers (Restricted or Symmetric), up to three
 // candidates are registered in the IntroducerRegistry and republish (if non-nil)
 // is invoked so the caller can re-publish the updated RouterInfo.
-//
 // The goroutine is tracked in the transport WaitGroup and exits cleanly when
 // the transport context is cancelled.
 func (t *SSU2Transport) StartNATDetection(candidates []router_info.RouterInfo, republish func()) {
@@ -1500,14 +1495,12 @@ func (t *SSU2Transport) StartNATDetection(candidates []router_info.RouterInfo, r
 // seedDirectReachability inspects the transport's bound local address and, when
 // it is publicly routable (IPv4 or IPv6), seeds the NAT state cache with a
 // direct (NATNone) classification plus the corresponding external address.
-//
 // This is the public-IP short-circuit: a host with a public, routable address
 // is deterministically classified "direct" without waiting for — or depending
 // on — SSU2 PeerTest, which can silently fail when too few SSU2 peers are
 // available or when probes are dropped. It is idempotent: it only writes when a
 // public address is detected and the cache does not already hold the identical
 // direct classification.
-//
 // Returns true when the host is directly reachable via a public address.
 func (t *SSU2Transport) seedDirectReachability() bool {
 	if t.natStateCache == nil {
@@ -1620,10 +1613,10 @@ func (t *SSU2Transport) initiatePeerTest(candidates []router_info.RouterInfo) (*
 func (t *SSU2Transport) sendPeerTestRequest(session *SSU2Session, nonce uint32, charlieHash data.Hash) error {
 	ptBlock := &ssu2noise.PeerTestBlock{
 		MessageCode: ssu2noise.PeerTestRequest,
-		Nonce:       nonce,
-		RouterHash:  &charlieHash,
-		Version:     2,
-		Timestamp:   uint32(time.Now().Unix()),
+		Nonce: nonce,
+		RouterHash: &charlieHash,
+		Version: 2,
+		Timestamp: uint32(time.Now().Unix()),
 	}
 	encoded, err := ssu2noise.EncodePeerTestBlock(ptBlock)
 	if err != nil {
@@ -1708,9 +1701,9 @@ func (t *SSU2Transport) handlePeerTestTimeout(candidates []router_info.RouterInf
 
 		t.logger.WithFields(map[string]interface{}{
 			"timeout_seconds": 60,
-			"retry_count":     retryCount,
-			"base_backoff":    baseBackoff.String(),
-			"next_retry_in":   backoff.String(),
+			"retry_count": retryCount,
+			"base_backoff": baseBackoff.String(),
+			"next_retry_in": backoff.String(),
 		}).Warn("NAT detection: peer test timed out; scheduling retry to avoid false FIREWALLED classification")
 
 		// Schedule retry after backoff
@@ -1718,9 +1711,9 @@ func (t *SSU2Transport) handlePeerTestTimeout(candidates []router_info.RouterInf
 	} else {
 		// After maxRetries consecutive failures, classify as firewalled
 		t.logger.WithFields(map[string]interface{}{
-			"timeout_seconds":   60,
+			"timeout_seconds": 60,
 			"consecutive_fails": retryCount,
-			"classification":    "FIREWALLED",
+			"classification": "FIREWALLED",
 		}).Warn("NAT detection: peer test failed after maximum retries; classifying as FIREWALLED and registering introducers")
 
 		// Step 4: write a *terminal* NAT classification so the router stops
@@ -1819,7 +1812,7 @@ func (t *SSU2Transport) checkPeerTestComplete(nonce uint32, candidates []router_
 	case ssu2noise.HasPublicIP(natType) && extStr != "" && republish != nil:
 		// Directly reachable (no NAT / full-cone NAT) with a detected external
 		// address: republish immediately so the correct public IP is advertised
-		// without waiting for the next periodic republish interval. RC-2 fix:
+		// without waiting for the next periodic republish interval.
 		// previously NATNone fell through here and the 'R' cap was never set
 		// until the slow reachability loop ran.
 		republish()
@@ -1828,8 +1821,7 @@ func (t *SSU2Transport) checkPeerTestComplete(nonce uint32, candidates []router_
 }
 
 // classifyNATType determines the NAT type from a completed test.
-//
-// RC-1/RC-5 fix: the authoritative classification is the NATType the
+// The authoritative classification is the NATType the
 // PeerTestManager already computed (via CompleteTest) and stored on the test.
 // The previous implementation reconstructed a TestResult that omitted the
 // DirectProbeSuccess/RelayedProbeSuccess/*Consistent fields that
@@ -1851,8 +1843,8 @@ func (t *SSU2Transport) classifyNATType(test *ssu2noise.PeerTest) ssu2noise.NATT
 	}
 	return ssu2noise.DetermineNATType(&ssu2noise.TestResult{
 		ExternalAddr: test.ExternalAddr,
-		Reachable:    test.Reachable,
-		NATType:      test.NATType,
+		Reachable: test.Reachable,
+		NATType: test.NATType,
 	})
 }
 
@@ -1894,7 +1886,7 @@ func (t *SSU2Transport) tryRegisterIntroducer(ri router_info.RouterInfo) bool {
 		t.trackAbandonedRelayTag(intro.RelayTag, intro.Addr, err.Error())
 		t.logger.WithError(err).WithFields(map[string]interface{}{
 			"introducer_hash": logutil.BytePrefix(intro.RouterHash[:]),
-			"relay_tag":       intro.RelayTag,
+			"relay_tag": intro.RelayTag,
 		}).Warn("Introducer registration failed; relay tag tracked for future cleanup")
 		return false
 	}
@@ -1904,12 +1896,12 @@ func (t *SSU2Transport) tryRegisterIntroducer(ri router_info.RouterInfo) bool {
 // trackAbandonedRelayTag records a relay tag that was allocated but not successfully
 // registered. Provides monitoring and prepares for future cleanup when a release
 // API becomes available in the RelayManager.
-// L-2 fix: Bound the slice to maxAbandonedRelayTags and prune entries older than maxAbandonedRelayTagAge.
+// Bound the slice to maxAbandonedRelayTags and prune entries older than maxAbandonedRelayTagAge.
 func (t *SSU2Transport) trackAbandonedRelayTag(tag uint32, addr *net.UDPAddr, reason string) {
 	t.abandonedRelayTagsMu.Lock()
 	defer t.abandonedRelayTagsMu.Unlock()
 
-	const maxAbandonedRelayTags = 50                 // Hard cap on slice size
+	const maxAbandonedRelayTags = 50 // Hard cap on slice size
 	const maxAbandonedRelayTagAge = 10 * time.Minute // Prune entries older than this
 
 	// Prune expired entries before adding
@@ -1924,10 +1916,10 @@ func (t *SSU2Transport) trackAbandonedRelayTag(tag uint32, addr *net.UDPAddr, re
 
 	// Append new entry
 	t.abandonedRelayTags = append(t.abandonedRelayTags, abandonedRelayTag{
-		tag:         tag,
-		addr:        addr,
+		tag: tag,
+		addr: addr,
 		allocatedAt: now,
-		reason:      reason,
+		reason: reason,
 	})
 
 	// If still over cap after pruning, evict oldest entries (ring-buffer style)
@@ -1979,13 +1971,13 @@ func (t *SSU2Transport) createIntroducerFromRouterInfo(ri router_info.RouterInfo
 		return nil, err
 	}
 	return &ssu2noise.RegisteredIntroducer{
-		Addr:       addr,
+		Addr: addr,
 		RouterHash: hBytes[:],
-		StaticKey:  []byte(i2pbase64.EncodeToString(staticRaw)),
-		IntroKey:   []byte(i2pbase64.EncodeToString(introRaw)),
-		RelayTag:   tag,
-		AddedAt:    time.Now(),
-		LastSeen:   time.Now(),
+		StaticKey: []byte(i2pbase64.EncodeToString(staticRaw)),
+		IntroKey: []byte(i2pbase64.EncodeToString(introRaw)),
+		RelayTag: tag,
+		AddedAt: time.Now(),
+		LastSeen: time.Now(),
 	}, nil
 }
 
@@ -2077,9 +2069,9 @@ func (t *SSU2Transport) launchPeerTest(udpAddr *net.UDPAddr) {
 
 // validateAndExtractPort validates the listener address and extracts the internal port.
 // Returns the port number and true if valid, or 0 and false if validation fails.
-// R-2 fix: Reads t.config.ListenerAddress under identityMu to avoid race with SetIdentity.
+// Reads t.config.ListenerAddress under identityMu to avoid race with SetIdentity.
 func (t *SSU2Transport) validateAndExtractPort() (int, bool) {
-	// R-2 fix: Atomic config snapshot
+	// Atomic config snapshot
 	cfg := t.config.Load()
 	if cfg == nil {
 		return 0, false

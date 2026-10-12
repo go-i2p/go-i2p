@@ -13,10 +13,10 @@ import (
 
 // CongestionAwarePeerSelector adjusts peer selection based on congestion flags.
 // Implements PROP_162 peer selection rules:
-//   - G flag: Exclude from selection entirely
-//   - E flag: Apply severe capacity multiplier (0.1x default)
-//   - D flag: Apply moderate capacity multiplier (0.5x default)
-//   - Stale E flag (>15min): Treat as D flag
+// - G flag: Exclude from selection entirely
+// - E flag: Apply severe capacity multiplier (0.1x default)
+// - D flag: Apply moderate capacity multiplier (0.5x default)
+// - Stale E flag (>15min): Treat as D flag
 type CongestionAwarePeerSelector interface {
 	// SelectPeersWithCongestionAwareness selects peers, filtering/derating by congestion.
 	// Excludes G-flagged peers and applies capacity multipliers to D/E peers.
@@ -44,20 +44,20 @@ type DefaultCongestionAwarePeerSelector struct {
 	underlying       NetDBSelector
 	congestionInfo   CongestionInfoProvider
 	cfg              config.CongestionDefaults
-	maxRetries       int        // Max retries when G-flagged peers need replacing
-	metricsMu        sync.Mutex // Protects selectionMetrics
+	maxRetries int // Max retries when G-flagged peers need replacing
+	metricsMu sync.Mutex // Protects selectionMetrics
 	selectionMetrics *SelectionMetrics
 }
 
 // SelectionMetrics tracks peer selection statistics for monitoring.
 type SelectionMetrics struct {
-	TotalSelections    int64 // Total selection attempts
-	GFlagExclusions    int64 // Peers excluded due to G flag
-	DFlagDeratings     int64 // Peers selected with D flag derating
-	EFlagDeratings     int64 // Peers selected with E flag derating
-	StaleEDowngrades   int64 // E flags downgraded to D due to stale RI
-	InsufficientPeers  int64 // Times we couldn't find enough non-G peers
-	SelectionFailures  int64 // Total selection failures
+	TotalSelections int64 // Total selection attempts
+	GFlagExclusions int64 // Peers excluded due to G flag
+	DFlagDeratings int64 // Peers selected with D flag derating
+	EFlagDeratings int64 // Peers selected with E flag derating
+	StaleEDowngrades int64 // E flags downgraded to D due to stale RI
+	InsufficientPeers int64 // Times we couldn't find enough non-G peers
+	SelectionFailures int64 // Total selection failures
 	AverageRetries     float64
 	totalRetryCount    int64
 	selectionWithRetry int64
@@ -115,7 +115,7 @@ func NewCongestionAwarePeerSelector(
 
 // SelectPeersWithCongestionAwareness selects peers with congestion awareness.
 // It excludes G-flagged peers and may request additional peers to replace them.
-// Consolidation for H-9: delegates to retryingSelect helper.
+// delegates to retryingSelect helper.
 func (s *DefaultCongestionAwarePeerSelector) SelectPeersWithCongestionAwareness(
 	count int,
 	exclude []common.Hash,
@@ -203,11 +203,11 @@ func (s *DefaultCongestionAwarePeerSelector) ShouldExcludePeer(ri router_info.Ro
 
 // GetCapacityMultiplier returns the capacity multiplier for a peer.
 // Returns:
-//   - 1.0 for non-congested peers
-//   - 0.5 for D-flagged peers (configurable)
-//   - 0.1 for E-flagged peers (configurable)
-//   - 0.5 for stale E-flagged peers (treated as D)
-//   - 0.0 for G-flagged peers (should be excluded entirely)
+// - 1.0 for non-congested peers
+// - 0.5 for D-flagged peers (configurable)
+// - 0.1 for E-flagged peers (configurable)
+// - 0.5 for stale E-flagged peers (treated as D)
+// - 0.0 for G-flagged peers (should be excluded entirely)
 func (s *DefaultCongestionAwarePeerSelector) GetCapacityMultiplier(ri router_info.RouterInfo) float64 {
 	hash, err := ri.IdentHash()
 	if err != nil {
@@ -374,9 +374,7 @@ var (
 
 // NewCongestionAwareStack creates a stacked selector with congestion filtering.
 // This is equivalent to:
-//
 //	FromNetDB(db).WithFilter(NewCongestionFilter(info)).Build()
-//
 // For more complex stacking, use PeerSelectorStack directly.
 func NewCongestionAwareStack(
 	db NetDBSelector,

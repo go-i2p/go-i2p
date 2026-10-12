@@ -34,32 +34,32 @@ const maxRTTSample = 30 * time.Second
 // pendingI2NP tracks an I2NP message that has been written to the conn but
 // has not yet been confirmed delivered (used for session-level retransmission).
 type pendingI2NP struct {
-	data   []byte
+	data []byte
 	blocks []*ssu2noise.SSU2Block
 	// packetNums tracks all SSU2 packet numbers currently associated with this
 	// pending message (initial send and any retransmits).
 	packetNums map[uint32]struct{}
-	sentAt     time.Time
-	deadline   time.Time // sentAt + rto; extended on each retransmit with back-off
-	attempts   int
+	sentAt time.Time
+	deadline time.Time // sentAt + rto; extended on each retransmit with back-off
+	attempts int
 }
 
 // SSU2Session implements transport.TransportSession over an SSU2 connection.
 type SSU2Session struct {
 	*transport.SessionCore
 
-	conn   *ssu2noise.SSU2Conn
-	connMu sync.RWMutex // protects conn field (R-1 fix: upgraded to RWMutex for read-heavy access)
+	conn *ssu2noise.SSU2Conn
+	connMu sync.RWMutex // protects conn field (upgraded to RWMutex for read-heavy access)
 
 	// Phase 5: Reliability & congestion control (SSU2-specific fields)
-	rttEstimator    *ssu2noise.RTTEstimator
-	congestionCtrl  *ssu2noise.CongestionController
-	pendingMsgsMu   sync.Mutex
-	pendingMsgs     map[uint64]*pendingI2NP
+	rttEstimator *ssu2noise.RTTEstimator
+	congestionCtrl *ssu2noise.CongestionController
+	pendingMsgsMu sync.Mutex
+	pendingMsgs map[uint64]*pendingI2NP
 	packetToPending map[uint32]uint64 // SSU2 packet number -> pending sequence
-	pendingSeqNext  uint64            // incremented atomically
-	maxRetransmit   int
-	lastSendNano    int64 // atomic unix-nano of most recent Write call
+	pendingSeqNext uint64 // incremented atomically
+	maxRetransmit int
+	lastSendNano int64 // atomic unix-nano of most recent Write call
 
 	// peerTestLimiter enforces a per-session cap on PeerTest (Bob-role) relays.
 	// Burst of 3 with a sustained rate of 1/s (I2P spec allows infrequent tests).
@@ -81,13 +81,13 @@ func NewSSU2SessionDeferred(conn *ssu2noise.SSU2Conn, ctx context.Context, logge
 
 	rtt := ssu2noise.NewRTTEstimator()
 	s := &SSU2Session{
-		SessionCore:     core,
-		conn:            conn,
-		rttEstimator:    rtt,
-		congestionCtrl:  ssu2noise.NewCongestionController(rtt),
-		pendingMsgs:     make(map[uint64]*pendingI2NP),
+		SessionCore: core,
+		conn: conn,
+		rttEstimator: rtt,
+		congestionCtrl: ssu2noise.NewCongestionController(rtt),
+		pendingMsgs: make(map[uint64]*pendingI2NP),
 		packetToPending: make(map[uint32]uint64),
-		maxRetransmit:   DefaultMaxRetransmissions,
+		maxRetransmit: DefaultMaxRetransmissions,
 	}
 	s.peerTestLimiter = rate.NewLimiter(rate.Limit(1), 3)
 	s.wireDataHandlerCallbacks()
@@ -232,7 +232,7 @@ func (s *SSU2Session) CloseWithReason(reason ssu2noise.TerminationReason) error 
 		s.Logger().WithField("reason", reason.String()).Info("Closing SSU2 session")
 		// Reset pendingMsgs to free resources held by the retransmission tracker.
 		// Any unconfirmed messages are dropped at this point since the session
-		// is being torn down regardless (MEDIUM-1 fix).
+		// is being torn down regardless.
 		s.pendingMsgsMu.Lock()
 		s.pendingMsgs = make(map[uint64]*pendingI2NP)
 		s.packetToPending = make(map[uint32]uint64)
@@ -256,14 +256,14 @@ func (s *SSU2Session) CloseWithReason(reason ssu2noise.TerminationReason) error 
 // preventing Close() from closing the socket. This is used when a session
 // loses a promotion race — the winner owns the socket, so the loser must
 // not close it. Workers will still stop cleanly when Close() cancels the
-// session context (SM-2 fix).
+// session context.
 func (s *SSU2Session) DetachConn() {
 	s.connMu.Lock()
 	s.conn = nil
 	s.connMu.Unlock()
 }
 
-// Conn returns the session's underlying connection, or nil if detached (R-1 fix).
+// Conn returns the session's underlying connection, or nil if detached.
 // Caller must not retain the pointer across context switches.
 func (s *SSU2Session) Conn() *ssu2noise.SSU2Conn {
 	s.connMu.RLock()
@@ -272,7 +272,7 @@ func (s *SSU2Session) Conn() *ssu2noise.SSU2Conn {
 }
 
 // RemoteAddr returns the remote address of the session's underlying connection,
-// or nil if the connection is detached (R-1 fix).
+// or nil if the connection is detached.
 func (s *SSU2Session) RemoteAddr() net.Addr {
 	s.connMu.RLock()
 	defer s.connMu.RUnlock()
@@ -286,7 +286,7 @@ func (s *SSU2Session) RemoteAddr() net.Addr {
 // bypassing the I2NP send queue. Used for protocol-level blocks such as PeerTest
 // and Relay that must not be fragmented or queued alongside I2NP traffic.
 func (s *SSU2Session) WriteBlocks(blocks []*ssu2noise.SSU2Block) error {
-	// Check if conn has been detached (SM-2 fix: losing promotion race).
+	// Check if conn has been detached.
 	s.connMu.Lock()
 	conn := s.conn
 	s.connMu.Unlock()
@@ -369,7 +369,6 @@ func (s *SSU2Session) sendWithCongestionControl(msg i2np.Message) error {
 
 // marshalI2NPShort converts an I2NP message to the 9-byte SSU2 short header
 // format: Type(1) + MessageID(4) + ShortExpiration(4) + Body.
-//
 // SSU2 data-phase I2NP blocks use the same 9-byte short header as NTCP2
 // (SSU2Session.cpp: "SSU2 has the same format as NTCP2"). Framing is delegated
 // to i2np.MarshalMessageShort so both transports share one implementation and
@@ -382,9 +381,7 @@ func marshalI2NPShort(msg i2np.Message) ([]byte, error) {
 // fragmentSSU2Short splits SSU2 short-header data into correctly formatted
 // FirstFragment (type 4) and FollowOnFragment (type 5) blocks matching
 // the format expected by go-noise's DataHandler.
-//
 // For messages that fit in a single block, returns a type 3 I2NPMessage block.
-//
 // FirstFragment format: I2NPType(1) + MessageID(4) + ShortExpiry(4) + BodyChunk
 // FollowOnFragment format: FragInfo(1) + MessageID(4) + BodyChunk
 func fragmentSSU2Short(data []byte, maxPayload int) ([]*ssu2noise.SSU2Block, error) {
@@ -502,7 +499,7 @@ func (s *SSU2Session) sendTrackedBlocks(data []byte, blocks []*ssu2noise.SSU2Blo
 	if s.GetContext().Err() != nil {
 		return ErrSessionClosed
 	}
-	// Check if conn has been detached (SM-2 fix: losing promotion race).
+	// Check if conn has been detached.
 	s.connMu.Lock()
 	conn := s.conn
 	s.connMu.Unlock()
@@ -546,11 +543,11 @@ func (s *SSU2Session) trackPendingBlocks(data []byte, blocks []*ssu2noise.SSU2Bl
 	now := time.Now()
 	s.pendingMsgsMu.Lock()
 	s.pendingMsgs[seq] = &pendingI2NP{
-		data:       data,
-		blocks:     blocks,
+		data: data,
+		blocks: blocks,
 		packetNums: make(map[uint32]struct{}),
-		sentAt:     now,
-		deadline:   now.Add(rto),
+		sentAt: now,
+		deadline: now.Add(rto),
 	}
 	s.pendingMsgsMu.Unlock()
 	return seq
@@ -600,12 +597,12 @@ func (s *SSU2Session) removePending(seq uint64) {
 // retransmitCandidate holds a pending message that needs retransmission,
 // collected under lock and processed after the lock is released.
 type retransmitCandidate struct {
-	seq     uint64
+	seq uint64
 	pending *pendingI2NP
 }
 
 // handleRetransmissions checks all pending I2NP messages and retransmits any
-// that have exceeded their RTO deadline.  Returns true if the session should
+// that have exceeded their RTO deadline. Returns true if the session should
 // be closed (max retransmissions exceeded for at least one message).
 // collectExpiredPendingMessages returns all pending messages whose deadline has
 // passed and a flag indicating whether any expired messages were found.
@@ -665,8 +662,8 @@ func (s *SSU2Session) handleRetransmissions() (shouldClose bool) {
 type retransmitAction int
 
 const (
-	retransmitOK     retransmitAction = iota // successfully retransmitted
-	retransmitDelete                         // should delete due to error or max attempts
+	retransmitOK retransmitAction = iota // successfully retransmitted
+	retransmitDelete // should delete due to error or max attempts
 )
 
 // processRetransmission handles a single pending message that has exceeded its deadline.
@@ -677,13 +674,13 @@ func (s *SSU2Session) processRetransmission(seq uint64, p *pendingI2NP, now time
 		// SSU2 packet-level reliability is handled by the go-noise conn's own
 		// retransmission loop; tearing down on I2NP-level max-retransmit
 		// with no ACK correlation was causing every session to self-close
-		// after the first message aged out (HIGH audit finding).
+		// after the first message aged out.
 		s.Logger().WithField("attempts", p.attempts).Warn(
 			"I2NP message exceeded max retransmissions; dropping (delivery unconfirmed, SSU2 ACK not correlated)",
 		)
 		return retransmitDelete
 	}
-	// Check if conn has been detached (SM-2 fix: losing promotion race).
+	// Check if conn has been detached.
 	s.connMu.Lock()
 	conn := s.conn
 	s.connMu.Unlock()
@@ -763,7 +760,7 @@ type receiveAction int
 
 const (
 	receiveRetry receiveAction = iota // transient timeout / deadline, retry
-	receiveFatal                      // permanent error, close session
+	receiveFatal // permanent error, close session
 )
 
 // classifyReceiveError returns receiveRetry for network timeouts and
@@ -779,7 +776,6 @@ func classifyReceiveError(err error) receiveAction {
 // messages, parses the payload as an I2NP message, and delivers it to recvChan.
 // Returns a non-nil error only for fatal session-ending conditions (context done).
 // Parse failures are logged and silently dropped (non-fatal).
-//
 // Frames arrive in SSU2 short-header format (9-byte header + body) from
 // conn.Read(), whether the original message was fragmented or not.
 func (s *SSU2Session) dispatchReceived(frame []byte) error {
@@ -880,7 +876,7 @@ func (s *SSU2Session) isContextCanceled() bool {
 // Returns the number of bytes read and an action indicating how to proceed.
 // On success, action is -1 (proceed to dispatch). On error, action is receiveRetry or receiveFatal.
 func (s *SSU2Session) readFrame(buf []byte) (int, receiveAction) {
-	// Check if conn has been detached (SM-2 fix: losing promotion race).
+	// Check if conn has been detached.
 	s.connMu.Lock()
 	conn := s.conn
 	s.connMu.Unlock()

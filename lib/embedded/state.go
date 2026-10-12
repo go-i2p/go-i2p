@@ -45,18 +45,18 @@ func (e *StandardEmbeddedRouter) Start() error {
 	// or an aborted startup rollback) would have already closed 'done',
 	// causing Wait() to return immediately forever after even while the
 	// router is actively running. Giving each Start()/Stop() pair its own
-	// channel fixes this silent lifecycle bug. See AUDIT.md Level 10 MEDIUM.
+	// channel fixes this silent lifecycle bug.
 	e.done = make(chan struct{})
 	e.doneOnce = sync.Once{}
 
-	// CRITICAL-6 FIX: Capture publisher AFTER router starts (when it's initialized)
+	// Capture publisher AFTER router starts (when it's initialized)
 	// Publisher is initialized during router.Start() in launchPublisher()
 	// We must capture it here, not during Configure()
 	if r, ok := e.router.(*router.Router); ok {
 		e.publisher = r.GetPublisher()
 	}
 
-	// CRITICAL-6 FIX: Force immediate RouterInfo republish at startup
+	// Force immediate RouterInfo republish at startup
 	// This flushes peer caches of old cached RouterInfo with different keys.
 	// Normally DHT updates are slow (cache expiry), but this ensures immediate
 	// propagation so peers start using new X25519 encryption key immediately.
@@ -154,12 +154,10 @@ func (e *StandardEmbeddedRouter) Stop() error {
 }
 
 // Wait blocks until the router is stopped via Stop()/HardStop()/StopWithContext().
-//
 // Precondition: This method is safe to call at any time after the router is constructed.
 // If called before Start(), it will block until either Start() is called and then Stop(),
 // or Stop() is called directly. Callers that race Wait() against Start() will block
 // until the first Stop() call completes.
-// See AUDIT.md M-5.
 func (e *StandardEmbeddedRouter) Wait() {
 	e.mu.RLock()
 	doneCh := e.done

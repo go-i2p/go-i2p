@@ -734,7 +734,7 @@ func (db *StdNetDB) validateSingleRouterInfo(ri router_info.RouterInfo, now time
 }
 
 // validatePublishedTimestamp rejects RouterInfos with missing, stale, or future-dated timestamps.
-// M-6 FIX: Added lower bound check for backwards clock skew.
+// Added lower bound check for backwards clock skew.
 func (db *StdNetDB) validatePublishedTimestamp(ri router_info.RouterInfo, hash common.Hash, now time.Time) error {
 	published := ri.Published()
 	if published == nil || published.Time().IsZero() {
@@ -742,7 +742,7 @@ func (db *StdNetDB) validatePublishedTimestamp(ri router_info.RouterInfo, hash c
 		return oops.Errorf("missing published date")
 	}
 
-	// M-6 FIX: Check upper bound (future): published <= now + 1hour (existing check)
+	// Check upper bound (future): published <= now + 1hour (existing check)
 	if published.Time().After(now.Add(1 * time.Hour)) {
 		log.WithFields(logger.Fields{
 			"hash":      hash,
@@ -751,7 +751,7 @@ func (db *StdNetDB) validatePublishedTimestamp(ri router_info.RouterInfo, hash c
 		return oops.Errorf("future-dated published time")
 	}
 
-	// M-6 FIX: Check lower bound (stale): published >= now - RouterInfoMaxAge (existing check)
+	// Check lower bound (stale): published >= now - RouterInfoMaxAge (existing check)
 	if now.Sub(published.Time()) > RouterInfoMaxAge {
 		log.WithFields(logger.Fields{
 			"hash": hash,
@@ -865,11 +865,11 @@ func (db *StdNetDB) persistRouterInfoToFilesystem(key common.Hash, ri router_inf
 
 // Store dispatches a DatabaseStore message to the appropriate handler based on data type.
 // This implements the NetDBStore interface used by the I2NP message processor.
-//   - 0: RouterInfo
-//   - 1: LeaseSet
-//   - 3: LeaseSet2
-//   - 5: EncryptedLeaseSet
-//   - 7: MetaLeaseSet
+// - 0: RouterInfo
+// - 1: LeaseSet
+// - 3: LeaseSet2
+// - 5: EncryptedLeaseSet
+// - 7: MetaLeaseSet
 func (db *StdNetDB) Store(key common.Hash, data []byte, dataType byte) error {
 	switch dataType {
 	case 0:
@@ -1673,10 +1673,9 @@ func (db *StdNetDB) GetActivePeerCount() int {
 // GetFastPeerCount returns the number of peers with low latency (fast response times).
 // Fast peers are those with average response times under 500ms, making them good
 // candidates for tunnel building and high-performance operations.
-//
 // Classification criteria:
-//   - Average response time < 500ms
-//   - Minimum 3 successful connections for statistical significance
+// - Average response time < 500ms
+// - Minimum 3 successful connections for statistical significance
 func (db *StdNetDB) GetFastPeerCount() int {
 	if db.PeerTracker == nil {
 		return 0
@@ -1711,12 +1710,11 @@ func (db *StdNetDB) GetFastPeerCount() int {
 // GetHighCapacityPeerCount returns the number of high-capacity peers.
 // High-capacity peers are reliable routers with good performance and high availability,
 // making them excellent candidates for important roles like tunnel building.
-//
 // Classification criteria:
-//   - Success rate >= 80%
-//   - Minimum 5 connection attempts for statistical significance
-//   - Average response time < 1000ms (1 second)
-//   - Not marked as stale
+// - Success rate >= 80%
+// - Minimum 5 connection attempts for statistical significance
+// - Average response time < 1000ms (1 second)
+// - Not marked as stale
 func (db *StdNetDB) GetHighCapacityPeerCount() int {
 	if db.PeerTracker == nil {
 		return 0
@@ -1766,7 +1764,6 @@ const riRefreshCooldownDuration = 5 * time.Minute
 // enforces a per-peer cooldown of riRefreshCooldownDuration to prevent
 // repeated evictions (e.g. when a key-rotated peer causes many handshake
 // failures in quick succession).
-//
 // After eviction the entry will be re-populated on the next reseed or
 // bootstrap cycle.
 func (db *StdNetDB) RequestRouterInfoRefresh(hash common.Hash) {

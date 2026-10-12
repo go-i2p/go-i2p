@@ -50,15 +50,14 @@ type TunnelStatsReader interface {
 // It composes TunnelBuildCoordinator and TunnelStatsReader into a single seam for
 // callers that need the complete surface (e.g. router wiring). Consumers that only
 // need a subset should depend on TunnelBuildCoordinator or TunnelStatsReader directly.
-//
 // TunnelOrchestrator structurally satisfies:
-//   - tunnel.BuilderInterface    (BuildTunnel — used by i2cp.Server.SetTunnelBuilder)
-//   - TunnelBuildReplyProcessor  (ProcessTunnelBuildReply — used by MessageProcessor)
+// - tunnel.BuilderInterface (BuildTunnel — used by i2cp.Server.SetTunnelBuilder)
+// - TunnelBuildReplyProcessor (ProcessTunnelBuildReply — used by MessageProcessor)
 type TunnelOrchestrator interface {
 	TunnelBuildCoordinator
 	TunnelStatsReader
 	// SetInboundHandler wires the InboundHandlerRegistrar so that newly-active
-	// inbound tunnels are registered as control-plane endpoints (C-1 fix).
+	// inbound tunnels are registered as control-plane endpoints.
 	SetInboundHandler(h InboundHandlerRegistrar)
 }
 

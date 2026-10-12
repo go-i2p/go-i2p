@@ -35,8 +35,8 @@ const (
 
 // externalAddrObservation records a single PeerTest-observed external address.
 type externalAddrObservation struct {
-	addr string    // net.UDPAddr.String()
-	at   time.Time // when the observation was received
+	addr string // net.UDPAddr.String()
+	at time.Time // when the observation was received
 }
 
 // natState holds a cached NAT detection result with its timestamp.
@@ -196,7 +196,7 @@ func (t *SSU2Transport) startNATCleanup() {
 // saveNATState persists the current NAT state to disk. No-op if WorkingDir is
 // empty (ephemeral mode).
 func (t *SSU2Transport) saveNATState() {
-	// R-2 fix: Atomic config snapshot
+	// Atomic config snapshot
 	cfg := t.config.Load()
 	if cfg == nil || cfg.WorkingDir == "" || t.natStateCache == nil {
 		return
@@ -224,7 +224,7 @@ func (t *SSU2Transport) saveNATState() {
 // cache if the stored result is still within TTL. Returns true if a valid
 // state was loaded. File read is limited to maxNATStateSize to prevent OOM.
 func (t *SSU2Transport) loadNATState() bool {
-	// R-2 fix: Atomic config snapshot
+	// Atomic config snapshot
 	cfg := t.config.Load()
 	if cfg == nil || cfg.WorkingDir == "" || t.natStateCache == nil {
 		return false

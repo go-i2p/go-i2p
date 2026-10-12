@@ -50,7 +50,7 @@ func (v *VariableTunnelBuildReply) logReplyStart(recordCount int) {
 
 // validateRecordCount validates that Count field matches actual record count.
 // Returns an error if count mismatch or no records present.
-// L-4 Consolidation: Delegates to shared ValidateRecordCount helper.
+// Delegates to shared ValidateRecordCount helper.
 func (v *VariableTunnelBuildReply) validateRecordCount(recordCount int) error {
 	return ValidateRecordCount(v.Count, recordCount, "VariableTunnelBuildReply")
 }
@@ -75,7 +75,7 @@ func (v *VariableTunnelBuildReply) logReplyCompletion(successCount, recordCount 
 
 // determineBuildResult determines the final result based on success count.
 // Returns nil if all hops accepted, otherwise returns an appropriate error.
-// L-1 Consolidation: Delegates to shared DetermineBuildResult helper.
+// Delegates to shared DetermineBuildResult helper.
 func (v *VariableTunnelBuildReply) determineBuildResult(successCount, recordCount int, firstError error) error {
 	return DetermineBuildResult(successCount, recordCount, firstError, "variable tunnel")
 }

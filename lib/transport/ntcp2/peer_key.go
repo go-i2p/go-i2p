@@ -16,14 +16,12 @@ import (
 // from a peer's RouterInfo. This key is required by the Noise XK pattern
 // because the initiator must know the responder's static key before the
 // handshake begins.
-//
 // The static key is published in the peer's RouterInfo as a base64-encoded
 // 32-byte Curve25519 public key in the "s=" option of the NTCP2 address.
-//
 // Returns the 32-byte static key or an error if:
-//   - The RouterInfo has no NTCP2 addresses
-//   - No NTCP2 address has a valid "s=" option
-//   - The "s=" value cannot be decoded or is not 32 bytes
+// - The RouterInfo has no NTCP2 addresses
+// - No NTCP2 address has a valid "s=" option
+// - The "s=" value cannot be decoded or is not 32 bytes
 func ExtractPeerStaticKey(routerInfo router_info.RouterInfo) ([]byte, error) {
 	addresses := routerInfo.RouterAddresses()
 	for _, addr := range addresses {
@@ -67,7 +65,6 @@ func extractStaticKeyFromAddress(addr *router_address.RouterAddress) ([]byte, er
 // ExtractPeerIV extracts the NTCP2 AES obfuscation IV ("i=" option)
 // from a peer's RouterInfo. This IV is used for AES-CBC obfuscation of the
 // ephemeral key in message 1.
-//
 // Returns the 16-byte IV or an error if not found.
 func ExtractPeerIV(routerInfo router_info.RouterInfo) ([]byte, error) {
 	addresses := routerInfo.RouterAddresses()
@@ -106,7 +103,6 @@ func ExtractPeerIVFromAddress(addr *router_address.RouterAddress) ([]byte, error
 // ConfigureDialConfig sets the peer's static key and obfuscation IV on a
 // Config for outbound connections. This is required for the Noise XK
 // handshake pattern where the initiator must know the responder's static key.
-//
 // Spec reference: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ntcp2.rst — Noise XK pattern requires
 // the initiator to pre-know the responder's static public key.
 func ConfigureDialConfig(config *ntcp2.Config, peerInfo router_info.RouterInfo) error {
@@ -158,11 +154,9 @@ func ConfigureDialConfigFromAddress(config *ntcp2.Config, peerAddr *router_addre
 // VerifyStaticKeyConsistency checks that the Noise static private key stored in the
 // transport config produces the same public key that was published in the NTCP2
 // RouterInfo "s=" option.
-//
 // A mismatch means every remote peer will reject our Noise message 1 immediately
 // after verifying our static key, causing 100% outbound NTCP2 handshake failures
 // and making us unreachable to all NTCP2 peers.
-//
 // Should be called once at startup after the RouterInfo has been built and signed.
 // Returns a descriptive error (with both keys base64-encoded) if a mismatch is found.
 func VerifyStaticKeyConsistency(transport *NTCP2Transport, identity router_info.RouterInfo) error {
@@ -186,7 +180,7 @@ func VerifyStaticKeyConsistency(transport *NTCP2Transport, identity router_info.
 
 // getValidatedPrivateKey retrieves and validates the transport's static private key.
 func getValidatedPrivateKey(transport *NTCP2Transport) ([]byte, error) {
-	// HIGH-1.3 fix: Load config atomically
+	// Load config atomically
 	cfg := transport.config.Load()
 	if cfg == nil || cfg.Config == nil {
 		return nil, oops.Errorf("transport config is not initialized")
@@ -217,7 +211,7 @@ func deriveLivePublicKey(privKeyBytes []byte) ([]byte, error) {
 
 // verifyKeyConsistency compares the live and published public keys.
 func verifyKeyConsistency(livePublicKey, publishedPublicKey []byte) error {
-	// L-3 FIX: Use constant-time comparison for public keys (policy uniformity for all key comparisons)
+	// Use constant-time comparison for public keys (policy uniformity for all key comparisons)
 	if subtle.ConstantTimeCompare(livePublicKey, publishedPublicKey) != 1 {
 		return oops.Errorf(
 			"NTCP2 static key mismatch: live Noise public key %s does not match published RouterInfo key %s — "+
@@ -235,12 +229,10 @@ func verifyKeyConsistency(livePublicKey, publishedPublicKey []byte) error {
 // verifyLocalRouterInfoMatchesStaticKey derives the Curve25519 public key from
 // staticPriv (32-byte scalar) and checks that at least one NTCP2 RouterAddress
 // in localRI publishes that exact key as its "s=" option.
-//
 // This mirrors i2pd's RouterInfo::GetNTCP2AddressWithStaticKey check that runs
 // inside HandleSessionConfirmedReceived: if no matching address is found, i2pd
 // silently closes the TCP connection with zero data-phase bytes (no termination
 // frame), producing the "frame #0 EOF" symptom.
-//
 // Returns nil if a matching address is found, otherwise a structured error with
 // the derived key and every published key in base64 for easy comparison.
 func verifyLocalRouterInfoMatchesStaticKey(localRI router_info.RouterInfo, staticPriv []byte) error {
@@ -302,7 +294,7 @@ func extractPublishedNTCP2Keys(localRI router_info.RouterInfo) ([][]byte, int) {
 // checkForKeyMatch checks if the derived key matches any published key.
 func checkForKeyMatch(derivedPubKey []byte, publishedKeys [][]byte) bool {
 	for _, pubKey := range publishedKeys {
-		// L-3 FIX: Use constant-time comparison for public keys (policy uniformity for all key comparisons)
+		// Use constant-time comparison for public keys (policy uniformity for all key comparisons)
 		if subtle.ConstantTimeCompare(pubKey, derivedPubKey) == 1 {
 			return true
 		}

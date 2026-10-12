@@ -24,21 +24,20 @@ type MessageHandler func(msgBytes []byte) error
 type MessageForwarder interface {
 	// ForwardToTunnel sends a message to a specific tunnel on a gateway router.
 	// Parameters:
-	//   - tunnelID: the destination tunnel ID
-	//   - gatewayHash: the hash of the gateway router
-	//   - msgBytes: the message payload
+	// - tunnelID: the destination tunnel ID
+	// - gatewayHash: the hash of the gateway router
+	// - msgBytes: the message payload
 	ForwardToTunnel(tunnelID uint32, gatewayHash [32]byte, msgBytes []byte) error
 
 	// ForwardToRouter sends a message directly to a router.
 	// Parameters:
-	//   - routerHash: the hash of the destination router
-	//   - msgBytes: the message payload
+	// - routerHash: the hash of the destination router
+	// - msgBytes: the message payload
 	ForwardToRouter(routerHash [32]byte, msgBytes []byte) error
 }
 
 // Endpoint handles receiving encrypted tunnel messages,
 // decrypting them, and extracting I2NP messages.
-//
 // Design decisions:
 // - Simple callback-based message delivery
 // - Works with raw bytes to avoid import cycles
@@ -49,23 +48,22 @@ type MessageForwarder interface {
 // - Clear error handling and logging
 // - Routes DTTunnel and DTRouter messages via MessageForwarder
 type Endpoint struct {
-	tunnelID        TunnelID
-	decryption      tunnel.TunnelEncryptor
-	handler         MessageHandler
-	forwarder       MessageForwarder
-	forwarderMu     sync.RWMutex // protects forwarder field
-	fragmentsMutex  sync.Mutex
-	fragments       map[uint32]*fragmentAssembler
+	tunnelID TunnelID
+	decryption tunnel.TunnelEncryptor
+	handler MessageHandler
+	forwarder MessageForwarder
+	forwarderMu sync.RWMutex // protects forwarder field
+	fragmentsMutex sync.Mutex
+	fragments map[uint32]*fragmentAssembler
 	fragmentTimeout time.Duration
-	stopChan        chan struct{}
-	stopOnce        sync.Once      // ensures Stop() is safe to call multiple times
-	wg              sync.WaitGroup // tracks cleanupFragments goroutine
+	stopChan chan struct{}
+	stopOnce sync.Once // ensures Stop() is safe to call multiple times
+	wg sync.WaitGroup // tracks cleanupFragments goroutine
 }
 
 // fragmentAssembler tracks fragments for a single message being reassembled.
 // It accumulates message fragments identified by a common message ID and
 // reassembles them into a complete I2NP message when all parts are received.
-//
 // Design rationale:
 // - Uses a map indexed by fragment number for O(1) lookup
 // - Tracks received fragments with a bitmap for efficient checking
@@ -73,14 +71,14 @@ type Endpoint struct {
 // - Supports up to 63 follow-on fragments (6-bit fragment number in spec)
 // - Tracks creation time for expiration-based cleanup
 type fragmentAssembler struct {
-	fragments             map[int][]byte // fragment number -> fragment data
-	deliveryType          byte           // Delivery type from first fragment
-	firstFragmentReceived bool           // M-1 FIX: Track if first fragment (index 0) was recorded
-	tunnelID              uint32         // Destination tunnel ID (DTTunnel only)
-	hash                  [32]byte       // Gateway or router hash (DTTunnel, DTRouter)
-	totalCount            int            // Expected number of fragments (0 until last fragment seen)
-	receivedMask          uint64         // Bitmap of received fragments (supports up to 64 fragments)
-	createdAt             time.Time      // Timestamp when first fragment was received
+	fragments map[int][]byte // fragment number -> fragment data
+	deliveryType byte // Delivery type from first fragment
+	firstFragmentReceived bool // Track if first fragment (index 0) was recorded
+	tunnelID uint32 // Destination tunnel ID (DTTunnel only)
+	hash [32]byte // Gateway or router hash (DTTunnel, DTRouter)
+	totalCount int // Expected number of fragments (0 until last fragment seen)
+	receivedMask uint64 // Bitmap of received fragments (supports up to 64 fragments)
+	createdAt time.Time // Timestamp when first fragment was received
 }
 
 var (
@@ -99,12 +97,10 @@ var (
 )
 
 // NewEndpoint creates a new tunnel endpoint.
-//
 // Parameters:
 // - tunnelID: the ID of this tunnel
 // - decryption: the tunnel decryption object for layered decryption
 // - handler: callback function to process received I2NP messages
-//
 // Returns an error if decryption or handler is nil.
 // Starts a background goroutine to clean up stale fragments.
 func NewEndpoint(tunnelID TunnelID, decryption tunnel.TunnelEncryptor, handler MessageHandler) (*Endpoint, error) {
@@ -116,12 +112,12 @@ func NewEndpoint(tunnelID TunnelID, decryption tunnel.TunnelEncryptor, handler M
 	}
 
 	ep := &Endpoint{
-		tunnelID:        tunnelID,
-		decryption:      decryption,
-		handler:         handler,
-		fragments:       make(map[uint32]*fragmentAssembler),
+		tunnelID: tunnelID,
+		decryption: decryption,
+		handler: handler,
+		fragments: make(map[uint32]*fragmentAssembler),
 		fragmentTimeout: 8 * time.Second, // Match i2pd I2NP_MESSAGE_EXPIRATION_TIMEOUT for incomplete fragments
-		stopChan:        make(chan struct{}),
+		stopChan: make(chan struct{}),
 	}
 
 	// Start background cleanup goroutine
@@ -132,8 +128,8 @@ func NewEndpoint(tunnelID TunnelID, decryption tunnel.TunnelEncryptor, handler M
 	}()
 
 	log.WithFields(logger.Fields{
-		"at":        "NewEndpoint",
-		"reason":    "inbound_endpoint_created",
+		"at": "NewEndpoint",
+		"reason": "inbound_endpoint_created",
 		"tunnel_id": tunnelID,
 	}).Debug("created tunnel endpoint")
 	return ep, nil
@@ -148,7 +144,6 @@ func (e *Endpoint) SetForwarder(forwarder MessageForwarder) {
 }
 
 // Receive processes an encrypted tunnel message.
-//
 // Process:
 // 1. Decrypt the tunnel message
 // 2. Validate checksum
@@ -156,15 +151,14 @@ func (e *Endpoint) SetForwarder(forwarder MessageForwarder) {
 // 4. Extract message fragments
 // 5. Reassemble if fragmented
 // 6. Deliver to handler
-//
 // Thread-safe: protects fragment map access with mutex.
 // Returns an error if processing fails at any step.
 func (e *Endpoint) Receive(encryptedData []byte) error {
 	if len(encryptedData) != 1028 {
 		log.WithFields(logger.Fields{
-			"at":       "(Endpoint) Receive",
-			"reason":   "invalid_data_size",
-			"size":     len(encryptedData),
+			"at": "(Endpoint) Receive",
+			"reason": "invalid_data_size",
+			"size": len(encryptedData),
 			"expected": 1028,
 		}).Error("invalid tunnel data size")
 		return ErrInvalidTunnelData
@@ -187,8 +181,8 @@ func (e *Endpoint) Receive(encryptedData []byte) error {
 	}
 
 	log.WithFields(logger.Fields{
-		"at":        "(Endpoint) Receive",
-		"reason":    "message_received",
+		"at": "(Endpoint) Receive",
+		"reason": "message_received",
 		"tunnel_id": e.tunnelID,
 	}).Debug("successfully received message through endpoint")
 	return nil
@@ -202,9 +196,9 @@ func (e *Endpoint) decryptTunnelMessage(encryptedData []byte) ([]byte, error) {
 	decrypted, err := e.decryption.Decrypt(encryptedData)
 	if err != nil {
 		log.WithFields(logger.Fields{
-			"at":     "(Endpoint) decryptLayers",
+			"at": "(Endpoint) decryptLayers",
 			"reason": "decryption_failed",
-			"error":  err.Error(),
+			"error": err.Error(),
 		}).Error("failed to decrypt tunnel message")
 		return nil, err
 	}
@@ -235,12 +229,12 @@ func (e *Endpoint) validateChecksum(decrypted []byte) error {
 	hash := types.SHA256(checksumData)
 	actualChecksum := hash[:4]
 
-	// L-1 FIX: Use constant-time comparison for policy uniformity (checksum is not
+	// Use constant-time comparison for policy uniformity (checksum is not
 	// secret-keyed, but we compare all integrity tags constant-time by policy)
 	if subtle.ConstantTimeCompare(expectedChecksum, actualChecksum) != 1 {
 		log.WithFields(map[string]interface{}{
 			"expected": expectedChecksum,
-			"actual":   actualChecksum,
+			"actual": actualChecksum,
 		}).Error("Checksum mismatch")
 		return ErrChecksumMismatch
 	}
@@ -297,9 +291,9 @@ func (e *Endpoint) readAndExtractFragment(data []byte) (*DeliveryInstructions, [
 	di, remainder, err := readDeliveryInstructions(data)
 	if err != nil {
 		log.WithFields(logger.Fields{
-			"at":     "(Endpoint) extractFragments",
+			"at": "(Endpoint) extractFragments",
 			"reason": "read_delivery_instructions_failed",
-			"error":  err.Error(),
+			"error": err.Error(),
 		}).Error("failed to read delivery instructions")
 		return nil, nil, nil, 0, err
 	}
@@ -315,7 +309,7 @@ func (e *Endpoint) readAndExtractFragment(data []byte) (*DeliveryInstructions, [
 func (e *Endpoint) validateAndProcessFragment(di *DeliveryInstructions, fragmentData []byte, fragSize uint16) error {
 	if fragSize == 0 {
 		log.WithFields(logger.Fields{
-			"at":     "(Endpoint) processInstructionLoop",
+			"at": "(Endpoint) processInstructionLoop",
 			"reason": "zero_length_fragment",
 		}).Error("delivery instruction has zero-length fragment, aborting to prevent infinite loop")
 		return ErrInvalidTunnelData
@@ -330,9 +324,9 @@ func (e *Endpoint) extractFragmentData(di *DeliveryInstructions, remainder []byt
 	fragSize, err := di.FragmentSize()
 	if err != nil {
 		log.WithFields(logger.Fields{
-			"at":     "(Endpoint) extractFragments",
+			"at": "(Endpoint) extractFragments",
 			"reason": "get_fragment_size_failed",
-			"error":  err.Error(),
+			"error": err.Error(),
 		}).Error("failed to get fragment size")
 		return 0, nil, nil, err
 	}
@@ -340,7 +334,7 @@ func (e *Endpoint) extractFragmentData(di *DeliveryInstructions, remainder []byt
 	if len(remainder) < int(fragSize) {
 		log.WithFields(map[string]interface{}{
 			"expected": fragSize,
-			"actual":   len(remainder),
+			"actual": len(remainder),
 		}).Warn("Insufficient data for fragment")
 		return fragSize, nil, remainder, nil
 	}
@@ -353,9 +347,9 @@ func (e *Endpoint) processFragmentByType(di *DeliveryInstructions, fragmentData 
 	fragmentType, err := di.Type()
 	if err != nil {
 		log.WithFields(logger.Fields{
-			"at":     "(Endpoint) extractFragments",
+			"at": "(Endpoint) extractFragments",
 			"reason": "fragment_type_unknown",
-			"error":  err.Error(),
+			"error": err.Error(),
 		}).Error("failed to determine fragment type")
 		return err
 	}
@@ -425,7 +419,7 @@ func (e *Endpoint) deliverViaForwarder(deliveryType byte, tunnelID uint32, hash 
 	case DTTunnel:
 		log.WithFields(map[string]interface{}{
 			"delivery_type": "DTTunnel",
-			"tunnel_id":     tunnelID,
+			"tunnel_id": tunnelID,
 		}).Debug("Forwarding message to tunnel")
 		return fwd.ForwardToTunnel(tunnelID, hash, msgBytes)
 	case DTRouter:
@@ -437,14 +431,14 @@ func (e *Endpoint) deliverViaForwarder(deliveryType byte, tunnelID uint32, hash 
 }
 
 // storeFirstFragmentWithDI stores the first fragment with routing info from delivery instructions.
-// M-1 FIX: Returns error if a conflicting first fragment was already recorded.
+// Returns error if a conflicting first fragment was already recorded.
 func (e *Endpoint) storeFirstFragmentWithDI(msgID uint32, deliveryType byte, di *DeliveryInstructions, fragmentData []byte) error {
 	e.fragmentsMutex.Lock()
 
 	assembler, err := e.ensureAssemblerExists(msgID, deliveryType)
 	if err != nil {
 		e.fragmentsMutex.Unlock()
-		return err // M-1 FIX: Reject conflicting delivery type
+		return err // Reject conflicting delivery type
 	}
 
 	// Store routing info from DI for later delivery
@@ -463,7 +457,7 @@ func (e *Endpoint) storeFirstFragmentWithDI(msgID uint32, deliveryType byte, di 
 }
 
 // ensureAssemblerExists retrieves existing assembler or creates a new one for the message ID.
-// M-1 FIX: Enforces delivery type consistency - rejects conflicting first fragments.
+// Enforces delivery type consistency - rejects conflicting first fragments.
 // If a first fragment was already recorded, the delivery type cannot be changed.
 // This prevents a compromised gateway from altering delivery routing mid-reassembly.
 // Note: Caller must hold fragmentsMutex.
@@ -479,7 +473,7 @@ func (e *Endpoint) ensureAssemblerExists(msgID uint32, deliveryType byte) (*frag
 		return assembler, nil
 	}
 
-	// M-1 FIX: If first fragment was already recorded, reject any duplicate.
+	// If first fragment was already recorded, reject any duplicate.
 	// Reject both conflicting delivery types and duplicate first fragments to prevent routing manipulation.
 	if assembler.firstFragmentReceived {
 		// Log the type of violation for debugging
@@ -488,11 +482,11 @@ func (e *Endpoint) ensureAssemblerExists(msgID uint32, deliveryType byte) (*frag
 			violationType = "duplicate first fragment"
 		}
 		log.WithFields(map[string]interface{}{
-			"message_id":             msgID,
+			"message_id": msgID,
 			"original_delivery_type": assembler.deliveryType,
 			"received_delivery_type": deliveryType,
-			"violation_type":         violationType,
-		}).Debug("Rejected duplicate/conflicting first fragment (M-1 fix)")
+			"violation_type": violationType,
+		}).Debug("Rejected duplicate/conflicting first fragment")
 		return nil, oops.Errorf("duplicate or conflicting first fragment for message ID %d: original=%d, received=%d",
 			msgID, assembler.deliveryType, deliveryType)
 	}
@@ -513,27 +507,27 @@ func (e *Endpoint) createAssemblerWithCapEnforcement(msgID uint32, deliveryType 
 	// Enforce cap on concurrent assemblies to prevent memory exhaustion
 	if len(e.fragments) >= maxConcurrentAssemblies {
 		log.WithFields(map[string]interface{}{
-			"at":    "createAssemblerWithCapEnforcement",
+			"at": "createAssemblerWithCapEnforcement",
 			"msgID": msgID,
 			"count": len(e.fragments),
-			"max":   maxConcurrentAssemblies,
+			"max": maxConcurrentAssemblies,
 		}).Debug("fragment assembly limit reached, evicting oldest")
 		e.evictOldestFragment()
 	}
 
 	assembler := &fragmentAssembler{
-		fragments:    make(map[int][]byte),
+		fragments: make(map[int][]byte),
 		deliveryType: deliveryType,
-		totalCount:   0,
+		totalCount: 0,
 		receivedMask: 0,
-		createdAt:    time.Now(),
+		createdAt: time.Now(),
 	}
 	e.fragments[msgID] = assembler
 	return assembler
 }
 
 // evictOldestFragment removes a fragment assembly to make room for a new one.
-// L-5 FIX: Weighted eviction policy prioritizes by completeness:
+// Weighted eviction policy prioritizes by completeness:
 // 1. Incomplete assemblies (missing fragments) evict first
 // 2. Among incomplete ones, prefer lowest completeness percentage
 // 3. Among equal completeness, use oldest-first
@@ -582,15 +576,15 @@ func (e *Endpoint) evictOldestFragment() {
 
 // recordFirstFragmentData stores the first fragment (index 0) in the assembler.
 // Sets the corresponding bit in the received mask for tracking.
-// M-1 FIX: Sets firstFragmentReceived flag to enforce delivery type consistency.
+// Sets firstFragmentReceived flag to enforce delivery type consistency.
 func (e *Endpoint) recordFirstFragmentData(assembler *fragmentAssembler, fragmentData []byte, msgID uint32) {
 	assembler.fragments[0] = fragmentData
 	assembler.receivedMask |= 1
-	assembler.firstFragmentReceived = true // M-1 FIX: Mark that first fragment was recorded
+	assembler.firstFragmentReceived = true // Mark that first fragment was recorded
 
 	log.WithFields(map[string]interface{}{
 		"message_id": msgID,
-		"size":       len(fragmentData),
+		"size": len(fragmentData),
 	}).Debug("Stored first fragment")
 }
 
@@ -598,11 +592,11 @@ func (e *Endpoint) recordFirstFragmentData(assembler *fragmentAssembler, fragmen
 // allowing delivery to occur outside the fragmentsMutex lock.
 type reassembledResult struct {
 	deliveryType byte
-	tunnelID     uint32
-	hash         [32]byte
-	data         []byte
-	msgID        uint32
-	err          error
+	tunnelID uint32
+	hash [32]byte
+	data []byte
+	msgID uint32
+	err error
 }
 
 // checkFragmentCompletion determines if all fragments have been received.
@@ -645,9 +639,9 @@ func (e *Endpoint) processFollowOnFragment(di *DeliveryInstructions, fragmentDat
 	// Log debug info if reassembly wasn't triggered (still waiting for fragments)
 	if result == nil {
 		log.WithFields(map[string]interface{}{
-			"message_id":   msgID,
+			"message_id": msgID,
 			"fragment_num": fragmentNum,
-			"is_last":      isLast,
+			"is_last": isLast,
 		}).Debug("Stored follow-on fragment, waiting for more")
 	}
 
@@ -701,7 +695,7 @@ func (e *Endpoint) getOrCreateAssembler(msgID uint32) *fragmentAssembler {
 func (e *Endpoint) storeFragmentData(msgID uint32, fragmentNum int, fragmentData []byte, assembler *fragmentAssembler) error {
 	if fragmentNum < 0 || fragmentNum >= 64 {
 		log.WithFields(map[string]interface{}{
-			"message_id":   msgID,
+			"message_id": msgID,
 			"fragment_num": fragmentNum,
 		}).Error("Fragment number out of range (must be 0-63)")
 		return oops.Errorf("fragment number %d out of range (must be 0-63)", fragmentNum)
@@ -710,7 +704,7 @@ func (e *Endpoint) storeFragmentData(msgID uint32, fragmentNum int, fragmentData
 	mask := uint64(1) << fragmentNum
 	if (assembler.receivedMask & mask) != 0 {
 		log.WithFields(map[string]interface{}{
-			"message_id":   msgID,
+			"message_id": msgID,
 			"fragment_num": fragmentNum,
 		}).Warn("Duplicate fragment received")
 		return ErrDuplicateFragment
@@ -725,8 +719,8 @@ func (e *Endpoint) storeFragmentData(msgID uint32, fragmentNum int, fragmentData
 func (e *Endpoint) markLastFragment(msgID uint32, fragmentNum int, assembler *fragmentAssembler) {
 	assembler.totalCount = fragmentNum + 1
 	log.WithFields(map[string]interface{}{
-		"message_id":   msgID,
-		"total_count":  assembler.totalCount,
+		"message_id": msgID,
+		"total_count": assembler.totalCount,
 		"fragment_num": fragmentNum,
 	}).Debug("Received last fragment")
 }
@@ -742,7 +736,7 @@ func (e *Endpoint) reassembleFragments(msgID uint32, assembler *fragmentAssemble
 		frag, exists := assembler.fragments[i]
 		if !exists {
 			log.WithFields(map[string]interface{}{
-				"message_id":   msgID,
+				"message_id": msgID,
 				"fragment_num": i,
 			}).Error("Missing fragment during reassembly")
 			return &reassembledResult{err: oops.Errorf("missing fragment")}
@@ -757,17 +751,17 @@ func (e *Endpoint) reassembleFragments(msgID uint32, assembler *fragmentAssemble
 	}
 
 	log.WithFields(map[string]interface{}{
-		"message_id":   msgID,
-		"total_size":   totalSize,
+		"message_id": msgID,
+		"total_size": totalSize,
 		"fragment_cnt": assembler.totalCount,
 	}).Debug("Reassembled fragmented message")
 
 	result := &reassembledResult{
 		deliveryType: assembler.deliveryType,
-		tunnelID:     assembler.tunnelID,
-		hash:         assembler.hash,
-		data:         completeMsg,
-		msgID:        msgID,
+		tunnelID: assembler.tunnelID,
+		hash: assembler.hash,
+		data: completeMsg,
+		msgID: msgID,
 	}
 
 	// Clean up
@@ -799,8 +793,8 @@ func (e *Endpoint) deliverReassembled(result *reassembledResult) error {
 		}
 		log.WithFields(map[string]interface{}{
 			"delivery_type": result.deliveryType,
-			"message_id":    result.msgID,
-			"total_size":    len(result.data),
+			"message_id": result.msgID,
+			"total_size": len(result.data),
 		}).Debug("Routing reassembled non-local message to forwarder")
 		return e.deliverViaForwarder(result.deliveryType, result.tunnelID, result.hash, result.data)
 	default:
@@ -866,8 +860,8 @@ func (e *Endpoint) removeStaleFragments() {
 			removedCount++
 			log.WithFields(map[string]interface{}{
 				"message_id": msgID,
-				"age":        now.Sub(assembler.createdAt),
-				"fragments":  len(assembler.fragments),
+				"age": now.Sub(assembler.createdAt),
+				"fragments": len(assembler.fragments),
 			}).Debug("Removed stale fragment assembler")
 		}
 	}
@@ -875,7 +869,7 @@ func (e *Endpoint) removeStaleFragments() {
 	if removedCount > 0 {
 		log.WithFields(map[string]interface{}{
 			"tunnel_id": e.tunnelID,
-			"removed":   removedCount,
+			"removed": removedCount,
 			"remaining": len(e.fragments),
 		}).Debug("Cleaned up stale fragments")
 	}

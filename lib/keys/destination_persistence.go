@@ -16,22 +16,18 @@ import (
 )
 
 // Persisted key file format v2 (all fields are fixed-size):
-//
-//   [4 bytes]  magic: "DKS\x02" (DestinationKeyStore v2)
-//   [4 bytes]  signing private key length (big-endian uint32)
-//   [N bytes]  signing private key (Ed25519, typically 64 bytes)
-//   [4 bytes]  encryption private key length (big-endian uint32)
-//   [M bytes]  encryption private key (X25519, typically 32 bytes)
-//   [4 bytes]  padding length (big-endian uint32)
-//   [P bytes]  identity padding bytes
-//
+// [4 bytes] magic: "DKS\x02" (DestinationKeyStore v2)
+// [4 bytes] signing private key length (big-endian uint32)
+// [N bytes] signing private key (Ed25519, typically 64 bytes)
+// [4 bytes] encryption private key length (big-endian uint32)
+// [M bytes] encryption private key (X25519, typically 32 bytes)
+// [4 bytes] padding length (big-endian uint32)
+// [P bytes] identity padding bytes
 // v1 format ("DKS\x01") is still readable for backward compatibility
 // but v2 is always written to preserve identity stability.
-//
 // On load, the destination (public keys + KeysAndCert) is reconstructed
 // deterministically from the private keys and persisted padding,
 // ensuring a stable .b32.i2p address.
-//
 // All files are written with 0600 permissions. Directories use 0700.
 
 var (
@@ -262,7 +258,7 @@ func detectFormatVersion(data []byte) (version, offset int, err error) {
 }
 
 // matchesMagic checks if data starts with the given magic bytes.
-// M-28: Refactored to use bytes.HasPrefix for idiomatic byte comparison.
+// Refactored to use bytes.HasPrefix for idiomatic byte comparison.
 func matchesMagic(data, magic []byte) bool {
 	return bytes.HasPrefix(data, magic)
 }
@@ -377,13 +373,10 @@ func (dks *DestinationKeyStore) archiveCurrentKeys(dir, name string) error {
 // RotateDestinationKeys generates new destination keys, archives the old keys,
 // and persists the new keys. The new keys will produce a different .b32.i2p
 // address, which is expected behavior for key rotation (forward secrecy).
-//
 // Important: After rotation, the old destination address becomes invalid.
 // Any services or clients using the old address must be updated.
-//
 // The old keys are archived to a timestamped file in the same directory,
 // allowing recovery of old keys if needed for decrypting previous messages.
-//
 // Returns the new DestinationKeyStore with freshly generated keys.
 func (dks *DestinationKeyStore) RotateDestinationKeys(dir, name string) (*DestinationKeyStore, error) {
 	log.WithFields(map[string]interface{}{

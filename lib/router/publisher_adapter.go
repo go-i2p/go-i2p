@@ -118,7 +118,7 @@ func (a *publisherTransportAdapter) GetSession(routerInfo router_info.RouterInfo
 	return session, nil
 }
 
-// ReleaseSession implements netdb.SessionProvider to release the transport pool slot (H-1 fix).
+// ReleaseSession implements netdb.SessionProvider to release the transport pool slot.
 func (a *publisherTransportAdapter) ReleaseSession() {
 	a.muxer.ReleaseSession()
 }
@@ -135,7 +135,7 @@ type floodfillTransportAdapter struct {
 
 // SendI2NPMessage looks up the RouterInfo for routerHash in the local NetDB,
 // obtains (or creates) a transport session to that router, and queues msg.
-// Releases the transport pool slot immediately after queuing (H-1 fix):
+// Releases the transport pool slot immediately after queuing:
 // the slot was reserved by GetSession but is not needed beyond the send,
 // and the underlying connection remains cached in the transport for reuse.
 func (a *floodfillTransportAdapter) SendI2NPMessage(ctx context.Context, routerHash common.Hash, msg i2np.Message) error {
@@ -156,7 +156,7 @@ func (a *floodfillTransportAdapter) SendI2NPMessage(ctx context.Context, routerH
 	if err != nil {
 		return oops.Wrapf(err, "floodfill: get session for %x", routerHash[:8])
 	}
-	defer a.muxer.ReleaseSession() // H-1 fix: release slot after send
+	defer a.muxer.ReleaseSession() // release slot after send
 	return session.QueueSendI2NP(msg)
 }
 

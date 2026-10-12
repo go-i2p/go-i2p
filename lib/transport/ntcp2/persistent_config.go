@@ -37,19 +37,17 @@ func (pc *PersistentConfig) LoadOrGenerateObfuscationIV() ([]byte, error) {
 	ivPath := filepath.Join(pc.workingDir, obfuscationIVFilename)
 	log.WithField("iv_path", ivPath).Debug("Loading or generating obfuscation IV")
 
-	// Delegate to shared transport helper (consolidation H-6)
+	// Delegate to shared transport helper
 	return transport.LoadOrGenerateKeyFile(pc.workingDir, ivPath, obfuscationIVSize, "NTCP2 obfuscation IV")
 }
 
 // GetStaticKeyFromRouter extracts the X25519 encryption private key from the router keystore.
 // This key serves as the NTCP2 static key, ensuring consistent peer identification
 // across router restarts. The key is already persisted by the RouterInfoKeystore.
-//
 // Parameters:
-//   - encryptionKey: The router's X25519 encryption private key
-//
+// - encryptionKey: The router's X25519 encryption private key
 // Returns:
-//   - 32-byte static key suitable for NTCP2 configuration
+// - 32-byte static key suitable for NTCP2 configuration
 func GetStaticKeyFromRouter(encryptionKey types.PrivateEncryptionKey) []byte {
 	// X25519 private keys are already 32 bytes - perfect for NTCP2 static key
 	return encryptionKey.Bytes()

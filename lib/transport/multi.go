@@ -44,7 +44,7 @@ type TransportMuxer struct {
 
 	// failedPeers records the last failure time for peers whose transports all
 	// failed. GetSession skips peers still inside the cooldown window to avoid
-	// repeatedly dialling unreachable routers (RCA-3 / AUDIT.md).
+	// repeatedly dialling unreachable routers.
 	failedPeers    map[[32]byte]time.Time
 	peerCooldownMu sync.Mutex
 

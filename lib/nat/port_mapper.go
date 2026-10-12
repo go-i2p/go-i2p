@@ -16,22 +16,22 @@ type PortMapperManager struct {
 	mu sync.Mutex
 
 	// Configuration
-	network      string        // "tcp" or "udp"
-	internalPort int           // Local port to map
-	leaseDur     time.Duration // Lease duration for port mapping (default: 1 hour)
+	network string // "tcp" or "udp"
+	internalPort int // Local port to map
+	leaseDur time.Duration // Lease duration for port mapping (default: 1 hour)
 
 	// Backoff configuration
 	backoffCfg *BackoffConfig
 
 	// State
-	parentCtx context.Context    // H-2 FIX: Store parent context for deadline derivation in Stop()
-	ctx       context.Context    // Internal context derived from parentCtx
-	cancel    context.CancelFunc // Cancel function for internal context
-	wg        sync.WaitGroup     // WaitGroup for goroutine lifecycle
+	parentCtx context.Context // Store parent context for deadline derivation in Stop()
+	ctx context.Context // Internal context derived from parentCtx
+	cancel context.CancelFunc // Cancel function for internal context
+	wg sync.WaitGroup // WaitGroup for goroutine lifecycle
 	mapper    nattraversal.PortMapper
-	extPort   int    // Currently mapped external port (0 if no mapping active)
-	extIP     string // External IP address from mapper
-	stopped   int32  // Prevent duplicate Stop() calls (atomic)
+	extPort int // Currently mapped external port (0 if no mapping active)
+	extIP string // External IP address from mapper
+	stopped int32 // Prevent duplicate Stop() calls (atomic)
 }
 
 // PortMapperConfig configures a PortMapperManager.
@@ -96,7 +96,7 @@ func NewPortMapperManager(cfg *PortMapperConfig) *PortMapperManager {
 			Max:     cfg.MaxBackoff,
 			Factor:  cfg.BackoffFactor,
 		},
-		parentCtx: cfg.Context, // H-2 FIX: Store parent context for Stop() deadline
+		parentCtx: cfg.Context, // Store parent context for Stop() deadline
 		ctx:       ctx,
 		cancel:    cancel,
 	}
@@ -235,12 +235,12 @@ func (pmm *PortMapperManager) GetExternalIP() string {
 
 // Stop stops the retry goroutine and unmaps the port.
 // Blocks until cleanup completes or timeout (30s) elapses.
-// RL-2 FIX: Increased timeout from 5s to 30s to allow time for ongoing UPnP/NAT-PMP operations
+// Increased timeout from 5s to 30s to allow time for ongoing UPnP/NAT-PMP operations
 // to complete before goroutine exits. UPnP discovery and port mapping can take 10-20+ seconds
 // on slow networks or unresponsive gateways.
-// L-1 FIX ITEM 4: Fixed goroutine leak in timeout path - now uses context.WithTimeout
+// Fixed goroutine leak in timeout path - now uses context.WithTimeout
 // instead of spawning an untracked goroutine that would leak if timeout expires.
-// H-2 FIX: Use parent context for timeout derivation instead of context.Background()
+// Use parent context for timeout derivation instead of context.Background()
 // to respect caller's deadline and enable proper shutdown coordination. This ensures
 // Stop() respects transport shutdown deadlines and enables immediate cancellation
 // when the parent context is already done.
@@ -258,7 +258,7 @@ func (pmm *PortMapperManager) Stop() error {
 	// Use parent context with timeout to enable proper shutdown coordination with caller.
 	// If parent context is already cancelled, this will timeout immediately.
 	// If parent context has a shorter deadline than 30s, that deadline will be used.
-	// H-2 FIX: Derive timeout deadline from parent context, not from context.Background().
+	// Derive timeout deadline from parent context, not from context.Background().
 	waitCtx, waitCancel := context.WithTimeout(pmm.parentCtx, 30*time.Second)
 	defer waitCancel()
 

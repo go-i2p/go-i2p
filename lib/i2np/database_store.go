@@ -22,7 +22,7 @@ const (
 )
 
 // Size limits for DatabaseStore data payloads
-// Centralized here per AUDIT.md LOW finding to ensure consistent limits across packages.
+// Centralized here to ensure consistent limits across packages.
 const (
 	// MaxRouterInfoSize is the maximum size for a RouterInfo in gzip-compressed form
 	// (wire format, on-disk format). Real compressed RouterInfos are typically 2-6KB;
@@ -150,9 +150,9 @@ func NewDatabaseStore(key common.Hash, data []byte, dataType byte) *DatabaseStor
 		BaseI2NPMessage: NewBaseI2NPMessage(I2NPMessageTypeDatabaseStore),
 		Key:             key,
 		StoreType:       dataType,
-		ReplyToken:      [4]byte{0, 0, 0, 0}, // No reply token
-		ReplyTunnelID:   [4]byte{0, 0, 0, 0}, // Direct response
-		ReplyGateway:    common.Hash{},       // No gateway
+		ReplyToken: [4]byte{0, 0, 0, 0}, // No reply token
+		ReplyTunnelID: [4]byte{0, 0, 0, 0}, // Direct response
+		ReplyGateway: common.Hash{}, // No gateway
 		Data:            data,
 	}
 }

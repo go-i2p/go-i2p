@@ -84,11 +84,11 @@ func DefaultServerConfig() *ServerConfig {
 type connectionState struct {
 	conn              net.Conn
 	lastMessageTime   time.Time
-	lastResetTime     time.Time // L-NEW-4: tracks when counters were last zeroed (wall-clock epoch)
+	lastResetTime time.Time // L-NEW-4: tracks when counters were last zeroed (wall-clock epoch)
 	messageCount      int
 	bytesRead         uint64
 	hostLookupLimiter *rate.Limiter
-	authenticated     atomic.Bool // true if this connection has been authenticated (or auth not required)
+	authenticated atomic.Bool // true if this connection has been authenticated (or auth not required)
 }
 
 // Server is an I2CP protocol server that accepts client connections
@@ -169,7 +169,7 @@ func (s *Server) GetSessionManager() *SessionManager {
 }
 
 // isLoopbackAddr checks if the given address is a loopback address.
-// L-6 FIX: Helper to detect non-loopback I2CP deployments for config warning.
+// Helper to detect non-loopback I2CP deployments for config warning.
 // Returns true for Unix sockets (always local), "localhost", "127.0.0.1", "::1", etc.
 func isLoopbackAddr(addr, network string) bool {
 	// Unix sockets are always local
@@ -211,7 +211,7 @@ func NewServer(config *ServerConfig) (*Server, error) {
 		"maxSessions": config.MaxSessions,
 	}).Info("creating_i2cp_server")
 
-	// L-6 FIX: Warn if I2CP is bound to a non-loopback address
+	// Warn if I2CP is bound to a non-loopback address
 	// Message IDs are sequential (1,2,3...) and predictable; this is acceptable
 	// for local interface (default), but should be flagged for non-loopback deployment.
 	if !isLoopbackAddr(config.ListenAddr, config.Network) {
@@ -258,7 +258,6 @@ func NewServer(config *ServerConfig) (*Server, error) {
 
 // createAndSecureListener opens the network listener and, for Unix sockets,
 // applies restrictive file permissions. Returns an error if either step fails.
-//
 // Note: On Windows, os.Chmod(path, 0o600) does not enforce POSIX-style
 // permission bits; NTFS uses ACLs instead. Unix sockets on Windows (supported
 // since Windows 10 1809) will be created with default inherited ACLs from the
@@ -551,7 +550,6 @@ func (s *Server) Addr() net.Addr {
 // deliverMessagesToClient runs in a goroutine to deliver incoming messages to a client.
 // This monitors the session's incoming message queue and sends MessagePayload messages
 // to the client connection when messages arrive from the I2P network.
-//
 // The goroutine exits when:
 // - The session is stopped
 // - The server is shutting down
@@ -703,7 +701,7 @@ func (s *Server) prepareMessagePayload(
 
 // sendMessageToClient sends a message to the client connection.
 // Uses per-connection write mutex to prevent concurrent write corruption.
-// M-3 FIX: Holds RLock across mutex acquisition to prevent TOCTOU during
+// Holds RLock across mutex acquisition to prevent TOCTOU during
 // session destruction/recreation with 16-bit ID reuse.
 func (s *Server) sendMessageToClient(conn net.Conn, sessionID uint16, msg *Message) bool {
 	s.mu.RLock()
@@ -711,7 +709,7 @@ func (s *Server) sendMessageToClient(conn net.Conn, sessionID uint16, msg *Messa
 	if writeMu != nil {
 		writeMu.Lock()
 	}
-	s.mu.RUnlock() // Release RLock after acquiring write mutex (M-3 FIX)
+	s.mu.RUnlock() // Release RLock after acquiring write mutex ()
 
 	err := WriteMessage(conn, msg)
 	if writeMu != nil {

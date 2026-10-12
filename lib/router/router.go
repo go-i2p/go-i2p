@@ -27,14 +27,12 @@ import (
 // Router is the core I2P router implementation that manages transports, the network database,
 // tunnel pools, and message routing for participating in the I2P network.
 // Router is the core I2P router implementation.
-//
 // Lock Ordering (CRITICAL: must be respected to prevent deadlocks):
 // When acquiring multiple mutexes, always acquire in this order:
-//  1. runMux      (protects running flag and router lifecycle state)
-//  2. sessionMutex (protects activeSessions map for transport message routing)
-//  3. reseedMutex (protects isReseeding flag)
-//  4. keystoreMux (protects RouterInfoKeystore access)
-//
+// 1. runMux (protects running flag and router lifecycle state)
+// 2. sessionMutex (protects activeSessions map for transport message routing)
+// 3. reseedMutex (protects isReseeding flag)
+// 4. keystoreMux (protects RouterInfoKeystore access)
 // Example: If acquiring both runMux and sessionMutex, acquire runMux first.
 // Never acquire in reverse order or skip levels, as this creates deadlock risk.
 // Currently, sessionMutex and keystoreMux are rarely acquired together in
@@ -99,7 +97,7 @@ type Router struct {
 	routerInfoProv *routerInfoProvider
 
 	// publisher publishes our RouterInfo and LeaseSets to floodfill routers (tunnel-anonymous)
-	// H-2: Now used for both router and I2CP client LeaseSets via PublishLeaseSetBytes() method
+	// Now used for both router and I2CP client LeaseSets via PublishLeaseSetBytes() method
 	publisher *netdb.Publisher
 
 	// explorer actively discovers new NetDB peers via random-key XOR lookups
@@ -132,7 +130,7 @@ type Router struct {
 	keystoreMux sync.RWMutex
 
 	// startupErr receives any error from the mainloop goroutine during
-	// startup-critical initialization (NetDB, I2CP, I2PControl).  Start()
+	// startup-critical initialization (NetDB, I2CP, I2PControl). Start()
 	// blocks on this channel so callers get a synchronous error report.
 	startupErr chan error
 }
@@ -260,7 +258,7 @@ func initializeTransports(r *Router, ri *router_info.RouterInfo, cfg *config.Rou
 			transports = append(transports, ssu2Transport)
 			// Propagate the final dual-transport RI to NTCP2 so msg3 sends
 			// ri_addr_count=2 instead of the stale 1-address RI stored during
-			// buildNTCP2Transport. (AUDIT FIX-1 / RC-B)
+			// buildNTCP2Transport.
 			ntcp2Transport.UpdateLocalRouterInfo(*ri)
 		}
 	}
@@ -360,7 +358,6 @@ func validateRouterKeys(r *Router) error {
 }
 
 // constructRouterInfo builds the initial router info from the keystore.
-//
 // We start with Reachable:false (caps='U') because at this point no
 // transport addresses have been added — the addresses are appended later
 // by buildNTCP2Transport / buildSSU2Transport. After all transports have
@@ -401,7 +398,6 @@ func routerInfoOptionsFromConfig(cfg *config.RouterConfig) keys.RouterInfoOption
 
 // FromConfig creates a minimal Router stub from config. This is a low-level
 // internal function used by CreateRouter. It only initializes cfg and closeChnl.
-//
 // WARNING: Do not use FromConfig directly unless you intend to manually
 // initialize the keystore, transport, and other subsystems afterward.
 // Use CreateRouter instead, which fully initializes the router.
@@ -525,7 +521,7 @@ func encodeRouterIdentityHash(hash common.Hash) string {
 
 // GetPublisher returns the NetDB publisher instance used by this router.
 // This is used to access router-specific publishing operations like ForceRouterInfoRepublish().
-// CRITICAL-6 FIX: Allows embedded router to trigger immediate RouterInfo republish at startup.
+// Allows embedded router to trigger immediate RouterInfo republish at startup.
 func (r *Router) GetPublisher() *netdb.Publisher {
 	return r.publisher
 }

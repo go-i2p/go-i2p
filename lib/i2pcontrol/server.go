@@ -29,8 +29,8 @@ type Server struct {
 	registry    *MethodRegistry
 	stats       RouterStatsProvider
 	httpServer  *http.Server
-	listener    net.Listener // Listener for exposing actual bound address
-	mu          sync.RWMutex // Protects listener field
+	listener net.Listener // Listener for exposing actual bound address
+	mu sync.RWMutex // Protects listener field
 	ctx         context.Context
 	cancel      context.CancelFunc
 	wg          sync.WaitGroup
@@ -115,7 +115,7 @@ func validateBindPolicy(cfg *config.I2PControlConfig) error {
 
 // isLoopbackBind reports whether the host portion of addr resolves exclusively
 // to loopback addresses. An empty host or a wildcard bind (0.0.0.0, ::) is
-// treated as non-loopback. Consolidation for H-10: delegates to nat.IsLoopbackAddress.
+// treated as non-loopback. delegates to nat.IsLoopbackAddress.
 func isLoopbackBind(addr string) (bool, error) {
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
@@ -550,7 +550,7 @@ func (s *Server) setCORSHeaders(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 	w.Header().Set("Vary", "Origin")
 
-	// Security headers (see AUDIT.md LOW finding)
+	// Security headers
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	if s.config.UseHTTPS {
 		w.Header().Set("Strict-Transport-Security", "max-age=31536000")
@@ -610,7 +610,7 @@ func (s *Server) corsAllowlist() []string {
 	origins := map[string]struct{}{
 		fmt.Sprintf("%s://localhost:%s", scheme, port): {},
 		fmt.Sprintf("%s://127.0.0.1:%s", scheme, port): {},
-		fmt.Sprintf("%s://[::1]:%s", scheme, port):     {},
+		fmt.Sprintf("%s://[::1]:%s", scheme, port): {},
 	}
 
 	if !isWildcardOrUnspecifiedHost(host) {
@@ -707,7 +707,7 @@ func (s *Server) writeErrorResponse(w http.ResponseWriter, id interface{}, rpcEr
 	resp := &Response{
 		ID:      id,
 		JSONRPC: "2.0",
-		Error:   rpcErr,
+		Error: rpcErr,
 	}
 
 	w.Header().Set("Content-Type", "application/json")

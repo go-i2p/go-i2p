@@ -13,7 +13,7 @@ import (
 	"github.com/samber/oops"
 )
 
-// M-2 FIX: Package-level variable and mutex for RNG function injection (testing only).
+// Package-level variable and mutex for RNG function injection (testing only).
 // Tests can set testInjectRNGError to inject errors when validating CSPRNG failure behavior.
 // Protected by testInjectMutex to prevent race detector errors.
 var (
@@ -62,13 +62,13 @@ type BaseI2NPMessage struct {
 
 // generateRandomMessageID creates a random 4-byte (32-bit) message ID.
 // Uses the full 32-bit unsigned range [0, 0xFFFFFFFF] to match the space
-// of received message IDs (LOW-1 audit fix: removed 0x7FFFFFFF mask that
+// of received message IDs (removed 0x7FFFFFFF mask that
 // had halved the outbound ID space).
-// M-2 FIX: Rejects CSPRNG failure rather than silently degrading to predictable IDs.
+// Rejects CSPRNG failure rather than silently degrading to predictable IDs.
 // Returns an error if the system's secure random number generator fails,
 // or if testInjectRNGError is set (for testing crash-fast behavior).
 func generateRandomMessageID() (int, error) {
-	// M-2 FIX: Allow tests to inject RNG failures (with mutex protection)
+	// Allow tests to inject RNG failures (with mutex protection)
 	testInjectMutex.Lock()
 	injectedErr := testInjectRNGError
 	testInjectMutex.Unlock()
@@ -80,11 +80,11 @@ func generateRandomMessageID() (int, error) {
 	if _, err := rand.Read(msgIDBytes); err != nil {
 		return 0, oops.Errorf("i2np: crypto/rand failed: %w", err)
 	}
-	// LOW-1 FIX: Use the full 32-bit space for generated IDs to match the
+	// Use the full 32-bit space for generated IDs to match the
 	// 32-bit space of received IDs (read via binary.BigEndian.Uint32 on
-	// incoming frames).  On 64-bit platforms (the only supported target)
+	// incoming frames). On 64-bit platforms (the only supported target)
 	// int is 64-bit, so uint32 values with the high bit set are stored as
-	// large positive ints — no sign overflow.  The previous 0x7FFFFFFF mask
+	// large positive ints — no sign overflow. The previous 0x7FFFFFFF mask
 	// halved the usable ID space and was only needed on 32-bit, which is not
 	// a supported platform.
 	return int(binary.BigEndian.Uint32(msgIDBytes)), nil
@@ -165,7 +165,6 @@ const StandardI2NPHeaderSize = 16
 
 // MarshalMessageShort serializes any I2NP message using the 9-byte short header
 // format required for NTCP2 and SSU2 data-phase I2NP blocks (block type 3).
-//
 // This is the single source of truth for short-header framing across both
 // transports. Unlike asserting *BaseI2NPMessage (which fails for typed message
 // structs and silently falls back to the 16-byte header), this works for every
@@ -173,11 +172,10 @@ const StandardI2NPHeaderSize = 16
 // 16-byte standard header stripped, so typed messages that compute their
 // payload lazily inside MarshalBinary (e.g. *DatabaseStore via SetData) are
 // serialized correctly — calling GetData() directly would return stale data.
-//
 // Short header format:
-//   - Type (1 byte)
-//   - Message ID (4 bytes, big-endian)
-//   - Short Expiration (4 bytes, big-endian, seconds since epoch)
+// - Type (1 byte)
+// - Message ID (4 bytes, big-endian)
+// - Short Expiration (4 bytes, big-endian, seconds since epoch)
 func MarshalMessageShort(msg Message) ([]byte, error) {
 	full, err := msg.MarshalBinary()
 	if err != nil {
@@ -208,12 +206,10 @@ func MarshalMessageShort(msg Message) ([]byte, error) {
 
 // MarshalShortI2NP serializes the I2NP message using the 9-byte short header
 // format used in NTCP2 block type 3 (I2NP message blocks).
-//
 // Short header format:
-//   - Type (1 byte)
-//   - Message ID (4 bytes, big-endian)
-//   - Short Expiration (4 bytes, big-endian, seconds since epoch)
-//
+// - Type (1 byte)
+// - Message ID (4 bytes, big-endian)
+// - Short Expiration (4 bytes, big-endian, seconds since epoch)
 // The payload follows the header. No checksum is included (AEAD provides integrity).
 func (m *BaseI2NPMessage) MarshalShortI2NP() ([]byte, error) {
 	totalSize := ShortI2NPHeaderSize + len(m.data)

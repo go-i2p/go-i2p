@@ -177,7 +177,7 @@ func (s *Server) handleAcceptError(err error) bool {
 // shouldRejectConnection checks if a connection should be rejected due to
 // connection or session limits. Tracks active TCP connections separately from
 // sessions to prevent resource exhaustion from unauthenticated connections.
-// M-8 FIX: Returns true if rejected (handled by caller), false if accepted.
+// Returns true if rejected (handled by caller), false if accepted.
 func (s *Server) shouldRejectConnection(conn net.Conn) bool {
 	connCount := s.activeConnCount.Load()
 	sessionCount := s.manager.SessionCount()
@@ -195,7 +195,7 @@ func (s *Server) shouldRejectConnection(conn net.Conn) bool {
 			"sessionCount": sessionCount,
 			"remoteAddr":   conn.RemoteAddr().String(),
 		}).Warn("max_connections_reached_rejecting")
-		// M-8 FIX: Send Disconnect message before closing
+		// Send Disconnect message before closing
 		s.sendDisconnectMessage(conn, "connection_limit_reached")
 		conn.Close()
 		return true
@@ -207,7 +207,7 @@ func (s *Server) shouldRejectConnection(conn net.Conn) bool {
 			"maxSessions":  maxSessions,
 			"remoteAddr":   conn.RemoteAddr().String(),
 		}).Warn("max_sessions_reached_rejecting_connection")
-		// M-8 FIX: Send Disconnect message before closing (protocol compliance)
+		// Send Disconnect message before closing (protocol compliance)
 		s.sendDisconnectMessage(conn, "session_limit_reached")
 		conn.Close()
 		return true
@@ -216,7 +216,7 @@ func (s *Server) shouldRejectConnection(conn net.Conn) bool {
 	return false
 }
 
-// M-8 FIX: sendDisconnectMessage sends an I2CP Disconnect message to the client
+// sendDisconnectMessage sends an I2CP Disconnect message to the client
 // before closing the connection. This provides proper protocol-level error signaling.
 func (s *Server) sendDisconnectMessage(conn net.Conn, reason string) {
 	defer func() {
@@ -245,7 +245,7 @@ func (s *Server) sendDisconnectMessage(conn net.Conn, reason string) {
 		Payload:   payload,
 	}
 
-	// M-8 FIX: Send with short timeout (don't block indefinitely)
+	// Send with short timeout (don't block indefinitely)
 	if err := conn.SetWriteDeadline(time.Now().Add(500 * time.Millisecond)); err != nil {
 		return // Can't set deadline, give up
 	}
@@ -309,7 +309,7 @@ func (s *Server) logClientConnected(conn net.Conn) {
 // Uses delete-from-map as a coordination mechanism with cleanupIdleSessions:
 // only the path that successfully removes the session from the map proceeds
 // with DestroySession, preventing double-cleanup races.
-// M-22: Now delegates to claimSessionCleanup for consistent lock-delete-check pattern.
+// Now delegates to claimSessionCleanup for consistent lock-delete-check pattern.
 func (s *Server) cleanupSessionConnection(sessionPtr **Session) {
 	if *sessionPtr != nil {
 		session := *sessionPtr
@@ -355,7 +355,7 @@ func (s *Server) cleanupConnectionState(conn net.Conn) {
 func (s *Server) readProtocolByte(conn net.Conn) bool {
 	// H-NEW-1 FIX: apply the configured read timeout before the first read so
 	// that clients which connect but never send data cannot hold goroutines
-	// (and session slots) indefinitely.  The deadline is cleared immediately
+	// (and session slots) indefinitely. The deadline is cleared immediately
 	// after the read so it does not interfere with the per-message deadlines
 	// applied later in readClientMessage.
 	if s.config.ReadTimeout > 0 {
@@ -597,7 +597,6 @@ func (s *Server) getOrCreateConnectionState(conn net.Conn) *connectionState {
 }
 
 // resetCountersIfNeeded resets rate limit counters after one calendar second.
-//
 // L-NEW-4 FIX: Previously the reset was gated on time since last message,
 // which means a burst sent within one second was never reset as long as
 // messages kept arriving, allowing an attacker to bypass the per-second
@@ -776,18 +775,18 @@ func (s *Server) sendResponse(conn net.Conn, response *Message, sessionPtr **Ses
 	return nil
 }
 
-// M-9 FIX: Minimum write deadline to prevent indefinite blocking while holding mutex
+// Minimum write deadline to prevent indefinite blocking while holding mutex
 // If WriteTimeout is 0 or too short, enforce this minimum to prevent DoS
 // where a stalled client blocks the delivery goroutine holding the write mutex
 const minimumWriteTimeout = 5 * time.Minute
 
 // applyWriteDeadline sets the connection write deadline if a timeout is configured.
-// M-9 FIX: Enforces a minimum write deadline even if WriteTimeout is 0 to prevent
+// Enforces a minimum write deadline even if WriteTimeout is 0 to prevent
 // a stalled client from indefinitely blocking while holding the per-connection write mutex.
 func (s *Server) applyWriteDeadline(conn net.Conn) {
 	timeout := s.config.WriteTimeout
 
-	// M-9 FIX: Enforce minimum write timeout to prevent indefinite blocking
+	// Enforce minimum write timeout to prevent indefinite blocking
 	// If WriteTimeout is 0 (disabled) or shorter than minimum, use minimum deadline.
 	// This prevents a stalled TCP client (zero window) from indefinitely blocking
 	// the delivery goroutine while holding the session write mutex.
@@ -805,7 +804,7 @@ func (s *Server) applyWriteDeadline(conn net.Conn) {
 
 // acquireWriteMutex acquires the per-connection write mutex for the session
 // if available. Returns the mutex and whether the server RLock is being held.
-// M-3 FIX: Keep RLock held across mutex acquisition to prevent TOCTOU between
+// Keep RLock held across mutex acquisition to prevent TOCTOU between
 // map lookup and mutex lock during session destruction/recreation races.
 // Caller MUST release the returned mutex AND call releaseWriteMutex to
 // properly release both the write mutex and the server RLock.
@@ -819,7 +818,7 @@ func (s *Server) acquireWriteMutex(sessionPtr **Session) (*sync.Mutex, bool) {
 		s.mu.RUnlock()
 		return nil, false
 	}
-	// M-3 FIX: Hold RLock while acquiring write mutex to prevent
+	// Hold RLock while acquiring write mutex to prevent
 	// TOCTOU where session is destroyed and ID reused between lookup and lock
 	writeMu.Lock()
 	s.mu.RUnlock()        // Release RLock only after acquiring write mutex

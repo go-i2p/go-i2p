@@ -18,7 +18,7 @@ type Bootstrap interface {
 }
 
 // tryBootstrapSource is a generic helper that attempts to obtain peers from any Bootstrap implementation.
-// Consolidation for H-8: consolidates triplicated try*Bootstrap patterns.
+// consolidates triplicated try*Bootstrap patterns.
 // Callers pass the bootstrap object and should handle source-specific logging.
 // Returns peers and nil on success (no error + len > 0).
 // Returns nil and a wrapped error if GetPeers fails or returns no peers.

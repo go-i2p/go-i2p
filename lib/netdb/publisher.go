@@ -33,7 +33,7 @@ type SessionProvider interface {
 
 	// ReleaseSession decrements the transport pool slot counter. Must be called
 	// after each GetSession to release the reserved slot, even if the underlying
-	// connection is reused. Fixes H-1 connection pool leak. Callers typically
+	// connection is reused.. Callers typically
 	// call this via defer immediately after GetSession succeeds.
 	ReleaseSession()
 }
@@ -151,13 +151,12 @@ func DefaultPublisherConfig() PublisherConfig {
 // NewPublisher creates a new database publisher.
 // The publisher periodically distributes RouterInfo and LeaseSets to
 // the closest floodfill routers based on Kademlia XOR distance.
-//
 // Parameters:
-//   - db: NetworkDatabase for floodfill router selection
-//   - pool: Tunnel pool for sending DatabaseStore messages (can be nil initially)
-//   - transport: TransportManager for sending I2NP messages to gateway routers (can be nil initially)
-//   - routerInfoProvider: Provider for accessing local RouterInfo (can be nil if not publishing RouterInfo)
-//   - config: Publisher configuration (intervals, floodfill count)
+// - db: NetworkDatabase for floodfill router selection
+// - pool: Tunnel pool for sending DatabaseStore messages (can be nil initially)
+// - transport: TransportManager for sending I2NP messages to gateway routers (can be nil initially)
+// - routerInfoProvider: Provider for accessing local RouterInfo (can be nil if not publishing RouterInfo)
+// - config: Publisher configuration (intervals, floodfill count)
 func NewPublisher(db NetworkDatabase, pool *tunnel.Pool, transport SessionProvider, routerInfoProvider RouterInfoProvider, config PublisherConfig) *Publisher {
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -341,10 +340,9 @@ func (p *Publisher) publishOurRouterInfo() {
 
 // ForceRouterInfoRepublish immediately republishes our RouterInfo to all known floodfill routers.
 // This should be called when:
-//  1. Encryption keys are regenerated or detected as inconsistent
-//  2. Garlic message decryption failures spike (indicates peers have old RouterInfo)
-//  3. Router restarts and needs to propagate new identity to network
-//
+// 1. Encryption keys are regenerated or detected as inconsistent
+// 2. Garlic message decryption failures spike (indicates peers have old RouterInfo)
+// 3. Router restarts and needs to propagate new identity to network
 // Without forced republish, it can take 30+ minutes for the network to converge
 // on the new RouterInfo, causing 100% garlic decryption failures during that window.
 func (p *Publisher) ForceRouterInfoRepublish() error {
@@ -386,10 +384,10 @@ func (p *Publisher) publishAllLeaseSets() {
 // publishLeaseSetEntry publishes a single LeaseSetEntry to floodfill routers.
 // This is a helper method that determines which type of LeaseSet to publish.
 // The DatabaseStore type byte must match the actual LeaseSet type per the I2P spec:
-//   - DatabaseStoreTypeLeaseSet (1) for original LeaseSet
-//   - DatabaseStoreTypeLeaseSet2 (3) for LeaseSet2
-//   - DatabaseStoreTypeEncryptedLeaseSet (5) for EncryptedLeaseSet
-//   - DatabaseStoreTypeMetaLeaseSet (7) for MetaLeaseSet
+// - DatabaseStoreTypeLeaseSet (1) for original LeaseSet
+// - DatabaseStoreTypeLeaseSet2 (3) for LeaseSet2
+// - DatabaseStoreTypeEncryptedLeaseSet (5) for EncryptedLeaseSet
+// - DatabaseStoreTypeMetaLeaseSet (7) for MetaLeaseSet
 func (p *Publisher) publishLeaseSetEntry(lsEntry LeaseSetEntry) error {
 	// Determine which type of LeaseSet we have, serialize it, and select the correct store type
 	var lsBytes []byte
@@ -431,14 +429,11 @@ func (p *Publisher) publishLeaseSetEntry(lsEntry LeaseSetEntry) error {
 // This method satisfies the i2cp.LeaseSetPublisher interface and is used
 // for publishing I2CP client LeaseSets (which are LeaseSet2) via the tunnel-anonymous path.
 // The provided bytes are assumed to be a serialized LeaseSet2 (dataType=3).
-//
-// H-2 Consolidation: This method enables complete migration to tunnel-anonymous publishing
+// This method enables complete migration to tunnel-anonymous publishing
 // for all LeaseSets, eliminating the separate router.LeaseSetPublisher direct-session approach.
-//
 // Parameters:
-//   - hash: The destination hash (SHA256 of the destination)
-//   - leaseSetData: Raw serialized LeaseSet2 bytes
-//
+// - hash: The destination hash (SHA256 of the destination)
+// - leaseSetData: Raw serialized LeaseSet2 bytes
 // Returns an error if publishing to floodfill routers fails.
 func (p *Publisher) PublishLeaseSet(hash common.Hash, leaseSetData []byte) error {
 	log.WithField("hash", logutil.HashPrefixPlain(hash)).Debug("Publishing LeaseSet via PublishLeaseSet")
@@ -448,7 +443,7 @@ func (p *Publisher) PublishLeaseSet(hash common.Hash, leaseSetData []byte) error
 		return oops.Errorf("cannot publish empty LeaseSet bytes")
 	}
 
-	// CRITICAL-3 FIX: Store LeaseSet in local NetDB for internal use only.
+	// Store LeaseSet in local NetDB for internal use only.
 	// Uses StoreOwnLeaseSet to mark as "local-use-only" so it won't be served
 	// to external lookup queries, maintaining privacy. This ensures:
 	// 1. Local router can find its own inbound tunnel entrance points
@@ -1184,11 +1179,11 @@ func (p *Publisher) createTunnelGatewayMessage(hash common.Hash, data []byte, da
 
 // createDatabaseStoreMessage creates a DatabaseStore I2NP message with the provided
 // hash, data, and type. The dataType should be one of the DATABASE_STORE_TYPE_* constants:
-//   - DatabaseStoreTypeRouterInfo (0): For RouterInfo entries
-//   - DatabaseStoreTypeLeaseSet (1): For original LeaseSet entries
-//   - DatabaseStoreTypeLeaseSet2 (3): For LeaseSet2 entries (standard as of 0.9.38+)
-//   - DatabaseStoreTypeEncryptedLeaseSet (5): For EncryptedLeaseSet entries (0.9.39+)
-//   - DatabaseStoreTypeMetaLeaseSet (7): For MetaLeaseSet entries (0.9.40+)
+// - DatabaseStoreTypeRouterInfo (0): For RouterInfo entries
+// - DatabaseStoreTypeLeaseSet (1): For original LeaseSet entries
+// - DatabaseStoreTypeLeaseSet2 (3): For LeaseSet2 entries (standard as of 0.9.38+)
+// - DatabaseStoreTypeEncryptedLeaseSet (5): For EncryptedLeaseSet entries (0.9.39+)
+// - DatabaseStoreTypeMetaLeaseSet (7): For MetaLeaseSet entries (0.9.40+)
 func (p *Publisher) createDatabaseStoreMessage(hash common.Hash, data []byte, dataType byte) (i2np.Message, error) {
 	dbStore := i2np.NewDatabaseStore(hash, data, dataType)
 	useTunnelReplyRoute := false
@@ -1394,11 +1389,9 @@ func (p *Publisher) cleanupStaleReplyTokens(ttl time.Duration) {
 }
 
 // selectReplyRoute returns a reply tunnel ID and gateway hash for DatabaseStore acks.
-//
 // ReplyGateway must identify the inbound tunnel gateway router (IBGW), not our
 // local router hash, because the sender targets the gateway that owns the
 // ReplyTunnelID path.
-//
 // Returns ok=false when no valid inbound reply route is available.
 func (p *Publisher) selectReplyRoute() ([4]byte, common.Hash, bool) {
 	p.fieldMu.RLock()

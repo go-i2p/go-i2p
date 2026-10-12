@@ -15,8 +15,7 @@ import (
 // deriveKeyIDFromPublicKey generates a hex-encoded KeyID from a public key.
 // Takes the first 10 bytes of the public key and encodes them as hex.
 // This is a shared helper used by multiple keystores to ensure consistent KeyID derivation.
-//
-// M-31 Consolidation: This helper eliminates duplicate logic between computeKeyID
+// This helper eliminates duplicate logic between computeKeyID
 // and tryGenerateKeyIDFromPrivateKey.
 func deriveKeyIDFromPublicKey(publicKey types.PublicKey) string {
 	keyBytes := publicKey.Bytes()

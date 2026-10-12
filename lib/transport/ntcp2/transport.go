@@ -27,12 +27,12 @@ import (
 
 const (
 	ntcp2FailsafeIterationFreq = 2 * time.Second
-	ntcp2MinExpireIdleTime     = 120 * time.Second
-	ntcp2MaxExpireIdleTime     = 11 * time.Minute
-	ntcp2MayDisconnectTimeout  = 10 * time.Second
-	ntcp2RiStoreInterval       = 29 * time.Minute
-	ntcp2IdleExpireIncrease    = 1 * time.Second
-	ntcp2IdleExpireDecrease    = 3 * time.Second
+	ntcp2MinExpireIdleTime = 120 * time.Second
+	ntcp2MaxExpireIdleTime = 11 * time.Minute
+	ntcp2MayDisconnectTimeout = 10 * time.Second
+	ntcp2RiStoreInterval = 29 * time.Minute
+	ntcp2IdleExpireIncrease = 1 * time.Second
+	ntcp2IdleExpireDecrease = 3 * time.Second
 )
 
 // NTCP2Transport implements the I2P NTCP2 transport protocol, managing listener setup, session lifecycle, and peer connections.
@@ -40,8 +40,8 @@ type NTCP2Transport struct {
 	// Network listener (uses net.Listener interface per guidelines)
 	listener net.Listener // Will be *ntcp2.Listener internally
 
-	// Configuration (HIGH-1.3 fix: use atomic.Pointer for thread-safe config swaps)
-	config   atomic.Pointer[Config]
+	// Configuration (use atomic.Pointer for thread-safe config swaps)
+	config atomic.Pointer[Config]
 	identity router_info.RouterInfo
 
 	// Keystore for crypto key initialization (needed by SetIdentity)
@@ -76,7 +76,7 @@ type NTCP2Transport struct {
 	// Metrics for critical bugs (X-1)
 	acceptedConnPromotionAttempts int32 // atomic counter for bug detection: how many times promoteInboundConnection refused an acceptedConn
 
-	// EH-1 fix: Track RouterInfo parse failures for observability.
+	// Track RouterInfo parse failures for observability.
 	// Incremented when ReadRouterInfo fails on inbound msg3 (malformed, signature invalid, etc).
 	// High count indicates peer misconfiguration or attack attempt.
 	routerInfoParseFailures int32 // atomic counter
@@ -110,9 +110,9 @@ type NTCP2Transport struct {
 	staticKeyMu sync.Mutex
 
 	// Lifecycle management
-	ctx    context.Context
+	ctx context.Context
 	cancel context.CancelFunc
-	wg     sync.WaitGroup
+	wg sync.WaitGroup
 
 	// Java-style shared idle window for NTCP2 failsafe maintenance.
 	idleExpireWriteTime int64 // atomic, time.Duration stored as nanoseconds
@@ -125,7 +125,7 @@ type NTCP2Transport struct {
 
 	// closeOnce ensures Close() is idempotent.
 	closeOnce sync.Once
-	closeErr  error
+	closeErr error
 }
 
 // KeystoreProvider is the interface that supplies the X25519 encryption private key required for NTCP2 handshake negotiation.
@@ -145,7 +145,7 @@ func NewNTCP2Transport(identity router_info.RouterInfo, config *Config, keystore
 	}
 	identHashBytes := identHash.Bytes()
 	logger.WithFields(map[string]interface{}{
-		"router_hash":      logutil.HashPrefixPlain(identHashBytes),
+		"router_hash": logutil.HashPrefixPlain(identHashBytes),
 		"listener_address": config.ListenerAddress,
 	}).Info("Initializing NTCP2 transport")
 
@@ -174,7 +174,7 @@ func NewNTCP2Transport(identity router_info.RouterInfo, config *Config, keystore
 	logger.WithField("address", transport.Addr().String()).Info("NTCP2 transport initialized successfully")
 	transport.startIdleMaintenance()
 
-	// CRITICAL-5.1: Verify map integrity at startup (debug build)
+	// Verify map integrity at startup (debug build)
 	if invalidCount := transport.verifyMapIntegrity(); invalidCount > 0 {
 		logger.WithField("invalid_entries", invalidCount).
 			Error("CRITICAL: Session map corruption detected at startup")
@@ -259,16 +259,16 @@ func loadOrGenerateObfuscationIV(ntcp2Config *ntcp2.Config, workingDir string, c
 func buildTransportInstance(config *Config, identity router_info.RouterInfo, keystore KeystoreProvider, ctx context.Context, cancel context.CancelFunc, logger *logger.Entry) *NTCP2Transport {
 	registry := transport.NewSessionRegistry(logger)
 	t := &NTCP2Transport{
-		identity:        identity,
-		keystore:        keystore,
-		handler:         NewDefaultHandler(),
-		ctx:             ctx,
-		cancel:          cancel,
-		logger:          logger,
-		wg:              sync.WaitGroup{},
+		identity: identity,
+		keystore: keystore,
+		handler: NewDefaultHandler(),
+		ctx: ctx,
+		cancel: cancel,
+		logger: logger,
+		wg: sync.WaitGroup{},
 		sessionRegistry: registry,
 	}
-	// HIGH-1.3 fix: Initialize atomic.Pointer[Config] with Store
+	// Initialize atomic.Pointer[Config] with Store
 	t.config.Store(config)
 	atomic.StoreInt64(&t.idleExpireWriteTime, int64(ntcp2MaxExpireIdleTime))
 	return t
@@ -325,7 +325,7 @@ func (t *NTCP2Transport) runIdleMaintenancePass() {
 
 	if failsafeCloses > 0 {
 		t.logger.WithFields(map[string]interface{}{
-			"idle_expire":     expire.String(),
+			"idle_expire": expire.String(),
 			"failsafe_closes": failsafeCloses,
 		}).Info("NTCP2 idle maintenance closed stale sessions")
 	}
@@ -381,16 +381,16 @@ func (t *NTCP2Transport) haveCapacity(percent int) bool {
 // bindOSAssignedPort discovers a free port via a temporary OS-assigned binding, then
 // re-binds through NAT traversal (UPnP/NAT-PMP with fallback) on that port so that
 // the resulting listener carries a real external address rather than the unspecified "::" host.
-//
 // Note: On iOS, app sandbox restrictions prevent net.Listen on arbitrary ports
 // without the com.apple.developer.networking.multipath entitlement or a
 // NEPacketTunnelProvider extension. Attempting to listen will fail with EACCES.
 // bindOSAssignedPort probes for an available OS-assigned port, closes the probe
 // socket, and rebinds that port. To handle the TOCTOU race where another process
 // may claim the port between probe and rebind, this function retries up to
-// maxPortProbeRetries times. Each retry probes a new port and attempts rebind.
-// P-1 partial mitigation: Increased retries to 5, added jitter, clear error message.
-// P-2 fix: Returns bound address instead of mutating config.ListenerAddress.
+// maxPortProbeRetries times. Each retry probes a new port and attempts rebind,
+// with jitter between attempts to reduce the chance of repeated collisions.
+// The function returns the bound address instead of mutating
+// config.ListenerAddress, so the caller always sees the actual address.
 func bindOSAssignedPort(config *Config) (net.Listener, string, error) {
 	cfg := nat.DefaultBindConfig("tcp", config.ListenerAddress)
 	result, err := nat.ProbeAndBindWithNATTraversal(cfg)
@@ -432,7 +432,8 @@ func bindPlainTCPListener(listenerAddress string, requestedPort int) (net.Listen
 }
 
 // isLoopbackAddress returns true if host is empty, a loopback IP, or resolves
-// entirely to loopback addresses. P-1 fix: catches "localhost" and other hostnames.
+// entirely to loopback addresses. It also catches "localhost" and other
+// hostnames that resolve to loopback.
 
 // attachNTCP2Listener wraps tcpListener in an NTCP2 listener and stores it on
 // the transport. Closes tcpListener on NTCP2 setup failure.
@@ -484,9 +485,9 @@ func setupNetworkListener(transport *NTCP2Transport, config *Config, ntcp2Config
 	if !nat.IsLoopbackAddress(host) {
 		port, _ := strconv.Atoi(portStr)
 		cfg := &nat.PortMapperConfig{
-			Network:      "tcp",
+			Network: "tcp",
 			InternalPort: port,
-			Context:      transport.ctx,
+			Context: transport.ctx,
 		}
 		transport.portMapperManager = nat.NewPortMapperManager(cfg)
 		transport.logger.WithField("internal_port", port).Info("Started TCP port mapper")
@@ -500,11 +501,9 @@ func setupNetworkListener(transport *NTCP2Transport, config *Config, ntcp2Config
 // GetSessionCount() and checkSessionLimit() accurately reflect both inbound
 // and outbound sessions. A cleanup callback is registered to remove the
 // tracking entry when the connection is closed.
-//
 // Handshakes run in per-connection goroutines so that one slow or malicious
 // peer cannot block the accept loop. The background runner is started lazily
 // on the first call to Accept().
-//
 // Spec reference: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ntcp2.rst
 func (t *NTCP2Transport) Accept() (net.Conn, error) {
 	t.identityMu.RLock()
@@ -576,7 +575,7 @@ func (t *NTCP2Transport) runInboundAcceptLoop() {
 // acceptNextConnection accepts and processes one incoming connection.
 // Returns false if the accept loop should terminate.
 func (t *NTCP2Transport) acceptNextConnection() bool {
-	// CRITICAL-1.1 NOTE: We read the listener pointer under RLock but do NOT hold
+	// NOTE: We read the listener pointer under RLock but do NOT hold
 	// the lock across Accept() — that would cause deadlock (Accept blocks indefinitely,
 	// preventing SetIdentity from acquiring write lock). Instead, we accept potential
 	// "use of closed network connection" errors if SetIdentity swaps the listener
@@ -603,7 +602,7 @@ func (t *NTCP2Transport) acceptNextConnection() bool {
 		}
 	}
 
-	// CRITICAL-1.1: Accept() is called without holding any lock. If SetIdentity
+	// Accept() is called without holding any lock. If SetIdentity
 	// swaps the listener concurrently, Accept() may return "use of closed network
 	// connection" error (handled below) or may succeed on the old listener (the
 	// connection is then closed and session count remains balanced). We do NOT
@@ -619,7 +618,7 @@ func (t *NTCP2Transport) acceptNextConnection() bool {
 		// MEDIUM 5.1: Distinguish transient from permanent accept errors.
 		// Only exit the loop on permanent errors (shutdown signaled or listener gone).
 		// For transient errors (EMFILE, etc.), log and continue accepting.
-		// CRITICAL-1.1: "use of closed network connection" from a SetIdentity listener
+		// "use of closed network connection" from a SetIdentity listener
 		// swap is treated as transient — we retry and pick up the new listener.
 		select {
 		case <-t.ctx.Done():
@@ -656,10 +655,10 @@ func (t *NTCP2Transport) shouldShutdown(rawConn net.Conn) bool {
 }
 
 // canAcceptNewSession performs pre-acceptance checks on the raw connection.
-// L-1/T-1 FIX: Session limit is now checked AFTER handshake completes, not before.
+// Session limit is now checked AFTER handshake completes, not before.
 // This prevents attackers from holding reserved slots during the 30s handshake window.
 func (t *NTCP2Transport) canAcceptNewSession(rawConn net.Conn) bool {
-	// L-1/T-1: No limit check here. Handshakes run without reserving slots.
+	// No limit check here. Handshakes run without reserving slots.
 	// The limit is enforced after successful handshake in inboundHandshakeWorker.
 	return true
 }
@@ -669,7 +668,7 @@ func (t *NTCP2Transport) canAcceptNewSession(rawConn net.Conn) bool {
 // pendingConns for consumption by Accept(). On failure the connection and
 // the reserved session slot are cleaned up. Times out if the queue is full
 // to prevent indefinite blocking and slot reservation exhaustion.
-// HIGH-2.2 fix: Use handshake context with timeout to prevent goroutine leaks on slow handshakes
+// Use handshake context with timeout to prevent goroutine leaks on slow handshakes
 func (t *NTCP2Transport) inboundHandshakeWorker(conn net.Conn) {
 	// TE-1 fix: Create context with timeout for handshake, using t.ctx as parent
 	// so that transport shutdown deadline is also honored. This prevents handshakes
@@ -690,22 +689,22 @@ func (t *NTCP2Transport) inboundHandshakeWorker(conn net.Conn) {
 	defer cancel()
 
 	if err := t.performInboundHandshake(conn, handshakeCtx); err != nil {
-		// L-1/T-1 FIX: Handshake failed. No slot was reserved, so just return.
+		// Handshake failed. No slot was reserved, so just return.
 		// performInboundHandshake already closes conn; no unreserve needed.
 		t.logger.WithField("remote_addr", remoteAddr).WithError(err).
 			Warn("[DIAG] Handshake worker exiting after performInboundHandshake error")
 		return
 	}
 
-	// L-1/T-1 FIX: Handshake succeeded. NOW check session limit and reserve a slot.
+	// Handshake succeeded. NOW check session limit and reserve a slot.
 	// This prevents attackers from holding reserved slots during the 30s handshake.
 	// If we're at capacity, close the connection and return (no slot to unreserve).
 	if err := t.checkSessionLimit(); err != nil {
 		cfg := t.config.Load()
 		t.logger.WithFields(map[string]interface{}{
 			"session_count": t.GetSessionCount(),
-			"max_sessions":  cfg.GetMaxSessions(),
-			"remote_addr":   conn.RemoteAddr().String(),
+			"max_sessions": cfg.GetMaxSessions(),
+			"remote_addr": conn.RemoteAddr().String(),
 		}).Warn("Session limit reached after successful handshake; dropping connection")
 		conn.Close()
 		return
@@ -743,7 +742,7 @@ func (t *NTCP2Transport) inboundHandshakeWorker(conn net.Conn) {
 		old = t.metrics.maxPendingConnsQueueDepth.Load()
 	}
 
-	// R-1/S-1 FIX: Perform ownership CAS BEFORE sending to pendingConns.
+	// Perform ownership CAS BEFORE sending to pendingConns.
 	// This prevents dual ownership when Accept() and GetSession race on the same peer.
 	// The CAS atomically marks the connection as "accepted" — only if this succeeds
 	// do we deliver to Accept(). If a concurrent GetSession promotion wins the CAS,
@@ -751,48 +750,48 @@ func (t *NTCP2Transport) inboundHandshakeWorker(conn net.Conn) {
 	peerHash := t.extractPeerHash(tracked)
 	originalConn := tracked.(*trackedConn).Conn
 	if !t.sessionRegistry.MarkAccepted(peerHash, originalConn) {
-		// R-1/S-1 FIX: Promotion race detected. A concurrent GetSession already promoted
+		// Promotion race detected. A concurrent GetSession already promoted
 		// this connection to a full session and won the CAS. The promoted session now owns
 		// the underlying socket and reserved slot. Do NOT send to pendingConns (violates
 		// single-ownership invariant), and do NOT call tracked.Close() (would interfere
 		// with the live promoted session). The trackedConn wrapper is harmlessly GC'd.
 		t.logger.WithFields(map[string]interface{}{
 			"remote_addr": conn.RemoteAddr().String(),
-			"peer_hash":   logutil.HashPrefixPlain(peerHash),
+			"peer_hash": logutil.HashPrefixPlain(peerHash),
 		}).Debug("Inbound connection promoted concurrently before Accept delivery; not sending to pendingConns")
 		return
 	}
 
-	// R-1/S-1 FIX: CAS succeeded — we now own the connection via acceptedConn.
+	// CAS succeeded — we now own the connection via acceptedConn.
 	// Attempt to deliver to Accept(). If the send fails (timeout or shutdown),
 	// we must undo the ownership transition by closing, which fires the onClose
 	// callback that removes the acceptedConn entry and decrements sessionCount.
 	select {
 	case t.pendingConns <- tracked:
-		// R-1/S-1 FIX: Successfully delivered to Accept(). The acceptedConn entry
+		// Successfully delivered to Accept(). The acceptedConn entry
 		// remains in the map until Accept() consumes it and promotes or the connection closes.
 	case <-sendCtx.Done():
-		// R-1/S-1 FIX: Queue send timed out. Undo the CAS by closing the connection.
+		// Queue send timed out. Undo the CAS by closing the connection.
 		// The onClose callback will remove the acceptedConn entry and decrement sessionCount.
 		// TE-2 fix: Track timeout occurrences for monitoring
 		t.metrics.queueSendTimeouts.Add(1)
 		t.logger.WithFields(map[string]interface{}{
-			"remote_addr":               conn.RemoteAddr().String(),
-			"queue_timeout":             queueTimeout,
-			"session_count":             t.GetSessionCount(),
+			"remote_addr": conn.RemoteAddr().String(),
+			"queue_timeout": queueTimeout,
+			"session_count": t.GetSessionCount(),
 			"pending_conns_queue_depth": queueLen,
-			"total_queue_timeouts":      t.metrics.queueSendTimeouts.Load(),
+			"total_queue_timeouts": t.metrics.queueSendTimeouts.Load(),
 		}).Warn("Inbound connection dropped: pending queue send timeout (accept consumer too slow?)")
 		tracked.Close()
 	case <-t.ctx.Done():
-		// R-1/S-1 FIX: Transport shutting down. Undo the CAS by closing the connection.
+		// Transport shutting down. Undo the CAS by closing the connection.
 		// The onClose callback will remove the acceptedConn entry and decrement sessionCount.
 		tracked.Close()
 	}
 }
 
 // performInboundHandshake performs the Noise XK handshake on an accepted connection.
-// HIGH-2.2 fix: Accepts handshakeCtx with timeout to prevent goroutine leaks on slow handshakes.
+// Accepts handshakeCtx with timeout to prevent goroutine leaks on slow handshakes.
 // On failure, applies probing resistance and releases the reserved session slot.
 // On success, propagates the peer's static key, extracts and stores the peer's
 // RouterInfo from message 3, and wires the AEAD-error termination callback.
@@ -810,13 +809,13 @@ func (t *NTCP2Transport) performInboundHandshake(conn net.Conn, handshakeCtx con
 		t.logger.WithField("conn_type", fmt.Sprintf("%T", conn)).
 			Error("Accepted connection is not *ntcp2.Conn; rejecting")
 		_ = conn.Close()
-		// L-1/T-1 FIX: No slot was reserved before handshake, so no unreserve needed.
+		// No slot was reserved before handshake, so no unreserve needed.
 		err := oops.Errorf("accepted connection is not *ntcp2.Conn (got %T)", conn)
 		t.onInboundHandshakeError(err)
 		return err
 	}
 
-	// HIGH-2.2: Use handshakeCtx (with timeout) for the handshake, not t.ctx
+	// Use handshakeCtx (with timeout) for the handshake, not t.ctx
 	if err := t.executeHandshake(ntcp2Conn, handshakeCtx); err != nil {
 		t.onInboundHandshakeError(err)
 		return err
@@ -843,7 +842,7 @@ func (t *NTCP2Transport) onInboundHandshakeError(err error) {
 }
 
 // executeHandshake performs the Noise XK handshake with probing resistance on failure.
-// HIGH-2.2 fix: Uses handshakeCtx (with timeout) to prevent goroutine leaks on slow/stuck handshakes.
+// Uses handshakeCtx (with timeout) to prevent goroutine leaks on slow/stuck handshakes.
 func (t *NTCP2Transport) executeHandshake(ntcp2Conn *ntcp2.Conn, handshakeCtx context.Context) error {
 	remoteAddr := "<unknown>"
 	if ra := ntcp2Conn.RemoteAddr(); ra != nil { //nolint:all
@@ -859,7 +858,7 @@ func (t *NTCP2Transport) executeHandshake(ntcp2Conn *ntcp2.Conn, handshakeCtx co
 		if errors.Is(err, context.DeadlineExceeded) {
 			t.logger.WithFields(map[string]interface{}{
 				"remote_addr": remoteAddr,
-				"error_type":  "context.DeadlineExceeded",
+				"error_type": "context.DeadlineExceeded",
 				"timeout_sec": 60,
 			}).Warn("[DIAG] Inbound handshake TIMEOUT - Noise XK protocol exceeded 60s deadline")
 		} else {
@@ -869,7 +868,7 @@ func (t *NTCP2Transport) executeHandshake(ntcp2Conn *ntcp2.Conn, handshakeCtx co
 
 		applyProbingResistance(raw)
 		_ = ntcp2Conn.Close()
-		// L-1/T-1 FIX: No slot was reserved before handshake, so no unreserve needed.
+		// No slot was reserved before handshake, so no unreserve needed.
 		return WrapNTCP2Error(err, "inbound handshake (probing resistance applied)")
 	}
 
@@ -897,14 +896,14 @@ func (t *NTCP2Transport) extractAndStorePeerRouterInfo(ntcp2Conn *ntcp2.Conn, co
 		t.logger.WithField("remote_addr", conn.RemoteAddr().String()).
 			Warn("Inbound NTCP2: no RouterInfo block in msg3 — protocol violation; closing")
 		_ = ntcp2Conn.Close()
-		// L-1/T-1 FIX: No slot was reserved before handshake, so no unreserve needed.
+		// No slot was reserved before handshake, so no unreserve needed.
 		return oops.Errorf("inbound NTCP2: missing RouterInfo block in msg3")
 	}
 
 	peerRI, _, parseErr := router_info.ReadRouterInfo(riBytes)
 	if parseErr != nil {
 		t.recordNoiseHandshakeFailure()
-		// EH-1 fix: Track parse failures separately for operator observability.
+		// Track parse failures separately for operator observability.
 		// This allows alerting on RouterInfo quality issues without conflating
 		// with NetDB storage failures.
 		atomic.AddInt32(&t.routerInfoParseFailures, 1)
@@ -912,13 +911,13 @@ func (t *NTCP2Transport) extractAndStorePeerRouterInfo(ntcp2Conn *ntcp2.Conn, co
 		// MEDIUM 5.2: RouterInfo parse failure should be a hard session-establishment error,
 		// not a warning that allows degraded routing. Abort handshake on parse failure.
 		t.logger.WithError(parseErr).WithFields(map[string]interface{}{
-			"remote_addr":          conn.RemoteAddr().String(),
+			"remote_addr": conn.RemoteAddr().String(),
 			"total_parse_failures": atomic.LoadInt32(&t.routerInfoParseFailures),
-			"ri_bytes_len":         len(riBytes),
-			"ri_bytes_prefix":      fmt.Sprintf("%x", riBytes[:min(16, len(riBytes))]),
+			"ri_bytes_len": len(riBytes),
+			"ri_bytes_prefix": fmt.Sprintf("%x", riBytes[:min(16, len(riBytes))]),
 		}).Warn("Inbound NTCP2: failed to parse peer RouterInfo from msg3; aborting handshake")
 		_ = ntcp2Conn.Close()
-		// L-1/T-1 FIX: No slot was reserved before handshake, so no unreserve needed.
+		// No slot was reserved before handshake, so no unreserve needed.
 		return oops.Errorf("RouterInfo parse failed: %w", parseErr)
 	}
 
@@ -941,9 +940,9 @@ func (t *NTCP2Transport) extractAndStorePeerRouterInfo(ntcp2Conn *ntcp2.Conn, co
 		// handshake succeeded and the session can still be used for message routing).
 		// E-3: Enhanced log with guidance for operators.
 		t.logger.WithError(err).WithFields(map[string]interface{}{
-			"remote_addr":          conn.RemoteAddr().String(),
+			"remote_addr": conn.RemoteAddr().String(),
 			"total_store_failures": atomic.LoadInt32(&t.routerInfoStoreFailures),
-			"impact":               "OBEP reply routing may fail for this peer",
+			"impact": "OBEP reply routing may fail for this peer",
 		}).Warn("Inbound NTCP2: handshake succeeded but failed to persist peer RouterInfo in NetDB")
 	}
 	return nil
@@ -995,8 +994,8 @@ func (t *NTCP2Transport) logHandshakeSuccess(conn net.Conn) {
 	t.identityMu.RUnlock()
 
 	t.logger.WithFields(map[string]interface{}{
-		"remote_addr":      conn.RemoteAddr().String(),
-		"local_caps":       localRI.RouterCapabilities(),
+		"remote_addr": conn.RemoteAddr().String(),
+		"local_caps": localRI.RouterCapabilities(),
 		"local_addr_count": localRI.RouterAddressCount(),
 	}).Debug("Inbound Noise XK handshake completed successfully (responder role)")
 }
@@ -1010,9 +1009,9 @@ func (t *NTCP2Transport) writeTerminationBlockBestEffort(rawConn net.Conn, term 
 		}
 		if t.logger != nil {
 			t.logger.WithFields(map[string]interface{}{
-				"written_bytes":  n,
+				"written_bytes": n,
 				"expected_bytes": len(term),
-				"remote_addr":    remoteAddr,
+				"remote_addr": remoteAddr,
 			}).WithError(err).Warn("Failed to write AEAD termination block")
 		}
 	}
@@ -1032,7 +1031,7 @@ func (t *NTCP2Transport) trackInboundConnection(conn net.Conn) (net.Conn, bool) 
 		t.unreserveSessionSlot()
 		t.logger.WithFields(map[string]interface{}{
 			"remote_addr": conn.RemoteAddr().String(),
-			"peer_hash":   logutil.HashPrefixPlain(peerHash),
+			"peer_hash": logutil.HashPrefixPlain(peerHash),
 		}).Debug("Duplicate inbound connection detected; reservation unreserved")
 		return conn, false // Mark as duplicate, return raw connection
 	}
@@ -1050,8 +1049,8 @@ func (t *NTCP2Transport) trackInboundConnection(conn net.Conn) (net.Conn, bool) 
 	t.recordSessionEstablished()
 
 	t.logger.WithFields(map[string]interface{}{
-		"remote_addr":   conn.RemoteAddr().String(),
-		"peer_hash":     logutil.HashPrefixPlain(peerHash),
+		"remote_addr": conn.RemoteAddr().String(),
+		"peer_hash": logutil.HashPrefixPlain(peerHash),
 		"session_count": t.GetSessionCount(),
 	}).Debug("Accepted and tracked incoming NTCP2 connection")
 	return wrappedConn, true // Mark as fresh
@@ -1074,7 +1073,7 @@ func (t *NTCP2Transport) extractPeerHash(conn net.Conn) data.Hash {
 // when the connection is closed, preventing session counter drift.
 type trackedConn struct {
 	net.Conn
-	onClose   func()
+	onClose func()
 	closeOnce sync.Once
 }
 
@@ -1128,7 +1127,7 @@ func (t *NTCP2Transport) Addr() net.Addr {
 // initialization (before the router starts accepting connections). Unlike
 // SetIdentity, this does NOT recreate the listener.
 func (t *NTCP2Transport) UpdateLocalRouterInfo(ri router_info.RouterInfo) {
-	// HIGH-1.3 fix: Load config atomically
+	// Load config atomically
 	cfg := t.config.Load()
 	staticKey := cfg.Config.StaticKey
 
@@ -1214,7 +1213,7 @@ func (t *NTCP2Transport) SetIdentity(ident router_info.RouterInfo) error {
 	// Only update identity/config after listener rebind succeeds.
 	t.identityMu.Lock()
 	t.identity = ident
-	// HIGH-1.3 fix: Load current config, make a copy, update the copy, and atomically store it
+	// Load current config, make a copy, update the copy, and atomically store it
 	oldCfg := t.config.Load()
 	newCfg := *oldCfg // Shallow copy the Config struct
 	newCfg.Config = ntcp2Config
@@ -1275,7 +1274,7 @@ func (t *NTCP2Transport) recreateListenerIfNeeded(ntcp2Config *ntcp2.Config) err
 	if err != nil {
 		// S-2 fix: On failure, old listener remains active (not set to nil).
 		// Accept loop continues serving on old listener instead of retrying forever on nil.
-		// RL-2 fix: Also keep old port mapper active on failure
+		// Also keep old port mapper active on failure
 		t.logger.WithError(err).Error("Failed to create new listener during identity update; keeping old listener active")
 		return err
 	}
@@ -1285,15 +1284,15 @@ func (t *NTCP2Transport) recreateListenerIfNeeded(ntcp2Config *ntcp2.Config) err
 	t.identityMu.Lock()
 	t.listener = newListener
 	t.portMapperManager = newPortMapper
-	// HIGH-1.3 fix: Load current config, make a copy, update the copy, and atomically store it
+	// Load current config, make a copy, update the copy, and atomically store it
 	oldCfg := t.config.Load()
 	newCfg := *oldCfg
 	newCfg.ListenerAddress = newAddr
-	t.config.Store(&newCfg) // HIGH-1.3 fix: atomic store
+	t.config.Store(&newCfg) // atomic store
 	t.identityMu.Unlock()
 
 	// Close the old listener and port mapper outside the lock after successful swap
-	// RL-2 fix: Stop old port mapper to prevent port reservation leak
+	// Stop old port mapper to prevent port reservation leak
 	if oldPortMapper != nil {
 		if err := oldPortMapper.Stop(); err != nil {
 			t.logger.WithError(err).Warn("Error stopping old port mapper after successful listener recreation")
@@ -1327,9 +1326,9 @@ func (t *NTCP2Transport) createNewListenerWithConfig(ntcp2Config *ntcp2.Config, 
 
 	// Use NAT traversal to rebind with the same port, preserving external address mapping.
 	// This ensures the recreated listener maintains NAT-mapped address semantics.
-	// R-2 fix: Inline nat.BindWithNATTraversal call with port parameter
+	// Inline nat.BindWithNATTraversal call with port parameter
 	// for the caller to update config under lock.
-	// HIGH-1.3 fix: Load config atomically before inlining BindWithNATTraversal
+	// Load config atomically before inlining BindWithNATTraversal
 	cfg := t.config.Load()
 	natCfg := nat.DefaultBindConfig("tcp", cfg.ListenerAddress)
 	natCfg.RequestedPort = iport
@@ -1372,16 +1371,16 @@ func (t *NTCP2Transport) createNewListenerWithConfig(ntcp2Config *ntcp2.Config, 
 		return nil, "", nil, WrapNTCP2Error(err, "creating new listener")
 	}
 
-	// RL-2 fix: Create new port mapper for the recreated listener. Old port mapper will be
+	// Create new port mapper for the recreated listener. Old port mapper will be
 	// stopped by the caller (recreateListenerIfNeeded) to prevent port reservation leaks.
 	var portMapper *nat.PortMapperManager
 	host, portStr, _ := net.SplitHostPort(boundAddr)
 	if !nat.IsLoopbackAddress(host) {
 		port, _ := strconv.Atoi(portStr)
 		portMapCfg := &nat.PortMapperConfig{
-			Network:      "tcp",
+			Network: "tcp",
 			InternalPort: port,
-			Context:      t.ctx,
+			Context: t.ctx,
 		}
 		portMapper = nat.NewPortMapperManager(portMapCfg)
 		t.logger.WithField("internal_port", port).Info("Started TCP port mapper for new listener")
@@ -1399,7 +1398,7 @@ func (t *NTCP2Transport) GetSession(routerInfo router_info.RouterInfo) (transpor
 	routerHashBytes := routerHash.Bytes()
 	t.logger.WithFields(map[string]interface{}{
 		"router_hash": logutil.HashPrefixPlain(routerHashBytes),
-		"operation":   "get_session",
+		"operation": "get_session",
 	}).Debug("Getting NTCP2 session")
 
 	if session, found := t.findExistingSession(routerHash); found {
@@ -1426,9 +1425,9 @@ const (
 // sessionMapEntryResolution describes the result of resolving a session map entry.
 // This factored helper ensures all lookup paths apply the same guards (X-1 fix).
 type sessionMapEntryResolution struct {
-	kind    sessionMapEntryKind
+	kind sessionMapEntryKind
 	session *NTCP2Session // non-nil when kind == entryIsSession
-	rawConn net.Conn      // non-nil when kind == entryIsRawConn
+	rawConn net.Conn // non-nil when kind == entryIsRawConn
 }
 
 // resolveSessionMapEntry examines a session map entry and returns a resolution
@@ -1439,7 +1438,7 @@ func (t *NTCP2Transport) resolveSessionMapEntry(existing interface{}) sessionMap
 	// Fast path: already a full session.
 	if ntcp2Session, ok := existing.(*NTCP2Session); ok {
 		return sessionMapEntryResolution{
-			kind:    entryIsSession,
+			kind: entryIsSession,
 			session: ntcp2Session,
 		}
 	}
@@ -1453,7 +1452,7 @@ func (t *NTCP2Transport) resolveSessionMapEntry(existing interface{}) sessionMap
 	// Raw connection needs promotion.
 	if rawConn, ok := existing.(net.Conn); ok {
 		return sessionMapEntryResolution{
-			kind:    entryIsRawConn,
+			kind: entryIsRawConn,
 			rawConn: rawConn,
 		}
 	}
@@ -1466,7 +1465,7 @@ func (t *NTCP2Transport) resolveSessionMapEntry(existing interface{}) sessionMap
 // of expected types: *NTCP2Session, acceptedConn, or net.Conn. This is primarily
 // a debug-build function to catch map corruption early. Returns number of invalid
 // entries found; zero means map is healthy.
-// CRITICAL-5.1: Map integrity check to prevent silent map corruption.
+// Map integrity check to prevent silent map corruption.
 func (t *NTCP2Transport) verifyMapIntegrity() int {
 	invalidCount := 0
 	t.sessionRegistry.RangeWithHash(func(hash data.Hash, value interface{}) bool {
@@ -1477,7 +1476,7 @@ func (t *NTCP2Transport) verifyMapIntegrity() int {
 			t.logger.WithFields(map[string]interface{}{
 				"router_hash": logutil.HashPrefixPlain(hashBytes),
 				"entry_value": fmt.Sprintf("%#v", value),
-				"entry_type":  fmt.Sprintf("%T", value),
+				"entry_type": fmt.Sprintf("%T", value),
 			}).Error("verifyMapIntegrity: invalid session map entry type")
 			invalidCount++
 		}
@@ -1529,14 +1528,14 @@ func (t *NTCP2Transport) validateExistingSession(s *NTCP2Session, routerHash dat
 		routerHashBytes := routerHash.Bytes()
 		t.logger.WithFields(map[string]interface{}{
 			"router_hash": logutil.HashPrefixPlain(routerHashBytes),
-			"reason":      s.GetContext().Err().Error(),
+			"reason": s.GetContext().Err().Error(),
 		}).Info("Evicting stale NTCP2 session")
 		t.sessionRegistry.Remove(routerHash)
 		return nil, false
 	}
 	routerHashBytes := routerHash.Bytes()
 	t.logger.WithFields(map[string]interface{}{
-		"router_hash":     logutil.HashPrefixPlain(routerHashBytes),
+		"router_hash": logutil.HashPrefixPlain(routerHashBytes),
 		"send_queue_size": s.SendQueueSize(),
 	}).Debug("Reusing existing NTCP2 session")
 	return s, true
@@ -1561,7 +1560,7 @@ func (t *NTCP2Transport) promoteInboundConnection(conn net.Conn, original interf
 
 	promoted := NewNTCP2SessionDeferred(conn, t.ctx, t.logger)
 
-	// CRITICAL-3.1 FIX: Start workers AFTER CAS succeeds, not before.
+	// Start workers AFTER CAS succeeds, not before.
 	// Starting workers before CAS means losers have running workers that may
 	// interfere with the winner's connection (frame corruption, data races).
 	// The old comment claimed this "ensures no other goroutine sees a session
@@ -1573,14 +1572,14 @@ func (t *NTCP2Transport) promoteInboundConnection(conn net.Conn, original interf
 	// Use SessionRegistry.Promote to handle CAS, callback setup, and worker startup atomically
 	promoteOpts := transport.PromoteOptions{
 		PreflightCheck: func() error {
-			// Pre-flight check: verify session is in map before starting workers (CRITICAL-3.1)
+			// Pre-flight check: verify session is in map before starting workers
 			if mapValue, exists := t.sessionRegistry.Load(routerHash); !exists {
 				t.logger.WithField("router_hash", logutil.HashPrefixPlain(routerHashBytes)).
-					Error("CRITICAL-3.1 violation: CAS succeeded but session missing from map before StartWorkers")
+					Error("CAS succeeded but session missing from map before StartWorkers")
 				return fmt.Errorf("session not in map")
 			} else if mapSession, ok := mapValue.(*NTCP2Session); !ok || mapSession != promoted {
 				t.logger.WithField("router_hash", logutil.HashPrefixPlain(routerHashBytes)).
-					Error("CRITICAL-3.1 violation: CAS succeeded but wrong session in map before StartWorkers")
+					Error("CAS succeeded but wrong session in map before StartWorkers")
 				return fmt.Errorf("wrong session in map")
 			}
 			return nil
@@ -1627,9 +1626,9 @@ func (t *NTCP2Transport) createOutboundSession(routerInfo router_info.RouterInfo
 	if err := t.checkSessionLimit(); err != nil {
 		cfg := t.config.Load()
 		t.logger.WithFields(map[string]interface{}{
-			"router_hash":   logutil.HashPrefixPlain(routerHashBytes),
+			"router_hash": logutil.HashPrefixPlain(routerHashBytes),
 			"session_count": t.GetSessionCount(),
-			"max_sessions":  cfg.GetMaxSessions(),
+			"max_sessions": cfg.GetMaxSessions(),
 		}).Warn("Connection pool full, rejecting outbound session")
 		return nil, err
 	}
@@ -1657,7 +1656,7 @@ func (t *NTCP2Transport) handleDialFailure(routerHash data.Hash, routerHashBytes
 		t.routerInfoRefresher.RequestRouterInfoRefresh(routerHash)
 		t.logger.WithFields(map[string]interface{}{
 			"router_hash": logutil.HashPrefixPlain(routerHashBytes),
-			"reason":      classifyDialError(err),
+			"reason": classifyDialError(err),
 		}).Info("Requested RouterInfo refresh after NTCP2 dial failure")
 	}
 	if n := t.getPeerConnNotifier(); n != nil {
@@ -1729,8 +1728,8 @@ func (t *NTCP2Transport) tryDialCandidates(candidates []NTCP2DialCandidate, peer
 		t.logger.WithFields(map[string]interface{}{
 			"candidate_index": i + 1,
 			"candidate_total": len(candidates),
-			"remote_addr":     tcpAddrString,
-			"peer_hash":       logutil.BytePrefix(peerHashBytes),
+			"remote_addr": tcpAddrString,
+			"peer_hash": logutil.BytePrefix(peerHashBytes),
 		}).Debug("Attempting NTCP2 dial candidate")
 
 		config, err := t.createNTCP2ConfigForAddress(routerInfo, candidate.RouterAddress)
@@ -1781,8 +1780,8 @@ func dialCandidatesWithPerformer(
 		t.logger.WithFields(map[string]interface{}{
 			"candidate_index": i + 1,
 			"candidate_total": len(candidates),
-			"remote_addr":     tcpAddrString,
-			"peer_hash":       logutil.BytePrefix(peerHashBytes),
+			"remote_addr": tcpAddrString,
+			"peer_hash": logutil.BytePrefix(peerHashBytes),
 		}).Debug("Attempting NTCP2 dial candidate")
 
 		t.logTCPConnectionAttempt(tcpAddrString, peerHashBytes)
@@ -1826,7 +1825,7 @@ func (t *NTCP2Transport) getPeerHashBytes(routerInfo router_info.RouterInfo) []b
 func (t *NTCP2Transport) logTCPConnectionAttempt(tcpAddrString string, peerHashBytes []byte) {
 	t.logger.WithFields(map[string]interface{}{
 		"remote_addr": tcpAddrString,
-		"peer_hash":   logutil.BytePrefix(peerHashBytes),
+		"peer_hash": logutil.BytePrefix(peerHashBytes),
 	}).Debug("Attempting raw TCP connection before noise handshake")
 	t.logger.Debugf("Attempting TCP connection to peer at %s (hash: %s)", tcpAddrString, logutil.BytePrefix(peerHashBytes))
 }
@@ -1836,11 +1835,9 @@ func (t *NTCP2Transport) logTCPConnectionAttempt(tcpAddrString string, peerHashB
 // followed by a manual Handshake() call. This allows us to apply probing resistance
 // (random delay + junk read) on handshake failure, so that both sides are
 // indistinguishable from a random TCP service to an active prober.
-//
 // The TCP dial uses a 10 s context deadline (reduced from 30 s; P0.2) which is
 // sufficient for reachable peers and avoids holding goroutines for 30 s against
 // hosts that silently drop SYN packets.
-//
 // Spec reference: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ntcp2.rst
 func (t *NTCP2Transport) performNTCP2Handshake(ntcp2Addr net.Addr, tcpAddrString string, peerHashBytes []byte, config *ntcp2.Config, tcpDialStart time.Time) (*ntcp2.Conn, error) {
 	t.logger.WithField("remote_addr", ntcp2Addr.String()).Debug("Dialing NTCP2 connection")
@@ -1891,8 +1888,8 @@ func (t *NTCP2Transport) performNTCP2Handshake(ntcp2Addr net.Addr, tcpAddrString
 	}
 
 	t.logger.WithFields(map[string]interface{}{
-		"remote_addr":       tcpAddrString,
-		"peer_hash":         logutil.BytePrefix(peerHashBytes),
+		"remote_addr": tcpAddrString,
+		"peer_hash": logutil.BytePrefix(peerHashBytes),
 		"total_duration_ms": time.Since(tcpDialStart).Milliseconds(),
 	}).Info("NTCP2 connection established")
 	return conn, nil
@@ -1917,16 +1914,16 @@ func (t *NTCP2Transport) logHandshakeFailure(tcpAddrString string, peerHashBytes
 	}
 
 	fields := map[string]interface{}{
-		"remote_addr":    tcpAddrString,
-		"peer_hash":      logutil.BytePrefix(peerHashBytes),
+		"remote_addr": tcpAddrString,
+		"peer_hash": logutil.BytePrefix(peerHashBytes),
 		"peer_hash_full": fmt.Sprintf("%x", peerHashBytes),
-		"error_type":     errorType,
-		"error_message":  err.Error(),
-		"duration_ms":    handshakeDuration.Milliseconds(),
-		"syscall_error":  getSyscallError(err),
-		"is_ipv6":        isIPv6,
-		"phase":          phase,
-		"impact":         impact,
+		"error_type": errorType,
+		"error_message": err.Error(),
+		"duration_ms": handshakeDuration.Milliseconds(),
+		"syscall_error": getSyscallError(err),
+		"is_ipv6": isIPv6,
+		"phase": phase,
+		"impact": impact,
 	}
 
 	// IPv6 peers on an IPv4-only host will always fail with ENETUNREACH.
@@ -2096,7 +2093,7 @@ func (t *NTCP2Transport) attachLocalRouterInfo(config *ntcp2.Config) error {
 	localRI := t.identity
 	t.identityMu.RUnlock()
 
-	// HIGH-1.3 fix: Load config atomically
+	// Load config atomically
 	cfg := t.config.Load()
 	ourStaticKey := cfg.Config.StaticKey
 
@@ -2119,13 +2116,13 @@ func (t *NTCP2Transport) attachLocalRouterInfo(config *ntcp2.Config) error {
 	addrCount := localRI.RouterAddressCount()
 	sigValid, sigErr := localRI.VerifySignature()
 	t.logger.WithFields(map[string]interface{}{
-		"ri_bytes_len":    len(riBytes),
-		"ri_addr_count":   addrCount,
-		"sig_valid":       sigValid,
-		"sig_verify_err":  fmt.Sprintf("%v", sigErr),
+		"ri_bytes_len": len(riBytes),
+		"ri_addr_count": addrCount,
+		"sig_valid": sigValid,
+		"sig_verify_err": fmt.Sprintf("%v", sigErr),
 		"ri_bytes_prefix": fmt.Sprintf("%x", riBytes[:min(16, len(riBytes))]),
 		"ri_bytes_suffix": fmt.Sprintf("%x", riBytes[max(0, len(riBytes)-16):]),
-		"ri_bytes_full":   fmt.Sprintf("%x", riBytes),
+		"ri_bytes_full": fmt.Sprintf("%x", riBytes),
 	}).Debug("LocalRouterInfo for msg3 outbound")
 	config.WithLocalRouterInfo(riBytes)
 	return nil
@@ -2136,7 +2133,7 @@ func (t *NTCP2Transport) setupSession(conn *ntcp2.Conn, routerHash data.Hash) *N
 	// that may be immediately discarded if an existing session wins the race.
 	session := NewNTCP2SessionDeferred(conn, t.ctx, t.logger)
 
-	// CRITICAL-3.1 FIX: Start workers AFTER LoadOrStore succeeds, not before.
+	// Start workers AFTER LoadOrStore succeeds, not before.
 	// Starting workers before LoadOrStore means losers have running workers that
 	// may interfere with the winner's connection (frame corruption, data races).
 	// The old comment claimed this "ensures no other goroutine sees a session
@@ -2166,17 +2163,17 @@ func (t *NTCP2Transport) setupSession(conn *ntcp2.Conn, routerHash data.Hash) *N
 	}
 
 	// We won the store — start workers NOW
-	// Pre-flight check: verify session is in map before starting workers (CRITICAL-3.1)
+	// Pre-flight check: verify session is in map before starting workers
 	routerHashBytes := routerHash.Bytes()
 	if mapValue, exists := t.sessionRegistry.Load(routerHash); !exists {
 		t.logger.WithField("router_hash", logutil.HashPrefixPlain(routerHashBytes)).
-			Error("CRITICAL-3.1 violation: LoadOrStore succeeded but session missing from map before StartWorkers")
+			Error("LoadOrStore succeeded but session missing from map before StartWorkers")
 	} else if mapSession, ok := mapValue.(*NTCP2Session); !ok || mapSession != session {
 		t.logger.WithField("router_hash", logutil.HashPrefixPlain(routerHashBytes)).
-			Error("CRITICAL-3.1 violation: LoadOrStore succeeded but wrong session in map before StartWorkers")
+			Error("LoadOrStore succeeded but wrong session in map before StartWorkers")
 	}
 
-	// Wire up the cleanup callback BEFORE starting workers (HIGH-8.2 fix).
+	// Wire up the cleanup callback BEFORE starting workers.
 	// If a Close() happens between StartWorkers and SetCleanupCallback, the
 	// session would be orphaned in the map because cleanup is not installed yet.
 	session.SetCleanupCallback(func() {
@@ -2209,7 +2206,7 @@ func (t *NTCP2Transport) resolveExistingSession(existing interface{}, routerHash
 
 	case entryIsUnexpected:
 		// Should not reach here in practice. Log an error and return nil.
-		// CRITICAL-5.1: Log full value (not just type) for debugging corrupt map entries
+		// Log full value (not just type) for debugging corrupt map entries
 		t.logger.WithField("entry_value", fmt.Sprintf("%#v", existing)).
 			Error("resolveExistingSession: unexpected session map entry type — returning nil")
 		return nil
@@ -2235,7 +2232,7 @@ func (t *NTCP2Transport) checkSessionLimit() error {
 	current := t.sessionRegistry.Count()
 	t.logger.WithFields(map[string]interface{}{
 		"current_sessions": current,
-		"max_sessions":     maxSessions,
+		"max_sessions": maxSessions,
 	}).Warn("Session limit reached")
 	return ErrConnectionPoolFull
 }
@@ -2262,7 +2259,7 @@ func (t *NTCP2Transport) promoteRawConnToSession(rawConn net.Conn, routerHash da
 	// a losing session would share the same conn, causing errors.
 	promoted := NewNTCP2SessionDeferred(rawConn, t.ctx, t.logger)
 
-	// CRITICAL-3.1 FIX: Start workers AFTER CAS succeeds, not before.
+	// Start workers AFTER CAS succeeds, not before.
 	// Starting workers before CAS means losers have running workers that may
 	// interfere with the winner's connection (frame corruption, data races).
 	// The old comment claimed this "ensures no other goroutine sees a session
@@ -2274,14 +2271,14 @@ func (t *NTCP2Transport) promoteRawConnToSession(rawConn net.Conn, routerHash da
 	// Use SessionRegistry.Promote for CAS, callback setup, and worker startup
 	promoteOpts := transport.PromoteOptions{
 		PreflightCheck: func() error {
-			// Pre-flight check: verify session is in map before starting workers (CRITICAL-3.1)
+			// Pre-flight check: verify session is in map before starting workers
 			if mapValue, exists := t.sessionRegistry.Load(routerHash); !exists {
 				t.logger.WithField("router_hash", logutil.HashPrefixPlain(routerHashBytes)).
-					Error("CRITICAL-3.1 violation: CAS succeeded but session missing from map before StartWorkers")
+					Error("CAS succeeded but session missing from map before StartWorkers")
 				return fmt.Errorf("session not in map")
 			} else if mapSession, ok := mapValue.(*NTCP2Session); !ok || mapSession != promoted {
 				t.logger.WithField("router_hash", logutil.HashPrefixPlain(routerHashBytes)).
-					Error("CRITICAL-3.1 violation: CAS succeeded but wrong session in map before StartWorkers")
+					Error("CAS succeeded but wrong session in map before StartWorkers")
 				return fmt.Errorf("wrong session in map")
 			}
 			return nil
@@ -2303,27 +2300,27 @@ func (t *NTCP2Transport) promoteRawConnToSession(rawConn net.Conn, routerHash da
 		return result.(*NTCP2Session)
 	}
 
-	// CAS failed. Another goroutine won the promotion race. Handle R-1 race:
+	// CAS failed. Another goroutine won the promotion race. Handle
 	// If the winner is an acceptedConn, it means the Accept() path won and
 	// the connection is now owned by Accept. If it's a *NTCP2Session, another
 	// promotion goroutine won. In either case, discard our promoted session.
 	// Detach the shared conn before closing so the loser doesn't close
 	// the winner's socket. Workers will exit cleanly when Close() cancels
-	// the session context (SM-2 fix).
+	// the session context.
 	promoted.DetachConn()
 	_ = promoted.Close()
 
 	if winner, exists := t.sessionRegistry.Load(routerHash); exists {
 		if _, isAcceptedConn := winner.(transport.AcceptedConn); isAcceptedConn {
-			// R-1 race detected: Accept() won against us. The connection is now owned by
+			// Accept() won against us. The connection is now owned by
 			// Accept() and will be delivered to the listener. We don't increment the counter
 			// here because we already incremented it at line 1910 (or didn't, if existing
 			// was still rawConn at that point). This observation confirms the race occurred.
 			routerHashBytes := routerHash.Bytes()
 			t.logger.WithFields(map[string]interface{}{
 				"router_hash": logutil.HashPrefixPlain(routerHashBytes),
-				"winner":      "acceptedConn",
-			}).Debug("R-1: Promotion lost to Accept() — connection now owned by Accept")
+				"winner": "acceptedConn",
+			}).Debug("Promotion lost to Accept() — connection now owned by Accept")
 			return nil
 		} else if winnerSession, ok := winner.(*NTCP2Session); ok {
 			// Another promotion goroutine won the race. Return its session.
@@ -2353,7 +2350,7 @@ func (t *NTCP2Transport) Compatible(routerInfo router_info.RouterInfo) bool {
 	routerHashBytes := routerHash.Bytes()
 	t.logger.WithFields(map[string]interface{}{
 		"router_hash": logutil.HashPrefixPlain(routerHashBytes),
-		"dialable":    dialable,
+		"dialable": dialable,
 	}).Debug("Checking NTCP2 compatibility")
 	return dialable
 }
@@ -2385,7 +2382,7 @@ func (t *NTCP2Transport) HasSession(peerHash data.Hash) bool {
 
 // GetRouterInfoParseFailures returns the total count of RouterInfo parse failures
 // since transport startup. Incremented each time ReadRouterInfo fails on inbound msg3.
-// EH-1 fix: Exposes peer RouterInfo quality for monitoring and alerting. High count
+// Exposes peer RouterInfo quality for monitoring and alerting. High count
 // indicates peer misconfiguration, network corruption, or attack attempts.
 func (t *NTCP2Transport) GetRouterInfoParseFailures() int {
 	return int(atomic.LoadInt32(&t.routerInfoParseFailures))
@@ -2411,7 +2408,7 @@ func (t *NTCP2Transport) GetTotalBandwidth() (totalBytesSent, totalBytesReceived
 		return true // Continue iteration
 	})
 	t.logger.WithFields(map[string]interface{}{
-		"total_bytes_sent":     totalBytesSent,
+		"total_bytes_sent": totalBytesSent,
 		"total_bytes_received": totalBytesReceived,
 	}).Debug("Aggregated bandwidth across all sessions")
 	return totalBytesSent, totalBytesReceived
@@ -2500,7 +2497,7 @@ func (t *NTCP2Transport) closeAllActiveSessions() {
 	t.sessionRegistry.RangeWithHash(func(hash data.Hash, value interface{}) bool {
 		sessionCount++
 		t.closeIndividualSession(hash, value)
-		// CRITICAL-8.1 FIX: Do NOT delete here. The cleanup callback
+		// Do NOT delete here. The cleanup callback
 		// will delete the entry and decrement sessionCount. If we delete
 		// here, we decrement immediately, and when the cleanup callback runs
 		// (possibly delayed by GC/scheduler), it decrements again, causing
@@ -2555,7 +2552,7 @@ func (t *NTCP2Transport) closeIndividualSession(key, value interface{}) {
 			t.logger.WithError(err).WithField("router_hash", logutil.HashPrefixPlain(routerHashBytes)).Warn("Error closing session")
 		}
 	case transport.AcceptedConn:
-		// Connection delivered to Accept() consumer (R-3 fix).
+		// Connection delivered to Accept() consumer.
 		if closer, ok := v.Value.(interface{ Close() error }); ok {
 			if err := closer.Close(); err != nil && hashOk {
 				routerHashBytes := routerHash.Bytes()
@@ -2580,7 +2577,7 @@ func (t *NTCP2Transport) waitForBackgroundOperations() {
 	t.logger.Debug("Waiting for background operations to complete")
 	t.wg.Wait()
 
-	// RL-3 fix: Drain any remaining connections from pendingConns queue
+	// Drain any remaining connections from pendingConns queue
 	// and close them to release session slots and trigger cleanup callbacks.
 	// This ensures no connections are left abandoned when the transport closes.
 	if t.pendingConns != nil {
@@ -2607,7 +2604,7 @@ func (t *NTCP2Transport) waitForBackgroundOperations() {
 		}
 	}
 
-	// RC-6 fix: Close pendingConns channel after all goroutines complete and drained.
+	// Close pendingConns channel after all goroutines complete and drained.
 	// This ensures:
 	// 1. No new senders (accept loop has stopped)
 	// 2. Any receivers blocked on pendingConns will wake up with ok=false
@@ -2659,8 +2656,8 @@ func (t *NTCP2Transport) ValidateSessionCountingInvariant() int {
 	if mismatch != 0 {
 		t.logger.WithFields(map[string]interface{}{
 			"session_count": count,
-			"map_entries":   mapEntries,
-			"mismatch":      mismatch,
+			"map_entries": mapEntries,
+			"mismatch": mismatch,
 		}).Error("SA-2: Session counting invariant violated (acceptedConn reservation mismatch)")
 	}
 	return int(mismatch)

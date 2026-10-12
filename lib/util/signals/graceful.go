@@ -25,17 +25,14 @@ func init() {
 // handlers during graceful shutdown. This is the appropriate place to register
 // network announcement callbacks, such as sending a DatabaseStore message with
 // zero addresses to inform peers that this router is going offline.
-//
 // Pre-shutdown handlers run in registration order (FIFO). Each handler is
 // given an individual timeout (total timeout / handler count) so that a single
 // stuck handler cannot block the entire shutdown chain.
-//
 // Per convention (not formally specified in common-structures.rst), a router
 // MAY send a DatabaseStore with zero addresses before disconnecting.
-//
 // Returns a HandlerID that can be passed to DeregisterPreShutdownHandler.
 // Nil handlers are silently ignored and return -1.
-// M-27 Consolidation: Uses shared registerHandler pattern from signals.go.
+// Uses shared registerHandler pattern from signals.go.
 func RegisterPreShutdownHandler(f Handler) HandlerID {
 	id := registerHandler(f, &preShutdownHandlers)
 	if id >= 0 {
@@ -90,7 +87,6 @@ func handlePreShutdown() bool {
 
 // runHandlerWithTimeout executes a single handler in a goroutine with the
 // given timeout. Returns true if the handler completed, false if it timed out.
-//
 // Note: Go cannot pre-empt arbitrary user code, so a handler that does not
 // return on its own continues running in the background goroutine after this
 // function returns false; the caller is released but the goroutine survives

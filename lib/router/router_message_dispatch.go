@@ -53,7 +53,7 @@ func (r *Router) processSessionMessageSafely(session i2npReader, peerHash common
 		if rec := recover(); rec != nil {
 			log.WithFields(logger.Fields{
 				"peer_hash": logutil.HashPrefix(peerHash),
-				"panic":     fmt.Sprintf("%v", rec),
+				"panic": fmt.Sprintf("%v", rec),
 			}).Error("Recovered from panic in I2NP dispatch; dropping session")
 			keepProcessing = false
 		}
@@ -94,11 +94,11 @@ func (r *Router) logInboundI2NPIngress(msg i2np.Message, peerHash common.Hash, s
 	}
 
 	log.WithFields(logger.Fields{
-		"at":           "readNextMessage",
+		"at": "readNextMessage",
 		"message_type": msg.Type(),
 		"message_size": estimateI2NPMessageSize(msg),
-		"source_peer":  logutil.HashPrefix(peerHash),
-		"session_id":   fmt.Sprintf("%T:%p", session, session),
+		"source_peer": logutil.HashPrefix(peerHash),
+		"session_id": fmt.Sprintf("%T:%p", session, session),
 	}).Debug("Inbound I2NP ingress")
 }
 
@@ -153,12 +153,12 @@ func isFramingOrLengthViolation(err error) bool {
 }
 
 var (
-	readWarnLimiterMu       sync.Mutex
-	readWarnLastByPeer      = make(map[string]time.Time)
-	readWarnMinInterval     = 5 * time.Second
-	readWarnCleanupInterval = 1 * time.Minute  // How often to cleanup stale entries
-	readWarnMaxAge          = 10 * time.Minute // Remove entries not updated for this duration
-	readWarnMaxMapSize      = 5000             // Max entries in readWarnLastByPeer map; evict oldest when exceeded
+	readWarnLimiterMu sync.Mutex
+	readWarnLastByPeer = make(map[string]time.Time)
+	readWarnMinInterval = 5 * time.Second
+	readWarnCleanupInterval = 1 * time.Minute // How often to cleanup stale entries
+	readWarnMaxAge = 10 * time.Minute // Remove entries not updated for this duration
+	readWarnMaxMapSize = 5000 // Max entries in readWarnLastByPeer map; evict oldest when exceeded
 )
 
 func shouldLogReadWarn(peerHash string) bool {
@@ -211,7 +211,7 @@ func cleanupReadWarnLastByPeer() {
 
 	mapSize := len(readWarnLastByPeer)
 	logFields := logger.Fields{
-		"at":      "cleanupReadWarnLastByPeer",
+		"at": "cleanupReadWarnLastByPeer",
 		"evicted": evicted,
 		"mapSize": mapSize,
 	}
@@ -239,8 +239,8 @@ func (r *Router) handleIncomingMessage(msg i2np.Message, peerHash common.Hash) {
 	if err := r.routeMessage(msg, peerHash); err != nil {
 		log.WithError(err).WithFields(logger.Fields{
 			"message_type": msg.Type(),
-			"message_id":   msg.MessageID(),
-			"peer_hash":    logutil.HashPrefix(peerHash),
+			"message_id": msg.MessageID(),
+			"peer_hash": logutil.HashPrefix(peerHash),
 		}).Error("Failed to route I2NP message")
 	}
 }
@@ -258,18 +258,18 @@ func (r *Router) routeMessage(msg i2np.Message, fromPeer common.Hash) (err error
 			err = oops.Errorf("panic while routing I2NP message type %d: %v", messageType, rec)
 			log.WithError(err).WithFields(logger.Fields{
 				"message_type": messageType,
-				"message_id":   messageID,
-				"from_peer":    logutil.HashPrefix(fromPeer),
-				"panic":        fmt.Sprintf("%v", rec),
-				"stack":        string(buf[:n]),
+				"message_id": messageID,
+				"from_peer": logutil.HashPrefix(fromPeer),
+				"panic": fmt.Sprintf("%v", rec),
+				"stack": string(buf[:n]),
 			}).Error("Recovered from panic in routeMessage")
 		}
 	}()
 
 	log.WithFields(logger.Fields{
 		"message_type": messageType,
-		"message_id":   messageID,
-		"from_peer":    logutil.HashPrefix(fromPeer),
+		"message_id": messageID,
+		"from_peer": logutil.HashPrefix(fromPeer),
 	}).Debug("Routing I2NP message")
 
 	mr, fs := r.getRoutingComponents()
@@ -339,7 +339,7 @@ func (r *Router) routeDatabaseStore(msg i2np.Message, mr *i2np.I2NPMessageDispat
 	}
 	return mr.GetProcessor().ProcessMessage(&sourcedDatabaseStoreMessage{
 		DatabaseStore: dbStore,
-		source:        fromPeer,
+		source: fromPeer,
 	})
 }
 
@@ -403,7 +403,7 @@ func (r *Router) parseDatabaseStoreMessage(msg i2np.Message) (*i2np.DatabaseStor
 	log.WithFields(logger.Fields{
 		"message_id": msg.MessageID(),
 		"store_type": dbStore.GetStoreType(),
-		"key":        dbStore.GetStoreKey().String(),
+		"key": dbStore.GetStoreKey().String(),
 	}).Debug("Parsed DatabaseStore message from peer")
 
 	dbStore.BaseI2NPMessage = i2np.BaseMessageFromMessage(msg, dataCarrier.GetData())

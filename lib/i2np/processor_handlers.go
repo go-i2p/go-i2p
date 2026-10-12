@@ -419,27 +419,23 @@ func (p *MessageProcessor) processDatabaseLookupMessage(msg Message) error {
 
 // processGarlicMessage processes encrypted garlic messages by decrypting them
 // and routing the contained cloves based on their delivery instructions.
-//
 // Process:
 // 1. Extract encrypted garlic data from the message
 // 2. Decrypt using GarlicSessionManager (handles ECIES-X25519-AEAD-Ratchet)
 // 3. Parse each decrypted clove payload into a Garlic structure
 // 4. For each clove, route based on delivery type:
-//   - LOCAL (0x00): Process wrapped message locally via ProcessMessage()
-//   - DESTINATION/ROUTER/TUNNEL: forwarded by lib/router/garlic_router.go
-//
+// - LOCAL (0x00): Process wrapped message locally via ProcessMessage()
+// - DESTINATION/ROUTER/TUNNEL: forwarded by lib/router/garlic_router.go
 // A spec-compliant ratchet payload may contain more than one GarlicClove block;
 // all cloves are processed so no delivery instructions are silently dropped.
-//
 // Note: This processor handles LOCAL delivery only. Other delivery types require
 // router context and would be implemented at the router layer.
 // H6 FIX: depth parameter threads garlic nesting level through process pipeline.
-//
 // TROUBLESHOOTING: If garlic_decrypt_succeeded=0 (100% failures):
-//  1. Peers have cached OLD RouterInfo with different X25519 encryption key
-//  2. Call publisher.ForceRouterInfoRepublish() to push current key to floodfill
-//  3. Monitor garlic_decrypt_succeeded counter - should increase as peers get new RouterInfo
-//  4. Process exploratory replies via tunnel_manager_reply.go metrics tracking
+// 1. Peers have cached OLD RouterInfo with different X25519 encryption key
+// 2. Call publisher.ForceRouterInfoRepublish() to push current key to floodfill
+// 3. Monitor garlic_decrypt_succeeded counter - should increase as peers get new RouterInfo
+// 4. Process exploratory replies via tunnel_manager_reply.go metrics tracking
 func (p *MessageProcessor) processGarlicMessage(msg Message, depth int) error {
 	if err := p.validateGarlicSession(); err != nil {
 		return err
@@ -452,12 +448,11 @@ func (p *MessageProcessor) processGarlicMessage(msg Message, depth int) error {
 
 	decryptedCloves, sessionTag, err := p.decryptGarlicData(msg.MessageID(), encryptedData)
 	if err != nil {
-		// CRITICAL-5 FIX: Garlic decryption failures should NOT be fatal.
+		// Garlic decryption failures should NOT be fatal.
 		// This happens when:
-		//  1. Garlic message is transit traffic (meant for other routers, not us)
-		//  2. Peers encrypted with old X25519 key (they have cached RouterInfo)
-		//  3. Message is not actually encrypted to our public key for some reason
-		//
+		// 1. Garlic message is transit traffic (meant for other routers, not us)
+		// 2. Peers encrypted with old X25519 key (they have cached RouterInfo)
+		// 3. Message is not actually encrypted to our public key for some reason
 		// Solution: Log and skip instead of returning error. This allows router
 		// to continue processing other messages. Only LOCAL garlic messages for
 		// this router would decrypt successfully anyway.
@@ -510,9 +505,7 @@ func (p *MessageProcessor) extractGarlicData(msg Message) ([]byte, error) {
 
 // stripGarlicLengthPrefixIfPresent removes the 4-byte length prefix from garlic ciphertext.
 // Garlic (type 11) encrypted payload on the wire is length-prefixed:
-//
 //	[4-byte big-endian length][ciphertext bytes]
-//
 // DecryptGarlicMessage expects ciphertext to begin with the 8-byte session tag,
 // so we strip the prefix when it is present and consistent.
 func stripGarlicLengthPrefixIfPresent(encryptedData []byte, messageID int) ([]byte, error) {

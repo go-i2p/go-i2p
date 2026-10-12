@@ -15,27 +15,25 @@ import (
 // AuthManager handles token-based authentication for I2PControl RPC.
 // It generates HMAC-SHA256 tokens for authenticated clients and validates
 // tokens with expiration checking. Thread-safe for concurrent access.
-//
 // Authentication flow:
 // 1. Client sends password via Authenticate method
 // 2. Server validates password and generates token
 // 3. Token stored with expiration timestamp
 // 4. Client includes token in subsequent RPC requests
 // 5. Server validates token before processing requests
-//
 // Rate limiting: After maxFailedAttempts consecutive failures, authentication
 // is locked out for failedAttemptLockout duration to prevent brute-force attacks.
 type AuthManager struct {
-	password string                 // Configured password for authentication
-	tokens   map[[32]byte]time.Time // Active tokens with expiration times; key = SHA-256(token)
-	mu       sync.RWMutex           // Protects tokens map
-	secret   []byte                 // HMAC secret key for token generation
+	password string // Configured password for authentication
+	tokens map[[32]byte]time.Time // Active tokens with expiration times; key = SHA-256(token)
+	mu sync.RWMutex // Protects tokens map
+	secret []byte // HMAC secret key for token generation
 	randRead func([]byte) (int, error)
 
 	// Rate limiting fields
-	failedAttempts    int       // Consecutive failed authentication attempts
+	failedAttempts int // Consecutive failed authentication attempts
 	lastFailedAttempt time.Time // Time of the last failed attempt
-	lockoutUntil      time.Time // Time until which auth is locked out
+	lockoutUntil time.Time // Time until which auth is locked out
 	rateLimitMu       sync.Mutex
 }
 
@@ -53,13 +51,11 @@ var errTokenEntropyFailure = errors.New("failed to read entropy for token genera
 // NewAuthManager creates a new authentication manager.
 // The password is used to validate authentication requests.
 // A random secret key is generated for HMAC token signing.
-//
 // Parameters:
-//   - password: The authentication password clients must provide
-//
+// - password: The authentication password clients must provide
 // Returns:
-//   - *AuthManager: Initialized auth manager
-//   - error: If random secret generation fails
+// - *AuthManager: Initialized auth manager
+// - error: If random secret generation fails
 func NewAuthManager(password string) (*AuthManager, error) {
 	// Generate a random 32-byte secret for HMAC signing
 	// This ensures tokens are unique per server instance
@@ -79,18 +75,15 @@ func NewAuthManager(password string) (*AuthManager, error) {
 // Authenticate validates a password and generates an access token.
 // The token is a base64-encoded HMAC-SHA256 signature of the current
 // timestamp, ensuring uniqueness and cryptographic security.
-//
 // Rate limiting: After maxFailedAttempts consecutive failures, authentication
 // is locked out for failedAttemptLockout duration. Successful authentication
 // resets the failure counter.
-//
 // Parameters:
-//   - password: The password to authenticate
-//   - expiration: How long the token should remain valid
-//
+// - password: The password to authenticate
+// - expiration: How long the token should remain valid
 // Returns:
-//   - token: Base64-encoded authentication token
-//   - error: If password is invalid, token generation fails, or rate limited
+// - token: Base64-encoded authentication token
+// - error: If password is invalid, token generation fails, or rate limited
 func (am *AuthManager) Authenticate(password string, expiration time.Duration) (string, error) {
 	// Hold rateLimitMu across the lockout check AND password validation to
 	// prevent a TOCTOU race where a concurrent goroutine could reset the
@@ -136,7 +129,7 @@ func (am *AuthManager) Authenticate(password string, expiration time.Duration) (
 	am.lockoutUntil = time.Time{}
 	am.rateLimitMu.Unlock()
 
-	// LOW-2 FIX: Use only a crypto/rand nonce for token uniqueness; the
+	// Use only a crypto/rand nonce for token uniqueness; the
 	// timestamp was redundant (the nonce already ensures uniqueness) and
 	// using UnixNano() as HMAC input adds no security benefit while
 	// implying a relationship to wall time that could be abused.
@@ -146,7 +139,7 @@ func (am *AuthManager) Authenticate(password string, expiration time.Duration) (
 	}
 
 	// Store token with expiration time; key = SHA-256(token) for hardened
-	// token comparison (MEDIUM-4 audit fix: prevents timing oracle on the
+	// token comparison (prevents timing oracle on the
 	// raw token string comparison in map lookups).
 	am.mu.Lock()
 	am.tokens[am.tokenKey(token)] = time.Now().Add(expiration)
@@ -160,12 +153,10 @@ func (am *AuthManager) Authenticate(password string, expiration time.Duration) (
 
 // ValidateToken checks if a token is valid and not expired.
 // Invalid or expired tokens are automatically removed from storage.
-//
 // Parameters:
-//   - token: The token to validate
-//
+// - token: The token to validate
 // Returns:
-//   - bool: true if token is valid and not expired, false otherwise
+// - bool: true if token is valid and not expired, false otherwise
 func (am *AuthManager) ValidateToken(token string) bool {
 	key := am.tokenKey(token)
 	am.mu.RLock()
@@ -193,9 +184,8 @@ func (am *AuthManager) ValidateToken(token string) bool {
 
 // RevokeToken removes a token from the valid token set.
 // Used for explicit logout or token invalidation.
-//
 // Parameters:
-//   - token: The token to revoke
+// - token: The token to revoke
 func (am *AuthManager) RevokeToken(token string) {
 	am.mu.Lock()
 	delete(am.tokens, am.tokenKey(token))
@@ -208,9 +198,8 @@ func (am *AuthManager) RevokeToken(token string) {
 // CleanupExpiredTokens removes all expired tokens from storage.
 // Should be called periodically (e.g., every 5 minutes) to prevent
 // memory growth from expired tokens.
-//
 // Returns:
-//   - int: Number of tokens removed
+// - int: Number of tokens removed
 func (am *AuthManager) CleanupExpiredTokens() int {
 	now := time.Now()
 	removed := 0
@@ -236,9 +225,8 @@ func (am *AuthManager) CleanupExpiredTokens() int {
 
 // TokenCount returns the number of active tokens.
 // Useful for monitoring and testing.
-//
 // Returns:
-//   - int: Number of valid tokens currently stored
+// - int: Number of valid tokens currently stored
 func (am *AuthManager) TokenCount() int {
 	am.mu.RLock()
 	defer am.mu.RUnlock()
@@ -248,12 +236,10 @@ func (am *AuthManager) TokenCount() int {
 // ChangePassword updates the authentication password and revokes all existing tokens.
 // This forces all clients to re-authenticate with the new password.
 // Thread-safe for concurrent access.
-//
 // Parameters:
-//   - newPassword: The new password to set
-//
+// - newPassword: The new password to set
 // Returns:
-//   - int: Number of tokens revoked (clients that must re-authenticate)
+// - int: Number of tokens revoked (clients that must re-authenticate)
 func (am *AuthManager) ChangePassword(newPassword string) int {
 	am.mu.Lock()
 	defer am.mu.Unlock()
@@ -276,18 +262,17 @@ func (am *AuthManager) ChangePassword(newPassword string) int {
 // tokenKey computes a SHA-256 hash of the raw token string.
 // Tokens are stored and compared by hash rather than by the raw string to
 // harden against timing-based side channels on the raw-string equality
-// check inside Go's map lookup (MEDIUM-4 audit fix).
+// check inside Go's map lookup.
 func (am *AuthManager) tokenKey(token string) [32]byte {
 	return sha256.Sum256([]byte(token))
 }
 
 // generateToken creates a cryptographic token from a random nonce.
 // Uses HMAC-SHA256 with the server's secret key to ensure tokens
-// cannot be forged without knowing the secret.  A 32-byte random nonce
-// provides uniqueness — no timestamp input is needed or used (LOW-2 audit fix).
-//
+// cannot be forged without knowing the secret. A 32-byte random nonce
+// provides uniqueness — no timestamp input is needed or used ().
 // Returns:
-//   - string: Base64-encoded HMAC signature
+// - string: Base64-encoded HMAC signature
 func (am *AuthManager) generateToken() (string, error) {
 	// 32-byte nonce provides 256 bits of entropy — collision-resistant and
 	// unpredictable, with no dependency on wall-clock time.

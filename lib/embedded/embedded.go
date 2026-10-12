@@ -61,7 +61,7 @@ type StandardEmbeddedRouter struct {
 	// cfg stores the router configuration
 	cfg *config.RouterConfig
 
-	// CRITICAL-6 FIX: publisher reference to force RouterInfo republish at startup
+	// publisher reference to force RouterInfo republish at startup
 	// This ensures peer caches are flushed of old RouterInfo when router restarts
 	publisher *netdb.Publisher
 
@@ -87,5 +87,4 @@ type StandardEmbeddedRouter struct {
 // NewStandardEmbeddedRouter creates a new embedded router instance.
 // The router is automatically configured with the provided config.
 // Call Start() to begin router operations.
-//
 // Returns error if the configuration is nil or invalid, or if router creation fails.

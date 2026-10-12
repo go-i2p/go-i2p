@@ -74,7 +74,7 @@ func HasDialableSSU2Address(routerInfo *router_info.RouterInfo) bool {
 	return false
 }
 
-// Redirect to shared transport.ProbeIPv6 (consolidation H-5; mirrors ntcp2.probeIPv6)
+// Redirect to shared transport.ProbeIPv6 (mirrors ntcp2.probeIPv6)
 // probeIPv6 wraps the shared transport.ProbeIPv6 for backward compatibility within ssu2 package.
 func probeIPv6() bool {
 	return transport.ProbeIPv6()
@@ -83,7 +83,7 @@ func probeIPv6() bool {
 // ExtractSSU2Addr extracts the SSU2 network address from a RouterInfo structure.
 // It returns a *net.UDPAddr for the best SSU2 transport address found, using a
 // two-pass strategy: IPv4 addresses are preferred; IPv6 is only returned when
-// the host has confirmed global-unicast IPv6 connectivity (AUDIT FIX-2 / RC-C).
+// the host has confirmed global-unicast IPv6 connectivity.
 func ExtractSSU2Addr(routerInfo router_info.RouterInfo) (*net.UDPAddr, error) {
 	ipv6Fallback := searchForSSU2Address(routerInfo.RouterAddresses())
 	if ipv6Fallback != nil {
@@ -121,7 +121,7 @@ func searchForSSU2Address(addresses []*router_address.RouterAddress) *net.UDPAdd
 }
 
 // ExtractSSU2IntroKey extracts the 32-byte introduction key from the "i" option
-// of the first SSU2 RouterAddress found in ri.  The option value is
+// of the first SSU2 RouterAddress found in ri. The option value is
 // I2P-base64-encoded (same alphabet as static keys).
 // Returns an error if no SSU2 address carries a valid 32-byte intro key.
 func ExtractSSU2IntroKey(ri router_info.RouterInfo) ([]byte, error) {
@@ -204,7 +204,6 @@ func resolveUDPAddress(addr *router_address.RouterAddress) (*net.UDPAddr, error)
 // unchanged. The substituted host is re-validated by buildSSU2Options, so a
 // cached external that is itself non-public still falls back to a caps-only
 // address rather than leaking a private host.
-//
 // BUG FIX: the previous gate only substituted for ip.IsPrivate() (RFC1918),
 // which silently skipped CGNAT (100.64.0.0/10), special-use ranges, and
 // wildcard binds — so a router behind carrier-grade NAT with a confirmed public
@@ -295,7 +294,7 @@ func buildSSU2Options(host, portStr string, transport *SSU2Transport, introducer
 		familyCaps := ssu2AddressFamilyCaps(host)
 		options := map[string]string{
 			router_address.PROTOCOL_VERSION_OPTION_KEY: "2",
-			router_address.CAPS_OPTION_KEY:             familyCaps + "B",
+			router_address.CAPS_OPTION_KEY: familyCaps + "B",
 		}
 		addStaticKeyOption(options, transport)
 		addIntroKeyOption(options, transport)
@@ -310,7 +309,7 @@ func buildSSU2Options(host, portStr string, transport *SSU2Transport, introducer
 		// reply traffic (build replies, etc.).
 		options := map[string]string{
 			router_address.PROTOCOL_VERSION_OPTION_KEY: "2",
-			router_address.CAPS_OPTION_KEY:             ssu2AddressFamilyCaps(host),
+			router_address.CAPS_OPTION_KEY: ssu2AddressFamilyCaps(host),
 		}
 		addStaticKeyOption(options, transport)
 		addIntroKeyOption(options, transport)
@@ -503,8 +502,8 @@ func isPublicIPv4Address(ip net.IP) bool {
 // buildBaseSSU2Options creates the base options map for an SSU2 RouterAddress.
 func buildBaseSSU2Options(host, port string) map[string]string {
 	return map[string]string{
-		router_address.HOST_OPTION_KEY:             host,
-		router_address.PORT_OPTION_KEY:             port,
+		router_address.HOST_OPTION_KEY: host,
+		router_address.PORT_OPTION_KEY: port,
 		router_address.PROTOCOL_VERSION_OPTION_KEY: "2",
 	}
 }
@@ -523,7 +522,7 @@ func addIntroKeyOption(options map[string]string, transport *SSU2Transport) {
 // requires publishing the corresponding PUBLIC key as the 's=' parameter.
 // This mirrors the NTCP2 pattern in ntcp2/router_address.go.
 func addStaticKeyOption(options map[string]string, transport *SSU2Transport) {
-	// R-2 fix: Atomic config snapshot
+	// Atomic config snapshot
 	cfg := transport.config.Load()
 	if cfg != nil && cfg.SSU2Config != nil && len(cfg.SSU2Config.StaticKey) == 32 {
 		pub, err := curve25519.X25519(cfg.SSU2Config.StaticKey, curve25519.Basepoint)
@@ -581,7 +580,7 @@ type IntroducerAddr struct {
 }
 
 // ExtractIntroducers parses the introducer entries (indices 0-2) from a single
-// SSU2 RouterAddress, returning all valid entries.  Invalid or missing entries
+// SSU2 RouterAddress, returning all valid entries. Invalid or missing entries
 // (e.g. empty hash, zero relay tag, already-expired) are silently skipped.
 func ExtractIntroducers(addr *router_address.RouterAddress) []IntroducerAddr {
 	if addr == nil {
@@ -662,14 +661,14 @@ func extractIntroducerAtSlot(addr *router_address.RouterAddress, slot int, now i
 	}
 	return IntroducerAddr{
 		RouterHash: routerHash,
-		RelayTag:   tag,
-		Expiry:     expiry,
+		RelayTag: tag,
+		Expiry: expiry,
 	}, true
 }
 
 // HasIntroducerOnlySSU2Address returns true if the RouterInfo has at least one
 // SSU2 address containing a valid introducer entry (ih0/itag0 present) but no
-// directly dialable address.  Used by Compatible() and GetSession() to decide
+// directly dialable address. Used by Compatible() and GetSession() to decide
 // whether the introducer path should be attempted.
 func HasIntroducerOnlySSU2Address(ri *router_info.RouterInfo) bool {
 	if ri == nil {

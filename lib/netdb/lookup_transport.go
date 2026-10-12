@@ -21,7 +21,6 @@ const maxPendingLookups = 4096
 
 // lookupReplyRegistry correlates inbound DatabaseStore / DatabaseSearchReply
 // messages with outstanding DatabaseLookup requests.
-//
 // Correlation is keyed by the lookup TARGET KEY rather than by message ID,
 // because I2P DatabaseLookup replies do not echo the request's message ID —
 // they carry the looked-up key. The iterative resolver issues several parallel
@@ -36,7 +35,7 @@ const maxPendingLookups = 4096
 type lookupReplyRegistry struct {
 	mu      sync.Mutex
 	waiters map[common.Hash][]chan lookupResponse
-	count   int // total registered channels, bounded by maxPendingLookups
+	count int // total registered channels, bounded by maxPendingLookups
 }
 
 func newLookupReplyRegistry() *lookupReplyRegistry {
@@ -112,7 +111,6 @@ func (r *lookupReplyRegistry) deliver(key common.Hash, msgType int, data []byte)
 // DatabaseLookupClient is the production LookupTransport. It sends direct
 // (non-tunnelled) DatabaseLookup messages over transport sessions and blocks
 // until the correlated reply arrives or the context is cancelled.
-//
 // The same instance must be registered as the MessageProcessor's
 // LookupReplyDeliverer so that inbound DatabaseStore / DatabaseSearchReply
 // messages are routed back into its registry. SendDatabaseLookup (outbound) and
@@ -161,7 +159,7 @@ func (c *DatabaseLookupClient) SendDatabaseLookup(ctx context.Context, peerRI ro
 	if err != nil {
 		return nil, 0, oops.Errorf("failed to get session to peer: %w", err)
 	}
-	defer c.provider.ReleaseSession() // H-1 fix: release slot after send
+	defer c.provider.ReleaseSession() // release slot after send
 	if err := session.QueueSendI2NP(msg); err != nil {
 		return nil, 0, oops.Errorf("failed to queue DatabaseLookup: %w", err)
 	}

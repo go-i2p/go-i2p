@@ -14,32 +14,27 @@ import (
 
 // SessionConfigParser parses I2CP CreateSession and ReconfigureSession message payloads.
 // These messages contain a Destination followed by session options (Mapping).
-//
 // Payload format (CreateSession):
-//   - Destination (variable length)
-//   - Options (Mapping - key/value pairs)
-//
+// - Destination (variable length)
+// - Options (Mapping - key/value pairs)
 // Payload format (ReconfigureSession):
-//   - SessionID (2 bytes) - already in message header
-//   - Options (Mapping - key/value pairs)
-//
+// - SessionID (2 bytes) - already in message header
+// - Options (Mapping - key/value pairs)
 // Standard I2CP option keys (from Java I2P):
-//   - inbound.length: Number of hops for inbound tunnels (default: 3)
-//   - outbound.length: Number of hops for outbound tunnels (default: 3)
-//   - inbound.quantity: Number of inbound tunnels (default: 5)
-//   - outbound.quantity: Number of outbound tunnels (default: 5)
-//   - i2cp.messageReliability: Message reliability (default: BestEffort)
-//   - i2cp.encryptLeaseSet: Encrypt LeaseSet (default: false)
-//
+// - inbound.length: Number of hops for inbound tunnels (default: 3)
+// - outbound.length: Number of hops for outbound tunnels (default: 3)
+// - inbound.quantity: Number of inbound tunnels (default: 5)
+// - outbound.quantity: Number of outbound tunnels (default: 5)
+// - i2cp.messageReliability: Message reliability (default: BestEffort)
+// - i2cp.encryptLeaseSet: Encrypt LeaseSet (default: false)
 // Note: Most options use standard library strconv for parsing integers.
 // Returns DefaultSessionConfig values for unspecified options.
 
 // ParseCreateSessionPayload parses a CreateSession message payload.
 // Returns the destination and session configuration.
-//
 // Wire format:
-//   - Destination (variable length, typically ~387+ bytes)
-//   - Options Mapping (2-byte size + key=value; pairs)
+// - Destination (variable length, typically ~387+ bytes)
+// - Options Mapping (2-byte size + key=value; pairs)
 func ParseCreateSessionPayload(payload []byte) (*destination.Destination, *SessionConfig, error) {
 	if len(payload) < 2 {
 		log.WithFields(logger.Fields{
@@ -83,13 +78,12 @@ func ParseCreateSessionPayload(payload []byte) (*destination.Destination, *Sessi
 }
 
 // ParseCreateSessionSignedPayload parses and verifies a signed CreateSession payload.
-//
 // Strict wire format:
-//   - Destination (variable length)
-//   - Options size (2 bytes, big endian)
-//   - Options mapping bytes (exactly options size bytes)
-//   - Date (8 bytes)
-//   - Signature (size depends on destination signing type)
+// - Destination (variable length)
+// - Options size (2 bytes, big endian)
+// - Options mapping bytes (exactly options size bytes)
+// - Date (8 bytes)
+// - Signature (size depends on destination signing type)
 func ParseCreateSessionSignedPayload(payload []byte) (*destination.Destination, *SessionConfig, error) {
 	dest, remaining, err := parseDestination(payload)
 	if err != nil {
@@ -114,10 +108,8 @@ func ParseCreateSessionSignedPayload(payload []byte) (*destination.Destination, 
 
 // ParseReconfigureSessionPayload parses a ReconfigureSession message payload.
 // Returns the updated session configuration.
-//
 // Wire format:
-//   - Options Mapping (2-byte size + key=value; pairs)
-//
+// - Options Mapping (2-byte size + key=value; pairs)
 // Note: The caller must strip the 2-byte SessionID prefix from the raw wire
 // payload before calling this function. The SessionID is included in the wire
 // payload but is extracted into msg.SessionID by ReadMessage.
@@ -136,14 +128,13 @@ func ParseReconfigureSessionPayload(payload []byte) (*SessionConfig, error) {
 }
 
 // ParseReconfigureSessionSignedPayload parses and verifies a signed ReconfigureSession payload.
-//
 // Strict wire format:
-//   - SessionID (2 bytes)
-//   - Destination (variable length)
-//   - Options size (2 bytes)
-//   - Options mapping bytes
-//   - Date (8 bytes)
-//   - Signature (size depends on destination signing type)
+// - SessionID (2 bytes)
+// - Destination (variable length)
+// - Options size (2 bytes)
+// - Options mapping bytes
+// - Date (8 bytes)
+// - Signature (size depends on destination signing type)
 func ParseReconfigureSessionSignedPayload(payload []byte) (uint16, *destination.Destination, *SessionConfig, error) {
 	if len(payload) < 2 {
 		return 0, nil, nil, oops.Errorf("reconfigure session payload too short: %d bytes", len(payload))
@@ -373,7 +364,7 @@ func markExplicitlySet(config *SessionConfig, field string) {
 
 // applyIntOption is a generic helper for parsing and applying integer options.
 // Parses the value from options[key], validates it's within [min, max], then calls setter(value).
-// Logs debug on success, warn on failure. Consolidation for H-7.
+// Logs debug on success, warn on failure. .
 func applyIntOption(config *SessionConfig, options map[string]string, key string, setter func(int), min, max int, fieldName string) {
 	val, exists := options[key]
 	if !exists {
@@ -404,7 +395,7 @@ func applyTunnelQuantityOptions(config *SessionConfig, options map[string]string
 
 // applyQuantityOption parses and applies a single tunnel quantity option if present.
 // The value must be a valid integer in the range [1, 16].
-// Consolidation for H-7.
+// .
 func applyQuantityOption(config *SessionConfig, options map[string]string, key string, target *int) {
 	applyIntOption(config, options, key,
 		func(val int) { *target = val },
@@ -413,7 +404,7 @@ func applyQuantityOption(config *SessionConfig, options map[string]string, key s
 
 // applyBackupQuantities parses and applies backup quantity options.
 // These values are consumed by the tunnel pool manager in server_tunnels.go.
-// Valid range: 0-16. Consolidation for H-7.
+// Valid range: 0-16. .
 func applyBackupQuantities(config *SessionConfig, options map[string]string) {
 	applyIntOption(config, options, "inbound.backupQuantity",
 		func(val int) { config.InboundBackupQuantity = val },
@@ -426,7 +417,7 @@ func applyBackupQuantities(config *SessionConfig, options map[string]string) {
 // applyTunnelLifetimeOptions applies tunnel length variance configuration options.
 // Keys: inbound.lengthVariance, outbound.lengthVariance
 // Valid range: -7 to +7 (0 = no variance, negative = decrease only, positive = +/- range)
-// Consolidation for H-7.
+// .
 func applyTunnelLifetimeOptions(config *SessionConfig, options map[string]string) {
 	applyIntOption(config, options, "inbound.lengthVariance",
 		func(val int) { config.InboundLengthVariance = val },
@@ -438,12 +429,11 @@ func applyTunnelLifetimeOptions(config *SessionConfig, options map[string]string
 
 // applyMessageOptions applies message-related configuration options.
 // Keys: i2cp.messageReliability, i2cp.gzip, i2cp.encryptLeaseSet, i2cp.dontPublishLeaseSet
-//
 // Implemented options:
-//   - i2cp.messageReliability: Stored for relay decision logic ("BestEffort", "Guaranteed", "None")
-//   - i2cp.gzip: Controls whether the I2CP client library compresses/decompresses payloads (default: true)
-//   - i2cp.encryptLeaseSet: Enables LeaseSet encryption via UseEncryptedLeaseSet
-//   - i2cp.dontPublishLeaseSet: Prevents LeaseSet publication to NetDB
+// - i2cp.messageReliability: Stored for relay decision logic ("BestEffort", "Guaranteed", "None")
+// - i2cp.gzip: Controls whether the I2CP client library compresses/decompresses payloads (default: true)
+// - i2cp.encryptLeaseSet: Enables LeaseSet encryption via UseEncryptedLeaseSet
+// - i2cp.dontPublishLeaseSet: Prevents LeaseSet publication to NetDB
 func applyMessageOptions(config *SessionConfig, options map[string]string) {
 	applyMessageReliability(config, options)
 	applyGzipOption(config, options)

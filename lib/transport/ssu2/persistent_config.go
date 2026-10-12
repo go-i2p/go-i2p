@@ -41,7 +41,7 @@ func (pc *PersistentConfig) LoadOrGenerateObfuscationIV() ([]byte, error) {
 	ivPath := filepath.Join(pc.workingDir, obfuscationIVFilename)
 	log.WithField("iv_path", ivPath).Debug("loading or generating SSU2 obfuscation IV")
 
-	// Delegate to shared transport helper (consolidation H-6)
+	// Delegate to shared transport helper
 	return transport.LoadOrGenerateKeyFile(pc.workingDir, ivPath, obfuscationIVSize, "SSU2 obfuscation IV")
 }
 
@@ -52,7 +52,7 @@ func (pc *PersistentConfig) LoadOrGenerateIntroKey() ([]byte, error) {
 	keyPath := filepath.Join(pc.workingDir, introKeyFilename)
 	log.WithField("key_path", keyPath).Debug("loading or generating SSU2 intro key")
 
-	// Delegate to shared transport helper (consolidation H-6)
+	// Delegate to shared transport helper
 	return transport.LoadOrGenerateKeyFile(pc.workingDir, keyPath, introKeySize, "SSU2 intro key")
 }
 
@@ -60,7 +60,7 @@ func (pc *PersistentConfig) LoadOrGenerateIntroKey() ([]byte, error) {
 // and obfuscation IV, wires them into ssu2Config, and starts the
 // KeyRotationManager for the transport.
 func initKeyManagement(t *SSU2Transport, ssu2Config *ssu2noise.SSU2Config) error {
-	// R-2 fix: Atomic config snapshot
+	// Atomic config snapshot
 	cfg := t.config.Load()
 	pc := NewPersistentConfig(cfg.WorkingDir)
 	t.persistentConfig = pc

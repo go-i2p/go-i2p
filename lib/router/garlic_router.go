@@ -34,10 +34,10 @@ const (
 
 // pendingMessage represents a message waiting for LeaseSet resolution.
 type pendingMessage struct {
-	msg      i2np.Message // The message to send
-	queuedAt time.Time    // When the message was queued
-	retryAt  time.Time    // When to retry the lookup
-	attempts int          // Number of lookup attempts
+	msg i2np.Message // The message to send
+	queuedAt time.Time // When the message was queued
+	retryAt time.Time // When to retry the lookup
+	attempts int // Number of lookup attempts
 }
 
 // GarlicNetDB defines the NetDB interface needed for garlic message routing.
@@ -75,16 +75,13 @@ func newNetDBAdapter(netdb *netdb.StdNetDB) GarlicNetDB {
 // It bridges the gap between message processing (lib/i2np) and router
 // infrastructure (NetDB, transport, tunnels) to enable delivery of garlic
 // cloves to destinations, routers, and tunnels beyond LOCAL processing.
-//
 // This component implements the GarlicCloveForwarder interface and is designed
 // to be injected into the MessageProcessor via SetCloveForwarder().
-//
 // Architecture:
-//   - Receives forwarding requests from MessageProcessor
-//   - Accesses NetDB for destination/router lookups
-//   - Uses transport layer for direct router-to-router messaging
-//   - Uses tunnel pools for destination and tunnel delivery
-//
+// - Receives forwarding requests from MessageProcessor
+// - Accesses NetDB for destination/router lookups
+// - Uses transport layer for direct router-to-router messaging
+// - Uses tunnel pools for destination and tunnel delivery
 // drainRequest encapsulates a channel that needs to be drained to prevent
 // blocking the NetDB sender goroutine.
 type drainRequest struct {
@@ -103,32 +100,32 @@ const (
 // It resolves LeaseSets via the NetDB and delivers encrypted messages through the tunnel pool.
 type GarlicMessageRouter struct {
 	// Router infrastructure dependencies
-	netdb          GarlicNetDB               // NetDB with LeaseSet support
-	transportMgr   *transport.TransportMuxer // Transport for router-to-router messaging
-	tunnelPool     *tunnel.Pool              // Tunnel pool for routing through tunnels
-	routerIdentity common.Hash               // Our router's identity hash
+	netdb GarlicNetDB // NetDB with LeaseSet support
+	transportMgr *transport.TransportMuxer // Transport for router-to-router messaging
+	tunnelPool *tunnel.Pool // Tunnel pool for routing through tunnels
+	routerIdentity common.Hash // Our router's identity hash
 
 	// Message processing
 	processor *i2np.MessageProcessor // Reference to the processor for LOCAL recursion
 
 	// Destination lookup queue for async LeaseSet resolution
-	pendingMsgs  map[common.Hash][]pendingMessage // Messages waiting for LeaseSet lookup
-	pendingMutex sync.RWMutex                     // Protects pendingMsgs map
-	ctx          context.Context                  // Context for graceful shutdown
-	cancel       context.CancelFunc               // Cancel function for shutdown
-	wg           sync.WaitGroup                   // Tracks background goroutines
+	pendingMsgs map[common.Hash][]pendingMessage // Messages waiting for LeaseSet lookup
+	pendingMutex sync.RWMutex // Protects pendingMsgs map
+	ctx context.Context // Context for graceful shutdown
+	cancel context.CancelFunc // Cancel function for shutdown
+	wg sync.WaitGroup // Tracks background goroutines
 
 	// Channel draining worker pool
-	drainRequests      chan drainRequest // Bounded channel for drain requests
-	fallbackDrainCount atomic.Int64      // Counts fallback drain activations for observability
+	drainRequests chan drainRequest // Bounded channel for drain requests
+	fallbackDrainCount atomic.Int64 // Counts fallback drain activations for observability
 }
 
 // NewGarlicMessageRouter creates a new garlic message router with required dependencies.
 // All parameters are required for full functionality:
-//   - netdb: For looking up destinations and routers
-//   - transportMgr: For sending messages to peer routers
-//   - tunnelPool: For routing messages through tunnels
-//   - routerIdentity: Our router's hash for reflexive delivery detection
+// - netdb: For looking up destinations and routers
+// - transportMgr: For sending messages to peer routers
+// - tunnelPool: For routing messages through tunnels
+// - routerIdentity: Our router's hash for reflexive delivery detection
 func NewGarlicMessageRouter(
 	netdb GarlicNetDB,
 	transportMgr *transport.TransportMuxer,
@@ -225,13 +222,11 @@ func (gr *GarlicMessageRouter) drainRouterInfoChanWithContext(ch chan router_inf
 
 // ForwardToDestination implements GarlicCloveForwarder interface.
 // Forwards a message to a destination hash (delivery type 0x01).
-//
 // Process:
-//  1. Look up destination in NetDB to get LeaseSet
-//  2. If found: Select a valid lease and route through the tunnel
-//  3. If not found: Queue message and trigger async LeaseSet lookup
-//  4. Background processor retries lookups and forwards messages when LeaseSets arrive
-//
+// 1. Look up destination in NetDB to get LeaseSet
+// 2. If found: Select a valid lease and route through the tunnel
+// 3. If not found: Queue message and trigger async LeaseSet lookup
+// 4. Background processor retries lookups and forwards messages when LeaseSets arrive
 // Per I2P spec, destinations are identified by their 32-byte hash and are
 // reached by sending messages through one of their published inbound tunnels.
 func (gr *GarlicMessageRouter) ForwardToDestination(destHash common.Hash, msg i2np.Message) error {
@@ -417,13 +412,11 @@ func (gr *GarlicMessageRouter) selectBestLease(leases []lease.Lease) *lease.Leas
 
 // ForwardToRouter implements GarlicCloveForwarder interface.
 // Forwards a message directly to a router hash (delivery type 0x02).
-//
 // Process:
-//  1. Check if router_hash == our_router_hash (reflexive delivery)
-//  2. If reflexive, process locally via MessageProcessor
-//  3. Otherwise, look up router in NetDB to get RouterInfo
-//  4. Send message via transport layer
-//
+// 1. Check if router_hash == our_router_hash (reflexive delivery)
+// 2. If reflexive, process locally via MessageProcessor
+// 3. Otherwise, look up router in NetDB to get RouterInfo
+// 4. Send message via transport layer
 // Reflexive delivery occurs when a garlic message instructs us to send a clove
 // to ourselves - this is processed locally to avoid unnecessary network traffic.
 func (gr *GarlicMessageRouter) ForwardToRouter(routerHash common.Hash, msg i2np.Message) error {
@@ -646,7 +639,7 @@ func (gr *GarlicMessageRouter) sendMessageToRouter(routerHash common.Hash, route
 		}).WithError(err).Error("Failed to get transport session")
 		return oops.Wrapf(err, "failed to get session for router %x", routerHash[:8])
 	}
-	defer gr.transportMgr.ReleaseSession() // H-1 fix: release slot after send
+	defer gr.transportMgr.ReleaseSession() // release slot after send
 
 	if err := session.QueueSendI2NP(msg); err != nil {
 		log.WithFields(logger.Fields{
@@ -666,13 +659,11 @@ func (gr *GarlicMessageRouter) sendMessageToRouter(routerHash common.Hash, route
 
 // ForwardThroughTunnel implements GarlicCloveForwarder interface.
 // Forwards a message through a tunnel to a gateway (delivery type 0x03).
-//
 // Process:
-//  1. Check if gateway_hash == our_router_hash (we are the gateway)
-//  2. If yes, inject message directly into our tunnel processing via processReflexiveTunnelDelivery()
-//  3. Otherwise, wrap message in TunnelGateway envelope
-//  4. Send TunnelGateway message to gateway router via ROUTER delivery
-//
+// 1. Check if gateway_hash == our_router_hash (we are the gateway)
+// 2. If yes, inject message directly into our tunnel processing via processReflexiveTunnelDelivery()
+// 3. Otherwise, wrap message in TunnelGateway envelope
+// 4. Send TunnelGateway message to gateway router via ROUTER delivery
 // Tunnel delivery is the most common forwarding type in I2P, as most traffic
 // flows through tunnels for anonymity. The gateway router is responsible for
 // injecting messages into the tunnel's encryption layers.

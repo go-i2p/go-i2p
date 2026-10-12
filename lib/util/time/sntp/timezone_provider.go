@@ -35,15 +35,13 @@ var currentTimezoneProvider timezoneProvider = &defaultTimezoneProvider{}
 // detectIANATimezone attempts to determine the system's IANA timezone name
 // using multiple platform-appropriate strategies. Returns "" if detection
 // fails. This function does not make network calls.
-//
 // Detection order:
-//  1. /etc/timezone file (Debian/Ubuntu)
-//  2. /etc/localtime symlink target (most Linux, macOS)
-//  3. Go stdlib time.Now().Location() (cross-platform fallback, works on Windows)
-//
+// 1. /etc/timezone file (Debian/Ubuntu)
+// 2. /etc/localtime symlink target (most Linux, macOS)
+// 3. Go stdlib time.Now().Location() (cross-platform fallback, works on Windows)
 // Note: TZ environment variable is intentionally not consulted to prevent
 // external processes from influencing NTP peer geography selection, which
-// could weaken anonymity properties. See AUDIT.md LOW finding.
+// could weaken anonymity properties.
 func detectIANATimezone() string {
 	return currentTimezoneProvider.detectIANATimezone()
 }

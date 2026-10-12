@@ -66,7 +66,7 @@ func (s *ShortTunnelBuildReply) logReplyStart(recordCount int) {
 
 // validateRecordCount validates that Count field matches actual record count.
 // Returns an error if count mismatch or no records present.
-// L-4 Consolidation: Delegates to shared ValidateRecordCount helper.
+// Delegates to shared ValidateRecordCount helper.
 func (s *ShortTunnelBuildReply) validateRecordCount(recordCount int) error {
 	return ValidateRecordCount(s.Count, recordCount, "ShortTunnelBuildReply")
 }

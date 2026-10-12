@@ -16,7 +16,6 @@ import (
 
 // Gateway handles sending I2NP messages through a tunnel
 // by wrapping them in tunnel messages and applying encryption.
-//
 // Design decisions:
 // - Works with raw bytes to avoid import cycles with i2np package
 // - Uses crypto/tunnel package with ECIES-X25519-AEAD (ChaCha20/Poly1305)
@@ -28,7 +27,7 @@ type Gateway struct {
 	tunnelID   TunnelID
 	encryption tunnel.TunnelEncryptor
 	nextHopID  TunnelID
-	encMu      sync.Mutex // protects concurrent calls to encryption.Encrypt
+	encMu sync.Mutex // protects concurrent calls to encryption.Encrypt
 }
 
 var (
@@ -49,12 +48,10 @@ const (
 )
 
 // NewGateway creates a new tunnel gateway.
-//
 // Parameters:
 // - tunnelID: the ID of this tunnel
 // - encryption: the tunnel encryption object for layered encryption
 // - nextHopID: the tunnel ID to use when forwarding to the next hop
-//
 // Returns an error if encryption is nil.
 func NewGateway(tunnelID TunnelID, encryption tunnel.TunnelEncryptor, nextHopID TunnelID) (*Gateway, error) {
 	if encryption == nil {
@@ -102,17 +99,14 @@ func (g *Gateway) validateSendMessage(msgBytes []byte) error {
 }
 
 // Send wraps an I2NP message (as bytes) in tunnel format and encrypts it.
-//
 // Parameters:
 // - msgBytes: the serialized I2NP message to send
-//
 // Process:
 // 1. Validate message size
 // 2. Create delivery instructions
 // 3. Build tunnel message with padding
 // 4. Calculate checksum
 // 5. Apply encryption
-//
 // Returns the encrypted tunnel message ready for transmission, or an error.
 func (g *Gateway) Send(msgBytes []byte) ([]byte, error) {
 	log.WithFields(logger.Fields{
@@ -207,7 +201,6 @@ func maxPayloadForDelivery(dc DeliveryConfig) int {
 // SendWithDelivery sends an I2NP message with the specified delivery type.
 // Supports DTLocal, DTTunnel, and DTRouter delivery types.
 // Automatically fragments messages that exceed the tunnel payload limit.
-//
 // Returns a slice of encrypted tunnel messages (one per fragment), or an error.
 func (g *Gateway) SendWithDelivery(msgBytes []byte, dc DeliveryConfig) ([][]byte, error) {
 	if len(msgBytes) == 0 {
@@ -530,9 +523,9 @@ func replaceZeroPaddingBytes(paddingBytes []byte) {
 
 // generateNonZeroByte returns a cryptographically random byte in the range [1, 255].
 // Falls back to 0x01 if random generation fails.
-// L-2 FIX: Documents secondary identifier fallback pattern (see M-2 for primary CSPRNG failure handling).
+// Documents secondary identifier fallback pattern.
 // This is LOW severity (entropy degradation on already-catastrophic RNG failure).
-// Unified with M-2 crash-fast pattern via WARNFAIL_I2P environment variable in main I2NP message ID generation.
+// Unified with Uses a crash-fast pattern via environment variable in main I2NP message ID generation.
 func generateNonZeroByte() byte {
 	var b [1]byte
 	if _, err := rand.Read(b[:]); err != nil {
