@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// Validates that delivery instructions are read from the correct offset in a
+// decrypted tunnel message when no padding is present.
 func TestDeliveryInstructionDataWithNoPadding(t *testing.T) {
 	assert := assert.New(t)
 
@@ -23,6 +25,8 @@ func TestDeliveryInstructionDataWithNoPadding(t *testing.T) {
 	assert.Equal(1028-4-4-16-1, len(di))
 }
 
+// Validates that delivery instructions are found after the non-zero padding
+// and zero separator byte in a decrypted tunnel message.
 func TestDeliveryInstructionDataWithSomePadding(t *testing.T) {
 	assert := assert.New(t)
 
@@ -41,6 +45,8 @@ func TestDeliveryInstructionDataWithSomePadding(t *testing.T) {
 	assert.Equal(1028-4-4-16-1-padding_size, len(di))
 }
 
+// Validates that a tunnel message filled entirely with padding is handled
+// without reading past the end of the message.
 func TestDeliveryInstructionDataWithOnlyPadding(t *testing.T) {
 	assert := assert.New(t)
 

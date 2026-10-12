@@ -78,6 +78,8 @@ func (m *MockTunnelBuilder) GetBuildCount() int {
 	return m.buildCount
 }
 
+// Validates that the pool uses the I2P spec defaults: 11-minute tunnel
+// lifetime and 3 hops.
 func TestPoolConfig(t *testing.T) {
 	config := DefaultPoolConfig()
 

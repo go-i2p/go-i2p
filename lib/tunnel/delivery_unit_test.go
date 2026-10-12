@@ -67,6 +67,8 @@ func validFirstFragmentDeliveryInstructions(mapping common.Mapping) []byte {
 	return data
 }
 
+// Validates that delivery instructions are parsed from a tunnel message with
+// the correct field sizes and delivery type bits.
 func TestReadDeliveryInstructions(t *testing.T) {
 	assert := assert.New(t)
 

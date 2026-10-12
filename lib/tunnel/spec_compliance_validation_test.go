@@ -1245,6 +1245,8 @@ func TestTunnelPool_PoolSizeConfigurable(t *testing.T) {
 	assert.Equal(t, 8, pool.config.MaxTunnels)
 }
 
+// Validates that the default tunnel lifetime is 11 minutes and the default
+// hop count is 3, per the I2P tunnel spec.
 func TestTunnelPool_DefaultConfigValues(t *testing.T) {
 	// DefaultPoolConfig must set project-default values.
 	cfg := DefaultPoolConfig()
@@ -1255,6 +1257,8 @@ func TestTunnelPool_DefaultConfigValues(t *testing.T) {
 	assert.Equal(t, 3, cfg.HopCount, "default hop count")
 }
 
+// Validates that a tunnel expires after its 10-minute participant lifetime
+// per the I2P tunnel spec.
 func TestTunnelPool_ExpirationAfter10Minutes(t *testing.T) {
 	// Tunnels should expire once they exceed the default lifetime.
 	pool := NewTunnelPool(&specMockPeerSelector{count: 3})
@@ -1278,6 +1282,8 @@ func TestTunnelPool_ExpirationAfter10Minutes(t *testing.T) {
 	assert.False(t, exists, "tunnel older than default lifetime must be expired")
 }
 
+// Validates that a tunnel is rebuilt before it expires, so the pool always
+// has usable tunnels.
 func TestTunnelPool_RebuildBeforeExpiry(t *testing.T) {
 	// Pool must detect near-expiry tunnels and plan rebuilds
 	pool := NewTunnelPool(&specMockPeerSelector{count: 3})
@@ -1302,6 +1308,8 @@ func TestTunnelPool_RebuildBeforeExpiry(t *testing.T) {
 	assert.Greater(t, needed, 0, "should need replacement tunnels due to near-expiry")
 }
 
+// Validates that tunnel hop counts stay within the 1 to 8 range allowed by
+// the I2P tunnel spec.
 func TestTunnelPool_HopCountRange(t *testing.T) {
 	// Configurable hop count (0-7), default 2-3 hops
 	cfg := DefaultPoolConfig()
@@ -1555,6 +1563,8 @@ func TestCryptoAudit_ECIESEncryptorCreation(t *testing.T) {
 		"ECIES encryptor must report ECIES type")
 }
 
+// Validates that a tunnel's session key is derived per the I2P tunnel spec
+// from the build record, producing 32-byte keys.
 func TestCryptoAudit_TunnelKeyDerivation(t *testing.T) {
 	// Layer key and IV key in build record must be proper 32-byte session keys
 	selector := &specMockPeerSelector{count: 3}
@@ -1581,6 +1591,8 @@ func TestCryptoAudit_TunnelKeyDerivation(t *testing.T) {
 	}
 }
 
+// Validates that the reply session key and IV stored from a build record can
+// decrypt messages sent back from the hop.
 func TestCryptoAudit_ReplyKeyAndIVForDecryption(t *testing.T) {
 	// Reply key and IV must be generated for each hop so tunnel creator can decrypt replies
 	selector := &specMockPeerSelector{count: 3}
@@ -1599,6 +1611,8 @@ func TestCryptoAudit_ReplyKeyAndIVForDecryption(t *testing.T) {
 	}
 }
 
+// Validates that the manager uses AES (encryption type 0) for participant
+// build records, as required for middle hops.
 func TestCryptoAudit_ManagerUsesAESForParticipants(t *testing.T) {
 	// Manager.RegisterParticipant must create AES encryptor from layer and IV keys
 	// (verified by checking NewAESEncryptor is used in the code path)
@@ -1709,6 +1723,8 @@ func TestLegacyCrypto_NoHardcodedAESInGateway(t *testing.T) {
 	require.NoError(t, err, "Gateway must work with non-AES encryptors")
 }
 
+// Validates that build records use the 29-byte ECIES record format, not the
+// legacy 528-byte ElGamal record.
 func TestLegacyCrypto_No528ByteRecords(t *testing.T) {
 	// Verify no 528-byte legacy record constants exist in the tunnel package
 	// 528 bytes was the legacy ElGamal-encrypted build record size
@@ -1760,12 +1776,16 @@ func TestManager_ProcessBuildRequest_AcceptReject(t *testing.T) {
 	assert.Equal(t, byte(0), rejectCode, "accept code must be 0")
 }
 
+// Validates that build rejections due to bandwidth use reply code 30
+// (BuildReplyCodeBandwidth) per the I2P tunnel spec.
 func TestManager_BuildReplyCodeBandwidthForRejections(t *testing.T) {
 	// Per I2P spec, rejections should use BuildReplyCodeBandwidth (30) to hide reason
 	assert.Equal(t, 30, BuildReplyCodeBandwidth,
 		"bandwidth reject code must be 30 per I2P spec")
 }
 
+// Validates that a router's participation in a tunnel lasts 10 minutes per
+// the I2P tunnel spec.
 func TestManager_ParticipantLifetime10Min(t *testing.T) {
 	// Participants must have 10-minute default lifetime
 	enc := &specMockEncryptor{}
@@ -1781,6 +1801,8 @@ func TestManager_ParticipantLifetime10Min(t *testing.T) {
 		"must be expired after 10 minutes")
 }
 
+// Validates that an idle tunnel is closed after 2 minutes per the I2P
+// tunnel spec.
 func TestManager_IdleTimeout2Min(t *testing.T) {
 	// Idle timeout defaults to 2 minutes to mitigate resource exhaustion
 	assert.Equal(t, 2*time.Minute, DefaultIdleTimeout)

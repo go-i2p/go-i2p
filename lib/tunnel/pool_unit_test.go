@@ -63,6 +63,8 @@ func TestTunnelPoolOperations(t *testing.T) {
 	assert.False(t, exists)
 }
 
+// Validates that expired tunnels are removed from the pool after their
+// lifetime ends.
 func TestTunnelCleanup(t *testing.T) {
 	selector := &MockPeerSelector{}
 	pool := NewTunnelPool(selector)
