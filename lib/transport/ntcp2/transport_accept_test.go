@@ -1,3 +1,6 @@
+// Tests for inbound connection acceptance. Validates that accepted
+// connections are tracked and promoted to sessions.
+
 package ntcp2
 
 import (

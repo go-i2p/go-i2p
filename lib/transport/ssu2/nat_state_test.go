@@ -1,3 +1,6 @@
+// Tests for natState. Verifies NAT state set/get, expiry, and save/load of
+// the persisted NAT results.
+
 package ssu2
 
 import (

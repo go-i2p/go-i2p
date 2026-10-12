@@ -1,3 +1,7 @@
+// Tests for RL-5: cleanup of the losing side of a peer test promotion.
+// Verifies that DetachConn prevents the loser from closing the socket that
+// the winner keeps using.
+
 package ssu2
 
 import (

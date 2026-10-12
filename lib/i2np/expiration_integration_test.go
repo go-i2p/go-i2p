@@ -1,3 +1,4 @@
+// Integration tests for I2NP message expiration checking in the processor.
 package i2np
 
 import (

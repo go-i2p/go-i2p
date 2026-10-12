@@ -1,3 +1,7 @@
+// Tests for the session promotion race (CRITICAL-1.1). Validates that
+// concurrent promotion of the same connection does not create duplicate
+// sessions.
+
 package ntcp2
 
 import (

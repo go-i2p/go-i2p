@@ -1,3 +1,6 @@
+// Tests for the port mapper. Validates the port mapper lifecycle used
+// for NAT traversal.
+
 package ntcp2
 
 import (

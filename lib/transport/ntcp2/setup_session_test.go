@@ -1,3 +1,6 @@
+// Tests for session setup. Validates that duplicate sessions for the
+// same peer are handled correctly.
+
 package ntcp2
 
 import (

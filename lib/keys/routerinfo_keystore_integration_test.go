@@ -184,6 +184,8 @@ func TestLoadOrGenerateEncryptionKey_LoadsExistingKey(t *testing.T) {
 }
 
 // TestKeyStoreFullRoundTrip verifies complete key storage and retrieval.
+// Validates the routerinfo keystore format: a stored key file must reload
+// to the same public key, so the router identity survives a restart.
 func TestKeyStoreFullRoundTrip(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "keys_roundtrip_test")
 	if err != nil {

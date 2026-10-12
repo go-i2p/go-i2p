@@ -1,3 +1,4 @@
+// Tests for the I2NP message factory that creates messages by type.
 package i2np
 
 import (

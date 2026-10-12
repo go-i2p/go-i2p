@@ -1,3 +1,4 @@
+// Benchmarks for tunnel build message creation and serialization performance.
 package i2np
 
 import (

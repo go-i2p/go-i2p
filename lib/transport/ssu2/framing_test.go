@@ -1,3 +1,7 @@
+// Tests for I2NP-to-block framing. Validates that I2NP messages are wrapped
+// into SSU2 blocks and back, and that ACK block parsing handles packet
+// number ranges without integer wraparound.
+
 package ssu2
 
 import (

@@ -1,3 +1,6 @@
+// Tests for NTCP2 security properties. Validates frame length limits,
+// static key length, and obfuscation IV length checks.
+
 package ntcp2
 
 import (

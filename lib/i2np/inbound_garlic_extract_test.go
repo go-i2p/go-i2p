@@ -1,3 +1,4 @@
+// Tests for extracting the inner message from an inbound garlic clove.
 package i2np
 
 import (

@@ -1,3 +1,6 @@
+// Tests for RouterAddress conversion. Validates that a RouterInfo is
+// converted into a RouterAddress carrying the NTCP2 transport data.
+
 package ntcp2
 
 import (

@@ -1,3 +1,4 @@
+// Tests for message processor handler dispatch, including garlic clove parsing.
 package i2np
 
 import (
@@ -7,6 +8,8 @@ import (
 	"time"
 )
 
+// Validates that a LOCAL-delivery garlic clove wrapping a ShortTunnelBuildReply
+// parses with the correct flag, message type, ID, and expiration.
 func TestParseECIESGarlicClove_LocalShortTunnelBuildReply(t *testing.T) {
 	expiry := time.Unix(1770000000, 0).UTC()
 	payload := append([]byte{1}, bytes.Repeat([]byte{0xaa}, 218)...)

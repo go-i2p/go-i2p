@@ -1,3 +1,6 @@
+// Tests for DestinationKeyStore, which holds the key pair behind an I2P
+// destination. Covers the on-disk key file format (DKS v2 magic header),
+// key rotation, and the Ed25519/X25519 key certificate layout.
 package keys
 
 import (

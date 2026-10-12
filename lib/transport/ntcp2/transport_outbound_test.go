@@ -1,3 +1,6 @@
+// Tests for outbound connections. Validates GetSession behavior and
+// the transport interface contract.
+
 package ntcp2
 
 import (

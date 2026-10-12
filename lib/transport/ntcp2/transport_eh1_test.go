@@ -1,3 +1,6 @@
+// Tests for RouterInfo fetch failure handling (EH-1). Validates that
+// handshake failures are counted in the metrics.
+
 package ntcp2
 
 import (

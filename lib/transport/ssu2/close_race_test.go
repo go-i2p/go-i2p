@@ -1,3 +1,6 @@
+// Tests for the SessionRegistry shutdown path. Verifies that marking the
+// registry as shutting down and decrementing session counts do not race.
+
 package ssu2
 
 import (

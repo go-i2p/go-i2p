@@ -1,3 +1,6 @@
+// Unit tests for destination key store construction and crypto.
+// Covers rebuilding a destination from private keys, key zeroing on Close,
+// and the Ed25519/X25519 key certificate sizes and padding layout.
 package keys
 
 import (

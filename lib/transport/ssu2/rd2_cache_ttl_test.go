@@ -1,3 +1,6 @@
+// Tests for RD-2: NAT result cache TTL. Verifies that cached external NAT
+// results expire after natResultTTL and are re-observed.
+
 package ssu2
 
 import (

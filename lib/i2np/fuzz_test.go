@@ -1,3 +1,6 @@
+// Fuzz tests for I2NP message parsing.
+// Feeds random and mutated byte slices to the parsers to catch panics and
+// malformed-input handling bugs.
 package i2np
 
 // L-NEW-1 FIX: native Go fuzz targets for I2NP network-facing parsers.

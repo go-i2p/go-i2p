@@ -1,3 +1,4 @@
+// Tests that database stores from a peer are recorded with their source router.
 package i2np
 
 import (
@@ -31,6 +32,8 @@ func (m *sourceAwareStoreMock) StoreFromPeer(key common.Hash, data []byte, dataT
 	return nil
 }
 
+// Validates that a DatabaseStore received from a peer is stored through the
+// source-aware path so the source router hash is recorded with the data.
 func TestDatabaseManager_StoreDataFromPeer_UsesSourceAwarePath(t *testing.T) {
 	mock := &sourceAwareStoreMock{}
 	dm := NewDatabaseManager(mock)

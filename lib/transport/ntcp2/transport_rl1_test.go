@@ -1,3 +1,6 @@
+// Tests for handshake timeout handling (RL-1). Validates that stalled
+// handshakes are timed out and cleaned up.
+
 package ntcp2
 
 import (

@@ -1,3 +1,6 @@
+// Tests for R-1: DetachConn under concurrent access. Verifies that detaching
+// a connection while readers access it does not cause a data race.
+
 package ssu2
 
 import (

@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// Validates that a truncated build request record returns the not-enough-data error.
 func TestReadBuildRequestRecordTooLittleData(t *testing.T) {
 	assert := assert.New(t)
 
@@ -15,6 +16,7 @@ func TestReadBuildRequestRecordTooLittleData(t *testing.T) {
 	assert.Equal(ErrBuildRequestRecordNotEnoughData, err)
 }
 
+// Validates that a 222-byte build request record parses and the receive tunnel ID is read from the wire.
 func TestReadBuildRequestRecordValidReceiveTunnel(t *testing.T) {
 	assert := assert.New(t)
 

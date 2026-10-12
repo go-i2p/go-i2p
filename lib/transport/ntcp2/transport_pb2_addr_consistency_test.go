@@ -1,3 +1,6 @@
+// Tests for address consistency (PB-2). Validates that a session's
+// Addr() always returns the same peer address.
+
 package ntcp2
 
 import (

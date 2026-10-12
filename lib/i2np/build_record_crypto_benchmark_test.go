@@ -1,3 +1,4 @@
+// Benchmarks for build record encryption and decryption performance.
 package i2np
 
 import (

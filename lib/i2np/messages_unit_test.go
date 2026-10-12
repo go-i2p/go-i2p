@@ -1,3 +1,5 @@
+// Tests for I2NP message wire-format round-trips.
+// Validates that each message type encodes and decodes back to its original form.
 package i2np
 
 import (

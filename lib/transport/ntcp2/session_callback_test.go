@@ -1,3 +1,6 @@
+// Tests for session cleanup callbacks. Validates that callbacks fire
+// when a session is closed or removed.
+
 package ntcp2
 
 import (

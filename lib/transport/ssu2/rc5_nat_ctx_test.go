@@ -1,3 +1,6 @@
+// Tests for RC-5: NAT manager context cancellation. Verifies that cancelling
+// the NAT context stops its goroutines cleanly without leaks.
+
 package ssu2
 
 import (

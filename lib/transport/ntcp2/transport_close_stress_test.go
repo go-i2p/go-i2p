@@ -1,3 +1,6 @@
+// Stress tests for closing the transport (RC-4). Validates that
+// concurrent close and dial calls do not panic or leak.
+
 package ntcp2
 
 import (

@@ -1,3 +1,6 @@
+// Tests for outbound dial fallback. Validates that dialing tries the
+// next candidate address when one fails.
+
 package ntcp2
 
 import (

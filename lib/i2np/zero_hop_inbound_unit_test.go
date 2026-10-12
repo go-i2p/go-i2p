@@ -1,3 +1,6 @@
+// Tests for zero-hop inbound tunnel build validation.
+// A zero-hop tunnel has no intermediate hops, so the reply path must be
+// established before the outbound tunnel can be built.
 package i2np
 
 import (
@@ -44,6 +47,7 @@ func TestBuildTunnelFromRequest_ZeroHopInbound(t *testing.T) {
 	assert.Empty(t, state.Hops, "0-hop tunnel has no remote hops")
 }
 
+// Validates that a zero-hop build request is rejected when the router identity is unset.
 func TestBuildTunnelFromRequest_RejectsZeroRouterIdentity(t *testing.T) {
 	tm := NewTunnelManager(&MockTestPeerSelector{})
 	defer tm.Stop()
@@ -53,6 +57,8 @@ func TestBuildTunnelFromRequest_RejectsZeroRouterIdentity(t *testing.T) {
 	assert.Contains(t, err.Error(), "identity is unset")
 }
 
+// Validates that an outbound build request is rejected when no inbound reply
+// tunnel is available to carry the TunnelBuildReply back.
 func TestBuildTunnelFromRequest_RejectsOutboundWithoutInboundReplyPath(t *testing.T) {
 	tm := NewTunnelManager(&MockTestPeerSelector{})
 	defer tm.Stop()

@@ -1,3 +1,7 @@
+// Tests for SA-1: the peer test initiation cap. Verifies that
+// shouldInitiatePeerTest respects startupPeerTestMax under concurrent load
+// without a check-then-decrement race.
+
 package ssu2
 
 import (

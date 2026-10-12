@@ -1,3 +1,6 @@
+// Tests for NTCP2 spec compliance. Validates the Noise XK handshake and
+// message exchange required by the NTCP2 spec.
+
 package ntcp2
 
 import (

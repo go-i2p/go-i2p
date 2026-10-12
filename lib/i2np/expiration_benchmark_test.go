@@ -1,3 +1,4 @@
+// Benchmarks for I2NP message expiration validation performance.
 package i2np
 
 import (

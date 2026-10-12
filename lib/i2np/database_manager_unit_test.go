@@ -1,3 +1,4 @@
+// Tests for the database manager's NetDB lookup and store behavior.
 package i2np
 
 import (

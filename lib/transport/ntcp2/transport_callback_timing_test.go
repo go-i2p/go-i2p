@@ -1,3 +1,6 @@
+// Tests for cleanup callback timing (SA-1). Validates that session
+// cleanup callbacks run without racing the close path.
+
 package ntcp2
 
 import (

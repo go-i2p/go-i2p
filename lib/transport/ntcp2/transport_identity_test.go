@@ -1,3 +1,6 @@
+// Tests for identity handling. Validates that the transport's identity
+// and RouterInfo are updated correctly.
+
 package ntcp2
 
 import (

@@ -1,3 +1,6 @@
+// Tests for BlockCallbackConfig. Verifies that block callbacks (termination,
+// router info) are wired into the data handler correctly.
+
 package ssu2
 
 import (

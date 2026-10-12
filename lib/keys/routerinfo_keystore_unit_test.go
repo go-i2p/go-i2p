@@ -635,7 +635,8 @@ func TestRandomSourceAvailability(t *testing.T) {
 }
 
 // TestKeySerializationRoundTrip verifies that keys can be serialized and
-// deserialized without data loss.
+// deserialized without data loss. This is what the keystore relies on when
+// persisting key material to disk and reloading it later.
 func TestKeySerializationRoundTrip(t *testing.T) {
 	pubKey, privKey, err := ed25519.GenerateEd25519KeyPair()
 	if err != nil {
