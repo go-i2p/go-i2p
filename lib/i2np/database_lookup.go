@@ -57,9 +57,9 @@ Fields:
 
   flags (bit order 76543210):
     bit 0  deliveryFlag: 0 = direct reply, 1 = reply via tunnel.
-    bit 1  reserved (must be 0).
+    bit 1  encryptionFlag: ignored as of 0.9.6 (set to 0).
     bits 3-2 lookup type:
-             00 = normal (RouterInfo or LeaseSet)
+             00 = ANY (RouterInfo or LeaseSet) — DEPRECATED as of 0.9.16
              01 = LeaseSet only
              10 = RouterInfo only
              11 = exploration (non-floodfill routers only)
@@ -99,6 +99,20 @@ ECIES: https://geti2p.net/spec/ecies
 // peers, which search their local database and reply with a
 // DatabaseSearchReplyMessage. The reply is delivered directly or through a
 // reply tunnel, and can be ECIES-encrypted.
+//
+// Data flow:
+//
+//	Requester                Floodfill peer(s)
+//	     │                            │
+//	     │  DatabaseLookup (key)      │
+//	     ├───────────────────────────>│  search local database
+//	     │                            │
+//	     │  DatabaseSearchReply       │
+//	     │  (peer hashes, ECIES-enc)  │
+//	     │<───────────────────────────┤  direct or via reply tunnel
+//	     │                            │
+//
+// The requester then issues follow-up lookups for each suggested peer hash.
 //
 // See the package-level wire format diagram above for the on-wire layout.
 type DatabaseLookup struct {
@@ -411,8 +425,9 @@ const (
 	DatabaseLookupFlagDirect byte = 0x00
 	// DatabaseLookupFlagTunnel requests a reply routed through a tunnel (bit 0 = 1).
 	DatabaseLookupFlagTunnel byte = 0x01
-	// DatabaseLookupFlagTypeNormal requests a normal lookup returning a
-	// RouterInfo or LeaseSet (bits 3-2 = 00).
+	// DatabaseLookupFlagTypeNormal requests an ANY lookup returning a
+	// RouterInfo or LeaseSet (bits 3-2 = 00). DEPRECATED as of 0.9.16;
+	// prefer DatabaseLookupFlagTypeLS or DatabaseLookupFlagTypeRI.
 	DatabaseLookupFlagTypeNormal byte = 0x00
 	// DatabaseLookupFlagTypeLS requests a LeaseSet lookup (bits 3-2 = 01).
 	DatabaseLookupFlagTypeLS byte = 0x04

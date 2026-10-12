@@ -17,57 +17,58 @@ func truncateHashString(s string, maxLen int) string {
 }
 
 /*
-I2P I2NP DatabaseSearchReply
-https://geti2p.net/spec/i2np
-Accurate for version 0.9.28
+DatabaseSearchReply is part of the I2P database subsystem. It is the reply a
+floodfill router sends when a DatabaseLookup fails: instead of the requested
+object, it returns the SHA-256 hashes of the routers it believes are closest
+to the lookup key, so the requester can continue the iterative (Kademlia-style)
+search toward the target.
 
-+----+----+----+----+----+----+----+----+
-| SHA256 hash as query key              |
-+                                       +
-|                                       |
-+                                       +
-|                                       |
-+                                       +
-|                                       |
-+----+----+----+----+----+----+----+----+
-| num| peer_hashes                      |
-+----+                                  +
-|                                       |
-+                                       +
-|                                       |
-+                                       +
-|                                       |
-+    +----+----+----+----+----+----+----+
-|    | from                             |
-+----+                                  +
-|                                       |
-+                                       +
-|                                       |
-+                                       +
-|                                       |
-+    +----+----+----+----+----+----+----+
-|    |
-+----+
+The reply is unauthenticated: the "from" hash and the peer hashes are not
+signed, so a router must treat them as untrusted suggestions, not as verified
+identities. The peer hashes are "real" hashes (RouterIdentity), not routing
+keys.
 
-key ::
-    32 bytes
-    SHA256 of the object being searched
+Wire format:
 
-num ::
-    1 byte Integer
-    number of peer hashes that follow, 0-255
+  +--------------------------------------------------+
+  | key (32 bytes)                                   |
+  +--------------------------------------------------+
+  | num (1 byte)                                     |
+  +--------------------------------------------------+
+  | peer_hashes (num x 32 bytes)                     |
+  +--------------------------------------------------+
+  | from (32 bytes)                                  |
+  +--------------------------------------------------+
 
-peer_hashes ::
-          $num SHA256 hashes of 32 bytes each (total $num*32 bytes)
-          SHA256 of the RouterIdentity that the other router thinks is close
-          to the key
+Fields:
 
-from ::
-     32 bytes
-     SHA256 of the RouterInfo of the router this reply was sent from
+  key:
+    SHA-256 hash of the object being searched (echoed from the lookup).
+
+  num:
+    Number of peer hashes that follow (0-255 on the wire; the spec
+    recommends at most 16).
+
+  peer_hashes:
+    SHA-256 hashes of the RouterIdentity of routers the responder thinks
+    are close to the key.
+
+  from:
+    SHA-256 hash of the RouterInfo of the router this reply was sent from.
+    Unauthenticated and cannot be trusted.
+
+Spec: https://geti2p.net/spec/i2np#databasesearchreply
+Accurate for version 0.9.66
 */
 
-// DatabaseSearchReply represents an I2NP DatabaseSearchReply message returned in response to a failed DatabaseLookup, containing hashes of alternative peers to query.
+// DatabaseSearchReply is an I2NP message returned in response to a failed
+// DatabaseLookup, containing the hashes of alternative peers to query.
+//
+// It is the reply half of the database subsystem: when a floodfill router
+// cannot satisfy a DatabaseLookup, it answers with this message so the
+// requester can keep iterating toward the target key.
+//
+// See the package-level wire format diagram above for the on-wire layout.
 type DatabaseSearchReply struct {
 	*BaseI2NPMessage
 	Key        common.Hash
@@ -76,7 +77,12 @@ type DatabaseSearchReply struct {
 	From       common.Hash
 }
 
-// NewDatabaseSearchReply creates a new DatabaseSearchReply message
+// NewDatabaseSearchReply creates a new DatabaseSearchReply message.
+//
+// It is used by a floodfill router to answer a DatabaseLookup it cannot
+// satisfy: key is the lookup key being echoed back, from is the responder's
+// RouterInfo hash, and peerHashes are the RouterIdentity hashes of routers
+// the responder believes are close to the key.
 func NewDatabaseSearchReply(key, from common.Hash, peerHashes []common.Hash) *DatabaseSearchReply {
 	log.WithFields(logger.Fields{
 		"at":         "NewDatabaseSearchReply",
@@ -94,8 +100,10 @@ func NewDatabaseSearchReply(key, from common.Hash, peerHashes []common.Hash) *Da
 	}
 }
 
-// MarshalPayload serializes only the DatabaseSearchReply-specific payload fields
-// (without the I2NP header). Use MarshalBinary() for a complete I2NP message.
+// MarshalPayload serializes only the DatabaseSearchReply-specific payload
+// fields (without the I2NP header), in the spec wire order:
+// key(32) + num(1) + peer_hashes(num*32) + from(32).
+// Use MarshalBinary() for a complete I2NP message including the header.
 func (d *DatabaseSearchReply) MarshalPayload() ([]byte, error) {
 	// Calculate size: key(32) + count(1) + peerHashes(count*32) + from(32)
 	size := 32 + 1 + (d.Count * 32) + 32
@@ -122,8 +130,9 @@ func (d *DatabaseSearchReply) MarshalPayload() ([]byte, error) {
 	return result, nil
 }
 
-// MarshalBinary serializes the DatabaseSearchReply as a complete I2NP message
-// including the 16-byte I2NP header (type, messageID, expiration, size, checksum).
+// MarshalBinary serializes the DatabaseSearchReply as a complete I2NP message,
+// including the 16-byte I2NP header (type, messageID, expiration, size,
+// checksum) followed by the payload produced by MarshalPayload.
 func (d *DatabaseSearchReply) MarshalBinary() ([]byte, error) {
 	log.WithFields(logger.Fields{
 		"at":         "DatabaseSearchReply.MarshalBinary",
@@ -158,14 +167,19 @@ func readPeerHashes(remainder []byte, count int) ([]common.Hash, []byte, error) 
 	return hashes, remainder, nil
 }
 
-// maxDatabaseSearchReplySuggestions is the I2P spec maximum number of peer
-// hashes in a single DatabaseSearchReply (section 3.3, num field: 0–255 per
-// wire format but the spec caps it at 16 in practice to bound Kademlia fan-out).
-// Replies claiming more than 16 suggestions are rejected to prevent a malicious
-// peer from injecting an oversized suggestion set into the iterative lookup.
+// maxDatabaseSearchReplySuggestions bounds the number of peer hashes accepted
+// from a DatabaseSearchReply. The wire format allows num in 0–255, and the
+// spec recommends at most 16 ("Recommended maximum number of hashes to return:
+// 16"). This implementation rejects replies with more than 16 suggestions:
+// beyond the recommended maximum, a peer could inject an oversized suggestion
+// set and skew the local router's iterative (Kademlia-style) lookup fan-out.
+// See AUDIT.md for the deviation from the wire format's 0–255 range.
 const maxDatabaseSearchReplySuggestions = 16
 
-// UnmarshalBinary deserializes the DatabaseSearchReply message from binary data.
+// UnmarshalBinary deserializes the DatabaseSearchReply message from binary
+// data, parsing the spec wire order: key(32) + num(1) + peer_hashes(num*32) +
+// from(32). It rejects messages shorter than the 65-byte minimum and replies
+// whose num exceeds maxDatabaseSearchReplySuggestions.
 func (d *DatabaseSearchReply) UnmarshalBinary(data []byte) error {
 	// Minimum size: key(32) + count(1) + from(32) = 65 bytes
 	if len(data) < 65 {

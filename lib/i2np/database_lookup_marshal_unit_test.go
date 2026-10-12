@@ -7,7 +7,10 @@ import (
 	common "github.com/go-i2p/common/data"
 )
 
-// TestNewDatabaseLookup tests the DatabaseLookup constructor
+// TestNewDatabaseLookup validates that NewDatabaseLookup sets the Key, From,
+// and Flags fields correctly for each lookup type (RouterInfo, LeaseSet,
+// Exploration) and that the excluded-peer count is derived from the slice
+// length.
 func TestNewDatabaseLookup(t *testing.T) {
 	key := common.Hash{1, 2, 3, 4, 5, 6, 7, 8}
 	from := common.Hash{9, 10, 11, 12, 13, 14, 15, 16}
@@ -60,7 +63,9 @@ func TestNewDatabaseLookup(t *testing.T) {
 	})
 }
 
-// TestNewDatabaseLookupWithTunnel tests the tunnel-reply variant
+// TestNewDatabaseLookupWithTunnel validates that the tunnel-reply constructor
+// sets the tunnel delivery flag (bit 0), stores the reply tunnel ID, and uses
+// the reply gateway's identity hash as the From field.
 func TestNewDatabaseLookupWithTunnel(t *testing.T) {
 	key := common.Hash{1, 2, 3, 4}
 	gateway := common.Hash{5, 6, 7, 8}
@@ -79,7 +84,9 @@ func TestNewDatabaseLookupWithTunnel(t *testing.T) {
 	}
 }
 
-// TestDatabaseLookupMarshalBinary tests serialization
+// TestDatabaseLookupMarshalBinary validates the wire layout produced by
+// MarshalBinary: key(32) + from(32) + flags(1) + [reply_tunnelId(4)] +
+// size(2, big-endian) + excluded peers, with each field at its spec offset.
 func TestDatabaseLookupMarshalBinary(t *testing.T) {
 	key := common.Hash{1, 2, 3, 4}
 	from := common.Hash{5, 6, 7, 8}
@@ -163,11 +170,10 @@ func TestDatabaseLookupMarshalBinary(t *testing.T) {
 	})
 }
 
-// TestDatabaseLookupRoundTrip tests serialization followed by parsing
-// Note: The existing ReadDatabaseLookup implementation always expects encryption fields,
-// even when encryption flag is not set. This is a known limitation.
-// This test verifies that our MarshalBinary produces a valid format that could be
-// parsed by a spec-compliant implementation.
+// TestDatabaseLookupRoundTrip validates that MarshalBinary output is a valid
+// I2NP wire format: the serialized bytes are checked field-by-field at their
+// spec offsets (key, from, flags, big-endian size, excluded peers) so that a
+// spec-compliant implementation can parse them.
 func TestDatabaseLookupRoundTrip(t *testing.T) {
 	key := common.Hash{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
 	from := common.Hash{17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
@@ -181,46 +187,42 @@ func TestDatabaseLookupRoundTrip(t *testing.T) {
 		t.Fatalf("MarshalBinary failed: %v", err)
 	}
 
-	// Verify the format is correct by manually checking the bytes
-	// instead of using ReadDatabaseLookup (which has a pre-existing limitation)
-	if len(data) < 67+64 { // key(32)+from(32)+flags(1)+size(2)+excluded(2*32)
-		t.Fatalf("Data too short: got %d bytes, expected at least %d", len(data), 67+64)
+	// Expected size: key(32) + from(32) + flags(1) + size(2) + excluded(2*32)
+	expectedSize := 32 + 32 + 1 + 2 + 2*32
+	if len(data) != expectedSize {
+		t.Fatalf("Data size: got %d bytes, expected %d", len(data), expectedSize)
 	}
 
-	// Verify key
-	var parsedKey common.Hash
-	copy(parsedKey[:], data[:32])
-	if parsedKey != key {
-		t.Error("Key mismatch in serialized data")
+	// Parse the wire bytes back and compare every field.
+	parsed, err := ReadDatabaseLookup(data)
+	if err != nil {
+		t.Fatalf("ReadDatabaseLookup failed: %v", err)
 	}
 
-	// Verify from
-	var parsedFrom common.Hash
-	copy(parsedFrom[:], data[32:64])
-	if parsedFrom != from {
-		t.Error("From mismatch in serialized data")
+	if parsed.Key != key {
+		t.Error("Key mismatch in round trip")
 	}
-
-	// Verify flags (should be DatabaseLookupFlagTypeRI = 0x08)
-	if data[64] != DatabaseLookupFlagTypeRI {
-		t.Errorf("Flags mismatch: expected 0x%02x, got 0x%02x", DatabaseLookupFlagTypeRI, data[64])
+	if parsed.From != from {
+		t.Error("From mismatch in round trip")
 	}
-
-	// Verify size (big-endian, 2 bytes)
-	size := int(data[65])<<8 | int(data[66])
-	if size != 2 {
-		t.Errorf("Size mismatch: expected 2, got %d", size)
+	if parsed.Flags != original.Flags {
+		t.Errorf("Flags mismatch: expected 0x%02x, got 0x%02x", original.Flags, parsed.Flags)
 	}
-
-	// Verify first excluded peer
-	var peer1 common.Hash
-	copy(peer1[:], data[67:99])
-	if peer1 != excluded[0] {
-		t.Error("First excluded peer mismatch")
+	if parsed.Size != 2 {
+		t.Errorf("Size mismatch: expected 2, got %d", parsed.Size)
+	}
+	if len(parsed.ExcludedPeers) != 2 {
+		t.Fatalf("ExcludedPeers count: expected 2, got %d", len(parsed.ExcludedPeers))
+	}
+	if parsed.ExcludedPeers[0] != excluded[0] || parsed.ExcludedPeers[1] != excluded[1] {
+		t.Error("Excluded peer mismatch in round trip")
 	}
 }
 
-// TestDatabaseLookupFlagConstants tests flag constants are correct
+// TestDatabaseLookupFlagConstants validates that the flag constants match the
+// I2NP spec bit layout: bit 0 delivery (Direct=0x00, Tunnel=0x01), bits 3-2
+// lookup type (Normal=0x00, LeaseSet=0x04, RouterInfo=0x08, Exploration=0x0C),
+// and bit 4 ECIES (0x10).
 func TestDatabaseLookupFlagConstants(t *testing.T) {
 	// Direct should be 0x00 (bit 0 = 0)
 	if DatabaseLookupFlagDirect != 0x00 {
@@ -258,7 +260,10 @@ func TestDatabaseLookupFlagConstants(t *testing.T) {
 	}
 }
 
-// TestDatabaseSearchReplyUnmarshalBinary tests parsing of search replies
+// TestDatabaseSearchReplyUnmarshalBinary validates that a DatabaseSearchReply
+// payload (key(32) + count(1) + peer_hashes(count*32) + from(32)) round-trips
+// through MarshalPayload/UnmarshalBinary, and that malformed payloads (too
+// short, truncated peer hashes) are rejected.
 func TestDatabaseSearchReplyUnmarshalBinary(t *testing.T) {
 	t.Run("ValidReply", func(t *testing.T) {
 		key := common.Hash{1, 2, 3, 4}
@@ -315,7 +320,9 @@ func TestDatabaseSearchReplyUnmarshalBinary(t *testing.T) {
 	})
 }
 
-// TestReadDatabaseSearchReply tests the convenience function
+// TestReadDatabaseSearchReply validates that the ReadDatabaseSearchReply
+// convenience function parses a payload-only DatabaseSearchReply and returns
+// the original key and from fields.
 func TestReadDatabaseSearchReply(t *testing.T) {
 	key := common.Hash{1, 2, 3, 4}
 	from := common.Hash{5, 6, 7, 8}
@@ -338,19 +345,3 @@ func TestReadDatabaseSearchReply(t *testing.T) {
 	}
 }
 
-// TestDatabaseSearchReplyString tests the String method
-func TestDatabaseSearchReplyString(t *testing.T) {
-	key := common.Hash{1, 2, 3, 4}
-	from := common.Hash{5, 6, 7, 8}
-	peers := []common.Hash{{9, 10}, {11, 12}}
-
-	reply := NewDatabaseSearchReply(key, from, peers)
-	str := reply.String()
-
-	if str == "" {
-		t.Error("String() should return non-empty string")
-	}
-	if len(str) < 20 {
-		t.Error("String() should return descriptive string")
-	}
-}

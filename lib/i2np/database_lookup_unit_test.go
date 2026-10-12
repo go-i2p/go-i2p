@@ -163,6 +163,8 @@ func TestReadDatabaseLookupFromTooLittleData(t *testing.T) {
 	assert.Equal(ErrDatabaseLookupNotEnoughData, err)
 }
 
+// TestReadDatabaseLookupFromValidData validates that the 32-byte From field
+// (the identity hash of the requesting router) is parsed as a common.Hash.
 func TestReadDatabaseLookupFromValidData(t *testing.T) {
 	assert := assert.New(t)
 
@@ -180,6 +182,9 @@ func TestReadDatabaseLookupFromValidData(t *testing.T) {
 	assert.Equal(nil, err)
 }
 
+// TestReadDatabaseLookupFlagsTooLittleData validates that the 1-byte Flags
+// field is rejected with ErrDatabaseLookupNotEnoughData when the buffer is
+// exhausted.
 func TestReadDatabaseLookupFlagsTooLittleData(t *testing.T) {
 	assert := assert.New(t)
 
@@ -193,6 +198,8 @@ func TestReadDatabaseLookupFlagsTooLittleData(t *testing.T) {
 	assert.Equal(ErrDatabaseLookupNotEnoughData, err)
 }
 
+// TestReadDatabaseLookupFlagsValidData validates that the 1-byte Flags field
+// is parsed verbatim (here 0x01 = tunnel delivery, normal lookup type).
 func TestReadDatabaseLookupFlagsValidData(t *testing.T) {
 	assert := assert.New(t)
 
@@ -282,6 +289,8 @@ func TestReadDatabaseLookupSizeTooLittleData(t *testing.T) {
 	assert.Equal(ErrDatabaseLookupNotEnoughData, err)
 }
 
+// TestReadDatabaseLookupSizeValidData validates that the 2-byte big-endian
+// Size field (number of excluded peers, 0-512) is parsed as an integer.
 func TestReadDatabaseLookupSizeValidData(t *testing.T) {
 	assert := assert.New(t)
 
