@@ -139,7 +139,7 @@ func (sr *SessionRegistry) runPreflightOrRollback(peerHash data.Hash, original, 
 			current, exists := sr.sessions.Load(peerHash)
 			sr.logger.WithField("peer_hash", logutil.HashPrefixPlain(peerHash)).WithFields(logger.Fields{
 				"entry_exists": exists,
-				"entry_type": fmt.Sprintf("%T", current),
+				"entry_type":   fmt.Sprintf("%T", current),
 			}).Error("Failed to roll back session promotion after preflight failure")
 		}
 

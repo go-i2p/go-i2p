@@ -1300,6 +1300,26 @@ scrape_configs:
 
 ---
 
+## Development Status
+
+This implementation prioritizes development convenience over production
+robustness. Current status:
+
+- ✅ JSON-RPC 2.0 compliance
+- ✅ Token authentication
+- ✅ HTTP/HTTPS transport
+- ✅ Echo, GetRate, RouterInfo methods
+- ✅ RouterManager method (shutdown)
+- ✅ NetworkSetting method (read-only)
+- ✅ I2PControl method (password changes)
+- ✅ Thread-safe concurrent access
+- ✅ Graceful shutdown
+- ✅ 78%+ test coverage
+- ⚠️ No rate limiting
+- ⚠️ No audit logging
+- 🚧 RouterManager: Restart/reseed (planned)
+- 🚧 NetworkSetting: Write operations (planned)
+
 ## References
 
 - [I2PControl Specification](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2cp.rst)

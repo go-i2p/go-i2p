@@ -30,10 +30,13 @@ func decodeParams(method string, params json.RawMessage, v interface{}) error {
 // Simply returns whatever value is sent in the "Echo" parameter.
 // This is useful for testing RPC connectivity.
 // Request params:
+//
 //	{
 //	 "Echo": "any_value"
 //	}
+//
 // Response:
+//
 //	{
 //	 "Echo": "any_value"
 //	}
@@ -77,8 +80,10 @@ func (h *EchoHandler) Handle(ctx context.Context, params json.RawMessage) (inter
 
 // GetRateHandler implements the GetRate RPC method.
 // Java I2P spec style (used by go-i2pcontrol / go-i2p TUI):
+//
 //	{"Stat": "bw.sendBps", "Period": 300000}
 //	→ {"Result": 12345.0}
+//
 // The Stat/Period style MUST return {"Result": float64} or clients like
 // go-i2pcontrol will panic when they type-assert retpre["Result"].(float64).
 type GetRateHandler struct {
@@ -115,7 +120,7 @@ func (h *GetRateHandler) handleStatPeriodStyle(req map[string]interface{}, statN
 	val := h.resolveStatName(statName, periodMs)
 
 	log.WithFields(map[string]interface{}{
-		"stat": statName,
+		"stat":   statName,
 		"period": periodMs,
 		"result": val,
 	}).Debug("i2pcontrol: GetRate Stat/Period style")
@@ -153,13 +158,16 @@ func (h *GetRateHandler) resolveStatName(statName interface{}, periodMs int64) f
 // RouterInfoHandler implements the RouterInfo RPC method.
 // Returns general router status and statistics.
 // Request params:
+//
 //	{
 //	 "i2p.router.uptime": null,
 //	 "i2p.router.version": null,
 //	 "i2p.router.net.tunnels.participating": null,
 //	 "i2p.router.netdb.knownpeers": null
 //	}
+//
 // Response:
+//
 //	{
 //	 "i2p.router.uptime": 3600000,
 //	 "i2p.router.version": "0.1.0-go",
@@ -168,6 +176,7 @@ func (h *GetRateHandler) resolveStatName(statName interface{}, periodMs int64) f
 //	 "i2p.router.net.tunnels.inbound": 5,
 //	 "i2p.router.net.tunnels.outbound": 5
 //	}
+//
 // The request specifies which statistics are desired.
 // Any field with a null value will be populated in the response.
 type RouterInfoHandler struct {
@@ -191,30 +200,30 @@ func (h *RouterInfoHandler) buildAvailableFields() map[string]interface{} {
 	bandwidthStats := h.stats.GetBandwidthStats()
 
 	fields := map[string]interface{}{
-		"i2p.router.uptime": routerStats.Uptime,
-		"i2p.router.version": routerStats.Version,
-		"i2p.router.status": routerStats.Status,
-		"i2p.router.net.tunnels.participating": routerStats.ParticipatingTunnels,
-		"i2p.router.netdb.knownpeers": routerStats.KnownPeers,
-		"i2p.router.netdb.activepeers": routerStats.ActivePeersCount,
-		"i2p.router.netdb.fastpeers": routerStats.FastPeersCount,
-		"i2p.router.netdb.highcapacitypeers": routerStats.HighCapacityPeersCount,
-		"i2p.router.netdb.routerinfo.accepted": routerStats.RouterInfoAcceptCount,
-		"i2p.router.netdb.routerinfo.rejected": routerStats.RouterInfoRejectCount,
-		"i2p.router.netdb.routerinfo.rejected.datatype": routerStats.RouterInfoRejectDataTypeCount,
-		"i2p.router.netdb.routerinfo.rejected.parse": routerStats.RouterInfoRejectParseCount,
+		"i2p.router.uptime":                               routerStats.Uptime,
+		"i2p.router.version":                              routerStats.Version,
+		"i2p.router.status":                               routerStats.Status,
+		"i2p.router.net.tunnels.participating":            routerStats.ParticipatingTunnels,
+		"i2p.router.netdb.knownpeers":                     routerStats.KnownPeers,
+		"i2p.router.netdb.activepeers":                    routerStats.ActivePeersCount,
+		"i2p.router.netdb.fastpeers":                      routerStats.FastPeersCount,
+		"i2p.router.netdb.highcapacitypeers":              routerStats.HighCapacityPeersCount,
+		"i2p.router.netdb.routerinfo.accepted":            routerStats.RouterInfoAcceptCount,
+		"i2p.router.netdb.routerinfo.rejected":            routerStats.RouterInfoRejectCount,
+		"i2p.router.netdb.routerinfo.rejected.datatype":   routerStats.RouterInfoRejectDataTypeCount,
+		"i2p.router.netdb.routerinfo.rejected.parse":      routerStats.RouterInfoRejectParseCount,
 		"i2p.router.netdb.routerinfo.rejected.validation": routerStats.RouterInfoRejectValidationCount,
-		"i2p.router.netdb.routerinfo.rejected.admission": routerStats.RouterInfoRejectAdmissionCount,
-		"i2p.router.netdb.routerinfo.persist_deferred": routerStats.RouterInfoPersistDeferredCount,
-		"i2p.router.netdb.routerinfo.persist_pending": routerStats.RouterInfoPersistPendingCount,
-		"i2p.router.netdb.isreseeding": routerStats.IsReseeding,
-		"i2p.router.net.tunnels.inbound": routerStats.InboundTunnels,
-		"i2p.router.net.tunnels.outbound": routerStats.OutboundTunnels,
-		"i2p.router.net.status": h.stats.GetNetworkStatus(),
-		"i2p.router.net.bw.inbound.1s": bandwidthStats.InboundRate1s,
-		"i2p.router.net.bw.inbound.15s": bandwidthStats.InboundRate,
-		"i2p.router.net.bw.outbound.1s": bandwidthStats.OutboundRate1s,
-		"i2p.router.net.bw.outbound.15s": bandwidthStats.OutboundRate,
+		"i2p.router.netdb.routerinfo.rejected.admission":  routerStats.RouterInfoRejectAdmissionCount,
+		"i2p.router.netdb.routerinfo.persist_deferred":    routerStats.RouterInfoPersistDeferredCount,
+		"i2p.router.netdb.routerinfo.persist_pending":     routerStats.RouterInfoPersistPendingCount,
+		"i2p.router.netdb.isreseeding":                    routerStats.IsReseeding,
+		"i2p.router.net.tunnels.inbound":                  routerStats.InboundTunnels,
+		"i2p.router.net.tunnels.outbound":                 routerStats.OutboundTunnels,
+		"i2p.router.net.status":                           h.stats.GetNetworkStatus(),
+		"i2p.router.net.bw.inbound.1s":                    bandwidthStats.InboundRate1s,
+		"i2p.router.net.bw.inbound.15s":                   bandwidthStats.InboundRate,
+		"i2p.router.net.bw.outbound.1s":                   bandwidthStats.OutboundRate1s,
+		"i2p.router.net.bw.outbound.15s":                  bandwidthStats.OutboundRate,
 	}
 
 	// Add local router identity hash (non-standard I2PControl extension for i2ptui)
@@ -310,15 +319,19 @@ func networkStatusString(code int) string {
 // RouterManagerHandler implements the RouterManager RPC method.
 // Provides router control operations (shutdown, restart, reseed).
 // Request params:
+//
 //	{
 //	 "Shutdown": null,
 //	 "Reseed": null
 //	}
+//
 // Response:
+//
 //	{
 //	 "Shutdown": null,
 //	 "Reseed": null
 //	}
+//
 // Note: Restart performs a stop; the process supervisor is expected to restart the process.
 // Shutdown will stop the router gracefully.
 type RouterManagerHandler struct {
@@ -335,12 +348,12 @@ type RouterManagerHandler struct {
 	// wg tracks handler goroutines so the server can wait for them on shutdown.
 	wg *sync.WaitGroup
 
-	reseedMu sync.Mutex
-	reseedRunning bool
-	reseedStatus string
+	reseedMu        sync.Mutex
+	reseedRunning   bool
+	reseedStatus    string
 	reseedLastError string
 	reseedStartedAt time.Time
-	reseedEndedAt time.Time
+	reseedEndedAt   time.Time
 }
 
 // NewRouterManagerHandler creates a new RouterManager handler.
@@ -355,9 +368,9 @@ func NewRouterManagerHandler(ctx context.Context, wg *sync.WaitGroup, control in
 ) *RouterManagerHandler {
 	return &RouterManagerHandler{
 		RouterControl: control,
-		ctx: ctx,
-		wg: wg,
-		reseedStatus: "idle",
+		ctx:           ctx,
+		wg:            wg,
+		reseedStatus:  "idle",
 	}
 }
 
@@ -511,7 +524,7 @@ func (h *RouterManagerHandler) snapshotReseedState() map[string]interface{} {
 	defer h.reseedMu.Unlock()
 
 	state := map[string]interface{}{
-		"status": h.reseedStatus,
+		"status":  h.reseedStatus,
 		"running": h.reseedRunning,
 	}
 	if !h.reseedStartedAt.IsZero() {
@@ -730,10 +743,10 @@ func (h *ClientServicesInfoHandler) Handle(ctx context.Context, params json.RawM
 			"server": map[string]interface{}{},
 		},
 		"HTTPProxy": map[string]interface{}{"enabled": false},
-		"SOCKS": map[string]interface{}{"enabled": false},
-		"SAM": map[string]interface{}{"enabled": false},
-		"BOB": map[string]interface{}{"enabled": false},
-		"I2CP": map[string]interface{}{"enabled": viper.GetBool("i2cp.enabled")},
+		"SOCKS":     map[string]interface{}{"enabled": false},
+		"SAM":       map[string]interface{}{"enabled": false},
+		"BOB":       map[string]interface{}{"enabled": false},
+		"I2CP":      map[string]interface{}{"enabled": viper.GetBool("i2cp.enabled")},
 	}
 
 	result := make(map[string]interface{})
@@ -799,27 +812,27 @@ func (h *NetworkSettingHandler) buildAvailableSettings(netConfig NetworkConfig) 
 
 	return map[string]interface{}{
 		// NTCP2 transport settings — NC-4: all values as strings per spec.
-		"i2p.router.net.ntcp.port": fmt.Sprintf("%d", netConfig.NTCP2Port),
+		"i2p.router.net.ntcp.port":     fmt.Sprintf("%d", netConfig.NTCP2Port),
 		"i2p.router.net.ntcp.hostname": netConfig.NTCP2Hostname,
-		"i2p.router.net.ntcp.autoip": fmt.Sprintf("%t", ntcpAutoIP),
+		"i2p.router.net.ntcp.autoip":   fmt.Sprintf("%t", ntcpAutoIP),
 
 		// SSU2 (UDP) transport settings
-		"i2p.router.net.ssu2.port": fmt.Sprintf("%d", netConfig.SSU2Port),
+		"i2p.router.net.ssu2.port":     fmt.Sprintf("%d", netConfig.SSU2Port),
 		"i2p.router.net.ssu2.hostname": netConfig.SSU2Hostname,
 		// Alias: some clients use "i2p.router.net.ssu.port" for SSU2
 		"i2p.router.net.ssu.port": fmt.Sprintf("%d", netConfig.SSU2Port),
 
 		// Bandwidth limits — NC-4: returned as strings per spec.
-		"i2p.router.bandwidth.in": fmt.Sprintf("%d", netConfig.BandwidthLimitIn),
+		"i2p.router.bandwidth.in":  fmt.Sprintf("%d", netConfig.BandwidthLimitIn),
 		"i2p.router.bandwidth.out": fmt.Sprintf("%d", netConfig.BandwidthLimitOut),
-		"i2p.router.net.bw.in": fmt.Sprintf("%d", netConfig.BandwidthLimitIn),
-		"i2p.router.net.bw.out": fmt.Sprintf("%d", netConfig.BandwidthLimitOut),
+		"i2p.router.net.bw.in":     fmt.Sprintf("%d", netConfig.BandwidthLimitIn),
+		"i2p.router.net.bw.out":    fmt.Sprintf("%d", netConfig.BandwidthLimitOut),
 
 		// Bandwidth share percentage (0–100).
 		"i2p.router.net.bw.share": fmt.Sprintf("%d", netConfig.SharePercentage),
 
 		// UPnP — NC-4: returned as string "true"/"false" per spec.
-		"i2p.router.net.upnp": fmt.Sprintf("%t", upnpEnabled),
+		"i2p.router.net.upnp":     fmt.Sprintf("%t", upnpEnabled),
 		"i2p.router.upnp.enabled": fmt.Sprintf("%t", upnpEnabled),
 	}
 }
@@ -851,25 +864,25 @@ func (h *NetworkSettingHandler) processRequestedSettings(req, availableSettings 
 // settingViperKey maps an I2PControl setting name to its Viper config key.
 // Returns empty string if the setting is not writable.
 var settingViperKey = map[string]string{
-	"i2p.router.net.ntcp.port": "transport.ntcp2_port",
+	"i2p.router.net.ntcp.port":     "transport.ntcp2_port",
 	"i2p.router.net.ntcp.hostname": "transport.ntcp2_hostname",
-	"i2p.router.bandwidth.in": "router.max_bandwidth_in",
-	"i2p.router.bandwidth.out": "router.max_bandwidth_out",
-	"i2p.router.net.bw.in": "router.max_bandwidth_in",
-	"i2p.router.net.bw.out": "router.max_bandwidth_out",
-	"i2p.router.net.bw.share": "router.share_percentage",
-	"i2p.router.net.ssu2.port": "transport.ssu2_port",
-	"i2p.router.net.ssu.port": "transport.ssu2_port",
-	"i2p.router.net.upnp": "router.upnp_enabled",
-	"i2p.router.upnp.enabled": "router.upnp_enabled",
+	"i2p.router.bandwidth.in":      "router.max_bandwidth_in",
+	"i2p.router.bandwidth.out":     "router.max_bandwidth_out",
+	"i2p.router.net.bw.in":         "router.max_bandwidth_in",
+	"i2p.router.net.bw.out":        "router.max_bandwidth_out",
+	"i2p.router.net.bw.share":      "router.share_percentage",
+	"i2p.router.net.ssu2.port":     "transport.ssu2_port",
+	"i2p.router.net.ssu.port":      "transport.ssu2_port",
+	"i2p.router.net.upnp":          "router.upnp_enabled",
+	"i2p.router.upnp.enabled":      "router.upnp_enabled",
 }
 
 // restartRequiredSettings is the set of settings whose changes require a router restart.
 var restartRequiredSettings = map[string]bool{
-	"i2p.router.net.ntcp.port": true,
+	"i2p.router.net.ntcp.port":     true,
 	"i2p.router.net.ntcp.hostname": true,
-	"i2p.router.net.ssu2.port": true,
-	"i2p.router.net.ssu.port": true,
+	"i2p.router.net.ssu2.port":     true,
+	"i2p.router.net.ssu.port":      true,
 }
 
 // applySettingChange persists a single setting change via Viper.
@@ -888,9 +901,9 @@ func (h *NetworkSettingHandler) applySettingChange(setting string, value interfa
 	viper.Set(viperKey, normalized)
 	if err := viper.WriteConfig(); err != nil {
 		log.WithFields(map[string]interface{}{
-			"at": "applySettingChange",
+			"at":      "applySettingChange",
 			"setting": setting,
-			"error": err.Error(),
+			"error":   err.Error(),
 		}).Warn("setting changed in memory but failed to persist to config file")
 	}
 
@@ -1044,29 +1057,33 @@ func validateHostname(host string) error {
 // NC-4: all values are returned as strings per the I2PControl spec.
 func (h *NetworkSettingHandler) buildDefaultSettings(netConfig NetworkConfig) map[string]interface{} {
 	return map[string]interface{}{
-		"i2p.router.net.ntcp.port": fmt.Sprintf("%d", netConfig.NTCP2Port),
+		"i2p.router.net.ntcp.port":     fmt.Sprintf("%d", netConfig.NTCP2Port),
 		"i2p.router.net.ntcp.hostname": netConfig.NTCP2Hostname,
-		"i2p.router.bandwidth.in": fmt.Sprintf("%d", netConfig.BandwidthLimitIn),
-		"i2p.router.bandwidth.out": fmt.Sprintf("%d", netConfig.BandwidthLimitOut),
-		"i2p.router.net.bw.in": fmt.Sprintf("%d", netConfig.BandwidthLimitIn),
-		"i2p.router.net.bw.out": fmt.Sprintf("%d", netConfig.BandwidthLimitOut),
-		"i2p.router.net.bw.share": fmt.Sprintf("%d", netConfig.SharePercentage),
-		"i2p.router.net.ssu2.port": fmt.Sprintf("%d", netConfig.SSU2Port),
-		"i2p.router.net.upnp": fmt.Sprintf("%t", viper.GetBool("router.upnp_enabled")),
+		"i2p.router.bandwidth.in":      fmt.Sprintf("%d", netConfig.BandwidthLimitIn),
+		"i2p.router.bandwidth.out":     fmt.Sprintf("%d", netConfig.BandwidthLimitOut),
+		"i2p.router.net.bw.in":         fmt.Sprintf("%d", netConfig.BandwidthLimitIn),
+		"i2p.router.net.bw.out":        fmt.Sprintf("%d", netConfig.BandwidthLimitOut),
+		"i2p.router.net.bw.share":      fmt.Sprintf("%d", netConfig.SharePercentage),
+		"i2p.router.net.ssu2.port":     fmt.Sprintf("%d", netConfig.SSU2Port),
+		"i2p.router.net.upnp":          fmt.Sprintf("%t", viper.GetBool("router.upnp_enabled")),
 	}
 }
 
 // I2PControlHandler implements the I2PControl RPC method.
 // Manages I2PControl server settings (password, port, address).
 // Request params:
+//
 //	{
 //	 "i2pcontrol.password": "new_password"
 //	}
+//
 // Response:
+//
 //	{
 //	 "i2pcontrol.password": null,
 //	 "SettingsSaved": true
 //	}
+//
 // Note: Only password changes are implemented initially.
 // Port and address changes would require server restart and are deferred.
 type I2PControlHandler struct {
@@ -1086,7 +1103,7 @@ type I2PControlHandler struct {
 func NewI2PControlHandler(authManager interface{ ChangePassword(string) int }, cfg *config.I2PControlConfig) *I2PControlHandler {
 	return &I2PControlHandler{
 		authManager: authManager,
-		config: cfg,
+		config:      cfg,
 	}
 }
 
@@ -1178,13 +1195,13 @@ func handlePasswordChange(authManager interface{ ChangePassword(string) int }, c
 		// Non-fatal: the in-memory password is already updated for this session.
 		// Log a warning so the operator knows the change won't survive a restart.
 		log.WithFields(map[string]interface{}{
-			"at": "handlePasswordChange",
+			"at":    "handlePasswordChange",
 			"error": err.Error(),
 		}).Warn("password changed in memory but failed to persist to config file")
 	}
 
 	log.WithFields(map[string]interface{}{
-		"at": "handlePasswordChange",
+		"at":      "handlePasswordChange",
 		"revoked": revokedCount,
 	}).Info("password changed via RPC")
 
@@ -1201,7 +1218,7 @@ func persistRestartRequiredSettings(req map[string]interface{}) error {
 		viper.Set("i2pcontrol.port", val)
 		if err := viper.WriteConfig(); err != nil {
 			log.WithFields(map[string]interface{}{
-				"at": "persistRestartRequiredSettings",
+				"at":    "persistRestartRequiredSettings",
 				"error": err.Error(),
 			}).Warn("i2pcontrol.port changed in memory but failed to persist")
 		}
@@ -1212,7 +1229,7 @@ func persistRestartRequiredSettings(req map[string]interface{}) error {
 		viper.Set("i2pcontrol.address", val)
 		if err := viper.WriteConfig(); err != nil {
 			log.WithFields(map[string]interface{}{
-				"at": "persistRestartRequiredSettings",
+				"at":    "persistRestartRequiredSettings",
 				"error": err.Error(),
 			}).Warn("i2pcontrol.address changed in memory but failed to persist")
 		}
@@ -1236,11 +1253,17 @@ func buildResultWithSettingsSaved(result map[string]interface{}, settingsSaved b
 // AdvancedSettingsHandler implements the AdvancedSettings RPC method.
 // Provides bulk get/set access to arbitrary router configuration keys via Viper.
 // Request params (read):
+//
 //	{"i2p.router.some.key": null, ...}
+//
 // Request params (write):
+//
 //	{"Set": {"i2p.router.some.key": "value", ...}}
+//
 // Response always returns the current value of each key requested or set:
+//
 //	{"i2p.router.some.key": "current_value", ...}
+//
 // Keys use the Java I2P dotted format. They are mapped to Viper config keys
 // by replacing "i2p.router." with "" and dots with underscores as needed,
 // or by exact key lookup.

@@ -294,7 +294,7 @@ func buildSSU2Options(host, portStr string, transport *SSU2Transport, introducer
 		familyCaps := ssu2AddressFamilyCaps(host)
 		options := map[string]string{
 			router_address.PROTOCOL_VERSION_OPTION_KEY: "2",
-			router_address.CAPS_OPTION_KEY: familyCaps + "B",
+			router_address.CAPS_OPTION_KEY:             familyCaps + "B",
 		}
 		addStaticKeyOption(options, transport)
 		addIntroKeyOption(options, transport)
@@ -309,7 +309,7 @@ func buildSSU2Options(host, portStr string, transport *SSU2Transport, introducer
 		// reply traffic (build replies, etc.).
 		options := map[string]string{
 			router_address.PROTOCOL_VERSION_OPTION_KEY: "2",
-			router_address.CAPS_OPTION_KEY: ssu2AddressFamilyCaps(host),
+			router_address.CAPS_OPTION_KEY:             ssu2AddressFamilyCaps(host),
 		}
 		addStaticKeyOption(options, transport)
 		addIntroKeyOption(options, transport)
@@ -502,8 +502,8 @@ func isPublicIPv4Address(ip net.IP) bool {
 // buildBaseSSU2Options creates the base options map for an SSU2 RouterAddress.
 func buildBaseSSU2Options(host, port string) map[string]string {
 	return map[string]string{
-		router_address.HOST_OPTION_KEY: host,
-		router_address.PORT_OPTION_KEY: port,
+		router_address.HOST_OPTION_KEY:             host,
+		router_address.PORT_OPTION_KEY:             port,
 		router_address.PROTOCOL_VERSION_OPTION_KEY: "2",
 	}
 }
@@ -661,8 +661,8 @@ func extractIntroducerAtSlot(addr *router_address.RouterAddress, slot int, now i
 	}
 	return IntroducerAddr{
 		RouterHash: routerHash,
-		RelayTag: tag,
-		Expiry: expiry,
+		RelayTag:   tag,
+		Expiry:     expiry,
 	}, true
 }
 

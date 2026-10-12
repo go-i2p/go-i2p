@@ -35,8 +35,8 @@ const (
 
 // externalAddrObservation records a single PeerTest-observed external address.
 type externalAddrObservation struct {
-	addr string // net.UDPAddr.String()
-	at time.Time // when the observation was received
+	addr string    // net.UDPAddr.String()
+	at   time.Time // when the observation was received
 }
 
 // natState holds a cached NAT detection result with its timestamp.

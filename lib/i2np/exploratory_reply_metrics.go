@@ -21,43 +21,43 @@ const (
 
 // stageNames maps ExploratoryReplyStage to string keys for reporting
 var stageNames = map[ExploratoryReplyStage]string{
-	ExploratoryReplyStageInboundI2NPReceived: "inbound_i2np_received",
-	ExploratoryReplyStageTunnelGatewayParsed: "tunnel_gateway_inner_parsed",
-	ExploratoryReplyStageGarlicDecryptAttempt: "garlic_decrypt_attempted",
-	ExploratoryReplyStageGarlicDecryptSuccess: "garlic_decrypt_succeeded",
-	ExploratoryReplyStageShortReplyDispatched: "short_build_reply_dispatched",
-	ExploratoryReplyStageShortReplyCorrelated: "short_build_reply_correlated",
+	ExploratoryReplyStageInboundI2NPReceived:    "inbound_i2np_received",
+	ExploratoryReplyStageTunnelGatewayParsed:    "tunnel_gateway_inner_parsed",
+	ExploratoryReplyStageGarlicDecryptAttempt:   "garlic_decrypt_attempted",
+	ExploratoryReplyStageGarlicDecryptSuccess:   "garlic_decrypt_succeeded",
+	ExploratoryReplyStageShortReplyDispatched:   "short_build_reply_dispatched",
+	ExploratoryReplyStageShortReplyCorrelated:   "short_build_reply_correlated",
 	ExploratoryReplyStageShortReplyUncorrelated: "short_build_reply_uncorrelated",
-	ExploratoryReplyStageLateReplyReclassedOK: "late_reply_reclassified_success",
+	ExploratoryReplyStageLateReplyReclassedOK:   "late_reply_reclassified_success",
 	ExploratoryReplyStageLateReplyReclassedFail: "late_reply_reclassified_reject",
-	ExploratoryReplyStageLateReplyShortSkipped: "late_reply_short_build_skipped",
+	ExploratoryReplyStageLateReplyShortSkipped:  "late_reply_short_build_skipped",
 }
 
 var exploratoryReplyCounters = struct {
-	inboundI2NPReceived atomic.Uint64
-	tunnelGatewayParsed atomic.Uint64
+	inboundI2NPReceived    atomic.Uint64
+	tunnelGatewayParsed    atomic.Uint64
 	garlicDecryptAttempted atomic.Uint64
 	garlicDecryptSucceeded atomic.Uint64
-	shortReplyDispatched atomic.Uint64
-	shortReplyCorrelated atomic.Uint64
+	shortReplyDispatched   atomic.Uint64
+	shortReplyCorrelated   atomic.Uint64
 	shortReplyUncorrelated atomic.Uint64
-	lateReplyReclassedOK atomic.Uint64
+	lateReplyReclassedOK   atomic.Uint64
 	lateReplyReclassedFail atomic.Uint64
-	lateReplyShortSkipped atomic.Uint64
+	lateReplyShortSkipped  atomic.Uint64
 }{}
 
 // stageToCounter maps ExploratoryReplyStage to its atomic counter.
 var stageToCounter = map[ExploratoryReplyStage]*atomic.Uint64{
-	ExploratoryReplyStageInboundI2NPReceived: &exploratoryReplyCounters.inboundI2NPReceived,
-	ExploratoryReplyStageTunnelGatewayParsed: &exploratoryReplyCounters.tunnelGatewayParsed,
-	ExploratoryReplyStageGarlicDecryptAttempt: &exploratoryReplyCounters.garlicDecryptAttempted,
-	ExploratoryReplyStageGarlicDecryptSuccess: &exploratoryReplyCounters.garlicDecryptSucceeded,
-	ExploratoryReplyStageShortReplyDispatched: &exploratoryReplyCounters.shortReplyDispatched,
-	ExploratoryReplyStageShortReplyCorrelated: &exploratoryReplyCounters.shortReplyCorrelated,
+	ExploratoryReplyStageInboundI2NPReceived:    &exploratoryReplyCounters.inboundI2NPReceived,
+	ExploratoryReplyStageTunnelGatewayParsed:    &exploratoryReplyCounters.tunnelGatewayParsed,
+	ExploratoryReplyStageGarlicDecryptAttempt:   &exploratoryReplyCounters.garlicDecryptAttempted,
+	ExploratoryReplyStageGarlicDecryptSuccess:   &exploratoryReplyCounters.garlicDecryptSucceeded,
+	ExploratoryReplyStageShortReplyDispatched:   &exploratoryReplyCounters.shortReplyDispatched,
+	ExploratoryReplyStageShortReplyCorrelated:   &exploratoryReplyCounters.shortReplyCorrelated,
 	ExploratoryReplyStageShortReplyUncorrelated: &exploratoryReplyCounters.shortReplyUncorrelated,
-	ExploratoryReplyStageLateReplyReclassedOK: &exploratoryReplyCounters.lateReplyReclassedOK,
+	ExploratoryReplyStageLateReplyReclassedOK:   &exploratoryReplyCounters.lateReplyReclassedOK,
 	ExploratoryReplyStageLateReplyReclassedFail: &exploratoryReplyCounters.lateReplyReclassedFail,
-	ExploratoryReplyStageLateReplyShortSkipped: &exploratoryReplyCounters.lateReplyShortSkipped,
+	ExploratoryReplyStageLateReplyShortSkipped:  &exploratoryReplyCounters.lateReplyShortSkipped,
 }
 
 // RecordExploratoryReplyStage increments a stage counter used to audit the

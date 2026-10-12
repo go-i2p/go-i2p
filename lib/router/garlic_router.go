@@ -34,10 +34,10 @@ const (
 
 // pendingMessage represents a message waiting for LeaseSet resolution.
 type pendingMessage struct {
-	msg i2np.Message // The message to send
-	queuedAt time.Time // When the message was queued
-	retryAt time.Time // When to retry the lookup
-	attempts int // Number of lookup attempts
+	msg      i2np.Message // The message to send
+	queuedAt time.Time    // When the message was queued
+	retryAt  time.Time    // When to retry the lookup
+	attempts int          // Number of lookup attempts
 }
 
 // GarlicNetDB defines the NetDB interface needed for garlic message routing.
@@ -100,24 +100,24 @@ const (
 // It resolves LeaseSets via the NetDB and delivers encrypted messages through the tunnel pool.
 type GarlicMessageRouter struct {
 	// Router infrastructure dependencies
-	netdb GarlicNetDB // NetDB with LeaseSet support
-	transportMgr *transport.TransportMuxer // Transport for router-to-router messaging
-	tunnelPool *tunnel.Pool // Tunnel pool for routing through tunnels
-	routerIdentity common.Hash // Our router's identity hash
+	netdb          GarlicNetDB               // NetDB with LeaseSet support
+	transportMgr   *transport.TransportMuxer // Transport for router-to-router messaging
+	tunnelPool     *tunnel.Pool              // Tunnel pool for routing through tunnels
+	routerIdentity common.Hash               // Our router's identity hash
 
 	// Message processing
 	processor *i2np.MessageProcessor // Reference to the processor for LOCAL recursion
 
 	// Destination lookup queue for async LeaseSet resolution
-	pendingMsgs map[common.Hash][]pendingMessage // Messages waiting for LeaseSet lookup
-	pendingMutex sync.RWMutex // Protects pendingMsgs map
-	ctx context.Context // Context for graceful shutdown
-	cancel context.CancelFunc // Cancel function for shutdown
-	wg sync.WaitGroup // Tracks background goroutines
+	pendingMsgs  map[common.Hash][]pendingMessage // Messages waiting for LeaseSet lookup
+	pendingMutex sync.RWMutex                     // Protects pendingMsgs map
+	ctx          context.Context                  // Context for graceful shutdown
+	cancel       context.CancelFunc               // Cancel function for shutdown
+	wg           sync.WaitGroup                   // Tracks background goroutines
 
 	// Channel draining worker pool
-	drainRequests chan drainRequest // Bounded channel for drain requests
-	fallbackDrainCount atomic.Int64 // Counts fallback drain activations for observability
+	drainRequests      chan drainRequest // Bounded channel for drain requests
+	fallbackDrainCount atomic.Int64      // Counts fallback drain activations for observability
 }
 
 // NewGarlicMessageRouter creates a new garlic message router with required dependencies.

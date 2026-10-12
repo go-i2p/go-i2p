@@ -278,8 +278,11 @@ func (r *Router) handleNewConnection(conn net.Conn) {
 // attachInboundSSU2TransportCallbacks wires transport-level callbacks into an
 // inbound SSU2 session when an SSU2 transport is active in the muxer.
 func (r *Router) attachInboundSSU2TransportCallbacks(session *ssu2.SSU2Session) {
+	if r == nil || session == nil {
+		return
+	}
 	muxer := r.transports.Load()
-	if r == nil || muxer == nil || session == nil {
+	if muxer == nil {
 		return
 	}
 	for _, tr := range muxer.GetTransports() {

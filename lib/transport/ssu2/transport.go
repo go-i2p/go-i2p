@@ -26,20 +26,20 @@ import (
 // abandonedRelayTag tracks a relay tag that was allocated but not successfully
 // registered, for monitoring and future cleanup.
 type abandonedRelayTag struct {
-	tag uint32
-	addr *net.UDPAddr
+	tag         uint32
+	addr        *net.UDPAddr
 	allocatedAt time.Time
-	reason string // why registration failed
+	reason      string // why registration failed
 }
 
 // SSU2Transport implements the SSU2 transport protocol for I2P connections.
 type SSU2Transport struct {
 	listener *ssu2noise.SSU2Listener
 	// use atomic.Pointer for thread-safe config swaps (mirrors NTCP2 pattern)
-	config atomic.Pointer[Config]
+	config   atomic.Pointer[Config]
 	identity router_info.RouterInfo
 	keystore KeystoreProvider
-	handler *DefaultHandler
+	handler  *DefaultHandler
 
 	// Session management via shared SessionRegistry (H2 fix: unified NTCP2/SSU2 implementation).
 	// See "Session Map Ownership Invariant" comment above for details on state transitions.
@@ -53,10 +53,10 @@ type SSU2Transport struct {
 	natManagerMu sync.RWMutex
 
 	// NAT traversal managers (initialised after listener starts).
-	peerTestManager *ssu2noise.PeerTestManager
-	relayManager *ssu2noise.RelayManager
+	peerTestManager    *ssu2noise.PeerTestManager
+	relayManager       *ssu2noise.RelayManager
 	introducerRegistry *ssu2noise.IntroducerRegistry
-	holePunchCoord *ssu2noise.HolePunchCoordinator
+	holePunchCoord     *ssu2noise.HolePunchCoordinator
 
 	// pendingRelayResponses holds channels waiting for a RelayResponse keyed by nonce.
 	// Used by dialViaIntroducer to synchronise with the protocol callback.
@@ -72,7 +72,7 @@ type SSU2Transport struct {
 	portMapperManager *nat.PortMapperManager
 
 	// Key management.
-	persistentConfig *PersistentConfig
+	persistentConfig   *PersistentConfig
 	keyRotationManager *ssu2noise.KeyRotationManager
 
 	// peerConnNotifier receives connection outcome feedback (optional).
@@ -82,17 +82,17 @@ type SSU2Transport struct {
 	// abandonedRelayTags tracks relay tags allocated but not successfully registered.
 	// Used for monitoring and future cleanup when a release API becomes available.
 	abandonedRelayTagsMu sync.Mutex
-	abandonedRelayTags []abandonedRelayTag
+	abandonedRelayTags   []abandonedRelayTag
 
-	ctx context.Context
+	ctx    context.Context
 	cancel context.CancelFunc
-	wg sync.WaitGroup
+	wg     sync.WaitGroup
 
 	// NAT manager lifecycle: per-generation context for NAT goroutines and managers.
 	// Cancelled and replaced on each SetIdentity to stop old NAT goroutines
 	// before starting new ones.
-	natCtxMu sync.Mutex
-	natCtx context.Context
+	natCtxMu  sync.Mutex
+	natCtx    context.Context
 	natCancel context.CancelFunc
 
 	logger *logger.Entry
@@ -121,16 +121,16 @@ type SSU2Transport struct {
 
 	// Peer test retry state (T-1 fix): tracks consecutive failures and timing
 	// for exponential backoff retry of NAT detection. Protected by peerTestRetryMu.
-	peerTestRetryMu sync.Mutex
-	peerTestRetryCount int
+	peerTestRetryMu     sync.Mutex
+	peerTestRetryCount  int
 	peerTestLastAttempt time.Time
-	peerTestCandidates []router_info.RouterInfo
+	peerTestCandidates  []router_info.RouterInfo
 	peerTestRepublishFn func()
-	peerTestRetryTimer *time.Timer
+	peerTestRetryTimer  *time.Timer
 
 	// closeOnce ensures Close() is idempotent.
 	closeOnce sync.Once
-	closeErr error
+	closeErr  error
 
 	// reachMetrics tracks reachability-related events for monitoring.
 	reachMetrics reachabilityMetrics
@@ -188,7 +188,7 @@ func prepareIdentityAndLog(identity router_info.RouterInfo, listenerAddress stri
 		return oops.Wrapf(err, "failed to get router identity hash")
 	}
 	l.WithFields(map[string]interface{}{
-		"router_hash": logutil.HashPrefix(identHash),
+		"router_hash":      logutil.HashPrefix(identHash),
 		"listener_address": listenerAddress,
 	}).Info("Initializing SSU2 transport")
 	return nil
@@ -213,15 +213,15 @@ func setupSSU2Config(identity router_info.RouterInfo, keystore KeystoreProvider,
 // createSSU2TransportStruct creates the SSU2Transport struct with default values.
 func createSSU2TransportStruct(config *Config, identity router_info.RouterInfo, keystore KeystoreProvider, ctx context.Context, cancel context.CancelFunc, l *logger.Entry) *SSU2Transport {
 	t := &SSU2Transport{
-		identity: identity,
-		keystore: keystore,
-		handler: NewDefaultHandler(),
-		sessionRegistry: transport.NewSessionRegistry(l),
-		natStateCache: &natState{},
+		identity:              identity,
+		keystore:              keystore,
+		handler:               NewDefaultHandler(),
+		sessionRegistry:       transport.NewSessionRegistry(l),
+		natStateCache:         &natState{},
 		peerTestGlobalLimiter: rate.NewLimiter(100, 200),
-		ctx: ctx,
-		cancel: cancel,
-		logger: l,
+		ctx:                   ctx,
+		cancel:                cancel,
+		logger:                l,
 	}
 	// Initialize atomic.Pointer[Config] with Store (mirrors NTCP2)
 	t.config.Store(config)
@@ -419,7 +419,7 @@ func (t *SSU2Transport) Accept() (net.Conn, error) {
 		// Let the TrackedConn wrapper be GC'd harmlessly.
 		t.logger.WithFields(map[string]interface{}{
 			"remote_addr": conn.RemoteAddr().String(),
-			"peer_hash": logutil.HashPrefix(peerHash),
+			"peer_hash":   logutil.HashPrefix(peerHash),
 		}).Debug("Inbound SSU2 connection promoted concurrently; not delivering to Accept")
 		// Note: We DO NOT unreserve the slot here because the promoted session
 		// is still using it. The session's cleanup callback will handle unreserving
@@ -444,7 +444,7 @@ func (t *SSU2Transport) trackInboundConnection(conn net.Conn) (net.Conn, bool) {
 		conn.Close()
 		t.logger.WithFields(map[string]interface{}{
 			"remote_addr": conn.RemoteAddr().String(),
-			"peer_hash": logutil.HashPrefix(peerHash),
+			"peer_hash":   logutil.HashPrefix(peerHash),
 		}).Debug("Duplicate inbound SSU2 connection detected and closed; reservation unreserved")
 		return conn, false // Mark as duplicate
 	}
@@ -459,7 +459,7 @@ func (t *SSU2Transport) trackInboundConnection(conn net.Conn) (net.Conn, bool) {
 		conn.Close()
 		t.logger.WithFields(map[string]interface{}{
 			"remote_addr": conn.RemoteAddr().String(),
-			"peer_hash": logutil.HashPrefix(peerHash),
+			"peer_hash":   logutil.HashPrefix(peerHash),
 		}).Warn("SSU2 anti-replay check rejected inbound connection (possible replay attack)")
 		return conn, false // Mark as replay
 	}
@@ -761,7 +761,7 @@ func (t *SSU2Transport) GetSession(routerInfo router_info.RouterInfo) (transport
 		// reseed floor because exploration dials never complete.
 		if canRelay {
 			t.logger.WithFields(map[string]interface{}{
-				"router_hash": logutil.HashPrefix(routerHash),
+				"router_hash":  logutil.HashPrefix(routerHash),
 				"direct_error": dialErr.Error(),
 			}).Debug("direct SSU2 dial failed; attempting introducer fallback")
 			introSession, introErr := t.dialViaIntroducer(routerInfo, routerHash)
@@ -915,7 +915,7 @@ func (t *SSU2Transport) createOutboundSession(routerInfo router_info.RouterInfo,
 		t.recordPeerFailure(routerHash, err)
 		t.logger.WithFields(map[string]interface{}{
 			"router_hash": logutil.HashPrefix(routerHash),
-			"error": err.Error(),
+			"error":       err.Error(),
 		}).Warn("SSU2 outbound dial failed")
 		return nil, WrapSSU2Error(err, "dialing SSU2 connection")
 	}
@@ -1152,7 +1152,7 @@ func (t *SSU2Transport) promoteRawConnToSession(rawConn net.Conn, routerHash dat
 		// Not an SSU2Conn — cannot promote.
 		t.logger.WithFields(map[string]interface{}{
 			"router_hash": logutil.HashPrefix(routerHash),
-			"conn_type": fmt.Sprintf("%T", rawConn),
+			"conn_type":   fmt.Sprintf("%T", rawConn),
 		}).Error("promoteRawConnToSession: cannot promote non-SSU2Conn")
 		return nil
 	}

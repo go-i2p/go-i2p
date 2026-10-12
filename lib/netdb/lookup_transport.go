@@ -35,7 +35,7 @@ const maxPendingLookups = 4096
 type lookupReplyRegistry struct {
 	mu      sync.Mutex
 	waiters map[common.Hash][]chan lookupResponse
-	count int // total registered channels, bounded by maxPendingLookups
+	count   int // total registered channels, bounded by maxPendingLookups
 }
 
 func newLookupReplyRegistry() *lookupReplyRegistry {

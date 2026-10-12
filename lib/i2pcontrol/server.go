@@ -29,8 +29,8 @@ type Server struct {
 	registry    *MethodRegistry
 	stats       RouterStatsProvider
 	httpServer  *http.Server
-	listener net.Listener // Listener for exposing actual bound address
-	mu sync.RWMutex // Protects listener field
+	listener    net.Listener // Listener for exposing actual bound address
+	mu          sync.RWMutex // Protects listener field
 	ctx         context.Context
 	cancel      context.CancelFunc
 	wg          sync.WaitGroup
@@ -610,7 +610,7 @@ func (s *Server) corsAllowlist() []string {
 	origins := map[string]struct{}{
 		fmt.Sprintf("%s://localhost:%s", scheme, port): {},
 		fmt.Sprintf("%s://127.0.0.1:%s", scheme, port): {},
-		fmt.Sprintf("%s://[::1]:%s", scheme, port): {},
+		fmt.Sprintf("%s://[::1]:%s", scheme, port):     {},
 	}
 
 	if !isWildcardOrUnspecifiedHost(host) {
@@ -707,7 +707,7 @@ func (s *Server) writeErrorResponse(w http.ResponseWriter, id interface{}, rpcEr
 	resp := &Response{
 		ID:      id,
 		JSONRPC: "2.0",
-		Error: rpcErr,
+		Error:   rpcErr,
 	}
 
 	w.Header().Set("Content-Type", "application/json")

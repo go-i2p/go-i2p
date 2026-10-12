@@ -24,16 +24,16 @@ import (
 // Rate limiting: After maxFailedAttempts consecutive failures, authentication
 // is locked out for failedAttemptLockout duration to prevent brute-force attacks.
 type AuthManager struct {
-	password string // Configured password for authentication
-	tokens map[[32]byte]time.Time // Active tokens with expiration times; key = SHA-256(token)
-	mu sync.RWMutex // Protects tokens map
-	secret []byte // HMAC secret key for token generation
+	password string                 // Configured password for authentication
+	tokens   map[[32]byte]time.Time // Active tokens with expiration times; key = SHA-256(token)
+	mu       sync.RWMutex           // Protects tokens map
+	secret   []byte                 // HMAC secret key for token generation
 	randRead func([]byte) (int, error)
 
 	// Rate limiting fields
-	failedAttempts int // Consecutive failed authentication attempts
+	failedAttempts    int       // Consecutive failed authentication attempts
 	lastFailedAttempt time.Time // Time of the last failed attempt
-	lockoutUntil time.Time // Time until which auth is locked out
+	lockoutUntil      time.Time // Time until which auth is locked out
 	rateLimitMu       sync.Mutex
 }
 

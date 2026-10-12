@@ -137,9 +137,9 @@ func initNATManagers(t *SSU2Transport) error {
 	// Start port mapper with retry logic (extracted to lib/nat).
 	if port, valid := t.validateAndExtractPort(); valid {
 		cfg := &nat.PortMapperConfig{
-			Network: "udp",
+			Network:      "udp",
 			InternalPort: port,
-			Context: t.natCtx,
+			Context:      t.natCtx,
 		}
 		t.portMapperManager = nat.NewPortMapperManager(cfg)
 	}
@@ -544,7 +544,7 @@ func (t *SSU2Transport) handlePeerTestAsAlice(ptBlock *ssu2noise.PeerTestBlock, 
 
 	result := &ssu2noise.TestResult{
 		ExternalAddr: externalAddr,
-		Reachable: externalAddr != nil,
+		Reachable:    externalAddr != nil,
 	}
 	if completeErr := mgr.CompleteTest(nonce, result); completeErr != nil {
 		t.logger.Debug("PeerTest complete (non-initiator path)")
@@ -560,7 +560,7 @@ func extractAliceAddress(ptBlock *ssu2noise.PeerTestBlock) *net.UDPAddr {
 		return nil
 	}
 	return &net.UDPAddr{
-		IP: net.IP(ptBlock.AliceIP),
+		IP:   net.IP(ptBlock.AliceIP),
 		Port: int(ptBlock.AlicePort),
 	}
 }
@@ -630,7 +630,7 @@ func parsePeerTestAliceAddr(ptBlock *ssu2noise.PeerTestBlock) *net.UDPAddr {
 		return nil
 	}
 	return &net.UDPAddr{
-		IP: net.IP(ptBlock.AliceIP),
+		IP:   net.IP(ptBlock.AliceIP),
 		Port: int(ptBlock.AlicePort),
 	}
 }
@@ -703,8 +703,8 @@ func (t *SSU2Transport) handlePeerTestAsBob(ptBlock *ssu2noise.PeerTestBlock, se
 	if verifyErr := t.verifyPeerTestSignature(ptBlock, senderHash); verifyErr != nil {
 		t.logger.WithFields(map[string]interface{}{
 			"sender_hash": senderHash[:4],
-			"nonce": ptBlock.Nonce,
-			"error": verifyErr,
+			"nonce":       ptBlock.Nonce,
+			"error":       verifyErr,
 		}).Warn("PeerTest signature verification failed, rejecting")
 		return verifyErr
 	}
@@ -753,12 +753,12 @@ func (t *SSU2Transport) forwardPeerTestToCharlie(ptBlock *ssu2noise.PeerTestBloc
 	}
 	relayBlock := &ssu2noise.PeerTestBlock{
 		MessageCode: ssu2noise.PeerTestRelay,
-		Nonce: ptBlock.Nonce,
-		Version: ptBlock.Version,
-		Timestamp: ptBlock.Timestamp,
-		AlicePort: ptBlock.AlicePort,
-		AliceIP: ptBlock.AliceIP,
-		Signature: ptBlock.Signature,
+		Nonce:       ptBlock.Nonce,
+		Version:     ptBlock.Version,
+		Timestamp:   ptBlock.Timestamp,
+		AlicePort:   ptBlock.AlicePort,
+		AliceIP:     ptBlock.AliceIP,
+		Signature:   ptBlock.Signature,
 	}
 	encoded, err := ssu2noise.EncodePeerTestBlock(relayBlock)
 	if err != nil {
@@ -775,7 +775,7 @@ func (t *SSU2Transport) handlePeerTestAsCharlie(ptBlock *ssu2noise.PeerTestBlock
 	var aliceAddr *net.UDPAddr
 	if len(ptBlock.AliceIP) > 0 {
 		aliceAddr = &net.UDPAddr{
-			IP: net.IP(ptBlock.AliceIP),
+			IP:   net.IP(ptBlock.AliceIP),
 			Port: int(ptBlock.AlicePort),
 		}
 	}
@@ -801,9 +801,9 @@ func (t *SSU2Transport) handlePeerTestAsCharlie(ptBlock *ssu2noise.PeerTestBlock
 func (t *SSU2Transport) sendProbeToAlice(ptBlock *ssu2noise.PeerTestBlock, aliceAddr *net.UDPAddr, relaySession *SSU2Session) error {
 	probeBlock := &ssu2noise.PeerTestBlock{
 		MessageCode: ssu2noise.PeerTestProbe,
-		Nonce: ptBlock.Nonce,
-		Version: ptBlock.Version,
-		Timestamp: uint32(time.Now().Unix()),
+		Nonce:       ptBlock.Nonce,
+		Version:     ptBlock.Version,
+		Timestamp:   uint32(time.Now().Unix()),
 	}
 	encoded, err := ssu2noise.EncodePeerTestBlock(probeBlock)
 	if err != nil {
@@ -875,15 +875,15 @@ func (t *SSU2Transport) handleRelayRequestBlock(block *ssu2noise.SSU2Block, sess
 	if verifyErr != nil {
 		t.logger.WithFields(map[string]interface{}{
 			"sender_hash": senderHash[:4],
-			"nonce": req.Nonce,
-			"error": verifyErr,
+			"nonce":       req.Nonce,
+			"error":       verifyErr,
 		}).Warn("RelayRequest signature verification failed, rejecting")
 		return verifyErr
 	}
 	if !valid {
 		t.logger.WithFields(map[string]interface{}{
 			"sender_hash": senderHash[:4],
-			"nonce": req.Nonce,
+			"nonce":       req.Nonce,
 		}).Warn("RelayRequest signature invalid, rejecting")
 		return oops.Errorf("invalid RelayRequest signature")
 	}
@@ -913,7 +913,7 @@ func (t *SSU2Transport) forwardRelayIntro(req *ssu2noise.RelayRequestBlock, mgr 
 	}
 	if !t.hasIntroducerCapability(session) {
 		t.logger.WithFields(map[string]interface{}{
-			"relay_tag": req.RelayTag,
+			"relay_tag":    req.RelayTag,
 			"charlie_addr": tag.ForAddr,
 		}).Warn("RelayRequest rejected: Charlie lacks introducer capability caps=B")
 		return nil
@@ -929,9 +929,12 @@ func (t *SSU2Transport) forwardRelayIntro(req *ssu2noise.RelayRequestBlock, mgr 
 // hasIntroducerCapability returns true when session's remote peer advertises
 // introducer capability (caps=B) in its RouterInfo.
 func (t *SSU2Transport) hasIntroducerCapability(session *SSU2Session) bool {
+	if t == nil || session == nil || session.conn == nil {
+		return false
+	}
 	// Atomic config snapshot
 	cfg := t.config.Load()
-	if t == nil || cfg == nil || cfg.RouterLookupFunc == nil || session == nil || session.conn == nil {
+	if cfg == nil || cfg.RouterLookupFunc == nil {
 		return false
 	}
 	addr, ok := session.conn.RemoteAddr().(*ssu2noise.SSU2Addr)
@@ -943,7 +946,7 @@ func (t *SSU2Transport) hasIntroducerCapability(session *SSU2Session) bool {
 	if err != nil {
 		t.logger.WithFields(map[string]interface{}{
 			"router_hash": rh.String(),
-			"error": err,
+			"error":       err,
 		}).Warn("RelayRequest rejected: failed RouterInfo lookup for Charlie")
 		return false
 	}
@@ -953,13 +956,13 @@ func (t *SSU2Transport) hasIntroducerCapability(session *SSU2Session) bool {
 // buildRelayIntro constructs a RelayIntroBlock from a RelayRequest.
 func buildRelayIntro(req *ssu2noise.RelayRequestBlock) *ssu2noise.RelayIntroBlock {
 	return &ssu2noise.RelayIntroBlock{
-		Nonce: req.Nonce,
+		Nonce:         req.Nonce,
 		AliceRelayTag: req.RelayTag,
-		Timestamp: req.Timestamp,
-		Version: req.Version,
-		AlicePort: req.AlicePort,
-		AliceIP: req.AliceIP,
-		Signature: req.Signature,
+		Timestamp:     req.Timestamp,
+		Version:       req.Version,
+		AlicePort:     req.AlicePort,
+		AliceIP:       req.AliceIP,
+		Signature:     req.Signature,
 	}
 }
 
@@ -1065,7 +1068,7 @@ func (t *SSU2Transport) handleRelayIntroBlock(block *ssu2noise.SSU2Block, bobSes
 // bobSession carries Bob's session (from which the RelayIntro arrived).
 func (t *SSU2Transport) initiateHolePunch(intro *ssu2noise.RelayIntroBlock, bobSession *SSU2Session, coord *ssu2noise.HolePunchCoordinator) error {
 	aliceAddr := &net.UDPAddr{
-		IP: net.IP(intro.AliceIP),
+		IP:   net.IP(intro.AliceIP),
 		Port: int(intro.AlicePort),
 	}
 
@@ -1073,7 +1076,7 @@ func (t *SSU2Transport) initiateHolePunch(intro *ssu2noise.RelayIntroBlock, bobS
 	// Reject private, loopback, multicast, and other invalid addresses.
 	if !isValidExternalAddress(aliceAddr.IP) {
 		t.logger.WithFields(map[string]interface{}{
-			"alice_ip": aliceAddr.IP.String(),
+			"alice_ip":   aliceAddr.IP.String(),
 			"alice_port": aliceAddr.Port,
 		}).Warn("hole-punch: rejected RelayIntro with invalid Alice IP (potential reflection attack)")
 		return oops.Errorf("invalid Alice IP address: %s", aliceAddr.IP)
@@ -1183,7 +1186,7 @@ func (t *SSU2Transport) verifyRelayIntroSignature(intro *ssu2noise.RelayIntroBlo
 
 	t.logger.WithFields(map[string]interface{}{
 		"alice_hash": fmt.Sprintf("%x", aliceHash[:4]),
-		"bob_hash": fmt.Sprintf("%x", bobHash[:4]),
+		"bob_hash":   fmt.Sprintf("%x", bobHash[:4]),
 	}).Debug("RelayIntro signature verified successfully with correct Bob hash")
 
 	return nil
@@ -1341,6 +1344,7 @@ func (t *SSU2Transport) IsInboundBlocked() bool {
 // I2PControl network-status code that most specifically describes how inbound
 // connectivity is blocked, giving callers a granular view of the firewalled
 // state rather than a single coarse "firewalled" verdict:
+//
 //	11 (ERROR_SYMMETRIC_NAT) — behind a symmetric NAT; per-destination port
 //	 mapping prevents introducer-assisted inbound connections from working
 //	 reliably.
@@ -1348,6 +1352,7 @@ func (t *SSU2Transport) IsInboundBlocked() bool {
 //	 introducers / hole-punching but not by unsolicited direct inbound.
 //	 0 — inbound is not blocked: NAT type is unknown
 //	 (not yet tested) or indicates direct reachability (no NAT / full-cone).
+//
 // Returning 0 for the unknown/direct cases ensures a directly-reachable or
 // not-yet-tested router is never misreported as inbound-blocked.
 func (t *SSU2Transport) InboundBlockedStatusCode() int {
@@ -1613,10 +1618,10 @@ func (t *SSU2Transport) initiatePeerTest(candidates []router_info.RouterInfo) (*
 func (t *SSU2Transport) sendPeerTestRequest(session *SSU2Session, nonce uint32, charlieHash data.Hash) error {
 	ptBlock := &ssu2noise.PeerTestBlock{
 		MessageCode: ssu2noise.PeerTestRequest,
-		Nonce: nonce,
-		RouterHash: &charlieHash,
-		Version: 2,
-		Timestamp: uint32(time.Now().Unix()),
+		Nonce:       nonce,
+		RouterHash:  &charlieHash,
+		Version:     2,
+		Timestamp:   uint32(time.Now().Unix()),
 	}
 	encoded, err := ssu2noise.EncodePeerTestBlock(ptBlock)
 	if err != nil {
@@ -1701,9 +1706,9 @@ func (t *SSU2Transport) handlePeerTestTimeout(candidates []router_info.RouterInf
 
 		t.logger.WithFields(map[string]interface{}{
 			"timeout_seconds": 60,
-			"retry_count": retryCount,
-			"base_backoff": baseBackoff.String(),
-			"next_retry_in": backoff.String(),
+			"retry_count":     retryCount,
+			"base_backoff":    baseBackoff.String(),
+			"next_retry_in":   backoff.String(),
 		}).Warn("NAT detection: peer test timed out; scheduling retry to avoid false FIREWALLED classification")
 
 		// Schedule retry after backoff
@@ -1711,9 +1716,9 @@ func (t *SSU2Transport) handlePeerTestTimeout(candidates []router_info.RouterInf
 	} else {
 		// After maxRetries consecutive failures, classify as firewalled
 		t.logger.WithFields(map[string]interface{}{
-			"timeout_seconds": 60,
+			"timeout_seconds":   60,
 			"consecutive_fails": retryCount,
-			"classification": "FIREWALLED",
+			"classification":    "FIREWALLED",
 		}).Warn("NAT detection: peer test failed after maximum retries; classifying as FIREWALLED and registering introducers")
 
 		// Step 4: write a *terminal* NAT classification so the router stops
@@ -1843,8 +1848,8 @@ func (t *SSU2Transport) classifyNATType(test *ssu2noise.PeerTest) ssu2noise.NATT
 	}
 	return ssu2noise.DetermineNATType(&ssu2noise.TestResult{
 		ExternalAddr: test.ExternalAddr,
-		Reachable: test.Reachable,
-		NATType: test.NATType,
+		Reachable:    test.Reachable,
+		NATType:      test.NATType,
 	})
 }
 
@@ -1886,7 +1891,7 @@ func (t *SSU2Transport) tryRegisterIntroducer(ri router_info.RouterInfo) bool {
 		t.trackAbandonedRelayTag(intro.RelayTag, intro.Addr, err.Error())
 		t.logger.WithError(err).WithFields(map[string]interface{}{
 			"introducer_hash": logutil.BytePrefix(intro.RouterHash[:]),
-			"relay_tag": intro.RelayTag,
+			"relay_tag":       intro.RelayTag,
 		}).Warn("Introducer registration failed; relay tag tracked for future cleanup")
 		return false
 	}
@@ -1901,7 +1906,7 @@ func (t *SSU2Transport) trackAbandonedRelayTag(tag uint32, addr *net.UDPAddr, re
 	t.abandonedRelayTagsMu.Lock()
 	defer t.abandonedRelayTagsMu.Unlock()
 
-	const maxAbandonedRelayTags = 50 // Hard cap on slice size
+	const maxAbandonedRelayTags = 50                 // Hard cap on slice size
 	const maxAbandonedRelayTagAge = 10 * time.Minute // Prune entries older than this
 
 	// Prune expired entries before adding
@@ -1916,10 +1921,10 @@ func (t *SSU2Transport) trackAbandonedRelayTag(tag uint32, addr *net.UDPAddr, re
 
 	// Append new entry
 	t.abandonedRelayTags = append(t.abandonedRelayTags, abandonedRelayTag{
-		tag: tag,
-		addr: addr,
+		tag:         tag,
+		addr:        addr,
 		allocatedAt: now,
-		reason: reason,
+		reason:      reason,
 	})
 
 	// If still over cap after pruning, evict oldest entries (ring-buffer style)
@@ -1971,13 +1976,13 @@ func (t *SSU2Transport) createIntroducerFromRouterInfo(ri router_info.RouterInfo
 		return nil, err
 	}
 	return &ssu2noise.RegisteredIntroducer{
-		Addr: addr,
+		Addr:       addr,
 		RouterHash: hBytes[:],
-		StaticKey: []byte(i2pbase64.EncodeToString(staticRaw)),
-		IntroKey: []byte(i2pbase64.EncodeToString(introRaw)),
-		RelayTag: tag,
-		AddedAt: time.Now(),
-		LastSeen: time.Now(),
+		StaticKey:  []byte(i2pbase64.EncodeToString(staticRaw)),
+		IntroKey:   []byte(i2pbase64.EncodeToString(introRaw)),
+		RelayTag:   tag,
+		AddedAt:    time.Now(),
+		LastSeen:   time.Now(),
 	}, nil
 }
 

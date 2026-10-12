@@ -116,14 +116,14 @@ ECIES: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ecies.rst
 //
 // See the package-level wire format diagram above for the on-wire layout.
 type DatabaseLookup struct {
-	Key            common.Hash             // SHA-256 hash of the object to look up
-	From           common.Hash             // RouterInfo hash (direct) or reply tunnel gateway hash (tunnel)
-	Flags          byte                    // delivery, lookup type, and ECIES flags
-	ReplyTunnelID  [4]byte                 // reply tunnel ID (present only when deliveryFlag == 1)
-	Size           int                     // number of excluded peers (0-512)
-	ExcludedPeers  []common.Hash           // routers to exclude from the reply
-	ReplyKey       session_key.SessionKey  // ECIES SessionKey (present only when ECIES flag set)
-	Tags           int                     // number of ECIES reply tags (present only when ECIES flag set)
+	Key            common.Hash                   // SHA-256 hash of the object to look up
+	From           common.Hash                   // RouterInfo hash (direct) or reply tunnel gateway hash (tunnel)
+	Flags          byte                          // delivery, lookup type, and ECIES flags
+	ReplyTunnelID  [4]byte                       // reply tunnel ID (present only when deliveryFlag == 1)
+	Size           int                           // number of excluded peers (0-512)
+	ExcludedPeers  []common.Hash                 // routers to exclude from the reply
+	ReplyKey       session_key.SessionKey        // ECIES SessionKey (present only when ECIES flag set)
+	Tags           int                           // number of ECIES reply tags (present only when ECIES flag set)
 	ECIESReplyTags []session_tag.ECIESSessionTag // 8-byte ECIES SessionTags (present only when ECIES flag set)
 }
 

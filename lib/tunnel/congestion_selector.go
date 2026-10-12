@@ -44,20 +44,20 @@ type DefaultCongestionAwarePeerSelector struct {
 	underlying       NetDBSelector
 	congestionInfo   CongestionInfoProvider
 	cfg              config.CongestionDefaults
-	maxRetries int // Max retries when G-flagged peers need replacing
-	metricsMu sync.Mutex // Protects selectionMetrics
+	maxRetries       int        // Max retries when G-flagged peers need replacing
+	metricsMu        sync.Mutex // Protects selectionMetrics
 	selectionMetrics *SelectionMetrics
 }
 
 // SelectionMetrics tracks peer selection statistics for monitoring.
 type SelectionMetrics struct {
-	TotalSelections int64 // Total selection attempts
-	GFlagExclusions int64 // Peers excluded due to G flag
-	DFlagDeratings int64 // Peers selected with D flag derating
-	EFlagDeratings int64 // Peers selected with E flag derating
-	StaleEDowngrades int64 // E flags downgraded to D due to stale RI
-	InsufficientPeers int64 // Times we couldn't find enough non-G peers
-	SelectionFailures int64 // Total selection failures
+	TotalSelections    int64 // Total selection attempts
+	GFlagExclusions    int64 // Peers excluded due to G flag
+	DFlagDeratings     int64 // Peers selected with D flag derating
+	EFlagDeratings     int64 // Peers selected with E flag derating
+	StaleEDowngrades   int64 // E flags downgraded to D due to stale RI
+	InsufficientPeers  int64 // Times we couldn't find enough non-G peers
+	SelectionFailures  int64 // Total selection failures
 	AverageRetries     float64
 	totalRetryCount    int64
 	selectionWithRetry int64
@@ -374,7 +374,9 @@ var (
 
 // NewCongestionAwareStack creates a stacked selector with congestion filtering.
 // This is equivalent to:
+//
 //	FromNetDB(db).WithFilter(NewCongestionFilter(info)).Build()
+//
 // For more complex stacking, use PeerSelectorStack directly.
 func NewCongestionAwareStack(
 	db NetDBSelector,

@@ -16,22 +16,22 @@ type PortMapperManager struct {
 	mu sync.Mutex
 
 	// Configuration
-	network string // "tcp" or "udp"
-	internalPort int // Local port to map
-	leaseDur time.Duration // Lease duration for port mapping (default: 1 hour)
+	network      string        // "tcp" or "udp"
+	internalPort int           // Local port to map
+	leaseDur     time.Duration // Lease duration for port mapping (default: 1 hour)
 
 	// Backoff configuration
 	backoffCfg *BackoffConfig
 
 	// State
-	parentCtx context.Context // Store parent context for deadline derivation in Stop()
-	ctx context.Context // Internal context derived from parentCtx
-	cancel context.CancelFunc // Cancel function for internal context
-	wg sync.WaitGroup // WaitGroup for goroutine lifecycle
+	parentCtx context.Context    // Store parent context for deadline derivation in Stop()
+	ctx       context.Context    // Internal context derived from parentCtx
+	cancel    context.CancelFunc // Cancel function for internal context
+	wg        sync.WaitGroup     // WaitGroup for goroutine lifecycle
 	mapper    nattraversal.PortMapper
-	extPort int // Currently mapped external port (0 if no mapping active)
-	extIP string // External IP address from mapper
-	stopped int32 // Prevent duplicate Stop() calls (atomic)
+	extPort   int    // Currently mapped external port (0 if no mapping active)
+	extIP     string // External IP address from mapper
+	stopped   int32  // Prevent duplicate Stop() calls (atomic)
 }
 
 // PortMapperConfig configures a PortMapperManager.

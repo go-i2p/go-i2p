@@ -45,11 +45,11 @@ type BindConfig struct {
 // DefaultBindConfig returns a BindConfig with sensible defaults.
 func DefaultBindConfig(network, listenerAddress string) *BindConfig {
 	return &BindConfig{
-		Network: network,
+		Network:         network,
 		ListenerAddress: listenerAddress,
-		NATTimeout: 3 * time.Second,
-		MaxRetries: 5,
-		RetryBaseDelay: 50 * time.Millisecond,
+		NATTimeout:      3 * time.Second,
+		MaxRetries:      5,
+		RetryBaseDelay:  50 * time.Millisecond,
 	}
 }
 
@@ -105,7 +105,7 @@ func bindLoopback(cfg *BindConfig, host string) (*BindResult, error) {
 			return nil, oops.Wrapf(err, "failed to create TCP listener on %s", bindAddr)
 		}
 		return &BindResult{
-			Listener: listener,
+			Listener:     listener,
 			BoundAddress: listener.Addr().String(),
 		}, nil
 	}
@@ -116,7 +116,7 @@ func bindLoopback(cfg *BindConfig, host string) (*BindResult, error) {
 		return nil, oops.Wrapf(err, "failed to create UDP listener on %s", bindAddr)
 	}
 	return &BindResult{
-		PacketConn: conn,
+		PacketConn:   conn,
 		BoundAddress: conn.LocalAddr().String(),
 	}, nil
 }
@@ -135,7 +135,7 @@ func bindWithNAT(cfg *BindConfig) (*BindResult, error) {
 			return nil, oops.Wrapf(err, "failed to create TCP listener with NAT traversal")
 		}
 		return &BindResult{
-			Listener: listener,
+			Listener:     listener,
 			BoundAddress: listener.Addr().String(),
 		}, nil
 	}
@@ -146,7 +146,7 @@ func bindWithNAT(cfg *BindConfig) (*BindResult, error) {
 		return nil, oops.Wrapf(err, "failed to create UDP listener with NAT traversal")
 	}
 	return &BindResult{
-		PacketConn: natPL.PacketConn(),
+		PacketConn:   natPL.PacketConn(),
 		BoundAddress: natPL.Addr().String(),
 	}, nil
 }
@@ -297,9 +297,9 @@ func rebindWithRetry(cfg *BindConfig, assignedPort int) (*BindResult, error) {
 		// Retry with jitter if not last attempt
 		if attempt < cfg.MaxRetries-1 {
 			log.WithFields(map[string]interface{}{
-				"port": assignedPort,
+				"port":    assignedPort,
 				"attempt": attempt + 1,
-				"error": err,
+				"error":   err,
 			}).Warn("TOCTOU race: probed port claimed by another process; retrying")
 
 			jitteredDelay := applyJitter(cfg.RetryBaseDelay)

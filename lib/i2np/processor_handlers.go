@@ -505,7 +505,9 @@ func (p *MessageProcessor) extractGarlicData(msg Message) ([]byte, error) {
 
 // stripGarlicLengthPrefixIfPresent removes the 4-byte length prefix from garlic ciphertext.
 // Garlic (type 11) encrypted payload on the wire is length-prefixed:
+//
 //	[4-byte big-endian length][ciphertext bytes]
+//
 // DecryptGarlicMessage expects ciphertext to begin with the 8-byte session tag,
 // so we strip the prefix when it is present and consistent.
 func stripGarlicLengthPrefixIfPresent(encryptedData []byte, messageID int) ([]byte, error) {

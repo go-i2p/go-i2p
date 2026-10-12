@@ -344,4 +344,3 @@ func TestReadDatabaseSearchReply(t *testing.T) {
 		t.Error("From mismatch")
 	}
 }
-

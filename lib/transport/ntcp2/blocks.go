@@ -169,8 +169,10 @@ func NewPaddingBlock(size int) Block {
 
 // NewRouterInfoBlock creates a RouterInfo block (type 2) with a flag byte
 // prepended. Per ntcp2.rst §1575-1577, the flag byte encodes:
+//
 //	bit 0: 0 = local store (RouterInfoFlagLocalStore), 1 = flood request (RouterInfoFlagFloodRequest)
 //	bits 1-7: unused, must be 0
+//
 // IMPORTANT: RouterInfo in NTCP2 blocks is NEVER gzip-compressed.
 // Use RouterInfoFlagLocalStore (0x00) or RouterInfoFlagFloodRequest (0x01).
 func NewRouterInfoBlock(routerInfoBytes []byte, flag byte) Block {

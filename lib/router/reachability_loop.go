@@ -110,7 +110,7 @@ func (r *Router) handleAddressLoss(ext, prev string, lastPublished *atomic.Value
 	}
 
 	log.WithFields(logger.Fields{
-		"at": "reachabilityLoop",
+		"at":       "reachabilityLoop",
 		"prev_ext": prev,
 	}).Info("external address lost — republishing RouterInfo with caps-only addresses")
 
@@ -133,7 +133,7 @@ func (r *Router) shouldRateLimitRepublication(lastResignAt time.Time) bool {
 	now := time.Now()
 	if now.Sub(lastResignAt) < reachabilityResignMinInterval {
 		log.WithFields(logger.Fields{
-			"at": "reachabilityLoop",
+			"at":        "reachabilityLoop",
 			"wait_secs": reachabilityResignMinInterval.Seconds(),
 		}).Debug("RouterInfo republication rate-limited; will retry next tick")
 		return true
@@ -144,9 +144,9 @@ func (r *Router) shouldRateLimitRepublication(lastResignAt time.Time) bool {
 // republishWithNewAddress publishes the RouterInfo with the new external address.
 func (r *Router) republishWithNewAddress(ext, prev string, lastPublished *atomic.Value, lastResignAt *time.Time) {
 	log.WithFields(logger.Fields{
-		"at": "reachabilityLoop",
+		"at":       "reachabilityLoop",
 		"prev_ext": prev,
-		"new_ext": ext,
+		"new_ext":  ext,
 	}).Info("external address changed — republishing RouterInfo")
 
 	if r.publisher != nil {
@@ -185,7 +185,7 @@ func (r *Router) refreshNTCP2LocalRouterInfo() {
 		if nt, ok := t.(*ntcp2.NTCP2Transport); ok {
 			nt.UpdateLocalRouterInfo(*ri)
 			log.WithFields(logger.Fields{
-				"at": "refreshNTCP2LocalRouterInfo",
+				"at":   "refreshNTCP2LocalRouterInfo",
 				"caps": ri.RouterCapabilities(),
 			}).Info("NTCP2 local RouterInfo refreshed for msg3")
 			return

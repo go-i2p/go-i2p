@@ -27,7 +27,7 @@ type Gateway struct {
 	tunnelID   TunnelID
 	encryption tunnel.TunnelEncryptor
 	nextHopID  TunnelID
-	encMu sync.Mutex // protects concurrent calls to encryption.Encrypt
+	encMu      sync.Mutex // protects concurrent calls to encryption.Encrypt
 }
 
 var (

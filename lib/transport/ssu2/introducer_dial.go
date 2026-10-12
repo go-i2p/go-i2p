@@ -80,7 +80,7 @@ func (t *SSU2Transport) dialViaIntroducer(charlieRI router_info.RouterInfo, char
 	// Try all introducers concurrently with bounded fan-out.
 	type result struct {
 		session transport.TransportSession
-		err error
+		err     error
 	}
 	resultCh := make(chan result, len(introducers))
 
@@ -126,7 +126,7 @@ func (t *SSU2Transport) collectIntroducers(charlieRI router_info.RouterInfo) []I
 	var result []IntroducerAddr
 	type introducerKey struct {
 		hash data.Hash
-		tag uint32
+		tag  uint32
 	}
 	seen := make(map[introducerKey]bool)
 	for _, addr := range charlieRI.RouterAddresses() {
@@ -201,7 +201,7 @@ func (t *SSU2Transport) establishBobSessionWithContext(ctx context.Context, intr
 // so that a delivery attempt arriving after the waiter has timed out is
 // silently dropped instead of buffered indefinitely.
 type pendingRelayResponse struct {
-	ch chan *ssu2noise.RelayResponseBlock
+	ch       chan *ssu2noise.RelayResponseBlock
 	consumed atomic.Bool
 }
 
@@ -272,12 +272,12 @@ func (t *SSU2Transport) sendRelayRequest(bobSession *SSU2Session, intro Introduc
 	}
 
 	req := &ssu2noise.RelayRequestBlock{
-		Nonce: nonce,
-		RelayTag: intro.RelayTag,
+		Nonce:     nonce,
+		RelayTag:  intro.RelayTag,
 		Timestamp: timestamp,
-		Version: 2,
+		Version:   2,
 		AlicePort: alicePort,
-		AliceIP: aliceIP,
+		AliceIP:   aliceIP,
 		Signature: sig,
 	}
 	block, err := ssu2noise.EncodeRelayRequest(req)
@@ -357,7 +357,7 @@ func (t *SSU2Transport) dialCharlieDirectly(charlieRI router_info.RouterInfo, ch
 	}
 
 	charlieAddr := &net.UDPAddr{
-		IP: resp.CharlieIP,
+		IP:   resp.CharlieIP,
 		Port: int(resp.CharliePort),
 	}
 	t.logger.WithField("charlie_addr", charlieAddr).Debug("dialing Charlie directly after relay")

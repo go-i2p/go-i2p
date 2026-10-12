@@ -34,32 +34,32 @@ const maxRTTSample = 30 * time.Second
 // pendingI2NP tracks an I2NP message that has been written to the conn but
 // has not yet been confirmed delivered (used for session-level retransmission).
 type pendingI2NP struct {
-	data []byte
+	data   []byte
 	blocks []*ssu2noise.SSU2Block
 	// packetNums tracks all SSU2 packet numbers currently associated with this
 	// pending message (initial send and any retransmits).
 	packetNums map[uint32]struct{}
-	sentAt time.Time
-	deadline time.Time // sentAt + rto; extended on each retransmit with back-off
-	attempts int
+	sentAt     time.Time
+	deadline   time.Time // sentAt + rto; extended on each retransmit with back-off
+	attempts   int
 }
 
 // SSU2Session implements transport.TransportSession over an SSU2 connection.
 type SSU2Session struct {
 	*transport.SessionCore
 
-	conn *ssu2noise.SSU2Conn
+	conn   *ssu2noise.SSU2Conn
 	connMu sync.RWMutex // protects conn field (upgraded to RWMutex for read-heavy access)
 
 	// Phase 5: Reliability & congestion control (SSU2-specific fields)
-	rttEstimator *ssu2noise.RTTEstimator
-	congestionCtrl *ssu2noise.CongestionController
-	pendingMsgsMu sync.Mutex
-	pendingMsgs map[uint64]*pendingI2NP
+	rttEstimator    *ssu2noise.RTTEstimator
+	congestionCtrl  *ssu2noise.CongestionController
+	pendingMsgsMu   sync.Mutex
+	pendingMsgs     map[uint64]*pendingI2NP
 	packetToPending map[uint32]uint64 // SSU2 packet number -> pending sequence
-	pendingSeqNext uint64 // incremented atomically
-	maxRetransmit int
-	lastSendNano int64 // atomic unix-nano of most recent Write call
+	pendingSeqNext  uint64            // incremented atomically
+	maxRetransmit   int
+	lastSendNano    int64 // atomic unix-nano of most recent Write call
 
 	// peerTestLimiter enforces a per-session cap on PeerTest (Bob-role) relays.
 	// Burst of 3 with a sustained rate of 1/s (I2P spec allows infrequent tests).
@@ -81,13 +81,13 @@ func NewSSU2SessionDeferred(conn *ssu2noise.SSU2Conn, ctx context.Context, logge
 
 	rtt := ssu2noise.NewRTTEstimator()
 	s := &SSU2Session{
-		SessionCore: core,
-		conn: conn,
-		rttEstimator: rtt,
-		congestionCtrl: ssu2noise.NewCongestionController(rtt),
-		pendingMsgs: make(map[uint64]*pendingI2NP),
+		SessionCore:     core,
+		conn:            conn,
+		rttEstimator:    rtt,
+		congestionCtrl:  ssu2noise.NewCongestionController(rtt),
+		pendingMsgs:     make(map[uint64]*pendingI2NP),
 		packetToPending: make(map[uint32]uint64),
-		maxRetransmit: DefaultMaxRetransmissions,
+		maxRetransmit:   DefaultMaxRetransmissions,
 	}
 	s.peerTestLimiter = rate.NewLimiter(rate.Limit(1), 3)
 	s.wireDataHandlerCallbacks()
@@ -543,11 +543,11 @@ func (s *SSU2Session) trackPendingBlocks(data []byte, blocks []*ssu2noise.SSU2Bl
 	now := time.Now()
 	s.pendingMsgsMu.Lock()
 	s.pendingMsgs[seq] = &pendingI2NP{
-		data: data,
-		blocks: blocks,
+		data:       data,
+		blocks:     blocks,
 		packetNums: make(map[uint32]struct{}),
-		sentAt: now,
-		deadline: now.Add(rto),
+		sentAt:     now,
+		deadline:   now.Add(rto),
 	}
 	s.pendingMsgsMu.Unlock()
 	return seq
@@ -597,7 +597,7 @@ func (s *SSU2Session) removePending(seq uint64) {
 // retransmitCandidate holds a pending message that needs retransmission,
 // collected under lock and processed after the lock is released.
 type retransmitCandidate struct {
-	seq uint64
+	seq     uint64
 	pending *pendingI2NP
 }
 
@@ -662,8 +662,8 @@ func (s *SSU2Session) handleRetransmissions() (shouldClose bool) {
 type retransmitAction int
 
 const (
-	retransmitOK retransmitAction = iota // successfully retransmitted
-	retransmitDelete // should delete due to error or max attempts
+	retransmitOK     retransmitAction = iota // successfully retransmitted
+	retransmitDelete                         // should delete due to error or max attempts
 )
 
 // processRetransmission handles a single pending message that has exceeded its deadline.
@@ -760,7 +760,7 @@ type receiveAction int
 
 const (
 	receiveRetry receiveAction = iota // transient timeout / deadline, retry
-	receiveFatal // permanent error, close session
+	receiveFatal                      // permanent error, close session
 )
 
 // classifyReceiveError returns receiveRetry for network timeouts and

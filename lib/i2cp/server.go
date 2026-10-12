@@ -84,11 +84,11 @@ func DefaultServerConfig() *ServerConfig {
 type connectionState struct {
 	conn              net.Conn
 	lastMessageTime   time.Time
-	lastResetTime time.Time // L-NEW-4: tracks when counters were last zeroed (wall-clock epoch)
+	lastResetTime     time.Time // L-NEW-4: tracks when counters were last zeroed (wall-clock epoch)
 	messageCount      int
 	bytesRead         uint64
 	hostLookupLimiter *rate.Limiter
-	authenticated atomic.Bool // true if this connection has been authenticated (or auth not required)
+	authenticated     atomic.Bool // true if this connection has been authenticated (or auth not required)
 }
 
 // Server is an I2CP protocol server that accepts client connections

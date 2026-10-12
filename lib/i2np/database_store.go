@@ -150,9 +150,9 @@ func NewDatabaseStore(key common.Hash, data []byte, dataType byte) *DatabaseStor
 		BaseI2NPMessage: NewBaseI2NPMessage(I2NPMessageTypeDatabaseStore),
 		Key:             key,
 		StoreType:       dataType,
-		ReplyToken: [4]byte{0, 0, 0, 0}, // No reply token
-		ReplyTunnelID: [4]byte{0, 0, 0, 0}, // Direct response
-		ReplyGateway: common.Hash{}, // No gateway
+		ReplyToken:      [4]byte{0, 0, 0, 0}, // No reply token
+		ReplyTunnelID:   [4]byte{0, 0, 0, 0}, // Direct response
+		ReplyGateway:    common.Hash{},       // No gateway
 		Data:            data,
 	}
 }

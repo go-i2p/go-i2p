@@ -25,23 +25,23 @@ type NTCP2Session struct {
 	*transport.SessionCore
 
 	// Underlying connection (uses net.Conn interface per guidelines)
-	conn net.Conn // Will be *ntcp2.NTCP2Conn internally
+	conn   net.Conn   // Will be *ntcp2.NTCP2Conn internally
 	connMu sync.Mutex // protects conn field
 
 	// Rekeying state — tracks message counts for periodic rekeying
 	rekeyState *rekeyState
 
 	// Error tracking for receive worker
-	errorMu sync.Mutex
+	errorMu   sync.Mutex
 	lastError error
 
 	// RouterInfo callback (called when a RouterInfo block is received from peer)
-	routerInfoMu sync.Mutex
+	routerInfoMu       sync.Mutex
 	routerInfoCallback func([]byte)
 
 	createdAtUnixNano int64
-	lastSendUnixNano int64
-	lastRecvUnixNano int64
+	lastSendUnixNano  int64
+	lastRecvUnixNano  int64
 }
 
 // NewNTCP2Session creates a new NTCP2 session and immediately starts background
@@ -63,8 +63,8 @@ func NewNTCP2SessionDeferred(conn net.Conn, ctx context.Context, logger *logger.
 
 	session := &NTCP2Session{
 		SessionCore: core,
-		conn: conn,
-		rekeyState: newRekeyState(),
+		conn:        conn,
+		rekeyState:  newRekeyState(),
 	}
 	now := time.Now().UnixNano()
 	atomic.StoreInt64(&session.createdAtUnixNano, now)
@@ -197,14 +197,14 @@ func (s *NTCP2Session) logSessionLifecycleSummary(reason byte) {
 	bytesSent, bytesReceived := s.GetBandwidthStats()
 
 	fields := map[string]interface{}{
-		"close_reason": TerminationReasonString(reason),
-		"last_error": s.getError(),
-		"session_age_ms": age.Milliseconds(),
+		"close_reason":       TerminationReasonString(reason),
+		"last_error":         s.getError(),
+		"session_age_ms":     age.Milliseconds(),
 		"idle_since_send_ms": idleSend.Milliseconds(),
 		"idle_since_recv_ms": idleRecv.Milliseconds(),
-		"bytes_sent": bytesSent,
-		"bytes_received": bytesReceived,
-		"dropped_messages": s.DroppedMessages(),
+		"bytes_sent":         bytesSent,
+		"bytes_received":     bytesReceived,
+		"dropped_messages":   s.DroppedMessages(),
 	}
 
 	s.Logger().WithFields(fields).Debug("NTCP2 session lifecycle summary")
@@ -237,7 +237,7 @@ func (s *NTCP2Session) sendEncryptedTermination(reason byte) {
 
 	block := BuildTerminationBlock(reason)
 	s.Logger().WithFields(map[string]interface{}{
-		"reason": TerminationReasonString(reason),
+		"reason":     TerminationReasonString(reason),
 		"block_size": len(block),
 	}).Debug("Sending encrypted termination block")
 
@@ -315,7 +315,7 @@ func (s *NTCP2Session) discardRemainingMessages() {
 func (s *NTCP2Session) processSendQueueMessage(msg i2np.Message, nextMetaAt *time.Time) bool {
 	newSize := s.AddToSendQueueSize(-1)
 	s.Logger().WithFields(map[string]interface{}{
-		"message_type": msg.Type(),
+		"message_type":       msg.Type(),
 		"remaining_in_queue": newSize,
 	}).Debug("Processing message from send queue")
 
@@ -481,9 +481,9 @@ func (s *NTCP2Session) handleNonI2NPBlock(block Block) {
 			reason = block.Data[terminationBlockPayloadSize-1]
 		}
 		s.Logger().WithFields(map[string]interface{}{
-			"at": "(NTCP2Session) handleNonI2NPBlock",
+			"at":          "(NTCP2Session) handleNonI2NPBlock",
 			"reason_code": reason,
-			"reason": TerminationReasonString(reason),
+			"reason":      TerminationReasonString(reason),
 		}).Warn("Received Termination block from peer, closing session")
 		// Close in a goroutine to avoid deadlock: Close() calls wg.Wait(),
 		// and this callback runs inside the receive worker goroutine.
@@ -648,7 +648,7 @@ func (s *NTCP2Session) recordAndLogDroppedMessage(msg i2np.Message) {
 	s.RecordDroppedMessage()
 	dropped := s.DroppedMessages()
 	s.Logger().WithFields(map[string]interface{}{
-		"message_type": msg.Type(),
+		"message_type":  msg.Type(),
 		"total_dropped": dropped,
 		"recv_chan_cap": cap(s.RecvChan()),
 	}).Warn("Dropping received message - receive channel full (backpressure)")
@@ -660,7 +660,7 @@ func (s *NTCP2Session) checkRekey(totalMessages uint64) {
 	if totalMessages >= RekeyThreshold {
 		s.Logger().WithFields(map[string]interface{}{
 			"total_messages": totalMessages,
-			"threshold": RekeyThreshold,
+			"threshold":      RekeyThreshold,
 		}).Info("Rekey threshold reached, attempting session rekey")
 		s.connMu.Lock()
 		conn := s.conn

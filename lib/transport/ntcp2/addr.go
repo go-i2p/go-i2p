@@ -18,7 +18,7 @@ import (
 // RouterAddress entry that produced it. Outbound dialers must use this binding
 // so the handshake static key/IV are selected from the same address record.
 type NTCP2DialCandidate struct {
-	Addr net.Addr
+	Addr          net.Addr
 	RouterAddress *router_address.RouterAddress
 }
 
@@ -94,7 +94,7 @@ func ExtractNTCP2DialCandidatesWithMetadata(routerInfo router_info.RouterInfo) (
 		seen[key] = struct{}{}
 
 		dialCandidate := NTCP2DialCandidate{
-			Addr: candidate,
+			Addr:          candidate,
 			RouterAddress: addr,
 		}
 
@@ -112,7 +112,7 @@ func ExtractNTCP2DialCandidatesWithMetadata(routerInfo router_info.RouterInfo) (
 	}
 
 	log.WithFields(map[string]interface{}{
-		"router_hash": logutil.BytePrefix(routerHashBytes),
+		"router_hash":     logutil.BytePrefix(routerHashBytes),
 		"candidate_count": len(candidates),
 		"ipv4_candidates": len(ipv4Candidates),
 		"ipv6_candidates": len(ipv6Candidates),
@@ -157,7 +157,7 @@ func validateNTCP2Support(routerInfo *router_info.RouterInfo, hashBytes []byte) 
 // logAddressSearch logs the start of NTCP2 address search.
 func logAddressSearch(hashBytes []byte, addressCount int) {
 	log.WithFields(map[string]interface{}{
-		"router_hash": logutil.BytePrefix(hashBytes),
+		"router_hash":   logutil.BytePrefix(hashBytes),
 		"address_count": addressCount,
 	}).Debug("Searching for valid NTCP2 address")
 }
@@ -167,7 +167,7 @@ func logAddressCheck(index int, addr *router_address.RouterAddress) {
 	style := addr.TransportStyle()
 	styleStr, _ := style.Data()
 	log.WithFields(map[string]interface{}{
-		"index": index,
+		"index":           index,
 		"transport_style": styleStr,
 	}).Debug("Checking router address")
 }
@@ -182,10 +182,10 @@ func logAddressProcessingFailure(index int, err error) {
 // logNoValidAddressFound logs diagnostic information when no valid NTCP2 addresses are found.
 func logNoValidAddressFound(hashBytes []byte, addressCount int) {
 	log.WithFields(map[string]interface{}{
-		"at": "findValidNTCP2Address",
-		"phase": "address_extraction",
-		"operation": "find_valid_address",
-		"router_hash": logutil.BytePrefix(hashBytes),
+		"at":              "findValidNTCP2Address",
+		"phase":           "address_extraction",
+		"operation":       "find_valid_address",
+		"router_hash":     logutil.BytePrefix(hashBytes),
 		"addresses_total": addressCount,
 		"addresses_tried": addressCount,
 	}).Warn("No valid NTCP2 address found in RouterInfo after checking all addresses")
@@ -202,11 +202,11 @@ func processNTCP2Address(addr *router_address.RouterAddress, routerInfo router_i
 		hashVal, _ := routerInfo.IdentHash()
 		hashBytes := hashVal.Bytes()
 		log.WithFields(map[string]interface{}{
-			"at": "processNTCP2Address",
-			"phase": "address_resolution",
-			"operation": "resolve_tcp",
-			"error": err.Error(),
-			"router_hash": logutil.HashPrefixPlain(hashBytes),
+			"at":            "processNTCP2Address",
+			"phase":         "address_resolution",
+			"operation":     "resolve_tcp",
+			"error":         err.Error(),
+			"router_hash":   logutil.HashPrefixPlain(hashBytes),
 			"address_count": len(routerInfo.RouterAddresses()),
 		}).Warn("Failed to resolve TCP address from NTCP2 router address")
 		return nil, oops.Wrapf(err, "failed to resolve TCP address")
@@ -216,7 +216,7 @@ func processNTCP2Address(addr *router_address.RouterAddress, routerInfo router_i
 	if concrete, ok := tcpAddr.(*net.TCPAddr); ok {
 		if concrete.IP.To4() == nil && !probeIPv6() {
 			log.WithFields(map[string]interface{}{
-				"at": "processNTCP2Address",
+				"at":      "processNTCP2Address",
 				"address": tcpAddr.String(),
 			}).Debug("Skipping IPv6 NTCP2 address: no local IPv6 connectivity")
 			return nil, oops.Errorf("skip IPv6 address %s: no local IPv6 connectivity", tcpAddr)
@@ -258,12 +258,12 @@ func resolveTCPAddress(addr *router_address.RouterAddress) (net.Addr, error) {
 		// Port extraction failures are less common but still possible for malformed addresses
 		// Downgrade to Warn since some legitimate scenarios may lack port (though rare)
 		log.WithFields(map[string]interface{}{
-			"at": "resolveTCPAddress",
-			"phase": "address_parsing",
+			"at":        "resolveTCPAddress",
+			"phase":     "address_parsing",
 			"operation": "extract_port",
-			"error": err.Error(),
-			"host": host.String(),
-			"cost": addr.Cost(),
+			"error":     err.Error(),
+			"host":      host.String(),
+			"cost":      addr.Cost(),
 		}).Warn("Failed to extract port from RouterAddress")
 		return nil, oops.Wrapf(err, "failed to extract port")
 	}

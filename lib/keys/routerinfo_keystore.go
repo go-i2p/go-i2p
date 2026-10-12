@@ -807,8 +807,10 @@ const defaultBandwidthTier = "L"
 
 // validBandwidthTiers are the only legal bandwidth capability letters per the I2P
 // common-structures spec, in ascending throughput order:
+//
 //	K: <12 KBps L: 12-48 KBps M: 48-64 KBps N: 64-128 KBps
 //	O: 128-256 KBps P: 256-2048 KBps X: >2048 KBps
+//
 // i2pd's RouterInfo::ExtractCaps reads the first such letter into m_BandwidthCap
 // and flags O/P/X as high bandwidth (eHighBandwidth / eExtraBandwidth).
 var validBandwidthTiers = map[string]bool{
