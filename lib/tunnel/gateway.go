@@ -606,12 +606,17 @@ func (g *Gateway) encryptTunnelMessage(msg []byte) ([]byte, error) {
 	return encrypted, nil
 }
 
-// TunnelID returns the ID of this gateway's tunnel
+// TunnelID returns the ID of this gateway's tunnel.
+// It identifies the tunnel this gateway sends through, so callers can
+// correlate outgoing messages with the tunnel chain they travel in.
 func (g *Gateway) TunnelID() TunnelID {
 	return g.tunnelID
 }
 
-// NextHopID returns the tunnel ID used for the next hop
+// NextHopID returns the tunnel ID used for the next hop.
+// When the gateway forwards a message onward, it rewrites the delivery
+// instructions to point at this tunnel ID so the next hop in the chain
+// can pick the message up.
 func (g *Gateway) NextHopID() TunnelID {
 	return g.nextHopID
 }

@@ -1,3 +1,6 @@
+// Tests for verifying routerinfo signatures and network ID before storing
+// entries in the NetDB.
+
 package netdb
 
 import (

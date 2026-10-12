@@ -1,3 +1,6 @@
+// Tests for the daily routing key derivation used to sign and verify
+// database entries.
+
 package netdb
 
 import (

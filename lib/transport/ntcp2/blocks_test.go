@@ -1,3 +1,7 @@
+// Tests for NTCP2 handshake blocks. Validates the wire format of the
+// block framing (type + 2-byte big-endian size header) used in the
+// NTCP2 handshake message.
+
 package ntcp2
 
 import (

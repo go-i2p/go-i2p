@@ -1,3 +1,6 @@
+// Tests for the adaptive exploration strategy that generates lookup keys in
+// sparse Kademlia buckets to fill gaps in the local NetDB.
+
 package netdb
 
 import (

@@ -59,6 +59,10 @@ func WithScoringMaxRetries(n int) ScoringPeerSelectorOption {
 }
 
 // NewScoringPeerSelector creates a scoring-based peer selector.
+// It wraps an underlying selector and ranks the candidate peers it returns
+// using the registered scorers, so the best routers are picked first when
+// building tunnels.
+// See also [ScoringPeerSelector].
 func NewScoringPeerSelector(
 	underlying PeerSelector,
 	opts ...ScoringPeerSelectorOption,
@@ -96,6 +100,10 @@ func NewScoringPeerSelector(
 }
 
 // SelectPeers implements PeerSelector with scoring logic.
+// It asks the underlying selector for candidates, scores each one, drops
+// peers below the configured threshold, and returns the highest-scoring
+// peers first.
+// See also [PeerSelector].
 func (s *ScoringPeerSelector) SelectPeers(count int, exclude []common.Hash) ([]router_info.RouterInfo, error) {
 	belowThreshold := 0
 
@@ -155,6 +163,10 @@ func (s *ScoringPeerSelector) ComputeScore(ri router_info.RouterInfo) float64 {
 }
 
 // AddScorer adds a scorer to the selector.
+// Each added scorer contributes one factor to the multiplicative combined
+// score, letting callers layer independent quality signals (e.g. latency,
+// failure history) on top of each other.
+// See also [PeerScorer].
 func (s *ScoringPeerSelector) AddScorer(scorer PeerScorer) {
 	s.scorers = append(s.scorers, scorer)
 }

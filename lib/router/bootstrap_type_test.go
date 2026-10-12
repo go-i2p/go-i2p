@@ -1,3 +1,5 @@
+// Tests for bootstrap type resolution. Validates that the router picks the
+// right bootstrap method from its configuration.
 package router
 
 import (

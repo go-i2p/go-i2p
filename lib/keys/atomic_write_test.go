@@ -1,3 +1,6 @@
+// Tests for atomicWriteFile, the helper that writes key files safely.
+// It checks that writes land with the right permissions and never leave
+// partial or temporary files behind.
 package keys
 
 import (

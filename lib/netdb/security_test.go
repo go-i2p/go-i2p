@@ -1,3 +1,6 @@
+// Security-focused tests for the NetDB: storage isolation between client
+// and router databases, thread safety, and input validation.
+
 package netdb
 
 import (

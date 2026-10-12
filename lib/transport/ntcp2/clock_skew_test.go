@@ -1,3 +1,6 @@
+// Tests for peer timestamp validation. Validates that a peer's clock skew
+// beyond the allowed tolerance is rejected during the NTCP2 handshake.
+
 package ntcp2
 
 import (

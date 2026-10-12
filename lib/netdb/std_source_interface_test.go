@@ -1,3 +1,5 @@
+// Tests that StdNetDB implements the source-aware store path interface.
+
 package netdb
 
 import (

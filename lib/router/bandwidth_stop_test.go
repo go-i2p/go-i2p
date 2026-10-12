@@ -1,3 +1,5 @@
+// Tests for stopping the bandwidth tracker. Validates that Stop() shuts the
+// tracker down cleanly.
 package router
 
 import (

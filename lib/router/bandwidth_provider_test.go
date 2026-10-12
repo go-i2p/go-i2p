@@ -1,3 +1,5 @@
+// Tests for the router bandwidth provider. Validates that bandwidth settings
+// from the config are applied to the router.
 package router
 
 import (

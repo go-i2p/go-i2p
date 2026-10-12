@@ -1,3 +1,5 @@
+// Tests for GetLeaseSet error paths when the lease set entry is missing.
+
 package netdb
 
 import (

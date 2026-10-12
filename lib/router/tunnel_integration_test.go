@@ -1,5 +1,7 @@
 //go:build integration
 
+// Integration tests for tunnel management. Verifies that the router builds and
+// maintains tunnels correctly.
 package router
 
 import (

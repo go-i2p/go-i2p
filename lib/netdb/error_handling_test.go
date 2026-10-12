@@ -1,3 +1,6 @@
+// Tests for NetDB error handling: invalid data, error propagation, and
+// graceful degradation under concurrent access.
+
 package netdb
 
 import (

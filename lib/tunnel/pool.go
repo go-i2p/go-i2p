@@ -440,6 +440,8 @@ func (p *Pool) SetHopCount(hopCount int) error {
 }
 
 // HopCount returns the configured hop count for this pool.
+// The hop count determines how many routers make up each tunnel chain the
+// pool builds; more hops give more layers of encryption but add latency.
 func (p *Pool) HopCount() int {
 	p.mutex.RLock()
 	defer p.mutex.RUnlock()

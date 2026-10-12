@@ -1,3 +1,5 @@
+// Tests for the M6 race detector's timestamp validation under clock skew.
+
 package netdb
 
 import (

@@ -1,3 +1,6 @@
+// Tests for the reseed protocol: fetching SU3 files over HTTPS, validating
+// their signatures, and extracting routerinfo entries.
+
 package reseed
 
 import (

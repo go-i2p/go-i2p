@@ -1,3 +1,5 @@
+// Tests for the session registry. Validates that promoting a raw
+// connection to a session rolls back cleanly when preflight checks fail.
 package transport
 
 import (

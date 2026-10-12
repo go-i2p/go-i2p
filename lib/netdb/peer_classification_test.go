@@ -1,3 +1,6 @@
+// Tests for classifying peers by speed and capacity to pick better lookup
+// targets.
+
 package netdb
 
 import (

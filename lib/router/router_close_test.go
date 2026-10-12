@@ -1,5 +1,7 @@
 //go:build integration
 
+// Integration tests for router shutdown. Verifies that Stop() cleans up all
+// subsystems without hanging.
 package router
 
 import (

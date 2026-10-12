@@ -1,3 +1,6 @@
+// Tests for the core StdNetDB implementation: routerinfo storage, directory
+// layout, and entry refresh.
+
 package netdb
 
 import (

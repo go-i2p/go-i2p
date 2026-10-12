@@ -1,3 +1,6 @@
+// Tests for the rate limiter that caps how fast the NetDB replicates entries
+// to floodfill peers.
+
 package netdb
 
 import (

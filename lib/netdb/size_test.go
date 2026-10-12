@@ -1,3 +1,5 @@
+// Tests for NetDB size tracking: entry counts, removals, and thread safety.
+
 package netdb
 
 import (

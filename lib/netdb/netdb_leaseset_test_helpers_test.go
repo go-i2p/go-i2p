@@ -1,3 +1,5 @@
+// Shared test helpers for the netdb lease set tests.
+
 package netdb
 
 import (

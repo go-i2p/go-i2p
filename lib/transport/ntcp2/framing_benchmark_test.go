@@ -1,3 +1,6 @@
+// Benchmarks for the I2NP unframer. Measures the cost of stripping the
+// 4-byte length prefix from incoming NTCP2 frames.
+
 package ntcp2
 
 import (

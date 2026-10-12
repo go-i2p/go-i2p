@@ -1,3 +1,6 @@
+// Shared test helpers for the NTCP2 package. Provides mock connections,
+// listeners, and session setup used by the other test files.
+
 package ntcp2
 
 import (

@@ -1,3 +1,5 @@
+// Tests for publisher error handling when the gateway message queue fails.
+
 package netdb
 
 import (

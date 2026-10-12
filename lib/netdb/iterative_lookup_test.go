@@ -1,3 +1,6 @@
+// Tests for iterative database lookups: querying the closest peers and
+// following their suggestions until the entry is found.
+
 package netdb
 
 import (

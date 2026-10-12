@@ -1,3 +1,7 @@
+// Tests for the floodfill admission controller. Checks that database store requests
+// are accepted under normal load and throttled per source when the NetDB is under
+// critical pressure.
+
 package netdb
 
 import (

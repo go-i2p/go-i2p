@@ -815,12 +815,18 @@ func (e *Endpoint) deliverReassembled(result *reassembledResult) error {
 	}
 }
 
-// TunnelID returns the ID of this endpoint's tunnel
+// TunnelID returns the ID of this endpoint's tunnel.
+// It identifies the tunnel this endpoint receives messages through, so
+// callers can correlate incoming messages with the tunnel chain they
+// arrived in.
 func (e *Endpoint) TunnelID() TunnelID {
 	return e.tunnelID
 }
 
-// ClearFragments clears all accumulated fragments (useful for cleanup)
+// ClearFragments clears all accumulated fragments (useful for cleanup).
+// Fragments are buffered until a complete message can be reassembled;
+// clearing them frees memory when the endpoint is being torn down or when
+// the buffered fragments are no longer expected to complete.
 func (e *Endpoint) ClearFragments() {
 	e.fragmentsMutex.Lock()
 	defer e.fragmentsMutex.Unlock()

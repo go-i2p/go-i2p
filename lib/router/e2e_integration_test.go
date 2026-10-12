@@ -1,3 +1,5 @@
+// End-to-end integration tests. Verifies full message flows (Garlic and
+// session-based) through the router using mocked transports.
 package router
 
 import (

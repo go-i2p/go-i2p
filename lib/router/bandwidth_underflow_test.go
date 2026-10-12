@@ -1,3 +1,5 @@
+// Tests for bandwidth tracker counter underflow. Validates that the tracker
+// does not panic or corrupt its counters when values go negative.
 package router
 
 import (

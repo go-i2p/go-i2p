@@ -1,3 +1,5 @@
+// Tests for saving NetDB entries, including nil and empty entry handling.
+
 package netdb
 
 import (

@@ -1,5 +1,7 @@
 //go:build integration
 
+// Live network integration tests. Verifies that the router bootstraps, publishes,
+// and interoperates with the real I2P network.
 package router
 
 import (

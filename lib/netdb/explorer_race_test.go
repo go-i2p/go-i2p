@@ -1,3 +1,6 @@
+// Tests that the explorer's transport and hash setters are safe for
+// concurrent use.
+
 package netdb
 
 import (

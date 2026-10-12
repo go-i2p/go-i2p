@@ -1,3 +1,6 @@
+// Tests for TransportMuxer.ReleaseSession. Validates that the active
+// session counter decrements correctly and never goes negative under
+// concurrent use.
 package transport
 
 import (

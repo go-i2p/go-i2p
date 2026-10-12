@@ -1,3 +1,6 @@
+// Tests for the transport muxer's Accept behavior. Validates that
+// connections are accepted across multiple transports with timeouts,
+// fallback, and no leaked connections.
 package transport
 
 import (

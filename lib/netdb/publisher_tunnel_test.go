@@ -1,3 +1,6 @@
+// Tests for sending database store messages to floodfill peers over
+// tunnels, including reply route selection.
+
 package netdb
 
 import (

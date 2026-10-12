@@ -1,3 +1,6 @@
+// Tests for storing and retrieving lease sets in the NetDB, including
+// on-disk layout and data type validation.
+
 package netdb
 
 import (

@@ -1,3 +1,6 @@
+// Tests for the length-prefixed framing of NetDB entry files. Framing lets
+// the reader detect truncated or corrupted entries on disk.
+
 package netdb
 
 import (

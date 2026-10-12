@@ -1,3 +1,6 @@
+// Tests for the reseed certificate pool used to verify SU3 file signatures
+// from reseed servers.
+
 package reseed
 
 import (

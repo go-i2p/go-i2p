@@ -1,3 +1,6 @@
+// Tests that peer selection prefers peers with an active connection and
+// falls back to unconnected peers when needed.
+
 package netdb
 
 import (

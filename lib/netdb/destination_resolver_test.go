@@ -1,3 +1,6 @@
+// Tests for resolving an I2P destination to its public key by looking up its
+// lease set (classic, LeaseSet2, and meta lease set formats).
+
 package netdb
 
 import (

@@ -1,3 +1,6 @@
+// Benchmarks for NetDB hot paths: hash validation, routerinfo store/get, and
+// concurrent read/write access.
+
 package netdb
 
 import (

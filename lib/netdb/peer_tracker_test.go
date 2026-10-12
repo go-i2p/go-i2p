@@ -1,3 +1,6 @@
+// Tests for the peer tracker: success rates, staleness detection, and peer
+// scoring used to pick reliable lookup peers.
+
 package netdb
 
 import (

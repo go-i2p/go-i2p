@@ -1,3 +1,5 @@
+// Tests for the destination lookup queue. Validates that Destination lookups
+// are queued, deduplicated, and processed in order.
 package router
 
 import (

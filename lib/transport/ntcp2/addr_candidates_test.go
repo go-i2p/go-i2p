@@ -1,3 +1,7 @@
+// Tests for extracting NTCP2 dial candidates from a RouterInfo.
+// Validates that duplicate addresses are removed and the first preferred
+// address is returned when dialing a peer.
+
 package ntcp2
 
 import (

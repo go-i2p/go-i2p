@@ -1,3 +1,5 @@
+// Shared test helpers for the netdb package tests.
+
 package netdb
 
 import (

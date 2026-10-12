@@ -1,3 +1,5 @@
+// Test helpers for the transport package. Provides reflection-based
+// assertions for interface method signatures.
 package transport
 
 import (

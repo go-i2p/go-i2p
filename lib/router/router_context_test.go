@@ -1,5 +1,7 @@
 //go:build integration
 
+// Integration tests for router context lifecycle. Verifies that the context is
+// created and cancelled correctly.
 package router
 
 import (

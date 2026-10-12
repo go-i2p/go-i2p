@@ -1,3 +1,6 @@
+// Tests for NetDB congestion tracking: the congestion flag, the per-peer
+// congestion cache, and the tracker that combines them.
+
 package netdb
 
 import (

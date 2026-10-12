@@ -1,3 +1,5 @@
+// Shared test fixtures for the netdb package tests.
+
 package netdb
 
 import "testing"

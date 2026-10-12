@@ -1,3 +1,6 @@
+// Regression tests for previously audited bugs in the congestion cache, peer
+// tracker, and entry reader.
+
 package netdb
 
 import (

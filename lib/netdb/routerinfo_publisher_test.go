@@ -1,3 +1,5 @@
+// Tests for publishing the router's own routerinfo to the network.
+
 package netdb
 
 import (

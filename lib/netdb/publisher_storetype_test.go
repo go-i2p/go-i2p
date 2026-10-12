@@ -1,3 +1,6 @@
+// Tests that the publisher picks the correct NetDB store type for each
+// lease set variant.
+
 package netdb
 
 import (

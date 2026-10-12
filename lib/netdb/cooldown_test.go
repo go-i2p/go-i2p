@@ -1,3 +1,6 @@
+// Tests for the time-bucketed cooldown used to back off from peers that
+// repeatedly fail lookups.
+
 package netdb
 
 import (

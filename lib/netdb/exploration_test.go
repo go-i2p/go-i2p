@@ -1,3 +1,6 @@
+// Tests for the NetDB explorer lifecycle: creation, start/stop, config
+// defaults, and stats.
+
 package netdb
 
 import (

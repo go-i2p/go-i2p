@@ -1,3 +1,5 @@
+// Tests for tracked sessions and connections. Validates that closing
+// them decrements the active session counter exactly once.
 package transport
 
 import (

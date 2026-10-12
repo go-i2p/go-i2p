@@ -1,3 +1,6 @@
+// Fuzz tests for the reseed SU3 parser, the most security-critical parser in
+// the reseed path since it processes untrusted router data.
+
 package reseed
 
 // L-NEW-1 FIX: native Go fuzz targets for the reseed SU3 parser.

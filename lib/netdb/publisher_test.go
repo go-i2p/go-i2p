@@ -1,3 +1,6 @@
+// Tests for the NetDB publisher: floodfill selection, routerinfo
+// publication, and verifying published entries are retrievable.
+
 package netdb
 
 import (

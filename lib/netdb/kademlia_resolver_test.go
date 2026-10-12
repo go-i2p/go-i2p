@@ -1,3 +1,6 @@
+// Tests for the Kademlia-style resolver that performs database lookups by
+// querying peers closest to the target key.
+
 package netdb
 
 import (

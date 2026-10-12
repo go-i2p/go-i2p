@@ -1,3 +1,6 @@
+// Tests for peer tracker attempt and success counting, including that
+// results are not double-counted.
+
 package netdb
 
 import (

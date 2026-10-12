@@ -1,3 +1,6 @@
+// Tests for the client-side NetDB wrapper. Clients store lease sets only;
+// routerinfo storage is reserved for the router-side NetDB.
+
 package netdb
 
 import (

@@ -1,3 +1,6 @@
+// Tests for random peer selection, including subnet and address-family
+// diversity to avoid picking peers from one network.
+
 package netdb
 
 import (

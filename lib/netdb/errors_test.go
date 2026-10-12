@@ -1,3 +1,6 @@
+// Tests that NetDB sentinel errors are non-nil and that threshold constants
+// are positive.
+
 package netdb
 
 import (

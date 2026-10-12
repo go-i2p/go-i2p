@@ -1,3 +1,6 @@
+// Tests for selecting floodfill routers by XOR distance in the Kademlia
+// key space.
+
 package netdb
 
 import (

@@ -1,3 +1,5 @@
+// Tests for storing and retrieving encrypted lease sets in the NetDB.
+
 package netdb
 
 import (

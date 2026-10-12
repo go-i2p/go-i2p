@@ -1,3 +1,6 @@
+// Tests for the database lookup client transport: matching replies to
+// pending requests by key and reply token.
+
 package netdb
 
 import (
@@ -59,6 +62,9 @@ func keyFromByte(b byte) common.Hash {
 	return h
 }
 
+// A database lookup reply is delivered to the waiting request that
+// matches by key and reply token.
+
 func TestDatabaseLookupClient_SynchronousReply(t *testing.T) {
 	sender := &mockI2NPSender{}
 	client := NewDatabaseLookupClient(&mockSessionProvider{sender: sender})
@@ -105,6 +111,9 @@ func TestDatabaseLookupClient_SynchronousReply(t *testing.T) {
 	}
 }
 
+// A lookup that gets no reply within the timeout must fail with a
+// timeout error.
+
 func TestDatabaseLookupClient_Timeout(t *testing.T) {
 	sender := &mockI2NPSender{}
 	client := NewDatabaseLookupClient(&mockSessionProvider{sender: sender})
@@ -122,6 +131,9 @@ func TestDatabaseLookupClient_Timeout(t *testing.T) {
 		t.Fatalf("registry not drained after timeout: %d pending", n)
 	}
 }
+
+// A reply for a different key must not be delivered to the waiting
+// request.
 
 func TestDatabaseLookupClient_MismatchedKeyDoesNotDeliver(t *testing.T) {
 	sender := &mockI2NPSender{}

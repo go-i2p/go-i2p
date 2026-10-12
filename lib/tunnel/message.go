@@ -139,6 +139,8 @@ type DeliveryInstructionsWithFragment struct {
 }
 
 // ID returns the TunnelID from the first 4 bytes of the encrypted tunnel message.
+// The tunnel ID is the only field sent in the clear, so the receiving hop can
+// route the message to the right tunnel before decrypting it.
 func (tm EncryptedTunnelMessage) ID() (tid TunnelID, err error) {
 	if len(tm) < 4 {
 		return 0, oops.Errorf("encrypted tunnel message too short for tunnel ID: %d bytes", len(tm))
@@ -148,6 +150,8 @@ func (tm EncryptedTunnelMessage) ID() (tid TunnelID, err error) {
 }
 
 // IV returns the 16-byte initialization vector from the encrypted tunnel message.
+// The IV is needed by the tunnel decryptor to recover the layered-encrypted
+// payload; each message uses a fresh IV so identical payloads do not repeat.
 func (tm EncryptedTunnelMessage) IV() (tunnel.TunnelIV, error) {
 	if len(tm) < 20 {
 		return nil, oops.Errorf("encrypted tunnel message too short for IV: %d bytes", len(tm))
@@ -174,6 +178,8 @@ func (tm EncryptedTunnelMessage) Data() ([]byte, error) {
 type DecryptedTunnelMessage [1028]byte
 
 // ID returns the TunnelID from the first 4 bytes of the decrypted tunnel message.
+// It is the same clear-text tunnel ID the sender placed in the message header,
+// now available after the message layer has been decrypted.
 func (dtm DecryptedTunnelMessage) ID() TunnelID {
 	return TunnelID(binary.BigEndian.Uint32(
 		dtm[:4],
@@ -181,11 +187,15 @@ func (dtm DecryptedTunnelMessage) ID() TunnelID {
 }
 
 // IV returns the 16-byte initialization vector from the decrypted tunnel message.
+// Exposing the IV lets callers inspect or log the vector that was used to
+// encrypt this message layer.
 func (dtm DecryptedTunnelMessage) IV() tunnel.TunnelIV {
 	return dtm[4 : 4+16]
 }
 
 // Checksum returns the 4-byte checksum from the decrypted tunnel message, located after the TunnelID and IV fields.
+// The checksum lets the receiver detect a corrupted or tampered message before
+// it is delivered to the application.
 func (dtm DecryptedTunnelMessage) Checksum() []byte {
 	return dtm[4+16 : 4+4+16]
 }

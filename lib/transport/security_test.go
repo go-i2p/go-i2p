@@ -1,3 +1,5 @@
+// Tests for the transport muxer's interface compliance, transport
+// selection, connection limits, and shutdown behavior.
 package transport
 
 import (

@@ -1,3 +1,5 @@
+// Tests for listing all lease sets stored in the NetDB.
+
 package netdb
 
 import (

@@ -1,3 +1,6 @@
+// Tests for the privacy safeguard that keeps a router's own lease set from
+// being served to external database lookups.
+
 package netdb
 
 import (

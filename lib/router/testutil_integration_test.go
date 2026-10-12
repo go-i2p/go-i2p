@@ -1,5 +1,7 @@
 //go:build integration
 
+// Shared test utilities for integration tests. Provides helpers for starting
+// and stopping test routers.
 package router
 
 import (

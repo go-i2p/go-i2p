@@ -1,3 +1,5 @@
+// Tests for the congestion monitor and router metrics collector. Validates
+// that congestion state is tracked and reported correctly.
 package router
 
 import (

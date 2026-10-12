@@ -1,3 +1,6 @@
+// Tests for delivering database lookup responses over tunnels, including
+// ECIES-encrypted responses.
+
 package netdb
 
 import (
@@ -275,6 +278,9 @@ func TestDeliveryFlagExtraction(t *testing.T) {
 	}
 }
 
+// ECIES-encrypted database responses are delivered over the direct
+// reply route with the destination's public key.
+
 func TestHandleDatabaseLookupDirectECIESResponse(t *testing.T) {
 	db := NewStdNetDB(t.TempDir())
 	if err := db.Ensure(); err != nil {
@@ -344,6 +350,9 @@ func TestHandleDatabaseLookupDirectECIESResponse(t *testing.T) {
 		t.Fatalf("ECIES reply did not preserve requested session tag")
 	}
 }
+
+// ECIES-encrypted database responses are delivered through the tunnel
+// reply route.
 
 func TestHandleDatabaseLookupTunnelECIESResponse(t *testing.T) {
 	db := NewStdNetDB(t.TempDir())

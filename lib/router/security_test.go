@@ -1,5 +1,7 @@
 //go:build integration
 
+// Integration tests for router security properties. Verifies startup order,
+// shutdown cleanup, and error recovery.
 package router
 
 import (

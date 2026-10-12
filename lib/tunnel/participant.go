@@ -139,11 +139,15 @@ func NewParticipantWithNextHop(tunnelID TunnelID, decryption tunnel.TunnelEncryp
 }
 
 // NextHopIdent returns the router identity of the next hop for routing.
+// When this router relays a build request onward, it addresses the next
+// hop in the tunnel chain by this identity hash.
 func (p *Participant) NextHopIdent() common.Hash {
 	return p.nextHopIdent
 }
 
 // NextHopTunnel returns the tunnel ID at the next hop for routing.
+// The participant stores the tunnel ID the requester expects at the next
+// hop so it can verify and forward the build request correctly.
 func (p *Participant) NextHopTunnel() TunnelID {
 	return p.nextHopTunnel
 }

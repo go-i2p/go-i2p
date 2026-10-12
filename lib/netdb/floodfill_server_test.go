@@ -1,3 +1,6 @@
+// Tests for the floodfill server: handling database lookup and store
+// messages, gzip compression of responses, and floodfill selection.
+
 package netdb
 
 import (
@@ -69,6 +72,9 @@ func TestFloodfillServerEnable(t *testing.T) {
 	}
 }
 
+// A floodfill that is not enabled must not answer database lookups; it
+// replies that the entry was not found.
+
 func TestHandleDatabaseLookupDisabled(t *testing.T) {
 	db := NewStdNetDB(t.TempDir())
 	transport := &mockFloodfillTransport{}
@@ -87,6 +93,9 @@ func TestHandleDatabaseLookupDisabled(t *testing.T) {
 		t.Error("No messages should be sent when server is disabled")
 	}
 }
+
+// A floodfill without the requested entry must reply with a not-found
+// database search reply, not an error.
 
 func TestHandleDatabaseLookupNotFound(t *testing.T) {
 	db := NewStdNetDB(t.TempDir())
@@ -322,6 +331,9 @@ func TestHandleDatabaseLookupNoTransport(t *testing.T) {
 		t.Error("Expected error when no transport is available")
 	}
 }
+
+// Exploration lookups are never expected to hit; the server must always
+// send a search reply so the lookup does not hang.
 
 func TestExplorationLookupAlwaysReturnsSearchReply(t *testing.T) {
 	db := NewStdNetDB(t.TempDir())

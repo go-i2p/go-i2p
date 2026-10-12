@@ -1,3 +1,6 @@
+// Tests for cleaning expired routerinfos from the NetDB while keeping a
+// minimum number of entries.
+
 package netdb
 
 import (

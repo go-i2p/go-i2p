@@ -1,3 +1,6 @@
+// Tests for the default NTCP2 handler. Covers replay protection,
+// timestamp validation, and handshake error handling.
+
 package ntcp2
 
 import (

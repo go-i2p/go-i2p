@@ -1,3 +1,6 @@
+// Tests for the router-side NetDB wrapper, which stores both routerinfos
+// and lease sets.
+
 package netdb
 
 import (

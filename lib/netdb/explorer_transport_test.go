@@ -1,3 +1,6 @@
+// Tests for the explorer performing exploratory database lookups through a
+// transport.
+
 package netdb
 
 import (

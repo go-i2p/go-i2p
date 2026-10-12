@@ -1,3 +1,6 @@
+// Tests for CRITICAL-2: lease sets must be signature-verified when read back
+// from the NetDB, so tampered or corrupted entries are rejected.
+
 package netdb
 
 import (

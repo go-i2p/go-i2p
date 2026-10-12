@@ -1,3 +1,6 @@
+// Tests for the periodic cleaner that removes expired lease sets from the
+// NetDB, plus expiration stats.
+
 package netdb
 
 import (

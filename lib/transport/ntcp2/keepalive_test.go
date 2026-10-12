@@ -1,3 +1,6 @@
+// Tests for NTCP2 keepalive scheduling. Validates the randomized keepalive
+// interval used to keep sessions alive.
+
 package ntcp2
 
 import (

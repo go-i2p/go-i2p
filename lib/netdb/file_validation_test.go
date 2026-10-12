@@ -1,3 +1,6 @@
+// Tests for NetDB entry file path validation, including path traversal and
+// symlink escape prevention.
+
 package netdb
 
 import (

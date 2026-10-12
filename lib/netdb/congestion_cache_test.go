@@ -1,3 +1,6 @@
+// Tests for the congestion cache that tracks which peers report a congested
+// NetDB, including size limits and TTL expiration.
+
 package netdb
 
 import (

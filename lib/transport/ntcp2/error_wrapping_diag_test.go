@@ -1,3 +1,6 @@
+// Diagnostic tests for error wrapping. Documents how oops-wrapped errors
+// affect timeout detection in the read loop.
+
 package ntcp2
 
 import (

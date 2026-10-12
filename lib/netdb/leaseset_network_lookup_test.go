@@ -1,3 +1,6 @@
+// Tests that a local lease set miss triggers a network lookup when a lookup
+// provider is wired in.
+
 package netdb
 
 import (
