@@ -74,6 +74,8 @@ func ParseI2NPFromSSU2(data []byte) (i2np.Message, error) {
 }
 
 // NewDateTimeBlock creates a DateTime block (type 0) with the current timestamp.
+// The block carries the sender's clock as a 4-byte big-endian Unix timestamp.
+// See [I2P Spec: SSU2](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ssu2.rst) for the block format.
 func NewDateTimeBlock() *ssu2noise.SSU2Block {
 	data := make([]byte, 4)
 	binary.BigEndian.PutUint32(data, uint32(time.Now().Unix()))

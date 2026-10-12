@@ -31,6 +31,10 @@ const (
 // FragmentI2NPMessage splits a large I2NP message into SSU2 fragment blocks
 // when the serialized message exceeds the MTU. Returns a single-element slice
 // containing a type 3 (I2NPMessage) block when no fragmentation is needed.
+// SSU2 is a UDP transport, so oversized messages must be split into
+// FirstFragment and FollowOnFragment blocks to stay within the packet limit.
+// See [I2P Spec: SSU2](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ssu2.rst) for the fragment block format.
+// See also [FrameI2NPToBlock].
 func FragmentI2NPMessage(msg i2np.Message, maxPayload int) ([]*ssu2noise.SSU2Block, error) {
 	data, err := msg.MarshalBinary()
 	if err != nil {

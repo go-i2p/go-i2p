@@ -1195,7 +1195,10 @@ func (t *NTCP2Transport) getRouterInfoStorer() transport.RouterInfoStorer {
 }
 
 // SetIdentity sets the router identity for this transport.
+// It recreates the NTCP2 configuration and listener when the identity's
+// published address changes, so peers can reach the router at its new address.
 // Protected by identityMu to prevent races with GetSession/Accept/Compatible.
+// See also [transport.Transport.SetIdentity].
 func (t *NTCP2Transport) SetIdentity(ident router_info.RouterInfo) error {
 	if err := t.logIdentityUpdate(ident); err != nil {
 		return err
@@ -1398,6 +1401,8 @@ func (t *NTCP2Transport) createNewListenerWithConfig(ntcp2Config *ntcp2.Config, 
 }
 
 // GetSession obtains a transport session with a router given its RouterInfo.
+// It returns an existing session if one is already established, otherwise it
+// dials the peer and performs the Noise XK handshake. See also [NTCP2Session].
 func (t *NTCP2Transport) GetSession(routerInfo router_info.RouterInfo) (transport.TransportSession, error) {
 	routerHash, err := routerInfo.IdentHash()
 	if err != nil {
@@ -2348,6 +2353,8 @@ func (t *NTCP2Transport) unreserveSessionSlot() {
 // Compatible returns true if a routerInfo is compatible with this transport.
 // It checks that the RouterInfo has at least one directly dialable NTCP2 address
 // (i.e., one with a valid host and port), not just any NTCP2 address listing.
+// Higher layers use this to decide whether to attempt an NTCP2 session.
+// See also [transport.Transport.Compatible].
 func (t *NTCP2Transport) Compatible(routerInfo router_info.RouterInfo) bool {
 	dialable := HasDialableNTCP2Address(&routerInfo)
 	routerHash, err := routerInfo.IdentHash()
@@ -2376,6 +2383,7 @@ func (t *NTCP2Transport) removeSession(routerHash data.Hash) {
 
 // GetSessionCount returns the number of active sessions managed by this transport.
 // Uses an atomic counter for O(1) performance instead of iterating the session map.
+// It is used by higher layers to enforce connection limits and report status.
 func (t *NTCP2Transport) GetSessionCount() int32 {
 	return t.sessionRegistry.Count()
 }
@@ -2449,6 +2457,8 @@ func (t *NTCP2Transport) verifyRouterInfoStaticKey(ntcp2Conn *ntcp2.Conn, peerRI
 }
 
 // Close closes the transport cleanly.
+// It stops the accept loop, closes all active sessions, and releases the
+// listener. After Close returns, the transport cannot be used again.
 func (t *NTCP2Transport) Close() error {
 	t.closeOnce.Do(func() {
 		t.logger.Info("Closing NTCP2 transport")
@@ -2672,6 +2682,8 @@ func (t *NTCP2Transport) ValidateSessionCountingInvariant() int {
 }
 
 // Name returns the name of this transport.
+// It returns "NTCP2", which higher layers use to identify and select this
+// transport among the available options.
 func (t *NTCP2Transport) Name() string {
 	return "NTCP2"
 }

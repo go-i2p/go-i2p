@@ -41,7 +41,10 @@ type pendingMessage struct {
 }
 
 // GarlicNetDB defines the NetDB interface needed for garlic message routing.
-// This matches the actual StdNetDB implementation which returns channels for async lookups.
+// It abstracts the network database so the router can look up RouterInfos and
+// LeaseSets asynchronously while forwarding garlic cloves.
+// See [I2P Spec: RouterInfo](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/routerinfo.rst) for the RouterInfo format.
+// See also [GarlicMessageRouter].
 type GarlicNetDB interface {
 	GetRouterInfo(hash common.Hash) chan router_info.RouterInfo
 	GetLeaseSet(hash common.Hash) chan lease_set.LeaseSet
@@ -87,6 +90,10 @@ const (
 
 // GarlicMessageRouter routes outbound garlic-encrypted messages to remote I2P destinations.
 // It resolves LeaseSets via the NetDB and delivers encrypted messages through the tunnel pool.
+// It implements the GarlicCloveForwarder interface so the MessageProcessor can hand off
+// cloves that need delivery beyond local processing.
+// See [I2P Spec: Garlic](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/garlic.rst) for the garlic message format.
+// See also [GarlicNetDB], [InboundMessageHandler].
 type GarlicMessageRouter struct {
 	// Router infrastructure dependencies
 	netdb          GarlicNetDB               // NetDB with LeaseSet support
@@ -155,6 +162,8 @@ func NewGarlicMessageRouter(
 
 // SetMessageProcessor sets a reference to the MessageProcessor for LOCAL delivery recursion.
 // This enables the router to process messages locally when needed (e.g., reflexive ROUTER delivery).
+// It is called during router startup after the MessageProcessor is created.
+// See also [GarlicMessageRouter].
 func (gr *GarlicMessageRouter) SetMessageProcessor(processor *i2np.MessageProcessor) {
 	gr.processor = processor
 }
@@ -218,6 +227,8 @@ func (gr *GarlicMessageRouter) drainRouterInfoChanWithContext(ch chan router_inf
 // 4. Background processor retries lookups and forwards messages when LeaseSets arrive
 // Per I2P spec, destinations are identified by their 32-byte hash and are
 // reached by sending messages through one of their published inbound tunnels.
+// See [I2P Spec: Lease](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/lease.rst) for the LeaseSet format.
+// See also [GarlicMessageRouter].
 func (gr *GarlicMessageRouter) ForwardToDestination(destHash common.Hash, msg i2np.Message) error {
 	log.WithFields(logger.Fields{
 		"dest_hash":    logutil.HashPrefixPlain(destHash),
@@ -408,6 +419,8 @@ func (gr *GarlicMessageRouter) selectBestLease(leases []lease.Lease) *lease.Leas
 // 4. Send message via transport layer
 // Reflexive delivery occurs when a garlic message instructs us to send a clove
 // to ourselves - this is processed locally to avoid unnecessary network traffic.
+// See [I2P Spec: RouterInfo](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/routerinfo.rst) for the RouterInfo format.
+// See also [GarlicMessageRouter].
 func (gr *GarlicMessageRouter) ForwardToRouter(routerHash common.Hash, msg i2np.Message) error {
 	log.WithFields(logger.Fields{
 		"router_hash":  logutil.HashPrefixPlain(routerHash),
@@ -656,6 +669,8 @@ func (gr *GarlicMessageRouter) sendMessageToRouter(routerHash common.Hash, route
 // Tunnel delivery is the most common forwarding type in I2P, as most traffic
 // flows through tunnels for anonymity. The gateway router is responsible for
 // injecting messages into the tunnel's encryption layers.
+// See [I2P Spec: Tunnel](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/tunnel.rst) for the TunnelGateway format.
+// See also [GarlicMessageRouter].
 func (gr *GarlicMessageRouter) ForwardThroughTunnel(
 	gatewayHash common.Hash,
 	tunnelID tunnel.TunnelID,
@@ -751,6 +766,8 @@ func (gr *GarlicMessageRouter) forwardToTunnelGateway(gatewayHash common.Hash, t
 
 // Stop gracefully shuts down the garlic message router.
 // This stops the background message processing goroutine and waits for it to finish.
+// Pending messages that have not yet been delivered are discarded.
+// See also [GarlicMessageRouter].
 func (gr *GarlicMessageRouter) Stop() {
 	log.WithField("at", "Stop").Debug("Stopping garlic message router")
 	if gr.cancel != nil {

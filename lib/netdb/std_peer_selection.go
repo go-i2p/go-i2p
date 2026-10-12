@@ -45,6 +45,9 @@ func capsAllowsTunnelParticipation(caps string) bool {
 }
 
 // GetAllRouterInfos returns all cached RouterInfos as a slice.
+// It provides a snapshot of every RouterInfo currently in the NetDB, which
+// peer selection and exploration use as the pool of known routers.
+// See also [SelectPeers], [SelectFloodfillRouters].
 func (db *StdNetDB) GetAllRouterInfos() (ri []router_info.RouterInfo) {
 	log.WithFields(logger.Fields{
 		"at":     "StdNetDB.GetAllRouterInfos",

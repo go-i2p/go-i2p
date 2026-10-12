@@ -476,7 +476,10 @@ func (r *Router) GetGarlicRouter() *GarlicMessageRouter {
 }
 
 // GetCongestionMonitor returns the congestion monitor for PROP_162 congestion cap tracking.
+// It exposes the monitor as a CongestionStateProvider so callers can read the
+// current D/E/G congestion flag used in RouterInfo.
 // Returns nil if the congestion monitor has not been initialized yet.
+// See also [CongestionMonitor], [CongestionStateProvider].
 func (r *Router) GetCongestionMonitor() CongestionStateProvider {
 	r.runMux.RLock()
 	defer r.runMux.RUnlock()
@@ -507,7 +510,10 @@ func (r *Router) IsRunning() bool {
 }
 
 // IsReseeding returns whether the router is currently performing a NetDB reseed operation.
+// It is exposed to I2PControl status reporting (i2p.router.netdb.isreseeding) so
+// clients can see when the router is still populating its NetDB.
 // Thread-safe access to reseeding state.
+// See also [Router].
 func (r *Router) IsReseeding() bool {
 	r.reseedMutex.RLock()
 	defer r.reseedMutex.RUnlock()
@@ -516,6 +522,9 @@ func (r *Router) IsReseeding() bool {
 
 // ReseedWithContext triggers an explicit NetDB reseed operation and propagates
 // cancellation to bootstrap retrieval.
+// It is exposed to I2PControl so a client can request a manual reseed, for
+// example after the router has been offline for a long time.
+// See also [Router].
 func (r *Router) ReseedWithContext(ctx context.Context) error {
 	logAt("(Router) Reseed").WithFields(logger.Fields{
 		"reason": "explicit reseed requested",
@@ -525,6 +534,9 @@ func (r *Router) ReseedWithContext(ctx context.Context) error {
 
 // GetLocalRouterIdentityHash returns the identity hash of this router as a base64-encoded string.
 // This is used by I2PControl extensions for self-identification (e.g., i2p.router.hash).
+// The hash is derived from the router's identity key, which is the same value
+// advertised in its RouterInfo.
+// See also [Router].
 func (r *Router) GetLocalRouterIdentityHash() (string, error) {
 	hash, err := r.getOurRouterHash()
 	if err != nil {

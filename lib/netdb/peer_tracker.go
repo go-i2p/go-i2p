@@ -54,6 +54,9 @@ const (
 )
 
 // NewPeerTracker creates a new peer tracking system.
+// It starts with an empty peer map, ready to record connection attempts and
+// outcomes so callers can prioritize reliable peers for tunnel building.
+// See also [PeerTracker], [PeerStats].
 func NewPeerTracker() *PeerTracker {
 	log.WithFields(logger.Fields{
 		"at":     "NewPeerTracker",
@@ -79,6 +82,9 @@ func (pt *PeerTracker) getOrCreateStats(hash common.Hash) *PeerStats {
 }
 
 // RecordAttempt records a connection attempt to a peer.
+// It increments the total attempt count and updates the last-attempt time,
+// establishing the baseline that success and failure records build on.
+// See also [PeerTracker], [RecordSuccess], [RecordFailure].
 func (pt *PeerTracker) RecordAttempt(hash common.Hash) {
 	pt.mu.Lock()
 	defer pt.mu.Unlock()
@@ -95,6 +101,9 @@ func (pt *PeerTracker) RecordAttempt(hash common.Hash) {
 }
 
 // RecordSuccess records a successful connection to a peer.
+// It increments the success count, resets the consecutive-failure counter, and
+// folds the response time into the moving average, signaling the peer is healthy.
+// See also [PeerTracker], [RecordAttempt], [RecordFailure].
 func (pt *PeerTracker) RecordSuccess(hash common.Hash, responseTimeMs int64) {
 	pt.mu.Lock()
 	defer pt.mu.Unlock()
@@ -124,6 +133,10 @@ func (pt *PeerTracker) RecordSuccess(hash common.Hash, responseTimeMs int64) {
 }
 
 // RecordFailure records a failed connection attempt to a peer.
+// It classifies the failure reason and adds a weighted value to the
+// consecutive-failure counter, so local or transient issues are blamed less
+// than hard peer-attributable failures.
+// See also [PeerTracker], [RecordAttempt], [RecordSuccess].
 func (pt *PeerTracker) RecordFailure(hash common.Hash, reason string) {
 	pt.mu.Lock()
 	defer pt.mu.Unlock()
@@ -281,6 +294,9 @@ func (pt *PeerTracker) RecordTransportAttempt(peerHash [32]byte, transportName s
 }
 
 // GetStats retrieves statistics for a peer.
+// It returns a copy of the peer's stats so callers can inspect success rates
+// and response times without mutating the tracker's internal state.
+// See also [PeerTracker], [PeerStats].
 func (pt *PeerTracker) GetStats(hash common.Hash) *PeerStats {
 	pt.mu.RLock()
 	defer pt.mu.RUnlock()
@@ -452,6 +468,9 @@ func (pt *PeerTracker) PruneOldEntries(maxAge time.Duration) int {
 }
 
 // GetSummary returns overall tracking statistics.
+// It aggregates totals across all tracked peers, including the count of peers
+// considered stale, for monitoring and debugging the tracker's health.
+// See also [PeerTracker], [GetStats].
 func (pt *PeerTracker) GetSummary() map[string]interface{} {
 	pt.mu.RLock()
 	defer pt.mu.RUnlock()

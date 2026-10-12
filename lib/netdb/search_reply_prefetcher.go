@@ -58,6 +58,11 @@ func NewSearchReplyPrefetcher(db NetworkDatabase, pool *tunnel.Pool, transport L
 }
 
 // HandleSearchReply implements i2np.SearchReplyHandler.
+// It is invoked when a DatabaseSearchReply message arrives carrying suggested
+// peer hashes, and it prefetches their RouterInfos so future lookups have a
+// richer local frontier.
+// See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the DatabaseSearchReply message.
+// See also [SearchReplyPrefetcher], [NewSearchReplyPrefetcher].
 func (p *SearchReplyPrefetcher) HandleSearchReply(key common.Hash, peerHashes []common.Hash) {
 	if p == nil || p.resolver == nil || len(peerHashes) == 0 {
 		return

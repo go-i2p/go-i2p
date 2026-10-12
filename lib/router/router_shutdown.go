@@ -70,6 +70,9 @@ func (r *Router) cancelRouterContext() {
 
 // Stop initiates router shutdown and waits for all goroutines to complete.
 // This method blocks until the router is fully stopped.
+// It is the primary entry point for graceful shutdown, typically called from
+// a signal handler or the I2PControl shutdown command.
+// See also [Router].
 func (r *Router) Stop() {
 	log.WithFields(logger.Fields{
 		"at":     "(Router) Stop",

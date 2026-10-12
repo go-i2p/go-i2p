@@ -51,9 +51,16 @@ type TunnelBuildState int
 
 const (
 	// TunnelBuilding indicates that tunnel construction is currently in progress.
-	TunnelBuilding TunnelBuildState = iota // Tunnel is being built
-	TunnelReady                            // Tunnel is ready for use
-	TunnelFailed                           // Tunnel build failed
+	// The pool tracks these tunnels so it can expire them if the build does not
+	// complete within the build timeout.
+	TunnelBuilding TunnelBuildState = iota
+	// TunnelReady indicates the tunnel has been built and can carry traffic.
+	// Only tunnels in this state are returned by GetActiveTunnels and
+	// SelectTunnel.
+	TunnelReady
+	// TunnelFailed indicates the tunnel build failed or the tunnel expired.
+	// The pool removes these tunnels and may retry the build.
+	TunnelFailed
 )
 
 const (
@@ -883,10 +890,9 @@ func (p *Pool) logBuildFailure(err error, retry, maxRetries int, req *BuildTunne
 }
 
 // SelectTunnel selects a tunnel from the pool using round-robin strategy.
-// Returns nil if no active tunnels are available.
-// SelectTunnel returns an active tunnel using lock-free round-robin selection.
-// Returns nil if no active tunnels are available.
-// This is a hot-path function called on every message send.
+// It returns an active tunnel using lock-free round-robin selection, and
+// returns nil if no active tunnels are available. This is a hot-path
+// function called on every message send, so it avoids taking the pool lock.
 func (p *Pool) SelectTunnel() *TunnelState {
 	// Lock-free read of cached active tunnels
 	active := p.getActiveTunnels()

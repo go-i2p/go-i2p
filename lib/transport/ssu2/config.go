@@ -10,6 +10,8 @@ import (
 )
 
 // DefaultMaxSessions is the default maximum number of concurrent SSU2 sessions.
+// It caps the number of simultaneous sessions to bound memory and CPU usage on
+// a router that accepts many inbound UDP connections.
 const DefaultMaxSessions = 512
 
 // DefaultKeepaliveInterval is the SSU2 keepalive interval used by this implementation (15 s).
@@ -48,6 +50,10 @@ const DefaultHolePunchDelay = 150 * time.Millisecond
 
 // Config holds SSU2 transport configuration, extending the go-noise SSU2Config
 // with transport-layer settings needed by the go-i2p router.
+// It is the single configuration object passed to NewSSU2Transport, which
+// uses it to bind the UDP listener and size the session pool.
+// See [I2P Spec: SSU2](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ssu2.rst) for the protocol.
+// See also [NewConfig] and [SSU2Transport].
 type Config struct {
 	ListenerAddress    string        // UDP address to listen on, e.g. ":9002"
 	WorkingDir         string        // Persistent storage path for keys
@@ -76,6 +82,8 @@ type Config struct {
 }
 
 // GetMaxSessions returns the effective maximum session limit.
+// It falls back to DefaultMaxSessions when MaxSessions is unset (zero or
+// negative), so callers can rely on a sane limit without extra checks.
 func (c *Config) GetMaxSessions() int {
 	if c.MaxSessions <= 0 {
 		return DefaultMaxSessions
@@ -93,6 +101,8 @@ func (c *Config) GetKeepaliveInterval() time.Duration {
 }
 
 // GetMaxRetransmissions returns the effective maximum I2NP retransmission count.
+// It falls back to DefaultMaxRetransmissions when MaxRetransmissions is unset,
+// so callers can rely on a sane retry limit without extra checks.
 func (c *Config) GetMaxRetransmissions() int {
 	if c.MaxRetransmissions <= 0 {
 		return DefaultMaxRetransmissions
@@ -112,6 +122,10 @@ func (c *Config) GetHolePunchDelay() time.Duration {
 }
 
 // NewConfig creates a new SSU2 Config with the given listener address.
+// It returns a Config with only the listener address set; the remaining fields
+// (session limits, keepalive, retransmissions) fall back to their defaults via
+// the Get* methods. Call Validate to check the listener address before use.
+// See also [Config] and [NewSSU2Transport].
 func NewConfig(listenerAddress string) (*Config, error) {
 	log.WithFields(logger.Fields{
 		"at":               "NewConfig",
@@ -127,6 +141,8 @@ func NewConfig(listenerAddress string) (*Config, error) {
 }
 
 // Validate checks the configuration for correctness.
+// It returns ErrInvalidListenerAddress when the listener address is empty,
+// which would prevent the UDP listener from binding.
 func (c *Config) Validate() error {
 	if c.ListenerAddress == "" {
 		return ErrInvalidListenerAddress

@@ -27,6 +27,8 @@ import (
 // - Delivers decrypted I2NP messages to appropriate I2CP session queues
 // - Forwards transit tunnel messages through the participant manager
 // - Thread-safe for concurrent message processing
+// See [I2P Spec: Tunnel](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/tunnel.rst) for the TunnelData format.
+// See also [GarlicMessageRouter], [Router].
 type InboundMessageHandler struct {
 	mu sync.RWMutex
 
@@ -63,7 +65,10 @@ type inboundTunnelEntry struct {
 	endpoint  *tunnel.Endpoint
 }
 
-// NewInboundMessageHandler creates a new inbound message handler
+// NewInboundMessageHandler creates a new inbound message handler.
+// It is constructed with the I2CP session manager used to look up the local
+// session that owns each inbound tunnel.
+// See also [InboundMessageHandler].
 func NewInboundMessageHandler(sessionManager *i2cp.SessionManager) *InboundMessageHandler {
 	log.WithFields(logger.Fields{
 		"at":     "NewInboundMessageHandler",
@@ -76,6 +81,9 @@ func NewInboundMessageHandler(sessionManager *i2cp.SessionManager) *InboundMessa
 }
 
 // SetParticipantManager wires the participant manager for transit tunnel forwarding.
+// It is called during router startup so that transit TunnelData messages can be
+// relayed to the next hop when this router is an intermediate tunnel participant.
+// See also [InboundMessageHandler].
 func (h *InboundMessageHandler) SetParticipantManager(pm *tunnel.ParticipantManager) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -83,6 +91,9 @@ func (h *InboundMessageHandler) SetParticipantManager(pm *tunnel.ParticipantMana
 }
 
 // SetSessionProvider wires the session provider for forwarding transit tunnel messages.
+// It is called during router startup so that transit deliveries can be sent to
+// the next hop over an active transport session.
+// See also [InboundMessageHandler].
 func (h *InboundMessageHandler) SetSessionProvider(sp i2np.SessionProvider) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -180,7 +191,9 @@ func (h *InboundMessageHandler) CreateEndpointForSession(tunnelID tunnel.TunnelI
 }
 
 // UnregisterTunnel removes an inbound tunnel from the handler.
-// This should be called when a tunnel expires or is destroyed.
+// This should be called when a tunnel expires or is destroyed, so that
+// subsequent TunnelData for that ID is not delivered to a stale session.
+// See also [InboundMessageHandler].
 func (h *InboundMessageHandler) UnregisterTunnel(tunnelID tunnel.TunnelID) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -601,14 +614,20 @@ func (h *InboundMessageHandler) RegisterClientTunnel(tunnelID tunnel.TunnelID, s
 	return nil
 }
 
-// GetTunnelCount returns the number of registered inbound tunnels
+// GetTunnelCount returns the number of registered inbound tunnels.
+// It is used by I2PControl status reporting to expose the router's current
+// inbound tunnel load.
+// See also [InboundMessageHandler].
 func (h *InboundMessageHandler) GetTunnelCount() int {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return len(h.tunnelSessions)
 }
 
-// GetTunnelSession returns the session ID for a given tunnel ID, if registered
+// GetTunnelSession returns the session ID for a given tunnel ID, if registered.
+// It is used by the I2CP layer to route replies back through the session that
+// owns the tunnel.
+// See also [InboundMessageHandler].
 func (h *InboundMessageHandler) GetTunnelSession(tunnelID tunnel.TunnelID) (uint16, bool) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -623,6 +642,10 @@ func (h *InboundMessageHandler) GetTunnelSession(tunnelID tunnel.TunnelID) (uint
 
 // ForwardToTunnel routes endpoint DTTunnel deliveries via transport by wrapping
 // the payload in a TunnelGateway message addressed to the gateway router.
+// It is used when a decrypted endpoint message must continue to a remote
+// destination through a tunnel whose gateway is another router.
+// See [I2P Spec: Tunnel](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/tunnel.rst) for the TunnelGateway format.
+// See also [InboundMessageHandler].
 func (h *InboundMessageHandler) ForwardToTunnel(tunnelID uint32, gatewayHash [32]byte, msgBytes []byte) error {
 	h.mu.RLock()
 	sp := h.sessionProvider
@@ -648,6 +671,10 @@ func (h *InboundMessageHandler) ForwardToTunnel(tunnelID uint32, gatewayHash [32
 
 // ForwardToRouter routes endpoint DTRouter deliveries via transport by parsing
 // the I2NP payload and sending it to the target router.
+// It is used when a decrypted endpoint message is addressed directly to a
+// peer router rather than to a destination.
+// See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the I2NP message format.
+// See also [InboundMessageHandler].
 func (h *InboundMessageHandler) ForwardToRouter(routerHash [32]byte, msgBytes []byte) error {
 	h.mu.RLock()
 	sp := h.sessionProvider

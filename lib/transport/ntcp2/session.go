@@ -19,6 +19,11 @@ import (
 )
 
 // NTCP2Session represents an active NTCP2 connection session with a remote peer, managing message queues, bandwidth tracking, and rekeying state.
+// A session is the transport-level connection between two routers; it wraps
+// the Noise-encrypted TCP connection and satisfies transport.TransportSession.
+// It embeds *transport.SessionCore for shared queue and bandwidth logic.
+// See [I2P Spec: NTCP2](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ntcp2.rst) for the protocol.
+// See also [NTCP2Transport] and [transport.SessionCore].
 type NTCP2Session struct {
 	// Shared session core fields: queues, bandwidth tracking, lifecycle, and callbacks.
 	// This embeds *SessionCore, so callers can call QueueSendI2NP, ReadNextI2NP, etc. directly.

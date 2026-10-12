@@ -16,6 +16,10 @@ type LeaseSetEntry struct {
 }
 
 // Resolver resolves unknown RouterInfos given the hash of their RouterIdentity.
+// It abstracts how a missing RouterInfo is fetched, typically by querying the
+// closest known peers with DatabaseLookup messages and caching the result.
+// See [I2P Spec: Database](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/database.rst) for the lookup protocol.
+// See also [NetworkDatabase], [KademliaResolver].
 type Resolver interface {
 	// resolve a router info by hash
 	// return a chan that yields the found RouterInfo or nil if it could not be found after timeout
@@ -23,6 +27,11 @@ type Resolver interface {
 }
 
 // NetworkDatabase is the I2P network database for storing RouterInfos.
+// It is the core abstraction over the replicated NetDB: it stores and serves
+// RouterInfos and LeaseSets that are exchanged with floodfill routers via
+// DatabaseLookup and DatabaseStore I2NP messages.
+// See [I2P Spec: Database](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/database.rst) for the database protocol.
+// See also [Resolver], [StdNetDB], [LeaseSetEntry].
 type NetworkDatabase interface {
 	// obtain a RouterInfo by its hash locally
 	// return a channel that yields the RouterInfo if found locally
