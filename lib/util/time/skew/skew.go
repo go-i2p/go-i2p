@@ -7,9 +7,10 @@ import (
 )
 
 // MaxClockSkew is the maximum acceptable difference between a RouterInfo's
-// published timestamp and the current time. The 60-minute threshold applies
-// specifically to floodfill routers rejecting RouterInfo (per network-database.rst);
-// it is used here as a general implementation convention for clock skew validation.
+// published timestamp and the current time. The 60-minute threshold is
+// go-i2p's implementation convention for RouterInfo validation; the I2P
+// specification specifies tighter per-protocol windows (see the package
+// documentation for the NTCP2 and SSU2 references).
 const MaxClockSkew = 60 * time.Minute
 
 // nowFunc is overridable for testing. Defaults to time.Now.
@@ -19,10 +20,7 @@ var nowFunc = time.Now
 // clock skew window (±MaxClockSkew from the current time). It returns nil if
 // the timestamp is valid, or a descriptive error if it falls outside the window.
 // A zero-value time.Time is always rejected as invalid.
-// This implements the I2P spec requirement: "Router MUST reject RouterInfo with
-// published timestamp >60 minutes in the future or past."
-// This now delegates to ValidateTimestampWithSkew with
-// the MaxClockSkew constant, eliminating duplicate validation logic.
+// It delegates to ValidateTimestampWithSkew with the MaxClockSkew constant.
 func ValidateTimestamp(published time.Time) error {
 	return ValidateTimestampWithSkew(published, MaxClockSkew)
 }
