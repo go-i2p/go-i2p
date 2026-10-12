@@ -1,3 +1,5 @@
+// Tests for handling late tunnel build replies that arrive after the
+// original request has timed out.
 package i2np
 
 import (
@@ -27,6 +29,8 @@ func (s *uncorrelatedReplyHandlerStub) ProcessReply() error {
 	return s.err
 }
 
+// Validates that a reply that does not match an expired build is treated as
+// a normal uncorrelated reply and its error is preserved.
 func TestProcessUncorrelatedReply_NonLatePreservesError(t *testing.T) {
 	tm := NewTunnelManager(&SimpleMockPeerSelector{})
 	h := &uncorrelatedReplyHandlerStub{err: errors.New("rejected")}
@@ -36,6 +40,8 @@ func TestProcessUncorrelatedReply_NonLatePreservesError(t *testing.T) {
 	assert.Contains(t, err.Error(), "rejected")
 }
 
+// Validates that a late TunnelBuildReply for an expired build is reclassified
+// from an expiration to a reject instead of being processed.
 func TestProcessUncorrelatedReply_LateVTBReclassifiesExpireToReject(t *testing.T) {
 	tm := NewTunnelManager(&SimpleMockPeerSelector{})
 	windowMs := int64((10 * time.Minute).Milliseconds())
@@ -57,6 +63,8 @@ func TestProcessUncorrelatedReply_LateVTBReclassifiesExpireToReject(t *testing.T
 	assert.Equal(t, float64(1), tm.GetBuildRejectCount(windowMs))
 }
 
+// Validates that a late ShortTunnelBuildReply for an expired build is skipped
+// without decryption, keeping the original expiration count.
 func TestProcessUncorrelatedReply_LateShortBuildSkipped(t *testing.T) {
 	tm := NewTunnelManager(&SimpleMockPeerSelector{})
 	windowMs := int64((10 * time.Minute).Milliseconds())
@@ -80,6 +88,8 @@ func TestProcessUncorrelatedReply_LateShortBuildSkipped(t *testing.T) {
 	assert.Equal(t, before+1, SnapshotExploratoryReplyStages()["late_reply_short_build_skipped"])
 }
 
+// Validates that a late ShortTunnelBuildReply is decrypted best-effort with the
+// stored reply keys and reclassified from an expiration to a success.
 func TestProcessUncorrelatedReply_LateShortBuildBestEffortDecryptReclassifies(t *testing.T) {
 	tm := NewTunnelManager(&SimpleMockPeerSelector{})
 	windowMs := int64((10 * time.Minute).Milliseconds())

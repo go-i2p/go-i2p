@@ -1,3 +1,6 @@
+// Security validation tests for tunnel handling. Validates that malformed or
+// hostile tunnel messages are rejected without panics or state corruption.
+
 package tunnel
 
 import (

@@ -1,3 +1,4 @@
+// Tests for I2NP message header parsing, including NTCP and SSU framing.
 package i2np
 
 import (

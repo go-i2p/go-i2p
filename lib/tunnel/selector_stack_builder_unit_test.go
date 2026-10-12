@@ -1,3 +1,6 @@
+// Tests for the selector stack builder. Validates that the chain of tunnel
+// selectors is assembled in the correct order with the right filters.
+
 package tunnel
 
 import (

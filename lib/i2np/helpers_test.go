@@ -1,3 +1,4 @@
+// Shared test helpers for I2NP tests.
 package i2np
 
 import (

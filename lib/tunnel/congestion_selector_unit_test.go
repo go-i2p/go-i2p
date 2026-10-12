@@ -1,3 +1,6 @@
+// Tests for the congestion-aware tunnel selector. Validates that tunnels with
+// lower congestion scores are preferred when selecting a tunnel for sending.
+
 package tunnel
 
 import (

@@ -1,3 +1,6 @@
+// Tests for tunnel message data extraction. Validates that delivery
+// instructions are read from the correct offset in a decrypted tunnel message.
+
 package tunnel
 
 import (

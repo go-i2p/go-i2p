@@ -1,3 +1,6 @@
+// Tests for tunnel hash and key derivation helpers. Validates that message
+// IDs and checksums are computed with the correct hash functions.
+
 package tunnel
 
 import (

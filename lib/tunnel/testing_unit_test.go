@@ -1,3 +1,6 @@
+// Tests for the tunnel testing utilities. Validates the helpers used to set
+// up and tear down tunnel test scenarios.
+
 package tunnel
 
 import (

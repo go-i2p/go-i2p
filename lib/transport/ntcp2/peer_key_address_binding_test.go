@@ -31,6 +31,8 @@ func makeNTCP2RouterAddress(t *testing.T, host, port string, staticKey, iv []byt
 	return addr
 }
 
+// Validates that dialing a peer binds the exact 32-byte static key and
+// 16-byte obfuscation IV from the RouterAddress into the Noise config.
 func TestConfigureDialConfigFromAddress_BindsExactAddressMetadata(t *testing.T) {
 	var routerHash data.Hash
 	cfg, err := noise.NewNTCP2Config(routerHash, true)

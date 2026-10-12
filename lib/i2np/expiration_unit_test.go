@@ -1,3 +1,4 @@
+// Tests for I2NP message expiration validation.
 package i2np
 
 import (

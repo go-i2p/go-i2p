@@ -1,3 +1,6 @@
+// Tests for endpoint message handling fixes. Validates specific bug fixes in
+// endpoint message processing and edge-case handling.
+
 package tunnel
 
 import (

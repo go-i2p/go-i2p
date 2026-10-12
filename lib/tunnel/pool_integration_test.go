@@ -1,3 +1,6 @@
+// Integration tests for the tunnel pool. Validates that tunnels are created,
+// maintained, and replaced as they expire under realistic conditions.
+
 package tunnel
 
 import (

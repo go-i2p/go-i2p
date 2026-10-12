@@ -1,3 +1,4 @@
+// Tests for I2NP DatabaseLookup message marshaling and unmarshaling.
 package i2np
 
 import (

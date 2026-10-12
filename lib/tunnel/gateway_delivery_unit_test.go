@@ -1,3 +1,6 @@
+// Tests for gateway message delivery. Validates that the gateway encrypts
+// outgoing messages and attaches delivery instructions for the tunnel.
+
 package tunnel
 
 import (

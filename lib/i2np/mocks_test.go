@@ -1,3 +1,4 @@
+// Mock types for interfaces used in I2NP tests.
 package i2np
 
 import (

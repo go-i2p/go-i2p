@@ -1,3 +1,4 @@
+// Tests validating that I2NP message implementations match the I2P specification.
 package i2np
 
 // spec_compliance_test.go — I2P specification compliance tests for I2NP headers.

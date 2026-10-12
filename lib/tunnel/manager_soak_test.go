@@ -1,3 +1,6 @@
+// Soak tests for the tunnel manager. Runs the manager under sustained load to
+// check for memory leaks, goroutine leaks, and state corruption over time.
+
 package tunnel
 
 import (

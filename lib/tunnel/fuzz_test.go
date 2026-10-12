@@ -1,3 +1,6 @@
+// Fuzz tests for tunnel message parsing. Exercises the delivery instruction
+// parser with random input to find crashes or panics on malformed data.
+
 package tunnel
 
 // L-NEW-1 FIX: native Go fuzz targets for tunnel-layer network-facing parsers.

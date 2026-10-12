@@ -1,3 +1,6 @@
+// Integration tests for the tunnel gateway. Validates that the gateway
+// produces correctly formatted 1028-byte tunnel messages on the wire.
+
 package tunnel
 
 import (

@@ -1,3 +1,6 @@
+// Tests for the refuse-all-transit policy. Validates that a router configured
+// to refuse transit rejects all tunnel build requests from other routers.
+
 package tunnel
 
 import (

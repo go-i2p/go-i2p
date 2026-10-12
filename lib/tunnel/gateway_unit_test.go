@@ -1,3 +1,6 @@
+// Tests for the tunnel gateway. Validates that the gateway encrypts messages
+// with the correct IV, checksum, and padding per the I2P tunnel spec.
+
 package tunnel
 
 import (

@@ -1,3 +1,4 @@
+// Mock types for garlic-related interfaces used in I2NP tests.
 package i2np
 
 import (

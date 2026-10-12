@@ -1,3 +1,4 @@
+// Tests for building garlic messages from delivery instructions and cloves.
 package i2np
 
 import (
@@ -139,6 +140,8 @@ func TestBuild_EmptyCloves(t *testing.T) {
 	assert.Error(t, err, "expected error for zero cloves")
 }
 
+// Validates that building a garlic message with more than 255 cloves fails,
+// since the clove count is encoded in a single byte.
 func TestBuild_TooManyCloves(t *testing.T) {
 	builder, err := NewGarlicBuilderWithDefaults()
 	require.NoError(t, err)
@@ -152,6 +155,8 @@ func TestBuild_TooManyCloves(t *testing.T) {
 	assert.Error(t, err, "expected error for >255 cloves")
 }
 
+// Validates that a garlic message builds with the correct clove count,
+// message ID, and expiration.
 func TestBuild_Success(t *testing.T) {
 	messageID := 12345
 	expiration := time.Now().Add(10 * time.Second)
@@ -173,6 +178,8 @@ func TestBuild_Success(t *testing.T) {
 	assert.True(t, garlic.Expiration.Equal(expiration), "expiration")
 }
 
+// Validates that a clove payload starts with the delivery flag byte followed
+// by the 9-byte short I2NP header of the wrapped message.
 func TestBuildClovePayloads(t *testing.T) {
 	builder, err := NewGarlicBuilderWithDefaults()
 	require.NoError(t, err)
@@ -205,11 +212,14 @@ func TestSerializeGarlicClove_NilMessage(t *testing.T) {
 	assert.Error(t, err, "expected error for nil message")
 }
 
+// Validates that LOCAL delivery instructions serialize to a single 0x00 flag byte.
 func TestSerializeDeliveryInstructions_Local(t *testing.T) {
 	instructions := NewLocalDeliveryInstructions()
 	serializeAndAssertInstructions(t, &instructions, 1, 0x00)
 }
 
+// Validates that DESTINATION delivery instructions serialize to a 0x20 flag
+// byte followed by the 32-byte destination hash.
 func TestSerializeDeliveryInstructions_Destination(t *testing.T) {
 	destHash := createTestHash()
 	instructions := NewDestinationDeliveryInstructions(destHash)
@@ -218,6 +228,8 @@ func TestSerializeDeliveryInstructions_Destination(t *testing.T) {
 	assert.True(t, bytes.Equal(destHash[:], serialized[1:33]), "hash mismatch")
 }
 
+// Validates that ROUTER delivery instructions serialize to a 0x40 flag byte
+// followed by the 32-byte router hash.
 func TestSerializeDeliveryInstructions_Router(t *testing.T) {
 	routerHash := createTestHash()
 	instructions := NewRouterDeliveryInstructions(routerHash)
@@ -225,6 +237,8 @@ func TestSerializeDeliveryInstructions_Router(t *testing.T) {
 	serializeAndAssertInstructions(t, &instructions, 33, 0x40)
 }
 
+// Validates that TUNNEL delivery instructions serialize to a 0x60 flag byte,
+// the 32-byte gateway hash, and the 4-byte big-endian tunnel ID.
 func TestSerializeDeliveryInstructions_Tunnel(t *testing.T) {
 	gatewayHash := createTestHash()
 	tunnelID := tunnel.TunnelID(98765)

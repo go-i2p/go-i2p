@@ -1,3 +1,6 @@
+// Tests for endpoint message forwarding. Validates that the endpoint decrypts
+// the final layer and forwards non-local messages to the next hop.
+
 package tunnel
 
 import (

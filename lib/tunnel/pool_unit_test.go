@@ -1,3 +1,6 @@
+// Tests for tunnel pool operations. Validates that tunnels are added, looked
+// up, and removed from the pool correctly.
+
 package tunnel
 
 import (

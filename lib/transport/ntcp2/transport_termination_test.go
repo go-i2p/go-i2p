@@ -29,6 +29,8 @@ func (c *terminationWriteConn) SetDeadline(time.Time) error      { return nil }
 func (c *terminationWriteConn) SetReadDeadline(time.Time) error  { return nil }
 func (c *terminationWriteConn) SetWriteDeadline(time.Time) error { return nil }
 
+// Validates that writing the termination block is best-effort: a write
+// error does not panic or block session teardown.
 func TestWriteTerminationBlockBestEffort_DoesNotPanicOnWriteError(t *testing.T) {
 	transport := &NTCP2Transport{logger: logger.WithField("component", "ntcp2-test")}
 	conn := &terminationWriteConn{writeN: 0, writeErr: errors.New("write failed")}

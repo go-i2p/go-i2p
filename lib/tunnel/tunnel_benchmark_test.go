@@ -1,3 +1,6 @@
+// Benchmarks for tunnel operations. Measures the cost of encrypting,
+// decrypting, and routing tunnel messages under load.
+
 package tunnel
 
 import (

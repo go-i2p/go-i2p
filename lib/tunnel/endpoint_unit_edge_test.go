@@ -1,3 +1,6 @@
+// Edge-case tests for the tunnel endpoint. Validates behavior with malformed,
+// oversized, or boundary-condition tunnel messages.
+
 package tunnel
 
 import (

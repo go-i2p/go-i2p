@@ -1,3 +1,6 @@
+// Integration tests for peer selection. Validates that the selector picks
+// suitable peers from the router network for building tunnels.
+
 package tunnel
 
 import (

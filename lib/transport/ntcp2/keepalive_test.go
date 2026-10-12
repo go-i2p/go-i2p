@@ -10,6 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Validates that the randomized keepalive interval stays within the
+// [freq/2, freq) range used by Java I2P.
 func TestNextMetaIntervalWithRand_JavaI2PRange(t *testing.T) {
 	half := ntcp2MetaFrequency / 2
 

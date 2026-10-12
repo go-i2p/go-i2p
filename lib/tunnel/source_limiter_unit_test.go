@@ -1,3 +1,6 @@
+// Tests for the source limiter. Validates that per-source rate limits are
+// enforced to prevent a single router from flooding the tunnel pool.
+
 package tunnel
 
 import (

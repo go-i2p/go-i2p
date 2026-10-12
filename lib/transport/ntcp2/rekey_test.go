@@ -144,6 +144,8 @@ func TestAttemptRekey_ConnImplementsRekeyer_Success(t *testing.T) {
 	assert.Equal(t, uint64(1), rs.getRekeyCount())
 }
 
+// Validates that a failed rekey does not reset the message counters,
+// so the session keeps retrying the rekey.
 func TestAttemptRekey_ConnImplementsRekeyer_Failure(t *testing.T) {
 	rs := newRekeyState()
 	atomic.StoreUint64(&rs.messagesSent, RekeyThreshold)

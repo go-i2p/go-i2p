@@ -81,6 +81,8 @@ func TestSupportsNTCP2_Nil(t *testing.T) {
 	assert.False(t, SupportsNTCP2(nil))
 }
 
+// Validates that an I2NP message is framed with the 4-byte big-endian
+// length prefix when sent over an NTCP2 session.
 func TestFramingIntegration(t *testing.T) {
 	// Test that block framing produces non-empty output
 	msg := i2np.NewDataMessage([]byte("integration test"))

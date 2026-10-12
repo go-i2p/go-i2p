@@ -1,3 +1,6 @@
+// Tests for local delivery instruction handling. Validates that delivery
+// instructions with the LOCAL delivery type are parsed and routed correctly.
+
 package tunnel
 
 import (

@@ -1,3 +1,6 @@
+// Mock types for tunnel tests. Provides fake routers, tunnels, and message
+// handlers that record calls for assertions in other test files.
+
 package tunnel
 
 import (

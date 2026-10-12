@@ -1,3 +1,6 @@
+// Tests for the startup gate. Validates that the tunnel subsystem blocks
+// message handling until tunnels are ready after router startup.
+
 package tunnel
 
 import (

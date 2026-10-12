@@ -354,6 +354,8 @@ func TestSetDataMessageHandler(t *testing.T) {
 	assert.NotNil(t, processor.dataMessageHandler)
 }
 
+// Validates that a DatabaseStore carried in a base I2NP message is routed to
+// the database manager and stored with its source router.
 func TestProcessDatabaseStoreMessage_FromBaseMessageDataCarrier(t *testing.T) {
 	processor := NewMessageProcessor()
 	mockStore := newMockNetDBStore()
@@ -419,6 +421,8 @@ func TestProcessDatabaseStoreMessage_UsesSourceAwareStorePath(t *testing.T) {
 	assert.Equal(t, source, mockStore.source)
 }
 
+// Validates that a DatabaseSearchReply carried in a base I2NP message is
+// routed to the search reply handler with its key and source intact.
 func TestProcessDatabaseSearchReplyMessage_FromBaseMessageDataCarrier(t *testing.T) {
 	processor := NewMessageProcessor()
 	handler := &mockSearchReplyHandler{}
@@ -718,6 +722,8 @@ func TestValidateGarlicSession_WithMock(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+// Validates that garlic message data is extracted by stripping the 4-byte
+// big-endian length prefix that frames the ciphertext.
 func TestExtractGarlicData_StripsLengthPrefix(t *testing.T) {
 	processor := NewMessageProcessor()
 

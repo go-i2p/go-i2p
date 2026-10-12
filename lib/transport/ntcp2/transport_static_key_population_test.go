@@ -13,6 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Validates that a missing 32-byte X25519 static key is populated from
+// the keystore before the Noise handshake starts.
 func TestEnsureLocalStaticKeyConfigured_PopulatesMissingKeyFromKeystore(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

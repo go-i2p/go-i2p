@@ -1,3 +1,6 @@
+// Shared test helpers for tunnel tests. Provides mock tunnels, fake routers,
+// and utility functions used by other test files in this package.
+
 package tunnel
 
 import (

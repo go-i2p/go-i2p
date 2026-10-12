@@ -1,3 +1,4 @@
+// Tests for generating and encrypting tunnel build replies.
 package i2np
 
 import (
@@ -31,6 +32,8 @@ func TestBuildReplyForwarderInterface(t *testing.T) {
 	})
 }
 
+// Validates that an accepted build record is registered and its encrypted
+// reply is 544 bytes (528-byte record plus 16-byte ChaCha20-Poly1305 tag).
 func TestProcessSingleBuildRecord_AcceptedRequest(t *testing.T) {
 	processor, mockForwarder, mockParticipant := setupBuildReplyTest(t, true)
 
@@ -51,6 +54,8 @@ func TestProcessSingleBuildRecord_AcceptedRequest(t *testing.T) {
 	}
 }
 
+// Validates that a rejected build record is not registered as a participant
+// but a rejection reply is still forwarded to the next hop.
 func TestProcessSingleBuildRecord_RejectedRequest(t *testing.T) {
 	processor, mockForwarder, mockParticipant := setupBuildReplyTest(t, false)
 	mockParticipant.rejectCode = TunnelBuildReplyTransientOverload
@@ -65,6 +70,8 @@ func TestProcessSingleBuildRecord_RejectedRequest(t *testing.T) {
 	assert.Len(t, routerCalls, 1, "Should still forward rejection reply")
 }
 
+// Validates that a build record with a non-zero NextTunnel is forwarded
+// through the tunnel instead of directly to the next router.
 func TestProcessSingleBuildRecord_TunnelForwarding(t *testing.T) {
 	processor, mockForwarder, _ := setupBuildReplyTest(t, true)
 
@@ -107,6 +114,8 @@ func TestProcessSingleBuildRecord_NoForwarder(t *testing.T) {
 	assert.Equal(t, 1, mockParticipant.getRegisteredCount(), "Participant should still be registered")
 }
 
+// Validates that a generated build reply can be decrypted with the build
+// record's ReplyKey and ReplyIV and carries the expected reply code.
 func TestGenerateAndSendBuildReply_EncryptionWorks(t *testing.T) {
 	processor, mockForwarder, _ := setupBuildReplyTest(t, true)
 
@@ -132,6 +141,8 @@ func TestGenerateAndSendBuildReply_EncryptionWorks(t *testing.T) {
 	assert.Equal(t, byte(TunnelBuildReplySuccess), decrypted.Reply, "Reply code should be SUCCESS")
 }
 
+// Validates that every tunnel build reply code can be generated and sent
+// without error.
 func TestGenerateAndSendBuildReply_AllReplyCodes(t *testing.T) {
 	testCases := []struct {
 		name      string
@@ -204,6 +215,8 @@ func TestForwardBuildReply_TunnelForwardError(t *testing.T) {
 	assert.Contains(t, err.Error(), "tunnel error")
 }
 
+// Validates that a build request with multiple records splits correctly
+// between router and tunnel forwarding.
 func TestMultipleBuildRecords_Processing(t *testing.T) {
 	processor, mockForwarder, mockParticipant := setupBuildReplyTest(t, true)
 

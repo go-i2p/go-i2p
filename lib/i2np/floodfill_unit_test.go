@@ -1,3 +1,4 @@
+// Tests for floodfill router handling in the I2NP processor.
 package i2np
 
 import (

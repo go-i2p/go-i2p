@@ -1,3 +1,6 @@
+// Tests for tunnel manager state. Validates that tunnels move through build,
+// active, and close states correctly, and that build requests are handled.
+
 package tunnel
 
 import (

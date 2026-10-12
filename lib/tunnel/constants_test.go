@@ -1,3 +1,6 @@
+// Shared test constants for tunnel tests. Defines wire-format sizes, timing
+// values, and limits used across other test files in this package.
+
 package tunnel
 
 import "time"

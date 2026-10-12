@@ -1,3 +1,4 @@
+// Tests for the byte reader used to parse I2NP wire-format fields.
 package i2np
 
 import (

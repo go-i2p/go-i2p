@@ -1,3 +1,4 @@
+// Tests for build record encryption and decryption with layer keys.
 package i2np
 
 import (

@@ -1,3 +1,6 @@
+// Tests for endpoint fragment reassembly eviction. Validates that stale or
+// incomplete fragment assemblies are evicted to prevent resource exhaustion.
+
 package tunnel
 
 import (

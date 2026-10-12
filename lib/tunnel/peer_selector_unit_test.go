@@ -1,3 +1,6 @@
+// Tests for the peer selector. Validates that candidate routers are filtered
+// and scored correctly when choosing tunnel hops.
+
 package tunnel
 
 import (

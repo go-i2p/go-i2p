@@ -1,3 +1,4 @@
+// Security validation tests for I2NP message handling edge cases.
 package i2np
 
 import (

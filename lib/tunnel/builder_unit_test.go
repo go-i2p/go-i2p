@@ -1,3 +1,6 @@
+// Tests for tunnel build record construction. Validates that build records are
+// created with correct layer keys, session keys, and hop-specific parameters.
+
 package tunnel
 
 import (

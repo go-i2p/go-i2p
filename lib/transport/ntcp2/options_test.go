@@ -24,6 +24,8 @@ func TestDefaultOptions(t *testing.T) {
 	assert.Equal(t, uint16(0), opts.DelayMax)
 }
 
+// Validates that the Options block round-trips through its wire
+// encoding, including the 4.4 fixed-point values.
 func TestOptions_SerializeAndParse(t *testing.T) {
 	opts := &Options{
 		Version:    0,
@@ -57,6 +59,8 @@ func TestParseOptions_TooShort(t *testing.T) {
 	assert.Contains(t, err.Error(), "too short")
 }
 
+// Validates the 4.4 fixed-point wire encoding used for the Options
+// block values in the NTCP2 handshake.
 func TestFixed44_Encoding(t *testing.T) {
 	tests := []struct {
 		input    float64

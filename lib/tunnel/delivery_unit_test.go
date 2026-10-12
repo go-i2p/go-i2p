@@ -1,3 +1,6 @@
+// Tests for delivery instruction parsing. Validates that delivery instructions
+// are read from tunnel messages with correct field sizes and flag bits.
+
 package tunnel
 
 import (

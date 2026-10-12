@@ -1,3 +1,6 @@
+// Tests for zero-hop inbound handling. Validates that messages addressed to
+// the local router are delivered without going through a tunnel.
+
 package tunnel
 
 import (

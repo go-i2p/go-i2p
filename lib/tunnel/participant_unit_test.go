@@ -1,3 +1,6 @@
+// Tests for tunnel participants. Validates that a router can join a tunnel as
+// a middle hop and forward messages between the gateway and endpoint.
+
 package tunnel
 
 import (

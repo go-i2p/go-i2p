@@ -1,3 +1,6 @@
+// Tests for the tunnel endpoint. Validates that the endpoint decrypts the
+// final layer of a tunnel message and delivers the payload to the local router.
+
 package tunnel
 
 import (

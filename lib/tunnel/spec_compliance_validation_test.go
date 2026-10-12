@@ -1,3 +1,7 @@
+// Tests that validate the tunnel implementation against the I2P tunnel spec.
+// Covers the 1028-byte message format, delivery instructions, build records,
+// ECIES encryption, tunnel roles, and pool behavior.
+
 package tunnel
 
 import (
@@ -22,6 +26,7 @@ import (
 
 // --- Fixed Size (1028 bytes) ---
 
+// Validates that an encrypted tunnel message is exactly 1028 bytes per the I2P tunnel spec.
 func TestTunnelMessages_FixedSize_EncryptedTunnelMessageIs1028(t *testing.T) {
 	// EncryptedTunnelMessage is an alias for tunnel.TunnelData which is [1028]byte
 	var msg EncryptedTunnelMessage
@@ -118,6 +123,8 @@ func TestTunnelMessages_FixedSize_MaxTunnelPayloadConstant(t *testing.T) {
 		"maxTunnelPayload must be 1003 (1028 - 25 bytes overhead)")
 }
 
+// Validates that the tunnel message checksum is the first 4 bytes of SHA256
+// computed over the data after the zero separator byte plus the IV.
 func TestTunnelMessages_FixedSize_ChecksumIsSHA256First4Bytes(t *testing.T) {
 	// Per I2P spec: Checksum = first 4 bytes of SHA256(data_after_zero_byte + IV)
 	// "The checksum does NOT cover the padding or the zero byte."
@@ -151,6 +158,8 @@ func TestTunnelMessages_FixedSize_ChecksumIsSHA256First4Bytes(t *testing.T) {
 		"Checksum must be first 4 bytes of SHA256(data_after_zero_byte + IV)")
 }
 
+// Validates that padding bytes are non-zero and a single zero byte separates
+// padding from the delivery instructions in a tunnel message.
 func TestTunnelMessages_FixedSize_NonZeroPadding(t *testing.T) {
 	// I2P spec requires padding bytes to be non-zero
 	_, msg := buildSpecGatewayMsg(t)
@@ -175,6 +184,8 @@ func TestTunnelMessages_FixedSize_NonZeroPadding(t *testing.T) {
 
 // --- Delivery Instructions ---
 
+// Validates that the first-fragment flag (bit 7) is 0 in delivery instructions
+// per the I2P tunnel spec.
 func TestTunnelMessages_DeliveryInstructions_FirstFragmentFlagBit7Is0(t *testing.T) {
 	// First fragment: bit 7 = 0
 	di := NewLocalDeliveryInstructions(100)
@@ -270,6 +281,8 @@ func TestTunnelMessages_DeliveryInstructions_FirstFragmentSizes(t *testing.T) {
 	assert.Equal(t, 43, len(tunnelFragBytes), "TUNNEL fragmented delivery instructions must be 43 bytes")
 }
 
+// Validates that a follow-on fragment delivery instruction is exactly 7 bytes
+// per the I2P tunnel spec.
 func TestTunnelMessages_DeliveryInstructions_FollowOnFragmentIs7Bytes(t *testing.T) {
 	// Follow-on fragment is exactly 7 bytes: flag(1) + messageID(4) + size(2)
 	di := &DeliveryInstructions{
@@ -284,6 +297,8 @@ func TestTunnelMessages_DeliveryInstructions_FollowOnFragmentIs7Bytes(t *testing
 	assert.Equal(t, 7, len(data), "Follow-on fragment delivery instructions must be exactly 7 bytes")
 }
 
+// Validates that the fragment number occupies bits 6-1 of the follow-on
+// fragment byte, allowing up to 63 fragments.
 func TestTunnelMessages_DeliveryInstructions_FollowOnFragmentNumberBits6to1(t *testing.T) {
 	// Follow-on fragment number is encoded in bits 6-1 of flag byte
 	for fragNum := 1; fragNum <= 63; fragNum++ {
@@ -344,6 +359,8 @@ func TestTunnelMessages_DeliveryInstructions_FragmentedBit3(t *testing.T) {
 	assert.Equal(t, byte(0x00), dataNoFrag[0]&0x08, "Fragmented bit 3 must be clear when not fragmented")
 }
 
+// Validates that delivery type UNUSED (bits 6-5 = 11) is rejected per the
+// I2P tunnel spec.
 func TestTunnelMessages_DeliveryInstructions_DT_UNUSEDRejected(t *testing.T) {
 	// DTUnused (0x03) delivery type must be rejected
 	// Create raw bytes with delivery type 0x03 in bits 6-5
@@ -584,6 +601,8 @@ func TestTunnelMessages_FragmentReassembly_DuplicateFragmentRejected(t *testing.
 	require.NoError(t, ep.Receive(msg3))
 }
 
+// Validates that at most 63 fragments are accepted, matching the 6-bit
+// fragment number field in the I2P tunnel spec.
 func TestTunnelMessages_FragmentReassembly_MaxFragments63(t *testing.T) {
 	// Fragment number is 6-bit field (1-63), so max follow-on fragments = 63
 	di := &DeliveryInstructions{
@@ -610,6 +629,8 @@ func TestTunnelMessages_FragmentReassembly_MaxConcurrentAssemblies(t *testing.T)
 		"maxConcurrentAssemblies must be 5000 to prevent memory exhaustion")
 }
 
+// Validates that stale fragment assemblies are evicted after a timeout to
+// prevent resource exhaustion.
 func TestTunnelMessages_FragmentReassembly_StaleFragmentTimeout(t *testing.T) {
 	// Default fragment timeout is 8 seconds (aligned with i2pd I2NP expiration timeout)
 	enc := &mockPassthroughEncryptor{}
@@ -624,6 +645,8 @@ func TestTunnelMessages_FragmentReassembly_StaleFragmentTimeout(t *testing.T) {
 
 // --- Message ID ---
 
+// Validates that the message ID in a fragmented delivery instruction is
+// 4 bytes per the I2P tunnel spec.
 func TestTunnelMessages_MessageID_Is4Bytes(t *testing.T) {
 	// Message ID is 4 bytes in both first-fragment and follow-on delivery instructions
 	// First fragment: message ID present when fragmented=true
@@ -862,6 +885,8 @@ func buildTestTunnelResult(t *testing.T, peerCount int, req BuildTunnelRequest) 
 
 // --- Build Request ---
 
+// Validates that a build request carries one build record per hop, each
+// encrypted with that hop's layer key.
 func TestTunnelCreation_BuildRequest_EachHopGetsRecord(t *testing.T) {
 	// Each hop in the tunnel receives its own encrypted BuildRequestRecord
 	result := buildTestTunnelResult(t, 3, BuildTunnelRequest{
@@ -873,6 +898,8 @@ func TestTunnelCreation_BuildRequest_EachHopGetsRecord(t *testing.T) {
 	assert.Equal(t, 3, len(result.Hops), "must have one hop per record")
 }
 
+// Validates that each hop in a build request gets a unique session key, so
+// no two hops can decrypt each other's traffic.
 func TestTunnelCreation_BuildRequest_UniqueKeysPerHop(t *testing.T) {
 	// Each hop must get unique layer key, IV key, and reply key
 	result := buildTestTunnelResult(t, 3, BuildTunnelRequest{HopCount: 3})
@@ -889,6 +916,8 @@ func TestTunnelCreation_BuildRequest_UniqueKeysPerHop(t *testing.T) {
 	}
 }
 
+// Validates that the hop count in a build request is within the allowed
+// range of 1 to 8 per the I2P tunnel spec.
 func TestTunnelCreation_BuildRequest_HopCountValidation(t *testing.T) {
 	// Hop count must be 1-8 per I2P spec
 	selector := &specMockPeerSelector{count: 10}
@@ -911,6 +940,8 @@ func TestTunnelCreation_BuildRequest_HopCountValidation(t *testing.T) {
 
 // --- ECIES Record Format ---
 
+// Validates that an ECIES build record contains all required fields:
+// encryption type, reply key, IV, and encrypted session key.
 func TestTunnelCreation_ECIESRecordFormat_RecordFieldsPresent(t *testing.T) {
 	// Build request records must contain all required fields per spec
 	result := buildTestTunnelResult(t, 3, BuildTunnelRequest{HopCount: 3})
@@ -933,6 +964,8 @@ func TestTunnelCreation_ECIESRecordFormat_RecordFieldsPresent(t *testing.T) {
 	}
 }
 
+// Validates that the reply session key and IV from an ECIES build record are
+// stored so the router can decrypt replies from the hop.
 func TestTunnelCreation_ECIESRecordFormat_ReplyKeysStored(t *testing.T) {
 	// The builder must store reply keys and IVs for decrypting responses
 	result := buildTestTunnelResult(t, 3, BuildTunnelRequest{HopCount: 3})
@@ -950,6 +983,8 @@ func TestTunnelCreation_ECIESRecordFormat_ReplyKeysStored(t *testing.T) {
 
 // --- Response / Accept/Reject ---
 
+// Validates that build replies use the accept and reject codes defined in
+// the I2P tunnel spec.
 func TestTunnelCreation_AcceptRejectCodes(t *testing.T) {
 	// Verify build reply codes match I2P spec
 	assert.Equal(t, byte(0), byte(BuildReplyCodeAccepted), "accepted=0")
@@ -959,6 +994,8 @@ func TestTunnelCreation_AcceptRejectCodes(t *testing.T) {
 	assert.Equal(t, byte(50), byte(BuildReplyCodeCritical), "critical=50")
 }
 
+// Validates that the short tunnel build flag is set in build requests per
+// I2P Proposal 157.
 func TestTunnelCreation_UseShortBuild(t *testing.T) {
 	// TunnelBuildResult must propagate UseShortBuild flag
 	result := buildTestTunnelResult(t, 3, BuildTunnelRequest{HopCount: 3, UseShortBuild: true})
@@ -968,6 +1005,8 @@ func TestTunnelCreation_UseShortBuild(t *testing.T) {
 	assert.False(t, result2.UseShortBuild, "UseShortBuild=false must be propagated")
 }
 
+// Validates that outbound build requests carry the correct routing
+// parameters for the tunnel role.
 func TestTunnelCreation_RoutingParamsOutbound(t *testing.T) {
 	// Outbound tunnel: first hop is gateway, last hop is endpoint.
 	// When ReplyTunnelID is not set (zero), the OBEP NextTunnel is also zero.
@@ -984,6 +1023,8 @@ func TestTunnelCreation_RoutingParamsOutbound(t *testing.T) {
 	}
 }
 
+// Validates that inbound build requests carry the correct routing
+// parameters for the tunnel role.
 func TestTunnelCreation_RoutingParamsInbound(t *testing.T) {
 	// Inbound tunnel: messages flow toward us
 	replyTunnelID := TunnelID(0x12345678)
@@ -1003,6 +1044,8 @@ func TestTunnelCreation_RoutingParamsInbound(t *testing.T) {
 	assert.Equal(t, replyGateway, lastRecord.NextIdent, "inbound gateway must target reply gateway")
 }
 
+// Validates that each hop in a tunnel gets a unique tunnel ID, so messages
+// for different hops are not confused.
 func TestTunnelCreation_UniqueHopTunnelIDs(t *testing.T) {
 	// Each hop must get a unique receive tunnel ID
 	result := buildTestTunnelResult(t, 8, BuildTunnelRequest{HopCount: 8})
@@ -1019,6 +1062,7 @@ func TestTunnelCreation_UniqueHopTunnelIDs(t *testing.T) {
 // Section 9: lib/tunnel — Short Tunnel Build (Proposal 157)
 // =============================================================================
 
+// Validates that short tunnel build is enabled by default per I2P Proposal 157.
 func TestShortTunnelBuild_UseShortBuildDefault(t *testing.T) {
 	// Pool's prepareBuildRequest should default to UseShortBuild=true
 	pool := NewTunnelPool(&specMockPeerSelector{count: 3})
@@ -1028,12 +1072,16 @@ func TestShortTunnelBuild_UseShortBuildDefault(t *testing.T) {
 	assert.True(t, req.UseShortBuild, "Pool must default to ShortTunnelBuild (modern STBM)")
 }
 
+// Validates that the short build flag is propagated from the build request
+// to the tunnel result.
 func TestShortTunnelBuild_ResultPropagatesFlag(t *testing.T) {
 	// TunnelBuildResult tracks whether short build was used
 	result := buildTestTunnelResult(t, 3, BuildTunnelRequest{HopCount: 3, UseShortBuild: true})
 	assert.True(t, result.UseShortBuild, "Result must reflect UseShortBuild=true")
 }
 
+// Validates that variable-length tunnel builds remain backward compatible
+// with routers that do not support short builds.
 func TestShortTunnelBuild_VariableTunnelBuildBackwardCompat(t *testing.T) {
 	// Must still support UseShortBuild=false for VariableTunnelBuild
 	result := buildTestTunnelResult(t, 3, BuildTunnelRequest{HopCount: 3, UseShortBuild: false})
@@ -1044,6 +1092,8 @@ func TestShortTunnelBuild_VariableTunnelBuildBackwardCompat(t *testing.T) {
 // Section 9: lib/tunnel — Tunnel Roles
 // =============================================================================
 
+// Validates that the gateway encrypts the first layer and adds delivery
+// instructions before sending a message into the tunnel.
 func TestTunnelRoles_GatewayEncryptsAndAddsInstructions(t *testing.T) {
 	// Gateway must encrypt messages entering the tunnel and add delivery instructions
 	gw := createSpecGateway(t)
@@ -1054,6 +1104,8 @@ func TestTunnelRoles_GatewayEncryptsAndAddsInstructions(t *testing.T) {
 	assert.Equal(t, 1028, len(encrypted), "gateway must produce 1028-byte tunnel messages")
 }
 
+// Validates that the gateway can produce delivery instructions for all
+// delivery types: LOCAL, TUNNEL, and ROUTER.
 func TestTunnelRoles_GatewaySupportsAllDeliveryTypes(t *testing.T) {
 	// Gateway must support DTLocal, DTTunnel, and DTRouter
 	gw := createSpecGateway(t)
@@ -1079,6 +1131,8 @@ func TestTunnelRoles_GatewaySupportsAllDeliveryTypes(t *testing.T) {
 	assert.Len(t, msgs, 1)
 }
 
+// Validates that a middle hop decrypts exactly one layer with its session
+// key and forwards the result to the next hop.
 func TestTunnelRoles_ParticipantDecryptsOneLayerAndForwards(t *testing.T) {
 	// Participant decrypts one layer, extracts next hop tunnel ID from build record, forwards all 1028 bytes
 	enc := &specMockEncryptor{}
@@ -1096,6 +1150,8 @@ func TestTunnelRoles_ParticipantDecryptsOneLayerAndForwards(t *testing.T) {
 	assert.Equal(t, 1028, len(decrypted), "participant must return full 1028 bytes")
 }
 
+// Validates that a middle hop cannot inspect the message payload, since it
+// only holds the key for its own layer.
 func TestTunnelRoles_ParticipantNoMessageInspection(t *testing.T) {
 	// Participant must not inspect contents (privacy by design) — only reads tunnel ID
 	enc := &specMockEncryptor{}
@@ -1117,6 +1173,8 @@ func TestTunnelRoles_ParticipantNoMessageInspection(t *testing.T) {
 	}
 }
 
+// Validates that the endpoint decrypts the final layer and delivers the
+// payload to the local router.
 func TestTunnelRoles_EndpointDecryptsAndDelivers(t *testing.T) {
 	// Endpoint must decrypt final layer, validate checksum, parse DI, and deliver
 	ep, getReceived := createSpecEndpointWithCapture(t)
@@ -1128,6 +1186,8 @@ func TestTunnelRoles_EndpointDecryptsAndDelivers(t *testing.T) {
 	assert.Equal(t, payload, getReceived(), "endpoint must deliver the message payload")
 }
 
+// Validates that the endpoint forwards messages with a TUNNEL delivery type
+// to the next hop instead of delivering them locally.
 func TestTunnelRoles_EndpointRoutesNonLocalMessages(t *testing.T) {
 	// Endpoint must support DTTunnel and DTRouter delivery via forwarder
 	ep, fwd := createSpecEndpointWithForwarder(t)
@@ -1142,6 +1202,8 @@ func TestTunnelRoles_EndpointRoutesNonLocalMessages(t *testing.T) {
 	assert.True(t, fwd.tunnelCalled, "endpoint must forward DTTunnel to ForwardToTunnel")
 }
 
+// Validates that the IBGW (inbound gateway) and OBEP (outbound endpoint)
+// flags in a build record determine the tunnel role.
 func TestTunnelRoles_IBGWandOBEPDetermination(t *testing.T) {
 	// Builder must correctly determine hop positions
 	selector := &specMockPeerSelector{count: 3}

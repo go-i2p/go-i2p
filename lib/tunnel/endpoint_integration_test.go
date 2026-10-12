@@ -1,3 +1,6 @@
+// Integration tests for the tunnel endpoint. Validates end-to-end message
+// delivery through a full tunnel from gateway to endpoint.
+
 package tunnel
 
 import (
