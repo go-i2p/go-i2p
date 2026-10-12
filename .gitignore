@@ -28,4 +28,5 @@ err
 
 # go-stats-generator artifacts
 midpoint.json
-.go-stats-generator/
+/.go-stats-generator/
+/.spec-audit/
