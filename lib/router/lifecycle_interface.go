@@ -12,6 +12,7 @@ import (
 // Lifecycle encompasses the router's lifecycle management methods: startup,
 // graceful shutdown, hard shutdown with timeout, waiting for completion, and
 // resource cleanup.
+// See also [Router].
 type Lifecycle interface {
 	// Start begins router operations, starting all subsystems (networking,
 	// tunnels, netdb, etc.). Returns error if router fails to start or if

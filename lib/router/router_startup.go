@@ -17,6 +17,7 @@ import (
 // the keystore and transport are properly initialized before Start is called.
 // It acquires runMux for the duration of pre-launch setup, then releases it
 // before blocking on the mainloop's startup-error channel.
+// See also [Router], [CreateRouter].
 func (r *Router) Start() error {
 	r.runMux.Lock()
 

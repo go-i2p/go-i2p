@@ -14,6 +14,9 @@ type reachabilityMetrics struct {
 }
 
 // ReachabilitySnapshot is a point-in-time copy of all reachability counters.
+// It is returned by GetReachabilityCounters for monitoring and diagnostics,
+// letting operators see how NAT traversal and peer testing are performing.
+// See also [SSU2Transport].
 type ReachabilitySnapshot struct {
 	// NATMappingSuccess is the number of successful NAT-PMP/UPnP port mappings.
 	NATMappingSuccess uint64

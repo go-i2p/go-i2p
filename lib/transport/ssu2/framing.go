@@ -83,6 +83,8 @@ func NewDateTimeBlock() *ssu2noise.SSU2Block {
 }
 
 // NewPaddingBlock creates a Padding block (type 254) with the given size.
+// Padding blocks carry no payload and are used to obscure traffic patterns.
+// See [I2P Spec: SSU2](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ssu2.rst) for the block format.
 func NewPaddingBlock(size int) *ssu2noise.SSU2Block {
 	return ssu2noise.NewSSU2Block(ssu2noise.BlockTypePadding, make([]byte, size))
 }

@@ -102,6 +102,8 @@ func absInt64(v int64) float64 {
 }
 
 // SendTermination sends a termination block through the SSU2 connection.
+// It is called when the router is closing a session so the peer learns why the
+// connection is ending. See [I2P Spec: SSU2](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ssu2.rst) for the termination block format.
 func (h *DefaultHandler) SendTermination(conn *ssu2noise.SSU2Conn, reason byte) error {
 	log.WithField("reason", reason).Debug("sending SSU2 termination block")
 	block := buildTerminationBlock(reason)
