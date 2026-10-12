@@ -509,6 +509,8 @@ func TestCreateEndpointForSession_NilDecryptor(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to create endpoint")
 }
 
+// TestInboundForwardToTunnel_QueuesTunnelGateway verifies that forwarding to a tunnel
+// queues a TunnelGateway I2NP message to the peer session.
 func TestInboundForwardToTunnel_QueuesTunnelGateway(t *testing.T) {
 	capture := &captureTransportSession{}
 	h := NewInboundMessageHandler(i2cp.NewSessionManager())
@@ -525,6 +527,8 @@ func TestInboundForwardToTunnel_QueuesTunnelGateway(t *testing.T) {
 	assert.Equal(t, i2np.I2NPMessageTypeTunnelGateway, msg.Type())
 }
 
+// TestInboundForwardToRouter_ParsesAndQueuesI2NP verifies that forwarding to a router
+// parses the inner I2NP message and queues it to the peer session.
 func TestInboundForwardToRouter_ParsesAndQueuesI2NP(t *testing.T) {
 	capture := &captureTransportSession{}
 	h := NewInboundMessageHandler(i2cp.NewSessionManager())

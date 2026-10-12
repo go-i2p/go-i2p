@@ -297,6 +297,8 @@ func TestRouterInfoProvider_CongestionFlagTransitions(t *testing.T) {
 	}
 }
 
+// TestIsPubliclyRoutableHost verifies the policy that decides whether a host address
+// is publicly routable, which controls what the router advertises in its RouterInfo.
 func TestIsPubliclyRoutableHost(t *testing.T) {
 	tests := []struct {
 		name string
@@ -326,6 +328,8 @@ func TestIsPubliclyRoutableHost(t *testing.T) {
 	}
 }
 
+// TestHasReachableAddress_UsesPublicRoutableHostPolicy verifies that the reachable
+// address check uses the publicly routable host policy.
 func TestHasReachableAddress_UsesPublicRoutableHostPolicy(t *testing.T) {
 	makeAddr := func(host string) *router_address.RouterAddress {
 		opts := map[string]string{

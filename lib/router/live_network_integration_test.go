@@ -46,6 +46,8 @@ const (
 	liveNetworkArtifactDir            = "tmp/live-network-artifacts"
 )
 
+// TestLiveNetworkBootstrapAndInterop verifies that the router bootstraps from the live
+// network and discovers routers published by Java I2P and i2pd.
 func TestLiveNetworkBootstrapAndInterop(t *testing.T) {
 	requireLiveNetworkIntegration(t)
 	sources := discoverLiveInteropSources(t)
@@ -68,6 +70,8 @@ func TestLiveNetworkBootstrapAndInterop(t *testing.T) {
 		"expected at least one router from %s to appear in live netdb snapshot; diagnostics=%s", sources.I2PDLabel, overlap.DiagnosticSummary())
 }
 
+// TestLiveNetworkPublishRouterInfo verifies that the router publishes its RouterInfo
+// to the live network and receives a delivery status ACK.
 func TestLiveNetworkPublishRouterInfo(t *testing.T) {
 	requireLiveNetworkIntegration(t)
 
@@ -326,6 +330,8 @@ func TestLiveNetworkPublishRouterInfo(t *testing.T) {
 	)
 }
 
+// TestLiveNetworkPublishLeaseSet verifies that the router publishes its LeaseSet to
+// the live network.
 func TestLiveNetworkPublishLeaseSet(t *testing.T) {
 	requireLiveNetworkIntegration(t)
 
