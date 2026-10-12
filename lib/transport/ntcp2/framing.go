@@ -72,6 +72,8 @@ type I2NPUnframer struct {
 }
 
 // NewI2NPUnframer creates a new I2NPUnframer that reads length-prefixed I2NP messages from the given connection.
+// It is intended for tests and benchmarks over net.Pipe, not for real NTCP2
+// connections. See also [I2NPUnframer] and [BlockUnframer].
 func NewI2NPUnframer(conn net.Conn) *I2NPUnframer {
 	return &I2NPUnframer{
 		conn:           conn,
@@ -80,12 +82,15 @@ func NewI2NPUnframer(conn net.Conn) *I2NPUnframer {
 	}
 }
 
-// BytesRead returns the number of bytes read during the last ReadNextMessage call
+// BytesRead returns the number of bytes read during the last ReadNextMessage call.
+// It is used by tests to verify that the unframer consumed the expected amount of data.
 func (u *I2NPUnframer) BytesRead() int {
 	return u.bytesRead
 }
 
 // ReadNextMessage reads the next length-prefixed I2NP message from the underlying connection and returns the parsed message.
+// It blocks until a full message is available or the connection is closed.
+// See also [I2NPUnframer].
 func (u *I2NPUnframer) ReadNextMessage() (i2np.Message, error) {
 	log.WithFields(logger.Fields{"at": "ReadNextMessage"}).Debug("Reading next framed message from connection")
 
@@ -157,6 +162,8 @@ type BlockUnframer struct {
 }
 
 // NewBlockUnframer creates an unframer for NTCP2 block-based protocol.
+// It parses the spec-compliant block format used in the NTCP2 data phase,
+// including the 2-byte SipHash-obfuscated length field. See also [BlockUnframer] and [Block].
 func NewBlockUnframer(conn net.Conn) *BlockUnframer {
 	return &BlockUnframer{
 		conn:         conn,

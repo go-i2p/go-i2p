@@ -171,6 +171,10 @@ type NetDBCongestionTracker struct {
 }
 
 // NewNetDBCongestionTracker creates a congestion tracker for the given NetDB.
+// It wraps the NetDB with a CongestionCache so congestion flags parsed from
+// RouterInfos are cached and reused, avoiding repeated parsing. The tracker
+// implements PeerCongestionInfo for congestion-aware tunnel building.
+// See also [NetDBCongestionTracker], [CongestionCache], [PeerCongestionInfo].
 func NewNetDBCongestionTracker(db *StdNetDB, cfg config.CongestionDefaults) *NetDBCongestionTracker {
 	log.WithFields(logger.Fields{
 		"at":     "NewNetDBCongestionTracker",
@@ -264,6 +268,10 @@ func (t *NetDBCongestionTracker) GetCongestionStats() CongestionStats {
 }
 
 // CountCongestedPeers returns counts of peers by congestion level.
+// It scans all cached RouterInfos and tallies how many peers advertise each
+// congestion flag (D, E, G) plus the total, so callers can gauge how much of
+// the network is currently congested.
+// See also [NetDBCongestionTracker], [GetCongestionStats].
 func (t *NetDBCongestionTracker) CountCongestedPeers() (dCount, eCount, gCount, totalCount int) {
 	allRIs := t.db.GetAllRouterInfos()
 	totalCount = len(allRIs)
@@ -313,6 +321,9 @@ func (t *NetDBCongestionTracker) InvalidatePeerCache(hash common.Hash) {
 }
 
 // ClearCache clears the entire congestion flag cache.
+// It drops all cached congestion flags so every peer's flag is re-parsed from
+// its RouterInfo on the next lookup.
+// See also [NetDBCongestionTracker], [InvalidatePeerCache].
 func (t *NetDBCongestionTracker) ClearCache() {
 	t.cache.Clear()
 
@@ -323,6 +334,9 @@ func (t *NetDBCongestionTracker) ClearCache() {
 }
 
 // GetCacheSize returns the number of cached congestion flags.
+// It reports how many peers currently have a cached congestion flag, which is
+// useful for monitoring cache usage.
+// See also [NetDBCongestionTracker], [ClearCache].
 func (t *NetDBCongestionTracker) GetCacheSize() int {
 	return t.cache.Size()
 }

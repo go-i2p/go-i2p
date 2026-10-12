@@ -318,6 +318,8 @@ func (sl *SourceLimiter) cleanup() {
 }
 
 // SourceLimiterStats contains statistics about the source limiter.
+// It is a point-in-time snapshot of how many sources are being tracked,
+// how many are banned, and how many requests were rejected.
 type SourceLimiterStats struct {
 	TrackedSources  int    // Number of sources currently being tracked
 	BannedSources   int    // Number of sources currently banned
@@ -370,6 +372,8 @@ func (sl *SourceLimiter) GetSourceStats(sourceHash common.Hash) *SourceStats {
 }
 
 // SourceStats contains statistics for a specific source.
+// It tracks that source's token bucket state and rejection count so
+// operators can see which peers are being throttled or banned.
 type SourceStats struct {
 	RequestCount uint64    // Total requests from this source
 	RejectCount  uint64    // Total rejections for this source

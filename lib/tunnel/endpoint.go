@@ -82,17 +82,29 @@ type fragmentAssembler struct {
 }
 
 var (
-	// ErrNilDecryption is returned when decryption is nil
+	// ErrNilDecryption is returned when decryption is nil.
+	// An endpoint cannot decrypt the tunnel layer it terminates, so a nil
+	// decryptor means the endpoint is unusable.
 	ErrNilDecryption = errors.New("decryption tunnel cannot be nil")
-	// ErrNilHandler is returned when message handler is nil
+	// ErrNilHandler is returned when message handler is nil.
+	// The handler is where a fully decrypted message is delivered; without
+	// it the endpoint has nowhere to send the result.
 	ErrNilHandler = errors.New("message handler cannot be nil")
-	// ErrInvalidTunnelData is returned when tunnel data is malformed
+	// ErrInvalidTunnelData is returned when tunnel data is malformed.
+	// This guards against data that is not a valid 1028-byte tunnel message
+	// or that cannot be parsed into delivery instructions.
 	ErrInvalidTunnelData = errors.New("invalid tunnel data")
-	// ErrChecksumMismatch is returned when checksum validation fails
+	// ErrChecksumMismatch is returned when checksum validation fails.
+	// The checksum detects corruption or a wrong session key, so a mismatch
+	// means the message must be dropped rather than delivered.
 	ErrChecksumMismatch = errors.New("tunnel message checksum mismatch")
-	// ErrTooManyFragments is returned when fragment number exceeds maximum
+	// ErrTooManyFragments is returned when fragment number exceeds maximum.
+	// The fragment number is a 6-bit field, so at most 63 follow-on
+	// fragments are allowed per message.
 	ErrTooManyFragments = errors.New("too many fragments: maximum 63")
-	// ErrDuplicateFragment is returned when a fragment is received twice
+	// ErrDuplicateFragment is returned when a fragment is received twice.
+	// Re-delivering the same fragment would corrupt reassembly, so it is
+	// dropped.
 	ErrDuplicateFragment = errors.New("duplicate fragment received")
 )
 

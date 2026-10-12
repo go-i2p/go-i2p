@@ -13,17 +13,20 @@ import (
 // Per the NTCP2 spec, connections with a clock skew exceeding this value
 // should be terminated with reason code 6.
 //
-// We intentionally use 30 s (half the go-noise default of 60 s) to narrow the
-// post-restart replay window: a captured handshake msg1 is only replayable for
-// up to 30 s rather than 60 s after a router restart that flushes the in-memory
-// replay cache. This is a security trade-off; operators with loose NTP discipline
-// should consider tightening NTP synchronisation rather than widening this value.
+// The 60 s tolerance bounds the post-restart replay window: a captured
+// handshake msg1 is only replayable for up to 60 s after a router restart that
+// flushes the in-memory replay cache. This is a security trade-off; operators
+// with loose NTP discipline should consider tightening NTP synchronisation
+// rather than widening this value.
 const ClockSkewTolerance = transport.ClockSkewTolerance
 
 // _ ensures the upstream constant is still importable to catch future changes.
 var _ = gonoise.ClockSkewTolerance
 
 // ClockSkewError is returned when a peer's timestamp exceeds the allowed skew.
+// It carries the peer and local timestamps plus the observed skew so callers
+// can log the violation and terminate the connection with reason code 6.
+// See also [ValidateTimestamp].
 type ClockSkewError struct {
 	// PeerTime is the peer's reported Unix timestamp.
 	PeerTime uint32
@@ -45,9 +48,10 @@ func (e *ClockSkewError) Error() string {
 // Returns nil if the timestamp is acceptable, or a *ClockSkewError if the
 // skew exceeds ClockSkewTolerance.
 //
-// A peerTime of 0 is treated as "timestamp not provided" and is accepted
-// without validation, since some peers may not include timestamps during
-// early protocol negotiation.
+// A peerTime of 0 is rejected: the I2P spec requires timestamps in handshake
+// messages, and accepting a zero timestamp would let an attacker replay a
+// captured handshake with the timestamp field zeroed to bypass clock skew
+// rejection. See also [ClockSkewError].
 func ValidateTimestamp(peerTime uint32) error {
 	// H3 FIX: Reject peerTime=0. The I2P spec requires timestamps in handshake messages.
 	// Treating zero as "not provided" creates a replay vulnerability: an attacker can

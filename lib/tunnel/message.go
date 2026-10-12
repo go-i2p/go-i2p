@@ -124,9 +124,15 @@ total size: 1028 Bytes
 type TunnelID = buildrecord.TunnelID
 
 // EncryptedTunnelMessage represents an encrypted I2P tunnel message consisting of a TunnelID, IV, and encrypted data.
+// It is the on-wire form of a message as it travels between hops: each hop
+// decrypts one layer, forwards the rest, and re-encrypts for the next hop.
+// See [I2P Spec: Tunnel Creation](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/tunnel.rst) for the message format.
 type EncryptedTunnelMessage tunnel.TunnelData
 
 // DeliveryInstructionsWithFragment pairs a set of DeliveryInstructions with the corresponding message fragment payload.
+// A single tunnel message can carry up to 64 delivery instructions, each
+// with its own fragment; this type is the unit the endpoint iterates over
+// when reassembling and delivering a message.
 type DeliveryInstructionsWithFragment struct {
 	DeliveryInstructions *DeliveryInstructions
 	MessageFragment      []byte
@@ -161,6 +167,10 @@ func (tm EncryptedTunnelMessage) Data() ([]byte, error) {
 }
 
 // DecryptedTunnelMessage represents a decrypted 1028-byte I2P tunnel message containing a TunnelID, IV, checksum, and delivery instructions.
+// After a hop decrypts one layer, the inner message has this fixed layout:
+// 4-byte tunnel ID, 16-byte IV, 4-byte checksum, then the delivery
+// instructions and message data.
+// See [I2P Spec: Tunnel Creation](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/tunnel.rst) for the message format.
 type DecryptedTunnelMessage [1028]byte
 
 // ID returns the TunnelID from the first 4 bytes of the decrypted tunnel message.

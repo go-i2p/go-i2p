@@ -36,6 +36,11 @@ const (
 )
 
 // NTCP2Transport implements the I2P NTCP2 transport protocol, managing listener setup, session lifecycle, and peer connections.
+// NTCP2 is the TCP-based transport; it uses the Noise XK handshake for key
+// exchange and encrypts all I2NP traffic. It satisfies the transport.Transport
+// interface so it can be combined with other transports by higher layers.
+// See [I2P Spec: NTCP2](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ntcp2.rst) for the protocol.
+// See also [NewNTCP2Transport] and [NTCP2Session].
 type NTCP2Transport struct {
 	// Network listener (uses net.Listener interface per guidelines)
 	listener net.Listener // Will be *ntcp2.Listener internally
@@ -134,6 +139,9 @@ type KeystoreProvider interface {
 }
 
 // NewNTCP2Transport creates and initializes a new NTCP2Transport with the given router identity, configuration, and keystore provider.
+// It derives the NTCP2 crypto keys, binds the TCP listener (with NAT traversal
+// fallback), and starts the idle-maintenance loop. The returned transport is
+// ready to accept and dial sessions. See also [NTCP2Transport] and [Config].
 func NewNTCP2Transport(identity router_info.RouterInfo, config *Config, keystore KeystoreProvider) (*NTCP2Transport, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	logger := logger.WithField("component", "ntcp2")

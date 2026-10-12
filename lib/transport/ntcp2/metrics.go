@@ -21,6 +21,8 @@ type transportMetrics struct {
 }
 
 // TransportMetricsSnapshot is a point-in-time copy of all transport metric counters.
+// It is returned by NTCP2Transport.GetTransportMetrics so callers can inspect
+// transport health without locking the live counters. See also [NTCP2Transport].
 type TransportMetricsSnapshot struct {
 	// StaleSessionsReconciled is the number of times Close() found non-zero
 	// stale sessions during final reconciliation. This should always be 0

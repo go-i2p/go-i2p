@@ -56,7 +56,10 @@ type Explorer struct {
 	statsUpdateInt time.Duration // how often to update strategy stats
 }
 
-// ExplorerConfig holds configuration for database exploration
+// ExplorerConfig holds configuration for database exploration.
+// It controls how often the explorer runs, how many lookups it issues in
+// parallel, and whether it uses the adaptive bucket-aware strategy.
+// See also [Explorer], [DefaultExplorerConfig].
 type ExplorerConfig struct {
 	// Interval between exploration rounds (default: 5 minutes)
 	Interval time.Duration
@@ -90,7 +93,10 @@ type ExplorerConfig struct {
 	StatsUpdateInterval time.Duration
 }
 
-// DefaultExplorerConfig returns the default explorer configuration
+// DefaultExplorerConfig returns the default explorer configuration.
+// It uses a 5-minute interval, 3 concurrent lookups, and the adaptive
+// strategy enabled, which is a sensible starting point for most routers.
+// See also [ExplorerConfig], [NewExplorer].
 func DefaultExplorerConfig() ExplorerConfig {
 	return ExplorerConfig{
 		Interval:            5 * time.Minute,
@@ -160,6 +166,9 @@ func (e *Explorer) Start() error {
 }
 
 // Stop halts database exploration and waits for in-flight lookups to complete.
+// It cancels the explorer's context and blocks until the exploration and stats
+// goroutines have finished, so it is safe to call during shutdown.
+// See also [Explorer], [Start].
 func (e *Explorer) Stop() {
 	log.WithFields(logger.Fields{
 		"at":     "(Explorer) Stop",
@@ -187,6 +196,9 @@ func (e *Explorer) SetTransport(transport LookupTransport) {
 }
 
 // SetOurHash sets our router's identity hash for lookup message construction.
+// The hash is used to compute Kademlia bucket distances, so it must be set
+// before exploration begins for the adaptive strategy to work correctly.
+// See also [Explorer], [SetTransport].
 func (e *Explorer) SetOurHash(hash common.Hash) {
 	e.fieldMu.Lock()
 	e.ourHash = hash
@@ -433,7 +445,10 @@ func (e *Explorer) ExploreOnce() error {
 	return nil
 }
 
-// GetStats returns statistics about exploration activity
+// GetStats returns statistics about exploration activity.
+// It reports the explorer's configuration and, when the adaptive strategy is
+// in use, the bucket-level statistics from the strategy.
+// See also [Explorer], [ExplorerStats].
 func (e *Explorer) GetStats() ExplorerStats {
 	stats := ExplorerStats{
 		Interval:      e.interval,
@@ -454,7 +469,10 @@ func (e *Explorer) GetStats() ExplorerStats {
 	return stats
 }
 
-// ExplorerStats contains statistics about explorer activity
+// ExplorerStats contains statistics about explorer activity.
+// It captures the explorer's configuration and, when the adaptive strategy is
+// active, the total router and floodfill counts plus sparse/empty bucket counts.
+// See also [Explorer], [GetStats].
 type ExplorerStats struct {
 	Interval         time.Duration
 	Concurrency      int

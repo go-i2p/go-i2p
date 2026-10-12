@@ -12,7 +12,12 @@ import (
 // I2NP Header Types
 // Moved from: header.go
 
-// I2NPNTCPHeader represents a parsed I2NP message header for NTCP transport
+// I2NPNTCPHeader represents a parsed I2NP message header for NTCP
+// transport. It holds the standard 16-byte header fields (type, message
+// ID, expiration, size, checksum) plus the message data, so the router
+// can validate and dispatch messages received over NTCP.
+// See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the wire format.
+// See also [I2NPSecondGenTransportHeader] and [ReadI2NPNTCPHeader].
 type I2NPNTCPHeader struct {
 	Type       int
 	MessageID  int
@@ -22,7 +27,12 @@ type I2NPNTCPHeader struct {
 	Data       []byte
 }
 
-// I2NPSecondGenTransportHeader represents the compact 9-byte I2NP header used over NTCP2 and SSU2 transports, replacing the standard 16-byte header.
+// I2NPSecondGenTransportHeader represents the compact 9-byte I2NP header
+// used over NTCP2 and SSU2 transports, replacing the standard 16-byte
+// header. The size and checksum fields are dropped because the transport
+// layer already provides framing and integrity.
+// See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the wire format.
+// See also [I2NPNTCPHeader] and [ReadI2NPSecondGenTransportHeader].
 type I2NPSecondGenTransportHeader struct {
 	Type       int
 	MessageID  int
@@ -31,20 +41,29 @@ type I2NPSecondGenTransportHeader struct {
 
 // Interface Definitions
 
-// MessageSerializer represents types that can be marshaled and unmarshaled
+// MessageSerializer represents types that can be marshaled and
+// unmarshaled. All I2NP message types satisfy this interface, which lets
+// the message processor serialize and deserialize messages generically.
+// See also [Message].
 type MessageSerializer interface {
 	MarshalBinary() ([]byte, error)
 	UnmarshalBinary(data []byte) error
 }
 
-// MessageIdentifier represents types that have message identification
+// MessageIdentifier represents types that have message identification.
+// The message ID is used to correlate replies with their original
+// requests, and the type selects the message handler.
+// See also [Message].
 type MessageIdentifier interface {
 	Type() int
 	MessageID() int
 	SetMessageID(id int)
 }
 
-// MessageExpiration represents types that have expiration management
+// MessageExpiration represents types that have expiration management.
+// Expired messages are dropped before processing to prevent replay of
+// stale data, so every I2NP message carries an expiration timestamp.
+// See also [Message] and [CheckMessageExpiration].
 type MessageExpiration interface {
 	Expiration() time.Time
 	SetExpiration(exp time.Time)
@@ -58,7 +77,10 @@ type DataCarrier interface {
 	GetData() []byte
 }
 
-// PayloadCarrier represents messages that carry payload data
+// PayloadCarrier represents messages that carry payload data. It lets
+// the router extract the application payload from a Data message without
+// depending on the concrete message type.
+// See also [DataMessage] and [DataCarrier].
 type PayloadCarrier interface {
 	GetPayload() []byte
 }
@@ -70,24 +92,36 @@ type TunnelCarrier interface {
 	GetTunnelID() buildrecord.TunnelID
 }
 
-// BuildRecordReader represents types that can parse build request records
+// BuildRecordReader represents types that can parse build request
+// records. The tunnel manager uses it to decrypt and validate the
+// per-hop records in an inbound tunnel build message.
+// See also [BuildRequestRecord] and [ReadBuildRequestRecord].
 type BuildRecordReader interface {
 	ReadBuildRequestRecord(data []byte) (BuildRequestRecord, error)
 }
 
-// BuildRecordWriter represents types that can write build response records
+// BuildRecordWriter represents types that can write build response
+// records. The tunnel manager uses it to produce the per-hop records in a
+// tunnel build reply sent back to the requester.
+// See also [BuildResponseRecord] and [CreateBuildResponseRecord].
 type BuildRecordWriter interface {
 	WriteBuildResponseRecord() ([]byte, error)
 }
 
-// DatabaseReader represents types that can perform database lookups
+// DatabaseReader represents types that can perform database lookups.
+// It exposes the key, source, and flags of a lookup so the database
+// manager can route it to the correct store.
+// See also [DatabaseLookup] and [DatabaseManager].
 type DatabaseReader interface {
 	GetKey() common.Hash
 	GetFrom() common.Hash
 	GetFlags() byte
 }
 
-// DatabaseWriter represents types that can store database entries
+// DatabaseWriter represents types that can store database entries. It
+// exposes the key, data, and type of a store so the database manager can
+// persist it in the correct table.
+// See also [DatabaseStore] and [DatabaseManager].
 type DatabaseWriter interface {
 	GetStoreKey() common.Hash
 	GetStoreData() []byte
@@ -124,32 +158,47 @@ func processReplySteps(p replyStepProcessor, records []BuildResponseRecord) erro
 	return p.determineBuildResult(successCount, recordCount, firstError)
 }
 
-// SessionKeyProvider represents types that provide session keys
+// SessionKeyProvider represents types that provide session keys. Build
+// request records carry the reply and layer keys needed to decrypt
+// tunnel build replies and tunnel data for each hop.
+// See also [BuildRequestRecord].
 type SessionKeyProvider interface {
 	GetReplyKey() session_key.SessionKey
 	GetLayerKey() session_key.SessionKey
 	GetIVKey() session_key.SessionKey
 }
 
-// TunnelIdentifier represents types that identify tunnel endpoints
+// TunnelIdentifier represents types that identify tunnel endpoints.
+// Build request records use it to specify which tunnel to receive on and
+// which tunnel the next hop should be.
+// See also [BuildRequestRecord].
 type TunnelIdentifier interface {
 	GetReceiveTunnel() buildrecord.TunnelID
 	GetNextTunnel() buildrecord.TunnelID
 }
 
-// HashProvider represents types that provide hash identification
+// HashProvider represents types that provide hash identification. Build
+// request records use it to identify the requesting router and the next
+// hop's router identity for reply routing.
+// See also [BuildRequestRecord].
 type HashProvider interface {
 	GetOurIdent() common.Hash
 	GetNextIdent() common.Hash
 }
 
-// StatusReporter represents types that report delivery status
+// StatusReporter represents types that report delivery status. It lets
+// the delivery status reporter correlate a status message with the
+// original message it refers to.
+// See also [DeliveryStatusMessage].
 type StatusReporter interface {
 	GetStatusMessageID() int
 	GetTimestamp() time.Time
 }
 
-// GarlicProcessor represents types that process garlic messages
+// GarlicProcessor represents types that process garlic messages. It
+// exposes the cloves of a Garlic message so the router can unwrap and
+// dispatch each clove's payload.
+// See also [Garlic] and [GarlicClove].
 type GarlicProcessor interface {
 	GetCloves() []GarlicClove
 	GetCloveCount() int

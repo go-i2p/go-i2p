@@ -7,6 +7,10 @@ import (
 )
 
 // NewKademliaResolver creates a new resolver that stores result into a NetworkDatabase and uses a tunnel pool for the lookup.
+// It resolves unknown RouterInfos by querying the closest known peers with
+// DatabaseLookup messages and caching the results in the NetDB.
+// See [I2P Spec: Database](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/database.rst) for the lookup protocol.
+// See also [KademliaResolver], [NewKademliaResolverWithTransport].
 func NewKademliaResolver(netDB NetworkDatabase, pool *tunnel.Pool) (r Resolver) {
 	if pool != nil && netDB != nil {
 		log.WithFields(logger.Fields{
@@ -73,6 +77,9 @@ func (kr *KademliaResolver) SetTransport(transport LookupTransport) {
 }
 
 // SetOurHash sets our router's identity hash for constructing lookup messages.
+// The hash identifies this router in the Kademlia DHT and is used to compute
+// XOR distances when selecting the closest peers to query.
+// See also [KademliaResolver], [SetTransport].
 func (kr *KademliaResolver) SetOurHash(hash common.Hash) {
 	kr.mu.Lock()
 	kr.ourHash = hash

@@ -13,6 +13,9 @@ import (
 )
 
 // ReplyProcessorConfig configures tunnel reply processing behavior.
+// It holds the timeout, retry, and decryption settings that a ReplyProcessor
+// uses to track builds and recover from failed hops.
+// See also [ReplyProcessor].
 type ReplyProcessorConfig struct {
 	// BuildTimeout is the maximum time to wait for a tunnel build reply.
 	// Default: 90 seconds (I2P spec recommendation).
@@ -33,6 +36,9 @@ type ReplyProcessorConfig struct {
 }
 
 // DefaultReplyProcessorConfig returns the default configuration.
+// The defaults follow the I2P spec recommendation for build timeouts and
+// enable ECIES decryption, which is required for production use.
+// See also [ReplyProcessorConfig].
 func DefaultReplyProcessorConfig() ReplyProcessorConfig {
 	return ReplyProcessorConfig{
 		BuildTimeout:     90 * time.Second,
@@ -43,6 +49,9 @@ func DefaultReplyProcessorConfig() ReplyProcessorConfig {
 }
 
 // PendingBuildRequest tracks an in-progress tunnel build request.
+// It holds the reply keys, IVs, and retry state needed to decrypt and
+// correlate the reply for a specific tunnel once it arrives.
+// See also [ReplyProcessor].
 type PendingBuildRequest struct {
 	TunnelID     buildrecord.TunnelID
 	RequestedAt  time.Time
@@ -82,6 +91,10 @@ type ReplyProcessor struct {
 }
 
 // NewReplyProcessor creates a new reply processor with the given configuration.
+// The processor is the component that matches incoming build replies to the
+// builds that were sent, so it must be wired to the same TunnelManager that
+// initiates those builds.
+// See also [ReplyProcessor].
 func NewReplyProcessor(config ReplyProcessorConfig, tm *TunnelManager) *ReplyProcessor {
 	return &ReplyProcessor{
 		config:        config,
@@ -606,6 +619,8 @@ func (rp *ReplyProcessor) removeExpiredBuilds(expired []buildrecord.TunnelID) {
 }
 
 // GetPendingBuildCount returns the number of currently pending tunnel builds.
+// It is useful for monitoring how many builds are in flight at once.
+// See also [ReplyProcessor].
 func (rp *ReplyProcessor) GetPendingBuildCount() int {
 	rp.mutex.RLock()
 	defer rp.mutex.RUnlock()
@@ -613,7 +628,10 @@ func (rp *ReplyProcessor) GetPendingBuildCount() int {
 }
 
 // GetPendingBuildInfo returns information about a specific pending build.
+// It exposes the retry count and direction for a build so callers can
+// inspect build state without triggering processing.
 // Returns nil if the build is not found.
+// See also [PendingBuildRequest].
 func (rp *ReplyProcessor) GetPendingBuildInfo(tunnelID buildrecord.TunnelID) *PendingBuildRequest {
 	rp.mutex.RLock()
 	defer rp.mutex.RUnlock()

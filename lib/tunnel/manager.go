@@ -648,6 +648,9 @@ func (m *ParticipantManager) GetSourceLimiterStats() *SourceLimiterStats {
 }
 
 // TunnelLimitStats provides visibility into protection mechanisms.
+// It exposes the counters behind the manager's two-tier participant
+// rejection (soft limit and probabilistic rejection) so operators can see
+// how often builds are being turned away.
 type TunnelLimitStats struct {
 	// Global limits
 	CurrentParticipants    int

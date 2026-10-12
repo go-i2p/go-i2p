@@ -66,6 +66,9 @@ type BuildTunnelRequest struct {
 }
 
 // TunnelBuildResult contains the result of building a tunnel request.
+// It reports whether the build succeeded and, on success, the session keys
+// and tunnel IDs needed to encrypt and route data through the new tunnel.
+// See [I2P Spec: Tunnel Creation](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/tunnel.rst) for the build protocol.
 type TunnelBuildResult struct {
 	TunnelID        TunnelID                 // The generated tunnel ID
 	GatewayTunnelID TunnelID                 // Inbound gateway receive tunnel ID
@@ -573,8 +576,14 @@ func generateRecordPadding() ([29]byte, error) {
 // Bit 7 (0x80): IBGW — if set, allow messages from anyone (inbound gateway)
 // Bit 6 (0x40): OBEP — if set, allow messages to anyone (outbound endpoint)
 const (
-	FlagIBGW = 0x80 // Inbound Gateway: allow messages from anyone
-	FlagOBEP = 0x40 // Outbound Endpoint: allow messages to anyone
+	// FlagIBGW marks a hop as an Inbound Gateway, allowing messages from
+	// anyone to enter the tunnel at this hop.
+	// See [I2P Spec: Tunnel Creation](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/tunnel.rst) for the flag bits.
+	FlagIBGW = 0x80
+	// FlagOBEP marks a hop as an Outbound Endpoint, allowing messages to
+	// leave the tunnel to anyone at this hop.
+	// See [I2P Spec: Tunnel Creation](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/tunnel.rst) for the flag bits.
+	FlagOBEP = 0x40
 )
 
 // determineBuildRecordFlag sets the IBGW/OBEP flag bits based on hop position.

@@ -14,7 +14,11 @@ import (
 // Moved from: header.go
 
 // ReadI2NPNTCPHeader reads an entire I2NP message and returns the parsed header
-// with embedded encrypted data
+// with embedded encrypted data. It is the entry point for parsing inbound
+// I2NP messages received over NTCP, splitting the 16-byte standard header
+// from the payload that follows it.
+// See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the wire format.
+// See also [I2NPNTCPHeader].
 func ReadI2NPNTCPHeader(data []byte) (I2NPNTCPHeader, error) {
 	log.WithFields(logger.Fields{"at": "ReadI2NPNTCPHeader"}).Debug("Reading I2NP NTCP Header")
 	header := I2NPNTCPHeader{}
@@ -84,6 +88,8 @@ func executeHeaderParsers(data []byte, header *I2NPNTCPHeader) error {
 // a 9-byte buffer: type (1 byte) + msg_id (4 bytes, big-endian) +
 // short_expiration (4 bytes, seconds since epoch, big-endian).
 // This is the inverse of ReadI2NPSecondGenTransportHeader.
+// See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the wire format.
+// See also [I2NPSecondGenTransportHeader].
 func MarshalSecondGenTransportHeader(header I2NPSecondGenTransportHeader) ([]byte, error) {
 	data := make([]byte, 9)
 	data[0] = byte(header.Type)
@@ -97,6 +103,8 @@ func MarshalSecondGenTransportHeader(header I2NPSecondGenTransportHeader) ([]byt
 // Only a 1-byte type, 4-byte message id, and a 4-byte expiration in seconds are included.
 // The size is incorporated in the NTCP2 and SSU2 data packet formats.
 // The checksum is not required since errors are caught in decryption.
+// See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the wire format.
+// See also [I2NPSecondGenTransportHeader].
 func ReadI2NPSecondGenTransportHeader(dat []byte) (I2NPSecondGenTransportHeader, error) {
 	header := I2NPSecondGenTransportHeader{}
 
@@ -130,8 +138,11 @@ func ReadI2NPSecondGenTransportHeader(dat []byte) (I2NPSecondGenTransportHeader,
 	return header, nil
 }
 
-// ReadI2NPType reads the I2NP message type from data
-// Unified logging logic into single computed log call
+// ReadI2NPType reads the I2NP message type from data. The type byte is the
+// first field of every I2NP header and determines how the rest of the
+// message is parsed, so it is read before any other header field.
+// See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the message type assignments.
+// See also [I2NPNTCPHeader].
 func ReadI2NPType(data []byte) (int, error) {
 	if len(data) < 1 {
 		return 0, ErrI2NPNotEnoughData
@@ -185,7 +196,11 @@ func getI2NPTypeLogLevel(typeValue int) (i2npLogLevel, string) {
 	return logLevel, logMessage
 }
 
-// ReadI2NPNTCPMessageID reads the message ID from NTCP data
+// ReadI2NPNTCPMessageID reads the message ID from NTCP data. The ID lets a
+// router correlate a reply with the request that triggered it, which is how
+// build replies are matched to pending builds.
+// See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the wire format.
+// See also [I2NPNTCPHeader].
 func ReadI2NPNTCPMessageID(data []byte) (int, error) {
 	if len(data) < 5 {
 		return 0, ErrI2NPNotEnoughData
@@ -200,7 +215,11 @@ func ReadI2NPNTCPMessageID(data []byte) (int, error) {
 	return messageID.Int(), nil
 }
 
-// ReadI2NPNTCPMessageExpiration reads the expiration from NTCP data
+// ReadI2NPNTCPMessageExpiration reads the expiration from NTCP data. The
+// expiration timestamp lets a router drop stale messages before processing
+// them, which bounds the window for replayed or delayed packets.
+// See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the wire format.
+// See also [I2NPNTCPHeader].
 func ReadI2NPNTCPMessageExpiration(data []byte) (common.Date, error) {
 	if len(data) < 13 {
 		return common.Date{}, ErrI2NPNotEnoughData
@@ -218,7 +237,11 @@ func ReadI2NPNTCPMessageExpiration(data []byte) (common.Date, error) {
 	return date, nil
 }
 
-// ReadI2NPNTCPMessageSize reads the message size from NTCP data
+// ReadI2NPNTCPMessageSize reads the message size from NTCP data. The size
+// field bounds how many payload bytes follow the 16-byte header, so it must
+// be read before the data itself.
+// See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the wire format.
+// See also [I2NPNTCPHeader].
 func ReadI2NPNTCPMessageSize(data []byte) (int, error) {
 	if len(data) < 15 {
 		return 0, ErrI2NPNotEnoughData
@@ -233,7 +256,11 @@ func ReadI2NPNTCPMessageSize(data []byte) (int, error) {
 	return size.Int(), nil
 }
 
-// ReadI2NPNTCPMessageChecksum reads the message checksum from NTCP data
+// ReadI2NPNTCPMessageChecksum reads the message checksum from NTCP data. The
+// checksum is a single-byte integrity check over the message, used to detect
+// corrupted packets on the NTCP transport.
+// See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the wire format.
+// See also [I2NPNTCPHeader].
 func ReadI2NPNTCPMessageChecksum(data []byte) (int, error) {
 	if len(data) < 16 {
 		return 0, ErrI2NPNotEnoughData
@@ -248,7 +275,11 @@ func ReadI2NPNTCPMessageChecksum(data []byte) (int, error) {
 	return checksum.Int(), nil
 }
 
-// ReadI2NPNTCPData reads the message data from NTCP payload
+// ReadI2NPNTCPData reads the message data from NTCP payload. It returns the
+// payload bytes that follow the 16-byte standard header, using the size read
+// from the header to bound the slice.
+// See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the wire format.
+// See also [I2NPNTCPHeader].
 func ReadI2NPNTCPData(data []byte, size int) ([]byte, error) {
 	if len(data) < 16+size {
 		return []byte{}, ErrI2NPNotEnoughData
@@ -260,7 +291,10 @@ func ReadI2NPNTCPData(data []byte, size int) ([]byte, error) {
 // Helper Functions for Creating Interface Implementations
 // Moved from: processor.go
 
-// CreateTunnelRecord creates a build request record with interface methods
+// CreateTunnelRecord creates a build request record with interface methods.
+// It wraps a BuildRequestRecord so callers can pass tunnel identifiers to
+// build message factories without depending on the concrete record type.
+// See also [BuildRequestRecord].
 func CreateTunnelRecord(receiveTunnel, nextTunnel buildrecord.TunnelID,
 	ourIdent, nextIdent common.Hash,
 ) TunnelIdentifier {
@@ -272,7 +306,10 @@ func CreateTunnelRecord(receiveTunnel, nextTunnel buildrecord.TunnelID,
 	}
 }
 
-// CreateDatabaseQuery creates a database lookup with interface methods
+// CreateDatabaseQuery creates a database lookup with interface methods.
+// It wraps a DatabaseLookup so callers can pass NetDB queries to the
+// message processor without depending on the concrete message type.
+// See also [DatabaseLookup].
 func CreateDatabaseQuery(key, from common.Hash, flags byte) DatabaseReader {
 	return &DatabaseLookup{
 		Key:   key,
@@ -281,7 +318,10 @@ func CreateDatabaseQuery(key, from common.Hash, flags byte) DatabaseReader {
 	}
 }
 
-// CreateDatabaseEntry creates a database store with interface methods
+// CreateDatabaseEntry creates a database store with interface methods.
+// It wraps a DatabaseStore so callers can pass NetDB entries to the
+// message processor without depending on the concrete message type.
+// See also [DatabaseStore].
 func CreateDatabaseEntry(key common.Hash, data []byte, dataType byte) DatabaseWriter {
 	return &DatabaseStore{
 		BaseI2NPMessage: NewBaseI2NPMessage(I2NPMessageTypeDatabaseStore),
@@ -449,8 +489,11 @@ func processHopReplyCode(hopIndex int, replyCode byte, logPrefix string) (bool, 
 }
 
 // DetermineBuildResult evaluates tunnel build outcome based on success counts and first encountered error.
-// Shared by tunnel_build_reply.go and variable_tunnel_build_reply.go.
+// A build only succeeds when every hop accepted, so this is shared by
+// tunnel_build_reply.go and variable_tunnel_build_reply.go to keep the
+// success/failure logic in one place.
 // tunnelType should be lowercase (e.g., "tunnel", "variable tunnel") for error messages.
+// See also [TunnelBuildReply].
 func DetermineBuildResult(successCount, recordCount int, firstError error, tunnelType string) error {
 	if successCount == recordCount {
 		log.WithFields(logger.Fields{
@@ -468,8 +511,11 @@ func DetermineBuildResult(successCount, recordCount int, firstError error, tunne
 }
 
 // ValidateRecordCount validates that Count field matches actual record count.
-// Shared by variable_tunnel_build_reply.go and short_tunnel_build_reply.go.
+// A mismatch means the message was truncated or corrupted in transit, so
+// this check is shared by variable_tunnel_build_reply.go and
+// short_tunnel_build_reply.go before any records are processed.
 // tunnelTypeName is used in log messages (e.g., "VariableTunnelBuildReply", "ShortTunnelBuildReply")
+// See also [ShortTunnelBuildReply].
 func ValidateRecordCount(countField, recordCount int, tunnelTypeName string) error {
 	if countField != recordCount {
 		return oops.Errorf("count mismatch: Count field is %d but have %d records", countField, recordCount)
@@ -484,6 +530,10 @@ func ValidateRecordCount(countField, recordCount int, tunnelTypeName string) err
 }
 
 // BaseMessageFromMessage creates a base message using metadata from msg and payload.
+// It copies the type, message ID, and expiration from an existing message so
+// new messages can be built around a different payload while keeping the
+// original header fields.
+// See also [BaseI2NPMessage].
 func BaseMessageFromMessage(msg Message, payload []byte) *BaseI2NPMessage {
 	return &BaseI2NPMessage{
 		type_:      msg.Type(),

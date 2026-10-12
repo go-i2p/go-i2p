@@ -47,6 +47,9 @@ type TunnelTester struct {
 }
 
 // TunnelTestResult contains the results of a tunnel test.
+// The tester sends an echo message through a tunnel and records whether it
+// came back, and how long the round trip took, so the pool can decide if a
+// tunnel is still usable.
 type TunnelTestResult struct {
 	TunnelID TunnelID
 	Success  bool
@@ -378,6 +381,8 @@ func (tt *TunnelTester) TestAllTunnelsAsync() []TunnelTestResult {
 }
 
 // HealthCheckResult summarizes the health of the tunnel pool.
+// It aggregates per-tunnel test results into counts of healthy, degraded,
+// and failed tunnels, plus a recommendation for which tunnels to replace.
 type HealthCheckResult struct {
 	TotalTunnels     int
 	ReadyTunnels     int

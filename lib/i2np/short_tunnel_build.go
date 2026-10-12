@@ -25,12 +25,17 @@ total size: 1+$num*218
 */
 
 // ShortTunnelBuild represents an I2NP ShortTunnelBuild message, a modern compact format for tunnel build requests introduced in I2P 0.9.51.
+// It uses 218-byte short build records instead of the 528-byte standard
+// records, which makes it the preferred format for building tunnels today.
+// See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the wire format.
+// See also [ShortTunnelBuildReply].
 type ShortTunnelBuild struct {
 	sliceRecordSet
 }
 
 // NewShortTunnelBuilder creates a new ShortTunnelBuild and returns it as TunnelBuilder interface.
 // This is the modern, preferred format for tunnel building (added in I2P 0.9.51).
+// See also [ShortTunnelBuild].
 func NewShortTunnelBuilder(records []BuildRequestRecord) TunnelBuilder {
 	log.WithFields(logger.Fields{
 		"at":           "NewShortTunnelBuilder",
@@ -49,6 +54,7 @@ func NewShortTunnelBuilder(records []BuildRequestRecord) TunnelBuilder {
 // Format: [count:1][records...]
 // Each record is 218 bytes per the I2P specification (ECIES short records).
 // The caller is responsible for applying ECIES encryption to each record.
+// See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the wire format.
 func (s *ShortTunnelBuild) Bytes() []byte {
 	log.WithFields(logger.Fields{
 		"at":           "ShortTunnelBuild.Bytes",

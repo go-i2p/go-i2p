@@ -40,7 +40,8 @@ func ExtractPeerStaticKey(routerInfo router_info.RouterInfo) ([]byte, error) {
 }
 
 // ExtractPeerStaticKeyFromAddress extracts a 32-byte static key from a single
-// NTCP2 RouterAddress.
+// NTCP2 RouterAddress. It is used to configure the Noise handshake for an
+// outbound session to that peer. See also [ExtractPeerStaticKey].
 func ExtractPeerStaticKeyFromAddress(addr *router_address.RouterAddress) ([]byte, error) {
 	if addr == nil {
 		return nil, oops.Errorf("nil NTCP2 address")
@@ -84,7 +85,8 @@ func ExtractPeerIV(routerInfo router_info.RouterInfo) ([]byte, error) {
 }
 
 // ExtractPeerIVFromAddress extracts the 16-byte obfuscation IV from a single
-// NTCP2 RouterAddress.
+// NTCP2 RouterAddress. The IV is used for AES-CBC obfuscation of the ephemeral
+// key in message 1 when the peer has enabled obfuscation. See also [ExtractPeerIV].
 func ExtractPeerIVFromAddress(addr *router_address.RouterAddress) ([]byte, error) {
 	if addr == nil {
 		return nil, oops.Errorf("nil NTCP2 address")
@@ -119,7 +121,9 @@ func ConfigureDialConfig(config *ntcp2.Config, peerInfo router_info.RouterInfo) 
 }
 
 // ConfigureDialConfigFromAddress sets peer static key and optional obfuscation
-// IV using a specific NTCP2 RouterAddress.
+// IV using a specific NTCP2 RouterAddress. It is the per-address helper used by
+// ConfigureDialConfig, which tries each NTCP2 address in turn.
+// See also [ConfigureDialConfig].
 func ConfigureDialConfigFromAddress(config *ntcp2.Config, peerAddr *router_address.RouterAddress) error {
 	// Extract and set the peer's static key as the *remote* static key.
 	// The Noise XK pre-message is "← s": the initiator must know the

@@ -13,6 +13,9 @@ type NetDBSelectorAdapter struct {
 }
 
 // NewNetDBSelectorAdapter creates an adapter from NetDBSelector to PeerSelector.
+// It bridges the network database's peer selection into the composable
+// PeerSelector interface so filters and scorers can wrap it.
+// See also [NetDBSelector].
 func NewNetDBSelectorAdapter(db NetDBSelector) (*NetDBSelectorAdapter, error) {
 	if db == nil {
 		return nil, oops.Errorf("db selector cannot be nil")
@@ -21,6 +24,8 @@ func NewNetDBSelectorAdapter(db NetDBSelector) (*NetDBSelectorAdapter, error) {
 }
 
 // SelectPeers delegates to the underlying NetDBSelector.
+// The exclude list keeps the pool from re-picking routers that already
+// hold a hop in the tunnel being built.
 func (a *NetDBSelectorAdapter) SelectPeers(count int, exclude []common.Hash) ([]router_info.RouterInfo, error) {
 	return a.db.SelectPeers(count, exclude)
 }

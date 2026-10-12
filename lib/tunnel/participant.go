@@ -232,7 +232,9 @@ func (p *Participant) Process(encryptedData []byte) (nextHopID TunnelID, decrypt
 	return nextHopID, decrypted, nil
 }
 
-// TunnelID returns this participant's tunnel ID
+// TunnelID returns this participant's tunnel ID.
+// This is the receive tunnel ID the participant uses to accept messages
+// from the previous hop in the chain.
 func (p *Participant) TunnelID() TunnelID {
 	return p.tunnelID
 }
@@ -260,6 +262,8 @@ func (p *Participant) SetLifetime(lifetime time.Duration) {
 }
 
 // CreatedAt returns when this participant tunnel was created.
+// The manager uses this to enforce the tunnel lifetime and expire stale
+// participants.
 func (p *Participant) CreatedAt() time.Time {
 	return p.createdAt
 }

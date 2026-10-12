@@ -18,14 +18,20 @@ const (
 	MinFloodfillsPerBucket = 2
 )
 
-// BucketStats tracks statistics for a single Kademlia bucket
+// BucketStats tracks statistics for a single Kademlia bucket.
+// It records how many routers and floodfills fall into one bucket, which the
+// adaptive strategy uses to find sparse or empty regions of the network.
+// See also [AdaptiveStrategy], [NumKademliaBuckets].
 type BucketStats struct {
 	BucketIndex      int // 0-255, representing the leading bit position
 	TotalRouters     int // Total routers in this bucket
 	FloodfillRouters int // Floodfill routers in this bucket
 }
 
-// ExplorationStrategy defines an interface for different exploration approaches
+// ExplorationStrategy defines an interface for different exploration approaches.
+// It lets the explorer plug in different ways of choosing which hashes to look
+// up, so the adaptive bucket-aware strategy can be swapped for a simpler one.
+// See also [AdaptiveStrategy], [Explorer].
 type ExplorationStrategy interface {
 	// GenerateExplorationKeys generates hashes to explore based on strategy
 	GenerateExplorationKeys(count int) ([]common.Hash, error)
@@ -40,7 +46,10 @@ type ExplorationStrategy interface {
 	GetStats() StrategyStats
 }
 
-// StrategyStats contains statistics about exploration strategy
+// StrategyStats contains statistics about exploration strategy.
+// It summarizes the NetDB's bucket distribution, including which buckets are
+// sparse or empty, so callers can see where floodfill coverage is lacking.
+// See also [AdaptiveStrategy], [GetStats].
 type StrategyStats struct {
 	TotalRouters       int
 	FloodfillRouters   int
@@ -74,7 +83,10 @@ type AdaptiveStrategy struct {
 	minFloodfillsTotal int // Minimum total floodfills desired
 }
 
-// NewAdaptiveStrategy creates a new adaptive exploration strategy
+// NewAdaptiveStrategy creates a new adaptive exploration strategy.
+// It initializes the strategy with our router's hash and default minimums for
+// NetDB size and total floodfills, ready to track bucket distribution.
+// See also [AdaptiveStrategy], [ExplorationStrategy].
 func NewAdaptiveStrategy(ourHash common.Hash) *AdaptiveStrategy {
 	return &AdaptiveStrategy{
 		ourHash:            ourHash,
@@ -83,7 +95,10 @@ func NewAdaptiveStrategy(ourHash common.Hash) *AdaptiveStrategy {
 	}
 }
 
-// GenerateExplorationKeys generates exploration keys targeting sparse buckets
+// GenerateExplorationKeys generates exploration keys targeting sparse buckets.
+// It produces hashes that fall into empty or under-covered Kademlia buckets, so
+// lookups for them are likely to discover routers in regions we know little about.
+// See also [AdaptiveStrategy], [ExplorationStrategy].
 func (s *AdaptiveStrategy) GenerateExplorationKeys(count int) ([]common.Hash, error) {
 	s.mu.RLock()
 	sparseBuckets := make([]int, len(s.sparseBuckets))
@@ -130,7 +145,10 @@ func (s *AdaptiveStrategy) GenerateExplorationKeys(count int) ([]common.Hash, er
 	return keys, nil
 }
 
-// ShouldExplore determines if exploration is needed
+// ShouldExplore determines if exploration is needed.
+// It returns true when the NetDB is too small, has too few floodfills, or has
+// sparse or empty buckets, so the explorer can decide whether to run a round.
+// See also [AdaptiveStrategy], [ExplorationStrategy].
 func (s *AdaptiveStrategy) ShouldExplore(netdbSize int) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -154,7 +172,10 @@ func (s *AdaptiveStrategy) ShouldExplore(netdbSize int) bool {
 	return netdbSize < s.minNetDBSize*2
 }
 
-// UpdateStats refreshes bucket statistics from current NetDB state
+// UpdateStats refreshes bucket statistics from current NetDB state.
+// It re-scans all cached RouterInfos, recomputes the bucket distribution, and
+// identifies which buckets are sparse or empty.
+// See also [AdaptiveStrategy], [ExplorationStrategy].
 func (s *AdaptiveStrategy) UpdateStats(db NetworkDatabase, ourHash common.Hash) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -223,7 +244,10 @@ func (s *AdaptiveStrategy) logStatisticsUpdate() {
 	}).Debug("Updated exploration strategy statistics")
 }
 
-// GetStats returns current strategy statistics
+// GetStats returns current strategy statistics.
+// It returns a snapshot of the total router and floodfill counts, the sparse
+// and empty bucket lists, and the per-bucket distribution.
+// See also [AdaptiveStrategy], [StrategyStats].
 func (s *AdaptiveStrategy) GetStats() StrategyStats {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -367,7 +391,10 @@ func generateRandomHash() (common.Hash, error) {
 	return hash, nil
 }
 
-// GetBucketStats returns statistics for a specific bucket
+// GetBucketStats returns statistics for a specific bucket.
+// It returns the router and floodfill counts for the given bucket index, or a
+// zero value if the index is out of range.
+// See also [AdaptiveStrategy], [BucketStats].
 func (s *AdaptiveStrategy) GetBucketStats(bucketIdx int) BucketStats {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -379,7 +406,10 @@ func (s *AdaptiveStrategy) GetBucketStats(bucketIdx int) BucketStats {
 	return s.bucketStats[bucketIdx]
 }
 
-// GetFloodfillGaps returns bucket indices with insufficient floodfill coverage
+// GetFloodfillGaps returns bucket indices with insufficient floodfill coverage.
+// It returns a copy of the sparse bucket list, which callers can use to target
+// exploration at regions lacking floodfill routers.
+// See also [AdaptiveStrategy], [MinFloodfillsPerBucket].
 func (s *AdaptiveStrategy) GetFloodfillGaps() []int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

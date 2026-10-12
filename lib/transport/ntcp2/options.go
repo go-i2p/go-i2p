@@ -106,6 +106,10 @@ func (o *Options) Serialize() []byte {
 }
 
 // NewOptionsBlock creates an Options block (type 1) from an Options struct.
+// The Options block is sent during the NTCP2 handshake to negotiate
+// capabilities such as the maximum message size.
+// See [I2P Spec: NTCP2](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ntcp2.rst) for the block format.
+// See also [Options] and [Block].
 func NewOptionsBlock(opts *Options) Block {
 	return Block{Type: BlockTypeOptions, Data: opts.Serialize()}
 }

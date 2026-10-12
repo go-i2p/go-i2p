@@ -12,6 +12,8 @@ import (
 const DefaultMaxSessions = 512
 
 // Config holds the configuration parameters for an NTCP2 transport instance, including listener address, working directory, and session limits.
+// It is passed to NewNTCP2Transport and validated before the transport starts.
+// See also [NewConfig] and [DefaultMaxSessions].
 type Config struct {
 	ListenerAddress         string // Address to listen on, e.g., ":42069"
 	WorkingDir              string // Working directory for persistent storage (e.g., ~/.go-i2p/config)
@@ -30,6 +32,8 @@ func (c *Config) GetMaxSessions() int {
 }
 
 // NewConfig creates a new Config with the specified listener address and default values for other fields.
+// It validates the listener address up front so misconfiguration is caught at
+// construction time rather than when the transport tries to bind. See also [Config].
 func NewConfig(listenerAddress string) (*Config, error) {
 	log.WithFields(logger.Fields{
 		"at":               "NewConfig",

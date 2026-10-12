@@ -34,6 +34,9 @@ type DestinationResolver struct {
 }
 
 // NewDestinationResolver creates a new destination resolver with the given NetDB.
+// It takes any NetDB that can return LeaseSet bytes by hash, so the resolver
+// can look up LeaseSets and extract the encryption public key for a destination.
+// See also [DestinationResolver], [ResolveDestination].
 func NewDestinationResolver(netdb interface {
 	GetLeaseSetBytes(hash common.Hash) ([]byte, error)
 	GetLeaseSet2Bytes(hash common.Hash) ([]byte, error)

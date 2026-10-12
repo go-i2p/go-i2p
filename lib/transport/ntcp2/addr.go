@@ -326,7 +326,9 @@ func HasDialableNTCP2Address(routerInfo *router_info.RouterInfo) bool {
 	return false
 }
 
-// SupportsNTCP2 checks if RouterInfo has an NTCP2 transport address.
+// SupportsNTCP2 checks if RouterInfo has an NTCP2 transport address. It is the
+// cheap compatibility check used by the transport's Compatible method before
+// attempting a session. See also [SupportsDirectNTCP2].
 func SupportsNTCP2(routerInfo *router_info.RouterInfo) bool {
 	if routerInfo == nil {
 		log.WithFields(logger.Fields{"at": "SupportsNTCP2"}).Debug("RouterInfo is nil, NTCP2 not supported")
@@ -348,7 +350,9 @@ func SupportsNTCP2(routerInfo *router_info.RouterInfo) bool {
 	return false
 }
 
-// WrapNTCP2Addr converts a net.Addr to ntcp2.Addr.
+// WrapNTCP2Addr converts a net.Addr to ntcp2.Addr. It wraps a plain TCP
+// address in the go-noise NTCP2 address type, which carries the peer's router
+// hash and role so the handshake can bind to the correct peer.
 func WrapNTCP2Addr(addr net.Addr, routerHash data.Hash) (*ntcp2.Addr, error) {
 	if ntcp2Addr, ok := addr.(*ntcp2.Addr); ok {
 		return ntcp2Addr, nil

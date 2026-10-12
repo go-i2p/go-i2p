@@ -10,6 +10,10 @@ import (
 )
 
 // PeerStats tracks connection success/failure statistics for a peer.
+// It records attempt counts, success and failure timestamps, consecutive
+// failures, and an exponential moving average of response time, which the
+// tracker uses to judge whether a peer is reliable or stale.
+// See also [PeerTracker], [GetStats].
 type PeerStats struct {
 	Hash              common.Hash
 	SuccessCount      int

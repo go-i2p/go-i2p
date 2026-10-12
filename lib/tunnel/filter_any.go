@@ -10,11 +10,14 @@ type AnyFilter struct {
 }
 
 // NewAnyFilter creates a composite OR filter.
+// It is useful when a peer is acceptable if it matches any of several
+// independent criteria.
 func NewAnyFilter(name string, filters ...PeerFilter) *AnyFilter {
 	return &AnyFilter{name: name, filters: filters}
 }
 
 // Name returns the filter name.
+// The name is used in logs and diagnostics to identify this filter.
 func (f *AnyFilter) Name() string { return f.name }
 
 // Accept returns true if any inner filter accepts the peer.

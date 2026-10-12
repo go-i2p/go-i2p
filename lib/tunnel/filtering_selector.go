@@ -17,9 +17,13 @@ type FilteringPeerSelector struct {
 }
 
 // FilteringPeerSelectorOption is a functional option for FilteringPeerSelector.
+// Options configure which filters are applied and how hard the selector
+// works to find peers that pass them.
 type FilteringPeerSelectorOption func(*FilteringPeerSelector)
 
 // WithFilters adds filters to the selector.
+// Each filter can drop peers that should not be used (e.g. failed or
+// congested), before the selector returns candidates.
 func WithFilters(filters ...PeerFilter) FilteringPeerSelectorOption {
 	return func(s *FilteringPeerSelector) {
 		s.filters = append(s.filters, filters...)
@@ -27,6 +31,8 @@ func WithFilters(filters ...PeerFilter) FilteringPeerSelectorOption {
 }
 
 // WithFilterMaxRetries sets the maximum retry count for finding acceptable peers.
+// If the first batch of candidates is all filtered out, the selector re-asks
+// the base selector, up to this many times.
 func WithFilterMaxRetries(n int) FilteringPeerSelectorOption {
 	return func(s *FilteringPeerSelector) {
 		s.maxRetries = n
@@ -34,6 +40,8 @@ func WithFilterMaxRetries(n int) FilteringPeerSelectorOption {
 }
 
 // WithFilterName sets a descriptive name for logging.
+// A distinct name lets operators tell apart multiple filtering selectors
+// that may be active in the same pool.
 func WithFilterName(name string) FilteringPeerSelectorOption {
 	return func(s *FilteringPeerSelector) {
 		s.name = name

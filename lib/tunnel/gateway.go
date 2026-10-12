@@ -31,11 +31,17 @@ type Gateway struct {
 }
 
 var (
-	// ErrNilEncryption is returned when encryption is nil
+	// ErrNilEncryption is returned when encryption is nil.
+	// A gateway cannot encrypt the tunnel layer it originates, so a nil
+	// encryptor means the gateway is unusable.
 	ErrNilEncryption = errors.New("encryption tunnel cannot be nil")
-	// ErrMessageTooLarge is returned when a message exceeds maximum size
+	// ErrMessageTooLarge is returned when a message exceeds maximum size.
+	// A single tunnel message can carry at most 1003 bytes of payload, so
+	// larger messages must be split or rejected.
 	ErrMessageTooLarge = errors.New("message too large for tunnel")
-	// ErrInvalidMessage is returned when message data is invalid
+	// ErrInvalidMessage is returned when message data is invalid.
+	// This guards against empty or otherwise unusable message input before
+	// the gateway tries to wrap it in a tunnel message.
 	ErrInvalidMessage = errors.New("invalid I2NP message data")
 )
 
@@ -146,6 +152,9 @@ func (g *Gateway) Send(msgBytes []byte) ([]byte, error) {
 }
 
 // DeliveryConfig specifies the delivery type and addressing for a tunnel message.
+// It tells the gateway how to address the message: locally, to a tunnel on
+// a gateway router, or directly to a router.
+// See also [DeliveryInstructions].
 type DeliveryConfig struct {
 	// DeliveryType: DTLocal (0), DTTunnel (1), or DTRouter (2)
 	DeliveryType byte
@@ -156,11 +165,15 @@ type DeliveryConfig struct {
 }
 
 // LocalDelivery returns a DeliveryConfig for DTLocal delivery.
+// Local delivery means the message is consumed by this router itself, with
+// no tunnel or router addressing needed.
 func LocalDelivery() DeliveryConfig {
 	return DeliveryConfig{DeliveryType: DTLocal}
 }
 
 // TunnelDelivery returns a DeliveryConfig for DTTunnel delivery.
+// The message is routed to a specific tunnel (tunnelID) on the gateway
+// router identified by gatewayHash.
 func TunnelDelivery(tunnelID uint32, gatewayHash [32]byte) DeliveryConfig {
 	return DeliveryConfig{
 		DeliveryType: DTTunnel,
@@ -170,6 +183,8 @@ func TunnelDelivery(tunnelID uint32, gatewayHash [32]byte) DeliveryConfig {
 }
 
 // RouterDelivery returns a DeliveryConfig for DTRouter delivery.
+// The message is sent directly to the router identified by routerHash,
+// bypassing any tunnel.
 func RouterDelivery(routerHash [32]byte) DeliveryConfig {
 	return DeliveryConfig{
 		DeliveryType: DTRouter,

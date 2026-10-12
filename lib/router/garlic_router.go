@@ -71,17 +71,6 @@ func newNetDBAdapter(netdb *netdb.StdNetDB) GarlicNetDB {
 	return &netDBAdapter{StdNetDB: netdb}
 }
 
-// GarlicMessageRouter provides router-level garlic message forwarding.
-// It bridges the gap between message processing (lib/i2np) and router
-// infrastructure (NetDB, transport, tunnels) to enable delivery of garlic
-// cloves to destinations, routers, and tunnels beyond LOCAL processing.
-// This component implements the GarlicCloveForwarder interface and is designed
-// to be injected into the MessageProcessor via SetCloveForwarder().
-// Architecture:
-// - Receives forwarding requests from MessageProcessor
-// - Accesses NetDB for destination/router lookups
-// - Uses transport layer for direct router-to-router messaging
-// - Uses tunnel pools for destination and tunnel delivery
 // drainRequest encapsulates a channel that needs to be drained to prevent
 // blocking the NetDB sender goroutine.
 type drainRequest struct {

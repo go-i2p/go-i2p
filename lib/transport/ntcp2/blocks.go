@@ -55,7 +55,11 @@ const (
 	RouterInfoFlagFloodRequest byte = 0x01
 )
 
-// Block represents a single parsed NTCP2 data-phase block.
+// Block represents a single parsed NTCP2 data-phase block. After the Noise XK
+// handshake, each decrypted frame carries one or more of these blocks, which
+// carry I2NP messages, RouterInfos, and control data between the two routers.
+// See [I2P Spec: NTCP2](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ntcp2.rst) for the block format.
+// See also [ParseBlocks] and [SerializeBlocks].
 type Block struct {
 	// Type is the block type identifier (0–4, 254).
 	Type byte
@@ -182,7 +186,9 @@ func NewRouterInfoBlock(routerInfoBytes []byte, flag byte) Block {
 	return Block{Type: BlockTypeRouterInfo, Data: data}
 }
 
-// BlockTypeString returns a human-readable name for a block type.
+// BlockTypeString returns a human-readable name for a block type. It is used
+// in log messages so operators can identify which block type is being handled.
+// See also [Block].
 func BlockTypeString(blockType byte) string {
 	switch blockType {
 	case BlockTypeDateTime:

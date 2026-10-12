@@ -50,6 +50,8 @@ type DefaultCongestionAwarePeerSelector struct {
 }
 
 // SelectionMetrics tracks peer selection statistics for monitoring.
+// It records how often the selector had to retry or fall back when
+// replacing congested peers, so operators can see selector pressure.
 type SelectionMetrics struct {
 	TotalSelections    int64 // Total selection attempts
 	GFlagExclusions    int64 // Peers excluded due to G flag
@@ -64,9 +66,13 @@ type SelectionMetrics struct {
 }
 
 // CongestionAwareSelectorOption is a functional option for configuring the selector.
+// Options tune how aggressively the selector avoids congested peers, keeping
+// the constructor stable as new knobs are added.
 type CongestionAwareSelectorOption func(*DefaultCongestionAwarePeerSelector)
 
 // WithMaxRetries sets the maximum number of retries when replacing G-flagged peers.
+// G-flagged peers are excluded per the congestion spec, so the selector may
+// need several attempts to find a clean set; this bounds that loop.
 func WithMaxRetries(n int) CongestionAwareSelectorOption {
 	return func(s *DefaultCongestionAwarePeerSelector) {
 		s.maxRetries = n

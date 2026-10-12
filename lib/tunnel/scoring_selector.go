@@ -18,9 +18,13 @@ type ScoringPeerSelector struct {
 }
 
 // ScoringPeerSelectorOption is a functional option for ScoringPeerSelector.
+// Options configure how peers are scored and filtered, keeping the
+// constructor signature stable as new tuning knobs are added.
 type ScoringPeerSelectorOption func(*ScoringPeerSelector)
 
 // WithScorers adds scorers to the selector.
+// Each scorer contributes a multiplicative factor to a peer's combined
+// score, so adding scorers lets callers layer independent quality signals.
 func WithScorers(scorers ...PeerScorer) ScoringPeerSelectorOption {
 	return func(s *ScoringPeerSelector) {
 		s.scorers = append(s.scorers, scorers...)
@@ -28,6 +32,8 @@ func WithScorers(scorers ...PeerScorer) ScoringPeerSelectorOption {
 }
 
 // WithScoreThreshold sets the minimum acceptable score.
+// Peers scoring below the threshold are dropped, so this bounds how much
+// the selector degrades when all candidates are weak.
 func WithScoreThreshold(threshold float64) ScoringPeerSelectorOption {
 	return func(s *ScoringPeerSelector) {
 		s.threshold = threshold
@@ -35,6 +41,8 @@ func WithScoreThreshold(threshold float64) ScoringPeerSelectorOption {
 }
 
 // WithScoringName sets the selector name for logging.
+// A distinct name lets operators tell apart multiple scoring selectors
+// that may be active in the same pool.
 func WithScoringName(name string) ScoringPeerSelectorOption {
 	return func(s *ScoringPeerSelector) {
 		s.name = name
@@ -42,6 +50,8 @@ func WithScoringName(name string) ScoringPeerSelectorOption {
 }
 
 // WithScoringMaxRetries sets the maximum retry count.
+// Retries let the selector re-pick peers when a build attempt fails,
+// bounded so a bad candidate set cannot loop forever.
 func WithScoringMaxRetries(n int) ScoringPeerSelectorOption {
 	return func(s *ScoringPeerSelector) {
 		s.maxRetries = n
