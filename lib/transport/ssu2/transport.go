@@ -33,6 +33,11 @@ type abandonedRelayTag struct {
 }
 
 // SSU2Transport implements the SSU2 transport protocol for I2P connections.
+// It is the UDP-based transport: it binds a UDP listener, performs Noise key
+// exchange with peers, and manages the pool of SSU2 sessions. It satisfies
+// transport.Transport so it can be wrapped by a TransportMuxer.
+// See [I2P Spec: SSU2](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ssu2.rst) for the protocol.
+// See also [SSU2Session] and [Config].
 type SSU2Transport struct {
 	listener *ssu2noise.SSU2Listener
 	// use atomic.Pointer for thread-safe config swaps (mirrors NTCP2 pattern)
@@ -142,12 +147,18 @@ type SSU2Transport struct {
 }
 
 // KeystoreProvider provides access to the router's cryptographic keys.
+// The transport uses it to load the encryption and signing keys that back the
+// Noise static key, so the same identity can be used across transports.
 type KeystoreProvider interface {
 	GetEncryptionPrivateKey() types.PrivateEncryptionKey
 	GetSigningPrivateKey() types.PrivateKey
 }
 
 // NewSSU2Transport creates a new SSU2 transport instance.
+// It derives the Noise crypto keys from the identity, binds the UDP listener
+// (using NAT traversal when a specific port is requested), and initializes key
+// management when a working directory is configured.
+// See also [Config] and [SSU2Transport].
 func NewSSU2Transport(identity router_info.RouterInfo, config *Config, keystore KeystoreProvider) (*SSU2Transport, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	l := logger.WithField("component", "ssu2")
@@ -364,6 +375,10 @@ func startSSU2Listener(t *SSU2Transport, udpConn net.PacketConn, ssu2Config *ssu
 }
 
 // Accept accepts an incoming SSU2 connection.
+// It rejects the connection immediately when the session pool is full, then
+// tracks the accepted connection so it can be promoted to a full session once
+// the peer's RouterInfo is known.
+// See also [SSU2Session].
 func (t *SSU2Transport) Accept() (net.Conn, error) {
 	// BUG FIX MEDIUM 1.7: Protect listener access with identityMu to prevent races
 	// with SetIdentity() and Close(). Matches pattern in Addr() and NTCP2.Accept().
@@ -526,6 +541,8 @@ func replayTokenToReplayKey(token []byte) [32]byte {
 }
 
 // Addr returns the network address the transport is bound to.
+// It reads the listener's bound address, which reflects the actual port after
+// NAT traversal and may differ from the configured listener address.
 func (t *SSU2Transport) Addr() net.Addr {
 	t.identityMu.RLock()
 	l := t.listener
@@ -587,6 +604,10 @@ func (t *SSU2Transport) recordPeerSuccess(hash data.Hash, latencyMs int64) {
 }
 
 // SetIdentity sets the router identity for this transport.
+// It re-derives the Noise crypto keys and recreates the UDP listener so the
+// listener presents the new identity's static key to peers. Implements
+// transport.Transport.
+// See also [SSU2Transport].
 func (t *SSU2Transport) SetIdentity(ident router_info.RouterInfo) error {
 	identHash, err := ident.IdentHash()
 	if err != nil {
@@ -1241,6 +1262,8 @@ func (t *SSU2Transport) NATManagersHealthy() bool {
 }
 
 // Close closes the transport cleanly.
+// It stops the NAT managers, closes the UDP listener, closes every active
+// session, and waits for background goroutines to finish. It is idempotent.
 func (t *SSU2Transport) Close() error {
 	t.closeOnce.Do(func() {
 		t.logger.Info("Closing SSU2 transport")
@@ -1316,6 +1339,8 @@ func (t *SSU2Transport) Close() error {
 }
 
 // Name returns the name of this transport.
+// It returns "SSU2", which higher layers use to identify and select this
+// transport among the available options.
 func (t *SSU2Transport) Name() string {
 	return "SSU2"
 }

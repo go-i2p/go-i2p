@@ -18,7 +18,9 @@ import (
 	"golang.org/x/crypto/curve25519"
 )
 
-// SupportsSSU2 checks if a RouterInfo has an SSU2 transport address.
+// SupportsSSU2 checks if a RouterInfo has an SSU2 transport address. It is the
+// cheap compatibility check used by the transport's Compatible method before
+// attempting a session. See also [HasDialableSSU2Address].
 func SupportsSSU2(routerInfo *router_info.RouterInfo) bool {
 	if routerInfo == nil {
 		return false

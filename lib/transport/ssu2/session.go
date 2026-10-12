@@ -45,6 +45,11 @@ type pendingI2NP struct {
 }
 
 // SSU2Session implements transport.TransportSession over an SSU2 connection.
+// It is the transport-level connection between two routers: it wraps the
+// Noise-encrypted SSU2 connection and adds retransmission, congestion
+// control, and clock-skew validation on top of it.
+// See [I2P Spec: SSU2](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ssu2.rst) for the protocol.
+// See also [SSU2Transport] and [transport.SessionCore].
 type SSU2Session struct {
 	*transport.SessionCore
 
@@ -67,6 +72,9 @@ type SSU2Session struct {
 }
 
 // NewSSU2Session creates a new SSU2 session and starts background workers.
+// Use NewSSU2SessionDeferred when the session may not be used, to avoid
+// spawning workers for a connection that gets dropped.
+// See also [SSU2Session] and [NewSSU2SessionDeferred].
 func NewSSU2Session(conn *ssu2noise.SSU2Conn, ctx context.Context, logger *logger.Entry) *SSU2Session {
 	session := NewSSU2SessionDeferred(conn, ctx, logger)
 	session.StartWorkers()
@@ -75,6 +83,7 @@ func NewSSU2Session(conn *ssu2noise.SSU2Conn, ctx context.Context, logger *logge
 
 // NewSSU2SessionDeferred creates a new SSU2 session without starting workers.
 // Call StartWorkers() after confirming the session will be used.
+// See also [NewSSU2Session].
 func NewSSU2SessionDeferred(conn *ssu2noise.SSU2Conn, ctx context.Context, logger *logger.Entry) *SSU2Session {
 	core, sessionLogger := transport.NewSessionCoreWithLogger(ctx, logger, "ssu2_session", conn.RemoteAddr().String())
 	sessionLogger.Info("Creating new SSU2 session")
@@ -212,6 +221,8 @@ func mergeBlockCallbacks(cbs *ssu2noise.DataHandlerCallbacks, cfg *BlockCallback
 }
 
 // StartWorkers launches the background send and receive goroutines.
+// It must be called exactly once per session, after construction, before the
+// session is used to send or receive I2NP messages.
 func (s *SSU2Session) StartWorkers() {
 	s.WaitGroup().Add(2)
 	go s.sendWorker()
