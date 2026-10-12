@@ -1,8 +1,8 @@
-package ssu2
-
 // nat_shortcircuit_test.go validates the public-IP short-circuit and the
 // non-private fallback alignment introduced to stop public-IPv4 routers from
 // being misclassified as FIREWALLED / stuck in TESTING.
+
+package ssu2
 
 import (
 	"net"

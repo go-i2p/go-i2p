@@ -1,5 +1,3 @@
-package ssu2
-
 // rc7_dial_slot_comprehensive_test.go provides comprehensive verification for RC-7.
 // These tests verify the detailed checklist items:
 // - Slot lifecycle (increment/decrement timing)
@@ -8,6 +6,8 @@ package ssu2
 // - Rapid dial scenarios
 // - Mixed dial scenarios (inbound + outbound)
 // - Slot accounting invariants
+
+package ssu2
 
 import (
 	"sync"

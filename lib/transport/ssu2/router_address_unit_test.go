@@ -1,8 +1,8 @@
-package ssu2
-
 // router_address_unit_test.go exercises the unexported and exported helpers
 // in router_address.go that were not yet covered: isSSU2Transport,
 // encodeBase64, resolveUDPAddress, and ConvertToRouterAddress.
+
+package ssu2
 
 import (
 	"net"

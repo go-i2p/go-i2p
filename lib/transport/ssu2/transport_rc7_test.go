@@ -1,11 +1,11 @@
-package ssu2
-
 // transport_rc7_test.go covers RC-7: Outbound Dial Slot Reservation/Release Mismatch
 //
 // RC-7 is a HIGH severity bug where concurrent dial attempts to the same peer
 // can leave slot reservations hanging if registerOrReuseSession detects a duplicate.
 // The tests verify that the slot accounting invariant is maintained:
 // (slots reserved) - (slots unreserved) = (active sessions)
+
+package ssu2
 
 import (
 	"testing"

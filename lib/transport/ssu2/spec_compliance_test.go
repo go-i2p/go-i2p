@@ -1,9 +1,9 @@
-package ssu2
-
 // Spec compliance tests for lib/transport/ssu2.
 //
 // These tests verify the go-noise/ssu2 primitives satisfy the invariants
 // stated in the I2P SSU2.md specification and referenced in PLAN.md Phase 7.
+
+package ssu2
 
 import (
 	"testing"

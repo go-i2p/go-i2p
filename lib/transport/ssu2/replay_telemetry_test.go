@@ -18,6 +18,7 @@ func newReplayTestTransport() *SSU2Transport {
 	}
 }
 
+// A nil replay token defers the check and counts it in telemetry.
 func TestCheckReplayToken_NilTokenDefersAndIncrementsTelemetry(t *testing.T) {
 	tr := newReplayTestTransport()
 	defer tr.handler.Close()
@@ -29,6 +30,7 @@ func TestCheckReplayToken_NilTokenDefersAndIncrementsTelemetry(t *testing.T) {
 	assert.Equal(t, uint64(2), tr.GetReachabilityCounters().ReplayChecksDeferred)
 }
 
+// A replay token seen twice is flagged as a duplicate on the second check.
 func TestCheckReplayToken_DuplicateTokenDetected(t *testing.T) {
 	tr := newReplayTestTransport()
 	defer tr.handler.Close()
@@ -40,6 +42,7 @@ func TestCheckReplayToken_DuplicateTokenDetected(t *testing.T) {
 	assert.Equal(t, uint64(0), tr.GetReachabilityCounters().ReplayChecksDeferred, "validated replay tokens should not increment deferred counter")
 }
 
+// A deferred (nil-token) check followed by a validated token still detects duplicates.
 func TestCheckReplayToken_DeferredThenValidated(t *testing.T) {
 	tr := newReplayTestTransport()
 	defer tr.handler.Close()

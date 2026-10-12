@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// A 32-byte replay token is used directly as the replay key.
 func TestReplayTokenToReplayKey_UsesDirectBytesFor32ByteToken(t *testing.T) {
 	token := make([]byte, 32)
 	token[0] = 0xAB
@@ -23,6 +24,7 @@ func TestReplayTokenToReplayKey_UsesDirectBytesFor32ByteToken(t *testing.T) {
 	assert.Equal(t, want, got, "32-byte replay token should map directly")
 }
 
+// A token that is not 32 bytes is hashed with SHA-256 to form the replay key.
 func TestReplayTokenToReplayKey_HashesNon32ByteToken(t *testing.T) {
 	token := []byte("short-token")
 

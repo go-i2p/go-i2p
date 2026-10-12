@@ -1,9 +1,9 @@
-package ssu2
-
 // router_address_introducer_test.go covers Track C3: when the transport's
 // listener is bound to a non-public address but at least one usable
 // introducer is registered, ConvertToRouterAddress must publish an
 // introducer-only RouterAddress (caps=B, no host/port, ih0/itag0/iexp0).
+
+package ssu2
 
 import (
 	"net"

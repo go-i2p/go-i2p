@@ -1,7 +1,7 @@
-package ssu2
-
 // nat_nonce_test.go tests nonce verification in PeerTest observation handling
 // to prevent address-confirmation poisoning via injection attacks.
+
+package ssu2
 
 import (
 	"net"
