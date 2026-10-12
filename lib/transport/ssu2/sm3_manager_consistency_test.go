@@ -1,3 +1,7 @@
+// Tests for SM-3: PeerTestManager consistency. Verifies that Stop is
+// idempotent and that concurrent start/stop calls leave the manager in a
+// consistent state.
+
 package ssu2
 
 import (

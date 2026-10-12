@@ -1,3 +1,7 @@
+// Tests for replay key derivation. Verifies that replayTokenToReplayKey
+// derives a stable 32-byte key from a replay token, as required for
+// replay protection of SSU2 messages.
+
 package ssu2
 
 import (

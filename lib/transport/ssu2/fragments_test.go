@@ -1,3 +1,7 @@
+// Tests for I2NP message fragmentation. Validates that oversized I2NP
+// messages are split into first and follow-on fragment blocks that fit
+// the SSU2 payload limit, and that small messages stay unfragmented.
+
 package ssu2
 
 import (

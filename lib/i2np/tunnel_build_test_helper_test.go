@@ -1,3 +1,4 @@
+// Shared test helpers for tunnel build message tests.
 package i2np
 
 import (

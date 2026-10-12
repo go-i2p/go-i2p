@@ -1,3 +1,4 @@
+// Benchmarks for garlic clove serialization and parsing performance.
 package i2np
 
 import (

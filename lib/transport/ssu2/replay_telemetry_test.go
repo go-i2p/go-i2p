@@ -1,3 +1,7 @@
+// Tests for replay token telemetry. Verifies that checkReplayToken logs
+// and counts replayed SSU2 messages without affecting the accept/reject
+// decision.
+
 package ssu2
 
 import (

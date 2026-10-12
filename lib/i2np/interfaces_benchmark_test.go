@@ -1,3 +1,4 @@
+// Benchmarks for I2NP interface method call overhead.
 package i2np
 
 import (

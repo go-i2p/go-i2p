@@ -1,3 +1,4 @@
+// Tests for I2NP DataMessage serialization and deserialization.
 package i2np
 
 import (

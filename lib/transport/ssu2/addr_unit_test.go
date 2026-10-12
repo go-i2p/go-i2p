@@ -1,7 +1,7 @@
-package ssu2
-
 // addr_unit_test.go tests the WrapSSU2Addr function which wraps a net.Addr
 // as an SSU2Addr without requiring a full RouterInfo.
+
+package ssu2
 
 import (
 	"net"

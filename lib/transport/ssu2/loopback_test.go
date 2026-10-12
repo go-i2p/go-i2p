@@ -1,3 +1,6 @@
+// Tests for RL-5: DetachConn on loopback connections. Verifies that
+// detaching a connection releases its resources without leaking.
+
 package ssu2
 
 import (

@@ -1,8 +1,8 @@
-package ssu2
-
 // session_unit_test.go tests SSU2Session methods that operate on atomic
 // counters, callbacks, and block callback configuration, without requiring
 // a real network handshake for most cases.
+
+package ssu2
 
 import (
 	"context"

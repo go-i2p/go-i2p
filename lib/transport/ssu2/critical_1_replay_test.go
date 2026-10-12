@@ -1,3 +1,6 @@
+// Tests for CRITICAL-1: replay checking of incoming SSU2 messages.
+// Verifies that replayed messages are rejected and fresh ones accepted.
+
 package ssu2
 
 import (

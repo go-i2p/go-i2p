@@ -1,8 +1,8 @@
-package ssu2
-
 // nat_unit_test.go tests NAT handler methods that can be exercised without a
 // live peer-test or relay exchange by using nil-manager guard paths and the
 // minimal transport helper from transport_unit_test.go.
+
+package ssu2
 
 import (
 	"net"

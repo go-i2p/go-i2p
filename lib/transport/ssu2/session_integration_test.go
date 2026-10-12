@@ -1,5 +1,3 @@
-package ssu2
-
 // session_integration_test.go – Integration tests for SSU2Session over loopback UDP.
 //
 // These tests verify M2 (loopback handshake + I2NP round-trip) and M3 (fragment
@@ -12,6 +10,8 @@ package ssu2
 //
 //	go test -run TestSessionIntegration ./lib/transport/ssu2/...
 //	go test -run TestFragmentIntegration ./lib/transport/ssu2/...
+
+package ssu2
 
 import (
 	"context"

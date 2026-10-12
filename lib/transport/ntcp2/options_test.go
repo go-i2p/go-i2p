@@ -1,5 +1,6 @@
-// Tests for the NTCP2 Options block. Validates serialization, parsing,
-// and the 4.4 fixed-point encoding used in the handshake.
+// Tests for dial configuration from a RouterAddress. Validates that the
+// 32-byte static key and 16-byte obfuscation IV are bound into the
+// Noise config when dialing a peer.
 
 package ntcp2
 

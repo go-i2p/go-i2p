@@ -1,3 +1,5 @@
+// Tests for build request record wire-format parsing.
+// Validates that records are correctly decoded from I2NP message data.
 package i2np
 
 import (

@@ -1,3 +1,6 @@
+// Tests for persistent config file permissions. Verifies that the SSU2
+// config directory is created with 0o700 so only the owner can read it.
+
 package ssu2
 
 import (

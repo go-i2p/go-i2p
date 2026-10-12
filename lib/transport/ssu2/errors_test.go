@@ -1,3 +1,6 @@
+// Tests for SSU2 error values and WrapSSU2Error. Verifies that wrapped
+// errors keep their original message and type for callers that check them.
+
 package ssu2
 
 import (

@@ -159,6 +159,8 @@ func (m *panicTypeMessage) Type() int {
 	panic("panic from Type")
 }
 
+// TestProcessSessionMessagesRecoversFromReadPanic verifies that a panic while reading
+// I2NP messages from a session is recovered and the read loop stops.
 func TestProcessSessionMessagesRecoversFromReadPanic(t *testing.T) {
 	router := &Router{running: true}
 	peerHash := common.Hash{}
@@ -179,6 +181,8 @@ func TestProcessSessionMessagesRecoversFromReadPanic(t *testing.T) {
 	}
 }
 
+// TestRouteMessageRecoversFromMessagePanic verifies that a panic while routing an I2NP
+// message is recovered and returned as an error.
 func TestRouteMessageRecoversFromMessagePanic(t *testing.T) {
 	router := &Router{
 		messageRouter: i2np.NewI2NPMessageDispatcher(i2np.I2NPMessageDispatcherConfig{
@@ -199,6 +203,8 @@ func TestRouteMessageRecoversFromMessagePanic(t *testing.T) {
 	assert.Contains(t, err.Error(), "panic while routing I2NP message")
 }
 
+// TestProcessSessionMessagesRefusesUnauthenticatedPeer verifies that no I2NP messages
+// are read from a peer whose transport handshake is not complete.
 func TestProcessSessionMessagesRefusesUnauthenticatedPeer(t *testing.T) {
 	router := &Router{running: true}
 	peerHash := common.Hash{}
@@ -210,6 +216,8 @@ func TestProcessSessionMessagesRefusesUnauthenticatedPeer(t *testing.T) {
 	assert.Equal(t, 0, reader.calls, "unauthenticated peers must not start message reads")
 }
 
+// TestIsBenignReadError verifies that normal session-close errors are classified as
+// benign so they do not produce warning logs.
 func TestIsBenignReadError(t *testing.T) {
 	assert.True(t, isBenignReadError(ntcp.ErrSessionClosed))
 	assert.True(t, isBenignReadError(io.EOF))
@@ -219,6 +227,8 @@ func TestIsBenignReadError(t *testing.T) {
 	assert.False(t, isBenignReadError(errors.New("invalid frame length")))
 }
 
+// TestIsFramingOrLengthViolation verifies that I2NP framing and length violations are
+// classified separately from benign read errors.
 func TestIsFramingOrLengthViolation(t *testing.T) {
 	assert.True(t, isFramingOrLengthViolation(errors.New("invalid frame length")))
 	assert.True(t, isFramingOrLengthViolation(errors.New("payload exceeds limit")))

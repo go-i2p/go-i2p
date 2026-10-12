@@ -1,3 +1,6 @@
+// Tests for SupportsSSU2. Verifies the nil and empty RouterInfo guards
+// return false instead of panicking.
+
 package ssu2
 
 import (
