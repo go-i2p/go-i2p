@@ -1,3 +1,6 @@
+// Tests for tracked connection cleanup. Validates that tracked
+// connections are removed from the map when closed.
+
 package ntcp2
 
 import (

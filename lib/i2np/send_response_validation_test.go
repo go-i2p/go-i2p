@@ -1,3 +1,4 @@
+// Tests for validating responses sent back to peers during tunnel builds.
 package i2np
 
 import (

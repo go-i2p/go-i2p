@@ -1,3 +1,4 @@
+// Tests for ECIES-encrypted message marshaling and unmarshaling.
 package i2np
 
 import (

@@ -1,3 +1,6 @@
+// Tests for persistent SSU2 config. Verifies the obfuscation IV, intro key,
+// and key rotation are stored and reloaded correctly.
+
 package ssu2
 
 import (

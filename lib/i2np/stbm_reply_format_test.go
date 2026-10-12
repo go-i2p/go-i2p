@@ -1,3 +1,4 @@
+// Tests for the ShortTunnelBuildReply wire format.
 package i2np
 
 import (

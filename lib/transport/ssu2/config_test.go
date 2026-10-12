@@ -1,3 +1,6 @@
+// Tests for SSU2 Config. Verifies default values and validation of the
+// transport configuration.
+
 package ssu2
 
 import (

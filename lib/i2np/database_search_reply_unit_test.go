@@ -1,3 +1,4 @@
+// Tests for I2NP DatabaseSearchReply message serialization and deserialization.
 package i2np
 
 import (

@@ -1,3 +1,4 @@
+// Tests for garlic session state tracking during multi-hop delivery.
 package i2np
 
 import (

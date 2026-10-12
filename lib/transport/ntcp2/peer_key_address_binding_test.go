@@ -1,5 +1,6 @@
-// Tests for peer key and address binding. Validates that the persistent
-// config directory is created with restrictive permissions.
+// Tests for peer key and address binding. Validates that the 32-byte
+// static key and 16-byte obfuscation IV are bound into the Noise config
+// when dialing a peer.
 
 package ntcp2
 

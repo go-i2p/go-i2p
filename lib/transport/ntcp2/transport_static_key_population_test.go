@@ -1,3 +1,6 @@
+// Tests for static key population. Validates that a missing 32-byte
+// X25519 static key is loaded from the keystore.
+
 package ntcp2
 
 import (

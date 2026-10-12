@@ -1,3 +1,4 @@
+// Tests for the I2NP message processor dispatch and handler wiring.
 package i2np
 
 import (

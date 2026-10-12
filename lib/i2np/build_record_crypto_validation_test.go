@@ -1,3 +1,4 @@
+// Tests for build record encryption and decryption used in tunnel builds.
 package i2np
 
 // Security Audit Tests for Build Record Encryption/Decryption

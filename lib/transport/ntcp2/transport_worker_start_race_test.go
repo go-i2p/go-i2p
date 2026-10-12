@@ -1,3 +1,6 @@
+// Tests for the worker start race (CRITICAL-3.1). Validates that
+// starting the transport twice does not start duplicate workers.
+
 package ntcp2
 
 import (

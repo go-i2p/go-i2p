@@ -21,6 +21,8 @@ func TestParseBlocks_Empty(t *testing.T) {
 	assert.Empty(t, blocks)
 }
 
+// Validates that a single block parses with the 3-byte header (1 type
+// byte + 2-byte big-endian size) from the NTCP2 handshake message.
 func TestParseBlocks_SingleBlock(t *testing.T) {
 	// DateTime block: type=0, size=4, data=4 bytes of timestamp
 	payload := make([]byte, 7) // 3 header + 4 data
@@ -101,6 +103,8 @@ func TestParseBlocks_UnknownType(t *testing.T) {
 
 // --- Block serialization tests ---
 
+// Validates that serializing then parsing blocks returns the original
+// blocks, matching the NTCP2 wire format.
 func TestSerializeBlocks_RoundTrip(t *testing.T) {
 	original := []Block{
 		NewDateTimeBlock(),
@@ -126,6 +130,8 @@ func TestSerializeBlocks_Empty(t *testing.T) {
 
 // --- Block constructors ---
 
+// Validates that the DateTime block carries the local timestamp in the
+// 8-byte big-endian payload the NTCP2 spec expects.
 func TestNewDateTimeBlock(t *testing.T) {
 	block := NewDateTimeBlock()
 	assert.Equal(t, BlockTypeDateTime, block.Type)
@@ -145,6 +151,8 @@ func TestParseDateTimeBlock_InvalidSize(t *testing.T) {
 	assert.Contains(t, err.Error(), "must be 4 bytes")
 }
 
+// Validates that the Padding block fills the handshake with random
+// bytes, as the NTCP2 spec allows for variable-size messages.
 func TestNewPaddingBlock(t *testing.T) {
 	block := NewPaddingBlock(64)
 	assert.Equal(t, BlockTypePadding, block.Type)
@@ -161,6 +169,8 @@ func TestNewPaddingBlock(t *testing.T) {
 	assert.False(t, allZero, "Expected random padding bytes, got all zeros")
 }
 
+// Validates that the RouterInfo block is prefixed with a 1-byte flag
+// before the RouterInfo payload, per the NTCP2 spec.
 func TestNewRouterInfoBlock(t *testing.T) {
 	ri := []byte{0x01, 0x02, 0x03}
 	block := NewRouterInfoBlock(ri, RouterInfoFlagFloodRequest)
@@ -191,6 +201,8 @@ func TestBlockTypeString(t *testing.T) {
 
 // --- Termination block integration with block framing ---
 
+// Validates that a Termination block serializes into the handshake
+// payload with the correct type byte.
 func TestTerminationBlockInSerializedPayload(t *testing.T) {
 	termBlock := BuildTerminationBlock(TerminationNormalClose)
 	// BuildTerminationBlock already includes the block header, so it should

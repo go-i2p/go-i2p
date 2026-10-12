@@ -1,3 +1,4 @@
+// Property tests for the ChaCha20 layer encryption used in short tunnel builds.
 package i2np
 
 import (

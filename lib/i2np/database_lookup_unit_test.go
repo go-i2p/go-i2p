@@ -1,3 +1,4 @@
+// Tests for I2NP DatabaseLookup message wire-format parsing.
 package i2np
 
 // These tests validate the DatabaseLookup wire-format parsing required by the

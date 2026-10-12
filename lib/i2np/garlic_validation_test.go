@@ -1,3 +1,4 @@
+// Tests for garlic message encryption and decryption using ECIES with X25519.
 package i2np
 
 // Security Audit Tests for Garlic Messages (ECIES-X25519-AEAD-Ratchet)

@@ -1,3 +1,7 @@
+// Tests for RC-3: NAT manager pointer races during relay callbacks.
+// Verifies that concurrent SetIdentity calls racing with relay signature
+// verification do not cause a data race.
+
 package ssu2
 
 import (

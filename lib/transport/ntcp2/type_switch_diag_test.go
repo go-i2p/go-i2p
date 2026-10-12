@@ -1,3 +1,6 @@
+// Diagnostic tests for type switching. Documents how wrapped errors
+// affect type assertions in the read loop.
+
 package ntcp2
 
 import (

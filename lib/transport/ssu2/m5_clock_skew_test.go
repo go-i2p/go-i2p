@@ -1,3 +1,6 @@
+// Tests for M-5: timestamp tolerance. Verifies that SSU2 message timestamps
+// outside the allowed clock skew window are rejected.
+
 package ssu2
 
 import (

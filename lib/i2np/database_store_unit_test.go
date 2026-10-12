@@ -1,3 +1,4 @@
+// Tests for I2NP DatabaseStore message serialization and deserialization.
 package i2np
 
 import (

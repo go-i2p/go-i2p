@@ -1,3 +1,7 @@
+// Tests for relay request signature verification. Verifies that relay
+// requests are only accepted with a valid router signature, and fail
+// closed when the router cannot be looked up.
+
 package ssu2
 
 import (

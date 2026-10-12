@@ -1,3 +1,4 @@
+// Integration tests for the I2NP message processor end-to-end flow.
 package i2np
 
 import (

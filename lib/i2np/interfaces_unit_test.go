@@ -1,3 +1,4 @@
+// Tests that I2NP types satisfy the expected interfaces.
 package i2np
 
 import (

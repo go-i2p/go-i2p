@@ -1,3 +1,4 @@
+// Tests for I2NP message ID generation and assignment.
 package i2np
 
 import (

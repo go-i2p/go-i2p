@@ -58,6 +58,8 @@ func TestRekeyState_NeedsRekey_BelowThreshold(t *testing.T) {
 	assert.False(t, rs.needsRekey())
 }
 
+// Validates that the session flags itself for rekeying once the
+// message count reaches the rekey threshold.
 func TestRekeyState_NeedsRekey_AtThreshold(t *testing.T) {
 	rs := newRekeyState()
 	atomic.StoreUint64(&rs.messagesSent, RekeyThreshold)
@@ -177,6 +179,8 @@ var _ Rekeyer = (*mockRekeyConn)(nil)
 
 // --- RekeyThreshold value test ---
 
+// Validates that the rekey threshold is 65535, just under 2^16, so a
+// session rekeys before the message counter wraps.
 func TestRekeyThreshold_Value(t *testing.T) {
 	// Verify threshold is just under 2^16 as documented
 	assert.Equal(t, uint64(65535), RekeyThreshold)

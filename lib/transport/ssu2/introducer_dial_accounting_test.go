@@ -1,3 +1,6 @@
+// Tests for dialViaIntroducer accounting. Verifies that dials through an
+// introducer are counted correctly and cleaned up on failure.
+
 package ssu2
 
 import (

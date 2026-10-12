@@ -1,3 +1,6 @@
+// Tests for DefaultHandler. Validates the SSU2 message checks: replay
+// protection, timestamp tolerance, and session termination handling.
+
 package ssu2
 
 import (

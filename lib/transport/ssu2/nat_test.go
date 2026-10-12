@@ -1,3 +1,6 @@
+// Tests for the SSU2 NAT managers. Verifies NAT type detection and the
+// manager lifecycle on a loopback listener.
+
 package ssu2
 
 import (

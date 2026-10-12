@@ -10,6 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// Validates that a base I2NP message round-trips through its wire format
+// with type, message ID, and payload intact.
 func TestBaseI2NPMessage(t *testing.T) {
 	// Test basic message creation and marshaling
 	msg := NewBaseI2NPMessage(I2NPMessageTypeData)
@@ -30,6 +32,7 @@ func TestBaseI2NPMessage(t *testing.T) {
 	assert.Equal(t, []byte("Hello I2P"), msg2.GetData())
 }
 
+// Validates that a Data message round-trips through its wire format with the payload intact.
 func TestDataMessage(t *testing.T) {
 	payload := []byte("This is test data")
 	msg := NewDataMessage(payload)
@@ -48,6 +51,8 @@ func TestDataMessage(t *testing.T) {
 	assert.Equal(t, payload, msg2.GetPayload())
 }
 
+// Validates that a DeliveryStatus message round-trips through its wire format
+// with the referenced status message ID intact.
 func TestDeliveryStatusMessage(t *testing.T) {
 	timestamp := time.Now().Truncate(time.Second) // Truncate for comparison
 	msg := NewDeliveryStatusMessage(54321, timestamp)
@@ -67,6 +72,8 @@ func TestDeliveryStatusMessage(t *testing.T) {
 	// Note: Timestamp comparison might have some precision differences due to I2P Date format
 }
 
+// Validates that a TunnelData message round-trips through its wire format
+// with the tunnel ID and data intact.
 func TestTunnelDataMessage(t *testing.T) {
 	var data [1024]byte
 	copy(data[:], "Test tunnel data")

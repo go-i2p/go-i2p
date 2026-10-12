@@ -1,3 +1,6 @@
+// Tests for the session promotion race. Validates that racing
+// promotion of the same connection does not corrupt session state.
+
 package ntcp2
 
 import (

@@ -1,3 +1,6 @@
+// Tests for the NTCP2 termination block. Validates that a termination
+// block is written best-effort when a session ends.
+
 package ntcp2
 
 import (

@@ -1,3 +1,6 @@
+// Tests for the session count invariant (SA-2). Validates that the
+// active session count stays consistent under concurrent use.
+
 package ntcp2
 
 import (

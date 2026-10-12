@@ -1,3 +1,4 @@
+// Tests for garlic clove construction and parsing.
 package i2np
 
 import (

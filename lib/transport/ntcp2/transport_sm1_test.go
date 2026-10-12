@@ -1,3 +1,6 @@
+// Tests for the SetIdentity race (SM-1). Validates that updating the
+// transport identity concurrently with session setup is safe.
+
 package ntcp2
 
 import (
