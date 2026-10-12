@@ -1,3 +1,5 @@
+// Integration tests for inbound SSU2 sessions. Verifies that the router
+// accepts and handles incoming SSU2 connections.
 package router
 
 // router_ssu2_integration_test.go — Integration test for G-H1: inbound SSU2 sessions.

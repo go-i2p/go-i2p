@@ -1,3 +1,6 @@
+// Tests for destination keystore persistence. Validates that ECIES
+// destinations are saved to disk and reloaded without losing key material,
+// so a destination keeps the same identity across restarts.
 package keys
 
 import (

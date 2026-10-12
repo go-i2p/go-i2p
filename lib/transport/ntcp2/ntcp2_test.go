@@ -1,3 +1,6 @@
+// Tests for the NTCP2 transport core. Covers session basics, config
+// validation, and I2NP message framing.
+
 package ntcp2
 
 import (

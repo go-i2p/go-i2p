@@ -1,3 +1,6 @@
+// Tests for persistent config file permissions. Validates that the
+// working directory holding key material is not world-readable.
+
 package ntcp2
 
 import (

@@ -1,3 +1,5 @@
+// Integration tests for the full router. Verifies that the router starts,
+// connects, and shuts down correctly as a whole.
 package router
 
 import (

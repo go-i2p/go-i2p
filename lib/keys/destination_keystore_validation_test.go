@@ -1,3 +1,5 @@
+// Tests for NewDestinationKeyStoreFromKeys input validation.
+// Rebuilding a destination from existing keys must reject nil keys.
 package keys
 
 import (

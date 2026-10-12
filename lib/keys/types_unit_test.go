@@ -1,3 +1,5 @@
+// Tests for the base KeyStoreImpl. Verifies that Close() zeroes private
+// key bytes so key material does not linger in memory.
 package keys
 
 import (

@@ -1,3 +1,6 @@
+// Tests for loopback address detection. Validates that localhost
+// connections skip NAT traversal during transport startup.
+
 package ntcp2
 
 import (

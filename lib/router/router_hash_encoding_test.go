@@ -1,3 +1,5 @@
+// Tests for router identity hash encoding. Validates that the router identity
+// hash is encoded with the I2P base64 alphabet.
 package router
 
 import (

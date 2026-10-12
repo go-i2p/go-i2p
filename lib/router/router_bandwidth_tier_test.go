@@ -1,3 +1,5 @@
+// Tests for router bandwidth tier resolution. Validates that the router
+// classifies its bandwidth into the right tier from its settings.
 package router
 
 import (

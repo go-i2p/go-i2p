@@ -1,3 +1,6 @@
+// Tests for the NTCP2 Options block. Validates serialization, parsing,
+// and the 4.4 fixed-point encoding used in the handshake.
+
 package ntcp2
 
 import (

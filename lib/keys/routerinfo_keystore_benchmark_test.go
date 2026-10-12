@@ -1,3 +1,5 @@
+// Benchmarks for key generation and router keystore operations.
+// Tracks the cost of Ed25519 key generation, key storage, and KeyID lookups.
 package keys
 
 import (

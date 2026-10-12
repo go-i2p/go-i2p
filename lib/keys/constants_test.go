@@ -1,3 +1,5 @@
+// Shared test constants for the keys package test suite.
+// These replace magic literals that appear across multiple test files.
 package keys
 
 import "os"

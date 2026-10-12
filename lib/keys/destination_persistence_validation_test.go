@@ -1,3 +1,6 @@
+// Tests for destination key file loading and file permissions.
+// A corrupt or unreadable key file must fail loudly instead of silently
+// generating a new identity, which would lose the destination.
 package keys
 
 import (

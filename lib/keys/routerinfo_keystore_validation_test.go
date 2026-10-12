@@ -1,3 +1,6 @@
+// Tests for router keystore safety and security. Covers type assertion
+// error handling, key file permissions, and audits that only modern
+// crypto (Ed25519/X25519) is used, with no legacy DSA or ElGamal paths.
 package keys
 
 import (

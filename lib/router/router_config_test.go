@@ -1,3 +1,5 @@
+// Tests for router configuration handling. Validates that config values are
+// parsed and applied to the router correctly.
 package router
 
 import (

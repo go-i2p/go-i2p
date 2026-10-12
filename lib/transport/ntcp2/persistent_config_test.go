@@ -1,3 +1,6 @@
+// Tests for persistent config. Validates that the obfuscation IV is
+// loaded from disk or generated and stored on first use.
+
 package ntcp2
 
 import (

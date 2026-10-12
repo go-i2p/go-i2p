@@ -1,3 +1,6 @@
+// Tests for peer key and address binding. Validates that the persistent
+// config directory is created with restrictive permissions.
+
 package ntcp2
 
 import (

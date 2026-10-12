@@ -1,3 +1,5 @@
+// Tests for router safety properties. Validates that the router behaves
+// correctly under concurrent access and edge conditions.
 package router
 
 import (

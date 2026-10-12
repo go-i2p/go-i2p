@@ -1,3 +1,5 @@
+// Tests for KeyStoreImpl key file storage. Verifies that stored key files
+// are created with owner-only permissions (0600).
 package keys
 
 import (

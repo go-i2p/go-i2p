@@ -1,3 +1,5 @@
+// Tests for router Wait. Validates that Wait blocks until the router has
+// fully started or stopped.
 package router
 
 import (

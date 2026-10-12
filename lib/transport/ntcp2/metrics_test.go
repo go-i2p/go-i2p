@@ -1,3 +1,6 @@
+// Tests for transport metrics. Validates that handshake phase failure
+// counters are tracked correctly.
+
 package ntcp2
 
 import (

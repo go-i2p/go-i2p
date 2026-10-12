@@ -1,3 +1,5 @@
+// Tests for reseed status. Validates that the router tracks and reports its
+// reseed progress correctly.
 package router
 
 import (

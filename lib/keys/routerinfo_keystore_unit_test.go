@@ -1,3 +1,6 @@
+// Unit tests for RouterInfoKeystore. Covers KeyID generation and fallbacks,
+// RouterInfo capability strings, Ed25519/X25519 key generation, and
+// RouterInfo timestamp rounding.
 package keys
 
 import (

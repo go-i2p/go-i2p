@@ -1,3 +1,5 @@
+// Tests for the RouterInfo provider. Validates that the router builds its
+// RouterInfo and applies the publicly routable host policy correctly.
 package router
 
 import (

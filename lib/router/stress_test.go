@@ -1,3 +1,5 @@
+// Stress tests for the router. Exercises the router under heavy load to
+// surface race conditions and resource leaks.
 package router
 
 import (

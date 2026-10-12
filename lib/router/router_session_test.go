@@ -1,3 +1,5 @@
+// Tests for router session management. Validates that sessions are added,
+// looked up, and removed correctly.
 package router
 
 import (

@@ -1,3 +1,6 @@
+// Tests for NTCP2 rekeying. Validates that the session rekeys its Noise
+// state after the message count reaches the rekey threshold.
+
 package ntcp2
 
 import (

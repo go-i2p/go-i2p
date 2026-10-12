@@ -1,3 +1,5 @@
+// Tests for router health checks. Validates that the router reports its
+// resource usage (open file descriptors) correctly.
 package router
 
 import (

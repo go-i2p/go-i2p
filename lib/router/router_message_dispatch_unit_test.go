@@ -1,3 +1,5 @@
+// Unit tests for router message dispatch. Validates that incoming I2NP
+// messages are routed to the right handler.
 package router
 
 import (

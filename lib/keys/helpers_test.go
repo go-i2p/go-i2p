@@ -1,3 +1,5 @@
+// Shared test helpers for the keys package test suite.
+// Provides key store setup, load/store round-trips, and permission checks.
 package keys
 
 import (

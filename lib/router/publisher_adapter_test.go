@@ -1,3 +1,5 @@
+// Tests for the publisher transport adapter. Validates that published data
+// (RouterInfo, LeaseSet) is sent through the transport correctly.
 package router
 
 import (

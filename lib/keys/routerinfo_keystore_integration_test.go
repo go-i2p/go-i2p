@@ -1,3 +1,6 @@
+// Integration tests for RouterInfoKeystore, which holds the keys behind a
+// router's RouterInfo. Covers key persistence across restarts, RouterInfo
+// construction and signing, and concurrent key generation.
 package keys
 
 import (
