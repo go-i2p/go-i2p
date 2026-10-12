@@ -1,3 +1,5 @@
+// Performance tests and benchmarks for the router. Measures throughput and
+// latency of core router operations.
 package router
 
 import (

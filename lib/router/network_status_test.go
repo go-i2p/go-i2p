@@ -1,3 +1,5 @@
+// Tests for network status reporting. Validates that the router reports its
+// network state (peers, tunnels, bandwidth) correctly.
 package router
 
 import (

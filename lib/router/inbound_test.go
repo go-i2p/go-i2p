@@ -1,3 +1,5 @@
+// Tests for the inbound message handler. Validates that incoming I2NP data is
+// forwarded to the right tunnel or router session.
 package router
 
 import (

@@ -1,3 +1,5 @@
+// Tests for introducer selection. Validates that the router picks suitable
+// introducers from the network database.
 package router
 
 import (

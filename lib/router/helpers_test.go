@@ -1,3 +1,5 @@
+// Shared test helpers for the router package. Provides common setup, mock
+// types, and utilities used by other test files.
 package router
 
 import (

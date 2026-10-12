@@ -1,3 +1,5 @@
+// Tests for the I2PControl server. Validates that the I2CP control protocol
+// server handles commands and reports router state correctly.
 package router
 
 import (

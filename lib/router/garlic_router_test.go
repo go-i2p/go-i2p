@@ -1,3 +1,5 @@
+// Tests for the Garlic message router. Validates that Garlic messages are
+// routed to the right handler, with mock transports.
 package router
 
 import (
