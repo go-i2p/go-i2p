@@ -1,26 +1,45 @@
-// Package config provides configuration management for go-i2p router.
+// Package config provides configuration management for the go-i2p router.
 //
-// # Configuration Directories
+// # What is config?
 //
-// BaseDir vs WorkingDir: This router uses two separate directory paths to distinguish
-// between read-only system defaults and mutable runtime state:
+// A router has many settings: which ports to listen on, how many tunnels to
+// build, which peers to trust, and so on. This package loads those settings,
+// fills in sensible defaults for anything the user did not set, and exposes
+// them to the rest of the router.
 //
-// BaseDir: Contains read-only default configuration files that ship with the system.
-// These files provide fallback values and should not be modified during runtime. When
-// you want to customize the configuration, copy the relevant files from BaseDir to
-// WorkingDir and edit them there.
-//   - Default location: $HOME/.go-i2p/base
-//   - Purpose: System-wide defaults, pristine copies of configuration templates
-//   - Examples: Default router.config, reseed certificates, bootstrap RouterInfo
+// # Two directories: defaults vs. your changes
 //
-// WorkingDir: Contains runtime-modifiable configuration files and state. The router
-// reads from WorkingDir first, falling back to BaseDir if a file doesn't exist. All
-// runtime changes (e.g., adding peers, updating configuration) are written here.
-//   - Default location: $HOME/.go-i2p/config
-//   - Purpose: User customizations, runtime state, active NetDB
-//   - Examples: Custom router.config overrides, netDb directory, active LeaseSet cache
+// The router keeps its files in two separate directories so that the
+// built-in defaults are never overwritten by your changes:
 //
-// Usage Pattern: To customize a configuration option, copy the file from BaseDir to
-// WorkingDir, then edit the copy in WorkingDir. The router will automatically prefer
-// the WorkingDir version while preserving the BaseDir original.
+//   - BaseDir holds read-only default files that ship with the system. They
+//     provide fallback values and should not be edited.
+//     Default location: $HOME/.go-i2p/base.
+//     Examples: the default router.config, reseed certificates, bootstrap
+//     RouterInfo.
+//
+//   - WorkingDir holds your customizations and runtime state. The router
+//     reads from WorkingDir first and falls back to BaseDir only when a file
+//     is missing. All runtime changes (adding peers, updating settings) are
+//     written here.
+//     Default location: $HOME/.go-i2p/config.
+//     Examples: your router.config overrides, the netDb directory, the active
+//     LeaseSet cache.
+//
+// To customize a setting, copy the file from BaseDir to WorkingDir and edit
+// the copy. The router always prefers the WorkingDir version while leaving
+// the BaseDir original untouched.
+//
+// # Usage
+//
+//	// Load the router configuration, applying defaults for anything unset.
+//	cfg, err := config.NewRouterConfigFromViper()
+//	if err != nil {
+//		log.Fatal(err)
+//	}
+//
+// # Thread safety
+//
+// A loaded [RouterConfig] is not safe for concurrent mutation. Load it once
+// at startup and treat it as read-only while the router runs.
 package config
