@@ -6,7 +6,7 @@ package i2np
 // message header format as defined in i2np.rst. Each test group maps to a
 // specific audit checklist item in Section 6 of AUDIT.md.
 //
-// Spec reference: https://geti2p.net/spec/i2np (version 0.9.66+)
+// Spec reference: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst (version 0.9.66+)
 
 import (
 	"bytes"
@@ -1794,7 +1794,7 @@ func TestGarlic_CloveFormat_MaxCloves255(t *testing.T) {
 // Audit Item: Delivery instruction types
 // Local (0), Destination (1), Router (2), Tunnel (3)
 //
-// Spec reference: https://geti2p.net/spec/i2np (Garlic Clove Delivery Instructions)
+// Spec reference: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst (Garlic Clove Delivery Instructions)
 //
 // flag byte bit layout: 76543210
 //   bit 7:   encrypted (always 0)

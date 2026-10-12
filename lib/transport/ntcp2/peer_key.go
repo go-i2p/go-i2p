@@ -107,7 +107,7 @@ func ExtractPeerIVFromAddress(addr *router_address.RouterAddress) ([]byte, error
 // Config for outbound connections. This is required for the Noise XK
 // handshake pattern where the initiator must know the responder's static key.
 //
-// Spec reference: https://geti2p.net/spec/ntcp2 — Noise XK pattern requires
+// Spec reference: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ntcp2.rst — Noise XK pattern requires
 // the initiator to pre-know the responder's static public key.
 func ConfigureDialConfig(config *ntcp2.Config, peerInfo router_info.RouterInfo) error {
 	for _, addr := range peerInfo.RouterAddresses() {

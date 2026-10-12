@@ -11,7 +11,7 @@ import (
 
 // Probing-resistance constants per the NTCP2 specification.
 //
-// Spec reference: https://geti2p.net/spec/ntcp2#probing-resistance
+// Spec reference: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ntcp2.rst
 //
 // When an AEAD failure occurs during the handshake phase, the responder (Bob)
 // should set a random timeout and then read a random number of bytes before

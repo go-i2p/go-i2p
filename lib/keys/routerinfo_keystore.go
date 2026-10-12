@@ -748,7 +748,7 @@ func (ks *RouterInfoKeystore) assembleRouterInfo(routerIdentity *router_identity
 
 	rawTime := ks.RouterTimestamper.GetCurrentTime()
 	// Round to nearest second per NTCP2 spec to prevent clock bias in the network
-	// Reference: https://geti2p.net/spec/ntcp2#datetime
+	// Reference: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ntcp2.rst
 	publishedTime := rawTime.Round(time.Second)
 
 	// Build caps string - bandwidth tier, floodfill, hidden, reachability, then

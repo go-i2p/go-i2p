@@ -1,41 +1,57 @@
-// Package bootstrap provides generic interfaces for initial bootstrap into network and network reseeding
+// Package bootstrap provides the interfaces a router uses to join the I2P
+// network for the first time, and to reseed its network database later.
 //
-// # RouterInfo Validation
+// # What is bootstrap?
 //
-// The bootstrap package performs comprehensive validation on all RouterInfo entries
-// obtained from reseed servers, local files, or netDb directories. This validation
-// ensures that only well-formed, usable peer information enters the router's network database.
+// When a router starts, it needs to know about other routers before it can
+// talk to them. Bootstrap is the process of loading that initial list of
+// peers. It can come from:
 //
-// # Validation Checks Performed
+//   - A reseed server (downloaded over the public internet).
+//   - A local file of RouterInfo records.
+//   - A directory of previously saved RouterInfo records.
 //
-// RouterInfo Level:
-//   - At least one valid RouterAddress must be present
-//   - RouterInfo structure must be parseable
+// # RouterInfo validation
 //
-// RouterAddress Level:
-//   - Transport style field must be non-empty and valid
-//   - Transport-specific validation applies based on style:
-//   - NTCP2: Requires host, port, s (static key), and v (protocol version) keys
-//   - SSU: Requires host, port, and key keys
-//   - SSU2: Requires host, port, s (static key), and i (intro key) keys
-//   - Host must be a valid IPv4 or IPv6 address
-//   - Port must be in valid range (1-65535)
+// Not every RouterInfo a reseed server sends is usable. Before a record is
+// added to the network database, bootstrap validates it so that only
+// well-formed, reachable peers enter the database.
 //
-// # Validation Error Reporting
+// RouterInfo level:
+//   - At least one valid RouterAddress must be present.
+//   - The RouterInfo structure must be parseable.
 //
-// Validation functions return detailed error messages describing why a RouterInfo
-// or RouterAddress failed validation:
-//   - ValidateRouterInfo(): Returns "no valid router addresses found" with the last address validation error
-//   - ValidateRouterAddress(): Returns specific errors like "missing required NTCP2 key: s" or "invalid port number"
-//   - ValidateNTCP2Address(): Checks NTCP2-specific requirements (static key, version, host/port)
+// RouterAddress level:
+//   - The transport style field must be non-empty and valid.
+//   - Transport-specific checks apply based on the style:
+//   - NTCP2: requires host, port, s (static key), and v (protocol version).
+//   - SSU: requires host, port, and key.
+//   - SSU2: requires host, port, s (static key), and i (intro key).
+//   - The host must be a valid IPv4 or IPv6 address.
+//   - The port must be in the valid range (1-65535).
 //
-// # Validation Statistics
+// # Validation error reporting
+//
+// Validation functions return detailed error messages describing why a
+// RouterInfo or RouterAddress failed:
+//
+//   - ValidateRouterInfo(): returns "no valid router addresses found" with the
+//     last address validation error.
+//   - ValidateRouterAddress(): returns specific errors like "missing required
+//     NTCP2 key: s" or "invalid port number".
+//   - ValidateNTCP2Address(): checks NTCP2-specific requirements (static key,
+//     version, host/port).
+//
+// # Validation statistics
 //
 // The ValidationStats type tracks validation metrics during bootstrap:
-//   - Total RouterInfos processed
-//   - Valid vs invalid counts
-//   - Breakdown of invalid reasons (e.g., "missing NTCP2 static key", "introducer-only address")
-//   - Validity rate percentage
 //
-// Use ValidationStats.LogSummary() to output validation statistics for debugging reseed quality issues.
+//   - Total RouterInfos processed.
+//   - Valid vs invalid counts.
+//   - Breakdown of invalid reasons (for example, "missing NTCP2 static key" or
+//     "introducer-only address").
+//   - Validity rate percentage.
+//
+// Use ValidationStats.LogSummary() to print validation statistics when
+// debugging reseed quality issues.
 package bootstrap

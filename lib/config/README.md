@@ -222,7 +222,7 @@ SpecRouterInfoOptionKeys is the set of option keys recognized by the I2P
 specification for RouterInfo. Any key NOT in this set may cause the RouterInfo
 to be rejected or ignored by other routers.
 
-Spec: https://geti2p.net/spec/network-database#routerinfo
+Spec: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/common-structures.rst
 
 #### func  BuildCapsString
 
@@ -442,7 +442,7 @@ network-database specification and Proposal 162.
 The bandwidth class is determined by the router's shared bandwidth limit and
 advertised in the RouterInfo caps string.
 
-Spec: https://geti2p.net/spec/network-database#routerinfo
+Spec: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/common-structures.rst
 
 ```go
 const (
@@ -709,7 +709,7 @@ The congestion cap system provides three levels:
     - E (High): Router is near capacity, rejecting most tunnel requests
     - G (Critical): Router is rejecting ALL tunnel requests (temporary or permanent)
 
-Spec: https://geti2p.net/spec/proposals/162-congestion-caps
+Spec: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/proposals/162-congestion-caps.rst
 
 #### type CongestionFlag
 

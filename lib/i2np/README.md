@@ -3459,7 +3459,7 @@ TunnelDataMessage represents an I2NP TunnelData message. Per I2P spec
 1028 bytes. The IV precedes the encrypted payload; the 1024 non-TunnelID bytes
 are not a monolithic "data" field.
 
-https://geti2p.net/spec/i2np#tunneldata
+https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst
 
 #### func  NewTunnelDataMessage
 

@@ -422,7 +422,7 @@ func validateAndExtractStaticKey(transport *NTCP2Transport) (string, error) {
 // buildRouterAddressOptions constructs the options map for the RouterAddress with all required
 // NTCP2 parameters including host, port, static key, and IV.
 //
-// Per I2P specification (https://geti2p.net/spec/ntcp2#published-addresses):
+// Per I2P specification (https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ntcp2.rst):
 // - Static key 's': 32 bytes binary (X25519 public key), 44 bytes I2P base64-encoded
 // - IV 'i': 16 bytes binary (big-endian), 24 bytes I2P base64-encoded
 //

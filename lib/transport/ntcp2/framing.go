@@ -20,7 +20,7 @@ import (
 // 7 bytes and corrupt every message. The 16-byte standard header is only used
 // for tunnel-delivered messages (inside TunnelGateway/TunnelData), never here.
 //
-// Spec reference: https://geti2p.net/spec/ntcp2#data-phase
+// Spec reference: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ntcp2.rst
 func FrameI2NPMessageAsBlock(msg i2np.Message) ([]byte, error) {
 	log.WithField("message_type", msg.Type()).Debug("Framing I2NP message as NTCP2 block")
 

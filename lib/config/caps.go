@@ -14,7 +14,7 @@ import (
 // The bandwidth class is determined by the router's shared bandwidth limit
 // and advertised in the RouterInfo caps string.
 //
-// Spec: https://geti2p.net/spec/network-database#routerinfo
+// Spec: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/common-structures.rst
 type BandwidthClass string
 
 const (
@@ -260,7 +260,7 @@ func BuildCapsString(bandwidth BandwidthClass, reachable, floodfill, hidden bool
 // specification for RouterInfo. Any key NOT in this set may cause the
 // RouterInfo to be rejected or ignored by other routers.
 //
-// Spec: https://geti2p.net/spec/network-database#routerinfo
+// Spec: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/common-structures.rst
 var SpecRouterInfoOptionKeys = map[string]string{
 	"router.version":       "Router software version (e.g. 0.9.64)",
 	"caps":                 "Capability flags string",

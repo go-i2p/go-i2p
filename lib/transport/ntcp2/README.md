@@ -57,7 +57,7 @@ const (
 ```
 NTCP2 data-phase block types per the specification.
 
-Spec reference: https://geti2p.net/spec/ntcp2#data-phase
+Spec reference: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ntcp2.rst
 
 After the Noise XK handshake completes, both peers exchange AEAD-encrypted
 frames. Each decrypted frame payload consists of one or more concatenated
@@ -145,7 +145,7 @@ const (
 Termination reason codes per the NTCP2 specification. These are used in the
 termination block (block type 0x04) to indicate why the session is being closed.
 
-Spec reference: https://geti2p.net/spec/ntcp2#termination
+Spec reference: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ntcp2.rst
 
 ```go
 const ClockSkewTolerance = transport.ClockSkewTolerance
@@ -222,7 +222,7 @@ ConfigureDialConfig sets the peer's static key and obfuscation IV on a Config
 for outbound connections. This is required for the Noise XK handshake pattern
 where the initiator must know the responder's static key.
 
-Spec reference: https://geti2p.net/spec/ntcp2 — Noise XK pattern requires the
+Spec reference: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ntcp2.rst — Noise XK pattern requires the
 initiator to pre-know the responder's static public key.
 
 #### func  ConvertToRouterAddress
@@ -295,7 +295,7 @@ FromNTCP2); sending a 16-byte standard header here would shift the payload by 7
 bytes and corrupt every message. The 16-byte standard header is only used for
 tunnel-delivered messages (inside TunnelGateway/TunnelData), never here.
 
-Spec reference: https://geti2p.net/spec/ntcp2#data-phase
+Spec reference: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ntcp2.rst
 
 #### func  GetStaticKeyFromRouter
 
@@ -825,7 +825,7 @@ connection's Noise cipher state (via conn.Write), which ensures it is encrypted
 and has a SipHash-obfuscated length prefix like any other data-phase frame. No
 plaintext termination blocks are ever sent.
 
-Spec reference: https://geti2p.net/spec/ntcp2#termination
+Spec reference: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ntcp2.rst
 
 #### func (*NTCP2Session) DetachConn
 
@@ -904,7 +904,7 @@ Handshakes run in per-connection goroutines so that one slow or malicious peer
 cannot block the accept loop. The background runner is started lazily on the
 first call to Accept().
 
-Spec reference: https://geti2p.net/spec/ntcp2#probing-resistance
+Spec reference: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ntcp2.rst
 
 #### func (*NTCP2Transport) AcceptedConnPromotionAttempts
 
@@ -1098,7 +1098,7 @@ type Options struct {
 Options represents the NTCP2 options block parameters used for negotiating
 padding and traffic shaping between peers.
 
-Spec reference: https://geti2p.net/spec/ntcp2#options-block
+Spec reference: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ntcp2.rst
 
 The options block is sent in message 3 part 2 (first post-handshake payload from
 the initiator) and can be resent during the data phase to renegotiate
@@ -1118,7 +1118,7 @@ unnecessary overhead, while a non-zero PaddingMax still prevents fingerprinting
 via the absence of padding. Padding bytes are generated from crypto/rand by
 NewPaddingBlock.
 
-Spec reference: https://geti2p.net/spec/ntcp2#options-block
+Spec reference: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ntcp2.rst
 
 #### func  ParseOptions
 

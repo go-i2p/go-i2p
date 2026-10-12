@@ -10,7 +10,7 @@ import (
 
 /*
 I2P First Fragment Delivery Instructions
-https://geti2p.net/spec/tunnel-message#struct-tunnelmessagedeliveryinstructions
+https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/tunnel-message.rst
 Accurate for version 0.9.11
 
 +----+----+----+----+----+----+----+----+
@@ -95,7 +95,7 @@ Total length: Typical length is:
 
 
 I2P Follow-on Fragment Delivery Instructions
-https://geti2p.net/spec/tunnel-message#struct-tunnelmessagedeliveryinstructions
+https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/tunnel-message.rst
 Accurate for version 0.9.11
 
 ----+----+----+----+----+----+----+

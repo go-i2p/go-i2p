@@ -10,7 +10,7 @@ import (
 // Options represents the NTCP2 options block parameters used for negotiating
 // padding and traffic shaping between peers.
 //
-// Spec reference: https://geti2p.net/spec/ntcp2#options-block
+// Spec reference: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ntcp2.rst
 //
 // The options block is sent in message 3 part 2 (first post-handshake payload
 // from the initiator) and can be resent during the data phase to renegotiate
@@ -58,7 +58,7 @@ const optionsBlockMinSize = 11
 // still prevents fingerprinting via the absence of padding. Padding bytes are
 // generated from crypto/rand by NewPaddingBlock.
 //
-// Spec reference: https://geti2p.net/spec/ntcp2#options-block
+// Spec reference: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ntcp2.rst
 func DefaultOptions() *Options {
 	return &Options{
 		Version:    0,

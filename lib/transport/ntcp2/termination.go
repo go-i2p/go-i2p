@@ -8,7 +8,7 @@ import (
 // These are used in the termination block (block type 0x04) to indicate
 // why the session is being closed.
 //
-// Spec reference: https://geti2p.net/spec/ntcp2#termination
+// Spec reference: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ntcp2.rst
 const (
 	// TerminationNormalClose indicates a graceful session shutdown.
 	TerminationNormalClose byte = 0
@@ -82,7 +82,7 @@ const terminationBlockType byte = 0x04
 //
 //	session duration (8 bytes, big-endian uint64) + reason code (1 byte) = 9 bytes
 //
-// Spec reference: https://geti2p.net/spec/ntcp2#blk-termination
+// Spec reference: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ntcp2.rst
 const terminationBlockPayloadSize = 9
 
 // terminationBlockHeaderSize is the block type (1 byte) + size (2 bytes) = 3 bytes

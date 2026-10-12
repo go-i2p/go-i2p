@@ -6,7 +6,7 @@ package transport
 // transport abstraction layer as defined in transport.rst. Each test group maps
 // to a specific audit checklist item in Section 7 of AUDIT.md.
 //
-// Spec reference: https://geti2p.net/spec/transport
+// Spec reference: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ntcp2.rst
 
 import (
 	"errors"

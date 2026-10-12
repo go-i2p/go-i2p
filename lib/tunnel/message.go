@@ -12,7 +12,7 @@ import (
 
 /*
 I2P Encrypted Tunnel Message
-https://geti2p.net/spec/tunnel-message
+https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/tunnel-message.rst
 Accurate for version 0.9.11
 +----+----+----+----+----+----+----+----+
 |    Tunnel ID      |       IV          |
@@ -46,7 +46,7 @@ total size: 1028 Bytes
 
 
 I2P Decrypted Tunnel Message
-https://geti2p.net/spec/tunnel-message
+https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/tunnel-message.rst
 Accurate for version 0.9.11
 
 +----+----+----+----+----+----+----+----+

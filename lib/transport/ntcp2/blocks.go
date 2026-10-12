@@ -11,7 +11,7 @@ import (
 
 // NTCP2 data-phase block types per the specification.
 //
-// Spec reference: https://geti2p.net/spec/ntcp2#data-phase
+// Spec reference: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ntcp2.rst
 //
 // After the Noise XK handshake completes, both peers exchange AEAD-encrypted
 // frames. Each decrypted frame payload consists of one or more concatenated

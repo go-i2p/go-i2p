@@ -88,8 +88,8 @@ Fields:
     One or more 8-byte ECIES SessionTags. Present only when the ECIES
     flag is set.
 
-Spec: https://geti2p.net/spec/i2np#databaselookup
-ECIES: https://geti2p.net/spec/ecies
+Spec: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst
+ECIES: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ecies.rst
 */
 
 // DatabaseLookup is an I2NP message that queries the distributed database

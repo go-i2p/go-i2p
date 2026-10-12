@@ -10,7 +10,7 @@ import (
 
 /*
 I2P I2NP ShortTunnelBuildReply
-https://geti2p.net/spec/i2np
+https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst
 Added in version 0.9.51
 
 Format:

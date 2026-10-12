@@ -1,60 +1,72 @@
-// Package transport implements I2P transport layer protocols for router-to-router communication.
+// Package transport implements the I2P transport layer: the encrypted,
+// authenticated connections between routers.
 //
-// # Overview
+// # What is the transport layer?
 //
-// The transport layer handles encrypted, authenticated connections between I2P routers.
-// Supported transports:
-//   - NTCP2: TCP-based transport with Noise protocol encryption
-//   - SSU2: UDP-based transport with NAT traversal and introducer support
+// I2NP messages (see lib/i2np) need a way to get from one router to another.
+// The transport layer provides that channel. It sets up an encrypted,
+// authenticated connection so that routers can be sure of each other's
+// identity and that their messages have not been tampered with.
+//
+// Two transports are supported:
+//   - NTCP2: a TCP-based transport. Reliable, and works through most networks.
+//   - SSU2: a UDP-based transport. Lower latency, with NAT traversal and
+//     introducer support for peers behind firewalls.
+//
+// Both use the Noise protocol framework for key agreement, which gives forward
+// secrecy (past sessions stay secret even if a key is later compromised) and
+// identity hiding.
 //
 // # TransportMuxer
 //
-// The TransportMuxer multiplexes multiple transports into a single Transport interface:
-//   - Combines multiple transports in priority order
-//   - Accepts connections from all registered transports concurrently
-//   - Dials peers using the first compatible transport
-//   - Enforces connection limits across all transports
+// A TransportMuxer combines several transports behind a single Transport
+// interface:
+//   - It accepts connections from all registered transports at once.
+//   - It dials a peer using the first compatible transport.
+//   - It enforces a connection limit across all transports.
 //
-// # NTCP2 Transport
+// # NTCP2
 //
-// NTCP2 uses Noise_XK_25519_ChaChaPoly_SHA256:
-//   - X25519 key exchange
-//   - ChaCha20-Poly1305 AEAD encryption
-//   - Session state management
-//   - I2NP message framing
+// NTCP2 uses the Noise_XK_25519_ChaChaPoly_SHA256 pattern: X25519 key
+// exchange with ChaCha20-Poly1305 encryption. See lib/transport/ntcp2 for
+// details and the NTCP2 specification:
+// https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ntcp2.rst
 //
-// See lib/transport/ntcp2 for implementation details.
+// # SSU2
 //
-// # Thread Safety
+// SSU2 is the UDP equivalent, with NAT traversal and introducer support. See
+// lib/transport/ssu2 for details and the SSU2 specification:
+// https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ssu2.rst
 //
-// TransportMuxer is safe for concurrent access:
-//   - Connection counting uses atomic operations
-//   - Each transport manages its own connections
-//   - Accept listens on all transports concurrently
+// # Thread safety
 //
-// # Usage Example
+// TransportMuxer is safe for concurrent use. Connection counting uses atomic
+// operations, each transport manages its own connections, and Accept listens
+// on all transports at once.
 //
-//	// Create individual transports
+// # Usage example
+//
+//	// Create individual transports.
 //	ntcp2Transport := ntcp2.NewTransport(config)
 //
-//	// Multiplex transports together
+//	// Multiplex transports together.
 //	tmux := transport.Mux(ntcp2Transport)
 //	// Or with a connection limit:
 //	tmux := transport.MuxWithLimit(1024, ntcp2Transport)
 //
-//	// Set identity for all transports
+//	// Set identity for all transports.
 //	tmux.SetIdentity(ourRouterInfo)
 //
-//	// Accept connections from any transport
+//	// Accept connections from any transport.
 //	conn, err := tmux.Accept()
 //
-//	// Dial a peer
-//	conn, err := tmux.Dial(peerRouterInfo)
+//	// Dial a peer.
+//	conn, err = tmux.Dial(peerRouterInfo)
 //
-// # Connection Management
+// # Connection management
 //
-// Connections are automatically managed:
-//   - Connection limits enforced via MaxConnections
-//   - Session counting with atomic operations
-//   - ReleaseSession() frees capacity when connections close
+// Connections are managed automatically:
+//   - Connection limits are enforced via MaxConnections.
+//   - Session counting uses atomic operations.
+//   - ReleaseSession() frees capacity when a connection closes.
 package transport

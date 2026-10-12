@@ -1302,7 +1302,7 @@ scrape_configs:
 
 ## References
 
-- [I2PControl Specification](https://geti2p.net/spec/i2pcontrol)
+- [I2PControl Specification](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2cp.rst)
 - [JSON-RPC 2.0 Specification](https://www.jsonrpc.org/specification)
 - [go-i2p GitHub Repository](https://github.com/go-i2p/go-i2p)
 - [Package Documentation](../lib/i2pcontrol/README.md)

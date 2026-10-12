@@ -505,7 +505,7 @@ func setupNetworkListener(transport *NTCP2Transport, config *Config, ntcp2Config
 // peer cannot block the accept loop. The background runner is started lazily
 // on the first call to Accept().
 //
-// Spec reference: https://geti2p.net/spec/ntcp2#probing-resistance
+// Spec reference: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ntcp2.rst
 func (t *NTCP2Transport) Accept() (net.Conn, error) {
 	t.identityMu.RLock()
 	if t.listener == nil {
@@ -1841,7 +1841,7 @@ func (t *NTCP2Transport) logTCPConnectionAttempt(tcpAddrString string, peerHashB
 // sufficient for reachable peers and avoids holding goroutines for 30 s against
 // hosts that silently drop SYN packets.
 //
-// Spec reference: https://geti2p.net/spec/ntcp2#probing-resistance
+// Spec reference: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ntcp2.rst
 func (t *NTCP2Transport) performNTCP2Handshake(ntcp2Addr net.Addr, tcpAddrString string, peerHashBytes []byte, config *ntcp2.Config, tcpDialStart time.Time) (*ntcp2.Conn, error) {
 	t.logger.WithField("remote_addr", ntcp2Addr.String()).Debug("Dialing NTCP2 connection")
 

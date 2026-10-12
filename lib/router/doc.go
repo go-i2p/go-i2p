@@ -1,16 +1,18 @@
-// Package router coordinates I2P router subsystems including I2CP server,
-// tunnel management, NetDB, transport layer, and message routing.
+// Package router coordinates the I2P router subsystems: the I2CP server,
+// tunnel management, the NetDB, the transport layer, and message routing.
 //
-// # Router Architecture
+// # What is the router?
 //
-// The Router integrates multiple subsystems:
-//   - I2CP server for client applications (localhost:7654)
-//   - Tunnel pools for anonymized routing
-//   - NetDB for RouterInfo and LeaseSet storage
-//   - NTCP2 transport for router-to-router communication
-//   - Message routing with garlic encryption (ECIES-X25519-AEAD-Ratchet)
+// A router is the main I2P node. It ties all the other packages together and
+// runs them as one unit:
 //
-// # Usage Example
+//   - I2CP server for client applications (localhost:7654).
+//   - Tunnel pools for anonymized routing.
+//   - NetDB for RouterInfo and LeaseSet storage.
+//   - NTCP2 and SSU2 transports for router-to-router communication.
+//   - Message routing with garlic encryption (ECIES-X25519-AEAD-Ratchet).
+//
+// # Usage example
 //
 //	// Create router
 //	router, err := router.NewRouter(config)
@@ -30,7 +32,7 @@
 //	    log.Printf("Shutdown error: %v", err)
 //	}
 //
-// # Current Status
+// # Current status
 //
-// Core routing functional, I2CP complete, LeaseSet2 supported.
+// Core routing is functional, I2CP is complete, and LeaseSet2 is supported.
 package router

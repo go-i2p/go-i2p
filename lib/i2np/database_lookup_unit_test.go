@@ -1,7 +1,7 @@
 package i2np
 
 // These tests validate the DatabaseLookup wire-format parsing required by the
-// I2NP specification (https://geti2p.net/spec/i2np#databaselookup): each field
+// I2NP specification (https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst): each field
 // is read at the correct offset, conditional fields (reply_tunnelId, ECIES
 // reply fields) appear only when their flag is set, and malformed or
 // truncated input is rejected.

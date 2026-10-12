@@ -12,7 +12,7 @@ import "time"
 //   - E (High): Router is near capacity, rejecting most tunnel requests
 //   - G (Critical): Router is rejecting ALL tunnel requests (temporary or permanent)
 //
-// Spec: https://geti2p.net/spec/proposals/162-congestion-caps
+// Spec: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/proposals/162-congestion-caps.rst
 type CongestionDefaults struct {
 	// === Flag Advertisement Thresholds ===
 	// These thresholds determine when to advertise D/E/G flags based on

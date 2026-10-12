@@ -119,7 +119,7 @@ func (s *NTCP2Session) Close() error {
 // encrypted and has a SipHash-obfuscated length prefix like any other data-phase
 // frame. No plaintext termination blocks are ever sent.
 //
-// Spec reference: https://geti2p.net/spec/ntcp2#termination
+// Spec reference: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ntcp2.rst
 func (s *NTCP2Session) CloseWithReason(reason byte) error {
 	var err error
 	s.CloseOnce().Do(func() {

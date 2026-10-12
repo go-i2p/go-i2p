@@ -26,7 +26,7 @@ transport.TransportSession interfaces used by the go-i2p router.
 
 # I2P Specification
 
-SSU2 is defined in the I2P specification at: https://geti2p.net/spec/ssu2
+SSU2 is defined in the I2P specification at: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ssu2.rst
 
 # Configuration
 

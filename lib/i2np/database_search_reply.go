@@ -57,7 +57,7 @@ Fields:
     SHA-256 hash of the RouterInfo of the router this reply was sent from.
     Unauthenticated and cannot be trusted.
 
-Spec: https://geti2p.net/spec/i2np#databasesearchreply
+Spec: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst
 Accurate for version 0.9.66
 */
 
