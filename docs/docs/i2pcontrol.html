@@ -13,7 +13,7 @@
         <a href="../index.html">go-i2p/go-i2p</a>
       </h2>
       <div class="repo-meta">
-        📝 2510 commits
+        📝 2541 commits
          • 📜 MIT License
       </div>
     </div>
@@ -39,10 +39,6 @@
           <li><a href="../docs/RELEASE_NOTES.html" >RELEASE NOTES</a></li>
         
           <li><a href="../docs/template.html" >Template</a></li>
-        
-          <li><a href="../docs/docs/transport-flake-baseline.html" >Transport and Tunnel Flake Baseline</a></li>
-        
-          <li><a href="../docs/docs/transport-observability.html" >Transport and Tunnel Observability</a></li>
         
           <li><a href="../docs/lib/i2np/tunnel_build_f060_f064_fix.html" >Tunnel Build F060 F064 Fix</a></li>
         
@@ -1524,10 +1520,32 @@ if __name__ == '__main__':
 
 <hr>
 
+<h2 id="development-status">Development Status</h2>
+
+<p>This implementation prioritizes development convenience over production
+robustness. Current status:</p>
+
+<ul>
+<li>✅ JSON-RPC 2.0 compliance</li>
+<li>✅ Token authentication</li>
+<li>✅ HTTP/HTTPS transport</li>
+<li>✅ Echo, GetRate, RouterInfo methods</li>
+<li>✅ RouterManager method (shutdown)</li>
+<li>✅ NetworkSetting method (read-only)</li>
+<li>✅ I2PControl method (password changes)</li>
+<li>✅ Thread-safe concurrent access</li>
+<li>✅ Graceful shutdown</li>
+<li>✅ 78%+ test coverage</li>
+<li>⚠️ No rate limiting</li>
+<li>⚠️ No audit logging</li>
+<li>🚧 RouterManager: Restart/reseed (planned)</li>
+<li>🚧 NetworkSetting: Write operations (planned)</li>
+</ul>
+
 <h2 id="references">References</h2>
 
 <ul>
-<li><a href="https://geti2p.net/spec/i2pcontrol" target="_blank">I2PControl Specification</a></li>
+<li><a href="https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2cp.rst" target="_blank">I2PControl Specification</a></li>
 <li><a href="https://www.jsonrpc.org/specification" target="_blank">JSON-RPC 2.0 Specification</a></li>
 <li><a href="https://github.com/go-i2p/go-i2p" target="_blank">go-i2p GitHub Repository</a></li>
 <li><a href="../../lib/i2pcontrol/README.html">Package Documentation</a></li>
@@ -1552,7 +1570,7 @@ if __name__ == '__main__':
     </main>
     
     <footer class="page-footer">
-      <p>Generated on 2026-10-13 10:15:12 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
+      <p>Generated on 2026-10-13 14:05:25 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
     </footer>
   </div>
 </body>
