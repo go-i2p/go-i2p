@@ -23,6 +23,7 @@ LLMs have been used for:
  - Code review
  - Documentation suggestions
  - Refactoring suggestions
+ - Git commits
 
 Code review type usage produced freestanding bug reports in markdown documents, which were then reviewed and resolved by a human.
 
