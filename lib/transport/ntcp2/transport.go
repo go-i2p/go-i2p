@@ -471,6 +471,21 @@ func setupNetworkListener(transport *NTCP2Transport, config *Config, ntcp2Config
 	var boundAddr string
 	if iport == 0 {
 		tcpListener, boundAddr, err = bindOSAssignedPort(config)
+		if err != nil {
+			// Symmetric with the explicit-port branch below: failing to obtain a
+			// NAT port mapping must not prevent the transport from listening at
+			// all. Port 0 is the default configuration, so without this fallback a
+			// router on a host where UPnP/NAT-PMP is unavailable (behind a
+			// restrictive NAT, or a CI runner) cannot be constructed at all.
+			//
+			// The plain listener binds an OS-assigned port on an unspecified host,
+			// which publishes a capabilities-only RouterInfo address — the correct
+			// representation for a router with no routable external address. NAT
+			// detection can still promote it to a real host later, and
+			// recomputeReachabilityCaps upgrades the caps when that happens.
+			transport.logger.WithError(err).Warn("NAT traversal failed on OS-assigned port, falling back to plain TCP listener")
+			tcpListener, boundAddr, err = bindPlainTCPListener(config.ListenerAddress, 0)
+		}
 	} else {
 		cfg := nat.DefaultBindConfig("tcp", config.ListenerAddress)
 		cfg.RequestedPort = iport
