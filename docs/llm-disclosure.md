@@ -47,4 +47,11 @@ LLMs that have been used are:
  - qwen3.8-27b
  - qwen3.8-Flash
 
+Third parties have submitted audits using:
+------------------------------------------
+
+ - claude-5.0-mythos(allegedly)
+ - chatgpt-sol
+ - claude-4.8-opus
+
 All LLM assistance has been provided by Github Copilot.
