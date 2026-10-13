@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -284,10 +285,22 @@ func initializeCryptoKeys(cfg *ssu2noise.SSU2Config, keystore KeystoreProvider) 
 	return nil
 }
 
+// probeAndBindNATPacket is the OS/NAT-interaction seam behind listenWithOSPort.
+// It is a variable so tests can force a NAT failure deterministically instead
+// of depending on whether the host happens to have UPnP/NAT-PMP available.
+var probeAndBindNATPacket = func(cfg *nat.BindConfig) (*nat.BindResult, error) {
+	return nat.ProbeAndBindWithNATTraversal(cfg)
+}
+
+// bindNATWithPortPacket is the equivalent seam for the explicit-port bind path.
+var bindNATWithPortPacket = func(cfg *nat.BindConfig) (*nat.BindResult, error) {
+	return nat.BindWithNATTraversal(cfg)
+}
+
 // setupUDPListener creates the UDP listener and wraps it with SSU2.
-// When a specific port is requested (non-zero), NAT traversal (UPnP/NAT-PMP) is
-// attempted so the router publishes its external IP:port in the RouterInfo.
-// Port 0 (OS-assigned) skips NAT traversal because there is no stable port to map.
+// NAT traversal is attempted on both the OS-assigned and explicit-port paths so
+// the router can publish its external IP:port in the RouterInfo, but a mapping
+// failure never prevents the socket from binding (see bindPacketConnWithFallback).
 func setupUDPListener(t *SSU2Transport, config *Config, ssu2Config *ssu2noise.SSU2Config) error {
 	_, portStr, err := net.SplitHostPort(config.ListenerAddress)
 	if err != nil {
@@ -298,7 +311,7 @@ func setupUDPListener(t *SSU2Transport, config *Config, ssu2Config *ssu2noise.SS
 		return oops.Wrapf(err, "failed to convert port to integer")
 	}
 
-	udpConn, boundAddr, err := createUDPConn(config, iport)
+	udpConn, boundAddr, err := bindPacketConnWithFallback(t, config, iport)
 	if err != nil {
 		return err
 	}
@@ -307,23 +320,66 @@ func setupUDPListener(t *SSU2Transport, config *Config, ssu2Config *ssu2noise.SS
 	return startSSU2Listener(t, udpConn, ssu2Config)
 }
 
-// createUDPConn creates a UDP packet connection, using OS-assigned port or NAT traversal.
-// Returns the connection and the bound address. Caller must update config.ListenerAddress.
-func createUDPConn(config *Config, iport int) (net.PacketConn, string, error) {
+// bindPacketConnWithFallback attempts a NAT-traversed UDP bind for the
+// configured port and, if that fails, falls back to a plain packet connection.
+// A NAT port mapping improves reachability but is never required to listen, so
+// a mapping failure must not stop the transport from binding at all.
+//
+// iport == 0 means "OS-assigned port" and goes through the probe/rebind path;
+// any other value binds that specific port. Both share the same fallback here
+// so the two paths cannot drift apart, mirroring ntcp2.bindListenerWithFallback.
+func bindPacketConnWithFallback(t *SSU2Transport, config *Config, iport int) (net.PacketConn, string, error) {
 	if iport == 0 {
 		conn, boundAddr, err := listenWithOSPort(config)
-		if err != nil {
-			return nil, "", err
+		if err == nil {
+			return conn, boundAddr, nil
 		}
-		return conn, boundAddr, nil
+		t.logger.WithError(err).Warn("NAT traversal failed on OS-assigned port, falling back to plain UDP listener")
+		return bindPlainUDPConn(config.ListenerAddress, 0)
 	}
+
 	cfg := nat.DefaultBindConfig("udp", config.ListenerAddress)
 	cfg.RequestedPort = iport
-	result, err := nat.BindWithNATTraversal(cfg)
-	if err != nil {
-		return nil, "", err
+	result, err := bindNATWithPortPacket(cfg)
+	if err == nil {
+		return result.PacketConn, result.BoundAddress, nil
 	}
-	return result.PacketConn, result.BoundAddress, nil
+	t.logger.WithError(err).Warn("NAT traversal failed, falling back to plain UDP listener")
+	return bindPlainUDPConn(config.ListenerAddress, iport)
+}
+
+// bindPlainUDPConn binds a UDP packet connection without NAT traversal. When
+// requestedPort is 0 the OS assigns one. The address is reconstructed from the
+// listener host so an explicit port is preserved across the fallback, with
+// brackets added for IPv6 hosts.
+func bindPlainUDPConn(listenerAddress string, requestedPort int) (net.PacketConn, string, error) {
+	listenCfg := net.ListenConfig{}
+
+	host, _, err := net.SplitHostPort(listenerAddress)
+	if err != nil {
+		if listenerAddress == "" || strings.HasPrefix(listenerAddress, ":") {
+			host = ""
+		} else {
+			return nil, "", oops.Wrapf(err, "failed to parse listener address")
+		}
+	}
+
+	bindAddr := listenerAddress
+	if requestedPort != 0 {
+		if host == "" {
+			bindAddr = fmt.Sprintf(":%d", requestedPort)
+		} else if strings.Contains(host, ":") {
+			bindAddr = fmt.Sprintf("[%s]:%d", host, requestedPort)
+		} else {
+			bindAddr = fmt.Sprintf("%s:%d", host, requestedPort)
+		}
+	}
+
+	conn, err := listenCfg.ListenPacket(context.Background(), "udp", bindAddr)
+	if err != nil {
+		return nil, "", oops.Wrapf(err, "failed to create UDP listener on %s", bindAddr)
+	}
+	return conn, conn.LocalAddr().String(), nil
 }
 
 // listenWithOSPort discovers a free UDP port via a temporary OS-assigned binding,
@@ -341,7 +397,7 @@ func createUDPConn(config *Config, iport int) (net.PacketConn, string, error) {
 // Pure go-i2p in-app deployment is not supported on iOS App Store builds.
 func listenWithOSPort(config *Config) (net.PacketConn, string, error) {
 	cfg := nat.DefaultBindConfig("udp", config.ListenerAddress)
-	result, err := nat.ProbeAndBindWithNATTraversal(cfg)
+	result, err := probeAndBindNATPacket(cfg)
 	if err != nil {
 		return nil, "", err
 	}

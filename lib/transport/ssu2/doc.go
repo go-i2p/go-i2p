@@ -43,10 +43,16 @@
 //
 // As of 2026-06, NAT traversal logic (UPnP/NAT-PMP, loopback detection,
 // SO_REUSEADDR socket options, and TOCTOU retry handling) has been extracted
-// to the shared lib/nat package. The listenWithOSPort and
-// listenWithNATTraversal functions in this package are now thin wrappers
-// around nat.ProbeAndBindWithNATTraversal and nat.BindWithNATTraversal
-// respectively.
+// to the shared lib/nat package. listenWithOSPort is a thin wrapper around
+// nat.ProbeAndBindWithNATTraversal, and the explicit-port path in
+// bindPacketConnWithFallback wraps nat.BindWithNATTraversal.
+//
+// bindPacketConnWithFallback also provides the plain-socket fallback: a NAT
+// port mapping improves reachability but is never a precondition for
+// listening, so a mapping failure falls back to bindPlainUDPConn rather than
+// failing transport construction. This mirrors ntcp2.bindListenerWithFallback
+// and matters because port 0 is the default configuration — without the
+// fallback a router on a host with no UPnP/NAT-PMP silently loses SSU2.
 //
 // Future enhancements to NAT handling should be implemented in lib/nat, not
 // here. This ensures consistent behavior across all transports (NTCP2, SSU2,

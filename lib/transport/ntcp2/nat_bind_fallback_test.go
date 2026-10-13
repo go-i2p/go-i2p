@@ -85,9 +85,14 @@ func TestBindListenerWithFallback_ExplicitPortNATFailure(t *testing.T) {
 	// An explicit port keeps that port when falling back, as it did before.
 	const requested = 42069
 	listener, boundAddr, err := bindListenerWithFallback(transport, config, requested)
+	if errors.Is(err, errNATUnavailable) {
+		// The NAT error reached the caller, which means no fallback ran.
+		require.NoError(t, err, "NAT failure must not propagate when a plain bind is possible")
+	}
 	if err != nil {
-		// The port may legitimately be taken on a busy host; that is an
-		// environment limit, not a regression in the NAT handling.
+		// Any other error is the plain bind itself failing (e.g. the port is
+		// already taken on a busy host), which is an environment limit rather
+		// than a regression in the NAT handling.
 		t.Skipf("plain bind on port %d failed, which is unrelated to NAT fallback: %v", requested, err)
 	}
 	require.NotNil(t, listener)
