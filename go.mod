@@ -6,15 +6,15 @@ require (
 	github.com/beevik/ntp v1.5.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
-	github.com/go-i2p/common v0.1.70002-0.20260928021252-c0bcc3d5067f
-	github.com/go-i2p/crypto v0.1.70002-0.20260922121909-236a5a5632eb
+	github.com/go-i2p/common v0.1.70002-0.20261013062227-da2d25f84cdb
+	github.com/go-i2p/crypto v0.1.70002-0.20261013135807-86425eac6c59
 	github.com/go-i2p/go-nat-listener v0.1.70001
-	github.com/go-i2p/go-noise v0.1.70002-0.20260922121840-b2eda442959a
+	github.com/go-i2p/go-noise v0.1.70002-0.20261013145830-a7782a85e848
 	github.com/go-i2p/go-unzip v0.0.0-20260908193701-6ecb33740b07
 	github.com/go-i2p/i2p-control v0.1.70001
 	github.com/go-i2p/i2ptui v0.1.70001
 	github.com/go-i2p/logger v0.1.70001
-	github.com/go-i2p/noise v1.1.1-0.20260612013029-6d1ef3427561
+	github.com/go-i2p/noise v1.1.70001-0.20261013005149-88e8cbb61acc
 	github.com/go-i2p/su3 v0.1.70001
 	github.com/samber/oops v1.23.1
 	github.com/spf13/cobra v1.10.2
@@ -43,8 +43,8 @@ require (
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/go-i2p/elgamal v0.1.70001 // indirect
 	github.com/go-i2p/go-i2pcontrol v0.1.9-0.20260607233455-950087a3858f // indirect
-	github.com/go-i2p/path v0.1.70001 // indirect
-	github.com/go-i2p/pool v0.1.70001 // indirect
+	github.com/go-i2p/path v0.1.70002-0.20261013140514-a9f6ce13721d // indirect
+	github.com/go-i2p/pool v0.1.70002-0.20260908223948-09bd42c580c8 // indirect
 	github.com/go-i2p/red25519 v0.0.0-20260908204607-9444de34c638 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/huin/goupnp v1.3.0 // indirect
@@ -79,8 +79,8 @@ require (
 )
 
 retract (
-	v0.1.70000
 	v0.1.70001
+	v0.1.70000
 	v0.1.59999
 	v0.1.5999
 	v0.1.599
