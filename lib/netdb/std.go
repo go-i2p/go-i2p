@@ -156,6 +156,20 @@ func (db *StdNetDB) SetConnectedPeerProvider(provider func() map[common.Hash]str
 	db.connectedPeerMu.Unlock()
 }
 
+// HasConnectedPeerProvider reports whether a connected-peer provider is wired.
+//
+// Tunnel-build convergence depends on this being installed during router
+// startup. With no provider, SelectPeers falls back to reachability heuristics
+// only, can commit builds to peers it cannot dial, and never converges — the
+// failure mode behind issue #55. The provider is nil-tolerant by design, so a
+// missing wiring step degrades silently instead of failing loudly; this
+// accessor lets startup assert the wiring rather than rely on inspection.
+func (db *StdNetDB) HasConnectedPeerProvider() bool {
+	db.connectedPeerMu.RLock()
+	defer db.connectedPeerMu.RUnlock()
+	return db.connectedPeerProvider != nil
+}
+
 // connectedPeers returns the current set of peer hashes with an established
 // transport session, or nil if no provider is configured. The returned map
 // must be treated as read-only by callers.
