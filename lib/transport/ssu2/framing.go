@@ -89,28 +89,54 @@ func NewPaddingBlock(size int) *ssu2noise.SSU2Block {
 	return ssu2noise.NewSSU2Block(ssu2noise.BlockTypePadding, make([]byte, size))
 }
 
-// ACKBlockInfo holds parsed data from an explicit ACK block (type 12).
-// According to SSU2 spec section 5.2.2.1, an ACK block contains:
-// - 4-byte first packet number (big-endian)
-// - 1-byte nack count
-// - nack count bytes of nack fields (each bit indicates nack for 8 packets)
-type ACKBlockInfo struct {
-	FirstPacketNum uint32   // First packet number in the ACK range
-	NackCount      uint8    // Number of nack fields that follow
-	NackFields     []uint8  // Bit fields: 0 = ACKed, 1 = NACKed (for 8 packets each)
-	AckedRange     []uint32 // Expanded list of explicitly ACKed packet numbers
+// ACKRange represents a single range entry in an SSU2 ACK block.
+// Each range specifies a gap of nacked packets followed by a run of
+// acked packets, continuing downward from the previous range.
+type ACKRange struct {
+	// NackCount is the number of nacked packets in this range.
+	NackCount uint8
+	// AckCount is the number of acked packets in this range.
+	AckCount uint8
 }
 
-// ParseACKBlock parses an explicit ACK block (type 12) and extracts the acknowledged packet range.
-// Returns an error if the block type is invalid or data is malformed.
+// ACKBlockInfo holds parsed data from an explicit ACK block (type 12).
+// According to the SSU2 spec, an ACK block contains:
+// - 4-byte "ack through" (big-endian): highest packet number acked
+// - 1-byte "acnt": number of packets below ack-through also acked
+// - zero or more range entries, each 2 bytes (nack count, ack count)
 //
-// According to SSU2 spec 5.2.2.1, the block data contains:
-// - 4 bytes: first packet number (big-endian uint32)
-// - 1 byte: nack count (number of 8-bit nack fields)
-// - nack count bytes: each bit indicates if a packet is NACKed (0=ACK, 1=NACK)
+// See [I2P Spec: SSU2 Ack Block](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ssu2.rst#ack).
+type ACKBlockInfo struct {
+	// AckThrough is the highest packet number that has been acknowledged.
+	AckThrough uint32
+	// AckCount is the number of packets immediately below AckThrough
+	// that are also acknowledged (consecutive run).
+	AckCount uint8
+	// Ranges contains zero or more range entries. Each range specifies
+	// a gap of nacked packets followed by a run of acked packets,
+	// continuing downward from the previous range.
+	Ranges []ACKRange
+	// AckedRange is the expanded list of all acknowledged packet
+	// numbers, computed from AckThrough, AckCount, and Ranges.
+	AckedRange []uint32
+}
+
+// ParseACKBlock parses an explicit ACK block (type 12) and extracts the
+// acknowledged packet numbers. Returns an error if the block type is
+// invalid or data is malformed.
 //
-// Example: FirstPacket=100, NackCount=0 → packets 100-107 all ACKed
-// Example: FirstPacket=100, NackCount=1, nack_fields=[0x05] → packets 100,102 ACKed; 101,103-107 NACKed
+// The block data format per the SSU2 spec:
+//
+//	| Ack Through(4) | acnt(1) | range | range | ... |
+//
+// where each range is two bytes: nack count followed by ack count.
+// The minimum block data size is 5 bytes (ack through + acnt).
+//
+// Example from the spec: ACK 10 9 8 6 5 2 1 0, NACK 7 4 3
+// → AckThrough=10, acnt=2, range(1,2), range(2,3)
+// → AckedRange = [10, 9, 8, 6, 5, 2, 1, 0]
+//
+// See [I2P Spec: SSU2 Ack Block](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ssu2.rst#ack).
 func ParseACKBlock(block *ssu2noise.SSU2Block) (*ACKBlockInfo, error) {
 	if block.Type != ssu2noise.BlockTypeACK {
 		return nil, oops.Errorf("expected ACK block (type 12), got type %d", block.Type)
@@ -120,57 +146,57 @@ func ParseACKBlock(block *ssu2noise.SSU2Block) (*ACKBlockInfo, error) {
 		return nil, oops.Errorf("ACK block data too short: %d bytes (minimum 5)", len(block.Data))
 	}
 
-	info := &ACKBlockInfo{}
-
-	// Parse first packet number (4 bytes, big-endian)
-	info.FirstPacketNum = binary.BigEndian.Uint32(block.Data[0:4])
-
-	// Parse nack count (1 byte)
-	info.NackCount = block.Data[4]
-
-	// Validate data length matches nack count
-	expectedLen := 5 + int(info.NackCount)
-	if len(block.Data) != expectedLen {
-		return nil, oops.Errorf("ACK block data length mismatch: got %d bytes, expected %d (5 + %d nack fields)",
-			len(block.Data), expectedLen, info.NackCount)
+	info := &ACKBlockInfo{
+		AckThrough: binary.BigEndian.Uint32(block.Data[0:4]),
+		AckCount:   block.Data[4],
 	}
 
-	// Extract nack fields if present
-	if info.NackCount > 0 {
-		info.NackFields = make([]uint8, info.NackCount)
-		copy(info.NackFields, block.Data[5:5+info.NackCount])
+	// Parse range entries (2 bytes each: nack count + ack count)
+	offset := 5
+	for offset+2 <= len(block.Data) {
+		info.Ranges = append(info.Ranges, ACKRange{
+			NackCount: block.Data[offset],
+			AckCount:  block.Data[offset+1],
+		})
+		offset += 2
 	}
 
-	// Build expanded list of explicitly ACKed packet numbers
-	// Each nack field covers 8 packets; 0 bit = ACKed, 1 bit = NACKed
-	packetNum := info.FirstPacketNum
-	for i, nackByte := range info.NackFields {
-		_ = i // for loop iteration
-		for bit := 0; bit < 8; bit++ {
-			if (nackByte & (1 << uint(bit))) == 0 {
-				// Bit is 0: this packet is ACKed
-				info.AckedRange = append(info.AckedRange, packetNum)
-			}
-			// Check for uint32 wraparound before incrementing
-			if packetNum == 0xFFFFFFFF {
-				// Stop processing if we've reached the maximum packet number
-				break
-			}
-			packetNum++
-		}
-		// Break outer loop if we hit wraparound
-		if packetNum == 0xFFFFFFFF && len(info.NackFields) > i+1 {
-			// NackFields remain but packet number has wrapped; stop to avoid wrapping into low numbers
-			break
-		}
-	}
-
-	// If no nack fields, then the first 8 packets after FirstPacketNum are all ACKed
-	if info.NackCount == 0 {
-		for i := 0; i < 8; i++ {
-			info.AckedRange = append(info.AckedRange, info.FirstPacketNum+uint32(i))
-		}
-	}
+	// Expand the acked packet numbers
+	info.AckedRange = expandAckedRange(info.AckThrough, info.AckCount, info.Ranges)
 
 	return info, nil
+}
+
+// expandAckedRange computes the full list of acknowledged packet numbers
+// from the ACK block fields. It walks downward from AckThrough:
+//  1. AckThrough itself
+//  2. AckCount consecutive packets below AckThrough
+//  3. For each range: skip NackCount packets, then include AckCount packets
+//
+// Expansion stops if packet numbers would underflow below 0.
+func expandAckedRange(ackThrough uint32, ackCount uint8, ranges []ACKRange) []uint32 {
+	acked := make([]uint32, 0, 1+int(ackCount))
+	acked = append(acked, ackThrough)
+
+	current := ackThrough
+	// Add ackCount packets below AckThrough
+	for i := 0; i < int(ackCount) && current > 0; i++ {
+		current--
+		acked = append(acked, current)
+	}
+
+	// Process each range
+	for _, r := range ranges {
+		// Skip nackCount packets
+		for i := 0; i < int(r.NackCount) && current > 0; i++ {
+			current--
+		}
+		// Include ackCount packets
+		for i := 0; i < int(r.AckCount) && current > 0; i++ {
+			current--
+			acked = append(acked, current)
+		}
+	}
+
+	return acked
 }
