@@ -385,6 +385,18 @@ func (t *NTCP2Transport) haveCapacity(percent int) bool {
 	return current*100 < maxSessions*percent
 }
 
+// probeAndBindNAT is the OS/NAT-interaction seam behind bindOSAssignedPort.
+// It is a variable so tests can force a NAT failure deterministically instead
+// of depending on whether the host happens to have UPnP/NAT-PMP available.
+var probeAndBindNAT = func(cfg *nat.BindConfig) (*nat.BindResult, error) {
+	return nat.ProbeAndBindWithNATTraversal(cfg)
+}
+
+// bindNATWithPort is the equivalent seam for the explicit-port bind path.
+var bindNATWithPort = func(cfg *nat.BindConfig) (*nat.BindResult, error) {
+	return nat.BindWithNATTraversal(cfg)
+}
+
 // setupNetworkListener creates and attaches the TCP and NTCP2 listeners to the transport.
 // bindOSAssignedPort discovers a free port via a temporary OS-assigned binding, then
 // re-binds through NAT traversal (UPnP/NAT-PMP with fallback) on that port so that
@@ -401,11 +413,39 @@ func (t *NTCP2Transport) haveCapacity(percent int) bool {
 // config.ListenerAddress, so the caller always sees the actual address.
 func bindOSAssignedPort(config *Config) (net.Listener, string, error) {
 	cfg := nat.DefaultBindConfig("tcp", config.ListenerAddress)
-	result, err := nat.ProbeAndBindWithNATTraversal(cfg)
+	result, err := probeAndBindNAT(cfg)
 	if err != nil {
 		return nil, "", err
 	}
 	return result.Listener, result.BoundAddress, nil
+}
+
+// bindListenerWithFallback attempts a NAT-traversed bind for the configured
+// port and, if that fails, falls back to a plain TCP listener. A NAT port
+// mapping improves reachability but is never required to listen, so a mapping
+// failure must not prevent the transport from starting.
+//
+// iport == 0 means "OS-assigned port" and goes through the probe/rebind path;
+// any other value binds that specific port. Both share the same fallback here
+// so the two paths cannot drift apart.
+func bindListenerWithFallback(transport *NTCP2Transport, config *Config, iport int) (net.Listener, string, error) {
+	if iport == 0 {
+		listener, boundAddr, err := bindOSAssignedPort(config)
+		if err == nil {
+			return listener, boundAddr, nil
+		}
+		transport.logger.WithError(err).Warn("NAT traversal failed on OS-assigned port, falling back to plain TCP listener")
+		return bindPlainTCPListener(config.ListenerAddress, 0)
+	}
+
+	cfg := nat.DefaultBindConfig("tcp", config.ListenerAddress)
+	cfg.RequestedPort = iport
+	result, err := bindNATWithPort(cfg)
+	if err == nil {
+		return result.Listener, result.BoundAddress, nil
+	}
+	transport.logger.WithError(err).Warn("NAT traversal failed, falling back to plain TCP listener")
+	return bindPlainTCPListener(config.ListenerAddress, iport)
 }
 
 func bindPlainTCPListener(listenerAddress string, requestedPort int) (net.Listener, string, error) {
@@ -467,37 +507,19 @@ func setupNetworkListener(transport *NTCP2Transport, config *Config, ntcp2Config
 		return oops.Wrapf(err, "failed to convert port to integer")
 	}
 
-	var tcpListener net.Listener
-	var boundAddr string
-	if iport == 0 {
-		tcpListener, boundAddr, err = bindOSAssignedPort(config)
-		if err != nil {
-			// Symmetric with the explicit-port branch below: failing to obtain a
-			// NAT port mapping must not prevent the transport from listening at
-			// all. Port 0 is the default configuration, so without this fallback a
-			// router on a host where UPnP/NAT-PMP is unavailable (behind a
-			// restrictive NAT, or a CI runner) cannot be constructed at all.
-			//
-			// The plain listener binds an OS-assigned port on an unspecified host,
-			// which publishes a capabilities-only RouterInfo address — the correct
-			// representation for a router with no routable external address. NAT
-			// detection can still promote it to a real host later, and
-			// recomputeReachabilityCaps upgrades the caps when that happens.
-			transport.logger.WithError(err).Warn("NAT traversal failed on OS-assigned port, falling back to plain TCP listener")
-			tcpListener, boundAddr, err = bindPlainTCPListener(config.ListenerAddress, 0)
-		}
-	} else {
-		cfg := nat.DefaultBindConfig("tcp", config.ListenerAddress)
-		cfg.RequestedPort = iport
-		result, bindErr := nat.BindWithNATTraversal(cfg)
-		if bindErr == nil {
-			tcpListener = result.Listener
-			boundAddr = result.BoundAddress
-		} else {
-			transport.logger.WithError(bindErr).Warn("NAT traversal failed, falling back to plain TCP listener")
-			tcpListener, boundAddr, err = bindPlainTCPListener(config.ListenerAddress, iport)
-		}
-	}
+	// NAT mapping is an optimisation for reachability, never a precondition for
+	// listening. Failing to obtain a mapping must not stop the transport from
+	// binding at all: port 0 is the default configuration, so a router behind a
+	// restrictive NAT (or a CI runner with no UPnP/NAT-PMP) has to be able to
+	// start. Both branches therefore share one plain-listener fallback, so the
+	// two paths cannot drift apart again.
+	//
+	// The plain listener binds an OS-assigned port on an unspecified host, which
+	// publishes a capabilities-only RouterInfo address — the correct
+	// representation for a router with no routable external address. NAT
+	// detection can still promote it later, and recomputeReachabilityCaps
+	// upgrades the caps when that happens.
+	tcpListener, boundAddr, err := bindListenerWithFallback(transport, config, iport)
 	if err != nil {
 		return err
 	}
