@@ -16,13 +16,16 @@ const maxSSU2PayloadIPv4 = 1424
 // 1452 (max wire) - 16 (short header) - 16 (MAC placeholder) - 16 (AEAD tag) = 1404 bytes.
 const maxSSU2PayloadIPv6 = 1404
 
-// Fragment block overhead per SSU2 spec.
+// Fragment block overhead.
 // Both block types carry a 7-byte header inside the TLV payload:
 //
 //	FirstFragment:    MessageID(4) + FragInfo(1) + TotalSize uint16(2)
 //	FollowOnFragment: FragInfo(1)  + Reserved(2) + MessageID(4)
 //
 // Plus the 3-byte TLV wrapper (type + 2-byte length) = 10 bytes total each.
+// Note: this is a non-standard format. The SSU2 spec defines FirstFragment
+// as type(1) + msg_id(4) + short_exp(4) (9 bytes) and FollowOnFragment as
+// frag(1) + msg_id(4) (5 bytes).
 const (
 	firstFragmentOverhead    = 3 + 7 // TLV header + spec-defined fragment header
 	followOnFragmentOverhead = 3 + 7 // TLV header + spec-defined fragment header
@@ -138,8 +141,10 @@ func createFollowOnFragments(data []byte, messageID uint32, maxPayload int) ([]*
 }
 
 // buildFirstFragment creates a BlockTypeFirstFragment (type 4) block.
-// SSU2 spec format: MessageID(4) + FragInfo(1) + TotalSize uint16(2) + Data
+// Wire format: MessageID(4) + FragInfo(1) + TotalSize uint16(2) + Data
 // FragInfo = (0 << 1) | isLast  (fragment number 0, isLast flag in bit 0).
+// Note: this is a non-standard format. The SSU2 spec defines FirstFragment
+// as type(1) + msg_id(4) + short_exp(4) + Data (9-byte I2NP header).
 func buildFirstFragment(messageID, totalSize uint32, data []byte, isLast bool) (*ssu2noise.SSU2Block, error) {
 	// H-NEW-2 FIX: the TotalSize field is only 2 bytes (uint16). Reject messages
 	// whose total size exceeds 65535 bytes before silently truncating.

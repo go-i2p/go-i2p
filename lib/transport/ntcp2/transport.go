@@ -1816,7 +1816,7 @@ func dialCandidatesWithPerformer(
 	return nil, lastErr
 }
 
-// extractNTCP2AddressInfo extracts all dialable NTCP2 addresses from router info.
+// extractNTCP2AddressInfo extracts all dialable NTCP2 addresses from the RouterInfo.
 func (t *NTCP2Transport) extractNTCP2AddressInfo(routerInfo router_info.RouterInfo) ([]NTCP2DialCandidate, error) {
 	candidates, err := ExtractNTCP2DialCandidatesWithMetadata(routerInfo)
 	if err != nil {
@@ -1827,7 +1827,7 @@ func (t *NTCP2Transport) extractNTCP2AddressInfo(routerInfo router_info.RouterIn
 	return candidates, nil
 }
 
-// getPeerHashBytes extracts the peer hash bytes from router info.
+// getPeerHashBytes extracts the peer hash bytes from the RouterInfo.
 func (t *NTCP2Transport) getPeerHashBytes(routerInfo router_info.RouterInfo) []byte {
 	peerHash, _ := routerInfo.IdentHash()
 	hashBytes := peerHash.Bytes()
@@ -1947,7 +1947,7 @@ func (t *NTCP2Transport) logHandshakeFailure(tcpAddrString string, peerHashBytes
 		return
 	}
 
-	// Handshake rejections (EOF / connection reset during noise handshake) are
+	// Handshake rejections (EOF / connection reset during Noise handshake) are
 	// expected when a new router joins the network — remote peers may not
 	// recognise our identity and close immediately. Log at Warn, not Error.
 	isExpectedRejection := errorType == "handshake_rejected_eof" || errorType == "connection_reset"

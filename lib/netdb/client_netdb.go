@@ -12,7 +12,8 @@ import (
 //
 // Design rationale:
 // - Clients only need LeaseSet operations (destinations, services)
-// - Prevents clients from accessing/modifying router information
+// - Clients should not have access to other client's LeaseSet operations
+// - Prevents clients from accessing/modifying RouterInfo
 // - Enables future optimizations specific to client use cases
 // - Clearer separation of concerns in the codebase
 type ClientNetDB struct {

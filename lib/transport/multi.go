@@ -436,7 +436,7 @@ func (tmux *TransportMuxer) failedPeersCleanupLoop() {
 	}
 }
 
-// get a transport session given a router info
+// get a transport session given a RouterInfo
 // return session and nil if successful
 // findCompatibleSession tries each registered transport in order and returns
 // the first successfully established session. Returns the session, whether any
@@ -536,7 +536,7 @@ func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s Tra
 	return nil, tmux.handleSessionFailure(routerInfo, compatibleFound)
 }
 
-// Compatible returns true if there is a transport that we mux that is compatible with this router info.
+// Compatible returns true if there is a transport that we mux that is compatible with this RouterInfo.
 // It is used by higher layers to decide whether a peer is reachable through any
 // of the muxed transports before attempting a session.
 func (tmux *TransportMuxer) Compatible(routerInfo router_info.RouterInfo) bool {

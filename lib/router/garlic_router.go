@@ -440,7 +440,7 @@ func (gr *GarlicMessageRouter) ForwardToRouter(routerHash common.Hash, msg i2np.
 		return nil
 	}
 
-	// Look up and validate router information
+	// Look up and validate RouterInfo
 	routerInfo, err := gr.lookupRouterInfo(routerHash)
 	if err != nil {
 		return err

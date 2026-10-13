@@ -21,7 +21,7 @@ type LeaseSetEntry struct {
 // See [I2P Spec: Database](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/database.rst) for the lookup protocol.
 // See also [NetworkDatabase], [KademliaResolver].
 type Resolver interface {
-	// resolve a router info by hash
+	// resolve a RouterInfo by hash
 	// return a chan that yields the found RouterInfo or nil if it could not be found after timeout
 	Lookup(hash common.Hash, timeout time.Duration) (*router_info.RouterInfo, error)
 }
@@ -42,14 +42,14 @@ type NetworkDatabase interface {
 	// return a slice of routerInfos
 	GetAllRouterInfos() []router_info.RouterInfo
 
-	// store a router info locally
+	// store a RouterInfo locally
 	StoreRouterInfo(ri router_info.RouterInfo)
 
-	// try obtaining more peers with a bootstrap instance until we get minRouters number of router infos
+	// try obtaining more peers with a bootstrap instance until we get minRouters number of RouterInfos
 	// returns error if bootstrap.GetPeers returns an error otherwise returns nil
 	Reseed(b bootstrap.Bootstrap, minRouters int) error
 
-	// return how many router infos we have
+	// return how many RouterInfos we have
 	Size() int
 
 	// Recaculate size of netdb from backend

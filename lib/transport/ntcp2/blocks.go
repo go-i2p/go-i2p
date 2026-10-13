@@ -34,7 +34,7 @@ const (
 	BlockTypeI2NP byte = 3
 
 	// BlockTypeTermination is a Termination block (type 4).
-	// Payload: version(4) + networkID(1) + time(4) + reason(1) = 10 bytes.
+	// Payload: valid data frames received (8 bytes, big-endian) + reason (1 byte) = 9 bytes.
 	BlockTypeTermination byte = 4
 
 	// BlockTypePadding is a Padding block (type 254).

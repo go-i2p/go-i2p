@@ -106,7 +106,7 @@ func (h *LookupResponseHandler) HandleResponse(messageID, msgType int, data []by
 	}
 }
 
-// KademliaResolver resolves router infos with recursive kademlia lookup.
+// KademliaResolver resolves RouterInfos with recursive kademlia lookup.
 // It finds a RouterInfo by querying the Kademlia DHT: it starts from the
 // local NetDB and, if not found, sends DatabaseLookup messages to peers that
 // are progressively closer to the target hash until a peer returns the data.
@@ -544,7 +544,7 @@ func (kr *KademliaResolver) findClosestPeers(target common.Hash) []common.Hash {
 	rk := RoutingKey(target, time.Now())
 	seeds := kr.selectClosestFloodfillSeeds(rk, K)
 
-	// Get all known router infos from the network database
+	// Get all known RouterInfos from the network database
 	allRouterInfos := kr.NetworkDatabase.GetAllRouterInfos()
 	if len(allRouterInfos) == 0 {
 		log.WithFields(logger.Fields{"at": "findClosestPeers"}).Debug("No peers available in network database")
@@ -615,7 +615,7 @@ func (kr *KademliaResolver) selectClosestFloodfillSeeds(routingKey common.Hash, 
 	return seeds
 }
 
-// calculatePeerDistances calculates XOR distances for all router infos.
+// calculatePeerDistances calculates XOR distances for all RouterInfos.
 func (kr *KademliaResolver) calculatePeerDistances(allRouterInfos []router_info.RouterInfo, target common.Hash) []peerDistance {
 	peers := make([]peerDistance, 0, len(allRouterInfos))
 

@@ -544,7 +544,7 @@ func (db *StdNetDB) GetLeaseSetBytes(hash common.Hash) ([]byte, error) {
 
 // GetLeaseSetCount returns the total number of LeaseSet entries in memory cache.
 // It counts the LeaseSets held in the in-memory cache, which is the fast path
-// for monitoring how much lease-set data the NetDB is currently holding.
+// for monitoring how much LeaseSet data the NetDB is currently holding.
 // See also [GetAllLeaseSets].
 func (db *StdNetDB) GetLeaseSetCount() int {
 	return db.lsCache.count()

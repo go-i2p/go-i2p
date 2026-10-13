@@ -41,7 +41,7 @@ import (
 // Currently, sessionMutex and keystoreMux are rarely acquired together in
 // practice; document any new cross-mutex code paths with inline comments.
 type Router struct {
-	// keystore for router info
+	// keystore for RouterInfo
 	keystore *keys.RouterInfoKeystore
 	// multi-transport manager (atomic-safe to avoid TOCTOU race during shutdown)
 	transports atomic.Pointer[transport.TransportMuxer]
@@ -363,7 +363,7 @@ func validateRouterKeys(r *Router) error {
 	return nil
 }
 
-// constructRouterInfo builds the initial router info from the keystore.
+// constructRouterInfo builds the initial RouterInfo from the keystore.
 // We start with Reachable:false (caps='U') because at this point no
 // transport addresses have been added — the addresses are appended later
 // by buildNTCP2Transport / buildSSU2Transport. After all transports have

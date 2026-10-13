@@ -539,12 +539,12 @@ func (r *Reseed) extractSU3Content(su3file *su3.SU3) ([]byte, error) {
 	return content, nil
 }
 
-// processReseedZip writes the zip content to disk, extracts it, and parses router infos.
+// processReseedZip writes the zip content to disk, extracts it, and parses RouterInfos.
 func (r *Reseed) processReseedZip(content []byte) ([]router_info.RouterInfo, error) {
 	return r.processReseedZipWithLimit(content, 0)
 }
 
-// processReseedZipWithLimit writes the zip content to disk, extracts it, and parses router infos with a limit.
+// processReseedZipWithLimit writes the zip content to disk, extracts it, and parses RouterInfos with a limit.
 // If limit <= 0, all RouterInfos are parsed.
 func (r *Reseed) processReseedZipWithLimit(content []byte, limit int) ([]router_info.RouterInfo, error) {
 	zipPath, err := r.writeZipFile(content)
@@ -788,7 +788,7 @@ func buildFullPaths(tempDir string, files []string) ([]string, error) {
 	return fullPaths, nil
 }
 
-// parseRouterInfoFilesWithLimit reads and parses router info files from the extracted files with a limit.
+// parseRouterInfoFilesWithLimit reads and parses RouterInfo files from the extracted files with a limit.
 // If limit <= 0, all files are parsed. Otherwise, parsing stops after successfully parsing 'limit' RouterInfos.
 // This minimizes memory usage when only a small number of RouterInfos is needed.
 func (r *Reseed) parseRouterInfoFilesWithLimit(files []string, limit int) ([]router_info.RouterInfo, error) {
@@ -809,7 +809,7 @@ func (r *Reseed) parseRouterInfoFilesWithLimit(files []string, limit int) ([]rou
 	return routerInfos, nil
 }
 
-// parseStats tracks statistics during router info file parsing.
+// parseStats tracks statistics during RouterInfo file parsing.
 type parseStats struct {
 	parseErrors  int
 	readErrors   int
@@ -861,7 +861,7 @@ func (r *Reseed) hasReachedLimit(parsed, limit, totalFiles int) bool {
 	return false
 }
 
-// tryParseRouterInfoFile attempts to read and parse a single router info file.
+// tryParseRouterInfoFile attempts to read and parse a single RouterInfo file.
 // Returns the parsed RouterInfo and a boolean indicating success.
 func (r *Reseed) tryParseRouterInfoFile(filePath string, stats *parseStats) (router_info.RouterInfo, bool) {
 	riB, err := os.ReadFile(filePath)

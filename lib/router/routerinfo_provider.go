@@ -168,7 +168,7 @@ func (p *routerInfoProvider) routerConfig() *config.RouterConfig {
 	return p.router.cfg
 }
 
-// SetCongestionMonitor sets the congestion state provider for the routerinfo_provider.
+// SetCongestionMonitor sets the congestion state provider for the RouterInfo provider.
 // This is called by the Router during initialization to wire up congestion monitoring.
 func (p *routerInfoProvider) SetCongestionMonitor(monitor CongestionStateProvider) {
 	p.monitorMu.Lock()

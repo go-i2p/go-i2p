@@ -110,7 +110,7 @@ func (r *Router) getMaxConnections() int {
 // isAcceptingTunnels returns true if the router is accepting tunnel participation.
 // Reads from RouterConfig.AcceptTunnels. Hidden mode forces this to false so the
 // PROP_162 congestion monitor advertises the "G" flag (rejecting all tunnels)
-// in addition to the "H"/"U" caps published by the routerinfo provider.
+// in addition to the "H"/"U" caps published by the RouterInfo provider.
 func (r *Router) isAcceptingTunnels() bool {
 	if r.cfg != nil {
 		if r.cfg.Hidden {

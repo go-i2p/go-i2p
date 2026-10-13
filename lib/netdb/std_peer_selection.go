@@ -90,7 +90,7 @@ func hasReachableAddress(ri *router_info.RouterInfo) (direct, viaIntroducer bool
 	return false, false
 }
 
-// filterAvailablePeers filters router infos excluding specified hashes and checking reachability.
+// filterAvailablePeers filters RouterInfos excluding specified hashes and checking reachability.
 // Results are sorted by PeerTracker reliability score (reliable peers first).
 func (db *StdNetDB) filterAvailablePeers(allRouterInfos []router_info.RouterInfo, excludeMap map[common.Hash]bool) []router_info.RouterInfo {
 	stats := &peerFilterStats{}
@@ -129,7 +129,7 @@ type peerFilterStats struct {
 	viaIntroducer       int // accepted via SSU2 introducers
 }
 
-// collectAvailablePeers iterates through router infos and filters out invalid or excluded peers.
+// collectAvailablePeers iterates through RouterInfos and filters out invalid or excluded peers.
 // Accepted peers are those reachable directly (NTCP2 or SSU2 with host+port) or
 // via SSU2 introducers.
 func (db *StdNetDB) collectAvailablePeers(allRouterInfos []router_info.RouterInfo, excludeMap map[common.Hash]bool, stats *peerFilterStats) []router_info.RouterInfo {

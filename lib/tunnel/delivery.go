@@ -181,7 +181,7 @@ type DelayFactor byte
 // They sit at the start of every decrypted tunnel message and tell the
 // receiving router where to send the payload: locally, to a tunnel on a
 // gateway router, or directly to a router.
-// See [I2P Spec: Tunnel Creation](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/tunnel.rst) for the wire format.
+// See [I2P Spec: Tunnel Message](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/tunnel-message.rst) for the wire format.
 type DeliveryInstructions struct {
 	// Type: FirstFragment or FollowOnFragment
 	fragmentType int
