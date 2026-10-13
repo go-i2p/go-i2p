@@ -110,7 +110,7 @@ func (h *LookupResponseHandler) HandleResponse(messageID, msgType int, data []by
 // It finds a RouterInfo by querying the Kademlia DHT: it starts from the
 // local NetDB and, if not found, sends DatabaseLookup messages to peers that
 // are progressively closer to the target hash until a peer returns the data.
-// See [I2P Spec: Database](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/database.rst) for the lookup protocol.
+// See [I2P Spec: I2NP Database](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the lookup protocol.
 // See also [LookupTransport], [LookupResponseHandler].
 type KademliaResolver struct {
 	// netdb to store result into

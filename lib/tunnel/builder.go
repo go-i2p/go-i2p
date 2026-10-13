@@ -68,7 +68,7 @@ type BuildTunnelRequest struct {
 // TunnelBuildResult contains the result of building a tunnel request.
 // It reports whether the build succeeded and, on success, the session keys
 // and tunnel IDs needed to encrypt and route data through the new tunnel.
-// See [I2P Spec: Tunnel Creation](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/tunnel.rst) for the build protocol.
+// See [I2P Spec: Tunnel Creation ECIES](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/tunnel-creation-ecies.rst) for the build protocol.
 type TunnelBuildResult struct {
 	TunnelID        TunnelID                 // The generated tunnel ID
 	GatewayTunnelID TunnelID                 // Inbound gateway receive tunnel ID
@@ -578,11 +578,11 @@ func generateRecordPadding() ([29]byte, error) {
 const (
 	// FlagIBGW marks a hop as an Inbound Gateway, allowing messages from
 	// anyone to enter the tunnel at this hop.
-	// See [I2P Spec: Tunnel Creation](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/tunnel.rst) for the flag bits.
+	// See [I2P Spec: Tunnel Creation ECIES](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/tunnel-creation-ecies.rst) for the flag bits.
 	FlagIBGW = 0x80
 	// FlagOBEP marks a hop as an Outbound Endpoint, allowing messages to
 	// leave the tunnel to anyone at this hop.
-	// See [I2P Spec: Tunnel Creation](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/tunnel.rst) for the flag bits.
+	// See [I2P Spec: Tunnel Creation ECIES](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/tunnel-creation-ecies.rst) for the flag bits.
 	FlagOBEP = 0x40
 )
 

@@ -9,7 +9,7 @@ import (
 // NewKademliaResolver creates a new resolver that stores result into a NetworkDatabase and uses a tunnel pool for the lookup.
 // It resolves unknown RouterInfos by querying the closest known peers with
 // DatabaseLookup messages and caching the results in the NetDB.
-// See [I2P Spec: Database](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/database.rst) for the lookup protocol.
+// See [I2P Spec: I2NP Database](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the lookup protocol.
 // See also [KademliaResolver], [NewKademliaResolverWithTransport].
 func NewKademliaResolver(netDB NetworkDatabase, pool *tunnel.Pool) (r Resolver) {
 	if pool != nil && netDB != nil {

@@ -27,7 +27,7 @@ import (
 // - Delivers decrypted I2NP messages to appropriate I2CP session queues
 // - Forwards transit tunnel messages through the participant manager
 // - Thread-safe for concurrent message processing
-// See [I2P Spec: Tunnel](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/tunnel.rst) for the TunnelData format.
+// See [I2P Spec: I2NP Tunnel Messages](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the TunnelData format.
 // See also [GarlicMessageRouter], [Router].
 type InboundMessageHandler struct {
 	mu sync.RWMutex
@@ -644,7 +644,7 @@ func (h *InboundMessageHandler) GetTunnelSession(tunnelID tunnel.TunnelID) (uint
 // the payload in a TunnelGateway message addressed to the gateway router.
 // It is used when a decrypted endpoint message must continue to a remote
 // destination through a tunnel whose gateway is another router.
-// See [I2P Spec: Tunnel](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/tunnel.rst) for the TunnelGateway format.
+// See [I2P Spec: I2NP Tunnel Messages](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the TunnelGateway format.
 // See also [InboundMessageHandler].
 func (h *InboundMessageHandler) ForwardToTunnel(tunnelID uint32, gatewayHash [32]byte, msgBytes []byte) error {
 	h.mu.RLock()

@@ -28,7 +28,7 @@ import (
 // tunnel pools, and message routing for participating in the I2P network.
 // It owns the router's identity (RouterInfo and keys), the NetDB of peer
 // RouterInfos, and the transports used to reach other routers.
-// See [I2P Spec: RouterInfo](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/routerinfo.rst) for the RouterInfo format the router signs and publishes.
+// See [I2P Spec: Common Structures RouterInfo](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/common-structures.rst) for the RouterInfo format the router signs and publishes.
 // See also [CreateRouter], [GarlicMessageRouter], [InboundMessageHandler], [CongestionMonitor].
 // Lock Ordering (CRITICAL: must be respected to prevent deadlocks):
 // When acquiring multiple mutexes, always acquire in this order:

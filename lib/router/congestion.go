@@ -58,7 +58,7 @@ type CongestionSample struct {
 // - Thread-safe for concurrent access from RouterInfo publisher
 // - State machine: None → D → E → G with hysteresis thresholds for downgrades
 //
-// See [I2P Spec: RouterInfo](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/routerinfo.rst) for the congestion flags advertised in RouterInfo caps.
+// See [I2P Spec: Common Structures RouterInfo](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/common-structures.rst) for the congestion flags advertised in RouterInfo caps.
 // See also [CongestionStateProvider].
 type CongestionMonitor struct {
 	mu sync.RWMutex

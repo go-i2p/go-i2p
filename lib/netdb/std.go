@@ -28,7 +28,7 @@ import (
 // persists them to a skiplist directory on disk, and it serves as the store
 // that receives data from DatabaseStore messages and the source for
 // DatabaseLookup responses.
-// See [I2P Spec: Database](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/database.rst) for the NetDB role.
+// See [I2P Spec: I2NP Database](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the NetDB role.
 // See also [NetworkDatabase], [Entry].
 type StdNetDB struct {
 	DB string

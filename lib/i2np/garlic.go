@@ -67,7 +67,7 @@ Expiration :: Date (8 bytes)
 // addressed to a different hop, so a single Garlic message can carry a
 // message through a tunnel without revealing the full path to any single
 // router.
-// See [I2P Spec: Garlic](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/garlic.rst) for the format.
+// See [I2P Spec: ECIES](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ecies.rst) for the ECIES garlic message format.
 // See also [GarlicClove], [GarlicBuilder], [GarlicProcessor].
 type Garlic struct {
 	Count       int

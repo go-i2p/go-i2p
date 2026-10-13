@@ -20,7 +20,7 @@ import (
 // These are the codes a router returns in a tunnel build reply to tell the
 // requester whether the tunnel was accepted or why it was rejected.
 // Aliases of the canonical constants in lib/tunnel/replycodes.
-// See [I2P Spec: Tunnel](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/tunnel.rst) for the tunnel build protocol.
+// See [I2P Spec: Tunnel Creation ECIES](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/tunnel-creation-ecies.rst) for the tunnel build protocol.
 const (
 	BuildReplyCodeAccepted            = replycodes.TunnelBuildReplySuccess             // Tunnel accepted (0)
 	BuildReplyCodeProbabilisticReject = replycodes.TunnelBuildReplyProbabilisticReject // Rejected: probabilistic reject (10)

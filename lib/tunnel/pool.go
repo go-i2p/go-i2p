@@ -90,7 +90,7 @@ const (
 // BuildResponse represents a response from a tunnel hop.
 // Each hop in the build chain replies with its own success or rejection
 // code, which the pool uses to attribute build failures to specific peers.
-// See [I2P Spec: Tunnel Creation](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/tunnel.rst) for the reply codes.
+// See [I2P Spec: Tunnel Creation ECIES](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/tunnel-creation-ecies.rst) for the reply codes.
 type BuildResponse struct {
 	HopIndex int    // Index of the hop that responded
 	Success  bool   // Whether the hop accepted the tunnel
@@ -596,7 +596,7 @@ func (p *Pool) Stop() {
 // CleanupExpiredTunnels removes tunnels that have been building for too long.
 // Builds that exceed the I2P spec's 90-second reply deadline are dropped so
 // the pool can retry them with fresh peers.
-// See [I2P Spec: Tunnel Creation](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/tunnel.rst) for the build deadline.
+// See [I2P Spec: Tunnel Creation ECIES](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/tunnel-creation-ecies.rst) for the build deadline.
 func (p *Pool) CleanupExpiredTunnels(maxAge time.Duration) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()

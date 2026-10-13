@@ -43,7 +43,7 @@ type pendingMessage struct {
 // GarlicNetDB defines the NetDB interface needed for garlic message routing.
 // It abstracts the network database so the router can look up RouterInfos and
 // LeaseSets asynchronously while forwarding garlic cloves.
-// See [I2P Spec: RouterInfo](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/routerinfo.rst) for the RouterInfo format.
+// See [I2P Spec: Common Structures RouterInfo](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/common-structures.rst) for the RouterInfo format.
 // See also [GarlicMessageRouter].
 type GarlicNetDB interface {
 	GetRouterInfo(hash common.Hash) chan router_info.RouterInfo
@@ -92,7 +92,7 @@ const (
 // It resolves LeaseSets via the NetDB and delivers encrypted messages through the tunnel pool.
 // It implements the GarlicCloveForwarder interface so the MessageProcessor can hand off
 // cloves that need delivery beyond local processing.
-// See [I2P Spec: Garlic](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/garlic.rst) for the garlic message format.
+// See [I2P Spec: ECIES](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ecies.rst) for the ECIES garlic message format.
 // See also [GarlicNetDB], [InboundMessageHandler].
 type GarlicMessageRouter struct {
 	// Router infrastructure dependencies
@@ -227,7 +227,7 @@ func (gr *GarlicMessageRouter) drainRouterInfoChanWithContext(ch chan router_inf
 // 4. Background processor retries lookups and forwards messages when LeaseSets arrive
 // Per I2P spec, destinations are identified by their 32-byte hash and are
 // reached by sending messages through one of their published inbound tunnels.
-// See [I2P Spec: Lease](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/lease.rst) for the LeaseSet format.
+// See [I2P Spec: I2NP LeaseSet](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the LeaseSet format.
 // See also [GarlicMessageRouter].
 func (gr *GarlicMessageRouter) ForwardToDestination(destHash common.Hash, msg i2np.Message) error {
 	log.WithFields(logger.Fields{
@@ -419,7 +419,7 @@ func (gr *GarlicMessageRouter) selectBestLease(leases []lease.Lease) *lease.Leas
 // 4. Send message via transport layer
 // Reflexive delivery occurs when a garlic message instructs us to send a clove
 // to ourselves - this is processed locally to avoid unnecessary network traffic.
-// See [I2P Spec: RouterInfo](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/routerinfo.rst) for the RouterInfo format.
+// See [I2P Spec: Common Structures RouterInfo](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/common-structures.rst) for the RouterInfo format.
 // See also [GarlicMessageRouter].
 func (gr *GarlicMessageRouter) ForwardToRouter(routerHash common.Hash, msg i2np.Message) error {
 	log.WithFields(logger.Fields{
@@ -669,7 +669,7 @@ func (gr *GarlicMessageRouter) sendMessageToRouter(routerHash common.Hash, route
 // Tunnel delivery is the most common forwarding type in I2P, as most traffic
 // flows through tunnels for anonymity. The gateway router is responsible for
 // injecting messages into the tunnel's encryption layers.
-// See [I2P Spec: Tunnel](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/tunnel.rst) for the TunnelGateway format.
+// See [I2P Spec: I2NP Tunnel Messages](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the TunnelGateway format.
 // See also [GarlicMessageRouter].
 func (gr *GarlicMessageRouter) ForwardThroughTunnel(
 	gatewayHash common.Hash,
