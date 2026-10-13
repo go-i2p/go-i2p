@@ -36,7 +36,7 @@ const (
 // containing a type 3 (I2NPMessage) block when no fragmentation is needed.
 // SSU2 is a UDP transport, so oversized messages must be split into
 // FirstFragment and FollowOnFragment blocks to stay within the packet limit.
-// See [I2P Spec: SSU2](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ssu2.rst) for the fragment block format.
+// See [I2P Spec: SSU2](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ssu2.rst) for the SSU2 protocol.
 // See also [FrameI2NPToBlock].
 func FragmentI2NPMessage(msg i2np.Message, maxPayload int) ([]*ssu2noise.SSU2Block, error) {
 	data, err := msg.MarshalBinary()
@@ -164,8 +164,10 @@ func buildFirstFragment(messageID, totalSize uint32, data []byte, isLast bool) (
 }
 
 // buildFollowOnFragment creates a BlockTypeFollowOnFragment (type 5) block.
-// SSU2 spec format: FragInfo(1) + Reserved(2) + MessageID(4) + Data
+// Wire format: FragInfo(1) + Reserved(2) + MessageID(4) + Data
 // FragInfo = (fragmentNum << 1) | isLast  (fragment number in bits 7:1, isLast in bit 0).
+// Note: this is a non-standard format. The SSU2 spec defines FollowOnFragment
+// as frag(1) + msg_id(4) + Data (5 bytes overhead).
 func buildFollowOnFragment(messageID uint32, fragmentNum uint8, data []byte, isLast bool) *ssu2noise.SSU2Block {
 	payload := make([]byte, 7+len(data))
 	isLastBit := uint8(0)
