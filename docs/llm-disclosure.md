@@ -44,5 +44,7 @@ LLMs that have been used are:
  - claude-4.5-sonnet
  - claude-4.6-sonnet
  - claude-4.6-opus
+ - qwen3.8-27b
+ - qwen3.8-Flash
 
 All LLM assistance has been provided by Github Copilot.
