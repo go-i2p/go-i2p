@@ -268,16 +268,18 @@ func TestCRITICAL_1_1_SessionCountConsistency(t *testing.T) {
 // TestCRITICAL_R1_SetIdentityDoesNotKillAcceptLoop is a regression test for
 // R-1 (CRITICAL): SetIdentity permanently kills the NTCP2 accept loop.
 //
-// Bug: recreateListenerIfNeeded sets t.listener = nil temporarily during swap.
-// If acceptNextConnection observes nil, it returns false, terminating the loop.
-// Since the loop is guarded by acceptRunOnce, it never restarts.
+// Bug: the listener was set to nil temporarily during the SetIdentity swap.
+// If acceptNextConnection observed nil, it returned false, terminating the
+// loop. Since the loop is guarded by acceptRunOnce, it never restarted.
 //
 // Fix: acceptNextConnection distinguishes "listener nil during swap" from
 // "listener nil during shutdown". It waits/retries when nil but transport
 // is still running, only terminating on actual shutdown.
 //
-// This test verifies that the accept loop remains operational after the
-// listener is temporarily nil during a SetIdentity operation.
+// SetIdentity no longer swaps the listener at all (it updates identity in
+// place), so the nil window cannot arise from that path any more. This test
+// still guards the defensive handling itself by forcing the nil state, which
+// remains reachable during shutdown.
 func TestCRITICAL_R1_SetIdentityDoesNotKillAcceptLoop(t *testing.T) {
 	// This test verifies the accept loop behavior when listener becomes temporarily nil.
 	// We simulate the scenario by manually setting listener to nil while transport is running.
@@ -599,7 +601,7 @@ func TestRC1_ConcurrentSetIdentityAndAcceptUnderLoad(t *testing.T) {
 
 			for iteration := 0; iteration < maxIterations; iteration++ {
 				// Simulate the listener swap behavior of SetIdentity (S-2 fix).
-				// This mimics what recreateListenerIfNeeded does.
+				// This mimics the historical swap window that caused R-1.
 
 				// Step 1: Acquire write lock and snapshot old listener.
 				transport.identityMu.Lock()

@@ -54,7 +54,9 @@
 //	// Or with a connection limit:
 //	tmux := transport.MuxWithLimit(1024, ntcp2Transport)
 //
-//	// Set identity for all transports.
+//	// Optionally rotate the identity presented to peers. Transports are
+//	// already constructed with an identity, so this is only needed if the
+//	// RouterInfo changes at runtime; it updates in place and never rebinds.
 //	tmux.SetIdentity(ourRouterInfo)
 //
 //	// Accept connections from any transport.

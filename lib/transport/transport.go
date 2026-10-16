@@ -89,10 +89,21 @@ type Transport interface {
 	// Addr returns an
 	Addr() net.Addr
 
-	// Set the router identity for this transport.
-	// will bind if the underlying socket is not already
-	// if the underlying socket is already bound update the RouterIdentity
-	// returns any errors that happen if they do
+	// SetIdentity updates the router identity this transport presents to peers.
+	//
+	// An already-bound transport updates its identity in place: the socket is
+	// not rebound and established sessions are preserved. Rebinding is not
+	// merely unnecessary (a responder's identity is consumed per connection,
+	// not per socket) but impossible while the transport is live, because the
+	// old socket has to stay open for any swap to be atomic and a second bind
+	// to the same port fails with EADDRINUSE.
+	//
+	// Binding is the constructor's responsibility; a transport returned
+	// successfully by its constructor is always bound. Implementations that are
+	// not yet bound may skip the listener-level update rather than fail.
+	//
+	// Returns an error if the identity is unusable or the update cannot be
+	// published, and must leave the transport unchanged in that case.
 	SetIdentity(ident router_info.RouterInfo) error
 
 	// Obtain a transport session with a router given its RouterInfo.

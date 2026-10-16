@@ -659,10 +659,22 @@ func (t *SSU2Transport) recordPeerSuccess(hash data.Hash, latencyMs int64) {
 	}
 }
 
-// SetIdentity sets the router identity for this transport.
-// It re-derives the Noise crypto keys and recreates the UDP listener so the
-// listener presents the new identity's static key to peers. Implements
-// transport.Transport.
+// SetIdentity updates the router identity used for new inbound sessions, over
+// the existing socket. It re-derives the Noise crypto keys and publishes them
+// to the listener in place.
+//
+// The listener is deliberately NOT recreated. Per the transport.Transport
+// contract an already-bound transport updates its identity rather than
+// rebinding, and rebinding could never have worked: the old listener has to
+// stay open for the swap to be atomic, and a second bind to the same UDP port
+// fails with EADDRINUSE. Identity is consumed per session — go-noise reads the
+// static key when creating each session — so publishing a new config is enough.
+//
+// The previous implementation called stopNATManagers before rebinding and then
+// returned the rebind error, so a single SetIdentity call left the relay,
+// peer-test, hole-punch and key-rotation managers permanently nil: hole
+// punching, relay registration and intro-key publication in the RouterInfo all
+// silently stopped working. Updating in place has no such failure mode.
 // See also [SSU2Transport].
 func (t *SSU2Transport) SetIdentity(ident router_info.RouterInfo) error {
 	identHash, err := ident.IdentHash()
@@ -680,127 +692,40 @@ func (t *SSU2Transport) SetIdentity(ident router_info.RouterInfo) error {
 		return oops.Wrapf(err, "failed to reinitialize crypto keys")
 	}
 
-	// BUG FIX HIGH 3.3: SSU2 listener must be recreated when identity changes,
-	// similar to NTCP2. The listener encapsulates the old identity's crypto keys.
-	// Without rebinding, the listener presents the old static key to peers while
-	// the transport claims a new identity, violating protocol coherence.
-	// Close old listener and create new one with updated config.
+	// createSSU2Config + initializeCryptoKeys reproduce only what construction
+	// sets. IntroKey and the obfuscation settings are populated later, by
+	// initKeyManagement, on the shared config pointer — they are persistent
+	// per working directory rather than derived from the identity, so they must
+	// be carried over. Dropping them would clear the listener's inbound header
+	// protector and disable ChaCha obfuscation for new sessions.
+	oldCfg := t.config.Load()
+	if live := oldCfg.SSU2Config; live != nil {
+		ssu2Config.IntroKey = live.IntroKey
+		ssu2Config.EnableChaChaObfuscation = live.EnableChaChaObfuscation
+		ssu2Config.ObfuscationIV = live.ObfuscationIV
+	}
 
-	// Stop NAT managers and goroutines before swapping the listener.
-	// NAT managers hold references to the old listener and must be re-initialized.
-	// Call stopNATManagers() before initNATManagers().
-	stopNATManagers(t)
+	t.identityMu.Lock()
+	newCfg := *oldCfg // Copy-on-write, mirroring the NTCP2 pattern
+	newCfg.SSU2Config = ssu2Config
+	t.config.Store(&newCfg) // Atomic config store
+	t.identity = ident
+	listener := t.listener
+	t.identityMu.Unlock()
 
-	// S-2 + S-3 fix: Snapshot old state (listener, address, identity, config) for rollback.
-	// Keep old listener active during new listener creation for atomic swap.
-	t.identityMu.RLock()
-	oldCfg := t.config.Load() // Load config snapshot atomically
-	currentAddr := oldCfg.ListenerAddress
-	oldListener := t.listener
-	oldIdentity := t.identity
-	_ = oldCfg.SSU2Config // referenced for completeness but not currently used
-	t.identityMu.RUnlock()
-
-	// Create new listener with the new identity/config if one existed before.
-	if oldListener != nil {
-		// Extract port from the snapshotted listener address to maintain the same listening port.
-		_, portStr, err := net.SplitHostPort(currentAddr)
-		if err != nil {
-			t.logger.WithError(err).Error("Failed to extract port from SSU2 listener address")
-			return err
-		}
-		port, err := strconv.Atoi(portStr)
-		if err != nil {
-			t.logger.WithError(err).Error("Failed to parse port from SSU2 listener address")
-			return err
-		}
-
-		// S-2 fix: Create new UDP connection and listener outside the lock.
-		// On any failure, return error immediately without touching t.listener.
-		// This keeps old listener active so Accept() continues working.
-		// Use snapshotted oldCfg instead of direct t.config access
-		natCfg := nat.DefaultBindConfig("udp", oldCfg.ListenerAddress)
-		natCfg.RequestedPort = port
-		result, err := nat.BindWithNATTraversal(natCfg)
-		if err != nil {
-			t.logger.WithError(err).Error("Failed to rebind UDP address during identity update")
-			return err
-		}
-		udpConn := result.PacketConn
-		newAddr := result.BoundAddress
-
-		listener, err := ssu2noise.NewSSU2Listener(udpConn, ssu2Config)
-		if err != nil {
-			_ = udpConn.Close()
-			t.logger.WithError(err).Error("Failed to create new SSU2 listener during identity update")
-			return WrapSSU2Error(err, "recreating SSU2 listener")
-		}
-
-		if err := listener.Start(); err != nil {
-			_ = listener.Close()
-			t.logger.WithError(err).Error("Failed to start new SSU2 listener during identity update")
-			return WrapSSU2Error(err, "starting recreated SSU2 listener")
-		}
-
-		// S-2 + S-3 fix: Install new listener AND update identity/config under lock.
-		// From this point, Accept() uses new listener and NAT init sees new identity.
-		// If NAT/key init fails below, rollback restores ALL old state atomically.
-		// Copy-on-write config update (mirrors NTCP2 pattern)
-		newCfg := *oldCfg // Shallow copy
-		newCfg.ListenerAddress = newAddr
-		newCfg.SSU2Config = ssu2Config
-
-		t.identityMu.Lock()
-		t.listener = listener
-		t.config.Store(&newCfg) // Atomic config store
-		t.identity = ident
-		t.identityMu.Unlock()
-
-		// Re-initialize NAT managers with the new listener.
-		// NAT managers must be bound to the new listener, not the old one.
-		// S-3 fix: NAT managers now see new identity (t.identity updated above).
-		// S-2 fix: On failure, close new listener and restore ALL old state.
-		// E-2 fix: Track NAT manager health status.
-		if err := initNATManagers(t); err != nil {
-			t.natManagersHealthy.Store(false) // E-2 fix: Mark NAT degraded
-			t.logger.WithError(err).Error("Failed to reinitialize NAT managers after identity update")
-			// Rollback ALL state: listener, address, identity, config
-			// Restore oldCfg atomically
-			t.identityMu.Lock()
-			_ = t.listener.Close() // Close failed new listener
-			t.listener = oldListener
-			t.config.Store(oldCfg) // Atomic config restore
-			t.identity = oldIdentity
-			t.identityMu.Unlock()
-			return err
-		}
-		t.natManagersHealthy.Store(true) // E-2 fix: Mark NAT healthy on success
-
-		// Re-initialize keyRotationManager with the new identity's keys.
-		// S-2 fix: On failure, close new listener and restore ALL old state.
-		if err := initKeyManagement(t, ssu2Config); err != nil {
-			t.logger.WithError(err).Error("Failed to reinitialize key rotation manager after identity update")
-			// Rollback ALL state: listener, address, identity, config
-			// Restore oldCfg atomically
-			t.identityMu.Lock()
-			_ = t.listener.Close() // Close failed new listener
-			t.listener = oldListener
-			t.config.Store(oldCfg) // Atomic config restore
-			t.identity = oldIdentity
-			t.identityMu.Unlock()
-			return err
-		}
-
-		// S-2 fix: Only close old listener after all initialization succeeds.
-		// This ensures atomic swap: old listener stays active until new one fully ready.
-		if err := oldListener.Close(); err != nil {
-			t.logger.WithError(err).Warn("Error closing old SSU2 listener after successful recreation")
+	// Publish to the listener last, so no session is created with the new
+	// identity while the transport still reports the old one. The listener
+	// rebuilds its intro-key protector from the carried-over IntroKey.
+	if listener != nil {
+		if err := listener.UpdateIdentity(ssu2Config); err != nil {
+			return WrapSSU2Error(err, "updating listener identity")
 		}
 	}
 
-	// S-3 fix: Identity/config already updated above (before NAT init) so NAT managers
-	// see new identity during initialization. No further updates needed here.
-	t.logger.Info("SSU2 transport identity updated successfully with listener rebind")
+	// The NAT managers hold the listener through path.ListenerRef (GetAddr
+	// only) and read the transport config live, so they stay valid across an
+	// in-place update and are deliberately left running.
+	t.logger.WithField("address", t.Addr().String()).Info("SSU2 transport identity updated in place")
 	return nil
 }
 

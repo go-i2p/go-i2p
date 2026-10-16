@@ -54,6 +54,13 @@
 // and matters because port 0 is the default configuration — without the
 // fallback a router on a host with no UPnP/NAT-PMP silently loses SSU2.
 //
+// Identity updates do not touch the socket either. SetIdentity publishes a new
+// config to the live listener via its UpdateIdentity method rather than
+// recreating it: a responder's identity is consumed per session, so the socket
+// is irrelevant, and rebinding could not work anyway because the old socket
+// must stay open for the swap to be atomic. The NAT managers are left running,
+// since they reference the listener only through path.ListenerRef (GetAddr).
+//
 // Future enhancements to NAT handling should be implemented in lib/nat, not
 // here. This ensures consistent behavior across all transports (NTCP2, SSU2,
 // and any future transport implementations).

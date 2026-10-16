@@ -4,9 +4,10 @@
 package ntcp2
 
 import (
-	"fmt"
+	"net"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -302,23 +303,23 @@ func TestAccept_ThenFindExistingSession_Promotion(t *testing.T) {
 	}
 }
 
-// TestCreateNewListenerWithConfig_ClosesListenerOnError is a compile-time
-// verification that the fix is in place. We can't easily make
-// ntcp2.NewNTCP2Listener fail in a unit test without complex mocking,
-// but we verify the error path structure is correct.
-func TestCreateNewListenerWithConfig_ErrorPathStructure(t *testing.T) {
-	// Verify the function exists and has the correct signature.
+// TestAttachNTCP2Listener_ClosesTCPListenerOnError guards the FD-leak fix: when
+// ntcp2.NewNTCP2Listener rejects the config, the freshly bound TCP listener must
+// be closed rather than abandoned. (This previously targeted
+// createNewListenerWithConfig, which was removed when SetIdentity stopped
+// rebinding the socket; attachNTCP2Listener is the surviving bind path.)
+func TestAttachNTCP2Listener_ClosesTCPListenerOnError(t *testing.T) {
 	transport := newNilListenerTestTransport(t, 100)
 
-	// Calling with a valid address but nil config should fail at
-	// NewNTCP2Listener, and the fix ensures tcpListener is closed.
-	listenerAddr := fmt.Sprintf("127.0.0.1:0")
-	// HIGH-1.3 fix: Use atomic Load/Store to modify config (make a copy before modifying)
-	oldCfg := transport.config.Load()
-	newCfg := *oldCfg
-	newCfg.ListenerAddress = listenerAddr
-	transport.config.Store(&newCfg)
-	_, _, _, err := transport.createNewListenerWithConfig(nil, listenerAddr)
-	// We expect an error because ntcp2Config is nil.
-	assert.Error(t, err, "should fail with nil NTCP2 config")
+	tcpListener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+
+	// nil config must be rejected by NewNTCP2Listener...
+	err = attachNTCP2Listener(transport, tcpListener, nil)
+	require.Error(t, err, "should fail with nil NTCP2 config")
+
+	// ...and the TCP listener must have been closed on that error path.
+	_, dialErr := net.DialTimeout("tcp", tcpListener.Addr().String(), 500*time.Millisecond)
+	assert.Error(t, dialErr, "the TCP listener must be closed after NTCP2 listener creation fails")
+	assert.Nil(t, transport.listener, "no NTCP2 listener should be installed on failure")
 }
