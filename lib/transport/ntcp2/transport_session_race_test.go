@@ -7,7 +7,6 @@ import (
 	"net"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -319,7 +318,13 @@ func TestAttachNTCP2Listener_ClosesTCPListenerOnError(t *testing.T) {
 	require.Error(t, err, "should fail with nil NTCP2 config")
 
 	// ...and the TCP listener must have been closed on that error path.
-	_, dialErr := net.DialTimeout("tcp", tcpListener.Addr().String(), 500*time.Millisecond)
-	assert.Error(t, dialErr, "the TCP listener must be closed after NTCP2 listener creation fails")
+	//
+	// Do NOT dial the address to prove closure: attachNTCP2Listener has already
+	// returned the port to the OS, so a successful dial here could mean a
+	// different process claimed it. Instead, transferring ownership is the
+	// signal -- closing an already-closed listener must report the closed error.
 	assert.Nil(t, transport.listener, "no NTCP2 listener should be installed on failure")
+	err = tcpListener.Close()
+	assert.ErrorIs(t, err, net.ErrClosed,
+		"the TCP listener must already be closed after NTCP2 listener creation fails")
 }
