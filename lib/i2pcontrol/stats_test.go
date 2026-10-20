@@ -30,7 +30,8 @@ func (m *mockTunnelEncryptor) Decrypt(data []byte) ([]byte, error) {
 }
 
 func (m *mockTunnelEncryptor) Type() tunnel.TunnelEncryptionType {
-	return tunnel.TunnelEncryptionECIES
+	// AES (type 0) is the only spec-defined tunnel layer encryption type.
+	return tunnel.TunnelEncryptionAES
 }
 
 // mockRouterAccess provides a simple mock for testing

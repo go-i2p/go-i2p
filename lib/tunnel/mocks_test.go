@@ -39,7 +39,8 @@ func (m *mockTunnelEncryptor) Decrypt(data []byte) ([]byte, error) {
 }
 
 func (m *mockTunnelEncryptor) Type() cryptotunnel.TunnelEncryptionType {
-	return cryptotunnel.TunnelEncryptionECIES
+	// AES (type 0) is the only spec-defined tunnel layer encryption type.
+	return cryptotunnel.TunnelEncryptionAES
 }
 
 // mockPassthroughEncryptor is a passthrough TunnelEncryptor that reports AES type.

@@ -1525,11 +1525,12 @@ func TestPeerSelection_FailedPeerExclusionSpec(t *testing.T) {
 // =============================================================================
 
 func TestCryptoAudit_TunnelEncryptorInterface(t *testing.T) {
-	// The crypto/tunnel package must support both ECIES and AES encryption types
+	// AES (type 0) is the only tunnel layer encryption type defined by the I2P
+	// specifications (Tunnel-Creation-ECIES: "The only layer encryption currently
+	// supported is type 0, which is AES"). The former ECIES type 1 was a
+	// non-spec value and has been removed from crypto/tunnel.
 	assert.Equal(t, cryptotunnel.TunnelEncryptionType(0), cryptotunnel.TunnelEncryptionAES,
 		"AES must be type 0")
-	assert.Equal(t, cryptotunnel.TunnelEncryptionType(1), cryptotunnel.TunnelEncryptionECIES,
-		"ECIES must be type 1")
 }
 
 func TestCryptoAudit_AESEncryptorCreation(t *testing.T) {
@@ -1548,19 +1549,6 @@ func TestCryptoAudit_AESEncryptorCreation(t *testing.T) {
 	assert.NotNil(t, enc)
 	assert.Equal(t, cryptotunnel.TunnelEncryptionAES, enc.Type(),
 		"AES encryptor must report AES type")
-}
-
-func TestCryptoAudit_ECIESEncryptorCreation(t *testing.T) {
-	// ECIES encryptors must be creatable from X25519 keys
-	var pubKey [32]byte
-	for i := range pubKey {
-		pubKey[i] = byte(i + 1)
-	}
-
-	enc := cryptotunnel.NewECIESEncryptor(pubKey)
-	assert.NotNil(t, enc)
-	assert.Equal(t, cryptotunnel.TunnelEncryptionECIES, enc.Type(),
-		"ECIES encryptor must report ECIES type")
 }
 
 // Validates that a tunnel's session key is derived per the I2P tunnel spec
@@ -1712,17 +1700,6 @@ func TestLegacyCrypto_DocReferencesLegacy(t *testing.T) {
 	assert.NotNil(t, gw, "Gateway must accept any TunnelEncryptor implementation")
 }
 
-func TestLegacyCrypto_NoHardcodedAESInGateway(t *testing.T) {
-	// Gateway must use TunnelEncryptor interface, not hardcoded AES
-	// Test by verifying ECIES-type encryptor also works
-	eciesLike := &specMockECIESEncryptor{}
-	gw, err := NewGateway(TunnelID(1), eciesLike, TunnelID(2))
-	require.NoError(t, err)
-
-	_, err = gw.Send([]byte("test message"))
-	require.NoError(t, err, "Gateway must work with non-AES encryptors")
-}
-
 // Validates that build records use the 29-byte ECIES record format, not the
 // legacy 528-byte ElGamal record.
 func TestLegacyCrypto_No528ByteRecords(t *testing.T) {
@@ -1854,25 +1831,6 @@ type specMockScorer struct {
 func (s *specMockScorer) Name() string                            { return "mock-scorer" }
 func (s *specMockScorer) Score(ri router_info.RouterInfo) float64 { return s.score }
 
-// specMockECIESEncryptor mimics an ECIES-type encryptor to verify interface compatibility.
-type specMockECIESEncryptor struct{}
-
-func (m *specMockECIESEncryptor) Encrypt(data []byte) ([]byte, error) {
-	result := make([]byte, len(data))
-	copy(result, data)
-	return result, nil
-}
-
-func (m *specMockECIESEncryptor) Decrypt(data []byte) ([]byte, error) {
-	result := make([]byte, len(data))
-	copy(result, data)
-	return result, nil
-}
-
-func (m *specMockECIESEncryptor) Type() cryptotunnel.TunnelEncryptionType {
-	return cryptotunnel.TunnelEncryptionECIES
-}
-
 // specMockForwarder implements MessageForwarder for endpoint routing tests.
 type specMockForwarder struct {
 	tunnelCalled bool
@@ -1893,6 +1851,7 @@ func (f *specMockForwarder) ForwardToRouter(routerHash [32]byte, msgBytes []byte
 func TestCryptoAudit_EncryptionTypeStrings(t *testing.T) {
 	assert.True(t, strings.Contains(cryptotunnel.TunnelEncryptionAES.String(), "AES"),
 		"AES type string should contain 'AES'")
-	assert.True(t, strings.Contains(cryptotunnel.TunnelEncryptionECIES.String(), "ECIES"),
-		"ECIES type string should contain 'ECIES'")
+	// Unknown values (including the removed ECIES type 1) report "Unknown".
+	assert.True(t, strings.Contains(cryptotunnel.TunnelEncryptionType(1).String(), "Unknown"),
+		"removed type 1 must no longer name itself ECIES")
 }
