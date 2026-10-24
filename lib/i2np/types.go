@@ -226,9 +226,7 @@ var (
 	_ DatabaseWriter = (*DatabaseStore)(nil)
 
 	// Tunnel interfaces
-	_ TunnelBuilder      = (*TunnelBuild)(nil)
 	_ TunnelBuilder      = (*VariableTunnelBuild)(nil)
-	_ TunnelReplyHandler = (*TunnelBuildReply)(nil)
 	_ TunnelReplyHandler = (*VariableTunnelBuildReply)(nil)
 
 	// Build record interfaces

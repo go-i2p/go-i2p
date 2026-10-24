@@ -33,8 +33,8 @@ func processAllRecordsAsHops(records []BuildResponseRecord, processHop func(int,
 }
 
 // processValidatedHopResponseRecord validates a response record and processes its reply
-// code.  It is the shared core of TunnelBuildReply.processHopResponse and
-// VariableTunnelBuildReply.processHopResponse; only the log prefix differs.
+// code.  It is the shared core of VariableTunnelBuildReply.processHopResponse and
+// ShortTunnelBuildReply.processHopResponse; only the log prefix differs.
 func processValidatedHopResponseRecord(hopIndex int, record BuildResponseRecord, logPrefix string) (bool, error) {
 	if err := ValidateBuildResponseRecord(record); err != nil {
 		return false, oops.Wrapf(err, "hop %d: invalid response record", hopIndex)

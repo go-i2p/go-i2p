@@ -90,7 +90,7 @@ type BuildReplyForwarder interface {
 	// - messageID: The I2NP message ID for the reply
 	// - encryptedRecords: The complete encrypted build reply records
 	// - isShortBuild: Whether this is a Short Tunnel Build Message (STBM) format
-	// - inputMessageType: The input message type (21=TunnelBuild, 23=VariableTunnelBuild, 25=ShortTunnelBuild) for F061 correct reply type mapping
+	// - inputMessageType: The input message type (23=VariableTunnelBuild, 25=ShortTunnelBuild) for F061 correct reply type mapping
 	ForwardBuildReplyToRouter(routerHash common.Hash, messageID int, encryptedRecords []byte, isShortBuild bool, inputMessageType int) error
 
 	// ForwardBuildReplyThroughTunnel forwards a build reply message through a reply tunnel.
@@ -102,7 +102,7 @@ type BuildReplyForwarder interface {
 	// - messageID: The I2NP message ID for the reply
 	// - encryptedRecords: The complete encrypted build reply records
 	// - isShortBuild: Whether this is a Short Tunnel Build Message (STBM) format
-	// - inputMessageType: The input message type (21=TunnelBuild, 23=VariableTunnelBuild, 25=ShortTunnelBuild) for F061 correct reply type mapping
+	// - inputMessageType: The input message type (23=VariableTunnelBuild, 25=ShortTunnelBuild) for F061 correct reply type mapping
 	ForwardBuildReplyThroughTunnel(gatewayHash common.Hash, tunnelID buildrecord.TunnelID, messageID int, encryptedRecords []byte, isShortBuild bool, inputMessageType int) error
 }
 
@@ -601,10 +601,6 @@ func (p *MessageProcessor) processMessageDispatch(msg Message, depth int) error 
 		return p.processShortTunnelBuildMessage(msg)
 	case I2NPMessageTypeVariableTunnelBuild:
 		return p.processVariableTunnelBuildMessage(msg)
-	case I2NPMessageTypeTunnelBuild:
-		return p.processTunnelBuildMessage(msg) // Legacy fixed 8-record format (no count prefix)
-	case I2NPMessageTypeTunnelBuildReply:
-		return p.processTunnelBuildReplyMessage(msg)
 	case I2NPMessageTypeVariableTunnelBuildReply:
 		return p.processVariableTunnelBuildReplyMessage(msg)
 	case I2NPMessageTypeShortTunnelBuildReply:

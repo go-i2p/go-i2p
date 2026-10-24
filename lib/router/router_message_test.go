@@ -119,8 +119,6 @@ func TestRouteMessageSwitchStatement(t *testing.T) {
 
 	// Test tunnel message types
 	tunnelTypes := []byte{
-		i2np.I2NPMessageTypeTunnelBuild,
-		i2np.I2NPMessageTypeTunnelBuildReply,
 		i2np.I2NPMessageTypeVariableTunnelBuild,
 		i2np.I2NPMessageTypeVariableTunnelBuildReply,
 	}
@@ -397,8 +395,6 @@ func TestRouteMessageAllSupportedTypes(t *testing.T) {
 		{"TunnelData", i2np.I2NPMessageTypeTunnelData},
 		{"TunnelGateway", i2np.I2NPMessageTypeTunnelGateway},
 		{"Data", i2np.I2NPMessageTypeData},
-		{"TunnelBuild", i2np.I2NPMessageTypeTunnelBuild},
-		{"TunnelBuildReply", i2np.I2NPMessageTypeTunnelBuildReply},
 		{"VariableTunnelBuild", i2np.I2NPMessageTypeVariableTunnelBuild},
 		{"VariableTunnelBuildReply", i2np.I2NPMessageTypeVariableTunnelBuildReply},
 	}

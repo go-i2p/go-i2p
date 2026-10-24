@@ -19,7 +19,7 @@
 // provides a focused implementation of the most useful operations for
 // monitoring and controlling a router.
 //
-// See [I2P Spec: I2PControl](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2cp.rst)
+// See [I2P Spec: I2PControl](https://github.com/i2p/i2p-control)
 // for the full protocol definition.
 //
 // # How it works

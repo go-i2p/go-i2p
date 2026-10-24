@@ -4,10 +4,6 @@ package i2np
 // (VariableTunnelBuild and ShortTunnelBuild).  Both types store their records
 // as a []BuildRequestRecord with an accompanying Count; the accessor logic is
 // identical, so a single embedded helper eliminates the duplication.
-//
-// TunnelBuild (fixed [8]array) is intentionally not handled here because its
-// backing storage and constant count differ in a way that does not benefit from
-// the same embedding.
 type sliceRecordSet struct {
 	Count               int
 	BuildRequestRecords []BuildRequestRecord

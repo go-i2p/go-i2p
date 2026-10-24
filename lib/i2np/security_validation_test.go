@@ -183,36 +183,6 @@ func TestTunnelDataMessage_BoundsChecking(t *testing.T) {
 	}
 }
 
-// TestTunnelBuildMessage_BoundsChecking verifies TunnelBuild size requirements
-func TestTunnelBuildMessage_BoundsChecking(t *testing.T) {
-	tests := []struct {
-		name        string
-		payloadSize int
-		expectError bool
-	}{
-		{"payload too short - 0 bytes", 0, true},
-		{"payload too short - 528 bytes (1 record)", 528, true},
-		{"payload too short - 4223 bytes (8 records - 1 byte)", 8*528 - 1, true},
-		{"payload exactly 4224 bytes (8 records)", 8 * 528, false},
-		{"payload too long - 4225 bytes", 8*528 + 1, true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			payload := make([]byte, tt.payloadSize)
-			data := createValidI2NPMessage(I2NPMessageTypeTunnelBuild, payload)
-
-			msg := &TunnelBuildMessage{BaseI2NPMessage: &BaseI2NPMessage{}}
-			err := msg.UnmarshalBinary(data)
-			if tt.expectError {
-				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
-			}
-		})
-	}
-}
-
 // =============================================================================
 // DatabaseLookup Bounds Checking Tests
 // =============================================================================

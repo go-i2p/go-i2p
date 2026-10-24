@@ -21,7 +21,7 @@ Same format as VariableTunnelBuildMessage, with BuildResponseRecords.
 // the reply counterpart to VariableTunnelBuild. It is used to process
 // replies for variable-length tunnels.
 // See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the wire format.
-// See also [VariableTunnelBuild] and [TunnelBuildReply].
+// See also [VariableTunnelBuild].
 type VariableTunnelBuildReply struct {
 	Count                int
 	BuildResponseRecords []BuildResponseRecord
@@ -44,7 +44,7 @@ func (v *VariableTunnelBuildReply) GetRawReplyRecords() [][]byte {
 }
 
 // ProcessReply processes the variable tunnel build reply by analyzing each response record.
-// Similar to TunnelBuildReply but handles variable-length tunnels (1-8 hops).
+// Handles variable-length tunnels (1-8 hops).
 // Validates response integrity and determines tunnel build success/failure.
 func (v *VariableTunnelBuildReply) ProcessReply() error {
 	return processReplySteps(v, v.BuildResponseRecords)

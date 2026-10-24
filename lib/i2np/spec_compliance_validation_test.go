@@ -256,13 +256,15 @@ func TestBothHeaderFormats_Supported(t *testing.T) {
 
 // =============================================================================
 // Audit Item: Message type IDs
-// Verify all 14 type constants match spec (1,2,3,10,11,18,19,20,21,22,23,24,25,26)
+// Verify all non-deprecated type constants match spec.
+// Deprecated types 21 (TunnelBuild) and 22 (TunnelBuildReply) are intentionally
+// not implemented per i2np.rst deprecation notice.
 // =============================================================================
 
 // TestMessageTypeIDs_MatchSpec verifies every I2NP message type constant matches
 // the authoritative values from i2np.rst.
 func TestMessageTypeIDs_MatchSpec(t *testing.T) {
-	// Spec-defined message type IDs (i2np.rst)
+	// Spec-defined message type IDs (i2np.rst) — non-deprecated only
 	specTypes := map[string]int{
 		"DatabaseStore":            1,
 		"DatabaseLookup":           2,
@@ -272,8 +274,6 @@ func TestMessageTypeIDs_MatchSpec(t *testing.T) {
 		"TunnelData":               18,
 		"TunnelGateway":            19,
 		"Data":                     20,
-		"TunnelBuild":              21,
-		"TunnelBuildReply":         22,
 		"VariableTunnelBuild":      23,
 		"VariableTunnelBuildReply": 24,
 		"ShortTunnelBuild":         25,
@@ -289,16 +289,14 @@ func TestMessageTypeIDs_MatchSpec(t *testing.T) {
 		"TunnelData":               I2NPMessageTypeTunnelData,
 		"TunnelGateway":            I2NPMessageTypeTunnelGateway,
 		"Data":                     I2NPMessageTypeData,
-		"TunnelBuild":              I2NPMessageTypeTunnelBuild,
-		"TunnelBuildReply":         I2NPMessageTypeTunnelBuildReply,
 		"VariableTunnelBuild":      I2NPMessageTypeVariableTunnelBuild,
 		"VariableTunnelBuildReply": I2NPMessageTypeVariableTunnelBuildReply,
 		"ShortTunnelBuild":         I2NPMessageTypeShortTunnelBuild,
 		"ShortTunnelBuildReply":    I2NPMessageTypeShortTunnelBuildReply,
 	}
 
-	assert.Equal(t, len(specTypes), 14, "spec defines exactly 14 I2NP message types")
-	assert.Equal(t, len(codeTypes), 14, "code defines exactly 14 I2NP message type constants")
+	assert.Equal(t, len(specTypes), 12, "12 non-deprecated I2NP message types")
+	assert.Equal(t, len(codeTypes), 12, "code defines exactly 12 non-deprecated I2NP message type constants")
 
 	for name, specID := range specTypes {
 		codeID, ok := codeTypes[name]
@@ -309,9 +307,9 @@ func TestMessageTypeIDs_MatchSpec(t *testing.T) {
 }
 
 // TestMessageTypeIDs_AllValidTypesRecognized verifies ReadI2NPType accepts all
-// 14 spec-defined type values without error.
+// non-deprecated spec-defined type values without error.
 func TestMessageTypeIDs_AllValidTypesRecognized(t *testing.T) {
-	specTypeIDs := []int{1, 2, 3, 10, 11, 18, 19, 20, 21, 22, 23, 24, 25, 26}
+	specTypeIDs := []int{1, 2, 3, 10, 11, 18, 19, 20, 23, 24, 25, 26}
 
 	for _, typeID := range specTypeIDs {
 		data := []byte{byte(typeID)}
@@ -322,7 +320,7 @@ func TestMessageTypeIDs_AllValidTypesRecognized(t *testing.T) {
 }
 
 // TestMessageTypeIDs_NoGapOverlap verifies there are no duplicate type IDs
-// and the set of assigned IDs is exactly {1,2,3,10,11,18,19,20,21,22,23,24,25,26}.
+// and the set of assigned IDs is exactly the 12 non-deprecated spec values.
 func TestMessageTypeIDs_NoGapOverlap(t *testing.T) {
 	allConstants := []int{
 		I2NPMessageTypeDatabaseStore,
@@ -333,8 +331,6 @@ func TestMessageTypeIDs_NoGapOverlap(t *testing.T) {
 		I2NPMessageTypeTunnelData,
 		I2NPMessageTypeTunnelGateway,
 		I2NPMessageTypeData,
-		I2NPMessageTypeTunnelBuild,
-		I2NPMessageTypeTunnelBuildReply,
 		I2NPMessageTypeVariableTunnelBuild,
 		I2NPMessageTypeVariableTunnelBuildReply,
 		I2NPMessageTypeShortTunnelBuild,
@@ -343,7 +339,7 @@ func TestMessageTypeIDs_NoGapOverlap(t *testing.T) {
 
 	expected := map[int]bool{
 		1: true, 2: true, 3: true, 10: true, 11: true,
-		18: true, 19: true, 20: true, 21: true, 22: true,
+		18: true, 19: true, 20: true,
 		23: true, 24: true, 25: true, 26: true,
 	}
 
@@ -354,7 +350,7 @@ func TestMessageTypeIDs_NoGapOverlap(t *testing.T) {
 		seen[id] = true
 	}
 	assert.Equal(t, len(expected), len(seen),
-		"all 14 spec type IDs must be represented by constants")
+		"all 12 non-deprecated spec type IDs must be represented by constants")
 }
 
 // =============================================================================
@@ -2697,20 +2693,8 @@ func TestData_Format_RoundTrip(t *testing.T) {
 }
 
 // ============================================================================
-// Section 6 — TunnelBuild / VariableTunnelBuild (types 21, 23) spec compliance
+// Section 6 — VariableTunnelBuild (type 23) spec compliance
 // ============================================================================
-
-// TestTunnelBuild_RecordCount_FixedAt8 verifies TunnelBuild always has exactly 8 records.
-func TestTunnelBuild_RecordCount_FixedAt8(t *testing.T) {
-	var tb TunnelBuild
-	assert.Equal(t, 8, len(tb), "TunnelBuild must have exactly 8 BuildRequestRecord slots")
-}
-
-// TestTunnelBuild_RecordCount_WireSize verifies TunnelBuild wire size = 8 × 528 = 4224 bytes.
-func TestTunnelBuild_RecordCount_WireSize(t *testing.T) {
-	expectedSize := 8 * StandardBuildRecordSize
-	assert.Equal(t, 4224, expectedSize, "TunnelBuild wire size must be 8 × 528 = 4224")
-}
 
 // TestVariableTunnelBuild_RecordCount_1to8 verifies VariableTunnelBuild supports 1-8 records.
 func TestVariableTunnelBuild_RecordCount_1to8(t *testing.T) {
@@ -2909,7 +2893,7 @@ func makeTestResponseRecords(n int) []BuildResponseRecord {
 // TestTunnelBuild_ReplyProcessing_AllAccepted verifies ProcessReply succeeds when all hops accept.
 func TestTunnelBuild_ReplyProcessing_AllAccepted(t *testing.T) {
 	records := makeTestResponseRecords(8)
-	reply := &TunnelBuildReply{Records: [8]BuildResponseRecord(records)}
+	reply := &VariableTunnelBuildReply{Count: 8, BuildResponseRecords: records}
 	err := reply.ProcessReply()
 	assert.NoError(t, err, "All hops accepted — ProcessReply must succeed")
 }
@@ -2921,7 +2905,7 @@ func TestTunnelBuild_ReplyProcessing_OneReject(t *testing.T) {
 	rd := makeRandomData(func(j int) byte { return byte(3 + j%256) })
 	records[3] = CreateBuildResponseRecord(TunnelBuildReplyProbabilisticReject, rd)
 
-	reply := &TunnelBuildReply{Records: [8]BuildResponseRecord(records)}
+	reply := &VariableTunnelBuildReply{Count: 8, BuildResponseRecords: records}
 	err := reply.ProcessReply()
 	assert.Error(t, err, "One rejection means tunnel build failed")
 }
@@ -2934,7 +2918,7 @@ func TestTunnelBuild_ReplyProcessing_HashIntegrity(t *testing.T) {
 	records := makeTestResponseRecords(8)
 	records[0].Hash[0] ^= 0xFF
 
-	reply := &TunnelBuildReply{Records: [8]BuildResponseRecord(records)}
+	reply := &VariableTunnelBuildReply{Count: 8, BuildResponseRecords: records}
 	err := reply.ProcessReply()
 	assert.Error(t, err, "corrupted hash must cause ProcessReply to fail")
 }
@@ -3138,15 +3122,8 @@ func TestShortTunnelBuild_LayerEncryption_WrongKeyFails(t *testing.T) {
 }
 
 // ============================================================================
-// Section 6 — TunnelBuildReply / VariableTunnelBuildReply (types 22, 24)
+// Section 6 — VariableTunnelBuildReply (type 24) spec compliance
 // ============================================================================
-
-// TestTunnelBuildReply_Format_8ResponseRecords verifies TunnelBuildReply has 8 records.
-func TestTunnelBuildReply_Format_8ResponseRecords(t *testing.T) {
-	var reply TunnelBuildReply
-	assert.Equal(t, 8, len(reply.Records),
-		"TunnelBuildReply must have exactly 8 BuildResponseRecord slots")
-}
 
 // TestTunnelBuildReply_Format_ResponseRecordIs528 verifies each response record = 528 bytes.
 func TestTunnelBuildReply_Format_ResponseRecordIs528(t *testing.T) {
@@ -3335,11 +3312,11 @@ func TestLegacyCrypto_LongFormatBuildRecords_FlagPresence(t *testing.T) {
 	assert.Equal(t, 528, StandardBuildRecordSize,
 		"StandardBuildRecordSize (528) is the ECIES long-format record size")
 
-	// TunnelBuild uses 8×528 = 4224 byte format (receive-path interop)
-	var tb TunnelBuild
-	totalSize := len(tb) * StandardBuildRecordSize
+	// A full 8-hop build uses 8×528 = 4224 bytes of long-format records
+	// (receive-path interop with pre-STBM peers).
+	totalSize := 8 * StandardBuildRecordSize
 	assert.Equal(t, 4224, totalSize,
-		"TunnelBuild uses 528-byte records (ECIES long format)")
+		"8-hop build uses 528-byte records (ECIES long format)")
 
 	t.Log("NOTE: 528-byte long-format build records are present for receive-path interop.")
 	t.Log("The modern send path uses ECIES-only 218-byte short records (STBM).")

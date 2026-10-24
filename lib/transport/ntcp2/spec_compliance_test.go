@@ -32,12 +32,9 @@ import (
 
 // TestNoiseXKHandshake_PatternString verifies the Noise pattern used for NTCP2.
 //
-// AUDIT FINDING: The I2P spec (ntcp2.rst) specifies Noise_XK_25519_ChaChaPoly_SHA256.
-// The go-noise library's NTCP2Config defaults to pattern "XK" which maps internally
-// to Noise_XK_25519_AESGCM_SHA256 (using AES-GCM instead of ChaChaPoly1305).
-// This is a known deviation — the go-noise library uses AESGCM as the cipher suite.
-// The I2P spec historically uses ChaChaPoly, but some implementations negotiate or
-// use AESGCM as an equivalent AEAD cipher. The Noise framework allows both.
+// The I2P spec (ntcp2.rst) specifies Noise_XK_25519_ChaChaPoly_SHA256.
+// The go-noise library's NTCP2Config uses pattern "XK" with the
+// ChaChaPoly cipher suite, matching the spec.
 //
 // Spec reference: ntcp2.rst Section "Noise Protocol"
 func TestNoiseXKHandshake_PatternString(t *testing.T) {
@@ -592,10 +589,8 @@ func TestConnectionManagement_IPPortFromRouterAddress(t *testing.T) {
 // TestCryptoAudit_NoiseFramework verifies that the go-noise library is configured
 // with the correct Noise parameters for NTCP2.
 //
-// AUDIT FINDING: The go-noise library uses Noise_XK_25519_AESGCM_SHA256 rather
-// than the spec's Noise_XK_25519_ChaChaPoly_SHA256. Both are valid AEAD ciphers
-// in the Noise framework. The I2P network currently uses ChaChaPoly, but the
-// go-i2p implementation uses AESGCM. This is noted as a deviation.
+// The go-noise library uses Noise_XK_25519_ChaChaPoly_SHA256, matching the
+// I2P spec. The cipher suite is ChaChaPoly (ChaCha20-Poly1305 per RFC 7539).
 //
 // Spec reference: ntcp2.rst Section "Noise Protocol"
 func TestCryptoAudit_NoiseFramework(t *testing.T) {
@@ -663,10 +658,11 @@ func TestCryptoAudit_SipHashLengthObfuscation(t *testing.T) {
 // TestCryptoAudit_AEAD verifies that all data frames are encrypted with
 // authenticated encryption (AEAD) derived from the Noise handshake.
 //
-// AUDIT FINDING: The go-noise library uses AESGCM (not ChaChaPoly) as the
-// AEAD cipher. All data phase messages are encrypted through the Noise
-// transport layer. The local session code writes plaintext I2NP messages
-// to the connection, and the Noise layer encrypts them transparently.
+// The go-noise library uses ChaChaPoly (ChaCha20-Poly1305) as the AEAD
+// cipher, matching the I2P spec. All data phase messages are encrypted
+// through the Noise transport layer. The local session code writes
+// plaintext I2NP messages to the connection, and the Noise layer encrypts
+// them transparently.
 //
 // Spec reference: ntcp2.rst Section "Data Phase Encryption"
 func TestCryptoAudit_AEAD(t *testing.T) {

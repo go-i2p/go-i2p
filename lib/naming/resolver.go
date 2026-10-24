@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/go-i2p/common/base64"
+	i2pbase32 "github.com/go-i2p/common/base32"
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/lease_set"
 	"github.com/go-i2p/go-i2p/lib/util/logutil"
@@ -256,8 +257,38 @@ func DestinationToB32(destBytes []byte) string {
 	return b32Encoding.EncodeToString(hash[:]) + ".b32.i2p"
 }
 
-// decodeB32Address decodes a .b32.i2p address to its raw hash bytes.
+// DecodeB33Address decodes an encrypted (b33) .b32.i2p address into its
+// structured form: the destination's public key, the public-key and
+// blinded-key signature types, and the flag bits (secret-required and
+// per-client-auth).
+//
+// This implements the I2P spec "Encrypted B32 Addresses" (b33). The CRC-32
+// checksum and reserved flag bits are validated. Standard (non-encrypted)
+// 52-character B32 addresses are not b33 addresses and will return an error.
+func DecodeB33Address(address string) (*i2pbase32.ExtendedAddress, error) {
+	ext, err := i2pbase32.DecodeExtendedAddress(address)
+	if err != nil {
+		return nil, oops.Wrapf(err, "invalid encrypted b32 (b33) address")
+	}
+	return ext, nil
+}
+
+// decodeB32Address decodes a .b32.i2p address to its raw payload bytes.
+// For standard (non-encrypted) B32 addresses this is the 32-byte SHA-256
+// hash of the destination. For encrypted (b33) addresses this is the
+// destination's public key.
 func decodeB32Address(address string) ([]byte, error) {
+	// Encrypted (b33) addresses are longer than standard B32 addresses and
+	// carry a public key rather than a hash. Delegate to the common b33
+	// implementation, which validates the CRC-32 checksum and flag bits.
+	if i2pbase32.IsExtendedAddress(address) {
+		ext, err := i2pbase32.DecodeExtendedAddress(address)
+		if err != nil {
+			return nil, oops.Wrapf(err, "invalid encrypted b32 (b33) address")
+		}
+		return ext.PublicKey, nil
+	}
+
 	// Strip .b32.i2p suffix if present
 	address = strings.ToLower(address)
 	address = strings.TrimSuffix(address, ".b32.i2p")
@@ -319,6 +350,19 @@ func (r *HostsTxtResolver) Resolve(address string) ([]byte, bool, error) {
 
 // resolveB32 handles resolution of .b32.i2p addresses.
 func (r *HostsTxtResolver) resolveB32(address string) ([]byte, bool, error) {
+	// Encrypted (b33) addresses carry a public key rather than a hash. The
+	// spec requires clients to cache the public-key-to-destination mapping,
+	// so we return the decoded public key and indicate that a lookup is
+	// needed (isHash=true). The hash-based NetDB LeaseSet lookup does not
+	// apply to b33 addresses.
+	if i2pbase32.IsExtendedAddress(address) {
+		ext, err := i2pbase32.DecodeExtendedAddress(address)
+		if err != nil {
+			return nil, false, oops.Wrapf(err, "invalid encrypted b32 (b33) address")
+		}
+		return ext.PublicKey, true, nil
+	}
+
 	hashBytes, err := r.ResolveB32Address(address)
 	if err != nil {
 		return nil, false, err

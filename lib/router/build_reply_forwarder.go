@@ -18,7 +18,6 @@ type transportBuildReplyForwarder struct {
 
 // ForwardBuildReplyToRouter forwards a build reply message directly to a router.
 // F061 FIX: Uses inputMessageType to determine output type:
-// - Type 21 TunnelBuild → send type 22 reply
 // - Type 23 VariableTunnelBuild → send type 24 reply
 // - Type 25 ShortTunnelBuild → send type 26 reply
 // See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the TunnelBuildReply format.
@@ -45,7 +44,6 @@ func (f *transportBuildReplyForwarder) ForwardBuildReplyToRouter(routerHash comm
 
 // ForwardBuildReplyThroughTunnel forwards a build reply message through a reply tunnel.
 // F061 FIX: Uses inputMessageType to determine output type:
-// - Type 21 TunnelBuild → send type 22 reply
 // - Type 23 VariableTunnelBuild → send type 24 reply
 // - Type 25 ShortTunnelBuild → send type 26 reply
 // See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the TunnelBuildReply format.
@@ -78,7 +76,6 @@ func (f *transportBuildReplyForwarder) ForwardBuildReplyThroughTunnel(gatewayHas
 
 // createReplyMessage creates the appropriate I2NP message type for the build reply.
 // F061 FIX: Reply message type is always inputMessageType + 1:
-// - Type 21 TunnelBuild → type 22 TunnelBuildReply
 // - Type 23 VariableTunnelBuild → type 24 VariableTunnelBuildReply
 // - Type 25 ShortTunnelBuild → type 26 ShortTunnelBuildReply
 // This arithmetic relationship is guaranteed by the I2P protocol spec.

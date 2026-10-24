@@ -287,7 +287,7 @@ robustness. Current status:
 
 # References
 
-    - I2PControl Specification: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2cp.rst
+    - I2PControl Specification: https://github.com/i2p/i2p-control
     - JSON-RPC 2.0 Specification: https://www.jsonrpc.org/specification
     - User Guide: docs/i2pcontrol.md
 

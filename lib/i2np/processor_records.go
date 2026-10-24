@@ -32,105 +32,6 @@ func (p *MessageProcessor) processVariableTunnelBuildMessage(msg Message) error 
 	return newBuildRequestProcessor(p, msg, false).process()
 }
 
-// processTunnelBuildMessage processes TunnelBuild (type 21) messages.
-// TunnelBuild has a fixed format: exactly 8 records × 528 bytes = 4224 bytes,
-// with NO count prefix byte (unlike VariableTunnelBuild type 23).
-func (p *MessageProcessor) processTunnelBuildMessage(msg Message) error {
-	return p.processFixedTunnelBuildRequest(msg)
-}
-
-// processFixedTunnelBuildRequest handles TunnelBuild (type 21) messages with
-// fixed 8-record format. Unlike VTB/STBM, type 21 has no count prefix byte.
-func (p *MessageProcessor) processFixedTunnelBuildRequest(msg Message) error {
-	return newFixedBuildRequestProcessor(p, msg).process()
-}
-
-// parseFixedTunnelBuildRecords parses TunnelBuild (type 21) records.
-// Type 21 has exactly 8 records at 528 bytes each with no count prefix byte.
-func (p *MessageProcessor) parseFixedTunnelBuildRecords(data []byte) ([]BuildRequestRecord, error) {
-	const fixedRecordCount = 8
-	const recordSize = 528                             // VTB record size
-	const expectedSize = fixedRecordCount * recordSize // 4224 bytes
-
-	if len(data) < expectedSize {
-		return nil, oops.Errorf("insufficient data for TunnelBuild: have %d, need %d", len(data), expectedSize)
-	}
-
-	records := make([]BuildRequestRecord, 0, fixedRecordCount)
-	offset := 0 // No count prefix byte for type 21
-
-	for i := 0; i < fixedRecordCount; i++ {
-		recordData := data[offset : offset+recordSize]
-		p.tryParseAndAppendRecord(&records, recordData, i, false)
-		offset += recordSize
-	}
-
-	return records, nil
-}
-
-// processTunnelBuildReplyMessage processes TunnelBuildReply (type 22) messages.
-// The reply contains 8 fixed BuildResponseRecords with NO count prefix byte.
-func (p *MessageProcessor) processTunnelBuildReplyMessage(msg Message) error {
-	return p.processFixedBuildReply(msg)
-}
-
-// processFixedBuildReply handles TunnelBuildReply (type 22) with fixed 8-record format.
-func (p *MessageProcessor) processFixedBuildReply(msg Message) error {
-	if p.buildReplyProcessor == nil {
-		log.WithFields(logger.Fields{
-			"at":           "processFixedBuildReply",
-			"message_type": msg.Type(),
-			"message_id":   msg.MessageID(),
-			"reason":       "no build reply processor configured",
-		}).Warn("Tunnel build reply discarded - no TunnelBuildReplyProcessor set")
-		return nil
-	}
-
-	data, err := extractBuildReplyData(msg)
-	if err != nil {
-		return err
-	}
-
-	const fixedRecordCount = 8
-	const recordSize = 528
-	const expectedSize = fixedRecordCount * recordSize
-
-	if len(data) < expectedSize {
-		return oops.Errorf("insufficient data for TunnelBuildReply: have %d, need %d", len(data), expectedSize)
-	}
-
-	records, rawRecords, err := parseFixedBuildRecords(data, fixedRecordCount, recordSize)
-	if err != nil {
-		return err
-	}
-
-	handler := &TunnelBuildReply{
-		Records:       records,
-		RawRecordData: rawRecords,
-	}
-
-	log.WithFields(logger.Fields{
-		"at":           "processFixedBuildReply",
-		"message_id":   msg.MessageID(),
-		"record_count": fixedRecordCount,
-	}).Debug("Dispatching fixed tunnel build reply to processor")
-
-	return p.buildReplyProcessor.ProcessTunnelBuildReply(handler, msg.MessageID())
-}
-
-// extractBuildReplyData extracts the data payload from a build reply message.
-func extractBuildReplyData(msg Message) ([]byte, error) {
-	carrier, ok := msg.(DataCarrier)
-	if !ok {
-		return nil, oops.Errorf("tunnel build reply does not implement DataCarrier")
-	}
-	data := carrier.GetData()
-	if len(data) == 0 {
-		return nil, oops.Errorf("tunnel build reply contains no data")
-	}
-	return data, nil
-}
-
 // parseResponseRecords reads count response records of recordSize bytes each from data,
 // starting at startOffset. It returns the parsed records, a raw byte copy of each record,
 // and any parse error. The caller is responsible for bounds-checking data before calling.
@@ -161,17 +62,6 @@ func parseResponseRecords(data []byte, count, recordSize, startOffset int, isSho
 		records[i] = record
 		offset += recordSize
 	}
-	return records, rawRecords, nil
-}
-
-// parseFixedBuildRecords parses a fixed number of build response records from data.
-func parseFixedBuildRecords(data []byte, count, recordSize int) ([8]BuildResponseRecord, [][]byte, error) {
-	var records [8]BuildResponseRecord
-	sliceRecords, rawRecords, err := parseResponseRecords(data, count, recordSize, 0, false)
-	if err != nil {
-		return records, nil, err
-	}
-	copy(records[:], sliceRecords)
 	return records, rawRecords, nil
 }
 
@@ -287,22 +177,6 @@ func newBuildRequestProcessor(p *MessageProcessor, msg Message, isShortBuild boo
 	}
 }
 
-func newFixedBuildRequestProcessor(p *MessageProcessor, msg Message) buildRequestProcessor {
-	return buildRequestProcessor{
-		processor:        p,
-		msg:              msg,
-		isShort:          false,
-		inputMessageType: msg.Type(), // F061: Preserve type 21 to send type 22 reply, not 24
-		parse: func(data []byte) ([]BuildRequestRecord, error) {
-			records, err := p.parseFixedTunnelBuildRecords(data)
-			if err != nil {
-				return nil, oops.Wrapf(err, "failed to parse fixed tunnel build records")
-			}
-			return records, nil
-		},
-	}
-}
-
 func (b buildRequestProcessor) process() error {
 	if err := b.processor.validateParticipantManager(b.isShort, b.msg.Type()); err != nil {
 		return err
@@ -369,7 +243,6 @@ func (p *MessageProcessor) logParsedBuildRequest(messageID, recordCount int, isS
 // processed. The decryption itself is sufficient proof of correctness.
 //
 // F061 FIX: inputMessageType is preserved to send the correct reply type:
-// - Type 21 TunnelBuild → send type 22 TunnelBuildReply
 // - Type 23 VariableTunnelBuild → send type 24 VariableTunnelBuildReply
 // - Type 25 ShortTunnelBuild → send type 26 ShortTunnelBuildReply
 //
@@ -450,7 +323,6 @@ func (p *MessageProcessor) processSingleBuildRecord(messageID, index int, record
 // This implements the core of tunnel participation response handling.
 //
 // F061 FIX: inputMessageType determines the output reply type:
-// - Type 21 TunnelBuild → send type 22 reply
 // - Type 23 VariableTunnelBuild → send type 24 reply
 // - Type 25 ShortTunnelBuild → send type 26 reply
 //
@@ -690,7 +562,6 @@ func (p *MessageProcessor) xorOtherSTBMSlot(replyData []byte, slotOffset, slotIn
 // forwardBuildReply sends the encrypted build reply to the appropriate next hop.
 // The next hop is determined by the NextIdent and NextTunnel fields in the BuildRequestRecord.
 // F061 FIX: inputMessageType is used to determine the output reply type (not isShortBuild alone):
-// - Type 21 TunnelBuild → send type 22 reply
 // - Type 23 VariableTunnelBuild → send type 24 reply
 // - Type 25 ShortTunnelBuild → send type 26 reply
 func (p *MessageProcessor) forwardBuildReply(messageID int, record BuildRequestRecord, encryptedReply []byte, isShortBuild bool, inputMessageType int) error {

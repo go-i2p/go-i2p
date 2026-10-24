@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	i2pbase32 "github.com/go-i2p/common/base32"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -188,6 +189,100 @@ func TestResolve_UnknownHostname(t *testing.T) {
 
 	_, _, err = r.Resolve("nonexistent.i2p")
 	assert.Error(t, err)
+}
+
+// --- Encrypted (b33) B32 address tests ---
+
+// makeB33Address builds a valid encrypted (b33) .b32.i2p address from a
+// public key using the common b33 implementation.
+func makeB33Address(t *testing.T, pubKey []byte, secretRequired, perClientAuth bool) string {
+	t.Helper()
+	addr, err := i2pbase32.EncodeExtendedAddress(&i2pbase32.ExtendedAddress{
+		PubKeySigType:  1, // ed25519
+		BlindedSigType: 1, // ed25519
+		PublicKey:      pubKey,
+		SecretRequired: secretRequired,
+		PerClientAuth:  perClientAuth,
+	})
+	require.NoError(t, err)
+	return addr
+}
+
+func TestDecodeB33Address_RoundTrip(t *testing.T) {
+	pubKey := make([]byte, 32)
+	for i := range pubKey {
+		pubKey[i] = byte(i * 7)
+	}
+	addr := makeB33Address(t, pubKey, false, false)
+
+	ext, err := DecodeB33Address(addr)
+	require.NoError(t, err)
+	assert.Equal(t, pubKey, ext.PublicKey, "decoded public key should match")
+	assert.Equal(t, uint16(1), ext.PubKeySigType)
+	assert.Equal(t, uint16(1), ext.BlindedSigType)
+	assert.False(t, ext.SecretRequired)
+	assert.False(t, ext.PerClientAuth)
+}
+
+func TestDecodeB33Address_Flags(t *testing.T) {
+	pubKey := make([]byte, 32)
+	addr := makeB33Address(t, pubKey, true, true)
+
+	ext, err := DecodeB33Address(addr)
+	require.NoError(t, err)
+	assert.True(t, ext.SecretRequired)
+	assert.True(t, ext.PerClientAuth)
+}
+
+func TestDecodeB33Address_StandardAddressRejected(t *testing.T) {
+	// A standard 52-char B32 address is not a b33 address.
+	_, err := DecodeB33Address("ukeu3k5oycgaauneqgtnvselmt4yemvoilkln7jpvamvfx7dnkdq.b32.i2p")
+	assert.Error(t, err)
+}
+
+func TestDecodeB33Address_InvalidChecksum(t *testing.T) {
+	pubKey := make([]byte, 32)
+	addr := makeB33Address(t, pubKey, false, false)
+
+	// Corrupt one character of the base32 payload (not the suffix) to break
+	// the CRC-32 checksum.
+	runes := []rune(addr)
+	if runes[0] == 'a' {
+		runes[0] = 'b'
+	} else {
+		runes[0] = 'a'
+	}
+	_, err := DecodeB33Address(string(runes))
+	assert.Error(t, err)
+}
+
+func TestResolveB32Address_B33(t *testing.T) {
+	pubKey := make([]byte, 32)
+	for i := range pubKey {
+		pubKey[i] = byte(i + 1)
+	}
+	addr := makeB33Address(t, pubKey, false, false)
+
+	// ResolveB32Address on a b33 address returns the public key.
+	payload, err := ResolveB32Address(addr)
+	require.NoError(t, err)
+	assert.Equal(t, pubKey, payload, "b33 address should resolve to its public key")
+}
+
+func TestResolve_B33Address(t *testing.T) {
+	r, err := NewHostsTxtResolver()
+	require.NoError(t, err)
+
+	pubKey := make([]byte, 32)
+	for i := range pubKey {
+		pubKey[i] = byte(i * 3)
+	}
+	addr := makeB33Address(t, pubKey, false, false)
+
+	payload, isHash, err := r.Resolve(addr)
+	require.NoError(t, err)
+	assert.True(t, isHash, "b33 address should indicate a lookup is needed")
+	assert.Equal(t, pubKey, payload, "b33 address should resolve to its public key")
 }
 
 // --- Address book loading tests ---

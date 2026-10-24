@@ -322,8 +322,7 @@ func (r *Router) dispatchByMessageType(msg i2np.Message, mr *i2np.I2NPMessageDis
 		i2np.I2NPMessageTypeGarlic, i2np.I2NPMessageTypeTunnelData,
 		i2np.I2NPMessageTypeTunnelGateway:
 		return mr.RouteMessage(msg)
-	case i2np.I2NPMessageTypeTunnelBuild, i2np.I2NPMessageTypeTunnelBuildReply,
-		i2np.I2NPMessageTypeVariableTunnelBuild, i2np.I2NPMessageTypeVariableTunnelBuildReply,
+	case i2np.I2NPMessageTypeVariableTunnelBuild, i2np.I2NPMessageTypeVariableTunnelBuildReply,
 		i2np.I2NPMessageTypeShortTunnelBuild, i2np.I2NPMessageTypeShortTunnelBuildReply:
 		return mr.GetProcessor().ProcessMessage(msg)
 	default:

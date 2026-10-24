@@ -490,10 +490,10 @@ func processHopReplyCode(hopIndex int, replyCode byte, logPrefix string) (bool, 
 
 // DetermineBuildResult evaluates tunnel build outcome based on success counts and first encountered error.
 // A build only succeeds when every hop accepted, so this is shared by
-// tunnel_build_reply.go and variable_tunnel_build_reply.go to keep the
+// VariableTunnelBuildReply and ShortTunnelBuildReply to keep the
 // success/failure logic in one place.
 // tunnelType should be lowercase (e.g., "tunnel", "variable tunnel") for error messages.
-// See also [TunnelBuildReply].
+// See also [VariableTunnelBuildReply] and [ShortTunnelBuildReply].
 func DetermineBuildResult(successCount, recordCount int, firstError error, tunnelType string) error {
 	if successCount == recordCount {
 		log.WithFields(logger.Fields{

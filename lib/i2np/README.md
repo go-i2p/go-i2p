@@ -79,8 +79,6 @@ const (
 	I2NPMessageTypeTunnelData               = 18
 	I2NPMessageTypeTunnelGateway            = 19
 	I2NPMessageTypeData                     = 20
-	I2NPMessageTypeTunnelBuild              = 21
-	I2NPMessageTypeTunnelBuildReply         = 22
 	I2NPMessageTypeVariableTunnelBuild      = 23
 	I2NPMessageTypeVariableTunnelBuildReply = 24
 	I2NPMessageTypeShortTunnelBuild         = 25
@@ -869,7 +867,7 @@ type BuildReplyForwarder interface {
 	// - messageID: The I2NP message ID for the reply
 	// - encryptedRecords: The complete encrypted build reply records
 	// - isShortBuild: Whether this is a Short Tunnel Build Message (STBM) format
-	// - inputMessageType: The input message type (21=TunnelBuild, 23=VariableTunnelBuild, 25=ShortTunnelBuild) for F061 correct reply type mapping
+	// - inputMessageType: The input message type (23=VariableTunnelBuild, 25=ShortTunnelBuild) for F061 correct reply type mapping
 	ForwardBuildReplyToRouter(routerHash common.Hash, messageID int, encryptedRecords []byte, isShortBuild bool, inputMessageType int) error
 
 	// ForwardBuildReplyThroughTunnel forwards a build reply message through a reply tunnel.
@@ -881,7 +879,7 @@ type BuildReplyForwarder interface {
 	// - messageID: The I2NP message ID for the reply
 	// - encryptedRecords: The complete encrypted build reply records
 	// - isShortBuild: Whether this is a Short Tunnel Build Message (STBM) format
-	// - inputMessageType: The input message type (21=TunnelBuild, 23=VariableTunnelBuild, 25=ShortTunnelBuild) for F061 correct reply type mapping
+	// - inputMessageType: The input message type (23=VariableTunnelBuild, 25=ShortTunnelBuild) for F061 correct reply type mapping
 	ForwardBuildReplyThroughTunnel(gatewayHash common.Hash, tunnelID buildrecord.TunnelID, messageID int, encryptedRecords []byte, isShortBuild bool, inputMessageType int) error
 }
 ```
@@ -2922,7 +2920,6 @@ reply records, validates responses, and updates tunnel state.
 
 The handler parameter should be one of:
 
-    - *TunnelBuildReply (8 hops)
     - *VariableTunnelBuildReply (1-8 hops)
     - *ShortTunnelBuildReply (1-8 hops, modern STBM format)
 
@@ -3186,28 +3183,6 @@ func NewDeliveryStatusReporter(messageID int, timestamp time.Time) StatusReporte
 NewDeliveryStatusReporter creates a new DeliveryStatus message and returns it as
 StatusReporter interface
 
-#### type TunnelBuild
-
-```go
-type TunnelBuild [8]BuildRequestRecord
-```
-
-TunnelBuild represents the raw 8 build request records
-
-#### func (*TunnelBuild) GetBuildRecords
-
-```go
-func (t *TunnelBuild) GetBuildRecords() []BuildRequestRecord
-```
-GetBuildRecords returns the build request records
-
-#### func (*TunnelBuild) GetRecordCount
-
-```go
-func (t *TunnelBuild) GetRecordCount() int
-```
-GetRecordCount returns the number of build records
-
 #### type TunnelBuildCoordinator
 
 ```go
@@ -3234,109 +3209,6 @@ type TunnelBuildCoordinator interface {
 TunnelBuildCoordinator is the narrow interface needed by I2NPMessageDispatcher.
 It covers dependency injection, build emission, and reply processing — the
 operations that belong to the message-routing layer.
-
-#### type TunnelBuildMessage
-
-```go
-type TunnelBuildMessage struct {
-	*BaseI2NPMessage
-	Records TunnelBuild
-}
-```
-
-TunnelBuildMessage wraps TunnelBuild to implement Message interface
-
-#### func (*TunnelBuildMessage) GetBuildRecords
-
-```go
-func (msg *TunnelBuildMessage) GetBuildRecords() []BuildRequestRecord
-```
-GetBuildRecords implements TunnelBuilder interface
-
-#### func (*TunnelBuildMessage) GetRecordCount
-
-```go
-func (msg *TunnelBuildMessage) GetRecordCount() int
-```
-GetRecordCount implements TunnelBuilder interface
-
-#### func (*TunnelBuildMessage) MarshalBinary
-
-```go
-func (msg *TunnelBuildMessage) MarshalBinary() ([]byte, error)
-```
-MarshalBinary serializes the TunnelBuild message using BaseI2NPMessage. Returns
-an error if records are not encrypted, because cleartext build records are not
-specification-compliant for network transmission.
-
-#### func (*TunnelBuildMessage) UnmarshalBinary
-
-```go
-func (msg *TunnelBuildMessage) UnmarshalBinary(data []byte) error
-```
-UnmarshalBinary parses a TunnelBuildMessage from the provided byte slice,
-populating the base I2NP header and the fixed set of 8 build request records.
-
-#### func (*TunnelBuildMessage) UnmarshalEncryptedBinary
-
-```go
-func (msg *TunnelBuildMessage) UnmarshalEncryptedBinary(data, privateKey []byte) error
-```
-UnmarshalEncryptedBinary deserializes and decrypts a TunnelBuild message.
-
-Each 528-byte record is decrypted using ECIES-X25519-AEAD decryption with the
-local router's private key. Only the record addressed to us (identified by
-matching identity hash prefix) will decrypt successfully; other records will
-fail decryption and are left as zero-value records.
-
-Parameters:
-
-    - data: The raw I2NP message bytes
-    - privateKey: Our router's 32-byte X25519 private encryption key
-
-Returns an error if the base message or the targeted record cannot be parsed.
-
-#### type TunnelBuildReply
-
-```go
-type TunnelBuildReply struct {
-	Records       [8]BuildResponseRecord
-	RawRecordData [][]byte // Original encrypted bytes before parsing
-}
-```
-
-TunnelBuildReply represents an I2NP TunnelBuildReply message containing exactly
-8 build response records indicating the success or failure of a tunnel build
-request.
-
-NOTE (0.2.0 consolidation opportunity): This type shares GetReplyRecords() and
-GetRawReplyRecords() accessors with VariableTunnelBuildReply, differing only in
-backing storage ([8]array vs []slice). See tunnel_build.go for the full context
-on consolidating fixed/variable accessors into a generic recordSet[T] type.
-
-#### func (*TunnelBuildReply) GetRawReplyRecords
-
-```go
-func (t *TunnelBuildReply) GetRawReplyRecords() [][]byte
-```
-GetRawReplyRecords returns the original encrypted record bytes.
-
-#### func (*TunnelBuildReply) GetReplyRecords
-
-```go
-func (t *TunnelBuildReply) GetReplyRecords() []BuildResponseRecord
-```
-GetReplyRecords returns the build response records
-
-#### func (*TunnelBuildReply) ProcessReply
-
-```go
-func (t *TunnelBuildReply) ProcessReply() error
-```
-ProcessReply processes the tunnel build reply by analyzing each response record.
-It validates response integrity, determines tunnel build success/failure, and
-returns detailed results for each hop. Implements replyStepProcessor interface
-for unified reply processing.
 
 #### type TunnelBuildReplyProcessor
 

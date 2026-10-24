@@ -27,10 +27,6 @@ const (
 	I2NPMessageTypeTunnelGateway = 19
 	// I2NPMessageTypeData is the type for Data messages.
 	I2NPMessageTypeData = 20
-	// I2NPMessageTypeTunnelBuild is the type for TunnelBuild messages.
-	I2NPMessageTypeTunnelBuild = 21
-	// I2NPMessageTypeTunnelBuildReply is the type for TunnelBuildReply messages.
-	I2NPMessageTypeTunnelBuildReply = 22
 	// I2NPMessageTypeVariableTunnelBuild is the type for VariableTunnelBuild messages.
 	I2NPMessageTypeVariableTunnelBuild = 23
 	// I2NPMessageTypeVariableTunnelBuildReply is the type for VariableTunnelBuildReply messages.

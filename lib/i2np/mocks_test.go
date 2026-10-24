@@ -268,28 +268,32 @@ func createTestBuildRequestRecord(t interface{ Helper() }) BuildRequestRecord {
 }
 
 // --- Shared helpers: tunnel build reply factories ---
+//
+// These factories build VariableTunnelBuildReply values (the modern reply
+// type, type 24) so the reply-handler tests exercise the shared
+// processReplySteps path. The deprecated fixed 8-record TunnelBuildReply
+// (type 22) has been removed.
 
-// createSuccessfulTunnelBuildReply creates a TunnelBuildReply where all hops accepted
-func createSuccessfulTunnelBuildReply() *TunnelBuildReply {
-	var reply TunnelBuildReply
-	for i := 0; i < 8; i++ {
-		reply.Records[i] = createValidResponseRecordWithReply(TunnelBuildReplySuccess)
+// createSuccessfulTunnelBuildReply creates a reply where all hops accepted
+func createSuccessfulTunnelBuildReply() *VariableTunnelBuildReply {
+	records := make([]BuildResponseRecord, 8)
+	for i := range records {
+		records[i] = createValidResponseRecordWithReply(TunnelBuildReplySuccess)
 	}
-	return &reply
+	return &VariableTunnelBuildReply{Count: 8, BuildResponseRecords: records}
 }
 
-// createRejectedTunnelBuildReply creates a TunnelBuildReply where all hops rejected
-func createRejectedTunnelBuildReply() *TunnelBuildReply {
-	var reply TunnelBuildReply
-	for i := 0; i < 8; i++ {
-		reply.Records[i] = createValidResponseRecordWithReply(TunnelBuildReplyProbabilisticReject)
+// createRejectedTunnelBuildReply creates a reply where all hops rejected
+func createRejectedTunnelBuildReply() *VariableTunnelBuildReply {
+	records := make([]BuildResponseRecord, 8)
+	for i := range records {
+		records[i] = createValidResponseRecordWithReply(TunnelBuildReplyProbabilisticReject)
 	}
-	return &reply
+	return &VariableTunnelBuildReply{Count: 8, BuildResponseRecords: records}
 }
 
-// createMixedTunnelBuildReply creates a TunnelBuildReply with mixed responses
-func createMixedTunnelBuildReply() *TunnelBuildReply {
-	var reply TunnelBuildReply
+// createMixedTunnelBuildReply creates a reply with mixed responses
+func createMixedTunnelBuildReply() *VariableTunnelBuildReply {
 	replyCodes := []byte{
 		TunnelBuildReplySuccess,
 		TunnelBuildReplySuccess,
@@ -300,54 +304,55 @@ func createMixedTunnelBuildReply() *TunnelBuildReply {
 		TunnelBuildReplyBandwidth,
 		TunnelBuildReplySuccess,
 	}
+	records := make([]BuildResponseRecord, len(replyCodes))
 	for i, replyCode := range replyCodes {
-		reply.Records[i] = createValidResponseRecordWithReply(replyCode)
+		records[i] = createValidResponseRecordWithReply(replyCode)
 	}
-	return &reply
+	return &VariableTunnelBuildReply{Count: len(records), BuildResponseRecords: records}
 }
 
-// createSingleFailureTunnelBuildReply creates a TunnelBuildReply with one failure
-func createSingleFailureTunnelBuildReply() *TunnelBuildReply {
-	var reply TunnelBuildReply
-	for i := 0; i < 8; i++ {
+// createSingleFailureTunnelBuildReply creates a reply with one failure
+func createSingleFailureTunnelBuildReply() *VariableTunnelBuildReply {
+	records := make([]BuildResponseRecord, 8)
+	for i := range records {
 		if i == 3 {
-			reply.Records[i] = createValidResponseRecordWithReply(TunnelBuildReplyTransientOverload)
+			records[i] = createValidResponseRecordWithReply(TunnelBuildReplyTransientOverload)
 		} else {
-			reply.Records[i] = createValidResponseRecordWithReply(TunnelBuildReplySuccess)
+			records[i] = createValidResponseRecordWithReply(TunnelBuildReplySuccess)
 		}
 	}
-	return &reply
+	return &VariableTunnelBuildReply{Count: 8, BuildResponseRecords: records}
 }
 
-// createUnknownReplyCodeTunnelBuildReply creates a TunnelBuildReply with unknown reply code
-func createUnknownReplyCodeTunnelBuildReply() *TunnelBuildReply {
-	var reply TunnelBuildReply
-	for i := 0; i < 8; i++ {
+// createUnknownReplyCodeTunnelBuildReply creates a reply with unknown reply code
+func createUnknownReplyCodeTunnelBuildReply() *VariableTunnelBuildReply {
+	records := make([]BuildResponseRecord, 8)
+	for i := range records {
 		if i == 0 {
-			reply.Records[i] = createValidResponseRecordWithReply(0xFF)
+			records[i] = createValidResponseRecordWithReply(0xFF)
 		} else {
-			reply.Records[i] = createValidResponseRecordWithReply(TunnelBuildReplySuccess)
+			records[i] = createValidResponseRecordWithReply(TunnelBuildReplySuccess)
 		}
 	}
-	return &reply
+	return &VariableTunnelBuildReply{Count: 8, BuildResponseRecords: records}
 }
 
-// createEmptyHashTunnelBuildReply creates a TunnelBuildReply with empty hash
-func createEmptyHashTunnelBuildReply() *TunnelBuildReply {
-	var reply TunnelBuildReply
-	for i := 0; i < 8; i++ {
+// createEmptyHashTunnelBuildReply creates a reply with empty hash
+func createEmptyHashTunnelBuildReply() *VariableTunnelBuildReply {
+	records := make([]BuildResponseRecord, 8)
+	for i := range records {
 		if i == 0 {
-			reply.Records[i] = BuildResponseRecord{
+			records[i] = BuildResponseRecord{
 				Hash:       common.Hash{},
 				RandomData: [495]byte{},
 				Reply:      TunnelBuildReplySuccess,
 			}
 		} else {
-			reply.Records[i] = createValidResponseRecord()
-			reply.Records[i].Reply = TunnelBuildReplySuccess
+			records[i] = createValidResponseRecord()
+			records[i].Reply = TunnelBuildReplySuccess
 		}
 	}
-	return &reply
+	return &VariableTunnelBuildReply{Count: 8, BuildResponseRecords: records}
 }
 
 // createSuccessfulVariableTunnelBuildReply creates a successful VariableTunnelBuildReply

@@ -130,9 +130,9 @@ func NewI2NPMessage(msgType int) Message {
 	return NewBaseI2NPMessage(msgType)
 }
 
-// Type returns the I2NP message type number (e.g. 20 for Data, 21 for
-// TunnelBuild). The type byte is the first byte of every I2NP header and
-// determines how the payload is interpreted.
+// Type returns the I2NP message type number (e.g. 20 for Data, 23 for
+// VariableTunnelBuild). The type byte is the first byte of every I2NP header
+// and determines how the payload is interpreted.
 // See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the message type registry.
 func (m *BaseI2NPMessage) Type() int {
 	return m.type_

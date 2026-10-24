@@ -122,13 +122,11 @@ func TestVariableTunnelBuildReply_ProcessReply_SingleHop(t *testing.T) {
 	assert.NoError(t, err, "ProcessReply should succeed with single hop")
 }
 
-// TestTunnelBuildReply_ValidateResponseRecord tests response record validation
-func TestTunnelBuildReply_ValidateResponseRecord(t *testing.T) {
-	reply := &TunnelBuildReply{}
-
+// TestValidateResponseRecord tests response record validation
+func TestValidateResponseRecord(t *testing.T) {
 	// Valid record
 	validRecord := createValidResponseRecord()
-	err := reply.validateResponseRecord(validRecord)
+	err := ValidateBuildResponseRecord(validRecord)
 	assert.NoError(t, err, "Valid record should pass validation")
 
 	// Invalid record with empty hash
@@ -137,14 +135,14 @@ func TestTunnelBuildReply_ValidateResponseRecord(t *testing.T) {
 		RandomData: [495]byte{},
 		Reply:      TunnelBuildReplySuccess,
 	}
-	err = reply.validateResponseRecord(invalidRecord)
+	err = ValidateBuildResponseRecord(invalidRecord)
 	assert.Error(t, err, "Invalid record with empty hash should fail validation")
 	assert.Contains(t, err.Error(), "empty hash")
 }
 
 // TestProcessHopResponse_AllReplyCodes tests processing of all defined reply codes
 func TestProcessHopResponse_AllReplyCodes(t *testing.T) {
-	reply := &TunnelBuildReply{}
+	reply := &VariableTunnelBuildReply{}
 
 	testCases := []struct {
 		replyCode     byte
@@ -182,16 +180,6 @@ func TestProcessHopResponse_AllReplyCodes(t *testing.T) {
 
 // TestTunnelReplyHandler_InterfaceCompliance tests interface satisfaction
 func TestTunnelReplyHandler_InterfaceCompliance(t *testing.T) {
-	// Test TunnelBuildReply interface compliance
-	var handler TunnelReplyHandler = &TunnelBuildReply{}
-	assert.NotNil(t, handler, "TunnelBuildReply should implement TunnelReplyHandler")
-
-	records := handler.GetReplyRecords()
-	assert.Equal(t, 8, len(records), "TunnelBuildReply should return 8 records")
-
-	err := handler.ProcessReply()
-	assert.Error(t, err, "Empty TunnelBuildReply should fail processing")
-
 	// Test VariableTunnelBuildReply interface compliance
 	var variableHandler TunnelReplyHandler = &VariableTunnelBuildReply{}
 	assert.NotNil(t, variableHandler, "VariableTunnelBuildReply should implement TunnelReplyHandler")
@@ -199,6 +187,6 @@ func TestTunnelReplyHandler_InterfaceCompliance(t *testing.T) {
 	variableRecords := variableHandler.GetReplyRecords()
 	assert.Equal(t, 0, len(variableRecords), "Empty VariableTunnelBuildReply should return 0 records")
 
-	err = variableHandler.ProcessReply()
+	err := variableHandler.ProcessReply()
 	assert.Error(t, err, "Empty VariableTunnelBuildReply should fail processing")
 }

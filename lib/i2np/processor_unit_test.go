@@ -598,7 +598,6 @@ func TestProcessMessageDispatch_TunnelBuildReply(t *testing.T) {
 
 	// Test that reply types no longer return "unknown message type"
 	for _, msgType := range []int{
-		I2NPMessageTypeTunnelBuildReply,
 		I2NPMessageTypeVariableTunnelBuildReply,
 		I2NPMessageTypeShortTunnelBuildReply,
 	} {
