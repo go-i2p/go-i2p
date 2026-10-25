@@ -16,6 +16,7 @@ import (
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/nat"
 	"github.com/go-i2p/go-i2p/lib/util/logutil"
+	i2ped25519 "github.com/go-i2p/crypto/ed25519"
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
 	"github.com/samber/oops"
 )
@@ -58,15 +59,16 @@ func initNATManagers(t *SSU2Transport) error {
 	relayMgr := ssu2noise.NewRelayManager(listener)
 	introducerReg := ssu2noise.NewIntroducerRegistry(3)
 	// resolveHolePunchContext resolves the peer identities and signer key for
-	// incoming hole-punch messages. Per SSU2 spec §Hole Punch, the RelayIntro
-	// signature covers Bob's and Charlie's router hashes, so both must be
-	// resolved from live session state (fail-closed when unknown):
+	// incoming hole-punch messages. Per SSU2 spec §Hole Punch, the Hole Punch
+	// message carries the identical signed Relay Response block that Bob
+	// forwards to Alice, and that signature is made by Charlie (the
+	// introduction target). Both router hashes must therefore be resolved from
+	// live session state (fail-closed when unknown):
 	// - BobHash: router hash of the introducer session (attempt.Introducer)
-	// - CharlieHash: router hash of the target session (attempt.RemoteAddr),
-	// or the local router's hash when the target is ourselves
-	// - signerKey: Alice's Ed25519 key, looked up in NetDB from the block's
-	// AliceRouterHash
-	resolver := func(info ssu2noise.HolePunchVerifyInfo) (ssu2noise.HolePunchVerifyContext, ed25519.PublicKey, bool) {
+	// - CharlieHash: router hash of the target session (attempt.RemoteAddr)
+	// - signerKey: Charlie's Ed25519 signing key, looked up in NetDB from the
+	//   target session's router hash
+	resolver := func(info ssu2noise.HolePunchVerifyInfo) (ssu2noise.HolePunchVerifyContext, i2ped25519.Ed25519PublicKey, bool) {
 		var ctx ssu2noise.HolePunchVerifyContext
 
 		// Resolve Bob's hash from the introducer session.
@@ -85,31 +87,28 @@ func initNATManagers(t *SSU2Transport) error {
 		}
 		ctx.CharlieHash = extractBobRouterHash(charlieSession)
 
-		// Resolve the signer's (Alice's) Ed25519 key from NetDB.
-		if info.Block == nil || len(info.Block.AliceRouterHash) != 32 {
-			t.logger.Debug("hole-punch verify: block missing Alice router hash; failing closed")
+		if info.Block == nil {
+			t.logger.Debug("hole-punch verify: nil relay response block; failing closed")
 			return ctx, nil, false
 		}
-		var aliceHash data.Hash
-		copy(aliceHash[:], info.Block.AliceRouterHash)
 
 		cfg := t.config.Load()
 		if cfg.RouterLookupFunc == nil {
 			t.logger.Debug("hole-punch verify: RouterLookupFunc not configured; failing closed")
 			return ctx, nil, false
 		}
-		aliceRI, err := cfg.RouterLookupFunc(aliceHash)
+		charlieRI, err := cfg.RouterLookupFunc(ctx.CharlieHash)
 		if err != nil {
-			t.logger.WithField("error", err).Debug("hole-punch verify: NetDB lookup for Alice failed; failing closed")
+			t.logger.WithField("error", err).Debug("hole-punch verify: NetDB lookup for Charlie failed; failing closed")
 			return ctx, nil, false
 		}
-		alicePubKey, err := extractEd25519PublicKey(aliceRI)
+		charliePubKey, err := extractEd25519PublicKey(charlieRI)
 		if err != nil {
-			t.logger.WithField("error", err).Debug("hole-punch verify: failed to extract Alice's Ed25519 key; failing closed")
+			t.logger.WithField("error", err).Debug("hole-punch verify: failed to extract Charlie's Ed25519 key; failing closed")
 			return ctx, nil, false
 		}
 
-		return ctx, alicePubKey, true
+		return ctx, charliePubKey, true
 	}
 	holePunch, err := ssu2noise.NewHolePunchCoordinator(relayMgr, resolver)
 	if err != nil {
@@ -444,7 +443,7 @@ func (t *SSU2Transport) verifyPeerTestSignature(block *ssu2noise.PeerTestBlock, 
 
 // extractEd25519PublicKey extracts the Ed25519 signing public key from a RouterInfo.
 // Returns an error if the key type is not Ed25519 or extraction fails.
-func extractEd25519PublicKey(ri router_info.RouterInfo) (ed25519.PublicKey, error) {
+func extractEd25519PublicKey(ri router_info.RouterInfo) (i2ped25519.Ed25519PublicKey, error) {
 	identity := ri.RouterIdentity()
 	if identity == nil {
 		return nil, oops.Errorf("RouterInfo has nil RouterIdentity")
@@ -458,7 +457,7 @@ func extractEd25519PublicKey(ri router_info.RouterInfo) (ed25519.PublicKey, erro
 	if len(keyBytes) != ed25519.PublicKeySize {
 		return nil, oops.Errorf("signing public key has unexpected size %d (expected %d)", len(keyBytes), ed25519.PublicKeySize)
 	}
-	return ed25519.PublicKey(keyBytes), nil
+	return i2ped25519.Ed25519PublicKey(keyBytes), nil
 }
 
 // getOurIdentityHash returns the identity hash of the local router.
@@ -1275,7 +1274,7 @@ func extractBobRouterHash(bobSession *SSU2Session) data.Hash {
 
 // buildSignedRelayResponse creates and signs a RelayResponse block.
 func (t *SSU2Transport) buildSignedRelayResponse(signingKeyBytes []byte, bobHash data.Hash, intro *ssu2noise.RelayIntroBlock, timestamp uint32, charliePort uint16, charlieIP net.IP, token []byte) (*ssu2noise.RelayResponseBlock, error) {
-	ed25519Key := ed25519.PrivateKey(signingKeyBytes)
+	ed25519Key := i2ped25519.Ed25519PrivateKey(signingKeyBytes)
 	sig, err := ssu2noise.SignRelayResponse(ed25519Key, bobHash, intro.Nonce, timestamp, intro.Version, charliePort, charlieIP)
 	if err != nil {
 		return nil, oops.Wrapf(err, "hole-punch: sign RelayResponse")

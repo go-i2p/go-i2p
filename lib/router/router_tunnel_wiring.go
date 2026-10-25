@@ -151,9 +151,7 @@ func (r *Router) wireBuildRecordIdentity() error {
 		return oops.Wrapf(err, "failed to derive router hash for build-record identity")
 	}
 	privKeyBytes := r.keystore.GetEncryptionPrivateKey().Bytes()
-	buildCrypto := i2np.NewBuildRecordCrypto()
 	r.messageRouter.GetProcessor().SetOurRouterHash(routerHash)
-	r.messageRouter.GetProcessor().SetBuildRequestDecryptor(buildCrypto)
 	r.messageRouter.GetProcessor().SetOurPrivateKey(privKeyBytes)
 	// Propagate our router hash to the tunnel manager so pools can set
 	// ReplyGateway correctly. Without this, the last hop in every build

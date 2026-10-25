@@ -23,19 +23,18 @@ import (
 // 4. Accept or reject based on available capacity and rate limits
 // 5. Generate and send appropriate build reply
 func (p *MessageProcessor) processShortTunnelBuildMessage(msg Message) error {
-	return newBuildRequestProcessor(p, msg, true).process()
+	return newBuildRequestProcessor(p, msg).process()
 }
 
-// processVariableTunnelBuildMessage processes Variable Tunnel Build Messages (legacy format).
-// This handles incoming requests using the older VTB format for backward compatibility.
-func (p *MessageProcessor) processVariableTunnelBuildMessage(msg Message) error {
-	return newBuildRequestProcessor(p, msg, false).process()
-}
-
-// parseResponseRecords reads count response records of recordSize bytes each from data,
-// starting at startOffset. It returns the parsed records, a raw byte copy of each record,
-// and any parse error. The caller is responsible for bounds-checking data before calling.
-func parseResponseRecords(data []byte, count, recordSize, startOffset int, isShortBuild bool) ([]BuildResponseRecord, [][]byte, error) {
+// parseResponseRecords reads count 218-byte short response records from data,
+// starting at startOffset. It returns placeholder records plus a raw byte copy
+// of each record. Type-26 short replies carry encrypted slots that are
+// decrypted later in ReplyProcessor using pending build keys, so the actual
+// ciphertext is preserved in rawRecords for that deferred decryption. The
+// Reply field is set to an internal "pending decryption" sentinel so
+// pre-decryption consumers cannot mistake it for a real wire rejection code.
+// The caller is responsible for bounds-checking data before calling.
+func parseResponseRecords(data []byte, count, recordSize, startOffset int) ([]BuildResponseRecord, [][]byte, error) {
 	records := make([]BuildResponseRecord, count)
 	rawRecords := make([][]byte, count)
 	offset := startOffset
@@ -44,43 +43,22 @@ func parseResponseRecords(data []byte, count, recordSize, startOffset int, isSho
 		rawCopy := make([]byte, recordSize)
 		copy(rawCopy, recordData)
 		rawRecords[i] = rawCopy
-		if isShortBuild {
-			// Type-26 short replies carry 218-byte encrypted slots. They are
-			// decrypted later in ReplyProcessor using pending build keys; the
-			// actual ciphertext is preserved in rawRecords for that deferred
-			// decryption. The Reply field is set to an internal "pending
-			// decryption" sentinel so pre-decryption consumers cannot mistake
-			// it for a real wire rejection code.
-			records[i] = BuildResponseRecord{Reply: TunnelBuildReplyPendingDecryption}
-			offset += recordSize
-			continue
-		}
-		record, err := ReadBuildResponseRecord(recordData)
-		if err != nil {
-			return nil, nil, oops.Wrapf(err, "failed to parse response record %d", i)
-		}
-		records[i] = record
+		records[i] = BuildResponseRecord{Reply: TunnelBuildReplyPendingDecryption}
 		offset += recordSize
 	}
 	return records, rawRecords, nil
 }
 
-// processVariableTunnelBuildReplyMessage processes VariableTunnelBuildReply (type 24) messages.
-// The reply contains a variable number of BuildResponseRecords.
-func (p *MessageProcessor) processVariableTunnelBuildReplyMessage(msg Message) error {
-	return p.processBuildReplyCommon(msg, false)
-}
-
-// processShortTunnelBuildReplyMessage processes ShortTunnelBuildReply (type 26) messages.
-// Uses the newer short tunnel build format (v0.9.51+).
+// processShortTunnelBuildReplyMessage processes ShortTunnelBuildReply (type 26)
+// messages, the current short tunnel build reply format (v0.9.51+).
 func (p *MessageProcessor) processShortTunnelBuildReplyMessage(msg Message) error {
-	return p.processBuildReplyCommon(msg, true)
+	return p.processBuildReplyCommon(msg)
 }
 
 // processBuildReplyCommon is the common handler for all tunnel build reply message types.
 // It extracts the response records from the raw message data, wraps them in the
 // appropriate TunnelReplyHandler, and delegates to the configured TunnelBuildReplyProcessor.
-func (p *MessageProcessor) processBuildReplyCommon(msg Message, isShortBuild bool) error {
+func (p *MessageProcessor) processBuildReplyCommon(msg Message) error {
 	if p.buildReplyProcessor == nil {
 		log.WithFields(logger.Fields{
 			"at":           "processBuildReplyCommon",
@@ -101,43 +79,33 @@ func (p *MessageProcessor) processBuildReplyCommon(msg Message, isShortBuild boo
 		return oops.Errorf("tunnel build reply contains no data")
 	}
 
-	records, rawRecords, err := p.parseBuildResponseRecords(data, isShortBuild)
+	records, rawRecords, err := p.parseBuildResponseRecords(data)
 	if err != nil {
 		return oops.Wrapf(err, "failed to parse build reply records")
 	}
 
-	// Wrap parsed records in a TunnelReplyHandler
-	var handler TunnelReplyHandler
-	if isShortBuild {
-		RecordExploratoryReplyStage(ExploratoryReplyStageShortReplyDispatched)
-		handler = &ShortTunnelBuildReply{
-			Count:                len(records),
-			BuildResponseRecords: records,
-			RawRecordData:        rawRecords,
-		}
-	} else {
-		handler = &VariableTunnelBuildReply{
-			Count:                len(records),
-			BuildResponseRecords: records,
-			RawRecordData:        rawRecords,
-		}
+	RecordExploratoryReplyStage(ExploratoryReplyStageShortReplyDispatched)
+	handler := &ShortTunnelBuildReply{
+		Count:                len(records),
+		BuildResponseRecords: records,
+		RawRecordData:        rawRecords,
 	}
 
 	log.WithFields(logger.Fields{
-		"at":             "processBuildReplyCommon",
-		"message_id":     msg.MessageID(),
-		"record_count":   len(records),
-		"is_short_build": isShortBuild,
+		"at":           "processBuildReplyCommon",
+		"message_id":   msg.MessageID(),
+		"record_count": len(records),
 	}).Debug("Dispatching tunnel build reply to processor")
 
 	return p.buildReplyProcessor.ProcessTunnelBuildReply(handler, msg.MessageID())
 }
 
-// parseBuildResponseRecords parses build response records from raw message data.
-// The format is: 1 byte record count followed by N response records.
-// Returns both parsed records and the raw encrypted bytes for each record,
-// since re-serializing parsed records corrupts the original ciphertext needed for decryption.
-func (p *MessageProcessor) parseBuildResponseRecords(data []byte, isShortBuild bool) ([]BuildResponseRecord, [][]byte, error) {
+// parseBuildResponseRecords parses short build response records from raw
+// message data. The format is: 1 byte record count followed by N 218-byte
+// records. Returns both placeholder records and the raw encrypted bytes for
+// each record, since re-serializing parsed records corrupts the original
+// ciphertext needed for decryption.
+func (p *MessageProcessor) parseBuildResponseRecords(data []byte) ([]BuildResponseRecord, [][]byte, error) {
 	if len(data) < 1 {
 		return nil, nil, oops.Errorf("insufficient data for record count")
 	}
@@ -147,38 +115,36 @@ func (p *MessageProcessor) parseBuildResponseRecords(data []byte, isShortBuild b
 		return nil, nil, oops.Errorf("invalid record count: %d (must be 1-8)", recordCount)
 	}
 
-	recordSize := p.getRecordSize(isShortBuild)
+	recordSize := ShortBuildRecordSize
 	expectedLen := 1 + recordCount*recordSize
 	if len(data) < expectedLen {
 		return nil, nil, oops.Errorf("insufficient data for %d records: have %d, need %d", recordCount, len(data), expectedLen)
 	}
 
-	return parseResponseRecords(data, recordCount, recordSize, 1, isShortBuild)
+	return parseResponseRecords(data, recordCount, recordSize, 1)
 }
 
 // buildRequestProcessor centralizes the common extract → validate → parse → log → dispatch flow.
 type buildRequestProcessor struct {
 	processor        *MessageProcessor
 	msg              Message
-	isShort          bool
-	inputMessageType int // F061: Track input type to send correct reply type
+	inputMessageType int
 	parse            func([]byte) ([]BuildRequestRecord, error)
 }
 
-func newBuildRequestProcessor(p *MessageProcessor, msg Message, isShortBuild bool) buildRequestProcessor {
+func newBuildRequestProcessor(p *MessageProcessor, msg Message) buildRequestProcessor {
 	return buildRequestProcessor{
 		processor:        p,
 		msg:              msg,
-		isShort:          isShortBuild,
 		inputMessageType: msg.Type(),
 		parse: func(data []byte) ([]BuildRequestRecord, error) {
-			return p.parseTunnelBuildRecords(data, isShortBuild)
+			return p.parseTunnelBuildRecords(data)
 		},
 	}
 }
 
 func (b buildRequestProcessor) process() error {
-	if err := b.processor.validateParticipantManager(b.isShort, b.msg.Type()); err != nil {
+	if err := b.processor.validateParticipantManager(b.msg.Type()); err != nil {
 		return err
 	}
 
@@ -192,17 +158,16 @@ func (b buildRequestProcessor) process() error {
 		return oops.Wrapf(err, "failed to parse tunnel build records")
 	}
 
-	b.processor.logParsedBuildRequest(b.msg.MessageID(), len(records), b.isShort)
-	return b.processor.processAllBuildRecords(b.msg.MessageID(), records, data, b.isShort, b.inputMessageType)
+	b.processor.logParsedBuildRequest(b.msg.MessageID(), len(records))
+	return b.processor.processAllBuildRecords(b.msg.MessageID(), records, data, b.inputMessageType)
 }
 
 // validateParticipantManager checks if the participant manager is configured.
-func (p *MessageProcessor) validateParticipantManager(isShortBuild bool, msgType int) error {
+func (p *MessageProcessor) validateParticipantManager(msgType int) error {
 	if p.participantManager == nil {
 		log.WithFields(logger.Fields{
-			"at":             "processTunnelBuildRequest",
-			"message_type":   msgType,
-			"is_short_build": isShortBuild,
+			"at":           "processTunnelBuildRequest",
+			"message_type": msgType,
 		}).Warn("participant manager not configured - rejecting tunnel build request")
 		return oops.Errorf("participant manager not configured - cannot process tunnel build requests")
 	}
@@ -225,31 +190,29 @@ func (p *MessageProcessor) extractBuildMessageData(msg Message) ([]byte, error) 
 }
 
 // logParsedBuildRequest logs the parsed build request details.
-func (p *MessageProcessor) logParsedBuildRequest(messageID, recordCount int, isShortBuild bool) {
+func (p *MessageProcessor) logParsedBuildRequest(messageID, recordCount int) {
 	log.WithFields(logger.Fields{
-		"at":             "processTunnelBuildRequest",
-		"message_id":     messageID,
-		"record_count":   recordCount,
-		"is_short_build": isShortBuild,
+		"at":           "processTunnelBuildRequest",
+		"message_id":   messageID,
+		"record_count": recordCount,
 	}).Debug("parsed tunnel build request")
 }
 
 // processAllBuildRecords processes each build record destined for us.
-// F060 FIX: All records in this list have already been validated and filtered by
-// tryParseRecord(): only records that were successfully decrypted (which proves they
-// were meant for us) are included. The short build record format does not carry an
-// OurIdent field at all (it is zero), so the previous check `record.OurIdent !=
-// p.ourRouterHash` always failed for short records, preventing them from ever being
-// processed. The decryption itself is sufficient proof of correctness.
 //
-// F061 FIX: inputMessageType is preserved to send the correct reply type:
-// - Type 23 VariableTunnelBuild → send type 24 VariableTunnelBuildReply
-// - Type 25 ShortTunnelBuild → send type 26 ShortTunnelBuildReply
+// Every record in the list was already decrypted by tryParseRecord: a short
+// build record carries no OurIdent (it is zero), so successful decryption with
+// our static key is the sole proof that the record is ours. Records we could
+// not decrypt are never added to the list.
 //
-// IMPORTANT: If our router hash has not been set (is zero), NO records are added
-// to the list by tryParseRecord, so this function will be called with an empty list.
-// Callers must call SetOurRouterHash before processing any tunnel build messages.
-func (p *MessageProcessor) processAllBuildRecords(messageID int, records []BuildRequestRecord, rawData []byte, isShortBuild bool, inputMessageType int) error {
+// inputMessageType is preserved so the reply type maps correctly (type 25
+// ShortTunnelBuild -> type 26 ShortTunnelBuildReply).
+//
+// IMPORTANT: If our router hash has not been set (is zero), NO records are
+// added to the list by tryParseRecord, so this function will be called with an
+// empty list. Callers must call SetOurRouterHash before processing any tunnel
+// build messages.
+func (p *MessageProcessor) processAllBuildRecords(messageID int, records []BuildRequestRecord, rawData []byte, inputMessageType int) error {
 	var zeroHash common.Hash
 	if p.ourRouterHash == zeroHash {
 		log.WithFields(logger.Fields{
@@ -260,14 +223,7 @@ func (p *MessageProcessor) processAllBuildRecords(messageID int, records []Build
 	}
 
 	for i, record := range records {
-		// F060 FIX: Short build records do not carry an OurIdent field (it is
-		// zero), so decryption by tryParseRecord is the sole proof of ownership
-		// and no OurIdent filter applies. Non-short (legacy/VTB) records DO carry
-		// OurIdent and must be filtered so we only process records destined for us.
-		if !isShortBuild && record.OurIdent != p.ourRouterHash {
-			continue
-		}
-		p.processSingleBuildRecord(messageID, i, record, rawData, isShortBuild, inputMessageType)
+		p.processSingleBuildRecord(messageID, i, record, rawData, inputMessageType)
 	}
 	return nil
 }
@@ -275,8 +231,8 @@ func (p *MessageProcessor) processAllBuildRecords(messageID int, records []Build
 // processSingleBuildRecord validates and processes a single build request record.
 // After validating and accepting/rejecting the request, it generates an encrypted
 // BuildResponseRecord and forwards it to the next hop.
-// inputMessageType is passed to generateAndSendBuildReply for F061: correct reply type mapping.
-func (p *MessageProcessor) processSingleBuildRecord(messageID, index int, record BuildRequestRecord, rawData []byte, isShortBuild bool, inputMessageType int) {
+// inputMessageType is passed to generateAndSendBuildReply for correct reply type mapping.
+func (p *MessageProcessor) processSingleBuildRecord(messageID, index int, record BuildRequestRecord, rawData []byte, inputMessageType int) {
 	accepted, rejectCode, reason := p.participantManager.ProcessBuildRequest(record.OurIdent)
 
 	// availableBW is the bandwidth (KB/s) advertised back to the tunnel creator
@@ -309,7 +265,7 @@ func (p *MessageProcessor) processSingleBuildRecord(messageID, index int, record
 	}
 
 	// Generate and send build reply message
-	if err := p.generateAndSendBuildReply(messageID, index, record, rejectCode, availableBW, rawData, isShortBuild, inputMessageType); err != nil {
+	if err := p.generateAndSendBuildReply(messageID, index, record, rejectCode, availableBW, rawData, inputMessageType); err != nil {
 		log.WithError(err).WithFields(logger.Fields{
 			"at":             "processSingleBuildRecord",
 			"message_id":     messageID,
@@ -319,45 +275,31 @@ func (p *MessageProcessor) processSingleBuildRecord(messageID, index int, record
 	}
 }
 
-// generateAndSendBuildReply creates an encrypted BuildResponseRecord and forwards it.
-// This implements the core of tunnel participation response handling.
+// generateAndSendBuildReply creates an encrypted short BuildResponseRecord and
+// forwards it. inputMessageType determines the output reply type (type 25
+// ShortTunnelBuild -> type 26 ShortTunnelBuildReply).
 //
-// F061 FIX: inputMessageType determines the output reply type:
-// - Type 23 VariableTunnelBuild → send type 24 reply
-// - Type 25 ShortTunnelBuild → send type 26 reply
-//
-// For STBM (isShortBuild=true) the wire format differs from VTB:
+// The STBM reply wire format is:
 //   - Reply record: 218 bytes, ChaCha20 stream XOR (no Poly1305 tag)
 //   - Our reply slot is written at position 'index' in the full N-slot message
 //   - All other slots carry the original (opaque) build-request bytes so the
 //     reply message has the correct wire size: 1 byte count + N × 218 bytes
-//
-// For VTB (isShortBuild=false) the original AEAD path is unchanged:
-//   - 528-byte cleartext → ChaCha20-Poly1305 AEAD → 544-byte ciphertext
-func (p *MessageProcessor) generateAndSendBuildReply(messageID, index int, record BuildRequestRecord, replyCode byte, availableBW uint32, rawData []byte, isShortBuild bool, inputMessageType int) error {
-	encryptedReply, err := p.encryptBuildReply(index, record, replyCode, availableBW, rawData, isShortBuild)
+func (p *MessageProcessor) generateAndSendBuildReply(messageID, index int, record BuildRequestRecord, replyCode byte, availableBW uint32, rawData []byte, inputMessageType int) error {
+	encryptedReply, err := p.encryptBuildReply(index, replyCode, availableBW, rawData)
 	if err != nil {
 		return err
 	}
 
-	if err := p.forwardBuildReply(messageID, record, encryptedReply, isShortBuild, inputMessageType); err != nil {
+	if err := p.forwardBuildReply(messageID, record, encryptedReply, inputMessageType); err != nil {
 		return oops.Wrapf(err, "failed to forward build reply")
 	}
 
-	p.logBuildReplySuccess(messageID, index, replyCode, int(record.NextTunnel), len(encryptedReply), isShortBuild)
+	p.logBuildReplySuccess(messageID, index, replyCode, int(record.NextTunnel), len(encryptedReply))
 	return nil
 }
 
-// encryptBuildReply encrypts a build reply using the appropriate encryption path.
-func (p *MessageProcessor) encryptBuildReply(index int, record BuildRequestRecord, replyCode byte, availableBW uint32, rawData []byte, isShortBuild bool) ([]byte, error) {
-	if isShortBuild {
-		return p.encryptSTBMReply(index, replyCode, availableBW, rawData)
-	}
-	return p.encryptVTBReply(index, record, replyCode)
-}
-
-// encryptSTBMReply encrypts a short tunnel build reply.
-func (p *MessageProcessor) encryptSTBMReply(index int, replyCode byte, availableBW uint32, rawData []byte) ([]byte, error) {
+// encryptBuildReply encrypts a short tunnel build reply.
+func (p *MessageProcessor) encryptBuildReply(index int, replyCode byte, availableBW uint32, rawData []byte) ([]byte, error) {
 	var crypto stbmSlotCrypto
 	if p.stbmSlotCrypto != nil {
 		crypto = p.stbmSlotCrypto[index]
@@ -370,45 +312,15 @@ func (p *MessageProcessor) encryptSTBMReply(index int, replyCode byte, available
 	return encryptedReply, nil
 }
 
-// encryptVTBReply encrypts a variable tunnel build reply.
-func (p *MessageProcessor) encryptVTBReply(index int, record BuildRequestRecord, replyCode byte) ([]byte, error) {
-	var randomData [495]byte
-	if _, err := rand.Read(randomData[:]); err != nil {
-		return nil, oops.Wrapf(err, "failed to generate random data for VTB reply")
-	}
-
-	responseRecord := CreateBuildResponseRecord(replyCode, randomData)
-
-	if p.buildRecordCrypto == nil {
-		log.WithFields(logger.Fields{
-			"at":           "generateAndSendBuildReply",
-			"record_index": index,
-		}).Warn("build record crypto not initialized - cannot encrypt reply")
-		return nil, oops.Errorf("build record crypto not initialized")
-	}
-
-	encryptedReply, err := p.buildRecordCrypto.EncryptReplyRecord(
-		responseRecord,
-		record.ReplyKey,
-		record.ReplyIV,
-	)
-	if err != nil {
-		return nil, oops.Wrapf(err, "failed to encrypt VTB build response record")
-	}
-
-	return encryptedReply, nil
-}
-
 // logBuildReplySuccess logs successful build reply generation and sending.
-func (p *MessageProcessor) logBuildReplySuccess(messageID, index int, replyCode byte, nextTunnel, encryptedLen int, isShortBuild bool) {
+func (p *MessageProcessor) logBuildReplySuccess(messageID, index int, replyCode byte, nextTunnel, encryptedLen int) {
 	log.WithFields(logger.Fields{
-		"at":             "generateAndSendBuildReply",
-		"message_id":     messageID,
-		"record_index":   index,
-		"reply_code":     replyCode,
-		"next_tunnel":    nextTunnel,
-		"encrypted_len":  encryptedLen,
-		"is_short_build": isShortBuild,
+		"at":            "generateAndSendBuildReply",
+		"message_id":    messageID,
+		"record_index":  index,
+		"reply_code":    replyCode,
+		"next_tunnel":   nextTunnel,
+		"encrypted_len": encryptedLen,
 	}).Debug("generated and sent build reply successfully")
 }
 
@@ -561,10 +473,8 @@ func (p *MessageProcessor) xorOtherSTBMSlot(replyData []byte, slotOffset, slotIn
 
 // forwardBuildReply sends the encrypted build reply to the appropriate next hop.
 // The next hop is determined by the NextIdent and NextTunnel fields in the BuildRequestRecord.
-// F061 FIX: inputMessageType is used to determine the output reply type (not isShortBuild alone):
-// - Type 23 VariableTunnelBuild → send type 24 reply
-// - Type 25 ShortTunnelBuild → send type 26 reply
-func (p *MessageProcessor) forwardBuildReply(messageID int, record BuildRequestRecord, encryptedReply []byte, isShortBuild bool, inputMessageType int) error {
+// inputMessageType determines the output reply type: type 25 ShortTunnelBuild → type 26 reply.
+func (p *MessageProcessor) forwardBuildReply(messageID int, record BuildRequestRecord, encryptedReply []byte, inputMessageType int) error {
 	// Check if we have a forwarder configured
 	if p.buildReplyForwarder == nil {
 		log.WithFields(logger.Fields{
@@ -585,7 +495,6 @@ func (p *MessageProcessor) forwardBuildReply(messageID int, record BuildRequestR
 			record.NextIdent,
 			messageID,
 			encryptedReply,
-			isShortBuild,
 			inputMessageType,
 		)
 	}
@@ -596,7 +505,6 @@ func (p *MessageProcessor) forwardBuildReply(messageID int, record BuildRequestR
 		record.NextTunnel,
 		messageID,
 		encryptedReply,
-		isShortBuild,
 		inputMessageType,
 	)
 }
@@ -645,16 +553,16 @@ func (p *MessageProcessor) handleRejectedBuildRecord(messageID, index int, recor
 	}).Debug("rejecting tunnel build request")
 }
 
-// parseTunnelBuildRecords parses the build request records from message data.
-// Returns the parsed records or an error if parsing fails.
-func (p *MessageProcessor) parseTunnelBuildRecords(data []byte, isShortBuild bool) ([]BuildRequestRecord, error) {
+// parseTunnelBuildRecords parses the short build request records from message
+// data. Returns the parsed records or an error if parsing fails. Only records
+// that decrypt with our static key are returned.
+func (p *MessageProcessor) parseTunnelBuildRecords(data []byte) ([]BuildRequestRecord, error) {
 	recordCount, err := p.validateAndGetRecordCount(data)
 	if err != nil {
 		return nil, err
 	}
 
-	recordSize := p.getRecordSize(isShortBuild)
-	return p.parseRecordsFromData(data, recordCount, recordSize, isShortBuild)
+	return p.parseRecordsFromData(data, recordCount, ShortBuildRecordSize)
 }
 
 // validateAndGetRecordCount validates the data and extracts the record count.
@@ -671,17 +579,8 @@ func (p *MessageProcessor) validateAndGetRecordCount(data []byte) (int, error) {
 	return recordCount, nil
 }
 
-// getRecordSize returns the record size based on the build type.
-// Record sizes differ between STBM (218 bytes encrypted, 154 bytes cleartext) and VTB (528 bytes).
-func (p *MessageProcessor) getRecordSize(isShortBuild bool) int {
-	if isShortBuild {
-		return ShortBuildRecordSize // STBM encrypted record size (ECIES)
-	}
-	return StandardBuildRecordSize // VTB encrypted record size
-}
-
 // parseRecordsFromData iterates through the data and parses each record.
-func (p *MessageProcessor) parseRecordsFromData(data []byte, recordCount, recordSize int, isShortBuild bool) ([]BuildRequestRecord, error) {
+func (p *MessageProcessor) parseRecordsFromData(data []byte, recordCount, recordSize int) ([]BuildRequestRecord, error) {
 	records := make([]BuildRequestRecord, 0, recordCount)
 	offset := 1
 
@@ -691,53 +590,42 @@ func (p *MessageProcessor) parseRecordsFromData(data []byte, recordCount, record
 		}
 
 		recordData := data[offset : offset+recordSize]
-		p.tryParseAndAppendRecord(&records, recordData, i, isShortBuild)
+		p.tryParseAndAppendRecord(&records, recordData, i)
 		offset += recordSize
 	}
 
 	return records, nil
 }
 
-// tryParseAndAppendRecord attempts to parse a single build request record.
-// For standard (VTB) 528-byte records it checks the first 16 bytes (toPeer)
-// against our router identity hash. If the record is destined for us and a
-// BuildRequestDecryptor + private key are configured, the record is decrypted
-// via ECIES-X25519-AEAD before parsing. Records not destined for us are still
-// appended so that processAllBuildRecords can forward them to other hops.
-// When no decryptor is configured the record is parsed as cleartext (testing mode).
-func (p *MessageProcessor) tryParseAndAppendRecord(records *[]BuildRequestRecord, recordData []byte, index int, isShortBuild bool) {
-	if isShortBuild && len(recordData) >= ShortBuildRecordSize {
-		p.tryParseRecord(records, recordData, index, p.decryptShortRecord, "STBM")
-	} else if !isShortBuild && len(recordData) >= StandardBuildRecordSize {
-		p.tryParseRecord(records, recordData, index, p.decryptStandardRecord, "VTB")
-	}
-}
-
-// tryParseRecord handles record parsing with a pluggable decrypt function.
-// It attempts to decrypt records destined for us, with fail-closed behavior on decryption errors.
-// For records not destined for us (or when decryption is not available), it parses as cleartext.
-func (p *MessageProcessor) tryParseRecord(
-	records *[]BuildRequestRecord,
-	recordData []byte,
-	index int,
-	decryptFn func([]byte, int) (BuildRequestRecord, error),
-	recordType string,
-) {
-	if p.isRecordForUs(recordData) && p.buildRequestDecryptor != nil && len(p.ourPrivateKey) > 0 {
-		record, err := decryptFn(recordData, index)
-		if err == nil {
-			*records = append(*records, record)
-			return
-		}
-		log.WithError(err).WithField("record_index", index).Warnf("%s ECIES decryption failed; rejecting record destined for us", recordType)
+// tryParseAndAppendRecord attempts to decrypt a single 218-byte short build
+// request record destined for us and, on success, appends the parsed record.
+//
+// A record is only ever accepted if it authenticates under our static X25519
+// key. Records that are not addressed to us, or that fail to decrypt, are
+// dropped: the ECIES tunnel-creation spec requires unencrypted/foreign build
+// records to be detected and rejected, and accepting a cleartext record on the
+// strength of its OurIdent field alone would let any peer register a transit
+// tunnel with attacker-chosen layer, IV and reply keys.
+func (p *MessageProcessor) tryParseAndAppendRecord(records *[]BuildRequestRecord, recordData []byte, index int) {
+	if len(recordData) < ShortBuildRecordSize {
 		return
 	}
-	record, err := ReadBuildRequestRecord(recordData)
-	if err != nil {
-		log.WithError(err).WithField("record_index", index).Warnf("failed to parse %s build request record", recordType)
-	} else {
-		*records = append(*records, record)
+	if !p.isRecordForUs(recordData) {
+		return
 	}
+	if len(p.ourPrivateKey) == 0 {
+		log.WithField("record_index", index).
+			Warn("STBM record addressed to us but no static private key configured; rejecting")
+		return
+	}
+
+	record, err := p.decryptShortRecord(recordData, index)
+	if err != nil {
+		log.WithError(err).WithField("record_index", index).
+			Warn("STBM ECIES decryption failed; rejecting record destined for us")
+		return
+	}
+	*records = append(*records, record)
 }
 
 // decryptShortRecord decrypts a 218-byte STBM record using ECIES-X25519-AEAD.
@@ -797,9 +685,3 @@ func (p *MessageProcessor) isRecordForUs(recordData []byte) bool {
 	return true
 }
 
-// decryptStandardRecord decrypts a 528-byte VTB record using ECIES-X25519-AEAD.
-func (p *MessageProcessor) decryptStandardRecord(recordData []byte, index int) (BuildRequestRecord, error) {
-	var encrypted [528]byte
-	copy(encrypted[:], recordData[:528])
-	return p.buildRequestDecryptor.DecryptRecord(encrypted, p.ourPrivateKey)
-}

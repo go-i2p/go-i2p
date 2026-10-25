@@ -17,12 +17,11 @@ type transportBuildReplyForwarder struct {
 }
 
 // ForwardBuildReplyToRouter forwards a build reply message directly to a router.
-// F061 FIX: Uses inputMessageType to determine output type:
-// - Type 23 VariableTunnelBuild → send type 24 reply
-// - Type 25 ShortTunnelBuild → send type 26 reply
+// inputMessageType determines the output type: type 25 ShortTunnelBuild sends a
+// type 26 ShortTunnelBuildReply.
 // See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the TunnelBuildReply format.
-func (f *transportBuildReplyForwarder) ForwardBuildReplyToRouter(routerHash common.Hash, messageID int, encryptedRecords []byte, isShortBuild bool, inputMessageType int) error {
-	msg := f.createReplyMessage(messageID, encryptedRecords, isShortBuild, inputMessageType)
+func (f *transportBuildReplyForwarder) ForwardBuildReplyToRouter(routerHash common.Hash, messageID int, encryptedRecords []byte, inputMessageType int) error {
+	msg := f.createReplyMessage(messageID, encryptedRecords, inputMessageType)
 
 	session, err := f.sessionProvider.GetSessionByHash(routerHash)
 	if err != nil {
@@ -37,18 +36,16 @@ func (f *transportBuildReplyForwarder) ForwardBuildReplyToRouter(routerHash comm
 		"at":         "ForwardBuildReplyToRouter",
 		"peer":       logutil.HashPrefix(routerHash),
 		"message_id": messageID,
-		"short":      isShortBuild,
 	}).Debug("forwarded build reply to router")
 	return nil
 }
 
 // ForwardBuildReplyThroughTunnel forwards a build reply message through a reply tunnel.
-// F061 FIX: Uses inputMessageType to determine output type:
-// - Type 23 VariableTunnelBuild → send type 24 reply
-// - Type 25 ShortTunnelBuild → send type 26 reply
+// inputMessageType determines the output type: type 25 ShortTunnelBuild sends a
+// type 26 ShortTunnelBuildReply.
 // See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the TunnelBuildReply format.
-func (f *transportBuildReplyForwarder) ForwardBuildReplyThroughTunnel(gatewayHash common.Hash, tunnelID tunnel.TunnelID, messageID int, encryptedRecords []byte, isShortBuild bool, inputMessageType int) error {
-	innerMsg := f.createReplyMessage(messageID, encryptedRecords, isShortBuild, inputMessageType)
+func (f *transportBuildReplyForwarder) ForwardBuildReplyThroughTunnel(gatewayHash common.Hash, tunnelID tunnel.TunnelID, messageID int, encryptedRecords []byte, inputMessageType int) error {
+	innerMsg := f.createReplyMessage(messageID, encryptedRecords, inputMessageType)
 	innerBytes, err := innerMsg.MarshalBinary()
 	if err != nil {
 		return oops.Wrapf(err, "failed to marshal build reply for tunnel %d", tunnelID)
@@ -69,17 +66,15 @@ func (f *transportBuildReplyForwarder) ForwardBuildReplyThroughTunnel(gatewayHas
 		"gateway":    logutil.HashPrefix(gatewayHash),
 		"tunnel_id":  tunnelID,
 		"message_id": messageID,
-		"short":      isShortBuild,
 	}).Debug("forwarded build reply through tunnel")
 	return nil
 }
 
 // createReplyMessage creates the appropriate I2NP message type for the build reply.
-// F061 FIX: Reply message type is always inputMessageType + 1:
-// - Type 23 VariableTunnelBuild → type 24 VariableTunnelBuildReply
-// - Type 25 ShortTunnelBuild → type 26 ShortTunnelBuildReply
-// This arithmetic relationship is guaranteed by the I2P protocol spec.
-func (f *transportBuildReplyForwarder) createReplyMessage(messageID int, encryptedRecords []byte, isShortBuild bool, inputMessageType int) i2np.Message {
+// Reply message type is always inputMessageType + 1: type 25 ShortTunnelBuild
+// produces a type 26 ShortTunnelBuildReply. This arithmetic relationship is
+// guaranteed by the I2P protocol spec.
+func (f *transportBuildReplyForwarder) createReplyMessage(messageID int, encryptedRecords []byte, inputMessageType int) i2np.Message {
 	msgType := inputMessageType + 1
 	msg := i2np.NewBaseI2NPMessage(msgType)
 	msg.SetMessageID(messageID)

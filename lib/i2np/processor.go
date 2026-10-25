@@ -89,9 +89,8 @@ type BuildReplyForwarder interface {
 	// - routerHash: The hash of the router to forward to (NextIdent from BuildRequestRecord)
 	// - messageID: The I2NP message ID for the reply
 	// - encryptedRecords: The complete encrypted build reply records
-	// - isShortBuild: Whether this is a Short Tunnel Build Message (STBM) format
-	// - inputMessageType: The input message type (23=VariableTunnelBuild, 25=ShortTunnelBuild) for F061 correct reply type mapping
-	ForwardBuildReplyToRouter(routerHash common.Hash, messageID int, encryptedRecords []byte, isShortBuild bool, inputMessageType int) error
+	// - inputMessageType: The input message type (25=ShortTunnelBuild) for correct reply type mapping
+	ForwardBuildReplyToRouter(routerHash common.Hash, messageID int, encryptedRecords []byte, inputMessageType int) error
 
 	// ForwardBuildReplyThroughTunnel forwards a build reply message through a reply tunnel.
 	// This is used when the build request specifies a reply tunnel for the response.
@@ -101,9 +100,8 @@ type BuildReplyForwarder interface {
 	// - tunnelID: The tunnel ID to use for forwarding
 	// - messageID: The I2NP message ID for the reply
 	// - encryptedRecords: The complete encrypted build reply records
-	// - isShortBuild: Whether this is a Short Tunnel Build Message (STBM) format
-	// - inputMessageType: The input message type (23=VariableTunnelBuild, 25=ShortTunnelBuild) for F061 correct reply type mapping
-	ForwardBuildReplyThroughTunnel(gatewayHash common.Hash, tunnelID buildrecord.TunnelID, messageID int, encryptedRecords []byte, isShortBuild bool, inputMessageType int) error
+	// - inputMessageType: The input message type (25=ShortTunnelBuild) for correct reply type mapping
+	ForwardBuildReplyThroughTunnel(gatewayHash common.Hash, tunnelID buildrecord.TunnelID, messageID int, encryptedRecords []byte, inputMessageType int) error
 }
 
 // TunnelGatewayHandler defines the interface for handling TunnelGateway messages.
@@ -193,23 +191,15 @@ type GarlicMessageDecryptor interface {
 // GarlicKeyRegistrar allows callers to register one-time symmetric garlic keys - re-exported from lib/tunnel/build
 type GarlicKeyRegistrar = build.GarlicKeyRegistrar
 
-// ReplyRecordEncryptor encrypts tunnel build reply records.
-// This interface is satisfied by both BuildRecordCrypto (the concrete adapter)
-// and test mocks.
-type ReplyRecordEncryptor interface {
-	// EncryptReplyRecord encrypts a BuildResponseRecord with the given reply key and IV.
-	EncryptReplyRecord(record BuildResponseRecord, replyKey session_key.SessionKey, replyIV [16]byte) ([]byte, error)
-}
-
-// BuildRequestDecryptor decrypts inbound tunnel build request records.
-// When processing build requests from the network, encrypted records destined
-// for this router must be decrypted before parsing. This interface abstracts
-// the ECIES-X25519-AEAD decryption so that test mocks can be substituted.
-type BuildRequestDecryptor interface {
-	// DecryptRecord decrypts a 528-byte encrypted build request record
-	// using the router's static private key and returns the parsed record.
-	DecryptRecord(encrypted [528]byte, privateKey []byte) (BuildRequestRecord, error)
-}
+// Tunnel build reply/request record crypto for the 528-byte long-record format
+// was removed along with the deprecated long-record path. The I2P spec marks
+// both record formats that filled a 528-byte record as legacy: the ElGamal
+// record ("DEPRECATED, only used in the current network when a tunnel contains
+// an ElGamal router") and the ECIES long record ("NOTE: Deprecated, obsolete.
+// Use the Short Record format specified below"). Current routers build tunnels
+// with ShortTunnelBuild (type 25) / ShortTunnelBuildReply (type 26) and
+// 218-byte ECIES short records, which use the Noise_N transcript in
+// build_record_crypto_short.go instead.
 
 // stbmSlotCrypto holds the Noise-derived reply key and transcript hash for a single
 // STBM build request record slot. These are computed during ECIES decryption and
@@ -231,7 +221,6 @@ type MessageProcessor struct {
 	replayCache           *messageReplayCache       // H-NEW-4: bounded replay cache keyed by message ID
 	participantManager    ParticipantManager        // Optional participant manager for tunnel build requests
 	buildReplyForwarder   BuildReplyForwarder       // Optional forwarder for tunnel build replies
-	buildRecordCrypto     ReplyRecordEncryptor      // Interface for encrypting build response records
 	tunnelGatewayHandler  TunnelGatewayHandler      // Optional handler for tunnel gateway messages
 	tunnelDataHandler     TunnelDataHandler         // Optional handler for inbound tunnel data messages
 	searchReplyHandler    SearchReplyHandler        // Optional handler for DatabaseSearchReply suggestions
@@ -240,27 +229,23 @@ type MessageProcessor struct {
 	deliveryStatusHandler DeliveryStatusHandler     // Optional handler for delivery status confirmations
 	floodfillReplicator   FloodfillReplicator       // Optional floodfill re-propagation for accepted DatabaseStores
 	buildReplyProcessor   TunnelBuildReplyProcessor // Optional processor for tunnel build reply messages
-	buildRequestDecryptor BuildRequestDecryptor     // Optional decryptor for inbound build request records
 	ourRouterHash         common.Hash               // Our router identity hash for filtering build records
 	ourPrivateKey         []byte                    // Our router's static X25519 private key for build record decryption
 	stbmSlotCrypto        map[int]stbmSlotCrypto    // Per-slot STBM crypto state (valid during one message processing call)
 }
 
 // NewMessageProcessor creates a new message processor with default
-// configuration: build record crypto, an expiration validator, and a reply
-// processor. The processor is the main handler for inbound I2NP messages
-// (tunnel builds, data, delivery status, database lookups).
+// configuration: an expiration validator and a bounded replay cache. The
+// processor is the main handler for inbound I2NP messages (tunnel builds,
+// data, delivery status, database lookups).
 // See also [MessageProcessor].
 func NewMessageProcessor() *MessageProcessor {
 	log.WithField("at", "NewMessageProcessor").Debug("Creating new message processor")
-	crypto := NewBuildRecordCrypto()
 	ev := NewExpirationValidator()
 	return &MessageProcessor{
-		factory:               NewMessageFactory(),
-		expirationValidator:   ev,
-		replayCache:           newMessageReplayCache(10_000, time.Duration(ev.toleranceSeconds)*time.Second),
-		buildRecordCrypto:     crypto,
-		buildRequestDecryptor: crypto,
+		factory:             NewMessageFactory(),
+		expirationValidator: ev,
+		replayCache:         newMessageReplayCache(10_000, time.Duration(ev.toleranceSeconds)*time.Second),
 	}
 }
 
@@ -270,14 +255,6 @@ func NewMessageProcessor() *MessageProcessor {
 func (p *MessageProcessor) SetGarlicSessionManager(garlicMgr GarlicMessageDecryptor) {
 	p.setField("SetGarlicSessionManager", func() {
 		p.garlicSessions = garlicMgr
-	})
-}
-
-// SetBuildRecordCrypto sets the build record crypto handler for encrypting build response records.
-// Accepts any implementation of ReplyRecordEncryptor, including *BuildRecordCrypto and test mocks.
-func (p *MessageProcessor) SetBuildRecordCrypto(crypto ReplyRecordEncryptor) {
-	p.setField("SetBuildRecordCrypto", func() {
-		p.buildRecordCrypto = crypto
 	})
 }
 
@@ -401,14 +378,11 @@ func (p *MessageProcessor) SetOurRouterHash(hash common.Hash) {
 	})
 }
 
-// SetBuildRequestDecryptor sets the decryptor used to decrypt inbound build request
-// records that are destined for this router. If not set, encrypted records will be
-// attempted as cleartext (testing mode only).
-func (p *MessageProcessor) SetBuildRequestDecryptor(dec BuildRequestDecryptor) {
-	p.setField("SetBuildRequestDecryptor", func() {
-		p.buildRequestDecryptor = dec
-	})
-}
+// Inbound build-request record decryption no longer goes through a pluggable
+// decryptor interface. The 528-byte long-record formats it served are
+// deprecated by the I2P specification, and the current short-record path
+// decrypts directly with the router's static X25519 key (see
+// SetOurPrivateKey and decryptShortRecord).
 
 // SetOurPrivateKey sets the router's static X25519 private key used for
 // decrypting inbound build request records.
@@ -599,12 +573,23 @@ func (p *MessageProcessor) processMessageDispatch(msg Message, depth int) error 
 		return p.processTunnelGatewayMessage(msg)
 	case I2NPMessageTypeShortTunnelBuild:
 		return p.processShortTunnelBuildMessage(msg)
-	case I2NPMessageTypeVariableTunnelBuild:
-		return p.processVariableTunnelBuildMessage(msg)
-	case I2NPMessageTypeVariableTunnelBuildReply:
-		return p.processVariableTunnelBuildReplyMessage(msg)
 	case I2NPMessageTypeShortTunnelBuildReply:
 		return p.processShortTunnelBuildReplyMessage(msg)
+	case I2NPMessageTypeVariableTunnelBuild, I2NPMessageTypeVariableTunnelBuildReply:
+		// The 528-byte build records these message types carry are deprecated
+		// by the I2P specification in both of their variants: the ElGamal
+		// record ("DEPRECATED, only used in the current network when a tunnel
+		// contains an ElGamal router"; ElGamal routers themselves deprecated as
+		// of 0.9.58) and the ECIES long record ("NOTE: Deprecated, obsolete.
+		// Use the Short Record format specified below"). Current routers build
+		// tunnels with ShortTunnelBuild / ShortTunnelBuildReply (types 25/26)
+		// and 218-byte ECIES short records, so the long-record message pair is
+		// unsupported and dropped.
+		log.WithFields(logger.Fields{
+			"at":           "processMessageDispatch",
+			"message_type": messageType,
+		}).Debug("Dropping deprecated 528-byte tunnel build message")
+		return nil
 	default:
 		// Per I2P spec, message types 224-254 are reserved for experimental use.
 		// A production router should silently drop unknown types to support

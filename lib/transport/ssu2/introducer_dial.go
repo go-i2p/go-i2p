@@ -2,7 +2,6 @@ package ssu2
 
 import (
 	"context"
-	"crypto/ed25519"
 	"net"
 	"strconv"
 	"sync/atomic"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
+	i2ped25519 "github.com/go-i2p/crypto/ed25519"
 	"github.com/go-i2p/go-i2p/lib/transport"
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
 )
@@ -248,7 +248,7 @@ func (t *SSU2Transport) sendRelayRequest(bobSession *SSU2Session, intro Introduc
 		return oops.Errorf("signing key unavailable")
 	}
 	// types.PrivateKey.Bytes() returns the raw 64-byte Ed25519 seed+public.
-	ed25519Key := ed25519.PrivateKey(signingKey.Bytes())
+	ed25519Key := i2ped25519.Ed25519PrivateKey(signingKey.Bytes())
 
 	// BUG FIX HIGH RD-2: Use confirmed external address, not local bind address.
 	// localIPPort() returns the listener bind address (often 0.0.0.0 or private),

@@ -6,7 +6,6 @@ import (
 
 	"github.com/go-i2p/common/session_key"
 	"github.com/go-i2p/go-i2p/lib/tunnel/buildrecord"
-	"github.com/go-i2p/go-noise/ratchet"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 	"golang.org/x/crypto/chacha20poly1305"
@@ -256,11 +255,14 @@ func (rp *ReplyProcessor) processReplyWithHandler(handler TunnelReplyHandler, tu
 	return nil
 }
 
-// decryptReplyRecords decrypts encrypted build reply records using the stored reply keys.
-// Two formats are handled depending on record size:
-//   - 218 bytes (ShortBuildRecordSize): STBM format — multi-pass ChaCha20 layer peel
-//     followed by ChaCha20-Poly1305 AEAD decrypt. Ret code at plaintext[201].
-//   - 544 bytes: VTB — ChaCha20-Poly1305 AEAD (528 ciphertext + 16 auth tag).
+// decryptReplyRecords decrypts encrypted short (STBM) build reply records using
+// the stored reply keys.
+//
+// STBM format (218-byte records, ShortBuildRecordSize): multi-pass ChaCha20
+// layer peel followed by ChaCha20-Poly1305 AEAD decrypt; the ret code is at
+// plaintext[201]. The 544-byte VTB reply format was removed along with the
+// deprecated 528-byte long records ("NOTE: Deprecated, obsolete. Use the Short
+// Record format specified below").
 //
 // Uses raw encrypted bytes from GetRawReplyRecords() instead of re-serializing parsed records,
 // because round-tripping through parse/serialize corrupts the original ciphertext.
@@ -276,9 +278,9 @@ func (rp *ReplyProcessor) decryptReplyRecords(handler TunnelReplyHandler, pendin
 		return nil
 	}
 
-	isShortBuild := len(rawRecords[0]) == ShortBuildRecordSize
-	if !isShortBuild {
-		return rp.decryptVTBReplyRecords(records, rawRecords, pending)
+	if len(rawRecords[0]) != ShortBuildRecordSize {
+		return oops.Errorf("unexpected reply record size: %d (want %d-byte short records)",
+			len(rawRecords[0]), ShortBuildRecordSize)
 	}
 
 	return rp.decryptSTBMReplyRecords(records, rawRecords, pending)
@@ -296,23 +298,6 @@ func (rp *ReplyProcessor) validateRecordCounts(records []BuildResponseRecord, ra
 			len(rawRecords), len(records))
 	}
 
-	return nil
-}
-
-// decryptVTBReplyRecords handles standard VTB reply decryption (per-record AEAD).
-func (rp *ReplyProcessor) decryptVTBReplyRecords(records []BuildResponseRecord, rawRecords [][]byte, pending *PendingBuildRequest) error {
-	for i := range records {
-		decrypted, err := rp.decryptRecord(rawRecords[i], pending.ReplyKeys[i], pending.ReplyIVs[i])
-		if err != nil {
-			return oops.Wrapf(err, "failed to decrypt record %d", i)
-		}
-		decryptedRecord, err := ReadBuildResponseRecord(decrypted)
-		if err != nil {
-			return oops.Wrapf(err, "failed to parse decrypted record %d", i)
-		}
-		records[i] = decryptedRecord
-	}
-	log.WithField("record_count", len(records)).Debug("Decrypted all VTB reply records")
 	return nil
 }
 
@@ -418,39 +403,6 @@ func decryptSTBMReplySlot(encrypted []byte, key, noiseHash [32]byte, index int) 
 			len(cleartext), ShortBuildRecordSize-chacha20poly1305.Overhead)
 	}
 	return cleartext, nil
-}
-
-// decryptRecord decrypts a single encrypted build response record from raw bytes.
-// Uses ChaCha20-Poly1305 AEAD (I2P 0.9.44+).
-//
-// The encrypted parameter must be the original wire bytes, NOT re-serialized from
-// a parsed record, as round-tripping through parse/serialize would corrupt the ciphertext.
-func (rp *ReplyProcessor) decryptRecord(
-	encrypted []byte,
-	replyKey session_key.SessionKey,
-	replyIV [16]byte,
-) ([]byte, error) {
-	crypto := NewBuildRecordCrypto()
-
-	// ChaCha20-Poly1305 AEAD decryption.
-	// DecryptReplyRecord expects 544 bytes (528 ciphertext + 16 auth tag).
-	if len(encrypted) == 544 {
-		decryptedRecord, err := crypto.DecryptReplyRecord(encrypted, replyKey, replyIV)
-		if err != nil {
-			return nil, oops.Wrapf(err, "ChaCha20-Poly1305 decryption failed")
-		}
-
-		cleartext := ratchet.SerializeResponseRecord(decryptedRecord.Hash, decryptedRecord.RandomData, decryptedRecord.Reply)
-
-		log.WithFields(logger.Fields{
-			"encryption": "ChaCha20-Poly1305",
-			"size":       len(cleartext),
-		}).Debug("Decrypted tunnel build reply record")
-
-		return cleartext, nil
-	}
-
-	return nil, oops.Errorf("unexpected encrypted record size: %d (expected 544)", len(encrypted))
 }
 
 // handleBuildSuccess handles successful tunnel build completion.

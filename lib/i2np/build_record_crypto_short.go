@@ -418,3 +418,46 @@ func DecryptSTBMRecordReturningChainingKeyAndHash(encrypted [218]byte, privateKe
 	copy(noiseHash[:], ns.HandshakeHash())
 	return chainingKey, noiseHash, nil
 }
+
+// extractEncryptionPublicKey retrieves the X25519 public encryption key from a
+// RouterInfo. Used by the short-record build-request encryption path.
+func extractEncryptionPublicKey(routerInfo router_info.RouterInfo) ([]byte, error) {
+	identity := routerInfo.RouterIdentity()
+	if identity == nil {
+		return nil, oops.Errorf("RouterInfo has nil RouterIdentity")
+	}
+
+	keysAndCert := identity.KeysAndCert
+	if keysAndCert == nil {
+		return nil, oops.Errorf("RouterIdentity has nil KeysAndCert")
+	}
+
+	pubKey, err := keysAndCert.PublicKey()
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to get PublicKey from KeysAndCert")
+	}
+	if pubKey == nil {
+		return nil, oops.Errorf("KeysAndCert has nil PublicKey")
+	}
+
+	pubKeyBytes := pubKey.Bytes()
+	if len(pubKeyBytes) != 32 {
+		return nil, oops.Errorf("invalid public key size: expected 32 bytes (X25519), got %d", len(pubKeyBytes))
+	}
+
+	return pubKeyBytes, nil
+}
+
+// DecryptShortBuildRequestRecord decrypts a 218-byte STBM (Short Tunnel Build
+// Message) record using the Noise_N_25519_ChaChaPoly_SHA256 transcript
+// specified by I2P proposal 157. See DecryptShortBuildRequestRecordNoise for
+// the full transcript description.
+//
+// STBM on-wire layout (218 bytes):
+//   - Bytes   0-15:  toPeer (first 16 bytes of recipient identity hash)
+//   - Bytes  16-47:  sender ephemeral X25519 public key
+//   - Bytes  48-201: ChaCha20-Poly1305 ciphertext (154 bytes of cleartext)
+//   - Bytes 202-217: Poly1305 MAC tag (16 bytes)
+func DecryptShortBuildRequestRecord(encrypted [218]byte, privateKey []byte) (BuildRequestRecord, error) {
+	return DecryptShortBuildRequestRecordNoise(encrypted, privateKey)
+}
