@@ -1,6 +1,8 @@
 package i2np
 
 import (
+	"encoding/binary"
+
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/go-i2p/logger"
@@ -398,3 +400,44 @@ func validateDatabaseStoreSize(dataType byte, size int) error {
 
 // Compile-time interface satisfaction check
 var _ DatabaseWriter = (*DatabaseStore)(nil)
+
+// NewRouterInfoDatabaseStore builds the DatabaseStore message that delivers a
+// RouterInfo to another router.
+//
+// The RouterInfo payload of a DatabaseStore MUST be a 2-byte big-endian
+// compressed length followed by the gzip-compressed RouterInfo bytes; a
+// recipient reads it with this exact framing. Centralising it here matters
+// because the framing is not optional: an uncompressed or mis-length-prefixed
+// payload is silently rejected by the receiver's validator, which looks like a
+// network failure rather than an encoding bug.
+//
+// riBytes must be the serialized (uncompressed) RouterInfo. Use
+// DatabaseStoreTypeRouterInfo; reply fields are zero, so the recipient replies
+// directly rather than through a tunnel.
+func NewRouterInfoDatabaseStore(key common.Hash, riBytes []byte) (*DatabaseStore, error) {
+	if len(riBytes) == 0 {
+		return nil, oops.Errorf("RouterInfo DatabaseStore requires non-empty RouterInfo bytes")
+	}
+	payload, err := BuildRouterInfoStorePayload(riBytes)
+	if err != nil {
+		return nil, err
+	}
+	return NewDatabaseStore(key, payload, DatabaseStoreTypeRouterInfo), nil
+}
+
+// BuildRouterInfoStorePayload applies the wire framing described on
+// NewRouterInfoDatabaseStore and returns the encoded payload only, for callers
+// that construct the DatabaseStore themselves.
+func BuildRouterInfoStorePayload(riBytes []byte) ([]byte, error) {
+	if len(riBytes) == 0 {
+		return nil, oops.Errorf("RouterInfo payload requires non-empty RouterInfo bytes")
+	}
+	compressed, err := gzipCompress(riBytes)
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to gzip RouterInfo for DatabaseStore")
+	}
+	payload := make([]byte, 2+len(compressed))
+	binary.BigEndian.PutUint16(payload[:2], uint16(len(compressed)))
+	copy(payload[2:], compressed)
+	return payload, nil
+}

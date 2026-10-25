@@ -1,13 +1,15 @@
-// Tests for NTCP2 rekeying. Validates that the session rekeys its Noise
-// state after the message count reaches the rekey threshold.
+// Tests for NTCP2 message-count tracking and threshold-based session
+// replacement. NTCP2 has no in-band mid-session rekey, so the compliant
+// behaviour is to retire a session once it crosses RekeyThreshold and let the
+// transport re-handshake.
 
 package ntcp2
 
 import (
-	"errors"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -37,39 +39,24 @@ func TestRekeyState_MixedCounting(t *testing.T) {
 	assert.Equal(t, uint64(3), rs.totalMessages())
 }
 
-func TestRekeyState_ResetCounters(t *testing.T) {
+func TestRekeyState_NeedsReplacement_BelowThreshold(t *testing.T) {
 	rs := newRekeyState()
 	for i := 0; i < 100; i++ {
 		rs.recordSent()
 	}
-	assert.Equal(t, uint64(100), rs.totalMessages())
-	assert.Equal(t, uint64(0), rs.getRekeyCount())
-
-	rs.resetCounters()
-	assert.Equal(t, uint64(0), rs.totalMessages())
-	assert.Equal(t, uint64(1), rs.getRekeyCount())
+	assert.False(t, rs.needsReplacement())
 }
 
-func TestRekeyState_NeedsRekey_BelowThreshold(t *testing.T) {
-	rs := newRekeyState()
-	for i := 0; i < 100; i++ {
-		rs.recordSent()
-	}
-	assert.False(t, rs.needsRekey())
-}
-
-// Validates that the session flags itself for rekeying once the
-// message count reaches the rekey threshold.
-func TestRekeyState_NeedsRekey_AtThreshold(t *testing.T) {
+func TestRekeyState_NeedsReplacement_AtThreshold(t *testing.T) {
 	rs := newRekeyState()
 	atomic.StoreUint64(&rs.messagesSent, RekeyThreshold)
-	assert.True(t, rs.needsRekey())
+	assert.True(t, rs.needsReplacement())
 }
 
-func TestRekeyState_NeedsRekey_AboveThreshold(t *testing.T) {
+func TestRekeyState_NeedsReplacement_AboveThreshold(t *testing.T) {
 	rs := newRekeyState()
 	atomic.StoreUint64(&rs.messagesSent, RekeyThreshold+100)
-	assert.True(t, rs.needsRekey())
+	assert.True(t, rs.needsReplacement())
 }
 
 func TestRekeyState_ConcurrentAccess(t *testing.T) {
@@ -98,92 +85,128 @@ func TestRekeyState_ConcurrentAccess(t *testing.T) {
 	assert.Equal(t, uint64(goroutines*messagesPerGoroutine*2), rs.totalMessages())
 }
 
-// --- mockRekeyConn for testing attemptRekey ---
+// --- tryTriggerReplacement is one-shot ---
 
-type mockRekeyConn struct {
-	rekeys   int
-	failNext bool
-}
-
-func (m *mockRekeyConn) Rekey() error {
-	if m.failNext {
-		return errors.New("rekey failed")
-	}
-	m.rekeys++
-	return nil
-}
-
-// nonRekeyConn does NOT implement Rekeyer
-type nonRekeyConn struct{}
-
-// --- attemptRekey tests ---
-
-func TestAttemptRekey_ConnDoesNotImplementRekeyer(t *testing.T) {
+func TestRekeyState_TryTriggerReplacement_FirstWins(t *testing.T) {
 	rs := newRekeyState()
-	atomic.StoreUint64(&rs.messagesSent, RekeyThreshold)
-	require.True(t, rs.needsRekey())
 
-	conn := &nonRekeyConn{}
-	result := attemptRekey(conn, rs)
+	require.True(t, rs.tryTriggerReplacement(), "first caller must win the trigger")
+	assert.Equal(t, uint64(1), rs.getReplacementCount())
 
-	assert.False(t, result, "should return false when conn does not implement Rekeyer")
-	assert.Equal(t, uint64(0), rs.totalMessages(), "counters should be reset even when rekeying unavailable")
-	assert.Equal(t, uint64(1), rs.getRekeyCount(), "rekey count should still increment")
-}
-
-func TestAttemptRekey_ConnImplementsRekeyer_Success(t *testing.T) {
-	rs := newRekeyState()
-	atomic.StoreUint64(&rs.messagesSent, RekeyThreshold)
-
-	conn := &mockRekeyConn{}
-	result := attemptRekey(conn, rs)
-
-	assert.True(t, result, "should return true when rekey succeeds")
-	assert.Equal(t, 1, conn.rekeys, "should have called Rekey() once")
-	assert.Equal(t, uint64(0), rs.totalMessages(), "counters should be reset")
-	assert.Equal(t, uint64(1), rs.getRekeyCount())
-}
-
-// Validates that a failed rekey does not reset the message counters,
-// so the session keeps retrying the rekey.
-func TestAttemptRekey_ConnImplementsRekeyer_Failure(t *testing.T) {
-	rs := newRekeyState()
-	atomic.StoreUint64(&rs.messagesSent, RekeyThreshold)
-
-	conn := &mockRekeyConn{failNext: true}
-	result := attemptRekey(conn, rs)
-
-	assert.False(t, result, "should return false when rekey fails")
-	assert.Equal(t, 0, conn.rekeys, "should not have incremented rekey count on conn")
-	// Counters must NOT be reset on failure so the next message triggers another attempt
-	assert.Equal(t, RekeyThreshold, rs.totalMessages(), "counters should remain above threshold after failure")
-	assert.Equal(t, uint64(0), rs.getRekeyCount(), "state rekey count should not increment on failure")
-}
-
-func TestAttemptRekey_MultipleRekeys(t *testing.T) {
-	rs := newRekeyState()
-	conn := &mockRekeyConn{}
-
+	// Subsequent calls must not re-trigger: a session is replaced at most once.
 	for i := 0; i < 5; i++ {
-		atomic.StoreUint64(&rs.messagesSent, RekeyThreshold)
-		result := attemptRekey(conn, rs)
-		assert.True(t, result)
-		assert.Equal(t, uint64(0), rs.totalMessages())
+		assert.False(t, rs.tryTriggerReplacement(), "trigger must be one-shot")
 	}
-
-	assert.Equal(t, 5, conn.rekeys)
-	assert.Equal(t, uint64(5), rs.getRekeyCount())
+	assert.Equal(t, uint64(1), rs.getReplacementCount(), "replacement count stays at 1")
 }
 
-// --- Rekeyer interface compile-time check ---
+// Validates that concurrent workers crossing the threshold together schedule
+// exactly one replacement.
+func TestRekeyState_TryTriggerReplacement_ConcurrentSingleWinner(t *testing.T) {
+	rs := newRekeyState()
 
-var _ Rekeyer = (*mockRekeyConn)(nil)
+	const workers = 32
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	winners := make([]bool, workers)
 
-// --- RekeyThreshold value test ---
+	wg.Add(workers)
+	for i := 0; i < workers; i++ {
+		go func(idx int) {
+			defer wg.Done()
+			<-start
+			winners[idx] = rs.tryTriggerReplacement()
+		}(i)
+	}
+	close(start)
+	wg.Wait()
 
-// Validates that the rekey threshold is 65535, just under 2^16, so a
-// session rekeys before the message counter wraps.
+	var won int
+	for _, w := range winners {
+		if w {
+			won++
+		}
+	}
+	assert.Equal(t, 1, won, "exactly one worker may claim the replacement")
+	assert.Equal(t, uint64(1), rs.getReplacementCount())
+}
+
+// --- RekeyThreshold value ---
+
+// Validates that the replacement threshold is 65535, just under 2^16, so a
+// session is retired well before the Noise nonce counters approach their
+// limit.
 func TestRekeyThreshold_Value(t *testing.T) {
-	// Verify threshold is just under 2^16 as documented
 	assert.Equal(t, uint64(65535), RekeyThreshold)
+}
+
+// --- session-level replacement behaviour ---
+
+// Validates that crossing the threshold closes the session (drop-and-restart)
+// rather than rekeying it in place, and that the close is scheduled off the
+// calling worker so a worker never joins itself.
+func TestSession_CheckRekey_ReplacesSessionAtThreshold(t *testing.T) {
+	s := newTestSession(t)
+
+	// Drive the counters past the threshold without sending real traffic.
+	atomic.StoreUint64(&s.rekeyState.messagesSent, RekeyThreshold)
+
+	s.checkRekey(s.rekeyState.totalMessages())
+
+	select {
+	case <-s.GetContext().Done():
+		// Session cancelled: the transport will re-handshake on next use.
+	case <-time.After(5 * time.Second):
+		t.Fatal("session context was not cancelled after crossing the rekey threshold")
+	}
+
+	total, replacements := s.GetTrafficStats()
+	assert.Equal(t, uint64(1), replacements, "exactly one replacement must be recorded")
+	assert.GreaterOrEqual(t, total, RekeyThreshold)
+}
+
+// Below the threshold the session must stay up.
+func TestSession_CheckRekey_BelowThresholdKeepsSession(t *testing.T) {
+	s := newTestSession(t)
+
+	atomic.StoreUint64(&s.rekeyState.messagesSent, RekeyThreshold-1)
+	total := s.rekeyState.totalMessages()
+	s.checkRekey(total)
+
+	select {
+	case <-s.GetContext().Done():
+		t.Fatal("session must not be replaced below the rekey threshold")
+	default:
+	}
+
+	reportedTotal, replacements := s.GetTrafficStats()
+	assert.Equal(t, uint64(0), replacements)
+	assert.Equal(t, uint64(RekeyThreshold-1), reportedTotal)
+}
+
+// Concurrent threshold hits (send worker + receive worker) must produce a
+// single replacement.
+func TestSession_CheckRekey_ConcurrentTriggersSingleReplacement(t *testing.T) {
+	s := newTestSession(t)
+
+	atomic.StoreUint64(&s.rekeyState.messagesSent, RekeyThreshold)
+
+	var wg sync.WaitGroup
+	wg.Add(4)
+	for i := 0; i < 4; i++ {
+		go func() {
+			defer wg.Done()
+			s.checkRekey(s.rekeyState.totalMessages())
+		}()
+	}
+	wg.Wait()
+
+	_, replacements := s.GetTrafficStats()
+	assert.Equal(t, uint64(1), replacements, "only one replacement may be scheduled")
+
+	select {
+	case <-s.GetContext().Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("session context was not cancelled")
+	}
 }

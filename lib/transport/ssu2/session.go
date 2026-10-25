@@ -218,6 +218,19 @@ func mergeBlockCallbacks(cbs *ssu2noise.DataHandlerCallbacks, cfg *BlockCallback
 	if cfg.VerifyRelayIntroSignature != nil {
 		cbs.VerifyRelayIntroSignature = cfg.VerifyRelayIntroSignature
 	}
+	// The per-session signature verifiers. Without these, go-noise's fail-closed
+	// dispatch rejects every signed PeerTest (messages 1-4), RelayRequest and
+	// RelayResponse block with VERIFIER_MISSING before the On* handler ever
+	// runs, which makes peer testing and relaying non-functional.
+	if cfg.VerifyPeerTestSignature != nil {
+		cbs.VerifyPeerTestSignature = cfg.VerifyPeerTestSignature
+	}
+	if cfg.VerifyRelayRequestSignature != nil {
+		cbs.VerifyRelayRequestSignature = cfg.VerifyRelayRequestSignature
+	}
+	if cfg.VerifyRelayResponseSignature != nil {
+		cbs.VerifyRelayResponseSignature = cfg.VerifyRelayResponseSignature
+	}
 }
 
 // StartWorkers launches the background send and receive goroutines.

@@ -42,6 +42,20 @@ func DefaultRouterAddressConfig() RouterAddressConfig {
 // addrCfg controls the router address parameters; pass nil to use defaults.
 func CreateSignedTestRouterInfo(tb testing.TB, options map[string]string, addrCfg *RouterAddressConfig) *router_info.RouterInfo {
 	tb.Helper()
+	ri, _ := CreateSignedTestRouterInfoAndKey(tb, options, addrCfg)
+	return ri
+}
+
+// CreateSignedTestRouterInfoAndKey is CreateSignedTestRouterInfo, additionally
+// returning the Ed25519 signing private key the RouterInfo was signed with.
+//
+// Tests that exercise signature VERIFICATION need both halves: the RouterInfo
+// publishes the public key the verifier resolves from the netdb, while the test
+// needs the private key to produce a signature that ought to pass. Returning
+// only the RouterInfo forces tests to fabricate unsigned fixtures and weakens
+// the assertion to "did not crash".
+func CreateSignedTestRouterInfoAndKey(tb testing.TB, options map[string]string, addrCfg *RouterAddressConfig) (*router_info.RouterInfo, *ed25519.Ed25519PrivateKey) {
+	tb.Helper()
 
 	if addrCfg == nil {
 		def := DefaultRouterAddressConfig()
@@ -105,5 +119,5 @@ func CreateSignedTestRouterInfo(tb testing.TB, options map[string]string, addrCf
 	)
 	require.NoError(tb, err, "Failed to create RouterInfo")
 
-	return ri
+	return ri, &ed25519PrivKeyTyped
 }

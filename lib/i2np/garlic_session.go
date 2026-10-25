@@ -286,12 +286,6 @@ func extractGarlicFromPayload(payload []byte) ([][]byte, error) {
 	return cloves, nil
 }
 
-// ProcessIncomingDHRatchet processes a DH ratchet key received from a peer.
-// The session is found by tag lookup using the sessionTag parameter.
-func (sm *GarlicSessionManager) ProcessIncomingDHRatchet(sessionTag [8]byte, newRemotePubKey [32]byte) error {
-	return sm.inner.ProcessIncomingDHRatchet(sessionTag, newRemotePubKey)
-}
-
 // RegisterOneTimeGarlicKey registers a one-time symmetric garlic key derived
 // from a STBM Noise transcript hash via HKDF("AttachLayerEncryption"). The
 // OBEP uses this key to wrap the ShortTunnelBuildReply garlic; it is consumed

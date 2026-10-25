@@ -14,9 +14,9 @@ import (
 	i2pbase64 "github.com/go-i2p/common/base64"
 	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
+	i2ped25519 "github.com/go-i2p/crypto/ed25519"
 	"github.com/go-i2p/go-i2p/lib/nat"
 	"github.com/go-i2p/go-i2p/lib/util/logutil"
-	i2ped25519 "github.com/go-i2p/crypto/ed25519"
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
 	"github.com/samber/oops"
 )
@@ -28,6 +28,12 @@ const (
 	// natRetryMax caps the exponential back-off between retry attempts.
 	natRetryMax = 30 * time.Minute
 )
+
+// relayResponseCharlieUnspecified is RelayResponse status code 64, "rejected by
+// Charlie, reason unspecified", per ssu2.rst §"RelayResponse". Codes 1-63 are
+// Bob rejections and 64-127 Charlie rejections; the library exposes the Code
+// field but no named constants, so the one we emit is named here.
+const relayResponseCharlieUnspecified uint8 = 64
 
 // initNATManagers allocates and wires the PeerTestManager, RelayManager,
 // IntroducerRegistry, and HolePunchCoordinator on a freshly started transport.
@@ -123,6 +129,19 @@ func initNATManagers(t *SSU2Transport) error {
 	}
 	t.loadNATState()
 	t.startNATCleanup()
+
+	// Register the out-of-session (intro-key protected) message handler on the
+	// listener socket. Peer Test messages 5-7 and the Hole Punch arrive there
+	// rather than on any session, and until this is installed they are dropped
+	// unseen -- which is why Bob's probe, Alice's reply and Charlie's
+	// hole-punch were all one-way conversations.
+	//
+	// Registered before the managers are installed below: the handler reads them
+	// under natManagerMu at call time, so registering here (outside the lock)
+	// both avoids a natManagerMu/identityMu ordering inversion and is safe,
+	// because a message that arrives in the window simply finds no manager and is
+	// dropped as unsolicited.
+	listener.SetOutOfSessionHandler(t.handleOutOfSessionMessage)
 
 	// Now install all managers under the write lock.
 	// This prevents callbacks from starting to read managers until all are fully initialized.
@@ -230,7 +249,46 @@ func (t *SSU2Transport) buildTransportCallbacks(session *SSU2Session) *BlockCall
 		VerifyRelayIntroSignature: func(block *ssu2noise.RelayIntroBlock) error {
 			return t.verifyRelayIntroSignature(block, session)
 		},
+
+		// Per-session signature verifiers. go-noise's DataHandler verifies
+		// signatures BEFORE dispatching to the On* callbacks above and fails
+		// closed (VERIFIER_MISSING) when a signed block arrives with no
+		// verifier registered, so these are what actually make peer testing and
+		// relaying work. Each closure supplies the session peer's router hash --
+		// the block does not carry it and the transport cannot know it any other
+		// way.
+		VerifyPeerTestSignature: func(block *ssu2noise.PeerTestBlock) error {
+			return t.verifyPeerTestSignature(block, extractSenderHash(session))
+		},
+		VerifyRelayRequestSignature: func(block *ssu2noise.RelayRequestBlock) error {
+			// Alice is our session peer when she sends us a RelayRequest, so
+			// senderHash is both the signer and (per §"RelayRequest") the bhash
+			// is ours. verifyRelayRequestSignature resolves Charlie from the
+			// relay tag we issued.
+			valid, err := t.verifyRelayRequestSignature(block, extractSenderHash(session))
+			return relayVerifierResult(valid, err)
+		},
+		VerifyRelayResponseSignature: func(block *ssu2noise.RelayResponseBlock) error {
+			valid, err := t.verifyRelayResponseSignature(block, extractSenderHash(session))
+			return relayVerifierResult(valid, err)
+		},
 	}
+}
+
+// relayVerifierResult collapses the legacy (bool, error) verifier shape into
+// the error-only shape go-noise's DataHandlerCallbacks expects. A (false, nil)
+// result -- which the old API documented as "gracefully skip" -- must NOT be
+// treated as success here: an unsigned-but-required block silently passing
+// verification is exactly the forgery vector the spec's signature rules exist
+// to close, so it becomes an error.
+func relayVerifierResult(valid bool, err error) error {
+	if err != nil {
+		return err
+	}
+	if !valid {
+		return oops.Errorf("signature verification did not succeed")
+	}
+	return nil
 }
 
 // handleRouterInfoBlock processes RouterInfo block data received from a peer.
@@ -334,96 +392,229 @@ func (t *SSU2Transport) verifyRelayRequestSignature(block *ssu2noise.RelayReques
 }
 
 // verifyRelayResponseSignature verifies the Ed25519 signature on a RelayResponse
-// block using the sender's signing public key retrieved from NetDB.
-// Returns (true, nil) if signature is valid, and (false, error) on verification failure
-// or when RouterLookupFunc is unavailable (fail-closed).
+// block.
+//
+// Returns (true, nil) if the signature is valid (or genuinely absent), and
+// (false, error) on failure or when verification cannot be performed
+// (fail-closed).
+//
+// Which key verifies the block depends on the code AND on our role, per
+// ssu2.rst §"RelayResponse": "If Charlie agrees (response code 0) or rejects
+// (response code 64 or higher), Charlie signs the response"; "If Bob rejects
+// (response code 1-63), Bob signs"; and the signature always covers
+// "prologue, Bob's hash, and signed data". senderHash is the session peer the
+// block arrived on, which is Charlie when we are Bob but Bob when we are Alice
+// -- so treating senderHash as both the signer and bhash (as this function
+// previously did) only ever worked for one role, and not for the role that
+// actually consumes the response. The go-i2p delivery path (handleRelayResponseBlock
+// -> deliverRelayResponse) is Alice-side, so the previous logic was wrong on
+// the live path.
 func (t *SSU2Transport) verifyRelayResponseSignature(block *ssu2noise.RelayResponseBlock, senderHash data.Hash) (bool, error) {
-	// Atomic config snapshot
-	cfg := t.config.Load()
-	if cfg.RouterLookupFunc == nil {
-		return false, oops.Errorf("signature verification unavailable: RouterLookupFunc not configured")
+	if block == nil {
+		return false, oops.Errorf("RelayResponse: nil block")
 	}
-	ri, err := cfg.RouterLookupFunc(senderHash)
+	if senderHash == (data.Hash{}) {
+		return false, oops.Errorf("RelayResponse: unknown session peer for nonce %d", block.Nonce)
+	}
+
+	// Charlie's field layout makes the signature optional: "Not present if
+	// rejected by Bob." go-noise's dispatcher already fails closed when a
+	// signature is present but no verifier is configured, so an absent
+	// signature on a Bob rejection is legitimate and needs no check here.
+	if len(block.Signature) == 0 {
+		if block.Code == 0 || block.Code >= 64 {
+			return false, oops.Errorf("RelayResponse code %d requires Charlie's signature but none present", block.Code)
+		}
+		return true, nil
+	}
+
+	ourHash := t.getOurIdentityHash()
+	var (
+		signerHash data.Hash
+		bhash      data.Hash
+		port       uint16
+		ip         net.IP
+	)
+
+	switch t.natRoleFor(block.Nonce) {
+	case natRoleBob:
+		// We are the relay: Charlie's response arrives on his session. Charlie
+		// signs either an accept (code 0) or his own rejection (code >= 64),
+		// and both include the Charlie endpoint, so csz comes from the block.
+		bhash = ourHash
+		signerHash = senderHash // Charlie
+		port, ip = block.CharliePort, block.CharlieIP
+	case natRoleAlice:
+		// We are the relay client: the response arrives forwarded by Bob.
+		bhash = senderHash // Bob
+		if block.Code >= 1 && block.Code <= 63 {
+			// Bob's own rejection, signed by Bob with csz = 0, so the Charlie
+			// endpoint is left out of the signed data entirely.
+			signerHash = senderHash
+			port, ip = 0, nil
+		} else {
+			// Accept or Charlie rejection: Charlie signed it, and Bob forwarded
+			// the block unmodified. Charlie is not our session peer here, so
+			// his identity must come from the relay context we authenticated.
+			ch, ok := t.lookupCharlieForNonce(block.Nonce)
+			if !ok {
+				return false, oops.Errorf("RelayResponse: no authenticated Charlie context for nonce %d", block.Nonce)
+			}
+			signerHash = ch
+			port, ip = block.CharliePort, block.CharlieIP
+		}
+	default:
+		// No context for this nonce means we never asked for this relay.
+		// Anything arriving for an unknown nonce is unsolicited and must not
+		// influence anything: the intro key it is sealed with is public.
+		return false, oops.Errorf("RelayResponse: no relay context for nonce %d (unsolicited)", block.Nonce)
+	}
+
+	pubKey, err := t.signingKeyForHash(signerHash)
 	if err != nil {
-		t.logger.WithField("sender_hash", senderHash[:4]).Warn("RelayResponse: failed to lookup sender RouterInfo for signature verification")
-		return false, oops.Wrapf(err, "netdb lookup failed for sender %x", senderHash[:4])
+		t.logger.WithField("signer_hash", signerHash[:4]).Warn("RelayResponse: failed to resolve signer RouterInfo")
+		return false, oops.Wrapf(err, "netdb lookup failed for signer %x", signerHash[:4])
 	}
-	pubKey, err := extractEd25519PublicKey(ri)
-	if err != nil {
-		return false, oops.Wrapf(err, "failed to extract Ed25519 public key from sender RouterInfo")
-	}
-	bobHash := t.getOurIdentityHash()
+
 	valid, verifyErr := ssu2noise.VerifyRelayResponseSignature(
 		pubKey,
 		block.Signature,
-		bobHash,
+		bhash,
 		block.Nonce,
 		block.Timestamp,
 		block.Version,
-		block.CharliePort,
-		block.CharlieIP,
+		port,
+		ip,
 	)
 	if verifyErr != nil {
-		t.logger.WithField("sender_hash", senderHash[:4]).Warn("RelayResponse signature verification failed")
+		t.logger.WithField("signer_hash", signerHash[:4]).Warn("RelayResponse signature verification failed")
 		return false, oops.Wrapf(verifyErr, "signature verification failed")
 	}
 	if !valid {
-		t.logger.WithField("sender_hash", senderHash[:4]).Warn("RelayResponse signature invalid")
-		return false, oops.Errorf("invalid RelayResponse signature from %x", senderHash[:4])
+		t.logger.WithField("signer_hash", signerHash[:4]).Warn("RelayResponse signature invalid")
+		return false, oops.Errorf("invalid RelayResponse signature from %x", signerHash[:4])
 	}
 	return true, nil
 }
 
-// verifyPeerTestSignature verifies the Ed25519 signature on a PeerTest block
-// using the sender's signing public key retrieved from NetDB.
-// Returns nil when the signature is valid; a non-nil error indicates either a
-// verification failure (bad signature) or that verification could not be
-// performed (fail-closed). The previous (bool, error) form was redundant —
-// every invalid path also returned an error — and risked future callers
-// misreading a (false, nil) tuple as success.
+// verifyPeerTestSignature verifies the Ed25519 signature on a PeerTest block.
+//
+// Returns nil when the signature is valid; a non-nil error means either the
+// signature is invalid or verification could not be performed (fail-closed).
+// The previous (bool, error) form was redundant -- every invalid path also
+// returned an error -- and risked future callers misreading a (false, nil)
+// tuple as success.
+//
+// Per ssu2.rst §"Peer Test Block" / §"Signatures" a peer-test signature is
+// made by Alice (messages 1 and 2) or Charlie (messages 3 and 4) over
+// "prologue, Bob's hash, and signed data", where the Alice hash is "Only used
+// in the signature for messages 3 and 4; not included in message 3 or 4" and
+// the hash field itself is "only present in messages 2 and 4". So NEITHER the
+// signer NOR the bhash/ahash inputs can be taken from the wire alone: they
+// depend on which role we are playing in the transaction. senderHash is the
+// router on the other end of the session the block arrived on, which is only
+// the signer for message 1 (Alice -> us as Bob) and message 3 (Charlie -> us
+// as Bob). Deriving everything from senderHash -- as this function previously
+// did -- verifies every message against the wrong key and the wrong hashes, so
+// a legitimate peer test could never pass verification.
+//
+// The identities that are not on the wire come from t.natContexts, which is
+// populated only from data we already authenticated.
 func (t *SSU2Transport) verifyPeerTestSignature(block *ssu2noise.PeerTestBlock, senderHash data.Hash) error {
-	// Atomic config snapshot
-	cfg := t.config.Load()
-	if cfg.RouterLookupFunc == nil {
-		return oops.Errorf("signature verification unavailable: RouterLookupFunc not configured")
+	if block == nil {
+		return oops.Errorf("PeerTest: nil block")
 	}
-	// Resolve Alice's hash up-front and fail-closed for codes 3/4 before any
-	// NetDB lookup. PeerTest signed-data inclusion of Alice's hash depends on
-	// the message code:
-	// - Messages 1 (Alice→Bob) and 2 (Bob→Charlie): aliceHash MUST be nil.
-	// - Messages 3 (Charlie→Bob) and 4 (Bob→Alice): aliceHash MUST be Alice's
-	// 32-byte router hash. Per the SSU2 PeerTest block layout, message 4
-	// carries it explicitly in the optional RouterHash field; message 3
-	// does not carry it on the wire and the verifier must obtain it from
-	// external context (not currently plumbed through to this callback).
-	// We fail-closed for codes 3/4 when Alice's hash cannot be determined,
-	// rather than silently substituting senderHash (which would either reject
-	// legitimate signatures or accept signatures attributable to the sender as
-	// proof of Alice's claim —).
-	var aliceHash *data.Hash
+	// Messages 5-7 arrive out-of-session, so there is no session peer to
+	// require; their signer comes from the nonce context instead. Only the
+	// in-session codes need senderHash.
+	if senderHash == (data.Hash{}) && block.MessageCode <= ssu2noise.PeerTestResult {
+		return oops.Errorf("PeerTest: unknown session peer, cannot verify message %d", block.MessageCode)
+	}
+
+	ourHash := t.getOurIdentityHash()
+
+	// Resolve the signer, bhash and ahash for this message code given our role.
+	var (
+		signerHash data.Hash
+		bhash      data.Hash
+		ahash      *data.Hash
+	)
 	switch block.MessageCode {
-	case ssu2noise.PeerTestResponse, ssu2noise.PeerTestResult:
+	case ssu2noise.PeerTestRequest: // msg 1: Alice -> Bob. We are Bob.
+		signerHash = senderHash // Alice, our session peer
+		bhash = ourHash
+		// Messages 1 and 2 sign without an Alice hash: bhash identifies us.
+	case ssu2noise.PeerTestRelay: // msg 2: Bob -> Charlie. We are Charlie.
 		if block.RouterHash == nil {
-			return oops.Errorf("PeerTest message code %d requires Alice's hash but block.RouterHash is nil", block.MessageCode)
+			return oops.Errorf("PeerTest msg 2 to us as Charlie carries no Alice hash")
 		}
-		hash := *block.RouterHash
-		aliceHash = &hash
+		signerHash = *block.RouterHash // Alice
+		bhash = senderHash             // Bob, our session peer
+		ah := *block.RouterHash
+		ahash = &ah
+	case ssu2noise.PeerTestResponse: // msg 3: Charlie -> Bob. We are Bob.
+		signerHash = senderHash // Charlie, our session peer
+		bhash = ourHash
+		// Alice's hash is covered by the signature but is not present on the
+		// wire in message 3, so it must come from what we learned at message 1.
+		ah, ok := t.lookupAliceForNonce(block.Nonce)
+		if !ok {
+			return oops.Errorf("PeerTest msg 3: no authenticated Alice context for nonce %d", block.Nonce)
+		}
+		ahash = &ah
+	case ssu2noise.PeerTestResult: // msg 4: Bob -> Alice. We are Alice.
+		if block.RouterHash == nil {
+			return oops.Errorf("PeerTest msg 4 to us as Alice carries no Charlie hash")
+		}
+		signerHash = *block.RouterHash // Charlie
+		bhash = senderHash             // Bob, our session peer
+		ah := ourHash
+		ahash = &ah
+	default:
+		// Messages 5-7 are out-of-session and their signature is optional
+		// ("Signature is optional" per §"Peer Test Process"). When one IS
+		// present we still have to attribute it: 5 and 7 are signed by Charlie
+		// and 6 by Alice, neither of whom is the UDP source. If the signer
+		// cannot be resolved from authenticated context, reject rather than
+		// skip -- a present-but-unverifiable signature must never be treated
+		// as valid.
+		if len(block.Signature) == 0 {
+			return nil
+		}
+		signer, ok := t.outOfSessionPeerTestSigner(block)
+		if !ok {
+			return oops.Errorf("PeerTest msg %d: cannot resolve signer for nonce %d", block.MessageCode, block.Nonce)
+		}
+		// §"Peer Test Process": "Messages 5 and 7 may contain the same signed
+		// data as sent in messages 3 and 4" and "Message 6 may contain the same
+		// signed data as sent in messages 1 and 2". The signed-data recipe in
+		// §"Signatures" uses bhash = Bob's hash always, and ahash only for
+		// messages 3 and 4 -- so 5 and 7 (Charlie's agreement, mirroring 3/4)
+		// take ahash = Alice's hash (us), while 6 (Alice's request, mirroring
+		// 1/2) takes NO ahash at all.
+		b, ok := t.lookupBobForNonce(block.Nonce)
+		if !ok {
+			return oops.Errorf("PeerTest msg %d: no authenticated Bob context for nonce %d", block.MessageCode, block.Nonce)
+		}
+		signerHash = signer
+		bhash = b
+		if block.MessageCode != ssu2noise.PeerTestReply {
+			ah := ourHash // we are Alice
+			ahash = &ah
+		}
 	}
-	ri, err := cfg.RouterLookupFunc(senderHash)
+
+	pubKey, err := t.signingKeyForHash(signerHash)
 	if err != nil {
-		t.logger.WithField("sender_hash", senderHash[:4]).Warn("PeerTest: failed to lookup sender RouterInfo for signature verification")
-		return oops.Wrapf(err, "netdb lookup failed for sender %x", senderHash[:4])
+		t.logger.WithField("signer_hash", signerHash[:4]).Warn("PeerTest: failed to resolve signer RouterInfo")
+		return oops.Wrapf(err, "netdb lookup failed for signer %x", signerHash[:4])
 	}
-	pubKey, err := extractEd25519PublicKey(ri)
-	if err != nil {
-		return oops.Wrapf(err, "failed to extract Ed25519 public key from sender RouterInfo")
-	}
-	bobHash := t.getOurIdentityHash()
+
 	valid, verifyErr := ssu2noise.VerifyPeerTestSignature(
 		pubKey,
 		block.Signature,
-		bobHash,
-		aliceHash,
+		bhash,
+		ahash,
 		block.Version,
 		block.Nonce,
 		block.Timestamp,
@@ -431,14 +622,46 @@ func (t *SSU2Transport) verifyPeerTestSignature(block *ssu2noise.PeerTestBlock, 
 		block.AliceIP,
 	)
 	if verifyErr != nil {
-		t.logger.WithField("sender_hash", senderHash[:4]).Warn("PeerTest signature verification failed")
+		t.logger.WithField("signer_hash", signerHash[:4]).Warn("PeerTest signature verification failed")
 		return oops.Wrapf(verifyErr, "signature verification failed")
 	}
 	if !valid {
-		t.logger.WithField("sender_hash", senderHash[:4]).Warn("PeerTest signature invalid")
-		return oops.Errorf("invalid PeerTest signature from %x", senderHash[:4])
+		t.logger.WithField("signer_hash", signerHash[:4]).Warn("PeerTest signature invalid")
+		return oops.Errorf("invalid PeerTest signature from %x", signerHash[:4])
 	}
 	return nil
+}
+
+// outOfSessionPeerTestSigner resolves the signing router for an out-of-session
+// peer-test message (5, 6 or 7). Charlie signs 5 and 7, Alice signs 6.
+//
+// The UDP source address is useless for this: Charlie sends 5/7 from his own
+// NAT endpoint and the message is not tied to a session. The identity therefore
+// has to come from the in-session half of the same transaction, which we
+// verified when it arrived. A nonce we have no context for is unsolicited.
+func (t *SSU2Transport) outOfSessionPeerTestSigner(block *ssu2noise.PeerTestBlock) (data.Hash, bool) {
+	switch block.MessageCode {
+	case ssu2noise.PeerTestProbe, ssu2noise.PeerTestConfirmation:
+		return t.lookupCharlieForNonce(block.Nonce)
+	case ssu2noise.PeerTestReply:
+		return t.lookupAliceForNonce(block.Nonce)
+	default:
+		return data.Hash{}, false
+	}
+}
+
+// signingKeyForHash resolves a router's Ed25519 signing public key from the
+// netdb. Fails closed when no lookup is configured.
+func (t *SSU2Transport) signingKeyForHash(hash data.Hash) (i2ped25519.Ed25519PublicKey, error) {
+	cfg := t.config.Load()
+	if cfg == nil || cfg.RouterLookupFunc == nil {
+		return nil, oops.Errorf("signature verification unavailable: RouterLookupFunc not configured")
+	}
+	ri, err := cfg.RouterLookupFunc(hash)
+	if err != nil {
+		return nil, oops.Wrapf(err, "netdb lookup failed for %x", hash[:4])
+	}
+	return extractEd25519PublicKey(ri)
 }
 
 // extractEd25519PublicKey extracts the Ed25519 signing public key from a RouterInfo.
@@ -503,14 +726,119 @@ func (t *SSU2Transport) handlePeerTestBlock(block *ssu2noise.SSU2Block, session 
 		t.logger.WithField("error", err).Warn("failed to decode PeerTest block")
 		return err
 	}
+	// Route strictly by message code and the role that code implies for US.
+	// ssu2.rst §"Peer Test Process" fixes the direction of every message, so a
+	// code uniquely determines which party we must be: 1 arrives only at Bob, 2
+	// only at Charlie, 3 only at Bob (Charlie's response) and 4 only at Alice
+	// (Bob's result). The previous "default -> Alice" catch-all sent message 3
+	// to the initiator handler, which recorded Charlie's response as if it were
+	// our own external-address observation and completed the wrong test.
 	switch ptBlock.MessageCode {
-	case ssu2noise.PeerTestRequest:
+	case ssu2noise.PeerTestRequest: // 1: Alice -> Bob
 		return t.handlePeerTestAsBob(ptBlock, session, mgr)
-	case ssu2noise.PeerTestRelay:
+	case ssu2noise.PeerTestRelay: // 2: Bob -> Charlie
 		return t.handlePeerTestAsCharlie(ptBlock, session, mgr)
+	case ssu2noise.PeerTestResponse: // 3: Charlie -> Bob
+		return t.handlePeerTestResponseAsBob(ptBlock, session, mgr)
+	case ssu2noise.PeerTestResult: // 4: Bob -> Alice
+		return t.handlePeerTestResultAsAlice(ptBlock, session, mgr)
 	default:
-		return t.handlePeerTestAsAlice(ptBlock, mgr)
+		t.logger.WithField("code", uint8(ptBlock.MessageCode)).
+			Debug("PeerTest: unexpected message code on an in-session block")
+		return nil
 	}
+}
+
+// handlePeerTestResponseAsBob handles PeerTest message 3 (Charlie's response,
+// arriving on our session with Charlie while we are relaying for Alice).
+//
+// Per ssu2.rst §"Peer Test Process" Bob must forward the result to Alice as
+// message 4, and §"Peer Test Block" Notes requires "Bob must send Charlie's RI
+// to Alice prior to sending message 4, if accepted (reason code 0)". The
+// signature on message 3 was already verified before dispatch with Alice's hash
+// taken from the context we recorded at message 1.
+func (t *SSU2Transport) handlePeerTestResponseAsBob(ptBlock *ssu2noise.PeerTestBlock, session *SSU2Session, mgr *ssu2noise.PeerTestManager) error {
+	charlieHash := extractSenderHash(session)
+	if charlieHash == (data.Hash{}) {
+		t.logger.Debug("PeerTest msg 3: cannot identify Charlie session, ignoring")
+		return nil
+	}
+	aliceHash, ok := t.lookupAliceForNonce(ptBlock.Nonce)
+	if !ok {
+		// The verifier above already required this context, so reaching here
+		// means the context expired between verification and dispatch.
+		t.logger.WithField("nonce", ptBlock.Nonce).Debug("PeerTest msg 3: Alice context expired, dropping")
+		return nil
+	}
+	// Record Charlie for the out-of-session messages: when Alice later receives
+	// nothing from us she still cannot attribute message 5/7, but WE can use
+	// this when relaying, and it is what the nonce context exists to hold.
+	t.rememberCharlieForNonce(ptBlock.Nonce, charlieHash)
+
+	aliceSession := t.findSessionByHash(aliceHash)
+	if aliceSession == nil {
+		t.logger.WithField("alice_hash", logutil.HashPrefixPlain(aliceHash)).
+			Debug("PeerTest msg 3: no session to Alice, cannot forward result")
+		return nil
+	}
+
+	// §"Peer Test Process" Notes: "Bob must send Charlie's RI to Alice prior to
+	// sending message 4, if accepted (reason code 0)." Alice needs Charlie's
+	// full RouterInfo to open the session she will build with the token from the
+	// peer test, so this is only required on the accept path.
+	if ptBlock.Code == 0 {
+		if err := t.sendRouterInfoToPeer(aliceSession, charlieHash); err != nil {
+			t.logger.WithField("error", err).Debug("PeerTest Bob: could not forward Charlie's RouterInfo to Alice")
+		}
+	}
+
+	// §"Peer Test Block": message 4 carries Charlie's hash in the hash field,
+	// which is how Alice knows whose agreement she is being given.
+	charlie := charlieHash
+	resultBlock := &ssu2noise.PeerTestBlock{
+		MessageCode: ssu2noise.PeerTestResult,
+		Code:        ptBlock.Code,
+		RouterHash:  &charlie,
+		Nonce:       ptBlock.Nonce,
+		Version:     ptBlock.Version,
+		Timestamp:   ptBlock.Timestamp,
+		AlicePort:   ptBlock.AlicePort,
+		AliceIP:     ptBlock.AliceIP,
+		Signature:   ptBlock.Signature,
+	}
+	encoded, err := ssu2noise.EncodePeerTestBlock(resultBlock)
+	if err != nil {
+		return oops.Wrapf(err, "PeerTest msg 3: encode result block")
+	}
+	if err := aliceSession.WriteBlocks([]*ssu2noise.SSU2Block{encoded}); err != nil {
+		return oops.Wrapf(err, "PeerTest msg 3: forward result to Alice")
+	}
+	if mgr != nil {
+		if err := mgr.UpdateState(ptBlock.Nonce, ssu2noise.TestProbed); err != nil {
+			t.logger.WithField("error", err).Debug("PeerTest msg 3: relay test state update failed")
+		}
+	}
+	return nil
+}
+
+// handlePeerTestResultAsAlice handles PeerTest message 4 (Bob's forwarded
+// result). The signature was already verified against Charlie's key, resolved
+// from block.RouterHash, so the Charlie hash the block names is authenticated.
+//
+// Recording it here is what makes the out-of-session half usable: messages 5 and
+// 7 arrive with no session behind them, and their (optional) signature can only
+// be attributed to Charlie if we learned his identity from this in-session
+// message.
+func (t *SSU2Transport) handlePeerTestResultAsAlice(ptBlock *ssu2noise.PeerTestBlock, session *SSU2Session, mgr *ssu2noise.PeerTestManager) error {
+	if ptBlock.RouterHash != nil {
+		t.rememberCharlieForNonce(ptBlock.Nonce, *ptBlock.RouterHash)
+	}
+	bobHash := extractSenderHash(session)
+	if bobHash != (data.Hash{}) {
+		t.rememberBobForNonce(ptBlock.Nonce, bobHash)
+	}
+	t.setNatRole(ptBlock.Nonce, natRoleAlice)
+	return t.handlePeerTestAsAlice(ptBlock, mgr)
 }
 
 // handlePeerTestAsAlice processes a PeerTest response/probe/result directed at
@@ -713,9 +1041,17 @@ func (t *SSU2Transport) handlePeerTestAsBob(ptBlock *ssu2noise.PeerTestBlock, se
 	// Checking again after verification is redundant and confuses error reporting.
 	// The first check at line ~529 is sufficient.
 
-	charlieAddr := t.resolveCharlieAddr(ptBlock)
+	// The signature above validated that Alice (our session peer) signed this
+	// request, so her identity is now authenticated for this nonce. We record it
+	// because message 3 from Charlie must be verified with Alice's hash in the
+	// signed data, and §"Peer Test Block" states that hash is not carried in
+	// message 3 -- it has to come from what we learned here.
+	t.setNatRole(ptBlock.Nonce, natRoleBob)
+	t.rememberAliceForNonce(ptBlock.Nonce, senderHash)
+
+	charlieHash, charlieAddr := t.selectCharlieForPeerTest(aliceAddr)
 	if charlieAddr == nil {
-		t.logger.Debug("PeerTest Bob: cannot resolve Charlie address, ignoring")
+		t.logger.Debug("PeerTest Bob: no Charlie available for this address family, ignoring")
 		return nil
 	}
 	// mgr is already locked and safe to use
@@ -725,33 +1061,105 @@ func (t *SSU2Transport) handlePeerTestAsBob(ptBlock *ssu2noise.PeerTestBlock, se
 			return nil
 		}
 	}
-	return t.forwardPeerTestToCharlie(ptBlock, charlieAddr)
+	t.rememberCharlieForNonce(ptBlock.Nonce, charlieHash)
+
+	// §"Peer Test Process" Notes: "Bob must send Alice's RI to Charlie prior to
+	// sending message 2." Charlie needs Alice's RouterInfo to reach her with the
+	// out-of-session probe, and message 2 gives him only her hash.
+	charlieSession := t.findSessionByHash(charlieHash)
+	if err := t.sendRouterInfoToPeer(charlieSession, senderHash); err != nil {
+		t.logger.WithField("error", err).Debug("PeerTest Bob: could not forward Alice's RouterInfo to Charlie")
+	}
+
+	return t.forwardPeerTestToCharlie(ptBlock, charlieAddr, senderHash, charlieHash)
 }
 
-// resolveCharlieAddr looks up Charlie's SSU2 address from the RouterHash in
-// the PeerTest block. Returns nil if the hash is absent or the address cannot
-// be resolved.
-func (t *SSU2Transport) resolveCharlieAddr(ptBlock *ssu2noise.PeerTestBlock) *net.UDPAddr {
-	if ptBlock.RouterHash == nil {
-		return nil
+// selectCharlieForPeerTest picks the responder Bob relays a peer test to.
+//
+// ssu2.rst §"Peer Test Block" Notes: "When Bob receives a request from Alice via
+// IPv4, Bob must select a Charlie that advertises an IPv4 address. When Bob
+// receives a request from Alice via IPv6, Bob must select a Charlie that
+// advertises an IPv6 address." So the choice is ours, driven by the family of
+// the address Alice asked us to test -- it is NOT read from the block: the same
+// section states the hash field is "only present in messages 2 and 4", so
+// message 1 carries no Charlie (or Alice) hash at all. The previous
+// implementation looked up ptBlock.RouterHash here, which is always nil on a
+// conformant message 1, so Bob silently dropped every peer-test request and the
+// relay never started.
+//
+// Candidates come from the introducer registry the router maintains from
+// connected peers. Bob needs a live session with Charlie to send message 2
+// in-session, so a registered introducer we are not connected to is unusable
+// and is skipped.
+func (t *SSU2Transport) selectCharlieForPeerTest(aliceAddr *net.UDPAddr) (data.Hash, *net.UDPAddr) {
+	t.natManagerMu.RLock()
+	registry := t.introducerRegistry
+	t.natManagerMu.RUnlock()
+	if registry == nil {
+		return data.Hash{}, nil
 	}
-	session := t.findSessionByHash(*ptBlock.RouterHash)
+
+	wantV6 := aliceAddr != nil && aliceAddr.IP != nil && aliceAddr.IP.To4() == nil
+	for _, intro := range registry.GetIntroducers() {
+		if intro == nil || intro.Addr == nil {
+			continue
+		}
+		isV6 := intro.Addr.IP != nil && intro.Addr.IP.To4() == nil
+		if isV6 != wantV6 {
+			continue
+		}
+		hash, err := hashFromIntroBytes(intro.RouterHash)
+		if err != nil {
+			continue
+		}
+		// Message 2 must travel in-session (§"Peer Test Process": "Messages 1-4
+		// must be contained in a Data message in an existing session"), so we
+		// can only use a Charlie we actually have a session with.
+		session := t.findSessionByHash(hash)
+		if session == nil {
+			continue
+		}
+		if addr := session.RemoteUDPAddr(); addr != nil {
+			return hash, addr
+		}
+	}
+	return data.Hash{}, nil
+}
+
+// hashFromIntroBytes converts a 32-byte router hash from a registry entry.
+func hashFromIntroBytes(b []byte) (data.Hash, error) {
+	var h data.Hash
+	if len(b) != len(h) {
+		return h, oops.Errorf("router hash has unexpected size %d (want %d)", len(b), len(h))
+	}
+	copy(h[:], b)
+	return h, nil
+}
+
+// forwardPeerTestToCharlie builds a PeerTestRelay (message 2) block and sends it
+// to Charlie via an existing session.
+//
+// aliceHash is the router hash Bob learned from Alice's session. Per ssu2.rst
+// §"Peer Test Block", the 32-byte hash field is "Alice's or Charlie's router
+// hash, only present in messages 2 and 4", so message 2 must carry Alice's hash
+// and EncodePeerTestBlock fails closed without it. Passing it through is also
+// what lets Charlie resolve Alice's introduction key for the out-of-session
+// probe (message 5) without a separate lookup.
+func (t *SSU2Transport) forwardPeerTestToCharlie(ptBlock *ssu2noise.PeerTestBlock, charlieAddr *net.UDPAddr, aliceHash, charlieHash data.Hash) error {
+	// Prefer the hash- keyed lookup: selectCharlieForPeerTest already proved a
+	// session exists for this Charlie, and an address lookup can miss it when the
+	// session was re-keyed onto a different port.
+	session := t.findSessionByHash(charlieHash)
 	if session == nil {
-		return nil
+		session = t.findSessionByAddr(charlieAddr)
 	}
-	return session.RemoteUDPAddr()
-}
-
-// forwardPeerTestToCharlie builds a PeerTestRelay block and sends it to
-// Charlie via an existing session.
-func (t *SSU2Transport) forwardPeerTestToCharlie(ptBlock *ssu2noise.PeerTestBlock, charlieAddr *net.UDPAddr) error {
-	session := t.findSessionByAddr(charlieAddr)
 	if session == nil {
 		t.logger.Debug("PeerTest Bob: no session to Charlie for relay")
 		return nil
 	}
 	relayBlock := &ssu2noise.PeerTestBlock{
 		MessageCode: ssu2noise.PeerTestRelay,
+		RouterHash:  &aliceHash,
 		Nonce:       ptBlock.Nonce,
 		Version:     ptBlock.Version,
 		Timestamp:   ptBlock.Timestamp,
@@ -767,10 +1175,14 @@ func (t *SSU2Transport) forwardPeerTestToCharlie(ptBlock *ssu2noise.PeerTestBloc
 }
 
 // handlePeerTestAsCharlie processes a PeerTestRelay where we act as Charlie
-// (responder). We record the test and send a direct probe to Alice.
-// relaySession is the session from which the PeerTestRelay was received;
-// it is preferred for sending the probe to maintain protocol-correlated paths.
-func (t *SSU2Transport) handlePeerTestAsCharlie(ptBlock *ssu2noise.PeerTestBlock, relaySession *SSU2Session, mgr *ssu2noise.PeerTestManager) error {
+// (responder). We record the test and send the direct probe to Alice.
+//
+// The probe is peer-test message 5, which ssu2.rst §"Peer Test Process" places
+// out-of-session ("Messages 5-7 are out-of-session using Peer Test blocks in a
+// Peer Test message"), sealed under Alice's intro key. It therefore travels on
+// the listener socket, not on the Bob session the relay arrived over, so no
+// session is needed here.
+func (t *SSU2Transport) handlePeerTestAsCharlie(ptBlock *ssu2noise.PeerTestBlock, session *SSU2Session, mgr *ssu2noise.PeerTestManager) error {
 	var aliceAddr *net.UDPAddr
 	if len(ptBlock.AliceIP) > 0 {
 		aliceAddr = &net.UDPAddr{
@@ -782,42 +1194,39 @@ func (t *SSU2Transport) handlePeerTestAsCharlie(ptBlock *ssu2noise.PeerTestBlock
 		t.logger.Debug("PeerTest Charlie: missing Alice address, ignoring")
 		return nil
 	}
+	// ssu2.rst §"Peer Test Block": the hash field is "Alice's or Charlie's router
+	// hash, only present in messages 2 and 4", and this is message 2, so the
+	// block identifies Alice. Her intro key (needed to seal the out-of-session
+	// probe) is resolved from it. The block went through signature verification
+	// before dispatch, and that verifier required this hash to be present, so it
+	// is authenticated context rather than an unverified claim.
+	if ptBlock.RouterHash == nil {
+		t.logger.Debug("PeerTest Charlie: message 2 carried no Alice hash, ignoring")
+		return nil
+	}
+	aliceHash := *ptBlock.RouterHash
+
+	bobHash := extractSenderHash(session)
+	bobAddr := session.RemoteUDPAddr()
+
+	// Record the transaction identities before emitting anything. Message 6
+	// arrives out-of-session from Alice with no session to attribute it to, so
+	// the only way to know who signed it (Alice) and who bhash refers to (Bob)
+	// is what we learned here, from the authenticated message 2.
+	t.setNatRole(ptBlock.Nonce, natRoleCharlie)
+	t.rememberAliceForNonce(ptBlock.Nonce, aliceHash)
+	if bobHash != (data.Hash{}) {
+		t.rememberBobForNonce(ptBlock.Nonce, bobHash)
+	}
+
 	// mgr is already locked and safe to use
-	if mgr != nil {
-		if err := mgr.CreateResponderTest(ptBlock.Nonce, aliceAddr, nil); err != nil {
+	if mgr != nil && bobAddr != nil {
+		if err := mgr.CreateResponderTest(ptBlock.Nonce, aliceAddr, bobAddr); err != nil {
 			t.logger.WithField("error", err).Debug("PeerTest Charlie: failed to create responder test")
 			return nil
 		}
 	}
-	return t.sendProbeToAlice(ptBlock, aliceAddr, relaySession)
-}
-
-// sendProbeToAlice sends a PeerTestProbe directly to Alice so she can observe
-// connectivity from a third party (Charlie). Uses an existing session's
-// underlying connection to send to Alice's address.
-// Prefers to send from relaySession (if provided) to maintain protocol-correlated
-// probe traffic rather than from an arbitrary session.
-func (t *SSU2Transport) sendProbeToAlice(ptBlock *ssu2noise.PeerTestBlock, aliceAddr *net.UDPAddr, relaySession *SSU2Session) error {
-	probeBlock := &ssu2noise.PeerTestBlock{
-		MessageCode: ssu2noise.PeerTestProbe,
-		Nonce:       ptBlock.Nonce,
-		Version:     ptBlock.Version,
-		Timestamp:   uint32(time.Now().Unix()),
-	}
-	encoded, err := ssu2noise.EncodePeerTestBlock(probeBlock)
-	if err != nil {
-		return oops.Wrapf(err, "PeerTest Charlie: encode probe block")
-	}
-	// Require relaySession to maintain protocol-correlated probe traffic (6.2).
-	// Sending a probe from an arbitrary peer's session skews external address
-	// observations and confuses NAT behavior detection. Fail-closed if relaySession
-	// is unavailable to prevent misattribution of traffic source.
-	conn := relaySession.Conn()
-	if relaySession == nil || conn == nil {
-		t.logger.Debug("PeerTest Charlie: relay session unavailable, cannot send probe (probe requires protocol-correlated path)")
-		return nil
-	}
-	return conn.SendToAddress(encoded, aliceAddr)
+	return t.sendPeerTestProbeToAlice(ptBlock, aliceAddr, aliceHash)
 }
 
 // anyActiveSession returns the first active SSU2Session, or nil if none exist.
@@ -1115,8 +1524,34 @@ func (t *SSU2Transport) initiateHolePunch(intro *ssu2noise.RelayIntroBlock, bobS
 		return err
 	}
 
-	t.sendHolePunchToAlice(intro, aliceAddr, bobSession)
-	if err := t.sendRelayResponseToBob(bobSession, intro); err != nil {
+	// Alice's router hash identifies whose intro key seals the Hole Punch. The
+	// RelayIntro block carries it (§"RelayIntro": "Alice's router hash") and its
+	// signature was verified above, so it is trustworthy here.
+	aliceHash := data.Hash{}
+	if len(intro.AliceRouterHash) == 32 {
+		copy(aliceHash[:], intro.AliceRouterHash)
+	}
+
+	// The Hole Punch message carries the Relay Response block (§"Hole Punch
+	// (Type 11)" payload list), and it must be the identical block Bob forwards
+	// to Alice in message 4 -- i2pd reuses the exact bytes. Build it once here
+	// and share it between the two emissions so Alice can verify a signature she
+	// actually receives.
+	resp, respErr := t.buildRelayResponse(bobSession, intro)
+	if respErr != nil {
+		t.logger.WithField("error", respErr).Warn("hole-punch: could not build RelayResponse")
+	}
+
+	// The hole-punch datagram itself is best-effort: if Alice's intro key cannot
+	// be resolved we still owe Bob a RelayResponse (or a rejection), and Bob
+	// forwards it to Alice in-session.
+	if respErr == nil {
+		if err := t.sendHolePunchToAlice(intro, aliceAddr, aliceHash, resp); err != nil {
+			t.logger.WithField("error", err).Debug("hole-punch: send to Alice failed")
+		}
+	}
+
+	if err := t.sendRelayResponseToBob(bobSession, resp, respErr); err != nil {
 		t.logger.WithField("error", err).Warn("failed to send RelayResponse to Bob")
 		return err
 	}
@@ -1191,56 +1626,53 @@ func (t *SSU2Transport) verifyRelayIntroSignature(intro *ssu2noise.RelayIntroBlo
 	return nil
 }
 
-// sendHolePunchToAlice sends a best-effort HolePunch UDP datagram to Alice.
-// Uses the same wire format as RelayIntro (block type 9; the receiver ignores
-// the type byte for UDP hole-punch purposes). Non-fatal on failure.
-// Prefers to send from bobSession if provided, to maintain protocol-correlated
-// hole-punch traffic rather than from an arbitrary session.
-func (t *SSU2Transport) sendHolePunchToAlice(intro *ssu2noise.RelayIntroBlock, aliceAddr *net.UDPAddr, bobSession *SSU2Session) {
-	// Require bobSession to maintain protocol-correlated hole-punch traffic (6.2).
-	// Using an arbitrary peer's session for hole-punch confuses NAT path tracking.
-	// Fail-closed if Bob's session is unavailable.
-	if bobSession == nil || bobSession.conn == nil {
-		t.logger.Debug("hole-punch: Bob session unavailable, cannot send hole-punch (requires protocol-correlated path)")
-		return
-	}
-	encoded, err := ssu2noise.EncodeRelayIntro(intro)
-	if err != nil {
-		t.logger.WithField("error", err).Debug("hole-punch: encode block failed")
-		return
-	}
-	if err := bobSession.conn.SendToAddress(encoded, aliceAddr); err != nil {
-		t.logger.WithField("error", err).Debug("hole-punch: send to Alice failed")
-	}
-}
-
 // sendRelayResponseToBob signs and sends a RelayResponse (code=0) to Bob so
 // that Bob can forward it to Alice. Alice uses Charlie's IP/Port and token to
 // send the SSU2 SessionRequest directly to us.
-func (t *SSU2Transport) sendRelayResponseToBob(bobSession *SSU2Session, intro *ssu2noise.RelayIntroBlock) error {
-	// BUG FIX HIGH RD-2: Use confirmed external address, not local bind address.
-	// localIPPort() returns the listener bind address (often 0.0.0.0 or private),
-	// which breaks hole-punching when Charlie advertises an unreachable address.
-	// Use the external address confirmed by PeerTest observations when available.
+func (t *SSU2Transport) sendRelayResponseToBob(bobSession *SSU2Session, resp *ssu2noise.RelayResponseBlock, buildErr error) error {
+	if buildErr != nil {
+		// We cannot produce an accepted RelayResponse, so tell Bob we are
+		// rejecting rather than staying silent: per ssu2.rst §"Relay Process",
+		// a RelayResponse with a non-zero code is how Charlie declines, and
+		// without it Alice waits on a relay that will never come.
+		reject := &ssu2noise.RelayResponseBlock{
+			Code:  relayResponseCharlieUnspecified,
+			Nonce: respNonceOrZero(resp),
+		}
+		return t.sendEncodedRelayResponse(bobSession, reject)
+	}
+	return t.sendEncodedRelayResponse(bobSession, resp)
+}
+
+func respNonceOrZero(resp *ssu2noise.RelayResponseBlock) uint32 {
+	if resp == nil {
+		return 0
+	}
+	return resp.Nonce
+}
+
+// buildRelayResponse constructs the signed accepted RelayResponse for a relay
+// request from Alice that we (as Charlie) are honouring.
+//
+// BUG FIX HIGH RD-2: uses the confirmed external address, not the local bind
+// address. localIPPort() returns the listener bind address (often 0.0.0.0 or
+// private), which breaks hole-punching when Charlie advertises an unreachable
+// address.
+func (t *SSU2Transport) buildRelayResponse(bobSession *SSU2Session, intro *ssu2noise.RelayIntroBlock) (*ssu2noise.RelayResponseBlock, error) {
 	charlieIP, charliePort, err := t.externalAddressForRelay()
 	if err != nil {
-		return oops.Wrapf(err, "hole-punch: external address")
+		return nil, oops.Wrapf(err, "hole-punch: external address")
 	}
 
 	signingKey, token, err := t.prepareRelayResponseCredentials()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	bobHash := extractBobRouterHash(bobSession)
 	timestamp := uint32(time.Now().Unix())
 
-	resp, err := t.buildSignedRelayResponse(signingKey, bobHash, intro, timestamp, charliePort, charlieIP, token)
-	if err != nil {
-		return err
-	}
-
-	return t.sendEncodedRelayResponse(bobSession, resp)
+	return t.buildSignedRelayResponse(signingKey, bobHash, intro, timestamp, charliePort, charlieIP, token)
 }
 
 // prepareRelayResponseCredentials retrieves the signing key and generates a token.

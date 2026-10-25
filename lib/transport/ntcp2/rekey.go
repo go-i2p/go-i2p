@@ -1,48 +1,64 @@
 package ntcp2
 
 import (
-	"sync"
 	"sync/atomic"
 )
 
-// RekeyThreshold is the number of messages (sent + received) after which
-// a session should be rekeyed for forward secrecy. Per the NTCP2 specification,
-// rekeying should occur periodically. 65535 messages is a conservative threshold
-// (just under 2^16) that balances forward secrecy with performance.
+// RekeyThreshold is the number of messages (sent + received) after which a
+// session is torn down and re-established with a fresh Noise handshake.
+//
+// NTCP2 defines NO in-band, mid-session symmetric rekey. The spec's "rekey"
+// refers to rotating the router's static key / IV (a RouterInfo-level change
+// at startup), not renegotiating the keys of a live data-phase session. See
+// ntcp2.rst "Public Key and IV Rotation".
+//
+// The go-noise Conn.Rekey() helper only rotates the *local* cipher and does
+// not reset the nonce counters or signal the peer, so calling it mid-session
+// desynchronises the two peers and breaks AEAD. Its own documentation says a
+// connection "near its nonce limit should be replaced with a new one".
+//
+// The compliant way to bound key/nonce lifetime is therefore to terminate the
+// session once it has carried RekeyThreshold messages; the transport
+// transparently re-dials (NTCP2Transport.GetSession re-establishes on demand).
+// 65535 messages is a conservative threshold (just under 2^16) that balances
+// forward secrecy against connection churn.
+//
+// The go-noise library exposes the authoritative signal for the same
+// conclusion — Conn.NonceExhaustionImminent(), documented as "the right
+// response is to open a new connection rather than keep using this one" — at
+// MaxNonce-1000. This message-count bound is far stricter than that, so it
+// always fires first and the nonce limit is never approached.
 const RekeyThreshold uint64 = 65535
 
-// Rekeyer is an interface for connections that support cryptographic rekeying.
-// The go-noise library's NTCP2Conn and NoiseConn both implement this interface
-// (since go-noise v0.1.4), so rekeying is fully functional for NTCP2 sessions.
+// rekeyState tracks per-session message counts and whether a threshold-based
+// replacement has already been triggered. It replaces the previous in-band
+// rekeying mechanism (the Rekeyer interface and attemptRekey), which was not
+// spec-compliant for NTCP2.
 //
-// Implementations must be safe for concurrent use.
-type Rekeyer interface {
-	// Rekey replaces the session's encryption key using the Noise protocol's
-	// rekeying mechanism (encrypt 32 zero bytes with nonce 2^64-1, use first
-	// 32 bytes as new key). Both send and receive cipher states should be rekeyed.
-	Rekey() error
-}
-
-// rekeyState tracks message counts and rekeying state for an NTCP2 session.
+// All counters are updated with atomics so the concurrent send and receive
+// workers can record traffic without locking.
 type rekeyState struct {
-	// messagesSent is the total number of messages sent since last rekey
+	// messagesSent is the number of messages sent over this session.
 	messagesSent uint64 // atomic
-	// messagesReceived is the total number of messages received since last rekey
+	// messagesReceived is the number of messages received over this session.
 	messagesReceived uint64 // atomic
-	// rekeyCount is the total number of rekeys performed on this session
-	rekeyCount uint64 // atomic
-	// rekeyMu serializes rekey attempts so that concurrent send/receive workers
-	// cannot trigger two overlapping Rekey() calls on the Noise connection.
-	rekeyMu sync.Mutex
+	// replacementCount is the number of times the threshold triggered a
+	// session replacement. Within a single session this is at most 1, but it
+	// is tracked so stats callers can see that a replacement was requested.
+	replacementCount uint64 // atomic
+	// replacementTriggered is a 0/1 flag set via CAS so that, even if both
+	// workers cross the threshold simultaneously, only one replacement (and
+	// therefore one close) is scheduled.
+	replacementTriggered uint64 // atomic
 }
 
-// newRekeyState creates a new rekeying state tracker.
+// newRekeyState creates a new message-count tracker.
 func newRekeyState() *rekeyState {
 	return &rekeyState{}
 }
 
 // recordSent increments the sent message counter and returns the new total
-// messages (sent + received) since last rekey.
+// messages (sent + received) for the session.
 func (rs *rekeyState) recordSent() uint64 {
 	sent := atomic.AddUint64(&rs.messagesSent, 1)
 	received := atomic.LoadUint64(&rs.messagesReceived)
@@ -50,66 +66,38 @@ func (rs *rekeyState) recordSent() uint64 {
 }
 
 // recordReceived increments the received message counter and returns the new
-// total messages (sent + received) since last rekey.
+// total messages (sent + received) for the session.
 func (rs *rekeyState) recordReceived() uint64 {
 	received := atomic.AddUint64(&rs.messagesReceived, 1)
 	sent := atomic.LoadUint64(&rs.messagesSent)
 	return sent + received
 }
 
-// resetCounters resets the message counters after a successful rekey.
-func (rs *rekeyState) resetCounters() {
-	atomic.StoreUint64(&rs.messagesSent, 0)
-	atomic.StoreUint64(&rs.messagesReceived, 0)
-	atomic.AddUint64(&rs.rekeyCount, 1)
-}
-
-// totalMessages returns the total messages (sent + received) since last rekey.
+// totalMessages returns the total messages (sent + received) for the session.
 func (rs *rekeyState) totalMessages() uint64 {
 	return atomic.LoadUint64(&rs.messagesSent) + atomic.LoadUint64(&rs.messagesReceived)
 }
 
-// getRekeyCount returns the total number of rekeys performed.
-func (rs *rekeyState) getRekeyCount() uint64 {
-	return atomic.LoadUint64(&rs.rekeyCount)
+// getReplacementCount returns the number of threshold-triggered replacements.
+func (rs *rekeyState) getReplacementCount() uint64 {
+	return atomic.LoadUint64(&rs.replacementCount)
 }
 
-// needsRekey returns true if the message count has reached the rekey threshold.
-func (rs *rekeyState) needsRekey() bool {
+// needsReplacement returns true if the message count has reached the
+// replacement threshold.
+func (rs *rekeyState) needsReplacement() bool {
 	return rs.totalMessages() >= RekeyThreshold
 }
 
-// attemptRekey tries to rekey the connection if it implements the Rekeyer interface.
-// Returns true if rekeying was performed, false if the connection does not support it.
-// Serialized by rekeyMu so concurrent send/receive workers cannot trigger
-// overlapping Rekey() calls on the same Noise connection.
-func attemptRekey(conn interface{}, rs *rekeyState) bool {
-	rs.rekeyMu.Lock()
-	defer rs.rekeyMu.Unlock()
-
-	// Re-check threshold under lock — the other goroutine may have already rekeyed.
-	if rs.totalMessages() < RekeyThreshold {
+// tryTriggerReplacement atomically claims the one-shot replacement trigger.
+// It returns true for the single caller that wins the race (and should
+// therefore schedule the session teardown) and increments the replacement
+// count. Concurrent callers that lose the race receive false and take no
+// action, guaranteeing exactly one replacement per session.
+func (rs *rekeyState) tryTriggerReplacement() bool {
+	if !atomic.CompareAndSwapUint64(&rs.replacementTriggered, 0, 1) {
 		return false
 	}
-
-	rekeyer, ok := conn.(Rekeyer)
-	if !ok {
-		// Connection does not support rekeying (e.g., mock conn in tests).
-		// Reset counters to avoid checking on every message.
-		rs.resetCounters()
-		return false
-	}
-
-	err := rekeyer.Rekey()
-	if err != nil {
-		// Log the error but don't fail the session — rekeying is best-effort.
-		// Do NOT reset counters on failure: leaving them above the threshold
-		// ensures the next message triggers another rekey attempt rather than
-		// silently deferring for another RekeyThreshold messages.
-		log.WithField("error", err.Error()).Warn("NTCP2 session rekeying failed, will retry on next message")
-		return false
-	}
-
-	rs.resetCounters()
+	atomic.AddUint64(&rs.replacementCount, 1)
 	return true
 }

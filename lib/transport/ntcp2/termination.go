@@ -97,12 +97,25 @@ const terminationBlockTotalSize = terminationBlockHeaderSize + terminationBlockP
 //
 // The termination block format per NTCP2 spec is:
 //
-//	[type:1=0x04][size:2=0x0009][sessionDuration:8][reason:1]
+//	[type:1=0x04][size:2=0x0009][validFramesReceived:8][reason:1]
 //
-// Total: 12 bytes (3 header + 9 payload).
-// sessionDuration is elapsed seconds since the session was established; zero is
-// acceptable when the caller does not track session start time.
+// Total: 12 bytes (3 header + 9 payload). Use
+// [BuildTerminationBlockWithFrames] to report the receive nonce for a
+// data-phase teardown; this variant reports 0, which the spec prescribes for
+// handshake-phase errors.
 func BuildTerminationBlock(reason byte) []byte {
+	return BuildTerminationBlockWithFrames(reason, 0)
+}
+
+// BuildTerminationBlockWithFrames constructs a termination block carrying the
+// number of valid AEAD data-phase frames received so far.
+//
+// The spec's Termination block defines bytes 3-10 as "the number of valid
+// AEAD data phase frames received (current receive nonce value), 0 if error
+// occurs in handshake phase" — not a session duration. Pass the connection's
+// receive nonce for a data-phase teardown; BuildTerminationBlock uses 0, the
+// correct value for handshake-phase and unknown-state teardowns.
+func BuildTerminationBlockWithFrames(reason byte, validFramesReceived uint64) []byte {
 	block := make([]byte, terminationBlockTotalSize)
 
 	// Block type
@@ -111,9 +124,8 @@ func BuildTerminationBlock(reason byte) []byte {
 	// Payload size (big-endian 16-bit)
 	binary.BigEndian.PutUint16(block[1:3], uint16(terminationBlockPayloadSize))
 
-	// Session duration (8 bytes, big-endian uint64). We use 0 as a conservative
-	// default; the spec only requires the field to be present.
-	binary.BigEndian.PutUint64(block[3:11], 0)
+	// Valid AEAD data-phase frames received (8 bytes, big-endian uint64).
+	binary.BigEndian.PutUint64(block[3:11], validFramesReceived)
 
 	// Reason code
 	block[11] = reason

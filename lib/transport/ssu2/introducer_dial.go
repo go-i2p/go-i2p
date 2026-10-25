@@ -198,18 +198,47 @@ func (t *SSU2Transport) establishBobSessionWithContext(ctx context.Context, intr
 	return bobSSU2Session, nil
 }
 
-// so that a delivery attempt arriving after the waiter has timed out is
-// silently dropped instead of buffered indefinitely.
+// pendingRelayResponse is the waiter for one relay attempt. It also carries the
+// identities of the peers we asked to relay us, so a RelayResponse arriving on
+// EITHER path -- forwarded by Bob in-session, or delivered out-of-session inside
+// a Hole Punch from Charlie -- can be checked against what we actually requested
+// before anything in it is acted on. That binding is essential rather than
+// cosmetic: the introduction key a Hole Punch is sealed with is published in the
+// netdb (ssu2.rst §"Introduction Key"), so the AEAD proves the sender knew our
+// public value, not that he is anyone in particular.
+//
+// The consumed flag ensures that a delivery attempt arriving after the waiter
+// has timed out is silently dropped instead of buffered indefinitely.
 type pendingRelayResponse struct {
 	ch       chan *ssu2noise.RelayResponseBlock
 	consumed atomic.Bool
+
+	// bobHash is the introducer we sent the RelayRequest to.
+	bobHash data.Hash
+	// charlieHash is the peer we asked Bob to introduce us to.
+	charlieHash data.Hash
 }
 
 // sendRelayRequestAndWaitWithContext sends a RelayRequest to Bob and waits for Charlie's RelayResponse,
 // honoring the parent context for cancellation (T-2 fix).
 func (t *SSU2Transport) sendRelayRequestAndWaitWithContext(ctx context.Context, bobSSU2Session *SSU2Session, intro IntroducerAddr, charlieHash data.Hash, nonce uint32) (*ssu2noise.RelayResponseBlock, error) {
-	pending := &pendingRelayResponse{ch: make(chan *ssu2noise.RelayResponseBlock, 1)}
+	pending := &pendingRelayResponse{
+		ch:          make(chan *ssu2noise.RelayResponseBlock, 1),
+		bobHash:     extractSenderHash(bobSSU2Session),
+		charlieHash: charlieHash,
+	}
 	t.pendingRelayResponses.Store(nonce, pending)
+
+	// Record the transaction identities from our own authenticated knowledge:
+	// we are Alice, Bob is the session peer we just asked, and Charlie is the
+	// peer we chose. RelayResponse verification (and the Hole Punch correlation)
+	// resolve the signer from here, because §"RelayResponse" has Charlie signing
+	// an accept while Bob merely forwards it -- so the session peer is NOT the
+	// signer on the path Alice consumes.
+	t.setNatRole(nonce, natRoleAlice)
+	t.rememberAliceForNonce(nonce, t.getOurIdentityHash())
+	t.rememberBobForNonce(nonce, pending.bobHash)
+	t.rememberCharlieForNonce(nonce, charlieHash)
 	defer func() {
 		pending.consumed.Store(true)
 		t.pendingRelayResponses.Delete(nonce)

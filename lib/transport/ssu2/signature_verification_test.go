@@ -8,6 +8,7 @@ import (
 	"crypto/ed25519"
 	"net"
 	"testing"
+	"time"
 
 	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
@@ -235,50 +236,51 @@ func TestVerifyPeerTestSignature_Code4_NilRouterHashFailsClosed(t *testing.T) {
 	assert.Error(t, err, "code 4 with nil RouterHash must fail closed")
 }
 
-// TestVerifyPeerTestSignature_Code4_UsesBlockRouterHashNotSenderHash verifies
-// that when the block does carry a RouterHash distinct from the senderHash,
-// the verifier uses block.RouterHash (Alice) for signature verification — not
-// senderHash. We assert this indirectly: NetDB lookup is invoked with
-// senderHash (Bob in code 4), and the signature still fails because the
-// RouterInfo we return cannot satisfy a real signature, but the verifier must
-// reach the lookup path (i.e. it must not short-circuit). Regression for
-// AUDIT.md H-1.
-func TestVerifyPeerTestSignature_Code4_UsesBlockRouterHashNotSenderHash(t *testing.T) {
+// TestVerifyPeerTestSignature_Code4_SignerIsCharlieFromBlockHash verifies that
+// for PeerTestResult (code 4, Bob -> Alice, we are Alice) the signing key is
+// fetched for block.RouterHash -- Charlie, who produced the agreement being
+// signed -- and NOT for senderHash (Bob, who merely forwarded the block).
+//
+// ssu2.rst §"Signatures": "Charlie signs the response and includes it in
+// message 3; Bob forwards it in message 4 to Alice", with bhash = Bob's hash
+// and the Alice hash used as ahash. Verifying with Bob's key (the previous
+// behavior) could never succeed on a genuine message 4, since Bob did not sign
+// it. Regression for AUDIT.md H-1.
+func TestVerifyPeerTestSignature_Code4_SignerIsCharlieFromBlockHash(t *testing.T) {
 	tr := makeMinimalTransport()
 	lookupCalledWith := data.Hash{}
 	cfg := tr.config.Load()
 	cfg.RouterLookupFunc = func(hash data.Hash) (router_info.RouterInfo, error) {
 		lookupCalledWith = hash
 		// Return error so verification stops at the lookup boundary; the test
-		// only needs to confirm we reached lookup with senderHash and did not
-		// reject upfront.
+		// only needs to confirm which hash the signing-key fetch used.
 		return router_info.RouterInfo{}, assert.AnError
 	}
 	tr.config.Store(cfg)
 
-	aliceHash := data.Hash{}
-	for i := range aliceHash {
-		aliceHash[i] = 0xAA
+	charlieHash := data.Hash{}
+	for i := range charlieHash {
+		charlieHash[i] = 0xAA
 	}
-	senderHash := data.Hash{}
-	for i := range senderHash {
-		senderHash[i] = 0xBB
+	bobHash := data.Hash{}
+	for i := range bobHash {
+		bobHash[i] = 0xBB
 	}
 
 	block := &ssu2noise.PeerTestBlock{
 		MessageCode: ssu2noise.PeerTestResult,
-		RouterHash:  &aliceHash,
+		RouterHash:  &charlieHash,
 		Nonce:       12345,
-		Timestamp:   1234567890,
+		Timestamp:   uint32(time.Now().Unix()),
 		Version:     2,
 		AlicePort:   9000,
 		AliceIP:     net.ParseIP("192.0.2.1"),
 		Signature:   make([]byte, ed25519.SignatureSize),
 	}
 
-	err := tr.verifyPeerTestSignature(block, senderHash)
+	err := tr.verifyPeerTestSignature(block, bobHash)
 
 	assert.Error(t, err, "lookup error should propagate")
-	assert.Equal(t, senderHash, lookupCalledWith, "NetDB lookup must use senderHash to fetch Bob's signing key")
-	assert.NotEqual(t, aliceHash, lookupCalledWith, "lookup must not use Alice's hash for the signing-key fetch")
+	assert.Equal(t, charlieHash, lookupCalledWith, "signing key must be fetched for Charlie (block.RouterHash)")
+	assert.NotEqual(t, bobHash, lookupCalledWith, "signing key must not be fetched for Bob, who only forwarded the block")
 }

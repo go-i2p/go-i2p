@@ -70,6 +70,15 @@ type SSU2Transport struct {
 	// from being written to a channel whose reader has already given up.
 	pendingRelayResponses sync.Map // map[uint32]*pendingRelayResponse
 
+	// natContexts records the peer identities (Alice's and Charlie's router
+	// hashes) this router has legitimately learned for each in-flight peer-test
+	// or relay nonce. Needed because the spec requires signatures to be verified
+	// against a peer who is not the session partner (see nat_context.go), and
+	// because out-of-session messages must be correlated with a transaction we
+	// started before anything in them is acted on. Self-initializing and
+	// internally locked.
+	natContexts natNonceStore
+
 	// NAT state cache with TTL.
 	natStateCache *natState
 

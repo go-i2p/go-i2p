@@ -925,16 +925,59 @@ func (t *NTCP2Transport) executeHandshake(ntcp2Conn *ntcp2.Conn, handshakeCtx co
 	return nil
 }
 
-// setupAEADErrorCallback wires the AEAD error callback to send termination before RST.
+// setupAEADErrorCallback wires the AEAD error callback so the peer receives a
+// proper encrypted termination frame before the socket is torn down.
+//
+// C12 FIX: the previous implementation wrote BuildTerminationBlock's 12 bytes
+// straight to the raw TCP socket. That is not a valid NTCP2 message — every
+// data-phase frame must carry a SipHash-masked length prefix and be AEAD
+// encrypted — and go-noise then closed the socket with SO_LINGER(0), which
+// discards queued bytes, so the peer saw neither a frame nor the block.
+//
+// A data-phase AEAD failure desynchronises only the *inbound* state; the
+// outbound cipher, write nonce, and SipHash mask are still in sync, so exactly
+// one more framed write is valid and decryptable by the peer. go-noise's
+// SendTerminationFrame performs that framing, and a nil error return here
+// tells go-noise to close gracefully so the frame actually flushes.
+//
+// Spec: ntcp2.rst §"AEAD Error Handling" — "On a data phase AEAD
+// authentication failure... the recipient should send a payload with a
+// termination block containing an 'AEAD failure' reason code, and close the
+// connection." The same action applies to an invalid length field.
 func (t *NTCP2Transport) setupAEADErrorCallback(ntcp2Conn *ntcp2.Conn) {
-	ntcp2Conn.OnAEADError = func(rawConn net.Conn) {
-		term := BuildTerminationBlock(TerminationAEADFailure)
-		t.writeTerminationBlockBestEffort(rawConn, term)
+	ntcp2Conn.OnAEADError = func(conn *ntcp2.Conn, validFramesReceived uint64) error {
+		block := BuildTerminationBlockWithFrames(TerminationAEADFailure, validFramesReceived)
+		if _, err := conn.SendTerminationFrame(block); err != nil {
+			t.logger.WithError(err).
+				Warn("NTCP2: failed to send AEAD-failure termination frame; closing abnormally")
+			return err
+		}
+		t.logger.WithField("valid_frames_received", validFramesReceived).
+			Debug("NTCP2: sent AEAD-failure termination frame")
+		return nil
 	}
 }
 
+// msg3PeerConn is the narrow view of the Noise connection that the msg3
+// RouterInfo gate needs. *ntcp2.Conn satisfies it; tests substitute a mock to
+// exercise the validation gate without a full Noise handshake.
+type msg3PeerConn interface {
+	Close() error
+	PeerRouterInfoBytes() []byte
+	PeerStaticKey() []byte
+	RemoteAddr() net.Addr
+}
+
 // extractAndStorePeerRouterInfo extracts the peer's RouterInfo from msg3 and stores it.
-func (t *NTCP2Transport) extractAndStorePeerRouterInfo(ntcp2Conn *ntcp2.Conn, conn net.Conn) error {
+//
+// Spec (ntcp2.rst, SessionConfirmed Notes): "Bob must perform the usual Router
+// Info validation. Ensure the signature type is supported, verify the
+// signature, verify the timestamp is within bounds, and any other checks
+// necessary." and "On any error, including AEAD, RI, DH, timestamp, or key
+// validation failure, Bob must halt further message processing and close the
+// connection." Every validation failure below is therefore fatal to the
+// handshake — none may be logged and swallowed.
+func (t *NTCP2Transport) extractAndStorePeerRouterInfo(ntcp2Conn msg3PeerConn, conn net.Conn) error {
 	riBytes := ntcp2Conn.PeerRouterInfoBytes()
 	if len(riBytes) == 0 {
 		t.recordNoiseHandshakeFailure()
@@ -966,6 +1009,21 @@ func (t *NTCP2Transport) extractAndStorePeerRouterInfo(ntcp2Conn *ntcp2.Conn, co
 		return oops.Errorf("RouterInfo parse failed: %w", parseErr)
 	}
 
+	// C11 FIX: verify the RouterInfo signature over the exact wire bytes.
+	// Previously this was never checked here (only inside the NetDB store,
+	// whose error was swallowed), letting an attacker complete a handshake
+	// with a forged or corrupt RouterInfo.
+	if err := t.verifyPeerRouterInfoSignature(peerRI, conn); err != nil {
+		_ = ntcp2Conn.Close()
+		return err
+	}
+
+	// C11 FIX: verify the published timestamp is within bounds.
+	if err := t.verifyPeerRouterInfoTimestamp(peerRI, conn); err != nil {
+		_ = ntcp2Conn.Close()
+		return err
+	}
+
 	// F107 FIX: Verify that the Noise-authenticated static key matches the RouterInfo's "s" option.
 	// This prevents attackers from presenting a third party's RouterInfo and impersonating them.
 	// The responder MUST compare the authenticated static key against the published NTCP2 "s" option.
@@ -979,22 +1037,94 @@ func (t *NTCP2Transport) extractAndStorePeerRouterInfo(ntcp2Conn *ntcp2.Conn, co
 
 	t.updateRemoteAddressWithIdentHash(ntcp2Conn, peerRI)
 	if err := t.storeRouterInfoInNetDB(peerRI, conn); err != nil {
-		// E-3 fix: Increment observable metric on store failure for monitoring.
+		// C11 FIX: A peer we just authenticated cannot be routed to without
+		// its RouterInfo; i2pd terminates in this case too. Halt the
+		// handshake instead of continuing with a degraded session.
+		t.recordNoiseHandshakeFailure()
 		atomic.AddInt32(&t.routerInfoStoreFailures, 1)
-		// E-5: Storage failures are now observable; log at Warn (not Error, because the
-		// handshake succeeded and the session can still be used for message routing).
-		// E-3: Enhanced log with guidance for operators.
 		t.logger.WithError(err).WithFields(map[string]interface{}{
 			"remote_addr":          conn.RemoteAddr().String(),
 			"total_store_failures": atomic.LoadInt32(&t.routerInfoStoreFailures),
-			"impact":               "OBEP reply routing may fail for this peer",
-		}).Warn("Inbound NTCP2: handshake succeeded but failed to persist peer RouterInfo in NetDB")
+		}).Warn("Inbound NTCP2: failed to persist peer RouterInfo in NetDB; aborting handshake")
+		_ = ntcp2Conn.Close()
+		return oops.Errorf("failed to store peer RouterInfo: %w", err)
 	}
 	return nil
 }
 
+// msg3RouterInfoMaxAge is how old a peer's msg3 RouterInfo may be and still be
+// accepted. Matches i2pd's check (NETDB_MIN_EXPIRATION_TIMEOUT, 90 minutes):
+// a router that has not republished in that long is stale and its static key
+// may have rotated.
+const msg3RouterInfoMaxAge = 90 * time.Minute
+
+// msg3RouterInfoMaxFutureSkew is how far in the future a peer's msg3
+// RouterInfo timestamp may be. Matches i2pd's check
+// (NETDB_EXPIRATION_TIMEOUT_THRESHOLD, 2 minutes).
+const msg3RouterInfoMaxFutureSkew = 2 * time.Minute
+
+// verifyPeerRouterInfoSignature verifies the signature of a RouterInfo
+// received in handshake message 3, over the exact bytes as received on the
+// wire. A failure is fatal to the handshake per the spec's msg3 notes.
+func (t *NTCP2Transport) verifyPeerRouterInfoSignature(peerRI router_info.RouterInfo, conn net.Conn) error {
+	valid, err := peerRI.VerifySignature()
+	if !valid || err != nil {
+		t.recordNoiseHandshakeFailure()
+		t.logger.WithError(err).WithFields(map[string]interface{}{
+			"remote_addr": conn.RemoteAddr().String(),
+			"sig_valid":   valid,
+		}).Warn("Inbound NTCP2: msg3 RouterInfo signature verification failed; aborting handshake")
+		if err != nil {
+			return oops.Wrapf(err, "inbound NTCP2: msg3 RouterInfo signature verification failed")
+		}
+		return oops.Errorf("inbound NTCP2: msg3 RouterInfo signature verification failed")
+	}
+
+	t.logger.WithField("remote_addr", conn.RemoteAddr().String()).
+		Debug("Inbound NTCP2: msg3 RouterInfo signature verified")
+	return nil
+}
+
+// verifyPeerRouterInfoTimestamp checks the msg3 RouterInfo published date is
+// within the accepted bounds (not older than msg3RouterInfoMaxAge, not more
+// than msg3RouterInfoMaxFutureSkew ahead). A failure is fatal per spec.
+func (t *NTCP2Transport) verifyPeerRouterInfoTimestamp(peerRI router_info.RouterInfo, conn net.Conn) error {
+	published := peerRI.Published()
+	if published == nil || published.Time().IsZero() {
+		t.recordNoiseHandshakeFailure()
+		t.logger.WithField("remote_addr", conn.RemoteAddr().String()).
+			Warn("Inbound NTCP2: msg3 RouterInfo has no published timestamp; aborting handshake")
+		return oops.Errorf("inbound NTCP2: msg3 RouterInfo missing published timestamp")
+	}
+
+	now := time.Now()
+	publishedTime := published.Time()
+	if age := now.Sub(publishedTime); age > msg3RouterInfoMaxAge {
+		t.recordNoiseHandshakeFailure()
+		t.logger.WithFields(map[string]interface{}{
+			"remote_addr": conn.RemoteAddr().String(),
+			"age_seconds": int64(age.Seconds()),
+		}).Warn("Inbound NTCP2: msg3 RouterInfo is too old; aborting handshake")
+		return oops.Errorf("inbound NTCP2: msg3 RouterInfo is too old: published %s ago (max %s)",
+			age.Round(time.Second), msg3RouterInfoMaxAge)
+	}
+	if skew := publishedTime.Sub(now); skew > msg3RouterInfoMaxFutureSkew {
+		t.recordNoiseHandshakeFailure()
+		t.logger.WithFields(map[string]interface{}{
+			"remote_addr":    conn.RemoteAddr().String(),
+			"future_seconds": int64(skew.Seconds()),
+		}).Warn("Inbound NTCP2: msg3 RouterInfo is from the future; aborting handshake")
+		return oops.Errorf("inbound NTCP2: msg3 RouterInfo published %s in the future (max %s)",
+			skew.Round(time.Second), msg3RouterInfoMaxFutureSkew)
+	}
+
+	t.logger.WithField("remote_addr", conn.RemoteAddr().String()).
+		Debug("Inbound NTCP2: msg3 RouterInfo timestamp within bounds")
+	return nil
+}
+
 // updateRemoteAddressWithIdentHash updates the remote address with the real router hash.
-func (t *NTCP2Transport) updateRemoteAddressWithIdentHash(ntcp2Conn *ntcp2.Conn, peerRI router_info.RouterInfo) {
+func (t *NTCP2Transport) updateRemoteAddressWithIdentHash(ntcp2Conn msg3PeerConn, peerRI router_info.RouterInfo) {
 	identHash, hashErr := peerRI.IdentHash()
 	if hashErr != nil {
 		return
@@ -1043,23 +1173,6 @@ func (t *NTCP2Transport) logHandshakeSuccess(conn net.Conn) {
 		"local_caps":       localRI.RouterCapabilities(),
 		"local_addr_count": localRI.RouterAddressCount(),
 	}).Debug("Inbound Noise XK handshake completed successfully (responder role)")
-}
-
-func (t *NTCP2Transport) writeTerminationBlockBestEffort(rawConn net.Conn, term []byte) {
-	n, err := rawConn.Write(term)
-	if err != nil || n != len(term) {
-		remoteAddr := "<unknown>"
-		if ra := rawConn.RemoteAddr(); ra != nil {
-			remoteAddr = ra.String()
-		}
-		if t.logger != nil {
-			t.logger.WithFields(map[string]interface{}{
-				"written_bytes":  n,
-				"expected_bytes": len(term),
-				"remote_addr":    remoteAddr,
-			}).WithError(err).Warn("Failed to write AEAD termination block")
-		}
-	}
 }
 
 // trackInboundConnection registers the accepted connection for session counting
@@ -2367,7 +2480,7 @@ func (t *NTCP2Transport) GetTotalBandwidth() (totalBytesSent, totalBytesReceived
 // This prevents attackers from presenting a third party's RouterInfo and impersonating them.
 // Per I2P spec: the responder MUST compare the authenticated static key (from Noise handshake)
 // against the published NTCP2 "s" option before accepting the RouterInfo.
-func (t *NTCP2Transport) verifyRouterInfoStaticKey(ntcp2Conn *ntcp2.Conn, peerRI router_info.RouterInfo, conn net.Conn) error {
+func (t *NTCP2Transport) verifyRouterInfoStaticKey(ntcp2Conn msg3PeerConn, peerRI router_info.RouterInfo, conn net.Conn) error {
 	// Extract the Noise-authenticated static key (32 bytes) from the completed handshake
 	authenticatedKey := ntcp2Conn.PeerStaticKey()
 	if len(authenticatedKey) != 32 {

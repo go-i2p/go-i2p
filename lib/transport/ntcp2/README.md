@@ -170,9 +170,12 @@ This prevents resource exhaustion under heavy load.
 const RekeyThreshold uint64 = 65535
 ```
 RekeyThreshold is the number of messages (sent + received) after which a session
-should be rekeyed for forward secrecy. Per the NTCP2 specification, rekeying
-should occur periodically. 65535 messages is a conservative threshold (just
-under 2^16) that balances forward secrecy with performance.
+is torn down and re-established with a fresh Noise handshake. NTCP2 defines no
+in-band, mid-session rekey — the spec's "rekey" is static key / IV rotation in
+the RouterInfo at startup — so the compliant way to bound key and nonce
+lifetime is to retire the session and let the transport re-dial. 65535
+messages is a conservative threshold (just under 2^16) that balances forward
+secrecy against connection churn.
 
 ```go
 var (
@@ -838,14 +841,16 @@ promotion race — the winner owns the socket, so the loser must not close it.
 Workers will still stop cleanly when Close() cancels the session context (SM-2
 fix).
 
-#### func (*NTCP2Session) GetRekeyStats
+#### func (*NTCP2Session) GetTrafficStats
 
 ```go
-func (s *NTCP2Session) GetRekeyStats() (messagesSinceRekey, rekeyCount uint64)
+func (s *NTCP2Session) GetTrafficStats() (totalMessages, replacements uint64)
 ```
-GetRekeyStats returns rekeying statistics for this session: messagesSinceRekey
-is the count of messages since the last rekey (or session start), rekeyCount is
-the total number of successful rekeys performed.
+GetTrafficStats returns per-session traffic statistics: totalMessages is the
+count of messages sent plus received over the session, and replacements is the
+number of threshold-triggered session replacements (0 or 1 for a live session).
+This replaces the former GetRekeyStats, which reported in-band rekeys that
+NTCP2 does not support.
 
 #### func (*NTCP2Session) ReadNextI2NP
 
@@ -1164,23 +1169,6 @@ LoadOrGenerateObfuscationIV loads the obfuscation IV from persistent storage. If
 the file doesn't exist, generates a new random IV and saves it. Returns an error
 if the file exists but contains invalid data. Returns the 16-byte obfuscation IV
 or an error if loading/generation fails.
-
-#### type Rekeyer
-
-```go
-type Rekeyer interface {
-	// Rekey replaces the session's encryption key using the Noise protocol's
-	// rekeying mechanism (encrypt 32 zero bytes with nonce 2^64-1, use first
-	// 32 bytes as new key). Both send and receive cipher states should be rekeyed.
-	Rekey() error
-}
-```
-
-Rekeyer is an interface for connections that support cryptographic rekeying. The
-go-noise library's NTCP2Conn and NoiseConn both implement this interface (since
-go-noise v0.1.4), so rekeying is fully functional for NTCP2 sessions.
-
-Implementations must be safe for concurrent use.
 
 #### type TransportMetricsSnapshot
 

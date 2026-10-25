@@ -71,6 +71,23 @@ type BlockCallbackConfig struct {
 	// Returns error if signature verification fails or is unavailable (fail-closed).
 	// nil return indicates signature is valid; non-nil indicates verification failure.
 	VerifyRelayIntroSignature func(block *ssu2noise.RelayIntroBlock) error
+
+	// The three fields below are the go-noise DataHandlerCallbacks signature
+	// verifiers, wired per-session so each closure can supply the session
+	// peer's router hash -- which the block itself does not carry and which the
+	// transport cannot know from a bare block. go-noise fails closed
+	// (VERIFIER_MISSING) on any signed PeerTest / RelayRequest / RelayResponse
+	// block when the matching verifier is nil, so leaving these unset silently
+	// disables NAT detection and relaying entirely.
+	//
+	// VerifyPeerTestSignature wires to DataHandlerCallbacks.VerifyPeerTestSignature.
+	VerifyPeerTestSignature func(block *ssu2noise.PeerTestBlock) error
+
+	// VerifyRelayRequestSignature wires to DataHandlerCallbacks.VerifyRelayRequestSignature.
+	VerifyRelayRequestSignature func(block *ssu2noise.RelayRequestBlock) error
+
+	// VerifyRelayResponseSignature wires to DataHandlerCallbacks.VerifyRelayResponseSignature.
+	VerifyRelayResponseSignature func(block *ssu2noise.RelayResponseBlock) error
 }
 
 // ToDataHandlerCallbacks converts BlockCallbackConfig into go-noise/ssu2

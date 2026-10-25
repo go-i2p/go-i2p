@@ -390,89 +390,77 @@ func TestDataPhase_MaxFrameSize(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Rekey
+// Session replacement (key/nonce lifetime)
 // ---------------------------------------------------------------------------
 
-// TestRekey_ThresholdAndMechanism verifies the rekey threshold and mechanism.
+// TestRekey_NoInBandRekeyMechanism documents the spec position that NTCP2 has
+// no in-band mid-session rekey.
 //
-// AUDIT FINDING: The local RekeyThreshold is 65535 (just under 2^16), which is
-// a conservative threshold compared to the spec's 2^64-1. This is a deliberate
-// design choice for forward secrecy — rekeying more frequently provides stronger
-// security guarantees. The NTCP2Conn.Rekey() method in go-noise delegates to the
-// Noise library's rekey function which derives new cipher state per Noise spec
-// (encrypts 32 zero bytes with nonce 2^64-1, takes first 32 bytes as new key).
+// AUDIT FINDING (fixed): the transport previously performed an in-band
+// "rekey" by calling go-noise Conn.Rekey() once a session crossed
+// RekeyThreshold messages. That call is unilateral — it rotates only the
+// local cipher, does not reset the nonce counters, and sends no signal to the
+// peer — so both peers silently desynchronised and the next AEAD open failed.
 //
-// Spec reference: ntcp2.rst Section "Rekey"
-func TestRekey_ThresholdAndMechanism(t *testing.T) {
-	// Verify threshold constant
-	assert.Equal(t, uint64(65535), RekeyThreshold,
-		"RekeyThreshold is 65535 (conservative, spec allows up to 2^64-1)")
+// NTCP2 defines no such mechanism. The spec's "rekey" is the rotation of the
+// router's static key / IV, a RouterInfo-level change performed at startup
+// subject to downtime rules. For a live data-phase session the only compliant
+// way to bound key/nonce lifetime is to terminate the session and establish a
+// new one, which is what go-noise itself recommends ("a connection near its
+// nonce limit should be replaced with a new one").
+//
+// The implementation therefore retires the session at the threshold and the
+// transport re-handshakes on demand.
+//
+// Spec reference: ntcp2.rst Section "Public Key and IV Rotation"
+func TestRekey_NoInBandRekeyMechanism(t *testing.T) {
+	// The unilateral rekeyer must be gone: there is no Rekeyer interface and
+	// no attemptRekey helper any more.
+	rekeyStateType := reflect.TypeOf((*rekeyState)(nil)).Elem()
+	for i := 0; i < rekeyStateType.NumMethod(); i++ {
+		assert.NotEqual(t, "Rekey", rekeyStateType.Method(i).Name,
+			"rekeyState must not expose an in-band Rekey operation")
+	}
 
-	// Verify threshold is well below the theoretical max (2^64-1)
-	specMaxBeforeRekey := uint64(math.MaxUint64)
-	assert.Less(t, RekeyThreshold, specMaxBeforeRekey,
-		"RekeyThreshold must be less than 2^64-1 (spec max)")
+	sessionType := reflect.TypeOf((*NTCP2Session)(nil))
+	_, hasAttemptRekey := sessionType.MethodByName("attemptRekey")
+	assert.False(t, hasAttemptRekey,
+		"NTCP2Session must not attempt an in-band rekey")
 
-	// Verify the Rekeyer interface exists and is well-defined
-	var _ Rekeyer = Rekeyer(nil)
-	rekeyerType := reflect.TypeOf((*Rekeyer)(nil)).Elem()
-	assert.True(t, rekeyerType.Kind() == reflect.Interface,
-		"Rekeyer must be an interface type")
-
-	rekeyMethod, found := rekeyerType.MethodByName("Rekey")
-	assert.True(t, found, "Rekeyer interface must have a Rekey() method")
-	assert.Equal(t, 0, rekeyMethod.Type.NumIn(),
-		"Rekey() must take no arguments")
-	assert.Equal(t, 1, rekeyMethod.Type.NumOut(),
-		"Rekey() must return 1 value (error)")
+	// Threshold is a conservative local bound, far below the 2^64-1 nonce
+	// limit of the cipher state.
+	assert.Equal(t, uint64(65535), RekeyThreshold)
+	assert.Less(t, RekeyThreshold, uint64(math.MaxUint64),
+		"replacement threshold must be below the 2^64-1 nonce limit")
 }
 
-// TestRekey_RekeyStateTracking verifies that the rekey state correctly tracks
-// message counts and rekey operations.
+// TestRekey_ReplacementTriggerIsOneShot verifies that crossing the threshold
+// schedules exactly one session replacement even under concurrent workers.
 //
-// Spec reference: ntcp2.rst Section "Rekey"
-func TestRekey_RekeyStateTracking(t *testing.T) {
+// Spec reference: ntcp2.rst Section "Public Key and IV Rotation"
+func TestRekey_ReplacementTriggerIsOneShot(t *testing.T) {
 	state := &rekeyState{}
 
-	// Initial state: zero messages
 	assert.Equal(t, uint64(0), state.totalMessages(),
 		"Initial total messages must be zero")
-	assert.Equal(t, uint64(0), state.getRekeyCount(),
-		"Initial rekey count must be zero")
+	assert.Equal(t, uint64(0), state.getReplacementCount(),
+		"Initial replacement count must be zero")
 
-	// Record sent messages
 	for i := 0; i < 100; i++ {
 		state.recordSent()
 	}
-	assert.Equal(t, uint64(100), state.totalMessages(),
-		"Total messages after 100 sends must be 100")
-
-	// Record received messages
 	for i := 0; i < 50; i++ {
 		state.recordReceived()
 	}
 	assert.Equal(t, uint64(150), state.totalMessages(),
 		"Total messages after 100 sent + 50 received must be 150")
-}
+	assert.False(t, state.needsReplacement(),
+		"150 messages is below the replacement threshold")
 
-// TestRekey_NTCPConnImplementsRekeyer verifies that the go-noise NTCP2Conn
-// implements the Rekeyer interface.
-//
-// Spec reference: ntcp2.rst Section "Rekey"
-func TestRekey_NTCPConnImplementsRekeyer(t *testing.T) {
-	// Verify NTCP2Conn from go-noise has a Rekey() method via reflection
-	connType := reflect.TypeOf((*ntcp2.Conn)(nil))
-	rekeyMethod, found := connType.MethodByName("Rekey")
-	assert.True(t, found,
-		"ntcp2.Conn must have a Rekey() method (implements Rekeyer interface)")
-
-	if found {
-		// Verify method signature: func() error
-		assert.Equal(t, 1, rekeyMethod.Type.NumIn(),
-			"Rekey() on NTCP2Conn must take receiver only (no args)")
-		assert.Equal(t, 1, rekeyMethod.Type.NumOut(),
-			"Rekey() must return 1 value (error)")
-	}
+	require.True(t, state.tryTriggerReplacement(), "first trigger must win")
+	assert.Equal(t, uint64(1), state.getReplacementCount())
+	assert.False(t, state.tryTriggerReplacement(),
+		"a session is replaced at most once")
 }
 
 // ---------------------------------------------------------------------------

@@ -18,7 +18,7 @@ import (
 	"github.com/samber/oops"
 )
 
-// NTCP2Session represents an active NTCP2 connection session with a remote peer, managing message queues, bandwidth tracking, and rekeying state.
+// NTCP2Session represents an active NTCP2 connection session with a remote peer, managing message queues, bandwidth tracking, and message-count based session replacement state.
 // A session is the transport-level connection between two routers; it wraps
 // the Noise-encrypted TCP connection and satisfies transport.TransportSession.
 // It embeds *transport.SessionCore for shared queue and bandwidth logic.
@@ -33,7 +33,7 @@ type NTCP2Session struct {
 	conn   net.Conn   // Will be *ntcp2.NTCP2Conn internally
 	connMu sync.Mutex // protects conn field
 
-	// Rekeying state — tracks message counts for periodic rekeying
+	// Message-count state — tracks traffic to enforce the session replacement threshold
 	rekeyState *rekeyState
 
 	// Error tracking for receive worker
@@ -374,7 +374,7 @@ func (s *NTCP2Session) writeFramedData(framedData []byte) bool {
 	s.markSendActivity()
 	s.Logger().WithField("bytes_written", bytesWritten).Debug("Message written successfully")
 
-	// Track message count for rekeying
+	// Track message count for the replacement threshold
 	s.checkRekey(s.rekeyState.recordSent())
 
 	return true
@@ -659,30 +659,39 @@ func (s *NTCP2Session) recordAndLogDroppedMessage(msg i2np.Message) {
 	}).Warn("Dropping received message - receive channel full (backpressure)")
 }
 
-// checkRekey checks if the session needs rekeying based on message count.
-// If the threshold is reached, attempts to rekey the underlying connection.
+// checkRekey enforces the NTCP2 key/nonce lifetime bound. NTCP2 has no
+// in-band mid-session rekey (see RekeyThreshold doc), so once a session has
+// carried RekeyThreshold messages it is gracefully closed and the transport
+// re-establishes a fresh handshake on the next send.
+//
+// The teardown is scheduled asynchronously: this runs inside the send/receive
+// workers, and CloseWithReason joins the worker WaitGroup, so closing inline
+// would deadlock the calling worker. The one-shot trigger guarantees exactly
+// one replacement even if both workers cross the threshold at once.
 func (s *NTCP2Session) checkRekey(totalMessages uint64) {
-	if totalMessages >= RekeyThreshold {
-		s.Logger().WithFields(map[string]interface{}{
-			"total_messages": totalMessages,
-			"threshold":      RekeyThreshold,
-		}).Info("Rekey threshold reached, attempting session rekey")
-		s.connMu.Lock()
-		conn := s.conn
-		s.connMu.Unlock()
-		if attemptRekey(conn, s.rekeyState) {
-			s.Logger().WithField("rekey_count", s.rekeyState.getRekeyCount()).Info("Session rekeyed successfully")
-		} else {
-			s.Logger().Debug("Session rekeying not available (connection does not implement Rekeyer)")
-		}
+	if totalMessages < RekeyThreshold {
+		return
 	}
+	if !s.rekeyState.tryTriggerReplacement() {
+		// Another worker already claimed the replacement; do nothing.
+		return
+	}
+	s.Logger().WithFields(map[string]interface{}{
+		"total_messages": totalMessages,
+		"threshold":      RekeyThreshold,
+	}).Info("Rekey threshold reached, replacing NTCP2 session with a fresh handshake")
+	// Normal close sends a termination block so the peer can re-dial; the
+	// cleanup callback removes this session from the transport map.
+	go func() { _ = s.CloseWithReason(TerminationNormalClose) }()
 }
 
-// GetRekeyStats returns rekeying statistics for this session:
-// messagesSinceRekey is the count of messages since the last rekey (or session start),
-// rekeyCount is the total number of successful rekeys performed.
-func (s *NTCP2Session) GetRekeyStats() (messagesSinceRekey, rekeyCount uint64) {
-	return s.rekeyState.totalMessages(), s.rekeyState.getRekeyCount()
+// GetTrafficStats returns per-session traffic statistics:
+// totalMessages is the count of messages sent plus received over the session,
+// and replacements is the number of threshold-triggered session replacements
+// (0 or 1 for a live session). This replaces the former GetRekeyStats, which
+// reported in-band rekeys that NTCP2 does not support.
+func (s *NTCP2Session) GetTrafficStats() (totalMessages, replacements uint64) {
+	return s.rekeyState.totalMessages(), s.rekeyState.getReplacementCount()
 }
 
 // getError returns the last error recorded by setError, if any. Safe for
