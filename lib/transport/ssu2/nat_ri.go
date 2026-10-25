@@ -62,7 +62,7 @@ func (t *SSU2Transport) sendRouterInfoToPeer(session *SSU2Session, hash data.Has
 
 // buildRouterInfoDatabaseStore wraps RouterInfo bytes in a DatabaseStore.
 // Delegates the framing to i2np, which owns the DatabaseStore wire format.
-func buildRouterInfoDatabaseStore(hash data.Hash, riBytes []byte) (i2np.Message, error) {
+func buildRouterInfoDatabaseStore(hash data.Hash, riBytes []byte) (*i2np.DatabaseStore, error) {
 	var key [32]byte
 	copy(key[:], hash[:])
 	// Reply fields are left zero, which means the recipient replies directly

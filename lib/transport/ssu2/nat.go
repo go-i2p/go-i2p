@@ -1206,8 +1206,15 @@ func (t *SSU2Transport) handlePeerTestAsCharlie(ptBlock *ssu2noise.PeerTestBlock
 	}
 	aliceHash := *ptBlock.RouterHash
 
-	bobHash := extractSenderHash(session)
-	bobAddr := session.RemoteUDPAddr()
+	// session may legitimately be nil (an unauthenticated or already-detached
+	// peer). RemoteUDPAddr dereferences the session's conn, so guard before
+	// calling it rather than panicking on the data path.
+	var bobHash data.Hash
+	var bobAddr *net.UDPAddr
+	if session != nil {
+		bobHash = extractSenderHash(session)
+		bobAddr = session.RemoteUDPAddr()
+	}
 
 	// Record the transaction identities before emitting anything. Message 6
 	// arrives out-of-session from Alice with no session to attribute it to, so
