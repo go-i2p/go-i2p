@@ -79,7 +79,7 @@ const (
 	StandardBuildRecordCleartextLen = buildrecord.StandardCleartextLen     // 222 (deprecated long record)
 	ShortBuildRecordCleartextLen    = buildrecord.ShortCleartextLen        // 154
 	ShortRecordHeaderSize           = 64                                   // toPeer(16) + ephemeralKey(32) + MAC(16)
-	DefaultExpirationSeconds        = buildrecord.DefaultExpirationSeconds // 480
+	DefaultExpirationSeconds        = buildrecord.DefaultExpirationSeconds // 600, the only spec-supported value
 )
 
 // DefaultExpirationTolerance is the default expiration tolerance for clock skew (5 minutes into the past).

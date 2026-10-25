@@ -888,36 +888,54 @@ func (t *NTCP2Transport) onInboundHandshakeError(err error) {
 
 // executeHandshake performs the Noise XK handshake with probing resistance on failure.
 // Uses handshakeCtx (with timeout) to prevent goroutine leaks on slow/stuck handshakes.
+// executeHandshake performs the NTCP2 wire-format handshake on an accepted
+// (responder) connection.
+//
+// It MUST call (*ntcp2.Conn).Handshake — the NTCP2-specific handshake — and not
+// the generic Noise handshake reachable through UnderlyingConn(). Per
+// ntcp2.rst §"Message Format", the two-byte frame length field "is used in the
+// data phase messages only. Message 1 and 2 AEAD frames are fixed length.
+// Message 3 part 1 AEAD frame is fixed length." The generic Noise handshake
+// writes and reads that 2-byte prefix on all three messages and sends nil
+// payloads, so it omits the 16-byte options block (id/ver/padLen/m3p2Len/tsA),
+// never reads or MixHashes the cleartext padding, and skips the mandatory
+// responder checks (replay cache, tsA window, net-ID, padding bounds). It also
+// leaves the connection's established flag clear, so data-phase I/O would fail
+// even if the handshake appeared to complete.
+//
+// The upstream handshake already performs the spec's failure action for
+// handshake protocol errors (random junk read + TCP RST, closing "without
+// responding"), stores the decrypted peer message-3 payload for RouterInfo
+// extraction, runs the post-handshake hook, propagates the SipHash keys and
+// marks the connection established. Duplicating probing resistance here would
+// read junk bytes twice, so it is deliberately not repeated.
 func (t *NTCP2Transport) executeHandshake(ntcp2Conn *ntcp2.Conn, handshakeCtx context.Context) error {
 	remoteAddr := "<unknown>"
 	if ra := ntcp2Conn.RemoteAddr(); ra != nil { //nolint:all
 		remoteAddr = ra.String()
 	}
-	t.logger.WithField("remote_addr", remoteAddr).Debug("[DIAG] executeHandshake: calling ntcp2Conn.UnderlyingConn().Handshake()")
-	err := ntcp2Conn.UnderlyingConn().Handshake(handshakeCtx)
+
+	err := ntcp2Conn.Handshake(handshakeCtx)
 	if err != nil {
 		t.recordNoiseHandshakeFailure()
-		raw := extractRawConn(ntcp2Conn.UnderlyingConn())
 
-		// DIAGNOSTIC: Log timeout vs other errors differently
 		if errors.Is(err, context.DeadlineExceeded) {
 			t.logger.WithFields(map[string]interface{}{
 				"remote_addr": remoteAddr,
 				"error_type":  "context.DeadlineExceeded",
-				"timeout_sec": 60,
-			}).Warn("[DIAG] Inbound handshake TIMEOUT - Noise XK protocol exceeded 60s deadline")
+			}).Warn("Inbound NTCP2 handshake timed out")
 		} else {
 			t.logger.WithField("remote_addr", remoteAddr).WithError(err).
-				Warn("[DIAG] Inbound handshake FAILED - applying probing resistance")
+				Warn("Inbound NTCP2 handshake failed")
 		}
 
-		applyProbingResistance(raw)
+		// Upstream closes/RSTs the socket on protocol errors; Close is idempotent
+		// and covers the non-protocol-error paths (e.g. deadline). No slot was
+		// reserved before the handshake, so no unreserve is needed.
 		_ = ntcp2Conn.Close()
-		// No slot was reserved before handshake, so no unreserve needed.
-		return WrapNTCP2Error(err, "inbound handshake (probing resistance applied)")
+		return WrapNTCP2Error(err, "inbound NTCP2 wire handshake")
 	}
 
-	t.logger.WithField("remote_addr", remoteAddr).Debug("[DIAG] Inbound Noise XK handshake succeeded, propagating peer static key")
 	err = ntcp2Conn.PropagatePeerStaticKey()
 	if err != nil {
 		return WrapNTCP2Error(err, "propagating peer static key")

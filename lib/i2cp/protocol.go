@@ -164,8 +164,10 @@ type Message struct {
 	Payload   []byte // Message payload
 }
 
-// MarshalBinary serializes the I2CP message to wire format
-// Format: type(1) + sessionID(2) + length(4) + payload(variable)
+// MarshalBinary serializes the I2CP message to wire format.
+// Format: length(4) + type(1) + payload(variable). The Session ID is not part
+// of the wire framing (i2cp.rst); for message types that carry it, it is the
+// first 2 bytes of the payload and is recovered by ReadMessage.
 func (m *Message) MarshalBinary() ([]byte, error) {
 	if m.Payload == nil {
 		m.Payload = []byte{}

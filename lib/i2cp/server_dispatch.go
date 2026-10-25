@@ -605,14 +605,21 @@ func (s *Server) storeClientVersionInSession(sessionID uint16, clientVersion str
 // The I2CP API Version is an I2P [String] (1-byte length prefix) per
 // common-structures.rst, not a 2-byte length-prefixed string.
 func buildSetDatePayload(currentTimeMillis int64, versionStr string) []byte {
-	versionBytes := []byte(versionStr)
-	if len(versionBytes) > 255 {
-		versionBytes = versionBytes[:255]
+	str, err := common.NewI2PString(versionStr)
+	if err != nil {
+		// The version string is internally generated ("major.minor.patch") and
+		// far below the 255-byte String limit; degrade to an empty String rather
+		// than failing the whole date exchange.
+		log.WithError(err).WithFields(logger.Fields{
+			"at":          "i2cp.buildSetDatePayload",
+			"version_str": versionStr,
+		}).Warn("version string too long for I2P String; sending empty version")
+		str = common.I2PString{0x00}
 	}
-	payload := make([]byte, 8+1+len(versionBytes))
+
+	payload := make([]byte, 8+len(str))
 	binary.BigEndian.PutUint64(payload[0:8], uint64(currentTimeMillis))
-	payload[8] = byte(len(versionBytes))
-	copy(payload[9:], versionBytes)
+	copy(payload[8:], str)
 	return payload
 }
 

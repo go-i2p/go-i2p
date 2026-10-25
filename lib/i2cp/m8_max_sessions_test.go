@@ -8,10 +8,14 @@ import (
 	"time"
 )
 
+// decodeDisconnectFrame decodes a framed I2CP Disconnect message and returns
+// the reason. The payload is an I2P [String] (1-byte length prefix) per
+// common-structures.rst, so decoding is delegated to ParseDisconnectPayload
+// rather than re-implementing the wire format here.
 func decodeDisconnectFrame(t *testing.T, msg []byte) string {
 	t.Helper()
-	if len(msg) < 7 {
-		t.Fatalf("disconnect frame too short: got %d bytes, need at least 7", len(msg))
+	if len(msg) < 5 {
+		t.Fatalf("disconnect frame too short: got %d bytes, need at least 5", len(msg))
 	}
 
 	payloadLen := int(binary.BigEndian.Uint32(msg[0:4]))
@@ -21,15 +25,16 @@ func decodeDisconnectFrame(t *testing.T, msg []byte) string {
 	if len(msg) != 5+payloadLen {
 		t.Fatalf("disconnect frame length mismatch: declared payload %d, total %d", payloadLen, len(msg))
 	}
-	if payloadLen < 2 {
+	// I2P String needs at least the 1-byte length prefix.
+	if payloadLen < 1 {
 		t.Fatalf("disconnect payload too short: %d", payloadLen)
 	}
 
-	reasonLen := int(binary.BigEndian.Uint16(msg[5:7]))
-	if payloadLen != 2+reasonLen {
-		t.Fatalf("disconnect reason length mismatch: payload=%d reason=%d", payloadLen, reasonLen)
+	dp, err := ParseDisconnectPayload(msg[5:])
+	if err != nil {
+		t.Fatalf("failed to parse disconnect payload: %v", err)
 	}
-	return string(msg[7 : 7+reasonLen])
+	return dp.Reason
 }
 
 // mockConn is a mock network connection for testing

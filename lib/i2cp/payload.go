@@ -3,7 +3,6 @@ package i2cp
 import (
 	"encoding/binary"
 	"encoding/hex"
-	"math"
 
 	commondata "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/destination"
@@ -464,6 +463,8 @@ func ParseDisconnectPayload(data []byte) (*DisconnectPayload, error) {
 		}).Error("disconnect_payload_invalid_string")
 		return nil, oops.Wrapf(err, "invalid disconnect reason string")
 	}
+	// A zero-length String is valid on the wire (the spec allows 0-255 bytes);
+	// I2PString.Data() returns ("", nil) for that case.
 	reason, err := str.Data()
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to decode disconnect reason")
@@ -481,30 +482,23 @@ func ParseDisconnectPayload(data []byte) (*DisconnectPayload, error) {
 
 // MarshalBinary serializes the DisconnectPayload to wire format.
 // Returns the serialized bytes ready to be sent as an I2CP message payload.
-// The reason is an I2P [String] with a 1-byte length prefix per
-// common-structures.rst.
+// The reason is an I2P [String] (1-byte length prefix, 0-255 bytes) per
+// common-structures.rst, so encoding is delegated to common/data.NewI2PString,
+// which enforces the 255-byte limit.
 func (dp *DisconnectPayload) MarshalBinary() ([]byte, error) {
-	// Calculate total size: 1 (length) + len(reason)
-	reasonBytes := []byte(dp.Reason)
-	if len(reasonBytes) > 255 {
-		return nil, oops.Errorf("disconnect reason too long: %d bytes (max %d)", len(reasonBytes), 255)
+	str, err := commondata.NewI2PString(dp.Reason)
+	if err != nil {
+		return nil, oops.Wrapf(err, "disconnect reason cannot be encoded as I2P String")
 	}
-	totalSize := 1 + len(reasonBytes)
-	result := make([]byte, totalSize)
 
-	// Write reason length (1 byte, per I2P String)
-	result[0] = byte(len(reasonBytes))
-
-	// Write reason string
-	if len(reasonBytes) > 0 {
-		copy(result[1:], reasonBytes)
-	}
+	result := make([]byte, len(str))
+	copy(result, str)
 
 	log.WithFields(logger.Fields{
 		"at":        "i2cp.DisconnectPayload.MarshalBinary",
 		"reason":    dp.Reason,
-		"reasonLen": len(reasonBytes),
-		"totalSize": totalSize,
+		"reasonLen": len(dp.Reason),
+		"totalSize": len(result),
 	}).Debug("marshaled_disconnect_payload")
 
 	return result, nil

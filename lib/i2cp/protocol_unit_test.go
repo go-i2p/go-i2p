@@ -458,3 +458,57 @@ func TestMessageStatusUnmarshal(t *testing.T) {
 		}
 	}
 }
+
+// TestExtractSessionIDFromPayload_HostLookup guards the HostReply session-ID
+// echo (i2cp.rst: "The session ID and request ID are those from the
+// HostLookupMessage"). HostLookup carries SessionID as the first 2 payload
+// bytes, so ReadMessage must recover it; if it is omitted from the extractor,
+// every HostReply is emitted with session 0.
+func TestExtractSessionIDFromPayload_HostLookup(t *testing.T) {
+	payload, err := (&HostLookupPayload{
+		SessionID:  0x1234,
+		RequestID:  99,
+		LookupType: HostLookupTypeHostname,
+		Query:      "forum.i2p",
+	}).MarshalBinary()
+	if err != nil {
+		t.Fatalf("marshal HostLookup: %v", err)
+	}
+
+	if got := extractSessionIDFromPayload(MessageTypeHostLookup, payload); got != 0x1234 {
+		t.Errorf("extractSessionIDFromPayload(HostLookup) = 0x%04x, want 0x1234", got)
+	}
+
+	// Full read path: framing must carry the session ID into Message.SessionID.
+	msg := &Message{Type: MessageTypeHostLookup, Payload: payload}
+	wire, err := msg.MarshalBinary()
+	if err != nil {
+		t.Fatalf("marshal frame: %v", err)
+	}
+	read, err := ReadMessage(bytes.NewReader(wire), 0)
+	if err != nil {
+		t.Fatalf("ReadMessage: %v", err)
+	}
+	if read.SessionID != 0x1234 {
+		t.Errorf("ReadMessage(HostLookup).SessionID = 0x%04x, want 0x1234", read.SessionID)
+	}
+}
+
+// TestBuildHostReplyMessage_EchosSessionID verifies the reply carries the
+// caller-supplied session ID instead of zero.
+func TestBuildHostReplyMessage_EchosSessionID(t *testing.T) {
+	replyPayload := &HostReplyPayload{RequestID: 7, ResultCode: HostReplyNotFound}
+
+	out, err := buildHostReplyMessage(0x0002, replyPayload)
+	if err != nil {
+		t.Fatalf("buildHostReplyMessage: %v", err)
+	}
+
+	parsed, err := ParseHostReplyPayload(out.Payload)
+	if err != nil {
+		t.Fatalf("ParseHostReplyPayload: %v", err)
+	}
+	if parsed.SessionID != 0x0002 {
+		t.Errorf("HostReply.SessionID = 0x%04x, want 0x0002", parsed.SessionID)
+	}
+}

@@ -573,22 +573,18 @@ func TestDisconnectPayloadParse(t *testing.T) {
 		expectReason string
 	}{
 		{
-			name: "empty_reason",
-			payload: func() []byte {
-				buf := make([]byte, 2)
-				binary.BigEndian.PutUint16(buf[0:2], 0) // length = 0
-				return buf
-			}(),
-			expectError:  false,
+			name:        "empty_reason",
+			payload:     []byte{0x00}, // length = 0, no string bytes
+			expectError: false,
 			expectReason: "",
 		},
 		{
 			name: "short_reason",
 			payload: func() []byte {
 				reason := "timeout"
-				buf := make([]byte, 2+len(reason))
-				binary.BigEndian.PutUint16(buf[0:2], uint16(len(reason)))
-				copy(buf[2:], reason)
+				buf := make([]byte, 1+len(reason))
+				buf[0] = byte(len(reason)) // I2P String: 1-byte length prefix
+				copy(buf[1:], reason)
 				return buf
 			}(),
 			expectError:  false,
@@ -598,9 +594,9 @@ func TestDisconnectPayloadParse(t *testing.T) {
 			name: "normal_reason",
 			payload: func() []byte {
 				reason := "client shutdown"
-				buf := make([]byte, 2+len(reason))
-				binary.BigEndian.PutUint16(buf[0:2], uint16(len(reason)))
-				copy(buf[2:], reason)
+				buf := make([]byte, 1+len(reason))
+				buf[0] = byte(len(reason))
+				copy(buf[1:], reason)
 				return buf
 			}(),
 			expectError:  false,
@@ -610,9 +606,9 @@ func TestDisconnectPayloadParse(t *testing.T) {
 			name: "long_reason",
 			payload: func() []byte {
 				reason := "Connection terminated due to protocol version mismatch: expected 0.9.67, got 2.9.0"
-				buf := make([]byte, 2+len(reason))
-				binary.BigEndian.PutUint16(buf[0:2], uint16(len(reason)))
-				copy(buf[2:], reason)
+				buf := make([]byte, 1+len(reason))
+				buf[0] = byte(len(reason))
+				copy(buf[1:], reason)
 				return buf
 			}(),
 			expectError:  false,
@@ -622,18 +618,13 @@ func TestDisconnectPayloadParse(t *testing.T) {
 			name: "utf8_reason",
 			payload: func() []byte {
 				reason := "クライアント終了" // "Client termination" in Japanese
-				buf := make([]byte, 2+len(reason))
-				binary.BigEndian.PutUint16(buf[0:2], uint16(len(reason)))
-				copy(buf[2:], reason)
+				buf := make([]byte, 1+len(reason))
+				buf[0] = byte(len(reason)) // byte count, not character count
+				copy(buf[1:], reason)
 				return buf
 			}(),
 			expectError:  false,
 			expectReason: "クライアント終了",
-		},
-		{
-			name:        "too_short_no_length",
-			payload:     make([]byte, 1), // Need at least 2 bytes
-			expectError: true,
 		},
 		{
 			name:        "empty_payload",
@@ -643,9 +634,9 @@ func TestDisconnectPayloadParse(t *testing.T) {
 		{
 			name: "incomplete_reason",
 			payload: func() []byte {
-				buf := make([]byte, 2+5) // Says 10 bytes but only has 5
-				binary.BigEndian.PutUint16(buf[0:2], 10)
-				copy(buf[2:], "short")
+				buf := make([]byte, 1+5) // Declares 10 bytes but only has 5
+				buf[0] = 10
+				copy(buf[1:], "short")
 				return buf
 			}(),
 			expectError: true,
@@ -687,15 +678,20 @@ func TestDisconnectPayloadMarshal(t *testing.T) {
 			marshaled, err := dp.MarshalBinary()
 			require.NoError(t, err)
 
-			expectedSize := 2 + len(tt.reason)
+			// I2P String wire format: 1-byte length prefix + UTF-8 bytes.
+			expectedSize := 1 + len(tt.reason)
 			assert.Equal(t, expectedSize, len(marshaled), "marshaled size")
 
-			reasonLen := binary.BigEndian.Uint16(marshaled[0:2])
-			assert.Equal(t, uint16(len(tt.reason)), reasonLen, "length field")
+			assert.Equal(t, byte(len(tt.reason)), marshaled[0], "length field")
 
 			if len(tt.reason) > 0 {
-				assert.Equal(t, tt.reason, string(marshaled[2:]), "reason")
+				assert.Equal(t, tt.reason, string(marshaled[1:]), "reason")
 			}
+
+			// Round-trip must preserve the reason.
+			parsed, err := ParseDisconnectPayload(marshaled)
+			require.NoError(t, err)
+			assert.Equal(t, tt.reason, parsed.Reason, "round-trip")
 		})
 	}
 }
@@ -755,17 +751,31 @@ func TestDisconnectCommonReasons(t *testing.T) {
 }
 
 // TestDisconnectMaxLength tests handling of maximum length reasons
+// TestDisconnectMaxLength verifies the I2P [String] limit on the disconnect
+// reason. Per common-structures.rst the length prefix is a single byte, so a
+// reason may hold at most 255 bytes; anything longer must be rejected rather
+// than silently truncated or mis-framed.
 func TestDisconnectMaxLength(t *testing.T) {
-	longReason := string(bytes.Repeat([]byte("X"), 1024))
+	t.Run("max_allowed_255", func(t *testing.T) {
+		maxReason := string(bytes.Repeat([]byte("X"), 255))
 
-	dp := &DisconnectPayload{Reason: longReason}
-	data, err := dp.MarshalBinary()
-	require.NoError(t, err)
+		dp := &DisconnectPayload{Reason: maxReason}
+		data, err := dp.MarshalBinary()
+		require.NoError(t, err)
+		assert.Equal(t, 256, len(data), "1-byte length prefix + 255 bytes")
 
-	parsed, err := ParseDisconnectPayload(data)
-	require.NoError(t, err)
+		parsed, err := ParseDisconnectPayload(data)
+		require.NoError(t, err)
+		assert.Equal(t, maxReason, parsed.Reason)
+	})
 
-	assert.Equal(t, longReason, parsed.Reason)
+	t.Run("over_limit_rejected", func(t *testing.T) {
+		overReason := string(bytes.Repeat([]byte("X"), 256))
+
+		dp := &DisconnectPayload{Reason: overReason}
+		_, err := dp.MarshalBinary()
+		assert.Error(t, err, "reason longer than 255 bytes cannot be an I2P String")
+	})
 }
 
 // TestSendMessageExpiresPayloadParse tests parsing of SendMessageExpires payload

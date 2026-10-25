@@ -31,8 +31,13 @@ const (
 	ShortRecordSize = 218
 	// ShortCleartextLen is the cleartext payload length for short ECIES records (154 bytes).
 	ShortCleartextLen = 154
-	// DefaultExpirationSeconds is the default tunnel expiration in seconds (8 minutes).
-	DefaultExpirationSeconds = 480
+	// DefaultExpirationSeconds is the tunnel request expiration in seconds.
+	// The ECIES tunnel-creation spec (tunnel-creation-ecies.rst, "Short Request
+	// Record Unencrypted") states: "The request expiration is for future variable
+	// tunnel duration. For now, the only supported value is 600 (10 minutes)."
+	// Any other value is a protocol deviation that peers may reject. This also
+	// matches the 10-minute participant lifetime used by the tunnel pool.
+	DefaultExpirationSeconds = 600
 )
 
 // BuildRequestRecord contains all the data for a single tunnel hop build request.
