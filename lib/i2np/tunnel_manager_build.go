@@ -159,7 +159,7 @@ func (tm *TunnelManager) finalizePendingBuild(result *tunnel.TunnelBuildResult, 
 	// STBM message construction updates result.ReplyKeys/NoiseHashes to the
 	// final HKDF-derived values used for reply decryption. Persist the final
 	// crypto context so late uncorrelated replies can be best-effort decrypted.
-	tm.updatePendingBuildReplyCrypto(messageID, result.ReplyKeys, result.ReplyIVs, result.NoiseHashes)
+	tm.updatePendingBuildReplyCrypto(messageID, result.ReplyKeys, result.ReplyIVs, result.NoiseHashes, result.RecordSlots)
 
 	// Anchor the 90-second expiration window to the moment the build message
 	// actually left this router, then arm cleanup at that horizon.
@@ -196,6 +196,15 @@ func (tm *TunnelManager) finalizePendingBuild(result *tunnel.TunnelBuildResult, 
 	if len(result.NoiseHashes) > 0 {
 		if setErr := tm.replyProcessor.SetPendingBuildNoiseHashes(result.TunnelID, result.NoiseHashes); setErr != nil {
 			log.WithError(setErr).WithField("tunnel_id", result.TunnelID).Warn("Failed to set STBM noise hashes")
+		}
+	}
+
+	// Store the build-record permutation chosen when the message was serialized.
+	// Reply decryption needs it to find each hop's slot, since the slots are
+	// deliberately shuffled on the wire.
+	if len(result.RecordSlots) > 0 {
+		if setErr := tm.replyProcessor.SetPendingBuildRecordSlots(result.TunnelID, result.RecordSlots); setErr != nil {
+			log.WithError(setErr).WithField("tunnel_id", result.TunnelID).Warn("Failed to set STBM record slots")
 		}
 	}
 
@@ -395,6 +404,7 @@ func (tm *TunnelManager) trackPendingBuild(result *tunnel.TunnelBuildResult, mes
 		replyKeys:       result.ReplyKeys,
 		replyIVs:        result.ReplyIVs,
 		noiseHashes:     result.NoiseHashes,
+		recordSlots:     result.RecordSlots,
 		createdAt:       time.Now(),
 		retryCount:      0,
 		useShortBuild:   result.UseShortBuild,
@@ -406,7 +416,7 @@ func (tm *TunnelManager) trackPendingBuild(result *tunnel.TunnelBuildResult, mes
 
 // updatePendingBuildReplyCrypto refreshes the pending build's reply-decryption
 // context after message creation has finalized STBM-derived keys and hashes.
-func (tm *TunnelManager) updatePendingBuildReplyCrypto(messageID int, replyKeys []session_key.SessionKey, replyIVs [][16]byte, noiseHashes [][32]byte) {
+func (tm *TunnelManager) updatePendingBuildReplyCrypto(messageID int, replyKeys []session_key.SessionKey, replyIVs [][16]byte, noiseHashes [][32]byte, recordSlots []int) {
 	tm.buildMutex.Lock()
 	defer tm.buildMutex.Unlock()
 	req, ok := tm.pendingBuilds[messageID]
@@ -416,6 +426,7 @@ func (tm *TunnelManager) updatePendingBuildReplyCrypto(messageID int, replyKeys 
 	req.replyKeys = replyKeys
 	req.replyIVs = replyIVs
 	req.noiseHashes = noiseHashes
+	req.recordSlots = recordSlots
 }
 
 // resetPendingBuildCreatedAt re-anchors the createdAt timestamp of a tracked
@@ -560,14 +571,30 @@ func (tm *TunnelManager) createSerializedShortTunnelBuildMessage(result *tunnel.
 	for i, keys := range hopKeys {
 		replyKeys[i] = keys.ReplyKey
 	}
-	if err := tm.applyChaCha20LayerObfuscation(encryptedRecords, replyKeys); err != nil {
+
+	// Randomize build record order so a middle hop cannot infer its position in
+	// the tunnel from the slot it was addressed in
+	// (tunnel-creation-ecies.rst "Build Records": "Build record order must be
+	// randomized"). Everything else stays in tunnel PATH order; only the wire
+	// layout is permuted, so the permutation is recorded on the result and the
+	// reply peel uses slot indices for its nonces.
+	//
+	// The ChaCha20 layers are applied in wire-slot space because that is what
+	// the hops see: hop i XORs every slot but its own, using the addressed slot
+	// as the nonce, and the creator's pre-applied layers must cancel those
+	// exactly. After all hops have processed the message, wire slot s_k carries
+	// only the layers of hops j > k, which is the invariant the peel relies on.
+	recordSlots := shuffleRecordSlots(len(encryptedRecords))
+	result.RecordSlots = recordSlots
+
+	if err := tm.applyChaCha20LayerObfuscation(encryptedRecords, replyKeys, recordSlots); err != nil {
 		return nil, err
 	}
 
-	// Convert [][218]byte to [][]byte for factory
+	// Convert [][218]byte to [][]byte for factory, in permuted (wire) order.
 	records := make([][]byte, len(encryptedRecords))
-	for i := range encryptedRecords {
-		records[i] = encryptedRecords[i][:]
+	for pathIndex, slot := range recordSlots {
+		records[slot] = encryptedRecords[pathIndex][:]
 	}
 
 	serialized, err := tm.messageFactory.CreateShortTunnelBuildMessage(records, messageID)
@@ -575,6 +602,19 @@ func (tm *TunnelManager) createSerializedShortTunnelBuildMessage(result *tunnel.
 		return nil, oops.Wrapf(err, "failed to create Short Tunnel Build message")
 	}
 	return serialized, nil
+}
+
+// shuffleRecordSlots returns a random path-index -> wire-slot-index mapping for
+// a build message with the given record count. A permutation of length 0 or 1
+// is trivially the identity.
+//
+// Uses the upstream crypto-backed CSPRNG (github.com/go-i2p/crypto/rand), which
+// is safe for concurrent use.
+func shuffleRecordSlots(count int) []int {
+	if count <= 1 {
+		return []int{0}[:count]
+	}
+	return rand.Perm(count)
 }
 
 // convertAndOverrideMessageID converts tunnel records to I2NP format and overrides SendMessageID
@@ -700,20 +740,36 @@ func (tm *TunnelManager) registerGarlicReplyKeys(preReplyCKs [][32]byte, message
 // to STBM records. For each hop i (second-to-last down to first), XOR every record at
 // index j > i with ChaCha20(key=replyKeys[i], nonce[4]=j). This ensures each hop can
 // decrypt its record and peel its layer off subsequent records.
-func (tm *TunnelManager) applyChaCha20LayerObfuscation(encryptedRecords [][ShortBuildRecordSize]byte, replyKeys [][32]byte) error {
+//
+// Records are in tunnel PATH order here; the wire permutation is applied by
+// the caller afterwards (see shuffleRecordSlots).
+func (tm *TunnelManager) applyChaCha20LayerObfuscation(encryptedRecords [][ShortBuildRecordSize]byte, replyKeys [][32]byte, recordSlots []int) error {
 	if len(encryptedRecords) < 2 {
 		return nil
 	}
 
 	for i := len(encryptedRecords) - 2; i >= 0; i-- {
 		for j := i + 1; j < len(encryptedRecords); j++ {
-			if err := chacha20XORRecord(&encryptedRecords[j], replyKeys[i], j); err != nil {
+			// The nonce is the record's WIRE slot, not its path index: hops
+			// address slots positionally, so the layer the creator pre-applies
+			// must cancel the layer hop i applies to the same wire slot.
+			slot := slotIndexOf(recordSlots, j)
+			if err := chacha20XORRecord(&encryptedRecords[j], replyKeys[i], slot); err != nil {
 				return oops.Wrapf(err, "ChaCha20 layer obfuscation failed at hop %d record %d", i, j)
 			}
 		}
 	}
 
 	return nil
+}
+
+// slotIndexOf returns the wire slot for path index i, falling back to the
+// identity when no permutation was recorded.
+func slotIndexOf(recordSlots []int, i int) int {
+	if i < 0 || i >= len(recordSlots) {
+		return i
+	}
+	return recordSlots[i]
 }
 
 // generateMessageID generates a unique message ID for tracking build requests.

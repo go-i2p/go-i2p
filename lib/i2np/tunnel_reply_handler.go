@@ -61,6 +61,13 @@ type PendingBuildRequest struct {
 	IsInbound    bool                     // True for inbound tunnel, false for outbound
 	HopCount     int                      // Number of hops in tunnel
 	TimeoutTimer *time.Timer              // Timeout timer for this build
+
+	// RecordSlots maps hop path index -> wire slot index for the build request
+	// we sent. Build record order is randomized (tunnel-creation-ecies.rst
+	// "Build Records"), and every per-slot nonce on both the build and reply
+	// paths is the WIRE slot number, so reply decryption must address hop i's
+	// record at RecordSlots[i] rather than at i. Nil means the identity.
+	RecordSlots []int
 }
 
 // ReplyProcessor handles tunnel build reply processing with timeout and retry logic.
@@ -173,6 +180,24 @@ func (rp *ReplyProcessor) SetPendingBuildNoiseHashes(tunnelID buildrecord.Tunnel
 		return oops.Errorf("no pending build for tunnel %d when setting noise hashes", tunnelID)
 	}
 	pending.NoiseHashes = noiseHashes
+	return nil
+}
+
+// SetPendingBuildRecordSlots stores the build-record permutation used for an
+// in-progress STBM build. Build record order is randomized so middle hops cannot
+// learn their tunnel position (tunnel-creation-ecies.rst "Build Records"); the
+// creator must remember it to address each hop's reply slot correctly, because
+// every per-slot nonce on the reply path is the wire slot number. Must be called
+// immediately after RegisterPendingBuild.
+func (rp *ReplyProcessor) SetPendingBuildRecordSlots(tunnelID buildrecord.TunnelID, recordSlots []int) error {
+	rp.mutex.Lock()
+	defer rp.mutex.Unlock()
+
+	pending, exists := rp.pendingBuilds[tunnelID]
+	if !exists {
+		return oops.Errorf("no pending build for tunnel %d when setting record slots", tunnelID)
+	}
+	pending.RecordSlots = recordSlots
 	return nil
 }
 
@@ -302,11 +327,18 @@ func (rp *ReplyProcessor) validateRecordCounts(records []BuildResponseRecord, ra
 }
 
 // decryptSTBMReplyRecords handles STBM reply decryption using i2pd-compatible 2-pass algorithm.
-// After all N hops have processed the STBM and generated their reply:
 //
-//	record[i] = AEAD(hop_i_reply, key_i) XOR'd by all hops j > i
+// Hops process the build message in path order 0..n-1, each replacing its own
+// wire slot with its AEAD-encrypted reply and XOR-ing every other slot with its
+// reply key, so after the last hop:
 //
-// Creator decrypts from LAST hop to FIRST by peeling XOR layers then AEAD-decrypting.
+//	slot[perm[i]] = AEAD(hop_i_reply, key_i) XOR'd by all hops j > i
+//
+// where perm is the build-record permutation the creator chose (pending.RecordSlots).
+// The creator decrypts from LAST hop to FIRST, peeling each hop's XOR layers off
+// the other slots and then AEAD-decrypting that hop's slot. Both nonces are the
+// WIRE slot number, not the path index; results are written back in path order
+// so callers see records[i] for hop i regardless of the shuffle.
 func (rp *ReplyProcessor) decryptSTBMReplyRecords(records []BuildResponseRecord, rawRecords [][]byte, pending *PendingBuildRequest) error {
 	work, err := rp.prepareSTBMWorkBuffer(rawRecords)
 	if err != nil {
@@ -318,11 +350,12 @@ func (rp *ReplyProcessor) decryptSTBMReplyRecords(records []BuildResponseRecord,
 		var key [32]byte
 		copy(key[:], pending.ReplyKeys[i][:])
 
-		if err := rp.peelChaCha20Layers(work, key, i); err != nil {
+		ourSlot := rp.slotForHop(pending, i, n)
+		if err := rp.peelChaCha20Layers(work, key, ourSlot); err != nil {
 			return err
 		}
 
-		retCode, err := rp.decryptSTBMSlot(work[i][:], key, pending.NoiseHashes, i)
+		retCode, err := rp.decryptSTBMSlot(work[ourSlot][:], key, pending.NoiseHashes, i, ourSlot)
 		if err != nil {
 			return err
 		}
@@ -332,6 +365,20 @@ func (rp *ReplyProcessor) decryptSTBMReplyRecords(records []BuildResponseRecord,
 
 	log.WithField("record_count", n).Debug("Decrypted all STBM reply records")
 	return nil
+}
+
+// slotForHop returns the wire slot carrying hop i's reply record. Falls back to
+// the identity mapping when no permutation was recorded (or when it does not
+// cover this hop, e.g. a legacy reply).
+func (rp *ReplyProcessor) slotForHop(pending *PendingBuildRequest, hopIndex, recordCount int) int {
+	if pending == nil || hopIndex < 0 || hopIndex >= len(pending.RecordSlots) {
+		return hopIndex
+	}
+	slot := pending.RecordSlots[hopIndex]
+	if slot < 0 || slot >= recordCount {
+		return hopIndex
+	}
+	return slot
 }
 
 // prepareSTBMWorkBuffer copies raw records into a work buffer for in-place decryption.
@@ -347,29 +394,34 @@ func (rp *ReplyProcessor) prepareSTBMWorkBuffer(rawRecords [][]byte) ([][ShortBu
 	return work, nil
 }
 
-// peelChaCha20Layers peels hop i's ChaCha20 layer from all records except the hop's own record.
-// This mirrors the relay behavior: relay XORs all j != ourIndex, so initiator must peel all j != hopIndex.
-func (rp *ReplyProcessor) peelChaCha20Layers(work [][ShortBuildRecordSize]byte, key [32]byte, hopIndex int) error {
+// peelChaCha20Layers peels one hop's ChaCha20 layer from every wire slot except
+// that hop's own. This mirrors the relay behavior exactly: a hop XORs all slots
+// j != ourSlot using j as the nonce, so the initiator peels the same set with
+// the same nonces.
+func (rp *ReplyProcessor) peelChaCha20Layers(work [][ShortBuildRecordSize]byte, key [32]byte, ourSlot int) error {
 	for j := 0; j < len(work); j++ {
-		if j == hopIndex {
-			continue // Skip hop i's own record (AEAD-decrypted separately)
+		if j == ourSlot {
+			continue // Skip the hop's own record (AEAD-decrypted separately)
 		}
 		if err := chacha20XORRecord(&work[j], key, j); err != nil {
-			return oops.Wrapf(err, "ChaCha20 peel failed for hop %d record %d", hopIndex, j)
+			return oops.Wrapf(err, "ChaCha20 peel failed for slot %d record %d", ourSlot, j)
 		}
 	}
 	return nil
 }
 
-// decryptSTBMSlot AEAD-decrypts hop i's own STBM reply record and extracts the ret code.
-func (rp *ReplyProcessor) decryptSTBMSlot(record []byte, key [32]byte, noiseHashes [][32]byte, hopIndex int) (byte, error) {
+// decryptSTBMSlot AEAD-decrypts hop hopIndex's own STBM reply record and extracts
+// the ret code. The AEAD nonce is the record's WIRE slot number (spec: "n =
+// record number 0-7"); the associated-data hash is looked up by path index,
+// which stays in tunnel order.
+func (rp *ReplyProcessor) decryptSTBMSlot(record []byte, key [32]byte, noiseHashes [][32]byte, hopIndex, slotIndex int) (byte, error) {
 	var noiseHash [32]byte
 	if hopIndex < len(noiseHashes) {
 		noiseHash = noiseHashes[hopIndex]
 	}
-	cleartext, err := decryptSTBMReplySlot(record, key, noiseHash, hopIndex)
+	cleartext, err := decryptSTBMReplySlot(record, key, noiseHash, slotIndex)
 	if err != nil {
-		return 0, oops.Wrapf(err, "STBM AEAD decrypt failed for hop %d", hopIndex)
+		return 0, oops.Wrapf(err, "STBM AEAD decrypt failed for hop %d (slot %d)", hopIndex, slotIndex)
 	}
 	return cleartext[201], nil
 }

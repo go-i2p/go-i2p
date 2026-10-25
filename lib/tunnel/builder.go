@@ -81,6 +81,14 @@ type TunnelBuildResult struct {
 	NoiseHashes     [][32]byte               // Per-hop Noise transcript hashes (m_H) for STBM reply AEAD decryption
 	UseShortBuild   bool                     // True if using Short Tunnel Build (STBM), false for Variable Tunnel Build
 	IsInbound       bool                     // True if this is an inbound tunnel
+
+	// RecordSlots maps hop path index -> wire slot index, populated when the
+	// build message is serialized. Build record order is randomized so middle
+	// hops cannot learn their position in the tunnel
+	// (tunnel-creation-ecies.rst "Build Records"). Everything else in this
+	// struct stays in path order; only the wire layout is permuted, so reply
+	// decryption must consult this map for its AEAD/ChaCha20 nonces.
+	RecordSlots []int
 }
 
 // CreateBuildRequest generates a complete tunnel build request with encrypted records.

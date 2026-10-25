@@ -26,6 +26,7 @@ type buildRequest struct {
 	replyKeys       []session_key.SessionKey // Reply decryption keys for each hop
 	replyIVs        [][16]byte               // Reply IVs for each hop
 	noiseHashes     [][32]byte               // STBM per-hop Noise transcript hashes for reply AEAD decryption
+	recordSlots     []int                    // STBM build-record permutation: path index -> wire slot index
 	createdAt       time.Time                // When the request was created
 	retryCount      int                      // Number of retry attempts
 	useShortBuild   bool                     // True if using STBM, false for legacy VTB

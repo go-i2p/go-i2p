@@ -135,6 +135,7 @@ func (tm *TunnelManager) tryDecryptLateShortBuildReply(handler TunnelReplyHandle
 		ReplyKeys:   req.replyKeys,
 		ReplyIVs:    req.replyIVs,
 		NoiseHashes: req.noiseHashes,
+		RecordSlots: req.recordSlots,
 	}
 	if tm.replyProcessor == nil {
 		return oops.Errorf("reply processor unavailable")
