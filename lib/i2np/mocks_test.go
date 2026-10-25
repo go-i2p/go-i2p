@@ -132,13 +132,22 @@ type tunnelForwardCall struct {
 	inputMessageType int // track input message type for reply type verification
 }
 
+// requestForwardCall records a transit-hop relay of a type-25 build request.
+type requestForwardCall struct {
+	routerHash common.Hash
+	messageID  int
+	body       []byte
+}
+
 // mockBuildReplyForwarder implements BuildReplyForwarder for testing
 type mockBuildReplyForwarder struct {
 	mu                 sync.Mutex
 	routerCalls        []routerForwardCall
 	tunnelCalls        []tunnelForwardCall
+	requestCalls       []requestForwardCall
 	forwardToRouterErr error
 	forwardToTunnelErr error
+	forwardRequestErr  error
 }
 
 func newMockBuildReplyForwarder() *mockBuildReplyForwarder {
@@ -178,6 +187,27 @@ func (m *mockBuildReplyForwarder) getRouterCalls() []routerForwardCall {
 	defer m.mu.Unlock()
 	result := make([]routerForwardCall, len(m.routerCalls))
 	copy(result, m.routerCalls)
+	return result
+}
+
+func (m *mockBuildReplyForwarder) ForwardBuildRequestToRouter(routerHash common.Hash, messageID int, body []byte) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	cp := make([]byte, len(body))
+	copy(cp, body)
+	m.requestCalls = append(m.requestCalls, requestForwardCall{
+		routerHash: routerHash,
+		messageID:  messageID,
+		body:       cp,
+	})
+	return m.forwardRequestErr
+}
+
+func (m *mockBuildReplyForwarder) getRequestCalls() []requestForwardCall {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	result := make([]requestForwardCall, len(m.requestCalls))
+	copy(result, m.requestCalls)
 	return result
 }
 
@@ -256,7 +286,10 @@ func createTestBuildRequestRecord(t interface{ Helper() }) BuildRequestRecord {
 		IVKey:         ivKey,
 		ReplyKey:      replyKey,
 		ReplyIV:       replyIV,
-		Flag:          0,
+		// OBEP by default: the reply-generation tests exercise the endpoint
+		// branch (send a type-26 ShortTunnelBuildReply). Transit-relay tests
+		// clear this flag explicitly.
+		Flag:          tunnel.FlagOBEP,
 		RequestTime:   time.Now(),
 		SendMessageID: 42,
 		Padding:       padding,

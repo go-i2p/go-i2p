@@ -115,9 +115,9 @@ func TestProcessSingleBuildRecord_TunnelForwarding(t *testing.T) {
 	processor.stbmSlotCrypto = map[int]stbmSlotCrypto{0: newTestSTBMSlotCrypto()}
 
 	record := createTestBuildRequestRecord(t)
-	record.NextTunnel = tunnel.TunnelID(67890) // Non-zero means tunnel forwarding
 	messageID := 1003
-
+	record.NextTunnel = tunnel.TunnelID(67890) // Non-zero means tunnel forwarding
+	record.SendMessageID = messageID           // echoed as the outgoing reply message ID
 	processor.processSingleBuildRecord(messageID, 0, record, newSingleSlotSTBMRaw(), 25)
 
 	tunnelCalls := mockForwarder.getTunnelCalls()
@@ -266,7 +266,11 @@ func TestMultipleBuildRecords_Processing(t *testing.T) {
 		raw[i] = byte(i % 197)
 	}
 
-	processor.processAllBuildRecords(2000, records, raw, 25)
+	// All records are OBEP-flagged (fixture default), so each takes the reply
+	// branch: even slots (NextTunnel==0) forward directly to the router, odd
+	// slots forward through the reply tunnel.
+	slots := []int{0, 1, 2, 3, 4}
+	processor.processAllBuildRecords(2000, records, slots, raw, 25)
 
 	assert.Equal(t, 5, mockParticipant.getRegisteredCount(), "All participants should be registered")
 

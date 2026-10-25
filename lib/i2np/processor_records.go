@@ -130,7 +130,7 @@ type buildRequestProcessor struct {
 	processor        *MessageProcessor
 	msg              Message
 	inputMessageType int
-	parse            func([]byte) ([]BuildRequestRecord, error)
+	parse            func([]byte) ([]BuildRequestRecord, []int, error)
 }
 
 func newBuildRequestProcessor(p *MessageProcessor, msg Message) buildRequestProcessor {
@@ -138,7 +138,7 @@ func newBuildRequestProcessor(p *MessageProcessor, msg Message) buildRequestProc
 		processor:        p,
 		msg:              msg,
 		inputMessageType: msg.Type(),
-		parse: func(data []byte) ([]BuildRequestRecord, error) {
+		parse: func(data []byte) ([]BuildRequestRecord, []int, error) {
 			return p.parseTunnelBuildRecords(data)
 		},
 	}
@@ -154,13 +154,86 @@ func (b buildRequestProcessor) process() error {
 		return err
 	}
 
-	records, err := b.parse(data)
+	// A ShortTunnelBuild addressed to us may be the completed reply set of an
+	// inbound tunnel we are building (see tryCompleteInboundBuild); check that
+	// before treating the message as a request to participate in a build.
+	if handled, err := b.processor.tryCompleteInboundBuild(b.msg.MessageID(), data); handled {
+		return err
+	}
+
+	records, slotIndices, err := b.parse(data)
 	if err != nil {
 		return oops.Wrapf(err, "failed to parse tunnel build records")
 	}
 
 	b.processor.logParsedBuildRequest(b.msg.MessageID(), len(records))
-	return b.processor.processAllBuildRecords(b.msg.MessageID(), records, data, b.inputMessageType)
+	return b.processor.processAllBuildRecords(b.msg.MessageID(), records, slotIndices, data, b.inputMessageType)
+}
+
+// pendingInboundBuildMatcher is optionally implemented by a
+// TunnelBuildReplyProcessor that can say whether an inbound tunnel build it
+// started is still awaiting its reply set under a given I2NP message ID.
+// Implemented by *TunnelManager.
+type pendingInboundBuildMatcher interface {
+	HasPendingInboundBuild(messageID int) bool
+}
+
+// tryCompleteInboundBuild recognises the final leg of an inbound tunnel build
+// that this router created.
+//
+// Inbound builds have no OBEP hop: the creator is the tunnel's endpoint, so
+// every peer relays the transformed message (type 25) to the previous hop and
+// the inbound gateway sends the finished message - whose body is now the
+// complete reply set, [count][N x 218] - straight back to the creator. The
+// I2NP message ID is the correlation ID the creator put in the last record's
+// "next message ID" field.
+//
+// This mirrors the reference behaviour of checking for a pending inbound tunnel
+// by reply message ID before doing any transit processing (i2pd
+// Tunnel::HandleShortTunnelBuildMsg -> GetPendingInboundTunnel). When the ID
+// matches, the body is handed to the reply processor, which peels the per-hop
+// ChaCha20 layers and AEAD-decrypts each reply slot, establishing the tunnel.
+//
+// It returns handled=true when the message was consumed as our own inbound
+// build reply (err reports the outcome) and handled=false when normal build
+// request processing should continue.
+func (p *MessageProcessor) tryCompleteInboundBuild(messageID int, data []byte) (bool, error) {
+	if p.buildReplyProcessor == nil {
+		return false, nil
+	}
+	matcher, ok := p.buildReplyProcessor.(pendingInboundBuildMatcher)
+	if !ok || !matcher.HasPendingInboundBuild(messageID) {
+		return false, nil
+	}
+
+	records, rawRecords, err := p.parseBuildResponseRecords(data)
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":          "tryCompleteInboundBuild",
+			"message_id":  messageID,
+			"record_size": len(data),
+			"error":       err,
+		}).Warn("Inbound build reply set could not be parsed - falling back to build request processing")
+		return false, nil
+	}
+
+	handler := &ShortTunnelBuildReply{
+		Count:                len(records),
+		BuildResponseRecords: records,
+		RawRecordData:        rawRecords,
+	}
+
+	RecordExploratoryReplyStage(ExploratoryReplyStageShortReplyDispatched)
+	log.WithFields(logger.Fields{
+		"at":           "tryCompleteInboundBuild",
+		"message_id":   messageID,
+		"record_count": len(records),
+	}).Debug("Completed inbound tunnel build from relayed ShortTunnelBuild")
+
+	if err := p.buildReplyProcessor.ProcessTunnelBuildReply(handler, messageID); err != nil {
+		return true, oops.Wrapf(err, "failed to process inbound build reply set")
+	}
+	return true, nil
 }
 
 // validateParticipantManager checks if the participant manager is configured.
@@ -201,19 +274,26 @@ func (p *MessageProcessor) logParsedBuildRequest(messageID, recordCount int) {
 
 // processAllBuildRecords processes each build record destined for us.
 //
-// Every record in the list was already decrypted by tryParseRecord: a short
-// build record carries no OurIdent (it is zero), so successful decryption with
-// our static key is the sole proof that the record is ours. Records we could
-// not decrypt are never added to the list.
+// Every record in the list was already decrypted by tryParseAndAppendRecord: a
+// short build record carries no OurIdent (it is zero), so successful decryption
+// with our static key is the sole proof that the record is ours. Records we could
+// not decrypt are never added to the list. slotIndices[i] is the position record
+// i occupied in the message - the reply/forward transform must use it, not the
+// index within this filtered list.
+//
+// Per tunnel-creation-ecies.rst, a hop sends the ShortTunnelBuildReply (type 26)
+// only if it is the outbound endpoint (request record flag bit 6); every other
+// hop forwards the transformed build message (type 25) to the next hop. The
+// total record count from rawData determines whether our slot is the last one.
 //
 // inputMessageType is preserved so the reply type maps correctly (type 25
 // ShortTunnelBuild -> type 26 ShortTunnelBuildReply).
 //
 // IMPORTANT: If our router hash has not been set (is zero), NO records are
-// added to the list by tryParseRecord, so this function will be called with an
+// added to the list by tryParseAndAppendRecord, so this function will be called with an
 // empty list. Callers must call SetOurRouterHash before processing any tunnel
 // build messages.
-func (p *MessageProcessor) processAllBuildRecords(messageID int, records []BuildRequestRecord, rawData []byte, inputMessageType int) error {
+func (p *MessageProcessor) processAllBuildRecords(messageID int, records []BuildRequestRecord, slotIndices []int, rawData []byte, inputMessageType int) error {
 	var zeroHash common.Hash
 	if p.ourRouterHash == zeroHash {
 		log.WithFields(logger.Fields{
@@ -224,7 +304,11 @@ func (p *MessageProcessor) processAllBuildRecords(messageID int, records []Build
 	}
 
 	for i, record := range records {
-		p.processSingleBuildRecord(messageID, i, record, rawData, inputMessageType)
+		slot := i
+		if i < len(slotIndices) {
+			slot = slotIndices[i]
+		}
+		p.processSingleBuildRecord(messageID, slot, record, rawData, inputMessageType)
 	}
 	return nil
 }
@@ -276,27 +360,98 @@ func (p *MessageProcessor) processSingleBuildRecord(messageID, index int, record
 	}
 }
 
-// generateAndSendBuildReply creates an encrypted short BuildResponseRecord and
-// forwards it. inputMessageType determines the output reply type (type 25
-// ShortTunnelBuild -> type 26 ShortTunnelBuildReply).
+// generateAndSendBuildReply applies this hop's symmetric transform to the build
+// message and sends it on. The transform is the same for every hop
+// (tunnel-creation-ecies.rst "Symmetric Encryption of Records"): our own slot is
+// replaced with our AEAD-encrypted reply, and every other slot is ChaCha20-XOR'd
+// with our reply key (which peels the layer the creator pre-applied to the still
+// opaque request slots, or adds a layer to the replies of earlier hops).
 //
-// The STBM reply wire format is:
-//   - Reply record: 218 bytes, ChaCha20 stream XOR (no Poly1305 tag)
-//   - Our reply slot is written at position 'index' in the full N-slot message
-//   - All other slots carry the original (opaque) build-request bytes so the
-//     reply message has the correct wire size: 1 byte count + N × 218 bytes
+// What differs is where the transformed message goes, decided by our record's
+// OBEP flag bit (bit 6, tunnel.FlagOBEP), exactly as the I2P reference (i2pd
+// TransitTunnels::HandleShortTransitTunnelBuildMsg) branches on
+// TUNNEL_BUILD_RECORD_ENDPOINT_FLAG:
+//   - OBEP set (we are the outbound endpoint): send it back toward the creator
+//     as a ShortTunnelBuildReply (type 26) through the reply routing in our
+//     record (NextIdent/NextTunnel = the reply tunnel gateway).
+//   - OBEP clear (a transit/inbound hop): forward the SAME transformed body to
+//     the next hop as a ShortTunnelBuild (type 25) message, so the next hop can
+//     process its record. For the final hop of an inbound build this delivers
+//     the completed reply set back to the creator.
+//
+// The reply/forward body has wire size 1 byte count + N × 218 bytes.
+// See [I2P Spec: Tunnel Creation ECIES](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/tunnel-creation-ecies.rst) "Message Flow" and "Symmetric Encryption of Records".
 func (p *MessageProcessor) generateAndSendBuildReply(messageID, index int, record BuildRequestRecord, replyCode byte, availableBW uint32, rawData []byte, inputMessageType int) error {
-	encryptedReply, err := p.encryptBuildReply(index, replyCode, availableBW, rawData)
+	transformed, err := p.encryptBuildReply(index, replyCode, availableBW, rawData)
 	if err != nil {
 		return err
 	}
 
-	if err := p.forwardBuildReply(messageID, record, encryptedReply, inputMessageType); err != nil {
-		return oops.Wrapf(err, "failed to forward build reply")
+	// The outgoing I2NP message ID is the "next message ID" carried in our own
+	// request record (spec field bytes 52-55), NOT the ID the message arrived
+	// with. i2pd uses SHORT_REQUEST_RECORD_SEND_MSG_ID_OFFSET for both the
+	// type-26 reply and the type-25 relay; a conforming creator sets the final
+	// hop's value to its own correlation ID and randomizes the rest, so echoing
+	// the incoming ID would break reply correlation against real peers.
+	outgoingID := record.SendMessageID
+
+	// Flag bit 6 (OBEP) marks the outbound endpoint: it is the only hop that
+	// emits a ShortTunnelBuildReply. Every other hop relays the build request.
+	if record.Flag&tunnel.FlagOBEP != 0 {
+		if err := p.forwardBuildReply(outgoingID, record, transformed, inputMessageType); err != nil {
+			return oops.Wrapf(err, "failed to forward build reply")
+		}
+		p.logBuildReplySuccess(outgoingID, index, replyCode, int(record.NextTunnel), len(transformed))
+		return nil
 	}
 
-	p.logBuildReplySuccess(messageID, index, replyCode, int(record.NextTunnel), len(encryptedReply))
+	// Transit / inbound hop: relay the build message to the next hop as a type-25 STBM.
+	if err := p.forwardBuildRequest(outgoingID, record, transformed, inputMessageType); err != nil {
+		return oops.Wrapf(err, "failed to forward build request to next hop")
+	}
+	p.logBuildRequestForward(outgoingID, index, record)
 	return nil
+}
+
+// forwardBuildRequest relays the transformed build message to the next hop as a
+// ShortTunnelBuild (type 25) over a direct transport session to the next hop's
+// identity (NextIdent). A build request is always sent hop-to-hop directly: the
+// NextTunnel field carries the next hop's receive tunnel ID as record data, not a
+// routing tunnel, so - unlike the build reply - it is never wrapped in a
+// TunnelGateway here.
+func (p *MessageProcessor) forwardBuildRequest(messageID int, record BuildRequestRecord, body []byte, inputMessageType int) error {
+	if p.buildReplyForwarder == nil {
+		log.WithFields(logger.Fields{
+			"at":         "forwardBuildRequest",
+			"message_id": messageID,
+			"next_ident": logutil.HashPrefix(record.NextIdent),
+		}).Warn("build forwarder not configured - build request not relayed")
+		return nil // Not an error - forwarder is optional
+	}
+
+	// A build request is only ever relayed for ShortTunnelBuild (type 25).
+	if inputMessageType != I2NPMessageTypeShortTunnelBuild {
+		log.WithFields(logger.Fields{
+			"at":           "forwardBuildRequest",
+			"message_id":   messageID,
+			"message_type": inputMessageType,
+		}).Warn("refusing to relay non-STBM build request")
+		return nil
+	}
+
+	return p.buildReplyForwarder.ForwardBuildRequestToRouter(record.NextIdent, messageID, body)
+}
+
+// logBuildRequestForward logs a successful transit-hop relaying of the build
+// message to the next hop.
+func (p *MessageProcessor) logBuildRequestForward(messageID, index int, record BuildRequestRecord) {
+	log.WithFields(logger.Fields{
+		"at":           "forwardBuildRequest",
+		"message_id":   messageID,
+		"record_index": index,
+		"next_ident":   logutil.HashPrefix(record.NextIdent),
+		"next_tunnel":  record.NextTunnel,
+	}).Debug("relayed STBM build request to next hop")
 }
 
 // encryptBuildReply encrypts a short tunnel build reply.
@@ -558,12 +713,15 @@ func (p *MessageProcessor) handleRejectedBuildRecord(messageID, index int, recor
 }
 
 // parseTunnelBuildRecords parses the short build request records from message
-// data. Returns the parsed records or an error if parsing fails. Only records
-// that decrypt with our static key are returned.
-func (p *MessageProcessor) parseTunnelBuildRecords(data []byte) ([]BuildRequestRecord, error) {
+// data. Returns the parsed records (in slot order) together with the slot index
+// each record occupied in the message. Only records that decrypt with our static
+// key are returned; the slot index is needed downstream because a relay hop's
+// own slot is NOT necessarily position 0 of the filtered list, and the reply /
+// forward transform must write and obfuscate by the true slot index.
+func (p *MessageProcessor) parseTunnelBuildRecords(data []byte) ([]BuildRequestRecord, []int, error) {
 	recordCount, err := p.validateAndGetRecordCount(data)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	return p.parseRecordsFromData(data, recordCount, ShortBuildRecordSize)
@@ -583,22 +741,28 @@ func (p *MessageProcessor) validateAndGetRecordCount(data []byte) (int, error) {
 	return recordCount, nil
 }
 
-// parseRecordsFromData iterates through the data and parses each record.
-func (p *MessageProcessor) parseRecordsFromData(data []byte, recordCount, recordSize int) ([]BuildRequestRecord, error) {
+// parseRecordsFromData iterates through the data and parses each record,
+// recording the slot index of each record that decrypts to us.
+func (p *MessageProcessor) parseRecordsFromData(data []byte, recordCount, recordSize int) ([]BuildRequestRecord, []int, error) {
 	records := make([]BuildRequestRecord, 0, recordCount)
+	slotIndices := make([]int, 0, recordCount)
 	offset := 1
 
 	for i := 0; i < recordCount; i++ {
 		if len(data)-offset < recordSize {
-			return nil, oops.Errorf("insufficient data for record %d: have %d, need %d", i, len(data)-offset, recordSize)
+			return nil, nil, oops.Errorf("insufficient data for record %d: have %d, need %d", i, len(data)-offset, recordSize)
 		}
 
 		recordData := data[offset : offset+recordSize]
+		before := len(records)
 		p.tryParseAndAppendRecord(&records, recordData, i)
+		if len(records) > before {
+			slotIndices = append(slotIndices, i)
+		}
 		offset += recordSize
 	}
 
-	return records, nil
+	return records, slotIndices, nil
 }
 
 // tryParseAndAppendRecord attempts to decrypt a single 218-byte short build
@@ -684,4 +848,3 @@ func (p *MessageProcessor) isRecordForUs(recordData []byte) bool {
 	}
 	return true
 }
-

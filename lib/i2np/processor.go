@@ -102,6 +102,22 @@ type BuildReplyForwarder interface {
 	// - encryptedRecords: The complete encrypted build reply records
 	// - inputMessageType: The input message type (25=ShortTunnelBuild) for correct reply type mapping
 	ForwardBuildReplyThroughTunnel(gatewayHash common.Hash, tunnelID buildrecord.TunnelID, messageID int, encryptedRecords []byte, inputMessageType int) error
+
+	// ForwardBuildRequestToRouter relays the transformed build message to the
+	// next hop as a ShortTunnelBuild (type 25) over a direct transport session.
+	// A non-endpoint hop (request record flag bit 6 / OBEP clear) must forward
+	// the SAME transformed body onward rather than emitting a build reply, so
+	// the next hop can process its own record. The build request is always
+	// delivered hop-to-hop directly to NextIdent: the record's NextTunnel field
+	// carries the next hop's receive tunnel ID as data, not a delivery tunnel,
+	// so it is never wrapped in a TunnelGateway here.
+	// See [I2P Spec: Tunnel Creation ECIES](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/tunnel-creation-ecies.rst) "Message Flow".
+	//
+	// Parameters:
+	// - routerHash: The hash of the next hop router (NextIdent from the record)
+	// - messageID: The I2NP message ID to use (the record's SendMessageID)
+	// - body: The transformed [count:1][N x 218] build message body
+	ForwardBuildRequestToRouter(routerHash common.Hash, messageID int, body []byte) error
 }
 
 // TunnelGatewayHandler defines the interface for handling TunnelGateway messages.

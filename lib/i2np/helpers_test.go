@@ -116,6 +116,9 @@ func processDirectBuildRecord(t *testing.T, processor *MessageProcessor, message
 	t.Helper()
 	record := createTestBuildRequestRecord(t)
 	record.NextTunnel = 0
+	// The hop echoes the record's own "next message ID" as the outgoing I2NP
+	// ID, so pin it to the correlation ID the test expects on the forward call.
+	record.SendMessageID = messageID
 	raw := make([]byte, 1+ShortBuildRecordSize)
 	raw[0] = 1
 	for i := 1; i < len(raw); i++ {

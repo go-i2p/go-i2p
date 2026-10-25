@@ -81,3 +81,33 @@ func (f *transportBuildReplyForwarder) createReplyMessage(messageID int, encrypt
 	msg.SetData(encryptedRecords)
 	return msg
 }
+
+// ForwardBuildRequestToRouter relays the transformed build message onward to the
+// next hop as a ShortTunnelBuild (type 25) over a direct transport session to
+// routerHash (the record's NextIdent). A build request is always delivered
+// hop-to-hop directly; the record's NextTunnel field carries the next hop's
+// receive tunnel ID as data, not a delivery tunnel, so it is never wrapped in a
+// TunnelGateway here. This is how non-endpoint hops telescope the build toward
+// the OBEP (outbound) or back to the creator (inbound) per the I2P spec "Message
+// Flow". See [I2P Spec: Tunnel Creation ECIES](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/tunnel-creation-ecies.rst).
+func (f *transportBuildReplyForwarder) ForwardBuildRequestToRouter(routerHash common.Hash, messageID int, body []byte) error {
+	msg := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeShortTunnelBuild)
+	msg.SetMessageID(messageID)
+	msg.SetData(body)
+
+	session, err := f.sessionProvider.GetSessionByHash(routerHash)
+	if err != nil {
+		return oops.Wrapf(err, "failed to get session to relay build request to %x", routerHash[:8])
+	}
+
+	if err := session.QueueSendI2NP(msg); err != nil {
+		return oops.Wrapf(err, "failed to relay build request to router %x", routerHash[:8])
+	}
+
+	log.WithFields(logger.Fields{
+		"at":         "ForwardBuildRequestToRouter",
+		"peer":       logutil.HashPrefix(routerHash),
+		"message_id": messageID,
+	}).Debug("relayed STBM build request to next hop")
+	return nil
+}

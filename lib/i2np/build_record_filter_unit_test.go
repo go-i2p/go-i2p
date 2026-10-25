@@ -67,7 +67,7 @@ func TestProcessAllBuildRecords_NoProcessingWhenHashUnset(t *testing.T) {
 		records[i].NextTunnel = 0
 	}
 
-	err := processor.processAllBuildRecords(43, records, nil, 25)
+	err := processor.processAllBuildRecords(43, records, []int{0, 1, 2}, nil, 25)
 	require.Error(t, err, "processing must fail when our router hash is unset")
 
 	assert.Equal(t, 0, mockParticipant.getRegisteredCount(),
