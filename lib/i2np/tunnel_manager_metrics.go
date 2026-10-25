@@ -1,8 +1,7 @@
 package i2np
 
 import (
-	"golang.org/x/crypto/chacha20"
-
+	i2ptunnel "github.com/go-i2p/crypto/tunnel"
 	"github.com/samber/oops"
 )
 
@@ -51,17 +50,19 @@ func (tm *TunnelManager) GetClientBuildExpireCount(windowMs int64) float64 {
 
 // chacha20XORRecord applies the I2P short-tunnel-build chained layer
 // obfuscation to a single 218-byte STBM record using ChaCha20 as a raw
-// stream cipher (no Poly1305). The nonce is 12 zero bytes with nonce[4]
-// set to the record's index in the message — matching i2pd's
-// ShortECIESTunnelHopConfig::DecryptRecord. Because ChaCha20 is a stream
-// cipher, the same operation both applies and removes the layer.
+// stream cipher (no Poly1305). The IV is 12 zero bytes with IV[4] set to the
+// record's index in the message (tunnel-creation-ecies.rst "Record Encryption").
+// Because ChaCha20 is a stream cipher, the same operation both applies and
+// removes the layer.
+//
+// Delegates to the upstream primitive (crypto/tunnel.ObfuscateOtherBuildRecord)
+// so the creator-side layering, the transit-hop reply, and the initiator's reply
+// peeling all use one implementation.
 func chacha20XORRecord(record *[ShortBuildRecordSize]byte, key [32]byte, index int) error {
-	var nonce [12]byte
-	nonce[4] = byte(index)
-	c, err := chacha20.NewUnauthenticatedCipher(key[:], nonce[:])
+	out, err := i2ptunnel.ObfuscateOtherBuildRecord(key, byte(index), record[:])
 	if err != nil {
-		return oops.Wrapf(err, "ChaCha20 init failed")
+		return oops.Wrapf(err, "ChaCha20 layer obfuscation failed")
 	}
-	c.XORKeyStream(record[:], record[:])
+	copy(record[:], out)
 	return nil
 }

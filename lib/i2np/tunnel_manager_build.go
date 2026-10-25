@@ -10,6 +10,7 @@ import (
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/common/session_key"
 	"github.com/go-i2p/crypto/rand"
+	i2ptunnel "github.com/go-i2p/crypto/tunnel"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/go-i2p/logger"
@@ -535,26 +536,30 @@ func (tm *TunnelManager) createSerializedBuildMessage(result *tunnel.TunnelBuild
 func (tm *TunnelManager) createSerializedShortTunnelBuildMessage(result *tunnel.TunnelBuildResult, messageID int) ([]byte, error) {
 	i2npRecords := tm.convertAndOverrideMessageID(result.Records, messageID)
 
-	encryptedRecords, replyKeys, noiseHashes, postReplyCKs, err := tm.encryptRecordsAndDeriveKeys(i2npRecords, result.Hops)
+	encryptedRecords, hopKeys, noiseHashes, preReplyCKs, err := tm.encryptRecordsAndDeriveKeys(i2npRecords, result.Hops)
 	if err != nil {
 		return nil, err
 	}
 
-	tm.updateReplyKeysWithHKDF(result, replyKeys, noiseHashes)
+	tm.updateReplyKeys(result, hopKeys, noiseHashes)
 
-	// F063 FIX: The STBM cleartext does not carry layer/IV keys, so each hop
-	// derives them from the Noise chaining key. The tunnel creator must derive
-	// the SAME keys for its own hops (from each hop's post-reply chaining key)
-	// and install them on result.Records so the creator's tunnel-data path
-	// (gateway/endpoint encryptors) encrypts with keys the hops can decrypt.
-	if err := tm.updateLayerKeysFromHKDF(result, postReplyCKs); err != nil {
+	// The STBM cleartext does not carry layer/IV keys, so each hop derives them
+	// from the Noise chaining key. The tunnel creator must derive the SAME keys
+	// for its own hops (via the shared OBEP-aware KDF) and install them on
+	// result.Records so the creator's tunnel-data path (gateway/endpoint
+	// encryptors) encrypts with keys the hops can decrypt.
+	if err := tm.updateLayerKeys(result, hopKeys); err != nil {
 		return nil, err
 	}
 
-	if err := tm.registerGarlicReplyKeys(noiseHashes, postReplyCKs, messageID, result.TunnelID); err != nil {
+	if err := tm.registerGarlicReplyKeys(preReplyCKs, messageID, result.TunnelID); err != nil {
 		return nil, err
 	}
 
+	replyKeys := make([][32]byte, len(hopKeys))
+	for i, keys := range hopKeys {
+		replyKeys[i] = keys.ReplyKey
+	}
 	if err := tm.applyChaCha20LayerObfuscation(encryptedRecords, replyKeys); err != nil {
 		return nil, err
 	}
@@ -584,90 +589,99 @@ func (tm *TunnelManager) convertAndOverrideMessageID(records []tunnel.BuildReque
 	return i2npRecords
 }
 
-// encryptRecordsAndDeriveKeys encrypts each STBM record and derives cryptographic keys.
-// Each encrypted STBM record is exactly 218 bytes. Returns encrypted records, reply keys,
-// Noise transcript hashes, and post-reply chaining keys needed for STBM protocol.
+// encryptRecordsAndDeriveKeys encrypts each STBM record and derives each hop's
+// reply/layer/IV keys. Each encrypted STBM record is exactly 218 bytes.
+//
+// The keys come from the shared upstream KDF (deriveSTBMHopKeys ->
+// crypto/tunnel.DeriveBuildReplyKeysFromChain) driven by each record's own Flag,
+// so the OBEP hop gets the endpoint branch (extra TunnelLayerIVKey step + garlic
+// reply key/tag) and every other hop gets the non-OBEP branch (IV key = left half
+// of the layer-key output). Deriving both sides with one implementation is what
+// keeps the creator's tunnel-data keys identical to the keys the hops install.
 func (tm *TunnelManager) encryptRecordsAndDeriveKeys(i2npRecords []BuildRequestRecord, hops []router_info.RouterInfo) (
 	encryptedRecords [][ShortBuildRecordSize]byte,
-	replyKeys [][32]byte,
+	hopKeys []i2ptunnel.BuildReplyKeys,
 	noiseHashes [][32]byte,
-	postReplyCKs [][32]byte,
+	preReplyCKs [][32]byte,
 	err error,
 ) {
 	encryptedRecords = make([][ShortBuildRecordSize]byte, len(i2npRecords))
-	replyKeys = make([][32]byte, len(i2npRecords))
+	hopKeys = make([]i2ptunnel.BuildReplyKeys, len(i2npRecords))
 	noiseHashes = make([][32]byte, len(i2npRecords))
-	postReplyCKs = make([][32]byte, len(i2npRecords))
+	preReplyCKs = make([][32]byte, len(i2npRecords))
 
 	for i, record := range i2npRecords {
 		if i >= len(hops) {
 			return nil, nil, nil, nil, oops.Errorf("record %d has no corresponding hop RouterInfo", i)
 		}
-		encrypted, ck, nh, encErr := EncryptShortBuildRequestRecordWithChain(record, hops[i])
+		encrypted, preReplyCK, nh, encErr := EncryptShortBuildRequestRecordWithChain(record, hops[i])
 		if encErr != nil {
 			return nil, nil, nil, nil, oops.Wrapf(encErr, "failed to encrypt short build record %d", i)
 		}
 		encryptedRecords[i] = encrypted
 		noiseHashes[i] = nh
+		preReplyCKs[i] = preReplyCK
 
-		rk, newCK, keyErr := DeriveSTBMReplyKey(ck)
+		isOBEP := record.Flag&tunnel.FlagOBEP != 0
+		keys, keyErr := deriveSTBMHopKeys(preReplyCK, isOBEP)
 		if keyErr != nil {
-			return nil, nil, nil, nil, oops.Wrapf(keyErr, "failed to derive reply key for hop %d", i)
+			return nil, nil, nil, nil, oops.Wrapf(keyErr, "failed to derive STBM keys for hop %d", i)
 		}
-		replyKeys[i] = rk
-		postReplyCKs[i] = newCK
+		hopKeys[i] = keys
 	}
 
-	return encryptedRecords, replyKeys, noiseHashes, postReplyCKs, nil
+	return encryptedRecords, hopKeys, noiseHashes, preReplyCKs, nil
 }
 
-// updateReplyKeysWithHKDF overwrites result.ReplyKeys with HKDF-derived keys.
-// Per STBM spec (proposal 152), the ReplyKey field is absent from the 154-byte cleartext.
-// Each hop derives its reply key via HKDF(ck, "", "SMTunnelReplyKey", 64).
-func (tm *TunnelManager) updateReplyKeysWithHKDF(result *tunnel.TunnelBuildResult, replyKeys, noiseHashes [][32]byte) {
-	result.ReplyKeys = make([]session_key.SessionKey, len(replyKeys))
-	for i, rk := range replyKeys {
-		result.ReplyKeys[i] = session_key.SessionKey(rk)
+// updateReplyKeys stores each hop's HKDF-derived reply key and Noise transcript
+// hash on the build result. Per STBM spec (proposal 152) the ReplyKey field is
+// absent from the 154-byte cleartext; each hop derives it via the shared KDF.
+func (tm *TunnelManager) updateReplyKeys(result *tunnel.TunnelBuildResult, hopKeys []i2ptunnel.BuildReplyKeys, noiseHashes [][32]byte) {
+	result.ReplyKeys = make([]session_key.SessionKey, len(hopKeys))
+	for i, keys := range hopKeys {
+		result.ReplyKeys[i] = session_key.SessionKey(keys.ReplyKey)
 	}
 	result.NoiseHashes = noiseHashes
 }
 
-// updateLayerKeysFromHKDF overwrites result.Records[i].LayerKey/IVKey with keys
-// HKDF-derived from each hop's post-reply Noise chaining key, matching exactly
-// what the transit hop derives (DeriveSTBMLayerKeys).
-// F063 FIX: For STBM the 154-byte cleartext does not carry layer/IV keys, so the
-// random keys placed in the record by the builder are never transmitted. The
-// creator must derive the same keys the hops will, and install them on the
-// records so the creator's own tunnel-data encryption uses them. Without this,
-// the creator would encrypt tunnel data with keys the hops never learned.
-func (tm *TunnelManager) updateLayerKeysFromHKDF(result *tunnel.TunnelBuildResult, postReplyCKs [][32]byte) error {
-	if len(postReplyCKs) != len(result.Records) {
-		return oops.Errorf("post-reply chaining key count %d does not match record count %d", len(postReplyCKs), len(result.Records))
+// updateLayerKeys installs each hop's derived layer/IV keys on result.Records so
+// the creator's own tunnel-data path (gateway/endpoint encryptors) encrypts with
+// the exact keys the hops will install on acceptance. The STBM cleartext does not
+// carry layer/IV keys, so the random keys placed in the record by the builder are
+// never transmitted and must be overwritten here with the derived ones.
+func (tm *TunnelManager) updateLayerKeys(result *tunnel.TunnelBuildResult, hopKeys []i2ptunnel.BuildReplyKeys) error {
+	if len(hopKeys) != len(result.Records) {
+		return oops.Errorf("hop key count %d does not match record count %d", len(hopKeys), len(result.Records))
 	}
-	for i, ck := range postReplyCKs {
-		layerKey, ivKey, _, err := DeriveSTBMLayerKeys(ck)
-		if err != nil {
-			return oops.Wrapf(err, "failed to derive layer keys for hop %d", i)
-		}
-		copy(result.Records[i].LayerKey[:], layerKey[:])
-		copy(result.Records[i].IVKey[:], ivKey[:])
+	for i, keys := range hopKeys {
+		copy(result.Records[i].LayerKey[:], keys.LayerKey[:])
+		copy(result.Records[i].IVKey[:], keys.IVKey[:])
 	}
 	return nil
 }
 
-// registerGarlicReplyKeys derives and registers the one-time garlic key for OBEP reply decryption.
-// Uses the spec-compliant i2pd derivation path: SMTunnelLayerKey → TunnelLayerIVKey → RGarlicKeyAndTag.
-// This matches TransitTunnel.cpp::HandleShortTransitTunnelBuildMsg.
-func (tm *TunnelManager) registerGarlicReplyKeys(noiseHashes, postReplyCKs [][32]byte, messageID int, tunnelID tunnel.TunnelID) error {
-	if tm.garlicKeyRegistrar == nil || len(postReplyCKs) == 0 {
+// registerGarlicReplyKeys derives and registers the one-time garlic key for OBEP
+// reply decryption. The OBEP branch of the shared KDF produces the garlic reply
+// key/tag (SMTunnelLayerKey -> TunnelLayerIVKey -> RGarlicKeyAndTag).
+func (tm *TunnelManager) registerGarlicReplyKeys(preReplyCKs [][32]byte, messageID int, tunnelID tunnel.TunnelID) error {
+	if tm.garlicKeyRegistrar == nil || len(preReplyCKs) == 0 {
 		return nil
 	}
 
-	lastHop := len(postReplyCKs) - 1
-	obepKey, obepTag, obepErr := DeriveSTBMOBEPGarlicKeyAndTag(postReplyCKs[lastHop])
+	// The OBEP always wraps its ShortTunnelBuildReply in garlic addressed to the
+	// creator, so the creator derives the one-time garlic key/tag from the last
+	// hop's pre-reply chaining key using the OBEP branch of the KDF, regardless
+	// of the flag bits carried in the record.
+	lastHop := len(preReplyCKs) - 1
+	obepKeys, obepErr := deriveSTBMHopKeys(preReplyCKs[lastHop], true)
 	if obepErr != nil {
 		return oops.Wrapf(obepErr, "failed to derive OBEP garlic reply key")
 	}
+	var obepKey [32]byte
+	var obepTag [8]byte
+	copy(obepKey[:], obepKeys.GarlicReplyKey[:])
+	copy(obepTag[:], obepKeys.GarlicReplyTag[:])
+
 	tm.garlicKeyRegistrar.RegisterOneTimeGarlicKey(obepTag, obepKey)
 	log.WithFields(logger.Fields{
 		"at":         "registerGarlicReplyKeys",
@@ -680,6 +694,7 @@ func (tm *TunnelManager) registerGarlicReplyKeys(noiseHashes, postReplyCKs [][32
 
 	return nil
 }
+
 
 // applyChaCha20LayerObfuscation applies chained ChaCha20 stream-cipher layer obfuscation
 // to STBM records. For each hop i (second-to-last down to first), XOR every record at

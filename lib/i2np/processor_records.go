@@ -7,10 +7,11 @@ import (
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/crypto/rand"
+	i2ptunnel "github.com/go-i2p/crypto/tunnel"
+	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
-	"golang.org/x/crypto/chacha20poly1305"
 )
 
 // processShortTunnelBuildMessage processes Short Tunnel Build Messages (STBM).
@@ -381,13 +382,17 @@ func (p *MessageProcessor) initializeSTBMReply(rawData []byte, expected, count i
 }
 
 // encryptSTBMSlots encrypts all slots: AEAD for our slot, ChaCha20 XOR for others.
+//
+// The per-slot primitives are the upstream ones (crypto/tunnel), so the reply
+// records we emit are byte-identical to what a conforming router expects:
+// our slot is ChaCha20-Poly1305 under our reply key with the build-request
+// handshake hash as AD and the record number as the nonce; the other slots are
+// raw ChaCha20-XORed with the same reply key so the next hop can peel our layer.
 func (p *MessageProcessor) encryptSTBMSlots(replyData []byte, count, ourIndex int, crypto stbmSlotCrypto, replyCode byte, availableBW uint32) error {
-	var nonce [12]byte
 	for j := 0; j < count; j++ {
 		slotOffset := 1 + j*ShortBuildRecordSize
-		nonce[4] = byte(j)
 		if j == ourIndex {
-			if err := p.encryptOwnSTBMSlot(replyData, slotOffset, nonce, crypto, replyCode, availableBW); err != nil {
+			if err := p.encryptOwnSTBMSlot(replyData, slotOffset, byte(j), crypto, replyCode, availableBW); err != nil {
 				return err
 			}
 		} else {
@@ -400,13 +405,12 @@ func (p *MessageProcessor) encryptSTBMSlots(replyData []byte, count, ourIndex in
 }
 
 // encryptOwnSTBMSlot AEAD-encrypts our slot with the reply code.
-func (p *MessageProcessor) encryptOwnSTBMSlot(replyData []byte, slotOffset int, nonce [12]byte, crypto stbmSlotCrypto, replyCode byte, availableBW uint32) error {
+func (p *MessageProcessor) encryptOwnSTBMSlot(replyData []byte, slotOffset int, recordNumber byte, crypto stbmSlotCrypto, replyCode byte, availableBW uint32) error {
 	cleartext := p.prepareSTBMSlotCleartext(replyCode, availableBW)
-	aead, err := chacha20poly1305.New(crypto.replyKey[:])
+	ciphertext, err := i2ptunnel.EncryptOwnBuildReply(crypto.replyKey, crypto.noiseHash, recordNumber, cleartext[:])
 	if err != nil {
-		return oops.Wrapf(err, "ChaCha20-Poly1305 init failed")
+		return oops.Wrapf(err, "failed to AEAD-encrypt STBM reply slot %d", recordNumber)
 	}
-	ciphertext := aead.Seal(nil, nonce[:], cleartext[:], crypto.noiseHash[:])
 	copy(replyData[slotOffset:], ciphertext[:ShortBuildRecordSize])
 	return nil
 }
@@ -632,40 +636,36 @@ func (p *MessageProcessor) tryParseAndAppendRecord(records *[]BuildRequestRecord
 // As a side effect it populates p.stbmSlotCrypto[index] with the Noise-derived
 // reply key and transcript hash that are needed to build the AEAD reply.
 //
-// F062 FIX: The short record format does not carry layer/IV keys in its
-// cleartext, so the returned record would have zero LayerKey/IVKey. Both the
+// The short record format does not carry layer/IV keys in its cleartext, so the
 // transit hop and the tunnel creator must derive them from the Noise chaining
-// key (post-reply) via DeriveSTBMLayerKeys. We populate record.LayerKey and
+// key via the spec KDF (deriveSTBMHopKeys -> upstream
+// crypto/tunnel.DeriveBuildReplyKeysFromChain). That chain is OBEP-dependent:
+// the outbound endpoint runs an extra TunnelLayerIVKey step while every other
+// hop uses the left half of the layer-key output as its IV key
+// (tunnel-creation-ecies.rst "Reply keys"). The hop learns which branch applies
+// from its own decrypted record's Flag bit 6. We populate record.LayerKey and
 // record.IVKey here so handleAcceptedBuildRecord registers real (non-zero) keys.
 func (p *MessageProcessor) decryptShortRecord(recordData []byte, index int) (BuildRequestRecord, error) {
 	var encrypted [218]byte
 	copy(encrypted[:], recordData[:218])
-	ck, noiseHash, err := DecryptSTBMRecordReturningChainingKeyAndHash(encrypted, p.ourPrivateKey)
+	record, preReplyCK, noiseHash, err := decryptSTBMRecord(encrypted, p.ourPrivateKey)
 	if err != nil {
 		return BuildRequestRecord{}, err
 	}
-	replyKey, postReplyCK, err := DeriveSTBMReplyKey(ck)
+
+	isOBEP := record.Flag&tunnel.FlagOBEP != 0
+	keys, err := deriveSTBMHopKeys(preReplyCK, isOBEP)
 	if err != nil {
-		return BuildRequestRecord{}, oops.Wrapf(err, "failed to derive STBM reply key for slot %d", index)
+		return BuildRequestRecord{}, oops.Wrapf(err, "failed to derive STBM reply/layer keys for slot %d", index)
 	}
+
 	if p.stbmSlotCrypto == nil {
 		p.stbmSlotCrypto = make(map[int]stbmSlotCrypto)
 	}
-	p.stbmSlotCrypto[index] = stbmSlotCrypto{replyKey: replyKey, noiseHash: noiseHash}
+	p.stbmSlotCrypto[index] = stbmSlotCrypto{replyKey: keys.ReplyKey, noiseHash: noiseHash}
 
-	record, err := DecryptShortBuildRequestRecord(encrypted, p.ourPrivateKey)
-	if err != nil {
-		return BuildRequestRecord{}, err
-	}
-
-	// F062 FIX: derive the tunnel layer/IV keys from the post-reply chaining key
-	// and populate the record so participant registration uses real keys.
-	layerKey, ivKey, _, err := DeriveSTBMLayerKeys(postReplyCK)
-	if err != nil {
-		return BuildRequestRecord{}, oops.Wrapf(err, "failed to derive STBM layer keys for slot %d", index)
-	}
-	copy(record.LayerKey[:], layerKey[:])
-	copy(record.IVKey[:], ivKey[:])
+	copy(record.LayerKey[:], keys.LayerKey[:])
+	copy(record.IVKey[:], keys.IVKey[:])
 
 	return record, nil
 }

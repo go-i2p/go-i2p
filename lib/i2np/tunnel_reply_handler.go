@@ -5,10 +5,10 @@ import (
 	"time"
 
 	"github.com/go-i2p/common/session_key"
+	i2ptunnel "github.com/go-i2p/crypto/tunnel"
 	"github.com/go-i2p/go-i2p/lib/tunnel/buildrecord"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
-	"golang.org/x/crypto/chacha20poly1305"
 )
 
 // ReplyProcessorConfig configures tunnel reply processing behavior.
@@ -376,31 +376,19 @@ func (rp *ReplyProcessor) decryptSTBMSlot(record []byte, key [32]byte, noiseHash
 
 // decryptSTBMReplySlot AEAD-decrypts a single 218-byte STBM reply record slot.
 //
-// Per proposal 157 and i2pd TunnelConfig.cpp ShortECIESTunnelHopConfig::DecryptBuildResponseRecord:
+// Delegates to the upstream primitive (crypto/tunnel.DecryptOwnBuildReply),
+// which implements proposal 157 / i2pd ShortECIESTunnelHopConfig::
+// DecryptBuildResponseRecord:
 //   - Cipher: ChaCha20-Poly1305
-//   - Key: 32-byte reply key (derived from HKDF(ck, "", "SMTunnelReplyKey")[32:64])
-//   - Nonce: 12 bytes, nonce[4] = record index (byte 4 of nonce = slot position)
+//   - Key: 32-byte reply key (HKDF "SMTunnelReplyKey" output)
+//   - Nonce: record number 0-7 in nonce byte 4
 //   - AD: 32-byte Noise transcript hash (m_H after EncryptAndHash on creator side)
 //   - Input: 218 bytes (202 ciphertext + 16 Poly1305 MAC)
 //   - Output: 202 bytes plaintext; ret code at offset 201
 func decryptSTBMReplySlot(encrypted []byte, key, noiseHash [32]byte, index int) ([]byte, error) {
-	if len(encrypted) < ShortBuildRecordSize {
-		return nil, oops.Errorf("STBM reply slot too short: got %d bytes, need %d", len(encrypted), ShortBuildRecordSize)
-	}
-	aead, err := chacha20poly1305.New(key[:])
-	if err != nil {
-		return nil, oops.Wrapf(err, "ChaCha20-Poly1305 init failed")
-	}
-	var nonce [12]byte
-	nonce[4] = byte(index)
-	cleartext, err := aead.Open(nil, nonce[:], encrypted[:ShortBuildRecordSize], noiseHash[:])
+	cleartext, err := i2ptunnel.DecryptOwnBuildReply(key, noiseHash, byte(index), encrypted[:min(len(encrypted), ShortBuildRecordSize)])
 	if err != nil {
 		return nil, oops.Wrapf(err, "ChaCha20-Poly1305 Open failed for STBM reply slot %d", index)
-	}
-	// AEAD removes the 16-byte tag: 218 - 16 = 202 bytes of plaintext.
-	if len(cleartext) != ShortBuildRecordSize-chacha20poly1305.Overhead {
-		return nil, oops.Errorf("unexpected STBM cleartext length: got %d, want %d",
-			len(cleartext), ShortBuildRecordSize-chacha20poly1305.Overhead)
 	}
 	return cleartext, nil
 }

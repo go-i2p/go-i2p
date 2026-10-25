@@ -2,18 +2,16 @@ package i2np
 
 import (
 	"crypto/rand"
-	"crypto/sha256"
 	"fmt"
-	"io"
 	"time"
 
 	"github.com/go-i2p/common/router_info"
+	i2ptunnel "github.com/go-i2p/crypto/tunnel"
 	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/go-i2p/logger"
 	"github.com/go-i2p/noise"
 	"github.com/samber/oops"
 	"go.step.sm/crypto/x25519"
-	"golang.org/x/crypto/hkdf"
 )
 
 // stbmNoiseProtocolName is the Noise protocol name used by Java I2P and i2pd
@@ -190,130 +188,68 @@ func assembleEncryptedSTBMRecord(encrypted *[218]byte, full, ephemeralPub, ct []
 	copy(encrypted[48:218], ct)
 }
 
-// DeriveSTBMReplyKey derives the per-hop ChaCha20 reply key from a hop's
-// post-encryption Noise chaining key. This key is used both for the chained
-// stream-cipher layer obfuscation that the sender applies to records following
-// this hop, and for AEAD-decrypting that hop's build response record.
+// STBM reply/layer/IV key derivation.
 //
-// The derivation matches i2pd:
+// Delegates to the canonical implementation in github.com/go-i2p/crypto/tunnel
+// (DeriveBuildReplyKeysFromChain), which is pinned by known-answer tests there.
+// Keeping one implementation matters because the spec's KDF is DIFFERENT for
+// the outbound endpoint (OBEP) and every other hop (tunnel-creation-ecies.rst
+// "Reply keys"):
 //
-//	HKDF-SHA256(salt=ck, ikm="", info="SMTunnelReplyKey", out=64)
-//	-> new_ck (bytes 0:32) || replyKey (bytes 32:64)
+//   keydata = HKDF(ck, ZEROLEN, "SMTunnelReplyKey", 64)
+//     replyKey = keydata[32:63]; ck = keydata[0:31]
+//   keydata = HKDF(ck, ZEROLEN, "SMTunnelLayerKey", 64)
+//     layerKey = keydata[32:63]
+//     non-OBEP: ivKey = keydata[0:31]              ("because it's last")
+//     OBEP:     ck = keydata[0:31]
+//               keydata = HKDF(ck, ZEROLEN, "TunnelLayerIVKey", 64)
+//               ivKey = keydata[32:63]; ck = keydata[0:31]
+//               keydata = HKDF(ck, ZEROLEN, "RGarlicKeyAndTag", 64)
+//               garlicReplyKey = keydata[32:63]; garlicReplyTag = keydata[0:7]
 //
-// Returns both the replyKey and the new chaining key so callers can continue
-// the HKDF chain (e.g. for layer/IV/garlic key derivation).
-func DeriveSTBMReplyKey(chainingKey [32]byte) ([32]byte, [32]byte, error) {
-	var replyKey, newCK [32]byte
-	// I2P HKDF convention: ck is the HMAC key (salt), IKM is empty.
-	// i2pd: HKDF(salt=ck, ikm="", info) → PRK = HMAC-SHA256(key=ck, data="")
-	// Go hkdf.New(hash, secret=IKM, salt, info) → PRK = HMAC-SHA256(key=salt, data=IKM)
-	// So: salt=ck[:], secret=[]byte{} (not the reverse)
-	r := hkdf.New(sha256.New, []byte{}, chainingKey[:], []byte("SMTunnelReplyKey"))
-	var out [64]byte
-	if _, err := io.ReadFull(r, out[:]); err != nil {
-		return replyKey, newCK, oops.Wrapf(err, "HKDF for SMTunnelReplyKey failed")
-	}
-	copy(newCK[:], out[0:32])
-	copy(replyKey[:], out[32:64])
-	return replyKey, newCK, nil
+// Note: "The KDF for the IV key at the OBEP is different from that for the
+// other hops, even if the reply is not garlic encrypted." A single chain that
+// always runs TunnelLayerIVKey gives transit hops an IV key the tunnel creator
+// never used (and vice versa), so tunnel data cannot be decrypted at the peer.
+//
+// Callers pass the PRE-reply chaining key: the Noise ck immediately after the
+// hop's request record was encrypted/decrypted, before any reply KDF step.
+
+// deriveSTBMHopKeys runs the upstream reply/layer/IV (and OBEP garlic) KDF for
+// one hop. isOBEP must come from the hop's build request record Flag bit 6.
+func deriveSTBMHopKeys(preReplyCK [32]byte, isOBEP bool) (i2ptunnel.BuildReplyKeys, error) {
+	return i2ptunnel.DeriveBuildReplyKeysFromChain(preReplyCK, isOBEP)
 }
 
-// hkdf64 performs one HKDF-SHA256 step matching i2pd's HKDF(salt, nil, 0, info, out, 64):
-// output is 64 bytes, [0:32]=new chaining key, [32:64]=derived key.
+// decryptSTBMRecord performs the Noise_N AEAD-decrypt of a 218-byte STBM build
+// request record and returns everything a transit hop needs:
 //
-// I2P HKDF convention: ck is the HMAC key (salt), IKM is empty.
-// i2pd: HKDF(salt=ck, ikm="", info) → PRK = HMAC-SHA256(key=ck, data="")
-// Go hkdf.New(hash, secret=IKM, salt, info) → PRK = HMAC-SHA256(key=salt, data=IKM)
-// Correct call: salt=ck[:], secret=[]byte{} (empty IKM)
-func hkdf64(ck [32]byte, info string) ([64]byte, error) {
-	var out [64]byte
-	r := hkdf.New(sha256.New, []byte{}, ck[:], []byte(info))
-	_, err := io.ReadFull(r, out[:])
-	return out, err
-}
-
-// DeriveSTBMLayerKeys derives the tunnel layer key and IV key for a hop that
-// accepted an STBM build record, matching i2pd's TransitTunnel.cpp derivation.
+//   - the parsed cleartext BuildRequestRecord (whose Flag carries the OBEP bit
+//     the reply/layer KDF branch depends on)
+//   - the PRE-reply chaining key (ck right after the request record, before any
+//     reply KDF step) - feed this to deriveSTBMHopKeys with the hop's isOBEP
+//   - the post-decrypt handshake hash m_H, used as AEAD associated data when the
+//     hop builds its own ShortTunnelBuildReply record
 //
-// Input: postReplyCK — the Noise chaining key after the "SMTunnelReplyKey" HKDF
-// step (i.e. the second return value of DeriveSTBMReplyKey).
+// The transcript is the inverse of EncryptShortBuildRequestRecordWithChain:
 //
-// Derivation:
-//
-//	HKDF64(postReplyCK, "SMTunnelLayerKey") -> ck1 || layerKey
-//	HKDF64(ck1, "TunnelLayerIVKey")         -> ck2 || ivKey
-//
-// The short build record format does not carry layer/IV keys in its cleartext;
-// both the transit hop and the tunnel creator MUST derive them from the Noise
-// chaining key with this exact chain, or tunnel data decryption will fail.
-func DeriveSTBMLayerKeys(postReplyCK [32]byte) (layerKey, ivKey, nextCK [32]byte, err error) {
-	out1, err := hkdf64(postReplyCK, "SMTunnelLayerKey")
-	if err != nil {
-		return layerKey, ivKey, nextCK, oops.Wrapf(err, "HKDF for SMTunnelLayerKey failed")
-	}
-	var ck1 [32]byte
-	copy(ck1[:], out1[0:32])
-	copy(layerKey[:], out1[32:64])
-
-	out2, err := hkdf64(ck1, "TunnelLayerIVKey")
-	if err != nil {
-		return layerKey, ivKey, nextCK, oops.Wrapf(err, "HKDF for TunnelLayerIVKey failed")
-	}
-	copy(nextCK[:], out2[0:32])
-	copy(ivKey[:], out2[32:64])
-
-	return layerKey, ivKey, nextCK, nil
-}
-
-// DeriveSTBMOBEPGarlicKeyAndTag derives the one-time garlic key and tag that
-// the OBEP uses to wrap its ShortTunnelBuildReply, matching i2pd exactly.
-//
-// Input: postReplyCK — the Noise chaining key after "SMTunnelReplyKey" HKDF step.
-//
-// Derivation (from TransitTunnel.cpp::HandleShortTransitTunnelBuildMsg):
-//
-//	HKDF64(postReplyCK, "SMTunnelLayerKey") -> ck1 || layerKey
-//	HKDF64(ck1, "TunnelLayerIVKey")         -> ck2 || ivKey
-//	HKDF64(ck2, "RGarlicKeyAndTag")          -> ck3 || garlicEncKey
-//	  TAG = ck3[0:8]         (first 8 bytes of new chaining key)
-//	  KEY = garlicEncKey     (output key, 32 bytes)
-func DeriveSTBMOBEPGarlicKeyAndTag(postReplyCK [32]byte) ([32]byte, [8]byte, error) {
-	var garlicKey [32]byte
-	var tag [8]byte
-
-	_, _, ck2, err := DeriveSTBMLayerKeys(postReplyCK)
-	if err != nil {
-		return garlicKey, tag, err
-	}
-
-	out3, err := hkdf64(ck2, "RGarlicKeyAndTag")
-	if err != nil {
-		return garlicKey, tag, oops.Wrapf(err, "HKDF for RGarlicKeyAndTag failed")
-	}
-	copy(garlicKey[:], out3[32:64]) // output key
-	copy(tag[:], out3[0:8])         // first 8 bytes of new chaining key (NOT output key)
-
-	return garlicKey, tag, nil
-}
-
-// DecryptShortBuildRequestRecordNoise is the inverse of EncryptShortBuildRequestRecord:
-// it decrypts a 218-byte STBM record using the Noise_N_25519_ChaChaPoly_SHA256
-// transcript described above. The caller supplies the local router's static
-// X25519 private key (which corresponds to the public key the sender used as
-// the responder static).
-//
-// Returns the parsed cleartext BuildRequestRecord on success.
-func DecryptShortBuildRequestRecordNoise(encrypted [218]byte, privateKey []byte) (BuildRequestRecord, error) {
+//	state = NewNoiseN(our_static_pub)   // MixHash(protocol), MixHash(""), MixHash(rs)
+//	MixHash(eph_pub)
+//	MixKey(X25519(our_static_priv, eph_pub))
+//	cleartext = AEAD_ChaCha20Poly1305(key=k, nonce=0, ad=h).Open(ct)
+//	MixHash(ct)
+func decryptSTBMRecord(encrypted [218]byte, privateKey []byte) (BuildRequestRecord, [32]byte, [32]byte, error) {
+	var chainingKey, noiseHash [32]byte
 	if len(privateKey) != 32 {
-		return BuildRequestRecord{}, oops.Errorf("invalid private key size: expected 32 bytes, got %d", len(privateKey))
+		return BuildRequestRecord{}, chainingKey, noiseHash, oops.Errorf("invalid private key size: expected 32 bytes, got %d", len(privateKey))
 	}
 
-	// Recover our static public key by performing X25519(priv, basepoint).
-	// We need it to seed the Noise_N initial state with rs = our static pub.
+	// Recover our static public key by performing X25519(priv, basepoint). We
+	// need it to seed the Noise_N initial state with rs = our static pub.
 	priv := x25519.PrivateKey(privateKey)
 	ourStaticPubBytes, err := priv.PublicKey()
 	if err != nil {
-		return BuildRequestRecord{}, oops.Wrapf(err, "failed to derive static public key from private key")
+		return BuildRequestRecord{}, chainingKey, noiseHash, oops.Wrapf(err, "failed to derive static public key from private key")
 	}
 
 	ephPub := encrypted[16:48]
@@ -324,99 +260,27 @@ func DecryptShortBuildRequestRecordNoise(encrypted [218]byte, privateKey []byte)
 
 	sharedSecret, err := priv.SharedKey(x25519.PublicKey(ephPub))
 	if err != nil {
-		return BuildRequestRecord{}, oops.Wrapf(err, "X25519 key agreement failed")
+		return BuildRequestRecord{}, chainingKey, noiseHash, oops.Wrapf(err, "X25519 key agreement failed")
 	}
 	ns.MixKey(sharedSecret)
 
 	cleartext, err := ns.DecryptAndHash(nil, ct)
 	if err != nil {
-		return BuildRequestRecord{}, oops.Wrapf(err, "Noise DecryptAndHash failed")
+		return BuildRequestRecord{}, chainingKey, noiseHash, oops.Wrapf(err, "Noise DecryptAndHash failed")
 	}
 	if len(cleartext) != ShortBuildRecordCleartextLen {
-		return BuildRequestRecord{}, oops.Errorf("unexpected cleartext length: got %d, want %d",
+		return BuildRequestRecord{}, chainingKey, noiseHash, oops.Errorf("unexpected cleartext length: got %d, want %d",
 			len(cleartext), ShortBuildRecordCleartextLen)
 	}
 
-	log.WithField("cleartext_size", ShortBuildRecordCleartextLen).
-		Debug("STBM build request record decrypted (Noise_N)")
-	return ReadShortBuildRequestRecord(cleartext)
-}
-
-// DecryptSTBMRecordReturningChainingKey performs the same Noise_N AEAD-decrypt
-// as DecryptShortBuildRequestRecordNoise but returns the post-decrypt Noise
-// chaining key instead of the cleartext record. This chaining key is what the
-// hop needs to derive its replyKey (via DeriveSTBMReplyKey) so it can:
-//
-//  1. Peel its own layer off all subsequent records via ChaCha20 stream.
-//  2. AEAD-decrypt the build response record addressed to it.
-//
-// Used by the test harness to validate the sender-side chained ChaCha20 layer
-// obfuscation, and intended for use by the real receive path once we wire up
-// inbound STBM handling.
-func DecryptSTBMRecordReturningChainingKey(encrypted [218]byte, privateKey []byte) ([32]byte, error) {
-	var chainingKey [32]byte
-	if len(privateKey) != 32 {
-		return chainingKey, oops.Errorf("invalid private key size: expected 32 bytes, got %d", len(privateKey))
-	}
-	priv := x25519.PrivateKey(privateKey)
-	ourStaticPubBytes, err := priv.PublicKey()
-	if err != nil {
-		return chainingKey, oops.Wrapf(err, "failed to derive static public key from private key")
-	}
-
-	ephPub := encrypted[16:48]
-	ct := encrypted[48:218]
-
-	ns := initSTBMNoiseN(ourStaticPubBytes)
-	ns.MixHash(ephPub)
-
-	sharedSecret, err := priv.SharedKey(x25519.PublicKey(ephPub))
-	if err != nil {
-		return chainingKey, oops.Wrapf(err, "X25519 key agreement failed")
-	}
-	ns.MixKey(sharedSecret)
-
-	if _, err := ns.DecryptAndHash(nil, ct); err != nil {
-		return chainingKey, oops.Wrapf(err, "Noise DecryptAndHash failed")
-	}
-	copy(chainingKey[:], ns.ChainingKey())
-	return chainingKey, nil
-}
-
-// DecryptSTBMRecordReturningChainingKeyAndHash performs the same Noise_N AEAD-decrypt
-// as DecryptSTBMRecordReturningChainingKey but also returns the post-decrypt Noise
-// handshake hash (m_H). The transit hop needs m_H as AEAD associated data when
-// constructing its ShortTunnelBuildReply record.
-func DecryptSTBMRecordReturningChainingKeyAndHash(encrypted [218]byte, privateKey []byte) ([32]byte, [32]byte, error) {
-	var chainingKey [32]byte
-	var noiseHash [32]byte
-	if len(privateKey) != 32 {
-		return chainingKey, noiseHash, oops.Errorf("invalid private key size: expected 32 bytes, got %d", len(privateKey))
-	}
-	priv := x25519.PrivateKey(privateKey)
-	ourStaticPubBytes, err := priv.PublicKey()
-	if err != nil {
-		return chainingKey, noiseHash, oops.Wrapf(err, "failed to derive static public key from private key")
-	}
-
-	ephPub := encrypted[16:48]
-	ct := encrypted[48:218]
-
-	ns := initSTBMNoiseN(ourStaticPubBytes)
-	ns.MixHash(ephPub)
-
-	sharedSecret, err := priv.SharedKey(x25519.PublicKey(ephPub))
-	if err != nil {
-		return chainingKey, noiseHash, oops.Wrapf(err, "X25519 key agreement failed")
-	}
-	ns.MixKey(sharedSecret)
-
-	if _, err := ns.DecryptAndHash(nil, ct); err != nil {
-		return chainingKey, noiseHash, oops.Wrapf(err, "Noise DecryptAndHash failed")
-	}
 	copy(chainingKey[:], ns.ChainingKey())
 	copy(noiseHash[:], ns.HandshakeHash())
-	return chainingKey, noiseHash, nil
+
+	record, err := ReadShortBuildRequestRecord(cleartext)
+	if err != nil {
+		return BuildRequestRecord{}, chainingKey, noiseHash, err
+	}
+	return record, chainingKey, noiseHash, nil
 }
 
 // extractEncryptionPublicKey retrieves the X25519 public encryption key from a
@@ -449,9 +313,8 @@ func extractEncryptionPublicKey(routerInfo router_info.RouterInfo) ([]byte, erro
 }
 
 // DecryptShortBuildRequestRecord decrypts a 218-byte STBM (Short Tunnel Build
-// Message) record using the Noise_N_25519_ChaChaPoly_SHA256 transcript
-// specified by I2P proposal 157. See DecryptShortBuildRequestRecordNoise for
-// the full transcript description.
+// Message) record and returns only the parsed cleartext record. See
+// decryptSTBMRecord for the full Noise_N_25519_ChaChaPoly_SHA256 transcript.
 //
 // STBM on-wire layout (218 bytes):
 //   - Bytes   0-15:  toPeer (first 16 bytes of recipient identity hash)
@@ -459,5 +322,6 @@ func extractEncryptionPublicKey(routerInfo router_info.RouterInfo) ([]byte, erro
 //   - Bytes  48-201: ChaCha20-Poly1305 ciphertext (154 bytes of cleartext)
 //   - Bytes 202-217: Poly1305 MAC tag (16 bytes)
 func DecryptShortBuildRequestRecord(encrypted [218]byte, privateKey []byte) (BuildRequestRecord, error) {
-	return DecryptShortBuildRequestRecordNoise(encrypted, privateKey)
+	record, _, _, err := decryptSTBMRecord(encrypted, privateKey)
+	return record, err
 }
