@@ -72,7 +72,7 @@ func TestReplyProcessor_ProcessBuildReply_Success(t *testing.T) {
 	tunnelID := registerTestBuild(t, rp)
 
 	// Create successful reply
-	reply := createSuccessfulVariableTunnelBuildReply(3)
+	reply := createSuccessfulShortTunnelBuildReply(3)
 
 	// Process reply
 	err := rp.ProcessBuildReply(reply, tunnelID)
@@ -86,7 +86,7 @@ func TestReplyProcessor_ProcessBuildReply_UnknownTunnel(t *testing.T) {
 	rp := newTestRP(t, nil)
 
 	unknownID := tunnel.TunnelID(99999)
-	reply := createSuccessfulVariableTunnelBuildReply(3)
+	reply := createSuccessfulShortTunnelBuildReply(3)
 
 	err := rp.ProcessBuildReply(reply, unknownID)
 
@@ -104,7 +104,7 @@ func TestReplyProcessor_ProcessBuildReply_Failure(t *testing.T) {
 	tunnelID := registerTestBuild(t, rp)
 
 	// Create failed reply (all hops reject)
-	reply := createMixedVariableTunnelBuildReply(3) // This has failures
+	reply := createMixedShortTunnelBuildReply(3) // This has failures
 
 	// Process reply
 	err := rp.ProcessBuildReply(reply, tunnelID)
@@ -151,7 +151,7 @@ func TestReplyProcessor_Retry(t *testing.T) {
 	tunnelID := registerTestBuild(t, rp)
 
 	// Create failed reply
-	reply := createMixedVariableTunnelBuildReply(3)
+	reply := createMixedShortTunnelBuildReply(3)
 
 	// Process reply (should trigger retry)
 	err := rp.ProcessBuildReply(reply, tunnelID)
@@ -197,7 +197,7 @@ func TestReplyProcessor_RetryExhausted(t *testing.T) {
 	info.Retries = 1 // Match MaxRetries
 
 	// Create failed reply
-	reply := createMixedVariableTunnelBuildReply(3)
+	reply := createMixedShortTunnelBuildReply(3)
 
 	// Process reply (should NOT trigger retry)
 	err := rp.ProcessBuildReply(reply, tunnelID)
@@ -296,7 +296,7 @@ func TestReplyProcessor_ConcurrentProcessing(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 			tunnelID := tunnel.TunnelID(10000 + id)
-			reply := createSuccessfulVariableTunnelBuildReply(3)
+			reply := createSuccessfulShortTunnelBuildReply(3)
 			err := rp.ProcessBuildReply(reply, tunnelID)
 			assert.NoError(t, err)
 		}(i)
@@ -323,7 +323,7 @@ func TestReplyProcessor_DecryptionDisabled(t *testing.T) {
 
 	tunnelID := registerTestBuild(t, rp)
 
-	reply := createSuccessfulVariableTunnelBuildReply(3)
+	reply := createSuccessfulShortTunnelBuildReply(3)
 	err := rp.ProcessBuildReply(reply, tunnelID)
 
 	assert.NoError(t, err, "Should process reply without decryption")
@@ -340,7 +340,7 @@ func TestReplyProcessor_RecordCountMismatch(t *testing.T) {
 	tunnelID := registerTestBuild(t, rp)
 
 	// Create reply with different number of records
-	reply := createSuccessfulVariableTunnelBuildReply(5) // Mismatch!
+	reply := createSuccessfulShortTunnelBuildReply(5) // Mismatch!
 
 	err := rp.ProcessBuildReply(reply, tunnelID)
 
@@ -358,7 +358,7 @@ func TestReplyProcessor_TimeoutCancellation(t *testing.T) {
 	tunnelID := registerTestBuild(t, rp)
 
 	// Process reply quickly (before timeout)
-	reply := createSuccessfulVariableTunnelBuildReply(3)
+	reply := createSuccessfulShortTunnelBuildReply(3)
 	err := rp.ProcessBuildReply(reply, tunnelID)
 	assert.NoError(t, err)
 
@@ -378,7 +378,7 @@ func TestReplyProcessor_NoRetryCallback(t *testing.T) {
 
 	tunnelID := registerTestBuild(t, rp)
 
-	reply := createMixedVariableTunnelBuildReply(3)
+	reply := createMixedShortTunnelBuildReply(3)
 	err := rp.ProcessBuildReply(reply, tunnelID)
 
 	assert.Error(t, err, "Should fail without retry callback")
@@ -397,7 +397,7 @@ func TestReplyProcessor_IntegrationWithTunnelManager(t *testing.T) {
 
 	tunnelID := registerTestBuild(t, rp)
 
-	reply := createSuccessfulVariableTunnelBuildReply(3)
+	reply := createSuccessfulShortTunnelBuildReply(3)
 	err := rp.ProcessBuildReply(reply, tunnelID)
 
 	assert.NoError(t, err, "Should process reply with tunnel manager integration")

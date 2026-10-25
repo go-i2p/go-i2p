@@ -60,28 +60,47 @@ func TestTunnelBuildReply_ProcessReply_UnknownReplyCode(t *testing.T) {
 	assert.Contains(t, err.Error(), "rejected with code 255")
 }
 
-// TestTunnelBuildReply_ProcessReply_EmptyHash tests handling of invalid response records
-func TestTunnelBuildReply_ProcessReply_EmptyHash(t *testing.T) {
+// TestTunnelBuildReply_ProcessReply_ZeroHashAccepted documents that a short
+// tunnel build reply slot legitimately carries no hash field: the decrypted
+// 218-byte slot is a 202-byte cleartext whose only semantic content is the
+// 1-byte reply code, so record.Hash stays zero. verifyRecordIntegrity must
+// skip the hash check for such records rather than reject them.
+func TestTunnelBuildReply_ProcessReply_ZeroHashAccepted(t *testing.T) {
 	reply := createEmptyHashTunnelBuildReply()
 
 	err := reply.ProcessReply()
 
-	assert.Error(t, err, "ProcessReply should fail with empty hash records")
-	assert.Contains(t, err.Error(), "empty hash")
+	assert.NoError(t, err, "zero-hash STBM reply records must not be rejected on hash grounds")
 }
 
-// TestVariableTunnelBuildReply_ProcessReply_AllSuccess tests successful variable tunnel build
-func TestVariableTunnelBuildReply_ProcessReply_AllSuccess(t *testing.T) {
-	reply := createSuccessfulVariableTunnelBuildReply(3)
+// TestTunnelBuildReply_ProcessReply_HashMismatchRejected verifies that when a
+// record does carry a hash, an integrity mismatch is rejected.
+func TestTunnelBuildReply_ProcessReply_HashMismatchRejected(t *testing.T) {
+	records := make([]BuildResponseRecord, 2)
+	records[0] = createValidResponseRecordWithReply(TunnelBuildReplySuccess)
+	records[1] = createValidResponseRecordWithReply(TunnelBuildReplySuccess)
+	// Corrupt the second record's hash so it no longer covers RandomData||Reply.
+	records[1].Hash[0] ^= 0xFF
+
+	reply := &ShortTunnelBuildReply{Count: 2, BuildResponseRecords: records}
+
+	err := reply.ProcessReply()
+	assert.Error(t, err, "a populated but mismatched record hash must fail integrity")
+	assert.Contains(t, err.Error(), "hash mismatch")
+}
+
+// TestShortTunnelBuildReplyExtra_ProcessReply_AllSuccess tests successful short tunnel build
+func TestShortTunnelBuildReplyExtra_ProcessReply_AllSuccess(t *testing.T) {
+	reply := createSuccessfulShortTunnelBuildReply(3)
 
 	err := reply.ProcessReply()
 
 	assert.NoError(t, err, "ProcessReply should succeed when all hops accept")
 }
 
-// TestVariableTunnelBuildReply_ProcessReply_CountMismatch tests count field validation
-func TestVariableTunnelBuildReply_ProcessReply_CountMismatch(t *testing.T) {
-	reply := createSuccessfulVariableTunnelBuildReply(3)
+// TestShortTunnelBuildReplyExtra_ProcessReply_CountMismatch tests count field validation
+func TestShortTunnelBuildReplyExtra_ProcessReply_CountMismatch(t *testing.T) {
+	reply := createSuccessfulShortTunnelBuildReply(3)
 	reply.Count = 5 // Mismatch with actual record count
 
 	err := reply.ProcessReply()
@@ -90,9 +109,9 @@ func TestVariableTunnelBuildReply_ProcessReply_CountMismatch(t *testing.T) {
 	assert.Contains(t, err.Error(), "count mismatch")
 }
 
-// TestVariableTunnelBuildReply_ProcessReply_EmptyRecords tests handling of empty tunnel
-func TestVariableTunnelBuildReply_ProcessReply_EmptyRecords(t *testing.T) {
-	reply := &VariableTunnelBuildReply{
+// TestShortTunnelBuildReplyExtra_ProcessReply_EmptyRecords tests handling of empty tunnel
+func TestShortTunnelBuildReplyExtra_ProcessReply_EmptyRecords(t *testing.T) {
+	reply := &ShortTunnelBuildReply{
 		Count:                0,
 		BuildResponseRecords: []BuildResponseRecord{},
 	}
@@ -103,19 +122,19 @@ func TestVariableTunnelBuildReply_ProcessReply_EmptyRecords(t *testing.T) {
 	assert.Contains(t, err.Error(), "no response records")
 }
 
-// TestVariableTunnelBuildReply_ProcessReply_MixedResponses tests variable tunnel with mixed responses
-func TestVariableTunnelBuildReply_ProcessReply_MixedResponses(t *testing.T) {
-	reply := createMixedVariableTunnelBuildReply(4)
+// TestShortTunnelBuildReplyExtra_ProcessReply_MixedResponses tests short tunnel with mixed responses
+func TestShortTunnelBuildReplyExtra_ProcessReply_MixedResponses(t *testing.T) {
+	reply := createMixedShortTunnelBuildReply(4)
 
 	err := reply.ProcessReply()
 
 	assert.Error(t, err, "ProcessReply should fail when not all hops accept")
-	assert.Contains(t, err.Error(), "variable tunnel build failed")
+	assert.Contains(t, err.Error(), "short tunnel build failed")
 }
 
-// TestVariableTunnelBuildReply_ProcessReply_SingleHop tests single hop variable tunnel
-func TestVariableTunnelBuildReply_ProcessReply_SingleHop(t *testing.T) {
-	reply := createSuccessfulVariableTunnelBuildReply(1)
+// TestShortTunnelBuildReplyExtra_ProcessReply_SingleHop tests single hop short tunnel
+func TestShortTunnelBuildReplyExtra_ProcessReply_SingleHop(t *testing.T) {
+	reply := createSuccessfulShortTunnelBuildReply(1)
 
 	err := reply.ProcessReply()
 
@@ -142,7 +161,7 @@ func TestValidateResponseRecord(t *testing.T) {
 
 // TestProcessHopResponse_AllReplyCodes tests processing of all defined reply codes
 func TestProcessHopResponse_AllReplyCodes(t *testing.T) {
-	reply := &VariableTunnelBuildReply{}
+	reply := &ShortTunnelBuildReply{}
 
 	testCases := []struct {
 		replyCode     byte
@@ -180,13 +199,13 @@ func TestProcessHopResponse_AllReplyCodes(t *testing.T) {
 
 // TestTunnelReplyHandler_InterfaceCompliance tests interface satisfaction
 func TestTunnelReplyHandler_InterfaceCompliance(t *testing.T) {
-	// Test VariableTunnelBuildReply interface compliance
-	var variableHandler TunnelReplyHandler = &VariableTunnelBuildReply{}
-	assert.NotNil(t, variableHandler, "VariableTunnelBuildReply should implement TunnelReplyHandler")
+	// Test ShortTunnelBuildReply interface compliance
+	var variableHandler TunnelReplyHandler = &ShortTunnelBuildReply{}
+	assert.NotNil(t, variableHandler, "ShortTunnelBuildReply should implement TunnelReplyHandler")
 
 	variableRecords := variableHandler.GetReplyRecords()
-	assert.Equal(t, 0, len(variableRecords), "Empty VariableTunnelBuildReply should return 0 records")
+	assert.Equal(t, 0, len(variableRecords), "Empty ShortTunnelBuildReply should return 0 records")
 
 	err := variableHandler.ProcessReply()
-	assert.Error(t, err, "Empty VariableTunnelBuildReply should fail processing")
+	assert.Error(t, err, "Empty ShortTunnelBuildReply should fail processing")
 }

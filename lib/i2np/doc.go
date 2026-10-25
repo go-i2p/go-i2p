@@ -50,7 +50,6 @@
 // These messages set them up, with each hop encrypted separately so that no
 // single router can see the whole path:
 //   - ShortTunnelBuild: build a tunnel of 1 to 8 hops (the current format).
-//   - VariableTunnelBuild: an older, longer format (kept for compatibility).
 //
 // Data delivery. Once a tunnel exists, traffic flows through it:
 //   - TunnelData: one fixed-size chunk of data moving through a tunnel.

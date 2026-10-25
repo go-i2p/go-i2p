@@ -505,8 +505,8 @@ func TestSetBuildReplyProcessor(t *testing.T) {
 func TestProcessBuildReplyCommon_NoProcessor(t *testing.T) {
 	processor := NewMessageProcessor()
 
-	msg := NewBaseI2NPMessage(I2NPMessageTypeVariableTunnelBuildReply)
-	err := processor.processBuildReplyCommon(msg, false)
+	msg := NewBaseI2NPMessage(I2NPMessageTypeShortTunnelBuildReply)
+	err := processor.processBuildReplyCommon(msg)
 	assert.NoError(t, err) // Should succeed silently (logged + discarded)
 }
 
@@ -516,9 +516,9 @@ func TestProcessBuildReplyCommon_EmptyData(t *testing.T) {
 	proc := &mockBuildReplyProcessor{}
 	processor.SetBuildReplyProcessor(proc)
 
-	msg := NewBaseI2NPMessage(I2NPMessageTypeVariableTunnelBuildReply)
+	msg := NewBaseI2NPMessage(I2NPMessageTypeShortTunnelBuildReply)
 	// No data set on message
-	err := processor.processBuildReplyCommon(msg, false)
+	err := processor.processBuildReplyCommon(msg)
 	assert.Error(t, err)
 	assert.False(t, proc.called)
 }
@@ -529,9 +529,9 @@ func TestProcessBuildReplyCommon_InvalidRecordCount(t *testing.T) {
 	proc := &mockBuildReplyProcessor{}
 	processor.SetBuildReplyProcessor(proc)
 
-	msg := NewBaseI2NPMessage(I2NPMessageTypeVariableTunnelBuildReply)
+	msg := NewBaseI2NPMessage(I2NPMessageTypeShortTunnelBuildReply)
 	msg.SetData([]byte{0}) // record count 0 is invalid
-	err := processor.processBuildReplyCommon(msg, false)
+	err := processor.processBuildReplyCommon(msg)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid record count")
 	assert.False(t, proc.called)
@@ -552,7 +552,7 @@ func TestProcessBuildReplyCommon_ShortReply_EncryptedSlots(t *testing.T) {
 	data[0] = 1 // one short reply slot
 	msg.SetData(data)
 
-	err := processor.processBuildReplyCommon(msg, true)
+	err := processor.processBuildReplyCommon(msg)
 	assert.NoError(t, err)
 	assert.True(t, proc.called)
 	assert.Equal(t, 12345, proc.messageID)
@@ -649,21 +649,6 @@ func TestSetGarlicSessionManager_MockDecryptor(t *testing.T) {
 	processor.SetGarlicSessionManager(mock)
 
 	assert.NotNil(t, processor.garlicSessions)
-}
-
-// TestSetBuildRecordCrypto_MockEncryptor tests that a mock reply encryptor
-// can be injected into the processor via the interface.
-func TestSetBuildRecordCrypto_MockEncryptor(t *testing.T) {
-	processor := NewMessageProcessor()
-
-	// Initially set to real BuildRecordCrypto from constructor
-	assert.NotNil(t, processor.buildRecordCrypto)
-
-	// Inject mock encryptor
-	mock := newMockReplyEncryptor()
-	processor.SetBuildRecordCrypto(mock)
-
-	assert.NotNil(t, processor.buildRecordCrypto)
 }
 
 // TestDecryptGarlicData_WithMock tests garlic decryption using a mock.

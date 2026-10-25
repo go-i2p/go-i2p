@@ -63,7 +63,7 @@ func FuzzDatabaseStoreUnmarshal(f *testing.F) {
 // path; a panic here is a remote crash.
 func FuzzBuildRequestRecordUnmarshal(f *testing.F) {
 	f.Add([]byte{})
-	f.Add(make([]byte, 222)) // VariableTunnelBuild record size
+	f.Add(make([]byte, 222)) // ShortTunnelBuild record size
 	f.Add(make([]byte, 528)) // TunnelBuild record size
 	f.Fuzz(func(t *testing.T, data []byte) {
 		_, _ = ReadBuildRequestRecord(data)

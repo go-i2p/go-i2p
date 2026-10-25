@@ -110,12 +110,18 @@ func buildOurIdentTestData(identLen int, identByte byte) (testData, ourIdent []b
 }
 
 // processDirectBuildRecord creates a test build request record with NextTunnel=0
-// (direct router forwarding) and calls processSingleBuildRecord.
+// (direct router forwarding) and calls processSingleBuildRecord with a
+// single-slot short build message body.
 func processDirectBuildRecord(t *testing.T, processor *MessageProcessor, messageID int) BuildRequestRecord {
 	t.Helper()
 	record := createTestBuildRequestRecord(t)
 	record.NextTunnel = 0
-	processor.processSingleBuildRecord(messageID, 0, record, nil, false, 0)
+	raw := make([]byte, 1+ShortBuildRecordSize)
+	raw[0] = 1
+	for i := 1; i < len(raw); i++ {
+		raw[i] = byte(i % 251)
+	}
+	processor.processSingleBuildRecord(messageID, 0, record, raw, I2NPMessageTypeShortTunnelBuild)
 	return record
 }
 
@@ -205,7 +211,7 @@ func serializeAndAssertInstructions(t *testing.T, instructions *GarlicCloveDeliv
 func assertBuildResponseRecordHash(t *testing.T, replyCode byte, dataFn func(int) byte) {
 	t.Helper()
 	randomData := makeRandomData(dataFn)
-	record := CreateBuildResponseRecord(replyCode, randomData)
+	record := newTestBuildResponseRecord(replyCode, randomData)
 	hashInput := make([]byte, 496)
 	copy(hashInput[:495], randomData[:])
 	hashInput[495] = replyCode
@@ -280,5 +286,21 @@ func makeSingleHopBuildResult(hopRI router_info.RouterInfo, rec tunnel.BuildRequ
 		Records:       []tunnel.BuildRequestRecord{rec},
 		UseShortBuild: useShortBuild,
 		IsInbound:     false,
+	}
+}
+
+// newTestBuildResponseRecord builds a BuildResponseRecord whose Hash is the
+// SHA-256 of RandomData||Reply, matching what ValidateBuildResponseRecord
+// checks. The production CreateBuildResponseRecord helper was removed along
+// with the deprecated 528-byte long-record reply path, so tests construct the
+// record directly.
+func newTestBuildResponseRecord(replyCode byte, randomData [495]byte) BuildResponseRecord {
+	hashInput := make([]byte, 496)
+	copy(hashInput[:495], randomData[:])
+	hashInput[495] = replyCode
+	return BuildResponseRecord{
+		Hash:       types.SHA256(hashInput),
+		RandomData: randomData,
+		Reply:      replyCode,
 	}
 }

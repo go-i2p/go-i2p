@@ -1,4 +1,4 @@
-// Tests for build record filtering in tunnel build processing.
+// Tests for build record filtering in short tunnel build processing.
 package i2np
 
 import (
@@ -7,45 +7,55 @@ import (
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-// TestProcessAllBuildRecords_FiltersRecordsNotForUs verifies that when our
-// router hash is set, only records with OurIdent matching our hash are processed.
-// Before the fix, ALL records were processed, causing spurious accept/reject
-// decisions for records destined for other routers.
-func TestProcessAllBuildRecords_FiltersRecordsNotForUs(t *testing.T) {
-	processor, mockForwarder, mockParticipant := setupBuildReplyTest(t, true)
+// TestTryParseAndAppendRecord_RejectsForeignRecord verifies the fail-closed
+// rule from the ECIES tunnel-creation spec: a record whose 16-byte toPeer
+// prefix is not our router hash is never accepted, and a record addressed to
+// us is only accepted if it decrypts under our static key. Accepting a record
+// on cleartext fields alone would let any peer register a transit tunnel with
+// attacker-chosen layer, IV and reply keys.
+func TestTryParseAndAppendRecord_RejectsForeignRecord(t *testing.T) {
+	processor, _, mockParticipant := setupBuildReplyTest(t, true)
 
-	// Set our router hash.
 	var ourHash common.Hash
 	copy(ourHash[:], []byte("our-router-hash-value-32-bytes!!"))
 	processor.SetOurRouterHash(ourHash)
-
-	// Create 5 records — only 1 has OurIdent matching our hash.
-	records := make([]BuildRequestRecord, 5)
-	for i := range records {
-		records[i] = createTestBuildRequestRecord(t)
-		records[i].NextTunnel = 0
-		// Set a different OurIdent for all records.
-		copy(records[i].OurIdent[:], []byte("other-router-hash-different-32!!"))
+	var testPriv [32]byte
+	for i := range testPriv {
+		testPriv[i] = byte(i + 1)
 	}
-	// Mark record 2 as ours.
-	records[2].OurIdent = ourHash
+	processor.SetOurPrivateKey(testPriv[:])
 
-	processor.processAllBuildRecords(42, records, nil, false, 25)
+	// A record addressed to some other router.
+	foreign := make([]byte, ShortBuildRecordSize)
+	copy(foreign, []byte("not-our-router-hash-prefix-32byt"))
+	for i := 16; i < len(foreign); i++ {
+		foreign[i] = byte(i)
+	}
 
-	// Only 1 record should be processed (registered).
-	assert.Equal(t, 1, mockParticipant.getRegisteredCount(),
-		"Only the record destined for us should be processed")
+	var records []BuildRequestRecord
+	processor.tryParseAndAppendRecord(&records, foreign, 0)
+	assert.Empty(t, records, "record with a foreign toPeer prefix must be dropped")
 
-	routerCalls := mockForwarder.getRouterCalls()
-	assert.Len(t, routerCalls, 1, "Should forward reply for exactly one record")
+	// A record addressed to us but not validly encrypted must also be dropped.
+	mine := make([]byte, ShortBuildRecordSize)
+	copy(mine, ourHash[:16])
+	for i := 16; i < len(mine); i++ {
+		mine[i] = byte(i * 7)
+	}
+	processor.tryParseAndAppendRecord(&records, mine, 0)
+	assert.Empty(t, records, "unauthenticated record addressed to us must be dropped")
+
+	assert.Equal(t, 0, mockParticipant.getRegisteredCount(),
+		"no participant may be registered from a rejected record")
 }
 
 // TestProcessAllBuildRecords_NoProcessingWhenHashUnset verifies that when
 // our router hash is not set (zero), NO records are processed. This prevents
-// the router from incorrectly participating in all hops of a tunnel build
-// when its identity is unknown.
+// the router from incorrectly participating in tunnel builds when its
+// identity is unknown.
 func TestProcessAllBuildRecords_NoProcessingWhenHashUnset(t *testing.T) {
 	processor, mockForwarder, mockParticipant := setupBuildReplyTest(t, true)
 
@@ -57,9 +67,9 @@ func TestProcessAllBuildRecords_NoProcessingWhenHashUnset(t *testing.T) {
 		records[i].NextTunnel = 0
 	}
 
-	processor.processAllBuildRecords(43, records, nil, false, 25)
+	err := processor.processAllBuildRecords(43, records, nil, 25)
+	require.Error(t, err, "processing must fail when our router hash is unset")
 
-	// With zero hash, NO records should be processed (safety guard).
 	assert.Equal(t, 0, mockParticipant.getRegisteredCount(),
 		"No records should be processed when our router hash is not set (zero)")
 
@@ -67,19 +77,18 @@ func TestProcessAllBuildRecords_NoProcessingWhenHashUnset(t *testing.T) {
 	assert.Len(t, routerCalls, 0, "No replies should be forwarded when hash is zero")
 }
 
-// TestForwardBuildReply_UsesIsShortBuild verifies that the isShortBuild
-// parameter is correctly passed through to the build reply forwarder
-// instead of being hardcoded to false.
-func TestForwardBuildReply_IsShortBuildPropagation(t *testing.T) {
+// TestForwardBuildReply_RoutesByNextTunnel verifies that a reply with a zero
+// NextTunnel goes to the router forwarder and a non-zero NextTunnel goes to
+// the tunnel forwarder, with the input message type propagated for reply-type
+// mapping.
+func TestForwardBuildReply_RoutesByNextTunnel(t *testing.T) {
 	tests := []struct {
-		name         string
-		nextTunnel   tunnel.TunnelID
-		isShortBuild bool
-		checkRouter  bool // true = check router calls, false = check tunnel calls
+		name        string
+		nextTunnel  tunnel.TunnelID
+		checkRouter bool
 	}{
-		{"Router_ShortTrue", 0, true, true},
-		{"Router_ShortFalse", 0, false, true},
-		{"Tunnel_ShortTrue", 12345, true, false},
+		{"Router_Direct", 0, true},
+		{"Tunnel_ViaGateway", 12345, false},
 	}
 
 	for _, tt := range tests {
@@ -88,19 +97,19 @@ func TestForwardBuildReply_IsShortBuildPropagation(t *testing.T) {
 			record := createTestBuildRequestRecord(t)
 			record.NextTunnel = tt.nextTunnel
 
-			err := processor.forwardBuildReply(1, record, []byte("encrypted"), tt.isShortBuild, 25)
+			err := processor.forwardBuildReply(1, record, []byte("encrypted"), 25)
 			assert.NoError(t, err)
 
 			if tt.checkRouter {
 				routerCalls := mockForwarder.getRouterCalls()
 				assert.Len(t, routerCalls, 1)
-				assert.Equal(t, tt.isShortBuild, routerCalls[0].isShortBuild,
-					"isShortBuild should be passed to ForwardBuildReplyToRouter")
+				assert.Equal(t, 25, routerCalls[0].inputMessageType,
+					"input message type should reach ForwardBuildReplyToRouter")
 			} else {
 				tunnelCalls := mockForwarder.getTunnelCalls()
 				assert.Len(t, tunnelCalls, 1)
-				assert.Equal(t, tt.isShortBuild, tunnelCalls[0].isShortBuild,
-					"isShortBuild should be passed to ForwardBuildReplyThroughTunnel")
+				assert.Equal(t, 25, tunnelCalls[0].inputMessageType,
+					"input message type should reach ForwardBuildReplyThroughTunnel")
 			}
 		})
 	}

@@ -61,7 +61,7 @@ func (s *ShortTunnelBuildReply) GetRecordCount() int {
 }
 
 // ProcessReply processes the short tunnel build reply by analyzing each response record.
-// Similar to VariableTunnelBuildReply but specifically for short tunnel builds (v0.9.51+).
+// The current tunnel build reply format (v0.9.51+).
 // Validates response integrity and determines tunnel build success/failure.
 func (s *ShortTunnelBuildReply) ProcessReply() error {
 	return processReplySteps(s, s.BuildResponseRecords)
@@ -90,26 +90,17 @@ func (s *ShortTunnelBuildReply) processAllHops() (int, error) {
 }
 
 // processHopResponse processes a single hop's build response.
-// Returns true if the hop accepted the tunnel request, false otherwise.
+// Returns true if the hop accepted the tunnel request, false otherwise. A
+// rejection is returned as an error carrying the hop index and reply code so
+// the tunnel creator can tell *why* the build failed, per tunnel-creation.rst
+// (reply byte 0 = accept, non-zero = one of the defined reject codes).
 func (s *ShortTunnelBuildReply) processHopResponse(hopIndex int, record BuildResponseRecord) (bool, error) {
 	// Verify record integrity using SHA-256 hash
 	if err := s.verifyRecordIntegrity(hopIndex, record); err != nil {
 		return false, err
 	}
 
-	// Check if this hop accepted the tunnel request
-	// The Reply field contains the response code
-	replyCode := record.Reply
-	accepted := replyCode == TunnelBuildReplySuccess
-
-	log.WithFields(logger.Fields{
-		"at":         "ShortTunnelBuildReply.processHopResponse",
-		"hop_index":  hopIndex,
-		"reply_code": replyCode,
-		"accepted":   accepted,
-	}).Debug("Processed hop response")
-
-	return accepted, nil
+	return processHopReplyCode(hopIndex, record.Reply, "Short tunnel ")
 }
 
 // verifyRecordIntegrity verifies the SHA-256 hash of a build response record.

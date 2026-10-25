@@ -27,8 +27,8 @@ func BenchmarkTunnelBuildReply_ProcessReply_Mixed(b *testing.B) {
 	}
 }
 
-func BenchmarkVariableTunnelBuildReply_ProcessReply_Success(b *testing.B) {
-	reply := createSuccessfulVariableTunnelBuildReply(5)
+func BenchmarkShortTunnelBuildReplyExtra_ProcessReply_Success(b *testing.B) {
+	reply := createSuccessfulShortTunnelBuildReply(5)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -65,7 +65,7 @@ func BenchmarkReplyProcessor_ProcessBuildReply(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		tunnelID := tunnel.TunnelID(i)
-		reply := createSuccessfulVariableTunnelBuildReply(3)
+		reply := createSuccessfulShortTunnelBuildReply(3)
 		_ = rp.ProcessBuildReply(reply, tunnelID)
 	}
 }

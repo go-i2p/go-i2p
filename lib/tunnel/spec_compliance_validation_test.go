@@ -1083,9 +1083,9 @@ func TestShortTunnelBuild_ResultPropagatesFlag(t *testing.T) {
 // Validates that variable-length tunnel builds remain backward compatible
 // with routers that do not support short builds.
 func TestShortTunnelBuild_VariableTunnelBuildBackwardCompat(t *testing.T) {
-	// Must still support UseShortBuild=false for VariableTunnelBuild
+	// Must still support UseShortBuild=false for ShortTunnelBuild
 	result := buildTestTunnelResult(t, 3, BuildTunnelRequest{HopCount: 3, UseShortBuild: false})
-	assert.False(t, result.UseShortBuild, "Must support legacy VariableTunnelBuild (UseShortBuild=false)")
+	assert.False(t, result.UseShortBuild, "Must support legacy ShortTunnelBuild (UseShortBuild=false)")
 }
 
 // =============================================================================

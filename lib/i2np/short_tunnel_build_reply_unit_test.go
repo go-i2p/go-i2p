@@ -211,7 +211,7 @@ func createTestBuildResponseRecord(replyCode byte) BuildResponseRecord {
 		randomData[i] = byte(i % 256)
 	}
 
-	return CreateBuildResponseRecord(replyCode, randomData)
+	return newTestBuildResponseRecord(replyCode, randomData)
 }
 
 // Helper function to check if a string contains a substring

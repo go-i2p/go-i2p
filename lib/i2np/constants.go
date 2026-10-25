@@ -65,15 +65,18 @@ var (
 )
 
 // Build record size constants per the I2P specification.
-// Standard (ElGamal) records are 528 bytes on the wire; cleartext is 222 bytes.
-// ECIES-X25519 long-form records are also 528 bytes on the wire; cleartext is 464 bytes.
-// Short (ECIES) records are 218 bytes on the wire (added in 0.9.49).
-// Standard cleartext (before encryption) is 222 bytes.
-// Short cleartext (ECIES short) is 154 bytes (218 - 16 toPeer - 32 ephKey - 16 MAC).
+// The 528-byte long records (ElGamal and ECIES long form) are deprecated by the
+// specification - "DEPRECATED, only used in the current network when a tunnel
+// contains an ElGamal router" and "NOTE: Deprecated, obsolete. Use the Short
+// Record format specified below" - and go-i2p no longer builds or parses them.
+// The constants are retained only to document the historical sizes.
+// Short (ECIES) records are 218 bytes on the wire (added in 0.9.51).
 const (
-	StandardBuildRecordSize         = 528                                  // Encrypted on-wire size for standard/variable tunnel build records
+	// StandardBuildRecordSize is the deprecated 528-byte on-wire long-record
+	// size. Retained for documentation only; the long-record path is removed.
+	StandardBuildRecordSize         = 528
 	ShortBuildRecordSize            = buildrecord.ShortRecordSize          // 218
-	StandardBuildRecordCleartextLen = buildrecord.StandardCleartextLen     // 222
+	StandardBuildRecordCleartextLen = buildrecord.StandardCleartextLen     // 222 (deprecated long record)
 	ShortBuildRecordCleartextLen    = buildrecord.ShortCleartextLen        // 154
 	ShortRecordHeaderSize           = 64                                   // toPeer(16) + ephemeralKey(32) + MAC(16)
 	DefaultExpirationSeconds        = buildrecord.DefaultExpirationSeconds // 480

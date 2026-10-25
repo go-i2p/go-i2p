@@ -1,9 +1,7 @@
 package i2np
 
-// sliceRecordSet is a shared embedding for slice-backed tunnel build types
-// (VariableTunnelBuild and ShortTunnelBuild).  Both types store their records
-// as a []BuildRequestRecord with an accompanying Count; the accessor logic is
-// identical, so a single embedded helper eliminates the duplication.
+// sliceRecordSet backs the slice-typed tunnel build message (ShortTunnelBuild).
+// It stores the records as a []BuildRequestRecord with an accompanying Count.
 type sliceRecordSet struct {
 	Count               int
 	BuildRequestRecords []BuildRequestRecord

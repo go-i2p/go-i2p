@@ -136,7 +136,7 @@ type TunnelReplyHandler = build.TunnelReplyHandler
 
 // replyStepProcessor defines the internal operations for processing tunnel
 // build replies. Used by processReplySteps to eliminate duplication across
-// ShortTunnelBuildReply and VariableTunnelBuildReply.
+// ShortTunnelBuildReply.
 type replyStepProcessor interface {
 	logReplyStart(recordCount int)
 	validateRecordCount(recordCount int) error
@@ -226,8 +226,8 @@ var (
 	_ DatabaseWriter = (*DatabaseStore)(nil)
 
 	// Tunnel interfaces
-	_ TunnelBuilder      = (*VariableTunnelBuild)(nil)
-	_ TunnelReplyHandler = (*VariableTunnelBuildReply)(nil)
+	_ TunnelBuilder      = (*ShortTunnelBuild)(nil)
+	_ TunnelReplyHandler = (*ShortTunnelBuildReply)(nil)
 
 	// Build record interfaces
 	_ TunnelIdentifier   = (*BuildRequestRecord)(nil)

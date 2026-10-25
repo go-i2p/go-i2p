@@ -5,14 +5,12 @@ import (
 	"fmt"
 
 	common "github.com/go-i2p/common/data"
-	"github.com/go-i2p/common/session_key"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 )
 
 // Compile-time interface verification for mocks.
 var (
 	_ GarlicMessageDecryptor = (*mockGarlicDecryptor)(nil)
-	_ ReplyRecordEncryptor   = (*mockReplyEncryptor)(nil)
 )
 
 // mockGarlicDecryptor implements GarlicMessageDecryptor for testing.
@@ -64,47 +62,6 @@ func newMockGarlicDecryptorWithPlaintext(plaintext []byte, tag [8]byte) *mockGar
 	return &mockGarlicDecryptor{
 		decryptPlaintexts: [][]byte{plaintext},
 		decryptTag:        tag,
-	}
-}
-
-// mockReplyEncryptor implements ReplyRecordEncryptor for testing.
-type mockReplyEncryptor struct {
-	// encryptFunc is called when EncryptReplyRecord is invoked. If nil,
-	// the mock returns encryptResult/encryptErr.
-	encryptFunc func(record BuildResponseRecord, replyKey session_key.SessionKey, replyIV [16]byte) ([]byte, error)
-
-	// Default return values when encryptFunc is nil.
-	encryptResult []byte
-	encryptErr    error
-
-	// callCount tracks how many times EncryptReplyRecord was called.
-	callCount int
-	// lastRecord records the last BuildResponseRecord passed.
-	lastRecord BuildResponseRecord
-}
-
-// EncryptReplyRecord implements ReplyRecordEncryptor.
-func (m *mockReplyEncryptor) EncryptReplyRecord(record BuildResponseRecord, replyKey session_key.SessionKey, replyIV [16]byte) ([]byte, error) {
-	m.callCount++
-	m.lastRecord = record
-	if m.encryptFunc != nil {
-		return m.encryptFunc(record, replyKey, replyIV)
-	}
-	return m.encryptResult, m.encryptErr
-}
-
-// newMockReplyEncryptor creates a mock reply encryptor with default success behavior.
-// Returns a 544-byte zero slice by default (matching ChaCha20-Poly1305 output size).
-func newMockReplyEncryptor() *mockReplyEncryptor {
-	return &mockReplyEncryptor{
-		encryptResult: make([]byte, 544),
-	}
-}
-
-// newMockReplyEncryptorWithError creates a mock that always returns an error.
-func newMockReplyEncryptorWithError(err error) *mockReplyEncryptor {
-	return &mockReplyEncryptor{
-		encryptErr: err,
 	}
 }
 

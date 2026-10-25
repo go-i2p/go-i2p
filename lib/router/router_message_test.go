@@ -395,8 +395,8 @@ func TestRouteMessageAllSupportedTypes(t *testing.T) {
 		{"TunnelData", i2np.I2NPMessageTypeTunnelData},
 		{"TunnelGateway", i2np.I2NPMessageTypeTunnelGateway},
 		{"Data", i2np.I2NPMessageTypeData},
-		{"VariableTunnelBuild", i2np.I2NPMessageTypeVariableTunnelBuild},
-		{"VariableTunnelBuildReply", i2np.I2NPMessageTypeVariableTunnelBuildReply},
+		{"ShortTunnelBuild", i2np.I2NPMessageTypeVariableTunnelBuild},
+		{"ShortTunnelBuildReply", i2np.I2NPMessageTypeVariableTunnelBuildReply},
 	}
 
 	for _, tc := range supportedTypes {

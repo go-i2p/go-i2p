@@ -107,7 +107,7 @@ func TestReplyProcessor_CorrelationRemoval(t *testing.T) {
 	assert.Equal(t, 1, rp.GetPendingBuildCount())
 
 	// Create successful reply handler
-	handler := createSuccessfulVariableTunnelBuildReply(2)
+	handler := createSuccessfulShortTunnelBuildReply(2)
 
 	// Process the reply
 	err := rp.ProcessBuildReply(handler, tunnelID)
@@ -124,7 +124,7 @@ func TestReplyProcessor_UnknownTunnelID(t *testing.T) {
 	rp := NewReplyProcessor(config, nil)
 
 	// Try to process reply for unknown tunnel
-	handler := createSuccessfulVariableTunnelBuildReply(3)
+	handler := createSuccessfulShortTunnelBuildReply(3)
 	unknownID := tunnel.TunnelID(99999)
 
 	err := rp.ProcessBuildReply(handler, unknownID)
@@ -157,7 +157,7 @@ func TestReplyProcessor_TimeoutCancellationOnReply(t *testing.T) {
 	rp := registerPendingBuild(t, config, tunnelID, 2, true)
 
 	// Process reply before timeout
-	handler := createSuccessfulVariableTunnelBuildReply(2)
+	handler := createSuccessfulShortTunnelBuildReply(2)
 	err := rp.ProcessBuildReply(handler, tunnelID)
 	require.NoError(t, err)
 
@@ -210,7 +210,7 @@ func TestReplyProcessor_ConcurrentRegistrationAndProcessing(t *testing.T) {
 				}
 
 				// Process reply immediately
-				handler := createSuccessfulVariableTunnelBuildReply(2)
+				handler := createSuccessfulShortTunnelBuildReply(2)
 				err = rp.ProcessBuildReply(handler, tunnelID)
 				if err == nil {
 					atomic.AddInt64(&successfulOps, 1)
@@ -259,7 +259,7 @@ func TestReplyProcessor_RetryCorrelation(t *testing.T) {
 	require.NoError(t, err)
 
 	// Process failing reply
-	handler := createRejectedVariableTunnelBuildReply(2)
+	handler := createRejectedShortTunnelBuildReply(2)
 	err = rp.ProcessBuildReply(handler, tunnelID)
 	assert.Error(t, err, "Should surface the current build failure even when retry was successfully scheduled")
 	assert.Contains(t, err.Error(), "retry scheduled")
@@ -427,12 +427,12 @@ func TestReplyProcessor_KeyIVMismatch(t *testing.T) {
 }
 
 // Helper function to create rejected variable tunnel build reply
-func createRejectedVariableTunnelBuildReply(hopCount int) *VariableTunnelBuildReply {
+func createRejectedShortTunnelBuildReply(hopCount int) *ShortTunnelBuildReply {
 	records := make([]BuildResponseRecord, hopCount)
 	for i := 0; i < hopCount; i++ {
 		records[i] = createValidResponseRecordWithReply(TunnelBuildReplyProbabilisticReject)
 	}
-	return &VariableTunnelBuildReply{
+	return &ShortTunnelBuildReply{
 		Count:                hopCount,
 		BuildResponseRecords: records,
 	}

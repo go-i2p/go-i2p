@@ -121,8 +121,7 @@ type routerForwardCall struct {
 	routerHash       common.Hash
 	messageID        int
 	encryptedRecords []byte
-	isShortBuild     bool
-	inputMessageType int // F061: track input message type for reply type verification
+	inputMessageType int // track input message type for reply type verification
 }
 
 type tunnelForwardCall struct {
@@ -130,8 +129,7 @@ type tunnelForwardCall struct {
 	tunnelID         tunnel.TunnelID
 	messageID        int
 	encryptedRecords []byte
-	isShortBuild     bool
-	inputMessageType int // F061: track input message type for reply type verification
+	inputMessageType int // track input message type for reply type verification
 }
 
 // mockBuildReplyForwarder implements BuildReplyForwarder for testing
@@ -150,20 +148,19 @@ func newMockBuildReplyForwarder() *mockBuildReplyForwarder {
 	}
 }
 
-func (m *mockBuildReplyForwarder) ForwardBuildReplyToRouter(routerHash common.Hash, messageID int, encryptedRecords []byte, isShortBuild bool, inputMessageType int) error {
+func (m *mockBuildReplyForwarder) ForwardBuildReplyToRouter(routerHash common.Hash, messageID int, encryptedRecords []byte, inputMessageType int) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.routerCalls = append(m.routerCalls, routerForwardCall{
 		routerHash:       routerHash,
 		messageID:        messageID,
 		encryptedRecords: encryptedRecords,
-		isShortBuild:     isShortBuild,
 		inputMessageType: inputMessageType,
 	})
 	return m.forwardToRouterErr
 }
 
-func (m *mockBuildReplyForwarder) ForwardBuildReplyThroughTunnel(gatewayHash common.Hash, tunnelID tunnel.TunnelID, messageID int, encryptedRecords []byte, isShortBuild bool, inputMessageType int) error {
+func (m *mockBuildReplyForwarder) ForwardBuildReplyThroughTunnel(gatewayHash common.Hash, tunnelID tunnel.TunnelID, messageID int, encryptedRecords []byte, inputMessageType int) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.tunnelCalls = append(m.tunnelCalls, tunnelForwardCall{
@@ -171,7 +168,6 @@ func (m *mockBuildReplyForwarder) ForwardBuildReplyThroughTunnel(gatewayHash com
 		tunnelID:         tunnelID,
 		messageID:        messageID,
 		encryptedRecords: encryptedRecords,
-		isShortBuild:     isShortBuild,
 		inputMessageType: inputMessageType,
 	})
 	return m.forwardToTunnelErr
@@ -269,31 +265,31 @@ func createTestBuildRequestRecord(t interface{ Helper() }) BuildRequestRecord {
 
 // --- Shared helpers: tunnel build reply factories ---
 //
-// These factories build VariableTunnelBuildReply values (the modern reply
+// These factories build ShortTunnelBuildReply values (the modern reply
 // type, type 24) so the reply-handler tests exercise the shared
 // processReplySteps path. The deprecated fixed 8-record TunnelBuildReply
 // (type 22) has been removed.
 
 // createSuccessfulTunnelBuildReply creates a reply where all hops accepted
-func createSuccessfulTunnelBuildReply() *VariableTunnelBuildReply {
+func createSuccessfulTunnelBuildReply() *ShortTunnelBuildReply {
 	records := make([]BuildResponseRecord, 8)
 	for i := range records {
 		records[i] = createValidResponseRecordWithReply(TunnelBuildReplySuccess)
 	}
-	return &VariableTunnelBuildReply{Count: 8, BuildResponseRecords: records}
+	return &ShortTunnelBuildReply{Count: 8, BuildResponseRecords: records}
 }
 
 // createRejectedTunnelBuildReply creates a reply where all hops rejected
-func createRejectedTunnelBuildReply() *VariableTunnelBuildReply {
+func createRejectedTunnelBuildReply() *ShortTunnelBuildReply {
 	records := make([]BuildResponseRecord, 8)
 	for i := range records {
 		records[i] = createValidResponseRecordWithReply(TunnelBuildReplyProbabilisticReject)
 	}
-	return &VariableTunnelBuildReply{Count: 8, BuildResponseRecords: records}
+	return &ShortTunnelBuildReply{Count: 8, BuildResponseRecords: records}
 }
 
 // createMixedTunnelBuildReply creates a reply with mixed responses
-func createMixedTunnelBuildReply() *VariableTunnelBuildReply {
+func createMixedTunnelBuildReply() *ShortTunnelBuildReply {
 	replyCodes := []byte{
 		TunnelBuildReplySuccess,
 		TunnelBuildReplySuccess,
@@ -308,11 +304,11 @@ func createMixedTunnelBuildReply() *VariableTunnelBuildReply {
 	for i, replyCode := range replyCodes {
 		records[i] = createValidResponseRecordWithReply(replyCode)
 	}
-	return &VariableTunnelBuildReply{Count: len(records), BuildResponseRecords: records}
+	return &ShortTunnelBuildReply{Count: len(records), BuildResponseRecords: records}
 }
 
 // createSingleFailureTunnelBuildReply creates a reply with one failure
-func createSingleFailureTunnelBuildReply() *VariableTunnelBuildReply {
+func createSingleFailureTunnelBuildReply() *ShortTunnelBuildReply {
 	records := make([]BuildResponseRecord, 8)
 	for i := range records {
 		if i == 3 {
@@ -321,11 +317,11 @@ func createSingleFailureTunnelBuildReply() *VariableTunnelBuildReply {
 			records[i] = createValidResponseRecordWithReply(TunnelBuildReplySuccess)
 		}
 	}
-	return &VariableTunnelBuildReply{Count: 8, BuildResponseRecords: records}
+	return &ShortTunnelBuildReply{Count: 8, BuildResponseRecords: records}
 }
 
 // createUnknownReplyCodeTunnelBuildReply creates a reply with unknown reply code
-func createUnknownReplyCodeTunnelBuildReply() *VariableTunnelBuildReply {
+func createUnknownReplyCodeTunnelBuildReply() *ShortTunnelBuildReply {
 	records := make([]BuildResponseRecord, 8)
 	for i := range records {
 		if i == 0 {
@@ -334,11 +330,11 @@ func createUnknownReplyCodeTunnelBuildReply() *VariableTunnelBuildReply {
 			records[i] = createValidResponseRecordWithReply(TunnelBuildReplySuccess)
 		}
 	}
-	return &VariableTunnelBuildReply{Count: 8, BuildResponseRecords: records}
+	return &ShortTunnelBuildReply{Count: 8, BuildResponseRecords: records}
 }
 
 // createEmptyHashTunnelBuildReply creates a reply with empty hash
-func createEmptyHashTunnelBuildReply() *VariableTunnelBuildReply {
+func createEmptyHashTunnelBuildReply() *ShortTunnelBuildReply {
 	records := make([]BuildResponseRecord, 8)
 	for i := range records {
 		if i == 0 {
@@ -352,23 +348,23 @@ func createEmptyHashTunnelBuildReply() *VariableTunnelBuildReply {
 			records[i].Reply = TunnelBuildReplySuccess
 		}
 	}
-	return &VariableTunnelBuildReply{Count: 8, BuildResponseRecords: records}
+	return &ShortTunnelBuildReply{Count: 8, BuildResponseRecords: records}
 }
 
-// createSuccessfulVariableTunnelBuildReply creates a successful VariableTunnelBuildReply
-func createSuccessfulVariableTunnelBuildReply(hopCount int) *VariableTunnelBuildReply {
+// createSuccessfulShortTunnelBuildReply creates a successful ShortTunnelBuildReply
+func createSuccessfulShortTunnelBuildReply(hopCount int) *ShortTunnelBuildReply {
 	records := make([]BuildResponseRecord, hopCount)
 	for i := 0; i < hopCount; i++ {
 		records[i] = createValidResponseRecordWithReply(TunnelBuildReplySuccess)
 	}
-	return &VariableTunnelBuildReply{
+	return &ShortTunnelBuildReply{
 		Count:                hopCount,
 		BuildResponseRecords: records,
 	}
 }
 
-// createMixedVariableTunnelBuildReply creates a VariableTunnelBuildReply with mixed responses
-func createMixedVariableTunnelBuildReply(hopCount int) *VariableTunnelBuildReply {
+// createMixedShortTunnelBuildReply creates a ShortTunnelBuildReply with mixed responses
+func createMixedShortTunnelBuildReply(hopCount int) *ShortTunnelBuildReply {
 	records := make([]BuildResponseRecord, hopCount)
 	replyCodes := []byte{
 		TunnelBuildReplySuccess,
@@ -379,7 +375,7 @@ func createMixedVariableTunnelBuildReply(hopCount int) *VariableTunnelBuildReply
 	for i := 0; i < hopCount; i++ {
 		records[i] = createValidResponseRecordWithReply(replyCodes[i%len(replyCodes)])
 	}
-	return &VariableTunnelBuildReply{
+	return &ShortTunnelBuildReply{
 		Count:                hopCount,
 		BuildResponseRecords: records,
 	}

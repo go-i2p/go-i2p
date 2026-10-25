@@ -310,12 +310,21 @@ func TestForwardRelayIntro_UnknownTag(t *testing.T) {
 // TestRelayRequestBlock_RoundTrip is the C7.1 unit test: verifies that a
 // RelayRequestBlock survives an encode → decode cycle with all fields intact.
 func TestRelayRequestBlock_RoundTrip(t *testing.T) {
+	// Per SSU2 spec the RelayRequest signature is mandatory (64 bytes for
+	// Ed25519), so a round-trippable block must carry one.
+	sig := make([]byte, 64)
+	for i := range sig {
+		sig[i] = byte(i)
+	}
+
 	req := &ssu2noise.RelayRequestBlock{
 		Timestamp: 12345,
 		Nonce:     9999,
 		RelayTag:  0xdeadbeef,
+		Version:   2,
 		AlicePort: 4567,
 		AliceIP:   net.ParseIP("10.0.0.1").To4(),
+		Signature: sig,
 	}
 
 	encoded, err := ssu2noise.EncodeRelayRequest(req)
@@ -326,8 +335,11 @@ func TestRelayRequestBlock_RoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, req.Nonce, decoded.Nonce)
 	assert.Equal(t, req.RelayTag, decoded.RelayTag)
+	assert.Equal(t, req.Timestamp, decoded.Timestamp)
+	assert.Equal(t, req.Version, decoded.Version)
 	assert.Equal(t, req.AlicePort, decoded.AlicePort)
 	assert.True(t, net.IP(req.AliceIP).Equal(net.IP(decoded.AliceIP)))
+	assert.Equal(t, sig, decoded.Signature)
 }
 
 // ---- D5 test: NAT-PMP back-off cap ----------------------------------------

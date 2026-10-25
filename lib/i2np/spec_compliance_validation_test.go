@@ -1359,21 +1359,6 @@ func performFullHandshake(t *testing.T, sender, receiver *GarlicSessionManager,
 	return nsMsg
 }
 
-// encryptTestBuildRecord creates a BuildRecordCrypto, builds a success response
-// record with zero random data, encrypts it with a deterministic key, and
-// returns all components for subsequent assertions.
-func encryptTestBuildRecord(t *testing.T) (*BuildRecordCrypto, BuildResponseRecord, []byte, session_key.SessionKey, [16]byte) {
-	t.Helper()
-	crypto := NewBuildRecordCrypto()
-	var randomData [495]byte
-	record := CreateBuildResponseRecord(TunnelBuildReplySuccess, randomData)
-	key := makeSessionKey(0)
-	var iv [16]byte
-	encrypted, err := crypto.EncryptReplyRecord(record, key, iv)
-	require.NoError(t, err)
-	return crypto, record, encrypted, key, iv
-}
-
 // TestGarlic_ECIES_NewSessionMessageFormat verifies the New Session wire format:
 // [ephemeralPubKey(32)] + [nonce(12)] + [ciphertext(N)] + [tag(16)]
 // Minimum size = 32 + 12 + 0 + 16 = 60 bytes (empty plaintext).
@@ -2693,21 +2678,21 @@ func TestData_Format_RoundTrip(t *testing.T) {
 }
 
 // ============================================================================
-// Section 6 — VariableTunnelBuild (type 23) spec compliance
+// Section 6 — ShortTunnelBuild (type 23) spec compliance
 // ============================================================================
 
-// TestVariableTunnelBuild_RecordCount_1to8 verifies VariableTunnelBuild supports 1-8 records.
+// TestVariableTunnelBuild_RecordCount_1to8 verifies ShortTunnelBuild supports 1-8 records.
 func TestVariableTunnelBuild_RecordCount_1to8(t *testing.T) {
 	for count := 1; count <= 8; count++ {
 		records := make([]BuildRequestRecord, count)
-		vtb := VariableTunnelBuild{
+		vtb := ShortTunnelBuild{
 			sliceRecordSet: sliceRecordSet{
 				Count:               count,
 				BuildRequestRecords: records,
 			},
 		}
 		assert.Equal(t, count, vtb.Count,
-			"VariableTunnelBuild must support Count=%d", count)
+			"ShortTunnelBuild must support Count=%d", count)
 		assert.Equal(t, count, len(vtb.BuildRequestRecords))
 	}
 }
@@ -2885,7 +2870,7 @@ func makeTestResponseRecords(n int) []BuildResponseRecord {
 	for i := range records {
 		seed := i
 		rd := makeRandomData(func(j int) byte { return byte(seed*10 + j%256) })
-		records[i] = CreateBuildResponseRecord(TunnelBuildReplySuccess, rd)
+		records[i] = newTestBuildResponseRecord(TunnelBuildReplySuccess, rd)
 	}
 	return records
 }
@@ -2893,7 +2878,7 @@ func makeTestResponseRecords(n int) []BuildResponseRecord {
 // TestTunnelBuild_ReplyProcessing_AllAccepted verifies ProcessReply succeeds when all hops accept.
 func TestTunnelBuild_ReplyProcessing_AllAccepted(t *testing.T) {
 	records := makeTestResponseRecords(8)
-	reply := &VariableTunnelBuildReply{Count: 8, BuildResponseRecords: records}
+	reply := &ShortTunnelBuildReply{Count: 8, BuildResponseRecords: records}
 	err := reply.ProcessReply()
 	assert.NoError(t, err, "All hops accepted — ProcessReply must succeed")
 }
@@ -2903,9 +2888,9 @@ func TestTunnelBuild_ReplyProcessing_OneReject(t *testing.T) {
 	records := makeTestResponseRecords(8)
 	// Override record 3 with a rejection
 	rd := makeRandomData(func(j int) byte { return byte(3 + j%256) })
-	records[3] = CreateBuildResponseRecord(TunnelBuildReplyProbabilisticReject, rd)
+	records[3] = newTestBuildResponseRecord(TunnelBuildReplyProbabilisticReject, rd)
 
-	reply := &VariableTunnelBuildReply{Count: 8, BuildResponseRecords: records}
+	reply := &ShortTunnelBuildReply{Count: 8, BuildResponseRecords: records}
 	err := reply.ProcessReply()
 	assert.Error(t, err, "One rejection means tunnel build failed")
 }
@@ -2918,7 +2903,7 @@ func TestTunnelBuild_ReplyProcessing_HashIntegrity(t *testing.T) {
 	records := makeTestResponseRecords(8)
 	records[0].Hash[0] ^= 0xFF
 
-	reply := &VariableTunnelBuildReply{Count: 8, BuildResponseRecords: records}
+	reply := &ShortTunnelBuildReply{Count: 8, BuildResponseRecords: records}
 	err := reply.ProcessReply()
 	assert.Error(t, err, "corrupted hash must cause ProcessReply to fail")
 }
@@ -3047,82 +3032,8 @@ func makeRandomData(fn func(int) byte) [495]byte {
 	return data
 }
 
-// TestBuildRecordEncryption_ChaCha20Poly1305Roundtrip verifies that
-// BuildRecordCrypto uses ChaCha20-Poly1305 for reply record encryption.
-func TestBuildRecordEncryption_ChaCha20Poly1305Roundtrip(t *testing.T) {
-	tests := []struct {
-		name            string
-		randomDataFn    func(int) byte
-		keyOffset       int
-		ivOffset        int
-		checkRandomData bool
-	}{
-		{
-			name:            "ShortTunnelBuild",
-			randomDataFn:    func(i int) byte { return byte(i % 256) },
-			keyOffset:       1,
-			ivOffset:        100,
-			checkRandomData: false,
-		},
-		{
-			name:            "CryptoAudit_Proposal152",
-			randomDataFn:    func(i int) byte { return byte(i) },
-			keyOffset:       0x10,
-			ivOffset:        0x20,
-			checkRandomData: true,
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			crypto := NewBuildRecordCrypto()
-			randomData := makeRandomData(tc.randomDataFn)
-			record := CreateBuildResponseRecord(TunnelBuildReplySuccess, randomData)
-			key := makeSessionKey(tc.keyOffset)
-			iv := makeIV(tc.ivOffset)
-
-			encrypted, err := crypto.EncryptReplyRecord(record, key, iv)
-			require.NoError(t, err)
-			assert.Equal(t, 544, len(encrypted),
-				"ChaCha20-Poly1305 encrypted reply must be 528+16=544 bytes")
-
-			decrypted, err := crypto.DecryptReplyRecord(encrypted, key, iv)
-			require.NoError(t, err)
-			assert.Equal(t, record.Reply, decrypted.Reply, "Decrypted reply code must match original")
-			assert.Equal(t, record.Hash, decrypted.Hash, "Decrypted hash must match original")
-			if tc.checkRandomData {
-				assert.Equal(t, record.RandomData, decrypted.RandomData)
-			}
-		})
-	}
-}
-
-// TestShortTunnelBuild_LayerEncryption_AuthTagRequired verifies authentication tag is checked.
-func TestShortTunnelBuild_LayerEncryption_AuthTagRequired(t *testing.T) {
-	crypto, _, encrypted, key, iv := encryptTestBuildRecord(t)
-
-	// Corrupt the auth tag (last 16 bytes)
-	encrypted[len(encrypted)-1] ^= 0xFF
-
-	_, err := crypto.DecryptReplyRecord(encrypted, key, iv)
-	assert.Error(t, err, "corrupted auth tag must cause decryption failure")
-}
-
-// TestShortTunnelBuild_LayerEncryption_WrongKeyFails verifies wrong key detection.
-func TestShortTunnelBuild_LayerEncryption_WrongKeyFails(t *testing.T) {
-	crypto, _, encrypted, _, iv := encryptTestBuildRecord(t)
-
-	// Try with wrong key
-	var wrongKey session_key.SessionKey
-	for i := range wrongKey {
-		wrongKey[i] = 0xBB
-	}
-	_, err := crypto.DecryptReplyRecord(encrypted, wrongKey, iv)
-	assert.Error(t, err, "wrong key must cause decryption failure")
-}
-
 // ============================================================================
-// Section 6 — VariableTunnelBuildReply (type 24) spec compliance
+// Section 6 — ShortTunnelBuildReply (type 24) spec compliance
 // ============================================================================
 
 // TestTunnelBuildReply_Format_ResponseRecordIs528 verifies each response record = 528 bytes.
@@ -3135,7 +3046,7 @@ func TestTunnelBuildReply_Format_ResponseRecordIs528(t *testing.T) {
 // TestTunnelBuildReply_Format_HashIsFirst32Bytes verifies Hash occupies first 32 bytes.
 func TestTunnelBuildReply_Format_HashIsFirst32Bytes(t *testing.T) {
 	randomData := makeRandomData(func(i int) byte { return byte(i) })
-	record := CreateBuildResponseRecord(TunnelBuildReplySuccess, randomData)
+	record := newTestBuildResponseRecord(TunnelBuildReplySuccess, randomData)
 
 	// Serialize manually
 	buf := make([]byte, 528)
@@ -3151,11 +3062,11 @@ func TestTunnelBuildReply_Format_HashIsFirst32Bytes(t *testing.T) {
 	assert.Equal(t, record.Reply, parsed.Reply, "Reply at [527] must survive roundtrip")
 }
 
-// TestVariableTunnelBuildReply_Format_CountPlusRecords verifies the count+records layout.
-func TestVariableTunnelBuildReply_Format_CountPlusRecords(t *testing.T) {
+// TestShortTunnelBuildReplyExtra_Format_CountPlusRecords verifies the count+records layout.
+func TestShortTunnelBuildReplyExtra_Format_CountPlusRecords(t *testing.T) {
 	records := makeTestResponseRecords(3)
 
-	reply := &VariableTunnelBuildReply{
+	reply := &ShortTunnelBuildReply{
 		Count:                3,
 		BuildResponseRecords: records,
 	}
@@ -3165,11 +3076,11 @@ func TestVariableTunnelBuildReply_Format_CountPlusRecords(t *testing.T) {
 
 	// All records should validate
 	err := reply.ProcessReply()
-	assert.NoError(t, err, "All-success VariableTunnelBuildReply.ProcessReply must succeed")
+	assert.NoError(t, err, "All-success ShortTunnelBuildReply.ProcessReply must succeed")
 }
 
-// TestVariableTunnelBuildReply_Format_SHA256Integrity verifies hash integrity check.
-func TestVariableTunnelBuildReply_Format_SHA256Integrity(t *testing.T) {
+// TestShortTunnelBuildReplyExtra_Format_SHA256Integrity verifies hash integrity check.
+func TestShortTunnelBuildReplyExtra_Format_SHA256Integrity(t *testing.T) {
 	assertBuildResponseRecordHash(t, TunnelBuildReplyTransientOverload, func(i int) byte { return byte(i * 3) })
 }
 
@@ -3190,9 +3101,9 @@ func TestShortTunnelBuildReply_Format_MixedResults(t *testing.T) {
 	rd1 := makeRandomData(func(int) byte { return 0x22 })
 	rd2 := makeRandomData(func(int) byte { return 0x33 })
 	records := []BuildResponseRecord{
-		CreateBuildResponseRecord(TunnelBuildReplySuccess, rd0),
-		CreateBuildResponseRecord(TunnelBuildReplyBandwidth, rd1),
-		CreateBuildResponseRecord(TunnelBuildReplySuccess, rd2),
+		newTestBuildResponseRecord(TunnelBuildReplySuccess, rd0),
+		newTestBuildResponseRecord(TunnelBuildReplyBandwidth, rd1),
+		newTestBuildResponseRecord(TunnelBuildReplySuccess, rd2),
 	}
 
 	reply := NewShortTunnelBuildReply(records)
@@ -3234,33 +3145,6 @@ func TestCryptoAudit_GarlicEncryption_ECIESRatchetImplemented(t *testing.T) {
 
 // TestCryptoAudit_BuildRecordEncryption_ChaCha20Poly1305 is now covered by
 // TestBuildRecordEncryption_ChaCha20Poly1305Roundtrip/CryptoAudit_Proposal152.
-
-// TestCryptoAudit_BuildRecordEncryption_Nonce12Bytes verifies ChaCha20-Poly1305
-// uses the first 12 bytes of the 16-byte IV as the nonce.
-func TestCryptoAudit_BuildRecordEncryption_Nonce12Bytes(t *testing.T) {
-	crypto := NewBuildRecordCrypto()
-
-	var randomData [495]byte
-	record := CreateBuildResponseRecord(TunnelBuildReplySuccess, randomData)
-
-	var key session_key.SessionKey
-	for i := range key {
-		key[i] = 0x42
-	}
-
-	// Two IVs that differ only in byte 12-15 (beyond the 12-byte nonce)
-	iv1 := [16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 0xAA, 0xBB, 0xCC, 0xDD}
-	iv2 := [16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 0x11, 0x22, 0x33, 0x44}
-
-	enc1, err := crypto.EncryptReplyRecord(record, key, iv1)
-	require.NoError(t, err)
-	enc2, err := crypto.EncryptReplyRecord(record, key, iv2)
-	require.NoError(t, err)
-
-	// Same first 12 bytes → same nonce → same ciphertext
-	assert.Equal(t, enc1, enc2,
-		"Only first 12 bytes of IV are used as nonce; bytes 12-15 must not affect output")
-}
 
 // TestCryptoAudit_SessionTagRatchet_Prop144Section5 verifies the tag ratchet produces
 // deterministic 8-byte tags as specified in Proposal 144 Section 5.
