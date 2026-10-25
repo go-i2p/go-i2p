@@ -435,48 +435,44 @@ type DisconnectPayload struct {
 // ParseDisconnectPayload deserializes a Disconnect payload from wire format.
 // Returns an error if the payload is too short or malformed.
 //
-// Wire format:
+// Wire format (I2P [String], per common-structures.rst):
 //
-//	bytes 0-1:  Reason length (uint16, big endian)
-//	bytes 2+:   Reason string (UTF-8, length specified by bytes 0-1)
+//	byte 0:     Reason length (0-255)
+//	bytes 1+:   Reason string (UTF-8, length specified by byte 0)
 func ParseDisconnectPayload(data []byte) (*DisconnectPayload, error) {
-	// Minimum size: 2 bytes for length field
-	// Reason can be empty (0 bytes), so minimum is exactly 2
-	if len(data) < 2 {
+	// Minimum size: 1 byte for the String length prefix.
+	// Reason can be empty (0 bytes), so minimum is exactly 1.
+	if len(data) < 1 {
 		log.WithFields(logger.Fields{
 			"at":       "i2cp.ParseDisconnectPayload",
 			"dataSize": len(data),
-			"required": 2,
+			"required": 1,
 		}).Error("disconnect_payload_too_short")
-		return nil, oops.Errorf("disconnect payload too short: need at least 2 bytes for length, got %d", len(data))
+		return nil, oops.Errorf("disconnect payload too short: need at least 1 byte for length, got %d", len(data))
 	}
 
 	dp := &DisconnectPayload{}
 
-	// Parse reason length (first 2 bytes, big endian)
-	reasonLen := binary.BigEndian.Uint16(data[0:2])
-
-	// Validate we have enough bytes for the reason string
-	if len(data) < 2+int(reasonLen) {
+	// The reason is an I2P [String]: the first byte is the number of bytes in
+	// the string (common-structures.rst), not a 2-byte big-endian length.
+	str, _, err := commondata.ReadI2PString(data)
+	if err != nil {
 		log.WithFields(logger.Fields{
-			"at":          "i2cp.ParseDisconnectPayload",
-			"dataSize":    len(data),
-			"reasonLen":   reasonLen,
-			"requiredLen": 2 + int(reasonLen),
-		}).Error("disconnect_payload_incomplete")
-		return nil, oops.Errorf("disconnect payload incomplete: need %d bytes for reason, got %d", 2+int(reasonLen), len(data))
+			"at":       "i2cp.ParseDisconnectPayload",
+			"dataSize": len(data),
+			"error":    err.Error(),
+		}).Error("disconnect_payload_invalid_string")
+		return nil, oops.Wrapf(err, "invalid disconnect reason string")
 	}
-
-	// Parse reason string (UTF-8)
-	if reasonLen > 0 {
-		dp.Reason = string(data[2 : 2+reasonLen])
-	} else {
-		dp.Reason = ""
+	reason, err := str.Data()
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to decode disconnect reason")
 	}
+	dp.Reason = reason
 
 	log.WithFields(logger.Fields{
 		"at":        "i2cp.ParseDisconnectPayload",
-		"reasonLen": reasonLen,
+		"reasonLen": len(dp.Reason),
 		"reason":    dp.Reason,
 	}).Debug("parsed_disconnect_payload")
 
@@ -485,21 +481,23 @@ func ParseDisconnectPayload(data []byte) (*DisconnectPayload, error) {
 
 // MarshalBinary serializes the DisconnectPayload to wire format.
 // Returns the serialized bytes ready to be sent as an I2CP message payload.
+// The reason is an I2P [String] with a 1-byte length prefix per
+// common-structures.rst.
 func (dp *DisconnectPayload) MarshalBinary() ([]byte, error) {
-	// Calculate total size: 2 (length) + len(reason)
+	// Calculate total size: 1 (length) + len(reason)
 	reasonBytes := []byte(dp.Reason)
-	if len(reasonBytes) > math.MaxUint16 {
-		return nil, oops.Errorf("disconnect reason too long: %d bytes (max %d)", len(reasonBytes), math.MaxUint16)
+	if len(reasonBytes) > 255 {
+		return nil, oops.Errorf("disconnect reason too long: %d bytes (max %d)", len(reasonBytes), 255)
 	}
-	totalSize := 2 + len(reasonBytes)
+	totalSize := 1 + len(reasonBytes)
 	result := make([]byte, totalSize)
 
-	// Write reason length (big endian)
-	binary.BigEndian.PutUint16(result[0:2], uint16(len(reasonBytes)))
+	// Write reason length (1 byte, per I2P String)
+	result[0] = byte(len(reasonBytes))
 
 	// Write reason string
 	if len(reasonBytes) > 0 {
-		copy(result[2:], reasonBytes)
+		copy(result[1:], reasonBytes)
 	}
 
 	log.WithFields(logger.Fields{

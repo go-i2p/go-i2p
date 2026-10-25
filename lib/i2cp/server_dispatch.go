@@ -564,22 +564,26 @@ func (s *Server) publishLeaseSet2WithLogging(session *Session, leaseSetBytes []b
 //
 //	Going forward, clients may use this information to communicate correctly with old routers."
 //
-// SetDate payload format:
+// SetDate payload format (i2cp.rst "SetDateMessage": 1. Date, 2. I2CP API
+// Version [String]):
 //
 //	Bytes 0-7:  Current time (milliseconds since epoch, big endian)
-//	Bytes 8-9:  Version string length (big endian uint16)
-//	Bytes 10+:  Protocol version string (UTF-8)
+//	Byte  8:    Version string length (1 byte, per common-structures.rst)
+//	Bytes 9+:   Protocol version string (UTF-8)
 
 // parseClientVersion extracts the client protocol version from GetDate payload.
+// The version is an I2P [String]: the first byte is the number of bytes in the
+// string, not a 2-byte big-endian length (common-structures.rst).
 func parseClientVersion(payload []byte) string {
-	if len(payload) < 2 {
+	str, _, err := common.ReadI2PString(payload)
+	if err != nil {
 		return ""
 	}
-	strLen := binary.BigEndian.Uint16(payload[0:2])
-	if len(payload) < 2+int(strLen) {
+	version, err := str.Data()
+	if err != nil {
 		return ""
 	}
-	return string(payload[2 : 2+strLen])
+	return version
 }
 
 // storeClientVersionInSession stores the client version in the session if available.
@@ -598,12 +602,17 @@ func (s *Server) storeClientVersionInSession(sessionID uint16, clientVersion str
 }
 
 // buildSetDatePayload creates the payload for SetDate response.
+// The I2CP API Version is an I2P [String] (1-byte length prefix) per
+// common-structures.rst, not a 2-byte length-prefixed string.
 func buildSetDatePayload(currentTimeMillis int64, versionStr string) []byte {
 	versionBytes := []byte(versionStr)
-	payload := make([]byte, 8+2+len(versionBytes))
+	if len(versionBytes) > 255 {
+		versionBytes = versionBytes[:255]
+	}
+	payload := make([]byte, 8+1+len(versionBytes))
 	binary.BigEndian.PutUint64(payload[0:8], uint64(currentTimeMillis))
-	binary.BigEndian.PutUint16(payload[8:10], uint16(len(versionBytes)))
-	copy(payload[10:], versionBytes)
+	payload[8] = byte(len(versionBytes))
+	copy(payload[9:], versionBytes)
 	return payload
 }
 

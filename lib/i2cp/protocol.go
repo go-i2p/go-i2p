@@ -371,6 +371,10 @@ func logPayloadReadFailure(connInfo string, msgType uint8, sessionID uint16, pay
 // - SendMessage (type 5): SessionID(2) + message_data
 // - CreateLeaseSet (type 4): SessionID(2) + leaseset_data
 // - SendMessageExpires (type 36): SessionID(2) + message_data
+// - HostLookup (type 38): SessionID(2) + RequestID(4) + Timeout(4) + Type(1) + query
+//   Per i2cp.rst, "The session ID and request ID will be returned in the
+//   HostReplyMessage_", so the HostLookup Session ID must be carried through to
+//   the reply rather than left at zero.
 func extractSessionIDFromPayload(msgType uint8, payload []byte) uint16 {
 	// Messages that include SessionID in payload
 	switch msgType {
@@ -383,12 +387,13 @@ func extractSessionIDFromPayload(msgType uint8, payload []byte) uint16 {
 		MessageTypeCreateLeaseSet,
 		MessageTypeCreateLeaseSet2,
 		MessageTypeSendMessageExpires,
-		MessageTypeBlindingInfo:
+		MessageTypeBlindingInfo,
+		MessageTypeHostLookup:
 		if len(payload) >= 2 {
 			return binary.BigEndian.Uint16(payload[0:2])
 		}
 	}
-	// Messages without SessionID in payload (e.g., CreateSession, GetDate, HostLookup)
+	// Messages without SessionID in payload (e.g., CreateSession, GetDate)
 	return 0
 }
 

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"unicode"
 
+	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
@@ -325,19 +326,17 @@ func extractGetDateCredentials(payload []byte) (username, password string) {
 }
 
 // parseGetDatePayload parses past the version string to find the options mapping.
+// The version is an I2P [String] with a 1-byte length prefix (common-structures.rst).
 func parseGetDatePayload(payload []byte) []byte {
-	if len(payload) < 2 {
+	_, remainder, err := common.ReadI2PString(payload)
+	if err != nil {
 		return nil
 	}
-
-	// Skip version string: 2-byte length + string bytes
-	versionLen := int(binary.BigEndian.Uint16(payload[0:2]))
-	offset := 2 + versionLen
-	if offset >= len(payload) {
+	if len(remainder) == 0 {
 		return nil // No options mapping after version string
 	}
 
-	return payload[offset:]
+	return remainder
 }
 
 // authenticateConnectionIfValid attempts to authenticate the connection with the given credentials.
