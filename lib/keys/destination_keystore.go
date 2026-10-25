@@ -281,6 +281,44 @@ func validatePrivateKeys(signingPrivKey types.SigningPrivateKey, encryptionPrivK
 	return nil
 }
 
+// NewClientManagedKeyStore builds a read-only DestinationKeyStore around a
+// Destination supplied by an I2CP client.
+//
+// Per the I2CP specification's Session Config structure, a CreateSession
+// message carries the client's [Destination], the options [Mapping], the
+// creation [Date] and a [Signature] "signed by the [SigningPrivateKey]" and
+// "validated... in the router". Verification therefore uses the signing
+// PUBLIC key embedded in the Destination: the router never receives, and must
+// never require, the client's private keys. A conforming client keeps its keys
+// client-side and publishes its identity later with CreateLeaseSet2, which
+// carries the client-built LeaseSet2 (and, for decryption, any private keys the
+// client chooses to hand over).
+//
+// The returned store exposes only public material: SigningPrivateKey() and
+// EncryptionPrivateKey() are nil, so router-side LeaseSet generation (which
+// needs a signing key) is correctly refused for such a session while message
+// delivery, tunnel management and client-supplied LeaseSet2 publication all
+// work against the client's own destination.
+func NewClientManagedKeyStore(dest *destination.Destination) (*DestinationKeyStore, error) {
+	if dest == nil {
+		return nil, oops.Errorf("client-managed keystore requires a destination")
+	}
+	if dest.KeysAndCert == nil {
+		return nil, oops.Errorf("client destination is not initialized: nil KeysAndCert")
+	}
+	if err := dest.Validate(); err != nil {
+		return nil, oops.Wrapf(err, "invalid client destination")
+	}
+
+	log.WithField("at", "NewClientManagedKeyStore").
+		Debug("Creating public-only destination keystore for client-managed identity")
+
+	return &DestinationKeyStore{
+		destination: dest,
+		padding:     dest.KeysAndCert.Padding,
+	}, nil
+}
+
 // derivePublicKeys derives signing and encryption public keys from the provided private keys.
 // Returns the signing public key and the encryption public key as a ReceivingPublicKey.
 func derivePublicKeys(signingPrivKey types.SigningPrivateKey, encryptionPrivKey types.PrivateEncryptionKey) (types.SigningPublicKey, types.ReceivingPublicKey, error) {

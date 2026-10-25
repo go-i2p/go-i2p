@@ -23,15 +23,37 @@ func NewSessionManager() *SessionManager {
 }
 
 // CreateSession creates a new session with the given destination and config.
-// Optional private keys (signingPrivKey, encryptionPrivKey) can be provided
-// to preserve the client's persistent identity across sessions.
-// If a destination is provided, private keys MUST also be provided (go-i2p requires
-// clients to always provide private keys for their destinations).
+//
+// Optional private keys (signingPrivKey, encryptionPrivKey) can be provided to
+// preserve a client's persistent identity across sessions. They are NOT
+// required: per the I2CP specification a conforming client signs the Session
+// Config with its own signing private key, which the router verifies using the
+// public key embedded in the supplied Destination, and never sends its private
+// keys in CreateSession. A destination supplied without keys therefore yields a
+// client-managed (public-only) session whose LeaseSet2 arrives via
+// CreateLeaseSet2.
+//
+// When no destination is supplied, the router generates a fresh identity.
+//
+// Per spec, if a session already exists for the given Destination, creation is
+// refused.
 func (sm *SessionManager) CreateSession(dest *destination.Destination, config *SessionConfig, privKeys ...interface{}) (*Session, error) {
 	var session *Session
 	var err error
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
+
+	// If there is already a session on the router for this Destination, the
+	// session will be rejected (I2CP spec, CreateSessionMessage notes).
+	if dest != nil {
+		if existingID, ok := sm.findSessionForDestinationLocked(dest); ok {
+			log.WithFields(logger.Fields{
+				"at":              "i2cp.SessionManager.CreateSession",
+				"existingSession": existingID,
+			}).Warn("duplicate_destination_session_refused")
+			return nil, oops.Errorf("a session already exists for this destination (session %d)", existingID)
+		}
+	}
 
 	// Allocate session ID
 	sessionID, err := sm.allocateSessionID()
@@ -43,27 +65,17 @@ func (sm *SessionManager) CreateSession(dest *destination.Destination, config *S
 		return nil, err
 	}
 
-	// If destination is provided, private keys are required
-	if dest != nil && len(privKeys) == 0 {
-		return nil, oops.Errorf(
-			"client destination requires private keys: go-i2p design requires clients to always provide " +
-				"signing and encryption private keys for their persistent identity; destinations without keys cannot be used",
-		)
-	}
-
 	if len(privKeys) == 0 {
-		var sessionKeys *SessionKeys
-		sessionKeys, err = NewSessionKeys()
-		if err != nil {
-			return nil, err
-		}
-		session, err = NewSessionWithKeys(sessionID, dest, config, sessionKeys)
+		// No private keys: NewSession either adopts the client's public-only
+		// destination (client-managed identity) or generates fresh keys when
+		// no destination was supplied (router-managed identity).
+		session, err = NewSession(sessionID, dest, config)
 		if err != nil {
 			log.WithFields(logger.Fields{
 				"at":        "i2cp.SessionManager.CreateSession",
 				"sessionID": sessionID,
 				"error":     err.Error(),
-			}).Error("failed_to_create_session_with_keys")
+			}).Error("failed_to_create_session")
 			return nil, err
 		}
 	} else {
@@ -89,6 +101,25 @@ func (sm *SessionManager) CreateSession(dest *destination.Destination, config *S
 	}).Info("session_registered")
 
 	return session, nil
+}
+
+// findSessionForDestinationLocked returns the ID of an existing active session
+// whose destination matches dest. Caller must hold sm.mu (write lock, or at
+// least a read lock stable for the duration). Comparison uses
+// Destination.Equals so canonicalized encodings of the same identity match.
+func (sm *SessionManager) findSessionForDestinationLocked(dest *destination.Destination) (uint16, bool) {
+	if dest == nil {
+		return 0, false
+	}
+	for id, session := range sm.sessions {
+		if session == nil || !session.IsActive() {
+			continue
+		}
+		if session.Destination().Equals(dest) {
+			return id, true
+		}
+	}
+	return 0, false
 }
 
 // GetSession retrieves a session by ID

@@ -127,6 +127,13 @@ func (s *Session) handleMaintenanceTick() {
 // - Current LeaseSet is more than half its lifetime old
 // - Tunnel pool has changed significantly
 func (s *Session) maintainLeaseSet() error {
+	// A client-managed session never has the router sign a LeaseSet: the
+	// client publishes its own via CreateLeaseSet2, and SetCurrentLeaseSet
+	// caches it, so there is nothing for router-side maintenance to do.
+	if s.IsClientManaged() {
+		return nil
+	}
+
 	needsRegeneration := s.checkLeaseSetRegeneration()
 
 	if !needsRegeneration {

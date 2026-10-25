@@ -470,9 +470,15 @@ func ensureValidConfig(config *SessionConfig) *SessionConfig {
 // If identityPadding is also provided, the exact same destination hash is produced,
 // giving the client a stable .b32.i2p address across sessions.
 //
-// When private keys are nil, a fresh DestinationKeyStore with new keys and a new
-// destination is generated. The dest parameter is ignored in this case because
-// we cannot use a destination without its corresponding private keys.
+// When a destination is supplied without private keys, the session is
+// client-managed: the router holds only the client's public identity. This is
+// the normal case for a conforming I2CP client, which signs the Session Config
+// with its own signing private key (verified by the router using the public key
+// embedded in the Destination) and never transmits private keys in CreateSession.
+// The client publishes its LeaseSet2 itself via CreateLeaseSet2.
+//
+// When no destination and no keys are supplied, a fresh DestinationKeyStore
+// with new keys and a new destination is generated (router-managed identity).
 func prepareDestinationAndKeys(dest *destination.Destination, sigPriv types.SigningPrivateKey, encPriv types.PrivateEncryptionKey, identityPadding ...[]byte) (*keys.DestinationKeyStore, *destination.Destination, error) {
 	// Case 1: Client provided private keys — reconstruct their identity
 	if sigPriv != nil && encPriv != nil {
@@ -488,14 +494,20 @@ func prepareDestinationAndKeys(dest *destination.Destination, sigPriv types.Sign
 		return keyStore, keyStore.Destination(), nil
 	}
 
-	// Case 2: Client provided only a destination (no private keys)
-	// go-i2p requires clients to always provide private keys for their destinations;
-	// the router does not manage client identities. Reject this as an error.
+	// Case 2: Client provided only a destination (no private keys) — the
+	// standard conforming client. Keep the client's identity verbatim; the
+	// router holds no private keys for it.
 	if dest != nil {
-		return nil, nil, oops.Errorf(
-			"client destination requires private keys: go-i2p design requires clients to always provide " +
-				"signing and encryption private keys for their persistent identity; destinations without keys cannot be used",
-		)
+		log.WithFields(logger.Fields{
+			"at":     "prepareDestinationAndKeys",
+			"reason": "client_managed_identity",
+		}).Debug("Client destination supplied without private keys - public-only session")
+
+		keyStore, err := keys.NewClientManagedKeyStore(dest)
+		if err != nil {
+			return nil, nil, oops.Errorf("failed to accept client destination: %w", err)
+		}
+		return keyStore, dest, nil
 	}
 
 	// Case 3: No destination and no keys — generate everything fresh
@@ -582,6 +594,16 @@ func (s *Session) IsActive() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.active
+}
+
+// IsClientManaged reports whether the session's identity is owned by the client
+// (a conforming I2CP client supplied a Destination but no private keys, so the
+// router holds only public material). For such a session the router cannot sign
+// a LeaseSet2; the client publishes its own via CreateLeaseSet2.
+func (s *Session) IsClientManaged() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.keys == nil || s.keys.SigningPrivateKey() == nil
 }
 
 // CreatedAt returns when the session was created
@@ -1004,16 +1026,22 @@ func (s *Session) validateSessionState() error {
 		return oops.Errorf("session %d not active", s.id)
 	}
 
+	// A client-managed session holds only the client's public identity: the
+	// router has no signing private key, so it cannot build a LeaseSet2. The
+	// client publishes its own via CreateLeaseSet2. Refuse router-side
+	// generation explicitly rather than dereferencing a nil signing key.
+	// This is checked first because it is fundamental to the identity model,
+	// independent of tunnel-pool state.
+	if s.keys == nil || s.keys.SigningPrivateKey() == nil {
+		return oops.Errorf("session %d is client-managed: router holds no signing key, client must publish LeaseSet2 via CreateLeaseSet2", s.id)
+	}
+
 	if s.inboundPool == nil {
 		return oops.Errorf("session %d has no inbound tunnel pool", s.id)
 	}
 
 	if s.destination == nil {
 		return oops.Errorf("session %d has no destination", s.id)
-	}
-
-	if s.keys == nil {
-		return oops.Errorf("session %d has no private keys", s.id)
 	}
 
 	return nil

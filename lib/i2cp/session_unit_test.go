@@ -797,16 +797,29 @@ func TestCreateSession_WithPrivateKeys_PreservesIdentity(t *testing.T) {
 		"session destination should match original when private keys are provided via SessionManager")
 }
 
-// TestNewSession_WithoutPrivateKeys_GeneratesFreshIdentity verifies that
-// when no private keys are provided, a fresh identity is always generated
-// (backward compatibility with the previous behavior).
-func TestNewSession_WithoutPrivateKeys_GeneratesFreshIdentity(t *testing.T) {
+// TestNewSession_WithoutPrivateKeys_ClientManaged verifies that a
+// destination supplied without private keys is accepted as a client-managed
+// (public-only) session, per the I2CP spec: the router verifies the Session
+// Config signature with the destination's signing PUBLIC key and never
+// requires the client's private keys.
+func TestNewSession_WithoutPrivateKeys_ClientManaged(t *testing.T) {
 	id := generateTestIdentity(t)
 
-	// Destination-only session creation is now rejected.
-	_, err := NewSession(1, id.Dest, nil)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "client destination requires private keys")
+	session, err := NewSession(1, id.Dest, nil)
+	require.NoError(t, err, "destination-only session must be accepted")
+	defer session.Stop()
+
+	assert.True(t, session.IsClientManaged(), "session must be client-managed")
+	assert.NotNil(t, session.keys, "keystore must be present (public material)")
+	assert.Nil(t, session.keys.SigningPrivateKey(), "router holds no signing private key")
+	assert.Nil(t, session.keys.EncryptionPrivateKey(), "router holds no encryption private key")
+	assertSessionDestinationMatch(t, session, id.DestBytes, true,
+		"client-managed session must keep the client's destination verbatim")
+
+	// Router-side LeaseSet generation is refused (client publishes via CreateLeaseSet2).
+	_, err = session.CreateLeaseSet()
+	require.Error(t, err, "client-managed session must not sign a router-side LeaseSet")
+	assert.Contains(t, err.Error(), "client-managed")
 }
 
 // TestNewSession_WithNilDestAndNilKeys_GeneratesFreshIdentity verifies the
@@ -899,8 +912,9 @@ func TestNewSession_VariadicPrivKeysBackwardCompat(t *testing.T) {
 // =============================================================================
 
 // TestNewSession_WithExternalDestination_HasKeys verifies that providing a
-// non-nil destination to NewSession still results in a session whose internal
-// keys field is non-nil (so CreateLeaseSet won't panic).
+// non-nil destination to NewSession without private keys yields a usable
+// client-managed session whose internal keys field is non-nil (so message
+// handling and client-published LeaseSet2 delivery work without panicking).
 func TestNewSession_WithExternalDestination_HasKeys(t *testing.T) {
 	// Create an external destination using a temporary keystore
 	keyStore, err := keys.NewDestinationKeyStore()
@@ -909,10 +923,13 @@ func TestNewSession_WithExternalDestination_HasKeys(t *testing.T) {
 	externalDest := keyStore.Destination()
 	require.NotNil(t, externalDest, "test destination should not be nil")
 
-	// Destination-only sessions are rejected.
-	_, err = NewSession(42, externalDest, nil)
-	require.Error(t, err, "NewSession with external destination should fail")
-	assert.Contains(t, err.Error(), "client destination requires private keys")
+	// Destination-only sessions are accepted as client-managed identities.
+	session, err := NewSession(42, externalDest, nil)
+	require.NoError(t, err, "NewSession with external destination should succeed")
+	defer session.Stop()
+
+	assert.NotNil(t, session.keys, "keystore must be non-nil")
+	assert.True(t, session.IsClientManaged(), "session must be client-managed")
 }
 
 // TestNewSession_WithNilDestination_HasKeys verifies the baseline: a session
@@ -929,19 +946,21 @@ func TestNewSession_WithNilDestination_HasKeys(t *testing.T) {
 
 // TestPrepareDestinationAndKeys_ExternalDest_ReturnsValidKeyStore tests the
 // prepareDestinationAndKeys helper directly to confirm it returns a
-// non-nil DestinationKeyStore when only a destination is provided (no private keys).
+// non-nil DestinationKeyStore (public-only) when only a destination is
+// provided (no private keys).
 func TestPrepareDestinationAndKeys_ExternalDest_ReturnsValidKeyStore(t *testing.T) {
 	// Create an external destination
 	ks, err := keys.NewDestinationKeyStore()
 	require.NoError(t, err)
 	externalDest := ks.Destination()
 
-	// Calling with a destination but no private keys is now rejected.
+	// A destination without private keys is accepted as client-managed.
 	keyStore, dest, err := prepareDestinationAndKeys(externalDest, nil, nil)
-	require.Error(t, err)
-	assert.Nil(t, keyStore)
-	assert.Nil(t, dest)
-	assert.Contains(t, err.Error(), "client destination requires private keys")
+	require.NoError(t, err)
+	require.NotNil(t, keyStore)
+	require.NotNil(t, dest)
+	assert.Nil(t, keyStore.SigningPrivateKey(), "no signing private key for a client-managed identity")
+	assert.True(t, dest.Equals(externalDest), "the client's destination must be preserved verbatim")
 }
 
 // TestPrepareDestinationAndKeys_NilDest_ReturnsValidKeyStore is the baseline
@@ -1070,7 +1089,9 @@ func TestSessionManager_CreateAndDestroyMultiple(t *testing.T) {
 }
 
 // TestSessionManager_CreateWithExternalDest verifies that CreateSession with
-// an external destination produces a fully usable session (non-nil keys).
+// an external destination (no private keys) produces a usable client-managed
+// session, and that a second session for the same destination is refused per
+// the I2CP spec's duplicate-Destination rule.
 func TestSessionManager_CreateWithExternalDest(t *testing.T) {
 	sm := NewSessionManager()
 
@@ -1078,9 +1099,19 @@ func TestSessionManager_CreateWithExternalDest(t *testing.T) {
 	require.NoError(t, err)
 	externalDest := ks.Destination()
 
+	session, err := sm.CreateSession(externalDest, nil)
+	require.NoError(t, err, "destination-only session must be accepted")
+	require.NotNil(t, session)
+	defer sm.DestroySession(session.ID())
+
+	assert.True(t, session.IsClientManaged(), "session must be client-managed")
+	assert.True(t, session.Destination().Equals(externalDest),
+		"session must adopt the client's destination")
+
+	// A second session for the same Destination must be refused.
 	_, err = sm.CreateSession(externalDest, nil)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "client destination requires private keys")
+	require.Error(t, err, "duplicate destination must be refused")
+	assert.Contains(t, err.Error(), "already exists")
 }
 
 // TestSessionConfigEncryptedLeaseSet verifies EncryptedLeaseSet configuration fields
