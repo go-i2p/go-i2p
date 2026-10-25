@@ -315,58 +315,33 @@ func (s *Server) handleReconfigureSession(msg *Message, sessionPtr **Session) (*
 	return buildSessionStatusResponseWithCode((*sessionPtr).ID(), SessionStatusUpdated), nil
 }
 
-// handleCreateLeaseSet creates and publishes a LeaseSet for the session.
-// This handler generates a LeaseSet from the session's inbound tunnel pool
-// and returns it to the client. In a full implementation, this would also
-// publish the LeaseSet to the network database.
+// handleCreateLeaseSet is a no-op drop for the deprecated CreateLeaseSet
+// message (type 4).
+//
+// The I2CP spec marks CreateLeaseSetMessage DEPRECATED ("Use
+// CreateLeaseSet2Message with all routers 0.9.39 or higher"). Its wire contents
+// are the client's own LeaseSet plus the matching [PrivateKey]_, which the
+// router must publish verbatim - the earlier behavior here instead generated a
+// LeaseSet from the session's tunnels and discarded the client's payload. That
+// noncompliant path is replaced by handleCreateLeaseSet2 (type 41), which
+// consumes the client-supplied LeaseSet2 and private keys correctly.
+//
+// A modern router keeps accepting the deprecated message for legacy clients
+// without disconnecting them (consistent with how the deprecated 528-byte
+// build messages are handled in the I2NP layer), so this logs and drops it.
+// Legacy clients that only speak type 4 should upgrade to type 41.
 func (s *Server) handleCreateLeaseSet(msg *Message, sessionPtr **Session) (*Message, error) {
-	if *sessionPtr == nil {
-		return nil, oops.Errorf("no active session")
+	var sessionID uint16
+	if *sessionPtr != nil {
+		sessionID = (*sessionPtr).ID()
 	}
 
-	session := *sessionPtr
-
-	// i2psnark compatibility: Log LeaseSet creation request
 	log.WithFields(logger.Fields{
 		"at":          "i2cp.Server.handleCreateLeaseSet",
-		"sessionID":   session.ID(),
+		"sessionID":   sessionID,
 		"payloadSize": len(msg.Payload),
-	}).Debug("creating_leaseset")
+	}).Debug("dropping deprecated CreateLeaseSet (type 4); use CreateLeaseSet2 (type 41)")
 
-	// Create LeaseSet from session's inbound tunnels
-	leaseSetBytes, err := session.CreateLeaseSet()
-	if err != nil {
-		log.WithFields(logger.Fields{
-			"at":        "i2cp.Server.handleCreateLeaseSet",
-			"sessionID": session.ID(),
-			"error":     err,
-		}).Error("failed_to_create_leaseset")
-		return nil, oops.Errorf("failed to create LeaseSet: %w", err)
-	}
-
-	log.WithFields(logger.Fields{
-		"at":        "i2cp.Server.handleCreateLeaseSet",
-		"sessionID": session.ID(),
-		"size":      len(leaseSetBytes),
-	}).Info("leaseset_created")
-
-	// Publish LeaseSet to network database (NetDB) if publisher is configured.
-	// The session's publishLeaseSetToNetwork method:
-	// - Calculates the destination hash (SHA256 of destination)
-	// - Calls the LeaseSetPublisher.PublishLeaseSet() interface
-	// - Returns nil if no publisher configured (allows testing without network)
-	// - Logs errors but doesn't fail the operation (LeaseSet is cached locally)
-	if err := session.publishLeaseSetToNetwork(leaseSetBytes); err != nil {
-		// Log warning but don't fail - LeaseSet creation succeeded
-		log.WithFields(logger.Fields{
-			"at":        "i2cp.Server.handleCreateLeaseSet",
-			"sessionID": session.ID(),
-			"error":     err,
-		}).Warn("failed_to_publish_leaseset_to_network")
-	}
-
-	// For I2CP protocol, we don't send a response to CreateLeaseSet
-	// The client just needs to know the operation succeeded (no error)
 	return nil, nil
 }
 

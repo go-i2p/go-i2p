@@ -148,8 +148,11 @@ func TestMessageTypeHandlers(t *testing.T) {
 		{
 			name:        "CreateLeaseSet handler exists",
 			messageType: MessageTypeCreateLeaseSet,
-			expectError: true, // Will error without session
-			description: "CreateLeaseSet should be handled",
+			// Deprecated type 4 is recognized and dropped without error
+			// (replaced by CreateLeaseSet2 type 41), so it must NOT hit the
+			// "unsupported message type" default.
+			expectError: false,
+			description: "CreateLeaseSet should be handled (deprecated, dropped)",
 		},
 		{
 			name:        "CreateLeaseSet2 handler exists",

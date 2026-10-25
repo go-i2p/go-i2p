@@ -134,6 +134,10 @@ func (d *tunnelGatewayDispatcher) HandleGateway(tunnelID tunnel.TunnelID, payloa
 		}
 		inner = inner2
 	}
+	// The inner message was delivered down an inbound tunnel. Mark it so the
+	// DatabaseStore reply-token security rule applies (spec: reply fields are
+	// ignored for tunnel-delivered stores).
+	inner.SetReceivedViaTunnel(true)
 	i2np.RecordExploratoryReplyStage(i2np.ExploratoryReplyStageTunnelGatewayParsed)
 	log.WithFields(logger.Fields{
 		"outer_tunnel_id": tunnelID,

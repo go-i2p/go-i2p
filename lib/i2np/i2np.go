@@ -73,6 +73,26 @@ type BaseI2NPMessage struct {
 	messageID  int
 	expiration time.Time
 	data       []byte
+	// receivedViaTunnel records whether this message was delivered to us down
+	// an inbound tunnel (via a TunnelGateway or control-plane tunnel) rather
+	// than directly from a peer over NTCP2/SSU2. Certain reply behaviors -
+	// notably the DatabaseStore reply token - must be ignored for
+	// tunnel-delivered messages for security. See [TunnelOriginProvider].
+	receivedViaTunnel bool
+}
+
+// ReceivedViaTunnel reports whether this message was delivered down an inbound
+// tunnel. It satisfies [TunnelOriginProvider].
+func (m *BaseI2NPMessage) ReceivedViaTunnel() bool {
+	return m.receivedViaTunnel
+}
+
+// SetReceivedViaTunnel marks the message as tunnel-delivered (or clears it).
+// Entry points that reconstruct an inner I2NP message from a TunnelGateway or
+// control-plane tunnel payload set this so downstream handlers can honor the
+// spec's "reply fields are ignored if the message is received down a tunnel".
+func (m *BaseI2NPMessage) SetReceivedViaTunnel(v bool) {
+	m.receivedViaTunnel = v
 }
 
 // generateRandomMessageID creates a random 4-byte (32-bit) message ID.

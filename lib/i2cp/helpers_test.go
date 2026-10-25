@@ -107,14 +107,6 @@ func createTestDestAndPubKey() (common.Hash, [32]byte) {
 	return destHash, destPubKey
 }
 
-// callHandleCreateLeaseSet invokes handleCreateLeaseSet on the fixture,
-// returning the response message and error.
-func callHandleCreateLeaseSet(t *testing.T, f *leaseSetTestFixture) (*Message, error) {
-	t.Helper()
-	sessionPtr := f.session
-	return f.server.handleCreateLeaseSet(f.msg, &sessionPtr)
-}
-
 // assertSessionDestinationMatch compares the session destination bytes with
 // expectedDestBytes. If shouldMatch is true, asserts equality; otherwise
 // asserts inequality.

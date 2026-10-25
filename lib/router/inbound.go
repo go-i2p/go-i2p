@@ -530,6 +530,10 @@ func (h *InboundMessageHandler) createControlPlaneHandler(tunnelID tunnel.Tunnel
 			}).Debug("control-plane inbound tunnel delivered DeliveryStatus to processor")
 		}
 
+		// This inner I2NP message arrived down an inbound control-plane
+		// tunnel, so mark it as tunnel-delivered for the DatabaseStore
+		// reply-token security rule.
+		inner.SetReceivedViaTunnel(true)
 		return proc.ProcessMessage(inner)
 	}
 }

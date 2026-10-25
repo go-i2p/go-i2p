@@ -535,10 +535,14 @@ func ValidateRecordCount(countField, recordCount int, tunnelTypeName string) err
 // original header fields.
 // See also [BaseI2NPMessage].
 func BaseMessageFromMessage(msg Message, payload []byte) *BaseI2NPMessage {
-	return &BaseI2NPMessage{
+	base := &BaseI2NPMessage{
 		type_:      msg.Type(),
 		messageID:  msg.MessageID(),
 		expiration: msg.Expiration(),
 		data:       payload,
 	}
+	// Preserve tunnel-origin so a coerced concrete message keeps the security
+	// context the spec's DatabaseStore reply-token rule depends on.
+	base.receivedViaTunnel = receivedViaTunnel(msg)
+	return base
 }

@@ -54,6 +54,16 @@ func (p *MessageProcessor) processDatabaseStoreMessage(msg Message) error {
 		return err
 	}
 
+	// Per the I2P spec DatabaseStore note: "For security, the reply fields are
+	// ignored if the message is received down a tunnel." A store delivered
+	// through an inbound tunnel (or inside a garlic clove) must not have its
+	// reply token honored - otherwise a tunnel's last hop could make us
+	// reflect a DeliveryStatus to an arbitrary reply gateway/tunnel. The data
+	// is still stored and still correlated with our own pending lookups (a
+	// floodfill's reply to our lookup legitimately arrives down a tunnel);
+	// only the reply-token-driven ack and flood are suppressed below.
+	viaTunnel := receivedViaTunnel(msg)
+
 	key := dbStore.GetStoreKey()
 	storeType := dbStore.GetStoreType()
 	data := dbStore.GetStoreData()
@@ -97,15 +107,30 @@ func (p *MessageProcessor) processDatabaseStoreMessage(msg Message) error {
 
 	// In floodfill mode, a successful store carrying a non-zero reply token must
 	// be re-propagated to nearby floodfills so the entry becomes network-visible
-	// beyond this single accepting router.
-	if replicator := p.floodfillReplicator; replicator != nil {
-		if token := binary.BigEndian.Uint32(dbStore.ReplyToken[:]); token != 0 {
-			replicator.FloodDatabaseStore(key, data, storeType)
+	// beyond this single accepting router. The reply token is ignored for
+	// tunnel-delivered stores (spec DatabaseStore note), so flooding - which is
+	// gated on that token - is likewise skipped for them.
+	if !viaTunnel {
+		if replicator := p.floodfillReplicator; replicator != nil {
+			if token := binary.BigEndian.Uint32(dbStore.ReplyToken[:]); token != 0 {
+				replicator.FloodDatabaseStore(key, data, storeType)
+			}
 		}
 	}
 
 	// Send DeliveryStatus acknowledgment when a non-zero reply token is present.
-	p.sendDatabaseStoreAck(dbStore)
+	// Suppressed for tunnel-delivered stores: honoring their reply fields is the
+	// exact reflection risk the spec's security note forbids.
+	if !viaTunnel {
+		p.sendDatabaseStoreAck(dbStore)
+	} else if binary.BigEndian.Uint32(dbStore.ReplyToken[:]) != 0 {
+		log.WithFields(logger.Fields{
+			"at":          "processDatabaseStoreMessage",
+			"key":         logutil.HashPrefix(key),
+			"reply_token": binary.BigEndian.Uint32(dbStore.ReplyToken[:]),
+			"reason":      "reply fields ignored for tunnel-delivered store",
+		}).Debug("Ignoring DatabaseStore reply token received down a tunnel")
+	}
 
 	return nil
 }
@@ -693,6 +718,11 @@ func (p *MessageProcessor) handleLocalDelivery(index int, clove GarlicClove, dep
 
 	// H6 FIX: Pass nextDepth to processMessageWithDepth so nested garlic messages
 	// continue tracking the nesting depth and can't bypass the recursion limit.
+	//
+	// A message carried inside a garlic clove is treated as indirectly received
+	// (i2pd's fromClove), so the DatabaseStore reply-token security rule applies
+	// to it even when the garlic itself arrived directly.
+	markIndirectOrigin(clove.Message)
 	if err := p.processMessageWithDepth(clove.Message, nextDepth); err != nil {
 		log.WithFields(logger.Fields{
 			"clove_index": index,

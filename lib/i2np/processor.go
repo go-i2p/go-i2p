@@ -166,6 +166,41 @@ type SourceHashProvider interface {
 	SourceHash() common.Hash
 }
 
+// TunnelOriginProvider exposes whether an inbound message was delivered down a
+// tunnel rather than directly from a peer. The I2P spec requires that a
+// DatabaseStore's reply fields (reply token, reply tunnel ID and reply gateway)
+// be ignored when the message is received down a tunnel: "For security, the
+// reply fields are ignored if the message is received down a tunnel."
+// Implemented by *BaseI2NPMessage.
+type TunnelOriginProvider interface {
+	ReceivedViaTunnel() bool
+}
+
+// tunnelOriginSetter is implemented by *BaseI2NPMessage so delivery entry
+// points (tunnel gateways, control-plane tunnels, garlic clove LOCAL delivery)
+// can mark a reconstructed inner message as indirectly received.
+type tunnelOriginSetter interface {
+	SetReceivedViaTunnel(bool)
+}
+
+// markIndirectOrigin records that msg was delivered down a tunnel or inside a
+// garlic clove rather than directly from a peer. It is a no-op for message
+// types that do not carry origin state.
+func markIndirectOrigin(msg Message) {
+	if setter, ok := msg.(tunnelOriginSetter); ok {
+		setter.SetReceivedViaTunnel(true)
+	}
+}
+
+// receivedViaTunnel reports whether msg was delivered down an inbound tunnel
+// (or inside a garlic clove). A message type that does not implement
+// [TunnelOriginProvider] is treated as directly received, matching the
+// reply-honoring path used for locally-constructed and peer-direct messages.
+func receivedViaTunnel(msg Message) bool {
+	provider, ok := msg.(TunnelOriginProvider)
+	return ok && provider.ReceivedViaTunnel()
+}
+
 // DataMessageHandler defines the interface for handling incoming Data messages.
 // Data messages carry end-to-end payloads that need to be delivered to I2CP sessions.
 type DataMessageHandler interface {
