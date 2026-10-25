@@ -52,6 +52,19 @@ func (tm *TunnelManager) retrievePendingBuildRequest(messageID int) (*buildReque
 	return req, exists
 }
 
+// HasPendingInboundBuild reports whether this router started an inbound tunnel
+// build whose reply set is still awaited under the given I2NP message ID. It
+// satisfies the optional pendingInboundBuildMatcher interface so the message
+// processor can recognise a relayed ShortTunnelBuild carrying the completed
+// reply set of our own inbound build instead of misreading it as a request for
+// us to join someone else's tunnel.
+func (tm *TunnelManager) HasPendingInboundBuild(messageID int) bool {
+	tm.buildMutex.RLock()
+	defer tm.buildMutex.RUnlock()
+	req, exists := tm.pendingBuilds[messageID]
+	return exists && req.isInbound && req.useShortBuild
+}
+
 // processUncorrelatedReply handles replies without a pending build request.
 func (tm *TunnelManager) processUncorrelatedReply(handler TunnelReplyHandler, messageID int, records []BuildResponseRecord) error {
 	RecordExploratoryReplyStage(ExploratoryReplyStageShortReplyUncorrelated)
