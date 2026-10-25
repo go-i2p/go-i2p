@@ -177,20 +177,27 @@ func TestParticipantProcess(t *testing.T) {
 
 			var encryptedData []byte
 			if tt.dataSize == 1028 {
-				// For valid tunnel messages, create proper 1008-byte payload
-				// The payload contains: [Tunnel ID (4)] [IV placeholder (16)] [Checksum (4)] [Padding + Data (984)]
-				payload := make([]byte, 1008)
+				// Build the inner 1028-byte tunnel record the way the spec
+				// defines it (Tunnel Message (Decrypted)):
+				// [Tunnel ID (4)] [IV (16)] [Checksum (4)] [Padding + Data (984)]
+				// and encrypt a whole layer on top of it.
+				inner := make([]byte, 1028)
 
-				// Set tunnel ID at start of payload
-				binary.BigEndian.PutUint32(payload[:4], uint32(tt.nextHopID))
+				// Next hop tunnel ID at bytes 0..3 of the inner record
+				binary.BigEndian.PutUint32(inner[:4], uint32(tt.nextHopID))
 
-				// Fill rest with test pattern
-				for i := 4; i < len(payload); i++ {
-					payload[i] = byte(i % 256)
+				// Nonzero IV at bytes 4..19
+				for i := 4; i < 20; i++ {
+					inner[i] = byte(i)
 				}
 
-				// Encrypt to get full 1028-byte tunnel message
-				encryptedData, err = aesEncryptor.Encrypt(payload)
+				// Fill the payload region with a test pattern
+				for i := 20; i < len(inner); i++ {
+					inner[i] = byte(i % 256)
+				}
+
+				// Encrypt to get the full 1028-byte wire tunnel message
+				encryptedData, err = aesEncryptor.Encrypt(inner)
 				if err != nil {
 					t.Fatalf("failed to encrypt: %v", err)
 				}
@@ -216,12 +223,13 @@ func TestParticipantProcess(t *testing.T) {
 				if nextHop != tt.nextHopID {
 					t.Errorf("expected next hop ID %d, got %d", tt.nextHopID, nextHop)
 				}
-				// After decryption, we get the 1008-byte payload back
-				if len(decrypted) != 1008 {
-					t.Errorf("expected decrypted data length 1008, got %d", len(decrypted))
+				// Peeling one layer returns the full 1028-byte decrypted record,
+				// so the transit hop can forward the tunnel ID and IV framing.
+				if len(decrypted) != 1028 {
+					t.Errorf("expected decrypted data length 1028, got %d", len(decrypted))
 				}
 
-				// Verify the tunnel ID at the start of the decrypted payload
+				// The next hop tunnel ID is at bytes 0..3 of the decrypted record
 				if len(decrypted) >= 4 {
 					decryptedTunnelID := binary.BigEndian.Uint32(decrypted[:4])
 					if decryptedTunnelID != uint32(tt.nextHopID) {
@@ -238,16 +246,20 @@ func TestParticipantProcess(t *testing.T) {
 func TestParticipantProcessMultiLayer(t *testing.T) {
 	p, aesEncryptor := createTestParticipant(t, 1000)
 
-	// Create a 1008-byte payload (what goes into AES encryption)
-	payload := make([]byte, 1008)
+	// Create the inner 1028-byte tunnel record:
+	// [Tunnel ID (4)] [IV (16)] [Checksum (4)] [Padding + Data (984)]
+	inner := make([]byte, 1028)
 	nextHopID := TunnelID(2000)
-	binary.BigEndian.PutUint32(payload[:4], uint32(nextHopID))
-	for i := 4; i < len(payload); i++ {
-		payload[i] = byte(i % 256)
+	binary.BigEndian.PutUint32(inner[:4], uint32(nextHopID))
+	for i := 4; i < 20; i++ {
+		inner[i] = byte(i)
+	}
+	for i := 20; i < len(inner); i++ {
+		inner[i] = byte(i % 256)
 	}
 
 	// Encrypt it (produces 1028-byte tunnel message)
-	encryptedMsg, err := aesEncryptor.Encrypt(payload)
+	encryptedMsg, err := aesEncryptor.Encrypt(inner)
 	if err != nil {
 		t.Fatalf("failed to encrypt: %v", err)
 	}
@@ -257,7 +269,7 @@ func TestParticipantProcessMultiLayer(t *testing.T) {
 		t.Fatalf("expected encrypted message length 1028, got %d", len(encryptedMsg))
 	}
 
-	// Process through participant (decrypts back to 1008-byte payload)
+	// Process through participant (peels one layer, returns the 1028-byte record)
 	extractedNextHop, decryptedMsg, err := p.Process(encryptedMsg)
 	if err != nil {
 		t.Fatalf("participant process failed: %v", err)
@@ -268,22 +280,28 @@ func TestParticipantProcessMultiLayer(t *testing.T) {
 		t.Errorf("expected next hop %d, got %d", nextHopID, extractedNextHop)
 	}
 
-	// Verify decryption worked (should return 1008-byte payload)
-	if len(decryptedMsg) != 1008 {
-		t.Errorf("expected 1008 bytes, got %d", len(decryptedMsg))
+	// Verify decryption worked (should return the full 1028-byte record)
+	if len(decryptedMsg) != 1028 {
+		t.Errorf("expected 1028 bytes, got %d", len(decryptedMsg))
 	}
 
-	// The decrypted tunnel ID should match what we put in the payload
+	// The decrypted tunnel ID should match what we put in the record header
 	decryptedTunnelID := binary.BigEndian.Uint32(decryptedMsg[:4])
 	if decryptedTunnelID != uint32(nextHopID) {
 		t.Errorf("expected tunnel ID %d, got %d", nextHopID, decryptedTunnelID)
 	}
 
-	// Verify payload matches original
-	if !bytes.Equal(decryptedMsg, payload) {
+	// Verify the payload region matches the original inner record
+	if !bytes.Equal(decryptedMsg[20:], inner[20:]) {
 		t.Errorf("decrypted payload doesn't match original")
-		t.Logf("Expected first 20 bytes: %x", payload[:20])
-		t.Logf("Got first 20 bytes: %x", decryptedMsg[:20])
+		t.Logf("Expected first 20 bytes: %x", inner[20:40])
+		t.Logf("Got first 20 bytes: %x", decryptedMsg[20:40])
+	}
+
+	// The IV in the decrypted record is the one this hop's inverse transform
+	// produced for the next hop, so it must be present (16 bytes at 4..19).
+	if bytes.Equal(decryptedMsg[4:20], make([]byte, 16)) {
+		t.Error("decrypted IV region is all zero; forwarding framing was lost")
 	}
 }
 
@@ -544,17 +562,18 @@ func TestParticipantUsesNextHopFromBuildRecord(t *testing.T) {
 	participant.lifetime.Store(int64(10 * time.Minute))
 	participant.idleTimeout.Store(int64(2 * time.Minute))
 
-	// Create a 1008-byte payload with a DIFFERENT tunnel ID in bytes 0-3
-	// (to prove we're not reading from decrypted bytes)
+	// Build the inner 1028-byte record with a DIFFERENT tunnel ID in bytes 0..3
+	// (the cleartext framing a previous hop controls) to prove we're not reading
+	// the next hop ID from the message at all.
 	const decoyNextHop = TunnelID(9999) // Different from expectedNextHop
-	payload := make([]byte, 1008)
-	binary.BigEndian.PutUint32(payload[:4], uint32(decoyNextHop))
-	for i := 4; i < len(payload); i++ {
-		payload[i] = byte(i % 256)
+	inner := make([]byte, 1028)
+	binary.BigEndian.PutUint32(inner[:4], uint32(decoyNextHop))
+	for i := 4; i < len(inner); i++ {
+		inner[i] = byte(i % 256)
 	}
 
-	// Encrypt the payload to create a 1028-byte tunnel message
-	encryptedMsg, err := aesEncryptor.Encrypt(payload)
+	// Encrypt the record to create the 1028-byte wire tunnel message
+	encryptedMsg, err := aesEncryptor.Encrypt(inner)
 	if err != nil {
 		t.Fatalf("failed to encrypt: %v", err)
 	}
@@ -570,18 +589,18 @@ func TestParticipantUsesNextHopFromBuildRecord(t *testing.T) {
 	}
 
 	// CRITICAL: Verify that nextHopID equals the build record's nextHopTunnel,
-	// NOT the decoyNextHop embedded in the decrypted payload bytes
+	// NOT the decoyNextHop embedded in the decrypted record's cleartext header
 	if nextHopID != expectedNextHop {
 		t.Errorf("nextHopID should come from build record: expected %d, got %d", expectedNextHop, nextHopID)
 	}
 
-	// The decrypted payload should still contain the decoyNextHop in bytes 0-3
+	// The decrypted record should still carry the decoyNextHop in bytes 0-3
 	// (proving we didn't read nextHopID from there)
-	if len(decrypted) >= 4 {
-		decryptedTunnelID := TunnelID(binary.BigEndian.Uint32(decrypted[:4]))
-		if decryptedTunnelID != decoyNextHop {
-			t.Errorf("decrypted payload bytes 0-3 should contain decoy: expected %d, got %d", decoyNextHop, decryptedTunnelID)
-		}
+	if len(decrypted) != 1028 {
+		t.Fatalf("expected 1028-byte decrypted record, got %d", len(decrypted))
+	}
+	if decryptedTunnelID := TunnelID(binary.BigEndian.Uint32(decrypted[:4])); decryptedTunnelID != decoyNextHop {
+		t.Errorf("decrypted record bytes 0-3 should contain decoy: expected %d, got %d", decoyNextHop, decryptedTunnelID)
 	}
 
 	t.Logf("SUCCESS: Process returned nextHopID=%d from build record (ignored decoy=%d in payload)", nextHopID, decoyNextHop)

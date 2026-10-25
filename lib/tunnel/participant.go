@@ -221,9 +221,12 @@ func (p *Participant) Process(encryptedData []byte) (nextHopID TunnelID, decrypt
 	}
 
 	// Use the next hop tunnel ID from the build record, not from decrypted payload.
-	// Per I2P Tunnel Message spec, a transit hop forwards using the next tunnel ID
-	// it learned in its build record. The first 4 bytes of the decrypted payload
-	// are part of the transformed IV/data region, not a tunnel ID.
+	// Per I2P Tunnel Message spec, the cleartext 4-byte ID in a transit message is
+	// the ID of the next hop, and the participant learned that value from its own
+	// build record, so the build record is the authoritative source. The decrypted
+	// record does carry the same ID at bytes 0..3 as unauthenticated framing, but
+	// trusting it would let a previous hop redirect the message by rewriting a
+	// cleartext field.
 	nextHopID = p.nextHopTunnel
 
 	log.WithFields(map[string]interface{}{

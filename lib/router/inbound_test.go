@@ -716,16 +716,20 @@ func TestHandleTunnelDataTransitFullIntegration(t *testing.T) {
 	aesEncryptor, err := tunnel.NewAESEncryptor(layerKey, ivKey)
 	require.NoError(t, err)
 
-	// Create a 1008-byte payload with the DECOY tunnel ID in bytes 0-3
-	// (to prove Process doesn't read nextHopID from here)
-	payload := make([]byte, 1008)
-	binary.BigEndian.PutUint32(payload[:4], uint32(decoyNextHop))
-	for i := 4; i < len(payload); i++ {
-		payload[i] = byte(i % 256)
+	// Build the inner 1028-byte tunnel record with the DECOY tunnel ID in its
+	// cleartext header bytes 0..3 (to prove Process doesn't read nextHopID from
+	// there), a nonzero IV at bytes 4..19, and a payload region after that.
+	inner := make([]byte, 1028)
+	binary.BigEndian.PutUint32(inner[:4], uint32(decoyNextHop))
+	for i := 4; i < 20; i++ {
+		inner[i] = byte(0x40 + i)
+	}
+	for i := 20; i < len(inner); i++ {
+		inner[i] = byte(i % 256)
 	}
 
 	// Encrypt to create the full 1028-byte tunnel message
-	encryptedMsg, err := aesEncryptor.Encrypt(payload)
+	encryptedMsg, err := aesEncryptor.Encrypt(inner)
 	require.NoError(t, err)
 	require.Equal(t, 1028, len(encryptedMsg), "encrypted message must be 1028 bytes")
 
@@ -770,18 +774,14 @@ func TestHandleTunnelDataTransitFullIntegration(t *testing.T) {
 	}
 	handler.SetSessionProvider(mockSessionProv)
 
-	// Process the transit tunnel message
+	// Process the transit tunnel message. With the layer contract fixed, this
+	// must now succeed end-to-end: Participant.Process peels one layer and
+	// returns the full 1028-byte inner record, which forwardToNextHop rebuilds
+	// into the TunnelData message for the next hop.
 	err = handler.HandleTunnelData(msg)
-	// The handler should succeed (or fail gracefully)
-	// We're primarily testing that the size contract and nextHopID logic are correct
-	if err != nil {
-		t.Logf("HandleTunnelData returned error (acceptable for mock setup): %v", err)
-	}
+	require.NoError(t, err, "transit forwarding must succeed once one layer is peeled")
 
-	// VALIDATION: Verify the participant was looked up and Process was called
-	// If we get here without panicking from a size mismatch, C1 is fixed
-
-	// Check if a message was forwarded
+	// C1 validation: a message must actually have been forwarded to the next hop
 	mockSession.mu.Lock()
 	receivedCount := len(mockSession.receivedMsgs)
 	var forwardedMsg i2np.Message
@@ -790,17 +790,25 @@ func TestHandleTunnelDataTransitFullIntegration(t *testing.T) {
 	}
 	mockSession.mu.Unlock()
 
-	// If a message was forwarded, verify it has the correct tunnel ID (from build record)
-	if forwardedMsg != nil {
-		if tdMsg, ok := forwardedMsg.(i2np.TunnelCarrier); ok {
-			actualNextHop := tdMsg.GetTunnelID()
-			// C2 validation: nextHopID should match the build record, NOT the decoy
-			assert.Equal(t, buildRecordNextHop, actualNextHop,
-				"forwarded message should use nextHopTunnel from build record (C2 fix)")
-			assert.NotEqual(t, decoyNextHop, actualNextHop,
-				"forwarded message should NOT use decoy from payload")
-		}
-	}
+	require.NotNil(t, forwardedMsg, "transit hop must forward the peeled record to the next hop (C1)")
+	assert.Equal(t, 1, receivedCount, "exactly one message should be forwarded")
 
-	t.Log("SUCCESS: Transit tunnel forwarding validated - C1 (size) and C2 (nextHopID) fixes confirmed")
+	tdMsg, ok := forwardedMsg.(i2np.TunnelCarrier)
+	require.True(t, ok, "forwarded message must be a tunnel-carrier message")
+
+	// C2 validation: nextHopID comes from the build record, NOT the decoy in the
+	// message's cleartext header.
+	assert.Equal(t, buildRecordNextHop, tdMsg.GetTunnelID(),
+		"forwarded message should use nextHopTunnel from build record (C2 fix)")
+	assert.NotEqual(t, decoyNextHop, tdMsg.GetTunnelID(),
+		"forwarded message should NOT use decoy from payload")
+
+	// C1 validation: the forwarded 1024-byte body must be the inner record's
+	// bytes 4..1027, i.e. the IV this hop produced for the next hop followed by
+	// the still-encrypted inner layers. Dropping the IV would corrupt this.
+	forwardedBody := tdMsg.GetTunnelData()
+	assert.Equal(t, inner[4:1028], forwardedBody[:1024],
+		"forwarded body must carry the next hop's IV and the inner layers intact")
+
+	t.Log("SUCCESS: Transit tunnel forwarding validated - C1 (full 1028-byte record) and C2 (nextHopID) fixes confirmed")
 }
