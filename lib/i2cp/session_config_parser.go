@@ -187,7 +187,40 @@ func parseSignedSessionBody(remaining []byte) (*SessionConfig, int, []byte, erro
 		return nil, 0, nil, oops.Errorf("signed session payload missing signature")
 	}
 
+	// I2CP spec, CreateSession/ReconfigureSession notes: "If the Date in the
+	// Session Config is too far (more than +/- 30 seconds) from the router's
+	// current time, the session will be rejected." The Date is an 8-byte
+	// milliseconds-since-epoch integer (see SetDateMessage).
+	if err := validateSessionConfigDate(remaining[optionsEnd:dateEnd]); err != nil {
+		return nil, 0, nil, err
+	}
+
 	return config, dateEnd, signature, nil
+}
+
+// sessionConfigDateTolerance is the spec's maximum allowed skew between the
+// Session Config creation Date and the router's clock.
+const sessionConfigDateTolerance = 30 * time.Second
+
+// validateSessionConfigDate checks the 8-byte Session Config Date (big-endian
+// milliseconds since epoch) against the router's current time, rejecting a
+// skew greater than +/- 30 seconds as the specification requires.
+func validateSessionConfigDate(dateBytes []byte) error {
+	if len(dateBytes) != 8 {
+		return oops.Errorf("session config date must be 8 bytes, got %d", len(dateBytes))
+	}
+
+	createdMs := int64(binary.BigEndian.Uint64(dateBytes))
+	skew := time.Since(time.UnixMilli(createdMs))
+	if skew < 0 {
+		skew = -skew
+	}
+	if skew > sessionConfigDateTolerance {
+		return oops.Errorf("session config date %d ms is %v from router time (max +/- %v)",
+			createdMs, skew.Round(time.Second), sessionConfigDateTolerance)
+	}
+
+	return nil
 }
 
 func verifySignedSessionData(dest *destination.Destination, signedData, sig []byte) error {

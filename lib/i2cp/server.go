@@ -154,6 +154,14 @@ type Server struct {
 	// LeaseSet publishing
 	leaseSetPublisher LeaseSetPublisher
 
+	// blindingAdvice records BlindingInfo (type 42) messages received per
+	// session, keyed by the blinded peer destination hash. BlindingInfo is the
+	// client's advice that a destination it will send to is blinded ("b33"),
+	// together with the optional per-client decryption key and lookup password
+	// the client holds. The router stores it so blinded-destination resolution
+	// can use the secret/private key without the client re-sending it.
+	blindingAdvice map[common.Hash]*BlindingInfoPayload
+
 	// Message ID generation for status tracking
 	nextMessageID atomic.Uint32
 
@@ -249,6 +257,7 @@ func NewServer(config *ServerConfig) (*Server, error) {
 		sessionConns:      make(map[uint16]net.Conn),
 		connWriteMu:       make(map[uint16]*sync.Mutex),
 		connStates:        make(map[net.Conn]*connectionState),
+		blindingAdvice:    make(map[common.Hash]*BlindingInfoPayload),
 		leaseSetPublisher: config.LeaseSetPublisher,
 		hostnameResolver:  hostnameResolver,
 		ctx:               ctx,

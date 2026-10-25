@@ -7,6 +7,7 @@ import (
 
 	commondata "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/destination"
+	"github.com/go-i2p/common/key_certificate"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
@@ -779,85 +780,295 @@ func (hrp *HostReplyPayload) MarshalBinary() ([]byte, error) {
 	return result, nil
 }
 
-// BlindingInfoPayload represents the payload structure of a BlindingInfo (type 42) message.
-// This message allows clients to configure destination blinding parameters.
+// BlindingInfo endpoint types (I2CP spec BlindingInfoMessage contents field 3).
+const (
+	BlindingEndpointHash        = 0 // Endpoint is a 32-byte destination hash
+	BlindingEndpointHostname    = 1 // Endpoint is a hostname String
+	BlindingEndpointDestination = 2 // Endpoint is a binary Destination
+	BlindingEndpointSigTypeKey  = 3 // Endpoint is a 2-byte sig type + SigningPublicKey
+)
+
+// BlindingInfo flag bits (I2CP spec BlindingInfoMessage contents field 2).
+const (
+	blindingFlagPerClient  = 0x01 // bit 0: 0 for everybody, 1 for per-client
+	blindingAuthSchemeMask = 0x0E // bits 3-1: authentication scheme (000 DH/none, 001 PSK)
+	blindingFlagSecret     = 0x10 // bit 4: 1 if a lookup secret/password is required
+)
+
+// BlindingInfoPayload represents the payload structure of a BlindingInfo (type 42)
+// message.
 //
-// Wire format:
+// The message advises the router that a *peer* Destination is blinded (a "b33"
+// new-format address), optionally supplying the per-client authentication secret
+// (lookup password) and the per-client decryption private key. It is the
+// programmatic counterpart to a Host Lookup of a blinded address, which has no
+// way to carry the secret/private key. See proposals 123 and 149.
 //
-//	1 byte:  Blinding enabled flag (0x00 = disabled, 0x01 = enabled)
-//	N bytes: Blinding secret (optional, 32 bytes if provided; 0 bytes to use random)
+// Wire format (I2P spec, i2p2www/spec/i2cp.rst "BlindingInfoMessage"):
 //
-// If enabled flag is 0x00, no secret is expected and blinding will be disabled.
-// If enabled flag is 0x01 and no secret follows, a random secret will be generated.
-// If enabled flag is 0x01 and 32 bytes follow, that secret will be used.
+//	2 bytes: Session ID
+//	1 byte:  Flags
+//	           bit 0   0 = everybody, 1 = per-client
+//	           bits 3-1 authentication scheme when bit 0 is 1 (000 DH/none, 001 PSK)
+//	           bit 4   1 = secret required
+//	           bits 7-5 unused, must be 0
+//	1 byte:  Endpoint type (0 hash, 1 hostname String, 2 Destination, 3 sig type + key)
+//	2 bytes: Blinded signature type
+//	4 bytes: Expiration, seconds since epoch
+//	Endpoint: as specified by the endpoint type
+//	[PrivateKey] Decryption key: 32-byte ECIES_X25519 private key, little-endian
+//	           - only present when flag bit 0 is 1
+//	[String]   Lookup password    - only present when flag bit 4 is 1
 type BlindingInfoPayload struct {
-	Enabled bool   // Whether destination blinding is enabled
-	Secret  []byte // Blinding secret (nil = generate random, empty = disabled)
+	SessionID   uint16 // Session ID (contents field 1)
+	Flags       uint8  // Flag byte (contents field 2)
+	Endpoint    uint8  // Endpoint type (contents field 3)
+	SigType     uint16 // Blinded signature type (contents field 4)
+	Expiration  uint32 // Seconds since epoch (contents field 5)
+	Hash        []byte // Type 0 endpoint: 32-byte destination hash
+	Hostname    string // Type 1 endpoint: hostname
+	Destination []byte // Type 2 endpoint: serialized Destination
+	PubkeyType  uint16 // Type 3 endpoint: signing public key type
+	Pubkey      []byte // Type 3 endpoint: signing public key bytes
+	PrivateKey  []byte // Decryption key, present iff flag bit 0 is set
+	Password    string // Lookup password, present iff flag bit 4 is set
+}
+
+// IsPerClient reports whether the per-client flag (bit 0) is set.
+func (bip *BlindingInfoPayload) IsPerClient() bool {
+	return bip.Flags&blindingFlagPerClient != 0
+}
+
+// RequiresSecret reports whether the secret-required flag (bit 4) is set.
+func (bip *BlindingInfoPayload) RequiresSecret() bool {
+	return bip.Flags&blindingFlagSecret != 0
+}
+
+// AuthScheme returns the 3-bit authentication scheme from bits 3-1.
+func (bip *BlindingInfoPayload) AuthScheme() uint8 {
+	return (bip.Flags & blindingAuthSchemeMask) >> 1
 }
 
 // ParseBlindingInfoPayload deserializes a BlindingInfo payload from wire format.
-// Minimum size: 1 byte (enabled flag)
-// Maximum size: 33 bytes (flag + 32-byte secret)
+// Minimum size: 10 bytes (session ID + flags + endpoint type + sig type + expiration).
 func ParseBlindingInfoPayload(data []byte) (*BlindingInfoPayload, error) {
-	if len(data) < 1 {
+	if len(data) < 10 {
 		log.WithFields(logger.Fields{
 			"at":       "i2cp.ParseBlindingInfoPayload",
 			"dataSize": len(data),
 		}).Error("payload_too_short")
-		return nil, oops.Errorf("BlindingInfo payload too short: need at least 1 byte, got %d", len(data))
+		return nil, oops.Errorf("BlindingInfo payload too short: need at least 10 bytes, got %d", len(data))
 	}
 
-	bip := &BlindingInfoPayload{}
-	bip.Enabled = data[0] != 0x00
+	bip := &BlindingInfoPayload{
+		SessionID:  binary.BigEndian.Uint16(data[0:2]),
+		Flags:      data[2],
+		Endpoint:   data[3],
+		SigType:    binary.BigEndian.Uint16(data[4:6]),
+		Expiration: binary.BigEndian.Uint32(data[6:10]),
+	}
 
-	// If enabled and secret provided, extract it
-	if bip.Enabled && len(data) > 1 {
-		if len(data) != 33 {
-			log.WithFields(logger.Fields{
-				"at":       "i2cp.ParseBlindingInfoPayload",
-				"dataSize": len(data),
-			}).Error("invalid_secret_length")
-			return nil, oops.Errorf("BlindingInfo secret must be 32 bytes, got %d", len(data)-1)
-		}
-		bip.Secret = make([]byte, 32)
-		copy(bip.Secret, data[1:33])
+	if bip.Flags&0xE0 != 0 {
+		return nil, oops.Errorf("BlindingInfo flags bits 7-5 must be zero, got 0x%02X", bip.Flags)
+	}
+
+	body := data[10:]
+	rest, err := bip.parseEndpoint(body)
+	if err != nil {
+		return nil, err
+	}
+
+	rest, err = bip.parseOptionalTrailing(rest)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(rest) != 0 {
+		return nil, oops.Errorf("BlindingInfo payload has %d trailing byte(s)", len(rest))
 	}
 
 	log.WithFields(logger.Fields{
-		"at":        "i2cp.ParseBlindingInfoPayload",
-		"enabled":   bip.Enabled,
-		"hasSecret": len(bip.Secret) > 0,
-		"dataSize":  len(data),
+		"at":         "i2cp.ParseBlindingInfoPayload",
+		"sessionID":  bip.SessionID,
+		"flags":      bip.Flags,
+		"endpoint":   bip.Endpoint,
+		"sigType":    bip.SigType,
+		"expiration": bip.Expiration,
+		"perClient":  bip.IsPerClient(),
+		"secret":     bip.RequiresSecret(),
+		"dataSize":   len(data),
 	}).Debug("parsed_blinding_info_payload")
 
 	return bip, nil
 }
 
-// MarshalBinary serializes the BlindingInfoPayload to wire format.
-func (bip *BlindingInfoPayload) MarshalBinary() ([]byte, error) {
-	var result []byte
-
-	// Enabled flag
-	if bip.Enabled {
-		result = append(result, 0x01)
-	} else {
-		result = append(result, 0x00)
-	}
-
-	// Secret (if provided and enabled)
-	if bip.Enabled && len(bip.Secret) > 0 {
-		if len(bip.Secret) != 32 {
-			return nil, oops.Errorf("BlindingInfo secret must be 32 bytes, got %d", len(bip.Secret))
+// parseEndpoint decodes the endpoint field per its type, returning the
+// unconsumed remainder.
+func (bip *BlindingInfoPayload) parseEndpoint(body []byte) ([]byte, error) {
+	switch bip.Endpoint {
+	case BlindingEndpointHash:
+		if len(body) < 32 {
+			return nil, oops.Errorf("BlindingInfo hash endpoint needs 32 bytes, got %d", len(body))
 		}
-		result = append(result, bip.Secret...)
+		bip.Hash = make([]byte, 32)
+		copy(bip.Hash, body[:32])
+		return body[32:], nil
+
+	case BlindingEndpointHostname:
+		str, remainder, err := commondata.ReadI2PString(body)
+		if err != nil {
+			return nil, oops.Wrapf(err, "BlindingInfo hostname endpoint")
+		}
+		hostname, err := str.Data()
+		if err != nil {
+			return nil, oops.Wrapf(err, "BlindingInfo hostname endpoint decode")
+		}
+		bip.Hostname = hostname
+		return remainder, nil
+
+	case BlindingEndpointDestination:
+		// A Destination is a variable-length KeysAndCert; ReadDestination
+		// reports the remainder, so no separate length field is needed.
+		dest, remainder, err := destination.ReadDestination(body)
+		if err != nil {
+			return nil, oops.Wrapf(err, "BlindingInfo destination endpoint")
+		}
+		destBytes, err := dest.Bytes()
+		if err != nil {
+			return nil, oops.Wrapf(err, "BlindingInfo destination endpoint serialize")
+		}
+		bip.Destination = destBytes
+		return remainder, nil
+
+	case BlindingEndpointSigTypeKey:
+		if len(body) < 2 {
+			return nil, oops.Errorf("BlindingInfo sig-type endpoint needs a 2-byte signature type")
+		}
+		bip.PubkeyType = binary.BigEndian.Uint16(body[0:2])
+		keyLen, err := signingPublicKeySize(int(bip.PubkeyType))
+		if err != nil {
+			return nil, oops.Wrapf(err, "BlindingInfo sig-type endpoint")
+		}
+		if len(body[2:]) < keyLen {
+			return nil, oops.Errorf("BlindingInfo signing public key needs %d bytes, got %d", keyLen, len(body[2:]))
+		}
+		bip.Pubkey = make([]byte, keyLen)
+		copy(bip.Pubkey, body[2:2+keyLen])
+		return body[2+keyLen:], nil
+
+	default:
+		return nil, oops.Errorf("unsupported BlindingInfo endpoint type: %d", bip.Endpoint)
+	}
+}
+
+// parseOptionalTrailing decodes the private key (present iff per-client) and
+// the lookup password (present iff secret required), returning the remainder.
+func (bip *BlindingInfoPayload) parseOptionalTrailing(rest []byte) ([]byte, error) {
+	if bip.IsPerClient() {
+		if len(rest) < 32 {
+			return nil, oops.Errorf("BlindingInfo per-client decryption key needs 32 bytes, got %d", len(rest))
+		}
+		bip.PrivateKey = make([]byte, 32)
+		copy(bip.PrivateKey, rest[:32])
+		rest = rest[32:]
 	}
 
-	log.WithFields(logger.Fields{
-		"at":        "i2cp.BlindingInfoPayload.MarshalBinary",
-		"enabled":   bip.Enabled,
-		"hasSecret": len(bip.Secret) > 0,
-		"totalSize": len(result),
-	}).Debug("marshaled_blinding_info_payload")
+	if bip.RequiresSecret() {
+		str, remainder, err := commondata.ReadI2PString(rest)
+		if err != nil {
+			return nil, oops.Wrapf(err, "BlindingInfo lookup password")
+		}
+		password, err := str.Data()
+		if err != nil {
+			return nil, oops.Wrapf(err, "BlindingInfo lookup password decode")
+		}
+		bip.Password = password
+		return remainder, nil
+	}
+
+	return rest, nil
+}
+
+// signingPublicKeySize returns the on-wire size of a signing public key for the
+// given I2P signing key type, using the authoritative key-size table.
+func signingPublicKeySize(sigType int) (int, error) {
+	info, ok := key_certificate.SigningKeySizes[sigType]
+	if !ok {
+		return 0, oops.Errorf("unknown BlindingInfo signing key type %d", sigType)
+	}
+	return info.SigningPublicKeySize, nil
+}
+
+// MarshalBinary serializes the BlindingInfoPayload to wire format, mirroring
+// ParseBlindingInfoPayload.
+func (bip *BlindingInfoPayload) MarshalBinary() ([]byte, error) {
+	result := make([]byte, 10)
+	binary.BigEndian.PutUint16(result[0:2], bip.SessionID)
+	result[2] = bip.Flags
+	result[3] = bip.Endpoint
+	binary.BigEndian.PutUint16(result[4:6], bip.SigType)
+	binary.BigEndian.PutUint32(result[6:10], bip.Expiration)
+
+	endpoint, err := bip.marshalEndpoint()
+	if err != nil {
+		return nil, err
+	}
+	result = append(result, endpoint...)
+
+	if bip.IsPerClient() {
+		if len(bip.PrivateKey) != 32 {
+			return nil, oops.Errorf("BlindingInfo decryption key must be 32 bytes, got %d", len(bip.PrivateKey))
+		}
+		result = append(result, bip.PrivateKey...)
+	}
+
+	if bip.RequiresSecret() {
+		str, err := commondata.ToI2PString(bip.Password)
+		if err != nil {
+			return nil, oops.Wrapf(err, "BlindingInfo lookup password")
+		}
+		result = append(result, str...)
+	}
 
 	return result, nil
+}
+
+// marshalEndpoint serializes the endpoint field per its type.
+func (bip *BlindingInfoPayload) marshalEndpoint() ([]byte, error) {
+	switch bip.Endpoint {
+	case BlindingEndpointHash:
+		if len(bip.Hash) != 32 {
+			return nil, oops.Errorf("BlindingInfo hash endpoint must be 32 bytes, got %d", len(bip.Hash))
+		}
+		return bip.Hash, nil
+
+	case BlindingEndpointHostname:
+		str, err := commondata.ToI2PString(bip.Hostname)
+		if err != nil {
+			return nil, oops.Wrapf(err, "BlindingInfo hostname endpoint")
+		}
+		return []byte(str), nil
+
+	case BlindingEndpointDestination:
+		if len(bip.Destination) == 0 {
+			return nil, oops.Errorf("BlindingInfo destination endpoint is empty")
+		}
+		return bip.Destination, nil
+
+	case BlindingEndpointSigTypeKey:
+		keyLen, err := signingPublicKeySize(int(bip.PubkeyType))
+		if err != nil {
+			return nil, err
+		}
+		if len(bip.Pubkey) != keyLen {
+			return nil, oops.Errorf("BlindingInfo signing public key must be %d bytes, got %d", keyLen, len(bip.Pubkey))
+		}
+		out := make([]byte, 2+len(bip.Pubkey))
+		binary.BigEndian.PutUint16(out[0:2], bip.PubkeyType)
+		copy(out[2:], bip.Pubkey)
+		return out, nil
+
+	default:
+		return nil, oops.Errorf("unsupported BlindingInfo endpoint type: %d", bip.Endpoint)
+	}
 }

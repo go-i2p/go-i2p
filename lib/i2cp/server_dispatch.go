@@ -222,6 +222,10 @@ func (s *Server) handleDestroySession(msg *Message, sessionPtr **Session) (*Mess
 		return nil, oops.Errorf("failed to destroy session: %w", err)
 	}
 
+	// Drop any BlindingInfo advice recorded under this session so a departing
+	// client's per-client decryption keys are not retained.
+	s.forgetBlindingAdviceForSession(sessionID)
+
 	*sessionPtr = nil
 
 	log.WithFields(logger.Fields{
@@ -752,6 +756,7 @@ func (s *Server) handleDisconnect(msg *Message, sessionPtr **Session) (*Message,
 				"error":     err.Error(),
 			}).Warn("failed_to_destroy_session_on_disconnect")
 		}
+		s.forgetBlindingAdviceForSession(session.ID())
 
 		// Clear session pointer
 		*sessionPtr = nil
@@ -1019,17 +1024,17 @@ func (s *Server) extractDestinationFromLeaseSet(leaseSetBytes []byte) ([]byte, e
 	return leaseSetBytes[:destSize], nil
 }
 
-// handleBlindingInfo handles blinded destination parameters.
-// This allows clients to configure destination blinding for privacy enhancement.
-// Blinded destinations rotate daily at UTC midnight to prevent long-term correlation.
+// handleBlindingInfo records a client's advice that a peer Destination is
+// blinded (a new-format "b33" address), together with the optional per-client
+// decryption key and lookup password.
 //
-// Workflow:
-// 1. Parse BlindingInfo payload (enabled flag + optional secret)
-// 2. Update session configuration with blinding parameters
-// 3. If enabled, trigger blinded destination derivation
-// 4. Session will automatically use blinded destinations in EncryptedLeaseSets
-//
-// The session's updateBlindedDestination() handles daily rotation automatically.
+// Per the I2CP spec (BlindingInfoMessage, since 0.9.43): "Advise the router
+// that a Destination is blinded, with optional lookup password and optional
+// private key for decryption... The router does not send a reply to this
+// message." The advice concerns the *peer* the client will send to — it is not
+// a switch for the session's own EncryptedLeaseSet, so this handler stores it
+// for blinded-destination resolution and leaves the session's own configuration
+// untouched.
 func (s *Server) handleBlindingInfo(msg *Message, sessionPtr **Session) (*Message, error) {
 	if *sessionPtr == nil {
 		return nil, oops.Errorf("session not active")
@@ -1037,22 +1042,6 @@ func (s *Server) handleBlindingInfo(msg *Message, sessionPtr **Session) (*Messag
 
 	session := *sessionPtr
 
-	blindingInfo, err := parseAndLogBlindingInfo(msg, session)
-	if err != nil {
-		return nil, err
-	}
-
-	updateSessionBlindingConfig(session, blindingInfo)
-
-	if err := applyBlindedDestinationUpdate(session, blindingInfo); err != nil {
-		return nil, err
-	}
-
-	return nil, nil
-}
-
-// parseAndLogBlindingInfo parses the BlindingInfo payload and logs the received configuration.
-func parseAndLogBlindingInfo(msg *Message, session *Session) (*BlindingInfoPayload, error) {
 	blindingInfo, err := ParseBlindingInfoPayload(msg.Payload)
 	if err != nil {
 		log.WithFields(logger.Fields{
@@ -1064,56 +1053,104 @@ func parseAndLogBlindingInfo(msg *Message, session *Session) (*BlindingInfoPaylo
 		return nil, oops.Errorf("failed to parse BlindingInfo payload: %w", err)
 	}
 
-	log.WithFields(logger.Fields{
-		"at":        "i2cp.Server.handleBlindingInfo",
-		"sessionID": session.ID(),
-		"enabled":   blindingInfo.Enabled,
-		"hasSecret": len(blindingInfo.Secret) > 0,
-	}).Debug("received_blinding_info")
-
-	return blindingInfo, nil
-}
-
-// updateSessionBlindingConfig updates the session's blinding configuration based on the received info.
-func updateSessionBlindingConfig(session *Session, blindingInfo *BlindingInfoPayload) {
-	session.mu.Lock()
-	defer session.mu.Unlock()
-
-	session.config.UseEncryptedLeaseSet = blindingInfo.Enabled
-	if blindingInfo.Enabled && len(blindingInfo.Secret) > 0 {
-		session.config.BlindingSecret = blindingInfo.Secret
-		session.blindingSecret = nil
-	} else if blindingInfo.Enabled {
-		session.config.BlindingSecret = nil
-		session.blindingSecret = nil
-	} else {
-		session.config.BlindingSecret = nil
-		session.blindingSecret = nil
-		session.blindedDestination = nil
-	}
-}
-
-// applyBlindedDestinationUpdate triggers blinded destination update if blinding is enabled.
-func applyBlindedDestinationUpdate(session *Session, blindingInfo *BlindingInfoPayload) error {
-	if !blindingInfo.Enabled {
-		return nil
-	}
-
-	if err := session.updateBlindedDestination(); err != nil {
+	if uint16(msg.SessionID) != 0 && blindingInfo.SessionID != msg.SessionID {
 		log.WithFields(logger.Fields{
-			"at":        "i2cp.Server.handleBlindingInfo",
-			"sessionID": session.ID(),
-			"error":     err.Error(),
-		}).Error("failed_to_update_blinded_destination")
-		return oops.Errorf("failed to update blinded destination: %w", err)
+			"at":             "i2cp.Server.handleBlindingInfo",
+			"sessionID":      session.ID(),
+			"payloadSession": blindingInfo.SessionID,
+		}).Warn("blinding_info_session_id_mismatch")
+		return nil, oops.Errorf("BlindingInfo session ID %d does not match message session %d",
+			blindingInfo.SessionID, msg.SessionID)
 	}
 
-	log.WithFields(logger.Fields{
-		"at":        "i2cp.Server.handleBlindingInfo",
-		"sessionID": session.ID(),
-	}).Debug("blinded_destination_updated")
+	destHash, err := blindedPeerHash(blindingInfo)
+	if err != nil {
+		return nil, err
+	}
 
-	return nil
+	s.storeBlindingAdvice(destHash, blindingInfo)
+
+	log.WithFields(logger.Fields{
+		"at":         "i2cp.Server.handleBlindingInfo",
+		"sessionID":  session.ID(),
+		"peer":       logutil.HashPrefixPlain(destHash),
+		"endpoint":   blindingInfo.Endpoint,
+		"sigType":    blindingInfo.SigType,
+		"expiration": blindingInfo.Expiration,
+		"perClient":  blindingInfo.IsPerClient(),
+		"secret":     blindingInfo.RequiresSecret(),
+	}).Info("blinding_info_recorded")
+
+	// The router does not reply to BlindingInfo.
+	return nil, nil
+}
+
+// storeBlindingAdvice remembers blinding advice for a peer destination hash.
+func (s *Server) storeBlindingAdvice(destHash common.Hash, info *BlindingInfoPayload) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.blindingAdvice == nil {
+		s.blindingAdvice = make(map[common.Hash]*BlindingInfoPayload)
+	}
+	s.blindingAdvice[destHash] = info
+}
+
+// BlindingAdviceFor returns the blinding advice recorded for a peer
+// destination hash, if any. Resolution and lookup paths consult it to learn
+// that an address is blinded and to obtain the per-client secret.
+func (s *Server) BlindingAdviceFor(destHash common.Hash) (*BlindingInfoPayload, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	info, ok := s.blindingAdvice[destHash]
+	return info, ok
+}
+
+// forgetBlindingAdviceForSession drops any advice recorded for a session that
+// is going away, so a departing client's per-client keys are not retained.
+func (s *Server) forgetBlindingAdviceForSession(sessionID uint16) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for hash, info := range s.blindingAdvice {
+		if info.SessionID == sessionID {
+			delete(s.blindingAdvice, hash)
+		}
+	}
+}
+
+// blindedPeerHash derives the destination hash the advice applies to, from the
+// endpoint field. A hash endpoint is already the answer; a Destination endpoint
+// is hashed; a sig-type+key endpoint is hashed over the blinded signing public
+// key (the NetDB lookup key for a blinded destination).
+func blindedPeerHash(info *BlindingInfoPayload) (common.Hash, error) {
+	switch info.Endpoint {
+	case BlindingEndpointHash:
+		var h common.Hash
+		copy(h[:], info.Hash)
+		return h, nil
+
+	case BlindingEndpointDestination:
+		dest, _, err := destination.ReadDestination(info.Destination)
+		if err != nil {
+			return common.Hash{}, oops.Wrapf(err, "BlindingInfo destination endpoint")
+		}
+		h, err := dest.Hash()
+		if err != nil {
+			return common.Hash{}, oops.Wrapf(err, "BlindingInfo destination hash")
+		}
+		return h, nil
+
+	case BlindingEndpointSigTypeKey:
+		// The blinded signing public key is what a "b33" address encodes; the
+		// NetDB key is SHA-256 of that key.
+		return common.HashData(info.Pubkey), nil
+
+	case BlindingEndpointHostname:
+		return common.Hash{}, oops.Errorf(
+			"BlindingInfo hostname endpoint %q cannot be resolved to a destination hash without an address book", info.Hostname)
+
+	default:
+		return common.Hash{}, oops.Errorf("unsupported BlindingInfo endpoint type: %d", info.Endpoint)
+	}
 }
 
 // handleSendMessage handles a client sending a message to a destination.
