@@ -1053,7 +1053,11 @@ func (s *Server) handleBlindingInfo(msg *Message, sessionPtr **Session) (*Messag
 		return nil, oops.Errorf("failed to parse BlindingInfo payload: %w", err)
 	}
 
-	if uint16(msg.SessionID) != 0 && blindingInfo.SessionID != msg.SessionID {
+	// The message's session ID is taken from the first two payload bytes (see
+	// extractSessionIDFromPayload), so it always equals the parsed value for a
+	// wire message. The guard only fires for a hand-constructed Message whose
+	// header disagrees with its payload, which must not be trusted.
+	if msg.SessionID != blindingInfo.SessionID {
 		log.WithFields(logger.Fields{
 			"at":             "i2cp.Server.handleBlindingInfo",
 			"sessionID":      session.ID(),

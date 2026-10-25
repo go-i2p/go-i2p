@@ -382,7 +382,8 @@ func extractSessionIDFromPayload(msgType uint8, payload []byte) uint16 {
 		MessageTypeSendMessage,
 		MessageTypeCreateLeaseSet,
 		MessageTypeCreateLeaseSet2,
-		MessageTypeSendMessageExpires:
+		MessageTypeSendMessageExpires,
+		MessageTypeBlindingInfo:
 		if len(payload) >= 2 {
 			return binary.BigEndian.Uint16(payload[0:2])
 		}

@@ -368,297 +368,198 @@ func BenchmarkParseMessagePayloadPayload(b *testing.B) {
 	}
 }
 
-func TestBlindingInfoPayloadParse(t *testing.T) {
-	tests := []struct {
-		name        string
-		data        []byte
-		wantEnabled bool
-		wantSecret  []byte
-		shouldError bool
-	}{
-		{
-			name:        "disabled",
-			data:        []byte{0x00},
-			wantEnabled: false,
-			wantSecret:  nil,
-			shouldError: false,
-		},
-		{
-			name:        "enabled_no_secret",
-			data:        []byte{0x01},
-			wantEnabled: true,
-			wantSecret:  nil,
-			shouldError: false,
-		},
-		{
-			name: "enabled_with_secret",
-			data: func() []byte {
-				result := []byte{0x01}
-				secret := make([]byte, 32)
-				for i := range secret {
-					secret[i] = byte(i)
-				}
-				result = append(result, secret...)
-				return result
-			}(),
-			wantEnabled: true,
-			wantSecret: func() []byte {
-				secret := make([]byte, 32)
-				for i := range secret {
-					secret[i] = byte(i)
-				}
-				return secret
-			}(),
-			shouldError: false,
-		},
-		{
-			name:        "empty",
-			data:        []byte{},
-			shouldError: true,
-		},
-		{
-			name:        "invalid_secret_length_short",
-			data:        []byte{0x01, 0x11, 0x22, 0x33}, // Only 3 bytes of secret
-			shouldError: true,
-		},
-		{
-			name: "invalid_secret_length_long",
-			data: func() []byte {
-				result := []byte{0x01}
-				result = append(result, make([]byte, 33)...) // 33 bytes of secret
-				return result
-			}(),
-			shouldError: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			payload, err := ParseBlindingInfoPayload(tt.data)
-
-			if tt.shouldError {
-				assert.Error(t, err)
-				return
-			}
-
-			require.NoError(t, err)
-			assert.Equal(t, tt.wantEnabled, payload.Enabled)
-			assert.True(t, bytes.Equal(tt.wantSecret, payload.Secret), "secret mismatch")
-		})
-	}
-}
-
-func TestBlindingInfoPayloadMarshal(t *testing.T) {
-	tests := []struct {
-		name        string
-		payload     *BlindingInfoPayload
-		wantSize    int
-		shouldError bool
-	}{
-		{
-			name: "disabled",
-			payload: &BlindingInfoPayload{
-				Enabled: false,
-				Secret:  nil,
-			},
-			wantSize:    1,
-			shouldError: false,
-		},
-		{
-			name: "enabled_no_secret",
-			payload: &BlindingInfoPayload{
-				Enabled: true,
-				Secret:  nil,
-			},
-			wantSize:    1,
-			shouldError: false,
-		},
-		{
-			name: "enabled_with_secret",
-			payload: &BlindingInfoPayload{
-				Enabled: true,
-				Secret:  make([]byte, 32),
-			},
-			wantSize:    33,
-			shouldError: false,
-		},
-		{
-			name: "invalid_secret_length",
-			payload: &BlindingInfoPayload{
-				Enabled: true,
-				Secret:  make([]byte, 16), // Wrong length
-			},
-			shouldError: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			data, err := tt.payload.MarshalBinary()
-
-			if tt.shouldError {
-				assert.Error(t, err)
-				return
-			}
-
-			require.NoError(t, err)
-			assert.Equal(t, tt.wantSize, len(data), "data length")
-
-			if tt.payload.Enabled {
-				assert.Equal(t, byte(0x01), data[0], "enabled flag")
-			} else {
-				assert.Equal(t, byte(0x00), data[0], "enabled flag")
-			}
-
-			if tt.payload.Enabled && len(tt.payload.Secret) == 32 {
-				assert.True(t, bytes.Equal(data[1:33], tt.payload.Secret), "marshaled secret mismatch")
-			}
-		})
-	}
-}
-
-func TestBlindingInfoRoundTrip(t *testing.T) {
-	tests := []struct {
-		name    string
-		payload *BlindingInfoPayload
-	}{
-		{
-			name: "disabled",
-			payload: &BlindingInfoPayload{
-				Enabled: false,
-				Secret:  nil,
-			},
-		},
-		{
-			name: "enabled_no_secret",
-			payload: &BlindingInfoPayload{
-				Enabled: true,
-				Secret:  nil,
-			},
-		},
-		{
-			name: "enabled_with_secret",
-			payload: &BlindingInfoPayload{
-				Enabled: true,
-				Secret: func() []byte {
-					secret := make([]byte, 32)
-					for i := range secret {
-						secret[i] = byte(i * 7 % 256)
-					}
-					return secret
-				}(),
-			},
-		},
-		{
-			name: "enabled_with_zero_secret",
-			payload: &BlindingInfoPayload{
-				Enabled: true,
-				Secret:  make([]byte, 32),
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			data, err := tt.payload.MarshalBinary()
-			require.NoError(t, err)
-
-			parsed, err := ParseBlindingInfoPayload(data)
-			require.NoError(t, err)
-
-			assert.Equal(t, tt.payload.Enabled, parsed.Enabled)
-			assert.True(t, bytes.Equal(tt.payload.Secret, parsed.Secret), "secret mismatch")
-		})
-	}
-}
-
+// TestBlindingInfoConstants verifies the BlindingInfo message type constant.
 func TestBlindingInfoConstants(t *testing.T) {
 	assert.Equal(t, uint8(42), MessageTypeBlindingInfo)
 	assert.Equal(t, "BlindingInfo", MessageTypeName(MessageTypeBlindingInfo))
 }
 
-func TestBlindingInfoEnableDisable(t *testing.T) {
-	enablePayload := &BlindingInfoPayload{
-		Enabled: true,
-		Secret:  nil,
+// TestBlindingInfoParseHashEndpoint exercises the spec wire format for a
+// hash endpoint with no per-client key and no secret:
+//
+//	sessionID(2) flags(1) endpoint(1) sigType(2) expiration(4) hash(32)
+func TestBlindingInfoParseHashEndpoint(t *testing.T) {
+	data := make([]byte, 10+32)
+	binary.BigEndian.PutUint16(data[0:2], 7) // session ID
+	data[2] = 0x00                           // flags: everybody, no secret
+	data[3] = BlindingEndpointHash           // endpoint type 0
+	binary.BigEndian.PutUint16(data[4:6], 7) // blinded sig type (Ed25519)
+	binary.BigEndian.PutUint32(data[6:10], 1_800_000_000)
+	for i := range data[10:] {
+		data[10+i] = byte(i)
 	}
-	enableData, err := enablePayload.MarshalBinary()
-	require.NoError(t, err)
-	assert.Equal(t, 1, len(enableData), "enable payload length")
-	assert.Equal(t, byte(0x01), enableData[0], "enable flag")
 
-	disablePayload := &BlindingInfoPayload{
-		Enabled: false,
-		Secret:  nil,
-	}
-	disableData, err := disablePayload.MarshalBinary()
+	info, err := ParseBlindingInfoPayload(data)
 	require.NoError(t, err)
-	assert.Equal(t, 1, len(disableData), "disable payload length")
-	assert.Equal(t, byte(0x00), disableData[0], "disable flag")
+
+	assert.Equal(t, uint16(7), info.SessionID)
+	assert.Equal(t, uint8(BlindingEndpointHash), info.Endpoint)
+	assert.Equal(t, uint16(7), info.SigType)
+	assert.Equal(t, uint32(1_800_000_000), info.Expiration)
+	assert.False(t, info.IsPerClient())
+	assert.False(t, info.RequiresSecret())
+	assert.Equal(t, data[10:], info.Hash)
+
+	roundTrip, err := info.MarshalBinary()
+	require.NoError(t, err)
+	assert.Equal(t, data, roundTrip)
 }
 
-func TestBlindingInfoSecretFormats(t *testing.T) {
+// TestBlindingInfoParsePerClientKeyAndSecret verifies the flag-conditional
+// trailing fields: a 32-byte decryption key when bit 0 is set, and a String
+// lookup password when bit 4 is set.
+func TestBlindingInfoParsePerClientKeyAndSecret(t *testing.T) {
+	hostname := "suspect.i2p"
+	// flags: bit0 per-client (0x01) | bits3-1 scheme 001 PSK (0x02) | bit4 secret (0x10) = 0x13
+	flags := byte(0x13)
+
+	data := make([]byte, 0, 10+32+32+1+len(hostname))
+	head := make([]byte, 10)
+	binary.BigEndian.PutUint16(head[0:2], 42)
+	head[2] = flags
+	head[3] = BlindingEndpointHash
+	binary.BigEndian.PutUint16(head[4:6], 7)
+	binary.BigEndian.PutUint32(head[6:10], 1_900_000_000)
+	data = append(data, head...)
+	data = append(data, bytes.Repeat([]byte{0xAB}, 32)...) // hash endpoint
+	data = append(data, bytes.Repeat([]byte{0xCD}, 32)...) // ECIES_X25519 decryption key
+	data = append(data, byte(len(hostname)))               // String: 1-byte length
+	data = append(data, hostname...)
+
+	info, err := ParseBlindingInfoPayload(data)
+	require.NoError(t, err)
+
+	assert.True(t, info.IsPerClient())
+	assert.True(t, info.RequiresSecret())
+	assert.Equal(t, uint8(1), info.AuthScheme()) // PSK
+	assert.Len(t, info.PrivateKey, 32)
+	assert.Equal(t, hostname, info.Password)
+
+	roundTrip, err := info.MarshalBinary()
+	require.NoError(t, err)
+	assert.Equal(t, data, roundTrip)
+}
+
+// TestBlindingInfoParseHostnameEndpoint verifies a type-1 hostname endpoint
+// decodes the String and leaves the optional fields absent.
+func TestBlindingInfoParseHostnameEndpoint(t *testing.T) {
+	host := "explorer.i2p"
+	data := make([]byte, 0, 11+len(host))
+	head := make([]byte, 10)
+	binary.BigEndian.PutUint16(head[0:2], 1)
+	head[3] = BlindingEndpointHostname
+	data = append(data, head...)
+	data = append(data, byte(len(host)))
+	data = append(data, host...)
+
+	info, err := ParseBlindingInfoPayload(data)
+	require.NoError(t, err)
+	assert.Equal(t, host, info.Hostname)
+	assert.False(t, info.IsPerClient())
+	assert.Empty(t, info.PrivateKey)
+}
+
+// TestBlindingInfoParseSigTypeKeyEndpoint verifies a type-3 endpoint decodes
+// the 2-byte signature type and the implied-length signing public key.
+func TestBlindingInfoParseSigTypeKeyEndpoint(t *testing.T) {
+	const ed25519SigType = 7
+	const ed25519KeyLen = 32
+
+	data := make([]byte, 0, 10+2+ed25519KeyLen)
+	head := make([]byte, 10)
+	head[3] = BlindingEndpointSigTypeKey
+	data = append(data, head...)
+
+	typeAndKey := make([]byte, 2+ed25519KeyLen)
+	binary.BigEndian.PutUint16(typeAndKey[0:2], ed25519SigType)
+	for i := range typeAndKey[2:] {
+		typeAndKey[2+i] = byte(0x10 + i)
+	}
+	data = append(data, typeAndKey...)
+
+	info, err := ParseBlindingInfoPayload(data)
+	require.NoError(t, err)
+	assert.Equal(t, uint16(ed25519SigType), info.PubkeyType)
+	assert.Len(t, info.Pubkey, ed25519KeyLen)
+
+	roundTrip, err := info.MarshalBinary()
+	require.NoError(t, err)
+	assert.Equal(t, data, roundTrip)
+}
+
+// TestBlindingInfoParseErrors covers malformed payloads.
+func TestBlindingInfoParseErrors(t *testing.T) {
 	tests := []struct {
-		name   string
-		secret []byte
-		valid  bool
+		name string
+		data []byte
+	}{
+		{"too_short", []byte{0x00, 0x01}},
+		{"short_hash_endpoint", append(func() []byte {
+			h := make([]byte, 10)
+			h[3] = BlindingEndpointHash
+			return h
+		}(), bytes.Repeat([]byte{0x01}, 16)...)},
+		{"unknown_endpoint", func() []byte {
+			h := make([]byte, 10)
+			h[3] = 99
+			return h
+		}()},
+		{"unused_flag_bits_set", func() []byte {
+			h := make([]byte, 10+32)
+			h[2] = 0x20 // bit 5 must be zero
+			h[3] = BlindingEndpointHash
+			return h
+		}()},
+		{"per_client_missing_key", func() []byte {
+			h := make([]byte, 10+32)
+			h[2] = 0x01 // per-client, but no key follows
+			h[3] = BlindingEndpointHash
+			return h
+		}()},
+		{"trailing_bytes", func() []byte {
+			b := make([]byte, 10+32)
+			b[3] = BlindingEndpointHash
+			return append(b, 0xEE)
+		}()},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := ParseBlindingInfoPayload(tt.data)
+			assert.Error(t, err)
+		})
+	}
+}
+
+// TestBlindingInfoMarshalErrors verifies the marshaler rejects inconsistent
+// payloads before they hit the wire.
+func TestBlindingInfoMarshalErrors(t *testing.T) {
+	tests := []struct {
+		name  string
+		input *BlindingInfoPayload
 	}{
 		{
-			name:   "nil_secret",
-			secret: nil,
-			valid:  true,
+			name:  "hash_wrong_len",
+			input: &BlindingInfoPayload{Endpoint: BlindingEndpointHash, Hash: make([]byte, 16)},
 		},
 		{
-			name:   "valid_32_byte_secret",
-			secret: make([]byte, 32),
-			valid:  true,
+			name:  "per_client_key_wrong_len",
+			input: &BlindingInfoPayload{Flags: 0x01, Endpoint: BlindingEndpointHash, Hash: make([]byte, 32), PrivateKey: make([]byte, 8)},
 		},
 		{
-			name:   "all_ones_secret",
-			secret: bytes.Repeat([]byte{0xFF}, 32),
-			valid:  true,
+			name:  "unknown_endpoint",
+			input: &BlindingInfoPayload{Endpoint: 77},
 		},
 		{
-			name:   "all_zeros_secret",
-			secret: bytes.Repeat([]byte{0x00}, 32),
-			valid:  true,
-		},
-		{
-			name:   "invalid_16_bytes",
-			secret: make([]byte, 16),
-			valid:  false,
-		},
-		{
-			name:   "invalid_64_bytes",
-			secret: make([]byte, 64),
-			valid:  false,
-		},
-		{
-			name:   "invalid_1_byte",
-			secret: []byte{0x42},
-			valid:  false,
+			name:  "sig_type_key_wrong_len",
+			input: &BlindingInfoPayload{Endpoint: BlindingEndpointSigTypeKey, PubkeyType: 7, Pubkey: make([]byte, 4)},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			payload := &BlindingInfoPayload{
-				Enabled: true,
-				Secret:  tt.secret,
-			}
-
-			data, err := payload.MarshalBinary()
-
-			if tt.valid {
-				require.NoError(t, err, "unexpected error for valid secret")
-				if tt.secret != nil {
-					assert.Equal(t, 33, len(data), "data length")
-				} else {
-					assert.Equal(t, 1, len(data), "data length")
-				}
-			} else {
-				assert.Error(t, err, "expected error for invalid secret length")
-			}
+			_, err := tt.input.MarshalBinary()
+			assert.Error(t, err)
 		})
 	}
 }
@@ -1611,36 +1512,4 @@ func TestHostLookup_ReplyPayloadMarshaling(t *testing.T) {
 	assert.Equal(t, uint16(0x1234), binary.BigEndian.Uint16(data[0:2]), "SessionID not serialized correctly")
 	assert.Equal(t, uint32(12345), binary.BigEndian.Uint32(data[2:6]), "RequestID not serialized correctly")
 	assert.Equal(t, HostReplySuccess, data[6], "ResultCode not serialized correctly")
-}
-
-// =============================================================================
-// BLINDING INFO TESTS
-// =============================================================================
-
-// TestBlindingInfo_PayloadParsing verifies BlindingInfo payload parsing.
-func TestBlindingInfo_PayloadParsing(t *testing.T) {
-	// Valid blinding info - correct wire format:
-	// byte 0: enabled flag (0x00 = disabled, 0x01 = enabled)
-	// bytes 1-32: secret (only if enabled, exactly 32 bytes)
-	t.Run("valid_blinding_info", func(t *testing.T) {
-		payload := make([]byte, 33)         // 1 (enabled flag) + 32 (secret)
-		payload[0] = 0x01                   // enabled
-		copy(payload[1:], make([]byte, 32)) // 32-byte secret
-
-		info, err := ParseBlindingInfoPayload(payload)
-		require.NoError(t, err)
-
-		assert.True(t, info.Enabled)
-		assert.Equal(t, 32, len(info.Secret))
-	})
-
-	// Disabled blinding
-	t.Run("disabled_blinding", func(t *testing.T) {
-		payload := []byte{0x00} // disabled
-
-		info, err := ParseBlindingInfoPayload(payload)
-		require.NoError(t, err)
-
-		assert.False(t, info.Enabled)
-	})
 }
