@@ -47,6 +47,20 @@ type RouterInfoStorer interface {
 	StoreRouterInfo(ri router_info.RouterInfo)
 }
 
+// RouterInfoFlooder floods a RouterInfo received from a peer to this router's
+// closest floodfill peers. NTCP2 and SSU2 RouterInfo blocks carry a flag bit
+// meaning "flood request" (ntcp2.rst §"RouterInfo Block": bit 0 is "0 for local
+// store, 1 for flood request"), and the spec requires a floodfill receiver to
+// treat such a block as a DatabaseStore message with a nonzero reply token and
+// flood it. Implemented by netdb.FloodfillServer.FloodDatabaseStore.
+// Implementations must be safe for concurrent use.
+type RouterInfoFlooder interface {
+	// FloodDatabaseStore sends a DatabaseStore for the given key and payload to
+	// the closest floodfill routers. dataType selects RouterInfo vs LeaseSet
+	// storage on the receiving floodfills.
+	FloodDatabaseStore(key common.Hash, data []byte, dataType byte)
+}
+
 // RouterInfoStorerWithErrors is an optional extension to RouterInfoStorer that
 // exposes storage errors for observability and metrics. Transport layers should
 // type-assert to this interface and, if available, use StoreRouterInfoWithError

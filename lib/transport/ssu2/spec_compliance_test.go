@@ -6,6 +6,7 @@
 package ssu2
 
 import (
+	"encoding/binary"
 	"testing"
 	"time"
 
@@ -157,27 +158,84 @@ func TestSpec_IPv4GreaterThanIPv6(t *testing.T) {
 
 // --- Termination reason codes ------------------------------------------
 
-// TestSpec_TerminationReasonCode_NormalClose verifies that reason code 0
-// corresponds to the normal-close condition (no error).
-func TestSpec_TerminationReasonCode_NormalClose(t *testing.T) {
-	block := buildTerminationBlock(0)
-	assert.Equal(t, byte(ssu2noise.BlockTypeTermination), block[0],
-		"first byte must be BlockTypeTermination (6)")
-	assert.Len(t, block, 12,
-		"termination block must be 12 bytes (type=1, length=2, data=9)")
-	assert.Equal(t, byte(0), block[11],
-		"last byte must be the reason code (0 = normal close)")
+// TestSpec_TerminationBlockLayout verifies the SSU2 Termination block layout
+// required by ssu2.rst §"Termination":
+//
+//	blk  :: 6
+//	size :: 2 bytes big endian, value = 9 or more
+//	data  :: valid data packets received (8 bytes, big endian)
+//	         then rsn (1 byte), then optional additional data
+//
+// The block is carried inside an encrypted Data packet, which is why the
+// upstream connection (CloseWithReason) owns its construction.
+func TestSpec_TerminationBlockLayout(t *testing.T) {
+	const validPackets = uint64(0x0102030405060708)
+	const reason = byte(2) // idle timeout
+
+	data := make([]byte, 9)
+	binary.BigEndian.PutUint64(data[0:8], validPackets)
+	data[8] = reason
+
+	block := ssu2noise.SSU2Block{Type: ssu2noise.BlockTypeTermination, Data: data}
+	serialized, err := ssu2noise.SerializeBlocks([]*ssu2noise.SSU2Block{&block})
+	require.NoError(t, err)
+
+	// type(1) + size(2) + data(9)
+	assert.Len(t, serialized, 12)
+	assert.Equal(t, byte(ssu2noise.BlockTypeTermination), serialized[0],
+		"block type must be Termination (6)")
+	assert.Equal(t, uint16(9), binary.BigEndian.Uint16(serialized[1:3]),
+		"size field must be the 9-byte data length, big endian")
+
+	// Reason is the LAST byte of the fixed 9-byte payload, immediately after an
+	// 8-byte receive counter — not after a 4-byte "seconds connected" field,
+	// which is the SSU1 layout.
+	assert.Equal(t, validPackets, binary.BigEndian.Uint64(serialized[3:11]),
+		"valid data packets received must occupy 8 bytes big endian")
+	assert.Equal(t, reason, serialized[11], "reason byte follows the 8-byte counter")
 }
 
-// TestSpec_TerminationBlock_CustomReason verifies arbitrary reason bytes
-// are preserved in the termination block.
-func TestSpec_TerminationBlock_CustomReason(t *testing.T) {
-	for _, reason := range []byte{0, 1, 2, 9, 255} {
-		block := buildTerminationBlock(reason)
-		assert.Equal(t, reason, block[11],
-			"reason byte 0x%02x should be preserved in termination block", reason)
+// TestSpec_TerminationReasonCodes verifies the reason codes defined by
+// ssu2.rst §"Termination" are the values the handler passes through, and that
+// the payload length grows past the 9-byte minimum when additional data is
+// present ("size :: 2 bytes, big endian, value = 9 or more").
+func TestSpec_TerminationReasonCodes(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		reason byte
+	}{
+		{"normal close", 0},
+		{"termination received", 1},
+		{"idle timeout", 2},
+		{"router shutdown", 3},
+		{"data phase AEAD failure", 4},
+		{"clock skew", 7},
+		{"incompatible version", 20},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			data := make([]byte, 9)
+			data[8] = tc.reason
+			serialized, err := ssu2noise.SerializeBlocks([]*ssu2noise.SSU2Block{
+				{Type: ssu2noise.BlockTypeTermination, Data: data},
+			})
+			require.NoError(t, err)
+			assert.Equal(t, tc.reason, serialized[len(serialized)-1],
+				"reason code must be the last byte of the fixed payload")
+		})
 	}
+
+	// Additional data after the reason is permitted: size must be 9 or more.
+	data := make([]byte, 9+4)
+	data[8] = 3
+	copy(data[9:], "bye!")
+	serialized, err := ssu2noise.SerializeBlocks([]*ssu2noise.SSU2Block{
+		{Type: ssu2noise.BlockTypeTermination, Data: data},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, uint16(13), binary.BigEndian.Uint16(serialized[1:3]),
+		"size field must include the additional data (9 + 4)")
 }
+
 
 // --- ACK delay bounds --------------------------------------------------
 

@@ -1,8 +1,6 @@
 package ntcp2
 
 import (
-	"bytes"
-	"compress/gzip"
 	"context"
 	"errors"
 	"io"
@@ -42,7 +40,7 @@ type NTCP2Session struct {
 
 	// RouterInfo callback (called when a RouterInfo block is received from peer)
 	routerInfoMu       sync.Mutex
-	routerInfoCallback func([]byte)
+	routerInfoCallback func(riBytes []byte, floodRequested bool)
 
 	createdAtUnixNano int64
 	lastSendUnixNano  int64
@@ -498,16 +496,29 @@ func (s *NTCP2Session) handleNonI2NPBlock(block Block) {
 	}
 }
 
-// SetRouterInfoCallback sets a callback for RouterInfo blocks received from the peer.
-// The callback receives the raw (decompressed) RouterInfo bytes.
-func (s *NTCP2Session) SetRouterInfoCallback(cb func([]byte)) {
+// SetRouterInfoCallback sets a callback for RouterInfo blocks received from the
+// peer during the data phase. The callback receives the raw RouterInfo bytes and
+// the block's flood-request flag.
+func (s *NTCP2Session) SetRouterInfoCallback(cb func(riBytes []byte, floodRequested bool)) {
 	s.routerInfoMu.Lock()
 	s.routerInfoCallback = cb
 	s.routerInfoMu.Unlock()
 }
 
-// handleRouterInfoBlock parses a RouterInfo block, decompresses if needed,
-// and passes the raw RouterInfo bytes to the registered callback.
+// handleRouterInfoBlock parses a data-phase RouterInfo block and hands the raw
+// RouterInfo bytes to the registered callback for validation and storage.
+//
+// Per ntcp2.rst §"RouterInfo Block", the block data is a 1-byte flag followed by
+// the RouterInfo: bit 0 is "0 for local store, 1 for flood request" and bits 7-1
+// are unused. The spec is explicit that "The Router Info is NOT compressed with
+// gzip (unlike in a DatabaseStore Message, where it is)", so bit 0 must never be
+// treated as a compression indicator.
+//
+// The spec also requires the receiver to validate the Router Hash matches the
+// peer, validate the signature, validate a more-recent timestamp, store it in the
+// local netdb as a local DatabaseStore, and flood it when bit 0 is set and this
+// router is a floodfill. Those steps need the transport's peer identity and netdb
+// wiring, so they live in the transport callback rather than here.
 func (s *NTCP2Session) handleRouterInfoBlock(data []byte) {
 	if len(data) < 2 {
 		s.Logger().Warn("RouterInfo block too short")
@@ -515,36 +526,17 @@ func (s *NTCP2Session) handleRouterInfoBlock(data []byte) {
 	}
 	flag := data[0]
 	riData := data[1:]
-
-	if flag&0x01 != 0 {
-		decompressed, err := decompressGzip(riData)
-		if err != nil {
-			s.Logger().WithError(err).Warn("Failed to decompress RouterInfo block")
-			return
-		}
-		riData = decompressed
-	}
+	floodRequested := flag&0x01 != 0
 
 	s.routerInfoMu.Lock()
 	cb := s.routerInfoCallback
 	s.routerInfoMu.Unlock()
 
 	if cb != nil {
-		cb(riData)
+		cb(riData, floodRequested)
 	} else {
 		s.Logger().Debug("Received RouterInfo block but no callback registered")
 	}
-}
-
-// decompressGzip decompresses gzip-compressed data with a size limit to prevent gzip bomb DoS.
-// Uses the centralized MaxDecompressedRouterInfoSize limit from lib/i2np.
-func decompressGzip(data []byte) ([]byte, error) {
-	r, err := gzip.NewReader(bytes.NewReader(data))
-	if err != nil {
-		return nil, oops.Wrapf(err, "gzip reader")
-	}
-	defer func() { _ = r.Close() }()
-	return io.ReadAll(io.LimitReader(r, i2np.MaxDecompressedRouterInfoSize))
 }
 
 // shouldStopReceiving checks if the session context is done and receiving should stop.

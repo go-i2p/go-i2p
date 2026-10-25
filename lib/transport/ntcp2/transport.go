@@ -17,6 +17,7 @@ import (
 	"github.com/go-i2p/common/router_address"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/crypto/types"
+	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/nat"
 	"github.com/go-i2p/go-i2p/lib/transport"
 	"github.com/go-i2p/go-i2p/lib/util/logutil"
@@ -67,6 +68,10 @@ type NTCP2Transport struct {
 	// routerInfoStorer persists peer RouterInfos learned during inbound NTCP2 handshakes
 	// into the local NetDB. Set via SetRouterInfoStorer after construction.
 	routerInfoStorer atomic.Value // stores transport.RouterInfoStorer
+
+	// routerInfoFlooder floods RouterInfos received with the spec's flood-request
+	// flag to this router's closest floodfill peers. Set via SetRouterInfoFlooder.
+	routerInfoFlooder atomic.Value // stores transport.RouterInfoFlooder
 
 	// pendingConns receives fully-handshaked inbound connections ready for Accept().
 	// Initialized lazily by startInboundAcceptRunner on the first Accept() call.
@@ -1362,6 +1367,118 @@ func (t *NTCP2Transport) getRouterInfoStorer() transport.RouterInfoStorer {
 	return nil
 }
 
+// SetRouterInfoFlooder wires a flooder so that data-phase RouterInfo blocks
+// carrying the spec's "flood request" flag are flooded to the closest floodfill
+// peers. Optional: without it, received RouterInfos are still validated and
+// stored locally, but flood requests are logged and dropped.
+func (t *NTCP2Transport) SetRouterInfoFlooder(f transport.RouterInfoFlooder) {
+	t.routerInfoFlooder.Store(f)
+}
+
+// getRouterInfoFlooder returns the configured flooder, or nil.
+func (t *NTCP2Transport) getRouterInfoFlooder() transport.RouterInfoFlooder {
+	if v := t.routerInfoFlooder.Load(); v != nil {
+		return v.(transport.RouterInfoFlooder)
+	}
+	return nil
+}
+
+// handleDataPhaseRouterInfo processes a RouterInfo block received during the NTCP2
+// data phase.
+//
+// ntcp2.rst §"RouterInfo Block" Notes requires the receiver to: validate the
+// Router Hash is the same peer it is connected to; treat the block as a local
+// I2NP DatabaseStore message; validate the signature; validate a more-recent
+// timestamp; store it in the local netdb; and, when flag bit 0 requests flooding
+// and the receiver is a floodfill, flood it to the nearest floodfills. Flooding
+// must not happen unless the RouterInfo contains published RouterAddresses.
+//
+// The netdb's own store path enforces hash binding and the more-recent-timestamp
+// rule, so this handler supplies the peer-hash check, the signature check, the
+// raw-bytes preservation for flooding, and the flood dispatch.
+func (t *NTCP2Transport) handleDataPhaseRouterInfo(remoteAddr string, peerHash data.Hash, riBytes []byte, floodRequested bool) {
+	peerRI, _, err := router_info.ReadRouterInfo(riBytes)
+	if err != nil {
+		atomic.AddInt32(&t.routerInfoParseFailures, 1)
+		t.logger.WithError(err).WithField("remote_addr", remoteAddr).
+			Warn("NTCP2 data phase: malformed RouterInfo block; ignoring")
+		return
+	}
+
+	// Router Hash must match the peer this session is authenticated to;
+	// otherwise a peer could inject a third party's RouterInfo.
+	receivedHash, hashErr := peerRI.IdentHash()
+	if hashErr != nil {
+		t.logger.WithError(hashErr).WithField("remote_addr", remoteAddr).
+			Warn("NTCP2 data phase: cannot compute RouterInfo hash; ignoring")
+		return
+	}
+	if receivedHash != peerHash {
+		t.logger.WithFields(map[string]interface{}{
+			"remote_addr":     remoteAddr,
+			"session_hash":    logutil.HashPrefixPlain(peerHash),
+			"routerinfo_hash": logutil.HashPrefixPlain(receivedHash),
+		}).Warn("NTCP2 data phase: RouterInfo hash does not match session peer; ignoring")
+		return
+	}
+
+	// Validate the signature over the exact wire bytes.
+	if valid, sigErr := peerRI.VerifySignature(); !valid || sigErr != nil {
+		t.logger.WithError(sigErr).WithFields(map[string]interface{}{
+			"remote_addr": remoteAddr,
+			"sig_valid":   valid,
+		}).Warn("NTCP2 data phase: RouterInfo signature invalid; ignoring")
+		return
+	}
+
+	storer := t.getRouterInfoStorer()
+	if storer == nil {
+		t.logger.WithField("remote_addr", remoteAddr).
+			Debug("NTCP2 data phase: RouterInfo received but no netdb storer configured")
+		return
+	}
+
+	// Store as a local DatabaseStore. The netdb rejects entries whose published
+	// timestamp is not more recent than the cached one.
+	if storerWithErrors, ok := storer.(transport.RouterInfoStorerWithErrors); ok {
+		if storeErr := storerWithErrors.StoreRouterInfoWithError(peerRI); storeErr != nil {
+			t.logger.WithError(storeErr).
+				WithField("remote_addr", remoteAddr).
+				Debug("NTCP2 data phase: RouterInfo not stored (stale or invalid)")
+			return
+		}
+	} else {
+		storer.StoreRouterInfo(peerRI)
+	}
+
+	t.logger.WithFields(map[string]interface{}{
+		"remote_addr":     remoteAddr,
+		"flood_requested": floodRequested,
+	}).Debug("NTCP2 data phase: stored peer RouterInfo from block")
+
+	if !floodRequested {
+		return
+	}
+
+	// "Flooding must not be requested unless there are published RouterAddresses
+	// in the RouterInfo."
+	if len(peerRI.RouterAddresses()) == 0 {
+		t.logger.WithField("remote_addr", remoteAddr).
+			Debug("NTCP2 data phase: flood requested for RouterInfo with no published addresses; not flooding")
+		return
+	}
+
+	flooder := t.getRouterInfoFlooder()
+	if flooder == nil {
+		t.logger.WithField("remote_addr", remoteAddr).
+			Debug("NTCP2 data phase: flood requested but no flooder configured")
+		return
+	}
+
+	// Flood the original wire bytes as a RouterInfo DatabaseStore.
+	flooder.FloodDatabaseStore(receivedHash, riBytes, i2np.DatabaseStoreTypeRouterInfo)
+}
+
 // SetIdentity updates the router identity used for new inbound handshakes,
 // over the existing socket. Protected by identityMu to prevent races with
 // GetSession/Accept/Compatible.
@@ -2208,6 +2325,17 @@ func (t *NTCP2Transport) setupSession(conn *ntcp2.Conn, routerHash data.Hash) *N
 	// Create session WITHOUT starting workers to avoid spawning goroutines
 	// that may be immediately discarded if an existing session wins the race.
 	session := NewNTCP2SessionDeferred(conn, t.ctx, t.logger)
+
+	// ntcp2.rst §"RouterInfo Block" requires a data-phase RouterInfo block to be
+	// validated and stored as a local DatabaseStore, and flooded when its flag
+	// requests it. Without this wiring the block is parsed and discarded.
+	remoteAddr := ""
+	if ra := conn.RemoteAddr(); ra != nil {
+		remoteAddr = ra.String()
+	}
+	session.SetRouterInfoCallback(func(riBytes []byte, floodRequested bool) {
+		t.handleDataPhaseRouterInfo(remoteAddr, routerHash, riBytes, floodRequested)
+	})
 
 	// Start workers AFTER LoadOrStore succeeds, not before.
 	// Starting workers before LoadOrStore means losers have running workers that

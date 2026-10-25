@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/go-i2p/crypto/rand"
+
+	"github.com/go-i2p/go-i2p/lib/tunnel/buildrecord"
 	"github.com/samber/oops"
 
 	common "github.com/go-i2p/common/data"
@@ -579,11 +581,13 @@ const (
 	// FlagIBGW marks a hop as an Inbound Gateway, allowing messages from
 	// anyone to enter the tunnel at this hop.
 	// See [I2P Spec: Tunnel Creation ECIES](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/tunnel-creation-ecies.rst) for the flag bits.
-	FlagIBGW = 0x80
+	// Defined in lib/tunnel/buildrecord so the record serializer and the
+	// builder agree on one value.
+	FlagIBGW = buildrecord.FlagIBGW
 	// FlagOBEP marks a hop as an Outbound Endpoint, allowing messages to
 	// leave the tunnel to anyone at this hop.
 	// See [I2P Spec: Tunnel Creation ECIES](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/tunnel-creation-ecies.rst) for the flag bits.
-	FlagOBEP = 0x40
+	FlagOBEP = buildrecord.FlagOBEP
 )
 
 // determineBuildRecordFlag sets the IBGW/OBEP flag bits based on hop position.

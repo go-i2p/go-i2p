@@ -2960,7 +2960,11 @@ func TestShortTunnelBuild_RecordFormat_CleartextPayloadLayout(t *testing.T) {
 	record := BuildRequestRecord{
 		ReceiveTunnel: tunnel.TunnelID(0x01020304),
 		NextTunnel:    tunnel.TunnelID(0x05060708),
-		Flag:          3,
+		// Flag bits 5-0 are "Undefined, must set to 0 for compatibility with
+		// future options" (tunnel-creation-ecies.rst), so this fixture
+		// deliberately sets them alongside the IBGW bit to prove the serializer
+		// masks them out.
+		Flag:          tunnel.FlagIBGW | 0x03,
 		RequestTime:   time.Unix(60*5000, 0), // 5000 minutes since epoch
 		SendMessageID: 0x0A0B0C0D,
 	}
@@ -2985,8 +2989,8 @@ func TestShortTunnelBuild_RecordFormat_CleartextPayloadLayout(t *testing.T) {
 	assert.Equal(t, byte(0xCC), shortData[off+8], "next_ident starts at payload[8]")
 	assert.Equal(t, byte(0xCC), shortData[off+39], "next_ident ends at payload[39]")
 
-	// flag at [off+40]
-	assert.Equal(t, byte(3), shortData[off+40], "flag at payload[40]")
+	// flag at [off+40] — only bits 7-6 are defined; bits 5-0 must be written 0.
+	assert.Equal(t, byte(tunnel.FlagIBGW), shortData[off+40], "flag at payload[40] with undefined bits masked to 0")
 
 	// request_time at [off+44:off+48] — minutes since epoch for short records
 	minutes := binary.BigEndian.Uint32(shortData[off+44 : off+48])

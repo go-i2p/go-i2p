@@ -101,13 +101,22 @@ func absInt64(v int64) float64 {
 	return float64(v)
 }
 
-// SendTermination sends a termination block through the SSU2 connection.
-// It is called when the router is closing a session so the peer learns why the
-// connection is ending. See [I2P Spec: SSU2](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ssu2.rst) for the termination block format.
+// SendTermination sends a termination block through the SSU2 connection and
+// closes it, so the peer learns why the connection is ending.
+//
+// The Termination block format (ssu2.rst §"Termination") is block type 6 with
+// data = valid data packets received (8 bytes, big endian) + reason (1 byte) +
+// optional additional data, carried inside an encrypted Data packet. That
+// framing is owned by the upstream connection, so this delegates to
+// (*SSU2Conn).CloseWithReason rather than assembling a block by hand.
+//
+// An earlier implementation here wrote a plaintext 12-byte
+// type(1)+len(2)+seconds(4)+padding(4)+reason(1) buffer straight to the socket.
+// That layout is SSU1's, not SSU2's, and it also skipped the Data-packet
+// encryption entirely, so no peer could have parsed it.
 func (h *DefaultHandler) SendTermination(conn *ssu2noise.SSU2Conn, reason byte) error {
 	log.WithField("reason", reason).Debug("sending SSU2 termination block")
-	block := buildTerminationBlock(reason)
-	_, err := conn.Write(block)
+	err := conn.CloseWithReason(ssu2noise.TerminationReason(reason), nil)
 	if err != nil {
 		log.WithError(err).WithFields(map[string]interface{}{
 			"at":             "(SSU2 DefaultHandler) SendTermination",
@@ -119,19 +128,4 @@ func (h *DefaultHandler) SendTermination(conn *ssu2noise.SSU2Conn, reason byte) 
 		}).Warn("failed to send SSU2 termination block")
 	}
 	return err
-}
-
-// buildTerminationBlock constructs a termination block payload for SSU2.
-// Block type 6, 9 bytes of data per SSU2 spec.
-func buildTerminationBlock(reason byte) []byte {
-	// Block format: type (1) + length (2) + data (9)
-	// Data: seconds connected (4) + padding (4) + reason (1)
-	block := make([]byte, 12)
-	block[0] = 6 // BlockTypeTermination
-	block[1] = 0
-	block[2] = 9 // 9 bytes data
-	// Seconds connected (4 bytes) - zeroed for immediate termination
-	// Padding (4 bytes) - zeroed
-	block[11] = reason
-	return block
 }

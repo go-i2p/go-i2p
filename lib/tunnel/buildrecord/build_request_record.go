@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/go-i2p/crypto/rand"
+
 	"github.com/go-i2p/logger"
 
 	common "github.com/go-i2p/common/data"
@@ -67,6 +69,11 @@ type BuildRequestRecord struct {
 	// requests from this hop (key "r", i2pd TRANSIT_TUNNEL_REQUESTED_BANDWIDTH).
 	// Zero means unspecified. Only populated by ReadShortBuildRequestRecord.
 	RequestedBandwidthKBps uint32
+	// LimitBandwidthKBps is the bandwidth (KB/s) limit the creator asks the
+	// IBGW to apply to this tunnel (option "l"). Per
+	// tunnel-creation-ecies.rst §"Build Request Options", "l" is only sent to an
+	// IBGW, and the constraint is m <= r <= l. Zero means unspecified.
+	LimitBandwidthKBps uint32
 }
 
 // ReadBuildRequestRecord parses a BuildRequestRecord from the provided byte slice.
@@ -376,6 +383,16 @@ func (b *BuildRequestRecord) Bytes() []byte {
 }
 
 // ShortBytes serializes the BuildRequestRecord to the 218-byte ECIES short record wire format.
+//
+// Layout (tunnel-creation-ecies.rst §"Short Request Record"): the first 48 bytes
+// are the unencrypted prefix — toPeer hash (16) and the sender's ephemeral X25519
+// key (32, zeroed here and filled during ECIES encryption) — followed by the
+// 154-byte cleartext payload: tunnel IDs, next identity hash, flags, unused
+// bytes, layer encryption type, request time, expiration, next message ID, the
+// tunnel build options Mapping, and random padding to byte 153.
+//
+// The padding region must be random, not zero-filled: the spec calls it
+// "random padding", and a constant tail is a fingerprint.
 func (b *BuildRequestRecord) ShortBytes() []byte {
 	data := make([]byte, ShortRecordSize)
 
@@ -391,8 +408,11 @@ func (b *BuildRequestRecord) ShortBytes() []byte {
 		copy(data[payloadOff+4:payloadOff+8], tunnelInt.Bytes())
 	}
 	copy(data[payloadOff+8:payloadOff+40], b.NextIdent[:])
-	data[payloadOff+40] = byte(b.Flag)
-	// layer_enc_type (1 byte) — 0 = default
+	// flags: bit 7 IBGW, bit 6 OBEP, bits 5-0 "Undefined, must set to 0 for
+	// compatibility with future options".
+	data[payloadOff+40] = byte(b.Flag) & 0xC0
+	// bytes 41-42: "more flags, unused, set to 0 for compatibility" (already zero)
+	// layer_enc_type (1 byte) — 0 = AES (current tunnels)
 	data[payloadOff+43] = 0
 	minutes := int(b.RequestTime.Unix() / 60)
 	if timeInt, err := common.NewIntegerFromInt(minutes, 4); err == nil {
@@ -403,6 +423,28 @@ func (b *BuildRequestRecord) ShortBytes() []byte {
 	}
 	if msgInt, err := common.NewIntegerFromInt(b.SendMessageID, 4); err == nil {
 		copy(data[payloadOff+52:payloadOff+56], msgInt.Bytes())
+	}
+
+	// Tunnel build options Mapping occupies payload bytes 56 onward; the spec
+	// caps it at 98 bytes including its 2-byte length field. An empty Mapping is
+	// the two bytes 0x00 0x00. Whatever the options do not use is random padding,
+	// per "bytes x-153: random padding".
+	options := b.shortBuildOptionsBytes()
+	const maxOptionsLen = 98
+	if len(options) > maxOptionsLen {
+		log.WithFields(logger.Fields{
+			"at":          "ShortBytes",
+			"options_len": len(options),
+			"max":         maxOptionsLen,
+		}).Warn("build options too large for short record; sending empty mapping")
+		options = emptyShortBuildOptions
+	}
+	copy(data[payloadOff+56:], options)
+
+	paddingStart := payloadOff + 56 + len(options)
+	if _, err := rand.Read(data[paddingStart : payloadOff+ShortCleartextLen]); err != nil {
+		log.WithError(err).WithFields(logger.Fields{"at": "ShortBytes"}).
+			Warn("failed to generate short record padding")
 	}
 
 	log.WithFields(logger.Fields{"at": "ShortBytes"}).Debug("BuildRequestRecord serialized to 218-byte short ECIES format")
@@ -448,24 +490,75 @@ func ReadShortBuildRequestRecord(data []byte) (BuildRequestRecord, error) {
 	// short cleartext (i2pd SHORT_REQUEST_RECORD_TUNNEL_BUILD_OPTIONS_OFFSET).
 	// Parse best-effort: a malformed or empty options block leaves the
 	// bandwidth fields at zero, matching i2pd's tolerant handling.
-	record.MinBandwidthKBps, record.RequestedBandwidthKBps = parseShortBuildOptions(data[56:ShortCleartextLen])
+	record.MinBandwidthKBps, record.RequestedBandwidthKBps, record.LimitBandwidthKBps =
+		parseShortBuildOptions(data[56:ShortCleartextLen])
 
 	log.WithFields(logger.Fields{"at": "ReadShortBuildRequestRecord"}).Debug("ReadShortBuildRequestRecord: parsed 154-byte STBM cleartext")
 	return record, nil
+}
+
+// Build record flag bits (tunnel-creation.rst §"Request Record Specification"):
+// bit 7 IBGW, bit 6 OBEP, bits 5-0 undefined and required to be 0.
+// Defined in this leaf package so both lib/tunnel and lib/i2np agree on the
+// same values without either importing the other.
+const (
+	// FlagIBGW marks the hop as an Inbound Gateway ("allow messages from anyone").
+	FlagIBGW = 0x80
+	// FlagOBEP marks the hop as an Outbound Endpoint ("allow messages to anyone").
+	FlagOBEP = 0x40
+)
+
+// emptyShortBuildOptions is the spec's encoding for an absent options Mapping:
+// two zero bytes (a 2-byte length field of 0).
+var emptyShortBuildOptions = []byte{0x00, 0x00}
+
+// shortBuildOptionsBytes encodes the tunnel build options Mapping for this
+// record: "m" (minimum bandwidth) and "r" (requested bandwidth), both KBps
+// decimal strings, plus "l" (bandwidth limit) when this record is for an inbound
+// gateway. Returns the empty-Mapping encoding when no options are set.
+//
+// Per tunnel-creation-ecies.rst §"Build Request Options", a requesting router
+// may include any, all, or none of the three, under the constraint m <= r <= l.
+// "l" is only meaningful to an IBGW, so it is emitted only when the IBGW flag is
+// set.
+func (b *BuildRequestRecord) shortBuildOptionsBytes() []byte {
+	options := make(map[string]string, 3)
+	if b.MinBandwidthKBps > 0 {
+		options["m"] = strconv.FormatUint(uint64(b.MinBandwidthKBps), 10)
+	}
+	if b.RequestedBandwidthKBps > 0 {
+		options["r"] = strconv.FormatUint(uint64(b.RequestedBandwidthKBps), 10)
+	}
+	if b.LimitBandwidthKBps > 0 && b.Flag&FlagIBGW != 0 {
+		options["l"] = strconv.FormatUint(uint64(b.LimitBandwidthKBps), 10)
+	}
+	if len(options) == 0 {
+		return emptyShortBuildOptions
+	}
+
+	mapping, err := common.GoMapToMapping(options)
+	if err != nil {
+		return emptyShortBuildOptions
+	}
+	data, err := mapping.DataSafe()
+	if err != nil || len(data) == 0 {
+		return emptyShortBuildOptions
+	}
+	return data
 }
 
 // parseShortBuildOptions extracts the transit-tunnel bandwidth options ("m" and
 // "r", both decimal KB/s strings) from a short build record's options mapping.
 // It is intentionally tolerant: any parse failure yields zero values, matching
 // i2pd's behavior of ignoring malformed or absent build options.
-func parseShortBuildOptions(optionsRegion []byte) (minKBps, requestedKBps uint32) {
+func parseShortBuildOptions(optionsRegion []byte) (minKBps, requestedKBps, limitKBps uint32) {
 	mapping, _, errs := common.ReadMapping(optionsRegion)
 	if len(errs) != 0 {
-		return 0, 0
+		return 0, 0, 0
 	}
 	gomap, err := mapping.ToGoMap()
 	if err != nil {
-		return 0, 0
+		return 0, 0, 0
 	}
 	if v, ok := gomap["m"]; ok {
 		if n, perr := strconv.ParseUint(v, 10, 32); perr == nil {
@@ -477,5 +570,12 @@ func parseShortBuildOptions(optionsRegion []byte) (minKBps, requestedKBps uint32
 			requestedKBps = uint32(n)
 		}
 	}
-	return minKBps, requestedKBps
+	// "l" is only meaningful to an IBGW, but parse it wherever it appears; the
+	// caller decides whether to honour it.
+	if v, ok := gomap["l"]; ok {
+		if n, perr := strconv.ParseUint(v, 10, 32); perr == nil {
+			limitKBps = uint32(n)
+		}
+	}
+	return minKBps, requestedKBps, limitKBps
 }

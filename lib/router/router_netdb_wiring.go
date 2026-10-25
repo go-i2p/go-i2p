@@ -14,6 +14,8 @@ import (
 
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/netdb"
+	"github.com/go-i2p/go-i2p/lib/transport"
+	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/go-i2p/go-i2p/lib/util/logutil"
 )
@@ -71,7 +73,25 @@ func (r *Router) startFloodfillServer() {
 	if r.messageRouter != nil {
 		r.messageRouter.GetProcessor().SetFloodfillReplicator(r.floodfillServer)
 	}
+	// ntcp2.rst §"RouterInfo Block": a data-phase RouterInfo block whose flag bit
+	// 0 requests flooding must be flooded to the nearest floodfills. Transports
+	// are built before the mainloop reaches this step, so the flooder is wired
+	// here rather than at transport construction.
+	r.attachRouterInfoFlooder(muxer)
 	log.WithField("enabled", cfg.Enabled).Info("Floodfill server started")
+}
+
+// attachRouterInfoFlooder gives each transport that can receive data-phase
+// RouterInfo blocks access to the floodfill server's flood dispatch.
+func (r *Router) attachRouterInfoFlooder(muxer *transport.TransportMuxer) {
+	if muxer == nil || r.floodfillServer == nil {
+		return
+	}
+	for _, t := range muxer.GetTransports() {
+		if ntcp2T, ok := t.(*ntcp.NTCP2Transport); ok {
+			ntcp2T.SetRouterInfoFlooder(r.floodfillServer)
+		}
+	}
 }
 
 // startExplorer instantiates and starts the NetDB explorer. The explorer
