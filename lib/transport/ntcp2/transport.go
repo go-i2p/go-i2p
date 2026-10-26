@@ -1,7 +1,6 @@
 package ntcp2
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -175,6 +174,14 @@ func NewNTCP2Transport(identity router_info.RouterInfo, config *Config, keystore
 
 	logger.Info("Crypto keys initialized successfully")
 	config.Config = ntcp2Config
+
+	// ntcp2.rst:1917-1918: the last-shutdown time is persisted at Close();
+	// calculate and log the previous downtime from it now that we are up.
+	// Key rotation based on the downtime is intentionally not performed yet:
+	// the spec makes rotation optional ("Subject to concerns about exposing
+	// restart times, routers may rotate", :1921) and gating it correctly on
+	// published-address age is out of scope for this remediation.
+	logPreviousDowntime(config.WorkingDir, logger)
 
 	transport := buildTransportInstance(config, identity, keystore, ctx, cancel, logger)
 
@@ -2626,22 +2633,22 @@ func (t *NTCP2Transport) GetTotalBandwidth() (totalBytesSent, totalBytesReceived
 // This prevents attackers from presenting a third party's RouterInfo and impersonating them.
 // Per I2P spec: the responder MUST compare the authenticated static key (from Noise handshake)
 // against the published NTCP2 "s" option before accepting the RouterInfo.
+//
+// It also enforces ntcp2.rst:1142 — "Bob must validate that Alice's static
+// key is a valid point on the curve here" — on the Noise-authenticated key
+// before it is used any further. On failure the caller halts processing and
+// closes abnormally per ntcp2.rst:1144-1147.
 func (t *NTCP2Transport) verifyRouterInfoStaticKey(ntcp2Conn msg3PeerConn, peerRI router_info.RouterInfo, conn net.Conn) error {
-	// Extract the Noise-authenticated static key (32 bytes) from the completed handshake
-	authenticatedKey := ntcp2Conn.PeerStaticKey()
-	if len(authenticatedKey) != 32 {
-		return oops.Errorf("F107: peer static key has unexpected length %d (want 32)", len(authenticatedKey))
-	}
-
-	// Extract the published "s" option from the RouterInfo
+	// Extract the published "s" option from the RouterInfo.
+	// ExtractPeerStaticKey validates the key as a curve point (ntcp2.rst:298)
+	// and accepts NTCP-published dual-protocol addresses (ntcp2.rst:1864-1867).
 	publishedKey, err := ExtractPeerStaticKey(peerRI)
 	if err != nil {
 		return oops.Wrapf(err, "F107: failed to extract static key from RouterInfo")
 	}
 
-	// Compare the two keys byte-for-byte
-	if !bytes.Equal(authenticatedKey, publishedKey) {
-		return oops.Errorf("F107: Noise-authenticated static key does not match RouterInfo 's' option; probable identity attack by %s", conn.RemoteAddr().String())
+	if err := verifyRouterInfoStaticKeyError(ntcp2Conn, publishedKey); err != nil {
+		return oops.Wrapf(err, "probable identity attack by %s", conn.RemoteAddr().String())
 	}
 
 	return nil
@@ -2823,8 +2830,46 @@ func (t *NTCP2Transport) waitForBackgroundOperations() {
 	}
 }
 
+// persistLastShutdownTime stores the current time as this router's NTCP2
+// last-shutdown time via the same PersistentConfig mechanism that stores the
+// obfuscation IV (ntcp2.rst:1917-1918). Failures are logged, not fatal: the
+// requirement is persistence of a value used to compute downtime at the next
+// startup, and losing it does not compromise the running router.
+func (t *NTCP2Transport) persistLastShutdownTime() {
+	cfg := t.config.Load()
+	if cfg == nil || cfg.WorkingDir == "" {
+		t.logger.Debug("No working directory configured, skipping NTCP2 last-shutdown persistence")
+		return
+	}
+	if err := NewPersistentConfig(cfg.WorkingDir).SaveLastShutdownTime(time.Now()); err != nil {
+		t.logger.WithError(err).Warn("Failed to persist NTCP2 last-shutdown time")
+	}
+}
+
+// logPreviousDowntime calculates and logs the previous downtime from the
+// persisted last-shutdown time at startup (ntcp2.rst:1917-1918). The stored
+// value is what the spec requires routers to keep so the downtime "may be
+// calculated at startup"; key rotation decisions based on it are deliberately
+// not implemented (see the note in NewNTCP2Transport).
+func logPreviousDowntime(workingDir string, logger *logger.Entry) {
+	if workingDir == "" {
+		return
+	}
+	downtime, known := NewPersistentConfig(workingDir).PreviousDowntime()
+	if !known {
+		logger.Debug("No persisted NTCP2 last-shutdown time (first run)")
+		return
+	}
+	logger.WithField("previous_downtime", downtime.String()).
+		Info("Calculated NTCP2 previous downtime from persisted last-shutdown time")
+}
+
 // handleCloseCompletion processes the final close status and returns appropriate error.
 func (t *NTCP2Transport) handleCloseCompletion(listenerErr error) error {
+	// ntcp2.rst:1917-1918: persistently store the last-shutdown time so the
+	// previous downtime can be calculated at startup.
+	t.persistLastShutdownTime()
+
 	// Close the handler to stop replay cache cleanup goroutine.
 	if t.handler != nil {
 		t.handler.Close()

@@ -11,10 +11,23 @@ import (
 	i2pbase64 "github.com/go-i2p/common/base64"
 	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_address"
+	"github.com/go-i2p/crypto/curve25519"
+	"github.com/go-i2p/crypto/types"
 	noise "github.com/go-i2p/go-noise/ntcp2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// validNTCP2TestKey returns a 32-byte X25519 public key that passes the
+// curve-point validation required of a dial target (ntcp2.rst:298).
+func validNTCP2TestKey(t *testing.T) []byte {
+	t.Helper()
+	pub, _, err := curve25519.GenerateKeyPair()
+	require.NoError(t, err)
+	key, ok := pub.(types.ReceivingPublicKey)
+	require.True(t, ok)
+	return key.Bytes()
+}
 
 func makeNTCP2RouterAddress(t *testing.T, host, port string, staticKey, iv []byte) *router_address.RouterAddress {
 	t.Helper()
@@ -26,6 +39,7 @@ func makeNTCP2RouterAddress(t *testing.T, host, port string, staticKey, iv []byt
 		"port": port,
 		"s":    i2pbase64.I2PEncoding.EncodeToString(staticKey),
 		"i":    i2pbase64.I2PEncoding.EncodeToString(iv),
+		"v":    "2",
 	})
 	require.NoError(t, err)
 	return addr
@@ -38,11 +52,11 @@ func TestConfigureDialConfigFromAddress_BindsExactAddressMetadata(t *testing.T) 
 	cfg, err := noise.NewNTCP2Config(routerHash, true)
 	require.NoError(t, err)
 
-	staticA := make([]byte, 32)
+	// W6: ConfigureDialConfigFromAddress now verifies all three NTCP2 options
+	// (s=, i=, v=) and validates the static key as an X25519 curve point
+	// (ntcp2.rst:1861-1862, :298), so the fixture uses real generated keys.
+	staticA := validNTCP2TestKey(t)
 	ivA := make([]byte, 16)
-	for i := range staticA {
-		staticA[i] = byte(i + 1)
-	}
 	for i := range ivA {
 		ivA[i] = byte(i + 11)
 	}
@@ -53,11 +67,8 @@ func TestConfigureDialConfigFromAddress_BindsExactAddressMetadata(t *testing.T) 
 	assert.True(t, cfg.EnableAESObfuscation)
 	assert.Equal(t, ivA, cfg.ObfuscationIV)
 
-	staticB := make([]byte, 32)
+	staticB := validNTCP2TestKey(t)
 	ivB := make([]byte, 16)
-	for i := range staticB {
-		staticB[i] = byte(200 + i)
-	}
 	for i := range ivB {
 		ivB[i] = byte(100 + i)
 	}

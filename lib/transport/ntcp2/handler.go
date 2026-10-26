@@ -4,7 +4,6 @@ import (
 	"net"
 
 	"github.com/go-i2p/go-i2p/lib/transport"
-	gonoise "github.com/go-i2p/go-noise/ntcp2"
 )
 
 // NTCP2Handler defines callback hooks for injecting I2P-specific behaviour
@@ -36,14 +35,6 @@ type NTCP2Handler interface {
 	// is within the allowed clock skew tolerance. Returns a non-nil error if
 	// the skew exceeds the tolerance.
 	ValidateTimestamp(peerTime uint32) error
-
-	// SendTermination sends an encrypted termination block through the NTCP2
-	// connection's Noise cipher state. The block is encrypted and framed by
-	// conn.Write, ensuring no plaintext termination data appears on the wire.
-	//
-	// For AEAD failure reasons (reason 4), this must NOT be called because
-	// the cipher state may be corrupted. Use OnHandshakeError instead.
-	SendTermination(conn *gonoise.Conn, reason byte) error
 }
 
 // DefaultHandler implements NTCP2Handler using the existing functions in this
@@ -85,24 +76,4 @@ func (h *DefaultHandler) ValidateTimestamp(peerTime uint32) error {
 			"error":         err.Error(),
 		}).Warn("NTCP2 peer clock skew exceeds tolerance")
 	})
-}
-
-// SendTermination constructs and sends an encrypted termination block through
-// the NTCP2 connection's Noise cipher. The block is written via conn.Write,
-// which applies AEAD encryption and SipHash length obfuscation.
-func (h *DefaultHandler) SendTermination(conn *gonoise.Conn, reason byte) error {
-	log.WithField("reason", reason).Debug("sending NTCP2 termination block")
-	block := BuildTerminationBlock(reason)
-	_, err := conn.Write(block)
-	if err != nil {
-		log.WithError(err).WithFields(map[string]interface{}{
-			"at":             "(NTCP2 DefaultHandler) SendTermination",
-			"reason":         "termination_write_failed",
-			"phase":          "teardown",
-			"session_state":  "closing",
-			"transport":      "ntcp2",
-			"termination_id": reason,
-		}).Warn("failed to send NTCP2 termination block")
-	}
-	return err
 }

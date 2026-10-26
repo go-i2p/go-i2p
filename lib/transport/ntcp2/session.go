@@ -238,10 +238,15 @@ func (s *NTCP2Session) sendEncryptedTermination(reason byte) {
 		return
 	}
 
-	block := BuildTerminationBlock(reason)
+	// ntcp2.rst:1691-1694: the Termination block carries the number of valid
+	// AEAD data-phase frames received (the current receive nonce), 0 if the
+	// error occurred in the handshake phase.
+	frames := validFramesReceived(conn)
+	block := BuildTerminationBlockWithFrames(reason, frames)
 	s.Logger().WithFields(map[string]interface{}{
-		"reason":     TerminationReasonString(reason),
-		"block_size": len(block),
+		"reason":       TerminationReasonString(reason),
+		"block_size":   len(block),
+		"valid_frames": frames,
 	}).Debug("Sending encrypted termination block")
 
 	if _, writeErr := conn.Write(block); writeErr != nil {
@@ -326,29 +331,111 @@ func (s *NTCP2Session) processSendQueueMessage(msg i2np.Message, nextMetaAt *tim
 	if err != nil {
 		return false
 	}
+	if framedData == nil {
+		// frameMessage dropped an oversized message rather than fragmenting
+		// it across frames; keep the worker running with the next message.
+		return true
+	}
 
 	framedData = s.attachDateTimeMetadataIfDue(framedData, nextMetaAt)
 
 	return s.writeFramedData(framedData)
 }
 
+// attachDateTimeMetadataIfDue prepends the periodic DateTime block (type 0) to
+// an outbound frame when the next metadata interval is due.
+//
+// The block is only attached when the combined payload still fits in one
+// ChaChaPoly frame: if the I2NP block already fills a frame, adding the
+// DateTime block would push the write past the single-frame limit, and the
+// go-noise write path would fragment the I2NP message across frames, which
+// ntcp2.rst:1626-1628 forbids. In that case the metadata is deferred to a
+// later frame rather than the message being dropped.
 func (s *NTCP2Session) attachDateTimeMetadataIfDue(framedData []byte, nextMetaAt *time.Time) []byte {
 	if time.Now().Before(*nextMetaAt) {
 		return framedData
 	}
+	withMeta := append(SerializeBlocks(NewDateTimeBlock()), framedData...)
+	if !s.fitsInSingleFrame(withMeta) {
+		return framedData
+	}
 	*nextMetaAt = time.Now().Add(ntcp2NextMetaInterval())
-	return append(SerializeBlocks(NewDateTimeBlock()), framedData...)
+	return withMeta
 }
 
 // frameMessage frames an I2NP message for transmission using NTCP2 block format.
 // Returns the framed data or sets an error and returns nil.
+//
+// ntcp2.rst:1626-1628 forbids fragmenting an I2NP message across blocks or
+// across ChaChaPoly frames: "I2NP messages may not be fragmented across blocks
+// or across ChaChaPoly frames." A message whose block does not fit in a single
+// data-phase frame must therefore never be put on the wire split up. The
+// outbound write path in go-noise (Conn.writeFramed, conn_framing.go:439-478)
+// splits any oversized payload across frames transparently, so the session
+// refuses to send an oversized message instead: the message is dropped and
+// counted, and the send path continues with the next queued message.
 func (s *NTCP2Session) frameMessage(msg i2np.Message) ([]byte, error) {
 	framedData, err := FrameI2NPMessageAsBlock(msg)
 	if err != nil {
 		s.setError(WrapNTCP2Error(err, "framing message"))
 		return nil, err
 	}
+
+	if !s.fitsInSingleFrame(framedData) {
+		s.logOversizedMessageDrop(msg, len(framedData))
+		s.SessionCore.RecordDroppedMessage()
+		return nil, nil
+	}
+
 	return framedData, nil
+}
+
+// Outbound single-frame sizing constants. go-noise's Conn.writeFramed
+// (conn_framing.go:439-478) silently splits any payload larger than one
+// frame across multiple ChaChaPoly frames, which ntcp2.rst:1626-1628 forbids
+// for I2NP messages; the session therefore sizes its own writes so nothing it
+// queues needs splitting.
+//
+// The per-frame plaintext ceiling is the configured maximum frame size minus
+// the 16-byte Poly1305 tag. go-noise defaults MaxFrameSize to
+// DefaultMaxFrameSize (16384) and this transport never overrides it (no
+// WithFrameSettings call exists in go-i2p), so the defaults are the values the
+// write path actually uses. The outbound AEAD padding modifier then appends up
+// to MaxPaddingSize + 3 block-header bytes to the frame, so that headroom is
+// reserved too — otherwise the padding itself would push the frame over the
+// limit and re-introduce the split.
+const (
+	ntcp2DefaultMaxFrameSize  = 16384 // go-noise ntcp2.DefaultMaxFrameSize
+	ntcp2Poly1305Overhead     = 16    // go-noise ntcp2.Poly1305Overhead
+	ntcp2DefaultMaxPadding    = 64    // go-noise ntcp2.DefaultMaxPaddingSize
+	ntcp2MaxSingleBlockSize   = 65519 // ntcp2.rst:1447 maximum single block size
+	ntcp2PaddingBlockOverhead = blockHeaderSize + ntcp2DefaultMaxPadding
+)
+
+// maxOutboundFramePlaintext returns the largest block payload (DateTime and
+// I2NP blocks included) the session may hand to conn.Write in one frame
+// without go-noise fragmenting it across ChaChaPoly frames.
+func maxOutboundFramePlaintext() int {
+	maxPlaintext := ntcp2DefaultMaxFrameSize - ntcp2Poly1305Overhead - ntcp2PaddingBlockOverhead
+	if specMax := ntcp2MaxSingleBlockSize; maxPlaintext > specMax {
+		maxPlaintext = specMax
+	}
+	return maxPlaintext
+}
+
+// fitsInSingleFrame reports whether payload fits in one outbound data-phase
+// frame after the mandatory AEAD padding headroom is applied.
+func (s *NTCP2Session) fitsInSingleFrame(payload []byte) bool {
+	return len(payload) <= maxOutboundFramePlaintext()
+}
+
+// logOversizedMessageDrop records why an outbound message was refused.
+func (s *NTCP2Session) logOversizedMessageDrop(msg i2np.Message, framedSize int) {
+	s.Logger().WithFields(map[string]interface{}{
+		"message_type":   msg.Type(),
+		"framed_size":    framedSize,
+		"max_frame_size": maxOutboundFramePlaintext(),
+	}).Warn("Outbound NTCP2 frame would exceed one ChaChaPoly frame; dropping message instead of fragmenting (ntcp2.rst:1626-1628)")
 }
 
 // writeFramedData writes framed data to the connection.
@@ -449,6 +536,22 @@ func (s *NTCP2Session) handleReadResult(err error) bool {
 		s.Logger().Debug("Read deadline expired, checking session state")
 		return true
 	}
+
+	// W5: a data-phase frame that violates the spec's block ordering rules
+	// (ntcp2.rst:1455-1469, :1675, :1742) is fatal — close the connection
+	// with the reason code the violation maps to (8 = Padding Violation,
+	// 10 = Payload Format Error) so the peer learns why.
+	var violation *BlockOrderViolation
+	if errors.As(err, &violation) {
+		s.Logger().WithFields(map[string]interface{}{
+			"rule":   violation.Rule,
+			"reason": violation.Reason,
+			"detail": violation.Detail,
+		}).Warn("NTCP2 data-phase block ordering violation, closing session")
+		go func() { _ = s.CloseWithReason(violation.TerminationReason()) }()
+		return false
+	}
+
 	s.handleReceiveError(err)
 	return false
 }

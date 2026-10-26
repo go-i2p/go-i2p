@@ -2,6 +2,9 @@ package ntcp2
 
 import (
 	"encoding/binary"
+	"net"
+
+	"github.com/go-i2p/go-noise/ntcp2"
 )
 
 // Termination reason codes per the NTCP2 specification.
@@ -184,4 +187,37 @@ func TerminationReasonString(reason byte) string {
 // resistance).
 func IsAEADFailureReason(reason byte) bool {
 	return reason == TerminationAEADFailure
+}
+
+// validFramesReceived returns the number of valid AEAD data-phase frames
+// received on conn, for the Termination block's "valid frames received"
+// field.
+//
+// Spec: ntcp2.rst:1691-1694 — the field is "the number of valid AEAD data
+// phase frames received (current receive nonce value), 0 if error occurs in
+// handshake phase". The receive nonce is authoritative on the Noise
+// CipherState: CipherState.Decrypt increments it only when a frame
+// authenticates (go-noise noise/cipher_state.go:61-77), so Nonce() equals the
+// count of valid frames. go-noise keeps Conn.readNonce private but exposes
+// the equivalent value through Conn.UnderlyingConn().RecvCipherState().Nonce()
+// (go-noise conn/state.go:125, noise cipher_state.go:96), which is delegated
+// to here rather than duplicating a counter.
+//
+// Returns 0 for a handshake-phase or non-NTCP2 connection (nil cipher state,
+// detached conn, or a transport that is not a go-noise NTCP2 conn), matching
+// the spec's handshake-phase value.
+func validFramesReceived(conn net.Conn) uint64 {
+	nc, ok := conn.(*ntcp2.Conn)
+	if !ok {
+		return 0
+	}
+	noiseConn := nc.UnderlyingConn()
+	if noiseConn == nil {
+		return 0
+	}
+	recv := noiseConn.RecvCipherState()
+	if recv == nil {
+		return 0
+	}
+	return recv.Nonce()
 }

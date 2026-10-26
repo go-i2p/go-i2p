@@ -25,7 +25,7 @@ import (
 func ExtractPeerStaticKey(routerInfo router_info.RouterInfo) ([]byte, error) {
 	addresses := routerInfo.RouterAddresses()
 	for _, addr := range addresses {
-		if !isNTCP2Transport(addr) {
+		if !isNTCP2DialAddress(addr) {
 			continue
 		}
 
@@ -42,11 +42,16 @@ func ExtractPeerStaticKey(routerInfo router_info.RouterInfo) ([]byte, error) {
 // ExtractPeerStaticKeyFromAddress extracts a 32-byte static key from a single
 // NTCP2 RouterAddress. It is used to configure the Noise handshake for an
 // outbound session to that peer. See also [ExtractPeerStaticKey].
+//
+// The address may be published as "NTCP2" or as "NTCP" carrying full valid
+// NTCP2 options (ntcp2.rst:1864-1867, see isNTCP2DialAddress). The key must
+// additionally be a valid X25519 curve point: ntcp2.rst:298 requires Alice to
+// validate Bob's static key before the handshake uses it.
 func ExtractPeerStaticKeyFromAddress(addr *router_address.RouterAddress) ([]byte, error) {
 	if addr == nil {
 		return nil, oops.Errorf("nil NTCP2 address")
 	}
-	if !isNTCP2Transport(addr) {
+	if !isNTCP2DialAddress(addr) {
 		return nil, oops.Errorf("address is not NTCP2")
 	}
 
@@ -54,13 +59,20 @@ func ExtractPeerStaticKeyFromAddress(addr *router_address.RouterAddress) ([]byte
 }
 
 // extractStaticKeyFromAddress attempts to extract the static key from a single
-// NTCP2 router address using the StaticKey() accessor.
+// NTCP2 router address. It decodes the "s=" option with the tolerant
+// padded/unpadded I2P base64 path (decodeNTCP2AddressOption) rather than
+// common's padded-only StaticKey() accessor, and validates the result as an
+// X25519 curve point per ntcp2.rst:298 before it is used in the XK handshake.
 func extractStaticKeyFromAddress(addr *router_address.RouterAddress) ([]byte, error) {
-	staticKey, err := addr.StaticKey()
+	staticKey, err := decodeNTCP2AddressOption(addr, "s", 32)
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to extract static key")
 	}
-	return staticKey[:], nil
+	validated, err := ValidateNTCP2StaticKey(staticKey)
+	if err != nil {
+		return nil, oops.Wrapf(err, "invalid NTCP2 static key")
+	}
+	return validated, nil
 }
 
 // ExtractPeerIV extracts the NTCP2 AES obfuscation IV ("i=" option)
@@ -70,7 +82,7 @@ func extractStaticKeyFromAddress(addr *router_address.RouterAddress) ([]byte, er
 func ExtractPeerIV(routerInfo router_info.RouterInfo) ([]byte, error) {
 	addresses := routerInfo.RouterAddresses()
 	for _, addr := range addresses {
-		if !isNTCP2Transport(addr) {
+		if !isNTCP2DialAddress(addr) {
 			continue
 		}
 
@@ -87,19 +99,22 @@ func ExtractPeerIV(routerInfo router_info.RouterInfo) ([]byte, error) {
 // ExtractPeerIVFromAddress extracts the 16-byte obfuscation IV from a single
 // NTCP2 RouterAddress. The IV is used for AES-CBC obfuscation of the ephemeral
 // key in message 1 when the peer has enabled obfuscation. See also [ExtractPeerIV].
+//
+// The "i=" option is decoded with the tolerant padded/unpadded I2P base64
+// path so i2pd-style unpadded publications interoperate.
 func ExtractPeerIVFromAddress(addr *router_address.RouterAddress) ([]byte, error) {
 	if addr == nil {
 		return nil, oops.Errorf("nil NTCP2 address")
 	}
-	if !isNTCP2Transport(addr) {
+	if !isNTCP2DialAddress(addr) {
 		return nil, oops.Errorf("address is not NTCP2")
 	}
 
-	iv, err := addr.InitializationVector()
+	iv, err := decodeNTCP2AddressOption(addr, "i", 16)
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to extract IV")
 	}
-	return iv[:], nil
+	return iv, nil
 }
 
 // ConfigureDialConfig sets the peer's static key and obfuscation IV on a
@@ -109,7 +124,7 @@ func ExtractPeerIVFromAddress(addr *router_address.RouterAddress) ([]byte, error
 // the initiator to pre-know the responder's static public key.
 func ConfigureDialConfig(config *ntcp2.Config, peerInfo router_info.RouterInfo) error {
 	for _, addr := range peerInfo.RouterAddresses() {
-		if !isNTCP2Transport(addr) {
+		if !isNTCP2DialAddress(addr) {
 			continue
 		}
 		if err := ConfigureDialConfigFromAddress(config, addr); err == nil {
@@ -123,8 +138,18 @@ func ConfigureDialConfig(config *ntcp2.Config, peerInfo router_info.RouterInfo) 
 // ConfigureDialConfigFromAddress sets peer static key and optional obfuscation
 // IV using a specific NTCP2 RouterAddress. It is the per-address helper used by
 // ConfigureDialConfig, which tries each NTCP2 address in turn.
+//
+// Before anything is dialed, all three NTCP2 address options (s=, i=, v=) are
+// verified present and valid, per ntcp2.rst:1861-1862 ("Alice must verify that
+// all three options are present and valid before connecting using the NTCP2
+// protocol"), and the static key is verified to be a valid curve point per
+// ntcp2.rst:298. An address that fails is refused outright.
 // See also [ConfigureDialConfig].
 func ConfigureDialConfigFromAddress(config *ntcp2.Config, peerAddr *router_address.RouterAddress) error {
+	if _, _, err := ValidateNTCP2AddressOptions(peerAddr); err != nil {
+		return oops.Wrapf(err, "refusing to dial NTCP2 address with invalid options")
+	}
+
 	// Extract and set the peer's static key as the *remote* static key.
 	// The Noise XK pre-message is "← s": the initiator must know the
 	// responder's static public key before the handshake begins.

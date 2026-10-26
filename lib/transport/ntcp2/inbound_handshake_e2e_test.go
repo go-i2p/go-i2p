@@ -55,7 +55,10 @@ func newNTCP2TestKeyPair(t *testing.T) ntcp2TestKeyPair {
 
 	// msg3 must carry a RouterInfo block advertising the initiator's Noise static
 	// key, otherwise the responder's key-binding check rejects the handshake.
-	initiatorConfig, err := gontcp2.NewNTCP2Config(initiatorHash, true)
+	// Upstream go-noise requires an initiator's BobRouterHash (the AES
+	// ephemeral-obfuscation key RH_B) to equal its RemoteRouterHash: for an
+	// initiator both are the responder's hash.
+	initiatorConfig, err := gontcp2.NewNTCP2Config(responderHash, true)
 	require.NoError(t, err)
 	initiatorConfig = initiatorConfig.
 		WithStaticKey(initiatorKP.Private).

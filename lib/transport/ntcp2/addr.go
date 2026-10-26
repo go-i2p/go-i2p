@@ -77,7 +77,9 @@ func ExtractNTCP2DialCandidatesWithMetadata(routerInfo router_info.RouterInfo) (
 	for i, addr := range addresses {
 		logAddressCheck(i, addr)
 
-		if !isNTCP2Transport(addr) {
+		// Consider "NTCP2" addresses and "NTCP" addresses carrying full
+		// valid NTCP2 options (ntcp2.rst:1864-1867; see isNTCP2DialAddress).
+		if !isNTCP2DialAddress(addr) {
 			continue
 		}
 
@@ -328,20 +330,16 @@ func HasDialableNTCP2Address(routerInfo *router_info.RouterInfo) bool {
 
 // SupportsNTCP2 checks if RouterInfo has an NTCP2 transport address. It is the
 // cheap compatibility check used by the transport's Compatible method before
-// attempting a session. See also [SupportsDirectNTCP2].
+// attempting a session. An "NTCP" address published with full valid NTCP2
+// options (s=, i=, v=) also signals NTCP2 support per ntcp2.rst:1864-1867.
+// See also [SupportsDirectNTCP2].
 func SupportsNTCP2(routerInfo *router_info.RouterInfo) bool {
 	if routerInfo == nil {
 		log.WithFields(logger.Fields{"at": "SupportsNTCP2"}).Debug("RouterInfo is nil, NTCP2 not supported")
 		return false
 	}
 	for _, addr := range routerInfo.RouterAddresses() {
-		style := addr.TransportStyle()
-		str, err := style.Data()
-		if err != nil {
-			continue
-		}
-		// Check case-insensitively - some implementations use "NTCP2", others "ntcp2"
-		if strings.EqualFold(str, "ntcp2") {
+		if isNTCP2DialAddress(addr) {
 			log.WithFields(logger.Fields{"at": "SupportsNTCP2"}).Debug("RouterInfo supports NTCP2")
 			return true
 		}

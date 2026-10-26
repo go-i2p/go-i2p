@@ -208,6 +208,15 @@ func (u *BlockUnframer) ReadNextMessage() (i2np.Message, error) {
 			return nil, oops.Wrapf(err, "failed to parse NTCP2 blocks")
 		}
 
+		// Enforce the spec's data-phase block ordering rules before any block
+		// is processed (ntcp2.rst:1455-1469, :1675, :1742): padding must be
+		// last, at most one padding block, termination last except for
+		// padding. A violation is fatal to the connection.
+		if err := ValidateDataPhaseBlockOrder(blocks); err != nil {
+			log.WithError(err).Warn("NTCP2 frame violates block ordering rules, dropping connection")
+			return nil, oops.Wrapf(err, "invalid NTCP2 block ordering")
+		}
+
 		// Process blocks, extracting I2NP messages
 		firstMsg, terminated := u.processBlocks(blocks)
 		if terminated {
