@@ -40,7 +40,7 @@ type TunnelBuildReplyProcessor interface {
 // derived from STBM Noise transcript hashes. Implemented by *GarlicSessionManager.
 type GarlicKeyRegistrar interface {
 	// RegisterOneTimeGarlicKey stores a single-use garlic key for a pending
-	// ShortTunnelBuildReply. tag is garlicKeyMaterial[24:32], key is [0:32].
+	// OutboundTunnelBuildReply. tag is garlicKeyMaterial[24:32], key is [0:32].
 	RegisterOneTimeGarlicKey(tag [8]byte, key [32]byte)
 }
 
@@ -51,12 +51,13 @@ type GarlicKeyRegistrar interface {
 // Only the Short Tunnel Build (STBM, type 25) send format is supported. The
 // fixed TunnelBuild (type 21) and VariableTunnelBuild (type 23) send paths were
 // removed, and there is no receive-side handling for them either: the processor
-// drops types 23/24 explicitly (lib/i2np/processor.go) and has no implementation
-// for 21/22, so they reach its unknown-type branch. Neither pair is parsed on
-// inbound, so this package cannot build or answer a tunnel whose hops are not
-// all ECIES-X25519 routers at 0.9.51 or newer. See the "Tunnel build message
-// coverage (known gap)" section of package i2np's doc.go for the specification
-// background, including the "Routers must implement" sentence for types 21/22.
+// recognises types 21, 22, 23 and 24 and drops all four (lib/i2np/processor.go),
+// because none of their 528-byte record formats is implemented. Nothing in those
+// pairs is parsed on inbound, so this package cannot build or answer a tunnel
+// whose hops are not all ECIES-X25519 routers at 0.9.51 or newer. See the
+// "Tunnel build message coverage (known gap)" section of package i2np's doc.go
+// for the specification background, including the "Routers must implement"
+// sentence for types 21/22.
 type BuildMessageFactory interface {
 	// CreateShortTunnelBuildMessage creates a serialized Short Tunnel Build message (type 25).
 	// encryptedRecords contains 218-byte encrypted STBM records, messageID is the I2NP message ID.

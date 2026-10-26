@@ -78,3 +78,48 @@ func TestDefaultHandler_OnHandshakeError_WithConn(t *testing.T) {
 	// Should complete without hanging (probing resistance with closed peer)
 	h.OnHandshakeError(client, assert.AnError)
 }
+
+// TestApplyReplayDetector_WiresHandlerCache proves the transport's replay cache
+// is the detector go-noise consults, rather than the unmanaged process-wide
+// fallback it would otherwise install. ntcp2.rst:547-550 makes the duplicate
+// handshake cache mandatory for Bob and :879-883 for Alice, and the router owns
+// the cache's lifetime via Close(), so the registered detector must be that same
+// cache: a key seen through the detector must also be reported as a replay by
+// the handler, and must show up in its size.
+func TestApplyReplayDetector_WiresHandlerCache(t *testing.T) {
+	h := NewDefaultHandler()
+	defer h.Close()
+
+	cfg := newTestNTCP2Config(t, false)
+	applyReplayDetector(cfg, h)
+
+	if cfg.ReplayDetector == nil {
+		t.Fatal("ReplayDetector not registered; go-noise would use the shared fallback cache")
+	}
+
+	var key [32]byte
+	key[0] = 0x5a
+
+	// Seen through the detector first (this is what the handshake does).
+	if seen := cfg.ReplayDetector.CheckAndAdd(key); seen {
+		t.Fatal("first use of a fresh key must not be reported as a replay")
+	}
+	// The handler's own cache must now consider it a replay, proving the two are
+	// the same cache rather than two independent ones.
+	if !h.CheckReplay(key) {
+		t.Error("handler cache and registered detector are not the same instance")
+	}
+	if got := h.ReplayCacheSize(); got != 1 {
+		t.Errorf("ReplayCacheSize() = %d, want 1", got)
+	}
+}
+
+// TestApplyReplayDetector_NilSafe documents that a missing config or handler
+// leaves the detector unset instead of panicking; go-noise then installs its
+// mandatory fallback, so replay protection is never actually disabled.
+func TestApplyReplayDetector_NilSafe(t *testing.T) {
+	applyReplayDetector(nil, NewDefaultHandler())
+
+	applyReplayDetector(newTestNTCP2Config(t, false), nil)
+
+}

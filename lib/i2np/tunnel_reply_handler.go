@@ -215,7 +215,7 @@ func (rp *ReplyProcessor) RegisterPendingBuild(
 // SetPendingBuildNoiseHashes stores the per-hop Noise transcript hashes for an
 // in-progress STBM build. These are the m_H values (Noise handshake hash after
 // EncryptAndHash) needed as AEAD associated data when decrypting each hop's
-// ShortTunnelBuildReply record. Must be called immediately after RegisterPendingBuild.
+// OutboundTunnelBuildReply record. Must be called immediately after RegisterPendingBuild.
 func (rp *ReplyProcessor) SetPendingBuildNoiseHashes(tunnelID buildrecord.TunnelID, noiseHashes [][32]byte) error {
 	rp.mutex.Lock()
 	defer rp.mutex.Unlock()
@@ -259,7 +259,7 @@ func (rp *ReplyProcessor) SetPendingBuildRecordSlots(tunnelID buildrecord.Tunnel
 // The handler parameter should be one of:
 //   - *TunnelBuildReply (8 hops)
 //   - *VariableTunnelBuildReply (1-8 hops)
-//   - *ShortTunnelBuildReply (1-8 hops, modern STBM format)
+//   - *OutboundTunnelBuildReply (1-8 hops, modern STBM format)
 //
 // Returns nil on successful build, error otherwise.
 func (rp *ReplyProcessor) ProcessBuildReply(handler TunnelReplyHandler, tunnelID buildrecord.TunnelID) error {

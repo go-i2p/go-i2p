@@ -131,7 +131,7 @@ type repliedHopCounter interface {
 
 // replyStepProcessor defines the internal operations for processing tunnel
 // build replies. Used by processReplySteps to eliminate duplication across
-// ShortTunnelBuildReply.
+// OutboundTunnelBuildReply.
 type replyStepProcessor interface {
 	logReplyStart(recordCount int)
 	validateRecordCount(recordCount int) error
@@ -222,7 +222,7 @@ var (
 
 	// Tunnel interfaces
 	_ TunnelBuilder      = (*ShortTunnelBuild)(nil)
-	_ TunnelReplyHandler = (*ShortTunnelBuildReply)(nil)
+	_ TunnelReplyHandler = (*OutboundTunnelBuildReply)(nil)
 
 	// Build record interfaces
 	_ TunnelIdentifier   = (*BuildRequestRecord)(nil)

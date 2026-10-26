@@ -28,7 +28,7 @@ total size: 1+$num*218
 // It uses 218-byte short build records instead of the 528-byte standard
 // records, which makes it the preferred format for building tunnels today.
 // See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the wire format.
-// See also [ShortTunnelBuildReply].
+// See also [OutboundTunnelBuildReply].
 type ShortTunnelBuild struct {
 	sliceRecordSet
 }

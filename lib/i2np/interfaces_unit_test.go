@@ -35,7 +35,7 @@ func TestInterfaceSatisfaction(t *testing.T) {
 	var _ DatabaseReader = (*DatabaseLookup)(nil)
 	var _ DatabaseWriter = (*DatabaseStore)(nil)
 	var _ TunnelBuilder = (*ShortTunnelBuild)(nil)
-	var _ TunnelReplyHandler = (*ShortTunnelBuildReply)(nil)
+	var _ TunnelReplyHandler = (*OutboundTunnelBuildReply)(nil)
 	var _ GarlicProcessor = (*Garlic)(nil)
 }
 

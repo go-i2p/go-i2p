@@ -185,15 +185,27 @@ func TestNoiseXKHandshake_Padding(t *testing.T) {
 	assert.Equal(t, 128, customConfig.MaxPaddingSize, "Custom MaxPaddingSize must be respected")
 }
 
-// TestNoiseXKHandshake_Timestamp verifies that the options block in handshake
-// messages includes timestamp handling. Spec requires rejecting if clock skew
-// exceeds ±2 minutes (configurable).
+// TestNoiseXKHandshake_Timestamp verifies the clock-skew configuration that
+// governs handshake timestamp rejection.
 //
-// AUDIT FINDING: Timestamp validation (clock skew rejection) is handled by the
-// go-noise library's handshake modifier chain. The local transport code does not
-// explicitly check timestamps, delegating to the Noise library.
+// Clock-skew enforcement lives in two places, and this test pins the local
+// half:
+//   - go-noise validates the tsA/tsB options during the handshake itself
+//     (validateMessage1Options / validateMessage2Options, and the
+//     SessionConfirmed recheck recheckClockSkewAfterConfirm), using
+//     Config.MaxClockSkew, and replies with termination reason 7 (ntcp2.rst:1703).
+//   - This package exposes [ValidateTimestamp] and the NTCP2Handler hook that
+//     wraps it, so a transport-level caller can apply the same ±60 s rule to a
+//     timestamp it holds outside the handshake.
 //
-// Spec reference: ntcp2.rst Section "Options block"
+// The tolerance is 60 s (transport.ClockSkewTolerance), which is what the spec
+// gives: ntcp2.rst:2013 "A clock skew between two peers of greater than +/- 60
+// seconds is generally fatal." The ±2 minute figure that appears elsewhere in
+// this repository is the SSU2 recommendation for out-of-session DateTime blocks
+// (ssu2.rst:4036-4039), not the NTCP2 handshake bound.
+//
+// Spec reference: ntcp2.rst §"Clock Skew Guidelines" (:2009-2037),
+// §"Session Request" (:547-550).
 func TestNoiseXKHandshake_Timestamp(t *testing.T) {
 	config := newTestNTCP2Config(t, true)
 
@@ -232,16 +244,19 @@ func TestNoiseXKHandshake_Version(t *testing.T) {
 // Data Phase (Post-Handshake)
 // ---------------------------------------------------------------------------
 
-// TestDataPhase_FrameFormat verifies that the local framing uses a length-prefixed
-// format for I2NP messages.
+// TestDataPhase_FrameFormat verifies that the local framing uses the NTCP2
+// block format for I2NP messages.
 //
-// AUDIT FINDING: The local framing.go uses a 4-byte big-endian length prefix
-// for I2NP messages at the application layer. The actual NTCP2 wire format with
-// 2-byte SipHash-obfuscated lengths is handled by the go-noise library's
-// SipHashLengthModifier at the transport layer. The local framing operates
-// ABOVE the Noise encryption layer.
+// Local framing does NOT add an application-layer length prefix. A framed
+// message is a type-3 (I2NP) block: [blk:1][size:2][data], where data is the
+// I2NP message carrying the mandatory 9-byte short header
+// (ntcp2.rst:1626-1628). The 2-byte block `size` is the only length field the
+// local layer writes; the frame-level 2-byte length and its SipHash-2-4
+// obfuscation are the go-noise transport's job (SipHashLengthModifier), applied
+// below this layer inside the AEAD framing.
 //
-// Spec reference: ntcp2.rst Section "Data Phase"
+// Spec reference: ntcp2.rst §"Data Phase" block format (:1432-1450),
+// §"I2NP Message Block" (:1626-1628).
 func TestDataPhase_FrameFormat(t *testing.T) {
 	msg := i2np.NewDataMessage([]byte("test frame format"))
 	framedData, err := FrameI2NPMessageAsBlock(msg)
@@ -265,12 +280,16 @@ func TestDataPhase_LengthObfuscation(t *testing.T) {
 
 // TestDataPhase_BlockTypes verifies that the implementation handles the required
 // NTCP2 block types. The spec defines: DateTime(0), Options(1), RouterInfo(2),
-// I2NP(3), Termination(4), Padding(254).
+// I2NP(3), Termination(4), Padding(254) (ntcp2.rst:1430-1438).
 //
-// AUDIT FINDING: Block type handling is primarily done by the go-noise library.
-// The local code handles I2NP messages through the framing layer.
+// Block dispatch on the receive path is local, not delegated: the block
+// constants are declared in blocks.go, [ParseBlocks] decodes the
+// [type:1][size:2][data] sequence from the decrypted frame, and
+// [NTCP2Session.handleNonI2NPBlock] switches on every one of the six types
+// above. go-noise supplies the AEAD framing and returns the decrypted frame
+// payload; it does not parse blocks.
 //
-// Spec reference: ntcp2.rst Section "Block Types"
+// Spec reference: ntcp2.rst §"Data Phase" → block format (:1432-1450).
 func TestDataPhase_BlockTypes(t *testing.T) {
 	// The I2NP block type (3) is the primary block handled locally
 	// Verify we can create and frame I2NP messages of various types
@@ -310,19 +329,27 @@ func TestDataPhase_I2NPBlock(t *testing.T) {
 }
 
 // TestDataPhase_DateTimeBlock verifies DateTime block awareness.
-// Spec requires periodic DateTime blocks (4-byte timestamp).
+// A DateTime block is blk 0 with size 4 carrying an unsigned-seconds Unix
+// timestamp, and implementations "must round to the nearest second to prevent
+// clock bias in the network" (ntcp2.rst:1473-1491).
 //
-// AUDIT FINDING: DateTime blocks are handled by the go-noise library's data
-// phase. The local session code sends I2NP messages; the Noise layer can
-// inject DateTime blocks as needed.
+// Both halves are local, not delegated to go-noise: [NewDateTimeBlock] builds
+// and [ParseDateTimeBlock] reads them, the outbound path attaches one
+// periodically in [NTCP2Session.attachDateTimeMetadataIfDue], and the inbound
+// path parses the peer's timestamp in handleNonI2NPBlock. go-noise supplies the
+// AEAD frame that carries the block, nothing more.
 //
-// Spec reference: ntcp2.rst Section "DateTime Block (type 0)"
+// The read deadline below is a separate liveness mechanism, not a substitute
+// for DateTime blocks: it bounds how long the receive worker blocks on a silent
+// peer (see [ntcp2ReadDeadline]).
+//
+// Spec reference: ntcp2.rst §"DateTime" (:1473-1491).
 func TestDataPhase_DateTimeBlock(t *testing.T) {
-	// DateTime blocks are a transport-layer concern handled by go-noise.
-	// The local session tracks time via read deadlines (ntcp2ReadDeadline = 5 min)
-	// which serve as a session liveness check.
+	// DateTime blocks are emitted by this transport on the outbound data path
+	// (attachDateTimeMetadataIfDue) and parsed on the inbound path
+	// (handleNonI2NPBlock); the rounding rule is NewDateTimeBlock's.
 	assert.Equal(t, 5*60, int(ntcp2ReadDeadline.Seconds()),
-		"Read deadline (5 min) serves as session liveness check complementing DateTime blocks")
+		"Read deadline (5 min) bounds receive-worker blocking on a silent peer")
 }
 
 // TestDataPhase_PaddingBlock verifies that padding is supported in the data phase.
@@ -337,15 +364,23 @@ func TestDataPhase_PaddingBlock(t *testing.T) {
 		"MaxPaddingSize must be non-negative")
 }
 
-// TestDataPhase_TerminationBlock verifies that the implementation properly
-// terminates sessions. The spec requires sending a Termination block with a
-// reason code before closing the connection.
+// TestDataPhase_TerminationBlock verifies that the implementation terminates
+// sessions with a Termination block.
 //
-// AUDIT FINDING: Session termination in the local code calls Close() which
-// drains the send queue then cancels the context. The actual Termination block
-// (type 4) wire format is handled by the go-noise library.
+// ntcp2.rst:1670-1673 states "Noise recommends an explicit termination message.
+// Original NTCP doesn't have one. Drop the connection." — so sending a block is
+// the recommended behaviour rather than a MUST. This transport implements it:
+// [NTCP2Session.Close] delegates to [NTCP2Session.CloseWithReason] with reason 0
+// ("normal close", :1696), which drains the send queue and writes an encrypted
+// Termination block built by [BuildTerminationBlockWithFrames] before cancelling
+// the context. The block is never sent in the clear, and it is deliberately
+// skipped on an AEAD-failure close (:1700 reason 4) where the cipher state may
+// be desynchronised — that path applies probing resistance instead.
 //
-// Spec reference: ntcp2.rst Section "Termination Block (type 4)"
+// go-noise supplies the AEAD framing of the write; the block's construction and
+// the reason-code selection are local (termination.go).
+//
+// Spec reference: ntcp2.rst §"Termination" (:1670-1725).
 func TestDataPhase_TerminationBlock(t *testing.T) {
 	session := newTestSession(t)
 	require.NotNil(t, session)
@@ -358,19 +393,25 @@ func TestDataPhase_TerminationBlock(t *testing.T) {
 	assert.Error(t, session.GetContext().Err(), "Session context must be canceled after Close()")
 }
 
-// TestDataPhase_MaxFrameSize verifies the maximum I2NP message size constraint.
+// TestDataPhase_MaxFrameSize verifies the maximum single-block data size.
 //
-// AUDIT FINDING: The local maxI2NPMessageSize is 65516 bytes (matching the I2NP
-// message spec). The go-noise library's default MaxFrameSize is 16384 (16KB).
-// The NTCP2 spec allows up to 65535 bytes per frame. The local 65516 is the
-// I2NP message limit, not the NTCP2 frame limit — these are at different layers.
+// ntcp2.rst:1441 bounds a block's data at "size :: 2 bytes, big endian, size of
+// data to follow, 0 - 65516", restated at :1450 "Maximum single block data size
+// is 65516 bytes." The related ceilings in the same section are 65535 for a
+// ChaChaPoly frame (:1444) and 65519 for a total/single block including its
+// 3-byte header (:1446-1447).
 //
-// Spec reference: ntcp2.rst Section "Max Frame Size"
+// 65516 is therefore the NTCP2 block-data limit, not an I2NP message limit: the
+// I2NP spec sets no such cap of its own. [MaxBlockDataSize] enforces it when
+// decoding a received block, and the outbound path is separately bounded by the
+// configured frame size (go-noise defaults to DefaultMaxFrameSize 16384, see
+// [maxOutboundFramePlaintext]), which is smaller than the spec ceiling.
+//
+// Spec reference: ntcp2.rst §"Data Phase" block format (:1441, :1444-1450).
 func TestDataPhase_MaxFrameSize(t *testing.T) {
-	// Maximum single block data size (ntcp2.rst:1440 "size :: 2 bytes, big
-	// endian, size of data to follow, 0 - 65516"). The non-spec I2NPUnframer
-	// that used to carry this constant locally has been removed; the live
-	// receive path enforces it in ParseBlocks.
+	// Maximum single block data size (ntcp2.rst:1441 "size :: 2 bytes, big
+	// endian, size of data to follow, 0 - 65516"), enforced on receive by
+	// ParseBlocks via MaxBlockDataSize.
 	const expectedMaxI2NPMessageSize = 65516
 
 	// Verify by testing that a message at the max size can be framed

@@ -19,11 +19,13 @@ import (
 // inbound data-phase frame is bounded by the data actually present, so a peer
 // cannot make the receiver allocate and parse beyond the frame.
 //
-// ntcp2.rst:1440 defines the block header's size field as "2 bytes, big
-// endian, size of data to follow, 0 - 65516", which caps any single block at
-// 65516 bytes; the decrypted frame itself is capped at 65535 bytes
-// (ntcp2.rst:1442). ParseBlocks enforces the declared-size-vs-available-data
-// relationship, which is the memory-exhaustion guard on the live receive path.
+// ntcp2.rst:1441 defines the block header's size field as "2 bytes, big
+// endian, size of data to follow, 0 - 65516", restated at :1450 "Maximum single
+// block data size is 65516 bytes"; the decrypted frame itself is capped at 65535
+// bytes (:1444) with a maximum single block of 65519 including the 3-byte header
+// (:1447). ParseBlocks enforces both the absolute declared-size ceiling and the
+// declared-size-vs-available-data relationship, which together are the
+// memory-exhaustion guard on the live receive path.
 func TestFrameLengthValidation(t *testing.T) {
 	// maxI2NPMessageSize is the spec's maximum single block data size.
 	const maxI2NPMessageSize = 65516
@@ -32,19 +34,22 @@ func TestFrameLengthValidation(t *testing.T) {
 		name        string
 		declared    int
 		available   int
-		expectError bool
+		expectError string
 	}{
-		{"valid_small_message", 100, 100, false},
-		{"valid_max_message", maxI2NPMessageSize, maxI2NPMessageSize, false},
-		{"invalid_oversized_declaration", maxI2NPMessageSize + 1, 8, true},
-		{"invalid_huge_declaration", 65535, 8, true},
-		{"invalid_truncated_data", 512, 511, true},
+		{"valid_small_message", 100, 100, ""},
+		{"valid_max_message", maxI2NPMessageSize, maxI2NPMessageSize, ""},
+		// A size over 65516 cannot legally exist in one block (3 + 65517 would
+		// exceed the 65519 single-block ceiling at :1447), so it is rejected as
+		// an illegal declaration rather than merely a truncation.
+		{"invalid_oversized_declaration", maxI2NPMessageSize + 1, 8, "over the 65516 byte maximum"},
+		{"invalid_huge_declaration", 65535, 8, "over the 65516 byte maximum"},
+		{"invalid_truncated_data", 512, 511, "truncated block data"},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			data := make([]byte, tc.available)
-			if !tc.expectError {
+			if tc.expectError == "" {
 				// A parseable I2NP block payload: 9-byte short header only.
 				copy(data, mustShortFramedI2NP(t))
 			}
@@ -53,9 +58,9 @@ func TestFrameLengthValidation(t *testing.T) {
 
 			unframer := NewBlockUnframer(&mockConn{data: payload})
 			_, err := unframer.ReadNextMessage()
-			if tc.expectError {
+			if tc.expectError != "" {
 				assert.Error(t, err, "should reject block declaring %d bytes with %d available", tc.declared, tc.available)
-				assert.Contains(t, err.Error(), "truncated block data")
+				assert.Contains(t, err.Error(), tc.expectError)
 			} else {
 				assert.NoError(t, err, "should accept block declaring %d bytes", tc.declared)
 			}

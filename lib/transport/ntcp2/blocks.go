@@ -46,6 +46,15 @@ const (
 // blockHeaderSize is the size of a block header: type (1 byte) + size (2 bytes).
 const blockHeaderSize = 3
 
+// MaxBlockDataSize is the largest value the 2-byte block `size` field may
+// carry: ntcp2.rst:1441 "size :: 2 bytes, big endian, size of data to follow,
+// 0 - 65516", restated at :1450 "Maximum single block data size is 65516
+// bytes." A frame plaintext is capped at 65519 bytes (:1447 "Maximum single
+// block size"), so 65516 is the most data that can follow a 3-byte header in
+// one block. A larger declared size is a framing violation, not a truncation:
+// it means the peer wrote a size that cannot legally exist.
+const MaxBlockDataSize = 65516
+
 // NTCP2 RouterInfo block flag byte constants (ntcp2.rst §1575-1577).
 // Bit 0: 0 = local store, 1 = flood request. Bits 1-7: unused, must be 0.
 // NOTE: RouterInfo in NTCP2 blocks is NEVER gzip-compressed (unlike DatabaseStore).
@@ -92,6 +101,19 @@ func ParseBlocks(payload []byte) ([]Block, error) {
 		blockType := payload[offset]
 		blockSize := int(binary.BigEndian.Uint16(payload[offset+1 : offset+3]))
 		offset += blockHeaderSize
+
+		// ntcp2.rst:1441, :1450 bound a block's data at 65516 bytes. A larger
+		// declared size is not a truncation but an illegal frame, so reject it
+		// rather than trusting it for the bounds check below.
+		if blockSize > MaxBlockDataSize {
+			log.WithFields(map[string]interface{}{
+				"block_type":    blockType,
+				"declared_size": blockSize,
+				"max_size":      MaxBlockDataSize,
+			}).Error("NTCP2 block data size exceeds spec maximum")
+			return blocks, oops.Errorf("block type %d declares %d bytes, over the %d byte maximum (ntcp2.rst:1441)",
+				blockType, blockSize, MaxBlockDataSize)
+		}
 
 		if offset+blockSize > len(payload) {
 			log.WithFields(map[string]interface{}{

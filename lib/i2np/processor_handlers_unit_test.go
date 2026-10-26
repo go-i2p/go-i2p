@@ -8,16 +8,16 @@ import (
 	"time"
 )
 
-// Validates that a LOCAL-delivery garlic clove wrapping a ShortTunnelBuildReply
+// Validates that a LOCAL-delivery garlic clove wrapping a OutboundTunnelBuildReply
 // parses with the correct flag, message type, ID, and expiration.
-func TestParseECIESGarlicClove_LocalShortTunnelBuildReply(t *testing.T) {
+func TestParseECIESGarlicClove_LocalOutboundTunnelBuildReply(t *testing.T) {
 	expiry := time.Unix(1770000000, 0).UTC()
 	payload := append([]byte{1}, bytes.Repeat([]byte{0xaa}, 218)...)
 	messageID := uint32(0x10203040)
 
 	data := make([]byte, 1+ShortI2NPHeaderSize+len(payload))
 	data[0] = 0x00
-	data[1] = byte(I2NPMessageTypeShortTunnelBuildReply)
+	data[1] = byte(I2NPMessageTypeOutboundTunnelBuildReply)
 	binary.BigEndian.PutUint32(data[2:6], messageID)
 	binary.BigEndian.PutUint32(data[6:10], uint32(expiry.Unix()))
 	copy(data[10:], payload)
@@ -38,8 +38,8 @@ func TestParseECIESGarlicClove_LocalShortTunnelBuildReply(t *testing.T) {
 	if clove.DeliveryInstructions.Flag != 0x00 {
 		t.Fatalf("expected LOCAL delivery flag 0x00, got 0x%02x", clove.DeliveryInstructions.Flag)
 	}
-	if clove.Message.Type() != I2NPMessageTypeShortTunnelBuildReply {
-		t.Fatalf("expected wrapped type %d, got %d", I2NPMessageTypeShortTunnelBuildReply, clove.Message.Type())
+	if clove.Message.Type() != I2NPMessageTypeOutboundTunnelBuildReply {
+		t.Fatalf("expected wrapped type %d, got %d", I2NPMessageTypeOutboundTunnelBuildReply, clove.Message.Type())
 	}
 	if clove.Message.MessageID() != int(messageID) {
 		t.Fatalf("expected message ID %d, got %d", messageID, clove.Message.MessageID())

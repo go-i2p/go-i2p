@@ -79,7 +79,7 @@ func EncryptShortBuildRequestRecord(record BuildRequestRecord, recipientRouterIn
 // See i2pd ShortECIESTunnelHopConfig::CreateBuildRequestRecord for the full
 // per-hop key derivation chain. Also returns the Noise transcript hash (m_H)
 // after EncryptAndHash, which the initiator stores and later uses as AEAD
-// associated data when decrypting each hop's ShortTunnelBuildReply record.
+// associated data when decrypting each hop's OutboundTunnelBuildReply record.
 func EncryptShortBuildRequestRecordWithChain(record BuildRequestRecord, recipientRouterInfo router_info.RouterInfo) ([218]byte, [32]byte, [32]byte, error) {
 	var encrypted [218]byte
 	var chainingKey [32]byte
@@ -229,7 +229,7 @@ func deriveSTBMHopKeys(preReplyCK [32]byte, isOBEP bool) (i2ptunnel.BuildReplyKe
 //   - the PRE-reply chaining key (ck right after the request record, before any
 //     reply KDF step) - feed this to deriveSTBMHopKeys with the hop's isOBEP
 //   - the post-decrypt handshake hash m_H, used as AEAD associated data when the
-//     hop builds its own ShortTunnelBuildReply record
+//     hop builds its own OutboundTunnelBuildReply record
 //
 // The transcript is the inverse of EncryptShortBuildRequestRecordWithChain:
 //

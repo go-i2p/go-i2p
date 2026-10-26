@@ -294,7 +294,7 @@ func makeSingleHopBuildResult(hopRI router_info.RouterInfo, rec tunnel.BuildRequ
 
 // newTestBuildResponseRecord builds a BuildResponseRecord whose Hash is the
 // SHA-256 of RandomData||Reply — the deprecated long-record layout, matching
-// what ShortTunnelBuildReply.verifyRecordIntegrity checks for a record that
+// what OutboundTunnelBuildReply.verifyRecordIntegrity checks for a record that
 // carries a hash. The long-record parser/validator and the
 // CreateBuildResponseRecord helper were removed with the deprecated 528-byte
 // reply path, so tests construct the record directly. Live short reply records

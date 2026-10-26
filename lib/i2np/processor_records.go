@@ -50,9 +50,9 @@ func parseResponseRecords(data []byte, count, recordSize, startOffset int) ([]Bu
 	return records, rawRecords, nil
 }
 
-// processShortTunnelBuildReplyMessage processes ShortTunnelBuildReply (type 26)
+// processOutboundTunnelBuildReplyMessage processes OutboundTunnelBuildReply (type 26)
 // messages, the current short tunnel build reply format (v0.9.51+).
-func (p *MessageProcessor) processShortTunnelBuildReplyMessage(msg Message) error {
+func (p *MessageProcessor) processOutboundTunnelBuildReplyMessage(msg Message) error {
 	return p.processBuildReplyCommon(msg)
 }
 
@@ -86,7 +86,7 @@ func (p *MessageProcessor) processBuildReplyCommon(msg Message) error {
 	}
 
 	RecordExploratoryReplyStage(ExploratoryReplyStageShortReplyDispatched)
-	handler := &ShortTunnelBuildReply{
+	handler := &OutboundTunnelBuildReply{
 		Count:                len(records),
 		BuildResponseRecords: records,
 		RawRecordData:        rawRecords,
@@ -217,7 +217,7 @@ func (p *MessageProcessor) tryCompleteInboundBuild(messageID int, data []byte) (
 		return false, nil
 	}
 
-	handler := &ShortTunnelBuildReply{
+	handler := &OutboundTunnelBuildReply{
 		Count:                len(records),
 		BuildResponseRecords: records,
 		RawRecordData:        rawRecords,
@@ -281,13 +281,13 @@ func (p *MessageProcessor) logParsedBuildRequest(messageID, recordCount int) {
 // i occupied in the message - the reply/forward transform must use it, not the
 // index within this filtered list.
 //
-// Per tunnel-creation-ecies.rst, a hop sends the ShortTunnelBuildReply (type 26)
+// Per tunnel-creation-ecies.rst, a hop sends the OutboundTunnelBuildReply (type 26)
 // only if it is the outbound endpoint (request record flag bit 6); every other
 // hop forwards the transformed build message (type 25) to the next hop. The
 // total record count from rawData determines whether our slot is the last one.
 //
 // inputMessageType is preserved so the reply type maps correctly (type 25
-// ShortTunnelBuild -> type 26 ShortTunnelBuildReply).
+// ShortTunnelBuild -> type 26 OutboundTunnelBuildReply).
 //
 // IMPORTANT: If our router hash has not been set (is zero), NO records are
 // added to the list by tryParseAndAppendRecord, so this function will be called with an
@@ -372,7 +372,7 @@ func (p *MessageProcessor) processSingleBuildRecord(messageID, index int, record
 // TransitTunnels::HandleShortTransitTunnelBuildMsg) branches on
 // TUNNEL_BUILD_RECORD_ENDPOINT_FLAG:
 //   - OBEP set (we are the outbound endpoint): send it back toward the creator
-//     as a ShortTunnelBuildReply (type 26) through the reply routing in our
+//     as a OutboundTunnelBuildReply (type 26) through the reply routing in our
 //     record (NextIdent/NextTunnel = the reply tunnel gateway).
 //   - OBEP clear (a transit/inbound hop): forward the SAME transformed body to
 //     the next hop as a ShortTunnelBuild (type 25) message, so the next hop can
@@ -396,7 +396,7 @@ func (p *MessageProcessor) generateAndSendBuildReply(messageID, index int, recor
 	outgoingID := record.SendMessageID
 
 	// Flag bit 6 (OBEP) marks the outbound endpoint: it is the only hop that
-	// emits a ShortTunnelBuildReply. Every other hop relays the build request.
+	// emits a OutboundTunnelBuildReply. Every other hop relays the build request.
 	if record.Flag&tunnel.FlagOBEP != 0 {
 		if err := p.forwardBuildReply(outgoingID, record, transformed, inputMessageType); err != nil {
 			return oops.Wrapf(err, "failed to forward build reply")
@@ -480,7 +480,7 @@ func (p *MessageProcessor) logBuildReplySuccess(messageID, index int, replyCode 
 	}).Debug("generated and sent build reply successfully")
 }
 
-// buildSTBMReplyMessage assembles the ShortTunnelBuildReply body (type 26):
+// buildSTBMReplyMessage assembles the OutboundTunnelBuildReply body (type 26):
 //
 //	[count:1][slot_0:218][slot_1:218]...[slot_N-1:218]
 //

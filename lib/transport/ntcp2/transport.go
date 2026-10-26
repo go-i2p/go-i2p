@@ -185,6 +185,11 @@ func NewNTCP2Transport(identity router_info.RouterInfo, config *Config, keystore
 
 	transport := buildTransportInstance(config, identity, keystore, ctx, cancel, logger)
 
+	// Make the transport's replay cache the one go-noise consults, so the
+	// mandatory duplicate-handshake cache (ntcp2.rst:547-550) is enforced by the
+	// cache this router owns rather than by an unmanaged process-wide fallback.
+	applyReplayDetector(ntcp2Config, transport.handler)
+
 	if err := setupNetworkListener(transport, config, ntcp2Config); err != nil {
 		cancel()
 		logger.WithError(err).Error("Failed to setup network listener")
@@ -215,6 +220,26 @@ func createNTCP2Config(identity router_info.RouterInfo, cancel context.CancelFun
 		return nil, err
 	}
 	return ntcp2Config, nil
+}
+
+// applyReplayDetector registers the transport's own replay cache as the detector
+// go-noise consults during handshakes.
+//
+// ntcp2.rst:547-550 makes Bob's duplicate-handshake-value cache mandatory ("Bob
+// must maintain a local cache of previously-used handshake values and reject
+// duplicates... Values in the cache must have a lifetime of at least 2*D"), and
+// :554-556 adds "Diffie-Hellman ephemeral keys may never be reused". Without this call the transport
+// constructs a DefaultHandler whose cache is never consulted, and go-noise
+// silently substitutes a process-wide fallback shared by every listener, so the
+// router's per-listener cache and its Close() lifetime are decorative. Passing
+// ours makes the cache this transport owns the one that enforces the rule.
+func applyReplayDetector(ntcp2Config *ntcp2.Config, handler *DefaultHandler) {
+	if ntcp2Config == nil || handler == nil {
+		return
+	}
+	if cache := handler.ReplayCache(); cache != nil {
+		ntcp2Config.WithReplayDetector(cache)
+	}
 }
 
 // initializeCryptoKeys loads or derives NTCP2 cryptographic keys from persistent storage.
@@ -1361,7 +1386,7 @@ func (t *NTCP2Transport) SetRouterInfoRefresher(r transport.RouterInfoRefresher)
 // SetRouterInfoStorer wires a NetDB store so that RouterInfos received from
 // inbound peers during the NTCP2 handshake are persisted locally. This is
 // required for tunnel-build reply routing to work: the OBEP looks up the
-// originator's RouterInfo in the NetDB when delivering a ShortTunnelBuildReply.
+// originator's RouterInfo in the NetDB when delivering a OutboundTunnelBuildReply.
 func (t *NTCP2Transport) SetRouterInfoStorer(s transport.RouterInfoStorer) {
 	t.routerInfoStorer.Store(s)
 }
@@ -1511,6 +1536,9 @@ func (t *NTCP2Transport) SetIdentity(ident router_info.RouterInfo) error {
 	if err != nil {
 		return err
 	}
+	// A fresh config carries no detector; re-apply the transport's cache so an
+	// identity change does not silently fall back to the process-wide one.
+	applyReplayDetector(ntcp2Config, t.handler)
 
 	cfg := t.config.Load()
 	if err := initializeCryptoKeys(ntcp2Config, ident, t.keystore, cfg.WorkingDir, nil); err != nil {
@@ -2223,6 +2251,12 @@ func (t *NTCP2Transport) createNTCP2ConfigForAddress(routerInfo router_info.Rout
 	if err != nil {
 		return nil, WrapNTCP2Error(err, "creating NTCP2 config")
 	}
+	// The initiator side needs one too: ntcp2.rst:879-883 requires Alice to
+	// "maintain a local cache of previously-used handshake values and reject
+	// duplicates", keyed on "the 32-byte Y value (or its encrypted equivalent)",
+	// which is exactly what go-noise checks on message 2 (MSG2_REPLAY). Without
+	// this the per-dial config falls back to the unmanaged process-wide cache.
+	applyReplayDetector(config, t.handler)
 
 	config.WithStaticKey(ourStaticKey)
 	config = config.WithRemoteRouterHash(remoteHash)

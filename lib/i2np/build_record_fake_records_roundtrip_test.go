@@ -259,7 +259,7 @@ func TestReplyHandlerScoresHopsNotWireRecords(t *testing.T) {
 		{Reply: TunnelBuildReplySuccess},
 		{Reply: TunnelBuildReplyPendingDecryption},
 	}
-	handler := &ShortTunnelBuildReply{
+	handler := &OutboundTunnelBuildReply{
 		Count:                len(replies),
 		BuildResponseRecords: replies,
 	}
@@ -279,7 +279,7 @@ func TestSetRepliedHopCountIgnoresBogusValues(t *testing.T) {
 	for i := range replies {
 		replies[i] = BuildResponseRecord{Reply: TunnelBuildReplySuccess}
 	}
-	h := &ShortTunnelBuildReply{Count: 4, BuildResponseRecords: replies}
+	h := &OutboundTunnelBuildReply{Count: 4, BuildResponseRecords: replies}
 
 	h.SetRepliedHopCount(0)
 	require.Equal(t, 4, h.hopRecordCount())
@@ -328,7 +328,7 @@ func testRouterHash() common.Hash {
 }
 
 // TestType26DispatchHandlesPaddedReply drives a padded reply through the real
-// ShortTunnelBuildReply (type 26) dispatch path rather than the simulated relay
+// OutboundTunnelBuildReply (type 26) dispatch path rather than the simulated relay
 // used above: processBuildReplyCommon parses the wire bytes into a handler whose
 // Count is the WIRE record count, then TunnelManager correlates it to the pending
 // build and the ReplyProcessor decrypts and scores it.
@@ -361,7 +361,7 @@ func TestType26DispatchHandlesPaddedReply(t *testing.T) {
 				off += ShortBuildRecordSize
 			}
 
-			msg := NewBaseI2NPMessage(I2NPMessageTypeShortTunnelBuildReply)
+			msg := NewBaseI2NPMessage(I2NPMessageTypeOutboundTunnelBuildReply)
 			const messageID = 4242
 			msg.SetMessageID(messageID)
 			msg.SetData(data)
@@ -398,13 +398,13 @@ func TestType26DispatchHandlesPaddedReply(t *testing.T) {
 			processor := NewMessageProcessor()
 			processor.SetBuildReplyProcessor(recorder)
 
-			require.NoError(t, processor.processShortTunnelBuildReplyMessage(msg),
+			require.NoError(t, processor.processOutboundTunnelBuildReplyMessage(msg),
 				"a padded type-26 reply must process cleanly through the real dispatch")
 
 			// The hops must have been scored in PATH order with their real ret
 			// codes, and the padded slots must not have been scored at all.
-			stb, ok := recorder.handler.(*ShortTunnelBuildReply)
-			require.True(t, ok, "dispatch must build a ShortTunnelBuildReply, got %T", recorder.handler)
+			stb, ok := recorder.handler.(*OutboundTunnelBuildReply)
+			require.True(t, ok, "dispatch must build a OutboundTunnelBuildReply, got %T", recorder.handler)
 			records := stb.GetReplyRecords()
 			require.Len(t, records, f.wireCount,
 				"dispatch must expose every wire slot, including the fake records")

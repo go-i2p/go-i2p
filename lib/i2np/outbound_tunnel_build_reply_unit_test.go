@@ -1,27 +1,27 @@
-// Tests for I2NP ShortTunnelBuildReply message serialization and deserialization.
+// Tests for I2NP OutboundTunnelBuildReply message serialization and deserialization.
 package i2np
 
 import (
 	"testing"
 )
 
-// TestShortTunnelBuildReplyImplementsTunnelReplyHandler verifies interface satisfaction
-func TestShortTunnelBuildReplyImplementsTunnelReplyHandler(t *testing.T) {
-	// This should compile if ShortTunnelBuildReply implements TunnelReplyHandler
-	var _ TunnelReplyHandler = (*ShortTunnelBuildReply)(nil)
+// TestOutboundTunnelBuildReplyImplementsTunnelReplyHandler verifies interface satisfaction
+func TestOutboundTunnelBuildReplyImplementsTunnelReplyHandler(t *testing.T) {
+	// This should compile if OutboundTunnelBuildReply implements TunnelReplyHandler
+	var _ TunnelReplyHandler = (*OutboundTunnelBuildReply)(nil)
 }
 
-// TestNewShortTunnelBuildReply tests the constructor
-func TestNewShortTunnelBuildReply(t *testing.T) {
+// TestNewOutboundTunnelBuildReply tests the constructor
+func TestNewOutboundTunnelBuildReply(t *testing.T) {
 	records := []BuildResponseRecord{
 		createTestBuildResponseRecord(TunnelBuildReplySuccess),
 		createTestBuildResponseRecord(TunnelBuildReplySuccess),
 	}
 
-	reply := NewShortTunnelBuildReply(records)
+	reply := NewOutboundTunnelBuildReply(records)
 
 	if reply == nil {
-		t.Fatal("NewShortTunnelBuildReply returned nil")
+		t.Fatal("NewOutboundTunnelBuildReply returned nil")
 	}
 
 	if reply.Count != 2 {
@@ -33,14 +33,14 @@ func TestNewShortTunnelBuildReply(t *testing.T) {
 	}
 }
 
-// TestShortTunnelBuildReplyGetReplyRecords tests the GetReplyRecords method
-func TestShortTunnelBuildReplyGetReplyRecords(t *testing.T) {
+// TestOutboundTunnelBuildReplyGetReplyRecords tests the GetReplyRecords method
+func TestOutboundTunnelBuildReplyGetReplyRecords(t *testing.T) {
 	records := []BuildResponseRecord{
 		createTestBuildResponseRecord(TunnelBuildReplySuccess),
 		createTestBuildResponseRecord(TunnelBuildReplyProbabilisticReject),
 	}
 
-	reply := NewShortTunnelBuildReply(records)
+	reply := NewOutboundTunnelBuildReply(records)
 	replyRecords := reply.GetReplyRecords()
 
 	if len(replyRecords) != 2 {
@@ -57,30 +57,30 @@ func TestShortTunnelBuildReplyGetReplyRecords(t *testing.T) {
 	}
 }
 
-// TestShortTunnelBuildReplyProcessReplyAllSuccess tests ProcessReply with all hops accepting
-func TestShortTunnelBuildReplyProcessReplyAllSuccess(t *testing.T) {
+// TestOutboundTunnelBuildReplyProcessReplyAllSuccess tests ProcessReply with all hops accepting
+func TestOutboundTunnelBuildReplyProcessReplyAllSuccess(t *testing.T) {
 	records := []BuildResponseRecord{
 		createTestBuildResponseRecord(TunnelBuildReplySuccess),
 		createTestBuildResponseRecord(TunnelBuildReplySuccess),
 		createTestBuildResponseRecord(TunnelBuildReplySuccess),
 	}
 
-	reply := NewShortTunnelBuildReply(records)
+	reply := NewOutboundTunnelBuildReply(records)
 	err := reply.ProcessReply()
 	if err != nil {
 		t.Errorf("ProcessReply should succeed when all hops accept, got error: %v", err)
 	}
 }
 
-// TestShortTunnelBuildReplyProcessReplyWithRejection tests ProcessReply with rejections
-func TestShortTunnelBuildReplyProcessReplyWithRejection(t *testing.T) {
+// TestOutboundTunnelBuildReplyProcessReplyWithRejection tests ProcessReply with rejections
+func TestOutboundTunnelBuildReplyProcessReplyWithRejection(t *testing.T) {
 	records := []BuildResponseRecord{
 		createTestBuildResponseRecord(TunnelBuildReplySuccess),
 		createTestBuildResponseRecord(TunnelBuildReplyProbabilisticReject), // One hop rejects
 		createTestBuildResponseRecord(TunnelBuildReplySuccess),
 	}
 
-	reply := NewShortTunnelBuildReply(records)
+	reply := NewOutboundTunnelBuildReply(records)
 	err := reply.ProcessReply()
 
 	if err == nil {
@@ -93,14 +93,14 @@ func TestShortTunnelBuildReplyProcessReplyWithRejection(t *testing.T) {
 	}
 }
 
-// TestShortTunnelBuildReplyProcessReplyAllRejected tests ProcessReply when all hops reject
-func TestShortTunnelBuildReplyProcessReplyAllRejected(t *testing.T) {
+// TestOutboundTunnelBuildReplyProcessReplyAllRejected tests ProcessReply when all hops reject
+func TestOutboundTunnelBuildReplyProcessReplyAllRejected(t *testing.T) {
 	records := []BuildResponseRecord{
 		createTestBuildResponseRecord(TunnelBuildReplyTransientOverload),
 		createTestBuildResponseRecord(TunnelBuildReplyBandwidth),
 	}
 
-	reply := NewShortTunnelBuildReply(records)
+	reply := NewOutboundTunnelBuildReply(records)
 	err := reply.ProcessReply()
 
 	if err == nil {
@@ -113,9 +113,9 @@ func TestShortTunnelBuildReplyProcessReplyAllRejected(t *testing.T) {
 	}
 }
 
-// TestShortTunnelBuildReplyProcessReplyNoRecords tests ProcessReply with empty records
-func TestShortTunnelBuildReplyProcessReplyNoRecords(t *testing.T) {
-	reply := &ShortTunnelBuildReply{
+// TestOutboundTunnelBuildReplyProcessReplyNoRecords tests ProcessReply with empty records
+func TestOutboundTunnelBuildReplyProcessReplyNoRecords(t *testing.T) {
+	reply := &OutboundTunnelBuildReply{
 		Count:                0,
 		BuildResponseRecords: []BuildResponseRecord{},
 	}
@@ -132,9 +132,9 @@ func TestShortTunnelBuildReplyProcessReplyNoRecords(t *testing.T) {
 	}
 }
 
-// TestShortTunnelBuildReplyProcessReplyCountMismatch tests ProcessReply with count mismatch
-func TestShortTunnelBuildReplyProcessReplyCountMismatch(t *testing.T) {
-	reply := &ShortTunnelBuildReply{
+// TestOutboundTunnelBuildReplyProcessReplyCountMismatch tests ProcessReply with count mismatch
+func TestOutboundTunnelBuildReplyProcessReplyCountMismatch(t *testing.T) {
+	reply := &OutboundTunnelBuildReply{
 		Count: 5, // Claims 5 records
 		BuildResponseRecords: []BuildResponseRecord{
 			createTestBuildResponseRecord(TunnelBuildReplySuccess),
@@ -154,23 +154,23 @@ func TestShortTunnelBuildReplyProcessReplyCountMismatch(t *testing.T) {
 	}
 }
 
-// TestShortTunnelBuildReplyGetRecordCount tests GetRecordCount method
-func TestShortTunnelBuildReplyGetRecordCount(t *testing.T) {
+// TestOutboundTunnelBuildReplyGetRecordCount tests GetRecordCount method
+func TestOutboundTunnelBuildReplyGetRecordCount(t *testing.T) {
 	records := []BuildResponseRecord{
 		createTestBuildResponseRecord(TunnelBuildReplySuccess),
 		createTestBuildResponseRecord(TunnelBuildReplySuccess),
 		createTestBuildResponseRecord(TunnelBuildReplySuccess),
 	}
 
-	reply := NewShortTunnelBuildReply(records)
+	reply := NewOutboundTunnelBuildReply(records)
 
 	if reply.GetRecordCount() != 3 {
 		t.Errorf("Expected GetRecordCount()=3, got %d", reply.GetRecordCount())
 	}
 }
 
-// TestShortTunnelBuildReplyVariousReplyCodes tests handling of various reply codes
-func TestShortTunnelBuildReplyVariousReplyCodes(t *testing.T) {
+// TestOutboundTunnelBuildReplyVariousReplyCodes tests handling of various reply codes
+func TestOutboundTunnelBuildReplyVariousReplyCodes(t *testing.T) {
 	testCases := []struct {
 		name       string
 		replyCode  byte
@@ -189,7 +189,7 @@ func TestShortTunnelBuildReplyVariousReplyCodes(t *testing.T) {
 				createTestBuildResponseRecord(tc.replyCode),
 			}
 
-			reply := NewShortTunnelBuildReply(records)
+			reply := NewOutboundTunnelBuildReply(records)
 			err := reply.ProcessReply()
 
 			if tc.shouldPass && err != nil {

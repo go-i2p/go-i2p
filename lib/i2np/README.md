@@ -79,10 +79,12 @@ const (
 	I2NPMessageTypeTunnelData               = 18
 	I2NPMessageTypeTunnelGateway            = 19
 	I2NPMessageTypeData                     = 20
+	I2NPMessageTypeTunnelBuild              = 21
+	I2NPMessageTypeTunnelBuildReply         = 22
 	I2NPMessageTypeVariableTunnelBuild      = 23
 	I2NPMessageTypeVariableTunnelBuildReply = 24
 	I2NPMessageTypeShortTunnelBuild         = 25
-	I2NPMessageTypeShortTunnelBuildReply    = 26
+	I2NPMessageTypeOutboundTunnelBuildReply = 26
 )
 ```
 I2NP Message Type Constants Moved from: header.go
@@ -286,7 +288,7 @@ func DecryptSTBMRecordReturningChainingKeyAndHash(encrypted [218]byte, privateKe
 DecryptSTBMRecordReturningChainingKeyAndHash performs the same Noise_N
 AEAD-decrypt as DecryptSTBMRecordReturningChainingKey but also returns the
 post-decrypt Noise handshake hash (m_H). The transit hop needs m_H as AEAD
-associated data when constructing its ShortTunnelBuildReply record.
+associated data when constructing its OutboundTunnelBuildReply record.
 
 #### func  DeriveSTBMLayerKeys
 
@@ -314,7 +316,7 @@ chaining key with this exact chain, or tunnel data decryption will fail.
 func DeriveSTBMOBEPGarlicKeyAndTag(postReplyCK [32]byte) ([32]byte, [8]byte, error)
 ```
 DeriveSTBMOBEPGarlicKeyAndTag derives the one-time garlic key and tag that the
-OBEP uses to wrap its ShortTunnelBuildReply, matching i2pd exactly.
+OBEP uses to wrap its OutboundTunnelBuildReply, matching i2pd exactly.
 
 Input: postReplyCK — the Noise chaining key after "SMTunnelReplyKey" HKDF step.
 
@@ -423,7 +425,7 @@ following each hop.
 See i2pd ShortECIESTunnelHopConfig::CreateBuildRequestRecord for the full
 per-hop key derivation chain. Also returns the Noise transcript hash (m_H) after
 EncryptAndHash, which the initiator stores and later uses as AEAD associated
-data when decrypting each hop's ShortTunnelBuildReply record.
+data when decrypting each hop's OutboundTunnelBuildReply record.
 
 #### func  ExtractDataClovePayload
 
@@ -627,8 +629,8 @@ func ValidateRecordCount(countField, recordCount int, tunnelTypeName string) err
 ```
 ValidateRecordCount validates that Count field matches actual record count. L-4
 Consolidation: Shared by variable_tunnel_build_reply.go and
-short_tunnel_build_reply.go. tunnelTypeName is used in log messages (e.g.,
-"VariableTunnelBuildReply", "ShortTunnelBuildReply")
+outbound_tunnel_build_reply.go. tunnelTypeName is used in log messages (e.g.,
+"VariableTunnelBuildReply", "OutboundTunnelBuildReply")
 
 #### func  VerifyIdentityHash
 
@@ -2195,7 +2197,7 @@ func (sm *GarlicSessionManager) RegisterOneTimeGarlicKey(tag [8]byte, key [32]by
 ```
 RegisterOneTimeGarlicKey registers a one-time symmetric garlic key derived from
 a STBM Noise transcript hash via HKDF("AttachLayerEncryption"). The OBEP uses
-this key to wrap the ShortTunnelBuildReply garlic; it is consumed on first use
+this key to wrap the OutboundTunnelBuildReply garlic; it is consumed on first use
 and never reused.
 
 tag is garlicKeyMaterial[24:32], key is garlicKeyMaterial[0:32].
@@ -2921,7 +2923,7 @@ reply records, validates responses, and updates tunnel state.
 The handler parameter should be one of:
 
     - *VariableTunnelBuildReply (1-8 hops)
-    - *ShortTunnelBuildReply (1-8 hops, modern STBM format)
+    - *OutboundTunnelBuildReply (1-8 hops, modern STBM format)
 
 Returns nil on successful build, error otherwise.
 
@@ -2956,7 +2958,7 @@ func (rp *ReplyProcessor) SetPendingBuildNoiseHashes(tunnelID buildrecord.Tunnel
 SetPendingBuildNoiseHashes stores the per-hop Noise transcript hashes for an
 in-progress STBM build. These are the m_H values (Noise handshake hash after
 EncryptAndHash) needed as AEAD associated data when decrypting each hop's
-ShortTunnelBuildReply record. Must be called immediately after
+OutboundTunnelBuildReply record. Must be called immediately after
 RegisterPendingBuild.
 
 #### func (*ReplyProcessor) SetRetryCallback
@@ -3091,52 +3093,52 @@ func (s *ShortTunnelBuild) GetRecordCount() int
 ```
 GetRecordCount returns the number of build records.
 
-#### type ShortTunnelBuildReply
+#### type OutboundTunnelBuildReply
 
 ```go
-type ShortTunnelBuildReply struct {
+type OutboundTunnelBuildReply struct {
 	Count                int
 	BuildResponseRecords []BuildResponseRecord
 	RawRecordData        [][]byte // Original encrypted bytes before parsing
 }
 ```
 
-ShortTunnelBuildReply represents an I2NP ShortTunnelBuildReply message, the
+OutboundTunnelBuildReply represents an I2NP OutboundTunnelBuildReply message, the
 reply counterpart to ShortTunnelBuild containing compact build response records.
 
-#### func  NewShortTunnelBuildReply
+#### func  NewOutboundTunnelBuildReply
 
 ```go
-func NewShortTunnelBuildReply(records []BuildResponseRecord) *ShortTunnelBuildReply
+func NewOutboundTunnelBuildReply(records []BuildResponseRecord) *OutboundTunnelBuildReply
 ```
-NewShortTunnelBuildReply creates a new ShortTunnelBuildReply
+NewOutboundTunnelBuildReply creates a new OutboundTunnelBuildReply
 
-#### func (*ShortTunnelBuildReply) GetRawReplyRecords
+#### func (*OutboundTunnelBuildReply) GetRawReplyRecords
 
 ```go
-func (s *ShortTunnelBuildReply) GetRawReplyRecords() [][]byte
+func (s *OutboundTunnelBuildReply) GetRawReplyRecords() [][]byte
 ```
 GetRawReplyRecords returns the original encrypted record bytes.
 
-#### func (*ShortTunnelBuildReply) GetRecordCount
+#### func (*OutboundTunnelBuildReply) GetRecordCount
 
 ```go
-func (s *ShortTunnelBuildReply) GetRecordCount() int
+func (s *OutboundTunnelBuildReply) GetRecordCount() int
 ```
 GetRecordCount returns the number of response records
 
-#### func (*ShortTunnelBuildReply) GetReplyRecords
+#### func (*OutboundTunnelBuildReply) GetReplyRecords
 
 ```go
-func (s *ShortTunnelBuildReply) GetReplyRecords() []BuildResponseRecord
+func (s *OutboundTunnelBuildReply) GetReplyRecords() []BuildResponseRecord
 ```
 GetReplyRecords returns the build response records (TunnelReplyHandler
 interface)
 
-#### func (*ShortTunnelBuildReply) ProcessReply
+#### func (*OutboundTunnelBuildReply) ProcessReply
 
 ```go
-func (s *ShortTunnelBuildReply) ProcessReply() error
+func (s *OutboundTunnelBuildReply) ProcessReply() error
 ```
 ProcessReply processes the short tunnel build reply by analyzing each response
 record. Similar to VariableTunnelBuildReply but specifically for short tunnel

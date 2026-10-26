@@ -83,25 +83,25 @@ func TestTunnelBuildReply_ProcessReply_HashMismatchRejected(t *testing.T) {
 	// Corrupt the second record's hash so it no longer covers RandomData||Reply.
 	records[1].Hash[0] ^= 0xFF
 
-	reply := &ShortTunnelBuildReply{Count: 2, BuildResponseRecords: records}
+	reply := &OutboundTunnelBuildReply{Count: 2, BuildResponseRecords: records}
 
 	err := reply.ProcessReply()
 	assert.Error(t, err, "a populated but mismatched record hash must fail integrity")
 	assert.Contains(t, err.Error(), "hash mismatch")
 }
 
-// TestShortTunnelBuildReplyExtra_ProcessReply_AllSuccess tests successful short tunnel build
-func TestShortTunnelBuildReplyExtra_ProcessReply_AllSuccess(t *testing.T) {
-	reply := createSuccessfulShortTunnelBuildReply(3)
+// TestOutboundTunnelBuildReplyExtra_ProcessReply_AllSuccess tests successful short tunnel build
+func TestOutboundTunnelBuildReplyExtra_ProcessReply_AllSuccess(t *testing.T) {
+	reply := createSuccessfulOutboundTunnelBuildReply(3)
 
 	err := reply.ProcessReply()
 
 	assert.NoError(t, err, "ProcessReply should succeed when all hops accept")
 }
 
-// TestShortTunnelBuildReplyExtra_ProcessReply_CountMismatch tests count field validation
-func TestShortTunnelBuildReplyExtra_ProcessReply_CountMismatch(t *testing.T) {
-	reply := createSuccessfulShortTunnelBuildReply(3)
+// TestOutboundTunnelBuildReplyExtra_ProcessReply_CountMismatch tests count field validation
+func TestOutboundTunnelBuildReplyExtra_ProcessReply_CountMismatch(t *testing.T) {
+	reply := createSuccessfulOutboundTunnelBuildReply(3)
 	reply.Count = 5 // Mismatch with actual record count
 
 	err := reply.ProcessReply()
@@ -110,9 +110,9 @@ func TestShortTunnelBuildReplyExtra_ProcessReply_CountMismatch(t *testing.T) {
 	assert.Contains(t, err.Error(), "count mismatch")
 }
 
-// TestShortTunnelBuildReplyExtra_ProcessReply_EmptyRecords tests handling of empty tunnel
-func TestShortTunnelBuildReplyExtra_ProcessReply_EmptyRecords(t *testing.T) {
-	reply := &ShortTunnelBuildReply{
+// TestOutboundTunnelBuildReplyExtra_ProcessReply_EmptyRecords tests handling of empty tunnel
+func TestOutboundTunnelBuildReplyExtra_ProcessReply_EmptyRecords(t *testing.T) {
+	reply := &OutboundTunnelBuildReply{
 		Count:                0,
 		BuildResponseRecords: []BuildResponseRecord{},
 	}
@@ -123,9 +123,9 @@ func TestShortTunnelBuildReplyExtra_ProcessReply_EmptyRecords(t *testing.T) {
 	assert.Contains(t, err.Error(), "no response records")
 }
 
-// TestShortTunnelBuildReplyExtra_ProcessReply_MixedResponses tests short tunnel with mixed responses
-func TestShortTunnelBuildReplyExtra_ProcessReply_MixedResponses(t *testing.T) {
-	reply := createMixedShortTunnelBuildReply(4)
+// TestOutboundTunnelBuildReplyExtra_ProcessReply_MixedResponses tests short tunnel with mixed responses
+func TestOutboundTunnelBuildReplyExtra_ProcessReply_MixedResponses(t *testing.T) {
+	reply := createMixedOutboundTunnelBuildReply(4)
 
 	err := reply.ProcessReply()
 
@@ -133,9 +133,9 @@ func TestShortTunnelBuildReplyExtra_ProcessReply_MixedResponses(t *testing.T) {
 	assert.Contains(t, err.Error(), "short tunnel build failed")
 }
 
-// TestShortTunnelBuildReplyExtra_ProcessReply_SingleHop tests single hop short tunnel
-func TestShortTunnelBuildReplyExtra_ProcessReply_SingleHop(t *testing.T) {
-	reply := createSuccessfulShortTunnelBuildReply(1)
+// TestOutboundTunnelBuildReplyExtra_ProcessReply_SingleHop tests single hop short tunnel
+func TestOutboundTunnelBuildReplyExtra_ProcessReply_SingleHop(t *testing.T) {
+	reply := createSuccessfulOutboundTunnelBuildReply(1)
 
 	err := reply.ProcessReply()
 
@@ -148,7 +148,7 @@ func TestShortTunnelBuildReplyExtra_ProcessReply_SingleHop(t *testing.T) {
 // integrity comes from the ChaCha20-Poly1305 tag on the 218-byte encrypted
 // slot (tunnel-creation-ecies.rst:729-741, :758-770).
 func TestVerifyRecordIntegrity_ShortPathIsNoop(t *testing.T) {
-	reply := &ShortTunnelBuildReply{}
+	reply := &OutboundTunnelBuildReply{}
 	short := BuildResponseRecord{Reply: byte(TunnelBuildReplySuccess)}
 	require.NoError(t, reply.verifyRecordIntegrity(0, short),
 		"a short reply record with no hash must pass (AEAD provides integrity)")
@@ -158,7 +158,7 @@ func TestVerifyRecordIntegrity_ShortPathIsNoop(t *testing.T) {
 // long-record hash rule enforced for any record that does carry a hash, so the
 // integrity check a peer would expect is not silently dropped.
 func TestVerifyRecordIntegrity_LongLayoutStillVerified(t *testing.T) {
-	reply := &ShortTunnelBuildReply{}
+	reply := &OutboundTunnelBuildReply{}
 
 	randomData := [495]byte{}
 	for i := range randomData {
@@ -178,7 +178,7 @@ func TestVerifyRecordIntegrity_LongLayoutStillVerified(t *testing.T) {
 
 // TestProcessHopResponse_AllReplyCodes tests processing of all defined reply codes
 func TestProcessHopResponse_AllReplyCodes(t *testing.T) {
-	reply := &ShortTunnelBuildReply{}
+	reply := &OutboundTunnelBuildReply{}
 
 	testCases := []struct {
 		replyCode     byte
@@ -216,13 +216,13 @@ func TestProcessHopResponse_AllReplyCodes(t *testing.T) {
 
 // TestTunnelReplyHandler_InterfaceCompliance tests interface satisfaction
 func TestTunnelReplyHandler_InterfaceCompliance(t *testing.T) {
-	// Test ShortTunnelBuildReply interface compliance
-	var variableHandler TunnelReplyHandler = &ShortTunnelBuildReply{}
-	assert.NotNil(t, variableHandler, "ShortTunnelBuildReply should implement TunnelReplyHandler")
+	// Test OutboundTunnelBuildReply interface compliance
+	var variableHandler TunnelReplyHandler = &OutboundTunnelBuildReply{}
+	assert.NotNil(t, variableHandler, "OutboundTunnelBuildReply should implement TunnelReplyHandler")
 
 	variableRecords := variableHandler.GetReplyRecords()
-	assert.Equal(t, 0, len(variableRecords), "Empty ShortTunnelBuildReply should return 0 records")
+	assert.Equal(t, 0, len(variableRecords), "Empty OutboundTunnelBuildReply should return 0 records")
 
 	err := variableHandler.ProcessReply()
-	assert.Error(t, err, "Empty ShortTunnelBuildReply should fail processing")
+	assert.Error(t, err, "Empty OutboundTunnelBuildReply should fail processing")
 }

@@ -150,27 +150,32 @@ func findSSU2IntroKey(addresses []*router_address.RouterAddress) []byte {
 }
 
 // extractAndDecodeIntroKey extracts and decodes the introduction key from a router address.
+//
+// The decode itself is delegated to go-noise (ssu2.IntroKeyFromRouterAddress),
+// which owns the SSU2 wire semantics for the "i" parameter: it requires the
+// value to be present, decodes it with the I2P Base64 alphabet, and enforces the
+// 32-byte length. Keeping a private copy here meant two implementations of the
+// same rule could drift — go-i2p previously accepted any 32-byte decode while
+// saying nothing about the empty/missing cases go-noise rejects.
+//
+// go-i2p reads the option through common's InitializationVectorString() (the "i"
+// option key), then hands the options map to upstream so the parsing rule lives
+// in one place.
 func extractAndDecodeIntroKey(addr *router_address.RouterAddress) []byte {
-	ivStr := addr.InitializationVectorString()
-	if ivStr == nil {
+	if addr.TransportOptions == nil {
 		return nil
 	}
-
-	encoded, err := ivStr.Data()
+	mapping := addr.Options()
+	options, err := mapping.ToGoMap()
 	if err != nil {
 		return nil
 	}
-
-	raw, err := i2pbase64.DecodeString(encoded)
+	introKey, err := ssu2noise.IntroKeyFromRouterAddress(options)
 	if err != nil {
+		log.WithField("error", err.Error()).Debug("Rejected SSU2 introduction key option")
 		return nil
 	}
-
-	if len(raw) != 32 {
-		return nil
-	}
-
-	return raw
+	return introKey
 }
 
 // resolveUDPAddress extracts host and port from a RouterAddress and resolves to a UDP address.

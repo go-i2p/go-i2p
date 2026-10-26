@@ -984,7 +984,7 @@ func (t *NTCP2Transport) SetRouterInfoStorer(s transport.RouterInfoStorer)
 SetRouterInfoStorer wires a NetDB store so that RouterInfos received from
 inbound peers during the NTCP2 handshake are persisted locally. This is required
 for tunnel-build reply routing to work: the OBEP looks up the originator's
-RouterInfo in the NetDB when delivering a ShortTunnelBuildReply.
+RouterInfo in the NetDB when delivering a OutboundTunnelBuildReply.
 
 #### func (*NTCP2Transport) UpdateLocalRouterInfo
 

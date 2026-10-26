@@ -625,21 +625,39 @@ func (p *MessageProcessor) processMessageDispatch(msg Message, depth int) error 
 	case I2NPMessageTypeShortTunnelBuild:
 		return p.processShortTunnelBuildMessage(msg)
 	case I2NPMessageTypeOutboundTunnelBuildReply:
-		return p.processShortTunnelBuildReplyMessage(msg)
-	case I2NPMessageTypeVariableTunnelBuild, I2NPMessageTypeVariableTunnelBuildReply:
-		// The 528-byte build records these message types carry are deprecated
-		// by the I2P specification in both of their variants: the ElGamal
-		// record ("DEPRECATED, only used in the current network when a tunnel
-		// contains an ElGamal router"; ElGamal routers themselves deprecated as
-		// of 0.9.58) and the ECIES long record ("NOTE: Deprecated, obsolete.
-		// Use the Short Record format specified below"). Current routers build
-		// tunnels with ShortTunnelBuild / OutboundTunnelBuildReply (types 25/26)
-		// and 218-byte ECIES short records, so the long-record message pair is
-		// unsupported and dropped.
+		return p.processOutboundTunnelBuildReplyMessage(msg)
+	case I2NPMessageTypeTunnelBuild, I2NPMessageTypeTunnelBuildReply,
+		I2NPMessageTypeVariableTunnelBuild, I2NPMessageTypeVariableTunnelBuildReply:
+		// These four build messages carry only 528-byte BuildRequest/Response
+		// records (i2np.rst:1568-1570 for type 21, :1628 for type 23), and both
+		// 528-byte record formats are deprecated: the ElGamal record at
+		// i2np.rst:267-269 ("DEPRECATED, only used in the current network when a
+		// tunnel contains an ElGamal router") and the ECIES long record at
+		// tunnel-creation-ecies.rst:141 ("NOTE: Deprecated, obsolete. Use the
+		// Short Record format specified below"). Upstream go-i2p/crypto rejects
+		// long records outright (tunnel/buildkeys.go checkBuild*Size), so there
+		// is no record layer here to build on.
+		//
+		// This is NOT a claim that the messages themselves are optional. For
+		// 21/22 the specification contradicts its own registry: the normative
+		// Notes say they "may still be used for very long tunnels, and has not
+		// been deprecated. Routers must implement." (i2np.rst:1581-1583,
+		// :1607-1609), and 23/24 are not labelled deprecated at all
+		// (i2np.rst:693-694 gives their *Since* version). Dropping all four is a
+		// known, deliberate capability gap: this router can neither build
+		// through an ElGamal hop nor accept a build from one, so any tunnel
+		// containing such a router fails. See the "Tunnel build message coverage
+		// (known gap)" section of this package's doc.go.
+		//
+		// The message is dropped without an error, matching how unrecognised
+		// experimental types are handled below. Returning an error here would
+		// log at Error level and misreport a defined message type as "unknown",
+		// which is a noisier and more fingerprintable deviation from a
+		// conforming router than silently discarding it.
 		log.WithFields(logger.Fields{
 			"at":           "processMessageDispatch",
 			"message_type": messageType,
-		}).Debug("Dropping deprecated 528-byte tunnel build message")
+		}).Debug("Dropping 528-byte tunnel build message (long-record formats unsupported)")
 		return nil
 	default:
 		// Per I2P spec, message types 224-254 are reserved for experimental use.

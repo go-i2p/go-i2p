@@ -63,7 +63,7 @@ func TestProcessUncorrelatedReply_LateVTBReclassifiesExpireToReject(t *testing.T
 	assert.Equal(t, float64(1), tm.GetBuildRejectCount(windowMs))
 }
 
-// Validates that a late ShortTunnelBuildReply for an expired build is skipped
+// Validates that a late OutboundTunnelBuildReply for an expired build is skipped
 // without decryption, keeping the original expiration count.
 func TestProcessUncorrelatedReply_LateShortBuildSkipped(t *testing.T) {
 	tm := NewTunnelManager(&SimpleMockPeerSelector{})
@@ -88,7 +88,7 @@ func TestProcessUncorrelatedReply_LateShortBuildSkipped(t *testing.T) {
 	assert.Equal(t, before+1, SnapshotExploratoryReplyStages()["late_reply_short_build_skipped"])
 }
 
-// Validates that a late ShortTunnelBuildReply is decrypted best-effort with the
+// Validates that a late OutboundTunnelBuildReply is decrypted best-effort with the
 // stored reply keys and reclassified from an expiration to a success.
 func TestProcessUncorrelatedReply_LateShortBuildBestEffortDecryptReclassifies(t *testing.T) {
 	tm := NewTunnelManager(&SimpleMockPeerSelector{})
@@ -105,7 +105,7 @@ func TestProcessUncorrelatedReply_LateShortBuildBestEffortDecryptReclassifies(t 
 	}
 
 	encrypted := makeEncryptedSTBMReplySlotForTest(t, key, noiseHash, 0, TunnelBuildReplySuccess)
-	handler := &ShortTunnelBuildReply{
+	handler := &OutboundTunnelBuildReply{
 		Count:                1,
 		BuildResponseRecords: []BuildResponseRecord{{Reply: TunnelBuildReplyProbabilisticReject}},
 		RawRecordData:        [][]byte{encrypted},

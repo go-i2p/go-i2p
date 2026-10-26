@@ -20,10 +20,13 @@
 // ECIES-X25519 router at version 0.9.51 or newer
 // (tunnel-creation-ecies.rst:538-539).
 //
-// The three 528-byte-record build messages are NOT handled: TunnelBuild (21),
+// The four 528-byte-record build messages are NOT handled: TunnelBuild (21),
 // TunnelBuildReply (22), VariableTunnelBuild (23) and VariableTunnelBuildReply
-// (24). Types 23/24 are dropped in the message dispatch; types 21/22 have no
-// implementation at all, so they fall through to the unknown-type path.
+// (24). All four are recognised by the message dispatch and dropped there with
+// a debug-level log; none is parsed, so no record of a build or reply in the
+// long format is ever read. (The types are declared in constants.go precisely
+// so that they are dropped as the defined messages they are rather than
+// reported as "unknown message type".)
 //
 // This is a deliberate scope decision, not a specification allowance, and it
 // should not be read as "these messages are deprecated". Two caveats matter to

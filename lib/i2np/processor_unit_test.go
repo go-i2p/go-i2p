@@ -505,7 +505,7 @@ func TestSetBuildReplyProcessor(t *testing.T) {
 func TestProcessBuildReplyCommon_NoProcessor(t *testing.T) {
 	processor := NewMessageProcessor()
 
-	msg := NewBaseI2NPMessage(I2NPMessageTypeShortTunnelBuildReply)
+	msg := NewBaseI2NPMessage(I2NPMessageTypeOutboundTunnelBuildReply)
 	err := processor.processBuildReplyCommon(msg)
 	assert.NoError(t, err) // Should succeed silently (logged + discarded)
 }
@@ -516,7 +516,7 @@ func TestProcessBuildReplyCommon_EmptyData(t *testing.T) {
 	proc := &mockBuildReplyProcessor{}
 	processor.SetBuildReplyProcessor(proc)
 
-	msg := NewBaseI2NPMessage(I2NPMessageTypeShortTunnelBuildReply)
+	msg := NewBaseI2NPMessage(I2NPMessageTypeOutboundTunnelBuildReply)
 	// No data set on message
 	err := processor.processBuildReplyCommon(msg)
 	assert.Error(t, err)
@@ -529,7 +529,7 @@ func TestProcessBuildReplyCommon_InvalidRecordCount(t *testing.T) {
 	proc := &mockBuildReplyProcessor{}
 	processor.SetBuildReplyProcessor(proc)
 
-	msg := NewBaseI2NPMessage(I2NPMessageTypeShortTunnelBuildReply)
+	msg := NewBaseI2NPMessage(I2NPMessageTypeOutboundTunnelBuildReply)
 	msg.SetData([]byte{0}) // record count 0 is invalid
 	err := processor.processBuildReplyCommon(msg)
 	assert.Error(t, err)
@@ -545,7 +545,7 @@ func TestProcessBuildReplyCommon_ShortReply_EncryptedSlots(t *testing.T) {
 	proc := &mockBuildReplyProcessor{}
 	processor.SetBuildReplyProcessor(proc)
 
-	msg := NewBaseI2NPMessage(I2NPMessageTypeShortTunnelBuildReply)
+	msg := NewBaseI2NPMessage(I2NPMessageTypeOutboundTunnelBuildReply)
 	msg.SetMessageID(12345)
 
 	data := make([]byte, 1+ShortBuildRecordSize)
@@ -557,9 +557,9 @@ func TestProcessBuildReplyCommon_ShortReply_EncryptedSlots(t *testing.T) {
 	assert.True(t, proc.called)
 	assert.Equal(t, 12345, proc.messageID)
 
-	handler, ok := proc.handler.(*ShortTunnelBuildReply)
+	handler, ok := proc.handler.(*OutboundTunnelBuildReply)
 	if !ok {
-		t.Fatalf("expected *ShortTunnelBuildReply handler, got %T", proc.handler)
+		t.Fatalf("expected *OutboundTunnelBuildReply handler, got %T", proc.handler)
 	}
 
 	assert.Equal(t, 1, handler.Count)
@@ -572,13 +572,13 @@ func TestProcessBuildReplyCommon_ShortReply_EncryptedSlots(t *testing.T) {
 }
 
 // TestProcessMessageDispatch_ShortReply_EncryptedSlots verifies dispatch path
-// integration for ShortTunnelBuildReply parsing with 218-byte records.
+// integration for OutboundTunnelBuildReply parsing with 218-byte records.
 func TestProcessMessageDispatch_ShortReply_EncryptedSlots(t *testing.T) {
 	processor := NewMessageProcessor()
 	proc := &mockBuildReplyProcessor{}
 	processor.SetBuildReplyProcessor(proc)
 
-	msg := NewBaseI2NPMessage(I2NPMessageTypeShortTunnelBuildReply)
+	msg := NewBaseI2NPMessage(I2NPMessageTypeOutboundTunnelBuildReply)
 	msg.SetMessageID(777)
 	data := make([]byte, 1+ShortBuildRecordSize)
 	data[0] = 1
@@ -599,7 +599,7 @@ func TestProcessMessageDispatch_TunnelBuildReply(t *testing.T) {
 	// Test that reply types no longer return "unknown message type"
 	for _, msgType := range []int{
 		I2NPMessageTypeVariableTunnelBuildReply,
-		I2NPMessageTypeShortTunnelBuildReply,
+		I2NPMessageTypeOutboundTunnelBuildReply,
 	} {
 		msg := NewBaseI2NPMessage(msgType)
 		// Even with no data, it should not return "unknown message type"

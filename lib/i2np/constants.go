@@ -27,6 +27,19 @@ const (
 	I2NPMessageTypeTunnelGateway = 19
 	// I2NPMessageTypeData is the type for Data messages.
 	I2NPMessageTypeData = 20
+	// I2NPMessageTypeTunnelBuild is the type for TunnelBuild messages.
+	// Declared so the router can recognise the message and drop it with an
+	// accurate log instead of reporting a defined type as "unknown"; the
+	// 528-byte records it carries are not implemented (see the "Tunnel build
+	// message coverage (known gap)" section of doc.go and the dispatch note in
+	// processor.go). i2np.rst:691 lists the type, and :1581-1583 states it "has
+	// not been deprecated. Routers must implement."
+	I2NPMessageTypeTunnelBuild = 21
+	// I2NPMessageTypeTunnelBuildReply is the type for TunnelBuildReply
+	// messages, the reply counterpart of I2NPMessageTypeTunnelBuild. Declared
+	// for the same reason; i2np.rst:1607-1609 carries the same "Routers must
+	// implement." sentence.
+	I2NPMessageTypeTunnelBuildReply = 22
 	// I2NPMessageTypeVariableTunnelBuild is the type for VariableTunnelBuild messages.
 	I2NPMessageTypeVariableTunnelBuild = 23
 	// I2NPMessageTypeVariableTunnelBuildReply is the type for VariableTunnelBuildReply messages.
@@ -35,22 +48,16 @@ const (
 	I2NPMessageTypeShortTunnelBuild = 25
 	// I2NPMessageTypeOutboundTunnelBuildReply is the type for
 	// OutboundTunnelBuildReply messages — the reply that travels back over the
-	// outbound tunnel. The specification names this message
-	// OutboundTunnelBuildReply (i2np.rst:696, :1721); there is no
-	// "ShortTunnelBuildReply" in the spec.
+	// outbound tunnel. This is the specification name (i2np.rst:696, :1721).
+	// The earlier name for this constant,
+	// I2NPMessageTypeShortTunnelBuildReply, was removed rather than kept as an
+	// alias: no "ShortTunnelBuildReply" exists in the I2P specification, and
+	// tunnel-creation-ecies.rst:537 describes the pair as "Short Tunnel Build
+	// Message (type 25) and Outbound Tunnel Build Reply Message (type 26)".
+	// The outbound direction is the semantic distinction, so the non-spec name
+	// actively misleads a reader into looking for a "short" reply variant.
 	I2NPMessageTypeOutboundTunnelBuildReply = 26
 )
-
-// I2NPMessageTypeShortTunnelBuildReply is a deprecated alias of
-// [I2NPMessageTypeOutboundTunnelBuildReply]. The name does not exist in the
-// I2P specification: i2np.rst:696 and :1721 call type 26
-// OutboundTunnelBuildReply, and tunnel-creation-ecies.rst:537 describes the
-// pair as "Short Tunnel Build Message (type 25) and Outbound Tunnel Build
-// Reply Message (type 26)". The alias is retained for API compatibility and
-// will be removed in a future release.
-//
-// Deprecated: use I2NPMessageTypeOutboundTunnelBuildReply.
-const I2NPMessageTypeShortTunnelBuildReply = I2NPMessageTypeOutboundTunnelBuildReply
 
 // I2NP Error Constants
 // These use errors.New (not oops.Errorf) so callers can match them with errors.Is().

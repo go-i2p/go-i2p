@@ -1,7 +1,7 @@
 // Tests for C2: STBM build-message telescoping and per-hop forwarding.
 //
 // Per tunnel-creation-ecies.rst ("Message Flow"), only the outbound endpoint
-// (OBEP) hop emits a ShortTunnelBuildReply (type 26); every other hop relays
+// (OBEP) hop emits a OutboundTunnelBuildReply (type 26); every other hop relays
 // the transformed build message (type 25) to the next hop. The outgoing I2NP
 // message ID is the record's own "next message ID" field (bytes 52-55), not
 // the ID the message arrived with.
@@ -180,7 +180,7 @@ func TestTryCompleteInboundBuild_ConsumesOwnReplySet(t *testing.T) {
 	require.Len(t, proc.calls, 1)
 	assert.Equal(t, 4242, proc.calls[0], "correlated by the relayed message ID")
 
-	handler, ok := proc.handlers[0].(*ShortTunnelBuildReply)
+	handler, ok := proc.handlers[0].(*OutboundTunnelBuildReply)
 	require.True(t, ok)
 	assert.Equal(t, 3, handler.GetRecordCount())
 	require.Len(t, handler.GetRawReplyRecords(), 3, "raw ciphertext preserved for deferred decryption")

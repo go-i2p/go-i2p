@@ -35,12 +35,12 @@ func TestShortTunnelBuild(t *testing.T) {
 	}
 }
 
-// TestShortTunnelBuildReply tests Short Tunnel Build Reply message creation
-func TestShortTunnelBuildReply(t *testing.T) {
+// TestOutboundTunnelBuildReply tests Short Tunnel Build Reply message creation
+func TestOutboundTunnelBuildReply(t *testing.T) {
 	// Create test response records
 	records := make([]BuildResponseRecord, 3)
 
-	reply := NewShortTunnelBuildReply(records)
+	reply := NewOutboundTunnelBuildReply(records)
 
 	if reply == nil {
 		t.Fatal("expected non-nil reply")
@@ -77,8 +77,8 @@ func TestMessageTypeConstants(t *testing.T) {
 		t.Errorf("SHORT_TUNNEL_BUILD should be 25, got %d", I2NPMessageTypeShortTunnelBuild)
 	}
 
-	if I2NPMessageTypeShortTunnelBuildReply != 26 {
-		t.Errorf("SHORT_TUNNEL_BUILD_REPLY should be 26, got %d", I2NPMessageTypeShortTunnelBuildReply)
+	if I2NPMessageTypeOutboundTunnelBuildReply != 26 {
+		t.Errorf("SHORT_TUNNEL_BUILD_REPLY should be 26, got %d", I2NPMessageTypeOutboundTunnelBuildReply)
 	}
 }
 

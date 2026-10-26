@@ -61,7 +61,7 @@ func TestTunnelManager_ProcessTunnelReply_VariableTunnel(t *testing.T) {
 	tm := NewTunnelManager(peerSelector)
 
 	// Create a successful variable tunnel build reply
-	reply := createSuccessfulShortTunnelBuildReply(3)
+	reply := createSuccessfulOutboundTunnelBuildReply(3)
 
 	// Process the reply
 	err := tm.ProcessTunnelReply(reply, 34567)

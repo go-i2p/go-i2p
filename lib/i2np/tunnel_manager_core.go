@@ -68,7 +68,7 @@ type TunnelManager struct {
 	stopOnce         sync.Once             // Ensures Stop() is idempotent (no double-close panic)
 	replyProcessor   *ReplyProcessor       // Handles reply decryption and processing
 	// garlicKeyRegistrar receives one-time garlic keys derived from STBM Noise
-	// transcript hashes so that incoming ShortTunnelBuildReply garlic messages
+	// transcript hashes so that incoming OutboundTunnelBuildReply garlic messages
 	// can be decrypted. Set via SetGarlicKeyRegistrar after construction.
 	garlicKeyRegistrar GarlicKeyRegistrar
 

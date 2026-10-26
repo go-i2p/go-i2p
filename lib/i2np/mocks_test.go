@@ -287,7 +287,7 @@ func createTestBuildRequestRecord(t interface{ Helper() }) BuildRequestRecord {
 		ReplyKey:      replyKey,
 		ReplyIV:       replyIV,
 		// OBEP by default: the reply-generation tests exercise the endpoint
-		// branch (send a type-26 ShortTunnelBuildReply). Transit-relay tests
+		// branch (send a type-26 OutboundTunnelBuildReply). Transit-relay tests
 		// clear this flag explicitly.
 		Flag:          tunnel.FlagOBEP,
 		RequestTime:   time.Now(),
@@ -298,31 +298,31 @@ func createTestBuildRequestRecord(t interface{ Helper() }) BuildRequestRecord {
 
 // --- Shared helpers: tunnel build reply factories ---
 //
-// These factories build ShortTunnelBuildReply values (the modern reply
+// These factories build OutboundTunnelBuildReply values (the modern reply
 // type, type 24) so the reply-handler tests exercise the shared
 // processReplySteps path. The deprecated fixed 8-record TunnelBuildReply
 // (type 22) has been removed.
 
 // createSuccessfulTunnelBuildReply creates a reply where all hops accepted
-func createSuccessfulTunnelBuildReply() *ShortTunnelBuildReply {
+func createSuccessfulTunnelBuildReply() *OutboundTunnelBuildReply {
 	records := make([]BuildResponseRecord, 8)
 	for i := range records {
 		records[i] = createValidResponseRecordWithReply(TunnelBuildReplySuccess)
 	}
-	return &ShortTunnelBuildReply{Count: 8, BuildResponseRecords: records}
+	return &OutboundTunnelBuildReply{Count: 8, BuildResponseRecords: records}
 }
 
 // createRejectedTunnelBuildReply creates a reply where all hops rejected
-func createRejectedTunnelBuildReply() *ShortTunnelBuildReply {
+func createRejectedTunnelBuildReply() *OutboundTunnelBuildReply {
 	records := make([]BuildResponseRecord, 8)
 	for i := range records {
 		records[i] = createValidResponseRecordWithReply(TunnelBuildReplyProbabilisticReject)
 	}
-	return &ShortTunnelBuildReply{Count: 8, BuildResponseRecords: records}
+	return &OutboundTunnelBuildReply{Count: 8, BuildResponseRecords: records}
 }
 
 // createMixedTunnelBuildReply creates a reply with mixed responses
-func createMixedTunnelBuildReply() *ShortTunnelBuildReply {
+func createMixedTunnelBuildReply() *OutboundTunnelBuildReply {
 	replyCodes := []byte{
 		TunnelBuildReplySuccess,
 		TunnelBuildReplySuccess,
@@ -337,11 +337,11 @@ func createMixedTunnelBuildReply() *ShortTunnelBuildReply {
 	for i, replyCode := range replyCodes {
 		records[i] = createValidResponseRecordWithReply(replyCode)
 	}
-	return &ShortTunnelBuildReply{Count: len(records), BuildResponseRecords: records}
+	return &OutboundTunnelBuildReply{Count: len(records), BuildResponseRecords: records}
 }
 
 // createSingleFailureTunnelBuildReply creates a reply with one failure
-func createSingleFailureTunnelBuildReply() *ShortTunnelBuildReply {
+func createSingleFailureTunnelBuildReply() *OutboundTunnelBuildReply {
 	records := make([]BuildResponseRecord, 8)
 	for i := range records {
 		if i == 3 {
@@ -350,11 +350,11 @@ func createSingleFailureTunnelBuildReply() *ShortTunnelBuildReply {
 			records[i] = createValidResponseRecordWithReply(TunnelBuildReplySuccess)
 		}
 	}
-	return &ShortTunnelBuildReply{Count: 8, BuildResponseRecords: records}
+	return &OutboundTunnelBuildReply{Count: 8, BuildResponseRecords: records}
 }
 
 // createUnknownReplyCodeTunnelBuildReply creates a reply with unknown reply code
-func createUnknownReplyCodeTunnelBuildReply() *ShortTunnelBuildReply {
+func createUnknownReplyCodeTunnelBuildReply() *OutboundTunnelBuildReply {
 	records := make([]BuildResponseRecord, 8)
 	for i := range records {
 		if i == 0 {
@@ -363,11 +363,11 @@ func createUnknownReplyCodeTunnelBuildReply() *ShortTunnelBuildReply {
 			records[i] = createValidResponseRecordWithReply(TunnelBuildReplySuccess)
 		}
 	}
-	return &ShortTunnelBuildReply{Count: 8, BuildResponseRecords: records}
+	return &OutboundTunnelBuildReply{Count: 8, BuildResponseRecords: records}
 }
 
 // createEmptyHashTunnelBuildReply creates a reply with empty hash
-func createEmptyHashTunnelBuildReply() *ShortTunnelBuildReply {
+func createEmptyHashTunnelBuildReply() *OutboundTunnelBuildReply {
 	records := make([]BuildResponseRecord, 8)
 	for i := range records {
 		if i == 0 {
@@ -381,23 +381,23 @@ func createEmptyHashTunnelBuildReply() *ShortTunnelBuildReply {
 			records[i].Reply = TunnelBuildReplySuccess
 		}
 	}
-	return &ShortTunnelBuildReply{Count: 8, BuildResponseRecords: records}
+	return &OutboundTunnelBuildReply{Count: 8, BuildResponseRecords: records}
 }
 
-// createSuccessfulShortTunnelBuildReply creates a successful ShortTunnelBuildReply
-func createSuccessfulShortTunnelBuildReply(hopCount int) *ShortTunnelBuildReply {
+// createSuccessfulOutboundTunnelBuildReply creates a successful OutboundTunnelBuildReply
+func createSuccessfulOutboundTunnelBuildReply(hopCount int) *OutboundTunnelBuildReply {
 	records := make([]BuildResponseRecord, hopCount)
 	for i := 0; i < hopCount; i++ {
 		records[i] = createValidResponseRecordWithReply(TunnelBuildReplySuccess)
 	}
-	return &ShortTunnelBuildReply{
+	return &OutboundTunnelBuildReply{
 		Count:                hopCount,
 		BuildResponseRecords: records,
 	}
 }
 
-// createMixedShortTunnelBuildReply creates a ShortTunnelBuildReply with mixed responses
-func createMixedShortTunnelBuildReply(hopCount int) *ShortTunnelBuildReply {
+// createMixedOutboundTunnelBuildReply creates a OutboundTunnelBuildReply with mixed responses
+func createMixedOutboundTunnelBuildReply(hopCount int) *OutboundTunnelBuildReply {
 	records := make([]BuildResponseRecord, hopCount)
 	replyCodes := []byte{
 		TunnelBuildReplySuccess,
@@ -408,7 +408,7 @@ func createMixedShortTunnelBuildReply(hopCount int) *ShortTunnelBuildReply {
 	for i := 0; i < hopCount; i++ {
 		records[i] = createValidResponseRecordWithReply(replyCodes[i%len(replyCodes)])
 	}
-	return &ShortTunnelBuildReply{
+	return &OutboundTunnelBuildReply{
 		Count:                hopCount,
 		BuildResponseRecords: records,
 	}

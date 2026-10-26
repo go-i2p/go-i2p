@@ -53,3 +53,12 @@ func (h *BaseHandler) ReplayCacheSize() int {
 	}
 	return h.replayCache.Size()
 }
+
+// ReplayCache exposes the handler's replay cache so a transport can register it
+// as the detector its handshake library consults. Returning the concrete
+// *gonoise.ReplayCache (which satisfies gonoise.ReplayDetector) lets the
+// router's cache be the one that actually runs, so the cache is scoped per
+// listener and its lifetime follows the handler's Close().
+func (h *BaseHandler) ReplayCache() *gonoise.ReplayCache {
+	return h.replayCache
+}

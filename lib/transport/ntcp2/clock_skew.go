@@ -11,7 +11,8 @@ import (
 
 // ClockSkewTolerance is re-exported from the shared transport package.
 // Per the NTCP2 spec, connections with a clock skew exceeding this value
-// should be terminated with reason code 6.
+// should be terminated with reason code 7 ("clock skew", ntcp2.rst:1703).
+// Reason 6 is "incompatible signature type" (:1702) — a different failure.
 //
 // The 60 s tolerance bounds the post-restart replay window: a captured
 // handshake msg1 is only replayable for up to 60 s after a router restart that
@@ -25,7 +26,8 @@ var _ = gonoise.ClockSkewTolerance
 
 // ClockSkewError is returned when a peer's timestamp exceeds the allowed skew.
 // It carries the peer and local timestamps plus the observed skew so callers
-// can log the violation and terminate the connection with reason code 6.
+// can log the violation and terminate the connection with reason 7
+// ([TerminationClockSkew], ntcp2.rst:1703).
 // See also [ValidateTimestamp].
 type ClockSkewError struct {
 	// PeerTime is the peer's reported Unix timestamp.

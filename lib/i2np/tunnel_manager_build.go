@@ -538,11 +538,10 @@ func validateTunnelBuild(result *tunnel.TunnelBuildResult) (router_info.RouterIn
 // createSerializedBuildMessage creates and serializes a Short Tunnel Build
 // (STBM, type 25) message. STBM is the only supported send format; the fixed
 // TunnelBuild (type 21) and VariableTunnelBuild (type 23) send paths have been
-// removed, and the processor has no receive-side handling for them either
-// (types 23/24 are dropped, types 21/22 fall through to the unknown-type
-// branch), so this router neither sends nor accepts the 528-byte build pair.
-// See the "Tunnel build message coverage (known gap)" section of this
-// package's doc.go.
+// removed, and the processor has no receive-side handling for them either — it
+// recognises types 21/22/23/24 and drops all four — so this router neither sends
+// nor accepts the 528-byte build pairs. See the "Tunnel build message coverage
+// (known gap)" section of this package's doc.go.
 func (tm *TunnelManager) createSerializedBuildMessage(result *tunnel.TunnelBuildResult, messageID int) ([]byte, error) {
 	return tm.createSerializedShortTunnelBuildMessage(result, messageID)
 }
@@ -678,7 +677,7 @@ func shuffleRecordSlots(count int) []int {
 
 // convertAndOverrideMessageID converts tunnel records to I2NP format and overrides SendMessageID
 // for STBM reply correlation. The remote OBEP reads sendMessageID from its decrypted record
-// and uses it as the I2NP message ID of the ShortTunnelBuildReply it sends back.
+// and uses it as the I2NP message ID of the OutboundTunnelBuildReply it sends back.
 func (tm *TunnelManager) convertAndOverrideMessageID(records []tunnel.BuildRequestRecord, messageID int) []BuildRequestRecord {
 	i2npRecords := make([]BuildRequestRecord, len(records))
 	for i, rec := range records {
@@ -767,7 +766,7 @@ func (tm *TunnelManager) registerGarlicReplyKeys(preReplyCKs [][32]byte, message
 		return nil
 	}
 
-	// The OBEP always wraps its ShortTunnelBuildReply in garlic addressed to the
+	// The OBEP always wraps its OutboundTunnelBuildReply in garlic addressed to the
 	// creator, so the creator derives the one-time garlic key/tag from the last
 	// hop's pre-reply chaining key using the OBEP branch of the KDF, regardless
 	// of the flag bits carried in the record.

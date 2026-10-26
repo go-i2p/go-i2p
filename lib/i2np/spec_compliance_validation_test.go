@@ -256,15 +256,22 @@ func TestBothHeaderFormats_Supported(t *testing.T) {
 
 // =============================================================================
 // Audit Item: Message type IDs
-// Verify all non-deprecated type constants match spec.
-// Deprecated types 21 (TunnelBuild) and 22 (TunnelBuildReply) are intentionally
-// not implemented per i2np.rst deprecation notice.
+// Verify every type constant matches the spec registry.
+// The registry (i2np.rst:683-696) lists 14 message types; the code declares a
+// constant for each. Declaring 21/22 does not mean they are implemented: all
+// four 528-byte-record build messages (21, 22, 23, 24) are recognised and
+// dropped in the dispatch. They are declared so that a peer sending one is
+// handled as a defined type rather than reported as "unknown message type", and
+// so the registry's own numbering can be pinned by a test. Note that the
+// registry's fourth column is "Since", not deprecation, and the normative Notes
+// for 21/22 say they "has not been deprecated. Routers must implement."
+// (i2np.rst:1581-1583, :1607-1609).
 // =============================================================================
 
 // TestMessageTypeIDs_MatchSpec verifies every I2NP message type constant matches
 // the authoritative values from i2np.rst.
 func TestMessageTypeIDs_MatchSpec(t *testing.T) {
-	// Spec-defined message type IDs (i2np.rst) — non-deprecated only
+	// Spec-defined message type IDs (i2np.rst:683-696) — the full registry
 	specTypes := map[string]int{
 		"DatabaseStore":            1,
 		"DatabaseLookup":           2,
@@ -274,10 +281,12 @@ func TestMessageTypeIDs_MatchSpec(t *testing.T) {
 		"TunnelData":               18,
 		"TunnelGateway":            19,
 		"Data":                     20,
+		"TunnelBuild":              21,
+		"TunnelBuildReply":         22,
 		"VariableTunnelBuild":      23,
 		"VariableTunnelBuildReply": 24,
 		"ShortTunnelBuild":         25,
-		"ShortTunnelBuildReply":    26,
+		"OutboundTunnelBuildReply": 26,
 	}
 
 	codeTypes := map[string]int{
@@ -289,14 +298,16 @@ func TestMessageTypeIDs_MatchSpec(t *testing.T) {
 		"TunnelData":               I2NPMessageTypeTunnelData,
 		"TunnelGateway":            I2NPMessageTypeTunnelGateway,
 		"Data":                     I2NPMessageTypeData,
+		"TunnelBuild":              I2NPMessageTypeTunnelBuild,
+		"TunnelBuildReply":         I2NPMessageTypeTunnelBuildReply,
 		"VariableTunnelBuild":      I2NPMessageTypeVariableTunnelBuild,
 		"VariableTunnelBuildReply": I2NPMessageTypeVariableTunnelBuildReply,
 		"ShortTunnelBuild":         I2NPMessageTypeShortTunnelBuild,
-		"ShortTunnelBuildReply":    I2NPMessageTypeShortTunnelBuildReply,
+		"OutboundTunnelBuildReply": I2NPMessageTypeOutboundTunnelBuildReply,
 	}
 
-	assert.Equal(t, len(specTypes), 12, "12 non-deprecated I2NP message types")
-	assert.Equal(t, len(codeTypes), 12, "code defines exactly 12 non-deprecated I2NP message type constants")
+	assert.Equal(t, len(specTypes), 14, "14 I2NP message types in the spec registry")
+	assert.Equal(t, len(codeTypes), 14, "code defines exactly 14 I2NP message type constants")
 
 	for name, specID := range specTypes {
 		codeID, ok := codeTypes[name]
@@ -309,7 +320,7 @@ func TestMessageTypeIDs_MatchSpec(t *testing.T) {
 // TestMessageTypeIDs_AllValidTypesRecognized verifies ReadI2NPType accepts all
 // non-deprecated spec-defined type values without error.
 func TestMessageTypeIDs_AllValidTypesRecognized(t *testing.T) {
-	specTypeIDs := []int{1, 2, 3, 10, 11, 18, 19, 20, 23, 24, 25, 26}
+	specTypeIDs := []int{1, 2, 3, 10, 11, 18, 19, 20, 21, 22, 23, 24, 25, 26}
 
 	for _, typeID := range specTypeIDs {
 		data := []byte{byte(typeID)}
@@ -331,16 +342,18 @@ func TestMessageTypeIDs_NoGapOverlap(t *testing.T) {
 		I2NPMessageTypeTunnelData,
 		I2NPMessageTypeTunnelGateway,
 		I2NPMessageTypeData,
+		I2NPMessageTypeTunnelBuild,
+		I2NPMessageTypeTunnelBuildReply,
 		I2NPMessageTypeVariableTunnelBuild,
 		I2NPMessageTypeVariableTunnelBuildReply,
 		I2NPMessageTypeShortTunnelBuild,
-		I2NPMessageTypeShortTunnelBuildReply,
+		I2NPMessageTypeOutboundTunnelBuildReply,
 	}
 
 	expected := map[int]bool{
 		1: true, 2: true, 3: true, 10: true, 11: true,
 		18: true, 19: true, 20: true,
-		23: true, 24: true, 25: true, 26: true,
+		21: true, 22: true, 23: true, 24: true, 25: true, 26: true,
 	}
 
 	seen := make(map[int]bool)
@@ -350,7 +363,7 @@ func TestMessageTypeIDs_NoGapOverlap(t *testing.T) {
 		seen[id] = true
 	}
 	assert.Equal(t, len(expected), len(seen),
-		"all 12 non-deprecated spec type IDs must be represented by constants")
+		"all 14 spec registry type IDs must be represented by constants")
 }
 
 // =============================================================================
@@ -2811,7 +2824,7 @@ func makeTestResponseRecords(n int) []BuildResponseRecord {
 // TestTunnelBuild_ReplyProcessing_AllAccepted verifies ProcessReply succeeds when all hops accept.
 func TestTunnelBuild_ReplyProcessing_AllAccepted(t *testing.T) {
 	records := makeTestResponseRecords(8)
-	reply := &ShortTunnelBuildReply{Count: 8, BuildResponseRecords: records}
+	reply := &OutboundTunnelBuildReply{Count: 8, BuildResponseRecords: records}
 	err := reply.ProcessReply()
 	assert.NoError(t, err, "All hops accepted — ProcessReply must succeed")
 }
@@ -2823,7 +2836,7 @@ func TestTunnelBuild_ReplyProcessing_OneReject(t *testing.T) {
 	rd := makeRandomData(func(j int) byte { return byte(3 + j%256) })
 	records[3] = newTestBuildResponseRecord(TunnelBuildReplyProbabilisticReject, rd)
 
-	reply := &ShortTunnelBuildReply{Count: 8, BuildResponseRecords: records}
+	reply := &OutboundTunnelBuildReply{Count: 8, BuildResponseRecords: records}
 	err := reply.ProcessReply()
 	assert.Error(t, err, "One rejection means tunnel build failed")
 }
@@ -2836,13 +2849,13 @@ func TestTunnelBuild_ReplyProcessing_HashIntegrity(t *testing.T) {
 	records := makeTestResponseRecords(8)
 	records[0].Hash[0] ^= 0xFF
 
-	reply := &ShortTunnelBuildReply{Count: 8, BuildResponseRecords: records}
+	reply := &OutboundTunnelBuildReply{Count: 8, BuildResponseRecords: records}
 	err := reply.ProcessReply()
 	assert.Error(t, err, "corrupted hash must cause ProcessReply to fail")
 }
 
 // ============================================================================
-// Section 6 — ShortTunnelBuild / ShortTunnelBuildReply (types 25, 26)
+// Section 6 — ShortTunnelBuild / OutboundTunnelBuildReply (types 25, 26)
 // ============================================================================
 
 // TestShortTunnelBuild_RecordFormat_Size218 verifies short records are 218 bytes.
@@ -2970,7 +2983,7 @@ func makeRandomData(fn func(int) byte) [495]byte {
 }
 
 // ============================================================================
-// Section 6 — ShortTunnelBuildReply (type 24) spec compliance
+// Section 6 — OutboundTunnelBuildReply (type 24) spec compliance
 // ============================================================================
 
 // TestTunnelBuildReply_Format_ResponseRecordIs528 verifies each response record = 528 bytes.
@@ -3003,11 +3016,11 @@ func TestTunnelBuildReply_Format_LongRecordLayoutIsDocumented(t *testing.T) {
 	assert.Equal(t, [495]byte{}, short.RandomData, "short reply record has no random-data field")
 }
 
-// TestShortTunnelBuildReplyExtra_Format_CountPlusRecords verifies the count+records layout.
-func TestShortTunnelBuildReplyExtra_Format_CountPlusRecords(t *testing.T) {
+// TestOutboundTunnelBuildReplyExtra_Format_CountPlusRecords verifies the count+records layout.
+func TestOutboundTunnelBuildReplyExtra_Format_CountPlusRecords(t *testing.T) {
 	records := makeTestResponseRecords(3)
 
-	reply := &ShortTunnelBuildReply{
+	reply := &OutboundTunnelBuildReply{
 		Count:                3,
 		BuildResponseRecords: records,
 	}
@@ -3017,27 +3030,27 @@ func TestShortTunnelBuildReplyExtra_Format_CountPlusRecords(t *testing.T) {
 
 	// All records should validate
 	err := reply.ProcessReply()
-	assert.NoError(t, err, "All-success ShortTunnelBuildReply.ProcessReply must succeed")
+	assert.NoError(t, err, "All-success OutboundTunnelBuildReply.ProcessReply must succeed")
 }
 
-// TestShortTunnelBuildReplyExtra_Format_SHA256Integrity verifies hash integrity check.
-func TestShortTunnelBuildReplyExtra_Format_SHA256Integrity(t *testing.T) {
+// TestOutboundTunnelBuildReplyExtra_Format_SHA256Integrity verifies hash integrity check.
+func TestOutboundTunnelBuildReplyExtra_Format_SHA256Integrity(t *testing.T) {
 	assertBuildResponseRecordHash(t, TunnelBuildReplyTransientOverload, func(i int) byte { return byte(i * 3) })
 }
 
-// TestShortTunnelBuildReply_Format_AllAccepted verifies ShortTunnelBuildReply processes correctly.
-func TestShortTunnelBuildReply_Format_AllAccepted(t *testing.T) {
+// TestOutboundTunnelBuildReply_Format_AllAccepted verifies OutboundTunnelBuildReply processes correctly.
+func TestOutboundTunnelBuildReply_Format_AllAccepted(t *testing.T) {
 	records := makeTestResponseRecords(4)
 
-	reply := NewShortTunnelBuildReply(records)
+	reply := NewOutboundTunnelBuildReply(records)
 	assert.Equal(t, 4, reply.Count)
 
 	err := reply.ProcessReply()
-	assert.NoError(t, err, "All-success ShortTunnelBuildReply must succeed")
+	assert.NoError(t, err, "All-success OutboundTunnelBuildReply must succeed")
 }
 
-// TestShortTunnelBuildReply_Format_MixedResults verifies mixed accept/reject handling.
-func TestShortTunnelBuildReply_Format_MixedResults(t *testing.T) {
+// TestOutboundTunnelBuildReply_Format_MixedResults verifies mixed accept/reject handling.
+func TestOutboundTunnelBuildReply_Format_MixedResults(t *testing.T) {
 	rd0 := makeRandomData(func(int) byte { return 0x11 })
 	rd1 := makeRandomData(func(int) byte { return 0x22 })
 	rd2 := makeRandomData(func(int) byte { return 0x33 })
@@ -3047,7 +3060,7 @@ func TestShortTunnelBuildReply_Format_MixedResults(t *testing.T) {
 		newTestBuildResponseRecord(TunnelBuildReplySuccess, rd2),
 	}
 
-	reply := NewShortTunnelBuildReply(records)
+	reply := NewOutboundTunnelBuildReply(records)
 	err := reply.ProcessReply()
 	assert.Error(t, err, "Mixed results (1 reject) means build failed")
 }

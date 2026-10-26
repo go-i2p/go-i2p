@@ -288,7 +288,7 @@ func extractGarlicFromPayload(payload []byte) ([][]byte, error) {
 
 // RegisterOneTimeGarlicKey registers a one-time symmetric garlic key derived
 // from a STBM Noise transcript hash via HKDF("AttachLayerEncryption"). The
-// OBEP uses this key to wrap the ShortTunnelBuildReply garlic; it is consumed
+// OBEP uses this key to wrap the OutboundTunnelBuildReply garlic; it is consumed
 // on first use and never reused.
 //
 // tag is garlicKeyMaterial[24:32], key is garlicKeyMaterial[0:32].
