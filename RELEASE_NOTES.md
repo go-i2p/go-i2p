@@ -62,6 +62,20 @@ go-noise `trunk` still passes `go build ./...` but fails four SSU2 integration t
 timeouts. The fix must be merged onto `trunk` and pushed. Routing the tests back around the listener was
 rejected: that is the non-production path which hid the bug, and `ssu2.rst:1587-1588` forbids it.
 
+A second go-noise listener defect was exposed while stabilising those same harnesses and is likewise
+reported upstream rather than patched locally. The data-phase inbound header protector is installed
+out-of-band: `SSU2Conn.notifyRecvDataKey` performs a non-blocking send (a `select` with a `default`
+branch) into a channel the listener wires up separately, and a listener goroutine then calls
+`AcceptedSessionRegistry.SetDataPhaseProtector`. On rare schedules the protector is never installed for
+that session, and because `TrialDeobfuscate` silently skips sessions it cannot deobfuscate, every
+inbound data-phase packet for the session is dropped for good. The sender gets no feedback — data
+packets are retransmitted only on RTO expiry for unACKed packets, never because the peer could not
+deobfuscate them — so the loss is unrecoverable within the session. This was confirmed empirically: the
+failing sessions never delivered a message across ten send retries spanning 30 seconds while the reader
+stayed alive, and re-establishing the session instead of re-sending reduced the SSU2 package failure
+rate from 3/100 to 0/100. go-i2p's test harnesses now verify both data directions before handing a
+session to a test, so the race is detected and bounded rather than asserted through.
+
 Release notes for: `go-i2p` Version `0.1.70001`
 ============================================
 
@@ -126,3 +140,8 @@ This release also corresponds to significant progress in other parts of the name
  - and most importantly, [`go-sam-bridge` implements the SAMv3.3 API, and embeds a `go-i2p` router, *and* is embeddable itself](https://github.com/go-i2p/go-sam-bridge)
 
 All these changes are building toward the big API target for `go-i2p`, which is making I2P integration as simple as possible for Go applications. The latest checkin of `onramp` now embeds a `go-sam-bridge` and starts it automatically if SAMv3.3 is not available on the host, meaning that in the next version of `onramp`, those who upgrade will seamlessly upgrade to having optional embedded I2P routers. Our hope is that it is also possible to do this for the lower-level `go-sam-go` library as well. Zero-Configuration I2P applications are nearly upon us!
+
+Production uses the same go-noise listener (startSSU2Listener in lib/transport/ssu2/transport.go), so an
+accepted inbound session there can be affected too. It is survivable rather than benign: the peer gets no
+answer, gives up on the session and dials a fresh one, which re-establishes the protector. It still costs
+a session setup and any in-flight message, so it is worth fixing upstream.

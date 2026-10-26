@@ -128,10 +128,15 @@ func TestRC3_ConcurrentSetIdentityAndRelayCallbacksUnderLoad(t *testing.T) {
 	assert.Greater(t, managerSwaps, int32(50), "Expected many manager swaps, got %d", managerSwaps)
 	assert.Greater(t, verifyAttempts, int32(100), "Expected many verification attempts, got %d", verifyAttempts)
 
-	// Verify at least some readers successfully observed a non-nil manager
-	// (Some reads during nil windows are expected and safe)
-	assert.Greater(t, verifySuccesses, int32(10),
-		"Expected some verification attempts to see non-nil manager, got %d successes out of %d attempts",
+	// We deliberately do NOT assert on verifySuccesses. How many readers observe a
+	// non-nil manager is scheduler-dependent: the managers nil out the pointers
+	// under the lock 2/3 of the time, so a reader-heavy schedule can legitimately
+	// produce zero non-nil observations. Asserting on that distribution makes the
+	// test flaky for no gain - the correctness property under test is freedom from
+	// data races and absence of nil dereference, which the panic counter and
+	// `go test -race` already cover. Same reasoning as the M-1 fix on
+	// TestRC3_MultipleReadersSafelyReadRelayManager below.
+	t.Logf("RC-3 non-nil observations: %d of %d attempts (not asserted, scheduler-dependent)",
 		verifySuccesses, verifyAttempts)
 
 	t.Logf("RC-3 test complete: %d manager swaps, %d verify attempts (%d successes)",
