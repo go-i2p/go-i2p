@@ -636,3 +636,154 @@ func assertNoDatagram(t *testing.T, cap *captureSocket) {
 		t.Fatalf("expected a read timeout, got %v", err)
 	}
 }
+
+// --- W7: mandatory DateTime skew validation (§"Replay Prevention") ---
+
+// dateTimeBlockAt builds a DateTime block carrying the given unix seconds.
+func dateTimeBlockAt(unixSeconds uint32) *ssu2noise.SSU2Block {
+	data := make([]byte, 4)
+	binary.BigEndian.PutUint32(data, unixSeconds)
+	return ssu2noise.NewSSU2Block(ssu2noise.BlockTypeDateTime, data)
+}
+
+// TestHandleOutOfSessionPeerTest_StaleDateTimeRejected proves the replay gate:
+// ssu2.rst line 4036-4039 requires out-of-session Peer Test messages to carry a
+// DateTime block and requires both Alice and Bob to validate it against a
+// +/- 2 minute skew. A replayed message carries the ORIGINAL nonce, so the
+// nonce-correlation gate alone cannot stop it.
+func TestHandleOutOfSessionPeerTest_StaleDateTimeRejected(t *testing.T) {
+	tr, cleanup := makeTestTransportWithListener(t)
+	defer cleanup()
+
+	nonce := uint32(0xabcd)
+	dest, src := ssu2noise.NonceConnectionIDs(nonce)
+	tr.setNatRole(nonce, natRoleAlice)
+
+	pt := &ssu2noise.PeerTestBlock{
+		MessageCode: ssu2noise.PeerTestProbe,
+		Nonce:       nonce,
+		Version:     2,
+		Timestamp:   uint32(time.Now().Add(-10 * time.Minute).Unix()),
+		AliceIP:     net.ParseIP("203.0.113.9").To4(),
+		AlicePort:   12345,
+	}
+	encoded, err := ssu2noise.EncodePeerTestBlock(pt)
+	require.NoError(t, err)
+
+	before := len(tr.natStateCache.observations)
+	err = tr.handleOutOfSessionPeerTest(ssu2noise.OutOfSessionMessage{
+		Type:         ssu2noise.MessageTypePeerTest,
+		DestConnID:   dest,
+		SourceConnID: src,
+		Blocks:       []*ssu2noise.SSU2Block{dateTimeBlockAt(pt.Timestamp), encoded},
+		From:         &net.UDPAddr{IP: net.ParseIP("198.51.100.9"), Port: 40000},
+	})
+	require.Error(t, err, "a DateTime block 10 minutes stale must be rejected")
+	assert.Contains(t, err.Error(), "skew")
+	assert.Nil(t, tr.peerTestManager.GetTest(nonce),
+		"a replayed probe must not create or complete a test")
+	assert.Len(t, tr.natStateCache.observations, before,
+		"a replayed probe must not poison the address-observation cache")
+}
+
+// TestHandleOutOfSessionPeerTest_MissingDateTimeRejected proves the "must
+// contain DateTime blocks" half of the same spec sentence.
+func TestHandleOutOfSessionPeerTest_MissingDateTimeRejected(t *testing.T) {
+	tr, cleanup := makeTestTransportWithListener(t)
+	defer cleanup()
+
+	nonce := uint32(0xabce)
+	dest, src := ssu2noise.NonceConnectionIDs(nonce)
+	tr.setNatRole(nonce, natRoleAlice)
+
+	pt := &ssu2noise.PeerTestBlock{
+		MessageCode: ssu2noise.PeerTestProbe,
+		Nonce:       nonce,
+		Version:     2,
+		Timestamp:   uint32(time.Now().Unix()),
+		AliceIP:     net.ParseIP("203.0.113.9").To4(),
+		AlicePort:   12345,
+	}
+	encoded, err := ssu2noise.EncodePeerTestBlock(pt)
+	require.NoError(t, err)
+
+	err = tr.handleOutOfSessionPeerTest(ssu2noise.OutOfSessionMessage{
+		Type:         ssu2noise.MessageTypePeerTest,
+		DestConnID:   dest,
+		SourceConnID: src,
+		Blocks:       []*ssu2noise.SSU2Block{encoded},
+		From:         &net.UDPAddr{IP: net.ParseIP("198.51.100.9"), Port: 40000},
+	})
+	require.Error(t, err, "a Peer Test message without a DateTime block must be rejected")
+	assert.Contains(t, err.Error(), "missing required DateTime block")
+}
+
+// TestHandleOutOfSessionPeerTest_FreshDateTimeAccepted is the positive control:
+// a current timestamp passes the new gate and reaches the correlation logic.
+func TestHandleOutOfSessionPeerTest_FreshDateTimeAccepted(t *testing.T) {
+	tr, cleanup := makeTestTransportWithListener(t)
+	defer cleanup()
+
+	nonce := uint32(0xabcdf)
+	dest, src := ssu2noise.NonceConnectionIDs(nonce)
+	tr.setNatRole(nonce, natRoleAlice)
+
+	now := uint32(time.Now().Unix())
+	pt := &ssu2noise.PeerTestBlock{
+		MessageCode: ssu2noise.PeerTestProbe,
+		Nonce:       nonce,
+		Version:     2,
+		Timestamp:   now,
+		AliceIP:     net.ParseIP("203.0.113.9").To4(),
+		AlicePort:   12345,
+	}
+	encoded, err := ssu2noise.EncodePeerTestBlock(pt)
+	require.NoError(t, err)
+
+	err = tr.handleOutOfSessionPeerTest(ssu2noise.OutOfSessionMessage{
+		Type:         ssu2noise.MessageTypePeerTest,
+		DestConnID:   dest,
+		SourceConnID: src,
+		Blocks:       []*ssu2noise.SSU2Block{dateTimeBlockAt(now), encoded},
+		From:         &net.UDPAddr{IP: net.ParseIP("198.51.100.9"), Port: 40000},
+	})
+	require.NoError(t, err, "a fresh, correlated probe must pass validation")
+}
+
+// TestHandleOutOfSessionHolePunch_StaleDateTimeRejected proves the same gate on
+// the Hole Punch path. The pending relay request is registered so the ONLY
+// reason for rejection is the stale DateTime, not the correlation gate.
+func TestHandleOutOfSessionHolePunch_StaleDateTimeRejected(t *testing.T) {
+	tr, cleanup := makeTestTransportWithListener(t)
+	defer cleanup()
+
+	nonce := uint32(0xbeef)
+	dest, src := ssu2noise.NonceConnectionIDs(nonce)
+	pending := &pendingRelayResponse{ch: make(chan *ssu2noise.RelayResponseBlock, 1)}
+	tr.pendingRelayResponses.Store(nonce, pending)
+
+	stale := uint32(time.Now().Add(-10 * time.Minute).Unix())
+	// A Charlie-rejection (code 64-127 is Charlie; 1-63 is Bob) carries no
+	// endpoint or signature, which keeps this fixture about the DateTime gate.
+	resp := &ssu2noise.RelayResponseBlock{
+		Code:  2,
+		Nonce: nonce,
+	}
+	encoded, err := ssu2noise.EncodeRelayResponse(resp)
+	require.NoError(t, err)
+
+	err = tr.handleOutOfSessionHolePunch(ssu2noise.OutOfSessionMessage{
+		Type:         ssu2noise.MessageTypeHolePunch,
+		DestConnID:   dest,
+		SourceConnID: src,
+		Blocks:       []*ssu2noise.SSU2Block{dateTimeBlockAt(stale), encoded},
+		From:         &net.UDPAddr{IP: net.ParseIP("198.51.100.9"), Port: 40000},
+	})
+	require.Error(t, err, "a Hole Punch 10 minutes stale must be rejected")
+	assert.Contains(t, err.Error(), "skew")
+	select {
+	case got := <-pending.ch:
+		t.Fatalf("a replayed hole punch must not deliver a relay response, got %v", got)
+	default:
+	}
+}

@@ -9,20 +9,6 @@ import (
 	"github.com/samber/oops"
 )
 
-// FrameI2NPToBlock serializes an I2NP message into an SSU2 block type 3.
-// The message is serialized with the mandatory 9-byte short I2NP header (the
-// same format NTCP2 uses; SSU2 has the same format as NTCP2) and wrapped in an
-// SSU2Block with BlockTypeI2NPMessage. The 16-byte standard header is never
-// used on the wire here — only tunnel-delivered messages carry it.
-func FrameI2NPToBlock(msg i2np.Message) (*ssu2noise.SSU2Block, error) {
-	data, err := i2np.MarshalMessageShort(msg)
-	if err != nil {
-		log.WithError(err).Error("failed to marshal I2NP message for SSU2 block")
-		return nil, oops.Wrapf(err, "failed to marshal I2NP message")
-	}
-	return ssu2noise.NewSSU2Block(ssu2noise.BlockTypeI2NPMessage, data), nil
-}
-
 // ParseI2NPFromBlock deserializes an SSU2 block type 3 back to an I2NP message.
 // Returns an error if the block type is not BlockTypeI2NPMessage or parsing fails.
 func ParseI2NPFromBlock(block *ssu2noise.SSU2Block) (i2np.Message, error) {

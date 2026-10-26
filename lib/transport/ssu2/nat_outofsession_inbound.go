@@ -1,6 +1,7 @@
 package ssu2
 
 import (
+	"encoding/binary"
 	"net"
 	"time"
 
@@ -74,9 +75,69 @@ func (t *SSU2Transport) handleOutOfSessionMessage(msg ssu2noise.OutOfSessionMess
 	}
 }
 
+// defaultOutOfSessionMaxSkew is the fallback DateTime window used when the
+// transport config leaves MaxClockSkew unset. ssu2.rst §"Replay Prevention"
+// recommends "±2 minutes" and go-noise's config defaults to 120s; a
+// hand-built config with a zero value must not silently disable the check.
+const defaultOutOfSessionMaxSkew = 2 * time.Minute
+
+// outOfSessionMaxSkew returns the DateTime skew window for out-of-session
+// messages, honouring the configured MaxClockSkew with the spec's 2-minute
+// recommendation as the floor when it is unset.
+func (t *SSU2Transport) outOfSessionMaxSkew() time.Duration {
+	if cfg := t.config.Load(); cfg != nil && cfg.SSU2Config != nil && cfg.MaxClockSkew > 0 {
+		return cfg.MaxClockSkew
+	}
+	return defaultOutOfSessionMaxSkew
+}
+
+// validateOutOfSessionDateTime enforces the mandatory DateTime replay check on
+// an intro-key protected out-of-session message.
+//
+// ssu2.rst §"Replay Prevention" (line 4036-4039): "Token Request, Retry,
+// Session Request, Session Created, Hole Punch, and out-of-session Peer Test
+// messages must contain DateTime blocks. Both Alice and Bob validate that the
+// time for these messages is within a valid skew (recommended +/- 2 minutes)."
+//
+// The check is load-bearing here precisely because these messages are NOT
+// authenticated: the seal key is our published introduction key, readable by
+// anyone in the NetDB (see the security rule at the top of this file). Without
+// a freshness gate, anyone who captured a single valid Peer Test 5/6/7 or Hole
+// Punch datagram could replay it forever -- re-triggering replies, refreshing
+// reachability observations, or re-delivering a relay response. The nonce
+// correlation gate below does not help against replay, because a replay carries
+// the original, still-known nonce.
+//
+// go-noise does not perform this check on the out-of-session path: it only
+// validates DateTime skew for Session Request, Retry
+// (ssu2/session/conn_handshake.go:966) and Token Request
+// (ssu2/server/listener.go:731), and hands PeerTest/HolePunch payloads to the
+// registered callback untouched. So it is enforced here, in go-i2p's dispatch.
+func (t *SSU2Transport) validateOutOfSessionDateTime(blocks []*ssu2noise.SSU2Block, kind string) error {
+	dateTime := ssu2noise.FindBlockByType(blocks, ssu2noise.BlockTypeDateTime)
+	if dateTime == nil {
+		return oops.Errorf("%s: missing required DateTime block", kind)
+	}
+	if len(dateTime.Data) < 4 {
+		return oops.Errorf("%s: DateTime block too short: %d bytes", kind, len(dateTime.Data))
+	}
+	peer := time.Unix(int64(binary.BigEndian.Uint32(dateTime.Data[:4])), 0)
+	skew := time.Since(peer)
+	if skew < 0 {
+		skew = -skew
+	}
+	if max := t.outOfSessionMaxSkew(); skew > max {
+		return oops.Errorf("%s: DateTime skew %s exceeds maximum %s", kind, skew, max)
+	}
+	return nil
+}
+
 // handleOutOfSessionPeerTest processes a type-7 Peer Test message carrying
 // peer-test code 5, 6 or 7.
 func (t *SSU2Transport) handleOutOfSessionPeerTest(msg ssu2noise.OutOfSessionMessage) error {
+	if err := t.validateOutOfSessionDateTime(msg.Blocks, "PeerTest"); err != nil {
+		return err
+	}
 	ptBlock, err := findPeerTestBlock(msg.Blocks)
 	if err != nil {
 		return oops.Wrapf(err, "PeerTest message")
@@ -368,6 +429,9 @@ func (t *SSU2Transport) signPeerTestBlock(block *ssu2noise.PeerTestBlock, bobHas
 // connection attempts. So the binding is strict: the nonce must match a relay
 // request WE sent and are still waiting on.
 func (t *SSU2Transport) handleOutOfSessionHolePunch(msg ssu2noise.OutOfSessionMessage) error {
+	if err := t.validateOutOfSessionDateTime(msg.Blocks, "HolePunch"); err != nil {
+		return err
+	}
 	// §"Hole Punch" uses the same nonce-derived connection IDs as messages
 	// 5/7 (Charlie -> Alice), so the nonce is in the destination ID.
 	nonce := uint32(msg.DestConnID >> 32)

@@ -5,6 +5,7 @@
 package ssu2
 
 import (
+	"encoding/binary"
 	"errors"
 	"testing"
 
@@ -23,20 +24,32 @@ func (f *failMarshalMsg) MarshalBinary() ([]byte, error) {
 	return nil, errors.New("marshal error")
 }
 
-func TestFrameI2NPToBlock(t *testing.T) {
+// TestMarshalI2NPShort_SingleBlock exercises the conformant framing the live
+// send path uses (marshalI2NPShort -> fragmentSSU2Short): a message that fits
+// in one packet becomes a single BlockTypeI2NPMessage block carrying the 9-byte
+// SSU2/NTCP2 short header, Type(1)+MessageID(4)+ShortExpiration(4)+Body.
+func TestMarshalI2NPShort_SingleBlock(t *testing.T) {
 	msg := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeData)
 	msg.SetData([]byte("test payload"))
-	block, err := FrameI2NPToBlock(msg)
+	data, err := marshalI2NPShort(msg)
 	require.NoError(t, err)
-	assert.Equal(t, ssu2noise.BlockTypeI2NPMessage, block.Type)
-	assert.NotEmpty(t, block.Data)
+	require.GreaterOrEqual(t, len(data), i2np.ShortI2NPHeaderSize)
+	assert.EqualValues(t, msg.Type(), data[0])
+	assert.EqualValues(t, msg.MessageID(), binary.BigEndian.Uint32(data[1:5]))
+
+	blocks, err := fragmentSSU2Short(data, maxSSU2PayloadIPv4)
+	require.NoError(t, err)
+	require.Len(t, blocks, 1)
+	assert.Equal(t, ssu2noise.BlockTypeI2NPMessage, blocks[0].Type)
+	assert.Equal(t, data, blocks[0].Data)
 }
 
 func TestParseI2NPFromBlock(t *testing.T) {
 	msg := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeData)
 	msg.SetData([]byte("test payload"))
-	block, err := FrameI2NPToBlock(msg)
+	data, err := marshalI2NPShort(msg)
 	require.NoError(t, err)
+	block := ssu2noise.NewSSU2Block(ssu2noise.BlockTypeI2NPMessage, data)
 	parsed, err := ParseI2NPFromBlock(block)
 	require.NoError(t, err)
 	assert.Equal(t, msg.Type(), parsed.Type())
@@ -85,11 +98,11 @@ func TestNewPaddingBlock(t *testing.T) {
 	assert.Len(t, block.Data, 32)
 }
 
-// TestFrameI2NPToBlock_MarshalError verifies that FrameI2NPToBlock propagates
+// TestMarshalI2NPShort_MarshalError verifies that marshalI2NPShort propagates
 // a MarshalBinary error from the message.
-func TestFrameI2NPToBlock_MarshalError(t *testing.T) {
+func TestMarshalI2NPShort_MarshalError(t *testing.T) {
 	msg := &failMarshalMsg{}
-	_, err := FrameI2NPToBlock(msg)
+	_, err := marshalI2NPShort(msg)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "marshal error")
 }
