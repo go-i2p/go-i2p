@@ -395,20 +395,6 @@ func TerminationReasonString(reason byte) string
 TerminationReasonString returns a human-readable string for a termination reason
 code received from a peer. The descriptions match i2pd's definitions.
 
-#### func  UnframeI2NPMessage
-
-```go
-func UnframeI2NPMessage(conn net.Conn) (i2np.Message, error)
-```
-UnframeI2NPMessage unframes I2NP messages from an internal test/pipe stream.
-
-M-4 WARNING: This function reads a NON-STANDARD 4-byte big-endian length prefix.
-It is NOT compliant with the NTCP2 spec, which uses a 2-byte SipHash-obfuscated
-length field handled by the NTCP2Conn.Read layer. Do NOT call this function on a
-real NTCP2 connection — use BlockUnframer (which parses spec-compliant NTCP2
-block frames) instead. This function is retained for internal benchmark/test
-helpers that use pre-decoded I2NP wire format over net.Pipe.
-
 #### func  ValidateTimestamp
 
 ```go
@@ -485,13 +471,6 @@ func NewI2NPBlock(i2npData []byte) Block
 ```
 NewI2NPBlock creates an I2NP message block (type 3) from raw I2NP message bytes.
 The caller is responsible for providing the short I2NP header + message body.
-
-#### func  NewOptionsBlock
-
-```go
-func NewOptionsBlock(opts *Options) Block
-```
-NewOptionsBlock creates an Options block (type 1) from an Options struct.
 
 #### func  NewPaddingBlock
 
@@ -676,45 +655,6 @@ func (h *DefaultHandler) ValidateTimestamp(peerTime uint32) error
 ```
 ValidateTimestamp checks whether a peer's timestamp is within ±60 seconds of the
 local clock. Returns a *ClockSkewError if the skew is excessive.
-
-#### type I2NPUnframer
-
-```go
-type I2NPUnframer struct {
-}
-```
-
-I2NPUnframer provides stream-based unframing for test/pipe use only.
-
-M-4 WARNING: I2NPUnframer reads a NON-STANDARD 4-byte big-endian length prefix
-that does NOT appear in the NTCP2 specification. Real NTCP2 connections use a
-2-byte SipHash-obfuscated length field, handled transparently by NTCP2Conn.Read.
-Use BlockUnframer for spec-compliant NTCP2 data-phase parsing. I2NPUnframer
-exists only to support tests and benchmarks that write raw I2NP frames over a
-net.Pipe.
-
-#### func  NewI2NPUnframer
-
-```go
-func NewI2NPUnframer(conn net.Conn) *I2NPUnframer
-```
-NewI2NPUnframer creates a new I2NPUnframer that reads length-prefixed I2NP
-messages from the given connection.
-
-#### func (*I2NPUnframer) BytesRead
-
-```go
-func (u *I2NPUnframer) BytesRead() int
-```
-BytesRead returns the number of bytes read during the last ReadNextMessage call
-
-#### func (*I2NPUnframer) ReadNextMessage
-
-```go
-func (u *I2NPUnframer) ReadNextMessage() (i2np.Message, error)
-```
-ReadNextMessage reads the next length-prefixed I2NP message from the underlying
-connection and returns the parsed message.
 
 #### type KeystoreProvider
 
@@ -1066,80 +1006,6 @@ entries in the sessions map (A-1 fix for SA-2). This invariant must hold:
 sessionCount == number of (net.Conn + acceptedConn + *NTCP2Session) entries
 Returns the mismatch count (0 = healthy, >0 = accounting bug detected). SA-2
 FIX: Added explicit invariant validation to detect session counting leaks.
-
-#### type Options
-
-```go
-type Options struct {
-	// Version is the NTCP2 protocol version. Currently 0.
-	Version uint8
-
-	// PaddingMin is the minimum padding length for data-phase frames.
-	// Encoded as a 4.4 fixed-point ratio of the frame payload size.
-	PaddingMin float64
-
-	// PaddingMax is the maximum padding length for data-phase frames.
-	// Encoded as a 4.4 fixed-point ratio of the frame payload size.
-	PaddingMax float64
-
-	// DummyMin is the minimum interval (in seconds) between dummy traffic frames.
-	// 0 means no dummy traffic.
-	DummyMin uint16
-
-	// DummyMax is the maximum interval (in seconds) between dummy traffic frames.
-	// 0 means no dummy traffic.
-	DummyMax uint16
-
-	// DelayMin is the minimum intra-message delay (in milliseconds).
-	// 0 means no artificial delay.
-	DelayMin uint16
-
-	// DelayMax is the maximum intra-message delay (in milliseconds).
-	// 0 means no artificial delay.
-	DelayMax uint16
-}
-```
-
-Options represents the NTCP2 options block parameters used for negotiating
-padding and traffic shaping between peers.
-
-Spec reference: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ntcp2.rst
-
-The options block is sent in message 3 part 2 (first post-handshake payload from
-the initiator) and can be resent during the data phase to renegotiate
-parameters.
-
-#### func  DefaultOptions
-
-```go
-func DefaultOptions() *Options
-```
-DefaultOptions returns the default NTCP2 options.
-
-PaddingMax is set to 0.06 (up to 6 % of the frame payload size), matching i2pd's
-NTCP2_MAX_PADDING_RATIO (6 %, see i2pd NTCP2.h / NTCP2.cpp CreatePaddingBlock).
-PaddingMin remains 0 so that frames with small payloads are not forced to carry
-unnecessary overhead, while a non-zero PaddingMax still prevents fingerprinting
-via the absence of padding. Padding bytes are generated from crypto/rand by
-NewPaddingBlock.
-
-Spec reference: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ntcp2.rst
-
-#### func  ParseOptions
-
-```go
-func ParseOptions(data []byte) (*Options, error)
-```
-ParseOptions parses an options block payload (the data portion, without the
-3-byte block header) into an Options struct.
-
-#### func (*Options) Serialize
-
-```go
-func (o *Options) Serialize() []byte
-```
-Serialize encodes the Options into a byte slice suitable for use as the data
-portion of an Options block (type 1).
 
 #### type PersistentConfig
 

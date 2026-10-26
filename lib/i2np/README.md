@@ -3077,16 +3077,6 @@ type ShortTunnelBuild struct {
 ShortTunnelBuild represents an I2NP ShortTunnelBuild message, a modern compact
 format for tunnel build requests introduced in I2P 0.9.51.
 
-#### func (*ShortTunnelBuild) Bytes
-
-```go
-func (s *ShortTunnelBuild) Bytes() []byte
-```
-Bytes serializes the ShortTunnelBuild message to wire format. Format:
-[count:1][records...] Each record is 218 bytes per the I2P specification (ECIES
-short records). The caller is responsible for applying ECIES encryption to each
-record.
-
 #### func (*ShortTunnelBuild) GetBuildRecords
 
 ```go

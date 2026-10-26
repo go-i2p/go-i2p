@@ -1,12 +1,15 @@
-// Benchmarks for the I2NP unframer. Measures the cost of stripping the
-// 4-byte length prefix from incoming NTCP2 frames.
+// Benchmarks for the spec-compliant NTCP2 block unframer. Measures the cost of
+// decoding a data-phase frame: the 2-byte SipHash-obfuscated length is handled
+// below this layer by NTCP2Conn.Read (ntcp2.rst:1314-1355), and the decrypted
+// payload is a sequence of NTCP2 blocks (ntcp2.rst:1428-1447).
+//
+// These replace the benchmarks that used to target the non-spec I2NPUnframer,
+// which read a 4-byte length prefix that appears nowhere in ntcp2.rst and was
+// therefore removed.
 
 package ntcp2
 
 import (
-	"bytes"
-	"encoding/binary"
-	"io"
 	"net"
 	"testing"
 	"time"
@@ -14,141 +17,69 @@ import (
 	"github.com/go-i2p/go-i2p/lib/i2np"
 )
 
-// benchmarkConn is a net.Conn that reads from a buffer repeatedly for benchmarking
-type benchmarkConn struct {
+// loopConn is a net.Conn that re-serves the same frame payload forever, so a
+// benchmark can decode the same frame repeatedly without a real socket. The
+// unframer performs one Read per frame, which is all this needs to provide.
+type loopConn struct {
 	data   []byte
 	offset int
 }
 
-func (c *benchmarkConn) Read(p []byte) (n int, err error) {
+func (c *loopConn) Read(p []byte) (n int, err error) {
 	if c.offset >= len(c.data) {
-		c.offset = 0 // Reset to loop
+		c.offset = 0 // loop
 	}
-
 	n = copy(p, c.data[c.offset:])
 	c.offset += n
 	return n, nil
 }
 
-func (c *benchmarkConn) Write(p []byte) (n int, err error) {
-	return len(p), nil
-}
+func (c *loopConn) Write(p []byte) (int, error)        { return len(p), nil }
+func (c *loopConn) Close() error                       { return nil }
+func (c *loopConn) LocalAddr() net.Addr                { return &mockAddr{"loop-local"} }
+func (c *loopConn) RemoteAddr() net.Addr               { return &mockAddr{"loop-remote"} }
+func (c *loopConn) SetDeadline(t time.Time) error      { return nil }
+func (c *loopConn) SetReadDeadline(t time.Time) error  { return nil }
+func (c *loopConn) SetWriteDeadline(t time.Time) error { return nil }
 
-func (c *benchmarkConn) Close() error {
-	return nil
-}
-
-func (c *benchmarkConn) LocalAddr() net.Addr {
-	return &mockAddr{"benchmark-local"}
-}
-
-func (c *benchmarkConn) RemoteAddr() net.Addr {
-	return &mockAddr{"benchmark-remote"}
-}
-
-func (c *benchmarkConn) SetDeadline(t time.Time) error {
-	return nil
-}
-
-func (c *benchmarkConn) SetReadDeadline(t time.Time) error {
-	return nil
-}
-
-func (c *benchmarkConn) SetWriteDeadline(t time.Time) error {
-	return nil
-}
-
-// createTestFramedMessage creates a properly formatted NTCP2 framed I2NP message
-func createTestFramedMessage(payloadSize int) []byte {
-	// Create a simple I2NP DatabaseStore message for testing
+// createBlockFramedMessage returns the decrypted data-phase frame payload for
+// an I2NP message carrying a payloadSize-byte body — exactly what
+// BlockUnframer.readFrame hands to ParseBlocks on the live receive path.
+func createBlockFramedMessage(b *testing.B, payloadSize int) []byte {
+	b.Helper()
 	var key [32]byte // Zero hash
 	testData := make([]byte, payloadSize)
 	msg := i2np.NewDatabaseStore(key, testData, 0)
 
-	// Marshal to get actual I2NP data
-	msgData, _ := msg.MarshalBinary()
-
-	// Create NTCP2 frame: 4-byte length prefix + message data
-	buf := new(bytes.Buffer)
-	length := uint32(len(msgData))
-	binary.Write(buf, binary.BigEndian, length)
-	buf.Write(msgData)
-
-	return buf.Bytes()
+	framed, err := FrameI2NPMessageAsBlock(msg)
+	if err != nil {
+		b.Fatalf("FrameI2NPMessageAsBlock failed: %v", err)
+	}
+	return framed
 }
 
-// BenchmarkNTCP2Unframer benchmarks the ReadNextMessage function to measure
-// allocation reduction from stack-based buffer allocation
-func BenchmarkNTCP2Unframer(b *testing.B) {
-	// Create test message with 100-byte payload
-	testData := createTestFramedMessage(100)
-
-	// Create conn that loops the test data
-	conn := &benchmarkConn{
-		data:   testData,
-		offset: 0,
-	}
-
-	// Create unframer
-	unframer := NewI2NPUnframer(conn)
+func benchmarkBlockUnframer(b *testing.B, payloadSize int) {
+	conn := &loopConn{data: createBlockFramedMessage(b, payloadSize)}
+	u := NewBlockUnframer(conn)
 
 	b.ResetTimer()
 	b.ReportAllocs()
-
 	for i := 0; i < b.N; i++ {
-		msg, err := unframer.ReadNextMessage()
-		if err != nil && err != io.EOF {
+		msg, err := u.ReadNextMessage()
+		if err != nil {
 			b.Fatalf("ReadNextMessage failed: %v", err)
 		}
 		if msg == nil {
-			// Reset connection for next iteration
-			conn.offset = 0
-			msg, err = unframer.ReadNextMessage()
-			if err != nil {
-				b.Fatalf("ReadNextMessage failed after reset: %v", err)
-			}
+			b.Fatal("ReadNextMessage returned no message")
 		}
 	}
 }
 
-// BenchmarkNTCP2UnframerSmall benchmarks with small messages (32 bytes)
-func BenchmarkNTCP2UnframerSmall(b *testing.B) {
-	testData := createTestFramedMessage(32)
-	conn := &benchmarkConn{data: testData, offset: 0}
-	unframer := NewI2NPUnframer(conn)
+// BenchmarkBlockUnframer benchmarks the spec-compliant block decode path.
+func BenchmarkBlockUnframer(b *testing.B) { benchmarkBlockUnframer(b, 100) }
 
-	b.ResetTimer()
-	b.ReportAllocs()
+// BenchmarkBlockUnframerSmall benchmarks with small messages (32 bytes).
+func BenchmarkBlockUnframerSmall(b *testing.B) { benchmarkBlockUnframer(b, 32) }
 
-	for i := 0; i < b.N; i++ {
-		msg, err := unframer.ReadNextMessage()
-		if err != nil && err != io.EOF {
-			b.Fatalf("ReadNextMessage failed: %v", err)
-		}
-		if msg == nil {
-			conn.offset = 0
-			msg, _ = unframer.ReadNextMessage()
-		}
-	}
-}
-
-// BenchmarkNTCP2UnframerLarge benchmarks with large messages (1KB)
-func BenchmarkNTCP2UnframerLarge(b *testing.B) {
-	testData := createTestFramedMessage(1024)
-	conn := &benchmarkConn{data: testData, offset: 0}
-	unframer := NewI2NPUnframer(conn)
-
-	b.ResetTimer()
-	b.ReportAllocs()
-
-	for i := 0; i < b.N; i++ {
-		msg, err := unframer.ReadNextMessage()
-		if err != nil && err != io.EOF {
-			b.Fatalf("ReadNextMessage failed: %v", err)
-		}
-		if msg == nil {
-			conn.offset = 0
-			msg, _ = unframer.ReadNextMessage()
-		}
-	}
-}
+// BenchmarkBlockUnframerLarge benchmarks with large messages (1KB).
+func BenchmarkBlockUnframerLarge(b *testing.B) { benchmarkBlockUnframer(b, 1024) }

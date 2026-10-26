@@ -367,8 +367,10 @@ func TestDataPhase_TerminationBlock(t *testing.T) {
 //
 // Spec reference: ntcp2.rst Section "Max Frame Size"
 func TestDataPhase_MaxFrameSize(t *testing.T) {
-	// Local I2NP message size limit (65516 per I2NP spec)
-	// This constant is defined locally in UnframeI2NPMessage
+	// Maximum single block data size (ntcp2.rst:1440 "size :: 2 bytes, big
+	// endian, size of data to follow, 0 - 65516"). The non-spec I2NPUnframer
+	// that used to carry this constant locally has been removed; the live
+	// receive path enforces it in ParseBlocks.
 	const expectedMaxI2NPMessageSize = 65516
 
 	// Verify by testing that a message at the max size can be framed

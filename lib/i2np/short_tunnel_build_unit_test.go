@@ -141,32 +141,62 @@ func TestShortBytesVsStandardBytes(t *testing.T) {
 	}
 }
 
-// TestShortTunnelBuildBytesRecordSize verifies Bytes() uses 218-byte records
-func TestShortTunnelBuildBytesRecordSize(t *testing.T) {
-	records := make([]BuildRequestRecord, 4)
-	for i := range records {
-		records[i] = BuildRequestRecord{
-			ReceiveTunnel: tunnel.TunnelID(i + 1),
-			NextTunnel:    tunnel.TunnelID(i + 100),
-			RequestTime:   time.Now(),
-			SendMessageID: i,
+// TestShortTunnelBuildWireFormatRecordSize verifies the live outbound STBM
+// serializer (build.BuildMessageFactory.CreateShortTunnelBuildMessage) emits
+// the spec layout: 1 count byte followed by 218-byte records, wrapped in a
+// full I2NP header.
+//
+// Spec: i2np.rst:1682-1706 — "num :: 1 byte Integer, Valid values: 1-8",
+// "record size: 218 bytes", "total size: 1+$num*218".
+//
+// This replaces the test of the removed noncompliant ShortTunnelBuild.Bytes(),
+// which serialized cleartext records with a zeroed ephemeral-key slot and was
+// never on a live path.
+func TestShortTunnelBuildWireFormatRecordSize(t *testing.T) {
+	factory := NewBuildMessageFactory()
+
+	for _, count := range []int{1, 4, 8} {
+		records := make([][]byte, count)
+		for i := range records {
+			rec := make([]byte, ShortBuildRecordSize)
+			// Distinct first byte per record so ordering is observable.
+			rec[0] = byte(0xA0 + i)
+			records[i] = rec
 		}
-	}
 
-	builder := NewShortTunnelBuilder(records)
-	stb := builder.(*ShortTunnelBuild)
-	data := stb.Bytes()
+		messageID := 0x11223344
+		serialized, err := factory.CreateShortTunnelBuildMessage(records, messageID)
+		if err != nil {
+			t.Fatalf("CreateShortTunnelBuildMessage(%d records): %v", count, err)
+		}
 
-	// Expected size: 1 byte count + 4 * 218 bytes per record
-	expectedSize := 1 + (4 * ShortBuildRecordSize)
-	if len(data) != expectedSize {
-		t.Errorf("ShortTunnelBuild.Bytes() returned %d bytes, expected %d (1 + 4*%d)",
-			len(data), expectedSize, ShortBuildRecordSize)
-	}
+		// Parse the I2NP envelope back off the wire.
+		msg := &BaseI2NPMessage{}
+		if err := msg.UnmarshalBinary(serialized); err != nil {
+			t.Fatalf("unmarshal serialized STBM: %v", err)
+		}
+		if msg.Type() != I2NPMessageTypeShortTunnelBuild {
+			t.Errorf("message type: got %d, want %d (ShortTunnelBuild)", msg.Type(), I2NPMessageTypeShortTunnelBuild)
+		}
+		if msg.MessageID() != messageID {
+			t.Errorf("message ID: got %d, want %d", msg.MessageID(), messageID)
+		}
 
-	// Verify count byte
-	if data[0] != 4 {
-		t.Errorf("Record count byte should be 4, got %d", data[0])
+		data := msg.GetData()
+		expectedSize := 1 + count*ShortBuildRecordSize
+		if len(data) != expectedSize {
+			t.Fatalf("STBM body = %d bytes, want %d (1 + %d*%d)", len(data), expectedSize, count, ShortBuildRecordSize)
+		}
+		if int(data[0]) != count {
+			t.Errorf("count byte = %d, want %d", data[0], count)
+		}
+		for i := 0; i < count; i++ {
+			off := 1 + i*ShortBuildRecordSize
+			if data[off] != byte(0xA0+i) {
+				t.Errorf("record %d marker at offset %d: got 0x%02X, want 0x%02X", i, off, data[off], byte(0xA0+i))
+				break
+			}
+		}
 	}
 }
 

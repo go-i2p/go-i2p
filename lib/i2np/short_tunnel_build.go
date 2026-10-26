@@ -50,35 +50,16 @@ func NewShortTunnelBuilder(records []BuildRequestRecord) TunnelBuilder {
 	}
 }
 
-// Bytes serializes the ShortTunnelBuild message to wire format.
-// Format: [count:1][records...]
-// Each record is 218 bytes per the I2P specification (ECIES short records).
-// The caller is responsible for applying ECIES encryption to each record.
-// See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the wire format.
-func (s *ShortTunnelBuild) Bytes() []byte {
-	log.WithFields(logger.Fields{
-		"at":           "ShortTunnelBuild.Bytes",
-		"record_count": s.Count,
-		"output_size":  1 + (s.Count * ShortBuildRecordSize),
-	}).Debug("Serializing ShortTunnelBuild")
-
-	// 1 byte for count + 218 bytes per record (ECIES short format)
-	size := 1 + (s.Count * ShortBuildRecordSize)
-	data := make([]byte, size)
-
-	// Write count
-	data[0] = byte(s.Count)
-
-	// Write each record in short ECIES format
-	offset := 1
-	for _, record := range s.BuildRequestRecords {
-		recordBytes := record.ShortBytes()
-		copy(data[offset:offset+ShortBuildRecordSize], recordBytes)
-		offset += ShortBuildRecordSize
-	}
-
-	return data
-}
+// Wire serialization for this message is deliberately NOT implemented here.
+// The live outbound path builds a type 25 message from already-encrypted
+// records via build.BuildMessageFactory.CreateShortTunnelBuildMessage
+// (lib/i2np/build_message_factory.go:61), which emits the spec's
+// "[count:1][218-byte encrypted records...]" layout (i2np.rst:1682-1706)
+// inside a full I2NP header. A previous Bytes() method on this type serialized
+// the cleartext records produced by BuildRequestRecord.ShortBytes(), which
+// zeroes the 32-byte ephemeral-key slot (tunnel/buildrecord/
+// build_request_record.go:396-405). That output was never a valid build
+// message and no caller used it, so it has been removed rather than fixed.
 
 // Compile-time interface satisfaction check
 var _ TunnelBuilder = (*ShortTunnelBuild)(nil)

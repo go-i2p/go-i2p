@@ -15,50 +15,69 @@ import (
 
 // Security audit tests for NTCP2 package (2026-02-04)
 
-// TestFrameLengthValidation verifies that message length limits are enforced
-// to prevent memory exhaustion attacks (max 65516 bytes per I2NP spec).
+// TestFrameLengthValidation verifies that the declared block size of an
+// inbound data-phase frame is bounded by the data actually present, so a peer
+// cannot make the receiver allocate and parse beyond the frame.
+//
+// ntcp2.rst:1440 defines the block header's size field as "2 bytes, big
+// endian, size of data to follow, 0 - 65516", which caps any single block at
+// 65516 bytes; the decrypted frame itself is capped at 65535 bytes
+// (ntcp2.rst:1442). ParseBlocks enforces the declared-size-vs-available-data
+// relationship, which is the memory-exhaustion guard on the live receive path.
 func TestFrameLengthValidation(t *testing.T) {
+	// maxI2NPMessageSize is the spec's maximum single block data size.
 	const maxI2NPMessageSize = 65516
 
 	testCases := []struct {
 		name        string
-		length      int
+		declared    int
+		available   int
 		expectError bool
 	}{
-		{"valid_small_message", 100, false},
-		{"valid_max_message", maxI2NPMessageSize, false},
-		{"invalid_oversized_message", maxI2NPMessageSize + 1, true},
-		{"invalid_huge_message", 100000, true},
-		{"invalid_negative_length", -1, true},
+		{"valid_small_message", 100, 100, false},
+		{"valid_max_message", maxI2NPMessageSize, maxI2NPMessageSize, false},
+		{"invalid_oversized_declaration", maxI2NPMessageSize + 1, 8, true},
+		{"invalid_huge_declaration", 65535, 8, true},
+		{"invalid_truncated_data", 512, 511, true},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Create mock connection with crafted length prefix
-			lengthBytes := []byte{
-				byte(tc.length >> 24),
-				byte(tc.length >> 16),
-				byte(tc.length >> 8),
-				byte(tc.length),
+			data := make([]byte, tc.available)
+			if !tc.expectError {
+				// A parseable I2NP block payload: 9-byte short header only.
+				copy(data, mustShortFramedI2NP(t))
 			}
 
-			// If length is valid, add dummy message data
-			data := lengthBytes
-			if !tc.expectError && tc.length > 0 {
-				data = append(data, make([]byte, tc.length)...)
-			}
+			payload := blockFrame(tc.declared, data)
 
-			conn := &mockConn{data: data}
-			unframer := NewI2NPUnframer(conn)
-
+			unframer := NewBlockUnframer(&mockConn{data: payload})
 			_, err := unframer.ReadNextMessage()
 			if tc.expectError {
-				assert.Error(t, err, "should reject message with length %d", tc.length)
+				assert.Error(t, err, "should reject block declaring %d bytes with %d available", tc.declared, tc.available)
+				assert.Contains(t, err.Error(), "truncated block data")
+			} else {
+				assert.NoError(t, err, "should accept block declaring %d bytes", tc.declared)
 			}
-			// Note: valid cases may still fail due to incomplete mock data,
-			// but the length validation should pass
 		})
 	}
+}
+
+// blockFrame builds one data-phase block (type 3, I2NP) with the given
+// declared size and data, as it appears after AEAD decryption.
+func blockFrame(declaredSize int, data []byte) []byte {
+	payload := make([]byte, 0, 3+len(data))
+	payload = append(payload, BlockTypeI2NP, byte(declaredSize>>8), byte(declaredSize))
+	return append(payload, data...)
+}
+
+// mustShortFramedI2NP returns a spec-conformant 9-byte short-header I2NP
+// message payload for use as block data.
+func mustShortFramedI2NP(t *testing.T) []byte {
+	t.Helper()
+	short, err := i2np.MarshalMessageShort(i2np.NewDataMessage([]byte("security test payload")))
+	require.NoError(t, err)
+	return short
 }
 
 // TestStaticKeyLengthValidation verifies that static keys must be exactly 32 bytes.
