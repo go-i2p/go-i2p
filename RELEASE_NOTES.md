@@ -1,3 +1,57 @@
+Release notes for: `go-i2p` Unreleased
+======================================
+
+This release is only recommended for developers at this time.
+The first general-use release will be version `0.2.0`
+
+This release closes out a full specification-compliance audit against the language-agnostic I2P
+specifications referenced from the package documentation. Four Critical and nine Warning findings were
+fixed, each with a regression test verified to fail against the unfixed code.
+
+Tunnel building changed most. Build records are now shuffled into random wire slots, as the spec
+requires, with the slot index used as the ChaCha20 nonce on both the creator and hop side. Inbound
+tunnels additionally insert a "phony" record carrying our own router hash and a real ephemeral key, and
+both record sets are padded to the spec's minimum of four and maximum of eight, so a relay cannot tell
+which records are ours. Because the phony record's creator layers and the hop re-XORs cancel exactly,
+it returns byte-identical, which is what lets us detect records modified in transit; that check is now
+performed and a tampered tunnel is discarded. The default build expiration moved from 480 to the
+specified 600 seconds.
+
+NTCP2 now performs the protocol handshake on inbound connections instead of the generic transport one,
+validates block ordering, verifies the `s=`/`i=`/`v=` address options before dialing, accepts unpadded
+I2P base64 and addresses published as `"NTCP"`, stops fragmenting I2NP messages across ChaChaPoly
+frames, reports the true count of valid frames received in its termination block, validates remote
+static keys as X25519 curve points, and persists its last-shutdown time. SSU2 now rejects out-of-session
+Peer Test and Hole Punch messages that are stale or missing a DateTime block, which closes an unbounded
+replay hole against unauthenticated traffic, and its termination handling delegates to go-noise.
+
+I2CP asynchronous message statuses now carry the originating nonce instead of zero, a nonce of zero
+suppresses the status as specified, DestroySession answers with a DisconnectMessage and closes the
+connection, unsupported message types disconnect rather than being logged and skipped, the session
+config Mapping sort order is enforced so signatures verify, and CreateLeaseSet2's store type now selects
+the framing, validation and NetDB record type instead of being parsed and discarded. BandwidthLimits are
+reported in KBps as the spec defines rather than bytes per second. `[String]` fields use the specified
+one-byte length prefix.
+
+Noncompliant dead APIs were deleted after confirming the live path uses a conformant replacement: the
+NTCP2 options serializer (11 bytes where the spec requires 12), `I2NPUnframer` (a four-byte prefix where
+the spec defines two), the SSU2 `FragmentI2NPMessage`/`FrameI2NPToBlock` pair, and
+`ShortTunnelBuild.Bytes()`, which emitted unsendable cleartext records.
+
+A note on I2NP TunnelBuild (21) and TunnelBuildReply (22), which an earlier release removed as
+"deprecated": the specification's message registry does label them deprecated, but the normative notes
+for those same two messages state they "has not been deprecated. Routers must implement." The removed
+handler could not parse encrypted records, so deleting it did not remove working capability, and
+VariableTunnelBuild covers the same one-to-eight record range, but the gap is real and is recorded as
+outstanding rather than resolved. The same correction applies to I2CP DestLookup (34) and DestReply (35),
+which the registry never labelled deprecated at all.
+
+Several validation gaps belong to upstream go-noise rather than to this repository and are reported
+there instead of patched locally: the unreachable `ValidateAEADFrame`, `writeFramed` silently
+fragmenting payloads, the missing minimum-size check on msg3 part 2 Options blocks, the responder's
+inability to learn Alice's intro key on the listener path, and the replay cache being created only for
+responders.
+
 Release notes for: `go-i2p` Version `0.1.70001`
 ============================================
 
