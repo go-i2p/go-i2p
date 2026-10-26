@@ -503,11 +503,11 @@ func verifyPhonyRecordIntegrity(work [][ShortBuildRecordSize]byte, pending *Pend
 
 	if got := checksumBuildRecord(work[slot][:]); got != pending.PhonyChecksum {
 		log.WithFields(logger.Fields{
-			"at":         "verifyPhonyRecordIntegrity",
-			"slot":       slot,
-			"want":       fmt.Sprintf("%x", pending.PhonyChecksum[:8]),
-			"got":        fmt.Sprintf("%x", got[:8]),
-			"tunnel_id":  pending.TunnelID,
+			"at":        "verifyPhonyRecordIntegrity",
+			"slot":      slot,
+			"want":      fmt.Sprintf("%x", pending.PhonyChecksum[:8]),
+			"got":       fmt.Sprintf("%x", got[:8]),
+			"tunnel_id": pending.TunnelID,
 		}).Warn("Phony build record was modified in transit - discarding tunnel")
 		return oops.Errorf("phony build record in slot %d was modified in transit; discarding tunnel", slot)
 	}

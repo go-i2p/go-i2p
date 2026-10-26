@@ -103,10 +103,10 @@ func (s *ShortTunnelBuildReply) hopRecordCount() int {
 // logReplyStart logs the initial processing information.
 func (s *ShortTunnelBuildReply) logReplyStart(recordCount int) {
 	log.WithFields(logger.Fields{
-		"at":            "ShortTunnelBuildReply.ProcessReply",
+		"at":               "ShortTunnelBuildReply.ProcessReply",
 		"hop_record_count": recordCount,
-		"total_records": len(s.BuildResponseRecords),
-		"count_field":   s.Count,
+		"total_records":    len(s.BuildResponseRecords),
+		"count_field":      s.Count,
 	}).Debug("Processing ShortTunnelBuildReply")
 }
 

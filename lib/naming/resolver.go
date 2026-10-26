@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-i2p/common/base64"
 	i2pbase32 "github.com/go-i2p/common/base32"
+	"github.com/go-i2p/common/base64"
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/lease_set"
 	"github.com/go-i2p/go-i2p/lib/util/logutil"

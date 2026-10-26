@@ -14,7 +14,7 @@
 //     hash prefix or other build record contents were modified, the router must
 //     discard the tunnel."
 //
-// Why the phony record returns byte-identical
+// # Why the phony record returns byte-identical
 //
 // A transit hop answers a build by rewriting the slot addressed to it with its
 // AEAD-encrypted reply and ChaCha20-XORing every OTHER slot, using each slot's

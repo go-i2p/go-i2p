@@ -790,7 +790,6 @@ func (tm *TunnelManager) registerGarlicReplyKeys(preReplyCKs [][32]byte, message
 	return nil
 }
 
-
 // applyChaCha20LayerObfuscation applies chained ChaCha20 stream-cipher layer obfuscation
 // to STBM records. For each hop i (second-to-last down to first), XOR every record at
 // index j > i with ChaCha20(key=replyKeys[i], nonce[4]=j). This ensures each hop can

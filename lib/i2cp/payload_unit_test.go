@@ -573,9 +573,9 @@ func TestDisconnectPayloadParse(t *testing.T) {
 		expectReason string
 	}{
 		{
-			name:        "empty_reason",
-			payload:     []byte{0x00}, // length = 0, no string bytes
-			expectError: false,
+			name:         "empty_reason",
+			payload:      []byte{0x00}, // length = 0, no string bytes
+			expectError:  false,
 			expectReason: "",
 		},
 		{
