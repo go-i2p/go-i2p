@@ -134,6 +134,17 @@ type TunnelBuilder = build.TunnelBuilder
 // TunnelReplyHandler represents types that handle tunnel build replies - re-exported from lib/tunnel/build
 type TunnelReplyHandler = build.TunnelReplyHandler
 
+// repliedHopCounter is implemented by reply handlers that can be told how many
+// of their records are real hop replies. A short build reply relays every slot
+// of the build request it answered, fake records included, so the handler needs
+// the hop count to avoid scoring padding as a rejected hop
+// (tunnel-creation-ecies.rst "Build Records"). Handlers that do not implement it
+// evaluate every record they hold, which is correct for reply sets that carry one
+// record per hop.
+type repliedHopCounter interface {
+	SetRepliedHopCount(count int)
+}
+
 // replyStepProcessor defines the internal operations for processing tunnel
 // build replies. Used by processReplySteps to eliminate duplication across
 // ShortTunnelBuildReply.

@@ -36,6 +36,13 @@ type ShortTunnelBuildReply struct {
 	Count                int
 	BuildResponseRecords []BuildResponseRecord
 	RawRecordData        [][]byte // Original encrypted bytes before parsing
+
+	// repliedHops is how many entries of BuildResponseRecords are actual hop
+	// replies. Zero means "all of them". A short build reply relays every slot of
+	// the build request it answered - including the fake records the creator added
+	// for randomized/padded record order - so the reply set is longer than the
+	// tunnel. Scoring those extra slots as hops would reject a healthy build.
+	repliedHops int
 }
 
 // GetReplyRecords returns the parsed build response records. It satisfies
@@ -63,30 +70,62 @@ func (s *ShortTunnelBuildReply) GetRecordCount() int {
 // ProcessReply processes the short tunnel build reply by analyzing each response record.
 // The current tunnel build reply format (v0.9.51+).
 // Validates response integrity and determines tunnel build success/failure.
+//
+// Only the hop replies are analyzed: the trailing fake records are padding whose
+// contents carry no verdict, and they still hold the parser's
+// "pending decryption" sentinel, so counting them as hops would fail every build
+// that correctly pads its record order.
 func (s *ShortTunnelBuildReply) ProcessReply() error {
-	return processReplySteps(s, s.BuildResponseRecords)
+	return processReplySteps(s, s.BuildResponseRecords[:s.hopRecordCount()])
+}
+
+// SetRepliedHopCount records how many of the reply's slots are real hop replies.
+// Called by the reply processor once the build's hop count is known; satisfies
+// the repliedHopCounter interface. Values outside 1-8 are ignored so a bogus
+// count cannot truncate a legitimate reply.
+func (s *ShortTunnelBuildReply) SetRepliedHopCount(count int) {
+	if count < 1 || count > maxBuildRecords {
+		return
+	}
+	s.repliedHops = count
+}
+
+// hopRecordCount returns the number of BuildResponseRecords that are hop replies.
+// Never exceeds what the message actually carries.
+func (s *ShortTunnelBuildReply) hopRecordCount() int {
+	total := len(s.BuildResponseRecords)
+	if s.repliedHops <= 0 || s.repliedHops > total {
+		return total
+	}
+	return s.repliedHops
 }
 
 // logReplyStart logs the initial processing information.
 func (s *ShortTunnelBuildReply) logReplyStart(recordCount int) {
 	log.WithFields(logger.Fields{
-		"at":           "ShortTunnelBuildReply.ProcessReply",
-		"record_count": recordCount,
-		"count_field":  s.Count,
+		"at":            "ShortTunnelBuildReply.ProcessReply",
+		"hop_record_count": recordCount,
+		"total_records": len(s.BuildResponseRecords),
+		"count_field":   s.Count,
 	}).Debug("Processing ShortTunnelBuildReply")
 }
 
 // validateRecordCount validates that Count field matches actual record count.
 // Returns an error if count mismatch or no records present.
 // Delegates to shared ValidateRecordCount helper.
-func (s *ShortTunnelBuildReply) validateRecordCount(recordCount int) error {
-	return ValidateRecordCount(s.Count, recordCount, "ShortTunnelBuildReply")
+//
+// The Count field is the message's declared record count, which covers the fake
+// records too, so it is checked against everything the message carries rather
+// than against the hop replies alone.
+func (s *ShortTunnelBuildReply) validateRecordCount(_ int) error {
+	return ValidateRecordCount(s.Count, len(s.BuildResponseRecords), "ShortTunnelBuildReply")
 }
 
 // processAllHops processes each hop response and counts successes.
 // Returns the success count and the first error encountered (if any).
 func (s *ShortTunnelBuildReply) processAllHops() (int, error) {
-	return processAllRecordsAsHops(s.BuildResponseRecords, s.processHopResponse)
+	records := s.BuildResponseRecords[:s.hopRecordCount()]
+	return processAllRecordsAsHops(records, s.processHopResponse)
 }
 
 // processHopResponse processes a single hop's build response.

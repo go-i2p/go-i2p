@@ -132,10 +132,13 @@ func (tm *TunnelManager) tryDecryptLateShortBuildReply(handler TunnelReplyHandle
 		return oops.Errorf("missing STBM decryption keys/noise hashes")
 	}
 	pending := &PendingBuildRequest{
-		ReplyKeys:   req.replyKeys,
-		ReplyIVs:    req.replyIVs,
-		NoiseHashes: req.noiseHashes,
-		RecordSlots: req.recordSlots,
+		ReplyKeys:      req.replyKeys,
+		ReplyIVs:       req.replyIVs,
+		NoiseHashes:    req.noiseHashes,
+		HopCount:       req.hopCount,
+		RecordSlots:    req.recordSlots,
+		HasPhonyRecord: req.hasPhonyRecord,
+		PhonyChecksum:  req.phonyChecksum,
 	}
 	if tm.replyProcessor == nil {
 		return oops.Errorf("reply processor unavailable")
@@ -291,8 +294,20 @@ func (tm *TunnelManager) updateTunnelStatesFromReply(messageID int, records []Bu
 
 	tm.logTunnelUpdate(matchingTunnel.ID, messageID, len(records), replyErr == nil)
 
-	responses := tm.createBuildResponses(records)
+	// A short build reply relays every slot of the request it answered, fake
+	// records included, so only the first hopCount entries are hop verdicts.
+	responses := tm.createBuildResponses(hopReplyRecords(records, req, reqExists))
 	tm.updateTunnelBasedOnReply(matchingTunnel, messageID, responses, replyErr)
+}
+
+// hopReplyRecords returns the reply records that belong to real hops, dropping
+// the fake/padding slots a padded build reply also carries. Falls back to the
+// full slice when the build is unknown, since there is no hop count to trust.
+func hopReplyRecords(records []BuildResponseRecord, req *buildRequest, reqExists bool) []BuildResponseRecord {
+	if !reqExists || req.replyHopCount() <= 0 || req.replyHopCount() >= len(records) {
+		return records
+	}
+	return records[:req.replyHopCount()]
 }
 
 func (tm *TunnelManager) accountCorrelatedReplyWithoutTunnelState(req *buildRequest, messageID int, replyErr error) {

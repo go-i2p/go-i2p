@@ -1,6 +1,7 @@
 package tunnel
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"time"
 
@@ -76,19 +77,39 @@ type TunnelBuildResult struct {
 	GatewayTunnelID TunnelID                 // Inbound gateway receive tunnel ID
 	Hops            []router_info.RouterInfo // Selected router hops
 	Records         []BuildRequestRecord     // Build records for each hop
+	OurIdentity     common.Hash              // Our router identity hash, needed to build the inbound phony record
 	ReplyKeys       []session_key.SessionKey // Reply decryption keys for each hop
 	ReplyIVs        [][16]byte               // Reply IVs for each hop
 	NoiseHashes     [][32]byte               // Per-hop Noise transcript hashes (m_H) for STBM reply AEAD decryption
 	UseShortBuild   bool                     // True if using Short Tunnel Build (STBM), false for Variable Tunnel Build
 	IsInbound       bool                     // True if this is an inbound tunnel
 
-	// RecordSlots maps hop path index -> wire slot index, populated when the
+	// RecordSlots maps PATH ENTRY index -> wire slot index, populated when the
 	// build message is serialized. Build record order is randomized so middle
 	// hops cannot learn their position in the tunnel
-	// (tunnel-creation-ecies.rst "Build Records"). Everything else in this
-	// struct stays in path order; only the wire layout is permuted, so reply
-	// decryption must consult this map for its AEAD/ChaCha20 nonces.
+	// (tunnel-creation-ecies.rst "Build Records"). Everything else in this struct
+	// stays in path order; only the wire layout is permuted, so reply decryption
+	// must consult this map for its AEAD/ChaCha20 nonces.
+	//
+	// It is indexed by PATH ENTRY, not by hop: entries [0, len(Hops)) are the
+	// real hops, entry len(Hops) is the phony record when HasPhonyRecord is set,
+	// and any entries past those are random padding slots. Its length is
+	// therefore the number of records put on the wire, which is at least 4.
 	RecordSlots []int
+
+	// HasPhonyRecord is set when the build carries a fake record standing in for
+	// the originating router, which inbound builds must always include
+	// (tunnel-creation-ecies.rst "Build Records"): it carries our own 16-byte
+	// hash prefix and a real X25519 ephemeral key, so the closest hop cannot tell
+	// that the next hop is the originator. Its wire slot is
+	// RecordSlots[len(Hops)], and it is the last path entry that carries a real
+	// layer target - the padding slots past it are never addressed to anybody.
+	HasPhonyRecord bool
+
+	// PhonyChecksum is the SHA-256 digest of the phony record as it was sent.
+	// The spec mandates that an inbound-tunnel originator verify its fake
+	// record was not modified in transit and discard the tunnel if it was.
+	PhonyChecksum [sha256.Size]byte
 }
 
 // CreateBuildRequest generates a complete tunnel build request with encrypted records.
@@ -225,6 +246,7 @@ func (tb *TunnelBuilder) CreateBuildRequest(req BuildTunnelRequest) (*TunnelBuil
 		GatewayTunnelID: gatewayTunnelID,
 		Hops:            peers,
 		Records:         records,
+		OurIdentity:     req.OurIdentity,
 		ReplyKeys:       replyKeys,
 		ReplyIVs:        replyIVs,
 		UseShortBuild:   req.UseShortBuild,

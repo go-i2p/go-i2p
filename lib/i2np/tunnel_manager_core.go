@@ -1,6 +1,7 @@
 package i2np
 
 import (
+	"crypto/sha256"
 	"sync"
 	"time"
 
@@ -26,7 +27,9 @@ type buildRequest struct {
 	replyKeys       []session_key.SessionKey // Reply decryption keys for each hop
 	replyIVs        [][16]byte               // Reply IVs for each hop
 	noiseHashes     [][32]byte               // STBM per-hop Noise transcript hashes for reply AEAD decryption
-	recordSlots     []int                    // STBM build-record permutation: path index -> wire slot index
+	recordSlots     []int                    // STBM build-record layout: path entry -> wire slot index, length = wire record count
+	hasPhonyRecord  bool                     // True when the build carried our fake originator record
+	phonyChecksum   [sha256.Size]byte        // Digest of the phony record as sent, for the mandatory tamper check
 	createdAt       time.Time                // When the request was created
 	retryCount      int                      // Number of retry attempts
 	useShortBuild   bool                     // True if using STBM, false for legacy VTB
@@ -257,4 +260,18 @@ func (tm *TunnelManager) SetOurRouterHash(hash common.Hash) {
 	if tm.outboundPool != nil {
 		tm.outboundPool.SetRouterHash(hash)
 	}
+}
+
+// replyHopCount returns the number of real hops this build expects replies from.
+// The reply key list is authoritative - it is built one-per-hop - so it is used
+// in preference to the recorded hop count. A padded short build reply carries
+// more records than that, and the extras are not hop verdicts.
+func (b *buildRequest) replyHopCount() int {
+	if b == nil {
+		return 0
+	}
+	if len(b.replyKeys) > 0 {
+		return len(b.replyKeys)
+	}
+	return b.hopCount
 }

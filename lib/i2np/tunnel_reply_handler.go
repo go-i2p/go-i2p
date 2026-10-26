@@ -1,6 +1,8 @@
 package i2np
 
 import (
+	"crypto/sha256"
+	"fmt"
 	"sync"
 	"time"
 
@@ -67,7 +69,50 @@ type PendingBuildRequest struct {
 	// "Build Records"), and every per-slot nonce on both the build and reply
 	// paths is the WIRE slot number, so reply decryption must address hop i's
 	// record at RecordSlots[i] rather than at i. Nil means the identity.
+	//
+	// It is indexed by PATH ENTRY, not by hop: entries [0, HopCount) are the real
+	// hops, entry HopCount is our own phony record when HasPhonyRecord is set,
+	// and entries past those are random padding slots. Its length is therefore
+	// the number of records the build put on the wire, which is at least 4.
 	RecordSlots []int
+
+	// HasPhonyRecord reports whether this build carried the originator's fake
+	// record, which inbound builds always do when there is room for it. Its wire
+	// slot is RecordSlots[HopCount].
+	HasPhonyRecord bool
+
+	// PhonyChecksum is the digest of the phony record as we sent it. Verifying it
+	// is mandatory: if a previous hop modified our fake record the tunnel must be
+	// discarded, because that is a de-anonymization vector
+	// (tunnel-creation-ecies.rst "Build Records").
+	PhonyChecksum [sha256.Size]byte
+}
+
+// hopCount returns the number of real hops this build is waiting replies from.
+// The reply key list is authoritative: RegisterPendingBuild enforces that it has
+// exactly one key per hop, and it is what the peel loop iterates.
+func (p *PendingBuildRequest) hopCount() int {
+	if p == nil {
+		return 0
+	}
+	if len(p.ReplyKeys) > 0 {
+		return len(p.ReplyKeys)
+	}
+	return p.HopCount
+}
+
+// pathEntryCount returns how many of the build's wire slots carry something the
+// creator cares about: one per real hop, plus one for the phony record when the
+// build carried one. Anything past that on the wire is random padding.
+func (p *PendingBuildRequest) pathEntryCount() int {
+	if p == nil {
+		return 0
+	}
+	n := p.hopCount()
+	if p.HasPhonyRecord {
+		n++
+	}
+	return n
 }
 
 // ReplyProcessor handles tunnel build reply processing with timeout and retry logic.
@@ -183,13 +228,18 @@ func (rp *ReplyProcessor) SetPendingBuildNoiseHashes(tunnelID buildrecord.Tunnel
 	return nil
 }
 
-// SetPendingBuildRecordSlots stores the build-record permutation used for an
+// SetPendingBuildRecordSlots stores the build-record layout used for an
 // in-progress STBM build. Build record order is randomized so middle hops cannot
-// learn their tunnel position (tunnel-creation-ecies.rst "Build Records"); the
-// creator must remember it to address each hop's reply slot correctly, because
-// every per-slot nonce on the reply path is the wire slot number. Must be called
-// immediately after RegisterPendingBuild.
-func (rp *ReplyProcessor) SetPendingBuildRecordSlots(tunnelID buildrecord.TunnelID, recordSlots []int) error {
+// learn their tunnel position, and fake records pad the message up to the
+// standard minimum (tunnel-creation-ecies.rst "Build Records"); the creator must
+// remember the layout to address each hop's reply slot correctly, because every
+// per-slot nonce on the reply path is the wire slot number.
+//
+// recordSlots is indexed by path entry and its length is the number of records
+// put on the wire. hasPhony and phonyChecksum describe the originator's fake
+// record for inbound builds, whose integrity the creator must verify. Must be
+// called immediately after RegisterPendingBuild.
+func (rp *ReplyProcessor) SetPendingBuildRecordSlots(tunnelID buildrecord.TunnelID, recordSlots []int, hasPhony bool, phonyChecksum [sha256.Size]byte) error {
 	rp.mutex.Lock()
 	defer rp.mutex.Unlock()
 
@@ -198,6 +248,8 @@ func (rp *ReplyProcessor) SetPendingBuildRecordSlots(tunnelID buildrecord.Tunnel
 		return oops.Errorf("no pending build for tunnel %d when setting record slots", tunnelID)
 	}
 	pending.RecordSlots = recordSlots
+	pending.HasPhonyRecord = hasPhony
+	pending.PhonyChecksum = phonyChecksum
 	return nil
 }
 
@@ -270,6 +322,13 @@ func (rp *ReplyProcessor) decryptReplyIfEnabled(handler TunnelReplyHandler, tunn
 }
 
 func (rp *ReplyProcessor) processReplyWithHandler(handler TunnelReplyHandler, tunnelID buildrecord.TunnelID, pending *PendingBuildRequest) error {
+	// Tell the handler how many of the records it holds are actual hop replies.
+	// A short build reply relays every slot of the request, fake records
+	// included, so scoring it on wire record count would fail a good build.
+	if counter, ok := handler.(repliedHopCounter); ok {
+		counter.SetRepliedHopCount(len(pending.ReplyKeys))
+	}
+
 	if err := handler.ProcessReply(); err != nil {
 		log.WithFields(logger.Fields{
 			"tunnel_id": tunnelID,
@@ -312,15 +371,27 @@ func (rp *ReplyProcessor) decryptReplyRecords(handler TunnelReplyHandler, pendin
 }
 
 // validateRecordCounts ensures record counts match between parsed, raw, and expected keys.
+//
+// A short build reply relays every slot of the request it answered, including
+// the fake records, so the reply carries the WIRE record count - which is at
+// least 4 and always at least the hop count (tunnel-creation-ecies.rst "Build
+// Records"). Only the first HopCount slots are replies.
 func (rp *ReplyProcessor) validateRecordCounts(records []BuildResponseRecord, rawRecords [][]byte, pending *PendingBuildRequest) error {
-	if len(records) != len(pending.ReplyKeys) {
-		return oops.Errorf("record count mismatch: got %d records, expected %d",
-			len(records), len(pending.ReplyKeys))
-	}
-
 	if len(rawRecords) != len(records) {
 		return oops.Errorf("raw record count mismatch: got %d raw records, expected %d",
 			len(rawRecords), len(records))
+	}
+
+	if len(pending.RecordSlots) > 0 {
+		if len(records) != len(pending.RecordSlots) {
+			return oops.Errorf("record count mismatch: got %d records, expected %d from build %v",
+				len(records), len(pending.RecordSlots), pending.RecordSlots)
+		}
+	}
+
+	if len(records) < len(pending.ReplyKeys) {
+		return oops.Errorf("record count too small: got %d records, expected at least %d hop replies",
+			len(records), len(pending.ReplyKeys))
 	}
 
 	return nil
@@ -339,19 +410,27 @@ func (rp *ReplyProcessor) validateRecordCounts(records []BuildResponseRecord, ra
 // the other slots and then AEAD-decrypting that hop's slot. Both nonces are the
 // WIRE slot number, not the path index; results are written back in path order
 // so callers see records[i] for hop i regardless of the shuffle.
+//
+// Slots that no hop answered - our phony record and the random padding - are
+// deliberately not peeled. See peelChaCha20Layers for why.
 func (rp *ReplyProcessor) decryptSTBMReplyRecords(records []BuildResponseRecord, rawRecords [][]byte, pending *PendingBuildRequest) error {
 	work, err := rp.prepareSTBMWorkBuffer(rawRecords)
 	if err != nil {
 		return err
 	}
 
-	n := len(work)
-	for i := n - 1; i >= 0; i-- {
+	hopCount := len(pending.ReplyKeys)
+	// Slots the creator must not touch on the way back: our own fake record,
+	// whose bytes have to survive intact for the tamper check, plus the padding
+	// slots, which nobody reads.
+	locked := lockedReplySlots(pending, len(work))
+
+	for i := hopCount - 1; i >= 0; i-- {
 		var key [32]byte
 		copy(key[:], pending.ReplyKeys[i][:])
 
-		ourSlot := rp.slotForHop(pending, i, n)
-		if err := rp.peelChaCha20Layers(work, key, ourSlot); err != nil {
+		ourSlot := rp.slotForHop(pending, i, len(work))
+		if err := rp.peelChaCha20Layers(work, key, ourSlot, locked); err != nil {
 			return err
 		}
 
@@ -363,7 +442,75 @@ func (rp *ReplyProcessor) decryptSTBMReplyRecords(records []BuildResponseRecord,
 		records[i] = BuildResponseRecord{Reply: retCode}
 	}
 
-	log.WithField("record_count", n).Debug("Decrypted all STBM reply records")
+	// Spec: "Originators of inbound tunnels must use some method to validate that
+	// their 'fake' record has not been modified by the previous hop, as this may
+	// also be used for deanonimization. ... If the 16-byte hash prefix or other
+	// build record contents were modified, the router must discard the tunnel."
+	if err := verifyPhonyRecordIntegrity(work, pending); err != nil {
+		return err
+	}
+
+	// Only the first hopCount slots are replies. The fake/padding slots keep the
+	// "pending decryption" sentinel the parser installed, so nothing can mistake
+	// them for an accepting hop; the reply handler evaluates hopCount records.
+
+	log.WithFields(logger.Fields{
+		"record_count": len(work),
+		"hop_count":    hopCount,
+	}).Debug("Decrypted all STBM reply records")
+	return nil
+}
+
+// lockedReplySlots returns the wire slots the creator must not peel layers from.
+//
+// The phony slot is the interesting one. The creator pre-applies every real
+// hop's ChaCha20 layer to it (it is the last path entry), each hop applies its
+// own layer to it again on the reply path, and those two sets are identical - so
+// the slot arrives back byte-identical to what was sent. Peeling it a third time
+// would corrupt exactly the property the mandatory tamper check depends on.
+//
+// Padding slots are locked for a simpler reason: nothing reads them, and leaving
+// them alone keeps the peel's slot set equal to the creator's layer set.
+func lockedReplySlots(pending *PendingBuildRequest, wireCount int) map[int]bool {
+	locked := make(map[int]bool, wireCount)
+	if pending == nil {
+		return locked
+	}
+	// Path entries at or past the hop count are the fake records. Their slots are
+	// the tail of the recorded layout; when no layout was recorded (legacy reply)
+	// the identity mapping applies.
+	for entry := pending.hopCount(); entry < wireCount; entry++ {
+		locked[slotForPathEntry(pending, entry, wireCount)] = true
+	}
+	return locked
+}
+
+// verifyPhonyRecordIntegrity checks the creator's fake record came back
+// unmodified. It is a no-op for builds that carried none (outbound builds, and
+// inbound builds with no room for one).
+func verifyPhonyRecordIntegrity(work [][ShortBuildRecordSize]byte, pending *PendingBuildRequest) error {
+	if pending == nil || !pending.HasPhonyRecord {
+		return nil
+	}
+	phonyEntry := pending.hopCount()
+	if phonyEntry >= len(pending.RecordSlots) {
+		return oops.Errorf("inbound build expects a phony record at path entry %d but none was recorded", phonyEntry)
+	}
+	slot := pending.RecordSlots[phonyEntry]
+	if slot < 0 || slot >= len(work) {
+		return oops.Errorf("phony build record slot %d out of range [0, %d)", slot, len(work))
+	}
+
+	if got := checksumBuildRecord(work[slot][:]); got != pending.PhonyChecksum {
+		log.WithFields(logger.Fields{
+			"at":         "verifyPhonyRecordIntegrity",
+			"slot":       slot,
+			"want":       fmt.Sprintf("%x", pending.PhonyChecksum[:8]),
+			"got":        fmt.Sprintf("%x", got[:8]),
+			"tunnel_id":  pending.TunnelID,
+		}).Warn("Phony build record was modified in transit - discarding tunnel")
+		return oops.Errorf("phony build record in slot %d was modified in transit; discarding tunnel", slot)
+	}
 	return nil
 }
 
@@ -371,12 +518,19 @@ func (rp *ReplyProcessor) decryptSTBMReplyRecords(records []BuildResponseRecord,
 // the identity mapping when no permutation was recorded (or when it does not
 // cover this hop, e.g. a legacy reply).
 func (rp *ReplyProcessor) slotForHop(pending *PendingBuildRequest, hopIndex, recordCount int) int {
-	if pending == nil || hopIndex < 0 || hopIndex >= len(pending.RecordSlots) {
-		return hopIndex
+	return slotForPathEntry(pending, hopIndex, recordCount)
+}
+
+// slotForPathEntry returns the wire slot carrying the given path entry of a
+// pending build's request. Falls back to the identity mapping when no
+// permutation was recorded or it does not cover this entry.
+func slotForPathEntry(pending *PendingBuildRequest, entry, recordCount int) int {
+	if pending == nil || entry < 0 || entry >= len(pending.RecordSlots) {
+		return entry
 	}
-	slot := pending.RecordSlots[hopIndex]
+	slot := pending.RecordSlots[entry]
 	if slot < 0 || slot >= recordCount {
-		return hopIndex
+		return entry
 	}
 	return slot
 }
@@ -395,13 +549,14 @@ func (rp *ReplyProcessor) prepareSTBMWorkBuffer(rawRecords [][]byte) ([][ShortBu
 }
 
 // peelChaCha20Layers peels one hop's ChaCha20 layer from every wire slot except
-// that hop's own. This mirrors the relay behavior exactly: a hop XORs all slots
-// j != ourSlot using j as the nonce, so the initiator peels the same set with
-// the same nonces.
-func (rp *ReplyProcessor) peelChaCha20Layers(work [][ShortBuildRecordSize]byte, key [32]byte, ourSlot int) error {
+// that hop's own and except the slots the creator must leave alone. This mirrors
+// the relay behavior exactly: a hop XORs all slots j != ourSlot using j as the
+// nonce, so the initiator peels the same set with the same nonces - minus the
+// fake records, whose XORs are self-cancelling (see lockedReplySlots).
+func (rp *ReplyProcessor) peelChaCha20Layers(work [][ShortBuildRecordSize]byte, key [32]byte, ourSlot int, locked map[int]bool) error {
 	for j := 0; j < len(work); j++ {
-		if j == ourSlot {
-			continue // Skip the hop's own record (AEAD-decrypted separately)
+		if j == ourSlot || locked[j] {
+			continue // Skip the hop's own record (AEAD-decrypted separately) and the fake records
 		}
 		if err := chacha20XORRecord(&work[j], key, j); err != nil {
 			return oops.Wrapf(err, "ChaCha20 peel failed for slot %d record %d", ourSlot, j)

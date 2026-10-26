@@ -159,7 +159,7 @@ func (tm *TunnelManager) finalizePendingBuild(result *tunnel.TunnelBuildResult, 
 	// STBM message construction updates result.ReplyKeys/NoiseHashes to the
 	// final HKDF-derived values used for reply decryption. Persist the final
 	// crypto context so late uncorrelated replies can be best-effort decrypted.
-	tm.updatePendingBuildReplyCrypto(messageID, result.ReplyKeys, result.ReplyIVs, result.NoiseHashes, result.RecordSlots)
+	tm.updatePendingBuildReplyCrypto(messageID, result)
 
 	// Anchor the 90-second expiration window to the moment the build message
 	// actually left this router, then arm cleanup at that horizon.
@@ -199,11 +199,14 @@ func (tm *TunnelManager) finalizePendingBuild(result *tunnel.TunnelBuildResult, 
 		}
 	}
 
-	// Store the build-record permutation chosen when the message was serialized.
+	// Store the build-record layout chosen when the message was serialized.
 	// Reply decryption needs it to find each hop's slot, since the slots are
-	// deliberately shuffled on the wire.
+	// deliberately shuffled on the wire, and to know which trailing slots are
+	// fake records it must leave untouched.
 	if len(result.RecordSlots) > 0 {
-		if setErr := tm.replyProcessor.SetPendingBuildRecordSlots(result.TunnelID, result.RecordSlots); setErr != nil {
+		if setErr := tm.replyProcessor.SetPendingBuildRecordSlots(
+			result.TunnelID, result.RecordSlots, result.HasPhonyRecord, result.PhonyChecksum,
+		); setErr != nil {
 			log.WithError(setErr).WithField("tunnel_id", result.TunnelID).Warn("Failed to set STBM record slots")
 		}
 	}
@@ -405,6 +408,8 @@ func (tm *TunnelManager) trackPendingBuild(result *tunnel.TunnelBuildResult, mes
 		replyIVs:        result.ReplyIVs,
 		noiseHashes:     result.NoiseHashes,
 		recordSlots:     result.RecordSlots,
+		hasPhonyRecord:  result.HasPhonyRecord,
+		phonyChecksum:   result.PhonyChecksum,
 		createdAt:       time.Now(),
 		retryCount:      0,
 		useShortBuild:   result.UseShortBuild,
@@ -416,17 +421,19 @@ func (tm *TunnelManager) trackPendingBuild(result *tunnel.TunnelBuildResult, mes
 
 // updatePendingBuildReplyCrypto refreshes the pending build's reply-decryption
 // context after message creation has finalized STBM-derived keys and hashes.
-func (tm *TunnelManager) updatePendingBuildReplyCrypto(messageID int, replyKeys []session_key.SessionKey, replyIVs [][16]byte, noiseHashes [][32]byte, recordSlots []int) {
+func (tm *TunnelManager) updatePendingBuildReplyCrypto(messageID int, result *tunnel.TunnelBuildResult) {
 	tm.buildMutex.Lock()
 	defer tm.buildMutex.Unlock()
 	req, ok := tm.pendingBuilds[messageID]
 	if !ok {
 		return
 	}
-	req.replyKeys = replyKeys
-	req.replyIVs = replyIVs
-	req.noiseHashes = noiseHashes
-	req.recordSlots = recordSlots
+	req.replyKeys = result.ReplyKeys
+	req.replyIVs = result.ReplyIVs
+	req.noiseHashes = result.NoiseHashes
+	req.recordSlots = result.RecordSlots
+	req.hasPhonyRecord = result.HasPhonyRecord
+	req.phonyChecksum = result.PhonyChecksum
 }
 
 // resetPendingBuildCreatedAt re-anchors the createdAt timestamp of a tracked
@@ -572,6 +579,27 @@ func (tm *TunnelManager) createSerializedShortTunnelBuildMessage(result *tunnel.
 		replyKeys[i] = keys.ReplyKey
 	}
 
+	// Grow the path-ordered record set to make room for the phony entry. It is
+	// the last path entry that a real hop's layer is applied to, which is what
+	// makes its slot come back byte-identical: the creator XORs it once per real
+	// hop, every real hop XORs it once on the way back, and the peel never
+	// touches it.
+	hopCount := len(encryptedRecords)
+	phony := shouldInsertPhonyRecord(result.IsInbound, hopCount)
+	pathEntries := hopCount
+	if phony {
+		phonyRecord, phonyErr := makePhonyShortBuildRecord(result.OurIdentity)
+		if phonyErr != nil {
+			return nil, oops.Wrapf(phonyErr, "failed to create phony build record")
+		}
+		var slot [ShortBuildRecordSize]byte
+		copy(slot[:], phonyRecord)
+		encryptedRecords = append(encryptedRecords, slot)
+		result.HasPhonyRecord = true
+		result.PhonyChecksum = checksumBuildRecord(phonyRecord)
+		pathEntries++
+	}
+
 	// Randomize build record order so a middle hop cannot infer its position in
 	// the tunnel from the slot it was addressed in
 	// (tunnel-creation-ecies.rst "Build Records": "Build record order must be
@@ -580,21 +608,32 @@ func (tm *TunnelManager) createSerializedShortTunnelBuildMessage(result *tunnel.
 	// reply peel uses slot indices for its nonces.
 	//
 	// The ChaCha20 layers are applied in wire-slot space because that is what
-	// the hops see: hop i XORs every slot but its own, using the addressed slot
-	// as the nonce, and the creator's pre-applied layers must cancel those
-	// exactly. After all hops have processed the message, wire slot s_k carries
-	// only the layers of hops j > k, which is the invariant the peel relies on.
-	recordSlots := shuffleRecordSlots(len(encryptedRecords))
-	result.RecordSlots = recordSlots
+	// the hops see: hop i XORs every slot addressed to a later path entry, using
+	// that slot as the nonce, and the creator's pre-applied layers must cancel
+	// those exactly. After all hops have processed the message, wire slot
+	// pathSlots[k] carries only the layers of path entries j > k.
+	wireCount := shortBuildRecordCount(pathEntries)
+	pathSlots := shuffleRecordSlots(wireCount)
+	result.RecordSlots = pathSlots
+	if wireCount > pathEntries {
+		// Slots past the last path entry are padding: pure random, never
+		// addressed to a hop and never read back. Hops still re-XOR them along
+		// with everything else, which is harmless - they carry no information.
+		padding, padErr := makeRandomShortBuildRecords(pathSlots, pathEntries, wireCount)
+		if padErr != nil {
+			return nil, padErr
+		}
+		encryptedRecords = append(encryptedRecords, padding...)
+	}
 
-	if err := tm.applyChaCha20LayerObfuscation(encryptedRecords, replyKeys, recordSlots); err != nil {
+	if err := tm.applyChaCha20LayerObfuscation(encryptedRecords[:pathEntries], replyKeys, pathSlots); err != nil {
 		return nil, err
 	}
 
 	// Convert [][218]byte to [][]byte for factory, in permuted (wire) order.
-	records := make([][]byte, len(encryptedRecords))
-	for pathIndex, slot := range recordSlots {
-		records[slot] = encryptedRecords[pathIndex][:]
+	records := make([][]byte, wireCount)
+	for pathIndex := 0; pathIndex < wireCount; pathIndex++ {
+		records[pathSlots[pathIndex]] = encryptedRecords[pathIndex][:]
 	}
 
 	serialized, err := tm.messageFactory.CreateShortTunnelBuildMessage(records, messageID)
@@ -602,6 +641,22 @@ func (tm *TunnelManager) createSerializedShortTunnelBuildMessage(result *tunnel.
 		return nil, oops.Wrapf(err, "failed to create Short Tunnel Build message")
 	}
 	return serialized, nil
+}
+
+// makeRandomShortBuildRecords fills the wire slots that no path entry claims
+// with random bytes, returning them in path-entry order so the caller can
+// append them after the real records. Slots `entries` and beyond in `pathSlots`
+// are the ones left over.
+func makeRandomShortBuildRecords(pathSlots []int, entries, wireCount int) ([][ShortBuildRecordSize]byte, error) {
+	padding := make([][ShortBuildRecordSize]byte, wireCount-entries)
+	for k := entries; k < wireCount; k++ {
+		raw, err := makeRandomShortBuildRecord()
+		if err != nil {
+			return nil, oops.Wrapf(err, "failed to create padding build record for slot %d", pathSlots[k])
+		}
+		copy(padding[k-entries][:], raw)
+	}
+	return padding, nil
 }
 
 // shuffleRecordSlots returns a random path-index -> wire-slot-index mapping for
