@@ -47,10 +47,20 @@ outstanding rather than resolved. The same correction applies to I2CP DestLookup
 which the registry never labelled deprecated at all.
 
 Several validation gaps belong to upstream go-noise rather than to this repository and are reported
-there instead of patched locally: the unreachable `ValidateAEADFrame`, `writeFramed` silently
-fragmenting payloads, the missing minimum-size check on msg3 part 2 Options blocks, the responder's
-inability to learn Alice's intro key on the listener path, and the replay cache being created only for
-responders.
+there instead of patched locally: `writeFramed` silently fragmenting payloads, the missing minimum-size
+check on msg3 part 2 Options blocks, the responder's inability to learn Alice's intro key on the listener
+path, and the replay cache being created only for responders.
+
+**This release requires go-noise at or past `6372d5b`, which is not yet on `trunk`.** Moving the SSU2
+test harnesses onto the production listener path exposed a real upstream defect: a router using one
+shared SSU2 listen socket — the normal deployment — could not receive any data-phase traffic for an
+accepted session, because the SessionConfirmed and Data header protectors share `k_header_1` and the
+demuxer matched on the destination connection ID alone, so the wrong protector false-matched first and
+the payload was never decrypted. go-noise's own suite had no test that delivered data over the listener,
+so the bug was invisible there; `6372d5b` fixes it and adds that missing test. Building against
+go-noise `trunk` still passes `go build ./...` but fails four SSU2 integration tests at their read
+timeouts. The fix must be merged onto `trunk` and pushed. Routing the tests back around the listener was
+rejected: that is the non-production path which hid the bug, and `ssu2.rst:1587-1588` forbids it.
 
 Release notes for: `go-i2p` Version `0.1.70001`
 ============================================
