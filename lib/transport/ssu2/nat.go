@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	cryptorand "crypto/rand"
 	"fmt"
+	"github.com/go-i2p/go-i2p/lib/transport"
 	"net"
 	"strconv"
 	"strings"
@@ -1677,7 +1678,7 @@ func (t *SSU2Transport) buildRelayResponse(bobSession *SSU2Session, intro *ssu2n
 	}
 
 	bobHash := extractBobRouterHash(bobSession)
-	timestamp := uint32(time.Now().Unix())
+	timestamp := transport.RoundUnixSeconds(time.Now())
 
 	return t.buildSignedRelayResponse(signingKey, bobHash, intro, timestamp, charliePort, charlieIP, token)
 }
@@ -2059,7 +2060,7 @@ func (t *SSU2Transport) sendPeerTestRequest(session *SSU2Session, nonce uint32, 
 		Nonce:       nonce,
 		RouterHash:  &charlieHash,
 		Version:     2,
-		Timestamp:   uint32(time.Now().Unix()),
+		Timestamp:   transport.RoundUnixSeconds(time.Now()),
 	}
 	encoded, err := ssu2noise.EncodePeerTestBlock(ptBlock)
 	if err != nil {

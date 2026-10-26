@@ -2,6 +2,7 @@ package ssu2
 
 import (
 	cryptorand "crypto/rand"
+	"github.com/go-i2p/go-i2p/lib/transport"
 	"net"
 	"time"
 
@@ -101,7 +102,7 @@ func (t *SSU2Transport) sendPeerTestProbeToAlice(ptBlock *ssu2noise.PeerTestBloc
 		Code:        ptBlock.Code,
 		Nonce:       ptBlock.Nonce,
 		Version:     ptBlock.Version,
-		Timestamp:   uint32(time.Now().Unix()),
+		Timestamp:   transport.RoundUnixSeconds(time.Now()),
 		AlicePort:   ptBlock.AlicePort,
 		AliceIP:     append([]byte(nil), ptBlock.AliceIP...),
 	}

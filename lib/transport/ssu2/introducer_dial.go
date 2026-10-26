@@ -288,7 +288,7 @@ func (t *SSU2Transport) sendRelayRequest(bobSession *SSU2Session, intro Introduc
 		return oops.Wrapf(err, "could not determine external address for RelayRequest")
 	}
 
-	timestamp := uint32(time.Now().Unix())
+	timestamp := transport.RoundUnixSeconds(time.Now())
 	sig, err := ssu2noise.SignRelayRequest(
 		ed25519Key,
 		intro.RouterHash, charlieHash,

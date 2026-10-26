@@ -4,6 +4,7 @@ import (
 	cryptorand "crypto/rand"
 	"encoding/binary"
 	"fmt"
+	"github.com/go-i2p/go-i2p/lib/transport"
 	"time"
 
 	"github.com/samber/oops"
@@ -136,7 +137,10 @@ func SerializeBlocks(blocks ...Block) []byte {
 // Unix epoch timestamp as 4 big-endian bytes.
 func NewDateTimeBlock() Block {
 	data := make([]byte, 4)
-	binary.BigEndian.PutUint32(data, uint32(time.Now().Unix()))
+	// ntcp2.rst:1491 "Implementations must round to the nearest second to
+	// prevent clock bias in the network." Truncating with uint32(Unix()) is
+	// always biased up to a full second into the past.
+	binary.BigEndian.PutUint32(data, transport.RoundUnixSeconds(time.Now()))
 	return Block{Type: BlockTypeDateTime, Data: data}
 }
 

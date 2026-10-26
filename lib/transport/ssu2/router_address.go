@@ -289,8 +289,14 @@ func createSSU2RouterAddress(cost uint8, options map[string]string) (*router_add
 // RouterInfo as malformed, which silently kills NTCP2 SessionConfirmed (peer
 // closes TCP without sending a Termination block) and prevents tunnel-build
 // replies from ever returning to us.
-// Otherwise the standard direct-connection options (host + port + keys +
-// optional introducer hints) are emitted.
+// Otherwise the standard direct-connection options (host + port + keys) are
+// emitted. Introducers are deliberately NOT published in this branch:
+// ssu2.rst:5719 "A router must not publish host or port in the address when
+// publishing introducers." A publicly routable host is dialable directly, which
+// is the only thing published introducers buy a router, so dropping the
+// introducer hints here satisfies the MUST without making us harder to reach.
+// Dropping host/port instead would have been the literal alternative and would
+// have cost a directly-reachable router its inbound connectivity.
 func buildSSU2Options(host, portStr string, transport *SSU2Transport, introducers []*ssu2noise.RegisteredIntroducer) map[string]string {
 	if !isPublicHost(host) && hasUsableIntroducer(introducers) {
 		familyCaps := ssu2AddressFamilyCaps(host)
@@ -320,7 +326,6 @@ func buildSSU2Options(host, portStr string, transport *SSU2Transport, introducer
 	options := buildBaseSSU2Options(host, portStr)
 	addStaticKeyOption(options, transport)
 	addIntroKeyOption(options, transport)
-	addIntroducerOptions(options, introducers)
 	return options
 }
 

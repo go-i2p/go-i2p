@@ -11,6 +11,22 @@ import (
 // should be terminated.
 const ClockSkewTolerance = 60 * time.Second
 
+// RoundUnixSeconds converts a time to a Unix timestamp in whole seconds,
+// rounded to the nearest second rather than truncated.
+//
+// ntcp2.rst:1491 and ssu2.rst:2836 both state "Implementations must round to
+// the nearest second to prevent clock bias in the network." Truncating with
+// uint32(t.Unix()) always discards the sub-second remainder, so every
+// timestamp we emit is biased up to one full second into the past. Peers
+// measuring skew against those timestamps inherit that bias, which pushes
+// legitimate connections toward the edge of the tolerance window.
+func RoundUnixSeconds(t time.Time) uint32 {
+	// time.Time.Round half-up to the nearest second, then take the epoch
+	// seconds. Round() operates on absolute time, so the result is the
+	// nearest whole second on both sides of the epoch.
+	return uint32(t.Round(time.Second).Unix())
+}
+
 // CalculateTimestampSkew returns the observed clock skew (in seconds) between
 // a peer's timestamp and the local time. Positive skew means the peer's clock
 // is ahead of ours. This can be used for diagnostic logging and validation.

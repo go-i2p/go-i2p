@@ -2,6 +2,7 @@ package ssu2
 
 import (
 	"encoding/binary"
+	"github.com/go-i2p/go-i2p/lib/transport"
 	"net"
 	"time"
 
@@ -293,7 +294,7 @@ func (t *SSU2Transport) sendPeerTestReplyToCharlie(ptBlock *ssu2noise.PeerTestBl
 		MessageCode: ssu2noise.PeerTestReply,
 		Nonce:       ptBlock.Nonce,
 		Version:     ptBlock.Version,
-		Timestamp:   uint32(time.Now().Unix()),
+		Timestamp:   transport.RoundUnixSeconds(time.Now()),
 		AlicePort:   ptBlock.AlicePort,
 		AliceIP:     append([]byte(nil), ptBlock.AliceIP...),
 	}
@@ -360,7 +361,7 @@ func (t *SSU2Transport) sendPeerTestConfirmationToAlice(ptBlock *ssu2noise.PeerT
 		MessageCode: ssu2noise.PeerTestConfirmation,
 		Nonce:       ptBlock.Nonce,
 		Version:     ptBlock.Version,
-		Timestamp:   uint32(time.Now().Unix()),
+		Timestamp:   transport.RoundUnixSeconds(time.Now()),
 		AlicePort:   ptBlock.AlicePort,
 		AliceIP:     append([]byte(nil), ptBlock.AliceIP...),
 	}

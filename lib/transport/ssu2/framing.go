@@ -2,6 +2,7 @@ package ssu2
 
 import (
 	"encoding/binary"
+	"github.com/go-i2p/go-i2p/lib/transport"
 	"time"
 
 	"github.com/go-i2p/go-i2p/lib/i2np"
@@ -64,7 +65,9 @@ func ParseI2NPFromSSU2(data []byte) (i2np.Message, error) {
 // See [I2P Spec: SSU2](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ssu2.rst) for the block format.
 func NewDateTimeBlock() *ssu2noise.SSU2Block {
 	data := make([]byte, 4)
-	binary.BigEndian.PutUint32(data, uint32(time.Now().Unix()))
+	// ssu2.rst:2836 "Implementations must round to the nearest second to
+	// prevent clock bias in the network."
+	binary.BigEndian.PutUint32(data, transport.RoundUnixSeconds(time.Now()))
 	return ssu2noise.NewSSU2Block(ssu2noise.BlockTypeDateTime, data)
 }
 

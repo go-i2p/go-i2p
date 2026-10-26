@@ -3,6 +3,7 @@ package i2cp
 import (
 	"encoding/binary"
 	"fmt"
+	"math"
 	"net"
 	"time"
 
@@ -633,6 +634,29 @@ func (s *Server) handleGetDate(msg *Message) (*Message, error) {
 	return response, nil
 }
 
+// bytesPerSecToKBps converts a byte-per-second rate into the KBps unit the
+// BandwidthLimits message requires (i2cp.rst:497-502).
+//
+// The provider's math.MaxUint32 "unlimited" sentinel is forwarded unchanged:
+// dividing it would turn an "I have no limit" answer into a large but finite
+// number, which is exactly the kind of value a client throttles itself against.
+// A zero rate stays zero. Rounds to nearest so a 1500 B/s limit does not report
+// as 1 KBps-1.
+func bytesPerSecToKBps(bytesPerSec uint32) uint32 {
+	if bytesPerSec == math.MaxUint32 {
+		return math.MaxUint32
+	}
+	if bytesPerSec == 0 {
+		return 0
+	}
+	return (bytesPerSec + i2cpKiB/2) / i2cpKiB
+}
+
+// i2cpKiB is the bytes-per-KB divisor for I2CP bandwidth conversions. The spec's
+// KBps tracks the router's own byte-rate accounting, which is binary (see
+// lib/config BandwidthClassFromRate, which divides by 1024).
+const i2cpKiB = 1024
+
 // handleGetBandwidthLimits returns bandwidth limits
 // Per I2CP v0.9.67 spec, returns 64 bytes of bandwidth data (16 × uint32 big endian)
 func (s *Server) handleGetBandwidthLimits(msg *Message) (*Message, error) {
@@ -640,24 +664,33 @@ func (s *Server) handleGetBandwidthLimits(msg *Message) (*Message, error) {
 	// [inbound_limit:4][outbound_limit:4][spare:56]
 	// The 16 uint32 values represent various bandwidth-related metrics.
 	// Currently only inbound and outbound limits are populated; rest are zero-filled.
-	// Values are in bytes per second (0 = unlimited)
-
-	var inboundLimit, outboundLimit uint32
+	//
+	// The wire unit is KBps, not bytes per second (i2cp.rst:497-502 labels all
+	// six defined limits "(KBps)"). The provider reports the router's configured
+	// MaxBandwidth in bytes per second (lib/config/router.go:72), so the value is
+	// converted here at the wire boundary. Reporting the raw byte rate overstated
+	// every limit by 1024x, which makes clients compute a wildly optimistic
+	// throughput budget. The provider's MaxUint32 "unlimited" sentinel is passed
+	// through untouched rather than divided down into a finite-looking number.
+	var inboundBytes, outboundBytes uint32
 	if s.bandwidthProvider != nil {
-		inboundLimit, outboundLimit = s.bandwidthProvider.GetBandwidthLimits()
+		inboundBytes, outboundBytes = s.bandwidthProvider.GetBandwidthLimits()
 	} else {
 		// Fallback: use a conservative default (1 MB/s) when no provider is configured
-		inboundLimit = 1024 * 1024
-		outboundLimit = 1024 * 1024
+		inboundBytes = 1024 * 1024
+		outboundBytes = 1024 * 1024
 	}
+
+	inboundLimit := bytesPerSecToKBps(inboundBytes)
+	outboundLimit := bytesPerSecToKBps(outboundBytes)
 
 	// Per I2CP spec: BandwidthLimits is 64 bytes (16 uint32 values, big endian)
 	payload := make([]byte, 64)
 
-	// First uint32 (bytes 0-3): Inbound limit
+	// First uint32 (bytes 0-3): Inbound limit (KBps)
 	binary.BigEndian.PutUint32(payload[0:4], inboundLimit)
 
-	// Second uint32 (bytes 4-7): Outbound limit
+	// Second uint32 (bytes 4-7): Outbound limit (KBps)
 	binary.BigEndian.PutUint32(payload[4:8], outboundLimit)
 
 	// Remaining 56 bytes (bytes 8-63): Zero-filled for future use
@@ -670,11 +703,11 @@ func (s *Server) handleGetBandwidthLimits(msg *Message) (*Message, error) {
 	}
 
 	log.WithFields(logger.Fields{
-		"at":           "i2cp.Server.handleGetBandwidthLimits",
-		"reason":       "client_requested",
-		"inbound_bps":  inboundLimit,
-		"outbound_bps": outboundLimit,
-		"payloadSize":  len(payload),
+		"at":            "i2cp.Server.handleGetBandwidthLimits",
+		"reason":        "client_requested",
+		"inbound_kbps":  inboundLimit,
+		"outbound_kbps": outboundLimit,
+		"payloadSize":   len(payload),
 	}).Debug("returning_bandwidth_limits")
 
 	return response, nil

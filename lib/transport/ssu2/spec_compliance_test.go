@@ -236,7 +236,6 @@ func TestSpec_TerminationReasonCodes(t *testing.T) {
 		"size field must include the additional data (9 + 4)")
 }
 
-
 // --- ACK delay bounds --------------------------------------------------
 
 // specACKDelay computes the ACK delay per SSU2.md section 4.8:
