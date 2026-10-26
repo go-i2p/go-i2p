@@ -79,11 +79,14 @@ echo "Pulling live-network peer images"
 docker pull geti2p/i2p:latest
 docker pull purplei2p/i2pd:latest
 
+# No bind mount for Java: the container writes netDb subdirectories as mode
+# 0700 owned by its own uid, which the host runner cannot read through a
+# bind mount. The netDb is exported with docker cp below instead (same
+# approach used for i2pd), which produces host-readable files.
 echo "Starting Java I2P container"
 docker run -d \
 	--name "${java_container}" \
 	-e JVM_XMX=256m \
-	-v "${HOME}/.i2p:/i2p/.i2p" \
 	geti2p/i2p:latest >/dev/null
 
 echo "Starting i2pd container"
@@ -97,9 +100,14 @@ sleep 5  # Give containers time to initialize
 docker logs "${java_container}" | tail -5 || true
 docker logs "${i2pd_container}" | tail -5 || true
 
+# Count routerInfos INSIDE the java container. The container creates
+# netDb subdirectories as mode 0700 owned by its own uid, so a host-side
+# find silently gets "Permission denied" (swallowed by 2>/dev/null) and
+# always reports 0 — this precondition blocked every daily run since the
+# suite was introduced. Mirrors the docker-exec approach used for i2pd.
 wait_for_routerinfos \
 	"java-i2p" \
-	"find \"${HOME}/.i2p/netDb\" -type f -name 'routerInfo-*.dat' 2>/dev/null | wc -l | tr -d ' '" \
+	"docker exec ${java_container} sh -lc 'find /i2p/.i2p/netDb -type f -name \"routerInfo-*.dat\" 2>/dev/null | wc -l' | tr -d ' '" \
 	8 \
 	900
 
@@ -120,6 +128,22 @@ fi
 rm -rf "${HOME}/i2p/netDb"
 mkdir -p "${HOME}/i2p/netDb"
 docker cp "${i2pd_container}:${i2pd_netdb_path}/." "${HOME}/i2p/netDb/"
+
+# Export the Java netDb to the host too (no bind mount, see above). docker cp
+# extracts as the runner user, so the files are readable by the test.
+java_netdb_path=$(docker exec "${java_container}" sh -lc 'find /i2p/.i2p -maxdepth 1 -type d -name netDb 2>/dev/null | head -n 1' || echo "")
+if [[ -z "${java_netdb_path}" ]]; then
+	echo "Failed to discover java netDb path. Container logs:" >&2
+	docker logs "${java_container}" | tail -20 >&2
+	write_status "failed" "missing_java_netdb_path"
+	exit 1
+fi
+
+rm -rf "${HOME}/.i2p/netDb"
+mkdir -p "${HOME}/.i2p/netDb"
+docker cp "${java_container}:${java_netdb_path}/." "${HOME}/.i2p/netDb/"
+
+echo "Exported netdbs: java=$(find "${HOME}/.i2p/netDb" -type f -name 'routerInfo-*.dat' 2>/dev/null | wc -l | tr -d ' ') i2pd=$(find "${HOME}/i2p/netDb" -type f -name 'routerInfo-*.dat' 2>/dev/null | wc -l | tr -d ' ')"
 
 if run_live_tests 1; then
 	write_status "passed" "attempt_1"
