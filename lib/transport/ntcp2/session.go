@@ -42,6 +42,12 @@ type NTCP2Session struct {
 	routerInfoMu       sync.Mutex
 	routerInfoCallback func(riBytes []byte, floodRequested bool)
 
+	// peerOptions holds the most recent valid Options block received from the
+	// peer (handshake message 2/3 or data phase). Recorded for observability and
+	// for outbound padding decisions; see [NTCP2Session.PeerOptions].
+	peerOptionsMu sync.Mutex
+	peerOptions   *OptionsData
+
 	createdAtUnixNano int64
 	lastSendUnixNano  int64
 	lastRecvUnixNano  int64
@@ -576,7 +582,7 @@ func (s *NTCP2Session) handleNonI2NPBlock(block Block) {
 			s.Logger().WithField("peer_time", ts).Debug("Received DateTime block from peer")
 		}
 	case BlockTypeOptions:
-		s.Logger().Debug("Received Options block from peer")
+		s.handleOptionsBlock(block.Data)
 	case BlockTypePadding:
 		// Padding is ignored per spec
 	case BlockTypeRouterInfo:
@@ -597,6 +603,57 @@ func (s *NTCP2Session) handleNonI2NPBlock(block Block) {
 	default:
 		s.Logger().WithField("block_type", block.Type).Debug("Received unknown block type")
 	}
+}
+
+// handleOptionsBlock parses and records an Options block received from the peer
+// during the data phase (ntcp2.rst:1739 "Updated options may be sent during the
+// data phase."). A block shorter than the spec's 12-byte minimum (:1515) is
+// malformed: its contents are not applied and the event is logged, but the
+// connection is kept, because the spec leaves the response to options/padding
+// violations implementation-dependent (:1530 "These are guidelines, there
+// is no enforcement"; :1773 "Router response on violation of negotiated padding
+// is implementation-dependent").
+func (s *NTCP2Session) handleOptionsBlock(data []byte) {
+	opts, err := ParseOptionsBlock(data)
+	if err != nil {
+		s.Logger().WithError(err).Warn("Received malformed NTCP2 Options block, ignoring its contents")
+		return
+	}
+
+	s.peerOptionsMu.Lock()
+	snapshot := opts
+	s.peerOptions = &snapshot
+	s.peerOptionsMu.Unlock()
+
+	s.Logger().WithFields(map[string]interface{}{
+		"tmin_ratio":     RatioToFloat(opts.TransmitMinRatio),
+		"tmax_ratio":     RatioToFloat(opts.TransmitMaxRatio),
+		"rmin_ratio":     RatioToFloat(opts.ReceiveMinRatio),
+		"rmax_ratio":     RatioToFloat(opts.ReceiveMaxRatio),
+		"tdmy_bytes_sec": opts.TransmitDummy,
+		"rdmy_bytes_sec": opts.ReceiveDummy,
+		"tdelay_ms":      opts.TransmitDelay,
+		"rdelay_ms":      opts.ReceiveDelay,
+		"extra_bytes":    len(opts.Extra),
+	}).Debug("Recorded peer NTCP2 options")
+}
+
+// PeerOptions returns the most recent valid Options block received from the
+// peer, or nil if none has been received. The peer's transmit limits
+// (TransmitMinRatio/TransmitMaxRatio) describe the padding it will send us; its
+// receive limits describe what it would like us to send.
+//
+// Note that go-noise trunk exposes no accessor for the live padding modifier,
+// so these values cannot yet be pushed into the outbound padding path; they are
+// recorded for observability and for the transport layer to act on.
+func (s *NTCP2Session) PeerOptions() *OptionsData {
+	s.peerOptionsMu.Lock()
+	defer s.peerOptionsMu.Unlock()
+	if s.peerOptions == nil {
+		return nil
+	}
+	cp := *s.peerOptions
+	return &cp
 }
 
 // SetRouterInfoCallback sets a callback for RouterInfo blocks received from the

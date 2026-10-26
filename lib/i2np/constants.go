@@ -33,9 +33,24 @@ const (
 	I2NPMessageTypeVariableTunnelBuildReply = 24
 	// I2NPMessageTypeShortTunnelBuild is the type for ShortTunnelBuild messages.
 	I2NPMessageTypeShortTunnelBuild = 25
-	// I2NPMessageTypeShortTunnelBuildReply is the type for ShortTunnelBuildReply messages.
-	I2NPMessageTypeShortTunnelBuildReply = 26
+	// I2NPMessageTypeOutboundTunnelBuildReply is the type for
+	// OutboundTunnelBuildReply messages — the reply that travels back over the
+	// outbound tunnel. The specification names this message
+	// OutboundTunnelBuildReply (i2np.rst:696, :1721); there is no
+	// "ShortTunnelBuildReply" in the spec.
+	I2NPMessageTypeOutboundTunnelBuildReply = 26
 )
+
+// I2NPMessageTypeShortTunnelBuildReply is a deprecated alias of
+// [I2NPMessageTypeOutboundTunnelBuildReply]. The name does not exist in the
+// I2P specification: i2np.rst:696 and :1721 call type 26
+// OutboundTunnelBuildReply, and tunnel-creation-ecies.rst:537 describes the
+// pair as "Short Tunnel Build Message (type 25) and Outbound Tunnel Build
+// Reply Message (type 26)". The alias is retained for API compatibility and
+// will be removed in a future release.
+//
+// Deprecated: use I2NPMessageTypeOutboundTunnelBuildReply.
+const I2NPMessageTypeShortTunnelBuildReply = I2NPMessageTypeOutboundTunnelBuildReply
 
 // I2NP Error Constants
 // These use errors.New (not oops.Errorf) so callers can match them with errors.Is().

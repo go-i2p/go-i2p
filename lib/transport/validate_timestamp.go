@@ -36,12 +36,21 @@ func CalculateTimestampSkew(peerTime, localTime uint32) int64 {
 
 // IsTimestampWithinTolerance returns true if the absolute skew between peerTime
 // and the current local time is within the specified tolerance.
-// A peerTime of 0 is treated as "timestamp not provided" and returns true
-// (accepted without validation).
+//
+// A peerTime of 0 is rejected. Both transports require a timestamp on the
+// messages they carry: ssu2.rst:4036-4039 says Token Request, Retry, Session
+// Request, Session Created, Hole Punch and out-of-session Peer Test messages
+// "must contain DateTime blocks", and ntcp2.rst:547-550 / :879-882 require each
+// party to "reject connections where the timestamp value is too far off from the
+// current time". A missing or zero timestamp is a violation of that MUST, not an
+// absent optional field, and treating it as "not provided" would let an attacker
+// zero the field on a captured handshake to skip skew and replay protection.
+// This matches the explicit zero rejection in ntcp2.ValidateTimestamp and
+// ssu2 DefaultHandler.ValidateTimestamp.
 func IsTimestampWithinTolerance(peerTime uint32, tolerance time.Duration) bool {
 	if peerTime == 0 {
-		// Timestamp not provided — skip validation.
-		return true
+		// Required timestamp missing — reject.
+		return false
 	}
 
 	localTime := uint32(time.Now().Unix())

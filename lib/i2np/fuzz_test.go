@@ -58,24 +58,12 @@ func FuzzDatabaseStoreUnmarshal(f *testing.F) {
 	})
 }
 
-// FuzzBuildRequestRecordUnmarshal exercises the variable-length tunnel build
-// request record parser. Records arrive from untrusted peers on the tunnel-build
-// path; a panic here is a remote crash.
-func FuzzBuildRequestRecordUnmarshal(f *testing.F) {
-	f.Add([]byte{})
-	f.Add(make([]byte, 222)) // ShortTunnelBuild record size
-	f.Add(make([]byte, 528)) // TunnelBuild record size
-	f.Fuzz(func(t *testing.T, data []byte) {
-		_, _ = ReadBuildRequestRecord(data)
-	})
-}
-
 // FuzzShortBuildRequestRecordUnmarshal exercises the Short Tunnel Build
 // message record parser used in STBM (Noise-ratchet-based tunnel building).
 func FuzzShortBuildRequestRecordUnmarshal(f *testing.F) {
 	f.Add([]byte{})
 	f.Add(make([]byte, 218)) // STBM short record size
-	f.Add(make([]byte, 528))
+	f.Add(make([]byte, 154)) // short record cleartext size
 	f.Fuzz(func(t *testing.T, data []byte) {
 		_, _ = ReadShortBuildRequestRecord(data)
 	})

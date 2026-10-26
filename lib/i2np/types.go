@@ -92,22 +92,6 @@ type TunnelCarrier interface {
 	GetTunnelID() buildrecord.TunnelID
 }
 
-// BuildRecordReader represents types that can parse build request
-// records. The tunnel manager uses it to decrypt and validate the
-// per-hop records in an inbound tunnel build message.
-// See also [BuildRequestRecord] and [ReadBuildRequestRecord].
-type BuildRecordReader interface {
-	ReadBuildRequestRecord(data []byte) (BuildRequestRecord, error)
-}
-
-// BuildRecordWriter represents types that can write build response
-// records. The tunnel manager uses it to produce the per-hop records in a
-// tunnel build reply sent back to the requester.
-// See also [BuildResponseRecord] and [CreateBuildResponseRecord].
-type BuildRecordWriter interface {
-	WriteBuildResponseRecord() ([]byte, error)
-}
-
 // DatabaseReader represents types that can perform database lookups.
 // It exposes the key, source, and flags of a lookup so the database
 // manager can route it to the correct store.

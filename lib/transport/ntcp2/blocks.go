@@ -211,3 +211,92 @@ func BlockTypeString(blockType byte) string {
 		return fmt.Sprintf("Unknown(%d)", blockType)
 	}
 }
+
+// OptionsData is the parsed content of an NTCP2 Options block (type 1).
+//
+// Spec: ntcp2.rst:1493-1542 (Options block). The block data is at least 12 bytes:
+//
+//	tmin(1) tmax(1) rmin(1) rmax(1) tdmy(2) rdmy(2) tdelay(2) rdelay(2)
+//
+// with any further bytes being "more_options", whose format the spec leaves
+// TBD (:1542), so they are preserved but not interpreted.
+//
+// tmin/tmax/rmin/rmax are 4.4 fixed-point padding-to-data ratios: an unsigned
+// 8-bit value divided by 16.0, i.e. 0 to 15.9375 (ntcp2.rst:1522-1523). They
+// are the *sending* router's own limits — tmin/tmax for its transmit direction,
+// rmin/rmax for the direction it receives — so a receiver applies the peer's
+// tmax as the ceiling on padding it should expect inbound, and applies its own
+// negotiated limits outbound.
+//
+// The spec hedges enforcement deliberately (:1530-1532): "These are guidelines,
+// there is no enforcement. Sender should honor receiver's maximum. Sender may
+// or may not honor receiver's minimum, within bandwidth constraints." Parsing
+// and validating the block is therefore about correctness of the wire format,
+// not about mandatory traffic behaviour.
+type OptionsData struct {
+	// TransmitMinRatio and TransmitMaxRatio are the sender's requested
+	// transmit padding limits, as raw 4.4 fixed-point bytes.
+	TransmitMinRatio byte
+	TransmitMaxRatio byte
+	// ReceiveMinRatio and ReceiveMaxRatio are the sender's requested receive
+	// padding limits, as raw 4.4 fixed-point bytes.
+	ReceiveMinRatio byte
+	ReceiveMaxRatio byte
+	// TransmitDummy is the max dummy traffic the sender is willing to send,
+	// bytes/sec average.
+	TransmitDummy uint16
+	// ReceiveDummy is the dummy traffic the sender requests, bytes/sec average.
+	ReceiveDummy uint16
+	// TransmitDelay is the max intra-message delay the sender will insert, msec.
+	TransmitDelay uint16
+	// ReceiveDelay is the intra-message delay the sender requests, msec.
+	ReceiveDelay uint16
+	// Extra carries any "more_options" bytes past the mandatory 12. Format
+	// TBD per ntcp2.rst:1542; preserved for forward compatibility.
+	Extra []byte
+}
+
+// optionsDataMinSize is the mandatory Options block data size:
+// 4 ratio bytes + 4 big-endian uint16 fields = 12.
+// ntcp2.rst:1515 "size of options to follow, 12 bytes minimum".
+const optionsDataMinSize = 12
+
+// RatioToFloat converts a 4.4 fixed-point padding ratio byte to its float
+// value, i.e. the ratio of padding to data (ntcp2.rst:1522-1528: 0x00 = no
+// padding, 0x01 = 6 percent, 0x10 = 100 percent, 0x80 = 800 percent).
+func RatioToFloat(b byte) float64 {
+	return float64(b) / 16.0
+}
+
+// ParseOptionsBlock parses the data of an NTCP2 Options block (type 1).
+// It returns an error when the block is shorter than the 12 bytes the spec
+// requires (ntcp2.rst:1515), which makes the frame malformed; callers should
+// treat that as a payload-format error rather than ignoring the block.
+//
+// There is no upstream parser to delegate to: go-noise trunk exposes only the
+// unexported outbound encoders buildOptionsBlock (ntcp2/handshake.go:1139) and
+// msg3Part2OptionsData (ntcp2/handshake.go:1230), and its own inbound handling
+// of received options is absent, so parsing lives with the other block
+// parsers in this file.
+func ParseOptionsBlock(data []byte) (OptionsData, error) {
+	var out OptionsData
+	if len(data) < optionsDataMinSize {
+		return out, oops.Errorf("NTCP2 Options block data must be at least %d bytes, got %d",
+			optionsDataMinSize, len(data))
+	}
+
+	out.TransmitMinRatio = data[0]
+	out.TransmitMaxRatio = data[1]
+	out.ReceiveMinRatio = data[2]
+	out.ReceiveMaxRatio = data[3]
+	out.TransmitDummy = binary.BigEndian.Uint16(data[4:6])
+	out.ReceiveDummy = binary.BigEndian.Uint16(data[6:8])
+	out.TransmitDelay = binary.BigEndian.Uint16(data[8:10])
+	out.ReceiveDelay = binary.BigEndian.Uint16(data[10:12])
+	if len(data) > optionsDataMinSize {
+		extra := make([]byte, len(data)-optionsDataMinSize)
+		copy(extra, data[optionsDataMinSize:])
+		out.Extra = extra
+	}
+	return out, nil
+}

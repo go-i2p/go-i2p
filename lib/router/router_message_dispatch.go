@@ -323,7 +323,7 @@ func (r *Router) dispatchByMessageType(msg i2np.Message, mr *i2np.I2NPMessageDis
 		i2np.I2NPMessageTypeTunnelGateway:
 		return mr.RouteMessage(msg)
 	case i2np.I2NPMessageTypeVariableTunnelBuild, i2np.I2NPMessageTypeVariableTunnelBuildReply,
-		i2np.I2NPMessageTypeShortTunnelBuild, i2np.I2NPMessageTypeShortTunnelBuildReply:
+		i2np.I2NPMessageTypeShortTunnelBuild, i2np.I2NPMessageTypeOutboundTunnelBuildReply:
 		return mr.GetProcessor().ProcessMessage(msg)
 	default:
 		return oops.Errorf("unsupported message type: %d", msg.Type())

@@ -12,8 +12,38 @@
 // can ask another for data, request a tunnel, or deliver a message, and the
 // other side always knows how to read the request.
 //
-// This package only implements the current, modern message types. Legacy
-// ElGamal-based tunnel building is not supported.
+// # Tunnel build message coverage (known gap)
+//
+// This package implements the short-record tunnel build pair only:
+// ShortTunnelBuild (type 25) and OutboundTunnelBuildReply (type 26), which
+// carry 218-byte ECIES-X25519 records and require every hop to be an
+// ECIES-X25519 router at version 0.9.51 or newer
+// (tunnel-creation-ecies.rst:538-539).
+//
+// The three 528-byte-record build messages are NOT handled: TunnelBuild (21),
+// TunnelBuildReply (22), VariableTunnelBuild (23) and VariableTunnelBuildReply
+// (24). Types 23/24 are dropped in the message dispatch; types 21/22 have no
+// implementation at all, so they fall through to the unknown-type path.
+//
+// This is a deliberate scope decision, not a specification allowance, and it
+// should not be read as "these messages are deprecated". Two caveats matter to
+// anyone assessing interop:
+//
+//   - The specification's message-type table (i2np.rst:691-692) labels 21/22
+//     "deprecated", but the normative Notes for those same messages say they
+//     "may still be used for very long tunnels, and has not been deprecated.
+//     Routers must implement." (i2np.rst:1581-1583, :1607-1609).
+//   - The 528-byte records that 21-24 carry are what a tunnel needs whenever
+//     any hop is an ElGamal router: i2np.rst:268 describes the ElGamal record
+//     as "only used in the current network when a tunnel contains an ElGamal
+//     router", and tunnel-creation-ecies.rst:543 scopes the 218-byte records to
+//     types 25/26 "compared to 528 bytes for all other build messages". Because
+//     this package also has no ElGamal record crypto, a tunnel that includes an
+//     ElGamal router cannot be built or accepted here.
+//
+// The registry's fourth column is the "Since" column, not a deprecation column
+// — i2np.rst:693 reads "VariableTunnelBuild_ 23 0.7.12" — so a version number
+// in that column means "introduced in", not "obsolete".
 //
 // # Anatomy of a message
 //
@@ -49,7 +79,11 @@
 // Tunnel building. Tunnels are the private paths that carry real traffic.
 // These messages set them up, with each hop encrypted separately so that no
 // single router can see the whole path:
-//   - ShortTunnelBuild: build a tunnel of 1 to 8 hops (the current format).
+//   - ShortTunnelBuild: build a tunnel of 1 to 8 hops, and its
+//     OutboundTunnelBuildReply. This is the only build pair implemented — see
+//     "Tunnel build message coverage (known gap)" above for the messages that
+//     are not, and why the short-record pair cannot replace them when a hop is
+//     an ElGamal router.
 //
 // Data delivery. Once a tunnel exists, traffic flows through it:
 //   - TunnelData: one fixed-size chunk of data moving through a tunnel.

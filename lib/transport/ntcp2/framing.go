@@ -52,6 +52,13 @@ type BlockUnframer struct {
 	totalBytesRead int // Track cumulative bytes read
 	// bufferedMsgs holds I2NP messages extracted from multi-block frames
 	bufferedMsgs []i2np.Message
+	// pendingEOFCause records the error to return once bufferedMsgs is drained
+	// on a frame that also carried a Termination block. ntcp2.rst:1464 makes
+	// Termination "the last block except for Padding", so any other blocks in
+	// the same frame necessarily precede it, and :1466 allows multiple I2NP
+	// blocks per frame: a conformant [I2NP, I2NP, Termination] frame must have
+	// both I2NP messages delivered before the connection is reported closed.
+	pendingEOFCause error
 	// BlockCallback is called for non-I2NP blocks (DateTime, Options, etc.)
 	BlockCallback func(block Block)
 }
@@ -83,7 +90,19 @@ func (u *BlockUnframer) ReadNextMessage() (i2np.Message, error) {
 		if len(u.bufferedMsgs) > 0 {
 			msg := u.bufferedMsgs[0]
 			u.bufferedMsgs = u.bufferedMsgs[1:]
+			// These bytes were already accounted for when the frame carrying
+			// them was read; zero the counter so a multi-message frame is not
+			// counted once per message.
+			u.bytesRead = 0
 			return msg, nil
+		}
+
+		// Buffer drained: if a Termination block was seen on the frame whose
+		// messages we just delivered, report the closure now.
+		if u.pendingEOFCause != nil {
+			cause := u.pendingEOFCause
+			u.pendingEOFCause = nil
+			return nil, cause
 		}
 
 		u.bytesRead = 0
@@ -115,6 +134,14 @@ func (u *BlockUnframer) ReadNextMessage() (i2np.Message, error) {
 		// Process blocks, extracting I2NP messages
 		firstMsg, terminated := u.processBlocks(blocks)
 		if terminated {
+			// ntcp2.rst:1464 places Termination after all other non-padding
+			// blocks and :1466 allows multiple I2NP blocks per frame, so the
+			// blocks that preceded it in this frame are messages the peer sent
+			// before closing. Deliver them first, then report the closure.
+			u.pendingEOFCause = io.EOF
+			if firstMsg != nil {
+				return firstMsg, nil
+			}
 			return nil, io.EOF
 		}
 
@@ -127,11 +154,13 @@ func (u *BlockUnframer) ReadNextMessage() (i2np.Message, error) {
 
 // processBlocks handles each block type, returning the first I2NP message found
 // and whether a termination block was received. Additional I2NP messages are buffered.
+// When a Termination block is present, any I2NP message already decoded from the
+// same frame is still returned rather than discarded.
 func (u *BlockUnframer) processBlocks(blocks []Block) (firstMsg i2np.Message, terminated bool) {
 	for _, block := range blocks {
 		msg, term := u.processBlock(block)
 		if term {
-			return nil, true
+			return firstMsg, true
 		}
 		if msg != nil {
 			if firstMsg == nil {

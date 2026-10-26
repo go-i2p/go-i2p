@@ -248,7 +248,7 @@ type GarlicKeyRegistrar = build.GarlicKeyRegistrar
 // record ("DEPRECATED, only used in the current network when a tunnel contains
 // an ElGamal router") and the ECIES long record ("NOTE: Deprecated, obsolete.
 // Use the Short Record format specified below"). Current routers build tunnels
-// with ShortTunnelBuild (type 25) / ShortTunnelBuildReply (type 26) and
+// with ShortTunnelBuild (type 25) / OutboundTunnelBuildReply (type 26) and
 // 218-byte ECIES short records, which use the Noise_N transcript in
 // build_record_crypto_short.go instead.
 
@@ -624,7 +624,7 @@ func (p *MessageProcessor) processMessageDispatch(msg Message, depth int) error 
 		return p.processTunnelGatewayMessage(msg)
 	case I2NPMessageTypeShortTunnelBuild:
 		return p.processShortTunnelBuildMessage(msg)
-	case I2NPMessageTypeShortTunnelBuildReply:
+	case I2NPMessageTypeOutboundTunnelBuildReply:
 		return p.processShortTunnelBuildReplyMessage(msg)
 	case I2NPMessageTypeVariableTunnelBuild, I2NPMessageTypeVariableTunnelBuildReply:
 		// The 528-byte build records these message types carry are deprecated
@@ -633,7 +633,7 @@ func (p *MessageProcessor) processMessageDispatch(msg Message, depth int) error 
 		// contains an ElGamal router"; ElGamal routers themselves deprecated as
 		// of 0.9.58) and the ECIES long record ("NOTE: Deprecated, obsolete.
 		// Use the Short Record format specified below"). Current routers build
-		// tunnels with ShortTunnelBuild / ShortTunnelBuildReply (types 25/26)
+		// tunnels with ShortTunnelBuild / OutboundTunnelBuildReply (types 25/26)
 		// and 218-byte ECIES short records, so the long-record message pair is
 		// unsupported and dropped.
 		log.WithFields(logger.Fields{

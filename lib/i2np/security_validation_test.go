@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	i2ptunnel "github.com/go-i2p/crypto/tunnel"
 	"github.com/go-i2p/crypto/types"
 
 	common "github.com/go-i2p/common/data"
@@ -337,10 +338,15 @@ func TestDatabaseStore_SizeLimits(t *testing.T) {
 }
 
 // =============================================================================
-// BuildRequestRecord Bounds Checking Tests
+// Build Request Record Bounds Checking Tests (short record path)
+//
+// The 528-byte long-record parsers were removed with the deprecated long-record
+// path (see the "Tunnel build message coverage (known gap)" section of doc.go).
+// These cases exercise the live short-record parser instead, which is what
+// untrusted peers actually reach on the tunnel-build path.
 // =============================================================================
 
-func TestBuildRequestRecord_BoundsChecking(t *testing.T) {
+func TestShortBuildRequestRecord_BoundsChecking(t *testing.T) {
 	tests := []struct {
 		name        string
 		dataSize    int
@@ -348,18 +354,22 @@ func TestBuildRequestRecord_BoundsChecking(t *testing.T) {
 	}{
 		{"empty data", 0, true},
 		{"partial - 3 bytes", 3, true},
-		{"partial - 35 bytes (missing OurIdent)", 35, true},
-		{"partial - 71 bytes (missing NextIdent)", 71, true},
-		{"partial - 183 bytes (missing ReplyIV)", 183, true},
-		{"partial - 221 bytes (missing Padding)", 221, true},
-		{"complete - 222 bytes", 222, false},
-		{"extra data - 500 bytes", 500, false},
+		{"partial - 7 bytes (missing NextIdent)", 7, true},
+		{"partial - 47 bytes (missing flags)", 47, true},
+		{"partial - 153 bytes", 153, true},
+		{"complete - 154 bytes (ShortCleartextLen)", ShortBuildRecordCleartextLen, false},
+		{"extra data - 218 bytes", 218, false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			data := make([]byte, tt.dataSize)
-			_, err := ReadBuildRequestRecord(data)
+			if tt.dataSize >= ShortBuildRecordCleartextLen {
+				// A non-zero tunnel ID keeps the parse on the happy path; the
+				// parser only bounds-checks, so zeros are fine either way.
+				data[0] = 0x01
+			}
+			_, err := ReadShortBuildRequestRecord(data)
 			if tt.expectError {
 				require.Error(t, err)
 				assert.Equal(t, ErrBuildRequestRecordNotEnoughData, err)
@@ -370,35 +380,33 @@ func TestBuildRequestRecord_BoundsChecking(t *testing.T) {
 	}
 }
 
-// =============================================================================
-// BuildResponseRecord Bounds Checking Tests
-// =============================================================================
-
-func TestBuildResponseRecord_BoundsChecking(t *testing.T) {
-	tests := []struct {
-		name        string
-		dataSize    int
-		expectError bool
-	}{
-		{"empty data", 0, true},
-		{"partial - 31 bytes (missing Hash)", 31, true},
-		{"partial - 526 bytes (missing RandomData)", 526, true},
-		{"partial - 527 bytes (missing Reply)", 527, true},
-		{"complete - 528 bytes", 528, false},
-		{"extra data - 600 bytes", 600, false},
+// Short reply records carry no hash field: the 202-byte cleartext is reply
+// options plus padding plus a one-byte reply code at offset 201
+// (tunnel-creation-ecies.rst "Short Reply Record Unencrypted"), and integrity
+// comes from the ChaCha20-Poly1305 tag on the 218-byte encrypted record. A
+// truncated slot must therefore fail AEAD opening rather than parse.
+func TestShortBuildReplySlot_TooShortFailsAEAD(t *testing.T) {
+	var key, ad [32]byte
+	for i := range key {
+		key[i] = byte(i)
+		ad[i] = byte(255 - i)
 	}
+	plaintext := make([]byte, 202)
+	plaintext[201] = TunnelBuildReplySuccess
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			data := make([]byte, tt.dataSize)
-			_, err := ReadBuildResponseRecord(data)
-			if tt.expectError {
-				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
-			}
-		})
-	}
+	ciphertext, err := i2ptunnel.EncryptOwnBuildReply(key, ad, 0, plaintext)
+	require.NoError(t, err)
+	require.Len(t, ciphertext, ShortBuildRecordSize)
+
+	// A truncated ciphertext must not open.
+	_, err = i2ptunnel.DecryptOwnBuildReply(key, ad, 0, ciphertext[:ShortBuildRecordSize-1])
+	require.Error(t, err, "truncated short reply slot must fail AEAD verification")
+
+	// The full slot opens and the reply byte round-trips.
+	out, err := i2ptunnel.DecryptOwnBuildReply(key, ad, 0, ciphertext)
+	require.NoError(t, err)
+	require.Len(t, out, 202)
+	assert.Equal(t, byte(TunnelBuildReplySuccess), out[201])
 }
 
 // =============================================================================
@@ -583,9 +591,9 @@ func TestErrorMessages_NoSensitiveDataLeakage(t *testing.T) {
 			},
 		},
 		{
-			name: "BuildRequestRecord not enough data",
+			name: "ShortBuildRequestRecord not enough data",
 			errGen: func() error {
-				_, err := ReadBuildRequestRecord([]byte{0x01, 0x02, 0x03})
+				_, err := ReadShortBuildRequestRecord([]byte{0x01, 0x02, 0x03})
 				return err
 			},
 		},

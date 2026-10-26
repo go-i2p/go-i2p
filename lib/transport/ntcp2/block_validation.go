@@ -6,36 +6,40 @@ import (
 
 // Block ordering violations enforced during the data phase.
 //
-// Spec: ntcp2.rst:1455-1469 ("Block Ordering Rules") and :1675 / :1742:
-//   - "There must be at most one Padding block per AEAD frame" (:1462-1463)
-//   - "If there is a Padding block, it must be the last block in the frame" (:1463-1464,
-//     restated for the data phase at :1742)
-//   - "If there is a Termination block, it must be the last block in the frame,
-//     unless there is a Padding block, in which case the Termination block must
-//     be the second to last block" (:1465-1469; the Termination block spec at
-//     :1675 refers back to these rules)
+// Spec: ntcp2.rst:1455-1469 ("Block Ordering Rules"), quoted from the live
+// document:
+//   - "Padding, if present, must be the last block." (:1463, restated for the
+//     padding block itself at :1742)
+//   - "Termination, if present, must be the last block except for Padding."
+//     (:1464; the Termination block section repeats it at :1675 as "This must
+//     be the last non-padding block in the frame.")
+//   - "Multiple Padding blocks are not allowed in a single frame." (:1467)
 //
-// A receiver that gets a Termination block must process the blocks before it
-// and then close the connection with reason 3 (Normal Close) — :1730-1731,
-// which the session receive path does.
+// The spec does not state what a receiver must do with the blocks that precede
+// a Termination block; it only says "Drop the connection." (:1674). This
+// implementation delivers them first — see [BlockUnframer.ReadNextMessage] and
+// its pendingEOFCause field — because :1464 guarantees they precede it and
+// :1466 permits multiple I2NP blocks per frame, then closes with reason 0
+// ("normal close or unspecified", :1696). Reason 3 is "router shutdown" (:1699),
+// which is what this router sends when it initiates the shutdown, not what it
+// replies with after receiving one.
 //
-// This validation lives here, in go-i2p, because the equivalent upstream
-// helper is not reachable from outside go-noise: go-noise exposes
-// ValidateAEADFrame in ntcp2/padding_modifier.go:316, but it has zero
-// non-test callers — the inbound modifier chain only calls
-// RemoveTrailingAEADPadding (padding_modifier.go:134-151), and the padding
-// modifier instance is created privately inside Config.setupNTCP2Modifiers
-// (config.go:796-830) with no accessor. Custom modifiers registered with
-// WithModifiers run before the standard ones on the inbound path
-// (modifier_chain.go:102-113), i.e. before the padding is stripped, so they
-// cannot see the final block list either. go-i2p owns the decrypted block
-// list in BlockUnframer, so that is where the spec rules are enforced.
-// (Reported upstream as a defect: ValidateAEADFrame is dead code.)
+// This validation lives here, in go-i2p, because go-noise trunk no longer
+// provides an equivalent helper: NTCP2PaddingModifier.ValidateAEADFrame was
+// removed in go-noise 353292a8be ("fix(ntcp2): correct RH_B semantics, nonce
+// ceiling, and drop the deprecated global Transport API"), and even while it
+// existed it enforced only the two padding rules, never the Termination rule.
+// The inbound data-phase path in trunk strips trailing padding and nothing
+// else — NTCP2PaddingModifier.ModifyInbound (ntcp2/padding_modifier.go:133-146)
+// delegates to PaddingEngine.RemoveTrailingAEADPadding
+// (handshake/padding_engine.go:223) — so no upstream component rejects a
+// misordered frame. go-i2p owns the decrypted block list in [BlockUnframer],
+// which is where the spec rules are enforced.
 //
-// The handshake-message ordering rules for msg3p2 (Router Info, then Options,
-// then Padding) are enforced upstream in go-noise's
-// validateMsg3Part2Blocks (ntcp2/handshake_options.go:344-411), so they are
-// deliberately not re-implemented here.
+// The handshake-message ordering rules for msg3p2 (RouterInfo, then Options,
+// then Padding) are enforced upstream in go-noise's validateMsg3Part2Blocks
+// (ntcp2/handshake_options.go:344-411), so they are deliberately not
+// re-implemented here.
 
 // BlockOrderViolation describes a data-phase AEAD frame whose blocks violate
 // the spec's Block Ordering Rules.
@@ -43,7 +47,7 @@ type BlockOrderViolation struct {
 	// Reason is the NTCP2 Termination block reason code the connection
 	// should be closed with: 8 (Padding Violation) for padding-rule
 	// violations, 10 (Payload Format Error) for a misplaced Termination
-	// block. See ntcp2.rst:1730-1760.
+	// block. See the reason table at ntcp2.rst:1695-1713 (:1704 padding violation, :1706 payload format error).
 	Reason byte
 	// Rule is the oops-compatible code identifying which rule was broken.
 	Rule string
@@ -53,14 +57,14 @@ type BlockOrderViolation struct {
 
 const (
 	// BlockOrderRuleMultiplePadding is returned when a frame carries more
-	// than one Padding block (ntcp2.rst:1462-1463).
+	// than one Padding block (ntcp2.rst:1467).
 	BlockOrderRuleMultiplePadding = "NTCP2_PADDING_MULTIPLE"
 	// BlockOrderRulePaddingNotLast is returned when a Padding block is not
-	// the last block in the frame (ntcp2.rst:1463-1464, :1742).
+	// the last block in the frame (ntcp2.rst:1463, restated at :1742).
 	BlockOrderRulePaddingNotLast = "NTCP2_PADDING_NOT_LAST"
 	// BlockOrderRuleTerminationNotLast is returned when a Termination block
 	// is not the last block in the frame, or is followed only by a Padding
-	// block with another block after it (ntcp2.rst:1465-1469).
+	// block with another block after it (ntcp2.rst:1464, :1675).
 	BlockOrderRuleTerminationNotLast = "NTCP2_TERMINATION_NOT_LAST"
 )
 
@@ -96,7 +100,7 @@ func ValidateDataPhaseBlockOrder(blocks []Block) error {
 
 	last := len(blocks) - 1
 
-	// At most one Padding block per frame (ntcp2.rst:1462-1463).
+	// At most one Padding block per frame (ntcp2.rst:1467).
 	if paddingCount > 1 {
 		return &BlockOrderViolation{
 			Reason: TerminationPaddingViolation,
@@ -106,7 +110,7 @@ func ValidateDataPhaseBlockOrder(blocks []Block) error {
 	}
 
 	// A Padding block, when present, must be the last block in the frame
-	// (ntcp2.rst:1463-1464, restated for the data phase at :1742). This
+	// (ntcp2.rst:1463, restated for the data phase at :1742). This
 	// covers [Padding, Termination]: the padding is not last, which the
 	// padding rule forbids regardless of where the termination sits.
 	if paddingIdx >= 0 && paddingIdx != last {
@@ -118,7 +122,7 @@ func ValidateDataPhaseBlockOrder(blocks []Block) error {
 	}
 
 	// A Termination block must be last, or second to last when followed by
-	// the frame's single Padding block (ntcp2.rst:1465-1469).
+	// the frame's single Padding block (ntcp2.rst:1464, :1675).
 	if terminationIdx >= 0 {
 		allowed := terminationIdx == last ||
 			(terminationIdx == last-1 && paddingIdx == last)
@@ -136,7 +140,7 @@ func ValidateDataPhaseBlockOrder(blocks []Block) error {
 
 // BlockOrderTerminationReason maps a block-ordering error to the NTCP2
 // Termination block reason code to close the connection with (8 = Padding
-// Violation, 10 = Payload Format Error; ntcp2.rst:1751-1755).
+// Violation, 10 = Payload Format Error; ntcp2.rst:1704, :1706).
 func BlockOrderTerminationReason(err error) byte {
 	if v, ok := err.(*BlockOrderViolation); ok {
 		return v.Reason

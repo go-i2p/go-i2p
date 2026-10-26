@@ -149,23 +149,15 @@ total length: 222
 // defined in lib/tunnel/buildrecord.
 type BuildRequestRecord = buildrecord.BuildRequestRecord
 
-// ReadBuildRequestRecord parses a BuildRequestRecord from the provided byte slice.
-// It delegates to buildrecord.ReadBuildRequestRecord and translates any error to
-// ErrBuildRequestRecordNotEnoughData. The original buildrecord error is discarded
-// to provide a uniform I2NP error type for all parsing failures (I2NP spec does not
-// distinguish between different parse failure modes in this context).
-func ReadBuildRequestRecord(data []byte) (BuildRequestRecord, error) {
-	rec, err := buildrecord.ReadBuildRequestRecord(data)
-	if err != nil {
-		return rec, ErrBuildRequestRecordNotEnoughData
-	}
-	return rec, nil
-}
-
 // ReadShortBuildRequestRecord parses the 154-byte STBM cleartext payload into a BuildRequestRecord.
 // It delegates to buildrecord.ReadShortBuildRequestRecord and translates any error to
 // ErrBuildRequestRecordNotEnoughData. The original buildrecord error is discarded
-// (see ReadBuildRequestRecord for rationale).
+// so callers get one uniform error for every parse failure; the I2P spec does not
+// distinguish between parse-failure modes.
+//
+// The long (222-byte cleartext / 528-byte encrypted) record parser that used to
+// sit beside this one was removed with the deprecated long-record path — see the
+// "Tunnel build message coverage (known gap)" section of this package's doc.go.
 func ReadShortBuildRequestRecord(data []byte) (BuildRequestRecord, error) {
 	rec, err := buildrecord.ReadShortBuildRequestRecord(data)
 	if err != nil {

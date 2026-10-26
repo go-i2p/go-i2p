@@ -5,22 +5,16 @@ import (
 )
 
 // BuildResponseRecord is a type alias for buildrecord.BuildResponseRecord,
-// the canonical definition. Both lib/tunnel and lib/i2np share this type
-// without import cycles. Parsing, serialization, and accessor methods are
-// defined in lib/tunnel/buildrecord.
+// the canonical definition shared by lib/tunnel and lib/i2np without an
+// import cycle.
+//
+// The 528-byte long-format reply record parser and its SHA-256 hash validator
+// were removed here: they belonged to the deprecated long-record path (see the
+// "Tunnel build message coverage (known gap)" section of this package's
+// doc.go), had no live callers, and the live short-record path authenticates
+// replies with ChaCha20-Poly1305 instead. The Hash and RandomData fields
+// remain on the struct because they describe the historical long-record layout
+// and are still exercised by the format-documentation tests.
 // See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the wire format.
 // See also [BuildRequestRecord].
 type BuildResponseRecord = buildrecord.BuildResponseRecord
-
-// Re-export functions from buildrecord package
-var (
-	// ReadBuildResponseRecord parses a BuildResponseRecord from the provided
-	// byte slice. It delegates to buildrecord.ReadBuildResponseRecord.
-	ReadBuildResponseRecord = buildrecord.ReadBuildResponseRecord
-
-	// ValidateBuildResponseRecord checks that the record's hash matches
-	// SHA256(randomData + reply byte), which binds the reply to the
-	// original build request. It delegates to
-	// buildrecord.ValidateBuildResponseRecord.
-	ValidateBuildResponseRecord = buildrecord.ValidateBuildResponseRecord
-)

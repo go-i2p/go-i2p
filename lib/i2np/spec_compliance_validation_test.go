@@ -2736,118 +2736,51 @@ func TestTunnelBuild_ECIESRecords_ShortBytesProduces218(t *testing.T) {
 		"ShortBytes() must produce exactly 218 bytes")
 }
 
-// TestTunnelBuild_RecordFormat_CleartextIs222 verifies standard cleartext record = 222 bytes.
+// The tests in this block previously exercised the 222-byte long-record
+// serializer (BuildRequestRecord.Bytes) and its parser. Both were removed with
+// the deprecated long-record path (see the "Tunnel build message coverage
+// (known gap)" section of doc.go), so what remains is the specification
+// documentation of that format: the sizes are still asserted from the retained
+// constants, and the live short-record format is covered by the
+// TestShortTunnelBuild_RecordFormat_* tests below.
+
+// TestTunnelBuild_RecordFormat_CleartextIs222 documents the deprecated long
+// record's cleartext size (i2np.rst:268-300, tunnel-creation-ecies.rst:141
+// "NOTE: Deprecated, obsolete. Use the Short Record format specified below").
 func TestTunnelBuild_RecordFormat_CleartextIs222(t *testing.T) {
 	assert.Equal(t, 222, StandardBuildRecordCleartextLen,
-		"Standard build request cleartext must be 222 bytes")
+		"deprecated long build request cleartext is 222 bytes (documentation constant)")
+	assert.Equal(t, 528, StandardBuildRecordSize,
+		"deprecated long build record is 528 bytes encrypted (documentation constant)")
+	assert.NotEqual(t, StandardBuildRecordSize, ShortBuildRecordSize,
+		"the live short record must not share the deprecated long record size")
 }
 
-// TestTunnelBuild_RecordFormat_BytesProduces222 verifies Bytes() serialization is 222 bytes.
-func TestTunnelBuild_RecordFormat_BytesProduces222(t *testing.T) {
-	record := BuildRequestRecord{
-		ReceiveTunnel: tunnel.TunnelID(100),
-		NextTunnel:    tunnel.TunnelID(200),
-		Flag:          1,
-		RequestTime:   time.Now(),
-		SendMessageID: 42,
-	}
-	data := record.Bytes()
-	assert.Equal(t, 222, len(data),
-		"BuildRequestRecord.Bytes() must produce exactly 222 bytes")
-}
-
-// TestTunnelBuild_RecordFormat_FieldLayout verifies the exact byte offsets per I2P spec.
-func TestTunnelBuild_RecordFormat_FieldLayout(t *testing.T) {
-	var ourIdent common.Hash
-	for i := range ourIdent {
-		ourIdent[i] = 0xAA
-	}
-	var nextIdent common.Hash
-	for i := range nextIdent {
-		nextIdent[i] = 0xBB
-	}
-	var layerKey, ivKey, replyKey session_key.SessionKey
-	for i := range layerKey {
-		layerKey[i] = 0x11
-	}
-	for i := range ivKey {
-		ivKey[i] = 0x22
-	}
-	for i := range replyKey {
-		replyKey[i] = 0x33
-	}
-	var replyIV [16]byte
-	for i := range replyIV {
-		replyIV[i] = 0x44
-	}
-
-	record := BuildRequestRecord{
-		ReceiveTunnel: tunnel.TunnelID(0x01020304),
-		OurIdent:      ourIdent,
-		NextTunnel:    tunnel.TunnelID(0x05060708),
-		NextIdent:     nextIdent,
-		LayerKey:      layerKey,
-		IVKey:         ivKey,
-		ReplyKey:      replyKey,
-		ReplyIV:       replyIV,
-		Flag:          7,
-		RequestTime:   time.Unix(3600*1000, 0), // 1000 hours since epoch
-		SendMessageID: 0x0A0B0C0D,
-	}
-
-	data := record.Bytes()
-	require.Equal(t, 222, len(data))
-
-	assertFieldOffsets(t, data, []fieldCheck{
-		{0, 3, 0x01, 0x04, "ReceiveTunnel"},
-		{4, 35, 0xAA, 0xAA, "OurIdent"},
-		{36, 39, 0x05, 0x08, "NextTunnel"},
-		{40, 71, 0xBB, 0xBB, "NextIdent"},
-		{72, 103, 0x11, 0x11, "LayerKey"},
-		{104, 135, 0x22, 0x22, "IVKey"},
-		{136, 167, 0x33, 0x33, "ReplyKey"},
-		{168, 183, 0x44, 0x44, "ReplyIV"},
-	})
-
-	// Flag at [184]
-	assert.Equal(t, byte(7), data[184])
-
-	// RequestTime at [185:189] — hours since epoch
-	hours := binary.BigEndian.Uint32(data[185:189])
-	assert.Equal(t, uint32(1000), hours, "RequestTime at [185:189] must be hours since epoch")
-
-	// SendMessageID at [189:193]
-	msgID := binary.BigEndian.Uint32(data[189:193])
-	assert.Equal(t, uint32(0x0A0B0C0D), msgID, "SendMessageID at [189:193]")
-
-	// Padding at [193:222] = 29 bytes
-	assert.Equal(t, 29, len(data[193:222]), "Padding must be 29 bytes at [193:222]")
-}
-
-// TestTunnelBuild_RecordFormat_ParseRoundTrip verifies Bytes() → ReadBuildRequestRecord roundtrip.
-func TestTunnelBuild_RecordFormat_ParseRoundTrip(t *testing.T) {
+// TestShortBuildRecordFormat_CleartextRoundTrip verifies the live short-record
+// parser reads back what ShortBytes writes, replacing the removed long-record
+// roundtrip test.
+func TestShortBuildRecordFormat_CleartextRoundTrip(t *testing.T) {
 	original := BuildRequestRecord{
 		ReceiveTunnel: tunnel.TunnelID(12345),
 		NextTunnel:    tunnel.TunnelID(67890),
-		Flag:          1,
-		RequestTime:   time.Unix(3600*500, 0), // truncated to hour
+		Flag:          0x80, // IBGW: bit 7 is one of the two defined flag bits
+		RequestTime:   time.Unix(60*500, 0),
 		SendMessageID: 9999,
-	}
-	for i := range original.OurIdent {
-		original.OurIdent[i] = byte(i)
 	}
 	for i := range original.NextIdent {
 		original.NextIdent[i] = byte(i + 32)
 	}
 
-	data := original.Bytes()
-	require.Equal(t, 222, len(data))
+	wire := original.ShortBytes()
+	require.Equal(t, ShortBuildRecordSize, len(wire))
 
-	parsed, err := ReadBuildRequestRecord(data)
+	// The 154-byte cleartext payload starts at offset 48 of the short record
+	// (toPeer 16 + ephemeral key 32).
+	cleartext := wire[48 : 48+ShortBuildRecordCleartextLen]
+	parsed, err := ReadShortBuildRequestRecord(cleartext)
 	require.NoError(t, err)
 
 	assert.Equal(t, original.ReceiveTunnel, parsed.ReceiveTunnel)
-	assert.Equal(t, original.OurIdent, parsed.OurIdent)
 	assert.Equal(t, original.NextTunnel, parsed.NextTunnel)
 	assert.Equal(t, original.NextIdent, parsed.NextIdent)
 	assert.Equal(t, original.Flag, parsed.Flag)
@@ -3047,23 +2980,27 @@ func TestTunnelBuildReply_Format_ResponseRecordIs528(t *testing.T) {
 		"BuildResponseRecord must be Hash(32)+RandomData(495)+Reply(1)=528 bytes")
 }
 
-// TestTunnelBuildReply_Format_HashIsFirst32Bytes verifies Hash occupies first 32 bytes.
-func TestTunnelBuildReply_Format_HashIsFirst32Bytes(t *testing.T) {
-	randomData := makeRandomData(func(i int) byte { return byte(i) })
-	record := newTestBuildResponseRecord(TunnelBuildReplySuccess, randomData)
+// TestTunnelBuildReply_Format_LongRecordLayoutIsDocumented documents the
+// deprecated 528-byte reply record layout: Hash(32) + RandomData(495) +
+// Reply(1), with the hash covering bytes 32-527 (i2np.rst:448-492). The parser
+// for this format was removed with the deprecated long-record path; the live
+// short reply record has no hash field at all, so integrity comes from the
+// record's ChaCha20-Poly1305 tag instead
+// (tunnel-creation-ecies.rst:729-741 "Short Reply Record Unencrypted":
+// options Mapping, random padding, then "byte 201: Reply byte").
+func TestTunnelBuildReply_Format_LongRecordLayoutIsDocumented(t *testing.T) {
+	assert.Equal(t, 528, 32+495+1,
+		"deprecated long reply record is Hash(32)+RandomData(495)+Reply(1)=528 bytes")
 
-	// Serialize manually
-	buf := make([]byte, 528)
-	copy(buf[0:32], record.Hash[:])
-	copy(buf[32:527], record.RandomData[:])
-	buf[527] = record.Reply
+	// The struct still describes that layout so the format stays documented.
+	record := newTestBuildResponseRecord(TunnelBuildReplySuccess, makeRandomData(func(i int) byte { return byte(i) }))
+	assert.NotEqual(t, common.Hash{}, record.Hash, "long-record layout carries a hash")
+	assert.NotEqual(t, [495]byte{}, record.RandomData, "long-record layout carries random data")
 
-	// Parse back
-	parsed, err := ReadBuildResponseRecord(buf)
-	require.NoError(t, err)
-	assert.Equal(t, record.Hash, parsed.Hash, "Hash at [0:32] must survive roundtrip")
-	assert.Equal(t, record.RandomData, parsed.RandomData, "RandomData at [32:527] must survive roundtrip")
-	assert.Equal(t, record.Reply, parsed.Reply, "Reply at [527] must survive roundtrip")
+	// A short reply record carries neither: only the reply byte is meaningful.
+	short := BuildResponseRecord{Reply: byte(TunnelBuildReplySuccess)}
+	assert.Equal(t, common.Hash{}, short.Hash, "short reply record has no hash field")
+	assert.Equal(t, [495]byte{}, short.RandomData, "short reply record has no random-data field")
 }
 
 // TestShortTunnelBuildReplyExtra_Format_CountPlusRecords verifies the count+records layout.

@@ -9,7 +9,8 @@ I2P I2NP Tunnel Build Reply codes
 https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst
 
 Reply codes shared by all tunnel build reply message types
-(ShortTunnelBuildReply type 26).
+(OutboundTunnelBuildReply type 26, the spec name for this package's
+ShortTunnelBuildReply).
 */
 
 // TunnelBuildReply constants for processing responses

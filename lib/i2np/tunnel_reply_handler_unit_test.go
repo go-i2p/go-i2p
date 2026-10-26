@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"testing"
 
-	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/crypto/types"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestTunnelBuildReply_ProcessReply_AllSuccess tests successful tunnel build with all hops accepting
@@ -141,22 +142,38 @@ func TestShortTunnelBuildReplyExtra_ProcessReply_SingleHop(t *testing.T) {
 	assert.NoError(t, err, "ProcessReply should succeed with single hop")
 }
 
-// TestValidateResponseRecord tests response record validation
-func TestValidateResponseRecord(t *testing.T) {
-	// Valid record
-	validRecord := createValidResponseRecord()
-	err := ValidateBuildResponseRecord(validRecord)
-	assert.NoError(t, err, "Valid record should pass validation")
+// TestVerifyRecordIntegrity_ShortPathIsNoop covers the live reply integrity
+// behaviour that replaced the removed ValidateBuildResponseRecord helper. A
+// short (STBM) reply record has no hash field, so the hash check is skipped:
+// integrity comes from the ChaCha20-Poly1305 tag on the 218-byte encrypted
+// slot (tunnel-creation-ecies.rst:729-741, :758-770).
+func TestVerifyRecordIntegrity_ShortPathIsNoop(t *testing.T) {
+	reply := &ShortTunnelBuildReply{}
+	short := BuildResponseRecord{Reply: byte(TunnelBuildReplySuccess)}
+	require.NoError(t, reply.verifyRecordIntegrity(0, short),
+		"a short reply record with no hash must pass (AEAD provides integrity)")
+}
 
-	// Invalid record with empty hash
-	invalidRecord := BuildResponseRecord{
-		Hash:       common.Hash{}, // All zeros
-		RandomData: [495]byte{},
-		Reply:      TunnelBuildReplySuccess,
+// TestVerifyRecordIntegrity_LongLayoutStillVerified keeps the deprecated
+// long-record hash rule enforced for any record that does carry a hash, so the
+// integrity check a peer would expect is not silently dropped.
+func TestVerifyRecordIntegrity_LongLayoutStillVerified(t *testing.T) {
+	reply := &ShortTunnelBuildReply{}
+
+	randomData := [495]byte{}
+	for i := range randomData {
+		randomData[i] = byte(i)
 	}
-	err = ValidateBuildResponseRecord(invalidRecord)
-	assert.Error(t, err, "Invalid record with empty hash should fail validation")
-	assert.Contains(t, err.Error(), "empty hash")
+	toHash := make([]byte, 496)
+	copy(toHash[:495], randomData[:])
+	toHash[495] = byte(TunnelBuildReplySuccess)
+
+	good := BuildResponseRecord{Hash: types.SHA256(toHash), RandomData: randomData, Reply: byte(TunnelBuildReplySuccess)}
+	require.NoError(t, reply.verifyRecordIntegrity(0, good), "matching hash must verify")
+
+	bad := good
+	bad.Reply = byte(TunnelBuildReplyBandwidth)
+	require.Error(t, reply.verifyRecordIntegrity(0, bad), "hash must not match a tampered reply byte")
 }
 
 // TestProcessHopResponse_AllReplyCodes tests processing of all defined reply codes

@@ -9,9 +9,19 @@ import (
 )
 
 /*
-I2P I2NP ShortTunnelBuildReply
+I2P I2NP OutboundTunnelBuildReply (this type is named ShortTunnelBuildReply)
 https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst
 Added in version 0.9.51
+
+NOTE ON THE NAME: the specification calls message type 26
+OutboundTunnelBuildReply (i2np.rst:696, :1721), not ShortTunnelBuildReply —
+"ShortTunnelBuildReply" does not appear in the spec. The distinction is
+semantic, not cosmetic: tunnel-creation-ecies.rst:537 pairs the two new
+messages as "Short Tunnel Build Message (type 25) and Outbound Tunnel Build
+Reply Message (type 26)", and the reply travels back over the *outbound*
+tunnel. [OutboundTunnelBuildReply] is the spec-named alias for this type;
+the ShortTunnelBuildReply name is kept as the primary identifier for API
+stability.
 
 Format:
 +----+----+----+----+----+----+----+----+
@@ -26,8 +36,9 @@ record size: 218 bytes
 total size: 1+$num*218
 */
 
-// ShortTunnelBuildReply represents an I2NP ShortTunnelBuildReply message,
-// the reply counterpart to ShortTunnelBuild. It carries one compact
+// ShortTunnelBuildReply represents an I2NP OutboundTunnelBuildReply message
+// (type 26 — the specification name; see [OutboundTunnelBuildReply]), the reply
+// counterpart to ShortTunnelBuild. It carries one compact
 // 218-byte build response record per hop (1-8 records), which the
 // TunnelManager uses to determine whether the short tunnel build succeeded.
 // See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the wire format.
@@ -44,6 +55,13 @@ type ShortTunnelBuildReply struct {
 	// tunnel. Scoring those extra slots as hops would reject a healthy build.
 	repliedHops int
 }
+
+// OutboundTunnelBuildReply is the specification name for the message type 26
+// that this package calls [ShortTunnelBuildReply] (i2np.rst:696, :1721). It is
+// an alias, not a second implementation: the two share this file's methods and
+// wire format, so either name can be used in type positions. Prefer this name
+// in new code because it matches the specification.
+type OutboundTunnelBuildReply = ShortTunnelBuildReply
 
 // GetReplyRecords returns the parsed build response records. It satisfies
 // the TunnelReplyHandler interface so the reply processor can handle

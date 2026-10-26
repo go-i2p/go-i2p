@@ -536,9 +536,13 @@ func validateTunnelBuild(result *tunnel.TunnelBuildResult) (router_info.RouterIn
 }
 
 // createSerializedBuildMessage creates and serializes a Short Tunnel Build
-// (STBM, type 25) message. STBM is the only supported send format; the legacy
-// fixed TunnelBuild (type 21) and VariableTunnelBuild (type 23) send paths have
-// been removed (receive-side parsing for interop remains in the processor).
+// (STBM, type 25) message. STBM is the only supported send format; the fixed
+// TunnelBuild (type 21) and VariableTunnelBuild (type 23) send paths have been
+// removed, and the processor has no receive-side handling for them either
+// (types 23/24 are dropped, types 21/22 fall through to the unknown-type
+// branch), so this router neither sends nor accepts the 528-byte build pair.
+// See the "Tunnel build message coverage (known gap)" section of this
+// package's doc.go.
 func (tm *TunnelManager) createSerializedBuildMessage(result *tunnel.TunnelBuildResult, messageID int) ([]byte, error) {
 	return tm.createSerializedShortTunnelBuildMessage(result, messageID)
 }

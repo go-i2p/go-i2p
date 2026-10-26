@@ -770,3 +770,79 @@ func TestW10_DialRefusesInvalidCurvePoint(t *testing.T) {
 	require.Error(t, err, "non-curve static key must refuse the dial (ntcp2.rst:298)")
 	assert.Contains(t, err.Error(), "Curve25519")
 }
+
+// --- A6: a Termination block must not discard the I2NP messages that
+// preceded it in the same frame (ntcp2.rst:1464, :1466) ---
+
+// i2npBlockWithID frames a Data message carrying the given I2NP message ID,
+// so a test can tell two blocks in one frame apart.
+func i2npBlockWithID(t *testing.T, id uint32, payload string) Block {
+	t.Helper()
+	msg := i2np.NewDataMessage([]byte(payload))
+	msg.SetMessageID(int(id))
+	framed, err := FrameI2NPMessageAsBlock(msg)
+	require.NoError(t, err)
+	blocks, err := ParseBlocks(framed)
+	require.NoError(t, err)
+	require.Len(t, blocks, 1)
+	return blocks[0]
+}
+
+// A conformant [I2NP, I2NP, Termination] frame must deliver both I2NP
+// messages before the closure is reported. Before the fix, processBlocks
+// returned (nil, true) on the Termination block and ReadNextMessage threw
+// away firstMsg plus everything in bufferedMsgs.
+func TestA6_TerminationFrameDeliversPrecedingI2NPMessages(t *testing.T) {
+	term := Block{Type: BlockTypeTermination, Data: make([]byte, 9)}
+	frame := SerializeBlocks(
+		i2npBlockWithID(t, 0x1111, "a6 first"),
+		i2npBlockWithID(t, 0x2222, "a6 second"),
+		term,
+	)
+
+	unframer := NewBlockUnframer(newFrameSource(frame))
+
+	first, err := unframer.ReadNextMessage()
+	require.NoError(t, err, "first I2NP message in the terminated frame must be delivered")
+	require.NotNil(t, first)
+	assert.Equal(t, 0x1111, first.MessageID())
+
+	second, err := unframer.ReadNextMessage()
+	require.NoError(t, err, "second I2NP message in the terminated frame must be delivered")
+	require.NotNil(t, second)
+	assert.Equal(t, 0x2222, second.MessageID())
+
+	// Only after the buffer drains does the unframer report the closure.
+	_, err = unframer.ReadNextMessage()
+	require.ErrorIs(t, err, io.EOF, "closure reported after buffered messages are delivered")
+}
+
+// A frame whose only block is a Termination block still reports EOF at once.
+func TestA6_TerminationOnlyFrameStillReturnsEOF(t *testing.T) {
+	term := Block{Type: BlockTypeTermination, Data: make([]byte, 9)}
+	unframer := NewBlockUnframer(newFrameSource(SerializeBlocks(term)))
+	_, err := unframer.ReadNextMessage()
+	require.ErrorIs(t, err, io.EOF)
+}
+
+// The buffered-message path must not re-account the frame's bytes once per
+// message: bytesRead is zeroed when draining the buffer.
+func TestA6_BufferedMessagesDoNotDoubleCountBytes(t *testing.T) {
+	term := Block{Type: BlockTypeTermination, Data: make([]byte, 9)}
+	frame := SerializeBlocks(
+		i2npBlockWithID(t, 0x3333, "a6 count one"),
+		i2npBlockWithID(t, 0x4444, "a6 count two"),
+		term,
+	)
+	unframer := NewBlockUnframer(newFrameSource(frame))
+
+	_, err := unframer.ReadNextMessage()
+	require.NoError(t, err)
+	assert.Equal(t, len(frame), unframer.BytesRead(),
+		"the frame's bytes are accounted exactly once, on the read that consumed it")
+
+	_, err = unframer.ReadNextMessage()
+	require.NoError(t, err)
+	assert.Equal(t, 0, unframer.BytesRead(),
+		"a buffered message must not re-account the frame's bytes")
+}

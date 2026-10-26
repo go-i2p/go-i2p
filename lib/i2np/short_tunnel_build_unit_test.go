@@ -117,8 +117,14 @@ func TestShortBytesLength(t *testing.T) {
 	}
 }
 
-// TestShortBytesVsStandardBytes verifies short records are smaller than standard
-func TestShortBytesVsStandardBytes(t *testing.T) {
+// TestShortBytesIsSmallerThanLongRecord documents that the live short record is
+// smaller than the deprecated 528-byte long record. The long-record serializer
+// was removed with the deprecated long-record path, so the comparison is made
+// against the specification's documented sizes rather than against a live
+// serializer: ShortBytes emits the 218-byte short wire record
+// (tunnel-creation-ecies.rst:543 "218 bytes, compared to 528 bytes for all
+// other build messages").
+func TestShortBytesIsSmallerThanLongRecord(t *testing.T) {
 	record := BuildRequestRecord{
 		ReceiveTunnel: tunnel.TunnelID(100),
 		NextTunnel:    tunnel.TunnelID(200),
@@ -126,18 +132,13 @@ func TestShortBytesVsStandardBytes(t *testing.T) {
 		SendMessageID: 1,
 	}
 
-	standardData := record.Bytes()
 	shortData := record.ShortBytes()
-
-	if len(standardData) != StandardBuildRecordCleartextLen {
-		t.Errorf("Bytes() returned %d bytes, expected %d", len(standardData), StandardBuildRecordCleartextLen)
-	}
 	if len(shortData) != ShortBuildRecordSize {
 		t.Errorf("ShortBytes() returned %d bytes, expected %d", len(shortData), ShortBuildRecordSize)
 	}
-	if len(shortData) >= len(standardData) {
-		t.Errorf("Short record (%d bytes) should be smaller than standard cleartext (%d bytes)",
-			len(shortData), len(standardData))
+	if len(shortData) >= StandardBuildRecordSize {
+		t.Errorf("short record (%d bytes) should be smaller than the deprecated long record (%d bytes)",
+			len(shortData), StandardBuildRecordSize)
 	}
 }
 
