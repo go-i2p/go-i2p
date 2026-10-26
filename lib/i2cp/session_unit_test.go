@@ -1402,55 +1402,38 @@ func TestCreateEncryptedLeaseSetSerialization(t *testing.T) {
 
 // TestPublishLeaseSetNetworkWithEncrypted verifies blinded hash is used for EncryptedLeaseSet
 func TestPublishLeaseSetNetworkWithEncrypted(t *testing.T) {
-	keyStore, config := setupEncryptedLeaseSetConfig(t)
+	session, ls2Bytes := createTestSessionWithLeaseSet(t)
+	defer session.Stop()
 
-	session := &Session{
-		id:          1,
-		destination: keyStore.Destination(),
-		keys:        keyStore,
-		config:      config,
-	}
+	mockPublisher := newMockLeaseSetPublisher()
+	session.publisher = mockPublisher
 
-	// Update blinded destination
-	err := session.updateBlindedDestination()
-	require.NoError(t, err)
-
-	// Calculate expected hashes
 	origBytes, err := session.destination.Bytes()
 	require.NoError(t, err)
 	origHash := common.HashData(origBytes)
 
-	blindedBytes, err := session.blindedDestination.Bytes()
-	require.NoError(t, err)
-	blindedHash := common.HashData(blindedBytes)
-
-	// Hashes should be different (blinded vs original)
-	assert.NotEqual(t, origHash, blindedHash)
-
-	// Create a mock publisher to verify correct hash is used
-	mockPublisher := newMockLeaseSetPublisher()
-
-	session.publisher = mockPublisher
-
-	// Publish with EncryptedLeaseSet enabled
-	leaseSetBytes := []byte("mock-encrypted-leaseset-data")
-	err = session.publishLeaseSetToNetwork(leaseSetBytes)
-	assert.NoError(t, err)
-
-	// Verify blinded hash was used
-	assert.Contains(t, mockPublisher.published, blindedHash)
-	assert.NotContains(t, mockPublisher.published, origHash)
-
-	// Test with EncryptedLeaseSet disabled
-	session.config.UseEncryptedLeaseSet = false
-	mockPublisher.published = make(map[common.Hash][]byte)
-
-	err = session.publishLeaseSetToNetwork(leaseSetBytes)
-	assert.NoError(t, err)
-
-	// Verify original hash was used
+	// LeaseSet2 path: published under the hash of the contained destination.
+	require.NoError(t, session.publishLeaseSetToNetwork(ls2Bytes))
 	assert.Contains(t, mockPublisher.published, origHash)
-	assert.NotContains(t, mockPublisher.published, blindedHash)
+
+	// EncryptedLeaseSet path: published under the hash of the blinded key it
+	// carries in cleartext, which is the key the NetDB enforces on store
+	// (lib/netdb verifyEncryptedLeaseSetHash) — not the hash of the blinded
+	// destination's full bytes.
+	elsBytes := buildBlindedEncryptedLeaseSet(t, session, ls2Bytes)
+	session.SetCurrentLeaseSetWithType(elsBytes, LeaseSetStoreTypeEncryptedLeaseSet)
+
+	mockPublisher.published = make(map[common.Hash][]byte)
+	require.NoError(t, session.publishLeaseSetToNetwork(elsBytes))
+
+	els, _, err := encrypted_leaseset.ReadEncryptedLeaseSet(elsBytes)
+	require.NoError(t, err)
+	blindedKeyHash := common.HashData(els.BlindedPublicKey())
+
+	assert.Contains(t, mockPublisher.published, blindedKeyHash,
+		"EncryptedLeaseSet must be published under the blinded-key hash")
+	assert.NotContains(t, mockPublisher.published, origHash,
+		"an EncryptedLeaseSet must not be published under the cleartext destination hash")
 }
 
 // TestRegenerateAndPublishWithEncrypted verifies maintenance loop uses EncryptedLeaseSet when configured

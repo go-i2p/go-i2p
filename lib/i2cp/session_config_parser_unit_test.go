@@ -350,10 +350,12 @@ func TestApplyMessageOptions_Reliability(t *testing.T) {
 		config := DefaultSessionConfig()
 		options := map[string]string{"i2cp.messageReliability": "None"}
 		applyMessageOptions(config, options)
-		assert.Equal(t, "BestEffort", config.MessageReliability, "None should fall back to BestEffort")
+		// "None" is honored: the router sends no MessageStatusMessage_ for the
+		// session (i2cp.rst:1421-1423).
+		assert.Equal(t, MessageReliabilityNone, config.MessageReliability, "None must be honored")
 		assert.True(t, config.ExplicitlySetFields["MessageReliability"])
-		assert.Contains(t, config.UnsupportedOptions, "i2cp.messageReliability", "None should be recorded as unsupported")
-		assert.Equal(t, "None", config.UnsupportedOptions["i2cp.messageReliability"])
+		assert.NotContains(t, config.UnsupportedOptions, "i2cp.messageReliability",
+			"None is implemented for status reporting, so it is not an unsupported option")
 	})
 	t.Run("Guaranteed", func(t *testing.T) {
 		config := DefaultSessionConfig()

@@ -484,26 +484,15 @@ func applyMessageReliability(config *SessionConfig, options map[string]string) {
 	}
 	switch val {
 	case "BestEffort":
-		config.MessageReliability = val
+		config.MessageReliability = MessageReliabilityBestEffort
 		markExplicitlySet(config, "MessageReliability")
 
 	case "None":
-		// "None" delivery mode is not fully implemented; semantically it should
-		// mean "don't even attempt delivery confirmation," but in practice this
-		// implementation treats it the same as BestEffort (single attempt, no ack).
-		config.MessageReliability = "BestEffort"
+		// "None" is honored: the router sends neither MessageStatusMessage_ for
+		// this session (i2cp.rst:1421-1423, :1479-1481). Delivery itself is
+		// still attempted best-effort.
+		config.MessageReliability = MessageReliabilityNone
 		markExplicitlySet(config, "MessageReliability")
-		if config.UnsupportedOptions == nil {
-			config.UnsupportedOptions = make(map[string]string)
-		}
-		config.UnsupportedOptions["i2cp.messageReliability"] = "None"
-		log.WithFields(logger.Fields{
-			"at":        "i2cp.applyMessageOptions",
-			"option":    "i2cp.messageReliability",
-			"requested": "None",
-			"effective": "BestEffort",
-			"reason":    "only BestEffort is implemented",
-		}).Warn("message_reliability_downgrade")
 	case "Guaranteed":
 		// Guaranteed delivery is not implemented; fall back to BestEffort
 		// and record the unsupported option so clients can detect this.

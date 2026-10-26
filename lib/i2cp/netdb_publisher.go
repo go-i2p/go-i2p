@@ -63,5 +63,26 @@ func (p *NetDBLeaseSetPublisher) PublishLeaseSet(key common.Hash, leaseSetData [
 	return nil
 }
 
-// Compile-time interface check
-var _ LeaseSetPublisher = (*NetDBLeaseSetPublisher)(nil)
+// PublishLeaseSetWithType stores the LeaseSet under an explicit record type, so a
+// session's CreateLeaseSet2 store type (i2cp.rst:668-672) is reflected in the
+// NetDB instead of being assumed to be LeaseSet2.
+func (p *NetDBLeaseSetPublisher) PublishLeaseSetWithType(key common.Hash, leaseSetData []byte, dataType byte) error {
+	log.WithFields(logger.Fields{
+		"at":        "NetDBLeaseSetPublisher.PublishLeaseSetWithType",
+		"hash":      key,
+		"data_size": len(leaseSetData),
+		"data_type": dataType,
+	}).Debug("Publishing LeaseSet to local NetDB")
+
+	if err := p.store.StoreLeaseSet(key, leaseSetData, dataType); err != nil {
+		log.WithError(err).WithField("hash", key).Error("Failed to publish LeaseSet to NetDB")
+		return err
+	}
+	return nil
+}
+
+// Compile-time interface checks
+var (
+	_ LeaseSetPublisher      = (*NetDBLeaseSetPublisher)(nil)
+	_ TypedLeaseSetPublisher = (*NetDBLeaseSetPublisher)(nil)
+)

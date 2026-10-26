@@ -46,18 +46,33 @@ func startServerAndConnect(t *testing.T, server *Server) net.Conn {
 	return conn
 }
 
-// createSessionOnConn sends a CreateSession message and returns the session ID.
+// createSessionOnConn performs a spec-conforming CreateSession handshake over an
+// already-connected socket and returns the resulting session ID.
+//
+// The payload must be a real signed Session Config: an empty payload is rejected
+// with SessionStatus(Invalid) (i2cp.rst:1616), no session is created, and the
+// reserved control-channel ID 0 comes back, which makes any later per-session
+// assertion vacuous. The status byte is checked so a refused/invalid session
+// fails loudly here rather than silently in a downstream test.
 func createSessionOnConn(t *testing.T, conn net.Conn) uint16 {
 	t.Helper()
+
+	id := generateTestIdentity(t)
 	createMsg := &Message{
 		Type:      MessageTypeCreateSession,
 		SessionID: SessionIDReservedControl,
-		Payload:   []byte{},
+		Payload:   buildSignedCreateSessionPayload(t, id),
 	}
 	require.NoError(t, WriteMessage(conn, createMsg), "WriteMessage() error")
-	response, err := ReadMessage(conn, 0) // No timeout for test
+
+	require.NoError(t, conn.SetReadDeadline(time.Now().Add(5*time.Second)))
+	response, err := ReadMessage(conn, 0)
 	require.NoError(t, err, "ReadMessage() error")
 	require.Equal(t, MessageTypeSessionStatus, response.Type, "Response type mismatch")
+	require.Equal(t, SessionStatusCreated, response.Payload[2],
+		"CreateSession must be accepted, not refused or invalid")
+	require.NotEmpty(t, response.SessionID, "a created session must get a nonzero ID")
+
 	return response.SessionID
 }
 
@@ -293,10 +308,13 @@ func TestServerConnWriteMuInitialized(t *testing.T) {
 	assert.Empty(t, server.connWriteMu, "connWriteMu should be empty initially")
 }
 
-// TestSessionStatusDestroyedCode verifies that handleDestroySession returns
-// a 3-byte SessionStatus payload (SessionID + Status) with status byte 0x00
-// (Destroyed) per I2CP spec.
-func TestSessionStatusDestroyedCode(t *testing.T) {
+// TestHandleDestroySessionSendsDisconnectNotSessionStatus verifies that
+// DestroySession does NOT reply with SessionStatus(Destroyed) — the current
+// version router "never sends a SessionStatus(Destroyed) response. If no
+// sessions are left, it sends a DisconnectMessage_" (i2cp.rst:802-804) — but
+// instead replies with a DisconnectMessage and closes the socket
+// (i2cp.rst:828-829).
+func TestHandleDestroySessionSendsDisconnectNotSessionStatus(t *testing.T) {
 	server := newTestI2CPServer(t, "")
 
 	session, err := server.manager.CreateSession(nil, nil)
@@ -311,18 +329,20 @@ func TestSessionStatusDestroyedCode(t *testing.T) {
 	}
 
 	response, err := server.handleDestroySession(destroyMsg, &sessionCopy)
-	require.NoError(t, err, "handleDestroySession() error")
-	require.NotNil(t, response, "handleDestroySession() returned nil response")
+	require.Error(t, err, "handleDestroySession() must signal the connection should close")
+	assert.True(t, errors.Is(err, errCloseAfterResponse),
+		"error must wrap errCloseAfterResponse, got %v", err)
 
-	// Verify payload is 3 bytes: SessionID(2) + Status(1)
-	require.Len(t, response.Payload, 3, "payload length")
+	require.NotNil(t, response, "handleDestroySession() must return the DisconnectMessage")
+	assert.Equal(t, MessageTypeDisconnect, response.Type, "response must be a DisconnectMessage")
+	assert.NotEqual(t, MessageTypeSessionStatus, response.Type,
+		"must not reply with SessionStatus (i2cp.rst:802-804)")
 
-	// Verify the session ID is correctly encoded in the payload
-	payloadSessionID := binary.BigEndian.Uint16(response.Payload[0:2])
-	assert.Equal(t, sessionID, payloadSessionID, "Payload SessionID")
-
-	// Destroyed status must be 0
-	assert.Equal(t, SessionStatusDestroyed, response.Payload[2], "status byte")
+	// A DisconnectMessage payload is an I2CP [String]: 2-byte length + reason.
+	require.GreaterOrEqual(t, len(response.Payload), 2, "DisconnectMessage payload too short")
+	assert.Nil(t, sessionCopy, "session pointer must be cleared after destroy")
+	_, stillRegistered := server.manager.GetSession(sessionID)
+	assert.False(t, stillRegistered, "session must be destroyed")
 }
 
 // TestBuildRequestVariableLeaseSetPayload_FilteredCount verifies that the

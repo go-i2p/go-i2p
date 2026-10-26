@@ -475,6 +475,16 @@ func setupSessionInboundPool(t *testing.T, session *Session) *tunnel.Pool {
 // setup that appeared in multiple send-message tests.
 func buildSendMessageRequest(t *testing.T, dest, payload string) (*Server, *Session, *Message) {
 	t.Helper()
+	// Non-zero nonce: a nonce of 0 asks the router to send no MessageStatus at
+	// all (i2cp.rst:1426-1429), which would suppress the status these tests
+	// assert on.
+	return buildSendMessageRequestWithNonce(t, dest, payload, 0x01020304)
+}
+
+// buildSendMessageRequestWithNonce is buildSendMessageRequest with an explicit
+// SendMessage nonce.
+func buildSendMessageRequestWithNonce(t *testing.T, dest, payload string, nonce uint32) (*Server, *Session, *Message) {
+	t.Helper()
 
 	server, err := NewServer(nil)
 	require.NoError(t, err, "NewServer()")
@@ -488,6 +498,7 @@ func buildSendMessageRequest(t *testing.T, dest, payload string) (*Server, *Sess
 	sendPayload := &SendMessagePayload{
 		Destination: *testDest,
 		Payload:     []byte(payload),
+		Nonce:       nonce,
 	}
 
 	payloadBytes, err := sendPayload.MarshalBinary()

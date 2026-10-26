@@ -365,18 +365,18 @@ func logPayloadReadFailure(connInfo string, msgType uint8, sessionID uint16, pay
 // extractSessionIDFromPayload extracts SessionID from message payload for message types that include it.
 // Per I2CP spec: Some message types have SessionID as first 2 bytes of payload.
 // Message types with SessionID in payload:
-// - SessionStatus (type 20): SessionID(2) + Status(1)
-// - MessageStatus (type 22): SessionID(2) + MessageID(4) + Status(1) + Size(4) + Nonce(4)
-// - MessagePayload (type 31): SessionID(2) + MessageID(4) + payload_data
-// - ReconfigureSession (type 2): SessionID(2) + config_data
-// - DestroySession (type 3): SessionID(2)
-// - SendMessage (type 5): SessionID(2) + message_data
-// - CreateLeaseSet (type 4): SessionID(2) + leaseset_data
-// - SendMessageExpires (type 36): SessionID(2) + message_data
-// - HostLookup (type 38): SessionID(2) + RequestID(4) + Timeout(4) + Type(1) + query
-//   Per i2cp.rst, "The session ID and request ID will be returned in the
-//   HostReplyMessage_", so the HostLookup Session ID must be carried through to
-//   the reply rather than left at zero.
+//   - SessionStatus (type 20): SessionID(2) + Status(1)
+//   - MessageStatus (type 22): SessionID(2) + MessageID(4) + Status(1) + Size(4) + Nonce(4)
+//   - MessagePayload (type 31): SessionID(2) + MessageID(4) + payload_data
+//   - ReconfigureSession (type 2): SessionID(2) + config_data
+//   - DestroySession (type 3): SessionID(2)
+//   - SendMessage (type 5): SessionID(2) + message_data
+//   - CreateLeaseSet (type 4): SessionID(2) + leaseset_data
+//   - SendMessageExpires (type 36): SessionID(2) + message_data
+//   - HostLookup (type 38): SessionID(2) + RequestID(4) + Timeout(4) + Type(1) + query
+//     Per i2cp.rst, "The session ID and request ID will be returned in the
+//     HostReplyMessage_", so the HostLookup Session ID must be carried through to
+//     the reply rather than left at zero.
 func extractSessionIDFromPayload(msgType uint8, payload []byte) uint16 {
 	// Messages that include SessionID in payload
 	switch msgType {

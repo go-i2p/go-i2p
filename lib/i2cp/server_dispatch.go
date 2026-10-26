@@ -8,7 +8,6 @@ import (
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/destination"
-	"github.com/go-i2p/common/lease_set2"
 	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
@@ -68,7 +67,10 @@ func (s *Server) handleMessage(conn net.Conn, msg *Message, sessionPtr **Session
 		return s.handleBlindingInfo(msg, sessionPtr)
 
 	default:
-		// i2psnark compatibility: Log unsupported message types with full context
+		// i2cp.rst:228-229: routers "generally disconnect the session upon
+		// reception of an unsupported message". Returning the terminal sentinel
+		// makes runConnectionLoop close the socket instead of skipping the
+		// message and continuing on the same connection.
 		log.WithFields(logger.Fields{
 			"at":          "i2cp.Server.handleMessage",
 			"msgType":     MessageTypeName(msg.Type),
@@ -76,8 +78,8 @@ func (s *Server) handleMessage(conn net.Conn, msg *Message, sessionPtr **Session
 			"sessionID":   msg.SessionID,
 			"payloadSize": len(msg.Payload),
 			"payloadHex":  fmt.Sprintf("%x", msg.Payload[:min(32, len(msg.Payload))]),
-		}).Warn("unsupported_message_type")
-		return nil, oops.Errorf("unsupported message type: %d", msg.Type)
+		}).Warn("unsupported_message_type_disconnecting")
+		return nil, oops.Wrapf(errUnsupportedMessageType, "unsupported message type: %d", msg.Type)
 	}
 }
 
@@ -210,7 +212,21 @@ func buildMessageStatusResponse(sessionID uint16, messageID uint32, statusCode u
 	}
 }
 
-// handleDestroySession destroys a session
+// handleDestroySession destroys a session.
+//
+// i2cp.rst:798 — "The router at this point should release all resources related
+// to the session."
+// i2cp.rst:802-804 — the current-version router behaviour: "The router never
+// sends a SessionStatus(Destroyed) response. If no sessions are left, it sends a
+// DisconnectMessage_. If there are subsessions or the primary session is
+// remaining, it does not reply."
+// i2cp.rst:828-829 — the DisconnectMessage "ends all sessions on that
+// connection. The socket will be closed shortly."
+//
+// This router keeps at most one session per connection (a destroy of the primary
+// is a destroy of the connection's sessions, i2cp.rst:813-815), so after the
+// destroy no sessions are left and the prescribed reply is a DisconnectMessage
+// followed by closing the socket — not SessionStatus(Destroyed).
 func (s *Server) handleDestroySession(msg *Message, sessionPtr **Session) (*Message, error) {
 	if *sessionPtr == nil {
 		return nil, oops.Errorf("session not active")
@@ -226,6 +242,11 @@ func (s *Server) handleDestroySession(msg *Message, sessionPtr **Session) (*Mess
 	// client's per-client decryption keys are not retained.
 	s.forgetBlindingAdviceForSession(sessionID)
 
+	// The session is gone: stop routing async MessageStatus writes to it and
+	// release the connection's ownership of the session so cleanupIdleSessions
+	// cannot race with the deferred connection cleanup.
+	s.forgetSessionConnection(sessionID)
+
 	*sessionPtr = nil
 
 	log.WithFields(logger.Fields{
@@ -234,16 +255,13 @@ func (s *Server) handleDestroySession(msg *Message, sessionPtr **Session) (*Mess
 		"sessionID": sessionID,
 	}).Info("session_destroyed")
 
-	// Per I2CP spec, SessionStatus payload is SessionID(2 bytes) + Status(1 byte).
-	// Status code 0 = Destroyed.
-	payload := make([]byte, 3)
-	binary.BigEndian.PutUint16(payload[0:2], sessionID)
-	payload[2] = SessionStatusDestroyed
-	return &Message{
-		Type:      MessageTypeSessionStatus,
-		SessionID: sessionID,
-		Payload:   payload,
-	}, nil
+	disconnect, err := s.buildDisconnectMessage("session destroyed")
+	if err != nil {
+		// Still close the socket; a failure to encode the reason must not leave
+		// the connection half-open.
+		return nil, oops.Wrapf(errCloseAfterResponse, "failed to build disconnect message: %w", err)
+	}
+	return disconnect, oops.Wrapf(errCloseAfterResponse, "session %d destroyed", sessionID)
 }
 
 // logReconfigSuccess logs a successful session reconfiguration.
@@ -345,26 +363,28 @@ func (s *Server) handleCreateLeaseSet(msg *Message, sessionPtr **Session) (*Mess
 	return nil, nil
 }
 
-// handleCreateLeaseSet2 handles CreateLeaseSet2Message (type 41) - modern LeaseSet format.
-// This is the modern replacement for CreateLeaseSet (type 5), supporting:
-// - LeaseSet2 format (type 3) with modern crypto (X25519/Ed25519)
-// - EncryptedLeaseSet (type 5) for destination privacy
-// - MetaLeaseSet (type 7) for multiple destinations
-// - Multiple encryption keys per destination
+// handleCreateLeaseSet2 handles CreateLeaseSet2Message (type 41).
 //
-// Per I2CP v0.9.67 spec:
-// "CreateLeaseSet2Message: Create a LeaseSet2. Sent from client to router.
+// i2cp.rst:658-677 — the payload is:
 //
-//	Supports LeaseSet2, EncryptedLeaseSet, and MetaLeaseSet formats.
-//	Use this instead of CreateLeaseSetMessage for all routers 0.9.39+."
+//  1. Session ID
+//  2. One byte type of lease set to follow.
+//     Type 1 is a LeaseSet (deprecated)
+//     Type 3 is a LeaseSet2
+//     Type 5 is an EncryptedLeaseSet
+//     Type 7 is a MetaLeaseSet
+//  3. LeaseSet / LeaseSet2 / EncryptedLeaseSet / MetaLeaseSet
+//  4. One byte number of private keys to follow.
+//  5. PrivateKey list, one per public key in the lease set, in the same order
+//     (not present for Meta LS2)
 //
-// Payload format:
+// The store type byte is not decorative: it selects which structure follows, and
+// therefore the framing, the validation, the NetDB record type and the lookup key
+// the record is published under. Framing and structural parsing are delegated to
+// the upstream go-i2p/common lease-set packages (see leaseset_store.go).
 //
-//	2 bytes: Session ID
-//	N bytes: Complete serialized LeaseSet2 (format depends on type byte)
-//
-// Unlike CreateLeaseSet (type 5), the client provides the complete serialized
-// LeaseSet2 structure. The router validates and publishes it to the network.
+// i2cp.rst:660 — "MetaLeaseSet is not yet supported via I2CP", so store type 7 is
+// rejected rather than stored as something the router cannot use.
 func (s *Server) handleCreateLeaseSet2(msg *Message, sessionPtr **Session) (*Message, error) {
 	if *sessionPtr == nil {
 		return nil, oops.Errorf("no active session")
@@ -373,35 +393,41 @@ func (s *Server) handleCreateLeaseSet2(msg *Message, sessionPtr **Session) (*Mes
 	session := *sessionPtr
 	logLeaseSet2Request(session.ID(), len(msg.Payload))
 
-	// Extract SessionID (first 2 bytes)
-	if len(msg.Payload) < 3 { // SessionID(2) + StoreType(1) minimum
+	// SessionID(2) + store type(1)
+	if len(msg.Payload) < 3 {
 		return nil, oops.Errorf("CreateLeaseSet2 payload too short: %d bytes (need at least 3 for SessionID+StoreType)", len(msg.Payload))
 	}
 
-	// Parse StoreType (1 byte after SessionID)
-	storeType := msg.Payload[2]
+	// The one byte after the SessionID names the structure that follows
+	// (i2cp.rst:666-672).
+	storeType := LeaseSetStoreType(msg.Payload[2])
+	if err := storeType.validate(); err != nil {
+		return nil, oops.Wrapf(err, "CreateLeaseSet2")
+	}
 
-	// Extract LeaseSet2 and private keys from the remaining payload
-	leaseSetBytes, privKeys, err := parseCreateLeaseSet2Payload(msg.Payload[3:], storeType)
+	leaseSetBytes, remainder, err := frameLeaseSetByStoreType(msg.Payload[3:], storeType)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := validateLeaseSet2PayloadSize(session.ID(), leaseSetBytes); err != nil {
+	// Parse private keys from the bytes following the lease set (field 4/5).
+	privKeys, err := parseCreateLeaseSet2PrivateKeys(remainder, storeType)
+	if err != nil {
 		return nil, err
 	}
 
 	log.WithFields(logger.Fields{
 		"at":             "i2cp.Server.handleCreateLeaseSet2",
 		"sessionID":      session.ID(),
-		"storeType":      storeType,
+		"storeType":      uint8(storeType),
+		"leaseSetType":   storeType.name(),
 		"leaseSetSize":   len(leaseSetBytes),
 		"numPrivateKeys": len(privKeys),
-	}).Debug("leaseset2_received")
+	}).Debug("leaseset_received")
 
-	if err := session.ValidateLeaseSet2Data(leaseSetBytes); err != nil {
+	if err := validateLeaseSetForSession(session, storeType, leaseSetBytes); err != nil {
 		logLeaseSet2ValidationError(session.ID(), err)
-		return nil, oops.Errorf("LeaseSet2 validation failed: %w", err)
+		return nil, oops.Errorf("%s validation failed: %w", storeType.name(), err)
 	}
 
 	// Store private keys in session for decryption of inbound messages
@@ -416,14 +442,15 @@ func (s *Server) handleCreateLeaseSet2(msg *Message, sessionPtr **Session) (*Mes
 		}
 	}
 
-	session.SetCurrentLeaseSet(leaseSetBytes)
-	s.publishLeaseSet2WithLogging(session, leaseSetBytes)
+	session.SetCurrentLeaseSetWithType(leaseSetBytes, storeType)
+	s.publishLeaseSetWithLogging(session, storeType, leaseSetBytes)
 
 	log.WithFields(logger.Fields{
 		"at":        "i2cp.Server.handleCreateLeaseSet2",
 		"sessionID": session.ID(),
+		"type":      storeType.name(),
 		"size":      len(leaseSetBytes),
-	}).Info("leaseset2_processed")
+	}).Info("leaseset_processed")
 
 	return nil, nil
 }
@@ -437,108 +464,58 @@ func logLeaseSet2Request(sessionID uint16, payloadSize int) {
 	}).Debug("handling_create_leaseset2")
 }
 
-// parseCreateLeaseSet2Payload extracts LeaseSet2 and private keys from the payload.
-// Format per I2CP spec (after SessionID + StoreType are removed):
+// parseCreateLeaseSet2PrivateKeys reads the trailing "One byte number of private
+// keys to follow" plus the [PrivateKey]_ list of i2cp.rst:673-681:
 //
-//	LeaseSet2: variable length (destination + published + expires + flags + key sections + leases + signature)
-//	NumPrivateKeys: 1 byte
-//	For each private key:
-//	  KeyType: 2 bytes (big endian)
-//	  KeyLen: 2 bytes (big endian)
-//	  KeyData: KeyLen bytes
-func parseCreateLeaseSet2Payload(payload []byte, storeType uint8) ([]byte, map[uint16][]byte, error) {
-	if len(payload) < 400 { // Minimum LeaseSet2 size
-		return nil, nil, oops.Errorf("payload too short for LeaseSet2: %d bytes", len(payload))
+//   - Encryption type (2 byte Integer)
+//   - Encryption key length (2 byte Integer)
+//   - Encryption PrivateKey (number of bytes specified)
+//
+// The list is not present for MetaLeaseSet (i2cp.rst:677), so a declared count
+// for that type is a framing error rather than something to ignore.
+func parseCreateLeaseSet2PrivateKeys(remainder []byte, storeType LeaseSetStoreType) (map[uint16][]byte, error) {
+	if len(remainder) == 0 {
+		return nil, nil
 	}
 
-	// Parse LeaseSet2 using the lease_set2 package
-	_, remaining, err := lease_set2.ReadLeaseSet2(payload)
-	if err != nil {
-		return nil, nil, oops.Errorf("invalid LeaseSet2: %w", err)
+	numPrivateKeys := int(remainder[0])
+	if numPrivateKeys == 0 {
+		return nil, nil
 	}
 
-	// Get the LeaseSet2 bytes
-	leaseSetBytes := payload[:len(payload)-len(remaining)]
+	if !storeType.allowsPrivateKeys() {
+		return nil, oops.Errorf("CreateLeaseSet2: %s does not carry private keys but payload declares %d",
+			storeType.name(), numPrivateKeys)
+	}
 
-	// Parse private keys from remaining bytes
-	privateKeys := make(map[uint16][]byte)
-
-	if len(remaining) > 0 {
-		// Read NumPrivateKeys (1 byte)
-		if len(remaining) < 1 {
-			return leaseSetBytes, nil, nil // No private keys section
+	privateKeys := make(map[uint16][]byte, numPrivateKeys)
+	offset := 1
+	for i := 0; i < numPrivateKeys; i++ {
+		if offset+4 > len(remainder) {
+			return nil, oops.Errorf("CreateLeaseSet2: truncated private key header at index %d (offset %d, %d bytes available)",
+				i, offset, len(remainder))
 		}
 
-		numPrivateKeys := remaining[0]
-		offset := 1
+		keyType := binary.BigEndian.Uint16(remainder[offset : offset+2])
+		offset += 2
+		keyLen := int(binary.BigEndian.Uint16(remainder[offset : offset+2]))
+		offset += 2
 
-		for i := uint8(0); i < numPrivateKeys; i++ {
-			// Check for KeyType (2 bytes) + KeyLen (2 bytes)
-			if offset+4 > len(remaining) {
-				log.WithFields(logger.Fields{
-					"at":           "i2cp.parseCreateLeaseSet2Payload",
-					"index":        i,
-					"offset":       offset,
-					"dataLen":      len(remaining),
-					"expectedSize": offset + 4,
-				}).Warn("truncated_private_key_header")
-				break
-			}
-
-			// Read KeyType (2 bytes, big endian)
-			keyType := binary.BigEndian.Uint16(remaining[offset : offset+2])
-			offset += 2
-
-			// Read KeyLen (2 bytes, big endian)
-			keyLen := binary.BigEndian.Uint16(remaining[offset : offset+2])
-			offset += 2
-
-			// Check if we have enough data for the key
-			if offset+int(keyLen) > len(remaining) {
-				log.WithFields(logger.Fields{
-					"at":      "i2cp.parseCreateLeaseSet2Payload",
-					"index":   i,
-					"keyType": keyType,
-					"keyLen":  keyLen,
-					"offset":  offset,
-					"dataLen": len(remaining),
-				}).Warn("truncated_private_key_data")
-				break
-			}
-
-			// Extract key data
-			keyData := remaining[offset : offset+int(keyLen)]
-			offset += int(keyLen)
-
-			// Store key by type
-			privateKeys[keyType] = keyData
-
-			log.WithFields(logger.Fields{
-				"at":      "i2cp.parseCreateLeaseSet2Payload",
-				"keyType": keyType,
-				"keyLen":  keyLen,
-			}).Debug("parsed_private_key")
+		if offset+keyLen > len(remainder) {
+			return nil, oops.Errorf("CreateLeaseSet2: truncated private key data for type %d (need %d bytes, %d available)",
+				keyType, keyLen, len(remainder)-offset)
 		}
+
+		keyData := make([]byte, keyLen)
+		copy(keyData, remainder[offset:offset+keyLen])
+		offset += keyLen
+		privateKeys[keyType] = keyData
 	}
 
-	return leaseSetBytes, privateKeys, nil
+	return privateKeys, nil
 }
 
-// validateLeaseSet2PayloadSize checks the minimum payload size for a valid LeaseSet2.
-func validateLeaseSet2PayloadSize(sessionID uint16, leaseSetBytes []byte) error {
-	// Minimum LeaseSet2: destination (387+ bytes) + published (8) + expires (2) + flags (2) + leases (1+) ≈ 400 bytes
-	if len(leaseSetBytes) < 400 {
-		log.WithFields(logger.Fields{
-			"at":          "i2cp.Server.handleCreateLeaseSet2",
-			"sessionID":   sessionID,
-			"payloadSize": len(leaseSetBytes),
-		}).Warn("create_leaseset2_payload_too_short")
-		return oops.Errorf("CreateLeaseSet2 payload too short: %d bytes (need at least 400)", len(leaseSetBytes))
-	}
-	return nil
-}
-
-// logLeaseSet2ValidationError logs a LeaseSet2 validation failure.
+// logLeaseSet2ValidationError logs a CreateLeaseSet2 validation failure.
 func logLeaseSet2ValidationError(sessionID uint16, err error) {
 	log.WithFields(logger.Fields{
 		"at":        "i2cp.Server.handleCreateLeaseSet2",
@@ -547,14 +524,16 @@ func logLeaseSet2ValidationError(sessionID uint16, err error) {
 	}).Warn("create_leaseset2_validation_failed")
 }
 
-// publishLeaseSet2WithLogging publishes LeaseSet2 to network and logs any errors.
-func (s *Server) publishLeaseSet2WithLogging(session *Session, leaseSetBytes []byte) {
+// publishLeaseSetWithLogging publishes the lease set to the network under the key
+// and record type implied by its store type, and logs any errors.
+func (s *Server) publishLeaseSetWithLogging(session *Session, storeType LeaseSetStoreType, leaseSetBytes []byte) {
 	if err := session.publishLeaseSetToNetwork(leaseSetBytes); err != nil {
 		log.WithFields(logger.Fields{
 			"at":        "i2cp.Server.handleCreateLeaseSet2",
 			"sessionID": session.ID(),
+			"type":      storeType.name(),
 			"error":     err,
-		}).Warn("failed_to_publish_leaseset2_to_network")
+		}).Warn("failed_to_publish_leaseset_to_network")
 	}
 }
 
@@ -1271,7 +1250,23 @@ func (s *Server) validateOutboundPool(session *Session) error {
 
 // acceptAndRouteMessage handles the common accept-and-route flow for send
 // message handlers: generate message ID → log → build acceptance response →
-// launch async routing goroutine. Returns the acceptance response message.
+// launch async routing goroutine. Returns the acceptance response message, or
+// nil when the client asked for no status at all.
+//
+// i2cp.rst:1405-1408: "As soon as the SendMessageMessage_ arrives fully intact,
+// the router should return a MessageStatusMessage_ stating that it has been
+// accepted for delivery. That message will contain the same nonce sent here."
+//
+// i2cp.rst:1426-1429: "a nonce value of 0 is allowed, and tells to the router
+// that it should not send either MessageStatusMessage_, i.e. it acts as if
+// i2cp.messageReliability=none for this message only." The message is still
+// routed; only the status reporting is suppressed.
+//
+// i2cp.rst:1421-1423: "the router does not send either MessageStatusMessage_ if
+// i2cp.messageReliability=none".
+//
+// i2cp.rst:1431-1437: in a messageReliability=none session a nonzero nonce opts
+// back in to the later success/failure status, but not the "accepted" one.
 func (s *Server) acceptAndRouteMessage(
 	session *Session, destination [32]byte, payloadSize int, nonce uint32,
 	extraFields logger.Fields, routeAsync func(messageID uint32),
@@ -1283,15 +1278,19 @@ func (s *Server) acceptAndRouteMessage(
 		"messageID":   messageID,
 		"destination": logutil.HashPrefixPlain(destination),
 		"payloadSize": payloadSize,
+		"nonce":       nonce,
 	}
 	for k, v := range extraFields {
 		fields[k] = v
 	}
 	log.WithFields(fields).Debug("message_accepted")
 
-	acceptMsg := buildMessageStatusResponse(
-		session.ID(), messageID, MessageStatusAccepted, uint32(payloadSize), nonce,
-	)
+	var acceptMsg *Message
+	if sendStatusRequested(nonce, session.MessageReliability(), true) {
+		acceptMsg = buildMessageStatusResponse(
+			session.ID(), messageID, MessageStatusAccepted, uint32(payloadSize), nonce,
+		)
+	}
 
 	s.wg.Add(1)
 	go func() {
@@ -1300,6 +1299,27 @@ func (s *Server) acceptAndRouteMessage(
 	}()
 
 	return acceptMsg
+}
+
+// sendStatusRequested decides whether a MessageStatusMessage_ is sent to the
+// client for a message with the given nonce, in a session with the given
+// i2cp.messageReliability value.
+//
+// nonce 0 always means "send no status" (i2cp.rst:1426-1429, :1474-1477).
+// In a messageReliability=none session no status is sent either, except that a
+// nonzero nonce requests the later success/failure status only, never the
+// "accepted" one (i2cp.rst:1421-1423, :1431-1437, :1481-1487).
+//
+// accepted distinguishes the synchronous "accepted" status from the
+// asynchronous delivery status.
+func sendStatusRequested(nonce uint32, reliability string, accepted bool) bool {
+	if nonce == 0 {
+		return false
+	}
+	if reliability == MessageReliabilityNone && accepted {
+		return false
+	}
+	return true
 }
 
 // handleSendMessageExpires handles SendMessageExpires (type 36) messages.
@@ -1443,7 +1463,7 @@ func (s *Server) routeMessageExpiresWithStatus(session *Session, messageID uint3
 			"messageID": messageID,
 			"error":     err.Error(),
 		}).Error("failed_to_compute_destination_hash")
-		statusCallback := s.buildStatusCallback(session, sendMsg.Nonce)
+		statusCallback := s.buildStatusCallback(session)
 		statusCallback(messageID, MessageStatusNoLeaseSet, uint32(len(sendMsg.Payload)), sendMsg.Nonce)
 		return
 	}
@@ -1458,7 +1478,7 @@ func (s *Server) routeMessageExpiresWithStatus(session *Session, messageID uint3
 		"nonce":       sendMsg.Nonce,
 	}).Debug("routing_message_expires")
 
-	statusCallback := s.buildStatusCallback(session, sendMsg.Nonce)
+	statusCallback := s.buildStatusCallback(session)
 
 	destPubKey, err := s.resolveDestinationKey(destHash)
 	if err != nil {
@@ -1467,7 +1487,7 @@ func (s *Server) routeMessageExpiresWithStatus(session *Session, messageID uint3
 		return
 	}
 
-	s.dispatchToMessageRouter("routeMessageExpiresWithStatus", session, messageID, destHash, destPubKey, sendMsg.Payload, sendMsg.Expiration, statusCallback)
+	s.dispatchToMessageRouter("routeMessageExpiresWithStatus", session, messageID, destHash, destPubKey, sendMsg.Payload, sendMsg.Expiration, sendMsg.Nonce, statusCallback)
 }
 
 // routeMessageWithStatus routes a message asynchronously with delivery status tracking.
@@ -1483,8 +1503,8 @@ func (s *Server) routeMessageWithStatus(session *Session, messageID uint32, send
 			"messageID": messageID,
 			"error":     err.Error(),
 		}).Error("failed_to_compute_destination_hash")
-		statusCallback := s.buildStatusCallback(session, 0)
-		statusCallback(messageID, MessageStatusNoLeaseSet, uint32(len(sendMsg.Payload)), 0)
+		statusCallback := s.buildStatusCallback(session)
+		statusCallback(messageID, MessageStatusNoLeaseSet, uint32(len(sendMsg.Payload)), sendMsg.Nonce)
 		return
 	}
 
@@ -1494,14 +1514,15 @@ func (s *Server) routeMessageWithStatus(session *Session, messageID uint32, send
 		"messageID":   messageID,
 		"destination": logutil.HashPrefixPlain(destHash),
 		"payloadSize": len(sendMsg.Payload),
+		"nonce":       sendMsg.Nonce,
 	}).Debug("routing_message_async")
 
-	statusCallback := s.buildStatusCallback(session, 0)
+	statusCallback := s.buildStatusCallback(session)
 
 	destPubKey, err := s.resolveDestinationKey(destHash)
 	if err != nil {
 		logDestinationResolutionFailure("routeMessageWithStatus", session.ID(), messageID, destHash, err)
-		statusCallback(messageID, MessageStatusNoLeaseSet, uint32(len(sendMsg.Payload)), 0)
+		statusCallback(messageID, MessageStatusNoLeaseSet, uint32(len(sendMsg.Payload)), sendMsg.Nonce)
 		return
 	}
 
@@ -1512,22 +1533,28 @@ func (s *Server) routeMessageWithStatus(session *Session, messageID uint32, send
 			"messageID":   messageID,
 			"destination": logutil.HashPrefixPlain(destHash),
 		}).Warn("no_message_router_message_queued")
-		statusCallback(messageID, MessageStatusFailure, uint32(len(sendMsg.Payload)), 0)
+		statusCallback(messageID, MessageStatusFailure, uint32(len(sendMsg.Payload)), sendMsg.Nonce)
 		return
 	}
 
-	s.dispatchToMessageRouter("routeMessageWithStatus", session, messageID, destHash, destPubKey, sendMsg.Payload, 0, statusCallback)
+	s.dispatchToMessageRouter("routeMessageWithStatus", session, messageID, destHash, destPubKey, sendMsg.Payload, 0, sendMsg.Nonce, statusCallback)
 }
 
-// buildStatusCallback creates a status callback that sends a MessageStatus response
-// to the client. The fixedNonce is used for SendMessageExpires; pass 0 for SendMessage.
-func (s *Server) buildStatusCallback(session *Session, fixedNonce uint32) func(uint32, uint8, uint32, uint32) {
+// buildStatusCallback creates a status callback that sends the asynchronous
+// delivery MessageStatus response to the client.
+//
+// The nonce carried in the status is the nonce of the client message the status
+// refers to (i2cp.rst:1405-1408: "That message will contain the same nonce sent
+// here", and the same rule for SendMessageExpires at :1464-1467), so it is taken
+// from the callback argument, which the message router propagates from
+// RouteRequest.Nonce. A nonce of 0 means the client asked for no status at all,
+// so nothing is sent (i2cp.rst:1426-1429).
+func (s *Server) buildStatusCallback(session *Session) func(uint32, uint8, uint32, uint32) {
 	return func(msgID uint32, statusCode uint8, messageSize, nonce uint32) {
-		effectiveNonce := nonce
-		if fixedNonce != 0 {
-			effectiveNonce = fixedNonce
+		if !sendStatusRequested(nonce, session.MessageReliability(), false) {
+			return
 		}
-		statusMsg := buildMessageStatusResponse(session.ID(), msgID, statusCode, messageSize, effectiveNonce)
+		statusMsg := buildMessageStatusResponse(session.ID(), msgID, statusCode, messageSize, nonce)
 		s.sendStatusToClient(session, statusMsg)
 	}
 }
@@ -1546,7 +1573,7 @@ func logDestinationResolutionFailure(caller string, sessionID uint16, messageID 
 // dispatchToMessageRouter routes a message through the message router if available.
 // Logs routing failures but does not return errors since the status callback
 // is already invoked by RouteOutboundMessage.
-func (s *Server) dispatchToMessageRouter(caller string, session *Session, messageID uint32, destination common.Hash, destPubKey [32]byte, payload []byte, expiration uint64, statusCallback func(uint32, uint8, uint32, uint32)) {
+func (s *Server) dispatchToMessageRouter(caller string, session *Session, messageID uint32, destination common.Hash, destPubKey [32]byte, payload []byte, expiration uint64, nonce uint32, statusCallback func(uint32, uint8, uint32, uint32)) {
 	if s.messageRouter == nil {
 		log.WithFields(logger.Fields{
 			"at":          "i2cp.Server." + caller,
@@ -1564,6 +1591,7 @@ func (s *Server) dispatchToMessageRouter(caller string, session *Session, messag
 		DestinationPubKey: destPubKey,
 		Payload:           payload,
 		ExpirationMs:      expiration,
+		Nonce:             nonce,
 		StatusCallback:    statusCallback,
 	})
 	if err != nil {

@@ -24,6 +24,33 @@ import (
 // should terminate without logging a spurious read-error.
 var errClientDisconnected = errors.New("client disconnected")
 
+// errUnsupportedMessageType is returned when a client sends a message type this
+// router does not implement.
+//
+// i2cp.rst:228-229: "Clients and routers should not send messages that are
+// unsupported by the other side, as they generally disconnect the session upon
+// reception of an unsupported message." The connection loop treats this sentinel
+// as terminal, so the socket is closed instead of the message being logged and
+// skipped.
+var errUnsupportedMessageType = errors.New("unsupported message type")
+
+// errCloseAfterResponse asks the connection loop to write the response the
+// handler returned and then close the socket. DestroySession uses it: per
+// i2cp.rst:802-804 the router never replies SessionStatus(Destroyed), it sends
+// a DisconnectMessage when no sessions are left on the connection, and per
+// i2cp.rst:828-829 "The socket will be closed shortly."
+var errCloseAfterResponse = errors.New("close connection after response")
+
+// shouldCloseConnection reports whether a handler error is terminal for the
+// client connection. errClientDisconnected is the graceful client-initiated
+// close; errUnsupportedMessageType is the router-side close mandated by
+// i2cp.rst:228-229 for a message type the router does not support.
+func shouldCloseConnection(err error) bool {
+	return errors.Is(err, errClientDisconnected) ||
+		errors.Is(err, errUnsupportedMessageType) ||
+		errors.Is(err, errCloseAfterResponse)
+}
+
 // HostnameResolver resolves .i2p hostnames to their binary Destination representation.
 // Implementations may use an address book file, naming service, or subscription list.
 type HostnameResolver interface {

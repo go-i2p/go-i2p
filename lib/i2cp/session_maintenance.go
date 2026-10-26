@@ -216,11 +216,13 @@ func (s *Session) regenerateAndPublishLeaseSet() error {
 		if err != nil {
 			return oops.Errorf("failed to create EncryptedLeaseSet: %w", err)
 		}
+		s.SetCurrentLeaseSetWithType(leaseSetBytes, LeaseSetStoreTypeEncryptedLeaseSet)
 	} else {
 		leaseSetBytes, err = s.CreateLeaseSet()
 		if err != nil {
 			return oops.Errorf("failed to create LeaseSet: %w", err)
 		}
+		s.SetCurrentLeaseSetWithType(leaseSetBytes, LeaseSetStoreTypeLeaseSet2)
 	}
 
 	s.logLeaseSetRegenerated(leaseSetBytes)
@@ -252,12 +254,14 @@ func (s *Session) regenerateAndPublishLeaseSet() error {
 
 // publishLeaseSetToNetwork publishes the LeaseSet to the network database.
 // Skips publication if no publisher is configured (allows sessions to work without network integration).
-// For EncryptedLeaseSet, publishes using the blinded destination hash instead of the original.
+// The lookup key and NetDB record type are taken from the store type of the
+// cached lease set (i2cp.rst:668-672): an EncryptedLeaseSet is keyed under the
+// hash of the blinded key it carries in cleartext, LeaseSet and LeaseSet2 under
+// the hash of their contained destination.
 func (s *Session) publishLeaseSetToNetwork(leaseSetBytes []byte) error {
 	s.mu.RLock()
 	publisher := s.publisher
-	useEncrypted := s.config.UseEncryptedLeaseSet
-	blindedDest := s.blindedDestination
+	storeType := s.storeType
 	s.mu.RUnlock()
 
 	if publisher == nil {
@@ -265,50 +269,46 @@ func (s *Session) publishLeaseSetToNetwork(leaseSetBytes []byte) error {
 		return nil
 	}
 
-	// Calculate destination hash for publication
-	destHash, err := s.calculatePublicationHash(useEncrypted, blindedDest)
+	if storeType == 0 {
+		storeType = LeaseSetStoreTypeLeaseSet2
+	}
+
+	// Calculate the publication key for this lease set type
+	destHash, err := leaseSetPublicationKey(storeType, leaseSetBytes)
 	if err != nil {
 		return err
 	}
 
 	// Publish to network
-	if err := s.publishToPublisher(publisher, destHash, leaseSetBytes, useEncrypted); err != nil {
+	if err := s.publishToPublisher(publisher, destHash, leaseSetBytes, storeType); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-// calculatePublicationHash determines the correct hash for LeaseSet publication.
-func (s *Session) calculatePublicationHash(useEncrypted bool, blindedDest *destination.Destination) (data.Hash, error) {
-	if useEncrypted && blindedDest != nil {
-		// For EncryptedLeaseSet, use blinded destination hash
-		destBytes, err := blindedDest.Bytes()
-		if err != nil {
-			return data.Hash{}, oops.Errorf("failed to get blinded destination bytes: %w", err)
-		}
-		return data.HashData(destBytes), nil
+// publishToPublisher executes the publication and logs the result. When the
+// publisher can record the lease set structure type, the store type the client
+// declared is passed through (i2cp.rst:668-672).
+func (s *Session) publishToPublisher(publisher LeaseSetPublisher, destHash data.Hash, leaseSetBytes []byte, storeType LeaseSetStoreType) error {
+	var err error
+	if typed, ok := publisher.(TypedLeaseSetPublisher); ok {
+		err = typed.PublishLeaseSetWithType(destHash, leaseSetBytes, byte(storeType))
+	} else {
+		err = publisher.PublishLeaseSet(destHash, leaseSetBytes)
 	}
-
-	// For normal LeaseSet2, use original destination hash
-	destBytes, err := s.destination.Bytes()
 	if err != nil {
-		return data.Hash{}, oops.Errorf("failed to get destination bytes: %w", err)
-	}
-	return data.HashData(destBytes), nil
-}
-
-// publishToPublisher executes the publication and logs the result.
-func (s *Session) publishToPublisher(publisher LeaseSetPublisher, destHash data.Hash, leaseSetBytes []byte, useEncrypted bool) error {
-	if err := publisher.PublishLeaseSet(destHash, leaseSetBytes); err != nil {
 		return oops.Errorf("publisher failed: %w", err)
 	}
 
 	log.WithFields(logger.Fields{
-		"at":          "i2cp.Session.publishLeaseSetToNetwork",
-		"sessionID":   s.ID(),
-		"destHash":    logutil.HashPrefixPlain(destHash),
-		"isEncrypted": useEncrypted,
+		"at":        "i2cp.Session.publishLeaseSetToNetwork",
+		"sessionID": s.ID(),
+		"destHash":  logutil.HashPrefixPlain(destHash),
+		"storeType": storeType.name(),
+		// The NetDB / DatabaseStore record type uses the same numbering as the
+		// CreateLeaseSet2 store type (i2cp.rst:668-672).
+		"recordType": byte(storeType),
 	}).Debug("leaseset_published_to_network")
 
 	return nil
@@ -331,13 +331,35 @@ func (s *Session) CurrentLeaseSet() []byte {
 	return s.currentLeaseSet
 }
 
-// SetCurrentLeaseSet caches externally-provided LeaseSet bytes (e.g. from CreateLeaseSet2).
-// Updates the currentLeaseSet and leaseSetPublishedAt timestamp.
+// SetCurrentLeaseSet caches externally-provided LeaseSet bytes (e.g. from
+// CreateLeaseSet2) as a LeaseSet2, the format CreateLeaseSet2 defaults to for
+// router-generated LeaseSets. Use SetCurrentLeaseSetWithType when the client
+// declared a different store type.
 func (s *Session) SetCurrentLeaseSet(leaseSetBytes []byte) {
+	s.SetCurrentLeaseSetWithType(leaseSetBytes, LeaseSetStoreTypeLeaseSet2)
+}
+
+// SetCurrentLeaseSetWithType caches externally-provided LeaseSet bytes together
+// with the store type the client declared in CreateLeaseSet2 (i2cp.rst:668-672).
+// The type is retained so that later re-publication uses the matching NetDB
+// record type and lookup key instead of assuming LeaseSet2.
+func (s *Session) SetCurrentLeaseSetWithType(leaseSetBytes []byte, storeType LeaseSetStoreType) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.currentLeaseSet = leaseSetBytes
 	s.leaseSetPublishedAt = time.Now()
+	s.storeType = storeType
+}
+
+// LeaseSetStoreType returns the kind of structure currently cached in the
+// session. Unset (router-generated LeaseSets) reports LeaseSet2.
+func (s *Session) LeaseSetStoreType() LeaseSetStoreType {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.storeType == 0 {
+		return LeaseSetStoreTypeLeaseSet2
+	}
+	return s.storeType
 }
 
 // ValidateLeaseSet2Data parses and validates client-provided LeaseSet2 bytes.

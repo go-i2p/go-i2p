@@ -8,7 +8,8 @@ import (
 )
 
 // TestHandleCreateLeaseSet2_WithValidation verifies that handleCreateLeaseSet2
-// now validates the LeaseSet2 before publishing.
+// validates the declared lease set before publishing, and caches exactly the
+// framed structure.
 func TestHandleCreateLeaseSet2_WithValidation(t *testing.T) {
 	publisher := newMockLeaseSetPublisher()
 
@@ -21,24 +22,18 @@ func TestHandleCreateLeaseSet2_WithValidation(t *testing.T) {
 	server, err := NewServer(config)
 	require.NoError(t, err)
 
-	// Build wire-format payload: SessionID(2 bytes) + LeaseSet2 data
-	wirePayload := prependSessionID(session.ID(), leaseSetBytes)
-
-	msg := &Message{
-		Type:      MessageTypeCreateLeaseSet2,
-		SessionID: session.ID(),
-		Payload:   wirePayload,
-	}
+	// Build wire-format payload: SessionID(2) + StoreType(1) + LeaseSet2
+	msg := buildCreateLeaseSet2Message(t, session.ID(), LeaseSetStoreTypeLeaseSet2, leaseSetBytes, nil)
 
 	sessionPtr := session
 	response, err := server.handleCreateLeaseSet2(msg, &sessionPtr)
+	require.NoError(t, err, "a valid LeaseSet2 declared with store type 3 must be accepted")
+	assert.Nil(t, response, "CreateLeaseSet2 does not return a response message")
 
-	assert.Error(t, err, "handleCreateLeaseSet2 should currently reject the test fixture")
-	assert.Nil(t, response, "CreateLeaseSet2 should not return a response")
-
-	// Verify session cached the LeaseSet (should be the stripped payload, not wire format)
+	// Verify session cached the LeaseSet (the framed structure, not the wire payload)
 	cached := session.CurrentLeaseSet()
 	assert.Equal(t, leaseSetBytes, cached, "Session should cache the validated LeaseSet2")
+	assert.Equal(t, 1, publisher.publishCalled, "the validated LeaseSet2 must be published")
 }
 
 // TestHandleCreateLeaseSet2_RejectsGarbage verifies that handleCreateLeaseSet2
@@ -54,20 +49,15 @@ func TestHandleCreateLeaseSet2_RejectsGarbage(t *testing.T) {
 	server, err := NewServer(config)
 	require.NoError(t, err)
 
-	// Send garbage bytes as payload (>400 bytes after session ID to pass the length check)
-	garbage := make([]byte, 500)
+	// Send garbage bytes as payload (large enough to clear the upstream minimum
+	// LeaseSet2 size, so the structural parse is what must reject it)
+	garbage := make([]byte, 1200)
 	for i := range garbage {
 		garbage[i] = byte(i % 256)
 	}
 
-	// Build wire-format payload: SessionID(2 bytes) + garbage data
-	wirePayload := prependSessionID(session.ID(), garbage)
-
-	msg := &Message{
-		Type:      MessageTypeCreateLeaseSet2,
-		SessionID: session.ID(),
-		Payload:   wirePayload,
-	}
+	// Build wire-format payload: SessionID(2) + StoreType(1) + garbage data
+	msg := buildCreateLeaseSet2Message(t, session.ID(), LeaseSetStoreTypeLeaseSet2, garbage, nil)
 
 	sessionPtr := session
 	_, err = server.handleCreateLeaseSet2(msg, &sessionPtr)
@@ -96,19 +86,12 @@ func TestHandleCreateLeaseSet2_RejectsWrongDestination(t *testing.T) {
 	require.NoError(t, err)
 
 	// Try to publish session2's LeaseSet through session1
-	// Build wire-format payload: SessionID(2 bytes) + LeaseSet2 data
-	wirePayload := prependSessionID(session1.ID(), leaseSet2Bytes)
-
-	msg := &Message{
-		Type:      MessageTypeCreateLeaseSet2,
-		SessionID: session1.ID(),
-		Payload:   wirePayload,
-	}
+	msg := buildCreateLeaseSet2Message(t, session1.ID(), LeaseSetStoreTypeLeaseSet2, leaseSet2Bytes, nil)
 
 	sessionPtr := session1
 	_, err = server.handleCreateLeaseSet2(msg, &sessionPtr)
 	assert.Error(t, err, "handleCreateLeaseSet2 should reject LeaseSet2 with wrong destination")
-	assert.Contains(t, err.Error(), "invalid LeaseSet2")
+	assert.Contains(t, err.Error(), "does not match")
 
 	// Verify publisher was NOT called
 	assert.Equal(t, 0, publisher.publishCalled, "Publisher should not be called for mismatched destination")
@@ -124,13 +107,12 @@ func TestHandleCreateLeaseSet2_RejectsTooShort(t *testing.T) {
 	server, err := NewServer(config)
 	require.NoError(t, err)
 
-	// Build wire-format payload: SessionID(2 bytes) + very short LeaseSet2 data
-	// The handler will strip the 2-byte session ID, leaving only 1 byte,
-	// which is too short for a valid LeaseSet2.
+	// SessionID(2) + store type 3 + a 1-byte body, far below the upstream
+	// minimum LeaseSet2 size.
 	msg := &Message{
 		Type:      MessageTypeCreateLeaseSet2,
 		SessionID: session.ID(),
-		Payload:   []byte{0x00, 0x01, 0x03},
+		Payload:   []byte{0x00, 0x01, 0x03, 0x00},
 	}
 
 	sessionPtr := session

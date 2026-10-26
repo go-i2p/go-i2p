@@ -82,6 +82,7 @@ type RouteRequest struct {
 	DestinationPubKey [32]byte              // X25519 public key of the destination
 	Payload           []byte                // Raw message data to send
 	ExpirationMs      uint64                // Expiration timestamp in ms since epoch (0 = none)
+	Nonce             uint32                // Nonce of the client message, echoed in every status (i2cp.rst:1405-1408)
 	StatusCallback    MessageStatusCallback // Optional delivery status callback (nil allowed)
 }
 
@@ -98,24 +99,24 @@ type RouteRequest struct {
 func (mr *MessageRouter) RouteOutboundMessage(req RouteRequest) error {
 	mr.logRoutingStart(req.Session, req.MessageID, req.DestinationHash, req.Payload, req.ExpirationMs)
 
-	if err := checkMessageExpiration(req.Session, req.MessageID, req.ExpirationMs, req.Payload, req.StatusCallback); err != nil {
+	if err := checkMessageExpiration(req.Session, req.MessageID, req.ExpirationMs, req.Payload, req.Nonce, req.StatusCallback); err != nil {
 		return err
 	}
 
 	selectedTunnel, err := mr.validateAndSelectTunnel(req.Session, req.DestinationHash)
 	if err != nil {
-		notifyStatusCallback(req.StatusCallback, req.MessageID, MessageStatusNoTunnels, req.Payload)
+		notifyStatusCallback(req.StatusCallback, req.MessageID, MessageStatusNoTunnels, req.Payload, req.Nonce)
 		return err
 	}
 
 	garlicMsg, err := mr.buildEncryptedGarlicMessage(req.Session, req.DestinationHash, req.DestinationPubKey, req.Payload)
 	if err != nil {
-		notifyStatusCallback(req.StatusCallback, req.MessageID, MessageStatusFailure, req.Payload)
+		notifyStatusCallback(req.StatusCallback, req.MessageID, MessageStatusFailure, req.Payload, req.Nonce)
 		return err
 	}
 
 	if err := mr.sendThroughGateway(req.Session, selectedTunnel, req.DestinationHash, garlicMsg); err != nil {
-		notifyStatusCallback(req.StatusCallback, req.MessageID, MessageStatusFailure, req.Payload)
+		notifyStatusCallback(req.StatusCallback, req.MessageID, MessageStatusFailure, req.Payload, req.Nonce)
 		return err
 	}
 
@@ -126,7 +127,7 @@ func (mr *MessageRouter) RouteOutboundMessage(req RouteRequest) error {
 	// the tunnel subsystem. This does not guarantee end-to-end delivery, but
 	// I2CP clients (e.g., i2psnark-standalone) expect this status to track
 	// message progress rather than just ACCEPTED (status 1).
-	notifyStatusCallback(req.StatusCallback, req.MessageID, MessageStatusSuccess, req.Payload)
+	notifyStatusCallback(req.StatusCallback, req.MessageID, MessageStatusSuccess, req.Payload, req.Nonce)
 
 	return nil
 }
@@ -144,7 +145,7 @@ func (mr *MessageRouter) logRoutingStart(session *Session, messageID uint32, des
 }
 
 // checkMessageExpiration validates the message has not expired and notifies callback on expiration.
-func checkMessageExpiration(session *Session, messageID uint32, expirationMs uint64, payload []byte, statusCallback MessageStatusCallback) error {
+func checkMessageExpiration(session *Session, messageID uint32, expirationMs uint64, payload []byte, nonce uint32, statusCallback MessageStatusCallback) error {
 	if expirationMs == 0 {
 		return nil
 	}
@@ -162,14 +163,20 @@ func checkMessageExpiration(session *Session, messageID uint32, expirationMs uin
 		"expirationMs": expirationMs,
 	}).Warn("message_expired")
 
-	notifyStatusCallback(statusCallback, messageID, MessageStatusFailure, payload)
+	notifyStatusCallback(statusCallback, messageID, MessageStatusFailure, payload, nonce)
 	return oops.Errorf("message expired: current=%d, expiration=%d", currentMs, expirationMs)
 }
 
 // notifyStatusCallback invokes the status callback if provided.
-func notifyStatusCallback(callback MessageStatusCallback, messageID uint32, statusCode uint8, payload []byte) {
+//
+// The nonce of the client message that produced this status is passed through
+// unchanged: i2cp.rst:1405-1408 ("That message will contain the same nonce sent
+// here") and i2cp.rst:1464-1467 for SendMessageExpires. Reporting 0 here would
+// make every asynchronous MessageStatus refer to a different message than the
+// synchronous "accepted" status, so clients could not correlate them.
+func notifyStatusCallback(callback MessageStatusCallback, messageID uint32, statusCode uint8, payload []byte, nonce uint32) {
 	if callback != nil {
-		callback(messageID, statusCode, uint32(len(payload)), 0)
+		callback(messageID, statusCode, uint32(len(payload)), nonce)
 	}
 }
 

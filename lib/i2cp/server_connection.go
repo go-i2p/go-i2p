@@ -161,6 +161,17 @@ func (s *Server) claimSessionCleanup(sessionID uint16) bool {
 	return owned
 }
 
+// forgetSessionConnection releases the connection's ownership of a session
+// without claiming cleanup. DestroySession uses it so that async MessageStatus
+// writes (which look the connection up by session ID) stop targeting a session
+// that no longer exists.
+func (s *Server) forgetSessionConnection(sessionID uint16) {
+	s.mu.Lock()
+	delete(s.sessionConns, sessionID)
+	delete(s.connWriteMu, sessionID)
+	s.mu.Unlock()
+}
+
 // handleAcceptError processes errors from listener.Accept().
 // Returns true if the accept loop should terminate, false to continue.
 func (s *Server) handleAcceptError(err error) bool {
@@ -216,6 +227,22 @@ func (s *Server) shouldRejectConnection(conn net.Conn) bool {
 	return false
 }
 
+// buildDisconnectMessage constructs an I2CP Disconnect (type 30) message whose
+// payload is the spec's single Reason [String] (i2cp.rst:832-834), encoded with
+// the 1-byte length prefix from common-structures.rst via common/data.
+func (s *Server) buildDisconnectMessage(reason string) (*Message, error) {
+	payload, err := (&DisconnectPayload{Reason: reason}).MarshalBinary()
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to marshal disconnect payload")
+	}
+
+	return &Message{
+		Type:      MessageTypeDisconnect,
+		SessionID: SessionIDReservedControl,
+		Payload:   payload,
+	}, nil
+}
+
 // sendDisconnectMessage sends an I2CP Disconnect message to the client
 // before closing the connection. This provides proper protocol-level error signaling.
 func (s *Server) sendDisconnectMessage(conn net.Conn, reason string) {
@@ -229,7 +256,7 @@ func (s *Server) sendDisconnectMessage(conn net.Conn, reason string) {
 		}
 	}()
 
-	payload, err := (&DisconnectPayload{Reason: reason}).MarshalBinary()
+	disconnectMsg, err := s.buildDisconnectMessage(reason)
 	if err != nil {
 		log.WithFields(logger.Fields{
 			"at":     "i2cp.Server.sendDisconnectMessage",
@@ -237,12 +264,6 @@ func (s *Server) sendDisconnectMessage(conn net.Conn, reason string) {
 			"error":  err,
 		}).Debug("failed_to_marshal_disconnect_payload")
 		return
-	}
-
-	disconnectMsg := &Message{
-		Type:      MessageTypeDisconnect,
-		SessionID: SessionIDReservedControl,
-		Payload:   payload,
 	}
 
 	// Send with short timeout (don't block indefinitely)
@@ -470,10 +491,18 @@ func (s *Server) checkMessageAuthentication(conn net.Conn, msg *Message) bool {
 
 // processAndRespond processes the client message and sends the response.
 // Returns false if the connection should be closed, true to continue.
+//
+// A handler that returns a response together with errCloseAfterResponse wants
+// that final response written before the socket closes (DestroySession's
+// DisconnectMessage, i2cp.rst:803). Every other terminal error is silent.
 func (s *Server) processAndRespond(conn net.Conn, msg *Message, sessionPtr **Session) bool {
 	response, err := s.processClientMessage(conn, msg, sessionPtr)
 	if err != nil {
-		return !errors.Is(err, errClientDisconnected)
+		if errors.Is(err, errCloseAfterResponse) && response != nil {
+			s.sendFinalResponseBeforeClose(conn, response, sessionPtr)
+			return false
+		}
+		return !shouldCloseConnection(err)
 	}
 
 	s.handleNewSessionTracking(msg, sessionPtr, conn)
@@ -673,9 +702,22 @@ func (s *Server) processClientMessage(conn net.Conn, msg *Message, sessionPtr **
 	response, err = s.handleMessage(conn, msg, sessionPtr)
 	if err != nil {
 		log.WithError(err).Error("failed_to_handle_message")
-		return nil, err
+		// Keep the response: a handler may return a final message together with
+		// a terminal error (errCloseAfterResponse).
+		return response, err
 	}
 	return response, nil
+}
+
+// sendFinalResponseBeforeClose writes a last response before the socket is
+// closed. Best effort: the close is not conditional on the write succeeding.
+func (s *Server) sendFinalResponseBeforeClose(conn net.Conn, response *Message, sessionPtr **Session) {
+	if err := s.sendResponse(conn, response, sessionPtr); err != nil {
+		log.WithFields(logger.Fields{
+			"at":   "i2cp.Server.sendFinalResponseBeforeClose",
+			"type": MessageTypeName(response.Type),
+		}).Debug("failed_to_write_final_response_before_close")
+	}
 }
 
 func (s *Server) allowHostLookup(conn net.Conn, msg *Message) (*Message, bool) {

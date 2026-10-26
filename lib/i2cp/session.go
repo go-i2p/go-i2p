@@ -84,6 +84,18 @@ func (rl *simpleRateLimiter) allow() bool {
 }
 
 // SessionConfig holds the configuration for an I2CP session
+// i2cp.messageReliability values (i2cp.rst:1421-1437).
+//
+// "None" is a delivery-reporting mode: the router sends neither the "accepted"
+// nor the asynchronous MessageStatusMessage_ (i2cp.rst:1421-1423), except that
+// since 0.9.14 a nonzero nonce requests the later success/failure status
+// (i2cp.rst:1431-1437). Delivery itself is still attempted.
+const (
+	MessageReliabilityBestEffort = "BestEffort"
+	MessageReliabilityGuaranteed = "Guaranteed"
+	MessageReliabilityNone       = "None"
+)
+
 type SessionConfig struct {
 	// Tunnel parameters
 	InboundTunnelLength  int           // Number of hops for inbound tunnels (default: 3)
@@ -114,12 +126,14 @@ type SessionConfig struct {
 	// Message delivery semantics (per I2CP spec)
 	// Supported values: "BestEffort" (default), "Guaranteed", "None"
 	//
-	// NOTE: Currently all modes are treated as BestEffort. Guaranteed mode
-	// acknowledgment tracking is not implemented. This field is parsed and
-	// stored to support future delivery confirmation features and to allow
-	// clients to configure their preferred semantics. Applications requiring
-	// guaranteed delivery must implement their own acknowledgment layer
-	// (e.g., via the streaming library).
+	// "None" is honored for MessageStatus reporting: the router sends neither
+	// the "accepted" nor the delivery MessageStatusMessage_ (i2cp.rst:1421-1423,
+	// :1479-1481), except that a nonzero nonce requests the later success/failure
+	// status (i2cp.rst:1431-1437, :1485-1487). See sendStatusRequested().
+	//
+	// NOTE: Guaranteed mode acknowledgment tracking is not implemented and is
+	// downgraded to BestEffort. Applications requiring guaranteed delivery must
+	// implement their own acknowledgment layer (e.g., via the streaming library).
 	MessageReliability string // Message reliability mode (default: "BestEffort")
 
 	// LeaseSet configuration
@@ -163,7 +177,7 @@ func DefaultSessionConfig() *SessionConfig {
 		MessageQueueSize:       100,
 		MessageRateLimit:       100, // 100 messages/second
 		MessageRateBurstSize:   200, // Allow bursts up to 200 messages
-		MessageReliability:     "BestEffort",
+		MessageReliability:     MessageReliabilityBestEffort,
 		DontPublishLeaseSet:    false,
 		UseEncryptedLeaseSet:   false,
 		BlindingSecret:         nil,
@@ -207,6 +221,9 @@ type Session struct {
 	currentLeaseSet     []byte            // Currently published LeaseSet
 	leaseSetPublishedAt time.Time         // When LeaseSet was last published
 	publisher           LeaseSetPublisher // Publisher for distributing LeaseSets to network
+	// storeType is the kind of structure in currentLeaseSet, so that publication
+	// uses the matching NetDB record type and lookup key. Defaults to LeaseSet2.
+	storeType LeaseSetStoreType
 
 	// EncryptedLeaseSet state (only used if UseEncryptedLeaseSet is true)
 	blindedDestination *destination.Destination // Blinded destination for EncryptedLeaseSet
@@ -251,6 +268,21 @@ func (s *Session) StorePrivateKeys(keys map[uint16][]byte) error {
 	}
 
 	return nil
+}
+
+// ClientEncryptionKeys returns a copy of the client-provided private keys from
+// CreateLeaseSet2, keyed by encryption type (i2cp.rst:673-681).
+func (s *Session) ClientEncryptionKeys() map[uint16][]byte {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	out := make(map[uint16][]byte, len(s.clientEncryptionKeys))
+	for k, v := range s.clientEncryptionKeys {
+		cp := make([]byte, len(v))
+		copy(cp, v)
+		out[k] = cp
+	}
+	return out
 }
 
 // GetEncryptionPrivateKey retrieves a client-provided encryption private key by type.
@@ -587,6 +619,21 @@ func (s *Session) Config() *SessionConfig {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.config
+}
+
+// MessageReliability returns the configured i2cp.messageReliability value
+// ("BestEffort", "Guaranteed" or "None"). It is read under the session lock so
+// that a concurrent Reconfigure cannot tear the value observed here.
+func (s *Session) MessageReliability() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.config == nil {
+		return MessageReliabilityBestEffort
+	}
+	if s.config.MessageReliability == "" {
+		return MessageReliabilityBestEffort
+	}
+	return s.config.MessageReliability
 }
 
 // IsActive returns whether the session is active
