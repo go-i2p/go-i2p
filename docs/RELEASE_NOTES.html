@@ -13,7 +13,7 @@
         <a href="../index.html">go-i2p/go-i2p</a>
       </h2>
       <div class="repo-meta">
-        📝 2552 commits
+        📝 2581 commits
          • 📜 MIT License
       </div>
     </div>
@@ -57,7 +57,84 @@
     
     <main>
       <div class="doc-content">
-        <h1 id="release-notes-for-go-i2p-version-0-1-70001">Release notes for: <code>go-i2p</code> Version <code>0.1.70001</code></h1>
+        <h1 id="release-notes-for-go-i2p-unreleased">Release notes for: <code>go-i2p</code> Unreleased</h1>
+
+<p>This release is only recommended for developers at this time.
+The first general-use release will be version <code>0.2.0</code></p>
+
+<p>This release closes out a full specification-compliance audit against the language-agnostic I2P
+specifications referenced from the package documentation. Four Critical and nine Warning findings were
+fixed, each with a regression test verified to fail against the unfixed code.</p>
+
+<p>Tunnel building changed most. Build records are now shuffled into random wire slots, as the spec
+requires, with the slot index used as the ChaCha20 nonce on both the creator and hop side. Inbound
+tunnels additionally insert a &ldquo;phony&rdquo; record carrying our own router hash and a real ephemeral key, and
+both record sets are padded to the spec&rsquo;s minimum of four and maximum of eight, so a relay cannot tell
+which records are ours. Because the phony record&rsquo;s creator layers and the hop re-XORs cancel exactly,
+it returns byte-identical, which is what lets us detect records modified in transit; that check is now
+performed and a tampered tunnel is discarded. The default build expiration moved from 480 to the
+specified 600 seconds.</p>
+
+<p>NTCP2 now performs the protocol handshake on inbound connections instead of the generic transport one,
+validates block ordering, verifies the <code>s=</code>/<code>i=</code>/<code>v=</code> address options before dialing, accepts unpadded
+I2P base64 and addresses published as <code>&quot;NTCP&quot;</code>, stops fragmenting I2NP messages across ChaChaPoly
+frames, reports the true count of valid frames received in its termination block, validates remote
+static keys as X25519 curve points, and persists its last-shutdown time. SSU2 now rejects out-of-session
+Peer Test and Hole Punch messages that are stale or missing a DateTime block, which closes an unbounded
+replay hole against unauthenticated traffic, and its termination handling delegates to go-noise.</p>
+
+<p>I2CP asynchronous message statuses now carry the originating nonce instead of zero, a nonce of zero
+suppresses the status as specified, DestroySession answers with a DisconnectMessage and closes the
+connection, unsupported message types disconnect rather than being logged and skipped, the session
+config Mapping sort order is enforced so signatures verify, and CreateLeaseSet2&rsquo;s store type now selects
+the framing, validation and NetDB record type instead of being parsed and discarded. BandwidthLimits are
+reported in KBps as the spec defines rather than bytes per second. <code>[String]</code> fields use the specified
+one-byte length prefix.</p>
+
+<p>Noncompliant dead APIs were deleted after confirming the live path uses a conformant replacement: the
+NTCP2 options serializer (11 bytes where the spec requires 12), <code>I2NPUnframer</code> (a four-byte prefix where
+the spec defines two), the SSU2 <code>FragmentI2NPMessage</code>/<code>FrameI2NPToBlock</code> pair, and
+<code>ShortTunnelBuild.Bytes()</code>, which emitted unsendable cleartext records.</p>
+
+<p>A note on I2NP TunnelBuild (21) and TunnelBuildReply (22), which an earlier release removed as
+&ldquo;deprecated&rdquo;: the specification&rsquo;s message registry does label them deprecated, but the normative notes
+for those same two messages state they &ldquo;has not been deprecated. Routers must implement.&rdquo; The removed
+handler could not parse encrypted records, so deleting it did not remove working capability, and
+VariableTunnelBuild covers the same one-to-eight record range, but the gap is real and is recorded as
+outstanding rather than resolved. The same correction applies to I2CP DestLookup (34) and DestReply (35),
+which the registry never labelled deprecated at all.</p>
+
+<p>Several validation gaps belong to upstream go-noise rather than to this repository and are reported
+there instead of patched locally: <code>writeFramed</code> silently fragmenting payloads, the missing minimum-size
+check on msg3 part 2 Options blocks, the responder&rsquo;s inability to learn Alice&rsquo;s intro key on the listener
+path, and the replay cache being created only for responders.</p>
+
+<p><strong>This release requires go-noise at or past <code>6372d5b</code>, which is not yet on <code>trunk</code>.</strong> Moving the SSU2
+test harnesses onto the production listener path exposed a real upstream defect: a router using one
+shared SSU2 listen socket — the normal deployment — could not receive any data-phase traffic for an
+accepted session, because the SessionConfirmed and Data header protectors share <code>k_header_1</code> and the
+demuxer matched on the destination connection ID alone, so the wrong protector false-matched first and
+the payload was never decrypted. go-noise&rsquo;s own suite had no test that delivered data over the listener,
+so the bug was invisible there; <code>6372d5b</code> fixes it and adds that missing test. Building against
+go-noise <code>trunk</code> still passes <code>go build ./...</code> but fails four SSU2 integration tests at their read
+timeouts. The fix must be merged onto <code>trunk</code> and pushed. Routing the tests back around the listener was
+rejected: that is the non-production path which hid the bug, and <code>ssu2.rst:1587-1588</code> forbids it.</p>
+
+<p>A second go-noise listener defect was exposed while stabilising those same harnesses and is likewise
+reported upstream rather than patched locally. The data-phase inbound header protector is installed
+out-of-band: <code>SSU2Conn.notifyRecvDataKey</code> performs a non-blocking send (a <code>select</code> with a <code>default</code>
+branch) into a channel the listener wires up separately, and a listener goroutine then calls
+<code>AcceptedSessionRegistry.SetDataPhaseProtector</code>. On rare schedules the protector is never installed for
+that session, and because <code>TrialDeobfuscate</code> silently skips sessions it cannot deobfuscate, every
+inbound data-phase packet for the session is dropped for good. The sender gets no feedback — data
+packets are retransmitted only on RTO expiry for unACKed packets, never because the peer could not
+deobfuscate them — so the loss is unrecoverable within the session. This was confirmed empirically: the
+failing sessions never delivered a message across ten send retries spanning 30 seconds while the reader
+stayed alive, and re-establishing the session instead of re-sending reduced the SSU2 package failure
+rate from <sup>3</sup>&frasl;<sub>100</sub> to 0/100. go-i2p&rsquo;s test harnesses now verify both data directions before handing a
+session to a test, so the race is detected and bounded rather than asserted through.</p>
+
+<h1 id="release-notes-for-go-i2p-version-0-1-70001">Release notes for: <code>go-i2p</code> Version <code>0.1.70001</code></h1>
 
 <p>This release is only recommended for developers at this time.
 The first general-use release will be version <code>0.2.0</code></p>
@@ -118,11 +195,16 @@ This release also corresponds to significant progress in other parts of the name
 
 <p>All these changes are building toward the big API target for <code>go-i2p</code>, which is making I2P integration as simple as possible for Go applications. The latest checkin of <code>onramp</code> now embeds a <code>go-sam-bridge</code> and starts it automatically if SAMv3.3 is not available on the host, meaning that in the next version of <code>onramp</code>, those who upgrade will seamlessly upgrade to having optional embedded I2P routers. Our hope is that it is also possible to do this for the lower-level <code>go-sam-go</code> library as well. Zero-Configuration I2P applications are nearly upon us!</p>
 
+<p>Production uses the same go-noise listener (startSSU2Listener in lib/transport/ssu2/transport.go), so an
+accepted inbound session there can be affected too. It is survivable rather than benign: the peer gets no
+answer, gives up on the session and dials a fresh one, which re-establishes the protector. It still costs
+a session setup and any in-flight message, so it is worth fixing upstream.</p>
+
       </div>
     </main>
     
     <footer class="page-footer">
-      <p>Generated on 2026-10-26 09:52:22 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
+      <p>Generated on 2026-10-26 14:50:13 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
     </footer>
   </div>
 </body>
