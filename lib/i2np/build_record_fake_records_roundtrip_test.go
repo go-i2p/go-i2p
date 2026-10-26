@@ -11,8 +11,10 @@ import (
 	"testing"
 
 	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/common/session_key"
 	rand "github.com/go-i2p/crypto/rand"
+	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/stretchr/testify/require"
 )
 
@@ -24,6 +26,14 @@ type fakeRecordsRoundTrip struct {
 	phonySlot   int
 	phonySent   []byte
 	retCodes    []byte
+	rawWire     [][]byte // populated by run(): the padded reply as it hits the wire
+
+	// crypto context captured by run() so a test can register the same pending
+	// build through the public ReplyProcessor API.
+	replyKeys     [][32]byte
+	replyIVs      [][16]byte
+	noiseHashes   [][32]byte
+	phonyChecksum [sha256.Size]byte
 }
 
 // newRoundTrip picks a wire layout for a build with the given hop count that
@@ -77,6 +87,14 @@ func (f *fakeRecordsRoundTrip) run(t *testing.T, tamperPhony bool) ([]BuildRespo
 	pathRecords := make([][ShortBuildRecordSize]byte, f.hopCount)
 	for i := range pathRecords {
 		_, err := rand.Read(pathRecords[i][:])
+		require.NoError(t, err)
+	}
+
+	f.replyKeys = replyKeys
+	f.noiseHashes = noiseHashes
+	f.replyIVs = make([][16]byte, f.hopCount)
+	for i := range f.replyIVs {
+		_, err := rand.Read(f.replyIVs[i][:])
 		require.NoError(t, err)
 	}
 
@@ -136,6 +154,7 @@ func (f *fakeRecordsRoundTrip) run(t *testing.T, tamperPhony bool) ([]BuildRespo
 	for i := range wire {
 		raw[i] = wire[i][:]
 	}
+	f.rawWire = raw
 
 	// The reply parser fills every slot with the pending-decryption sentinel; the
 	// peel overwrites only the real hops.
@@ -143,6 +162,8 @@ func (f *fakeRecordsRoundTrip) run(t *testing.T, tamperPhony bool) ([]BuildRespo
 	for i := range records {
 		records[i] = BuildResponseRecord{Reply: TunnelBuildReplyPendingDecryption}
 	}
+
+	f.phonyChecksum = sha256.Sum256(f.phonySent)
 
 	pending := &PendingBuildRequest{
 		ReplyKeys:      toSessionKeys(replyKeys),
@@ -304,4 +325,113 @@ func testRouterHash() common.Hash {
 	var h common.Hash
 	_, _ = rand.Read(h[:])
 	return h
+}
+
+// TestType26DispatchHandlesPaddedReply drives a padded reply through the real
+// ShortTunnelBuildReply (type 26) dispatch path rather than the simulated relay
+// used above: processBuildReplyCommon parses the wire bytes into a handler whose
+// Count is the WIRE record count, then TunnelManager correlates it to the pending
+// build and the ReplyProcessor decrypts and scores it.
+//
+// This is the path that the round-trip harness alone does not cover, and it is
+// where a padded reply could be mis-scored: the handler is built before anyone
+// knows the hop count, so the reply must be truncated to the real hops before
+// ProcessReply runs.
+func TestType26DispatchHandlesPaddedReply(t *testing.T) {
+	for _, hopCount := range []int{1, 3} {
+		t.Run(itoa(hopCount)+"-hops", func(t *testing.T) {
+			f := newRoundTrip(t, hopCount)
+			// Hops must ACCEPT for the build to succeed; the peel test above uses
+			// distinct non-zero codes to catch misattribution, but processAllHops
+			// treats any non-zero byte as a rejection.
+			for i := range f.retCodes {
+				f.retCodes[i] = TunnelBuildReplySuccess
+			}
+			if _, err := f.run(t, false); err != nil {
+				require.NoError(t, err, "padded inbound build must round-trip")
+			}
+
+			// Build the type-26 wire payload: 1 byte count + N 218-byte slots,
+			// exactly as a transit hop would relay it back to us.
+			data := make([]byte, 1+len(f.rawWire)*ShortBuildRecordSize)
+			data[0] = byte(len(f.rawWire))
+			off := 1
+			for _, slot := range f.rawWire {
+				copy(data[off:], slot)
+				off += ShortBuildRecordSize
+			}
+
+			msg := NewBaseI2NPMessage(I2NPMessageTypeShortTunnelBuildReply)
+			const messageID = 4242
+			msg.SetMessageID(messageID)
+			msg.SetData(data)
+
+			tm := NewTunnelManager(&mockPeerSelector{})
+
+			// Register the pending build through the same API the creator uses, so
+			// the reply correlates by I2NP message ID instead of falling to the
+			// uncorrelated late-reply path.
+			result := &tunnel.TunnelBuildResult{
+				TunnelID:       tunnel.TunnelID(12345),
+				Hops:           make([]router_info.RouterInfo, hopCount),
+				ReplyKeys:      toSessionKeys(f.replyKeys),
+				ReplyIVs:       f.replyIVs,
+				NoiseHashes:    f.noiseHashes,
+				UseShortBuild:  true,
+				IsInbound:      true,
+				RecordSlots:    f.recordSlots,
+				HasPhonyRecord: true,
+				PhonyChecksum:  f.phonyChecksum,
+			}
+			tm.trackPendingBuild(result, messageID, tunnel.BuildTunnelRequest{
+				HopCount: hopCount, IsInbound: true, UseShortBuild: true,
+			})
+			// finalizePendingBuild registers the same context on the ReplyProcessor
+			// under the tunnel ID; mirror both registrations here.
+			require.NoError(t, tm.replyProcessor.RegisterPendingBuild(
+				result.TunnelID, result.ReplyKeys, result.ReplyIVs, true, hopCount))
+			require.NoError(t, tm.replyProcessor.SetPendingBuildNoiseHashes(result.TunnelID, f.noiseHashes))
+			require.NoError(t, tm.replyProcessor.SetPendingBuildRecordSlots(
+				result.TunnelID, f.recordSlots, true, f.phonyChecksum))
+
+			recorder := &recordingReplyProcessor{delegate: tm}
+			processor := NewMessageProcessor()
+			processor.SetBuildReplyProcessor(recorder)
+
+			require.NoError(t, processor.processShortTunnelBuildReplyMessage(msg),
+				"a padded type-26 reply must process cleanly through the real dispatch")
+
+			// The hops must have been scored in PATH order with their real ret
+			// codes, and the padded slots must not have been scored at all.
+			stb, ok := recorder.handler.(*ShortTunnelBuildReply)
+			require.True(t, ok, "dispatch must build a ShortTunnelBuildReply, got %T", recorder.handler)
+			records := stb.GetReplyRecords()
+			require.Len(t, records, f.wireCount,
+				"dispatch must expose every wire slot, including the fake records")
+			for i := 0; i < hopCount; i++ {
+				require.Equal(t, byte(TunnelBuildReplySuccess), records[i].Reply,
+					"dispatched reply lost hop %d's acceptance (wire layout %v)", i, f.recordSlots)
+			}
+			// Fake/padding slots stay unscored: the pending-decryption sentinel is
+			// what an unpeeled slot holds, and scoring it as a hop would fail a
+			// perfectly good build.
+			for i := hopCount; i < len(records); i++ {
+				require.Equal(t, byte(TunnelBuildReplyPendingDecryption), records[i].Reply,
+					"slot %d must not be scored as a hop reply", i)
+			}
+		})
+	}
+}
+
+// recordingReplyProcessor captures the handler the type-26 dispatch built while
+// delegating the actual work to the TunnelManager, so a test can inspect the
+// records after the real peel ran.
+type recordingReplyProcessor struct {
+	delegate TunnelBuildReplyProcessor
+	handler  TunnelReplyHandler
+}
+
+func (r *recordingReplyProcessor) ProcessTunnelBuildReply(handler TunnelReplyHandler, messageID int) error {
+	r.handler = handler
+	return r.delegate.ProcessTunnelBuildReply(handler, messageID)
 }
