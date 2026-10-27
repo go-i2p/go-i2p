@@ -49,6 +49,19 @@ const (
 	MessageTypeSetDate            uint8 = 33 // Router -> Client: Current router time (SPEC: 33, was 12)
 
 	// Naming service (modern types)
+	//
+	// Only the HostLookup/HostReply pair is implemented. Its predecessors,
+	// DestLookup (34) and DestReply (35), are not: the spec designates the newer
+	// pair as preferred ("HostLookupMessage_ is preferred as of release 0.9.11",
+	// i2cp.rst:754) and notes the older pair "do not contain Session IDs"
+	// (i2cp.rst:212-213), so a client speaking 34/35 gets an unsupported-message
+	// response rather than a lookup.
+	//
+	// Worth stating precisely because it is easy to get wrong: the message-type
+	// registry (i2cp.rst:457-481) tags types 4, 6, 7, 21 and 29 "deprecated" and
+	// gives 34/35 only a "Since" value (0.7). 34/35 are therefore legacy and
+	// superseded, NOT deprecated, and there is no "must implement" sentence for
+	// them either — which is why this gap is minor rather than a violation.
 	MessageTypeHostLookup uint8 = 38 // Client -> Router: Destination lookup by hash or hostname
 	MessageTypeHostReply  uint8 = 39 // Router -> Client: Destination lookup result
 

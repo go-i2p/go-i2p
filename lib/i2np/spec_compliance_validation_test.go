@@ -3137,26 +3137,39 @@ func TestCryptoAudit_SessionTagRatchet_Prop144Section5(t *testing.T) {
 }
 
 // ============================================================================
-// Section 6 — Legacy (Receive-Path Interop) Crypto
+// Section 6 — Legacy long-record format (documented size only, NOT parsed)
 // ============================================================================
 
-// TestLegacyCrypto_LongFormatBuildRecords_FlagPresence documents the presence of
-// 528-byte long-format build record types. These are NOT ElGamal — they use
-// ECIES-X25519-AEAD (see EncryptBuildRequestRecord). The 528-byte long format
-// is retained for RECEIVE-path interop with pre-STBM peers; the send path uses
-// 218-byte ECIES short records (STBM, proposal 152).
+// TestLegacyCrypto_LongFormatBuildRecords_FlagPresence pins the 528-byte
+// long-format record SIZE constant, which is retained as documentation of the
+// format this router rejects.
+//
+// It is important not to over-read what this constant buys. There is NO
+// receive-path interop with pre-STBM peers: the 528-byte parsers were removed,
+// and message types 21/22/23/24 — the only messages that carry long records —
+// are recognised and dropped in the dispatch (see the "Tunnel build message
+// coverage (known gap)" section of doc.go). The constant exists so the
+// short/long distinction can be asserted and so a reader can see the rejected
+// size, not because anything parses that size. Upstream go-i2p/crypto likewise
+// keeps LongBuild*Size as "documentation of the rejected format only"
+// (crypto 911099c5) and rejects long records in every checkBuild*Size function.
 func TestLegacyCrypto_LongFormatBuildRecords_FlagPresence(t *testing.T) {
 	// StandardBuildRecordSize = 528 is the ECIES long-format record size
+	// (tunnel-creation-ecies.rst:224 "Encrypted size: 528 bytes").
 	assert.Equal(t, 528, StandardBuildRecordSize,
 		"StandardBuildRecordSize (528) is the ECIES long-format record size")
 
-	// A full 8-hop build uses 8×528 = 4224 bytes of long-format records
-	// (receive-path interop with pre-STBM peers).
+	// A full 8-hop build would use 8×528 = 4224 bytes of long-format records
+	// (i2np.rst:1568-1570). This is the arithmetic being documented, not a
+	// capability: no 4224-byte build payload is accepted by this router.
 	totalSize := 8 * StandardBuildRecordSize
 	assert.Equal(t, 4224, totalSize,
-		"8-hop build uses 528-byte records (ECIES long format)")
+		"8-hop build would use 528-byte records (ECIES long format)")
 
-	t.Log("NOTE: 528-byte long-format build records are present for receive-path interop.")
-	t.Log("The modern send path uses ECIES-only 218-byte short records (STBM).")
-	t.Log("528-byte records remain so this router can parse builds/replies from older peers.")
+	assert.NotEqual(t, StandardBuildRecordSize, ShortBuildRecordSize,
+		"the rejected long size must stay distinct from the implemented short size")
+
+	t.Log("NOTE: 528-byte long records are documented by size only; the parsers are gone.")
+	t.Log("The send path uses ECIES-only 218-byte short records (STBM, proposal 152),")
+	t.Log("and builds/replies from pre-STBM peers are dropped, not parsed.")
 }

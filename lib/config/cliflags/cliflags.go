@@ -223,7 +223,7 @@ func registerTransportFlags(cmd *cobra.Command) {
 		"Maximum concurrent NTCP2 sessions")
 	cmd.PersistentFlags().Bool("transport.ssu2-enabled",
 		config.DefaultTransportConfig.SSU2Enabled,
-		"Enable SSU2 transport (UDP-based, currently experimental)")
+		"Enable SSU2 transport (UDP-based, currently experimental; see docs/ssu2-experimental.md)")
 	cmd.PersistentFlags().Int("transport.ssu2-port",
 		config.DefaultTransportConfig.SSU2Port,
 		"SSU2 listen port (0 = random port assigned by OS)")

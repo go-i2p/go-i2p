@@ -33,6 +33,22 @@
 //	  ssu2_enabled: true
 //	  ssu2_port: 9002  # use a random port when 0
 //
+// # Experimental status
+//
+// This transport is described as experimental in the README and in the
+// --transport.ssu2-enabled help text, and it is enabled by default. The label
+// means something specific: the implementation covers the specification's SSU2
+// surface and is exercised by this package's tests, but it has never completed a
+// handshake with a Java I2P or i2pd peer on the real network. The live-network
+// suite asserts bootstrap, RouterInfo and LeaseSet paths; none of them asserts
+// SSU2 (see docs/interop-matrix.md). NTCP2 is proven against both reference
+// implementations.
+//
+// docs/ssu2-experimental.md lists the full set of gaps — including the
+// initiator-side handshake replay cache that ssu2.rst:1576-1581 requires and
+// that go-noise creates only for responders — and the checklist that must be
+// satisfied before the designation can be removed.
+//
 // # Implementation notes
 //
 // This package wraps the go-noise/ssu2 library (which provides the Noise state

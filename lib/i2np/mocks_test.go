@@ -298,10 +298,11 @@ func createTestBuildRequestRecord(t interface{ Helper() }) BuildRequestRecord {
 
 // --- Shared helpers: tunnel build reply factories ---
 //
-// These factories build OutboundTunnelBuildReply values (the modern reply
-// type, type 24) so the reply-handler tests exercise the shared
-// processReplySteps path. The deprecated fixed 8-record TunnelBuildReply
-// (type 22) has been removed.
+// These factories build OutboundTunnelBuildReply values (the reply this router
+// implements, type 26 — the counterpart of ShortTunnelBuild 25) so the
+// reply-handler tests exercise the shared processReplySteps path. The fixed
+// 8-record TunnelBuildReply (type 22) and VariableTunnelBuildReply (type 24) are
+// not implemented: their 528-byte records are dropped by the dispatch.
 
 // createSuccessfulTunnelBuildReply creates a reply where all hops accepted
 func createSuccessfulTunnelBuildReply() *OutboundTunnelBuildReply {

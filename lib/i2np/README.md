@@ -263,110 +263,6 @@ func CheckMessageExpiration(msg Message) error
 CheckMessageExpiration is a convenience function that validates message
 expiration using the default validator settings (5 minute tolerance).
 
-#### func  DecryptSTBMRecordReturningChainingKey
-
-```go
-func DecryptSTBMRecordReturningChainingKey(encrypted [218]byte, privateKey []byte) ([32]byte, error)
-```
-DecryptSTBMRecordReturningChainingKey performs the same Noise_N AEAD-decrypt as
-DecryptShortBuildRequestRecordNoise but returns the post-decrypt Noise chaining
-key instead of the cleartext record. This chaining key is what the hop needs to
-derive its replyKey (via DeriveSTBMReplyKey) so it can:
-
-    1. Peel its own layer off all subsequent records via ChaCha20 stream.
-    2. AEAD-decrypt the build response record addressed to it.
-
-Used by the test harness to validate the sender-side chained ChaCha20 layer
-obfuscation, and intended for use by the real receive path once we wire up
-inbound STBM handling.
-
-#### func  DecryptSTBMRecordReturningChainingKeyAndHash
-
-```go
-func DecryptSTBMRecordReturningChainingKeyAndHash(encrypted [218]byte, privateKey []byte) ([32]byte, [32]byte, error)
-```
-DecryptSTBMRecordReturningChainingKeyAndHash performs the same Noise_N
-AEAD-decrypt as DecryptSTBMRecordReturningChainingKey but also returns the
-post-decrypt Noise handshake hash (m_H). The transit hop needs m_H as AEAD
-associated data when constructing its OutboundTunnelBuildReply record.
-
-#### func  DeriveSTBMLayerKeys
-
-```go
-func DeriveSTBMLayerKeys(postReplyCK [32]byte) (layerKey, ivKey, nextCK [32]byte, err error)
-```
-DeriveSTBMLayerKeys derives the tunnel layer key and IV key for a hop that
-accepted an STBM build record, matching i2pd's TransitTunnel.cpp derivation.
-
-Input: postReplyCK — the Noise chaining key after the "SMTunnelReplyKey" HKDF
-step (i.e. the second return value of DeriveSTBMReplyKey).
-
-Derivation:
-
-    HKDF64(postReplyCK, "SMTunnelLayerKey") -> ck1 || layerKey
-    HKDF64(ck1, "TunnelLayerIVKey")         -> ck2 || ivKey
-
-The short build record format does not carry layer/IV keys in its cleartext;
-both the transit hop and the tunnel creator MUST derive them from the Noise
-chaining key with this exact chain, or tunnel data decryption will fail.
-
-#### func  DeriveSTBMOBEPGarlicKeyAndTag
-
-```go
-func DeriveSTBMOBEPGarlicKeyAndTag(postReplyCK [32]byte) ([32]byte, [8]byte, error)
-```
-DeriveSTBMOBEPGarlicKeyAndTag derives the one-time garlic key and tag that the
-OBEP uses to wrap its OutboundTunnelBuildReply, matching i2pd exactly.
-
-Input: postReplyCK — the Noise chaining key after "SMTunnelReplyKey" HKDF step.
-
-Derivation (from TransitTunnel.cpp::HandleShortTransitTunnelBuildMsg):
-
-    HKDF64(postReplyCK, "SMTunnelLayerKey") -> ck1 || layerKey
-    HKDF64(ck1, "TunnelLayerIVKey")         -> ck2 || ivKey
-    HKDF64(ck2, "RGarlicKeyAndTag")          -> ck3 || garlicEncKey
-      TAG = ck3[0:8]         (first 8 bytes of new chaining key)
-      KEY = garlicEncKey     (output key, 32 bytes)
-
-#### func  DeriveSTBMReplyKey
-
-```go
-func DeriveSTBMReplyKey(chainingKey [32]byte) ([32]byte, [32]byte, error)
-```
-DeriveSTBMReplyKey derives the per-hop ChaCha20 reply key from a hop's
-post-encryption Noise chaining key. This key is used both for the chained
-stream-cipher layer obfuscation that the sender applies to records following
-this hop, and for AEAD-decrypting that hop's build response record.
-
-The derivation matches i2pd:
-
-    HKDF-SHA256(salt=ck, ikm="", info="SMTunnelReplyKey", out=64)
-    -> new_ck (bytes 0:32) || replyKey (bytes 32:64)
-
-Returns both the replyKey and the new chaining key so callers can continue the
-HKDF chain (e.g. for layer/IV/garlic key derivation).
-
-#### func  DetermineBuildResult
-
-```go
-func DetermineBuildResult(successCount, recordCount int, firstError error, tunnelType string) error
-```
-DetermineBuildResult evaluates tunnel build outcome based on success counts and
-first encountered error. L-1 Consolidation: Shared by tunnel_build_reply.go and
-variable_tunnel_build_reply.go. tunnelType should be lowercase (e.g., "tunnel",
-"variable tunnel") for error messages.
-
-#### func  EncryptBuildRequestRecord
-
-```go
-func EncryptBuildRequestRecord(record BuildRequestRecord, recipientRouterInfo router_info.RouterInfo) ([528]byte, error)
-```
-EncryptBuildRequestRecord encrypts a BuildRequestRecord using ECIES-X25519-AEAD.
-
-This adapter extracts the recipient's public key and identity hash from
-RouterInfo, serializes the BuildRequestRecord, then delegates ECIES encryption
-to go-noise/ratchet.
-
 #### func  EncryptGarlicWithBuilder
 
 ```go
@@ -459,14 +355,6 @@ prefix, if present, is stripped automatically. Returns one byte slice per Data
 clove found. Non-Data cloves (e.g. status/delivery cloves) are skipped. Returns
 an error if decryption fails or no Data clove is present.
 
-#### func  ExtractIdentityHashPrefix
-
-```go
-func ExtractIdentityHashPrefix(encrypted [528]byte) common.Hash
-```
-ExtractIdentityHashPrefix returns the first 16 bytes of an encrypted record as a
-common.Hash (remaining bytes zero).
-
 #### func  IsMessageExpired
 
 ```go
@@ -513,13 +401,6 @@ ReadI2NPSecondGenTransportHeader.
 func NewBuildMessageFactory() build.BuildMessageFactory
 ```
 NewBuildMessageFactory creates a new factory for tunnel build messages.
-
-#### func  NewBuildRecordEncryptor
-
-```go
-func NewBuildRecordEncryptor() build.BuildRecordEncryptor
-```
-NewBuildRecordEncryptor creates a new encryptor for tunnel build records.
 
 #### func  NewBuildSessionProvider
 
@@ -611,35 +492,16 @@ func SnapshotExploratoryReplyStages() map[string]uint64
 SnapshotExploratoryReplyStages returns current exploratory reply funnel
 counters.
 
-#### func  TunnelCipherEncrypt
-
-```go
-func TunnelCipherEncrypt(in []byte, out *[1028]byte, iv, key []byte) error
-```
-TunnelCipherEncrypt performs AES-CBC tunnel-layer encryption per I2P spec. F079
-fix: operates through pointer (not value copy) so mutations persist. F080 fix:
-CBC IV taken from correct byte offset. F081 fix: single-block transform applied;
-last 4 payload bytes encrypted; output is full 1028 bytes (not truncated to
-1008).
-
 #### func  ValidateRecordCount
 
 ```go
 func ValidateRecordCount(countField, recordCount int, tunnelTypeName string) error
 ```
-ValidateRecordCount validates that Count field matches actual record count. L-4
-Consolidation: Shared by variable_tunnel_build_reply.go and
-outbound_tunnel_build_reply.go. tunnelTypeName is used in log messages (e.g.,
-"VariableTunnelBuildReply", "OutboundTunnelBuildReply")
-
-#### func  VerifyIdentityHash
-
-```go
-func VerifyIdentityHash(encrypted [528]byte, ourRouterInfo router_info.RouterInfo) bool
-```
-VerifyIdentityHash checks if an encrypted BuildRequestRecord is intended for us.
-This adapter extracts the identity hash from RouterInfo, then delegates the byte
-comparison to go-noise/ratchet.
+ValidateRecordCount validates that Count field matches actual record count. A
+mismatch means the message was truncated or corrupted in transit, so this check
+runs before any records are processed by a reply handler. tunnelTypeName is used
+in log messages (e.g., "OutboundTunnelBuildReply") See also
+[OutboundTunnelBuildReply].
 
 #### type BaseI2NPMessage
 
@@ -783,80 +645,6 @@ func (m *BaseI2NPMessage) UnmarshalShortI2NP(data []byte) error
 UnmarshalShortI2NP deserializes an I2NP message from the 9-byte short header
 format used in NTCP2 block type 3.
 
-#### type BuildRecordCrypto
-
-```go
-type BuildRecordCrypto struct {
-}
-```
-
-BuildRecordCrypto provides encryption/decryption for tunnel build records. This
-is a thin adapter that delegates to go-noise/ratchet.BuildReplyCrypto while
-handling I2P-specific type conversions (SessionKey, BuildResponseRecord,
-BuildRequestRecord, RouterInfo).
-
-#### func  NewBuildRecordCrypto
-
-```go
-func NewBuildRecordCrypto() *BuildRecordCrypto
-```
-NewBuildRecordCrypto creates a new build record crypto handler.
-
-#### func (*BuildRecordCrypto) DecryptRecord
-
-```go
-func (c *BuildRecordCrypto) DecryptRecord(encrypted [528]byte, privateKey []byte) (BuildRequestRecord, error)
-```
-DecryptRecord decrypts an encrypted BuildRequestRecord using ECIES-X25519-AEAD.
-This method satisfies the BuildRequestDecryptor interface, delegating to the
-package-level DecryptBuildRequestRecord function.
-
-#### func (*BuildRecordCrypto) DecryptReplyRecord
-
-```go
-func (c *BuildRecordCrypto) DecryptReplyRecord(
-	encryptedData []byte,
-	replyKey session_key.SessionKey,
-	replyIV [16]byte,
-) (BuildResponseRecord, error)
-```
-DecryptReplyRecord decrypts an encrypted BuildResponseRecord. Delegates to
-go-noise/ratchet for decryption, then parses and verifies the result using
-I2P-specific types.
-
-#### func (*BuildRecordCrypto) EncryptReplyRecord
-
-```go
-func (c *BuildRecordCrypto) EncryptReplyRecord(
-	record BuildResponseRecord,
-	replyKey session_key.SessionKey,
-	replyIV [16]byte,
-) ([]byte, error)
-```
-EncryptReplyRecord encrypts a BuildResponseRecord using the reply key and IV.
-Serializes the record to bytes, converts SessionKey to [32]byte, then delegates
-to go-noise/ratchet.
-
-#### type BuildRecordReader
-
-```go
-type BuildRecordReader interface {
-	ReadBuildRequestRecord(data []byte) (BuildRequestRecord, error)
-}
-```
-
-BuildRecordReader represents types that can parse build request records
-
-#### type BuildRecordWriter
-
-```go
-type BuildRecordWriter interface {
-	WriteBuildResponseRecord() ([]byte, error)
-}
-```
-
-BuildRecordWriter represents types that can write build response records
-
 #### type BuildReplyForwarder
 
 ```go
@@ -890,21 +678,6 @@ BuildReplyForwarder defines the interface for forwarding tunnel build replies.
 This interface enables the MessageProcessor to send build response messages to
 the next hop in the tunnel or back through the reply tunnel.
 
-#### type BuildRequestDecryptor
-
-```go
-type BuildRequestDecryptor interface {
-	// DecryptRecord decrypts a 528-byte encrypted build request record
-	// using the router's static private key and returns the parsed record.
-	DecryptRecord(encrypted [528]byte, privateKey []byte) (BuildRequestRecord, error)
-}
-```
-
-BuildRequestDecryptor decrypts inbound tunnel build request records. When
-processing build requests from the network, encrypted records destined for this
-router must be decrypted before parsing. This interface abstracts the
-ECIES-X25519-AEAD decryption so that test mocks can be substituted.
-
 #### type BuildRequestRecord
 
 ```go
@@ -915,17 +688,6 @@ BuildRequestRecord is a type alias for buildrecord.BuildRequestRecord, the
 canonical definition. Both lib/tunnel and lib/i2np share this type without
 import cycles. Parsing, serialization, and accessor methods are defined in
 lib/tunnel/buildrecord.
-
-#### func  DecryptBuildRequestRecord
-
-```go
-func DecryptBuildRequestRecord(encrypted [528]byte, privateKey []byte) (BuildRequestRecord, error)
-```
-DecryptBuildRequestRecord decrypts an encrypted BuildRequestRecord using
-ECIES-X25519-AEAD.
-
-This adapter delegates ECIES decryption to go-noise/ratchet, then parses the
-resulting 222-byte cleartext into a BuildRequestRecord.
 
 #### func  DecryptShortBuildRequestRecord
 
@@ -944,30 +706,6 @@ STBM on-wire layout (218 bytes):
     - Bytes  48-201: ChaCha20-Poly1305 ciphertext (154 bytes of cleartext)
     - Bytes 202-217: Poly1305 MAC tag (16 bytes)
 
-#### func  DecryptShortBuildRequestRecordNoise
-
-```go
-func DecryptShortBuildRequestRecordNoise(encrypted [218]byte, privateKey []byte) (BuildRequestRecord, error)
-```
-DecryptShortBuildRequestRecordNoise is the inverse of
-EncryptShortBuildRequestRecord: it decrypts a 218-byte STBM record using the
-Noise_N_25519_ChaChaPoly_SHA256 transcript described above. The caller supplies
-the local router's static X25519 private key (which corresponds to the public
-key the sender used as the responder static).
-
-Returns the parsed cleartext BuildRequestRecord on success.
-
-#### func  ReadBuildRequestRecord
-
-```go
-func ReadBuildRequestRecord(data []byte) (BuildRequestRecord, error)
-```
-ReadBuildRequestRecord parses a BuildRequestRecord from the provided byte slice.
-It delegates to buildrecord.ReadBuildRequestRecord and translates any error to
-ErrBuildRequestRecordNotEnoughData. The original buildrecord error is discarded
-to provide a uniform I2NP error type for all parsing failures (I2NP spec does
-not distinguish between different parse failure modes in this context).
-
 #### func  ReadShortBuildRequestRecord
 
 ```go
@@ -976,7 +714,7 @@ func ReadShortBuildRequestRecord(data []byte) (BuildRequestRecord, error)
 ReadShortBuildRequestRecord parses the 154-byte STBM cleartext payload into a
 BuildRequestRecord. It delegates to buildrecord.ReadShortBuildRequestRecord and
 translates any error to ErrBuildRequestRecordNotEnoughData. The original
-buildrecord error is discarded (see ReadBuildRequestRecord for rationale).
+buildrecord error is discarded so callers match on ErrBuildRequestRecordNotEnoughData.
 
 #### type BuildResponseRecord
 
@@ -986,20 +724,6 @@ type BuildResponseRecord = buildrecord.BuildResponseRecord
 
 Type alias for BuildResponseRecord - canonical definition in
 lib/tunnel/buildrecord
-
-#### func  CreateBuildResponseRecord
-
-```go
-func CreateBuildResponseRecord(reply byte, randomData [495]byte) BuildResponseRecord
-```
-CreateBuildResponseRecord creates a new BuildResponseRecord with proper hash.
-
-Parameters:
-
-    - reply: Status code (0=accept, non-zero=reject reason)
-    - randomData: 495 bytes of random data (should be cryptographically random)
-
-Returns a BuildResponseRecord with the SHA-256 hash properly computed.
 
 #### type ByteReader
 
@@ -1258,13 +982,6 @@ GetFrom returns the from hash
 func (d *DatabaseLookup) GetKey() common.Hash
 ```
 GetKey returns the lookup key
-
-#### func (*DatabaseLookup) GetReplyTags
-
-```go
-func (d *DatabaseLookup) GetReplyTags() []session_tag.SessionTag
-```
-GetReplyTags returns the reply tags
 
 #### func (*DatabaseLookup) GetTagCount
 
@@ -2182,14 +1899,6 @@ func (sm *GarlicSessionManager) GetSessionCount() int
 ```
 GetSessionCount returns the number of active sessions.
 
-#### func (*GarlicSessionManager) ProcessIncomingDHRatchet
-
-```go
-func (sm *GarlicSessionManager) ProcessIncomingDHRatchet(sessionTag [8]byte, newRemotePubKey [32]byte) error
-```
-ProcessIncomingDHRatchet processes a DH ratchet key received from a peer. The
-session is found by tag lookup using the sessionTag parameter.
-
 #### func (*GarlicSessionManager) RegisterOneTimeGarlicKey
 
 ```go
@@ -2559,15 +2268,6 @@ expiration, then released before dispatching. This avoids a deadlock when
 processing garlic messages with LOCAL delivery cloves, which recursively call
 ProcessMessage (RLock is not re-entrant when a concurrent writer is waiting).
 
-#### func (*MessageProcessor) SetBuildRecordCrypto
-
-```go
-func (p *MessageProcessor) SetBuildRecordCrypto(crypto ReplyRecordEncryptor)
-```
-SetBuildRecordCrypto sets the build record crypto handler for encrypting build
-response records. Accepts any implementation of ReplyRecordEncryptor, including
-*BuildRecordCrypto and test mocks.
-
 #### func (*MessageProcessor) SetBuildReplyForwarder
 
 ```go
@@ -2588,15 +2288,6 @@ reply messages. When set, tunnel build reply message types (22, 24, 26) are
 dispatched to this processor which correlates them with pending build requests
 and updates tunnel state. If not set, tunnel build replies are logged and
 discarded.
-
-#### func (*MessageProcessor) SetBuildRequestDecryptor
-
-```go
-func (p *MessageProcessor) SetBuildRequestDecryptor(dec BuildRequestDecryptor)
-```
-SetBuildRequestDecryptor sets the decryptor used to decrypt inbound build
-request records that are destined for this router. If not set, encrypted records
-will be attempted as cleartext (testing mode only).
 
 #### func (*MessageProcessor) SetCloveForwarder
 
@@ -2920,10 +2611,10 @@ func (rp *ReplyProcessor) ProcessBuildReply(handler TunnelReplyHandler, tunnelID
 ProcessBuildReply processes a tunnel build reply message. It decrypts encrypted
 reply records, validates responses, and updates tunnel state.
 
-The handler parameter should be one of:
-
-    - *VariableTunnelBuildReply (1-8 hops)
-    - *OutboundTunnelBuildReply (1-8 hops, modern STBM format)
+The handler parameter must be an OutboundTunnelBuildReply (type 26, 1-8 hops) —
+the only TunnelReplyHandler implementation in this package. The fixed 8-record
+TunnelBuildReply (22) and VariableTunnelBuildReply (24) are not implemented:
+their 528-byte record formats are dropped by the dispatch.
 
 Returns nil on successful build, error otherwise.
 
@@ -3011,18 +2702,6 @@ func DefaultReplyProcessorConfig() ReplyProcessorConfig
 ```
 DefaultReplyProcessorConfig returns the default configuration.
 
-#### type ReplyRecordEncryptor
-
-```go
-type ReplyRecordEncryptor interface {
-	// EncryptReplyRecord encrypts a BuildResponseRecord with the given reply key and IV.
-	EncryptReplyRecord(record BuildResponseRecord, replyKey session_key.SessionKey, replyIV [16]byte) ([]byte, error)
-}
-```
-
-ReplyRecordEncryptor encrypts tunnel build reply records. This interface is
-satisfied by both BuildRecordCrypto (the concrete adapter) and test mocks.
-
 #### type SearchReplyHandler
 
 ```go
@@ -3057,17 +2736,6 @@ type SessionProvider interface {
 ```
 
 SessionProvider defines the interface for obtaining transport sessions
-
-#### type SessionTagProvider
-
-```go
-type SessionTagProvider interface {
-	GetReplyTags() []session_tag.SessionTag
-	GetTagCount() int
-}
-```
-
-SessionTagProvider represents types that provide session tags
 
 #### type ShortTunnelBuild
 
@@ -3140,10 +2808,14 @@ interface)
 ```go
 func (s *OutboundTunnelBuildReply) ProcessReply() error
 ```
-ProcessReply processes the short tunnel build reply by analyzing each response
-record. Similar to VariableTunnelBuildReply but specifically for short tunnel
-builds (v0.9.51+). Validates response integrity and determines tunnel build
-success/failure.
+ProcessReply processes the short tunnel build reply by analyzing each response record.
+The current tunnel build reply format (v0.9.51+). Validates response integrity and
+determines tunnel build success/failure.
+
+Only the hop replies are analyzed: the trailing fake records are padding whose
+contents carry no verdict, and they still hold the parser's "pending decryption"
+sentinel, so counting them as hops would fail every build that correctly pads its
+record order.
 
 #### type SourceHashProvider
 
@@ -3673,73 +3345,3 @@ TunnelStatsReader is the narrow interface needed by I2PControl and router status
 reporters. It covers pool access and build-metrics reads — the operations that
 belong to the observability layer. Any substitute only needs to implement these
 10 methods.
-
-#### type VariableTunnelBuild
-
-```go
-type VariableTunnelBuild struct {
-}
-```
-
-VariableTunnelBuild represents an I2NP VariableTunnelBuild message containing a
-variable number of build request records for tunnel construction.
-
-NOTE: This type is retained for receive-side parsing and spec-compliance
-record-count validation only. The send-side constructor has been removed —
-production builds use ShortTunnelBuild (STBM, type 25) exclusively.
-
-#### func (*VariableTunnelBuild) GetBuildRecords
-
-```go
-func (s *VariableTunnelBuild) GetBuildRecords() []BuildRequestRecord
-```
-GetBuildRecords returns the build request records.
-
-#### func (*VariableTunnelBuild) GetRecordCount
-
-```go
-func (s *VariableTunnelBuild) GetRecordCount() int
-```
-GetRecordCount returns the number of build records.
-
-#### type VariableTunnelBuildReply
-
-```go
-type VariableTunnelBuildReply struct {
-	Count                int
-	BuildResponseRecords []BuildResponseRecord
-	RawRecordData        [][]byte // Original encrypted bytes before parsing
-}
-```
-
-VariableTunnelBuildReply represents an I2NP VariableTunnelBuildReply message
-containing a variable number of build response records.
-
-NOTE (0.2.0 consolidation opportunity): This type shares GetReplyRecords() and
-GetRawReplyRecords() accessors with TunnelBuildReply, differing only in backing
-storage ([8]array vs []slice). See tunnel_build.go for the full context on
-consolidating fixed/variable accessors into a generic recordSet[T] type.
-
-#### func (*VariableTunnelBuildReply) GetRawReplyRecords
-
-```go
-func (v *VariableTunnelBuildReply) GetRawReplyRecords() [][]byte
-```
-GetRawReplyRecords returns the original encrypted record bytes.
-
-#### func (*VariableTunnelBuildReply) GetReplyRecords
-
-```go
-func (v *VariableTunnelBuildReply) GetReplyRecords() []BuildResponseRecord
-```
-GetReplyRecords returns the build response records
-
-#### func (*VariableTunnelBuildReply) ProcessReply
-
-```go
-func (v *VariableTunnelBuildReply) ProcessReply() error
-```
-ProcessReply processes the variable tunnel build reply by analyzing each
-response record. Similar to TunnelBuildReply but handles variable-length tunnels
-(1-8 hops). Validates response integrity and determines tunnel build
-success/failure.

@@ -488,28 +488,6 @@ func processHopReplyCode(hopIndex int, replyCode byte, logPrefix string) (bool, 
 	return false, oops.Errorf("hop %d: rejected with code %d", hopIndex, replyCode)
 }
 
-// DetermineBuildResult evaluates tunnel build outcome based on success counts and first encountered error.
-// A build only succeeds when every hop accepted, so this is shared by
-// OutboundTunnelBuildReply to keep the
-// success/failure logic in one place.
-// tunnelType should be lowercase (e.g., "tunnel", "variable tunnel") for error messages.
-// See also [OutboundTunnelBuildReply].
-func DetermineBuildResult(successCount, recordCount int, firstError error, tunnelType string) error {
-	if successCount == recordCount {
-		log.WithFields(logger.Fields{
-			"at":   "DetermineBuildResult",
-			"type": tunnelType,
-		}).Debug(tunnelType + " build successful - all hops accepted")
-		return nil
-	}
-
-	if firstError != nil {
-		return oops.Wrapf(firstError, "%s build failed", tunnelType)
-	}
-
-	return oops.Errorf("%s build failed: only %d of %d hops accepted", tunnelType, successCount, recordCount)
-}
-
 // ValidateRecordCount validates that Count field matches actual record count.
 // A mismatch means the message was truncated or corrupted in transit, so
 // this check runs before any records are processed by a reply handler.

@@ -256,10 +256,12 @@ func (rp *ReplyProcessor) SetPendingBuildRecordSlots(tunnelID buildrecord.Tunnel
 // ProcessBuildReply processes a tunnel build reply message.
 // It decrypts encrypted reply records, validates responses, and updates tunnel state.
 //
-// The handler parameter should be one of:
-//   - *TunnelBuildReply (8 hops)
-//   - *VariableTunnelBuildReply (1-8 hops)
-//   - *OutboundTunnelBuildReply (1-8 hops, modern STBM format)
+// The handler parameter must be an [OutboundTunnelBuildReply] (type 26, 1-8
+// hops) — the only [TunnelReplyHandler] implementation in this package. The
+// fixed 8-record *TunnelBuildReply (22) and *VariableTunnelBuildReply (24) that
+// used to be listed here no longer exist: their 528-byte record formats are not
+// implemented, so there is nothing to hand a reply of that shape. See the
+// "Tunnel build message coverage (known gap)" section of doc.go.
 //
 // Returns nil on successful build, error otherwise.
 func (rp *ReplyProcessor) ProcessBuildReply(handler TunnelReplyHandler, tunnelID buildrecord.TunnelID) error {

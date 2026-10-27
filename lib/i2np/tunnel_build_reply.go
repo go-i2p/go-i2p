@@ -8,9 +8,9 @@ import (
 I2P I2NP Tunnel Build Reply codes
 https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst
 
-Reply codes shared by all tunnel build reply message types.
-The type 26 reply is OutboundTunnelBuildReply (i2np.rst:696, :1721), the
-specification name for this package's OutboundTunnelBuildReply type.
+Reply codes shared by every tunnel build reply message type — 22, 24 and 26 —
+even though only type 26 (this package's [OutboundTunnelBuildReply],
+i2np.rst:696, :1721) is implemented here.
 */
 
 // TunnelBuildReply constants for processing responses

@@ -60,7 +60,7 @@ Anonymity-sensitive operators should review [Anonymity-Safe Logging](docs/anonym
 - End-to-End Crypto (crypto engine in [go-noise/ratchet](https://github.com/go-i2p/go-noise/tree/main/ratchet))
   - [X] Garlic messages (thin adapter in `lib/i2np/garlic_session.go` → `go-noise/ratchet.SessionManager`)
   - [X] ECIES-X25519-AEAD-Ratchet (primary, implemented in `go-noise/ratchet/`)
-  - [X] Tunnel build record crypto (adapter in `lib/i2np/build_record_crypto.go` → `go-noise/ratchet.BuildRecordCrypto`)
+  - [X] Tunnel build record crypto (adapter in `lib/i2np/build_record_crypto_short.go` → `github.com/go-i2p/crypto/tunnel`)
   - [ ] ElGamal/AES+SessionTag (not implemented - ECIES-only destinations supported)
 - I2NP
   - [X] Message parsing and serialization
@@ -90,7 +90,7 @@ Anonymity-sensitive operators should review [Anonymity-Safe Logging](docs/anonym
     - [X] I2NP message framing and unframing
     - [X] Session lifecycle management
     - [X] Message queuing and worker threads
-  - SSU2 (**currently experimental** — see `--transport.ssu2-enabled` help text)
+  - SSU2 (**currently experimental** — see [docs/ssu2-experimental.md](docs/ssu2-experimental.md) for what is and is not proven, and the `--transport.ssu2-enabled` help text)
     - [X] Session handshake
     - [X] Connection management
     - [X] Peer Tests (experimental — all roles implemented; end-to-end integration ongoing)

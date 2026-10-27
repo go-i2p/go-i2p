@@ -57,8 +57,8 @@ type OutboundTunnelBuildReply struct {
 }
 
 // GetReplyRecords returns the parsed build response records. It satisfies
-// the TunnelReplyHandler interface so the reply processor can handle
-// short and standard build replies uniformly.
+// the TunnelReplyHandler interface, which is the seam the reply processor uses
+// so that a reply can be handled without knowing the concrete message type.
 // See also [TunnelReplyHandler].
 func (s *OutboundTunnelBuildReply) GetReplyRecords() []BuildResponseRecord {
 	return s.BuildResponseRecords
