@@ -10,6 +10,15 @@ import (
 
 	i2pbase64 "github.com/go-i2p/common/base64"
 	"github.com/go-i2p/common/data"
+	"github.com/go-i2p/common/key_certificate"
+	"github.com/go-i2p/common/keys_and_cert"
+	"github.com/go-i2p/common/router_address"
+	"github.com/go-i2p/common/router_identity"
+	"github.com/go-i2p/common/router_info"
+	"github.com/go-i2p/common/signature"
+	"github.com/go-i2p/crypto/curve25519"
+	"github.com/go-i2p/crypto/ed25519"
+	i2prand "github.com/go-i2p/crypto/rand"
 	gontcp2 "github.com/go-i2p/go-noise/ntcp2"
 	upstreamnoise "github.com/go-i2p/noise"
 	"github.com/stretchr/testify/assert"
@@ -65,16 +74,76 @@ func newNTCP2TestKeyPair(t *testing.T) ntcp2TestKeyPair {
 		WithRemoteRouterHash(responderHash).
 		WithRemoteStaticKey(responderKP.Public).
 		WithAESObfuscation(false, nil).
-		WithLocalRouterInfo(routerInfoAdvertisingKey(initiatorKP.Public))
+		WithLocalRouterInfo(routerInfoAdvertisingKey(t, initiatorKP.Public))
 
 	return ntcp2TestKeyPair{initiatorConfig: initiatorConfig, responderConfig: responderConfig}
 }
 
-// routerInfoAdvertisingKey builds RouterInfo bytes embedding the given
-// Curve25519 public key as an s= option, satisfying the initiator-side
-// static-key binding check without a fully signed RouterInfo document.
-func routerInfoAdvertisingKey(pub []byte) []byte {
-	return []byte("ri s=" + i2pbase64.EncodeToString(pub))
+// routerInfoAdvertisingKey builds a real, signed RouterInfo whose NTCP2
+// RouterAddress advertises the given Curve25519 public key in the s= option.
+//
+// go-noise validates the local RouterInfo on the initiator side
+// (verifyLocalRouterInfoMatchesStaticKey: it must parse, carry an NTCP/NTCP2
+// address with v=2, and advertise the key the static private key derives to) and
+// validates the peer's message-3 RouterInfo on the responder side
+// (validatePeerRouterInfo: structural validation, signature verification,
+// publication age, and the s= key match). Both follow ntcp2.md §"Published
+// Addresses" ("The current Noise static public key (s) for this RouterAddress")
+// and §"3) SessionConfirmed" ("Bob must perform the usual Router Info
+// validation ... Bob must verify that Alice's static key received in the first
+// frame matches the static key in the Router Info").
+//
+// A hand-built byte stub cannot satisfy either check any more, so the harness
+// constructs an actual document. The signing key is freshly generated: the
+// responder verifies the signature against the identity inside the RouterInfo,
+// not against any preconfigured hash, so a throwaway identity is valid.
+func routerInfoAdvertisingKey(t *testing.T, pub []byte) []byte {
+	t.Helper()
+
+	ed25519Priv, err := ed25519.GenerateEd25519Key()
+	require.NoError(t, err)
+	signingPriv, ok := ed25519Priv.(ed25519.Ed25519PrivateKey)
+	require.True(t, ok)
+	signingPub, err := signingPriv.Public()
+	require.NoError(t, err)
+
+	cryptoPub, err := curve25519.NewCurve25519PublicKey(pub)
+	require.NoError(t, err)
+
+	cert, err := key_certificate.NewEd25519X25519KeyCertificate()
+	require.NoError(t, err)
+
+	padding := make([]byte, keys_and_cert.KEYS_AND_CERT_DATA_SIZE-
+		cert.CryptoSize()-cert.SigningPublicKeySize())
+	_, err = i2prand.Read(padding)
+	require.NoError(t, err)
+
+	identity, err := router_identity.NewRouterIdentity(cryptoPub, signingPub, &cert.Certificate, padding)
+	require.NoError(t, err)
+
+	published := time.Now()
+	addr, err := router_address.NewRouterAddress(3, published.Add(24*time.Hour), "NTCP2", map[string]string{
+		"host": "203.0.111.5",
+		"port": "3333",
+		"s":    i2pbase64.I2PEncoding.EncodeToString(pub),
+		"v":    "2",
+	})
+	require.NoError(t, err)
+
+	ri, err := router_info.NewRouterInfo(
+		identity,
+		published,
+		[]*router_address.RouterAddress{addr},
+		map[string]string{"netId": "2", "router.version": "0.9.64"},
+		&signingPriv,
+		signature.SIGNATURE_TYPE_EDDSA_SHA512_ED25519,
+	)
+	require.NoError(t, err)
+	require.NoError(t, ri.Validate())
+
+	riBytes, err := ri.Bytes()
+	require.NoError(t, err)
+	return riBytes
 }
 
 // TestExecuteHandshake_PerformsNTCP2WireHandshake is the regression test for the
