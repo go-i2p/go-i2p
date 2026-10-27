@@ -82,7 +82,7 @@ type RouteRequest struct {
 	DestinationPubKey [32]byte              // X25519 public key of the destination
 	Payload           []byte                // Raw message data to send
 	ExpirationMs      uint64                // Expiration timestamp in ms since epoch (0 = none)
-	Nonce             uint32                // Nonce of the client message, echoed in every status (i2cp.rst:1405-1408)
+	Nonce             uint32                // Nonce of the client message, echoed in every status (i2cp.rst:1417-1419)
 	StatusCallback    MessageStatusCallback // Optional delivery status callback (nil allowed)
 }
 
@@ -170,7 +170,7 @@ func checkMessageExpiration(session *Session, messageID uint32, expirationMs uin
 // notifyStatusCallback invokes the status callback if provided.
 //
 // The nonce of the client message that produced this status is passed through
-// unchanged: i2cp.rst:1405-1408 ("That message will contain the same nonce sent
+// unchanged: i2cp.rst:1417-1419 ("That message will contain the same nonce sent
 // here") and i2cp.rst:1464-1467 for SendMessageExpires. Reporting 0 here would
 // make every asynchronous MessageStatus refer to a different message than the
 // synchronous "accepted" status, so clients could not correlate them.

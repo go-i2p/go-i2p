@@ -372,8 +372,10 @@ func TestW8_UnsupportedMessageType_EndToEndConnectionLoop(t *testing.T) {
 // TestW8_SessionConfigMapping_SortOrderEnforced verifies the spec requirement
 // that the Mapping be sorted by key, delegated to upstream common/data, which
 // validates the order on read (data/mapping_values.go validateMappingSortOrder).
-// i2cp.rst:410-412: "The Mapping ... must be sorted ... otherwise the signature
-// will not validate."
+// i2cp.rst:410-411 states it as: "The [Mapping]_ must be sorted by key so that
+// the signature will be validated correctly in the router." (quoted verbatim;
+// the consequence is that an unsorted Mapping fails signature validation, which
+// is what the upstream check enforces at parse time.)
 func TestW8_SessionConfigMapping_SortOrderEnforced(t *testing.T) {
 	// "inbound.length" must precede "outbound.length"; this payload is sorted.
 	sorted := buildMappingPayload(t, [][2]string{

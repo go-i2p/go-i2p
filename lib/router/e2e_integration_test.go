@@ -649,8 +649,13 @@ func (env *e2eTestEnvironment) CompleteGarlicHandshake(t *testing.T, nsMsg i2np.
 		}
 	}
 
-	// Receiver sends NSR to complete the handshake
-	nsrPayload, err := noiseratchet.BuildNSPayload([]byte("nsr"))
+	// Receiver sends NSR to complete the handshake. The reply body carries only a
+	// Garlic Clove: ecies.rst §"Block Ordering Rules" forbids the DateTime block
+	// in a New Session Reply, so the generic builder is used rather than
+	// BuildNSPayload (which is the New Session helper and prepends DateTime).
+	nsrPayload, err := noiseratchet.NewPayloadBuilder().
+		AddBlock(noiseratchet.PayloadBlock{Type: noiseratchet.BlockGarlicClove, Data: []byte("nsr")}).
+		Build()
 	require.NoError(t, err, "Failed to build NSR payload")
 	nsrMsg, err := env.receiverGarlicManager.EncryptNewSessionReply(*sessionHash, nsrPayload)
 	require.NoError(t, err, "Failed to encrypt NSR")

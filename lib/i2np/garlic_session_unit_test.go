@@ -31,7 +31,15 @@ func completeGarlicHandshake(t *testing.T, senderSM, receiverSM *GarlicSessionMa
 	require.NoError(t, err, "NS decrypt")
 	require.NotNil(t, sessionHash, "sessionHash must be non-nil for New Session")
 
-	nsrPayload, err := noiseratchet.BuildNSPayload([]byte("nsr"))
+	// A New Session Reply may carry only Garlic Clove (11), Options (5) or
+	// Padding (254) — ecies.rst §"Block Ordering Rules" states "No other blocks
+	// are allowed" for the reply, in contrast to the New Session where DateTime
+	// is required and must come first. BuildNSPayload is the New Session helper
+	// and prepends a DateTime block, so the reply body is assembled with the
+	// generic builder instead.
+	nsrPayload, err := noiseratchet.NewPayloadBuilder().
+		AddBlock(noiseratchet.PayloadBlock{Type: noiseratchet.BlockGarlicClove, Data: []byte("nsr")}).
+		Build()
 	require.NoError(t, err, "build NSR payload")
 	nsrMsg, err := receiverSM.EncryptNewSessionReply(*sessionHash, nsrPayload)
 	require.NoError(t, err, "encrypt NSR")

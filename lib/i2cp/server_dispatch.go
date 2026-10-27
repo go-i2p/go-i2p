@@ -1286,7 +1286,7 @@ func (s *Server) validateOutboundPool(session *Session) error {
 // launch async routing goroutine. Returns the acceptance response message, or
 // nil when the client asked for no status at all.
 //
-// i2cp.rst:1405-1408: "As soon as the SendMessageMessage_ arrives fully intact,
+// i2cp.rst:1417-1419: "As soon as the SendMessageMessage_ arrives fully intact,
 // the router should return a MessageStatusMessage_ stating that it has been
 // accepted for delivery. That message will contain the same nonce sent here."
 //
@@ -1295,7 +1295,7 @@ func (s *Server) validateOutboundPool(session *Session) error {
 // i2cp.messageReliability=none for this message only." The message is still
 // routed; only the status reporting is suppressed.
 //
-// i2cp.rst:1421-1423: "the router does not send either MessageStatusMessage_ if
+// i2cp.rst:1423-1424: "the router does not send either MessageStatusMessage_ if
 // i2cp.messageReliability=none".
 //
 // i2cp.rst:1431-1437: in a messageReliability=none session a nonzero nonce opts
@@ -1338,10 +1338,10 @@ func (s *Server) acceptAndRouteMessage(
 // client for a message with the given nonce, in a session with the given
 // i2cp.messageReliability value.
 //
-// nonce 0 always means "send no status" (i2cp.rst:1426-1429, :1474-1477).
+// nonce 0 always means "send no status" (i2cp.rst:1426-1429, :1472-1475).
 // In a messageReliability=none session no status is sent either, except that a
 // nonzero nonce requests the later success/failure status only, never the
-// "accepted" one (i2cp.rst:1421-1423, :1431-1437, :1481-1487).
+// "accepted" one (i2cp.rst:1423-1424, :1431-1437, :1477-1483).
 //
 // accepted distinguishes the synchronous "accepted" status from the
 // asynchronous delivery status.
@@ -1577,7 +1577,7 @@ func (s *Server) routeMessageWithStatus(session *Session, messageID uint32, send
 // delivery MessageStatus response to the client.
 //
 // The nonce carried in the status is the nonce of the client message the status
-// refers to (i2cp.rst:1405-1408: "That message will contain the same nonce sent
+// refers to (i2cp.rst:1417-1419: "That message will contain the same nonce sent
 // here", and the same rule for SendMessageExpires at :1464-1467), so it is taken
 // from the callback argument, which the message router propagates from
 // RouteRequest.Nonce. A nonce of 0 means the client asked for no status at all,
