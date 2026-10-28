@@ -121,5 +121,4 @@ func TestApplyReplayDetector_NilSafe(t *testing.T) {
 	applyReplayDetector(nil, NewDefaultHandler())
 
 	applyReplayDetector(newTestNTCP2Config(t, false), nil)
-
 }

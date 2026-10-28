@@ -51,12 +51,12 @@ func TestKnownReseedServers_NoDuplicateURLs(t *testing.T) {
 func TestKnownReseedServers_ContainsI2pGitOrg(t *testing.T) {
 	found := false
 	for _, server := range KnownReseedServers {
-		if strings.Contains(server.URL, "reseed.i2pgit.org") {
+		if strings.Contains(server.URL, "reseed2.i2pgit.org") {
 			found = true
 			break
 		}
 	}
-	assert.True(t, found, "reseed.i2pgit.org should be in KnownReseedServers")
+	assert.True(t, found, "reseed2.i2pgit.org should be in KnownReseedServers")
 }
 
 func TestReseedStrategyConstants(t *testing.T) {

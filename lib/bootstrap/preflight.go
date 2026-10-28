@@ -44,7 +44,7 @@ func TestNetworkConnectivity() error {
 func TestDNSResolution() error {
 	log.Debug("Testing DNS resolution...")
 	testHosts := []string{
-		"reseed.i2pgit.org",
+		"reseed2.i2pgit.org",
 	}
 
 	for _, host := range testHosts {
@@ -75,7 +75,7 @@ func TestDNSResolution() error {
 func TestTCPConnectivity() error {
 	log.Debug("Testing TCP connectivity to reseed server...")
 	tcpTestHosts := []string{
-		"reseed.i2pgit.org:443",
+		"reseed2.i2pgit.org:443",
 	}
 
 	for _, hostPort := range tcpTestHosts {

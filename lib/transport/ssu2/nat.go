@@ -5,12 +5,13 @@ import (
 	"crypto/ed25519"
 	cryptorand "crypto/rand"
 	"fmt"
-	"github.com/go-i2p/go-i2p/lib/transport"
 	"net"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/go-i2p/go-i2p/lib/transport"
 
 	i2pbase64 "github.com/go-i2p/common/base64"
 	"github.com/go-i2p/common/data"

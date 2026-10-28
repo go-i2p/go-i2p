@@ -219,8 +219,7 @@ func ReadShortBuildRequestRecord(data []byte) (BuildRequestRecord, error) {
 	// short cleartext (i2pd SHORT_REQUEST_RECORD_TUNNEL_BUILD_OPTIONS_OFFSET).
 	// Parse best-effort: a malformed or empty options block leaves the
 	// bandwidth fields at zero, matching i2pd's tolerant handling.
-	record.MinBandwidthKBps, record.RequestedBandwidthKBps, record.LimitBandwidthKBps =
-		parseShortBuildOptions(data[56:ShortCleartextLen])
+	record.MinBandwidthKBps, record.RequestedBandwidthKBps, record.LimitBandwidthKBps = parseShortBuildOptions(data[56:ShortCleartextLen])
 
 	log.WithFields(logger.Fields{"at": "ReadShortBuildRequestRecord"}).Debug("ReadShortBuildRequestRecord: parsed 154-byte STBM cleartext")
 	return record, nil

@@ -4,8 +4,9 @@ import (
 	cryptorand "crypto/rand"
 	"encoding/binary"
 	"fmt"
-	"github.com/go-i2p/go-i2p/lib/transport"
 	"time"
+
+	"github.com/go-i2p/go-i2p/lib/transport"
 
 	"github.com/samber/oops"
 )

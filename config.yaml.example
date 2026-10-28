@@ -90,11 +90,11 @@ bootstrap:
   # reseed_file_path: ""
   
   # Reseed server configurations
-  # By default, only reseed.i2pgit.org (maintained by go-i2p dev team) is configured.
+  # By default, only reseed2.i2pgit.org (maintained by go-i2p dev team) is configured.
   # Additional servers should be verified against the official I2P repository:
   # https://github.com/i2p/i2p.i2p/tree/master/installer/resources/certificates/reseed
   reseed_servers:
-    - url: "https://reseed.i2pgit.org/"
+    - url: "https://reseed2.i2pgit.org/"
       su3_fingerprint: "hankhill19580_at_gmail.com.crt"
     
     # Additional reseed servers from the I2P network (uncomment to enable):

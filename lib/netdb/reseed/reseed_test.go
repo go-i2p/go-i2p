@@ -375,18 +375,18 @@ func TestEnsureReseedPath(t *testing.T) {
 	}{
 		{
 			name:     "root URL with trailing slash",
-			input:    "https://reseed.i2pgit.org/",
-			expected: "https://reseed.i2pgit.org/i2pseeds.su3",
+			input:    "https://reseed2.i2pgit.org/",
+			expected: "https://reseed2.i2pgit.org/i2pseeds.su3",
 		},
 		{
 			name:     "root URL without trailing slash",
-			input:    "https://reseed.i2pgit.org",
-			expected: "https://reseed.i2pgit.org/i2pseeds.su3",
+			input:    "https://reseed2.i2pgit.org",
+			expected: "https://reseed2.i2pgit.org/i2pseeds.su3",
 		},
 		{
 			name:     "URL already has SU3 path",
-			input:    "https://reseed.i2pgit.org/i2pseeds.su3",
-			expected: "https://reseed.i2pgit.org/i2pseeds.su3",
+			input:    "https://reseed2.i2pgit.org/i2pseeds.su3",
+			expected: "https://reseed2.i2pgit.org/i2pseeds.su3",
 		},
 		{
 			name:     "URL with custom SU3 path",
@@ -418,7 +418,7 @@ func TestEnsureReseedPath(t *testing.T) {
 
 // TestEnsureReseedPath_DoesNotModifyOriginal verifies the original URL is not mutated
 func TestEnsureReseedPath_DoesNotModifyOriginal(t *testing.T) {
-	u, err := url.Parse("https://reseed.i2pgit.org/")
+	u, err := url.Parse("https://reseed2.i2pgit.org/")
 	require.NoError(t, err)
 
 	original := u.String()
@@ -427,7 +427,7 @@ func TestEnsureReseedPath_DoesNotModifyOriginal(t *testing.T) {
 	// Original should be unchanged
 	assert.Equal(t, original, u.String())
 	// Result should have path appended
-	assert.Equal(t, "https://reseed.i2pgit.org/i2pseeds.su3", result.String())
+	assert.Equal(t, "https://reseed2.i2pgit.org/i2pseeds.su3", result.String())
 }
 
 // TestPerformReseedRequest_RejectsHTTP verifies that plain HTTP URLs are rejected

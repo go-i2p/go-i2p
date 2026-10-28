@@ -30,3 +30,5 @@ err
 midpoint.json
 /.go-stats-generator/
 /.spec-audit/
+/.reseed-test/*
+*.su3

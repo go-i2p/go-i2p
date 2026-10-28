@@ -2,8 +2,9 @@ package ssu2
 
 import (
 	"encoding/binary"
-	"github.com/go-i2p/go-i2p/lib/transport"
 	"time"
+
+	"github.com/go-i2p/go-i2p/lib/transport"
 
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"

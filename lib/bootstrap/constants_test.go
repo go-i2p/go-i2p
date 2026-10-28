@@ -15,7 +15,7 @@ const (
 	testServerFingerprint = "test.crt"
 
 	// testReseedServerURL is a real reseed server URL used in configuration tests.
-	testReseedServerURL = "https://reseed.i2pgit.org/"
+	testReseedServerURL = "https://reseed2.i2pgit.org/"
 
 	// testReseedFingerprint is the fingerprint for the real test reseed server.
 	testReseedFingerprint = "hankhill19580_at_gmail.com.crt"

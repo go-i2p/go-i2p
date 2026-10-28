@@ -389,10 +389,12 @@ func TestType26DispatchHandlesPaddedReply(t *testing.T) {
 			// finalizePendingBuild registers the same context on the ReplyProcessor
 			// under the tunnel ID; mirror both registrations here.
 			require.NoError(t, tm.replyProcessor.RegisterPendingBuild(
-				result.TunnelID, result.ReplyKeys, result.ReplyIVs, true, hopCount))
+				result.TunnelID, result.ReplyKeys, result.ReplyIVs, true, hopCount,
+			))
 			require.NoError(t, tm.replyProcessor.SetPendingBuildNoiseHashes(result.TunnelID, f.noiseHashes))
 			require.NoError(t, tm.replyProcessor.SetPendingBuildRecordSlots(
-				result.TunnelID, f.recordSlots, true, f.phonyChecksum))
+				result.TunnelID, f.recordSlots, true, f.phonyChecksum,
+			))
 
 			recorder := &recordingReplyProcessor{delegate: tm}
 			processor := NewMessageProcessor()

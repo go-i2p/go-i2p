@@ -73,7 +73,7 @@ func TestPerformReseed_BootstrapTypeSelection(t *testing.T) {
 					ReseedFilePath:   tt.reseedFilePath,
 					ReseedServers: []*config.ReseedConfig{
 						{
-							URL:            "https://reseed.i2pgit.org/",
+							URL:            "https://reseed2.i2pgit.org/",
 							SU3Fingerprint: "hankhill19580_at_gmail.com.crt",
 						},
 					},
@@ -123,7 +123,7 @@ func TestBootstrapTypeIntegration(t *testing.T) {
 					BootstrapType:    tc.bootstrapType,
 					ReseedServers: []*config.ReseedConfig{
 						{
-							URL:            "https://reseed.i2pgit.org/",
+							URL:            "https://reseed2.i2pgit.org/",
 							SU3Fingerprint: "hankhill19580_at_gmail.com.crt",
 						},
 					},

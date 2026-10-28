@@ -12,7 +12,7 @@ package config
 // when using the default "auto" bootstrap type.
 var KnownReseedServers = []*ReseedConfig{
 	// go-i2p dev team server (primary)
-	{URL: "https://reseed.i2pgit.org/", SU3Fingerprint: "hankhill19580_at_gmail.com.crt"},
+	{URL: "https://reseed2.i2pgit.org/", SU3Fingerprint: "hankhill19580_at_gmail.com.crt"},
 	// Community servers
 	{URL: "https://reseed.sahil.world/", SU3Fingerprint: "sahil_at_mail.i2p.crt"},
 	{URL: "https://i2p.diyarciftci.xyz/", SU3Fingerprint: "diyarciftci_at_protonmail.com.crt"},

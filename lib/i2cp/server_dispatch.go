@@ -1153,7 +1153,8 @@ func blindedPeerHash(info *BlindingInfoPayload) (common.Hash, error) {
 
 	case BlindingEndpointHostname:
 		return common.Hash{}, oops.Errorf(
-			"BlindingInfo hostname endpoint %q cannot be resolved to a destination hash without an address book", info.Hostname)
+			"BlindingInfo hostname endpoint %q cannot be resolved to a destination hash without an address book", info.Hostname,
+		)
 
 	default:
 		return common.Hash{}, oops.Errorf("unsupported BlindingInfo endpoint type: %d", info.Endpoint)

@@ -2,9 +2,10 @@ package ssu2
 
 import (
 	"encoding/binary"
-	"github.com/go-i2p/go-i2p/lib/transport"
 	"net"
 	"time"
+
+	"github.com/go-i2p/go-i2p/lib/transport"
 
 	i2ped25519 "github.com/go-i2p/crypto/ed25519"
 

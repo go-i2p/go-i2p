@@ -145,7 +145,7 @@ type BootstrapDefaults struct {
 	ReseedRetryInterval time.Duration
 
 	// ReseedServers are the default reseed server configurations
-	// Only reseed.i2pgit.org is included by default (maintained by go-i2p dev team)
+	// Only reseed2.i2pgit.org is included by default (maintained by go-i2p dev team)
 	// Additional reseed servers should be configured via config file
 	ReseedServers []*ReseedConfig
 

@@ -172,7 +172,8 @@ func TestSendHolePunch_SpecShapeAndOpensAtAlice(t *testing.T) {
 	timestamp := uint32(time.Now().Unix())
 	sig, err := ssu2noise.SignRelayResponse(
 		charliePriv, bobHash, nonce, timestamp, 2,
-		29000, net.ParseIP("198.51.100.4").To4())
+		29000, net.ParseIP("198.51.100.4").To4(),
+	)
 	require.NoError(t, err)
 	resp := &ssu2noise.RelayResponseBlock{
 		Code:        0,
@@ -517,7 +518,8 @@ func TestVerifyPeerTestSignature_Msg1SignedByAliceVerifies(t *testing.T) {
 
 	sig, err := ssu2noise.SignPeerTest(
 		*aliceKey,
-		tr.getOurIdentityHash(), nil, 2, nonce, timestamp, 12345, aliceIP)
+		tr.getOurIdentityHash(), nil, 2, nonce, timestamp, 12345, aliceIP,
+	)
 	require.NoError(t, err)
 
 	block := &ssu2noise.PeerTestBlock{
@@ -565,7 +567,8 @@ func TestVerifyPeerTestSignature_Msg3NeedsAliceContext(t *testing.T) {
 	// Charlie signs the agreement with bhash = Bob (us) and ahash = Alice.
 	sig, err := ssu2noise.SignPeerTest(
 		*charlieKey,
-		tr.getOurIdentityHash(), &aliceHash, 2, nonce, timestamp, 12345, aliceIP)
+		tr.getOurIdentityHash(), &aliceHash, 2, nonce, timestamp, 12345, aliceIP,
+	)
 	require.NoError(t, err)
 
 	block := &ssu2noise.PeerTestBlock{

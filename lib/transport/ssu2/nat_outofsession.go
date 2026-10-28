@@ -2,9 +2,10 @@ package ssu2
 
 import (
 	cryptorand "crypto/rand"
-	"github.com/go-i2p/go-i2p/lib/transport"
 	"net"
 	"time"
+
+	"github.com/go-i2p/go-i2p/lib/transport"
 
 	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/util/logutil"

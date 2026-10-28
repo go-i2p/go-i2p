@@ -114,7 +114,7 @@ func (st LeaseSetStoreType) validate() error {
 // frameLeaseSetByStoreType returns exactly the bytes of the lease set structure
 // the store type says is next, plus whatever follows it (the private key list).
 // Framing is delegated to the upstream reader for that structure.
-func frameLeaseSetByStoreType(payload []byte, st LeaseSetStoreType) (leaseSetBytes []byte, remainder []byte, err error) {
+func frameLeaseSetByStoreType(payload []byte, st LeaseSetStoreType) (leaseSetBytes, remainder []byte, err error) {
 	if err := st.validate(); err != nil {
 		return nil, nil, err
 	}
@@ -156,7 +156,7 @@ func frameLeaseSetByStoreType(payload []byte, st LeaseSetStoreType) (leaseSetByt
 // larger structure, which is not the CreateLeaseSet2 case (the private key list
 // follows), so the length is computed from the destination's key certificate.
 // Each component size comes from exported upstream constants and accessors.
-func frameLeaseSetV1(payload []byte) (leaseSetBytes []byte, remainder []byte, err error) {
+func frameLeaseSetV1(payload []byte) (leaseSetBytes, remainder []byte, err error) {
 	dest, rest, err := lease_set.ReadDestinationFromLeaseSet(payload)
 	if err != nil {
 		return nil, nil, oops.Wrapf(err, "invalid LeaseSet")
