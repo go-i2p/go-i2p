@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SSU2: what "experimental" means - go-i2p/go-i2p</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <nav class="nav-sidebar">
+    <div class="repo-info">
+      <h2>
+        <a href="../index.html">go-i2p/go-i2p</a>
+      </h2>
+      <div class="repo-meta">
+        📝 2592 commits
+         • 📜 MIT License
+      </div>
+    </div>
+    
+    <ul class="nav-links">
+      <li><a href="../index.html">Repository Overview</a></li>
+      
+      
+        <div class="nav-section-title">Documentation:</div>
+        
+          <li><a href="../docs/docs/anonymity-logging.html" >Anonymity-Safe Logging</a></li>
+        
+          <li><a href="../docs/CONTRIBUTING.html" >Contributing</a></li>
+        
+          <li><a href="../docs/docs/i2pcontrol.html" >I2PControl JSON-RPC Server User Guide</a></li>
+        
+          <li><a href="../docs/docs/llm-disclosure.html" >Llm Disclosure</a></li>
+        
+          <li><a href="../docs/docs/interop-matrix.html" >Mixed-Peer Interoperability Matrix</a></li>
+        
+          <li><a href="../docs/lib/netdb/ISOLATION.html" >NetDB Client/Router Isolation</a></li>
+        
+          <li><a href="../docs/RELEASE_NOTES.html" >RELEASE NOTES</a></li>
+        
+          <li><a href="../docs/docs/ssu2-experimental.html" class="active">SSU2: what "experimental" means</a></li>
+        
+          <li><a href="../docs/template.html" >Template</a></li>
+        
+          <li><a href="../docs/lib/i2np/tunnel_build_f060_f064_fix.html" >Tunnel Build F060 F064 Fix</a></li>
+        
+      
+    </ul>
+    
+    <div class="nav-footer">
+      <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a>
+    </div>
+  </nav>
+  
+  <div class="main-content">
+    <header class="page-header">
+      <h1>SSU2: what "experimental" means - go-i2p/go-i2p</h1>
+    </header>
+    
+    <main>
+      <div class="doc-content">
+        <h1 id="ssu2-what-experimental-means">SSU2: what &ldquo;experimental&rdquo; means</h1>
+
+<p>Updated: 2026-10-26</p>
+
+<p>The README marks the SSU2 transport <strong>currently experimental</strong>
+(<code>README.md</code>, and the <code>--transport.ssu2-enabled</code> help text). That label has
+until now carried no specifics. This document states exactly what is and is not
+proven, what the known gaps are, and what has to happen before the designation
+can be dropped.</p>
+
+<p>SSU2 is enabled by default (<code>lib/config/defaults.go</code> →
+<code>DefaultTransportConfig.SSU2Enabled = true</code>), so &ldquo;experimental&rdquo; here describes
+confidence level, not an opt-in preview.</p>
+
+<h2 id="what-is-implemented">What is implemented</h2>
+
+<p>Everything the spec&rsquo;s core SSU2 surface requires, in
+<a href="../lib/transport/ssu2"><code>lib/transport/ssu2</code></a> (22 non-test files) on top of the
+<code>go-noise/ssu2</code> Noise state machine:</p>
+
+<table>
+<thead>
+<tr>
+<th>Area</th>
+<th>Status</th>
+<th>Where</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td>Session handshake (Noise XK)</td>
+<td>Implemented</td>
+<td>delegated to <code>go-noise/ssu2/handshake</code></td>
+</tr>
+
+<tr>
+<td>Connection management</td>
+<td>Implemented</td>
+<td><code>transport.go</code>, <code>session.go</code></td>
+</tr>
+
+<tr>
+<td>Fragmentation / reassembly</td>
+<td>Implemented</td>
+<td><code>fragments.go</code></td>
+</tr>
+
+<tr>
+<td>Congestion control</td>
+<td>Implemented</td>
+<td><code>session.go</code> (<code>congestionCtrl</code>, <code>sendWithCongestionControl</code>)</td>
+</tr>
+
+<tr>
+<td>Connection migration</td>
+<td>Implemented</td>
+<td><code>go-noise/ssu2/session/conn_read.go</code> (path validation per spec §&rdquo;Connection Migration&rdquo;)</td>
+</tr>
+
+<tr>
+<td>Peer tests (all roles)</td>
+<td>Implemented</td>
+<td><code>nat.go</code>, <code>nat_state.go</code>, <code>nat_ri.go</code></td>
+</tr>
+
+<tr>
+<td>Introducers</td>
+<td>Implemented</td>
+<td><code>introducer_dial.go</code>, <code>ExtractIntroducers</code></td>
+</tr>
+
+<tr>
+<td>Hole punching</td>
+<td>Implemented</td>
+<td><code>nat_outofsession.go</code>, <code>nat_outofsession_inbound.go</code></td>
+</tr>
+
+<tr>
+<td>Relay requests / responses / intros</td>
+<td>Implemented</td>
+<td>block handling in <code>framing.go</code></td>
+</tr>
+
+<tr>
+<td>Path challenge / new token</td>
+<td>Implemented</td>
+<td>block handling in <code>framing.go</code></td>
+</tr>
+
+<tr>
+<td>Out-of-session DateTime skew validation</td>
+<td>Implemented</td>
+<td><code>nat_outofsession_inbound.go</code> (±2 min, <code>ssu2.rst:4036-4039</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>323 tests exercise this package, including <code>spec_compliance_test.go</code>, which
+validates all 19 block types against the live specification.</p>
+
+<h2 id="what-is-not-proven">What is NOT proven</h2>
+
+<p>This is the substance of the experimental label.</p>
+
+<h3 id="1-no-live-network-interoperability-evidence">1. No live-network interoperability evidence</h3>
+
+<p><code>docs/interop-matrix.md</code> records the evidence produced by the daily
+live-network suite (<code>TestLiveNetwork*</code> against real Java I2P and i2pd peers).
+The paths it asserts are bootstrap/peer overlap, RouterInfo publication and
+LeaseSet publication/retrieval. <strong>None of them asserts anything SSU2-specific.</strong>
+The only SSU2 reference in <code>lib/router/live_network_integration_test.go</code> is a
+diagnostic log of <code>ssu2.ExtractIntroducers(addr)</code>.</p>
+
+<p>So: SSU2 is proven against <strong>itself</strong> (loopback and harness peers built from
+this same code plus <code>go-noise</code>), and against the specification text, but not
+against a Java or i2pd peer on the real network. NTCP2 is proven against both.
+A transport that has never completed a handshake with a different
+implementation is exactly what &ldquo;experimental&rdquo; is meant to signal.</p>
+
+<p>The gap is partly environmental: outbound SSU2 needs UDP reachability, and the
+live suite runs in a NAT&rsquo;d sandbox where the router&rsquo;s own RouterAddress is
+published as capabilities-only (see the publish-RouterInfo row of
+<code>docs/interop-matrix.md</code>). Demonstrating inbound SSU2 requires a deployment with
+a routable address.</p>
+
+<h3 id="2-initiator-side-replay-cache-is-not-enforced">2. Initiator-side replay cache is not enforced</h3>
+
+<p><code>ssu2.rst:1576-1581</code> requires the initiator (&ldquo;Alice&rdquo;) to &ldquo;maintain a local
+cache of previously-used handshake values and reject duplicates&rdquo;, with entries
+living at least 2*D. <code>go-noise</code> creates that cache only for responders
+(<code>ssu2/handshake/handshake_handler.go</code>: <code>if !initiator { handler.replayCache = … }</code>),
+so a dialing router has no duplicate-handshake cache.</p>
+
+<p><code>lib/transport/ssu2/transport.go</code> adds a transport-level check
+(<code>checkConnectionReplay</code> → <code>checkReplayToken</code> → <code>handler.CheckReplay</code>) that does
+maintain a cache, but it runs on <strong>inbound</strong> connections only, so it covers the
+responder case that go-noise already handles and not the initiator case the spec
+also requires. The token system limits the impact of a replayed Session Request
+(<code>ssu2.rst:4050-4056</code> — &ldquo;a replayed Session Request message will never have a
+valid token&rdquo;), which is why this is a gap rather than a critical hole.</p>
+
+<h3 id="3-peer-tests-and-introducers-are-individually-flagged-experimental">3. Peer tests and introducers are individually flagged experimental</h3>
+
+<p>The README marks both sub-items experimental: peer tests have all roles
+implemented with end-to-end integration ongoing, and introducer registration and
+republish are wired but not proven against live introducers.</p>
+
+<h3 id="4-deferred-replay-checks-are-observable-but-not-resolvable-here">4. Deferred replay checks are observable but not resolvable here</h3>
+
+<p>When <code>GetReplayToken()</code> returns nil, the transport counts the event
+(<code>metrics.go</code> → <code>ReplayChecksDeferred</code>) and proceeds. The counter is the thing
+to watch on a real deployment: a large deferred count means the replay check is
+being skipped in practice, not merely in theory.</p>
+
+<h2 id="production-readiness-checklist">Production-readiness checklist</h2>
+
+<p>The experimental designation can be removed when all of these hold:</p>
+
+<ul>
+<li>[ ] <strong>Live interop, outbound</strong>: <code>TestLiveNetwork*</code> establishes at least one
+  SSU2 session to a Java peer and one to an i2pd peer, asserted by transport
+  type rather than inferred from a successful netdb operation.</li>
+<li>[ ] <strong>Live interop, inbound</strong>: a peer on the public network dials this
+  router&rsquo;s SSU2 address and completes a handshake, with a routable
+  (non-caps-only) published RouterAddress.</li>
+<li>[ ] <strong>Interop matrix updated</strong>: <code>docs/interop-matrix.md</code> gains an SSU2 row
+  with the same pass criteria as the NTCP2 paths.</li>
+<li>[ ] <strong>Initiator replay cache</strong>: either enforced upstream in <code>go-noise</code> for
+  <code>initiator == true</code>, or enforced in this transport on the dial path.</li>
+<li>[ ] <strong>Peer tests</strong>: end-to-end NAT detection against a real Java/i2pd peer,
+  producing a correct external-address verdict.</li>
+<li>[ ] <strong>Introducers</strong>: a real relay through a live introducer to a firewalled
+  peer.</li>
+<li>[ ] <strong>Soak</strong>: sustained traffic over SSU2 sessions with no AEAD-failure
+  terminations and a bounded <code>ReplayChecksDeferred</code> count.</li>
+</ul>
+
+<p>Until then, routers that must interoperate with the widest set of peers should
+keep NTCP2 enabled; SSU2 adds reachability where UDP works and is safe to run
+alongside it, but its real-network behaviour is unverified.</p>
+
+      </div>
+    </main>
+    
+    <footer class="page-footer">
+      <p>Generated on 2026-10-29 18:22:34 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
+    </footer>
+  </div>
+</body>
+</html>

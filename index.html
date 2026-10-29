@@ -13,7 +13,7 @@
         <a href="index.html">go-i2p/go-i2p</a>
       </h2>
       <div class="repo-meta">
-        📝 2583 commits
+        📝 2592 commits
          • 📜 MIT License
       </div>
     </div>
@@ -38,6 +38,8 @@
         
           <li><a href="docs/RELEASE_NOTES.html">RELEASE NOTES</a></li>
         
+          <li><a href="docs/docs/ssu2-experimental.html">SSU2: what "experimental" means</a></li>
+        
           <li><a href="docs/template.html">Template</a></li>
         
           <li><a href="docs/lib/i2np/tunnel_build_f060_f064_fix.html">Tunnel Build F060 F064 Fix</a></li>
@@ -58,12 +60,12 @@
       <div class="repo-stats">
         
         <div class="repo-stat">
-          <span>📝</span> <span>2583 commits</span>
+          <span>📝</span> <span>2592 commits</span>
         </div>
         
         
         <div class="repo-stat">
-          <span>📅</span> <span>Last updated: October 26, 2026</span>
+          <span>📅</span> <span>Last updated: October 29, 2026</span>
         </div>
         
         
@@ -158,7 +160,7 @@
 <ul>
 <li>[X] Garlic messages (thin adapter in <code>lib/i2np/garlic_session.go</code> → <code>go-noise/ratchet.SessionManager</code>)</li>
 <li>[X] ECIES-X25519-AEAD-Ratchet (primary, implemented in <code>go-noise/ratchet/</code>)</li>
-<li>[X] Tunnel build record crypto (adapter in <code>lib/i2np/build_record_crypto.go</code> → <code>go-noise/ratchet.BuildRecordCrypto</code>)</li>
+<li>[X] Tunnel build record crypto (adapter in <code>lib/i2np/build_record_crypto_short.go</code> → <code>github.com/go-i2p/crypto/tunnel</code>)</li>
 <li>[ ] ElGamal/AES+SessionTag (not implemented - ECIES-only destinations supported)</li>
 </ul></li>
 <li>I2NP
@@ -200,7 +202,7 @@
 <li>[X] Session lifecycle management</li>
 <li>[X] Message queuing and worker threads</li>
 </ul></li>
-<li>SSU2 (<strong>currently experimental</strong> — see <code>--transport.ssu2-enabled</code> help text)
+<li>SSU2 (<strong>currently experimental</strong> — see <a href="docs/ssu2-experimental.md" target="_blank">docs/ssu2-experimental.md</a> for what is and is not proven, and the <code>--transport.ssu2-enabled</code> help text)
 
 <ul>
 <li>[X] Session handshake</li>
@@ -365,7 +367,7 @@ requiring acknowledgment must implement their own delivery-confirmation layer
                 eyedeekay
               </div>
               <div class="contributor-commits">
-                2180 commits
+                2189 commits
               </div>
             </div>
           </div>
@@ -437,7 +439,7 @@ requiring acknowledgment must implement their own delivery-confirmation layer
     </main>
     
     <footer class="page-footer">
-      <p>Generated on 2026-10-29 16:42:50 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
+      <p>Generated on 2026-10-29 18:22:34 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
     </footer>
   </div>
 </body>
