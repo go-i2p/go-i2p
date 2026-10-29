@@ -18,6 +18,11 @@ import (
 type ReseedBootstrap struct {
 	// Configuration containing reseed servers
 	config *config.BootstrapConfig
+
+	// health tracks per-server reseed outcomes so the multi-server path can prefer
+	// servers that have historically been fast and reliable. It is shared across
+	// reseed cycles for the lifetime of the bootstrap.
+	health *reseedHealthTracker
 }
 
 // NewReseedBootstrap creates a new reseeder with the provided configuration
@@ -51,6 +56,7 @@ func NewReseedBootstrap(config *config.BootstrapConfig) *ReseedBootstrap {
 	}
 	return &ReseedBootstrap{
 		config: config,
+		health: newReseedHealthTracker(),
 	}
 }
 

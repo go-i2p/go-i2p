@@ -78,7 +78,7 @@ func (rb *ReseedBootstrap) MultiServerReseed(ctx context.Context, n int) ([]rout
 		minServers = 1
 	}
 
-	servers := rb.shuffleServers()
+	servers := rb.rankServersByHealth()
 	logMultiServerReseedStart(minServers, len(servers), rb.config.ReseedStrategy)
 
 	results := rb.fetchFromServers(ctx, servers, minServers)
@@ -110,6 +110,39 @@ func (rb *ReseedBootstrap) shuffleServers() []*config.ReseedConfig {
 		servers[i], servers[j] = servers[j], servers[i]
 	})
 	return servers
+}
+
+// rankServersByHealth returns a copy of the configured servers ordered so that
+// historically healthy (fast and reliable) servers are tried first.
+//
+// The servers are first shuffled (preserving the privacy property of not always
+// contacting the same servers first) and then stably sorted by descending health score.
+// Because the sort is stable, servers with equal scores — including all servers with no
+// recorded history, which is the case on the very first reseed — keep their random
+// order, so the ranking degrades gracefully to a plain shuffle when no health data
+// exists yet.
+func (rb *ReseedBootstrap) rankServersByHealth() []*config.ReseedConfig {
+	servers := rb.shuffleServers()
+	if rb.health == nil {
+		return servers
+	}
+
+	urls := make([]string, len(servers))
+	for i, s := range servers {
+		urls[i] = s.URL
+	}
+	rankedURLs := rb.health.rank(urls)
+
+	ranked := make([]*config.ReseedConfig, 0, len(servers))
+	for _, url := range rankedURLs {
+		for _, s := range servers {
+			if s.URL == url {
+				ranked = append(ranked, s)
+				break
+			}
+		}
+	}
+	return ranked
 }
 
 // fetchState holds the shared state for concurrent server fetching operations.
@@ -218,6 +251,12 @@ func (rb *ReseedBootstrap) fetchFromServers(ctx context.Context, servers []*conf
 }
 
 // fetchFromSingleServer fetches RouterInfos from a single reseed server.
+//
+// The request is bounded by a per-server timeout (reseedRequestTimeout) derived from the
+// passed context, so a slow or unresponsive server is cut off rather than blocking the
+// whole reseed. Because the derived context is also cancelled when the parent context is
+// cancelled (the overall ReseedTimeout, or the early-exit cancel once enough servers
+// succeed), in-flight requests are actually aborted in both cases.
 func (rb *ReseedBootstrap) fetchFromSingleServer(ctx context.Context, server *config.ReseedConfig) ReseedResult {
 	startTime := time.Now()
 
@@ -237,11 +276,19 @@ func (rb *ReseedBootstrap) fetchFromSingleServer(ctx context.Context, server *co
 		}
 	}
 
+	// Derive a per-server timeout so a single slow server cannot stall the reseed.
+	// The derived context is also cancelled when the parent is cancelled, so the
+	// early-exit "enough servers succeeded" cancel and the overall ReseedTimeout both
+	// abort this in-flight request.
+	reseedCtx, cancel := context.WithTimeout(ctx, reseedRequestTimeout)
+	defer cancel()
+
 	reseeder := reseed.NewReseed()
-	routerInfos, err := reseeder.SingleReseed(server.URL)
+	routerInfos, err := reseeder.SingleReseedWithContext(reseedCtx, server.URL)
 	duration := time.Since(startTime)
 
 	if err != nil {
+		rb.recordReseedFailure(server.URL)
 		log.WithError(err).WithFields(logger.Fields{
 			"at":          "(ReseedBootstrap) fetchFromSingleServer",
 			"phase":       "bootstrap",
@@ -259,6 +306,8 @@ func (rb *ReseedBootstrap) fetchFromSingleServer(ctx context.Context, server *co
 	// Validate and filter RouterInfos
 	validRouterInfos := rb.validateAndFilterRouterInfos(routerInfos, server.URL)
 
+	rb.recordReseedSuccess(server.URL, duration)
+
 	log.WithFields(logger.Fields{
 		"at":            "(ReseedBootstrap) fetchFromSingleServer",
 		"phase":         "bootstrap",
@@ -273,6 +322,23 @@ func (rb *ReseedBootstrap) fetchFromSingleServer(ctx context.Context, server *co
 		ServerURL:   server.URL,
 		RouterInfos: validRouterInfos,
 		Duration:    duration,
+	}
+}
+
+// recordReseedSuccess records a successful reseed from the server in the health tracker.
+// It is a no-op when no tracker is present (e.g. in tests that construct ReseedBootstrap
+// directly without going through NewReseedBootstrap).
+func (rb *ReseedBootstrap) recordReseedSuccess(url string, duration time.Duration) {
+	if rb.health != nil {
+		rb.health.recordSuccess(url, duration)
+	}
+}
+
+// recordReseedFailure records a failed reseed from the server in the health tracker.
+// It is a no-op when no tracker is present.
+func (rb *ReseedBootstrap) recordReseedFailure(url string) {
+	if rb.health != nil {
+		rb.health.recordFailure(url)
 	}
 }
 

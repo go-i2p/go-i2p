@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"net"
 	"testing"
 	"time"
 
@@ -378,5 +379,92 @@ func TestContextCancellation(t *testing.T) {
 	// Should return error due to insufficient servers (context cancelled before any fetch)
 	if err == nil {
 		t.Error("MultiServerReseed with cancelled context should return error")
+	}
+}
+
+// TestFetchFromSingleServerHonorsContextTimeout verifies that the per-server
+// reseed request is bound to the caller's context. A hanging reseed server
+// (accepts TCP but never completes the TLS handshake) must be aborted when the
+// parent context deadline passes, rather than running until the 30s client
+// timeout. This guards the fix that routes the parallel path through
+// SingleReseedWithContext instead of SingleReseed (context.Background).
+func TestFetchFromSingleServerHonorsContextTimeout(t *testing.T) {
+	// A TCP listener that accepts connections but never writes, so the client's
+	// TLS handshake blocks until the context is cancelled.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to start listener: %v", err)
+	}
+	defer ln.Close()
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			// Hold the connection open without completing the handshake.
+			_ = conn
+		}
+	}()
+
+	server := &config.ReseedConfig{URL: "https://" + ln.Addr().String() + "/"}
+	rb := &ReseedBootstrap{config: &config.BootstrapConfig{}}
+
+	// A short parent deadline. With the fix, this deadline is propagated into
+	// the reseed request; without it the request would run ~30s.
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	result := rb.fetchFromSingleServer(ctx, server)
+	elapsed := time.Since(start)
+
+	if result.Error == nil {
+		t.Fatal("expected an error from a hanging reseed server")
+	}
+	if elapsed > 5*time.Second {
+		t.Errorf("fetchFromSingleServer took %v; the context deadline was not honored (expected ~500ms)", elapsed)
+	}
+}
+
+// TestRankServersByHealth verifies that rankServersByHealth orders healthy
+// servers ahead of unhealthy ones while preserving all configured servers.
+func TestRankServersByHealth(t *testing.T) {
+	cfg := &config.BootstrapConfig{
+		ReseedServers: []*config.ReseedConfig{
+			{URL: "https://slow/"},
+			{URL: "https://fast/"},
+			{URL: "https://unknown/"},
+		},
+	}
+	rb := &ReseedBootstrap{config: cfg, health: newReseedHealthTracker()}
+
+	// Mark "fast" as healthy and "slow" as unhealthy.
+	for i := 0; i < 5; i++ {
+		rb.health.recordSuccess("https://fast/", time.Second)
+	}
+	for i := 0; i < 5; i++ {
+		rb.health.recordFailure("https://slow/")
+	}
+
+	ranked := rb.rankServersByHealth()
+	if len(ranked) != 3 {
+		t.Fatalf("expected 3 ranked servers, got %d", len(ranked))
+	}
+
+	fastIdx, slowIdx := -1, -1
+	for i, s := range ranked {
+		switch s.URL {
+		case "https://fast/":
+			fastIdx = i
+		case "https://slow/":
+			slowIdx = i
+		}
+	}
+	if fastIdx == -1 || slowIdx == -1 {
+		t.Fatalf("missing servers in ranking: %v", ranked)
+	}
+	if fastIdx > slowIdx {
+		t.Errorf("healthy server should be ranked before unhealthy; got %v", ranked)
 	}
 }
