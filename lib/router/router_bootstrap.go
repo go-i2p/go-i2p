@@ -14,6 +14,18 @@ import (
 const (
 	inNetworkPeerTarget  = 500
 	emergencyReseedFloor = 40
+
+	// startupReseedMaxAttempts bounds how many times the router retries an
+	// initial reseed before giving up and stopping. A single transient reseed
+	// failure (all reseed servers briefly unreachable, a slow first fetch, etc.)
+	// must not kill the router before the NetDB watchdog can take over.
+	startupReseedMaxAttempts = 5
+
+	// startupReseedBaseBackoff is the initial delay between startup reseed
+	// attempts; it doubles on each subsequent attempt (5s, 10s, 20s, 40s, ...).
+	// Each attempt is itself bounded to ~30s by reseed.DefaultDialTimeout, so the
+	// worst-case startup retry budget is a few minutes.
+	startupReseedBaseBackoff = 5 * time.Second
 )
 
 // ensureNetDBReady validates NetDB state and performs reseed if needed.
@@ -34,9 +46,69 @@ func (r *Router) ensureNetDBReady() error {
 	}
 
 	if r.netdb.Size() < r.emergencyReseedThreshold() {
-		return r.performReseed()
+		return r.reseedUntilReady()
 	}
 	return nil
+}
+
+// reseedUntilReady retries the initial reseed with a short exponential backoff
+// until the NetDB reaches the emergency floor, the router is stopped, or the
+// attempt budget is exhausted.
+//
+// This is the startup path only: it is called from ensureNetDBReady before the
+// NetDB watchdog exists, so a single transient reseed failure would otherwise
+// stop the router entirely. Once startup succeeds, the watchdog
+// (maintainNetDBPeerFloor) takes over ongoing reseed retries with its own
+// cooldown, so this loop is not used for steady-state recovery.
+func (r *Router) reseedUntilReady() error {
+	ctx := r.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return r.reseedUntilReadyWith(ctx, r.performReseedWithContext, startupReseedMaxAttempts, startupReseedBaseBackoff)
+}
+
+// reseedUntilReadyWith is the testable core of the startup reseed retry loop.
+// It calls reseed repeatedly until the NetDB reaches the emergency floor, the
+// context is cancelled, or maxAttempts is exhausted. baseBackoff doubles on
+// each retry (baseBackoff, 2*baseBackoff, 4*baseBackoff, ...).
+func (r *Router) reseedUntilReadyWith(ctx context.Context, reseed func(context.Context) error, maxAttempts int, baseBackoff time.Duration) error {
+	var lastErr error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		if err := reseed(ctx); err != nil {
+			lastErr = err
+		}
+
+		// Success: the reseed populated the NetDB past the floor (or the NetDB
+		// was already sufficient). Proceed with startup.
+		if r.netdb.Size() >= r.emergencyReseedThreshold() {
+			return nil
+		}
+
+		if attempt == maxAttempts {
+			break
+		}
+
+		backoff := baseBackoff << (attempt - 1)
+		log.WithFields(logger.Fields{
+			"at":           "reseedUntilReady",
+			"phase":        "bootstrap",
+			"reason":       "initial reseed did not reach the peer floor, retrying",
+			"attempt":      attempt,
+			"max_attempts": maxAttempts,
+			"current_size": r.netdb.Size(),
+			"threshold":    r.emergencyReseedThreshold(),
+			"backoff":      backoff.String(),
+		}).Warn("initial reseed incomplete, retrying after backoff")
+
+		select {
+		case <-ctx.Done():
+			return oops.Errorf("router stopped during startup reseed: %w", ctx.Err())
+		case <-time.After(backoff):
+		}
+	}
+
+	return oops.Errorf("initial reseed failed after %d attempts: %w", maxAttempts, lastErr)
 }
 
 // performReseed executes network database reseeding process.
