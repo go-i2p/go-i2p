@@ -143,6 +143,9 @@ func setBootstrapDefaults(defaults ConfigDefaults) {
 		{"bootstrap.min_reseed_servers", DefaultMinReseedServers},
 		{"bootstrap.reseed_strategy", ReseedStrategyUnion},
 		{"bootstrap.reseed_servers", defaults.Bootstrap.ReseedServers},
+		{"bootstrap.peer_cache_enabled", defaults.Bootstrap.PeerCacheEnabled},
+		{"bootstrap.peer_cache_path", defaults.Bootstrap.PeerCachePath},
+		{"bootstrap.peer_cache_max_size", defaults.Bootstrap.PeerCacheMaxSize},
 	})
 }
 
@@ -394,6 +397,9 @@ func buildBootstrapConfig(caller string) (*BootstrapConfig, error) {
 		LocalNetDBPaths:     localNetDBPaths,
 		MinReseedServers:    viper.GetInt("bootstrap.min_reseed_servers"),
 		ReseedStrategy:      viper.GetString("bootstrap.reseed_strategy"),
+		PeerCacheEnabled:    viper.GetBool("bootstrap.peer_cache_enabled"),
+		PeerCachePath:       viper.GetString("bootstrap.peer_cache_path"),
+		PeerCacheMaxSize:    viper.GetInt("bootstrap.peer_cache_max_size"),
 	}, nil
 }
 

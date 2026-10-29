@@ -14,17 +14,20 @@ import (
 
 // CompositeBootstrap implements the Bootstrap interface by trying multiple
 // bootstrap methods in sequence:
-// 1. Local reseed file (if specified) - highest priority
-// 2. Remote reseed servers
-// 3. Local netDb directories - fallback
+// 1. Peer cache (if enabled) - fastest, no network, repeat-startup speedup
+// 2. Local reseed file (if specified) - high priority
+// 3. Remote reseed servers
+// 4. Local netDb directories - fallback
 type CompositeBootstrap struct {
 	fileBootstrap       *FileBootstrap
 	reseedBootstrap     *ReseedBootstrap
 	localNetDBBootstrap *LocalNetDBBootstrap
+	peerCache           *PeerCache
 	config              *config.BootstrapConfig
 }
 
-// NewCompositeBootstrap creates a new composite bootstrap with file, reseed, and local netDb fallback
+// NewCompositeBootstrap creates a new composite bootstrap with peer cache,
+// file, reseed, and local netDb fallback.
 func NewCompositeBootstrap(cfg *config.BootstrapConfig) *CompositeBootstrap {
 	cb := &CompositeBootstrap{
 		reseedBootstrap:     NewReseedBootstrap(cfg),
@@ -35,6 +38,23 @@ func NewCompositeBootstrap(cfg *config.BootstrapConfig) *CompositeBootstrap {
 	// Only create file bootstrap if a file path is specified
 	if cfg.ReseedFilePath != "" {
 		cb.fileBootstrap = NewFileBootstrap(cfg.ReseedFilePath)
+	}
+
+	// Create and load the peer cache if enabled and a path is configured.
+	// Loading failures are non-fatal: the cache simply stays empty and the
+	// composite falls back to the other sources.
+	if cfg.PeerCacheEnabled && cfg.PeerCachePath != "" {
+		cache := NewPeerCache(cfg.PeerCachePath, cfg.PeerCacheMaxSize)
+		if err := cache.Load(context.Background()); err != nil {
+			log.WithError(err).WithFields(logger.Fields{
+				"at":     "(CompositeBootstrap) NewCompositeBootstrap",
+				"phase":  "bootstrap",
+				"reason": "peer_cache_load_failed",
+				"file":   cfg.PeerCachePath,
+			}).Warn("failed to load peer cache, continuing without it")
+		} else {
+			cb.peerCache = cache
+		}
 	}
 
 	return cb
@@ -84,15 +104,29 @@ func (cb *CompositeBootstrap) getPeersLocalOnly(ctx context.Context, n int) ([]r
 	return tryLocalNetDBBootstrap(cb.localNetDBBootstrap, ctx, n)
 }
 
-// getPeersAutoFallback tries all methods in sequence: file → reseed → local netDb.
+// getPeersAutoFallback tries all methods in sequence: peer cache → file →
+// reseed → local netDb. The peer cache is tried first because it is the
+// fastest source (no network, no reseed-server round trip); when it yields
+// enough fresh peers, repeat startups skip the network entirely. Any peers
+// obtained from a successful source are recorded back into the cache.
 func (cb *CompositeBootstrap) getPeersAutoFallback(ctx context.Context, n int) ([]router_info.RouterInfo, error) {
 	// Collect errors from all methods for better debugging
-	var fileErr, reseedErr, netDBErr error
+	var cacheErr, fileErr, reseedErr, netDBErr error
 
-	// Try file bootstrap first if configured
+	// Try the peer cache first — fastest source for repeat startups.
+	if cb.peerCache != nil {
+		peers, err := cb.tryPeerCache(ctx, n)
+		if err == nil {
+			return peers, nil
+		}
+		cacheErr = err
+	}
+
+	// Try file bootstrap if configured
 	if cb.fileBootstrap != nil {
 		peers, err := tryFileBootstrap(cb.fileBootstrap, ctx, n)
 		if err == nil {
+			cb.recordPeers(peers)
 			return peers, nil
 		}
 		fileErr = err
@@ -101,6 +135,7 @@ func (cb *CompositeBootstrap) getPeersAutoFallback(ctx context.Context, n int) (
 	// Try reseed bootstrap
 	peers, err := tryReseedBootstrap(cb.reseedBootstrap, ctx, n)
 	if err == nil {
+		cb.recordPeers(peers)
 		return peers, nil
 	}
 	reseedErr = err
@@ -110,12 +145,42 @@ func (cb *CompositeBootstrap) getPeersAutoFallback(ctx context.Context, n int) (
 	defer cancel()
 	peers, err = tryLocalNetDBBootstrap(cb.localNetDBBootstrap, localCtx, n)
 	if err == nil {
+		cb.recordPeers(peers)
 		return peers, nil
 	}
 	netDBErr = err
 
 	// All methods failed - return aggregated error for debugging
-	return nil, buildAggregatedError(fileErr, reseedErr, netDBErr)
+	return nil, buildAggregatedError(cacheErr, fileErr, reseedErr, netDBErr)
+}
+
+// tryPeerCache attempts to obtain peers from the on-disk peer cache.
+func (cb *CompositeBootstrap) tryPeerCache(ctx context.Context, n int) ([]router_info.RouterInfo, error) {
+	peers, err := cb.peerCache.GetPeers(ctx, n)
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":    "(CompositeBootstrap) tryPeerCache",
+			"phase": "bootstrap",
+			"reason": "cache_empty_or_unavailable",
+		}).Debug("peer cache has no usable peers, falling back to other sources")
+		return nil, err
+	}
+	return peers, nil
+}
+
+// recordPeers persists the given peers into the peer cache for future
+// startups. Failures are logged but never propagated — caching is best-effort.
+func (cb *CompositeBootstrap) recordPeers(peers []router_info.RouterInfo) {
+	if cb.peerCache == nil || len(peers) == 0 {
+		return
+	}
+	if err := cb.peerCache.Record(peers); err != nil {
+		log.WithError(err).WithFields(logger.Fields{
+			"at":    "(CompositeBootstrap) recordPeers",
+			"phase": "bootstrap",
+			"reason": "peer_cache_record_failed",
+		}).Warn("failed to record peers to cache")
+	}
 }
 
 // localFallbackContext ensures the local netDb fallback is not skipped just
@@ -195,7 +260,7 @@ func logReseedFailure(err error) {
 }
 
 // buildAggregatedError creates a detailed error message including all bootstrap method failures.
-func buildAggregatedError(fileErr, reseedErr, netDBErr error) error {
+func buildAggregatedError(cacheErr, fileErr, reseedErr, netDBErr error) error {
 	// Helper function to count failures
 	countFailures := func(errs ...error) int {
 		count := 0
@@ -211,16 +276,23 @@ func buildAggregatedError(fileErr, reseedErr, netDBErr error) error {
 		"at":             "(CompositeBootstrap) Bootstrap",
 		"phase":          "bootstrap",
 		"reason":         "all_methods_exhausted",
+		"cache_attempted": cacheErr != nil,
 		"file_attempted": fileErr != nil,
 		"reseed_failed":  reseedErr != nil,
 		"netdb_failed":   netDBErr != nil,
-		"methods_tried":  3,
-		"methods_failed": countFailures(fileErr, reseedErr, netDBErr),
+		"methods_tried":  4,
+		"methods_failed": countFailures(cacheErr, fileErr, reseedErr, netDBErr),
 		"recommendation": "check network connectivity and reseed server availability",
 	}).Error("all bootstrap methods failed")
 
 	// Build error message with all available error details
 	errMsg := "all bootstrap methods failed:"
+
+	if cacheErr != nil {
+		errMsg += fmt.Sprintf(" cache=%v;", cacheErr)
+	} else {
+		errMsg += " cache=not attempted;"
+	}
 
 	if fileErr != nil {
 		errMsg += fmt.Sprintf(" file=%v;", fileErr)

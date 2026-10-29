@@ -49,6 +49,18 @@ type BootstrapConfig struct {
 	// - "intersection": Only use RouterInfos present in ALL successful server responses
 	// - "random": Randomly select from union, weighted by appearance count
 	ReseedStrategy string
+	// PeerCacheEnabled controls whether the peer cache mechanism is active.
+	// When enabled, recently discovered peers are cached to disk and consulted
+	// as the fastest local bootstrap source on repeat startups, reducing
+	// bootstrap time.
+	PeerCacheEnabled bool
+	// PeerCachePath is the on-disk location of the peer cache file.
+	// If empty, a default location under the config working directory is used.
+	PeerCachePath string
+	// PeerCacheMaxSize is the maximum number of peers to keep in the cache.
+	// When exceeded, the least-recently-active peers are evicted.
+	// If <= 0, a sensible default (500) is used.
+	PeerCacheMaxSize int
 }
 
 // DefaultBootstrapConfig is the default configuration for network bootstrap.
@@ -69,4 +81,9 @@ var DefaultBootstrapConfig = BootstrapConfig{
 	MinReseedServers: DefaultMinReseedServers,
 	// Default to union strategy for maximum peer discovery
 	ReseedStrategy: ReseedStrategyUnion,
+	// Peer cache enabled by default to reduce repeat-startup bootstrap time
+	PeerCacheEnabled: true,
+	// Peer cache path is populated at runtime based on the OS working directory
+	PeerCachePath:  "",
+	PeerCacheMaxSize: 500,
 }

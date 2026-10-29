@@ -153,6 +153,18 @@ type BootstrapDefaults struct {
 	// Valid values: "union", "intersection", "random"
 	// Default: "union"
 	ReseedStrategy string
+
+	// PeerCacheEnabled controls whether the peer cache mechanism is active.
+	// Default: true
+	PeerCacheEnabled bool
+
+	// PeerCachePath is the on-disk location of the peer cache file.
+	// Default: <workingDir>/peerCache
+	PeerCachePath string
+
+	// PeerCacheMaxSize is the maximum number of peers to keep in the cache.
+	// Default: 500
+	PeerCacheMaxSize int
 }
 
 // I2CPDefaults contains default values for I2CP server
@@ -385,7 +397,7 @@ func Defaults() ConfigDefaults {
 	return ConfigDefaults{
 		Router:      buildRouterDefaults(baseDir, workingDir),
 		NetDB:       buildNetDBDefaults(workingDir),
-		Bootstrap:   buildBootstrapDefaults(),
+		Bootstrap:   buildBootstrapDefaults(workingDir),
 		I2CP:        buildI2CPDefaults(),
 		I2PControl:  buildI2PControlDefaults(),
 		Tunnel:      buildTunnelDefaults(),
@@ -425,7 +437,7 @@ func buildNetDBDefaults(workingDir string) NetDBDefaults {
 // buildBootstrapDefaults creates default bootstrap configuration values.
 // Uses all KnownReseedServers for maximum network availability, consistent
 // with DefaultBootstrapConfig.
-func buildBootstrapDefaults() BootstrapDefaults {
+func buildBootstrapDefaults(workingDir string) BootstrapDefaults {
 	return BootstrapDefaults{
 		LowPeerThreshold:    10,
 		BootstrapType:       "auto",
@@ -434,6 +446,9 @@ func buildBootstrapDefaults() BootstrapDefaults {
 		ReseedRetryInterval: 5 * time.Minute,
 		ReseedServers:       KnownReseedServers,
 		ReseedStrategy:      ReseedStrategyUnion,
+		PeerCacheEnabled:    true,
+		PeerCachePath:       filepath.Join(workingDir, "peerCache"),
+		PeerCacheMaxSize:    500,
 	}
 }
 

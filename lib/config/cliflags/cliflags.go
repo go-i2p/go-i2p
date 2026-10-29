@@ -160,6 +160,15 @@ func registerBootstrapFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().String("bootstrap.reseed-strategy",
 		config.DefaultBootstrapConfig.ReseedStrategy,
 		"How to combine RouterInfos from multiple servers: union, intersection, or random")
+	cmd.PersistentFlags().Bool("bootstrap.peer-cache",
+		defaults.Bootstrap.PeerCacheEnabled,
+		"Enable the peer cache (caches recently discovered peers to disk to speed up repeat startups)")
+	cmd.PersistentFlags().String("bootstrap.peer-cache-path",
+		defaults.Bootstrap.PeerCachePath,
+		"Path to the peer cache file")
+	cmd.PersistentFlags().Int("bootstrap.peer-cache-max-size",
+		defaults.Bootstrap.PeerCacheMaxSize,
+		"Maximum number of peers to keep in the peer cache")
 }
 
 func registerI2CPFlags(cmd *cobra.Command) {
@@ -382,6 +391,9 @@ func bindBootstrapFlags(cmd *cobra.Command, v *viper.Viper) error {
 		{"bootstrap.reseed_retry_interval", "bootstrap.reseed-retry-interval"},
 		{"bootstrap.min_reseed_servers", "bootstrap.min-reseed-servers"},
 		{"bootstrap.reseed_strategy", "bootstrap.reseed-strategy"},
+		{"bootstrap.peer_cache_enabled", "bootstrap.peer-cache"},
+		{"bootstrap.peer_cache_path", "bootstrap.peer-cache-path"},
+		{"bootstrap.peer_cache_max_size", "bootstrap.peer-cache-max-size"},
 	})
 }
 
