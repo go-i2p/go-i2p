@@ -8,6 +8,7 @@ import (
 	"github.com/go-i2p/crypto/curve25519"
 	ed25519i2p "github.com/go-i2p/crypto/ed25519"
 	"github.com/go-i2p/crypto/rand"
+	cryptoRed25519 "github.com/go-i2p/crypto/red25519"
 	"github.com/go-i2p/crypto/types"
 	"github.com/samber/oops"
 
@@ -227,8 +228,17 @@ type Session struct {
 
 	// EncryptedLeaseSet state (only used if UseEncryptedLeaseSet is true)
 	blindedDestination *destination.Destination // Blinded destination for EncryptedLeaseSet
-	blindingSecret     []byte                   // Secret used for blinding (cached)
-	lastBlindingDate   time.Time                // Last date used for blinding (triggers rotation at UTC midnight)
+	// blindedSigningKey is the blinded RedDSA scalar a' = (a + alpha) mod L that
+	// corresponds to blindedDestination's signing key A'. The outer
+	// EncryptedLeaseSet signature MUST be made with a', never with the
+	// destination's long-term signing key: a structure signed with the
+	// long-term key fails verification against its own blinded key at a
+	// spec-following floodfill, and is linkable to the destination by anyone
+	// who can read the netdb. Rotated with the blinded destination at UTC
+	// midnight.
+	blindedSigningKey cryptoRed25519.Red25519PrivateKey
+	blindingSecret    []byte    // Secret used for blinding (cached)
+	lastBlindingDate  time.Time // Last date used for blinding (triggers rotation at UTC midnight)
 
 	// Lifecycle
 	stopCh      chan struct{}  // Signal to stop session
@@ -1280,12 +1290,18 @@ func (s *Session) CreateEncryptedLeaseSet() ([]byte, error) {
 		return nil, err
 	}
 
-	encryptedData, cookie, err := s.buildEncryptedLeaseSetData(leases)
+	// One timestamp for the whole structure. A reader derives the inner-layer
+	// keys from the EncryptedLeaseSet's published field, so encrypting under a
+	// different second than the one recorded would produce a record nobody can
+	// decrypt. Taking time.Now() once avoids a second boundary mid-flow.
+	published := uint32(time.Now().Unix())
+
+	encryptedData, cookie, err := s.buildEncryptedLeaseSetData(leases, published)
 	if err != nil {
 		return nil, err
 	}
 
-	return s.finalizeEncryptedLeaseSet(cookie, encryptedData)
+	return s.finalizeEncryptedLeaseSet(cookie, encryptedData, published)
 }
 
 // prepareEncryptedLeaseSetContext validates and prepares the session for EncryptedLeaseSet creation.
@@ -1311,8 +1327,12 @@ func (s *Session) gatherActiveLeasesForEncryption() ([]lease.Lease2, error) {
 
 // buildEncryptedLeaseSetData creates and encrypts the inner LeaseSet2 data.
 // Returns the encrypted data and the cookie used for encryption.
-func (s *Session) buildEncryptedLeaseSetData(leases []lease.Lease2) ([]byte, [32]byte, error) {
-	innerLS2, err := s.createInnerLeaseSet2(leases)
+//
+// published is the timestamp both the inner LeaseSet2 and the enclosing
+// EncryptedLeaseSet are stamped with, and the value the inner encryption keys
+// are derived from.
+func (s *Session) buildEncryptedLeaseSetData(leases []lease.Lease2, published uint32) ([]byte, [32]byte, error) {
+	innerLS2, err := s.createInnerLeaseSet2(leases, published)
 	if err != nil {
 		return nil, [32]byte{}, err
 	}
@@ -1322,7 +1342,7 @@ func (s *Session) buildEncryptedLeaseSetData(leases []lease.Lease2) ([]byte, [32
 		return nil, [32]byte{}, err
 	}
 
-	encryptedData, err := s.encryptInnerLeaseSet(innerLS2, cookie)
+	encryptedData, err := s.encryptInnerLeaseSet(innerLS2, cookie, published)
 	if err != nil {
 		return nil, [32]byte{}, err
 	}
@@ -1333,8 +1353,8 @@ func (s *Session) buildEncryptedLeaseSetData(leases []lease.Lease2) ([]byte, [32
 // finalizeEncryptedLeaseSet assembles and serializes the final EncryptedLeaseSet structure.
 // Takes the encryption cookie and encrypted inner data, creates the EncryptedLeaseSet,
 // and returns the serialized bytes ready for network publication.
-func (s *Session) finalizeEncryptedLeaseSet(cookie [32]byte, encryptedData []byte) ([]byte, error) {
-	els, err := s.assembleEncryptedLeaseSet(cookie, encryptedData)
+func (s *Session) finalizeEncryptedLeaseSet(cookie [32]byte, encryptedData []byte, published uint32) ([]byte, error) {
+	els, err := s.assembleEncryptedLeaseSet(cookie, encryptedData, published)
 	if err != nil {
 		return nil, err
 	}
@@ -1357,8 +1377,14 @@ func (s *Session) validateEncryptedLeaseSetSupport() error {
 	return nil
 }
 
-// updateBlindedDestination derives or updates the blinded destination.
+// updateBlindedDestination derives or updates the blinded destination and its
+// matching blinded signing private key.
 // The blinded destination rotates daily at UTC midnight to prevent correlation.
+//
+// Both are derived in one call so the key pair cannot come from different
+// alphas. The scalar is what signs the EncryptedLeaseSet (see
+// assembleEncryptedLeaseSet); keeping it alongside the blinded destination is
+// what makes the published record unlinkable from the destination.
 func (s *Session) updateBlindedDestination() error {
 	now := time.Now().UTC()
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
@@ -1371,9 +1397,16 @@ func (s *Session) updateBlindedDestination() error {
 			return err
 		}
 
-		// Derive blinded destination for today
-		blindedDest, err := encrypted_leaseset.CreateBlindedDestination(
+		signingKey, err := s.stdlibSigningKey()
+		if err != nil {
+			return oops.Errorf("failed to get signing key for blinding: %w", err)
+		}
+
+		// Derive blinded destination for today, with the blinded private key
+		// that corresponds to it.
+		blindedDest, blindedSigningKey, err := encrypted_leaseset.CreateBlindedDestinationWithPrivateKey(
 			*s.destination,
+			signingKey,
 			s.blindingSecret,
 			today,
 		)
@@ -1382,6 +1415,7 @@ func (s *Session) updateBlindedDestination() error {
 		}
 
 		s.blindedDestination = &blindedDest
+		s.blindedSigningKey = blindedSigningKey
 		s.lastBlindingDate = today
 
 		log.WithFields(logger.Fields{
@@ -1423,7 +1457,16 @@ func (s *Session) ensureBlindingSecret() error {
 }
 
 // createInnerLeaseSet2 creates the inner LeaseSet2 that will be encrypted.
-func (s *Session) createInnerLeaseSet2(leases []lease.Lease2) (*lease_set2.LeaseSet2, error) {
+//
+// published is supplied by the caller so the inner LeaseSet2 and the enclosing
+// EncryptedLeaseSet carry the same timestamp; the spec expects the inner
+// timestamp and expiration to match the top level.
+//
+// The inner LeaseSet2 is signed with the destination's own key, which is correct
+// here: it is encrypted, and only parties that already know the destination can
+// derive the subcredential to read it. The spec calls this "the unblinded
+// leaseset ... signed by the unblinded ... signing private key as usual".
+func (s *Session) createInnerLeaseSet2(leases []lease.Lease2, published uint32) (*lease_set2.LeaseSet2, error) {
 	// Prepare encryption key
 	encKey, err := s.prepareEncryptionKey()
 	if err != nil {
@@ -1437,13 +1480,10 @@ func (s *Session) createInnerLeaseSet2(leases []lease.Lease2) (*lease_set2.Lease
 		return nil, oops.Errorf("failed to get signing key: %w", err)
 	}
 
-	// Calculate published time and expiration
-	publishedTime := uint32(time.Now().Unix())
-
 	// Create LeaseSet2 (this will be the inner encrypted content)
 	ls2, err := lease_set2.NewLeaseSet2(
 		*s.destination,
-		publishedTime,
+		published,
 		s.config.LeaseSetExpiration,
 		0,   // flags
 		nil, // no offline signature for inner LeaseSet2
@@ -1469,7 +1509,11 @@ func (s *Session) generateEncryptionCookie() ([32]byte, error) {
 }
 
 // encryptInnerLeaseSet encrypts the inner LeaseSet2 data.
-func (s *Session) encryptInnerLeaseSet(ls2 *lease_set2.LeaseSet2, cookie [32]byte) ([]byte, error) {
+//
+// published must be the same timestamp the EncryptedLeaseSet is stamped with:
+// the inner-layer keys are derived from it, and a reader recovers them from the
+// published field of the structure it fetched.
+func (s *Session) encryptInnerLeaseSet(ls2 *lease_set2.LeaseSet2, cookie [32]byte, published uint32) ([]byte, error) {
 	// Get the unblinded destination's signing public key
 	destSigningPubKey, err := s.destination.SigningPublicKey()
 	if err != nil {
@@ -1493,9 +1537,6 @@ func (s *Session) encryptInnerLeaseSet(ls2 *lease_set2.LeaseSet2, cookie [32]byt
 		uint16(s.blindedDestination.KeyCertificate.SigningPublicKeyType()),
 	)
 
-	// Published timestamp (seconds since epoch)
-	published := uint32(time.Now().Unix())
-
 	// Encrypt inner LeaseSet2
 	encryptedData, err := encrypted_leaseset.EncryptInnerLeaseSet2(ls2, subcredential, published)
 	if err != nil {
@@ -1506,17 +1547,33 @@ func (s *Session) encryptInnerLeaseSet(ls2 *lease_set2.LeaseSet2, cookie [32]byt
 }
 
 // assembleEncryptedLeaseSet assembles and signs the final EncryptedLeaseSet.
-func (s *Session) assembleEncryptedLeaseSet(cookie [32]byte, encryptedInnerData []byte) (*encrypted_leaseset.EncryptedLeaseSet, error) {
-	// Calculate published time
-	publishedTime := uint32(time.Now().Unix())
+//
+// Two properties make an EncryptedLeaseSet anonymous, and both are decided here:
+//
+//   - The cleartext blinded_public_key field carries the blinded SIGNING key A'.
+//     KeysAndCert.PublicKey() returns the *receiving* (X25519) key, which the
+//     blinded destination carries unchanged from the destination, so using it
+//     here would publish the destination's own encryption key in cleartext.
+//   - The outer signature is made with the blinded scalar a' at type 11
+//     (Red25519/RedDSA). Signing with the destination's long-term key produces a
+//     structure that fails verification against its own blinded key at a
+//     spec-following floodfill and that any netdb reader can link back to the
+//     destination.
+//
+// Spec: https://geti2p.net/spec/encryptedleaseset sections "Blinding
+// Calculations" and "Signing".
+func (s *Session) assembleEncryptedLeaseSet(cookie [32]byte, encryptedInnerData []byte, publishedTime uint32) (*encrypted_leaseset.EncryptedLeaseSet, error) {
+	if s.blindedDestination == nil {
+		return nil, oops.Errorf("session %d has no blinded destination: createEncryptedLeaseSet requires updateBlindedDestination", s.id)
+	}
 
-	// Get the blinded signing private key, converting to stdlib ed25519.PrivateKey
-	// for compatibility with common's ExtractEd25519PrivateKey type switch.
-	// Note: For EncryptedLeaseSet, we need to sign with the BLINDED key, not the original
-	// The encrypted_leaseset library's NewEncryptedLeaseSet expects the blinded private key
-	signingPrivateKey, err := s.stdlibSigningKey()
-	if err != nil {
-		return nil, oops.Errorf("failed to get signing key: %w", err)
+	// The blinded private key a' produced alongside the blinded destination in
+	// updateBlindedDestination. common's constructor rejects a signing key that
+	// does not correspond to the blinded public key being published, so a
+	// missing or mismatched scalar fails here instead of silently publishing a
+	// deanonymizing structure.
+	if len(s.blindedSigningKey) == 0 {
+		return nil, oops.Errorf("session %d has no blinded signing key", s.id)
 	}
 
 	// Create EncryptedLeaseSet
@@ -1524,14 +1581,17 @@ func (s *Session) assembleEncryptedLeaseSet(cookie [32]byte, encryptedInnerData 
 	// the new API only allows bit 0 (offline) and bit 1 (unpublished).
 	var elsFlags uint16 = 0
 
-	// Extract blinded public key bytes from the blinded destination
-	blindedPubKey, err := s.blindedDestination.PublicKey()
+	// The blinded destination's SIGNING public key (A', type 11) is the identity
+	// this structure publishes, and the same value the NetDB lookup hash is
+	// derived from. Not PublicKey(), which is the encryption key.
+	blindedPubKey, err := s.blindedDestination.SigningPublicKey()
 	if err != nil {
-		return nil, oops.Errorf("failed to get blinded public key: %w", err)
+		return nil, oops.Errorf("failed to get blinded signing public key: %w", err)
 	}
 	blindedPubKeyBytes := blindedPubKey.Bytes()
 
-	// sigType for Ed25519 (KEYCERT_SIGN_ED25519 = 7)
+	// Always RedDSA (11) for a blinded key; the blinded key certificate declares
+	// it so this reads back the right value rather than hardcoding it.
 	sigType := uint16(s.blindedDestination.KeyCertificate.SigningPublicKeyType())
 
 	els, err := encrypted_leaseset.NewEncryptedLeaseSet(
@@ -1542,7 +1602,7 @@ func (s *Session) assembleEncryptedLeaseSet(cookie [32]byte, encryptedInnerData 
 		elsFlags,
 		nil, // no offline signature
 		encryptedInnerData,
-		signingPrivateKey,
+		s.blindedSigningKey,
 	)
 	if err != nil {
 		return nil, oops.Errorf("failed to create EncryptedLeaseSet: %w", err)

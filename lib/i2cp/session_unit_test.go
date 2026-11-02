@@ -1305,7 +1305,7 @@ func TestCreateEncryptedLeaseSetWithMockTunnels(t *testing.T) {
 		leases, err := session.buildLeasesFromTunnels(tunnels)
 		require.NoError(t, err)
 
-		ls2, err := session.createInnerLeaseSet2(leases)
+		ls2, err := session.createInnerLeaseSet2(leases, enclsTestPublished())
 		assert.NoError(t, err)
 		assert.NotNil(t, ls2)
 	})
@@ -1320,13 +1320,14 @@ func TestCreateEncryptedLeaseSetWithMockTunnels(t *testing.T) {
 		leases, err := session.buildLeasesFromTunnels(tunnels)
 		require.NoError(t, err)
 
-		ls2, err := session.createInnerLeaseSet2(leases)
+		published := enclsTestPublished()
+		ls2, err := session.createInnerLeaseSet2(leases, published)
 		require.NoError(t, err)
 
 		cookie, err := session.generateEncryptionCookie()
 		require.NoError(t, err)
 
-		encryptedData, err := session.encryptInnerLeaseSet(ls2, cookie)
+		encryptedData, err := session.encryptInnerLeaseSet(ls2, cookie, published)
 		assert.NoError(t, err)
 		assert.NotEmpty(t, encryptedData)
 		assert.True(t, len(encryptedData) > 0)
@@ -1344,7 +1345,7 @@ func TestCreateEncryptedLeaseSetWithMockTunnels(t *testing.T) {
 		encryptedData := make([]byte, 100) // Use 100 bytes to be safe
 		copy(encryptedData, []byte("mock-encrypted-leaseset-inner-data-with-sufficient-length-to-meet-spec-requirements-minimum-61-bytes"))
 
-		els, err := session.assembleEncryptedLeaseSet(cookie, encryptedData)
+		els, err := session.assembleEncryptedLeaseSet(cookie, encryptedData, enclsTestPublished())
 		assert.NoError(t, err)
 		assert.NotNil(t, els)
 
@@ -1375,17 +1376,25 @@ func TestCreateEncryptedLeaseSetSerialization(t *testing.T) {
 	leases, err := session.buildLeasesFromTunnels(tunnels)
 	require.NoError(t, err)
 
-	ls2, err := session.createInnerLeaseSet2(leases)
+	// One published value for the inner LeaseSet2, the encryption, and the
+	// EncryptedLeaseSet, as the real flow does. A reader derives the inner keys
+	// from the structure's published field, so these must agree.
+	published := enclsTestPublished()
+
+	ls2, err := session.createInnerLeaseSet2(leases, published)
 	require.NoError(t, err)
 
 	cookie, err := session.generateEncryptionCookie()
 	require.NoError(t, err)
 
-	encryptedData, err := session.encryptInnerLeaseSet(ls2, cookie)
+	encryptedData, err := session.encryptInnerLeaseSet(ls2, cookie, published)
 	require.NoError(t, err)
 
-	els, err := session.assembleEncryptedLeaseSet(cookie, encryptedData)
+	els, err := session.assembleEncryptedLeaseSet(cookie, encryptedData, published)
 	require.NoError(t, err)
+
+	// The assembled structure must verify under its own blinded key.
+	require.NoError(t, els.Verify(), "serialized EncryptedLeaseSet must verify")
 
 	// Serialize to bytes
 	elsBytes, err := els.Bytes()
@@ -1470,7 +1479,7 @@ func TestRegenerateAndPublishWithEncrypted(t *testing.T) {
 	leases, err := session.buildLeasesFromTunnels(tunnels)
 	require.NoError(t, err)
 
-	ls2, err := session.createInnerLeaseSet2(leases)
+	ls2, err := session.createInnerLeaseSet2(leases, enclsTestPublished())
 	assert.NoError(t, err)
 	assert.NotNil(t, ls2)
 }
