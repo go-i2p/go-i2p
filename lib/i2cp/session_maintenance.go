@@ -256,8 +256,8 @@ func (s *Session) regenerateAndPublishLeaseSet() error {
 // Skips publication if no publisher is configured (allows sessions to work without network integration).
 // The lookup key and NetDB record type are taken from the store type of the
 // cached lease set (i2cp.rst:668-672): an EncryptedLeaseSet is keyed under the
-// hash of the blinded key it carries in cleartext, LeaseSet and LeaseSet2 under
-// the hash of their contained destination.
+// spec DHT key SHA-256(sig type || blinded public key), LeaseSet and LeaseSet2
+// under the hash of their contained destination.
 func (s *Session) publishLeaseSetToNetwork(leaseSetBytes []byte) error {
 	s.mu.RLock()
 	publisher := s.publisher

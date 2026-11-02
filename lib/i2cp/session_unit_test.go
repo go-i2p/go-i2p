@@ -1425,10 +1425,10 @@ func TestPublishLeaseSetNetworkWithEncrypted(t *testing.T) {
 	require.NoError(t, session.publishLeaseSetToNetwork(ls2Bytes))
 	assert.Contains(t, mockPublisher.published, origHash)
 
-	// EncryptedLeaseSet path: published under the hash of the blinded key it
-	// carries in cleartext, which is the key the NetDB enforces on store
-	// (lib/netdb verifyEncryptedLeaseSetHash) — not the hash of the blinded
-	// destination's full bytes.
+	// EncryptedLeaseSet path: published under the spec DHT key,
+	// SHA-256(sig type || blinded public key), which is the key the NetDB
+	// enforces on store (lib/netdb verifyEncryptedLeaseSetHash) and the key a
+	// resolver derives -- not the hash of the blinded destination's full bytes.
 	elsBytes := buildBlindedEncryptedLeaseSet(t, session, ls2Bytes)
 	session.SetCurrentLeaseSetWithType(elsBytes, LeaseSetStoreTypeEncryptedLeaseSet)
 
@@ -1437,12 +1437,16 @@ func TestPublishLeaseSetNetworkWithEncrypted(t *testing.T) {
 
 	els, _, err := encrypted_leaseset.ReadEncryptedLeaseSet(elsBytes)
 	require.NoError(t, err)
-	blindedKeyHash := common.HashData(els.BlindedPublicKey())
+	dhtKey := els.DHTKey()
 
-	assert.Contains(t, mockPublisher.published, blindedKeyHash,
-		"EncryptedLeaseSet must be published under the blinded-key hash")
+	assert.Contains(t, mockPublisher.published, dhtKey,
+		"EncryptedLeaseSet must be published under SHA-256(sig type || blinded public key)")
 	assert.NotContains(t, mockPublisher.published, origHash,
 		"an EncryptedLeaseSet must not be published under the cleartext destination hash")
+	// The bare blinded-key hash was the pre-interop rule; assert it is gone so a
+	// regression to it cannot pass unnoticed.
+	assert.NotContains(t, mockPublisher.published, common.HashData(els.BlindedPublicKey()),
+		"publishing under the bare blinded-key hash is not spec-conformant")
 }
 
 // TestRegenerateAndPublishWithEncrypted verifies maintenance loop uses EncryptedLeaseSet when configured

@@ -277,8 +277,9 @@ func (dr *DestinationResolver) ResolveEncryptedDestinationWithCredential(
 //
 // It is the entry point for sending to a destination whose record type is not
 // known in advance, because a blinded EncryptedLeaseSet cannot be found from the
-// destination hash alone: it is stored under the hash of the blinded signing key,
-// which is derived from the unblinded public key. So this tries, in order:
+// destination hash alone: it is stored under the spec DHT key SHA-256(sig type
+// || blinded signing key), the blinded key being derived from the unblinded
+// public key. So this tries, in order:
 //
 //  1. LeaseSet2 / classic LeaseSet under the destination hash.
 //  2. EncryptedLeaseSet under the blinded lookup hash derived from dest.
@@ -320,7 +321,8 @@ func (dr *DestinationResolver) ResolveDestinationWithCredential(
 		destHash[:8], encErr)
 }
 
-// deriveBlindedLookupHash computes the NetDB lookup hash from a blinded destination.
+// deriveBlindedLookupHash computes the NetDB lookup hash from a blinded
+// destination, using the spec DHT rule SHA-256(sig type || blinded public key).
 func (dr *DestinationResolver) deriveBlindedLookupHash(dest destination.Destination, secret []byte) (common.Hash, error) {
 	blindedDest, err := encrypted_leaseset.CreateBlindedDestination(dest, secret, time.Now())
 	if err != nil {
@@ -331,7 +333,10 @@ func (dr *DestinationResolver) deriveBlindedLookupHash(dest destination.Destinat
 	if err != nil {
 		return common.Hash{}, oops.Errorf("failed to get blinded signing key: %w", err)
 	}
-	lookupHash := common.HashData(blindedSigningKey.Bytes())
+	// Read the sig type from the blinded key certificate (always RedDSA/11) so
+	// it matches the bytes the publisher hashed into its DHT key.
+	sigType := uint16(blindedDest.KeyCertificate.SigningPublicKeyType())
+	lookupHash := encrypted_leaseset.BlindedDHTKey(sigType, blindedSigningKey.Bytes())
 
 	log.WithFields(logger.Fields{
 		"at":          "ResolveEncryptedDestination",

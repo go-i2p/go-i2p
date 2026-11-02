@@ -471,8 +471,8 @@ func TestW8_CreateLeaseSet2_StoreTypeSelectsFramingAndRecordType(t *testing.T) {
 
 		els, _, err := encrypted_leaseset.ReadEncryptedLeaseSet(elsBytes)
 		require.NoError(t, err)
-		key := common.HashData(els.BlindedPublicKey())
-		require.Contains(t, store.stored, key, "published under the blinded-key hash")
+		key := els.DHTKey()
+		require.Contains(t, store.stored, key, "published under the spec DHT key")
 		assert.Equal(t, byte(LeaseSetStoreTypeEncryptedLeaseSet), store.dataTypes[key],
 			"stored as an EncryptedLeaseSet record, not a LeaseSet2 record (i2cp.rst:668-672)")
 	})
@@ -598,7 +598,7 @@ func TestW8_CreateLeaseSet2_StoreTypeDrivesMaintenance(t *testing.T) {
 
 	els, _, err := encrypted_leaseset.ReadEncryptedLeaseSet(elsBytes)
 	require.NoError(t, err)
-	key := common.HashData(els.BlindedPublicKey())
+	key := els.DHTKey()
 	require.Contains(t, store.stored, key)
 	assert.Equal(t, byte(LeaseSetStoreTypeEncryptedLeaseSet), store.dataTypes[key],
 		"re-publication must keep the store type declared by the client")

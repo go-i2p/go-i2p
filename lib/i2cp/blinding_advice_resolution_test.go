@@ -242,7 +242,7 @@ func TestResolveDestinationKeyForPeerPerClientEndToEnd(t *testing.T) {
 	require.NoError(t, err)
 
 	// No advice recorded yet: the router cannot find the blinded record, since
-	// it is stored under the blinded key hash rather than the destination hash.
+	// it is stored under the blinded DHT key rather than the destination hash.
 	_, err = server.resolveDestinationKeyForPeer(dest, destHash)
 	require.Error(t, err, "without advice the blinded peer is unresolvable")
 

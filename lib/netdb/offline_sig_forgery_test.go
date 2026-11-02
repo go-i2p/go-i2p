@@ -152,7 +152,9 @@ func TestStoreEncryptedLeaseSetRejectsForgedOfflineSignature(t *testing.T) {
 	wire, err := els.Bytes()
 	require.NoError(t, err)
 
-	key := common.HashData(blindedPub)
+	// Use the record's own spec DHT key so the store gets past the hash check
+	// and reaches the offline-signature verification the test targets.
+	key := els.DHTKey()
 
 	err = db.StoreEncryptedLeaseSet(key, wire, encryptedLeaseSetType)
 	require.Error(t, err, "forged EncryptedLeaseSet must not be stored")

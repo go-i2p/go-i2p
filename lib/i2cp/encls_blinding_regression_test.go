@@ -268,8 +268,9 @@ func TestEncryptedLeaseSetPublicationKeyMatchesBlindedLookup(t *testing.T) {
 	require.NoError(t, err)
 
 	// Reproduce the resolver's lookup independently: derive alpha for today,
-	// blind the destination's private scalar, and take the resulting public
-	// key. lib/netdb deriveBlindedLookupHash hashes the blinded signing key.
+	// blind the destination's private scalar, and hash the resulting public key
+	// with the spec DHT rule. lib/netdb deriveBlindedLookupHash applies the same
+	// rule via encrypted_leaseset.BlindedDHTKey.
 	destSigning, err := session.destination.SigningPublicKey()
 	require.NoError(t, err)
 	alpha, err := kdf.DeriveBlindingFactorI2P(
@@ -288,6 +289,14 @@ func TestEncryptedLeaseSetPublicationKeyMatchesBlindedLookup(t *testing.T) {
 	expectedLookup, err := blindedPriv.Public()
 	require.NoError(t, err)
 
-	require.Equal(t, common.HashData(expectedLookup.Bytes()), pubKey,
-		"publication key must be the blinded signing key hash a resolver looks up")
+	// A blinded key is always RedDSA (type 11); assert the session agrees rather
+	// than trusting it, since the DHT key covers the sig type.
+	require.Equal(t, uint16(key_certificate.KEYCERT_SIGN_REDDSA_ED25519),
+		uint16(session.blindedDestination.KeyCertificate.SigningPublicKeyType()))
+
+	expectedKey := encrypted_leaseset.BlindedDHTKey(
+		uint16(key_certificate.KEYCERT_SIGN_REDDSA_ED25519), expectedLookup.Bytes())
+
+	require.Equal(t, expectedKey, pubKey,
+		"publication key must be SHA-256(sig type || blinded signing key), the spec DHT rule")
 }

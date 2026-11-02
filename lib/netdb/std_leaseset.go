@@ -901,13 +901,18 @@ func parseEncryptedLeaseSetData(data []byte) (encrypted_leaseset.EncryptedLeaseS
 	return els, nil
 }
 
-// verifyEncryptedLeaseSetHash validates that the provided key matches the EncryptedLeaseSet blinded destination hash.
+// verifyEncryptedLeaseSetHash validates that the provided key matches the
+// EncryptedLeaseSet's spec DHT storage key, SHA-256(sig type || blinded public
+// key). A record stored under any other key is a hash mismatch and rejected.
 func verifyEncryptedLeaseSetHash(key common.Hash, els encrypted_leaseset.EncryptedLeaseSet) error {
-	destBytes := els.BlindedPublicKey()
-	if destBytes == nil {
-		return oops.Errorf("failed to get blinded public key bytes")
+	if expected := els.DHTKey(); key != expected {
+		log.WithFields(logger.Fields{
+			"expected_hash": expected,
+			"provided_key":  key,
+		}).Error("EncryptedLeaseSet hash mismatch")
+		return oops.Errorf("EncryptedLeaseSet hash mismatch: expected %x, got %x", expected, key)
 	}
-	return verifyHashMatch(key, destBytes, "EncryptedLeaseSet")
+	return nil
 }
 
 // addEncryptedLeaseSetToCache adds an EncryptedLeaseSet entry to the in-memory cache.

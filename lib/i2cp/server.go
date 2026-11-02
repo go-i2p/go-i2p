@@ -521,10 +521,11 @@ func (s *Server) resolveDestinationKey(destHash common.Hash) ([32]byte, error) {
 // client is sending to, given the full Destination the SendMessage carried.
 //
 // A cleartext LeaseSet is found from the destination hash alone. A blinded
-// EncryptedLeaseSet is not: it is stored under the hash of a blinded signing key
-// derived from the destination's public key, its blinding secret and today's UTC
-// date, so the unblinded destination is required to locate it at all. That is why
-// this takes the destination rather than just the hash.
+// EncryptedLeaseSet is not: it is stored under the spec DHT key SHA-256(sig
+// type || blinded signing key), the blinded key being derived from the
+// destination's public key, its blinding secret and today's UTC date, so the
+// unblinded destination is required to locate it at all. That is why this takes
+// the destination rather than just the hash.
 //
 // The blinding secret and per-client private key come from the BlindingInfo
 // (type 42) advice the client sent for this peer. Per i2cp.rst, a client that

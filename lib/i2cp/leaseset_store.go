@@ -228,8 +228,9 @@ func validateLeaseSetForSession(session *Session, st LeaseSetStoreType, leaseSet
 // and its signature must verify. An EncryptedLeaseSet carries no cleartext
 // destination — the inner LeaseSet2 is encrypted and the only identity in
 // cleartext is the blinded key — so there is nothing here to compare against the
-// session's (cleartext) destination. The blinded key hash is enforced as the
-// NetDB lookup key by leaseSetPublicationKey, and re-checked by the NetDB store.
+// session's (cleartext) destination. The spec DHT key (SHA-256(sig type ||
+// blinded public key)) is enforced as the NetDB lookup key by
+// leaseSetPublicationKey, and re-checked by the NetDB store.
 func validateEncryptedLeaseSetForSession(leaseSetBytes []byte) error {
 	els, _, err := encrypted_leaseset.ReadEncryptedLeaseSet(leaseSetBytes)
 	if err != nil {
@@ -274,10 +275,10 @@ func validateLeaseSetV1ForSession(session *Session, leaseSetBytes []byte) error 
 }
 
 // leaseSetPublicationKey computes the NetDB / DatabaseStore key for a framed
-// lease set. An EncryptedLeaseSet is keyed under the hash of the blinded key it
-// carries in cleartext; LeaseSet and LeaseSet2 are keyed under the hash of the
-// contained destination (common-structures.rst:870-871, :1205-1207). This mirrors
-// the checks the NetDB itself applies on store.
+// lease set. An EncryptedLeaseSet is keyed by the spec DHT rule
+// SHA-256(sig type || blinded public key); LeaseSet and LeaseSet2 are keyed
+// under the hash of the contained destination (common-structures.rst:870-871,
+// :1205-1207). This mirrors the checks the NetDB itself applies on store.
 func leaseSetPublicationKey(st LeaseSetStoreType, leaseSetBytes []byte) (data.Hash, error) {
 	switch st {
 	case LeaseSetStoreTypeEncryptedLeaseSet:
@@ -285,11 +286,14 @@ func leaseSetPublicationKey(st LeaseSetStoreType, leaseSetBytes []byte) (data.Ha
 		if err != nil {
 			return data.Hash{}, oops.Wrapf(err, "invalid EncryptedLeaseSet")
 		}
-		// The NetDB keys an EncryptedLeaseSet under the hash of the blinded key
-		// it carries in cleartext and enforces that on store
-		// (lib/netdb verifyEncryptedLeaseSetHash), so publication must use the
-		// same key or the store is rejected as a hash mismatch.
-		return data.HashData(els.BlindedPublicKey()), nil
+		// Spec ("Encrypted LeaseSet", Format): "DHT storage location is
+		// SHA-256(sig type || blinded public key), and rotated daily." The
+		// NetDB enforces the same rule on store (verifyEncryptedLeaseSetHash),
+		// so publication must match or the store is rejected as a hash mismatch.
+		// Using the bare blinded-key hash here (the previous behavior) was
+		// self-consistent but produced records a spec-following Java/i2pd
+		// floodfill cannot find.
+		return els.DHTKey(), nil
 
 	case LeaseSetStoreTypeLeaseSet:
 		dest, _, err := lease_set.ReadDestinationFromLeaseSet(leaseSetBytes)
