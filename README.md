@@ -81,7 +81,7 @@ Anonymity-sensitive operators should review [Anonymity-Safe Logging](docs/anonym
   - [X] Exploration
   - [X] Publishing
   - [X] Floodfill
-  - [X] LS2 and Encrypted Leasesets (I2CP clients can publish; storage/retrieval supported; inbound client-side decryption and MetaLeaseSet resolution implemented)
+  - [X] LS2 and Encrypted Leasesets (I2CP clients can publish blinded EncryptedLeaseSets; storage/retrieval supported; inbound client-side decryption and MetaLeaseSet resolution implemented; per-client authorization (DH and PSK) supported on both the publishing and resolving halves)
 - Transport Layer
   - [X] Transport manager and interfaces
   - NTCP2
