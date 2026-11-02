@@ -13,7 +13,7 @@
         <a href="../index.html">go-i2p/go-i2p</a>
       </h2>
       <div class="repo-meta">
-        📝 2592 commits
+        📝 2593 commits
          • 📜 MIT License
       </div>
     </div>
@@ -61,7 +61,7 @@
       <div class="doc-content">
         <h1 id="ssu2-what-experimental-means">SSU2: what &ldquo;experimental&rdquo; means</h1>
 
-<p>Updated: 2026-10-26</p>
+<p>Updated: 2026-11-01</p>
 
 <p>The README marks the SSU2 transport <strong>currently experimental</strong>
 (<code>README.md</code>, and the <code>--transport.ssu2-enabled</code> help text). That label has
@@ -213,6 +213,43 @@ republish are wired but not proven against live introducers.</p>
 to watch on a real deployment: a large deferred count means the replay check is
 being skipped in practice, not merely in theory.</p>
 
+<h3 id="5-data-phase-key-derivation-is-now-per-session-but-has-no-live-traffic-evidence">5. Data-phase key derivation is now per-session, but has no live-traffic evidence</h3>
+
+<p>Until 2026-11-01 the <code>go-i2p/noise</code> fork zeroed the CipherState key arrays
+inside <code>Split</code>/<code>SplitWithASK</code>, because <code>hkdf</code> appends into the slices it is
+given and <code>Split</code> passed it <code>s1.k[:0]</code>/<code>s2.k[:0]</code> directly. <code>go-noise</code> derives
+the SSU2 data-phase keys from that stored key
+(<code>ssu2/handshake/kdf.go</code> → <code>cs.UnsafeKey()</code>), so every session used
+<code>HKDF(0^32, ZEROLEN, &quot;HKDFSSU2DataKeys&quot;, 64)</code> — a value any observer can
+compute. The data phase between two go-i2p routers was publicly decryptable and
+forgeable, and no other implementation could read go-i2p&rsquo;s data phase at all.
+The AEAD objects hold a by-value copy of the key, so encryption round-trips
+passed throughout and the defect was silent.</p>
+
+<p>The fork now writes the HKDF outputs to independent buffers before copying them
+into the key arrays, and zeroes those buffers. <code>go-noise</code> needed no derivation
+change: it already matched <code>ssu2.rst</code> §&rdquo;KDF for data phase&rdquo;, and this was
+confirmed against the reference implementation rather than by self-consistency —
+<code>TestSSU2_DataPhaseKeys_JavaInterop_KAT</code> in <code>go-noise/ssu2/handshake</code> asserts
+<code>k_data</code> and <code>k_header_2</code> equal the values Java I2P 2.12.0
+(<code>net.i2p.crypto.HKDF</code>, the call shape <code>SSU2Util.hkdf</code> uses) produces for the
+same split key. Because the derivation was already correct, rekeying
+(<code>ssu2/session/conn_data.go</code> → <code>deriveRekeyKey</code>) was affected by the same zeroed
+input and is fixed by the same change.</p>
+
+<p>What is still not proven is the consequence of the fix on real traffic. All
+prior wire evidence — including the decrypted-frame counts recorded while the
+defect was being confirmed — was measured against the buggy build, so it says
+nothing about interoperability now. Two things follow:</p>
+
+<ul>
+<li>Live SSU2 interop with Java I2P and i2pd (checklist items 1 and 2) has never
+been demonstrated end to end, and is now the first opportunity to do so.</li>
+<li>Sessions recorded before this fix remain decryptable by anyone holding the
+capture. No long-term secret is exposed, so no key rotation is warranted, but
+past captures must be treated as public.</li>
+</ul>
+
 <h2 id="production-readiness-checklist">Production-readiness checklist</h2>
 
 <p>The experimental designation can be removed when all of these hold:</p>
@@ -226,6 +263,10 @@ being skipped in practice, not merely in theory.</p>
   (non-caps-only) published RouterAddress.</li>
 <li>[ ] <strong>Interop matrix updated</strong>: <code>docs/interop-matrix.md</code> gains an SSU2 row
   with the same pass criteria as the NTCP2 paths.</li>
+<li>[ ] <strong>Data-phase interop</strong>: I2NP actually flows over an SSU2 session with a
+  Java or i2pd peer, in both directions. This is a separate gate from the
+  handshake completing: before the key-derivation fix in section 5, a peer
+  could finish SessionConfirmed and still never read a single data packet.</li>
 <li>[ ] <strong>Initiator replay cache</strong>: either enforced upstream in <code>go-noise</code> for
   <code>initiator == true</code>, or enforced in this transport on the dial path.</li>
 <li>[ ] <strong>Peer tests</strong>: end-to-end NAT detection against a real Java/i2pd peer,
@@ -244,7 +285,7 @@ alongside it, but its real-network behaviour is unverified.</p>
     </main>
     
     <footer class="page-footer">
-      <p>Generated on 2026-11-02 07:24:56 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
+      <p>Generated on 2026-11-02 13:34:50 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
     </footer>
   </div>
 </body>
