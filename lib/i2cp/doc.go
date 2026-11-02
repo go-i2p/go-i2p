@@ -59,17 +59,13 @@
 //
 // # Known limitations
 //
-// EncryptedLeaseSet DHT key: records are stored under SHA-256 of the blinded
-// public key, but the spec (proposal 123, "Encrypted LeaseSet" lookup) calls for
-// SHA-256 over the signature type and the blinded public key together. go-i2p is
-// self-consistent, so publish/lookup round-trips within this network, but the
-// records will not line up with a spec-following Java or i2pd floodfill.
-//
-// HostReply result codes: a failed blinded lookup is reported as timeout (2) or
-// generic failure (3). The spec (i2cp.rst, HostReply) reserves those for
-// "lookup password required" (2), "private key required" (3), "both required"
-// (4), and "decryption failure" (5); a b33 client relies on those codes to
-// learn that it must supply a secret or a client key.
+// HostLookup does not return blinded (EncryptedLeaseSet) destinations. A
+// blinded record is stored under SHA-256(sig type || blinded public key),
+// which cannot be derived from the 32-byte hash a type 0/2 lookup carries --
+// it needs the unblinded destination and the blinding secret. Blinded peers
+// are reached through the send path (see "Encrypted LeaseSets" above), which
+// has both; a client that wants a blinded destination's leases should send to
+// it rather than look it up.
 //
 // Message reliability: the i2cp.messageReliability option is parsed and
 // stored, but all reliability modes (BestEffort, Guaranteed, None) are

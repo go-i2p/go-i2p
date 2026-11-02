@@ -1106,13 +1106,19 @@ func TestHostLookupPayloadParse(t *testing.T) {
 			shouldError: true,
 		},
 		{
+			// A real truncated query: valid 11-byte header declaring a hostname
+			// lookup, then a String whose length prefix exceeds the bytes left.
+			// The header is well-formed, so this exercises body parsing rather
+			// than the unknown-type path.
 			name: "truncated_query",
 			data: func() []byte {
 				buf := new(bytes.Buffer)
-				binary.Write(buf, binary.BigEndian, uint32(11111))
-				binary.Write(buf, binary.BigEndian, uint16(HostLookupTypeHostname))
-				binary.Write(buf, binary.BigEndian, uint16(100)) // Claims 100 bytes
-				buf.WriteString("short")                         // Only 5 bytes
+				binary.Write(buf, binary.BigEndian, uint16(0))     // sessionID
+				binary.Write(buf, binary.BigEndian, uint32(11111)) // requestID
+				binary.Write(buf, binary.BigEndian, uint32(0))     // timeout
+				buf.WriteByte(byte(HostLookupTypeHostname))        // byte 10: type
+				buf.WriteByte(100)                                 // String length is 1 byte: claims 100
+				buf.WriteString("short")                           // only 5 bytes follow
 				return buf.Bytes()
 			}(),
 			shouldError: true,

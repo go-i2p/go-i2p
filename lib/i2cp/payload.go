@@ -556,18 +556,6 @@ const (
 	HostLookupTypeDestination uint16 = 4
 )
 
-// acceptsLookupType reports whether t is a HostLookup type the parser accepts.
-func acceptsLookupType(t uint16) bool {
-	switch t {
-	case HostLookupTypeHash, HostLookupTypeHostname,
-		HostLookupTypeHashWithOptions, HostLookupTypeHostnameWithOptions,
-		HostLookupTypeDestination:
-		return true
-	default:
-		return false
-	}
-}
-
 // lookupTypeRequestsOptions reports whether the type asks for the LeaseSet
 // options Mapping to be returned (proposal 167 types 2-4).
 func lookupTypeRequestsOptions(t uint16) bool {
@@ -658,7 +646,12 @@ func parseCanonicalHostLookupPayload(data []byte) (*HostLookupPayload, error) {
 		hlp.Hash = hash[:]
 		hlp.Query = hex.EncodeToString(hlp.Hash)
 	default:
-		return nil, oops.Errorf("unsupported host lookup type: %d", hlp.LookupType)
+		// An unknown lookup type must be answered with result code 7, not
+		// rejected: a parse error propagates out of the message handler and the
+		// connection loop closes the socket, which would disconnect any client
+		// that tries a lookup type newer than this router. Keep the header so
+		// the dispatcher can reply with the request ID the client is waiting on;
+		// the query body is left unparsed because its shape is unknown.
 	}
 
 	log.WithFields(logger.Fields{
