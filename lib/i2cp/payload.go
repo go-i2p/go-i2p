@@ -787,6 +787,16 @@ const (
 	blindingFlagSecret     = 0x10 // bit 4: 1 if a lookup secret/password is required
 )
 
+// BlindingInfo authentication scheme values, held in flag bits 3-1 and read by
+// BlindingInfoPayload.AuthScheme. These are the scheme field values, not the
+// Layer 1 auth types in common/encrypted_leaseset: DH is 000 and PSK is 001, so
+// the mapping to ENCRYPTED_LEASESET_AUTH_TYPE_* is done explicitly where advice
+// is converted into a decryption credential.
+const (
+	blindingAuthSchemeDH  uint8 = 0 // 000: DH client authentication (or none)
+	blindingAuthSchemePSK uint8 = 1 // 001: PSK client authentication
+)
+
 // BlindingInfoPayload represents the payload structure of a BlindingInfo (type 42)
 // message.
 //

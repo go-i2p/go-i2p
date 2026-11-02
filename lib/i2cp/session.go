@@ -240,6 +240,11 @@ type Session struct {
 	blindingSecret    []byte    // Secret used for blinding (cached)
 	lastBlindingDate  time.Time // Last date used for blinding (triggers rotation at UTC midnight)
 
+	// encLSClientAuth restricts who may decrypt this session's EncryptedLeaseSet
+	// (nil = auth type 0, readable by anyone who knows the destination). See
+	// SetEncryptedLeaseSetClientAuth.
+	encLSClientAuth *encrypted_leaseset.ClientAuthConfig
+
 	// Lifecycle
 	stopCh      chan struct{}  // Signal to stop session
 	stopOnce    sync.Once      // Ensure cleanup happens only once
@@ -1367,6 +1372,95 @@ func (s *Session) finalizeEncryptedLeaseSet(cookie [32]byte, encryptedData []byt
 	return elsBytes, nil
 }
 
+// SetEncryptedLeaseSetClientAuth restricts who may decrypt this session's
+// EncryptedLeaseSet, implementing the spec's per-client authorization.
+//
+// By default an EncryptedLeaseSet is readable by anybody who knows the
+// destination: the blinded record is public, and only the inner LeaseSet2 is
+// encrypted, under a subcredential derived from the destination's signing public
+// key. Per-client authorization goes further and encrypts a per-publication
+// authCookie to each authorized client, so that only those clients can derive the
+// Layer 2 key and read the leases at all.
+//
+// cfg.AuthType selects the scheme:
+//   - ENCRYPTED_LEASESET_AUTH_TYPE_DH:  cfg.DHClientPublicKeys  (each client's cpk_i)
+//   - ENCRYPTED_LEASESET_AUTH_TYPE_PSK: cfg.PSKClientKeys       (each client's psk_i)
+//   - ENCRYPTED_LEASESET_AUTH_TYPE_NONE (or a nil cfg): back to the default,
+//     readable by anyone who knows the destination.
+//
+// The key material arrives out-of-band. The spec is explicit that each client's
+// key "each client generates and sends to the server via a secure out-of-band
+// mechanism" (encryptedleaseset.rst §Per-client authorization), and I2CP defines
+// no option or message to carry it to the server; BlindingInfo (type 42) is the
+// reverse direction, a client telling the router about a *peer*. So this is set
+// programmatically by the host application, the same way clientEncryptionKeys are
+// supplied for CreateLeaseSet2.
+//
+// The list is validated and copied; it applies to the next LeaseSet regeneration.
+// ReconfigureSession does not carry this setting, so it survives reconfiguration.
+func (s *Session) SetEncryptedLeaseSetClientAuth(cfg *encrypted_leaseset.ClientAuthConfig) error {
+	if cfg == nil || cfg.AuthType == encrypted_leaseset.ENCRYPTED_LEASESET_AUTH_TYPE_NONE {
+		s.mu.Lock()
+		s.encLSClientAuth = nil
+		s.mu.Unlock()
+		return nil
+	}
+
+	// Copy so a caller mutating its own slices afterwards cannot change what the
+	// router publishes, and validate the copy with the same rules common applies
+	// at encryption time.
+	copied := &encrypted_leaseset.ClientAuthConfig{
+		AuthType:           cfg.AuthType,
+		DHClientPublicKeys: copyKeyList(cfg.DHClientPublicKeys),
+		PSKClientKeys:      copyKeyList(cfg.PSKClientKeys),
+	}
+	if err := encrypted_leaseset.ValidateClientAuthConfig(copied); err != nil {
+		return oops.Wrapf(err, "invalid EncryptedLeaseSet per-client authorization")
+	}
+
+	s.mu.Lock()
+	s.encLSClientAuth = copied
+	s.mu.Unlock()
+
+	log.WithFields(logger.Fields{
+		"at":        "i2cp.Session.SetEncryptedLeaseSetClientAuth",
+		"sessionID": s.id,
+		"authType":  copied.AuthType,
+		"clients":   len(copied.DHClientPublicKeys) + len(copied.PSKClientKeys),
+	}).Info("encrypted_leaseset_client_auth_configured")
+
+	return nil
+}
+
+// EncryptedLeaseSetClientAuth returns a copy of the per-client authorization in
+// effect for this session's EncryptedLeaseSet, or nil when the LeaseSet is
+// readable by anyone who knows the destination.
+func (s *Session) EncryptedLeaseSetClientAuth() *encrypted_leaseset.ClientAuthConfig {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.encLSClientAuth == nil {
+		return nil
+	}
+	return &encrypted_leaseset.ClientAuthConfig{
+		AuthType:           s.encLSClientAuth.AuthType,
+		DHClientPublicKeys: copyKeyList(s.encLSClientAuth.DHClientPublicKeys),
+		PSKClientKeys:      copyKeyList(s.encLSClientAuth.PSKClientKeys),
+	}
+}
+
+// copyKeyList deep-copies a list of fixed-size keys.
+func copyKeyList(in [][]byte) [][]byte {
+	if in == nil {
+		return nil
+	}
+	out := make([][]byte, len(in))
+	for i, k := range in {
+		out[i] = make([]byte, len(k))
+		copy(out[i], k)
+	}
+	return out
+}
+
 // validateEncryptedLeaseSetSupport ensures the destination supports EncryptedLeaseSet.
 // Only Ed25519 (type 7) signatures are supported for destination blinding.
 func (s *Session) validateEncryptedLeaseSetSupport() error {
@@ -1537,8 +1631,22 @@ func (s *Session) encryptInnerLeaseSet(ls2 *lease_set2.LeaseSet2, cookie [32]byt
 		uint16(s.blindedDestination.KeyCertificate.SigningPublicKeyType()),
 	)
 
-	// Encrypt inner LeaseSet2
-	encryptedData, err := encrypted_leaseset.EncryptInnerLeaseSet2(ls2, subcredential, published)
+	// Encrypt inner LeaseSet2. With per-client authorization configured, the
+	// Layer 1 flag marks the record per-client and the Layer 2 key is derived
+	// from a fresh authCookie that is separately encrypted to each authorized
+	// client, so only those clients can read the leases. A nil cfg is auth type
+	// 0: readable by anyone who knows the destination.
+	//
+	// s.mu is already held by CreateEncryptedLeaseSet, so read the field
+	// directly rather than through the locking accessor.
+	authCfg := s.encLSClientAuth
+	if authCfg != nil && authCfg.AuthType == encrypted_leaseset.ENCRYPTED_LEASESET_AUTH_TYPE_NONE {
+		authCfg = nil
+	}
+
+	// A nil cfg takes the same path: common's buildLayer1AuthSection maps nil to
+	// auth type 0, an empty auth block and a zero-length authCookie.
+	encryptedData, err := encrypted_leaseset.EncryptInnerLeaseSet2WithAuth(ls2, subcredential, published, authCfg)
 	if err != nil {
 		return nil, oops.Errorf("failed to encrypt inner LeaseSet2: %w", err)
 	}

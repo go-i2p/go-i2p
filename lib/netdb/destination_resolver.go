@@ -220,9 +220,33 @@ func (dr *DestinationResolver) extractValidX25519Key(encKey lease_set2.Encryptio
 //   - publicKey: The X25519 public key for garlic encryption (32 bytes)
 //   - error: Non-nil if resolution fails at any step
 func (dr *DestinationResolver) ResolveEncryptedDestination(dest destination.Destination, secret []byte) ([32]byte, error) {
+	return dr.ResolveEncryptedDestinationWithCredential(dest, secret, nil)
+}
+
+// ResolveEncryptedDestinationWithCredential resolves a destination that
+// publishes an EncryptedLeaseSet which uses per-client authorization.
+//
+// An encrypted LeaseSet restricts who may read the inner LeaseSet2 by
+// encrypting a per-publication authCookie to each authorized client (DH to the
+// client's X25519 public key, or PSK). Without that cookie the Layer 2 key
+// cannot be derived, so the record is present in the NetDB but undecryptable.
+// cred supplies this client's secret; pass nil for a LeaseSet that is open to
+// everybody (auth type 0).
+//
+// The router obtains cred from the BlindingInfo (type 42) advice its client sent
+// for this destination: the b33 address only flags that a secret and/or private
+// key is required, and carries neither.
+//
+// Spec: https://geti2p.net/spec/encryptedleaseset section "Per-client authorization"
+func (dr *DestinationResolver) ResolveEncryptedDestinationWithCredential(
+	dest destination.Destination,
+	secret []byte,
+	cred *encrypted_leaseset.ClientCredential,
+) ([32]byte, error) {
 	log.WithFields(logger.Fields{
-		"at":     "DestinationResolver.ResolveEncryptedDestination",
-		"reason": "encrypted_lookup_requested",
+		"at":             "DestinationResolver.ResolveEncryptedDestination",
+		"reason":         "encrypted_lookup_requested",
+		"has_credential": cred != nil,
 	}).Debug("resolving encrypted destination")
 
 	lookupHash, err := dr.deriveBlindedLookupHash(dest, secret)
@@ -235,7 +259,7 @@ func (dr *DestinationResolver) ResolveEncryptedDestination(dest destination.Dest
 		return [32]byte{}, err
 	}
 
-	innerLS2, err := dr.decryptEncryptedLeaseSet(dest, els)
+	innerLS2, err := dr.decryptEncryptedLeaseSet(dest, els, cred)
 	if err != nil {
 		return [32]byte{}, err
 	}
@@ -245,6 +269,55 @@ func (dr *DestinationResolver) ResolveEncryptedDestination(dest destination.Dest
 		return [32]byte{}, oops.Errorf("failed to hash destination: %w", err)
 	}
 	return dr.findX25519KeyInLeaseSet2(*innerLS2, destHash)
+}
+
+// ResolveDestinationWithCredential resolves a peer destination when the caller
+// holds the full (unblinded) Destination and, for a per-client authorized
+// EncryptedLeaseSet, this client's credential.
+//
+// It is the entry point for sending to a destination whose record type is not
+// known in advance, because a blinded EncryptedLeaseSet cannot be found from the
+// destination hash alone: it is stored under the hash of the blinded signing key,
+// which is derived from the unblinded public key. So this tries, in order:
+//
+//  1. LeaseSet2 / classic LeaseSet under the destination hash.
+//  2. EncryptedLeaseSet under the blinded lookup hash derived from dest.
+//
+// secret is the blinding secret (the "lookup password" a b33 consumer obtains out
+// of band); it feeds GENERATE_ALPHA, so a wrong or missing secret looks up a
+// different blinded key and finds nothing. cred may be nil for an
+// EncryptedLeaseSet that is open to everybody.
+//
+// Returns the X25519 encryption key for garlic encryption.
+func (dr *DestinationResolver) ResolveDestinationWithCredential(
+	dest destination.Destination,
+	secret []byte,
+	cred *encrypted_leaseset.ClientCredential,
+) ([32]byte, error) {
+	destHash, err := dest.Hash()
+	if err != nil {
+		return [32]byte{}, oops.Errorf("failed to hash destination: %w", err)
+	}
+
+	// Cleartext records first: they need no secret and no credential.
+	if key, err := dr.ResolveDestination(destHash); err == nil {
+		return key, nil
+	}
+
+	// Otherwise the peer may publish a blinded EncryptedLeaseSet.
+	key, encErr := dr.ResolveEncryptedDestinationWithCredential(dest, secret, cred)
+	if encErr == nil {
+		return key, nil
+	}
+
+	log.WithFields(logger.Fields{
+		"at":               "DestinationResolver.ResolveDestinationWithCredential",
+		"destination_hash": logutil.HashPrefix(destHash),
+		"error":            encErr.Error(),
+	}).Debug("destination_not_resolvable")
+
+	return [32]byte{}, oops.Errorf("destination %x not resolvable as LeaseSet or EncryptedLeaseSet: %w",
+		destHash[:8], encErr)
 }
 
 // deriveBlindedLookupHash computes the NetDB lookup hash from a blinded destination.
@@ -283,13 +356,17 @@ func (dr *DestinationResolver) fetchEncryptedLeaseSet(lookupHash common.Hash) (*
 }
 
 // decryptEncryptedLeaseSet decrypts the inner LeaseSet2 from an EncryptedLeaseSet.
-func (dr *DestinationResolver) decryptEncryptedLeaseSet(dest destination.Destination, els *encrypted_leaseset.EncryptedLeaseSet) (*lease_set2.LeaseSet2, error) {
+func (dr *DestinationResolver) decryptEncryptedLeaseSet(
+	dest destination.Destination,
+	els *encrypted_leaseset.EncryptedLeaseSet,
+	cred *encrypted_leaseset.ClientCredential,
+) (*lease_set2.LeaseSet2, error) {
 	if dest.KeyCertificate == nil {
 		return nil, oops.Errorf("encrypted leaseset: destination missing key certificate")
 	}
 	origSigningKey, err := dest.SigningPublicKey()
 	if err != nil {
-		return nil, oops.Errorf("failed to get original signing key: %w", err)
+		return nil, oops.Errorf("failed to get signing public key: %w", err)
 	}
 	subcredential := encrypted_leaseset.DeriveSubcredential(
 		origSigningKey.Bytes(),
@@ -298,7 +375,9 @@ func (dr *DestinationResolver) decryptEncryptedLeaseSet(dest destination.Destina
 		els.SigType(),
 	)
 
-	innerLS2, err := els.DecryptInnerData(subcredential)
+	// The credential is required when the record uses per-client authorization;
+	// for auth type 0 it is ignored by common, so nil is correct there.
+	innerLS2, err := els.DecryptInnerDataWithCredential(subcredential, cred)
 	if err != nil {
 		return nil, oops.Errorf("failed to decrypt EncryptedLeaseSet inner data: %w", err)
 	}

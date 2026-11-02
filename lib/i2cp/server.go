@@ -10,6 +10,8 @@ import (
 	"time"
 
 	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/common/destination"
+	"github.com/go-i2p/common/encrypted_leaseset"
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/naming"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
@@ -492,13 +494,20 @@ var ErrNoDestinationResolver = errors.New("no destination resolver configured: c
 // Returns the X25519 public key needed for ECIES-X25519-AEAD garlic encryption.
 // Returns ErrNoDestinationResolver if no resolver has been set via SetDestinationResolver.
 func (s *Server) resolveDestinationKey(destHash common.Hash) ([32]byte, error) {
-	if s.destinationResolver == nil {
+	// Snapshot under the lock: SetDestinationResolver writes the field while
+	// holding it, and routing runs on per-message goroutines. Reading it
+	// unlocked would race with a reconfigure.
+	s.mu.RLock()
+	resolver := s.destinationResolver
+	s.mu.RUnlock()
+
+	if resolver == nil {
 		log.WithField("destination", logutil.HashPrefixPlain(destHash)).
 			Error("no_destination_resolver_configured")
 		return [32]byte{}, ErrNoDestinationResolver
 	}
 
-	pubKey, err := s.destinationResolver.ResolveDestination(destHash)
+	pubKey, err := resolver.ResolveDestination(destHash)
 	if err != nil {
 		return [32]byte{}, oops.Errorf("failed to resolve destination: %w", err)
 	}
@@ -506,6 +515,88 @@ func (s *Server) resolveDestinationKey(destHash common.Hash) ([32]byte, error) {
 	log.WithField("destination", logutil.HashPrefixPlain(destHash)).
 		Debug("resolved_destination_public_key")
 	return pubKey, nil
+}
+
+// resolveDestinationKeyForPeer resolves the encryption key of a destination a
+// client is sending to, given the full Destination the SendMessage carried.
+//
+// A cleartext LeaseSet is found from the destination hash alone. A blinded
+// EncryptedLeaseSet is not: it is stored under the hash of a blinded signing key
+// derived from the destination's public key, its blinding secret and today's UTC
+// date, so the unblinded destination is required to locate it at all. That is why
+// this takes the destination rather than just the hash.
+//
+// The blinding secret and per-client private key come from the BlindingInfo
+// (type 42) advice the client sent for this peer. Per i2cp.rst, a client that
+// will send to a blinded destination which requires a secret or per-client
+// authentication "must send a Blinding Info message" - the b33 address only
+// flags that they are required, and carries neither.
+//
+// When the resolver cannot do blinded lookups (it only implements
+// ResolveDestination), or no advice is on file, this falls back to the cleartext
+// path and the send fails as it did before.
+func (s *Server) resolveDestinationKeyForPeer(dest *destination.Destination, destHash common.Hash) ([32]byte, error) {
+	resolver := s.resolverForBlindedLookup()
+	if resolver == nil || dest == nil {
+		return s.resolveDestinationKey(destHash)
+	}
+
+	advice, hasAdvice := s.blindingAdviceForDestination(dest)
+	if !hasAdvice {
+		// No advice: the peer is not known to be blinded. Try the cleartext
+		// record, which is also what an un-blinded destination looks like.
+		return s.resolveDestinationKey(destHash)
+	}
+
+	var secret []byte
+	if advice.RequiresSecret() {
+		secret = []byte(advice.Password)
+	}
+	cred := clientCredentialFromAdvice(advice)
+
+	pubKey, err := resolver.ResolveDestinationWithCredential(*dest, secret, cred)
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":          "i2cp.Server.resolveDestinationKeyForPeer",
+			"destination": logutil.HashPrefixPlain(destHash),
+			"perClient":   advice.IsPerClient(),
+			"secret":      advice.RequiresSecret(),
+			"error":       err.Error(),
+		}).Debug("blinded_destination_resolution_failed")
+
+		// Fall back to the cleartext lookup: advice may describe a destination
+		// that has since published an unblinded LeaseSet.
+		return s.resolveDestinationKey(destHash)
+	}
+
+	log.WithFields(logger.Fields{
+		"at":          "i2cp.Server.resolveDestinationKeyForPeer",
+		"destination": logutil.HashPrefixPlain(destHash),
+	}).Debug("resolved_blinded_destination_public_key")
+	return pubKey, nil
+}
+
+// blindedDestinationResolver is the capability this server uses to reach a
+// blinded EncryptedLeaseSet. lib/netdb.DestinationResolver implements it; a
+// resolver that only implements ResolveDestination is used for cleartext lookups
+// only. Kept separate from the required resolver interface so existing
+// implementations and test stubs are unaffected.
+type blindedDestinationResolver interface {
+	ResolveDestinationWithCredential(dest destination.Destination, secret []byte,
+		cred *encrypted_leaseset.ClientCredential) ([32]byte, error)
+}
+
+// resolverForBlindedLookup returns the configured resolver when it supports
+// blinded lookups, or nil when it does not.
+func (s *Server) resolverForBlindedLookup() blindedDestinationResolver {
+	s.mu.RLock()
+	resolver := s.destinationResolver
+	s.mu.RUnlock()
+
+	if bdr, ok := resolver.(blindedDestinationResolver); ok {
+		return bdr
+	}
+	return nil
 }
 
 // SessionManager returns the server's session manager

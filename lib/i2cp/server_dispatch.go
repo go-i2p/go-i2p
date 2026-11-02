@@ -1,6 +1,7 @@
 package i2cp
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"math"
@@ -9,6 +10,7 @@ import (
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/destination"
+	"github.com/go-i2p/common/encrypted_leaseset"
 	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
@@ -1112,6 +1114,157 @@ func (s *Server) BlindingAdviceFor(destHash common.Hash) (*BlindingInfoPayload, 
 	return info, ok
 }
 
+// blindingAdviceForDestination finds the advice that applies to a peer
+// destination the router is about to send to.
+//
+// Advice is stored under a key that depends on which endpoint form the client
+// used (blindedPeerHash), and a send only carries the full Destination, so the
+// two have to be matched rather than looked up directly. Each endpoint form is
+// matched by the rule that derives its key:
+//
+//   - Type 2 (Destination): the stored destination hashes to the same value.
+//   - Type 3 (sig type + key): the key is the destination's UNBLINDED signing
+//     public key. b32encrypted.rst puts the non-blinded public key in the
+//     address, precisely because the blinded key is derived per day and cannot
+//     be encoded in a stable hostname.
+//   - Type 0 (hash): either the destination's own hash, or the blinded lookup
+//     hash derived from the destination using the advice's own password as the
+//     blinding secret. Deriving it from the advice rather than guessing keeps
+//     this to "does the secret the client gave me actually produce this hash".
+//   - Type 1 (hostname): not matchable here; reverse hostname lookup needs an
+//     address book, which the send path does not carry.
+//
+// Expired advice is skipped. Expiration was previously only logged; now that
+// advice is what unlocks decryption of a peer's leases, stale key material must
+// not be trusted.
+func (s *Server) blindingAdviceForDestination(dest *destination.Destination) (*BlindingInfoPayload, bool) {
+	if dest == nil {
+		return nil, false
+	}
+
+	s.mu.RLock()
+	// Snapshot under the lock; matching (which hashes keys) runs outside it.
+	advices := make([]*BlindingInfoPayload, 0, len(s.blindingAdvice))
+	for _, info := range s.blindingAdvice {
+		advices = append(advices, info)
+	}
+	s.mu.RUnlock()
+
+	destHash, err := dest.Hash()
+	if err != nil {
+		return nil, false
+	}
+
+	var destPubKey []byte
+	if spk, err := dest.SigningPublicKey(); err == nil {
+		destPubKey = spk.Bytes()
+	}
+
+	now := uint32(time.Now().Unix())
+
+	for _, info := range advices {
+		if info == nil {
+			continue
+		}
+		if info.Expiration != 0 && info.Expiration < now {
+			continue
+		}
+
+		switch info.Endpoint {
+		case BlindingEndpointDestination:
+			stored, _, err := destination.ReadDestination(info.Destination)
+			if err != nil {
+				continue
+			}
+			if h, err := stored.Hash(); err == nil && h == destHash {
+				return info, true
+			}
+
+		case BlindingEndpointSigTypeKey:
+			// info.Pubkey is the destination's UNBLINDED signing public key,
+			// which is what a b33 address encodes (b32encrypted.rst: the
+			// address carries the public key, not the hash, precisely because
+			// the blinded key rotates daily). Match it against the same key.
+			if len(destPubKey) > 0 && len(info.Pubkey) > 0 &&
+				bytes.Equal(destPubKey, info.Pubkey) {
+				return info, true
+			}
+
+		case BlindingEndpointHash:
+			if len(info.Hash) == len(destHash) && bytes.Equal(info.Hash, destHash[:]) {
+				return info, true
+			}
+			// Blinded lookup hash, derived with the advice's own secret.
+			if info.RequiresSecret() && len(info.Password) > 0 {
+				if blindedHashMatches(dest, []byte(info.Password), info.Hash) {
+					return info, true
+				}
+			}
+		}
+	}
+
+	return nil, false
+}
+
+// blindedHashMatches reports whether deriving the blinded lookup hash for dest
+// under secret yields wantHash. Used to confirm that the secret a client
+// supplied actually belongs to the destination being sent to, so resolution does
+// not look up an unrelated blinded record.
+func blindedHashMatches(dest *destination.Destination, secret, wantHash []byte) bool {
+	if len(wantHash) != 32 {
+		return false
+	}
+	blinded, err := encrypted_leaseset.CreateBlindedDestination(*dest, secret, time.Now())
+	if err != nil {
+		return false
+	}
+	spk, err := blinded.SigningPublicKey()
+	if err != nil {
+		return false
+	}
+	h := common.HashData(spk.Bytes())
+	return bytes.Equal(h[:], wantHash)
+}
+
+// clientCredentialFromAdvice builds the per-client decryption credential for a
+// blinded peer, from the private key the client supplied in BlindingInfo.
+//
+// BlindingInfo carries a single 32-byte ECIES_X25519 private key and a scheme
+// field (bits 3-1: 000 DH, 001 PSK). Returns nil when the advice does not set the
+// per-client flag or carries no key, which means the record is readable by anyone
+// who knows the destination.
+func clientCredentialFromAdvice(info *BlindingInfoPayload) *encrypted_leaseset.ClientCredential {
+	if info == nil || !info.IsPerClient() || len(info.PrivateKey) == 0 {
+		return nil
+	}
+
+	// The PrivateKey field's meaning depends on the scheme in flag bits 3-1: a
+	// 32-byte X25519 private key (csk_i) for DH, or a 32-byte pre-shared key
+	// (psk_i) for PSK. Map explicitly rather than assuming, because a credential
+	// of the wrong scheme fails to recover the authCookie and the record looks
+	// undecryptable rather than misconfigured.
+	switch info.AuthScheme() {
+	case blindingAuthSchemePSK:
+		return &encrypted_leaseset.ClientCredential{
+			AuthType: encrypted_leaseset.ENCRYPTED_LEASESET_AUTH_TYPE_PSK,
+			PSK:      info.PrivateKey,
+		}
+	case blindingAuthSchemeDH:
+		return &encrypted_leaseset.ClientCredential{
+			AuthType:     encrypted_leaseset.ENCRYPTED_LEASESET_AUTH_TYPE_DH,
+			DHPrivateKey: info.PrivateKey,
+		}
+	default:
+		// Scheme values 2-7 are not defined by the spec. Refuse to guess rather
+		// than trying a scheme that cannot work.
+		log.WithFields(logger.Fields{
+			"at":     "i2cp.clientCredentialFromAdvice",
+			"scheme": info.AuthScheme(),
+		}).Warn("unknown_blinding_auth_scheme")
+		return nil
+	}
+}
+
 // forgetBlindingAdviceForSession drops any advice recorded for a session that
 // is going away, so a departing client's per-client keys are not retained.
 func (s *Server) forgetBlindingAdviceForSession(sessionID uint16) {
@@ -1124,10 +1277,18 @@ func (s *Server) forgetBlindingAdviceForSession(sessionID uint16) {
 	}
 }
 
-// blindedPeerHash derives the destination hash the advice applies to, from the
+// blindedPeerHash derives the map key the advice is stored under, from the
 // endpoint field. A hash endpoint is already the answer; a Destination endpoint
-// is hashed; a sig-type+key endpoint is hashed over the blinded signing public
-// key (the NetDB lookup key for a blinded destination).
+// is hashed; a sig-type+key endpoint is hashed over the signing public key it
+// carries.
+//
+// For type 3 that key is the destination's UNBLINDED signing public key, not the
+// blinded one: b32encrypted.rst puts the public key in the address precisely
+// because the blinded key is derived per day and cannot be encoded in a stable
+// hostname ("It does not provide the non-blinded public key... The client needs
+// either the full destination, or the public key by itself"). The value is only a
+// map key for storing the advice; the NetDB lookup key for a blinded record is
+// derived separately from the public key plus the blinding secret and date.
 func blindedPeerHash(info *BlindingInfoPayload) (common.Hash, error) {
 	switch info.Endpoint {
 	case BlindingEndpointHash:
@@ -1147,8 +1308,9 @@ func blindedPeerHash(info *BlindingInfoPayload) (common.Hash, error) {
 		return h, nil
 
 	case BlindingEndpointSigTypeKey:
-		// The blinded signing public key is what a "b33" address encodes; the
-		// NetDB key is SHA-256 of that key.
+		// The destination's unblinded signing public key is what a "b33" address
+		// encodes. Hashed here only to key the advice map; the NetDB lookup key
+		// for the blinded record is derived from it plus the secret and date.
 		return common.HashData(info.Pubkey), nil
 
 	case BlindingEndpointHostname:
@@ -1514,7 +1676,7 @@ func (s *Server) routeMessageExpiresWithStatus(session *Session, messageID uint3
 
 	statusCallback := s.buildStatusCallback(session)
 
-	destPubKey, err := s.resolveDestinationKey(destHash)
+	destPubKey, err := s.resolveDestinationKeyForPeer(&sendMsg.Destination, destHash)
 	if err != nil {
 		logDestinationResolutionFailure("routeMessageExpiresWithStatus", session.ID(), messageID, destHash, err)
 		statusCallback(messageID, MessageStatusNoLeaseSet, uint32(len(sendMsg.Payload)), sendMsg.Nonce)
@@ -1553,7 +1715,7 @@ func (s *Server) routeMessageWithStatus(session *Session, messageID uint32, send
 
 	statusCallback := s.buildStatusCallback(session)
 
-	destPubKey, err := s.resolveDestinationKey(destHash)
+	destPubKey, err := s.resolveDestinationKeyForPeer(&sendMsg.Destination, destHash)
 	if err != nil {
 		logDestinationResolutionFailure("routeMessageWithStatus", session.ID(), messageID, destHash, err)
 		statusCallback(messageID, MessageStatusNoLeaseSet, uint32(len(sendMsg.Payload)), sendMsg.Nonce)
