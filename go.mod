@@ -88,6 +88,12 @@ retract (
 
 replace github.com/go-i2p/go-noise => ../go-noise
 
+// github.com/go-i2p/noise is developed alongside this repo, like the sibling
+// modules replaced below. The require line above records the published version
+// to use once the SSU2 data-phase key fix (see docs/ssu2-experimental.md) is
+// tagged; until then the checkout supplies it.
+replace github.com/go-i2p/noise => ../noise
+
 replace github.com/go-i2p/common => ../common
 
 replace github.com/go-i2p/crypto => ../crypto
