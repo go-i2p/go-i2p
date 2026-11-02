@@ -1278,32 +1278,36 @@ func TestHostReplyPayloadParse(t *testing.T) {
 			shouldError:   false,
 		},
 		{
-			name: "timeout",
+			// Spec code 2: "Lookup password required" (0.9.43+). A b33 client
+			// reads this and goes and supplies the password.
+			name: "password_required",
 			data: func() []byte {
 				buf := new(bytes.Buffer)
 				binary.Write(buf, binary.BigEndian, uint16(0x1234))
 				binary.Write(buf, binary.BigEndian, uint32(11111))
-				buf.WriteByte(HostReplyTimeout)
+				buf.WriteByte(HostReplyPasswordRequired)
 				return buf.Bytes()
 			}(),
 			wantSessionID: 0x1234,
 			wantID:        11111,
-			wantCode:      HostReplyTimeout,
+			wantCode:      HostReplyPasswordRequired,
 			wantDestLen:   0,
 			shouldError:   false,
 		},
 		{
-			name: "error",
+			// Spec code 3: "Private key required" (0.9.43+), for a per-client
+			// authorized EncryptedLeaseSet.
+			name: "private_key_required",
 			data: func() []byte {
 				buf := new(bytes.Buffer)
 				binary.Write(buf, binary.BigEndian, uint16(0x1234))
 				binary.Write(buf, binary.BigEndian, uint32(99999))
-				buf.WriteByte(HostReplyError)
+				buf.WriteByte(HostReplyPrivateKeyRequired)
 				return buf.Bytes()
 			}(),
 			wantSessionID: 0x1234,
 			wantID:        99999,
-			wantCode:      HostReplyError,
+			wantCode:      HostReplyPrivateKeyRequired,
 			wantDestLen:   0,
 			shouldError:   false,
 		},
@@ -1370,16 +1374,16 @@ func TestHostReplyPayloadMarshal(t *testing.T) {
 			},
 		},
 		{
-			name: "timeout",
+			name: "decryption_failure",
 			payload: &HostReplyPayload{
 				SessionID:   0x1234,
 				RequestID:   22222,
-				ResultCode:  HostReplyTimeout,
+				ResultCode:  HostReplyDecryptionFailure,
 				Destination: []byte{}, // Empty slice
 			},
 			check: func(data []byte) error {
 				assert.Equal(t, 7, len(data), "data length")
-				assert.Equal(t, HostReplyTimeout, data[6], "ResultCode")
+				assert.Equal(t, HostReplyDecryptionFailure, data[6], "ResultCode")
 				return nil
 			},
 		},
@@ -1421,20 +1425,20 @@ func TestHostReplyRoundTrip(t *testing.T) {
 			},
 		},
 		{
-			name: "timeout",
+			name: "password_and_key_required",
 			payload: &HostReplyPayload{
 				SessionID:   0x1234,
 				RequestID:   11111,
-				ResultCode:  HostReplyTimeout,
+				ResultCode:  HostReplyPasswordAndKeyRequired,
 				Destination: []byte{},
 			},
 		},
 		{
-			name: "error",
+			name: "lookup_type_unsupported",
 			payload: &HostReplyPayload{
 				SessionID:   0x1234,
 				RequestID:   99999,
-				ResultCode:  HostReplyError,
+				ResultCode:  HostReplyLookupTypeUnsupported,
 				Destination: nil,
 			},
 		},
@@ -1460,10 +1464,20 @@ func TestHostLookupConstants(t *testing.T) {
 	assert.Equal(t, uint16(0), HostLookupTypeHash)
 	assert.Equal(t, uint16(1), HostLookupTypeHostname)
 
+	// Wire values are fixed by the spec (i2cp.rst "HostReplyMessage"). Pinned
+	// individually because a client branches on the number, not the name:
+	// 2/3/4 tell a b33 client to supply a password and/or private key, and
+	// reusing one of them as a generic error makes it chase a credential that
+	// was never the problem.
 	assert.Equal(t, uint8(0), HostReplySuccess)
-	assert.Equal(t, uint8(1), HostReplyNotFound)
-	assert.Equal(t, uint8(2), HostReplyTimeout)
-	assert.Equal(t, uint8(3), HostReplyError)
+	assert.Equal(t, uint8(1), HostReplyFailure)
+	assert.Equal(t, uint8(1), HostReplyNotFound) // alias for the same code
+	assert.Equal(t, uint8(2), HostReplyPasswordRequired)
+	assert.Equal(t, uint8(3), HostReplyPrivateKeyRequired)
+	assert.Equal(t, uint8(4), HostReplyPasswordAndKeyRequired)
+	assert.Equal(t, uint8(5), HostReplyDecryptionFailure)
+	assert.Equal(t, uint8(6), HostReplyLeaseSetLookupFailure)
+	assert.Equal(t, uint8(7), HostReplyLookupTypeUnsupported)
 }
 
 func TestHostLookupTypeNames(t *testing.T) {

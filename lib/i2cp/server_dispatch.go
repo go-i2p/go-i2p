@@ -11,6 +11,8 @@ import (
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/destination"
 	"github.com/go-i2p/common/encrypted_leaseset"
+	"github.com/go-i2p/common/lease_set2"
+	"github.com/go-i2p/common/meta_leaseset"
 	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
@@ -795,7 +797,8 @@ func logHostLookupRequest(sessionID uint16, lookupMsg *HostLookupPayload) {
 
 // handleHostnameLookup handles hostname lookup type.
 // If a HostnameResolver is configured, the hostname is resolved via the resolver.
-// Otherwise, returns HostReplyError indicating the feature is not available.
+// Otherwise returns HostReplyFailure: the spec has no "feature not implemented"
+// code for hostname lookups, and codes 2-7 each mean something a client acts on.
 func (s *Server) handleHostnameLookup(lookupMsg *HostLookupPayload) *HostReplyPayload {
 	if s.hostnameResolver == nil {
 		log.WithFields(logger.Fields{
@@ -803,7 +806,7 @@ func (s *Server) handleHostnameLookup(lookupMsg *HostLookupPayload) *HostReplyPa
 			"requestID": lookupMsg.RequestID,
 			"query":     lookupMsg.Query,
 		}).Debug("hostname_lookup_not_implemented")
-		return newErrorReply(lookupMsg.SessionID, lookupMsg.RequestID, HostReplyError)
+		return newErrorReply(lookupMsg.SessionID, lookupMsg.RequestID, HostReplyFailure)
 	}
 
 	destBytes, err := s.hostnameResolver.ResolveHostname(lookupMsg.Query)
@@ -823,22 +826,88 @@ func (s *Server) handleHostnameLookup(lookupMsg *HostLookupPayload) *HostReplyPa
 		"hostname":  lookupMsg.Query,
 		"destLen":   len(destBytes),
 	}).Debug("hostname_lookup_resolved")
-	return &HostReplyPayload{
+
+	reply := &HostReplyPayload{
 		SessionID:   lookupMsg.SessionID,
 		RequestID:   lookupMsg.RequestID,
 		ResultCode:  HostReplySuccess,
 		Destination: destBytes,
 	}
+
+	// Lookup type 3 (proposal 167): the options Mapping must come from the
+	// LeaseSet, which the router has to fetch even when the address book
+	// already supplied the destination. A failure to fetch is reported with
+	// code 6 rather than downgrading to a type-1 answer.
+	if lookupTypeRequestsOptions(lookupMsg.LookupType) {
+		options, errReply := s.optionsForDestinationBytes(destBytes,
+			lookupMsg.SessionID, lookupMsg.RequestID)
+		if errReply != nil {
+			// The hostname resolved, so the spec says the Destination is present
+			// even when error 6 is returned for the LeaseSet fetch.
+			errReply.Destination = destBytes
+			return errReply
+		}
+		reply.Options = options
+	}
+
+	return reply
 }
 
-// handleUnknownLookupType handles unknown lookup types.
+// optionsForDestinationBytes fetches the LeaseSet for a destination supplied as
+// raw bytes and returns its options Mapping. Used by lookup types 3 and 4, where
+// the key is a hostname or a Destination rather than a hash to look up directly.
+func (s *Server) optionsForDestinationBytes(destBytes []byte, sessionID uint16, requestID uint32) ([]byte, *HostReplyPayload) {
+	destObj, _, err := destination.ReadDestination(destBytes)
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Server.handleHostLookup",
+			"requestID": requestID,
+			"error":     err.Error(),
+		}).Error("failed_to_parse_resolved_destination")
+		return nil, newErrorReply(sessionID, requestID, HostReplyLeaseSetLookupFailure)
+	}
+
+	hash, err := destObj.Hash()
+	if err != nil {
+		return nil, newErrorReply(sessionID, requestID, HostReplyLeaseSetLookupFailure)
+	}
+
+	if s.netdb == nil {
+		return nil, newErrorReply(sessionID, requestID, HostReplyLeaseSetLookupFailure)
+	}
+
+	for _, fetcher := range s.leaseSetFetchers() {
+		leaseSetBytes, err := fetcher.get(common.Hash(hash))
+		if err != nil || len(leaseSetBytes) == 0 {
+			continue
+		}
+		options, err := fetcher.options(leaseSetBytes)
+		if err != nil {
+			log.WithFields(logger.Fields{
+				"at":        "i2cp.Server.handleHostLookup",
+				"requestID": requestID,
+				"error":     err.Error(),
+			}).Error("failed_to_extract_leaseset_options")
+			return nil, newErrorReply(sessionID, requestID, HostReplyLeaseSetLookupFailure)
+		}
+		return options, nil
+	}
+
+	// Destination resolved but no LeaseSet cached yet: the spec returns code 6
+	// with no mapping in this case.
+	return nil, newErrorReply(sessionID, requestID, HostReplyLeaseSetLookupFailure)
+}
+
+// handleUnknownLookupType handles a lookup type the router does not implement.
+// Spec code 7 (lookup type unsupported, 0.9.66+) is the correct reply; a generic
+// failure would hide the reason from a client that can fall back to another type.
 func handleUnknownLookupType(lookupMsg *HostLookupPayload) *HostReplyPayload {
 	log.WithFields(logger.Fields{
 		"at":         "i2cp.Server.handleHostLookup",
 		"requestID":  lookupMsg.RequestID,
 		"lookupType": lookupMsg.LookupType,
 	}).Warn("unknown_lookup_type")
-	return newErrorReply(lookupMsg.SessionID, lookupMsg.RequestID, HostReplyError)
+	return newErrorReply(lookupMsg.SessionID, lookupMsg.RequestID, HostReplyLookupTypeUnsupported)
 }
 
 // buildHostReplyMessage constructs the host reply message from payload.
@@ -887,9 +956,9 @@ func (s *Server) handleHostLookup(_ net.Conn, msg *Message) (*Message, error) {
 
 	var replyPayload *HostReplyPayload
 	switch lookupMsg.LookupType {
-	case HostLookupTypeHash:
+	case HostLookupTypeHash, HostLookupTypeHashWithOptions, HostLookupTypeDestination:
 		replyPayload = s.lookupDestinationByHash(lookupMsg)
-	case HostLookupTypeHostname:
+	case HostLookupTypeHostname, HostLookupTypeHostnameWithOptions:
 		replyPayload = s.handleHostnameLookup(lookupMsg)
 	default:
 		replyPayload = handleUnknownLookupType(lookupMsg)
@@ -926,7 +995,7 @@ func parseDestinationHash(lookupMsg *HostLookupPayload) (common.Hash, *HostReply
 			"requestID": lookupMsg.RequestID,
 			"queryLen":  len(lookupMsg.Query),
 		}).Warn("query_too_short_for_hash")
-		return destHash, newErrorReply(lookupMsg.SessionID, lookupMsg.RequestID, HostReplyError)
+		return destHash, newErrorReply(lookupMsg.SessionID, lookupMsg.RequestID, HostReplyFailure)
 	}
 
 	_, err := fmt.Sscanf(lookupMsg.Query[:64], "%x", &destHash)
@@ -937,38 +1006,126 @@ func parseDestinationHash(lookupMsg *HostLookupPayload) (common.Hash, *HostReply
 			"query":     lookupMsg.Query,
 			"error":     err.Error(),
 		}).Warn("invalid_hash_format")
-		return destHash, newErrorReply(lookupMsg.SessionID, lookupMsg.RequestID, HostReplyError)
+		return destHash, newErrorReply(lookupMsg.SessionID, lookupMsg.RequestID, HostReplyFailure)
 	}
 
 	return destHash, nil
 }
 
-// queryLeaseSetFromNetDB queries the NetDB for a LeaseSet and extracts the destination.
-// Returns the destination bytes and nil if successful, or nil and an error reply if the query fails.
-func (s *Server) queryLeaseSetFromNetDB(destHash common.Hash, sessionID uint16, requestID uint32) ([]byte, *HostReplyPayload) {
-	leaseSetBytes, err := s.netdb.GetLeaseSetBytes(destHash)
-	if err != nil {
-		log.WithFields(logger.Fields{
-			"at":        "i2cp.Server.lookupDestinationByHash",
-			"requestID": requestID,
-			"destHash":  logutil.HashPrefixPlain(destHash),
-			"error":     err.Error(),
-		}).Debug("leaseset_not_found_in_netdb")
-		return nil, newErrorReply(sessionID, requestID, HostReplyNotFound)
+// queryLeaseSetFromNetDB queries the NetDB for a destination's record and
+// extracts the destination. Returns the destination bytes and nil if successful,
+// or nil and an error reply if the query fails.
+//
+// A destination's record type is not known in advance and every fetcher here is
+// type-specific, so all cleartext record types stored under the destination hash
+// are consulted. LeaseSet2 is the one modern destinations publish (0.9.38+;
+// classic LeaseSet is deprecated), so consulting only GetLeaseSetBytes made
+// HostLookup fail for essentially every peer on the current network.
+//
+// An EncryptedLeaseSet is deliberately not tried: it is not stored under the
+// destination hash but under the blinded DHT key, which cannot be derived from a
+// 32-byte hash alone (it needs the unblinded destination and the blinding
+// secret). Blinded destinations are reached through the send path, which has the
+// destination and the BlindingInfo advice; see resolveDestinationKeyForPeer.
+func (s *Server) queryLeaseSetFromNetDB(destHash common.Hash, sessionID uint16, requestID uint32, wantOptions bool) ([]byte, []byte, *HostReplyPayload) {
+	for _, fetcher := range s.leaseSetFetchers() {
+		leaseSetBytes, err := fetcher.get(destHash)
+		if err != nil || len(leaseSetBytes) == 0 {
+			continue
+		}
+		destBytes, err := s.extractDestinationFromLeaseSet(leaseSetBytes)
+		if err != nil {
+			// Present but unparseable: report the lookup failure rather than
+			// falling through to a different record type, per code 6 semantics.
+			log.WithFields(logger.Fields{
+				"at":        "i2cp.Server.lookupDestinationByHash",
+				"requestID": requestID,
+				"destHash":  logutil.HashPrefixPlain(destHash),
+				"error":     err.Error(),
+			}).Error("failed_to_extract_destination")
+			return nil, nil, newErrorReply(sessionID, requestID, HostReplyLeaseSetLookupFailure)
+		}
+		if !wantOptions {
+			return destBytes, nil, nil
+		}
+		options, err := fetcher.options(leaseSetBytes)
+		if err != nil {
+			log.WithFields(logger.Fields{
+				"at":        "i2cp.Server.lookupDestinationByHash",
+				"requestID": requestID,
+				"destHash":  logutil.HashPrefixPlain(destHash),
+				"error":     err.Error(),
+			}).Error("failed_to_extract_leaseset_options")
+			return nil, nil, newErrorReply(sessionID, requestID, HostReplyLeaseSetLookupFailure)
+		}
+		return destBytes, options, nil
 	}
 
-	destination, err := s.extractDestinationFromLeaseSet(leaseSetBytes)
-	if err != nil {
-		log.WithFields(logger.Fields{
-			"at":        "i2cp.Server.lookupDestinationByHash",
-			"requestID": requestID,
-			"destHash":  logutil.HashPrefixPlain(destHash),
-			"error":     err.Error(),
-		}).Error("failed_to_extract_destination")
-		return nil, newErrorReply(sessionID, requestID, HostReplyError)
-	}
+	log.WithFields(logger.Fields{
+		"at":        "i2cp.Server.lookupDestinationByHash",
+		"requestID": requestID,
+		"destHash":  logutil.HashPrefixPlain(destHash),
+	}).Debug("leaseset_not_found_in_netdb")
+	return nil, nil, newErrorReply(sessionID, requestID, HostReplyNotFound)
+}
 
-	return destination, nil
+// leaseSetFetcher pairs a type-specific NetDB getter with the extractor that
+// pulls that record type's options Mapping, needed for lookup types 2-4.
+type leaseSetFetcher struct {
+	get     func(common.Hash) ([]byte, error)
+	options func(leaseSetBytes []byte) ([]byte, error)
+}
+
+// leaseSetFetchers returns the type-specific NetDB getters to consult for a
+// cleartext destination hash, in order. The LeaseSet2 and MetaLeaseSet getters
+// are an optional capability so a netdb that only implements GetLeaseSetBytes
+// keeps working; *netdb.StdNetDB implements all three.
+func (s *Server) leaseSetFetchers() []leaseSetFetcher {
+	fetchers := []leaseSetFetcher{
+		// A version 1 LeaseSet has no options; the spec still requires the
+		// Mapping to be returned, as the empty two-byte form.
+		{get: s.netdb.GetLeaseSetBytes, options: emptyOptionsMapping},
+	}
+	if v, ok := s.netdb.(leaseSetVariantGetter); ok {
+		fetchers = append(fetchers,
+			leaseSetFetcher{get: v.GetLeaseSet2Bytes, options: leaseSet2OptionsMapping},
+			leaseSetFetcher{get: v.GetMetaLeaseSetBytes, options: metaLeaseSetOptionsMapping},
+		)
+	}
+	return fetchers
+}
+
+// emptyOptionsMapping is a Mapping with no entries: the two-byte size field
+// the spec requires when a LeaseSet carries no options.
+func emptyOptionsMapping([]byte) ([]byte, error) {
+	return []byte{0x00, 0x00}, nil
+}
+
+// leaseSet2OptionsMapping extracts the options Mapping from LeaseSet2 bytes.
+func leaseSet2OptionsMapping(leaseSetBytes []byte) ([]byte, error) {
+	ls2, _, err := lease_set2.ReadLeaseSet2(leaseSetBytes)
+	if err != nil {
+		return nil, oops.Wrapf(err, "invalid LeaseSet2")
+	}
+	options := ls2.Options()
+	return options.DataSafe()
+}
+
+// metaLeaseSetOptionsMapping extracts the options Mapping from MetaLeaseSet bytes.
+func metaLeaseSetOptionsMapping(leaseSetBytes []byte) ([]byte, error) {
+	mls, _, err := meta_leaseset.ReadMetaLeaseSet(leaseSetBytes)
+	if err != nil {
+		return nil, oops.Wrapf(err, "invalid MetaLeaseSet")
+	}
+	options := mls.Options()
+	return options.DataSafe()
+}
+
+// leaseSetVariantGetter is the optional NetDB capability for the record types
+// stored under a destination hash besides the classic LeaseSet.
+type leaseSetVariantGetter interface {
+	GetLeaseSet2Bytes(hash common.Hash) ([]byte, error)
+	GetMetaLeaseSetBytes(hash common.Hash) ([]byte, error)
 }
 
 func (s *Server) lookupDestinationByHash(lookupMsg *HostLookupPayload) *HostReplyPayload {
@@ -977,7 +1134,7 @@ func (s *Server) lookupDestinationByHash(lookupMsg *HostLookupPayload) *HostRepl
 			"at":        "i2cp.Server.lookupDestinationByHash",
 			"requestID": lookupMsg.RequestID,
 		}).Warn("no_netdb_configured")
-		return newErrorReply(lookupMsg.SessionID, lookupMsg.RequestID, HostReplyError)
+		return newErrorReply(lookupMsg.SessionID, lookupMsg.RequestID, HostReplyFailure)
 	}
 
 	destHash, errReply := parseDestinationHash(lookupMsg)
@@ -985,8 +1142,19 @@ func (s *Server) lookupDestinationByHash(lookupMsg *HostLookupPayload) *HostRepl
 		return errReply
 	}
 
-	destination, errReply := s.queryLeaseSetFromNetDB(destHash, lookupMsg.SessionID, lookupMsg.RequestID)
+	wantOptions := lookupTypeRequestsOptions(lookupMsg.LookupType)
+	destBytes, options, errReply := s.queryLeaseSetFromNetDB(
+		destHash, lookupMsg.SessionID, lookupMsg.RequestID, wantOptions)
 	if errReply != nil {
+		// Lookup type 4 carries the Destination itself, so the spec says the
+		// reply may include it even when the LeaseSet could not be fetched --
+		// the client already knows the destination and asked only for the
+		// record's options.
+		if lookupMsg.LookupType == HostLookupTypeDestination &&
+			errReply.ResultCode == HostReplyLeaseSetLookupFailure &&
+			len(lookupMsg.Destination) > 0 {
+			errReply.Destination = lookupMsg.Destination
+		}
 		return errReply
 	}
 
@@ -994,14 +1162,16 @@ func (s *Server) lookupDestinationByHash(lookupMsg *HostLookupPayload) *HostRepl
 		"at":           "i2cp.Server.lookupDestinationByHash",
 		"requestID":    lookupMsg.RequestID,
 		"destHash":     logutil.HashPrefixPlain(destHash),
-		"destByteSize": len(destination),
+		"destByteSize": len(destBytes),
+		"optionsSize":  len(options),
 	}).Debug("destination_found")
 
 	return &HostReplyPayload{
 		SessionID:   lookupMsg.SessionID,
 		RequestID:   lookupMsg.RequestID,
 		ResultCode:  HostReplySuccess,
-		Destination: destination,
+		Destination: destBytes,
+		Options:     options,
 	}
 }
 

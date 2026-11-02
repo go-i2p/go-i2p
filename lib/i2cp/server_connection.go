@@ -737,9 +737,12 @@ func (s *Server) allowHostLookup(conn net.Conn, msg *Message) (*Message, bool) {
 		"rate":       float64(hostLookupLimit),
 	}).Warn("host_lookup_rate_limited")
 
+	// Generic failure (1). The spec defines no rate-limit code, and the old
+	// value here (2) means "Lookup password required" -- a client would have
+	// gone hunting for a credential that was never the problem.
 	response, err := buildHostReplyMessage(msg.SessionID, &HostReplyPayload{
 		RequestID:  extractHostLookupRequestID(msg.Payload),
-		ResultCode: HostReplyTimeout,
+		ResultCode: HostReplyFailure,
 	})
 	if err != nil {
 		log.WithFields(logger.Fields{

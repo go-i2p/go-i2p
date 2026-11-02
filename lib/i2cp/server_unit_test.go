@@ -593,7 +593,9 @@ func TestHandleHostnameLookup_NoResolver(t *testing.T) {
 
 	reply := server.handleHostnameLookup(lookupMsg)
 	assert.Equal(t, uint32(42), reply.RequestID)
-	assert.Equal(t, byte(HostReplyError), reply.ResultCode)
+	// Generic failure, not code 2: a client must not read "no hostname
+	// resolver configured" as "supply a lookup password".
+	assert.Equal(t, byte(HostReplyFailure), reply.ResultCode)
 	assert.Nil(t, reply.Destination)
 }
 
@@ -714,7 +716,10 @@ func TestAllowHostLookup_RateLimitedPerConnection(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, uint16(0), reply.SessionID)
 	assert.Equal(t, uint32(77), reply.RequestID)
-	assert.Equal(t, byte(HostReplyTimeout), reply.ResultCode)
+	// Rate limiting is a generic failure. It previously reported code 2, which
+	// the spec reserves for "Lookup password required" -- a client would have
+	// gone looking for a credential that was never the problem.
+	assert.Equal(t, byte(HostReplyFailure), reply.ResultCode)
 }
 
 func TestProcessClientMessage_RecoversFromHandlerPanic(t *testing.T) {

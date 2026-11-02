@@ -141,7 +141,7 @@ type Server struct {
 	}
 
 	// HostnameResolver resolves .i2p hostnames to Destination bytes.
-	// If nil, hostname lookups return HostReplyError (not implemented).
+	// If nil, hostname lookups return HostReplyFailure (not implemented).
 	// Implementations may use an address book, naming service, or subscription list.
 	hostnameResolver HostnameResolver
 
@@ -638,7 +638,7 @@ func (s *Server) SetNetDB(netdb interface {
 
 // SetHostnameResolver sets the resolver used for hostname-based HostLookup queries.
 // When set, hostname lookups (type 1) will delegate to this resolver instead of
-// returning an error. If nil, hostname lookups return HostReplyError.
+// returning an error. If nil, hostname lookups return HostReplyFailure.
 func (s *Server) SetHostnameResolver(resolver HostnameResolver) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

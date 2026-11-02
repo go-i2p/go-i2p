@@ -517,6 +517,9 @@ func (dp *DisconnectPayload) MarshalBinary() ([]byte, error) {
 // Lookup types:
 // - 0: Hash lookup - Query is base32 destination hash
 // - 1: Hostname lookup - Query is .i2p hostname
+// - 2: Hash lookup, also return the LeaseSet options (0.9.66+)
+// - 3: Hostname lookup, also return the LeaseSet options (0.9.66+)
+// - 4: Destination lookup, also return the LeaseSet options (0.9.66+)
 //
 // The server will return a HostReply message with the same RequestID.
 type HostLookupPayload struct {
@@ -524,16 +527,63 @@ type HostLookupPayload struct {
 	RequestID uint32 // Unique request identifier
 	TimeoutMs uint32 // Timeout in milliseconds (i2pd wire shape)
 
-	LookupType uint16 // 0=hash, 1=hostname (encoded as one byte on wire)
-	Query      string // Hash or hostname to lookup
-	Hash       []byte // Raw 32-byte hash for hash lookups when provided on-wire
+	// LookupType is encoded as one byte on the wire.
+	LookupType uint16
+	Query      string // Hash (hex) or hostname to lookup
+	Hash       []byte // Raw 32-byte hash for hash and destination lookups
+	// Destination holds the raw Destination for lookup type 4. The router
+	// resolves it by hashing, so Hash is populated from it during parse.
+	Destination []byte
 }
 
+// Lookup types per i2cp.rst "HostLookupMessage". Types 2-4 (0.9.66+, proposal
+// 167) request the same keys as 0/1 but additionally require the router to fetch
+// the LeaseSet and return its options Mapping; a router that does not implement
+// them must reply with code 7 rather than dropping the connection.
 const (
 	// HostLookupTypeHash requests a destination lookup by hash value.
-	HostLookupTypeHash     uint16 = 0 // Lookup by destination hash
-	HostLookupTypeHostname uint16 = 1 // Lookup by hostname
+	HostLookupTypeHash uint16 = 0
+	// HostLookupTypeHostname requests a lookup by hostname String.
+	HostLookupTypeHostname uint16 = 1
+	// HostLookupTypeHashWithOptions looks up by Hash and returns the LeaseSet
+	// options Mapping (0.9.66+).
+	HostLookupTypeHashWithOptions uint16 = 2
+	// HostLookupTypeHostnameWithOptions looks up by hostname String and returns
+	// the LeaseSet options Mapping (0.9.66+).
+	HostLookupTypeHostnameWithOptions uint16 = 3
+	// HostLookupTypeDestination looks up by full Destination and returns the
+	// LeaseSet options Mapping (0.9.66+).
+	HostLookupTypeDestination uint16 = 4
 )
+
+// acceptsLookupType reports whether t is a HostLookup type the parser accepts.
+func acceptsLookupType(t uint16) bool {
+	switch t {
+	case HostLookupTypeHash, HostLookupTypeHostname,
+		HostLookupTypeHashWithOptions, HostLookupTypeHostnameWithOptions,
+		HostLookupTypeDestination:
+		return true
+	default:
+		return false
+	}
+}
+
+// lookupTypeRequestsOptions reports whether the type asks for the LeaseSet
+// options Mapping to be returned (proposal 167 types 2-4).
+func lookupTypeRequestsOptions(t uint16) bool {
+	return t == HostLookupTypeHashWithOptions ||
+		t == HostLookupTypeHostnameWithOptions ||
+		t == HostLookupTypeDestination
+}
+
+// lookupTypeIsHashKeyed reports whether the lookup resolves to a destination
+// hash: types 0 and 2 carry a hash directly, and type 4 carries a Destination
+// whose hash is computed at parse time.
+func lookupTypeIsHashKeyed(t uint16) bool {
+	return t == HostLookupTypeHash ||
+		t == HostLookupTypeHashWithOptions ||
+		t == HostLookupTypeDestination
+}
 
 // ParseHostLookupPayload deserializes a HostLookup payload from wire format.
 // Returns an error if the payload is too short or malformed.
@@ -572,14 +622,14 @@ func parseCanonicalHostLookupPayload(data []byte) (*HostLookupPayload, error) {
 
 	body := data[11:]
 	switch hlp.LookupType {
-	case HostLookupTypeHash:
+	case HostLookupTypeHash, HostLookupTypeHashWithOptions:
 		if len(body) < 32 {
 			return nil, oops.Errorf("host lookup hash payload too short: need 32 bytes, got %d", len(body))
 		}
 		hlp.Hash = make([]byte, 32)
 		copy(hlp.Hash, body[:32])
 		hlp.Query = hex.EncodeToString(hlp.Hash)
-	case HostLookupTypeHostname:
+	case HostLookupTypeHostname, HostLookupTypeHostnameWithOptions:
 		str, _, err := commondata.ReadI2PString(body)
 		if err != nil {
 			return nil, oops.Errorf("failed to parse host lookup hostname: %w", err)
@@ -589,6 +639,24 @@ func parseCanonicalHostLookupPayload(data []byte) (*HostLookupPayload, error) {
 			return nil, oops.Errorf("failed to decode host lookup hostname: %w", err)
 		}
 		hlp.Query = hostname
+	case HostLookupTypeDestination:
+		// Item 5 is a full Destination. Keep the bytes for the caller and set
+		// Query to its hash in hex so the existing hash path can serve it.
+		dest, _, err := destination.ReadDestination(body)
+		if err != nil {
+			return nil, oops.Errorf("failed to parse host lookup destination: %w", err)
+		}
+		destBytes, err := dest.Bytes()
+		if err != nil {
+			return nil, oops.Errorf("failed to re-serialize host lookup destination: %w", err)
+		}
+		hlp.Destination = destBytes
+		hash, err := dest.Hash()
+		if err != nil {
+			return nil, oops.Errorf("failed to hash host lookup destination: %w", err)
+		}
+		hlp.Hash = hash[:]
+		hlp.Query = hex.EncodeToString(hlp.Hash)
 	default:
 		return nil, oops.Errorf("unsupported host lookup type: %d", hlp.LookupType)
 	}
@@ -610,7 +678,7 @@ func parseCanonicalHostLookupPayload(data []byte) (*HostLookupPayload, error) {
 func (hlp *HostLookupPayload) MarshalBinary() ([]byte, error) {
 	var body []byte
 	switch hlp.LookupType {
-	case HostLookupTypeHash:
+	case HostLookupTypeHash, HostLookupTypeHashWithOptions:
 		if len(hlp.Hash) == 32 {
 			body = make([]byte, 32)
 			copy(body, hlp.Hash)
@@ -628,12 +696,17 @@ func (hlp *HostLookupPayload) MarshalBinary() ([]byte, error) {
 			}
 			body = decoded
 		}
-	case HostLookupTypeHostname:
+	case HostLookupTypeHostname, HostLookupTypeHostnameWithOptions:
 		i2pStr, err := commondata.ToI2PString(hlp.Query)
 		if err != nil {
 			return nil, oops.Errorf("invalid host lookup hostname encoding: %w", err)
 		}
 		body = i2pStr
+	case HostLookupTypeDestination:
+		if len(hlp.Destination) == 0 {
+			return nil, oops.Errorf("host lookup type 4 requires a Destination")
+		}
+		body = hlp.Destination
 	default:
 		return nil, oops.Errorf("unsupported host lookup type: %d", hlp.LookupType)
 	}
@@ -669,11 +742,11 @@ func (hlp *HostLookupPayload) MarshalBinary() ([]byte, error) {
 //	ResultCode: uint8 (1 byte) - 0=success, non-zero=error code
 //	Destination: []byte (variable, 387+ bytes if found) - full destination (optional)
 //
-// Result codes:
-// - 0: Success - destination found
-// - 1: Not found - destination does not exist
-// - 2: Timeout - lookup timed out
-// - 3: Error - generic error during lookup
+// Result codes are defined by i2cp.rst ("HostReplyMessage"); see
+// HostReplySuccess and friends below. Codes 2-5 exist for "b33" (blinded)
+// lookups as of 0.9.43 and codes 6-7 for the proposal 167 lookup types as of
+// 0.9.66; a client uses 2/3/4 to learn it must supply a lookup password and/or
+// a client private key before the record can be decrypted.
 //
 // If ResultCode is 0 (success), Destination contains the full destination structure.
 // If ResultCode is non-zero, Destination is empty.
@@ -682,14 +755,75 @@ type HostReplyPayload struct {
 	RequestID   uint32 // Matches RequestID from HostLookup
 	ResultCode  uint8  // 0=success, non-zero=error
 	Destination []byte // Full destination (empty if error)
+	// Options is the LeaseSet options Mapping, spec item 5: present only on
+	// success and only for lookup types 2-4, and an empty Mapping (two zero
+	// bytes) when the LeaseSet carries no options or is a version 1 LeaseSet.
+	Options []byte
 }
 
+// splitHostReplyTail divides the bytes after the result code into a Destination
+// and the options Mapping that follows it (spec items 4 and 5). The Destination
+// is parsed structurally rather than by assuming a length, so the split is exact
+// for every key type. A tail that does not parse as Destination || Mapping is
+// returned as-is with no options, which keeps replies from older routers (and
+// replies that carry no Mapping) readable instead of failing the whole message.
+func splitHostReplyTail(tail []byte) (dest, options []byte) {
+	if len(tail) == 0 {
+		return nil, nil
+	}
+
+	_, remainder, err := destination.ReadDestination(tail)
+	if err != nil || len(remainder) > len(tail) {
+		return tail, nil
+	}
+	destLen := len(tail) - len(remainder)
+
+	// A Destination with nothing after it is a complete reply for lookup types
+	// 0 and 1; there is no Mapping to split off.
+	if len(remainder) == 0 {
+		return tail[:destLen], nil
+	}
+
+	if _, _, err := commondata.ReadMapping(remainder); err != nil {
+		// Trailing bytes are not a Mapping: treat the whole tail as opaque so
+		// the destination still reaches the client.
+		return tail, nil
+	}
+
+	return tail[:destLen], remainder
+}
+
+// HostReply result codes, per i2cp.rst "HostReplyMessage" contents item 3.
+// The spec defines exactly one generic-failure code (1); 2-7 each carry a
+// specific meaning a client acts on, so they must not be used as catch-alls.
 const (
 	// HostReplySuccess indicates that the requested destination was found.
-	HostReplySuccess  uint8 = 0 // Destination found
-	HostReplyNotFound uint8 = 1 // Destination not found
-	HostReplyTimeout  uint8 = 2 // Lookup timed out
-	HostReplyError    uint8 = 3 // Generic error
+	HostReplySuccess uint8 = 0 // Destination found
+	// HostReplyFailure is the generic failure code ("1 indicates a generic
+	// failure"). Also covers "not found" -- the spec defines no separate code
+	// for it, so a lookup with no result must not use the blinded-lookup codes.
+	HostReplyFailure uint8 = 1
+	// HostReplyNotFound is an alias for HostReplyFailure, kept for readability at
+	// "no such destination" call sites. The spec defines exactly one generic
+	// failure code (1); codes 2-7 each carry a specific meaning.
+	HostReplyNotFound = HostReplyFailure
+	// HostReplyPasswordRequired means the record needs a lookup password the
+	// client did not supply (0.9.43+, "b33" blinded lookups).
+	HostReplyPasswordRequired uint8 = 2
+	// HostReplyPrivateKeyRequired means the record needs a client private key
+	// the client did not supply (0.9.43+, per-client authorized EncryptedLeaseSet).
+	HostReplyPrivateKeyRequired uint8 = 3
+	// HostReplyPasswordAndKeyRequired means both are needed (0.9.43+).
+	HostReplyPasswordAndKeyRequired uint8 = 4
+	// HostReplyDecryptionFailure means the record was found but could not be
+	// decrypted -- typically a wrong password or private key (0.9.43+).
+	HostReplyDecryptionFailure uint8 = 5
+	// HostReplyLeaseSetLookupFailure means the destination was found but its
+	// LeaseSet could not be retrieved (0.9.66+, proposal 167 lookup types 2-4).
+	HostReplyLeaseSetLookupFailure uint8 = 6
+	// HostReplyLookupTypeUnsupported means the router does not implement the
+	// requested lookup type (0.9.66+).
+	HostReplyLookupTypeUnsupported uint8 = 7
 )
 
 // ParseHostReplyPayload deserializes a HostReply payload from wire format.
@@ -723,10 +857,11 @@ func ParseHostReplyPayload(data []byte) (*HostReplyPayload, error) {
 	// Parse result code (byte 6)
 	hrp.ResultCode = data[6]
 
-	// Parse destination (remaining bytes, if any)
+	// Parse destination and options Mapping (remaining bytes, if any).
 	if len(data) > 7 {
-		hrp.Destination = make([]byte, len(data)-7)
-		copy(hrp.Destination, data[7:])
+		tail := make([]byte, len(data)-7)
+		copy(tail, data[7:])
+		hrp.Destination, hrp.Options = splitHostReplyTail(tail)
 	}
 
 	log.WithFields(logger.Fields{
@@ -743,7 +878,15 @@ func ParseHostReplyPayload(data []byte) (*HostReplyPayload, error) {
 // MarshalBinary serializes the HostReplyPayload to wire format.
 // Returns the serialized bytes ready to be sent as an I2CP message payload.
 func (hrp *HostReplyPayload) MarshalBinary() ([]byte, error) {
-	totalSize := 2 + 4 + 1 + len(hrp.Destination) // sessionID + requestID + resultCode + destination
+	// The options Mapping is only meaningful alongside a Destination (spec items
+	// 4 and 5 are both "only present if result code is zero"), so dropping it on
+	// an error reply cannot produce a message a client would misparse.
+	options := hrp.Options
+	if len(hrp.Destination) == 0 {
+		options = nil
+	}
+
+	totalSize := 2 + 4 + 1 + len(hrp.Destination) + len(options)
 	result := make([]byte, totalSize)
 
 	// Write session ID (big endian)
@@ -758,6 +901,11 @@ func (hrp *HostReplyPayload) MarshalBinary() ([]byte, error) {
 	// Write destination (if present)
 	if len(hrp.Destination) > 0 {
 		copy(result[7:], hrp.Destination)
+	}
+
+	// Write options Mapping (lookup types 2-4 only)
+	if len(options) > 0 {
+		copy(result[7+len(hrp.Destination):], options)
 	}
 
 	log.WithFields(logger.Fields{
