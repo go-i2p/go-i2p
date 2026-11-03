@@ -252,15 +252,24 @@ func (r *Router) handleNewConnection(conn net.Conn) {
 	case *ssu2noise.SSU2Addr:
 		peerHash := common.Hash(addr.RouterHash())
 		sessionLog := logger.WithField("peer_hash", logutil.HashPrefix(peerHash))
-		ssu2Conn, ok := conn.(*ssu2noise.SSU2Conn)
+		// The muxer and the transport each wrap the connection in a
+		// transport.TrackedConn for their own session accounting, so what arrives
+		// here is wrapped twice. Asserting on the outer wrapper always fails,
+		// which is why no inbound SSU2 session ever completed; unwrap first.
+		ssu2Conn, ok := transport.UnwrapTrackedConn(conn).(*ssu2noise.SSU2Conn)
 		if !ok {
 			sessionLog.WithField("conn_type", fmt.Sprintf("%T", conn)).Error("Inbound SSU2 connection is not *ssu2noise.SSU2Conn, dropping")
-			conn.Close()
+			r.closeInboundConnectionAsync(conn)
 			return
 		}
 		session := ssu2.NewSSU2Session(ssu2Conn, r.ctx, sessionLog)
 		r.attachInboundSSU2TransportCallbacks(session)
+		// The session was built on the unwrapped connection, so closing the
+		// session alone never runs the TrackedConn callbacks that release the
+		// transport's and the muxer's session slots. Close the connection as the
+		// router received it too, or the pool fills up with dead entries.
 		session.AppendCleanupCallback(func() { r.removeSession(peerHash) })
+		session.AppendCleanupCallback(func() { r.closeInboundConnectionAsync(conn) })
 		r.addSession(peerHash, session)
 		r.wg.Add(1)
 		go func() {
@@ -271,8 +280,27 @@ func (r *Router) handleNewConnection(conn net.Conn) {
 
 	default:
 		sessionLogger.WithField("addr_type", fmt.Sprintf("%T", conn.RemoteAddr())).Error("Unrecognised inbound connection address type, dropping")
-		conn.Close()
+		r.closeInboundConnectionAsync(conn)
 	}
+}
+
+// closeInboundConnectionAsync closes a connection the router is discarding, on
+// its own goroutine.
+//
+// A close is not cheap here: go-noise's SSU2 connection waits the spec's
+// 11-second Termination period inside Close(). Doing it inline would block
+// monitorInboundSessions, which also serves NTCP2 accepts, so one rejected
+// connection would stall every inbound transport for that long. The connection
+// is already being thrown away; nothing else needs to wait for it.
+func (r *Router) closeInboundConnectionAsync(conn net.Conn) {
+	if conn == nil {
+		return
+	}
+	r.wg.Add(1)
+	go func() {
+		defer r.wg.Done()
+		_ = conn.Close()
+	}()
 }
 
 // attachInboundSSU2TransportCallbacks wires transport-level callbacks into an

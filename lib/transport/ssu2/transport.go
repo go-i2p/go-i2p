@@ -197,6 +197,11 @@ func NewSSU2Transport(identity router_info.RouterInfo, config *Config, keystore 
 		return nil, err
 	}
 	config.SSU2Config = ssu2Config
+	// Publish the transport's limits onto the go-noise config BEFORE the
+	// listener is created: the listener reads MaxSessions and RequireRetry from
+	// the config it is handed, and its built-in MaxSessions (65536) is far above
+	// any router's session pool.
+	applyListenerLimits(ssu2Config, config)
 
 	t := createSSU2TransportStruct(config, identity, keystore, ctx, cancel, l)
 
@@ -254,6 +259,7 @@ func createSSU2TransportStruct(config *Config, identity router_info.RouterInfo, 
 		sessionRegistry:       transport.NewSessionRegistry(l),
 		natStateCache:         &natState{},
 		peerTestGlobalLimiter: rate.NewLimiter(100, 200),
+		admission:             newHandshakeAdmission(),
 		ctx:                   ctx,
 		cancel:                cancel,
 		logger:                l,
@@ -287,6 +293,28 @@ func createSSU2Config(identity router_info.RouterInfo) (*ssu2noise.SSU2Config, e
 	}
 	cfg = cfg.WithRouterInfoValidator(ssu2noise.DefaultRouterInfoValidator)
 	return cfg, nil
+}
+
+// applyListenerLimits publishes the transport's own limits onto the go-noise
+// listener config, which is where they actually take effect.
+//
+// MaxSessions is the important one. go-noise caps its session map at
+// config.MaxSessions, whose built-in value is 65536, while the transport caps
+// its session pool at its own MaxSessions (512 by default). Without publishing
+// it, the listener happily registers a session for every SessionRequest it sees
+// and the transport's pool limit only rejects them after the fact; the router's
+// limit is never passed down.
+//
+// RequireRetry is the listener's source-address gate. Left at go-noise's
+// default of false, an unauthenticated SessionRequest with a spoofed source
+// reserves a full listener session and reaches Accept(). Turning it on makes
+// the peer answer a Retry before anything is reserved.
+func applyListenerLimits(noiseCfg *ssu2noise.SSU2Config, transportCfg *Config) {
+	if noiseCfg == nil || transportCfg == nil {
+		return
+	}
+	noiseCfg.MaxSessions = transportCfg.GetMaxSessions()
+	noiseCfg.RequireRetry = transportCfg.RequireRetry
 }
 
 // initializeCryptoKeys loads the X25519 static key from the keystore.
@@ -975,6 +1003,11 @@ func (t *SSU2Transport) SetIdentity(ident router_info.RouterInfo) error {
 		ssu2Config.EnableChaChaObfuscation = live.EnableChaChaObfuscation
 		ssu2Config.ObfuscationIV = live.ObfuscationIV
 	}
+	// createSSU2Config starts from go-noise's defaults, which do not carry this
+	// transport's limits, so re-publish them or an identity update would silently
+	// restore the listener's 65536 session cap and turn source-address
+	// validation back off.
+	applyListenerLimits(ssu2Config, oldCfg)
 
 	t.identityMu.Lock()
 	newCfg := *oldCfg // Copy-on-write, mirroring the NTCP2 pattern
@@ -1559,7 +1592,11 @@ func (t *SSU2Transport) Close() error {
 			return true
 		})
 
+		// Every handshake worker is tracked in t.wg, so after this wait no
+		// goroutine can still send on pendingConns: draining and closing it here
+		// is safe, and it wakes an Accept() consumer blocked on the queue.
 		t.wg.Wait()
+		t.drainPendingConns()
 		t.handler.Close()
 
 		// A-4 fix: Reconcile by decrementing truly-stale sessions (those whose
@@ -1588,6 +1625,33 @@ func (t *SSU2Transport) Close() error {
 		t.closeErr = listenerErr
 	})
 	return t.closeErr
+}
+
+// drainPendingConns closes and empties the inbound pending queue. Called from
+// Close() after every handshake worker has exited, so no send can race the
+// close. Connections left in the queue are closed so their reserved session
+// slots and registry entries are released rather than abandoned.
+func (t *SSU2Transport) drainPendingConns() {
+	if t.pendingConns == nil {
+		return
+	}
+	drained := 0
+	for {
+		select {
+		case conn := <-t.pendingConns:
+			if conn != nil {
+				_ = conn.Close()
+				drained++
+			}
+		default:
+			close(t.pendingConns)
+			if drained > 0 {
+				t.logger.WithField("drained_connections", drained).
+					Debug("Drained pending SSU2 inbound connections during close")
+			}
+			return
+		}
+	}
 }
 
 // Name returns the name of this transport.

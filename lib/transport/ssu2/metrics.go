@@ -47,6 +47,43 @@ type ReachabilitySnapshot struct {
 	// material was not yet available.
 	ReplayChecksDeferred uint64
 
+	// HandshakeRefusedGlobal counts inbound connections closed because the
+	// transport-wide pre-authentication handshake budget was already spent.
+	// Non-zero means something is flooding the router; the connections were
+	// shed without paying for a handshake.
+	HandshakeRefusedGlobal uint64
+
+	// HandshakeRefusedSource counts inbound connections closed because one
+	// source IP already held its share of the handshake budget.
+	HandshakeRefusedSource uint64
+
+	// InboundHandshakeFailures counts responder handshakes that failed or
+	// timed out. A peer that sends a SessionRequest and never completes the
+	// exchange shows up here.
+	InboundHandshakeFailures uint64
+
+	// InboundHandshakeSuccess counts responder handshakes completed and
+	// delivered to Accept(). Zero with non-zero failures means inbound SSU2 is
+	// not working at all.
+	InboundHandshakeSuccess uint64
+
+	// QueueSendTimeouts counts inbound handshakes that timed out trying to
+	// hand their connection to the pending queue. High values mean the Accept()
+	// consumer is slow or stopped.
+	QueueSendTimeouts uint64
+
+	// MaxPendingConnsQueueDepth is the maximum observed depth of the inbound
+	// pending queue, used for capacity planning.
+	MaxPendingConnsQueueDepth uint64
+
+	// PendingConnsQueueFullEvents counts inbound handshakes that attempted to
+	// deliver to a full pending queue.
+	PendingConnsQueueFullEvents uint64
+
+	// InflightHandshakes is how many inbound responder handshakes are running
+	// right now.
+	InflightHandshakes int64
+
 	// SessionPeerTerminations counts OnTermination callbacks received from peers.
 	SessionPeerTerminations uint64
 
@@ -63,15 +100,23 @@ type ReachabilitySnapshot struct {
 // reachability-related counters for monitoring and diagnostics.
 func (t *SSU2Transport) GetReachabilityCounters() ReachabilitySnapshot {
 	return ReachabilitySnapshot{
-		NATMappingSuccess:            t.reachMetrics.natMappingSuccess.Load(),
-		NATMappingFailure:            t.reachMetrics.natMappingFailure.Load(),
-		PeerTestConfirmed:            t.reachMetrics.peerTestConfirmed.Load(),
-		PublishedAddrChanged:         t.reachMetrics.publishedAddrChanged.Load(),
-		StaleSessionsReconciled:      t.reachMetrics.staleSessionsReconciled.Load(),
-		ReplayChecksDeferred:         t.reachMetrics.replayChecksDeferred.Load(),
-		SessionPeerTerminations:      globalSSU2SessionChurn.sessionPeerTerminations.Load(),
-		SessionReadTimeoutRetries:    globalSSU2SessionChurn.sessionReadTimeoutRetries.Load(),
-		SessionRecvBackpressureDrops: globalSSU2SessionChurn.sessionRecvBackpressureDrops.Load(),
+		NATMappingSuccess:             t.reachMetrics.natMappingSuccess.Load(),
+		NATMappingFailure:             t.reachMetrics.natMappingFailure.Load(),
+		PeerTestConfirmed:             t.reachMetrics.peerTestConfirmed.Load(),
+		PublishedAddrChanged:          t.reachMetrics.publishedAddrChanged.Load(),
+		StaleSessionsReconciled:       t.reachMetrics.staleSessionsReconciled.Load(),
+		ReplayChecksDeferred:          t.reachMetrics.replayChecksDeferred.Load(),
+		HandshakeRefusedGlobal:        t.reachMetrics.handshakeRefusedGlobal.Load(),
+		HandshakeRefusedSource:        t.reachMetrics.handshakeRefusedSource.Load(),
+		InboundHandshakeFailures:      t.reachMetrics.inboundHandshakeFailures.Load(),
+		InboundHandshakeSuccess:       t.reachMetrics.inboundHandshakeSuccess.Load(),
+		QueueSendTimeouts:             t.reachMetrics.queueSendTimeouts.Load(),
+		MaxPendingConnsQueueDepth:     t.reachMetrics.maxPendingConnsQueueDepth.Load(),
+		PendingConnsQueueFullEvents:   t.reachMetrics.pendingConnsQueueFullEvents.Load(),
+		InflightHandshakes:            t.admission.current(),
+		SessionPeerTerminations:       globalSSU2SessionChurn.sessionPeerTerminations.Load(),
+		SessionReadTimeoutRetries:     globalSSU2SessionChurn.sessionReadTimeoutRetries.Load(),
+		SessionRecvBackpressureDrops:  globalSSU2SessionChurn.sessionRecvBackpressureDrops.Load(),
 	}
 }
 

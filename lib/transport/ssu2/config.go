@@ -44,6 +44,12 @@ const DefaultMaxHandshakesPerSource = 8
 // rather than changing it.
 const DefaultHandshakeTimeout = 15 * time.Second
 
+// DefaultRequireRetry is the transport's default for [Config.RequireRetry].
+// go-noise ships it false; a router that accepts inbound connections wants
+// source-address validation before it spends a handshake on a peer, so this
+// layer turns it on and lets the operator opt out explicitly.
+const DefaultRequireRetry = true
+
 // DefaultHolePunchDelay is the time Alice waits for Charlie's hole-punch packets
 // to arrive before sending the SessionRequest directly during introducer-based
 // relay connections.
@@ -102,11 +108,10 @@ type Config struct {
 	// handshake on it. This is SSU2's own source-address validation, and it is
 	// the reason a spoofed-source flood costs the spoofer more than it costs us.
 	//
-	// The go-noise default is false, which leaves the pre-authentication path
-	// open: a single unauthenticated packet with a forged source reserves a
-	// session in the listener and hands it to Accept(). [NewConfig] turns it on
-	// for the transports the router builds; an operator opts out by setting
-	// transport.ssu2_require_retry: false.
+	// go-noise ships this false, which leaves the pre-authentication path open:
+	// a single unauthenticated packet with a forged source reserves a session in
+	// the listener and hands it to Accept(). [NewConfig] turns it on; an
+	// operator opts out with transport.ssu2_require_retry: false.
 	RequireRetry bool
 
 	// RouterLookupFunc looks up a RouterInfo by identity hash.
@@ -200,9 +205,10 @@ func (c *Config) GetHolePunchDelay() time.Duration {
 }
 
 // NewConfig creates a new SSU2 Config with the given listener address.
-// It returns a Config with only the listener address set; the remaining fields
-// (session limits, keepalive, retransmissions) fall back to their defaults via
-// the Get* methods. Call Validate to check the listener address before use.
+// It returns a Config with only the listener address set and source-address
+// validation on; the remaining limits (session pool, handshake budget,
+// keepalive, retransmissions) fall back to their defaults via the Get* methods.
+// Call Validate to check the listener address before use.
 // See also [Config] and [NewSSU2Transport].
 func NewConfig(listenerAddress string) (*Config, error) {
 	log.WithFields(logger.Fields{
@@ -214,6 +220,7 @@ func NewConfig(listenerAddress string) (*Config, error) {
 	return &Config{
 		ListenerAddress: listenerAddress,
 		WorkingDir:      "",
+		RequireRetry:    DefaultRequireRetry,
 		SSU2Config:      nil,
 	}, nil
 }
