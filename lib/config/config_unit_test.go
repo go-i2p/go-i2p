@@ -166,6 +166,29 @@ func TestNewRouterConfigFromViperSubsystemFields(t *testing.T) {
 	assert.Equal(t, defaults.Congestion.DFlagThreshold, cfg.Congestion.DFlagThreshold, "Congestion.DFlagThreshold")
 }
 
+// TestNewRouterConfigHandshakeBoundKeys verifies the two NTCP2 handshake-bound
+// settings are read from the same viper keys setTransportDefaults writes to, and
+// that an explicit value survives the round trip. A typo in either half of the
+// pair is silent — the field just stays zero — which is the failure mode this
+// package has been bitten by before (see TestCurrentConfigRouterInfoRefreshInterval).
+func TestNewRouterConfigHandshakeBoundKeys(t *testing.T) {
+	defaults := configTestSetup(t)
+
+	cfg, err := NewRouterConfigFromViper()
+	require.NoError(t, err, "NewRouterConfigFromViper failed")
+	assert.Equal(t, defaults.Transport.NTCP2MaxInflightHandshakes, cfg.Transport.NTCP2MaxInflightHandshakes,
+		"default transport config must round-trip NTCP2MaxInflightHandshakes")
+	assert.Equal(t, defaults.Transport.NTCP2MaxHandshakesPerSource, cfg.Transport.NTCP2MaxHandshakesPerSource,
+		"default transport config must round-trip NTCP2MaxHandshakesPerSource")
+
+	viper.Set("transport.ntcp2_max_inflight_handshakes", 32)
+	viper.Set("transport.ntcp2_max_handshakes_per_source", 4)
+	cfg, err = NewRouterConfigFromViper()
+	require.NoError(t, err, "NewRouterConfigFromViper failed")
+	assert.Equal(t, 32, cfg.Transport.NTCP2MaxInflightHandshakes, "Transport.NTCP2MaxInflightHandshakes")
+	assert.Equal(t, 4, cfg.Transport.NTCP2MaxHandshakesPerSource, "Transport.NTCP2MaxHandshakesPerSource")
+}
+
 // TestSetRouterConfigSubsystemFields verifies that SetRouterConfig(NewRouterConfigFromViper())
 // propagates Tunnel, Transport, Performance, and Congestion config.
 func TestUpdateRouterConfigSubsystemFields(t *testing.T) {

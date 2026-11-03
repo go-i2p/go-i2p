@@ -91,6 +91,9 @@ type RouterStatsProvider interface {
 	//   transport.session.fail.noiseHandshake           — cumulative NTCP2 Noise/msg3 failures
 	//   transport.ntcp2.session.established             — cumulative NTCP2 established sessions
 	//   transport.session.success.ntcp2                 — alias for NTCP2 established sessions
+	//   transport.ntcp2.handshake.refusedGlobal         — cumulative NTCP2 inbound connections shed at the transport-wide handshake cap
+	//   transport.ntcp2.handshake.refusedSource         — cumulative NTCP2 inbound connections shed at the per-source handshake cap
+	//   transport.ntcp2.handshake.inflight              — NTCP2 inbound handshakes running right now (a gauge, not a cumulative count)
 	GetRateForPeriod(stat string, periodMs int64) float64
 
 	// GetLocalRouterIdentityHash returns the base64-encoded identity hash of this router.
@@ -891,7 +894,10 @@ func (rsp *routerStatsProvider) isNTCP2TransportMetricStat(stat string) bool {
 		stat == "transport.session.success.ntcp2" ||
 		stat == "transport.ntcp2.session.eofClose" ||
 		stat == "transport.ntcp2.session.timeoutOrReset" ||
-		stat == "transport.ntcp2.session.recvBackpressureDrop"
+		stat == "transport.ntcp2.session.recvBackpressureDrop" ||
+		stat == "transport.ntcp2.handshake.refusedGlobal" ||
+		stat == "transport.ntcp2.handshake.refusedSource" ||
+		stat == "transport.ntcp2.handshake.inflight"
 }
 
 type ntcp2TransportMetricsReader interface {
@@ -917,6 +923,12 @@ func (rsp *routerStatsProvider) getNTCP2TransportMetric(stat string) float64 {
 		return float64(metrics.SessionTimeoutOrReset)
 	case "transport.ntcp2.session.recvBackpressureDrop":
 		return float64(metrics.SessionRecvBackpressure)
+	case "transport.ntcp2.handshake.refusedGlobal":
+		return float64(metrics.HandshakeRefusedGlobal)
+	case "transport.ntcp2.handshake.refusedSource":
+		return float64(metrics.HandshakeRefusedSource)
+	case "transport.ntcp2.handshake.inflight":
+		return float64(metrics.InflightHandshakes)
 	default:
 		return 0
 	}

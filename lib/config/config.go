@@ -210,6 +210,8 @@ func setTransportDefaults(defaults ConfigDefaults) {
 		{"transport.ntcp2_enabled", defaults.Transport.NTCP2Enabled},
 		{"transport.ntcp2_port", defaults.Transport.NTCP2Port},
 		{"transport.ntcp2_max_connections", defaults.Transport.NTCP2MaxConnections},
+		{"transport.ntcp2_max_inflight_handshakes", defaults.Transport.NTCP2MaxInflightHandshakes},
+		{"transport.ntcp2_max_handshakes_per_source", defaults.Transport.NTCP2MaxHandshakesPerSource},
 		{"transport.ssu2_enabled", defaults.Transport.SSU2Enabled},
 		{"transport.ssu2_port", defaults.Transport.SSU2Port},
 		{"transport.connection_timeout", defaults.Transport.ConnectionTimeout},
@@ -461,14 +463,16 @@ func buildTunnelConfig() *TunnelDefaults {
 // buildTransportConfig creates a TransportDefaults from current viper settings.
 func buildTransportConfig() *TransportDefaults {
 	return &TransportDefaults{
-		NTCP2Enabled:        viper.GetBool("transport.ntcp2_enabled"),
-		NTCP2Port:           viper.GetInt("transport.ntcp2_port"),
-		NTCP2MaxConnections: viper.GetInt("transport.ntcp2_max_connections"),
-		SSU2Enabled:         viper.GetBool("transport.ssu2_enabled"),
-		SSU2Port:            viper.GetInt("transport.ssu2_port"),
-		ConnectionTimeout:   viper.GetDuration("transport.connection_timeout"),
-		IdleTimeout:         viper.GetDuration("transport.idle_timeout"),
-		MaxMessageSize:      viper.GetInt("transport.max_message_size"),
+		NTCP2Enabled:                viper.GetBool("transport.ntcp2_enabled"),
+		NTCP2Port:                   viper.GetInt("transport.ntcp2_port"),
+		NTCP2MaxConnections:         viper.GetInt("transport.ntcp2_max_connections"),
+		NTCP2MaxInflightHandshakes:  viper.GetInt("transport.ntcp2_max_inflight_handshakes"),
+		NTCP2MaxHandshakesPerSource: viper.GetInt("transport.ntcp2_max_handshakes_per_source"),
+		SSU2Enabled:                 viper.GetBool("transport.ssu2_enabled"),
+		SSU2Port:                    viper.GetInt("transport.ssu2_port"),
+		ConnectionTimeout:           viper.GetDuration("transport.connection_timeout"),
+		IdleTimeout:                 viper.GetDuration("transport.idle_timeout"),
+		MaxMessageSize:              viper.GetInt("transport.max_message_size"),
 	}
 }
 

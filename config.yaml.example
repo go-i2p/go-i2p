@@ -237,6 +237,13 @@ transport:
   ntcp2_enabled: true
   ntcp2_port: 0  # 0 = random port assigned by OS
   ntcp2_max_connections: 200
+  # Inbound NTCP2 handshakes run before the peer is authenticated, so they cost
+  # the router work a caller gets for free. These two bounds cap that cost;
+  # ntcp2_max_connections cannot, because it is only checked after a handshake
+  # has already succeeded. 0 = the transport's built-in default (64 / 8),
+  # negative = bound disabled.
+  ntcp2_max_inflight_handshakes: 0
+  ntcp2_max_handshakes_per_source: 0
   
   # SSU2 transport settings
   ssu2_enabled: true

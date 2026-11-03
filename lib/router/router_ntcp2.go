@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-i2p/common/router_address"
 	"github.com/go-i2p/common/router_info"
+	"github.com/go-i2p/go-i2p/lib/config"
 	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
@@ -32,6 +33,29 @@ func buildNTCP2Transport(r *Router, ri *router_info.RouterInfo) (*ntcp.NTCP2Tran
 	return ntcp2Transport, nil
 }
 
+// applyNTCP2SessionLimits copies the operator's transport limits into the NTCP2
+// transport config.
+//
+// Before this, transport.ntcp2-max-connections was read into RouterConfig and
+// then never used: the transport always ran with its built-in DefaultMaxSessions,
+// so an operator who set 50 got 512.
+//
+// A nil transport config leaves every field at zero, which the transport
+// resolves to its own documented defaults — the same "0 means default" rule the
+// transport's Config uses, so the two layers agree without lib/config having to
+// restate the numbers (it cannot import the transport package without a cycle).
+//
+// The handshake bounds are passed through verbatim for the same reason: 0 keeps
+// the transport default and a negative value disables the bound, in both layers.
+func applyNTCP2SessionLimits(dst *ntcp.Config, src *config.TransportDefaults) {
+	if dst == nil || src == nil {
+		return
+	}
+	dst.MaxSessions = src.NTCP2MaxConnections
+	dst.MaxInflightHandshakes = src.NTCP2MaxInflightHandshakes
+	dst.MaxHandshakesPerSource = src.NTCP2MaxHandshakesPerSource
+}
+
 // createNTCP2TransportInstance creates and configures the NTCP2 transport with peer tracking.
 func createNTCP2TransportInstance(r *Router, ri *router_info.RouterInfo, addr string) (*ntcp.NTCP2Transport, error) {
 	log.WithFields(logger.Fields{"at": "buildNTCP2Transport", "addr": addr}).Debug("creating NTCP2 config")
@@ -41,6 +65,7 @@ func createNTCP2TransportInstance(r *Router, ri *router_info.RouterInfo, addr st
 		return nil, err
 	}
 	ntcp2Config.WorkingDir = r.cfg.WorkingDir
+	applyNTCP2SessionLimits(ntcp2Config, r.cfg.Transport)
 
 	log.WithField("at", "buildNTCP2Transport").Debug("creating NTCP2 transport instance")
 	ntcp2Transport, err := ntcp.NewNTCP2Transport(*ri, ntcp2Config, r.keystore)

@@ -690,6 +690,33 @@ func TestStatsTransportSessionFailureCounters(t *testing.T) {
 	assertRate("transport.session.success.ntcp2", 23)
 }
 
+func TestStatsNTCP2HandshakeAdmissionCounters(t *testing.T) {
+	router := &mockRouterAccessWithNTCP2Metrics{
+		mockRouterAccess: mockRouterAccess{running: true},
+		metrics: ntcp.TransportMetricsSnapshot{
+			HandshakeRefusedGlobal: 128,
+			HandshakeRefusedSource: 64,
+			InflightHandshakes:     9,
+		},
+	}
+
+	provider := NewRouterStatsProvider(router, "0.1.0-test")
+
+	assertRate := func(stat string, want float64) {
+		t.Helper()
+		got := provider.GetRateForPeriod(stat, 60000)
+		if got != want {
+			t.Fatalf("%s = %v, want %v", stat, got, want)
+		}
+	}
+
+	// An operator alerting on a pre-auth flood reads these; if the stat names are
+	// not wired to the snapshot they silently report 0 and the flood is invisible.
+	assertRate("transport.ntcp2.handshake.refusedGlobal", 128)
+	assertRate("transport.ntcp2.handshake.refusedSource", 64)
+	assertRate("transport.ntcp2.handshake.inflight", 9)
+}
+
 func TestStatsNTCP2SessionChurnCounters(t *testing.T) {
 	router := &mockRouterAccessWithNTCP2Metrics{
 		mockRouterAccess: mockRouterAccess{running: true},

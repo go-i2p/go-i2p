@@ -287,3 +287,71 @@ func TestConfig_HandshakeDefaultsAndOverrides(t *testing.T) {
 	assert.Equal(t, 7, cfg.GetMaxInflightHandshakes())
 	assert.Equal(t, 2, cfg.GetMaxHandshakesPerSource())
 }
+
+// TestNewNTCP2Transport_EnforcesConfiguredHandshakeBounds is the end-to-end pin
+// for the operator-facing settings: limits placed on the Config handed to
+// NewNTCP2Transport must actually shed connections on the live accept path. A
+// transport that reads its own defaults regardless of what it was constructed
+// with would pass every unit test here and still ignore config.yaml.
+func TestNewNTCP2Transport_EnforcesConfiguredHandshakeBounds(t *testing.T) {
+	const configuredGlobal = 3
+
+	staticPriv := make([]byte, 32)
+	for i := range staticPriv {
+		staticPriv[i] = byte(i + 1)
+	}
+
+	_, port, err := net.SplitHostPort("127.0.0.1:0")
+	require.NoError(t, err)
+
+	cfg, err := NewConfig("127.0.0.1:0")
+	require.NoError(t, err)
+	cfg.MaxInflightHandshakes = configuredGlobal
+	cfg.MaxHandshakesPerSource = -1 // isolate the transport-wide bound
+
+	identity := newFallbackIntegrationIdentity(t, "localhost", port, staticPriv)
+	keystore := &fallbackIntegrationKeystore{privateKey: append([]byte(nil), staticPriv...)}
+	tr, err := NewNTCP2Transport(identity, cfg, keystore)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = tr.Close() })
+
+	// The transport must be running the configured numbers, not its defaults.
+	live := tr.config.Load()
+	require.NotNil(t, live)
+	require.Equal(t, configuredGlobal, live.GetMaxInflightHandshakes(),
+		"NewNTCP2Transport must carry the configured global handshake bound")
+
+	// Drive the accept path past that bound. admitInboundHandshake is exactly what
+	// acceptNextConnection calls before spawning a handshake goroutine.
+	conns := make([]*acceptMockConn, 0, configuredGlobal+5)
+	for i := 0; i < configuredGlobal+5; i++ {
+		conns = append(conns, newAcceptMockConn("10.9.9.9:4000"))
+	}
+
+	// Admitted slots are held open (not released) so the budget stays spent and
+	// the surplus is what gets refused -- the shape of a real flood, where each
+	// handshake is still in flight.
+	admitted, shed := 0, 0
+	var releases []func()
+	for _, c := range conns {
+		release := tr.admitInboundHandshake(c)
+		if release == nil {
+			shed++
+			continue
+		}
+		admitted++
+		releases = append(releases, release)
+	}
+	t.Cleanup(func() {
+		for _, r := range releases {
+			r()
+		}
+	})
+
+	assert.Equal(t, configuredGlobal, admitted,
+		"exactly the configured number of handshakes may be admitted at once")
+	assert.Equal(t, len(conns)-configuredGlobal, shed,
+		"every connection beyond the configured bound must be shed")
+	assert.EqualValues(t, len(conns)-configuredGlobal,
+		tr.GetTransportMetrics().HandshakeRefusedGlobal)
+}

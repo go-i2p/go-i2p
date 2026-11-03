@@ -230,6 +230,12 @@ func registerTransportFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().Int("transport.ntcp2-max-connections",
 		config.DefaultTransportConfig.NTCP2MaxConnections,
 		"Maximum concurrent NTCP2 sessions")
+	cmd.PersistentFlags().Int("transport.ntcp2-max-inflight-handshakes",
+		config.DefaultTransportConfig.NTCP2MaxInflightHandshakes,
+		"Maximum concurrent inbound NTCP2 handshakes (0 = default, negative = unlimited)")
+	cmd.PersistentFlags().Int("transport.ntcp2-max-handshakes-per-source",
+		config.DefaultTransportConfig.NTCP2MaxHandshakesPerSource,
+		"Maximum concurrent inbound NTCP2 handshakes per source IP (0 = default, negative = unlimited)")
 	cmd.PersistentFlags().Bool("transport.ssu2-enabled",
 		config.DefaultTransportConfig.SSU2Enabled,
 		"Enable SSU2 transport (UDP-based, currently experimental; see docs/ssu2-experimental.md)")
@@ -430,6 +436,8 @@ func bindTransportFlags(cmd *cobra.Command, v *viper.Viper) error {
 		{"transport.ntcp2_enabled", "transport.ntcp2-enabled"},
 		{"transport.ntcp2_port", "transport.ntcp2-port"},
 		{"transport.ntcp2_max_connections", "transport.ntcp2-max-connections"},
+		{"transport.ntcp2_max_inflight_handshakes", "transport.ntcp2-max-inflight-handshakes"},
+		{"transport.ntcp2_max_handshakes_per_source", "transport.ntcp2-max-handshakes-per-source"},
 		{"transport.ssu2_enabled", "transport.ssu2-enabled"},
 		{"transport.ssu2_port", "transport.ssu2-port"},
 		{"transport.connection_timeout", "transport.connection-timeout"},

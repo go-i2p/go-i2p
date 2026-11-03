@@ -344,6 +344,21 @@ type TransportDefaults struct {
 	// Default: 200
 	NTCP2MaxConnections int
 
+	// NTCP2MaxInflightHandshakes bounds how many inbound NTCP2 handshakes the
+	// transport runs at once, before any of them authenticates. Unlike
+	// NTCP2MaxConnections, which is only enforced after a handshake succeeds,
+	// this caps the work an unauthenticated peer can make the router do.
+	// Default: 0 (use the transport's built-in default)
+	// A negative value disables the bound.
+	NTCP2MaxInflightHandshakes int
+
+	// NTCP2MaxHandshakesPerSource bounds how many of those concurrent inbound
+	// handshakes may come from one source IP, so a single host cannot consume
+	// the whole budget.
+	// Default: 0 (use the transport's built-in default)
+	// A negative value disables the bound.
+	NTCP2MaxHandshakesPerSource int
+
 	// SSU2Enabled determines if SSU2 transport is active
 	// Default: true
 	SSU2Enabled bool
@@ -516,11 +531,16 @@ func buildTransportDefaults() TransportDefaults {
 		NTCP2Enabled:        true,
 		NTCP2Port:           0, // Random port
 		NTCP2MaxConnections: 200,
-		SSU2Enabled:         true,
-		SSU2Port:            0, // Random port
-		ConnectionTimeout:   30 * time.Second,
-		IdleTimeout:         5 * time.Minute,
-		MaxMessageSize:      32768, // 32 KiB
+		// Zero defers to the NTCP2 transport's own documented defaults
+		// (ntcp2.DefaultMaxInflightHandshakes / DefaultMaxHandshakesPerSource)
+		// rather than restating the numbers here, so the two cannot drift.
+		NTCP2MaxInflightHandshakes:  0,
+		NTCP2MaxHandshakesPerSource: 0,
+		SSU2Enabled:                 true,
+		SSU2Port:                    0, // Random port
+		ConnectionTimeout:           30 * time.Second,
+		IdleTimeout:                 5 * time.Minute,
+		MaxMessageSize:              32768, // 32 KiB
 	}
 }
 
@@ -1046,6 +1066,19 @@ func validateTransportSizes(transport TransportDefaults) error {
 	if transport.NTCP2MaxConnections < 1 {
 		log.WithField("ntcp2_max_connections", transport.NTCP2MaxConnections).Error("Invalid transport configuration")
 		return newValidationError("Transport.NTCP2MaxConnections must be at least 1")
+	}
+	// The handshake bounds allow 0 (transport default) and a negative value
+	// (bound explicitly disabled), so only their relationship can be wrong: a
+	// per-source cap larger than the transport-wide cap can never be what
+	// refuses a connection, which means the intended limit silently does nothing.
+	if global, perSource := transport.NTCP2MaxInflightHandshakes, transport.NTCP2MaxHandshakesPerSource; global > 0 && perSource > global {
+		log.WithFields(logger.Fields{
+			"ntcp2_max_inflight_handshakes":   global,
+			"ntcp2_max_handshakes_per_source": perSource,
+		}).Error("Invalid transport configuration")
+		return newValidationError("Transport.NTCP2MaxHandshakesPerSource (" + strconv.Itoa(perSource) +
+			") must not exceed Transport.NTCP2MaxInflightHandshakes (" + strconv.Itoa(global) +
+			"): the per-source limit would never bind")
 	}
 	return nil
 }

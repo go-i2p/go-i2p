@@ -278,6 +278,41 @@ func TestValidate_TransportInvalidMaxConnections(t *testing.T) {
 	requireValidationFails(t, cfg, "Validate() should fail when NTCP2MaxConnections < 1")
 }
 
+// TestValidate_HandshakeBoundsInverted verifies validation rejects a per-source
+// handshake cap that exceeds the transport-wide cap. Either bound may be 0
+// (transport default) or negative (disabled), so their relative size is the only
+// thing that can be wrong — and an inverted pair means the per-source limit the
+// operator asked for silently never binds.
+func TestValidate_HandshakeBoundsInverted(t *testing.T) {
+	cfg := Defaults()
+	cfg.Transport.NTCP2MaxInflightHandshakes = 10
+	cfg.Transport.NTCP2MaxHandshakesPerSource = 50
+	requireValidationFails(t, cfg, "Validate() should fail when per-source exceeds the transport-wide handshake cap")
+}
+
+// TestValidate_HandshakeBoundsAllowDefaultAndDisabled verifies the two accepted
+// spellings are not rejected: 0 defers to the transport's own default and a
+// negative value explicitly disables the bound.
+func TestValidate_HandshakeBoundsAllowDefaultAndDisabled(t *testing.T) {
+	cfg := Defaults()
+	cfg.Transport.NTCP2MaxInflightHandshakes = 0
+	cfg.Transport.NTCP2MaxHandshakesPerSource = 0
+	require.NoError(t, Validate(cfg), "Validate() should accept the zero (transport default) spelling")
+
+	cfg.Transport.NTCP2MaxInflightHandshakes = -1
+	cfg.Transport.NTCP2MaxHandshakesPerSource = -1
+	require.NoError(t, Validate(cfg), "Validate() should accept negative (bound disabled)")
+
+	cfg.Transport.NTCP2MaxInflightHandshakes = 64
+	cfg.Transport.NTCP2MaxHandshakesPerSource = 8
+	require.NoError(t, Validate(cfg), "Validate() should accept a per-source cap below the global cap")
+
+	// A disabled global cap cannot be exceeded by any per-source value.
+	cfg.Transport.NTCP2MaxInflightHandshakes = -1
+	cfg.Transport.NTCP2MaxHandshakesPerSource = 500
+	require.NoError(t, Validate(cfg), "Validate() should not compare bounds when the global cap is disabled")
+}
+
 // TestValidate_TransportInvalidNTCP2Port verifies validation catches out-of-range ports
 func TestValidate_TransportInvalidNTCP2Port(t *testing.T) {
 	cfg := Defaults()
