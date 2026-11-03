@@ -38,7 +38,11 @@ func TestCRITICAL_1_1_PromotionRace(t *testing.T) {
 	defer transport.Close()
 
 	peerHash := newTestPeerHash("critical-1-1-promotion-race!!")
-	rawConn := newAcceptMockConn("192.168.1.100:5100")
+	// Live conn, not the EOF-reporting acceptMockConn: the winner of the
+	// promotion race now tears itself down when its read fails (finding 006),
+	// which would delete the map entry this test asserts on. This test is about
+	// who wins the store, not about a peer that already hung up.
+	rawConn := newLiveMockConnInContext(transport.ctx, "192.168.1.100:5100")
 
 	// Simulate Accept() storing a raw net.Conn (as would happen with inbound connections).
 	// Store() auto-increments session count for fresh entries
@@ -130,7 +134,10 @@ func TestCRITICAL_1_1_PromotionRace_DirectCAS(t *testing.T) {
 	defer transport.Close()
 
 	peerHash := newTestPeerHash("direct-cas-race-test!!!!!")
-	rawConn := newAcceptMockConn("192.168.1.101:5101")
+	// Live conn: this test asserts the winner stays in the map, which an
+	// instant-EOF conn would not (a failed read now tears the session down —
+	// finding 006).
+	rawConn := newLiveMockConnInContext(transport.ctx, "192.168.1.101:5101")
 
 	// Store the raw connection as Accept() would.
 	transport.sessionRegistry.StoreWithCount(peerHash, rawConn)
@@ -474,7 +481,11 @@ func TestX3_AcceptStoreVsPromotionCAS(t *testing.T) {
 	for i := 0; i < concurrentRaces; i++ {
 		i := i
 		peerHash := newTestPeerHash(fmt.Sprintf("x3-race-%d", i))
-		rawConn := newAcceptMockConn(fmt.Sprintf("192.168.1.%d:5400", 100+i))
+		// Live conn: a session promoted over an EOF-reporting conn would tear
+		// itself down and delete its entry (finding 006), which would make the
+		// "some entries remain" assertion below about teardown rather than the
+		// accept-vs-promotion ownership race under test.
+		rawConn := newLiveMockConnInContext(transport.ctx, fmt.Sprintf("192.168.1.%d:5400", 100+i))
 
 		// Simulate trackInboundConnection storing the rawConn.
 		transport.sessionRegistry.StoreWithCount(peerHash, rawConn)

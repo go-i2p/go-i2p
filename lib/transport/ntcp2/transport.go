@@ -407,7 +407,14 @@ func (t *NTCP2Transport) currentIdleExpireWriteTime() time.Duration {
 
 func (t *NTCP2Transport) updateIdleExpireWriteTime(haveCapacity bool) {
 	for {
-		current := atomic.LoadInt64(&t.idleExpireWriteTime)
+		raw := atomic.LoadInt64(&t.idleExpireWriteTime)
+
+		// A non-positive stored value means the window has not been seeded yet
+		// (the field's zero value is 0, not a duration). The CAS below must
+		// compare against the raw stored value, so the normalisation is kept
+		// separate: comparing against a substituted value could never succeed
+		// and this loop would spin forever without ever updating the window.
+		current := raw
 		if current <= 0 {
 			current = int64(ntcp2MaxExpireIdleTime)
 		}
@@ -425,7 +432,7 @@ func (t *NTCP2Transport) updateIdleExpireWriteTime(haveCapacity bool) {
 			}
 		}
 
-		if atomic.CompareAndSwapInt64(&t.idleExpireWriteTime, current, int64(next)) {
+		if atomic.CompareAndSwapInt64(&t.idleExpireWriteTime, raw, int64(next)) {
 			return
 		}
 	}

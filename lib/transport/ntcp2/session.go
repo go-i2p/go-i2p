@@ -162,6 +162,21 @@ func (s *NTCP2Session) CloseWithReason(reason byte) error {
 				applyProbingResistance(raw)
 			}
 		} else {
+			// On an error-driven teardown the send worker may be parked writing
+			// to a peer that stopped reading, and go-noise serialises writes, so
+			// this block would queue behind that parked write. Cancelling pending
+			// writes first unblocks the worker, which then exits on the cancelled
+			// context. Without it Close stalls for as long as the parked write
+			// holds the socket — keeping the fd, the registry entry and the
+			// session slot alive, which is the failure this teardown exists to
+			// clear.
+			//
+			// A healthy close (context still live) must not do this: a worker may
+			// legitimately still be flushing the last queued message after the
+			// drain, and cancelling it would truncate the graceful shutdown.
+			if !s.IsAlive() {
+				s.cancelPendingWrites()
+			}
 			s.sendEncryptedTermination(reason)
 		}
 
@@ -283,11 +298,10 @@ func (s *NTCP2Session) sendEncryptedTermination(reason byte) {
 		"valid_frames": frames,
 	}).Debug("Sending encrypted termination block")
 
-	// Bound the write: the termination block is best-effort, and this runs on
-	// the teardown path that an error just scheduled. Without a deadline, a
-	// peer that stops reading could hold CloseWithReason (and with it the
-	// socket, the registry entry and the session slot) open indefinitely before
-	// the connection is actually closed below.
+	// go-noise serialises writes, so this block queues behind whatever the send
+	// worker has in flight. Arm a short deadline so a parked worker cannot make
+	// Close wait for it; the deadline is bounded rather than expired so this
+	// write itself still gets a chance to reach the wire.
 	if deadlineErr := conn.SetWriteDeadline(time.Now().Add(ntcp2TerminationWriteTimeout)); deadlineErr != nil {
 		s.Logger().WithError(deadlineErr).Debug("Failed to set termination block write deadline")
 	}
@@ -296,6 +310,21 @@ func (s *NTCP2Session) sendEncryptedTermination(reason byte) {
 		s.Logger().WithError(writeErr).Debug("Failed to send encrypted termination block (best-effort)")
 	} else {
 		s.Logger().Debug("Encrypted termination block sent successfully")
+	}
+}
+
+// cancelPendingWrites arms an expired write deadline so a send worker parked in
+// a blocking write returns immediately. It must only be called while tearing the
+// session down, since it discards whatever is mid-flight.
+func (s *NTCP2Session) cancelPendingWrites() {
+	s.connMu.Lock()
+	conn := s.conn
+	s.connMu.Unlock()
+	if conn == nil {
+		return
+	}
+	if err := conn.SetWriteDeadline(time.Now()); err != nil {
+		s.Logger().WithError(err).Debug("Failed to cancel pending NTCP2 writes before close")
 	}
 }
 
@@ -594,9 +623,9 @@ func (s *NTCP2Session) handleReadResult(err error) bool {
 	}
 
 	// W5: a data-phase frame that violates the spec's block ordering rules
-	// (ntcp2.rst:1455-1469, :1675, :1742) is fatal — close the connection
-	// with the reason code the violation maps to (8 = Padding Violation,
-	// 10 = Payload Format Error) so the peer learns why.
+	// (ntcp2.rst:1455-1469, :1675, :1742) is fatal. setError is the single
+	// teardown funnel, and it maps the violation to its own reason code
+	// (8 = Padding Violation, 10 = Payload Format Error) so the peer learns why.
 	var violation *BlockOrderViolation
 	if errors.As(err, &violation) {
 		s.Logger().WithFields(map[string]interface{}{
@@ -604,7 +633,7 @@ func (s *NTCP2Session) handleReadResult(err error) bool {
 			"reason": violation.Reason,
 			"detail": violation.Detail,
 		}).Warn("NTCP2 data-phase block ordering violation, closing session")
-		go func() { _ = s.CloseWithReason(violation.TerminationReason()) }()
+		s.setError(WrapNTCP2Error(violation, "invalid NTCP2 block ordering"))
 		return false
 	}
 
@@ -986,9 +1015,12 @@ func (s *NTCP2Session) setError(err error) {
 // the connection before handing us the error. Everything else is reported as a
 // normal close; the write is best-effort and simply fails on a dead socket.
 func terminationReasonForReadError(err error) byte {
-	var violation *BlockOrderViolation
-	if errors.As(err, &violation) {
-		return violation.TerminationReason()
+	// Frame-level failures carry the reason the spec prescribes for them:
+	// *BlockOrderViolation for a frame that decodes but is ordered wrongly
+	// (8 or 10), *BlockParseError for a frame that does not decode at all (10).
+	var terminator interface{ TerminationReason() byte }
+	if errors.As(err, &terminator) {
+		return terminator.TerminationReason()
 	}
 	if isCipherLevelError(err) {
 		return TerminationAEADFailure

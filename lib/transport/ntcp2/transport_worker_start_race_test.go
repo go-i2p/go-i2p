@@ -184,7 +184,11 @@ func TestConcurrentPromoteInboundNoWorkersBeforeCAS(t *testing.T) {
 				winnerCount++
 				winnerCountMu.Unlock()
 			} else {
-				// Loser. Close without starting workers.
+				// Loser. Detach the shared conn before closing, as production's
+				// promoteInboundConnection does: the winner owns that socket now,
+				// and closing it here would fail the winner's next read, which
+				// tears the winner down and unregisters it (finding 006).
+				promoted.DetachConn()
 				_ = promoted.Close()
 			}
 		}(i)

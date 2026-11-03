@@ -115,11 +115,13 @@ func (u *BlockUnframer) ReadNextMessage() (i2np.Message, error) {
 			return nil, err
 		}
 
-		// Parse blocks from the decrypted payload
+		// Parse blocks from the decrypted payload. A frame that does not decode
+		// into whole blocks is fatal and is reported as a Payload Format Error
+		// (ntcp2.rst:1706) so the teardown can tell the peer why.
 		blocks, err := ParseBlocks(payload)
 		if err != nil {
 			log.WithError(err).Error("Failed to parse NTCP2 blocks")
-			return nil, oops.Wrapf(err, "failed to parse NTCP2 blocks")
+			return nil, oops.Wrapf(newBlockParseError("frame does not decode into whole blocks", err), "failed to parse NTCP2 blocks")
 		}
 
 		// Enforce the spec's data-phase block ordering rules before any block
