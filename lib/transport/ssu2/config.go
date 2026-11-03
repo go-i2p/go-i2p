@@ -24,6 +24,26 @@ const DefaultKeepaliveInterval = 15 * time.Second
 // before the session is torn down.
 const DefaultMaxRetransmissions = 3
 
+// DefaultMaxInflightHandshakes is the default cap on concurrent inbound SSU2
+// responder handshakes, authenticated or not. See [Config.MaxInflightHandshakes].
+//
+// A pre-handshake SessionRequest costs this router a goroutine, listener state
+// for the pending session and a handshake window, and the peer proves nothing to
+// get it. The cap bounds that cost; 64 is enough for a router establishing
+// sessions at a normal rate and small enough that a flood cannot grow the
+// handshake work past it.
+const DefaultMaxInflightHandshakes = 64
+
+// DefaultMaxHandshakesPerSource is the default cap on concurrent inbound SSU2
+// handshakes from one source IP. See [Config.MaxHandshakesPerSource].
+const DefaultMaxHandshakesPerSource = 8
+
+// DefaultHandshakeTimeout bounds one inbound SSU2 responder handshake when the
+// transport's go-noise config carries no value of its own. It matches go-noise's
+// spec-derived default (ssu2.rst: 15 s), so this only makes the bound explicit
+// rather than changing it.
+const DefaultHandshakeTimeout = 15 * time.Second
+
 // DefaultHolePunchDelay is the time Alice waits for Charlie's hole-punch packets
 // to arrive before sending the SessionRequest directly during introducer-based
 // relay connections.
@@ -62,6 +82,33 @@ type Config struct {
 	MaxRetransmissions int           // I2NP retransmission attempts before teardown (0 = DefaultMaxRetransmissions)
 	HolePunchDelay     time.Duration // Delay before sending SessionRequest after RelayResponse (0 = default 150ms)
 
+	// MaxInflightHandshakes bounds how many inbound SSU2 responder handshakes
+	// the transport runs at once, before any of them authenticates. Unlike
+	// MaxSessions, which is only enforced after a handshake succeeds, this caps
+	// the work an unauthenticated SessionRequest can make the router do.
+	// Zero (the default) selects [DefaultMaxInflightHandshakes]; a negative
+	// value disables the bound.
+	MaxInflightHandshakes int
+
+	// MaxHandshakesPerSource bounds how many of those concurrent handshakes may
+	// come from one source IP, so a single host cannot consume the whole
+	// budget. Zero selects [DefaultMaxHandshakesPerSource]; a negative value
+	// disables the bound.
+	MaxHandshakesPerSource int
+
+	// RequireRetry makes the listener answer a SessionRequest that carries no
+	// valid token with a Retry, so the initiator must prove it can receive
+	// packets at the claimed source address before this router spends a
+	// handshake on it. This is SSU2's own source-address validation, and it is
+	// the reason a spoofed-source flood costs the spoofer more than it costs us.
+	//
+	// The go-noise default is false, which leaves the pre-authentication path
+	// open: a single unauthenticated packet with a forged source reserves a
+	// session in the listener and hands it to Accept(). [NewConfig] turns it on
+	// for the transports the router builds; an operator opts out by setting
+	// transport.ssu2_require_retry: false.
+	RequireRetry bool
+
 	// RouterLookupFunc looks up a RouterInfo by identity hash.
 	// Required for SSU2 via introducers: Alice looks up Bob (the introducer)
 	// to get a direct dialable address before sending the RelayRequest.
@@ -89,6 +136,37 @@ func (c *Config) GetMaxSessions() int {
 		return DefaultMaxSessions
 	}
 	return c.MaxSessions
+}
+
+// GetMaxInflightHandshakes returns the effective inbound handshake concurrency
+// cap. Zero selects [DefaultMaxInflightHandshakes]; a negative value means the
+// bound is disabled and every inbound handshake is admitted.
+func (c *Config) GetMaxInflightHandshakes() int {
+	if c == nil || c.MaxInflightHandshakes == 0 {
+		return DefaultMaxInflightHandshakes
+	}
+	return c.MaxInflightHandshakes
+}
+
+// GetMaxHandshakesPerSource returns the effective per-source inbound handshake
+// cap. Zero selects [DefaultMaxHandshakesPerSource]; a negative value means the
+// bound is disabled.
+func (c *Config) GetMaxHandshakesPerSource() int {
+	if c == nil || c.MaxHandshakesPerSource == 0 {
+		return DefaultMaxHandshakesPerSource
+	}
+	return c.MaxHandshakesPerSource
+}
+
+// GetHandshakeTimeout returns the bound applied to one inbound responder
+// handshake. It reads the go-noise config, which is where the value actually
+// used by the handshake lives, and falls back to [DefaultHandshakeTimeout] when
+// unset.
+func (c *Config) GetHandshakeTimeout() time.Duration {
+	if c == nil || c.SSU2Config == nil || c.SSU2Config.HandshakeTimeout <= 0 {
+		return DefaultHandshakeTimeout
+	}
+	return c.SSU2Config.HandshakeTimeout
 }
 
 // GetKeepaliveInterval returns the effective keepalive interval.

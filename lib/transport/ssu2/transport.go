@@ -154,6 +154,20 @@ type SSU2Transport struct {
 	// Ensures warn is emitted only once per transport lifetime when RouterInfo
 	// blocks arrive but RouterStoreFunc is nil in non-test builds.
 	routerStoreWarnOnce sync.Once
+
+	// pendingConns receives inbound connections whose responder handshake has
+	// completed, ready for Accept(). Populated by the background accept loop;
+	// closed by Close() once every handshake worker has exited.
+	pendingConns chan net.Conn
+
+	// acceptRunOnce guards the background accept loop and pendingConns setup,
+	// both created lazily on the first Accept() call.
+	acceptRunOnce sync.Once
+
+	// admission bounds the pre-authentication inbound handshake path: how many
+	// responder handshakes may run at once transport-wide and per source. See
+	// [handshakeAdmission].
+	admission *handshakeAdmission
 }
 
 // KeystoreProvider provides access to the router's cryptographic keys.
@@ -439,14 +453,34 @@ func startSSU2Listener(t *SSU2Transport, udpConn net.PacketConn, ssu2Config *ssu
 	return nil
 }
 
-// Accept accepts an incoming SSU2 connection.
-// It rejects the connection immediately when the session pool is full, then
-// tracks the accepted connection so it can be promoted to a full session once
-// the peer's RouterInfo is known.
-// See also [SSU2Session].
+// pendingConnsQueueSize is the depth of the queue of inbound connections whose
+// responder handshake has completed. It matches the NTCP2 transport's queue so
+// the two transports absorb the same burst of simultaneous establishments
+// before back-pressure kicks in.
+const pendingConnsQueueSize = 64
+
+// inboundQueueSendTimeout bounds how long a finished handshake worker waits to
+// hand its connection to Accept(). A consumer that has stopped draining
+// Accept() must not pin a session slot and a goroutine indefinitely.
+const inboundQueueSendTimeout = 5 * time.Second
+
+// Accept returns the next inbound SSU2 connection whose responder handshake has
+// completed successfully.
+//
+// The handshake is NOT performed here. go-noise's listener hands us a connection
+// the moment a SessionRequest parses, before the peer has proven anything, and
+// completing the XK exchange on it takes as long as the peer takes. Doing that
+// inline would let one unauthenticated — and possibly spoofed — SessionRequest
+// stall inbound SSU2 for a whole handshake window. Instead a background accept
+// loop admits the connection against the pre-authentication budget
+// ([handshakeAdmission]), runs the handshake in its own goroutine, and delivers
+// only established connections here. See [SSU2Session].
+//
+// Handshakes that fail, are refused at admission, or arrive when the session
+// pool is full are torn down with CloseImmediate rather than Close: Close waits
+// the spec's 11-second Termination period, which is pointless for a session that
+// was never established and would tie up a handshake worker.
 func (t *SSU2Transport) Accept() (net.Conn, error) {
-	// BUG FIX MEDIUM 1.7: Protect listener access with identityMu to prevent races
-	// with SetIdentity() and Close(). Matches pattern in Addr() and NTCP2.Accept().
 	t.identityMu.RLock()
 	listener := t.listener
 	t.identityMu.RUnlock()
@@ -454,60 +488,288 @@ func (t *SSU2Transport) Accept() (net.Conn, error) {
 		return nil, ErrSessionClosed
 	}
 
-	// Fast-path reject if pool already full (non-reserving check)
-	// This provides immediate rejection for tests/callers checking capacity
-	// without blocking on Accept() when we know we can't serve the connection.
+	t.startInboundAcceptRunner()
+
+	// Fast-path reject if the pool is already full, so a caller checking
+	// capacity is not made to wait on a connection that cannot arrive.
 	if t.isSessionLimitReached() {
 		return nil, ErrConnectionPoolFull
 	}
 
-	// Accept connection BEFORE reserving slot (don't hold reservation while blocking)
-	conn, err := listener.Accept()
-	if err != nil {
-		return nil, err
+	select {
+	case conn, ok := <-t.pendingConns:
+		if !ok {
+			return nil, ErrSessionClosed
+		}
+		return conn, nil
+	case <-t.ctx.Done():
+		return nil, ErrSessionClosed
+	}
+}
+
+// startInboundAcceptRunner starts the background accept loop exactly once. It
+// initialises pendingConns and spawns the goroutine that calls the go-noise
+// listener's Accept() and hands each connection to a handshake worker. A second
+// goroutine closes the listener when the transport context is cancelled so a
+// blocking listener.Accept() is unblocked promptly on shutdown.
+func (t *SSU2Transport) startInboundAcceptRunner() {
+	t.acceptRunOnce.Do(func() {
+		t.pendingConns = make(chan net.Conn, pendingConnsQueueSize)
+		t.wg.Add(1)
+		go t.runInboundAcceptLoop()
+
+		// Track this goroutine in wg so Close() waits for it and cannot race
+		// with the listener pointer it reads.
+		t.wg.Add(1)
+		go func() {
+			defer t.wg.Done()
+			<-t.ctx.Done()
+			t.identityMu.RLock()
+			listener := t.listener
+			t.identityMu.RUnlock()
+			if listener != nil {
+				if err := listener.Close(); err != nil {
+					t.logger.WithError(err).Debug("Error closing SSU2 listener during transport shutdown")
+				}
+			}
+		}()
+	})
+}
+
+// runInboundAcceptLoop accepts raw inbound connections until the listener is
+// closed or the transport context is cancelled.
+func (t *SSU2Transport) runInboundAcceptLoop() {
+	defer t.wg.Done()
+	for {
+		if !t.acceptNextInboundConnection() {
+			return
+		}
+	}
+}
+
+// acceptNextInboundConnection processes one accepted connection, returning false
+// when the loop should terminate.
+func (t *SSU2Transport) acceptNextInboundConnection() bool {
+	// Read the listener under RLock but do NOT hold it across Accept(): that
+	// would deadlock against SetIdentity, and Accept() blocks. Mirrors the
+	// NTCP2 accept loop.
+	t.identityMu.RLock()
+	listener := t.listener
+	t.identityMu.RUnlock()
+	if listener == nil {
+		select {
+		case <-t.ctx.Done():
+			return false
+		case <-time.After(50 * time.Millisecond):
+			return true
+		}
 	}
 
-	// Now reserve slot after we have actual connection
-	// Handles race where pool filled while blocking on Accept()
+	conn, err := listener.Accept()
+	if err != nil {
+		select {
+		case <-t.ctx.Done():
+			t.logger.WithError(err).Debug("SSU2 accept error during shutdown; closing accept loop")
+			return false
+		default:
+			t.logger.WithError(err).Debug("Transient SSU2 accept error; will retry")
+			time.Sleep(10 * time.Millisecond)
+			return true
+		}
+	}
+
+	ssu2Conn, ok := conn.(*ssu2noise.SSU2Conn)
+	if !ok {
+		// The listener only ever queues *SSU2Conn. Anything else is a
+		// programming error, not a peer's fault; drop it without paying a
+		// destroy wait.
+		t.logger.WithField("conn_type", fmt.Sprintf("%T", conn)).
+			Error("SSU2 listener returned a connection that is not *ssu2noise.SSU2Conn")
+		closeConnImmediately(conn)
+		return true
+	}
+
+	select {
+	case <-t.ctx.Done():
+		closeConnImmediately(ssu2Conn)
+		return false
+	default:
+	}
+
+	release := t.admitInboundHandshake(ssu2Conn)
+	if release == nil {
+		// Refused at admission: already closed. Bound the pre-authentication
+		// cost instead of spending a handshake window on it.
+		return true
+	}
+
+	t.wg.Add(1)
+	go func() {
+		defer t.wg.Done()
+		defer release()
+		t.inboundHandshakeWorker(ssu2Conn)
+	}()
+	return true
+}
+
+// admitInboundHandshake bounds the cost of a not-yet-authenticated inbound
+// connection: it reserves a slot in the transport-wide and per-source handshake
+// budgets, and closes the connection if either is already spent.
+//
+// On success it returns the release function the caller must run when the
+// handshake goroutine exits. On refusal it closes the connection and returns
+// nil, so a flood is shed without a goroutine or a handshake timeout window.
+//
+// The session limit is deliberately NOT checked here; it is enforced after a
+// successful handshake in [SSU2Transport.inboundHandshakeWorker]. Reserving a
+// session slot pre-handshake would let an attacker hold every slot in the pool
+// for the duration of the handshake timeout.
+func (t *SSU2Transport) admitInboundHandshake(conn *ssu2noise.SSU2Conn) (release func()) {
+	cfg := t.config.Load()
+	var global, perSource int64
+	if cfg != nil {
+		global = int64(cfg.GetMaxInflightHandshakes())
+		perSource = int64(cfg.GetMaxHandshakesPerSource())
+	}
+
+	remote := conn.RemoteAddr()
+	var err error
+	release, err = t.admission.admit(remote, global, perSource)
+	if err == nil {
+		return release
+	}
+
+	t.recordHandshakeRefused(remote, err)
+	closeConnImmediately(conn)
+	return nil
+}
+
+// recordHandshakeRefused logs and counts a connection turned away at admission.
+// Kept at Debug: a flood would otherwise flood the log, and the counters are the
+// signal operators should alert on.
+func (t *SSU2Transport) recordHandshakeRefused(remote net.Addr, err error) {
+	if errors.Is(err, errAdmissionGlobalFull) {
+		t.reachMetrics.handshakeRefusedGlobal.Add(1)
+	} else {
+		t.reachMetrics.handshakeRefusedSource.Add(1)
+	}
+	addr := "<unknown>"
+	if remote != nil {
+		addr = remote.String()
+	}
+	t.logger.WithFields(map[string]interface{}{
+		"remote_addr": addr,
+		"reason":      err.Error(),
+	}).Debug("Inbound SSU2 connection refused at handshake admission")
+}
+
+// inboundHandshakeWorker completes the responder half of the SSU2 handshake for
+// one accepted connection and, on success, delivers the established connection
+// to Accept(). Everything about a failure is handled here so the accept loop
+// never waits on a peer: a failed or timed-out handshake costs this goroutine
+// and a CloseImmediate.
+func (t *SSU2Transport) inboundHandshakeWorker(conn *ssu2noise.SSU2Conn) {
+	remoteAddr := "<unknown>"
+	if conn.RemoteAddr() != nil {
+		remoteAddr = conn.RemoteAddr().String()
+	}
+
+	cfg := t.config.Load()
+	handshakeTimeout := cfg.GetHandshakeTimeout()
+	handshakeCtx, cancel := context.WithTimeout(t.ctx, handshakeTimeout)
+	defer cancel()
+
+	if err := conn.Handshake(handshakeCtx); err != nil {
+		t.reachMetrics.inboundHandshakeFailures.Add(1)
+		t.logger.WithFields(map[string]interface{}{
+			"remote_addr": remoteAddr,
+		}).WithError(err).Debug("Inbound SSU2 handshake failed; dropping connection")
+		closeConnImmediately(conn)
+		return
+	}
+
+	// The handshake is what authenticates the peer, and it is what populates
+	// the replay material from the validated SessionRequest. Both the duplicate
+	// check and the anti-replay check inside trackInboundConnection are only
+	// meaningful past this point.
 	if err := t.checkSessionLimit(); err != nil {
-		// Close the accepted connection since we can't serve it
-		// No unreserve needed: checkSessionLimit failed before reserving slot
-		conn.Close()
-		return nil, err
+		t.logger.WithFields(map[string]interface{}{
+			"session_count": t.GetSessionCount(),
+			"max_sessions":  cfg.GetMaxSessions(),
+			"remote_addr":   remoteAddr,
+		}).Warn("SSU2 session limit reached after successful handshake; dropping connection")
+		closeConnImmediately(conn)
+		return
 	}
 
 	tracked, isFresh := t.trackInboundConnection(conn)
 	if !isFresh {
-		// Duplicate detected: trackInboundConnection closed and unreserved it.
-		// Return a clean error to the caller.
-		return nil, ErrDuplicateSession
+		// Duplicate or replay: trackInboundConnection already unreserved the
+		// slot and closed the connection.
+		return
 	}
 
 	// Mark the connection as accepted to prevent dual-ownership via promotion.
-	// Use MarkAccepted to handle CAS atomically and avoid clobbering a concurrent promotion (X-3).
+	// Use MarkAccepted to handle CAS atomically and avoid clobbering a
+	// concurrent promotion (X-3).
 	peerHash := t.extractPeerHash(tracked)
-	// The original value should be the underlying raw conn (before wrapping in transport.TrackedConn).
-	// If MarkAccepted fails, a concurrent GetSession already promoted this to a session, so we
-	// don't deliver it to Accept (ownership already transferred).
-	originalConn := tracked.(*transport.TrackedConn).Conn
+	originalConn := transport.UnwrapTrackedConn(tracked)
 	if !t.sessionRegistry.MarkAccepted(peerHash, originalConn) {
-		// Promotion race: concurrent GetSession won.
-		// Do NOT call tracked.Close() here!
-		// The promoted session owns the connection now. Calling tracked.Close()
-		// would fire onClose → removeSession, incorrectly deleting the promoted
-		// session from the map while it's still alive.
-		// Let the TrackedConn wrapper be GC'd harmlessly.
+		// Promotion race: a concurrent GetSession won. The promoted session owns
+		// the connection now. Do NOT close tracked: its onClose would remove the
+		// live promoted session from the map. The wrapper is GC'd harmlessly, and
+		// the slot stays reserved for that session's own cleanup to release.
 		t.logger.WithFields(map[string]interface{}{
-			"remote_addr": conn.RemoteAddr().String(),
+			"remote_addr": remoteAddr,
 			"peer_hash":   logutil.HashPrefix(peerHash),
 		}).Debug("Inbound SSU2 connection promoted concurrently; not delivering to Accept")
-		// Note: We DO NOT unreserve the slot here because the promoted session
-		// is still using it. The session's cleanup callback will handle unreserving
-		// when the session eventually closes.
-		return nil, ErrDuplicateSession
+		return
 	}
 
-	return tracked, nil
+	sendCtx, sendCancel := context.WithTimeout(context.Background(), inboundQueueSendTimeout)
+	defer sendCancel()
+
+	queueLen := len(t.pendingConns)
+	if queueLen == pendingConnsQueueSize {
+		t.reachMetrics.pendingConnsQueueFullEvents.Add(1)
+	}
+	for old := t.reachMetrics.maxPendingConnsQueueDepth.Load(); uint64(queueLen) > old; {
+		if t.reachMetrics.maxPendingConnsQueueDepth.CompareAndSwap(old, uint64(queueLen)) {
+			break
+		}
+		old = t.reachMetrics.maxPendingConnsQueueDepth.Load()
+	}
+
+	select {
+	case t.pendingConns <- tracked:
+		t.reachMetrics.inboundHandshakeSuccess.Add(1)
+	case <-sendCtx.Done():
+		t.reachMetrics.queueSendTimeouts.Add(1)
+		t.logger.WithFields(map[string]interface{}{
+			"remote_addr":  remoteAddr,
+			"queue_timeout": inboundQueueSendTimeout,
+		}).Warn("Inbound SSU2 connection dropped: pending queue send timeout (Accept consumer too slow?)")
+		tracked.Close()
+	case <-t.ctx.Done():
+		tracked.Close()
+	}
+}
+
+// closeConnImmediately tears down a connection without waiting the spec's
+// DestroyTimeout for a Termination round-trip. go-noise documents
+// CloseImmediate for exactly this case — a session abandoned before it was ever
+// established — and its absence is what let one unauthenticated SessionRequest
+// occupy an accept path for 11 seconds. Falls back to Close for connections from
+// a test double that does not implement it.
+func closeConnImmediately(conn net.Conn) {
+	if conn == nil {
+		return
+	}
+	if immediate, ok := conn.(interface{ CloseImmediate() error }); ok {
+		_ = immediate.CloseImmediate()
+		return
+	}
+	_ = conn.Close()
 }
 
 // trackInboundConnection registers the accepted connection for session counting

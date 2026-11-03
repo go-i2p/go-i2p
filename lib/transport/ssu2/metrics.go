@@ -11,6 +11,15 @@ type reachabilityMetrics struct {
 	publishedAddrChanged    atomic.Uint64
 	staleSessionsReconciled atomic.Uint64 // A-3: how many Close() operations found non-zero stale sessions
 	replayChecksDeferred    atomic.Uint64 // deferred anti-replay checks due to unavailable SessionRequest replay token
+
+	// Inbound pre-authentication handshake path (finding 005).
+	handshakeRefusedGlobal      atomic.Uint64 // inbound connections closed for exceeding the transport-wide handshake budget
+	handshakeRefusedSource      atomic.Uint64 // inbound connections closed for exceeding the per-source handshake budget
+	inboundHandshakeFailures    atomic.Uint64 // responder handshakes that failed or timed out
+	inboundHandshakeSuccess     atomic.Uint64 // responder handshakes completed and delivered to Accept()
+	queueSendTimeouts           atomic.Uint64 // handshakes that timed out sending to the pendingConns queue
+	maxPendingConnsQueueDepth   atomic.Uint64 // maximum observed depth of the pendingConns queue
+	pendingConnsQueueFullEvents atomic.Uint64 // times a send was attempted with the queue full
 }
 
 // ReachabilitySnapshot is a point-in-time copy of all reachability counters.
