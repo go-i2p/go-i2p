@@ -158,6 +158,22 @@ func (s *NTCP2Session) CloseWithReason(reason byte) error {
 		conn := s.conn
 		s.connMu.Unlock()
 		if conn != nil {
+			// Unblock the receive worker before closing, or Close() stalls.
+			//
+			// go-noise's (*Conn).Close zeroes its buffered plaintext under the
+			// connection's read mutex, and the receive worker holds that mutex for
+			// the whole blocking Read — which is armed with the 5-minute
+			// ntcp2ReadDeadline. Closing first would therefore make Close wait for
+			// the parked Read to time out, holding the session (and the transport's
+			// shutdown) for minutes after the peer is gone.
+			//
+			// An expired read deadline returns the parked Read immediately; the
+			// worker then exits on its own because Cancel() above already closed the
+			// session context.
+			if deadlineErr := conn.SetReadDeadline(time.Now()); deadlineErr != nil {
+				s.Logger().WithError(deadlineErr).
+					Debug("Failed to set closing read deadline on NTCP2 connection")
+			}
 			err = conn.Close()
 			if err != nil {
 				s.Logger().WithError(err).Warn("Error closing connection")

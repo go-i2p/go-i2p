@@ -167,6 +167,35 @@ DefaultMaxSessions is the default maximum number of concurrent NTCP2 sessions.
 This prevents resource exhaustion under heavy load.
 
 ```go
+const (
+	DefaultMaxInflightHandshakes  = 64
+	DefaultMaxHandshakesPerSource = 8
+)
+```
+The bounds on the *pre-authentication* inbound path. A handshake is work the
+router pays for and the requester does not: every accepted TCP connection costs a
+goroutine, a socket, and the buffers the handshake allocates, and none of that is
+covered by DefaultMaxSessions, which is only checked after a handshake has
+already succeeded.
+
+DefaultMaxInflightHandshakes caps how many inbound handshakes may run at once
+transport-wide; DefaultMaxHandshakesPerSource caps how many of those may come
+from one source IP, so a single host cannot spend the whole budget. Connections
+beyond either bound are closed at accept time, before a handshake window, a junk
+read, or a probing-resistance delay is spent on them.
+
+Both are configuration ([Config.MaxInflightHandshakes],
+[Config.MaxHandshakesPerSource]): zero selects the default and a negative value
+disables the bound. The spec asks for the limit ("Limit repeated or simultaneous
+connections from the same source", ntcp2.rst §"Session Request" DoS Mitigation)
+but names no numbers, so these defaults are ours.
+
+They are separate from go-noise's FailureTracker, which blacklists a source for
+repeated *protocol* failures: that mechanism cannot see a host that opens
+connections and never sends a handshake message at all, because nothing ever
+reaches a protocol error.
+
+```go
 const RekeyThreshold uint64 = 65535
 ```
 RekeyThreshold is the number of messages (sent + received) after which a session

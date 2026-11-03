@@ -985,10 +985,9 @@ func (t *NTCP2Transport) onInboundHandshakeError(err error) {
 	}
 }
 
-// executeHandshake performs the Noise XK handshake with probing resistance on failure.
-// Uses handshakeCtx (with timeout) to prevent goroutine leaks on slow/stuck handshakes.
 // executeHandshake performs the NTCP2 wire-format handshake on an accepted
-// (responder) connection.
+// (responder) connection. Uses handshakeCtx (with timeout) to prevent goroutine
+// leaks on slow/stuck handshakes.
 //
 // It MUST call (*ntcp2.Conn).Handshake — the NTCP2-specific handshake — and not
 // the generic Noise handshake reachable through UnderlyingConn(). Per

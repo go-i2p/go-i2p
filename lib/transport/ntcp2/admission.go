@@ -75,11 +75,19 @@ func (a *handshakeAdmission) admit(addr net.Addr, global, perSource int64) (rele
 	if a == nil {
 		return noopRelease, nil
 	}
-	if global > 0 {
-		if a.inFlight.Add(1) > global {
-			a.inFlight.Add(-1)
-			return noopRelease, errAdmissionGlobalFull
-		}
+
+	// Always accounted, even when the global bound is disabled, so
+	// [TransportMetricsSnapshot.InflightHandshakes] reports the real number of
+	// handshakes running rather than zero whenever an operator turns the cap off.
+	//
+	// Increment-then-test is what makes the cap exact without a lock: an admit
+	// that would exceed the budget observes its own post-increment value above the
+	// limit, backs its reservation straight back out, and refuses. Concurrent
+	// admits may transiently overshoot the counter, but never admit more than
+	// global handshakes.
+	if a.inFlight.Add(1) > global && global > 0 {
+		a.inFlight.Add(-1)
+		return noopRelease, errAdmissionGlobalFull
 	}
 
 	key := handshakeSourceKey(addr)
@@ -87,9 +95,7 @@ func (a *handshakeAdmission) admit(addr net.Addr, global, perSource int64) (rele
 		a.mu.Lock()
 		if int64(a.bySource[key])+1 > perSource {
 			a.mu.Unlock()
-			if global > 0 {
-				a.inFlight.Add(-1)
-			}
+			a.inFlight.Add(-1)
 			return noopRelease, errAdmissionSourceFull
 		}
 		a.bySource[key]++
@@ -99,9 +105,7 @@ func (a *handshakeAdmission) admit(addr net.Addr, global, perSource int64) (rele
 	var once sync.Once
 	release = func() {
 		once.Do(func() {
-			if global > 0 {
-				a.inFlight.Add(-1)
-			}
+			a.inFlight.Add(-1)
 			if perSource > 0 && key != "" {
 				a.mu.Lock()
 				if a.bySource[key]--; a.bySource[key] <= 0 {

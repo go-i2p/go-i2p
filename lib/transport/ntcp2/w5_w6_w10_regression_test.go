@@ -454,15 +454,18 @@ func TestW10_OversizedI2NPNotFragmented(t *testing.T) {
 
 	require.NoError(t, session.QueueSendI2NP(msg))
 
-	// Wait for the queue to drain: the message must be dropped, not written.
+	// Wait for the send worker to process the message. Poll on the counter the
+	// assertion below actually reads: the worker decrements the queue size
+	// before it records the drop, so waiting only for the queue to empty can
+	// observe dropped == 0 in the window between the two, which made this
+	// flake under -race.
 	deadline := time.Now().Add(5 * time.Second)
-	for session.SendQueueSize() > 0 && time.Now().Before(deadline) {
+	for session.DroppedMessages() == 0 && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
 	}
-	require.Equal(t, 0, session.SendQueueSize())
 
-	dropped := session.DroppedMessages()
-	assert.GreaterOrEqual(t, dropped, uint64(1), "oversized message must be counted as dropped")
+	assert.Equal(t, 0, session.SendQueueSize(), "queue must drain")
+	assert.GreaterOrEqual(t, session.DroppedMessages(), uint64(1), "oversized message must be counted as dropped")
 	assert.Empty(t, conn.writtenFrames(), "oversized message must never be written (no fragmentation)")
 
 	// The session must still be functional: a normal message gets written.

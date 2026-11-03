@@ -154,6 +154,12 @@ func newFallbackIntegrationIdentity(t *testing.T, host, port string, staticPriv 
 			"host": host,
 			"port": port,
 			"s":    i2pbase64.I2PEncoding.EncodeToString(curvePub.Bytes()),
+			// ntcp2.rst:1861-1862 requires s=, i= and v= on a published NTCP2
+			// address; the dialer enforces all three. The i= value is the
+			// responder's live obfuscation IV, which the test only knows once
+			// the transport exists, so it is injected by
+			// buildPeerRouterInfoWithFallbackCandidates instead.
+			"v": "2",
 		},
 	}
 
