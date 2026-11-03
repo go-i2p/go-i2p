@@ -248,6 +248,25 @@ transport:
   # SSU2 transport settings
   ssu2_enabled: true
   ssu2_port: 0  # 0 = random port assigned by OS
+  # Maximum concurrent SSU2 sessions. 0 = the transport's built-in default (512).
+  # This is also published down to the go-noise listener, whose own default (65536)
+  # is far above any router's pool; without that the limit was never actually
+  # enforced on inbound connections.
+  ssu2_max_connections: 0
+  # Inbound SSU2 handshakes now run off the accept path and before the peer is
+  # authenticated, so they cost the router work a caller gets for free. These two
+  # bounds cap that cost; ssu2_max_connections cannot, because it is only checked
+  # after a handshake has already succeeded. 0 = the transport's built-in default
+  # (64 global / 8 per source), negative = bound disabled.
+  ssu2_max_inflight_handshakes: 0
+  ssu2_max_handshakes_per_source: 0
+  # Source-address validation: answer a tokenless SessionRequest with a Retry so a
+  # spoofed source costs the spoofer more than it costs us. LEAVE THIS OFF: the
+  # go-noise version this build pins mishandles the Retry issuance for a
+  # Noise-encrypted SessionRequest and drops EVERY inbound SessionRequest when it
+  # is enabled, causing a total inbound SSU2 outage. Kept as an opt-in only for
+  # when that upstream path is fixed.
+  ssu2_require_retry: false
   
   # Connection parameters
   connection_timeout: 30s

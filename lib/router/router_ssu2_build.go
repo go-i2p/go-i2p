@@ -6,6 +6,7 @@ import (
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_address"
 	"github.com/go-i2p/common/router_info"
+	"github.com/go-i2p/go-i2p/lib/config"
 	ssu2 "github.com/go-i2p/go-i2p/lib/transport/ssu2"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
@@ -36,6 +37,28 @@ func buildSSU2Transport(r *Router, ri *router_info.RouterInfo) (*ssu2.SSU2Transp
 	return ssu2Transport, nil
 }
 
+// applySSU2SessionLimits copies the operator's SSU2 limits into the SSU2
+// transport config.
+//
+// Like the NTCP2 equivalent, a nil transport config leaves every field at zero,
+// which the transport resolves to its own documented defaults — lib/config
+// cannot import the transport package without a cycle, so restating the numbers
+// here is exactly what would let the two drift.
+//
+// RequireRetry is a plain opt-in copied straight through. It defaults to false in
+// both lib/config and the transport, because the pinned go-noise rejects every
+// inbound SessionRequest when it is enabled (see ssu2.DefaultRequireRetry); an
+// operator who opts in is deliberately overriding that.
+func applySSU2SessionLimits(dst *ssu2.Config, src *config.TransportDefaults) {
+	if dst == nil || src == nil {
+		return
+	}
+	dst.MaxSessions = src.SSU2MaxConnections
+	dst.MaxInflightHandshakes = src.SSU2MaxInflightHandshakes
+	dst.MaxHandshakesPerSource = src.SSU2MaxHandshakesPerSource
+	dst.RequireRetry = src.SSU2RequireRetry
+}
+
 // createSSU2TransportInstance creates and configures the SSU2 transport with peer tracking.
 func createSSU2TransportInstance(r *Router, ri *router_info.RouterInfo, addr string) (*ssu2.SSU2Transport, error) {
 	ssu2Config, err := ssu2.NewConfig(addr)
@@ -44,6 +67,7 @@ func createSSU2TransportInstance(r *Router, ri *router_info.RouterInfo, addr str
 		return nil, err
 	}
 	ssu2Config.WorkingDir = r.cfg.WorkingDir
+	applySSU2SessionLimits(ssu2Config, r.cfg.Transport)
 	ssu2Config.RouterLookupFunc = func(hash common.Hash) (router_info.RouterInfo, error) {
 		ch := r.netdb.GetRouterInfo(hash)
 		var ri router_info.RouterInfo

@@ -45,10 +45,25 @@ const DefaultMaxHandshakesPerSource = 8
 const DefaultHandshakeTimeout = 15 * time.Second
 
 // DefaultRequireRetry is the transport's default for [Config.RequireRetry].
-// go-noise ships it false; a router that accepts inbound connections wants
-// source-address validation before it spends a handshake on a peer, so this
-// layer turns it on and lets the operator opt out explicitly.
-const DefaultRequireRetry = true
+//
+// It is FALSE, and deliberately so, even though source-address validation is a
+// real hardening: go-i2p pins a go-noise whose Retry-issuance path
+// (SSU2Listener.processTokenRequest → verifyIntroKeyMessage) AEAD-opens the
+// inbound packet's payload with the intro key as if it were a Token Request. A
+// SessionRequest's payload is Noise-encrypted, not intro-key-sealed, so that
+// check always fails and the SessionRequest is dropped with
+// "failed to send Retry: no token present in SessionRequest" — before any session
+// is created. Turning RequireRetry on therefore rejects EVERY inbound
+// SessionRequest, including valid peers, which is a total inbound SSU2 outage:
+// strictly worse than the stall it was meant to prevent.
+//
+// The pre-authentication stall in finding 005 is fixed by the other controls here
+// (the responder handshake moved off the accept path, CloseImmediate, and the
+// [Config.MaxInflightHandshakes] budget), none of which depend on RequireRetry.
+// The knob stays wired so an operator can opt in once go-noise's Retry path
+// handles a Noise-encrypted SessionRequest payload; until then the default must
+// stay off.
+const DefaultRequireRetry = false
 
 // DefaultHolePunchDelay is the time Alice waits for Charlie's hole-punch packets
 // to arrive before sending the SessionRequest directly during introducer-based
@@ -102,16 +117,36 @@ type Config struct {
 	// disables the bound.
 	MaxHandshakesPerSource int
 
+	// InboundHandshakeTimeout bounds one inbound SSU2 responder handshake: the
+	// deadline the transport's handshake worker enforces, and the value published
+	// onto the go-noise config so the timeouts go-noise applies internally agree
+	// with it. Zero selects [DefaultHandshakeTimeout].
+	//
+	// It is a construction-time field on purpose. The go-noise listener copies its
+	// config into every session it creates, so mutating the noise config once the
+	// listener is running is a data race — which is why
+	// [Config.GetHandshakeTimeout] resolves this field rather than reading the
+	// live noise config.
+	InboundHandshakeTimeout time.Duration
+
 	// RequireRetry makes the listener answer a SessionRequest that carries no
 	// valid token with a Retry, so the initiator must prove it can receive
 	// packets at the claimed source address before this router spends a
-	// handshake on it. This is SSU2's own source-address validation, and it is
-	// the reason a spoofed-source flood costs the spoofer more than it costs us.
+	// handshake on it. This is SSU2's own source-address validation, and in
+	// principle it is the reason a spoofed-source flood should cost the spoofer
+	// more than it costs us.
 	//
-	// go-noise ships this false, which leaves the pre-authentication path open:
-	// a single unauthenticated packet with a forged source reserves a session in
-	// the listener and hands it to Accept(). [NewConfig] turns it on; an
-	// operator opts out with transport.ssu2_require_retry: false.
+	// Do NOT turn this on yet. The pinned go-noise treats the SessionRequest as
+	// if it were a Token Request when issuing the Retry token and AEAD-opens its
+	// payload with the intro key, which a Noise-encrypted SessionRequest payload
+	// can never satisfy — so every inbound SessionRequest is dropped. See
+	// [DefaultRequireRetry] for the full failure mode. The transport's own
+	// pre-authentication bounds ([Config.MaxInflightHandshakes],
+	// [Config.MaxHandshakesPerSource]) are what actually cap the cost of a
+	// spoofed flood today.
+	//
+	// Defaults to [DefaultRequireRetry] (off). Opt in with
+	// transport.ssu2_require_retry once go-noise's Retry path is fixed.
 	RequireRetry bool
 
 	// RouterLookupFunc looks up a RouterInfo by identity hash.
@@ -164,14 +199,30 @@ func (c *Config) GetMaxHandshakesPerSource() int {
 }
 
 // GetHandshakeTimeout returns the bound applied to one inbound responder
-// handshake. It reads the go-noise config, which is where the value actually
-// used by the handshake lives, and falls back to [DefaultHandshakeTimeout] when
-// unset.
+// handshake. It resolves [Config.InboundHandshakeTimeout], falling back to
+// [DefaultHandshakeTimeout] when unset; a negative value returns the value from
+// the go-noise config, which is how an operator opts out of this layer's bound
+// and lets go-noise's own handshake budget apply.
+//
+// It deliberately does NOT read the live noise config: the listener copies that
+// config into every session, so the transport's worker and the listener could
+// otherwise disagree, and a test that set the noise value after the listener
+// started would race it.
 func (c *Config) GetHandshakeTimeout() time.Duration {
-	if c == nil || c.SSU2Config == nil || c.SSU2Config.HandshakeTimeout <= 0 {
+	if c == nil {
 		return DefaultHandshakeTimeout
 	}
-	return c.SSU2Config.HandshakeTimeout
+	switch {
+	case c.InboundHandshakeTimeout == 0:
+		return DefaultHandshakeTimeout
+	case c.InboundHandshakeTimeout < 0:
+		if c.SSU2Config != nil && c.SSU2Config.HandshakeTimeout > 0 {
+			return c.SSU2Config.HandshakeTimeout
+		}
+		return DefaultHandshakeTimeout
+	default:
+		return c.InboundHandshakeTimeout
+	}
 }
 
 // GetKeepaliveInterval returns the effective keepalive interval.

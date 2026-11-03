@@ -1,6 +1,6 @@
 # SSU2: what "experimental" means
 
-Updated: 2026-11-01
+Updated: 2026-11-03 (inbound accept path added; see "Inbound accept path")
 
 The README marks the SSU2 transport **currently experimental**
 (`README.md`, and the `--transport.ssu2-enabled` help text). That label has
@@ -89,6 +89,12 @@ When `GetReplayToken()` returns nil, the transport counts the event
 to watch on a real deployment: a large deferred count means the replay check is
 being skipped in practice, not merely in theory.
 
+Before the inbound-handshake fix this counter was guaranteed to rise on every
+inbound connection, because replay material is only populated during
+`Handshake()` and the transport never called it — the check could not have real
+input. Now that `Accept()` delivers established connections, a non-zero
+`ReplayChecksDeferred` means what it was always meant to mean.
+
 ### 5. Data-phase key derivation is now per-session, but has no live-traffic evidence
 
 Until 2026-11-01 the `go-i2p/noise` fork zeroed the CipherState key arrays
@@ -124,6 +130,55 @@ nothing about interoperability now. Two things follow:
   capture. No long-term secret is exposed, so no key rotation is warranted, but
   past captures must be treated as public.
 
+## Inbound accept path
+
+No inbound SSU2 session had ever completed until the 005 fix — not from a foreign
+peer, and not between two go-i2p routers over loopback either. Two independent
+defects combined to make every inbound session impossible:
+
+1. **No responder handshake.** `go-noise`'s `SSU2Listener.Accept()` returns a
+   connection in `StateInit` holding only a parsed SessionRequest; the XK responder
+   half runs only when the caller invokes `Handshake()`. Nothing in
+   `lib/transport/ssu2` ever called it. `SSU2Transport.Accept()` now runs a
+   background accept loop that admits each connection against a pre-authentication
+   budget, completes the handshake in its own worker goroutine with a timeout, runs
+   the duplicate and anti-replay checks on the established connection, and delivers
+   only established sessions to `Accept()`.
+2. **The router's type assertion always failed.** The transport and the muxer each
+   wrap the connection in a `transport.TrackedConn`, so the value reaching
+   `handleNewConnection` is wrapped twice and `conn.(*ssu2noise.SSU2Conn)` never
+   matched. The router now unwraps via `transport.UnwrapTrackedConn` first.
+
+The stall that made this an availability problem is fixed too. On a failed
+assertion the router used to call `conn.Close()` inline on the single
+`monitorInboundSessions` goroutine, which also serves NTCP2 accepts; `go-noise`'s
+`Close` waits the spec's 11 s `DestroyTimeout`, so one unauthenticated — and
+possibly spoofed — SessionRequest blocked every inbound transport for 11 s.
+Rejections now close asynchronously, and connections abandoned before they were
+established are torn down with `CloseImmediate`.
+
+A third defect, found while testing the fix, was that `NewSSU2Transport` created
+the listener *before* `initKeyManagement` loaded the intro key onto the shared
+config. The listener builds its inbound header protector from `IntroKey` inside
+`NewSSU2Listener`, and a SessionRequest's header is obfuscated with the receiver's
+intro key — so the protector was nil at construction and no inbound SessionRequest
+could be deobfuscated. Key management now runs before the listener is created.
+
+### Operator-visible consequences
+
+- The transport now passes its session cap down to the go-noise listener (whose
+  built-in 65536 was never bounded by the router's 512-slot pool), and exposes
+  `ssu2_max_inflight_handshakes` / `ssu2_max_handshakes_per_source` to cap
+  pre-authentication work. See `config.yaml.example`.
+- **`ssu2_require_retry` must stay off.** Source-address validation is the right
+  hardening in principle, but the go-noise version pinned here routes a tokenless
+  SessionRequest through its Token-Request path and AEAD-opens the payload with the
+  intro key. A SessionRequest payload is Noise-encrypted, not intro-key-sealed, so
+  the check always fails and the request is dropped — every inbound SessionRequest,
+  valid peers included. Enabling it is a total inbound SSU2 outage. The knob is
+  plumbed so it can be turned on once that upstream path is fixed; the transport's
+  own handshake budget is what bounds a spoofed flood today.
+
 ## Production-readiness checklist
 
 The experimental designation can be removed when all of these hold:
@@ -133,7 +188,11 @@ The experimental designation can be removed when all of these hold:
       type rather than inferred from a successful netdb operation.
 - [ ] **Live interop, inbound**: a peer on the public network dials this
       router's SSU2 address and completes a handshake, with a routable
-      (non-caps-only) published RouterAddress.
+      (non-caps-only) published RouterAddress. The mechanism is now proven in-repo
+      (`lib/transport/ssu2/inbound_handshake_test.go`
+      `TestAcceptDeliversEstablishedConnection` dials a real bound transport and
+      gets an established session back from `Accept()`); what remains is a real
+      foreign implementation.
 - [ ] **Interop matrix updated**: `docs/interop-matrix.md` gains an SSU2 row
       with the same pass criteria as the NTCP2 paths.
 - [ ] **Data-phase interop**: I2NP actually flows over an SSU2 session with a

@@ -205,13 +205,29 @@ func NewSSU2Transport(identity router_info.RouterInfo, config *Config, keystore 
 
 	t := createSSU2TransportStruct(config, identity, keystore, ctx, cancel, l)
 
-	if err := setupUDPListener(t, config, ssu2Config); err != nil {
+	// Key management must run BEFORE the listener is created. The go-noise
+	// listener builds its inbound header protector from config.IntroKey inside
+	// NewSSU2Listener, and a SessionRequest's header is obfuscated with the
+	// receiver's intro key. initKeyManagement is what loads or generates that
+	// key onto the shared config; running it after the listener would leave the
+	// protector nil at construction, so the very first inbound SessionRequest
+	// could not be deobfuscated and no inbound SSU2 session could ever complete.
+	// (SetIdentity rebuilds the protector via UpdateIdentity, which is why a
+	// router that happens to call SetIdentity later can mask the defect.)
+	if err := conditionallyInitKeyManagement(t, config, ssu2Config, cancel); err != nil {
 		t.handler.Close()
 		cancel()
 		return nil, err
 	}
 
-	if err := conditionallyInitKeyManagement(t, config, ssu2Config, cancel); err != nil {
+	if err := setupUDPListener(t, config, ssu2Config); err != nil {
+		// initKeyManagement already started the rotation checker; nothing else
+		// owns the transport now that construction is failing, so stop it here or
+		// the goroutine leaks.
+		if t.keyRotationManager != nil {
+			t.keyRotationManager.Stop()
+			t.keyRotationManager = nil
+		}
 		t.handler.Close()
 		cancel()
 		return nil, err
@@ -260,9 +276,12 @@ func createSSU2TransportStruct(config *Config, identity router_info.RouterInfo, 
 		natStateCache:         &natState{},
 		peerTestGlobalLimiter: rate.NewLimiter(100, 200),
 		admission:             newHandshakeAdmission(),
-		ctx:                   ctx,
-		cancel:                cancel,
-		logger:                l,
+		// Created up front rather than on the first Accept() so Close() can
+		// drain and close it without racing the lazy initialisation.
+		pendingConns: make(chan net.Conn, pendingConnsQueueSize),
+		ctx:          ctx,
+		cancel:       cancel,
+		logger:       l,
 	}
 	// Initialize atomic.Pointer[Config] with Store (mirrors NTCP2)
 	t.config.Store(config)
@@ -315,6 +334,15 @@ func applyListenerLimits(noiseCfg *ssu2noise.SSU2Config, transportCfg *Config) {
 	}
 	noiseCfg.MaxSessions = transportCfg.GetMaxSessions()
 	noiseCfg.RequireRetry = transportCfg.RequireRetry
+	// Publish the handshake bound too, so the deadline this transport's worker
+	// enforces and the budget go-noise applies inside Handshake() are the same
+	// number. go-noise copies this config into every session it creates, so the
+	// value must be set here, before the listener exists, rather than adjusted on
+	// the live config later. Zero leaves go-noise's own default in place, which
+	// [Config.GetHandshakeTimeout] mirrors.
+	if transportCfg.InboundHandshakeTimeout > 0 {
+		noiseCfg.HandshakeTimeout = transportCfg.InboundHandshakeTimeout
+	}
 }
 
 // initializeCryptoKeys loads the X25519 static key from the keystore.
@@ -492,6 +520,12 @@ const pendingConnsQueueSize = 64
 // Accept() must not pin a session slot and a goroutine indefinitely.
 const inboundQueueSendTimeout = 5 * time.Second
 
+// handshakeWatchdogGrace is how long past the handshake deadline the worker waits
+// before forcing go-noise's Termination destroy wait to end. It has to be a grace
+// rather than zero: a handshake that completes just before the deadline must not
+// have its teardown cancelled out from under it. See [SSU2Transport.inboundHandshakeWorker].
+const handshakeWatchdogGrace = 250 * time.Millisecond
+
 // Accept returns the next inbound SSU2 connection whose responder handshake has
 // completed successfully.
 //
@@ -542,7 +576,6 @@ func (t *SSU2Transport) Accept() (net.Conn, error) {
 // blocking listener.Accept() is unblocked promptly on shutdown.
 func (t *SSU2Transport) startInboundAcceptRunner() {
 	t.acceptRunOnce.Do(func() {
-		t.pendingConns = make(chan net.Conn, pendingConnsQueueSize)
 		t.wg.Add(1)
 		go t.runInboundAcceptLoop()
 
@@ -707,7 +740,37 @@ func (t *SSU2Transport) inboundHandshakeWorker(conn *ssu2noise.SSU2Conn) {
 	handshakeCtx, cancel := context.WithTimeout(t.ctx, handshakeTimeout)
 	defer cancel()
 
-	if err := conn.Handshake(handshakeCtx); err != nil {
+	// go-noise's Handshake() closes the connection through CloseWithReason when it
+	// fails, and that path waits the spec's DestroyTimeout (11 s) for a Termination
+	// round-trip. A context deadline makes Handshake give up on the handshake, but
+	// it does not shorten that teardown wait, so a peer that sends a SessionRequest
+	// and then goes silent would hold this worker's admission slot for the full 11 s
+	// after its own timeout expired. Measured: a 400 ms handshake timeout still held
+	// the slot 11.01 s. With a 64-slot budget that is enough for a spoofed-source
+	// flood to keep genuine peers out of the transport.
+	//
+	// TriggerForceDestroy is go-noise's own cancellation for that wait — its
+	// listener.Close() uses it for exactly this reason — so arm it just past the
+	// handshake deadline and stop it the moment the handshake returns.
+	watchdogDone := new(atomic.Bool)
+	watchdog := time.AfterFunc(handshakeTimeout+handshakeWatchdogGrace, func() {
+		if watchdogDone.Load() {
+			return
+		}
+		// Only for a connection that never got established: an established session
+		// must keep its normal Termination behaviour.
+		if conn.GetState() == ssu2noise.StateEstablished {
+			return
+		}
+		t.reachMetrics.handshakeWatchdogsFired.Add(1)
+		conn.TriggerForceDestroy()
+	})
+
+	err := conn.Handshake(handshakeCtx)
+	watchdogDone.Store(true)
+	watchdog.Stop()
+
+	if err != nil {
 		t.reachMetrics.inboundHandshakeFailures.Add(1)
 		t.logger.WithFields(map[string]interface{}{
 			"remote_addr": remoteAddr,
@@ -774,7 +837,7 @@ func (t *SSU2Transport) inboundHandshakeWorker(conn *ssu2noise.SSU2Conn) {
 	case <-sendCtx.Done():
 		t.reachMetrics.queueSendTimeouts.Add(1)
 		t.logger.WithFields(map[string]interface{}{
-			"remote_addr":  remoteAddr,
+			"remote_addr":   remoteAddr,
 			"queue_timeout": inboundQueueSendTimeout,
 		}).Warn("Inbound SSU2 connection dropped: pending queue send timeout (Accept consumer too slow?)")
 		tracked.Close()
@@ -811,7 +874,7 @@ func (t *SSU2Transport) trackInboundConnection(conn net.Conn) (net.Conn, bool) {
 	if !t.sessionRegistry.TrackInboundConnection(conn, peerHash) {
 		// Duplicate detected: unreserve the slot and close this connection.
 		t.sessionRegistry.DecrementCountSafe()
-		conn.Close()
+		closeConnImmediately(conn)
 		t.logger.WithFields(map[string]interface{}{
 			"remote_addr": conn.RemoteAddr().String(),
 			"peer_hash":   logutil.HashPrefix(peerHash),
@@ -826,7 +889,7 @@ func (t *SSU2Transport) trackInboundConnection(conn net.Conn) (net.Conn, bool) {
 	if t.checkConnectionReplay(conn) {
 		// Replay detected: close connection and unreserve slot
 		t.sessionRegistry.DecrementCountSafe()
-		conn.Close()
+		closeConnImmediately(conn)
 		t.logger.WithFields(map[string]interface{}{
 			"remote_addr": conn.RemoteAddr().String(),
 			"peer_hash":   logutil.HashPrefix(peerHash),

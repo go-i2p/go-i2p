@@ -292,13 +292,17 @@ func (r *Router) handleNewConnection(conn net.Conn) {
 // monitorInboundSessions, which also serves NTCP2 accepts, so one rejected
 // connection would stall every inbound transport for that long. The connection
 // is already being thrown away; nothing else needs to wait for it.
+//
+// The goroutine is deliberately not tracked in the router's WaitGroup: this runs
+// from session cleanup callbacks too, which can fire while shutdown is already
+// waiting, and Add-concurrent-with-Wait panics. It does not need joining: the
+// close is bounded at 11 s, and closing the transport cancels the pending
+// destroy waits outright.
 func (r *Router) closeInboundConnectionAsync(conn net.Conn) {
 	if conn == nil {
 		return
 	}
-	r.wg.Add(1)
 	go func() {
-		defer r.wg.Done()
 		_ = conn.Close()
 	}()
 }

@@ -70,6 +70,19 @@ func (p *testSignKey) Public() (types.SigningPublicKey, error) { return nil, nil
 // obfuscation IV are populated the way production does.
 func newBoundSSU2Transport(t *testing.T) (*SSU2Transport, router_info.RouterInfo) {
 	t.Helper()
+	tr, ri := newBoundSSU2TransportWith(t, nil)
+	return tr, ri
+}
+
+// newBoundSSU2TransportWith is newBoundSSU2Transport with a hook to adjust the
+// transport config BEFORE the listener is built.
+//
+// The go-noise listener copies its config into every session it creates and reads
+// it from its packet workers, so tuning a timeout is only safe at construction
+// time. Mutating transport.config.Load().SSU2Config after NewSSU2Transport
+// returns is a data race the race detector rightly flags.
+func newBoundSSU2TransportWith(t *testing.T, tune func(*Config)) (*SSU2Transport, router_info.RouterInfo) {
+	t.Helper()
 
 	identity := testutil.CreateSignedTestRouterInfo(t, map[string]string{}, nil)
 	require.NotNil(t, identity)
@@ -77,6 +90,9 @@ func newBoundSSU2Transport(t *testing.T) (*SSU2Transport, router_info.RouterInfo
 	config, err := NewConfig("127.0.0.1:0")
 	require.NoError(t, err)
 	config.WorkingDir = t.TempDir()
+	if tune != nil {
+		tune(config)
+	}
 
 	key := make([]byte, 32)
 	for i := range key {

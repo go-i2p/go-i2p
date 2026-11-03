@@ -46,6 +46,24 @@ func TestTransportFlagsReachTheirViperKeys(t *testing.T) {
 			value:    "4",
 			want:     4,
 		},
+		{
+			flag:     "transport.ssu2-max-connections",
+			viperKey: "transport.ssu2_max_connections",
+			value:    "77",
+			want:     77,
+		},
+		{
+			flag:     "transport.ssu2-max-inflight-handshakes",
+			viperKey: "transport.ssu2_max_inflight_handshakes",
+			value:    "32",
+			want:     32,
+		},
+		{
+			flag:     "transport.ssu2-max-handshakes-per-source",
+			viperKey: "transport.ssu2_max_handshakes_per_source",
+			value:    "4",
+			want:     4,
+		},
 	}
 
 	for _, tc := range tests {
@@ -80,10 +98,18 @@ func TestTransportHandshakeBoundFlagsDefaultToZero(t *testing.T) {
 	for _, key := range []string{
 		"transport.ntcp2_max_inflight_handshakes",
 		"transport.ntcp2_max_handshakes_per_source",
+		"transport.ssu2_max_connections",
+		"transport.ssu2_max_inflight_handshakes",
+		"transport.ssu2_max_handshakes_per_source",
 	} {
 		assert.Zerof(t, v.GetInt(key),
 			"an unset %s must stay 0 so the transport resolves its own default", key)
 	}
+
+	// RequireRetry must default off via the flag too: enabling it makes the pinned
+	// go-noise reject every inbound SessionRequest.
+	assert.False(t, v.GetBool("transport.ssu2_require_retry"),
+		"an unset transport.ssu2_require_retry must stay false; enabling it breaks all inbound SSU2")
 }
 
 // TestBindAllRejectsUnregisteredFlag pins the one failure mode bind() does catch,

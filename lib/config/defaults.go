@@ -367,6 +367,48 @@ type TransportDefaults struct {
 	// Default: 0 (random port assigned by OS)
 	SSU2Port int
 
+	// SSU2MaxConnections is maximum concurrent SSU2 sessions.
+	// Default: 0 (use the transport's built-in default)
+	SSU2MaxConnections int
+
+	// SSU2MaxInflightHandshakes bounds how many inbound SSU2 responder
+	// handshakes the transport runs at once, before any of them authenticates.
+	// Unlike SSU2MaxConnections, which is only enforced after a handshake
+	// succeeds, this caps the work an unauthenticated SessionRequest can make
+	// the router do.
+	// Default: 0 (use the transport's built-in default)
+	// A negative value disables the bound.
+	SSU2MaxInflightHandshakes int
+
+	// SSU2MaxHandshakesPerSource bounds how many of those concurrent inbound
+	// handshakes may come from one source IP, so a single host cannot consume
+	// the whole budget.
+	// Default: 0 (use the transport's built-in default)
+	// A negative value disables the bound.
+	SSU2MaxHandshakesPerSource int
+
+	// SSU2RequireRetry turns on the SSU2 listener's source-address validation:
+	// the listener answers a SessionRequest that carries no valid retry token
+	// with a Retry, so the initiator must prove it can receive packets at the
+	// claimed source address before this router spends a handshake on it. In
+	// principle that makes a spoofed-source flood cost the spoofer more than it
+	// costs us.
+	//
+	// Do NOT enable this yet. The go-noise version this repo pins treats the
+	// SessionRequest as if it were a Token Request when issuing the Retry token
+	// and AEAD-opens its payload with the intro key; a Noise-encrypted
+	// SessionRequest payload can never satisfy that, so every inbound
+	// SessionRequest — including valid peers — is dropped. Enabling it is a
+	// total inbound SSU2 outage. See ssu2.DefaultRequireRetry for the full
+	// failure mode.
+	//
+	// The transport's pre-authentication bounds (SSU2MaxInflightHandshakes,
+	// SSU2MaxHandshakesPerSource) are what cap the cost of a spoofed flood today,
+	// and they do not depend on this knob.
+	//
+	// Default: false (opt-in).
+	SSU2RequireRetry bool
+
 	// ConnectionTimeout is maximum time to establish connection
 	// Default: 30 seconds
 	ConnectionTimeout time.Duration
@@ -538,9 +580,17 @@ func buildTransportDefaults() TransportDefaults {
 		NTCP2MaxHandshakesPerSource: 0,
 		SSU2Enabled:                 true,
 		SSU2Port:                    0, // Random port
-		ConnectionTimeout:           30 * time.Second,
-		IdleTimeout:                 5 * time.Minute,
-		MaxMessageSize:              32768, // 32 KiB
+		// Zero defers to the SSU2 transport's own documented defaults
+		// (ssu2.DefaultMaxSessions / DefaultMaxInflightHandshakes /
+		// DefaultMaxHandshakesPerSource) rather than restating the numbers here,
+		// so the two cannot drift.
+		SSU2MaxConnections:         0,
+		SSU2MaxInflightHandshakes:  0,
+		SSU2MaxHandshakesPerSource: 0,
+		SSU2RequireRetry:           false,
+		ConnectionTimeout:          30 * time.Second,
+		IdleTimeout:                5 * time.Minute,
+		MaxMessageSize:             32768, // 32 KiB
 	}
 }
 
@@ -1078,6 +1128,21 @@ func validateTransportSizes(transport TransportDefaults) error {
 		}).Error("Invalid transport configuration")
 		return newValidationError("Transport.NTCP2MaxHandshakesPerSource (" + strconv.Itoa(perSource) +
 			") must not exceed Transport.NTCP2MaxInflightHandshakes (" + strconv.Itoa(global) +
+			"): the per-source limit would never bind")
+	}
+	// SSU2MaxConnections allows 0 (transport default), unlike NTCP2MaxConnections
+	// whose default is an explicit number; only a negative pool size is nonsense.
+	if transport.SSU2MaxConnections < 0 {
+		log.WithField("ssu2_max_connections", transport.SSU2MaxConnections).Error("Invalid transport configuration")
+		return newValidationError("Transport.SSU2MaxConnections must not be negative (0 uses the transport default)")
+	}
+	if global, perSource := transport.SSU2MaxInflightHandshakes, transport.SSU2MaxHandshakesPerSource; global > 0 && perSource > global {
+		log.WithFields(logger.Fields{
+			"ssu2_max_inflight_handshakes":   global,
+			"ssu2_max_handshakes_per_source": perSource,
+		}).Error("Invalid transport configuration")
+		return newValidationError("Transport.SSU2MaxHandshakesPerSource (" + strconv.Itoa(perSource) +
+			") must not exceed Transport.SSU2MaxInflightHandshakes (" + strconv.Itoa(global) +
 			"): the per-source limit would never bind")
 	}
 	return nil

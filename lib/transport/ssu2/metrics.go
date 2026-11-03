@@ -16,6 +16,7 @@ type reachabilityMetrics struct {
 	handshakeRefusedGlobal      atomic.Uint64 // inbound connections closed for exceeding the transport-wide handshake budget
 	handshakeRefusedSource      atomic.Uint64 // inbound connections closed for exceeding the per-source handshake budget
 	inboundHandshakeFailures    atomic.Uint64 // responder handshakes that failed or timed out
+	handshakeWatchdogsFired     atomic.Uint64 // failed handshakes whose go-noise destroy wait was cut short by the worker watchdog
 	inboundHandshakeSuccess     atomic.Uint64 // responder handshakes completed and delivered to Accept()
 	queueSendTimeouts           atomic.Uint64 // handshakes that timed out sending to the pendingConns queue
 	maxPendingConnsQueueDepth   atomic.Uint64 // maximum observed depth of the pendingConns queue
@@ -67,6 +68,13 @@ type ReachabilitySnapshot struct {
 	// not working at all.
 	InboundHandshakeSuccess uint64
 
+	// HandshakeWatchdogsFired counts failed handshakes where the worker had to
+	// cancel go-noise's Termination destroy wait so the connection's handshake
+	// slot came back promptly instead of 11 s later. Non-zero is normal under
+	// probing; a value that keeps climbing while InboundHandshakeSuccess stays
+	// zero means peers are sending SessionRequests they never finish.
+	HandshakeWatchdogsFired uint64
+
 	// QueueSendTimeouts counts inbound handshakes that timed out trying to
 	// hand their connection to the pending queue. High values mean the Accept()
 	// consumer is slow or stopped.
@@ -100,23 +108,24 @@ type ReachabilitySnapshot struct {
 // reachability-related counters for monitoring and diagnostics.
 func (t *SSU2Transport) GetReachabilityCounters() ReachabilitySnapshot {
 	return ReachabilitySnapshot{
-		NATMappingSuccess:             t.reachMetrics.natMappingSuccess.Load(),
-		NATMappingFailure:             t.reachMetrics.natMappingFailure.Load(),
-		PeerTestConfirmed:             t.reachMetrics.peerTestConfirmed.Load(),
-		PublishedAddrChanged:          t.reachMetrics.publishedAddrChanged.Load(),
-		StaleSessionsReconciled:       t.reachMetrics.staleSessionsReconciled.Load(),
-		ReplayChecksDeferred:          t.reachMetrics.replayChecksDeferred.Load(),
-		HandshakeRefusedGlobal:        t.reachMetrics.handshakeRefusedGlobal.Load(),
-		HandshakeRefusedSource:        t.reachMetrics.handshakeRefusedSource.Load(),
-		InboundHandshakeFailures:      t.reachMetrics.inboundHandshakeFailures.Load(),
-		InboundHandshakeSuccess:       t.reachMetrics.inboundHandshakeSuccess.Load(),
-		QueueSendTimeouts:             t.reachMetrics.queueSendTimeouts.Load(),
-		MaxPendingConnsQueueDepth:     t.reachMetrics.maxPendingConnsQueueDepth.Load(),
-		PendingConnsQueueFullEvents:   t.reachMetrics.pendingConnsQueueFullEvents.Load(),
-		InflightHandshakes:            t.admission.current(),
-		SessionPeerTerminations:       globalSSU2SessionChurn.sessionPeerTerminations.Load(),
-		SessionReadTimeoutRetries:     globalSSU2SessionChurn.sessionReadTimeoutRetries.Load(),
-		SessionRecvBackpressureDrops:  globalSSU2SessionChurn.sessionRecvBackpressureDrops.Load(),
+		NATMappingSuccess:            t.reachMetrics.natMappingSuccess.Load(),
+		NATMappingFailure:            t.reachMetrics.natMappingFailure.Load(),
+		PeerTestConfirmed:            t.reachMetrics.peerTestConfirmed.Load(),
+		PublishedAddrChanged:         t.reachMetrics.publishedAddrChanged.Load(),
+		StaleSessionsReconciled:      t.reachMetrics.staleSessionsReconciled.Load(),
+		ReplayChecksDeferred:         t.reachMetrics.replayChecksDeferred.Load(),
+		HandshakeRefusedGlobal:       t.reachMetrics.handshakeRefusedGlobal.Load(),
+		HandshakeRefusedSource:       t.reachMetrics.handshakeRefusedSource.Load(),
+		InboundHandshakeFailures:     t.reachMetrics.inboundHandshakeFailures.Load(),
+		InboundHandshakeSuccess:      t.reachMetrics.inboundHandshakeSuccess.Load(),
+		HandshakeWatchdogsFired:      t.reachMetrics.handshakeWatchdogsFired.Load(),
+		QueueSendTimeouts:            t.reachMetrics.queueSendTimeouts.Load(),
+		MaxPendingConnsQueueDepth:    t.reachMetrics.maxPendingConnsQueueDepth.Load(),
+		PendingConnsQueueFullEvents:  t.reachMetrics.pendingConnsQueueFullEvents.Load(),
+		InflightHandshakes:           t.admission.current(),
+		SessionPeerTerminations:      globalSSU2SessionChurn.sessionPeerTerminations.Load(),
+		SessionReadTimeoutRetries:    globalSSU2SessionChurn.sessionReadTimeoutRetries.Load(),
+		SessionRecvBackpressureDrops: globalSSU2SessionChurn.sessionRecvBackpressureDrops.Load(),
 	}
 }
 

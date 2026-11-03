@@ -242,6 +242,19 @@ func registerTransportFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().Int("transport.ssu2-port",
 		config.DefaultTransportConfig.SSU2Port,
 		"SSU2 listen port (0 = random port assigned by OS)")
+	cmd.PersistentFlags().Int("transport.ssu2-max-connections",
+		config.DefaultTransportConfig.SSU2MaxConnections,
+		"Maximum concurrent SSU2 sessions (0 = transport default)")
+	cmd.PersistentFlags().Int("transport.ssu2-max-inflight-handshakes",
+		config.DefaultTransportConfig.SSU2MaxInflightHandshakes,
+		"Maximum concurrent inbound SSU2 handshakes, before any peer authenticates (0 = default, negative = unlimited)")
+	cmd.PersistentFlags().Int("transport.ssu2-max-handshakes-per-source",
+		config.DefaultTransportConfig.SSU2MaxHandshakesPerSource,
+		"Maximum concurrent inbound SSU2 handshakes per source IP (0 = default, negative = unlimited)")
+	cmd.PersistentFlags().Bool("transport.ssu2-require-retry",
+		config.DefaultTransportConfig.SSU2RequireRetry,
+		"Require SSU2 SessionRequests to carry a valid retry token (source-address validation). "+
+			"DANGEROUS: the pinned go-noise rejects every inbound SessionRequest when this is on, so leave it off")
 	cmd.PersistentFlags().Duration("transport.connection-timeout",
 		config.DefaultTransportConfig.ConnectionTimeout,
 		"Maximum time to establish a connection")
@@ -440,6 +453,10 @@ func bindTransportFlags(cmd *cobra.Command, v *viper.Viper) error {
 		{"transport.ntcp2_max_handshakes_per_source", "transport.ntcp2-max-handshakes-per-source"},
 		{"transport.ssu2_enabled", "transport.ssu2-enabled"},
 		{"transport.ssu2_port", "transport.ssu2-port"},
+		{"transport.ssu2_max_connections", "transport.ssu2-max-connections"},
+		{"transport.ssu2_max_inflight_handshakes", "transport.ssu2-max-inflight-handshakes"},
+		{"transport.ssu2_max_handshakes_per_source", "transport.ssu2-max-handshakes-per-source"},
+		{"transport.ssu2_require_retry", "transport.ssu2-require-retry"},
 		{"transport.connection_timeout", "transport.connection-timeout"},
 		{"transport.idle_timeout", "transport.idle-timeout"},
 		{"transport.max_message_size", "transport.max-message-size"},
