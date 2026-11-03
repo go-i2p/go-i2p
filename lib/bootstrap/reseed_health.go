@@ -67,11 +67,11 @@ const (
 
 // reseedServerHealth holds the rolling health statistics for a single reseed server.
 type reseedServerHealth struct {
-	attempts           int
-	successes          int
-	consecutiveFails   int
-	avgDuration        time.Duration // exponential moving average of successful response times
-	lastAttempt        time.Time
+	attempts         int
+	successes        int
+	consecutiveFails int
+	avgDuration      time.Duration // exponential moving average of successful response times
+	lastAttempt      time.Time
 }
 
 // reseedHealthTracker is a thread-safe registry of per-server reseed health.

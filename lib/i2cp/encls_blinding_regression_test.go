@@ -141,7 +141,8 @@ func TestEncryptedLeaseSetSignedWithBlindedKey(t *testing.T) {
 		elsBytes[:len(elsBytes)-encLSWireSignatureSize]...)
 
 	blindedAsKey, err := key_certificate.ConstructSigningPublicKeyByType(
-		els.BlindedPublicKey(), int(els.SigType()))
+		els.BlindedPublicKey(), int(els.SigType()),
+	)
 	require.NoError(t, err)
 
 	// Positive control first, so the negative check below is meaningful and not
@@ -156,7 +157,8 @@ func TestEncryptedLeaseSetSignedWithBlindedKey(t *testing.T) {
 	// read the netdb, and the feature's purpose is defeated. Checked at the
 	// record's own sig type so this tests key identity, not key type.
 	unblindedAsSameType, err := key_certificate.ConstructSigningPublicKeyByType(
-		destSigning.Bytes(), int(els.SigType()))
+		destSigning.Bytes(), int(els.SigType()),
+	)
 	require.NoError(t, err)
 	require.Error(t,
 		rootcommon.VerifySignatureData(dataForSigning, els.Signature().Bytes(),
@@ -277,7 +279,8 @@ func TestEncryptedLeaseSetPublicationKeyMatchesBlindedLookup(t *testing.T) {
 		destSigning.Bytes(),
 		string(session.blindingSecret),
 		uint16(session.destination.KeyCertificate.SigningPublicKeyType()),
-		session.lastBlindingDate)
+		session.lastBlindingDate,
+	)
 	require.NoError(t, err)
 
 	stdlibKey, err := session.stdlibSigningKey()
@@ -295,7 +298,8 @@ func TestEncryptedLeaseSetPublicationKeyMatchesBlindedLookup(t *testing.T) {
 		uint16(session.blindedDestination.KeyCertificate.SigningPublicKeyType()))
 
 	expectedKey := encrypted_leaseset.BlindedDHTKey(
-		uint16(key_certificate.KEYCERT_SIGN_REDDSA_ED25519), expectedLookup.Bytes())
+		uint16(key_certificate.KEYCERT_SIGN_REDDSA_ED25519), expectedLookup.Bytes(),
+	)
 
 	require.Equal(t, expectedKey, pubKey,
 		"publication key must be SHA-256(sig type || blinded signing key), the spec DHT rule")

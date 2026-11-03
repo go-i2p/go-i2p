@@ -66,7 +66,7 @@ func buildBlindingInfoDestPayload(t *testing.T, sessionID uint16, flags byte, de
 // buildBlindingInfoSigKeyPayload assembles a type-3 (sig type + signing public
 // key) advice, the form a "b33" address maps to: the address carries the
 // destination's UNBLINDED public key.
-func buildBlindingInfoSigKeyPayload(t *testing.T, sessionID uint16, flags byte, pubKey []byte, privKey []byte, password string) []byte {
+func buildBlindingInfoSigKeyPayload(t *testing.T, sessionID uint16, flags byte, pubKey, privKey []byte, password string) []byte {
 	t.Helper()
 
 	data := make([]byte, 10)
@@ -284,7 +284,8 @@ func TestResolveDestinationKeyForPeerCleartextUnaffected(t *testing.T) {
 	require.NoError(t, err)
 
 	server.SetDestinationResolver(netdb.NewDestinationResolver(
-		newENCLSNetDB(destHash, ls2Bytes)))
+		newENCLSNetDB(destHash, ls2Bytes),
+	))
 
 	// The cleartext path is reached through ResolveDestination, which reads the
 	// LeaseSet2 buckets; the fake only answers EncLS lookups, so use a resolver

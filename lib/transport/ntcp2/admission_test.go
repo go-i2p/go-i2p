@@ -195,7 +195,8 @@ func TestAcceptNextConnection_SurplusConnectionsShedAtAccept(t *testing.T) {
 	holders := make([]func(), 0, global)
 	for i := 0; i < global; i++ {
 		release, err := transport.admission.admit(
-			&net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 1000 + i}, global, -1)
+			&net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 1000 + i}, global, -1,
+		)
 		require.NoError(t, err)
 		holders = append(holders, release)
 	}

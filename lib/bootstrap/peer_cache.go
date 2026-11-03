@@ -126,10 +126,10 @@ func (pc *PeerCache) Load(ctx context.Context) error {
 	if err != nil {
 		// A corrupt cache should not block bootstrap; log and start empty.
 		log.WithError(err).WithFields(logger.Fields{
-			"at":      "(PeerCache) Load",
-			"phase":   "bootstrap",
-			"reason":  "corrupt_cache",
-			"file":    pc.path,
+			"at":     "(PeerCache) Load",
+			"phase":  "bootstrap",
+			"reason": "corrupt_cache",
+			"file":   pc.path,
 		}).Warn("peer cache file is corrupt, starting with empty cache")
 		pc.loaded = true
 		return nil
@@ -174,13 +174,13 @@ func (pc *PeerCache) Load(ctx context.Context) error {
 	pc.evictIfNeeded()
 
 	log.WithFields(logger.Fields{
-		"at":         "(PeerCache) Load",
-		"phase":      "bootstrap",
-		"step":       "complete",
-		"file":       pc.path,
-		"total":      len(entries),
-		"valid":      valid,
-		"max_size":   pc.maxSize,
+		"at":       "(PeerCache) Load",
+		"phase":    "bootstrap",
+		"step":     "complete",
+		"file":     pc.path,
+		"total":    len(entries),
+		"valid":    valid,
+		"max_size": pc.maxSize,
 	}).Info("peer cache loaded")
 
 	return nil
@@ -282,12 +282,12 @@ func (pc *PeerCache) Record(peers []router_info.RouterInfo) error {
 			return err
 		}
 		log.WithFields(logger.Fields{
-			"at":         "(PeerCache) Record",
-			"phase":      "bootstrap",
-			"step":       "complete",
-			"recorded":   added,
-			"total":      pc.Size(),
-			"max_size":   pc.maxSize,
+			"at":       "(PeerCache) Record",
+			"phase":    "bootstrap",
+			"step":     "complete",
+			"recorded": added,
+			"total":    pc.Size(),
+			"max_size": pc.maxSize,
 		}).Info("recorded peers to cache")
 	}
 

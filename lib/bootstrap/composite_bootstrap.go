@@ -159,8 +159,8 @@ func (cb *CompositeBootstrap) tryPeerCache(ctx context.Context, n int) ([]router
 	peers, err := cb.peerCache.GetPeers(ctx, n)
 	if err != nil {
 		log.WithFields(logger.Fields{
-			"at":    "(CompositeBootstrap) tryPeerCache",
-			"phase": "bootstrap",
+			"at":     "(CompositeBootstrap) tryPeerCache",
+			"phase":  "bootstrap",
 			"reason": "cache_empty_or_unavailable",
 		}).Debug("peer cache has no usable peers, falling back to other sources")
 		return nil, err
@@ -176,8 +176,8 @@ func (cb *CompositeBootstrap) recordPeers(peers []router_info.RouterInfo) {
 	}
 	if err := cb.peerCache.Record(peers); err != nil {
 		log.WithError(err).WithFields(logger.Fields{
-			"at":    "(CompositeBootstrap) recordPeers",
-			"phase": "bootstrap",
+			"at":     "(CompositeBootstrap) recordPeers",
+			"phase":  "bootstrap",
 			"reason": "peer_cache_record_failed",
 		}).Warn("failed to record peers to cache")
 	}
@@ -273,16 +273,16 @@ func buildAggregatedError(cacheErr, fileErr, reseedErr, netDBErr error) error {
 	}
 
 	log.WithFields(logger.Fields{
-		"at":             "(CompositeBootstrap) Bootstrap",
-		"phase":          "bootstrap",
-		"reason":         "all_methods_exhausted",
+		"at":              "(CompositeBootstrap) Bootstrap",
+		"phase":           "bootstrap",
+		"reason":          "all_methods_exhausted",
 		"cache_attempted": cacheErr != nil,
-		"file_attempted": fileErr != nil,
-		"reseed_failed":  reseedErr != nil,
-		"netdb_failed":   netDBErr != nil,
-		"methods_tried":  4,
-		"methods_failed": countFailures(cacheErr, fileErr, reseedErr, netDBErr),
-		"recommendation": "check network connectivity and reseed server availability",
+		"file_attempted":  fileErr != nil,
+		"reseed_failed":   reseedErr != nil,
+		"netdb_failed":    netDBErr != nil,
+		"methods_tried":   4,
+		"methods_failed":  countFailures(cacheErr, fileErr, reseedErr, netDBErr),
+		"recommendation":  "check network connectivity and reseed server availability",
 	}).Error("all bootstrap methods failed")
 
 	// Build error message with all available error details

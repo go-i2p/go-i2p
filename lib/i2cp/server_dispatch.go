@@ -1144,7 +1144,8 @@ func (s *Server) lookupDestinationByHash(lookupMsg *HostLookupPayload) *HostRepl
 
 	wantOptions := lookupTypeRequestsOptions(lookupMsg.LookupType)
 	destBytes, options, errReply := s.queryLeaseSetFromNetDB(
-		destHash, lookupMsg.SessionID, lookupMsg.RequestID, wantOptions)
+		destHash, lookupMsg.SessionID, lookupMsg.RequestID, wantOptions,
+	)
 	if errReply != nil {
 		// Lookup type 4 carries the Destination itself, so the spec says the
 		// reply may include it even when the LeaseSet could not be fetched --
