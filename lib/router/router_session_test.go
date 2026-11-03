@@ -11,7 +11,6 @@ import (
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/netdb"
 	"github.com/go-i2p/go-i2p/lib/transport"
-	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -29,11 +28,11 @@ func TestRouterSessionTracking(t *testing.T) {
 	copy(peer1Hash[:], "peer1_hash_12345678901234567890123")
 	copy(peer2Hash[:], "peer2_hash_12345678901234567890123")
 
-	// For unit testing session tracking logic, we don't need actual sessions
-	// We just need non-nil pointers that can be stored in the map
-	// Using type assertions to store nil pointers of correct type
-	session1 := (*ntcp.NTCP2Session)(nil)
-	session2 := (*ntcp.NTCP2Session)(nil)
+	// For unit testing session tracking logic, we don't need actual sessions.
+	// They do need to be live ones: the router evicts a session whose transport
+	// context is gone (finding 006), so a typed nil would be treated as dead.
+	session1 := newFakeTransportSession()
+	session2 := newFakeTransportSession()
 
 	// Note: In real usage, these would be actual NTCP2Session instances
 	// For this unit test, we're only testing map operations, not session functionality
@@ -77,8 +76,8 @@ func TestGetSessionByHash(t *testing.T) {
 	peerHash := common.Hash{}
 	copy(peerHash[:], "test_peer_hash_1234567890123456789")
 
-	// Use nil session for testing map operations only
-	session := (*ntcp.NTCP2Session)(nil)
+	// A live placeholder session: the router only returns sessions that are alive.
+	session := newFakeTransportSession()
 	addAndAssertSession(t, router, peerHash, session)
 }
 
@@ -102,8 +101,8 @@ func TestSessionThreadSafety(t *testing.T) {
 				peerHash := common.Hash{}
 				hashStr := fmt.Sprintf("peer_%d_%d_hash_1234567890123456", id, j)
 				copy(peerHash[:], hashStr)
-				// Use nil session for testing concurrent map operations
-				session := (*ntcp.NTCP2Session)(nil)
+				// Live placeholder sessions for testing concurrent map operations
+				session := newFakeTransportSession()
 				router.addSession(peerHash, session)
 			}
 		}(i)
@@ -157,15 +156,13 @@ func TestRouterImplementsSessionProvider(t *testing.T) {
 	peerHash := common.Hash{}
 	copy(peerHash[:], "test_peer_for_interface_12345678901")
 
-	// Use nil session - we're only testing the interface, not actual functionality
-	session := (*ntcp.NTCP2Session)(nil)
+	// We're only testing the interface, not actual session functionality.
+	session := newFakeTransportSession()
 	router.addSession(peerHash, session)
 
 	// Test GetSessionByHash (SessionProvider method)
 	transportSession, err := router.GetSessionByHash(peerHash)
 	require.NoError(t, err, "GetSessionByHash should succeed")
-	// Note: transportSession will be nil in this test since we used a nil session,
-	// but in real usage it would be a valid NTCP2Session that implements TransportSession
 	assert.Equal(t, session, transportSession, "Should return the stored session")
 }
 
@@ -203,10 +200,9 @@ func TestSessionReplacement(t *testing.T) {
 	peerHash := common.Hash{}
 	copy(peerHash[:], "test_peer_replacement_1234567890123")
 
-	// Create two distinct session pointers for testing replacement
-	// Using new() ensures we get different memory addresses
-	session1 := new(ntcp.NTCP2Session)
-	session2 := new(ntcp.NTCP2Session)
+	// Create two distinct sessions for testing replacement
+	session1 := newFakeTransportSession()
+	session2 := newFakeTransportSession()
 
 	// Verify they're different pointers (compare addresses, not values)
 	require.NotSame(t, session1, session2, "Sessions should have different addresses")
@@ -241,8 +237,8 @@ func TestMultipleSessionRemoval(t *testing.T) {
 	peerHash := common.Hash{}
 	copy(peerHash[:], "test_multiple_removal_123456789012")
 
-	// Use nil session for testing
-	session := (*ntcp.NTCP2Session)(nil)
+	// Use a live placeholder session for testing
+	session := newFakeTransportSession()
 
 	// Add and remove session
 	router.addSession(peerHash, session)
@@ -290,8 +286,8 @@ func TestSessionMapInitialization(t *testing.T) {
 	peerHash := common.Hash{}
 	copy(peerHash[:], "test_init_hash_123456789012345678")
 
-	// Use nil session for testing
-	session := (*ntcp.NTCP2Session)(nil)
+	// Use a live placeholder session for testing
+	session := newFakeTransportSession()
 	router.addSession(peerHash, session)
 
 	assert.Equal(t, 1, len(router.activeSessions), "Should have 1 session after initialization")
@@ -303,13 +299,14 @@ func BenchmarkAddSession(b *testing.B) {
 		activeSessions: make(map[common.Hash]transport.TransportSession),
 	}
 
-	// Use nil sessions for benchmarking - we're testing map operations, not session functionality
-	sessions := make([]*ntcp.NTCP2Session, b.N)
+	// Use live placeholder sessions - we're benchmarking map operations, not
+	// session functionality. Dead entries would be evicted on lookup.
+	sessions := make([]*fakeTransportSession, b.N)
 	hashes := make([]common.Hash, b.N)
 
 	// Pre-create hashes
 	for i := 0; i < b.N; i++ {
-		sessions[i] = (*ntcp.NTCP2Session)(nil)
+		sessions[i] = newFakeTransportSession()
 		hashStr := fmt.Sprintf("bench_peer_%d_hash_12345678901234", i)
 		copy(hashes[i][:], hashStr)
 	}
@@ -326,11 +323,11 @@ func BenchmarkGetSession(b *testing.B) {
 		activeSessions: make(map[common.Hash]transport.TransportSession),
 	}
 
-	// Add 1000 nil sessions for benchmarking map retrieval
+	// Add 1000 live placeholder sessions for benchmarking map retrieval
 	const numSessions = 1000
 	hashes := make([]common.Hash, numSessions)
 	for i := 0; i < numSessions; i++ {
-		session := (*ntcp.NTCP2Session)(nil)
+		session := newFakeTransportSession()
 		hashStr := fmt.Sprintf("bench_get_%d_hash_123456789012345", i)
 		copy(hashes[i][:], hashStr)
 		router.addSession(hashes[i], session)
@@ -350,9 +347,9 @@ func BenchmarkRemoveSession(b *testing.B) {
 
 	hashes := make([]common.Hash, b.N)
 
-	// Add nil sessions for benchmarking map removal
+	// Add live placeholder sessions for benchmarking map removal
 	for i := 0; i < b.N; i++ {
-		session := (*ntcp.NTCP2Session)(nil)
+		session := newFakeTransportSession()
 		hashStr := fmt.Sprintf("bench_remove_%d_hash_1234567890123", i)
 		copy(hashes[i][:], hashStr)
 		router.addSession(hashes[i], session)

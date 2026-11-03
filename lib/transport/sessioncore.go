@@ -253,6 +253,18 @@ func (sc *SessionCore) Cancel() {
 	sc.cancel()
 }
 
+// IsAlive reports whether the session can still carry traffic, i.e. its
+// context has not been cancelled. A cancelled context means a worker already
+// hit a fatal read/write error or the session is mid-close, so the socket must
+// not be trusted for forwarding.
+//
+// Lookups use this as a cheap liveness gate: holding a dead session in a
+// session map hides the peer's departure from every caller and prevents the
+// router from redialling.
+func (sc *SessionCore) IsAlive() bool {
+	return sc.ctx.Err() == nil
+}
+
 // Logger returns the session's logger entry. Callers can use WithFields
 // to add contextual fields.
 func (sc *SessionCore) Logger() *logger.Entry {

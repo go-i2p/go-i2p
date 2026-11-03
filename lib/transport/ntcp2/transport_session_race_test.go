@@ -96,8 +96,12 @@ func TestResolveExistingSession_ConcurrentPromotion(t *testing.T) {
 
 	peerHash := newTestPeerHash("test-peer-hash-concurrent-prm")
 
-	rawConn := newAcceptMockConn("192.168.1.4:5004")
+	// Live conn: this test asserts the promotion winner *stays* in the map.
+	// A conn that reports EOF would (correctly, per finding 006) tear the
+	// promoted session straight back down again.
+	rawConn := newLiveMockConn("192.168.1.4:5004")
 	transport.sessionRegistry.StoreWithCount(peerHash, rawConn)
+	defer rawConn.Close()
 
 	// Simulate the realistic race: multiple goroutines each call
 	// resolveExistingSession, but only with the value they see from

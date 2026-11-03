@@ -357,12 +357,23 @@ func (t *NTCP2Transport) runIdleMaintenancePass() {
 	expire := t.currentIdleExpireWriteTime()
 
 	failsafeCloses := 0
+	reapedDeadSessions := 0
 	t.sessionRegistry.RangeWithHash(func(hash data.Hash, value interface{}) bool {
 		session, ok := value.(*NTCP2Session)
 		if !ok || session == nil {
 			return true
 		}
 		if session.GetContext().Err() != nil {
+			// A cancelled session that never started its teardown is a leaked
+			// session: its socket, its registry entry and its slot reservation
+			// are all still held, and nothing else will ever close it. Reap it
+			// here as a failsafe for error paths that bypass Close.
+			if !session.CloseRequested() {
+				reapedDeadSessions++
+				t.logger.WithField("peer_hash", logutil.HashPrefixPlain(hash.Bytes())).
+					Warn("Reaping NTCP2 session cancelled without a teardown")
+				go func() { _ = session.Close() }()
+			}
 			return true
 		}
 		if session.shouldCloseForIdle(now, expire) {
@@ -379,6 +390,10 @@ func (t *NTCP2Transport) runIdleMaintenancePass() {
 			"idle_expire":     expire.String(),
 			"failsafe_closes": failsafeCloses,
 		}).Info("NTCP2 idle maintenance closed stale sessions")
+	}
+	if reapedDeadSessions > 0 {
+		t.logger.WithField("reaped", reapedDeadSessions).
+			Warn("NTCP2 idle maintenance reaped sessions cancelled without a teardown")
 	}
 }
 
@@ -1819,7 +1834,13 @@ func (t *NTCP2Transport) validateExistingSession(s *NTCP2Session, routerHash dat
 			"router_hash": logutil.HashPrefixPlain(routerHashBytes),
 			"reason":      s.GetContext().Err().Error(),
 		}).Info("Evicting stale NTCP2 session")
-		t.sessionRegistry.Remove(routerHash)
+		// Identity-scoped: only drop the entry if it is still this session.
+		t.removeSessionIfCurrent(routerHash, s)
+		// The stale session was cancelled without a teardown (or its teardown
+		// is still in flight); close it so its socket is released too.
+		if !s.CloseRequested() {
+			go func() { _ = s.Close() }()
+		}
 		return nil, false
 	}
 	routerHashBytes := routerHash.Bytes()
@@ -1890,8 +1911,13 @@ func (t *NTCP2Transport) promoteInboundConnection(conn net.Conn, original interf
 		return result.(*NTCP2Session), true
 	}
 
-	// Promotion CAS failed. Another goroutine won the promotion race — close our duplicate.
-	// Workers will exit cleanly due to context.Done().
+	// Promotion CAS failed. Another goroutine won the promotion race — discard
+	// our duplicate. Detach the shared conn first, exactly as setupSession's
+	// loser path does: the winner owns that socket now, so closing it here would
+	// kill a live session and (since a failed read now tears a session down and
+	// unregisters it) turn the peer's link into a dead one the router never
+	// redials. Workers exit cleanly because Close() cancels the session context.
+	promoted.DetachConn()
 	_ = promoted.Close()
 
 	if winner, exists := t.sessionRegistry.Load(routerHash); exists {
@@ -2482,8 +2508,12 @@ func (t *NTCP2Transport) setupSession(conn *ntcp2.Conn, routerHash data.Hash) *N
 	// Wire up the cleanup callback BEFORE starting workers.
 	// If a Close() happens between StartWorkers and SetCleanupCallback, the
 	// session would be orphaned in the map because cleanup is not installed yet.
+	//
+	// The removal is identity-scoped: an error-torn session that closes after
+	// the transport has already re-dialled this peer must not evict the newer
+	// session that now owns the hash.
 	session.SetCleanupCallback(func() {
-		t.removeSession(routerHash)
+		t.removeSessionIfCurrent(routerHash, session)
 	})
 
 	session.StartWorkers()
@@ -2674,6 +2704,24 @@ func (t *NTCP2Transport) removeSession(routerHash data.Hash) {
 	t.logger.WithField("router_hash", logutil.HashPrefixPlain(routerHashBytes)).Debug("Removed session from transport session map")
 }
 
+// removeSessionIfCurrent removes this session's registry entry only if the
+// registry still holds this session for the peer's hash.
+//
+// An error-torn session must not evict a re-dialled replacement: once the
+// transport has re-connected to the peer, the newer entry owns the hash and the
+// slot reservation, and deleting it would re-create the dead-link and
+// slot-leak failure this cleanup exists to prevent.
+func (t *NTCP2Transport) removeSessionIfCurrent(routerHash data.Hash, session *NTCP2Session) {
+	routerHashBytes := routerHash.Bytes()
+	if t.sessionRegistry.RemoveIfSession(routerHash, session) {
+		t.logger.WithField("router_hash", logutil.HashPrefixPlain(routerHashBytes)).
+			Debug("Removed session from transport session map")
+		return
+	}
+	t.logger.WithField("router_hash", logutil.HashPrefixPlain(routerHashBytes)).
+		Debug("Session cleanup skipped: registry entry already replaced by a newer session")
+}
+
 // GetSessionCount returns the number of active sessions managed by this transport.
 // Uses an atomic counter for O(1) performance instead of iterating the session map.
 // It is used by higher layers to enforce connection limits and report status.
@@ -2684,9 +2732,21 @@ func (t *NTCP2Transport) GetSessionCount() int32 {
 // HasSession returns true if an active session exists for the given peer hash.
 // This lets higher layers (e.g. tunnel peer selection) check reachability
 // without triggering a new dial attempt. Implements transport.Transport.
+//
+// A session that has lost its context is not reported: nothing can be sent
+// over it, and claiming otherwise would keep higher layers from redialling a
+// peer whose link just died. Non-session registry entries (a raw inbound
+// connection, or one already handed to Accept) are still reported, as they were
+// before.
 func (t *NTCP2Transport) HasSession(peerHash data.Hash) bool {
-	_, ok := t.sessionRegistry.Load(peerHash)
-	return ok
+	value, ok := t.sessionRegistry.Load(peerHash)
+	if !ok {
+		return false
+	}
+	if session, isSession := value.(*NTCP2Session); isSession {
+		return session.IsAlive()
+	}
+	return true
 }
 
 // GetRouterInfoParseFailures returns the total count of RouterInfo parse failures

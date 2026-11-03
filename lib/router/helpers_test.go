@@ -5,12 +5,14 @@ package router
 import (
 	"context"
 	"runtime"
+	"sync"
 	"testing"
 	"time"
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/i2cp"
+	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/transport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -244,6 +246,66 @@ func setupInboundHandlerWithSession(t *testing.T) (*InboundMessageHandler, uint1
 }
 
 // --- Session helpers ---
+
+// fakeTransportSession is a live transport.TransportSession used as a registry
+// placeholder where a test only needs map bookkeeping.
+//
+// The router gates session lookups on liveness (getSessionByHash evicts a
+// session that has lost its context, so a dead link cannot stop the router from
+// redialling), so the previous idiom of storing a typed nil
+// (*ntcp.NTCP2Session)(nil) no longer works: a nil session is correctly treated
+// as dead. This fake answers the liveness question explicitly instead.
+type fakeTransportSession struct {
+	mu        sync.Mutex
+	queued    []i2np.Message
+	alive     bool
+	closeCall bool
+}
+
+// newFakeTransportSession returns an alive session placeholder.
+func newFakeTransportSession() *fakeTransportSession {
+	return &fakeTransportSession{alive: true}
+}
+
+func (f *fakeTransportSession) QueueSendI2NP(msg i2np.Message) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.queued = append(f.queued, msg)
+	return nil
+}
+
+func (f *fakeTransportSession) SendQueueSize() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.queued)
+}
+
+func (f *fakeTransportSession) ReadNextI2NP() (i2np.Message, error) {
+	return nil, transport.ErrSessionClosed
+}
+
+func (f *fakeTransportSession) Close() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.closeCall = true
+	f.alive = false
+	return nil
+}
+
+// IsAlive mirrors the liveness method the real NTCP2/SSU2 sessions expose.
+func (f *fakeTransportSession) IsAlive() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.alive
+}
+
+// setAlive flips the session's liveness, simulating a transport worker that hit
+// a fatal read/write error and cancelled the session context.
+func (f *fakeTransportSession) setAlive(alive bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.alive = alive
+}
 
 // addAndAssertSession adds a session to the router and verifies retrieval.
 func addAndAssertSession(t *testing.T, router *Router, hash common.Hash, session transport.TransportSession) {

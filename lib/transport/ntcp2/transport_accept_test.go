@@ -17,6 +17,92 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// liveMockConn is an established-looking net.Conn whose Read blocks until the
+// connection is closed (or its parent context is cancelled), mirroring a real
+// session with a silent peer.
+//
+// Tests that promote a connection into an NTCP2Session and then assert the
+// session stays registered need this instead of acceptMockConn: acceptMockConn
+// reports EOF on the first read, and a session now tears itself down when its
+// read fails (finding 006), so it correctly unregisters and closes. That
+// teardown is the behaviour under test elsewhere, not an incidental part of
+// CAS/promotion race tests, which are about who wins the store.
+type liveMockConn struct {
+	local    net.Addr
+	remote   net.Addr
+	done     <-chan struct{}
+	closed   chan struct{}
+	closeMu  sync.Mutex
+	isClosed bool
+
+	writeMu sync.Mutex
+	writes  [][]byte
+}
+
+func newLiveMockConn(remoteAddr string) *liveMockConn {
+	return &liveMockConn{
+		local:  &mockAddr{"127.0.0.1:0"},
+		remote: &mockAddr{remoteAddr},
+		closed: make(chan struct{}),
+	}
+}
+
+// newLiveMockConnInContext returns a live conn whose Read also unblocks when
+// ctx is done, so a test that leaves the session running cannot park a
+// goroutine past its own lifetime.
+func newLiveMockConnInContext(ctx context.Context, remoteAddr string) *liveMockConn {
+	conn := newLiveMockConn(remoteAddr)
+	conn.done = ctx.Done()
+	return conn
+}
+
+func (c *liveMockConn) Read(p []byte) (int, error) {
+	if c.done != nil {
+		select {
+		case <-c.closed:
+		case <-c.done:
+		}
+		return 0, net.ErrClosed
+	}
+	<-c.closed
+	return 0, net.ErrClosed
+}
+
+func (c *liveMockConn) Write(p []byte) (int, error) {
+	select {
+	case <-c.closed:
+		return 0, net.ErrClosed
+	default:
+	}
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+	c.writes = append(c.writes, append([]byte(nil), p...))
+	return len(p), nil
+}
+
+func (c *liveMockConn) LocalAddr() net.Addr              { return c.local }
+func (c *liveMockConn) RemoteAddr() net.Addr             { return c.remote }
+func (c *liveMockConn) SetDeadline(time.Time) error      { return nil }
+func (c *liveMockConn) SetReadDeadline(time.Time) error  { return nil }
+func (c *liveMockConn) SetWriteDeadline(time.Time) error { return nil }
+
+func (c *liveMockConn) Close() error {
+	c.closeMu.Lock()
+	defer c.closeMu.Unlock()
+	if c.isClosed {
+		return nil
+	}
+	c.isClosed = true
+	close(c.closed)
+	return nil
+}
+
+func (c *liveMockConn) isLiveClosed() bool {
+	c.closeMu.Lock()
+	defer c.closeMu.Unlock()
+	return c.isClosed
+}
+
 // acceptMockConn is a net.Conn with configurable addresses for accept tests.
 // It is separate from the mockConn in ntcp2_test.go which has hardcoded addresses.
 type acceptMockConn struct {

@@ -115,10 +115,13 @@ func (sr *SessionRegistry) Promote(peerHash data.Hash, original, newSession inte
 		return nil, false
 	}
 
-	// Install cleanup callback BEFORE starting workers
+	// Install cleanup callback BEFORE starting workers.
+	// Removal is identity-scoped: if the peer reconnected and this session is
+	// no longer the registry's entry, closing it must not evict the newer
+	// session that now owns the hash and its slot reservation.
 	if opts.SetCallback != nil {
 		opts.SetCallback(func() {
-			sr.Remove(peerHash)
+			sr.RemoveIfSession(peerHash, newSession)
 		})
 	}
 
@@ -159,6 +162,27 @@ func (sr *SessionRegistry) Remove(peerHash data.Hash) {
 	if _, loaded := sr.sessions.LoadAndDelete(peerHash); loaded {
 		sr.DecrementCountSafe()
 	}
+}
+
+// RemoveIfSession deletes the registry entry only when it still holds the given
+// session, and reports whether it did.
+//
+// A closing session must not remove its peer's *replacement*: when an error
+// tears a session down, the transport can already have re-dialled and stored a
+// new session under the same hash. An unconditional Remove would drop the live
+// session from the registry while its socket stays open, leaking both the
+// entry and its slot reservation. Callers that lose the race (the entry is
+// already something else) must not decrement either, because the surviving
+// entry still owns its reservation.
+func (sr *SessionRegistry) RemoveIfSession(peerHash data.Hash, session interface{}) bool {
+	if session == nil {
+		return false
+	}
+	if sr.sessions.CompareAndDelete(peerHash, session) {
+		sr.DecrementCountSafe()
+		return true
+	}
+	return false
 }
 
 func atomicCompareAndSwapRetry(ptr *int32, predicate func(int32) bool, delta int32) (int32, bool) {

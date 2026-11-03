@@ -12,7 +12,6 @@ import (
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/netdb"
 	"github.com/go-i2p/go-i2p/lib/transport"
-	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -52,8 +51,9 @@ func TestMessageRouterSessionProvider(t *testing.T) {
 	copy(peerHash[:], "test_peer_hash_1234567890123456789")
 
 	// Add a mock session to the router
-	// For this test, we're testing the wiring, not actual session functionality
-	mockSession := (*ntcp.NTCP2Session)(nil)
+	// For this test, we're testing the wiring, not actual session functionality.
+	// It must be a live session: the router evicts dead ones on lookup (finding 006).
+	mockSession := newFakeTransportSession()
 	router.addSession(peerHash, mockSession)
 
 	// Set the router as SessionProvider for the MessageRouter
@@ -121,7 +121,7 @@ func TestInitializeMessageRouterWithSessionProvider(t *testing.T) {
 	// Add a test session
 	testPeerHash := common.Hash{}
 	copy(testPeerHash[:], "integration_test_peer_123456789012")
-	testSession := (*ntcp.NTCP2Session)(nil)
+	testSession := newFakeTransportSession()
 	router.addSession(testPeerHash, testSession)
 
 	// Verify the session can be retrieved through the router's SessionProvider
@@ -146,7 +146,7 @@ func TestSessionProviderThreadSafety(t *testing.T) {
 		hash := common.Hash{}
 		copy(hash[:], []byte(fmt.Sprintf("concurrent_peer_%02d_hash_1234567", i)))
 		sessionHashes[i] = hash
-		router.addSession(hash, (*ntcp.NTCP2Session)(nil))
+		router.addSession(hash, newFakeTransportSession())
 	}
 
 	// Concurrently access SessionProvider from multiple goroutines

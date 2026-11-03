@@ -19,7 +19,6 @@ import (
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/netdb"
 	"github.com/go-i2p/go-i2p/lib/transport"
-	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -677,11 +676,11 @@ func TestSessionManagement_SessionReplacement(t *testing.T) {
 	hash[0] = 0x01
 
 	// Add first session
-	session1 := (*ntcp.NTCP2Session)(nil)
+	session1 := newFakeTransportSession()
 	router.addSession(hash, session1)
 
 	// Replace with second session
-	session2 := (*ntcp.NTCP2Session)(nil)
+	session2 := newFakeTransportSession()
 	router.addSession(hash, session2)
 
 	// Should have replaced

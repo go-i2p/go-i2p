@@ -219,7 +219,10 @@ func TestCRITICAL_1_1_SessionCountConsistency(t *testing.T) {
 		peerHash := newTestPeerHash(fmt.Sprintf("consistency-test-peer-%d!", i))
 		peerHashes[i] = peerHash
 
-		rawConn := newAcceptMockConn(fmt.Sprintf("192.168.1.%d:51%02d", 100+i, i))
+		// A live conn, not acceptMockConn: promotion now tears a session down
+		// when its read fails (finding 006), and this test is about who wins the
+		// CAS, not about the teardown of a peer that already hung up.
+		rawConn := newLiveMockConn(fmt.Sprintf("192.168.1.%d:51%02d", 100+i, i))
 		transport.sessionRegistry.StoreWithCount(peerHash, rawConn)
 		// Skipped: sessionCount management moved to sessionRegistry
 		// atomic.AddInt32(&transport.sessionCount, 1)

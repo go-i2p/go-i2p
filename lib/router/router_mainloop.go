@@ -240,8 +240,12 @@ func (r *Router) handleNewConnection(conn net.Conn) {
 		peerHash := common.Hash(addr.RouterHash())
 		sessionLog := logger.WithField("peer_hash", logutil.HashPrefix(peerHash))
 		session := ntcp.NewNTCP2Session(conn, r.ctx, sessionLog)
-		session.AppendCleanupCallback(func() { r.removeSession(peerHash) })
+		// Register before installing cleanup, matching registerTypedSession: a
+		// teardown that fires between the two would otherwise leave the dead
+		// session in the registry. Removal is identity-scoped so a late cleanup
+		// from this session cannot evict a replacement session for the peer.
 		r.addSession(peerHash, session)
+		session.AppendCleanupCallback(func() { r.removeSessionIfCurrent(peerHash, session) })
 		r.wg.Add(1)
 		go func() {
 			defer r.wg.Done()
@@ -264,13 +268,16 @@ func (r *Router) handleNewConnection(conn net.Conn) {
 		}
 		session := ssu2.NewSSU2Session(ssu2Conn, r.ctx, sessionLog)
 		r.attachInboundSSU2TransportCallbacks(session)
+		// Register before installing cleanup, matching registerTypedSession, and
+		// remove by identity so a late cleanup from this session cannot evict a
+		// replacement session for the same peer.
+		r.addSession(peerHash, session)
+		session.AppendCleanupCallback(func() { r.removeSessionIfCurrent(peerHash, session) })
 		// The session was built on the unwrapped connection, so closing the
 		// session alone never runs the TrackedConn callbacks that release the
 		// transport's and the muxer's session slots. Close the connection as the
 		// router received it too, or the pool fills up with dead entries.
-		session.AppendCleanupCallback(func() { r.removeSession(peerHash) })
 		session.AppendCleanupCallback(func() { r.closeInboundConnectionAsync(conn) })
-		r.addSession(peerHash, session)
 		r.wg.Add(1)
 		go func() {
 			defer r.wg.Done()

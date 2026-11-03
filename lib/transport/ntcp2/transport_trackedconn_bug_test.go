@@ -163,7 +163,10 @@ func TestConcurrentAcceptAndGetSessionIntegration(t *testing.T) {
 	for i := 0; i < numPeers; i++ {
 		peers[i] = testPeer{
 			hash: newTestPeerHash(fmt.Sprintf("concurrent-integration-%d", i)),
-			conn: newAcceptMockConn(fmt.Sprintf("10.0.1.%d:5000", i)),
+			// Live conns: this test's invariant is that promoted sessions REMAIN
+			// in the map. acceptMockConn reports EOF on first read, which now
+			// (finding 006) correctly tears the promoted session back down.
+			conn: newLiveMockConn(fmt.Sprintf("10.0.1.%d:5000", i)),
 		}
 	}
 

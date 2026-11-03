@@ -38,6 +38,13 @@ type NTCP2Session struct {
 	errorMu   sync.Mutex
 	lastError error
 
+	// closeRequested is set when the close path has started, either through an
+	// explicit Close() or through the automatic teardown an error triggers.
+	// Idle maintenance uses it as a failsafe: a session whose context is done
+	// and whose close has not started is a session whose socket, transport
+	// registry entry and muxer slot are still held (finding 006).
+	closeRequested atomic.Bool
+
 	// RouterInfo callback (called when a RouterInfo block is received from peer)
 	routerInfoMu       sync.Mutex
 	routerInfoCallback func(riBytes []byte, floodRequested bool)
@@ -129,6 +136,11 @@ func (s *NTCP2Session) Close() error {
 // Spec reference: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ntcp2.rst
 func (s *NTCP2Session) CloseWithReason(reason byte) error {
 	var err error
+	// Mark the teardown as started before anything else: the idle-maintenance
+	// failsafe uses closeRequested to tell "cancelled and already tearing down"
+	// apart from "cancelled with the socket, registry entry and session slot
+	// still held" (finding 006). sync.Once below makes the body idempotent.
+	s.closeRequested.Store(true)
 	s.CloseOnce().Do(func() {
 		s.logSessionLifecycleSummary(reason)
 		s.Logger().WithField("reason", TerminationReasonString(reason)).Info("Closing NTCP2 session")
@@ -271,6 +283,15 @@ func (s *NTCP2Session) sendEncryptedTermination(reason byte) {
 		"valid_frames": frames,
 	}).Debug("Sending encrypted termination block")
 
+	// Bound the write: the termination block is best-effort, and this runs on
+	// the teardown path that an error just scheduled. Without a deadline, a
+	// peer that stops reading could hold CloseWithReason (and with it the
+	// socket, the registry entry and the session slot) open indefinitely before
+	// the connection is actually closed below.
+	if deadlineErr := conn.SetWriteDeadline(time.Now().Add(ntcp2TerminationWriteTimeout)); deadlineErr != nil {
+		s.Logger().WithError(deadlineErr).Debug("Failed to set termination block write deadline")
+	}
+
 	if _, writeErr := conn.Write(block); writeErr != nil {
 		s.Logger().WithError(writeErr).Debug("Failed to send encrypted termination block (best-effort)")
 	} else {
@@ -282,6 +303,13 @@ func (s *NTCP2Session) sendEncryptedTermination(reason byte) {
 // This is called before canceling the session context so the sendWorker can
 // still process queued messages.
 func (s *NTCP2Session) drainSendQueue() {
+	// Once the session context is cancelled the send worker has stopped (or is
+	// stopping), so nothing left in the queue can reach the wire. Waiting here
+	// would only delay the teardown that an error path just scheduled.
+	if !s.IsAlive() {
+		return
+	}
+
 	queueSize := s.SendQueueSize()
 	if queueSize == 0 {
 		return
@@ -492,6 +520,12 @@ func (s *NTCP2Session) writeFramedData(framedData []byte) bool {
 // when a peer goes silent without closing the connection.
 const ntcp2ReadDeadline = 5 * time.Minute
 
+// ntcp2TerminationWriteTimeout bounds the best-effort Termination block written
+// during teardown. A close must never wait on a peer that has stopped reading:
+// the socket, the transport registry entry and the session slot are only
+// released once this write returns.
+const ntcp2TerminationWriteTimeout = 2 * time.Second
+
 // receiveWorker handles receiving I2NP messages from the NTCP2 connection.
 func (s *NTCP2Session) receiveWorker() {
 	defer s.WaitGroup().Done()
@@ -545,8 +579,8 @@ func (s *NTCP2Session) allowInboundMessage(msg i2np.Message) bool {
 		return true
 	}
 	s.Logger().WithField("message_type", msg.Type()).Warn("Inbound I2NP rate limit exceeded, closing session")
+	// setError schedules the teardown itself; no separate Close here.
 	s.setError(oops.Errorf("inbound I2NP rate limit exceeded"))
-	go func() { _ = s.Close() }()
 	return false
 }
 
@@ -870,27 +904,128 @@ func (s *NTCP2Session) getError() error {
 	return s.lastError
 }
 
-// setError sets the last error (once) and cancels the session context.
-// Cleanup callback is NOT called here — it is deferred to Close() which
-// waits for workers to finish first, preventing the transport from
-// creating a new session to the same peer while old workers still run.
+// IsAlive reports whether this session can still carry traffic.
+//
+// It is nil-safe and core-safe so a session map can gate lookups on liveness
+// without panicking on a zero-value or nil placeholder. A session that has
+// lost its context is dead even when its socket has not been closed yet: the
+// workers are gone, nothing will ever be read from or written to it again, and
+// keeping it registered hides the peer's departure from the router, which then
+// never redials (finding 006).
+func (s *NTCP2Session) IsAlive() bool {
+	if s == nil || s.SessionCore == nil {
+		return false
+	}
+	return s.SessionCore.IsAlive()
+}
+
+// CloseRequested reports whether the session's teardown has started, either
+// through an explicit Close or through the automatic teardown an error
+// triggers. Used by idle maintenance to spot sessions that were cancelled
+// without ever being closed.
+func (s *NTCP2Session) CloseRequested() bool {
+	if s == nil {
+		return false
+	}
+	return s.closeRequested.Load()
+}
+
+// setError records the session's terminal error (once), cancels the context
+// and schedules the full teardown.
+//
+// Cancelling alone is what made finding 006 permanent: the socket stayed open,
+// the cleanup callback never ran, and the session stayed in the transport
+// registry and the router's activeSessions, so the router kept routing to a
+// dead link and never redialled. The teardown therefore has to be driven from
+// here, the single funnel every fatal read/write error passes through.
+//
+// The cleanup callback is not called directly — Close() runs it after joining
+// the workers, which prevents the transport from creating a new session to the
+// same peer while old workers still run. Close is scheduled on its own
+// goroutine because it joins the worker WaitGroup and setError is called from
+// inside a worker.
 func (s *NTCP2Session) setError(err error) {
 	s.errorMu.Lock()
-	defer s.errorMu.Unlock()
-	if s.lastError == nil {
-		s.lastError = err
-
-		// EOF indicates the remote peer closed the connection — this is normal
-		// peer churn, not an error condition. Log at Warn to avoid flooding
-		// the error log with non-actionable entries.
-		switch {
-		case errors.Is(err, io.EOF):
-			s.Logger().WithError(err).Warn("Session closed by remote peer")
-		case isTimeoutOrReset(err):
-			s.Logger().WithError(err).Warn("Session closed due to timeout or reset")
-		default:
-			s.Logger().WithError(err).Error("Session error")
-		}
-		s.Cancel()
+	if s.lastError != nil {
+		s.errorMu.Unlock()
+		return
 	}
+	s.lastError = err
+
+	// EOF indicates the remote peer closed the connection — this is normal
+	// peer churn, not an error condition. Log at Warn to avoid flooding
+	// the error log with non-actionable entries.
+	switch {
+	case errors.Is(err, io.EOF):
+		s.Logger().WithError(err).Warn("Session closed by remote peer")
+	case isTimeoutOrReset(err):
+		s.Logger().WithError(err).Warn("Session closed due to timeout or reset")
+	default:
+		s.Logger().WithError(err).Error("Session error")
+	}
+	s.Cancel()
+	s.errorMu.Unlock()
+
+	reason := terminationReasonForReadError(err)
+	go func() {
+		if closeErr := s.CloseWithReason(reason); closeErr != nil {
+			s.Logger().WithError(closeErr).WithField("reason", TerminationReasonString(reason)).
+				Debug("NTCP2 session close after error returned an error")
+		}
+	}()
+}
+
+// terminationReasonForReadError maps a fatal read/write error to the NTCP2
+// Termination block reason code the session should report, per the spec's
+// reason list (ntcp2.rst "Termination block").
+//
+// A block-ordering violation carries its own code. Cipher-level failures map to
+// the AEAD-failure reason so CloseWithReason skips the termination block — the
+// cipher state is no longer trustworthy, and go-noise has already performed the
+// spec's AEAD teardown (probing resistance plus its own termination frame) on
+// the connection before handing us the error. Everything else is reported as a
+// normal close; the write is best-effort and simply fails on a dead socket.
+func terminationReasonForReadError(err error) byte {
+	var violation *BlockOrderViolation
+	if errors.As(err, &violation) {
+		return violation.TerminationReason()
+	}
+	if isCipherLevelError(err) {
+		return TerminationAEADFailure
+	}
+	return TerminationNormalClose
+}
+
+// cipherLevelErrorCodes are the go-noise error codes that mean the frame could
+// not be authenticated or de-framed, i.e. the cipher/SipHash state of the
+// connection is no longer usable. go-noise marks its Conn broken and performs
+// the spec's AEAD error handling for all of them.
+var cipherLevelErrorCodes = [...]string{
+	"DECRYPT_FAILED",
+	"READ_LENGTH_FAILED",
+	"FRAME_TOO_SMALL",
+	"FRAME_TOO_LARGE",
+	"CONNECTION_BROKEN",
+	"NONCE_EXHAUSTED",
+	"ENCRYPT_FAILED",
+}
+
+// isCipherLevelError reports whether err carries one of go-noise's cipher or
+// framing failure codes. Codes are read from the deepest oops layer, which is
+// where WrapNTCP2Error leaves the original.
+func isCipherLevelError(err error) bool {
+	oopsErr, ok := oops.AsOops(err)
+	if !ok {
+		return false
+	}
+	code, ok := oopsErr.Code().(string)
+	if !ok {
+		return false
+	}
+	for _, c := range cipherLevelErrorCodes {
+		if code == c {
+			return true
+		}
+	}
+	return false
 }
