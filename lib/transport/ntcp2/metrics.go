@@ -11,6 +11,8 @@ type transportMetrics struct {
 	pendingConnsQueueFullEvents atomic.Uint64 // TE-2: how many times send attempted with full queue
 	tcpDialFailures             atomic.Uint64 // Outbound NTCP2 failures that never reached Noise (TCP dial/connect stage)
 	noiseHandshakeFailures      atomic.Uint64 // NTCP2 Noise/msg3 handshake failures after TCP connect
+	handshakeRefusedGlobal      atomic.Uint64 // H-033: inbound connections closed for exceeding the transport-wide handshake budget
+	handshakeRefusedSource      atomic.Uint64 // H-033: inbound connections closed for exceeding the per-source handshake budget
 	sessionEstablishedTotal     atomic.Uint64 // Cumulative inbound+outbound session establishments
 
 	// Session-level churn counters (process-wide aggregate across all NTCP2Session
@@ -53,6 +55,19 @@ type TransportMetricsSnapshot struct {
 	// Noise handshake errors and msg3 RouterInfo processing failures.
 	NoiseHandshakeFailures uint64
 
+	// HandshakeRefusedGlobal counts inbound connections closed because the
+	// transport-wide pre-authentication handshake budget was already spent
+	// (H-033). Non-zero means something is flooding the router; the connections
+	// were shed without paying for a handshake.
+	HandshakeRefusedGlobal uint64
+
+	// HandshakeRefusedSource counts inbound connections closed because one
+	// source IP already held its share of the handshake budget (H-033).
+	HandshakeRefusedSource uint64
+
+	// InflightHandshakes is how many inbound handshakes are running right now.
+	InflightHandshakes int64
+
 	// SessionEstablishedTotal counts cumulative NTCP2 sessions established
 	// (outbound finalize success + fresh inbound tracking).
 	SessionEstablishedTotal uint64
@@ -79,6 +94,9 @@ func (t *NTCP2Transport) GetTransportMetrics() TransportMetricsSnapshot {
 		PendingConnsQueueFullEvents: t.metrics.pendingConnsQueueFullEvents.Load(),
 		TCPDialFailures:             t.metrics.tcpDialFailures.Load(),
 		NoiseHandshakeFailures:      t.metrics.noiseHandshakeFailures.Load(),
+		HandshakeRefusedGlobal:      t.metrics.handshakeRefusedGlobal.Load(),
+		HandshakeRefusedSource:      t.metrics.handshakeRefusedSource.Load(),
+		InflightHandshakes:          t.admission.current(),
 		SessionEstablishedTotal:     t.metrics.sessionEstablishedTotal.Load(),
 		SessionEOFCloses:            globalNTCP2SessionChurn.sessionEOFCloses.Load(),
 		SessionTimeoutOrReset:       globalNTCP2SessionChurn.sessionTimeoutOrReset.Load(),

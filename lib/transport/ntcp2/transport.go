@@ -82,6 +82,11 @@ type NTCP2Transport struct {
 	// Session management via shared SessionRegistry (H2 deduplication)
 	sessionRegistry *transport.SessionRegistry
 
+	// admission bounds the pre-authentication inbound handshake path: how many
+	// handshakes may run at once transport-wide and per source IP. See
+	// [handshakeAdmission].
+	admission *handshakeAdmission
+
 	// Metrics for critical bugs (X-1)
 	acceptedConnPromotionAttempts int32 // atomic counter for bug detection: how many times promoteInboundConnection refused an acceptedConn
 
@@ -312,6 +317,7 @@ func buildTransportInstance(config *Config, identity router_info.RouterInfo, key
 		logger:          logger,
 		wg:              sync.WaitGroup{},
 		sessionRegistry: registry,
+		admission:       newHandshakeAdmission(),
 	}
 	// Initialize atomic.Pointer[Config] with Store
 	t.config.Store(config)
@@ -715,11 +721,17 @@ func (t *NTCP2Transport) acceptNextConnection() bool {
 		}
 	}
 
-	if !t.canAcceptNewSession(rawConn) {
-		return true // continue accepting
+	release := t.admitInboundHandshake(rawConn)
+	if release == nil {
+		// Refused at admission: the connection is already closed. Bound the
+		// pre-auth cost instead of spending a handshake window on it.
+		return true
 	}
 
-	go t.inboundHandshakeWorker(rawConn)
+	go func() {
+		defer release()
+		t.inboundHandshakeWorker(rawConn)
+	}()
 	return true
 }
 
@@ -736,13 +748,63 @@ func (t *NTCP2Transport) shouldShutdown(rawConn net.Conn) bool {
 	}
 }
 
-// canAcceptNewSession performs pre-acceptance checks on the raw connection.
-// Session limit is now checked AFTER handshake completes, not before.
-// This prevents attackers from holding reserved slots during the 30s handshake window.
-func (t *NTCP2Transport) canAcceptNewSession(rawConn net.Conn) bool {
-	// No limit check here. Handshakes run without reserving slots.
-	// The limit is enforced after successful handshake in inboundHandshakeWorker.
-	return true
+// admitInboundHandshake bounds the cost of a not-yet-authenticated inbound
+// connection: it reserves a slot in the transport-wide and per-source handshake
+// budgets, and closes the connection if either is already spent.
+//
+// On success it returns the release function the caller must run when the
+// handshake goroutine exits. On refusal it closes rawConn and returns nil, so a
+// flood is shed at accept time without a goroutine, a handshake timeout window,
+// or the probing-resistance junk read being paid for it.
+//
+// The session limit is deliberately NOT checked here. It is enforced after a
+// successful handshake in [NTCP2Transport.inboundHandshakeWorker]; reserving a
+// session slot pre-handshake would let an attacker hold all 512 slots for the
+// duration of the handshake timeout, which is the opposite of what this is for.
+//
+// Spec: ntcp2.rst §"Session Request" DoS Mitigation — "Limit repeated or
+// simultaneous connections from the same source."
+func (t *NTCP2Transport) admitInboundHandshake(rawConn net.Conn) (release func()) {
+	cfg := t.config.Load()
+	var global, perSource int64
+	if cfg != nil {
+		global = int64(cfg.GetMaxInflightHandshakes())
+		perSource = int64(cfg.GetMaxHandshakesPerSource())
+	}
+
+	remote := rawConn.RemoteAddr()
+	var err error
+	release, err = t.admission.admit(remote, global, perSource)
+	if err == nil {
+		return release
+	}
+
+	// Refused. Count it and close without any handshake attempt.
+	t.recordHandshakeRefused(remote, err)
+	_ = rawConn.Close()
+	return nil
+}
+
+// recordHandshakeRefused logs and counts a connection turned away at admission.
+// Kept at Debug: a flood would otherwise flood the log, and the metric counters
+// are the signal operators should alert on.
+func (t *NTCP2Transport) recordHandshakeRefused(remote net.Addr, err error) {
+	if errors.Is(err, errAdmissionGlobalFull) {
+		t.metrics.handshakeRefusedGlobal.Add(1)
+	} else {
+		t.metrics.handshakeRefusedSource.Add(1)
+	}
+	if t.logger == nil {
+		return
+	}
+	addr := "<unknown>"
+	if remote != nil {
+		addr = remote.String()
+	}
+	t.logger.WithFields(map[string]interface{}{
+		"remote_addr": addr,
+		"reason":      err.Error(),
+	}).Debug("Inbound NTCP2 connection refused at handshake admission")
 }
 
 // inboundHandshakeWorker performs the full NTCP2 inbound handshake for a
