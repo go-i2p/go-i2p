@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/transport"
+	"github.com/go-i2p/go-noise/ntcp2"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
@@ -476,30 +477,64 @@ func (s *NTCP2Session) frameMessage(msg i2np.Message) ([]byte, error) {
 // queues needs splitting.
 //
 // The per-frame plaintext ceiling is the configured maximum frame size minus
-// the 16-byte Poly1305 tag. go-noise defaults MaxFrameSize to
-// DefaultMaxFrameSize (16384) and this transport never overrides it (no
-// WithFrameSettings call exists in go-i2p), so the defaults are the values the
-// write path actually uses. The outbound AEAD padding modifier then appends up
-// to MaxPaddingSize + 3 block-header bytes to the frame, so that headroom is
+// the 16-byte Poly1305 tag. The transport raises go-noise's default to the
+// largest frame the wire format can carry (see [applyNTCP2FrameSettings]), so
+// a message that fits the spec's own block limit is actually delivered rather
+// than dropped. The outbound AEAD padding modifier then appends up to
+// MaxPaddingSize + 3 block-header bytes to the frame, so that headroom is
 // reserved too — otherwise the padding itself would push the frame over the
 // limit and re-introduce the split.
 const (
-	ntcp2DefaultMaxFrameSize  = 16384 // go-noise ntcp2.DefaultMaxFrameSize
-	ntcp2Poly1305Overhead     = 16    // go-noise ntcp2.Poly1305Overhead
-	ntcp2DefaultMaxPadding    = 64    // go-noise ntcp2.DefaultMaxPaddingSize
-	ntcp2MaxSingleBlockSize   = 65519 // ntcp2.rst:1447 maximum single block size
-	ntcp2PaddingBlockOverhead = blockHeaderSize + ntcp2DefaultMaxPadding
+	ntcp2SpecMaxFrameSize   = 65535 // ntcp2.rst:1444 maximum ChaChaPoly frame
+	ntcp2Poly1305Overhead   = 16    // go-noise ntcp2.Poly1305Overhead
+	ntcp2DefaultMaxPadding  = 64    // go-noise ntcp2.DefaultMaxPaddingSize
+	ntcp2MaxTotalBlockSize  = 65519 // ntcp2.rst:1446 maximum total block size
+	ntcp2PaddingOverhead    = blockHeaderSize + ntcp2DefaultMaxPadding
+	ntcp2WriteFramedCeiling = ntcp2SpecMaxFrameSize - ntcp2Poly1305Overhead
 )
 
 // maxOutboundFramePlaintext returns the largest block payload (DateTime and
 // I2NP blocks included) the session may hand to conn.Write in one frame
 // without go-noise fragmenting it across ChaChaPoly frames.
+//
+// Two ceilings bound it, and the smaller wins:
+//
+//   - writeFramed splits at its configured maximum frame size minus the
+//     authentication tag, which [applyNTCP2FrameSettings] sets to the spec
+//     maximum, so 65535 - 16 = 65519;
+//   - the padding modifier appends a Padding block after the payload, so the
+//     payload must leave that much headroom or the padded frame would exceed
+//     the split point and be fragmented anyway.
+//
+// The result is the same value i2pd uses for its own outbound frames
+// (NTCP2_UNENCRYPTED_FRAME_MAX_SIZE), so a message go-i2p is willing to send is
+// one a peer is willing to receive.
 func maxOutboundFramePlaintext() int {
-	maxPlaintext := ntcp2DefaultMaxFrameSize - ntcp2Poly1305Overhead - ntcp2PaddingBlockOverhead
-	if specMax := ntcp2MaxSingleBlockSize; maxPlaintext > specMax {
-		maxPlaintext = specMax
+	maxPlaintext := ntcp2WriteFramedCeiling - ntcp2PaddingOverhead
+	if maxPlaintext > ntcp2MaxTotalBlockSize {
+		maxPlaintext = ntcp2MaxTotalBlockSize
 	}
 	return maxPlaintext
+}
+
+// applyNTCP2FrameSettings raises a connection config's outbound frame size to
+// the largest frame the wire format carries.
+//
+// go-noise defaults MaxFrameSize to 16 KiB, which is well under the spec's
+// 65535-byte frame (ntcp2.rst:1444). Since the session refuses to fragment an
+// I2NP message across frames, that default silently caps every outbound message
+// at roughly 16 KiB: anything larger is dropped and the peer never receives it,
+// with no error to the caller. Raising it to the spec maximum makes the drop
+// path match what the spec actually forbids — messages too large for a frame at
+// all — rather than messages merely larger than an implementation default.
+//
+// Padding is left at go-noise's defaults (0-64 bytes) so the headroom reserved
+// in [maxOutboundFramePlaintext] stays accurate.
+func applyNTCP2FrameSettings(config *ntcp2.Config) *ntcp2.Config {
+	if config == nil {
+		return nil
+	}
+	return config.WithFrameSettings(ntcp2SpecMaxFrameSize, true, 0, ntcp2DefaultMaxPadding)
 }
 
 // fitsInSingleFrame reports whether payload fits in one outbound data-phase
@@ -514,7 +549,7 @@ func (s *NTCP2Session) logOversizedMessageDrop(msg i2np.Message, framedSize int)
 		"message_type":   msg.Type(),
 		"framed_size":    framedSize,
 		"max_frame_size": maxOutboundFramePlaintext(),
-	}).Warn("Outbound NTCP2 frame would exceed one ChaChaPoly frame; dropping message instead of fragmenting (ntcp2.rst:1626-1628)")
+	}).Warn("Outbound NTCP2 message exceeds one ChaChaPoly frame; dropping rather than fragmenting (ntcp2.rst:1626-1628)")
 }
 
 // writeFramedData writes framed data to the connection.

@@ -224,7 +224,7 @@ func createNTCP2Config(identity router_info.RouterInfo, cancel context.CancelFun
 		cancel()
 		return nil, err
 	}
-	return ntcp2Config, nil
+	return applyNTCP2FrameSettings(ntcp2Config), nil
 }
 
 // applyReplayDetector registers the transport's own replay cache as the detector
@@ -1695,7 +1695,7 @@ func (t *NTCP2Transport) createNTCP2ConfigFromIdentity(ident router_info.RouterI
 		t.logger.WithError(err).Error("Failed to create new NTCP2 config for identity update")
 		return nil, WrapNTCP2Error(err, "updating identity")
 	}
-	return ntcp2Config, nil
+	return applyNTCP2FrameSettings(ntcp2Config), nil
 }
 
 // GetSession obtains a transport session with a router given its RouterInfo.
@@ -2345,6 +2345,11 @@ func (t *NTCP2Transport) createNTCP2ConfigForAddress(routerInfo router_info.Rout
 	if err != nil {
 		return nil, WrapNTCP2Error(err, "creating NTCP2 config")
 	}
+	// Raise the outbound frame budget to the spec maximum before anything else
+	// touches this config: go-noise's 16 KiB default would cap every message
+	// this session can send, and the session drops rather than fragments
+	// anything over the cap (ntcp2.rst:1626-1628).
+	config = applyNTCP2FrameSettings(config)
 	// The initiator side needs one too: ntcp2.rst:879-883 requires Alice to
 	// "maintain a local cache of previously-used handshake values and reject
 	// duplicates", keyed on "the 32-byte Y value (or its encrypted equivalent)",
