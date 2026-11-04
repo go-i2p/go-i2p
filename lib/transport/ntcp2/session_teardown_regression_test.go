@@ -661,19 +661,20 @@ func TestWireTeardownCompletesPromptly(t *testing.T) {
 	}
 }
 
-// TestSlotExhaustionErrorStormFreesSlots is the availability question the
+// TestSlotExhaustionErrorStormFreesSlots answers the availability question the
 // finding left open: can a peer drive enough sessions into the error path that
 // the transport's session limit fills with dead entries and no new session can
 // open?
 //
-// Before the fix this was a permanent state — every errored session kept its
-// registry entry, so 512 of them (the default max) ended NTCP2 for good. Now
-// each teardown releases its slot as part of Close, so the question becomes
-// whether the release keeps up with the errors.
+// Before the fix that state was permanent — every errored session kept its
+// registry entry, so once the limit was reached it stayed reached until restart.
+// Each teardown now releases its slot as part of Close, which turns the question
+// into whether the release keeps up with the errors.
 //
-// The test fills a small transport to its limit with live sessions, kills them
-// all through the real error path (a failing read), and asserts the count
-// returns to zero and a new session can be registered in the freed capacity.
+// The transport is filled to its limit, the limit is observed to refuse a new
+// peer, and then every session is driven through the real error path: an AEAD
+// frame whose only block claims 50 bytes and carries 2, so ParseBlocks fails.
+// The slots must all come back and the freed capacity must be usable.
 func TestSlotExhaustionErrorStormFreesSlots(t *testing.T) {
 	const peerCount = 32
 
@@ -681,47 +682,47 @@ func TestSlotExhaustionErrorStormFreesSlots(t *testing.T) {
 	require.Equal(t, peerCount, tr.config.Load().GetMaxSessions(),
 		"precondition: the transport limit must equal the number of peers under test")
 
-	// Fill the transport with live sessions first, so the "at the limit" state
-	// is observed before any error happens rather than racing one.
+	// The malformed frame is queued before the session is built, so the read
+	// worker fails on its very first read. Queueing it afterwards would serialise
+	// the test against each worker's read timeout, which holds the mock's lock.
+	malformed := []byte{0x03, 0x00, 0x32, 0x01, 0x02}
+
 	peers := make([]data.Hash, peerCount)
-	conns := make([]*frameSource, peerCount)
+	sessions := make([]*NTCP2Session, peerCount)
 	for i := range peers {
 		peers[i] = newTestPeerHash(fmt.Sprintf("slot-storm-peer-%04d", i))
-		conns[i] = newFrameSource()
+		sessions[i] = NewNTCP2SessionDeferred(newFrameSource(malformed), tr.ctx, logger.WithField("test", t.Name()))
 
-		session := NewNTCP2SessionDeferred(conns[i], tr.ctx, logger.WithField("test", t.Name()))
-		tr.sessionRegistry.StoreWithCount(peers[i], session)
-		session.SetCleanupCallback(func() { tr.removeSessionIfCurrent(peers[i], session) })
-		session.StartWorkers()
+		// Registered and counted, but not started: the "at the limit" state has
+		// to be observed before any session can tear itself down.
+		tr.sessionRegistry.StoreWithCount(peers[i], sessions[i])
+		sessions[i].SetCleanupCallback(func() { tr.removeSessionIfCurrent(peers[i], sessions[i]) })
 	}
 
 	require.Equal(t, int32(peerCount), tr.GetSessionCount(),
 		"precondition: the transport must be at its session limit")
-
-	// At the limit, a new peer cannot be admitted. With the old behaviour this
-	// state was permanent: every errored session kept its entry.
 	require.Error(t, tr.checkSessionLimit(),
 		"precondition: admission must be refused at the limit")
 
-	// Now drive every session through the real error path: one AEAD frame whose
-	// only block claims 50 bytes and carries 2, so ParseBlocks fails.
-	malformed := []byte{0x03, 0x00, 0x32, 0x01, 0x02}
-	for _, conn := range conns {
-		conn.queue(malformed)
+	start := time.Now()
+	for _, session := range sessions {
+		session.StartWorkers()
 	}
 
-	waitUntil(t, 20*time.Second, "the error storm to release every slot", func() bool {
+	waitUntil(t, 30*time.Second, "the error storm to release every slot", func() bool {
 		return tr.GetSessionCount() == 0
 	})
+	t.Logf("released %d slots in %s", peerCount, time.Since(start))
 
-	// Capacity is available again, so the router can serve new peers.
+	// Capacity is available again, so the router can serve new peers. The check
+	// below reserves a slot itself, so the registration pairs with it exactly as
+	// setupSession does: LoadOrStore, no second increment.
 	require.NoError(t, tr.checkSessionLimit(),
 		"slot exhaustion must not persist once errored sessions tear down")
 
-	// And the freed capacity is usable: register a session into it.
-	replacement := NewNTCP2SessionDeferred(newFrameSource(), tr.ctx, logger.WithField("test", t.Name()))
 	replacementHash := newTestPeerHash("slot-storm-replacement")
-	tr.sessionRegistry.StoreWithCount(replacementHash, replacement)
+	replacement := NewNTCP2SessionDeferred(newFrameSource(), tr.ctx, logger.WithField("test", t.Name()))
+	tr.sessionRegistry.LoadOrStore(replacementHash, replacement)
 	replacement.SetCleanupCallback(func() { tr.removeSessionIfCurrent(replacementHash, replacement) })
 	replacement.StartWorkers()
 
