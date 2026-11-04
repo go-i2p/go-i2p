@@ -2,64 +2,12 @@ package ntcp2
 
 import (
 	"bytes"
-	"context"
-	"net"
 	"testing"
 	"time"
 
 	"github.com/go-i2p/go-i2p/lib/i2np"
-	gontcp2 "github.com/go-i2p/go-noise/ntcp2"
 	"github.com/stretchr/testify/require"
 )
-
-// wireHandshakePairNoPadding is wireHandshakePair with the initiator's padding
-// turned off, so a frame written by the initiator reaches the responder as
-// exactly the block stream that was serialised.
-func wireHandshakePairNoPadding(t *testing.T) (initiator, responder *gontcp2.Conn) {
-	t.Helper()
-
-	p := newNTCP2TestKeyPair(t)
-	p.initiatorConfig = p.initiatorConfig.WithFrameSettings(0, true, 0, 0)
-
-	tcpLn, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = tcpLn.Close() })
-
-	ntcp2Ln, err := gontcp2.NewNTCP2Listener(tcpLn, p.responderConfig)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = ntcp2Ln.Close() })
-
-	tr := newTestTransport(ntcp2Ln, 10)
-	t.Cleanup(tr.cancel)
-
-	type responderResult struct {
-		conn *gontcp2.Conn
-		err  error
-	}
-	responderDone := make(chan responderResult, 1)
-	go func() {
-		conn, acceptErr := ntcp2Ln.Accept()
-		if acceptErr != nil {
-			responderDone <- responderResult{nil, acceptErr}
-			return
-		}
-		rc, ok := conn.(*gontcp2.Conn)
-		if !ok {
-			responderDone <- responderResult{nil, errUnexpectedConnType}
-			return
-		}
-		responderDone <- responderResult{rc, tr.executeHandshake(rc, context.Background())}
-	}()
-
-	dialCtx, dialCancel := context.WithTimeout(context.Background(), 10*time.Second)
-	t.Cleanup(dialCancel)
-	initiator, dialErr := gontcp2.DialNTCP2WithHandshakeContext(dialCtx, "tcp", tcpLn.Addr().String(), p.initiatorConfig)
-
-	res := <-responderDone
-	require.NoError(t, dialErr, "initiator dial")
-	require.NoError(t, res.err, "responder handshake")
-	return initiator, res.conn
-}
 
 // TestWireBlockDataEndingFE0000Survives is the H-017 regression: an I2NP block
 // whose data happens to end in FE 00 00.
@@ -74,7 +22,9 @@ func wireHandshakePairNoPadding(t *testing.T) (initiator, responder *gontcp2.Con
 // The boundary is now taken from the block stream itself, so the bytes are
 // reached as data inside the block and the message is delivered intact.
 func TestWireBlockDataEndingFE0000Survives(t *testing.T) {
-	ic, rc := wireHandshakePairNoPadding(t)
+	ic, rc := wireHandshakePairWith(t, func(p *ntcp2TestKeyPair) {
+		p.initiatorConfig = p.initiatorConfig.WithFrameSettings(0, true, 0, 0)
+	})
 
 	// Only one reader may own the connection: the unframer below, not a session
 	// worker. The frame is read straight off the wire so the padding layer is

@@ -901,48 +901,19 @@ func TestW10_OutboundFrameBudgetIsSpecSized(t *testing.T) {
 // tunnel build or a DatabaseStore above ~16 KB simply never arrived and the
 // sender timed out. The write path must now carry it in a single frame
 // (ntcp2.rst:1626-1628 forbids fragmenting an I2NP message across frames).
+//
+// Reverting only the config change makes this fail with the finding's own case
+// (b) verbatim: go-noise splits the payload at its 16384-byte frame, the
+// receiver's first frame carries half an I2NP block, and ParseBlocks reports
+// "truncated block data at offset 0: type=3, declared size=32781, available=16365".
+// Both halves of the change — the raised config and the budget derived from it —
+// are needed for the message to arrive.
 func TestW10_MidSizedI2NPDeliveredOnWire(t *testing.T) {
-	p := newNTCP2TestKeyPair(t)
-	p.initiatorConfig = applyNTCP2FrameSettings(p.initiatorConfig)
+	ic, rc := wireHandshakePairWith(t, func(p *ntcp2TestKeyPair) {
+		p.initiatorConfig = applyNTCP2FrameSettings(p.initiatorConfig)
+	})
 
-	tcpLn, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = tcpLn.Close() })
-
-	ntcp2Ln, err := gontcp2.NewNTCP2Listener(tcpLn, p.responderConfig)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = ntcp2Ln.Close() })
-
-	tr := newTestTransport(ntcp2Ln, 10)
-	t.Cleanup(tr.cancel)
-
-	type responderResult struct {
-		conn *gontcp2.Conn
-		err  error
-	}
-	responderDone := make(chan responderResult, 1)
-	go func() {
-		conn, acceptErr := ntcp2Ln.Accept()
-		if acceptErr != nil {
-			responderDone <- responderResult{nil, acceptErr}
-			return
-		}
-		rc, ok := conn.(*gontcp2.Conn)
-		if !ok {
-			responderDone <- responderResult{nil, errUnexpectedConnType}
-			return
-		}
-		responderDone <- responderResult{rc, tr.executeHandshake(rc, context.Background())}
-	}()
-
-	dialCtx, dialCancel := context.WithTimeout(context.Background(), 10*time.Second)
-	t.Cleanup(dialCancel)
-	ic, dialErr := gontcp2.DialNTCP2WithHandshakeContext(dialCtx, "tcp", tcpLn.Addr().String(), p.initiatorConfig)
-	res := <-responderDone
-	require.NoError(t, dialErr, "initiator dial")
-	require.NoError(t, res.err, "responder handshake")
-
-	rc := res.conn
+	// One reader only: the unframer owns the responder connection.
 	body := make([]byte, 32*1024)
 	for i := range body {
 		body[i] = byte('A' + i%26)
@@ -953,7 +924,6 @@ func TestW10_MidSizedI2NPDeliveredOnWire(t *testing.T) {
 	require.Greater(t, len(frame), 16384, "the message must exceed go-noise's old default frame")
 	require.LessOrEqual(t, len(frame), maxOutboundFramePlaintext())
 
-	// One reader only: the unframer owns the responder connection.
 	unframer := NewBlockUnframer(rc)
 	written, writeErr := ic.Write(frame)
 	require.NoError(t, writeErr)

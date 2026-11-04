@@ -453,8 +453,19 @@ func TestIdleMaintenancePassTerminatesWithUnseededWindow(t *testing.T) {
 // must be driven by a real AEAD/framing failure, not a mock's error string.
 func wireHandshakePair(t *testing.T) (initiator, responder *gontcp2.Conn) {
 	t.Helper()
+	return wireHandshakePairWith(t, nil)
+}
+
+// wireHandshakePairWith is wireHandshakePair with a hook to adjust the configs
+// before the handshake runs — used by tests that need a specific frame or
+// padding setting on the initiator side.
+func wireHandshakePairWith(t *testing.T, configure func(*ntcp2TestKeyPair)) (initiator, responder *gontcp2.Conn) {
+	t.Helper()
 
 	p := newNTCP2TestKeyPair(t)
+	if configure != nil {
+		configure(&p)
+	}
 
 	tcpLn, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
