@@ -13,7 +13,7 @@
         <a href="../index.html">go-i2p/go-i2p</a>
       </h2>
       <div class="repo-meta">
-        📝 2601 commits
+        📝 2613 commits
          • 📜 MIT License
       </div>
     </div>
@@ -84,6 +84,16 @@ frames, reports the true count of valid frames received in its termination block
 static keys as X25519 curve points, and persists its last-shutdown time. SSU2 now rejects out-of-session
 Peer Test and Hole Punch messages that are stale or missing a DateTime block, which closes an unbounded
 replay hole against unauthenticated traffic, and its termination handling delegates to go-noise.</p>
+
+<p>Because the inbound handshake now completes, NTCP2 bounds the work an unauthenticated peer can make the
+router do: concurrent inbound handshakes are capped transport-wide (default 64) and per source IP
+(default 8), and connections beyond either bound are closed at accept time rather than being given a
+handshake window. These are configurable as <code>transport.ntcp2_max_inflight_handshakes</code> and
+<code>transport.ntcp2_max_handshakes_per_source</code> (0 selects the default, a negative value disables the bound),
+and surfaced as the <code>transport.ntcp2.handshake.refusedGlobal</code>, <code>.refusedSource</code> and <code>.inflight</code> I2PControl
+stats. Note a behavior change: <code>transport.ntcp2_max_connections</code> was previously read but never applied, so
+the transport always ran with its built-in 512-session cap; it now governs, which lowers the effective
+default to the documented 200. Set it explicitly if a router needs more.</p>
 
 <p>I2CP asynchronous message statuses now carry the originating nonce instead of zero, a nonce of zero
 suppresses the status as specified, DestroySession answers with a DisconnectMessage and closes the
@@ -206,7 +216,7 @@ a session setup and any in-flight message, so it is worth fixing upstream.</p>
     </main>
     
     <footer class="page-footer">
-      <p>Generated on 2026-11-04 16:59:14 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
+      <p>Generated on 2026-11-04 18:02:34 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
     </footer>
   </div>
 </body>
