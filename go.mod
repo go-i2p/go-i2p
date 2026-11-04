@@ -9,7 +9,7 @@ require (
 	github.com/go-i2p/common v0.1.70002-0.20261013062227-da2d25f84cdb
 	github.com/go-i2p/crypto v0.1.70002-0.20261013135807-86425eac6c59
 	github.com/go-i2p/go-nat-listener v0.1.70002-0.20261015233531-1e3cbd432928
-	github.com/go-i2p/go-noise v0.1.70002-0.20261015134300-27d1af57427a
+	github.com/go-i2p/go-noise v0.1.70002-0.20261103170741-5353b1cb79f1
 	github.com/go-i2p/go-unzip v0.0.0-20260908193701-6ecb33740b07
 	github.com/go-i2p/i2p-control v0.1.70001
 	github.com/go-i2p/i2ptui v0.1.70001
@@ -86,6 +86,10 @@ retract (
 	v0.1.599
 )
 
+// github.com/go-i2p/go-noise is developed alongside this repo. The require line
+// above records the published version to use once the NTCP2 data-phase fixes
+// (the AEAD padding-block boundary resolution, see the finding 006 / H-017 work)
+// land in a tag; until then the checkout supplies it.
 replace github.com/go-i2p/go-noise => ../go-noise
 
 // github.com/go-i2p/noise is developed alongside this repo, like the sibling
