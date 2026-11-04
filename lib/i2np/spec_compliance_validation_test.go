@@ -1363,9 +1363,8 @@ func performFullHandshake(t *testing.T, sender, receiver *GarlicSessionManager,
 	_, _, sessionHash, err := receiver.DecryptGarlicMessage(nsMsg)
 	require.NoError(t, err)
 	require.NotNil(t, sessionHash)
-	nsrPayload, err := noiseratchet.NewPayloadBuilder().
-		AddBlock(noiseratchet.PayloadBlock{Type: noiseratchet.BlockGarlicClove, Data: []byte("nsr")}).
-		Build()
+	// BuildNSReplyPayload, not BuildNSPayload: a reply may not carry a DateTime block.
+	nsrPayload, err := noiseratchet.BuildNSReplyPayload([]byte("nsr"))
 	require.NoError(t, err)
 	nsrMsg, err := receiver.EncryptNewSessionReply(*sessionHash, nsrPayload)
 	require.NoError(t, err)
