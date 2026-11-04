@@ -22,6 +22,7 @@ package ntcp2
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"sync"
@@ -594,4 +595,141 @@ func TestParseBlockErrorIsTerminal(t *testing.T) {
 func TestBlockParseErrorInTerminationCases(t *testing.T) {
 	assert.Equal(t, byte(TerminationPayloadFormatError),
 		terminationReasonForReadError(WrapNTCP2Error(newBlockParseError("bad", nil), "reading message")))
+}
+
+// TestWireTeardownCompletesPromptly bounds how long a peer-triggered teardown
+// takes to release the socket, the registry entry and the session slot.
+//
+// Finding 006 was graded High because a dead session was never released at all:
+// the link stayed dead until the router restarted. Phase 3 measured a recovery
+// window of one to five minutes, which came from the router's periodic redial
+// round, not from the teardown — the session itself was still registered and its
+// descriptor still open during that whole time.
+//
+// With the teardown driven from setError, the release is immediate, so the
+// recovery window is the redial scheduling delay alone. Pinning it here keeps
+// the "promptly" part of that claim honest: a regression that reintroduces a
+// blocking step in Close (a parked write, a joined worker that never exits)
+// would push the recovery back towards minutes and is caught by this bound.
+func TestWireTeardownCompletesPromptly(t *testing.T) {
+	for _, mode := range []string{"peer-tcp-close", "malformed-block"} {
+		t.Run(mode, func(t *testing.T) {
+			ic, rc := wireHandshakePair(t)
+
+			cleaned := make(chan time.Time, 1)
+			session := NewNTCP2Session(rc, context.Background(), logger.WithField("test", t.Name()))
+			session.SetCleanupCallback(func() {
+				select {
+				case cleaned <- time.Now():
+				default:
+				}
+			})
+
+			// Let the receive worker park in Read before the peer acts, so the
+			// teardown is driven by a real blocked reader rather than a race.
+			time.Sleep(100 * time.Millisecond)
+
+			start := time.Now()
+			if mode == "peer-tcp-close" {
+				require.NoError(t, ic.Close())
+			} else {
+				_, err := ic.Write([]byte{0x03, 0x00, 0x32, 0x01, 0x02})
+				require.NoError(t, err)
+			}
+
+			select {
+			case done := <-cleaned:
+				elapsed := done.Sub(start)
+				// The bound sits above the internal termination-write timeout
+				// (ntcp2TerminationWriteTimeout), which a peer that has already
+				// gone can consume in full: the block is best-effort, so the
+				// teardown waits for TCP to give up on it before closing the
+				// socket. Measured here at ~17 ms to ~1.6 s depending on whether
+				// that write is attempted at all. Anything approaching minutes
+				// means a step of Close has started blocking again.
+				assert.Less(t, elapsed, 5*time.Second,
+					"teardown took %s: the socket, registry entry and slot stay held while a peer-triggered close is stuck", elapsed)
+				t.Logf("%s: full teardown in %s", mode, elapsed)
+			case <-time.After(10 * time.Second):
+				require.FailNow(t, "teardown never completed: the session leaked its socket and slot")
+			}
+
+			assert.False(t, session.IsAlive())
+			_ = session.Close()
+			_ = ic.Close()
+		})
+	}
+}
+
+// TestSlotExhaustionErrorStormFreesSlots is the availability question the
+// finding left open: can a peer drive enough sessions into the error path that
+// the transport's session limit fills with dead entries and no new session can
+// open?
+//
+// Before the fix this was a permanent state — every errored session kept its
+// registry entry, so 512 of them (the default max) ended NTCP2 for good. Now
+// each teardown releases its slot as part of Close, so the question becomes
+// whether the release keeps up with the errors.
+//
+// The test fills a small transport to its limit with live sessions, kills them
+// all through the real error path (a failing read), and asserts the count
+// returns to zero and a new session can be registered in the freed capacity.
+func TestSlotExhaustionErrorStormFreesSlots(t *testing.T) {
+	const peerCount = 32
+
+	tr := newNilListenerTestTransport(t, peerCount)
+	require.Equal(t, peerCount, tr.config.Load().GetMaxSessions(),
+		"precondition: the transport limit must equal the number of peers under test")
+
+	// Fill the transport with live sessions first, so the "at the limit" state
+	// is observed before any error happens rather than racing one.
+	peers := make([]data.Hash, peerCount)
+	conns := make([]*frameSource, peerCount)
+	for i := range peers {
+		peers[i] = newTestPeerHash(fmt.Sprintf("slot-storm-peer-%04d", i))
+		conns[i] = newFrameSource()
+
+		session := NewNTCP2SessionDeferred(conns[i], tr.ctx, logger.WithField("test", t.Name()))
+		tr.sessionRegistry.StoreWithCount(peers[i], session)
+		session.SetCleanupCallback(func() { tr.removeSessionIfCurrent(peers[i], session) })
+		session.StartWorkers()
+	}
+
+	require.Equal(t, int32(peerCount), tr.GetSessionCount(),
+		"precondition: the transport must be at its session limit")
+
+	// At the limit, a new peer cannot be admitted. With the old behaviour this
+	// state was permanent: every errored session kept its entry.
+	require.Error(t, tr.checkSessionLimit(),
+		"precondition: admission must be refused at the limit")
+
+	// Now drive every session through the real error path: one AEAD frame whose
+	// only block claims 50 bytes and carries 2, so ParseBlocks fails.
+	malformed := []byte{0x03, 0x00, 0x32, 0x01, 0x02}
+	for _, conn := range conns {
+		conn.queue(malformed)
+	}
+
+	waitUntil(t, 20*time.Second, "the error storm to release every slot", func() bool {
+		return tr.GetSessionCount() == 0
+	})
+
+	// Capacity is available again, so the router can serve new peers.
+	require.NoError(t, tr.checkSessionLimit(),
+		"slot exhaustion must not persist once errored sessions tear down")
+
+	// And the freed capacity is usable: register a session into it.
+	replacement := NewNTCP2SessionDeferred(newFrameSource(), tr.ctx, logger.WithField("test", t.Name()))
+	replacementHash := newTestPeerHash("slot-storm-replacement")
+	tr.sessionRegistry.StoreWithCount(replacementHash, replacement)
+	replacement.SetCleanupCallback(func() { tr.removeSessionIfCurrent(replacementHash, replacement) })
+	replacement.StartWorkers()
+
+	assert.True(t, replacement.IsAlive(), "a session registered after the storm must be live")
+	assert.Equal(t, int32(1), tr.GetSessionCount(), "the new session occupies exactly one slot")
+
+	_ = replacement.Close()
+	waitUntil(t, 5*time.Second, "the post-storm session to release its slot", func() bool {
+		return tr.GetSessionCount() == 0
+	})
 }
