@@ -36,7 +36,7 @@ func TestTryParseAndAppendRecord_RejectsForeignRecord(t *testing.T) {
 	}
 
 	var records []BuildRequestRecord
-	processor.tryParseAndAppendRecord(&records, foreign, 0)
+	processor.tryParseAndAppendRecord(&records, foreign, 0, 1)
 	assert.Empty(t, records, "record with a foreign toPeer prefix must be dropped")
 
 	// A record addressed to us but not validly encrypted must also be dropped.
@@ -45,7 +45,7 @@ func TestTryParseAndAppendRecord_RejectsForeignRecord(t *testing.T) {
 	for i := 16; i < len(mine); i++ {
 		mine[i] = byte(i * 7)
 	}
-	processor.tryParseAndAppendRecord(&records, mine, 0)
+	processor.tryParseAndAppendRecord(&records, mine, 0, 1)
 	assert.Empty(t, records, "unauthenticated record addressed to us must be dropped")
 
 	assert.Equal(t, 0, mockParticipant.getRegisteredCount(),
