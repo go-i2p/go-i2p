@@ -527,7 +527,6 @@ func (p *MessageProcessor) processMessageWithDepth(msg Message, depth int) error
 	// without holding the lock after the snapshot.
 	p.mu.RLock()
 	ev := p.expirationValidator
-	//p.mu.RUnlock()
 
 	log.WithFields(logger.Fields{
 		"at":           "ProcessMessage",
