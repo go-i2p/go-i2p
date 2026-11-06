@@ -2,6 +2,7 @@ package i2pcontrol
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -560,5 +561,84 @@ func BenchmarkChangePassword(b *testing.B) {
 		am.ChangePassword("newpassword")
 		// Restore original password for next iteration
 		am.ChangePassword("password")
+	}
+}
+
+// TestAuthLockoutResetsOnExpiry verifies that once a lockout period expires,
+// the failed-attempt counter restarts from zero: a single periodic bad
+// attempt can no longer hold every client locked out indefinitely (it would
+// have to accumulate maxFailedAttempts fresh failures per window).
+func TestAuthLockoutResetsOnExpiry(t *testing.T) {
+	am, err := NewAuthManager("correctpassword")
+	require.NoError(t, err)
+
+	// Trip the lockout with consecutive failures.
+	for i := 0; i < maxFailedAttempts; i++ {
+		_, _ = am.Authenticate("wrong", 10*time.Minute)
+	}
+	// While locked out, even the correct password is rejected.
+	_, err = am.Authenticate("correctpassword", 10*time.Minute)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "locked out")
+
+	// Expire the lockout.
+	am.rateLimitMu.Lock()
+	am.rateLimits[""].lockoutUntil = time.Now().Add(-time.Second)
+	am.rateLimitMu.Unlock()
+
+	// One failure restarts the counter from zero (no immediate re-lockout).
+	_, err = am.Authenticate("wrong", 10*time.Minute)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid password")
+
+	am.rateLimitMu.Lock()
+	assert.Equal(t, 1, am.rateLimits[""].failedAttempts, "counter must restart from zero after lockout expiry")
+	am.rateLimitMu.Unlock()
+
+	// And legitimate clients can authenticate again.
+	token, err := am.Authenticate("correctpassword", 10*time.Minute)
+	require.NoError(t, err)
+	assert.True(t, am.ValidateToken(token))
+}
+
+func TestAuthRateLimitCleanup(t *testing.T) {
+	am, err := NewAuthManager("correctpassword")
+	require.NoError(t, err)
+
+	now := time.Now()
+	am.rateLimits["expired"] = &authRateLimit{
+		lastFailedAttempt: now.Add(-2 * failedAttemptLockout),
+		lockoutUntil:      now.Add(-failedAttemptLockout),
+	}
+	am.rateLimits["active"] = &authRateLimit{
+		lastFailedAttempt: now,
+		lockoutUntil:      now.Add(failedAttemptLockout),
+	}
+	am.CleanupExpiredTokens()
+
+	assert.NotContains(t, am.rateLimits, "expired")
+	assert.Contains(t, am.rateLimits, "active")
+}
+
+func TestConcurrentAuthRateLimitsBySource(t *testing.T) {
+	am, err := NewAuthManager("correctpassword")
+	require.NoError(t, err)
+
+	const sources = 20
+	var wg sync.WaitGroup
+	for i := 0; i < sources; i++ {
+		wg.Add(1)
+		go func(source string) {
+			defer wg.Done()
+			for attempt := 0; attempt < 5; attempt++ {
+				_, _ = am.authenticateFromSource("wrong", time.Minute, source)
+			}
+		}(fmt.Sprint(i))
+	}
+	wg.Wait()
+
+	require.Len(t, am.rateLimits, sources)
+	for _, limit := range am.rateLimits {
+		assert.Equal(t, 5, limit.failedAttempts)
 	}
 }

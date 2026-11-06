@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -1260,7 +1261,8 @@ func buildResultWithSettingsSaved(result map[string]interface{}, settingsSaved b
 //
 //	{"Set": {"i2p.router.some.key": "value", ...}}
 //
-// Response always returns the current value of each key requested or set:
+// Responses return current values, except for passwords and their parent
+// objects. Password writes are returned as null.
 //
 //	{"i2p.router.some.key": "current_value", ...}
 //
@@ -1314,7 +1316,11 @@ func (h *AdvancedSettingsHandler) applySettingChanges(setMap map[string]interfac
 	for key, val := range setMap {
 		viperKey := advancedSettingViperKey(key)
 		viper.Set(viperKey, val)
-		result[key] = viper.Get(viperKey)
+		if isRedactedAdvancedSettingKey(viperKey) {
+			result[key] = nil
+		} else {
+			result[key] = viper.Get(viperKey)
+		}
 	}
 	return result
 }
@@ -1326,11 +1332,22 @@ func (h *AdvancedSettingsHandler) writeConfigFile() {
 	}
 }
 
+// Viper keys are case-insensitive, and parent keys may contain passwords.
+func isRedactedAdvancedSettingKey(key string) bool {
+	key = strings.ToLower(key)
+	return key == "i2pcontrol" || key == "i2cp" ||
+		key == "i2pcontrol.password" || strings.HasPrefix(key, "i2pcontrol.password.") ||
+		key == "i2cp.password" || strings.HasPrefix(key, "i2cp.password.")
+}
+
 // handleSettingsRead processes a read operation for AdvancedSettings.
 func (h *AdvancedSettingsHandler) handleSettingsRead(req map[string]interface{}) map[string]interface{} {
 	result := make(map[string]interface{})
 	for key := range req {
 		viperKey := advancedSettingViperKey(key)
+		if isRedactedAdvancedSettingKey(viperKey) {
+			continue
+		}
 		result[key] = viper.Get(viperKey)
 	}
 	return result

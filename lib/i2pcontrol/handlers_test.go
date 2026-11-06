@@ -4,11 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/go-i2p/go-i2p/lib/config"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -1013,6 +1016,95 @@ func TestAdvancedSettingsHandler_WriteWrapsInSetKey(t *testing.T) {
 	require.True(t, ok, "result should be map[string]interface{}")
 	_, hasSet := outer["Set"]
 	assert.True(t, hasSet, "write response must contain top-level 'Set' key per spec")
+}
+
+func TestAdvancedSettingsWriteAndRedaction(t *testing.T) {
+	handler := NewAdvancedSettingsHandler()
+	keys := []string{
+		"i2pcontrol.address",
+		"i2pcontrol.allow_plaintext_non_loopback",
+		"i2cp.password",
+		"i2pcontrol.enabled",
+	}
+	old := make(map[string]interface{}, len(keys))
+	for _, key := range keys {
+		old[key] = viper.Get(key)
+	}
+	oldConfigFile := viper.ConfigFileUsed()
+	configFile := filepath.Join(t.TempDir(), "config.yaml")
+	require.NoError(t, os.WriteFile(configFile, []byte("{}\n"), 0600))
+	viper.SetConfigFile(configFile)
+	t.Cleanup(func() {
+		for key, val := range old {
+			viper.Set(key, val)
+		}
+		viper.SetConfigFile(oldConfigFile)
+	})
+
+	params := json.RawMessage(`{"Set": {
+		"i2pcontrol.address": "127.0.0.1:7651",
+		"i2pcontrol.allow_plaintext_non_loopback": true,
+		"I2CP.PASSWORD": "test-secret",
+		"i2pcontrol.enabled": false
+	}}`)
+	result, err := handler.Handle(context.Background(), params)
+	require.NoError(t, err)
+
+	outer, ok := result.(map[string]interface{})
+	require.True(t, ok)
+	set, ok := outer["Set"].(map[string]interface{})
+	require.True(t, ok)
+
+	assert.Equal(t, "127.0.0.1:7651", set["i2pcontrol.address"])
+	assert.Equal(t, true, set["i2pcontrol.allow_plaintext_non_loopback"])
+	assert.Contains(t, set, "I2CP.PASSWORD")
+	assert.Nil(t, set["I2CP.PASSWORD"])
+	assert.Equal(t, false, set["i2pcontrol.enabled"])
+
+	persisted := viper.New()
+	persisted.SetConfigFile(configFile)
+	require.NoError(t, persisted.ReadInConfig())
+	assert.Equal(t, "127.0.0.1:7651", persisted.GetString("i2pcontrol.address"))
+	assert.True(t, persisted.GetBool("i2pcontrol.allow_plaintext_non_loopback"))
+	assert.Equal(t, "test-secret", persisted.GetString("i2cp.password"))
+
+	reads := handler.handleSettingsRead(map[string]interface{}{
+		"I2CP.PASSWORD": nil, "i2cp": nil, "I2PCONTROL": nil,
+		"i2pcontrol.allow_plaintext_non_loopback": nil,
+	})
+	assert.NotContains(t, reads, "I2CP.PASSWORD")
+	assert.NotContains(t, reads, "i2cp")
+	assert.NotContains(t, reads, "I2PCONTROL")
+	assert.Equal(t, true, reads["i2pcontrol.allow_plaintext_non_loopback"])
+
+	oldI2CP := viper.Get("i2cp")
+	t.Cleanup(func() { viper.Set("i2cp", oldI2CP) })
+	parentWrite := handler.applySettingChanges(map[string]interface{}{
+		"I2CP": map[string]interface{}{"password": "nested-test-secret"},
+	})
+	assert.Contains(t, parentWrite, "I2CP")
+	assert.Nil(t, parentWrite["I2CP"])
+	assert.Equal(t, "nested-test-secret", viper.GetString("i2cp.password"))
+}
+
+func TestRedactedAdvancedSettingKeys(t *testing.T) {
+	for _, tc := range []struct {
+		key      string
+		redacted bool
+	}{
+		{"I2PCONTROL", true},
+		{"i2pcontrol.PASSWORD", true},
+		{"i2pcontrol.password.nested", true},
+		{"I2CP", true},
+		{"i2cp.PASSWORD", true},
+		{"i2cp.password.nested", true},
+		{"i2pcontrol.allow_default_password_non_loopback", false},
+		{"i2cp.username", false},
+	} {
+		t.Run(tc.key, func(t *testing.T) {
+			assert.Equal(t, tc.redacted, isRedactedAdvancedSettingKey(tc.key))
+		})
+	}
 }
 
 // TestI2PControlHandler_PortAndAddressNullRead verifies that null-value requests

@@ -9,7 +9,7 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/url"
+	"net/netip"
 	"sort"
 	"strings"
 	"sync"
@@ -36,6 +36,8 @@ type Server struct {
 	wg          sync.WaitGroup
 	stopOnce    sync.Once
 }
+
+type authSourceContextKey struct{}
 
 // NewServer creates a new I2PControl server with the given configuration and statistics provider.
 // It initializes authentication, registers all RPC method handlers, and prepares the HTTP server.
@@ -166,7 +168,8 @@ func newAuthenticateHandler(authManager *AuthManager, cfg *config.I2PControlConf
 			return nil, err
 		}
 
-		token, err := performAuthentication(authManager, req.Password, cfg)
+		source, _ := ctx.Value(authSourceContextKey{}).(string)
+		token, err := performAuthentication(authManager, req.Password, cfg, source)
 		if err != nil {
 			return nil, err
 		}
@@ -206,8 +209,8 @@ func validateAuthenticateAPIVersion(api *int) error {
 }
 
 // performAuthentication attempts to authenticate with the password and generate a token.
-func performAuthentication(authManager *AuthManager, password string, cfg *config.I2PControlConfig) (string, error) {
-	token, err := authManager.Authenticate(password, cfg.TokenExpiration)
+func performAuthentication(authManager *AuthManager, password string, cfg *config.I2PControlConfig, source string) (string, error) {
+	token, err := authManager.authenticateFromSource(password, cfg.TokenExpiration, source)
 	if err != nil {
 		if errors.Is(err, errTokenEntropyFailure) {
 			log.WithField("reason", err.Error()).Error("i2pcontrol: failed to generate authentication token")
@@ -489,6 +492,13 @@ func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate Host/Origin before anything else: a request that is not
+	// addressed to this server must not reach parsing or authentication
+	if rpcErr := s.validateHostAndOrigin(r); rpcErr != nil {
+		s.writeErrorResponse(w, nil, rpcErr)
+		return
+	}
+
 	req, rpcErr := s.parseAndValidateRequest(r)
 	if rpcErr != nil {
 		s.writeErrorResponse(w, nil, rpcErr)
@@ -505,6 +515,36 @@ func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.handleValidatedRequest(w, r, req)
+}
+
+// validateHostAndOrigin ensures both the host and origin are legitimate.
+func (s *Server) validateHostAndOrigin(r *http.Request) *RPCError {
+	host, port, err := net.SplitHostPort(r.Host) // strips [..] for IPv6
+	if err != nil {
+		return NewRPCError(ErrCodeInvalidRequest, fmt.Sprintf("Invalid Host %q", r.Host))
+	}
+
+	bindHost, bindPort, err := net.SplitHostPort(s.config.Address)
+	ip := net.ParseIP(host)
+	bindIP := net.ParseIP(bindHost)
+	hostOK := strings.EqualFold(host, bindHost) || strings.EqualFold(host, "localhost") ||
+		(ip != nil && (ip.Equal(net.ParseIP("127.0.0.1")) || ip.Equal(net.IPv6loopback) ||
+			(bindIP != nil && ip.Equal(bindIP)) || isWildcardOrUnspecifiedHost(bindHost)))
+
+	if err != nil || port != bindPort || !hostOK {
+		return NewRPCError(ErrCodeInvalidRequest, fmt.Sprintf("Host %q is not allowed", r.Host))
+	}
+
+	// if an Origin is present it must be allowlisted.
+	if origin := r.Header.Get("Origin"); origin != "" {
+		for _, a := range s.corsAllowlist() {
+			if strings.EqualFold(origin, a) {
+				return nil
+			}
+		}
+		return NewRPCError(ErrCodeInvalidRequest, fmt.Sprintf("Origin %q is not allowed", origin))
+	}
+	return nil
 }
 
 // parseAndValidateRequest parses the request body and validates it.
@@ -529,7 +569,15 @@ func (s *Server) parseAndValidateRequest(r *http.Request) (*Request, *RPCError) 
 
 // handleValidatedRequest processes a validated request and writes the response.
 func (s *Server) handleValidatedRequest(w http.ResponseWriter, r *http.Request, req *Request) {
-	resp := s.registry.HandleParsedRequest(r.Context(), req)
+	// Use the connection's peer address, not client-supplied proxy headers.
+	var source string
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		if ip, err := netip.ParseAddr(host); err == nil {
+			source = ip.WithZone("").Unmap().String()
+		}
+	}
+	ctx := context.WithValue(r.Context(), authSourceContextKey{}, source)
+	resp := s.registry.HandleParsedRequest(ctx, req)
 	// JSON-RPC 2.0 notifications (requests with no "id") require no response.
 	// HandleParsedRequest returns nil for notifications.
 	if resp == nil {
@@ -544,8 +592,7 @@ func (s *Server) handleValidatedRequest(w http.ResponseWriter, r *http.Request, 
 // preventing cross-site request exposure from arbitrary origins.
 // Also sets security headers (X-Content-Type-Options, Strict-Transport-Security).
 func (s *Server) setCORSHeaders(w http.ResponseWriter, r *http.Request) {
-	origin := s.corsOriginForRequest(r)
-	w.Header().Set("Access-Control-Allow-Origin", origin)
+	s.corsOriginForRequest(w, r)
 	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 	w.Header().Set("Vary", "Origin")
@@ -557,29 +604,23 @@ func (s *Server) setCORSHeaders(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// corsOriginForRequest derives a usable CORS origin for this request.
-// When the configured bind host is wildcard/unspecified, prefer request host
-// to avoid emitting unusable origins like "http://0.0.0.0:7650".
-func (s *Server) corsOriginForRequest(r *http.Request) string {
-	allowlist := s.corsAllowlist()
-	defaultOrigin := allowlist[0]
+// corsOriginForRequest sets Access-Control-Allow-Origin only when the request
+// carries an Origin header that is in the allowlist. A foreign or absent
+// Origin receives no ACAO header, so browsers block cross-origin reads.
+// Server-side rejection of foreign Host/Origin requests is enforced by
+// validateHostAndOrigin; this function only governs the headers browsers see.
+func (s *Server) corsOriginForRequest(w http.ResponseWriter, r *http.Request) {
 	reqOrigin := r.Header.Get("Origin")
 	if reqOrigin == "" {
-		return defaultOrigin
+		return
 	}
 
-	parsedOrigin, err := url.Parse(reqOrigin)
-	if err != nil || parsedOrigin.Host == "" {
-		return defaultOrigin
-	}
-
-	for _, allowed := range allowlist {
+	for _, allowed := range s.corsAllowlist() {
 		if strings.EqualFold(reqOrigin, allowed) {
-			return reqOrigin
+			w.Header().Set("Access-Control-Allow-Origin", reqOrigin)
+			return
 		}
 	}
-
-	return defaultOrigin
 }
 
 func (s *Server) corsAllowlist() []string {
