@@ -72,7 +72,7 @@ func TestBuildReplyForwarderInterface(t *testing.T) {
 func TestProcessSingleBuildRecord_AcceptedRequest(t *testing.T) {
 	processor, mockForwarder, mockParticipant := setupBuildReplyTest(t, true)
 	crypto := newTestSTBMSlotCrypto()
-	processor.stbmSlotCrypto = map[int]stbmSlotCrypto{0: crypto}
+	processor.stbmSlotCrypto = map[stbmSlotKey]stbmSlotCrypto{{index: 0, messageID: 1001}: crypto}
 
 	record := processDirectBuildRecord(t, processor, 1001)
 
@@ -98,7 +98,7 @@ func TestProcessSingleBuildRecord_RejectedRequest(t *testing.T) {
 	processor, mockForwarder, mockParticipant := setupBuildReplyTest(t, false)
 	mockParticipant.rejectCode = TunnelBuildReplyTransientOverload
 	mockParticipant.rejectReason = "router overloaded"
-	processor.stbmSlotCrypto = map[int]stbmSlotCrypto{0: newTestSTBMSlotCrypto()}
+	processor.stbmSlotCrypto = map[stbmSlotKey]stbmSlotCrypto{{index: 0, messageID: 1002}: newTestSTBMSlotCrypto()}
 
 	processDirectBuildRecord(t, processor, 1002)
 
@@ -112,7 +112,7 @@ func TestProcessSingleBuildRecord_RejectedRequest(t *testing.T) {
 // through the tunnel instead of directly to the next router.
 func TestProcessSingleBuildRecord_TunnelForwarding(t *testing.T) {
 	processor, mockForwarder, _ := setupBuildReplyTest(t, true)
-	processor.stbmSlotCrypto = map[int]stbmSlotCrypto{0: newTestSTBMSlotCrypto()}
+	processor.stbmSlotCrypto = map[stbmSlotKey]stbmSlotCrypto{{index: 0, messageID: 1003}: newTestSTBMSlotCrypto()}
 
 	record := createTestBuildRequestRecord(t)
 	messageID := 1003
@@ -137,7 +137,7 @@ func TestProcessSingleBuildRecord_NoForwarder(t *testing.T) {
 	processor := NewMessageProcessor()
 	mockParticipant := newMockParticipantManager(true)
 	processor.SetParticipantManager(mockParticipant)
-	processor.stbmSlotCrypto = map[int]stbmSlotCrypto{0: newTestSTBMSlotCrypto()}
+	processor.stbmSlotCrypto = map[stbmSlotKey]stbmSlotCrypto{{index: 0, messageID: 1004}: newTestSTBMSlotCrypto()}
 	// Note: No SetBuildReplyForwarder called
 
 	record := createTestBuildRequestRecord(t)
@@ -153,7 +153,7 @@ func TestProcessSingleBuildRecord_NoForwarder(t *testing.T) {
 func TestGenerateAndSendBuildReply_EncryptionWorks(t *testing.T) {
 	processor, mockForwarder, _ := setupBuildReplyTest(t, true)
 	crypto := newTestSTBMSlotCrypto()
-	processor.stbmSlotCrypto = map[int]stbmSlotCrypto{0: crypto}
+	processor.stbmSlotCrypto = map[stbmSlotKey]stbmSlotCrypto{{index: 0, messageID: 1005}: crypto}
 
 	record := createTestBuildRequestRecord(t)
 	record.NextTunnel = 0 // Force direct router forwarding
@@ -186,7 +186,7 @@ func TestGenerateAndSendBuildReply_AllReplyCodes(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			processor, mockForwarder, _ := setupBuildReplyTest(t, true)
 			crypto := newTestSTBMSlotCrypto()
-			processor.stbmSlotCrypto = map[int]stbmSlotCrypto{0: crypto}
+			processor.stbmSlotCrypto = map[stbmSlotKey]stbmSlotCrypto{{index: 0, messageID: 1}: crypto}
 
 			record := createTestBuildRequestRecord(t)
 			record.NextTunnel = 0
@@ -243,9 +243,9 @@ func TestMultipleBuildRecords_Processing(t *testing.T) {
 	var ourHash common.Hash
 	copy(ourHash[:], []byte("test-router-hash-32-bytes-long!"))
 	processor.SetOurRouterHash(ourHash)
-	processor.stbmSlotCrypto = map[int]stbmSlotCrypto{}
+	processor.stbmSlotCrypto = map[stbmSlotKey]stbmSlotCrypto{}
 	for i := 0; i < 5; i++ {
-		processor.stbmSlotCrypto[i] = newTestSTBMSlotCrypto()
+		processor.stbmSlotCrypto[stbmSlotKey{index: i, messageID: 2000}] = newTestSTBMSlotCrypto()
 	}
 
 	records := make([]BuildRequestRecord, 5)
@@ -298,7 +298,7 @@ func TestSetBuildReplyForwarder(t *testing.T) {
 func TestProcessSingleBuildRecord_RegisterParticipantFailure(t *testing.T) {
 	processor, mockForwarder, mockParticipant := setupBuildReplyTest(t, true)
 	mockParticipant.registerErr = fmt.Errorf("participant slots exhausted")
-	processor.stbmSlotCrypto = map[int]stbmSlotCrypto{0: newTestSTBMSlotCrypto()}
+	processor.stbmSlotCrypto = map[stbmSlotKey]stbmSlotCrypto{{index: 0, messageID: 3001}: newTestSTBMSlotCrypto()}
 
 	processDirectBuildRecord(t, processor, 3001)
 

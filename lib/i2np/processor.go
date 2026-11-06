@@ -260,29 +260,35 @@ type stbmSlotCrypto struct {
 	noiseHash [32]byte
 }
 
+// ensures two concurrent ID's do not argue / overlap
+type stbmSlotKey struct {
+	index     int
+	messageID int
+}
+
 // MessageProcessor routes inbound I2NP messages to type-specific handlers and
 // pluggable subsystem interfaces.
 type MessageProcessor struct {
 	mu                    sync.RWMutex
 	factory               *MessageFactory
-	garlicSessions        GarlicMessageDecryptor    // Interface for garlic message decryption
-	cloveForwarder        GarlicCloveForwarder      // Optional delegate for non-LOCAL garlic clove delivery
-	dbManager             *DatabaseManager          // Optional database manager for DatabaseLookup messages
-	expirationValidator   *ExpirationValidator      // Validator for checking message expiration
-	replayCache           *messageReplayCache       // H-NEW-4: bounded replay cache keyed by message ID
-	participantManager    ParticipantManager        // Optional participant manager for tunnel build requests
-	buildReplyForwarder   BuildReplyForwarder       // Optional forwarder for tunnel build replies
-	tunnelGatewayHandler  TunnelGatewayHandler      // Optional handler for tunnel gateway messages
-	tunnelDataHandler     TunnelDataHandler         // Optional handler for inbound tunnel data messages
-	searchReplyHandler    SearchReplyHandler        // Optional handler for DatabaseSearchReply suggestions
-	lookupReplyDeliverer  LookupReplyDeliverer      // Optional deliverer correlating DB replies to direct lookups
-	dataMessageHandler    DataMessageHandler        // Optional handler for Data message payloads
-	deliveryStatusHandler DeliveryStatusHandler     // Optional handler for delivery status confirmations
-	floodfillReplicator   FloodfillReplicator       // Optional floodfill re-propagation for accepted DatabaseStores
-	buildReplyProcessor   TunnelBuildReplyProcessor // Optional processor for tunnel build reply messages
-	ourRouterHash         common.Hash               // Our router identity hash for filtering build records
-	ourPrivateKey         []byte                    // Our router's static X25519 private key for build record decryption
-	stbmSlotCrypto        map[int]stbmSlotCrypto    // Per-slot STBM crypto state (valid during one message processing call)
+	garlicSessions        GarlicMessageDecryptor         // Interface for garlic message decryption
+	cloveForwarder        GarlicCloveForwarder           // Optional delegate for non-LOCAL garlic clove delivery
+	dbManager             *DatabaseManager               // Optional database manager for DatabaseLookup messages
+	expirationValidator   *ExpirationValidator           // Validator for checking message expiration
+	replayCache           *messageReplayCache            // H-NEW-4: bounded replay cache keyed by message ID
+	participantManager    ParticipantManager             // Optional participant manager for tunnel build requests
+	buildReplyForwarder   BuildReplyForwarder            // Optional forwarder for tunnel build replies
+	tunnelGatewayHandler  TunnelGatewayHandler           // Optional handler for tunnel gateway messages
+	tunnelDataHandler     TunnelDataHandler              // Optional handler for inbound tunnel data messages
+	searchReplyHandler    SearchReplyHandler             // Optional handler for DatabaseSearchReply suggestions
+	lookupReplyDeliverer  LookupReplyDeliverer           // Optional deliverer correlating DB replies to direct lookups
+	dataMessageHandler    DataMessageHandler             // Optional handler for Data message payloads
+	deliveryStatusHandler DeliveryStatusHandler          // Optional handler for delivery status confirmations
+	floodfillReplicator   FloodfillReplicator            // Optional floodfill re-propagation for accepted DatabaseStores
+	buildReplyProcessor   TunnelBuildReplyProcessor      // Optional processor for tunnel build reply messages
+	ourRouterHash         common.Hash                    // Our router identity hash for filtering build records
+	ourPrivateKey         []byte                         // Our router's static X25519 private key for build record decryption
+	stbmSlotCrypto        map[stbmSlotKey]stbmSlotCrypto // STBM reply crypto keyed by {arriving message ID, wire slot}; written at record decryption, deleted at reply generation
 }
 
 // NewMessageProcessor creates a new message processor with default
@@ -521,7 +527,6 @@ func (p *MessageProcessor) processMessageWithDepth(msg Message, depth int) error
 	// without holding the lock after the snapshot.
 	p.mu.RLock()
 	ev := p.expirationValidator
-	p.mu.RUnlock()
 
 	log.WithFields(logger.Fields{
 		"at":           "ProcessMessage",
@@ -539,6 +544,8 @@ func (p *MessageProcessor) processMessageWithDepth(msg Message, depth int) error
 				"expiration": expiration.UTC(),
 				"now":        ev.now().UTC(),
 			}).Warn("rejecting expired message")
+			p.mu.RUnlock()
+
 			return err
 		}
 	}
@@ -555,11 +562,13 @@ func (p *MessageProcessor) processMessageWithDepth(msg Message, depth int) error
 				"message_type": messageType,
 				"message_id":   id,
 			}).Debug("dropping replayed I2NP message")
+			p.mu.RUnlock()
+
 			return nil
 		}
 		p.replayCache.Mark(id)
 	}
-
+	p.mu.RUnlock()
 	// Dispatch without holding the lock so that garlic LOCAL delivery
 	// cloves can safely re-enter ProcessMessage.
 	return p.processMessageDispatch(msg, depth)
