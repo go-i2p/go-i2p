@@ -725,13 +725,12 @@ func (p *MessageProcessor) handleRejectedBuildRecord(messageID, index int, recor
 // key are returned; the slot index is needed downstream because a relay hop's
 // own slot is NOT necessarily position 0 of the filtered list, and the reply /
 // forward transform must write and obfuscate by the true slot index.
-func (p *MessageProcessor) parseTunnelBuildRecords(data []byte) ([]BuildRequestRecord, []int, error) {
+func (p *MessageProcessor) parseTunnelBuildRecords(data []byte, messageID int) ([]BuildRequestRecord, []int, error) {
 	recordCount, err := p.validateAndGetRecordCount(data)
 	if err != nil {
 		return nil, nil, err
 	}
-
-	return p.parseRecordsFromData(data, recordCount, ShortBuildRecordSize)
+	return p.parseRecordsFromData(data, recordCount, ShortBuildRecordSize, messageID)
 }
 
 // validateAndGetRecordCount validates the data and extracts the record count.
@@ -743,6 +742,10 @@ func (p *MessageProcessor) validateAndGetRecordCount(data []byte) (int, error) {
 	recordCount := int(data[0])
 	if recordCount < 1 || recordCount > 8 {
 		return 0, oops.Errorf("invalid record count: %d (must be 1-8)", recordCount)
+	}
+
+	if len(data) < 1+recordCount*ShortBuildRecordSize {
+		return 0, oops.Errorf("insufficient data for %d records", recordCount)
 	}
 
 	return recordCount, nil
