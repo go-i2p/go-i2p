@@ -73,7 +73,7 @@ func newResolverFromData(data []byte) (*HostsTxtResolver, error) {
 		if err != nil {
 			log.WithFields(logger.Fields{
 				"at":    "naming.newResolverFromData",
-				"line":  line[:min(len(line), 40)],
+				"line":  line[:min(len(line), maxLoggedHostsLineLength)],
 				"error": err.Error(),
 			}).Warn("skipping_invalid_hosts_line")
 			continue
@@ -182,7 +182,7 @@ func (r *HostsTxtResolver) addHostsData(data []byte, source string) error {
 			log.WithFields(logger.Fields{
 				"at":     "naming.addHostsData",
 				"source": source,
-				"line":   line[:min(len(line), 40)],
+				"line":   line[:min(len(line), maxLoggedHostsLineLength)],
 				"error":  err.Error(),
 			}).Warn("skipping_invalid_hosts_line")
 			continue
@@ -294,8 +294,8 @@ func decodeB32Address(address string) ([]byte, error) {
 	address = strings.TrimSuffix(address, ".b32.i2p")
 
 	// B32 addresses are 52 characters (256 bits in base32)
-	if len(address) != 52 {
-		return nil, oops.Errorf("invalid b32 address length: %d (expected 52)", len(address))
+	if len(address) != B32AddressLength {
+		return nil, oops.Errorf("invalid b32 address length: %d (expected %d)", len(address), B32AddressLength)
 	}
 
 	hashBytes, err := b32Encoding.DecodeString(address)
@@ -303,8 +303,8 @@ func decodeB32Address(address string) ([]byte, error) {
 		return nil, oops.Wrapf(err, "invalid b32 encoding")
 	}
 
-	if len(hashBytes) != 32 {
-		return nil, oops.Errorf("decoded b32 hash is %d bytes (expected 32)", len(hashBytes))
+	if len(hashBytes) != B32HashSize {
+		return nil, oops.Errorf("decoded b32 hash is %d bytes (expected %d)", len(hashBytes), B32HashSize)
 	}
 
 	return hashBytes, nil

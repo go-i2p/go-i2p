@@ -249,8 +249,8 @@ func loadExistingKey(keyData []byte) (types.PrivateKey, error) {
 	// Ed25519 private keys are 32 bytes (seed) or 64 bytes (seed+public).
 	// Reject anything else to prevent malformed keys from causing
 	// panics or incorrect signatures downstream.
-	if len(keyData) != 32 && len(keyData) != 64 {
-		return nil, oops.Errorf("invalid Ed25519 key length: got %d bytes, want 32 or 64", len(keyData))
+	if len(keyData) != Ed25519SeedSize && len(keyData) != Ed25519PrivateKeySize {
+		return nil, oops.Errorf("invalid Ed25519 key length: got %d bytes, want %d or %d", len(keyData), Ed25519SeedSize, Ed25519PrivateKeySize)
 	}
 	key := ed25519.Ed25519PrivateKey(keyData)
 	return &key, nil

@@ -19,8 +19,8 @@ import (
 // and tryGenerateKeyIDFromPrivateKey.
 func deriveKeyIDFromPublicKey(publicKey types.PublicKey) string {
 	keyBytes := publicKey.Bytes()
-	if len(keyBytes) > 10 {
-		keyBytes = keyBytes[:10]
+	if len(keyBytes) > keyIDPrefixBytes {
+		keyBytes = keyBytes[:keyIDPrefixBytes]
 	}
 	return hex.EncodeToString(keyBytes)
 }
@@ -102,7 +102,7 @@ func (ks *KeyStoreImpl) computeKeyID() string {
 			// Using SHA-256 prevents leaking raw private key material into
 			// log messages or filenames on disk.
 			pkHash := types.SHA256(ks.privateKey.Bytes())
-			fallbackID := "unknown-" + hex.EncodeToString(pkHash[:10])
+			fallbackID := "unknown-" + hex.EncodeToString(pkHash[:keyIDPrefixBytes])
 			log.WithField("fallback_id", fallbackID).Debug("Generated fallback KeyID")
 			return fallbackID
 		}

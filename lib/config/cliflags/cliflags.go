@@ -179,7 +179,7 @@ func registerI2CPFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().String("i2cp.network", config.DefaultI2CPConfig.Network,
 		"I2CP network type (tcp or unix)")
 	cmd.PersistentFlags().Int("i2cp.max-sessions", config.DefaultI2CPConfig.MaxSessions,
-		"Maximum number of concurrent I2CP sessions (range: 1-320)")
+		fmt.Sprintf("Maximum number of concurrent I2CP sessions (range: 1-%d)", config.MaxI2CPSessions))
 	cmd.PersistentFlags().String("i2cp.username", "",
 		"I2CP authentication username (empty = no auth)")
 	cmd.PersistentFlags().String("i2cp.password", "",

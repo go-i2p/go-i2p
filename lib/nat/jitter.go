@@ -17,11 +17,11 @@ var log = logger.GetGoI2PLogger()
 //
 // Thread-safe: crypto/rand is goroutine-safe.
 func applyJitter(baseDelay time.Duration) time.Duration {
-	jitterBytes := make([]byte, 2)
+	jitterBytes := make([]byte, jitterBytesLen)
 	if _, randErr := rand.Read(jitterBytes); randErr == nil {
 		// Convert 2 random bytes to float64 in [0, 1)
-		randVal := float64(uint16(jitterBytes[0])<<8|uint16(jitterBytes[1])) / 65536.0
-		jitterFactor := 0.75 + (randVal * 0.5) // [0.75, 1.25]
+		randVal := float64(uint16(jitterBytes[0])<<8|uint16(jitterBytes[1])) / jitterUint16Range
+		jitterFactor := jitterFactorMin + (randVal * jitterFactorSpan) // [0.75, 1.25)
 		return time.Duration(float64(baseDelay) * jitterFactor)
 	} else {
 		log.WithError(randErr).Warn("Failed to generate jitter; using base delay")

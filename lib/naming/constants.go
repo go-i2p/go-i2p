@@ -29,3 +29,13 @@ const B32HashSize = 32
 // DefaultFetchTimeout is the maximum time to wait for a NetDB
 // LeaseSet lookup before returning a timeout error.
 const DefaultFetchTimeout = 10 * time.Second
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Hosts-file parsing constants
+// ──────────────────────────────────────────────────────────────────────────────
+
+// maxLoggedHostsLineLength is how much of a rejected hosts-file line is
+// included in the skip warning. The full line can be arbitrarily long and is
+// attacker-influenced, so only a prefix is logged.
+// Moved from: resolver.go
+const maxLoggedHostsLineLength = 40
