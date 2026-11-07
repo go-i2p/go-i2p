@@ -54,11 +54,11 @@ type BuildRequestRecord struct {
 	LayerKey      session_key.SessionKey
 	IVKey         session_key.SessionKey
 	ReplyKey      session_key.SessionKey
-	ReplyIV       [16]byte
+	ReplyIV       [replyIVLen]byte
 	Flag          int
 	RequestTime   time.Time
 	SendMessageID int
-	Padding       [29]byte
+	Padding       [legacyPaddingLen]byte
 
 	// MinBandwidthKBps is the minimum bandwidth (KB/s) the tunnel creator
 	// requires from this hop, parsed from the short build record's tunnel
@@ -126,32 +126,32 @@ func (b *BuildRequestRecord) ShortBytes() []byte {
 	data := make([]byte, ShortRecordSize)
 
 	// toPeer: first 16 bytes of peer's identity hash
-	copy(data[0:16], b.OurIdent[:16])
+	copy(data[0:toPeerHashLen], b.OurIdent[:toPeerHashLen])
 	// Ephemeral X25519 key placeholder (offset 16, 32 bytes) — zeroed, filled during ECIES encryption.
-	const payloadOff = 48
+	payloadOff := shortRecordPrefixLen
 
-	if tunnelInt, err := common.NewIntegerFromInt(int(b.ReceiveTunnel), 4); err == nil {
-		copy(data[payloadOff:payloadOff+4], tunnelInt.Bytes())
+	if tunnelInt, err := common.NewIntegerFromInt(int(b.ReceiveTunnel), tunnelIDLen); err == nil {
+		copy(data[payloadOff+payloadReceiveTunnelOffset:payloadOff+payloadNextTunnelOffset], tunnelInt.Bytes())
 	}
-	if tunnelInt, err := common.NewIntegerFromInt(int(b.NextTunnel), 4); err == nil {
-		copy(data[payloadOff+4:payloadOff+8], tunnelInt.Bytes())
+	if tunnelInt, err := common.NewIntegerFromInt(int(b.NextTunnel), tunnelIDLen); err == nil {
+		copy(data[payloadOff+payloadNextTunnelOffset:payloadOff+payloadNextIdentOffset], tunnelInt.Bytes())
 	}
-	copy(data[payloadOff+8:payloadOff+40], b.NextIdent[:])
+	copy(data[payloadOff+payloadNextIdentOffset:payloadOff+payloadFlagOffset], b.NextIdent[:])
 	// flags: bit 7 IBGW, bit 6 OBEP, bits 5-0 "Undefined, must set to 0 for
 	// compatibility with future options".
-	data[payloadOff+40] = byte(b.Flag) & 0xC0
+	data[payloadOff+payloadFlagOffset] = byte(b.Flag) & flagBitsMask
 	// bytes 41-42: "more flags, unused, set to 0 for compatibility" (already zero)
 	// layer_enc_type (1 byte) — 0 = AES (current tunnels)
-	data[payloadOff+43] = 0
-	minutes := int(b.RequestTime.Unix() / 60)
-	if timeInt, err := common.NewIntegerFromInt(minutes, 4); err == nil {
-		copy(data[payloadOff+44:payloadOff+48], timeInt.Bytes())
+	data[payloadOff+payloadLayerEncTypeOffset] = 0
+	minutes := int(b.RequestTime.Unix() / secondsPerMinute)
+	if timeInt, err := common.NewIntegerFromInt(minutes, tunnelIDLen); err == nil {
+		copy(data[payloadOff+payloadRequestTimeOffset:payloadOff+payloadExpirationOffset], timeInt.Bytes())
 	}
-	if expInt, err := common.NewIntegerFromInt(DefaultExpirationSeconds, 4); err == nil {
-		copy(data[payloadOff+48:payloadOff+52], expInt.Bytes())
+	if expInt, err := common.NewIntegerFromInt(DefaultExpirationSeconds, tunnelIDLen); err == nil {
+		copy(data[payloadOff+payloadExpirationOffset:payloadOff+payloadSendMessageIDOffset], expInt.Bytes())
 	}
-	if msgInt, err := common.NewIntegerFromInt(b.SendMessageID, 4); err == nil {
-		copy(data[payloadOff+52:payloadOff+56], msgInt.Bytes())
+	if msgInt, err := common.NewIntegerFromInt(b.SendMessageID, tunnelIDLen); err == nil {
+		copy(data[payloadOff+payloadSendMessageIDOffset:payloadOff+payloadOptionsOffset], msgInt.Bytes())
 	}
 
 	// Tunnel build options Mapping occupies payload bytes 56 onward; the spec
@@ -159,24 +159,23 @@ func (b *BuildRequestRecord) ShortBytes() []byte {
 	// the two bytes 0x00 0x00. Whatever the options do not use is random padding,
 	// per "bytes x-153: random padding".
 	options := b.shortBuildOptionsBytes()
-	const maxOptionsLen = 98
-	if len(options) > maxOptionsLen {
+	if len(options) > maxShortBuildOptionsLen {
 		log.WithFields(logger.Fields{
 			"at":          "ShortBytes",
 			"options_len": len(options),
-			"max":         maxOptionsLen,
+			"max":         maxShortBuildOptionsLen,
 		}).Warn("build options too large for short record; sending empty mapping")
 		options = emptyShortBuildOptions
 	}
-	copy(data[payloadOff+56:], options)
+	copy(data[payloadOff+payloadOptionsOffset:], options)
 
-	paddingStart := payloadOff + 56 + len(options)
+	paddingStart := payloadOff + payloadOptionsOffset + len(options)
 	if _, err := rand.Read(data[paddingStart : payloadOff+ShortCleartextLen]); err != nil {
 		log.WithError(err).WithFields(logger.Fields{"at": "ShortBytes"}).
 			Warn("failed to generate short record padding")
 	}
 
-	log.WithFields(logger.Fields{"at": "ShortBytes"}).Debug("BuildRequestRecord serialized to 218-byte short ECIES format")
+	log.WithFields(logger.Fields{"at": "ShortBytes"}).Debugf("BuildRequestRecord serialized to %d-byte short ECIES format", ShortRecordSize)
 	return data
 }
 
@@ -203,25 +202,25 @@ func ReadShortBuildRequestRecord(data []byte) (BuildRequestRecord, error) {
 	}
 
 	record := BuildRequestRecord{}
-	record.ReceiveTunnel = TunnelID(common.Integer(data[0:4]).Int())
-	record.NextTunnel = TunnelID(common.Integer(data[4:8]).Int())
-	nextIdent, _, err := common.ReadHash(data[8:])
+	record.ReceiveTunnel = TunnelID(common.Integer(data[payloadReceiveTunnelOffset:payloadNextTunnelOffset]).Int())
+	record.NextTunnel = TunnelID(common.Integer(data[payloadNextTunnelOffset:payloadNextIdentOffset]).Int())
+	nextIdent, _, err := common.ReadHash(data[payloadNextIdentOffset:])
 	if err != nil {
 		return BuildRequestRecord{}, ErrNotEnoughData
 	}
 	record.NextIdent = nextIdent
-	record.Flag = int(data[40])
-	minutesSinceEpoch := common.Integer(data[44:48]).Int()
-	record.RequestTime = time.Unix(int64(minutesSinceEpoch)*60, 0)
-	record.SendMessageID = common.Integer(data[52:56]).Int()
+	record.Flag = int(data[payloadFlagOffset])
+	minutesSinceEpoch := common.Integer(data[payloadRequestTimeOffset:payloadExpirationOffset]).Int()
+	record.RequestTime = time.Unix(int64(minutesSinceEpoch)*secondsPerMinute, 0)
+	record.SendMessageID = common.Integer(data[payloadSendMessageIDOffset:payloadOptionsOffset]).Int()
 
 	// Tunnel build options mapping occupies bytes [56:154] (98 bytes) in the
 	// short cleartext (i2pd SHORT_REQUEST_RECORD_TUNNEL_BUILD_OPTIONS_OFFSET).
 	// Parse best-effort: a malformed or empty options block leaves the
 	// bandwidth fields at zero, matching i2pd's tolerant handling.
-	record.MinBandwidthKBps, record.RequestedBandwidthKBps, record.LimitBandwidthKBps = parseShortBuildOptions(data[56:ShortCleartextLen])
+	record.MinBandwidthKBps, record.RequestedBandwidthKBps, record.LimitBandwidthKBps = parseShortBuildOptions(data[payloadOptionsOffset:ShortCleartextLen])
 
-	log.WithFields(logger.Fields{"at": "ReadShortBuildRequestRecord"}).Debug("ReadShortBuildRequestRecord: parsed 154-byte STBM cleartext")
+	log.WithFields(logger.Fields{"at": "ReadShortBuildRequestRecord"}).Debugf("ReadShortBuildRequestRecord: parsed %d-byte STBM cleartext", ShortCleartextLen)
 	return record, nil
 }
 
@@ -250,7 +249,7 @@ var emptyShortBuildOptions = []byte{0x00, 0x00}
 // "l" is only meaningful to an IBGW, so it is emitted only when the IBGW flag is
 // set.
 func (b *BuildRequestRecord) shortBuildOptionsBytes() []byte {
-	options := make(map[string]string, 3)
+	options := make(map[string]string, shortBuildOptionCount)
 	if b.MinBandwidthKBps > 0 {
 		options["m"] = strconv.FormatUint(uint64(b.MinBandwidthKBps), 10)
 	}
