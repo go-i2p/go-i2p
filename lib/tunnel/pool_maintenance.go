@@ -66,7 +66,7 @@ func (p *Pool) waitForStartupGate() bool {
 
 // runMaintenanceTicker runs the maintenance loop with periodic checks.
 func (p *Pool) runMaintenanceTicker() {
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(poolMaintenanceInterval)
 	defer ticker.Stop()
 
 	// Perform initial check immediately

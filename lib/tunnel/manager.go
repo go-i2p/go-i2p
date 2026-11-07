@@ -533,7 +533,7 @@ func (m *ParticipantManager) EvaluateBuildBandwidth(minKBps, requestedKBps uint3
 	if limitKBps == 0 {
 		return 0, 0
 	}
-	limitBytes := uint64(limitKBps) * 1024
+	limitBytes := uint64(limitKBps) * bytesPerKiB
 
 	var useBytes uint64
 	if fnPtr := m.transitBandwidthFn.Load(); fnPtr != nil {
@@ -543,7 +543,7 @@ func (m *ParticipantManager) EvaluateBuildBandwidth(minKBps, requestedKBps uint3
 	// Minimum bandwidth gate: reject if the required minimum plus current usage
 	// would exceed the configured limit.
 	if minKBps > 0 {
-		if uint64(minKBps)*1024+useBytes > limitBytes {
+		if uint64(minKBps)*bytesPerKiB+useBytes > limitBytes {
 			return BuildReplyCodeBandwidth, 0
 		}
 	}
@@ -552,8 +552,8 @@ func (m *ParticipantManager) EvaluateBuildBandwidth(minKBps, requestedKBps uint3
 	if requestedKBps > 0 {
 		if useBytes < limitBytes {
 			availBytes := limitBytes - useBytes
-			if uint64(requestedKBps)*1024 > availBytes {
-				availableKBps = uint32(availBytes / 1024)
+			if uint64(requestedKBps)*bytesPerKiB > availBytes {
+				availableKBps = uint32(availBytes / bytesPerKiB)
 			} else {
 				availableKBps = requestedKBps
 			}

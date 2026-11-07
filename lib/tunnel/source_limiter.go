@@ -208,7 +208,7 @@ func (sl *SourceLimiter) handleRateLimitExceeded(state *sourceState, sourceHash 
 	sl.totalRejections++
 
 	// Auto-ban if excessive rejections (more than 10 rejections)
-	if state.rejectCount > 10 {
+	if state.rejectCount > banRejectCountThreshold {
 		return sl.applyAutoBan(state, sourceHash, now)
 	}
 
@@ -284,7 +284,7 @@ func (sl *SourceLimiter) cleanup() {
 	defer sl.mu.Unlock()
 
 	now := time.Now()
-	cutoff := now.Add(-10 * time.Minute)
+	cutoff := now.Add(-rejectCountWindow)
 	removed := 0
 
 	for hash, state := range sl.sources {
@@ -417,8 +417,8 @@ func (sl *SourceLimiter) Stop() {
 // Only shows first 16 characters to protect privacy while still being useful.
 func truncateHash(h common.Hash) string {
 	s := h.String()
-	if len(s) > 16 {
-		return s[:16]
+	if len(s) > logHashPrefixLen {
+		return s[:logHashPrefixLen]
 	}
 	return s
 }

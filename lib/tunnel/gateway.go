@@ -45,13 +45,11 @@ var (
 	ErrInvalidMessage = errors.New("invalid I2NP message data")
 )
 
-const (
-	// maxTunnelPayload is the maximum size of data (delivery instructions + message)
-	// that can fit in a tunnel message after accounting for:
-	// tunnel ID (4) + IV (16) + checksum (4) + zero byte separator (1) = 25 bytes overhead
-	// Total tunnel message = 1028 bytes, so max data = 1028 - 25 = 1003
-	maxTunnelPayload = 1028 - 4 - 16 - 4 - 1 // 1003 bytes for delivery instructions + message
-)
+// maxTunnelPayload is the maximum size of data (delivery instructions + message)
+// that can fit in a tunnel message after accounting for the tunnel ID, IV,
+// checksum and zero byte separator. Its terms are named in constants.go.
+const maxTunnelPayload = TunnelMessageSize - TunnelIDSize - TunnelIVSize -
+	TunnelChecksumSize - TunnelZeroSeparatorSize // 1003 bytes
 
 // NewGateway creates a new tunnel gateway.
 // Parameters:
@@ -161,7 +159,7 @@ type DeliveryConfig struct {
 	// TunnelID is the destination tunnel ID (required for DTTunnel)
 	TunnelID uint32
 	// Hash is the gateway router hash (DTTunnel) or destination router hash (DTRouter)
-	Hash [32]byte
+	Hash [HashSize]byte
 }
 
 // LocalDelivery returns a DeliveryConfig for DTLocal delivery.
@@ -174,7 +172,7 @@ func LocalDelivery() DeliveryConfig {
 // TunnelDelivery returns a DeliveryConfig for DTTunnel delivery.
 // The message is routed to a specific tunnel (tunnelID) on the gateway
 // router identified by gatewayHash.
-func TunnelDelivery(tunnelID uint32, gatewayHash [32]byte) DeliveryConfig {
+func TunnelDelivery(tunnelID uint32, gatewayHash [HashSize]byte) DeliveryConfig {
 	return DeliveryConfig{
 		DeliveryType: DTTunnel,
 		TunnelID:     tunnelID,
@@ -185,7 +183,7 @@ func TunnelDelivery(tunnelID uint32, gatewayHash [32]byte) DeliveryConfig {
 // RouterDelivery returns a DeliveryConfig for DTRouter delivery.
 // The message is sent directly to the router identified by routerHash,
 // bypassing any tunnel.
-func RouterDelivery(routerHash [32]byte) DeliveryConfig {
+func RouterDelivery(routerHash [HashSize]byte) DeliveryConfig {
 	return DeliveryConfig{
 		DeliveryType: DTRouter,
 		Hash:         routerHash,
@@ -194,15 +192,15 @@ func RouterDelivery(routerHash [32]byte) DeliveryConfig {
 
 // deliveryInstructionsSize returns the byte size of delivery instructions for a given config.
 func deliveryInstructionsSize(dc DeliveryConfig, fragmented bool) int {
-	// flag(1) + size(2) = 3 bytes base
-	size := 3
+	// flag + size field are always present
+	size := FlagSize + SizeFieldSize
 	if dc.DeliveryType == DTTunnel {
-		size += 4 + 32 // tunnel ID + hash
+		size += TunnelIDSize + HashSize
 	} else if dc.DeliveryType == DTRouter {
-		size += 32 // hash
+		size += HashSize
 	}
 	if fragmented {
-		size += 4 // message ID
+		size += MessageIDSize
 	}
 	return size
 }
@@ -319,7 +317,7 @@ func (g *Gateway) sendSingleFragment(msgBytes []byte, dc DeliveryConfig) ([][]by
 func (g *Gateway) validateFragmentCount(msgLen, firstPayloadMax, followPayloadMax int) (int, error) {
 	remaining := msgLen - firstPayloadMax
 	followOnCount := (remaining + followPayloadMax - 1) / followPayloadMax
-	if followOnCount > 63 {
+	if followOnCount > MaxFollowOnFragments {
 		return 0, ErrMessageTooLarge
 	}
 	return followOnCount, nil
@@ -444,7 +442,7 @@ func (g *Gateway) createDeliveryInstructions(msgBytes []byte) ([]byte, error) {
 // Tunnel message structure:
 // [Tunnel ID (4)] [IV (16)] [Checksum (4)] [Padding (variable)] [0x00] [Instructions] [Message]
 func (g *Gateway) buildTunnelMessage(deliveryInstructions, msgBytes []byte) ([]byte, error) {
-	totalSize := 1028 // Fixed tunnel message size
+	totalSize := TunnelMessageSize
 	msg := make([]byte, totalSize)
 
 	g.writeTunnelID(msg)
@@ -454,7 +452,7 @@ func (g *Gateway) buildTunnelMessage(deliveryInstructions, msgBytes []byte) ([]b
 	}
 
 	dataSize := len(deliveryInstructions) + len(msgBytes)
-	paddingSize := totalSize - 24 - 1 - dataSize // -1 for zero byte
+	paddingSize := totalSize - TunnelHeaderSize - TunnelZeroSeparatorSize - dataSize
 
 	if err := g.validatePaddingSize(paddingSize, dataSize, totalSize); err != nil {
 		return nil, err
@@ -472,14 +470,14 @@ func (g *Gateway) buildTunnelMessage(deliveryInstructions, msgBytes []byte) ([]b
 
 // writeTunnelID writes the tunnel ID to the message header.
 func (g *Gateway) writeTunnelID(msg []byte) {
-	binary.BigEndian.PutUint32(msg[0:4], uint32(g.nextHopID))
+	binary.BigEndian.PutUint32(msg[TunnelIDOffset:TunnelIVOffset], uint32(g.nextHopID))
 }
 
 // writeIV generates a random 16-byte IV and writes it to bytes 4-19.
 // The IV is used as part of the tunnel message checksum calculation
 // and provides randomization for the encryption layer.
 func (g *Gateway) writeIV(msg []byte) error {
-	if _, err := rand.Read(msg[4:20]); err != nil {
+	if _, err := rand.Read(msg[TunnelIVOffset:TunnelChecksumOffset]); err != nil {
 		log.WithFields(logger.Fields{
 			"at":     "buildTunnelMessage",
 			"reason": "failed to generate random IV",
@@ -512,7 +510,7 @@ func (g *Gateway) writeRandomPadding(msg []byte, paddingSize int) error {
 		return nil
 	}
 
-	paddingBytes := msg[24 : 24+paddingSize]
+	paddingBytes := msg[TunnelHeaderSize : TunnelHeaderSize+paddingSize]
 	if _, err := rand.Read(paddingBytes); err != nil {
 		log.WithFields(logger.Fields{
 			"at":     "buildTunnelMessage",
@@ -555,10 +553,10 @@ func generateNonZeroByte() byte {
 // writePayload writes the zero separator, delivery instructions, and message to the buffer.
 func (g *Gateway) writePayload(msg []byte, paddingSize int, deliveryInstructions, msgBytes []byte) {
 	// Zero byte separator
-	msg[24+paddingSize] = 0x00
+	msg[TunnelHeaderSize+paddingSize] = 0x00
 
 	// Delivery instructions and message
-	offset := 24 + paddingSize + 1
+	offset := TunnelHeaderSize + paddingSize + TunnelZeroSeparatorSize
 	copy(msg[offset:], deliveryInstructions)
 	copy(msg[offset+len(deliveryInstructions):], msgBytes)
 }
@@ -570,14 +568,14 @@ func (g *Gateway) writePayload(msg []byte, paddingSize int, deliveryInstructions
 // Checksum is the first 4 bytes of SHA256(delivery_instructions_and_fragments + IV).
 func (g *Gateway) writeChecksum(msg []byte, paddingSize int) {
 	// Data after the zero byte separator: delivery instructions + message fragments
-	dataStart := 24 + paddingSize + 1 // checksum(4) ends at 24, then padding, then 0x00
+	dataStart := TunnelHeaderSize + paddingSize + TunnelZeroSeparatorSize
 	data := msg[dataStart:]
-	iv := msg[4:20]
+	iv := msg[TunnelIVOffset:TunnelChecksumOffset]
 	buf := make([]byte, len(data)+len(iv))
 	copy(buf, data)
 	copy(buf[len(data):], iv)
 	hash := types.SHA256(buf)
-	copy(msg[20:24], hash[:4])
+	copy(msg[TunnelChecksumOffset:TunnelHeaderSize], hash[:TunnelChecksumSize])
 }
 
 // encryptTunnelMessage applies tunnel encryption to the message.

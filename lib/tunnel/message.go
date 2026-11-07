@@ -142,10 +142,10 @@ type DeliveryInstructionsWithFragment struct {
 // The tunnel ID is the only field sent in the clear, so the receiving hop can
 // route the message to the right tunnel before decrypting it.
 func (tm EncryptedTunnelMessage) ID() (tid TunnelID, err error) {
-	if len(tm) < 4 {
+	if len(tm) < TunnelIDSize {
 		return 0, oops.Errorf("encrypted tunnel message too short for tunnel ID: %d bytes", len(tm))
 	}
-	tid = TunnelID(binary.BigEndian.Uint32(tm[:4]))
+	tid = TunnelID(binary.BigEndian.Uint32(tm[TunnelIDOffset:TunnelIVOffset]))
 	return tid, nil
 }
 
@@ -153,10 +153,10 @@ func (tm EncryptedTunnelMessage) ID() (tid TunnelID, err error) {
 // The IV is needed by the tunnel decryptor to recover the layered-encrypted
 // payload; each message uses a fresh IV so identical payloads do not repeat.
 func (tm EncryptedTunnelMessage) IV() (tunnel.TunnelIV, error) {
-	if len(tm) < 20 {
+	if len(tm) < TunnelChecksumOffset {
 		return nil, oops.Errorf("encrypted tunnel message too short for IV: %d bytes", len(tm))
 	}
-	return tm[4:20], nil
+	return tm[TunnelIVOffset:TunnelChecksumOffset], nil
 }
 
 // Data returns the encrypted data portion of the tunnel message (1008 bytes).
@@ -164,10 +164,10 @@ func (tm EncryptedTunnelMessage) IV() (tunnel.TunnelIV, error) {
 // There is no checksum field in the encrypted format; checksum exists only in
 // the decrypted format.
 func (tm EncryptedTunnelMessage) Data() ([]byte, error) {
-	if len(tm) < 20 {
+	if len(tm) < TunnelChecksumOffset {
 		return nil, oops.Errorf("encrypted tunnel message too short for data: %d bytes", len(tm))
 	}
-	return tm[20:], nil
+	return tm[TunnelChecksumOffset:], nil
 }
 
 // DecryptedTunnelMessage represents a decrypted 1028-byte I2P tunnel message containing a TunnelID, IV, checksum, and delivery instructions.
@@ -175,14 +175,14 @@ func (tm EncryptedTunnelMessage) Data() ([]byte, error) {
 // 4-byte tunnel ID, 16-byte IV, 4-byte checksum, then the delivery
 // instructions and message data.
 // See [I2P Spec: Tunnel Message](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/tunnel-message.rst) for the message format.
-type DecryptedTunnelMessage [1028]byte
+type DecryptedTunnelMessage [TunnelMessageSize]byte
 
 // ID returns the TunnelID from the first 4 bytes of the decrypted tunnel message.
 // It is the same clear-text tunnel ID the sender placed in the message header,
 // now available after the message layer has been decrypted.
 func (dtm DecryptedTunnelMessage) ID() TunnelID {
 	return TunnelID(binary.BigEndian.Uint32(
-		dtm[:4],
+		dtm[TunnelIDOffset:TunnelIVOffset],
 	))
 }
 
@@ -190,14 +190,14 @@ func (dtm DecryptedTunnelMessage) ID() TunnelID {
 // Exposing the IV lets callers inspect or log the vector that was used to
 // encrypt this message layer.
 func (dtm DecryptedTunnelMessage) IV() tunnel.TunnelIV {
-	return dtm[4 : 4+16]
+	return dtm[TunnelIVOffset:TunnelChecksumOffset]
 }
 
 // Checksum returns the 4-byte checksum from the decrypted tunnel message, located after the TunnelID and IV fields.
 // The checksum lets the receiver detect a corrupted or tampered message before
 // it is delivered to the application.
 func (dtm DecryptedTunnelMessage) Checksum() []byte {
-	return dtm[4+16 : 4+4+16]
+	return dtm[TunnelChecksumOffset:TunnelHeaderSize]
 }
 
 // Returns the contents of a decrypted tunnel message that contain the data for the
@@ -208,7 +208,7 @@ func (dtm DecryptedTunnelMessage) Checksum() []byte {
 // root cause of malformed or truncated tunnel messages.
 func (dtm DecryptedTunnelMessage) deliveryInstructionData() ([]byte, error) {
 	log.WithFields(logger.Fields{"at": "deliveryInstructionData"}).Debug("Retrieving delivery instruction data from DecryptedTunnelMessage")
-	dataArea := dtm[4+4+16:]
+	dataArea := dtm[TunnelHeaderSize:]
 	for i := 0; i < len(dataArea); i++ {
 		if dataArea[i] == 0x00 {
 			deliveryData := dataArea[i+1:]

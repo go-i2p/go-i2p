@@ -308,7 +308,7 @@ func readDestinationHash(data []byte, offset int, di *DeliveryInstructions) (int
 		return offset, oops.Errorf("insufficient data for hash")
 	}
 	di.hash = hash
-	return offset + 32, nil
+	return offset + HashSize, nil
 }
 
 // readDelayIfPresent reads the optional delay field from the delivery instructions.
@@ -396,7 +396,7 @@ func (di *DeliveryInstructions) serializeFollowOnFragment() ([]byte, error) {
 }
 
 func (di *DeliveryInstructions) serializeFirstFragment() ([]byte, error) {
-	result := make([]byte, 0, 128)
+	result := make([]byte, 0, deliveryInstructionsInitialCapacity)
 
 	flag := di.buildFlagByte()
 	result = append(result, flag)
@@ -730,7 +730,7 @@ func NewLocalDeliveryInstructions(fragmentSize uint16) *DeliveryInstructions {
 //
 // Returns:
 //   - *DeliveryInstructions: A new delivery instruction configured for TUNNEL delivery
-func NewTunnelDeliveryInstructions(tunnelID uint32, gatewayHash [32]byte, fragmentSize uint16) *DeliveryInstructions {
+func NewTunnelDeliveryInstructions(tunnelID uint32, gatewayHash [HashSize]byte, fragmentSize uint16) *DeliveryInstructions {
 	di := newDeliveryInstructionsBase(DTTunnel)
 	di.tunnelID = tunnelID
 	di.hash = gatewayHash
@@ -747,7 +747,7 @@ func NewTunnelDeliveryInstructions(tunnelID uint32, gatewayHash [32]byte, fragme
 //
 // Returns:
 //   - *DeliveryInstructions: A new delivery instruction configured for ROUTER delivery
-func NewRouterDeliveryInstructions(routerHash [32]byte, fragmentSize uint16) *DeliveryInstructions {
+func NewRouterDeliveryInstructions(routerHash [HashSize]byte, fragmentSize uint16) *DeliveryInstructions {
 	di := newDeliveryInstructionsBase(DTRouter)
 	di.hash = routerHash
 	di.fragmentSize = fragmentSize

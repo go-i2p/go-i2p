@@ -27,13 +27,13 @@ type MessageForwarder interface {
 	// - tunnelID: the destination tunnel ID
 	// - gatewayHash: the hash of the gateway router
 	// - msgBytes: the message payload
-	ForwardToTunnel(tunnelID uint32, gatewayHash [32]byte, msgBytes []byte) error
+	ForwardToTunnel(tunnelID uint32, gatewayHash [HashSize]byte, msgBytes []byte) error
 
 	// ForwardToRouter sends a message directly to a router.
 	// Parameters:
 	// - routerHash: the hash of the destination router
 	// - msgBytes: the message payload
-	ForwardToRouter(routerHash [32]byte, msgBytes []byte) error
+	ForwardToRouter(routerHash [HashSize]byte, msgBytes []byte) error
 }
 
 // Endpoint handles receiving encrypted tunnel messages,
@@ -75,7 +75,7 @@ type fragmentAssembler struct {
 	deliveryType          byte           // Delivery type from first fragment
 	firstFragmentReceived bool           // Track if first fragment (index 0) was recorded
 	tunnelID              uint32         // Destination tunnel ID (DTTunnel only)
-	hash                  [32]byte       // Gateway or router hash (DTTunnel, DTRouter)
+	hash                  [HashSize]byte   // Gateway or router hash (DTTunnel, DTRouter)
 	totalCount            int            // Expected number of fragments (0 until last fragment seen)
 	receivedMask          uint64         // Bitmap of received fragments (supports up to 64 fragments)
 	createdAt             time.Time      // Timestamp when first fragment was received
@@ -166,12 +166,12 @@ func (e *Endpoint) SetForwarder(forwarder MessageForwarder) {
 // Thread-safe: protects fragment map access with mutex.
 // Returns an error if processing fails at any step.
 func (e *Endpoint) Receive(encryptedData []byte) error {
-	if len(encryptedData) != 1028 {
+	if len(encryptedData) != TunnelMessageSize {
 		log.WithFields(logger.Fields{
 			"at":       "(Endpoint) Receive",
 			"reason":   "invalid_data_size",
 			"size":     len(encryptedData),
-			"expected": 1028,
+			"expected": TunnelMessageSize,
 		}).Error("invalid tunnel data size")
 		return ErrInvalidTunnelData
 	}
@@ -224,8 +224,8 @@ func (e *Endpoint) decryptTunnelMessage(encryptedData []byte) ([]byte, error) {
 // concatenate the IV, and take the Hash of that."
 func (e *Endpoint) validateChecksum(decrypted []byte) error {
 	// Extract IV (bytes 4-20) and checksum (bytes 20-24)
-	iv := decrypted[4:20]
-	expectedChecksum := decrypted[20:24]
+	iv := decrypted[TunnelIVOffset:TunnelChecksumOffset]
+	expectedChecksum := decrypted[TunnelChecksumOffset:TunnelHeaderSize]
 
 	// Find the zero byte separator after the padding
 	dataStart, err := findZeroSeparator(decrypted)
@@ -239,7 +239,7 @@ func (e *Endpoint) validateChecksum(decrypted []byte) error {
 	copy(checksumData, deliveryData)
 	copy(checksumData[len(deliveryData):], iv)
 	hash := types.SHA256(checksumData)
-	actualChecksum := hash[:4]
+	actualChecksum := hash[:TunnelChecksumSize]
 
 	// Use constant-time comparison for policy uniformity (checksum is not
 	// secret-keyed, but we compare all integrity tags constant-time by policy)
@@ -257,7 +257,7 @@ func (e *Endpoint) validateChecksum(decrypted []byte) error {
 // findZeroSeparator locates the zero byte separator between padding and delivery
 // instructions. Returns the index of the first byte after the zero separator.
 func findZeroSeparator(decrypted []byte) (int, error) {
-	for i := 24; i < len(decrypted); i++ {
+	for i := TunnelHeaderSize; i < len(decrypted); i++ {
 		if decrypted[i] == 0x00 {
 			return i + 1, nil
 		}
@@ -417,7 +417,7 @@ func (e *Endpoint) deliverWithInstructions(deliveryType byte, di *DeliveryInstru
 }
 
 // deliverViaForwarder routes a message to a non-local destination using the forwarder.
-func (e *Endpoint) deliverViaForwarder(deliveryType byte, tunnelID uint32, hash [32]byte, msgBytes []byte) error {
+func (e *Endpoint) deliverViaForwarder(deliveryType byte, tunnelID uint32, hash [HashSize]byte, msgBytes []byte) error {
 	e.forwarderMu.RLock()
 	fwd := e.forwarder
 	e.forwarderMu.RUnlock()
@@ -562,11 +562,11 @@ func (e *Endpoint) evictOldestFragment() {
 			expectedMask := (uint64(1) << asm.totalCount) - 1
 			if asm.receivedMask == expectedMask {
 				// All fragments received - 100% complete
-				completeness = 100
+				completeness = percentCompleteFull
 			} else {
 				// Partial - count set bits in receivedMask up to totalCount
 				received := bits.OnesCount64(asm.receivedMask & expectedMask)
-				completeness = float32(received) / float32(asm.totalCount) * 100
+				completeness = float32(received) / float32(asm.totalCount) * percentCompleteFull
 			}
 		}
 
@@ -605,7 +605,7 @@ func (e *Endpoint) recordFirstFragmentData(assembler *fragmentAssembler, fragmen
 type reassembledResult struct {
 	deliveryType byte
 	tunnelID     uint32
-	hash         [32]byte
+	hash         [HashSize]byte
 	data         []byte
 	msgID        uint32
 	err          error
@@ -675,7 +675,7 @@ func (e *Endpoint) extractFollowOnFragmentInfo(di *DeliveryInstructions) (uint32
 	}
 
 	// Validate fragment number (0-63 range, but 0 is for first fragment)
-	if fragmentNum < 1 || fragmentNum > 63 {
+	if fragmentNum < 1 || fragmentNum > MaxFollowOnFragments {
 		log.WithField("fragment_num", fragmentNum).Error("Invalid fragment number")
 		return 0, 0, false, ErrTooManyFragments
 	}
@@ -705,12 +705,12 @@ func (e *Endpoint) getOrCreateAssembler(msgID uint32) *fragmentAssembler {
 
 // storeFragmentData validates and stores fragment data in the assembler.
 func (e *Endpoint) storeFragmentData(msgID uint32, fragmentNum int, fragmentData []byte, assembler *fragmentAssembler) error {
-	if fragmentNum < 0 || fragmentNum >= 64 {
+	if fragmentNum < 0 || fragmentNum >= fragmentNumberValues {
 		log.WithFields(map[string]interface{}{
 			"message_id":   msgID,
 			"fragment_num": fragmentNum,
-		}).Error("Fragment number out of range (must be 0-63)")
-		return oops.Errorf("fragment number %d out of range (must be 0-63)", fragmentNum)
+		}).Errorf("Fragment number out of range (must be 0-%d)", fragmentNumberValues-1)
+		return oops.Errorf("fragment number %d out of range (must be 0-%d)", fragmentNum, fragmentNumberValues-1)
 	}
 
 	mask := uint64(1) << fragmentNum
@@ -850,7 +850,7 @@ func (e *Endpoint) Stop() {
 // Runs in a background goroutine started by NewEndpoint.
 // Fragments older than fragmentTimeout are removed to prevent memory leaks.
 func (e *Endpoint) cleanupFragments() {
-	ticker := time.NewTicker(30 * time.Second) // Check every 30 seconds
+	ticker := time.NewTicker(fragmentCleanupInterval)
 	defer ticker.Stop()
 
 	for {

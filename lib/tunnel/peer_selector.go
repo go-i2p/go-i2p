@@ -105,7 +105,7 @@ func analyzePeerCharacteristics(peers []router_info.RouterInfo) {
 		"ntcp2_addresses":     ntcp2Count,
 		"directly_dialable":   directlyDialableCount,
 		"introducer_only":     introducerOnlyCount,
-		"dialable_percentage": fmt.Sprintf("%.1f%%", float64(directlyDialableCount)/float64(len(peers))*100),
+		"dialable_percentage": fmt.Sprintf("%.1f%%", float64(directlyDialableCount)/float64(len(peers))*percentScale),
 	}).Debug("Peer selection characteristics for tunnel building")
 
 	warnIfNoDialablePeers(directlyDialableCount, len(peers))

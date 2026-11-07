@@ -157,8 +157,8 @@ func DefaultPoolConfig() PoolConfig {
 	return PoolConfig{
 		MinTunnels:       4,
 		MaxTunnels:       6,
-		TunnelLifetime:   11 * time.Minute,
-		RebuildThreshold: 90 * time.Second,
+		TunnelLifetime:   poolTunnelLifetime,
+		RebuildThreshold: poolRebuildThreshold,
 		BuildRetryDelay:  2 * time.Second, // FIX #4: Reduced initial delay (exponential backoff will increase)
 		MaxBuildRetries:  3,
 		HopCount:         3,
