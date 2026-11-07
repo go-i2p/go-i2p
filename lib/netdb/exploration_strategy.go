@@ -90,8 +90,8 @@ type AdaptiveStrategy struct {
 func NewAdaptiveStrategy(ourHash common.Hash) *AdaptiveStrategy {
 	return &AdaptiveStrategy{
 		ourHash:            ourHash,
-		minNetDBSize:       500, // Default minimum NetDB size
-		minFloodfillsTotal: 50,  // Default minimum floodfills
+		minNetDBSize:       defaultMinNetDBSize,
+		minFloodfillsTotal: defaultMinFloodfillsTotal,
 	}
 }
 
@@ -169,7 +169,7 @@ func (s *AdaptiveStrategy) ShouldExplore(netdbSize int) bool {
 	}
 
 	// NetDB is healthy - less frequent exploration
-	return netdbSize < s.minNetDBSize*2
+	return netdbSize < s.minNetDBSize*netDBHealthySizeMultiplier
 }
 
 // UpdateStats refreshes bucket statistics from current NetDB state.

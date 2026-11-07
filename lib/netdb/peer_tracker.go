@@ -95,7 +95,7 @@ func (pt *PeerTracker) RecordAttempt(hash common.Hash) {
 	stats.TotalAttempts++
 
 	log.WithFields(logger.Fields{
-		"peer_hash":      shortHash(hash.String(), 16),
+		"peer_hash":      shortHash(hash.String(), hashLogPrefixHexChars),
 		"total_attempts": stats.TotalAttempts,
 	}).Debug("Recorded connection attempt")
 }
@@ -121,12 +121,11 @@ func (pt *PeerTracker) RecordSuccess(hash common.Hash, responseTimeMs int64) {
 	if stats.AvgResponseTimeMs == 0 {
 		stats.AvgResponseTimeMs = responseTimeMs
 	} else {
-		const alpha = 0.2
-		stats.AvgResponseTimeMs = int64(alpha*float64(responseTimeMs) + (1-alpha)*float64(stats.AvgResponseTimeMs))
+		stats.AvgResponseTimeMs = int64(EMAAlpha*float64(responseTimeMs) + (1-EMAAlpha)*float64(stats.AvgResponseTimeMs))
 	}
 
 	log.WithFields(logger.Fields{
-		"peer_hash":        shortHash(hash.String(), 16),
+		"peer_hash":        shortHash(hash.String(), hashLogPrefixHexChars),
 		"success_count":    stats.SuccessCount,
 		"response_time_ms": responseTimeMs,
 	}).Debug("Recorded successful connection")
@@ -150,7 +149,7 @@ func (pt *PeerTracker) RecordFailure(hash common.Hash, reason string) {
 	stats.ConsecutiveFails += failWeight
 
 	log.WithFields(logger.Fields{
-		"peer_hash":         shortHash(hash.String(), 16),
+		"peer_hash":         shortHash(hash.String(), hashLogPrefixHexChars),
 		"failure_count":     stats.FailureCount,
 		"consecutive_fails": stats.ConsecutiveFails,
 		"failure_weight":    failWeight,
@@ -258,7 +257,7 @@ func (pt *PeerTracker) RecordPermanentFailure(hash common.Hash, reason string) {
 	}
 
 	log.WithFields(logger.Fields{
-		"peer_hash":         shortHash(hash.String(), 16),
+		"peer_hash":         shortHash(hash.String(), hashLogPrefixHexChars),
 		"failure_count":     stats.FailureCount,
 		"consecutive_fails": stats.ConsecutiveFails,
 		"reason":            reason,
@@ -317,7 +316,7 @@ func (pt *PeerTracker) GetSuccessRate(hash common.Hash) float64 {
 
 	stats, exists := pt.stats[hash]
 	if !exists || stats.TotalAttempts == 0 {
-		return -1.0 // Unknown/no data
+		return unknownSuccessRate // Unknown/no data
 	}
 
 	return float64(stats.SuccessCount) / float64(stats.TotalAttempts)
@@ -360,7 +359,7 @@ func (pt *PeerTracker) IsLikelyStale(hash common.Hash) bool {
 func (pt *PeerTracker) hasExcessiveConsecutiveFailures(stats *PeerStats, hash common.Hash) bool {
 	if stats.ConsecutiveFails >= consecutiveFailThreshold {
 		log.WithFields(logger.Fields{
-			"peer_hash":         shortHash(hash.String(), 16),
+			"peer_hash":         shortHash(hash.String(), hashLogPrefixHexChars),
 			"consecutive_fails": stats.ConsecutiveFails,
 			"reason":            "high_consecutive_failures",
 		}).Debug("Peer marked as likely stale")
@@ -376,7 +375,7 @@ func (pt *PeerTracker) hasLowSuccessRate(stats *PeerStats, hash common.Hash) boo
 		successRate := float64(stats.SuccessCount) / float64(stats.TotalAttempts)
 		if successRate < lowSuccessRateThreshold {
 			log.WithFields(logger.Fields{
-				"peer_hash":    shortHash(hash.String(), 16),
+				"peer_hash":    shortHash(hash.String(), hashLogPrefixHexChars),
 				"success_rate": successRate,
 				"reason":       "low_success_rate",
 			}).Debug("Peer marked as likely stale")
@@ -393,7 +392,7 @@ func (pt *PeerTracker) hasRecentFailuresWithoutSuccess(stats *PeerStats, hash co
 	if stats.ConsecutiveFails >= consecutiveFailThreshold && !stats.LastFailure.IsZero() && stats.LastFailure.After(hourAgo) {
 		if stats.LastSuccess.IsZero() || stats.LastSuccess.Before(hourAgo) {
 			log.WithFields(logger.Fields{
-				"peer_hash":    shortHash(hash.String(), 16),
+				"peer_hash":    shortHash(hash.String(), hashLogPrefixHexChars),
 				"last_success": stats.LastSuccess,
 				"last_failure": stats.LastFailure,
 				"reason":       "no_recent_success_with_failures",
@@ -516,20 +515,20 @@ func (pt *PeerTracker) ScorePeer(hash common.Hash) float64 {
 
 	stats, exists := pt.stats[hash]
 	if !exists {
-		return 0.5 // Unknown peer — neutral score
+		return neutralPeerScore // Unknown peer — neutral score
 	}
 
 	if stats.TotalAttempts < minAttemptsForStats {
-		return 0.5 // Insufficient data — neutral score
+		return neutralPeerScore // Insufficient data — neutral score
 	}
 
 	successRate := float64(stats.SuccessCount) / float64(stats.TotalAttempts)
 
 	// Penalize peers with recent consecutive failures
 	if stats.ConsecutiveFails > 0 {
-		penalty := float64(stats.ConsecutiveFails) * 0.1
-		if penalty > 0.3 {
-			penalty = 0.3
+		penalty := float64(stats.ConsecutiveFails) * consecutiveFailPenaltyPerFailure
+		if penalty > maxConsecutiveFailPenalty {
+			penalty = maxConsecutiveFailPenalty
 		}
 		successRate -= penalty
 	}

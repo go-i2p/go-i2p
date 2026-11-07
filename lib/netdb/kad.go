@@ -826,7 +826,7 @@ func (kr *KademliaResolver) queryPeer(ctx context.Context, peer, target common.H
 		// For exploratory lookups, include known peers in the exclude-set so
 		// floodfills bias toward returning previously-unknown routers.
 		// This reduces re-suggestion of already-known peers and improves growth.
-		excludedPeers = kr.getKnownPeersSample(100)
+		excludedPeers = kr.getKnownPeersSample(explorationExcludedPeerSampleSize)
 	}
 
 	// Attempt to use tunnel-reply for firewalled routers to enable them to receive
@@ -873,7 +873,7 @@ func (kr *KademliaResolver) resolvePeerRouterInfo(ctx context.Context, peerHash 
 		return peerRI, nil
 	}
 	if !allowNetworkResolution {
-		return nil, oops.Errorf("peer %x not found in local database", peerHash[:8])
+		return nil, oops.Errorf("peer %x not found in local database", peerHash[:hashLogPrefixBytes])
 	}
 
 	resolveCtx, cancel := withClampedTimeout(ctx, peerResolutionTimeout)
@@ -885,7 +885,7 @@ func (kr *KademliaResolver) resolvePeerRouterInfo(ctx context.Context, peerHash 
 	// the resolved peer directly rather than delegating all growth to the prefetcher.
 	peerRI, err := kr.iterativeLookupWithOptions(resolveCtx, peerHash, false, false)
 	if err != nil {
-		return nil, oops.Errorf("peer %x not found in local database and resolution failed: %w", peerHash[:8], err)
+		return nil, oops.Errorf("peer %x not found in local database and resolution failed: %w", peerHash[:hashLogPrefixBytes], err)
 	}
 	return peerRI, nil
 }
@@ -999,16 +999,16 @@ func parseDatabaseStore(data []byte, targetHash common.Hash) (*i2np.DatabaseStor
 // RouterInfo from a DatabaseStore payload. The payload format is a 2-byte
 // big-endian compressed length followed by the compressed data.
 func decompressRouterInfoPayload(storeData []byte) ([]byte, error) {
-	if len(storeData) < 2 {
+	if len(storeData) < databaseStoreLengthFieldSize {
 		return nil, oops.Errorf("RouterInfo data too short")
 	}
 
-	compressedLen := int(binary.BigEndian.Uint16(storeData[:2]))
-	if len(storeData) < 2+compressedLen {
-		return nil, oops.Errorf("RouterInfo data truncated: need %d bytes, have %d", 2+compressedLen, len(storeData))
+	compressedLen := int(binary.BigEndian.Uint16(storeData[:databaseStoreLengthFieldSize]))
+	if len(storeData) < databaseStoreLengthFieldSize+compressedLen {
+		return nil, oops.Errorf("RouterInfo data truncated: need %d bytes, have %d", databaseStoreLengthFieldSize+compressedLen, len(storeData))
 	}
 
-	compressedData := storeData[2 : 2+compressedLen]
+	compressedData := storeData[databaseStoreLengthFieldSize : databaseStoreLengthFieldSize+compressedLen]
 
 	decompressed, err := gzipDecompress(compressedData)
 	if err != nil {

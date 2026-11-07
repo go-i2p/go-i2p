@@ -565,7 +565,7 @@ func (db *StdNetDB) SaveEntry(e *Entry) (err error) {
 	}
 	log.WithField("hash", h).Debug("Saving NetDB entry")
 	// if err == nil {
-	f, err = os.OpenFile(db.SkiplistFile(h), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	f, err = os.OpenFile(db.SkiplistFile(h), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, netDBFileMode)
 	if err == nil {
 		defer func() {
 			if cerr := f.Close(); cerr != nil && err == nil {
@@ -652,7 +652,7 @@ func (db *StdNetDB) saveAllLeaseSets() []error {
 // saveLeaseSetEntry persists a single LeaseSet entry to the filesystem.
 func (db *StdNetDB) saveLeaseSetEntry(hash common.Hash, entry Entry) (err error) {
 	fpath := db.SkiplistFileForLeaseSet(hash)
-	f, ferr := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	f, ferr := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, netDBFileMode)
 	if ferr != nil {
 		log.WithError(ferr).WithField("hash", hash).Error("Failed to open file for saving LeaseSet entry")
 		return ferr
@@ -784,7 +784,7 @@ func (db *StdNetDB) validatePublishedTimestamp(ri router_info.RouterInfo, hash c
 	}
 
 	// Check upper bound (future): published <= now + 1hour (existing check)
-	if published.Time().After(now.Add(1 * time.Hour)) {
+	if published.Time().After(now.Add(routerInfoFuturePublishTolerance)) {
 		log.WithFields(logger.Fields{
 			"hash":      hash,
 			"published": published.Time(),
@@ -1595,7 +1595,7 @@ func (db *StdNetDB) cacheLeaseSetEntry(hash common.Hash, entry *Entry) {
 // createRootDirectory creates the root network database directory.
 // Returns the directory mode and any error encountered.
 func (db *StdNetDB) createRootDirectory() (os.FileMode, error) {
-	mode := os.FileMode(0o700)
+	mode := os.FileMode(netDBDirMode)
 	p := db.Path()
 	log.WithField("path", p).Debug("Creating network database directory")
 	err := os.MkdirAll(p, mode)

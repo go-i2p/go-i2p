@@ -99,7 +99,8 @@ type peerLimit struct {
 func NewFloodfillRateLimiter(maxPerMinute, burstSize int) *FloodfillRateLimiter {
 	// Default global cap: 2000 requests/minute with burst 500.
 	// This bounds aggregate work across many peer identities.
-	return NewFloodfillRateLimiterWithGlobal(maxPerMinute, burstSize, 2000, 500)
+	return NewFloodfillRateLimiterWithGlobal(maxPerMinute, burstSize,
+		defaultFloodfillGlobalRequestsPerMinute, defaultFloodfillGlobalBurst)
 }
 
 // NewFloodfillRateLimiterWithGlobal creates a rate limiter with per-peer and
@@ -114,12 +115,12 @@ func NewFloodfillRateLimiterWithGlobal(maxPerMinute, burstSize, globalPerMinute,
 		lastSeen:   make(map[common.Hash]time.Time),
 		maxPeers:   maxPeersDefault,
 		maxBurst:   burstSize,
-		refillRate: float64(maxPerMinute) / 60.0,
+		refillRate: float64(maxPerMinute) / secondsPerMinute,
 
 		globalTokens:     float64(globalBurstSize),
 		globalLastUpdate: now,
 		globalMaxBurst:   globalBurstSize,
-		globalRefillRate: float64(globalPerMinute) / 60.0,
+		globalRefillRate: float64(globalPerMinute) / secondsPerMinute,
 
 		stopChan: make(chan struct{}),
 	}
@@ -146,7 +147,7 @@ func (rl *FloodfillRateLimiter) Allow(peer common.Hash) bool {
 	if !rl.allowPeer(peer, now) {
 		// Global limiter is checked first to bound aggregate load.
 		// Refund if peer-specific limiting rejects this request.
-		rl.globalTokens += 1.0
+		rl.globalTokens += tokensPerRequest
 		if rl.globalTokens > float64(rl.globalMaxBurst) {
 			rl.globalTokens = float64(rl.globalMaxBurst)
 		}
@@ -201,8 +202,8 @@ func tokenBucketAllow(elapsed, currentTokens, refillRate, maxBurst float64) (flo
 		currentTokens = maxBurst
 	}
 
-	if currentTokens >= 1.0 {
-		currentTokens -= 1.0
+	if currentTokens >= tokensPerRequest {
+		currentTokens -= tokensPerRequest
 		return currentTokens, true
 	}
 	return currentTokens, false
@@ -220,7 +221,7 @@ func (rl *FloodfillRateLimiter) GlobalRejectedCount() uint64 {
 // that haven't been seen recently).
 func (rl *FloodfillRateLimiter) cleanupLoop() {
 	defer rl.wg.Done()
-	ticker := time.NewTicker(5 * time.Minute)
+	ticker := time.NewTicker(floodfillLimiterCleanupInterval)
 	defer ticker.Stop()
 	for {
 		select {
@@ -240,7 +241,7 @@ func (rl *FloodfillRateLimiter) removeStalePeers() {
 	defer rl.mu.Unlock()
 	now := time.Now()
 	for peer, pl := range rl.peers {
-		if now.Sub(pl.lastUpdate) > 2*time.Minute {
+		if now.Sub(pl.lastUpdate) > floodfillLimiterStalePeerAge {
 			delete(rl.peers, peer)
 			delete(rl.lastSeen, peer)
 		}
@@ -301,7 +302,7 @@ type FloodfillConfig struct {
 func DefaultFloodfillConfig() FloodfillConfig {
 	return FloodfillConfig{
 		Enabled:    false,
-		FloodCount: 4,
+		FloodCount: defaultFloodfillPeers,
 	}
 }
 
@@ -319,7 +320,7 @@ func NewFloodfillServer(db *StdNetDB, transport FloodfillTransport, config Flood
 
 	floodCount := config.FloodCount
 	if floodCount <= 0 {
-		floodCount = 4
+		floodCount = defaultFloodfillPeers
 	}
 
 	fs := &FloodfillServer{
@@ -328,7 +329,7 @@ func NewFloodfillServer(db *StdNetDB, transport FloodfillTransport, config Flood
 		ourHash:       config.OurHash,
 		enabled:       config.Enabled,
 		floodCount:    floodCount,
-		lookupLimiter: NewFloodfillRateLimiter(60, 10), // 60 requests/min per peer, burst of 10
+		lookupLimiter: NewFloodfillRateLimiter(defaultFloodfillLookupRequestsPerMinute, defaultFloodfillLookupBurst),
 		ctx:           ctx,
 		cancel:        cancel,
 	}
@@ -594,7 +595,7 @@ func (fs *FloodfillServer) lookupRouterInfo(key common.Hash) ([]byte, byte, erro
 		return nil, 0, err
 	}
 	if len(data) == 0 {
-		return nil, 0, oops.Errorf("RouterInfo not found for %x", key[:8])
+		return nil, 0, oops.Errorf("RouterInfo not found for %x", key[:hashLogPrefixBytes])
 	}
 
 	// Gzip-compress the RouterInfo data for DatabaseStore (per I2P spec)
@@ -605,9 +606,9 @@ func (fs *FloodfillServer) lookupRouterInfo(key common.Hash) ([]byte, byte, erro
 	}
 
 	// RouterInfo DatabaseStore payload MUST be: 2-byte compressed length + gzip bytes.
-	payload := make([]byte, 2+len(compressed))
-	binary.BigEndian.PutUint16(payload[:2], uint16(len(compressed)))
-	copy(payload[2:], compressed)
+	payload := make([]byte, databaseStoreLengthFieldSize+len(compressed))
+	binary.BigEndian.PutUint16(payload[:databaseStoreLengthFieldSize], uint16(len(compressed)))
+	copy(payload[databaseStoreLengthFieldSize:], compressed)
 
 	return payload, i2np.DatabaseStoreTypeRouterInfo, nil
 }
@@ -650,7 +651,7 @@ func (fs *FloodfillServer) lookupLeaseSet(key common.Hash) ([]byte, byte, error)
 		return data, i2np.DatabaseStoreTypeLeaseSet, nil
 	}
 
-	return nil, 0, oops.Errorf("LeaseSet not found for %x", key[:8])
+	return nil, 0, oops.Errorf("LeaseSet not found for %x", key[:hashLogPrefixBytes])
 }
 
 // sendDatabaseStore constructs and sends a DatabaseStore response to the requester.
@@ -921,7 +922,7 @@ func (fs *FloodfillServer) GetFloodfillRouterInfo() (*router_info.RouterInfo, er
 			return nil, oops.Errorf("channel closed without RouterInfo")
 		}
 		return &ri, nil
-	case <-time.After(1 * time.Second):
+	case <-time.After(floodfillSelfRouterInfoTimeout):
 		return nil, oops.Errorf("timeout getting our RouterInfo")
 	}
 }
