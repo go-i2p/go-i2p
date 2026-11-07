@@ -65,7 +65,7 @@ func initNATManagers(t *SSU2Transport) error {
 	// as a batch. This minimizes the critical section and prevents callbacks from seeing
 	// partially initialized state.
 	relayMgr := ssu2noise.NewRelayManager(listener)
-	introducerReg := ssu2noise.NewIntroducerRegistry(3)
+	introducerReg := ssu2noise.NewIntroducerRegistry(maxIntroducerRegistrations)
 	// resolveHolePunchContext resolves the peer identities and signer key for
 	// incoming hole-punch messages. Per SSU2 spec §Hole Punch, the Hole Punch
 	// message carries the identical signed Relay Response block that Bob
@@ -331,8 +331,8 @@ func (t *SSU2Transport) verifyRelayRequestSignature(block *ssu2noise.RelayReques
 	}
 	ri, err := cfg.RouterLookupFunc(senderHash)
 	if err != nil {
-		t.logger.WithField("sender_hash", senderHash[:4]).Warn("RelayRequest: failed to lookup sender RouterInfo for signature verification")
-		return false, oops.Wrapf(err, "netdb lookup failed for sender %x", senderHash[:4])
+		t.logger.WithField("sender_hash", senderHash[:logHashPrefixBytes]).Warn("RelayRequest: failed to lookup sender RouterInfo for signature verification")
+		return false, oops.Wrapf(err, "netdb lookup failed for sender %x", senderHash[:logHashPrefixBytes])
 	}
 	pubKey, err := extractEd25519PublicKey(ri)
 	if err != nil {
@@ -383,12 +383,12 @@ func (t *SSU2Transport) verifyRelayRequestSignature(block *ssu2noise.RelayReques
 		block.AliceIP,
 	)
 	if verifyErr != nil {
-		t.logger.WithField("sender_hash", senderHash[:4]).Warn("RelayRequest signature verification failed")
+		t.logger.WithField("sender_hash", senderHash[:logHashPrefixBytes]).Warn("RelayRequest signature verification failed")
 		return false, oops.Wrapf(verifyErr, "signature verification failed")
 	}
 	if !valid {
-		t.logger.WithField("sender_hash", senderHash[:4]).Warn("RelayRequest signature invalid")
-		return false, oops.Errorf("invalid RelayRequest signature from %x", senderHash[:4])
+		t.logger.WithField("sender_hash", senderHash[:logHashPrefixBytes]).Warn("RelayRequest signature invalid")
+		return false, oops.Errorf("invalid RelayRequest signature from %x", senderHash[:logHashPrefixBytes])
 	}
 	return true, nil
 }
@@ -424,7 +424,7 @@ func (t *SSU2Transport) verifyRelayResponseSignature(block *ssu2noise.RelayRespo
 	// signature is present but no verifier is configured, so an absent
 	// signature on a Bob rejection is legitimate and needs no check here.
 	if len(block.Signature) == 0 {
-		if block.Code == 0 || block.Code >= 64 {
+		if block.Code == codeAccepted || block.Code > relayResponseBobRejectionMax {
 			return false, oops.Errorf("RelayResponse code %d requires Charlie's signature but none present", block.Code)
 		}
 		return true, nil
@@ -449,7 +449,7 @@ func (t *SSU2Transport) verifyRelayResponseSignature(block *ssu2noise.RelayRespo
 	case natRoleAlice:
 		// We are the relay client: the response arrives forwarded by Bob.
 		bhash = senderHash // Bob
-		if block.Code >= 1 && block.Code <= 63 {
+		if block.Code >= relayResponseBobRejectionMin && block.Code <= relayResponseBobRejectionMax {
 			// Bob's own rejection, signed by Bob with csz = 0, so the Charlie
 			// endpoint is left out of the signed data entirely.
 			signerHash = senderHash
@@ -474,8 +474,8 @@ func (t *SSU2Transport) verifyRelayResponseSignature(block *ssu2noise.RelayRespo
 
 	pubKey, err := t.signingKeyForHash(signerHash)
 	if err != nil {
-		t.logger.WithField("signer_hash", signerHash[:4]).Warn("RelayResponse: failed to resolve signer RouterInfo")
-		return false, oops.Wrapf(err, "netdb lookup failed for signer %x", signerHash[:4])
+		t.logger.WithField("signer_hash", signerHash[:logHashPrefixBytes]).Warn("RelayResponse: failed to resolve signer RouterInfo")
+		return false, oops.Wrapf(err, "netdb lookup failed for signer %x", signerHash[:logHashPrefixBytes])
 	}
 
 	valid, verifyErr := ssu2noise.VerifyRelayResponseSignature(
@@ -489,12 +489,12 @@ func (t *SSU2Transport) verifyRelayResponseSignature(block *ssu2noise.RelayRespo
 		ip,
 	)
 	if verifyErr != nil {
-		t.logger.WithField("signer_hash", signerHash[:4]).Warn("RelayResponse signature verification failed")
+		t.logger.WithField("signer_hash", signerHash[:logHashPrefixBytes]).Warn("RelayResponse signature verification failed")
 		return false, oops.Wrapf(verifyErr, "signature verification failed")
 	}
 	if !valid {
-		t.logger.WithField("signer_hash", signerHash[:4]).Warn("RelayResponse signature invalid")
-		return false, oops.Errorf("invalid RelayResponse signature from %x", signerHash[:4])
+		t.logger.WithField("signer_hash", signerHash[:logHashPrefixBytes]).Warn("RelayResponse signature invalid")
+		return false, oops.Errorf("invalid RelayResponse signature from %x", signerHash[:logHashPrefixBytes])
 	}
 	return true, nil
 }
@@ -608,8 +608,8 @@ func (t *SSU2Transport) verifyPeerTestSignature(block *ssu2noise.PeerTestBlock, 
 
 	pubKey, err := t.signingKeyForHash(signerHash)
 	if err != nil {
-		t.logger.WithField("signer_hash", signerHash[:4]).Warn("PeerTest: failed to resolve signer RouterInfo")
-		return oops.Wrapf(err, "netdb lookup failed for signer %x", signerHash[:4])
+		t.logger.WithField("signer_hash", signerHash[:logHashPrefixBytes]).Warn("PeerTest: failed to resolve signer RouterInfo")
+		return oops.Wrapf(err, "netdb lookup failed for signer %x", signerHash[:logHashPrefixBytes])
 	}
 
 	valid, verifyErr := ssu2noise.VerifyPeerTestSignature(
@@ -624,12 +624,12 @@ func (t *SSU2Transport) verifyPeerTestSignature(block *ssu2noise.PeerTestBlock, 
 		block.AliceIP,
 	)
 	if verifyErr != nil {
-		t.logger.WithField("signer_hash", signerHash[:4]).Warn("PeerTest signature verification failed")
+		t.logger.WithField("signer_hash", signerHash[:logHashPrefixBytes]).Warn("PeerTest signature verification failed")
 		return oops.Wrapf(verifyErr, "signature verification failed")
 	}
 	if !valid {
-		t.logger.WithField("signer_hash", signerHash[:4]).Warn("PeerTest signature invalid")
-		return oops.Errorf("invalid PeerTest signature from %x", signerHash[:4])
+		t.logger.WithField("signer_hash", signerHash[:logHashPrefixBytes]).Warn("PeerTest signature invalid")
+		return oops.Errorf("invalid PeerTest signature from %x", signerHash[:logHashPrefixBytes])
 	}
 	return nil
 }
@@ -661,7 +661,7 @@ func (t *SSU2Transport) signingKeyForHash(hash data.Hash) (i2ped25519.Ed25519Pub
 	}
 	ri, err := cfg.RouterLookupFunc(hash)
 	if err != nil {
-		return nil, oops.Wrapf(err, "netdb lookup failed for %x", hash[:4])
+		return nil, oops.Wrapf(err, "netdb lookup failed for %x", hash[:logHashPrefixBytes])
 	}
 	return extractEd25519PublicKey(ri)
 }
@@ -788,7 +788,7 @@ func (t *SSU2Transport) handlePeerTestResponseAsBob(ptBlock *ssu2noise.PeerTestB
 	// sending message 4, if accepted (reason code 0)." Alice needs Charlie's
 	// full RouterInfo to open the session she will build with the token from the
 	// peer test, so this is only required on the accept path.
-	if ptBlock.Code == 0 {
+	if ptBlock.Code == codeAccepted {
 		if err := t.sendRouterInfoToPeer(aliceSession, charlieHash); err != nil {
 			t.logger.WithField("error", err).Debug("PeerTest Bob: could not forward Charlie's RouterInfo to Alice")
 		}
@@ -1031,7 +1031,7 @@ func (t *SSU2Transport) handlePeerTestAsBob(ptBlock *ssu2noise.PeerTestBlock, se
 	}
 	if verifyErr := t.verifyPeerTestSignature(ptBlock, senderHash); verifyErr != nil {
 		t.logger.WithFields(map[string]interface{}{
-			"sender_hash": senderHash[:4],
+			"sender_hash": senderHash[:logHashPrefixBytes],
 			"nonce":       ptBlock.Nonce,
 			"error":       verifyErr,
 		}).Warn("PeerTest signature verification failed, rejecting")
@@ -1291,7 +1291,7 @@ func (t *SSU2Transport) handleRelayRequestBlock(block *ssu2noise.SSU2Block, sess
 	valid, verifyErr := t.verifyRelayRequestSignature(req, senderHash)
 	if verifyErr != nil {
 		t.logger.WithFields(map[string]interface{}{
-			"sender_hash": senderHash[:4],
+			"sender_hash": senderHash[:logHashPrefixBytes],
 			"nonce":       req.Nonce,
 			"error":       verifyErr,
 		}).Warn("RelayRequest signature verification failed, rejecting")
@@ -1299,7 +1299,7 @@ func (t *SSU2Transport) handleRelayRequestBlock(block *ssu2noise.SSU2Block, sess
 	}
 	if !valid {
 		t.logger.WithFields(map[string]interface{}{
-			"sender_hash": senderHash[:4],
+			"sender_hash": senderHash[:logHashPrefixBytes],
 			"nonce":       req.Nonce,
 		}).Warn("RelayRequest signature invalid, rejecting")
 		return oops.Errorf("invalid RelayRequest signature")
@@ -1537,7 +1537,7 @@ func (t *SSU2Transport) initiateHolePunch(intro *ssu2noise.RelayIntroBlock, bobS
 	// RelayIntro block carries it (§"RelayIntro": "Alice's router hash") and its
 	// signature was verified above, so it is trustworthy here.
 	aliceHash := data.Hash{}
-	if len(intro.AliceRouterHash) == 32 {
+	if len(intro.AliceRouterHash) == routerHashSize {
 		copy(aliceHash[:], intro.AliceRouterHash)
 	}
 
@@ -1579,7 +1579,7 @@ func (t *SSU2Transport) verifyRelayIntroSignature(intro *ssu2noise.RelayIntroBlo
 
 	// Extract Alice's router hash from the intro block
 	var aliceHash data.Hash
-	if len(intro.AliceRouterHash) == 32 {
+	if len(intro.AliceRouterHash) == routerHashSize {
 		copy(aliceHash[:], intro.AliceRouterHash)
 	} else {
 		return oops.Errorf("relay intro: AliceRouterHash missing or wrong size")
@@ -1593,8 +1593,8 @@ func (t *SSU2Transport) verifyRelayIntroSignature(intro *ssu2noise.RelayIntroBlo
 	}
 	aliceRI, err := cfg.RouterLookupFunc(aliceHash)
 	if err != nil {
-		t.logger.WithField("alice_hash", aliceHash[:4]).Warn("RelayIntro: failed to lookup Alice's RouterInfo for signature verification")
-		return oops.Wrapf(err, "netdb lookup failed for Alice %x", aliceHash[:4])
+		t.logger.WithField("alice_hash", aliceHash[:logHashPrefixBytes]).Warn("RelayIntro: failed to lookup Alice's RouterInfo for signature verification")
+		return oops.Wrapf(err, "netdb lookup failed for Alice %x", aliceHash[:logHashPrefixBytes])
 	}
 	alicePubKey, err := extractEd25519PublicKey(aliceRI)
 	if err != nil {
@@ -1628,8 +1628,8 @@ func (t *SSU2Transport) verifyRelayIntroSignature(intro *ssu2noise.RelayIntroBlo
 	}
 
 	t.logger.WithFields(map[string]interface{}{
-		"alice_hash": fmt.Sprintf("%x", aliceHash[:4]),
-		"bob_hash":   fmt.Sprintf("%x", bobHash[:4]),
+		"alice_hash": fmt.Sprintf("%x", aliceHash[:logHashPrefixBytes]),
+		"bob_hash":   fmt.Sprintf("%x", bobHash[:logHashPrefixBytes]),
 	}).Debug("RelayIntro signature verified successfully with correct Bob hash")
 
 	return nil
@@ -1691,7 +1691,7 @@ func (t *SSU2Transport) prepareRelayResponseCredentials() ([]byte, []byte, error
 		return nil, nil, oops.Errorf("hole-punch: signing key unavailable")
 	}
 
-	token := make([]byte, 8)
+	token := make([]byte, relayResponseTokenSize)
 	if _, err := cryptorand.Read(token); err != nil {
 		return nil, nil, oops.Wrapf(err, "hole-punch: token generation")
 	}
@@ -1805,9 +1805,9 @@ func (t *SSU2Transport) InboundBlockedStatusCode() int {
 	}
 	switch {
 	case ssu2noise.IsSymmetricNAT(natType):
-		return 11 // ERROR_SYMMETRIC_NAT
+		return inboundBlockedSymmetricNATCode
 	case ssu2noise.RequiresRelay(natType) || natType == ssu2noise.NATRestricted:
-		return 2 // FIREWALLED
+		return inboundBlockedFirewalledCode
 	default:
 		return 0
 	}
@@ -1926,7 +1926,7 @@ func (t *SSU2Transport) StartNATDetection(candidates []router_info.RouterInfo, r
 		return
 	}
 
-	if len(candidates) < 2 {
+	if len(candidates) < minPeerTestCandidates {
 		t.logger.Warn("NAT detection skipped: need at least 2 SSU2-capable peers")
 		return
 	}
@@ -2060,7 +2060,7 @@ func (t *SSU2Transport) sendPeerTestRequest(session *SSU2Session, nonce uint32, 
 		MessageCode: ssu2noise.PeerTestRequest,
 		Nonce:       nonce,
 		RouterHash:  &charlieHash,
-		Version:     2,
+		Version:     ssu2ProtocolVersion,
 		Timestamp:   transport.RoundUnixSeconds(time.Now()),
 	}
 	encoded, err := ssu2noise.EncodePeerTestBlock(ptBlock)
@@ -2140,7 +2140,7 @@ func (t *SSU2Transport) handlePeerTestTimeout(candidates []router_info.RouterInf
 			randFloat := float64(randUint64) / float64(^uint64(0))
 
 			// Apply jitter: ±25% → range [0.75, 1.25] * baseBackoff
-			jitterFactor := 0.75 + (randFloat * 0.5) // 0.75 + [0, 0.5) = [0.75, 1.25)
+			jitterFactor := peerTestJitterMinFactor + (randFloat * peerTestJitterSpan)
 			backoff = time.Duration(float64(baseBackoff) * jitterFactor)
 		}
 
@@ -2208,7 +2208,7 @@ func (t *SSU2Transport) scheduleNATDetectionRetry(backoff time.Duration) {
 		republish := t.peerTestRepublishFn
 		t.peerTestRetryMu.Unlock()
 
-		if len(candidates) >= 2 {
+		if len(candidates) >= minPeerTestCandidates {
 			t.logger.Debug("NAT detection: retry timer fired; re-running peer test")
 			t.wg.Add(1)
 			go func() {
@@ -2298,7 +2298,7 @@ func (t *SSU2Transport) classifyNATType(test *ssu2noise.PeerTest) ssu2noise.NATT
 func (t *SSU2Transport) registerIntroducers(candidates []router_info.RouterInfo, republish func()) {
 	registered := 0
 	for _, ri := range candidates {
-		if registered >= 3 {
+		if registered >= maxIntroducerRegistrations {
 			break
 		}
 		if t.tryRegisterIntroducer(ri) {
@@ -2375,7 +2375,7 @@ func (t *SSU2Transport) trackAbandonedRelayTag(tag uint32, addr *net.UDPAddr, re
 	}
 
 	// Log a warning if we're accumulating many abandoned tags (even after pruning)
-	if len(t.abandonedRelayTags) > 10 {
+	if len(t.abandonedRelayTags) > abandonedRelayTagWarnThreshold {
 		t.logger.WithField("count", len(t.abandonedRelayTags)).
 			Warn("Accumulating abandoned relay tags; may indicate registration instability")
 	}

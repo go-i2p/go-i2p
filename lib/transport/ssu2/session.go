@@ -98,7 +98,7 @@ func NewSSU2SessionDeferred(conn *ssu2noise.SSU2Conn, ctx context.Context, logge
 		packetToPending: make(map[uint32]uint64),
 		maxRetransmit:   DefaultMaxRetransmissions,
 	}
-	s.peerTestLimiter = rate.NewLimiter(rate.Limit(1), 3)
+	s.peerTestLimiter = rate.NewLimiter(rate.Limit(perSessionPeerTestRateLimit), perSessionPeerTestBurst)
 	s.wireDataHandlerCallbacks()
 	return s
 }
@@ -131,10 +131,10 @@ func (s *SSU2Session) buildMergedCallbacks(extra *BlockCallbackConfig) ssu2noise
 			if delta < 0 {
 				delta = -delta
 			}
-			if delta > 60 {
+			if delta > clockSkewToleranceSeconds {
 				s.Logger().WithField("skew_seconds", delta).Warn("SSU2 clock skew out of tolerance, closing session")
 				s.Cancel()
-				return oops.Errorf("clock skew %ds exceeds 60s tolerance", delta)
+				return oops.Errorf("clock skew %ds exceeds %ds tolerance", delta, clockSkewToleranceSeconds)
 			}
 			return nil
 		},
@@ -475,7 +475,7 @@ func buildShortFollowOnFragments(messageID uint32, body []byte, offset, maxPaylo
 	}
 
 	var blocks []*ssu2noise.SSU2Block
-	fragNum := uint8(1)
+	fragNum := uint8(firstFollowOnFragmentNumber)
 	for offset < len(body) {
 		end := offset + maxFollowBody
 		if end > len(body) {
@@ -495,8 +495,8 @@ func buildShortFollowOnFragments(messageID uint32, body []byte, offset, maxPaylo
 		blocks = append(blocks, ssu2noise.NewSSU2Block(ssu2noise.BlockTypeFollowOnFragment, followData))
 		offset = end
 		fragNum++
-		if fragNum > 127 {
-			return nil, oops.Errorf("message too large: exceeds 127 follow-on fragments")
+		if fragNum > maxFollowOnFragments {
+			return nil, oops.Errorf("message too large: exceeds %d follow-on fragments", maxFollowOnFragments)
 		}
 	}
 
@@ -844,7 +844,7 @@ func (s *SSU2Session) updateRTTEstimate(recvAt time.Time) {
 
 // deliverMessage sends the message to the receive channel with timeout handling.
 func (s *SSU2Session) deliverMessage(msg i2np.Message) error {
-	timer := time.NewTimer(100 * time.Millisecond)
+	timer := time.NewTimer(recvBackpressureTimeout)
 	defer timer.Stop()
 	select {
 	case s.RecvChan() <- msg:

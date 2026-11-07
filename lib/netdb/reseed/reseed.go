@@ -390,7 +390,7 @@ func validateReseedResponse(response *http.Response, uri string) error {
 	}).Info("Successfully received response from reseed server")
 
 	// Check if we got an error page instead of SU3 file
-	if response.StatusCode != 200 {
+	if response.StatusCode != http.StatusOK {
 		response.Body.Close()
 		log.WithField("status_code", response.StatusCode).Error("Reseed server returned error status")
 		return oops.Errorf("reseed server returned status %d", response.StatusCode)

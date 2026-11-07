@@ -88,7 +88,7 @@ func (pc *PersistentConfig) SaveLastShutdownTime(t time.Time) error {
 	record := make([]byte, lastShutdownSize)
 	binary.BigEndian.PutUint64(record, uint64(t.Unix()))
 	path := filepath.Join(pc.workingDir, lastShutdownFilename)
-	if err := os.WriteFile(path, record, 0o600); err != nil {
+	if err := os.WriteFile(path, record, secureFilePermissions); err != nil {
 		return oops.Wrapf(err, "failed to store NTCP2 last-shutdown time")
 	}
 	log.WithField("path", path).Debug("Stored NTCP2 last-shutdown time")

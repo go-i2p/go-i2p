@@ -491,16 +491,16 @@ func (dr *DestinationResolver) resolveMetaEntryWithDepth(entryHash [32]byte, ent
 	hash := common.Hash(entryHash)
 
 	switch entryType {
-	case 1: // Classic LeaseSet
+	case leaseSetType: // Classic LeaseSet
 		return dr.extractKeyFromLeaseSet2(hash)
-	case 3: // LeaseSet2
+	case leaseSet2Type: // LeaseSet2
 		return dr.extractKeyFromLeaseSet2Direct(hash)
-	case 5: // EncryptedLeaseSet - requires decryption, fall back to LS2 lookup
+	case encryptedLeaseSetType: // EncryptedLeaseSet - requires decryption, fall back to LS2 lookup
 		if key, err := dr.extractKeyFromLeaseSet2Direct(hash); err == nil {
 			return key, nil
 		}
 		return dr.extractKeyFromLeaseSet2(hash)
-	case 7: // Nested MetaLeaseSet (recursive, depth-limited)
+	case metaLeaseSetType: // Nested MetaLeaseSet (recursive, depth-limited)
 		return dr.resolveMetaDestinationWithDepth(hash, depth+1)
 	default: // type 0 (unknown) — try LS2 then classic
 		if key, err := dr.extractKeyFromLeaseSet2Direct(hash); err == nil {

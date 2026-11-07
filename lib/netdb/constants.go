@@ -389,3 +389,22 @@ const (
 	// netDBDirMode is the permission for NetDB directories.
 	netDBDirMode = 0o700
 )
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Peer diversity address families
+// ──────────────────────────────────────────────────────────────────────────────
+
+// routerAddressPrefix tags each peer address with the IP family its dedup
+// prefix belongs to, so two peers in the same /16 (v4) or /48 (v6) - typically
+// the same host or the same provider's block - count as one for diversity
+// purposes. The tags are the IP protocol version numbers, which is how the
+// values read everywhere else in the stack.
+//
+// Moved from: std_peer_selection.go
+const (
+	// ipv4AddressFamily selects the IPv4 prefix bucket.
+	ipv4AddressFamily = 4
+
+	// ipv6AddressFamily selects the IPv6 prefix bucket.
+	ipv6AddressFamily = 6
+)

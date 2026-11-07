@@ -6,6 +6,7 @@ import (
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/crypto/rand"
+	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
@@ -286,7 +287,7 @@ func computeXORDistance(hash1, hash2 common.Hash) common.Hash {
 // that differs between two hashes (represented by their XOR distance).
 // Returns the bit position (0-255) or 0 if the distance is zero.
 func findMostSignificantDifferingBit(distance common.Hash) int {
-	for byteIdx := 0; byteIdx < 32; byteIdx++ {
+	for byteIdx := 0; byteIdx < i2np.HashSize; byteIdx++ {
 		if distance[byteIdx] != 0 {
 			b := distance[byteIdx]
 			for bitIdx := 7; bitIdx >= 0; bitIdx-- {
@@ -357,7 +358,7 @@ func (s *AdaptiveStrategy) randomizeLowerBits(key *common.Hash, bucketIdx int) e
 	}
 
 	// Randomize all subsequent bytes
-	for i := byteIdx + 1; i < 32; i++ {
+	for i := byteIdx + 1; i < i2np.HashSize; i++ {
 		var b [1]byte
 		_, err := rand.Read(b[:])
 		if err != nil {

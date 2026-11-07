@@ -19,6 +19,7 @@ import (
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/bootstrap"
 	"github.com/go-i2p/go-i2p/lib/config"
+	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/netdb/reseed"
 	"github.com/go-i2p/go-i2p/lib/util/logutil"
 )
@@ -833,7 +834,7 @@ func (db *StdNetDB) updateCacheAfterReseed() error {
 
 // validateRouterInfoDataType checks if the data type is valid for RouterInfo storage.
 func validateRouterInfoDataType(dataType byte) error {
-	if dataType != 0 {
+	if dataType != i2np.DatabaseStoreTypeRouterInfo {
 		log.WithField("type", dataType).Warn("Invalid data type for RouterInfo, expected 0")
 		return oops.Errorf("invalid data type for RouterInfo: expected 0, got %d", dataType)
 	}
@@ -915,15 +916,15 @@ func (db *StdNetDB) persistRouterInfoToFilesystem(key common.Hash, ri router_inf
 // See also [StoreRouterInfoFromMessage], [StoreLeaseSet].
 func (db *StdNetDB) Store(key common.Hash, data []byte, dataType byte) error {
 	switch dataType {
-	case 0:
+	case i2np.DatabaseStoreTypeRouterInfo:
 		return db.StoreRouterInfoFromMessage(key, data, dataType)
-	case 1:
+	case i2np.DatabaseStoreTypeLeaseSet:
 		return db.StoreLeaseSet(key, data, dataType)
-	case 3:
+	case i2np.DatabaseStoreTypeLeaseSet2:
 		return db.StoreLeaseSet2(key, data, dataType)
-	case 5:
+	case i2np.DatabaseStoreTypeEncryptedLeaseSet:
 		return db.StoreEncryptedLeaseSet(key, data, dataType)
-	case 7:
+	case i2np.DatabaseStoreTypeMetaLeaseSet:
 		return db.StoreMetaLeaseSet(key, data, dataType)
 	default:
 		return oops.Errorf("unknown database store type: %d", dataType)

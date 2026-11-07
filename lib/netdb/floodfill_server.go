@@ -177,7 +177,7 @@ func (rl *FloodfillRateLimiter) allowPeer(peer common.Hash, now time.Time) bool 
 			return false
 		}
 		rl.peers[peer] = &peerLimit{
-			tokens:     float64(rl.maxBurst) - 1,
+			tokens:     float64(rl.maxBurst) - tokensPerRequest,
 			lastUpdate: now,
 		}
 		rl.lastSeen[peer] = now

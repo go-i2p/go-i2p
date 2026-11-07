@@ -1,6 +1,10 @@
 package transport
 
-import "time"
+import (
+	"time"
+
+	"github.com/go-i2p/go-i2p/lib/config"
+)
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Session message queue sizing
@@ -88,3 +92,15 @@ const (
 	// because the cooldown check compares timestamps anyway.
 	failedPeersCleanupInterval = 5 * time.Minute
 )
+
+// ──────────────────────────────────────────────────────────────────────────────
+// On-disk file permissions
+// ──────────────────────────────────────────────────────────────────────────────
+
+// secureFilePermissions is the mode used for every file this transport writes
+// that contains key material: owner read/write only. Aliased from lib/config,
+// which owns the router-wide policy, so the transport cannot write a key file
+// with a looser mode than the rest of the router.
+//
+// Moved from: persistent_config.go
+const secureFilePermissions = config.SecureFilePermissions

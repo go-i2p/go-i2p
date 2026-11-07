@@ -120,10 +120,10 @@ func (t *SSU2Transport) validateOutOfSessionDateTime(blocks []*ssu2noise.SSU2Blo
 	if dateTime == nil {
 		return oops.Errorf("%s: missing required DateTime block", kind)
 	}
-	if len(dateTime.Data) < 4 {
+	if len(dateTime.Data) < dateTimeFieldSize {
 		return oops.Errorf("%s: DateTime block too short: %d bytes", kind, len(dateTime.Data))
 	}
-	peer := time.Unix(int64(binary.BigEndian.Uint32(dateTime.Data[:4])), 0)
+	peer := time.Unix(int64(binary.BigEndian.Uint32(dateTime.Data[:dateTimeFieldSize])), 0)
 	skew := time.Since(peer)
 	if skew < 0 {
 		skew = -skew

@@ -274,7 +274,7 @@ func createSSU2TransportStruct(config *Config, identity router_info.RouterInfo, 
 		handler:               NewDefaultHandler(),
 		sessionRegistry:       transport.NewSessionRegistry(l),
 		natStateCache:         &natState{},
-		peerTestGlobalLimiter: rate.NewLimiter(100, 200),
+		peerTestGlobalLimiter: rate.NewLimiter(peerTestGlobalRateLimit, peerTestGlobalBurst),
 		admission:             newHandshakeAdmission(),
 		// Created up front rather than on the first Accept() so Close() can
 		// drain and close it without racing the lazy initialisation.
@@ -355,7 +355,7 @@ func initializeCryptoKeys(cfg *ssu2noise.SSU2Config, keystore KeystoreProvider) 
 		return WrapSSU2Error(oops.Errorf("encryption private key is nil"), "retrieving encryption key")
 	}
 	cfg.StaticKey = encryptionPrivKey.Bytes()
-	if len(cfg.StaticKey) != 32 {
+	if len(cfg.StaticKey) != staticKeySize {
 		return WrapSSU2Error(
 			oops.Errorf("invalid static key size: expected 32 bytes, got %d", len(cfg.StaticKey)),
 			"loading static key",
@@ -621,7 +621,7 @@ func (t *SSU2Transport) acceptNextInboundConnection() bool {
 		select {
 		case <-t.ctx.Done():
 			return false
-		case <-time.After(50 * time.Millisecond):
+		case <-time.After(listenerSwapPollInterval):
 			return true
 		}
 	}
@@ -634,7 +634,7 @@ func (t *SSU2Transport) acceptNextInboundConnection() bool {
 			return false
 		default:
 			t.logger.WithError(err).Debug("Transient SSU2 accept error; will retry")
-			time.Sleep(10 * time.Millisecond)
+			time.Sleep(transientAcceptBackoff)
 			return true
 		}
 	}
@@ -912,7 +912,7 @@ func (t *SSU2Transport) extractPeerHash(conn net.Conn) data.Hash {
 			return ssu2Addr.RouterHash(), true
 		}
 		return data.Hash{}, false
-	}, 0xFE) // SSU2 marker byte
+	}, peerHashMarkerByte)
 }
 
 // checkConnectionReplay performs anti-replay validation for an inbound SSU2 connection.
@@ -950,7 +950,7 @@ func (t *SSU2Transport) checkReplayToken(replayToken []byte, remoteAddr string) 
 // If token length is exactly 32 bytes, it is used directly. Otherwise we hash
 // it to 32 bytes to preserve deterministic replay-key semantics.
 func replayTokenToReplayKey(token []byte) [32]byte {
-	if len(token) == 32 {
+	if len(token) == routerHashSize {
 		var replayKey [32]byte
 		copy(replayKey[:], token)
 		return replayKey
@@ -1146,7 +1146,7 @@ func (t *SSU2Transport) GetSession(routerInfo router_info.RouterInfo) (transport
 		return t.dialViaIntroducer(routerInfo, routerHash)
 	}
 
-	err = oops.Wrapf(ErrInvalidRouterInfo, "no reachable SSU2 address for router %x", routerHash[:4])
+	err = oops.Wrapf(ErrInvalidRouterInfo, "no reachable SSU2 address for router %x", routerHash[:logHashPrefixBytes])
 	t.recordPeerAttempt(routerHash)
 	t.recordPeerFailure(routerHash, err)
 	return nil, err
@@ -1370,7 +1370,7 @@ func (t *SSU2Transport) createBaseDialConfig() (*ssu2noise.SSU2Config, error) {
 		return nil, err
 	}
 
-	if ik := t.GetIntroKey(); len(ik) == 32 {
+	if ik := t.GetIntroKey(); len(ik) == introKeySize {
 		dialConfig.IntroKey = ik
 	}
 

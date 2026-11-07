@@ -68,7 +68,7 @@ func (t *SSU2Transport) dialViaIntroducer(charlieRI router_info.RouterInfo, char
 
 	introducers := t.collectIntroducers(charlieRI)
 	if len(introducers) == 0 {
-		err := oops.Errorf("no valid introducers found for router %x", charlieHash[:4])
+		err := oops.Errorf("no valid introducers found for router %x", charlieHash[:logHashPrefixBytes])
 		t.recordPeerFailure(charlieHash, err)
 		return nil, err
 	}
@@ -115,7 +115,7 @@ func (t *SSU2Transport) dialViaIntroducer(charlieRI router_info.RouterInfo, char
 	}
 
 	// All introducers failed.
-	err := oops.Wrapf(lastErr, "all %d introducer(s) failed for router %x", len(introducers), charlieHash[:4])
+	err := oops.Wrapf(lastErr, "all %d introducer(s) failed for router %x", len(introducers), charlieHash[:logHashPrefixBytes])
 	t.recordPeerFailure(charlieHash, err)
 	return nil, err
 }
@@ -180,14 +180,14 @@ func (t *SSU2Transport) establishBobSessionWithContext(ctx context.Context, intr
 	cfg := t.config.Load()
 	bobRI, err := cfg.RouterLookupFunc(intro.RouterHash)
 	if err != nil {
-		return nil, oops.Wrapf(err, "Bob (%x...) lookup failed", intro.RouterHash[:4])
+		return nil, oops.Wrapf(err, "Bob (%x...) lookup failed", intro.RouterHash[:logHashPrefixBytes])
 	}
 
 	// Note: GetSession doesn't support context yet, but if the parent context
 	// is canceled, the concurrent attempt will be abandoned anyway.
 	bobSession, err := t.GetSession(bobRI)
 	if err != nil {
-		return nil, oops.Wrapf(err, "failed to get session to Bob (%x...)", intro.RouterHash[:4])
+		return nil, oops.Wrapf(err, "failed to get session to Bob (%x...)", intro.RouterHash[:logHashPrefixBytes])
 	}
 
 	bobSSU2Session, ok := bobSession.(*SSU2Session)
@@ -223,7 +223,7 @@ type pendingRelayResponse struct {
 // honoring the parent context for cancellation (T-2 fix).
 func (t *SSU2Transport) sendRelayRequestAndWaitWithContext(ctx context.Context, bobSSU2Session *SSU2Session, intro IntroducerAddr, charlieHash data.Hash, nonce uint32) (*ssu2noise.RelayResponseBlock, error) {
 	pending := &pendingRelayResponse{
-		ch:          make(chan *ssu2noise.RelayResponseBlock, 1),
+		ch:          make(chan *ssu2noise.RelayResponseBlock, relayResponseChanBuffer),
 		bobHash:     extractSenderHash(bobSSU2Session),
 		charlieHash: charlieHash,
 	}
@@ -293,7 +293,7 @@ func (t *SSU2Transport) sendRelayRequest(bobSession *SSU2Session, intro Introduc
 		ed25519Key,
 		intro.RouterHash, charlieHash,
 		nonce, intro.RelayTag, timestamp,
-		2, // SSU2 version
+		ssu2ProtocolVersion,
 		alicePort, aliceIP,
 	)
 	if err != nil {
@@ -304,7 +304,7 @@ func (t *SSU2Transport) sendRelayRequest(bobSession *SSU2Session, intro Introduc
 		Nonce:     nonce,
 		RelayTag:  intro.RelayTag,
 		Timestamp: timestamp,
-		Version:   2,
+		Version:   ssu2ProtocolVersion,
 		AlicePort: alicePort,
 		AliceIP:   aliceIP,
 		Signature: sig,
@@ -328,7 +328,7 @@ func (t *SSU2Transport) externalAddressForRelay() (net.IP, uint16, error) {
 		if err == nil {
 			ip := net.ParseIP(host)
 			port, portErr := strconv.Atoi(portStr)
-			if ip != nil && portErr == nil && port > 0 && port <= 65535 {
+			if ip != nil && portErr == nil && port > 0 && port <= maxPortNumber {
 				return ip, uint16(port), nil
 			}
 		}
@@ -381,7 +381,7 @@ func (t *SSU2Transport) localIPPort() (net.IP, uint16, error) {
 
 // dialCharlieDirectly dials Charlie's address obtained from the RelayResponse.
 func (t *SSU2Transport) dialCharlieDirectly(charlieRI router_info.RouterInfo, charlieHash data.Hash, resp *ssu2noise.RelayResponseBlock) (transport.TransportSession, error) {
-	if resp.Code != 0 {
+	if resp.Code != codeAccepted {
 		return nil, oops.Errorf("relay rejected by introducer: code=%d", resp.Code)
 	}
 
@@ -518,7 +518,7 @@ func (t *SSU2Transport) configureRemoteKeys(dialConfig *ssu2noise.SSU2Config, ch
 // configureIntroKeys sets both local and remote introduction keys in the dial config.
 func (t *SSU2Transport) configureIntroKeys(dialConfig *ssu2noise.SSU2Config, charlieRI router_info.RouterInfo) error {
 	// Set our local intro key for header protection.
-	if ik := t.GetIntroKey(); len(ik) == 32 {
+	if ik := t.GetIntroKey(); len(ik) == introKeySize {
 		dialConfig.IntroKey = ik
 	}
 
