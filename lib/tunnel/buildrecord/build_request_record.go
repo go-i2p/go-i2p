@@ -54,11 +54,11 @@ type BuildRequestRecord struct {
 	LayerKey      session_key.SessionKey
 	IVKey         session_key.SessionKey
 	ReplyKey      session_key.SessionKey
-	ReplyIV       [replyIVLen]byte
+	ReplyIV       [ReplyIVLen]byte
 	Flag          int
 	RequestTime   time.Time
 	SendMessageID int
-	Padding       [legacyPaddingLen]byte
+	Padding       [LegacyPaddingLen]byte
 
 	// MinBandwidthKBps is the minimum bandwidth (KB/s) the tunnel creator
 	// requires from this hop, parsed from the short build record's tunnel

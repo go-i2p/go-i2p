@@ -110,12 +110,12 @@ const StandardRecordSize = 528
 // Spec: i2np.rst §"Build Response Record"; tunnel-creation.rst.
 // Moved from: build_response_record.go
 const (
-	// responseHashLen is the width of the leading integrity hash.
-	responseHashLen = 32
+	// ResponseHashLen is the width of the leading integrity hash.
+	ResponseHashLen = 32
 
 	// responseRandomDataLen is the padding between the integrity hash and the
 	// reply byte. 495 = 528 - 32 - 1.
-	responseRandomDataLen = StandardRecordSize - responseHashLen - 1
+	responseRandomDataLen = StandardRecordSize - ResponseHashLen - 1
 
 	// responseReplyOffset is the byte holding the reply code, the last byte of
 	// the record.
@@ -126,14 +126,16 @@ const (
 // Legacy long-request record field widths
 // ──────────────────────────────────────────────────────────────────────────────
 
-// replyIVLen is the width of the per-hop reply IV in the deprecated long
+// ReplyIVLen is the width of the per-hop reply IV in the deprecated long
 // request record. The short ECIES format does not carry it; per-hop IVs are
-// derived from the ECIES handshake instead.
+// derived from the ECIES handshake instead. Exported because lib/tunnel
+// builds the same records and must agree on the width.
 // Moved from: build_request_record.go
-const replyIVLen = 16
+const ReplyIVLen = 16
 
-// legacyPaddingLen is the width of the fixed padding tail in the deprecated
+// LegacyPaddingLen is the width of the fixed padding tail in the deprecated
 // long request record. The field is retained on BuildRequestRecord so callers
-// that still read the long format see the same layout.
+// that still read the long format see the same layout. Exported for the same
+// reason as ReplyIVLen.
 // Moved from: build_request_record.go
-const legacyPaddingLen = 29
+const LegacyPaddingLen = 29

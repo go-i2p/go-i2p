@@ -145,7 +145,7 @@ func NewManagerWithConfig(cfg config.TunnelDefaults) *ParticipantManager {
 		"at":                     "NewManagerWithConfig",
 		"phase":                  "tunnel_build",
 		"reason":                 "tunnel manager initialized",
-		"cleanup_interval":       "60s",
+		"cleanup_interval":       managerCleanupInterval.String(),
 		"max_participants":       m.maxParticipants,
 		"limits_enabled":         m.limitsEnabled,
 		"soft_limit":             m.softLimit(),
@@ -698,13 +698,13 @@ func (m *ParticipantManager) GetLimitStats() TunnelLimitStats {
 // removes expired participant tunnels.
 //
 // Design decisions:
-// - Runs every 60 seconds (tunnels typically last 10 minutes)
+// - Runs every managerCleanupInterval (tunnels typically last 10 minutes)
 // - Logs statistics about cleaned up tunnels
 // - Gracefully stops when stopChan is closed
 func (m *ParticipantManager) cleanupLoop() {
 	defer m.wg.Done()
 
-	ticker := time.NewTicker(60 * time.Second)
+	ticker := time.NewTicker(managerCleanupInterval)
 	defer ticker.Stop()
 
 	for {

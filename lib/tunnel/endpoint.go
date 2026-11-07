@@ -3,6 +3,7 @@ package tunnel
 import (
 	"crypto/subtle"
 	"errors"
+	"fmt"
 	"math/bits"
 	"sync"
 	"time"
@@ -75,7 +76,7 @@ type fragmentAssembler struct {
 	deliveryType          byte           // Delivery type from first fragment
 	firstFragmentReceived bool           // Track if first fragment (index 0) was recorded
 	tunnelID              uint32         // Destination tunnel ID (DTTunnel only)
-	hash                  [HashSize]byte   // Gateway or router hash (DTTunnel, DTRouter)
+	hash                  [HashSize]byte // Gateway or router hash (DTTunnel, DTRouter)
 	totalCount            int            // Expected number of fragments (0 until last fragment seen)
 	receivedMask          uint64         // Bitmap of received fragments (supports up to 64 fragments)
 	createdAt             time.Time      // Timestamp when first fragment was received
@@ -101,7 +102,7 @@ var (
 	// ErrTooManyFragments is returned when fragment number exceeds maximum.
 	// The fragment number is a 6-bit field, so at most 63 follow-on
 	// fragments are allowed per message.
-	ErrTooManyFragments = errors.New("too many fragments: maximum 63")
+	ErrTooManyFragments = fmt.Errorf("too many fragments: maximum %d", MaxFollowOnFragments)
 	// ErrDuplicateFragment is returned when a fragment is received twice.
 	// Re-delivering the same fragment would corrupt reassembly, so it is
 	// dropped.
