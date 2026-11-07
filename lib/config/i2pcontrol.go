@@ -1,6 +1,9 @@
 package config
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // DefaultI2PControlPort is the standard I2PControl RPC port
 // As defined in the I2PControl specification
@@ -76,12 +79,12 @@ type I2PControlConfig struct {
 func DefaultI2PControlConfig() I2PControlConfig {
 	return I2PControlConfig{
 		Enabled:                         true,
-		Address:                         "localhost:7650",
-		Password:                        "itoopie",
+		Address:                         fmt.Sprintf("localhost:%d", DefaultI2PControlPort),
+		Password:                        DefaultI2PControlPassword,
 		UseHTTPS:                        false,
 		CertFile:                        "",
 		KeyFile:                         "",
-		TokenExpiration:                 10 * time.Minute,
+		TokenExpiration:                 DefaultI2PControlTokenExpiration,
 		AllowPlaintextNonLoopback:       false,
 		AllowDefaultPasswordNonLoopback: false,
 		CORSAllowedOrigins:              nil,

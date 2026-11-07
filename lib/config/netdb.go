@@ -37,11 +37,11 @@ type NetDBConfig struct {
 // DefaultNetDBConfig holds the default settings for netdb.
 var DefaultNetDBConfig = NetDBConfig{
 	Path:                                    filepath.Join(defaultConfig(), "netDb"),
-	MaxRouterInfos:                          5000,
-	MaxLeaseSets:                            1000,
-	ExpirationCheckInterval:                 1 * time.Minute,
-	LeaseSetRefreshThreshold:                2 * time.Minute,
-	ExplorationInterval:                     5 * time.Minute,
+	MaxRouterInfos:                          DefaultMaxRouterInfos,
+	MaxLeaseSets:                            DefaultMaxLeaseSets,
+	ExpirationCheckInterval:                 DefaultNetDBExpirationCheckInterval,
+	LeaseSetRefreshThreshold:                DefaultNetDBLeaseSetRefreshThreshold,
+	ExplorationInterval:                     DefaultNetDBExplorationInterval,
 	StrictRouterInfoNetworkValidation:       true,
-	RouterInfoAdmissionPressureThresholdPct: 80,
+	RouterInfoAdmissionPressureThresholdPct: DefaultRouterInfoAdmissionPressurePct,
 }

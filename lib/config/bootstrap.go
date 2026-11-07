@@ -85,5 +85,5 @@ var DefaultBootstrapConfig = BootstrapConfig{
 	PeerCacheEnabled: true,
 	// Peer cache path is populated at runtime based on the OS working directory
 	PeerCachePath:    "",
-	PeerCacheMaxSize: 500,
+	PeerCacheMaxSize: DefaultPeerCacheMaxSize,
 }
