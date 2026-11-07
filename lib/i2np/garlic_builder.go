@@ -71,7 +71,7 @@ func NewGarlicBuilderWithDefaults() (*GarlicBuilder, error) {
 	messageID := int(binary.BigEndian.Uint32(msgIDBytes) & 0x7FFFFFFF)
 
 	// Default expiration: 10 seconds from now (typical for garlic messages)
-	expiration := time.Now().Add(10 * time.Second)
+	expiration := time.Now().Add(garlicMessageTTL)
 
 	log.WithFields(logger.Fields{
 		"message_id": messageID,
@@ -220,14 +220,14 @@ func (gb *GarlicBuilder) Build() (*Garlic, error) {
 		return nil, oops.Errorf("cannot build garlic message with zero cloves")
 	}
 
-	if len(gb.cloves) > 255 {
+	if len(gb.cloves) > garlicCloveWireLimit {
 		log.WithFields(logger.Fields{
 			"at":          "Build",
 			"clove_count": len(gb.cloves),
-			"max_cloves":  255,
+			"max_cloves":  garlicCloveWireLimit,
 			"reason":      "exceeded maximum clove count",
 		}).Error("Too many cloves in garlic message")
-		return nil, oops.Errorf("garlic message cannot contain more than 255 cloves, got %d", len(gb.cloves))
+		return nil, oops.Errorf("garlic message cannot contain more than %d cloves, got %d", garlicCloveWireLimit, len(gb.cloves))
 	}
 
 	garlic := &Garlic{
@@ -303,7 +303,7 @@ func serializeGarlicClove(clove *GarlicClove) ([]byte, error) {
 		return nil, oops.Errorf("garlic clove contains nil I2NP message")
 	}
 
-	buf := make([]byte, 0, 128)
+	buf := make([]byte, 0, garlicBuilderInitialCapacity)
 
 	// Serialize delivery instructions
 	instructionsBytes, err := serializeDeliveryInstructions(&clove.DeliveryInstructions)
@@ -315,10 +315,10 @@ func serializeGarlicClove(clove *GarlicClove) ([]byte, error) {
 	// Write the 9-byte short I2NP header: type(1) + msgID(4) + shortExp(4).
 	// The short I2NP header carries the embedded I2NP message's own expiration
 	// (seconds since epoch), not the garlic-level expiration.
-	header := make([]byte, 9)
+	header := make([]byte, garlicCloveHeaderSize)
 	header[0] = byte(clove.Message.Type())
 	binary.BigEndian.PutUint32(header[1:5], uint32(clove.Message.MessageID()))
-	binary.BigEndian.PutUint32(header[5:9], uint32(clove.Message.Expiration().Unix()))
+	binary.BigEndian.PutUint32(header[I2NPExpirationOffset:garlicCloveHeaderSize], uint32(clove.Message.Expiration().Unix()))
 	buf = append(buf, header...)
 
 	// Write the body: raw payload bytes (no standard 16-byte I2NP header,
@@ -378,7 +378,7 @@ func serializeDeliveryInstructions(di *GarlicCloveDeliveryInstructions) ([]byte,
 
 // initializeBufferWithFlag creates a buffer with the flag byte.
 func initializeBufferWithFlag(flag byte) []byte {
-	buf := make([]byte, 0, 37) // Max possible size
+	buf := make([]byte, 0, garlicDeliveryInstructionInitialCapacity) // Max possible size
 	return append(buf, flag)
 }
 
@@ -403,8 +403,8 @@ func appendEncryptionKeyIfNeeded(di *GarlicCloveDeliveryInstructions, buf *[]byt
 // appendHashForDeliveryType adds hash to buffer for DESTINATION, ROUTER, or TUNNEL delivery.
 func appendHashForDeliveryType(di *GarlicCloveDeliveryInstructions, deliveryType byte, buf *[]byte) error {
 	if deliveryType == 0x01 || deliveryType == 0x02 || deliveryType == 0x03 {
-		if len(di.Hash) != 32 {
-			return oops.Errorf("hash must be 32 bytes for delivery type %d", deliveryType)
+		if len(di.Hash) != HashSize {
+			return oops.Errorf("hash must be %d bytes for delivery type %d", HashSize, deliveryType)
 		}
 		*buf = append(*buf, di.Hash[:]...)
 	}
@@ -414,7 +414,7 @@ func appendHashForDeliveryType(di *GarlicCloveDeliveryInstructions, deliveryType
 // appendTunnelIDIfNeeded adds tunnel ID to buffer for TUNNEL delivery type.
 func appendTunnelIDIfNeeded(di *GarlicCloveDeliveryInstructions, deliveryType byte, buf *[]byte) {
 	if deliveryType == 0x03 {
-		tunnelIDBytes := make([]byte, 4)
+		tunnelIDBytes := make([]byte, I2NPMessageIDSize)
 		binary.BigEndian.PutUint32(tunnelIDBytes, uint32(di.TunnelID))
 		*buf = append(*buf, tunnelIDBytes...)
 	}
@@ -424,7 +424,7 @@ func appendTunnelIDIfNeeded(di *GarlicCloveDeliveryInstructions, deliveryType by
 func appendDelayIfNeeded(di *GarlicCloveDeliveryInstructions, buf *[]byte) {
 	delayIncluded := (di.Flag >> 4) & 0x01
 	if delayIncluded == 1 {
-		delayBytes := make([]byte, 4)
+		delayBytes := make([]byte, I2NPMessageIDSize)
 		binary.BigEndian.PutUint32(delayBytes, uint32(di.Delay))
 		*buf = append(*buf, delayBytes...)
 	}
@@ -539,13 +539,13 @@ func parseHashData(di *GarlicCloveDeliveryInstructions, data []byte, deliveryTyp
 		return 0, oops.Errorf("insufficient data for %s hash", deliveryTypeName)
 	}
 	di.Hash = hash
-	return 32, nil
+	return HashSize, nil
 }
 
 // parseTunnelData parses TUNNEL delivery type data (32-byte hash + 4-byte tunnel ID).
 // Returns the number of bytes consumed and any error.
 func parseTunnelData(di *GarlicCloveDeliveryInstructions, data []byte) (int, error) {
-	if len(data) < 36 {
+	if len(data) < HashSize+I2NPMessageIDSize {
 		return 0, oops.Errorf("insufficient data for TUNNEL hash and ID")
 	}
 	hash, remainder, err := common.ReadHash(data)
@@ -553,8 +553,8 @@ func parseTunnelData(di *GarlicCloveDeliveryInstructions, data []byte) (int, err
 		return 0, oops.Errorf("insufficient data for TUNNEL hash and ID")
 	}
 	di.Hash = hash
-	di.TunnelID = buildrecord.TunnelID(binary.BigEndian.Uint32(remainder[:4]))
-	return 36, nil
+	di.TunnelID = buildrecord.TunnelID(binary.BigEndian.Uint32(remainder[:I2NPMessageIDSize]))
+	return HashSize + I2NPMessageIDSize, nil
 }
 
 // parseOptionalDelayField parses the optional delay field if present.

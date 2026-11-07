@@ -126,9 +126,9 @@ func (b *BuildRequestRecord) ShortBytes() []byte {
 	data := make([]byte, ShortRecordSize)
 
 	// toPeer: first 16 bytes of peer's identity hash
-	copy(data[0:toPeerHashLen], b.OurIdent[:toPeerHashLen])
+	copy(data[0:ToPeerHashLen], b.OurIdent[:ToPeerHashLen])
 	// Ephemeral X25519 key placeholder (offset 16, 32 bytes) — zeroed, filled during ECIES encryption.
-	payloadOff := shortRecordPrefixLen
+	payloadOff := ShortRecordPrefixLen
 
 	if tunnelInt, err := common.NewIntegerFromInt(int(b.ReceiveTunnel), tunnelIDLen); err == nil {
 		copy(data[payloadOff+payloadReceiveTunnelOffset:payloadOff+payloadNextTunnelOffset], tunnelInt.Bytes())

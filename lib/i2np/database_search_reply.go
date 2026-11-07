@@ -103,13 +103,13 @@ func NewDatabaseSearchReply(key, from common.Hash, peerHashes []common.Hash) *Da
 // Use MarshalBinary() for a complete I2NP message including the header.
 func (d *DatabaseSearchReply) MarshalPayload() ([]byte, error) {
 	// Calculate size: key(32) + count(1) + peerHashes(count*32) + from(32)
-	size := 32 + 1 + (d.Count * 32) + 32
+	size := HashSize + I2NPTypeSize + (d.Count * HashSize) + HashSize
 	result := make([]byte, size)
 	offset := 0
 
 	// Key (32 bytes)
-	copy(result[offset:offset+32], d.Key[:])
-	offset += 32
+	copy(result[offset:offset+HashSize], d.Key[:])
+	offset += HashSize
 
 	// Count (1 byte)
 	result[offset] = byte(d.Count)
@@ -117,12 +117,12 @@ func (d *DatabaseSearchReply) MarshalPayload() ([]byte, error) {
 
 	// Peer hashes (count * 32 bytes)
 	for i := 0; i < d.Count && i < len(d.PeerHashes); i++ {
-		copy(result[offset:offset+32], d.PeerHashes[i][:])
-		offset += 32
+		copy(result[offset:offset+HashSize], d.PeerHashes[i][:])
+		offset += HashSize
 	}
 
 	// From (32 bytes)
-	copy(result[offset:offset+32], d.From[:])
+	copy(result[offset:offset+HashSize], d.From[:])
 
 	return result, nil
 }
@@ -178,7 +178,7 @@ const maxDatabaseSearchReplySuggestions = 16
 // whose num exceeds maxDatabaseSearchReplySuggestions.
 func (d *DatabaseSearchReply) UnmarshalBinary(data []byte) error {
 	// Minimum size: key(32) + count(1) + from(32) = 65 bytes
-	if len(data) < 65 {
+	if len(data) < databaseSearchReplyMinSize+HashSize {
 		return ErrDatabaseSearchReplyNotEnoughData
 	}
 
@@ -209,7 +209,7 @@ func (d *DatabaseSearchReply) UnmarshalBinary(data []byte) error {
 	}
 
 	// Validate total length
-	if len(data) < 32+1+(d.Count*32)+32 {
+	if len(data) < HashSize+I2NPTypeSize+(d.Count*HashSize)+HashSize {
 		return ErrDatabaseSearchReplyNotEnoughData
 	}
 

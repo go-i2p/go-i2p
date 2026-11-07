@@ -91,10 +91,10 @@ func executeHeaderParsers(data []byte, header *I2NPNTCPHeader) error {
 // See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the wire format.
 // See also [I2NPSecondGenTransportHeader].
 func MarshalSecondGenTransportHeader(header I2NPSecondGenTransportHeader) ([]byte, error) {
-	data := make([]byte, 9)
+	data := make([]byte, I2NPShortHeaderSize)
 	data[0] = byte(header.Type)
-	binary.BigEndian.PutUint32(data[1:5], uint32(header.MessageID))
-	binary.BigEndian.PutUint32(data[5:9], uint32(header.Expiration.Unix()))
+	binary.BigEndian.PutUint32(data[I2NPMessageIDOffset:I2NPMessageIDOffset+I2NPMessageIDSize], uint32(header.MessageID))
+	binary.BigEndian.PutUint32(data[I2NPExpirationOffset:I2NPExpirationOffset+I2NPShortExpirationSize], uint32(header.Expiration.Unix()))
 	return data, nil
 }
 
@@ -108,7 +108,7 @@ func MarshalSecondGenTransportHeader(header I2NPSecondGenTransportHeader) ([]byt
 func ReadI2NPSecondGenTransportHeader(dat []byte) (I2NPSecondGenTransportHeader, error) {
 	header := I2NPSecondGenTransportHeader{}
 
-	if len(dat) < 9 {
+	if len(dat) < I2NPShortHeaderSize {
 		return header, ErrI2NPNotEnoughData
 	}
 
@@ -119,13 +119,13 @@ func ReadI2NPSecondGenTransportHeader(dat []byte) (I2NPSecondGenTransportHeader,
 	}
 	header.Type = messageType
 
-	messageID := common.Integer(dat[1:5])
+	messageID := common.Integer(dat[I2NPMessageIDOffset : I2NPMessageIDOffset+I2NPMessageIDSize])
 	header.MessageID = messageID.Int()
 
 	// NTCP2/SSU2 uses a 4-byte expiration in seconds since epoch (not the
 	// 8-byte millisecond Date used in standard I2NP headers). Read as uint32
 	// and convert to time.Time directly.
-	expirationSeconds := binary.BigEndian.Uint32(dat[5:9])
+	expirationSeconds := binary.BigEndian.Uint32(dat[I2NPExpirationOffset : I2NPExpirationOffset+I2NPShortExpirationSize])
 	header.Expiration = time.Unix(int64(expirationSeconds), 0)
 
 	log.WithFields(logger.Fields{
@@ -183,12 +183,13 @@ func getI2NPTypeLogLevel(typeValue int) (i2npLogLevel, string) {
 	// Types 4-9 and 12-17 are currently unassigned in the I2NP spec.
 	// Log at Debug level instead of Warn to avoid spurious warnings for
 	// types that may be assigned in future spec revisions.
-	if (typeValue >= 4 && typeValue <= 9) || (typeValue >= 12 && typeValue <= 17) {
+	if (typeValue >= unassignedTypeRangeStart && typeValue <= unassignedTypeRangeEnd) ||
+		(typeValue >= unassignedTypeRange2Start && typeValue <= unassignedTypeRange2End) {
 		logMessage = "unassigned_i2np_type"
-	} else if typeValue >= 224 && typeValue <= 254 {
+	} else if typeValue >= experimentalTypeRangeStart && typeValue <= experimentalTypeRangeEnd {
 		logLevel = i2npLogLevelWarn
 		logMessage = "experimental_i2np_type"
-	} else if typeValue == 255 {
+	} else if typeValue == reservedType {
 		logLevel = i2npLogLevelWarn
 		logMessage = "reserved_i2np_type"
 	}
@@ -221,11 +222,11 @@ func ReadI2NPNTCPMessageID(data []byte) (int, error) {
 // See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the wire format.
 // See also [I2NPNTCPHeader].
 func ReadI2NPNTCPMessageExpiration(data []byte) (common.Date, error) {
-	if len(data) < 13 {
+	if len(data) < I2NPSizeFieldOffset {
 		return common.Date{}, ErrI2NPNotEnoughData
 	}
 
-	date, _, err := common.ReadDate(data[5:])
+	date, _, err := common.ReadDate(data[I2NPExpirationOffset:])
 	if err != nil {
 		return common.Date{}, err
 	}
@@ -243,11 +244,11 @@ func ReadI2NPNTCPMessageExpiration(data []byte) (common.Date, error) {
 // See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the wire format.
 // See also [I2NPNTCPHeader].
 func ReadI2NPNTCPMessageSize(data []byte) (int, error) {
-	if len(data) < 15 {
+	if len(data) < I2NPChecksumOffset {
 		return 0, ErrI2NPNotEnoughData
 	}
 
-	size := common.Integer(data[13:15])
+	size := common.Integer(data[I2NPSizeFieldOffset : I2NPSizeFieldOffset+I2NPSizeFieldSize])
 
 	log.WithFields(logger.Fields{
 		"at":   "i2np.ReadI2NPNTCPMessageSize",
@@ -262,11 +263,11 @@ func ReadI2NPNTCPMessageSize(data []byte) (int, error) {
 // See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the wire format.
 // See also [I2NPNTCPHeader].
 func ReadI2NPNTCPMessageChecksum(data []byte) (int, error) {
-	if len(data) < 16 {
+	if len(data) < StandardI2NPHeaderSize {
 		return 0, ErrI2NPNotEnoughData
 	}
 
-	checksum := common.Integer(data[15:16])
+	checksum := common.Integer(data[I2NPChecksumOffset : I2NPChecksumOffset+I2NPChecksumSize])
 
 	log.WithFields(logger.Fields{
 		"at":       "i2np.ReadI2NPNTCPMessageCHecksum",
@@ -281,11 +282,11 @@ func ReadI2NPNTCPMessageChecksum(data []byte) (int, error) {
 // See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the wire format.
 // See also [I2NPNTCPHeader].
 func ReadI2NPNTCPData(data []byte, size int) ([]byte, error) {
-	if len(data) < 16+size {
+	if len(data) < StandardI2NPHeaderSize+size {
 		return []byte{}, ErrI2NPNotEnoughData
 	}
 	log.WithField("data_size", size).Debug("Read I2NP NTCP message data")
-	return data[16 : 16+size], nil
+	return data[StandardI2NPHeaderSize : StandardI2NPHeaderSize+size], nil
 }
 
 // Helper Functions for Creating Interface Implementations
@@ -425,7 +426,7 @@ func (br *ByteReader) ReadBytes(n int) ([]byte, error) {
 // ReadHash reads a 32-byte router hash and advances the offset.
 // Returns ErrI2NPNotEnoughData if fewer than 32 bytes remain.
 func (br *ByteReader) ReadHash() (common.Hash, error) {
-	data, err := br.ReadBytes(32)
+	data, err := br.ReadBytes(HashSize)
 	if err != nil {
 		return common.Hash{}, err
 	}

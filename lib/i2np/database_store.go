@@ -224,35 +224,35 @@ func (d *DatabaseStore) MarshalPayload() ([]byte, error) {
 	// Calculate the size: key(32) + type(1) + replyToken(4) + data
 	// If replyToken > 0, add replyTunnelID(4) + replyGateway(32)
 	hasReply := d.ReplyToken != [4]byte{0, 0, 0, 0}
-	baseSize := 32 + 1 + 4 + len(d.Data) // key + type + replyToken + data
+	baseSize := HashSize + I2NPTypeSize + databaseStoreReplyTokenSize + len(d.Data) // key + type + replyToken + data
 	if hasReply {
 		log.WithFields(logger.Fields{
 			"at": "MarshalPayload",
 		}).Debug("DatabaseStore includes reply token and gateway")
-		baseSize += 4 + 32 // replyTunnelID + replyGateway
+		baseSize += I2NPMessageIDSize + HashSize // replyTunnelID + replyGateway
 	}
 
 	result := make([]byte, baseSize)
 	offset := 0
 
 	// Key (32 bytes)
-	copy(result[offset:offset+32], d.Key[:])
-	offset += 32
+	copy(result[offset:offset+HashSize], d.Key[:])
+	offset += HashSize
 
 	// StoreType (1 byte)
 	result[offset] = d.StoreType
 	offset++
 
 	// Reply Token (4 bytes)
-	copy(result[offset:offset+4], d.ReplyToken[:])
-	offset += 4
+	copy(result[offset:offset+databaseStoreReplyTokenSize], d.ReplyToken[:])
+	offset += databaseStoreReplyTokenSize
 
 	// If reply token > 0, include reply tunnel ID and gateway
 	if hasReply {
-		copy(result[offset:offset+4], d.ReplyTunnelID[:])
-		offset += 4
-		copy(result[offset:offset+32], d.ReplyGateway[:])
-		offset += 32
+		copy(result[offset:offset+I2NPMessageIDSize], d.ReplyTunnelID[:])
+		offset += I2NPMessageIDSize
+		copy(result[offset:offset+HashSize], d.ReplyGateway[:])
+		offset += HashSize
 	}
 
 	// Data
@@ -300,7 +300,7 @@ func readReplyRoutingInfo(d *DatabaseStore, remainder []byte) ([]byte, error) {
 	if d.ReplyToken == ([4]byte{}) {
 		return remainder, nil
 	}
-	if len(remainder) < 36 {
+	if len(remainder) < databaseSearchReplyMinSize {
 		return nil, oops.Errorf("DatabaseStore with reply token truncated")
 	}
 	copy(d.ReplyTunnelID[:], remainder[:4])
@@ -318,7 +318,7 @@ func readReplyRoutingInfo(d *DatabaseStore, remainder []byte) ([]byte, error) {
 // See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the wire format.
 // See also [DatabaseStore].
 func (d *DatabaseStore) UnmarshalBinary(data []byte) error {
-	if len(data) < 37 { // Minimum: key(32) + type(1) + replyToken(4)
+	if len(data) < databaseStoreMinSize { // Minimum: key + type + replyToken
 		return oops.Errorf("DatabaseStore message too short: %d bytes", len(data))
 	}
 

@@ -10,19 +10,26 @@ package buildrecord
 // yields. See tunnel-creation-ecies.rst §"Short Request Record".
 // Moved from: build_request_record.go
 const (
-	// shortRecordPrefixLen is the unencrypted prefix of a short build record:
+	// ShortRecordPrefixLen is the unencrypted prefix of a short build record:
 	// the 16-byte toPeer hash followed by the 32-byte ephemeral public key.
-	shortRecordPrefixLen = 48
+	// Exported because lib/i2np encrypts and decrypts the same record and must
+	// split it at the same offset.
+	ShortRecordPrefixLen = 48
 
-	// toPeerHashLen is how many leading bytes of the next peer's identity hash
+	// ToPeerHashLen is how many leading bytes of the next peer's identity hash
 	// are written as the toPeer field. The recipient recognises the record by
 	// matching this against its own hash.
-	toPeerHashLen = 16
+	ToPeerHashLen = 16
 
-	// ephemeralPublicKeyLen is the length of the X25519 public key carried in
+	// EphemeralPublicKeyLen is the length of the X25519 public key carried in
 	// the short record prefix. It is zeroed at serialisation time and filled in
 	// during ECIES encryption.
-	ephemeralPublicKeyLen = 32
+	EphemeralPublicKeyLen = 32
+
+	// ShortRecordTagLen is the length of the AEAD authentication tag appended
+	// after the encrypted cleartext. A short record is therefore
+	// prefix + cleartext + tag bytes on the wire.
+	ShortRecordTagLen = 16
 )
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -31,7 +38,7 @@ const (
 
 // Offsets are measured from the start of the 154-byte cleartext payload, which
 // is what ReadShortBuildRequestRecord receives. When serialising, add
-// shortRecordPrefixLen to reach the corresponding absolute wire offset.
+// ShortRecordPrefixLen to reach the corresponding absolute wire offset.
 //
 // Spec: tunnel-creation-ecies.rst §"Short Request Record Unencrypted"; offsets
 // agree with i2pd's SHORT_REQUEST_RECORD_* constants.
