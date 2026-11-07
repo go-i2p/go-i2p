@@ -53,6 +53,11 @@ const (
 	// Moved from: defaults.go
 	LocalhostPrefix = "localhost:"
 
+	// LocalhostHost is the bare loopback hostname, used as the default bind
+	// host and as the trusted name in the loopback checks.
+	// Moved from: cli/clicmd, i2cp/auth.go
+	LocalhostHost = "localhost"
+
 	// MaxPort is the largest valid TCP/UDP port number. A port of 0 is legal
 	// and means "let the OS assign one".
 	// Moved from: defaults.go

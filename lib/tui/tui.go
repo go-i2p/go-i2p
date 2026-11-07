@@ -41,13 +41,15 @@ const (
 // connections.
 func ReachabilityFromNetworkStatus(code int) ReachabilityState {
 	switch code {
-	case 0: // OK — directly reachable
+	case netStatusOK: // directly reachable
 		return ReachabilityIPv4
-	case 1: // TESTING — not yet connected to any peers
+	case netStatusTesting: // not yet connected to any peers
 		return ReachabilityUnknown
-	case 2, 4, 5, 6, 7, 11: // FIREWALLED variants / symmetric NAT
+	case netStatusFirewalled, netStatusFirewalledAndFast, netStatusFirewalledAndFloodfill,
+		netStatusFirewalledWithInboundTCP, netStatusFirewalledWithUDPDisabled,
+		netStatusErrorSymmetricNAT: // FIREWALLED variants / symmetric NAT
 		return ReachabilityInboundBlocked
-	case 3: // HIDDEN
+	case netStatusHidden:
 		return ReachabilityHidden
 	default:
 		return ReachabilityUnknown
@@ -144,30 +146,30 @@ func (m WrapperModel) View() string {
 var (
 	panelBorder = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("214")).
+			BorderForeground(lipgloss.Color(colorAccent)).
 			Padding(1, 2)
 
 	panelTitle = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(lipgloss.Color("214"))
+			Foreground(lipgloss.Color(colorAccent))
 
 	panelLabel = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(lipgloss.Color("252"))
+			Foreground(lipgloss.Color(colorLabel))
 
 	panelValue = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("120"))
+			Foreground(lipgloss.Color(colorValue))
 
 	reachabilityStyle = lipgloss.NewStyle().
 				Bold(true)
 
 	reachabilityColors = map[ReachabilityState]string{
-		ReachabilityUnknown:        "240", // grey
-		ReachabilityHidden:         "214", // orange
-		ReachabilityFirewalled:     "220", // yellow
-		ReachabilityInboundBlocked: "208", // amber
-		ReachabilityIPv4:           "82",  // green
-		ReachabilityIPv6:           "39",  // cyan
+		ReachabilityUnknown:        colorMuted,
+		ReachabilityHidden:         colorAccent,
+		ReachabilityFirewalled:     colorFirewalled,
+		ReachabilityInboundBlocked: colorInboundBlocked,
+		ReachabilityIPv4:           colorIPv4,
+		ReachabilityIPv6:           colorIPv6,
 	}
 )
 
@@ -177,7 +179,7 @@ func (m WrapperModel) renderReachabilityStatus() string {
 	state := m.reachabilityStatus
 	color, ok := reachabilityColors[state]
 	if !ok {
-		color = "240"
+		color = colorMuted
 	}
 	styled := reachabilityStyle.Foreground(lipgloss.Color(color)).Render(string(state))
 	return fmt.Sprintf("  Network: %s", styled)

@@ -4,7 +4,9 @@ package clicmd
 import (
 	"fmt"
 	"net"
+	"strconv"
 
+	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/i2p-control/lib"
 	"github.com/go-i2p/logger"
 	"github.com/spf13/cobra"
@@ -77,10 +79,10 @@ func executeI2PControl(cmd *cobra.Command, args []string) error {
 			}
 			// Fall back to defaults if still not set
 			if hostVal == "" {
-				hostVal = "localhost"
+				hostVal = config.LocalhostHost
 			}
 			if portVal == "" {
-				portVal = "7650"
+				portVal = strconv.Itoa(config.DefaultI2PControlPort)
 			}
 		}
 
@@ -88,7 +90,7 @@ func executeI2PControl(cmd *cobra.Command, args []string) error {
 			passwordVal = configPassword
 		}
 		if passwordVal == "" {
-			passwordVal = "itoopie"
+			passwordVal = config.DefaultI2PControlPassword
 		}
 	}
 
