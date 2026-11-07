@@ -520,7 +520,7 @@ func (tm *TunnelManager) logExploratoryReplyFunnelSummary() {
 	lateShortSkipped := counters["late_reply_short_build_skipped"]
 
 	log.WithFields(logger.Fields{
-		"interval_sec":                     30,
+		"interval_sec":                     metricsLogIntervalSec,
 		"inbound_i2np_received":            inbound,
 		"tunnel_gateway_inner_parsed":      parsed,
 		"garlic_decrypt_attempted":         decryptAttempt,

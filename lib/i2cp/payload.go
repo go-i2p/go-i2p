@@ -43,8 +43,8 @@ type SendMessagePayload struct {
 //	bytes N+4+M:   Message payload (M bytes, as specified by PayloadLen)
 //	bytes N+4+M+4: Nonce (4 bytes, big endian)
 func ParseSendMessagePayload(rawData []byte) (*SendMessagePayload, error) {
-	if len(rawData) < 4 {
-		return nil, oops.Errorf("send message payload too short: need at least 4 bytes for destination+length, got %d", len(rawData))
+	if len(rawData) < payloadLengthFieldSize {
+		return nil, oops.Errorf("send message payload too short: need at least %d bytes for destination+length, got %d", payloadLengthFieldSize, len(rawData))
 	}
 
 	// Parse destination (variable-length structure)
@@ -58,30 +58,30 @@ func ParseSendMessagePayload(rawData []byte) (*SendMessagePayload, error) {
 		return nil, oops.Errorf("failed to parse destination: %w", err)
 	}
 
-	// Need at least 4 (payload length) + 4 (nonce) bytes remaining
-	if len(remaining) < 8 {
-		return nil, oops.Errorf("send message payload too short after destination: need at least 8 bytes for length+nonce, got %d", len(remaining))
+	// Need at least payload length + nonce bytes remaining
+	if len(remaining) < sendMessageMinTrailingSize {
+		return nil, oops.Errorf("send message payload too short after destination: need at least %d bytes for length+nonce, got %d", sendMessageMinTrailingSize, len(remaining))
 	}
 
 	// Parse payload length (4 bytes, big endian)
-	payloadLen := binary.BigEndian.Uint32(remaining[0:4])
+	payloadLen := binary.BigEndian.Uint32(remaining[0:payloadLengthFieldSize])
 	if err := validatePayloadSize(payloadLen); err != nil {
 		return nil, err
 	}
 
 	// Verify enough data for payload + nonce
-	if len(remaining) < 4+int(payloadLen)+4 {
-		return nil, oops.Errorf("send message truncated: need %d bytes, got %d", 4+payloadLen+4, len(remaining))
+	if len(remaining) < payloadLengthFieldSize+int(payloadLen)+nonceFieldSize {
+		return nil, oops.Errorf("send message truncated: need %d bytes, got %d", payloadLengthFieldSize+payloadLen+nonceFieldSize, len(remaining))
 	}
 
 	// Extract payload
-	payloadStart := 4
-	payloadEnd := 4 + int(payloadLen)
+	payloadStart := payloadLengthFieldSize
+	payloadEnd := payloadLengthFieldSize + int(payloadLen)
 	payload := make([]byte, payloadLen)
 	copy(payload, remaining[payloadStart:payloadEnd])
 
 	// Extract nonce (at offset 4 + payloadLen)
-	nonce := binary.BigEndian.Uint32(remaining[payloadEnd : payloadEnd+4])
+	nonce := binary.BigEndian.Uint32(remaining[payloadEnd : payloadEnd+nonceFieldSize])
 
 	smp := &SendMessagePayload{
 		Destination: dest,
@@ -107,8 +107,8 @@ func (smp *SendMessagePayload) MarshalBinary() ([]byte, error) {
 		return nil, oops.Errorf("failed to serialize destination: %w", err)
 	}
 
-	// Calculate total size: destBytes + 4 (length) + payloadLen + 4 (nonce)
-	totalSize := len(destBytes) + 4 + len(smp.Payload) + 4
+	// Calculate total size: destBytes + length + payloadLen + nonce
+	totalSize := len(destBytes) + payloadLengthFieldSize + len(smp.Payload) + nonceFieldSize
 	result := make([]byte, totalSize)
 
 	// Write destination
@@ -116,8 +116,8 @@ func (smp *SendMessagePayload) MarshalBinary() ([]byte, error) {
 	offset := len(destBytes)
 
 	// Write payload length
-	binary.BigEndian.PutUint32(result[offset:offset+4], uint32(len(smp.Payload)))
-	offset += 4
+	binary.BigEndian.PutUint32(result[offset:offset+payloadLengthFieldSize], uint32(len(smp.Payload)))
+	offset += payloadLengthFieldSize
 
 	// Write payload
 	if len(smp.Payload) > 0 {
@@ -126,7 +126,7 @@ func (smp *SendMessagePayload) MarshalBinary() ([]byte, error) {
 	}
 
 	// Write nonce
-	binary.BigEndian.PutUint32(result[offset:offset+4], smp.Nonce)
+	binary.BigEndian.PutUint32(result[offset:offset+nonceFieldSize], smp.Nonce)
 
 	log.WithFields(logger.Fields{
 		"at":          "i2cp.SendMessagePayload.MarshalBinary",
@@ -170,39 +170,40 @@ type MessagePayloadPayload struct {
 //	bytes 6-9:   Payload length (4 bytes, big endian)
 //	bytes 10+:   Message payload (variable length)
 func ParseMessagePayloadPayload(data []byte) (*MessagePayloadPayload, error) {
-	// Minimum size: 2 (SessionID) + 4 (MessageID) + 4 (PayloadLen) = 10 bytes
-	if len(data) < 10 {
+	// Minimum size: SessionID + MessageID + PayloadLen
+	if len(data) < messagePayloadHeaderSize {
 		log.WithFields(logger.Fields{
 			"at":       "i2cp.ParseMessagePayloadPayload",
 			"dataSize": len(data),
-			"required": 10,
+			"required": messagePayloadHeaderSize,
 		}).Error("message_payload_too_short")
-		return nil, oops.Errorf("message payload too short: need at least 10 bytes (SessionID + MessageID + PayloadLen), got %d", len(data))
+		return nil, oops.Errorf("message payload too short: need at least %d bytes (SessionID + MessageID + PayloadLen), got %d", messagePayloadHeaderSize, len(data))
 	}
 
 	mpp := &MessagePayloadPayload{}
 
 	// Parse session ID (first 2 bytes, big endian)
-	mpp.SessionID = binary.BigEndian.Uint16(data[0:2])
+	mpp.SessionID = binary.BigEndian.Uint16(data[0:sessionIDFieldSize])
 
 	// Parse message ID (next 4 bytes, big endian)
-	mpp.MessageID = binary.BigEndian.Uint32(data[2:6])
+	mpp.MessageID = binary.BigEndian.Uint32(data[sessionIDFieldSize : sessionIDFieldSize+messageIDFieldSize])
 
 	// Parse payload length (next 4 bytes, big endian)
-	payloadLen := binary.BigEndian.Uint32(data[6:10])
+	payloadLenOffset := sessionIDFieldSize + messageIDFieldSize
+	payloadLen := binary.BigEndian.Uint32(data[payloadLenOffset : payloadLenOffset+payloadLengthFieldSize])
 	if err := validatePayloadSize(payloadLen); err != nil {
 		return nil, err
 	}
 
 	// Verify enough data for payload
-	if len(data) < 10+int(payloadLen) {
-		return nil, oops.Errorf("message payload truncated: need %d bytes total, got %d", 10+payloadLen, len(data))
+	if len(data) < messagePayloadHeaderSize+int(payloadLen) {
+		return nil, oops.Errorf("message payload truncated: need %d bytes total, got %d", messagePayloadHeaderSize+payloadLen, len(data))
 	}
 
 	// Extract payload
 	if payloadLen > 0 {
 		mpp.Payload = make([]byte, payloadLen)
-		copy(mpp.Payload, data[10:10+payloadLen])
+		copy(mpp.Payload, data[messagePayloadHeaderSize:messagePayloadHeaderSize+int(payloadLen)])
 	} else {
 		mpp.Payload = []byte{}
 	}
@@ -220,22 +221,23 @@ func ParseMessagePayloadPayload(data []byte) (*MessagePayloadPayload, error) {
 // MarshalBinary serializes the MessagePayloadPayload to wire format.
 // Returns the serialized bytes ready to be sent as an I2CP message payload.
 func (mpp *MessagePayloadPayload) MarshalBinary() ([]byte, error) {
-	// Calculate total size: 2 (session ID) + 4 (message ID) + 4 (payload length) + len(payload)
-	totalSize := 10 + len(mpp.Payload)
+	// Calculate total size: session ID + message ID + payload length + payload
+	totalSize := messagePayloadHeaderSize + len(mpp.Payload)
 	result := make([]byte, totalSize)
 
 	// Write session ID (big endian)
-	binary.BigEndian.PutUint16(result[0:2], mpp.SessionID)
+	binary.BigEndian.PutUint16(result[0:sessionIDFieldSize], mpp.SessionID)
 
 	// Write message ID (big endian)
-	binary.BigEndian.PutUint32(result[2:6], mpp.MessageID)
+	binary.BigEndian.PutUint32(result[sessionIDFieldSize:sessionIDFieldSize+messageIDFieldSize], mpp.MessageID)
 
 	// Write payload length (big endian)
-	binary.BigEndian.PutUint32(result[6:10], uint32(len(mpp.Payload)))
+	payloadLenOffset := sessionIDFieldSize + messageIDFieldSize
+	binary.BigEndian.PutUint32(result[payloadLenOffset:payloadLenOffset+payloadLengthFieldSize], uint32(len(mpp.Payload)))
 
 	// Write payload
 	if len(mpp.Payload) > 0 {
-		copy(result[10:], mpp.Payload)
+		copy(result[messagePayloadHeaderSize:], mpp.Payload)
 	}
 
 	log.WithFields(logger.Fields{
@@ -286,8 +288,8 @@ type SendMessageExpiresPayload struct {
 //	bytes N+4+M+8: Flags (2 bytes, big endian)
 //	bytes N+4+M+10: Expiration (6 bytes, big endian, 48-bit timestamp)
 func ParseSendMessageExpiresPayload(rawData []byte) (*SendMessageExpiresPayload, error) {
-	if len(rawData) < 4 {
-		return nil, oops.Errorf("send message expires payload too short: need at least 4 bytes for destination+length, got %d", len(rawData))
+	if len(rawData) < payloadLengthFieldSize {
+		return nil, oops.Errorf("send message expires payload too short: need at least %d bytes for destination+length, got %d", payloadLengthFieldSize, len(rawData))
 	}
 
 	// Parse destination (variable-length structure)
@@ -301,35 +303,35 @@ func ParseSendMessageExpiresPayload(rawData []byte) (*SendMessageExpiresPayload,
 		return nil, oops.Errorf("failed to parse destination: %w", err)
 	}
 
-	// Need at least 4 (payload length) + 4 (nonce) + 2 (flags) + 6 (expiration) = 16 bytes remaining
-	if len(remaining) < 16 {
-		return nil, oops.Errorf("send message expires payload too short after destination: need at least 16 bytes for length+nonce+flags+expiration, got %d", len(remaining))
+	// Need at least length + nonce + flags + expiration bytes remaining
+	if len(remaining) < sendMessageExpiresMinTrailingSize {
+		return nil, oops.Errorf("send message expires payload too short after destination: need at least %d bytes for length+nonce+flags+expiration, got %d", sendMessageExpiresMinTrailingSize, len(remaining))
 	}
 
 	// Parse payload length (4 bytes, big endian)
-	payloadLen := binary.BigEndian.Uint32(remaining[0:4])
+	payloadLen := binary.BigEndian.Uint32(remaining[0:payloadLengthFieldSize])
 	if err := validatePayloadSize(payloadLen); err != nil {
 		return nil, err
 	}
 
 	// Verify enough data for payload + nonce + flags + expiration
-	if len(remaining) < 4+int(payloadLen)+12 {
-		return nil, oops.Errorf("send message expires truncated: need %d bytes, got %d", 4+payloadLen+12, len(remaining))
+	if len(remaining) < payloadLengthFieldSize+int(payloadLen)+nonceFieldSize+flagsFieldSize+expirationFieldSize {
+		return nil, oops.Errorf("send message expires truncated: need %d bytes, got %d", payloadLengthFieldSize+payloadLen+nonceFieldSize+flagsFieldSize+expirationFieldSize, len(remaining))
 	}
 
 	// Extract payload
-	payloadStart := 4
-	payloadEnd := 4 + int(payloadLen)
+	payloadStart := payloadLengthFieldSize
+	payloadEnd := payloadLengthFieldSize + int(payloadLen)
 	payload := make([]byte, payloadLen)
 	copy(payload, remaining[payloadStart:payloadEnd])
 
 	// Extract nonce, flags, and expiration from fixed fields after payload
 	fixedStart := payloadEnd
-	nonce := binary.BigEndian.Uint32(remaining[fixedStart : fixedStart+4])
-	flags := binary.BigEndian.Uint16(remaining[fixedStart+4 : fixedStart+6])
+	nonce := binary.BigEndian.Uint32(remaining[fixedStart : fixedStart+nonceFieldSize])
+	flags := binary.BigEndian.Uint16(remaining[fixedStart+nonceFieldSize : fixedStart+nonceFieldSize+flagsFieldSize])
 
-	// Parse 48-bit expiration (6 bytes) into uint64
-	expBytes := remaining[fixedStart+6 : fixedStart+12]
+	// Parse 48-bit expiration into uint64
+	expBytes := remaining[fixedStart+nonceFieldSize+flagsFieldSize : fixedStart+nonceFieldSize+flagsFieldSize+expirationFieldSize]
 	expiration := uint64(expBytes[0])<<40 |
 		uint64(expBytes[1])<<32 |
 		uint64(expBytes[2])<<24 |
@@ -365,8 +367,9 @@ func (smp *SendMessageExpiresPayload) MarshalBinary() ([]byte, error) {
 		return nil, oops.Errorf("failed to serialize destination: %w", err)
 	}
 
-	// Calculate total size: destBytes + 4 (length) + payloadLen + 4 (nonce) + 2 (flags) + 6 (expiration)
-	totalSize := len(destBytes) + 4 + len(smp.Payload) + 12
+	// Calculate total size: destBytes + length + payloadLen + nonce + flags + expiration
+	totalSize := len(destBytes) + payloadLengthFieldSize + len(smp.Payload) +
+		nonceFieldSize + flagsFieldSize + expirationFieldSize
 	result := make([]byte, totalSize)
 
 	// Write destination
@@ -374,8 +377,8 @@ func (smp *SendMessageExpiresPayload) MarshalBinary() ([]byte, error) {
 	offset := len(destBytes)
 
 	// Write payload length
-	binary.BigEndian.PutUint32(result[offset:offset+4], uint32(len(smp.Payload)))
-	offset += 4
+	binary.BigEndian.PutUint32(result[offset:offset+payloadLengthFieldSize], uint32(len(smp.Payload)))
+	offset += payloadLengthFieldSize
 
 	// Write payload
 	if len(smp.Payload) > 0 {
@@ -384,12 +387,12 @@ func (smp *SendMessageExpiresPayload) MarshalBinary() ([]byte, error) {
 	}
 
 	// Write nonce (4 bytes, big endian)
-	binary.BigEndian.PutUint32(result[offset:offset+4], smp.Nonce)
-	offset += 4
+	binary.BigEndian.PutUint32(result[offset:offset+nonceFieldSize], smp.Nonce)
+	offset += nonceFieldSize
 
 	// Write flags (2 bytes, big endian)
-	binary.BigEndian.PutUint16(result[offset:offset+2], smp.Flags)
-	offset += 2
+	binary.BigEndian.PutUint16(result[offset:offset+flagsFieldSize], smp.Flags)
+	offset += flagsFieldSize
 
 	// Write expiration (6 bytes, big endian, 48-bit)
 	result[offset] = byte(smp.Expiration >> 40)
@@ -597,25 +600,29 @@ func ParseHostLookupPayload(data []byte) (*HostLookupPayload, error) {
 }
 
 func parseCanonicalHostLookupPayload(data []byte) (*HostLookupPayload, error) {
-	if len(data) < 11 {
-		return nil, oops.Errorf("host lookup payload too short: need at least 11 bytes for canonical format, got %d", len(data))
+	if len(data) < hostLookupHeaderSize {
+		return nil, oops.Errorf("host lookup payload too short: need at least %d bytes for canonical format, got %d", hostLookupHeaderSize, len(data))
 	}
+
+	requestIDOffset := sessionIDFieldSize
+	timeoutOffset := requestIDOffset + requestIDFieldSize
+	lookupTypeOffset := timeoutOffset + timeoutMSFieldSize
 
 	hlp := &HostLookupPayload{
-		SessionID:  binary.BigEndian.Uint16(data[0:2]),
-		RequestID:  binary.BigEndian.Uint32(data[2:6]),
-		TimeoutMs:  binary.BigEndian.Uint32(data[6:10]),
-		LookupType: uint16(data[10]),
+		SessionID:  binary.BigEndian.Uint16(data[0:requestIDOffset]),
+		RequestID:  binary.BigEndian.Uint32(data[requestIDOffset:timeoutOffset]),
+		TimeoutMs:  binary.BigEndian.Uint32(data[timeoutOffset:lookupTypeOffset]),
+		LookupType: uint16(data[lookupTypeOffset]),
 	}
 
-	body := data[11:]
+	body := data[hostLookupHeaderSize:]
 	switch hlp.LookupType {
 	case HostLookupTypeHash, HostLookupTypeHashWithOptions:
-		if len(body) < 32 {
-			return nil, oops.Errorf("host lookup hash payload too short: need 32 bytes, got %d", len(body))
+		if len(body) < hashSize {
+			return nil, oops.Errorf("host lookup hash payload too short: need %d bytes, got %d", hashSize, len(body))
 		}
-		hlp.Hash = make([]byte, 32)
-		copy(hlp.Hash, body[:32])
+		hlp.Hash = make([]byte, hashSize)
+		copy(hlp.Hash, body[:hashSize])
 		hlp.Query = hex.EncodeToString(hlp.Hash)
 	case HostLookupTypeHostname, HostLookupTypeHostnameWithOptions:
 		str, _, err := commondata.ReadI2PString(body)
@@ -672,19 +679,19 @@ func (hlp *HostLookupPayload) MarshalBinary() ([]byte, error) {
 	var body []byte
 	switch hlp.LookupType {
 	case HostLookupTypeHash, HostLookupTypeHashWithOptions:
-		if len(hlp.Hash) == 32 {
-			body = make([]byte, 32)
+		if len(hlp.Hash) == hashSize {
+			body = make([]byte, hashSize)
 			copy(body, hlp.Hash)
 		} else {
 			hashHex := hlp.Query
-			if len(hashHex) < 64 {
-				return nil, oops.Errorf("host lookup hash query too short: need 64 hex chars, got %d", len(hashHex))
+			if len(hashHex) < hashHexLen {
+				return nil, oops.Errorf("host lookup hash query too short: need %d hex chars, got %d", hashHexLen, len(hashHex))
 			}
-			decoded, err := hex.DecodeString(hashHex[:64])
+			decoded, err := hex.DecodeString(hashHex[:hashHexLen])
 			if err != nil {
 				return nil, oops.Errorf("invalid host lookup hash encoding: %w", err)
 			}
-			if len(decoded) != 32 {
+			if len(decoded) != hashSize {
 				return nil, oops.Errorf("invalid host lookup hash size: %d", len(decoded))
 			}
 			body = decoded
@@ -704,13 +711,18 @@ func (hlp *HostLookupPayload) MarshalBinary() ([]byte, error) {
 		return nil, oops.Errorf("unsupported host lookup type: %d", hlp.LookupType)
 	}
 
-	totalSize := 2 + 4 + 4 + 1 + len(body)
+	totalSize := hostLookupHeaderSize + len(body)
 	result := make([]byte, totalSize)
-	binary.BigEndian.PutUint16(result[0:2], hlp.SessionID)
-	binary.BigEndian.PutUint32(result[2:6], hlp.RequestID)
-	binary.BigEndian.PutUint32(result[6:10], hlp.TimeoutMs)
-	result[10] = byte(hlp.LookupType)
-	copy(result[11:], body)
+	offset := 0
+	binary.BigEndian.PutUint16(result[offset:offset+sessionIDFieldSize], hlp.SessionID)
+	offset += sessionIDFieldSize
+	binary.BigEndian.PutUint32(result[offset:offset+requestIDFieldSize], hlp.RequestID)
+	offset += requestIDFieldSize
+	binary.BigEndian.PutUint32(result[offset:offset+timeoutMSFieldSize], hlp.TimeoutMs)
+	offset += timeoutMSFieldSize
+	result[offset] = byte(hlp.LookupType)
+	offset++
+	copy(result[offset:], body)
 
 	log.WithFields(logger.Fields{
 		"at":         "i2cp.HostLookupPayload.MarshalBinary",
@@ -829,31 +841,31 @@ const (
 //	byte 6:      ResultCode (uint8)
 //	bytes 7+:    Destination (optional, only if ResultCode=0)
 func ParseHostReplyPayload(data []byte) (*HostReplyPayload, error) {
-	// Minimum size: 2 (sessionID) + 4 (requestID) + 1 (resultCode) = 7 bytes
-	if len(data) < 7 {
+	// Minimum size: sessionID + requestID + resultCode
+	if len(data) < hostReplyHeaderSize {
 		log.WithFields(logger.Fields{
 			"at":       "i2cp.ParseHostReplyPayload",
 			"dataSize": len(data),
-			"required": 7,
+			"required": hostReplyHeaderSize,
 		}).Error("host_reply_payload_too_short")
-		return nil, oops.Errorf("host reply payload too short: need at least 7 bytes, got %d", len(data))
+		return nil, oops.Errorf("host reply payload too short: need at least %d bytes, got %d", hostReplyHeaderSize, len(data))
 	}
 
 	hrp := &HostReplyPayload{}
 
 	// Parse session ID (first 2 bytes, big endian)
-	hrp.SessionID = binary.BigEndian.Uint16(data[0:2])
+	hrp.SessionID = binary.BigEndian.Uint16(data[0:sessionIDFieldSize])
 
 	// Parse request ID (next 4 bytes, big endian)
-	hrp.RequestID = binary.BigEndian.Uint32(data[2:6])
+	hrp.RequestID = binary.BigEndian.Uint32(data[sessionIDFieldSize : sessionIDFieldSize+requestIDFieldSize])
 
 	// Parse result code (byte 6)
-	hrp.ResultCode = data[6]
+	hrp.ResultCode = data[sessionIDFieldSize+requestIDFieldSize]
 
 	// Parse destination and options Mapping (remaining bytes, if any).
-	if len(data) > 7 {
-		tail := make([]byte, len(data)-7)
-		copy(tail, data[7:])
+	if len(data) > hostReplyHeaderSize {
+		tail := make([]byte, len(data)-hostReplyHeaderSize)
+		copy(tail, data[hostReplyHeaderSize:])
 		hrp.Destination, hrp.Options = splitHostReplyTail(tail)
 	}
 
@@ -926,6 +938,11 @@ const (
 	blindingFlagPerClient  = 0x01 // bit 0: 0 for everybody, 1 for per-client
 	blindingAuthSchemeMask = 0x0E // bits 3-1: authentication scheme (000 DH/none, 001 PSK)
 	blindingFlagSecret     = 0x10 // bit 4: 1 if a lookup secret/password is required
+
+	// blindingReservedBitsMask covers bits 7-5, which the spec leaves unset. A
+	// client that sets any of them is speaking a dialect this router cannot
+	// interpret, so the payload is rejected rather than silently ignored.
+	blindingReservedBitsMask = 0xE0
 )
 
 // BlindingInfo authentication scheme values, held in flag bits 3-1 and read by
@@ -995,27 +1012,33 @@ func (bip *BlindingInfoPayload) AuthScheme() uint8 {
 // ParseBlindingInfoPayload deserializes a BlindingInfo payload from wire format.
 // Minimum size: 10 bytes (session ID + flags + endpoint type + sig type + expiration).
 func ParseBlindingInfoPayload(data []byte) (*BlindingInfoPayload, error) {
-	if len(data) < 10 {
+	if len(data) < blindingInfoMinSize {
 		log.WithFields(logger.Fields{
 			"at":       "i2cp.ParseBlindingInfoPayload",
 			"dataSize": len(data),
 		}).Error("payload_too_short")
-		return nil, oops.Errorf("BlindingInfo payload too short: need at least 10 bytes, got %d", len(data))
+		return nil, oops.Errorf("BlindingInfo payload too short: need at least %d bytes, got %d", blindingInfoMinSize, len(data))
 	}
+
+	// Prefix layout: sessionID(2) flags(1) endpoint(1) sigType(2) expiration(4).
+	flagsOffset := sessionIDFieldSize
+	endpointOffset := flagsOffset + blindingFlagsFieldSize
+	sigTypeOffset := endpointOffset + blindingEndpointTypeFieldSize
+	expirationOffset := sigTypeOffset + sigTypeFieldSize
 
 	bip := &BlindingInfoPayload{
-		SessionID:  binary.BigEndian.Uint16(data[0:2]),
-		Flags:      data[2],
-		Endpoint:   data[3],
-		SigType:    binary.BigEndian.Uint16(data[4:6]),
-		Expiration: binary.BigEndian.Uint32(data[6:10]),
+		SessionID:  binary.BigEndian.Uint16(data[0:flagsOffset]),
+		Flags:      data[flagsOffset],
+		Endpoint:   data[endpointOffset],
+		SigType:    binary.BigEndian.Uint16(data[sigTypeOffset:expirationOffset]),
+		Expiration: binary.BigEndian.Uint32(data[expirationOffset:blindingInfoMinSize]),
 	}
 
-	if bip.Flags&0xE0 != 0 {
+	if bip.Flags&blindingReservedBitsMask != 0 {
 		return nil, oops.Errorf("BlindingInfo flags bits 7-5 must be zero, got 0x%02X", bip.Flags)
 	}
 
-	body := data[10:]
+	body := data[blindingInfoMinSize:]
 	rest, err := bip.parseEndpoint(body)
 	if err != nil {
 		return nil, err
@@ -1050,12 +1073,12 @@ func ParseBlindingInfoPayload(data []byte) (*BlindingInfoPayload, error) {
 func (bip *BlindingInfoPayload) parseEndpoint(body []byte) ([]byte, error) {
 	switch bip.Endpoint {
 	case BlindingEndpointHash:
-		if len(body) < 32 {
-			return nil, oops.Errorf("BlindingInfo hash endpoint needs 32 bytes, got %d", len(body))
+		if len(body) < hashSize {
+			return nil, oops.Errorf("BlindingInfo hash endpoint needs %d bytes, got %d", hashSize, len(body))
 		}
-		bip.Hash = make([]byte, 32)
-		copy(bip.Hash, body[:32])
-		return body[32:], nil
+		bip.Hash = make([]byte, hashSize)
+		copy(bip.Hash, body[:hashSize])
+		return body[hashSize:], nil
 
 	case BlindingEndpointHostname:
 		str, remainder, err := commondata.ReadI2PString(body)
@@ -1084,20 +1107,20 @@ func (bip *BlindingInfoPayload) parseEndpoint(body []byte) ([]byte, error) {
 		return remainder, nil
 
 	case BlindingEndpointSigTypeKey:
-		if len(body) < 2 {
-			return nil, oops.Errorf("BlindingInfo sig-type endpoint needs a 2-byte signature type")
+		if len(body) < sigTypeFieldSize {
+			return nil, oops.Errorf("BlindingInfo sig-type endpoint needs a %d-byte signature type", sigTypeFieldSize)
 		}
-		bip.PubkeyType = binary.BigEndian.Uint16(body[0:2])
+		bip.PubkeyType = binary.BigEndian.Uint16(body[0:sigTypeFieldSize])
 		keyLen, err := signingPublicKeySize(int(bip.PubkeyType))
 		if err != nil {
 			return nil, oops.Wrapf(err, "BlindingInfo sig-type endpoint")
 		}
-		if len(body[2:]) < keyLen {
-			return nil, oops.Errorf("BlindingInfo signing public key needs %d bytes, got %d", keyLen, len(body[2:]))
+		if len(body[sigTypeFieldSize:]) < keyLen {
+			return nil, oops.Errorf("BlindingInfo signing public key needs %d bytes, got %d", keyLen, len(body[sigTypeFieldSize:]))
 		}
 		bip.Pubkey = make([]byte, keyLen)
-		copy(bip.Pubkey, body[2:2+keyLen])
-		return body[2+keyLen:], nil
+		copy(bip.Pubkey, body[sigTypeFieldSize:sigTypeFieldSize+keyLen])
+		return body[sigTypeFieldSize+keyLen:], nil
 
 	default:
 		return nil, oops.Errorf("unsupported BlindingInfo endpoint type: %d", bip.Endpoint)
@@ -1108,12 +1131,12 @@ func (bip *BlindingInfoPayload) parseEndpoint(body []byte) ([]byte, error) {
 // the lookup password (present iff secret required), returning the remainder.
 func (bip *BlindingInfoPayload) parseOptionalTrailing(rest []byte) ([]byte, error) {
 	if bip.IsPerClient() {
-		if len(rest) < 32 {
-			return nil, oops.Errorf("BlindingInfo per-client decryption key needs 32 bytes, got %d", len(rest))
+		if len(rest) < x25519KeySize {
+			return nil, oops.Errorf("BlindingInfo per-client decryption key needs %d bytes, got %d", x25519KeySize, len(rest))
 		}
-		bip.PrivateKey = make([]byte, 32)
-		copy(bip.PrivateKey, rest[:32])
-		rest = rest[32:]
+		bip.PrivateKey = make([]byte, x25519KeySize)
+		copy(bip.PrivateKey, rest[:x25519KeySize])
+		rest = rest[x25519KeySize:]
 	}
 
 	if bip.RequiresSecret() {
@@ -1159,8 +1182,8 @@ func (bip *BlindingInfoPayload) MarshalBinary() ([]byte, error) {
 	result = append(result, endpoint...)
 
 	if bip.IsPerClient() {
-		if len(bip.PrivateKey) != 32 {
-			return nil, oops.Errorf("BlindingInfo decryption key must be 32 bytes, got %d", len(bip.PrivateKey))
+		if len(bip.PrivateKey) != x25519KeySize {
+			return nil, oops.Errorf("BlindingInfo decryption key must be %d bytes, got %d", x25519KeySize, len(bip.PrivateKey))
 		}
 		result = append(result, bip.PrivateKey...)
 	}
@@ -1180,8 +1203,8 @@ func (bip *BlindingInfoPayload) MarshalBinary() ([]byte, error) {
 func (bip *BlindingInfoPayload) marshalEndpoint() ([]byte, error) {
 	switch bip.Endpoint {
 	case BlindingEndpointHash:
-		if len(bip.Hash) != 32 {
-			return nil, oops.Errorf("BlindingInfo hash endpoint must be 32 bytes, got %d", len(bip.Hash))
+		if len(bip.Hash) != hashSize {
+			return nil, oops.Errorf("BlindingInfo hash endpoint must be %d bytes, got %d", hashSize, len(bip.Hash))
 		}
 		return bip.Hash, nil
 
@@ -1206,9 +1229,9 @@ func (bip *BlindingInfoPayload) marshalEndpoint() ([]byte, error) {
 		if len(bip.Pubkey) != keyLen {
 			return nil, oops.Errorf("BlindingInfo signing public key must be %d bytes, got %d", keyLen, len(bip.Pubkey))
 		}
-		out := make([]byte, 2+len(bip.Pubkey))
-		binary.BigEndian.PutUint16(out[0:2], bip.PubkeyType)
-		copy(out[2:], bip.Pubkey)
+		out := make([]byte, sigTypeFieldSize+len(bip.Pubkey))
+		binary.BigEndian.PutUint16(out[0:sigTypeFieldSize], bip.PubkeyType)
+		copy(out[sigTypeFieldSize:], bip.Pubkey)
 		return out, nil
 
 	default:

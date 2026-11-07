@@ -254,11 +254,11 @@ func (d *DatabaseSearchReply) String() string {
 	fromStr := d.From.String()
 
 	// Safe string truncation
-	if len(keyStr) > 8 {
-		keyStr = keyStr[:8]
+	if len(keyStr) > logHashPrefixLen {
+		keyStr = keyStr[:logHashPrefixLen]
 	}
-	if len(fromStr) > 8 {
-		fromStr = fromStr[:8]
+	if len(fromStr) > logHashPrefixLen {
+		fromStr = fromStr[:logHashPrefixLen]
 	}
 
 	return fmt.Sprintf("DatabaseSearchReply{key=%s..., from=%s..., peers=%d}", keyStr, fromStr, d.Count)

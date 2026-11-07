@@ -42,9 +42,9 @@ type ReplyProcessorConfig struct {
 // See also [ReplyProcessorConfig].
 func DefaultReplyProcessorConfig() ReplyProcessorConfig {
 	return ReplyProcessorConfig{
-		BuildTimeout:     90 * time.Second,
-		MaxRetries:       3,
-		RetryBackoff:     5 * time.Second,
+		BuildTimeout:     defaultReplyBuildTimeout,
+		MaxRetries:       defaultReplyMaxRetries,
+		RetryBackoff:     defaultReplyRetryBackoff,
 		EnableDecryption: true,
 	}
 }

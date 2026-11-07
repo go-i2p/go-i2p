@@ -398,9 +398,9 @@ func (s *Server) handleCreateLeaseSet2(msg *Message, sessionPtr **Session) (*Mes
 	session := *sessionPtr
 	logLeaseSet2Request(session.ID(), len(msg.Payload))
 
-	// SessionID(2) + store type(1)
-	if len(msg.Payload) < 3 {
-		return nil, oops.Errorf("CreateLeaseSet2 payload too short: %d bytes (need at least 3 for SessionID+StoreType)", len(msg.Payload))
+	// SessionID + store type
+	if len(msg.Payload) < leaseSet2HeaderSize {
+		return nil, oops.Errorf("CreateLeaseSet2 payload too short: %d bytes (need at least %d for SessionID+StoreType)", len(msg.Payload), leaseSet2HeaderSize)
 	}
 
 	// The one byte after the SessionID names the structure that follows
@@ -680,24 +680,24 @@ func (s *Server) handleGetBandwidthLimits(msg *Message) (*Message, error) {
 	if s.bandwidthProvider != nil {
 		inboundBytes, outboundBytes = s.bandwidthProvider.GetBandwidthLimits()
 	} else {
-		// Fallback: use a conservative default (1 MB/s) when no provider is configured
-		inboundBytes = 1024 * 1024
-		outboundBytes = 1024 * 1024
+		// Fallback: use the conservative default limit when no provider is configured
+		inboundBytes = defaultBandwidthLimitBytesPerSec
+		outboundBytes = defaultBandwidthLimitBytesPerSec
 	}
 
 	inboundLimit := bytesPerSecToKBps(inboundBytes)
 	outboundLimit := bytesPerSecToKBps(outboundBytes)
 
-	// Per I2CP spec: BandwidthLimits is 64 bytes (16 uint32 values, big endian)
-	payload := make([]byte, 64)
+	// Per I2CP spec: BandwidthLimits is 16 uint32 values, big endian
+	payload := make([]byte, bandwidthLimitsPayloadSize)
 
 	// First uint32 (bytes 0-3): Inbound limit (KBps)
-	binary.BigEndian.PutUint32(payload[0:4], inboundLimit)
+	binary.BigEndian.PutUint32(payload[0:payloadLengthFieldSize], inboundLimit)
 
 	// Second uint32 (bytes 4-7): Outbound limit (KBps)
-	binary.BigEndian.PutUint32(payload[4:8], outboundLimit)
+	binary.BigEndian.PutUint32(payload[payloadLengthFieldSize:2*payloadLengthFieldSize], outboundLimit)
 
-	// Remaining 56 bytes (bytes 8-63): Zero-filled for future use
+	// Remaining bytes: Zero-filled for future use
 	// (Already initialized to zero by make())
 
 	response := &Message{
@@ -989,7 +989,7 @@ func parseDestinationHash(lookupMsg *HostLookupPayload) (common.Hash, *HostReply
 		return destHash, nil
 	}
 
-	if len(lookupMsg.Query) < 64 {
+	if len(lookupMsg.Query) < hashHexLen {
 		log.WithFields(logger.Fields{
 			"at":        "i2cp.Server.lookupDestinationByHash",
 			"requestID": lookupMsg.RequestID,
@@ -998,7 +998,7 @@ func parseDestinationHash(lookupMsg *HostLookupPayload) (common.Hash, *HostReply
 		return destHash, newErrorReply(lookupMsg.SessionID, lookupMsg.RequestID, HostReplyFailure)
 	}
 
-	_, err := fmt.Sscanf(lookupMsg.Query[:64], "%x", &destHash)
+	_, err := fmt.Sscanf(lookupMsg.Query[:hashHexLen], "%x", &destHash)
 	if err != nil {
 		log.WithFields(logger.Fields{
 			"at":        "i2cp.Server.lookupDestinationByHash",
@@ -1181,9 +1181,9 @@ func (s *Server) lookupDestinationByHash(lookupMsg *HostLookupPayload) *HostRepl
 // Returns the destination bytes suitable for HostReply, or an error if parsing fails.
 func (s *Server) extractDestinationFromLeaseSet(leaseSetBytes []byte) ([]byte, error) {
 	// LeaseSet format starts with Destination
-	// Destination minimum size is 387 bytes (for standard ElGamal/DSA)
-	// But can be larger with key certificates
-	if len(leaseSetBytes) < 387 {
+	// Destination minimum size is destinationMinSize (for standard ElGamal/DSA),
+	// but can be larger with key certificates
+	if len(leaseSetBytes) < destinationMinSize {
 		return nil, oops.Errorf("leaseset too small: %d bytes", len(leaseSetBytes))
 	}
 
@@ -1382,7 +1382,7 @@ func (s *Server) blindingAdviceForDestination(dest *destination.Destination) (*B
 // supplied actually belongs to the destination being sent to, so resolution does
 // not look up an unrelated blinded record.
 func blindedHashMatches(dest *destination.Destination, secret, wantHash []byte) bool {
-	if len(wantHash) != 32 {
+	if len(wantHash) != hashSize {
 		return false
 	}
 	blinded, err := encrypted_leaseset.CreateBlindedDestination(*dest, secret, time.Now())
@@ -1563,10 +1563,10 @@ func (s *Server) parseSendMessagePayload(msg *Message, session *Session) (*SendM
 	// Strip the 2-byte SessionID prefix from the wire payload.
 	// ReadMessage extracts SessionID into msg.SessionID but does not remove it
 	// from msg.Payload. ParseSendMessagePayload expects: Destination + PayloadLen + Payload + Nonce.
-	if len(msg.Payload) < 2 {
-		return nil, oops.Errorf("SendMessage payload too short: %d bytes (need at least 2 for SessionID)", len(msg.Payload))
+	if len(msg.Payload) < sessionIDPrefixSize {
+		return nil, oops.Errorf("SendMessage payload too short: %d bytes (need at least %d for SessionID)", len(msg.Payload), sessionIDPrefixSize)
 	}
-	payloadData := msg.Payload[2:]
+	payloadData := msg.Payload[sessionIDPrefixSize:]
 
 	sendMsg, err := ParseSendMessagePayload(payloadData)
 	if err != nil {
@@ -1747,10 +1747,10 @@ func (s *Server) parseSendMessageExpiresPayload(msg *Message, session *Session) 
 	// ReadMessage extracts SessionID into msg.SessionID but does not remove it
 	// from msg.Payload. ParseSendMessageExpiresPayload expects:
 	// Destination + PayloadLen + Payload + Nonce + Flags + Expiration.
-	if len(msg.Payload) < 2 {
-		return nil, oops.Errorf("SendMessageExpires payload too short: %d bytes (need at least 2 for SessionID)", len(msg.Payload))
+	if len(msg.Payload) < sessionIDPrefixSize {
+		return nil, oops.Errorf("SendMessageExpires payload too short: %d bytes (need at least %d for SessionID)", len(msg.Payload), sessionIDPrefixSize)
 	}
-	payloadData := msg.Payload[2:]
+	payloadData := msg.Payload[sessionIDPrefixSize:]
 
 	sendMsg, err := ParseSendMessageExpiresPayload(payloadData)
 	if err != nil {
@@ -1796,8 +1796,7 @@ func validateSendPayloadSizeWithContext(
 	logReason string,
 ) error {
 	// Account for post-parse overhead from garlic wrapping/encryption.
-	const maxSafePayloadSize = MaxPayloadSize - 2048
-	if payloadSize <= maxSafePayloadSize {
+	if payloadSize <= maxSafeSendPayloadSize {
 		return nil
 	}
 
@@ -1805,16 +1804,16 @@ func validateSendPayloadSizeWithContext(
 		"at":              at,
 		"sessionID":       sessionID,
 		"payloadSize":     payloadSize,
-		"maxAllowed":      maxSafePayloadSize,
+		"maxAllowed":      maxSafeSendPayloadSize,
 		"maxPayloadSize":  MaxPayloadSize,
-		"overhead":        512,
+		"overhead":        encryptionOverheadBudget,
 		"destinationHash": logutil.HashPrefixPlain(destination),
 	}).Error(logReason)
 
 	return oops.Errorf(
 		"message payload too large: %d bytes (max %d bytes to allow for encryption overhead)",
 		payloadSize,
-		maxSafePayloadSize,
+		maxSafeSendPayloadSize,
 	)
 }
 

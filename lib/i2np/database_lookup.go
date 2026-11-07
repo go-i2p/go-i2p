@@ -269,29 +269,28 @@ func readDatabaseLookupReplyTunnelID(flags byte, length int, data []byte) (int, 
 	if flags&1 != 1 {
 		return length, [4]byte{}, nil
 	}
-	if len(data) < length+4 {
+	if len(data) < length+lookupReplyTunnelIDSize {
 		return length, [4]byte{}, ErrDatabaseLookupNotEnoughData
 	}
 
-	replyTunnelID := [4]byte(data[length : length+4])
+	replyTunnelID := [4]byte(data[length : length+lookupReplyTunnelIDSize])
 	log.WithFields(logger.Fields{
 		"at":              "i2np.database_lookup.readDatabaseLookupReplyTunnelID",
 		"reply_tunnel_id": replyTunnelID,
 	}).Debug("parsed_database_lookup_reply_tunnel_id")
-	return length + 4, replyTunnelID, nil
+	return length + lookupReplyTunnelIDSize, replyTunnelID, nil
 }
 
 func readDatabaseLookupSize(length int, data []byte) (int, int, error) {
-	if len(data) < length+2 {
+	if len(data) < length+lookupExcludedCountFieldSize {
 		return length, 0, ErrDatabaseLookupNotEnoughData
 	}
 
-	size := common.Integer(data[length : length+2]).Int()
+	size := common.Integer(data[length : length+lookupExcludedCountFieldSize]).Int()
 
 	// I2P spec: valid range is 0-512 peers
 	// Validate to prevent resource exhaustion attacks
 	// Rate limiting is enforced at the processor level
-	const MaxExcludedPeers = 512
 	if size < 0 || size > MaxExcludedPeers {
 		log.WithFields(logger.Fields{
 			"at":   "i2np.database_lookup.readDatabaseLookupSize",
@@ -304,7 +303,7 @@ func readDatabaseLookupSize(length int, data []byte) (int, int, error) {
 		"at":   "i2np.database_lookup.readDatabaseLookupSize",
 		"size": size,
 	}).Debug("parsed_database_lookup_size")
-	return length + 2, size, nil
+	return length + lookupExcludedCountFieldSize, size, nil
 }
 
 func readDatabaseLookupExcludedPeers(length int, data []byte, size int) (int, []common.Hash, error) {
@@ -416,7 +415,7 @@ func (d *DatabaseLookup) GetTagCount() int {
 // the reply payload is encrypted with the ECIES reply tags.
 // See also [DatabaseLookup].
 func (d *DatabaseLookup) IsECIES() bool {
-	return (d.Flags & 0x10) != 0
+	return (d.Flags & DatabaseLookupFlagECIES) != 0
 }
 
 // Flag constants for the DatabaseLookup flags byte.
@@ -564,7 +563,7 @@ func (d *DatabaseLookup) calculateMarshalSize() int {
 
 	if d.IsECIES() {
 		totalSize += HashSize + I2NPTypeSize // reply_key + tags count
-		totalSize += d.Tags * 8
+		totalSize += d.Tags * eciesReplyTagSize
 	}
 
 	return totalSize

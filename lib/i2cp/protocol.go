@@ -194,19 +194,19 @@ func (m *Message) MarshalBinary() ([]byte, error) {
 
 	// Per I2CP spec: wire format is length(4) + type(1) + payload
 	// Session ID is NOT in the wire format - it's handled at the message layer
-	totalLen := 5 + payloadLen
+	totalLen := messageHeaderSize + payloadLen
 
 	result := make([]byte, totalLen)
 
 	// Payload length (4 bytes, big endian)
-	binary.BigEndian.PutUint32(result[0:4], uint32(payloadLen))
+	binary.BigEndian.PutUint32(result[0:messageLengthFieldSize], uint32(payloadLen))
 
 	// Type (1 byte)
-	result[4] = m.Type
+	result[messageLengthFieldSize] = m.Type
 
 	// Payload
 	if payloadLen > 0 {
-		copy(result[5:], m.Payload)
+		copy(result[messageHeaderSize:], m.Payload)
 	}
 
 	return result, nil
@@ -221,7 +221,7 @@ func (m *Message) UnmarshalBinary(data []byte) error {
 	}
 
 	// Parse type (1 byte)
-	m.Type = data[4]
+	m.Type = data[messageLengthFieldSize]
 
 	// Session ID is NOT in wire format - it must be set by the caller from context
 	m.SessionID = 0
@@ -229,7 +229,7 @@ func (m *Message) UnmarshalBinary(data []byte) error {
 	// Extract payload
 	if payloadLen > 0 {
 		m.Payload = make([]byte, payloadLen)
-		copy(m.Payload, data[5:5+payloadLen])
+		copy(m.Payload, data[messageHeaderSize:messageHeaderSize+payloadLen])
 	} else {
 		m.Payload = []byte{}
 	}
@@ -242,16 +242,16 @@ func (m *Message) UnmarshalBinary(data []byte) error {
 // (unbounded allocation), and truncated buffers, using 64-bit arithmetic to avoid
 // uint32 wraparound on the total-length check.
 func validateUnmarshalHeader(data []byte) (uint32, error) {
-	if len(data) < 5 {
-		return 0, oops.Errorf("i2cp message too short: need at least 5 bytes for header, got %d", len(data))
+	if len(data) < messageHeaderSize {
+		return 0, oops.Errorf("i2cp message too short: need at least %d bytes for header, got %d", messageHeaderSize, len(data))
 	}
 
-	payloadLen := binary.BigEndian.Uint32(data[0:4])
+	payloadLen := binary.BigEndian.Uint32(data[0:messageLengthFieldSize])
 	if err := validatePayloadSize(payloadLen); err != nil {
 		return 0, err
 	}
 
-	expectedTotal := uint64(payloadLen) + 5
+	expectedTotal := uint64(payloadLen) + messageHeaderSize
 	if uint64(len(data)) < expectedTotal {
 		return 0, oops.Errorf("i2cp message truncated: expected %d bytes, got %d", expectedTotal, len(data))
 	}
@@ -404,8 +404,8 @@ func extractSessionIDFromPayload(msgType uint8, payload []byte) uint16 {
 		MessageTypeSendMessageExpires,
 		MessageTypeBlindingInfo,
 		MessageTypeHostLookup:
-		if len(payload) >= 2 {
-			return binary.BigEndian.Uint16(payload[0:2])
+		if len(payload) >= sessionIDFieldSize {
+			return binary.BigEndian.Uint16(payload[0:sessionIDFieldSize])
 		}
 	}
 	// Messages without SessionID in payload (e.g., CreateSession, GetDate)
@@ -426,18 +426,21 @@ func readMessageHeader(r io.Reader) ([]byte, error) {
 // Per I2CP spec: header is length(4) + type(1). Session ID is NOT in the header.
 func parseMessageHeader(header []byte) (msgType uint8, sessionID uint16, payloadLen uint32) {
 	// Correct I2CP wire format: length(4 bytes big-endian) + type(1 byte)
-	payloadLen = binary.BigEndian.Uint32(header[0:4])
-	msgType = header[4]
+	payloadLen = binary.BigEndian.Uint32(header[0:messageLengthFieldSize])
+	msgType = header[messageLengthFieldSize]
 	sessionID = 0 // Session ID is NOT in the header
 
 	// i2psnark compatibility: Log message type and category at debug level.
 	// Excludes exact payloadLen and header hex to avoid traffic-correlation fingerprints
 	// in debug logs. See anonymity-safe-logging policy.
+	//
+	// Two categories only: MaxPayloadSize is the spec ceiling, so a payload above
+	// it is oversized and one at or below it is within the protocol. The previous
+	// "large" tier tested `payloadLen > 65535 && payloadLen <= MaxPayloadSize`,
+	// which is empty because MaxPayloadSize is 65535.
 	sizeCategory := "small"
-	if payloadLen > DefaultPayloadSize && payloadLen <= 65535 {
+	if payloadLen > DefaultPayloadSize && payloadLen <= MaxPayloadSize {
 		sizeCategory = "medium"
-	} else if payloadLen > 65535 && payloadLen <= MaxPayloadSize {
-		sizeCategory = "large"
 	} else if payloadLen > MaxPayloadSize {
 		sizeCategory = "oversized"
 	}

@@ -88,24 +88,24 @@ func (t *TunnelGateway) UnmarshalBinary(data []byte) error {
 
 	// Extract the data payload and parse it
 	messageData := t.BaseI2NPMessage.GetData()
-	if len(messageData) < 6 {
+	if len(messageData) < tunnelGatewayHeaderSize {
 		log.WithFields(logger.Fields{
 			"at":       "TunnelGateway.UnmarshalBinary",
-			"expected": 6,
+			"expected": tunnelGatewayHeaderSize,
 			"actual":   len(messageData),
 			"reason":   "payload too short",
 		}).Error("Invalid TunnelGateway payload")
 		return oops.Errorf("tunnel gateway message payload too short: %d bytes", len(messageData))
 	}
 
-	t.TunnelID = buildrecord.TunnelID(binary.BigEndian.Uint32(messageData[0:4]))
-	t.Length = int(binary.BigEndian.Uint16(messageData[4:6]))
+	t.TunnelID = buildrecord.TunnelID(binary.BigEndian.Uint32(messageData[0:tunnelGatewayTunnelIDSize]))
+	t.Length = int(binary.BigEndian.Uint16(messageData[tunnelGatewayTunnelIDSize:tunnelGatewayHeaderSize]))
 
-	if len(messageData) < 6+t.Length {
+	if len(messageData) < tunnelGatewayHeaderSize+t.Length {
 		log.WithFields(logger.Fields{
 			"at":        "TunnelGateway.UnmarshalBinary",
 			"tunnel_id": t.TunnelID,
-			"expected":  6 + t.Length,
+			"expected":  tunnelGatewayHeaderSize + t.Length,
 			"actual":    len(messageData),
 			"reason":    "payload truncated",
 		}).Error("TunnelGateway payload truncated")

@@ -432,3 +432,192 @@ const (
 	_ = uint(ShortI2NPHeaderSize - I2NPShortHeaderSize)
 	_ = uint(StandardI2NPHeaderSize - I2NPStandardHeaderSize)
 )
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Generic integer field widths
+// ──────────────────────────────────────────────────────────────────────────────
+
+// Several I2NP payload fields are plain big-endian integers that are not the
+// message ID or the header size field, but share their width. Naming the width
+// once keeps the payload parsers from restating 4 and 2.
+//
+// Moved from: data_message.go, tunnel_gateway.go, garlic_builder.go,
+// garlic_session.go, database_lookup.go, processor_handlers.go
+const (
+	// uint32FieldSize is the width of a big-endian uint32 payload field.
+	uint32FieldSize = 4
+
+	// uint16FieldSize is the width of a big-endian uint16 payload field.
+	uint16FieldSize = 2
+)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Garlic clove delivery instruction flag bits
+// ──────────────────────────────────────────────────────────────────────────────
+
+// A garlic clove's delivery instructions open with one flag byte. Bit 7 says
+// whether the session is encrypted, bits 6-5 give the delivery type, and bit 4
+// says whether a 4-byte delay follows. The type values below are the *field*
+// values (already shifted down), and the flag constants are those values shifted
+// into position, which is how the builder writes them.
+//
+// Note that this numbering is the garlic/ECIES one and differs from the
+// tunnel-layer delivery types in lib/tunnel (DTLocal/DTTunnel/DTRouter), which
+// order the same field differently. The two are separate wire formats — a garlic
+// clove's instructions and a tunnel message's instructions — and are not
+// interchangeable.
+//
+// Spec: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/garlic.rst
+// Moved from: garlic_builder.go, processor_handlers.go
+const (
+	// garlicEncryptedFlagBit is bit 7 of the flag byte: the clove is encrypted
+	// and a session key precedes the delivery data.
+	garlicEncryptedFlagBit = 7
+
+	// garlicDeliveryTypeShift is how far the delivery type field sits above the
+	// low bit: bits 6-5.
+	garlicDeliveryTypeShift = 5
+
+	// garlicDeliveryTypeMask selects the 2-bit delivery type field once shifted
+	// down.
+	garlicDeliveryTypeMask = 0x03
+
+	// garlicDelayFlagBit is bit 4 of the flag byte: a 4-byte delay follows the
+	// delivery data.
+	garlicDelayFlagBit = 4
+
+	// garlicDelayFieldSize is the width of that optional delay field.
+	garlicDelayFieldSize = uint32FieldSize
+
+	// Garlic delivery type field values.
+	garlicDeliveryTypeLocal       = 0x00
+	garlicDeliveryTypeDestination = 0x01
+	garlicDeliveryTypeRouter      = 0x02
+	garlicDeliveryTypeTunnel      = 0x03
+
+	// The same values pre-shifted into the flag byte, used when building cloves.
+	garlicDeliveryFlagLocal       = garlicDeliveryTypeLocal << garlicDeliveryTypeShift // 0x00
+	garlicDeliveryFlagDestination = garlicDeliveryTypeDestination << garlicDeliveryTypeShift
+	garlicDeliveryFlagRouter      = garlicDeliveryTypeRouter << garlicDeliveryTypeShift
+	garlicDeliveryFlagTunnel      = garlicDeliveryTypeTunnel << garlicDeliveryTypeShift // 0x60
+)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Garlic session tag
+// ──────────────────────────────────────────────────────────────────────────────
+
+// The first bytes of an encrypted garlic message are the recipient's session
+// tag, which is how the receiving router finds the ratchet state to decrypt
+// with. It is read as a fixed-size array key in the one-time-tag maps, so its
+// width is part of the type as well as the wire format.
+//
+// Moved from: garlic_session.go
+const (
+	// garlicSessionTagSize is the number of leading bytes of an encrypted garlic
+	// message used as the incoming session tag.
+	garlicSessionTagSize = 8
+
+	// garlicSessionTagLogPrefix is how many tag bytes are printed in diagnostics;
+	// enough to identify a session, short enough not to dump key material.
+	garlicSessionTagLogPrefix = 8
+)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Data / TunnelGateway message framing
+// ──────────────────────────────────────────────────────────────────────────────
+
+// Both message types carry a fixed header ahead of their variable payload
+// inside the I2NP data field.
+//
+// Spec: i2np.rst §"Data Message", §"Tunnel Gateway Message"
+// Moved from: data_message.go, tunnel_gateway.go, processor_handlers.go
+const (
+	// dataPayloadLengthFieldSize is the uint32 that gives the length of a Data
+	// message's payload.
+	dataPayloadLengthFieldSize = uint32FieldSize
+
+	// tunnelGatewayTunnelIDSize is the uint32 destination tunnel ID a
+	// TunnelGateway message opens with.
+	tunnelGatewayTunnelIDSize = uint32FieldSize
+
+	// tunnelGatewayLengthFieldSize is the uint16 giving the length of the
+	// tunnel record that follows.
+	tunnelGatewayLengthFieldSize = uint16FieldSize
+
+	// tunnelGatewayHeaderSize is the fixed TunnelGateway header: tunnel ID plus
+	// record length.
+	tunnelGatewayHeaderSize = tunnelGatewayTunnelIDSize + tunnelGatewayLengthFieldSize // 6
+)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// NTCP message ID framing
+// ──────────────────────────────────────────────────────────────────────────────
+
+// The NTCP I2NP header is type(1) + message ID(4), so reading the message ID
+// needs a 5-byte buffer and the ID itself starts at I2NPMessageIDOffset.
+//
+// Moved from: utils.go
+const ntcpMessageIDPrefixSize = I2NPTypeSize + I2NPMessageIDSize // 5
+
+// ──────────────────────────────────────────────────────────────────────────────
+// DatabaseLookup field sizes and limits
+// ──────────────────────────────────────────────────────────────────────────────
+
+// Moved from: database_lookup.go
+const (
+	// lookupReplyTunnelIDSize is the 4-byte tunnel ID a lookup asks for its
+	// reply to be routed through.
+	lookupReplyTunnelIDSize = uint32FieldSize
+
+	// lookupExcludedCountFieldSize is the uint16 giving the number of excluded
+	// peers.
+	lookupExcludedCountFieldSize = uint16FieldSize
+
+	// MaxExcludedPeers is the largest excluded-peer list a lookup may declare.
+	// The spec allows the full uint16, but a reply is capped at 8 routers, so a
+	// longer list cannot be honoured and is treated as a resource-exhaustion
+	// attempt rather than a valid request.
+	MaxExcludedPeers = 512
+
+	// eciesReplyTagSize is the width of one ECIES reply tag: a 32-byte hash
+	// plus a 4-byte tunnel ID, per the ECIES lookup reply format.
+	eciesReplyTagSize = HashSize + uint32FieldSize // 36
+)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Tunnel build reply defaults
+// ──────────────────────────────────────────────────────────────────────────────
+
+// A tunnel build reply is expected within the I2P build timeout; the reference
+// implementations use 90 seconds for the whole build, with retries spaced far
+// enough apart that a slow reply is not mistaken for a lost one.
+//
+// Moved from: tunnel_reply_handler.go
+const (
+	// defaultReplyBuildTimeout bounds a single tunnel build attempt.
+	defaultReplyBuildTimeout = 90 * time.Second
+
+	// defaultReplyMaxRetries is how many times a build is retried before the
+	// tunnel is abandoned.
+	defaultReplyMaxRetries = 3
+
+	// defaultReplyRetryBackoff is the delay before the first retry.
+	defaultReplyRetryBackoff = 5 * time.Second
+)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Diagnostics and logging
+// ──────────────────────────────────────────────────────────────────────────────
+
+const (
+	// metricsLogIntervalSec is the interval, in seconds, the tunnel metrics log
+	// reports over. It is a display unit only — the counters are cumulative.
+	// Moved from: tunnel_manager_reply.go
+	metricsLogIntervalSec = 30
+
+	// logHashPrefixLen is how many leading characters of a hex hash are printed
+	// in a String() summary: enough to recognise a peer in a log line without
+	// dumping the full key.
+	// Moved from: database_search_reply.go
+	logHashPrefixLen = 8
+)

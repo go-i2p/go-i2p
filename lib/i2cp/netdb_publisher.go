@@ -29,7 +29,7 @@ type NetDBLeaseSetPublisher struct {
 func NewNetDBLeaseSetPublisher(store LeaseSetStore) *NetDBLeaseSetPublisher {
 	return &NetDBLeaseSetPublisher{
 		store:    store,
-		dataType: 3, // LeaseSet2
+		dataType: byte(LeaseSetStoreTypeLeaseSet2),
 	}
 }
 

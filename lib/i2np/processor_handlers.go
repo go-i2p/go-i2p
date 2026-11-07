@@ -346,13 +346,13 @@ func (p *MessageProcessor) extractTunnelGatewayMessage(msg Message) (*TunnelGate
 	}
 
 	payload := carrier.GetData()
-	if len(payload) < 6 {
+	if len(payload) < tunnelGatewayHeaderSize {
 		return nil, oops.Errorf("TunnelGateway payload too short: %d bytes", len(payload))
 	}
 
 	tgMsg = &TunnelGateway{}
-	tgMsg.TunnelID = buildrecord.TunnelID(binary.BigEndian.Uint32(payload[0:4]))
-	tgMsg.Length = int(binary.BigEndian.Uint16(payload[4:6]))
+	tgMsg.TunnelID = buildrecord.TunnelID(binary.BigEndian.Uint32(payload[0:tunnelGatewayTunnelIDSize]))
+	tgMsg.Length = int(binary.BigEndian.Uint16(payload[tunnelGatewayTunnelIDSize:tunnelGatewayHeaderSize]))
 
 	if len(payload) < 6+tgMsg.Length {
 		return nil, oops.Errorf("TunnelGateway payload truncated: expected %d bytes, got %d", 6+tgMsg.Length, len(payload))
@@ -536,12 +536,12 @@ func (p *MessageProcessor) extractGarlicData(msg Message) ([]byte, error) {
 // DecryptGarlicMessage expects ciphertext to begin with the 8-byte session tag,
 // so we strip the prefix when it is present and consistent.
 func stripGarlicLengthPrefixIfPresent(encryptedData []byte, messageID int) ([]byte, error) {
-	if len(encryptedData) < 4 {
+	if len(encryptedData) < dataPayloadLengthFieldSize {
 		return encryptedData, nil
 	}
 
-	declaredLen := int(binary.BigEndian.Uint32(encryptedData[0:4]))
-	if declaredLen != len(encryptedData)-4 {
+	declaredLen := int(binary.BigEndian.Uint32(encryptedData[0:dataPayloadLengthFieldSize]))
+	if declaredLen != len(encryptedData)-dataPayloadLengthFieldSize {
 		return encryptedData, nil
 	}
 
@@ -663,7 +663,7 @@ func (p *MessageProcessor) processGarlicCloves(cloves []GarlicClove, depth int) 
 // processSingleClove processes a single garlic clove based on its delivery type.
 // depth tracks the current nesting level of garlic LOCAL delivery cloves.
 func (p *MessageProcessor) processSingleClove(index int, clove GarlicClove, depth int) error {
-	deliveryType := (clove.DeliveryInstructions.Flag >> 5) & 0x03
+	deliveryType := (clove.DeliveryInstructions.Flag >> garlicDeliveryTypeShift) & garlicDeliveryTypeMask
 
 	if clove.Message == nil {
 		log.WithField("clove_index", index).Warn("Garlic clove contains nil I2NP message")
@@ -684,15 +684,15 @@ func (p *MessageProcessor) processSingleClove(index int, clove GarlicClove, dept
 // depth tracks the current nesting level of garlic LOCAL delivery cloves.
 func (p *MessageProcessor) routeCloveByType(index int, deliveryType byte, clove GarlicClove, depth int) error {
 	switch deliveryType {
-	case 0x00:
+	case garlicDeliveryTypeLocal:
 		return p.handleLocalDelivery(index, clove, depth)
-	case 0x01:
+	case garlicDeliveryTypeDestination:
 		p.handleDestinationDelivery(index, clove)
 		return nil
-	case 0x02:
+	case garlicDeliveryTypeRouter:
 		p.handleRouterDelivery(index, clove)
 		return nil
-	case 0x03:
+	case garlicDeliveryTypeTunnel:
 		p.handleTunnelDelivery(index, clove)
 		return nil
 	}
