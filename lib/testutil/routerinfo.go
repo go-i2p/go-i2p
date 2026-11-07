@@ -30,8 +30,8 @@ type RouterAddressConfig struct {
 // DefaultRouterAddressConfig returns an NTCP2 address with no host/port.
 func DefaultRouterAddressConfig() RouterAddressConfig {
 	return RouterAddressConfig{
-		Cost:       3,
-		Expiration: time.Now().Add(24 * time.Hour),
+		Cost:       fixtureRouterAddressCost,
+		Expiration: time.Now().Add(fixtureRouterAddressLifetime),
 		Transport:  "NTCP2",
 		Options:    map[string]string{},
 	}
@@ -103,7 +103,7 @@ func CreateSignedTestRouterInfoAndKey(tb testing.TB, options map[string]string, 
 	// Merge default options with provided options. Real RouterInfos always carry
 	// both netId and router.version; include them by default so fixtures pass the
 	// same network validation a production router applies. Callers may override.
-	mergedOptions := map[string]string{"router.version": "0.9.64", "netId": "2"}
+	mergedOptions := map[string]string{"router.version": fixtureRouterVersion, "netId": fixtureNetID}
 	for k, v := range options {
 		mergedOptions[k] = v
 	}
