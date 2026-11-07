@@ -163,7 +163,8 @@ func TestHandleNewConnectionSSU2_BadConnTypeClosesAsync(t *testing.T) {
 	// assertion fails.
 	addr, err := ssu2noise.NewSSU2Addr(
 		&net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 9000},
-		common.Hash{9}, 1234, "responder")
+		common.Hash{9}, 1234, "responder",
+	)
 	require.NoError(t, err)
 
 	bad := &fixedAddrConn{remoteAddr: addr, closeDelay: 2 * time.Second, closeStarted: make(chan struct{})}
@@ -207,6 +208,7 @@ func (c *slowCloseConn) Close() error {
 	c.closeDone.Store(true)
 	return nil
 }
+
 func (c *slowCloseConn) LocalAddr() net.Addr {
 	return &mockAddr{network: "udp", address: "127.0.0.1:0"}
 }
@@ -234,6 +236,7 @@ func (c *fixedAddrConn) Close() error {
 	time.Sleep(c.closeDelay)
 	return nil
 }
+
 func (c *fixedAddrConn) LocalAddr() net.Addr {
 	return &mockAddr{network: "udp", address: "127.0.0.1:0"}
 }
@@ -242,5 +245,7 @@ func (c *fixedAddrConn) SetDeadline(time.Time) error      { return nil }
 func (c *fixedAddrConn) SetReadDeadline(time.Time) error  { return nil }
 func (c *fixedAddrConn) SetWriteDeadline(time.Time) error { return nil }
 
-var _ net.Conn = (*slowCloseConn)(nil)
-var _ net.Conn = (*fixedAddrConn)(nil)
+var (
+	_ net.Conn = (*slowCloseConn)(nil)
+	_ net.Conn = (*fixedAddrConn)(nil)
+)

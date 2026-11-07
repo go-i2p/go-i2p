@@ -278,42 +278,17 @@ func (h *RouterInfoHandler) Handle(ctx context.Context, params json.RawMessage) 
 }
 
 // networkStatusString maps an I2PControl numeric status code to the human-readable
-// status name used in the i2p.router.status RouterInfo field.
+// status name used in the i2p.router.status RouterInfo field. The mapping lives
+// in networkStatusNames, indexed by code, so a code and its name cannot drift
+// apart.
 func networkStatusString(code int) string {
-	switch code {
-	case 0:
-		return "OK"
-	case 1:
-		return "TESTING"
-	case 2:
-		return "FIREWALLED"
-	case 3:
-		return "HIDDEN"
-	case 4:
-		return "WARN_FIREWALLED_AND_FAST"
-	case 5:
-		return "WARN_FIREWALLED_AND_FLOODFILL"
-	case 6:
-		return "WARN_FIREWALLED_WITH_INBOUND_TCP"
-	case 7:
-		return "WARN_FIREWALLED_WITH_UDP_DISABLED"
-	case 8:
-		return "ERROR_I2CP"
-	case 9:
-		return "ERROR_CLOCK_SKEW"
-	case 10:
-		return "ERROR_PRIVATE_TCP_ADDRESS"
-	case 11:
-		return "ERROR_SYMMETRIC_NAT"
-	case 12:
-		return "ERROR_UDP_PORT_IN_USE"
-	case 13:
-		return "ERROR_NO_ACTIVE_PEERS_CHECK_CONNECTION_AND_FIREWALL"
-	case 14:
-		return "ERROR_UDP_DISABLED_AND_TCP_UNSET"
-	default:
+	if code < 0 || code >= len(networkStatusNames) {
 		return "UNKNOWN"
 	}
+	if name := networkStatusNames[code]; name != "" {
+		return name
+	}
+	return "UNKNOWN"
 }
 
 // RouterManagerHandler implements the RouterManager RPC method.
@@ -1032,8 +1007,8 @@ func validateHostname(host string) error {
 	if host == "" {
 		return nil
 	}
-	if len(host) > 253 {
-		return oops.Errorf("hostname exceeds 253 bytes")
+	if len(host) > maxHostnameLength {
+		return oops.Errorf("hostname exceeds %d bytes", maxHostnameLength)
 	}
 	if ip := net.ParseIP(host); ip != nil {
 		return nil

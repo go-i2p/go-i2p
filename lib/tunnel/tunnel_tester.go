@@ -69,7 +69,7 @@ type TunnelTestResult struct {
 func NewTunnelTester(pool *Pool) *TunnelTester {
 	return &TunnelTester{
 		pool:         pool,
-		timeout:      5 * time.Second,
+		timeout:      tunnelTestTimeout,
 		pendingTests: make(map[uint32]*pendingTest),
 	}
 }

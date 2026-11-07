@@ -668,7 +668,7 @@ func (rsp *routerStatsProvider) parsePort(portStr string) int {
 	for _, ch := range portStr {
 		if ch >= '0' && ch <= '9' {
 			port = port*10 + int(ch-'0')
-			if port > 65535 {
+			if port > maxPortNumber {
 				return 0
 			}
 		} else {
@@ -766,11 +766,11 @@ func (rsp *routerStatsProvider) GetRateForPeriod(stat string, periodMs int64) fl
 func (rsp *routerStatsProvider) getBandwidthRate(stat string, periodMs int64) float64 {
 	switch stat {
 	case "bw.sendBps":
-		if rsp.bwOutWindow.Len(periodMs) >= 2 {
+		if rsp.bwOutWindow.Len(periodMs) >= minBandwidthWindowSamples {
 			return rsp.bwOutWindow.Average(periodMs)
 		}
 	case "bw.receiveBps":
-		if rsp.bwInWindow.Len(periodMs) >= 2 {
+		if rsp.bwInWindow.Len(periodMs) >= minBandwidthWindowSamples {
 			return rsp.bwInWindow.Average(periodMs)
 		}
 	case "bw.combined":

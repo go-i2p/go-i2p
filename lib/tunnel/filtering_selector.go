@@ -61,7 +61,7 @@ func NewFilteringPeerSelector(
 	s := &FilteringPeerSelector{
 		underlying: underlying,
 		filters:    make([]PeerFilter, 0),
-		maxRetries: 3,
+		maxRetries: defaultSelectorMaxRetries,
 		name:       "FilteringPeerSelector",
 	}
 

@@ -147,19 +147,19 @@ func (r *Router) GetSSU2ReachabilityCounters() ssu2.ReachabilitySnapshot {
 //	11 = ERROR_SYMMETRIC_NAT (reachable only via introducers behind a symmetric NAT)
 func (r *Router) GetNetworkStatus() int {
 	if !r.IsRunning() {
-		return 8 // ERROR_I2CP
+		return statusErrorI2CP
 	}
 	// Hidden mode is a configuration posture that must be reported regardless
 	// of transient peer-count or reseeding state; check it first.
 	if r.cfg != nil && r.cfg.Hidden {
-		return 3 // HIDDEN
+		return statusHidden
 	}
 	if r.IsReseeding() || r.GetActiveSessionCount() == 0 {
-		return 1 // TESTING — no active peers yet
+		return statusTesting
 	}
 	// Firewalled: has peers but no confirmed external address.
 	if r.collectBestExternalAddr() == "" {
-		return 2 // FIREWALLED
+		return statusFirewalled
 	}
 	// We have a confirmed external address. If NAT detection concluded that
 	// unsolicited inbound connections are blocked, report the specific

@@ -70,7 +70,7 @@ func NewSourceLimiterWithConfig(cfg config.TunnelDefaults) *SourceLimiter {
 		maxRequestsPerMinute: cfg.MaxBuildRequestsPerMinute,
 		burstSize:            cfg.BuildRequestBurstSize,
 		banDuration:          cfg.SourceBanDuration,
-		cleanupInterval:      5 * time.Minute,
+		cleanupInterval:      sourceLimiterCleanupInterval,
 		stopChan:             make(chan struct{}),
 	}
 

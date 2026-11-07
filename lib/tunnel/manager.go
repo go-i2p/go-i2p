@@ -263,7 +263,7 @@ func (m *ParticipantManager) MaxParticipants() int {
 // This is always derived, not independently configured.
 // Probabilistic rejection starts at the soft limit.
 func (m *ParticipantManager) softLimit() int {
-	return m.maxParticipants / 2
+	return m.maxParticipants / softLimitDivisor
 }
 
 // CanAcceptParticipant checks if we can accept a new participating tunnel.

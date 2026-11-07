@@ -344,7 +344,7 @@ func readDatabaseLookupReplyKey(length int, data []byte) (int, session_key.Sessi
 }
 
 func readDatabaseLookupTags(length int, data []byte) (int, int, error) {
-	if len(data) < length+1 {
+	if len(data) < length+I2NPTypeSize {
 		return length, 0, ErrDatabaseLookupNotEnoughData
 	}
 	tags := int(data[length])
@@ -353,7 +353,7 @@ func readDatabaseLookupTags(length int, data []byte) (int, int, error) {
 		"at":   "i2np.database_lookup.readDatabaseLookupTags",
 		"tags": tags,
 	}).Debug("parsed_database_lookup_tags")
-	return length + 1, tags, nil
+	return length + I2NPTypeSize, tags, nil
 }
 
 func readDatabaseLookupECIESReplyTags(length int, data []byte, tags int) (int, []session_tag.ECIESSessionTag, error) {
@@ -556,7 +556,7 @@ func (d *DatabaseLookup) calculateMarshalSize() int {
 	totalSize := HashSize + HashSize + I2NPTypeSize + I2NPSizeFieldSize
 
 	if d.hasTunnelReply() {
-		totalSize += 4
+		totalSize += lookupReplyTunnelIDSize
 	}
 
 	totalSize += d.Size * HashSize
@@ -625,8 +625,8 @@ func (d *DatabaseLookup) marshalEncryptionFields(result []byte, offset int) {
 	offset++
 
 	for i := 0; i < d.Tags && i < len(d.ECIESReplyTags); i++ {
-		copy(result[offset:offset+8], d.ECIESReplyTags[i].Bytes())
-		offset += 8
+		copy(result[offset:offset+eciesReplyTagSize], d.ECIESReplyTags[i].Bytes())
+		offset += eciesReplyTagSize
 	}
 }
 

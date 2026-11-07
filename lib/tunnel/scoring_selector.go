@@ -76,7 +76,7 @@ func NewScoringPeerSelector(
 		scorers:    make([]PeerScorer, 0),
 		threshold:  0.0, // Accept all by default
 		name:       "ScoringPeerSelector",
-		maxRetries: 3,
+		maxRetries: defaultSelectorMaxRetries,
 	}
 
 	for _, opt := range opts {

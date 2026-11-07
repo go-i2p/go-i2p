@@ -417,23 +417,23 @@ func (g *Gateway) createFollowOnInstructions(msgID uint32, fragNum int, isLast b
 // For messages that exceed the single-message limit, use SendWithDelivery which
 // supports fragmentation automatically.
 func (g *Gateway) createDeliveryInstructions(msgBytes []byte) ([]byte, error) {
-	if len(msgBytes) > maxTunnelPayload-3 {
+	if len(msgBytes) > maxTunnelPayload-localDeliveryInstructionSize {
 		log.WithFields(logger.Fields{
 			"at":       "createDeliveryInstructions",
 			"msg_size": len(msgBytes),
-			"max_size": maxTunnelPayload - 3,
+			"max_size": maxTunnelPayload - localDeliveryInstructionSize,
 			"reason":   "use SendWithDelivery for fragmentation",
 		}).Error("Message exceeds tunnel payload limit")
 		return nil, ErrMessageTooLarge
 	}
 
-	instructions := make([]byte, 3)
+	instructions := make([]byte, localDeliveryInstructionSize)
 
 	// Byte 0: flags - DTLocal (0) and not fragmented
 	instructions[0] = DTLocal
 
 	// Bytes 1-2: message size
-	binary.BigEndian.PutUint16(instructions[1:3], uint16(len(msgBytes)))
+	binary.BigEndian.PutUint16(instructions[FlagSize:localDeliveryInstructionSize], uint16(len(msgBytes)))
 
 	return instructions, nil
 }

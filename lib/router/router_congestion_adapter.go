@@ -56,7 +56,7 @@ func (r *Router) getParticipantCount() int {
 // getMaxParticipants returns the maximum number of participating tunnels allowed.
 func (r *Router) getMaxParticipants() int {
 	if r.participantManager == nil {
-		return 1000 // Default max if not configured
+		return fallbackUnconfiguredMaxParticipants
 	}
 	return r.participantManager.MaxParticipants()
 }
@@ -72,7 +72,7 @@ func (r *Router) getMaxBandwidth() uint64 {
 	if r.cfg != nil && r.cfg.MaxBandwidth > 0 {
 		return r.cfg.MaxBandwidth
 	}
-	return 1024 * 1024 // Default 1 MB/s
+	return fallbackMaxBandwidthBytesPerSec
 }
 
 // getConnectionCount returns the current number of active transport connections.
@@ -104,7 +104,7 @@ func (r *Router) getMaxConnections() int {
 	if r.cfg != nil && r.cfg.MaxConnections > 0 {
 		return r.cfg.MaxConnections
 	}
-	return 200 // Default max connections
+	return fallbackMaxConnections
 }
 
 // isAcceptingTunnels returns true if the router is accepting tunnel participation.

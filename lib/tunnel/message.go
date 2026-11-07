@@ -210,7 +210,7 @@ func (dtm DecryptedTunnelMessage) deliveryInstructionData() ([]byte, error) {
 	log.WithFields(logger.Fields{"at": "deliveryInstructionData"}).Debug("Retrieving delivery instruction data from DecryptedTunnelMessage")
 	dataArea := dtm[TunnelHeaderSize:]
 	for i := 0; i < len(dataArea); i++ {
-		if dataArea[i] == 0x00 {
+		if dataArea[i] == TunnelZeroSeparator {
 			deliveryData := dataArea[i+1:]
 			log.WithField("delivery_data_length", len(deliveryData)).Debug("Retrieved delivery instruction data")
 			return deliveryData, nil

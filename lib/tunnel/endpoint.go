@@ -129,7 +129,7 @@ func NewEndpoint(tunnelID TunnelID, decryption tunnel.TunnelEncryptor, handler M
 		decryption:      decryption,
 		handler:         handler,
 		fragments:       make(map[uint32]*fragmentAssembler),
-		fragmentTimeout: 8 * time.Second, // Match i2pd I2NP_MESSAGE_EXPIRATION_TIMEOUT for incomplete fragments
+		fragmentTimeout: defaultFragmentTimeout, // matches i2pd I2NP_MESSAGE_EXPIRATION_TIMEOUT
 		stopChan:        make(chan struct{}),
 	}
 
@@ -259,7 +259,7 @@ func (e *Endpoint) validateChecksum(decrypted []byte) error {
 // instructions. Returns the index of the first byte after the zero separator.
 func findZeroSeparator(decrypted []byte) (int, error) {
 	for i := TunnelHeaderSize; i < len(decrypted); i++ {
-		if decrypted[i] == 0x00 {
+		if decrypted[i] == TunnelZeroSeparator {
 			return i + 1, nil
 		}
 	}

@@ -237,9 +237,9 @@ func createHTTPServer(cfg *config.I2PControlConfig, server *Server) *http.Server
 	return &http.Server{
 		Addr:         cfg.Address,
 		Handler:      mux,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		ReadTimeout:  serverReadTimeout,
+		WriteTimeout: serverWriteTimeout,
+		IdleTimeout:  serverIdleTimeout,
 	}
 }
 

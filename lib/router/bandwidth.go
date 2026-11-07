@@ -48,9 +48,9 @@ type BandwidthTracker struct {
 // bandwidth utilization.
 func NewBandwidthTracker() *BandwidthTracker {
 	return &BandwidthTracker{
-		samples:        make([]BandwidthSample, 0, 15),
-		maxSamples:     15, // Keep 15 samples for 15-second average
-		sampleInterval: time.Second,
+		samples:        make([]BandwidthSample, 0, bandwidthSampleWindow),
+		maxSamples:     bandwidthSampleWindow, // 15-second average at one-second sampling
+		sampleInterval: bandwidthSampleInterval,
 		stopChan:       make(chan struct{}),
 	}
 }

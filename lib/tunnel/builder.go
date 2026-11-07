@@ -134,8 +134,8 @@ func logHopCountError(err error, hopCount int) {
 		"phase":     "tunnel_build",
 		"reason":    "hop count validation failed",
 		"hop_count": hopCount,
-		"min_hops":  1,
-		"max_hops":  8,
+		"min_hops":  minOutboundHops,
+		"max_hops":  maxHops,
 	}).Error("invalid hop count")
 }
 
@@ -323,11 +323,11 @@ func (tb *TunnelBuilder) validateHopCount(hopCount int, isInbound bool) error {
 		"is_inbound": isInbound,
 	}).Debug("Validating hop count")
 
-	minHops := 1
+	minHops := minOutboundHops
 	if isInbound {
-		minHops = 0
+		minHops = minInboundHops
 	}
-	if hopCount < minHops || hopCount > 8 {
+	if hopCount < minHops || hopCount > maxHops {
 		log.WithFields(logger.Fields{
 			"at":         "validateHopCount",
 			"hop_count":  hopCount,

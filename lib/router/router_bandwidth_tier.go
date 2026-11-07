@@ -101,11 +101,11 @@ func promoteTierBySessionLimit(base string, limit int) string {
 
 	target := ""
 	switch {
-	case limit >= 4096:
+	case limit >= sessionLimitXThreshold:
 		target = "X"
-	case limit >= 1024:
+	case limit >= sessionLimitPThreshold:
 		target = "P"
-	case limit >= 512:
+	case limit >= sessionLimitOThreshold:
 		target = "O"
 	}
 

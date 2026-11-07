@@ -210,12 +210,12 @@ func (p *Participant) Process(encryptedData []byte) (nextHopID TunnelID, decrypt
 	}
 
 	// Validate decrypted size
-	if len(decrypted) < 4 {
+	if len(decrypted) < TunnelIDSize {
 		log.WithFields(logger.Fields{
 			"at":           "(Participant) Process",
 			"reason":       "truncated_data",
 			"size":         len(decrypted),
-			"expected_min": 4,
+			"expected_min": TunnelIDSize,
 		}).Error("decrypted data too small for tunnel ID")
 		return 0, nil, ErrInvalidParticipantData
 	}

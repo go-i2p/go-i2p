@@ -56,6 +56,10 @@ const (
 	// TunnelZeroSeparatorSize is the single 0x00 byte that terminates the
 	// padding and marks the start of the delivery instructions.
 	TunnelZeroSeparatorSize = 1
+
+	// TunnelZeroSeparator is the byte value that terminates the padding. A hop
+	// scans for it to find where the delivery instructions begin.
+	TunnelZeroSeparator = 0x00
 )
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -181,3 +185,195 @@ const (
 	// percentScale converts a ratio into a percentage for display.
 	percentScale = 100
 )
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Delivery instruction flag bits
+// ──────────────────────────────────────────────────────────────────────────────
+
+// The single flag byte that opens every delivery instruction is packed by
+// fragment type: a follow-on fragment uses bit 7 as a marker with the fragment
+// number in bits 6-1 and the last-fragment bit in bit 0, while a first fragment
+// uses bit 7 as 0 and spends bits 6-5 on the delivery type plus one bit each for
+// delay, fragmentation and extended options. The two layouts share the same byte
+// and are distinguished only by bit 7.
+//
+// Spec: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/tunnel-message.rst
+// Moved from: delivery.go
+const (
+	// followOnFragmentMarker is bit 7: set on a follow-on fragment, clear on a
+	// first fragment.
+	followOnFragmentMarker = 0x80
+
+	// followOnFragmentNumberMask selects bits 6-1, the 6-bit fragment number.
+	followOnFragmentNumberMask = 0x7E
+
+	// fragmentNumberValueMask bounds a fragment number once shifted down to the
+	// low 6 bits, used when writing the field back out.
+	fragmentNumberValueMask = 0x3F
+
+	// followOnFragmentNumberShift is how far the fragment number sits above the
+	// last-fragment bit.
+	followOnFragmentNumberShift = 1
+
+	// lastFragmentMarker is bit 0 of a follow-on fragment: the sequence ends
+	// with this fragment.
+	lastFragmentMarker = 0x01
+
+	// firstFragmentTypeMask selects the 2-bit delivery type in bits 6-5.
+	firstFragmentTypeMask = 0x60
+
+	// firstFragmentTypeShift is the delivery type's bit position.
+	firstFragmentTypeShift = 5
+
+	// firstFragmentDelayMask is bit 4: a delay field follows.
+	firstFragmentDelayMask = 0x10
+
+	// firstFragmentFragmentedMask is bit 3: the message is fragmented, so a
+	// message ID follows.
+	firstFragmentFragmentedMask = 0x08
+
+	// firstFragmentExtOptionsMask is bit 2: extended options follow.
+	firstFragmentExtOptionsMask = 0x04
+
+	// deliveryTypeValueMask bounds the delivery type after shifting it down.
+	deliveryTypeValueMask = 0x03
+
+	// followOnInstructionSize is the full follow-on fragment instruction: flag(1)
+	// + message ID(4) + size(2), which the spec states as a total length of 7.
+	followOnInstructionSize = FlagSize + MessageIDSize + SizeFieldSize // 7
+)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Hop count bounds
+// ──────────────────────────────────────────────────────────────────────────────
+
+// An outbound tunnel must have at least one hop to be a tunnel at all; an
+// inbound tunnel may have zero, which is how a router terminates a tunnel on
+// itself. The ceiling is the largest variable-length build the wire format
+// carries.
+//
+// Moved from: builder.go, pool.go
+const (
+	minOutboundHops = 1
+	minInboundHops  = 0
+	maxHops         = 8
+)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Pool defaults
+// ──────────────────────────────────────────────────────────────────────────────
+
+// Moved from: pool.go
+const (
+	// defaultPoolMinTunnels is how many ready tunnels a pool keeps at steady
+	// state.
+	defaultPoolMinTunnels = 4
+
+	// defaultPoolMaxTunnels is the ceiling a pool may grow to while replacing.
+	defaultPoolMaxTunnels = 6
+
+	// defaultPoolHopCount is the tunnel length the spec recommends for both
+	// directions.
+	defaultPoolHopCount = 3
+
+	// defaultPoolBuildRetryDelay is the first retry delay for a failed build;
+	// exponential backoff grows it from there.
+	defaultPoolBuildRetryDelay = 2 * time.Second
+
+	// defaultPoolMaxBuildRetries caps how many times one build is retried.
+	defaultPoolMaxBuildRetries = 3
+
+	// maxBuildBackoff caps how long exponential backoff may grow the retry delay,
+	// so a persistently failing pool still retries rather than stalling.
+	maxBuildBackoff = 5 * time.Minute
+)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Peer selection
+// ──────────────────────────────────────────────────────────────────────────────
+
+// Moved from: congestion_selector.go, scoring_selector.go, filtering_selector.go
+const (
+	// defaultSelectorMaxRetries is how many candidate sets a selector tries
+	// before giving up on a build.
+	defaultSelectorMaxRetries = 3
+
+	// candidateOversampleDivisor is how the candidate request is padded beyond
+	// the number of hops actually wanted: half again as many, so that peers
+	// rejected by a filter still leave enough to choose from.
+	candidateOversampleDivisor = 2
+
+	// candidateOversampleFloor is the extra candidate requested on top of the
+	// oversample, so a request for a single hop still asks for more than one.
+	candidateOversampleFloor = 1
+)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Score-adaptive build cooldown
+// ──────────────────────────────────────────────────────────────────────────────
+
+// A peer that scores well is worth trying again soon; one that scores badly
+// should be left alone longer. The multipliers below scale the base cooldown by
+// the peer's score, and the thresholds decide which side of the split a score
+// falls on.
+//
+// Moved from: pool.go
+const (
+	// highPeerScoreThreshold is the score at or above which a peer is considered
+	// healthy enough to retry sooner.
+	highPeerScoreThreshold = 0.75
+
+	// lowPeerScoreThreshold is the score at or below which a peer is considered
+	// unreliable and held off longer.
+	lowPeerScoreThreshold = 0.25
+
+	// highScoreCooldownFactor shortens the cooldown for a well-scored peer.
+	highScoreCooldownFactor = 0.6
+
+	// lowScoreCooldownFactor lengthens the cooldown for a poorly-scored peer.
+	lowScoreCooldownFactor = 1.4
+)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Participant manager limits
+// ──────────────────────────────────────────────────────────────────────────────
+
+// Moved from: manager.go
+const (
+	// softLimitDivisor halves the participant ceiling to give the soft limit at
+	// which probabilistic rejection begins, so the manager backs off gradually
+	// instead of refusing everything at the hard cap.
+	softLimitDivisor = 2
+)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Fragment and test timing
+// ──────────────────────────────────────────────────────────────────────────────
+
+// Moved from: endpoint.go, source_limiter.go, tunnel_tester.go
+const (
+	// defaultFragmentTimeout is how long an incomplete fragment assembly is kept
+	// before it is discarded. It matches i2pd's I2NP_MESSAGE_EXPIRATION_TIMEOUT
+	// so a stalled assembly is dropped on the same schedule the message that
+	// started it would expire.
+	defaultFragmentTimeout = 8 * time.Second
+
+	// sourceLimiterCleanupInterval is how often the limiter sweeps per-source
+	// state that has gone quiet.
+	sourceLimiterCleanupInterval = 5 * time.Minute
+
+	// tunnelTestTimeout bounds a single tunnel test round trip.
+	tunnelTestTimeout = 5 * time.Second
+)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Delivery instruction field presence
+// ──────────────────────────────────────────────────────────────────────────────
+
+// A DTLocal first-fragment instruction is only a flag byte plus the 2-byte
+// message size, and it has to fit in the payload alongside the message it
+// describes — so the budget for the message is the payload limit minus the
+// instruction that carries it.
+//
+// Moved from: gateway.go
+const localDeliveryInstructionSize = FlagSize + SizeFieldSize // 3

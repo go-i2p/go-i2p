@@ -584,8 +584,8 @@ func (p *MessageProcessor) prepareSTBMSlotCleartext(replyCode byte, availableBW 
 		copy(cleartext[0:], optionBytes)
 		_, _ = rand.Read(cleartext[len(optionBytes):ShortBuildReplyCodeOffset]) // padding (error ignored)
 	} else {
-		cleartext[0] = 0x00 // options high byte (empty mapping)
-		cleartext[1] = 0x00 // options low byte
+		cleartext[0] = 0x00                                                                       // options high byte (empty mapping)
+		cleartext[1] = 0x00                                                                       // options low byte
 		_, err := rand.Read(cleartext[shortBuildReplyEmptyOptionsSize:ShortBuildReplyCodeOffset]) // padding
 		if err != nil {
 			log.WithFields(logger.Fields{

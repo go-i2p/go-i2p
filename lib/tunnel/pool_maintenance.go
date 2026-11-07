@@ -301,8 +301,8 @@ func (p *Pool) checkAndUpdateBackoff() bool {
 
 	// Calculate backoff delay based on consecutive failures
 	backoffDelay := p.config.BuildRetryDelay * time.Duration(1<<uint(p.buildFailures))
-	if backoffDelay > 5*time.Minute {
-		backoffDelay = 5 * time.Minute // Cap at 5 minutes
+	if backoffDelay > maxBuildBackoff {
+		backoffDelay = maxBuildBackoff // Cap at maxBuildBackoff
 	}
 
 	// Check if we need to wait due to backoff

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/go-i2p/common/session_tag"
 	i2ptunnel "github.com/go-i2p/crypto/tunnel"
 	"github.com/go-i2p/go-i2p/lib/tunnel/buildrecord"
 )
@@ -99,10 +100,10 @@ const (
 	// StandardBuildRecordSize is the deprecated 528-byte on-wire long-record
 	// size. Retained for documentation only; the long-record path is removed.
 	StandardBuildRecordSize         = 528
-	ShortBuildRecordSize            = buildrecord.ShortRecordSize          // 218
-	StandardBuildRecordCleartextLen = buildrecord.StandardCleartextLen     // 222 (deprecated long record)
-	ShortBuildRecordCleartextLen    = buildrecord.ShortCleartextLen        // 154
-	ShortRecordHeaderSize           = 64                                   // toPeer(16) + ephemeralKey(32) + MAC(16)
+	ShortBuildRecordSize            = buildrecord.ShortRecordSize      // 218
+	StandardBuildRecordCleartextLen = buildrecord.StandardCleartextLen // 222 (deprecated long record)
+	ShortBuildRecordCleartextLen    = buildrecord.ShortCleartextLen    // 154
+	ShortRecordHeaderSize           = 64                               // toPeer(16) + ephemeralKey(32) + MAC(16)
 
 	// ShortRecordPrefixSize is the unencrypted prefix of a short record: the
 	// toPeer hash and the ephemeral public key. Aliased from buildrecord, which
@@ -156,7 +157,7 @@ const (
 	// retains before evicting the oldest.
 	// Moved from: processor.go
 	messageReplayCacheCapacity = 10_000
-	DefaultExpirationSeconds        = buildrecord.DefaultExpirationSeconds // 600, the only spec-supported value
+	DefaultExpirationSeconds   = buildrecord.DefaultExpirationSeconds // 600, the only spec-supported value
 )
 
 // DefaultExpirationTolerance is the default expiration tolerance for clock skew (5 minutes into the past).
@@ -353,7 +354,6 @@ const (
 	// destination and a stale one is better dropped than retried.
 	// Moved from: garlic_builder.go, garlic_session.go
 	garlicMessageTTL = 10 * time.Second
-
 )
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -420,7 +420,6 @@ const (
 	// key agreement used by the short build record.
 	// Moved from: build_record_crypto_short.go
 	x25519KeySize = 32
-
 )
 
 // Header layout assertions. These are compile-time checks, not runtime ones: if
@@ -579,9 +578,10 @@ const (
 	// attempt rather than a valid request.
 	MaxExcludedPeers = 512
 
-	// eciesReplyTagSize is the width of one ECIES reply tag: a 32-byte hash
-	// plus a 4-byte tunnel ID, per the ECIES lookup reply format.
-	eciesReplyTagSize = HashSize + uint32FieldSize // 36
+	// eciesReplyTagSize is the width of one ECIES reply tag. Aliased from the
+	// common package that defines the type so the size cannot drift from the
+	// tag's own encoding.
+	eciesReplyTagSize = session_tag.ECIESSessionTagSize // 8
 )
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -621,3 +621,26 @@ const (
 	// Moved from: database_search_reply.go
 	logHashPrefixLen = 8
 )
+
+// ──────────────────────────────────────────────────────────────────────────────
+// DatabaseStore data type field
+// ──────────────────────────────────────────────────────────────────────────────
+
+// The DatabaseStore type byte carries the record type in its low nibble; the
+// upper bits are flags. Masking before the switch is what keeps a store of one
+// type from being read as another when a flag happens to be set.
+//
+// Moved from: database_store.go
+const databaseStoreTypeNibbleMask = 0x0F
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Tunnel build layer obfuscation
+// ──────────────────────────────────────────────────────────────────────────────
+
+// STBM records are obfuscated in chained layers: hop i XORs every record after
+// its own, so the layers start at the second-to-last record and a lone record
+// has nothing to peel. Both bounds are the same distance from the end of the
+// slice, which is what this constant names.
+//
+// Moved from: tunnel_manager_build.go
+const secondToLastOffset = 2

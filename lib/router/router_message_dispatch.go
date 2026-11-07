@@ -216,7 +216,7 @@ func cleanupReadWarnLastByPeer() {
 		"mapSize": mapSize,
 	}
 
-	if mapSize > (readWarnMaxMapSize * 9 / 10) {
+	if mapSize > (readWarnMaxMapSize * readWarnHighWaterMarkNum / readWarnHighWaterMarkDen) {
 		// Map is at 90%+ capacity; log at Warn level to indicate high peer churn
 		log.WithFields(logFields).Warn("Read warn limiter map near capacity")
 	} else if evicted > 0 {

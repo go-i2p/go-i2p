@@ -124,7 +124,6 @@ const (
 	// responseRandomDataLen is the padding between the integrity hash and the
 	// reply byte. 495 = 528 - 32 - 1.
 	responseRandomDataLen = StandardRecordSize - ResponseHashLen - 1
-
 )
 
 // ──────────────────────────────────────────────────────────────────────────────

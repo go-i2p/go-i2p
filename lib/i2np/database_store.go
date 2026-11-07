@@ -373,7 +373,7 @@ func (d *DatabaseStore) UnmarshalBinary(data []byte) error {
 // validateDatabaseStoreSize checks if the data size is within acceptable limits
 // for the given DatabaseStore type to prevent memory exhaustion attacks.
 func validateDatabaseStoreSize(dataType byte, size int) error {
-	leaseSetType := dataType & 0x0F // Extract bits 3-0
+	leaseSetType := dataType & databaseStoreTypeNibbleMask // Extract bits 3-0
 
 	switch leaseSetType {
 	case DatabaseStoreTypeRouterInfo:

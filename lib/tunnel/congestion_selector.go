@@ -99,7 +99,7 @@ func NewCongestionAwarePeerSelector(
 		underlying:       underlying,
 		congestionInfo:   congestionInfo,
 		cfg:              cfg,
-		maxRetries:       3,
+		maxRetries:       defaultSelectorMaxRetries,
 		selectionMetrics: &SelectionMetrics{},
 	}
 
