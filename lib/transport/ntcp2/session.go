@@ -388,7 +388,7 @@ func ntcp2NextMetaInterval() time.Duration {
 }
 
 func nextMetaIntervalWithRand(randInt63n func(int64) int64) time.Duration {
-	half := ntcp2MetaFrequency / 2
+	half := ntcp2MetaFrequency / metaJitterDivisor
 	return half + time.Duration(randInt63n(int64(half)))
 }
 
@@ -794,12 +794,12 @@ func (s *NTCP2Session) SetRouterInfoCallback(cb func(riBytes []byte, floodReques
 // router is a floodfill. Those steps need the transport's peer identity and netdb
 // wiring, so they live in the transport callback rather than here.
 func (s *NTCP2Session) handleRouterInfoBlock(data []byte) {
-	if len(data) < 2 {
+	if len(data) < minRouterInfoBlockDataSize {
 		s.Logger().Warn("RouterInfo block too short")
 		return
 	}
 	flag := data[0]
-	riData := data[1:]
+	riData := data[routerInfoFlagSize:]
 	floodRequested := flag&0x01 != 0
 
 	s.routerInfoMu.Lock()
@@ -896,7 +896,7 @@ func (s *NTCP2Session) queueReceivedMessage(msg i2np.Message) bool {
 // the message to avoid stalling the receive worker. Returns true even on drop so
 // the receiveWorker continues processing subsequent messages.
 func (s *NTCP2Session) queueWithBackpressure(msg i2np.Message) bool {
-	timer := time.NewTimer(500 * time.Millisecond)
+	timer := time.NewTimer(recvBackpressureTimeout)
 	defer timer.Stop()
 
 	select {

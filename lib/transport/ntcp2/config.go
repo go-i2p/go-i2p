@@ -95,7 +95,7 @@ func NewConfig(listenerAddress string) (*Config, error) {
 	return &Config{
 		ListenerAddress:         listenerAddress,
 		WorkingDir:              "", // Must be set before use
-		PendingConnQueueTimeout: 5 * time.Second,
+		PendingConnQueueTimeout: defaultPendingConnQueueTimeout,
 		Config:                  nil, // Will be set when identity is provided
 	}, nil
 }

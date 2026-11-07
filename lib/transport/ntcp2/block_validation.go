@@ -138,7 +138,7 @@ func ValidateDataPhaseBlockOrder(blocks []Block) error {
 	last := len(blocks) - 1
 
 	// At most one Padding block per frame (ntcp2.rst:1467).
-	if paddingCount > 1 {
+	if paddingCount > maxPaddingBlocksPerFrame {
 		return &BlockOrderViolation{
 			Reason: TerminationPaddingViolation,
 			Rule:   BlockOrderRuleMultiplePadding,

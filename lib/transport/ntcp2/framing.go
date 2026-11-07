@@ -207,7 +207,7 @@ func (u *BlockUnframer) processBlock(block Block) (msg i2np.Message, terminated 
 func (u *BlockUnframer) readFrame() ([]byte, error) {
 	// NTCP2Conn.Read() returns decrypted frame payload
 	// Max frame payload is ~64KB, allocate a buffer for it
-	buf := make([]byte, 65536)
+	buf := make([]byte, maxFrameReadBufferSize)
 	n, err := u.conn.Read(buf)
 	if err != nil {
 		return nil, err

@@ -83,11 +83,11 @@ type SessionCore struct {
 func NewSessionCore(ctx context.Context, logger *logger.Entry) *SessionCore {
 	sessionCtx, cancelFunc := context.WithCancel(ctx)
 	return &SessionCore{
-		sendQueue:      make(chan i2np.Message, 256),
-		recvChan:       make(chan i2np.Message, 256),
+		sendQueue:      make(chan i2np.Message, defaultSessionQueueDepth),
+		recvChan:       make(chan i2np.Message, defaultSessionQueueDepth),
 		ctx:            sessionCtx,
 		cancel:         cancelFunc,
-		inboundLimiter: rate.NewLimiter(256, 512),
+		inboundLimiter: rate.NewLimiter(defaultInboundRateLimit, defaultInboundRateBurst),
 		logger:         logger,
 	}
 }
@@ -117,7 +117,7 @@ func (sc *SessionCore) QueueSendI2NP(msg i2np.Message) error {
 	// Increment atomically before channel send.
 	atomic.AddInt32(&sc.sendQueueSize, 1)
 
-	timer := time.NewTimer(500 * time.Millisecond)
+	timer := time.NewTimer(sendQueueSendTimeout)
 	defer timer.Stop()
 
 	select {
@@ -316,7 +316,7 @@ func (sc *SessionCore) DrainSendQueue(timeout time.Duration) bool {
 	deadline := time.NewTimer(timeout)
 	defer deadline.Stop()
 
-	ticker := time.NewTicker(10 * time.Millisecond)
+	ticker := time.NewTicker(sendQueueDrainPollInterval)
 	defer ticker.Stop()
 
 	for {

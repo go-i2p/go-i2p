@@ -276,7 +276,7 @@ func loadStaticKeyFromRouter(ntcp2Config *ntcp2.Config, identity router_info.Rou
 
 	// Use the encryption private key as the NTCP2 static key
 	ntcp2Config.StaticKey = encryptionPrivKey.Bytes()
-	if len(ntcp2Config.StaticKey) != 32 {
+	if len(ntcp2Config.StaticKey) != staticKeySize {
 		if cancel != nil {
 			cancel()
 		}
@@ -352,7 +352,7 @@ func (t *NTCP2Transport) runIdleMaintenance() {
 
 func (t *NTCP2Transport) runIdleMaintenancePass() {
 	now := time.Now()
-	haveCapacity := t.haveCapacity(33)
+	haveCapacity := t.haveCapacity(capacityThresholdPercent)
 	t.updateIdleExpireWriteTime(haveCapacity)
 	expire := t.currentIdleExpireWriteTime()
 
@@ -447,7 +447,7 @@ func (t *NTCP2Transport) haveCapacity(percent int) bool {
 		return true
 	}
 	current := int(t.sessionRegistry.Count())
-	return current*100 < maxSessions*percent
+	return current*percentBase < maxSessions*percent
 }
 
 // probeAndBindNAT is the OS/NAT-interaction seam behind bindOSAssignedPort.
@@ -645,7 +645,7 @@ func (t *NTCP2Transport) Accept() (net.Conn, error) {
 // is unblocked promptly on shutdown.
 func (t *NTCP2Transport) startInboundAcceptRunner() {
 	t.acceptRunOnce.Do(func() {
-		t.pendingConns = make(chan net.Conn, 64)
+		t.pendingConns = make(chan net.Conn, pendingConnsQueueSize)
 		t.wg.Add(1)
 		go t.runInboundAcceptLoop()
 		// Ensure listener.Accept() unblocks when the transport is cancelled.
@@ -705,7 +705,7 @@ func (t *NTCP2Transport) acceptNextConnection() bool {
 			// Shutdown signaled; exit loop.
 			t.logger.Debug("Listener is nil and transport shutting down; terminating accept loop")
 			return false
-		case <-time.After(50 * time.Millisecond):
+		case <-time.After(listenerSwapPollInterval):
 			// Listener temporarily nil (likely during SetIdentity swap); retry.
 			t.logger.Debug("Listener is nil but transport running; waiting for listener swap to complete")
 			return true
@@ -738,7 +738,7 @@ func (t *NTCP2Transport) acceptNextConnection() bool {
 		default:
 			// Transient error: log as info, sleep briefly to avoid tight loop, and continue
 			t.logger.WithError(err).Debug("Transient accept error; will retry")
-			time.Sleep(10 * time.Millisecond)
+			time.Sleep(transientAcceptBackoff)
 			return true
 		}
 	}
@@ -887,7 +887,7 @@ func (t *NTCP2Transport) inboundHandshakeWorker(conn net.Conn) {
 	// Use a timeout to send to the pending queue to avoid indefinitely blocking
 	// and holding a reserved slot when the queue is full or Accept() is slow.
 	// If the send times out, close the connection and unreserve.
-	queueTimeout := 5 * time.Second
+	queueTimeout := defaultPendingConnQueueTimeout
 	if cfg := t.config.Load(); cfg != nil && cfg.PendingConnQueueTimeout > 0 {
 		queueTimeout = cfg.PendingConnQueueTimeout
 	}
@@ -896,7 +896,7 @@ func (t *NTCP2Transport) inboundHandshakeWorker(conn net.Conn) {
 
 	// TE-2 fix: Track queue depth for capacity planning
 	queueLen := len(t.pendingConns)
-	if uint64(queueLen) == 64 {
+	if uint64(queueLen) == pendingConnsQueueSize {
 		// Queue is full, increment metric
 		t.metrics.pendingConnsQueueFullEvents.Add(1)
 	}
@@ -1140,7 +1140,7 @@ func (t *NTCP2Transport) extractAndStorePeerRouterInfo(ntcp2Conn msg3PeerConn, c
 			"remote_addr":          conn.RemoteAddr().String(),
 			"total_parse_failures": atomic.LoadInt32(&t.routerInfoParseFailures),
 			"ri_bytes_len":         len(riBytes),
-			"ri_bytes_prefix":      fmt.Sprintf("%x", riBytes[:min(16, len(riBytes))]),
+			"ri_bytes_prefix":      fmt.Sprintf("%x", riBytes[:min(logRouterInfoPrefixBytes, len(riBytes))]),
 		}).Warn("Inbound NTCP2: failed to parse peer RouterInfo from msg3; aborting handshake")
 		_ = ntcp2Conn.Close()
 		// No slot was reserved before handshake, so no unreserve needed.
@@ -1361,7 +1361,7 @@ func (t *NTCP2Transport) extractPeerHash(conn net.Conn) data.Hash {
 			return ntcpAddr.RouterHash(), true
 		}
 		return data.Hash{}, false
-	}, 0xFF) // NTCP2 marker byte
+	}, peerHashMarkerByte)
 }
 
 // trackedConn wraps a net.Conn to execute a cleanup function when closed.
@@ -2166,7 +2166,7 @@ func (t *NTCP2Transport) performNTCP2Handshake(ntcp2Addr net.Addr, tcpAddrString
 
 	// Phase 1a: TCP dial with a 10 s deadline (P0.2: reduced from 30 s to avoid
 	// blocking goroutines for 30 s against hosts that silently drop SYN packets).
-	dialCtx, dialCancel := context.WithTimeout(t.ctx, 10*time.Second)
+	dialCtx, dialCancel := context.WithTimeout(t.ctx, tcpDialTimeout)
 	defer dialCancel()
 	tcpDialer := &net.Dialer{}
 	tcpConn, err := tcpDialer.DialContext(dialCtx, "tcp", tcpAddrString)
@@ -2381,7 +2381,7 @@ func (t *NTCP2Transport) ensureLocalStaticKeyConfigured() ([]byte, error) {
 	if cfg == nil || cfg.Config == nil {
 		return nil, oops.Errorf("ntcp2 config is not initialized")
 	}
-	if len(cfg.Config.StaticKey) == 32 {
+	if len(cfg.Config.StaticKey) == staticKeySize {
 		return cfg.Config.StaticKey, nil
 	}
 
@@ -2397,7 +2397,7 @@ func (t *NTCP2Transport) ensureLocalStaticKeyConfigured() ([]byte, error) {
 	if cfg == nil || cfg.Config == nil {
 		return nil, oops.Errorf("ntcp2 config is not initialized")
 	}
-	if len(cfg.Config.StaticKey) == 32 {
+	if len(cfg.Config.StaticKey) == staticKeySize {
 		return cfg.Config.StaticKey, nil
 	}
 
@@ -2409,7 +2409,7 @@ func (t *NTCP2Transport) ensureLocalStaticKeyConfigured() ([]byte, error) {
 	if err := loadStaticKeyFromRouter(cfg.Config, identity, t.keystore, nil); err != nil {
 		return nil, WrapNTCP2Error(err, "loading static key from router keystore")
 	}
-	if len(cfg.Config.StaticKey) != 32 {
+	if len(cfg.Config.StaticKey) != staticKeySize {
 		return nil, oops.Errorf("invalid static key size after keystore load: got %d", len(cfg.Config.StaticKey))
 	}
 
@@ -2453,8 +2453,8 @@ func (t *NTCP2Transport) attachLocalRouterInfo(config *ntcp2.Config) error {
 		"ri_addr_count":   addrCount,
 		"sig_valid":       sigValid,
 		"sig_verify_err":  fmt.Sprintf("%v", sigErr),
-		"ri_bytes_prefix": fmt.Sprintf("%x", riBytes[:min(16, len(riBytes))]),
-		"ri_bytes_suffix": fmt.Sprintf("%x", riBytes[max(0, len(riBytes)-16):]),
+		"ri_bytes_prefix": fmt.Sprintf("%x", riBytes[:min(logRouterInfoPrefixBytes, len(riBytes))]),
+		"ri_bytes_suffix": fmt.Sprintf("%x", riBytes[max(0, len(riBytes)-logRouterInfoPrefixBytes):]),
 		"ri_bytes_full":   fmt.Sprintf("%x", riBytes),
 	}).Debug("LocalRouterInfo for msg3 outbound")
 	config.WithLocalRouterInfo(riBytes)
