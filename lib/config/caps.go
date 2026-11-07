@@ -53,21 +53,21 @@ const (
 //   - P: 256–2000 KBps
 //   - X: >= 2000 KBps (>= 2048000 bytes/s)
 func BandwidthClassFromRate(bytesPerSec uint64) BandwidthClass {
-	kbps := bytesPerSec / 1024
+	kbps := bytesPerSec / BytesPerKiB
 	switch {
-	case kbps >= 2000:
+	case kbps >= BandwidthClassXMinKBps:
 		// Note: the I2P spec allows either 2000 or 2048 KBps as the P/X boundary
 		// (implementor's choice). We use 2000 KBps.
 		return BandwidthClassX
-	case kbps >= 256:
+	case kbps >= BandwidthClassPMinKBps:
 		return BandwidthClassP
-	case kbps >= 128:
+	case kbps >= BandwidthClassOMinKBps:
 		return BandwidthClassO
-	case kbps >= 64:
+	case kbps >= BandwidthClassNMinKBps:
 		return BandwidthClassN
-	case kbps >= 48:
+	case kbps >= BandwidthClassMMinKBps:
 		return BandwidthClassM
-	case kbps >= 12:
+	case kbps >= BandwidthClassLMinKBps:
 		return BandwidthClassL
 	default:
 		return BandwidthClassK

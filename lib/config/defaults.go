@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -469,9 +470,9 @@ func buildRouterDefaults(baseDir, workingDir string) RouterDefaults {
 	return RouterDefaults{
 		BaseDir:                   baseDir,
 		WorkingDir:                workingDir,
-		RouterInfoRefreshInterval: 30 * time.Minute,
-		MessageExpirationTime:     60 * time.Second,
-		MaxConcurrentSessions:     200,
+		RouterInfoRefreshInterval: DefaultRouterInfoRefreshInterval,
+		MessageExpirationTime:     DefaultMessageExpirationTime,
+		MaxConcurrentSessions:     DefaultMaxConcurrentSessions,
 		BandwidthTier:             "",
 	}
 }
@@ -480,14 +481,14 @@ func buildRouterDefaults(baseDir, workingDir string) RouterDefaults {
 func buildNetDBDefaults(workingDir string) NetDBDefaults {
 	return NetDBDefaults{
 		Path:                                    filepath.Join(workingDir, "netDb"),
-		MaxRouterInfos:                          5000,
-		MaxLeaseSets:                            1000,
-		ExpirationCheckInterval:                 1 * time.Minute,
-		LeaseSetRefreshThreshold:                2 * time.Minute,
-		ExplorationInterval:                     5 * time.Minute,
+		MaxRouterInfos:                          DefaultMaxRouterInfos,
+		MaxLeaseSets:                            DefaultMaxLeaseSets,
+		ExpirationCheckInterval:                 DefaultNetDBExpirationCheckInterval,
+		LeaseSetRefreshThreshold:                DefaultNetDBLeaseSetRefreshThreshold,
+		ExplorationInterval:                     DefaultNetDBExplorationInterval,
 		FloodfillEnabled:                        false,
 		StrictRouterInfoNetworkValidation:       true,
-		RouterInfoAdmissionPressureThresholdPct: 80,
+		RouterInfoAdmissionPressureThresholdPct: DefaultRouterInfoAdmissionPressurePct,
 	}
 }
 
@@ -496,16 +497,16 @@ func buildNetDBDefaults(workingDir string) NetDBDefaults {
 // with DefaultBootstrapConfig.
 func buildBootstrapDefaults(workingDir string) BootstrapDefaults {
 	return BootstrapDefaults{
-		LowPeerThreshold:    10,
+		LowPeerThreshold:    DefaultLowPeerThreshold,
 		BootstrapType:       "auto",
-		ReseedTimeout:       60 * time.Second,
-		MinimumReseedPeers:  50,
-		ReseedRetryInterval: 5 * time.Minute,
+		ReseedTimeout:       DefaultReseedTimeout,
+		MinimumReseedPeers:  DefaultMinimumReseedPeers,
+		ReseedRetryInterval: DefaultReseedRetryInterval,
 		ReseedServers:       KnownReseedServers,
 		ReseedStrategy:      ReseedStrategyUnion,
 		PeerCacheEnabled:    true,
 		PeerCachePath:       filepath.Join(workingDir, "peerCache"),
-		PeerCacheMaxSize:    500,
+		PeerCacheMaxSize:    DefaultPeerCacheMaxSize,
 	}
 }
 
@@ -513,14 +514,14 @@ func buildBootstrapDefaults(workingDir string) BootstrapDefaults {
 func buildI2CPDefaults() I2CPDefaults {
 	return I2CPDefaults{
 		Enabled:                    true,
-		Address:                    "localhost:7654",
+		Address:                    fmt.Sprintf("localhost:%d", DefaultI2CPPort),
 		Network:                    "tcp",
-		MaxSessions:                100,
+		MaxSessions:                DefaultI2CPMaxSessions,
 		AllowInsecureCleartextAuth: false,
-		MessageQueueSize:           64,
-		SessionTimeout:             30 * time.Minute,
-		ReadTimeout:                60 * time.Second,
-		WriteTimeout:               30 * time.Second,
+		MessageQueueSize:           DefaultI2CPMessageQueueSize,
+		SessionTimeout:             DefaultSessionTimeout,
+		ReadTimeout:                DefaultI2CPReadTimeout,
+		WriteTimeout:               DefaultI2CPWriteTimeout,
 	}
 }
 
@@ -532,12 +533,12 @@ func buildI2CPDefaults() I2CPDefaults {
 func buildI2PControlDefaults() I2PControlDefaults {
 	return I2PControlDefaults{
 		Enabled:                         true,
-		Address:                         "localhost:7650",
-		Password:                        "itoopie",
+		Address:                         fmt.Sprintf("localhost:%d", DefaultI2PControlPort),
+		Password:                        DefaultI2PControlPassword,
 		UseHTTPS:                        false,
 		CertFile:                        "",
 		KeyFile:                         "",
-		TokenExpiration:                 10 * time.Minute,
+		TokenExpiration:                 DefaultI2PControlTokenExpiration,
 		AllowPlaintextNonLoopback:       false,
 		AllowDefaultPasswordNonLoopback: false,
 		CORSAllowedOrigins:              nil,
@@ -550,20 +551,20 @@ func buildTunnelDefaults() TunnelDefaults {
 		MinPoolSize:             4,
 		MaxPoolSize:             6,
 		TunnelLength:            3,
-		TunnelLifetime:          10 * time.Minute,
-		TunnelTestInterval:      60 * time.Second,
-		TunnelTestTimeout:       5 * time.Second,
-		BuildTimeout:            90 * time.Second,
+		TunnelLifetime:          DefaultTunnelLifetime,
+		TunnelTestInterval:      DefaultTunnelTestInterval,
+		TunnelTestTimeout:       DefaultTunnelTestTimeout,
+		BuildTimeout:            DefaultTunnelBuildTimeout,
 		BuildRetries:            3,
-		ReplaceBeforeExpiration: 2 * time.Minute,
-		MaintenanceInterval:     30 * time.Second,
+		ReplaceBeforeExpiration: DefaultTunnelReplaceBeforeExpiration,
+		MaintenanceInterval:     DefaultTunnelMaintenanceInterval,
 		// Participating tunnel limits (resource exhaustion protection)
-		MaxParticipatingTunnels:    15000,
+		MaxParticipatingTunnels:    DefaultMaxParticipatingTunnels,
 		ParticipatingLimitsEnabled: true,
 		PerSourceRateLimitEnabled:  true,
-		MaxBuildRequestsPerMinute:  10,
+		MaxBuildRequestsPerMinute:  DefaultMaxBuildRequestsPerMinute,
 		BuildRequestBurstSize:      3,
-		SourceBanDuration:          5 * time.Minute,
+		SourceBanDuration:          DefaultSourceBanDuration,
 	}
 }
 
@@ -572,7 +573,7 @@ func buildTransportDefaults() TransportDefaults {
 	return TransportDefaults{
 		NTCP2Enabled:        true,
 		NTCP2Port:           0, // Random port
-		NTCP2MaxConnections: 200,
+		NTCP2MaxConnections: DefaultNTCP2MaxConnections,
 		// Zero defers to the NTCP2 transport's own documented defaults
 		// (ntcp2.DefaultMaxInflightHandshakes / DefaultMaxHandshakesPerSource)
 		// rather than restating the numbers here, so the two cannot drift.
@@ -588,20 +589,20 @@ func buildTransportDefaults() TransportDefaults {
 		SSU2MaxInflightHandshakes:  0,
 		SSU2MaxHandshakesPerSource: 0,
 		SSU2RequireRetry:           false,
-		ConnectionTimeout:          30 * time.Second,
-		IdleTimeout:                5 * time.Minute,
-		MaxMessageSize:             32768, // 32 KiB
+		ConnectionTimeout:          DefaultTransportConnectionTimeout,
+		IdleTimeout:                DefaultTransportIdleTimeout,
+		MaxMessageSize:             DefaultTransportMaxMessageSizeBytes, // 32 KiB
 	}
 }
 
 // buildPerformanceDefaults creates default performance tuning configuration values.
 func buildPerformanceDefaults() PerformanceDefaults {
 	return PerformanceDefaults{
-		MessageQueueSize:          256,
+		MessageQueueSize:          DefaultPerformanceMessageQueueSize,
 		WorkerPoolSize:            8,
-		GarlicEncryptionCacheSize: 1000,
-		FragmentCacheSize:         500,
-		CleanupInterval:           5 * time.Minute,
+		GarlicEncryptionCacheSize: DefaultGarlicEncryptionCacheSize,
+		FragmentCacheSize:         DefaultFragmentCacheSize,
+		CleanupInterval:           DefaultPerformanceCleanupInterval,
 	}
 }
 
@@ -692,7 +693,7 @@ func validateNetDBPath(path string) error {
 
 // validateNetDBMaxRouterInfos validates the max router infos setting.
 func validateNetDBMaxRouterInfos(maxRouterInfos int) error {
-	return validateMinInt("max_router_infos", "NetDBConfig", maxRouterInfos, 10)
+	return validateMinInt("max_router_infos", "NetDBConfig", maxRouterInfos, MinRouterInfos)
 }
 
 // validateNetDBMaxLeaseSets validates the max lease sets setting.
@@ -701,9 +702,9 @@ func validateNetDBMaxLeaseSets(maxLeaseSets int) error {
 }
 
 func validateRouterInfoAdmissionPressureThresholdPct(threshold int) error {
-	if threshold < 1 || threshold > 99 {
+	if threshold < MinAdmissionPressurePct || threshold > MaxAdmissionPressurePct {
 		log.WithField("router_info_admission_pressure_threshold_pct", threshold).Error("Invalid NetDB configuration")
-		return newValidationError("NetDB.RouterInfoAdmissionPressureThresholdPct must be between 1 and 99")
+		return newValidationError(fmt.Sprintf("NetDB.RouterInfoAdmissionPressureThresholdPct must be between %d and %d", MinAdmissionPressurePct, MaxAdmissionPressurePct))
 	}
 	return nil
 }
@@ -820,7 +821,7 @@ func validateI2CPMaxSessions(maxSessions int) error {
 			"max_sessions":    maxSessions,
 			"maximum_allowed": MaxI2CPSessions,
 		}).Error("invalid I2CP configuration")
-		return newValidationError("I2CP.MaxSessions must be at most 320")
+		return newValidationError(fmt.Sprintf("I2CP.MaxSessions must be at most %d", MaxI2CPSessions))
 	}
 
 	return nil
@@ -891,17 +892,17 @@ func validateI2PControlSecurity(i2pcontrol I2PControlDefaults) error {
 		return nil
 	}
 
-	isLocalhost := strings.HasPrefix(i2pcontrol.Address, "localhost:") ||
-		strings.HasPrefix(i2pcontrol.Address, "127.0.0.1:") ||
-		strings.HasPrefix(i2pcontrol.Address, "[::1]:")
+	isLocalhost := strings.HasPrefix(i2pcontrol.Address, LocalhostPrefix) ||
+		strings.HasPrefix(i2pcontrol.Address, LoopbackIPv4Prefix) ||
+		strings.HasPrefix(i2pcontrol.Address, LoopbackIPv6Prefix)
 
 	// Hard reject: non-localhost + default password (regardless of HTTPS)
-	if !isLocalhost && i2pcontrol.Password == "itoopie" {
+	if !isLocalhost && i2pcontrol.Password == DefaultI2PControlPassword {
 		log.WithFields(logger.Fields{
 			"at":     "validateI2PControlConfig",
 			"reason": "insecure_remote_access",
 		}).Error("I2PControl refuses to start with default password on non-localhost")
-		return newValidationError("I2PControl cannot use default password 'itoopie' on non-localhost address " + i2pcontrol.Address + "; change the password")
+		return newValidationError("I2PControl cannot use default password '" + DefaultI2PControlPassword + "' on non-localhost address " + i2pcontrol.Address + "; change the password")
 	}
 
 	// Warn: non-localhost + HTTP (even with custom password, tokens travel in cleartext)
@@ -914,7 +915,7 @@ func validateI2PControlSecurity(i2pcontrol I2PControlDefaults) error {
 	}
 
 	// Warn: default password on localhost (server startup enforces refusal)
-	if i2pcontrol.Password == "itoopie" {
+	if i2pcontrol.Password == DefaultI2PControlPassword {
 		log.WithFields(logger.Fields{
 			"at":     "validateI2PControlConfig",
 			"reason": "default_password",
@@ -1044,14 +1045,14 @@ func validateParticipatingLimits(tunnel TunnelDefaults) error {
 	if !tunnel.ParticipatingLimitsEnabled {
 		return nil
 	}
-	if tunnel.MaxParticipatingTunnels < 100 {
+	if tunnel.MaxParticipatingTunnels < MinParticipatingTunnels {
 		log.WithFields(logger.Fields{
 			"at":                        "validateTunnelConfig",
 			"reason":                    "max_participating_tunnels_too_low",
 			"max_participating_tunnels": tunnel.MaxParticipatingTunnels,
-			"minimum_required":          100,
+			"minimum_required":          MinParticipatingTunnels,
 		}).Error("invalid tunnel configuration")
-		return newValidationError("Tunnel.MaxParticipatingTunnels must be at least 100")
+		return newValidationError(fmt.Sprintf("Tunnel.MaxParticipatingTunnels must be at least %d", MinParticipatingTunnels))
 	}
 	return nil
 }
@@ -1109,9 +1110,9 @@ func validateTransport(transport TransportDefaults) error {
 
 // validateTransportSizes checks message size and connection count limits.
 func validateTransportSizes(transport TransportDefaults) error {
-	if transport.MaxMessageSize < 1024 {
+	if transport.MaxMessageSize < MinMaxMessageSizeBytes {
 		log.WithField("max_message_size", transport.MaxMessageSize).Error("Invalid transport configuration")
-		return newValidationError("Transport.MaxMessageSize must be at least 1024 bytes")
+		return newValidationError(fmt.Sprintf("Transport.MaxMessageSize must be at least %d bytes", MinMaxMessageSizeBytes))
 	}
 	if transport.NTCP2MaxConnections < 1 {
 		log.WithField("ntcp2_max_connections", transport.NTCP2MaxConnections).Error("Invalid transport configuration")
@@ -1149,15 +1150,15 @@ func validateTransportSizes(transport TransportDefaults) error {
 }
 
 // validateTransportPorts checks that NTCP2 and SSU2 ports are within the
-// valid range (0–65535, where 0 means OS-assigned).
+// valid range (0–MaxPort, where 0 means OS-assigned).
 func validateTransportPorts(transport TransportDefaults) error {
-	if transport.NTCP2Port < 0 || transport.NTCP2Port > 65535 {
+	if transport.NTCP2Port < 0 || transport.NTCP2Port > MaxPort {
 		log.WithField("ntcp2_port", transport.NTCP2Port).Error("Invalid transport configuration")
-		return newValidationError("Transport.NTCP2Port must be between 0 and 65535")
+		return newValidationError(fmt.Sprintf("Transport.NTCP2Port must be between 0 and %d", MaxPort))
 	}
-	if transport.SSU2Port < 0 || transport.SSU2Port > 65535 {
+	if transport.SSU2Port < 0 || transport.SSU2Port > MaxPort {
 		log.WithField("ssu2_port", transport.SSU2Port).Error("Invalid transport configuration")
-		return newValidationError("Transport.SSU2Port must be between 0 and 65535")
+		return newValidationError(fmt.Sprintf("Transport.SSU2Port must be between 0 and %d", MaxPort))
 	}
 	return nil
 }
