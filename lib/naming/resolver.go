@@ -254,7 +254,7 @@ func ResolveB32Address(address string) ([]byte, error) {
 // to a .b32.i2p address string.
 func DestinationToB32(destBytes []byte) string {
 	hash := sha256.Sum256(destBytes)
-	return b32Encoding.EncodeToString(hash[:]) + ".b32.i2p"
+	return b32Encoding.EncodeToString(hash[:]) + B32Suffix
 }
 
 // DecodeB33Address decodes an encrypted (b33) .b32.i2p address into its
@@ -291,7 +291,7 @@ func decodeB32Address(address string) ([]byte, error) {
 
 	// Strip .b32.i2p suffix if present
 	address = strings.ToLower(address)
-	address = strings.TrimSuffix(address, ".b32.i2p")
+	address = strings.TrimSuffix(address, B32Suffix)
 
 	// B32 addresses are 52 characters (256 bits in base32)
 	if len(address) != B32AddressLength {
@@ -336,7 +336,7 @@ func (r *HostsTxtResolver) Resolve(address string) ([]byte, bool, error) {
 	address = strings.ToLower(strings.TrimSpace(address))
 
 	// Handle .b32.i2p addresses
-	if strings.HasSuffix(address, ".b32.i2p") {
+	if strings.HasSuffix(address, B32Suffix) {
 		return r.resolveB32(address)
 	}
 

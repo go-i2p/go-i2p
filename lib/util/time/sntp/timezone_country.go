@@ -25,7 +25,7 @@ func loadTimezoneCountryMap() map[string]string {
 	f, err := zoneToCountryFS.Open("zone_to_country.txt")
 	if err != nil {
 		log.WithError(err).Warn("Failed to open zone_to_country.txt")
-		return make(map[string]string, 420)
+		return make(map[string]string, timezoneCountryMapCapacity)
 	}
 	defer func() { _ = f.Close() }()
 
@@ -38,7 +38,7 @@ func loadTimezoneCountryMap() map[string]string {
 }
 
 func parseTimezoneCountryMap(r io.Reader) (map[string]string, error) {
-	m := make(map[string]string, 420)
+	m := make(map[string]string, timezoneCountryMapCapacity)
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())

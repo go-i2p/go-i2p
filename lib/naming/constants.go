@@ -30,6 +30,12 @@ const B32HashSize = 32
 // LeaseSet lookup before returning a timeout error.
 const DefaultFetchTimeout = 10 * time.Second
 
+// B32Suffix is the top-level domain identifying a base32-encoded I2P address.
+// It is stripped before decoding and appended when deriving an address from a
+// destination.
+// Moved from: resolver.go
+const B32Suffix = ".b32.i2p"
+
 // ──────────────────────────────────────────────────────────────────────────────
 // Hosts-file parsing constants
 // ──────────────────────────────────────────────────────────────────────────────

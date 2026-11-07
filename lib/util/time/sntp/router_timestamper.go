@@ -205,7 +205,7 @@ func (rt *RouterTimestamper) tryPriorityServers(priorityServers [][]string, pref
 }
 
 func (rt *RouterTimestamper) tryDefaultServers(servers []string, preferIPv6 bool) bool {
-	prefIPv6 := preferIPv6 && rt.secureRandBool(0.75)
+	prefIPv6 := preferIPv6 && rt.secureRandBool(defaultIPv6Preference)
 	return !rt.queryTime(servers, defaultTimeout, prefIPv6)
 }
 
@@ -248,7 +248,7 @@ func (rt *RouterTimestamper) calculateSleepDuration(lastFailed bool) time.Durati
 		if fails >= maxConsecutiveFails {
 			rt.mutex.Unlock()
 			rt.notifySyncLost()
-			return 30 * time.Minute
+			return SyncLostSleep
 		}
 		rt.mutex.Unlock()
 		rt.notifySyncFailure(fails)
@@ -461,7 +461,7 @@ func matchesAddressFamily(server string, wantIPv6 bool) bool {
 // Unlike the previous validateFirstSample, this never rejects the sample —
 // the purpose of SNTP is to correct arbitrary clock drift.
 func (rt *RouterTimestamper) checkSyncStatus(delta time.Duration) {
-	if absDuration(delta) < 500*time.Millisecond {
+	if absDuration(delta) < WellSyncedOffset {
 		rt.setSyncedStatus(true)
 	}
 }
