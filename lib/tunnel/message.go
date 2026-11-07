@@ -164,10 +164,10 @@ func (tm EncryptedTunnelMessage) IV() (tunnel.TunnelIV, error) {
 // There is no checksum field in the encrypted format; checksum exists only in
 // the decrypted format.
 func (tm EncryptedTunnelMessage) Data() ([]byte, error) {
-	if len(tm) < TunnelChecksumOffset {
+	if len(tm) < TunnelEncryptedDataOffset {
 		return nil, oops.Errorf("encrypted tunnel message too short for data: %d bytes", len(tm))
 	}
-	return tm[TunnelChecksumOffset:], nil
+	return tm[TunnelEncryptedDataOffset:], nil
 }
 
 // DecryptedTunnelMessage represents a decrypted 1028-byte I2P tunnel message containing a TunnelID, IV, checksum, and delivery instructions.

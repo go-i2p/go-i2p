@@ -296,7 +296,7 @@ func NewMessageProcessor() *MessageProcessor {
 	return &MessageProcessor{
 		factory:             NewMessageFactory(),
 		expirationValidator: ev,
-		replayCache:         newMessageReplayCache(10_000, time.Duration(ev.toleranceSeconds)*time.Second),
+		replayCache:         newMessageReplayCache(messageReplayCacheCapacity, time.Duration(ev.toleranceSeconds)*time.Second),
 	}
 }
 
@@ -657,17 +657,17 @@ func (p *MessageProcessor) processMessageDispatch(msg Message, depth int) error 
 		log.WithFields(logger.Fields{
 			"at":           "processMessageDispatch",
 			"message_type": messageType,
-		}).Debug("Dropping 528-byte tunnel build message (long-record formats unsupported)")
+		}).Debugf("Dropping %d-byte tunnel build message (long-record formats unsupported)", StandardBuildRecordSize)
 		return nil
 	default:
 		// Per I2P spec, message types 224-254 are reserved for experimental use.
 		// A production router should silently drop unknown types to support
 		// protocol extensibility. Return an error only for truly invalid types.
-		if messageType >= 224 && messageType <= 254 {
+		if messageType >= experimentalTypeRangeStart && messageType <= experimentalTypeRangeEnd {
 			log.WithFields(logger.Fields{
 				"at":           "processMessageDispatch",
 				"message_type": messageType,
-			}).Debug("Dropping experimental message type (224-254 range)")
+			}).Debugf("Dropping experimental message type (%d-%d range)", experimentalTypeRangeStart, experimentalTypeRangeEnd)
 			return nil
 		}
 		log.WithFields(logger.Fields{

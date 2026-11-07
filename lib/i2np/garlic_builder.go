@@ -63,7 +63,7 @@ func NewGarlicBuilder(messageID int, expiration time.Time) *GarlicBuilder {
 func NewGarlicBuilderWithDefaults() (*GarlicBuilder, error) {
 	log.WithField("at", "NewGarlicBuilderWithDefaults").Debug("Creating garlic builder with defaults")
 	// Generate random message ID (4 bytes)
-	msgIDBytes := make([]byte, 4)
+	msgIDBytes := make([]byte, I2NPMessageIDSize)
 	if _, err := rand.Read(msgIDBytes); err != nil {
 		log.WithError(err).Error("Failed to generate random message ID")
 		return nil, oops.Wrapf(err, "failed to generate random message ID")

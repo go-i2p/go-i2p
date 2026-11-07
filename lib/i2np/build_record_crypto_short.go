@@ -96,16 +96,16 @@ func EncryptShortBuildRequestRecordWithChain(record BuildRequestRecord, recipien
 		return encrypted, chainingKey, noiseHash, err
 	}
 
-	cleartext := full[48 : 48+ShortBuildRecordCleartextLen]
+	cleartext := full[ShortRecordPrefixSize : ShortRecordPrefixSize+ShortBuildRecordCleartextLen]
 	logSTBMEncryptionDiagnostics(record, recipientRouterInfo, recipientPubKey, cleartext)
 
 	ct, err := ns.EncryptAndHash(nil, cleartext)
 	if err != nil {
 		return encrypted, chainingKey, noiseHash, oops.Wrapf(err, "Noise EncryptAndHash failed")
 	}
-	if len(ct) != ShortBuildRecordCleartextLen+16 {
+	if len(ct) != ShortBuildRecordCleartextLen+ShortRecordTagSize {
 		return encrypted, chainingKey, noiseHash, oops.Errorf("unexpected ciphertext length: got %d, want %d",
-			len(ct), ShortBuildRecordCleartextLen+16)
+			len(ct), ShortBuildRecordCleartextLen+ShortRecordTagSize)
 	}
 
 	assembleEncryptedSTBMRecord(&encrypted, full, ephemeralPub, ct)
@@ -131,7 +131,7 @@ func validateSTBMInputs(full []byte, recipientRouterInfo router_info.RouterInfo)
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to extract encryption public key")
 	}
-	if len(recipientPubKey) != 32 {
+	if len(recipientPubKey) != x25519KeySize {
 		return nil, oops.Errorf("invalid recipient pubkey length: %d", len(recipientPubKey))
 	}
 
@@ -183,9 +183,9 @@ func logSTBMEncryptionDiagnostics(record BuildRequestRecord, recipientRouterInfo
 
 // assembleEncryptedSTBMRecord copies the encrypted data into the final record layout.
 func assembleEncryptedSTBMRecord(encrypted *[218]byte, full, ephemeralPub, ct []byte) {
-	copy(encrypted[0:16], full[0:16])
-	copy(encrypted[16:48], ephemeralPub)
-	copy(encrypted[48:218], ct)
+	copy(encrypted[:ShortRecordToPeerHashSize], full[:ShortRecordToPeerHashSize])
+	copy(encrypted[ShortRecordToPeerHashSize:ShortRecordPrefixSize], ephemeralPub)
+	copy(encrypted[ShortRecordPrefixSize:ShortBuildRecordSize], ct)
 }
 
 // STBM reply/layer/IV key derivation.
@@ -240,8 +240,8 @@ func deriveSTBMHopKeys(preReplyCK [32]byte, isOBEP bool) (i2ptunnel.BuildReplyKe
 //	MixHash(ct)
 func decryptSTBMRecord(encrypted [218]byte, privateKey []byte) (BuildRequestRecord, [32]byte, [32]byte, error) {
 	var chainingKey, noiseHash [32]byte
-	if len(privateKey) != 32 {
-		return BuildRequestRecord{}, chainingKey, noiseHash, oops.Errorf("invalid private key size: expected 32 bytes, got %d", len(privateKey))
+	if len(privateKey) != x25519KeySize {
+		return BuildRequestRecord{}, chainingKey, noiseHash, oops.Errorf("invalid private key size: expected %d bytes, got %d", x25519KeySize, len(privateKey))
 	}
 
 	// Recover our static public key by performing X25519(priv, basepoint). We
@@ -252,8 +252,8 @@ func decryptSTBMRecord(encrypted [218]byte, privateKey []byte) (BuildRequestReco
 		return BuildRequestRecord{}, chainingKey, noiseHash, oops.Wrapf(err, "failed to derive static public key from private key")
 	}
 
-	ephPub := encrypted[16:48]
-	ct := encrypted[48:218] // 154 bytes plaintext + 16 byte tag
+	ephPub := encrypted[ShortRecordToPeerHashSize:ShortRecordPrefixSize]
+	ct := encrypted[ShortRecordPrefixSize:ShortBuildRecordSize] // cleartext + AEAD tag
 
 	ns := initSTBMNoiseN(ourStaticPubBytes)
 	ns.MixHash(ephPub)
@@ -305,8 +305,8 @@ func extractEncryptionPublicKey(routerInfo router_info.RouterInfo) ([]byte, erro
 	}
 
 	pubKeyBytes := pubKey.Bytes()
-	if len(pubKeyBytes) != 32 {
-		return nil, oops.Errorf("invalid public key size: expected 32 bytes (X25519), got %d", len(pubKeyBytes))
+	if len(pubKeyBytes) != x25519KeySize {
+		return nil, oops.Errorf("invalid public key size: expected %d bytes (X25519), got %d", x25519KeySize, len(pubKeyBytes))
 	}
 
 	return pubKeyBytes, nil

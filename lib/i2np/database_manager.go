@@ -322,7 +322,7 @@ func (dm *DatabaseManager) fetchFloodfillRouters(targetKey common.Hash, count in
 // deriveRoutingKey computes the I2P DHT routing key for the current UTC date:
 // SHA256(hash || yyyyMMdd). Kept local to avoid package cycles with netdb.
 func deriveRoutingKey(h common.Hash, now time.Time) common.Hash {
-	date := now.UTC().Format("20060102")
+	date := now.UTC().Format(routerInfoDumpDateLayout)
 	sum := sha256.Sum256(append(h[:], []byte(date)...))
 	return sum
 }

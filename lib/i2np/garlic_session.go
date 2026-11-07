@@ -408,11 +408,11 @@ func WrapInGarlicMessage(encryptedGarlic []byte) (*BaseI2NPMessage, error) {
 	}
 
 	// Validate payload size against the 4-byte length field limit
-	if len(encryptedGarlic) > 65535 {
-		return nil, oops.Errorf("encrypted garlic exceeds maximum size: %d > 65535", len(encryptedGarlic))
+	if len(encryptedGarlic) > MaxI2NPStandardPayload {
+		return nil, oops.Errorf("encrypted garlic exceeds maximum size: %d > %d", len(encryptedGarlic), MaxI2NPStandardPayload)
 	}
 
-	msgIDBytes := make([]byte, 4)
+	msgIDBytes := make([]byte, I2NPMessageIDSize)
 	if _, err := rand.Read(msgIDBytes); err != nil {
 		return nil, oops.Wrapf(err, "failed to generate message ID")
 	}
@@ -420,10 +420,10 @@ func WrapInGarlicMessage(encryptedGarlic []byte) (*BaseI2NPMessage, error) {
 
 	msg := NewBaseI2NPMessage(I2NPMessageTypeGarlic)
 	msg.SetMessageID(messageID)
-	msg.SetExpiration(time.Now().Add(10 * time.Second))
+	msg.SetExpiration(time.Now().Add(garlicMessageTTL))
 
 	// F459/F461: Prepend the 4-byte length prefix (spec-required)
-	lengthPrefix := make([]byte, 4)
+	lengthPrefix := make([]byte, I2NPMessageIDSize)
 	binary.BigEndian.PutUint32(lengthPrefix, uint32(len(encryptedGarlic)))
 	msg.data = append(lengthPrefix, encryptedGarlic...)
 

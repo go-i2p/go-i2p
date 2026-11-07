@@ -170,9 +170,9 @@ func (s *OutboundTunnelBuildReply) verifyRecordIntegrity(hopIndex int, record Bu
 	}
 
 	// If record has a non-zero hash, verify it covers RandomData + Reply
-	dataToHash := make([]byte, 496)
-	copy(dataToHash[:495], record.RandomData[:])
-	dataToHash[495] = record.Reply
+	dataToHash := make([]byte, StandardBuildResponseHashInputSize)
+	copy(dataToHash[:StandardBuildResponseRandomDataSize], record.RandomData[:])
+	dataToHash[StandardBuildResponseRandomDataSize] = record.Reply
 
 	computedHash := types.SHA256(dataToHash)
 

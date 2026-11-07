@@ -50,8 +50,9 @@ const (
 	payloadNextTunnelOffset = 4
 	// payloadNextIdentOffset is the 32-byte next-hop identity hash.
 	payloadNextIdentOffset = 8
-	// payloadFlagOffset is the single flags byte (bit 7 IBGW, bit 6 OBEP).
-	payloadFlagOffset = 40
+	// payloadFlagOffset is the single flags byte (bit 7 IBGW, bit 6 OBEP),
+	// immediately after the next-hop identity hash.
+	payloadFlagOffset = payloadNextIdentOffset + nextIdentLen // 40
 	// payloadLayerEncTypeOffset is the 1-byte layer encryption type. 0 means
 	// AES, which is what current tunnels use.
 	payloadLayerEncTypeOffset = 43
@@ -124,9 +125,6 @@ const (
 	// reply byte. 495 = 528 - 32 - 1.
 	responseRandomDataLen = StandardRecordSize - ResponseHashLen - 1
 
-	// responseReplyOffset is the byte holding the reply code, the last byte of
-	// the record.
-	responseReplyOffset = StandardRecordSize - 1
 )
 
 // ──────────────────────────────────────────────────────────────────────────────

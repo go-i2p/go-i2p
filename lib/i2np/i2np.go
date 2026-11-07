@@ -137,7 +137,7 @@ func NewBaseI2NPMessage(msgType int) *BaseI2NPMessage {
 	return &BaseI2NPMessage{
 		type_:      msgType,
 		messageID:  msgID,
-		expiration: time.Now().Add(60 * time.Second), // Default 60s per spec recommendation
+		expiration: time.Now().Add(defaultI2NPMessageTTL),
 		data:       []byte{},
 	}
 }

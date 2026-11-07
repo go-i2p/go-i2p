@@ -397,13 +397,13 @@ func (p *MessageProcessor) processDeliveryStatusMessage(msg Message) error {
 		return oops.Errorf("DeliveryStatus message does not implement DataCarrier interface")
 	}
 	payload := carrier.GetData()
-	if len(payload) < 12 {
-		return oops.Errorf("DeliveryStatus payload too short: %d bytes (need 12)", len(payload))
+	if len(payload) < DeliveryStatusKeySize {
+		return oops.Errorf("DeliveryStatus payload too short: %d bytes (need %d)", len(payload), DeliveryStatusKeySize)
 	}
 
 	msgID := int(binary.BigEndian.Uint32(payload[0:4]))
 	var date common.Date
-	copy(date[:], payload[4:12])
+	copy(date[:], payload[I2NPMessageIDSize:DeliveryStatusKeySize])
 	timestamp := date.Time()
 
 	log.WithFields(logger.Fields{

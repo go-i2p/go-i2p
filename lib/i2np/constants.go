@@ -103,6 +103,59 @@ const (
 	StandardBuildRecordCleartextLen = buildrecord.StandardCleartextLen     // 222 (deprecated long record)
 	ShortBuildRecordCleartextLen    = buildrecord.ShortCleartextLen        // 154
 	ShortRecordHeaderSize           = 64                                   // toPeer(16) + ephemeralKey(32) + MAC(16)
+
+	// ShortRecordPrefixSize is the unencrypted prefix of a short record: the
+	// toPeer hash and the ephemeral public key. Aliased from buildrecord, which
+	// owns the record layout, so the encrypting code and the serialising code
+	// split the record at the same offset.
+	ShortRecordPrefixSize = buildrecord.ShortRecordPrefixLen // 48
+
+	// ShortRecordToPeerHashSize is the width of the leading toPeer field.
+	ShortRecordToPeerHashSize = buildrecord.ToPeerHashLen // 16
+
+	// ShortRecordTagSize is the width of the AEAD tag appended after the
+	// encrypted cleartext.
+	ShortRecordTagSize = buildrecord.ShortRecordTagLen // 16
+
+	// StandardBuildResponseHashInputSize is the byte count a long build response
+	// record hashes for its integrity check: the random padding plus the reply
+	// byte, i.e. everything after the leading hash. Aliased from the sum of
+	// buildrecord's own layout constants.
+	StandardBuildResponseHashInputSize = buildrecord.StandardRecordSize - buildrecord.ResponseHashLen // 496
+
+	// StandardBuildResponseRandomDataSize is the padding region of a long build
+	// response record, the hash input minus the trailing reply byte.
+	StandardBuildResponseRandomDataSize = StandardBuildResponseHashInputSize - 1 // 495
+
+	// ShortBuildReplyCleartextSize is what a hop decrypts from one short reply
+	// slot: the 218-byte record less its AEAD tag. It holds the reply options
+	// mapping followed by random padding and the one-byte reply code.
+	ShortBuildReplyCleartextSize = ShortBuildRecordSize - ShortRecordTagSize // 202
+
+	// ShortBuildReplyCodeOffset is where the reply code sits: the last byte of
+	// the decrypted short reply cleartext.
+	ShortBuildReplyCodeOffset = ShortBuildReplyCleartextSize - 1 // 201
+
+	// shortBuildReplyEmptyOptionsSize is the width of the two-byte length field
+	// that encodes an absent options Mapping.
+	shortBuildReplyEmptyOptionsSize = 2
+
+	// defaultI2NPMessageTTL is how long a freshly created I2NP message stays
+	// deliverable. 60 seconds is the spec's recommended default and is long
+	// enough to survive tunnel latency, short enough that a stuck message is
+	// dropped rather than retried forever.
+	// Moved from: i2np.go
+	defaultI2NPMessageTTL = 60 * time.Second
+
+	// participantTunnelLifetime is how long a registered participant keeps a
+	// tunnel, matching the I2P standard tunnel lifetime.
+	// Moved from: processor_records.go
+	participantTunnelLifetime = 10 * time.Minute
+
+	// messageReplayCacheCapacity is how many message IDs the replay cache
+	// retains before evicting the oldest.
+	// Moved from: processor.go
+	messageReplayCacheCapacity = 10_000
 	DefaultExpirationSeconds        = buildrecord.DefaultExpirationSeconds // 600, the only spec-supported value
 )
 
@@ -261,10 +314,6 @@ const (
 	// that is hashed to form a replay-cache key.
 	DeliveryStatusKeySize = I2NPMessageIDSize + I2NPExpirationSize // 12
 
-	// DeliveryStatusTimestampSize is the width of the delivery timestamp, an
-	// 8-byte Date in milliseconds.
-	DeliveryStatusTimestampSize = I2NPExpirationSize // 8
-
 	// DeliveryStatusMaxAge is how far in the past a DeliveryStatus may be
 	// dated and still be accepted. A status older than this is stale: the
 	// message it refers to has long since expired, so recording it in the
@@ -305,11 +354,6 @@ const (
 	// Moved from: garlic_builder.go, garlic_session.go
 	garlicMessageTTL = 10 * time.Second
 
-	// maxOneTimeGarlicKeys bounds how many one-time garlic keys the session
-	// manager retains. Each is registered by a peer, so an unbounded map would
-	// let a remote peer grow router memory without limit.
-	// Moved from: garlic_session.go
-	maxOneTimeGarlicKeys = 10_000
 )
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -377,10 +421,6 @@ const (
 	// Moved from: build_record_crypto_short.go
 	x25519KeySize = 32
 
-	// shortRecordAESKeySize is the width of the chaining key and Noise
-	// transcript hash produced by the short record's ECIES handshake.
-	// Moved from: build_record_crypto_short.go
-	shortRecordAESKeySize = 32
 )
 
 // Header layout assertions. These are compile-time checks, not runtime ones: if
