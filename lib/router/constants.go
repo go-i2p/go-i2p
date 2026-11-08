@@ -5,7 +5,7 @@ import (
 
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/i2np"
-	"github.com/go-i2p/go-i2p/lib/i2pcontrol"
+	"github.com/go-i2p/go-i2p/lib/i2pcontrol/netstatus"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 )
 
@@ -14,26 +14,28 @@ import (
 // ──────────────────────────────────────────────────────────────────────────────
 
 // GetNetworkStatus returns one of these integers as i2p.router.status. They are
-// the I2PControl protocol's codes, so they are owned by lib/i2pcontrol and
-// aliased here rather than restated: the package that defines the wire meaning
-// and the package that produces the value cannot then disagree.
+// the I2PControl protocol's codes, so they are owned by the leaf package
+// lib/i2pcontrol/netstatus and aliased here rather than restated: the producer
+// and the consumers cannot then disagree. The router also reaches lib/i2pcontrol
+// itself (see i2pcontrol.go), but aliasing through it would make the code depend
+// on a package that depends back on the router's transports.
 //
 // Moved from: router_status.go
 const (
 	// statusOK is the router running and directly reachable.
-	statusOK = i2pcontrol.NetworkStatusOK
+	statusOK = netstatus.OK
 
 	// statusTesting is a router with no active peers yet.
-	statusTesting = i2pcontrol.NetworkStatusTesting
+	statusTesting = netstatus.Testing
 
 	// statusFirewalled is a router whose inbound connections are blocked.
-	statusFirewalled = i2pcontrol.NetworkStatusFirewalled
+	statusFirewalled = netstatus.Firewalled
 
 	// statusHidden is a router configured to stay hidden from lookups.
-	statusHidden = i2pcontrol.NetworkStatusHidden
+	statusHidden = netstatus.Hidden
 
 	// statusErrorI2CP is a router whose I2CP server is not running.
-	statusErrorI2CP = i2pcontrol.NetworkStatusErrorI2CP
+	statusErrorI2CP = netstatus.ErrorI2CP
 )
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -195,8 +197,8 @@ const (
 // is derived from the configured rate, and may then be promoted by the connection
 // limits that show the router can actually carry the traffic.
 //
-// The rate boundaries are KBps and are aliased from lib/config wherever the two
-// agree, so the caps string and the advertised class cannot drift apart.
+// The rate boundaries are KBps and every one is aliased from lib/config, so the
+// caps string and the class derived from a rate cannot drift apart.
 //
 // Moved from: router_bandwidth_tier.go
 const (
@@ -208,14 +210,12 @@ const (
 	tierRateOMinKBps = config.BandwidthClassOMinKBps
 	tierRatePMinKBps = config.BandwidthClassPMinKBps
 
-	// tierRateXMinKBps is the P/X boundary. The I2P spec allows either 2000 or
-	// 2048 KBps here as implementor's choice, and lib/config picks 2000 — but the
-	// tier this function returns is deliberately cut at 2048, so a router between
-	// 2000 and 2047 KBps advertises class P here while config.BandwidthClassFromRate
-	// would call it X. Changing either value without the other makes the router
-	// describe itself two different ways; see the note in
-	// GO_I2P_READINESS.md / the report on this change.
-	tierRateXMinKBps = 2048
+	// tierRateXMinKBps is the P/X boundary, aliased from lib/config like the other
+	// class bounds. The I2P spec allows either 2000 or 2048 KBps here as
+	// implementor's choice, and both this package and config now use 2048, so the
+	// tier advertised in RouterInfo and the class config derives from the same rate
+	// always agree.
+	tierRateXMinKBps = config.BandwidthClassXMinKBps
 
 	// defaultUnlimitedTier is the class a router with no bandwidth cap starts from
 	// before session-limit promotion refines it.

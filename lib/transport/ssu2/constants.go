@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/go-i2p/go-i2p/lib/config"
+	"github.com/go-i2p/go-i2p/lib/i2pcontrol/netstatus"
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
 )
 
@@ -160,9 +161,12 @@ const (
 // Moved from: nat.go
 const relayResponseTokenSize = 8
 
-// InboundBlockedStatusCode reports our reachability to the rest of the router in
-// the same numeric vocabulary the out-of-session blocks use, so a status read
-// from the router and a code read from a peer mean the same thing.
+// InboundBlockedStatusCode reports our reachability using the I2PControl network
+// status vocabulary, so the code the router turns into i2p.router.net.status and
+// the code this transport reports are the same number for the same condition.
+// The codes are owned by lib/i2pcontrol/netstatus; this package cannot import
+// lib/i2pcontrol (which depends on the transports) but the leaf package is
+// importable from here.
 //
 // Reference: Java RouterErrorMessages.java ERROR_SYMMETRIC_NAT (11),
 // FIREWALLED (2).
@@ -170,12 +174,12 @@ const relayResponseTokenSize = 8
 const (
 	// inboundBlockedSymmetricNATCode reports a symmetric NAT, which cannot be
 	// hole-punched at all.
-	inboundBlockedSymmetricNATCode = 11
+	inboundBlockedSymmetricNATCode = netstatus.ErrorSymmetricNAT
 
 	// inboundBlockedFirewalledCode reports a restricted or port-restricted NAT:
 	// reachable via introducers and hole-punching, but not by unsolicited
 	// inbound.
-	inboundBlockedFirewalledCode = 2
+	inboundBlockedFirewalledCode = netstatus.Firewalled
 )
 
 // ──────────────────────────────────────────────────────────────────────────────

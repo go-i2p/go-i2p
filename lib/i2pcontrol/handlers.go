@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-i2p/go-i2p/lib/config"
+	"github.com/go-i2p/go-i2p/lib/i2pcontrol/netstatus"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 	"github.com/spf13/viper"
@@ -278,17 +279,11 @@ func (h *RouterInfoHandler) Handle(ctx context.Context, params json.RawMessage) 
 }
 
 // networkStatusString maps an I2PControl numeric status code to the human-readable
-// status name used in the i2p.router.status RouterInfo field. The mapping lives
-// in networkStatusNames, indexed by code, so a code and its name cannot drift
-// apart.
+// status name used in the i2p.router.status RouterInfo field. The codes and their
+// names are owned by lib/i2pcontrol/netstatus, so this is a thin delegation
+// rather than a second mapping to keep in step.
 func networkStatusString(code int) string {
-	if code < 0 || code >= len(networkStatusNames) {
-		return "UNKNOWN"
-	}
-	if name := networkStatusNames[code]; name != "" {
-		return name
-	}
-	return "UNKNOWN"
+	return netstatus.Name(code)
 }
 
 // RouterManagerHandler implements the RouterManager RPC method.

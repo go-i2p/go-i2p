@@ -35,7 +35,7 @@ const (
 // I2PControl JSON-RPC interface, so this is the canonical translation point
 // between the wire protocol and the displayed reachability label.
 //
-// Codes follow lib/i2pcontrol/handlers.go::networkStatusString. All firewalled
+// Codes follow lib/i2pcontrol/netstatus. All firewalled
 // variants (including symmetric-NAT) map to ReachabilityInboundBlocked: the
 // router is reachable via introducers but cannot accept unsolicited inbound
 // connections.

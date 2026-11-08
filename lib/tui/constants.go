@@ -1,5 +1,7 @@
 package tui
 
+import "github.com/go-i2p/go-i2p/lib/i2pcontrol/netstatus"
+
 // ──────────────────────────────────────────────────────────────────────────────
 // ANSI 256-colour palette entries
 // ──────────────────────────────────────────────────────────────────────────────
@@ -32,34 +34,36 @@ const (
 // I2PControl network status codes
 // ──────────────────────────────────────────────────────────────────────────────
 
-// The TUI reads i2p.router.net.status over the I2PControl JSON-RPC interface,
-// so it must translate the numeric wire codes. These mirror the codes in
-// lib/i2pcontrol/handlers.go::networkStatusString. That package is not imported
-// here — lib/tui sits below it in the dependency order — so the values are
-// declared locally and the two lists must be kept in step by hand.
+// The TUI reads i2p.router.net.status over the I2PControl JSON-RPC interface, so
+// it must translate the numeric wire codes. They are owned by
+// lib/i2pcontrol/netstatus, the leaf package both the producer and the consumers
+// can reach: lib/tui sits below lib/i2pcontrol in the dependency order, so
+// importing that package directly would invert it, but the leaf is importable
+// from here. The values are aliased rather than restated, so a display label can
+// never disagree with the code the router sent.
 //
 // Spec: https://github.com/i2p/i2p.i2p/blob/master/install/docs/http-api/i2pcontrol/index.md
 // Moved from: tui.go
 const (
 	// netStatusOK means the router is directly reachable.
-	netStatusOK = 0
+	netStatusOK = netstatus.OK
 	// netStatusTesting means the router has not yet connected to any peers.
-	netStatusTesting = 1
+	netStatusTesting = netstatus.Testing
 	// netStatusFirewalled is the base firewalled code.
-	netStatusFirewalled = 2
+	netStatusFirewalled = netstatus.Firewalled
 	// netStatusHidden means the router is in hidden mode with no published address.
-	netStatusHidden = 3
+	netStatusHidden = netstatus.Hidden
 	// netStatusFirewalledAndFast is a firewalled router configured as a fast peer.
-	netStatusFirewalledAndFast = 4
+	netStatusFirewalledAndFast = netstatus.WarnFirewalledAndFast
 	// netStatusFirewalledAndFloodfill is a firewalled floodfill, which cannot
 	// receive the queries it is meant to answer.
-	netStatusFirewalledAndFloodfill = 5
+	netStatusFirewalledAndFloodfill = netstatus.WarnFirewalledAndFloodfill
 	// netStatusFirewalledWithInboundTCP is a firewalled router that nonetheless
 	// accepts inbound TCP.
-	netStatusFirewalledWithInboundTCP = 6
+	netStatusFirewalledWithInboundTCP = netstatus.WarnFirewalledWithInboundTCP
 	// netStatusFirewalledWithUDPDisabled is a firewalled router whose UDP is off.
-	netStatusFirewalledWithUDPDisabled = 7
+	netStatusFirewalledWithUDPDisabled = netstatus.WarnFirewalledWithUDPDisabled
 	// netStatusErrorSymmetricNAT is the symmetric-NAT error, which blocks
 	// unsolicited inbound connections like the other firewalled variants.
-	netStatusErrorSymmetricNAT = 11
+	netStatusErrorSymmetricNAT = netstatus.ErrorSymmetricNAT
 )

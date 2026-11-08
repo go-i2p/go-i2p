@@ -1,103 +1,84 @@
 package i2pcontrol
 
-import "time"
+import (
+	"time"
+
+	"github.com/go-i2p/go-i2p/lib/i2pcontrol/netstatus"
+)
 
 // ──────────────────────────────────────────────────────────────────────────────
 // I2PControl network status codes
 // ──────────────────────────────────────────────────────────────────────────────
 
 // The integer the router reports as i2p.router.status and
-// i2p.router.net.status. The router produces these codes and this package names
-// them for the RPC reply, so they are defined once here and aliased by the
-// router rather than kept as matching literals in two places.
+// i2p.router.net.status. The codes are owned by lib/i2pcontrol/netstatus, a leaf
+// package, because the components that produce them sit at different depths in
+// the dependency order — lib/transport/ssu2 and lib/tui both report a code but
+// cannot import this package. These aliases keep the names available to
+// i2pcontrol's own callers while the values stay defined once.
 //
-// The codes come from the Java router's NetworkStatus enum, which I2PControl
-// mirrors; the reference set runs 0 through 14.
-//
-// Moved from: handlers.go
+// Spec: https://github.com/i2p/i2p.i2p/blob/master/install/docs/http-api/i2pcontrol/index.md
 const (
 	// NetworkStatusOK means the router is running and directly reachable with a
 	// confirmed external address.
-	NetworkStatusOK = 0
+	NetworkStatusOK = netstatus.OK
 
 	// NetworkStatusTesting means the router has not yet connected to any peers.
-	NetworkStatusTesting = 1
+	NetworkStatusTesting = netstatus.Testing
 
 	// NetworkStatusFirewalled means inbound is blocked: no confirmed external
 	// address, or reachability only through introducers behind a restricted or
 	// port-restricted NAT.
-	NetworkStatusFirewalled = 2
+	NetworkStatusFirewalled = netstatus.Firewalled
 
 	// NetworkStatusHidden means the router is in hidden mode by configuration.
-	NetworkStatusHidden = 3
+	NetworkStatusHidden = netstatus.Hidden
 
 	// NetworkStatusWarnFirewalledAndFast means a firewalled router is also
 	// advertising a high bandwidth class, which the network treats as a
 	// misconfiguration.
-	NetworkStatusWarnFirewalledAndFast = 4
+	NetworkStatusWarnFirewalledAndFast = netstatus.WarnFirewalledAndFast
 
 	// NetworkStatusWarnFirewalledAndFloodfill means a floodfill is firewalled and
 	// so cannot serve lookups to peers that cannot reach it.
-	NetworkStatusWarnFirewalledAndFloodfill = 5
+	NetworkStatusWarnFirewalledAndFloodfill = netstatus.WarnFirewalledAndFloodfill
 
 	// NetworkStatusWarnFirewalledWithInboundTCP means NTCP inbound succeeded while
 	// the router still reports itself firewalled.
-	NetworkStatusWarnFirewalledWithInboundTCP = 6
+	NetworkStatusWarnFirewalledWithInboundTCP = netstatus.WarnFirewalledWithInboundTCP
 
 	// NetworkStatusWarnFirewalledWithUDPDisabled means the router is firewalled on
 	// TCP with SSU disabled, leaving it no transport that could traverse NAT.
-	NetworkStatusWarnFirewalledWithUDPDisabled = 7
+	NetworkStatusWarnFirewalledWithUDPDisabled = netstatus.WarnFirewalledWithUDPDisabled
 
 	// NetworkStatusErrorI2CP means the I2CP server is not running, so local
 	// clients cannot connect.
-	NetworkStatusErrorI2CP = 8
+	NetworkStatusErrorI2CP = netstatus.ErrorI2CP
 
 	// NetworkStatusErrorClockSkew means the local clock differs from the network's
 	// by more than the tolerance, which breaks message expiration.
-	NetworkStatusErrorClockSkew = 9
+	NetworkStatusErrorClockSkew = netstatus.ErrorClockSkew
 
 	// NetworkStatusErrorPrivateTCPAddress means the router advertised a
 	// non-routable address as its public TCP endpoint.
-	NetworkStatusErrorPrivateTCPAddress = 10
+	NetworkStatusErrorPrivateTCPAddress = netstatus.ErrorPrivateTCPAddress
 
 	// NetworkStatusErrorSymmetricNAT means the router is reachable only via
 	// introducers because the NAT is symmetric.
-	NetworkStatusErrorSymmetricNAT = 11
+	NetworkStatusErrorSymmetricNAT = netstatus.ErrorSymmetricNAT
 
 	// NetworkStatusErrorUDPPortInUse means the SSU port is already bound by
 	// another process.
-	NetworkStatusErrorUDPPortInUse = 12
+	NetworkStatusErrorUDPPortInUse = netstatus.ErrorUDPPortInUse
 
 	// NetworkStatusErrorNoActivePeers means the router has no peers at all and the
 	// operator should check connectivity and firewall configuration.
-	NetworkStatusErrorNoActivePeers = 13
+	NetworkStatusErrorNoActivePeers = netstatus.ErrorNoActivePeers
 
 	// NetworkStatusErrorUDPDisabledAndTCPUnset means neither transport is usable,
 	// so the router cannot peer with anything.
-	NetworkStatusErrorUDPDisabledAndTCPUnset = 14
+	NetworkStatusErrorUDPDisabledAndTCPUnset = netstatus.ErrorUDPDisabledAndTCPUnset
 )
-
-// networkStatusNames maps each status code to the name the
-// i2p.router.status RouterInfo field reports. Indexed by the code, so adding a
-// code without a name is a compile-time-visible gap rather than a silent
-// fallthrough to "UNKNOWN".
-var networkStatusNames = [...]string{
-	NetworkStatusOK:                            "OK",
-	NetworkStatusTesting:                       "TESTING",
-	NetworkStatusFirewalled:                    "FIREWALLED",
-	NetworkStatusHidden:                        "HIDDEN",
-	NetworkStatusWarnFirewalledAndFast:         "WARN_FIREWALLED_AND_FAST",
-	NetworkStatusWarnFirewalledAndFloodfill:    "WARN_FIREWALLED_AND_FLOODFILL",
-	NetworkStatusWarnFirewalledWithInboundTCP:  "WARN_FIREWALLED_WITH_INBOUND_TCP",
-	NetworkStatusWarnFirewalledWithUDPDisabled: "WARN_FIREWALLED_WITH_UDP_DISABLED",
-	NetworkStatusErrorI2CP:                     "ERROR_I2CP",
-	NetworkStatusErrorClockSkew:                "ERROR_CLOCK_SKEW",
-	NetworkStatusErrorPrivateTCPAddress:        "ERROR_PRIVATE_TCP_ADDRESS",
-	NetworkStatusErrorSymmetricNAT:             "ERROR_SYMMETRIC_NAT",
-	NetworkStatusErrorUDPPortInUse:             "ERROR_UDP_PORT_IN_USE",
-	NetworkStatusErrorNoActivePeers:            "ERROR_NO_ACTIVE_PEERS_CHECK_CONNECTION_AND_FIREWALL",
-	NetworkStatusErrorUDPDisabledAndTCPUnset:   "ERROR_UDP_DISABLED_AND_TCP_UNSET",
-}
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Server timeouts
