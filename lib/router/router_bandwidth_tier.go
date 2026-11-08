@@ -43,28 +43,25 @@ func resolveRouterBandwidthTier(cfg *config.RouterConfig) string {
 }
 
 func deriveTierFromBandwidth(maxBandwidthBytesPerSec uint64) string {
-	const (
-		kb = uint64(1024)
-	)
-
 	// Unlimited bandwidth is handled as high-capacity and then refined by
 	// session-limit promotion logic.
 	if maxBandwidthBytesPerSec == 0 {
-		return "O"
+		return defaultUnlimitedTier
 	}
 
+	kbps := maxBandwidthBytesPerSec / config.BytesPerKiB
 	switch {
-	case maxBandwidthBytesPerSec < 12*kb:
+	case kbps < tierRateLMinKBps:
 		return "K"
-	case maxBandwidthBytesPerSec < 48*kb:
+	case kbps < tierRateMMinKBps:
 		return "L"
-	case maxBandwidthBytesPerSec < 64*kb:
+	case kbps < tierRateNMinKBps:
 		return "M"
-	case maxBandwidthBytesPerSec < 128*kb:
+	case kbps < tierRateOMinKBps:
 		return "N"
-	case maxBandwidthBytesPerSec < 256*kb:
+	case kbps < tierRatePMinKBps:
 		return "O"
-	case maxBandwidthBytesPerSec < 2048*kb:
+	case kbps < tierRateXMinKBps:
 		return "P"
 	default:
 		return "X"

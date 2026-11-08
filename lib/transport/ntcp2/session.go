@@ -800,7 +800,7 @@ func (s *NTCP2Session) handleRouterInfoBlock(data []byte) {
 	}
 	flag := data[0]
 	riData := data[routerInfoFlagSize:]
-	floodRequested := flag&0x01 != 0
+	floodRequested := flag&routerInfoFloodRequestedMask != 0
 
 	s.routerInfoMu.Lock()
 	cb := s.routerInfoCallback

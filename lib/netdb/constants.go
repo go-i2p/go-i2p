@@ -1,6 +1,10 @@
 package netdb
 
-import "time"
+import (
+	"time"
+
+	"github.com/go-i2p/go-i2p/lib/i2np"
+)
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Peer reliability threshold constants
@@ -177,7 +181,7 @@ const (
 	// entryDataMaxLength is the largest payload that length field can name.
 	// Exceeding it would silently truncate the value in the uint16 write, so
 	// serialization fails instead.
-	entryDataMaxLength = (1 << (entryDataLengthFieldSize * 8)) - 1 // 65535
+	entryDataMaxLength = (1 << (entryDataLengthFieldSize * bitsPerByte)) - 1 // 65535
 )
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -407,4 +411,62 @@ const (
 
 	// ipv6AddressFamily selects the IPv6 prefix bucket.
 	ipv6AddressFamily = 6
+)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Bit indexing
+// ──────────────────────────────────────────────────────────────────────────────
+
+// Kademlia-style distance work treats a 256-bit hash as a bit string, and the
+// buckets are numbered from the most significant bit. A byte index and a bit
+// index therefore have to be converted between each other, and the bit order
+// inside a byte is inverted relative to the bucket order — bit 7 of byte 0 is
+// bucket 0.
+const (
+	// bitsPerByte converts a byte count into a bit count.
+	bitsPerByte = 8
+
+	// highestBitIndex is the index of a byte's most significant bit, and also the
+	// offset that inverts bucket order into bit order.
+	highestBitIndex = bitsPerByte - 1 // 7
+)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Percentage arithmetic
+// ──────────────────────────────────────────────────────────────────────────────
+
+// percentWhole is the denominator for the occupancy thresholds expressed as
+// percentages, so a threshold and its comparison cannot use different bases.
+//
+// Moved from: admission_controller.go
+const percentWhole = 100
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Floodfill lookup flag decoding
+// ──────────────────────────────────────────────────────────────────────────────
+
+// A floodfill reads the reply routing and record type straight out of the
+// DatabaseLookup flags byte. The field positions are defined by i2np, which owns
+// the message; these are the values a field takes once extracted.
+//
+// Spec: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/database.rst
+// Moved from: floodfill_server.go
+const (
+	// floodfillTunnelReplyValue is the delivery field (bit 0) set to 1: send the
+	// reply through the tunnel named by ReplyTunnelID rather than directly to the
+	// requesting router.
+	floodfillTunnelReplyValue = 1
+
+	// floodfillLookupTypeShift and floodfillLookupTypeMask locate the 2-bit lookup
+	// type field at bits 3-2.
+	floodfillLookupTypeShift = 2
+	floodfillLookupTypeMask  = 0x03
+
+	// The lookup type values below are the i2np flag constants shifted down out of
+	// bits 3-2, so the floodfill's decoding agrees with the requester's encoding
+	// by construction rather than by two lists of literals matching.
+	floodfillLookupTypeAny         = i2np.DatabaseLookupFlagTypeNormal >> floodfillLookupTypeShift
+	floodfillLookupTypeLeaseSet    = i2np.DatabaseLookupFlagTypeLS >> floodfillLookupTypeShift
+	floodfillLookupTypeRouterInfo  = i2np.DatabaseLookupFlagTypeRI >> floodfillLookupTypeShift
+	floodfillLookupTypeExploration = i2np.DatabaseLookupFlagTypeExploration >> floodfillLookupTypeShift
 )

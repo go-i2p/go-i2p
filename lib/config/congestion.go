@@ -115,13 +115,13 @@ const (
 func (f CongestionFlag) CongestionLevel() int {
 	switch f {
 	case CongestionFlagD:
-		return 1
+		return CongestionLevelD
 	case CongestionFlagE:
-		return 2
+		return CongestionLevelE
 	case CongestionFlagG:
-		return 3
+		return CongestionLevelG
 	default:
-		return 0
+		return CongestionLevelNone
 	}
 }
 

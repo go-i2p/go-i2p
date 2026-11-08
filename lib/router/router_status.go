@@ -173,18 +173,18 @@ func (r *Router) GetNetworkStatus() int {
 	// definition, so report OK and never a firewalled variant. This makes the
 	// verdict deterministic regardless of PeerTest timing.
 	if r.directPublicExternalAddr() != "" {
-		return 0 // OK — directly reachable via public IPv4
+		return statusOK // directly reachable via public IPv4
 	}
-	if code := r.inboundBlockedStatusCode(); code != 0 {
+	if code := r.inboundBlockedStatusCode(); code != statusOK {
 		return code
 	}
-	return 0 // OK
+	return statusOK
 }
 
 // inboundBlockedStatusCode returns the I2PControl status code that describes how
-// NAT detection found inbound connectivity to be blocked (2 = FIREWALLED,
-// 11 = ERROR_SYMMETRIC_NAT), or 0 when SSU2 is unavailable or NAT detection has
-// not (yet) found a relay-requiring NAT. Returning 0 in the unavailable /
+// NAT detection found inbound connectivity to be blocked (statusFirewalled or
+// statusErrorSymmetricNAT), or statusOK when SSU2 is unavailable or NAT
+// detection has not (yet) found a relay-requiring NAT. Returning statusOK in the unavailable /
 // not-yet-tested / directly-reachable cases ensures such routers are never
 // misreported as inbound-blocked.
 func (r *Router) inboundBlockedStatusCode() int {

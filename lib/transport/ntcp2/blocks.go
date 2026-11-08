@@ -288,7 +288,7 @@ const optionsDataMinSize = 12
 // value, i.e. the ratio of padding to data (ntcp2.rst:1522-1528: 0x00 = no
 // padding, 0x01 = 6 percent, 0x10 = 100 percent, 0x80 = 800 percent).
 func RatioToFloat(b byte) float64 {
-	return float64(b) / 16.0
+	return float64(b) / paddingRatioFixedPointDivisor
 }
 
 // ParseOptionsBlock parses the data of an NTCP2 Options block (type 1).

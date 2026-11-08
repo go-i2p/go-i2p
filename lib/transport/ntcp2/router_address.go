@@ -362,7 +362,7 @@ func splitNATHostPort(addr string) (host, port string, err error) {
 		return host, port, err
 	}
 	// Detect unbracketed IPv6: more than one colon means IPv6, not IPv4.
-	if strings.Count(addr, ":") < 2 {
+	if strings.Count(addr, ":") < minIPv6Colons {
 		// Not IPv6 — return the original error.
 		return "", "", oops.Wrapf(err, "failed to parse NATAddr external address %q", addr)
 	}

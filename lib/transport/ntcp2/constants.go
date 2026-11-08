@@ -357,3 +357,56 @@ const (
 //
 // Moved from: persistent_config.go
 const secureFilePermissions = config.SecureFilePermissions
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Padding ratio fixed-point scale
+// ──────────────────────────────────────────────────────────────────────────────
+
+// The NTCP2 options block carries padding ratios as 4.4 fixed-point bytes: four
+// integer bits and four fractional ones, so the byte value divided by this
+// denominator is the ratio. ntcp2.rst:1522-1528 gives 0x00 as no padding and
+// 0x10 as 100 percent, which is exactly one unit of the denominator.
+//
+// Moved from: blocks.go
+const paddingRatioFixedPointDivisor = 16.0
+
+// ──────────────────────────────────────────────────────────────────────────────
+// RouterInfo block flags
+// ──────────────────────────────────────────────────────────────────────────────
+
+// The RouterInfo block's single flag byte uses bit 0 to ask the peer to flood the
+// RouterInfo on our behalf; the remaining bits are reserved.
+//
+// Spec: ntcp2.rst §"Router Info" ("flood requested :: 1 bit")
+// Moved from: session.go
+const routerInfoFloodRequestedMask = 0x01
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Curve25519 small-order check
+// ──────────────────────────────────────────────────────────────────────────────
+
+// Checking whether a u-coordinate has order dividing 8 is done by multiplying it
+// by 8 on the Montgomery ladder. The scalar is fixed, and its bit width is the
+// field's, so the loop always runs the same number of passes; only the bit for 8
+// itself ever triggers a swap.
+//
+// Moved from: curve_validation.go
+const (
+	// smallOrderScalar is the group order divisor the check tests against.
+	smallOrderScalar = 8
+
+	// curve25519TopBit is the highest bit index of a Curve25519 field element,
+	// which is 2^255-19 wide.
+	curve25519TopBit = 254
+)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Address parsing
+// ──────────────────────────────────────────────────────────────────────────────
+
+// minIPv6Colons is how many colons an address must contain before it can be an
+// unbracketed IPv6 literal rather than host:port. An IPv4 host:port has exactly
+// one, so a second colon only occurs in a bare IPv6 address.
+//
+// Moved from: router_address.go
+const minIPv6Colons = 2

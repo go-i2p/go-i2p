@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/config"
@@ -194,7 +193,7 @@ func (cb *CompositeBootstrap) recordPeers(peers []router_info.RouterInfo) {
 // starting a fresh budget.
 func localFallbackContext(ctx context.Context) (context.Context, context.CancelFunc) {
 	if ctx == nil {
-		return context.WithTimeout(context.Background(), 5*time.Second)
+		return context.WithTimeout(context.Background(), localFallbackBudget)
 	}
 
 	if ctx.Err() == nil {
@@ -207,7 +206,7 @@ func localFallbackContext(ctx context.Context) (context.Context, context.CancelF
 	}
 
 	// Parent deadline exceeded: give local filesystem bootstrap a fresh budget.
-	return context.WithTimeout(context.Background(), 5*time.Second)
+	return context.WithTimeout(context.Background(), localFallbackBudget)
 }
 
 // tryFileBootstrap attempts to obtain peers from the local reseed file.
@@ -280,7 +279,7 @@ func buildAggregatedError(cacheErr, fileErr, reseedErr, netDBErr error) error {
 		"file_attempted":  fileErr != nil,
 		"reseed_failed":   reseedErr != nil,
 		"netdb_failed":    netDBErr != nil,
-		"methods_tried":   4,
+		"methods_tried":   bootstrapMethodCount,
 		"methods_failed":  countFailures(cacheErr, fileErr, reseedErr, netDBErr),
 		"recommendation":  "check network connectivity and reseed server availability",
 	}).Error("all bootstrap methods failed")

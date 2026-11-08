@@ -127,7 +127,7 @@ func (c *admissionController) atCriticalPressure(currentCount int) bool {
 	if c.capacity <= 0 {
 		return false
 	}
-	criticalThreshold := (c.capacity * admissionCriticalThresholdPct) / 100
+	criticalThreshold := (c.capacity * admissionCriticalThresholdPct) / percentWhole
 	return currentCount >= criticalThreshold
 }
 
@@ -147,7 +147,7 @@ func (c *admissionController) underPressure(currentCount int) bool {
 	if c.capacity <= 0 {
 		return false
 	}
-	threshold := (c.capacity * c.config.pressurePct) / 100
+	threshold := (c.capacity * c.config.pressurePct) / percentWhole
 	return currentCount >= threshold
 }
 

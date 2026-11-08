@@ -58,7 +58,7 @@ func (dks *DestinationKeyStore) StoreKeys(dir, name string) error {
 	}
 
 	filename := filepath.Join(dir, name+".dest.key")
-	if err := atomicWriteFile(filename, data, 0o600); err != nil {
+	if err := atomicWriteFile(filename, data, keyMaterialFileMode); err != nil {
 		log.WithError(err).Error("Failed to write destination key file")
 		return oops.Wrapf(err, "failed to write destination key file")
 	}
@@ -165,11 +165,10 @@ func (dks *DestinationKeyStore) marshal() ([]byte, error) {
 		paddingBytes = []byte{}
 	}
 
-	// Calculate total size: magic + 3 x (4-byte length + field data)
+	// Calculate total size: magic + keyStoreFieldCountV2 x (length prefix + field data)
 	totalSize := len(destinationKeyStoreMagicV2) +
-		4 + len(sigPrivBytes) +
-		4 + len(encPrivBytes) +
-		4 + len(paddingBytes)
+		keyStoreFieldLengthSize*keyStoreFieldCountV2 +
+		len(sigPrivBytes) + len(encPrivBytes) + len(paddingBytes)
 
 	buf := make([]byte, 0, totalSize)
 
@@ -177,7 +176,7 @@ func (dks *DestinationKeyStore) marshal() ([]byte, error) {
 	buf = append(buf, destinationKeyStoreMagicV2...)
 
 	// Signing private key
-	lenBuf := make([]byte, 4)
+	lenBuf := make([]byte, keyStoreFieldLengthSize)
 	binary.BigEndian.PutUint32(lenBuf, uint32(len(sigPrivBytes)))
 	buf = append(buf, lenBuf...)
 	buf = append(buf, sigPrivBytes...)
@@ -200,7 +199,7 @@ func (dks *DestinationKeyStore) marshal() ([]byte, error) {
 // readV2Padding reads the padding field from version-2 format data.
 // Returns nil, nil when version != 2.
 func readV2Padding(data []byte, offset, version int) ([]byte, error) {
-	if version != 2 {
+	if version != destinationKeyStoreVersion2 {
 		return nil, nil
 	}
 	_, afterKeys, err := readPrivateKeyFieldsWithOffset(data, offset)
@@ -251,14 +250,14 @@ func unmarshalDestinationKeyStore(data []byte) (*DestinationKeyStore, error) {
 // detectFormatVersion checks the magic header and returns the version (1 or 2)
 // and the offset past the header.
 func detectFormatVersion(data []byte) (version, offset int, err error) {
-	if len(data) < 4 {
+	if len(data) < keyStoreMagicSize {
 		return 0, 0, oops.Errorf("data too short for magic header")
 	}
 	if matchesMagic(data, destinationKeyStoreMagicV2) {
-		return 2, len(destinationKeyStoreMagicV2), nil
+		return destinationKeyStoreVersion2, len(destinationKeyStoreMagicV2), nil
 	}
 	if matchesMagic(data, destinationKeyStoreMagicV1) {
-		return 1, len(destinationKeyStoreMagicV1), nil
+		return destinationKeyStoreVersion1, len(destinationKeyStoreMagicV1), nil
 	}
 	return 0, 0, oops.Errorf("invalid magic header: not a destination key file")
 }
@@ -332,11 +331,11 @@ const maxPrivateKeyFieldLength = 1024
 
 // readLengthPrefixedField reads a 4-byte big-endian length followed by that many bytes.
 func readLengthPrefixedField(data []byte, offset int, fieldName string) ([]byte, int, error) {
-	if offset+4 > len(data) {
+	if offset+keyStoreFieldLengthSize > len(data) {
 		return nil, 0, oops.Errorf("data too short for %s length", fieldName)
 	}
-	length := int(binary.BigEndian.Uint32(data[offset : offset+4]))
-	offset += 4
+	length := int(binary.BigEndian.Uint32(data[offset : offset+keyStoreFieldLengthSize]))
+	offset += keyStoreFieldLengthSize
 
 	if length > maxPrivateKeyFieldLength {
 		return nil, 0, oops.Errorf("%s length %d exceeds maximum allowed %d", fieldName, length, maxPrivateKeyFieldLength)
@@ -364,7 +363,7 @@ func (dks *DestinationKeyStore) archiveCurrentKeys(dir, name string) error {
 	timestamp := time.Now().UTC().Format("20060102-150405")
 	archiveFilename := filepath.Join(dir, fmt.Sprintf("%s.dest.key.%s.archive", name, timestamp))
 
-	if err := atomicWriteFile(archiveFilename, data, 0o600); err != nil {
+	if err := atomicWriteFile(archiveFilename, data, keyMaterialFileMode); err != nil {
 		return oops.Wrapf(err, "failed to write archive file")
 	}
 

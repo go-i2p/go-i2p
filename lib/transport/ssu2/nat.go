@@ -2108,8 +2108,10 @@ func (t *SSU2Transport) pollPeerTestOnce(timer *time.Timer, poll *time.Ticker, n
 // introducers. This prevents false firewalled classification from transient
 // network issues while ensuring eventual fallback for genuinely firewalled nodes.
 func (t *SSU2Transport) handlePeerTestTimeout(candidates []router_info.RouterInfo, republish func()) {
-	const maxRetries = 3
-	const initialBackoff = 60 * time.Second
+	const (
+		maxRetries     = natPeerTestMaxRetries
+		initialBackoff = natPeerTestInitialBackoff
+	)
 
 	t.peerTestRetryMu.Lock()
 	t.peerTestRetryCount++
@@ -2145,7 +2147,7 @@ func (t *SSU2Transport) handlePeerTestTimeout(candidates []router_info.RouterInf
 		}
 
 		t.logger.WithFields(map[string]interface{}{
-			"timeout_seconds": 60,
+			"timeout_seconds": int64(natPeerTestInitialBackoff / time.Second),
 			"retry_count":     retryCount,
 			"base_backoff":    baseBackoff.String(),
 			"next_retry_in":   backoff.String(),
@@ -2156,7 +2158,7 @@ func (t *SSU2Transport) handlePeerTestTimeout(candidates []router_info.RouterInf
 	} else {
 		// After maxRetries consecutive failures, classify as firewalled
 		t.logger.WithFields(map[string]interface{}{
-			"timeout_seconds":   60,
+			"timeout_seconds":   int64(natPeerTestInitialBackoff / time.Second),
 			"consecutive_fails": retryCount,
 			"classification":    "FIREWALLED",
 		}).Warn("NAT detection: peer test failed after maximum retries; classifying as FIREWALLED and registering introducers")

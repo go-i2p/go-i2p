@@ -387,3 +387,54 @@ const logHashPrefixBytes = 4
 //
 // Moved from: nat_state.go
 const secureFilePermissions = config.SecureFilePermissions
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Peer-test nonce and connection IDs
+// ──────────────────────────────────────────────────────────────────────────────
+
+// The 4-byte peer-test nonce is carried in an out-of-session header as a 64-bit
+// connection ID built by the handshake library as (nonce << 32) | nonce, so
+// recovering the nonce from the header is the inverse: take the high half. Naming
+// the shift keeps the reader tied to that construction instead of to a bare 32.
+//
+// Spec: ssu2.rst §"Peer Test (Type 7)"
+// Moved from: nat_outofsession_inbound.go
+const (
+	// peerTestNonceSize is the width of the test nonce in bytes.
+	peerTestNonceSize = 4
+
+	// connIDNonceShift is how far the nonce is shifted inside a 64-bit connection
+	// ID: one nonce width, in bits.
+	connIDNonceShift = peerTestNonceSize * 8 // 32
+)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// NAT detection retry
+// ──────────────────────────────────────────────────────────────────────────────
+
+// A peer test that times out is retried with exponential backoff before the
+// router concludes it is firewalled, because one lost probe is not evidence of a
+// blocked inbound path. The base delay is also the figure logged as the per-attempt
+// timeout, so the log and the backoff report the same number.
+//
+// Moved from: nat.go
+const (
+	// natPeerTestMaxRetries is how many consecutive peer-test failures are
+	// tolerated before the router classifies itself firewalled and falls back to
+	// introducers.
+	natPeerTestMaxRetries = 3
+
+	// natPeerTestInitialBackoff is the first retry delay, doubled on each
+	// subsequent failure.
+	natPeerTestInitialBackoff = 60 * time.Second
+)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Address parsing
+// ──────────────────────────────────────────────────────────────────────────────
+
+// minIPv6Colons is how many colons an address must contain before it can be an
+// unbracketed IPv6 literal rather than host:port.
+//
+// Moved from: router_address.go
+const minIPv6Colons = 2

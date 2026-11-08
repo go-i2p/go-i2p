@@ -311,3 +311,79 @@ const (
 	// is treated as a D flag (implementation convention).
 	DefaultCongestionEFlagAgeThreshold = 15 * time.Minute
 )
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Tunnel pool defaults
+// ──────────────────────────────────────────────────────────────────────────────
+
+// The pool sizes and hop count below are what a router uses when the operator has
+// not configured a tunnel shape. They match the I2P spec's recommended 3-hop
+// tunnels and the pool depth the reference implementations keep, which is enough
+// capacity to survive a tunnel dropping without immediately saturating transit
+// demand.
+//
+// Moved from: defaults.go
+const (
+	// DefaultTunnelPoolMinSize is the number of ready tunnels a pool maintains.
+	DefaultTunnelPoolMinSize = 4
+
+	// DefaultTunnelPoolMaxSize is the ceiling a pool may grow to while replacing a
+	// tunnel, so a rebuild does not drop the pool below its minimum.
+	DefaultTunnelPoolMaxSize = 6
+
+	// DefaultTunnelLength is the hop count for a newly built tunnel.
+	DefaultTunnelLength = 3
+
+	// DefaultTunnelBuildRetries caps how many times one build request is retried.
+	DefaultTunnelBuildRetries = 3
+
+	// DefaultBuildRequestBurstSize is the burst allowance on top of the per-source
+	// build rate: three at once, enough for a rebuild of a few tunnels without
+	// letting one client flood the builder.
+	DefaultBuildRequestBurstSize = 3
+)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Performance defaults
+// ──────────────────────────────────────────────────────────────────────────────
+
+// Moved from: defaults.go
+const (
+	// DefaultWorkerPoolSize is how many worker goroutines process queued router
+	// work. It matches the eight slots a typical small VPS offers, so the pool
+	// stays busy without oversubscribing the CPU.
+	DefaultWorkerPoolSize = 8
+)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Derived-limit divisors
+// ──────────────────────────────────────────────────────────────────────────────
+
+// Moved from: defaults.go
+const (
+	// participatingTunnelSoftLimitDivisor halves the participating-tunnel cap into
+	// the soft limit at which probabilistic rejection begins, so the manager backs
+	// off gradually instead of refusing everything at the hard cap.
+	participatingTunnelSoftLimitDivisor = 2
+)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Congestion severity levels
+// ──────────────────────────────────────────────────────────────────────────────
+
+// CongestionFlag orders the three flags by severity, and the numeric level is
+// what the router's congestion monitor compares against when deciding how much of
+// a peer's advertised capacity to trust. Naming the levels keeps the ordering
+// explicit instead of leaving it to the case order in CongestionLevel.
+//
+// Moved from: congestion.go
+const (
+	// CongestionLevelNone is no congestion: the peer is operating normally.
+	CongestionLevelNone = 0
+	// CongestionLevelD is medium congestion or a low-performance peer.
+	CongestionLevelD = 1
+	// CongestionLevelE is high congestion, at or near a limit.
+	CongestionLevelE = 2
+	// CongestionLevelG is the peer rejecting tunnels entirely.
+	CongestionLevelG = 3
+)

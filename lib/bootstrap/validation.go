@@ -47,7 +47,7 @@ func (vs *ValidationStats) ValidityRate() float64 {
 	if vs.TotalProcessed == 0 {
 		return 0.0
 	}
-	return float64(vs.ValidRouterInfos) / float64(vs.TotalProcessed) * 100.0
+	return float64(vs.ValidRouterInfos) / float64(vs.TotalProcessed) * percentBase
 }
 
 // LogSummary logs a summary of the validation statistics
@@ -505,7 +505,7 @@ func GetRouterHashString(ri router_info.RouterInfo) string {
 		return "<error>"
 	}
 	hashBytes := hash[:]
-	if len(hashBytes) < 8 {
+	if len(hashBytes) < hashLogPrefixBytes {
 		return logutil.BytePrefix(hashBytes)
 	}
 	return logutil.HashPrefixPlain(hash) // First 8 bytes for brevity

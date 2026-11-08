@@ -290,9 +290,9 @@ func findMostSignificantDifferingBit(distance common.Hash) int {
 	for byteIdx := 0; byteIdx < i2np.HashSize; byteIdx++ {
 		if distance[byteIdx] != 0 {
 			b := distance[byteIdx]
-			for bitIdx := 7; bitIdx >= 0; bitIdx-- {
+			for bitIdx := highestBitIndex; bitIdx >= 0; bitIdx-- {
 				if (b & (1 << uint(bitIdx))) != 0 {
-					return byteIdx*8 + (7 - bitIdx)
+					return byteIdx*bitsPerByte + (highestBitIndex - bitIdx)
 				}
 			}
 		}
@@ -336,8 +336,8 @@ func (s *AdaptiveStrategy) createKeyWithFlippedBit(ourHash common.Hash, bucketId
 	copy(key[:], ourHash[:])
 
 	// Flip the bit at position bucketIdx to create distance
-	byteIdx := bucketIdx / 8
-	bitIdx := 7 - (bucketIdx % 8)
+	byteIdx := bucketIdx / bitsPerByte
+	bitIdx := highestBitIndex - (bucketIdx % bitsPerByte)
 	key[byteIdx] ^= (1 << uint(bitIdx))
 
 	return key
@@ -345,8 +345,8 @@ func (s *AdaptiveStrategy) createKeyWithFlippedBit(ourHash common.Hash, bucketId
 
 // randomizeLowerBits randomizes all bits less significant than bucketIdx.
 func (s *AdaptiveStrategy) randomizeLowerBits(key *common.Hash, bucketIdx int) error {
-	byteIdx := bucketIdx / 8
-	bitIdx := 7 - (bucketIdx % 8)
+	byteIdx := bucketIdx / bitsPerByte
+	bitIdx := highestBitIndex - (bucketIdx % bitsPerByte)
 
 	// Randomize remaining bits in the target byte
 	for bit := bitIdx - 1; bit >= 0; bit-- {

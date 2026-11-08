@@ -328,7 +328,7 @@ type TunnelDefaults struct {
 // Probabilistic rejection starts at the soft limit and increases toward 100%
 // as we approach the hard limit.
 func (t TunnelDefaults) SoftLimitParticipatingTunnels() int {
-	return t.MaxParticipatingTunnels / 2
+	return t.MaxParticipatingTunnels / participatingTunnelSoftLimitDivisor
 }
 
 // TransportDefaults contains default values for transport layer
@@ -548,14 +548,14 @@ func buildI2PControlDefaults() I2PControlDefaults {
 // buildTunnelDefaults creates default tunnel configuration values.
 func buildTunnelDefaults() TunnelDefaults {
 	return TunnelDefaults{
-		MinPoolSize:             4,
-		MaxPoolSize:             6,
-		TunnelLength:            3,
+		MinPoolSize:             DefaultTunnelPoolMinSize,
+		MaxPoolSize:             DefaultTunnelPoolMaxSize,
+		TunnelLength:            DefaultTunnelLength,
 		TunnelLifetime:          DefaultTunnelLifetime,
 		TunnelTestInterval:      DefaultTunnelTestInterval,
 		TunnelTestTimeout:       DefaultTunnelTestTimeout,
 		BuildTimeout:            DefaultTunnelBuildTimeout,
-		BuildRetries:            3,
+		BuildRetries:            DefaultTunnelBuildRetries,
 		ReplaceBeforeExpiration: DefaultTunnelReplaceBeforeExpiration,
 		MaintenanceInterval:     DefaultTunnelMaintenanceInterval,
 		// Participating tunnel limits (resource exhaustion protection)
@@ -563,7 +563,7 @@ func buildTunnelDefaults() TunnelDefaults {
 		ParticipatingLimitsEnabled: true,
 		PerSourceRateLimitEnabled:  true,
 		MaxBuildRequestsPerMinute:  DefaultMaxBuildRequestsPerMinute,
-		BuildRequestBurstSize:      3,
+		BuildRequestBurstSize:      DefaultBuildRequestBurstSize,
 		SourceBanDuration:          DefaultSourceBanDuration,
 	}
 }
@@ -599,7 +599,7 @@ func buildTransportDefaults() TransportDefaults {
 func buildPerformanceDefaults() PerformanceDefaults {
 	return PerformanceDefaults{
 		MessageQueueSize:          DefaultPerformanceMessageQueueSize,
-		WorkerPoolSize:            8,
+		WorkerPoolSize:            DefaultWorkerPoolSize,
 		GarlicEncryptionCacheSize: DefaultGarlicEncryptionCacheSize,
 		FragmentCacheSize:         DefaultFragmentCacheSize,
 		CleanupInterval:           DefaultPerformanceCleanupInterval,

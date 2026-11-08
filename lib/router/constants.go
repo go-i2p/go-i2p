@@ -4,8 +4,8 @@ import (
 	"time"
 
 	"github.com/go-i2p/go-i2p/lib/config"
-	"github.com/go-i2p/go-i2p/lib/i2pcontrol"
 	"github.com/go-i2p/go-i2p/lib/i2np"
+	"github.com/go-i2p/go-i2p/lib/i2pcontrol"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 )
 
@@ -34,10 +34,6 @@ const (
 
 	// statusErrorI2CP is a router whose I2CP server is not running.
 	statusErrorI2CP = i2pcontrol.NetworkStatusErrorI2CP
-
-	// statusErrorSymmetricNAT is a router reachable only via introducers because
-	// its NAT is symmetric.
-	statusErrorSymmetricNAT = i2pcontrol.NetworkStatusErrorSymmetricNAT
 )
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -195,11 +191,40 @@ const (
 // Bandwidth tier promotion
 // ──────────────────────────────────────────────────────────────────────────────
 
-// A router may advertise a higher bandwidth class than its rate alone justifies
-// when its connection limits show it can actually carry the traffic. The
-// thresholds below are session counts, and the letters name the class each one
-// unlocks. The rate-derived class itself comes from config.BandwidthClassFromRate
-// so both paths share one set of boundaries.
+// A router advertises a bandwidth class letter in its RouterInfo caps. The class
+// is derived from the configured rate, and may then be promoted by the connection
+// limits that show the router can actually carry the traffic.
+//
+// The rate boundaries are KBps and are aliased from lib/config wherever the two
+// agree, so the caps string and the advertised class cannot drift apart.
+//
+// Moved from: router_bandwidth_tier.go
+const (
+	// tierRateLMinKBps and the rest are the lower bounds of each class, taken from
+	// the single source of truth in lib/config.
+	tierRateLMinKBps = config.BandwidthClassLMinKBps
+	tierRateMMinKBps = config.BandwidthClassMMinKBps
+	tierRateNMinKBps = config.BandwidthClassNMinKBps
+	tierRateOMinKBps = config.BandwidthClassOMinKBps
+	tierRatePMinKBps = config.BandwidthClassPMinKBps
+
+	// tierRateXMinKBps is the P/X boundary. The I2P spec allows either 2000 or
+	// 2048 KBps here as implementor's choice, and lib/config picks 2000 — but the
+	// tier this function returns is deliberately cut at 2048, so a router between
+	// 2000 and 2047 KBps advertises class P here while config.BandwidthClassFromRate
+	// would call it X. Changing either value without the other makes the router
+	// describe itself two different ways; see the note in
+	// GO_I2P_READINESS.md / the report on this change.
+	tierRateXMinKBps = 2048
+
+	// defaultUnlimitedTier is the class a router with no bandwidth cap starts from
+	// before session-limit promotion refines it.
+	defaultUnlimitedTier = "O"
+)
+
+// Session-count thresholds that promote the rate-derived class. A router that can
+// hold thousands of connections is capable of X-class traffic even if its byte
+// rate alone would not say so.
 //
 // Moved from: router_bandwidth_tier.go
 const (

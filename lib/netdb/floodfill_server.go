@@ -440,9 +440,8 @@ func (fs *FloodfillServer) HandleDatabaseLookup(lookup *i2np.DatabaseLookup) err
 			return fs.sendEncryptedLookupReply(key, data, dataType, lookup, transport)
 		}
 		// Found locally — check delivery preference from lookup flags
-		// deliveryFlag (bit 0): 0 = send directly, 1 = send through tunnel
-		deliveryFlag := lookup.Flags & 0x01
-		if deliveryFlag == 1 {
+		deliveryFlag := lookup.Flags & i2np.DatabaseLookupFlagTunnel
+		if deliveryFlag == floodfillTunnelReplyValue {
 			// Send response through tunnel as requested
 			return fs.sendDatabaseStoreThroughTunnel(key, data, dataType, lookup.ReplyTunnelID, from, transport)
 		}
@@ -455,8 +454,8 @@ func (fs *FloodfillServer) HandleDatabaseLookup(lookup *i2np.DatabaseLookup) err
 		return fs.sendEncryptedSearchReply(key, lookup, transport)
 	}
 	// Also check delivery preference for search replies
-	deliveryFlag := lookup.Flags & 0x01
-	if deliveryFlag == 1 {
+	deliveryFlag := lookup.Flags & i2np.DatabaseLookupFlagTunnel
+	if deliveryFlag == floodfillTunnelReplyValue {
 		return fs.sendDatabaseSearchReplyThroughTunnel(key, lookup.ReplyTunnelID, from, transport)
 	}
 	return fs.sendDatabaseSearchReply(key, from, transport)
@@ -552,15 +551,15 @@ func wrapEncryptedLookupReply(msg i2np.Message, lookup *i2np.DatabaseLookup) (i2
 // Returns: "ri" for RouterInfo, "ls" for LeaseSet, "exploration" for exploratory,
 // or "any" for normal lookup.
 func (fs *FloodfillServer) determineLookupType(lookup *i2np.DatabaseLookup) string {
-	typeBits := (lookup.Flags >> 2) & 0x03
+	typeBits := (lookup.Flags >> floodfillLookupTypeShift) & floodfillLookupTypeMask
 	switch typeBits {
-	case 0x00:
+	case floodfillLookupTypeAny:
 		return "any"
-	case 0x01:
+	case floodfillLookupTypeLeaseSet:
 		return "ls"
-	case 0x02:
+	case floodfillLookupTypeRouterInfo:
 		return "ri"
-	case 0x03:
+	case floodfillLookupTypeExploration:
 		return "exploration"
 	default:
 		return "any"

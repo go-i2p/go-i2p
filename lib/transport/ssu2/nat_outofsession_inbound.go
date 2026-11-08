@@ -150,9 +150,9 @@ func (t *SSU2Transport) handleOutOfSessionPeerTest(msg ssu2noise.OutOfSessionMes
 	// Destination Connection ID is two copies of the 4-byte big-endian test
 	// nonce ... For message 6 sent from Alice to Charlie, swap the two
 	// connection IDs."
-	nonce := msg.DestConnID >> 32
+	nonce := msg.DestConnID >> connIDNonceShift
 	if ptBlock.MessageCode == ssu2noise.PeerTestReply {
-		nonce = msg.SourceConnID >> 32
+		nonce = msg.SourceConnID >> connIDNonceShift
 	}
 	if uint32(nonce) != ptBlock.Nonce {
 		// The header and the block disagree about which test this is. The
