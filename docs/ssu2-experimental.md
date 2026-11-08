@@ -202,20 +202,42 @@ changes in `conn_write.go`:
 - A data-phase datagram that arrives while the initiator is still handshaking is
   retained and replayed once `finalizeHandshake` installs the data-phase keys,
   instead of being dropped.
+- The data-phase header protector reaches the listener's session registry
+  synchronously, inside the handshake goroutine that derives the key.
 
 The first three act on the connection itself, so they apply to every dial path,
-including the shared listener socket this router dials through. The fourth is
-narrower than it looks: retention happens in the connection's own read loop, and
-a listener-multiplexed session has none — its packets are parsed by the listener
-and handed in already parsed. On that path a first data packet arriving before
-the session's data-phase protector is installed is still dropped, because
-`AcceptedSessionRegistry.TrialDeobfuscate` skips an entry whose protector is not
-yet set. Recovery there is the peer's own retransmission under a fresh packet
-number, which happens at the initial RTO — about 1 s — and so lands well inside
-the 13 s deadline rather than being left to chance. Closing the race properly
-means retaining raw datagrams in the listener's demux cascade, which changes the
-listener's packet budget and its per-packet trial-deobfuscation cost: worth
-doing, but not needed to make the session recover.
+including the shared listener socket this router dials through. The last two are
+what make the race survivable on a shared socket.
+
+Retention needs care on the listener path, because a listener-multiplexed
+session never runs the connection's own read loop — one goroutine owns the
+shared socket and it belongs to the listener — so the connection-side buffer
+would simply never be fed. Two changes cover it. The protector install used to
+be a non-blocking send into a channel that only exists once the listener has
+wired it and that a background goroutine drains; if the handshake derived the
+key first the send hit its default branch and the protector was never installed
+at all, leaving the session permanently deaf with no error anywhere. It is now a
+synchronous hook, so there is no handoff to lose. That removes the large window
+but not the last few instructions of it, and for that residue the listener's
+demux cascade ends with an attribution stage: header protection masks bytes 0-7
+with `k_header_1`, which for an inbound Data packet is the listener's own
+introduction key, so the destination connection ID can be recovered even though
+the packet cannot be read. The raw datagram is then handed to that session's
+bounded retention buffer and replayed by `finalizeHandshake`.
+
+`SSU2Conn.RecvStats()["handshake_retained"]` counts what that buffer held. A
+non-zero value means the peer answered Session Confirmed immediately, which is
+normal and spec-directed; a value pinned at the buffer bound means the session
+was repeatedly losing packets it could not recover.
+
+Holding a packet that arrives mid-handshake is only safe if the handshake is not
+itself waiting for that packet — the buffer is drained inside `finalizeHandshake`,
+so a held handshake message would be a self-inflicted hang. Retention therefore
+requires a completed handshake, which means every message the connection could
+still be waiting for has already arrived; a responder additionally has to have
+been offered its own Session Confirmed stage. Both conditions are asserted by
+tests in `ssu2/server/retain_fallback_test.go` and
+`ssu2/session/retain_listener_test.go`.
 
 Residual risk of the deadline, stated plainly: a peer that completes the
 handshake and then genuinely sends nothing for 13 s has its session closed, and
@@ -235,14 +257,22 @@ leaving the registry entry behind.
 
 Two things deliberately left alone:
 
-- **The idle timeout still cannot fire on a merely idle session.** The keepalive
-  ACK is a fresh send, so it refreshes `lastActivity` every
-  `KeepaliveInterval`, and `timeSinceActivity` can never reach the 5-minute
-  idle timeout for any session — which is why the lab saw a 104-minute session
-  with no timeout. Fixing it means measuring inbound activity instead, which
-  requires the keepalive to become an ack-eliciting probe or every quiet-but-live
-  session gets reaped. That is a wider behavioural change than this finding, so
-  recovery here comes from the retry cap and the data-phase deadline.
+- **A session with a continuous stream of fresh sends still refreshes its own
+  idle clock.** What defeated the 5-minute idle timeout in the lab (a 104-minute
+  session that never expired) was retransmission: `sendPacketDirect` counted every
+  resend as activity, so a stuck session kept restarting the timer and, separately,
+  each resend reset the retry counter so the cap was never reached. Both are fixed,
+  and the idle timeout now does fire — `ssu2/session/data_phase_deadline_test.go`
+  proves it on a dead peer and on a session with resends queued. The keepalive was
+  never part of the problem: with nothing received to acknowledge,
+  `ACKHandler.GenerateACK` returns nil and `sendImmediateACK` sends nothing, so an
+  idle session's keepalive does not refresh `lastActivity` either.
+  What remains is the case where the application keeps handing the session genuinely
+  new data: those sends are activity, so the idle timeout is not the recovery path
+  there. It is the retry cap and the data-phase deadline that end such a session, and
+  making the idle clock measure inbound activity instead would require turning the
+  keepalive into an ack-eliciting probe — otherwise every quiet-but-live session gets
+  reaped. That is a wider behavioural change than this finding.
 - **Inbound sessions are never judged by peer silence.** A responder's peer has
   already proved itself by completing the handshake and may simply not have sent
   data yet; `peerSilent()` is scoped to `IsInitiator()` so healthy inbound
