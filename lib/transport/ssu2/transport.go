@@ -1732,9 +1732,22 @@ func (t *SSU2Transport) GetSessionCount() int32 {
 // HasSession returns true if an active session exists for the given peer hash.
 // This lets higher layers (e.g. tunnel peer selection) check reachability
 // without triggering a new dial attempt. Implements transport.Transport.
+//
+// A session that has lost its context is not reported: nothing can be sent over
+// it, and claiming otherwise keeps higher layers from redialling a peer whose
+// link has already died — the reason a half-completed SSU2 handshake (finding
+// 012) could occupy a slot and suppress redials for the life of the router.
+// NTCP2 applies the same gate. Non-session registry entries (a raw inbound
+// connection, or one already handed to Accept) are still reported.
 func (t *SSU2Transport) HasSession(peerHash data.Hash) bool {
-	_, ok := t.sessionRegistry.Load(peerHash)
-	return ok
+	value, ok := t.sessionRegistry.Load(peerHash)
+	if !ok {
+		return false
+	}
+	if session, isSession := value.(*SSU2Session); isSession {
+		return session.IsAlive()
+	}
+	return true
 }
 
 // GetTotalBandwidth returns the total bytes sent and received across all active sessions.

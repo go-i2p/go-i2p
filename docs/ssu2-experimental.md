@@ -164,6 +164,90 @@ config. The listener builds its inbound header protector from `IntroKey` inside
 intro key — so the protector was nil at construction and no inbound SessionRequest
 could be deobfuscated. Key management now runs before the listener is created.
 
+## Outbound sessions: a handshake the peer never completed
+
+Finding 012. An SSU2 dial that reached SessionConfirmed was treated as an
+established session the moment SessionConfirmed was written, without waiting for
+any acknowledgement from the peer. A responder that accepted the SessionRequest,
+answered SessionCreated, and then rejected or ignored the SessionConfirmed (a
+stale RouterInfo — see finding 010's H-161 — or a crash) left the initiator
+holding a session that reported itself live. Three independent mechanisms made
+that state permanent, all in `go-noise/ssu2/session`:
+
+1. **No completion condition.** `finalizeHandshake` returned after writing
+   SessionConfirmed. `ssu2.md` §"Handshake Retransmission" -> §"Session
+   Confirmed" makes the peer's first data message the event that ends Session
+   Confirmed retransmission, so the spec expects an endpoint to know whether that
+   event happened; nothing here did.
+2. **An unreachable retry cap.** `retransmitExpired` resends unacknowledged
+   contents under a fresh packet number, as §"Packet Numbering" requires, and
+   then re-tracked the new packet with `Retries: 0`. The packet number changed,
+   so the count restarted, so `maxPacketRetries` was never reached and one
+   message was resent 1157 times in seven and a half minutes on the lab testnet.
+3. **A timer that could not fire.** Every resend refreshed `lastActivity`, which
+   is what the idle check measures.
+
+The fix is in `go-noise/ssu2/session/conn_data_phase.go` plus the two send-path
+changes in `conn_write.go`:
+
+- The initiator now arms a deadline for the peer's first authenticated
+  data-phase packet and closes the session with
+  `TerminationSessionConfirmedError` when it passes. The default is 13 s —
+  §"Total Timeout"'s 12.5 s plus the final 5 s SessionConfirmed interval — so a
+  handshake the spec still considers in progress is never cut short. Tunable via
+  `SSU2Config.DataPhaseTimeout`; negative disables it.
+- The retry count belongs to the contents and now rides with them across
+  resends, so the cap is reachable and unacknowledged data is abandoned.
+- A retransmission no longer refreshes the idle timer.
+- A data-phase datagram that arrives while the initiator is still handshaking is
+  retained and replayed once `finalizeHandshake` installs the data-phase keys,
+  instead of being dropped.
+
+The first three act on the connection itself, so they apply to every dial path,
+including the shared listener socket this router dials through. The fourth is
+narrower than it looks: retention happens in the connection's own read loop, and
+a listener-multiplexed session has none — its packets are parsed by the listener
+and handed in already parsed. On that path a first data packet arriving before
+the session's data-phase protector is installed is still dropped, because
+`AcceptedSessionRegistry.TrialDeobfuscate` skips an entry whose protector is not
+yet set. Recovery there is the peer's own retransmission under a fresh packet
+number, which happens at the initial RTO — about 1 s — and so lands well inside
+the 13 s deadline rather than being left to chance. Closing the race properly
+means retaining raw datagrams in the listener's demux cascade, which changes the
+listener's packet budget and its per-packet trial-deobfuscation cost: worth
+doing, but not needed to make the session recover.
+
+Residual risk of the deadline, stated plainly: a peer that completes the
+handshake and then genuinely sends nothing for 13 s has its session closed, and
+the router redials. Every conformant implementation sends something inside that
+window — §"Packet Numbering" tells the responder its first Data packet "should
+be an ACK of the Session Confirmed", and §"Total Timeout" gives the handshake as
+a whole 12.5 s — so this is a peer outside the spec's own envelope. If a live
+peer turns out to be slow rather than dead, `DataPhaseTimeout` raises the bound
+or disables it.
+
+`SSU2Conn.PeerDataReceived()` exposes the bilateral condition to the router. In
+`lib/transport/ssu2`, `HasSession` no longer reports a session whose context is
+cancelled (matching NTCP2), a message that exhausts its retransmissions into a
+peer that has never sent us a data packet now closes the session instead of
+being dropped quietly, and a fatal read error closes the session rather than
+leaving the registry entry behind.
+
+Two things deliberately left alone:
+
+- **The idle timeout still cannot fire on a merely idle session.** The keepalive
+  ACK is a fresh send, so it refreshes `lastActivity` every
+  `KeepaliveInterval`, and `timeSinceActivity` can never reach the 5-minute
+  idle timeout for any session — which is why the lab saw a 104-minute session
+  with no timeout. Fixing it means measuring inbound activity instead, which
+  requires the keepalive to become an ack-eliciting probe or every quiet-but-live
+  session gets reaped. That is a wider behavioural change than this finding, so
+  recovery here comes from the retry cap and the data-phase deadline.
+- **Inbound sessions are never judged by peer silence.** A responder's peer has
+  already proved itself by completing the handshake and may simply not have sent
+  data yet; `peerSilent()` is scoped to `IsInitiator()` so healthy inbound
+  sessions are not closed on a race.
+
 ### Operator-visible consequences
 
 - The transport now passes its session cap down to the go-noise listener (whose
