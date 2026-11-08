@@ -13,7 +13,10 @@ const BytesPerKiB = 1024
 
 // Bandwidth class thresholds, in KBps, as advertised in the RouterInfo caps
 // string. The I2P spec allows either 2000 or 2048 KBps as the P/X boundary
-// (implementor's choice); this implementation uses 2000.
+// (implementor's choice); this implementation uses 2048 everywhere, so the
+// boundary is a power of two and agrees with the binary KiB the rest of the
+// stack divides by. lib/router's tier derivation aliases BandwidthClassXMinKBps
+// rather than restating it, so the two cannot drift apart again.
 //
 // Spec: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/common-structures.rst
 // Moved from: caps.go
@@ -29,8 +32,10 @@ const (
 	BandwidthClassOMinKBps = 128
 	// BandwidthClassPMinKBps is the lower bound of the "P" class.
 	BandwidthClassPMinKBps = 256
-	// BandwidthClassXMinKBps is the lower bound of the "X" class.
-	BandwidthClassXMinKBps = 2000
+	// BandwidthClassXMinKBps is the lower bound of the "X" class. The I2P spec
+	// permits 2000 or 2048 here; this implementation uses 2048, matching
+	// lib/router's tier derivation, which aliases this constant.
+	BandwidthClassXMinKBps = 2048
 )
 
 // ──────────────────────────────────────────────────────────────────────────────

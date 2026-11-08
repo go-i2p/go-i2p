@@ -42,13 +42,16 @@ func TestBandwidthClassFromRate(t *testing.T) {
 		{"200 KB/s (mid-O)", 200 * 1024, BandwidthClassO},
 		{"255 KB/s (top of O)", 255 * 1024, BandwidthClassO},
 
-		// P class: 256–2000 KB/s
+		// P class: 256–2048 KB/s
 		{"256 KB/s (P boundary)", 256 * 1024, BandwidthClassP},
 		{"1000 KB/s (mid-P)", 1000 * 1024, BandwidthClassP},
-		{"1999 KB/s (top of P)", 1999 * 1024, BandwidthClassP},
+		// 2000 KB/s used to be the X boundary; the spec allows either 2000 or
+		// 2048 and this implementation now uses 2048 everywhere, so 2000 is P.
+		{"2000 KB/s (still P at the 2048 boundary)", 2000 * 1024, BandwidthClassP},
+		{"2047 KB/s (top of P)", 2047 * 1024, BandwidthClassP},
 
-		// X class: over 2000 KB/s
-		{"2000 KB/s (X boundary)", 2000 * 1024, BandwidthClassX},
+		// X class: 2048 KB/s and above
+		{"2048 KB/s (X boundary)", 2048 * 1024, BandwidthClassX},
 		{"10000 KB/s (high X)", 10000 * 1024, BandwidthClassX},
 
 		// Default bandwidth (1 MB/s = 1024 KB/s → P)
