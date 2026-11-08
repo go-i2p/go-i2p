@@ -13,7 +13,7 @@
         <a href="../index.html">go-i2p/go-i2p</a>
       </h2>
       <div class="repo-meta">
-        📝 2638 commits
+        📝 2640 commits
          • 📜 MIT License
       </div>
     </div>
@@ -292,6 +292,126 @@ config. The listener builds its inbound header protector from <code>IntroKey</co
 intro key — so the protector was nil at construction and no inbound SessionRequest
 could be deobfuscated. Key management now runs before the listener is created.</p>
 
+<h2 id="outbound-sessions-a-handshake-the-peer-never-completed">Outbound sessions: a handshake the peer never completed</h2>
+
+<p>Finding 012. An SSU2 dial that reached SessionConfirmed was treated as an
+established session the moment SessionConfirmed was written, without waiting for
+any acknowledgement from the peer. A responder that accepted the SessionRequest,
+answered SessionCreated, and then rejected or ignored the SessionConfirmed (a
+stale RouterInfo — see finding 010&rsquo;s H-161 — or a crash) left the initiator
+holding a session that reported itself live. Three independent mechanisms made
+that state permanent, all in <code>go-noise/ssu2/session</code>:</p>
+
+<ol>
+<li><strong>No completion condition.</strong> <code>finalizeHandshake</code> returned after writing
+SessionConfirmed. <code>ssu2.md</code> §&rdquo;Handshake Retransmission&rdquo; -&gt; §&rdquo;Session
+Confirmed&rdquo; makes the peer&rsquo;s first data message the event that ends Session
+Confirmed retransmission, so the spec expects an endpoint to know whether that
+event happened; nothing here did.</li>
+<li><strong>An unreachable retry cap.</strong> <code>retransmitExpired</code> resends unacknowledged
+contents under a fresh packet number, as §&rdquo;Packet Numbering&rdquo; requires, and
+then re-tracked the new packet with <code>Retries: 0</code>. The packet number changed,
+so the count restarted, so <code>maxPacketRetries</code> was never reached and one
+message was resent 1157 times in seven and a half minutes on the lab testnet.</li>
+<li><strong>A timer that could not fire.</strong> Every resend refreshed <code>lastActivity</code>, which
+is what the idle check measures.</li>
+</ol>
+
+<p>The fix is in <code>go-noise/ssu2/session/conn_data_phase.go</code> plus the two send-path
+changes in <code>conn_write.go</code>:</p>
+
+<ul>
+<li>The initiator now arms a deadline for the peer&rsquo;s first authenticated
+data-phase packet and closes the session with
+<code>TerminationSessionConfirmedError</code> when it passes. The default is 13 s —
+§&rdquo;Total Timeout&rdquo;&rsquo;s 12.5 s plus the final 5 s SessionConfirmed interval — so a
+handshake the spec still considers in progress is never cut short. Tunable via
+<code>SSU2Config.DataPhaseTimeout</code>; negative disables it.</li>
+<li>The retry count belongs to the contents and now rides with them across
+resends, so the cap is reachable and unacknowledged data is abandoned.</li>
+<li>A retransmission no longer refreshes the idle timer.</li>
+<li>A data-phase datagram that arrives while the initiator is still handshaking is
+retained and replayed once <code>finalizeHandshake</code> installs the data-phase keys,
+instead of being dropped.</li>
+<li>The data-phase header protector reaches the listener&rsquo;s session registry
+synchronously, inside the handshake goroutine that derives the key.</li>
+</ul>
+
+<p>The first three act on the connection itself, so they apply to every dial path,
+including the shared listener socket this router dials through. The last two are
+what make the race survivable on a shared socket.</p>
+
+<p>Retention needs care on the listener path, because a listener-multiplexed
+session never runs the connection&rsquo;s own read loop — one goroutine owns the
+shared socket and it belongs to the listener — so the connection-side buffer
+would simply never be fed. Two changes cover it. The protector install used to
+be a non-blocking send into a channel that only exists once the listener has
+wired it and that a background goroutine drains; if the handshake derived the
+key first the send hit its default branch and the protector was never installed
+at all, leaving the session permanently deaf with no error anywhere. It is now a
+synchronous hook, so there is no handoff to lose. That removes the large window
+but not the last few instructions of it, and for that residue the listener&rsquo;s
+demux cascade ends with an attribution stage: header protection masks bytes 0-7
+with <code>k_header_1</code>, which for an inbound Data packet is the listener&rsquo;s own
+introduction key, so the destination connection ID can be recovered even though
+the packet cannot be read. The raw datagram is then handed to that session&rsquo;s
+bounded retention buffer and replayed by <code>finalizeHandshake</code>.</p>
+
+<p><code>SSU2Conn.RecvStats()[&quot;handshake_retained&quot;]</code> counts what that buffer held. A
+non-zero value means the peer answered Session Confirmed immediately, which is
+normal and spec-directed; a value pinned at the buffer bound means the session
+was repeatedly losing packets it could not recover.</p>
+
+<p>Holding a packet that arrives mid-handshake is only safe if the handshake is not
+itself waiting for that packet — the buffer is drained inside <code>finalizeHandshake</code>,
+so a held handshake message would be a self-inflicted hang. Retention therefore
+requires a completed handshake, which means every message the connection could
+still be waiting for has already arrived; a responder additionally has to have
+been offered its own Session Confirmed stage. Both conditions are asserted by
+tests in <code>ssu2/server/retain_fallback_test.go</code> and
+<code>ssu2/session/retain_listener_test.go</code>.</p>
+
+<p>Residual risk of the deadline, stated plainly: a peer that completes the
+handshake and then genuinely sends nothing for 13 s has its session closed, and
+the router redials. Every conformant implementation sends something inside that
+window — §&rdquo;Packet Numbering&rdquo; tells the responder its first Data packet &ldquo;should
+be an ACK of the Session Confirmed&rdquo;, and §&rdquo;Total Timeout&rdquo; gives the handshake as
+a whole 12.5 s — so this is a peer outside the spec&rsquo;s own envelope. If a live
+peer turns out to be slow rather than dead, <code>DataPhaseTimeout</code> raises the bound
+or disables it.</p>
+
+<p><code>SSU2Conn.PeerDataReceived()</code> exposes the bilateral condition to the router. In
+<code>lib/transport/ssu2</code>, <code>HasSession</code> no longer reports a session whose context is
+cancelled (matching NTCP2), a message that exhausts its retransmissions into a
+peer that has never sent us a data packet now closes the session instead of
+being dropped quietly, and a fatal read error closes the session rather than
+leaving the registry entry behind.</p>
+
+<p>Two things deliberately left alone:</p>
+
+<ul>
+<li><strong>A session with a continuous stream of fresh sends still refreshes its own
+idle clock.</strong> What defeated the 5-minute idle timeout in the lab (a 104-minute
+session that never expired) was retransmission: <code>sendPacketDirect</code> counted every
+resend as activity, so a stuck session kept restarting the timer and, separately,
+each resend reset the retry counter so the cap was never reached. Both are fixed,
+and the idle timeout now does fire — <code>ssu2/session/data_phase_deadline_test.go</code>
+proves it on a dead peer and on a session with resends queued. The keepalive was
+never part of the problem: with nothing received to acknowledge,
+<code>ACKHandler.GenerateACK</code> returns nil and <code>sendImmediateACK</code> sends nothing, so an
+idle session&rsquo;s keepalive does not refresh <code>lastActivity</code> either.
+What remains is the case where the application keeps handing the session genuinely
+new data: those sends are activity, so the idle timeout is not the recovery path
+there. It is the retry cap and the data-phase deadline that end such a session, and
+making the idle clock measure inbound activity instead would require turning the
+keepalive into an ack-eliciting probe — otherwise every quiet-but-live session gets
+reaped. That is a wider behavioural change than this finding.</li>
+<li><strong>Inbound sessions are never judged by peer silence.</strong> A responder&rsquo;s peer has
+already proved itself by completing the handshake and may simply not have sent
+data yet; <code>peerSilent()</code> is scoped to <code>IsInitiator()</code> so healthy inbound
+sessions are not closed on a race.</li>
+</ul>
+
 <h3 id="operator-visible-consequences">Operator-visible consequences</h3>
 
 <ul>
@@ -348,7 +468,7 @@ alongside it, but its real-network behaviour is unverified.</p>
     </main>
     
     <footer class="page-footer">
-      <p>Generated on 2026-11-08 00:54:36 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
+      <p>Generated on 2026-11-08 04:44:36 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
     </footer>
   </div>
 </body>
