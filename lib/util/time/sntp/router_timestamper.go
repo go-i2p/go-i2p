@@ -252,7 +252,7 @@ func (rt *RouterTimestamper) calculateSleepDuration(lastFailed bool) time.Durati
 		}
 		rt.mutex.Unlock()
 		rt.notifySyncFailure(fails)
-		return 30 * time.Second
+		return RetrySleep
 	}
 
 	rt.consecutiveFails = 0
@@ -567,8 +567,8 @@ func (rt *RouterTimestamper) validateConfigBounds() {
 
 	if rt.concurringServers < 1 {
 		rt.concurringServers = 1
-	} else if rt.concurringServers > 4 {
-		rt.concurringServers = 4
+	} else if rt.concurringServers > maxConcurrentServers {
+		rt.concurringServers = maxConcurrentServers
 	}
 }
 

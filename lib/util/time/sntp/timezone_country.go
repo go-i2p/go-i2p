@@ -45,8 +45,8 @@ func parseTimezoneCountryMap(r io.Reader) (map[string]string, error) {
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		parts := strings.SplitN(line, ",", 2)
-		if len(parts) != 2 {
+		parts := strings.SplitN(line, ",", timezoneRecordFieldCount)
+		if len(parts) != timezoneRecordFieldCount {
 			continue
 		}
 		tz := strings.TrimSpace(parts[0])

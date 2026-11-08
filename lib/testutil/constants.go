@@ -29,3 +29,15 @@ const fixtureRouterAddressCost = 3
 // a test run, including under the race detector.
 // Moved from: routerinfo.go
 const fixtureRouterAddressLifetime = 24 * time.Hour
+
+// ──────────────────────────────────────────────────────────────────────────────
+// HTTP helper timeouts
+// ──────────────────────────────────────────────────────────────────────────────
+
+// httpHelperTimeout bounds a single request made by the test HTTP helpers. It is
+// generous relative to a loopback round trip so a slow machine does not produce a
+// flake, but finite so a server that never answers fails the test instead of
+// hanging the whole run.
+//
+// Moved from: http.go
+const httpHelperTimeout = 5 * time.Second

@@ -55,3 +55,28 @@ const WellSyncedOffset = 500 * time.Millisecond
 // the map is not repeatedly grown while loading it.
 // Moved from: timezone_country.go
 const timezoneCountryMapCapacity = 420
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Concurrent server selection
+// ──────────────────────────────────────────────────────────────────────────────
+
+// maxConcurrentServers caps how many NTP servers the timestamper queries at once.
+// The point of querying several is to catch a single server that lies about the
+// time, and four is well past the point where more agreement adds confidence —
+// beyond that it only multiplies outbound traffic to third-party time servers.
+// A caller who asks for more is clamped down rather than rejected, since the
+// request is harmless and the ceiling is a safety limit, not a contract.
+//
+// Moved from: router_timestamper.go
+const maxConcurrentServers = 4
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Timezone data file layout
+// ──────────────────────────────────────────────────────────────────────────────
+
+// Both embedded data files are two-column comma-separated records: a timezone or
+// country name and its value. A line that does not split into that pair is not a
+// record at all, so it is skipped rather than half-parsed.
+//
+// Moved from: timezone_country.go, zones.go
+const timezoneRecordFieldCount = 2

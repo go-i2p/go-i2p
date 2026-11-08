@@ -92,7 +92,7 @@ func (z *Zones) processLine(line string) {
 	}
 
 	parts := strings.Split(line, ",")
-	if len(parts) < 2 {
+	if len(parts) < timezoneRecordFieldCount {
 		return
 	}
 
