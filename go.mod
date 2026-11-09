@@ -7,15 +7,16 @@ require (
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/go-i2p/common v0.1.70002-0.20261013062227-da2d25f84cdb
-	github.com/go-i2p/crypto v0.1.70002-0.20261013135807-86425eac6c59
+	github.com/go-i2p/crypto v0.1.70002-0.20261027053312-d22b54cc63a6
 	github.com/go-i2p/go-nat-listener v0.1.70002-0.20261015233531-1e3cbd432928
-	github.com/go-i2p/go-noise v0.1.70002-0.20261015134300-27d1af57427a
+	github.com/go-i2p/go-noise v0.1.70002-0.20261027022412-3cd5371ed85a
 	github.com/go-i2p/go-unzip v0.0.0-20260908193701-6ecb33740b07
 	github.com/go-i2p/i2p-control v0.1.70001
 	github.com/go-i2p/i2ptui v0.1.70001
 	github.com/go-i2p/logger v0.1.70001
 	github.com/go-i2p/noise v1.1.70001-0.20261013005149-88e8cbb61acc
 	github.com/go-i2p/su3 v0.1.70001
+	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/samber/oops v1.23.1
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
