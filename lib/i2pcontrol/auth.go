@@ -9,7 +9,9 @@ import (
 
 	"github.com/go-i2p/crypto/hmac"
 	"github.com/go-i2p/crypto/rand"
+	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/samber/oops"
+	"golang.org/x/time/rate"
 )
 
 // AuthManager handles token-based authentication for I2PControl RPC.
@@ -30,23 +32,14 @@ type AuthManager struct {
 	randRead func([]byte) (int, error)
 
 	// Rate limiting fields
-	rateLimits  map[string]*authRateLimit
 	rateLimitMu sync.Mutex
-}
-
-type authRateLimit struct {
-	failedAttempts    int
-	lastFailedAttempt time.Time
-	lockoutUntil      time.Time
+	rateLimiter *lru.Cache[string, *rate.Limiter]
 }
 
 const (
-	// maxFailedAttempts is the number of consecutive failed auth attempts
-	// before a lockout is applied.
-	maxFailedAttempts = 10
-	// failedAttemptLockout is how long authentication is locked after
-	// maxFailedAttempts consecutive failures.
-	failedAttemptLockout = 5 * time.Minute
+	maxSources       = 128              // only allow 128 cache entries
+	tokenRefreshRate = 30 * time.Second // how long until the next token is generated
+	maxBursts        = 5                // max amount of bursts / tries
 )
 
 var errTokenEntropyFailure = errors.New("failed to read entropy for token generation")
@@ -67,22 +60,25 @@ func NewAuthManager(password string) (*AuthManager, error) {
 		return nil, oops.Wrapf(err, "failed to generate HMAC secret")
 	}
 
+	cache, err := lru.New[string, *rate.Limiter](maxSources)
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to create rate limiting cache")
+	}
 	return &AuthManager{
-		password:   password,
-		tokens:     make(map[[32]byte]time.Time),
-		secret:     secret,
-		randRead:   rand.Read,
-		rateLimits: make(map[string]*authRateLimit),
+		password:    password,
+		tokens:      make(map[[32]byte]time.Time),
+		secret:      secret,
+		randRead:    rand.Read,
+		rateLimiter: cache,
 	}, nil
 }
 
 // Authenticate validates a password and generates an access token.
 // The token is a base64-encoded HMAC-SHA256 signature of the current
 // timestamp, ensuring uniqueness and cryptographic security.
-// Rate limiting: After maxFailedAttempts consecutive failures, authentication
-// is locked out for failedAttemptLockout duration. Successful authentication
-// resets the failure counter. Direct calls share an unspecified-source limit;
-// HTTP requests are limited by their peer IP.
+// Rate limiting: uses token based rate limiting. Allows up to 5 request bursts
+// then waits ~30 seconds for a token refresh. Uses a LRU cache to evict stale ips.
+// // HTTP requests are limited by their peer IP.
 // Parameters:
 // - password: The password to authenticate
 // - expiration: How long the token should remain valid
@@ -99,20 +95,26 @@ func (am *AuthManager) authenticateFromSource(password string, expiration time.D
 	// lockout between the check and the password comparison, allowing a
 	// brute-force attempt to slip through.
 	am.rateLimitMu.Lock()
-	now := time.Now()
-	limit := am.rateLimits[source]
-	if limit != nil && !now.Before(limit.lockoutUntil) && now.Sub(limit.lastFailedAttempt) >= failedAttemptLockout {
-		delete(am.rateLimits, source)
-		limit = nil
+
+	limit, ok := am.rateLimiter.Get(source)
+
+	// create new limit based on the source
+	if !ok {
+		// This is initializing our limiter for 30 seconds a token, with bursts up to 5.
+		// if a user bursts 5 passwords, they cannot input another password until a token refresh in
+		// 30 seconds. This removes the "global" 5 minute lockout while also disallowing malicious users
+		limit = rate.NewLimiter(rate.Every(tokenRefreshRate), maxBursts)
+		am.rateLimiter.Add(source, limit)
 	}
-	if limit != nil && now.Before(limit.lockoutUntil) {
-		remaining := limit.lockoutUntil.Sub(now).Round(time.Second)
+
+	if limit != nil && !limit.Allow() {
 		am.rateLimitMu.Unlock()
 		log.WithFields(map[string]interface{}{
 			"at":        "AuthManager.Authenticate",
-			"remaining": remaining.String(),
+			"remaining": "30s",
 		}).Warn("authentication rate limited")
-		return "", oops.Errorf("too many failed attempts, locked out for %s", remaining)
+		return "", oops.Errorf("too many login attempts, locked out for 30s")
+
 	}
 
 	// Read password with lock to prevent race with ChangePassword.
@@ -124,30 +126,11 @@ func (am *AuthManager) authenticateFromSource(password string, expiration time.D
 
 	// Validate password using constant-time comparison to prevent timing attacks
 	if !hmac.Equal([]byte(password), []byte(currentPassword)) {
-		// Track failed attempt for rate limiting (rateLimitMu already held)
-		if limit == nil {
-			limit = &authRateLimit{}
-			am.rateLimits[source] = limit
-		}
-		limit.failedAttempts++
-		limit.lastFailedAttempt = now
-		if limit.failedAttempts >= maxFailedAttempts {
-			limit.lockoutUntil = now.Add(failedAttemptLockout)
-			log.WithFields(map[string]interface{}{
-				"at":       "AuthManager.Authenticate",
-				"attempts": limit.failedAttempts,
-				"lockout":  failedAttemptLockout.String(),
-			}).Warn("authentication lockout triggered")
-			// Reset the counter when locking someone out.
-			limit.failedAttempts = 0
-		}
-
 		am.rateLimitMu.Unlock()
 		return "", oops.Errorf("invalid password")
 	}
 
 	// Successful authentication — reset failure counter (rateLimitMu already held)
-	delete(am.rateLimits, source)
 	am.rateLimitMu.Unlock()
 
 	// Use only a crypto/rand nonce for token uniqueness; the
@@ -235,13 +218,7 @@ func (am *AuthManager) CleanupExpiredTokens() int {
 	am.mu.Unlock()
 
 	am.rateLimitMu.Lock()
-	for source, limit := range am.rateLimits {
-		if !now.Before(limit.lockoutUntil) && now.Sub(limit.lastFailedAttempt) >= failedAttemptLockout {
-			delete(am.rateLimits, source)
-		}
-	}
 	am.rateLimitMu.Unlock()
-
 	if removed > 0 {
 		log.WithFields(map[string]interface{}{
 			"at":      "AuthManager.CleanupExpiredTokens",

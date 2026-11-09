@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -71,13 +72,12 @@ func TestAuthTokenUnpredictability(t *testing.T) {
 	am, err := NewAuthManager("password")
 	require.NoError(t, err)
 
-	// Generate many tokens and verify they don't have predictable patterns
+	// Generate tokens from distinct sources so rate limiting does not cap the sample.
 	tokens := make([]string, 100)
 	for i := 0; i < 100; i++ {
-		token, err := am.Authenticate("password", 10*time.Minute)
+		token, err := am.authenticateFromSource("password", 10*time.Minute, fmt.Sprintf("192.0.2.%d", i+1))
 		require.NoError(t, err)
 		tokens[i] = token
-		time.Sleep(time.Millisecond) // Ensure different timestamps
 	}
 
 	// Check for duplicates (should never happen)
@@ -337,10 +337,12 @@ func TestAuthorizationTokenRevokedAfterPasswordChange(t *testing.T) {
 	am, err := NewAuthManager("oldpassword")
 	require.NoError(t, err)
 
-	// Create several tokens
+	// Create several tokens from one source, keeping the direct-call source
+	// available for the password checks below.
 	tokens := make([]string, 5)
 	for i := 0; i < 5; i++ {
-		tokens[i], _ = am.Authenticate("oldpassword", 10*time.Minute)
+		tokens[i], err = am.authenticateFromSource("oldpassword", 10*time.Minute, "192.0.2.1")
+		require.NoError(t, err)
 	}
 
 	// All tokens should be valid
