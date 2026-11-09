@@ -458,15 +458,15 @@ func (p *MessageProcessor) logBuildRequestForward(messageID, index int, record B
 func (p *MessageProcessor) encryptBuildReply(messageID, index int, replyCode byte, availableBW uint32, rawData []byte) ([]byte, error) {
 	p.mu.Lock()
 
-	stbmSlotKey := newStbmSlotKey(messageID, index)
-	crypto, ok := p.stbmSlotCrypto[stbmSlotKey]
+	slotKey := newStbmSlotKey(messageID, index)
+	crypto, ok := p.stbmSlotCrypto[slotKey]
 
 	if !ok {
 		p.mu.Unlock()
 		return nil, fmt.Errorf("missing short tunnel build reply crypto for message %d, slot %d", messageID, index)
 	}
 
-	delete(p.stbmSlotCrypto, stbmSlotKey)
+	delete(p.stbmSlotCrypto, slotKey)
 	p.mu.Unlock()
 
 	encryptedReply, err := p.buildSTBMReplyMessage(rawData, index, crypto, replyCode, availableBW)
