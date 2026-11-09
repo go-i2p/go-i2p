@@ -262,8 +262,8 @@ type stbmSlotCrypto struct {
 
 // ensures two concurrent ID's do not argue / overlap
 type stbmSlotKey struct {
-	index     int
 	messageID int
+	index     int
 }
 
 // MessageProcessor routes inbound I2NP messages to type-specific handlers and
@@ -303,6 +303,14 @@ func NewMessageProcessor() *MessageProcessor {
 		factory:             NewMessageFactory(),
 		expirationValidator: ev,
 		replayCache:         newMessageReplayCache(10_000, time.Duration(ev.toleranceSeconds)*time.Second),
+	}
+}
+
+// newStbmSlotKey creates a key for stbmSlotCrypto
+func newStbmSlotKey(messageID, index int) stbmSlotKey {
+	return stbmSlotKey{
+		messageID: messageID,
+		index:     index,
 	}
 }
 

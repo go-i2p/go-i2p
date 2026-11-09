@@ -457,7 +457,8 @@ func (p *MessageProcessor) logBuildRequestForward(messageID, index int, record B
 // encryptBuildReply encrypts a short tunnel build reply.
 func (p *MessageProcessor) encryptBuildReply(messageID, index int, replyCode byte, availableBW uint32, rawData []byte) ([]byte, error) {
 	p.mu.Lock()
-	stbmSlotKey := stbmSlotKey{index, messageID}
+
+	stbmSlotKey := newStbmSlotKey(messageID, index)
 	crypto, ok := p.stbmSlotCrypto[stbmSlotKey]
 
 	if !ok {
@@ -837,7 +838,7 @@ func (p *MessageProcessor) decryptShortRecord(recordData []byte, index, messageI
 	if p.stbmSlotCrypto == nil {
 		p.stbmSlotCrypto = make(map[stbmSlotKey]stbmSlotCrypto)
 	}
-	stbmSlotKey := stbmSlotKey{index: index, messageID: messageID}
+	stbmSlotKey := newStbmSlotKey(messageID, index)
 
 	p.stbmSlotCrypto[stbmSlotKey] = stbmSlotCrypto{replyKey: keys.ReplyKey, noiseHash: noiseHash}
 
