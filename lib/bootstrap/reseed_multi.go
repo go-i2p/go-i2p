@@ -229,8 +229,7 @@ func (rb *ReseedBootstrap) fetchFromServers(ctx context.Context, servers []*conf
 	fs.cancelFunc = fetchCancel
 
 	// Limit concurrent requests to avoid overwhelming the network
-	const maxConcurrent = 3
-	semaphore := make(chan struct{}, maxConcurrent)
+	semaphore := make(chan struct{}, maxConcurrentReseedServers)
 
 	for _, server := range servers {
 		if isContextCancelled(fetchCtx) {

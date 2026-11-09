@@ -24,7 +24,7 @@ func (r *Router) startSSU2NATDetection() {
 	}
 
 	candidates := r.collectSSU2Candidates()
-	if len(candidates) < 2 {
+	if len(candidates) < minPeersForPeerTest {
 		log.WithField("count", len(candidates)).Debug("SSU2 NAT detection: insufficient SSU2 peers for PeerTest; attempting public-IP short-circuit only")
 	}
 

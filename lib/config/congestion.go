@@ -115,13 +115,13 @@ const (
 func (f CongestionFlag) CongestionLevel() int {
 	switch f {
 	case CongestionFlagD:
-		return 1
+		return CongestionLevelD
 	case CongestionFlagE:
-		return 2
+		return CongestionLevelE
 	case CongestionFlagG:
-		return 3
+		return CongestionLevelG
 	default:
-		return 0
+		return CongestionLevelNone
 	}
 }
 
@@ -135,25 +135,25 @@ func (f CongestionFlag) String() string {
 func buildCongestionDefaults() CongestionDefaults {
 	return CongestionDefaults{
 		// Flag advertisement thresholds
-		DFlagThreshold: 0.70,
-		EFlagThreshold: 0.85,
-		GFlagThreshold: 1.00,
+		DFlagThreshold: DefaultDFlagThreshold,
+		EFlagThreshold: DefaultEFlagThreshold,
+		GFlagThreshold: DefaultGFlagThreshold,
 
 		// Hysteresis thresholds (10-15% below advertisement thresholds)
-		ClearDFlagThreshold: 0.60,
-		ClearEFlagThreshold: 0.75,
-		ClearGFlagThreshold: 0.95,
+		ClearDFlagThreshold: DefaultClearDFlagThreshold,
+		ClearEFlagThreshold: DefaultClearEFlagThreshold,
+		ClearGFlagThreshold: DefaultClearGFlagThreshold,
 
 		// Averaging window (implementation convention)
-		AveragingWindow: 5 * time.Minute,
+		AveragingWindow: DefaultCongestionAveragingWindow,
 
 		// RouterInfo age threshold (implementation convention)
-		EFlagAgeThreshold: 15 * time.Minute,
+		EFlagAgeThreshold: DefaultCongestionEFlagAgeThreshold,
 
 		// Peer selection derating multipliers
-		DFlagCapacityMultiplier:      0.5,
-		EFlagCapacityMultiplier:      0.1,
-		StaleEFlagCapacityMultiplier: 0.5,
+		DFlagCapacityMultiplier:      DefaultDFlagCapacityMultiplier,
+		EFlagCapacityMultiplier:      DefaultEFlagCapacityMultiplier,
+		StaleEFlagCapacityMultiplier: DefaultStaleEFlagCapacityMultiplier,
 	}
 }
 

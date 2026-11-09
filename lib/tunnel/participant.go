@@ -102,7 +102,7 @@ func NewParticipant(tunnelID TunnelID, decryption tunnel.TunnelEncryptor) (*Part
 		createdAt:  now,
 	}
 	// Initialize atomic fields
-	p.lifetime.Store(int64(10 * time.Minute)) // Standard I2P tunnel lifetime
+	p.lifetime.Store(int64(defaultParticipantLifetime))
 	// Initialize lastActivity atomically to creation time (UnixNano)
 	p.lastActivity.Store(now.UnixNano())
 	// Initialize idleTimeout atomically (nanoseconds)
@@ -187,12 +187,12 @@ func (p *Participant) Process(encryptedData []byte) (nextHopID TunnelID, decrypt
 	}
 
 	// Validate input size
-	if len(encryptedData) != 1028 {
+	if len(encryptedData) != TunnelMessageSize {
 		log.WithFields(logger.Fields{
 			"at":           "(Participant) Process",
 			"reason":       "invalid_message_size",
 			"size":         len(encryptedData),
-			"expected_min": 1028,
+			"expected_min": TunnelMessageSize,
 		}).Error("invalid tunnel message size")
 		return 0, nil, ErrInvalidParticipantData
 	}
@@ -210,12 +210,12 @@ func (p *Participant) Process(encryptedData []byte) (nextHopID TunnelID, decrypt
 	}
 
 	// Validate decrypted size
-	if len(decrypted) < 4 {
+	if len(decrypted) < TunnelIDSize {
 		log.WithFields(logger.Fields{
 			"at":           "(Participant) Process",
 			"reason":       "truncated_data",
 			"size":         len(decrypted),
-			"expected_min": 4,
+			"expected_min": TunnelIDSize,
 		}).Error("decrypted data too small for tunnel ID")
 		return 0, nil, ErrInvalidParticipantData
 	}

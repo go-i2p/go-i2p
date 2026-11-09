@@ -69,16 +69,16 @@ type PortMapperConfig struct {
 func NewPortMapperManager(cfg *PortMapperConfig) *PortMapperManager {
 	// Apply defaults
 	if cfg.LeaseDuration == 0 {
-		cfg.LeaseDuration = 1 * time.Hour
+		cfg.LeaseDuration = defaultPortMappingLeaseDuration
 	}
 	if cfg.InitialBackoff == 0 {
-		cfg.InitialBackoff = 30 * time.Second
+		cfg.InitialBackoff = defaultBackoffInitial
 	}
 	if cfg.MaxBackoff == 0 {
-		cfg.MaxBackoff = 30 * time.Minute
+		cfg.MaxBackoff = defaultBackoffMax
 	}
 	if cfg.BackoffFactor == 0 {
-		cfg.BackoffFactor = 2.0
+		cfg.BackoffFactor = defaultBackoffFactor
 	}
 	if cfg.Context == nil {
 		cfg.Context = context.Background()
@@ -259,7 +259,7 @@ func (pmm *PortMapperManager) Stop() error {
 	// If parent context is already cancelled, this will timeout immediately.
 	// If parent context has a shorter deadline than 30s, that deadline will be used.
 	// Derive timeout deadline from parent context, not from context.Background().
-	waitCtx, waitCancel := context.WithTimeout(pmm.parentCtx, 30*time.Second)
+	waitCtx, waitCancel := context.WithTimeout(pmm.parentCtx, stopWaitTimeout)
 	defer waitCancel()
 
 	// Signal when WaitGroup is done via a channel
@@ -273,7 +273,7 @@ func (pmm *PortMapperManager) Stop() error {
 	case <-done:
 		// Goroutine exited cleanly
 	case <-waitCtx.Done():
-		log.Warn("Port mapper Stop() timed out waiting for retry goroutine (30s) - possible NAT operation hang")
+		log.Warnf("Port mapper Stop() timed out waiting for retry goroutine (%v) - possible NAT operation hang", stopWaitTimeout)
 	}
 
 	// Unmap port if we have an active mapping

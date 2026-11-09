@@ -11,6 +11,22 @@ import (
 // This prevents resource exhaustion under heavy load.
 const DefaultMaxSessions = 512
 
+// DefaultMaxInflightHandshakes is the default cap on concurrent inbound
+// handshakes, authenticated or not. See [Config.MaxInflightHandshakes].
+//
+// Sized well below DefaultMaxSessions: a handshake is unauthenticated work, so
+// its budget must be smaller than the session budget it feeds, and a flood that
+// spends it should shed connections rather than queue goroutines.
+const DefaultMaxInflightHandshakes = 64
+
+// DefaultMaxHandshakesPerSource is the default cap on concurrent inbound
+// handshakes from one source IP. See [Config.MaxHandshakesPerSource].
+//
+// Routers legitimately share an address behind NAT or in a hosting facility, so
+// this is generous enough for a small cluster of peers while still preventing
+// one host from consuming the whole transport-wide budget.
+const DefaultMaxHandshakesPerSource = 8
+
 // Config holds the configuration parameters for an NTCP2 transport instance, including listener address, working directory, and session limits.
 // It is passed to NewNTCP2Transport and validated before the transport starts.
 // See also [NewConfig] and [DefaultMaxSessions].
@@ -19,7 +35,42 @@ type Config struct {
 	WorkingDir              string // Working directory for persistent storage (e.g., ~/.go-i2p/config)
 	MaxSessions             int    // Maximum number of concurrent sessions (0 = use DefaultMaxSessions)
 	PendingConnQueueTimeout time.Duration
+	// MaxInflightHandshakes bounds how many inbound NTCP2 handshakes the
+	// transport will run at the same time, before any of them authenticates.
+	// Zero (the default) selects [DefaultMaxInflightHandshakes]; a negative
+	// value disables the bound.
+	//
+	// A handshake costs the router a goroutine, a socket, and the buffers the
+	// handshake allocates, and the requester pays nothing for it. Without this
+	// cap, an unauthenticated host can grow that cost without limit — the 512
+	// session ceiling cannot help, because it is only checked after a handshake
+	// succeeds.
+	MaxInflightHandshakes int
+	// MaxHandshakesPerSource bounds how many of those concurrent handshakes may
+	// come from one source IP. Zero selects [DefaultMaxHandshakesPerSource]; a
+	// negative value disables the per-source bound.
+	MaxHandshakesPerSource int
 	*ntcp2.Config
+}
+
+// GetMaxInflightHandshakes returns the effective inbound handshake concurrency
+// cap. Zero selects [DefaultMaxInflightHandshakes]; a negative value means the
+// bound is disabled and is returned as -1.
+func (c *Config) GetMaxInflightHandshakes() int {
+	if c == nil || c.MaxInflightHandshakes == 0 {
+		return DefaultMaxInflightHandshakes
+	}
+	return c.MaxInflightHandshakes
+}
+
+// GetMaxHandshakesPerSource returns the effective per-source inbound handshake
+// cap. Zero selects [DefaultMaxHandshakesPerSource]; a negative value means the
+// bound is disabled and is returned as -1.
+func (c *Config) GetMaxHandshakesPerSource() int {
+	if c == nil || c.MaxHandshakesPerSource == 0 {
+		return DefaultMaxHandshakesPerSource
+	}
+	return c.MaxHandshakesPerSource
 }
 
 // GetMaxSessions returns the effective maximum session limit.
@@ -44,7 +95,7 @@ func NewConfig(listenerAddress string) (*Config, error) {
 	return &Config{
 		ListenerAddress:         listenerAddress,
 		WorkingDir:              "", // Must be set before use
-		PendingConnQueueTimeout: 5 * time.Second,
+		PendingConnQueueTimeout: defaultPendingConnQueueTimeout,
 		Config:                  nil, // Will be set when identity is provided
 	}, nil
 }

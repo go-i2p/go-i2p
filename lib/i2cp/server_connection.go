@@ -197,7 +197,7 @@ func (s *Server) shouldRejectConnection(conn net.Conn) bool {
 	// Reject if either active connections OR sessions exceed the limit.
 	// Use 2x MaxSessions as the connection limit to allow some headroom
 	// for connections that haven't created sessions yet.
-	maxConns := maxSessions * 2
+	maxConns := maxSessions * connectionLimitMultiplier
 	if int(connCount) >= maxConns {
 		log.WithFields(logger.Fields{
 			"at":           "i2cp.Server.shouldRejectConnection",

@@ -262,14 +262,14 @@ func validateAndExtractAddress(transport *SSU2Transport) (host, portStr string, 
 // Returns 8 for published/introducer-reachable addresses, 15 for caps-only unpublished.
 func calculateSSU2AddressCost(options map[string]string) uint8 {
 	if _, hasHost := options["host"]; hasHost {
-		return 8
+		return costSSU2Published
 	}
 	if caps, hasCaps := options["caps"]; hasCaps && strings.Contains(caps, "B") {
 		// Introducer-reachable: peers can reach us via the listed
 		// introducers, so this is "directly reachable" in cost terms.
-		return 8
+		return costSSU2Published
 	}
-	return 15
+	return costSSU2NonPublished
 }
 
 // createSSU2RouterAddress creates a RouterAddress with the given cost and options.
@@ -306,7 +306,7 @@ func buildSSU2Options(host, portStr string, transport *SSU2Transport, introducer
 	if !isPublicHost(host) && hasUsableIntroducer(introducers) {
 		familyCaps := ssu2AddressFamilyCaps(host)
 		options := map[string]string{
-			router_address.PROTOCOL_VERSION_OPTION_KEY: "2",
+			router_address.PROTOCOL_VERSION_OPTION_KEY: ssu2VersionString,
 			router_address.CAPS_OPTION_KEY:             familyCaps + "B",
 		}
 		addStaticKeyOption(options, transport)
@@ -321,7 +321,7 @@ func buildSSU2Options(host, portStr string, transport *SSU2Transport, introducer
 		// which is correct: outbound sessions we initiated remain usable for
 		// reply traffic (build replies, etc.).
 		options := map[string]string{
-			router_address.PROTOCOL_VERSION_OPTION_KEY: "2",
+			router_address.PROTOCOL_VERSION_OPTION_KEY: ssu2VersionString,
 			router_address.CAPS_OPTION_KEY:             ssu2AddressFamilyCaps(host),
 		}
 		addStaticKeyOption(options, transport)
@@ -354,7 +354,7 @@ func hasUsableIntroducer(introducers []*ssu2noise.RegisteredIntroducer) bool {
 		if len(intro.RouterHash) == 0 || intro.RelayTag == 0 || intro.AddedAt.IsZero() {
 			continue
 		}
-		if intro.AddedAt.Add(4 * time.Hour).After(now) {
+		if intro.AddedAt.Add(introducerLifetime).After(now) {
 			return true
 		}
 	}
@@ -415,7 +415,7 @@ func splitNATHostPort(addr string) (host, port string, err error) {
 		return host, port, err
 	}
 	// Detect unbracketed IPv6: more than one colon means IPv6, not IPv4.
-	if strings.Count(addr, ":") < 2 {
+	if strings.Count(addr, ":") < minIPv6Colons {
 		return "", "", oops.Wrapf(err, "failed to parse NATAddr external address %q", addr)
 	}
 	lastColon := strings.LastIndex(addr, ":")
@@ -516,7 +516,7 @@ func buildBaseSSU2Options(host, port string) map[string]string {
 	return map[string]string{
 		router_address.HOST_OPTION_KEY:             host,
 		router_address.PORT_OPTION_KEY:             port,
-		router_address.PROTOCOL_VERSION_OPTION_KEY: "2",
+		router_address.PROTOCOL_VERSION_OPTION_KEY: ssu2VersionString,
 	}
 }
 
@@ -524,7 +524,7 @@ func buildBaseSSU2Options(host, port string) map[string]string {
 // The intro key is required by remote routers to obfuscate SSU2 packet headers.
 func addIntroKeyOption(options map[string]string, transport *SSU2Transport) {
 	ik := transport.GetIntroKey()
-	if len(ik) == 32 {
+	if len(ik) == introKeySize {
 		options[router_address.INITIALIZATION_VECTOR_OPTION_KEY] = encodeBase64(ik)
 	}
 }
@@ -536,7 +536,7 @@ func addIntroKeyOption(options map[string]string, transport *SSU2Transport) {
 func addStaticKeyOption(options map[string]string, transport *SSU2Transport) {
 	// Atomic config snapshot
 	cfg := transport.config.Load()
-	if cfg != nil && cfg.SSU2Config != nil && len(cfg.SSU2Config.StaticKey) == 32 {
+	if cfg != nil && cfg.SSU2Config != nil && len(cfg.SSU2Config.StaticKey) == staticKeySize {
 		pub, err := curve25519.X25519(cfg.SSU2Config.StaticKey, curve25519.Basepoint)
 		if err != nil {
 			return
@@ -568,7 +568,7 @@ func addSingleIntroducerOptions(options map[string]string, intro *ssu2noise.Regi
 		options[router_address.INTRODUCER_TAG_PREFIX+prefix] = fmt.Sprintf("%d", intro.RelayTag)
 	}
 	if !intro.AddedAt.IsZero() {
-		expTime := intro.AddedAt.Add(4 * time.Hour).Unix()
+		expTime := intro.AddedAt.Add(introducerLifetime).Unix()
 		options[router_address.INTRODUCER_EXPIRATION_PREFIX+prefix] = fmt.Sprintf("%d", expTime)
 	}
 }
@@ -616,7 +616,7 @@ func parseIntroducerHash(addr *router_address.RouterAddress, slot int) (data.Has
 		return data.Hash{}, false
 	}
 	hashBytes, err := i2pbase64.DecodeString(hashStr)
-	if err != nil || len(hashBytes) != 32 {
+	if err != nil || len(hashBytes) != routerHashSize {
 		return data.Hash{}, false
 	}
 	var h data.Hash

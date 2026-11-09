@@ -11,12 +11,13 @@ import (
 	"github.com/samber/oops"
 )
 
-// backupQuantityOrDefault returns the backup quantity, defaulting to 2 if not explicitly set.
+// backupQuantityOrDefault returns the backup quantity, defaulting to
+// defaultBackupTunnelQuantity if not explicitly set.
 func backupQuantityOrDefault(backup int) int {
 	if backup > 0 {
 		return backup
 	}
-	return 2
+	return defaultBackupTunnelQuantity
 }
 
 // applyLengthVariance adjusts hop count by the configured length variance.
@@ -151,10 +152,10 @@ func buildPoolConfig(tunnelCount, backupQty, tunnelLength, lengthVariance int, i
 	return tunnel.PoolConfig{
 		MinTunnels:       tunnelCount,
 		MaxTunnels:       tunnelCount + backupQty,
-		TunnelLifetime:   10 * time.Minute,
-		RebuildThreshold: 2 * time.Minute,
-		BuildRetryDelay:  2 * time.Second,
-		MaxBuildRetries:  3,
+		TunnelLifetime:   poolTunnelLifetime,
+		RebuildThreshold: poolRebuildThreshold,
+		BuildRetryDelay:  poolBuildRetryDelay,
+		MaxBuildRetries:  poolMaxBuildRetries,
 		HopCount:         applyLengthVariance(tunnelLength, lengthVariance),
 		IsInbound:        isInbound,
 		IsClientPool:     true,
@@ -442,8 +443,8 @@ func filterValidTunnels(tunnels []*tunnel.TunnelState) ([]*tunnel.TunnelState, e
 	if len(validTunnels) == 0 {
 		return nil, oops.Errorf("no valid tunnels provided")
 	}
-	if len(validTunnels) > 16 {
-		validTunnels = validTunnels[:16]
+	if len(validTunnels) > maxTunnelsPerLeaseSet {
+		validTunnels = validTunnels[:maxTunnelsPerLeaseSet]
 	}
 	return validTunnels, nil
 }
@@ -452,8 +453,8 @@ func filterValidTunnels(tunnels []*tunnel.TunnelState) ([]*tunnel.TunnelState, e
 // RequestVariableLeaseSet payload format: 2-byte session ID, 1-byte count, followed by
 // N lease entries of 44 bytes each (32-byte hash + 4-byte ID + 8-byte end date).
 func encodeLeaseSetPayload(sessionID uint16, tunnels []*tunnel.TunnelState) []byte {
-	// Payload: SessionID(2 bytes) + NumLeases(1 byte) + 44*N bytes for lease entries
-	payload := make([]byte, 2+1+len(tunnels)*44)
+	// Payload: SessionID + NumLeases + leaseEntrySize per tunnel
+	payload := make([]byte, sessionIDFieldSize+leaseSetCountFieldSize+len(tunnels)*leaseEntrySize)
 
 	// Write session ID (2 bytes, big endian)
 	binary.BigEndian.PutUint16(payload[0:2], sessionID)
@@ -473,15 +474,15 @@ func encodeLeaseSetPayload(sessionID uint16, tunnels []*tunnel.TunnelState) []by
 // encodeLeaseEntry writes a single lease entry (gateway hash, tunnel ID, end date)
 // into the payload at the given offset and returns the new offset.
 func encodeLeaseEntry(payload []byte, offset int, tun *tunnel.TunnelState, now time.Time) int {
-	copy(payload[offset:offset+32], tun.Hops[0][:])
-	offset += 32
+	copy(payload[offset:offset+hashSize], tun.Hops[0][:])
+	offset += hashSize
 
-	binary.BigEndian.PutUint32(payload[offset:offset+4], uint32(tun.ID))
-	offset += 4
+	binary.BigEndian.PutUint32(payload[offset:offset+leaseEntryTunnelIDSize], uint32(tun.ID))
+	offset += leaseEntryTunnelIDSize
 
 	endDate := calculateLeaseEndDate(tun.CreatedAt, now)
-	binary.BigEndian.PutUint64(payload[offset:offset+8], uint64(endDate.UnixMilli()))
-	offset += 8
+	binary.BigEndian.PutUint64(payload[offset:offset+leaseEntryEndDateSize], uint64(endDate.UnixMilli()))
+	offset += leaseEntryEndDateSize
 	return offset
 }
 

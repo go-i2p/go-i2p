@@ -58,7 +58,7 @@ func applyProbingResistance(rawConn net.Conn) {
 
 		// Set a read deadline so we don't block indefinitely if the prober
 		// has already closed their end of the connection.
-		_ = rawConn.SetReadDeadline(time.Now().Add(delay + 500*time.Millisecond))
+		_ = rawConn.SetReadDeadline(time.Now().Add(delay + probingResistanceJunkReadGrace))
 
 		junkBuf := make([]byte, junkSize)
 		// io.ReadFull may return early if the peer closes; that's fine.

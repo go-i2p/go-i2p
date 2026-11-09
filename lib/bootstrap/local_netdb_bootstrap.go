@@ -321,9 +321,6 @@ func readRouterInfoBytes(filePath string) ([]byte, error) {
 // validateRouterInfoFreshness checks that a RouterInfo's published date is within
 // the acceptable age range (not expired, not future-dated beyond clock skew tolerance).
 func validateRouterInfoFreshness(ri router_info.RouterInfo) error {
-	const routerInfoMaxAge = 48 * time.Hour
-	const maxClockSkew = 10 * time.Minute
-
 	publishedDate := ri.Published()
 	if publishedDate == nil {
 		return nil

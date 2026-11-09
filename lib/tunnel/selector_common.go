@@ -77,7 +77,7 @@ func fetchPeerCandidates(
 	needed int,
 	allExcluded map[common.Hash]struct{},
 ) ([]router_info.RouterInfo, error) {
-	requestCount := needed + (needed / 2) + 1
+	requestCount := needed + (needed / candidateOversampleDivisor) + candidateOversampleFloor
 	excludeList := HashSetToSlice(allExcluded)
 
 	candidates, err := cfg.underlying.SelectPeers(requestCount, excludeList)

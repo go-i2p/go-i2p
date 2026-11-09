@@ -285,14 +285,14 @@ func logValidationComplete(server *config.ReseedConfig, totalReceived, validCoun
 
 // warnSlowReseed logs a warning if reseed took longer than expected.
 func warnSlowReseed(server *config.ReseedConfig, elapsed time.Duration) {
-	if elapsed.Seconds() > 30 {
+	if elapsed > slowReseedThreshold {
 		log.WithFields(logger.Fields{
 			"at":          "(ReseedBootstrap) attemptReseedFromServer",
 			"phase":       "bootstrap",
 			"reason":      "slow reseed operation detected",
 			"server_url":  server.URL,
 			"duration_ms": elapsed.Milliseconds(),
-			"threshold_s": 30,
+			"threshold_s": int64(slowReseedThreshold / time.Second),
 			"impact":      "may indicate network issues or server load",
 		}).Warn("reseed operation slower than expected")
 	}
@@ -300,23 +300,19 @@ func warnSlowReseed(server *config.ReseedConfig, elapsed time.Duration) {
 
 // warnInsufficientRouters logs a warning if too few valid routers were received.
 func warnInsufficientRouters(server *config.ReseedConfig, validCount int) {
-	if validCount < 50 {
+	if validCount < minValidRoutersAfterReseed {
 		log.WithFields(logger.Fields{
 			"at":           "(ReseedBootstrap) attemptReseedFromServer",
 			"phase":        "bootstrap",
 			"reason":       "insufficient valid routers from reseed server",
 			"server_url":   server.URL,
 			"router_count": validCount,
-			"minimum":      50,
-			"shortfall":    50 - validCount,
+			"minimum":      minValidRoutersAfterReseed,
+			"shortfall":    minValidRoutersAfterReseed - validCount,
 			"impact":       "may need additional reseed servers",
 		}).Warn("reseed returned fewer valid routers than recommended")
 	}
 }
-
-// attemptReseedFromServer attempts to reseed from a single server with timeout.
-// Uses a 30-second timeout for the HTTP request to prevent hanging on unresponsive servers.
-const reseedRequestTimeout = 30 * time.Second
 
 func (rb *ReseedBootstrap) attemptReseedFromServer(ctx context.Context, server *config.ReseedConfig, attemptNumber int) ([]router_info.RouterInfo, error) {
 	startTime := time.Now()
@@ -433,7 +429,7 @@ func (rb *ReseedBootstrap) logReseedComplete(totalPeers, attemptedServers, succe
 		"attempted_servers":  attemptedServers,
 		"successful_servers": successfulServers,
 		"failed_servers":     attemptedServers - successfulServers,
-		"success_rate":       fmt.Sprintf("%.1f%%", float64(successfulServers)/float64(attemptedServers)*100),
+		"success_rate":       fmt.Sprintf("%.1f%%", float64(successfulServers)/float64(attemptedServers)*percentBase),
 	}).Info("bootstrap peer acquisition completed")
 }
 

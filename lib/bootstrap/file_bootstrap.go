@@ -163,16 +163,16 @@ func checkFileAccessibility(filePath string) (os.FileInfo, error) {
 }
 
 // validateFileSize checks that the file is large enough to be a valid reseed file.
-// Files smaller than 100 bytes are considered invalid.
+// Files smaller than minReseedFileSizeBytes are considered invalid.
 func validateFileSize(filePath string, info os.FileInfo) error {
-	if info.Size() < 100 {
+	if info.Size() < minReseedFileSizeBytes {
 		log.WithFields(logger.Fields{
 			"at":         "(FileBootstrap) validateFile",
 			"phase":      "bootstrap",
 			"reason":     "file too small to be valid reseed",
 			"file_path":  filePath,
 			"size_bytes": info.Size(),
-			"min_bytes":  100,
+			"min_bytes":  minReseedFileSizeBytes,
 			"suggestion": "verify file is complete and not corrupted",
 		}).Warn("reseed file is too small to be valid")
 		return oops.Errorf("file bootstrap validation failed: file too small (%d bytes) at %s", info.Size(), filePath)
@@ -265,7 +265,7 @@ func calculateRequestLimit(limit int) int {
 	if limit <= 0 {
 		return 0
 	}
-	return limit * 2
+	return limit * requestLimitOverfetchFactor
 }
 
 // logReseedProcessingFailure logs an error when reseed file processing fails.

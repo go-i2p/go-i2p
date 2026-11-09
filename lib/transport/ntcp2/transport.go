@@ -82,6 +82,11 @@ type NTCP2Transport struct {
 	// Session management via shared SessionRegistry (H2 deduplication)
 	sessionRegistry *transport.SessionRegistry
 
+	// admission bounds the pre-authentication inbound handshake path: how many
+	// handshakes may run at once transport-wide and per source IP. See
+	// [handshakeAdmission].
+	admission *handshakeAdmission
+
 	// Metrics for critical bugs (X-1)
 	acceptedConnPromotionAttempts int32 // atomic counter for bug detection: how many times promoteInboundConnection refused an acceptedConn
 
@@ -219,7 +224,7 @@ func createNTCP2Config(identity router_info.RouterInfo, cancel context.CancelFun
 		cancel()
 		return nil, err
 	}
-	return ntcp2Config, nil
+	return applyNTCP2FrameSettings(ntcp2Config), nil
 }
 
 // applyReplayDetector registers the transport's own replay cache as the detector
@@ -271,7 +276,7 @@ func loadStaticKeyFromRouter(ntcp2Config *ntcp2.Config, identity router_info.Rou
 
 	// Use the encryption private key as the NTCP2 static key
 	ntcp2Config.StaticKey = encryptionPrivKey.Bytes()
-	if len(ntcp2Config.StaticKey) != 32 {
+	if len(ntcp2Config.StaticKey) != staticKeySize {
 		if cancel != nil {
 			cancel()
 		}
@@ -312,6 +317,7 @@ func buildTransportInstance(config *Config, identity router_info.RouterInfo, key
 		logger:          logger,
 		wg:              sync.WaitGroup{},
 		sessionRegistry: registry,
+		admission:       newHandshakeAdmission(),
 	}
 	// Initialize atomic.Pointer[Config] with Store
 	t.config.Store(config)
@@ -346,17 +352,28 @@ func (t *NTCP2Transport) runIdleMaintenance() {
 
 func (t *NTCP2Transport) runIdleMaintenancePass() {
 	now := time.Now()
-	haveCapacity := t.haveCapacity(33)
+	haveCapacity := t.haveCapacity(capacityThresholdPercent)
 	t.updateIdleExpireWriteTime(haveCapacity)
 	expire := t.currentIdleExpireWriteTime()
 
 	failsafeCloses := 0
+	reapedDeadSessions := 0
 	t.sessionRegistry.RangeWithHash(func(hash data.Hash, value interface{}) bool {
 		session, ok := value.(*NTCP2Session)
 		if !ok || session == nil {
 			return true
 		}
 		if session.GetContext().Err() != nil {
+			// A cancelled session that never started its teardown is a leaked
+			// session: its socket, its registry entry and its slot reservation
+			// are all still held, and nothing else will ever close it. Reap it
+			// here as a failsafe for error paths that bypass Close.
+			if !session.CloseRequested() {
+				reapedDeadSessions++
+				t.logger.WithField("peer_hash", logutil.HashPrefixPlain(hash.Bytes())).
+					Warn("Reaping NTCP2 session cancelled without a teardown")
+				go func() { _ = session.Close() }()
+			}
 			return true
 		}
 		if session.shouldCloseForIdle(now, expire) {
@@ -374,6 +391,10 @@ func (t *NTCP2Transport) runIdleMaintenancePass() {
 			"failsafe_closes": failsafeCloses,
 		}).Info("NTCP2 idle maintenance closed stale sessions")
 	}
+	if reapedDeadSessions > 0 {
+		t.logger.WithField("reaped", reapedDeadSessions).
+			Warn("NTCP2 idle maintenance reaped sessions cancelled without a teardown")
+	}
 }
 
 func (t *NTCP2Transport) currentIdleExpireWriteTime() time.Duration {
@@ -386,7 +407,14 @@ func (t *NTCP2Transport) currentIdleExpireWriteTime() time.Duration {
 
 func (t *NTCP2Transport) updateIdleExpireWriteTime(haveCapacity bool) {
 	for {
-		current := atomic.LoadInt64(&t.idleExpireWriteTime)
+		raw := atomic.LoadInt64(&t.idleExpireWriteTime)
+
+		// A non-positive stored value means the window has not been seeded yet
+		// (the field's zero value is 0, not a duration). The CAS below must
+		// compare against the raw stored value, so the normalisation is kept
+		// separate: comparing against a substituted value could never succeed
+		// and this loop would spin forever without ever updating the window.
+		current := raw
 		if current <= 0 {
 			current = int64(ntcp2MaxExpireIdleTime)
 		}
@@ -404,7 +432,7 @@ func (t *NTCP2Transport) updateIdleExpireWriteTime(haveCapacity bool) {
 			}
 		}
 
-		if atomic.CompareAndSwapInt64(&t.idleExpireWriteTime, current, int64(next)) {
+		if atomic.CompareAndSwapInt64(&t.idleExpireWriteTime, raw, int64(next)) {
 			return
 		}
 	}
@@ -419,7 +447,7 @@ func (t *NTCP2Transport) haveCapacity(percent int) bool {
 		return true
 	}
 	current := int(t.sessionRegistry.Count())
-	return current*100 < maxSessions*percent
+	return current*percentBase < maxSessions*percent
 }
 
 // probeAndBindNAT is the OS/NAT-interaction seam behind bindOSAssignedPort.
@@ -617,7 +645,7 @@ func (t *NTCP2Transport) Accept() (net.Conn, error) {
 // is unblocked promptly on shutdown.
 func (t *NTCP2Transport) startInboundAcceptRunner() {
 	t.acceptRunOnce.Do(func() {
-		t.pendingConns = make(chan net.Conn, 64)
+		t.pendingConns = make(chan net.Conn, pendingConnsQueueSize)
 		t.wg.Add(1)
 		go t.runInboundAcceptLoop()
 		// Ensure listener.Accept() unblocks when the transport is cancelled.
@@ -677,7 +705,7 @@ func (t *NTCP2Transport) acceptNextConnection() bool {
 			// Shutdown signaled; exit loop.
 			t.logger.Debug("Listener is nil and transport shutting down; terminating accept loop")
 			return false
-		case <-time.After(50 * time.Millisecond):
+		case <-time.After(listenerSwapPollInterval):
 			// Listener temporarily nil (likely during SetIdentity swap); retry.
 			t.logger.Debug("Listener is nil but transport running; waiting for listener swap to complete")
 			return true
@@ -710,16 +738,22 @@ func (t *NTCP2Transport) acceptNextConnection() bool {
 		default:
 			// Transient error: log as info, sleep briefly to avoid tight loop, and continue
 			t.logger.WithError(err).Debug("Transient accept error; will retry")
-			time.Sleep(10 * time.Millisecond)
+			time.Sleep(transientAcceptBackoff)
 			return true
 		}
 	}
 
-	if !t.canAcceptNewSession(rawConn) {
-		return true // continue accepting
+	release := t.admitInboundHandshake(rawConn)
+	if release == nil {
+		// Refused at admission: the connection is already closed. Bound the
+		// pre-auth cost instead of spending a handshake window on it.
+		return true
 	}
 
-	go t.inboundHandshakeWorker(rawConn)
+	go func() {
+		defer release()
+		t.inboundHandshakeWorker(rawConn)
+	}()
 	return true
 }
 
@@ -736,13 +770,63 @@ func (t *NTCP2Transport) shouldShutdown(rawConn net.Conn) bool {
 	}
 }
 
-// canAcceptNewSession performs pre-acceptance checks on the raw connection.
-// Session limit is now checked AFTER handshake completes, not before.
-// This prevents attackers from holding reserved slots during the 30s handshake window.
-func (t *NTCP2Transport) canAcceptNewSession(rawConn net.Conn) bool {
-	// No limit check here. Handshakes run without reserving slots.
-	// The limit is enforced after successful handshake in inboundHandshakeWorker.
-	return true
+// admitInboundHandshake bounds the cost of a not-yet-authenticated inbound
+// connection: it reserves a slot in the transport-wide and per-source handshake
+// budgets, and closes the connection if either is already spent.
+//
+// On success it returns the release function the caller must run when the
+// handshake goroutine exits. On refusal it closes rawConn and returns nil, so a
+// flood is shed at accept time without a goroutine, a handshake timeout window,
+// or the probing-resistance junk read being paid for it.
+//
+// The session limit is deliberately NOT checked here. It is enforced after a
+// successful handshake in [NTCP2Transport.inboundHandshakeWorker]; reserving a
+// session slot pre-handshake would let an attacker hold all 512 slots for the
+// duration of the handshake timeout, which is the opposite of what this is for.
+//
+// Spec: ntcp2.rst §"Session Request" DoS Mitigation — "Limit repeated or
+// simultaneous connections from the same source."
+func (t *NTCP2Transport) admitInboundHandshake(rawConn net.Conn) (release func()) {
+	cfg := t.config.Load()
+	var global, perSource int64
+	if cfg != nil {
+		global = int64(cfg.GetMaxInflightHandshakes())
+		perSource = int64(cfg.GetMaxHandshakesPerSource())
+	}
+
+	remote := rawConn.RemoteAddr()
+	var err error
+	release, err = t.admission.admit(remote, global, perSource)
+	if err == nil {
+		return release
+	}
+
+	// Refused. Count it and close without any handshake attempt.
+	t.recordHandshakeRefused(remote, err)
+	_ = rawConn.Close()
+	return nil
+}
+
+// recordHandshakeRefused logs and counts a connection turned away at admission.
+// Kept at Debug: a flood would otherwise flood the log, and the metric counters
+// are the signal operators should alert on.
+func (t *NTCP2Transport) recordHandshakeRefused(remote net.Addr, err error) {
+	if errors.Is(err, errAdmissionGlobalFull) {
+		t.metrics.handshakeRefusedGlobal.Add(1)
+	} else {
+		t.metrics.handshakeRefusedSource.Add(1)
+	}
+	if t.logger == nil {
+		return
+	}
+	addr := "<unknown>"
+	if remote != nil {
+		addr = remote.String()
+	}
+	t.logger.WithFields(map[string]interface{}{
+		"remote_addr": addr,
+		"reason":      err.Error(),
+	}).Debug("Inbound NTCP2 connection refused at handshake admission")
 }
 
 // inboundHandshakeWorker performs the full NTCP2 inbound handshake for a
@@ -803,7 +887,7 @@ func (t *NTCP2Transport) inboundHandshakeWorker(conn net.Conn) {
 	// Use a timeout to send to the pending queue to avoid indefinitely blocking
 	// and holding a reserved slot when the queue is full or Accept() is slow.
 	// If the send times out, close the connection and unreserve.
-	queueTimeout := 5 * time.Second
+	queueTimeout := defaultPendingConnQueueTimeout
 	if cfg := t.config.Load(); cfg != nil && cfg.PendingConnQueueTimeout > 0 {
 		queueTimeout = cfg.PendingConnQueueTimeout
 	}
@@ -812,7 +896,7 @@ func (t *NTCP2Transport) inboundHandshakeWorker(conn net.Conn) {
 
 	// TE-2 fix: Track queue depth for capacity planning
 	queueLen := len(t.pendingConns)
-	if uint64(queueLen) == 64 {
+	if uint64(queueLen) == pendingConnsQueueSize {
 		// Queue is full, increment metric
 		t.metrics.pendingConnsQueueFullEvents.Add(1)
 	}
@@ -923,10 +1007,9 @@ func (t *NTCP2Transport) onInboundHandshakeError(err error) {
 	}
 }
 
-// executeHandshake performs the Noise XK handshake with probing resistance on failure.
-// Uses handshakeCtx (with timeout) to prevent goroutine leaks on slow/stuck handshakes.
 // executeHandshake performs the NTCP2 wire-format handshake on an accepted
-// (responder) connection.
+// (responder) connection. Uses handshakeCtx (with timeout) to prevent goroutine
+// leaks on slow/stuck handshakes.
 //
 // It MUST call (*ntcp2.Conn).Handshake — the NTCP2-specific handshake — and not
 // the generic Noise handshake reachable through UnderlyingConn(). Per
@@ -1057,7 +1140,7 @@ func (t *NTCP2Transport) extractAndStorePeerRouterInfo(ntcp2Conn msg3PeerConn, c
 			"remote_addr":          conn.RemoteAddr().String(),
 			"total_parse_failures": atomic.LoadInt32(&t.routerInfoParseFailures),
 			"ri_bytes_len":         len(riBytes),
-			"ri_bytes_prefix":      fmt.Sprintf("%x", riBytes[:min(16, len(riBytes))]),
+			"ri_bytes_prefix":      fmt.Sprintf("%x", riBytes[:min(logRouterInfoPrefixBytes, len(riBytes))]),
 		}).Warn("Inbound NTCP2: failed to parse peer RouterInfo from msg3; aborting handshake")
 		_ = ntcp2Conn.Close()
 		// No slot was reserved before handshake, so no unreserve needed.
@@ -1278,7 +1361,7 @@ func (t *NTCP2Transport) extractPeerHash(conn net.Conn) data.Hash {
 			return ntcpAddr.RouterHash(), true
 		}
 		return data.Hash{}, false
-	}, 0xFF) // NTCP2 marker byte
+	}, peerHashMarkerByte)
 }
 
 // trackedConn wraps a net.Conn to execute a cleanup function when closed.
@@ -1612,7 +1695,7 @@ func (t *NTCP2Transport) createNTCP2ConfigFromIdentity(ident router_info.RouterI
 		t.logger.WithError(err).Error("Failed to create new NTCP2 config for identity update")
 		return nil, WrapNTCP2Error(err, "updating identity")
 	}
-	return ntcp2Config, nil
+	return applyNTCP2FrameSettings(ntcp2Config), nil
 }
 
 // GetSession obtains a transport session with a router given its RouterInfo.
@@ -1758,7 +1841,13 @@ func (t *NTCP2Transport) validateExistingSession(s *NTCP2Session, routerHash dat
 			"router_hash": logutil.HashPrefixPlain(routerHashBytes),
 			"reason":      s.GetContext().Err().Error(),
 		}).Info("Evicting stale NTCP2 session")
-		t.sessionRegistry.Remove(routerHash)
+		// Identity-scoped: only drop the entry if it is still this session.
+		t.removeSessionIfCurrent(routerHash, s)
+		// The stale session was cancelled without a teardown (or its teardown
+		// is still in flight); close it so its socket is released too.
+		if !s.CloseRequested() {
+			go func() { _ = s.Close() }()
+		}
 		return nil, false
 	}
 	routerHashBytes := routerHash.Bytes()
@@ -1829,8 +1918,13 @@ func (t *NTCP2Transport) promoteInboundConnection(conn net.Conn, original interf
 		return result.(*NTCP2Session), true
 	}
 
-	// Promotion CAS failed. Another goroutine won the promotion race — close our duplicate.
-	// Workers will exit cleanly due to context.Done().
+	// Promotion CAS failed. Another goroutine won the promotion race — discard
+	// our duplicate. Detach the shared conn first, exactly as setupSession's
+	// loser path does: the winner owns that socket now, so closing it here would
+	// kill a live session and (since a failed read now tears a session down and
+	// unregisters it) turn the peer's link into a dead one the router never
+	// redials. Workers exit cleanly because Close() cancels the session context.
+	promoted.DetachConn()
 	_ = promoted.Close()
 
 	if winner, exists := t.sessionRegistry.Load(routerHash); exists {
@@ -2072,7 +2166,7 @@ func (t *NTCP2Transport) performNTCP2Handshake(ntcp2Addr net.Addr, tcpAddrString
 
 	// Phase 1a: TCP dial with a 10 s deadline (P0.2: reduced from 30 s to avoid
 	// blocking goroutines for 30 s against hosts that silently drop SYN packets).
-	dialCtx, dialCancel := context.WithTimeout(t.ctx, 10*time.Second)
+	dialCtx, dialCancel := context.WithTimeout(t.ctx, tcpDialTimeout)
 	defer dialCancel()
 	tcpDialer := &net.Dialer{}
 	tcpConn, err := tcpDialer.DialContext(dialCtx, "tcp", tcpAddrString)
@@ -2251,6 +2345,11 @@ func (t *NTCP2Transport) createNTCP2ConfigForAddress(routerInfo router_info.Rout
 	if err != nil {
 		return nil, WrapNTCP2Error(err, "creating NTCP2 config")
 	}
+	// Raise the outbound frame budget to the spec maximum before anything else
+	// touches this config: go-noise's 16 KiB default would cap every message
+	// this session can send, and the session drops rather than fragments
+	// anything over the cap (ntcp2.rst:1626-1628).
+	config = applyNTCP2FrameSettings(config)
 	// The initiator side needs one too: ntcp2.rst:879-883 requires Alice to
 	// "maintain a local cache of previously-used handshake values and reject
 	// duplicates", keyed on "the 32-byte Y value (or its encrypted equivalent)",
@@ -2282,7 +2381,7 @@ func (t *NTCP2Transport) ensureLocalStaticKeyConfigured() ([]byte, error) {
 	if cfg == nil || cfg.Config == nil {
 		return nil, oops.Errorf("ntcp2 config is not initialized")
 	}
-	if len(cfg.Config.StaticKey) == 32 {
+	if len(cfg.Config.StaticKey) == staticKeySize {
 		return cfg.Config.StaticKey, nil
 	}
 
@@ -2298,7 +2397,7 @@ func (t *NTCP2Transport) ensureLocalStaticKeyConfigured() ([]byte, error) {
 	if cfg == nil || cfg.Config == nil {
 		return nil, oops.Errorf("ntcp2 config is not initialized")
 	}
-	if len(cfg.Config.StaticKey) == 32 {
+	if len(cfg.Config.StaticKey) == staticKeySize {
 		return cfg.Config.StaticKey, nil
 	}
 
@@ -2310,7 +2409,7 @@ func (t *NTCP2Transport) ensureLocalStaticKeyConfigured() ([]byte, error) {
 	if err := loadStaticKeyFromRouter(cfg.Config, identity, t.keystore, nil); err != nil {
 		return nil, WrapNTCP2Error(err, "loading static key from router keystore")
 	}
-	if len(cfg.Config.StaticKey) != 32 {
+	if len(cfg.Config.StaticKey) != staticKeySize {
 		return nil, oops.Errorf("invalid static key size after keystore load: got %d", len(cfg.Config.StaticKey))
 	}
 
@@ -2354,8 +2453,8 @@ func (t *NTCP2Transport) attachLocalRouterInfo(config *ntcp2.Config) error {
 		"ri_addr_count":   addrCount,
 		"sig_valid":       sigValid,
 		"sig_verify_err":  fmt.Sprintf("%v", sigErr),
-		"ri_bytes_prefix": fmt.Sprintf("%x", riBytes[:min(16, len(riBytes))]),
-		"ri_bytes_suffix": fmt.Sprintf("%x", riBytes[max(0, len(riBytes)-16):]),
+		"ri_bytes_prefix": fmt.Sprintf("%x", riBytes[:min(logRouterInfoPrefixBytes, len(riBytes))]),
+		"ri_bytes_suffix": fmt.Sprintf("%x", riBytes[max(0, len(riBytes)-logRouterInfoPrefixBytes):]),
 		"ri_bytes_full":   fmt.Sprintf("%x", riBytes),
 	}).Debug("LocalRouterInfo for msg3 outbound")
 	config.WithLocalRouterInfo(riBytes)
@@ -2421,8 +2520,12 @@ func (t *NTCP2Transport) setupSession(conn *ntcp2.Conn, routerHash data.Hash) *N
 	// Wire up the cleanup callback BEFORE starting workers.
 	// If a Close() happens between StartWorkers and SetCleanupCallback, the
 	// session would be orphaned in the map because cleanup is not installed yet.
+	//
+	// The removal is identity-scoped: an error-torn session that closes after
+	// the transport has already re-dialled this peer must not evict the newer
+	// session that now owns the hash.
 	session.SetCleanupCallback(func() {
-		t.removeSession(routerHash)
+		t.removeSessionIfCurrent(routerHash, session)
 	})
 
 	session.StartWorkers()
@@ -2613,6 +2716,24 @@ func (t *NTCP2Transport) removeSession(routerHash data.Hash) {
 	t.logger.WithField("router_hash", logutil.HashPrefixPlain(routerHashBytes)).Debug("Removed session from transport session map")
 }
 
+// removeSessionIfCurrent removes this session's registry entry only if the
+// registry still holds this session for the peer's hash.
+//
+// An error-torn session must not evict a re-dialled replacement: once the
+// transport has re-connected to the peer, the newer entry owns the hash and the
+// slot reservation, and deleting it would re-create the dead-link and
+// slot-leak failure this cleanup exists to prevent.
+func (t *NTCP2Transport) removeSessionIfCurrent(routerHash data.Hash, session *NTCP2Session) {
+	routerHashBytes := routerHash.Bytes()
+	if t.sessionRegistry.RemoveIfSession(routerHash, session) {
+		t.logger.WithField("router_hash", logutil.HashPrefixPlain(routerHashBytes)).
+			Debug("Removed session from transport session map")
+		return
+	}
+	t.logger.WithField("router_hash", logutil.HashPrefixPlain(routerHashBytes)).
+		Debug("Session cleanup skipped: registry entry already replaced by a newer session")
+}
+
 // GetSessionCount returns the number of active sessions managed by this transport.
 // Uses an atomic counter for O(1) performance instead of iterating the session map.
 // It is used by higher layers to enforce connection limits and report status.
@@ -2623,9 +2744,21 @@ func (t *NTCP2Transport) GetSessionCount() int32 {
 // HasSession returns true if an active session exists for the given peer hash.
 // This lets higher layers (e.g. tunnel peer selection) check reachability
 // without triggering a new dial attempt. Implements transport.Transport.
+//
+// A session that has lost its context is not reported: nothing can be sent
+// over it, and claiming otherwise would keep higher layers from redialling a
+// peer whose link just died. Non-session registry entries (a raw inbound
+// connection, or one already handed to Accept) are still reported, as they were
+// before.
 func (t *NTCP2Transport) HasSession(peerHash data.Hash) bool {
-	_, ok := t.sessionRegistry.Load(peerHash)
-	return ok
+	value, ok := t.sessionRegistry.Load(peerHash)
+	if !ok {
+		return false
+	}
+	if session, isSession := value.(*NTCP2Session); isSession {
+		return session.IsAlive()
+	}
+	return true
 }
 
 // GetRouterInfoParseFailures returns the total count of RouterInfo parse failures

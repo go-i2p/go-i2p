@@ -49,9 +49,13 @@ func TestConcurrentSetupSessionNoWorkersBeforeCAS(t *testing.T) {
 		go func(idx int) {
 			defer wg.Done()
 
-			// Create a mock connection with a unique "remote address" so we can
-			// distinguish each racer, but all target the same peer hash
-			mockConn := newAcceptMockConn(fmt.Sprintf("racer-%d", idx))
+			// Create a live connection with a unique "remote address" so we can
+			// distinguish each racer, but all target the same peer hash.
+			// It must be live, not an EOF conn: a session whose read fails now
+			// tears itself down and unregisters (finding 006), which would let a
+			// later racer "win" LoadOrStore a second time and break the exactly-1
+			// invariant this test is about.
+			mockConn := newLiveMockConnInContext(transport.ctx, fmt.Sprintf("racer-%d", idx))
 
 			// Simulate setupSession: create session, LoadOrStore, check if we won
 			session := NewNTCP2SessionDeferred(mockConn, transport.ctx, logger.WithField("test", "racer"))
@@ -133,8 +137,10 @@ func TestConcurrentPromoteInboundNoWorkersBeforeCAS(t *testing.T) {
 	// Target peer
 	targetPeerHash := newTestPeerHash("promote-target")
 
-	// Pre-populate map with a raw conn (simulate trackInboundConnection storing it)
-	rawConn := newAcceptMockConn("raw-conn")
+	// Pre-populate map with a raw conn (simulate trackInboundConnection storing it).
+	// Must stay live: a session whose read fails now unregisters itself
+	// (finding 006), which would let another racer re-win the CAS.
+	rawConn := newLiveMockConnInContext(transport.ctx, "raw-conn")
 	transport.sessionRegistry.StoreWithCount(targetPeerHash, rawConn)
 
 	// Track winner count
@@ -178,7 +184,11 @@ func TestConcurrentPromoteInboundNoWorkersBeforeCAS(t *testing.T) {
 				winnerCount++
 				winnerCountMu.Unlock()
 			} else {
-				// Loser. Close without starting workers.
+				// Loser. Detach the shared conn before closing, as production's
+				// promoteInboundConnection does: the winner owns that socket now,
+				// and closing it here would fail the winner's next read, which
+				// tears the winner down and unregisters it (finding 006).
+				promoted.DetachConn()
 				_ = promoted.Close()
 			}
 		}(i)

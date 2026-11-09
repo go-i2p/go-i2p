@@ -145,7 +145,7 @@ func NewManagerWithConfig(cfg config.TunnelDefaults) *ParticipantManager {
 		"at":                     "NewManagerWithConfig",
 		"phase":                  "tunnel_build",
 		"reason":                 "tunnel manager initialized",
-		"cleanup_interval":       "60s",
+		"cleanup_interval":       managerCleanupInterval.String(),
 		"max_participants":       m.maxParticipants,
 		"limits_enabled":         m.limitsEnabled,
 		"soft_limit":             m.softLimit(),
@@ -263,7 +263,7 @@ func (m *ParticipantManager) MaxParticipants() int {
 // This is always derived, not independently configured.
 // Probabilistic rejection starts at the soft limit.
 func (m *ParticipantManager) softLimit() int {
-	return m.maxParticipants / 2
+	return m.maxParticipants / softLimitDivisor
 }
 
 // CanAcceptParticipant checks if we can accept a new participating tunnel.
@@ -533,7 +533,7 @@ func (m *ParticipantManager) EvaluateBuildBandwidth(minKBps, requestedKBps uint3
 	if limitKBps == 0 {
 		return 0, 0
 	}
-	limitBytes := uint64(limitKBps) * 1024
+	limitBytes := uint64(limitKBps) * bytesPerKiB
 
 	var useBytes uint64
 	if fnPtr := m.transitBandwidthFn.Load(); fnPtr != nil {
@@ -543,7 +543,7 @@ func (m *ParticipantManager) EvaluateBuildBandwidth(minKBps, requestedKBps uint3
 	// Minimum bandwidth gate: reject if the required minimum plus current usage
 	// would exceed the configured limit.
 	if minKBps > 0 {
-		if uint64(minKBps)*1024+useBytes > limitBytes {
+		if uint64(minKBps)*bytesPerKiB+useBytes > limitBytes {
 			return BuildReplyCodeBandwidth, 0
 		}
 	}
@@ -552,8 +552,8 @@ func (m *ParticipantManager) EvaluateBuildBandwidth(minKBps, requestedKBps uint3
 	if requestedKBps > 0 {
 		if useBytes < limitBytes {
 			availBytes := limitBytes - useBytes
-			if uint64(requestedKBps)*1024 > availBytes {
-				availableKBps = uint32(availBytes / 1024)
+			if uint64(requestedKBps)*bytesPerKiB > availBytes {
+				availableKBps = uint32(availBytes / bytesPerKiB)
 			} else {
 				availableKBps = requestedKBps
 			}
@@ -698,13 +698,13 @@ func (m *ParticipantManager) GetLimitStats() TunnelLimitStats {
 // removes expired participant tunnels.
 //
 // Design decisions:
-// - Runs every 60 seconds (tunnels typically last 10 minutes)
+// - Runs every managerCleanupInterval (tunnels typically last 10 minutes)
 // - Logs statistics about cleaned up tunnels
 // - Gracefully stops when stopChan is closed
 func (m *ParticipantManager) cleanupLoop() {
 	defer m.wg.Done()
 
-	ticker := time.NewTicker(60 * time.Second)
+	ticker := time.NewTicker(managerCleanupInterval)
 	defer ticker.Stop()
 
 	for {

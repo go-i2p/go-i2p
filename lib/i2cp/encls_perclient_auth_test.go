@@ -106,7 +106,8 @@ func TestEncryptedLeaseSetClientAuthRoundTrip(t *testing.T) {
 
 	// An authorized client decrypts and resolves.
 	authorized, err := resolver.ResolveEncryptedDestinationWithCredential(
-		dest, session.blindingSecret, dhCredential(clientPriv))
+		dest, session.blindingSecret, dhCredential(clientPriv),
+	)
 	require.NoError(t, err, "authorized client must resolve")
 	require.Equal(t, want.Bytes(), authorized[:],
 		"authorized client must recover the session's X25519 key")
@@ -114,7 +115,8 @@ func TestEncryptedLeaseSetClientAuthRoundTrip(t *testing.T) {
 	// A client that was not given the cookie cannot, even though it can see the
 	// blinded record and derive the subcredential.
 	unauthorized, err := resolver.ResolveEncryptedDestinationWithCredential(
-		dest, session.blindingSecret, dhCredential(newTestKeyBytes(t)))
+		dest, session.blindingSecret, dhCredential(newTestKeyBytes(t)),
+	)
 	require.Error(t, err, "unauthorized client must not resolve")
 	require.Equal(t, [32]byte{}, unauthorized)
 
@@ -125,7 +127,8 @@ func TestEncryptedLeaseSetClientAuthRoundTrip(t *testing.T) {
 	// Sanity: otherPub is genuinely authorized too, so the failure above is
 	// about authorization and not about the credential form.
 	alsoOK, err := resolver.ResolveEncryptedDestinationWithCredential(
-		dest, session.blindingSecret, dhCredential(otherPriv))
+		dest, session.blindingSecret, dhCredential(otherPriv),
+	)
 	require.NoError(t, err, "second authorized client must resolve")
 	require.Equal(t, want.Bytes(), alsoOK[:])
 }
@@ -153,7 +156,8 @@ func TestEncryptedLeaseSetClientAuthPSKRoundTrip(t *testing.T) {
 		&encrypted_leaseset.ClientCredential{
 			AuthType: encrypted_leaseset.ENCRYPTED_LEASESET_AUTH_TYPE_PSK,
 			PSK:      psk,
-		})
+		},
+	)
 	require.NoError(t, err, "PSK client must resolve")
 
 	want, err := session.keys.EncryptionPublicKey()
@@ -166,7 +170,8 @@ func TestEncryptedLeaseSetClientAuthPSKRoundTrip(t *testing.T) {
 		&encrypted_leaseset.ClientCredential{
 			AuthType: encrypted_leaseset.ENCRYPTED_LEASESET_AUTH_TYPE_PSK,
 			PSK:      newTestKeyBytes(t),
-		})
+		},
+	)
 	require.Error(t, err, "wrong PSK must not resolve")
 }
 
@@ -240,7 +245,8 @@ func TestEncryptedLeaseSetClientAuthClears(t *testing.T) {
 	resolver := newDestinationResolverForTest(newENCLSNetDB(key, elsBytes))
 
 	_, err = resolver.ResolveEncryptedDestinationWithCredential(
-		*session.destination, session.blindingSecret, nil)
+		*session.destination, session.blindingSecret, nil,
+	)
 	require.NoError(t, err, "cleared config must publish an open record")
 }
 

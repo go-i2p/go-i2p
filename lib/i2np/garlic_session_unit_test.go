@@ -35,11 +35,9 @@ func completeGarlicHandshake(t *testing.T, senderSM, receiverSM *GarlicSessionMa
 	// Padding (254) — ecies.rst §"Block Ordering Rules" states "No other blocks
 	// are allowed" for the reply, in contrast to the New Session where DateTime
 	// is required and must come first. BuildNSPayload is the New Session helper
-	// and prepends a DateTime block, so the reply body is assembled with the
-	// generic builder instead.
-	nsrPayload, err := noiseratchet.NewPayloadBuilder().
-		AddBlock(noiseratchet.PayloadBlock{Type: noiseratchet.BlockGarlicClove, Data: []byte("nsr")}).
-		Build()
+	// and prepends a DateTime block, so it must not be used here; BuildNSReplyPayload
+	// is the reply helper and enforces the reply allowlist as it builds.
+	nsrPayload, err := noiseratchet.BuildNSReplyPayload([]byte("nsr"))
 	require.NoError(t, err, "build NSR payload")
 	nsrMsg, err := receiverSM.EncryptNewSessionReply(*sessionHash, nsrPayload)
 	require.NoError(t, err, "encrypt NSR")
@@ -47,6 +45,67 @@ func completeGarlicHandshake(t *testing.T, senderSM, receiverSM *GarlicSessionMa
 	require.NoError(t, err, "sender process NSR")
 
 	return destHash
+}
+
+// TestNewSessionReplyBlockRules pins the New Session Reply payload to the block
+// allowlist of ecies.rst §"Block Ordering Rules": "In the New Session Reply
+// message, no blocks are required. Other allowed blocks: Garlic Clove (type 11)
+// / Options (type 5) / Padding (type 254). No other blocks are allowed."
+//
+// The DateTime block is required first in a New Session but forbidden in the
+// reply, so a reply built with the New Session helper (BuildNSPayload /
+// NewSessionPayloadBuilder, both of which prepend DateTime) produces a payload
+// no conformant peer accepts, and session establishment fails. This test guards
+// against reintroducing that mix-up.
+func TestNewSessionReplyBlockRules(t *testing.T) {
+	senderSM, receiverSM, receiverPubKey := setupGarlicSenderReceiver(t)
+	destHash := types.SHA256(receiverPubKey[:])
+
+	builder, err := NewGarlicBuilderWithDefaults()
+	require.NoError(t, err)
+	require.NoError(t, builder.AddLocalDeliveryClove(NewDataMessage([]byte("ns")), 1))
+	ns, err := EncryptGarlicWithBuilder(senderSM, builder, destHash, receiverPubKey)
+	require.NoError(t, err, "NS encrypt")
+
+	_, _, sessionHash, err := receiverSM.DecryptGarlicMessage(ns)
+	require.NoError(t, err, "NS decrypt")
+	require.NotNil(t, sessionHash, "sessionHash must be non-nil for New Session")
+
+	// A reply carrying a DateTime block must be refused before it is encrypted.
+	withDateTime, err := noiseratchet.NewSessionPayloadBuilder().
+		AddBlock(noiseratchet.NewGarlicCloveBlock([]byte("nsr"))).
+		Build()
+	require.NoError(t, err, "New Session helper still builds; it is only invalid as a reply")
+	_, err = receiverSM.EncryptNewSessionReply(*sessionHash, withDateTime)
+	require.Error(t, err, "DateTime (block type 0) must be rejected in a New Session Reply")
+	assert.Contains(t, err.Error(), "New Session Reply")
+
+	// The reply helper omits DateTime, and the payload it produces parses to
+	// GarlicClove only.
+	good, err := noiseratchet.BuildNSReplyPayload([]byte("nsr"))
+	require.NoError(t, err, "build NSR payload")
+	blocks, err := noiseratchet.ParsePayload(good)
+	require.NoError(t, err, "parse NSR payload")
+	require.NotEmpty(t, blocks, "NSR payload must contain the garlic clove block")
+	for _, b := range blocks {
+		assert.NotEqual(t, noiseratchet.BlockDateTime, b.Type,
+			"NSR payload must not contain a DateTime block")
+	}
+
+	nsr, err := receiverSM.EncryptNewSessionReply(*sessionHash, good)
+	require.NoError(t, err, "encrypt NSR")
+
+	// Sender must accept the reply and be able to move on to Existing Session.
+	_, _, _, err = senderSM.DecryptGarlicMessage(nsr)
+	require.NoError(t, err, "sender process NSR")
+
+	builder2, err := NewGarlicBuilderWithDefaults()
+	require.NoError(t, err)
+	require.NoError(t, builder2.AddLocalDeliveryClove(NewDataMessage([]byte("es")), 2))
+	es, err := EncryptGarlicWithBuilder(senderSM, builder2, destHash, receiverPubKey)
+	require.NoError(t, err, "ES encrypt after NSR")
+	_, _, _, err = receiverSM.DecryptGarlicMessage(es)
+	require.NoError(t, err, "ES decrypt")
 }
 
 // setupGarlicSenderReceiver creates a sender and receiver GarlicSessionManager pair

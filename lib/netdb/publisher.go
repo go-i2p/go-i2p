@@ -155,9 +155,9 @@ type PublisherConfig struct {
 // See also [PublisherConfig], [NewPublisher].
 func DefaultPublisherConfig() PublisherConfig {
 	return PublisherConfig{
-		RouterInfoInterval: 30 * time.Minute,
-		LeaseSetInterval:   5 * time.Minute,
-		FloodfillCount:     4,
+		RouterInfoInterval: defaultRouterInfoPublishInterval,
+		LeaseSetInterval:   defaultLeaseSetPublishInterval,
+		FloodfillCount:     defaultFloodfillPeers,
 	}
 }
 
@@ -183,9 +183,9 @@ func NewPublisher(db NetworkDatabase, pool *tunnel.Pool, transport SessionProvid
 		routerInfoInterval: config.RouterInfoInterval,
 		leaseSetInterval:   config.LeaseSetInterval,
 		floodfillCount:     config.FloodfillCount,
-		verifyTimeout:      15 * time.Second,
-		sendAttemptTimeout: 20 * time.Second,
-		ackTimeout:         20 * time.Second,
+		verifyTimeout:      publisherVerifyTimeout,
+		sendAttemptTimeout: publisherSendAttemptTimeout,
+		ackTimeout:         publisherAckTimeout,
 	}
 }
 
@@ -305,7 +305,7 @@ func (p *Publisher) runPublisherLoop(loop publisherLoopSpec) {
 // This makes our router discoverable in the I2P network by distributing our
 // RouterInfo to the closest floodfill routers in the DHT.
 func (p *Publisher) publishOurRouterInfo() {
-	p.cleanupStaleReplyTokens(45 * time.Minute)
+	p.cleanupStaleReplyTokens(replyTokenMaxAge)
 
 	log.WithFields(logger.Fields{"at": "publishOurRouterInfo"}).Debug("Publishing our RouterInfo")
 
@@ -327,7 +327,7 @@ func (p *Publisher) publishOurRouterInfo() {
 	if err == nil {
 		log.WithFields(logger.Fields{
 			"at":                     "publishOurRouterInfo",
-			"router_identity_prefix": riHash.String()[:16],
+			"router_identity_prefix": riHash.String()[:hashLogPrefixHexChars],
 			"router_identity_full":   riHash.String(),
 		}).Debug("RouterInfo details before publishing")
 	}
@@ -350,7 +350,7 @@ func (p *Publisher) publishOurRouterInfo() {
 
 	log.WithFields(logger.Fields{
 		"at":              "publishOurRouterInfo",
-		"router_identity": riHash.String()[:16],
+		"router_identity": riHash.String()[:hashLogPrefixHexChars],
 		"timestamp":       time.Now().UTC().Format(time.RFC3339),
 	}).Info("Successfully published our RouterInfo to floodfill routers")
 }
@@ -375,7 +375,7 @@ func (p *Publisher) ForceRouterInfoRepublish() error {
 
 // publishAllLeaseSets publishes all LeaseSets in the database
 func (p *Publisher) publishAllLeaseSets() {
-	p.cleanupStaleReplyTokens(45 * time.Minute)
+	p.cleanupStaleReplyTokens(replyTokenMaxAge)
 
 	log.WithFields(logger.Fields{"at": "publishAllLeaseSets"}).Debug("Publishing all LeaseSets")
 
@@ -522,7 +522,7 @@ func (p *Publisher) PublishRouterInfo(ri router_info.RouterInfo) error {
 		ffHashes := make([]string, 0, len(floodfills))
 		for _, ff := range floodfills {
 			ffHash, _ := ff.IdentHash()
-			ffHashes = append(ffHashes, ffHash.String()[:16])
+			ffHashes = append(ffHashes, ffHash.String()[:hashLogPrefixHexChars])
 		}
 		log.WithFields(logger.Fields{
 			"at":               "PublishRouterInfo",
@@ -541,7 +541,7 @@ func (p *Publisher) PublishRouterInfo(ri router_info.RouterInfo) error {
 	log.WithFields(logger.Fields{
 		"at":                "PublishRouterInfo",
 		"router_info_bytes": len(riBytes),
-		"hash":              hash.String()[:16],
+		"hash":              hash.String()[:hashLogPrefixHexChars],
 	}).Debug("RouterInfo serialized for distribution")
 
 	compressed, err := gzipCompress(riBytes)
@@ -550,15 +550,15 @@ func (p *Publisher) PublishRouterInfo(ri router_info.RouterInfo) error {
 	}
 
 	// RouterInfo DatabaseStore payload MUST be: 2-byte compressed length + gzip bytes.
-	payload := make([]byte, 2+len(compressed))
-	binary.BigEndian.PutUint16(payload[:2], uint16(len(compressed)))
-	copy(payload[2:], compressed)
+	payload := make([]byte, databaseStoreLengthFieldSize+len(compressed))
+	binary.BigEndian.PutUint16(payload[:databaseStoreLengthFieldSize], uint16(len(compressed)))
+	copy(payload[databaseStoreLengthFieldSize:], compressed)
 
 	log.WithFields(logger.Fields{
 		"at":                "PublishRouterInfo",
 		"uncompressed_size": len(riBytes),
 		"compressed_size":   len(compressed),
-		"hash":              hash.String()[:16],
+		"hash":              hash.String()[:hashLogPrefixHexChars],
 	}).Debug("RouterInfo compressed for transmission")
 
 	// Live networks can temporarily lack direct transport reachability to one of
@@ -800,7 +800,7 @@ func (p *Publisher) selectFloodfillsForPublishing(hash common.Hash) ([]router_in
 		}).Warn("forced target router not in local NetDB; attempting network lookup")
 
 		if resolver != nil {
-			if ri, rerr := resolver.Lookup(*forcedHash, 30*time.Second); rerr == nil && ri != nil {
+			if ri, rerr := resolver.Lookup(*forcedHash, defaultLookupTimeout); rerr == nil && ri != nil {
 				p.db.StoreRouterInfo(*ri)
 				log.WithFields(logger.Fields{
 					"at":          "selectFloodfillsForPublishing",
@@ -873,7 +873,7 @@ func prioritizeFloodfillFallback(db NetworkDatabase, candidates []router_info.Ro
 	for _, ri := range candidates {
 		hash, err := ri.IdentHash()
 		if err != nil {
-			scored = append(scored, scoredFloodfill{ri: ri, score: 0.5, stale: false})
+			scored = append(scored, scoredFloodfill{ri: ri, score: neutralPeerScore, stale: false})
 			continue
 		}
 		scored = append(scored, scoredFloodfill{
@@ -1303,7 +1303,7 @@ func (p *Publisher) waitForPublishAckTokens(tokens []uint32, timeout time.Durati
 	}
 	deadline := time.NewTimer(timeout)
 	defer deadline.Stop()
-	poll := time.NewTicker(250 * time.Millisecond)
+	poll := time.NewTicker(publishAckPollInterval)
 	defer poll.Stop()
 	for {
 		select {
@@ -1473,7 +1473,7 @@ func (p *Publisher) selectReplyRoute() ([4]byte, common.Hash, bool) {
 // Floodfills use a non-zero token to decide whether to flood the store entry.
 func generateReplyToken() ([4]byte, error) {
 	var token [4]byte
-	for attempt := 0; attempt < 3; attempt++ {
+	for attempt := 0; attempt < replyTokenGenerationAttempts; attempt++ {
 		if _, err := crand.Read(token[:]); err != nil {
 			return [4]byte{}, err
 		}
@@ -1534,11 +1534,11 @@ func (p *Publisher) getGatewayRouterInfo(gatewayHash common.Hash) (*router_info.
 	// Get RouterInfo from NetDB using the hash
 	riChan := p.db.GetRouterInfo(gatewayHash)
 	if riChan == nil {
-		return nil, oops.Errorf("gateway %x not found in NetDB", gatewayHash[:8])
+		return nil, oops.Errorf("gateway %x not found in NetDB", gatewayHash[:hashLogPrefixBytes])
 	}
 	ri, ok := <-riChan
 	if !ok {
-		return nil, oops.Errorf("failed to retrieve RouterInfo for gateway %x", gatewayHash[:8])
+		return nil, oops.Errorf("failed to retrieve RouterInfo for gateway %x", gatewayHash[:hashLogPrefixBytes])
 	}
 
 	// Check if RouterInfo has a valid identity by verifying we can get its hash.
@@ -1547,7 +1547,7 @@ func (p *Publisher) getGatewayRouterInfo(gatewayHash common.Hash) (*router_info.
 	// For transport purposes, we only need a valid identity to establish a session.
 	_, err := ri.IdentHash()
 	if err != nil {
-		return nil, oops.Errorf("gateway %x not found in NetDB or has no valid identity: %w", gatewayHash[:8], err)
+		return nil, oops.Errorf("gateway %x not found in NetDB or has no valid identity: %w", gatewayHash[:hashLogPrefixBytes], err)
 	}
 
 	return &ri, nil

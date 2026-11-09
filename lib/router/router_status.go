@@ -147,19 +147,19 @@ func (r *Router) GetSSU2ReachabilityCounters() ssu2.ReachabilitySnapshot {
 //	11 = ERROR_SYMMETRIC_NAT (reachable only via introducers behind a symmetric NAT)
 func (r *Router) GetNetworkStatus() int {
 	if !r.IsRunning() {
-		return 8 // ERROR_I2CP
+		return statusErrorI2CP
 	}
 	// Hidden mode is a configuration posture that must be reported regardless
 	// of transient peer-count or reseeding state; check it first.
 	if r.cfg != nil && r.cfg.Hidden {
-		return 3 // HIDDEN
+		return statusHidden
 	}
 	if r.IsReseeding() || r.GetActiveSessionCount() == 0 {
-		return 1 // TESTING — no active peers yet
+		return statusTesting
 	}
 	// Firewalled: has peers but no confirmed external address.
 	if r.collectBestExternalAddr() == "" {
-		return 2 // FIREWALLED
+		return statusFirewalled
 	}
 	// We have a confirmed external address. If NAT detection concluded that
 	// unsolicited inbound connections are blocked, report the specific
@@ -173,18 +173,18 @@ func (r *Router) GetNetworkStatus() int {
 	// definition, so report OK and never a firewalled variant. This makes the
 	// verdict deterministic regardless of PeerTest timing.
 	if r.directPublicExternalAddr() != "" {
-		return 0 // OK — directly reachable via public IPv4
+		return statusOK // directly reachable via public IPv4
 	}
-	if code := r.inboundBlockedStatusCode(); code != 0 {
+	if code := r.inboundBlockedStatusCode(); code != statusOK {
 		return code
 	}
-	return 0 // OK
+	return statusOK
 }
 
 // inboundBlockedStatusCode returns the I2PControl status code that describes how
-// NAT detection found inbound connectivity to be blocked (2 = FIREWALLED,
-// 11 = ERROR_SYMMETRIC_NAT), or 0 when SSU2 is unavailable or NAT detection has
-// not (yet) found a relay-requiring NAT. Returning 0 in the unavailable /
+// NAT detection found inbound connectivity to be blocked (statusFirewalled or
+// statusErrorSymmetricNAT), or statusOK when SSU2 is unavailable or NAT
+// detection has not (yet) found a relay-requiring NAT. Returning statusOK in the unavailable /
 // not-yet-tested / directly-reachable cases ensures such routers are never
 // misreported as inbound-blocked.
 func (r *Router) inboundBlockedStatusCode() int {

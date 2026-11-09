@@ -33,7 +33,7 @@ func (t *SSU2Transport) sendRouterInfoToPeer(session *SSU2Session, hash data.Has
 	}
 	cfg := t.config.Load()
 	if cfg == nil || cfg.RouterLookupFunc == nil {
-		return oops.Errorf("RouterLookupFunc not configured: cannot fetch RouterInfo %x", hash[:4])
+		return oops.Errorf("RouterLookupFunc not configured: cannot fetch RouterInfo %x", hash[:logHashPrefixBytes])
 	}
 	// A zero hash means we never learned whose RI this is; sending a
 	// DatabaseStore keyed on zeros would pollute the peer's netdb.
@@ -43,19 +43,19 @@ func (t *SSU2Transport) sendRouterInfoToPeer(session *SSU2Session, hash data.Has
 
 	ri, err := cfg.RouterLookupFunc(hash)
 	if err != nil {
-		return oops.Wrapf(err, "netdb lookup failed for RouterInfo %x", hash[:4])
+		return oops.Wrapf(err, "netdb lookup failed for RouterInfo %x", hash[:logHashPrefixBytes])
 	}
 	riBytes, err := ri.Bytes()
 	if err != nil {
-		return oops.Wrapf(err, "serialize RouterInfo %x", hash[:4])
+		return oops.Wrapf(err, "serialize RouterInfo %x", hash[:logHashPrefixBytes])
 	}
 	if len(riBytes) == 0 {
-		return oops.Errorf("RouterInfo %x serialized to zero bytes", hash[:4])
+		return oops.Errorf("RouterInfo %x serialized to zero bytes", hash[:logHashPrefixBytes])
 	}
 
 	msg, err := buildRouterInfoDatabaseStore(hash, riBytes)
 	if err != nil {
-		return oops.Wrapf(err, "build DatabaseStore for RouterInfo %x", hash[:4])
+		return oops.Wrapf(err, "build DatabaseStore for RouterInfo %x", hash[:logHashPrefixBytes])
 	}
 	return session.QueueSendI2NP(msg)
 }

@@ -404,8 +404,9 @@ func TestDataPhase_TerminationBlock(t *testing.T) {
 // 65516 is therefore the NTCP2 block-data limit, not an I2NP message limit: the
 // I2NP spec sets no such cap of its own. [MaxBlockDataSize] enforces it when
 // decoding a received block, and the outbound path is separately bounded by the
-// configured frame size (go-noise defaults to DefaultMaxFrameSize 16384, see
-// [maxOutboundFramePlaintext]), which is smaller than the spec ceiling.
+// single-frame budget in [maxOutboundFramePlaintext], which the transport
+// derives from the spec's own 65535-byte frame rather than go-noise's 16 KiB
+// default (see [applyNTCP2FrameSettings]).
 //
 // Spec reference: ntcp2.rst §"Data Phase" block format (:1441, :1444-1450).
 func TestDataPhase_MaxFrameSize(t *testing.T) {

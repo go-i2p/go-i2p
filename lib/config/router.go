@@ -137,12 +137,12 @@ var DefaultI2CPConfig = I2CPConfig{
 	Enabled:                    true,
 	Address:                    fmt.Sprintf("localhost:%d", DefaultI2CPPort),
 	Network:                    "tcp",
-	MaxSessions:                100,
+	MaxSessions:                DefaultI2CPMaxSessions,
 	AllowInsecureCleartextAuth: false,
-	MessageQueueSize:           64,
-	SessionTimeout:             30 * time.Minute,
-	ReadTimeout:                60 * time.Second,
-	WriteTimeout:               30 * time.Second,
+	MessageQueueSize:           DefaultI2CPMessageQueueSize,
+	SessionTimeout:             DefaultSessionTimeout,
+	ReadTimeout:                DefaultI2CPReadTimeout,
+	WriteTimeout:               DefaultI2CPWriteTimeout,
 }
 
 // DefaultTransportConfig provides default transport layer configuration
@@ -156,9 +156,9 @@ var defaultRouterConfig = &RouterConfig{
 	I2PControl:     defaultI2PControlConfigPtr(),
 	BaseDir:        defaultBase(),
 	WorkingDir:     defaultConfig(),
-	MaxBandwidth:   1024 * 1024, // 1 MB/s
+	MaxBandwidth:   DefaultMaxBandwidthBytesPerSec, // 1 MB/s
 	BandwidthTier:  "",
-	MaxConnections: 200,
+	MaxConnections: DefaultRouterMaxConnections,
 	AcceptTunnels:  true,
 	Tunnel:         defaultTunnelConfigPtr(),
 	Transport:      defaultTransportConfigPtr(),

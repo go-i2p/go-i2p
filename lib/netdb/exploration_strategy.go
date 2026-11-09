@@ -6,6 +6,7 @@ import (
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/crypto/rand"
+	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
@@ -90,8 +91,8 @@ type AdaptiveStrategy struct {
 func NewAdaptiveStrategy(ourHash common.Hash) *AdaptiveStrategy {
 	return &AdaptiveStrategy{
 		ourHash:            ourHash,
-		minNetDBSize:       500, // Default minimum NetDB size
-		minFloodfillsTotal: 50,  // Default minimum floodfills
+		minNetDBSize:       defaultMinNetDBSize,
+		minFloodfillsTotal: defaultMinFloodfillsTotal,
 	}
 }
 
@@ -169,7 +170,7 @@ func (s *AdaptiveStrategy) ShouldExplore(netdbSize int) bool {
 	}
 
 	// NetDB is healthy - less frequent exploration
-	return netdbSize < s.minNetDBSize*2
+	return netdbSize < s.minNetDBSize*netDBHealthySizeMultiplier
 }
 
 // UpdateStats refreshes bucket statistics from current NetDB state.
@@ -286,12 +287,12 @@ func computeXORDistance(hash1, hash2 common.Hash) common.Hash {
 // that differs between two hashes (represented by their XOR distance).
 // Returns the bit position (0-255) or 0 if the distance is zero.
 func findMostSignificantDifferingBit(distance common.Hash) int {
-	for byteIdx := 0; byteIdx < 32; byteIdx++ {
+	for byteIdx := 0; byteIdx < i2np.HashSize; byteIdx++ {
 		if distance[byteIdx] != 0 {
 			b := distance[byteIdx]
-			for bitIdx := 7; bitIdx >= 0; bitIdx-- {
+			for bitIdx := highestBitIndex; bitIdx >= 0; bitIdx-- {
 				if (b & (1 << uint(bitIdx))) != 0 {
-					return byteIdx*8 + (7 - bitIdx)
+					return byteIdx*bitsPerByte + (highestBitIndex - bitIdx)
 				}
 			}
 		}
@@ -335,8 +336,8 @@ func (s *AdaptiveStrategy) createKeyWithFlippedBit(ourHash common.Hash, bucketId
 	copy(key[:], ourHash[:])
 
 	// Flip the bit at position bucketIdx to create distance
-	byteIdx := bucketIdx / 8
-	bitIdx := 7 - (bucketIdx % 8)
+	byteIdx := bucketIdx / bitsPerByte
+	bitIdx := highestBitIndex - (bucketIdx % bitsPerByte)
 	key[byteIdx] ^= (1 << uint(bitIdx))
 
 	return key
@@ -344,8 +345,8 @@ func (s *AdaptiveStrategy) createKeyWithFlippedBit(ourHash common.Hash, bucketId
 
 // randomizeLowerBits randomizes all bits less significant than bucketIdx.
 func (s *AdaptiveStrategy) randomizeLowerBits(key *common.Hash, bucketIdx int) error {
-	byteIdx := bucketIdx / 8
-	bitIdx := 7 - (bucketIdx % 8)
+	byteIdx := bucketIdx / bitsPerByte
+	bitIdx := highestBitIndex - (bucketIdx % bitsPerByte)
 
 	// Randomize remaining bits in the target byte
 	for bit := bitIdx - 1; bit >= 0; bit-- {
@@ -357,7 +358,7 @@ func (s *AdaptiveStrategy) randomizeLowerBits(key *common.Hash, bucketIdx int) e
 	}
 
 	// Randomize all subsequent bytes
-	for i := byteIdx + 1; i < 32; i++ {
+	for i := byteIdx + 1; i < i2np.HashSize; i++ {
 		var b [1]byte
 		_, err := rand.Read(b[:])
 		if err != nil {

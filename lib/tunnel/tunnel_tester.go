@@ -69,7 +69,7 @@ type TunnelTestResult struct {
 func NewTunnelTester(pool *Pool) *TunnelTester {
 	return &TunnelTester{
 		pool:         pool,
-		timeout:      5 * time.Second,
+		timeout:      tunnelTestTimeout,
 		pendingTests: make(map[uint32]*pendingTest),
 	}
 }
@@ -301,11 +301,11 @@ func (tt *TunnelTester) performAgeBasedTest(tunnel *TunnelState, timeout time.Du
 		age := time.Since(tunnel.CreatedAt)
 
 		// Tunnels near expiration (within 1 minute of 10-minute lifetime) are less reliable
-		if age > 9*time.Minute {
+		if age > tunnelTestStaleAfter {
 			testChan <- oops.Errorf("tunnel near expiration (age: %v)", age)
 		} else {
 			// Minimal delay to simulate test overhead
-			time.Sleep(10 * time.Millisecond)
+			time.Sleep(tunnelTestPollInterval)
 			testChan <- nil
 		}
 	}()

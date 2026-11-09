@@ -59,7 +59,7 @@ type BootstrapConfig struct {
 	PeerCachePath string
 	// PeerCacheMaxSize is the maximum number of peers to keep in the cache.
 	// When exceeded, the least-recently-active peers are evicted.
-	// If <= 0, a sensible default (500) is used.
+	// If <= 0, a sensible default (DefaultPeerCacheMaxSize) is used.
 	PeerCacheMaxSize int
 }
 
@@ -67,10 +67,10 @@ type BootstrapConfig struct {
 // Uses all known reseed servers from KnownReseedServers for maximum availability.
 // MinReseedServers defaults to DefaultMinReseedServers (2) matching Java I2P.
 var DefaultBootstrapConfig = BootstrapConfig{
-	LowPeerThreshold:    10,
-	ReseedTimeout:       60 * time.Second,
-	MinimumReseedPeers:  50,
-	ReseedRetryInterval: 5 * time.Minute,
+	LowPeerThreshold:    DefaultLowPeerThreshold,
+	ReseedTimeout:       DefaultReseedTimeout,
+	MinimumReseedPeers:  DefaultMinimumReseedPeers,
+	ReseedRetryInterval: DefaultReseedRetryInterval,
 	BootstrapType:       "auto", // Default to composite (tries all methods)
 	ReseedFilePath:      "",     // No default reseed file
 	// Use all known reseed servers for maximum availability
@@ -84,6 +84,6 @@ var DefaultBootstrapConfig = BootstrapConfig{
 	// Peer cache enabled by default to reduce repeat-startup bootstrap time
 	PeerCacheEnabled: true,
 	// Peer cache path is populated at runtime based on the OS working directory
-	PeerCachePath:  "",
-	PeerCacheMaxSize: 500,
+	PeerCachePath:    "",
+	PeerCacheMaxSize: DefaultPeerCacheMaxSize,
 }

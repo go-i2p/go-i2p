@@ -575,25 +575,25 @@ func (p *MessageProcessor) encryptOwnSTBMSlot(replyData []byte, slotOffset int, 
 // the available transit bandwidth (KB/s) via the "b" option mapping (i2pd
 // TransitTunnel reply); otherwise the options field is empty (0x0000) and the
 // remaining bytes are random padding.
-func (p *MessageProcessor) prepareSTBMSlotCleartext(replyCode byte, availableBW uint32) [ShortBuildRecordSize - 16]byte {
-	var cleartext [ShortBuildRecordSize - 16]byte // 202 bytes
+func (p *MessageProcessor) prepareSTBMSlotCleartext(replyCode byte, availableBW uint32) [ShortBuildReplyCleartextSize]byte {
+	var cleartext [ShortBuildReplyCleartextSize]byte
 
 	optionBytes := encodeBuildReplyOptions(availableBW)
-	if len(optionBytes) > 0 && len(optionBytes) <= 201 {
+	if len(optionBytes) > 0 && len(optionBytes) <= ShortBuildReplyCodeOffset {
 		// Write the serialized options mapping at the front, random-pad the rest.
 		copy(cleartext[0:], optionBytes)
-		_, _ = rand.Read(cleartext[len(optionBytes):201]) // padding (error ignored)
+		_, _ = rand.Read(cleartext[len(optionBytes):ShortBuildReplyCodeOffset]) // padding (error ignored)
 	} else {
-		cleartext[0] = 0x00                   // options high byte (empty mapping)
-		cleartext[1] = 0x00                   // options low byte
-		_, err := rand.Read(cleartext[2:201]) // padding (error ignored, acceptable for padding)
+		cleartext[0] = 0x00                                                                       // options high byte (empty mapping)
+		cleartext[1] = 0x00                                                                       // options low byte
+		_, err := rand.Read(cleartext[shortBuildReplyEmptyOptionsSize:ShortBuildReplyCodeOffset]) // padding
 		if err != nil {
 			log.WithFields(logger.Fields{
 				"at": "prepareSTBMSlotCleartext",
 			}).Warn("Error in padding generation", err)
 		}
 	}
-	cleartext[201] = replyCode
+	cleartext[ShortBuildReplyCodeOffset] = replyCode
 	return cleartext
 }
 
@@ -680,7 +680,7 @@ func (p *MessageProcessor) handleAcceptedBuildRecord(messageID, index int, recor
 		"target_hash":    logutil.HashPrefix(record.OurIdent),
 	}).Debug("accepting tunnel build request")
 
-	expiry := time.Now().Add(10 * time.Minute) // Tunnel lifetime per I2P spec
+	expiry := time.Now().Add(participantTunnelLifetime)
 	err := p.participantManager.RegisterParticipant(
 		record.ReceiveTunnel,
 		record.OurIdent,
@@ -811,7 +811,7 @@ func (p *MessageProcessor) tryParseAndAppendRecord(records *[]BuildRequestRecord
 // record.IVKey here so handleAcceptedBuildRecord registers real (non-zero) keys.
 func (p *MessageProcessor) decryptShortRecord(recordData []byte, index int) (BuildRequestRecord, error) {
 	var encrypted [218]byte
-	copy(encrypted[:], recordData[:218])
+	copy(encrypted[:], recordData[:ShortBuildRecordSize])
 	record, preReplyCK, noiseHash, err := decryptSTBMRecord(encrypted, p.ourPrivateKey)
 	if err != nil {
 		return BuildRequestRecord{}, err

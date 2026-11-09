@@ -155,13 +155,13 @@ type PoolConfig struct {
 // values match the I2P spec's recommended tunnel lifetime and hop count.
 func DefaultPoolConfig() PoolConfig {
 	return PoolConfig{
-		MinTunnels:       4,
-		MaxTunnels:       6,
-		TunnelLifetime:   11 * time.Minute,
-		RebuildThreshold: 90 * time.Second,
-		BuildRetryDelay:  2 * time.Second, // FIX #4: Reduced initial delay (exponential backoff will increase)
-		MaxBuildRetries:  3,
-		HopCount:         3,
+		MinTunnels:       defaultPoolMinTunnels,
+		MaxTunnels:       defaultPoolMaxTunnels,
+		TunnelLifetime:   poolTunnelLifetime,
+		RebuildThreshold: poolRebuildThreshold,
+		BuildRetryDelay:  defaultPoolBuildRetryDelay, // exponential backoff increases this from the first retry
+		MaxBuildRetries:  defaultPoolMaxBuildRetries,
+		HopCount:         defaultPoolHopCount,
 		IsInbound:        false,
 	}
 }
@@ -423,12 +423,12 @@ func (p *Pool) ResetBuildFailures() {
 func (p *Pool) SetHopCount(hopCount int) error {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
-	minHops := 1
+	minHops := minOutboundHops
 	if p.config.IsInbound {
-		minHops = 0
+		minHops = minInboundHops
 	}
-	if hopCount < minHops || hopCount > 8 {
-		return oops.Errorf("hop count must be between %d and 8, got %d", minHops, hopCount)
+	if hopCount < minHops || hopCount > maxHops {
+		return oops.Errorf("hop count must be between %d and %d, got %d", minHops, maxHops, hopCount)
 	}
 	p.config.HopCount = hopCount
 	log.WithFields(logger.Fields{
@@ -1337,10 +1337,10 @@ func (p *Pool) computePeerCooldown(peerHash common.Hash, reason string) time.Dur
 
 	score := scorer.ScorePeer(peerHash)
 	cooldown := base
-	if score >= 0.75 {
-		cooldown = time.Duration(float64(base) * 0.6)
-	} else if score <= 0.25 {
-		cooldown = time.Duration(float64(base) * 1.4)
+	if score >= highPeerScoreThreshold {
+		cooldown = time.Duration(float64(base) * highScoreCooldownFactor)
+	} else if score <= lowPeerScoreThreshold {
+		cooldown = time.Duration(float64(base) * lowScoreCooldownFactor)
 	}
 
 	if cooldown < minAdaptiveCooldown {

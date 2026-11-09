@@ -65,7 +65,7 @@ func ParseI2NPFromSSU2(data []byte) (i2np.Message, error) {
 // The block carries the sender's clock as a 4-byte big-endian Unix timestamp.
 // See [I2P Spec: SSU2](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ssu2.rst) for the block format.
 func NewDateTimeBlock() *ssu2noise.SSU2Block {
-	data := make([]byte, 4)
+	data := make([]byte, dateTimeFieldSize)
 	// ssu2.rst:2836 "Implementations must round to the nearest second to
 	// prevent clock bias in the network."
 	binary.BigEndian.PutUint32(data, transport.RoundUnixSeconds(time.Now()))
@@ -132,23 +132,23 @@ func ParseACKBlock(block *ssu2noise.SSU2Block) (*ACKBlockInfo, error) {
 		return nil, oops.Errorf("expected ACK block (type 12), got type %d", block.Type)
 	}
 
-	if len(block.Data) < 5 {
-		return nil, oops.Errorf("ACK block data too short: %d bytes (minimum 5)", len(block.Data))
+	if len(block.Data) < ackBlockMinSize {
+		return nil, oops.Errorf("ACK block data too short: %d bytes (minimum %d)", len(block.Data), ackBlockMinSize)
 	}
 
 	info := &ACKBlockInfo{
-		AckThrough: binary.BigEndian.Uint32(block.Data[0:4]),
-		AckCount:   block.Data[4],
+		AckThrough: binary.BigEndian.Uint32(block.Data[0:ackThroughSize]),
+		AckCount:   block.Data[ackThroughSize],
 	}
 
 	// Parse range entries (2 bytes each: nack count + ack count)
-	offset := 5
-	for offset+2 <= len(block.Data) {
+	offset := ackBlockMinSize
+	for offset+ackRangeSize <= len(block.Data) {
 		info.Ranges = append(info.Ranges, ACKRange{
 			NackCount: block.Data[offset],
 			AckCount:  block.Data[offset+1],
 		})
-		offset += 2
+		offset += ackRangeSize
 	}
 
 	// Expand the acked packet numbers

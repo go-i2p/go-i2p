@@ -22,7 +22,7 @@ type TunnelDataMessage struct {
 // tunnel ID and data. The wire payload (4-byte tunnel ID + 1024-byte data)
 // is pre-serialized so the message is ready for transmission.
 // See also [TunnelDataMessage].
-func NewTunnelDataMessage(tunnelID buildrecord.TunnelID, data [1024]byte) *TunnelDataMessage {
+func NewTunnelDataMessage(tunnelID buildrecord.TunnelID, data [TunnelDataPayloadSize]byte) *TunnelDataMessage {
 	msg := &TunnelDataMessage{
 		BaseI2NPMessage: NewBaseI2NPMessage(I2NPMessageTypeTunnelData),
 		TunnelID:        tunnelID,
@@ -30,9 +30,9 @@ func NewTunnelDataMessage(tunnelID buildrecord.TunnelID, data [1024]byte) *Tunne
 	}
 
 	// Set the wire payload: 4-byte TunnelID + 1024-byte Data = 1028 bytes
-	payload := make([]byte, 1028)
-	binary.BigEndian.PutUint32(payload[0:4], uint32(tunnelID))
-	copy(payload[4:], data[:])
+	payload := make([]byte, TunnelDataSize)
+	binary.BigEndian.PutUint32(payload[:I2NPMessageIDSize], uint32(tunnelID))
+	copy(payload[I2NPMessageIDSize:], data[:])
 	msg.SetData(payload)
 	return msg
 }
@@ -41,7 +41,7 @@ func NewTunnelDataMessage(tunnelID buildrecord.TunnelID, data [1024]byte) *Tunne
 // TunnelCarrier interface. Use this when the caller only needs the generic
 // carrier surface (tunnel ID + payload) rather than the concrete type.
 // See also [TunnelCarrier] and [NewTunnelDataMessage].
-func NewTunnelCarrier(tunnelID buildrecord.TunnelID, data [1024]byte) TunnelCarrier {
+func NewTunnelCarrier(tunnelID buildrecord.TunnelID, data [TunnelDataPayloadSize]byte) TunnelCarrier {
 	return NewTunnelDataMessage(tunnelID, data)
 }
 
@@ -56,16 +56,16 @@ func (t *TunnelDataMessage) UnmarshalBinary(data []byte) error {
 
 	// Extract the data payload and parse it
 	messageData := t.BaseI2NPMessage.GetData()
-	if len(messageData) != 1028 {
+	if len(messageData) != TunnelDataSize {
 		log.WithFields(map[string]interface{}{
-			"expected": 1028,
+			"expected": TunnelDataSize,
 			"got":      len(messageData),
 		}).Error("tunnel data message payload wrong size")
-		return oops.Errorf("tunnel data message payload wrong size: expected 1028 bytes, got %d", len(messageData))
+		return oops.Errorf("tunnel data message payload wrong size: expected %d bytes, got %d", TunnelDataSize, len(messageData))
 	}
 
-	t.TunnelID = buildrecord.TunnelID(binary.BigEndian.Uint32(messageData[0:4]))
-	copy(t.Data[:], messageData[4:1028])
+	t.TunnelID = buildrecord.TunnelID(binary.BigEndian.Uint32(messageData[:I2NPMessageIDSize]))
+	copy(t.Data[:], messageData[I2NPMessageIDSize:TunnelDataSize])
 	return nil
 }
 

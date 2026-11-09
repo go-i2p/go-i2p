@@ -1,6 +1,7 @@
 package sntp
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/beevik/ntp"
@@ -31,10 +32,10 @@ func validateLeapAndStratum(response *ntp.Response) bool {
 		log.WithField("leap_indicator", response.Leap).Warn("Invalid NTP response: Server clock not synchronized")
 		return false
 	}
-	if response.Stratum == 0 || response.Stratum > 15 {
+	if response.Stratum == 0 || response.Stratum > MaxStratum {
 		log.WithFields(logger.Fields{
 			"stratum":     response.Stratum,
-			"valid_range": "1-15",
+			"valid_range": fmt.Sprintf("1-%d", MaxStratum),
 		}).Warn("Invalid NTP response: Stratum level out of valid range")
 		return false
 	}

@@ -61,7 +61,7 @@ func NewFilteringPeerSelector(
 	s := &FilteringPeerSelector{
 		underlying: underlying,
 		filters:    make([]PeerFilter, 0),
-		maxRetries: 3,
+		maxRetries: defaultSelectorMaxRetries,
 		name:       "FilteringPeerSelector",
 	}
 
@@ -135,8 +135,8 @@ func (s *FilteringPeerSelector) AddFilter(filter PeerFilter) {
 // logFilterRejection logs a peer rejection by a filter.
 func (s *FilteringPeerSelector) logFilterRejection(hash common.Hash, filterName string) {
 	hashStr := hash.String()
-	if len(hashStr) > 16 {
-		hashStr = hashStr[:16]
+	if len(hashStr) > logHashPrefixLen {
+		hashStr = hashStr[:logHashPrefixLen]
 	}
 
 	log.WithFields(logger.Fields{

@@ -5,6 +5,7 @@ import (
 	"net"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/go-i2p/go-i2p/lib/config"
 	tuipkg "github.com/go-i2p/go-i2p/lib/tui"
 	"github.com/go-i2p/i2ptui"
 	"github.com/go-i2p/logger"
@@ -42,7 +43,7 @@ func run(cmd *cobra.Command, args []string) {
 		"at":       "tuiCmd",
 		"host":     host,
 		"port":     port,
-		"password": password != "itoopie",
+		"password": password != config.DefaultI2PControlPassword,
 	}).Info("launching TUI")
 
 	opts := []i2ptui.Option{

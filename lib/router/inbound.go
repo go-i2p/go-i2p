@@ -269,14 +269,14 @@ func extractTunnelPayload(msg i2np.Message) ([]byte, tunnel.TunnelID, error) {
 	}
 
 	data := tunnelCarrier.GetTunnelData()
-	if len(data) != 1024 {
+	if len(data) != tunnelDataPayloadSize {
 		log.WithFields(logger.Fields{
 			"at":       "HandleTunnelData",
-			"expected": 1024,
+			"expected": tunnelDataPayloadSize,
 			"actual":   len(data),
 			"reason":   "wrong tunnel data size",
 		}).Error("Invalid tunnel data")
-		return nil, 0, oops.Errorf("tunnel data wrong size: expected 1024 bytes, got %d", len(data))
+		return nil, 0, oops.Errorf("tunnel data wrong size: expected %d bytes, got %d", tunnelDataPayloadSize, len(data))
 	}
 
 	return data, tunnelCarrier.GetTunnelID(), nil
@@ -298,8 +298,8 @@ func (h *InboundMessageHandler) lookupTunnelEntry(tunnelID tunnel.TunnelID) (*in
 
 	if !exists {
 		sort.Slice(registeredIDs, func(i, j int) bool { return registeredIDs[i] < registeredIDs[j] })
-		if len(registeredIDs) > 8 {
-			registeredIDs = registeredIDs[:8]
+		if len(registeredIDs) > maxLoggedTunnelIDs {
+			registeredIDs = registeredIDs[:maxLoggedTunnelIDs]
 		}
 		log.WithFields(logger.Fields{
 			"at":                      "(InboundMessageHandler) HandleTunnelData",
@@ -784,8 +784,8 @@ func (h *InboundMessageHandler) handleTransitTunnelData(tunnelID tunnel.TunnelID
 // Returns an error if forwarding fails.
 func (h *InboundMessageHandler) forwardToNextHop(participant *tunnel.Participant, nextHopID tunnel.TunnelID, decryptedData []byte) error {
 	// Validate decrypted data size
-	if len(decryptedData) != 1028 {
-		return oops.Errorf("invalid decrypted data size: expected 1028 bytes, got %d", len(decryptedData))
+	if len(decryptedData) != tunnelMessageSize {
+		return oops.Errorf("invalid decrypted data size: expected %d bytes, got %d", tunnelMessageSize, len(decryptedData))
 	}
 
 	// If nextHopID is 0, this reaches the local endpoint (not a transit case)

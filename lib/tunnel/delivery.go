@@ -250,25 +250,25 @@ func (di *DeliveryInstructions) guardFragmentType(expectedType int, at, msg stri
 func parseFollowOnFragment(data []byte, flag byte) (*DeliveryInstructions, int, error) {
 	di := &DeliveryInstructions{}
 	di.fragmentType = FollowOnFragment
-	di.fragmentNumber = int((flag & 0x7e) >> 1)
-	di.lastFragment = (flag & 0x01) == 0x01
+	di.fragmentNumber = int((flag & followOnFragmentNumberMask) >> followOnFragmentNumberShift)
+	di.lastFragment = (flag & lastFragmentMarker) == lastFragmentMarker
 
-	if len(data) < 7 {
+	if len(data) < followOnInstructionSize {
 		return nil, 0, oops.Errorf("insufficient data for FollowOnFragment")
 	}
 
 	di.messageID = binary.BigEndian.Uint32(data[1:5])
 	di.fragmentSize = binary.BigEndian.Uint16(data[5:7])
-	return di, 7, nil
+	return di, followOnInstructionSize, nil
 }
 
 // parseFirstFragmentFlags extracts delivery type and feature flags from the first fragment flag byte.
 func parseFirstFragmentFlags(di *DeliveryInstructions, flag byte) {
 	di.fragmentType = FirstFragment
-	di.deliveryType = (flag & 0x60) >> 5     // bits 6-5
-	di.hasDelay = (flag & 0x10) == 0x10      // bit 4
-	di.fragmented = (flag & 0x08) == 0x08    // bit 3
-	di.hasExtOptions = (flag & 0x04) == 0x04 // bit 2
+	di.deliveryType = (flag & firstFragmentTypeMask) >> firstFragmentTypeShift             // bits 6-5
+	di.hasDelay = (flag & firstFragmentDelayMask) == firstFragmentDelayMask                // bit 4
+	di.fragmented = (flag & firstFragmentFragmentedMask) == firstFragmentFragmentedMask    // bit 3
+	di.hasExtOptions = (flag & firstFragmentExtOptionsMask) == firstFragmentExtOptionsMask // bit 2
 }
 
 // need checks if the buffer has enough space starting at offset for n bytes.
@@ -288,12 +288,12 @@ func readTunnelID(data []byte, offset int, di *DeliveryInstructions) (int, error
 		return offset, nil
 	}
 
-	if err := need(data, offset, 4, "tunnel ID"); err != nil {
+	if err := need(data, offset, TunnelIDSize, "tunnel ID"); err != nil {
 		return offset, err
 	}
 
-	di.tunnelID = binary.BigEndian.Uint32(data[offset : offset+4])
-	return offset + 4, nil
+	di.tunnelID = binary.BigEndian.Uint32(data[offset : offset+TunnelIDSize])
+	return offset + TunnelIDSize, nil
 }
 
 // readDestinationHash reads the destination hash field if present in the delivery instructions.
@@ -308,7 +308,7 @@ func readDestinationHash(data []byte, offset int, di *DeliveryInstructions) (int
 		return offset, oops.Errorf("insufficient data for hash")
 	}
 	di.hash = hash
-	return offset + 32, nil
+	return offset + HashSize, nil
 }
 
 // readDelayIfPresent reads the optional delay field from the delivery instructions.
@@ -333,12 +333,12 @@ func readMessageIDIfFragmented(data []byte, offset int, di *DeliveryInstructions
 		return offset, nil
 	}
 
-	if err := need(data, offset, 4, "message ID"); err != nil {
+	if err := need(data, offset, MessageIDSize, "message ID"); err != nil {
 		return offset, err
 	}
 
-	di.messageID = binary.BigEndian.Uint32(data[offset : offset+4])
-	return offset + 4, nil
+	di.messageID = binary.BigEndian.Uint32(data[offset : offset+MessageIDSize])
+	return offset + MessageIDSize, nil
 }
 
 // readExtendedOptions reads extended options from the delivery instructions if present.
@@ -367,36 +367,36 @@ func readExtendedOptions(data []byte, offset int, di *DeliveryInstructions) (int
 // readFragmentSize reads the fragment size field from the delivery instructions.
 // Returns the updated offset and any error encountered.
 func readFragmentSize(data []byte, offset int, di *DeliveryInstructions) (int, error) {
-	if err := need(data, offset, 2, "fragment size"); err != nil {
+	if err := need(data, offset, SizeFieldSize, "fragment size"); err != nil {
 		return offset, err
 	}
 
-	di.fragmentSize = binary.BigEndian.Uint16(data[offset : offset+2])
-	return offset + 2, nil
+	di.fragmentSize = binary.BigEndian.Uint16(data[offset : offset+SizeFieldSize])
+	return offset + SizeFieldSize, nil
 }
 
 func (di *DeliveryInstructions) serializeFollowOnFragment() ([]byte, error) {
-	result := make([]byte, 7)
+	result := make([]byte, followOnInstructionSize)
 
 	// Build flag byte: 1nnnnnnd
-	flag := byte(0x80)                            // Set bit 7
-	flag |= byte((di.fragmentNumber & 0x3F) << 1) // Set bits 6-1
+	flag := byte(followOnFragmentMarker) // Set bit 7
+	flag |= byte((di.fragmentNumber & fragmentNumberValueMask) << followOnFragmentNumberShift)
 	if di.lastFragment {
-		flag |= 0x01 // Set bit 0
+		flag |= lastFragmentMarker // Set bit 0
 	}
 	result[0] = flag
 
 	// Message ID (4 bytes)
-	binary.BigEndian.PutUint32(result[1:5], di.messageID)
+	binary.BigEndian.PutUint32(result[FlagSize:FlagSize+MessageIDSize], di.messageID)
 
 	// Fragment size (2 bytes)
-	binary.BigEndian.PutUint16(result[5:7], di.fragmentSize)
+	binary.BigEndian.PutUint16(result[FlagSize+MessageIDSize:followOnInstructionSize], di.fragmentSize)
 
 	return result, nil
 }
 
 func (di *DeliveryInstructions) serializeFirstFragment() ([]byte, error) {
-	result := make([]byte, 0, 128)
+	result := make([]byte, 0, deliveryInstructionsInitialCapacity)
 
 	flag := di.buildFlagByte()
 	result = append(result, flag)
@@ -414,16 +414,16 @@ func (di *DeliveryInstructions) serializeFirstFragment() ([]byte, error) {
 // buildFlagByte constructs the flag byte for first fragment delivery instructions.
 // It encodes delivery type, delay flag, fragmentation flag, and extended options flag.
 func (di *DeliveryInstructions) buildFlagByte() byte {
-	flag := byte(0x00)                    // Bit 7 = 0 for first fragment
-	flag |= (di.deliveryType & 0x03) << 5 // Bits 6-5
+	flag := byte(0x00)                                                          // Bit 7 = 0 for first fragment
+	flag |= (di.deliveryType & deliveryTypeValueMask) << firstFragmentTypeShift // Bits 6-5
 	if di.hasDelay {
-		flag |= 0x10 // Bit 4
+		flag |= firstFragmentDelayMask // Bit 4
 	}
 	if di.fragmented {
-		flag |= 0x08 // Bit 3
+		flag |= firstFragmentFragmentedMask // Bit 3
 	}
 	if di.hasExtOptions {
-		flag |= 0x04 // Bit 2
+		flag |= firstFragmentExtOptionsMask // Bit 2
 	}
 	return flag
 }
@@ -730,7 +730,7 @@ func NewLocalDeliveryInstructions(fragmentSize uint16) *DeliveryInstructions {
 //
 // Returns:
 //   - *DeliveryInstructions: A new delivery instruction configured for TUNNEL delivery
-func NewTunnelDeliveryInstructions(tunnelID uint32, gatewayHash [32]byte, fragmentSize uint16) *DeliveryInstructions {
+func NewTunnelDeliveryInstructions(tunnelID uint32, gatewayHash [HashSize]byte, fragmentSize uint16) *DeliveryInstructions {
 	di := newDeliveryInstructionsBase(DTTunnel)
 	di.tunnelID = tunnelID
 	di.hash = gatewayHash
@@ -747,7 +747,7 @@ func NewTunnelDeliveryInstructions(tunnelID uint32, gatewayHash [32]byte, fragme
 //
 // Returns:
 //   - *DeliveryInstructions: A new delivery instruction configured for ROUTER delivery
-func NewRouterDeliveryInstructions(routerHash [32]byte, fragmentSize uint16) *DeliveryInstructions {
+func NewRouterDeliveryInstructions(routerHash [HashSize]byte, fragmentSize uint16) *DeliveryInstructions {
 	di := newDeliveryInstructionsBase(DTRouter)
 	di.hash = routerHash
 	di.fragmentSize = fragmentSize
@@ -764,7 +764,7 @@ func readDeliveryInstructionsStruct(data []byte) (instructions *DeliveryInstruct
 	flag := data[0]
 
 	// Determine fragment type from bit 7
-	if (flag & 0x80) == 0x80 {
+	if (flag & followOnFragmentMarker) == followOnFragmentMarker {
 		return readFollowOnFragmentInstructions(data, flag)
 	}
 

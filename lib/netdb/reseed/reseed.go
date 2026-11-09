@@ -12,7 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
@@ -252,17 +251,17 @@ func createReseedHTTPClient(dialContext func(ctx context.Context, network, addr 
 			MinVersion: tls.VersionTLS12,
 			RootCAs:    rootCAs,
 		},
-		TLSHandshakeTimeout: 10 * time.Second,
+		TLSHandshakeTimeout: reseedTLSHandshakeTimeout,
 		// Enable connection pooling to reuse TCP connections across reseed operations.
 		// This significantly reduces TLS handshake overhead (20-30% latency improvement).
-		MaxIdleConns:        10,
-		MaxIdleConnsPerHost: 2,
-		IdleConnTimeout:     90 * time.Second,
+		MaxIdleConns:        reseedMaxIdleConns,
+		MaxIdleConnsPerHost: reseedMaxIdleConnsPerHost,
+		IdleConnTimeout:     reseedIdleConnTimeout,
 	}
 
 	return &http.Client{
 		Transport: &transport,
-		Timeout:   30 * time.Second,
+		Timeout:   defaultReseedRequestTimeout,
 	}, nil
 }
 
@@ -391,7 +390,7 @@ func validateReseedResponse(response *http.Response, uri string) error {
 	}).Info("Successfully received response from reseed server")
 
 	// Check if we got an error page instead of SU3 file
-	if response.StatusCode != 200 {
+	if response.StatusCode != http.StatusOK {
 		response.Body.Close()
 		log.WithField("status_code", response.StatusCode).Error("Reseed server returned error status")
 		return oops.Errorf("reseed server returned status %d", response.StatusCode)
@@ -400,7 +399,7 @@ func validateReseedResponse(response *http.Response, uri string) error {
 	// Validate content length if provided
 	if response.ContentLength > 0 {
 		log.WithField("content_length", response.ContentLength).Debug("Response content length")
-		if response.ContentLength < 100 {
+		if response.ContentLength < minSU3FileSize {
 			response.Body.Close()
 			log.WithField("content_length", response.ContentLength).Error("Response too small to be valid SU3 file")
 			return oops.Errorf("response too small to be valid SU3 file: %d bytes", response.ContentLength)
@@ -438,7 +437,7 @@ func (r *Reseed) readSU3File(body io.Reader) (*su3.SU3, error) {
 	log.WithField("size_bytes", len(bufferedData)).Debug("Buffered SU3 response")
 
 	// Validate that we received a reasonable amount of data
-	if len(bufferedData) < 100 {
+	if len(bufferedData) < minSU3FileSize {
 		log.WithField("size_bytes", len(bufferedData)).Error("SU3 response too small")
 		return nil, oops.Errorf("SU3 response too small: %d bytes", len(bufferedData))
 	}
@@ -575,7 +574,7 @@ func (r *Reseed) writeZipFile(content []byte) (string, error) {
 	zipPath := tempFile.Name()
 
 	// Restrict permissions to owner-only (0600) before writing content.
-	if err := tempFile.Chmod(0o600); err != nil {
+	if err := tempFile.Chmod(reseedTempFileMode); err != nil {
 		tempFile.Close()
 		os.Remove(zipPath)
 		return "", oops.Errorf("failed to set temp file permissions: %w", err)
@@ -655,7 +654,7 @@ func (r *Reseed) createExtractionDir() (string, error) {
 
 	// Explicitly enforce owner-only permissions (0700) to prevent local users
 	// from reading metadata about reseed timing and RouterInfo arrival order.
-	if err := os.Chmod(tempDir, 0o700); err != nil {
+	if err := os.Chmod(tempDir, reseedTempDirMode); err != nil {
 		os.RemoveAll(tempDir)
 		return "", oops.Errorf("failed to set temp directory permissions: %w", err)
 	}
@@ -747,7 +746,7 @@ func (r *Reseed) validatePerEntrySize(tempDir string, files []string) error {
 			continue
 		}
 		if info.Size() > maxPerEntrySize {
-			return oops.Errorf("reseed entry %q exceeds %d KB size limit (possible zip bomb)", filename, maxPerEntrySize/1024)
+			return oops.Errorf("reseed entry %q exceeds %d KB size limit (possible zip bomb)", filename, maxPerEntrySize/bytesPerKiB)
 		}
 	}
 	return nil
@@ -767,7 +766,7 @@ func (r *Reseed) validateDecompressedSize(tempDir string, files []string) error 
 		}
 		totalSize += info.Size()
 		if totalSize > maxDecompressedSize {
-			return oops.Errorf("decompressed reseed data exceeds %d MB size limit (possible zip bomb)", maxDecompressedSize/(1024*1024))
+			return oops.Errorf("decompressed reseed data exceeds %d MB size limit (possible zip bomb)", maxDecompressedSize/bytesPerMiB)
 		}
 	}
 	return nil

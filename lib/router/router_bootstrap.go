@@ -145,7 +145,7 @@ func (r *Router) reseedCooldownInterval() time.Duration {
 	if r.cfg != nil && r.cfg.Bootstrap.ReseedRetryInterval > 0 {
 		return r.cfg.Bootstrap.ReseedRetryInterval
 	}
-	return 5 * time.Minute
+	return defaultReseedCooldown
 }
 
 func (r *Router) canAttemptReseedNow() bool {

@@ -229,7 +229,7 @@ func (db *StdNetDB) addLeaseSetToCache(key common.Hash, ls lease_set.LeaseSet) b
 // a transient I/O error does not remove valid cached data.
 func (db *StdNetDB) persistLeaseSetEntryToFile(key common.Hash, entry *Entry, typeName string) (err error) {
 	fpath := db.SkiplistFileForLeaseSet(key)
-	f, ferr := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	f, ferr := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, netDBFileMode)
 	if ferr != nil {
 		log.WithError(ferr).Warn(fmt.Sprintf("Failed to open file for saving %s (in-memory entry preserved)", typeName))
 		return oops.Errorf("failed to open %s file: %w", typeName, ferr)
@@ -1197,7 +1197,7 @@ func (db *StdNetDB) trackLeaseSetExpirationLocked(key common.Hash, ls lease_set.
 	if err != nil {
 		log.WithError(err).WithField("hash", key).Warn("Failed to get LeaseSet expiration, using default 10 minutes")
 		// Default to 10 minutes from now if we can't determine expiration
-		expiryTime := time.Now().Add(10 * time.Minute)
+		expiryTime := time.Now().Add(defaultLeaseSetExpiryFallback)
 		if lockHeld {
 			db.lsCache._setExpiryLocked(key, expiryTime)
 		} else {
@@ -1271,7 +1271,7 @@ func (db *StdNetDB) StartExpirationCleaner() {
 	go func() {
 		defer db.cleanupWg.Done()
 
-		ticker := time.NewTicker(1 * time.Minute)
+		ticker := time.NewTicker(leaseSetCleanupInterval)
 		defer ticker.Stop()
 
 		tickCount := 0
@@ -1295,7 +1295,7 @@ func (db *StdNetDB) StartExpirationCleaner() {
 func (db *StdNetDB) runPeriodicMaintenance(tickCount int) {
 	db.retryPendingRouterInfoPersists()
 
-	if tickCount%10 != 0 {
+	if tickCount%routerInfoCleanupTickDivisor != 0 {
 		return
 	}
 

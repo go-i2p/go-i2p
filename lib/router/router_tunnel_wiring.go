@@ -19,8 +19,8 @@ import (
 // initializeMessageRouter sets up message routing with NetDB integration
 func (r *Router) initializeMessageRouter() error {
 	messageConfig := i2np.I2NPMessageDispatcherConfig{
-		MaxRetries:     3,
-		DefaultTimeout: 30 * time.Second,
+		MaxRetries:     tunnelReplyMaxRetries,
+		DefaultTimeout: tunnelReplyDefaultTimeout,
 		EnableLogging:  true,
 	}
 	r.messageRouter = i2np.NewI2NPMessageDispatcher(messageConfig)
@@ -192,10 +192,10 @@ func (r *Router) configureRouterHashOnPools(inboundPool, outboundPool *tunnel.Po
 		return oops.Errorf("router hash is empty after computation")
 	}
 
-	// Log the hash being set (first 16 chars in hex for debugging)
+	// Log the hash being set (a hex prefix for debugging)
 	hashHex := routerHash.String()
-	if len(hashHex) > 16 {
-		hashHex = hashHex[:16]
+	if len(hashHex) > maxLoggedHashChars {
+		hashHex = hashHex[:maxLoggedHashChars]
 	}
 
 	if outboundPool != nil {
@@ -414,7 +414,7 @@ func (r *Router) checkInboundPoolReady(inboundPool *tunnel.Pool, inboundReady ch
 func (r *Router) handleInboundReadinessTimeout(inboundPool, outboundPool *tunnel.Pool, inboundReady chan struct{}) {
 	log.WithFields(logger.Fields{
 		"at":      "handleInboundReadinessTimeout",
-		"timeout": 2 * tunnel.BuildTimeout,
+		"timeout": replyTimeoutMultiplier * tunnel.BuildTimeout,
 	}).Warn("inbound pool readiness timeout; enforcing fallback before releasing outbound gate")
 
 	// Force outbound to 1-hop first

@@ -40,7 +40,7 @@ import (
 
 // ntcp2SupportedVersions lists the NTCP2 protocol versions this router can
 // speak. Only version 2 exists today (ntcp2.rst:1853).
-var ntcp2SupportedVersions = []int{2}
+var ntcp2SupportedVersions = []int{ntcp2ProtocolVersion}
 
 // ValidateNTCP2AddressOptions verifies that a RouterAddress published as
 // NTCP2 (or NTCP with NTCP2 options, see isNTCP2DialAddress) carries all
@@ -63,7 +63,7 @@ func ValidateNTCP2AddressOptions(addr *router_address.RouterAddress) (staticKey,
 
 	// s= must be present, decode (padded or unpadded I2P base64) to 32 bytes,
 	// and be a valid curve point (ntcp2.rst:298).
-	staticKey, err = decodeNTCP2AddressOption(addr, "s", 32)
+	staticKey, err = decodeNTCP2AddressOption(addr, "s", staticKeySize)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -73,7 +73,7 @@ func ValidateNTCP2AddressOptions(addr *router_address.RouterAddress) (staticKey,
 	}
 
 	// i= must be present and decode to 16 bytes.
-	iv, err = decodeNTCP2AddressOption(addr, "i", 16)
+	iv, err = decodeNTCP2AddressOption(addr, "i", obfuscationIVSize)
 	if err != nil {
 		return nil, nil, err
 	}

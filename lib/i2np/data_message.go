@@ -78,18 +78,18 @@ func (d *DataMessage) UnmarshalBinary(data []byte) error {
 
 	// Extract the data payload and parse it
 	messageData := d.BaseI2NPMessage.GetData()
-	if len(messageData) < 4 {
+	if len(messageData) < dataPayloadLengthFieldSize {
 		log.WithFields(logger.Fields{
 			"at":     "DataMessage.UnmarshalBinary",
 			"got":    len(messageData),
-			"need":   4,
+			"need":   dataPayloadLengthFieldSize,
 			"reason": "payload too short",
 		}).Error("Invalid data message")
 		return oops.Errorf("data message payload too short: %d bytes", len(messageData))
 	}
 
 	// Read payload length as uint32 to prevent overflow on 32-bit platforms
-	payloadLengthRaw := binary.BigEndian.Uint32(messageData[0:4])
+	payloadLengthRaw := binary.BigEndian.Uint32(messageData[0:dataPayloadLengthFieldSize])
 	if payloadLengthRaw > MaxI2NPMessageSize {
 		log.WithFields(logger.Fields{
 			"at":           "DataMessage.UnmarshalBinary",
@@ -101,14 +101,14 @@ func (d *DataMessage) UnmarshalBinary(data []byte) error {
 	}
 
 	d.PayloadLength = int(payloadLengthRaw)
-	if len(messageData) < 4+d.PayloadLength {
+	if len(messageData) < dataPayloadLengthFieldSize+d.PayloadLength {
 		log.WithFields(logger.Fields{
 			"at":       "DataMessage.UnmarshalBinary",
-			"expected": 4 + d.PayloadLength,
+			"expected": dataPayloadLengthFieldSize + d.PayloadLength,
 			"got":      len(messageData),
 			"reason":   "payload truncated",
 		}).Error("Truncated data message")
-		return oops.Errorf("data message payload truncated: expected %d bytes, got %d", 4+d.PayloadLength, len(messageData))
+		return oops.Errorf("data message payload truncated: expected %d bytes, got %d", dataPayloadLengthFieldSize+d.PayloadLength, len(messageData))
 	}
 
 	d.Payload = make([]byte, d.PayloadLength)

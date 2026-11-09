@@ -439,8 +439,11 @@ func TestW6_DialCandidatesAndSupportIncludeNTCPStyle(t *testing.T) {
 // I2NP messages may not be fragmented across ChaChaPoly frames
 // (ntcp2.rst:1626-1628): an oversized message must be dropped, not split.
 func TestW10_OversizedI2NPNotFragmented(t *testing.T) {
-	// Payload larger than the single-frame plaintext ceiling.
-	oversize := maxOutboundFramePlaintext() + 1024
+	// A framed block larger than the single-frame plaintext ceiling, but small
+	// enough for the I2NP layer to marshal: a frame is 16 bytes of block and
+	// short-header overhead plus the payload, and the ceiling is
+	// maxOutboundFramePlaintext().
+	oversize := maxOutboundFramePlaintext() + 48
 	msg := i2np.NewDataMessage(make([]byte, oversize))
 	framed, err := FrameI2NPMessageAsBlock(msg)
 	require.NoError(t, err)
@@ -454,15 +457,18 @@ func TestW10_OversizedI2NPNotFragmented(t *testing.T) {
 
 	require.NoError(t, session.QueueSendI2NP(msg))
 
-	// Wait for the queue to drain: the message must be dropped, not written.
+	// Wait for the send worker to process the message. Poll on the counter the
+	// assertion below actually reads: the worker decrements the queue size
+	// before it records the drop, so waiting only for the queue to empty can
+	// observe dropped == 0 in the window between the two, which made this
+	// flake under -race.
 	deadline := time.Now().Add(5 * time.Second)
-	for session.SendQueueSize() > 0 && time.Now().Before(deadline) {
+	for session.DroppedMessages() == 0 && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
 	}
-	require.Equal(t, 0, session.SendQueueSize())
 
-	dropped := session.DroppedMessages()
-	assert.GreaterOrEqual(t, dropped, uint64(1), "oversized message must be counted as dropped")
+	assert.Equal(t, 0, session.SendQueueSize(), "queue must drain")
+	assert.GreaterOrEqual(t, session.DroppedMessages(), uint64(1), "oversized message must be counted as dropped")
 	assert.Empty(t, conn.writtenFrames(), "oversized message must never be written (no fragmentation)")
 
 	// The session must still be functional: a normal message gets written.
@@ -845,4 +851,104 @@ func TestA6_BufferedMessagesDoNotDoubleCountBytes(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 0, unframer.BytesRead(),
 		"a buffered message must not re-account the frame's bytes")
+}
+
+// The single-frame plaintext ceiling is what the transport may hand conn.Write
+// in one frame without go-noise fragmenting it. It must be the spec's own
+// budget — 65535-byte frame minus the 16-byte tag minus the padding-block
+// headroom — and not go-noise's 16 KiB default, which capped every outbound
+// message at ~16 KB and silently dropped anything larger. i2pd uses the same
+// ceiling for its outbound frames (NTCP2_UNENCRYPTED_FRAME_MAX_SIZE), so a
+// message go-i2p is willing to send is one a peer can receive.
+func TestW10_OutboundFrameBudgetIsSpecSized(t *testing.T) {
+	const specFrame = 65535  // ntcp2.rst:1444 maximum ChaChaPoly frame
+	const tag = 16           // ntcp2.rst:1445 Poly1305 tag
+	const blockHeadroom = 67 // 3-byte block header + 64-byte default max padding
+
+	assert.Equal(t, specFrame-tag-blockHeadroom, maxOutboundFramePlaintext(),
+		"budget must be the spec frame minus the tag and the padding headroom")
+	assert.Greater(t, maxOutboundFramePlaintext(), 16384,
+		"budget must exceed go-noise's 16 KiB default, which silently capped outbound messages")
+
+	// The worst-case padded, encrypted frame must still fit the wire format.
+	assert.LessOrEqual(t, maxOutboundFramePlaintext()+blockHeadroom+tag, specFrame,
+		"payload plus maximum padding plus tag must not exceed the maximum frame")
+
+	// A config built by the transport carries the raised value into go-noise's
+	// write path, which is what makes the budget real rather than nominal.
+	cfg := applyNTCP2FrameSettings(newTestNTCP2Config(t, true))
+	require.NotNil(t, cfg)
+	assert.Equal(t, specFrame, cfg.MaxFrameSize,
+		"dial config must raise MaxFrameSize to the spec maximum")
+
+	// A message that would have been dropped under the old default must now be
+	// accepted by the sizing check.
+	oldDefaultCeiling := 16384 - tag - blockHeadroom
+	msg := i2np.NewDataMessage(make([]byte, oldDefaultCeiling+1024))
+	framed, err := FrameI2NPMessageAsBlock(msg)
+	require.NoError(t, err)
+	require.Greater(t, len(framed), oldDefaultCeiling,
+		"precondition: the message exceeds the old default ceiling")
+	assert.LessOrEqual(t, len(framed), maxOutboundFramePlaintext(),
+		"a message within the spec budget must no longer be treated as oversized")
+}
+
+// TestW10_MidSizedI2NPDeliveredOnWire sends a message larger than go-noise's
+// old 16 KiB default frame over a real NTCP2 handshake and reads it back whole.
+//
+// Before the outbound budget was raised, a message of this size was dropped by
+// frameMessage — the peer received nothing and the caller got no error, so a
+// tunnel build or a DatabaseStore above ~16 KB simply never arrived and the
+// sender timed out. The write path must now carry it in a single frame
+// (ntcp2.rst:1626-1628 forbids fragmenting an I2NP message across frames).
+//
+// Reverting only the config change makes this fail with the finding's own case
+// (b) verbatim: go-noise splits the payload at its 16384-byte frame, the
+// receiver's first frame carries half an I2NP block, and ParseBlocks reports
+// "truncated block data at offset 0: type=3, declared size=32781, available=16365".
+// Both halves of the change — the raised config and the budget derived from it —
+// are needed for the message to arrive.
+func TestW10_MidSizedI2NPDeliveredOnWire(t *testing.T) {
+	ic, rc := wireHandshakePairWith(t, func(p *ntcp2TestKeyPair) {
+		p.initiatorConfig = applyNTCP2FrameSettings(p.initiatorConfig)
+	})
+
+	// One reader only: the unframer owns the responder connection.
+	body := make([]byte, 32*1024)
+	for i := range body {
+		body[i] = byte('A' + i%26)
+	}
+	short, err := i2np.MarshalMessageShort(i2np.NewDataMessage(body))
+	require.NoError(t, err)
+	frame := SerializeBlocks(NewI2NPBlock(short))
+	require.Greater(t, len(frame), 16384, "the message must exceed go-noise's old default frame")
+	require.LessOrEqual(t, len(frame), maxOutboundFramePlaintext())
+
+	unframer := NewBlockUnframer(rc)
+	written, writeErr := ic.Write(frame)
+	require.NoError(t, writeErr)
+	require.Equal(t, len(frame), written)
+
+	type readResult struct {
+		msg i2np.Message
+		err error
+	}
+	reads := make(chan readResult, 2)
+	go func() {
+		msg, readErr := unframer.ReadNextMessage()
+		reads <- readResult{msg, readErr}
+	}()
+
+	select {
+	case got := <-reads:
+		require.NoError(t, got.err, "a message within the spec budget must be delivered, not dropped")
+		out, marshalErr := i2np.MarshalMessageShort(got.msg)
+		require.NoError(t, marshalErr)
+		require.Equal(t, short, out, "the message must arrive whole")
+	case <-time.After(15 * time.Second):
+		require.FailNow(t, "mid-sized message never arrived: it was dropped at the old ceiling")
+	}
+
+	_ = ic.Close()
+	_ = rc.Close()
 }

@@ -36,11 +36,11 @@ import (
 // - Destination (variable length, typically ~387+ bytes)
 // - Options Mapping (2-byte size + key=value; pairs)
 func ParseCreateSessionPayload(payload []byte) (*destination.Destination, *SessionConfig, error) {
-	if len(payload) < 2 {
+	if len(payload) < sessionIDPrefixSize {
 		log.WithFields(logger.Fields{
 			"at":          "i2cp.ParseCreateSessionPayload",
 			"payloadSize": len(payload),
-			"required":    2,
+			"required":    sessionIDPrefixSize,
 		}).Error("create_session_payload_too_short")
 		return nil, nil, oops.Errorf("create session payload too short: %d bytes", len(payload))
 	}
@@ -114,7 +114,7 @@ func ParseCreateSessionSignedPayload(payload []byte) (*destination.Destination, 
 // payload before calling this function. The SessionID is included in the wire
 // payload but is extracted into msg.SessionID by ReadMessage.
 func ParseReconfigureSessionPayload(payload []byte) (*SessionConfig, error) {
-	if len(payload) < 2 {
+	if len(payload) < sessionIDPrefixSize {
 		return nil, oops.Errorf("reconfigure session payload too short: %d bytes", len(payload))
 	}
 
@@ -136,7 +136,7 @@ func ParseReconfigureSessionPayload(payload []byte) (*SessionConfig, error) {
 // - Date (8 bytes)
 // - Signature (size depends on destination signing type)
 func ParseReconfigureSessionSignedPayload(payload []byte) (uint16, *destination.Destination, *SessionConfig, error) {
-	if len(payload) < 2 {
+	if len(payload) < sessionIDPrefixSize {
 		return 0, nil, nil, oops.Errorf("reconfigure session payload too short: %d bytes", len(payload))
 	}
 
@@ -165,13 +165,13 @@ func ParseReconfigureSessionSignedPayload(payload []byte) (uint16, *destination.
 }
 
 func parseSignedSessionBody(remaining []byte) (*SessionConfig, int, []byte, error) {
-	if len(remaining) < 2 {
+	if len(remaining) < optionsSizeFieldSize {
 		return nil, 0, nil, oops.Errorf("signed session payload missing options length")
 	}
 
-	optionsSize := int(binary.BigEndian.Uint16(remaining[0:2]))
-	optionsEnd := 2 + optionsSize
-	if len(remaining) < optionsEnd+8 {
+	optionsSize := int(binary.BigEndian.Uint16(remaining[0:optionsSizeFieldSize]))
+	optionsEnd := optionsSizeFieldSize + optionsSize
+	if len(remaining) < optionsEnd+sessionDateFieldSize {
 		return nil, 0, nil, oops.Errorf("signed session payload too short for options+date")
 	}
 
@@ -181,7 +181,7 @@ func parseSignedSessionBody(remaining []byte) (*SessionConfig, int, []byte, erro
 		return nil, 0, nil, oops.Errorf("failed to parse signed session options: %w", err)
 	}
 
-	dateEnd := optionsEnd + 8
+	dateEnd := optionsEnd + sessionDateFieldSize
 	signature := remaining[dateEnd:]
 	if len(signature) == 0 {
 		return nil, 0, nil, oops.Errorf("signed session payload missing signature")
@@ -206,8 +206,8 @@ const sessionConfigDateTolerance = 30 * time.Second
 // milliseconds since epoch) against the router's current time, rejecting a
 // skew greater than +/- 30 seconds as the specification requires.
 func validateSessionConfigDate(dateBytes []byte) error {
-	if len(dateBytes) != 8 {
-		return oops.Errorf("session config date must be 8 bytes, got %d", len(dateBytes))
+	if len(dateBytes) != sessionDateFieldSize {
+		return oops.Errorf("session config date must be %d bytes, got %d", sessionDateFieldSize, len(dateBytes))
 	}
 
 	createdMs := int64(binary.BigEndian.Uint64(dateBytes))
@@ -273,8 +273,8 @@ func parseSessionOptions(optionsBytes []byte) (*SessionConfig, error) {
 	// Start with defaults
 	config := DefaultSessionConfig()
 
-	// Handle empty or minimal options (less than 3 bytes can't be a valid mapping)
-	if len(optionsBytes) < 3 {
+	// Handle empty or minimal options (too short to be a valid mapping)
+	if len(optionsBytes) < minMappingSize {
 		return config, nil
 	}
 
@@ -349,7 +349,7 @@ func mappingToGoMap(mapping data.Mapping) map[string]string {
 	values := mapping.Values()
 
 	for _, pair := range values {
-		if len(pair) != 2 {
+		if len(pair) != mappingPairLength {
 			log.WithFields(logger.Fields{
 				"at":          "i2cp.mappingToGoMap",
 				"pair_length": len(pair),
@@ -599,23 +599,23 @@ func ValidateSessionConfig(config *SessionConfig) error {
 // validateTunnelLengths validates inbound and outbound tunnel length are within I2P spec limits (0-7 hops).
 // Returns error if either tunnel length is out of range.
 func validateTunnelLengths(config *SessionConfig) error {
-	if config.InboundTunnelLength < 0 || config.InboundTunnelLength > 7 {
+	if config.InboundTunnelLength < minTunnelLength || config.InboundTunnelLength > maxTunnelLength {
 		log.WithFields(logger.Fields{
 			"at":     "i2cp.validateTunnelLengths",
 			"length": config.InboundTunnelLength,
-			"min":    0,
-			"max":    7,
+			"min":    minTunnelLength,
+			"max":    maxTunnelLength,
 		}).Error("invalid_inbound_tunnel_length")
-		return oops.Errorf("invalid inbound tunnel length: %d (must be 0-7)", config.InboundTunnelLength)
+		return oops.Errorf("invalid inbound tunnel length: %d (must be %d-%d)", config.InboundTunnelLength, minTunnelLength, maxTunnelLength)
 	}
-	if config.OutboundTunnelLength < 0 || config.OutboundTunnelLength > 7 {
+	if config.OutboundTunnelLength < minTunnelLength || config.OutboundTunnelLength > maxTunnelLength {
 		log.WithFields(logger.Fields{
 			"at":     "i2cp.validateTunnelLengths",
 			"length": config.OutboundTunnelLength,
-			"min":    0,
-			"max":    7,
+			"min":    minTunnelLength,
+			"max":    maxTunnelLength,
 		}).Error("invalid_outbound_tunnel_length")
-		return oops.Errorf("invalid outbound tunnel length: %d (must be 0-7)", config.OutboundTunnelLength)
+		return oops.Errorf("invalid outbound tunnel length: %d (must be %d-%d)", config.OutboundTunnelLength, minTunnelLength, maxTunnelLength)
 	}
 	return nil
 }
@@ -623,23 +623,23 @@ func validateTunnelLengths(config *SessionConfig) error {
 // validateTunnelCounts validates inbound and outbound tunnel counts are within reasonable limits (1-16).
 // Returns error if either tunnel count is out of range.
 func validateTunnelCounts(config *SessionConfig) error {
-	if config.InboundTunnelCount < 1 || config.InboundTunnelCount > 16 {
+	if config.InboundTunnelCount < minTunnelCount || config.InboundTunnelCount > maxTunnelCount {
 		log.WithFields(logger.Fields{
 			"at":    "i2cp.validateTunnelCounts",
 			"count": config.InboundTunnelCount,
-			"min":   1,
-			"max":   16,
+			"min":   minTunnelCount,
+			"max":   maxTunnelCount,
 		}).Error("invalid_inbound_tunnel_count")
-		return oops.Errorf("invalid inbound tunnel count: %d (must be 1-16)", config.InboundTunnelCount)
+		return oops.Errorf("invalid inbound tunnel count: %d (must be %d-%d)", config.InboundTunnelCount, minTunnelCount, maxTunnelCount)
 	}
-	if config.OutboundTunnelCount < 1 || config.OutboundTunnelCount > 16 {
+	if config.OutboundTunnelCount < minTunnelCount || config.OutboundTunnelCount > maxTunnelCount {
 		log.WithFields(logger.Fields{
 			"at":    "i2cp.validateTunnelCounts",
 			"count": config.OutboundTunnelCount,
-			"min":   1,
-			"max":   16,
+			"min":   minTunnelCount,
+			"max":   maxTunnelCount,
 		}).Error("invalid_outbound_tunnel_count")
-		return oops.Errorf("invalid outbound tunnel count: %d (must be 1-16)", config.OutboundTunnelCount)
+		return oops.Errorf("invalid outbound tunnel count: %d (must be %d-%d)", config.OutboundTunnelCount, minTunnelCount, maxTunnelCount)
 	}
 	return nil
 }
@@ -647,14 +647,14 @@ func validateTunnelCounts(config *SessionConfig) error {
 // validateTunnelLifetime validates tunnel lifetime is within reasonable bounds (1 minute to 1 hour).
 // Returns error if lifetime is out of range.
 func validateTunnelLifetime(config *SessionConfig) error {
-	if config.TunnelLifetime < 1*time.Minute || config.TunnelLifetime > 60*time.Minute {
+	if config.TunnelLifetime < minTunnelLifetime || config.TunnelLifetime > maxTunnelLifetime {
 		log.WithFields(logger.Fields{
 			"at":       "i2cp.validateTunnelLifetime",
 			"lifetime": config.TunnelLifetime,
-			"min":      1 * time.Minute,
-			"max":      60 * time.Minute,
+			"min":      minTunnelLifetime,
+			"max":      maxTunnelLifetime,
 		}).Error("invalid_tunnel_lifetime")
-		return oops.Errorf("invalid tunnel lifetime: %v (must be 1m-60m)", config.TunnelLifetime)
+		return oops.Errorf("invalid tunnel lifetime: %v (must be %v-%v)", config.TunnelLifetime, minTunnelLifetime, maxTunnelLifetime)
 	}
 	return nil
 }
@@ -662,13 +662,13 @@ func validateTunnelLifetime(config *SessionConfig) error {
 // validateMessageQueueSize validates message queue size is positive.
 // Returns error if queue size is less than 1.
 func validateMessageQueueSize(config *SessionConfig) error {
-	if config.MessageQueueSize < 1 {
+	if config.MessageQueueSize < minMessageQueueSize {
 		log.WithFields(logger.Fields{
 			"at":        "i2cp.validateMessageQueueSize",
 			"queueSize": config.MessageQueueSize,
-			"min":       1,
+			"min":       minMessageQueueSize,
 		}).Error("invalid_message_queue_size")
-		return oops.Errorf("invalid message queue size: %d (must be >= 1)", config.MessageQueueSize)
+		return oops.Errorf("invalid message queue size: %d (must be >= %d)", config.MessageQueueSize, minMessageQueueSize)
 	}
 	return nil
 }

@@ -145,16 +145,16 @@ func (sm *GarlicSessionManager) DecryptGarlicMessage(encryptedGarlic []byte) ([]
 }
 
 // extractIncomingTag extracts the 8-byte session tag from the encrypted message.
-func (sm *GarlicSessionManager) extractIncomingTag(encryptedGarlic []byte) [8]byte {
-	var incomingTag [8]byte
-	if len(encryptedGarlic) >= 8 {
-		copy(incomingTag[:], encryptedGarlic[:8])
+func (sm *GarlicSessionManager) extractIncomingTag(encryptedGarlic []byte) [garlicSessionTagSize]byte {
+	var incomingTag [garlicSessionTagSize]byte
+	if len(encryptedGarlic) >= garlicSessionTagSize {
+		copy(incomingTag[:], encryptedGarlic[:garlicSessionTagSize])
 	}
 	return incomingTag
 }
 
 // getOneTimeTagDiagnostics retrieves diagnostic information about a one-time tag.
-func (sm *GarlicSessionManager) getOneTimeTagDiagnostics(incomingTag [8]byte) (bool, int) {
+func (sm *GarlicSessionManager) getOneTimeTagDiagnostics(incomingTag [garlicSessionTagSize]byte) (bool, int) {
 	sm.oneTimeDiagMu.Lock()
 	defer sm.oneTimeDiagMu.Unlock()
 	_, oneTimeTagRegistered := sm.oneTimeDiag[incomingTag]
@@ -162,7 +162,7 @@ func (sm *GarlicSessionManager) getOneTimeTagDiagnostics(incomingTag [8]byte) (b
 }
 
 // cleanupOneTimeTag removes a one-time tag if it was registered and returns the current map size.
-func (sm *GarlicSessionManager) cleanupOneTimeTag(incomingTag [8]byte, oneTimeTagRegistered bool) int {
+func (sm *GarlicSessionManager) cleanupOneTimeTag(incomingTag [garlicSessionTagSize]byte, oneTimeTagRegistered bool) int {
 	sm.oneTimeDiagMu.Lock()
 	defer sm.oneTimeDiagMu.Unlock()
 	if oneTimeTagRegistered {
@@ -172,10 +172,10 @@ func (sm *GarlicSessionManager) cleanupOneTimeTag(incomingTag [8]byte, oneTimeTa
 }
 
 // logDecryptStart logs diagnostics at the start of decryption.
-func (sm *GarlicSessionManager) logDecryptStart(incomingTag [8]byte, oneTimeTagRegistered bool, mapSize, encryptedSize int) {
-	if encryptedSize >= 8 {
+func (sm *GarlicSessionManager) logDecryptStart(incomingTag [garlicSessionTagSize]byte, oneTimeTagRegistered bool, mapSize, encryptedSize int) {
+	if encryptedSize >= garlicSessionTagSize {
 		ourPubKey := sm.GetPublicKey()
-		ourPubKeyHex := fmt.Sprintf("%x", ourPubKey[:8])
+		ourPubKeyHex := fmt.Sprintf("%x", ourPubKey[:garlicSessionTagLogPrefix])
 
 		log.WithFields(logger.Fields{
 			"at":                           "DecryptGarlicMessage",
@@ -408,11 +408,11 @@ func WrapInGarlicMessage(encryptedGarlic []byte) (*BaseI2NPMessage, error) {
 	}
 
 	// Validate payload size against the 4-byte length field limit
-	if len(encryptedGarlic) > 65535 {
-		return nil, oops.Errorf("encrypted garlic exceeds maximum size: %d > 65535", len(encryptedGarlic))
+	if len(encryptedGarlic) > MaxI2NPStandardPayload {
+		return nil, oops.Errorf("encrypted garlic exceeds maximum size: %d > %d", len(encryptedGarlic), MaxI2NPStandardPayload)
 	}
 
-	msgIDBytes := make([]byte, 4)
+	msgIDBytes := make([]byte, I2NPMessageIDSize)
 	if _, err := rand.Read(msgIDBytes); err != nil {
 		return nil, oops.Wrapf(err, "failed to generate message ID")
 	}
@@ -420,10 +420,10 @@ func WrapInGarlicMessage(encryptedGarlic []byte) (*BaseI2NPMessage, error) {
 
 	msg := NewBaseI2NPMessage(I2NPMessageTypeGarlic)
 	msg.SetMessageID(messageID)
-	msg.SetExpiration(time.Now().Add(10 * time.Second))
+	msg.SetExpiration(time.Now().Add(garlicMessageTTL))
 
 	// F459/F461: Prepend the 4-byte length prefix (spec-required)
-	lengthPrefix := make([]byte, 4)
+	lengthPrefix := make([]byte, I2NPMessageIDSize)
 	binary.BigEndian.PutUint32(lengthPrefix, uint32(len(encryptedGarlic)))
 	msg.data = append(lengthPrefix, encryptedGarlic...)
 
@@ -507,12 +507,12 @@ func extractDataClovePayload(clove GarlicClove) ([]byte, bool) {
 		return nil, false
 	}
 	data := carrier.GetData()
-	if len(data) < 4 {
+	if len(data) < dataPayloadLengthFieldSize {
 		return nil, false
 	}
 
-	declaredLen := int(binary.BigEndian.Uint32(data[0:4]))
-	body := data[4:]
+	declaredLen := int(binary.BigEndian.Uint32(data[0:dataPayloadLengthFieldSize]))
+	body := data[dataPayloadLengthFieldSize:]
 	if declaredLen != len(body) {
 		// Framing mismatch: fall back to the raw data body so a length-field
 		// discrepancy does not silently drop an otherwise-valid payload.

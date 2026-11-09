@@ -166,6 +166,61 @@ func TestNewRouterConfigFromViperSubsystemFields(t *testing.T) {
 	assert.Equal(t, defaults.Congestion.DFlagThreshold, cfg.Congestion.DFlagThreshold, "Congestion.DFlagThreshold")
 }
 
+// TestNewRouterConfigHandshakeBoundKeys verifies the two NTCP2 handshake-bound
+// settings are read from the same viper keys setTransportDefaults writes to, and
+// that an explicit value survives the round trip. A typo in either half of the
+// pair is silent — the field just stays zero — which is the failure mode this
+// package has been bitten by before (see TestCurrentConfigRouterInfoRefreshInterval).
+func TestNewRouterConfigHandshakeBoundKeys(t *testing.T) {
+	defaults := configTestSetup(t)
+
+	cfg, err := NewRouterConfigFromViper()
+	require.NoError(t, err, "NewRouterConfigFromViper failed")
+	assert.Equal(t, defaults.Transport.NTCP2MaxInflightHandshakes, cfg.Transport.NTCP2MaxInflightHandshakes,
+		"default transport config must round-trip NTCP2MaxInflightHandshakes")
+	assert.Equal(t, defaults.Transport.NTCP2MaxHandshakesPerSource, cfg.Transport.NTCP2MaxHandshakesPerSource,
+		"default transport config must round-trip NTCP2MaxHandshakesPerSource")
+
+	viper.Set("transport.ntcp2_max_inflight_handshakes", 32)
+	viper.Set("transport.ntcp2_max_handshakes_per_source", 4)
+	cfg, err = NewRouterConfigFromViper()
+	require.NoError(t, err, "NewRouterConfigFromViper failed")
+	assert.Equal(t, 32, cfg.Transport.NTCP2MaxInflightHandshakes, "Transport.NTCP2MaxInflightHandshakes")
+	assert.Equal(t, 4, cfg.Transport.NTCP2MaxHandshakesPerSource, "Transport.NTCP2MaxHandshakesPerSource")
+}
+
+// TestNewRouterConfigSSU2BoundKeys verifies the SSU2 session cap, the two
+// handshake bounds and the RequireRetry opt-in are read from the same viper keys
+// setTransportDefaults writes to, and that an explicit value survives the round
+// trip. A typo in either half of a pair is silent — the field just stays zero —
+// which is exactly how transport.ssu2_max_connections used to be dropped on the
+// floor. Finding 005 added these knobs, so they need the same coverage.
+func TestNewRouterConfigSSU2BoundKeys(t *testing.T) {
+	defaults := configTestSetup(t)
+
+	cfg, err := NewRouterConfigFromViper()
+	require.NoError(t, err, "NewRouterConfigFromViper failed")
+	assert.Equal(t, defaults.Transport.SSU2MaxConnections, cfg.Transport.SSU2MaxConnections,
+		"default transport config must round-trip SSU2MaxConnections")
+	assert.Equal(t, defaults.Transport.SSU2MaxInflightHandshakes, cfg.Transport.SSU2MaxInflightHandshakes,
+		"default transport config must round-trip SSU2MaxInflightHandshakes")
+	assert.Equal(t, defaults.Transport.SSU2MaxHandshakesPerSource, cfg.Transport.SSU2MaxHandshakesPerSource,
+		"default transport config must round-trip SSU2MaxHandshakesPerSource")
+	assert.False(t, cfg.Transport.SSU2RequireRetry,
+		"the default must leave SSU2RequireRetry off (enabling it breaks all inbound SSU2 on the pinned go-noise)")
+
+	viper.Set("transport.ssu2_max_connections", 250)
+	viper.Set("transport.ssu2_max_inflight_handshakes", 24)
+	viper.Set("transport.ssu2_max_handshakes_per_source", 6)
+	viper.Set("transport.ssu2_require_retry", true)
+	cfg, err = NewRouterConfigFromViper()
+	require.NoError(t, err, "NewRouterConfigFromViper failed")
+	assert.Equal(t, 250, cfg.Transport.SSU2MaxConnections, "Transport.SSU2MaxConnections")
+	assert.Equal(t, 24, cfg.Transport.SSU2MaxInflightHandshakes, "Transport.SSU2MaxInflightHandshakes")
+	assert.Equal(t, 6, cfg.Transport.SSU2MaxHandshakesPerSource, "Transport.SSU2MaxHandshakesPerSource")
+	assert.True(t, cfg.Transport.SSU2RequireRetry, "Transport.SSU2RequireRetry")
+}
+
 // TestSetRouterConfigSubsystemFields verifies that SetRouterConfig(NewRouterConfigFromViper())
 // propagates Tunnel, Transport, Performance, and Congestion config.
 func TestUpdateRouterConfigSubsystemFields(t *testing.T) {

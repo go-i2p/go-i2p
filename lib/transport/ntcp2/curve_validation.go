@@ -51,8 +51,8 @@ var (
 // as an NTCP2 static key per ntcp2.rst:298 / :1142. It returns the masked,
 // reduced 32-byte little-endian encoding of the key on success.
 func ValidateNTCP2StaticKey(key []byte) ([]byte, error) {
-	if len(key) != 32 {
-		return nil, oops.Errorf("NTCP2 static key must be 32 bytes, got %d", len(key))
+	if len(key) != staticKeySize {
+		return nil, oops.Errorf("NTCP2 static key must be %d bytes, got %d", staticKeySize, len(key))
 	}
 
 	// Mask the high bit: X25519 u-coordinates are decoded mod 2^255
@@ -117,8 +117,8 @@ func isCurve25519SmallOrder(u *big.Int) bool {
 	x3, z3 := new(big.Int).Set(u), big.NewInt(1)
 
 	// Scalar 8: fixed pass over bits 254..0; only bit 3 triggers a swap.
-	for t := 254; t >= 0; t-- {
-		swap := (8 >> t) & 1
+	for t := curve25519TopBit; t >= 0; t-- {
+		swap := (smallOrderScalar >> t) & 1
 		if swap == 1 {
 			x2, z2, x3, z3 = x3, z3, x2, z2
 		}

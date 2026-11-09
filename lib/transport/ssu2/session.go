@@ -98,7 +98,7 @@ func NewSSU2SessionDeferred(conn *ssu2noise.SSU2Conn, ctx context.Context, logge
 		packetToPending: make(map[uint32]uint64),
 		maxRetransmit:   DefaultMaxRetransmissions,
 	}
-	s.peerTestLimiter = rate.NewLimiter(rate.Limit(1), 3)
+	s.peerTestLimiter = rate.NewLimiter(rate.Limit(perSessionPeerTestRateLimit), perSessionPeerTestBurst)
 	s.wireDataHandlerCallbacks()
 	return s
 }
@@ -131,10 +131,10 @@ func (s *SSU2Session) buildMergedCallbacks(extra *BlockCallbackConfig) ssu2noise
 			if delta < 0 {
 				delta = -delta
 			}
-			if delta > 60 {
+			if delta > clockSkewToleranceSeconds {
 				s.Logger().WithField("skew_seconds", delta).Warn("SSU2 clock skew out of tolerance, closing session")
 				s.Cancel()
-				return oops.Errorf("clock skew %ds exceeds 60s tolerance", delta)
+				return oops.Errorf("clock skew %ds exceeds %ds tolerance", delta, clockSkewToleranceSeconds)
 			}
 			return nil
 		},
@@ -475,7 +475,7 @@ func buildShortFollowOnFragments(messageID uint32, body []byte, offset, maxPaylo
 	}
 
 	var blocks []*ssu2noise.SSU2Block
-	fragNum := uint8(1)
+	fragNum := uint8(firstFollowOnFragmentNumber)
 	for offset < len(body) {
 		end := offset + maxFollowBody
 		if end > len(body) {
@@ -495,8 +495,8 @@ func buildShortFollowOnFragments(messageID uint32, body []byte, offset, maxPaylo
 		blocks = append(blocks, ssu2noise.NewSSU2Block(ssu2noise.BlockTypeFollowOnFragment, followData))
 		offset = end
 		fragNum++
-		if fragNum > 127 {
-			return nil, oops.Errorf("message too large: exceeds 127 follow-on fragments")
+		if fragNum > maxFollowOnFragments {
+			return nil, oops.Errorf("message too large: exceeds %d follow-on fragments", maxFollowOnFragments)
 		}
 	}
 
@@ -694,11 +694,25 @@ const (
 // Called without holding pendingMsgsMu to avoid blocking other goroutines during network I/O.
 func (s *SSU2Session) processRetransmission(seq uint64, p *pendingI2NP, now time.Time) retransmitAction {
 	if p.attempts >= s.maxRetransmit {
-		// Drop the unconfirmed entry rather than tearing down the session.
-		// SSU2 packet-level reliability is handled by the go-noise conn's own
-		// retransmission loop; tearing down on I2NP-level max-retransmit
-		// with no ACK correlation was causing every session to self-close
-		// after the first message aged out.
+		// A message that has used up its attempts is evidence about the peer, not
+		// just about the message — but only when the peer has never given us
+		// anything back. Tearing down on max-retransmit alone closed every session
+		// after its first message aged out (reverted in 7c03218bc), because at that
+		// point nothing correlated an ACK to a pending message. That correlation
+		// exists now (packetToPending / ackPendingByPackets), so an entry that
+		// survives to the cap while the peer is actively delivering to us is an
+		// old message, and dropping it is right.
+		//
+		// A peer that has never sent us a single authenticated data-phase packet
+		// is a different thing: the handshake was never bilateral, and keeping the
+		// session means never redialling. Close it (finding 012).
+		if s.peerSilent() {
+			s.Logger().WithField("attempts", p.attempts).Warn(
+				"I2NP message exceeded max retransmissions and the peer has never sent a data packet; closing session",
+			)
+			s.requestClose()
+			return retransmitDelete
+		}
 		s.Logger().WithField("attempts", p.attempts).Warn(
 			"I2NP message exceeded max retransmissions; dropping (delivery unconfirmed, SSU2 ACK not correlated)",
 		)
@@ -736,6 +750,40 @@ func (s *SSU2Session) processRetransmission(seq uint64, p *pendingI2NP, now time
 	}
 	p.deadline = now.Add(backoff)
 	return retransmitOK
+}
+
+// peerSilent reports whether this is a session we dialled whose peer has never
+// sent a data-phase packet we authenticated.
+//
+// A true SSU2 handshake is bilateral: ssu2.md §"Handshake Retransmission" ->
+// §"Session Confirmed" makes the peer's first data message the event that ends
+// Session Confirmed retransmission, so until one arrives the peer has not
+// acknowledged the handshake at all. A session in that state is a hole — it
+// reports itself live, occupies a slot, is preferred by peer selection so the
+// router never redialls, and absorbs every message queued into it.
+//
+// Scoped to the initiator on purpose. A responder session is one a peer dialled
+// us on and already proved itself by completing the handshake, and it may simply
+// not have sent data yet; treating that silence as a dead peer would close
+// healthy inbound sessions on a race. go-noise arms its own data-phase deadline
+// for dialled sessions only, and this is the same rule one layer up.
+//
+// Returns false when the connection has been detached, so a session already
+// tearing down is never read as a silent peer.
+func (s *SSU2Session) peerSilent() bool {
+	conn := s.Conn()
+	if conn == nil || !conn.IsInitiator() {
+		return false
+	}
+	return !conn.PeerDataReceived()
+}
+
+// requestClose closes the session from inside a worker goroutine. Close() waits
+// on the worker WaitGroup, so calling it inline here would deadlock against the
+// caller's own goroutine; the same indirection NTCP2 uses for a received
+// Termination block.
+func (s *SSU2Session) requestClose() {
+	go func() { _ = s.Close() }()
 }
 
 // ackPendingByPackets retires pending messages that have at least one ACKed
@@ -844,7 +892,7 @@ func (s *SSU2Session) updateRTTEstimate(recvAt time.Time) {
 
 // deliverMessage sends the message to the receive channel with timeout handling.
 func (s *SSU2Session) deliverMessage(msg i2np.Message) error {
-	timer := time.NewTimer(100 * time.Millisecond)
+	timer := time.NewTimer(recvBackpressureTimeout)
 	defer timer.Stop()
 	select {
 	case s.RecvChan() <- msg:
@@ -869,6 +917,12 @@ func (s *SSU2Session) receiveWorker() {
 		}
 		n, action := s.readFrame(buf)
 		if action == receiveFatal {
+			// Returning here without closing left the session in the transport's
+			// registry: the entry kept answering HasSession, so peer selection kept
+			// choosing a peer whose socket was already dead and the router never
+			// redialled. The conn is gone; say so, and let the cleanup callback drop
+			// the registry entry.
+			s.requestClose()
 			return
 		}
 		if action == receiveRetry {

@@ -137,7 +137,7 @@ func NewBaseI2NPMessage(msgType int) *BaseI2NPMessage {
 	return &BaseI2NPMessage{
 		type_:      msgType,
 		messageID:  msgID,
-		expiration: time.Now().Add(60 * time.Second), // Default 60s per spec recommendation
+		expiration: time.Now().Add(defaultI2NPMessageTTL),
 		data:       []byte{},
 	}
 }
@@ -245,10 +245,10 @@ func MarshalMessageShort(msg Message) ([]byte, error) {
 	result[0] = byte(msg.Type())
 
 	// Message ID (4 bytes, big-endian)
-	binary.BigEndian.PutUint32(result[1:5], uint32(msg.MessageID()))
+	binary.BigEndian.PutUint32(result[I2NPMessageIDOffset:I2NPMessageIDOffset+I2NPMessageIDSize], uint32(msg.MessageID()))
 
 	// Short Expiration (4 bytes, big-endian, seconds since epoch)
-	binary.BigEndian.PutUint32(result[5:9], uint32(msg.Expiration().Unix()))
+	binary.BigEndian.PutUint32(result[I2NPExpirationOffset:I2NPExpirationOffset+I2NPShortExpirationSize], uint32(msg.Expiration().Unix()))
 
 	// Payload
 	copy(result[ShortI2NPHeaderSize:], body)
@@ -271,10 +271,10 @@ func (m *BaseI2NPMessage) MarshalShortI2NP() ([]byte, error) {
 	result[0] = byte(m.type_)
 
 	// Message ID (4 bytes, big-endian)
-	binary.BigEndian.PutUint32(result[1:5], uint32(m.messageID))
+	binary.BigEndian.PutUint32(result[I2NPMessageIDOffset:I2NPMessageIDOffset+I2NPMessageIDSize], uint32(m.messageID))
 
 	// Short Expiration (4 bytes, big-endian, seconds since epoch)
-	binary.BigEndian.PutUint32(result[5:9], uint32(m.expiration.Unix()))
+	binary.BigEndian.PutUint32(result[I2NPExpirationOffset:I2NPExpirationOffset+I2NPShortExpirationSize], uint32(m.expiration.Unix()))
 
 	// Data
 	copy(result[ShortI2NPHeaderSize:], m.data)
@@ -294,10 +294,10 @@ func (m *BaseI2NPMessage) UnmarshalShortI2NP(data []byte) error {
 
 	// Message ID (4 bytes, big-endian); preserve all 32 bits from the wire — masking
 	// inbound IDs truncates half the peer ID space and breaks message correlation.
-	m.messageID = int(binary.BigEndian.Uint32(data[1:5]))
+	m.messageID = int(binary.BigEndian.Uint32(data[I2NPMessageIDOffset : I2NPMessageIDOffset+I2NPMessageIDSize]))
 
 	// Short Expiration (4 bytes, big-endian, seconds since epoch)
-	expSecs := binary.BigEndian.Uint32(data[5:9])
+	expSecs := binary.BigEndian.Uint32(data[I2NPExpirationOffset : I2NPExpirationOffset+I2NPShortExpirationSize])
 	m.expiration = time.Unix(int64(expSecs), 0)
 
 	// Data (remaining bytes after header)
@@ -324,7 +324,7 @@ func (m *BaseI2NPMessage) MarshalBinary() ([]byte, error) {
 
 	// Build the complete message
 	// Header: type(1) + msgID(4) + expiration(8) + size(2) + checksum(1) = 16 bytes
-	headerSize := 16
+	headerSize := StandardI2NPHeaderSize
 	totalSize := headerSize + len(m.data)
 	result := make([]byte, totalSize)
 
@@ -332,28 +332,28 @@ func (m *BaseI2NPMessage) MarshalBinary() ([]byte, error) {
 	result[0] = byte(m.type_)
 
 	// Message ID (4 bytes, big endian)
-	result[1] = byte(m.messageID >> 24)
-	result[2] = byte(m.messageID >> 16)
-	result[3] = byte(m.messageID >> 8)
-	result[4] = byte(m.messageID)
+	result[I2NPMessageIDOffset] = byte(m.messageID >> I2NPMessageIDShift24)
+	result[I2NPMessageIDOffset+1] = byte(m.messageID >> I2NPMessageIDShift16)
+	result[I2NPMessageIDOffset+2] = byte(m.messageID >> I2NPMessageIDShift8)
+	result[I2NPMessageIDOffset+3] = byte(m.messageID)
 
 	// Expiration (8 bytes)
 	exp, err := datalib.DateFromTime(m.expiration)
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to convert expiration time")
 	}
-	copy(result[5:13], exp[:])
+	copy(result[I2NPExpirationOffset:I2NPSizeFieldOffset], exp[:])
 
 	// Size (2 bytes, big endian)
 	size := len(m.data)
-	result[13] = byte(size >> 8)
-	result[14] = byte(size)
+	result[I2NPSizeFieldOffset] = byte(size >> I2NPSizeFieldShift)
+	result[I2NPSizeFieldOffset+1] = byte(size)
 
 	// Checksum (1 byte)
-	result[15] = checksum
+	result[I2NPChecksumOffset] = checksum
 
 	// Data
-	copy(result[16:], m.data)
+	copy(result[StandardI2NPHeaderSize:], m.data)
 
 	return result, nil
 }
@@ -364,34 +364,37 @@ func (m *BaseI2NPMessage) MarshalBinary() ([]byte, error) {
 // See [I2P Spec: I2NP](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst) for the header formats.
 // See also [MarshalBinary].
 func (m *BaseI2NPMessage) UnmarshalBinary(data []byte) error {
-	if len(data) < 16 {
+	if len(data) < StandardI2NPHeaderSize {
 		return oops.Errorf("i2np message too short: %d bytes", len(data))
 	}
 
 	// Parse header
 	m.type_ = int(data[0])
 	// Preserve all 32 bits from the wire; masking inbound IDs breaks message correlation.
-	m.messageID = int(data[1])<<24 | int(data[2])<<16 | int(data[3])<<8 | int(data[4])
+	m.messageID = int(data[I2NPMessageIDOffset])<<I2NPMessageIDShift24 |
+		int(data[I2NPMessageIDOffset+1])<<I2NPMessageIDShift16 |
+		int(data[I2NPMessageIDOffset+2])<<I2NPMessageIDShift8 |
+		int(data[I2NPMessageIDOffset+3])
 
 	// Parse expiration
 	var expDate datalib.Date
-	copy(expDate[:], data[5:13])
+	copy(expDate[:], data[I2NPExpirationOffset:I2NPSizeFieldOffset])
 	m.expiration = expDate.Time()
 
 	// Parse size
-	size := int(data[13])<<8 | int(data[14])
+	size := int(data[I2NPSizeFieldOffset])<<I2NPSizeFieldShift | int(data[I2NPSizeFieldOffset+1])
 
 	// Parse checksum
-	expectedChecksum := data[15]
+	expectedChecksum := data[I2NPChecksumOffset]
 
 	// Validate total length
-	if len(data) < 16+size {
-		return oops.Errorf("i2np message data truncated: expected %d bytes, got %d", 16+size, len(data))
+	if len(data) < StandardI2NPHeaderSize+size {
+		return oops.Errorf("i2np message data truncated: expected %d bytes, got %d", StandardI2NPHeaderSize+size, len(data))
 	}
 
 	// Extract and validate data
 	m.data = make([]byte, size)
-	copy(m.data, data[16:16+size])
+	copy(m.data, data[StandardI2NPHeaderSize:StandardI2NPHeaderSize+size])
 
 	// Verify checksum
 	hash := types.SHA256(m.data)

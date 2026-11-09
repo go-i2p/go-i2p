@@ -278,6 +278,91 @@ func TestValidate_TransportInvalidMaxConnections(t *testing.T) {
 	requireValidationFails(t, cfg, "Validate() should fail when NTCP2MaxConnections < 1")
 }
 
+// TestValidate_HandshakeBoundsInverted verifies validation rejects a per-source
+// handshake cap that exceeds the transport-wide cap. Either bound may be 0
+// (transport default) or negative (disabled), so their relative size is the only
+// thing that can be wrong — and an inverted pair means the per-source limit the
+// operator asked for silently never binds.
+func TestValidate_HandshakeBoundsInverted(t *testing.T) {
+	cfg := Defaults()
+	cfg.Transport.NTCP2MaxInflightHandshakes = 10
+	cfg.Transport.NTCP2MaxHandshakesPerSource = 50
+	requireValidationFails(t, cfg, "Validate() should fail when per-source exceeds the transport-wide handshake cap")
+}
+
+// TestValidate_HandshakeBoundsAllowDefaultAndDisabled verifies the two accepted
+// spellings are not rejected: 0 defers to the transport's own default and a
+// negative value explicitly disables the bound.
+func TestValidate_HandshakeBoundsAllowDefaultAndDisabled(t *testing.T) {
+	cfg := Defaults()
+	cfg.Transport.NTCP2MaxInflightHandshakes = 0
+	cfg.Transport.NTCP2MaxHandshakesPerSource = 0
+	require.NoError(t, Validate(cfg), "Validate() should accept the zero (transport default) spelling")
+
+	cfg.Transport.NTCP2MaxInflightHandshakes = -1
+	cfg.Transport.NTCP2MaxHandshakesPerSource = -1
+	require.NoError(t, Validate(cfg), "Validate() should accept negative (bound disabled)")
+
+	cfg.Transport.NTCP2MaxInflightHandshakes = 64
+	cfg.Transport.NTCP2MaxHandshakesPerSource = 8
+	require.NoError(t, Validate(cfg), "Validate() should accept a per-source cap below the global cap")
+
+	// A disabled global cap cannot be exceeded by any per-source value.
+	cfg.Transport.NTCP2MaxInflightHandshakes = -1
+	cfg.Transport.NTCP2MaxHandshakesPerSource = 500
+	require.NoError(t, Validate(cfg), "Validate() should not compare bounds when the global cap is disabled")
+}
+
+// TestValidate_SSU2MaxConnectionsNegative verifies a negative SSU2 session-pool
+// size is rejected. Unlike NTCP2MaxConnections (whose default is an explicit
+// number), SSU2MaxConnections may be 0 to defer to the transport default, so only
+// a negative pool size is nonsense.
+func TestValidate_SSU2MaxConnectionsNegative(t *testing.T) {
+	cfg := Defaults()
+	cfg.Transport.SSU2MaxConnections = -1
+	requireValidationFails(t, cfg, "Validate() should fail when SSU2MaxConnections < 0")
+
+	cfg.Transport.SSU2MaxConnections = 0
+	require.NoError(t, Validate(cfg), "Validate() should accept SSU2MaxConnections == 0 (transport default)")
+}
+
+// TestValidate_SSU2HandshakeBoundsInverted mirrors the NTCP2 check: an SSU2
+// per-source handshake cap above the transport-wide cap silently never binds, so
+// validation must reject it.
+func TestValidate_SSU2HandshakeBoundsInverted(t *testing.T) {
+	cfg := Defaults()
+	cfg.Transport.SSU2MaxInflightHandshakes = 10
+	cfg.Transport.SSU2MaxHandshakesPerSource = 50
+	requireValidationFails(t, cfg, "Validate() should fail when SSU2 per-source exceeds the transport-wide handshake cap")
+}
+
+// TestValidate_SSU2HandshakeBoundsAllowDefaultAndDisabled verifies the accepted
+// spellings for the SSU2 handshake bounds are not rejected.
+func TestValidate_SSU2HandshakeBoundsAllowDefaultAndDisabled(t *testing.T) {
+	cfg := Defaults()
+	cfg.Transport.SSU2MaxInflightHandshakes = 0
+	cfg.Transport.SSU2MaxHandshakesPerSource = 0
+	require.NoError(t, Validate(cfg), "Validate() should accept the zero (transport default) spelling")
+
+	cfg.Transport.SSU2MaxInflightHandshakes = -1
+	cfg.Transport.SSU2MaxHandshakesPerSource = -1
+	require.NoError(t, Validate(cfg), "Validate() should accept negative (bound disabled)")
+
+	cfg.Transport.SSU2MaxInflightHandshakes = 64
+	cfg.Transport.SSU2MaxHandshakesPerSource = 8
+	require.NoError(t, Validate(cfg), "Validate() should accept a per-source cap below the global cap")
+
+	cfg.Transport.SSU2MaxInflightHandshakes = -1
+	cfg.Transport.SSU2MaxHandshakesPerSource = 500
+	require.NoError(t, Validate(cfg), "Validate() should not compare SSU2 bounds when the global cap is disabled")
+}
+
+// TestValidate_DefaultsPass pins that the shipped defaults — including the new
+// SSU2 knobs — are internally consistent, so a fresh config validates cleanly.
+func TestValidate_SSU2DefaultsPass(t *testing.T) {
+	require.NoError(t, Validate(Defaults()), "the built-in defaults must validate")
+}
+
 // TestValidate_TransportInvalidNTCP2Port verifies validation catches out-of-range ports
 func TestValidate_TransportInvalidNTCP2Port(t *testing.T) {
 	cfg := Defaults()

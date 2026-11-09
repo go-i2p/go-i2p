@@ -37,9 +37,9 @@ func (s *Session) StartLeaseSetMaintenance() error {
 	// Calculate maintenance interval: check every 1/4 of tunnel lifetime
 	// For default 10-minute tunnels, this means checking every 2.5 minutes.
 	// Enforce a minimum of 1ms to prevent ticker panic on zero duration.
-	maintenanceInterval := s.config.TunnelLifetime / 4
+	maintenanceInterval := s.config.TunnelLifetime / maintenanceIntervalDivisor
 	if maintenanceInterval <= 0 {
-		maintenanceInterval = 15 * time.Second
+		maintenanceInterval = defaultMaintenanceInterval
 	}
 
 	s.maintTicker = time.NewTicker(maintenanceInterval)
@@ -170,9 +170,9 @@ func (s *Session) logLeaseSetMissing() {
 func (s *Session) evaluateLeaseSetAge() bool {
 	now := time.Now()
 	age := now.Sub(s.leaseSetPublishedAt)
-	regenerationThreshold := s.config.TunnelLifetime / 2
+	regenerationThreshold := s.config.TunnelLifetime / leaseSetRegenerationDivisor
 	if regenerationThreshold <= 0 {
-		regenerationThreshold = 5 * time.Minute
+		regenerationThreshold = defaultLeaseSetRegenerationThreshold
 	}
 
 	if age > regenerationThreshold {

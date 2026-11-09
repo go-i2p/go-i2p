@@ -64,7 +64,7 @@ func ExtractPeerStaticKeyFromAddress(addr *router_address.RouterAddress) ([]byte
 // common's padded-only StaticKey() accessor, and validates the result as an
 // X25519 curve point per ntcp2.rst:298 before it is used in the XK handshake.
 func extractStaticKeyFromAddress(addr *router_address.RouterAddress) ([]byte, error) {
-	staticKey, err := decodeNTCP2AddressOption(addr, "s", 32)
+	staticKey, err := decodeNTCP2AddressOption(addr, "s", staticKeySize)
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to extract static key")
 	}
@@ -110,7 +110,7 @@ func ExtractPeerIVFromAddress(addr *router_address.RouterAddress) ([]byte, error
 		return nil, oops.Errorf("address is not NTCP2")
 	}
 
-	iv, err := decodeNTCP2AddressOption(addr, "i", 16)
+	iv, err := decodeNTCP2AddressOption(addr, "i", obfuscationIVSize)
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to extract IV")
 	}
@@ -163,7 +163,7 @@ func ConfigureDialConfigFromAddress(config *ntcp2.Config, peerAddr *router_addre
 
 	log.WithFields(map[string]interface{}{
 		"static_key_len": len(staticKey),
-		"static_key_b64": base64.StdEncoding.EncodeToString(staticKey[:8]),
+		"static_key_b64": base64.StdEncoding.EncodeToString(staticKey[:logKeyPrefixBytes]),
 	}).Debug("Configured peer remote static key for XK handshake")
 
 	// Extract and set the peer's obfuscation IV
@@ -216,7 +216,7 @@ func getValidatedPrivateKey(transport *NTCP2Transport) ([]byte, error) {
 	}
 
 	privKeyBytes := cfg.Config.StaticKey
-	if len(privKeyBytes) != 32 {
+	if len(privKeyBytes) != staticKeySize {
 		return nil, oops.Errorf("static key is not 32 bytes: got %d", len(privKeyBytes))
 	}
 
@@ -281,7 +281,7 @@ func verifyLocalRouterInfoMatchesStaticKey(localRI router_info.RouterInfo, stati
 
 // derivePublicKeyFromPrivate derives the Curve25519 public key from a private key.
 func derivePublicKeyFromPrivate(staticPriv []byte) ([]byte, error) {
-	if len(staticPriv) != 32 {
+	if len(staticPriv) != staticKeySize {
 		return nil, oops.Errorf("static key is %d bytes (want 32)", len(staticPriv))
 	}
 

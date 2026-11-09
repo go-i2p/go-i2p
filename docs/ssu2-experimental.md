@@ -1,6 +1,6 @@
 # SSU2: what "experimental" means
 
-Updated: 2026-11-01
+Updated: 2026-11-03 (inbound accept path added; see "Inbound accept path")
 
 The README marks the SSU2 transport **currently experimental**
 (`README.md`, and the `--transport.ssu2-enabled` help text). That label has
@@ -89,6 +89,12 @@ When `GetReplayToken()` returns nil, the transport counts the event
 to watch on a real deployment: a large deferred count means the replay check is
 being skipped in practice, not merely in theory.
 
+Before the inbound-handshake fix this counter was guaranteed to rise on every
+inbound connection, because replay material is only populated during
+`Handshake()` and the transport never called it — the check could not have real
+input. Now that `Accept()` delivers established connections, a non-zero
+`ReplayChecksDeferred` means what it was always meant to mean.
+
 ### 5. Data-phase key derivation is now per-session, but has no live-traffic evidence
 
 Until 2026-11-01 the `go-i2p/noise` fork zeroed the CipherState key arrays
@@ -124,6 +130,169 @@ nothing about interoperability now. Two things follow:
   capture. No long-term secret is exposed, so no key rotation is warranted, but
   past captures must be treated as public.
 
+## Inbound accept path
+
+No inbound SSU2 session had ever completed until the 005 fix — not from a foreign
+peer, and not between two go-i2p routers over loopback either. Two independent
+defects combined to make every inbound session impossible:
+
+1. **No responder handshake.** `go-noise`'s `SSU2Listener.Accept()` returns a
+   connection in `StateInit` holding only a parsed SessionRequest; the XK responder
+   half runs only when the caller invokes `Handshake()`. Nothing in
+   `lib/transport/ssu2` ever called it. `SSU2Transport.Accept()` now runs a
+   background accept loop that admits each connection against a pre-authentication
+   budget, completes the handshake in its own worker goroutine with a timeout, runs
+   the duplicate and anti-replay checks on the established connection, and delivers
+   only established sessions to `Accept()`.
+2. **The router's type assertion always failed.** The transport and the muxer each
+   wrap the connection in a `transport.TrackedConn`, so the value reaching
+   `handleNewConnection` is wrapped twice and `conn.(*ssu2noise.SSU2Conn)` never
+   matched. The router now unwraps via `transport.UnwrapTrackedConn` first.
+
+The stall that made this an availability problem is fixed too. On a failed
+assertion the router used to call `conn.Close()` inline on the single
+`monitorInboundSessions` goroutine, which also serves NTCP2 accepts; `go-noise`'s
+`Close` waits the spec's 11 s `DestroyTimeout`, so one unauthenticated — and
+possibly spoofed — SessionRequest blocked every inbound transport for 11 s.
+Rejections now close asynchronously, and connections abandoned before they were
+established are torn down with `CloseImmediate`.
+
+A third defect, found while testing the fix, was that `NewSSU2Transport` created
+the listener *before* `initKeyManagement` loaded the intro key onto the shared
+config. The listener builds its inbound header protector from `IntroKey` inside
+`NewSSU2Listener`, and a SessionRequest's header is obfuscated with the receiver's
+intro key — so the protector was nil at construction and no inbound SessionRequest
+could be deobfuscated. Key management now runs before the listener is created.
+
+## Outbound sessions: a handshake the peer never completed
+
+Finding 012. An SSU2 dial that reached SessionConfirmed was treated as an
+established session the moment SessionConfirmed was written, without waiting for
+any acknowledgement from the peer. A responder that accepted the SessionRequest,
+answered SessionCreated, and then rejected or ignored the SessionConfirmed (a
+stale RouterInfo — see finding 010's H-161 — or a crash) left the initiator
+holding a session that reported itself live. Three independent mechanisms made
+that state permanent, all in `go-noise/ssu2/session`:
+
+1. **No completion condition.** `finalizeHandshake` returned after writing
+   SessionConfirmed. `ssu2.md` §"Handshake Retransmission" -> §"Session
+   Confirmed" makes the peer's first data message the event that ends Session
+   Confirmed retransmission, so the spec expects an endpoint to know whether that
+   event happened; nothing here did.
+2. **An unreachable retry cap.** `retransmitExpired` resends unacknowledged
+   contents under a fresh packet number, as §"Packet Numbering" requires, and
+   then re-tracked the new packet with `Retries: 0`. The packet number changed,
+   so the count restarted, so `maxPacketRetries` was never reached and one
+   message was resent 1157 times in seven and a half minutes on the lab testnet.
+3. **A timer that could not fire.** Every resend refreshed `lastActivity`, which
+   is what the idle check measures.
+
+The fix is in `go-noise/ssu2/session/conn_data_phase.go` plus the two send-path
+changes in `conn_write.go`:
+
+- The initiator now arms a deadline for the peer's first authenticated
+  data-phase packet and closes the session with
+  `TerminationSessionConfirmedError` when it passes. The default is 13 s —
+  §"Total Timeout"'s 12.5 s plus the final 5 s SessionConfirmed interval — so a
+  handshake the spec still considers in progress is never cut short. Tunable via
+  `SSU2Config.DataPhaseTimeout`; negative disables it.
+- The retry count belongs to the contents and now rides with them across
+  resends, so the cap is reachable and unacknowledged data is abandoned.
+- A retransmission no longer refreshes the idle timer.
+- A data-phase datagram that arrives while the initiator is still handshaking is
+  retained and replayed once `finalizeHandshake` installs the data-phase keys,
+  instead of being dropped.
+- The data-phase header protector reaches the listener's session registry
+  synchronously, inside the handshake goroutine that derives the key.
+
+The first three act on the connection itself, so they apply to every dial path,
+including the shared listener socket this router dials through. The last two are
+what make the race survivable on a shared socket.
+
+Retention needs care on the listener path, because a listener-multiplexed
+session never runs the connection's own read loop — one goroutine owns the
+shared socket and it belongs to the listener — so the connection-side buffer
+would simply never be fed. Two changes cover it. The protector install used to
+be a non-blocking send into a channel that only exists once the listener has
+wired it and that a background goroutine drains; if the handshake derived the
+key first the send hit its default branch and the protector was never installed
+at all, leaving the session permanently deaf with no error anywhere. It is now a
+synchronous hook, so there is no handoff to lose. That removes the large window
+but not the last few instructions of it, and for that residue the listener's
+demux cascade ends with an attribution stage: header protection masks bytes 0-7
+with `k_header_1`, which for an inbound Data packet is the listener's own
+introduction key, so the destination connection ID can be recovered even though
+the packet cannot be read. The raw datagram is then handed to that session's
+bounded retention buffer and replayed by `finalizeHandshake`.
+
+`SSU2Conn.RecvStats()["handshake_retained"]` counts what that buffer held. A
+non-zero value means the peer answered Session Confirmed immediately, which is
+normal and spec-directed; a value pinned at the buffer bound means the session
+was repeatedly losing packets it could not recover.
+
+Holding a packet that arrives mid-handshake is only safe if the handshake is not
+itself waiting for that packet — the buffer is drained inside `finalizeHandshake`,
+so a held handshake message would be a self-inflicted hang. Retention therefore
+requires a completed handshake, which means every message the connection could
+still be waiting for has already arrived; a responder additionally has to have
+been offered its own Session Confirmed stage. Both conditions are asserted by
+tests in `ssu2/server/retain_fallback_test.go` and
+`ssu2/session/retain_listener_test.go`.
+
+Residual risk of the deadline, stated plainly: a peer that completes the
+handshake and then genuinely sends nothing for 13 s has its session closed, and
+the router redials. Every conformant implementation sends something inside that
+window — §"Packet Numbering" tells the responder its first Data packet "should
+be an ACK of the Session Confirmed", and §"Total Timeout" gives the handshake as
+a whole 12.5 s — so this is a peer outside the spec's own envelope. If a live
+peer turns out to be slow rather than dead, `DataPhaseTimeout` raises the bound
+or disables it.
+
+`SSU2Conn.PeerDataReceived()` exposes the bilateral condition to the router. In
+`lib/transport/ssu2`, `HasSession` no longer reports a session whose context is
+cancelled (matching NTCP2), a message that exhausts its retransmissions into a
+peer that has never sent us a data packet now closes the session instead of
+being dropped quietly, and a fatal read error closes the session rather than
+leaving the registry entry behind.
+
+Two things deliberately left alone:
+
+- **A session with a continuous stream of fresh sends still refreshes its own
+  idle clock.** What defeated the 5-minute idle timeout in the lab (a 104-minute
+  session that never expired) was retransmission: `sendPacketDirect` counted every
+  resend as activity, so a stuck session kept restarting the timer and, separately,
+  each resend reset the retry counter so the cap was never reached. Both are fixed,
+  and the idle timeout now does fire — `ssu2/session/data_phase_deadline_test.go`
+  proves it on a dead peer and on a session with resends queued. The keepalive was
+  never part of the problem: with nothing received to acknowledge,
+  `ACKHandler.GenerateACK` returns nil and `sendImmediateACK` sends nothing, so an
+  idle session's keepalive does not refresh `lastActivity` either.
+  What remains is the case where the application keeps handing the session genuinely
+  new data: those sends are activity, so the idle timeout is not the recovery path
+  there. It is the retry cap and the data-phase deadline that end such a session, and
+  making the idle clock measure inbound activity instead would require turning the
+  keepalive into an ack-eliciting probe — otherwise every quiet-but-live session gets
+  reaped. That is a wider behavioural change than this finding.
+- **Inbound sessions are never judged by peer silence.** A responder's peer has
+  already proved itself by completing the handshake and may simply not have sent
+  data yet; `peerSilent()` is scoped to `IsInitiator()` so healthy inbound
+  sessions are not closed on a race.
+
+### Operator-visible consequences
+
+- The transport now passes its session cap down to the go-noise listener (whose
+  built-in 65536 was never bounded by the router's 512-slot pool), and exposes
+  `ssu2_max_inflight_handshakes` / `ssu2_max_handshakes_per_source` to cap
+  pre-authentication work. See `config.yaml.example`.
+- **`ssu2_require_retry` must stay off.** Source-address validation is the right
+  hardening in principle, but the go-noise version pinned here routes a tokenless
+  SessionRequest through its Token-Request path and AEAD-opens the payload with the
+  intro key. A SessionRequest payload is Noise-encrypted, not intro-key-sealed, so
+  the check always fails and the request is dropped — every inbound SessionRequest,
+  valid peers included. Enabling it is a total inbound SSU2 outage. The knob is
+  plumbed so it can be turned on once that upstream path is fixed; the transport's
+  own handshake budget is what bounds a spoofed flood today.
+
 ## Production-readiness checklist
 
 The experimental designation can be removed when all of these hold:
@@ -133,7 +302,11 @@ The experimental designation can be removed when all of these hold:
       type rather than inferred from a successful netdb operation.
 - [ ] **Live interop, inbound**: a peer on the public network dials this
       router's SSU2 address and completes a handshake, with a routable
-      (non-caps-only) published RouterAddress.
+      (non-caps-only) published RouterAddress. The mechanism is now proven in-repo
+      (`lib/transport/ssu2/inbound_handshake_test.go`
+      `TestAcceptDeliversEstablishedConnection` dials a real bound transport and
+      gets an established session back from `Accept()`); what remains is a real
+      foreign implementation.
 - [ ] **Interop matrix updated**: `docs/interop-matrix.md` gains an SSU2 row
       with the same pass criteria as the NTCP2 paths.
 - [ ] **Data-phase interop**: I2NP actually flows over an SSU2 session with a

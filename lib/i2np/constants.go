@@ -2,7 +2,10 @@ package i2np
 
 import (
 	"errors"
+	"time"
 
+	"github.com/go-i2p/common/session_tag"
+	i2ptunnel "github.com/go-i2p/crypto/tunnel"
 	"github.com/go-i2p/go-i2p/lib/tunnel/buildrecord"
 )
 
@@ -97,14 +100,547 @@ const (
 	// StandardBuildRecordSize is the deprecated 528-byte on-wire long-record
 	// size. Retained for documentation only; the long-record path is removed.
 	StandardBuildRecordSize         = 528
-	ShortBuildRecordSize            = buildrecord.ShortRecordSize          // 218
-	StandardBuildRecordCleartextLen = buildrecord.StandardCleartextLen     // 222 (deprecated long record)
-	ShortBuildRecordCleartextLen    = buildrecord.ShortCleartextLen        // 154
-	ShortRecordHeaderSize           = 64                                   // toPeer(16) + ephemeralKey(32) + MAC(16)
-	DefaultExpirationSeconds        = buildrecord.DefaultExpirationSeconds // 600, the only spec-supported value
+	ShortBuildRecordSize            = buildrecord.ShortRecordSize      // 218
+	StandardBuildRecordCleartextLen = buildrecord.StandardCleartextLen // 222 (deprecated long record)
+	ShortBuildRecordCleartextLen    = buildrecord.ShortCleartextLen    // 154
+	ShortRecordHeaderSize           = 64                               // toPeer(16) + ephemeralKey(32) + MAC(16)
+
+	// ShortRecordPrefixSize is the unencrypted prefix of a short record: the
+	// toPeer hash and the ephemeral public key. Aliased from buildrecord, which
+	// owns the record layout, so the encrypting code and the serialising code
+	// split the record at the same offset.
+	ShortRecordPrefixSize = buildrecord.ShortRecordPrefixLen // 48
+
+	// ShortRecordToPeerHashSize is the width of the leading toPeer field.
+	ShortRecordToPeerHashSize = buildrecord.ToPeerHashLen // 16
+
+	// ShortRecordTagSize is the width of the AEAD tag appended after the
+	// encrypted cleartext.
+	ShortRecordTagSize = buildrecord.ShortRecordTagLen // 16
+
+	// StandardBuildResponseHashInputSize is the byte count a long build response
+	// record hashes for its integrity check: the random padding plus the reply
+	// byte, i.e. everything after the leading hash. Aliased from the sum of
+	// buildrecord's own layout constants.
+	StandardBuildResponseHashInputSize = buildrecord.StandardRecordSize - buildrecord.ResponseHashLen // 496
+
+	// StandardBuildResponseRandomDataSize is the padding region of a long build
+	// response record, the hash input minus the trailing reply byte.
+	StandardBuildResponseRandomDataSize = StandardBuildResponseHashInputSize - 1 // 495
+
+	// ShortBuildReplyCleartextSize is what a hop decrypts from one short reply
+	// slot: the 218-byte record less its AEAD tag. It holds the reply options
+	// mapping followed by random padding and the one-byte reply code.
+	ShortBuildReplyCleartextSize = ShortBuildRecordSize - ShortRecordTagSize // 202
+
+	// ShortBuildReplyCodeOffset is where the reply code sits: the last byte of
+	// the decrypted short reply cleartext.
+	ShortBuildReplyCodeOffset = ShortBuildReplyCleartextSize - 1 // 201
+
+	// shortBuildReplyEmptyOptionsSize is the width of the two-byte length field
+	// that encodes an absent options Mapping.
+	shortBuildReplyEmptyOptionsSize = 2
+
+	// defaultI2NPMessageTTL is how long a freshly created I2NP message stays
+	// deliverable. 60 seconds is the spec's recommended default and is long
+	// enough to survive tunnel latency, short enough that a stuck message is
+	// dropped rather than retried forever.
+	// Moved from: i2np.go
+	defaultI2NPMessageTTL = 60 * time.Second
+
+	// participantTunnelLifetime is how long a registered participant keeps a
+	// tunnel, matching the I2P standard tunnel lifetime.
+	// Moved from: processor_records.go
+	participantTunnelLifetime = 10 * time.Minute
+
+	// messageReplayCacheCapacity is how many message IDs the replay cache
+	// retains before evicting the oldest.
+	// Moved from: processor.go
+	messageReplayCacheCapacity = 10_000
+	DefaultExpirationSeconds   = buildrecord.DefaultExpirationSeconds // 600, the only spec-supported value
 )
 
 // DefaultExpirationTolerance is the default expiration tolerance for clock skew (5 minutes into the past).
 // This allows for reasonable clock differences between I2P routers while
 // still rejecting clearly expired messages.
 const DefaultExpirationTolerance = 5 * 60 // 5 minutes in seconds
+
+// ──────────────────────────────────────────────────────────────────────────────
+// I2NP header field layout
+// ──────────────────────────────────────────────────────────────────────────────
+
+// I2NP messages travel with one of two headers. The standard header carries a
+// payload size and checksum and is required for tunnel-delivered messages; the
+// short header omits both because the transport already frames the payload and
+// authenticates it. Field offsets are identical in the two forms up to the
+// expiration, which is an 8-byte millisecond Date in the standard header and a
+// 4-byte seconds-since-epoch Integer in the short one.
+//
+// Spec: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/i2np.rst
+// Moved from: i2np.go, utils.go
+const (
+	// I2NPTypeSize is the width of the leading message type byte.
+	I2NPTypeSize = 1
+
+	// I2NPMessageIDOffset is where the 4-byte message ID begins, immediately
+	// after the type byte.
+	I2NPMessageIDOffset = I2NPTypeSize // 1
+	// I2NPMessageIDSize is the width of the message ID field.
+	I2NPMessageIDSize = 4
+
+	// I2NPExpirationOffset is where the expiration field begins in both header
+	// forms.
+	I2NPExpirationOffset = I2NPMessageIDOffset + I2NPMessageIDSize // 5
+
+	// I2NPExpirationSize is the width of the standard header's expiration, an
+	// 8-byte Date in milliseconds since the epoch.
+	I2NPExpirationSize = 8
+
+	// I2NPShortExpirationSize is the width of the short header's expiration, a
+	// 4-byte Integer in seconds since the epoch.
+	I2NPShortExpirationSize = 4
+
+	// I2NPSizeFieldOffset is where the 2-byte payload length begins in the
+	// standard header, after the 8-byte expiration.
+	I2NPSizeFieldOffset = I2NPExpirationOffset + I2NPExpirationSize // 13
+	// I2NPSizeFieldSize is the width of the payload length field. Because it is
+	// two bytes, MaxI2NPStandardPayload is the largest payload it can name.
+	I2NPSizeFieldSize = 2
+
+	// I2NPChecksumOffset is where the 1-byte payload checksum begins, after the
+	// size field. It is the first byte of the payload's SHA-256.
+	I2NPChecksumOffset = I2NPSizeFieldOffset + I2NPSizeFieldSize // 15
+	// I2NPChecksumSize is the width of the checksum field.
+	I2NPChecksumSize = 1
+
+	// I2NPShortHeaderSize is the full short (NTCP2/SSU2) header length: type +
+	// message ID + short expiration. It is the same value as the exported
+	// ShortI2NPHeaderSize, restated from its field widths; the assertions below
+	// fail the build if the two ever disagree.
+	I2NPShortHeaderSize = I2NPTypeSize + I2NPMessageIDSize + I2NPShortExpirationSize // 9
+
+	// I2NPStandardHeaderSize is the full standard header length: type + message
+	// ID + expiration + size + checksum, again restated from field widths and
+	// asserted against StandardI2NPHeaderSize.
+	I2NPStandardHeaderSize = I2NPShortHeaderSize + I2NPSizeFieldSize + I2NPChecksumSize // 16
+
+	// I2NPSizeFieldShift is the bit position of the size field's high byte,
+	// used when reading the two-byte length without a binary helper.
+	I2NPSizeFieldShift = 8
+
+	// I2NPMessageIDShift32/24/16/8 are the byte bit positions used to assemble
+	// a big-endian message ID from four individual bytes.
+	I2NPMessageIDShift24 = 24
+	I2NPMessageIDShift16 = 16
+	I2NPMessageIDShift8  = 8
+)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// I2NP message type ranges
+// ──────────────────────────────────────────────────────────────────────────────
+
+// The type byte is one byte, so 0-255 are addressable, but only some of them
+// are assigned. These ranges are what ReadI2NPType uses to decide whether an
+// unfamiliar type is merely unassigned (log quietly, it may be specified later)
+// or something a router should not be sending (log loudly).
+//
+// Spec: i2np.rst §"Message Types"
+// Moved from: utils.go
+const (
+	// unassignedTypeRangeStart and unassignedTypeRangeEnd bound the first block
+	// of types the spec does not use (4-9).
+	unassignedTypeRangeStart = 4
+	unassignedTypeRangeEnd   = 9
+
+	// unassignedTypeRange2Start and unassignedTypeRange2End bound the second
+	// unused block (12-17).
+	unassignedTypeRange2Start = 12
+	unassignedTypeRange2End   = 17
+
+	// experimentalTypeRangeStart and experimentalTypeRangeEnd bound the
+	// implementation-defined range (224-254) that routers may use for their own
+	// protocols. Receiving one is not an error but is worth a warning, since it
+	// means a peer is speaking something outside the spec.
+	experimentalTypeRangeStart = 224
+	experimentalTypeRangeEnd   = 254
+
+	// reservedType is the single type held back entirely (255).
+	reservedType = 255
+)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Identity hash sizes
+// ──────────────────────────────────────────────────────────────────────────────
+
+// HashSize is the width, in bytes, of the SHA-256 identity hashes that appear
+// throughout the I2NP payload types: the DatabaseLookup key, the excluded-peer
+// list entries, the reply key, and the DatabaseSearchReply peer hashes. It
+// matches common.Hash, which is the type these fields are declared as.
+// Moved from: database_lookup.go, database_search_reply.go, database_store.go
+const HashSize = 32
+
+// ──────────────────────────────────────────────────────────────────────────────
+// TunnelData message framing
+// ──────────────────────────────────────────────────────────────────────────────
+
+// A TunnelData message's payload is a 4-byte tunnel ID followed by a fixed
+// 1024-byte encrypted block — one AES-CBC block chain, no length field — for
+// 1028 bytes total. The size is fixed by the tunnel layer, not by the payload.
+//
+// Spec: tunnel-message.rst; i2np.rst §"Tunnel Data Message"
+// Moved from: tunnel_data.go, tunnel_data_message.go, i2np.go
+const (
+	// TunnelDataPayloadSize is the encrypted tunnel payload that follows the
+	// tunnel ID in a TunnelData message.
+	TunnelDataPayloadSize = 1024
+
+	// TunnelDataSize is the whole TunnelData payload: tunnel ID plus encrypted
+	// data. Equal to tunnel.TunnelMessageSize, which the crypto package uses to
+	// size the same block.
+	TunnelDataSize = i2ptunnel.TunnelMessageSize // 1028
+)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// DeliveryStatus message framing
+// ──────────────────────────────────────────────────────────────────────────────
+
+// The DeliveryStatus replay cache key is SHA-256 over the 4-byte message ID
+// concatenated with the 8-byte delivery timestamp, so the preimage is exactly
+// 12 bytes.
+//
+// Spec: i2np.rst §"Delivery Status Message"
+// Moved from: delivery_status_message.go
+const (
+	// DeliveryStatusKeySize is the length of the message ID + timestamp buffer
+	// that is hashed to form a replay-cache key.
+	DeliveryStatusKeySize = I2NPMessageIDSize + I2NPExpirationSize // 12
+
+	// DeliveryStatusMaxAge is how far in the past a DeliveryStatus may be
+	// dated and still be accepted. A status older than this is stale: the
+	// message it refers to has long since expired, so recording it in the
+	// replay cache would only consume space.
+	DeliveryStatusMaxAge = 24 * time.Hour
+)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Garlic message limits
+// ──────────────────────────────────────────────────────────────────────────────
+
+const (
+	// garlicCloveWireLimit is the ceiling the wire format imposes on cloves in
+	// one garlic message. The clove count is written as a single byte, so 255 is
+	// the most a message can declare. The builder's own, tighter cap is
+	// MaxGarlicCloves.
+	// Moved from: garlic_builder.go
+	garlicCloveWireLimit = 255
+
+	// garlicBuilderInitialCapacity is the capacity hint for a serialised garlic
+	// message, sized to a typical small clove set to avoid regrowth.
+	// Moved from: garlic_builder.go
+	garlicBuilderInitialCapacity = 128
+
+	// garlicDeliveryInstructionInitialCapacity is the capacity hint for one
+	// serialised delivery instruction.
+	// Moved from: garlic_builder.go
+	garlicDeliveryInstructionInitialCapacity = 37
+
+	// garlicCloveHeaderSize is the size of the per-clove header written ahead of
+	// each clove's I2NP message.
+	// Moved from: garlic_builder.go
+	garlicCloveHeaderSize = 9
+
+	// garlicMessageTTL is how long a built garlic message stays deliverable.
+	// Kept short because a garlic message is a burst of cloves for one
+	// destination and a stale one is better dropped than retried.
+	// Moved from: garlic_builder.go, garlic_session.go
+	garlicMessageTTL = 10 * time.Second
+)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// RouterInfo / LeaseSet size limits
+// ──────────────────────────────────────────────────────────────────────────────
+
+// Upper bounds applied when accepting a DatabaseStore payload. The compressed
+// and decompressed limits are deliberately generous: they exist to stop a
+// decompression bomb and a truncated stream, not to police honest routers.
+// Moved from: database_store.go, database_manager.go
+const (
+	// KiB is the multiplier for the kilobyte units used by the size limits
+	// below.
+	KiB = 1024
+
+	// MaxRouterInfoCompressedSize is the largest accepted compressed RouterInfo.
+	MaxRouterInfoCompressedSize = 20 * KiB
+
+	// MaxRouterInfoUncompressedSize is the largest a RouterInfo may expand to.
+	// The ratio between this and the compressed limit is what catches a bomb.
+	MaxRouterInfoUncompressedSize = 100 * KiB
+
+	// MaxDecompressionRatio is how much a payload may grow during
+	// decompression before it is treated as a bomb rather than as compression
+	// doing its job.
+	MaxDecompressionRatio = 100
+
+	// databaseStoreReplyTokenSize is the width of the reply token field in a
+	// DatabaseStore payload. When it is zero the optional reply tunnel ID and
+	// gateway that follow it are absent.
+	databaseStoreReplyTokenSize = I2NPMessageIDSize // 4
+
+	// databaseStoreMinSize is the smallest valid DatabaseStore payload:
+	// key + type + reply token.
+	databaseStoreMinSize = HashSize + I2NPTypeSize + databaseStoreReplyTokenSize // 37
+
+	// databaseSearchReplyMinSize is the smallest valid DatabaseSearchReply:
+	// the requested key plus the peer count byte.
+	databaseSearchReplyMinSize = HashSize + I2NPTypeSize // 33
+
+)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// NetDB query rate limiting
+// ──────────────────────────────────────────────────────────────────────────────
+
+// Moved from: database_manager.go
+const (
+	// routerInfoDumpDateLayout is the Go reference layout for the date suffix
+	// on periodic RouterInfo dump filenames.
+	// Moved from: database_manager.go
+	routerInfoDumpDateLayout = "20060102"
+)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Short build record ECIES sizes
+// ──────────────────────────────────────────────────────────────────────────────
+
+// The sizes of the short (ECIES) build record are owned by
+// lib/tunnel/buildrecord, which defines the record; these alias them so the
+// encryption code and the serialisation code cannot drift apart.
+const (
+	// x25519KeySize is the width of an X25519 private key or public key, the
+	// key agreement used by the short build record.
+	// Moved from: build_record_crypto_short.go
+	x25519KeySize = 32
+)
+
+// Header layout assertions. These are compile-time checks, not runtime ones: if
+// a field width above is edited without the corresponding header total, or the
+// existing ShortI2NPHeaderSize / StandardI2NPHeaderSize constants are edited
+// without these, the package stops building rather than silently mis-framing
+// every message.
+const (
+	_ = uint(ShortI2NPHeaderSize - I2NPShortHeaderSize)
+	_ = uint(StandardI2NPHeaderSize - I2NPStandardHeaderSize)
+)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Generic integer field widths
+// ──────────────────────────────────────────────────────────────────────────────
+
+// Several I2NP payload fields are plain big-endian integers that are not the
+// message ID or the header size field, but share their width. Naming the width
+// once keeps the payload parsers from restating 4 and 2.
+//
+// Moved from: data_message.go, tunnel_gateway.go, garlic_builder.go,
+// garlic_session.go, database_lookup.go, processor_handlers.go
+const (
+	// uint32FieldSize is the width of a big-endian uint32 payload field.
+	uint32FieldSize = 4
+
+	// uint16FieldSize is the width of a big-endian uint16 payload field.
+	uint16FieldSize = 2
+)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Garlic clove delivery instruction flag bits
+// ──────────────────────────────────────────────────────────────────────────────
+
+// A garlic clove's delivery instructions open with one flag byte. Bit 7 says
+// whether the session is encrypted, bits 6-5 give the delivery type, and bit 4
+// says whether a 4-byte delay follows. The type values below are the *field*
+// values (already shifted down), and the flag constants are those values shifted
+// into position, which is how the builder writes them.
+//
+// Note that this numbering is the garlic/ECIES one and differs from the
+// tunnel-layer delivery types in lib/tunnel (DTLocal/DTTunnel/DTRouter), which
+// order the same field differently. The two are separate wire formats — a garlic
+// clove's instructions and a tunnel message's instructions — and are not
+// interchangeable.
+//
+// Spec: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/garlic.rst
+// Moved from: garlic_builder.go, processor_handlers.go
+const (
+	// garlicEncryptedFlagBit is bit 7 of the flag byte: the clove is encrypted
+	// and a session key precedes the delivery data.
+	garlicEncryptedFlagBit = 7
+
+	// garlicDeliveryTypeShift is how far the delivery type field sits above the
+	// low bit: bits 6-5.
+	garlicDeliveryTypeShift = 5
+
+	// garlicDeliveryTypeMask selects the 2-bit delivery type field once shifted
+	// down.
+	garlicDeliveryTypeMask = 0x03
+
+	// garlicDelayFlagBit is bit 4 of the flag byte: a 4-byte delay follows the
+	// delivery data.
+	garlicDelayFlagBit = 4
+
+	// garlicDelayFieldSize is the width of that optional delay field.
+	garlicDelayFieldSize = uint32FieldSize
+
+	// Garlic delivery type field values.
+	garlicDeliveryTypeLocal       = 0x00
+	garlicDeliveryTypeDestination = 0x01
+	garlicDeliveryTypeRouter      = 0x02
+	garlicDeliveryTypeTunnel      = 0x03
+
+	// The same values pre-shifted into the flag byte, used when building cloves.
+	garlicDeliveryFlagLocal       = garlicDeliveryTypeLocal << garlicDeliveryTypeShift // 0x00
+	garlicDeliveryFlagDestination = garlicDeliveryTypeDestination << garlicDeliveryTypeShift
+	garlicDeliveryFlagRouter      = garlicDeliveryTypeRouter << garlicDeliveryTypeShift
+	garlicDeliveryFlagTunnel      = garlicDeliveryTypeTunnel << garlicDeliveryTypeShift // 0x60
+)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Garlic session tag
+// ──────────────────────────────────────────────────────────────────────────────
+
+// The first bytes of an encrypted garlic message are the recipient's session
+// tag, which is how the receiving router finds the ratchet state to decrypt
+// with. It is read as a fixed-size array key in the one-time-tag maps, so its
+// width is part of the type as well as the wire format.
+//
+// Moved from: garlic_session.go
+const (
+	// garlicSessionTagSize is the number of leading bytes of an encrypted garlic
+	// message used as the incoming session tag.
+	garlicSessionTagSize = 8
+
+	// garlicSessionTagLogPrefix is how many tag bytes are printed in diagnostics;
+	// enough to identify a session, short enough not to dump key material.
+	garlicSessionTagLogPrefix = 8
+)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Data / TunnelGateway message framing
+// ──────────────────────────────────────────────────────────────────────────────
+
+// Both message types carry a fixed header ahead of their variable payload
+// inside the I2NP data field.
+//
+// Spec: i2np.rst §"Data Message", §"Tunnel Gateway Message"
+// Moved from: data_message.go, tunnel_gateway.go, processor_handlers.go
+const (
+	// dataPayloadLengthFieldSize is the uint32 that gives the length of a Data
+	// message's payload.
+	dataPayloadLengthFieldSize = uint32FieldSize
+
+	// tunnelGatewayTunnelIDSize is the uint32 destination tunnel ID a
+	// TunnelGateway message opens with.
+	tunnelGatewayTunnelIDSize = uint32FieldSize
+
+	// tunnelGatewayLengthFieldSize is the uint16 giving the length of the
+	// tunnel record that follows.
+	tunnelGatewayLengthFieldSize = uint16FieldSize
+
+	// tunnelGatewayHeaderSize is the fixed TunnelGateway header: tunnel ID plus
+	// record length.
+	tunnelGatewayHeaderSize = tunnelGatewayTunnelIDSize + tunnelGatewayLengthFieldSize // 6
+)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// NTCP message ID framing
+// ──────────────────────────────────────────────────────────────────────────────
+
+// The NTCP I2NP header is type(1) + message ID(4), so reading the message ID
+// needs a 5-byte buffer and the ID itself starts at I2NPMessageIDOffset.
+//
+// Moved from: utils.go
+const ntcpMessageIDPrefixSize = I2NPTypeSize + I2NPMessageIDSize // 5
+
+// ──────────────────────────────────────────────────────────────────────────────
+// DatabaseLookup field sizes and limits
+// ──────────────────────────────────────────────────────────────────────────────
+
+// Moved from: database_lookup.go
+const (
+	// lookupReplyTunnelIDSize is the 4-byte tunnel ID a lookup asks for its
+	// reply to be routed through.
+	lookupReplyTunnelIDSize = uint32FieldSize
+
+	// lookupExcludedCountFieldSize is the uint16 giving the number of excluded
+	// peers.
+	lookupExcludedCountFieldSize = uint16FieldSize
+
+	// MaxExcludedPeers is the largest excluded-peer list a lookup may declare.
+	// The spec allows the full uint16, but a reply is capped at 8 routers, so a
+	// longer list cannot be honoured and is treated as a resource-exhaustion
+	// attempt rather than a valid request.
+	MaxExcludedPeers = 512
+
+	// eciesReplyTagSize is the width of one ECIES reply tag. Aliased from the
+	// common package that defines the type so the size cannot drift from the
+	// tag's own encoding.
+	eciesReplyTagSize = session_tag.ECIESSessionTagSize // 8
+)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Tunnel build reply defaults
+// ──────────────────────────────────────────────────────────────────────────────
+
+// A tunnel build reply is expected within the I2P build timeout; the reference
+// implementations use 90 seconds for the whole build, with retries spaced far
+// enough apart that a slow reply is not mistaken for a lost one.
+//
+// Moved from: tunnel_reply_handler.go
+const (
+	// defaultReplyBuildTimeout bounds a single tunnel build attempt.
+	defaultReplyBuildTimeout = 90 * time.Second
+
+	// defaultReplyMaxRetries is how many times a build is retried before the
+	// tunnel is abandoned.
+	defaultReplyMaxRetries = 3
+
+	// defaultReplyRetryBackoff is the delay before the first retry.
+	defaultReplyRetryBackoff = 5 * time.Second
+)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Diagnostics and logging
+// ──────────────────────────────────────────────────────────────────────────────
+
+const (
+	// metricsLogIntervalSec is the interval, in seconds, the tunnel metrics log
+	// reports over. It is a display unit only — the counters are cumulative.
+	// Moved from: tunnel_manager_reply.go
+	metricsLogIntervalSec = 30
+
+	// logHashPrefixLen is how many leading characters of a hex hash are printed
+	// in a String() summary: enough to recognise a peer in a log line without
+	// dumping the full key.
+	// Moved from: database_search_reply.go
+	logHashPrefixLen = 8
+)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// DatabaseStore data type field
+// ──────────────────────────────────────────────────────────────────────────────
+
+// The DatabaseStore type byte carries the record type in its low nibble; the
+// upper bits are flags. Masking before the switch is what keeps a store of one
+// type from being read as another when a flag happens to be set.
+//
+// Moved from: database_store.go
+const databaseStoreTypeNibbleMask = 0x0F
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Tunnel build layer obfuscation
+// ──────────────────────────────────────────────────────────────────────────────
+
+// STBM records are obfuscated in chained layers: hop i XORs every record after
+// its own, so the layers start at the second-to-last record and a lone record
+// has nothing to peel. Both bounds are the same distance from the end of the
+// slice, which is what this constant names.
+//
+// Moved from: tunnel_manager_build.go
+const secondToLastOffset = 2

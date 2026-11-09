@@ -24,6 +24,47 @@ const DefaultKeepaliveInterval = 15 * time.Second
 // before the session is torn down.
 const DefaultMaxRetransmissions = 3
 
+// DefaultMaxInflightHandshakes is the default cap on concurrent inbound SSU2
+// responder handshakes, authenticated or not. See [Config.MaxInflightHandshakes].
+//
+// A pre-handshake SessionRequest costs this router a goroutine, listener state
+// for the pending session and a handshake window, and the peer proves nothing to
+// get it. The cap bounds that cost; 64 is enough for a router establishing
+// sessions at a normal rate and small enough that a flood cannot grow the
+// handshake work past it.
+const DefaultMaxInflightHandshakes = 64
+
+// DefaultMaxHandshakesPerSource is the default cap on concurrent inbound SSU2
+// handshakes from one source IP. See [Config.MaxHandshakesPerSource].
+const DefaultMaxHandshakesPerSource = 8
+
+// DefaultHandshakeTimeout bounds one inbound SSU2 responder handshake when the
+// transport's go-noise config carries no value of its own. It matches go-noise's
+// spec-derived default (ssu2.rst: 15 s), so this only makes the bound explicit
+// rather than changing it.
+const DefaultHandshakeTimeout = 15 * time.Second
+
+// DefaultRequireRetry is the transport's default for [Config.RequireRetry].
+//
+// It is FALSE, and deliberately so, even though source-address validation is a
+// real hardening: go-i2p pins a go-noise whose Retry-issuance path
+// (SSU2Listener.processTokenRequest → verifyIntroKeyMessage) AEAD-opens the
+// inbound packet's payload with the intro key as if it were a Token Request. A
+// SessionRequest's payload is Noise-encrypted, not intro-key-sealed, so that
+// check always fails and the SessionRequest is dropped with
+// "failed to send Retry: no token present in SessionRequest" — before any session
+// is created. Turning RequireRetry on therefore rejects EVERY inbound
+// SessionRequest, including valid peers, which is a total inbound SSU2 outage:
+// strictly worse than the stall it was meant to prevent.
+//
+// The pre-authentication stall in finding 005 is fixed by the other controls here
+// (the responder handshake moved off the accept path, CloseImmediate, and the
+// [Config.MaxInflightHandshakes] budget), none of which depend on RequireRetry.
+// The knob stays wired so an operator can opt in once go-noise's Retry path
+// handles a Noise-encrypted SessionRequest payload; until then the default must
+// stay off.
+const DefaultRequireRetry = false
+
 // DefaultHolePunchDelay is the time Alice waits for Charlie's hole-punch packets
 // to arrive before sending the SessionRequest directly during introducer-based
 // relay connections.
@@ -62,6 +103,52 @@ type Config struct {
 	MaxRetransmissions int           // I2NP retransmission attempts before teardown (0 = DefaultMaxRetransmissions)
 	HolePunchDelay     time.Duration // Delay before sending SessionRequest after RelayResponse (0 = default 150ms)
 
+	// MaxInflightHandshakes bounds how many inbound SSU2 responder handshakes
+	// the transport runs at once, before any of them authenticates. Unlike
+	// MaxSessions, which is only enforced after a handshake succeeds, this caps
+	// the work an unauthenticated SessionRequest can make the router do.
+	// Zero (the default) selects [DefaultMaxInflightHandshakes]; a negative
+	// value disables the bound.
+	MaxInflightHandshakes int
+
+	// MaxHandshakesPerSource bounds how many of those concurrent handshakes may
+	// come from one source IP, so a single host cannot consume the whole
+	// budget. Zero selects [DefaultMaxHandshakesPerSource]; a negative value
+	// disables the bound.
+	MaxHandshakesPerSource int
+
+	// InboundHandshakeTimeout bounds one inbound SSU2 responder handshake: the
+	// deadline the transport's handshake worker enforces, and the value published
+	// onto the go-noise config so the timeouts go-noise applies internally agree
+	// with it. Zero selects [DefaultHandshakeTimeout].
+	//
+	// It is a construction-time field on purpose. The go-noise listener copies its
+	// config into every session it creates, so mutating the noise config once the
+	// listener is running is a data race — which is why
+	// [Config.GetHandshakeTimeout] resolves this field rather than reading the
+	// live noise config.
+	InboundHandshakeTimeout time.Duration
+
+	// RequireRetry makes the listener answer a SessionRequest that carries no
+	// valid token with a Retry, so the initiator must prove it can receive
+	// packets at the claimed source address before this router spends a
+	// handshake on it. This is SSU2's own source-address validation, and in
+	// principle it is the reason a spoofed-source flood should cost the spoofer
+	// more than it costs us.
+	//
+	// Do NOT turn this on yet. The pinned go-noise treats the SessionRequest as
+	// if it were a Token Request when issuing the Retry token and AEAD-opens its
+	// payload with the intro key, which a Noise-encrypted SessionRequest payload
+	// can never satisfy — so every inbound SessionRequest is dropped. See
+	// [DefaultRequireRetry] for the full failure mode. The transport's own
+	// pre-authentication bounds ([Config.MaxInflightHandshakes],
+	// [Config.MaxHandshakesPerSource]) are what actually cap the cost of a
+	// spoofed flood today.
+	//
+	// Defaults to [DefaultRequireRetry] (off). Opt in with
+	// transport.ssu2_require_retry once go-noise's Retry path is fixed.
+	RequireRetry bool
+
 	// RouterLookupFunc looks up a RouterInfo by identity hash.
 	// Required for SSU2 via introducers: Alice looks up Bob (the introducer)
 	// to get a direct dialable address before sending the RelayRequest.
@@ -89,6 +176,53 @@ func (c *Config) GetMaxSessions() int {
 		return DefaultMaxSessions
 	}
 	return c.MaxSessions
+}
+
+// GetMaxInflightHandshakes returns the effective inbound handshake concurrency
+// cap. Zero selects [DefaultMaxInflightHandshakes]; a negative value means the
+// bound is disabled and every inbound handshake is admitted.
+func (c *Config) GetMaxInflightHandshakes() int {
+	if c == nil || c.MaxInflightHandshakes == 0 {
+		return DefaultMaxInflightHandshakes
+	}
+	return c.MaxInflightHandshakes
+}
+
+// GetMaxHandshakesPerSource returns the effective per-source inbound handshake
+// cap. Zero selects [DefaultMaxHandshakesPerSource]; a negative value means the
+// bound is disabled.
+func (c *Config) GetMaxHandshakesPerSource() int {
+	if c == nil || c.MaxHandshakesPerSource == 0 {
+		return DefaultMaxHandshakesPerSource
+	}
+	return c.MaxHandshakesPerSource
+}
+
+// GetHandshakeTimeout returns the bound applied to one inbound responder
+// handshake. It resolves [Config.InboundHandshakeTimeout], falling back to
+// [DefaultHandshakeTimeout] when unset; a negative value returns the value from
+// the go-noise config, which is how an operator opts out of this layer's bound
+// and lets go-noise's own handshake budget apply.
+//
+// It deliberately does NOT read the live noise config: the listener copies that
+// config into every session, so the transport's worker and the listener could
+// otherwise disagree, and a test that set the noise value after the listener
+// started would race it.
+func (c *Config) GetHandshakeTimeout() time.Duration {
+	if c == nil {
+		return DefaultHandshakeTimeout
+	}
+	switch {
+	case c.InboundHandshakeTimeout == 0:
+		return DefaultHandshakeTimeout
+	case c.InboundHandshakeTimeout < 0:
+		if c.SSU2Config != nil && c.SSU2Config.HandshakeTimeout > 0 {
+			return c.SSU2Config.HandshakeTimeout
+		}
+		return DefaultHandshakeTimeout
+	default:
+		return c.InboundHandshakeTimeout
+	}
 }
 
 // GetKeepaliveInterval returns the effective keepalive interval.
@@ -122,9 +256,10 @@ func (c *Config) GetHolePunchDelay() time.Duration {
 }
 
 // NewConfig creates a new SSU2 Config with the given listener address.
-// It returns a Config with only the listener address set; the remaining fields
-// (session limits, keepalive, retransmissions) fall back to their defaults via
-// the Get* methods. Call Validate to check the listener address before use.
+// It returns a Config with only the listener address set and source-address
+// validation on; the remaining limits (session pool, handshake budget,
+// keepalive, retransmissions) fall back to their defaults via the Get* methods.
+// Call Validate to check the listener address before use.
 // See also [Config] and [NewSSU2Transport].
 func NewConfig(listenerAddress string) (*Config, error) {
 	log.WithFields(logger.Fields{
@@ -136,6 +271,7 @@ func NewConfig(listenerAddress string) (*Config, error) {
 	return &Config{
 		ListenerAddress: listenerAddress,
 		WorkingDir:      "",
+		RequireRetry:    DefaultRequireRetry,
 		SSU2Config:      nil,
 	}, nil
 }

@@ -2,7 +2,6 @@ package embedded
 
 import (
 	"context"
-	"time"
 
 	"github.com/go-i2p/go-i2p/lib/router"
 	"github.com/go-i2p/logger"
@@ -19,7 +18,7 @@ func (e *StandardEmbeddedRouter) HardStop() {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), hardStopTimeout)
 	defer cancel()
 
 	if err := router.StopWithContext(ctx); err != nil {

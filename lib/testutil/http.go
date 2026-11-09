@@ -5,7 +5,6 @@ import (
 	"io"
 	"net/http"
 	"testing"
-	"time"
 )
 
 // PostJSON sends an HTTP POST with the given JSON body to url and returns the
@@ -19,7 +18,7 @@ func PostJSON(t *testing.T, url string, jsonBody []byte) []byte {
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 5 * time.Second}
+	client := &http.Client{Timeout: httpHelperTimeout}
 	httpResp, err := client.Do(httpReq)
 	if err != nil {
 		t.Fatalf("Failed to send request: %v", err)

@@ -73,16 +73,16 @@ type BuildTunnelRequest struct {
 // and tunnel IDs needed to encrypt and route data through the new tunnel.
 // See [I2P Spec: Tunnel Creation ECIES](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/tunnel-creation-ecies.rst) for the build protocol.
 type TunnelBuildResult struct {
-	TunnelID        TunnelID                 // The generated tunnel ID
-	GatewayTunnelID TunnelID                 // Inbound gateway receive tunnel ID
-	Hops            []router_info.RouterInfo // Selected router hops
-	Records         []BuildRequestRecord     // Build records for each hop
-	OurIdentity     common.Hash              // Our router identity hash, needed to build the inbound phony record
-	ReplyKeys       []session_key.SessionKey // Reply decryption keys for each hop
-	ReplyIVs        [][16]byte               // Reply IVs for each hop
-	NoiseHashes     [][32]byte               // Per-hop Noise transcript hashes (m_H) for STBM reply AEAD decryption
-	UseShortBuild   bool                     // True if using Short Tunnel Build (STBM), false for Variable Tunnel Build
-	IsInbound       bool                     // True if this is an inbound tunnel
+	TunnelID        TunnelID                       // The generated tunnel ID
+	GatewayTunnelID TunnelID                       // Inbound gateway receive tunnel ID
+	Hops            []router_info.RouterInfo       // Selected router hops
+	Records         []BuildRequestRecord           // Build records for each hop
+	OurIdentity     common.Hash                    // Our router identity hash, needed to build the inbound phony record
+	ReplyKeys       []session_key.SessionKey       // Reply decryption keys for each hop
+	ReplyIVs        [][buildrecord.ReplyIVLen]byte // Reply IVs for each hop
+	NoiseHashes     [][32]byte                     // Per-hop Noise transcript hashes (m_H) for STBM reply AEAD decryption
+	UseShortBuild   bool                           // True if using Short Tunnel Build (STBM), false for Variable Tunnel Build
+	IsInbound       bool                           // True if this is an inbound tunnel
 
 	// RecordSlots maps PATH ENTRY index -> wire slot index, populated when the
 	// build message is serialized. Build record order is randomized so middle
@@ -134,8 +134,8 @@ func logHopCountError(err error, hopCount int) {
 		"phase":     "tunnel_build",
 		"reason":    "hop count validation failed",
 		"hop_count": hopCount,
-		"min_hops":  1,
-		"max_hops":  8,
+		"min_hops":  minOutboundHops,
+		"max_hops":  maxHops,
 	}).Error("invalid hop count")
 }
 
@@ -323,11 +323,11 @@ func (tb *TunnelBuilder) validateHopCount(hopCount int, isInbound bool) error {
 		"is_inbound": isInbound,
 	}).Debug("Validating hop count")
 
-	minHops := 1
+	minHops := minOutboundHops
 	if isInbound {
-		minHops = 0
+		minHops = minInboundHops
 	}
-	if hopCount < minHops || hopCount > 8 {
+	if hopCount < minHops || hopCount > maxHops {
 		log.WithFields(logger.Fields{
 			"at":         "validateHopCount",
 			"hop_count":  hopCount,
@@ -446,10 +446,10 @@ func (tb *TunnelBuilder) createAllHopRecords(
 	req BuildTunnelRequest,
 	hopTunnelIDs []TunnelID,
 	peers []router_info.RouterInfo,
-) ([]BuildRequestRecord, []session_key.SessionKey, [][16]byte, error) {
+) ([]BuildRequestRecord, []session_key.SessionKey, [][buildrecord.ReplyIVLen]byte, error) {
 	records := make([]BuildRequestRecord, req.HopCount)
 	replyKeys := make([]session_key.SessionKey, req.HopCount)
-	replyIVs := make([][16]byte, req.HopCount)
+	replyIVs := make([][buildrecord.ReplyIVLen]byte, req.HopCount)
 
 	for i := 0; i < req.HopCount; i++ {
 		hopRecord, err := tb.generateHopRecord(i, req, hopTunnelIDs, peers)
@@ -476,7 +476,7 @@ func (tb *TunnelBuilder) createAllHopRecords(
 type generatedHopRecord struct {
 	record   BuildRequestRecord
 	replyKey session_key.SessionKey
-	replyIV  [16]byte
+	replyIV  [buildrecord.ReplyIVLen]byte
 }
 
 // determineHopPosition determines the position of a hop in the tunnel (gateway, endpoint, or participant).
@@ -568,7 +568,7 @@ func (tb *TunnelBuilder) generateHopRecord(
 }
 
 // generateHopCryptoKeys generates all cryptographic keys needed for a tunnel hop.
-func generateHopCryptoKeys() (layerKey, ivKey, replyKey session_key.SessionKey, replyIV [16]byte, err error) {
+func generateHopCryptoKeys() (layerKey, ivKey, replyKey session_key.SessionKey, replyIV [buildrecord.ReplyIVLen]byte, err error) {
 	layerKey, err = generateSessionKey()
 	if err != nil {
 		err = oops.Errorf("failed to generate layer key: %w", err)
@@ -596,10 +596,10 @@ func generateHopCryptoKeys() (layerKey, ivKey, replyKey session_key.SessionKey, 
 }
 
 // generateRecordPadding generates random padding for a build request record.
-func generateRecordPadding() ([29]byte, error) {
-	var padding [29]byte
+func generateRecordPadding() ([buildrecord.LegacyPaddingLen]byte, error) {
+	var padding [buildrecord.LegacyPaddingLen]byte
 	if _, err := rand.Read(padding[:]); err != nil {
-		return [29]byte{}, oops.Errorf("failed to generate padding: %w", err)
+		return [buildrecord.LegacyPaddingLen]byte{}, oops.Errorf("failed to generate padding: %w", err)
 	}
 	return padding, nil
 }
@@ -771,7 +771,7 @@ func (tb *TunnelBuilder) determineOutboundRouting(
 func generateTunnelID() (TunnelID, error) {
 	const maxAttempts = 8
 	for i := 0; i < maxAttempts; i++ {
-		var buf [4]byte
+		var buf [TunnelIDSize]byte
 		if _, err := rand.Read(buf[:]); err != nil {
 			return 0, oops.Errorf("failed to read random data: %w", err)
 		}
@@ -799,7 +799,7 @@ func generateSessionKey() (session_key.SessionKey, error) {
 // including 32-bit systems where int is 32 bits.
 // Returns an error if the system's secure random number generator fails.
 func generateMessageID() (int, error) {
-	var buf [4]byte
+	var buf [TunnelIDSize]byte
 	if _, err := rand.Read(buf[:]); err != nil {
 		return 0, oops.Errorf("tunnel: crypto/rand failed: %w", err)
 	}

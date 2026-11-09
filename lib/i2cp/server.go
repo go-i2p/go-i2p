@@ -102,9 +102,9 @@ func DefaultServerConfig() *ServerConfig {
 		ListenAddr:                 config.DefaultI2CPConfig.Address,
 		Network:                    config.DefaultI2CPConfig.Network,
 		MaxSessions:                config.DefaultI2CPConfig.MaxSessions,
-		ReadTimeout:                60 * time.Second,
-		WriteTimeout:               30 * time.Second,
-		SessionTimeout:             30 * time.Minute,
+		ReadTimeout:                defaultServerReadTimeout,
+		WriteTimeout:               defaultServerWriteTimeout,
+		SessionTimeout:             defaultServerSessionTimeout,
 		AllowInsecureCleartextAuth: config.DefaultI2CPConfig.AllowInsecureCleartextAuth,
 	}
 }

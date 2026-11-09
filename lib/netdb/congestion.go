@@ -64,8 +64,8 @@ type cachedFlag struct {
 func NewCongestionCache() *CongestionCache {
 	return &CongestionCache{
 		flags:   make(map[common.Hash]cachedFlag),
-		maxSize: 2048,
-		ttl:     30 * time.Minute,
+		maxSize: congestionCacheMaxEntries,
+		ttl:     congestionCacheTTL,
 	}
 }
 
@@ -227,7 +227,7 @@ func (t *NetDBCongestionTracker) parseAndCacheCongestionFlag(hash common.Hash, r
 
 	log.WithFields(logger.Fields{
 		"at":     "NetDBCongestionTracker.parseAndCacheCongestionFlag",
-		"hash":   shortHash(hash.String(), 16),
+		"hash":   shortHash(hash.String(), hashLogPrefixHexChars),
 		"caps":   caps,
 		"flag":   flag.String(),
 		"reason": "parsed congestion flag from RouterInfo",
@@ -315,7 +315,7 @@ func (t *NetDBCongestionTracker) InvalidatePeerCache(hash common.Hash) {
 
 	log.WithFields(logger.Fields{
 		"at":     "NetDBCongestionTracker.InvalidatePeerCache",
-		"hash":   shortHash(hash.String(), 16),
+		"hash":   shortHash(hash.String(), hashLogPrefixHexChars),
 		"reason": "RouterInfo updated, cache invalidated",
 	}).Debug("invalidated congestion cache for peer")
 }
@@ -366,7 +366,7 @@ func (t *NetDBCongestionTracker) GetEffectiveCongestionFlag(hash common.Hash) co
 	if flag == config.CongestionFlagE && t.IsStaleEFlag(hash) {
 		log.WithFields(logger.Fields{
 			"at":     "NetDBCongestionTracker.GetEffectiveCongestionFlag",
-			"hash":   shortHash(hash.String(), 16),
+			"hash":   shortHash(hash.String(), hashLogPrefixHexChars),
 			"reason": "E flag with stale RouterInfo, treating as D",
 		}).Debug("downgraded stale E flag to D")
 		return config.CongestionFlagD

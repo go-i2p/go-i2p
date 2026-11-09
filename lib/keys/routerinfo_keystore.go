@@ -122,7 +122,7 @@ func ensureDirectoryExists(dir string) error {
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
 		log.WithField("dir", dir).Debug("Creating keystore directory")
 		// Use 0700 to protect private key material from other users
-		if err := os.MkdirAll(dir, 0o700); err != nil {
+		if err := os.MkdirAll(dir, keyMaterialDirMode); err != nil {
 			log.WithError(err).Error("Failed to create directory")
 			return err
 		}
@@ -204,7 +204,7 @@ func generateAndPersistEncryptionKey(fullPath string) (types.ReceivingPublicKey,
 		return nil, nil, err
 	}
 
-	if err := atomicWriteFile(fullPath, encryptionPrivKey.Bytes(), 0o600); err != nil {
+	if err := atomicWriteFile(fullPath, encryptionPrivKey.Bytes(), keyMaterialFileMode); err != nil {
 		log.WithError(err).Error("Failed to write X25519 encryption key to disk")
 		return nil, nil, err
 	}
@@ -249,8 +249,8 @@ func loadExistingKey(keyData []byte) (types.PrivateKey, error) {
 	// Ed25519 private keys are 32 bytes (seed) or 64 bytes (seed+public).
 	// Reject anything else to prevent malformed keys from causing
 	// panics or incorrect signatures downstream.
-	if len(keyData) != 32 && len(keyData) != 64 {
-		return nil, oops.Errorf("invalid Ed25519 key length: got %d bytes, want 32 or 64", len(keyData))
+	if len(keyData) != Ed25519SeedSize && len(keyData) != Ed25519PrivateKeySize {
+		return nil, oops.Errorf("invalid Ed25519 key length: got %d bytes, want %d or %d", len(keyData), Ed25519SeedSize, Ed25519PrivateKeySize)
 	}
 	key := ed25519.Ed25519PrivateKey(keyData)
 	return &key, nil
@@ -329,7 +329,7 @@ func (ks *RouterInfoKeystore) storeSigningKey(keyName string) error {
 		"at":   "StoreKeys",
 		"file": sigFilename,
 	}).Debug("Writing signing key file")
-	if err := atomicWriteFile(sigFilename, ks.privateKey.Bytes(), 0o600); err != nil {
+	if err := atomicWriteFile(sigFilename, ks.privateKey.Bytes(), keyMaterialFileMode); err != nil {
 		log.WithError(err).WithField("at", "StoreKeys").Error("Failed to write signing key file")
 		return err
 	}
@@ -346,7 +346,7 @@ func (ks *RouterInfoKeystore) storeEncryptionKey(keyName string) error {
 		"at":   "StoreKeys",
 		"file": encFilename,
 	}).Debug("Writing encryption key file")
-	if err := atomicWriteFile(encFilename, ks.encryptionPrivKey.Bytes(), 0o600); err != nil {
+	if err := atomicWriteFile(encFilename, ks.encryptionPrivKey.Bytes(), keyMaterialFileMode); err != nil {
 		log.WithError(err).WithField("at", "StoreKeys").Error("Failed to write encryption key file")
 		return err
 	}
@@ -752,7 +752,7 @@ func (ks *RouterInfoKeystore) generateAndPersistPadding(paddingPath string, padd
 		return nil, oops.Errorf("failed to generate padding: %w", err)
 	}
 
-	if err := atomicWriteFile(paddingPath, padding, 0o600); err != nil {
+	if err := atomicWriteFile(paddingPath, padding, keyMaterialFileMode); err != nil {
 		log.WithError(err).Warn("Failed to persist identity padding to disk; identity hash may change on restart")
 	}
 	return padding, nil

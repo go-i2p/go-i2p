@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/transport"
+	"github.com/go-i2p/go-noise/ntcp2"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
@@ -37,6 +38,13 @@ type NTCP2Session struct {
 	// Error tracking for receive worker
 	errorMu   sync.Mutex
 	lastError error
+
+	// closeRequested is set when the close path has started, either through an
+	// explicit Close() or through the automatic teardown an error triggers.
+	// Idle maintenance uses it as a failsafe: a session whose context is done
+	// and whose close has not started is a session whose socket, transport
+	// registry entry and muxer slot are still held (finding 006).
+	closeRequested atomic.Bool
 
 	// RouterInfo callback (called when a RouterInfo block is received from peer)
 	routerInfoMu       sync.Mutex
@@ -129,6 +137,11 @@ func (s *NTCP2Session) Close() error {
 // Spec reference: https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/ntcp2.rst
 func (s *NTCP2Session) CloseWithReason(reason byte) error {
 	var err error
+	// Mark the teardown as started before anything else: the idle-maintenance
+	// failsafe uses closeRequested to tell "cancelled and already tearing down"
+	// apart from "cancelled with the socket, registry entry and session slot
+	// still held" (finding 006). sync.Once below makes the body idempotent.
+	s.closeRequested.Store(true)
 	s.CloseOnce().Do(func() {
 		s.logSessionLifecycleSummary(reason)
 		s.Logger().WithField("reason", TerminationReasonString(reason)).Info("Closing NTCP2 session")
@@ -150,6 +163,21 @@ func (s *NTCP2Session) CloseWithReason(reason byte) error {
 				applyProbingResistance(raw)
 			}
 		} else {
+			// On an error-driven teardown the send worker may be parked writing
+			// to a peer that stopped reading, and go-noise serialises writes, so
+			// this block would queue behind that parked write. Cancelling pending
+			// writes first unblocks the worker, which then exits on the cancelled
+			// context. Without it Close stalls for as long as the parked write
+			// holds the socket — keeping the fd, the registry entry and the
+			// session slot alive, which is the failure this teardown exists to
+			// clear.
+			//
+			// A healthy close (context still live) must not do this: a worker may
+			// legitimately still be flushing the last queued message after the
+			// drain, and cancelling it would truncate the graceful shutdown.
+			if !s.IsAlive() {
+				s.cancelPendingWrites()
+			}
 			s.sendEncryptedTermination(reason)
 		}
 
@@ -158,6 +186,22 @@ func (s *NTCP2Session) CloseWithReason(reason byte) error {
 		conn := s.conn
 		s.connMu.Unlock()
 		if conn != nil {
+			// Unblock the receive worker before closing, or Close() stalls.
+			//
+			// go-noise's (*Conn).Close zeroes its buffered plaintext under the
+			// connection's read mutex, and the receive worker holds that mutex for
+			// the whole blocking Read — which is armed with the 5-minute
+			// ntcp2ReadDeadline. Closing first would therefore make Close wait for
+			// the parked Read to time out, holding the session (and the transport's
+			// shutdown) for minutes after the peer is gone.
+			//
+			// An expired read deadline returns the parked Read immediately; the
+			// worker then exits on its own because Cancel() above already closed the
+			// session context.
+			if deadlineErr := conn.SetReadDeadline(time.Now()); deadlineErr != nil {
+				s.Logger().WithError(deadlineErr).
+					Debug("Failed to set closing read deadline on NTCP2 connection")
+			}
 			err = conn.Close()
 			if err != nil {
 				s.Logger().WithError(err).Warn("Error closing connection")
@@ -255,6 +299,14 @@ func (s *NTCP2Session) sendEncryptedTermination(reason byte) {
 		"valid_frames": frames,
 	}).Debug("Sending encrypted termination block")
 
+	// go-noise serialises writes, so this block queues behind whatever the send
+	// worker has in flight. Arm a short deadline so a parked worker cannot make
+	// Close wait for it; the deadline is bounded rather than expired so this
+	// write itself still gets a chance to reach the wire.
+	if deadlineErr := conn.SetWriteDeadline(time.Now().Add(ntcp2TerminationWriteTimeout)); deadlineErr != nil {
+		s.Logger().WithError(deadlineErr).Debug("Failed to set termination block write deadline")
+	}
+
 	if _, writeErr := conn.Write(block); writeErr != nil {
 		s.Logger().WithError(writeErr).Debug("Failed to send encrypted termination block (best-effort)")
 	} else {
@@ -262,10 +314,32 @@ func (s *NTCP2Session) sendEncryptedTermination(reason byte) {
 	}
 }
 
+// cancelPendingWrites arms an expired write deadline so a send worker parked in
+// a blocking write returns immediately. It must only be called while tearing the
+// session down, since it discards whatever is mid-flight.
+func (s *NTCP2Session) cancelPendingWrites() {
+	s.connMu.Lock()
+	conn := s.conn
+	s.connMu.Unlock()
+	if conn == nil {
+		return
+	}
+	if err := conn.SetWriteDeadline(time.Now()); err != nil {
+		s.Logger().WithError(err).Debug("Failed to cancel pending NTCP2 writes before close")
+	}
+}
+
 // drainSendQueue waits for the send queue to empty before close.
 // This is called before canceling the session context so the sendWorker can
 // still process queued messages.
 func (s *NTCP2Session) drainSendQueue() {
+	// Once the session context is cancelled the send worker has stopped (or is
+	// stopping), so nothing left in the queue can reach the wire. Waiting here
+	// would only delay the teardown that an error path just scheduled.
+	if !s.IsAlive() {
+		return
+	}
+
 	queueSize := s.SendQueueSize()
 	if queueSize == 0 {
 		return
@@ -314,7 +388,7 @@ func ntcp2NextMetaInterval() time.Duration {
 }
 
 func nextMetaIntervalWithRand(randInt63n func(int64) int64) time.Duration {
-	half := ntcp2MetaFrequency / 2
+	half := ntcp2MetaFrequency / metaJitterDivisor
 	return half + time.Duration(randInt63n(int64(half)))
 }
 
@@ -403,30 +477,64 @@ func (s *NTCP2Session) frameMessage(msg i2np.Message) ([]byte, error) {
 // queues needs splitting.
 //
 // The per-frame plaintext ceiling is the configured maximum frame size minus
-// the 16-byte Poly1305 tag. go-noise defaults MaxFrameSize to
-// DefaultMaxFrameSize (16384) and this transport never overrides it (no
-// WithFrameSettings call exists in go-i2p), so the defaults are the values the
-// write path actually uses. The outbound AEAD padding modifier then appends up
-// to MaxPaddingSize + 3 block-header bytes to the frame, so that headroom is
+// the 16-byte Poly1305 tag. The transport raises go-noise's default to the
+// largest frame the wire format can carry (see [applyNTCP2FrameSettings]), so
+// a message that fits the spec's own block limit is actually delivered rather
+// than dropped. The outbound AEAD padding modifier then appends up to
+// MaxPaddingSize + 3 block-header bytes to the frame, so that headroom is
 // reserved too — otherwise the padding itself would push the frame over the
 // limit and re-introduce the split.
 const (
-	ntcp2DefaultMaxFrameSize  = 16384 // go-noise ntcp2.DefaultMaxFrameSize
-	ntcp2Poly1305Overhead     = 16    // go-noise ntcp2.Poly1305Overhead
-	ntcp2DefaultMaxPadding    = 64    // go-noise ntcp2.DefaultMaxPaddingSize
-	ntcp2MaxSingleBlockSize   = 65519 // ntcp2.rst:1447 maximum single block size
-	ntcp2PaddingBlockOverhead = blockHeaderSize + ntcp2DefaultMaxPadding
+	ntcp2SpecMaxFrameSize   = 65535 // ntcp2.rst:1444 maximum ChaChaPoly frame
+	ntcp2Poly1305Overhead   = 16    // go-noise ntcp2.Poly1305Overhead
+	ntcp2DefaultMaxPadding  = 64    // go-noise ntcp2.DefaultMaxPaddingSize
+	ntcp2MaxTotalBlockSize  = 65519 // ntcp2.rst:1446 maximum total block size
+	ntcp2PaddingOverhead    = blockHeaderSize + ntcp2DefaultMaxPadding
+	ntcp2WriteFramedCeiling = ntcp2SpecMaxFrameSize - ntcp2Poly1305Overhead
 )
 
 // maxOutboundFramePlaintext returns the largest block payload (DateTime and
 // I2NP blocks included) the session may hand to conn.Write in one frame
 // without go-noise fragmenting it across ChaChaPoly frames.
+//
+// Two ceilings bound it, and the smaller wins:
+//
+//   - writeFramed splits at its configured maximum frame size minus the
+//     authentication tag, which [applyNTCP2FrameSettings] sets to the spec
+//     maximum, so 65535 - 16 = 65519;
+//   - the padding modifier appends a Padding block after the payload, so the
+//     payload must leave that much headroom or the padded frame would exceed
+//     the split point and be fragmented anyway.
+//
+// The result is the same value i2pd uses for its own outbound frames
+// (NTCP2_UNENCRYPTED_FRAME_MAX_SIZE), so a message go-i2p is willing to send is
+// one a peer is willing to receive.
 func maxOutboundFramePlaintext() int {
-	maxPlaintext := ntcp2DefaultMaxFrameSize - ntcp2Poly1305Overhead - ntcp2PaddingBlockOverhead
-	if specMax := ntcp2MaxSingleBlockSize; maxPlaintext > specMax {
-		maxPlaintext = specMax
+	maxPlaintext := ntcp2WriteFramedCeiling - ntcp2PaddingOverhead
+	if maxPlaintext > ntcp2MaxTotalBlockSize {
+		maxPlaintext = ntcp2MaxTotalBlockSize
 	}
 	return maxPlaintext
+}
+
+// applyNTCP2FrameSettings raises a connection config's outbound frame size to
+// the largest frame the wire format carries.
+//
+// go-noise defaults MaxFrameSize to 16 KiB, which is well under the spec's
+// 65535-byte frame (ntcp2.rst:1444). Since the session refuses to fragment an
+// I2NP message across frames, that default silently caps every outbound message
+// at roughly 16 KiB: anything larger is dropped and the peer never receives it,
+// with no error to the caller. Raising it to the spec maximum makes the drop
+// path match what the spec actually forbids — messages too large for a frame at
+// all — rather than messages merely larger than an implementation default.
+//
+// Padding is left at go-noise's defaults (0-64 bytes) so the headroom reserved
+// in [maxOutboundFramePlaintext] stays accurate.
+func applyNTCP2FrameSettings(config *ntcp2.Config) *ntcp2.Config {
+	if config == nil {
+		return nil
+	}
+	return config.WithFrameSettings(ntcp2SpecMaxFrameSize, true, 0, ntcp2DefaultMaxPadding)
 }
 
 // fitsInSingleFrame reports whether payload fits in one outbound data-phase
@@ -441,7 +549,7 @@ func (s *NTCP2Session) logOversizedMessageDrop(msg i2np.Message, framedSize int)
 		"message_type":   msg.Type(),
 		"framed_size":    framedSize,
 		"max_frame_size": maxOutboundFramePlaintext(),
-	}).Warn("Outbound NTCP2 frame would exceed one ChaChaPoly frame; dropping message instead of fragmenting (ntcp2.rst:1626-1628)")
+	}).Warn("Outbound NTCP2 message exceeds one ChaChaPoly frame; dropping rather than fragmenting (ntcp2.rst:1626-1628)")
 }
 
 // writeFramedData writes framed data to the connection.
@@ -475,6 +583,12 @@ func (s *NTCP2Session) writeFramedData(framedData []byte) bool {
 // before checking if the session should stop. This prevents goroutine leaks
 // when a peer goes silent without closing the connection.
 const ntcp2ReadDeadline = 5 * time.Minute
+
+// ntcp2TerminationWriteTimeout bounds the best-effort Termination block written
+// during teardown. A close must never wait on a peer that has stopped reading:
+// the socket, the transport registry entry and the session slot are only
+// released once this write returns.
+const ntcp2TerminationWriteTimeout = 2 * time.Second
 
 // receiveWorker handles receiving I2NP messages from the NTCP2 connection.
 func (s *NTCP2Session) receiveWorker() {
@@ -529,8 +643,8 @@ func (s *NTCP2Session) allowInboundMessage(msg i2np.Message) bool {
 		return true
 	}
 	s.Logger().WithField("message_type", msg.Type()).Warn("Inbound I2NP rate limit exceeded, closing session")
+	// setError schedules the teardown itself; no separate Close here.
 	s.setError(oops.Errorf("inbound I2NP rate limit exceeded"))
-	go func() { _ = s.Close() }()
 	return false
 }
 
@@ -544,9 +658,9 @@ func (s *NTCP2Session) handleReadResult(err error) bool {
 	}
 
 	// W5: a data-phase frame that violates the spec's block ordering rules
-	// (ntcp2.rst:1455-1469, :1675, :1742) is fatal — close the connection
-	// with the reason code the violation maps to (8 = Padding Violation,
-	// 10 = Payload Format Error) so the peer learns why.
+	// (ntcp2.rst:1455-1469, :1675, :1742) is fatal. setError is the single
+	// teardown funnel, and it maps the violation to its own reason code
+	// (8 = Padding Violation, 10 = Payload Format Error) so the peer learns why.
 	var violation *BlockOrderViolation
 	if errors.As(err, &violation) {
 		s.Logger().WithFields(map[string]interface{}{
@@ -554,7 +668,7 @@ func (s *NTCP2Session) handleReadResult(err error) bool {
 			"reason": violation.Reason,
 			"detail": violation.Detail,
 		}).Warn("NTCP2 data-phase block ordering violation, closing session")
-		go func() { _ = s.CloseWithReason(violation.TerminationReason()) }()
+		s.setError(WrapNTCP2Error(violation, "invalid NTCP2 block ordering"))
 		return false
 	}
 
@@ -680,13 +794,13 @@ func (s *NTCP2Session) SetRouterInfoCallback(cb func(riBytes []byte, floodReques
 // router is a floodfill. Those steps need the transport's peer identity and netdb
 // wiring, so they live in the transport callback rather than here.
 func (s *NTCP2Session) handleRouterInfoBlock(data []byte) {
-	if len(data) < 2 {
+	if len(data) < minRouterInfoBlockDataSize {
 		s.Logger().Warn("RouterInfo block too short")
 		return
 	}
 	flag := data[0]
-	riData := data[1:]
-	floodRequested := flag&0x01 != 0
+	riData := data[routerInfoFlagSize:]
+	floodRequested := flag&routerInfoFloodRequestedMask != 0
 
 	s.routerInfoMu.Lock()
 	cb := s.routerInfoCallback
@@ -782,7 +896,7 @@ func (s *NTCP2Session) queueReceivedMessage(msg i2np.Message) bool {
 // the message to avoid stalling the receive worker. Returns true even on drop so
 // the receiveWorker continues processing subsequent messages.
 func (s *NTCP2Session) queueWithBackpressure(msg i2np.Message) bool {
-	timer := time.NewTimer(500 * time.Millisecond)
+	timer := time.NewTimer(recvBackpressureTimeout)
 	defer timer.Stop()
 
 	select {
@@ -854,27 +968,131 @@ func (s *NTCP2Session) getError() error {
 	return s.lastError
 }
 
-// setError sets the last error (once) and cancels the session context.
-// Cleanup callback is NOT called here — it is deferred to Close() which
-// waits for workers to finish first, preventing the transport from
-// creating a new session to the same peer while old workers still run.
+// IsAlive reports whether this session can still carry traffic.
+//
+// It is nil-safe and core-safe so a session map can gate lookups on liveness
+// without panicking on a zero-value or nil placeholder. A session that has
+// lost its context is dead even when its socket has not been closed yet: the
+// workers are gone, nothing will ever be read from or written to it again, and
+// keeping it registered hides the peer's departure from the router, which then
+// never redials (finding 006).
+func (s *NTCP2Session) IsAlive() bool {
+	if s == nil || s.SessionCore == nil {
+		return false
+	}
+	return s.SessionCore.IsAlive()
+}
+
+// CloseRequested reports whether the session's teardown has started, either
+// through an explicit Close or through the automatic teardown an error
+// triggers. Used by idle maintenance to spot sessions that were cancelled
+// without ever being closed.
+func (s *NTCP2Session) CloseRequested() bool {
+	if s == nil {
+		return false
+	}
+	return s.closeRequested.Load()
+}
+
+// setError records the session's terminal error (once), cancels the context
+// and schedules the full teardown.
+//
+// Cancelling alone is what made finding 006 permanent: the socket stayed open,
+// the cleanup callback never ran, and the session stayed in the transport
+// registry and the router's activeSessions, so the router kept routing to a
+// dead link and never redialled. The teardown therefore has to be driven from
+// here, the single funnel every fatal read/write error passes through.
+//
+// The cleanup callback is not called directly — Close() runs it after joining
+// the workers, which prevents the transport from creating a new session to the
+// same peer while old workers still run. Close is scheduled on its own
+// goroutine because it joins the worker WaitGroup and setError is called from
+// inside a worker.
 func (s *NTCP2Session) setError(err error) {
 	s.errorMu.Lock()
-	defer s.errorMu.Unlock()
-	if s.lastError == nil {
-		s.lastError = err
-
-		// EOF indicates the remote peer closed the connection — this is normal
-		// peer churn, not an error condition. Log at Warn to avoid flooding
-		// the error log with non-actionable entries.
-		switch {
-		case errors.Is(err, io.EOF):
-			s.Logger().WithError(err).Warn("Session closed by remote peer")
-		case isTimeoutOrReset(err):
-			s.Logger().WithError(err).Warn("Session closed due to timeout or reset")
-		default:
-			s.Logger().WithError(err).Error("Session error")
-		}
-		s.Cancel()
+	if s.lastError != nil {
+		s.errorMu.Unlock()
+		return
 	}
+	s.lastError = err
+
+	// EOF indicates the remote peer closed the connection — this is normal
+	// peer churn, not an error condition. Log at Warn to avoid flooding
+	// the error log with non-actionable entries.
+	switch {
+	case errors.Is(err, io.EOF):
+		s.Logger().WithError(err).Warn("Session closed by remote peer")
+	case isTimeoutOrReset(err):
+		s.Logger().WithError(err).Warn("Session closed due to timeout or reset")
+	default:
+		s.Logger().WithError(err).Error("Session error")
+	}
+	s.Cancel()
+	s.errorMu.Unlock()
+
+	reason := terminationReasonForReadError(err)
+	go func() {
+		if closeErr := s.CloseWithReason(reason); closeErr != nil {
+			s.Logger().WithError(closeErr).WithField("reason", TerminationReasonString(reason)).
+				Debug("NTCP2 session close after error returned an error")
+		}
+	}()
+}
+
+// terminationReasonForReadError maps a fatal read/write error to the NTCP2
+// Termination block reason code the session should report, per the spec's
+// reason list (ntcp2.rst "Termination block").
+//
+// A block-ordering violation carries its own code. Cipher-level failures map to
+// the AEAD-failure reason so CloseWithReason skips the termination block — the
+// cipher state is no longer trustworthy, and go-noise has already performed the
+// spec's AEAD teardown (probing resistance plus its own termination frame) on
+// the connection before handing us the error. Everything else is reported as a
+// normal close; the write is best-effort and simply fails on a dead socket.
+func terminationReasonForReadError(err error) byte {
+	// Frame-level failures carry the reason the spec prescribes for them:
+	// *BlockOrderViolation for a frame that decodes but is ordered wrongly
+	// (8 or 10), *BlockParseError for a frame that does not decode at all (10).
+	var terminator interface{ TerminationReason() byte }
+	if errors.As(err, &terminator) {
+		return terminator.TerminationReason()
+	}
+	if isCipherLevelError(err) {
+		return TerminationAEADFailure
+	}
+	return TerminationNormalClose
+}
+
+// cipherLevelErrorCodes are the go-noise error codes that mean the frame could
+// not be authenticated or de-framed, i.e. the cipher/SipHash state of the
+// connection is no longer usable. go-noise marks its Conn broken and performs
+// the spec's AEAD error handling for all of them.
+var cipherLevelErrorCodes = [...]string{
+	"DECRYPT_FAILED",
+	"READ_LENGTH_FAILED",
+	"FRAME_TOO_SMALL",
+	"FRAME_TOO_LARGE",
+	"CONNECTION_BROKEN",
+	"NONCE_EXHAUSTED",
+	"ENCRYPT_FAILED",
+}
+
+// isCipherLevelError reports whether err carries one of go-noise's cipher or
+// framing failure codes. Codes are read from the deepest oops layer, which is
+// where WrapNTCP2Error leaves the original.
+func isCipherLevelError(err error) bool {
+	oopsErr, ok := oops.AsOops(err)
+	if !ok {
+		return false
+	}
+	code, ok := oopsErr.Code().(string)
+	if !ok {
+		return false
+	}
+	for _, c := range cipherLevelErrorCodes {
+		if code == c {
+			return true
+		}
+	}
+	return false
 }

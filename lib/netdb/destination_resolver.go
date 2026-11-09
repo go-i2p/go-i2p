@@ -82,7 +82,7 @@ func (dr *DestinationResolver) ResolveDestination(destHash common.Hash) ([32]byt
 		"destination_hash": logutil.HashPrefix(destHash),
 		"reason":           "not found in netdb",
 	}).Error("Destination lookup failed")
-	return [32]byte{}, oops.Errorf("destination %x not found in netdb", destHash[:8])
+	return [32]byte{}, oops.Errorf("destination %x not found in netdb", destHash[:hashLogPrefixBytes])
 }
 
 // extractKeyFromLeaseSet2Direct attempts to extract X25519 encryption key from LeaseSet2
@@ -182,10 +182,10 @@ func (dr *DestinationResolver) findX25519KeyInLeaseSet2(ls2 lease_set2.LeaseSet2
 
 // extractValidX25519Key validates and extracts a 32-byte X25519 key from encryption key data.
 func (dr *DestinationResolver) extractValidX25519Key(encKey lease_set2.EncryptionKey, destHash common.Hash) ([32]byte, error) {
-	if len(encKey.KeyData) != 32 {
+	if len(encKey.KeyData) != x25519EncryptionKeySize {
 		log.WithFields(logger.Fields{
 			"at":       "validateX25519KeyLength",
-			"expected": 32,
+			"expected": x25519EncryptionKeySize,
 			"actual":   len(encKey.KeyData),
 			"reason":   "invalid key length",
 		}).Error("X25519 key validation failed")
@@ -318,7 +318,7 @@ func (dr *DestinationResolver) ResolveDestinationWithCredential(
 	}).Debug("destination_not_resolvable")
 
 	return [32]byte{}, oops.Errorf("destination %x not resolvable as LeaseSet or EncryptedLeaseSet: %w",
-		destHash[:8], encErr)
+		destHash[:hashLogPrefixBytes], encErr)
 }
 
 // deriveBlindedLookupHash computes the NetDB lookup hash from a blinded
@@ -350,7 +350,7 @@ func (dr *DestinationResolver) deriveBlindedLookupHash(dest destination.Destinat
 func (dr *DestinationResolver) fetchEncryptedLeaseSet(lookupHash common.Hash) (*encrypted_leaseset.EncryptedLeaseSet, error) {
 	elsBytes, err := dr.netdb.GetEncryptedLeaseSetBytes(lookupHash)
 	if err != nil {
-		return nil, oops.Errorf("EncryptedLeaseSet not found for blinded hash %x: %w", lookupHash[:8], err)
+		return nil, oops.Errorf("EncryptedLeaseSet not found for blinded hash %x: %w", lookupHash[:hashLogPrefixBytes], err)
 	}
 
 	els, _, err := encrypted_leaseset.ReadEncryptedLeaseSet(elsBytes)
@@ -445,7 +445,7 @@ func (dr *DestinationResolver) resolveMetaDestinationWithDepth(destHash common.H
 func (dr *DestinationResolver) fetchMetaLeaseSet(destHash common.Hash) (meta_leaseset.MetaLeaseSet, error) {
 	mlsBytes, err := dr.netdb.GetMetaLeaseSetBytes(destHash)
 	if err != nil {
-		return meta_leaseset.MetaLeaseSet{}, oops.Errorf("MetaLeaseSet not found for hash %x: %w", destHash[:8], err)
+		return meta_leaseset.MetaLeaseSet{}, oops.Errorf("MetaLeaseSet not found for hash %x: %w", destHash[:hashLogPrefixBytes], err)
 	}
 	mls, _, err := meta_leaseset.ReadMetaLeaseSet(mlsBytes)
 	if err != nil {
@@ -491,16 +491,16 @@ func (dr *DestinationResolver) resolveMetaEntryWithDepth(entryHash [32]byte, ent
 	hash := common.Hash(entryHash)
 
 	switch entryType {
-	case 1: // Classic LeaseSet
+	case leaseSetType: // Classic LeaseSet
 		return dr.extractKeyFromLeaseSet2(hash)
-	case 3: // LeaseSet2
+	case leaseSet2Type: // LeaseSet2
 		return dr.extractKeyFromLeaseSet2Direct(hash)
-	case 5: // EncryptedLeaseSet - requires decryption, fall back to LS2 lookup
+	case encryptedLeaseSetType: // EncryptedLeaseSet - requires decryption, fall back to LS2 lookup
 		if key, err := dr.extractKeyFromLeaseSet2Direct(hash); err == nil {
 			return key, nil
 		}
 		return dr.extractKeyFromLeaseSet2(hash)
-	case 7: // Nested MetaLeaseSet (recursive, depth-limited)
+	case metaLeaseSetType: // Nested MetaLeaseSet (recursive, depth-limited)
 		return dr.resolveMetaDestinationWithDepth(hash, depth+1)
 	default: // type 0 (unknown) — try LS2 then classic
 		if key, err := dr.extractKeyFromLeaseSet2Direct(hash); err == nil {

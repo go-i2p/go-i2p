@@ -461,10 +461,10 @@ const (
 	// BandwidthClassO indicates 128–256 KB/s shared bandwidth.
 	BandwidthClassO BandwidthClass = "O"
 
-	// BandwidthClassP indicates 256–2000 KB/s shared bandwidth.
+	// BandwidthClassP indicates 256–2048 KB/s shared bandwidth.
 	BandwidthClassP BandwidthClass = "P"
 
-	// BandwidthClassX indicates over 2000 KB/s shared bandwidth.
+	// BandwidthClassX indicates 2048 KB/s and above shared bandwidth.
 	BandwidthClassX BandwidthClass = "X"
 )
 ```
@@ -484,8 +484,8 @@ Per Proposal 162 (open proposal, not yet a finalized spec):
     - M: 48–64 KBps
     - N: 64–128 KBps
     - O: 128–256 KBps
-    - P: 256–2000 KBps
-    - X: >= 2000 KBps (>= 2048000 bytes/s)
+    - P: 256–2048 KBps
+    - X: >= 2048 KBps (>= 2097152 bytes/s)
 
 #### func (BandwidthClass) String
 

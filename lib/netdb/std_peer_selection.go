@@ -371,11 +371,11 @@ func (state *peerDiversityState) accepts(ri router_info.RouterInfo) bool {
 			continue
 		}
 		switch familyType {
-		case 4:
+		case ipv4AddressFamily:
 			if _, exists := state.ipv4Prefixes[prefix.ipv4]; exists {
 				return false
 			}
-		case 6:
+		case ipv6AddressFamily:
 			if _, exists := state.ipv6Prefixes[prefix.ipv6]; exists {
 				return false
 			}
@@ -391,9 +391,9 @@ func (state *peerDiversityState) accepts(ri router_info.RouterInfo) bool {
 			continue
 		}
 		switch familyType {
-		case 4:
+		case ipv4AddressFamily:
 			state.ipv4Prefixes[prefix.ipv4] = struct{}{}
-		case 6:
+		case ipv6AddressFamily:
 			state.ipv6Prefixes[prefix.ipv6] = struct{}{}
 		}
 	}
@@ -418,13 +418,13 @@ func routerAddressPrefix(addr *router_address.RouterAddress) (peerPrefix, int, b
 		return peerPrefix{}, 0, false
 	}
 	if ipv4 := ip.To4(); ipv4 != nil {
-		return peerPrefix{ipv4: [2]byte{ipv4[0], ipv4[1]}}, 4, true
+		return peerPrefix{ipv4: [2]byte{ipv4[0], ipv4[1]}}, ipv4AddressFamily, true
 	}
 	ipv6 := ip.To16()
 	if ipv6 == nil {
 		return peerPrefix{}, 0, false
 	}
-	return peerPrefix{ipv6: [6]byte{ipv6[0], ipv6[1], ipv6[2], ipv6[3], ipv6[4], ipv6[5]}}, 6, true
+	return peerPrefix{ipv6: [6]byte{ipv6[0], ipv6[1], ipv6[2], ipv6[3], ipv6[4], ipv6[5]}}, ipv6AddressFamily, true
 }
 
 func routerFamilyName(ri router_info.RouterInfo) string {

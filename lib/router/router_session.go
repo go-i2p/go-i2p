@@ -30,9 +30,53 @@ func (r *Router) removeSession(peerHash common.Hash) {
 	log.WithField("peer_hash", logutil.HashPrefix(peerHash)).Debug("Removed session")
 }
 
-// connectedPeerHashes returns the set of peer hashes that currently have an
-// established transport session. It is installed on the NetDB as the connected
-// peer provider so tunnel peer selection can prefer peers we can already reach.
+// removeSessionIfCurrent deletes the registry entry only when it still holds
+// the given session, and reports whether it did.
+//
+// A dead session's cleanup must not evict the replacement session the router
+// already established with the same peer; doing so would drop a live link from
+// the registry and re-create the permanent-dead-link failure this cleanup
+// exists to fix. Thread-safe for concurrent access.
+func (r *Router) removeSessionIfCurrent(peerHash common.Hash, session transport.TransportSession) bool {
+	r.sessionMutex.Lock()
+	defer r.sessionMutex.Unlock()
+
+	if r.activeSessions == nil {
+		return false
+	}
+	// A nil interface value is never a removable entry: those are placeholders
+	// only tests install, and deleting on their behalf would be surprising.
+	if session == nil {
+		return false
+	}
+	current, ok := r.activeSessions[peerHash]
+	if !ok || current != session {
+		return false
+	}
+	delete(r.activeSessions, peerHash)
+	log.WithField("peer_hash", logutil.HashPrefix(peerHash)).Debug("Removed session")
+	return true
+}
+
+// sessionLiveness reports the liveness view of a session as stored in the
+// registry. Sessions that do not answer the question (test doubles and
+// wrappers that never carry a real session) are treated as alive, so the
+// registry keeps the behaviour its callers expect.
+func sessionLiveness(session transport.TransportSession) bool {
+	alive, ok := session.(interface{ IsAlive() bool })
+	if !ok {
+		return true
+	}
+	return alive.IsAlive()
+}
+
+// connectedPeerHashes returns the set of peer hashes that currently have a live
+// transport session. It is installed on the NetDB as the connected peer provider
+// so tunnel peer selection can prefer peers we can already reach.
+//
+// Sessions that have lost their transport context are excluded: the peer is not
+// reachable through them, and reporting them as connected would steer new
+// tunnels onto links that are already dead (finding 006).
 // Thread-safe for concurrent read access using RWMutex.
 func (r *Router) connectedPeerHashes() map[common.Hash]struct{} {
 	r.sessionMutex.RLock()
@@ -42,20 +86,44 @@ func (r *Router) connectedPeerHashes() map[common.Hash]struct{} {
 		return nil
 	}
 	hashes := make(map[common.Hash]struct{}, len(r.activeSessions))
-	for peerHash := range r.activeSessions {
-		hashes[peerHash] = struct{}{}
+	for peerHash, session := range r.activeSessions {
+		if sessionLiveness(session) {
+			hashes[peerHash] = struct{}{}
+		}
+	}
+	if len(hashes) == 0 {
+		return nil
 	}
 	return hashes
 }
 
-// getSessionByHash retrieves a session for a specific peer.
+// getSessionByHash retrieves a live session for a specific peer.
 // Returns an error if no active session exists for the given peer hash.
-// Thread-safe for concurrent read access using RWMutex.
+//
+// A session that has lost its context is dead: its transport workers stopped,
+// so nothing queued on it will ever reach the wire. Returning it would let the
+// router keep routing I2NP to a peer that is gone and, worse, would keep it
+// from ever redialling that peer, so the link stays broken until restart
+// (finding 006). Such an entry is evicted here and reported as absent, which
+// sends callers down their establish-a-new-session path.
+//
+// The eviction is identity-scoped (removeSessionIfCurrent), so a dead session
+// never deletes the replacement another goroutine already registered.
+// Thread-safe.
 func (r *Router) getSessionByHash(peerHash common.Hash) (transport.TransportSession, error) {
 	r.sessionMutex.RLock()
-	defer r.sessionMutex.RUnlock()
+	session, ok := r.activeSessions[peerHash]
+	alive := ok && sessionLiveness(session)
+	r.sessionMutex.RUnlock()
 
-	if session, ok := r.activeSessions[peerHash]; ok {
+	if ok && !alive {
+		log.WithField("peer_hash", logutil.HashPrefix(peerHash)).
+			Info("Evicting dead transport session from router registry")
+		r.removeSessionIfCurrent(peerHash, session)
+		return nil, oops.Errorf("session for peer %x is closed", peerHash[:8])
+	}
+
+	if ok {
 		return session, nil
 	}
 	return nil, oops.Errorf("no session found for peer %x", peerHash[:8])
@@ -192,11 +260,13 @@ func (r *Router) registerTypedSession(hash common.Hash, session sessionRegistere
 	r.addSession(hash, session)
 	// Append both cleanup callbacks in order:
 	// 1. Release transport pool slot
-	// 2. Remove session from registry
+	// 2. Remove session from registry, but only if the registry still holds
+	//    this session: a dead session closing late must not evict the
+	//    replacement the router already established with the same peer.
 	if muxer != nil {
 		session.AppendCleanupCallback(func() { muxer.ReleaseSession() })
 	}
-	session.AppendCleanupCallback(func() { r.removeSession(hash) })
+	session.AppendCleanupCallback(func() { r.removeSessionIfCurrent(hash, session) })
 	r.wg.Add(1)
 	go func() {
 		defer r.wg.Done()

@@ -60,7 +60,7 @@ func LoadOrGenerateKeyFile(workingDir, filePath string, expectedSize int, keyNam
 	}
 
 	// Save to file with restricted permissions (owner read/write only)
-	if err := os.WriteFile(filePath, key, 0o600); err != nil {
+	if err := os.WriteFile(filePath, key, secureFilePermissions); err != nil {
 		log.WithError(err).Error("Failed to save key file")
 		return nil, oops.Wrapf(err, "failed to store %s to file", keyName)
 	}

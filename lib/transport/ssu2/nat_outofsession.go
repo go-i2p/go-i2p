@@ -53,15 +53,15 @@ import (
 func (t *SSU2Transport) peerIntroKey(hash data.Hash) ([]byte, error) {
 	cfg := t.config.Load()
 	if cfg.RouterLookupFunc == nil {
-		return nil, oops.Errorf("RouterLookupFunc not configured: cannot resolve intro key for %x", hash[:4])
+		return nil, oops.Errorf("RouterLookupFunc not configured: cannot resolve intro key for %x", hash[:logHashPrefixBytes])
 	}
 	ri, err := cfg.RouterLookupFunc(hash)
 	if err != nil {
-		return nil, oops.Wrapf(err, "netdb lookup failed for %x", hash[:4])
+		return nil, oops.Wrapf(err, "netdb lookup failed for %x", hash[:logHashPrefixBytes])
 	}
 	introKey, err := ExtractSSU2IntroKey(ri)
 	if err != nil {
-		return nil, oops.Wrapf(err, "no SSU2 intro key for %x", hash[:4])
+		return nil, oops.Wrapf(err, "no SSU2 intro key for %x", hash[:logHashPrefixBytes])
 	}
 	return introKey, nil
 }

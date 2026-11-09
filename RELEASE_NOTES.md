@@ -25,6 +25,16 @@ static keys as X25519 curve points, and persists its last-shutdown time. SSU2 no
 Peer Test and Hole Punch messages that are stale or missing a DateTime block, which closes an unbounded
 replay hole against unauthenticated traffic, and its termination handling delegates to go-noise.
 
+Because the inbound handshake now completes, NTCP2 bounds the work an unauthenticated peer can make the
+router do: concurrent inbound handshakes are capped transport-wide (default 64) and per source IP
+(default 8), and connections beyond either bound are closed at accept time rather than being given a
+handshake window. These are configurable as `transport.ntcp2_max_inflight_handshakes` and
+`transport.ntcp2_max_handshakes_per_source` (0 selects the default, a negative value disables the bound),
+and surfaced as the `transport.ntcp2.handshake.refusedGlobal`, `.refusedSource` and `.inflight` I2PControl
+stats. Note a behavior change: `transport.ntcp2_max_connections` was previously read but never applied, so
+the transport always ran with its built-in 512-session cap; it now governs, which lowers the effective
+default to the documented 200. Set it explicitly if a router needs more.
+
 I2CP asynchronous message statuses now carry the originating nonce instead of zero, a nonce of zero
 suppresses the status as specified, DestroySession answers with a DisconnectMessage and closes the
 connection, unsupported message types disconnect rather than being logged and skipped, the session

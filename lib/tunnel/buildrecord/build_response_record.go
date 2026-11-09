@@ -50,6 +50,6 @@ concerning the creation of one hop in the tunnel
 // BuildResponseRecord represents a single response record in a tunnel build reply, indicating whether a hop accepted or rejected the tunnel build request.
 type BuildResponseRecord struct {
 	Hash       common.Hash
-	RandomData [495]byte
+	RandomData [responseRandomDataLen]byte
 	Reply      byte
 }

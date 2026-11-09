@@ -11,7 +11,6 @@ import (
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/netdb"
 	"github.com/go-i2p/go-i2p/lib/transport"
-	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -29,11 +28,11 @@ func TestRouterSessionTracking(t *testing.T) {
 	copy(peer1Hash[:], "peer1_hash_12345678901234567890123")
 	copy(peer2Hash[:], "peer2_hash_12345678901234567890123")
 
-	// For unit testing session tracking logic, we don't need actual sessions
-	// We just need non-nil pointers that can be stored in the map
-	// Using type assertions to store nil pointers of correct type
-	session1 := (*ntcp.NTCP2Session)(nil)
-	session2 := (*ntcp.NTCP2Session)(nil)
+	// For unit testing session tracking logic, we don't need actual sessions.
+	// They do need to be live ones: the router evicts a session whose transport
+	// context is gone (finding 006), so a typed nil would be treated as dead.
+	session1 := newFakeTransportSession()
+	session2 := newFakeTransportSession()
 
 	// Note: In real usage, these would be actual NTCP2Session instances
 	// For this unit test, we're only testing map operations, not session functionality
@@ -77,8 +76,8 @@ func TestGetSessionByHash(t *testing.T) {
 	peerHash := common.Hash{}
 	copy(peerHash[:], "test_peer_hash_1234567890123456789")
 
-	// Use nil session for testing map operations only
-	session := (*ntcp.NTCP2Session)(nil)
+	// A live placeholder session: the router only returns sessions that are alive.
+	session := newFakeTransportSession()
 	addAndAssertSession(t, router, peerHash, session)
 }
 
@@ -102,8 +101,8 @@ func TestSessionThreadSafety(t *testing.T) {
 				peerHash := common.Hash{}
 				hashStr := fmt.Sprintf("peer_%d_%d_hash_1234567890123456", id, j)
 				copy(peerHash[:], hashStr)
-				// Use nil session for testing concurrent map operations
-				session := (*ntcp.NTCP2Session)(nil)
+				// Live placeholder sessions for testing concurrent map operations
+				session := newFakeTransportSession()
 				router.addSession(peerHash, session)
 			}
 		}(i)
@@ -157,15 +156,13 @@ func TestRouterImplementsSessionProvider(t *testing.T) {
 	peerHash := common.Hash{}
 	copy(peerHash[:], "test_peer_for_interface_12345678901")
 
-	// Use nil session - we're only testing the interface, not actual functionality
-	session := (*ntcp.NTCP2Session)(nil)
+	// We're only testing the interface, not actual session functionality.
+	session := newFakeTransportSession()
 	router.addSession(peerHash, session)
 
 	// Test GetSessionByHash (SessionProvider method)
 	transportSession, err := router.GetSessionByHash(peerHash)
 	require.NoError(t, err, "GetSessionByHash should succeed")
-	// Note: transportSession will be nil in this test since we used a nil session,
-	// but in real usage it would be a valid NTCP2Session that implements TransportSession
 	assert.Equal(t, session, transportSession, "Should return the stored session")
 }
 
@@ -203,10 +200,9 @@ func TestSessionReplacement(t *testing.T) {
 	peerHash := common.Hash{}
 	copy(peerHash[:], "test_peer_replacement_1234567890123")
 
-	// Create two distinct session pointers for testing replacement
-	// Using new() ensures we get different memory addresses
-	session1 := new(ntcp.NTCP2Session)
-	session2 := new(ntcp.NTCP2Session)
+	// Create two distinct sessions for testing replacement
+	session1 := newFakeTransportSession()
+	session2 := newFakeTransportSession()
 
 	// Verify they're different pointers (compare addresses, not values)
 	require.NotSame(t, session1, session2, "Sessions should have different addresses")
@@ -241,8 +237,8 @@ func TestMultipleSessionRemoval(t *testing.T) {
 	peerHash := common.Hash{}
 	copy(peerHash[:], "test_multiple_removal_123456789012")
 
-	// Use nil session for testing
-	session := (*ntcp.NTCP2Session)(nil)
+	// Use a live placeholder session for testing
+	session := newFakeTransportSession()
 
 	// Add and remove session
 	router.addSession(peerHash, session)
@@ -290,8 +286,8 @@ func TestSessionMapInitialization(t *testing.T) {
 	peerHash := common.Hash{}
 	copy(peerHash[:], "test_init_hash_123456789012345678")
 
-	// Use nil session for testing
-	session := (*ntcp.NTCP2Session)(nil)
+	// Use a live placeholder session for testing
+	session := newFakeTransportSession()
 	router.addSession(peerHash, session)
 
 	assert.Equal(t, 1, len(router.activeSessions), "Should have 1 session after initialization")
@@ -303,13 +299,14 @@ func BenchmarkAddSession(b *testing.B) {
 		activeSessions: make(map[common.Hash]transport.TransportSession),
 	}
 
-	// Use nil sessions for benchmarking - we're testing map operations, not session functionality
-	sessions := make([]*ntcp.NTCP2Session, b.N)
+	// Use live placeholder sessions - we're benchmarking map operations, not
+	// session functionality. Dead entries would be evicted on lookup.
+	sessions := make([]*fakeTransportSession, b.N)
 	hashes := make([]common.Hash, b.N)
 
 	// Pre-create hashes
 	for i := 0; i < b.N; i++ {
-		sessions[i] = (*ntcp.NTCP2Session)(nil)
+		sessions[i] = newFakeTransportSession()
 		hashStr := fmt.Sprintf("bench_peer_%d_hash_12345678901234", i)
 		copy(hashes[i][:], hashStr)
 	}
@@ -326,11 +323,11 @@ func BenchmarkGetSession(b *testing.B) {
 		activeSessions: make(map[common.Hash]transport.TransportSession),
 	}
 
-	// Add 1000 nil sessions for benchmarking map retrieval
+	// Add 1000 live placeholder sessions for benchmarking map retrieval
 	const numSessions = 1000
 	hashes := make([]common.Hash, numSessions)
 	for i := 0; i < numSessions; i++ {
-		session := (*ntcp.NTCP2Session)(nil)
+		session := newFakeTransportSession()
 		hashStr := fmt.Sprintf("bench_get_%d_hash_123456789012345", i)
 		copy(hashes[i][:], hashStr)
 		router.addSession(hashes[i], session)
@@ -350,9 +347,9 @@ func BenchmarkRemoveSession(b *testing.B) {
 
 	hashes := make([]common.Hash, b.N)
 
-	// Add nil sessions for benchmarking map removal
+	// Add live placeholder sessions for benchmarking map removal
 	for i := 0; i < b.N; i++ {
-		session := (*ntcp.NTCP2Session)(nil)
+		session := newFakeTransportSession()
 		hashStr := fmt.Sprintf("bench_remove_%d_hash_1234567890123", i)
 		copy(hashes[i][:], hashStr)
 		router.addSession(hashes[i], session)
@@ -362,4 +359,167 @@ func BenchmarkRemoveSession(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		router.removeSession(hashes[i])
 	}
+}
+
+// --- finding 006: a dead session must not be handed out, and must not block re-dial ---
+
+// TestGetSessionByHashEvictsDeadSession pins the router half of finding 006.
+// Before the fix the lookup returned whatever was in activeSessions with no
+// liveness check, so tunnel forwarding, build replies and I2CP kept queueing
+// onto a session whose transport workers were already gone — and because a
+// session was "present", the router never re-dialled the peer. The link stayed
+// dead until restart.
+func TestGetSessionByHashEvictsDeadSession(t *testing.T) {
+	router := &Router{
+		activeSessions: make(map[common.Hash]transport.TransportSession),
+	}
+
+	peerHash := common.Hash{}
+	copy(peerHash[:], "finding006_evict_dead_123456789012")
+
+	session := newFakeTransportSession()
+	router.addSession(peerHash, session)
+
+	// A transport worker hits a fatal read/write error: the context is gone.
+	session.setAlive(false)
+
+	_, err := router.getSessionByHash(peerHash)
+	require.Error(t, err, "a dead session must not be returned")
+	assert.Contains(t, err.Error(), "is closed")
+
+	// It must also be gone from the registry, so the next lookup goes on to
+	// establish a new session rather than finding the corpse again.
+	router.sessionMutex.RLock()
+	_, exists := router.activeSessions[peerHash]
+	router.sessionMutex.RUnlock()
+	assert.False(t, exists, "the dead session must be evicted from activeSessions")
+
+	// A second lookup reports the plain "no session" case.
+	_, err = router.getSessionByHash(peerHash)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no session found")
+}
+
+// TestGetSessionByHashKeepsLiveSession is the negative control: liveness gating
+// must not disturb the normal path.
+func TestGetSessionByHashKeepsLiveSession(t *testing.T) {
+	router := &Router{
+		activeSessions: make(map[common.Hash]transport.TransportSession),
+	}
+
+	peerHash := common.Hash{}
+	copy(peerHash[:], "finding006_keep_live_1234567890123")
+
+	session := newFakeTransportSession()
+	router.addSession(peerHash, session)
+
+	retrieved, err := router.getSessionByHash(peerHash)
+	require.NoError(t, err)
+	assert.Same(t, session, retrieved, "a live session must be returned unchanged")
+}
+
+// TestGetSessionByHashAttemptsRedialAfterDeath is the end-to-end router
+// behaviour: once the dead session is gone, the public SessionProvider entry
+// point proceeds to establish a new session instead of returning the corpse.
+// The peer has no RouterInfo here, so the re-dial fails — which is exactly the
+// proof that the router tried to reconnect rather than reusing the dead link.
+func TestGetSessionByHashAttemptsRedialAfterDeath(t *testing.T) {
+	tempDir := t.TempDir()
+	router := &Router{
+		activeSessions: make(map[common.Hash]transport.TransportSession),
+		netdb:          netdb.NewStdNetDB(tempDir),
+		running:        true,
+	}
+	require.NoError(t, router.netdb.Ensure())
+
+	peerHash := common.Hash{}
+	copy(peerHash[:], "finding006_redial_attempt_12345678")
+
+	session := newFakeTransportSession()
+	router.addSession(peerHash, session)
+	session.setAlive(false)
+
+	got, err := router.GetSessionByHash(peerHash)
+	assert.Error(t, err, "the dead session must not be returned")
+	assert.Nil(t, got)
+	assert.NotContains(t, err.Error(), "is closed",
+		"the lookup must have moved past eviction to the establish-new-session path")
+	assert.Contains(t, err.Error(), "RouterInfo",
+		"expected the re-dial path's RouterInfo lookup to fail for an unknown peer")
+}
+
+// TestRemoveSessionIfCurrentDoesNotEvictReplacement pins the re-dial race the
+// fix introduces: a dead session whose cleanup runs late must not delete the
+// replacement session the router already registered for the same peer.
+func TestRemoveSessionIfCurrentDoesNotEvictReplacement(t *testing.T) {
+	router := &Router{
+		activeSessions: make(map[common.Hash]transport.TransportSession),
+	}
+
+	peerHash := common.Hash{}
+	copy(peerHash[:], "finding006_replacement_race_123456")
+
+	oldSession := newFakeTransportSession()
+	router.addSession(peerHash, oldSession)
+
+	// The router re-dials and registers a replacement under the same hash.
+	newSession := newFakeTransportSession()
+	router.addSession(peerHash, newSession)
+
+	// The old session's cleanup fires late.
+	assert.False(t, router.removeSessionIfCurrent(peerHash, oldSession),
+		"the old session must not remove an entry it no longer owns")
+
+	retrieved, err := router.getSessionByHash(peerHash)
+	require.NoError(t, err, "the replacement must still be registered")
+	assert.Same(t, newSession, retrieved)
+
+	// The replacement's own cleanup does remove it.
+	assert.True(t, router.removeSessionIfCurrent(peerHash, newSession))
+	_, err = router.getSessionByHash(peerHash)
+	require.Error(t, err)
+}
+
+// TestConnectedPeerHashesExcludesDeadSessions keeps hop-selection honest: a peer
+// whose session just died must not be reported as already reachable, or new
+// tunnels keep getting placed on dead links.
+func TestConnectedPeerHashesExcludesDeadSessions(t *testing.T) {
+	router := &Router{
+		activeSessions: make(map[common.Hash]transport.TransportSession),
+	}
+
+	liveHash := common.Hash{}
+	copy(liveHash[:], "finding006_connected_live_123456789")
+	deadHash := common.Hash{}
+	copy(deadHash[:], "finding006_connected_dead_123456789")
+
+	live := newFakeTransportSession()
+	dead := newFakeTransportSession()
+	dead.setAlive(false)
+
+	router.addSession(liveHash, live)
+	router.addSession(deadHash, dead)
+
+	connected := router.connectedPeerHashes()
+	require.NotNil(t, connected)
+	_, hasLive := connected[liveHash]
+	_, hasDead := connected[deadHash]
+	assert.True(t, hasLive, "a live session means the peer is connected")
+	assert.False(t, hasDead, "a dead session must not count as connected")
+}
+
+// TestConnectedPeerHashesNilWhenAllDead checks the provider reports "nothing
+// connected" rather than an empty-but-present map, so callers fall back cleanly.
+func TestConnectedPeerHashesNilWhenAllDead(t *testing.T) {
+	router := &Router{
+		activeSessions: make(map[common.Hash]transport.TransportSession),
+	}
+
+	hash := common.Hash{}
+	copy(hash[:], "finding006_all_dead_1234567890123")
+	dead := newFakeTransportSession()
+	dead.setAlive(false)
+	router.addSession(hash, dead)
+
+	assert.Nil(t, router.connectedPeerHashes(), "no live peers should yield nil")
 }

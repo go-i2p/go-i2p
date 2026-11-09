@@ -72,13 +72,13 @@ type TunnelReplyProcessor interface {
 	RegisterPendingBuild(
 		tunnelID buildrecord.TunnelID,
 		replyKeys []session_key.SessionKey,
-		replyIVs [][16]byte,
+		replyIVs [][buildrecord.ReplyIVLen]byte,
 		isInbound bool,
 		hopCount int,
 	) error
 
 	// SetPendingBuildNoiseHashes stores Noise transcript hashes for STBM reply AEAD decryption.
-	SetPendingBuildNoiseHashes(tunnelID buildrecord.TunnelID, noiseHashes [][32]byte) error
+	SetPendingBuildNoiseHashes(tunnelID buildrecord.TunnelID, noiseHashes [][buildrecord.ResponseHashLen]byte) error
 
 	// ProcessBuildReply processes an incoming tunnel build reply message.
 	ProcessBuildReply(handler TunnelReplyHandler, tunnelID buildrecord.TunnelID) error

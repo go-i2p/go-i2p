@@ -76,6 +76,43 @@ func (e *BlockOrderViolation) Error() string {
 // router should close the connection with for this violation.
 func (e *BlockOrderViolation) TerminationReason() byte { return e.Reason }
 
+// BlockParseError describes a data-phase AEAD frame whose block stream cannot be
+// decoded at all: a truncated block header, a block whose declared size runs
+// past the end of the frame, or a declared size over the spec maximum.
+//
+// It is the framing analogue of [BlockOrderViolation]: a frame that decodes but
+// is ordered wrongly, versus one that does not decode. Both are fatal and both
+// carry the Termination reason the connection should close with, which for a
+// malformed block stream is 10 (Payload Format Error, ntcp2.rst:1706).
+type BlockParseError struct {
+	// Reason is the NTCP2 Termination block reason code to close with.
+	Reason byte
+	// Detail describes what could not be decoded.
+	Detail string
+	// Err is the underlying decoding error.
+	Err error
+}
+
+func (e *BlockParseError) Error() string {
+	if e.Err != nil {
+		return fmt.Sprintf("NTCP2 block parse error: %s: %v", e.Detail, e.Err)
+	}
+	return fmt.Sprintf("NTCP2 block parse error: %s", e.Detail)
+}
+
+// Unwrap exposes the underlying decoding error for errors.Is/errors.As.
+func (e *BlockParseError) Unwrap() error { return e.Err }
+
+// TerminationReason returns the NTCP2 Termination block reason code this failure
+// maps to.
+func (e *BlockParseError) TerminationReason() byte { return e.Reason }
+
+// newBlockParseError builds a Payload Format Error for a frame that cannot be
+// decoded into blocks.
+func newBlockParseError(detail string, err error) *BlockParseError {
+	return &BlockParseError{Reason: TerminationPayloadFormatError, Detail: detail, Err: err}
+}
+
 // ValidateDataPhaseBlockOrder enforces the data-phase Block Ordering Rules
 // from ntcp2.rst:1455-1469 against the fully decoded block list of one AEAD
 // frame. It returns a *BlockOrderViolation when the frame is malformed and
@@ -101,7 +138,7 @@ func ValidateDataPhaseBlockOrder(blocks []Block) error {
 	last := len(blocks) - 1
 
 	// At most one Padding block per frame (ntcp2.rst:1467).
-	if paddingCount > 1 {
+	if paddingCount > maxPaddingBlocksPerFrame {
 		return &BlockOrderViolation{
 			Reason: TerminationPaddingViolation,
 			Rule:   BlockOrderRuleMultiplePadding,

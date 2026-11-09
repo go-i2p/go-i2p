@@ -577,7 +577,7 @@ func (tm *TunnelManager) createSerializedShortTunnelBuildMessage(result *tunnel.
 		return nil, err
 	}
 
-	replyKeys := make([][32]byte, len(hopKeys))
+	replyKeys := make([][x25519KeySize]byte, len(hopKeys))
 	for i, keys := range hopKeys {
 		replyKeys[i] = keys.ReplyKey
 	}
@@ -699,14 +699,14 @@ func (tm *TunnelManager) convertAndOverrideMessageID(records []tunnel.BuildReque
 func (tm *TunnelManager) encryptRecordsAndDeriveKeys(i2npRecords []BuildRequestRecord, hops []router_info.RouterInfo) (
 	encryptedRecords [][ShortBuildRecordSize]byte,
 	hopKeys []i2ptunnel.BuildReplyKeys,
-	noiseHashes [][32]byte,
-	preReplyCKs [][32]byte,
+	noiseHashes [][x25519KeySize]byte,
+	preReplyCKs [][x25519KeySize]byte,
 	err error,
 ) {
 	encryptedRecords = make([][ShortBuildRecordSize]byte, len(i2npRecords))
 	hopKeys = make([]i2ptunnel.BuildReplyKeys, len(i2npRecords))
-	noiseHashes = make([][32]byte, len(i2npRecords))
-	preReplyCKs = make([][32]byte, len(i2npRecords))
+	noiseHashes = make([][x25519KeySize]byte, len(i2npRecords))
+	preReplyCKs = make([][x25519KeySize]byte, len(i2npRecords))
 
 	for i, record := range i2npRecords {
 		if i >= len(hops) {
@@ -734,7 +734,7 @@ func (tm *TunnelManager) encryptRecordsAndDeriveKeys(i2npRecords []BuildRequestR
 // updateReplyKeys stores each hop's HKDF-derived reply key and Noise transcript
 // hash on the build result. Per STBM spec (proposal 152) the ReplyKey field is
 // absent from the 154-byte cleartext; each hop derives it via the shared KDF.
-func (tm *TunnelManager) updateReplyKeys(result *tunnel.TunnelBuildResult, hopKeys []i2ptunnel.BuildReplyKeys, noiseHashes [][32]byte) {
+func (tm *TunnelManager) updateReplyKeys(result *tunnel.TunnelBuildResult, hopKeys []i2ptunnel.BuildReplyKeys, noiseHashes [][x25519KeySize]byte) {
 	result.ReplyKeys = make([]session_key.SessionKey, len(hopKeys))
 	for i, keys := range hopKeys {
 		result.ReplyKeys[i] = session_key.SessionKey(keys.ReplyKey)
@@ -761,7 +761,7 @@ func (tm *TunnelManager) updateLayerKeys(result *tunnel.TunnelBuildResult, hopKe
 // registerGarlicReplyKeys derives and registers the one-time garlic key for OBEP
 // reply decryption. The OBEP branch of the shared KDF produces the garlic reply
 // key/tag (SMTunnelLayerKey -> TunnelLayerIVKey -> RGarlicKeyAndTag).
-func (tm *TunnelManager) registerGarlicReplyKeys(preReplyCKs [][32]byte, messageID int, tunnelID tunnel.TunnelID) error {
+func (tm *TunnelManager) registerGarlicReplyKeys(preReplyCKs [][x25519KeySize]byte, messageID int, tunnelID tunnel.TunnelID) error {
 	if tm.garlicKeyRegistrar == nil || len(preReplyCKs) == 0 {
 		return nil
 	}
@@ -775,7 +775,7 @@ func (tm *TunnelManager) registerGarlicReplyKeys(preReplyCKs [][32]byte, message
 	if obepErr != nil {
 		return oops.Wrapf(obepErr, "failed to derive OBEP garlic reply key")
 	}
-	var obepKey [32]byte
+	var obepKey [x25519KeySize]byte
 	var obepTag [8]byte
 	copy(obepKey[:], obepKeys.GarlicReplyKey[:])
 	copy(obepTag[:], obepKeys.GarlicReplyTag[:])
@@ -800,12 +800,12 @@ func (tm *TunnelManager) registerGarlicReplyKeys(preReplyCKs [][32]byte, message
 //
 // Records are in tunnel PATH order here; the wire permutation is applied by
 // the caller afterwards (see shuffleRecordSlots).
-func (tm *TunnelManager) applyChaCha20LayerObfuscation(encryptedRecords [][ShortBuildRecordSize]byte, replyKeys [][32]byte, recordSlots []int) error {
-	if len(encryptedRecords) < 2 {
+func (tm *TunnelManager) applyChaCha20LayerObfuscation(encryptedRecords [][ShortBuildRecordSize]byte, replyKeys [][x25519KeySize]byte, recordSlots []int) error {
+	if len(encryptedRecords) < secondToLastOffset {
 		return nil
 	}
 
-	for i := len(encryptedRecords) - 2; i >= 0; i-- {
+	for i := len(encryptedRecords) - secondToLastOffset; i >= 0; i-- {
 		for j := i + 1; j < len(encryptedRecords); j++ {
 			// The nonce is the record's WIRE slot, not its path index: hops
 			// address slots positionally, so the layer the creator pre-applies

@@ -171,12 +171,12 @@ func TestLatencyCredit(t *testing.T) {
 		d    time.Duration
 		want float64
 	}{
-		{0, 1.0},                       // unknown duration -> full credit
-		{time.Second, 1.0},             // at/below target -> full credit
-		{healthLatencyTarget, 1.0},     // exactly at target -> full credit
-		{15 * time.Second, 0.5},        // halfway to 2x target
-		{20 * time.Second, 0.0},        // at 2x target -> no credit
-		{100 * time.Second, 0.0},       // beyond 2x target -> no credit
+		{0, 1.0},                   // unknown duration -> full credit
+		{time.Second, 1.0},         // at/below target -> full credit
+		{healthLatencyTarget, 1.0}, // exactly at target -> full credit
+		{15 * time.Second, 0.5},    // halfway to 2x target
+		{20 * time.Second, 0.0},    // at 2x target -> no credit
+		{100 * time.Second, 0.0},   // beyond 2x target -> no credit
 	}
 	for _, c := range cases {
 		if got := latencyCredit(c.d); !approxEqual(got, c.want, 1e-9) {

@@ -21,22 +21,22 @@ func IsSpecialUseIPv4(ip net.IP) bool {
 	if ip4 == nil {
 		return false
 	}
-	if ip4[0] == 100 && ip4[1]&0xC0 == 64 {
+	if ip4[0] == cgnatFirstOctet && ip4[1]&cgnatSecondOctetMask == cgnatSecondOctetBits {
 		return true // 100.64.0.0/10 carrier-grade NAT
 	}
-	if ip4[0] == 192 && ip4[1] == 0 && ip4[2] == 0 {
+	if ip4[0] == ietfProtoFirstOctet && ip4[1] == ietfProtoSecondOctet && ip4[2] == ietfProtoThirdOctet {
 		return true // 192.0.0.0/24 IETF protocol assignments
 	}
-	if ip4[0] == 192 && ip4[1] == 0 && ip4[2] == 2 {
+	if ip4[0] == testNet1FirstOctet && ip4[1] == testNet1SecondOctet && ip4[2] == testNet1ThirdOctet {
 		return true // 192.0.2.0/24 TEST-NET-1
 	}
-	if ip4[0] == 198 && ip4[1] == 51 && ip4[2] == 100 {
+	if ip4[0] == testNet2FirstOctet && ip4[1] == testNet2SecondOctet && ip4[2] == testNet2ThirdOctet {
 		return true // 198.51.100.0/24 TEST-NET-2
 	}
-	if ip4[0] == 203 && ip4[1] == 0 && ip4[2] == 113 {
+	if ip4[0] == testNet3FirstOctet && ip4[1] == testNet3SecondOctet && ip4[2] == testNet3ThirdOctet {
 		return true // 203.0.113.0/24 TEST-NET-3
 	}
-	if ip4[0] >= 224 {
+	if ip4[0] >= multicastAndReservedFirstOctetFloor {
 		return true // multicast and reserved classes
 	}
 	return false

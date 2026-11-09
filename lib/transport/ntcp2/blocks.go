@@ -100,7 +100,7 @@ func ParseBlocks(payload []byte) ([]Block, error) {
 		}
 
 		blockType := payload[offset]
-		blockSize := int(binary.BigEndian.Uint16(payload[offset+1 : offset+3]))
+		blockSize := int(binary.BigEndian.Uint16(payload[offset+blockSizeFieldOffset : offset+blockSizeFieldEnd]))
 		offset += blockHeaderSize
 
 		// ntcp2.rst:1441, :1450 bound a block's data at 65516 bytes. A larger
@@ -148,7 +148,7 @@ func SerializeBlocks(blocks ...Block) []byte {
 	offset := 0
 	for _, b := range blocks {
 		payload[offset] = b.Type
-		binary.BigEndian.PutUint16(payload[offset+1:offset+3], uint16(len(b.Data)))
+		binary.BigEndian.PutUint16(payload[offset+blockSizeFieldOffset:offset+blockSizeFieldEnd], uint16(len(b.Data)))
 		copy(payload[offset+blockHeaderSize:], b.Data)
 		offset += blockHeaderSize + len(b.Data)
 	}
@@ -159,7 +159,7 @@ func SerializeBlocks(blocks ...Block) []byte {
 // NewDateTimeBlock creates a DateTime block (type 0) containing the current
 // Unix epoch timestamp as 4 big-endian bytes.
 func NewDateTimeBlock() Block {
-	data := make([]byte, 4)
+	data := make([]byte, dateTimeFieldSize)
 	// ntcp2.rst:1491 "Implementations must round to the nearest second to
 	// prevent clock bias in the network." Truncating with uint32(Unix()) is
 	// always biased up to a full second into the past.
@@ -170,8 +170,8 @@ func NewDateTimeBlock() Block {
 // ParseDateTimeBlock extracts the Unix epoch timestamp from a DateTime block's data.
 // Returns an error if the data is not exactly 4 bytes.
 func ParseDateTimeBlock(data []byte) (time.Time, error) {
-	if len(data) != 4 {
-		return time.Time{}, oops.Errorf("DateTime block data must be 4 bytes, got %d", len(data))
+	if len(data) != dateTimeFieldSize {
+		return time.Time{}, oops.Errorf("DateTime block data must be %d bytes, got %d", dateTimeFieldSize, len(data))
 	}
 	epoch := binary.BigEndian.Uint32(data)
 	return time.Unix(int64(epoch), 0), nil
@@ -207,9 +207,9 @@ func NewPaddingBlock(size int) Block {
 // IMPORTANT: RouterInfo in NTCP2 blocks is NEVER gzip-compressed.
 // Use RouterInfoFlagLocalStore (0x00) or RouterInfoFlagFloodRequest (0x01).
 func NewRouterInfoBlock(routerInfoBytes []byte, flag byte) Block {
-	data := make([]byte, 1+len(routerInfoBytes))
+	data := make([]byte, routerInfoFlagSize+len(routerInfoBytes))
 	data[0] = flag
-	copy(data[1:], routerInfoBytes)
+	copy(data[routerInfoFlagSize:], routerInfoBytes)
 	return Block{Type: BlockTypeRouterInfo, Data: data}
 }
 
@@ -288,7 +288,7 @@ const optionsDataMinSize = 12
 // value, i.e. the ratio of padding to data (ntcp2.rst:1522-1528: 0x00 = no
 // padding, 0x01 = 6 percent, 0x10 = 100 percent, 0x80 = 800 percent).
 func RatioToFloat(b byte) float64 {
-	return float64(b) / 16.0
+	return float64(b) / paddingRatioFixedPointDivisor
 }
 
 // ParseOptionsBlock parses the data of an NTCP2 Options block (type 1).
@@ -312,10 +312,10 @@ func ParseOptionsBlock(data []byte) (OptionsData, error) {
 	out.TransmitMaxRatio = data[1]
 	out.ReceiveMinRatio = data[2]
 	out.ReceiveMaxRatio = data[3]
-	out.TransmitDummy = binary.BigEndian.Uint16(data[4:6])
-	out.ReceiveDummy = binary.BigEndian.Uint16(data[6:8])
-	out.TransmitDelay = binary.BigEndian.Uint16(data[8:10])
-	out.ReceiveDelay = binary.BigEndian.Uint16(data[10:12])
+	out.TransmitDummy = binary.BigEndian.Uint16(data[optionsDummyTransmitOffset : optionsDummyTransmitOffset+optionsUInt16Size])
+	out.ReceiveDummy = binary.BigEndian.Uint16(data[optionsDummyReceiveOffset : optionsDummyReceiveOffset+optionsUInt16Size])
+	out.TransmitDelay = binary.BigEndian.Uint16(data[optionsDelayTransmitOffset : optionsDelayTransmitOffset+optionsUInt16Size])
+	out.ReceiveDelay = binary.BigEndian.Uint16(data[optionsDelayReceiveOffset : optionsDelayReceiveOffset+optionsUInt16Size])
 	if len(data) > optionsDataMinSize {
 		extra := make([]byte, len(data)-optionsDataMinSize)
 		copy(extra, data[optionsDataMinSize:])

@@ -160,9 +160,9 @@ func createNTCP2RouterAddress(options map[string]string) (*router_address.Router
 // Returns 3 for published addresses, 14 for caps-only (unpublished).
 func calculateNTCP2AddressCost(options map[string]string) uint8 {
 	if _, hasHost := options["host"]; hasHost {
-		return 3 // COST_NTCP2_PUBLISHED
+		return costNTCP2Published
 	}
-	return 14 // COST_NTCP2_NON_PUBLISHED
+	return costNTCP2NonPublished
 }
 
 // detectExternalIP returns the best routable local IP address to advertise when
@@ -362,7 +362,7 @@ func splitNATHostPort(addr string) (host, port string, err error) {
 		return host, port, err
 	}
 	// Detect unbracketed IPv6: more than one colon means IPv6, not IPv4.
-	if strings.Count(addr, ":") < 2 {
+	if strings.Count(addr, ":") < minIPv6Colons {
 		// Not IPv6 — return the original error.
 		return "", "", oops.Wrapf(err, "failed to parse NATAddr external address %q", addr)
 	}
@@ -392,7 +392,7 @@ func validateAndExtractStaticKey(transport *NTCP2Transport) (string, error) {
 
 	ntcp2Config := cfg.Config
 
-	if len(ntcp2Config.StaticKey) != 32 {
+	if len(ntcp2Config.StaticKey) != staticKeySize {
 		log.WithField("length", len(ntcp2Config.StaticKey)).Error("Invalid static key length")
 		return "", oops.Errorf("invalid static key length: expected 32 bytes, got %d", len(ntcp2Config.StaticKey))
 	}
@@ -423,7 +423,7 @@ func validateAndExtractStaticKey(transport *NTCP2Transport) (string, error) {
 // Returns the options map and an error if validation fails.
 func buildRouterAddressOptions(host, port, staticKey string, ntcp2Config *ntcp2noise.Config) (map[string]string, error) {
 	// Validate IV length (required per spec: 16 bytes binary -> 24 bytes Base64)
-	if len(ntcp2Config.ObfuscationIV) != 16 {
+	if len(ntcp2Config.ObfuscationIV) != obfuscationIVSize {
 		return nil, oops.Errorf("invalid IV length: expected 16 bytes, got %d", len(ntcp2Config.ObfuscationIV))
 	}
 
@@ -436,7 +436,7 @@ func buildRouterAddressOptions(host, port, staticKey string, ntcp2Config *ntcp2n
 			"port": port,
 			"s":    staticKey,
 			"i":    ivB64,
-			"v":    "2",
+			"v":    ntcp2VersionString,
 		}
 		return options, nil
 	}
@@ -450,7 +450,7 @@ func buildRouterAddressOptions(host, port, staticKey string, ntcp2Config *ntcp2n
 	options := map[string]string{
 		"s":    staticKey,
 		"caps": ntcp2AddressFamilyCaps(host),
-		"v":    "2",
+		"v":    ntcp2VersionString,
 	}
 	return options, nil
 }

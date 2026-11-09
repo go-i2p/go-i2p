@@ -198,7 +198,7 @@ func WriteSecureFile(path string, data []byte) error {
 // GenerateRandomPassword generates a cryptographically random password
 // encoded as URL-safe base64 (24 random bytes → 32-character string).
 func GenerateRandomPassword() (string, error) {
-	b := make([]byte, 24)
+	b := make([]byte, RandomPasswordBytes)
 	if _, err := rand.Read(b); err != nil {
 		return "", oops.Wrapf(err, "failed to generate random password")
 	}
@@ -208,11 +208,11 @@ func GenerateRandomPassword() (string, error) {
 // CheckDefaultPasswordWarning logs a warning if the I2PControl password
 // is still set to the default value in production environments.
 func CheckDefaultPasswordWarning(password string) {
-	if password == "itoopie" {
+	if password == DefaultI2PControlPassword {
 		log.WithFields(logger.Fields{
 			"at":     "CheckDefaultPasswordWarning",
 			"reason": "default_password_in_use",
-		}).Warn("I2PControl is using the default password 'itoopie' - change this in production!")
+		}).Warnf("I2PControl is using the default password '%s' - change this in production!", DefaultI2PControlPassword)
 	}
 }
 

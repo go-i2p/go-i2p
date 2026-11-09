@@ -93,10 +93,10 @@ type CongestionMonitor struct {
 // flag is ready before the first RouterInfo is published.
 func NewCongestionMonitor(cfg config.CongestionDefaults, collector CongestionMetricsCollector) *CongestionMonitor {
 	// Default to 1-second sampling, calculate max samples from averaging window
-	sampleInterval := time.Second
+	sampleInterval := congestionSampleInterval
 	maxSamples := int(cfg.AveragingWindow / sampleInterval)
-	if maxSamples < 10 {
-		maxSamples = 10 // Minimum 10 samples
+	if maxSamples < minCongestionSamples {
+		maxSamples = minCongestionSamples
 	}
 
 	m := &CongestionMonitor{
@@ -106,7 +106,7 @@ func NewCongestionMonitor(cfg config.CongestionDefaults, collector CongestionMet
 		maxSamples:      maxSamples,
 		currentFlag:     config.CongestionFlagNone,
 		startupTime:     time.Now(),
-		startupGraceSec: 60, // 60 second startup grace period
+		startupGraceSec: startupGraceSeconds,
 		stopChan:        make(chan struct{}),
 	}
 
@@ -463,11 +463,11 @@ type RouterMetricsCollector struct {
 func NewRouterMetricsCollector(opts ...RouterMetricsOption) *RouterMetricsCollector {
 	c := &RouterMetricsCollector{
 		participantCountFunc: func() int { return 0 },
-		maxParticipantsFunc:  func() int { return 15000 },
+		maxParticipantsFunc:  func() int { return fallbackMaxParticipants },
 		bandwidthRatesFunc:   func() (uint64, uint64) { return 0, 0 },
 		maxBandwidthFunc:     func() uint64 { return 0 },
 		connectionCountFunc:  func() int { return 0 },
-		maxConnectionsFunc:   func() int { return 200 },
+		maxConnectionsFunc:   func() int { return fallbackMaxConnections },
 		acceptingTunnelsFunc: func() bool { return true },
 	}
 

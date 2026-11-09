@@ -256,7 +256,7 @@ func (tmux *TransportMuxer) waitForAcceptGoroutines() {
 		tmux.logMuxerMethod("Close", logger.Fields{
 			"reason": "accept_goroutines_exited",
 		}, "debug", "all accept goroutines exited cleanly")
-	case <-time.After(3 * time.Second):
+	case <-time.After(acceptGoroutineWaitTimeout):
 		tmux.logMuxerMethod("Close", logger.Fields{
 			"reason": "accept_goroutines_timeout",
 		}, "warn", "timed out waiting for accept goroutines to exit")
@@ -424,7 +424,7 @@ func (tmux *TransportMuxer) cleanupExpiredPeers() {
 // failedPeers map to prevent unbounded growth over the router's lifetime.
 func (tmux *TransportMuxer) failedPeersCleanupLoop() {
 	defer tmux.acceptWg.Done()
-	ticker := time.NewTicker(5 * time.Minute)
+	ticker := time.NewTicker(failedPeersCleanupInterval)
 	defer ticker.Stop()
 	for {
 		select {
@@ -688,7 +688,7 @@ func (tmux *TransportMuxer) validateTransports() error {
 func (tmux *TransportMuxer) ensureAcceptLoop() {
 	tmux.acceptOnce.Do(func() {
 		// Buffer large enough so goroutines can always send without blocking
-		tmux.acceptChan = make(chan acceptResult, len(tmux.trans)*4)
+		tmux.acceptChan = make(chan acceptResult, len(tmux.trans)*acceptChanBufferPerTransport)
 		for i, t := range tmux.trans {
 			tmux.acceptWg.Add(1)
 			go tmux.runAcceptWorker(t, i)
@@ -723,7 +723,7 @@ func (tmux *TransportMuxer) processAcceptResult(conn net.Conn, err error, index 
 			return false
 		}
 		// Temporary error — brief back-off then retry
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(acceptRetryBackoff)
 		return true
 	}
 	return tmux.deliverAcceptResult(conn, index)

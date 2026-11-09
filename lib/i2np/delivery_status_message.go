@@ -62,13 +62,13 @@ const deliveryStatusTimestampSkew = 1 * time.Hour
 func validateDeliveryStatusNotReplayed(messageID int, timestamp time.Time) error {
 	// Build cache key: SHA-256(messageID || timestamp)
 	h := sha256.New()
-	keyBuf := make([]byte, 12)
-	binary.BigEndian.PutUint32(keyBuf[0:4], uint32(messageID))
+	keyBuf := make([]byte, DeliveryStatusKeySize)
+	binary.BigEndian.PutUint32(keyBuf[:I2NPMessageIDSize], uint32(messageID))
 	// Use milliseconds for timestamp to match I2P precision
-	binary.BigEndian.PutUint64(keyBuf[4:12], uint64(timestamp.UnixMilli()))
+	binary.BigEndian.PutUint64(keyBuf[I2NPMessageIDSize:], uint64(timestamp.UnixMilli()))
 	h.Write(keyBuf)
 
-	var cacheKey [32]byte
+	var cacheKey [HashSize]byte
 	copy(cacheKey[:], h.Sum(nil))
 
 	c := deliveryStatusReplayCacheGlobal
@@ -128,9 +128,9 @@ func validateDeliveryStatusTimestamp(timestamp time.Time) error {
 		return oops.Errorf("DeliveryStatus message far in future (skew=%v)", -timeDiff)
 	}
 
-	// Very old messages (more than 24 hours) are logged as warning but not rejected
+	// Very old messages (more than DeliveryStatusMaxAge) are logged as warning but not rejected
 	// to preserve compatibility with test data and unusual network conditions
-	if timeDiff > 24*time.Hour {
+	if timeDiff > DeliveryStatusMaxAge {
 		log.WithFields(logger.Fields{
 			"timestamp": timestamp,
 			"age":       timeDiff,
@@ -168,8 +168,8 @@ func NewDeliveryStatusMessage(messageID int, timestamp time.Time) *DeliveryStatu
 	}
 
 	// Set the data payload
-	data := make([]byte, 12) // 4 bytes for message ID + 8 bytes for timestamp
-	binary.BigEndian.PutUint32(data[0:4], uint32(messageID))
+	data := make([]byte, DeliveryStatusKeySize) // message ID + timestamp
+	binary.BigEndian.PutUint32(data[:I2NPMessageIDSize], uint32(messageID))
 
 	// Convert timestamp to I2P Date format
 	date, err := common.DateFromTime(timestamp)
@@ -181,7 +181,7 @@ func NewDeliveryStatusMessage(messageID int, timestamp time.Time) *DeliveryStatu
 		// Use current time if conversion fails
 		date, _ = common.DateFromTime(time.Now())
 	}
-	copy(data[4:12], date[:])
+	copy(data[I2NPMessageIDSize:DeliveryStatusKeySize], date[:])
 
 	msg.SetData(data)
 
@@ -219,7 +219,7 @@ func (d *DeliveryStatusMessage) UnmarshalBinary(data []byte) error {
 
 	// Extract the data payload and parse it
 	messageData := d.BaseI2NPMessage.GetData()
-	if len(messageData) < 12 {
+	if len(messageData) < DeliveryStatusKeySize {
 		log.WithFields(logger.Fields{
 			"at":           "UnmarshalBinary",
 			"payload_size": len(messageData),
@@ -227,10 +227,10 @@ func (d *DeliveryStatusMessage) UnmarshalBinary(data []byte) error {
 		return oops.Errorf("delivery status message payload too short: %d bytes", len(messageData))
 	}
 
-	d.StatusMessageID = int(binary.BigEndian.Uint32(messageData[0:4]))
+	d.StatusMessageID = int(binary.BigEndian.Uint32(messageData[:I2NPMessageIDSize]))
 
 	// Parse timestamp from I2P Date format
-	date, _, err := common.ReadDate(messageData[4:])
+	date, _, err := common.ReadDate(messageData[I2NPMessageIDSize:])
 	if err != nil {
 		log.WithError(err).Error("Failed to read Date from DeliveryStatus message")
 		return oops.Wrapf(err, "failed to read delivery status date")

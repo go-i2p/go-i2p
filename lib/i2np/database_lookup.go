@@ -233,11 +233,11 @@ func readDatabaseLookupKey(data []byte) (int, common.Hash, error) {
 		"at":  "i2np.readDatabaseLookupKey",
 		"key": key,
 	}).Debug("parsed_database_lookup_key")
-	return 32, key, nil
+	return HashSize, key, nil
 }
 
 func readDatabaseLookupFrom(length int, data []byte) (int, common.Hash, error) {
-	if len(data) < length+32 {
+	if len(data) < length+HashSize {
 		return length, common.Hash{}, ErrDatabaseLookupNotEnoughData
 	}
 
@@ -249,7 +249,7 @@ func readDatabaseLookupFrom(length int, data []byte) (int, common.Hash, error) {
 		"at":   "i2np.database_lookup.readDatabaseLookupFrom",
 		"from": from,
 	}).Debug("parsed_database_lookup_from")
-	return length + 32, from, nil
+	return length + HashSize, from, nil
 }
 
 func readDatabaseLookupFlags(length int, data []byte) (int, byte, error) {
@@ -269,29 +269,28 @@ func readDatabaseLookupReplyTunnelID(flags byte, length int, data []byte) (int, 
 	if flags&1 != 1 {
 		return length, [4]byte{}, nil
 	}
-	if len(data) < length+4 {
+	if len(data) < length+lookupReplyTunnelIDSize {
 		return length, [4]byte{}, ErrDatabaseLookupNotEnoughData
 	}
 
-	replyTunnelID := [4]byte(data[length : length+4])
+	replyTunnelID := [4]byte(data[length : length+lookupReplyTunnelIDSize])
 	log.WithFields(logger.Fields{
 		"at":              "i2np.database_lookup.readDatabaseLookupReplyTunnelID",
 		"reply_tunnel_id": replyTunnelID,
 	}).Debug("parsed_database_lookup_reply_tunnel_id")
-	return length + 4, replyTunnelID, nil
+	return length + lookupReplyTunnelIDSize, replyTunnelID, nil
 }
 
 func readDatabaseLookupSize(length int, data []byte) (int, int, error) {
-	if len(data) < length+2 {
+	if len(data) < length+lookupExcludedCountFieldSize {
 		return length, 0, ErrDatabaseLookupNotEnoughData
 	}
 
-	size := common.Integer(data[length : length+2]).Int()
+	size := common.Integer(data[length : length+lookupExcludedCountFieldSize]).Int()
 
 	// I2P spec: valid range is 0-512 peers
 	// Validate to prevent resource exhaustion attacks
 	// Rate limiting is enforced at the processor level
-	const MaxExcludedPeers = 512
 	if size < 0 || size > MaxExcludedPeers {
 		log.WithFields(logger.Fields{
 			"at":   "i2np.database_lookup.readDatabaseLookupSize",
@@ -304,16 +303,16 @@ func readDatabaseLookupSize(length int, data []byte) (int, int, error) {
 		"at":   "i2np.database_lookup.readDatabaseLookupSize",
 		"size": size,
 	}).Debug("parsed_database_lookup_size")
-	return length + 2, size, nil
+	return length + lookupExcludedCountFieldSize, size, nil
 }
 
 func readDatabaseLookupExcludedPeers(length int, data []byte, size int) (int, []common.Hash, error) {
-	if len(data) < length+size*32 {
+	if len(data) < length+size*HashSize {
 		return length, []common.Hash{}, ErrDatabaseLookupNotEnoughData
 	}
 	var excludedPeers []common.Hash
 	for i := 0; i < size; i++ {
-		offset := length + i*32
+		offset := length + i*HashSize
 		peer, _, err := common.ReadHash(data[offset:])
 		if err != nil {
 			return length, []common.Hash{}, ErrDatabaseLookupNotEnoughData
@@ -325,11 +324,11 @@ func readDatabaseLookupExcludedPeers(length int, data []byte, size int) (int, []
 		"at":             "i2np.database_lookup.readDatabaseLookupExcludedPeers",
 		"excluded_peers": excludedPeers,
 	}).Debug("parsed_database_lookup_excluded_peers")
-	return length + size*32, excludedPeers, nil
+	return length + size*HashSize, excludedPeers, nil
 }
 
 func readDatabaseLookupReplyKey(length int, data []byte) (int, session_key.SessionKey, error) {
-	if len(data) < length+32 {
+	if len(data) < length+HashSize {
 		return length, session_key.SessionKey{}, ErrDatabaseLookupNotEnoughData
 	}
 	replyKey, _, err := session_key.ReadSessionKey(data[length:])
@@ -341,11 +340,11 @@ func readDatabaseLookupReplyKey(length int, data []byte) (int, session_key.Sessi
 		"at":        "i2np.database_lookup.readDatabaseLookupReplyKey",
 		"reply_key": replyKey,
 	}).Debug("parsed_database_lookup_reply_key")
-	return length + 32, replyKey, nil
+	return length + HashSize, replyKey, nil
 }
 
 func readDatabaseLookupTags(length int, data []byte) (int, int, error) {
-	if len(data) < length+1 {
+	if len(data) < length+I2NPTypeSize {
 		return length, 0, ErrDatabaseLookupNotEnoughData
 	}
 	tags := int(data[length])
@@ -354,7 +353,7 @@ func readDatabaseLookupTags(length int, data []byte) (int, int, error) {
 		"at":   "i2np.database_lookup.readDatabaseLookupTags",
 		"tags": tags,
 	}).Debug("parsed_database_lookup_tags")
-	return length + 1, tags, nil
+	return length + I2NPTypeSize, tags, nil
 }
 
 func readDatabaseLookupECIESReplyTags(length int, data []byte, tags int) (int, []session_tag.ECIESSessionTag, error) {
@@ -416,7 +415,7 @@ func (d *DatabaseLookup) GetTagCount() int {
 // the reply payload is encrypted with the ECIES reply tags.
 // See also [DatabaseLookup].
 func (d *DatabaseLookup) IsECIES() bool {
-	return (d.Flags & 0x10) != 0
+	return (d.Flags & DatabaseLookupFlagECIES) != 0
 }
 
 // Flag constants for the DatabaseLookup flags byte.
@@ -554,17 +553,17 @@ func (d *DatabaseLookup) MarshalBinary() ([]byte, error) {
 // calculateMarshalSize computes the total byte length needed for the serialized message.
 func (d *DatabaseLookup) calculateMarshalSize() int {
 	// Base: key(32) + from(32) + flags(1) + size(2) = 67 bytes
-	totalSize := 32 + 32 + 1 + 2
+	totalSize := HashSize + HashSize + I2NPTypeSize + I2NPSizeFieldSize
 
 	if d.hasTunnelReply() {
-		totalSize += 4
+		totalSize += lookupReplyTunnelIDSize
 	}
 
-	totalSize += d.Size * 32
+	totalSize += d.Size * HashSize
 
 	if d.IsECIES() {
-		totalSize += 32 + 1 // reply_key + tags count
-		totalSize += d.Tags * 8
+		totalSize += HashSize + I2NPTypeSize // reply_key + tags count
+		totalSize += d.Tags * eciesReplyTagSize
 	}
 
 	return totalSize
@@ -580,11 +579,11 @@ func (d *DatabaseLookup) hasTunnelReply() bool {
 func (d *DatabaseLookup) marshalFixedFields(result []byte) int {
 	offset := 0
 
-	copy(result[offset:offset+32], d.Key[:])
-	offset += 32
+	copy(result[offset:offset+HashSize], d.Key[:])
+	offset += HashSize
 
-	copy(result[offset:offset+32], d.From[:])
-	offset += 32
+	copy(result[offset:offset+HashSize], d.From[:])
+	offset += HashSize
 
 	result[offset] = d.Flags
 	offset++
@@ -606,8 +605,8 @@ func (d *DatabaseLookup) marshalFixedFields(result []byte) int {
 // Returns the new offset after writing.
 func (d *DatabaseLookup) marshalExcludedPeers(result []byte, offset int) int {
 	for i := 0; i < d.Size && i < len(d.ExcludedPeers); i++ {
-		copy(result[offset:offset+32], d.ExcludedPeers[i][:])
-		offset += 32
+		copy(result[offset:offset+HashSize], d.ExcludedPeers[i][:])
+		offset += HashSize
 	}
 	return offset
 }
@@ -619,15 +618,15 @@ func (d *DatabaseLookup) marshalEncryptionFields(result []byte, offset int) {
 		return
 	}
 
-	copy(result[offset:offset+32], d.ReplyKey[:])
-	offset += 32
+	copy(result[offset:offset+HashSize], d.ReplyKey[:])
+	offset += HashSize
 
 	result[offset] = byte(d.Tags)
 	offset++
 
 	for i := 0; i < d.Tags && i < len(d.ECIESReplyTags); i++ {
-		copy(result[offset:offset+8], d.ECIESReplyTags[i].Bytes())
-		offset += 8
+		copy(result[offset:offset+eciesReplyTagSize], d.ECIESReplyTags[i].Bytes())
+		offset += eciesReplyTagSize
 	}
 }
 

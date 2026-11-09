@@ -66,7 +66,7 @@ func (p *Pool) waitForStartupGate() bool {
 
 // runMaintenanceTicker runs the maintenance loop with periodic checks.
 func (p *Pool) runMaintenanceTicker() {
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(poolMaintenanceInterval)
 	defer ticker.Stop()
 
 	// Perform initial check immediately
@@ -301,8 +301,8 @@ func (p *Pool) checkAndUpdateBackoff() bool {
 
 	// Calculate backoff delay based on consecutive failures
 	backoffDelay := p.config.BuildRetryDelay * time.Duration(1<<uint(p.buildFailures))
-	if backoffDelay > 5*time.Minute {
-		backoffDelay = 5 * time.Minute // Cap at 5 minutes
+	if backoffDelay > maxBuildBackoff {
+		backoffDelay = maxBuildBackoff // Cap at maxBuildBackoff
 	}
 
 	// Check if we need to wait due to backoff

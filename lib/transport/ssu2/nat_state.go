@@ -215,7 +215,7 @@ func (t *SSU2Transport) saveNATState() {
 		return
 	}
 	path := filepath.Join(cfg.WorkingDir, natStateFilename)
-	if err := os.WriteFile(path, data, 0o600); err != nil {
+	if err := os.WriteFile(path, data, secureFilePermissions); err != nil {
 		t.logger.WithField("error", err).Warn("failed to persist NAT state")
 	}
 }

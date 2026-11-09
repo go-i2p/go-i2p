@@ -2,6 +2,7 @@ package netdb
 
 import (
 	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
@@ -43,15 +44,15 @@ func NewRouterNetDB(db *StdNetDB) *RouterNetDB {
 //   - 7: MetaLeaseSet
 func (r *RouterNetDB) Store(key common.Hash, data []byte, dataType byte) error {
 	switch dataType {
-	case 0:
+	case i2np.DatabaseStoreTypeRouterInfo:
 		return r.StdNetDB.StoreRouterInfoFromMessage(key, data, dataType)
-	case 1:
+	case i2np.DatabaseStoreTypeLeaseSet:
 		return r.StdNetDB.StoreLeaseSet(key, data, dataType)
-	case 3:
+	case i2np.DatabaseStoreTypeLeaseSet2:
 		return r.StdNetDB.StoreLeaseSet2(key, data, dataType)
-	case 5:
+	case i2np.DatabaseStoreTypeEncryptedLeaseSet:
 		return r.StdNetDB.StoreEncryptedLeaseSet(key, data, dataType)
-	case 7:
+	case i2np.DatabaseStoreTypeMetaLeaseSet:
 		return r.StdNetDB.StoreMetaLeaseSet(key, data, dataType)
 	default:
 		return oops.Errorf("unknown database store type: %d", dataType)

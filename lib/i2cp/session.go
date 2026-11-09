@@ -165,25 +165,25 @@ type SessionConfig struct {
 // DefaultSessionConfig returns a SessionConfig with sensible defaults
 func DefaultSessionConfig() *SessionConfig {
 	return &SessionConfig{
-		InboundTunnelLength:    3,
-		OutboundTunnelLength:   3,
-		InboundTunnelCount:     5,
-		OutboundTunnelCount:    5,
+		InboundTunnelLength:    defaultTunnelLength,
+		OutboundTunnelLength:   defaultTunnelLength,
+		InboundTunnelCount:     defaultTunnelCount,
+		OutboundTunnelCount:    defaultTunnelCount,
 		InboundBackupQuantity:  0,
 		OutboundBackupQuantity: 0,
 		InboundLengthVariance:  0,
 		OutboundLengthVariance: 0,
-		TunnelLifetime:         10 * time.Minute,
-		MessageTimeout:         60 * time.Second,
-		MessageQueueSize:       100,
-		MessageRateLimit:       100, // 100 messages/second
-		MessageRateBurstSize:   200, // Allow bursts up to 200 messages
+		TunnelLifetime:         defaultSessionTunnelLifetime,
+		MessageTimeout:         defaultMessageTimeout,
+		MessageQueueSize:       defaultMessageQueueSize,
+		MessageRateLimit:       defaultMessageRateLimit,
+		MessageRateBurstSize:   defaultMessageRateBurst,
 		MessageReliability:     MessageReliabilityBestEffort,
 		DontPublishLeaseSet:    false,
 		UseEncryptedLeaseSet:   false,
 		BlindingSecret:         nil,
 		GzipEnabled:            true, // Per I2CP spec, gzip is enabled by default
-		LeaseSetExpiration:     600,  // 10 minutes
+		LeaseSetExpiration:     defaultLeaseSetExpirationSeconds,
 		Nickname:               "",
 	}
 }
@@ -324,7 +324,7 @@ func (s *Session) ECIESDecryptionKey() ([32]byte, bool) {
 	keystore := s.keys
 	s.mu.RUnlock()
 
-	if len(clientKey) == 32 {
+	if len(clientKey) == x25519KeySize {
 		copy(key[:], clientKey)
 		return key, true
 	}
@@ -332,7 +332,7 @@ func (s *Session) ECIESDecryptionKey() ([32]byte, bool) {
 	if keystore != nil {
 		if priv := keystore.EncryptionPrivateKey(); priv != nil {
 			b := priv.Bytes()
-			if len(b) == 32 {
+			if len(b) == x25519KeySize {
 				copy(key[:], b)
 				return key, true
 			}
@@ -402,7 +402,7 @@ func NewSession(id uint16, dest *destination.Destination, config *SessionConfig,
 		"at":                   "i2cp.NewSession",
 		"sessionID":            id,
 		"hasDestination":       dest != nil,
-		"hasPrivateKeys":       len(privKeys) >= 2,
+		"hasPrivateKeys":       len(privKeys) >= minPrivateKeysForSession,
 		"inboundTunnelLength":  config.InboundTunnelLength,
 		"outboundTunnelLength": config.OutboundTunnelLength,
 		"inboundTunnelCount":   config.InboundTunnelCount,
@@ -486,7 +486,7 @@ func extractPrivateKeys(privKeys []interface{}) (types.SigningPrivateKey, types.
 	var sigPriv types.SigningPrivateKey
 	var encPriv types.PrivateEncryptionKey
 	var identityPadding []byte
-	if len(privKeys) >= 2 {
+	if len(privKeys) >= minPrivateKeysForSession {
 		if sp, ok := privKeys[0].(types.SigningPrivateKey); ok {
 			sigPriv = sp
 		}
@@ -494,7 +494,7 @@ func extractPrivateKeys(privKeys []interface{}) (types.SigningPrivateKey, types.
 			encPriv = ep
 		}
 	}
-	if len(privKeys) >= 3 {
+	if len(privKeys) >= privateKeysWithIdentityPadding {
 		if pad, ok := privKeys[2].([]byte); ok {
 			identityPadding = pad
 		}
@@ -584,7 +584,7 @@ const maxQueueSize = 10000
 func determineQueueSize(config *SessionConfig) int {
 	queueSize := config.MessageQueueSize
 	if queueSize <= 0 {
-		return 100
+		return defaultMessageQueueSize
 	}
 	if queueSize > maxQueueSize {
 		return maxQueueSize
@@ -601,7 +601,7 @@ func createRateLimiterIfNeeded(config *SessionConfig, sessionID uint16) *simpleR
 
 	burstSize := config.MessageRateBurstSize
 	if burstSize <= 0 {
-		burstSize = config.MessageRateLimit * 2
+		burstSize = config.MessageRateLimit * rateLimiterBurstMultiplier
 	}
 
 	rateLimiter := newSimpleRateLimiter(config.MessageRateLimit, burstSize)
@@ -1183,8 +1183,8 @@ func (s *Session) createLeaseFromTunnel(tun *tunnel.TunnelState) (*lease.Lease2,
 	// Validate lease expiration: must have meaningful time remaining
 	// Use smaller of 30 seconds or 10% of tunnel lifetime to handle both
 	// production (10 minute tunnels) and test scenarios (short tunnels)
-	minValidity := 30 * time.Second
-	proportionalMin := s.config.TunnelLifetime / 10
+	minValidity := leaseValidityMinFloor
+	proportionalMin := s.config.TunnelLifetime / leaseValidityLifetimeDivisor
 	if proportionalMin < minValidity {
 		minValidity = proportionalMin
 	}
@@ -1208,7 +1208,7 @@ func (s *Session) prepareEncryptionKey() (lease_set2.EncryptionKey, error) {
 
 	return lease_set2.EncryptionKey{
 		KeyType: key_certificate.KEYCERT_CRYPTO_X25519,
-		KeyLen:  32,
+		KeyLen:  x25519KeySize,
 		KeyData: encryptionPublicKey.Bytes(),
 	}, nil
 }

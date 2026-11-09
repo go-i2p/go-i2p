@@ -99,13 +99,13 @@ type ExplorerConfig struct {
 // See also [ExplorerConfig], [NewExplorer].
 func DefaultExplorerConfig() ExplorerConfig {
 	return ExplorerConfig{
-		Interval:            5 * time.Minute,
-		MinInterval:         1 * time.Minute,
-		MaxInterval:         15 * time.Minute,
-		Concurrency:         3,
-		LookupTimeout:       30 * time.Second,
+		Interval:            defaultExplorerInterval,
+		MinInterval:         defaultExplorerMinInterval,
+		MaxInterval:         defaultExplorerMaxInterval,
+		Concurrency:         defaultExplorerConcurrency,
+		LookupTimeout:       defaultLookupTimeout,
 		UseAdaptive:         true,
-		StatsUpdateInterval: 1 * time.Minute,
+		StatsUpdateInterval: defaultStatsUpdateInterval,
 	}
 }
 

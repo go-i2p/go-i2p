@@ -16,43 +16,6 @@ import (
 	"github.com/samber/oops"
 )
 
-// Peer cache on-disk format constants.
-//
-// The cache is a self-contained binary file (no gob, consistent with the
-// codebase's existing compact binary conventions). Layout:
-//
-//	[4 bytes magic "PCAC"][1 byte version][4 bytes BE entry count]
-//	per entry:
-//	  [32 bytes ident hash][8 bytes BE last-activity unix seconds]
-//	  [4 bytes BE router-info length][N bytes router-info]
-const (
-	peerCacheMagic0 byte = 'P'
-	peerCacheMagic1 byte = 'C'
-	peerCacheMagic2 byte = 'A'
-	peerCacheMagic3 byte = 'C'
-
-	peerCacheVersion byte = 1
-
-	// peerCacheHeaderSize is the fixed-size header before the first entry.
-	peerCacheHeaderSize = 4 + 1 + 4
-
-	// peerCacheEntryFixedSize is the per-entry fixed overhead:
-	// 32-byte hash + 8-byte timestamp + 4-byte length.
-	peerCacheEntryFixedSize = 32 + 8 + 4
-
-	// peerCacheMaxAge is the maximum age of a cached RouterInfo before it is
-	// considered stale and dropped. Mirrors the 48h RouterInfoMaxAge used by
-	// the netDb reseed path.
-	peerCacheMaxAge = 48 * time.Hour
-
-	// peerCacheMaxClockSkew tolerates small clock differences between the
-	// machine that wrote the cache and the one reading it.
-	peerCacheMaxClockSkew = 10 * time.Minute
-
-	// peerCacheDefaultMaxSize is the default cap on cached peers.
-	peerCacheDefaultMaxSize = 500
-)
-
 // cachedPeer is a single entry in the peer cache.
 type cachedPeer struct {
 	// hash is the router's ident hash, used as the map key and for dedup.
@@ -126,10 +89,10 @@ func (pc *PeerCache) Load(ctx context.Context) error {
 	if err != nil {
 		// A corrupt cache should not block bootstrap; log and start empty.
 		log.WithError(err).WithFields(logger.Fields{
-			"at":      "(PeerCache) Load",
-			"phase":   "bootstrap",
-			"reason":  "corrupt_cache",
-			"file":    pc.path,
+			"at":     "(PeerCache) Load",
+			"phase":  "bootstrap",
+			"reason": "corrupt_cache",
+			"file":   pc.path,
 		}).Warn("peer cache file is corrupt, starting with empty cache")
 		pc.loaded = true
 		return nil
@@ -174,13 +137,13 @@ func (pc *PeerCache) Load(ctx context.Context) error {
 	pc.evictIfNeeded()
 
 	log.WithFields(logger.Fields{
-		"at":         "(PeerCache) Load",
-		"phase":      "bootstrap",
-		"step":       "complete",
-		"file":       pc.path,
-		"total":      len(entries),
-		"valid":      valid,
-		"max_size":   pc.maxSize,
+		"at":       "(PeerCache) Load",
+		"phase":    "bootstrap",
+		"step":     "complete",
+		"file":     pc.path,
+		"total":    len(entries),
+		"valid":    valid,
+		"max_size": pc.maxSize,
 	}).Info("peer cache loaded")
 
 	return nil
@@ -282,12 +245,12 @@ func (pc *PeerCache) Record(peers []router_info.RouterInfo) error {
 			return err
 		}
 		log.WithFields(logger.Fields{
-			"at":         "(PeerCache) Record",
-			"phase":      "bootstrap",
-			"step":       "complete",
-			"recorded":   added,
-			"total":      pc.Size(),
-			"max_size":   pc.maxSize,
+			"at":       "(PeerCache) Record",
+			"phase":    "bootstrap",
+			"step":     "complete",
+			"recorded": added,
+			"total":    pc.Size(),
+			"max_size": pc.maxSize,
 		}).Info("recorded peers to cache")
 	}
 
@@ -364,12 +327,12 @@ func (pc *PeerCache) Save() error {
 		buf = append(buf, e.routerInfo...)
 	}
 
-	if err := os.MkdirAll(filepath.Dir(pc.path), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(pc.path), peerCacheDirMode); err != nil {
 		return oops.Wrapf(err, "failed to create peer cache directory")
 	}
 
 	tmp := pc.path + ".tmp"
-	if err := os.WriteFile(tmp, buf, 0o600); err != nil {
+	if err := os.WriteFile(tmp, buf, peerCacheFileMode); err != nil {
 		return oops.Wrapf(err, "failed to write peer cache temp file")
 	}
 	if err := os.Rename(tmp, pc.path); err != nil {

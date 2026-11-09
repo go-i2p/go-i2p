@@ -258,13 +258,13 @@ func (sm *SessionManager) allocateRandomProbe(activeCount int) (uint16, error) {
 
 // generateSecureSessionID generates a cryptographically random 16-bit session ID
 func generateSecureSessionID() (uint16, error) {
-	var buf [2]byte
+	var buf [sessionIDByteSize]byte
 	if _, err := rand.Read(buf[:]); err != nil {
 		return 0, oops.Errorf("failed to read random bytes: %w", err)
 	}
 
 	// Convert bytes to uint16 (big-endian)
-	id := uint16(buf[0])<<8 | uint16(buf[1])
+	id := uint16(buf[0])<<bitsPerByte | uint16(buf[1])
 	return id, nil
 }
 

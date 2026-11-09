@@ -16,9 +16,9 @@ type BackoffConfig struct {
 // Initial 30s, Max 30min, Factor 2.0 (doubling).
 func DefaultBackoffConfig() *BackoffConfig {
 	return &BackoffConfig{
-		Initial: 30 * time.Second,
-		Max:     30 * time.Minute,
-		Factor:  2.0,
+		Initial: defaultBackoffInitial,
+		Max:     defaultBackoffMax,
+		Factor:  defaultBackoffFactor,
 	}
 }
 

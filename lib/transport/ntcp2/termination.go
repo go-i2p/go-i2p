@@ -125,13 +125,13 @@ func BuildTerminationBlockWithFrames(reason byte, validFramesReceived uint64) []
 	block[0] = terminationBlockType
 
 	// Payload size (big-endian 16-bit)
-	binary.BigEndian.PutUint16(block[1:3], uint16(terminationBlockPayloadSize))
+	binary.BigEndian.PutUint16(block[blockSizeFieldOffset:blockSizeFieldEnd], uint16(terminationBlockPayloadSize))
 
 	// Valid AEAD data-phase frames received (8 bytes, big-endian uint64).
-	binary.BigEndian.PutUint64(block[3:11], validFramesReceived)
+	binary.BigEndian.PutUint64(block[blockHeaderSize:blockHeaderSize+terminationFramesReceivedSize], validFramesReceived)
 
 	// Reason code
-	block[11] = reason
+	block[blockHeaderSize+terminationFramesReceivedSize] = reason
 
 	return block
 }

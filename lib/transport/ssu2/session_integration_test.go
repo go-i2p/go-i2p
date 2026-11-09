@@ -382,28 +382,26 @@ func attemptLoopbackPair(t testing.TB) (establishedPair, error) {
 // establishedSessionPair builds an SSU2 session pair over loopback UDP and
 // verifies that both data directions actually work before returning it.
 //
-// The verification is not redundant with the tests that use it. go-noise installs
-// a listener-accepted session's data-phase inbound header protector from a
-// separate goroutine: SSU2Conn.notifyRecvDataKey (ssu2/session/conn_handshake.go)
-// does a *non-blocking* send (select with a default branch) into a buffered
-// channel that only exists after the listener calls
-// SetAcceptedDataKeyNotify (ssu2/server/listener.go), and the receiving goroutine
-// then calls AcceptedSessionRegistry.SetDataPhaseProtector. If the notify runs
-// before the channel is wired, the protector is never installed for that session,
-// and AcceptedSessionRegistry.TrialDeobfuscate silently drops every inbound Data
-// packet it can no longer deobfuscate.
+// The verification is kept as a guard, not a workaround. There used to be a real
+// upstream defect it papered over: go-noise installed a listener-accepted
+// session's data-phase inbound header protector from a separate goroutine, fed by
+// a *non-blocking* send into a buffered channel that only existed after the
+// listener wired it. If the notify fired before the channel was wired, or the
+// draining goroutine had not yet run when the first Data packet arrived,
+// AcceptedSessionRegistry.TrialDeobfuscate silently dropped every inbound Data
+// packet for that session — permanently, because a datagram the listener cannot
+// deobfuscate is not recoverable by resending it under a new number into the same
+// empty entry. Retrying the *send* could never recover it; only re-establishing the
+// session could.
 //
-// That failure is permanent for the session, not a microsecond window: the sender
-// has no delivery feedback and data packets are retransmitted only on RTO expiry
-// for unACKed packets, so a message the peer cannot even deobfuscate is lost for
-// good. Retrying the send therefore cannot recover it; only re-establishing the
-// session can. That is why the readiness probe lives here, in the pair
-// establishment loop, rather than in the tests' send path.
-//
-// go-noise's own suite does not cover this because it has no test that delivers
-// data over a listener-accepted session. The defect is reported upstream rather
-// than patched here, since the fix belongs in go-noise's handshake/listener
-// state machine.
+// That is fixed in go-noise (finding 012 addendum): SSU2Conn now hands the
+// protector to the listener through a synchronous hook called from the handshake
+// goroutine that derives it (SetDataPhaseProtectorHook /
+// SetSessConfirmedProtectorHook), so the registry entry is populated before the
+// conn reports the data phase as reached. The probe and its retry loop stay as
+// cheap regression protection — if that ordering ever breaks again, the failure
+// mode is a silent one-way-deaf session, which is exactly what a test should not
+// have to rediscover through a timeout.
 //
 // The caller's ctx bounds session lifetime, not establishment: each attempt uses
 // its own probe deadline and cancellation is only checked between attempts, so one

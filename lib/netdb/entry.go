@@ -154,10 +154,10 @@ func (e *Entry) writeEntryType(w io.Writer, entryType byte) error {
 // Returns an error if the data length exceeds the maximum representable
 // by uint16 (65535 bytes).
 func (e *Entry) writeDataLength(w io.Writer, length int) error {
-	if length > 65535 {
+	if length > entryDataMaxLength {
 		return oops.Errorf("entry data too large for uint16 length field: %d bytes (max 65535)", length)
 	}
-	lenBytes := make([]byte, 2)
+	lenBytes := make([]byte, entryDataLengthFieldSize)
 	binary.BigEndian.PutUint16(lenBytes, uint16(length))
 	if _, err := w.Write(lenBytes); err != nil {
 		return oops.Errorf("failed to write length: %w", err)
@@ -219,7 +219,7 @@ func (e *Entry) readEntryData(r io.Reader) ([]byte, error) {
 
 // readDataLength reads and returns the data length from the reader.
 func (e *Entry) readDataLength(r io.Reader) (uint16, error) {
-	lenBytes := make([]byte, 2)
+	lenBytes := make([]byte, entryDataLengthFieldSize)
 	if _, err := io.ReadFull(r, lenBytes); err != nil {
 		return 0, oops.Errorf("failed to read length: %w", err)
 	}

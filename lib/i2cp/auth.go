@@ -364,10 +364,10 @@ func parseGetDateOptions(data []byte) map[string]string {
 
 // extractMappingData reads the mapping size header and returns the mapping bytes.
 func extractMappingData(data []byte) []byte {
-	if len(data) < 2 {
+	if len(data) < mappingSizeFieldSize {
 		return nil
 	}
-	mappingSize := int(binary.BigEndian.Uint16(data[0:2]))
+	mappingSize := int(binary.BigEndian.Uint16(data[0:mappingSizeFieldSize]))
 	if mappingSize == 0 {
 		return nil
 	}

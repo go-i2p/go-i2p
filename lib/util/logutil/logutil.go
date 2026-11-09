@@ -54,7 +54,7 @@ func applyDebugI2PEnv() {
 //
 // Example: HashPrefix([32]byte{...}) → "a1b2c3d4..." (first 16 hex chars + "...")
 func HashPrefix(h [32]byte) string {
-	return fmt.Sprintf("%x...", h[:8])
+	return fmt.Sprintf("%x...", h[:hashPrefixBytes])
 }
 
 // HashPrefixPlain returns a hex string prefix of the given hash without the "..." suffix.
@@ -62,7 +62,7 @@ func HashPrefix(h [32]byte) string {
 //
 // Example: HashPrefixPlain([32]byte{...}) → "a1b2c3d4" (first 16 hex chars)
 func HashPrefixPlain(h [32]byte) string {
-	return fmt.Sprintf("%x", h[:8])
+	return fmt.Sprintf("%x", h[:hashPrefixBytes])
 }
 
 // HashPrefixFromHash returns a hex prefix from a common.Hash pointer.
@@ -75,16 +75,16 @@ func HashPrefixFromHash(h *common.Hash) string {
 }
 
 // BytePrefix returns a hex string prefix of the given byte slice for logging.
-// It takes the first 8 bytes and formats as lowercase hex.
-// If the slice is shorter than 8 bytes, it formats whatever is available.
+// It takes the first hashPrefixBytes bytes and formats as lowercase hex.
+// If the slice is shorter than that, it formats whatever is available.
 //
 // Example: BytePrefix([]byte{...}) → "a1b2c3d4ef" (up to 16 hex chars)
 func BytePrefix(b []byte) string {
 	if len(b) == 0 {
 		return ""
 	}
-	if len(b) > 8 {
-		return fmt.Sprintf("%x", b[:8])
+	if len(b) > hashPrefixBytes {
+		return fmt.Sprintf("%x", b[:hashPrefixBytes])
 	}
 	return fmt.Sprintf("%x", b)
 }

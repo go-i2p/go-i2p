@@ -99,7 +99,7 @@ func NewCongestionAwarePeerSelector(
 		underlying:       underlying,
 		congestionInfo:   congestionInfo,
 		cfg:              cfg,
-		maxRetries:       3,
+		maxRetries:       defaultSelectorMaxRetries,
 		selectionMetrics: &SelectionMetrics{},
 	}
 
@@ -265,8 +265,8 @@ func (s *DefaultCongestionAwarePeerSelector) recordDeratingMetrics(hash common.H
 // logPeerExclusion logs a peer exclusion event with details.
 func (s *DefaultCongestionAwarePeerSelector) logPeerExclusion(hash common.Hash, reason string) {
 	hashStr := hash.String()
-	if len(hashStr) > 16 {
-		hashStr = hashStr[:16]
+	if len(hashStr) > logHashPrefixLen {
+		hashStr = hashStr[:logHashPrefixLen]
 	}
 
 	log.WithFields(logger.Fields{
