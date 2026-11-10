@@ -168,6 +168,32 @@ export WARNFAIL_I2P=true
 
 If `WARNFAIL_I2P` is set and `DEBUG_I2P` is unset, `DEBUG_I2P` will be set to `debug`.
 
+## Testnet mode
+
+By default go-i2p refuses to finish starting until its NetDB holds at least 40
+RouterInfos, and its watchdog triggers an emergency reseed whenever the count
+falls below that floor. A small test network cannot supply that many peers, so
+the router exhausts its reseed budget and exits before I2PControl starts — which
+looks like a failure on a healthy testnet.
+
+Set `router.testnet` to `true` to express no bootstrap peer floor. The NetDB is
+still seeded once, best-effort, from whatever bootstrap source is configured
+(`bootstrap.reseed_file`, a local netDb directory, or the reseed servers), and
+all further peer discovery stays in-network.
+
+```shell
+go-i2p --router.testnet
+```
+
+```yaml
+# or in $HOME/.go-i2p/config.yaml
+router:
+  testnet: true
+```
+
+Testnet mode does not change the `netId` this router advertises or accepts, so
+the test network must still use RouterInfos carrying the production `netId`.
+
 ## I2CP Server
 
 The I2CP (I2P Client Protocol) server allows client applications to communicate with the I2P router. It is enabled by default and listens on `localhost:7654`.

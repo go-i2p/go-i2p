@@ -157,6 +157,14 @@ func (r *Router) awaitStartupResult() error {
 			"phase":  "running",
 			"reason": "all startup-critical subsystems initialized",
 		}).Info("router started successfully")
+		if r.cfg != nil && r.cfg.Testnet {
+			log.WithFields(logger.Fields{
+				"at":     "(Router) Start",
+				"phase":  "running",
+				"reason": "testnet mode active",
+				"floor":  noPeerFloor,
+			}).Info("router is in testnet mode: no bootstrap peer floor, startup is not gated on NetDB size")
+		}
 		if r.cfg != nil && r.cfg.Hidden {
 			log.WithFields(logger.Fields{
 				"at":     "(Router) Start",

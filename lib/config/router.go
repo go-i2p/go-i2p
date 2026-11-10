@@ -91,6 +91,20 @@ type RouterConfig struct {
 	// AcceptTunnels controls whether the router participates in transit tunnels.
 	// Default: true.
 	AcceptTunnels bool
+	// Testnet enables testnet-mode operation: the router expresses no bootstrap
+	// peer floor. When true:
+	//   - startup does not wait for (or retry) an initial reseed to reach a
+	//     minimum RouterInfo count; I2PControl and I2CP start immediately,
+	//   - the NetDB watchdog never triggers an emergency reseed, so peers are
+	//     discovered in-network instead of from the public reseed servers.
+	// A small test network cannot supply production-scale peer counts, and
+	// pulling RouterInfos from the public network into a testnet is wrong, so
+	// the floor that protects production bootstrapping must not apply here.
+	// Testnet mode does not change the netId this router advertises or accepts:
+	// the test network must still use RouterInfos carrying the production netId
+	// (see netdb.expectedNetID).
+	// Default: false.
+	Testnet bool
 	// Hidden enables hidden-mode operation per Java I2P semantics. When true:
 	//   - the published RouterInfo caps include "H" and "U" (no "R"),
 	//   - no transport addresses with host/port are published,
@@ -243,6 +257,7 @@ func copyBaseFields(src *RouterConfig) *RouterConfig {
 		SharePercentage:      src.SharePercentage,
 		MaxConnections:       src.MaxConnections,
 		AcceptTunnels:        src.AcceptTunnels,
+		Testnet:              src.Testnet,
 		Hidden:               src.Hidden,
 		AlwaysZeroHopInbound: src.AlwaysZeroHopInbound,
 		AlwaysOneHopOutbound: src.AlwaysOneHopOutbound,

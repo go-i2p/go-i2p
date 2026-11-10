@@ -19,6 +19,21 @@ router:
   max_concurrent_sessions: 200
   # Participate in transit tunnels for the network
   accept_tunnels: true
+  # Testnet mode: run against a small, isolated test network.
+  # When true the router expresses no bootstrap peer floor. Normally go-i2p
+  # refuses to finish starting until it holds at least 40 RouterInfos (or
+  # bootstrap.low_peer_threshold, whichever is larger) and its watchdog triggers
+  # an emergency reseed whenever the count drops below that floor. A testnet
+  # cannot supply production-scale peer counts, so that floor makes the router
+  # exit before I2PControl starts and reads as a failure on a healthy testnet;
+  # reseeding to reach it would also pull production RouterInfos into the test
+  # network. In testnet mode the NetDB is seeded once, best-effort, from
+  # whatever bootstrap source is configured, and all further peer discovery
+  # stays in-network.
+  # Testnet mode does NOT change the netId advertised or accepted: the test
+  # network must still use RouterInfos carrying the production netId.
+  # Default: false (production floor applies).
+  testnet: false
   # Hidden mode: client-only operation behind NAT/firewall.
   # When true, this router publishes caps containing "H" (hidden) and "U"
   # (unreachable), publishes no transport addresses with host/port, and
@@ -64,7 +79,8 @@ netdb:
 
 # Bootstrap Configuration
 bootstrap:
-  # Trigger reseeding when peer count falls below this threshold
+  # Trigger reseeding when peer count falls below this threshold.
+  # Ignored entirely when router.testnet is true: a testnet expresses no floor.
   low_peer_threshold: 10
   
   # Bootstrap type: which bootstrap method to use exclusively

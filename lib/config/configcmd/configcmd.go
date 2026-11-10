@@ -36,6 +36,11 @@ func runConfig(cmd *cobra.Command, args []string) {
 	if cfg.NetDB != nil {
 		_, _ = fmt.Fprintf(out, "netDb path:         %s\n", cfg.NetDB.Path)
 	}
+	// router.testnet is a router-level setting that suppresses the bootstrap peer
+	// floor, so report it unconditionally.
+	if cfg.Testnet {
+		_, _ = fmt.Fprintf(out, "testnet mode:       true (no bootstrap peer floor)\n")
+	}
 	if cfg.Bootstrap != nil {
 		_, _ = fmt.Fprintf(out, "bootstrap type:     %s\n", cfg.Bootstrap.BootstrapType)
 		_, _ = fmt.Fprintf(out, "low peer threshold: %d\n", cfg.Bootstrap.LowPeerThreshold)

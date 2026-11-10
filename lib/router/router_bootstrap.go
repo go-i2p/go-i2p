@@ -2,6 +2,7 @@ package router
 
 import (
 	"context"
+	"math"
 	"strconv"
 	"time"
 
@@ -14,6 +15,11 @@ import (
 const (
 	inNetworkPeerTarget  = 500
 	emergencyReseedFloor = 40
+
+	// noPeerFloor is the threshold a router expresses when it must not gate
+	// startup or recovery on a RouterInfo count (testnet mode). See
+	// [Router.emergencyReseedThreshold].
+	noPeerFloor = 0
 
 	// startupReseedMaxAttempts bounds how many times the router retries an
 	// initial reseed before giving up and stopping. A single transient reseed
@@ -45,10 +51,52 @@ func (r *Router) ensureNetDBReady() error {
 		log.WithFields(logger.Fields{"at": "ensureNetDBReady"}).Warn("Unable to determine NetDB size")
 	}
 
-	if r.netdb.Size() < r.emergencyReseedThreshold() {
+	threshold := r.emergencyReseedThreshold()
+	if threshold == noPeerFloor {
+		// The RouterInfo count must not gate startup: seed a completely empty
+		// NetDB once, best-effort, and continue regardless of the result.
+		if r.netdb.Size() == 0 {
+			r.reseedWithoutFloor()
+		}
+		return nil
+	}
+
+	if r.netdb.Size() < threshold {
 		return r.reseedUntilReady()
 	}
 	return nil
+}
+
+// reseedWithoutFloor performs a single best-effort bootstrap for a router that
+// expresses no peer floor (testnet mode).
+//
+// Unlike reseedUntilReady it neither retries nor reports a shortfall to the
+// startup path: a small test network is not expected to reach production peer
+// counts, and blocking here would stop the router before I2PControl ever came
+// up. The configured bootstrap source is still consulted once — a reseed file
+// or a local netDb directory is how a testnet is normally seeded — and
+// in-network discovery takes over from whatever it produced.
+func (r *Router) reseedWithoutFloor() {
+	if r.cfg == nil || r.cfg.Bootstrap == nil {
+		return
+	}
+	ctx := r.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if r.cfg.Bootstrap.ReseedTimeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, r.cfg.Bootstrap.ReseedTimeout)
+		defer cancel()
+	}
+
+	if err := r.performReseedWithContext(ctx); err != nil {
+		log.WithError(err).WithFields(logger.Fields{
+			"at":     "ensureNetDBReady",
+			"phase":  "bootstrap",
+			"reason": "no bootstrap peer floor configured; startup does not depend on it",
+		}).Info("best-effort bootstrap did not complete; relying on in-network discovery")
+	}
 }
 
 // reseedUntilReady retries the initial reseed with a short exponential backoff
@@ -161,12 +209,33 @@ func (r *Router) canAttemptReseedNow() bool {
 	return time.Since(r.lastReseedAttempt) >= r.reseedCooldownInterval()
 }
 
+// emergencyReseedThreshold is the RouterInfo count below which the router
+// treats its NetDB as too small to work with: startup refuses to continue until
+// it is reached, and the watchdog escalates from in-network discovery to an
+// emergency reseed when it is not.
+//
+// In testnet mode the router expresses no floor at all (returns
+// [noPeerFloor]). A test network is small by construction, so a production
+// bootstrap floor can never be satisfied there: the router would block in
+// startup until its reseed budget ran out and then exit before I2PControl
+// started, which reads as a hard failure on perfectly healthy testnets.
+// Reseeding from the public network to fill the gap would also pull production
+// RouterInfos into the test network.
 func (r *Router) emergencyReseedThreshold() int {
+	if r.isTestnet() {
+		return noPeerFloor
+	}
 	threshold := emergencyReseedFloor
-	if r.cfg != nil && r.cfg.Bootstrap.LowPeerThreshold > threshold {
+	if r.cfg != nil && r.cfg.Bootstrap != nil && r.cfg.Bootstrap.LowPeerThreshold > threshold {
 		threshold = r.cfg.Bootstrap.LowPeerThreshold
 	}
 	return threshold
+}
+
+// isTestnet reports whether the router is running in testnet mode, in which it
+// must not express a bootstrap peer floor.
+func (r *Router) isTestnet() bool {
+	return r.cfg != nil && r.cfg.Testnet
 }
 
 // maintainNetDBPeerFloor prefers in-network recovery for low peer counts and
@@ -178,6 +247,18 @@ func (r *Router) maintainNetDBPeerFloor() {
 
 	current := r.netdb.Size()
 	reseedThreshold := r.emergencyReseedThreshold()
+
+	// With no floor expressed there is nothing to maintain: an emergency reseed
+	// would pull RouterInfos from the public network into a test network. Peer
+	// discovery is left entirely to in-network exploration and floodfill.
+	if reseedThreshold == noPeerFloor {
+		log.WithFields(logger.Fields{
+			"at":      "maintainNetDBPeerFloor",
+			"current": current,
+			"mode":    "in-network-exploration",
+		}).Debug("No bootstrap peer floor (testnet mode); peer recovery stays in-network")
+		return
+	}
 
 	// Stay in-network for peer recovery under normal low-count conditions.
 	if current >= reseedThreshold {
@@ -231,6 +312,18 @@ func (r *Router) setReseedingFlag(value bool) {
 // logReseedStart logs the beginning of the reseed operation with relevant metrics.
 func (r *Router) logReseedStart() {
 	reseedThreshold := r.emergencyReseedThreshold()
+	// With no floor expressed (testnet mode) the NetDB is never "critically
+	// low", so the same event is informational rather than a warning.
+	if reseedThreshold == noPeerFloor {
+		log.WithFields(logger.Fields{
+			"at":             "(Router) performReseed",
+			"phase":          "bootstrap",
+			"reason":         "no bootstrap peer floor configured, best-effort bootstrap",
+			"current_size":   r.netdb.Size(),
+			"bootstrap_type": r.cfg.Bootstrap.BootstrapType,
+		}).Info("bootstrap peer floor disabled (testnet mode), reseeding best-effort")
+		return
+	}
 	log.WithFields(logger.Fields{
 		"at":             "(Router) performReseed",
 		"phase":          "bootstrap",
@@ -323,7 +416,15 @@ func (r *Router) createFallbackBootstrapper() bootstrap.Bootstrap {
 // It logs success or failure and returns any error encountered.
 func (r *Router) executeReseedWithContext(ctx context.Context, bootstrapper bootstrap.Bootstrap) error {
 	targetFloor := r.emergencyReseedThreshold()
-	if err := r.netdb.ReseedWithContext(ctx, bootstrapper, targetFloor); err != nil {
+	// The NetDB skips a fetch once its size exceeds the requested minimum. With
+	// no floor expressed, passing 0 would make every reseed after the first a
+	// silent no-op — including an operator-requested one from I2PControl — so
+	// nothing is allowed to short-circuit the fetch.
+	fetchMinimum := targetFloor
+	if targetFloor == noPeerFloor {
+		fetchMinimum = math.MaxInt
+	}
+	if err := r.netdb.ReseedWithContext(ctx, bootstrapper, fetchMinimum); err != nil {
 		log.WithError(err).WithFields(logger.Fields{
 			"at":           "(Router) executeReseed",
 			"phase":        "bootstrap",
@@ -334,13 +435,18 @@ func (r *Router) executeReseedWithContext(ctx context.Context, bootstrapper boot
 		}).Warn("bootstrap failed, continuing with limited NetDB")
 		return err
 	}
-	log.WithFields(logger.Fields{
-		"at":           "(Router) executeReseed",
-		"phase":        "bootstrap",
-		"reason":       "bootstrap completed successfully",
-		"netdb_size":   r.netdb.Size(),
-		"threshold":    targetFloor,
-		"peers_gained": r.netdb.Size() - (targetFloor - 1),
-	}).Info("bootstrap completed successfully")
+	fields := logger.Fields{
+		"at":         "(Router) executeReseed",
+		"phase":      "bootstrap",
+		"reason":     "bootstrap completed successfully",
+		"netdb_size": r.netdb.Size(),
+	}
+	// Without a floor there is no shortfall to have closed, so the floor-relative
+	// fields would only report meaningless numbers.
+	if targetFloor != noPeerFloor {
+		fields["threshold"] = targetFloor
+		fields["peers_gained"] = r.netdb.Size() - (targetFloor - 1)
+	}
+	log.WithFields(fields).Info("bootstrap completed successfully")
 	return nil
 }

@@ -84,6 +84,32 @@ func TestTransportFlagsReachTheirViperKeys(t *testing.T) {
 	}
 }
 
+// TestRouterTestnetFlagReachesItsViperKey proves --router.testnet is bound to the
+// exact viper key lib/config's NewRouterConfigFromViper reads. The flag name uses
+// a hyphen-free single word while the key does not, and a mismatch would leave the
+// router silently gating startup on the production peer floor.
+func TestRouterTestnetFlagReachesItsViperKey(t *testing.T) {
+	cmd := &cobra.Command{Use: "go-i2p-test"}
+	v := viper.New()
+
+	RegisterAll(cmd)
+	require.NoError(t, BindAll(cmd, v), "every registered flag must bind to its viper key")
+
+	require.NoError(t, cmd.PersistentFlags().Set("router.testnet", "true"),
+		"router.testnet must be registered before it can be set")
+	assert.True(t, v.GetBool("router.testnet"),
+		"--router.testnet=true must resolve to viper key \"router.testnet\"")
+
+	// Left unset, the key must resolve false so the floor stays on. Uses a fresh
+	// command: the one above already had the flag set explicitly.
+	unsetCmd := &cobra.Command{Use: "go-i2p-test-unset"}
+	RegisterAll(unsetCmd)
+	unset := viper.New()
+	require.NoError(t, BindAll(unsetCmd, unset))
+	assert.False(t, unset.GetBool("router.testnet"),
+		"an unset router.testnet must stay false; the bootstrap peer floor is on by default")
+}
+
 // TestTransportHandshakeBoundFlagsDefaultToZero verifies the two handshake flags
 // default to 0 rather than a number, so an operator who sets nothing leaves the
 // transport to resolve its own documented default instead of this package's copy
