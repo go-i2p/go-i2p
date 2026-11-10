@@ -598,12 +598,19 @@ func (h *RouterManagerHandler) handleGracefulStop(req, result map[string]interfa
 		return
 	}
 
+	// Read the drain delay here, on the request goroutine, rather than inside
+	// the dispatch goroutine below. The goroutine outlives Server.Stop() by
+	// design (it must not be joined or we re-create the I2P-003 self-join), so
+	// any global-config read it performed could race a concurrent settings
+	// write long after this request finished.
+	delay := h.drainDelay(operation)
+
 	// Same self-join hazard as handleStopOperation: executeGracefulStop calls
 	// RouterControl.Stop(), so it must not be counted on the server WaitGroup.
 	h.routerStopWg.Add(1)
 	go func() {
 		defer h.routerStopWg.Done()
-		h.executeGracefulStop(operation)
+		h.executeGracefulStop(operation, delay)
 	}()
 	result[operation] = nil
 }
@@ -621,16 +628,16 @@ func (h *RouterManagerHandler) validateRouterControl(result map[string]interface
 
 // executeGracefulStop performs the actual graceful stop sequence:
 // 1. Check for context cancellation
-// 2. Wait for configured drain delay (if any)
+// 2. Wait for the drain delay captured at dispatch time (if > 0)
 // 3. Call RouterControl.Stop()
-func (h *RouterManagerHandler) executeGracefulStop(operation string) {
+func (h *RouterManagerHandler) executeGracefulStop(operation string, delay time.Duration) {
 	if h.contextCancelled(operation, "before execution") {
 		return
 	}
 
 	log.WithFields(logger.Fields{"at": fmt.Sprintf("handle%s", operation)}).Info(fmt.Sprintf("%s requested via I2PControl", operation))
 
-	if !h.waitForDrainDelay(operation) {
+	if !h.waitForDrainDelay(operation, delay) {
 		return
 	}
 
@@ -649,10 +656,23 @@ func (h *RouterManagerHandler) contextCancelled(operation, stage string) bool {
 	}
 }
 
-// waitForDrainDelay waits for the configured graceful stop delay (if > 0).
-// Returns true if delay completed normally, false if context was cancelled.
-func (h *RouterManagerHandler) waitForDrainDelay(operation string) bool {
+// drainDelay reads the configured graceful stop delay. Call it from the request
+// goroutine, not from the dispatched stop goroutine: viper's global instance is
+// not safe for concurrent read/write and the stop goroutine intentionally
+// outlives Server.Stop().
+func (h *RouterManagerHandler) drainDelay(operation string) time.Duration {
 	delay := viper.GetDuration("i2pcontrol.graceful_stop_delay")
+	if delay < 0 {
+		log.WithFields(logger.Fields{"at": fmt.Sprintf("handle%s", operation), "delay": delay}).
+			Warn("negative graceful stop delay configured, ignoring")
+		return 0
+	}
+	return delay
+}
+
+// waitForDrainDelay waits for the graceful stop delay captured at dispatch time.
+// Returns true if delay completed normally, false if context was cancelled.
+func (h *RouterManagerHandler) waitForDrainDelay(operation string, delay time.Duration) bool {
 	if delay <= 0 {
 		return true
 	}

@@ -74,14 +74,35 @@ type StandardEmbeddedRouter struct {
 	// running tracks whether the router is currently running
 	running bool
 
-	// done is closed when the router stops. Wait() selects on this channel
-	// instead of capturing and using the router pointer, avoiding TOCTOU races
-	// where Stop()+Close() could nil the pointer between RUnlock and router.Wait().
-	done chan struct{}
+	// done is the completion signal for the current run. Wait() selects on the
+	// channel inside it instead of capturing and using the router pointer,
+	// avoiding TOCTOU races where Stop()+Close() could nil the pointer between
+	// RUnlock and router.Wait().
+	//
+	// The channel and the sync.Once that guards its close live in one
+	// per-run object (see runCompletion) so that a watcher left over from an
+	// earlier run can never mark a later run complete. Start() re-arms it for
+	// every run; it is never nil after construction.
+	done *runCompletion
+}
 
-	// H7 FIX: doneOnce ensures the done channel is only closed once,
-	// preventing panic from double-close if Stop() and HardStop() race.
-	doneOnce sync.Once
+// runCompletion is the one-shot completion signal for a single Start()/Stop()
+// pair. Bundling the channel with its own sync.Once keeps the "closed exactly
+// once" guarantee scoped to the run it belongs to, which matters because
+// Stop(), HardStop() and the router-initiated stop watcher can all race.
+type runCompletion struct {
+	ch   chan struct{}
+	once sync.Once
+}
+
+// newRunCompletion builds the completion signal for a fresh run.
+func newRunCompletion() *runCompletion {
+	return &runCompletion{ch: make(chan struct{})}
+}
+
+// close marks the run complete, exactly once.
+func (rc *runCompletion) close() {
+	rc.once.Do(func() { close(rc.ch) })
 }
 
 // NewStandardEmbeddedRouter creates a new embedded router instance.

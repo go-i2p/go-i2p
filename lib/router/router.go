@@ -89,6 +89,17 @@ type Router struct {
 	// closeOnce ensures finalizeCloseChannel is safe to call concurrently
 	closeOnce sync.Once
 
+	// stoppedCh is closed by Stop/StopWithContext once the router's subsystems
+	// are down, signalling supervisors (e.g. lib/embedded) that the router
+	// stopped even when the stop was initiated from outside them — such as the
+	// I2PControl RPC shutdown path, which calls Router.Stop() directly instead
+	// of going through the embedded façade. Re-armed by Start(); see
+	// Router.Stopped for why it fires before the goroutine join.
+	// stoppedOnce guards the close so concurrent or repeated stops cannot
+	// double-close. Both are protected by runMux (Lock 1).
+	stoppedCh   chan struct{}
+	stoppedOnce sync.Once
+
 	// congestionMonitor tracks local congestion state and determines D/E/G flags
 	// for RouterInfo advertisement per PROP_162
 	congestionMonitor *CongestionMonitor

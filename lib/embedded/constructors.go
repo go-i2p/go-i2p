@@ -25,7 +25,7 @@ func NewStandardEmbeddedRouter(cfg *config.RouterConfig) (*StandardEmbeddedRoute
 		cfg:        cfg,
 		configured: false,
 		running:    false,
-		done:       make(chan struct{}), // Initialize done channel so Wait() blocks correctly
+		done:       newRunCompletion(), // Initialize done channel so Wait() blocks correctly
 	}
 
 	// Auto-configure the router so callers don't need a separate Configure() call.
@@ -67,7 +67,7 @@ func NewStandardEmbeddedRouterWith(r router.Lifecycle, cfg *config.RouterConfig)
 		cfg:        cfg,
 		configured: true, // Assume injected router is already configured
 		running:    false,
-		done:       make(chan struct{}), // Initialize done channel so Wait() blocks correctly
+		done:       newRunCompletion(), // Initialize done channel so Wait() blocks correctly
 	}, nil
 }
 

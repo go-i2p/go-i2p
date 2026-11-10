@@ -77,11 +77,9 @@ func (e *StandardEmbeddedRouter) prepareHardStop() router.Lifecycle {
 
 	// H7 FIX: Signal Wait() callers that the router is stopping.
 	// Use sync.Once to prevent panic if Stop() and HardStop() race.
-	e.doneOnce.Do(func() {
-		if doneCh != nil {
-			close(doneCh)
-		}
-	})
+	if doneCh != nil {
+		doneCh.close()
+	}
 
 	return r
 }

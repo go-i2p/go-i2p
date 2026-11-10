@@ -2,6 +2,7 @@ package router
 
 import (
 	"context"
+	"sync"
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/transport"
@@ -60,6 +61,49 @@ func (r *Router) checkAlreadyStopped() bool {
 	return false
 }
 
+// armStoppedChannel prepares a fresh stopped-notification channel for a run.
+// Must be called with runMux held for writing (Router.Start does this).
+func (r *Router) armStoppedChannel() {
+	r.stoppedCh = make(chan struct{})
+	r.stoppedOnce = sync.Once{}
+}
+
+// Stopped returns a channel that is closed once a stop has brought the router's
+// subsystems down. Supervisors use it to detect stops that were initiated
+// inside the router rather than through them — most importantly the I2PControl
+// RPC shutdown path, which calls Router.Stop() directly and would otherwise
+// leave the supervisor blocked in Wait() forever, requiring SIGKILL to
+// terminate the process.
+//
+// The signal is emitted before Stop() joins the goroutines still tracked on the
+// router WaitGroup, because those (transport session readers, tunnel-build
+// retries) only drain once the transports are closed by Close(). A supervisor
+// that wakes on this channel is therefore expected to proceed with its own
+// Close() step rather than treating the run as fully quiesced.
+//
+// The channel is re-armed on every successful Start(), so callers must invoke
+// Stopped() after Start() to observe the current run. It returns nil before
+// the router has ever started.
+func (r *Router) Stopped() <-chan struct{} {
+	r.runMux.RLock()
+	defer r.runMux.RUnlock()
+	return r.stoppedCh
+}
+
+// signalStopped closes the stopped channel created by armStoppedChannel,
+// telling supervisors the router's subsystems are down. Safe to call
+// concurrently and repeatedly: the sync.Once guarantees a single close per run,
+// so a Stop racing HardStop (or a repeated stop request) cannot panic.
+func (r *Router) signalStopped() {
+	r.runMux.Lock()
+	defer r.runMux.Unlock()
+	r.stoppedOnce.Do(func() {
+		if ch := r.stoppedCh; ch != nil {
+			close(ch)
+		}
+	})
+}
+
 // cancelRouterContext cancels the router context to signal shutdown.
 func (r *Router) cancelRouterContext() {
 	if r.cancel != nil {
@@ -91,6 +135,16 @@ func (r *Router) Stop() {
 
 	r.cancelRouterContext()
 	r.stopAllSubsystems()
+
+	// Notify supervisors that the stop is underway and its subsystems are down,
+	// BEFORE joining the remaining goroutines. Transport session readers and
+	// tunnel-build retries are tracked on r.wg and only drain once the
+	// transports are closed, which happens in Close(); a supervisor waiting on
+	// this signal can therefore proceed to Close() and finish the shutdown
+	// instead of hanging on the join below. The I2PControl RPC shutdown path
+	// needs this because it calls Router.Stop() directly and never goes through
+	// the embedded façade.
+	r.signalStopped()
 
 	logShutdownStep(3, "waiting for goroutines to complete", "waiting for router goroutines to finish")
 	r.wg.Wait()
@@ -124,6 +178,13 @@ func (r *Router) StopWithContext(ctx context.Context) error {
 
 	r.cancelRouterContext()
 	r.stopAllSubsystems()
+
+	// Signal before the join for the same reason as Stop(): the supervisor can
+	// only drain the remaining transport/tunnel goroutines by calling Close(),
+	// which it can do once the router reports itself stopped. The bounded join
+	// below is then just an optimisation for the case where they drain on their
+	// own.
+	r.signalStopped()
 
 	logShutdownStep(3, "waiting for goroutines to complete", "waiting for router goroutines to finish")
 

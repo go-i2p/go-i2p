@@ -1,8 +1,6 @@
 package embedded
 
 import (
-	"sync"
-
 	"github.com/go-i2p/go-i2p/lib/router"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
@@ -39,15 +37,25 @@ func (e *StandardEmbeddedRouter) Start() error {
 	}
 	e.running = true
 
-	// Re-arm the one-shot completion signal for this run. done/doneOnce were
+	// Re-arm the one-shot completion signal for this run. done was
 	// previously shared for the lifetime of the Go struct, so a Stop() call
 	// that happened before this successful Start() (e.g. defensive cleanup,
 	// or an aborted startup rollback) would have already closed 'done',
 	// causing Wait() to return immediately forever after even while the
 	// router is actively running. Giving each Start()/Stop() pair its own
 	// channel fixes this silent lifecycle bug.
-	e.done = make(chan struct{})
-	e.doneOnce = sync.Once{}
+	e.done = newRunCompletion()
+
+	// Observe stops that originate inside the router rather than through this
+	// façade. The I2PControl RPC Shutdown/Restart path calls Router.Stop()
+	// directly, so without this the supervisor's done channel would never be
+	// closed and Run()/Wait() would block forever after the router finished
+	// shutting down — leaving remote shutdown dependent on SIGKILL.
+	if stopped, ok := e.router.(stoppedNotifier); ok {
+		if ch := stopped.Stopped(); ch != nil {
+			go e.observeRouterStop(ch, e.done)
+		}
+	}
 
 	// Capture publisher AFTER router starts (when it's initialized)
 	// Publisher is initialized during router.Start() in launchPublisher()
@@ -100,11 +108,9 @@ func (e *StandardEmbeddedRouter) Stop() error {
 		e.mu.Unlock()
 
 		// Close the done channel to wake up any Wait() callers
-		e.doneOnce.Do(func() {
-			if doneCh != nil {
-				close(doneCh)
-			}
-		})
+		if doneCh != nil {
+			doneCh.close()
+		}
 
 		log.WithFields(logger.Fields{
 			"at":     "StandardEmbeddedRouter.Stop",
@@ -137,12 +143,11 @@ func (e *StandardEmbeddedRouter) Stop() error {
 	r.Stop()
 
 	// H7 FIX: Signal Wait() callers that the router has stopped.
-	// Use sync.Once to prevent panic if Stop() and HardStop() race.
-	e.doneOnce.Do(func() {
-		if doneCh != nil {
-			close(doneCh)
-		}
-	})
+	// The per-run once inside runCompletion prevents a double close if Stop(),
+	// HardStop() and the router-stop watcher race.
+	if doneCh != nil {
+		doneCh.close()
+	}
 
 	log.WithFields(logger.Fields{
 		"at":     "StandardEmbeddedRouter.Stop",
@@ -178,13 +183,50 @@ func (e *StandardEmbeddedRouter) Wait() {
 		"reason": "waiting for router shutdown",
 	}).Debug("waiting for embedded router to stop")
 
-	<-doneCh
+	<-doneCh.ch
 
 	log.WithFields(logger.Fields{
 		"at":     "StandardEmbeddedRouter.Wait",
 		"phase":  "shutdown",
 		"reason": "router wait completed",
 	}).Debug("embedded router wait completed")
+}
+
+// stoppedNotifier is implemented by routers that report when a run finishes,
+// regardless of who asked for the stop. *router.Router satisfies it; mocks and
+// other Lifecycle implementations that do not are simply not observed.
+type stoppedNotifier interface {
+	Stopped() <-chan struct{}
+}
+
+// observeRouterStop completes the supervisor-side shutdown when the underlying
+// router finishes a run on its own. It is woken either by the router signalling
+// its stop or by the supervisor already having ended the run (Stop/HardStop
+// closing done), so it never outlives the run it was started for.
+func (e *StandardEmbeddedRouter) observeRouterStop(routerStopped <-chan struct{}, completion *runCompletion) {
+	if completion == nil {
+		return
+	}
+	select {
+	case <-routerStopped:
+	case <-completion.ch:
+		// The supervisor already ended this run (Stop/HardStop); nothing to do.
+		return
+	}
+
+	// Mirror what Stop() does for a supervisor-initiated shutdown: mark the run
+	// finished so Close() is allowed, then wake Wait()/Run() callers.
+	e.mu.Lock()
+	e.running = false
+	e.mu.Unlock()
+
+	completion.close()
+
+	log.WithFields(logger.Fields{
+		"at":     "StandardEmbeddedRouter.observeRouterStop",
+		"phase":  "shutdown",
+		"reason": "router reported its own stop (e.g. I2PControl RPC shutdown)",
+	}).Info("embedded router observed router-initiated shutdown")
 }
 
 // IsRunning returns true if the router has been started and has not yet been stopped.

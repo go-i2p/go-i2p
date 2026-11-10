@@ -38,6 +38,7 @@ func (r *Router) Start() error {
 	}
 
 	r.markRunning()
+	r.armStoppedChannel()
 	log.WithField("at", "Start").Debug("step 2/6: initializing lifecycle context")
 	r.initializeLifecycleContext()
 	log.WithField("at", "Start").Debug("step 3/6: initializing bandwidth tracker")
