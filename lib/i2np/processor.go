@@ -497,11 +497,12 @@ func (p *MessageProcessor) setField(methodName string, assignFn func()) {
 // Messages are first validated for expiration before processing.
 // Expired messages are rejected with ErrI2NPMessageExpired.
 //
-// The lock is acquired only to snapshot handler references and validate
-// expiration, then released before dispatching. This avoids a deadlock
-// when processing garlic messages with LOCAL delivery cloves, which
-// recursively call ProcessMessage (RLock is not re-entrant when a
-// concurrent writer is waiting).
+// The lock is acquired only inside preDispatch (snapshot the expiration
+// validator, validate expiration, check the replay cache) and is always
+// released before dispatching. This avoids a deadlock when processing
+// garlic messages with LOCAL delivery cloves, which re-enter ProcessMessage
+// on the same goroutine (RLock is not re-entrant when a concurrent writer
+// is waiting).
 func (p *MessageProcessor) ProcessMessage(msg Message) error {
 	return p.processMessageWithDepth(msg, 0)
 }
@@ -509,31 +510,63 @@ func (p *MessageProcessor) ProcessMessage(msg Message) error {
 // processMessageWithDepth is the internal variant that threads garlic nesting depth
 // through the process pipeline to prevent H6 recursion bombs.
 // depth tracks the current garlic LOCAL delivery nesting level (0 = outermost).
+//
+// Processing is split into two phases: preDispatch runs the fast,
+// lock-guarded validation and always returns with p.mu released, and
+// processMessageDispatch then runs without the lock. The lock must never be
+// held across dispatch: garlic LOCAL delivery (handleLocalDelivery) calls
+// this function back on the same goroutine, so a "defer p.mu.RUnlock()" at
+// the top of the whole pipeline would still be held when the inner call
+// tries to RLock — which hangs as soon as a writer (any Set* method) is
+// waiting, because sync.RWMutex queues new readers behind pending writers.
 func (p *MessageProcessor) processMessageWithDepth(msg Message, depth int) error {
 	if msg == nil {
 		return oops.Errorf("invalid I2NP message: nil message")
 	}
 
-	messageType, err := safeProcessorMessageType(msg)
+	dropped, err := p.preDispatch(msg, depth)
 	if err != nil {
 		return err
+	}
+	if dropped {
+		return nil
+	}
+
+	// Dispatch without holding the lock so that garlic LOCAL delivery
+	// cloves can safely re-enter this function.
+	return p.processMessageDispatch(msg, depth)
+}
+
+// preDispatch runs the lock-guarded, non-re-entrant phase of message
+// processing: it extracts message metadata, snapshots the expiration
+// validator, rejects expired messages, and consults/marks the bounded replay
+// cache. It owns p.mu for exactly this scope, so a single defer releases it
+// on every path and the caller is guaranteed to hold no lock on return.
+//
+// It returns dropped=true when the message was silently discarded as a
+// replay (with a nil error), or a non-nil error when the message is rejected.
+func (p *MessageProcessor) preDispatch(msg Message, depth int) (dropped bool, err error) {
+	messageType, err := safeProcessorMessageType(msg)
+	if err != nil {
+		return false, err
 	}
 
 	messageID, err := safeProcessorMessageID(msg)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	expiration, err := safeProcessorMessageExpiration(msg)
 	if err != nil {
-		return err
+		return false, err
 	}
 
-	// Snapshot the expiration validator under the read lock, then release.
-	// The process* methods read handler fields that are only mutated by
-	// Set* methods during initialization, so they are safe to access
-	// without holding the lock after the snapshot.
+	// Snapshot the expiration validator under the read lock, then release it
+	// via defer. The process* methods read handler fields that are only
+	// mutated by Set* methods during initialization, so they are safe to
+	// access without holding the lock after the snapshot.
 	p.mu.RLock()
+	defer p.mu.RUnlock()
 	ev := p.expirationValidator
 
 	log.WithFields(logger.Fields{
@@ -552,9 +585,7 @@ func (p *MessageProcessor) processMessageWithDepth(msg Message, depth int) error
 				"expiration": expiration.UTC(),
 				"now":        ev.now().UTC(),
 			}).Warn("rejecting expired message")
-			p.mu.RUnlock()
-
-			return err
+			return false, err
 		}
 	}
 
@@ -570,16 +601,12 @@ func (p *MessageProcessor) processMessageWithDepth(msg Message, depth int) error
 				"message_type": messageType,
 				"message_id":   id,
 			}).Debug("dropping replayed I2NP message")
-			p.mu.RUnlock()
-
-			return nil
+			return true, nil
 		}
 		p.replayCache.Mark(id)
 	}
-	p.mu.RUnlock()
-	// Dispatch without holding the lock so that garlic LOCAL delivery
-	// cloves can safely re-enter ProcessMessage.
-	return p.processMessageDispatch(msg, depth)
+
+	return false, nil
 }
 
 func safeProcessorMessageType(msg Message) (messageType int, err error) {
