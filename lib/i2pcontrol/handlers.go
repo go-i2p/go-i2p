@@ -316,7 +316,19 @@ type RouterManagerHandler struct {
 	// ctx is the server context used to signal cancellation to handler goroutines.
 	ctx context.Context
 	// wg tracks handler goroutines so the server can wait for them on shutdown.
+	//
+	// Router-stop goroutines must NEVER be registered on this WaitGroup: they
+	// call RouterControl.Stop(), which re-enters Server.Stop() through the
+	// router's subsystem teardown. A goroutine counted by s.wg waiting for
+	// s.wg.Wait() is a self-join deadlock, and Server.Stop()'s sync.Once then
+	// strands every later Stop() call. Those goroutines are tracked by
+	// routerStopWg instead, which the server deliberately does not join.
 	wg *sync.WaitGroup
+	// routerStopWg tracks the goroutines that drive RouterControl.Stop().
+	// It exists so the handler can observe its own in-flight stop operations
+	// (tests, and idempotency accounting) without participating in the
+	// server's shutdown barrier.
+	routerStopWg sync.WaitGroup
 
 	reseedMu        sync.Mutex
 	reseedRunning   bool
@@ -410,9 +422,13 @@ func (h *RouterManagerHandler) handleStopOperation(req, result map[string]interf
 		return
 	}
 
-	h.wg.Add(1)
+	// Tracked on routerStopWg, NOT on h.wg: RouterControl.Stop() shuts the
+	// I2PControl server down as part of the router's subsystem teardown, and
+	// Server.Stop() waits for everything registered on the server WaitGroup.
+	// Registering here would make this goroutine wait for itself.
+	h.routerStopWg.Add(1)
 	go func() {
-		defer h.wg.Done()
+		defer h.routerStopWg.Done()
 		select {
 		case <-h.ctx.Done():
 			log.WithFields(logger.Fields{"at": opKey}).Infof("%s cancelled before execution", opKey)
@@ -582,9 +598,11 @@ func (h *RouterManagerHandler) handleGracefulStop(req, result map[string]interfa
 		return
 	}
 
-	h.wg.Add(1)
+	// Same self-join hazard as handleStopOperation: executeGracefulStop calls
+	// RouterControl.Stop(), so it must not be counted on the server WaitGroup.
+	h.routerStopWg.Add(1)
 	go func() {
-		defer h.wg.Done()
+		defer h.routerStopWg.Done()
 		h.executeGracefulStop(operation)
 	}()
 	result[operation] = nil

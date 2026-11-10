@@ -439,7 +439,25 @@ func (s *Server) startTokenCleanup() {
 	}()
 }
 
-// Stop gracefully shuts down the server, waiting for active requests to complete.
+// httpShutdownTimeout bounds the graceful drain of in-flight HTTP requests.
+const httpShutdownTimeout = 5 * time.Second
+
+// goroutineDrainTimeout bounds how long stopServer waits for tracked goroutines
+// after the HTTP server has been shut down and the server context cancelled.
+//
+// Every goroutine registered on s.wg observes s.ctx, so this is only a
+// backstop against a handler that ignores cancellation (a stuck reseed, for
+// example). Without it, a single non-cooperative goroutine would turn
+// Server.Stop() — and therefore Router.Stop(), which calls it while holding
+// the router's shutdown sequence — into an unbounded hang that only SIGKILL
+// can resolve.
+//
+// A var rather than a const so tests can shrink the bound.
+var goroutineDrainTimeout = 10 * time.Second
+
+// Stop gracefully shuts down the server, waiting for active requests to
+// complete. The wait is bounded: Stop is called from Router.stopAllSubsystems,
+// so blocking forever here would block the whole router's shutdown.
 func (s *Server) Stop() {
 	s.stopOnce.Do(func() {
 		s.stopServer()
@@ -455,7 +473,7 @@ func (s *Server) stopServer() {
 	s.cancel()
 
 	// Shutdown HTTP server with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), httpShutdownTimeout)
 	defer cancel()
 
 	if err := s.httpServer.Shutdown(ctx); err != nil {
@@ -465,12 +483,37 @@ func (s *Server) stopServer() {
 		}).Error("Error during server shutdown")
 	}
 
-	// Wait for all goroutines to finish
-	s.wg.Wait()
+	// Wait for all goroutines to finish, bounded by goroutineDrainTimeout.
+	if !s.waitGoroutines(goroutineDrainTimeout) {
+		log.WithFields(logger.Fields{
+			"at":      "(Server).Stop",
+			"timeout": goroutineDrainTimeout.String(),
+		}).Warn("Timed out waiting for I2PControl goroutines; proceeding with router shutdown")
+		return
+	}
 
 	log.WithFields(logger.Fields{
 		"at": "(Server).Stop",
 	}).Info("I2PControl server stopped")
+}
+
+// waitGoroutines joins s.wg, returning true if it drained within timeout and
+// false if the wait had to be abandoned. Abandoning the join leaks at most the
+// non-cooperative goroutine; it never re-enters the router's shutdown path, so
+// a goroutine that is itself waiting on Router.Stop() cannot deadlock here.
+func (s *Server) waitGoroutines(timeout time.Duration) bool {
+	done := make(chan struct{})
+	go func() {
+		s.wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		return true
+	case <-time.After(timeout):
+		return false
+	}
 }
 
 // handleRPC processes JSON-RPC requests on the /jsonrpc endpoint.
