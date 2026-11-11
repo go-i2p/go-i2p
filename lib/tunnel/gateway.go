@@ -23,11 +23,20 @@ import (
 // - Error handling at each step with clear error messages
 // - Supports DTLocal, DTTunnel, and DTRouter delivery types
 // - Fragments oversized messages across multiple tunnel messages
+// - Applies every hop's encryption layer, as the tunnel creator must
 type Gateway struct {
-	tunnelID   TunnelID
-	encryption tunnel.TunnelEncryptor
-	nextHopID  TunnelID
-	encMu      sync.Mutex // protects concurrent calls to encryption.Encrypt
+	tunnelID TunnelID
+	// layers holds one encryptor per hop in tunnel PATH order: layers[0] is
+	// the gateway (hop 0, whose layer is outermost) and the last entry is the
+	// endpoint (whose layer is innermost). A single-element slice is all a
+	// one-hop tunnel needs; NewGateway builds exactly that.
+	//
+	// encryptTunnelMessage applies them back-to-front so hop 0 encrypts last,
+	// which is the only order the network's peel (hop 0, hop 1, ... endpoint)
+	// can undo.
+	layers    []tunnel.TunnelEncryptor
+	nextHopID TunnelID
+	encMu     sync.Mutex // protects concurrent calls to the layer encryptors
 }
 
 var (
@@ -51,12 +60,16 @@ var (
 const maxTunnelPayload = TunnelMessageSize - TunnelIDSize - TunnelIVSize -
 	TunnelChecksumSize - TunnelZeroSeparatorSize // 1003 bytes
 
-// NewGateway creates a new tunnel gateway.
+// NewGateway creates a new single-layer tunnel gateway.
 // Parameters:
 // - tunnelID: the ID of this tunnel
-// - encryption: the tunnel encryption object for layered encryption
+// - encryption: the tunnel encryption object for the gateway's own layer
 // - nextHopID: the tunnel ID to use when forwarding to the next hop
 // Returns an error if encryption is nil.
+//
+// A one-layer gateway is only correct for a one-hop tunnel. For a multi-hop
+// outbound tunnel the creator must apply every hop's layer; use
+// [NewGatewayWithLayers] for that.
 func NewGateway(tunnelID TunnelID, encryption tunnel.TunnelEncryptor, nextHopID TunnelID) (*Gateway, error) {
 	if encryption == nil {
 		log.WithFields(logger.Fields{
@@ -68,9 +81,9 @@ func NewGateway(tunnelID TunnelID, encryption tunnel.TunnelEncryptor, nextHopID 
 	}
 
 	gw := &Gateway{
-		tunnelID:   tunnelID,
-		encryption: encryption,
-		nextHopID:  nextHopID,
+		tunnelID:  tunnelID,
+		layers:    []tunnel.TunnelEncryptor{encryption},
+		nextHopID: nextHopID,
 	}
 
 	log.WithFields(logger.Fields{
@@ -78,6 +91,60 @@ func NewGateway(tunnelID TunnelID, encryption tunnel.TunnelEncryptor, nextHopID 
 		"reason":    "outbound_gateway_created",
 		"tunnel_id": tunnelID,
 	}).Debug("created tunnel gateway")
+	return gw, nil
+}
+
+// NewGatewayWithLayers creates a tunnel gateway for a multi-hop outbound tunnel.
+//
+// Parameters:
+//   - tunnelID: the ID of this tunnel (the tunnel creator's view of it)
+//   - layers: one encryptor per hop in tunnel PATH order, layers[0] being the
+//     gateway (hop 0) and the last entry being the endpoint (OBEP)
+//   - nextHopID: the receive tunnel ID of hop 0, written in the clear so the
+//     gateway can route the message
+//
+// The creator applies the layers back-to-front (endpoint first, gateway last)
+// so that each hop peeling its layer in path order recovers the original
+// record, including the IV the checksum was taken over.
+//
+// Returns an error if layers is empty or contains a nil encryptor.
+func NewGatewayWithLayers(tunnelID TunnelID, layers []tunnel.TunnelEncryptor, nextHopID TunnelID) (*Gateway, error) {
+	if len(layers) == 0 {
+		log.WithFields(logger.Fields{
+			"at":        "NewGatewayWithLayers",
+			"tunnel_id": tunnelID,
+			"reason":    "no encryption layers",
+		}).Error("Failed to create gateway")
+		return nil, ErrNilEncryption
+	}
+	for i, enc := range layers {
+		if enc == nil {
+			log.WithFields(logger.Fields{
+				"at":        "NewGatewayWithLayers",
+				"tunnel_id": tunnelID,
+				"layer":     i,
+				"reason":    "nil encryption",
+			}).Error("Failed to create gateway")
+			return nil, ErrNilEncryption
+		}
+	}
+
+	// Copy the caller's slice so later mutation cannot change our layer set.
+	ours := make([]tunnel.TunnelEncryptor, len(layers))
+	copy(ours, layers)
+
+	gw := &Gateway{
+		tunnelID:  tunnelID,
+		layers:    ours,
+		nextHopID: nextHopID,
+	}
+
+	log.WithFields(logger.Fields{
+		"at":        "NewGatewayWithLayers",
+		"reason":    "outbound_gateway_created",
+		"tunnel_id": tunnelID,
+		"hop_count": len(ours),
+	}).Debug("created multi-layer tunnel gateway")
 	return gw, nil
 }
 
@@ -578,30 +645,52 @@ func (g *Gateway) writeChecksum(msg []byte, paddingSize int) {
 	copy(msg[TunnelChecksumOffset:TunnelHeaderSize], hash[:TunnelChecksumSize])
 }
 
-// encryptTunnelMessage applies tunnel encryption to the message.
-// Supports ECIES-X25519 encryption.
+// encryptTunnelMessage applies every hop's tunnel encryption layer.
+//
+// The creator of an N-hop outbound tunnel must apply all N layers, because a
+// transit hop removes exactly one layer and forwards the rest. Layers are
+// applied back-to-front (endpoint first, gateway last) so that the network's
+// peel order — hop 0, hop 1, ... endpoint — removes them in the order each
+// hop's key can undo. Applying only the gateway's layer, as a single-layer
+// gateway does, leaves the message undecryptable past hop 0 for any tunnel with
+// more than one hop.
+//
+// Each Encrypt call takes and returns a full 1028-byte record and leaves the
+// cleartext tunnel ID at bytes 0..3 untouched, so records chain without
+// re-padding. Because the AES layer's IV transform is applied twice per layer
+// and each Decrypt inverts it, a record that has travelled through every hop's
+// layer arrives back at the gateway's original IV, which is the IV the endpoint
+// verifies the checksum against.
 func (g *Gateway) encryptTunnelMessage(msg []byte) ([]byte, error) {
-	// Use the crypto/tunnel package to encrypt
-	// ECIES-X25519 uses ChaCha20/Poly1305 AEAD
-
 	// Serialize concurrent encryption calls to protect stateful TunnelEncryptor
 	// implementations. Current implementations are stateless,
 	// but the interface contract does not guarantee this.
 	g.encMu.Lock()
 	defer g.encMu.Unlock()
 
-	// The TunnelEncryptor interface now returns errors for better error handling
-	encrypted, err := g.encryption.Encrypt(msg)
-	if err != nil {
-		log.WithFields(logger.Fields{
-			"at":     "(Gateway) encryptMessage",
-			"reason": "encryption_failed",
-			"error":  err.Error(),
-		}).Error("failed to encrypt tunnel message")
-		return nil, err
+	data := msg
+	for i := len(g.layers) - 1; i >= 0; i-- {
+		// The TunnelEncryptor interface now returns errors for better error handling
+		encrypted, err := g.layers[i].Encrypt(data)
+		if err != nil {
+			log.WithFields(logger.Fields{
+				"at":     "(Gateway) encryptMessage",
+				"layer":  i,
+				"reason": "encryption_failed",
+				"error":  err.Error(),
+			}).Error("failed to encrypt tunnel message")
+			return nil, err
+		}
+		data = encrypted
 	}
 
-	return encrypted, nil
+	return data, nil
+}
+
+// HopCount returns the number of tunnel layers this gateway applies, which is
+// the hop count of the outbound tunnel it sends through.
+func (g *Gateway) HopCount() int {
+	return len(g.layers)
 }
 
 // TunnelID returns the ID of this gateway's tunnel.
