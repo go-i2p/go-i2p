@@ -35,6 +35,29 @@ type GarlicMessageEncryptor interface {
 type MessageRouter struct {
 	garlicSessions GarlicMessageEncryptor
 	transportSend  TransportSendFunc
+
+	// leaseResolver resolves a destination to the inbound tunnel (gateway
+	// router + tunnel ID) that can receive for it. Outbound encapsulation needs
+	// it to write delivery instructions; without it nothing can be correctly
+	// addressed, and sends fail closed.
+	leaseResolver DestinationLeaseResolver
+}
+
+// DestinationLeaseResolver resolves a destination hash to a current lease, i.e.
+// the inbound-tunnel addressing a tunnel message must carry.
+// *LeaseResolver implements it.
+type DestinationLeaseResolver interface {
+	ResolveLease(destHash common.Hash) (LeaseTarget, error)
+}
+
+// SetLeaseResolver installs the destination lease resolver used to address
+// outbound tunnel messages. Without one, RouteOutboundMessage fails closed
+// rather than sending anything.
+func (mr *MessageRouter) SetLeaseResolver(resolver DestinationLeaseResolver) {
+	if mr == nil {
+		return
+	}
+	mr.leaseResolver = resolver
 }
 
 // TransportSendFunc is a callback function for sending I2NP messages to peers.
@@ -356,9 +379,22 @@ func (mr *MessageRouter) wrapInGarlicMessage(
 	return garlicMsg, nil
 }
 
-// sendThroughGateway sends the garlic message to the tunnel gateway (first hop).
-// Zero-hop tunnels are rejected earlier in validateAndSelectTunnel, so the
-// tunnel is guaranteed to have at least one hop at this point.
+// sendThroughGateway encapsulates the garlic message as tunnel traffic and hands
+// the resulting records to hop 0 of the selected outbound tunnel.
+//
+// This is the only correct way to put I2CP traffic on the wire. A tunnel message
+// is addressed to a destination's inbound tunnel through delivery instructions,
+// carries the payload fragmented to fit 1008-byte layers, and is encrypted once
+// per hop in the tunnel so each hop can peel exactly one layer. Handing a bare
+// I2NP message to the transport instead — addressed at a hop's router hash with
+// no encapsulation — is not a degraded delivery: the hop cannot make sense of
+// it, the data is discarded, and because the message went straight to a peer
+// over a direct connection it identifies this router as the sender, which
+// defeats the whole point of using the overlay.
+//
+// Returns an error, without sending anything, if the destination has no usable
+// lease or the tunnel cannot encrypt as its creator. There is deliberately no
+// fallback to an unencapsulated send.
 func (mr *MessageRouter) sendThroughGateway(
 	session *Session,
 	selectedTunnel *tunnel.TunnelState,
@@ -369,22 +405,116 @@ func (mr *MessageRouter) sendThroughGateway(
 		return oops.Errorf("transport send function not initialized for session %d", session.ID())
 	}
 
-	// Always send to the first hop (gateway) of the tunnel.
-	// Zero-hop tunnels are rejected in validateAndSelectTunnel.
-	gatewayHash := selectedTunnel.Hops[0]
+	// 1. Resolve where the destination can actually be reached.
+	target, err := mr.resolveDestinationLease(session, destinationHash)
+	if err != nil {
+		return err
+	}
 
-	if err := mr.transportSend(gatewayHash, garlicMsg); err != nil {
+	// 2. Get the encryptor for every hop of the outbound tunnel we are sending on.
+	gw, err := selectedTunnel.CreatorGateway()
+	if err != nil {
 		log.WithFields(logger.Fields{
 			"at":          "i2cp.MessageRouter.sendThroughGateway",
 			"sessionID":   session.ID(),
 			"tunnelID":    selectedTunnel.ID,
-			"gateway":     logutil.HashPrefixPlain(gatewayHash),
+			"hopCount":    len(selectedTunnel.Hops),
 			"destination": logutil.HashPrefixPlain(destinationHash),
-			"error":       err,
-		}).Error("failed_to_send_to_gateway")
-		return oops.Errorf("failed to send message to gateway: %w", err)
+			"error":       err.Error(),
+		}).Error("tunnel_cannot_encrypt_as_creator")
+		return oops.Wrapf(err, "outbound tunnel %d cannot encapsulate traffic", selectedTunnel.ID)
 	}
+
+	// 3. Serialize the garlic I2NP message; this byte string is the tunnel payload.
+	garlicBytes, err := garlicMsg.MarshalBinary()
+	if err != nil {
+		return oops.Wrapf(err, "failed to serialize garlic message for session %d", session.ID())
+	}
+
+	// 4. Build delivery instructions, fragment, and apply every hop's layer.
+	records, err := gw.SendWithDelivery(garlicBytes, tunnel.TunnelDelivery(target.TunnelID, [32]byte(target.GatewayHash)))
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":          "i2cp.MessageRouter.sendThroughGateway",
+			"sessionID":   session.ID(),
+			"tunnelID":    selectedTunnel.ID,
+			"garlicSize":  len(garlicBytes),
+			"destination": logutil.HashPrefixPlain(destinationHash),
+			"error":       err.Error(),
+		}).Error("tunnel_encapsulation_failed")
+		return oops.Wrapf(err, "failed to encapsulate message for destination %x", destinationHash[:8])
+	}
+
+	// 5. Hand each record to hop 0. The TunnelData header carries hop 0's own
+	// receive ID, which is the ID hop 0 registered when it accepted our build.
+	hopZero := selectedTunnel.Hops[0]
+	hopReceiveID := gw.HopReceiveTunnelID()
+	for i, record := range records {
+		if err := sendTunnelRecord(mr.transportSend, hopZero, hopReceiveID, record); err != nil {
+			return oops.Wrapf(err, "failed to send tunnel record %d/%d to gateway", i+1, len(records))
+		}
+	}
+
+	log.WithFields(logger.Fields{
+		"at":           "i2cp.MessageRouter.sendThroughGateway",
+		"sessionID":    session.ID(),
+		"tunnelID":     selectedTunnel.ID,
+		"hopCount":     len(selectedTunnel.Hops),
+		"gateway":      logutil.HashPrefixPlain(hopZero),
+		"hopReceiveID": hopReceiveID,
+		"destGateway":  logutil.HashPrefixPlain(target.GatewayHash),
+		"destTunnelID": target.TunnelID,
+		"garlicSize":   len(garlicBytes),
+		"recordCount":  len(records),
+		"destination":  logutil.HashPrefixPlain(destinationHash),
+	}).Debug("message_encapsulated_and_sent_to_tunnel_gateway")
 	return nil
+}
+
+// sendTunnelRecord wraps one 1028-byte layered tunnel record in a TunnelData
+// I2NP message and queues it to the given hop.
+//
+// The wire format is a 4-byte tunnel ID followed by the remaining 1024 bytes of
+// the record; the record's own first 4 bytes are the in-clear next-hop ID that
+// hop 0 rewrites when it forwards, so they travel inside the payload rather than
+// in the header.
+func sendTunnelRecord(send TransportSendFunc, hop common.Hash, hopReceiveID tunnel.TunnelID, record []byte) error {
+	if len(record) != tunnel.TunnelMessageSize {
+		return oops.Errorf("tunnel record must be %d bytes, got %d", tunnel.TunnelMessageSize, len(record))
+	}
+
+	var payload [i2np.TunnelDataPayloadSize]byte
+	copy(payload[:], record[tunnel.TunnelIDSize:])
+
+	msg := i2np.NewTunnelDataMessage(hopReceiveID, payload)
+	return send(hop, msg)
+}
+
+// resolveDestinationLease looks up the inbound tunnel that can receive for a
+// destination.
+func (mr *MessageRouter) resolveDestinationLease(session *Session, destinationHash common.Hash) (LeaseTarget, error) {
+	if mr.leaseResolver == nil {
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.MessageRouter.resolveDestinationLease",
+			"sessionID": session.ID(),
+		}).Error("lease_resolver_not_configured")
+		return LeaseTarget{}, oops.Errorf("no destination lease resolver configured for session %d", session.ID())
+	}
+
+	target, err := mr.leaseResolver.ResolveLease(destinationHash)
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":          "i2cp.MessageRouter.resolveDestinationLease",
+			"sessionID":   session.ID(),
+			"destination": logutil.HashPrefixPlain(destinationHash),
+			"error":       err.Error(),
+		}).Debug("destination_lease_unresolved")
+		return LeaseTarget{}, oops.Wrapf(err, "cannot address message to destination %x", destinationHash[:8])
+	}
+	if target.IsZero() {
+		return LeaseTarget{}, oops.Errorf("destination %x has an empty lease", destinationHash[:8])
+	}
+	return target, nil
 }
 
 // logSuccessfulRouting logs successful message routing.
@@ -406,40 +536,68 @@ func (mr *MessageRouter) logSuccessfulRouting(
 	}).Debug("message_routed_successfully")
 }
 
-// SendThroughTunnel sends an I2NP message through a specific tunnel.
-// This is a lower-level method that can be used when the tunnel is already selected.
+// SendThroughTunnel encapsulates an I2NP message and sends it through a
+// specific outbound tunnel to the given destination lease target.
 //
 // Parameters:
-// - tunnel: The tunnel to send through
-// - msg: The I2NP message to send (already encrypted if needed)
+// - t: the tunnel to send through, which must have retained its build keys
+// - msg: the I2NP message to carry as the tunnel payload
+// - target: the destination's inbound tunnel addressing, from its lease
 //
-// Returns an error if sending fails.
-func (mr *MessageRouter) SendThroughTunnel(tunnel *tunnel.TunnelState, msg i2np.Message) error {
-	if len(tunnel.Hops) == 0 {
+// The message is fragmented and encrypted once per hop, and each resulting
+// record is delivered to hop 0 as TunnelData. There is no unencapsulated
+// fallback: see [MessageRouter.sendThroughGateway] for why.
+//
+// Returns an error if the tunnel has no hops, cannot encrypt as its creator,
+// the message cannot be serialized, or a record fails to send.
+func (mr *MessageRouter) SendThroughTunnel(t *tunnel.TunnelState, msg i2np.Message, target LeaseTarget) error {
+	if t == nil {
+		return oops.Errorf("nil tunnel")
+	}
+	if len(t.Hops) == 0 {
 		log.WithFields(logger.Fields{
 			"at":       "i2cp.MessageRouter.SendThroughTunnel",
-			"tunnelID": tunnel.ID,
+			"tunnelID": t.ID,
 		}).Error("tunnel_has_no_hops")
-		return oops.Errorf("tunnel hops required for tunnel %d", tunnel.ID)
+		return oops.Errorf("tunnel hops required for tunnel %d", t.ID)
+	}
+	if mr.transportSend == nil {
+		return oops.Errorf("transport send function not initialized")
+	}
+	if target.IsZero() {
+		return oops.Errorf("destination lease target required to send through tunnel %d", t.ID)
 	}
 
-	gatewayHash := tunnel.Hops[0]
-	log.WithFields(logger.Fields{
-		"at":       "i2cp.MessageRouter.SendThroughTunnel",
-		"tunnelID": tunnel.ID,
-		"gateway":  logutil.HashPrefixPlain(gatewayHash),
-		"hopCount": len(tunnel.Hops),
-	}).Debug("sending_message_through_tunnel")
-
-	err := mr.transportSend(gatewayHash, msg)
+	gw, err := t.CreatorGateway()
 	if err != nil {
-		log.WithFields(logger.Fields{
-			"at":       "i2cp.MessageRouter.SendThroughTunnel",
-			"tunnelID": tunnel.ID,
-			"gateway":  logutil.HashPrefixPlain(gatewayHash),
-			"error":    err.Error(),
-		}).Error("failed_to_send_through_tunnel")
+		return oops.Wrapf(err, "outbound tunnel %d cannot encapsulate traffic", t.ID)
 	}
 
-	return err
+	msgBytes, err := msg.MarshalBinary()
+	if err != nil {
+		return oops.Wrapf(err, "failed to serialize message for tunnel %d", t.ID)
+	}
+
+	records, err := gw.SendWithDelivery(msgBytes, tunnel.TunnelDelivery(target.TunnelID, [32]byte(target.GatewayHash)))
+	if err != nil {
+		return oops.Wrapf(err, "failed to encapsulate message for tunnel %d", t.ID)
+	}
+
+	hopZero := t.Hops[0]
+	hopReceiveID := gw.HopReceiveTunnelID()
+	for i, record := range records {
+		if err := sendTunnelRecord(mr.transportSend, hopZero, hopReceiveID, record); err != nil {
+			return oops.Wrapf(err, "failed to send tunnel record %d/%d for tunnel %d", i+1, len(records), t.ID)
+		}
+	}
+
+	log.WithFields(logger.Fields{
+		"at":         "i2cp.MessageRouter.SendThroughTunnel",
+		"tunnelID":   t.ID,
+		"gateway":    logutil.HashPrefixPlain(hopZero),
+		"hopCount":   len(t.Hops),
+		"destTunnel": target.TunnelID,
+		"recordCnt":  len(records),
+	}).Debug("sending_message_through_tunnel")
+	return nil
 }

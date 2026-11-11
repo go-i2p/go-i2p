@@ -30,6 +30,110 @@ type TunnelState struct {
 	ResponseCount   int              // Number of responses received
 	Responses       []BuildResponse  // Responses from each hop
 	IsInbound       bool             // True if this is an inbound tunnel
+
+	// Layers holds each hop's tunnel layer and IV key plus the tunnel IDs that
+	// hop reads, in tunnel PATH order: index 0 is hop 0 (the gateway) and the
+	// last index is the endpoint. The tunnel creator must apply every hop's
+	// layer to an outbound message, because each hop removes exactly one layer
+	// and forwards the rest; without all of them the endpoint can never decrypt.
+	//
+	// These keys are the ones the builder derived and installed on the build
+	// records (see i2np.TunnelManager.updateLayerKeys), so they are byte-for-byte
+	// the keys each remote hop installs on itself when it accepts the build.
+	// Populating them here is what makes the creator-side gateway path usable at
+	// runtime: before this, the per-hop layer keys were discarded as soon as the
+	// build reply arrived and the pending build was deleted, so nothing in the
+	// process could build a correctly layered tunnel message.
+	Layers []TunnelLayer
+
+	// GatewayHash is the hop-0 router's identity hash, i.e. the peer the
+	// layered TunnelData records must be addressed to. It is the first entry of
+	// Hops, stored separately so callers do not have to index into a slice they
+	// may mutate.
+	GatewayHash common.Hash
+
+	// gatewayMemo caches the creator-side gateway built from Layers so sends do
+	// not rebuild one AES encryptor per hop per message. Guarded by mu.
+	gatewayMemo *Gateway
+}
+
+// CreatorGateway returns the gateway for sending as this tunnel's creator,
+// building it once from the retained layers and caching the result.
+//
+// Returns ErrNoLayerKeys / ErrLayerKeyIncomplete if the build did not retain a
+// complete key set; callers must treat that as "this tunnel cannot carry
+// outbound traffic" rather than falling back to sending unencapsulated data.
+func (t *TunnelState) CreatorGateway() (*Gateway, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.gatewayMemo != nil {
+		return t.gatewayMemo, nil
+	}
+	gw, err := newGatewayFromStateLocked(t)
+	if err != nil {
+		return nil, err
+	}
+	t.gatewayMemo = gw
+	return gw, nil
+}
+
+// TunnelLayer is one hop's encryption layer and the routing identifiers that
+// hop reads, captured by the tunnel creator at build time.
+type TunnelLayer struct {
+	// LayerKey and IVKey are the AES keys this hop uses for its tunnel layer.
+	LayerKey [32]byte
+	IVKey    [32]byte
+
+	// ReceiveTunnel is the tunnel ID this hop looks incoming records up by. For
+	// hop 0 it is the ID written in the clear at the front of every record we
+	// send into the tunnel.
+	ReceiveTunnel TunnelID
+
+	// NextTunnel is the tunnel ID this hop forwards to. For the endpoint hop it
+	// is the reply tunnel rather than a forward target.
+	NextTunnel TunnelID
+}
+
+// LayerCount returns the number of retained hop layers.
+func (t *TunnelState) LayerCount() int {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return len(t.Layers)
+}
+
+// SetLayers records the per-hop layers retained from a build. Replaces any
+// previously retained set.
+func (t *TunnelState) SetLayers(layers []TunnelLayer) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if len(layers) == 0 {
+		t.Layers = nil
+		return
+	}
+	cp := make([]TunnelLayer, len(layers))
+	copy(cp, layers)
+	t.Layers = cp
+	// New keys mean the cached creator-side gateway is stale.
+	t.gatewayMemo = nil
+}
+
+// GetLayers returns a copy of the retained per-hop layers in path order, or nil
+// if the tunnel's build did not retain them.
+func (t *TunnelState) GetLayers() []TunnelLayer {
+	return t.snapshotLayers()
+}
+
+// snapshotLayers copies the retained layers so callers can build encryptors
+// without holding the state lock or racing a tunnel reset.
+func (t *TunnelState) snapshotLayers() []TunnelLayer {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	if len(t.Layers) == 0 {
+		return nil
+	}
+	out := make([]TunnelLayer, len(t.Layers))
+	copy(out, t.Layers)
+	return out
 }
 
 // SetState updates the tunnel build state with proper synchronization.

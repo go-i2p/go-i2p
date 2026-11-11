@@ -58,7 +58,7 @@ func newBaseTestSession() *Session {
 
 // addTestTunnelsToPool adds count tunnel states to pool with the given base
 // tunnel ID and gateway prefix string.
-func addTestTunnelsToPool(pool *tunnel.Pool, baseID int, gatewayPrefix string, count int) {
+func addTestTunnelsToPool(t *testing.T, pool *tunnel.Pool, baseID int, gatewayPrefix string, count int) {
 	for i := 0; i < count; i++ {
 		tunnelID := tunnel.TunnelID(baseID + i)
 		var gateway common.Hash
@@ -71,6 +71,9 @@ func addTestTunnelsToPool(pool *tunnel.Pool, baseID int, gatewayPrefix string, c
 			State:     tunnel.TunnelReady,
 			CreatedAt: time.Now(),
 		}
+		// Outbound sends encapsulate as the tunnel's creator, which needs the
+		// per-hop layer keys a real build would have retained.
+		addRetainedLayers(t, state, tunnelID*10)
 		pool.AddTunnel(state)
 	}
 }

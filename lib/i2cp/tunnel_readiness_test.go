@@ -20,16 +20,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newReadyPool(baseID int, gatewayPrefix string, count int) *tunnel.Pool {
+func newReadyPool(t *testing.T, baseID int, gatewayPrefix string, count int) *tunnel.Pool {
 	pool := tunnel.NewTunnelPool(&mockPeerSelector{})
-	addTestTunnelsToPool(pool, baseID, gatewayPrefix, count)
+	addTestTunnelsToPool(t, pool, baseID, gatewayPrefix, count)
 	return pool
 }
 
 func TestCheckTunnelReadiness_BothDirectionsReady(t *testing.T) {
 	session := newBaseTestSession()
-	session.SetInboundPool(newReadyPool(100, "in", 1))
-	session.SetOutboundPool(newReadyPool(200, "out", 1))
+	session.SetInboundPool(newReadyPool(t, 100, "in", 1))
+	session.SetOutboundPool(newReadyPool(t, 200, "out", 1))
 	defer session.InboundPool().Stop()
 	defer session.OutboundPool().Stop()
 
@@ -71,7 +71,7 @@ func TestCheckTunnelReadiness_EmptyPoolsIsNotReady(t *testing.T) {
 // send anything.
 func TestCheckTunnelReadiness_InboundOnlyIsNotReady(t *testing.T) {
 	session := newBaseTestSession()
-	session.SetInboundPool(newReadyPool(100, "in", 3))
+	session.SetInboundPool(newReadyPool(t, 100, "in", 3))
 	session.SetOutboundPool(tunnel.NewTunnelPool(&mockPeerSelector{}))
 	defer session.InboundPool().Stop()
 	defer session.OutboundPool().Stop()
@@ -84,7 +84,7 @@ func TestCheckTunnelReadiness_InboundOnlyIsNotReady(t *testing.T) {
 func TestCheckTunnelReadiness_OutboundOnlyIsNotReady(t *testing.T) {
 	session := newBaseTestSession()
 	session.SetInboundPool(tunnel.NewTunnelPool(&mockPeerSelector{}))
-	session.SetOutboundPool(newReadyPool(200, "out", 3))
+	session.SetOutboundPool(newReadyPool(t, 200, "out", 3))
 	defer session.InboundPool().Stop()
 	defer session.OutboundPool().Stop()
 
@@ -99,7 +99,7 @@ func TestCheckTunnelReadiness_OutboundOnlyIsNotReady(t *testing.T) {
 // never happening.
 func TestCheckTunnelReadiness_TransitionsToReadyOnceOutboundLands(t *testing.T) {
 	session := newBaseTestSession()
-	session.SetInboundPool(newReadyPool(100, "in", 1))
+	session.SetInboundPool(newReadyPool(t, 100, "in", 1))
 	outbound := tunnel.NewTunnelPool(&mockPeerSelector{})
 	session.SetOutboundPool(outbound)
 	defer session.InboundPool().Stop()
@@ -108,7 +108,7 @@ func TestCheckTunnelReadiness_TransitionsToReadyOnceOutboundLands(t *testing.T) 
 	_, ready := checkTunnelReadiness(session)
 	require.False(t, ready, "not ready while outbound is still building")
 
-	addTestTunnelsToPool(outbound, 200, "out", 1)
+	addTestTunnelsToPool(t, outbound, 200, "out", 1)
 
 	result, ready := checkTunnelReadiness(session)
 	assert.True(t, ready, "adding the first active outbound tunnel must flip the gate")

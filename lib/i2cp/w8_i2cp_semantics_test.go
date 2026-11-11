@@ -173,7 +173,7 @@ func TestW8_AsyncMessageStatus_CarriesRealNonce(t *testing.T) {
 	server, session, _, outboundPool, cleanup := setupTestEnvironment(t)
 	t.Cleanup(cleanup)
 
-	addTestTunnelsToPool(outboundPool, 4000, "mock-outbound-gateway-hash-12345678901234567890", 2)
+	addTestTunnelsToPool(t, outboundPool, 4000, "mock-outbound-gateway-hash-12345678901234567890", 2)
 
 	// Observe the asynchronous status on a connection registered for the session.
 	conn := &syncBufConn{Buffer: &bytes.Buffer{}}

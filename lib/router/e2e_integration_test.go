@@ -289,7 +289,15 @@ type e2eTestEnvironment struct {
 	receiverGarlicManager *i2np.GarlicSessionManager
 	messageRouter         *i2cp.MessageRouter
 
-	// Track sent messages for validation
+	// chain is the honest outbound path: real transit relays, a real tunnel
+	// endpoint, and a real ForwardToTunnel to the destination gateway. Messages
+	// only appear in sentMessages if they completed it.
+	chain *e2eOutboundChain
+
+	// Track sent messages for validation. After I2P-002 these are the garlic
+	// messages recovered from the far end of the tunnel chain, i.e. bytes that
+	// genuinely survived encapsulation, layer-by-layer relay and endpoint
+	// reassembly - not a copy of what the sender handed to the transport.
 	sentMessages []i2np.Message
 	sentMutex    sync.Mutex
 
@@ -303,6 +311,10 @@ func setupCompleteE2EEnvironment(t *testing.T) *e2eTestEnvironment {
 		sentMessages: make([]i2np.Message, 0),
 		cleanupFuncs: make([]func(), 0),
 	}
+
+	// The tunnel chain has to exist before any pool is populated, because the
+	// tunnels added to those pools are live relays over this chain.
+	env.chain = newE2EOutboundChain(t, "e2e-env")
 
 	// Create I2CP server
 	serverConfig := &i2cp.ServerConfig{
@@ -346,15 +358,11 @@ func setupCompleteE2EEnvironment(t *testing.T) *e2eTestEnvironment {
 	env.garlicManager, err = i2np.NewGarlicSessionManager(privKey)
 	require.NoError(t, err)
 
-	// Create message router with transport send function that captures messages
-	transportSend := func(peerHash common.Hash, msg i2np.Message) error {
-		env.sentMutex.Lock()
-		defer env.sentMutex.Unlock()
-		env.sentMessages = append(env.sentMessages, msg)
-		return nil
-	}
-
-	env.messageRouter = i2cp.NewMessageRouter(env.garlicManager, transportSend)
+	// The transport hands records to hop A of a real 3-hop tunnel; the endpoint
+	// forwards to the destination gateway, where the encapsulated garlic is
+	// recovered. Nothing is captured at the sender.
+	env.messageRouter = i2cp.NewMessageRouter(env.garlicManager, env.chain.TransportSend())
+	env.messageRouter.SetLeaseResolver(&encapLeaseResolver{target: env.chain.LeaseTarget()})
 	env.server.SetMessageRouter(env.messageRouter)
 
 	return env
@@ -402,27 +410,19 @@ func (env *e2eTestEnvironment) createSessionWithPools(t *testing.T, nickname str
 	})
 
 	// Add initial tunnels
-	env.addTunnelsToPool(t, inboundPool, 2, 2000)
-	env.addTunnelsToPool(t, outboundPool, 2, 3000)
+	env.addTunnelsToPool(t, inboundPool, 2)
+	env.addTunnelsToPool(t, outboundPool, 2)
 
 	return session
 }
 
-// addTunnelsToPool adds mock tunnels to a pool
-func (env *e2eTestEnvironment) addTunnelsToPool(t *testing.T, pool *tunnel.Pool, count, startID int) {
+// addTunnelsToPool adds count ready tunnels to a pool. Outbound pools get tunnels that
+// actually relay through the chain, with the per-hop layer keys a creator needs
+// to encapsulate; a tunnel without those keys cannot send anything, which is the
+// defect I2P-002 fixed.
+func (env *e2eTestEnvironment) addTunnelsToPool(t *testing.T, pool *tunnel.Pool, count int) {
 	for i := 0; i < count; i++ {
-		tunnelID := tunnel.TunnelID(startID + i)
-		var gateway common.Hash
-		copy(gateway[:], []byte("mock-gateway-hash-for-testing-padding-32"))
-		gateway[31] = byte(i)
-
-		tunnelState := &tunnel.TunnelState{
-			ID:        tunnelID,
-			Hops:      []common.Hash{gateway},
-			State:     tunnel.TunnelReady,
-			CreatedAt: time.Now(),
-		}
-		pool.AddTunnel(tunnelState)
+		pool.AddTunnel(env.chain.AddTunnel(t))
 	}
 }
 
@@ -433,9 +433,28 @@ func (env *e2eTestEnvironment) SendMessageFromClient(
 	destPubKey [32]byte,
 	payload []byte,
 ) error {
-	return env.messageRouter.RouteOutboundMessage(i2cp.RouteRequest{
+	if err := env.messageRouter.RouteOutboundMessage(i2cp.RouteRequest{
 		Session: session, DestinationHash: destHash, DestinationPubKey: destPubKey, Payload: payload,
-	})
+	}); err != nil {
+		return err
+	}
+
+	// The chain runs synchronously in-process, so the message has already reached
+	// the destination gateway by the time the send returns. Record what came out
+	// the far end; if it never arrives, the send is reported as failed rather than
+	// silently dropped the way the pre-I2P-002 transport capture did.
+	garlic := env.chain.PopGarlic(3 * time.Second)
+	if garlic == nil {
+		if decErr := env.chain.DecodeError(); decErr != nil {
+			return oops.Wrapf(decErr, "message crossed the tunnel chain but could not be parsed")
+		}
+		return oops.Errorf("message did not complete the tunnel chain")
+	}
+
+	env.sentMutex.Lock()
+	env.sentMessages = append(env.sentMessages, garlic)
+	env.sentMutex.Unlock()
+	return nil
 }
 
 // WaitForOutboundTransmission waits for messages to be transmitted through the gateway
@@ -588,10 +607,10 @@ func (env *e2eTestEnvironment) ClearAllTunnels() {
 
 // RebuildTunnels rebuilds tunnels after failure
 func (env *e2eTestEnvironment) RebuildTunnels(t *testing.T) {
-	env.addTunnelsToPool(t, env.senderOutboundPool, 2, 6000)
-	env.addTunnelsToPool(t, env.senderInboundPool, 2, 7000)
-	env.addTunnelsToPool(t, env.receiverOutboundPool, 2, 8000)
-	env.addTunnelsToPool(t, env.receiverInboundPool, 2, 9000)
+	env.addTunnelsToPool(t, env.senderOutboundPool, 2)
+	env.addTunnelsToPool(t, env.senderInboundPool, 2)
+	env.addTunnelsToPool(t, env.receiverOutboundPool, 2)
+	env.addTunnelsToPool(t, env.receiverInboundPool, 2)
 }
 
 // Cleanup performs cleanup of all resources

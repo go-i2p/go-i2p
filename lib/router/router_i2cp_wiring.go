@@ -177,6 +177,18 @@ func (r *Router) wireI2CPMessageRouter(server *i2cp.Server) {
 	}
 
 	msgRouter := i2cp.NewMessageRouter(garlicMgr, transportSend)
+
+	// Outbound messages are encapsulated as tunnel traffic, which requires
+	// addressing them to the destination's inbound tunnel. The lease resolver
+	// reads that from NetDB; without it the router fails closed and sends
+	// nothing, so wire it whenever NetDB is available.
+	if r.netdb != nil {
+		msgRouter.SetLeaseResolver(i2cp.NewLeaseResolver(r.netdb))
+	} else {
+		log.WithField("at", "wireI2CPMessageRouter").
+			Warn("I2CP server: no NetDB, outbound message routing will fail closed")
+	}
+
 	server.SetMessageRouter(msgRouter)
 	log.WithFields(logger.Fields{"at": "wireI2CPMessageRouter"}).Debug("I2CP server: message router configured for outbound routing")
 }

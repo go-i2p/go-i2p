@@ -15,7 +15,6 @@ import (
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/destination"
 	"github.com/go-i2p/common/router_info"
-	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/keys"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/stretchr/testify/require"
@@ -308,7 +307,7 @@ func createTestSessionWithLeaseSet(t *testing.T) (*Session, []byte) {
 	selector := &mockPeerSelector{}
 	inboundPool := tunnel.NewTunnelPool(selector)
 
-	addTestTunnelsToPool(inboundPool, 5000, "gateway-router-hash-1234567890ab", 2)
+	addTestTunnelsToPool(t, inboundPool, 5000, "gateway-router-hash-1234567890ab", 2)
 	session.SetInboundPool(inboundPool)
 
 	leaseSetBytes, err := session.CreateLeaseSet()
@@ -403,26 +402,27 @@ func (m *mockGarlicEncryptor) EncryptGarlicMessage(destinationHash common.Hash, 
 // Compile-time interface check.
 var _ GarlicMessageEncryptor = (*mockGarlicEncryptor)(nil)
 
-// setupMessageRouterTest sets up a message router test environment.
-func setupMessageRouterTest(t *testing.T) (*Session, GarlicMessageEncryptor, TransportSendFunc, map[string]i2np.Message) {
+// setupMessageRouterTest sets up a message router test environment whose
+// transport records every tunnel message it is handed.
+//
+// A slice is used rather than a map keyed by peer hash: one outbound message
+// can produce several records to the same hop, and collapsing them would hide
+// exactly the fragmentation behaviour these tests care about.
+func setupMessageRouterTest(t *testing.T) (*Session, GarlicMessageEncryptor, TransportSendFunc, *[]sentRecord, *fakeLeaseResolver) {
 	t.Helper()
 
 	server, session, _, outboundPool, cleanup := setupTestEnvironment(t)
 	t.Cleanup(cleanup)
 	_ = server
 
-	addTestTunnelsToPool(outboundPool, 2000, "mock-outbound-gateway-hash-12345678901234567890", 2)
+	addTestTunnelsToPool(t, outboundPool, 2000, "mock-outbound-gateway-hash-12345678901234567890", 2)
 
 	garlicMock := newMockGarlicEncryptor()
+	transportSend, records := captureTransport(t)
 
-	sentMessages := make(map[string]i2np.Message)
-	transportSend := func(peerHash common.Hash, msg i2np.Message) error {
-		key := string(peerHash[:])
-		sentMessages[key] = msg
-		return nil
-	}
+	resolver := newFakeLeaseResolver()
 
-	return session, garlicMock, transportSend, sentMessages
+	return session, garlicMock, transportSend, records, resolver
 }
 
 // createMockTunnels creates mock tunnel data for testing.

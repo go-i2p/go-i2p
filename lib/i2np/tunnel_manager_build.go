@@ -130,6 +130,12 @@ func (tm *TunnelManager) prepareAndSendBuild(req tunnel.BuildTunnelRequest) (*tu
 		return nil, 0, peerHashes, oops.Wrapf(err, "failed to send build request")
 	}
 
+	// sendBuildMessage is where STBM derives the per-hop layer/IV keys and
+	// installs them on result.Records. Capture them onto the pool state now,
+	// while they still exist, so creator-side sends can layer a tunnel message
+	// after the build reply arrives and the pending build entry is deleted.
+	tm.retainLayerKeys(tunnelState, result)
+
 	// W-1 fix: Register inbound exploratory tunnel endpoint at build-request time
 	// so that the build reply (which arrives immediately after send) can be routed
 	// to ProcessTunnelReply rather than dropped. On cold start (no pre-existing
@@ -387,7 +393,70 @@ func (tm *TunnelManager) createTunnelStateFromResult(result *tunnel.TunnelBuildR
 		Responses:       make([]tunnel.BuildResponse, 0, len(result.Hops)),
 		IsInbound:       result.IsInbound,
 	}
+	if len(tunnelState.Hops) > 0 {
+		tunnelState.GatewayHash = tunnelState.Hops[0]
+	}
 	return tunnelState
+}
+
+// retainLayerKeys copies the per-hop layer/IV keys and routing IDs that message
+// creation derived onto the pool's TunnelState, so they outlive the build.
+//
+// This is the creator-side counterpart of updateLayerKeys. For STBM the layer
+// keys are not in the build cleartext — each hop derives them from its Noise
+// chaining key, and updateLayerKeys installs the same derived values on our
+// records so the two sides agree. Until now those values only existed on
+// result.Records, which is dropped once the reply is processed, so no runtime
+// component could assemble a correctly layered outbound tunnel message: an
+// N-hop tunnel needs all N layers applied by the creator, since every hop removes
+// exactly one and forwards the rest.
+//
+// It must run AFTER sendBuildMessage, which is where the keys are derived, and
+// it deliberately does not depend on the pending-build entry, which is deleted
+// as soon as the reply arrives.
+func (tm *TunnelManager) retainLayerKeys(state *tunnel.TunnelState, result *tunnel.TunnelBuildResult) {
+	if state == nil || result == nil {
+		return
+	}
+	if len(result.Records) != len(result.Hops) {
+		log.WithFields(logger.Fields{
+			"at":         "retainLayerKeys",
+			"tunnel_id":  state.ID,
+			"record_cnt": len(result.Records),
+			"hop_cnt":    len(result.Hops),
+			"is_inbound": state.IsInbound,
+		}).Warn("build record count does not match hop count, layer keys not retained")
+		return
+	}
+
+	layers := make([]tunnel.TunnelLayer, len(result.Records))
+	for i := range result.Records {
+		rec := &result.Records[i]
+		var lk, ivk [32]byte
+		copy(lk[:], rec.LayerKey[:])
+		copy(ivk[:], rec.IVKey[:])
+		layers[i] = tunnel.TunnelLayer{
+			LayerKey:      lk,
+			IVKey:         ivk,
+			ReceiveTunnel: rec.ReceiveTunnel,
+			NextTunnel:    rec.NextTunnel,
+		}
+	}
+
+	state.SetLayers(layers)
+
+	// A zero layer key means the STBM derivation was skipped, which would make
+	// every message we send through this tunnel undecryptable by its hops. Say
+	// so rather than let it look like a working tunnel.
+	for i := range layers {
+		if layers[i].LayerKey == ([32]byte{}) || layers[i].IVKey == ([32]byte{}) {
+			log.WithFields(logger.Fields{
+				"at":        "retainLayerKeys",
+				"tunnel_id": state.ID,
+				"hop_index": i,
+			}).Warn("retained layer key is zero; tunnel cannot carry creator-side traffic")
+		}
+	}
 }
 
 // trackPendingBuild records the pending build request for reply correlation.

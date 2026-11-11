@@ -509,6 +509,7 @@ func TestE2E_OutboundMessageRouting(t *testing.T) {
 			State:     tunnel.TunnelReady,
 			CreatedAt: time.Now(),
 		}
+		addRetainedLayers(t, tunnelState, tunnelID*10)
 		outboundPool.AddTunnel(tunnelState)
 	}
 
@@ -530,8 +531,11 @@ func TestE2E_OutboundMessageRouting(t *testing.T) {
 		return nil
 	}
 
-	// Create and set message router on server
+	// Create and set message router on server, with a lease resolver so the
+	// outbound path can address the tunnel message to the destination.
 	router := NewMessageRouter(garlicMgr, transportSend)
+	resolver := newFakeLeaseResolver()
+	router.SetLeaseResolver(resolver)
 	server.SetMessageRouter(router)
 
 	// Create destination for routing
@@ -548,6 +552,11 @@ func TestE2E_OutboundMessageRouting(t *testing.T) {
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 	})
 
+	// Give the destination a lease before routing.
+	destGateway := createTestHash()
+	const destTunnelID uint32 = 0x5EED0001
+	resolver.add(destHash, destGateway, destTunnelID)
+
 	// Test payload
 	payload := []byte("Hello from I2CP integration test!")
 
@@ -558,14 +567,19 @@ func TestE2E_OutboundMessageRouting(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Verify message was sent
+	// Verify the message left as encapsulated tunnel traffic. A bare garlic
+	// message handed to a hop is the I2P-002 defect: the network cannot read
+	// it and the hop learns this router is the sender.
 	sentMutex.Lock()
 	defer sentMutex.Unlock()
-	assert.Len(t, sentMessages, 1, "should send one message to gateway")
+	require.Len(t, sentMessages, 1, "should send one tunnel record to hop 0")
 
-	// Verify sent message is a Garlic message
 	for _, msg := range sentMessages {
-		assert.Equal(t, i2np.I2NPMessageTypeGarlic, msg.Type())
+		assert.Equal(t, i2np.I2NPMessageTypeTunnelData, msg.Type(),
+			"outbound traffic must be tunnel-encapsulated, not bare garlic")
+		carrier, ok := msg.(i2np.TunnelCarrier)
+		require.True(t, ok)
+		assert.Len(t, carrier.GetTunnelData(), i2np.TunnelDataPayloadSize)
 	}
 }
 
@@ -576,7 +590,7 @@ func TestE2E_SendMessageIngressToTunnelEgress(t *testing.T) {
 	server, session, _, outboundPool, cleanup := setupTestEnvironment(t)
 	defer cleanup()
 
-	addTestTunnelsToPool(outboundPool, 4000, "ingress-egress-gateway-hash-1234567890", 1)
+	addTestTunnelsToPool(t, outboundPool, 4000, "ingress-egress-gateway-hash-1234567890", 1)
 
 	var gatewayHash data.Hash
 	copy(gatewayHash[:], []byte("ingress-egress-gateway-hash-1234567890"))
@@ -593,10 +607,21 @@ func TestE2E_SendMessageIngressToTunnelEgress(t *testing.T) {
 	}
 
 	server.SetDestinationResolver(&mockDestinationResolver{})
-	server.SetMessageRouter(NewMessageRouter(newMockGarlicEncryptor(), transportSend))
+
+	router := NewMessageRouter(newMockGarlicEncryptor(), transportSend)
+	resolver := newFakeLeaseResolver()
+	router.SetLeaseResolver(resolver)
+	server.SetMessageRouter(router)
 
 	dest, err := createTestDestination()
 	require.NoError(t, err)
+
+	rawHash, err := dest.Hash()
+	require.NoError(t, err)
+	destHash := data.Hash(rawHash)
+	destGateway := createTestHash()
+	const destTunnelID uint32 = 0x5EED0002
+	resolver.add(destHash, destGateway, destTunnelID)
 
 	payload := []byte("Hello from I2CP ingress")
 	sendPayload := &SendMessagePayload{
@@ -628,8 +653,15 @@ func TestE2E_SendMessageIngressToTunnelEgress(t *testing.T) {
 		t.Fatal("timed out waiting for tunnel egress dispatch")
 	}
 
+	// Egress must be encapsulated tunnel traffic addressed at hop 0, never the
+	// bare garlic message the pre-I2P-002 path handed to the transport.
 	assert.Equal(t, gatewayHash, sentGateway)
-	assert.Equal(t, i2np.I2NPMessageTypeGarlic, sentMsg.Type())
+	assert.Equal(t, i2np.I2NPMessageTypeTunnelData, sentMsg.Type())
+	carrier, ok := sentMsg.(i2np.TunnelCarrier)
+	require.True(t, ok)
+	assert.Len(t, carrier.GetTunnelData(), i2np.TunnelDataPayloadSize)
+	assert.NotEqual(t, destTunnelID, uint32(carrier.GetTunnelID()),
+		"envelope addresses our hop 0, not the destination tunnel")
 	assert.Len(t, outboundPool.GetActiveTunnels(), 1)
 }
 

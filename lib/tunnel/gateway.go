@@ -100,8 +100,9 @@ func NewGateway(tunnelID TunnelID, encryption tunnel.TunnelEncryptor, nextHopID 
 //   - tunnelID: the ID of this tunnel (the tunnel creator's view of it)
 //   - layers: one encryptor per hop in tunnel PATH order, layers[0] being the
 //     gateway (hop 0) and the last entry being the endpoint (OBEP)
-//   - nextHopID: the receive tunnel ID of hop 0, written in the clear so the
-//     gateway can route the message
+//   - nextHopID: the 4-byte in-clear ID written at the front of every record,
+//     naming the participant the record travels to next (hop 0, for a gateway
+//     built from a tunnel's retained keys).
 //
 // The creator applies the layers back-to-front (endpoint first, gateway last)
 // so that each hop peeling its layer in path order recovers the original
@@ -705,5 +706,86 @@ func (g *Gateway) TunnelID() TunnelID {
 // instructions to point at this tunnel ID so the next hop in the chain
 // can pick the message up.
 func (g *Gateway) NextHopID() TunnelID {
+	return g.nextHopID
+}
+
+// ErrNoLayerKeys is returned when a tunnel's build did not retain the per-hop
+// layer keys needed to encrypt as its creator.
+var ErrNoLayerKeys = errors.New("tunnel has no retained layer keys")
+
+// ErrLayerKeyIncomplete is returned when the retained layer set does not cover
+// every hop of the tunnel.
+var ErrLayerKeyIncomplete = errors.New("retained layer keys do not cover every hop")
+
+// NewGatewayFromState builds the creator-side gateway for a tunnel the pool
+// tracked through a successful build.
+//
+// The returned gateway applies every hop's layer, in path order, and addresses
+// the in-clear record header with hop 0's receive tunnel ID, which is the ID
+// remote hop 0 registered for itself when it accepted our build. That is what
+// makes the record routable and peelable end to end: hop 0 removes its layer
+// and forwards to hop 1's ID, and so on down to the endpoint.
+//
+// It returns ErrNoLayerKeys if the build retained nothing, and
+// ErrLayerKeyIncomplete if it retained fewer layers than the tunnel has hops —
+// sending through a partially layered tunnel would strand the message at the
+// endpoint, so it is refused rather than attempted.
+func NewGatewayFromState(state *TunnelState) (*Gateway, error) {
+	if state == nil {
+		return nil, ErrNoLayerKeys
+	}
+	state.mu.RLock()
+	defer state.mu.RUnlock()
+	return newGatewayFromStateLocked(state)
+}
+
+// newGatewayFromStateLocked is NewGatewayFromState without the lock, for
+// callers that already hold the state lock (TunnelState.CreatorGateway).
+func newGatewayFromStateLocked(state *TunnelState) (*Gateway, error) {
+	layers := state.Layers
+	if len(layers) == 0 {
+		return nil, oops.With("tunnel_id", uint32(state.ID)).
+			Wrapf(ErrNoLayerKeys, "tunnel build did not retain per-hop layer keys")
+	}
+	if len(layers) != len(state.Hops) {
+		return nil, oops.With("tunnel_id", uint32(state.ID)).
+			With("layer_count", len(layers)).
+			With("hop_count", len(state.Hops)).
+			Wrapf(ErrLayerKeyIncomplete, "retained %d layer keys for a %d-hop tunnel", len(layers), len(state.Hops))
+	}
+
+	encryptors := make([]tunnel.TunnelEncryptor, len(layers))
+	for i := range layers {
+		var lk, ivk tunnel.TunnelKey
+		copy(lk[:], layers[i].LayerKey[:])
+		copy(ivk[:], layers[i].IVKey[:])
+
+		enc, err := tunnel.NewAESEncryptor(lk, ivk)
+		if err != nil {
+			return nil, oops.With("tunnel_id", uint32(state.ID)).
+				With("layer", i).
+				Wrapf(err, "failed to create layer encryptor for hop %d", i)
+		}
+		encryptors[i] = enc
+	}
+
+	// The in-clear 4-byte ID at the front of the record names the participant
+	// the record travels to next, which for us is hop 0. It is the same value
+	// the caller puts in the TunnelData I2NP header: hop 0's own receive tunnel
+	// ID, the ID hop 0 registered when it accepted our build. The AES layers
+	// never touch bytes 0..3, so the field survives every layer intact and
+	// transit hops rewrite it from their build record when they forward.
+	return NewGatewayWithLayers(layers[0].ReceiveTunnel, encryptors, layers[0].ReceiveTunnel)
+}
+
+// HopReceiveTunnelID returns the ID to address the TunnelData I2NP envelope to
+// when handing this gateway's records to hop 0.
+//
+// It is hop 0's own receive tunnel ID — the ID hop 0 registered when it
+// accepted our build, and therefore what the receiving router looks up to find
+// the participant or endpoint that owns the tunnel. It is the same value the
+// gateway writes in the clear at the front of every record, so it is simply the
+// gateway's next-hop ID named from the envelope's point of view.
+func (g *Gateway) HopReceiveTunnelID() TunnelID {
 	return g.nextHopID
 }
