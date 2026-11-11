@@ -73,8 +73,19 @@ type ServerConfig struct {
 	// Maximum number of concurrent sessions
 	MaxSessions int
 
-	// ReadTimeout is the maximum duration for reading requests from clients
-	// Zero means no timeout. Default: 60 seconds
+	// ReadTimeout is the maximum duration for reading requests from clients.
+	// It bounds the idle gap between messages (the header wait), not the
+	// bytes of a single message. The per-message byte read is bounded
+	// separately by MessageReadTimeout (30s) to prevent slow-send attacks.
+	//
+	// Zero means no idle timeout is enforced (idle clients are never
+	// disconnected for inactivity). Default: 0 (disabled).
+	//
+	// To enable idle enforcement, set a value large enough that a legitimate
+	// client cannot trigger it while idle between messages — for example
+	// 5 minutes. A value as low as the previous 60-second default would kill
+	// normal long-lived I2CP client connections that sit idle after the
+	// GetDate/SetDate exchange.
 	ReadTimeout time.Duration
 
 	// WriteTimeout is the maximum duration for writing responses to clients

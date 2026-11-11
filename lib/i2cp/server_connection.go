@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"sync"
 	"time"
 
@@ -444,9 +445,15 @@ func (s *Server) shouldStopConnectionLoop() bool {
 
 // processOneMessage handles a single message from the client connection.
 // Returns false if the connection should be closed, true to continue.
+//
+// An idle read timeout (errIdleTimeout) is not terminal: the caller re-arms
+// the deadline and continues reading rather than closing the connection.
 func (s *Server) processOneMessage(conn net.Conn, sessionPtr **Session) bool {
 	msg, err := s.readClientMessage(conn)
 	if err != nil {
+		if errors.Is(err, errIdleTimeout) {
+			return true // idle gap exceeded; re-arm and continue reading
+		}
 		return false
 	}
 
@@ -515,6 +522,19 @@ func (s *Server) processAndRespond(conn net.Conn, msg *Message, sessionPtr **Ses
 }
 
 // readClientMessage reads an I2CP message from the connection with rate limiting.
+//
+// Deadline discipline:
+//   - ServerConfig.ReadTimeout bounds the idle gap between messages (header
+//     wait). It is applied once per iteration, before the header read, and
+//     never races a concurrent writer because only the read goroutine owns
+//     the read side of the connection.
+//   - MessageReadTimeout bounds only the per-message byte read (payload), set
+//     by ReadMessage after the header is read and refreshed on each body read.
+//   - A timeout while waiting for a header is NOT an error: re-arm and
+//     continue, do not close the connection, do not log at warn level per
+//     occurrence. A timeout during body/flag/payload continuation IS fatal.
+//   - s.ctx cancels a blocked header read so shutdown does not wait out a
+//     deadline.
 func (s *Server) readClientMessage(conn net.Conn) (*Message, error) {
 	// Check connection-level rate limits before reading
 	if !s.checkConnectionRateLimit(conn) {
@@ -528,12 +548,9 @@ func (s *Server) readClientMessage(conn net.Conn) (*Message, error) {
 		return nil, oops.Errorf("connection rate limit exceeded")
 	}
 
-	// ReadMessage now handles deadlines internally:
-	// - Header read: no deadline (idle timeout controlled by ServerConfig.ReadTimeout via caller)
-	// - Payload read: bounded by MessageReadTimeout (30s) to prevent slow-send attacks
-	// The idle timeout between messages is handled by the connection-level deadline
-	// set by the accept loop or connection handler, not here.
-	// Apply idle timeout before reading so idle clients don't hang forever.
+	// Apply the configured idle timeout (ServerConfig.ReadTimeout) before the
+	// header read so idle clients don't hang forever. This is per-iteration:
+	// only the read goroutine sets it, so it never races a concurrent writer.
 	if s.config.ReadTimeout > 0 {
 		if err := conn.SetReadDeadline(time.Now().Add(s.config.ReadTimeout)); err != nil {
 			log.WithFields(logger.Fields{
@@ -543,10 +560,28 @@ func (s *Server) readClientMessage(conn net.Conn) (*Message, error) {
 		}
 	}
 
-	msg, err := ReadMessage(conn, MessageReadTimeout*time.Second)
+	// ReadMessage bounds only the per-message payload read via
+	// MessageReadTimeout; the idle gap is bounded by ReadTimeout above.
+	msg, err := ReadMessage(s.ctx, conn, MessageReadTimeout*time.Second)
 	if err != nil {
-		// i2psnark compatibility: Log connection state on read failures
 		state := s.getOrCreateConnectionState(conn)
+
+		// A timeout while waiting for a header is not an error: re-arm and
+		// continue. Distinguish via errors.Is/errIdleTimeout and
+		// net.Error.Timeout() — never string comparison.
+		if errors.Is(err, errIdleTimeout) || (err != nil && isTimeoutError(err)) {
+			log.WithFields(logger.Fields{
+				"at":           "i2cp.Server.readClientMessage",
+				"remoteAddr":   conn.RemoteAddr().String(),
+				"error":        err.Error(),
+				"messageCount": state.messageCount,
+				"bytesRead":    state.bytesRead,
+			}).Debug("idle_read_timeout_rearming")
+			return nil, errIdleTimeout
+		}
+
+		// A timeout during body/flag/payload continuation (slow-send) or any
+		// other read error is fatal: close the connection.
 		log.WithFields(logger.Fields{
 			"at":           "i2cp.Server.readClientMessage",
 			"remoteAddr":   conn.RemoteAddr().String(),
@@ -561,6 +596,22 @@ func (s *Server) readClientMessage(conn net.Conn) (*Message, error) {
 	s.updateConnectionState(conn, msg)
 
 	return msg, nil
+}
+
+// isTimeoutError reports whether err is a deadline-exceeded or I/O timeout
+// error, using errors.Is and net.Error.Timeout() — never string comparison.
+func isTimeoutError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, os.ErrDeadlineExceeded) {
+		return true
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
+	}
+	return false
 }
 
 // checkConnectionRateLimit enforces per-connection rate limits.

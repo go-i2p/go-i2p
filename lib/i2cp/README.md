@@ -182,9 +182,13 @@ const (
 	// Payloads exceeding this threshold trigger warning logs.
 	DefaultPayloadSize = 8192 // 8 KB
 
-	// MessageReadTimeout is the maximum time allowed to read a complete message.
-	// This prevents slow-send attacks where attackers claim large payloads
-	// but drip-feed data slowly to exhaust connection resources.
+	// MessageReadTimeout is the maximum time allowed to read the bytes of a
+	// single I2CP message once its header has been read. This prevents
+	// slow-send attacks where attackers claim large payloads but drip-feed
+	// data slowly to exhaust connection resources.
+	//
+	// This bounds only the per-message byte read, not the idle gap between
+	// messages. The idle gap is bounded separately by ServerConfig.ReadTimeout.
 	MessageReadTimeout = 30 // seconds
 )
 ```
@@ -510,9 +514,9 @@ at the connection/session layer.
 #### func  ReadMessage
 
 ```go
-func ReadMessage(r io.Reader, payloadReadTimeout time.Duration) (*Message, error)
+func ReadMessage(ctx context.Context, r io.Reader, payloadReadTimeout time.Duration) (*Message, error)
 ```
-ReadMessage reads a complete I2CP message from a reader. The read deadline is applied only to the payload read, not the header read, to avoid treating idle time between messages as a timeout. The idle timeout (time between messages) is controlled by the caller via ServerConfig.ReadTimeout, while MessageReadTimeout bounds the payload read.
+ReadMessage reads a complete I2CP message from a reader. The header read is not deadline-bounded by MessageReadTimeout: the idle gap between messages is controlled by ServerConfig.ReadTimeout. Once the header is read, MessageReadTimeout bounds the per-message payload read and is refreshed on each body read so a drip-feeding client is still cut off. A timeout while waiting for a header is not an error — the caller re-arms and continues. ctx cancels a blocked header read so shutdown does not wait out a deadline.
 
 #### func (*Message) MarshalBinary
 
@@ -1021,8 +1025,19 @@ type ServerConfig struct {
 	// Maximum number of concurrent sessions
 	MaxSessions int
 
-	// ReadTimeout is the maximum duration for reading requests from clients
-	// Zero means no timeout. Default: 60 seconds
+	// ReadTimeout is the maximum duration for reading requests from clients.
+	// It bounds the idle gap between messages (the header wait), not the
+	// bytes of a single message. The per-message byte read is bounded
+	// separately by MessageReadTimeout (30s) to prevent slow-send attacks.
+	//
+	// Zero means no idle timeout is enforced (idle clients are never
+	// disconnected for inactivity). Default: 0 (disabled).
+	//
+	// To enable idle enforcement, set a value large enough that a legitimate
+	// client cannot trigger it while idle between messages — for example
+	// 5 minutes. A value as low as the previous 60-second default would kill
+	// normal long-lived I2CP client connections that sit idle after the
+	// GetDate/SetDate exchange.
 	ReadTimeout time.Duration
 
 	// WriteTimeout is the maximum duration for writing responses to clients

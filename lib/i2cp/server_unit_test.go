@@ -1,6 +1,7 @@
 package i2cp
 
 import (
+	"context"
 	"encoding/binary"
 	"errors"
 	"net"
@@ -66,7 +67,7 @@ func createSessionOnConn(t *testing.T, conn net.Conn) uint16 {
 	require.NoError(t, WriteMessage(conn, createMsg), "WriteMessage() error")
 
 	require.NoError(t, conn.SetReadDeadline(time.Now().Add(5*time.Second)))
-	response, err := ReadMessage(conn, 0)
+	response, err := ReadMessage(context.Background(), conn, 0)
 	require.NoError(t, err, "ReadMessage() error")
 	require.Equal(t, MessageTypeSessionStatus, response.Type, "Response type mismatch")
 	require.Equal(t, SessionStatusCreated, response.Payload[2],
@@ -123,7 +124,7 @@ func TestServerCreateSession(t *testing.T) {
 	require.NoError(t, WriteMessage(conn, createMsg), "WriteMessage() error")
 
 	// Read SessionStatus response
-	response, err := ReadMessage(conn, 0) // No timeout for test
+	response, err := ReadMessage(context.Background(), conn, 0) // No timeout for test
 	require.NoError(t, err, "ReadMessage() error")
 
 	assert.Equal(t, MessageTypeSessionStatus, response.Type)
@@ -209,7 +210,7 @@ func TestServerMaxSessions(t *testing.T) {
 	}
 
 	require.NoError(t, WriteMessage(conn, createMsg), "WriteMessage() error")
-	response, err := ReadMessage(conn, 0) // No timeout for test
+	response, err := ReadMessage(context.Background(), conn, 0) // No timeout for test
 	require.NoError(t, err, "ReadMessage() error")
 	assert.Equal(t, SessionStatusInvalid, response.Payload[2], "status byte")
 	assert.Equal(t, 0, server.SessionManager().SessionCount(), "SessionCount()")
@@ -227,7 +228,7 @@ func TestServerGetDate(t *testing.T) {
 
 	require.NoError(t, WriteMessage(conn, getDateMsg), "WriteMessage() error")
 
-	response, err := ReadMessage(conn, 0) // No timeout for test
+	response, err := ReadMessage(context.Background(), conn, 0) // No timeout for test
 	require.NoError(t, err, "ReadMessage() error")
 
 	assert.Equal(t, MessageTypeSetDate, response.Type)
@@ -294,7 +295,7 @@ func BenchmarkServerCreateSession(b *testing.B) {
 		}
 
 		_ = WriteMessage(conn, createMsg)
-		_, _ = ReadMessage(conn, 0) // No timeout for test
+		_, _ = ReadMessage(context.Background(), conn, 0) // No timeout for test
 		conn.Close()
 	}
 }
@@ -984,7 +985,7 @@ func TestDeliverMessagesToClientIntegration(t *testing.T) {
 	var readErr error
 
 	go func() {
-		readMsg, readErr = ReadMessage(clientConn, 0) // No timeout for test
+		readMsg, readErr = ReadMessage(context.Background(), clientConn, 0) // No timeout for test
 		close(readDone)
 	}()
 
@@ -1032,7 +1033,7 @@ func TestDeliverMessagesToClientMultiple(t *testing.T) {
 
 	go func() {
 		for i := 0; i < numMessages; i++ {
-			msg, err := ReadMessage(clientConn, 0) // No timeout for test
+			msg, err := ReadMessage(context.Background(), clientConn, 0) // No timeout for test
 			if err != nil {
 				t.Logf("Read error: %v", err)
 				break
@@ -1075,7 +1076,7 @@ func TestDeliverMessagesToClientMessageIDIncrement(t *testing.T) {
 
 	go func() {
 		for i := 0; i < numMessages; i++ {
-			msg, err := ReadMessage(clientConn, 0) // No timeout for test
+			msg, err := ReadMessage(context.Background(), clientConn, 0) // No timeout for test
 			if err != nil {
 				break
 			}

@@ -2,6 +2,7 @@ package i2cp
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"testing"
 )
@@ -152,7 +153,7 @@ func TestReadWriteMessage(t *testing.T) {
 	}
 
 	// Read from buffer
-	got, err := ReadMessage(buf, 0) // No timeout for test
+	got, err := ReadMessage(context.Background(), buf, 0) // No timeout for test
 	if err != nil {
 		t.Fatalf("ReadMessage() error = %v", err)
 	}
@@ -313,7 +314,7 @@ func TestReadMessagePayloadSizeLimit(t *testing.T) {
 
 	buf := bytes.NewBuffer(header)
 
-	_, err := ReadMessage(buf, 0) // No timeout for test
+	_, err := ReadMessage(context.Background(), buf, 0) // No timeout for test
 	if err == nil {
 		t.Error("Expected error when reading oversized message, got nil")
 		return
@@ -485,7 +486,7 @@ func TestExtractSessionIDFromPayload_HostLookup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal frame: %v", err)
 	}
-	read, err := ReadMessage(bytes.NewReader(wire), 0)
+	read, err := ReadMessage(context.Background(), bytes.NewReader(wire), 0)
 	if err != nil {
 		t.Fatalf("ReadMessage: %v", err)
 	}

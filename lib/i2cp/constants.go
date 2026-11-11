@@ -355,8 +355,15 @@ const (
 
 // Moved from: server.go, server_connection.go
 const (
-	// defaultServerReadTimeout bounds a single read from a client connection.
-	defaultServerReadTimeout = 60 * time.Second
+	// defaultServerReadTimeout bounds the idle gap between messages (the
+	// header wait). Zero means no idle timeout is enforced: idle clients are
+	// never disconnected for inactivity. The previous 60-second default
+	// killed normal long-lived I2CP client connections that sit idle after
+	// the GetDate/Setdate exchange (issue #54).
+	//
+	// The per-message byte read is bounded separately by MessageReadTimeout
+	// (30s) to prevent slow-send attacks.
+	defaultServerReadTimeout = 0
 
 	// defaultServerWriteTimeout bounds a single write to a client connection, so
 	// a client that stops reading cannot pin a writer goroutine indefinitely.

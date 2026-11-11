@@ -8,6 +8,7 @@ package i2cp
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"errors"
 	"io"
@@ -289,7 +290,7 @@ func TestW8_DestroySession_EndToEndSocket(t *testing.T) {
 	}), "WriteMessage() error")
 
 	require.NoError(t, conn.SetReadDeadline(time.Now().Add(5*time.Second)))
-	response, err := ReadMessage(conn, 0)
+	response, err := ReadMessage(context.Background(), conn, 0)
 	require.NoError(t, err, "the router must answer before closing")
 
 	assert.Equal(t, MessageTypeDisconnect, response.Type,
@@ -298,7 +299,7 @@ func TestW8_DestroySession_EndToEndSocket(t *testing.T) {
 		"the router never sends a SessionStatus(Destroyed) response (i2cp.rst:802-804)")
 
 	// The socket must be closed right after the DisconnectMessage.
-	_, err = ReadMessage(conn, 0)
+	_, err = ReadMessage(context.Background(), conn, 0)
 	assert.Error(t, err, "the socket must be closed after the DisconnectMessage (i2cp.rst:828-829)")
 }
 
@@ -345,7 +346,7 @@ func TestW8_UnsupportedMessageType_EndToEndConnectionLoop(t *testing.T) {
 	// not replying: a close yields EOF immediately, a live-but-silent connection
 	// yields a deadline-exceeded error only after the (long) timeout.
 	require.NoError(t, conn.SetReadDeadline(time.Now().Add(5*time.Second)))
-	_, err := ReadMessage(conn, 0)
+	_, err := ReadMessage(context.Background(), conn, 0)
 	require.Error(t, err,
 		"the connection must be terminated after an unsupported message type (i2cp.rst:228-229)")
 
@@ -358,7 +359,7 @@ func TestW8_UnsupportedMessageType_EndToEndConnectionLoop(t *testing.T) {
 	// A follow-up request on the same socket must never be answered.
 	_ = WriteMessage(conn, &Message{Type: MessageTypeGetDate, Payload: []byte{0x00, 0x00}})
 	require.NoError(t, conn.SetReadDeadline(time.Now().Add(2*time.Second)))
-	followUp, err := ReadMessage(conn, 0)
+	followUp, err := ReadMessage(context.Background(), conn, 0)
 	if err == nil {
 		assert.NotEqual(t, MessageTypeGetDate, followUp.Type,
 			"the router must not keep serving a connection after an unsupported message type")

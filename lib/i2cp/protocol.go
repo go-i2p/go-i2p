@@ -11,7 +11,9 @@
 package i2cp
 
 import (
+	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -162,11 +164,25 @@ const (
 	// Payloads exceeding this threshold trigger warning logs.
 	DefaultPayloadSize = 8192 // 8 KB
 
-	// MessageReadTimeout is the maximum time allowed to read a complete message.
-	// This prevents slow-send attacks where attackers claim large payloads
-	// but drip-feed data slowly to exhaust connection resources.
+	// MessageReadTimeout is the maximum time allowed to read the bytes of a
+	// single I2CP message once its header has been read. This prevents
+	// slow-send attacks where attackers claim large payloads but drip-feed
+	// data slowly to exhaust connection resources.
+	//
+	// This bounds only the per-message byte read (header + payload), not the
+	// idle gap between messages. The idle gap is bounded separately by
+	// ServerConfig.ReadTimeout (see readClientMessage). A timeout while
+	// waiting for a header is not an error — the connection stays open and
+	// the deadline is re-armed. A timeout during body/flag/payload
+	// continuation IS fatal.
 	MessageReadTimeout = 30 // seconds
 )
+
+// errIdleTimeout is returned when the idle gap between messages exceeds the
+// configured ReadTimeout. It is not a terminal error: the caller re-arms the
+// deadline and continues reading rather than closing the connection.
+// Distinguish from slow-send timeouts using errors.Is — never string comparison.
+var errIdleTimeout = errors.New("i2cp idle read timeout")
 
 // Message represents a generic I2CP message.
 // Wire format per I2CP spec: length(4) + type(1) + payload(variable)
@@ -260,16 +276,31 @@ func validateUnmarshalHeader(data []byte) (uint32, error) {
 }
 
 // ReadMessage reads a complete I2CP message from a reader.
-// The read deadline is applied only to the payload read, not the header read,
-// to avoid treating idle time between messages as a timeout.
-// The idle timeout (time between messages) is controlled by the caller via
-// ServerConfig.ReadTimeout, while MessageReadTimeout bounds the payload read.
-func ReadMessage(r io.Reader, payloadReadTimeout time.Duration) (*Message, error) {
+//
+// Deadline semantics:
+//   - The header read is NOT deadline-bounded: the idle gap between messages
+//     is controlled by the caller via ServerConfig.ReadTimeout (applied in
+//     readClientMessage). A timeout while waiting for a header is not an
+//     error — the caller re-arms and continues.
+//   - Once the header has been read, a per-message deadline of
+//     payloadReadTimeout bounds the payload read. It is refreshed on each
+//     body read so a client drip-feeding bytes is still cut off (the stated
+//     anti-slow-send purpose), while the gap between messages is not bounded
+//     by it.
+//   - ctx, when non-nil, cancels a blocked header read so shutdown does not
+//     have to wait out a deadline.
+//
+// A timeout while waiting for a header is NOT an error: re-arm and continue,
+// do not close the connection, do not log at warn level per occurrence. A
+// timeout during body/flag/payload continuation IS fatal.
+func ReadMessage(ctx context.Context, r io.Reader, payloadReadTimeout time.Duration) (*Message, error) {
 	connInfo := identifyConnection(r)
 
-	// Read header WITHOUT deadline - this bounds the idle gap between messages
-	// The caller (readClientMessage) sets the idle timeout via ServerConfig.ReadTimeout
-	header, err := readMessageHeader(r)
+	// Read header WITHOUT per-message deadline - this bounds the idle gap
+	// between messages. The caller (readClientMessage) sets the idle timeout
+	// via ServerConfig.ReadTimeout. ctx cancellation aborts a blocked header
+	// read so shutdown does not wait out a deadline.
+	header, err := readMessageHeaderWithContext(ctx, r)
 	if err != nil {
 		logHeaderReadFailure(connInfo, err)
 		return nil, err
@@ -284,12 +315,9 @@ func ReadMessage(r io.Reader, payloadReadTimeout time.Duration) (*Message, error
 
 	logLargePayload(payloadLen, msgType, sessionID)
 
-	// NOW set deadline for payload read only
-	if payloadReadTimeout > 0 {
-		setPayloadReadDeadline(r, payloadReadTimeout)
-	}
-
-	payload, err := readMessagePayload(r, payloadLen)
+	// Set per-message deadline for payload read only, refreshing on each
+	// body read so a drip-feeding client is still cut off.
+	payload, err := readMessagePayload(r, payloadLen, payloadReadTimeout)
 	if err != nil {
 		logPayloadReadFailure(connInfo, msgType, sessionID, payloadLen, err)
 		return nil, err
@@ -312,20 +340,80 @@ func ReadMessage(r io.Reader, payloadReadTimeout time.Duration) (*Message, error
 	}, nil
 }
 
+// readMessageHeaderWithContext reads the I2CP message header from the reader.
+// Per I2CP spec: header is length(4) + type(1) = 5 bytes total.
+//
+// The header read is NOT deadline-bounded by MessageReadTimeout: the idle gap
+// between messages is controlled separately by ServerConfig.ReadTimeout. ctx
+// cancellation aborts a blocked header read so shutdown does not wait out a
+// deadline. A timeout while waiting for a header is not an error — the caller
+// re-arms and continues.
+func readMessageHeaderWithContext(ctx context.Context, r io.Reader) ([]byte, error) {
+	header := make([]byte, messageHeaderSize)
+
+	// If ctx is already cancelled, fail fast without blocking.
+	if ctx != nil {
+		select {
+		case <-ctx.Done():
+			return nil, oops.Errorf("failed to read I2CP header: %w", ctx.Err())
+		default:
+		}
+	}
+
+	// Watch ctx in a goroutine that sets a past read deadline to unblock a
+	// blocked header read when shutdown cancels the context. The goroutine
+	// exits as soon as the read completes (done channel closes), so it does
+	// not leak during normal operation.
+	done := make(chan struct{})
+	var readErr error
+	var n int
+
+	go func() {
+		n, readErr = io.ReadFull(r, header)
+		close(done)
+	}()
+
+	if ctx != nil {
+		select {
+		case <-done:
+			// Read completed before ctx cancellation.
+		case <-ctx.Done():
+			// Unblock the blocked read by setting a past deadline.
+			if conn, ok := r.(net.Conn); ok {
+				_ = conn.SetReadDeadline(time.Now())
+			}
+			<-done // wait for the read goroutine to observe the deadline and exit
+		}
+	} else {
+		<-done
+	}
+
+	if readErr != nil {
+		return nil, oops.Errorf("failed to read I2CP header: %w", readErr)
+	}
+	if n != messageHeaderSize {
+		return nil, oops.Errorf("i2cp message too short: need at least %d bytes for header, got %d", messageHeaderSize, n)
+	}
+	return header, nil
+}
+
 // setPayloadReadDeadline sets a read deadline on the connection for payload reads only.
 // This prevents slow-send attacks where attackers claim large payloads
 // but drip-feed data slowly to exhaust connection resources.
-func setPayloadReadDeadline(r io.Reader, timeout time.Duration) {
+func setPayloadReadDeadline(r io.Reader, timeout time.Duration) error {
 	conn, ok := r.(net.Conn)
 	if !ok {
-		return
+		return nil
 	}
 
 	deadline := time.Now().Add(timeout)
 	if err := conn.SetReadDeadline(deadline); err != nil {
 		// Log but don't fail - deadline setting is defensive, not critical
 		log.WithError(err).Debug("failed_to_set_payload_read_deadline")
+		return nil
 	}
+
+	return nil
 }
 
 // identifyConnection returns a human-readable identifier for the reader's remote address.
@@ -484,7 +572,11 @@ func logLargePayload(payloadLen uint32, msgType uint8, sessionID uint16) {
 
 // readMessagePayload reads the message payload from the reader based on the specified length.
 // Defense-in-depth: Validates payload size before allocation to prevent memory exhaustion attacks.
-func readMessagePayload(r io.Reader, payloadLen uint32) ([]byte, error) {
+//
+// The per-message deadline is refreshed on each body read so a client
+// drip-feeding bytes is still cut off (the stated anti-slow-send purpose),
+// while the gap between messages is not bounded by it.
+func readMessagePayload(r io.Reader, payloadLen uint32, payloadReadTimeout time.Duration) ([]byte, error) {
 	// Validate payload size before allocation (defense-in-depth)
 	// Even though caller should validate, we check here to prevent misuse
 	if err := validatePayloadSize(payloadLen); err != nil {
@@ -494,11 +586,38 @@ func readMessagePayload(r io.Reader, payloadLen uint32) ([]byte, error) {
 	// Safe to allocate after validation
 	payload := make([]byte, payloadLen)
 	if payloadLen > 0 {
-		if _, err := io.ReadFull(r, payload); err != nil {
+		if err := readFullWithDeadlineRefresh(r, payload, payloadReadTimeout); err != nil {
 			return nil, oops.Errorf("failed to read I2CP payload: %w", err)
 		}
 	}
 	return payload, nil
+}
+
+// readFullWithDeadlineRefresh reads exactly len(buf) bytes from r, refreshing
+// the read deadline on each underlying read so a drip-feeding client is still
+// cut off by the per-message deadline. Returns io.ErrUnexpectedEOF or the
+// underlying read error if the stream ends early or errors.
+func readFullWithDeadlineRefresh(r io.Reader, buf []byte, payloadReadTimeout time.Duration) error {
+	conn, hasDeadline := r.(net.Conn)
+	total := 0
+	for total < len(buf) {
+		if hasDeadline && payloadReadTimeout > 0 {
+			// Refresh the per-message deadline on each body read so a
+			// drip-feeding client is still cut off.
+			if err := conn.SetReadDeadline(time.Now().Add(payloadReadTimeout)); err != nil {
+				log.WithError(err).Debug("failed_to_refresh_payload_read_deadline")
+			}
+		}
+		n, err := r.Read(buf[total:])
+		total += n
+		if err != nil {
+			if err == io.EOF && total < len(buf) {
+				return io.ErrUnexpectedEOF
+			}
+			return err
+		}
+	}
+	return nil
 }
 
 // WriteMessage writes a complete I2CP message to a writer
