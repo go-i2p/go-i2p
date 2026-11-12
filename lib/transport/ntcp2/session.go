@@ -603,10 +603,28 @@ func (s *NTCP2Session) receiveWorker() {
 			return
 		}
 
-		if !s.processNextInboundMessageFromBlocks(unframer) {
+		if !s.receiveNextMessageWithRecovery(unframer) {
 			return
 		}
 	}
+}
+
+// receiveNextMessageWithRecovery runs one receive iteration with panic
+// recovery. I2P-004: the block unframer parses untrusted remote input, and the
+// receive worker runs on its own goroutine with no upstream recover seam, so a
+// panic in the framing path would otherwise kill the router process. On panic
+// the message is dropped and the worker survives (returns true to continue);
+// this is a last-resort seam — the packet is lost, but the session and process
+// stay alive.
+func (s *NTCP2Session) receiveNextMessageWithRecovery(unframer *BlockUnframer) (keepGoing bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			s.Logger().WithField("panic", r).
+				Error("recovered from panic in NTCP2 receive worker; dropping message")
+			keepGoing = true
+		}
+	}()
+	return s.processNextInboundMessageFromBlocks(unframer)
 }
 
 // processNextInboundMessageFromBlocks sets a read deadline, reads the next message, and queues it.
