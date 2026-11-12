@@ -407,6 +407,37 @@ func TestPublishRouterInfo_FailsWhenNoAck(t *testing.T) {
 	assert.Equal(t, uint64(0), stats.RouterInfoSendFail)
 }
 
+// TestPublishRouterInfo_DirectRouteSucceedsWithoutAck verifies that publication
+// over a direct reply route (reply_gateway resolved to our own hash, no inbound
+// reply tunnel) succeeds on a successful send even when no DeliveryStatus ack
+// arrives. During bootstrap a brand-new router cannot receive the floodfill's
+// direct ack until its own RouterInfo has propagated, so the ack is best-effort
+// on this route; the floodfill stores and floods the entry on receipt.
+func TestPublishRouterInfo_DirectRouteSucceedsWithoutAck(t *testing.T) {
+	db := newPublisherVerifyStubDB()
+	transport := newMockTransportManager()
+
+	ourRI := createValidRouterInfo(t)
+	p := NewPublisher(db, nil, transport, staticRouterInfoProvider{ri: &ourRI}, DefaultPublisherConfig())
+	p.ackTimeout = 100 * time.Millisecond // very fast — no ACK will arrive
+
+	floodfill := createValidRouterInfo(t)
+	assert.NoError(t, db.SetFloodfills([]router_info.RouterInfo{floodfill}))
+
+	ri := createValidRouterInfo(t)
+	// No HandleDeliveryStatus call. With a resolved direct reply gateway the send
+	// alone is treated as proof of publication.
+	err := p.PublishRouterInfo(ri)
+	assert.NoError(t, err)
+
+	stats := p.GetStats()
+	assert.Equal(t, uint64(1), stats.RouterInfoPublishSuccess)
+	assert.Equal(t, uint64(0), stats.RouterInfoPublishFail)
+	assert.Equal(t, uint64(1), stats.RouterInfoSendSuccess)
+	assert.Equal(t, uint64(0), stats.RouterInfoSendFail)
+	assert.Equal(t, uint64(0), stats.ReplyTokenAckReceived)
+}
+
 func TestSelectFloodfillsForPublishing_UsesForceTargetRouterOverride(t *testing.T) {
 	db := newPublisherVerifyStubDB()
 	p := NewPublisher(db, nil, nil, nil, DefaultPublisherConfig())

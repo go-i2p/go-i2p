@@ -119,12 +119,15 @@ type Publisher struct {
 	ackTimeout               time.Duration // how long to wait for a floodfill DeliveryStatus ACK
 	routerInfoPublishSuccess atomic.Uint64
 	routerInfoPublishFail    atomic.Uint64
-	routerInfoSendSuccess    atomic.Uint64
-	routerInfoSendFail       atomic.Uint64
-	routerInfoVerifySuccess  atomic.Uint64
-	routerInfoVerifyFail     atomic.Uint64
-	ackReplyTokenReceived    atomic.Uint64
-	ackReplyTokenUnexpected  atomic.Uint64
+	// routerInfoPublishDirectNoAck counts publications accepted on a direct reply
+	// route without a DeliveryStatus ACK (best-effort ack). See waitForPublishAckTokens.
+	routerInfoPublishDirectNoAck atomic.Uint64
+	routerInfoSendSuccess        atomic.Uint64
+	routerInfoSendFail           atomic.Uint64
+	routerInfoVerifySuccess      atomic.Uint64
+	routerInfoVerifyFail         atomic.Uint64
+	ackReplyTokenReceived        atomic.Uint64
+	ackReplyTokenUnexpected      atomic.Uint64
 
 	// pendingReplyTokens tracks outstanding DatabaseStore reply tokens awaiting
 	// DeliveryStatus acknowledgements from floodfills.
@@ -132,6 +135,14 @@ type Publisher struct {
 	// ackedReplyTokens tracks recently acknowledged reply tokens so publication
 	// attempts can wait on their own tokens instead of a global ack counter.
 	ackedReplyTokens sync.Map // map[uint32]time.Time
+	// directReplyTokens marks reply tokens whose DatabaseStore used a direct
+	// reply route (reply_tunnel_id == 0, reply_gateway == our own hash). On that
+	// route the floodfill stores and floods the entry the moment it receives the
+	// DatabaseStore, but the DeliveryStatus ack must be delivered back to us
+	// directly over transport - which a brand-new router cannot receive until its
+	// own RouterInfo has propagated to the floodfill. Publication on a direct
+	// route therefore treats the ack as best-effort rather than mandatory.
+	directReplyTokens sync.Map // map[uint32]time.Time
 }
 
 type publisherLoopSpec struct {
@@ -611,13 +622,24 @@ func (p *Publisher) PublishRouterInfo(ri router_info.RouterInfo) error {
 
 	// Wait for a DeliveryStatus ACK from at least one floodfill. A matching ACK
 	// is proof the floodfill accepted and stored the DatabaseStore message.
-	// Without an ACK the DSM was silently dropped or rejected by all floodfills.
-	if p.waitForPublishAckTokens(ackTokens, p.ackTimeout) {
+	// Without an ACK the DSM was silently dropped or rejected by all floodfills,
+	// UNLESS the publication used a direct reply route, where the ack cannot reach
+	// a not-yet-propagated router even though the floodfill stored and flooded the
+	// entry on receipt (see waitForPublishAckTokens).
+	if confirmed, ackReceived := p.waitForPublishAckTokens(ackTokens, p.ackTimeout); confirmed {
 		p.routerInfoPublishSuccess.Add(1)
-		log.WithFields(logger.Fields{
-			"at":   "PublishRouterInfo",
-			"hash": logutil.HashPrefixPlain(hash),
-		}).Debug("RouterInfo publication confirmed by floodfill ACK")
+		if ackReceived {
+			log.WithFields(logger.Fields{
+				"at":   "PublishRouterInfo",
+				"hash": logutil.HashPrefixPlain(hash),
+			}).Debug("RouterInfo publication confirmed by floodfill ACK")
+		} else {
+			p.routerInfoPublishDirectNoAck.Add(1)
+			log.WithFields(logger.Fields{
+				"at":   "PublishRouterInfo",
+				"hash": logutil.HashPrefixPlain(hash),
+			}).Debug("RouterInfo publication accepted on direct reply route (best-effort ACK not received)")
+		}
 		return nil
 	}
 
@@ -1281,10 +1303,12 @@ func (p *Publisher) createDatabaseStoreMessage(hash common.Hash, data []byte, da
 			return nil, oops.Errorf("failed to generate DatabaseStore reply token: %w", err)
 		}
 		dbStore.ReplyToken = replyToken
+		gatewayResolved := false
 		if p.routerInfoProvider != nil {
 			if ri, err := p.routerInfoProvider.GetRouterInfo(); err == nil {
 				if riHash, err := ri.IdentHash(); err == nil {
 					dbStore.ReplyGateway = riHash
+					gatewayResolved = riHash != (common.Hash{})
 				}
 			}
 		}
@@ -1298,6 +1322,14 @@ func (p *Publisher) createDatabaseStoreMessage(hash common.Hash, data []byte, da
 			"reply_route":     "direct_router",
 		}).Debug("DatabaseStore direct reply route selected")
 		p.registerPendingReplyToken(replyToken)
+		// Only a direct route with a resolved reply gateway can ever receive the
+		// DeliveryStatus (the floodfill reflects it back to that hash). Mark it
+		// best-effort so bootstrap publication is not blocked by the propagation
+		// chicken-and-egg. A zero gateway means the floodfill has nowhere to send
+		// the ack, so publication still requires the ack there.
+		if gatewayResolved {
+			p.registerDirectReplyToken(replyToken)
+		}
 	}
 	return dbStore, nil
 }
@@ -1319,9 +1351,18 @@ func (p *Publisher) localRouterHash() (common.Hash, bool) {
 
 // waitForPublishAckTokens waits for a DeliveryStatus ACK for one of the provided
 // reply tokens. This avoids cross-attribution between concurrent publish attempts.
-func (p *Publisher) waitForPublishAckTokens(tokens []uint32, timeout time.Duration) bool {
+//
+// It returns (confirmed, ackReceived):
+//   - ackReceived=true: a matching DeliveryStatus arrived; publication is proven.
+//   - confirmed=true, ackReceived=false: no ack arrived but every candidate token
+//     used a direct reply route, where the floodfill stores and floods the entry
+//     on receipt and the ack cannot reach a not-yet-propagated router. The
+//     successful send is accepted as proof of publication (best-effort ack).
+//   - confirmed=false: no ack and at least one token used a tunnel reply route,
+//     where the ack reliably returns; the missing ack is a real failure.
+func (p *Publisher) waitForPublishAckTokens(tokens []uint32, timeout time.Duration) (confirmed bool, ackReceived bool) {
 	if len(tokens) == 0 {
-		return false
+		return false, false
 	}
 	deadline := time.NewTimer(timeout)
 	defer deadline.Stop()
@@ -1330,33 +1371,61 @@ func (p *Publisher) waitForPublishAckTokens(tokens []uint32, timeout time.Durati
 	for {
 		select {
 		case <-p.ctx.Done():
-			return false
+			return false, false
 		case <-deadline.C:
 			pendingTokenCount := 0
+			directRouteCount := 0
+			candidateCount := 0
 			for _, token := range tokens {
 				if token == 0 {
 					continue
 				}
+				candidateCount++
 				if _, ok := p.pendingReplyTokens.Load(token); ok {
 					pendingTokenCount++
 				}
+				if _, ok := p.directReplyTokens.Load(token); ok {
+					directRouteCount++
+				}
+			}
+			// A direct reply route (reply_tunnel_id == 0, reply_gateway == our own
+			// hash) means the floodfill must return the DeliveryStatus to us over a
+			// direct transport session. A brand-new router cannot receive that reply
+			// until its own RouterInfo has propagated to the floodfill, so the ack is
+			// expected to be lost during bootstrap even though the floodfill stored
+			// and flooded the entry on receipt. Accept the successful send as proof of
+			// publication only when EVERY candidate token used the direct route; if
+			// any token used a tunnel reply route (where the ack reliably returns), a
+			// missing ack is a genuine failure and we must not mask it.
+			if candidateCount > 0 && directRouteCount == candidateCount {
+				log.WithFields(logger.Fields{
+					"at":                       "waitForPublishAckTokens",
+					"timeout":                  timeout.String(),
+					"candidate_tokens":         candidateCount,
+					"candidate_tokens_pending": pendingTokenCount,
+					"direct_route_tokens":      directRouteCount,
+					"ack_ok_total":             p.ackReplyTokenReceived.Load(),
+					"ack_unexpected_total":     p.ackReplyTokenUnexpected.Load(),
+				}).Debug("No DeliveryStatus ACK on direct reply route; accepting send as publication (best-effort ack)")
+				return true, false
 			}
 			log.WithFields(logger.Fields{
 				"at":                       "waitForPublishAckTokens",
 				"timeout":                  timeout.String(),
-				"candidate_tokens":         len(tokens),
+				"candidate_tokens":         candidateCount,
 				"candidate_tokens_pending": pendingTokenCount,
+				"direct_route_tokens":      directRouteCount,
 				"ack_ok_total":             p.ackReplyTokenReceived.Load(),
 				"ack_unexpected_total":     p.ackReplyTokenUnexpected.Load(),
 			}).Debug("timed out waiting for DeliveryStatus ACK tokens")
-			return false
+			return false, false
 		case <-poll.C:
 			for _, token := range tokens {
 				if token == 0 {
 					continue
 				}
 				if _, ok := p.ackedReplyTokens.Load(token); ok {
-					return true
+					return true, true
 				}
 			}
 		}
@@ -1411,6 +1480,17 @@ func (p *Publisher) registerPendingReplyToken(token [4]byte) {
 	p.pendingReplyTokens.Store(key, time.Now())
 }
 
+// registerDirectReplyToken marks a reply token as belonging to a DatabaseStore
+// that used a direct reply route, so waitForPublishAckTokens can treat its ack
+// as best-effort. See [Publisher.directReplyTokens].
+func (p *Publisher) registerDirectReplyToken(token [4]byte) {
+	key := binary.BigEndian.Uint32(token[:])
+	if key == 0 {
+		return
+	}
+	p.directReplyTokens.Store(key, time.Now())
+}
+
 func (p *Publisher) cleanupStaleReplyTokens(ttl time.Duration) {
 	if ttl <= 0 {
 		return
@@ -1427,6 +1507,13 @@ func (p *Publisher) cleanupStaleReplyTokens(ttl time.Duration) {
 		ackedAt, ok := value.(time.Time)
 		if !ok || ackedAt.Before(cutoff) {
 			p.ackedReplyTokens.Delete(key)
+		}
+		return true
+	})
+	p.directReplyTokens.Range(func(key, value any) bool {
+		createdAt, ok := value.(time.Time)
+		if !ok || createdAt.Before(cutoff) {
+			p.directReplyTokens.Delete(key)
 		}
 		return true
 	})
@@ -1605,18 +1692,19 @@ func (p *Publisher) PublishOurRouterInfo() {
 // See also [PublisherStats], [Publisher].
 func (p *Publisher) GetStats() PublisherStats {
 	return PublisherStats{
-		RouterInfoInterval:       p.routerInfoInterval,
-		LeaseSetInterval:         p.leaseSetInterval,
-		FloodfillCount:           p.floodfillCount,
-		IsRunning:                p.ctx.Err() == nil,
-		RouterInfoPublishSuccess: p.routerInfoPublishSuccess.Load(),
-		RouterInfoPublishFail:    p.routerInfoPublishFail.Load(),
-		RouterInfoSendSuccess:    p.routerInfoSendSuccess.Load(),
-		RouterInfoSendFail:       p.routerInfoSendFail.Load(),
-		RouterInfoVerifySuccess:  p.routerInfoVerifySuccess.Load(),
-		RouterInfoVerifyFail:     p.routerInfoVerifyFail.Load(),
-		ReplyTokenAckReceived:    p.ackReplyTokenReceived.Load(),
-		ReplyTokenAckUnexpected:  p.ackReplyTokenUnexpected.Load(),
+		RouterInfoInterval:           p.routerInfoInterval,
+		LeaseSetInterval:             p.leaseSetInterval,
+		FloodfillCount:               p.floodfillCount,
+		IsRunning:                    p.ctx.Err() == nil,
+		RouterInfoPublishSuccess:     p.routerInfoPublishSuccess.Load(),
+		RouterInfoPublishFail:        p.routerInfoPublishFail.Load(),
+		RouterInfoPublishDirectNoAck: p.routerInfoPublishDirectNoAck.Load(),
+		RouterInfoSendSuccess:        p.routerInfoSendSuccess.Load(),
+		RouterInfoSendFail:           p.routerInfoSendFail.Load(),
+		RouterInfoVerifySuccess:      p.routerInfoVerifySuccess.Load(),
+		RouterInfoVerifyFail:         p.routerInfoVerifyFail.Load(),
+		ReplyTokenAckReceived:        p.ackReplyTokenReceived.Load(),
+		ReplyTokenAckUnexpected:      p.ackReplyTokenUnexpected.Load(),
 	}
 }
 
@@ -1633,12 +1721,15 @@ type PublisherStats struct {
 	IsRunning                bool
 	RouterInfoPublishSuccess uint64
 	RouterInfoPublishFail    uint64
-	RouterInfoSendSuccess    uint64
-	RouterInfoSendFail       uint64
-	RouterInfoVerifySuccess  uint64
-	RouterInfoVerifyFail     uint64
-	ReplyTokenAckReceived    uint64
-	ReplyTokenAckUnexpected  uint64
+	// RouterInfoPublishDirectNoAck counts publications accepted on a direct reply
+	// route without a DeliveryStatus ACK (best-effort ack).
+	RouterInfoPublishDirectNoAck uint64
+	RouterInfoSendSuccess        uint64
+	RouterInfoSendFail           uint64
+	RouterInfoVerifySuccess      uint64
+	RouterInfoVerifyFail         uint64
+	ReplyTokenAckReceived        uint64
+	ReplyTokenAckUnexpected      uint64
 }
 
 // Compile-time interface check
