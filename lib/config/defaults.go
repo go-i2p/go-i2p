@@ -957,9 +957,19 @@ func validateI2PControlSecurity(i2pcontrol I2PControlDefaults) error {
 	return nil
 }
 
-// validateI2PControlHTTPS checks that cert and key files are provided when HTTPS is enabled.
+// validateI2PControlHTTPS checks that cert and key files are consistent when
+// HTTPS is enabled.
+//
+// Neither path set is valid: the router then generates and persists a
+// self-signed pair under the working directory, so HTTPS works without manual
+// certificate preparation. Setting only one of the two is rejected — it signals
+// operator-managed material, and silently generating the other half would
+// produce a pair nobody intended.
 func validateI2PControlHTTPS(i2pcontrol I2PControlDefaults) error {
 	if !i2pcontrol.UseHTTPS {
+		return nil
+	}
+	if i2pcontrol.CertFile == "" && i2pcontrol.KeyFile == "" {
 		return nil
 	}
 	if i2pcontrol.CertFile == "" {

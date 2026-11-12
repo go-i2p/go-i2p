@@ -187,6 +187,19 @@ func TestValidate_I2CPValidNetworkTypes(t *testing.T) {
 	}
 }
 
+// TestValidate_I2PControlHTTPSNoCertsAutoGenerates verifies that enabling HTTPS
+// with neither path set is valid: the router generates and persists a
+// self-signed pair, so a testnet gets TLS without manual certificate prep.
+func TestValidate_I2PControlHTTPSNoCertsAutoGenerates(t *testing.T) {
+	cfg := Defaults()
+	cfg.I2PControl.UseHTTPS = true
+	cfg.I2PControl.CertFile = ""
+	cfg.I2PControl.KeyFile = ""
+	cfg.I2PControl.TokenExpiration = 10 * time.Minute
+	require.NoError(t, Validate(cfg),
+		"Validate() should accept UseHTTPS with no cert/key so the router can self-generate")
+}
+
 // TestValidate_I2PControlHTTPSMissingCert verifies validation catches missing cert file
 func TestValidate_I2PControlHTTPSMissingCert(t *testing.T) {
 	cfg := Defaults()
