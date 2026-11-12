@@ -299,6 +299,7 @@ type Pool struct {
 	routerHash           common.Hash                          // Our router's identity hash, used as ReplyGateway in build requests
 	startupGate          <-chan struct{}                      // BUG-1: closed when pre-conditions for first build are met
 	replyTunnelProvider  func() (TunnelID, common.Hash, bool) // Returns reply tunnel ID + gateway hash for reply routing (nil = direct delivery)
+	counters             buildCounters                        // TEMP for pre-fix evidence: field only, never incremented
 }
 
 // SetStartupGate sets a channel that maintenanceLoop waits on before

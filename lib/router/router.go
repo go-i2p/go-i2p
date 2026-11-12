@@ -71,6 +71,8 @@ type Router struct {
 	// sessionMutex protects concurrent access to activeSessions map (Lock 2: acquired after runMux if needed)
 	sessionMutex sync.RWMutex
 
+	connecting *connectingTracker // TEMP for pre-fix evidence: field only, never wired
+
 	// I2CP server for client applications
 	i2cpServer *i2cp.Server
 
