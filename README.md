@@ -194,6 +194,64 @@ router:
 Testnet mode does not change the `netId` this router advertises or accepts, so
 the test network must still use RouterInfos carrying the production `netId`.
 
+To keep the floor but lower it — a small private network that wants the
+emergency-reseed safety net without waiting on 40 peers — set
+`bootstrap.emergency_reseed_floor` instead:
+
+```shell
+go-i2p --bootstrap.emergency-reseed-floor 1
+```
+
+```yaml
+# or in $HOME/.go-i2p/config.yaml
+bootstrap:
+  emergency_reseed_floor: 1
+```
+
+An explicitly configured floor replaces the default of 40; `0` (or omitting the
+key) keeps 40. `router.testnet` still wins over it, since testnet mode expresses
+no floor at all.
+
+## Router identity file
+
+On every RouterInfo publish the router also writes its own RouterInfo to
+`<working_dir>/router.info` as a single base64 line — the same encoding i2pd
+uses for its `router.info`. Monitoring dashboards and topology collectors parse
+that file to get the router's ident hash, then match it against peers' NetDB
+file names (`routerInfo-<base64hash>.dat`) and live transport sessions.
+
+```shell
+# change the path, or disable the file with an empty value
+go-i2p --router.router-info-file=/var/lib/go-i2p/router.info
+go-i2p --router.router-info-file=
+```
+
+The file is world-readable (a RouterInfo is public data) and replaced atomically,
+so a reader never sees a partial write. It is written even when the network
+publish fails, which is what makes a router observable on a network with no
+floodfill routers.
+
+## I2PControl TLS
+
+`i2pcontrol.use_https` serves I2PControl over HTTPS. With no `cert_file` and no
+`key_file` configured, the router generates a self-signed certificate on first
+startup and persists it in the working directory as `i2pcontrol.crt.pem` and
+`i2pcontrol.key.pem` (the same file names i2pd uses). The pair is reused on
+later startups, so the certificate is stable and clients can pin it
+byte-for-byte; it is regenerated automatically once it approaches expiry.
+
+```yaml
+# or in $HOME/.go-i2p/config.yaml
+i2pcontrol:
+  use_https: true
+  # cert_file and key_file omitted: a self-signed pair is generated
+```
+
+Set both `cert_file` and `key_file` to supply your own material; go-i2p then
+refuses to start if either path is missing rather than generating over it.
+Binding to a non-loopback address with `use_https: false` requires the explicit
+`i2pcontrol.allow_plaintext_non_loopback: true` opt-in.
+
 ## I2CP Server
 
 The I2CP (I2P Client Protocol) server allows client applications to communicate with the I2P router. It is enabled by default and listens on `localhost:7654`.

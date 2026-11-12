@@ -108,6 +108,23 @@
 // Configuration can be set via a config.yaml file, command-line flags
 // (such as --i2pcontrol.enabled), or environment variables.
 //
+// # TLS certificates
+//
+// With UseHTTPS enabled and neither CertFile nor KeyFile set, the router
+// generates a self-signed certificate and persists it in the working directory
+// as i2pcontrol.crt.pem and i2pcontrol.key.pem — the same file names i2pd uses.
+// See [EnsureTLSCertificates].
+//
+// The pair is reused on later startups, so the certificate stays byte-for-byte
+// stable and clients can pin it the way they pin i2pd's; it is regenerated
+// automatically once it approaches expiry. The bind host is included as a
+// subject alternative name (alongside localhost and loopback) so clients that
+// verify hostname in addition to pinning still connect.
+//
+// Setting only one of CertFile / KeyFile is rejected, and so is a configured
+// path that does not exist: an explicit path signals operator-managed
+// material, which the router will not silently generate over.
+//
 // # Error codes
 //
 // The server returns standard JSON-RPC 2.0 error codes, plus a few

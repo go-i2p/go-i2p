@@ -13,6 +13,14 @@ working_dir: /home/user/.go-i2p/config
 router:
   # How often to update our RouterInfo
   info_refresh_interval: 30m
+
+  # Path where this router writes its own RouterInfo (base64, one line), so
+  # external tooling — a monitoring dashboard, a topology collector — can
+  # derive the router's ident hash without reaching into the NetDB. Written on
+  # every RouterInfo publish, atomically, and world-readable because a
+  # RouterInfo is public data. Set to "" to disable.
+  # Default: <working_dir>/router.info (i.e. ~/.go-i2p/config/router.info)
+  # router_info_file: "/root/.go-i2p/config/router.info"
   # How long messages stay valid
   message_expiration_time: 60s
   # Maximum number of active transport sessions
@@ -206,6 +214,11 @@ i2pcontrol:
   password: "CHANGE_ME"
   
   # Enable HTTPS (recommended for remote access)
+  # With use_https true and no cert_file/key_file below, go-i2p generates and
+  # persists a self-signed certificate in the working directory
+  # (i2pcontrol.crt.pem / i2pcontrol.key.pem, the same names i2pd uses) and
+  # reuses it on later startups, so clients can pin it byte-for-byte. Set
+  # cert_file and key_file to use your own material instead.
   use_https: false
 
   # Explicit browser CORS allowlist for /jsonrpc.

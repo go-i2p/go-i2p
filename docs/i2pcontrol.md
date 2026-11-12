@@ -92,8 +92,8 @@ Save the token for subsequent requests.
 | `address` | string | `"localhost:7650"` | Listen address (host:port) |
 | `password` | string | `"itoopie"` | Authentication password |
 | `use_https` | bool | `false` | Enable HTTPS/TLS |
-| `cert_file` | string | `""` | TLS certificate path |
-| `key_file` | string | `""` | TLS private key path |
+| `cert_file` | string | `""` | TLS certificate path (empty with `key_file` also empty: self-signed cert is generated) |
+| `key_file` | string | `""` | TLS private key path (empty with `cert_file` also empty: self-signed key is generated) |
 | `token_expiration` | duration | `10m` | Token validity duration |
 | `strict_auth` | bool | `false` | Refuse startup with default password |
 | `allow_plaintext_non_loopback` | bool | `false` | Permit non-loopback HTTP bind (unsafe unless behind trusted TLS proxy) |
@@ -167,7 +167,7 @@ export I2PCONTROL_PASSWORD=my-password
 The server validates configuration on startup:
 
 - **Password required**: Cannot be empty
-- **HTTPS requirements**: If `use_https` is true, both `cert_file` and `key_file` must be specified
+- **HTTPS requirements**: If `use_https` is true, either leave `cert_file` and `key_file` both unset (the router generates and persists a self-signed pair) or set both. Setting only one is rejected
 - **Port availability**: Specified port must not be in use
 - **Non-loopback safety rails**:
   - default password is refused on non-loopback binds
@@ -588,7 +588,40 @@ i2pcontrol:
   key_file: "/etc/ssl/private/i2pcontrol-key.pem"
 ```
 
-Generate self-signed certificate (testing only):
+### Automatic self-signed certificate
+
+Omit `cert_file` and `key_file` entirely and the router generates its own
+self-signed pair on first startup, saving it in the working directory as
+`i2pcontrol.crt.pem` and `i2pcontrol.key.pem` (the same file names i2pd uses):
+
+```yaml
+i2pcontrol:
+  address: "0.0.0.0:7650"
+  use_https: true
+  # cert_file and key_file omitted — generated automatically
+```
+
+The pair is reused on every later startup, so the certificate is stable and a
+client can pin it byte-for-byte — the same trust model i2pd offers. It is
+regenerated automatically once it approaches expiry. The bind host is added as a
+subject alternative name (alongside `localhost` and loopback), so a client that
+verifies hostname in addition to pinning still connects.
+
+A client pinning the generated certificate trusts the leaf directly:
+
+```go
+pool := x509.NewCertPool()
+pool.AppendCertsFromPEM(must(os.ReadFile("i2pcontrol.crt.pem")))
+client := &http.Client{Transport: &http.Transport{
+    TLSClientConfig: &tls.Config{RootCAs: pool, ServerName: "localhost"},
+}}
+```
+
+Setting only one of `cert_file` / `key_file` is rejected at startup, as is a
+configured path that does not exist — an explicit path signals operator-managed
+material, which the router will not silently generate over.
+
+Generate a certificate manually if you want to control the key or lifetime:
 
 ```bash
 openssl req -x509 -newkey rsa:4096 \
