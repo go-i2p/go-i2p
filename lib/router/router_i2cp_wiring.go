@@ -143,6 +143,15 @@ func (r *Router) configureI2CPHostnameResolver(server *i2cp.Server) {
 		return
 	}
 
+	// Wire the NetDB into the resolver so .b32.i2p lookups actually attempt a
+	// LeaseSet lookup. Without this the resolver has no NetDB, Resolve returns
+	// isHash=true, and every b32 NAMING LOOKUP answers KEY_NOT_FOUND in
+	// microseconds with no netDb lookup attempted -- the smaller issue reported
+	// alongside #55.
+	if r.netdb != nil {
+		hostResolver.SetNetDB(r.netdb)
+	}
+
 	server.SetHostnameResolver(hostResolver)
 	log.WithFields(logger.Fields{"at": "configureI2CPServerInfrastructure"}).Debug("I2CP server: hostname resolver configured")
 }

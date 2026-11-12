@@ -653,6 +653,17 @@ func (s *Server) SetNetDB(netdb interface {
 	s.netdb = netdb
 }
 
+// HostnameResolver returns the resolver currently used for hostname-based
+// HostLookup queries, or nil if none is set. Exposed so startup wiring can be
+// asserted in a test: SetNetDB on the resolver is nil-tolerant, so a dropped
+// call degrades silently into every .b32.i2p NAMING LOOKUP answering
+// KEY_NOT_FOUND with no netDb lookup attempted.
+func (s *Server) HostnameResolver() HostnameResolver {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.hostnameResolver
+}
+
 // SetHostnameResolver sets the resolver used for hostname-based HostLookup queries.
 // When set, hostname lookups (type 1) will delegate to this resolver instead of
 // returning an error. If nil, hostname lookups return HostReplyFailure.

@@ -121,7 +121,42 @@ func parseHostsLine(line string) (string, []byte, error) {
 // ResolveHostname resolves an I2P hostname to its raw Destination bytes.
 // Returns the destination bytes and nil on success, or nil and an error
 // if the hostname is not found.
+//
+// A .b32.i2p address is dispatched to Resolve rather than looked up in the
+// hosts.txt map. It can never be a hosts.txt entry -- a b32 address is derived
+// from a destination hash, not registered -- so a map-only lookup answered
+// every b32 query with "hostname not found" in microseconds and never consulted
+// the NetDB, even when a NetDB was configured. That is the
+// "NAMING LOOKUP returns KEY_NOT_FOUND in 0.0s with no netDb lookup attempted"
+// behaviour reported alongside issue #55.
+//
+// The dispatch happens before the read lock is taken: Resolve -> resolveB32
+// acquires r.mu itself, and re-acquiring a read lock while holding it can
+// deadlock against a writer that queues in between.
 func (r *HostsTxtResolver) ResolveHostname(hostname string) ([]byte, error) {
+	if strings.HasSuffix(strings.ToLower(strings.TrimSpace(hostname)), B32Suffix) {
+		// An encrypted (b33) address carries a public key, not a destination
+		// hash, and is stored under the blinded DHT key rather than under a
+		// destination hash. The hash-keyed NetDB path cannot resolve it, and the
+		// public key is not a Destination, so it cannot be returned as one.
+		if i2pbase32.IsExtendedAddress(hostname) {
+			return nil, oops.Errorf("encrypted b32 (b33) address %s cannot be resolved to a destination by hash lookup", hostname)
+		}
+
+		dest, isHash, err := r.Resolve(hostname)
+		if err != nil {
+			return nil, err
+		}
+		if isHash {
+			// No NetDB is configured, so Resolve returned the 32-byte
+			// destination hash rather than a Destination. Reporting it as a
+			// resolved destination would hand the caller a truncated record it
+			// cannot parse; an error keeps the reply an honest not-found.
+			return nil, oops.Errorf("b32 address %s requires a configured NetDB to resolve", hostname)
+		}
+		return dest, nil
+	}
+
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -141,6 +176,18 @@ func (r *HostsTxtResolver) Size() int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return len(r.hosts)
+}
+
+// HasNetDB reports whether a NetDB is wired for .b32.i2p lookups.
+//
+// SetNetDB is nil-tolerant, so a missing wiring step degrades silently: b32
+// lookups fall back to returning a bare hash and every NAMING LOOKUP answers
+// KEY_NOT_FOUND without attempting a netDb lookup. This accessor lets startup
+// and tests assert the wiring rather than rely on inspection.
+func (r *HostsTxtResolver) HasNetDB() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.netdb != nil
 }
 
 // SetNetDB configures the resolver to use the provided NetDB for .b32.i2p lookups.
