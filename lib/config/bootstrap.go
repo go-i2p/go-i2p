@@ -19,6 +19,13 @@ type BootstrapConfig struct {
 	// LowPeerThreshold defines the minimum number of known peers before reseeding.
 	// If the router has fewer peers than this threshold, it will attempt to reseed.
 	LowPeerThreshold int
+	// EmergencyReseedFloor is the RouterInfo count below which startup refuses
+	// to continue and the NetDB watchdog escalates to an emergency reseed.
+	// The default (DefaultEmergencyReseedFloor, 40) suits mainnet; a small
+	// test network can lower it (e.g. 1) so startup is not gated on a peer
+	// count the network cannot supply. 0 means "use the default". Ignored
+	// entirely when router.testnet is true, which expresses no floor.
+	EmergencyReseedFloor int
 	// ReseedTimeout is maximum time to wait for reseed operations.
 	ReseedTimeout time.Duration
 	// MinimumReseedPeers is minimum peers to acquire during reseed.
@@ -67,12 +74,13 @@ type BootstrapConfig struct {
 // Uses all known reseed servers from KnownReseedServers for maximum availability.
 // MinReseedServers defaults to DefaultMinReseedServers (2) matching Java I2P.
 var DefaultBootstrapConfig = BootstrapConfig{
-	LowPeerThreshold:    DefaultLowPeerThreshold,
-	ReseedTimeout:       DefaultReseedTimeout,
-	MinimumReseedPeers:  DefaultMinimumReseedPeers,
-	ReseedRetryInterval: DefaultReseedRetryInterval,
-	BootstrapType:       "auto", // Default to composite (tries all methods)
-	ReseedFilePath:      "",     // No default reseed file
+	LowPeerThreshold:     DefaultLowPeerThreshold,
+	EmergencyReseedFloor: DefaultEmergencyReseedFloor,
+	ReseedTimeout:        DefaultReseedTimeout,
+	MinimumReseedPeers:   DefaultMinimumReseedPeers,
+	ReseedRetryInterval:  DefaultReseedRetryInterval,
+	BootstrapType:        "auto", // Default to composite (tries all methods)
+	ReseedFilePath:       "",     // No default reseed file
 	// Use all known reseed servers for maximum availability
 	ReseedServers: KnownReseedServers,
 	// Local netDb paths are populated at runtime based on OS

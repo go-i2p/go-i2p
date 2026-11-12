@@ -61,6 +61,11 @@ type RouterConfig struct {
 	BaseDir string
 	// the path to the working config directory where files are changed
 	WorkingDir string
+	// RouterInfoFile is the path where the router writes its own RouterInfo
+	// (base64) so external tooling can derive the router's ident hash. Written
+	// on every RouterInfo publish. Empty disables the file.
+	// Default: <working_dir>/router.info
+	RouterInfoFile string
 	// netdb configuration
 	NetDB *NetDBConfig
 	// configuration for bootstrapping into the network
@@ -146,6 +151,12 @@ func defaultConfig() string {
 	return filepath.Join(BuildI2PDirPath(), "config")
 }
 
+// defaultRouterInfoFilePath is the default location of the router's own
+// RouterInfo file, alongside the other runtime files in the working directory.
+func defaultRouterInfoFilePath() string {
+	return filepath.Join(defaultConfig(), "router.info")
+}
+
 // DefaultI2CPConfig provides default I2CP server configuration
 var DefaultI2CPConfig = I2CPConfig{
 	Enabled:                    true,
@@ -170,6 +181,7 @@ var defaultRouterConfig = &RouterConfig{
 	I2PControl:     defaultI2PControlConfigPtr(),
 	BaseDir:        defaultBase(),
 	WorkingDir:     defaultConfig(),
+	RouterInfoFile: defaultRouterInfoFilePath(),
 	MaxBandwidth:   DefaultMaxBandwidthBytesPerSec, // 1 MB/s
 	BandwidthTier:  "",
 	MaxConnections: DefaultRouterMaxConnections,
@@ -250,6 +262,7 @@ func copyBaseFields(src *RouterConfig) *RouterConfig {
 	return &RouterConfig{
 		BaseDir:              src.BaseDir,
 		WorkingDir:           src.WorkingDir,
+		RouterInfoFile:       src.RouterInfoFile,
 		MaxBandwidth:         src.MaxBandwidth,
 		MaxBandwidthIn:       src.MaxBandwidthIn,
 		MaxBandwidthOut:      src.MaxBandwidthOut,

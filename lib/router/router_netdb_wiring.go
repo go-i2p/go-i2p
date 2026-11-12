@@ -318,6 +318,12 @@ func (r *Router) launchPublisher(tunnelPool *tunnel.Pool) error {
 
 	publisherConfig := netdb.DefaultPublisherConfig()
 	r.publisher = netdb.NewPublisher(dbAdapter, tunnelPool, transportAdapter, riProvider, publisherConfig)
+	// Publish our own RouterInfo to disk (base64) so local tooling — the
+	// monitoring dashboard, a topology collector — can derive our ident hash
+	// without reaching into the NetDB. Mirrors i2pd's router.info.
+	if r.cfg != nil && r.cfg.RouterInfoFile != "" {
+		r.publisher.SetRouterInfoFilePath(r.cfg.RouterInfoFile)
+	}
 	if r.lookupClient != nil {
 		r.publisher.SetLookupTransport(r.lookupClient)
 	}

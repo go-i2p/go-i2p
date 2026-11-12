@@ -103,6 +103,7 @@ func setRouterDefaults(defaults ConfigDefaults) {
 		{"base_dir", defaults.Router.BaseDir},
 		{"working_dir", defaults.Router.WorkingDir},
 		{"router.info_refresh_interval", defaults.Router.RouterInfoRefreshInterval},
+		{"router.router_info_file", defaults.Router.RouterInfoFile},
 		{"router.message_expiration_time", defaults.Router.MessageExpirationTime},
 		{"router.max_concurrent_sessions", defaults.Router.MaxConcurrentSessions},
 		{"router.max_bandwidth", uint64(DefaultMaxBandwidthBytesPerSec)},
@@ -137,6 +138,7 @@ func setNetDBDefaults(defaults ConfigDefaults) {
 func setBootstrapDefaults(defaults ConfigDefaults) {
 	applyViperDefaults([]viperDefault{
 		{"bootstrap.low_peer_threshold", defaults.Bootstrap.LowPeerThreshold},
+		{"bootstrap.emergency_reseed_floor", defaults.Bootstrap.EmergencyReseedFloor},
 		{"bootstrap.bootstrap_type", defaults.Bootstrap.BootstrapType},
 		{"bootstrap.reseed_timeout", defaults.Bootstrap.ReseedTimeout},
 		{"bootstrap.minimum_reseed_peers", defaults.Bootstrap.MinimumReseedPeers},
@@ -265,6 +267,7 @@ func NewRouterConfigFromViper() (*RouterConfig, error) {
 	return &RouterConfig{
 		BaseDir:              viper.GetString("base_dir"),
 		WorkingDir:           viper.GetString("working_dir"),
+		RouterInfoFile:       viper.GetString("router.router_info_file"),
 		NetDB:                buildNetDBConfig(),
 		Bootstrap:            bootstrap,
 		I2CP:                 buildI2CPConfig(),
@@ -309,6 +312,7 @@ func currentRouterConfig() RouterDefaults {
 		BaseDir:                   viper.GetString("base_dir"),
 		WorkingDir:                viper.GetString("working_dir"),
 		RouterInfoRefreshInterval: viper.GetDuration("router.info_refresh_interval"),
+		RouterInfoFile:            viper.GetString("router.router_info_file"),
 		MessageExpirationTime:     viper.GetDuration("router.message_expiration_time"),
 		MaxConcurrentSessions:     viper.GetInt("router.max_concurrent_sessions"),
 		BandwidthTier:             viper.GetString("router.bandwidth_tier"),
@@ -331,12 +335,13 @@ func currentNetDBConfig() NetDBDefaults {
 
 func currentBootstrapConfig() BootstrapDefaults {
 	return BootstrapDefaults{
-		LowPeerThreshold:    viper.GetInt("bootstrap.low_peer_threshold"),
-		BootstrapType:       viper.GetString("bootstrap.bootstrap_type"),
-		ReseedTimeout:       viper.GetDuration("bootstrap.reseed_timeout"),
-		MinimumReseedPeers:  viper.GetInt("bootstrap.minimum_reseed_peers"),
-		ReseedRetryInterval: viper.GetDuration("bootstrap.reseed_retry_interval"),
-		ReseedStrategy:      viper.GetString("bootstrap.reseed_strategy"),
+		LowPeerThreshold:     viper.GetInt("bootstrap.low_peer_threshold"),
+		EmergencyReseedFloor: viper.GetInt("bootstrap.emergency_reseed_floor"),
+		BootstrapType:        viper.GetString("bootstrap.bootstrap_type"),
+		ReseedTimeout:        viper.GetDuration("bootstrap.reseed_timeout"),
+		MinimumReseedPeers:   viper.GetInt("bootstrap.minimum_reseed_peers"),
+		ReseedRetryInterval:  viper.GetDuration("bootstrap.reseed_retry_interval"),
+		ReseedStrategy:       viper.GetString("bootstrap.reseed_strategy"),
 	}
 }
 
@@ -395,19 +400,20 @@ func buildBootstrapConfig(caller string) (*BootstrapConfig, error) {
 	localNetDBPaths := parseLocalNetDBPaths(caller)
 
 	return &BootstrapConfig{
-		LowPeerThreshold:    viper.GetInt("bootstrap.low_peer_threshold"),
-		ReseedTimeout:       viper.GetDuration("bootstrap.reseed_timeout"),
-		MinimumReseedPeers:  viper.GetInt("bootstrap.minimum_reseed_peers"),
-		ReseedRetryInterval: viper.GetDuration("bootstrap.reseed_retry_interval"),
-		BootstrapType:       viper.GetString("bootstrap.bootstrap_type"),
-		ReseedFilePath:      viper.GetString("bootstrap.reseed_file_path"),
-		ReseedServers:       reseedServers,
-		LocalNetDBPaths:     localNetDBPaths,
-		MinReseedServers:    viper.GetInt("bootstrap.min_reseed_servers"),
-		ReseedStrategy:      viper.GetString("bootstrap.reseed_strategy"),
-		PeerCacheEnabled:    viper.GetBool("bootstrap.peer_cache_enabled"),
-		PeerCachePath:       viper.GetString("bootstrap.peer_cache_path"),
-		PeerCacheMaxSize:    viper.GetInt("bootstrap.peer_cache_max_size"),
+		LowPeerThreshold:     viper.GetInt("bootstrap.low_peer_threshold"),
+		EmergencyReseedFloor: viper.GetInt("bootstrap.emergency_reseed_floor"),
+		ReseedTimeout:        viper.GetDuration("bootstrap.reseed_timeout"),
+		MinimumReseedPeers:   viper.GetInt("bootstrap.minimum_reseed_peers"),
+		ReseedRetryInterval:  viper.GetDuration("bootstrap.reseed_retry_interval"),
+		BootstrapType:        viper.GetString("bootstrap.bootstrap_type"),
+		ReseedFilePath:       viper.GetString("bootstrap.reseed_file_path"),
+		ReseedServers:        reseedServers,
+		LocalNetDBPaths:      localNetDBPaths,
+		MinReseedServers:     viper.GetInt("bootstrap.min_reseed_servers"),
+		ReseedStrategy:       viper.GetString("bootstrap.reseed_strategy"),
+		PeerCacheEnabled:     viper.GetBool("bootstrap.peer_cache_enabled"),
+		PeerCachePath:        viper.GetString("bootstrap.peer_cache_path"),
+		PeerCacheMaxSize:     viper.GetInt("bootstrap.peer_cache_max_size"),
 	}, nil
 }
 

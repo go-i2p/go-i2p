@@ -104,6 +104,9 @@ func registerRouterFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().Duration("router.info-refresh-interval",
 		defaults.Router.RouterInfoRefreshInterval,
 		"How often to refresh our RouterInfo")
+	cmd.PersistentFlags().String("router.router-info-file",
+		defaults.Router.RouterInfoFile,
+		"Path where this router's own RouterInfo is written (base64) for external tooling; empty disables it")
 	cmd.PersistentFlags().Duration("router.message-expiration-time",
 		defaults.Router.MessageExpirationTime,
 		"How long messages stay valid")
@@ -142,6 +145,9 @@ func registerBootstrapFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().Int("bootstrap.low-peer-threshold",
 		config.DefaultBootstrapConfig.LowPeerThreshold,
 		"Minimum number of peers before reseeding")
+	cmd.PersistentFlags().Int("bootstrap.emergency-reseed-floor",
+		config.DefaultEmergencyReseedFloor,
+		"RouterInfo count below which startup is gated and the watchdog triggers an emergency reseed (0 uses the default; lower it for small testnets)")
 	cmd.PersistentFlags().String("bootstrap.type",
 		config.DefaultBootstrapConfig.BootstrapType,
 		"Bootstrap type: auto (tries all methods), file (local file only), reseed (remote only), local (netDb only)")
@@ -384,6 +390,7 @@ func bindRouterFlags(cmd *cobra.Command, v *viper.Viper) error {
 		{"router.hidden", "router.hidden"},
 		{"router.testnet", "router.testnet"},
 		{"router.info_refresh_interval", "router.info-refresh-interval"},
+		{"router.router_info_file", "router.router-info-file"},
 		{"router.message_expiration_time", "router.message-expiration-time"},
 		{"router.max_concurrent_sessions", "router.max-concurrent-sessions"},
 	})
@@ -406,6 +413,7 @@ func bindNetDBFlags(cmd *cobra.Command, v *viper.Viper) error {
 func bindBootstrapFlags(cmd *cobra.Command, v *viper.Viper) error {
 	return bindPairs(cmd, v, [][2]string{
 		{"bootstrap.low_peer_threshold", "bootstrap.low-peer-threshold"},
+		{"bootstrap.emergency_reseed_floor", "bootstrap.emergency-reseed-floor"},
 		{"bootstrap.bootstrap_type", "bootstrap.type"},
 		{"bootstrap.reseed_file_path", "bootstrap.reseed-file"},
 		{"bootstrap.reseed_timeout", "bootstrap.reseed-timeout"},

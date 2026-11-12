@@ -7,14 +7,20 @@ import (
 	"time"
 
 	"github.com/go-i2p/go-i2p/lib/bootstrap"
+	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/samber/oops"
 
 	"github.com/go-i2p/logger"
 )
 
 const (
-	inNetworkPeerTarget  = 500
-	emergencyReseedFloor = 40
+	inNetworkPeerTarget = 500
+	// emergencyReseedFloor is the built-in default RouterInfo count below
+	// which startup is gated and the watchdog escalates to an emergency
+	// reseed. Operators override it with bootstrap.emergency_reseed_floor;
+	// router.testnet suppresses the floor entirely. See
+	// [Router.emergencyReseedThreshold].
+	emergencyReseedFloor = config.DefaultEmergencyReseedFloor
 
 	// noPeerFloor is the threshold a router expresses when it must not gate
 	// startup or recovery on a RouterInfo count (testnet mode). See
@@ -221,12 +227,25 @@ func (r *Router) canAttemptReseedNow() bool {
 // started, which reads as a hard failure on perfectly healthy testnets.
 // Reseeding from the public network to fill the gap would also pull production
 // RouterInfos into the test network.
+//
+// Outside testnet mode the floor is bootstrap.emergency_reseed_floor when set
+// (> 0), which lets a small private network lower it below the production
+// default. An explicitly configured floor wins outright: bootstrap.low_peer_threshold
+// (default 10) must not silently raise it back, or lowering the floor to 1 on a
+// three-router network would still gate startup at 10. When the floor is unset,
+// the historical behaviour holds and low_peer_threshold may raise the default.
 func (r *Router) emergencyReseedThreshold() int {
 	if r.isTestnet() {
 		return noPeerFloor
 	}
+	if r.cfg == nil || r.cfg.Bootstrap == nil {
+		return emergencyReseedFloor
+	}
+	if floor := r.cfg.Bootstrap.EmergencyReseedFloor; floor > 0 {
+		return floor
+	}
 	threshold := emergencyReseedFloor
-	if r.cfg != nil && r.cfg.Bootstrap != nil && r.cfg.Bootstrap.LowPeerThreshold > threshold {
+	if r.cfg.Bootstrap.LowPeerThreshold > threshold {
 		threshold = r.cfg.Bootstrap.LowPeerThreshold
 	}
 	return threshold

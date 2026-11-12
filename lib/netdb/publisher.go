@@ -98,6 +98,11 @@ type Publisher struct {
 	// routerInfoProvider supplies our local RouterInfo for publishing
 	routerInfoProvider RouterInfoProvider
 
+	// routerInfoFilePath is where our own RouterInfo is written on each
+	// publish, for external tooling to parse the ident hash. Guarded by
+	// fieldMu; empty disables the write.
+	routerInfoFilePath string
+
 	// publishing control
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -230,6 +235,24 @@ func (p *Publisher) SetForceTargetResolver(r Resolver) {
 	p.fieldMu.Unlock()
 }
 
+// SetRouterInfoFilePath configures where our own RouterInfo is written on each
+// publish (base64, one line, atomic). External tooling — dashboards, topology
+// collectors — parses that file to derive this router's ident hash instead of
+// reaching into the NetDB. An empty path (the default) disables the write.
+func (p *Publisher) SetRouterInfoFilePath(path string) {
+	p.fieldMu.Lock()
+	p.routerInfoFilePath = path
+	p.fieldMu.Unlock()
+}
+
+// routerInfoFileConfigured reports the current router.info path under a read
+// lock, so the publish loop never races a concurrent setter.
+func (p *Publisher) routerInfoFileConfigured() string {
+	p.fieldMu.RLock()
+	defer p.fieldMu.RUnlock()
+	return p.routerInfoFilePath
+}
+
 // Start begins periodic publishing of RouterInfo and LeaseSets.
 // Publishing runs in background goroutines until Stop is called.
 func (p *Publisher) Start() error {
@@ -337,6 +360,18 @@ func (p *Publisher) publishOurRouterInfo() {
 		log.WithFields(logger.Fields{"at": "publishOurRouterInfo"}).Warn("Local RouterInfo is invalid, skipping publishing")
 		return
 	}
+
+	// The on-disk copy declares our current identity to local tooling, so it is
+	// written before the network publish and independently of it: a small
+	// testnet may have no floodfill routers at all, which is exactly when the
+	// operator needs the hash. It is written after IsValid() (a broken identity
+	// must not reach the file) but before the publishability check below,
+	// because address publishability is a network concern — a hidden or
+	// unreachable router still has an identity worth observing.
+	if path := p.routerInfoFileConfigured(); path != "" {
+		logRouterInfoFileWrite(path, WriteRouterInfoFile(path, *ri))
+	}
+
 	if err := ri.ValidatePublishable(); err != nil {
 		log.WithError(err).Warn("Local RouterInfo contains unpublishable addresses, skipping publishing")
 		return

@@ -39,6 +39,18 @@ func (r *Router) startI2PControlServer() error {
 		r.cfg.I2PControl.TokenExpiration = defaultCfg.TokenExpiration
 	}
 
+	// HTTPS with no explicit certificate: generate (and persist) a self-signed
+	// one, so I2PControl is TLS-capable out of the box and clients can pin the
+	// certificate byte-for-byte the way they pin i2pd's.
+	if err := i2pcontrol.EnsureTLSCertificates(r.cfg.I2PControl, r.cfg.WorkingDir); err != nil {
+		log.WithError(err).WithFields(logger.Fields{
+			"at":     "(Router) startI2PControlServer",
+			"phase":  "startup",
+			"reason": "failed to prepare I2PControl TLS certificate",
+		}).Error("I2PControl TLS setup failed")
+		return err
+	}
+
 	log.WithFields(logger.Fields{
 		"at":      "(Router) startI2PControlServer",
 		"phase":   "startup",

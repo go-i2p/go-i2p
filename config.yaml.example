@@ -82,6 +82,16 @@ bootstrap:
   # Trigger reseeding when peer count falls below this threshold.
   # Ignored entirely when router.testnet is true: a testnet expresses no floor.
   low_peer_threshold: 10
+
+  # RouterInfo count below which startup refuses to continue and the NetDB
+  # watchdog escalates from in-network discovery to an emergency reseed.
+  # The default (40) suits mainnet. A small private network cannot supply 40
+  # peers, so lower this (e.g. 1) to let startup complete and I2PControl bind
+  # without waiting on a count the network will never reach. 0 means "use the
+  # default". Ignored entirely when router.testnet is true, which expresses no
+  # floor at all. bootstrap.low_peer_threshold still raises the effective floor
+  # when it is larger than this value.
+  emergency_reseed_floor: 40
   
   # Bootstrap type: which bootstrap method to use exclusively
   # Valid values:

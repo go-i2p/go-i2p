@@ -44,6 +44,11 @@ func runConfig(cmd *cobra.Command, args []string) {
 	if cfg.Bootstrap != nil {
 		_, _ = fmt.Fprintf(out, "bootstrap type:     %s\n", cfg.Bootstrap.BootstrapType)
 		_, _ = fmt.Fprintf(out, "low peer threshold: %d\n", cfg.Bootstrap.LowPeerThreshold)
+		floor := cfg.Bootstrap.EmergencyReseedFloor
+		if floor == 0 {
+			floor = config.DefaultEmergencyReseedFloor
+		}
+		_, _ = fmt.Fprintf(out, "emergency reseed floor: %d\n", floor)
 		_, _ = fmt.Fprintf(out, "reseed servers (%d):\n", len(cfg.Bootstrap.ReseedServers))
 		for i, server := range cfg.Bootstrap.ReseedServers {
 			_, _ = fmt.Fprintf(out, "  [%d] %s\n", i, server.URL)

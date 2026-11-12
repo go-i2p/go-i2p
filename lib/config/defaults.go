@@ -68,6 +68,13 @@ type RouterDefaults struct {
 	// Default: 30 minutes
 	RouterInfoRefreshInterval time.Duration
 
+	// RouterInfoFile is the path where the router writes its own RouterInfo
+	// (base64) for external tooling: dashboards, topology collectors and
+	// identity scanners parse it to derive the router's ident hash. Written on
+	// every RouterInfo publish. Empty disables the file.
+	// Default: <working_dir>/router.info
+	RouterInfoFile string
+
 	// MessageExpirationTime is how long messages stay valid
 	// Default: 60 seconds (I2P protocol standard)
 	MessageExpirationTime time.Duration
@@ -127,6 +134,11 @@ type BootstrapDefaults struct {
 	// LowPeerThreshold triggers reseeding when peer count falls below this
 	// Default: 10 peers
 	LowPeerThreshold int
+
+	// EmergencyReseedFloor is the RouterInfo count below which startup is
+	// gated and the watchdog triggers an emergency reseed.
+	// Default: 40 peers (DefaultEmergencyReseedFloor)
+	EmergencyReseedFloor int
 
 	// BootstrapType specifies which bootstrap method to use
 	// Valid values: "auto", "file", "reseed", "local"
@@ -471,6 +483,7 @@ func buildRouterDefaults(baseDir, workingDir string) RouterDefaults {
 		BaseDir:                   baseDir,
 		WorkingDir:                workingDir,
 		RouterInfoRefreshInterval: DefaultRouterInfoRefreshInterval,
+		RouterInfoFile:            filepath.Join(workingDir, "router.info"),
 		MessageExpirationTime:     DefaultMessageExpirationTime,
 		MaxConcurrentSessions:     DefaultMaxConcurrentSessions,
 		BandwidthTier:             "",
@@ -497,16 +510,17 @@ func buildNetDBDefaults(workingDir string) NetDBDefaults {
 // with DefaultBootstrapConfig.
 func buildBootstrapDefaults(workingDir string) BootstrapDefaults {
 	return BootstrapDefaults{
-		LowPeerThreshold:    DefaultLowPeerThreshold,
-		BootstrapType:       "auto",
-		ReseedTimeout:       DefaultReseedTimeout,
-		MinimumReseedPeers:  DefaultMinimumReseedPeers,
-		ReseedRetryInterval: DefaultReseedRetryInterval,
-		ReseedServers:       KnownReseedServers,
-		ReseedStrategy:      ReseedStrategyUnion,
-		PeerCacheEnabled:    true,
-		PeerCachePath:       filepath.Join(workingDir, "peerCache"),
-		PeerCacheMaxSize:    DefaultPeerCacheMaxSize,
+		LowPeerThreshold:     DefaultLowPeerThreshold,
+		EmergencyReseedFloor: DefaultEmergencyReseedFloor,
+		BootstrapType:        "auto",
+		ReseedTimeout:        DefaultReseedTimeout,
+		MinimumReseedPeers:   DefaultMinimumReseedPeers,
+		ReseedRetryInterval:  DefaultReseedRetryInterval,
+		ReseedServers:        KnownReseedServers,
+		ReseedStrategy:       ReseedStrategyUnion,
+		PeerCacheEnabled:     true,
+		PeerCachePath:        filepath.Join(workingDir, "peerCache"),
+		PeerCacheMaxSize:     DefaultPeerCacheMaxSize,
 	}
 }
 
@@ -739,6 +753,7 @@ func validateBootstrap(bootstrap BootstrapDefaults) error {
 	return runValidation(
 		"validateBootstrapConfig", "validating_bootstrap_settings", "bootstrap configuration validated successfully",
 		func() error { return validateLowPeerThreshold(bootstrap.LowPeerThreshold) },
+		func() error { return validateEmergencyReseedFloor(bootstrap.EmergencyReseedFloor) },
 		func() error { return validateMinimumReseedPeers(bootstrap.MinimumReseedPeers) },
 		func() error { return validateBootstrapType(bootstrap.BootstrapType) },
 		func() error { return validateReseedStrategyIfSet(bootstrap.ReseedStrategy) },
@@ -766,6 +781,23 @@ func logValidationSuccess(at, message string) {
 // validateLowPeerThreshold validates the LowPeerThreshold setting.
 func validateLowPeerThreshold(threshold int) error {
 	return validateMinInt("low_peer_threshold", "BootstrapConfig", threshold, 1)
+}
+
+// validateEmergencyReseedFloor validates the EmergencyReseedFloor setting.
+// 0 is permitted and means "use the built-in default"; negative values are
+// rejected because they would silently disable the floor, which router.testnet
+// expresses explicitly.
+func validateEmergencyReseedFloor(floor int) error {
+	if floor >= 0 {
+		return nil
+	}
+	log.WithFields(logger.Fields{
+		"at":                     "validateBootstrapConfig",
+		"reason":                 "emergency_reseed_floor_too_low",
+		"emergency_reseed_floor": floor,
+		"minimum_required":       0,
+	}).Error("invalid BootstrapConfig configuration")
+	return newValidationError("BootstrapConfig.emergency_reseed_floor must be at least 0 (0 uses the default)")
 }
 
 // validateMinimumReseedPeers validates the MinimumReseedPeers setting.

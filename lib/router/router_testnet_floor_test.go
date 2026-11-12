@@ -20,7 +20,7 @@ import (
 )
 
 // newFloorTestRouter builds a minimal Router with a real (empty) StdNetDB and the
-// given testnet flag and low-peer threshold.
+// given testnet flag, low-peer threshold and emergency reseed floor.
 //
 // BootstrapType "file" with no path is deliberate: it makes any reseed attempt fail
 // instantly and offline, so a test that expects no reseed cannot accidentally pass
@@ -29,12 +29,20 @@ import (
 // selects the bootstrapper).
 func newFloorTestRouter(t *testing.T, testnet bool, lowPeerThreshold int) *Router {
 	t.Helper()
+	return newFloorTestRouterWithFloor(t, testnet, lowPeerThreshold, 0)
+}
+
+// newFloorTestRouterWithFloor is newFloorTestRouter with an explicit
+// bootstrap.emergency_reseed_floor (0 means unset, i.e. use the default).
+func newFloorTestRouterWithFloor(t *testing.T, testnet bool, lowPeerThreshold, emergencyReseedFloor int) *Router {
+	t.Helper()
 	return &Router{
 		cfg: &config.RouterConfig{
 			Testnet: testnet,
 			Bootstrap: &config.BootstrapConfig{
-				LowPeerThreshold: lowPeerThreshold,
-				BootstrapType:    "file",
+				LowPeerThreshold:     lowPeerThreshold,
+				EmergencyReseedFloor: emergencyReseedFloor,
+				BootstrapType:        "file",
 			},
 		},
 		netdb: netdb.NewStdNetDB(t.TempDir()),
@@ -71,6 +79,39 @@ func TestEmergencyReseedThresholdProductionUnchanged(t *testing.T) {
 			assert.Equal(t, tt.want, r.emergencyReseedThreshold())
 		})
 	}
+}
+
+// TestEmergencyReseedThresholdConfigurableFloor verifies bootstrap.emergency_reseed_floor
+// replaces the hardcoded floor, which is what lets a small private network (a
+// testnet that does not set router.testnet) start without 40 RouterInfos.
+func TestEmergencyReseedThresholdConfigurableFloor(t *testing.T) {
+	tests := []struct {
+		name                 string
+		lowPeerThreshold     int
+		emergencyReseedFloor int
+		want                 int
+	}{
+		{"lowered floor wins over default", 10, 1, 1},
+		{"lowered floor not raised by low_peer_threshold", 10, 1, 1},
+		{"raised floor wins over default", 10, 100, 100},
+		{"zero floor means default", 10, 0, emergencyReseedFloor},
+		{"unset floor keeps low_peer_threshold raise", 60, 0, 60},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := newFloorTestRouterWithFloor(t, false, tt.lowPeerThreshold, tt.emergencyReseedFloor)
+			assert.Equal(t, tt.want, r.emergencyReseedThreshold())
+		})
+	}
+}
+
+// TestEmergencyReseedThresholdTestnetIgnoresConfiguredFloor verifies router.testnet
+// still wins over an explicitly configured floor: a testnet expresses no floor at
+// all, so the configured value cannot reintroduce the startup gate.
+func TestEmergencyReseedThresholdTestnetIgnoresConfiguredFloor(t *testing.T) {
+	r := newFloorTestRouterWithFloor(t, true, 10, 40)
+	assert.Equal(t, noPeerFloor, r.emergencyReseedThreshold())
 }
 
 // TestEnsureNetDBReadyTestnetNeverBlocks verifies startup succeeds with an empty

@@ -137,6 +137,11 @@ const (
 	// DefaultMinimumReseedPeers is the number of peers a reseed must yield to
 	// count as successful.
 	DefaultMinimumReseedPeers = 50
+	// DefaultEmergencyReseedFloor is the RouterInfo count below which startup
+	// refuses to continue and the watchdog escalates to an emergency reseed.
+	// Operators can lower (or raise) it with bootstrap.emergency_reseed_floor;
+	// router.testnet suppresses the floor entirely.
+	DefaultEmergencyReseedFloor = 40
 	// DefaultPeerCacheMaxSize is the number of peers retained in the on-disk
 	// peer cache; least-recently-active peers are evicted past it.
 	// Moved from: bootstrap.go, defaults.go
