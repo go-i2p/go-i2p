@@ -56,6 +56,14 @@ type StdNetDB struct {
 	connectedPeerProvider func() map[common.Hash]struct{}
 	connectedPeerMu       sync.RWMutex
 
+	// connectingPeerProvider, when set, returns the set of peer hashes whose
+	// outbound transport dial is currently in flight. Selection uses it as the
+	// second gateway tier, after established sessions and before
+	// dial-on-demand. Guarded by connectedPeerMu (same lock as the connected
+	// provider; both are read together during selection). May be nil, in which
+	// case the tier is empty and selection degrades to two tiers.
+	connectingPeerProvider func() map[common.Hash]struct{}
+
 	// leaseSetNetworkLookup, when set, performs an on-demand network
 	// DatabaseLookup for a LeaseSet that is not present in the local cache or
 	// on disk (e.g. an outbound .b32.i2p lookup for a destination we have
@@ -157,6 +165,19 @@ func (db *StdNetDB) SetConnectedPeerProvider(provider func() map[common.Hash]str
 	db.connectedPeerMu.Unlock()
 }
 
+// SetConnectingPeerProvider installs a callback that returns the set of peer
+// hashes whose transport dial is currently in flight. Selection uses this as
+// the second tier, after established sessions and before dial-on-demand: a
+// peer another goroutine is already dialing is a better gateway than one we
+// would have to dial from scratch, and re-picking it avoids a competing dial
+// that usually fails (issue #55 requirement 1). Passing nil leaves the tier
+// empty, which is the behaviour before this existed. Thread-safe.
+func (db *StdNetDB) SetConnectingPeerProvider(provider func() map[common.Hash]struct{}) {
+	db.connectedPeerMu.Lock()
+	db.connectingPeerProvider = provider
+	db.connectedPeerMu.Unlock()
+}
+
 // HasConnectedPeerProvider reports whether a connected-peer provider is wired.
 //
 // Tunnel-build convergence depends on this being installed during router
@@ -171,12 +192,34 @@ func (db *StdNetDB) HasConnectedPeerProvider() bool {
 	return db.connectedPeerProvider != nil
 }
 
+// HasConnectingPeerProvider reports whether the in-flight-dial provider is
+// wired. Like the connected provider it is nil-tolerant, so a missing wiring
+// step degrades silently; this accessor lets startup assert the second
+// reachability tier actually exists.
+func (db *StdNetDB) HasConnectingPeerProvider() bool {
+	db.connectedPeerMu.RLock()
+	defer db.connectedPeerMu.RUnlock()
+	return db.connectingPeerProvider != nil
+}
+
 // connectedPeers returns the current set of peer hashes with an established
 // transport session, or nil if no provider is configured. The returned map
 // must be treated as read-only by callers.
 func (db *StdNetDB) connectedPeers() map[common.Hash]struct{} {
 	db.connectedPeerMu.RLock()
 	provider := db.connectedPeerProvider
+	db.connectedPeerMu.RUnlock()
+	if provider == nil {
+		return nil
+	}
+	return provider()
+}
+
+// connectingPeers returns the current set of peer hashes with an in-flight
+// transport dial, or nil if no provider is configured.
+func (db *StdNetDB) connectingPeers() map[common.Hash]struct{} {
+	db.connectedPeerMu.RLock()
+	provider := db.connectingPeerProvider
 	db.connectedPeerMu.RUnlock()
 	if provider == nil {
 		return nil

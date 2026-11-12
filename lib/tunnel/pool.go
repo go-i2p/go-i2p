@@ -2,6 +2,7 @@ package tunnel
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -299,6 +300,7 @@ type Pool struct {
 	routerHash           common.Hash                          // Our router's identity hash, used as ReplyGateway in build requests
 	startupGate          <-chan struct{}                      // BUG-1: closed when pre-conditions for first build are met
 	replyTunnelProvider  func() (TunnelID, common.Hash, bool) // Returns reply tunnel ID + gateway hash for reply routing (nil = direct delivery)
+	counters             buildCounters                        // Build/penalty counters, atomic; see BuildStats
 }
 
 // SetStartupGate sets a channel that maintenanceLoop waits on before
@@ -922,9 +924,23 @@ func (p *Pool) prepareBuildRequest(excludePeers []common.Hash) BuildTunnelReques
 // executeBuildWithRetry attempts to build a tunnel with progressive peer exclusion on retries.
 // Each retry excludes peers from previous failed attempts to improve diversity.
 // Returns the tunnel ID on success or an error after all retries exhausted.
+//
+// The terminal error names the failure mode, because issue #55 was debuggable
+// only from 290 MB of debug log: "no dialable candidates exist for the selected
+// hop set" (every attempt failed locally, before reaching a peer) and "builds
+// were attempted and refused" (we reached peers and were rejected) are different
+// diagnoses, and collapsing both into `tunnel build failed after 3 retries`
+// hid which one a fix should address. The returned error wraps
+// [ErrNoDialableCandidates] or [ErrBuildsRefused] so callers classify it with
+// errors.Is rather than by reading prose.
 func (p *Pool) executeBuildWithRetry(req *BuildTunnelRequest) (TunnelID, error) {
-	const maxRetries = 3
+	maxRetries := p.maxBuildRetries()
 	var lastBuildPeers []common.Hash
+
+	// Per-loop tally, reported on exhaustion. localFailures counts attempts that
+	// never reached a peer; refused counts attempts that did and were rejected.
+	var localFailures, refused int
+	var lastErr error
 
 	for retry := 0; retry < maxRetries; retry++ {
 		if err := p.checkRetryContext(); err != nil {
@@ -937,8 +953,18 @@ func (p *Pool) executeBuildWithRetry(req *BuildTunnelRequest) (TunnelID, error) 
 		if builder == nil {
 			return 0, oops.Errorf("tunnel builder not set")
 		}
+
+		p.recordBuildAttempt()
 		result, err := builder.BuildTunnel(*req)
 		if err != nil {
+			lastErr = err
+			if IsGatewayUnreachable(err) {
+				localFailures++
+				p.recordBuildNoDialableCandidate()
+			} else {
+				refused++
+				p.recordBuildRefused()
+			}
 			p.logBuildFailure(err, retry, maxRetries, req)
 			lastBuildPeers = p.extractAndMarkFailedPeersForError(result, err)
 			continue
@@ -949,7 +975,48 @@ func (p *Pool) executeBuildWithRetry(req *BuildTunnelRequest) (TunnelID, error) 
 		return result.TunnelID, nil
 	}
 
-	return 0, oops.Errorf("tunnel build failed after %d retries", maxRetries)
+	return 0, p.exhaustedBuildError(maxRetries, localFailures, refused, lastErr)
+}
+
+// maxBuildRetries resolves the attempt cap for this pool. The cap was
+// previously a hardcoded constant in executeBuildWithRetry, so
+// PoolConfig.MaxBuildRetries -- which every caller already sets, including the
+// I2CP session pools -- had no effect on the inner retry loop. Requirement 4 of
+// issue #55 asks for a real bound, and a bound nobody can configure is not one.
+// Falls back to the package default when the config leaves it unset.
+func (p *Pool) maxBuildRetries() int {
+	p.mutex.RLock()
+	capped := p.config.MaxBuildRetries
+	p.mutex.RUnlock()
+
+	if capped <= 0 {
+		return defaultPoolMaxBuildRetries
+	}
+	return capped
+}
+
+// exhaustedBuildError builds the terminal error for an exhausted retry loop,
+// distinguishing the two failure modes and carrying the counts that make the
+// failure attributable without a debug-level log.
+func (p *Pool) exhaustedBuildError(maxRetries, localFailures, refused int, lastErr error) error {
+	attempts := fmt.Sprintf("%d attempts, %d could not reach a gateway, %d refused",
+		maxRetries, localFailures, refused)
+
+	if localFailures > 0 && refused == 0 {
+		return oops.Wrapf(
+			fmt.Errorf("%w: %s: %w", ErrNoDialableCandidates, attempts, lastErr),
+			"tunnel build failed after %d retries", maxRetries)
+	}
+	if refused > 0 && localFailures == 0 {
+		return oops.Wrapf(
+			fmt.Errorf("%w: %s: %w", ErrBuildsRefused, attempts, lastErr),
+			"tunnel build failed after %d retries", maxRetries)
+	}
+	// Mixed, or nothing classifiable: report the dominant mode but keep both
+	// counts so the mix is still visible.
+	return oops.Wrapf(
+		fmt.Errorf("tunnel build exhausted retries: %s: %w", attempts, lastErr),
+		"tunnel build failed after %d retries", maxRetries)
 }
 
 // checkRetryContext verifies the pool context is still active before a retry attempt.
@@ -1190,8 +1257,8 @@ func (p *Pool) logRetryFailure(tunnelID TunnelID, isInbound bool, hopCount int, 
 		"is_inbound":  isInbound,
 		"hop_count":   hopCount,
 	}
-	if strings.Contains(err.Error(), "no transports available") {
-		log.WithError(err).WithFields(fields).Warn("tunnel build retry failed (no transports available)")
+	if IsGatewayUnreachable(err) {
+		log.WithError(err).WithFields(fields).Warn("tunnel build retry failed (gateway unreachable)")
 	} else {
 		log.WithError(err).WithFields(fields).Error("failed to retry tunnel build after timeout")
 	}
@@ -1287,28 +1354,18 @@ func (p *Pool) extractAndMarkFailedPeersForError(result *BuildTunnelResult, err 
 	return result.PeerHashes
 }
 
-// isGatewayOnlyfailure reports whether a tunnel build error occurred at the
+// isGatewayOnlyFailure reports whether a tunnel build error occurred at the
 // step of sending the build request to the gateway (first hop) — before any
 // hop-to-hop forwarding could occur. For these failures only the gateway is
 // implicated; the remaining hops never received the build record and must not
 // be penalized.
+//
+// Classification is by sentinel (errors.Is) with a prose fallback; see
+// [IsGatewayUnreachable]. Issue #55: a dial failure says something about our
+// reachability to an address, not about a peer's suitability as a hop, so it
+// must be told apart from a downstream refusal.
 func isGatewayOnlyFailure(err error) bool {
-	if err == nil {
-		return false
-	}
-	errText := strings.ToLower(err.Error())
-	return containsAnySubstring(
-		errText,
-		"no transports available",
-		"transport unavailable",
-		"failed to establish outbound session",
-		"failed to get session for gateway",
-		"failed to send build request",
-		"failed to send tunnel build message",
-		"failed to dial",
-		"connection refused",
-		"no route to host",
-	)
+	return IsGatewayUnreachable(err)
 }
 
 // MarkFailedHopsFromReply applies penalties based on per-hop reply codes from a
@@ -1398,6 +1455,7 @@ func (p *Pool) MarkPeerFailed(peerHash common.Hash) {
 // If a PeerTracker is configured, the failure is also reported for reputation tracking.
 func (p *Pool) MarkPeerFailedWithReason(peerHash common.Hash, reason string) {
 	cooldown := p.computePeerCooldown(peerHash, reason)
+	p.recordPeerPenalized(reason)
 
 	p.failedPeersMu.Lock()
 	p.failedPeers[peerHash] = time.Now()
@@ -1460,6 +1518,21 @@ func (p *Pool) computePeerCooldown(peerHash common.Hash, reason string) time.Dur
 func baseCooldownForFailureReason(reason string) time.Duration {
 	r := strings.ToLower(reason)
 
+	// A gateway we could not dial says something about our reachability to one
+	// address, not about that peer's suitability as a hop. Blaming it hard
+	// burns a usable peer because of a transient path problem, which is
+	// precisely the non-convergence loop issue #55 reported. Short cooldown,
+	// so the peer is eligible again quickly.
+	if containsAnySubstring(r, "gateway_unreachable") {
+		return localFailureCooldown
+	}
+
+	// A build that reached the gateway and was refused downstream implicates
+	// the hop set, so it draws the full penalty.
+	if containsAnySubstring(r, "build_failed_refused", "tunnel_build_failed_permanent") {
+		return hardFailureCooldown
+	}
+
 	// Transport establishment failures are peer-attributable
 	if containsAnySubstring(
 		r,
@@ -1502,9 +1575,23 @@ func baseCooldownForFailureReason(reason string) time.Duration {
 	return ambiguousFailureDecay
 }
 
+// classifyTunnelBuildFailureReason maps a build error onto the reason string
+// the pool and the NetDB peer tracker use to pick a penalty and a cooldown.
+//
+// Sentinel-first: a wrapped tunnel.ErrGatewayUnreachable or
+// tunnel.ErrBuildRefused classifies deterministically, and prose matching
+// remains only as the fallback for builders that carry no sentinel. Issue #55
+// required this because the two failure modes must not draw the same penalty.
 func classifyTunnelBuildFailureReason(err error) string {
 	if err == nil {
 		return "tunnel_build_failed"
+	}
+
+	if errors.Is(err, ErrGatewayUnreachable) {
+		return "tunnel_build_failed_gateway_unreachable"
+	}
+	if errors.Is(err, ErrBuildRefused) {
+		return "tunnel_build_failed_refused"
 	}
 
 	errText := strings.ToLower(err.Error())

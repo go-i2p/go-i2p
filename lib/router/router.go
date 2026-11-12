@@ -71,6 +71,13 @@ type Router struct {
 	// sessionMutex protects concurrent access to activeSessions map (Lock 2: acquired after runMux if needed)
 	sessionMutex sync.RWMutex
 
+	// connecting tracks peers whose outbound transport dial is in flight, i.e.
+	// started but not yet handshaked. activeSessions only receives a peer after
+	// its handshake completes, so without this the "already connecting" tier of
+	// tunnel gateway selection would be empty by construction (issue #55).
+	// Bounded and self-expiring; see connectingTracker.
+	connecting *connectingTracker
+
 	// I2CP server for client applications
 	i2cpServer *i2cp.Server
 
@@ -229,6 +236,11 @@ func initializeNetDBAndTransports(r *Router, ri *router_info.RouterInfo, cfg *co
 	// pools never reach a ready state and no LeaseSet is ever published.
 	if r.netdb != nil {
 		r.netdb.SetConnectedPeerProvider(r.connectedPeerHashes)
+		// Second reachability tier: peers whose dial is already in flight.
+		// activeSessions only receives a peer after its handshake completes, so
+		// without this the tier is empty and selection jumps straight from
+		// "established" to "dial whoever advertises an address".
+		r.netdb.SetConnectingPeerProvider(r.connectingPeerHashes)
 	}
 	r.transports.Store(tmux)
 	return nil
@@ -435,6 +447,7 @@ func FromConfig(c *config.RouterConfig) (r *Router, err error) {
 	r = new(Router)
 	r.cfg = c
 	r.closeChnl = make(chan bool)
+	r.connecting = newConnectingTracker()
 	logAt("(Router) FromConfig").WithFields(logger.Fields{
 		"phase":  "startup",
 		"reason": "router struct initialized",

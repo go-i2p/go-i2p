@@ -272,7 +272,7 @@ func (s *Server) checkMonitoringEvent(session *Session, conn net.Conn, sessionID
 		return true
 
 	case <-timeout:
-		logTimeoutWaitingForTunnels(sessionID)
+		s.recordTunnelWaitTimeout(session, sessionID)
 		return true
 
 	case <-ticker.C:
@@ -292,12 +292,98 @@ func logMonitoringStart(sessionID uint16) {
 	}).Debug("starting_tunnel_monitoring")
 }
 
-// logTimeoutWaitingForTunnels logs when tunnel monitoring times out.
-func logTimeoutWaitingForTunnels(sessionID uint16) {
-	log.WithFields(logger.Fields{
-		"at":        "i2cp.Server.monitorTunnelsAndRequestLeaseSet",
-		"sessionID": sessionID,
-	}).Warn("timeout_waiting_for_tunnels")
+// recordTunnelWaitTimeout increments the session tunnel-wait counter and logs
+// the timeout with the reason it happened, rather than the bare
+// "timeout_waiting_for_tunnels" that left issue #55 diagnosable only from a
+// 290 MB debug log.
+//
+// The reason is which direction was short (inbound, outbound, or both), how
+// many builds the pools attempted, how many of those never reached a gateway,
+// how many were refused, and how many peers are currently in cooldown. Those
+// four numbers separate "we could not dial anything" from "peers refused us"
+// from "the pools were never given a builder", which is the distinction the
+// reporter had to reconstruct by hand.
+func (s *Server) recordTunnelWaitTimeout(session *Session, sessionID uint16) {
+	s.sessionTunnelWaitTimeouts.Add(1)
+
+	fields := logger.Fields{
+		"at":                   "i2cp.Server.monitorTunnelsAndRequestLeaseSet",
+		"sessionID":            sessionID,
+		"session_wait_timeouts": s.sessionTunnelWaitTimeouts.Load(),
+	}
+
+	inboundPool := session.InboundPool()
+	outboundPool := session.OutboundPool()
+
+	if inboundPool == nil || outboundPool == nil {
+		fields["reason"] = "tunnel_pools_never_initialized"
+		log.WithFields(fields).Warn("timeout_waiting_for_tunnels")
+		return
+	}
+
+	inbound := inboundPool.GetActiveTunnels()
+	outbound := outboundPool.GetActiveTunnels()
+	fields["inbound_tunnels"] = len(inbound)
+	fields["outbound_tunnels"] = len(outbound)
+	fields["short_direction"] = shortTunnelDirection(len(inbound), len(outbound))
+
+	inStats := inboundPool.GetBuildStats()
+	outStats := outboundPool.GetBuildStats()
+	fields["builds_attempted"] = inStats.BuildsAttempted + outStats.BuildsAttempted
+	fields["builds_no_dialable_gateway"] = inStats.BuildsNoDialableCandidate + outStats.BuildsNoDialableCandidate
+	fields["builds_refused"] = inStats.BuildsRefused + outStats.BuildsRefused
+	fields["peers_penalized_unreachable"] = inStats.PeersPenalizedGatewayUnreachable + outStats.PeersPenalizedGatewayUnreachable
+	fields["peers_penalized_refused"] = inStats.PeersPenalizedRefused + outStats.PeersPenalizedRefused
+	fields["peers_in_cooldown"] = len(inboundPool.GetFailedPeers()) + len(outboundPool.GetFailedPeers())
+
+	fields["reason"] = tunnelWaitReason(
+		inStats.BuildsAttempted+outStats.BuildsAttempted,
+		inStats.BuildsNoDialableCandidate+outStats.BuildsNoDialableCandidate,
+		inStats.BuildsRefused+outStats.BuildsRefused,
+	)
+
+	log.WithFields(fields).Warn("timeout_waiting_for_tunnels")
+}
+
+// shortTunnelDirection names which pool came up short, so the log says where to
+// look rather than only that something failed.
+func shortTunnelDirection(inboundCount, outboundCount int) string {
+	switch {
+	case inboundCount == 0 && outboundCount == 0:
+		return "both"
+	case inboundCount == 0:
+		return "inbound"
+	case outboundCount == 0:
+		return "outbound"
+	default:
+		return "none"
+	}
+}
+
+// tunnelWaitReason picks the diagnosis the counters support. A pool that
+// attempted nothing was never driven; one that attempted only undialable
+// gateways has a reachability problem; one with refusals has a peer-selection
+// problem. Each points at a different fix.
+func tunnelWaitReason(attempted, noDialable, refused uint64) string {
+	switch {
+	case attempted == 0:
+		return "no_builds_attempted_pools_idle"
+	case noDialable > 0 && refused == 0:
+		return "every_build_failed_to_reach_a_gateway_reachability"
+	case refused > 0 && noDialable == 0:
+		return "builds_reached_gateways_and_were_refused_peer_selection"
+	case attempted > 0:
+		return "mixed_gateway_unreachable_and_refused"
+	default:
+		return "unknown"
+	}
+}
+
+// GetSessionTunnelWaitTimeouts returns how many sessions have timed out waiting
+// for tunnels on this server. Surfaced so the failure is visible without debug
+// logging.
+func (s *Server) GetSessionTunnelWaitTimeouts() uint64 {
+	return s.sessionTunnelWaitTimeouts.Load()
 }
 
 // tunnelReadinessResult holds tunnel readiness check results.
