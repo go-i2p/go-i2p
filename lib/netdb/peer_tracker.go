@@ -172,20 +172,6 @@ func failureWeightForClass(class peerFailureClass) int {
 func classifyFailureReason(reason string) peerFailureClass {
 	r := strings.ToLower(reason)
 
-	// Issue #55: a gateway we could not dial tells us about our reachability to
-	// one address, not about that peer's suitability as a hop. Classifying it
-	// as hard burned otherwise-good peers on every transient path failure,
-	// which is what stopped pools from converging. Not the peer's fault.
-	if containsAny(r, "gateway_unreachable") {
-		return peerFailureClassLocal
-	}
-
-	// A build that reached the gateway and was refused downstream does
-	// implicate the hop set.
-	if containsAny(r, "build_failed_refused") {
-		return peerFailureClassHard
-	}
-
 	// Transport establishment failures are peer-attributable: the peer advertised
 	// addresses in their RouterInfo but we couldn't establish a session to them.
 	// This indicates the peer is unreachable (firewalled, offline, bad addresses).

@@ -494,133 +494,36 @@ func (db *StdNetDB) SelectPeers(count int, exclude []common.Hash) ([]router_info
 	return selected, nil
 }
 
-// selectPreferringConnected biases selection toward peers we can actually
-// reach, in an explicit order of decreasing reachability certainty:
+// selectPreferringConnected biases selection toward peers that already have an
+// established transport session. This lets tunnel builds converge on peers we
+// can actually reach instead of repeatedly gambling on undialable peers, which
+// is the root cause of the "no transports available" build-retry loop that
+// prevents client tunnel pools from ever reaching a ready state.
 //
-//  1. peers with an established, writable transport session;
-//  2. peers whose dial is already in flight (another goroutine is connecting);
-//  3. dial-on-demand, i.e. every remaining candidate.
-//
-// This is the shape issue #55 asked for. The old code had only tiers 1 and 3,
-// and the jump from "we have a session" straight to "we will dial whoever
-// advertises an address" is what let selection keep landing on peers it could
-// not then dial: with 124 established sessions and 63 "available" peers, builds
-// still committed to peers there was no session for, paid a full build timeout
-// for the privilege, marked them failed, and retried with the same odds.
-//
-// Tier 2 exists because a peer already being dialed is a better bet than one
-// not yet started, and re-picking it avoids a competing dial that usually
-// fails.
-//
-// The bias is soft rather than a hard stop at the first non-empty tier, and
-// that is deliberate: an N-hop tunnel needs N distinct candidates, so a tier
-// holding fewer than the request cannot be the whole answer. Drawing each tier
-// in full before descending keeps the ordering honest while still filling the
-// request. When no provider is wired, or no peer is connected yet (cold start),
+// The bias is soft: connected peers are drawn from first (still randomized and
+// diversity-filtered), and any shortfall is filled from the remaining peers.
+// When no provider is wired or no peers are connected yet (e.g. cold start),
 // this degrades exactly to the previous random-diverse behavior.
 func (db *StdNetDB) selectPreferringConnected(available []router_info.RouterInfo, count int) []router_info.RouterInfo {
 	connected := db.connectedPeers()
-	connecting := db.connectingPeers()
-
-	// Cold start / nothing wired: every candidate is equally unknown, so the
-	// previous random-diverse behaviour applies unchanged.
-	if len(connected) == 0 && len(connecting) == 0 {
+	if len(connected) == 0 {
 		return db.selectRandomPeers(available, count)
 	}
 
-	// Tier 1: established sessions.
-	var selected []router_info.RouterInfo
-	if len(connected) > 0 {
-		tier1 := partitionByHashes(available, connected, nil)
-		logConnectedBias(len(tier1), len(available)-len(tier1), count)
-		selected = db.selectRandomPeers(tier1, count)
-		if len(selected) >= count {
-			return selected
-		}
+	connectedPeers, otherPeers := partitionByConnected(available, connected)
+
+	logConnectedBias(len(connectedPeers), len(otherPeers), count)
+
+	// Draw from connected peers first (randomized + diversity-filtered), then
+	// top up from the remaining peers if we could not fill the request.
+	selected := db.selectRandomPeers(connectedPeers, count)
+	if len(selected) >= count {
+		return selected
 	}
 
-	// Tier 2: dials already in flight, excluding anything already chosen.
-	chosen := hashesOfSelected(selected)
-	if tier2 := partitionByHashes(available, connecting, chosen); len(tier2) > 0 {
-		logReachabilityTier("connecting", len(tier2), count-len(selected))
-		selected = append(selected, db.selectRandomPeers(tier2, count-len(selected))...)
-		if len(selected) >= count {
-			return selected
-		}
-	}
-
-	// Tier 3: dial-on-demand for whatever remains.
-	chosen = hashesOfSelected(selected)
-	tier3 := excludeByHash(available, chosen)
-	logReachabilityTier("dial_on_demand", len(tier3), count-len(selected))
-	return append(selected, db.selectRandomPeers(tier3, count-len(selected))...)
-}
-
-// hashesOfSelected indexes the peers already picked so later tiers cannot
-// return a duplicate.
-func hashesOfSelected(selected []router_info.RouterInfo) map[common.Hash]struct{} {
-	out := make(map[common.Hash]struct{}, len(selected))
-	for _, ri := range selected {
-		if hash, err := ri.IdentHash(); err == nil {
-			out[hash] = struct{}{}
-		}
-	}
-	return out
-}
-
-// partitionByHashes returns the available peers whose hash is in include but
-// not in exclude. Peers whose hash cannot be computed are left out of a
-// reachability tier: their reachability is unknown, and the tiers are ordered
-// by known reachability.
-func partitionByHashes(
-	available []router_info.RouterInfo,
-	include, exclude map[common.Hash]struct{},
-) []router_info.RouterInfo {
-	out := make([]router_info.RouterInfo, 0, len(available))
-	for _, ri := range available {
-		hash, err := ri.IdentHash()
-		if err != nil {
-			continue
-		}
-		if _, skip := exclude[hash]; skip {
-			continue
-		}
-		if _, ok := include[hash]; ok {
-			out = append(out, ri)
-		}
-	}
-	return out
-}
-
-// excludeByHash returns the available peers whose hash is not in exclude,
-// including peers whose hash cannot be computed (they are only ever reachable
-// by dialling, which is what tier 3 is).
-func excludeByHash(available []router_info.RouterInfo, exclude map[common.Hash]struct{}) []router_info.RouterInfo {
-	out := make([]router_info.RouterInfo, 0, len(available))
-	for _, ri := range available {
-		hash, err := ri.IdentHash()
-		if err != nil {
-			out = append(out, ri)
-			continue
-		}
-		if _, skip := exclude[hash]; !skip {
-			out = append(out, ri)
-		}
-	}
-	return out
-}
-
-// logReachabilityTier records which tier filled the shortfall, so a build
-// failure can be attributed to a tier being empty rather than reconstructed
-// from debug logs.
-func logReachabilityTier(tier string, tierSize, requested int) {
-	log.WithFields(logger.Fields{
-		"at":              "StdNetDB.SelectPeers",
-		"reason":          "reachability_tier",
-		"tier":            tier,
-		"tier_candidates": tierSize,
-		"requested_count": requested,
-	}).Debug("topped up tunnel candidates from reachability tier")
+	remaining := count - len(selected)
+	selected = append(selected, db.selectRandomPeers(otherPeers, remaining)...)
+	return selected
 }
 
 // partitionByConnected splits peers into those with an established transport

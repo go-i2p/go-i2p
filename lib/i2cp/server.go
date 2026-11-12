@@ -205,12 +205,6 @@ type Server struct {
 	// Message ID generation for status tracking
 	nextMessageID atomic.Uint32
 
-	// sessionTunnelWaitTimeouts counts sessions whose tunnel monitor gave up
-	// after the 2-minute wait without the pools becoming ready. Named after the
-	// metric the issue asked for (i2cp.session.tunnel_wait_timeout). Monotonic
-	// for the life of the server; see [Server.GetSessionTunnelWaitTimeouts].
-	sessionTunnelWaitTimeouts atomic.Uint64
-
 	ctx    context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
