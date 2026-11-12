@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -71,13 +72,12 @@ func TestAuthTokenUnpredictability(t *testing.T) {
 	am, err := NewAuthManager("password")
 	require.NoError(t, err)
 
-	// Generate many tokens and verify they don't have predictable patterns
+	// Generate tokens from distinct sources so rate limiting does not cap the sample.
 	tokens := make([]string, 100)
 	for i := 0; i < 100; i++ {
-		token, err := am.Authenticate("password", 10*time.Minute)
+		token, err := am.authenticateFromSource("password", 10*time.Minute, fmt.Sprintf("192.0.2.%d", i+1))
 		require.NoError(t, err)
 		tokens[i] = token
-		time.Sleep(time.Millisecond) // Ensure different timestamps
 	}
 
 	// Check for duplicates (should never happen)
@@ -191,23 +191,34 @@ type mockStopCtrl struct{}
 func (m *mockStopCtrl) Stop()                                       {}
 func (m *mockStopCtrl) ReseedWithContext(ctx context.Context) error { return nil }
 
-// setupAuthTestServer creates a configured I2PControl server with an httptest server for testing.
-// Returns the server, the test HTTP server URL, and a cleanup function.
-func setupAuthTestServer(t *testing.T) (*Server, *httptest.Server) {
+// newTestServerOnAddr builds an I2PControl Server configured for the given
+// loopback host:port and password, backed by a running mock stats provider.
+func newTestServerOnAddr(t *testing.T, addr, password string) *Server {
 	t.Helper()
 	stats := &mockStatsForAuth{running: true}
 	cfg := &config.I2PControlConfig{
 		Enabled:  true,
-		Address:  "127.0.0.1:0",
-		Password: "testpassword",
+		Address:  addr,
+		Password: password,
 		UseHTTPS: false,
 	}
-
 	server, err := NewServer(cfg, stats)
 	require.NoError(t, err)
+	return server
+}
 
-	ts := httptest.NewServer(http.HandlerFunc(server.handleRPC))
+// setupAuthTestServer creates a configured I2PControl server with an httptest server for testing.
+// Returns the server and the test HTTP server.
+func setupAuthTestServer(t *testing.T) (*Server, *httptest.Server) {
+	t.Helper()
+	ts := httptest.NewServer(http.NotFoundHandler())
 	t.Cleanup(func() { ts.Close() })
+
+	// The Host header of requests to the test server must be allowlisted by
+	// validateHostAndOrigin, so configure the server for the real test
+	// address rather than an ephemeral "host:0" bind.
+	server := newTestServerOnAddr(t, strings.TrimPrefix(ts.URL, "http://"), "testpassword")
+	ts.Config.Handler = http.HandlerFunc(server.handleRPC)
 	return server, ts
 }
 
@@ -326,10 +337,12 @@ func TestAuthorizationTokenRevokedAfterPasswordChange(t *testing.T) {
 	am, err := NewAuthManager("oldpassword")
 	require.NoError(t, err)
 
-	// Create several tokens
+	// Create several tokens from one source, keeping the direct-call source
+	// available for the password checks below.
 	tokens := make([]string, 5)
 	for i := 0; i < 5; i++ {
-		tokens[i], _ = am.Authenticate("oldpassword", 10*time.Minute)
+		tokens[i], err = am.authenticateFromSource("oldpassword", 10*time.Minute, "192.0.2.1")
+		require.NoError(t, err)
 	}
 
 	// All tokens should be valid
@@ -576,19 +589,12 @@ func TestInputValidationSQLInjection(t *testing.T) {
 
 // TestInfoDisclosureNoPasswordInResponse verifies password is never returned in responses.
 func TestInfoDisclosureNoPasswordInResponse(t *testing.T) {
-	stats := &mockStatsForAuth{running: true}
-	cfg := &config.I2PControlConfig{
-		Enabled:  true,
-		Address:  "127.0.0.1:0",
-		Password: "supersecretpassword123",
-		UseHTTPS: false,
-	}
-
-	server, err := NewServer(cfg, stats)
-	require.NoError(t, err)
-
-	ts := httptest.NewServer(http.HandlerFunc(server.handleRPC))
+	ts := httptest.NewServer(http.NotFoundHandler())
 	defer ts.Close()
+
+	// Configure for the real test address so the Host gate allowlists it.
+	server := newTestServerOnAddr(t, strings.TrimPrefix(ts.URL, "http://"), "supersecretpassword123")
+	ts.Config.Handler = http.HandlerFunc(server.handleRPC)
 
 	// Test various responses and ensure password never appears
 	requests := []struct {

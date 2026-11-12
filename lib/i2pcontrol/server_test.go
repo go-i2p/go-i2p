@@ -392,6 +392,8 @@ func TestHTTPErrors(t *testing.T) {
 
 	t.Run("options_request", func(t *testing.T) {
 		req, _ := http.NewRequest("OPTIONS", url, nil)
+		// An allowlisted Origin is echoed back to the browser.
+		req.Header.Set("Origin", fmt.Sprintf("http://%s", cfg.Address))
 		resp, err := client.Do(req)
 		if err != nil {
 			t.Fatalf("Request failed: %v", err)
@@ -407,6 +409,17 @@ func TestHTTPErrors(t *testing.T) {
 		expectedOrigin := fmt.Sprintf("http://%s", cfg.Address)
 		if origin := resp.Header.Get("Access-Control-Allow-Origin"); origin != expectedOrigin {
 			t.Errorf("Expected CORS origin %s, got %s", expectedOrigin, origin)
+		}
+
+		// Without an Origin header, no Access-Control-Allow-Origin is emitted.
+		reqNoOrigin, _ := http.NewRequest("OPTIONS", url, nil)
+		respNoOrigin, err := client.Do(reqNoOrigin)
+		if err != nil {
+			t.Fatalf("Request failed: %v", err)
+		}
+		defer respNoOrigin.Body.Close()
+		if origin := respNoOrigin.Header.Get("Access-Control-Allow-Origin"); origin != "" {
+			t.Errorf("Expected no CORS origin without Origin header, got %s", origin)
 		}
 	})
 }
@@ -502,7 +515,7 @@ func TestSecurityHeaders(t *testing.T) {
 		}
 	})
 
-	t.Run("wildcard_bind_uses_request_host_for_origin", func(t *testing.T) {
+	t.Run("wildcard_bind_echoes_allowlisted_loopback_origin", func(t *testing.T) {
 		cfg := testConfig(7650)
 		cfg.Address = "0.0.0.0:7650"
 		cfg.UseHTTPS = false
@@ -516,10 +529,11 @@ func TestSecurityHeaders(t *testing.T) {
 		mockW := &mockResponseWriter{header: make(http.Header)}
 		req, _ := http.NewRequest("OPTIONS", "http://127.0.0.1:7650/jsonrpc", nil)
 		req.Host = "127.0.0.1:7650"
+		req.Header.Set("Origin", "http://127.0.0.1:7650")
 		server.setCORSHeaders(mockW, req)
 
 		if got := mockW.header.Get("Access-Control-Allow-Origin"); got != "http://127.0.0.1:7650" {
-			t.Errorf("Expected wildcard bind CORS origin to use request host, got %q", got)
+			t.Errorf("Expected wildcard bind to echo allowlisted loopback origin, got %q", got)
 		}
 	})
 
@@ -558,8 +572,10 @@ func TestSecurityHeaders(t *testing.T) {
 		req.Header.Set("Origin", "http://evil.example")
 		server.setCORSHeaders(mockW, req)
 
-		if got := mockW.header.Get("Access-Control-Allow-Origin"); got != "http://127.0.0.1:7650" {
-			t.Errorf("Expected fallback to first allowlist origin, got %q", got)
+		// Foreign origins get no Access-Control-Allow-Origin header at all,
+		// so browsers block the cross-origin read.
+		if got := mockW.header.Get("Access-Control-Allow-Origin"); got != "" {
+			t.Errorf("Expected no Access-Control-Allow-Origin for non-allowlisted origin, got %q", got)
 		}
 	})
 }

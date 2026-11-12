@@ -2,12 +2,15 @@ package i2pcontrol
 
 import (
 	"errors"
+	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/time/rate"
 )
 
 // createAuthManagerWithToken creates an AuthManager, authenticates with the
@@ -213,7 +216,7 @@ func TestTokenUniqueness(t *testing.T) {
 	numTokens := 10
 
 	for i := 0; i < numTokens; i++ {
-		token, err := am.Authenticate("password", 10*time.Minute)
+		token, err := am.authenticateFromSource("password", 10*time.Minute, fmt.Sprint(i))
 		require.NoError(t, err)
 
 		assert.False(t, tokens[token], "duplicate token generated: %q", token)
@@ -225,14 +228,15 @@ func TestTokenUniqueness(t *testing.T) {
 	assert.Equal(t, numTokens, len(tokens))
 }
 
-// TestConcurrentAuthenticate verifies thread-safe authentication
+// TestConcurrentAuthenticate verifies authentication remains thread-safe when
+// more requests arrive from one source than its initial burst allows.
 func TestConcurrentAuthenticate(t *testing.T) {
 	am, err := NewAuthManager("password")
 	require.NoError(t, err)
 
-	numGoroutines := 50
+	const numGoroutines = 50
 	var wg sync.WaitGroup
-	errors := make(chan error, numGoroutines)
+	errs := make(chan error, numGoroutines)
 	tokens := make(chan string, numGoroutines)
 
 	for i := 0; i < numGoroutines; i++ {
@@ -241,7 +245,7 @@ func TestConcurrentAuthenticate(t *testing.T) {
 			defer wg.Done()
 			token, err := am.Authenticate("password", 10*time.Minute)
 			if err != nil {
-				errors <- err
+				errs <- err
 				return
 			}
 			tokens <- token
@@ -249,21 +253,14 @@ func TestConcurrentAuthenticate(t *testing.T) {
 	}
 
 	wg.Wait()
-	close(errors)
+	close(errs)
 	close(tokens)
 
-	// Check for errors
-	for err := range errors {
-		assert.NoError(t, err, "concurrent authenticate error")
+	for err := range errs {
+		assert.Contains(t, err.Error(), "locked out")
 	}
-
-	// Count tokens
-	tokenCount := 0
-	for range tokens {
-		tokenCount++
-	}
-
-	assert.Equal(t, numGoroutines, tokenCount)
+	assert.Len(t, tokens, 5)
+	assert.Equal(t, 5, am.TokenCount())
 }
 
 // TestConcurrentValidate verifies thread-safe validation
@@ -302,7 +299,8 @@ func TestConcurrentCleanup(t *testing.T) {
 
 	// Create some expired tokens
 	for i := 0; i < 10; i++ {
-		am.Authenticate("password", 10*time.Millisecond)
+		_, err := am.authenticateFromSource("password", 10*time.Millisecond, fmt.Sprint(i))
+		require.NoError(t, err)
 	}
 
 	time.Sleep(50 * time.Millisecond)
@@ -379,6 +377,8 @@ func BenchmarkAuthenticate(b *testing.B) {
 		b.Fatalf("NewAuthManager failed: %v", err)
 	}
 
+	// Benchmark token creation without exhausting the per-source burst.
+	am.rateLimiter.Add("", rate.NewLimiter(rate.Inf, 1))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, err := am.Authenticate("password", 10*time.Minute)
@@ -413,9 +413,12 @@ func BenchmarkCleanupExpiredTokens(b *testing.B) {
 		b.Fatalf("NewAuthManager failed: %v", err)
 	}
 
-	// Create 100 tokens
+	// Create 100 tokens for the cleanup benchmark.
+	am.rateLimiter.Add("", rate.NewLimiter(rate.Inf, 1))
 	for i := 0; i < 100; i++ {
-		am.Authenticate("password", 10*time.Minute)
+		if _, err := am.Authenticate("password", 10*time.Minute); err != nil {
+			b.Fatalf("Authenticate failed: %v", err)
+		}
 	}
 
 	b.ResetTimer()
@@ -472,7 +475,7 @@ func TestChangePasswordConcurrent(t *testing.T) {
 
 	// Create multiple tokens
 	for i := 0; i < 10; i++ {
-		_, err := am.Authenticate("pass", 10*time.Minute)
+		_, err := am.authenticateFromSource("pass", 10*time.Minute, fmt.Sprint(i))
 		require.NoError(t, err)
 	}
 
@@ -491,7 +494,7 @@ func TestChangePasswordConcurrent(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 5; i++ {
-			_, err := am.Authenticate("pass", 10*time.Minute)
+			_, err := am.authenticateFromSource("pass", 10*time.Minute, "auth")
 			if err != nil {
 				// Expected to fail sometimes during password change
 				continue
@@ -505,7 +508,7 @@ func TestChangePasswordConcurrent(t *testing.T) {
 		defer wg.Done()
 		for i := 0; i < 5; i++ {
 			// Create a token to validate
-			token, err := am.Authenticate("pass", 10*time.Minute)
+			token, err := am.authenticateFromSource("pass", 10*time.Minute, "validate")
 			if err != nil {
 				continue
 			}
@@ -530,14 +533,14 @@ func TestChangePasswordMultipleTimes(t *testing.T) {
 	passwords := []string{"pass2", "pass3", "pass4", "pass5"}
 
 	for _, newPass := range passwords {
-		oldToken, err := am.Authenticate(am.password, 10*time.Minute)
+		oldToken, err := am.authenticateFromSource(am.password, 10*time.Minute, newPass)
 		require.NoError(t, err)
 
 		am.ChangePassword(newPass)
 
 		assert.False(t, am.ValidateToken(oldToken), "token should be invalid after changing to %s", newPass)
 
-		newToken, err := am.Authenticate(newPass, 10*time.Minute)
+		newToken, err := am.authenticateFromSource(newPass, 10*time.Minute, newPass)
 		require.NoError(t, err)
 		assert.True(t, am.ValidateToken(newToken), "new token should be valid for %s", newPass)
 	}
@@ -550,9 +553,12 @@ func BenchmarkChangePassword(b *testing.B) {
 		b.Fatalf("NewAuthManager failed: %v", err)
 	}
 
-	// Create some tokens
+	// Create some tokens.
+	am.rateLimiter.Add("", rate.NewLimiter(rate.Inf, 1))
 	for i := 0; i < 10; i++ {
-		am.Authenticate("password", 10*time.Minute)
+		if _, err := am.Authenticate("password", 10*time.Minute); err != nil {
+			b.Fatalf("Authenticate failed: %v", err)
+		}
 	}
 
 	b.ResetTimer()
@@ -561,4 +567,94 @@ func BenchmarkChangePassword(b *testing.B) {
 		// Restore original password for next iteration
 		am.ChangePassword("password")
 	}
+}
+
+// TestAuthRateLimit verifies that both valid and invalid passwords consume
+// the same source's burst, and that another source remains independent.
+func TestAuthRateLimit(t *testing.T) {
+	am, err := NewAuthManager("correctpassword")
+	require.NoError(t, err)
+
+	for i := 0; i < 4; i++ {
+		_, err := am.authenticateFromSource("wrong", time.Minute, "source-a")
+		require.ErrorContains(t, err, "invalid password")
+	}
+	token, err := am.authenticateFromSource("correctpassword", time.Minute, "source-a")
+	require.NoError(t, err)
+	assert.True(t, am.ValidateToken(token))
+
+	_, err = am.authenticateFromSource("correctpassword", time.Minute, "source-a")
+	require.ErrorContains(t, err, "locked out")
+	token, err = am.authenticateFromSource("correctpassword", time.Minute, "source-b")
+	require.NoError(t, err)
+	assert.True(t, am.ValidateToken(token))
+
+	limiter, ok := am.rateLimiter.Peek("source-a")
+	require.True(t, ok)
+	assert.Equal(t, rate.Every(30*time.Second), limiter.Limit())
+	assert.Equal(t, 5, limiter.Burst())
+
+	// Move the limiter's clock backwards so one token refills without a
+	// 30-second sleep; the next attempt exercises the authentication path.
+	limiter.SetLimitAt(time.Now().Add(-30*time.Second), limiter.Limit())
+	token, err = am.authenticateFromSource("correctpassword", time.Minute, "source-a")
+	require.NoError(t, err)
+	assert.True(t, am.ValidateToken(token))
+	_, err = am.authenticateFromSource("correctpassword", time.Minute, "source-a")
+	require.ErrorContains(t, err, "locked out")
+}
+
+// TestAuthRateLimitEviction documents the bounded cache's best-effort policy:
+// an evicted source returns with a fresh burst.
+func TestAuthRateLimitEviction(t *testing.T) {
+	am, err := NewAuthManager("correctpassword")
+	require.NoError(t, err)
+
+	for i := 0; i < 5; i++ {
+		_, err := am.authenticateFromSource("wrong", time.Minute, "first")
+		require.ErrorContains(t, err, "invalid password")
+	}
+	_, err = am.authenticateFromSource("correctpassword", time.Minute, "first")
+	require.ErrorContains(t, err, "locked out")
+
+	for i := 0; i < maxSources; i++ {
+		_, err := am.authenticateFromSource("wrong", time.Minute, fmt.Sprint(i))
+		require.ErrorContains(t, err, "invalid password")
+	}
+	assert.Equal(t, maxSources, am.rateLimiter.Len())
+	token, err := am.authenticateFromSource("correctpassword", time.Minute, "first")
+	require.NoError(t, err)
+	assert.True(t, am.ValidateToken(token))
+}
+
+func TestConcurrentAuthRateLimitsBySource(t *testing.T) {
+	am, err := NewAuthManager("correctpassword")
+	require.NoError(t, err)
+
+	const sources = 20
+	var wg sync.WaitGroup
+	errs := make(chan error, sources)
+	for i := 0; i < sources; i++ {
+		wg.Add(1)
+		go func(source string) {
+			defer wg.Done()
+			for attempt := 0; attempt < 5; attempt++ {
+				_, err := am.authenticateFromSource("wrong", time.Minute, source)
+				if err == nil || !strings.Contains(err.Error(), "invalid password") {
+					errs <- fmt.Errorf("source %s attempt %d: %v", source, attempt, err)
+					return
+				}
+			}
+			_, err := am.authenticateFromSource("correctpassword", time.Minute, source)
+			if err == nil || !strings.Contains(err.Error(), "locked out") {
+				errs <- fmt.Errorf("source %s: expected rate limit, got %v", source, err)
+			}
+		}(fmt.Sprint(i))
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		assert.NoError(t, err)
+	}
+	assert.Equal(t, sources, am.rateLimiter.Len())
 }
