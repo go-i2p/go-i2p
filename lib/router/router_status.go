@@ -6,6 +6,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/transport"
 	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
 	ssu2 "github.com/go-i2p/go-i2p/lib/transport/ssu2"
+	"github.com/go-i2p/go-i2p/lib/tunnel"
 )
 
 // findTransport returns the first transport of the specified type, or nil if not found.
@@ -104,6 +105,35 @@ func (r *Router) GetTransportSessionFailureStats() transport.MuxSessionFailureSt
 		return transport.MuxSessionFailureStats{}
 	}
 	return muxer.GetSessionFailureStats()
+}
+
+// GetTunnelBuildStats aggregates the tunnel-build counters of the router's
+// exploratory inbound and outbound pools. It sits beside
+// [GetTransportSessionFailureStats] deliberately: the transport counters say how
+// often sessions fail to establish, and these say what the tunnel layer did with
+// that. Issue #55 needed both side by side -- 124 successful handshakes next to
+// 29 builds that never reached a gateway is the signature of selection picking
+// peers it could not dial, and neither counter shows it alone.
+//
+// Returns zero-valued stats when the tunnel manager or its pools are not ready.
+func (r *Router) GetTunnelBuildStats() tunnel.BuildStats {
+	if r.tunnelManager == nil {
+		return tunnel.BuildStats{}
+	}
+	var total tunnel.BuildStats
+	for _, pool := range []*tunnel.Pool{r.tunnelManager.GetInboundPool(), r.tunnelManager.GetOutboundPool()} {
+		if pool == nil {
+			continue
+		}
+		s := pool.GetBuildStats()
+		total.BuildsAttempted += s.BuildsAttempted
+		total.BuildsNoDialableCandidate += s.BuildsNoDialableCandidate
+		total.BuildsRefused += s.BuildsRefused
+		total.PeersPenalizedGatewayUnreachable += s.PeersPenalizedGatewayUnreachable
+		total.PeersPenalizedRefused += s.PeersPenalizedRefused
+		total.PeersPenalizedUnknown += s.PeersPenalizedUnknown
+	}
+	return total
 }
 
 // GetNTCP2TransportMetrics returns a snapshot of NTCP2 transport counters.

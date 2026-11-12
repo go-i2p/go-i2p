@@ -1,6 +1,8 @@
 package router
 
 import (
+	"errors"
+	"fmt"
 	"time"
 
 	common "github.com/go-i2p/common/data"
@@ -9,6 +11,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/transport"
 	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
 	ssu2 "github.com/go-i2p/go-i2p/lib/transport/ssu2"
+	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/samber/oops"
 
@@ -154,6 +157,14 @@ func (r *Router) GetSessionByHash(hash common.Hash) (i2np.I2NPTransportSession, 
 	// No existing session - try to establish outbound connection
 	log.WithField("peer_hash", logutil.HashPrefix(hash)).Debug("No active session, attempting outbound connection")
 
+	// Record the dial as in flight so tunnel gateway selection can prefer this
+	// peer in its "already connecting" tier instead of starting a competing
+	// dial (issue #55 requirement 1). Released on every return path below.
+	if r.connecting != nil {
+		r.connecting.mark(hash)
+		defer r.connecting.release(hash)
+	}
+
 	routerInfo, err := r.retrieveRouterInfoWithTimeout(hash)
 	if err != nil {
 		return nil, err
@@ -217,6 +228,16 @@ func (r *Router) establishOutboundSession(hash common.Hash, routerInfo *router_i
 	transportSession, err := muxer.GetSession(*routerInfo)
 	if err != nil {
 		r.logSessionEstablishmentFailure(hash, routerInfo, err)
+		// Attach the tunnel-level sentinel at this boundary: lib/transport
+		// imports lib/tunnel, so the transport layer cannot name a tunnel
+		// sentinel, and the pool above cannot name a transport one. The router
+		// is the only place that sees both. errors.Is then carries it through
+		// the oops.Wrapf chain up to the pool, which classifies the failure as
+		// "we could not dial this peer" rather than guessing from prose
+		// (issue #55).
+		if errors.Is(err, transport.ErrNoTransportAvailable) {
+			return nil, oops.Wrapf(fmt.Errorf("%w: %w", tunnel.ErrGatewayUnreachable, err), "failed to establish outbound session")
+		}
 		return nil, oops.Wrapf(err, "failed to establish outbound session")
 	}
 
