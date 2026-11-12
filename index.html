@@ -13,7 +13,7 @@
         <a href="index.html">go-i2p/go-i2p</a>
       </h2>
       <div class="repo-meta">
-        📝 2648 commits
+        📝 2654 commits
          • 📜 MIT License
       </div>
     </div>
@@ -60,12 +60,12 @@
       <div class="repo-stats">
         
         <div class="repo-stat">
-          <span>📝</span> <span>2648 commits</span>
+          <span>📝</span> <span>2654 commits</span>
         </div>
         
         
         <div class="repo-stat">
-          <span>📅</span> <span>Last updated: November 10, 2026</span>
+          <span>📅</span> <span>Last updated: November 11, 2026</span>
         </div>
         
         
@@ -323,6 +323,60 @@ router:
 <p>Testnet mode does not change the <code>netId</code> this router advertises or accepts, so
 the test network must still use RouterInfos carrying the production <code>netId</code>.</p>
 
+<p>To keep the floor but lower it — a small private network that wants the
+emergency-reseed safety net without waiting on 40 peers — set
+<code>bootstrap.emergency_reseed_floor</code> instead:</p>
+
+<pre><code class="language-shell">go-i2p --bootstrap.emergency-reseed-floor 1
+</code></pre>
+
+<pre><code class="language-yaml"># or in $HOME/.go-i2p/config.yaml
+bootstrap:
+  emergency_reseed_floor: 1
+</code></pre>
+
+<p>An explicitly configured floor replaces the default of 40; <code>0</code> (or omitting the
+key) keeps 40. <code>router.testnet</code> still wins over it, since testnet mode expresses
+no floor at all.</p>
+
+<h2 id="router-identity-file">Router identity file</h2>
+
+<p>On every RouterInfo publish the router also writes its own RouterInfo to
+<code>&lt;working_dir&gt;/router.info</code> as a single base64 line — the same encoding i2pd
+uses for its <code>router.info</code>. Monitoring dashboards and topology collectors parse
+that file to get the router&rsquo;s ident hash, then match it against peers&rsquo; NetDB
+file names (<code>routerInfo-&lt;base64hash&gt;.dat</code>) and live transport sessions.</p>
+
+<pre><code class="language-shell"># change the path, or disable the file with an empty value
+go-i2p --router.router-info-file=/var/lib/go-i2p/router.info
+go-i2p --router.router-info-file=
+</code></pre>
+
+<p>The file is world-readable (a RouterInfo is public data) and replaced atomically,
+so a reader never sees a partial write. It is written even when the network
+publish fails, which is what makes a router observable on a network with no
+floodfill routers.</p>
+
+<h2 id="i2pcontrol-tls">I2PControl TLS</h2>
+
+<p><code>i2pcontrol.use_https</code> serves I2PControl over HTTPS. With no <code>cert_file</code> and no
+<code>key_file</code> configured, the router generates a self-signed certificate on first
+startup and persists it in the working directory as <code>i2pcontrol.crt.pem</code> and
+<code>i2pcontrol.key.pem</code> (the same file names i2pd uses). The pair is reused on
+later startups, so the certificate is stable and clients can pin it
+byte-for-byte; it is regenerated automatically once it approaches expiry.</p>
+
+<pre><code class="language-yaml"># or in $HOME/.go-i2p/config.yaml
+i2pcontrol:
+  use_https: true
+  # cert_file and key_file omitted: a self-signed pair is generated
+</code></pre>
+
+<p>Set both <code>cert_file</code> and <code>key_file</code> to supply your own material; go-i2p then
+refuses to start if either path is missing rather than generating over it.
+Binding to a non-loopback address with <code>use_https: false</code> requires the explicit
+<code>i2pcontrol.allow_plaintext_non_loopback: true</code> opt-in.</p>
+
 <h2 id="i2cp-server">I2CP Server</h2>
 
 <p>The I2CP (I2P Client Protocol) server allows client applications to communicate with the I2P router. It is enabled by default and listens on <code>localhost:7654</code>.</p>
@@ -391,7 +445,7 @@ requiring acknowledgment must implement their own delivery-confirmation layer
                 eyedeekay
               </div>
               <div class="contributor-commits">
-                2245 commits
+                2251 commits
               </div>
             </div>
           </div>
@@ -463,7 +517,7 @@ requiring acknowledgment must implement their own delivery-confirmation layer
     </main>
     
     <footer class="page-footer">
-      <p>Generated on 2026-11-12 00:12:18 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
+      <p>Generated on 2026-11-12 03:24:59 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
     </footer>
   </div>
 </body>
