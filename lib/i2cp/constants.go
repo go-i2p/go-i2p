@@ -359,7 +359,7 @@ const (
 	// header wait). Zero means no idle timeout is enforced: idle clients are
 	// never disconnected for inactivity. The previous 60-second default
 	// killed normal long-lived I2CP client connections that sit idle after
-	// the GetDate/Setdate exchange (issue #54).
+	// the GetDate/SetDate exchange (issue #54).
 	//
 	// The per-message byte read is bounded separately by MessageReadTimeout
 	// (30s) to prevent slow-send attacks.

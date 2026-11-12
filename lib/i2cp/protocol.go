@@ -149,11 +149,15 @@ const (
 	MessageStatusNoLeaseSet uint8 = 21
 )
 
-// Protocol limits as per I2CP specification
+// Protocol limits. Not every constant here is spec-mandated; each one states
+// its own source. See the "Read timeouts" section of this package's README for
+// which knob bounds the idle gap between messages and which bounds the bytes of
+// one message.
 const (
 	// MaxPayloadSize is the maximum size for I2CP message payloads.
 	// i2pd authoritative behavior limits I2CP message payloads to 65535 bytes
-	// (I2CP_MAX_MESSAGE_LENGTH in i2pd/libi2pd_client/I2CP.h).
+	// (I2CP_MAX_MESSAGE_LENGTH in i2pd/libi2pd_client/I2CP.h). This is an
+	// interop limit taken from i2pd, not a value stated by the I2CP spec.
 	MaxPayloadSize = 65535
 
 	// MaxMessageSize is the maximum total I2CP message size including header.
@@ -168,6 +172,11 @@ const (
 	// single I2CP message once its header has been read. This prevents
 	// slow-send attacks where attackers claim large payloads but drip-feed
 	// data slowly to exhaust connection resources.
+	//
+	// This is a local default, not a spec-mandated value: the I2CP spec fixes
+	// the header framing (length(4) + type(1)) but prescribes no read
+	// deadline. See the "Read timeouts" section of this package's
+	// documentation.
 	//
 	// This bounds only the per-message byte read (header + payload), not the
 	// idle gap between messages. The idle gap is bounded separately by

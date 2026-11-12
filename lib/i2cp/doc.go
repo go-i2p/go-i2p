@@ -57,6 +57,46 @@
 // client's DH private keys are held by Session.StorePrivateKeys; the PSK and
 // lookup password travel in the BlindingInfo advice itself.
 //
+// # Read timeouts
+//
+// Two independent timeouts govern reading from an I2CP connection, and they
+// bound different things. Conflating them caused issue #54, where an idle
+// client was disconnected exactly 30 s after the GetDate/SetDate exchange.
+//
+//   - MessageReadTimeout (30 s) bounds only the bytes of a single message, and
+//     only once that message's header has been read. It exists to stop
+//     slow-send attacks: a peer that declares a large payload and then
+//     drip-feeds it. It is refreshed on each body read, so a stalled transfer
+//     mid-message is still cut off. It is a local default, not a value stated
+//     by the I2CP spec -- the spec fixes the header framing (length(4) +
+//     type(1)) but prescribes no read deadline. The 65535-byte payload cap
+//     beside it is likewise an i2pd interop limit, not a spec value.
+//
+//   - ServerConfig.ReadTimeout bounds the idle gap between messages, i.e. the
+//     wait for the next header. I2CP clients are expected to hold a long-lived
+//     connection and may be idle on it for a long time -- an application
+//     commonly connects at startup and creates its first session much later,
+//     which is the ordinary SAM-bridge topology. So the default is 0, meaning
+//     no idle timeout is enforced and an idle client is never disconnected for
+//     inactivity.
+//
+// To enable idle enforcement, set ServerConfig.ReadTimeout to a value a
+// legitimate client cannot reach while idle between messages -- 5 minutes is a
+// reasonable choice. Do not set it low: the previous 60 s default killed normal
+// long-lived client connections.
+//
+// A timeout while waiting for a header is not an error: the connection stays
+// open, the deadline is re-armed, and nothing is logged at warn level per
+// occurrence. A timeout during body/flag/payload continuation is fatal, so
+// malformed or truncated input never becomes survivable. Both cases are
+// distinguished with errors.Is(err, os.ErrDeadlineExceeded) and
+// net.Error.Timeout(), never by comparing error strings.
+//
+// Only the read goroutine sets read deadlines, once per iteration, so
+// SetReadDeadline never races a concurrent writer on the same connection. The
+// read path also takes a context.Context, so shutdown cancels a blocked header
+// read instead of waiting out a deadline.
+//
 // # Known limitations
 //
 // HostLookup does not return blinded (EncryptedLeaseSet) destinations. A
