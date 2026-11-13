@@ -47,6 +47,14 @@ var (
 	// reached peers and were refused. Paired with ErrNoDialableCandidates so a
 	// caller can tell which failure mode exhausted its retries.
 	ErrBuildsRefused = errors.New("tunnel builds attempted and refused")
+
+	// ErrInsufficientPeers means peer selection could not return enough
+	// candidates for the requested hop count after applying the exclusion set.
+	// The pool uses it to distinguish "the exclusion set starved selection"
+	// (I2P-010 sibling-hop avoidance: too many active hops excluded) from a
+	// genuine reachability or refusal failure, so it can relax the exclusion
+	// and retry rather than fail the build outright.
+	ErrInsufficientPeers = errors.New("insufficient peers for hop count")
 )
 
 // IsGatewayUnreachable reports whether err is a failure to reach the first

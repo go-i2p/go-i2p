@@ -683,6 +683,47 @@ func (p *Pool) GetActiveTunnels() []*TunnelState {
 	return active
 }
 
+// activeTunnelHops returns the router hashes of every hop currently committed
+// to a tunnel in this pool, across both ready and still-building tunnels.
+//
+// I2P-010: the spec says a router is "generally not used across two tunnels
+// within a pool". Pool builds previously excluded only recently-failed peers,
+// so a freshly built sibling's hops were invisible to the next build and two
+// tunnels in one pool could share a hop, correlating their traffic for that
+// shared router. Feeding these hashes into ExcludePeers makes each new build
+// avoid hops already in use.
+//
+// Building tunnels are included because the builder registers a tunnel with
+// its hops populated (TunnelState.Hops) before the build reply arrives, so a
+// sibling launched in the same maintenance pass is already visible here. Zero
+// hashes (from hops whose identity could not be extracted) are skipped so they
+// neither pollute the exclusion set nor accidentally exclude a real peer.
+func (p *Pool) activeTunnelHops() []common.Hash {
+	p.mutex.RLock()
+	defer p.mutex.RUnlock()
+
+	seen := make(map[common.Hash]struct{})
+	var hops []common.Hash
+	for _, tunnel := range p.tunnels {
+		// p.tunnels only ever holds tunnels in the building or ready state
+		// (failed/expired tunnels are removed), so iterating it covers exactly
+		// the "ready + in-flight" set the fix targets.
+		tunnel.mu.RLock()
+		for _, h := range tunnel.Hops {
+			if h == (common.Hash{}) {
+				continue
+			}
+			if _, dup := seen[h]; dup {
+				continue
+			}
+			seen[h] = struct{}{}
+			hops = append(hops, h)
+		}
+		tunnel.mu.RUnlock()
+	}
+	return hops
+}
+
 // Stop gracefully stops the pool maintenance goroutine.
 // Call this during router shutdown so the pool stops building tunnels and
 // releases its background goroutine.
@@ -786,7 +827,7 @@ func (p *Pool) attemptBuildTunnels(count int) bool {
 		return false
 	}
 
-	excludePeers := p.getAndLogFailedPeers()
+	excludeFailed := p.getAndLogFailedPeers()
 
 	var successCount int
 	for i := 0; i < count; i++ {
@@ -794,8 +835,7 @@ func (p *Pool) attemptBuildTunnels(count int) bool {
 			return successCount > 0
 		}
 
-		req := p.prepareBuildRequest(excludePeers)
-		tunnelID, err := p.executeBuildWithRetry(&req)
+		tunnelID, req, err := p.buildSiblingTunnel(excludeFailed)
 		if err != nil {
 			continue
 		}
@@ -805,6 +845,87 @@ func (p *Pool) attemptBuildTunnels(count int) bool {
 	}
 
 	return successCount > 0
+}
+
+// buildSiblingTunnel builds one tunnel in a pool, avoiding hops already used by
+// the pool's other tunnels (I2P-010).
+//
+// It excludes both recently-failed peers and the hops of every currently
+// committed tunnel (ready or in-flight), so a new sibling does not reuse a peer
+// another tunnel in the same pool already relies on. The active-hop set is
+// recomputed here — once per sibling — because the builder registers each
+// tunnel with its hops before returning, so siblings built earlier in the same
+// maintenance pass are already visible to this one.
+//
+// The exclusion is soft, matching the spec's "generally not used across two
+// tunnels": if excluding active hops starves selection (the pool is large
+// relative to the reachable peer set), the build is retried with only the
+// failed-peer exclusion, allowing hop reuse rather than failing outright.
+//
+// Returns the built tunnel's ID and the request it was built with (for logging),
+// or an error if both the strict and relaxed attempts failed.
+func (p *Pool) buildSiblingTunnel(excludeFailed []common.Hash) (TunnelID, BuildTunnelRequest, error) {
+	activeHops := p.activeTunnelHops()
+
+	// Strict attempt: exclude failed peers AND active sibling hops.
+	req := p.prepareBuildRequest(mergeExclusions(excludeFailed, activeHops))
+	tunnelID, err := p.executeBuildWithRetry(&req)
+	if err == nil {
+		return tunnelID, req, nil
+	}
+
+	// Soft fallback: only the strict attempt starved selection (not enough
+	// candidates once active hops are excluded) is it correct to relax. Any
+	// other failure (gateway unreachable, build refused) is a real problem and
+	// must not be papered over by reusing a hop.
+	if !errors.Is(err, ErrInsufficientPeers) || len(activeHops) == 0 {
+		return 0, req, err
+	}
+
+	p.logSiblingHopFallback(len(activeHops))
+	relaxed := p.prepareBuildRequest(excludeFailed)
+	tunnelID, err = p.executeBuildWithRetry(&relaxed)
+	if err != nil {
+		return 0, relaxed, err
+	}
+	return tunnelID, relaxed, nil
+}
+
+// mergeExclusions concatenates two exclusion lists, dropping duplicates and
+// zero hashes so the combined set neither double-counts a peer nor accidentally
+// excludes on a zero value.
+func mergeExclusions(a, b []common.Hash) []common.Hash {
+	if len(b) == 0 {
+		return a
+	}
+	seen := make(map[common.Hash]struct{}, len(a)+len(b))
+	out := make([]common.Hash, 0, len(a)+len(b))
+	for _, list := range [][]common.Hash{a, b} {
+		for _, h := range list {
+			if h == (common.Hash{}) {
+				continue
+			}
+			if _, dup := seen[h]; dup {
+				continue
+			}
+			seen[h] = struct{}{}
+			out = append(out, h)
+		}
+	}
+	return out
+}
+
+// logSiblingHopFallback records that sibling-hop avoidance had to be relaxed
+// because excluding active hops left too few candidates.
+func (p *Pool) logSiblingHopFallback(activeHopCount int) {
+	log.WithFields(logger.Fields{
+		"at":            "Pool.buildSiblingTunnel",
+		"phase":         "tunnel_build",
+		"reason":        "sibling_hop_avoidance_starved",
+		"excluded_hops": activeHopCount,
+		"is_inbound":    p.config.IsInbound,
+		"impact":        "relaxing sibling-hop exclusion; new tunnel may share a hop",
+	}).Debug("pool too small to avoid sibling hops; allowing hop reuse")
 }
 
 // isContextCancelled checks if the pool context has been cancelled.

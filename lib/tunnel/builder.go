@@ -402,7 +402,11 @@ func (tb *TunnelBuilder) selectTunnelPeers(req BuildTunnelRequest) ([]router_inf
 			"impact":     "tunnel build will fail",
 			"suggestion": "ensure sufficient peers in netDb or complete bootstrap",
 		}).Warn("not enough peers available for tunnel building")
-		return nil, oops.Errorf("insufficient peers: need %d, got %d", req.HopCount, len(peers))
+		// Wrap with ErrInsufficientPeers so the pool can tell "the exclusion
+		// set starved selection" (I2P-010: too many sibling hops excluded) from
+		// a reachability/refusal failure, and relax the exclusion instead of
+		// failing the build.
+		return nil, oops.Wrapf(ErrInsufficientPeers, "insufficient peers: need %d, got %d", req.HopCount, len(peers))
 	}
 
 	log.WithFields(logger.Fields{
