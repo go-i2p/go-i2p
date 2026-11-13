@@ -64,6 +64,15 @@ type StdNetDB struct {
 	// case the tier is empty and selection degrades to two tiers.
 	connectingPeerProvider func() map[common.Hash]struct{}
 
+	// ourHashProvider, when set, returns this router's own identity hash. Hop
+	// selection uses it to compute a per-pool Kademlia XOR-distance ordering
+	// key (I2P-017): candidates closer to us in the keyspace get a modestly
+	// higher weight in the exponential draw. Guarded by connectedPeerMu (read
+	// during the same selection pass as the other providers). May be nil, in
+	// which case the distance term is skipped and weighting falls back to the
+	// reliability score alone — the behaviour before this existed.
+	ourHashProvider func() (common.Hash, bool)
+
 	// leaseSetNetworkLookup, when set, performs an on-demand network
 	// DatabaseLookup for a LeaseSet that is not present in the local cache or
 	// on disk (e.g. an outbound .b32.i2p lookup for a destination we have
@@ -176,6 +185,34 @@ func (db *StdNetDB) SetConnectingPeerProvider(provider func() map[common.Hash]st
 	db.connectedPeerMu.Lock()
 	db.connectingPeerProvider = provider
 	db.connectedPeerMu.Unlock()
+}
+
+// SetOurHashProvider installs a callback returning this router's identity hash.
+// When set, hop selection weights each pool's candidates by their Kademlia
+// XOR-distance from us (I2P-017), so closer peers are modestly favored while
+// far peers remain eligible. Passing nil disables the distance term and
+// reverts to reliability-score-only weighting. Thread-safe.
+func (db *StdNetDB) SetOurHashProvider(provider func() (common.Hash, bool)) {
+	db.connectedPeerMu.Lock()
+	db.ourHashProvider = provider
+	db.connectedPeerMu.Unlock()
+}
+
+// ourHash returns this router's identity hash and true when an our-hash
+// provider is wired and yields a usable (non-zero) hash. It returns the zero
+// hash and false otherwise, which callers treat as "no distance term".
+func (db *StdNetDB) ourHash() (common.Hash, bool) {
+	db.connectedPeerMu.RLock()
+	provider := db.ourHashProvider
+	db.connectedPeerMu.RUnlock()
+	if provider == nil {
+		return common.Hash{}, false
+	}
+	h, ok := provider()
+	if !ok || h == (common.Hash{}) {
+		return common.Hash{}, false
+	}
+	return h, true
 }
 
 // HasConnectedPeerProvider reports whether a connected-peer provider is wired.

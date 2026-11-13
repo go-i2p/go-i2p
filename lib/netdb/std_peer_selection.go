@@ -2,6 +2,7 @@ package netdb
 
 import (
 	"fmt"
+	"math"
 	"net"
 	"sort"
 	"strings"
@@ -272,9 +273,31 @@ func logPeerFilteringResults(allRouterInfos, available []router_info.RouterInfo,
 	}).Debug("Peer filtering complete")
 }
 
-// selectRandomPeers randomly selects the requested number of peers from available pool.
-// Uses Fisher-Yates shuffle to avoid degenerate O(n²) behavior of rejection sampling
-// when count approaches len(available).
+// selectRandomPeers selects the requested number of peers from the available
+// pool. The pool here is one reachability tier (established / connecting /
+// dial-on-demand), each of which SelectPeers draws from in turn.
+//
+// Selection is a weighted random sample without replacement (I2P-017): each
+// candidate is assigned an exponential-race key and the count smallest keys
+// win. The weight combines two spec signals:
+//
+//   - the per-pool Kademlia XOR-distance ordering key (spec 'should'), so
+//     candidates closer to us in the keyspace are modestly favored; and
+//   - the PeerTracker reliability score, applied exponentially, so proven-good
+//     hops are favored over proven-bad ones.
+//
+// The draw uses the CSPRNG (crypto/rand), so it remains a genuine random
+// sample rather than a deterministic top-N — the spec permits uniform
+// selection, and weighting is a soft preference layered on top, not a hard
+// filter. When neither an our-hash provider nor a PeerTracker is wired (cold
+// start, or unit tests with unkeyed RouterInfos), every candidate gets equal
+// weight and the race reduces to a uniform CSPRNG permutation — exactly the
+// previous behavior.
+//
+// The resulting weighted order is then fed through the subnet/family diversity
+// filter, which is why this returns the ordered candidate permutation rather
+// than a raw top-count slice: the diversity pass may defer a high-weight peer
+// and pick a lower-weight one to keep the hops spread across networks.
 func (db *StdNetDB) selectRandomPeers(available []router_info.RouterInfo, count int) []router_info.RouterInfo {
 	if count > len(available) {
 		count = len(available)
@@ -283,18 +306,96 @@ func (db *StdNetDB) selectRandomPeers(available []router_info.RouterInfo, count 
 		return nil
 	}
 
-	// Create index slice and Fisher-Yates shuffle the first 'count' elements
-	indices := make([]int, len(available))
-	for i := range indices {
-		indices[i] = i
-	}
-	rand.Shuffle(len(indices), func(i, j int) {
-		indices[i], indices[j] = indices[j], indices[i]
-	})
+	// Order the candidate indices by weighted exponential race. With uniform
+	// weights this is a uniform CSPRNG permutation (the pre-I2P-017 behavior);
+	// with weighting it is a weighted random permutation whose prefix is the
+	// weighted sample without replacement.
+	indices := weightedPeerOrder(db, available)
 
 	selected, deferred := selectDiversePeers(available, indices, count)
 	logDiversityFallback(count, len(selected), len(deferred))
 	return appendDeferredPeers(selected, deferred, count)
+}
+
+// weightedPeerOrder returns the candidate indices ordered by ascending
+// exponential-race key (Efraimidis-Spirakis weighted sampling without
+// replacement): key = -ln(U)/weight for a CSPRNG U in (0,1]. A larger weight
+// yields a smaller key and an earlier position, so the leading prefix of the
+// returned order is the weighted sample.
+func weightedPeerOrder(db *StdNetDB, available []router_info.RouterInfo) []int {
+	indices := make([]int, len(available))
+	for i := range indices {
+		indices[i] = i
+	}
+
+	ourHash, haveOurHash := db.ourHash()
+	keys := make([]float64, len(available))
+	for i, ri := range available {
+		keys[i] = exponentialRaceKey(db, ri, ourHash, haveOurHash)
+	}
+
+	sort.SliceStable(indices, func(a, b int) bool {
+		return keys[indices[a]] < keys[indices[b]]
+	})
+	return indices
+}
+
+// exponentialRaceKey computes the selection key for one candidate. It draws a
+// CSPRNG value and divides by the candidate's weight; smaller keys are picked
+// first.
+func exponentialRaceKey(db *StdNetDB, ri router_info.RouterInfo, ourHash common.Hash, haveOurHash bool) float64 {
+	// U in [0,1); guard the zero draw so -ln(U) stays finite.
+	u := rand.Float64()
+	if u <= 0.0 {
+		u = math.SmallestNonzeroFloat64
+	}
+	return -math.Log(u) / hopSelectionWeight(db, ri, ourHash, haveOurHash)
+}
+
+// hopSelectionWeight computes a candidate's selection weight from its
+// reliability score and (when available) its Kademlia XOR-distance from us.
+// It resolves the two signals from the RouterInfo and the db, then defers to
+// hopWeightFor for the arithmetic. The result is always > 0 so the race key
+// stays finite.
+func hopSelectionWeight(db *StdNetDB, ri router_info.RouterInfo, ourHash common.Hash, haveOurHash bool) float64 {
+	riHash, err := ri.IdentHash()
+
+	// Reliability score: neutral for unknown/unhashable peers, otherwise the
+	// PeerTracker's 0.0-1.0 assessment.
+	score := float64(neutralPeerScore)
+	if err == nil && db.PeerTracker != nil {
+		score = db.PeerTracker.ScorePeer(riHash)
+	}
+
+	// Distance bucket (0 = nearest, maxKademliaBucket = farthest). Only
+	// computable when we have both our own hash and the candidate's.
+	if err == nil && haveOurHash {
+		bucket := findMostSignificantDifferingBit(computeXORDistance(ourHash, riHash))
+		return hopWeightFor(score, bucket, true)
+	}
+	return hopWeightFor(score, 0, false)
+}
+
+// hopWeightFor is the pure weighting arithmetic behind hopSelectionWeight: it
+// combines a reliability score and an optional Kademlia distance bucket into a
+// strictly positive selection weight. Split out so the math is unit-testable
+// without forging signed RouterInfo hashes.
+func hopWeightFor(score float64, distanceBucket int, haveDistance bool) float64 {
+	// Reliability term: exponential in the score, floored so a proven-bad peer
+	// (score 0.0) keeps a small but nonzero chance rather than being excluded
+	// outright.
+	weight := hopWeightScoreFloor + hopWeightScoreGain*score
+
+	// Distance term: favor candidates closer to us in the keyspace. The bucket
+	// index is normalized and inverted so a nearer peer gets a factor up to
+	// (1+hopWeightDistanceGain). Skipped when no distance is available, leaving
+	// score-only weighting.
+	if haveDistance && hopWeightDistanceGain > 0 {
+		normalized := float64(distanceBucket) / float64(maxKademliaBucket)
+		weight *= 1.0 + hopWeightDistanceGain*(1.0-normalized)
+	}
+
+	return weight
 }
 
 func selectDiversePeers(available []router_info.RouterInfo, indices []int, count int) ([]router_info.RouterInfo, []router_info.RouterInfo) {

@@ -241,6 +241,17 @@ func initializeNetDBAndTransports(r *Router, ri *router_info.RouterInfo, cfg *co
 		// without this the tier is empty and selection jumps straight from
 		// "established" to "dial whoever advertises an address".
 		r.netdb.SetConnectingPeerProvider(r.connectingPeerHashes)
+		// Per-pool XOR-distance weighting (I2P-017): hop selection favors peers
+		// closer to us in the Kademlia keyspace. Our identity hash is fixed for
+		// the process lifetime, so derive it once here from the RouterInfo we
+		// already constructed and hand selection a constant provider. If the hash
+		// can't be derived, leave the provider unset and weighting falls back to
+		// reliability score alone.
+		if ourHash, herr := ri.IdentHash(); herr == nil {
+			r.netdb.SetOurHashProvider(func() (common.Hash, bool) { return ourHash, true })
+		} else {
+			log.WithError(herr).Warn("I2P-017: could not derive our router hash; hop selection will skip XOR-distance weighting")
+		}
 	}
 	r.transports.Store(tmux)
 	return nil

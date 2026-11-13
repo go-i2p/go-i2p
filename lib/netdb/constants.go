@@ -292,6 +292,40 @@ const (
 	// maxConsecutiveFailPenalty caps that deduction so a long outage cannot
 	// drive the score below the range the sorters expect.
 	maxConsecutiveFailPenalty = 0.3
+
+	// ── Weighted hop selection (I2P-017) ────────────────────────────────────
+	//
+	// selectRandomPeers draws each pool's hops by an exponential race
+	// (Efraimidis-Spirakis weighted sampling without replacement): every
+	// candidate is assigned key = -ln(U)/weight for a CSPRNG U in (0,1], and
+	// the count smallest keys win. A larger weight makes a candidate's key
+	// smaller and its selection likelier, which is the exponential weighting
+	// the finding asked for; the CSPRNG draw keeps it a genuine random sample
+	// rather than a deterministic top-N.
+
+	// hopWeightScoreFloor is the minimum weight contributed by a peer's
+	// reliability score. ScorePeer returns 0.0 for a proven-bad peer; a raw
+	// 0.0 weight would give that peer an infinite key and exclude it entirely,
+	// which is too harsh for a soft bias and would starve the pool under
+	// churn. Flooring keeps even a bad peer reachable at low probability.
+	hopWeightScoreFloor = 0.05
+
+	// hopWeightScoreGain scales the reliability score into the weight. With a
+	// gain of 1 a perfect peer (score 1.0) is weighted (1+floor)/floor ≈ 21×
+	// a proven-bad peer, and a neutral unknown (0.5) sits between them. Larger
+	// gains sharpen the preference toward reliable hops at the cost of pool
+	// diversity.
+	hopWeightScoreGain = 1.0
+
+	// hopWeightDistanceGain scales the XOR-distance factor. The distance
+	// factor is 1 + gain*(1 - normalizedDistance), so a peer at distance 0
+	// from us is weighted (1+gain)× a peer at maximum distance. This is the
+	// per-pool XOR-distance ordering the spec 'should' calls for, expressed as
+	// a soft preference: closer peers (in the Kademlia sense) are modestly
+	// favored, but far peers stay eligible so we keep spreading across the
+	// keyspace instead of clustering. Set to 0 to disable the distance term
+	// and fall back to score-only weighting.
+	hopWeightDistanceGain = 0.25
 )
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -429,6 +463,12 @@ const (
 	// highestBitIndex is the index of a byte's most significant bit, and also the
 	// offset that inverts bucket order into bit order.
 	highestBitIndex = bitsPerByte - 1 // 7
+
+	// maxKademliaBucket is the highest bucket index findMostSignificantDifferingBit
+	// can return for a 32-byte (256-bit) hash: a differing bit in the final
+	// position. Used to normalize a bucket into [0,1] for the hop-selection
+	// distance weight (I2P-017).
+	maxKademliaBucket = i2np.HashSize*bitsPerByte - 1 // 255
 )
 
 // ──────────────────────────────────────────────────────────────────────────────
