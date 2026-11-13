@@ -65,9 +65,11 @@ func TestBuildOutcome_SentinelClassificationIsNotProseBased(t *testing.T) {
 // a good peer for ten minutes.
 func TestBuildOutcome_DialFailureAndRefusalDrawDifferentPenalties(t *testing.T) {
 	dialReason := classifyTunnelBuildFailureReason(
-		fmt.Errorf("could not reach gateway: %w", ErrGatewayUnreachable))
+		fmt.Errorf("could not reach gateway: %w", ErrGatewayUnreachable),
+	)
 	refusedReason := classifyTunnelBuildFailureReason(
-		fmt.Errorf("hop rejected the build: %w", ErrBuildRefused))
+		fmt.Errorf("hop rejected the build: %w", ErrBuildRefused),
+	)
 
 	require.NotEqual(t, dialReason, refusedReason,
 		"a dial failure and a refusal must not classify to the same reason")

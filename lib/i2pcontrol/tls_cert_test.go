@@ -73,11 +73,11 @@ func TestEnsureTLSCertificatesKeyPermissions(t *testing.T) {
 
 	keyInfo, err := os.Stat(cfg.KeyFile)
 	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(0600), keyInfo.Mode().Perm(), "the key must be owner-only")
+	assert.Equal(t, os.FileMode(0o600), keyInfo.Mode().Perm(), "the key must be owner-only")
 
 	certInfo, err := os.Stat(cfg.CertFile)
 	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(0644), certInfo.Mode().Perm(), "the certificate must be readable")
+	assert.Equal(t, os.FileMode(0o644), certInfo.Mode().Perm(), "the certificate must be readable")
 }
 
 // TestEnsureTLSCertificatesSANCoversBindHost verifies hostname verification

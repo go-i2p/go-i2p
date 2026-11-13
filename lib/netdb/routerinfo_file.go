@@ -15,7 +15,7 @@ import (
 // key material it is public data (a RouterInfo is a signed advertisement), so
 // it is world-readable: external tooling running as another user — a
 // monitoring dashboard parsing the ident hash — must be able to read it.
-const routerInfoFileMode os.FileMode = 0644
+const routerInfoFileMode os.FileMode = 0o644
 
 // WriteRouterInfoFile serializes ri and writes it to path as a single
 // base64-encoded line, the same encoding i2pd uses for its router.info. The
@@ -39,7 +39,7 @@ func WriteRouterInfoFile(path string, ri router_info.RouterInfo) error {
 	encoded := base64.StdEncoding.EncodeToString(data) + "\n"
 
 	if dir := filepath.Dir(path); dir != "" && dir != "." {
-		if err := os.MkdirAll(dir, 0755); err != nil {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return oops.Wrapf(err, "failed to create directory for router info file %s", path)
 		}
 	}

@@ -66,7 +66,7 @@ func newFakeLeaseResolver() *fakeLeaseResolver {
 	return &fakeLeaseResolver{targets: make(map[common.Hash]LeaseTarget)}
 }
 
-func (f *fakeLeaseResolver) add(dest common.Hash, gateway common.Hash, tunnelID uint32) {
+func (f *fakeLeaseResolver) add(dest, gateway common.Hash, tunnelID uint32) {
 	f.targets[dest] = LeaseTarget{
 		GatewayHash: gateway,
 		TunnelID:    tunnelID,

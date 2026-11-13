@@ -39,8 +39,8 @@ const (
 
 	// certFileMode and keyFileMode follow the i2pd layout: the certificate is
 	// public (clients pin it byte-for-byte) while the key stays owner-only.
-	certFileMode os.FileMode = 0644
-	keyFileMode  os.FileMode = 0600
+	certFileMode os.FileMode = 0o644
+	keyFileMode  os.FileMode = 0o600
 )
 
 // EnsureTLSCertificates resolves the certificate and key the I2PControl server
@@ -115,7 +115,7 @@ func resolveDefaultCertPaths(workingDir string) (certPath, keyPath string, err e
 		}
 		return filepath.Join(dir, defaultCertFileName), filepath.Join(dir, defaultKeyFileName), nil
 	}
-	if err := os.MkdirAll(workingDir, 0755); err != nil {
+	if err := os.MkdirAll(workingDir, 0o755); err != nil {
 		return "", "", oops.Wrapf(err, "i2pcontrol: failed to create certificate directory %s", workingDir)
 	}
 	return filepath.Join(workingDir, defaultCertFileName), filepath.Join(workingDir, defaultKeyFileName), nil

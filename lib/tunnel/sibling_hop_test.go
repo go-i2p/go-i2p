@@ -97,7 +97,7 @@ func (b *siblingRecordingBuilder) snapshot() ([]BuildTunnelRequest, [][]common.H
 }
 
 // assertExcluded asserts every hash in want appears in the exclusion list.
-func assertExcluded(t *testing.T, exclusion []common.Hash, want []common.Hash) {
+func assertExcluded(t *testing.T, exclusion, want []common.Hash) {
 	t.Helper()
 	set := make(map[common.Hash]struct{}, len(exclusion))
 	for _, h := range exclusion {
@@ -219,7 +219,7 @@ func TestActiveTunnelHops_SkipsZeroAndDedups(t *testing.T) {
 	shared := makePeerHash(0x55)
 	pool.AddTunnel(&TunnelState{
 		ID:        TunnelID(9100),
-		Hops:      []common.Hash{shared, common.Hash{}, makePeerHash(0x56)},
+		Hops:      []common.Hash{shared, {}, makePeerHash(0x56)},
 		State:     TunnelReady,
 		CreatedAt: time.Now(),
 	})
@@ -246,8 +246,8 @@ func TestActiveTunnelHops_SkipsZeroAndDedups(t *testing.T) {
 
 // TestMergeExclusions_DedupsAndDropsZero verifies the exclusion-merge helper.
 func TestMergeExclusions_DedupsAndDropsZero(t *testing.T) {
-	a := []common.Hash{makePeerHash(0x01), common.Hash{}, makePeerHash(0x02)}
-	b := []common.Hash{makePeerHash(0x02), makePeerHash(0x03), common.Hash{}}
+	a := []common.Hash{makePeerHash(0x01), {}, makePeerHash(0x02)}
+	b := []common.Hash{makePeerHash(0x02), makePeerHash(0x03), {}}
 
 	merged := mergeExclusions(a, b)
 

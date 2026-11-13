@@ -1360,7 +1360,7 @@ func (p *Publisher) localRouterHash() (common.Hash, bool) {
 //     successful send is accepted as proof of publication (best-effort ack).
 //   - confirmed=false: no ack and at least one token used a tunnel reply route,
 //     where the ack reliably returns; the missing ack is a real failure.
-func (p *Publisher) waitForPublishAckTokens(tokens []uint32, timeout time.Duration) (confirmed bool, ackReceived bool) {
+func (p *Publisher) waitForPublishAckTokens(tokens []uint32, timeout time.Duration) (confirmed, ackReceived bool) {
 	if len(tokens) == 0 {
 		return false, false
 	}

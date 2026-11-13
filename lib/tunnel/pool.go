@@ -1126,18 +1126,21 @@ func (p *Pool) exhaustedBuildError(maxRetries, localFailures, refused int, lastE
 	if localFailures > 0 && refused == 0 {
 		return oops.Wrapf(
 			fmt.Errorf("%w: %s: %w", ErrNoDialableCandidates, attempts, lastErr),
-			"tunnel build failed after %d retries", maxRetries)
+			"tunnel build failed after %d retries", maxRetries,
+		)
 	}
 	if refused > 0 && localFailures == 0 {
 		return oops.Wrapf(
 			fmt.Errorf("%w: %s: %w", ErrBuildsRefused, attempts, lastErr),
-			"tunnel build failed after %d retries", maxRetries)
+			"tunnel build failed after %d retries", maxRetries,
+		)
 	}
 	// Mixed, or nothing classifiable: report the dominant mode but keep both
 	// counts so the mix is still visible.
 	return oops.Wrapf(
 		fmt.Errorf("tunnel build exhausted retries: %s: %w", attempts, lastErr),
-		"tunnel build failed after %d retries", maxRetries)
+		"tunnel build failed after %d retries", maxRetries,
+	)
 }
 
 // checkRetryContext verifies the pool context is still active before a retry attempt.
