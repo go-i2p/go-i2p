@@ -1915,8 +1915,10 @@ example after switching to zero-hop mode via TriggerAutoFallbackCheck.
 ```go
 func (p *Pool) SelectTunnel() *TunnelState
 ```
-SelectTunnel selects a tunnel from the pool using round-robin strategy. Returns
-nil if no active tunnels are available.
+SelectTunnel selects a tunnel from the pool using cryptographically secure
+random selection (math/rand/v2), as the tunnel-implementation spec requires.
+Deterministic round-robin would let a gateway predict the next tunnel and
+correlate flows. Returns nil if no active tunnels are available.
 
 #### func (*Pool) SetAutoFallbackCheck
 

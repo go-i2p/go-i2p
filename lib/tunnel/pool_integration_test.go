@@ -135,7 +135,7 @@ func TestPoolMaintenanceRequiresBuilder(t *testing.T) {
 	assert.Contains(t, err.Error(), "tunnel builder not set")
 }
 
-func TestSelectTunnelRoundRobin(t *testing.T) {
+func TestSelectTunnelRandom(t *testing.T) {
 	selector := &MockPeerSelector{}
 	pool := NewTunnelPool(selector)
 	defer pool.Stop()
@@ -161,23 +161,43 @@ func TestSelectTunnelRoundRobin(t *testing.T) {
 	pool.AddTunnel(tunnel2)
 	pool.AddTunnel(tunnel3)
 
-	// Select enough times to verify fair distribution
-	// With round-robin, each tunnel should get equal selections
+	// Selection must be random (CSPRNG), not deterministic round-robin: a
+	// predictable cycle lets a gateway correlate consecutive messages.
+	// Over many draws every tunnel should be selected, the distribution should
+	// be roughly uniform, and the sequence should not be a strict rotation.
+	const numSelections = 3000
 	counts := make(map[TunnelID]int)
-	numSelections := 30 // 10 per tunnel
+	seq := make([]TunnelID, 0, numSelections)
 	for i := 0; i < numSelections; i++ {
 		tunnel := pool.SelectTunnel()
 		require.NotNil(t, tunnel)
 		counts[tunnel.ID]++
+		seq = append(seq, tunnel.ID)
 	}
 
-	// Verify all tunnels were selected
+	// All tunnels were selected at least once.
 	assert.Equal(t, 3, len(counts), "All 3 tunnels should be selected")
 
-	// Each tunnel should be selected exactly 10 times (30 / 3)
+	// Roughly uniform: each tunnel should land within a wide band of the
+	// expected one-third share. This is loose enough to never flake while still
+	// catching a degenerate selection that ignores some tunnels.
+	expected := numSelections / 3
 	for id, count := range counts {
-		assert.Equal(t, 10, count, "Tunnel %d should be selected exactly 10 times", id)
+		assert.Greater(t, count, expected/2, "Tunnel %d selected far too rarely", id)
+		assert.Less(t, count, expected*2, "Tunnel %d selected far too often", id)
 	}
+
+	// The sequence must not be a strict round-robin cycle (e.g. 1,2,3,1,2,3...).
+	// A perfect cycle would have zero adjacent repeats; random selection over
+	// 3000 draws makes a repeat overwhelmingly likely.
+	strictCycle := true
+	for i := 1; i < len(seq); i++ {
+		if seq[i] == seq[i-1] {
+			strictCycle = false
+			break
+		}
+	}
+	assert.False(t, strictCycle, "selection must not be a deterministic round-robin cycle")
 }
 
 func TestSelectTunnelNoActive(t *testing.T) {

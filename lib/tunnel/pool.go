@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"sort"
 	"strings"
 	"sync"
@@ -282,10 +283,9 @@ type Pool struct {
 	peerSelector         PeerSelector
 	tunnelBuilder        BuilderInterface
 	config               PoolConfig
-	clientSessionID      uint16        // Session ID for I2CP client pools; 0 for exploratory pools
-	selectionIndex       atomic.Uint32 // Lock-free round-robin counter
-	lastBuildTime        time.Time     // Track last build attempt for backoff
-	buildFailures        int           // Consecutive build failures
+	clientSessionID      uint16    // Session ID for I2CP client pools; 0 for exploratory pools
+	lastBuildTime        time.Time // Track last build attempt for backoff
+	buildFailures        int       // Consecutive build failures
 	ctx                  context.Context
 	cancel               context.CancelFunc
 	maintWg              sync.WaitGroup                       // Track maintenance goroutine
@@ -1062,10 +1062,21 @@ func (p *Pool) logBuildFailure(err error, retry, maxRetries int, req *BuildTunne
 	}).Warn("failed to build tunnel")
 }
 
-// SelectTunnel selects a tunnel from the pool using round-robin strategy.
-// It returns an active tunnel using lock-free round-robin selection, and
-// returns nil if no active tunnels are available. This is a hot-path
-// function called on every message send, so it avoids taking the pool lock.
+// SelectTunnel selects a tunnel from the pool using cryptographically secure
+// random selection. It returns an active tunnel chosen uniformly at random from
+// the cached active set, and returns nil if no active tunnels are available.
+//
+// Selection must be unpredictable: the I2P tunnel-implementation spec requires
+// random tunnel selection, and i2pd weights its choice randomly. A deterministic
+// scheme (the previous round-robin counter) lets a gateway or other observer
+// predict which tunnel carries the next message and correlate flows across it,
+// weakening anonymity. We draw the index from math/rand/v2's global source, a
+// per-P ChaCha8 CSPRNG: it is unpredictable to an observer while staying
+// lock-free and syscall-free, which matters because this is a hot path called
+// on every message send. (go-i2p/crypto/rand would also be secure but performs
+// an OS getrandom syscall under a global lock per call, which is too costly
+// here.) Uniform selection also avoids the traffic-analysis bias of always
+// preferring the first or last tunnel.
 func (p *Pool) SelectTunnel() *TunnelState {
 	// Lock-free read of cached active tunnels
 	active := p.getActiveTunnels()
@@ -1081,10 +1092,10 @@ func (p *Pool) SelectTunnel() *TunnelState {
 		return nil
 	}
 
-	// Lock-free round-robin selection using atomic increment
-	index := p.selectionIndex.Add(1) - 1
-	selected := active[index%uint32(len(active))]
-	return selected
+	// Lock-free CSPRNG selection. UintN never returns >= len(active) and never
+	// panics for n >= 1, which the len check above guarantees.
+	index := rand.UintN(uint(len(active)))
+	return active[index]
 }
 
 // getActiveTunnels returns the cached active tunnel slice with lock-free read.

@@ -1351,8 +1351,10 @@ func TestTunnelPool_AddRemoveGetTunnel(t *testing.T) {
 	assert.False(t, exists)
 }
 
-func TestTunnelPool_SelectTunnelRoundRobin(t *testing.T) {
-	// Pool must select tunnels using round-robin
+func TestTunnelPool_SelectTunnelRandom(t *testing.T) {
+	// The tunnel-implementation spec requires random tunnel selection so a
+	// gateway cannot predict which tunnel carries the next message. Verify the
+	// pool does not return a deterministic round-robin cycle.
 	pool := NewTunnelPool(&specMockPeerSelector{count: 3})
 	defer pool.Stop()
 
@@ -1364,12 +1366,26 @@ func TestTunnelPool_SelectTunnelRoundRobin(t *testing.T) {
 		})
 	}
 
-	selected := pool.SelectTunnel()
-	assert.NotNil(t, selected)
+	// Collect a sequence long enough that a strict rotation is statistically
+	// distinguishable from random selection.
+	const draws = 600
+	seen := make(map[TunnelID]bool)
+	repeat := false
+	prev := TunnelID(0)
+	for i := 0; i < draws; i++ {
+		selected := pool.SelectTunnel()
+		require.NotNil(t, selected)
+		seen[selected.ID] = true
+		if selected.ID == prev {
+			repeat = true
+		}
+		prev = selected.ID
+	}
 
-	// Subsequent selections should rotate
-	secondSelected := pool.SelectTunnel()
-	assert.NotNil(t, secondSelected)
+	// Every tunnel is reachable, and the sequence is not a strict cycle (a
+	// round-robin never repeats the same tunnel back-to-back).
+	assert.Equal(t, 3, len(seen), "all tunnels should be selectable")
+	assert.True(t, repeat, "selection should not be a deterministic round-robin cycle")
 }
 
 func TestTunnelPool_GetPoolStats(t *testing.T) {
