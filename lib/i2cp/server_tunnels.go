@@ -452,6 +452,11 @@ func (s *Server) sendLeaseSetRequest(session *Session, conn net.Conn, sessionID 
 		Payload:   payload,
 	}
 
+	// Re-arm the write deadline before writing (like sendResponse and the
+	// delivery path) so this write never inherits a stale absolute deadline
+	// left by an earlier response/status write. Regression for GI-I2CP-001.
+	s.applyWriteDeadline(conn)
+
 	s.mu.RLock()
 	writeMu := s.connWriteMu[sessionID]
 	s.mu.RUnlock()

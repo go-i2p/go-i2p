@@ -886,6 +886,15 @@ func (s *Server) sendMessageToClient(conn net.Conn, sessionID uint16, msg *Messa
 			"sessionID": sessionID,
 			"error":     err,
 		}).Error("failed_to_write_message_payload")
+		// A delivery write failure means the session can no longer receive
+		// messages. The delivery goroutine does not restart, so without this
+		// the client would stay attached but permanently deaf. Close the
+		// connection so the read loop's Read errors out and triggers the
+		// normal coordinated teardown (cleanupSessionConnection ->
+		// DestroySession); the client then reconnects instead of silently
+		// starving. Double-close from handleConnection's deferred Close is
+		// harmless (returns ErrClosed).
+		_ = conn.Close()
 		return true
 	}
 	return false
