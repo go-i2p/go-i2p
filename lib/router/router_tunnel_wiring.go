@@ -106,18 +106,18 @@ func (r *Router) wireTunnelDataHandler() {
 // tunnel-message.rst gateway preprocessing; i2pd Tunnel.cpp HandleTunnelGatewayMsg
 // treats the payload as opaque and calls tunnel->SendTunnelDataMsg).
 //
-// The dispatcher also keeps local dispatch for build-reply inner messages,
-// because go-i2p telescopes STBM build replies (type 26) inside a type-19
-// addressed at the reply tunnel (see transportBuildReplyForwarder). Reference
-// routers deliver build replies as bare type-26/24 instead, so this branch only
-// fires for our own reply traffic and never for spec-conformant peers.
+// The payload is injected verbatim regardless of its inner I2NP type, including
+// build replies: i2pd wraps a build reply in a TunnelGateway when the reply
+// gateway is remote (TransitTunnel.cpp CreateTunnelGatewayMsg) and injects it
+// into the reply tunnel even when the gateway is local (SendTunnelDataMsg). The
+// reply is processed at the tunnel's ENDPOINT after decryption, not at the
+// gateway, so the gateway must never consume it.
 func (r *Router) wireTunnelGatewayHandler() {
 	var pool *tunnel.Pool
 	if r.tunnelManager != nil {
 		pool = r.tunnelManager.GetInboundPool()
 	}
 	r.messageRouter.GetProcessor().SetTunnelGatewayHandler(&tunnelGatewayDispatcher{
-		processor:   r.messageRouter.GetProcessor(),
 		inboundPool: pool,
 		sessions:    r,
 	})
@@ -129,7 +129,6 @@ func (r *Router) wireTunnelGatewayHandler() {
 // tunnel named by the gateway's TunnelID field, rather than consuming it as our
 // own traffic.
 type tunnelGatewayDispatcher struct {
-	processor *i2np.MessageProcessor
 	// inboundPool resolves the destination's inbound tunnel by ID. Only tunnels
 	// WE built retain the full per-hop layer set, so injection is limited to our
 	// own inbound tunnels; a payload for an unknown tunnel fails closed.
@@ -141,9 +140,12 @@ type tunnelGatewayDispatcher struct {
 
 // HandleGateway injects a TunnelGateway payload into its inbound tunnel.
 //
-// Build-reply inner messages (type 24/26) are dispatched locally, because
-// go-i2p wraps them in a type-19 on the reply path; everything else is treated
-// as opaque payload and injected into the tunnel.
+// The payload is treated as opaque and injected verbatim, regardless of its
+// inner I2NP type. A gateway never consumes the payload it forwards; even a
+// build reply wrapped in a type-19 is injected into the reply tunnel and
+// processed at the tunnel's endpoint after decryption (i2pd TransitTunnel.cpp
+// injects the reply via SendTunnelDataMsg/CreateTunnelGatewayMsg rather than
+// handling it at the gateway).
 func (d *tunnelGatewayDispatcher) HandleGateway(tunnelID tunnel.TunnelID, payload []byte) error {
 	// BUG-4 fix: use the short-format minimum (9 bytes) as the floor so that
 	// valid 9–15 byte short I2NP messages are not rejected before the fallback
@@ -152,32 +154,9 @@ func (d *tunnelGatewayDispatcher) HandleGateway(tunnelID tunnel.TunnelID, payloa
 		return oops.Errorf("TunnelGateway payload too short: %d bytes", len(payload))
 	}
 
-	// Peek at the inner I2NP type only to decide build-reply vs. opaque payload.
-	// A real gateway never inspects the payload beyond this; the reference
-	// (i2pd HandleTunnelGatewayMsg) forwards it verbatim into the tunnel.
-	inner := &i2np.BaseI2NPMessage{}
-	if err := inner.UnmarshalBinary(payload); err != nil {
-		inner2 := &i2np.BaseI2NPMessage{}
-		if err2 := inner2.UnmarshalShortI2NP(payload); err2 != nil {
-			return oops.Wrapf(err, "failed to parse inner I2NP message from TunnelGateway payload (standard: %v, short: %v)", err, err2)
-		}
-		inner = inner2
-	}
-
-	// go-i2p reply telescoping: a build reply wrapped in a type-19 is OUR reply
-	// traffic and must be processed locally, not re-injected down a tunnel.
-	if isBuildReplyType(inner.Type()) {
-		inner.SetReceivedViaTunnel(true)
-		i2np.RecordExploratoryReplyStage(i2np.ExploratoryReplyStageTunnelGatewayParsed)
-		log.WithFields(logger.Fields{
-			"outer_tunnel_id": tunnelID,
-			"inner_type":      inner.Type(),
-			"inner_msg_id":    inner.MessageID(),
-		}).Debug("TunnelGateway: dispatching wrapped build reply locally")
-		return d.processor.ProcessMessage(inner)
-	}
-
-	// Opaque payload: inject into the inbound tunnel named by the gateway field.
+	// Inject the opaque payload into the inbound tunnel named by the gateway
+	// field. The reference (i2pd HandleTunnelGatewayMsg) forwards the payload
+	// verbatim without inspecting its inner type.
 	return d.injectIntoInboundTunnel(tunnelID, payload)
 }
 
