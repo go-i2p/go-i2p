@@ -111,8 +111,9 @@ func buildOurIdentTestData(identLen int, identByte byte) (testData, ourIdent []b
 
 // processDirectBuildRecord creates a test build request record with NextTunnel=0
 // (direct router forwarding) and calls processSingleBuildRecord with a
-// single-slot short build message body.
-func processDirectBuildRecord(t *testing.T, processor *MessageProcessor, messageID int) BuildRequestRecord {
+// single-slot short build message body. slotCrypto carries the per-slot reply
+// state for the message being processed.
+func processDirectBuildRecord(t *testing.T, processor *MessageProcessor, messageID int, slotCrypto map[int]stbmSlotCrypto) BuildRequestRecord {
 	t.Helper()
 	record := createTestBuildRequestRecord(t)
 	record.NextTunnel = 0
@@ -124,7 +125,7 @@ func processDirectBuildRecord(t *testing.T, processor *MessageProcessor, message
 	for i := 1; i < len(raw); i++ {
 		raw[i] = byte(i % 251)
 	}
-	processor.processSingleBuildRecord(messageID, 0, record, raw, I2NPMessageTypeShortTunnelBuild)
+	processor.processSingleBuildRecord(messageID, 0, record, slotCrypto, raw, I2NPMessageTypeShortTunnelBuild)
 	return record
 }
 

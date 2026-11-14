@@ -36,7 +36,8 @@ func TestTryParseAndAppendRecord_RejectsForeignRecord(t *testing.T) {
 	}
 
 	var records []BuildRequestRecord
-	processor.tryParseAndAppendRecord(&records, foreign, 0)
+	slotCrypto := map[int]stbmSlotCrypto{}
+	processor.tryParseAndAppendRecord(&records, slotCrypto, foreign, 0)
 	assert.Empty(t, records, "record with a foreign toPeer prefix must be dropped")
 
 	// A record addressed to us but not validly encrypted must also be dropped.
@@ -45,7 +46,7 @@ func TestTryParseAndAppendRecord_RejectsForeignRecord(t *testing.T) {
 	for i := 16; i < len(mine); i++ {
 		mine[i] = byte(i * 7)
 	}
-	processor.tryParseAndAppendRecord(&records, mine, 0)
+	processor.tryParseAndAppendRecord(&records, slotCrypto, mine, 0)
 	assert.Empty(t, records, "unauthenticated record addressed to us must be dropped")
 
 	assert.Equal(t, 0, mockParticipant.getRegisteredCount(),
@@ -67,7 +68,7 @@ func TestProcessAllBuildRecords_NoProcessingWhenHashUnset(t *testing.T) {
 		records[i].NextTunnel = 0
 	}
 
-	err := processor.processAllBuildRecords(43, records, []int{0, 1, 2}, nil, 25)
+	err := processor.processAllBuildRecords(43, records, []int{0, 1, 2}, nil, nil, 25)
 	require.Error(t, err, "processing must fail when our router hash is unset")
 
 	assert.Equal(t, 0, mockParticipant.getRegisteredCount(),

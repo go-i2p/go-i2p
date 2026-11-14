@@ -72,9 +72,9 @@ func TestBuildReplyForwarderInterface(t *testing.T) {
 func TestProcessSingleBuildRecord_AcceptedRequest(t *testing.T) {
 	processor, mockForwarder, mockParticipant := setupBuildReplyTest(t, true)
 	crypto := newTestSTBMSlotCrypto()
-	processor.stbmSlotCrypto = map[int]stbmSlotCrypto{0: crypto}
+	slotCrypto := map[int]stbmSlotCrypto{0: crypto}
 
-	record := processDirectBuildRecord(t, processor, 1001)
+	record := processDirectBuildRecord(t, processor, 1001, slotCrypto)
 
 	assert.Equal(t, 1, mockParticipant.getRegisteredCount(), "Participant should be registered")
 
@@ -98,9 +98,9 @@ func TestProcessSingleBuildRecord_RejectedRequest(t *testing.T) {
 	processor, mockForwarder, mockParticipant := setupBuildReplyTest(t, false)
 	mockParticipant.rejectCode = TunnelBuildReplyTransientOverload
 	mockParticipant.rejectReason = "router overloaded"
-	processor.stbmSlotCrypto = map[int]stbmSlotCrypto{0: newTestSTBMSlotCrypto()}
+	slotCrypto := map[int]stbmSlotCrypto{0: newTestSTBMSlotCrypto()}
 
-	processDirectBuildRecord(t, processor, 1002)
+	processDirectBuildRecord(t, processor, 1002, slotCrypto)
 
 	assert.Equal(t, 0, mockParticipant.getRegisteredCount(), "Participant should not be registered when rejected")
 
@@ -112,13 +112,13 @@ func TestProcessSingleBuildRecord_RejectedRequest(t *testing.T) {
 // through the tunnel instead of directly to the next router.
 func TestProcessSingleBuildRecord_TunnelForwarding(t *testing.T) {
 	processor, mockForwarder, _ := setupBuildReplyTest(t, true)
-	processor.stbmSlotCrypto = map[int]stbmSlotCrypto{0: newTestSTBMSlotCrypto()}
+	slotCrypto := map[int]stbmSlotCrypto{0: newTestSTBMSlotCrypto()}
 
 	record := createTestBuildRequestRecord(t)
 	messageID := 1003
 	record.NextTunnel = tunnel.TunnelID(67890) // Non-zero means tunnel forwarding
 	record.SendMessageID = messageID           // echoed as the outgoing reply message ID
-	processor.processSingleBuildRecord(messageID, 0, record, newSingleSlotSTBMRaw(), 25)
+	processor.processSingleBuildRecord(messageID, 0, record, slotCrypto, newSingleSlotSTBMRaw(), 25)
 
 	tunnelCalls := mockForwarder.getTunnelCalls()
 	assert.Len(t, tunnelCalls, 1, "Should have one tunnel forward call")
@@ -137,13 +137,13 @@ func TestProcessSingleBuildRecord_NoForwarder(t *testing.T) {
 	processor := NewMessageProcessor()
 	mockParticipant := newMockParticipantManager(true)
 	processor.SetParticipantManager(mockParticipant)
-	processor.stbmSlotCrypto = map[int]stbmSlotCrypto{0: newTestSTBMSlotCrypto()}
+	slotCrypto := map[int]stbmSlotCrypto{0: newTestSTBMSlotCrypto()}
 	// Note: No SetBuildReplyForwarder called
 
 	record := createTestBuildRequestRecord(t)
 
 	// Execute - should not panic, just log warning
-	processor.processSingleBuildRecord(1004, 0, record, newSingleSlotSTBMRaw(), 25)
+	processor.processSingleBuildRecord(1004, 0, record, slotCrypto, newSingleSlotSTBMRaw(), 25)
 
 	assert.Equal(t, 1, mockParticipant.getRegisteredCount(), "Participant should still be registered")
 }
@@ -153,12 +153,12 @@ func TestProcessSingleBuildRecord_NoForwarder(t *testing.T) {
 func TestGenerateAndSendBuildReply_EncryptionWorks(t *testing.T) {
 	processor, mockForwarder, _ := setupBuildReplyTest(t, true)
 	crypto := newTestSTBMSlotCrypto()
-	processor.stbmSlotCrypto = map[int]stbmSlotCrypto{0: crypto}
+	slotCrypto := map[int]stbmSlotCrypto{0: crypto}
 
 	record := createTestBuildRequestRecord(t)
 	record.NextTunnel = 0 // Force direct router forwarding
 
-	err := processor.generateAndSendBuildReply(1005, 0, record, TunnelBuildReplySuccess, 0, newSingleSlotSTBMRaw(), 25)
+	err := processor.generateAndSendBuildReply(1005, 0, record, TunnelBuildReplySuccess, 0, slotCrypto, newSingleSlotSTBMRaw(), 25)
 	require.NoError(t, err, "Should successfully generate and send reply")
 
 	routerCalls := mockForwarder.getRouterCalls()
@@ -186,12 +186,12 @@ func TestGenerateAndSendBuildReply_AllReplyCodes(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			processor, mockForwarder, _ := setupBuildReplyTest(t, true)
 			crypto := newTestSTBMSlotCrypto()
-			processor.stbmSlotCrypto = map[int]stbmSlotCrypto{0: crypto}
+			slotCrypto := map[int]stbmSlotCrypto{0: crypto}
 
 			record := createTestBuildRequestRecord(t)
 			record.NextTunnel = 0
 
-			err := processor.generateAndSendBuildReply(1, 0, record, tc.replyCode, 0, newSingleSlotSTBMRaw(), 25)
+			err := processor.generateAndSendBuildReply(1, 0, record, tc.replyCode, 0, slotCrypto, newSingleSlotSTBMRaw(), 25)
 			require.NoError(t, err)
 
 			routerCalls := mockForwarder.getRouterCalls()
@@ -243,9 +243,9 @@ func TestMultipleBuildRecords_Processing(t *testing.T) {
 	var ourHash common.Hash
 	copy(ourHash[:], []byte("test-router-hash-32-bytes-long!"))
 	processor.SetOurRouterHash(ourHash)
-	processor.stbmSlotCrypto = map[int]stbmSlotCrypto{}
+	slotCrypto := map[int]stbmSlotCrypto{}
 	for i := 0; i < 5; i++ {
-		processor.stbmSlotCrypto[i] = newTestSTBMSlotCrypto()
+		slotCrypto[i] = newTestSTBMSlotCrypto()
 	}
 
 	records := make([]BuildRequestRecord, 5)
@@ -270,7 +270,7 @@ func TestMultipleBuildRecords_Processing(t *testing.T) {
 	// branch: even slots (NextTunnel==0) forward directly to the router, odd
 	// slots forward through the reply tunnel.
 	slots := []int{0, 1, 2, 3, 4}
-	processor.processAllBuildRecords(2000, records, slots, raw, 25)
+	processor.processAllBuildRecords(2000, records, slots, slotCrypto, raw, 25)
 
 	assert.Equal(t, 5, mockParticipant.getRegisteredCount(), "All participants should be registered")
 
@@ -298,9 +298,9 @@ func TestSetBuildReplyForwarder(t *testing.T) {
 func TestProcessSingleBuildRecord_RegisterParticipantFailure(t *testing.T) {
 	processor, mockForwarder, mockParticipant := setupBuildReplyTest(t, true)
 	mockParticipant.registerErr = fmt.Errorf("participant slots exhausted")
-	processor.stbmSlotCrypto = map[int]stbmSlotCrypto{0: newTestSTBMSlotCrypto()}
+	slotCrypto := map[int]stbmSlotCrypto{0: newTestSTBMSlotCrypto()}
 
-	processDirectBuildRecord(t, processor, 3001)
+	processDirectBuildRecord(t, processor, 3001, slotCrypto)
 
 	assert.Equal(t, 1, mockParticipant.getRegisteredCount(),
 		"RegisterParticipant should have been called")

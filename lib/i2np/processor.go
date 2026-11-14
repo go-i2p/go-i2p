@@ -282,7 +282,6 @@ type MessageProcessor struct {
 	buildReplyProcessor   TunnelBuildReplyProcessor // Optional processor for tunnel build reply messages
 	ourRouterHash         common.Hash               // Our router identity hash for filtering build records
 	ourPrivateKey         []byte                    // Our router's static X25519 private key for build record decryption
-	stbmSlotCrypto        map[int]stbmSlotCrypto    // Per-slot STBM crypto state (valid during one message processing call)
 }
 
 // NewMessageProcessor creates a new message processor with default

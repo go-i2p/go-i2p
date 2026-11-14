@@ -130,7 +130,7 @@ type buildRequestProcessor struct {
 	processor        *MessageProcessor
 	msg              Message
 	inputMessageType int
-	parse            func([]byte) ([]BuildRequestRecord, []int, error)
+	parse            func([]byte) ([]BuildRequestRecord, []int, map[int]stbmSlotCrypto, error)
 }
 
 func newBuildRequestProcessor(p *MessageProcessor, msg Message) buildRequestProcessor {
@@ -138,7 +138,7 @@ func newBuildRequestProcessor(p *MessageProcessor, msg Message) buildRequestProc
 		processor:        p,
 		msg:              msg,
 		inputMessageType: msg.Type(),
-		parse: func(data []byte) ([]BuildRequestRecord, []int, error) {
+		parse: func(data []byte) ([]BuildRequestRecord, []int, map[int]stbmSlotCrypto, error) {
 			return p.parseTunnelBuildRecords(data)
 		},
 	}
@@ -161,13 +161,13 @@ func (b buildRequestProcessor) process() error {
 		return err
 	}
 
-	records, slotIndices, err := b.parse(data)
+	records, slotIndices, slotCrypto, err := b.parse(data)
 	if err != nil {
 		return oops.Wrapf(err, "failed to parse tunnel build records")
 	}
 
 	b.processor.logParsedBuildRequest(b.msg.MessageID(), len(records))
-	return b.processor.processAllBuildRecords(b.msg.MessageID(), records, slotIndices, data, b.inputMessageType)
+	return b.processor.processAllBuildRecords(b.msg.MessageID(), records, slotIndices, slotCrypto, data, b.inputMessageType)
 }
 
 // pendingInboundBuildMatcher is optionally implemented by a
@@ -279,7 +279,10 @@ func (p *MessageProcessor) logParsedBuildRequest(messageID, recordCount int) {
 // with our static key is the sole proof that the record is ours. Records we could
 // not decrypt are never added to the list. slotIndices[i] is the position record
 // i occupied in the message - the reply/forward transform must use it, not the
-// index within this filtered list.
+// index within this filtered list. slotCrypto carries the per-slot Noise-derived
+// reply key and transcript hash produced during decryption; it is threaded
+// through to the reply transform so no per-processor shared state is needed and
+// concurrent build messages cannot clobber each other.
 //
 // Per tunnel-creation-ecies.rst, a hop sends the OutboundTunnelBuildReply (type 26)
 // only if it is the outbound endpoint (request record flag bit 6); every other
@@ -293,7 +296,7 @@ func (p *MessageProcessor) logParsedBuildRequest(messageID, recordCount int) {
 // added to the list by tryParseAndAppendRecord, so this function will be called with an
 // empty list. Callers must call SetOurRouterHash before processing any tunnel
 // build messages.
-func (p *MessageProcessor) processAllBuildRecords(messageID int, records []BuildRequestRecord, slotIndices []int, rawData []byte, inputMessageType int) error {
+func (p *MessageProcessor) processAllBuildRecords(messageID int, records []BuildRequestRecord, slotIndices []int, slotCrypto map[int]stbmSlotCrypto, rawData []byte, inputMessageType int) error {
 	var zeroHash common.Hash
 	if p.ourRouterHash == zeroHash {
 		log.WithFields(logger.Fields{
@@ -308,7 +311,7 @@ func (p *MessageProcessor) processAllBuildRecords(messageID int, records []Build
 		if i < len(slotIndices) {
 			slot = slotIndices[i]
 		}
-		p.processSingleBuildRecord(messageID, slot, record, rawData, inputMessageType)
+		p.processSingleBuildRecord(messageID, slot, record, slotCrypto, rawData, inputMessageType)
 	}
 	return nil
 }
@@ -317,7 +320,8 @@ func (p *MessageProcessor) processAllBuildRecords(messageID int, records []Build
 // After validating and accepting/rejecting the request, it generates an encrypted
 // BuildResponseRecord and forwards it to the next hop.
 // inputMessageType is passed to generateAndSendBuildReply for correct reply type mapping.
-func (p *MessageProcessor) processSingleBuildRecord(messageID, index int, record BuildRequestRecord, rawData []byte, inputMessageType int) {
+// slotCrypto carries this message's per-slot Noise-derived reply state.
+func (p *MessageProcessor) processSingleBuildRecord(messageID, index int, record BuildRequestRecord, slotCrypto map[int]stbmSlotCrypto, rawData []byte, inputMessageType int) {
 	accepted, rejectCode, reason := p.participantManager.ProcessBuildRequest(record.OurIdent)
 
 	// availableBW is the bandwidth (KB/s) advertised back to the tunnel creator
@@ -350,7 +354,7 @@ func (p *MessageProcessor) processSingleBuildRecord(messageID, index int, record
 	}
 
 	// Generate and send build reply message
-	if err := p.generateAndSendBuildReply(messageID, index, record, rejectCode, availableBW, rawData, inputMessageType); err != nil {
+	if err := p.generateAndSendBuildReply(messageID, index, record, rejectCode, availableBW, slotCrypto, rawData, inputMessageType); err != nil {
 		log.WithError(err).WithFields(logger.Fields{
 			"at":             "processSingleBuildRecord",
 			"message_id":     messageID,
@@ -381,8 +385,8 @@ func (p *MessageProcessor) processSingleBuildRecord(messageID, index int, record
 //
 // The reply/forward body has wire size 1 byte count + N × 218 bytes.
 // See [I2P Spec: Tunnel Creation ECIES](https://github.com/i2p/i2p.www/blob/master/i2p2www/spec/tunnel-creation-ecies.rst) "Message Flow" and "Symmetric Encryption of Records".
-func (p *MessageProcessor) generateAndSendBuildReply(messageID, index int, record BuildRequestRecord, replyCode byte, availableBW uint32, rawData []byte, inputMessageType int) error {
-	transformed, err := p.encryptBuildReply(index, replyCode, availableBW, rawData)
+func (p *MessageProcessor) generateAndSendBuildReply(messageID, index int, record BuildRequestRecord, replyCode byte, availableBW uint32, slotCrypto map[int]stbmSlotCrypto, rawData []byte, inputMessageType int) error {
+	transformed, err := p.encryptBuildReply(index, replyCode, availableBW, slotCrypto, rawData)
 	if err != nil {
 		return err
 	}
@@ -454,11 +458,13 @@ func (p *MessageProcessor) logBuildRequestForward(messageID, index int, record B
 	}).Debug("relayed STBM build request to next hop")
 }
 
-// encryptBuildReply encrypts a short tunnel build reply.
-func (p *MessageProcessor) encryptBuildReply(index int, replyCode byte, availableBW uint32, rawData []byte) ([]byte, error) {
+// encryptBuildReply encrypts a short tunnel build reply. The per-slot Noise-derived
+// reply state is supplied by the caller (slotCrypto) rather than read from shared
+// processor state, so concurrent build messages cannot interfere with each other.
+func (p *MessageProcessor) encryptBuildReply(index int, replyCode byte, availableBW uint32, slotCrypto map[int]stbmSlotCrypto, rawData []byte) ([]byte, error) {
 	var crypto stbmSlotCrypto
-	if p.stbmSlotCrypto != nil {
-		crypto = p.stbmSlotCrypto[index]
+	if slotCrypto != nil {
+		crypto = slotCrypto[index]
 	}
 
 	encryptedReply, err := p.buildSTBMReplyMessage(rawData, index, crypto, replyCode, availableBW)
@@ -714,14 +720,17 @@ func (p *MessageProcessor) handleRejectedBuildRecord(messageID, index int, recor
 
 // parseTunnelBuildRecords parses the short build request records from message
 // data. Returns the parsed records (in slot order) together with the slot index
-// each record occupied in the message. Only records that decrypt with our static
+// each record occupied in the message and a per-message map of the Noise-derived
+// reply state for each decrypted slot. Only records that decrypt with our static
 // key are returned; the slot index is needed downstream because a relay hop's
 // own slot is NOT necessarily position 0 of the filtered list, and the reply /
-// forward transform must write and obfuscate by the true slot index.
-func (p *MessageProcessor) parseTunnelBuildRecords(data []byte) ([]BuildRequestRecord, []int, error) {
+// forward transform must write and obfuscate by the true slot index. The reply
+// state map is owned by this single message-processing call and threaded to the
+// reply transform, so concurrent build messages never share mutable state.
+func (p *MessageProcessor) parseTunnelBuildRecords(data []byte) ([]BuildRequestRecord, []int, map[int]stbmSlotCrypto, error) {
 	recordCount, err := p.validateAndGetRecordCount(data)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	return p.parseRecordsFromData(data, recordCount, ShortBuildRecordSize)
@@ -742,31 +751,36 @@ func (p *MessageProcessor) validateAndGetRecordCount(data []byte) (int, error) {
 }
 
 // parseRecordsFromData iterates through the data and parses each record,
-// recording the slot index of each record that decrypts to us.
-func (p *MessageProcessor) parseRecordsFromData(data []byte, recordCount, recordSize int) ([]BuildRequestRecord, []int, error) {
+// recording the slot index of each record that decrypts to us. It also collects
+// the per-slot Noise-derived reply state into a map owned by this call, which is
+// threaded to the reply transform so no per-processor shared state is needed.
+func (p *MessageProcessor) parseRecordsFromData(data []byte, recordCount, recordSize int) ([]BuildRequestRecord, []int, map[int]stbmSlotCrypto, error) {
 	records := make([]BuildRequestRecord, 0, recordCount)
 	slotIndices := make([]int, 0, recordCount)
+	slotCrypto := make(map[int]stbmSlotCrypto)
 	offset := 1
 
 	for i := 0; i < recordCount; i++ {
 		if len(data)-offset < recordSize {
-			return nil, nil, oops.Errorf("insufficient data for record %d: have %d, need %d", i, len(data)-offset, recordSize)
+			return nil, nil, nil, oops.Errorf("insufficient data for record %d: have %d, need %d", i, len(data)-offset, recordSize)
 		}
 
 		recordData := data[offset : offset+recordSize]
 		before := len(records)
-		p.tryParseAndAppendRecord(&records, recordData, i)
+		p.tryParseAndAppendRecord(&records, slotCrypto, recordData, i)
 		if len(records) > before {
 			slotIndices = append(slotIndices, i)
 		}
 		offset += recordSize
 	}
 
-	return records, slotIndices, nil
+	return records, slotIndices, slotCrypto, nil
 }
 
 // tryParseAndAppendRecord attempts to decrypt a single 218-byte short build
-// request record destined for us and, on success, appends the parsed record.
+// request record destined for us and, on success, appends the parsed record and
+// records its Noise-derived reply state in slotCrypto (the per-message map owned
+// by the caller).
 //
 // A record is only ever accepted if it authenticates under our static X25519
 // key. Records that are not addressed to us, or that fail to decrypt, are
@@ -774,7 +788,7 @@ func (p *MessageProcessor) parseRecordsFromData(data []byte, recordCount, record
 // records to be detected and rejected, and accepting a cleartext record on the
 // strength of its OurIdent field alone would let any peer register a transit
 // tunnel with attacker-chosen layer, IV and reply keys.
-func (p *MessageProcessor) tryParseAndAppendRecord(records *[]BuildRequestRecord, recordData []byte, index int) {
+func (p *MessageProcessor) tryParseAndAppendRecord(records *[]BuildRequestRecord, slotCrypto map[int]stbmSlotCrypto, recordData []byte, index int) {
 	if len(recordData) < ShortBuildRecordSize {
 		return
 	}
@@ -787,18 +801,19 @@ func (p *MessageProcessor) tryParseAndAppendRecord(records *[]BuildRequestRecord
 		return
 	}
 
-	record, err := p.decryptShortRecord(recordData, index)
+	record, crypto, err := p.decryptShortRecord(recordData, index)
 	if err != nil {
 		log.WithError(err).WithField("record_index", index).
 			Warn("STBM ECIES decryption failed; rejecting record destined for us")
 		return
 	}
+	slotCrypto[index] = crypto
 	*records = append(*records, record)
 }
 
 // decryptShortRecord decrypts a 218-byte STBM record using ECIES-X25519-AEAD.
-// As a side effect it populates p.stbmSlotCrypto[index] with the Noise-derived
-// reply key and transcript hash that are needed to build the AEAD reply.
+// It returns the Noise-derived reply key and transcript hash (stbmSlotCrypto)
+// that are needed to build the AEAD reply, alongside the decrypted record.
 //
 // The short record format does not carry layer/IV keys in its cleartext, so the
 // transit hop and the tunnel creator must derive them from the Noise chaining
@@ -809,29 +824,26 @@ func (p *MessageProcessor) tryParseAndAppendRecord(records *[]BuildRequestRecord
 // (tunnel-creation-ecies.rst "Reply keys"). The hop learns which branch applies
 // from its own decrypted record's Flag bit 6. We populate record.LayerKey and
 // record.IVKey here so handleAcceptedBuildRecord registers real (non-zero) keys.
-func (p *MessageProcessor) decryptShortRecord(recordData []byte, index int) (BuildRequestRecord, error) {
+func (p *MessageProcessor) decryptShortRecord(recordData []byte, index int) (BuildRequestRecord, stbmSlotCrypto, error) {
 	var encrypted [218]byte
 	copy(encrypted[:], recordData[:ShortBuildRecordSize])
 	record, preReplyCK, noiseHash, err := decryptSTBMRecord(encrypted, p.ourPrivateKey)
 	if err != nil {
-		return BuildRequestRecord{}, err
+		return BuildRequestRecord{}, stbmSlotCrypto{}, err
 	}
 
 	isOBEP := record.Flag&tunnel.FlagOBEP != 0
 	keys, err := deriveSTBMHopKeys(preReplyCK, isOBEP)
 	if err != nil {
-		return BuildRequestRecord{}, oops.Wrapf(err, "failed to derive STBM reply/layer keys for slot %d", index)
+		return BuildRequestRecord{}, stbmSlotCrypto{}, oops.Wrapf(err, "failed to derive STBM reply/layer keys for slot %d", index)
 	}
 
-	if p.stbmSlotCrypto == nil {
-		p.stbmSlotCrypto = make(map[int]stbmSlotCrypto)
-	}
-	p.stbmSlotCrypto[index] = stbmSlotCrypto{replyKey: keys.ReplyKey, noiseHash: noiseHash}
+	crypto := stbmSlotCrypto{replyKey: keys.ReplyKey, noiseHash: noiseHash}
 
 	copy(record.LayerKey[:], keys.LayerKey[:])
 	copy(record.IVKey[:], keys.IVKey[:])
 
-	return record, nil
+	return record, crypto, nil
 }
 
 // isRecordForUs checks whether the first 16 bytes of the encrypted record

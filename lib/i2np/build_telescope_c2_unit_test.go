@@ -31,13 +31,13 @@ func newThreeSlotSTBMRaw() []byte {
 // type-25 build request to NextIdent instead of emitting a build reply.
 func TestGenerateAndSendBuildReply_TransitHopRelaysType25(t *testing.T) {
 	processor, mockForwarder, _ := setupBuildReplyTest(t, true)
-	processor.stbmSlotCrypto = map[int]stbmSlotCrypto{1: newTestSTBMSlotCrypto()}
+	slotCrypto := map[int]stbmSlotCrypto{1: newTestSTBMSlotCrypto()}
 
 	record := createTestBuildRequestRecord(t)
 	record.Flag = 0 // transit hop: OBEP bit clear
 	record.SendMessageID = 9999
 
-	err := processor.generateAndSendBuildReply(1000, 1, record, TunnelBuildReplySuccess, 0, newThreeSlotSTBMRaw(), 25)
+	err := processor.generateAndSendBuildReply(1000, 1, record, TunnelBuildReplySuccess, 0, slotCrypto, newThreeSlotSTBMRaw(), 25)
 	require.NoError(t, err)
 
 	requestCalls := mockForwarder.getRequestCalls()
@@ -56,14 +56,14 @@ func TestGenerateAndSendBuildReply_TransitHopRelaysType25(t *testing.T) {
 // (outbound endpoint) hop emits the build reply and never relays the request.
 func TestGenerateAndSendBuildReply_OBEPHopSendsType26(t *testing.T) {
 	processor, mockForwarder, _ := setupBuildReplyTest(t, true)
-	processor.stbmSlotCrypto = map[int]stbmSlotCrypto{2: newTestSTBMSlotCrypto()}
+	slotCrypto := map[int]stbmSlotCrypto{2: newTestSTBMSlotCrypto()}
 
 	record := createTestBuildRequestRecord(t)
 	record.Flag = tunnel.FlagOBEP
 	record.NextTunnel = 0 // reply goes directly to the reply-tunnel gateway router
 	record.SendMessageID = 5555
 
-	err := processor.generateAndSendBuildReply(1000, 2, record, TunnelBuildReplySuccess, 0, newThreeSlotSTBMRaw(), 25)
+	err := processor.generateAndSendBuildReply(1000, 2, record, TunnelBuildReplySuccess, 0, slotCrypto, newThreeSlotSTBMRaw(), 25)
 	require.NoError(t, err)
 
 	routerCalls := mockForwarder.getRouterCalls()
@@ -84,7 +84,7 @@ func TestProcessAllBuildRecords_TelescopesMixedFlags(t *testing.T) {
 		ourHash[i] = byte(0x10 + i)
 	}
 	processor.SetOurRouterHash(ourHash)
-	processor.stbmSlotCrypto = map[int]stbmSlotCrypto{
+	slotCrypto := map[int]stbmSlotCrypto{
 		0: newTestSTBMSlotCrypto(),
 		1: newTestSTBMSlotCrypto(),
 		2: newTestSTBMSlotCrypto(),
@@ -102,7 +102,7 @@ func TestProcessAllBuildRecords_TelescopesMixedFlags(t *testing.T) {
 	records[1].SendMessageID = 22
 	records[2].SendMessageID = 33
 
-	require.NoError(t, processor.processAllBuildRecords(7000, records, []int{0, 1, 2}, newThreeSlotSTBMRaw(), 25))
+	require.NoError(t, processor.processAllBuildRecords(7000, records, []int{0, 1, 2}, slotCrypto, newThreeSlotSTBMRaw(), 25))
 
 	assert.Equal(t, 3, mockParticipant.getRegisteredCount(), "all three hops participate")
 
@@ -121,13 +121,13 @@ func TestProcessAllBuildRecords_TelescopesMixedFlags(t *testing.T) {
 // the next hop rather than short-circuiting the chain.
 func TestGenerateAndSendBuildReply_RejectedTransitStillRelays(t *testing.T) {
 	processor, mockForwarder, _ := setupBuildReplyTest(t, true)
-	processor.stbmSlotCrypto = map[int]stbmSlotCrypto{0: newTestSTBMSlotCrypto()}
+	slotCrypto := map[int]stbmSlotCrypto{0: newTestSTBMSlotCrypto()}
 
 	record := createTestBuildRequestRecord(t)
 	record.Flag = 0
 	record.SendMessageID = 777
 
-	err := processor.generateAndSendBuildReply(1000, 0, record, TunnelBuildReplyCritical, 0, newThreeSlotSTBMRaw(), 25)
+	err := processor.generateAndSendBuildReply(1000, 0, record, TunnelBuildReplyCritical, 0, slotCrypto, newThreeSlotSTBMRaw(), 25)
 	require.NoError(t, err)
 
 	requestCalls := mockForwarder.getRequestCalls()
@@ -253,7 +253,6 @@ func TestBuildRequestProcessor_TransitBuildStillProcessed(t *testing.T) {
 	}
 	processor.SetOurRouterHash(ourHash)
 	processor.SetBuildReplyProcessor(proc)
-	processor.stbmSlotCrypto = map[int]stbmSlotCrypto{0: newTestSTBMSlotCrypto()}
 
 	// A one-record body is not a parseable build request (undecryptable), so
 	// it is dropped; the point is process() reached record parsing at all.
