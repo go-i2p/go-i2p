@@ -46,10 +46,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestEvidence_LeaseSetPublishSendsBareTunnelGatewayToOutboundHopZero pins the
-// publication path: one unencapsulated type-19 to hop 0, and no layered
-// TunnelData records at all.
-func TestEvidence_LeaseSetPublishSendsBareTunnelGatewayToOutboundHopZero(t *testing.T) {
+// TestEvidence_LeaseSetPublishEncapsulatesIntoTunnelDataForHopZero pins the
+// fixed publication path: the DatabaseStore is encapsulated by the tunnel's
+// creator and handed to hop 0 as one or more layered type-18 TunnelData
+// records, never as a bare cleartext type-19 TunnelGateway.
+//
+// Before the fix (I2P-031) this test asserted the opposite: exactly one
+// unencapsulated type-19 to hop 0 and zero TunnelData records. The bug shared
+// its root cause with I2P-023 (no IBGW role) but had a distinct fix site: the
+// publisher already held a ready TunnelState and only needed to use it.
+func TestEvidence_LeaseSetPublishEncapsulatesIntoTunnelDataForHopZero(t *testing.T) {
 	const outboundTunnelID = tunnel.TunnelID(0x0BAD_0001)
 
 	env := setupPublisherWithTunnel(t, outboundTunnelID, []common.Hash{
@@ -65,20 +71,17 @@ func TestEvidence_LeaseSetPublishSendsBareTunnelGatewayToOutboundHopZero(t *test
 	require.NoError(t, err)
 
 	sent := env.transport.GetSentMessages(env.gatewayHash)
-	require.Len(t, sent, 1, "exactly one message goes to hop 0")
+	require.NotEmpty(t, sent, "at least one record goes to hop 0")
 
-	tg, ok := sent[0].(*i2np.TunnelGateway)
-	require.True(t, ok, "publication sends a TunnelGateway, not TunnelData")
-
-	assert.Equal(t, i2np.I2NPMessageTypeTunnelGateway, sent[0].Type(),
-		"the wire type is the gateway-injection format, aimed at a router with no gateway role here")
-	assert.NotEmpty(t, tg.Data, "the DatabaseStore is carried in the clear inside the type-19")
-
-	// A correct send would have produced one or more type-20 TunnelData records,
-	// each 1028 bytes, encrypted with every hop's layer. None exist.
+	// Every message to hop 0 is a layered TunnelData record; no cleartext
+	// TunnelGateway remains on the wire.
 	for _, m := range sent {
-		assert.NotEqual(t, i2np.I2NPMessageTypeTunnelData, m.Type(),
-			"nothing was encapsulated into tunnel records")
+		assert.Equal(t, i2np.I2NPMessageTypeTunnelData, m.Type(),
+			"publication must send encapsulated tunnel records, not a bare type-19")
+		td, ok := m.(*i2np.TunnelDataMessage)
+		require.True(t, ok, "TunnelData messages must be the typed record")
+		assert.NotEqual(t, tunnel.TunnelID(0), td.TunnelID,
+			"the record is addressed to hop 0's receive tunnel ID")
 	}
 }
 

@@ -1085,22 +1085,45 @@ func (p *Publisher) sendDatabaseStoreToFloodfill(hash common.Hash, data []byte, 
 		"tunnel_id":      selectedTunnel.ID,
 	}).Trace("Sending DatabaseStore message to floodfill through tunnel")
 
-	// Create and wrap DatabaseStore message for tunnel delivery
-	tunnelGateway, err := p.createTunnelGatewayMessage(hash, data, dataType, selectedTunnel.ID)
+	// Build the DatabaseStore I2NP message and serialize it. These bytes are the
+	// tunnel payload; the gateway wraps them in delivery instructions, fragments
+	// them to fit 1003-byte blocks, and encrypts one AES layer per hop.
+	dbStoreMsg, err := p.createDatabaseStoreMessage(hash, data, dataType)
 	if err != nil {
 		return 0, err
 	}
+	dbStoreBytes, err := dbStoreMsg.MarshalBinary()
+	if err != nil {
+		return 0, oops.Errorf("failed to marshal DatabaseStore I2NP message: %w", err)
+	}
 
-	log.WithFields(logger.Fields{
-		"tunnel_id":        selectedTunnel.ID,
-		"gateway_hash":     logutil.HashPrefixPlain(gatewayHash),
-		"floodfill_hash":   logutil.HashPrefixPlain(ffHash),
-		"gateway_msg_type": tunnelGateway.Type(),
-	}).Debug("Sending DatabaseStore through tunnel gateway")
+	// Encapsulate as the tunnel's creator. A bare type-19 TunnelGateway handed to
+	// hop 0 is not a degraded send: hop 0 cannot consume a gateway message for a
+	// tunnel it only participates in, and the cleartext payload identifies us as
+	// the sender (the I2P-002 leak class). Only the creator holds every hop's
+	// layer key, so only it can build a peelable record.
+	gw, err := selectedTunnel.CreatorGateway()
+	if err != nil {
+		return 0, oops.Wrapf(err, "outbound tunnel %d cannot encapsulate traffic", selectedTunnel.ID)
+	}
 
-	// Send message through gateway router
-	if err := p.sendMessageThroughGateway(gatewayHash, tunnelGateway); err != nil {
-		return 0, err
+	// DTLocal delivery: the tunnel's endpoint router processes the DatabaseStore
+	// in its router context (stores it and floods it toward the target), which is
+	// how reference implementations publish through an exploratory outbound
+	// tunnel. We have no inbound tunnel for the floodfill, so DTTunnel addressing
+	// is not available here.
+	records, err := gw.SendWithDelivery(dbStoreBytes, tunnel.LocalDelivery())
+	if err != nil {
+		return 0, oops.Wrapf(err, "failed to encapsulate DatabaseStore for tunnel %d", selectedTunnel.ID)
+	}
+
+	// Hand each layered record to hop 0 as a type-18 TunnelData addressed with
+	// hop 0's own receive tunnel ID.
+	hopReceiveID := gw.HopReceiveTunnelID()
+	for i, record := range records {
+		if err := p.sendTunnelRecordToGateway(gatewayHash, hopReceiveID, record); err != nil {
+			return 0, oops.Wrapf(err, "failed to send tunnel record %d/%d to gateway", i+1, len(records))
+		}
 	}
 
 	log.WithFields(logger.Fields{
@@ -1108,9 +1131,28 @@ func (p *Publisher) sendDatabaseStoreToFloodfill(hash common.Hash, data []byte, 
 		"floodfill_hash": logutil.HashPrefixPlain(ffHash),
 		"tunnel_id":      selectedTunnel.ID,
 		"gateway_hash":   logutil.HashPrefixPlain(gatewayHash),
-	}).Debug("DatabaseStore sent to tunnel gateway for transmission")
+		"record_count":   len(records),
+	}).Debug("DatabaseStore encapsulated and sent to tunnel gateway")
 
 	return 0, nil
+}
+
+// sendTunnelRecordToGateway wraps one 1028-byte layered tunnel record in a
+// type-18 TunnelData message and hands it to the gateway router (hop 0).
+//
+// The TunnelData header carries hop 0's own receive tunnel ID; the record's
+// first 4 bytes (the in-clear next-hop ID) travel inside the 1024-byte payload,
+// so the header carries record bytes 4..1027.
+func (p *Publisher) sendTunnelRecordToGateway(gatewayHash common.Hash, hopReceiveID tunnel.TunnelID, record []byte) error {
+	if len(record) != tunnel.TunnelMessageSize {
+		return oops.Errorf("tunnel record must be %d bytes, got %d", tunnel.TunnelMessageSize, len(record))
+	}
+
+	var payload [i2np.TunnelDataPayloadSize]byte
+	copy(payload[:], record[tunnel.TunnelIDSize:])
+
+	msg := i2np.NewTunnelDataMessage(hopReceiveID, payload)
+	return p.sendMessageThroughGateway(gatewayHash, msg)
 }
 
 // sendDatabaseStoreDirect sends a DatabaseStore message directly to a floodfill
@@ -1206,41 +1248,6 @@ func (p *Publisher) attemptTunnelSelection() (*tunnel.TunnelState, common.Hash, 
 
 	gatewayHash := selectedTunnel.Hops[0]
 	return selectedTunnel, gatewayHash, nil
-}
-
-// createTunnelGatewayMessage creates a TunnelGateway message containing a DatabaseStore
-// message. This wraps the DatabaseStore for delivery through an outbound tunnel.
-func (p *Publisher) createTunnelGatewayMessage(hash common.Hash, data []byte, dataType byte, tunnelID tunnel.TunnelID) (i2np.Message, error) {
-	// Create DatabaseStore I2NP message
-	dbStoreMsg, err := p.createDatabaseStoreMessage(hash, data, dataType)
-	if err != nil {
-		return nil, err
-	}
-	if dbStore, ok := dbStoreMsg.(*i2np.DatabaseStore); ok {
-		exp := dbStore.Expiration()
-		log.WithFields(logger.Fields{
-			"at":              "createTunnelGatewayMessage",
-			"data_hash":       logutil.HashPrefixPlain(hash),
-			"store_type":      dataType,
-			"message_id":      dbStore.MessageID(),
-			"expiration_utc":  exp.UTC().Format(time.RFC3339Nano),
-			"expires_in":      time.Until(exp).String(),
-			"reply_token":     binary.BigEndian.Uint32(dbStore.ReplyToken[:]),
-			"reply_tunnel_id": binary.BigEndian.Uint32(dbStore.ReplyTunnelID[:]),
-			"reply_gateway":   logutil.HashPrefixPlain(dbStore.ReplyGateway),
-			"outbound_tunnel": tunnelID,
-		}).Debug("DatabaseStore fields before tunnel wrapping")
-	}
-
-	// Marshal DatabaseStore message for tunnel wrapping
-	dbStoreMsgBytes, err := dbStoreMsg.MarshalBinary()
-	if err != nil {
-		return nil, oops.Errorf("failed to marshal DatabaseStore I2NP message: %w", err)
-	}
-
-	// Create TunnelGateway message to inject DatabaseStore into outbound tunnel
-	tunnelGateway := i2np.NewTunnelGatewayMessage(tunnelID, dbStoreMsgBytes)
-	return tunnelGateway, nil
 }
 
 // createDatabaseStoreMessage creates a DatabaseStore I2NP message with the provided

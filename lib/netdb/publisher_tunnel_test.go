@@ -146,6 +146,22 @@ func (p staticRouterInfoProvider) GetRouterInfo() (*router_info.RouterInfo, erro
 	return p.ri, nil
 }
 
+// attachTestLayers gives a test tunnel the per-hop layer set a real build
+// retains, so the creator-side gateway path (CreatorGateway) can encrypt. The
+// keys are random; nothing in these tests peels the layers.
+func attachTestLayers(state *tunnel.TunnelState) {
+	layers := make([]tunnel.TunnelLayer, len(state.Hops))
+	for i := range layers {
+		layers[i] = tunnel.TunnelLayer{
+			LayerKey:      [32]byte{byte(i + 1)},
+			IVKey:         [32]byte{byte(100 + i)},
+			ReceiveTunnel: state.ID + tunnel.TunnelID(i),
+			NextTunnel:    state.ID + tunnel.TunnelID(i+1),
+		}
+	}
+	state.SetLayers(layers)
+}
+
 // setupPublisherWithTunnel creates a publisher test environment with an active
 // tunnel whose gateway is stored in the mock NetDB. The caller specifies the
 // tunnel ID and any extra hops beyond the gateway.
@@ -168,6 +184,7 @@ func setupPublisherWithTunnel(t *testing.T, tunnelID tunnel.TunnelID, extraHops 
 		State:     tunnel.TunnelReady,
 		CreatedAt: time.Now(),
 	}
+	attachTestLayers(tunnelState)
 	pool.AddTunnel(tunnelState)
 
 	publisher := NewPublisher(db, pool, transport, nil, DefaultPublisherConfig())
@@ -515,14 +532,15 @@ func TestSendDatabaseStoreToFloodfill_WithActiveTunnel(t *testing.T) {
 	_, err := env.publisher.sendDatabaseStoreToFloodfill(hash, data, i2np.DatabaseStoreTypeLeaseSet2, floodfill)
 	assert.NoError(t, err)
 
-	// Verify message was sent through transport
+	// Verify messages were sent to hop 0 through the transport
 	sentMessages := env.transport.GetSentMessages(env.gatewayHash)
-	require.NotNil(t, sentMessages, "Expected messages sent to gateway")
-	require.Len(t, sentMessages, 1, "Expected exactly one message sent")
+	require.NotEmpty(t, sentMessages, "Expected messages sent to gateway")
 
-	// Verify message is a TunnelGateway message
-	msg := sentMessages[0]
-	assert.Equal(t, i2np.I2NPMessageTypeTunnelGateway, msg.Type(), "Expected TunnelGateway message type")
+	// The publication must be tunnel-encapsulated: layered TunnelData records,
+	// never a bare TunnelGateway handed to hop 0 in the clear (I2P-031).
+	for _, msg := range sentMessages {
+		assert.Equal(t, i2np.I2NPMessageTypeTunnelData, msg.Type(), "Expected TunnelData message type")
+	}
 }
 
 // TestSendDatabaseStoreToFloodfill_TunnelWithNoHops tests error handling for invalid tunnels
@@ -574,6 +592,7 @@ func TestSendDatabaseStoreToFloodfill_GatewayNotInNetDB(t *testing.T) {
 		State:     tunnel.TunnelReady,
 		CreatedAt: time.Now(),
 	}
+	attachTestLayers(tunnelState)
 	pool.AddTunnel(tunnelState)
 
 	publisher := NewPublisher(db, pool, transport, nil, DefaultPublisherConfig())
@@ -616,6 +635,7 @@ func TestSendDatabaseStoreToFloodfill_MultipleTunnelsRoundRobin(t *testing.T) {
 			State:     tunnel.TunnelReady,
 			CreatedAt: time.Now(),
 		}
+		attachTestLayers(tunnelState)
 		pool.AddTunnel(tunnelState)
 	}
 
@@ -661,9 +681,13 @@ func TestSendDatabaseStoreToFloodfill_LargeData(t *testing.T) {
 	_, err := env.publisher.sendDatabaseStoreToFloodfill(hash, data, i2np.DatabaseStoreTypeLeaseSet2, floodfill)
 	assert.NoError(t, err)
 
-	// Verify message was sent
+	// A 10KB DatabaseStore exceeds one tunnel block, so encapsulation must
+	// fragment it across multiple TunnelData records to the gateway.
 	sentMessages := env.transport.GetSentMessages(env.gatewayHash)
-	require.Len(t, sentMessages, 1, "Expected large message to be sent")
+	require.Greater(t, len(sentMessages), 1, "Expected large message to be fragmented across records")
+	for _, msg := range sentMessages {
+		assert.Equal(t, i2np.I2NPMessageTypeTunnelData, msg.Type(), "Expected TunnelData message type")
+	}
 }
 
 // TestSendDatabaseStoreToFloodfill_EmptyData tests handling of empty data payload
