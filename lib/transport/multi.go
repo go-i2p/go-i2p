@@ -247,10 +247,10 @@ func (tmux *TransportMuxer) closeAllTransports() []error {
 // after transports have been closed.
 func (tmux *TransportMuxer) waitForAcceptGoroutines() {
 	acceptExited := make(chan struct{})
-	go func() {
+	safeGo("TransportMuxer.waitForAcceptGoroutines", func() {
 		tmux.acceptWg.Wait()
 		close(acceptExited)
-	}()
+	})
 	select {
 	case <-acceptExited:
 		tmux.logMuxerMethod("Close", logger.Fields{
@@ -429,11 +429,27 @@ func (tmux *TransportMuxer) failedPeersCleanupLoop() {
 	for {
 		select {
 		case <-ticker.C:
-			tmux.cleanupExpiredPeers()
+			// I2P-004: this cleanup loop runs unrecovered; a panic in
+			// cleanupExpiredPeers would kill the router. Recover and skip one tick.
+			tmux.cleanupExpiredPeersSafe()
 		case <-tmux.acceptDone:
 			return
 		}
 	}
+}
+
+// cleanupExpiredPeersSafe runs one failed-peer cleanup pass with panic
+// recovery. I2P-004: the cleanup goroutine has no upstream recover seam, so a
+// panic would otherwise take down the whole router process. The panic is
+// logged and the tick skipped; the loop survives to the next interval.
+func (tmux *TransportMuxer) cleanupExpiredPeersSafe() {
+	defer func() {
+		if r := recover(); r != nil {
+			logAt("(TransportMuxer) failedPeersCleanupLoop").WithField("panic", r).
+				Error("recovered from panic in failed-peer cleanup; skipping this interval")
+		}
+	}()
+	tmux.cleanupExpiredPeers()
 }
 
 // get a transport session given a RouterInfo
@@ -702,14 +718,33 @@ func (tmux *TransportMuxer) ensureAcceptLoop() {
 func (tmux *TransportMuxer) runAcceptWorker(t Transport, index int) {
 	defer tmux.acceptWg.Done()
 	for {
-		conn, err := t.Accept()
-		if tmux.isShuttingDown(conn) {
-			return
-		}
-		if !tmux.processAcceptResult(conn, err, index) {
+		if tmux.runAcceptIterationSafe(t, index) {
 			return
 		}
 	}
+}
+
+// runAcceptIterationSafe performs one accept-and-deliver iteration with panic
+// recovery. I2P-004: the accept worker runs unrecovered, and the connection it
+// hands off can trigger parsing that panics, so a panic would otherwise kill
+// the whole router process. On panic the iteration is abandoned and the worker
+// survives (returns false to keep looping). Returns true only when the worker
+// should exit (shutdown or terminal accept error).
+func (tmux *TransportMuxer) runAcceptIterationSafe(t Transport, index int) (exit bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			logAt("(TransportMuxer) acceptLoop").WithFields(logger.Fields{
+				"transport_index": index,
+				"panic":           r,
+			}).Error("recovered from panic in accept worker; continuing")
+			exit = false
+		}
+	}()
+	conn, err := t.Accept()
+	if tmux.isShuttingDown(conn) {
+		return true
+	}
+	return !tmux.processAcceptResult(conn, err, index)
 }
 
 // processAcceptResult processes accept result and returns false if worker should stop.

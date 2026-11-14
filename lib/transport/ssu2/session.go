@@ -330,10 +330,28 @@ func (s *SSU2Session) sendWorker() {
 	defer ticker.Stop()
 
 	for {
-		if s.processSendWorkerEvents(ticker) {
+		if s.processSendWorkerEventsSafe(ticker) {
 			return
 		}
 	}
+}
+
+// processSendWorkerEventsSafe runs one send-worker iteration with panic
+// recovery. I2P-004: the send worker runs on its own goroutine with no
+// upstream recover seam, and it serializes/fragments messages whose contents
+// can be influenced by remote input, so a panic would otherwise kill the whole
+// router process. On panic the iteration is abandoned and the worker survives
+// (returns false to keep looping); this is a last-resort seam — the message in
+// flight is lost, but the session and process stay alive.
+func (s *SSU2Session) processSendWorkerEventsSafe(ticker *time.Ticker) (exit bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			s.Logger().WithField("panic", r).
+				Error("recovered from panic in SSU2 send worker; continuing")
+			exit = false
+		}
+	}()
+	return s.processSendWorkerEvents(ticker)
 }
 
 // processSendWorkerEvents handles a single iteration of the send worker loop.
@@ -783,7 +801,7 @@ func (s *SSU2Session) peerSilent() bool {
 // caller's own goroutine; the same indirection NTCP2 uses for a received
 // Termination block.
 func (s *SSU2Session) requestClose() {
-	go func() { _ = s.Close() }()
+	safeGo("SSU2Session.requestClose", func() { _ = s.Close() })
 }
 
 // ackPendingByPackets retires pending messages that have at least one ACKed
@@ -874,7 +892,7 @@ func (s *SSU2Session) checkInboundRateLimit(msg i2np.Message) error {
 		return nil
 	}
 	s.Logger().WithField("message_type", msg.Type()).Warn("Inbound I2NP rate limit exceeded, closing session")
-	go func() { _ = s.Close() }()
+	safeGo("SSU2Session.inboundRateLimit", func() { _ = s.Close() })
 	return oops.Errorf("inbound I2NP rate limit exceeded")
 }
 
@@ -915,29 +933,52 @@ func (s *SSU2Session) receiveWorker() {
 		if s.isContextCanceled() {
 			return
 		}
-		n, action := s.readFrame(buf)
-		if action == receiveFatal {
-			// Returning here without closing left the session in the transport's
-			// registry: the entry kept answering HasSession, so peer selection kept
-			// choosing a peer whose socket was already dead and the router never
-			// redialled. The conn is gone; say so, and let the cleanup callback drop
-			// the registry entry.
-			s.requestClose()
-			return
-		}
-		if action == receiveRetry {
-			continue
-		}
-		// H8 FIX: Copy the buffer slice before dispatching to prevent silent data
-		// corruption if UnmarshalShortI2NP retains a reference to the slice.
-		// The next readFrame call will overwrite the original buffer, so we must
-		// pass a copy to dispatchReceived.
-		frameCopy := make([]byte, n)
-		copy(frameCopy, buf[:n])
-		if err := s.dispatchReceived(frameCopy); err != nil {
+		if s.receiveOneFrameSafe(buf) {
 			return
 		}
 	}
+}
+
+// receiveOneFrameSafe reads and dispatches one frame with panic recovery.
+// I2P-004: the receive worker parses untrusted remote bytes (readFrame +
+// dispatchReceived) on its own goroutine with no upstream recover seam, so a
+// panic in the framing/dispatch path would otherwise kill the whole router
+// process. On panic the frame is dropped and the worker survives (returns
+// false to keep looping); this is a last-resort seam — the frame is lost, but
+// the session and process stay alive. Returns true only when the loop should
+// exit (fatal read error or dispatch error).
+func (s *SSU2Session) receiveOneFrameSafe(buf []byte) (exit bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			s.Logger().WithField("panic", r).
+				Error("recovered from panic in SSU2 receive worker; dropping frame")
+			exit = false
+		}
+	}()
+
+	n, action := s.readFrame(buf)
+	if action == receiveFatal {
+		// Returning here without closing left the session in the transport's
+		// registry: the entry kept answering HasSession, so peer selection kept
+		// choosing a peer whose socket was already dead and the router never
+		// redialled. The conn is gone; say so, and let the cleanup callback drop
+		// the registry entry.
+		s.requestClose()
+		return true
+	}
+	if action == receiveRetry {
+		return false
+	}
+	// H8 FIX: Copy the buffer slice before dispatching to prevent silent data
+	// corruption if UnmarshalShortI2NP retains a reference to the slice.
+	// The next readFrame call will overwrite the original buffer, so we must
+	// pass a copy to dispatchReceived.
+	frameCopy := make([]byte, n)
+	copy(frameCopy, buf[:n])
+	if err := s.dispatchReceived(frameCopy); err != nil {
+		return true
+	}
+	return false
 }
 
 // isContextCanceled checks if the session context has been canceled.

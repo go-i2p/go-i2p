@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"syscall"
 
 	"github.com/go-i2p/go-i2p/lib/cli"
@@ -78,6 +79,28 @@ func runRouter() {
 }
 
 func main() {
+	// I2P-004 top-level backstop for the MAIN goroutine. A panic that reaches
+	// here (e.g. during router.Run's synchronous setup path) is logged with a
+	// full stack and exits non-zero, instead of dying with an unrecovered
+	// panic trace that is hard to correlate with the logs.
+	//
+	// IMPORTANT Go limitation: recover() only catches panics on the SAME
+	// goroutine. A panic on any OTHER goroutine still crashes the process no
+	// matter what main() does — those are handled by the per-goroutine recover
+	// seams added across lib/transport and go-noise (I2P-004), not by this
+	// backstop. This guard is the last line for the main goroutine only.
+	defer func() {
+		if r := recover(); r != nil {
+			log.WithFields(logger.Fields{
+				"at":    "main",
+				"phase": "runtime",
+				"panic": fmt.Sprintf("%v", r),
+				"stack": string(debug.Stack()),
+			}).Error("recovered from panic on main goroutine; router exiting")
+			os.Exit(2)
+		}
+	}()
+
 	RootCmd.AddCommand(configcmd.New())
 	RootCmd.AddCommand(tuicmd.New())
 	cli.RegisterI2PControlCommand(RootCmd)

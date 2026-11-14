@@ -182,12 +182,22 @@ func (t *SSU2Transport) startNATCleanup() {
 			case <-natCtx.Done():
 				return
 			case <-ticker.C:
-				t.natManagerMu.RLock()
-				pm := t.peerTestManager
-				t.natManagerMu.RUnlock()
-				if pm != nil {
-					pm.CleanupExpired()
-				}
+				// I2P-004: this cleanup loop runs unrecovered; a panic in
+				// CleanupExpired would kill the router. Recover and skip one tick.
+				func() {
+					defer func() {
+						if r := recover(); r != nil {
+							t.logger.WithField("panic", r).
+								Error("recovered from panic in NAT cleanup tick; skipping this interval")
+						}
+					}()
+					t.natManagerMu.RLock()
+					pm := t.peerTestManager
+					t.natManagerMu.RUnlock()
+					if pm != nil {
+						pm.CleanupExpired()
+					}
+				}()
 			}
 		}
 	}()

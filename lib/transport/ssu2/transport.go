@@ -602,10 +602,26 @@ func (t *SSU2Transport) startInboundAcceptRunner() {
 func (t *SSU2Transport) runInboundAcceptLoop() {
 	defer t.wg.Done()
 	for {
-		if !t.acceptNextInboundConnection() {
+		if t.acceptNextInboundConnectionSafe() {
 			return
 		}
 	}
+}
+
+// acceptNextInboundConnectionSafe processes one accepted connection with panic
+// recovery. I2P-004: the accept loop runs unrecovered, and admission work can
+// touch state derived from untrusted input, so a panic would otherwise kill the
+// whole router process. On panic the connection handling is abandoned and the
+// loop survives. Returns true only when the loop should terminate.
+func (t *SSU2Transport) acceptNextInboundConnectionSafe() (exit bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.logger.WithField("panic", r).
+				Error("recovered from panic in SSU2 accept loop; continuing")
+			exit = false
+		}
+	}()
+	return !t.acceptNextInboundConnection()
 }
 
 // acceptNextInboundConnection processes one accepted connection, returning false
@@ -730,6 +746,21 @@ func (t *SSU2Transport) recordHandshakeRefused(remote net.Addr, err error) {
 // never waits on a peer: a failed or timed-out handshake costs this goroutine
 // and a CloseImmediate.
 func (t *SSU2Transport) inboundHandshakeWorker(conn *ssu2noise.SSU2Conn) {
+	// I2P-004: this worker completes the responder half of the SSU2 handshake,
+	// which parses the untrusted SessionRequest before the router's protected
+	// dispatch sites. It runs on its own goroutine with no upstream recover
+	// seam, so a panic in the handshake would otherwise kill the whole router
+	// process. Recovering here drops the offending connection and lets the
+	// worker exit; the process and transport stay alive.
+	defer func() {
+		if r := recover(); r != nil {
+			t.reachMetrics.inboundHandshakeFailures.Add(1)
+			t.logger.WithField("panic", r).
+				Error("recovered from panic in SSU2 inbound handshake worker; dropping connection")
+			closeConnImmediately(conn)
+		}
+	}()
+
 	remoteAddr := "<unknown>"
 	if conn.RemoteAddr() != nil {
 		remoteAddr = conn.RemoteAddr().String()

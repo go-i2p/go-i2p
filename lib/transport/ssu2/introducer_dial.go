@@ -88,6 +88,18 @@ func (t *SSU2Transport) dialViaIntroducer(charlieRI router_info.RouterInfo, char
 	for _, intro := range introducers {
 		intro := intro // capture loop variable
 		go func() {
+			// I2P-004: this attempt runs on its own goroutine with no upstream
+			// recover seam; a panic in the introducer dial would otherwise kill
+			// the router. Recover and report it as an error result so the
+			// collector below (which reads exactly len(introducers) results)
+			// cannot block forever waiting on this attempt.
+			defer func() {
+				if r := recover(); r != nil {
+					log.WithField("panic", r).
+						Error("recovered from panic in introducer dial attempt")
+					resultCh <- result{err: oops.Errorf("panic in introducer dial: %v", r)}
+				}
+			}()
 			session, err := t.tryOneIntroducerWithContext(ctx, charlieRI, charlieHash, intro)
 			resultCh <- result{session: session, err: err}
 		}()

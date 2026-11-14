@@ -1997,6 +1997,18 @@ func (t *SSU2Transport) publicBoundAddress() (net.IP, uint16, bool) {
 // T-1 fix: Uses single-flight pattern (natDetectionRunning flag) to prevent
 // concurrent detection runs from overwriting shared retry state.
 func (t *SSU2Transport) runNATDetection(candidates []router_info.RouterInfo, republish func()) {
+	// I2P-004: this worker runs on its own goroutine with no upstream recover
+	// seam, and it parses untrusted PeerTest/PeerTestResponse messages from
+	// remote peers, so a panic would otherwise kill the whole router process.
+	// Recovering here aborts the detection run; the process and transport stay
+	// alive and detection can be retried later.
+	defer func() {
+		if r := recover(); r != nil {
+			t.logger.WithField("panic", r).
+				Error("recovered from panic in NAT detection worker; aborting this run")
+		}
+	}()
+
 	// T-1 fix: Single-flight check — if detection already running, skip this call.
 	if !t.natDetectionRunning.CompareAndSwap(false, true) {
 		t.logger.Debug("NAT detection already in progress; skipping concurrent run")
@@ -2500,6 +2512,15 @@ func (t *SSU2Transport) launchPeerTest(udpAddr *net.UDPAddr) {
 	t.wg.Add(1)
 	go func() {
 		defer t.wg.Done()
+		// I2P-004: this one-shot runs on its own goroutine with no upstream
+		// recover seam; a panic in InitiatePeerTest would otherwise kill the
+		// router. Recover and log; the peer test is best-effort.
+		defer func() {
+			if r := recover(); r != nil {
+				t.logger.WithField("panic", r).
+					Error("recovered from panic in startup PeerTest")
+			}
+		}()
 
 		// Check for shutdown before initiating to avoid starting work that will be discarded
 		select {

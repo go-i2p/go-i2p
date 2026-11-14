@@ -731,7 +731,7 @@ func (s *NTCP2Session) handleNonI2NPBlock(block Block) {
 		}).Warn("Received Termination block from peer, closing session")
 		// Close in a goroutine to avoid deadlock: Close() calls wg.Wait(),
 		// and this callback runs inside the receive worker goroutine.
-		go func() { _ = s.Close() }()
+		safeGo("NTCP2Session.receivedTermination", func() { _ = s.Close() })
 	default:
 		s.Logger().WithField("block_type", block.Type).Debug("Received unknown block type")
 	}
@@ -966,7 +966,7 @@ func (s *NTCP2Session) checkRekey(totalMessages uint64) {
 	}).Info("Rekey threshold reached, replacing NTCP2 session with a fresh handshake")
 	// Normal close sends a termination block so the peer can re-dial; the
 	// cleanup callback removes this session from the transport map.
-	go func() { _ = s.CloseWithReason(TerminationNormalClose) }()
+	safeGo("NTCP2Session.rekeyNormalClose", func() { _ = s.CloseWithReason(TerminationNormalClose) })
 }
 
 // GetTrafficStats returns per-session traffic statistics:
@@ -1049,12 +1049,12 @@ func (s *NTCP2Session) setError(err error) {
 	s.errorMu.Unlock()
 
 	reason := terminationReasonForReadError(err)
-	go func() {
+	safeGo("NTCP2Session.closeAfterReadError", func() {
 		if closeErr := s.CloseWithReason(reason); closeErr != nil {
 			s.Logger().WithError(closeErr).WithField("reason", TerminationReasonString(reason)).
 				Debug("NTCP2 session close after error returned an error")
 		}
-	}()
+	})
 }
 
 // terminationReasonForReadError maps a fatal read/write error to the NTCP2

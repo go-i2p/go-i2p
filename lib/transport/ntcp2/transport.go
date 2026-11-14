@@ -345,9 +345,26 @@ func (t *NTCP2Transport) runIdleMaintenance() {
 		case <-t.ctx.Done():
 			return
 		case <-ticker.C:
-			t.runIdleMaintenancePass()
+			// I2P-004: this maintenance loop runs unrecovered; a panic in the pass
+			// (which walks sessions whose state derives from remote input) would
+			// kill the router. Recover and skip one pass.
+			t.runIdleMaintenancePassSafe()
 		}
 	}
+}
+
+// runIdleMaintenancePassSafe runs one idle-maintenance pass with panic
+// recovery. I2P-004: the maintenance goroutine has no upstream recover seam,
+// so a panic would otherwise take down the whole router process. The panic is
+// logged and the pass skipped; the loop survives to the next interval.
+func (t *NTCP2Transport) runIdleMaintenancePassSafe() {
+	defer func() {
+		if r := recover(); r != nil {
+			t.logger.WithField("panic", r).
+				Error("recovered from panic in NTCP2 idle maintenance pass; skipping this interval")
+		}
+	}()
+	t.runIdleMaintenancePass()
 }
 
 func (t *NTCP2Transport) runIdleMaintenancePass() {
@@ -372,7 +389,7 @@ func (t *NTCP2Transport) runIdleMaintenancePass() {
 				reapedDeadSessions++
 				t.logger.WithField("peer_hash", logutil.HashPrefixPlain(hash.Bytes())).
 					Warn("Reaping NTCP2 session cancelled without a teardown")
-				go func() { _ = session.Close() }()
+				safeGo("NTCP2Transport.reapDeadSession", func() { _ = session.Close() })
 			}
 			return true
 		}
@@ -676,10 +693,26 @@ func (t *NTCP2Transport) startInboundAcceptRunner() {
 func (t *NTCP2Transport) runInboundAcceptLoop() {
 	defer t.wg.Done()
 	for {
-		if !t.acceptNextConnection() {
+		if t.acceptNextConnectionSafe() {
 			return
 		}
 	}
+}
+
+// acceptNextConnectionSafe accepts and processes one incoming connection with
+// panic recovery. I2P-004: the accept loop runs unrecovered, and admission
+// work can touch state derived from untrusted input, so a panic would otherwise
+// kill the whole router process. On panic the connection handling is abandoned
+// and the loop survives. Returns true only when the loop should terminate.
+func (t *NTCP2Transport) acceptNextConnectionSafe() (exit bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.logger.WithField("panic", r).
+				Error("recovered from panic in NTCP2 accept loop; continuing")
+			exit = false
+		}
+	}()
+	return !t.acceptNextConnection()
 }
 
 // acceptNextConnection accepts and processes one incoming connection.
@@ -836,6 +869,22 @@ func (t *NTCP2Transport) recordHandshakeRefused(remote net.Addr, err error) {
 // to prevent indefinite blocking and slot reservation exhaustion.
 // Use handshake context with timeout to prevent goroutine leaks on slow handshakes
 func (t *NTCP2Transport) inboundHandshakeWorker(conn net.Conn) {
+	// I2P-004: this worker performs the full NTCP2 inbound handshake, which
+	// parses untrusted remote bytes before the router's protected dispatch
+	// sites. It runs on its own goroutine with no upstream recover seam, so a
+	// panic in the handshake would otherwise kill the whole router process.
+	// Recovering here drops the offending connection and lets the worker exit;
+	// the process and transport stay alive.
+	defer func() {
+		if r := recover(); r != nil {
+			t.logger.WithField("panic", r).
+				Error("recovered from panic in NTCP2 inbound handshake worker; dropping connection")
+			if conn != nil {
+				_ = conn.Close()
+			}
+		}
+	}()
+
 	// TE-1 fix: Create context with timeout for handshake, using t.ctx as parent
 	// so that transport shutdown deadline is also honored. This prevents handshakes
 	// from continuing beyond the transport context deadline, which ensures:
@@ -1846,7 +1895,7 @@ func (t *NTCP2Transport) validateExistingSession(s *NTCP2Session, routerHash dat
 		// The stale session was cancelled without a teardown (or its teardown
 		// is still in flight); close it so its socket is released too.
 		if !s.CloseRequested() {
-			go func() { _ = s.Close() }()
+			safeGo("NTCP2Transport.closeStaleSession", func() { _ = s.Close() })
 		}
 		return nil, false
 	}
