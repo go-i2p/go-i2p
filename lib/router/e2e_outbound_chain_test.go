@@ -15,12 +15,13 @@
 //	   -> InboundMessageHandler.ForwardToTunnel
 //	   -> destGW receives the type-19 TunnelGateway addressed at the destination
 //
-// The destGW boundary is the honest end of what this router can prove today.
-// Turning a type-19 that arrives for a REMOTE destination into layered TunnelData
-// on that destination's inbound tunnel is the inbound-gateway (IBGW) role, which
-// is not implemented - see the I2P-002 notes. Tests therefore assert on the
-// garlic envelope that genuinely completed the tunnel, not on remote-client
-// delivery, and say so.
+// The destGW boundary is the honest end of what this chain test proves: it stops
+// at the type-19 the endpoint emits for a REMOTE destination. Turning that
+// type-19 into layered TunnelData on the destination's inbound tunnel is the
+// inbound-gateway (IBGW) role, now implemented by tunnelGatewayDispatcher
+// (I2P-023) and covered by TestEvidence_TunnelGatewayIsInjectedIntoInboundTunnel.
+// This chain test still asserts on the garlic envelope that genuinely completed
+// the tunnel, not on remote-client delivery, and says so.
 
 package router
 

@@ -1,29 +1,23 @@
-// Evidence for the tunnel-gateway gap found while fixing I2P-002.
+// Evidence for the inbound-gateway (IBGW) role, fixed under I2P-023.
 //
-// I2P-002 is the outbound half of tunnel addressing: I2CP traffic was handed to
-// the transport bare instead of being encapsulated, and that is fixed. Fixing it
-// required understanding what a type-19 TunnelGateway is for, and the answer
-// exposes a separate, still-unimplemented role.
+// Before the fix, the only handler for a type-19 TunnelGateway was
+// tunnelGatewayDispatcher, which parsed the inner I2NP and fed it to the LOCAL
+// message processor. A real tunnel gateway never inspects the payload: it builds
+// delivery instructions for the tunnel's endpoint, fragments, encrypts one AES
+// layer per hop, and emits type-18 TunnelData at hop 0. That role was missing,
+// so inter-router delivery died at the peer's gateway and hidden-service ingress
+// from spec-conformant senders was mis-processed.
 //
-// The only handler for type-19 in this router, tunnelGatewayDispatcher
-// (router_tunnel_wiring.go), parses the inner I2NP and feeds it to the LOCAL
-// message processor. A real tunnel gateway would never inspect the payload: it
-// would build delivery instructions for the tunnel's endpoint, fragment, encrypt
-// one AES layer per hop, and emit type-20 TunnelData at hop 0. No component here
-// does that on behalf of a received type-19.
+// The fix makes the dispatcher perform the IBGW role: on a type-19 it resolves
+// the inbound tunnel by ID, encapsulates the opaque payload with the tunnel's
+// retained layer set, and hands layered type-18 records to hop 0. Build-reply
+// inner messages (type 22/24/26) are still dispatched locally, because go-i2p
+// telescopes its own STBM replies inside a type-19 on the reply path; reference
+// routers deliver build replies as bare type-26/24 instead, so that branch only
+// fires for our own reply traffic.
 //
-// Consequences these tests pin down:
-//
-//   - A message addressed to a REMOTE destination cannot be delivered. The
-//     tunnel endpoint's ForwardToTunnel emits a type-19 at the destination's
-//     gateway, which either has no consumer for it or, if the dispatcher runs,
-//     processes the inner message locally instead of tunneling it onward. So
-//     reaching another router's I2CP client is impossible end-to-end even though
-//     our own outbound encapsulation is now correct.
-//   - The same missing role makes leaseset publication fail; see the companion
-//     evidence test in lib/netdb.
-//
-// Nothing here changes behavior; it records it.
+// These tests now assert the FIXED behavior. They previously pinned the bug and
+// are inverted here.
 
 package router
 
@@ -34,25 +28,14 @@ import (
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
+	"github.com/go-i2p/go-i2p/lib/tunnel/build"
+	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// recordingGatewayHandler stands in for the IBGW role so the test can observe
-// what the dispatcher does with a received TunnelGateway.
-type recordingGatewayHandler struct {
-	seenTunnelID tunnel.TunnelID
-	seenPayload  []byte
-}
-
-func (h *recordingGatewayHandler) HandleGateway(tunnelID tunnel.TunnelID, payload []byte) error {
-	h.seenTunnelID = tunnelID
-	h.seenPayload = append([]byte(nil), payload...)
-	return nil
-}
-
-// recordingStatusHandler proves the inner message was interpreted as OUR traffic.
-// A DeliveryStatus is a reply that belongs to whoever sent the original message,
+// recordingStatusHandler proves whether an inner message was consumed as OUR
+// traffic. A DeliveryStatus is a reply owed to whoever sent the original message,
 // so a router acting as a pure gateway must never consume one for itself.
 type recordingStatusHandler struct {
 	msgIDs     []int
@@ -65,64 +48,192 @@ func (h *recordingStatusHandler) HandleDeliveryStatus(msgID int, timestamp time.
 	return nil
 }
 
-// TestEvidence_TunnelGatewayIsDispatchedLocallyNotInjectedIntoTunnel shows the
-// production dispatcher hands the inner I2NP to the local processor instead of
-// encapsulating it for the destination's inbound tunnel. A real gateway would
-// never look at the inner message at all: it would treat it as opaque payload.
-func TestEvidence_TunnelGatewayIsDispatchedLocallyNotInjectedIntoTunnel(t *testing.T) {
+// recordingGatewaySession captures every I2NP message the dispatcher hands to
+// hop 0, so the test can observe the injected type-18 records.
+type recordingGatewaySession struct {
+	sent []i2np.Message
+}
+
+func (s *recordingGatewaySession) QueueSendI2NP(msg i2np.Message) error {
+	s.sent = append(s.sent, msg)
+	return nil
+}
+
+func (s *recordingGatewaySession) SendQueueSize() int { return len(s.sent) }
+
+// recordingGatewayProvider resolves a single hop-0 hash to a recording session.
+type recordingGatewayProvider struct {
+	hash    common.Hash
+	session *recordingGatewaySession
+}
+
+func (p *recordingGatewayProvider) GetSessionByHash(hash common.Hash) (i2np.I2NPTransportSession, error) {
+	if hash != p.hash {
+		return nil, oops.Errorf("no session to %x", hash[:4])
+	}
+	return p.session, nil
+}
+
+// recordingBuildReplyProcessor counts build-reply dispatches.
+type recordingBuildReplyProcessor struct {
+	calls int
+}
+
+func (r *recordingBuildReplyProcessor) ProcessTunnelBuildReply(handler build.TunnelReplyHandler, messageID int) error {
+	r.calls++
+	return nil
+}
+
+// readyInboundPool builds a pool holding one ready inbound tunnel with retained
+// layer keys, mirroring what i2np.TunnelManager.retainLayerKeys writes after a
+// successful build. It returns the pool, the tunnel ID, and hop 0's identity hash.
+func readyInboundPool(t *testing.T, hopCnt int) (*tunnel.Pool, tunnel.TunnelID, common.Hash) {
+	t.Helper()
+
+	layers := make([]tunnel.TunnelLayer, hopCnt)
+	for i := 0; i < hopCnt; i++ {
+		var lk, ivk [32]byte
+		for j := range lk {
+			lk[j] = byte(0x10*i + j + 1)
+			ivk[j] = byte(0x80 + 0x20*i + j)
+		}
+		receive := tunnel.TunnelID(0xABCD_0001 + uint32(i))
+		layers[i] = tunnel.TunnelLayer{
+			LayerKey:      lk,
+			IVKey:         ivk,
+			ReceiveTunnel: receive,
+			NextTunnel:    tunnel.TunnelID(0x1000 + uint32(i)),
+		}
+	}
+
+	hops := make([]common.Hash, hopCnt)
+	for i := range hops {
+		hops[i] = common.Hash{byte(0xA0 + i)}
+	}
+
+	state := &tunnel.TunnelState{
+		ID:              layers[0].ReceiveTunnel,
+		GatewayTunnelID: layers[0].ReceiveTunnel,
+		Hops:            hops,
+		State:           tunnel.TunnelReady,
+		CreatedAt:       time.Now(),
+		IsInbound:       true,
+		GatewayHash:     hops[0],
+	}
+	state.SetLayers(layers)
+
+	pool := tunnel.NewTunnelPool(nil)
+	pool.AddTunnel(state)
+	return pool, state.ID, hops[0]
+}
+
+// TestEvidence_TunnelGatewayIsInjectedIntoInboundTunnel shows the production
+// dispatcher now performs the IBGW role: a type-19 carrying an opaque payload is
+// encapsulated and emitted as type-18 TunnelData to hop 0, NOT consumed by the
+// local processor. The payload here is a DeliveryStatus, which before the fix
+// was wrongly applied to OUR OWN message IDs; after the fix it is opaque traffic
+// destined for the tunnel's endpoint.
+func TestEvidence_TunnelGatewayIsInjectedIntoInboundTunnel(t *testing.T) {
 	const innerMsgID = 0x5EED_BEEF
 
+	pool, tunnelID, hop0Hash := readyInboundPool(t, 3)
+
 	processor := i2np.NewMessageProcessor()
-
-	// The PRODUCTION wiring: router_tunnel_wiring.go installs the local processor
-	// dispatcher as the type-19 handler.
-	processor.SetTunnelGatewayHandler(&tunnelGatewayDispatcher{processor: processor})
-
 	statusHandler := &recordingStatusHandler{}
 	processor.SetDeliveryStatusHandler(statusHandler)
+
+	session := &recordingGatewaySession{}
+	dispatcher := &tunnelGatewayDispatcher{
+		processor:   processor,
+		inboundPool: pool,
+		sessions:    &recordingGatewayProvider{hash: hop0Hash, session: session},
+	}
 
 	inner := i2np.NewDeliveryStatusMessage(innerMsgID, time.Now())
 	innerBytes, err := inner.MarshalBinary()
 	require.NoError(t, err)
 
-	outer := i2np.NewTunnelGatewayMessage(tunnel.TunnelID(0xC0FFEE01), innerBytes)
-	require.NoError(t, processor.ProcessMessage(outer))
+	require.NoError(t, dispatcher.HandleGateway(tunnelID, innerBytes))
 
-	// The proof: the inner DeliveryStatus was consumed as a reply to OUR OWN
-	// message. That is only possible because type-19 handling is wired to the
-	// local processor rather than to a gateway role.
-	require.Len(t, statusHandler.msgIDs, 1,
-		"the dispatcher re-dispatched the inner I2NP through the local processor")
-	assert.Equal(t, innerMsgID, statusHandler.msgIDs[0],
-		"the status was applied locally, keyed on the inner message ID")
+	// The proof of the fix: the payload left as layered type-18 records to hop 0.
+	require.NotEmpty(t, session.sent, "the gateway must emit tunnel records to hop 0")
+	for _, m := range session.sent {
+		assert.Equal(t, i2np.I2NPMessageTypeTunnelData, m.Type(),
+			"injection must produce type-18 TunnelData, not a local dispatch")
+		td, ok := m.(*i2np.TunnelDataMessage)
+		require.True(t, ok, "records must be the typed TunnelData message")
+		assert.NotEqual(t, tunnel.TunnelID(0), td.TunnelID,
+			"the record is addressed to hop 0's receive tunnel ID")
+	}
+
+	// And the proof the bug is gone: the DeliveryStatus was NOT consumed locally.
+	assert.Empty(t, statusHandler.msgIDs,
+		"a gateway must never consume a DeliveryStatus that belongs to the original sender")
 }
 
-// TestEvidence_ProductionDispatcherHasNoTunnelInjection confirms the concrete
-// production handler is the local processor dispatcher. It is written as a
-// compile-time/behavioral statement rather than a source grep so it fails if
-// someone wires a real gateway role in and forgets to update the I2P-002 notes.
-func TestEvidence_ProductionDispatcherHasNoTunnelInjection(t *testing.T) {
-	// The production dispatcher needs an i2np.MessageProcessor and nothing else:
-	// no tunnel pool, no gateway, no per-hop keys. A real IBGW cannot be built
-	// without those, so the shape of this constructor is itself the evidence.
-	processor := i2np.NewMessageProcessor()
-	dispatcher := &tunnelGatewayDispatcher{processor: processor}
-	require.NotNil(t, dispatcher)
+// TestEvidence_ProductionDispatcherHasInjectionCapability confirms the concrete
+// production handler now carries the collaborators a real IBGW needs: an inbound
+// pool to resolve the tunnel and a session provider to reach hop 0. It also
+// confirms the fail-closed behavior for a tunnel this router did not build.
+func TestEvidence_ProductionDispatcherHasInjectionCapability(t *testing.T) {
+	pool, tunnelID, hop0Hash := readyInboundPool(t, 3)
 
-	// Handing it a payload for a tunnel this router did not build must not
-	// encapsulate anything: there is no tunnel to encapsulate into, and the
-	// dispatcher's only field is a local processor.
-	var err error
-	require.NotPanics(t, func() {
-		err = dispatcher.HandleGateway(tunnel.TunnelID(1234), []byte("opaque tunnel payload"))
-	})
-	require.Error(t, err, "an opaque payload is not a parseable local I2NP message")
+	session := &recordingGatewaySession{}
+	dispatcher := &tunnelGatewayDispatcher{
+		processor:   i2np.NewMessageProcessor(),
+		inboundPool: pool,
+		sessions:    &recordingGatewayProvider{hash: hop0Hash, session: session},
+	}
+
+	// A built tunnel: injection succeeds and emits records.
+	require.NoError(t, dispatcher.HandleGateway(tunnelID, []byte("opaque tunnel payload that is not a build reply")))
+	require.NotEmpty(t, session.sent, "a built inbound tunnel must accept injection")
+
+	// An unknown tunnel: fail closed, no records, no crash.
+	before := len(session.sent)
+	require.Error(t, dispatcher.HandleGateway(tunnel.TunnelID(0xDEAD_BEEF), []byte("payload for a tunnel we did not build")))
+	assert.Len(t, session.sent, before, "an unknown tunnel must not emit any records")
+}
+
+// TestEvidence_BuildReplyWrappedInGatewayIsDispatchedLocally pins the one case
+// that must stay local: go-i2p telescopes its own STBM build replies (type 26)
+// inside a type-19 on the reply path, so the gateway processes those locally
+// rather than re-injecting them down a tunnel.
+func TestEvidence_BuildReplyWrappedInGatewayIsDispatchedLocally(t *testing.T) {
+	pool, tunnelID, hop0Hash := readyInboundPool(t, 3)
+
+	replyProcessor := &recordingBuildReplyProcessor{}
+	processor := i2np.NewMessageProcessor()
+	processor.SetBuildReplyProcessor(replyProcessor)
+
+	session := &recordingGatewaySession{}
+	dispatcher := &tunnelGatewayDispatcher{
+		processor:   processor,
+		inboundPool: pool,
+		sessions:    &recordingGatewayProvider{hash: hop0Hash, session: session},
+	}
+
+	// A type-26 build reply wrapped in a type-19 payload. The data must parse as
+	// build response records: 1 count byte + N * 218-byte short records.
+	reply := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeOutboundTunnelBuildReply)
+	reply.SetMessageID(0x1234)
+	replyData := make([]byte, 1+1*i2np.ShortBuildRecordSize)
+	replyData[0] = 1 // one record
+	reply.SetData(replyData)
+	replyBytes, err := reply.MarshalBinary()
+	require.NoError(t, err)
+
+	require.NoError(t, dispatcher.HandleGateway(tunnelID, replyBytes))
+
+	// The build reply is processed locally, not injected.
+	assert.Empty(t, session.sent, "a wrapped build reply must not be re-injected into the tunnel")
+	assert.Equal(t, 1, replyProcessor.calls, "the wrapped build reply must reach the build reply processor")
 }
 
 // TestEvidence_ForwardToTunnelProducesTunnelGateway proves the endpoint's
-// remote-delivery path emits the IBGW wire format, which the receiving side has
-// no role to consume. This is the half of the pair that makes remote delivery
-// impossible rather than merely inefficient.
+// remote-delivery path emits the IBGW wire format (a type-19). This is the
+// sender half of the pair; the receiving half — turning that type-19 into
+// layered type-18 records — is now implemented by the IBGW dispatcher above.
 func TestEvidence_ForwardToTunnelProducesTunnelGateway(t *testing.T) {
 	table := make(map[common.Hash]*encapRelay, 1)
 	destGW := newEncapRelay(t, "evidence-dest-gw", table)
@@ -141,10 +252,10 @@ func TestEvidence_ForwardToTunnelProducesTunnelGateway(t *testing.T) {
 	assert.Equal(t, tunnel.TunnelID(0x11223344), captured.TunnelID,
 		"the gateway field carries the destination's inbound tunnel ID")
 	assert.Equal(t, payload, captured.Data,
-		"the payload is carried verbatim, awaiting a gateway role that does not exist")
+		"the payload is carried verbatim, ready for the destination gateway to inject")
 
-	// What a real IBGW would have to do instead, stated so the gap is not just
-	// negative: it would need the destination's inbound tunnel and would emit
-	// type-20 TunnelData records, not consume a type-19.
+	// The type-19 is the wire format a real IBGW consumes; the receiving side now
+	// turns it into type-18 TunnelData rather than consuming it as local traffic
+	// (see TestEvidence_TunnelGatewayIsInjectedIntoInboundTunnel).
 	assert.NotEqual(t, i2np.I2NPMessageTypeTunnelData, captured.Type())
 }

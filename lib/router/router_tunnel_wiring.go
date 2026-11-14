@@ -98,25 +98,52 @@ func (r *Router) wireTunnelDataHandler() {
 	}
 }
 
-// wireTunnelGatewayHandler wires a TunnelGateway handler that re-parses the
-// inner I2NP message from the gateway payload and dispatches it through the
-// message processor. This is needed so that STBM build replies (type 26)
-// wrapped inside a TunnelGateway (type 19) are properly processed.
+// wireTunnelGatewayHandler wires the inbound-gateway (IBGW) handler for
+// TunnelGateway (type 19) messages. A type-19 carries an opaque payload that a
+// real gateway injects into the tunnel named by its TunnelID field: it builds
+// delivery instructions, fragments to the tunnel block size, encrypts one AES
+// layer per hop, and emits type-18 TunnelData at hop 0 (i2np.rst TunnelGateway;
+// tunnel-message.rst gateway preprocessing; i2pd Tunnel.cpp HandleTunnelGatewayMsg
+// treats the payload as opaque and calls tunnel->SendTunnelDataMsg).
+//
+// The dispatcher also keeps local dispatch for build-reply inner messages,
+// because go-i2p telescopes STBM build replies (type 26) inside a type-19
+// addressed at the reply tunnel (see transportBuildReplyForwarder). Reference
+// routers deliver build replies as bare type-26/24 instead, so this branch only
+// fires for our own reply traffic and never for spec-conformant peers.
 func (r *Router) wireTunnelGatewayHandler() {
+	var pool *tunnel.Pool
+	if r.tunnelManager != nil {
+		pool = r.tunnelManager.GetInboundPool()
+	}
 	r.messageRouter.GetProcessor().SetTunnelGatewayHandler(&tunnelGatewayDispatcher{
-		processor: r.messageRouter.GetProcessor(),
+		processor:   r.messageRouter.GetProcessor(),
+		inboundPool: pool,
+		sessions:    r,
 	})
-	log.WithFields(logger.Fields{"at": "initializeMessageRouter"}).Debug("TunnelGateway dispatcher wired into message processor")
+	log.WithFields(logger.Fields{"at": "initializeMessageRouter"}).Debug("TunnelGateway IBGW dispatcher wired into message processor")
 }
 
-// tunnelGatewayDispatcher implements i2np.TunnelGatewayHandler by parsing the
-// inner I2NP message from a TunnelGateway payload and re-dispatching it.
+// tunnelGatewayDispatcher implements i2np.TunnelGatewayHandler as the inbound
+// gateway (IBGW) role: it injects a received type-19 payload into the inbound
+// tunnel named by the gateway's TunnelID field, rather than consuming it as our
+// own traffic.
 type tunnelGatewayDispatcher struct {
 	processor *i2np.MessageProcessor
+	// inboundPool resolves the destination's inbound tunnel by ID. Only tunnels
+	// WE built retain the full per-hop layer set, so injection is limited to our
+	// own inbound tunnels; a payload for an unknown tunnel fails closed.
+	inboundPool *tunnel.Pool
+	// sessions obtains the transport session to hop 0 so the layered records can
+	// be handed off as type-18 TunnelData.
+	sessions i2np.SessionProvider
 }
 
-// HandleGateway parses and dispatches an inner I2NP message carried in a
-// TunnelGateway payload.
+// HandleGateway injects a TunnelGateway payload into its inbound tunnel.
+//
+// Build-reply inner messages (type 24/26) are dispatched locally, because
+// go-i2p wraps them in a type-19 on the reply path; everything else is treated
+// as opaque payload and injected into the tunnel.
 func (d *tunnelGatewayDispatcher) HandleGateway(tunnelID tunnel.TunnelID, payload []byte) error {
 	// BUG-4 fix: use the short-format minimum (9 bytes) as the floor so that
 	// valid 9–15 byte short I2NP messages are not rejected before the fallback
@@ -124,28 +151,122 @@ func (d *tunnelGatewayDispatcher) HandleGateway(tunnelID tunnel.TunnelID, payloa
 	if len(payload) < i2np.ShortI2NPHeaderSize {
 		return oops.Errorf("TunnelGateway payload too short: %d bytes", len(payload))
 	}
+
+	// Peek at the inner I2NP type only to decide build-reply vs. opaque payload.
+	// A real gateway never inspects the payload beyond this; the reference
+	// (i2pd HandleTunnelGatewayMsg) forwards it verbatim into the tunnel.
 	inner := &i2np.BaseI2NPMessage{}
 	if err := inner.UnmarshalBinary(payload); err != nil {
-		// Fall back to short I2NP format (9-byte header) in case the payload
-		// uses NTCP2 short format.
 		inner2 := &i2np.BaseI2NPMessage{}
 		if err2 := inner2.UnmarshalShortI2NP(payload); err2 != nil {
 			return oops.Wrapf(err, "failed to parse inner I2NP message from TunnelGateway payload (standard: %v, short: %v)", err, err2)
 		}
 		inner = inner2
 	}
-	// The inner message was delivered down an inbound tunnel. Mark it so the
-	// DatabaseStore reply-token security rule applies (spec: reply fields are
-	// ignored for tunnel-delivered stores).
-	inner.SetReceivedViaTunnel(true)
-	i2np.RecordExploratoryReplyStage(i2np.ExploratoryReplyStageTunnelGatewayParsed)
+
+	// go-i2p reply telescoping: a build reply wrapped in a type-19 is OUR reply
+	// traffic and must be processed locally, not re-injected down a tunnel.
+	if isBuildReplyType(inner.Type()) {
+		inner.SetReceivedViaTunnel(true)
+		i2np.RecordExploratoryReplyStage(i2np.ExploratoryReplyStageTunnelGatewayParsed)
+		log.WithFields(logger.Fields{
+			"outer_tunnel_id": tunnelID,
+			"inner_type":      inner.Type(),
+			"inner_msg_id":    inner.MessageID(),
+		}).Debug("TunnelGateway: dispatching wrapped build reply locally")
+		return d.processor.ProcessMessage(inner)
+	}
+
+	// Opaque payload: inject into the inbound tunnel named by the gateway field.
+	return d.injectIntoInboundTunnel(tunnelID, payload)
+}
+
+// injectIntoInboundTunnel performs the IBGW role for an opaque payload: resolve
+// the inbound tunnel by ID, build DTLocal delivery instructions, fragment, apply
+// every hop's encryption layer, and hand the resulting type-18 records to hop 0.
+func (d *tunnelGatewayDispatcher) injectIntoInboundTunnel(tunnelID tunnel.TunnelID, payload []byte) error {
+	if d.inboundPool == nil {
+		return oops.Errorf("TunnelGateway: no inbound pool to inject tunnel %d into", tunnelID)
+	}
+	state, ok := d.inboundPool.GetTunnel(tunnelID)
+	if !ok {
+		// Fail closed: we are not the gateway of this tunnel (or it is gone), so
+		// there is nothing to inject into. The reference logs "Tunnel not found"
+		// and drops the message.
+		return oops.Errorf("TunnelGateway: inbound tunnel %d not found; cannot inject", tunnelID)
+	}
+	if state.GetState() != tunnel.TunnelReady {
+		return oops.Errorf("TunnelGateway: inbound tunnel %d is not ready; cannot inject", tunnelID)
+	}
+
+	// The creator-side gateway applies every hop's layer and fragments to the
+	// tunnel block size. DTLocal delivery: the tunnel's endpoint consumes the
+	// payload in its own router context, which is how a gateway forwards traffic
+	// injected for a destination reached through that inbound tunnel.
+	gw, err := state.CreatorGateway()
+	if err != nil {
+		return oops.Wrapf(err, "TunnelGateway: inbound tunnel %d cannot encapsulate traffic", tunnelID)
+	}
+	records, err := gw.SendWithDelivery(payload, tunnel.LocalDelivery())
+	if err != nil {
+		return oops.Wrapf(err, "TunnelGateway: failed to encapsulate payload for tunnel %d", tunnelID)
+	}
+
+	// Hand each layered record to hop 0 as type-18 TunnelData addressed with
+	// hop 0's own receive tunnel ID.
+	hopReceiveID := gw.HopReceiveTunnelID()
+	gatewayHash := state.GatewayHash
+	if d.sessions == nil {
+		return oops.Errorf("TunnelGateway: no session provider to send tunnel %d records", tunnelID)
+	}
+	session, err := d.sessions.GetSessionByHash(gatewayHash)
+	if err != nil {
+		return oops.Wrapf(err, "TunnelGateway: no session to hop 0 of tunnel %d", tunnelID)
+	}
+	for i, record := range records {
+		msg, err := tunnelRecordToTunnelData(hopReceiveID, record)
+		if err != nil {
+			return oops.Wrapf(err, "TunnelGateway: malformed record %d/%d for tunnel %d", i+1, len(records), tunnelID)
+		}
+		if err := session.QueueSendI2NP(msg); err != nil {
+			return oops.Wrapf(err, "TunnelGateway: failed to send record %d/%d to hop 0 of tunnel %d", i+1, len(records), tunnelID)
+		}
+	}
+
 	log.WithFields(logger.Fields{
 		"outer_tunnel_id": tunnelID,
-		"inner_type":      inner.Type(),
-		"inner_msg_id":    inner.MessageID(),
+		"hop_receive_id":  hopReceiveID,
+		"records":         len(records),
 		"payload_size":    len(payload),
-	}).Debug("TunnelGateway: dispatching inner I2NP message")
-	return d.processor.ProcessMessage(inner)
+	}).Debug("TunnelGateway: injected payload into inbound tunnel as type-18 records")
+	return nil
+}
+
+// isBuildReplyType reports whether an I2NP type is a tunnel build reply. go-i2p
+// telescopes these inside a type-19 on the reply path, so the gateway must
+// process them locally rather than re-inject them.
+func isBuildReplyType(t int) bool {
+	switch t {
+	case i2np.I2NPMessageTypeTunnelBuildReply, // 22
+		i2np.I2NPMessageTypeVariableTunnelBuildReply, // 24
+		i2np.I2NPMessageTypeOutboundTunnelBuildReply: // 26
+		return true
+	default:
+		return false
+	}
+}
+
+// tunnelRecordToTunnelData wraps a 1028-byte layered record in a type-18
+// TunnelData addressed to hopReceiveID. The first 4 bytes of the record are the
+// in-clear next-hop ID, which the TunnelData envelope carries separately, so the
+// envelope payload is the remaining 1024 bytes.
+func tunnelRecordToTunnelData(hopReceiveID tunnel.TunnelID, record []byte) (*i2np.TunnelDataMessage, error) {
+	if len(record) != tunnel.TunnelMessageSize {
+		return nil, oops.Errorf("tunnel record must be %d bytes, got %d", tunnel.TunnelMessageSize, len(record))
+	}
+	var payload [i2np.TunnelDataPayloadSize]byte
+	copy(payload[:], record[tunnel.TunnelIDSize:])
+	return i2np.NewTunnelDataMessage(hopReceiveID, payload), nil
 }
 
 // wireBuildRecordIdentity wires router identity and crypto keys for build record decryption.
