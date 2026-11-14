@@ -221,20 +221,6 @@ func (d *tunnelGatewayDispatcher) injectIntoInboundTunnel(tunnelID tunnel.Tunnel
 	return nil
 }
 
-// isBuildReplyType reports whether an I2NP type is a tunnel build reply. go-i2p
-// telescopes these inside a type-19 on the reply path, so the gateway must
-// process them locally rather than re-inject them.
-func isBuildReplyType(t int) bool {
-	switch t {
-	case i2np.I2NPMessageTypeTunnelBuildReply, // 22
-		i2np.I2NPMessageTypeVariableTunnelBuildReply, // 24
-		i2np.I2NPMessageTypeOutboundTunnelBuildReply: // 26
-		return true
-	default:
-		return false
-	}
-}
-
 // tunnelRecordToTunnelData wraps a 1028-byte layered record in a type-18
 // TunnelData addressed to hopReceiveID. The first 4 bytes of the record are the
 // in-clear next-hop ID, which the TunnelData envelope carries separately, so the

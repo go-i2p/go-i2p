@@ -34,20 +34,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// recordingStatusHandler proves whether an inner message was consumed as OUR
-// traffic. A DeliveryStatus is a reply owed to whoever sent the original message,
-// so a router acting as a pure gateway must never consume one for itself.
-type recordingStatusHandler struct {
-	msgIDs     []int
-	timestamps []time.Time
-}
-
-func (h *recordingStatusHandler) HandleDeliveryStatus(msgID int, timestamp time.Time) error {
-	h.msgIDs = append(h.msgIDs, msgID)
-	h.timestamps = append(h.timestamps, timestamp)
-	return nil
-}
-
 // recordingGatewaySession captures every I2NP message the dispatcher hands to
 // hop 0, so the test can observe the injected type-18 records.
 type recordingGatewaySession struct {
