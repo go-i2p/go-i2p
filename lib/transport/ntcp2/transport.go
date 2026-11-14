@@ -670,6 +670,16 @@ func (t *NTCP2Transport) startInboundAcceptRunner() {
 		t.wg.Add(1)
 		go func() {
 			defer t.wg.Done()
+			// I2P-004: this shutdown goroutine runs unrecovered; a panic in
+			// listener.Close() would otherwise kill the router. Recover and log.
+			defer func() {
+				if r := recover(); r != nil {
+					log.WithFields(logger.Fields{
+						"at":    "startInboundAcceptRunner",
+						"panic": r,
+					}).Error("recovered from panic closing NTCP2 listener during shutdown")
+				}
+			}()
 			<-t.ctx.Done()
 			t.identityMu.RLock()
 			listener := t.listener

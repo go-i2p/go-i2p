@@ -365,16 +365,38 @@ func (s *NTCP2Session) sendWorker() {
 	nextMetaAt := time.Now().Add(ntcp2NextMetaInterval())
 
 	for {
-		select {
-		case msg := <-s.SendQueue():
-			if !s.processSendQueueMessage(msg, &nextMetaAt) {
-				s.discardRemainingMessages()
-				return
-			}
-		case <-s.GetContext().Done():
-			s.discardRemainingMessages()
+		if s.processSendWorkerEventsSafe(&nextMetaAt) {
 			return
 		}
+	}
+}
+
+// processSendWorkerEventsSafe runs one send-worker iteration with panic
+// recovery. I2P-004: the send worker runs on its own goroutine with no
+// upstream recover seam, and it serializes/fragments outbound messages whose
+// contents can be influenced by remote input, so a panic would otherwise kill
+// the whole router process. On panic the iteration is abandoned and the worker
+// survives (returns false to keep looping). Returns true only when the worker
+// should exit.
+func (s *NTCP2Session) processSendWorkerEventsSafe(nextMetaAt *time.Time) (exit bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			s.Logger().WithField("panic", r).
+				Error("recovered from panic in NTCP2 send worker; continuing")
+			exit = false
+		}
+	}()
+
+	select {
+	case msg := <-s.SendQueue():
+		if !s.processSendQueueMessage(msg, nextMetaAt) {
+			s.discardRemainingMessages()
+			return true
+		}
+		return false
+	case <-s.GetContext().Done():
+		s.discardRemainingMessages()
+		return true
 	}
 }
 
