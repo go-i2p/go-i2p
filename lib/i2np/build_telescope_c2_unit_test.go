@@ -31,7 +31,7 @@ func newThreeSlotSTBMRaw() []byte {
 // type-25 build request to NextIdent instead of emitting a build reply.
 func TestGenerateAndSendBuildReply_TransitHopRelaysType25(t *testing.T) {
 	processor, mockForwarder, _ := setupBuildReplyTest(t, true)
-	processor.stbmSlotCrypto = map[int]stbmSlotCrypto{1: newTestSTBMSlotCrypto()}
+	processor.stbmSlotCrypto = map[stbmSlotKey]stbmSlotCrypto{{index: 1, messageID: 1000}: newTestSTBMSlotCrypto()}
 
 	record := createTestBuildRequestRecord(t)
 	record.Flag = 0 // transit hop: OBEP bit clear
@@ -56,7 +56,7 @@ func TestGenerateAndSendBuildReply_TransitHopRelaysType25(t *testing.T) {
 // (outbound endpoint) hop emits the build reply and never relays the request.
 func TestGenerateAndSendBuildReply_OBEPHopSendsType26(t *testing.T) {
 	processor, mockForwarder, _ := setupBuildReplyTest(t, true)
-	processor.stbmSlotCrypto = map[int]stbmSlotCrypto{2: newTestSTBMSlotCrypto()}
+	processor.stbmSlotCrypto = map[stbmSlotKey]stbmSlotCrypto{{index: 2, messageID: 1000}: newTestSTBMSlotCrypto()}
 
 	record := createTestBuildRequestRecord(t)
 	record.Flag = tunnel.FlagOBEP
@@ -84,10 +84,10 @@ func TestProcessAllBuildRecords_TelescopesMixedFlags(t *testing.T) {
 		ourHash[i] = byte(0x10 + i)
 	}
 	processor.SetOurRouterHash(ourHash)
-	processor.stbmSlotCrypto = map[int]stbmSlotCrypto{
-		0: newTestSTBMSlotCrypto(),
-		1: newTestSTBMSlotCrypto(),
-		2: newTestSTBMSlotCrypto(),
+	processor.stbmSlotCrypto = map[stbmSlotKey]stbmSlotCrypto{
+		{index: 0, messageID: 7000}: newTestSTBMSlotCrypto(),
+		{index: 1, messageID: 7000}: newTestSTBMSlotCrypto(),
+		{index: 2, messageID: 7000}: newTestSTBMSlotCrypto(),
 	}
 
 	records := make([]BuildRequestRecord, 3)
@@ -121,7 +121,7 @@ func TestProcessAllBuildRecords_TelescopesMixedFlags(t *testing.T) {
 // the next hop rather than short-circuiting the chain.
 func TestGenerateAndSendBuildReply_RejectedTransitStillRelays(t *testing.T) {
 	processor, mockForwarder, _ := setupBuildReplyTest(t, true)
-	processor.stbmSlotCrypto = map[int]stbmSlotCrypto{0: newTestSTBMSlotCrypto()}
+	processor.stbmSlotCrypto = map[stbmSlotKey]stbmSlotCrypto{{index: 0, messageID: 1000}: newTestSTBMSlotCrypto()}
 
 	record := createTestBuildRequestRecord(t)
 	record.Flag = 0
@@ -253,7 +253,7 @@ func TestBuildRequestProcessor_TransitBuildStillProcessed(t *testing.T) {
 	}
 	processor.SetOurRouterHash(ourHash)
 	processor.SetBuildReplyProcessor(proc)
-	processor.stbmSlotCrypto = map[int]stbmSlotCrypto{0: newTestSTBMSlotCrypto()}
+	processor.stbmSlotCrypto = map[stbmSlotKey]stbmSlotCrypto{{index: 0, messageID: 6006}: newTestSTBMSlotCrypto()}
 
 	// A one-record body is not a parseable build request (undecryptable), so
 	// it is dropped; the point is process() reached record parsing at all.
