@@ -73,7 +73,9 @@ func (p *SearchReplyPrefetcher) HandleSearchReply(key common.Hash, peerHashes []
 			continue
 		}
 
-		go p.prefetchPeer(key, peerHash)
+		safeGo("SearchReplyPrefetcher.prefetchPeer", func() {
+			p.prefetchPeer(key, peerHash)
+		})
 	}
 }
 

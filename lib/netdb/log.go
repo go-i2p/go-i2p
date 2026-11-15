@@ -22,3 +22,22 @@ func shortHash(s string, n int) string {
 func logAt(at string) *logger.Entry {
 	return log.WithFields(logger.Fields{"at": at})
 }
+
+// safeGo runs fn on a new goroutine with panic recovery. These goroutines
+// (exploration, Kademlia lookups, prefetching) parse and act on untrusted
+// network data with no upstream recover seam, so a panic in one would
+// otherwise take down the whole router process. The panic is logged with the
+// call site's name; the goroutine simply ends. Callers whose goroutine feeds a
+// WaitGroup or an exact-count channel collector must keep their own
+// wg.Done()/send defers inside fn so the join cannot hang on a recovered panic.
+func safeGo(name string, fn func()) {
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logAt(name).WithField("panic", r).
+					Error("recovered from panic in netdb goroutine")
+			}
+		}()
+		fn()
+	}()
+}

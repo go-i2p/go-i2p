@@ -226,11 +226,23 @@ func (rl *FloodfillRateLimiter) cleanupLoop() {
 	for {
 		select {
 		case <-ticker.C:
-			rl.removeStalePeers()
+			rl.cleanupStalePeersSafe()
 		case <-rl.stopChan:
 			return
 		}
 	}
+}
+
+// cleanupStalePeersSafe runs one stale-peer sweep with panic recovery so a
+// panic in the sweep cannot permanently stop the rate limiter's cleanup loop.
+func (rl *FloodfillRateLimiter) cleanupStalePeersSafe() {
+	defer func() {
+		if r := recover(); r != nil {
+			logAt("FloodfillRateLimiter.cleanupLoop").WithField("panic", r).
+				Error("recovered from panic in floodfill rate-limiter cleanup; continuing loop")
+		}
+	}()
+	rl.removeStalePeers()
 }
 
 // removeStalePeers purges rate-limiter entries for peers that have been idle

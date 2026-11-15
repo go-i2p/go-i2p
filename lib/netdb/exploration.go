@@ -154,12 +154,12 @@ func (e *Explorer) Start() error {
 	}).Info("Starting database exploration")
 
 	e.wg.Add(1)
-	go e.explorationLoop()
+	safeGo("Explorer.explorationLoop", e.explorationLoop)
 
 	// Start stats update loop if using adaptive strategy
 	if e.strategy != nil {
 		e.wg.Add(1)
-		go e.statsUpdateLoop()
+		safeGo("Explorer.statsUpdateLoop", e.statsUpdateLoop)
 	}
 
 	return nil
@@ -245,10 +245,22 @@ func (e *Explorer) runExplorationTicker(ticker *time.Ticker, interval *time.Dura
 		case <-e.ctx.Done():
 			return
 		case <-ticker.C:
-			e.performExplorationRound()
+			e.performExplorationRoundSafe()
 			e.adjustIntervalIfNeeded(ticker, interval)
 		}
 	}
+}
+
+// performExplorationRoundSafe runs one exploration round with panic recovery so
+// a panic in a round cannot permanently stop the exploration loop.
+func (e *Explorer) performExplorationRoundSafe() {
+	defer func() {
+		if r := recover(); r != nil {
+			logAt("Explorer.explorationLoop").WithField("panic", r).
+				Error("recovered from panic in exploration round; continuing loop")
+		}
+	}()
+	e.performExplorationRound()
 }
 
 // adjustIntervalIfNeeded recalculates and updates the exploration interval when using adaptive strategy
@@ -306,6 +318,13 @@ func (e *Explorer) performExplorationRound() {
 		go func(index int, hash common.Hash) {
 			defer wg.Done()
 			defer func() { <-sem }() // release
+			defer func() {
+				if r := recover(); r != nil {
+					logAt("Explorer.exploreRound").WithField("index", index).
+						WithField("panic", r).
+						Error("recovered from panic in exploratory lookup goroutine")
+				}
+			}()
 
 			if err := e.performExploratoryLookup(index, hash); err != nil {
 				log.WithError(err).WithField("index", index).Debug("Exploratory lookup failed")

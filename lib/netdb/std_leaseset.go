@@ -1279,15 +1279,28 @@ func (db *StdNetDB) StartExpirationCleaner() {
 		for {
 			select {
 			case <-ticker.C:
-				db.cleanExpiredLeaseSets()
-				tickCount++
-				db.runPeriodicMaintenance(tickCount)
+				db.runExpirationTickSafe(&tickCount)
 			case <-db.ctx.Done():
 				log.WithFields(logger.Fields{"at": "StartExpirationCleaner"}).Info("Stopping expiration cleaner")
 				return
 			}
 		}
 	}()
+}
+
+// runExpirationTickSafe performs one expiration-cleaner tick with panic
+// recovery so a panic in cleanup cannot permanently stop the background
+// LeaseSet/RouterInfo expiration loop.
+func (db *StdNetDB) runExpirationTickSafe(tickCount *int) {
+	defer func() {
+		if r := recover(); r != nil {
+			logAt("StartExpirationCleaner").WithField("panic", r).
+				Error("recovered from panic in expiration cleaner tick; continuing loop")
+		}
+	}()
+	db.cleanExpiredLeaseSets()
+	*tickCount++
+	db.runPeriodicMaintenance(*tickCount)
 }
 
 // runPeriodicMaintenance performs less-frequent cleanup tasks every 10 ticks.

@@ -292,6 +292,23 @@ func (s *Server) startHTTPServer() error {
 		defer s.wg.Done()
 		close(ready)
 
+		// A panic in the serve loop must surface as a startup failure through
+		// errCh (the barrier below selects on it), not silently kill the
+		// goroutine and report success. Recover, report, and end.
+		defer func() {
+			if r := recover(); r != nil {
+				err := fmt.Errorf("panic in I2PControl serve loop: %v", r)
+				select {
+				case errCh <- err:
+				default:
+				}
+				log.WithFields(logger.Fields{
+					"at":     "(Server).startHTTPServer",
+					"reason": "panic",
+				}).WithField("panic", r).Error("recovered from panic in I2PControl serve loop")
+			}
+		}()
+
 		err := s.serveOnListener(listener)
 
 		if err != nil && err != http.ErrServerClosed {
@@ -433,10 +450,22 @@ func (s *Server) startTokenCleanup() {
 			case <-s.ctx.Done():
 				return
 			case <-ticker.C:
-				s.authManager.CleanupExpiredTokens()
+				s.cleanupExpiredTokensSafe()
 			}
 		}
 	}()
+}
+
+// cleanupExpiredTokensSafe runs one expired-token sweep with panic recovery so
+// a panic in the sweep cannot permanently stop the background token cleanup.
+func (s *Server) cleanupExpiredTokensSafe() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.WithFields(logger.Fields{"at": "(Server).startTokenCleanup"}).WithField("panic", r).
+				Error("recovered from panic in token cleanup; continuing loop")
+		}
+	}()
+	s.authManager.CleanupExpiredTokens()
 }
 
 // httpShutdownTimeout bounds the graceful drain of in-flight HTTP requests.

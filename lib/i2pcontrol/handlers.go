@@ -427,7 +427,7 @@ func (h *RouterManagerHandler) handleStopOperation(req, result map[string]interf
 	// Server.Stop() waits for everything registered on the server WaitGroup.
 	// Registering here would make this goroutine wait for itself.
 	h.routerStopWg.Add(1)
-	go func() {
+	safeGo(opKey, func() {
 		defer h.routerStopWg.Done()
 		select {
 		case <-h.ctx.Done():
@@ -438,7 +438,7 @@ func (h *RouterManagerHandler) handleStopOperation(req, result map[string]interf
 		log.WithFields(logger.Fields{"at": opKey}).Info(startMsg)
 		h.RouterControl.Stop()
 		log.WithFields(logger.Fields{"at": opKey}).Info(completeMsg)
-	}()
+	})
 	result[opKey] = nil
 }
 
@@ -530,6 +530,16 @@ func (h *RouterManagerHandler) executeReseedAsync() {
 	h.wg.Add(1)
 	go func() {
 		defer h.wg.Done()
+		// A panic in the reseed must still clear reseedRunning, or the handler
+		// would report a reseed as perpetually in flight. Recover, record the
+		// failure, and let the goroutine end.
+		defer func() {
+			if r := recover(); r != nil {
+				log.WithFields(logger.Fields{"at": "handleReseed"}).WithField("panic", r).
+					Error("recovered from panic in I2PControl reseed goroutine")
+				h.finishReseed("failed", fmt.Errorf("panic during reseed: %v", r))
+			}
+		}()
 
 		reseedCtx, cancel := context.WithTimeout(h.ctx, 2*time.Minute)
 		defer cancel()
@@ -608,10 +618,10 @@ func (h *RouterManagerHandler) handleGracefulStop(req, result map[string]interfa
 	// Same self-join hazard as handleStopOperation: executeGracefulStop calls
 	// RouterControl.Stop(), so it must not be counted on the server WaitGroup.
 	h.routerStopWg.Add(1)
-	go func() {
+	safeGo("handleGracefulStop", func() {
 		defer h.routerStopWg.Done()
 		h.executeGracefulStop(operation, delay)
-	}()
+	})
 	result[operation] = nil
 }
 

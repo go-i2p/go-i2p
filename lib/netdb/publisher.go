@@ -311,16 +311,30 @@ func (p *Publisher) periodicLoop(interval time.Duration, action func()) {
 	defer ticker.Stop()
 
 	// Execute action immediately on start
-	action()
+	p.runPublishAction(action)
 
 	for {
 		select {
 		case <-p.ctx.Done():
 			return
 		case <-ticker.C:
-			action()
+			p.runPublishAction(action)
 		}
 	}
+}
+
+// runPublishAction runs one publisher action with panic recovery. The publish
+// loops parse and act on network responses with no upstream recover seam; a
+// panic in one action must not permanently kill the periodic publisher, so it
+// is recovered here and the loop continues to the next tick.
+func (p *Publisher) runPublishAction(action func()) {
+	defer func() {
+		if r := recover(); r != nil {
+			logAt("Publisher.periodicLoop").WithField("panic", r).
+				Error("recovered from panic in publisher action; continuing loop")
+		}
+	}()
+	action()
 }
 
 func (p *Publisher) publisherLoopSpecs() []publisherLoopSpec {
@@ -669,6 +683,16 @@ func (p *Publisher) sendDatabaseStoreMessagesWithMinSuccess(hash common.Hash, da
 	resultCh := make(chan sendResult, len(floodfills))
 	for _, ff := range floodfills {
 		go func(floodfill router_info.RouterInfo) {
+			// The collector below reads exactly len(floodfills) results, so a
+			// panic must still produce one or the join hangs. Recover, log, and
+			// report the failure as an error result.
+			defer func() {
+				if r := recover(); r != nil {
+					logAt("sendDatabaseStoreMessagesWithMinSuccess").WithField("panic", r).
+						Error("recovered from panic in floodfill DatabaseStore send goroutine")
+					resultCh <- sendResult{err: oops.Errorf("panic in floodfill send: %v", r)}
+				}
+			}()
 			token, err := p.sendDatabaseStoreToFloodfill(hash, data, dataType, floodfill)
 			resultCh <- sendResult{token: token, err: err}
 		}(ff)
@@ -741,6 +765,18 @@ func (p *Publisher) verifyRouterInfoRetrievable(target common.Hash, floodfills [
 	results := make(chan verifyResult, len(floodfills))
 	for _, ff := range floodfills {
 		go func(floodfill router_info.RouterInfo) {
+			// The collector below reads exactly len(floodfills) results, so a
+			// panic must still produce one or the join hangs. Every normal send
+			// in this body is immediately followed by return, so a panic can only
+			// happen before the first send; recovering here emits a non-matching
+			// result without double-sending.
+			defer func() {
+				if r := recover(); r != nil {
+					logAt("verifyRouterInfoRetrievable").WithField("panic", r).
+						Error("recovered from panic in floodfill verification goroutine")
+					results <- verifyResult{matched: false, reason: fmt.Sprintf("panic in verification: %v", r)}
+				}
+			}()
 			ctx, cancel := context.WithTimeout(p.ctx, p.verifyTimeout)
 			defer cancel()
 
@@ -1005,6 +1041,17 @@ func (p *Publisher) sendDatabaseStoreMessages(hash common.Hash, data []byte, dat
 	resultCh := make(chan sendResult, len(floodfills))
 	for _, ff := range floodfills {
 		go func(floodfill router_info.RouterInfo) {
+			// The collector below reads exactly len(floodfills) results, so a
+			// panic must still produce one or the join hangs. The channel is
+			// buffered and never closed, so the send itself cannot panic; a panic
+			// can only occur in sendDatabaseStoreToFloodfill, before the send.
+			defer func() {
+				if r := recover(); r != nil {
+					logAt("sendDatabaseStoreMessages").WithField("panic", r).
+						Error("recovered from panic in floodfill DatabaseStore send goroutine")
+					resultCh <- sendResult{err: oops.Errorf("panic in floodfill send: %v", r)}
+				}
+			}()
 			_, err := p.sendDatabaseStoreToFloodfill(hash, data, dataType, floodfill)
 			resultCh <- sendResult{err: err}
 		}(ff)

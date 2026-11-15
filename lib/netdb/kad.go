@@ -301,7 +301,7 @@ func (kr *KademliaResolver) performRemoteLookup(ctx context.Context, h common.Ha
 		"timeout":  timeout,
 		"max_hops": MaxIterativeLookupHops,
 	}).Debug("Starting iterative Kademlia lookup")
-	go func() {
+	safeGo("performRemoteLookup", func() {
 		ri, err := kr.iterativeLookup(ctx, h)
 		if ri != nil {
 			resultChan <- ri
@@ -310,7 +310,7 @@ func (kr *KademliaResolver) performRemoteLookup(ctx context.Context, h common.Ha
 		} else {
 			errChan <- oops.Errorf("router info not found in kademlia lookup")
 		}
-	}()
+	})
 }
 
 // iterativeQueryResult holds the result from querying a single peer.
@@ -474,12 +474,12 @@ func (kr *KademliaResolver) queryBatchParallel(ctx context.Context, peers []comm
 
 	for _, peer := range peers {
 		wg.Add(1)
-		go func(p common.Hash) {
+		safeGo("queryBatchParallel", func() {
 			defer wg.Done()
 			queryCtx, cancel := withClampedTimeout(ctx, perPeerQueryTimeout)
 			defer cancel()
 
-			ri, err := kr.queryPeer(queryCtx, p, target, resolveSuggestedPeers, exploration)
+			ri, err := kr.queryPeer(queryCtx, peer, target, resolveSuggestedPeers, exploration)
 			result := iterativeQueryResult{ri: ri, err: err}
 
 			// Extract suggestions from SearchReplyError
@@ -488,13 +488,13 @@ func (kr *KademliaResolver) queryBatchParallel(ctx context.Context, peers []comm
 				result.suggestions = searchReplyErr.Suggestions
 				log.WithFields(logger.Fields{
 					"at":          "queryBatchParallel",
-					"peer":        logutil.HashPrefixPlain(p),
+					"peer":        logutil.HashPrefixPlain(peer),
 					"suggestions": len(searchReplyErr.Suggestions),
 				}).Debug("Peer returned suggestions for iterative follow-up")
 			}
 
 			resultsCh <- result
-		}(peer)
+		})
 	}
 
 	wg.Wait()
