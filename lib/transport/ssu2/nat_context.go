@@ -167,13 +167,6 @@ func (s *natNonceStore) remove(nonce uint32) {
 	s.mu.Unlock()
 }
 
-// size reports the number of live contexts (for tests and metrics).
-func (s *natNonceStore) size() int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return len(s.entries)
-}
-
 // rememberAliceForNonce records that nonce belongs to a transaction initiated
 // by the router with aliceHash. Only call this with a hash learned from an
 // authenticated source.

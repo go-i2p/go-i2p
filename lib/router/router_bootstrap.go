@@ -165,12 +165,6 @@ func (r *Router) reseedUntilReadyWith(ctx context.Context, reseed func(context.C
 	return oops.Errorf("initial reseed failed after %d attempts: %w", maxAttempts, lastErr)
 }
 
-// performReseed executes network database reseeding process.
-// It selects the appropriate bootstrapper based on configuration and executes the reseed operation.
-func (r *Router) performReseed() error {
-	return r.performReseedWithContext(context.Background())
-}
-
 // performReseedWithContext executes network database reseeding process.
 // It selects the appropriate bootstrapper based on configuration and executes
 // the reseed operation with cancellation support.

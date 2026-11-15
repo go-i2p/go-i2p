@@ -2528,10 +2528,8 @@ func (t *NTCP2Transport) setupSession(conn *ntcp2.Conn, routerHash data.Hash) *N
 	// ntcp2.rst §"RouterInfo Block" requires a data-phase RouterInfo block to be
 	// validated and stored as a local DatabaseStore, and flooded when its flag
 	// requests it. Without this wiring the block is parsed and discarded.
-	remoteAddr := ""
-	if ra := conn.RemoteAddr(); ra != nil {
-		remoteAddr = ra.String()
-	}
+	// conn.RemoteAddr() is never nil: NewNTCP2Conn rejects a nil remote address.
+	remoteAddr := conn.RemoteAddr().String()
 	session.SetRouterInfoCallback(func(riBytes []byte, floodRequested bool) {
 		t.handleDataPhaseRouterInfo(remoteAddr, routerHash, riBytes, floodRequested)
 	})

@@ -406,25 +406,6 @@ func readMessageHeaderWithContext(ctx context.Context, r io.Reader) ([]byte, err
 	return header, nil
 }
 
-// setPayloadReadDeadline sets a read deadline on the connection for payload reads only.
-// This prevents slow-send attacks where attackers claim large payloads
-// but drip-feed data slowly to exhaust connection resources.
-func setPayloadReadDeadline(r io.Reader, timeout time.Duration) error {
-	conn, ok := r.(net.Conn)
-	if !ok {
-		return nil
-	}
-
-	deadline := time.Now().Add(timeout)
-	if err := conn.SetReadDeadline(deadline); err != nil {
-		// Log but don't fail - deadline setting is defensive, not critical
-		log.WithError(err).Debug("failed_to_set_payload_read_deadline")
-		return nil
-	}
-
-	return nil
-}
-
 // identifyConnection returns a human-readable identifier for the reader's remote address.
 func identifyConnection(r io.Reader) string {
 	if conn, ok := r.(net.Conn); ok {
@@ -507,16 +488,6 @@ func extractSessionIDFromPayload(msgType uint8, payload []byte) uint16 {
 	}
 	// Messages without SessionID in payload (e.g., CreateSession, GetDate)
 	return 0
-}
-
-// readMessageHeader reads the I2CP message header from the reader.
-// Per I2CP spec: header is length(4) + type(1) = 5 bytes total.
-func readMessageHeader(r io.Reader) ([]byte, error) {
-	header := make([]byte, 5)
-	if _, err := io.ReadFull(r, header); err != nil {
-		return nil, oops.Errorf("failed to read I2CP header: %w", err)
-	}
-	return header, nil
 }
 
 // parseMessageHeader extracts the payload length and message type from the header bytes.

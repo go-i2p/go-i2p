@@ -567,15 +567,6 @@ func lookupTypeRequestsOptions(t uint16) bool {
 		t == HostLookupTypeDestination
 }
 
-// lookupTypeIsHashKeyed reports whether the lookup resolves to a destination
-// hash: types 0 and 2 carry a hash directly, and type 4 carries a Destination
-// whose hash is computed at parse time.
-func lookupTypeIsHashKeyed(t uint16) bool {
-	return t == HostLookupTypeHash ||
-		t == HostLookupTypeHashWithOptions ||
-		t == HostLookupTypeDestination
-}
-
 // ParseHostLookupPayload deserializes a HostLookup payload from wire format.
 // Returns an error if the payload is too short or malformed.
 //

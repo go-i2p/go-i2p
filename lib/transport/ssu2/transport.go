@@ -769,10 +769,9 @@ func (t *SSU2Transport) inboundHandshakeWorker(conn *ssu2noise.SSU2Conn) {
 		}
 	}()
 
-	remoteAddr := "<unknown>"
-	if conn.RemoteAddr() != nil {
-		remoteAddr = conn.RemoteAddr().String()
-	}
+	// conn.RemoteAddr() is never nil: SSU2Conn construction always builds an
+	// SSU2Addr (or errors), so the nil branch was unreachable.
+	remoteAddr := conn.RemoteAddr().String()
 
 	cfg := t.config.Load()
 	handshakeTimeout := cfg.GetHandshakeTimeout()

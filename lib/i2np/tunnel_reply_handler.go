@@ -101,20 +101,6 @@ func (p *PendingBuildRequest) hopCount() int {
 	return p.HopCount
 }
 
-// pathEntryCount returns how many of the build's wire slots carry something the
-// creator cares about: one per real hop, plus one for the phony record when the
-// build carried one. Anything past that on the wire is random padding.
-func (p *PendingBuildRequest) pathEntryCount() int {
-	if p == nil {
-		return 0
-	}
-	n := p.hopCount()
-	if p.HasPhonyRecord {
-		n++
-	}
-	return n
-}
-
 // ReplyProcessor handles tunnel build reply processing with timeout and retry logic.
 // It manages pending build requests, decrypts encrypted reply records, and coordinates
 // tunnel state transitions based on build success or failure.

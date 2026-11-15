@@ -32,6 +32,7 @@
 // addressed to any hop. Every hop still XORs them along with everything else,
 // so they too return unchanged, but the spec imposes no validation requirement
 // on them.
+
 package i2np
 
 import (
