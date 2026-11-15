@@ -280,17 +280,34 @@ func logError(reason string, err error) {
 }
 
 // initializeTransports creates and returns all configured transports.
+//
+// transport.ntcp2_enabled and transport.ssu2_enabled are both honored here:
+// a transport is built only when its enable flag is set. A nil Transport
+// config keeps the historical default (NTCP2 on, SSU2 off). At least one
+// transport must be enabled, otherwise the router has no way to reach the
+// network and startup fails fast with a clear message rather than silently
+// running a headless router.
 func initializeTransports(r *Router, ri *router_info.RouterInfo, cfg *config.RouterConfig) ([]transport.Transport, error) {
-	log.WithField("at", "initializeTransports").Debug("building NTCP2 transport")
-	ntcp2Transport, err := buildNTCP2Transport(r, ri)
-	if err != nil {
-		return nil, err
+	ntcp2Enabled := cfg.Transport == nil || cfg.Transport.NTCP2Enabled
+	ssu2Enabled := cfg.Transport != nil && cfg.Transport.SSU2Enabled
+
+	var transports []transport.Transport
+	var ntcp2Transport *ntcp.NTCP2Transport
+
+	if ntcp2Enabled {
+		log.WithField("at", "initializeTransports").Debug("building NTCP2 transport")
+		t, err := buildNTCP2Transport(r, ri)
+		if err != nil {
+			return nil, err
+		}
+		ntcp2Transport = t
+		transports = append(transports, t)
+		log.WithField("at", "initializeTransports").Debug("NTCP2 transport built successfully")
+	} else {
+		log.WithField("at", "initializeTransports").Info("NTCP2 transport disabled by config (transport.ntcp2_enabled=false)")
 	}
-	log.WithField("at", "initializeTransports").Debug("NTCP2 transport built successfully")
 
-	transports := []transport.Transport{ntcp2Transport}
-
-	if cfg.Transport != nil && cfg.Transport.SSU2Enabled {
+	if ssu2Enabled {
 		log.WithField("at", "initializeTransports").Debug("building SSU2 transport")
 		if ssu2Transport, err := buildSSU2Transport(r, ri); err != nil {
 			log.WithError(err).Warn("SSU2 transport setup failed; continuing without SSU2")
@@ -298,9 +315,18 @@ func initializeTransports(r *Router, ri *router_info.RouterInfo, cfg *config.Rou
 			transports = append(transports, ssu2Transport)
 			// Propagate the final dual-transport RI to NTCP2 so msg3 sends
 			// ri_addr_count=2 instead of the stale 1-address RI stored during
-			// buildNTCP2Transport.
-			ntcp2Transport.UpdateLocalRouterInfo(*ri)
+			// buildNTCP2Transport. No-op when NTCP2 is disabled.
+			if ntcp2Transport != nil {
+				ntcp2Transport.UpdateLocalRouterInfo(*ri)
+			}
 		}
+	}
+
+	// A router with no enabled transport cannot dial or accept, so it would
+	// never bootstrap, publish, or serve traffic. Fail fast instead of
+	// starting a headless router.
+	if len(transports) == 0 {
+		return nil, oops.Errorf("no transports enabled: enable at least one of transport.ntcp2_enabled or transport.ssu2_enabled")
 	}
 
 	// Now that all transport addresses have been added, recompute the
