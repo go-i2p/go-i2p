@@ -68,6 +68,9 @@ func createSSU2TransportInstance(r *Router, ri *router_info.RouterInfo, addr str
 	}
 	ssu2Config.WorkingDir = r.cfg.WorkingDir
 	applySSU2SessionLimits(ssu2Config, r.cfg.Transport)
+	// router.upnp_enabled=false suppresses the UPnP/NAT-PMP port mapping the
+	// transport would otherwise open on a public bind.
+	ssu2Config.DisablePortMapping = !r.cfg.UpnpEnabled
 	ssu2Config.RouterLookupFunc = func(hash common.Hash) (router_info.RouterInfo, error) {
 		ch := r.netdb.GetRouterInfo(hash)
 		var ri router_info.RouterInfo

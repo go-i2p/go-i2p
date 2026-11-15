@@ -99,6 +99,8 @@ func registerRouterFlags(cmd *cobra.Command) {
 		"Participate in transit tunnels for the network")
 	cmd.PersistentFlags().Bool("router.hidden", routerCfg.Hidden,
 		"Hidden mode: client-only operation, no transit, no published transport addresses")
+	cmd.PersistentFlags().Bool("router.upnp-enabled", routerCfg.UpnpEnabled,
+		"Attempt UPnP/NAT-PMP port mapping on a public transport bind")
 	cmd.PersistentFlags().Bool("router.testnet", routerCfg.Testnet,
 		"Testnet mode: no bootstrap peer floor; never waits for or triggers an emergency reseed")
 	cmd.PersistentFlags().Duration("router.info-refresh-interval",
@@ -388,6 +390,7 @@ func bindRouterFlags(cmd *cobra.Command, v *viper.Viper) error {
 		{"router.max_connections", "router.max-connections"},
 		{"router.accept_tunnels", "router.accept-tunnels"},
 		{"router.hidden", "router.hidden"},
+		{"router.upnp_enabled", "router.upnp-enabled"},
 		{"router.testnet", "router.testnet"},
 		{"router.info_refresh_interval", "router.info-refresh-interval"},
 		{"router.router_info_file", "router.router-info-file"},

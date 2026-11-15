@@ -27,6 +27,14 @@ router:
   max_concurrent_sessions: 200
   # Participate in transit tunnels for the network
   accept_tunnels: true
+  # Attempt UPnP/NAT-PMP port mapping on a public transport bind.
+  # When true (default) the SSU2 transport asks the gateway to open a port so
+  # the router is reachable without manual firewall rules. Set false to keep a
+  # public bind from requesting a port mapping — for explicit firewall control
+  # or a stronger anonymity posture. Reported by I2PControl as
+  # i2p.router.net.upnp.
+  # Default: true.
+  upnp_enabled: true
   # Testnet mode: run against a small, isolated test network.
   # When true the router expresses no bootstrap peer floor. Normally go-i2p
   # refuses to finish starting until it holds at least 40 RouterInfos (or

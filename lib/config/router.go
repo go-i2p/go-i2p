@@ -133,6 +133,14 @@ type RouterConfig struct {
 	// implies this behavior.
 	// Default: false.
 	AlwaysOneHopOutbound bool
+	// UpnpEnabled controls whether the router attempts UPnP/NAT-PMP port
+	// mapping on its public transport bind. When true (the default) the SSU2
+	// transport asks the gateway to open a port; set false to keep a public
+	// bind from requesting a port mapping, for explicit firewall control or a
+	// stronger anonymity posture. This is the knob i2pcontrol reports as
+	// i2p.router.net.upnp.
+	// Default: true.
+	UpnpEnabled bool
 	// Tunnel configuration for tunnel pool management and building.
 	Tunnel *TunnelDefaults
 	// Transport configuration for NTCP2/SSU2 transports.
@@ -186,6 +194,7 @@ var defaultRouterConfig = &RouterConfig{
 	BandwidthTier:  "",
 	MaxConnections: DefaultRouterMaxConnections,
 	AcceptTunnels:  true,
+	UpnpEnabled:    true,
 	Tunnel:         defaultTunnelConfigPtr(),
 	Transport:      defaultTransportConfigPtr(),
 	Performance:    defaultPerformanceConfigPtr(),
@@ -274,6 +283,7 @@ func copyBaseFields(src *RouterConfig) *RouterConfig {
 		Hidden:               src.Hidden,
 		AlwaysZeroHopInbound: src.AlwaysZeroHopInbound,
 		AlwaysOneHopOutbound: src.AlwaysOneHopOutbound,
+		UpnpEnabled:          src.UpnpEnabled,
 	}
 }
 

@@ -86,6 +86,15 @@ type RouterDefaults struct {
 	// BandwidthTier is the RouterInfo bandwidth capability letter (K/L/M/N/O/P/X).
 	// Default: "" (auto-derived from configured bandwidth/session limits).
 	BandwidthTier string
+
+	// UpnpEnabled controls whether the router attempts UPnP/NAT-PMP port
+	// mapping on its public transport bind. When true (the default, matching
+	// the reference implementation and prior go-i2p behavior) the SSU2
+	// transport opens a port mapping; set false to keep a public bind from
+	// asking the gateway to open a port, which some operators prefer for
+	// explicit firewall control or a stronger anonymity posture.
+	// Default: true
+	UpnpEnabled bool
 }
 
 // NetDBDefaults contains default values for network database configuration
@@ -487,6 +496,7 @@ func buildRouterDefaults(baseDir, workingDir string) RouterDefaults {
 		MessageExpirationTime:     DefaultMessageExpirationTime,
 		MaxConcurrentSessions:     DefaultMaxConcurrentSessions,
 		BandwidthTier:             "",
+		UpnpEnabled:               true,
 	}
 }
 

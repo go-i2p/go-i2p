@@ -154,14 +154,21 @@ func initNATManagers(t *SSU2Transport) error {
 	t.holePunchCoord = holePunch
 	t.peerTestManager = peerTestMgr
 
-	// Start port mapper with retry logic (extracted to lib/nat).
+	// Start port mapper with retry logic (extracted to lib/nat). Suppressed when
+	// the operator disabled UPnP/NAT-PMP (router.upnp_enabled=false), so a public
+	// bind no longer unconditionally asks the gateway to open a port.
 	if port, valid := t.validateAndExtractPort(); valid {
-		cfg := &nat.PortMapperConfig{
-			Network:      "udp",
-			InternalPort: port,
-			Context:      t.natCtx,
+		if cfg := t.config.Load(); cfg != nil && cfg.DisablePortMapping {
+			t.logger.WithField("at", "initNATManagers").
+				Info("UPnP/NAT-PMP port mapping disabled by config (router.upnp_enabled=false)")
+		} else {
+			mapperCfg := &nat.PortMapperConfig{
+				Network:      "udp",
+				InternalPort: port,
+				Context:      t.natCtx,
+			}
+			t.portMapperManager = nat.NewPortMapperManager(mapperCfg)
 		}
-		t.portMapperManager = nat.NewPortMapperManager(cfg)
 	}
 
 	return nil

@@ -116,6 +116,7 @@ func setRouterDefaults(defaults ConfigDefaults) {
 		{"router.testnet", false},
 		{"router.hidden", false},
 		{"router.always_one_hop_outbound", false},
+		{"router.upnp_enabled", defaults.Router.UpnpEnabled},
 	})
 }
 
@@ -282,6 +283,7 @@ func NewRouterConfigFromViper() (*RouterConfig, error) {
 		Testnet:              viper.GetBool("router.testnet"),
 		Hidden:               viper.GetBool("router.hidden"),
 		AlwaysOneHopOutbound: viper.GetBool("router.always_one_hop_outbound"),
+		UpnpEnabled:          viper.GetBool("router.upnp_enabled"),
 		Tunnel:               buildTunnelConfig(),
 		Transport:            buildTransportConfig(),
 		Performance:          buildPerformanceConfig(),
@@ -316,6 +318,7 @@ func currentRouterConfig() RouterDefaults {
 		MessageExpirationTime:     viper.GetDuration("router.message_expiration_time"),
 		MaxConcurrentSessions:     viper.GetInt("router.max_concurrent_sessions"),
 		BandwidthTier:             viper.GetString("router.bandwidth_tier"),
+		UpnpEnabled:               viper.GetBool("router.upnp_enabled"),
 	}
 }
 
