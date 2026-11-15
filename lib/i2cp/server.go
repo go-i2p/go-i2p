@@ -88,8 +88,12 @@ type ServerConfig struct {
 	// GetDate/SetDate exchange.
 	ReadTimeout time.Duration
 
-	// WriteTimeout is the maximum duration for writing responses to clients
-	// Zero means no timeout. Default: 30 seconds
+	// WriteTimeout is the maximum duration for a single write to a client
+	// connection. A positive value is honored exactly (GI-I2CP-008). Zero or
+	// negative means "unset", in which case a bounded 5-minute fallback
+	// (minimumWriteTimeout) is used so a stalled client cannot block a writer
+	// indefinitely while holding the per-connection write mutex.
+	// Default: 30 seconds
 	WriteTimeout time.Duration
 
 	// SessionTimeout is how long idle sessions stay alive before being closed

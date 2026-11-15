@@ -871,22 +871,31 @@ func (s *Server) sendResponse(conn net.Conn, response *Message, sessionPtr **Ses
 	return nil
 }
 
-// Minimum write deadline to prevent indefinite blocking while holding mutex
-// If WriteTimeout is 0 or too short, enforce this minimum to prevent DoS
-// where a stalled client blocks the delivery goroutine holding the write mutex
+// minimumWriteTimeout is the bounded write deadline used only when WriteTimeout
+// is unset (<= 0). It prevents a stalled client from blocking *indefinitely*
+// while holding the per-connection write mutex. Despite the name, it is NOT a
+// floor on a configured WriteTimeout: see applyWriteDeadline (GI-I2CP-008).
 const minimumWriteTimeout = 5 * time.Minute
 
-// applyWriteDeadline sets the connection write deadline if a timeout is configured.
-// Enforces a minimum write deadline even if WriteTimeout is 0 to prevent
-// a stalled client from indefinitely blocking while holding the per-connection write mutex.
+// applyWriteDeadline sets the connection write deadline.
+//
+// GI-I2CP-008: a configured WriteTimeout > 0 is honored as-is. The previous
+// behavior clamped every value below minimumWriteTimeout up to 5 minutes, which
+// silently ignored the operator's write_timeout knob (default 30s) and let a
+// stalled zero-window client hold the per-connection write mutex for 5 minutes.
+// Because acquireWriteMutex holds the server RLock across writeMu.Lock(), that
+// stall also held RLock for up to 5 minutes, widening GI-I2CP-003's convoy
+// window (Go's RWMutex queues new RLock() behind a pending Lock()).
+//
+// The bounded fallback (minimumWriteTimeout) still applies when WriteTimeout is
+// <= 0 (disabled/unset), preserving the M-9 DoS guard against indefinite
+// blocking while holding the write mutex.
 func (s *Server) applyWriteDeadline(conn net.Conn) {
 	timeout := s.config.WriteTimeout
 
-	// Enforce minimum write timeout to prevent indefinite blocking
-	// If WriteTimeout is 0 (disabled) or shorter than minimum, use minimum deadline.
-	// This prevents a stalled TCP client (zero window) from indefinitely blocking
-	// the delivery goroutine while holding the session write mutex.
-	if timeout <= 0 || timeout < minimumWriteTimeout {
+	// Only fall back to the bounded default when the knob is disabled/unset.
+	// A configured positive timeout is respected exactly as given.
+	if timeout <= 0 {
 		timeout = minimumWriteTimeout
 	}
 

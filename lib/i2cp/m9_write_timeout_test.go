@@ -58,7 +58,7 @@ func TestM9_ApplyWriteDeadline_RespectsShorterTimeout(t *testing.T) {
 	server := &Server{
 		config: &ServerConfig{
 			MaxSessions:    100,
-			WriteTimeout:   1 * time.Second, // M-9 FIX: Way shorter than minimum
+			WriteTimeout:   1 * time.Second, // GI-I2CP-008: shorter than the disabled fallback
 			SessionTimeout: 0,
 		},
 		manager: NewSessionManager(),
@@ -69,22 +69,24 @@ func TestM9_ApplyWriteDeadline_RespectsShorterTimeout(t *testing.T) {
 	server.applyWriteDeadline(mockConn)
 	after := time.Now()
 
-	// M-9 FIX: Verify deadline was enforced to minimum
-	expectedMin := before.Add(minimumWriteTimeout - 100*time.Millisecond)
-	expectedMax := after.Add(minimumWriteTimeout + 100*time.Millisecond)
+	// GI-I2CP-008 FIX: a configured positive WriteTimeout is honored as-is,
+	// NOT clamped up to minimumWriteTimeout. The old behavior ignored the
+	// operator's write_timeout knob and widened the convoy window.
+	expectedMin := before.Add(1*time.Second - 100*time.Millisecond)
+	expectedMax := after.Add(1*time.Second + 100*time.Millisecond)
 
 	if mockConn.lastWriteDeadline.Before(expectedMin) || mockConn.lastWriteDeadline.After(expectedMax) {
-		t.Errorf("deadline not enforced to minimum. Expected: %v±100ms, Got: %v", expectedMin, mockConn.lastWriteDeadline)
+		t.Errorf("configured WriteTimeout not honored. Expected ~now+1s, Got: %v", mockConn.lastWriteDeadline)
 	}
 }
 
 // TestM9_ApplyWriteDeadline_RespectsSensibleTimeout verifies that a reasonable
-// WriteTimeout (between 0 and minimum) is enforced to minimum.
+// WriteTimeout (e.g. the 30s default) is honored exactly, not clamped up.
 func TestM9_ApplyWriteDeadline_RespectsSensibleTimeout(t *testing.T) {
 	server := &Server{
 		config: &ServerConfig{
 			MaxSessions:    100,
-			WriteTimeout:   30 * time.Second, // M-9 FIX: Reasonable but less than minimum
+			WriteTimeout:   30 * time.Second, // GI-I2CP-008: the documented default
 			SessionTimeout: 0,
 		},
 		manager: NewSessionManager(),
@@ -95,12 +97,12 @@ func TestM9_ApplyWriteDeadline_RespectsSensibleTimeout(t *testing.T) {
 	server.applyWriteDeadline(mockConn)
 	after := time.Now()
 
-	// M-9 FIX: Verify deadline was enforced to minimum
-	expectedMin := before.Add(minimumWriteTimeout - 100*time.Millisecond)
-	expectedMax := after.Add(minimumWriteTimeout + 100*time.Millisecond)
+	// GI-I2CP-008 FIX: the configured 30s timeout is used verbatim.
+	expectedMin := before.Add(30*time.Second - 100*time.Millisecond)
+	expectedMax := after.Add(30*time.Second + 100*time.Millisecond)
 
 	if mockConn.lastWriteDeadline.Before(expectedMin) || mockConn.lastWriteDeadline.After(expectedMax) {
-		t.Errorf("deadline not enforced to minimum for reasonable timeout. Expected: %v±100ms, Got: %v", expectedMin, mockConn.lastWriteDeadline)
+		t.Errorf("configured 30s WriteTimeout not honored. Expected ~now+30s, Got: %v", mockConn.lastWriteDeadline)
 	}
 }
 
