@@ -5,6 +5,7 @@ import (
 	"time"
 
 	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/go-i2p/go-i2p/lib/util/logutil"
@@ -60,7 +61,18 @@ func (r *Router) wireDispatcherTunnelManager() {
 
 // wireParticipantManager initializes and wires the participant manager for transit tunnels.
 func (r *Router) wireParticipantManager() {
-	r.participantManager = tunnel.NewManager()
+	// Build the manager from the operator's tunnel config so the documented
+	// participation limits (tunnel.max_participating_tunnels,
+	// participating_limits_enabled, per_source_rate_limit_enabled,
+	// max_build_requests_per_minute, ...) actually reach the manager that
+	// enforces them. tunnel.NewManager() would use the hardcoded defaults and
+	// silently ignore every tunnel.* limit. Fall back to defaults only when the
+	// router has no tunnel config.
+	tunnelCfg := config.Defaults().Tunnel
+	if r.cfg != nil && r.cfg.Tunnel != nil {
+		tunnelCfg = *r.cfg.Tunnel
+	}
+	r.participantManager = tunnel.NewManagerWithConfig(tunnelCfg)
 	r.messageRouter.GetProcessor().SetParticipantManager(r.participantManager)
 	r.messageRouter.GetProcessor().SetBuildReplyForwarder(&transportBuildReplyForwarder{sessionProvider: r})
 	// Apply the no-transit policy: hidden mode or AcceptTunnels=false both

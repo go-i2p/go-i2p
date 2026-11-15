@@ -15,8 +15,15 @@ import (
 // startCongestionMonitor initializes and starts the congestion monitor (PROP_162).
 // The monitor tracks local congestion and determines D/E/G flags for RouterInfo caps.
 func (r *Router) startCongestionMonitor() {
-	// Get congestion config from global defaults
+	// Use the operator's configured congestion thresholds. config.Defaults()
+	// returns the hardcoded defaults, which silently ignored any
+	// congestion.* settings the operator set (the thresholds were validated in
+	// lib/config but never reached the monitor). Fall back to defaults only
+	// when the router has no congestion config.
 	congestionCfg := config.Defaults().Congestion
+	if r.cfg != nil && r.cfg.Congestion != nil {
+		congestionCfg = *r.cfg.Congestion
+	}
 
 	// Create metrics collector that gathers data from router subsystems
 	collector := NewRouterMetricsCollector(
