@@ -1265,13 +1265,17 @@ func (db *StdNetDB) trackMetaLeaseSetExpiration(key common.Hash, mls meta_leases
 // This method should be called once during NetDB initialization.
 // Use Stop() to gracefully shut down the cleanup goroutine.
 func (db *StdNetDB) StartExpirationCleaner() {
-	log.WithFields(logger.Fields{"at": "StartExpirationCleaner"}).Info("Starting expiration cleaner (LeaseSets every 1 min, RouterInfos every 10 min)")
+	interval := db.expirationCheckInterval
+	if interval <= 0 {
+		interval = leaseSetCleanupInterval
+	}
+	log.WithFields(logger.Fields{"at": "StartExpirationCleaner", "lease_set_interval": interval}).Info("Starting expiration cleaner")
 
 	db.cleanupWg.Add(1)
 	go func() {
 		defer db.cleanupWg.Done()
 
-		ticker := time.NewTicker(leaseSetCleanupInterval)
+		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 
 		tickCount := 0

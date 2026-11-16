@@ -107,6 +107,14 @@ func (r *Router) startExplorer() error {
 	}
 
 	cfg := netdb.DefaultExplorerConfig()
+	// Honor netdb.exploration_interval as the explorer's base cadence. With the
+	// adaptive strategy on (the default) it is the non-urgent reference the
+	// strategy brackets; with adaptive off it is the fixed period. Before this
+	// the explorer always used the built-in 5-minute default and the operator's
+	// setting was a dead knob.
+	if r.cfg != nil && r.cfg.NetDB != nil && r.cfg.NetDB.ExplorationInterval > 0 {
+		cfg.Interval = r.cfg.NetDB.ExplorationInterval
+	}
 
 	ourHash, err := r.getOurRouterHash()
 	if err == nil {
@@ -470,7 +478,11 @@ func (r *Router) initializeNetDB() error {
 		return nil
 	}
 	log.WithFields(logger.Fields{"at": "initializeNetDB"}).Debug("Initializing network database")
-	r.netdb = netdb.NewStdNetDB(r.cfg.NetDB.Path)
+	// Pass the operator's expiration-check cadence at construction: the cleaner's
+	// ticker is created once when the cleaner starts (inside the constructor), so
+	// netdb.expiration_check_interval must be supplied here, not via a later
+	// setter. Zero falls back to the built-in interval.
+	r.netdb = netdb.NewStdNetDBWithExpirationCheck(r.cfg.NetDB.Path, r.cfg.NetDB.ExpirationCheckInterval)
 	r.netdb.SetMaxRouterInfos(r.cfg.NetDB.MaxRouterInfos)
 	r.netdb.SetStrictRouterInfoNetworkValidation(r.cfg.NetDB.StrictRouterInfoNetworkValidation)
 	r.netdb.SetRouterInfoAdmissionPressureThreshold(r.cfg.NetDB.RouterInfoAdmissionPressureThresholdPct)

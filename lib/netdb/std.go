@@ -89,6 +89,11 @@ type StdNetDB struct {
 	// Uses time-bucketed structure for O(1) cleanup without iteration.
 	riRefreshCooldown *timeBucketedCooldown
 
+	// expirationCheckInterval is how often StartExpirationCleaner sweeps for
+	// expired LeaseSets. Set via SetExpirationCheckInterval; zero means
+	// leaseSetCleanupInterval.
+	expirationCheckInterval time.Duration
+
 	// Cleanup goroutine management
 	ctx       context.Context
 	cancel    context.CancelFunc
@@ -116,6 +121,16 @@ type StdNetDB struct {
 // NewStdNetDB creates and returns a new StdNetDB rooted at the given directory path,
 // initializing in-memory caches and starting the background expiration cleaner.
 func NewStdNetDB(db string) *StdNetDB {
+	return NewStdNetDBWithExpirationCheck(db, 0)
+}
+
+// NewStdNetDBWithExpirationCheck is NewStdNetDB with an operator-configured
+// expiration-check cadence. expirationCheckInterval sets how often the
+// background cleaner sweeps for expired LeaseSets (netdb.expiration_check_interval);
+// zero selects the built-in leaseSetCleanupInterval. The interval must be set
+// before the cleaner starts, which is why it is a constructor parameter rather
+// than a setter: the cleaner's ticker is created once at startup.
+func NewStdNetDBWithExpirationCheck(db string, expirationCheckInterval time.Duration) *StdNetDB {
 	log.WithFields(logger.Fields{
 		"at":      "(StdNetDB) NewStdNetDB",
 		"reason":  "initializing network database",
@@ -150,6 +165,7 @@ func NewStdNetDB(db string) *StdNetDB {
 		strictRouterInfoNetworkValidation: config.DefaultNetDBConfig.StrictRouterInfoNetworkValidation,
 		routerInfoExpectedNetID:           expectedNetID,
 		pendingRouterInfoPersists:         make(map[common.Hash]routerInfoPersistRetryState),
+		expirationCheckInterval:           expirationCheckInterval,
 	}
 	ndb.riCache.setAdmissionPressureThreshold(config.DefaultNetDBConfig.RouterInfoAdmissionPressureThresholdPct)
 
