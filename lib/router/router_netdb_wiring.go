@@ -317,6 +317,12 @@ func (r *Router) launchPublisher(tunnelPool *tunnel.Pool) error {
 	}
 
 	publisherConfig := netdb.DefaultPublisherConfig()
+	// Honor router.info_refresh_interval: the publisher republishes our
+	// RouterInfo on this cadence. Before this, it always used the built-in
+	// 30-minute default and the operator's setting was a dead knob.
+	if r.cfg != nil && r.cfg.RouterInfoRefreshInterval > 0 {
+		publisherConfig.RouterInfoInterval = r.cfg.RouterInfoRefreshInterval
+	}
 	r.publisher = netdb.NewPublisher(dbAdapter, tunnelPool, transportAdapter, riProvider, publisherConfig)
 	// Publish our own RouterInfo to disk (base64) so local tooling — the
 	// monitoring dashboard, a topology collector — can derive our ident hash

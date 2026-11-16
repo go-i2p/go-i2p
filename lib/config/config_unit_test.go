@@ -78,6 +78,24 @@ func TestCurrentConfigViperOverride(t *testing.T) {
 	assert.Equal(t, override, cfg.Router.RouterInfoRefreshInterval, "Override failed")
 }
 
+// TestRouterConfigCarriesInfoRefreshInterval is the C1 guard: the runtime
+// RouterConfig (what the router actually reads) must carry
+// router.info_refresh_interval, not just the validation-facing RouterDefaults.
+// Before this fix the field was dropped in NewRouterConfigFromViper, so the
+// publisher always used the built-in 30-minute cadence and the operator's
+// setting was a dead knob.
+func TestRouterConfigCarriesInfoRefreshInterval(t *testing.T) {
+	configTestSetup(t)
+
+	override := 45 * time.Minute
+	viper.Set("router.info_refresh_interval", override)
+
+	rc, err := NewRouterConfigFromViper()
+	require.NoError(t, err)
+	assert.Equal(t, override, rc.RouterInfoRefreshInterval,
+		"runtime RouterConfig must carry router.info_refresh_interval so the publisher honors it")
+}
+
 // TestBuildI2CPConfigAllFields verifies that buildI2CPConfig reads ALL I2CPConfig
 // fields from viper, not just a subset. This covers CRITICAL BUG: buildI2CPConfig
 // Drops Session Timeout and Queue Size Fields.

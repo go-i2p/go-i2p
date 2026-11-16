@@ -80,8 +80,12 @@ func validateServerConfig(cfg *config.I2PControlConfig, stats RouterStatsProvide
 	if cfg.Password == "" {
 		return oops.Errorf("i2pcontrol: password cannot be empty")
 	}
-	if cfg.Password == defaultI2PControlPassword {
-		return oops.Errorf("i2pcontrol: password is the well-known default; set a non-default password")
+	// The well-known default password is refused unless the operator explicitly
+	// opts back in via allow_default_password_non_loopback (legacy-compatibility
+	// escape hatch). validateBindPolicy still applies its own non-loopback
+	// checks below.
+	if cfg.Password == defaultI2PControlPassword && !cfg.AllowDefaultPasswordNonLoopback {
+		return oops.Errorf("i2pcontrol: password is the well-known default; set a non-default password or set allow_default_password_non_loopback=true")
 	}
 	return validateBindPolicy(cfg)
 }
@@ -107,8 +111,8 @@ func validateBindPolicy(cfg *config.I2PControlConfig) error {
 	if !cfg.UseHTTPS && !cfg.AllowPlaintextNonLoopback {
 		return oops.Errorf("i2pcontrol: non-loopback bind %q requires use_https=true or allow_plaintext_non_loopback=true", cfg.Address)
 	}
-	if cfg.Password == defaultI2PControlPassword {
-		return oops.Errorf("i2pcontrol: non-loopback bind %q refuses the default password; set a non-default password", cfg.Address)
+	if cfg.Password == defaultI2PControlPassword && !cfg.AllowDefaultPasswordNonLoopback {
+		return oops.Errorf("i2pcontrol: non-loopback bind %q refuses the default password; set a non-default password or set allow_default_password_non_loopback=true", cfg.Address)
 	}
 	return nil
 }

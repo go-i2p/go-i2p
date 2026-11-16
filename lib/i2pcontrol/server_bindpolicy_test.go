@@ -107,4 +107,37 @@ func TestValidateServerConfig_RejectsNonLoopbackPlaintext(t *testing.T) {
 			t.Fatalf("expected error to mention default password, got %q", err.Error())
 		}
 	})
+
+	// C1: allow_default_password_non_loopback was a dead knob — the default
+	// password was refused unconditionally, so the documented legacy-compat
+	// escape hatch had no effect. These pin that the opt-in now works.
+	t.Run("default_password_opt_in_allowed", func(t *testing.T) {
+		cfg := &config.I2PControlConfig{
+			Enabled:                         true,
+			Address:                         "localhost:7650",
+			Password:                        "itoopie",
+			UseHTTPS:                        false,
+			AllowDefaultPasswordNonLoopback: true,
+			TokenExpiration:                 10 * time.Minute,
+		}
+		if _, err := NewServer(cfg, stats); err != nil {
+			t.Fatalf("expected allow_default_password opt-in to succeed, got %v", err)
+		}
+	})
+
+	t.Run("non_loopback_default_password_opt_in_allowed", func(t *testing.T) {
+		cfg := &config.I2PControlConfig{
+			Enabled:                         true,
+			Address:                         "0.0.0.0:7650",
+			Password:                        "itoopie",
+			UseHTTPS:                        true,
+			CertFile:                        "/tmp/cert.pem",
+			KeyFile:                         "/tmp/key.pem",
+			AllowDefaultPasswordNonLoopback: true,
+			TokenExpiration:                 10 * time.Minute,
+		}
+		if _, err := NewServer(cfg, stats); err != nil {
+			t.Fatalf("expected non-loopback default password with opt-in to succeed, got %v", err)
+		}
+	})
 }

@@ -61,6 +61,10 @@ type RouterConfig struct {
 	BaseDir string
 	// the path to the working config directory where files are changed
 	WorkingDir string
+	// RouterInfoRefreshInterval is how often the router re-publishes its own
+	// RouterInfo to the network. Drives the publisher's RouterInfo cadence.
+	// Default: 30 minutes.
+	RouterInfoRefreshInterval time.Duration
 	// RouterInfoFile is the path where the router writes its own RouterInfo
 	// (base64) so external tooling can derive the router's ident hash. Written
 	// on every RouterInfo publish. Empty disables the file.
@@ -183,22 +187,23 @@ var DefaultTransportConfig = buildTransportDefaults()
 
 // defaults for router
 var defaultRouterConfig = &RouterConfig{
-	NetDB:          &DefaultNetDBConfig,
-	Bootstrap:      &DefaultBootstrapConfig,
-	I2CP:           &DefaultI2CPConfig,
-	I2PControl:     defaultI2PControlConfigPtr(),
-	BaseDir:        defaultBase(),
-	WorkingDir:     defaultConfig(),
-	RouterInfoFile: defaultRouterInfoFilePath(),
-	MaxBandwidth:   DefaultMaxBandwidthBytesPerSec, // 1 MB/s
-	BandwidthTier:  "",
-	MaxConnections: DefaultRouterMaxConnections,
-	AcceptTunnels:  true,
-	UpnpEnabled:    true,
-	Tunnel:         defaultTunnelConfigPtr(),
-	Transport:      defaultTransportConfigPtr(),
-	Performance:    defaultPerformanceConfigPtr(),
-	Congestion:     defaultCongestionConfigPtr(),
+	NetDB:                     &DefaultNetDBConfig,
+	Bootstrap:                 &DefaultBootstrapConfig,
+	I2CP:                      &DefaultI2CPConfig,
+	I2PControl:                defaultI2PControlConfigPtr(),
+	BaseDir:                   defaultBase(),
+	WorkingDir:                defaultConfig(),
+	RouterInfoFile:            defaultRouterInfoFilePath(),
+	RouterInfoRefreshInterval: DefaultRouterInfoRefreshInterval,
+	MaxBandwidth:              DefaultMaxBandwidthBytesPerSec, // 1 MB/s
+	BandwidthTier:             "",
+	MaxConnections:            DefaultRouterMaxConnections,
+	AcceptTunnels:             true,
+	UpnpEnabled:               true,
+	Tunnel:                    defaultTunnelConfigPtr(),
+	Transport:                 defaultTransportConfigPtr(),
+	Performance:               defaultPerformanceConfigPtr(),
+	Congestion:                defaultCongestionConfigPtr(),
 }
 
 func defaultI2PControlConfigPtr() *I2PControlConfig {
@@ -269,21 +274,22 @@ func copyBaseFields(src *RouterConfig) *RouterConfig {
 	}
 
 	return &RouterConfig{
-		BaseDir:              src.BaseDir,
-		WorkingDir:           src.WorkingDir,
-		RouterInfoFile:       src.RouterInfoFile,
-		MaxBandwidth:         src.MaxBandwidth,
-		MaxBandwidthIn:       src.MaxBandwidthIn,
-		MaxBandwidthOut:      src.MaxBandwidthOut,
-		BandwidthTier:        src.BandwidthTier,
-		SharePercentage:      src.SharePercentage,
-		MaxConnections:       src.MaxConnections,
-		AcceptTunnels:        src.AcceptTunnels,
-		Testnet:              src.Testnet,
-		Hidden:               src.Hidden,
-		AlwaysZeroHopInbound: src.AlwaysZeroHopInbound,
-		AlwaysOneHopOutbound: src.AlwaysOneHopOutbound,
-		UpnpEnabled:          src.UpnpEnabled,
+		BaseDir:                   src.BaseDir,
+		WorkingDir:                src.WorkingDir,
+		RouterInfoFile:            src.RouterInfoFile,
+		RouterInfoRefreshInterval: src.RouterInfoRefreshInterval,
+		MaxBandwidth:              src.MaxBandwidth,
+		MaxBandwidthIn:            src.MaxBandwidthIn,
+		MaxBandwidthOut:           src.MaxBandwidthOut,
+		BandwidthTier:             src.BandwidthTier,
+		SharePercentage:           src.SharePercentage,
+		MaxConnections:            src.MaxConnections,
+		AcceptTunnels:             src.AcceptTunnels,
+		Testnet:                   src.Testnet,
+		Hidden:                    src.Hidden,
+		AlwaysZeroHopInbound:      src.AlwaysZeroHopInbound,
+		AlwaysOneHopOutbound:      src.AlwaysOneHopOutbound,
+		UpnpEnabled:               src.UpnpEnabled,
 	}
 }
 
