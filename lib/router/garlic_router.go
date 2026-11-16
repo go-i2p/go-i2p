@@ -174,13 +174,21 @@ func (gr *GarlicMessageRouter) drainWorker() {
 	for {
 		select {
 		case req := <-gr.drainRequests:
-			if !gr.processDrainRequest(req) {
+			if !gr.processDrainRequestSafe(req) {
 				return
 			}
 		case <-gr.ctx.Done():
 			return
 		}
 	}
+}
+
+// processDrainRequestSafe runs processDrainRequest with panic recovery so a
+// panic while draining a lookup channel cannot crash the router or kill the
+// drain worker; the worker simply continues to the next request.
+func (gr *GarlicMessageRouter) processDrainRequestSafe(req drainRequest) bool {
+	defer recoverGoroutine("GarlicMessageRouter.drainWorker")
+	return gr.processDrainRequest(req)
 }
 
 // processDrainRequest drains the appropriate channel based on which is non-nil.
@@ -790,9 +798,18 @@ func (gr *GarlicMessageRouter) processPendingMessages() {
 			log.WithField("at", "processPendingMessages").Debug("Stopping pending message processor")
 			return
 		case <-ticker.C:
-			gr.retryPendingLookups()
+			gr.retryPendingLookupsSafe()
 		}
 	}
+}
+
+// retryPendingLookupsSafe runs retryPendingLookups with panic recovery. The
+// forwarding path it drives parses and decrypts remote-supplied LeaseSets and
+// messages; a panic there must not crash the router or stop the pending-message
+// processor, so the loop recovers and retries on the next tick.
+func (gr *GarlicMessageRouter) retryPendingLookupsSafe() {
+	defer recoverGoroutine("GarlicMessageRouter.processPendingMessages")
+	gr.retryPendingLookups()
 }
 
 // forwardWork represents resolved forwarding work to be executed outside the lock.
