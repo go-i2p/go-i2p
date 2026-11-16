@@ -51,7 +51,14 @@ func TestRestartNoGoroutineLeak(t *testing.T) {
 	// number of rounds. A loose per-round tolerance would miss a +1/cycle leak
 	// (it stays under the bound until the very end), so we assert on the last
 	// round with a tight bound.
-	const rounds = 4
+	//
+	// rounds is kept low (2) deliberately: each Start/Stop/Close cycle runs full
+	// network bootstrap and is ~30s, and this test dominates the lib/router
+	// package's wall-clock. Two rounds still discriminate a per-cycle leak
+	// (final delta 2 > tolerance 1) from no leak (delta ~0), while leaving the
+	// package ample headroom under the 10m per-package test timeout on loaded
+	// CI runners (the package otherwise sits close to the limit and flakes).
+	const rounds = 2
 	const finalTolerance = 1
 	var lastDelta int
 	for round := 0; round < rounds; round++ {
