@@ -412,7 +412,22 @@ func (r *Router) clearRoutingComponents() {
 	r.explorer = nil
 	r.floodfillServer = nil
 	r.netdb = nil
+	// Release the garlic session managers' ratchet NS-replay-cache goroutines
+	// before dropping the slice (I2P-A-1). Close is idempotent and safe to call
+	// concurrently with the message router that still references them.
+	garlicMgrs := r.garlicSessionManagers
+	r.garlicSessionManagers = nil
 	r.runMux.Unlock()
+
+	for _, gm := range garlicMgrs {
+		if gm != nil {
+			if err := gm.Close(); err != nil {
+				logAt("clearRoutingComponents").WithError(err).
+					Warn("failed to close garlic session manager")
+			}
+		}
+	}
+
 	log.WithFields(logger.Fields{
 		"at":     "(Router) Close",
 		"phase":  "finalization",

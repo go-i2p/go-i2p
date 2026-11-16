@@ -781,6 +781,16 @@ func (r *Router) wireGarlicSessionManager() {
 	if r.tunnelManager != nil {
 		r.tunnelManager.SetGarlicKeyRegistrar(garlicMgr)
 	}
+	// Start the ratchet cleanup loop, bounded by the router's lifecycle context.
+	// It periodically evicts expired sessions AND one-time garlic reply keys
+	// whose build reply never arrived (GN-009); without it those keys grow
+	// unbounded at the inbound-build rate. The loop exits on r.ctx cancellation,
+	// so it adds no goroutine past Stop().
+	garlicMgr.StartCleanupLoop(r.ctx)
+
+	// Track it so Close() can release the ratchet NS-replay-cache goroutine it
+	// owns; otherwise one goroutine leaks per router lifecycle (I2P-A-1).
+	r.garlicSessionManagers = append(r.garlicSessionManagers, garlicMgr)
 	log.WithFields(logger.Fields{"at": "wireGarlicSessionManager"}).Debug("Garlic session manager wired into message processor")
 }
 

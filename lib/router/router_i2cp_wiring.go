@@ -177,6 +177,10 @@ func (r *Router) wireI2CPMessageRouter(server *i2cp.Server) {
 		return
 	}
 
+	// Bound this manager's session/one-time-key state with the ratchet cleanup
+	// loop, tied to the router's lifecycle context (exits on Stop()).
+	garlicMgr.StartCleanupLoop(r.ctx)
+
 	transportSend := func(peerHash common.Hash, msg i2np.Message) error {
 		session, sErr := r.GetSessionByHash(peerHash)
 		if sErr != nil {
@@ -186,6 +190,9 @@ func (r *Router) wireI2CPMessageRouter(server *i2cp.Server) {
 	}
 
 	msgRouter := i2cp.NewMessageRouter(garlicMgr, transportSend)
+	// Track the outbound encryptor so Close() releases its ratchet NS-replay-cache
+	// goroutine; the I2CP MessageRouter does not close it (I2P-A-1).
+	r.garlicSessionManagers = append(r.garlicSessionManagers, garlicMgr)
 
 	// Outbound messages are encapsulated as tunnel traffic, which requires
 	// addressing them to the destination's inbound tunnel. The lease resolver

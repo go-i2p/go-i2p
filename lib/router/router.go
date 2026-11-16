@@ -107,6 +107,13 @@ type Router struct {
 	stoppedCh   chan struct{}
 	stoppedOnce sync.Once
 
+	// garlicSessionManagers holds every GarlicSessionManager the router creates
+	// (inbound decryptor + outbound I2CP encryptor). Each wraps a go-noise
+	// ratchet SessionManager that owns a background NS-replay-cache cleanup
+	// goroutine; the router must Close() them on shutdown or that goroutine
+	// leaks once per router lifecycle (I2P-A-1).
+	garlicSessionManagers []*i2np.GarlicSessionManager
+
 	// congestionMonitor tracks local congestion state and determines D/E/G flags
 	// for RouterInfo advertisement per PROP_162
 	congestionMonitor *CongestionMonitor

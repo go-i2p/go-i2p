@@ -331,6 +331,13 @@ func (sm *GarlicSessionManager) GetSessionCount() int {
 	return sm.inner.GetSessionCount()
 }
 
+// OneTimeKeyCount returns the number of registered one-time garlic reply keys
+// currently held by the underlying ratchet session manager. Used to assert the
+// count stays bounded under sustained inbound-build load (GN-009).
+func (sm *GarlicSessionManager) OneTimeKeyCount() int {
+	return sm.inner.OneTimeKeyCount()
+}
+
 // CleanupExpiredSessions removes sessions that haven't been used recently.
 // Without periodic cleanup, ratchet key material for inactive peers would
 // accumulate in memory indefinitely. Returns the number of sessions removed.
