@@ -925,8 +925,16 @@ func (t *SSU2Transport) trackInboundConnection(conn net.Conn) (net.Conn, bool) {
 	// SessionRequest via conn.GetReplayToken(). See checkConnectionReplay()
 	// for nil-token fallback behavior.
 	if t.checkConnectionReplay(conn) {
-		// Replay detected: close connection and unreserve slot
-		t.sessionRegistry.DecrementCountSafe()
+		// Replay detected. We must remove the registry entry we just inserted
+		// (peerHash -> conn), not merely unreserve the slot: otherwise the dead
+		// connection lingers under the peer hash and every later inbound
+		// connection from that peer is rejected as a "duplicate" until an
+		// outbound dial happens to replace the entry — permanently black-holing
+		// an inbound-only peer (I2P-C-1). RemoveIfSession deletes the entry only
+		// if it still holds our conn and decrements the count exactly once on
+		// success, so it both clears the entry and unreserves the slot, and is
+		// safe against a concurrent outbound promotion.
+		t.sessionRegistry.RemoveIfSession(peerHash, conn)
 		closeConnImmediately(conn)
 		t.logger.WithFields(map[string]interface{}{
 			"remote_addr": conn.RemoteAddr().String(),
