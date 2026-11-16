@@ -68,7 +68,7 @@ func TestEveryConfigKeyHasConsumer(t *testing.T) {
 // either the full dotted key string appears in the consumer blob (a subsystem
 // reading viper directly), or one of the derived field identifiers appears as a
 // whole token.
-func keyHasConsumer(key string, blob string) bool {
+func keyHasConsumer(key, blob string) bool {
 	if strings.Contains(blob, key) {
 		return true
 	}

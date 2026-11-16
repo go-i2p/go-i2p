@@ -20,7 +20,7 @@ func TestBuildMessageID_IsRandomNotUniform(t *testing.T) {
 	}
 	seen[first] = struct{}{}
 
-	var allSame = true
+	allSame := true
 	for i := 0; i < n; i++ {
 		id, err := tm.generateMessageID()
 		if err != nil {

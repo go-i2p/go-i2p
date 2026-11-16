@@ -23,8 +23,8 @@ import (
 // the muxer actually attempts a session and exercises the reject path.
 type erroringTransport struct{}
 
-func (erroringTransport) Accept() (net.Conn, error) { return nil, errors.New("no accept") }
-func (erroringTransport) Addr() net.Addr             { return nil }
+func (erroringTransport) Accept() (net.Conn, error)                { return nil, errors.New("no accept") }
+func (erroringTransport) Addr() net.Addr                           { return nil }
 func (erroringTransport) SetIdentity(router_info.RouterInfo) error { return nil }
 func (erroringTransport) GetSession(router_info.RouterInfo) (TransportSession, error) {
 	return nil, errors.New("transport pool full")
@@ -94,8 +94,8 @@ func TestGetSession_PoolLimitRejectDoesNotLeakSlot(t *testing.T) {
 // fill its connection pool with real reservations.
 type successTransport struct{}
 
-func (successTransport) Accept() (net.Conn, error) { return nil, errors.New("no accept") }
-func (successTransport) Addr() net.Addr            { return nil }
+func (successTransport) Accept() (net.Conn, error)                { return nil, errors.New("no accept") }
+func (successTransport) Addr() net.Addr                           { return nil }
 func (successTransport) SetIdentity(router_info.RouterInfo) error { return nil }
 func (successTransport) GetSession(router_info.RouterInfo) (TransportSession, error) {
 	return &noopSession{}, nil

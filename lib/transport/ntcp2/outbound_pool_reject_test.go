@@ -3,8 +3,8 @@ package ntcp2
 import (
 	"testing"
 
-	router_info "github.com/go-i2p/common/router_info"
 	data "github.com/go-i2p/common/data"
+	router_info "github.com/go-i2p/common/router_info"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

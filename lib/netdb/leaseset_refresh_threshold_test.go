@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-i2p/common/lease_set"
 	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/common/lease_set"
 	"github.com/stretchr/testify/assert"
 )
 

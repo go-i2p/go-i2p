@@ -66,7 +66,7 @@ type Participant struct {
 	// this tunnel. Without pinning, any peer that learns the tunnel ID can inject
 	// records. Guarded by prevHopMu; zero value means "not pinned" (accept any
 	// source), so a participant built without source attribution is unchanged.
-	prevHopIdent common.Hash
+	prevHopIdent  common.Hash
 	prevHopPinned bool
 	prevHopMu     sync.RWMutex
 
